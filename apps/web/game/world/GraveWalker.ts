@@ -3,16 +3,18 @@ import { bridge } from "../bridge";
 import type { Player, SeatRequester } from "../entities/Player";
 import { AutoWalk } from "../logic/autoWalk";
 import type { MoveInput } from "../logic/movement";
-import { buildGrid, type Rect, type WalkGrid } from "../logic/pathfind";
+import type { Rect, WalkGrid } from "../logic/pathfind";
 import { standSpot, TIER_SIZE, type GravePlacement, type GraveLayout } from "./graveLayout";
+import { PORTAL_WALK, WalkGridCache, walkGridOf, type WalkPortal } from "./portalWalk";
 
 // 41번: "내 묘비 가기" = 걸어가기. 맵 배치를 하드코딩하지 않고, 걷기 시작할 때 지금 있는 충돌체로 격자를 만든다
-// (맵이 바뀌어도 그대로 동작). WorldScene은 go/cancel/steer만 부른다.
+// (맵이 바뀌어도 그대로 동작). WorldScene은 go/goPortal/cancel/steer만 부른다.
+// 11/16 [사냥] 버튼도 같은 걷기로 사냥터 입구까지 간다 (goPortal → 도착하면 portal:open, 진행은 portal:walk).
+// 격자 규칙(칸·발 상자 여유)은 portalWalk.ts — 테스트도 같은 규칙으로 길을 찾는다.
 
-/** 격자 칸 (반 타일) */
-const CELL = 8;
-/** 발 상자 (Player BODY_W×BODY_H, 원점 = 발바닥 가운데) + 여유 1px */
-const PAD = { l: 5, r: 5, t: 1, b: 6 };
+/** 지금 걷는 목적지 */
+type Goal = { kind: "grave"; id: string } | { kind: "portal"; portal: WalkPortal };
+type Status = "started" | "arrived" | "cancelled" | "unreachable";
 
 export type WalkDeps = {
   scene: Phaser.Scene;
@@ -55,6 +57,9 @@ export class GraveWalker {
   private readonly input: MoveInput = { ax: 0, ay: 0, run: false };
   /** 이번 길을 물을 피해서 찾았는지 (다시 찾을 때 같은 규칙으로) */
   private dry = true;
+  private goal: Goal | null = null;
+  /** 물 피하기 격자 캐시 (물 판정이 칸마다라 가장 무겁다) */
+  private readonly cache = new WalkGridCache();
 
   constructor(private readonly d: WalkDeps) {}
 
@@ -62,55 +67,81 @@ export class GraveWalker {
     return this.walk.active;
   }
 
-  private grid(avoidWater: boolean): WalkGrid {
+  /** 사냥터 입구 등으로 걷는 중이면 그 입구 */
+  get portal(): WalkPortal | null {
+    return this.walk.active && this.goal?.kind === "portal" ? this.goal.portal : null;
+  }
+
+  private grid(avoidWater: boolean, fresh = false): WalkGrid {
     const b = this.d.scene.physics.world.bounds;
     const rects = placementRects(this.d.layout(), bodyRects(this.d.groups()));
     const water = avoidWater ? this.d.water : undefined;
-    // 발 상자가 월드 경계 안에 머무는 곳만 (x ± 4, 위로 5)
-    return buildGrid(b.width, b.height, CELL, rects, {
-      ox: b.x,
-      oy: b.y,
-      pad: PAD,
-      extraBlocked: (x, y) => x < b.x + PAD.l || x > b.right - PAD.r || y < b.y + PAD.b || y > b.bottom - 1 || !!water?.(x, y),
-    });
+    const build = () => walkGridOf(b, rects, water);
+    if (fresh) this.cache.clear();
+    return this.cache.get(`${avoidWater ? 1 : 0}:${rects.length}:${b.x},${b.y},${b.width},${b.height}`, this.d.scene.time.now, build);
+  }
+
+  private report(status: Status): void {
+    const g = this.goal;
+    if (!g) return;
+    if (g.kind === "grave") bridge.emit("grave:walk", { graveId: g.id, status });
+    else bridge.emit("portal:walk", { kind: g.portal, status });
+  }
+
+  /** 도착: 바라보고 알린다. 입구면 입구 창을 연다 (입구 앞에서 E를 누른 것과 같다) */
+  private arrive(face: { x: number; y: number }, now: number): void {
+    const pl = this.d.player();
+    if (pl.sitting) pl.stand(now, this.d.seats());
+    pl.faceTo(face.x, face.y, now);
+    this.walk.cancel();
+    this.report("arrived");
+    const g = this.goal;
+    this.goal = null;
+    if (g?.kind === "portal") bridge.emit("portal:open", { kind: g.portal });
+  }
+
+  /** 길을 찾아 걷기 시작 (물을 피해서 길이 없으면 헤엄쳐서라도) */
+  private begin(goal: Goal, to: { x: number; y: number }, face: { x: number; y: number }, now: number): void {
+    this.cancel();
+    this.goal = goal;
+    const pl = this.d.player();
+    const from = { x: pl.x, y: pl.y };
+    const key = goal.kind === "grave" ? goal.id : `portal:${goal.portal}`;
+    this.dry = true;
+    let r = this.walk.start(key, from, to, face, this.grid(true), now);
+    if (r === "unreachable" && this.d.water) {
+      this.dry = false;
+      r = this.walk.start(key, from, to, face, this.grid(false), now);
+    }
+    if (r === "near") return this.arrive(face, now);
+    if (r === "unreachable") {
+      this.report("unreachable");
+      this.goal = null;
+      return;
+    }
+    this.d.beforeWalk();
+    this.report("started");
   }
 
   /** 그 묘비 앞까지 걸어가기 시작. 묘비가 이 채널에 없으면 아무것도 하지 않는다 */
   go(graveId: string, now: number): void {
     const p = this.d.placement(graveId);
     if (!p) return;
-    this.cancel();
-    const pl = this.d.player();
-    const goal = standSpot(p);
-    const from = { x: pl.x, y: pl.y };
-    this.dry = true;
-    let r = this.walk.start(graveId, from, goal, p, this.grid(true), now);
-    // 물을 피해서는 길이 없으면 헤엄쳐서라도
-    if (r === "unreachable" && this.d.water) {
-      this.dry = false;
-      r = this.walk.start(graveId, from, goal, p, this.grid(false), now);
-    }
-    if (r === "near") {
-      if (pl.sitting) pl.stand(now, this.d.seats());
-      pl.faceTo(p.x, p.y, now);
-      this.walk.cancel();
-      bridge.emit("grave:walk", { graveId, status: "arrived" });
-      return;
-    }
-    if (r === "unreachable") {
-      bridge.emit("grave:walk", { graveId, status: "unreachable" });
-      return;
-    }
-    this.d.beforeWalk();
-    bridge.emit("grave:walk", { graveId, status: "started" });
+    this.begin({ kind: "grave", id: graveId }, standSpot(p), p, now);
+  }
+
+  /** 11/16 입구(사냥터) 앞까지 걸어가기 시작. 도착하면 portal:open */
+  goPortal(portal: WalkPortal, now: number): void {
+    const w = PORTAL_WALK[portal];
+    this.begin({ kind: "portal", portal }, w.goal, w.face, now);
   }
 
   /** 사용자 입력·상점·채널 이동 등으로 그만둔다 */
   cancel(): void {
-    const id = this.walk.target;
-    if (!this.walk.active || !id) return;
+    if (!this.walk.active || !this.walk.target) return;
     this.walk.cancel();
-    bridge.emit("grave:walk", { graveId: id, status: "cancelled" });
+    this.report("cancelled");
+    this.goal = null;
   }
 
   /**
@@ -122,26 +153,27 @@ export class GraveWalker {
     if (userMoving) return this.cancel();
     const pl = this.d.player();
     if (pl.airborne) return;
-    const id = this.walk.target!;
+    // 입구로 갈 때는 평소 걸음 (달리기를 켜 두었거나 Shift를 누르고 있으면 달린다). 묘비 가기는 먼 길이면 저절로 달린다
+    const userRun = move.run;
     const step = this.walk.steer({ x: pl.x, y: pl.y }, now, this.input);
     if (step === "arrived") {
       move.ax = move.ay = 0;
       move.run = false;
-      pl.faceTo(this.walk.face.x, this.walk.face.y, now);
-      this.walk.cancel();
-      bridge.emit("grave:walk", { graveId: id, status: "arrived" });
+      this.arrive(this.walk.face, now);
       return;
     }
     if (step === "stuck") {
-      if (!this.walk.repath({ x: pl.x, y: pl.y }, this.grid(this.dry), now)) {
+      // 막혔으면 새 격자로 한 번 더 찾는다 (묘비·집이 새로 섰을 수 있다)
+      if (!this.walk.repath({ x: pl.x, y: pl.y }, this.grid(this.dry, true), now)) {
         this.walk.cancel();
         move.ax = move.ay = 0;
-        bridge.emit("grave:walk", { graveId: id, status: "unreachable" });
+        this.report("unreachable");
+        this.goal = null;
       }
       return;
     }
     move.ax = this.input.ax;
     move.ay = this.input.ay;
-    move.run = this.input.run;
+    move.run = this.goal?.kind === "portal" ? userRun : this.input.run;
   }
 }

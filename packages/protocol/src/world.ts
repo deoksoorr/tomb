@@ -753,7 +753,9 @@ export type SpotKind =
   | "chair"
   | "bed"
   | "book"
-  | "tub";
+  | "tub"
+  // 11/16 포구 오두막 해먹 (집 안 해먹 — 월드 해먹과 같은 누운 자세)
+  | "hammockIn";
 /**
  * mobile = 앉은 채 움직이는 자리(조각배): 서버는 위치를 앵커에 고정하지 않고 MOVE를 따라간다 (속도 검증은 그대로).
  * radius = 서버가 점유 요청을 받을 때 허용하는 거리 (없으면 SEAT_SERVER_RADIUS)
@@ -818,6 +820,11 @@ export const SPOT_KINDS: Readonly<Record<SpotKind, SpotKindDef>> = {
   book: { code: "k", state: STATE.read, facing: DIR.down, indoor: true },
   /** 욕조에 들어가기 */
   tub: { code: "u", state: STATE.bath, facing: DIR.down, indoor: true },
+  /**
+   * 11/16 집 안 해먹에 눕기 (바닷가 세트 해먹). 자세는 월드 해먹과 같은 hammock이라, 상태 → 자리 종류(SPOT_BY_STATE)는 월드 해먹이 갖는다
+   * (shared — 방에서는 sit 요청으로만 잡는다)
+   */
+  hammockIn: { code: "i", state: STATE.hammock, facing: DIR.down, shared: true, indoor: true },
 };
 const SPOT_BY_CODE = new Map(Object.entries(SPOT_KINDS).map(([kind, v]) => [v.code, kind as SpotKind]));
 const SPOT_BY_STATE = new Map<number, SpotKind>(
@@ -856,6 +863,8 @@ export type SeatSlot = {
   furnitureId: string | null;
   /** 앉은 채 움직이는 자리 (조각배). 서버는 위치를 앵커에 묶지 않는다 */
   mobile?: boolean;
+  /** 11/16 r13 떠다니는 자리 (바닷가 튜브): 앉을 때도 서버 위치를 앵커로 옮기지 않는다 (탄 곳 그대로) */
+  drift?: boolean;
   /** 점유 요청을 받는 거리 (없으면 SEAT_SERVER_RADIUS) */
   radius?: number;
 };

@@ -1,5 +1,5 @@
 import { DIR, STATE, type DirId, type StateId } from "./types";
-import type { Furniture, FishingSpot, Seat } from "./world";
+import type { Campfire, Furniture, FishingSpot, Seat } from "./world";
 
 // 11/16 세 번째 맵 「달물결 포구」 (1차 바탕: 맵·버스·물때·갈매기). 캠핑장처럼 같은 채널(같은 Channel DO) 안의 따로 된 맵이에요.
 // 위쪽이 뭍, 아래쪽이 바다예요. 버스는 맨 위 길을 따라 오른쪽 끝에서 들어와 오른쪽 위 정류장에 서요.
@@ -20,10 +20,12 @@ import type { Furniture, FishingSpot, Seat } from "./world";
 export const SEA_TITLE = "달물결 포구";
 export const SEA_TITLE_EN = "Moonwave Harbor";
 
-export const SEA_COLS = 80;
-export const SEA_ROWS = 48; // 11/16 r11: 60 → 48 (덜 길게)
-export const SEA_WIDTH = SEA_COLS * 16; // 1280
-export const SEA_HEIGHT = SEA_ROWS * 16; // 768
+// 11/16 r12 사용자: 큰 모니터에서 가장 멀리 보면 양옆이 비어요 → 동쪽(오른쪽)으로 넓혀요 (기존 좌표는 그대로, 새 땅엔 갯바위·야자수 만)
+export const SEA_COLS = 110;
+// 11/16 r12 사용자: 큰 모니터(2560×1440)에서도 멀리 볼 수 있게 맨 아래에 먼바다 띠만 더해요 (뭍·갯벌·물때 선은 그대로)
+export const SEA_ROWS = 60; // 11/16 r11: 60 → 48 (덜 길게), r12: 아래 먼바다 192px 더해 다시 60
+export const SEA_WIDTH = SEA_COLS * 16; // 1760
+export const SEA_HEIGHT = SEA_ROWS * 16; // 960
 /**
  * 바닷가 배치 버전. 좌표가 바뀌는 개편마다 올려요 → 옛 바닷가 자리 기록(lib/resume.ts)은 위치를 버리고 정류장에서 시작해요.
  * 1 = 11/16 1차 바탕 (정류장·시장·부동산·오두막 터 6·산책로·백사장·갯벌·선착장·방파제·등대·갯바위)
@@ -35,8 +37,13 @@ export const SEA_HEIGHT = SEA_ROWS * 16; // 768
  * 6 = 11/16 백사장을 선베드·파라솔·선베드 한 벌 여섯으로 나란히 (선베드 12), 벤치는 산책로 아래로, 파라솔 돗자리는 빼고 돗자리 둘
  * 7 = 11/16 돗자리를 빼고 앞줄 선베드 10 (모두 22), 선베드는 막혀요 (누우면 올라가고 일어나면 발치로)
  * 8 = 11/16 r11 맵 높이 960 → 768 (뭍·갯벌을 줄임), 포구 시장 뺌, 별장 6을 뭍 곳곳에, 선착장·방파제를 짧게 (등대가 가까워요)
+ * 9 = 11/16 r12 매점 옆 피크닉 탁자 둘·자판기, 해변 모닥불(통나무 넷), 별장 사이 정원 벤치 둘, 해먹,
+ *     선착장 끝 데크를 넓히고 끝마다 걸터앉는 자리 셋 (낚시 자리·유령선 자리도 옮김),
+ *     맵 너비 1280 → 1760 (동쪽으로 넓힘 — 서쪽 좌표는 그대로)
+ * 10 = 11/16 r12 맵 높이 768 → 960 (맨 아래 먼바다 띠만 더함 — 다른 좌표는 그대로)
+ * 11 = 11/16 r13 방파제를 60px 바다 쪽으로 (끝 데크·등대·걸터앉기), 낚싯배 뺌, 튜브·제트스키
  */
-export const SEA_MAP_VERSION = 8;
+export const SEA_MAP_VERSION = 11;
 
 type Rect = { x: number; y: number; w: number; h: number };
 type Pt = { x: number; y: number };
@@ -146,8 +153,8 @@ export const SEA_ZONES: readonly SeaZone[] = [
   { id: "cottages", name: "별장", x: 24, y: 64, w: 900, h: 236 },
   { id: "beach", name: "백사장", x: 0, y: SEA_SAND_Y0, w: SEA_WIDTH, h: SEA_FLAT_Y0 - SEA_SAND_Y0 },
   { id: "flat", name: "갯벌", x: 240, y: SEA_FLAT_Y0, w: 900, h: TIDE_LOW_Y - SEA_FLAT_Y0 },
-  { id: "pier", name: "선착장", x: 584, y: 468, w: 72, h: 220 },
-  { id: "breakwater", name: "방파제", x: 1140, y: 468, w: 88, h: 184 },
+  { id: "pier", name: "선착장", x: 572, y: 468, w: 96, h: 220 },
+  { id: "breakwater", name: "방파제", x: 1140, y: 468, w: 88, h: 244 },
   { id: "rocks", name: "갯바위", x: 24, y: 506, w: 220, h: 180 },
 ];
 
@@ -229,18 +236,23 @@ export const SEA_LOT_LANTERNS: readonly Pt[] = [
 // 11/16 r11 사용자 "선착장·등대까지 너무 멀어요" → 짧게 (끝 데크는 간조 물가 바로 아래 — 늘 물 위)
 export const SEA_PIER = { x: 600, y: 468, w: 40, h: 186 } as const;
 /** 선착장 끝 넓은 데크 (간조에도 물 위) */
-export const SEA_PIER_END = { x: 584, y: 640, w: 72, h: 44 } as const;
+// r12 사용자: 끝 데크를 넓혀 걸터앉는 자리 셋 (양옆은 낚시 자리)
+export const SEA_PIER_END = { x: 572, y: 640, w: 96, h: 44 } as const;
 /** 매점 (선착장 머리 오른쪽 백사장 — 술·음료·오징어구이) */
 export const SEA_KIOSK = { x: 684, y: 428 } as const;
 export const SEA_KIOSK_W = 56;
 export const SEA_KIOSK_H = 56;
 /** 묶여 있는 낚싯배 (선착장 끝 오른쪽, 늘 깊은 물 — 지금은 물결 따라 흔들리기만) */
-export const SEA_BOAT = { x: 700, y: 694 } as const;
+// 11/16 r13 사용자: 선착장 끝 낚싯배(SEA_BOAT)는 뺐어요 (배 타기 계획도 접었어요). 그 자리에 제트스키를 매어 둬요
 /** 빨간 부표 */
 export const SEA_BUOYS: readonly Pt[] = [
   { x: 380, y: 730 }, // 11/16 유령선 자리를 비우려고 서쪽으로
   { x: 780, y: 724 },
   { x: 1086, y: 730 },
+  // 11/16 r12 아래로 넓힌 먼바다에 드문드문
+  { x: 236, y: 884 },
+  { x: 900, y: 912 },
+  { x: 1520, y: 868 },
 ];
 
 /**
@@ -250,19 +262,20 @@ export const SEA_BUOYS: readonly Pt[] = [
  *  - gangway = 선착장 끝 데크 서쪽 가장자리의 건널판 자리 (다음 차수에 난간을 열어요). 토요일 장터는 이 둘레 선착장에
  */
 export const SEA_GHOST_BERTH = {
-  ship: { x: 494, y: 750 },
+  ship: { x: 478, y: 750 },
   w: 160,
   h: 90,
-  clear: { x: 404, y: 660, w: 178, h: 98 },
-  gangway: { x: 588, y: 670 },
+  clear: { x: 388, y: 660, w: 178, h: 98 },
+  gangway: { x: SEA_PIER_END.x + 4, y: 670 },
 } as const;
 
 // ── 방파제 (오른쪽) ── 백사장 끝에서 먼바다로. 양옆은 테트라포드라 막혀요. 끝 데크에 등대 (오르기·등불은 다음 차수)
 // 11/16 r11 짧게: 방파제 몸통은 백사장 끝에서 조금만, 끝 데크(등대)는 간조 물가 근처 — 백사장에서 몇 걸음
-export const SEA_BREAKWATER = { x: 1160, y: 468, w: 48, h: 96 } as const;
-export const SEA_BREAKWATER_TIP = { x: 1136, y: 556, w: 96, h: 92 } as const;
+// 11/16 r13 사용자 "살짝 더 바다쪽으로": 둑을 60px 늘려 끝 데크·등대가 간조 물가 바깥(늘 물인 곳)에 서요
+export const SEA_BREAKWATER = { x: 1160, y: 468, w: 48, h: 156 } as const;
+export const SEA_BREAKWATER_TIP = { x: 1136, y: 616, w: 96, h: 92 } as const;
 /** 등대 받침 가운데 (끝 데크 뒤쪽) */
-export const SEA_LIGHTHOUSE = { x: 1184, y: 604 } as const;
+export const SEA_LIGHTHOUSE = { x: 1184, y: 664 } as const;
 export const SEA_LIGHTHOUSE_W = 36;
 export const SEA_LIGHTHOUSE_H = 96;
 /** 등대 문 앞 (다음 차수에 E → 오르기) */
@@ -296,6 +309,14 @@ export const SEA_ROCKS: readonly SeaRock[] = [
   { x: 796, y: 518, rx: 18, ry: 9 },
   { x: 934, y: 563, rx: 20, ry: 10 },
   { x: 686, y: 589, rx: 10, ry: 5, small: true },
+  // 11/16 r12 동쪽으로 넓힌 땅: 방파제 너머 갯바위 해안
+  { x: 1306, y: 514, rx: 26, ry: 13 },
+  { x: 1352, y: 552, rx: 32, ry: 16 },
+  { x: 1296, y: 590, rx: 14, ry: 7, small: true },
+  { x: 1398, y: 604, rx: 24, ry: 12 },
+  { x: 1440, y: 528, rx: 16, ry: 8, small: true },
+  { x: 1340, y: 660, rx: 26, ry: 13 },
+  { x: 1452, y: 676, rx: 18, ry: 9 },
 ];
 export const SEA_FOOTBATH = { x: 196, y: 546 } as const;
 /** 간조에도 남는 물웅덩이 (갯벌 위, 장식 — 걸을 수 있어요) */
@@ -309,6 +330,9 @@ export const SEA_TIDE_POOLS: readonly { x: number; y: number; rx: number; ry: nu
   { x: 1052, y: 580, rx: 16, ry: 6 },
   { x: 66, y: 526, rx: 14, ry: 5 },
   { x: 812, y: 532, rx: 12, ry: 4 },
+  // r12 동쪽 갯바위 둘레 · 작은 만
+  { x: 1380, y: 632, rx: 18, ry: 6 },
+  { x: 1596, y: 560, rx: 40, ry: 12 },
 ];
 
 // ── 다음 차수 자리 (쉴거리·갯벌 캐기·모래성 등). 지금은 그리기만 하거나 비워 둬요 ──
@@ -323,6 +347,24 @@ export const SEA_LOUNGER_FRONT_Y = 480;
 export function seaLoungerCollider(l: Pt): { x: number; y: number; w: number; h: number } {
   return { x: l.x - 10, y: l.y - 40, w: 20, h: 37 };
 }
+/** 11/16 r12 매점 왼쪽 빈 백사장의 피크닉 탁자 둘 (탁자 가운데) */
+export const SEA_PICNIC_TABLES: readonly Pt[] = [
+  { x: 556, y: 380 },
+  { x: 556, y: 444 },
+];
+/** 11/16 r12 해변 모닥불 (불 받침 가운데) · 둘레 통나무 넷 (자리 앵커, 불을 봐요) */
+export const SEA_BONFIRE = { id: "fireSea", x: 480, y: 404 } as const;
+export const SEA_BONFIRE_LOGS: readonly { x: number; y: number; facing: DirId }[] = [
+  { x: SEA_BONFIRE.x, y: SEA_BONFIRE.y - 18, facing: DIR.down },
+  { x: SEA_BONFIRE.x - 22, y: SEA_BONFIRE.y + 2, facing: DIR.right },
+  { x: SEA_BONFIRE.x + 22, y: SEA_BONFIRE.y + 2, facing: DIR.left },
+  { x: SEA_BONFIRE.x, y: SEA_BONFIRE.y + 22, facing: DIR.up },
+];
+/** 11/16 r12 별장 사이 정원 벤치 둘 (옆에 등불) */
+export const SEA_GARDEN_BENCHES: readonly Pt[] = [
+  { x: 616, y: 178 },
+  { x: 976, y: 190 },
+];
 /** 바다 보기 벤치 x (선베드 한 벌 사이 틈) */
 export const SEA_BEACH_BENCH_X: readonly number[] = [220, 340, 840, 960];
 export const SEA_SPOTS = {
@@ -342,8 +384,8 @@ export const SEA_SPOTS = {
   /** 야자수 해먹 (나무 둘 사이) · 해변 그네 */
   hammock: { x: 80, y: 374 },
   swing: { x: 1096, y: 384 },
-  /** 해변 모닥불 (마을 서쪽 모닥불을 옮겨 와요) */
-  bonfire: { x: 470, y: 398 },
+  /** 해변 모닥불 (r12 진짜 모닥불 — SEA_BONFIRE) */
+  bonfire: { x: SEA_BONFIRE.x, y: SEA_BONFIRE.y },
   /** 모래성 자리 3 (갯벌 바로 앞, 만조 앞뒤에 무너져요) */
   sandcastles: [
     { x: 344, y: 507 },
@@ -353,7 +395,7 @@ export const SEA_SPOTS = {
   /** 족욕 바위 · 선착장 끝 걸터앉기 · 방파제 끝 걸터앉기 · 등대 문 */
   footbath: SEA_FOOTBATH,
   pierEnd: { x: SEA_PIER_END.x + SEA_PIER_END.w / 2, y: SEA_PIER_END.y + SEA_PIER_END.h - 4, facing: DIR.down },
-  breakwaterEnd: { x: SEA_BREAKWATER_TIP.x + 16, y: SEA_BREAKWATER_TIP.y + SEA_BREAKWATER_TIP.h - 6, facing: DIR.down },
+  breakwaterEnd: { x: SEA_BREAKWATER_TIP.x + 24, y: SEA_BREAKWATER_TIP.y + SEA_BREAKWATER_TIP.h - 6, facing: DIR.down },
   lighthouseDoor: SEA_LIGHTHOUSE_DOOR,
 } as const;
 /**
@@ -379,8 +421,8 @@ export const SEA_FISHING_SPOTS: readonly FishingSpot[] = [
   // 물가 사이 바위
   rockSpot(15),
   // 선착장 끝 데크 (가운데 걸터앉기 자리 양옆)
-  { id: "f_604_674", water: "sea", x: 604, y: 674, facing: DIR.down },
-  { id: "f_636_674", water: "sea", x: 636, y: 674, facing: DIR.down },
+  { id: "f_584_674", water: "sea", x: 584, y: 674, facing: DIR.down },
+  { id: "f_656_674", water: "sea", x: 656, y: 674, facing: DIR.down },
 ];
 /** 갯바위 낚시 자리 발판 (바위 앞 넓적한 바위 턱 — 물이 차도 올라서 있어요, 선착장처럼 마른 자리) */
 export const SEA_FISHING_LEDGES: readonly Rect[] = SEA_FISHING_SPOTS.filter((f) => !onSeaDeckBase(f.x, f.y)).map((f) => ({ x: f.x - 15, y: f.y - 6, w: 30, h: 14 }));
@@ -466,8 +508,18 @@ export const SEA_FURNITURE: readonly Furniture[] = [
   // 11/16 백사장 바다 보기 벤치 4 (바다를 봐요)
   ...SEA_SPOTS.benches.map((b, i): Furniture => ({ id: `pS${i + 1}`, kind: "bench", x: b.x, y: b.y, facing: DIR.down, seatOffsets: [-10, 10] })),
   // 11/16 끝 걸터앉기 (선착장 끝 가운데 · 방파제 끝 데크)
-  { id: "pE1", kind: "chair", x: SEA_SPOTS.pierEnd.x, y: SEA_SPOTS.pierEnd.y, facing: DIR.down, seatOffsets: [0] },
-  { id: "pE2", kind: "chair", x: SEA_SPOTS.breakwaterEnd.x, y: SEA_SPOTS.breakwaterEnd.y, facing: DIR.down, seatOffsets: [0] },
+  // r12 사용자: 끝마다 나란히 셋 (방석을 깔아 눈에 띄게 — 그림은 SeaMap)
+  { id: "pE1", kind: "chair", x: SEA_SPOTS.pierEnd.x, y: SEA_SPOTS.pierEnd.y, facing: DIR.down, seatOffsets: [-15, 0, 15] },
+  { id: "pE2", kind: "chair", x: SEA_SPOTS.breakwaterEnd.x, y: SEA_SPOTS.breakwaterEnd.y, facing: DIR.down, seatOffsets: [-15, 0, 15] },
+  // 11/16 r12 매점 옆 피크닉 탁자 (넷이 앉아요 — 탁자 북쪽 벤치는 바다를, 남쪽 벤치는 탁자를 보고 등을 바다로)
+  ...SEA_PICNIC_TABLES.flatMap((t, i): Furniture[] => [
+    { id: `pT${i + 1}n`, kind: "bench", x: t.x, y: t.y - 10, facing: DIR.down, seatOffsets: [-9, 9] },
+    { id: `pT${i + 1}s`, kind: "bench", x: t.x, y: t.y + 12, facing: DIR.up, seatOffsets: [-9, 9] },
+  ]),
+  // 11/16 r12 해변 모닥불 둘레 통나무 넷 (불을 봐요)
+  ...SEA_BONFIRE_LOGS.map((l, i): Furniture => ({ id: `pF${i + 1}`, kind: "chair", x: l.x, y: l.y, facing: l.facing, seatOffsets: [0], campfire: SEA_BONFIRE.id })),
+  // 11/16 r12 별장 사이 정원 벤치 둘 (등불 옆)
+  ...SEA_GARDEN_BENCHES.map((b, i): Furniture => ({ id: `pG${i + 1}`, kind: "bench", x: b.x, y: b.y, facing: DIR.down, seatOffsets: [-10, 10] })),
 ];
 export const SEA_SEATS: readonly Seat[] = SEA_FURNITURE.flatMap((f) =>
   f.seatOffsets.map((dx, i) => ({
@@ -478,6 +530,8 @@ export const SEA_SEATS: readonly Seat[] = SEA_FURNITURE.flatMap((f) =>
     facing: f.facing as DirId,
     // 끝 걸터앉기는 일어서면 데크 쪽(뒤)으로 — 앞은 물이에요
     ...(SEA_EDGE_SEATS.includes(f.id) ? { standDy: -10 } : {}),
+    // 피크닉 탁자 북쪽 벤치·모닥불 북쪽 통나무는 앞(남쪽)이 탁자·불이라 뒤(북쪽)로 일어서요
+    ...((f.id.startsWith("pT") && f.id.endsWith("n")) || (f.campfire && f.facing === DIR.down) ? { standDy: -12 } : {}),
   })),
 );
 
@@ -487,7 +541,7 @@ export const SEA_SEATS: readonly Seat[] = SEA_FURNITURE.flatMap((f) =>
  *  - group = 같은 선베드·돗자리 (같이 앉은 사람을 바다 장면에 뒷모습으로 그려요)
  *  - x·y = 자리 발 위치, facing = 앉아서 보는 쪽 (모두 바다 쪽 아래)
  */
-export type SeaRestKind = "lounger" | "parasol" | "mat";
+export type SeaRestKind = "lounger" | "parasol" | "mat" | "hammock";
 export type SeaRestSeat = { id: string; group: string; kind: SeaRestKind; x: number; y: number; facing: DirId; state: StateId };
 /** 11/16 돗자리 (사용자: 모두 빼고 앞줄 선베드로 — 자리 목록은 남겨 둬요, 지금은 비어 있어요) */
 export const SEA_MATS: readonly Pt[] = [];
@@ -499,6 +553,8 @@ export const SEA_REST_SEATS: readonly SeaRestSeat[] = [
   ...SEA_MATS.flatMap((m, i) =>
     [-10, 10].map((dx, k): SeaRestSeat => ({ id: `pM${i + 1}-${k}`, group: `pM${i + 1}`, kind: "mat", x: m.x + dx, y: m.y + 2, facing: DIR.down, state: STATE.sitGround })),
   ),
+  // 11/16 r12 야자수 둘 사이 해먹 (누워서 흔들흔들 — 마을 해먹과 같은 자세)
+  { id: "pH", group: "pH", kind: "hammock", x: SEA_SPOTS.hammock.x, y: SEA_SPOTS.hammock.y, facing: DIR.down, state: STATE.hammock },
 ];
 const seaRestMap = new Map(SEA_REST_SEATS.map((s) => [s.id, s]));
 export function seaRestSeatById(id: string): SeaRestSeat | undefined {
@@ -510,11 +566,18 @@ export type SeaViewKind = "beach" | "mat" | "parasol" | "lounger" | "pier" | "br
 /** 이 자리에 앉아 있으면 볼 수 있는 바다 장면 (null = 바다 보기 없음 — 정류장·오두막 벤치) */
 export function seaViewOfSeat(seatId: string): SeaViewKind | null {
   const r = seaRestMap.get(seatId);
-  if (r) return r.kind;
-  if (seatId === "pE1") return "pier";
-  if (seatId === "pE2") return "breakwater";
+  // 해먹은 누워서 바다를 봐요 (선베드 장면)
+  if (r) return r.kind === "hammock" ? "lounger" : r.kind;
+  if (seatId.startsWith("pE1")) return "pier";
+  if (seatId.startsWith("pE2")) return "breakwater";
   if (seatId.startsWith("pS")) return "beach";
   return null;
+}
+/** 11/16 r12 해변 모닥불 (마을 Campfire 꼴 — 불멍 구도·소리를 같이 써요) */
+export const SEA_CAMPFIRE: Campfire = { id: SEA_BONFIRE.id, x: SEA_BONFIRE.x, y: SEA_BONFIRE.y };
+/** 이 바닷가 좌석이 모닥불 둘레 통나무면 그 모닥불 (불이 켜져 있는지는 클라이언트가 시간으로 봐요) */
+export function seaCampfireOfSeat(seatId: string): Campfire | null {
+  return /^pF\d$/.test(seatId) ? SEA_CAMPFIRE : null;
 }
 /** 같은 자리 묶음 (벤치·돗자리·선베드) */
 export function seaSeatGroup(seatId: string): string {
@@ -576,7 +639,7 @@ export function seaRockCollider(r: { x: number; y: number; rx: number; ry: numbe
  * 선착장·방파제 끝 데크 둘레는 난간(railColliders)이 막아서 물에서 데크로 바로 오르지는 못해요
  */
 function deepSeaColliders(): Rect[] {
-  return [{ x: SEA_BOAT.x - 34, y: SEA_BOAT.y - 12, w: 68, h: 16 }];
+  return [];
 }
 
 /** 선착장·방파제 난간 (머리 아래부터 양옆을 막아요 — 갯벌에서 올라타지 못해요) */
@@ -648,4 +711,71 @@ export function onSeaDeck(x: number, y: number): boolean {
 export function seaWet(x: number, y: number, level: number, edge = 10): boolean {
   if (y < tideLineY(level) + edge) return false;
   return !onSeaDeck(x, y);
+}
+
+// ── 11/16 r13 바다 놀거리: 튜브(헤엄치다 올라타 노 젓기) · 제트스키(선착장 끝에 매어 둠) ──
+// 서버 좌석은 조각배처럼 mobile 자리(상태 boat)라 탄 사람의 MOVE를 따라가요. 탄 사람이 없는 튜브는 모두의 화면에서
+// 같은 시계로 정해진 길(seaTubeDriftAt)을 떠다니고, 제트스키는 매어 둔 자리에 있어요.
+export type SeaRideKind = "tube" | "jetski";
+export type SeaRide = { id: string; kind: SeaRideKind; n: number; x: number; y: number };
+/** 튜브 다섯 (떠다니는 길의 가운데 — 간조 물가보다 넉넉히 바깥) */
+export const SEA_TUBES: readonly Pt[] = [
+  { x: 320, y: 700 },
+  { x: 840, y: 704 },
+  { x: 1000, y: 764 },
+  { x: 1580, y: 708 },
+  { x: 220, y: 804 },
+];
+/** 제트스키 둘 (선착장 끝 데크 동쪽 — 예전 낚싯배 자리에 위아래로 매어 둬요. 데크 동쪽 가장자리에서 타요) */
+export const SEA_JETSKIS: readonly Pt[] = [
+  { x: SEA_PIER_END.x + SEA_PIER_END.w + 22, y: SEA_PIER_END.y + 20 },
+  { x: SEA_PIER_END.x + SEA_PIER_END.w + 22, y: SEA_PIER_END.y + 50 },
+];
+export const SEA_RIDES: readonly SeaRide[] = [
+  ...SEA_TUBES.map((p, i): SeaRide => ({ id: `pU${i + 1}`, kind: "tube", n: i, x: p.x, y: p.y })),
+  ...SEA_JETSKIS.map((p, i): SeaRide => ({ id: `pJ${i + 1}`, kind: "jetski", n: i, x: p.x, y: p.y })),
+];
+const seaRideMap = new Map(SEA_RIDES.map((r) => [r.id, r]));
+export function seaRideById(id: string): SeaRide | undefined {
+  return seaRideMap.get(id);
+}
+/** 튜브 노 젓기 (헤엄 WALK보다 느리게) · 제트스키 (조각배 노 젓기 46의 두 배) — 둘 다 서버 속도 검증(MAX_VALID_SPEED) 안 */
+export const SEA_TUBE_SPEED = 24;
+export const SEA_JETSKI_SPEED = 92;
+/** 튜브가 떠다니는 폭 (가운데에서 좌우·위아래) */
+export const SEA_TUBE_DRIFT = { ax: 40, ay: 12 } as const;
+/** 튜브는 바다 어디서든 올라타요 (서버는 거리만 넉넉히 봐요) · 제트스키는 매어 둔 자리 가까이에서만 */
+export const SEA_TUBE_RADIUS = 2400;
+export const SEA_JETSKI_RADIUS = 48;
+/** 제트스키가 다닐 수 있는 가장 얕은 줄 (간조 물가보다 바깥 — 여기보다 물가 쪽은 「여기는 너무 얕아요」) */
+export const SEA_JET_MIN_Y = TIDE_LOW_Y + 24;
+export const SEA_JET_SHALLOW_MSG = "여기는 너무 얕아요";
+
+/** (x,y)가 선착장·방파제·낚싯배·갯바위에 닿는지 (pad = 놀거리 몸 반 폭) */
+export function seaRideBlocked(x: number, y: number, pad = 8): boolean {
+  const inR = (r: Rect) => x >= r.x - pad && x <= r.x + r.w + pad && y >= r.y - pad && y <= r.y + r.h + pad;
+  if (inR(SEA_PIER) || inR(SEA_PIER_END) || inR(SEA_BREAKWATER) || inR(SEA_BREAKWATER_TIP)) return true;
+  for (const r of SEA_ROCKS) {
+    const dx = (x - r.x) / (r.rx + pad);
+    const dy = (y - r.y) / (r.ry + pad * 0.6);
+    if (dx * dx + dy * dy < 1) return true;
+  }
+  return false;
+}
+/** 제트스키가 갈 수 있는 물인지: 깊은 물(SEA_JET_MIN_Y 바깥)·맵 안·부딪히는 것 없음 */
+export function seaJetWater(x: number, y: number): boolean {
+  return y >= SEA_JET_MIN_Y && y <= SEA_HEIGHT - 16 && x >= 16 && x <= SEA_WIDTH - 16 && !seaRideBlocked(x, y, 10);
+}
+/** 튜브가 뜰 수 있는 물인지 (지금 물 높이에서 물속·부딪히는 것 없음) */
+export function seaTubeWater(x: number, y: number, level: number): boolean {
+  return seaWet(x, y, level, 14) && y <= SEA_HEIGHT - 12 && x >= 12 && x <= SEA_WIDTH - 12 && !seaRideBlocked(x, y, 9);
+}
+/** 탄 사람이 없는 튜브 i의 자리 (t = 서버 시계 ms, level = 지금 물 높이). 모두의 화면에서 같아요 */
+export function seaTubeDriftAt(i: number, t: number, level: number): Pt {
+  const h = SEA_TUBES[i];
+  const ph = i * 1.7;
+  const TAU = Math.PI * 2;
+  const x = h.x + Math.sin((t / 23_000) * TAU + ph) * SEA_TUBE_DRIFT.ax + Math.sin((t / 9_100) * TAU + ph * 2) * 4;
+  const y = Math.max(h.y + Math.sin((t / 31_000) * TAU + ph * 1.3) * SEA_TUBE_DRIFT.ay, tideLineY(level) + 26);
+  return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
 }

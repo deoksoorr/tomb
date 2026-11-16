@@ -10,7 +10,7 @@ import { readBody } from "@/lib/validate";
 /** 가구 사기 `{ itemId }` → 하우징 가방 +1. 11/16 값은 집 갈래 칭호의 가구 할인을 뺀 값 (lib/titles discountedPrice) */
 export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
-  const { itemId } = await readBody(req, ItemSchema);
+  const { itemId, zone } = await readBody(req, ItemSchema);
   await rateLimit("shop", req, visitorId);
-  return json<MyHouseResponse>(await buyFurniture(getHouseStore(), visitorId, itemId, (await wornPerk(visitorId)).houseDiscount));
+  return json<MyHouseResponse>(await buyFurniture(getHouseStore(), visitorId, itemId, (await wornPerk(visitorId)).houseDiscount, zone));
 });

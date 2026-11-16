@@ -51,7 +51,7 @@ import { CAMPFIRE_HEAR_PX, CAMPFIRE_NEAR_MAX, campfireLevel, cineCenter, cineZoo
 import { ambienceAt } from "@/lib/ambience";
 import { LevelBlender, levelsFor, mixColor } from "./ambienceMix";
 import { graveChannelFor } from "./graveChannel";
-import { cameraBounds, clampZoom, parseStoredZoom, pinchZoom, snapZoom, stepZoom, approach } from "./cameraMath";
+import { cameraBounds, clampZoom, fitMinZoom, parseStoredZoom, pinchZoom, snapZoom, stepZoom, approach } from "./cameraMath";
 import { buildLayout, graveAt, layoutSignature, nearestGrave, standSpot } from "./graveLayout";
 import {
   allCampfireColliders,
@@ -530,6 +530,19 @@ describe("camera math", () => {
     expect(cameraBounds(400, 300, 640, 960)).toEqual({ x: 0, y: 0, w: 640, h: 960 });
     expect(cameraBounds(840, 300, 640, 960)).toEqual({ x: -100, y: 0, w: 840, h: 960 });
     expect(cameraBounds(400, 1160, 640, 960).y).toBe(-100);
+  });
+
+  // 11/16 큰 모니터(32인치·울트라와이드): 가장 멀리 봐도 맵 밖 빈 곳이 안 보이게 최소 줌을 화면에 맞춰요
+  it("fitMinZoom keeps the map covering big viewports", () => {
+    expect(fitMinZoom(1920, 1080, 1760, 768)).toBe(1.5);
+    for (const [w, h] of [[2560, 1440], [3072, 1728], [3440, 1440], [2560, 1080]] as const)
+      for (const [mw, mh] of [[1760, 768], [1280, 1040], [1440, 1200]] as const) {
+        const z = fitMinZoom(w, h, mw, mh);
+        expect(w / z, `${w}x${h} on ${mw}x${mh}`).toBeLessThanOrEqual(mw + 1e-9);
+        expect(h / z).toBeLessThanOrEqual(mh + 1e-9);
+        expect(z).toBeGreaterThanOrEqual(1.5);
+      }
+    expect(fitMinZoom(0, 0, 100, 100)).toBe(1.5);
   });
 
   it("approach converges smoothly", () => {

@@ -9,6 +9,7 @@ import type { CardChoice, CardOfferView } from "@/lib/rpg/cards";
 import type { ResumeState } from "@/lib/resume";
 import type { SoundMix } from "@/lib/soundMix";
 import type { IncomingChatLine } from "@/game/logic/chatLog";
+import type { RideStatus } from "@/lib/ridePolicy";
 
 // React(UI 오버레이) ↔ Phaser(게임) 사이의 유일한 통로. 양쪽은 서로를 직접 import하지 않는다.
 // "sticky" 이벤트는 마지막 값을 기억해서, 늦게 구독한 쪽도 last()로 현재 값을 읽을 수 있다.
@@ -75,6 +76,11 @@ export type GameEvents = {
    * cancelled = 이동·점프·클릭 등 입력으로 그만둠, unreachable = 길이 없음(또는 도중에 막힘)
    */
   "grave:walk": { graveId: string; status: "started" | "arrived" | "cancelled" | "unreachable" };
+  /**
+   * 11/16 [사냥] 버튼 → 사냥터 입구까지 걷기 상태 (sticky, lib/huntWalk). started = 걷기 시작, arrived = 도착 (곧 portal:open),
+   * cancelled = 방향키·조이스틱·다시 누르기 등으로 그만둠, unreachable = 길이 없음(또는 도중에 막힘)
+   */
+  "portal:walk": { kind: "hunt"; status: "started" | "arrived" | "cancelled" | "unreachable" };
   "net:status": NetStatus;
   "net:stats": NetStats;
   /** 일부러 옮기는 채널 이동이 로비 확인을 통과해 지금 채널을 떠난다 → 장면이 지금 자리를 기억하고 새 채널 처음 자리로 */
@@ -110,7 +116,11 @@ export type GameEvents = {
    * 월드의 특별한 장소와 상호작용: 사냥터 입구 / 분양 사무소(하우징) / 성황당 → UI가 해당 창을 연다.
    * 주거 구역(메인 맵의 분양 마을): 집 문이면 houseId(그 집으로 들어가기), 빈 필지 팻말이면 lot(그 번지로 분양 문의)
    */
-  "portal:open": { kind: "hunt" | "housing" | "shrine" | "telescope" | "wish" | "haunt" | "tower" | "lottery"; houseId?: string; lot?: number };
+  "portal:open": { kind: "hunt" | "housing" | "shrine" | "telescope" | "wish" | "haunt" | "tower" | "lottery"; houseId?: string; lot?: number; zone?: "sea" };
+  /** 11/16 포구 오두막이 바뀌었다 (분양·겉모습·넓히기·이름) → 바닷가 장면이 오두막을 다시 받아 그린다 */
+  "sea:cottages": undefined;
+  /** 11/16 바닷가에서 그 오두막 터 앞으로 (내 집 가기) */
+  "sea:lot": { lot: number };
   /** 22번 황금 고블린을 내가 가장 먼저 잡았다 → UI가 증서로 /api/goblin에 보상을 받는다 */
   "goblin:grant": { id: string; grant: string; points: number };
   /** 23번 확성기 한마디가 실시간 서버에서 왔다 (내 것 포함) → UI의 확성기 창에 띄운다 */
@@ -216,6 +226,11 @@ export type GameEvents = {
   "boat:duck": { riding: boolean };
   /** 11/16 범퍼카에 타 있음 (sticky) → 터치 [점프] 버튼이 [빵빵!]이 된다 (범퍼카 위 Space = 빵빵) */
   "bumper:riding": { riding: boolean };
+  /**
+   * 11/16 내 캐릭터가 지금 탄 것·앉은 자리 (sticky, 마을·캠핑장·바닷가 장면이 바뀔 때만 알린다 — lib/rideGate publishRide).
+   * 사냥터·미니게임·집으로 가는 입구가 이걸 보고 탈것이면 막고, 앉아 있으면 player:stand로 일으켜 세운다 (lib/ridePolicy)
+   */
+  "player:ride": RideStatus;
   /** 내 캐릭터의 화면 위치 (CSS px, 뷰포트 기준). ui:radial이 열려 있는 동안 움직일 때만 */
   "me:screen": { x: number; y: number };
 };
@@ -229,6 +244,8 @@ export type UiEvents = {
   "sea:view": undefined;
   /** 동물원 타는 펫 올라타기·내리기 (모바일·HUD 버튼, 데스크톱은 R) */
   "input:ride": undefined;
+  /** 11/16 다른 장면으로 가기 직전: 의자·벤치·그네·해먹 같은 자리에 있으면 일어난다 (탈것은 lib/rideGate가 먼저 막는다) */
+  "player:stand": undefined;
   /**
    * 지금 채널의 묘비 목록 (등록 순 = 격자 순서). 받을 때마다 월드를 다시 맞춘다.
    * 채널마다 묘지가 따로라, 게임은 channel이 자기 채널과 다른 목록은 무시하고 채널을 옮기면 묘비를 바로 비운다.
@@ -245,6 +262,8 @@ export type UiEvents = {
    * walk=false면 카메라만 그 묘비로 (랭킹 등)
    */
   "grave:focus": { graveId: string; walk: boolean };
+  /** 11/16 [사냥] 버튼: 내 캐릭터가 길을 찾아 그 입구까지 걸어가 도착하면 portal:open (순간이동 없음, 진행은 portal:walk). null = 그만 걷기 */
+  "portal:walkTo": { kind: "hunt" | null };
   /** 내가 방금 묘비를 세움: 카메라 이동 + 흙 덮이는 연출 + graveEvent(buried) 전송 */
   "grave:buried": { graveId: string };
   /** 내가 묘비를 수정/이장함: graveEvent 전송 */
@@ -435,6 +454,7 @@ const STICKY = new Set<keyof AllEvents>([
   "ride:state",
   "boat:duck",
   "bumper:riding",
+  "player:ride",
   "ui:radial",
   "sky:hud",
   "friends:here",
@@ -445,6 +465,7 @@ const STICKY = new Set<keyof AllEvents>([
   "map:changed",
   "bus:state",
   "camp:talk",
+  "portal:walk",
 ]);
 
 class Bridge {
@@ -478,6 +499,7 @@ class Bridge {
     this.lastValues.delete("net:status");
     this.lastValues.delete("ready");
     this.lastValues.delete("camera:state");
+    this.lastValues.delete("player:ride");
   }
 }
 

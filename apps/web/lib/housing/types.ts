@@ -1,4 +1,4 @@
-import type { HouseExteriorMap, HouseSort, PlotTierId } from "./catalog";
+import type { CottageStyleId, HouseExteriorMap, HouseSort, PlotTierId } from "./catalog";
 
 // 하우징 API 계약 (서버·클라이언트 공용). 계정 id는 절대 내보내지 않는다: 집 id는 계정 id의 HMAC이다.
 
@@ -15,6 +15,10 @@ export type PublicHouse = {
   ch: number;
   /** 그 채널 분양 마을의 번지 (1부터. 1..WORLD_LOTS는 메인 맵, 그보다 크면 2단지) */
   lot: number;
+  /** 11/16 "sea" = 달물결 포구 오두막 (lot = 포구 터 번호 1..6). 없으면 마을 집 */
+  zone?: "sea";
+  /** 오두막 겉모습 (zone sea만) */
+  style?: CottageStyleId;
   exterior: HouseExterior;
   name: string;
   intro: string;
@@ -34,6 +38,8 @@ export type HouseSummary = {
   id: string;
   ch: number;
   lot: number;
+  zone?: "sea";
+  style?: CottageStyleId;
   name: string;
   ownerName: string;
   tier: PlotTierId;
@@ -86,4 +92,4 @@ export type AdminHouse = HouseSummary & {
 export type VillageHouse = HouseSummary & { exterior: HouseExterior };
 
 /** 한 채널의 분양 마을: ch = 그 채널, lots = 지금 그리는 필지 수, taken = 숨긴 집 등 정보 없이 자리만 찬 번지 */
-export type VillageResponse = { ch: number; lots: number; houses: VillageHouse[]; taken: number[]; generatedAt: number };
+export type VillageResponse = { ch: number; zone?: "sea"; lots: number; houses: VillageHouse[]; taken: number[]; generatedAt: number };

@@ -1,4 +1,4 @@
-import { AVATAR_COLORS, CAMP_ARRIVE, DIR, SEA_ARRIVE, SPAWN, STATE, decodeSnapshot, encodeEvent, encodeMove, seaSeatById, SEA_FISHING_SPOTS, SEA_REST_SEATS, signJoinToken, type C2S, type S2C, type StateId } from "@tomb/protocol";
+import { AVATAR_COLORS, CAMP_ARRIVE, DIR, SEA_ARRIVE, SEA_JETSKIS, SEA_JETSKI_SPEED, SEA_TUBE_SPEED, SPAWN, STATE, decodeSnapshot, encodeEvent, encodeMove, seaSeatById, SEA_FISHING_SPOTS, SEA_REST_SEATS, signJoinToken, type C2S, type S2C, type StateId } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import { admit } from "./auth";
 import { ChannelCore, MAP_INTERVAL_MS, type ChannelHost, type JoinTicket } from "./channel";
@@ -171,8 +171,12 @@ describe("sea map (11/16 달물결 포구)", () => {
     core.message(a, toSea(), 0);
     const kinds = [
       { id: "pS1-0", state: STATE.sitChair },
-      { id: "pE1", state: STATE.sitChair },
-      { id: "pE2", state: STATE.sitChair },
+      // r12 끝 걸터앉기는 끝마다 셋 · 피크닉 탁자 · 모닥불 통나무 · 정원 벤치
+      { id: "pE1-2", state: STATE.sitChair },
+      { id: "pE2-0", state: STATE.sitChair },
+      { id: "pT1s-0", state: STATE.sitChair },
+      { id: "pF3", state: STATE.sitChair },
+      { id: "pG2-1", state: STATE.sitChair },
       ...SEA_REST_SEATS.filter((r, i, all) => all.findIndex((q) => q.kind === r.kind) === i).map((r) => ({ id: r.id, state: r.state })),
     ];
     let t = 1000;
@@ -193,12 +197,55 @@ describe("sea map (11/16 달물결 포구)", () => {
     }
   });
 
+  // 11/16 r13 튜브·제트스키: 조각배처럼 앉은 채 움직이는 자리 (상태 boat). 튜브는 바다 어디서든 올라타고 서버 자리를 앵커로 끌어가지 않아요
+  it("11/16 r13 a swimmer boards a drifting tube far from its anchor, paddles, and the others follow; one rider per tube", () => {
+    const { core, join } = setup();
+    const w = join("w", { sea: true, map: "sea", spawn: { x: 900, y: 860 } });
+    const a = join("a", { sea: true, map: "sea", spawn: { x: 900, y: 860 } });
+    const b = join("b", { sea: true, map: "sea", spawn: { x: 905, y: 860 } });
+    clear(w, a, b);
+    // 튜브 pU2 앵커는 (840, 704) — 150px 넘게 떨어진 곳에서 타요
+    core.message(a, send({ t: "sit", seatId: "pU2" }), 1000);
+    expect(events(a)).not.toContainEqual({ t: "seatDenied", seatId: "pU2" });
+    expect(core.peer(2)).toMatchObject({ seatId: "pU2", state: STATE.boat, x: 900, y: 860 });
+    expect(events(w)).toContainEqual({ t: "seat", seatId: "pU2", sid: 2 });
+    // 다른 사람은 같은 튜브에 못 타요
+    core.message(b, send({ t: "sit", seatId: "pU2" }), 1100);
+    expect(events(b)).toContainEqual({ t: "seatDenied", seatId: "pU2" });
+    // 노 젓기 (튜브 속도로 1초) → 서버가 따라가고 자리는 그대로
+    core.message(a, move(900 + SEA_TUBE_SPEED, 860, STATE.boat), 2100);
+    expect(core.peer(2)).toMatchObject({ seatId: "pU2", x: 900 + SEA_TUBE_SPEED });
+    // 내리면 (헤엄 MOVE) 자리를 놓아요
+    core.message(a, move(924, 860, STATE.swim), 2400);
+    expect(core.peer(2)?.seatId ?? null).toBeNull();
+  });
+
+  it("11/16 r13 a jet ski is boarded only at its mooring and its speed (2x rowboat) passes the server speed check", () => {
+    const { core, join } = setup();
+    const j = SEA_JETSKIS[0];
+    const far = join("f", { sea: true, map: "sea", spawn: { x: 300, y: 860 } });
+    core.message(far, send({ t: "sit", seatId: "pJ1" }), 1000);
+    expect(events(far)).toContainEqual({ t: "seatDenied", seatId: "pJ1" });
+    const a = join("a", { sea: true, map: "sea", spawn: { x: j.x, y: j.y - 24 } });
+    core.message(a, send({ t: "sit", seatId: "pJ1" }), 1000);
+    expect(core.peer(2)).toMatchObject({ seatId: "pJ1", state: STATE.boat, x: j.x, y: j.y });
+    // 2초 동안 오른쪽 아래로 전속력 (100ms마다 보고)
+    let x = j.x;
+    let y = j.y;
+    for (let t = 1100; t <= 3000; t += 100) {
+      x += SEA_JETSKI_SPEED * 0.07;
+      y += SEA_JETSKI_SPEED * 0.07;
+      core.message(a, move(Math.round(x), Math.round(y), STATE.boat), t);
+    }
+    expect(core.peer(2)).toMatchObject({ seatId: "pJ1", x: Math.round(x), y: Math.round(y) });
+  });
+
   it("?m=sea goes to the sea only with the sea claim", async () => {
     expect(parseMap("sea")).toBe("sea");
     expect(parseMap("ocean")).toBe("village");
-    // 11/16 r11 바닷가 맵 높이 768 (걷는 범위 y 60 ~ 754)
-    expect(parseSpawn("1200", "740", false, "sea")).toEqual({ x: 1200, y: 740 });
-    expect(parseSpawn("1200", "790", false, "sea")).toBeUndefined();
+    // 11/16 r12 바닷가 맵 높이 960 (걷는 범위 y 60 ~ 946 — 맨 아래는 먼바다)
+    expect(parseSpawn("1200", "930", false, "sea")).toEqual({ x: 1200, y: 930 });
+    expect(parseSpawn("1200", "990", false, "sea")).toBeUndefined();
     const exp = Math.floor(Date.now() / 1000) + 60;
     const base = { visitorId: "v_1234567890abcdef", name: "바다", color: AVATAR_COLORS[0], channel: 1, exp, look: [], body: "hood" };
     const withSea = await signJoinToken("secret", { ...base, sea: true });

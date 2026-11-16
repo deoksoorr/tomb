@@ -18,10 +18,12 @@ import ExteriorDialog from "./ExteriorDialog";
 import HouseHud from "./HouseHud";
 import styles from "./housing.module.css";
 import OfficeDialog from "./OfficeDialog";
+import SeaOffice from "./SeaOffice";
+import { rideGate } from "@/lib/rideGate";
 
 type Mode = { kind: "office" } | { kind: "pending" } | { kind: "village" } | { kind: "house"; house: PublicHouse; mine: boolean; edit: boolean };
 /** 메인 맵 주거 구역에서 열었을 때: 그 집 문(houseId) 또는 빈 필지(lot) */
-export type HousingIntent = { houseId?: string; lot?: number } | null;
+export type HousingIntent = { houseId?: string; lot?: number; zone?: "sea" } | null;
 /**
  * 마을 정보를 게임(메인 맵 집·마을 씬)에 넘긴다. 저장 직후 연달아 받은 응답이 순서가 뒤바뀌어 와도
  * 이미 보낸 것보다 먼저 만든 정보(generatedAt)는 버린다 (업그레이드 뒤 외관 저장이 옛 그림으로 덮이던 문제)
@@ -56,6 +58,12 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
   const [visitError, setVisitError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [villageCount, setVillageCount] = useState<number | null>(null);
+  // 11/16 포구 오두막 (포구 부동산에서 열었거나 오두막에 들어갈 때만 받는다)
+  const [seaMy, setSeaMy] = useState<MyHouseResponse | null>(null);
+  const [seaError, setSeaError] = useState<string | null>(null);
+  const seaRef = useRef<MyHouseResponse | null>(null);
+  /** 사무소 창이 포구 부동산인지 (포구에서 열었거나 오두막에서 「포구 부동산」으로 나왔을 때) */
+  const [seaOffice, setSeaOffice] = useState(intent?.zone === "sea");
   const backToOffice = useRef(false);
   /** 게임이 하우징 씬(마을·집)에 있는지 */
   const inScene = useRef(false);
@@ -68,6 +76,37 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
     myRef.current = my;
     chRef.current = channel;
   }, [onClose, my, channel]);
+
+  useEffect(() => {
+    if (!seaOffice || seaRef.current) return;
+    let alive = true;
+    housingApi
+      .mine("sea")
+      .then((r) => {
+        if (!alive || seaRef.current) return;
+        seaRef.current = r;
+        setSeaMy(r);
+      })
+      .catch((e) => alive && setSeaError(errorMessage(e)));
+    return () => {
+      alive = false;
+    };
+  }, [seaOffice]);
+
+  const onSeaMy = useCallback((r: MyHouseResponse) => {
+    seaRef.current = r;
+    setSeaMy(r);
+    void meStore.refresh();
+    bridge.emit("sea:cottages");
+  }, []);
+
+  /** 내 오두막 들어가기 (꾸미기는 오두막이 있는 채널에서만 — 창의 단추가 막는다) */
+  const enterSea = useCallback((edit: boolean) => {
+    const h = seaRef.current?.house;
+    if (!h) return;
+    setOverlay(null);
+    setMode({ kind: "house", house: h, mine: true, edit });
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -99,7 +138,11 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
         return;
       }
       if (inScene.current && !spawnLot && fresh) emitVillage(village, myHouseId);
-      else bridge.emit("village:enter", { village, myHouseId, spawnLot });
+      else {
+        // 11/16 마을에서 분양 마을로 갈 때: 탈것에 탄 채로는 못 간다 (lib/rideGate)
+        if (!inScene.current && rideGate("분양 마을에 갈")) return;
+        bridge.emit("village:enter", { village, myHouseId, spawnLot });
+      }
       inScene.current = true;
       setOverlay(null);
       setMode({ kind: "village" });
@@ -190,6 +233,11 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
   const enterKey = mode.kind === "house" ? `${mode.house.id}:${mode.edit}` : null;
   useEffect(() => {
     if (mode.kind !== "house") return;
+    // 11/16 마을에서 바로 들어갈 때: 탈것에 탄 채로는 못 들어간다 (lib/rideGate — 안내 토스트 후 창을 닫는다). 의자·벤치면 일어나서
+    if (!inScene.current && rideGate("집에 들어갈")) {
+      onCloseRef.current();
+      return;
+    }
     inScene.current = true;
     bridge.emit("house:enter", { house: mode.house, mine: mode.mine, edit: mode.edit });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 같은 집 안에서 정보만 바뀔 때(좋아요·저장)는 다시 들어가지 않는다
@@ -201,6 +249,12 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
     if (mine?.id === id) {
       setOverlay(null);
       setMode({ kind: "house", house: mine, mine: true, edit: false });
+      return;
+    }
+    const sea = seaRef.current?.house;
+    if (sea?.id === id) {
+      setOverlay(null);
+      setMode({ kind: "house", house: sea, mine: true, edit: false });
       return;
     }
     setBusy(true);
@@ -267,6 +321,16 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
       try {
         const { house } = await housingApi.detail(intentHouse);
         if (!alive) return;
+        // 11/16 오두막이면 내 오두막인지 한 번 더 본다 (주인이면 꾸미기·가방이 열린다)
+        if (house.zone === "sea") {
+          const sea = seaRef.current ?? (await housingApi.mine("sea").catch(() => null));
+          if (!alive) return;
+          if (sea?.house?.id === intentHouse) {
+            seaRef.current = sea;
+            setSeaMy(sea);
+            return setMode({ kind: "house", house: sea.house, mine: true, edit: false });
+          }
+        }
         setMode({ kind: "house", house, mine: false, edit: false });
       } catch (e) {
         if (!alive) return;
@@ -301,22 +365,40 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
   if (mode.kind === "pending") return null;
 
   if (mode.kind === "house") {
+    const sea = mode.house.zone === "sea";
     return (
       <HouseHud
         key={mode.house.id}
         house={mode.house}
         mine={mode.mine}
-        my={mode.mine ? my : null}
+        my={mode.mine ? (sea ? seaMy : my) : null}
         channel={channel}
-        onMy={onMy}
+        onMy={sea ? onSeaMy : onMy}
         onHouse={(house) => setMode((m) => (m.kind === "house" ? { ...m, house } : m))}
         onLeave={(toOffice) => {
           backToOffice.current = toOffice;
+          setSeaOffice(sea);
           bridge.emit("house:exit");
         }}
       />
     );
   }
+
+  if (seaOffice && mode.kind === "office")
+    return (
+      <SeaOffice
+        channel={channel}
+        my={seaMy}
+        myError={seaError}
+        villa={my ? !!my.house : myError ? false : null}
+        onMy={onSeaMy}
+        onEnterMine={enterSea}
+        onVisit={(id) => void visit(id)}
+        onClose={onClose}
+        busy={busy}
+        presetLot={intent?.zone === "sea" ? (intent.lot ?? null) : null}
+      />
+    );
 
   const office = (inVillage: boolean, lot: number | null) => (
     <OfficeDialog

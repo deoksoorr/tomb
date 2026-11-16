@@ -8,8 +8,11 @@ import {
   LEGACY_HOUSING_CHANNEL,
   LIKE_WEIGHT,
   reclaimLastSeen,
+  SEA_LOT_COUNT,
   VILLAGE_MAX_LOTS,
+  type CottageStyleId,
   type HouseSort,
+  type HouseZone,
   type PlotTierId,
 } from "./catalog";
 import { emptyLayout, normalizeExterior } from "./layout";
@@ -30,7 +33,30 @@ export type HouseRecord = PublicHouse & { owner: string; hidden: boolean; items:
 export type StoredGuest = GuestEntry & { author: string };
 
 /** ch: 분양받는 채널 (없으면 1), lot: 그 채널에서 고른 번지 (null이면 가장 앞의 빈 번지를 자동으로) */
-export type NewHouse = { id: string; owner: string; name: string; intro: string; ownerName: string; tier: PlotTierId; ch?: number; lot: number | null; now: number; paid?: number };
+export type NewHouse = {
+  id: string;
+  owner: string;
+  name: string;
+  intro: string;
+  ownerName: string;
+  tier: PlotTierId;
+  ch?: number;
+  lot: number | null;
+  now: number;
+  paid?: number;
+  /** 11/16 sea = 포구 오두막 (번지 색인이 마을과 따로, 1..SEA_LOT_COUNT). 없으면 마을 */
+  zone?: HouseZone;
+  style?: CottageStyleId;
+  /** 처음 배치 (없으면 빈 방). placed = 그 배치에 놓인 개수, placedScore = 그 점수 (호출자가 designCounts·designScore로 센다) */
+  layout?: HouseLayout;
+  placed?: Record<string, number>;
+  placedScore?: number;
+  /** 함께 주는 가구 (그 집 가방에 +1씩, 한 집 id에 한 번만 — 철거 뒤 다시 분양받아도 또 주지 않는다) */
+  starter?: readonly string[];
+};
+
+/** 번지 수 상한 (마을·포구) */
+export const zoneMaxLots = (zone: HouseZone | undefined) => (zone === "sea" ? SEA_LOT_COUNT : VILLAGE_MAX_LOTS);
 
 export type CreateResult = { lot: number } | "exists" | "lot_taken" | "full";
 
@@ -52,6 +78,8 @@ export type ReclaimInput = {
   lastSeenAt: number;
   label: string;
   now: number;
+  /** 11/16 오두막이면 sea (번지 색인이 따로) */
+  zone?: HouseZone;
 };
 
 /** ok면 비웠다. gone = 이미 없거나 주인이 다름, changed = 그 사이 넓혔음, active = 주인이 돌아왔음 */
@@ -69,12 +97,16 @@ export interface HouseStore {
   get(id: string): Promise<HouseRecord | null>;
   /** 가진 물건 (놓은 것 포함) */
   inventory(id: string): Promise<Record<string, number>>;
+  /** 11/16 이 집 id에 시작 가구를 이미 준 적이 있는지 (오두막) */
+  hasStarter(id: string): Promise<boolean>;
   /** 집 만들기와 번지 배정을 한 번에 (같은 채널의 같은 번지를 두 집이 받지 않는다. 채널이 다르면 같은 번지도 따로) */
   create(h: NewHouse): Promise<CreateResult>;
   /** 번지가 없는 (마을이 생기기 전) 집에 그 집 채널의 가장 앞의 빈 번지를 준다. 이미 있으면 그 번지 */
   assignLot(id: string): Promise<number | null>;
-  /** 한 채널의 마을: 그 채널에 번지가 있는 모든 집 (숨김 포함, 번지 순) */
-  village(ch?: number): Promise<HouseRecord[]>;
+  /** 한 채널의 마을: 그 채널에 번지가 있는 모든 집 (숨김 포함, 번지 순). zone sea = 그 채널 포구 오두막 */
+  village(ch?: number, zone?: HouseZone): Promise<HouseRecord[]>;
+  /** 오두막 겉모습 바꾸기 (오두막이 아니거나 없으면 false) */
+  setStyle(id: string, style: CottageStyleId, now: number): Promise<boolean>;
   /** 집과 딸린 키를 모두 지운다 (분양 결제 실패 보상·관리자 삭제) */
   remove(id: string): Promise<void>;
   /**
@@ -161,6 +193,8 @@ export class MemoryHouseStore implements HouseStore {
   private keptInv = new Map<string, Map<string, number>>();
   private pending = new Map<string, PendingReclaim[]>();
   private reclaimLockUntil = 0;
+  /** 시작 가구를 이미 준 집 id */
+  private starterGiven_ = new Set<string>();
 
   async states(id: string) {
     return { ...(this.stateMap.get(id) ?? {}) };
@@ -209,50 +243,61 @@ export class MemoryHouseStore implements HouseStore {
     return h ? this.view(h) : null;
   }
 
+  async hasStarter(id: string) {
+    return this.starterGiven_.has(id);
+  }
+
   async inventory(id: string) {
     return Object.fromEntries(this.houses.get(id)?.inv ?? this.keptInv.get(id) ?? []);
   }
 
   /** 채널마다 번지 → 집 (메모리는 집 기록에서 바로 센다. 채널이 없는 예전 기록은 1채널로 본다) */
-  private lotTaken(ch: number, lot: number): boolean {
-    for (const h of this.houses.values()) if (h.rec.lot === lot && housingChannelOf(h.rec.ch) === ch) return true;
+  private lotTaken(ch: number, lot: number, zone?: HouseZone): boolean {
+    for (const h of this.houses.values()) if (h.rec.lot === lot && housingChannelOf(h.rec.ch) === ch && h.rec.zone === (zone === "sea" ? "sea" : undefined)) return true;
     return false;
   }
 
-  private freeLot(ch: number): number | null {
-    for (let l = 1; l <= VILLAGE_MAX_LOTS; l++) if (isOpenLot(l) && !this.lotTaken(ch, l)) return l; // 비운 번지(CLOSED_LOTS)는 건너뛴다
+  private freeLot(ch: number, zone?: HouseZone): number | null {
+    // 비운 번지(CLOSED_LOTS)는 마을에서만 건너뛴다
+    for (let l = 1; l <= zoneMaxLots(zone); l++) if ((zone === "sea" || isOpenLot(l)) && !this.lotTaken(ch, l, zone)) return l;
     return null;
   }
 
   async create(n: NewHouse): Promise<CreateResult> {
     if (this.houses.has(n.id)) return "exists";
     const ch = housingChannelOf(n.ch ?? LEGACY_HOUSING_CHANNEL);
-    if (n.lot !== null && this.lotTaken(ch, n.lot)) return "lot_taken";
-    const lot = n.lot ?? this.freeLot(ch);
+    const sea = n.zone === "sea";
+    if (n.lot !== null && this.lotTaken(ch, n.lot, n.zone)) return "lot_taken";
+    const lot = n.lot ?? this.freeLot(ch, n.zone);
     if (lot === null) return "full";
-    const kept = this.keptInv.get(n.id);
+    const kept = this.keptInv.get(n.id) ?? new Map<string, number>();
     this.keptInv.delete(n.id);
+    if (n.starter?.length && !this.starterGiven_.has(n.id)) {
+      this.starterGiven_.add(n.id);
+      for (const it of n.starter) kept.set(it, (kept.get(it) ?? 0) + 1);
+    }
     this.houses.set(n.id, {
       rec: {
         id: n.id,
         ch,
         lot,
+        ...(sea ? { zone: "sea" as const, style: n.style ?? "wood" } : {}),
         exterior: defaultExterior(),
         owner: n.owner,
         name: n.name,
         intro: n.intro,
         ownerName: n.ownerName,
         tier: n.tier,
-        layout: emptyLayout(),
+        layout: n.layout ? structuredClone(n.layout) : emptyLayout(),
         likes: 0,
-        placedScore: 0,
+        placedScore: n.placedScore ?? 0,
         createdAt: n.now,
         updatedAt: n.now,
         hidden: false,
         ...(n.paid !== undefined ? { paid: n.paid } : {}),
       },
-      inv: kept ?? new Map(),
-      placed: new Map(),
+      inv: kept,
+      placed: new Map(Object.entries(n.placed ?? {})),
       guests: [],
       guestHidden: new Set(),
       guestReports: new Map(),
@@ -264,15 +309,16 @@ export class MemoryHouseStore implements HouseStore {
     const h = this.houses.get(id);
     if (!h) return null;
     if (h.rec.lot) return h.rec.lot;
-    const lot = this.freeLot(housingChannelOf(h.rec.ch));
+    const lot = this.freeLot(housingChannelOf(h.rec.ch), h.rec.zone);
     if (lot === null) return null;
     h.rec.lot = lot;
     return lot;
   }
 
-  async village(ch = LEGACY_HOUSING_CHANNEL) {
+  async village(ch = LEGACY_HOUSING_CHANNEL, zone?: HouseZone) {
+    const want = zone === "sea" ? "sea" : undefined;
     return [...this.houses.values()]
-      .filter((h) => h.rec.lot > 0 && housingChannelOf(h.rec.ch) === ch)
+      .filter((h) => h.rec.lot > 0 && housingChannelOf(h.rec.ch) === ch && h.rec.zone === want)
       .map((h) => this.view(h))
       .sort((a, b) => a.lot - b.lot);
   }
@@ -281,7 +327,7 @@ export class MemoryHouseStore implements HouseStore {
     const h = this.houses.get(id);
     if (!h) return "no_house" as const;
     const ch = housingChannelOf(h.rec.ch);
-    for (const [oid, o] of this.houses) if (oid !== id && o.rec.lot === lot && housingChannelOf(o.rec.ch) === ch) return "taken" as const;
+    for (const [oid, o] of this.houses) if (oid !== id && o.rec.lot === lot && housingChannelOf(o.rec.ch) === ch && o.rec.zone === h.rec.zone) return "taken" as const;
     h.rec.lot = lot;
     return "ok" as const;
   }
@@ -321,6 +367,13 @@ export class MemoryHouseStore implements HouseStore {
     const now = Date.now();
     if (now < this.reclaimLockUntil) return false;
     this.reclaimLockUntil = now + ttlMs;
+    return true;
+  }
+
+  async setStyle(id: string, style: CottageStyleId, now: number) {
+    const h = this.houses.get(id);
+    if (!h || h.rec.zone !== "sea") return false;
+    Object.assign(h.rec, { style, updatedAt: now });
     return true;
   }
 

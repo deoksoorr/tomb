@@ -25,6 +25,7 @@ import StarsHud from "./StarsHud";
 import s from "./rpg.module.css";
 import { readStarsRecords, saveStarsRecord, StarsDexCard, StarsInfo, StarsPreview } from "./TelescopeExtras";
 import x from "./TelescopeExtras.module.css";
+import { rideGate } from "@/lib/rideGate";
 
 // 22번 별 보기 언덕의 망원경 (월드에서 망원경 앞 E → portal:open {kind:"telescope"}).
 // 사냥터 로비에 있던 "별자리 잇기"를 여기서 한다. 판 시작·결과 검증은 사냥터와 같은 /api/rpg/run (game "stars") —
@@ -128,6 +129,12 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
   }
 
   async function start() {
+    // 11/16 탈것에 탄 채로는 못 한다 (lib/rideGate). 의자·벤치면 일어나서
+    const why = rideGate("별자리 잇기를 할");
+    if (why) {
+      setNotice(why);
+      return;
+    }
     setPhase("starting");
     setNotice(null);
     try {

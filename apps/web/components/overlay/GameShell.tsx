@@ -15,6 +15,9 @@ import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { useMyGraves } from "@/lib/hooks/useMyGraves";
 import { useNotices } from "@/lib/hooks/useNotices";
 import { showToast, useToasts } from "@/lib/hooks/useToasts";
+import { useRideBlocked } from "@/lib/hooks/useRideBlocked";
+import { rideGate } from "@/lib/rideGate";
+import { HUNT_NO_PATH_TOAST, huntPress, huntWalkHint, walkingAfter } from "@/lib/huntWalk";
 import { readItem, UI_KEYS, writeItem } from "@/lib/storage";
 import { onBackgroundChange } from "@/lib/background";
 import { onVisibleAgain, tabHidden } from "@/lib/hooks/visibleAgain";
@@ -276,7 +279,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   /** 말풍선 채팅 입력: 데스크톱 Enter 막대 · 터치 [채팅] 버튼 한 줄 입력칸 */
   const [chatOpen, setChatOpen] = useState(false);
   /** 주거 구역의 집 문·빈 필지에서 하우징 창을 열었으면 그 집/번지 */
-  const [housingIntent, setHousingIntent] = useState<{ houseId?: string; lot?: number } | null>(null);
+  const [housingIntent, setHousingIntent] = useState<{ houseId?: string; lot?: number; zone?: "sea" } | null>(null);
   const coarse = useMediaQuery("(pointer: coarse)");
   // 데스크톱인데 창이 좁으면 윗줄에 채널 표시 자리가 없다 → 아래 안내 줄로
   const narrow = useMediaQuery("(max-width: 700px)");
@@ -286,6 +289,16 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const away = scene === "house" || scene === "hunt" || scene === "minigame";
   // 11/15 마을 ↔ 캠핑장 버스 창밖 연출 동안은 HUD를 숨긴다 (몇 초)
   const riding = useBridgeValue("bus:state")?.riding === true;
+  // 11/16 오리배·조각배·범퍼카·관람차 같은 탈것에 타 있으면 [사냥]을 흐리게 (누르면 안내만 — lib/rideGate). 의자·벤치는 저절로 일어나 간다
+  const huntBlocked = useRideBlocked("사냥터에 갈");
+  /** 메뉴 타일 설명 자리용 짧은 문구 (타일 이름이 이미 「사냥터」) */
+  const rideOff = useRideBlocked();
+  // 11/16 [사냥] → 사냥터 입구까지 걸어가는 중 (lib/huntWalk). 다시 누르거나 방향키·조이스틱으로 멈춘다
+  const huntWalking = walkingAfter(useBridgeValue("portal:walk")?.status);
+  const mapNow = useBridgeValue("map:changed")?.map ?? "village";
+  useBridgeEvent("portal:walk", ({ status }) => {
+    if (status === "unreachable") showToast(HUNT_NO_PATH_TOAST);
+  });
   // 11/16 버스에 오르면 열려 있던 한 줄 채팅 입력칸도 닫는다 (내린 뒤 저절로 다시 뜨지 않게)
   useBridgeEvent("bus:state", (st) => {
     if (st.riding) setChatOpen(false);
@@ -313,8 +326,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   useEffect(() => {
     if (onlineChannel) rememberChannel(onlineChannel);
   }, [onlineChannel]);
-  useBridgeEvent("portal:open", ({ kind, houseId, lot }) => {
-    setHousingIntent(kind === "housing" && (houseId || lot) ? { houseId, lot } : null);
+  useBridgeEvent("portal:open", ({ kind, houseId, lot, zone }) => {
+    setHousingIntent(kind === "housing" && (houseId || lot || zone) ? { houseId, lot, zone } : null);
     setPanel(kind);
     // 집으로 바로 들어갈 때(친구 창 [집 놀러 가기]·[친구한테 가기]·집 문): 떠 있던 다른 창·목록은 닫는다
     if (kind === "housing" && houseId) {
@@ -481,6 +494,15 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       house.ch,
       houseChannel,
       () => {
+        // 11/16 포구 오두막: 바닷가에 있으면 그 터 앞으로, 아니면 오두막 안으로 바로 들어가요
+        if (house.zone === "sea") {
+          if ((bridge.last("map:changed")?.map ?? "village") === "sea") bridge.emit("sea:lot", { lot: house.lot });
+          else {
+            setHousingIntent({ houseId: house.id });
+            setPanel("housing");
+          }
+          return;
+        }
         if (isWorldLot(house.lot)) bridge.emit("world:lot", { lot: house.lot, label: "내 집" });
         else {
           setHousingIntent(null);
@@ -526,9 +548,23 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       .catch(() => showToast("그 묘비를 찾지 못했어요. 성불했거나 이장되었을 수 있어요."));
   }
 
+  /**
+   * 11/16 [사냥]: 내 캐릭터가 마을의 사냥터 입구까지 걸어가서 입구 창을 연다 (입구 앞에서 E를 누른 것과 같다).
+   * 걷는 중이면 멈춘다. 캠핑장·바닷가·탈것이면 안내만 (lib/huntWalk), 의자·벤치에 앉아 있으면 일어나서 간다 (lib/rideGate)
+   */
+  function pressHunt() {
+    const act = huntPress({ map: mapNow, walking: huntWalking, rideWhy: huntBlocked });
+    if (act.do === "cancel") bridge.emit("portal:walkTo", { kind: null });
+    else if (act.do === "toast") showToast(act.message);
+    else if (!rideGate("사냥터에 갈")) bridge.emit("portal:walkTo", { kind: "hunt" });
+  }
+
   /** 터치 메뉴 시트에서 고른 것 열기 */
   function pickFromMenu(target: MenuTarget) {
-    if (target === "bury") startBury();
+    if (target === "hunt") {
+      setPanel(null);
+      pressHunt();
+    } else if (target === "bury") startBury();
     else if (target === "graves") openMyGraves();
     else if (target === "dex") {
       setPanel(null);
@@ -713,7 +749,14 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                   </>
                 )}
               </button>
-              <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("hunt")}>
+              <button
+                type="button"
+                className={cx(ui.button, styles.dockButton)}
+                aria-disabled={huntBlocked ? true : undefined}
+                aria-pressed={huntWalking || undefined}
+                title={huntBlocked ?? (huntWalking ? "다시 누르면 멈춰요" : "사냥터 입구까지 걸어가요")}
+                onClick={pressHunt}
+              >
                 <PixelIcon name="sword" />
                 사냥
               </button>
@@ -746,6 +789,11 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           <div className={styles.bottomCenter}>
             {showTutorial && <Tutorial touch={coarse} onDone={() => setTutorialOn(false)} />}
             <ToastList toasts={toasts} />
+            {huntWalking && (
+              <button type="button" className={cx(ui.button, styles.walkHint)} onClick={() => bridge.emit("portal:walkTo", { kind: null })} aria-live="polite">
+                {huntWalkHint(coarse)}
+              </button>
+            )}
             <StatusBanners />
             {narrow && !coarse && <Hud onOpenChannels={() => setPanel("channels")} />}
           </div>
@@ -872,6 +920,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           friendIncoming={friendIncoming}
           titleNew={titleNew}
           noFriends={iAmStaff}
+          huntBlocked={rideOff}
           points={me ? me.points : null}
           onPick={pickFromMenu}
           onClose={closePanel}
@@ -901,7 +950,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
         />
       )}
       {panel === "housing" && (
-        <HousingOffice key={housingIntent?.houseId ?? housingIntent?.lot ?? "office"} intent={housingIntent} channel={houseChannel} onClose={closePanel} />
+        <HousingOffice key={housingIntent?.houseId ?? `${housingIntent?.zone ?? ""}${housingIntent?.lot ?? "office"}`} intent={housingIntent} channel={houseChannel} onClose={closePanel} />
       )}
       {panel === "hunt" && <HuntLobby onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
       {/* 11/15 마을의 야근 빌딩 (사냥 레벨 50 전이면 창 없이 경비원 한마디) */}

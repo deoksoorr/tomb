@@ -69,6 +69,7 @@ import type { ShopContext } from "./ShopScene";
 import { CampTrip, villageLandFor } from "../camp/CampTrip";
 import { BIG_RIDE_TOAST, myBig, RIDE_OBJECT_KINDS } from "../camp/foodState";
 import type { CampFriend } from "../camp/campHost";
+import { publishRide, rideBlocked, standForGate } from "@/lib/rideGate";
 
 // 월드 씬: 맵·묘비·내 캐릭터·원격 아바타·분위기·조명·카메라·네트워크를 묶고 bridge 이벤트를 처리한다.
 // 유령 잡화점에 들어가면 이 씬은 숨기만 하고(업데이트·연결은 유지) 상점 씬이 그 위에 그려진다.
@@ -811,6 +812,8 @@ export class WorldScene extends Phaser.Scene {
     // 휴식 중(탭이 숨겨져 게임 루프를 재움)은 실시간 연결에서 탭 숨김과 같게
     on.push(bridge.on("game:rest", ({ on: resting }) => this.net.setResting(resting)));
     on.push(bridge.on("grave:focus", ({ graveId, walk }) => (this.trip.away ? this.toast("묘비는 마을에 있어요. 버스를 타고 마을로 돌아가요.") : this.focusGrave(graveId, walk))));
+    // 11/16 [사냥] 버튼 → 사냥터 입구까지 걸어가기 (lib/huntWalk — 캠핑장·바닷가·탈것은 UI가 먼저 거른다). null = 그만 걷기
+    on.push(bridge.on("portal:walkTo", ({ kind }) => this.walkToPortal(kind)));
     on.push(
       bridge.on("grave:buried", ({ graveId }) => {
         this.net.graveEvent("buried", graveId);
@@ -868,6 +871,8 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("input:whoOn", ({ names }) => !this.cleaned && this.net.whoOn(names)));
     on.push(bridge.on("input:mood", ({ mood }) => !this.cleaned && !this.trip.away && this.expr.setMood(mood)));
     on.push(bridge.on("input:ride", () => !this.cleaned && !this.inShop && !this.trip.away && !this.tripLock && this.riding.toggle()));
+    // 11/16 사냥터·미니게임·집으로 가기 직전 (lib/rideGate): 의자·그네 같은 자리에서 일어난다 (캠핑장·바닷가에 있으면 그 장면이 받는다)
+    on.push(bridge.on("player:stand", () => !this.cleaned && !this.inShop && !this.trip.away && standForGate(this.player, this.time.now, this.seatReq)));
     on.push(bridge.on("guide:point", ({ target, label }) => !this.trip.away && this.guide.set(target ? this.resolveGuide(target, label) : null)));
     on.push(bridge.on("world:lot", ({ lot, label }) => (this.trip.away ? this.toast("마을로 돌아간 뒤에 볼 수 있어요.") : this.showLot(lot, label))));
     on.push(
@@ -995,6 +1000,18 @@ export class WorldScene extends Phaser.Scene {
       bridge.emit("grave:open", { graveId: id });
     }
     this.startNet();
+  }
+
+  /** 11/16 입구까지 걷기 (null = 그만). 마을 밖(캠핑장·바닷가·버스)·실내에서는 걷지 않는다 */
+  private walkToPortal(kind: "hunt" | null): void {
+    if (this.cleaned) return;
+    if (!kind) {
+      if (this.walker.portal) this.walker.cancel();
+      return;
+    }
+    if (this.trip.away || this.awayScene || this.tripLock) return;
+    if (this.inShop) this.exitShop();
+    this.walker.goPortal(kind, this.time.now);
   }
 
   /** walk=true: 길을 찾아 그 묘비 앞까지 걸어간다 (41번, 순간이동 없음). false: 카메라만 */
@@ -1487,6 +1504,9 @@ export class WorldScene extends Phaser.Scene {
     if (this.cleaned || !this.net.online) return;
     if (!(map === "sea" ? this.net.seaOpen : this.net.campOpen)) return notice(`지금은 ${MAP_NAME[map]}에 갈 수 없어요.`);
     if (this.awayScene) return notice("마을로 나온 뒤에 친구한테 갈 수 있어요.");
+    // 11/16 오리배·범퍼카 같은 탈것에 탄 채로는 버스를 타지 않는다 (lib/rideGate — 사냥터 입구와 같은 규칙)
+    const why = rideBlocked(`${MAP_NAME[map]}에 갈`);
+    if (why) return notice(why);
     if (this.inShop) this.exitShop();
     this.leaveCampfire();
     this.trip.board(f, map);
@@ -1636,6 +1656,8 @@ export class WorldScene extends Phaser.Scene {
     } else if (kind === "honk") {
       // 11/16 범퍼카 빵빵 (경적·헤드라이트 깜빡은 BumperRide, "빵빵!" 말풍선은 AvatarView.playAct)
       this.bumper.honkFx(x, y, mine, d);
+    } else if (kind === "lamp") {
+      // 11/16 바닷가 등대 등불 (바닷가 장면만 쓴다 — 마을에서는 아무것도 하지 않는다)
     } else if (d < 400 || mine) {
       // 손 흔들기·환호 이모티콘은 아바타가 이름표 위에 띄운다 (AvatarView.playAct). 여기는 환호 반짝임과 소리 (이모티콘과 같은 톡 — 환호는 높게)
       this.fx.actSparks(x, y, kind);
@@ -1838,6 +1860,8 @@ export class WorldScene extends Phaser.Scene {
     this.life.update(dt, view, s);
     this.forage.update(dt, view, s);
     this.riding.update();
+    // 11/16 탄 것·앉은 자리 → UI (사냥터·미니게임·집 입구가 본다, lib/rideGate)
+    publishRide(pl, this.riding.on);
     this.zoo.update(now, view);
     this.zoo.scaleLabels(s);
 

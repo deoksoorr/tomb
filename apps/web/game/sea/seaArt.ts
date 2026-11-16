@@ -173,6 +173,16 @@ export const SEA_TEX = {
   depthShade: `${P}depthShade`,
   sheenWet: `${P}sheenWet`,
   mailbox: `${P}mailbox`,
+  /** 11/16 r12 피크닉 탁자(상판·긴 의자 판) · 모닥불(낮엔 꺼진 장작) · 통나무 · 끝 걸터앉기 방석 */
+  picnicTop: `${P}picnicTop`,
+  picnicPlank: `${P}picnicPlank`,
+  ashLogs: `${P}ashLogs`,
+  driftLog: `${P}driftLog`,
+  cushion: (v: number) => `${P}cushion${v}`,
+  /** 11/16 r13 바다 놀거리: 튜브(색 다섯) · 제트스키(옆·앞·뒤) · 물살 자국 */
+  tube: (v: number) => `${P}tube${v}`,
+  jetski: (d: "side" | "front" | "back", v: number) => `${P}jetski-${d}${v}`,
+  wake: `${P}wake`,
   stone: (v: number) => `${P}stone${v}`,
   crab: `${P}crab`,
   ledge: `${P}ledge`,
@@ -1288,7 +1298,11 @@ export const WATER_ROW0 = 64;
 /** 물가에서 깊이(px) → 물 색 (시안: 0.1 + 깊이/62 — 시안 1px = 월드 4px) */
 function waterBand(x: number, depth: number): Color {
   const n = fbm(x / 64, depth * 0.02, 4) - 0.5;
-  return pick(RAMP.water, Math.min(1, Math.max(0, 0.1 + depth / 248 + n * 0.18)), x, depth);
+  const c = pick(RAMP.water, Math.min(1, Math.max(0, 0.1 + depth / 248 + n * 0.18)), x, depth);
+  // 11/16 r12 아래로 넓힌 먼바다: 물가에서 멀어질수록 조금 더 짙은 남색 (수평선 쪽 느낌, 4단 디더)
+  if (depth <= 230) return c;
+  const f = Math.min(1, (depth - 230) / 210) * 0.55 + n * 0.08;
+  return pick([c, mix(c, 0x2c5488, 0.33), mix(c, 0x2c5488, 0.66), 0x2c5488], Math.max(0, Math.min(1, f)), x, depth);
 }
 export function waterArt(): Grid {
   const g = new Grid(WATER_TILE_W, WATER_TILE_H);
@@ -1661,4 +1675,179 @@ export function* seaGroundSteps(cx: number, cy: number, size = SEA_CHUNK, band =
         put(out, (py * size + px) * 4, d > 0.6 ? (y < 0 ? RAMP.wet[2] : RAMP.wet[0]) : RAMP.wet[3]);
       }
   return out;
+}
+
+// ── 11/16 r12 매점 옆 피크닉 탁자 · 해변 모닥불 · 끝 걸터앉기 방석 ──
+const PICNIC = hexes(["#f6dcb2", "#ecc898", "#dcb282", "#c89c6e", "#b2885e"]);
+/** 피크닉 탁자 상판 (46×18, 원점 가운데 아래 = 탁자 가운데 + 6). 위엔 줄무늬 천 한 장 */
+export function picnicTopArt(): Grid {
+  const g = new Grid(46, 18);
+  for (let y = 2; y < 12; y++)
+    for (let x = 2; x < 44; x++) {
+      const k = (y - 2) % 4;
+      g.set(x, y, k === 3 ? PICNIC[3] : k === 0 ? PICNIC[0] : pick(PICNIC, 0.3 + h2(x, y) * 0.15, x, y));
+    }
+  g.hline(2, 43, 11, PICNIC[4]);
+  // 다리 (X자)
+  for (let i = 0; i < 4; i++) {
+    g.set(8 + i, 12 + i, PICNIC[4]);
+    g.set(37 - i, 12 + i, PICNIC[4]);
+  }
+  // 체크 천 + 컵
+  for (let y = 4; y < 10; y++) for (let x = 16; x < 30; x++) if (((x >> 1) + (y >> 1)) % 2) g.set(x, y, 0xf2a49a);
+  g.rect(34, 4, 3, 3, 0xfdf6ec);
+  g.set(35, 4, 0x9ad6e6);
+  softOutline(g);
+  shadow(g, 23, 15.5, 20, 1.6, 52);
+  return g;
+}
+/** 피크닉 긴 의자 판 (36×7, 원점 가운데 아래) */
+export function picnicPlankArt(): Grid {
+  const g = new Grid(36, 7);
+  g.rect(2, 1, 32, 3, PICNIC[2]);
+  g.hline(2, 33, 1, PICNIC[0]);
+  g.hline(2, 33, 3, PICNIC[4]);
+  g.rect(5, 4, 2, 2, PICNIC[4]);
+  g.rect(29, 4, 2, 2, PICNIC[4]);
+  softOutline(g);
+  shadow(g, 18, 5.5, 15, 1, 48);
+  return g;
+}
+/** 꺼진 모닥불 장작 (낮 — 엇갈린 숯 장작, 22×10, 원점 가운데 아래) */
+export function ashLogsArt(): Grid {
+  const g = new Grid(22, 10);
+  const bark = [0x8a6a4c, 0x6e5238, 0x4e3a2a];
+  for (let i = 0; i < 12; i++) {
+    g.set(4 + i, 7 - (i >> 2), bark[i % 3 === 0 ? 0 : 1]);
+    g.set(4 + i, 8 - (i >> 2), bark[2]);
+    g.set(17 - i, 7 - (i >> 2), bark[i % 3 === 1 ? 0 : 1]);
+    g.set(17 - i, 8 - (i >> 2), bark[2]);
+  }
+  for (const [x, y] of [[10, 4], [11, 5], [9, 6], [12, 6]]) g.set(x, y, 0x3a3230);
+  g.set(11, 4, 0x6a6460);
+  softOutline(g);
+  return g;
+}
+/** 물에 씻긴 통나무 의자 (1인, 18×10, 원점 가운데 아래) */
+export function driftLogArt(): Grid {
+  const g = new Grid(18, 10);
+  const bark = hexes(["#d8c2a2", "#c2a882", "#a88c68", "#8c7254"]);
+  for (let y = 2; y < 8; y++) for (let x = 2; x < 16; x++) g.set(x, y, y === 2 ? bark[0] : y === 7 ? bark[3] : pick(bark, 0.25 + h2(x, y) * 0.35, x, y));
+  for (const ex of [2, 15]) {
+    g.vline(ex, 3, 6, 0xeedcbc);
+    g.set(ex, 4, 0xc8aa80);
+  }
+  softOutline(g);
+  shadow(g, 9, 8.5, 8, 1.1, 50);
+  return g;
+}
+/** 끝 걸터앉기 방석 (12×6, 원점 가운데 아래). v: 0 = 산호, 1 = 하늘, 2 = 노랑 — 데크 끝 앉는 자리 표시 */
+export function cushionArt(v: number): Grid {
+  const ramp = v === 0 ? RAMP.umbC : v === 1 ? RAMP.towel : RAMP.umbY;
+  const g = new Grid(12, 6);
+  for (let y = 1; y < 5; y++) for (let x = 1; x < 11; x++) if (!((x === 1 || x === 10) && (y === 1 || y === 4))) g.set(x, y, y === 1 ? ramp[0] : y === 4 ? ramp[2] : ramp[1]);
+  g.set(5, 2, ramp[2]);
+  g.set(6, 2, ramp[2]);
+  softOutline(g);
+  return g;
+}
+
+// ── 11/16 r13 바다 놀거리: 튜브 · 제트스키 (부드러운 단계·옅은 테) ──
+/** 튜브 크기 (원점 = 가운데). 위쪽 반(뒤)과 아래쪽 반(앞)을 잘라 탄 사람 앞뒤로 그려요 */
+export const TUBE_W = 26;
+export const TUBE_H = 16;
+export const TUBE_CY = 8;
+const TUBE_COLORS = [hexes(["#ffd0c4", "#f6a896", "#e48678"]), hexes(["#fff2c0", "#fbe08e", "#eec66e"]), hexes(["#cdf2dc", "#a6e2c0", "#84cba4"]), hexes(["#d4ecff", "#a8d4f6", "#86b8e4"]), hexes(["#ffd6ec", "#f6b0d2", "#e490ba"])];
+/** 줄무늬 튜브 (v = 색). 가운데 구멍은 비워 둬요 (물이 보여요) */
+export function tubeArt(v: number): Grid {
+  const ramp = TUBE_COLORS[v % TUBE_COLORS.length];
+  const g = new Grid(TUBE_W, TUBE_H);
+  const cx = TUBE_W / 2;
+  for (let y = 0; y < TUBE_H; y++)
+    for (let x = 0; x < TUBE_W; x++) {
+      const dx = (x + 0.5 - cx) / 11.5;
+      const dy = (y + 0.5 - TUBE_CY) / 6.2;
+      const o = dx * dx + dy * dy;
+      const ix = (x + 0.5 - cx) / 5.2;
+      const iy = (y + 0.5 - TUBE_CY + 0.6) / 2.6;
+      if (o > 1 || ix * ix + iy * iy < 1) continue;
+      const a = Math.atan2(dy, dx);
+      const stripe = Math.floor(((a + Math.PI) / (Math.PI * 2)) * 8) % 2 === 0;
+      // 빛은 왼쪽 위: 위쪽 바깥은 밝게, 아래쪽은 한 단계 진하게
+      const shade = dy < -0.35 ? 0 : dy > 0.45 ? 2 : 1;
+      g.set(x, y, stripe ? ramp[shade] : shade === 2 ? 0xe8e4dc : shade === 0 ? 0xffffff : 0xf8f6f0);
+    }
+  g.set(7, 4, 0xffffff);
+  g.set(8, 4, 0xffffff);
+  softOutline(g);
+  return g;
+}
+
+/** 제트스키 크기 · 앉는 높이 (원점 = 가운데 아래) */
+export const JET_SIDE_W = 34;
+export const JET_SIDE_H = 16;
+export const JET_FB_W = 18;
+export const JET_FB_H = 18;
+const JET_HULL = [hexes(["#ffe0d6", "#f8b8a6", "#e8958a"]), hexes(["#d8f0ff", "#a6d6f4", "#7cb8e0"])];
+const JET_TOP = hexes(["#fffdf8", "#f2eee6", "#ddd6ca"]);
+const JET_SEAT = hexes(["#7c8cc0", "#5c6aa0", "#46528a"]);
+/** 옆모습 (오른쪽으로 가요 — 왼쪽은 뒤집어 그려요). v = 색 */
+export function jetskiSideArt(v: number): Grid {
+  const H = JET_HULL[v % 2];
+  const g = new Grid(JET_SIDE_W, JET_SIDE_H);
+  // 아래 배 (앞이 올라간 뱃머리)
+  for (let x = 2; x < 32; x++) {
+    const top = x > 24 ? 8 - Math.round((x - 24) * 0.4) : 8;
+    const bot = x > 26 ? 12 - Math.round((x - 26) * 0.6) : 12;
+    for (let y = top; y <= bot; y++) g.set(x, y, y === bot ? H[2] : y === top ? H[0] : H[1]);
+  }
+  // 위 덮개 (흰색) + 줄무늬
+  for (let x = 4; x < 28; x++) for (let y = 6; y < 9; y++) g.set(x, y, y === 6 ? JET_TOP[0] : JET_TOP[1]);
+  g.hline(6, 26, 9, H[2]);
+  // 안장 (뒤쪽) · 손잡이 기둥 (앞)
+  for (let x = 7; x < 17; x++) for (let y = 4; y < 6; y++) g.set(x, y, y === 4 ? JET_SEAT[0] : JET_SEAT[1]);
+  g.vline(21, 2, 6, 0x6a6f80);
+  g.hline(20, 23, 2, 0x4a4e5c);
+  // 앞 유리 · 물보라 자국 (배 밑)
+  g.set(24, 5, 0xbfe8f1);
+  g.set(25, 5, 0x94d3e6);
+  for (let x = 3; x <= 30; x++) g.set(x, 13, 0xffffff, 120);
+  softOutline(g);
+  return g;
+}
+/** 앞모습(아래로 와요)·뒷모습(위로 가요) */
+export function jetskiFbArt(front: boolean, v: number): Grid {
+  const H = JET_HULL[v % 2];
+  const g = new Grid(JET_FB_W, JET_FB_H);
+  const cx = JET_FB_W / 2;
+  for (let y = 4; y < 16; y++) {
+    const half = front ? Math.min(7, 2 + (y - 4) * 0.7) : Math.min(7, 5 + (y - 4) * 0.25);
+    for (let x = Math.round(cx - half); x < Math.round(cx + half); x++) g.set(x, y, y < 10 ? (y === 4 ? JET_TOP[0] : JET_TOP[1]) : y >= 14 ? H[2] : H[1]);
+  }
+  if (front) {
+    // 손잡이 · 앞 유리
+    g.hline(4, 13, 3, 0x4a4e5c);
+    g.rect(7, 5, 4, 2, 0xbfe8f1);
+  } else {
+    // 안장 · 뒤 등 두 개
+    g.rect(6, 5, 6, 4, JET_SEAT[1]);
+    g.hline(6, 11, 5, JET_SEAT[0]);
+    g.set(4, 12, 0xff8a7a);
+    g.set(13, 12, 0xff8a7a);
+  }
+  for (let x = 2; x <= 15; x++) g.set(x, 16, 0xffffff, 130);
+  softOutline(g);
+  return g;
+}
+/** 물살 자국 한 점 (밝은 거품 타원, 원점 가운데) */
+export function wakeArt(): Grid {
+  const g = new Grid(10, 6);
+  for (let y = 0; y < 6; y++)
+    for (let x = 0; x < 10; x++) {
+      const dx = (x + 0.5 - 5) / 5;
+      const dy = (y + 0.5 - 3) / 3;
+      const d = dx * dx + dy * dy;
+      if (d < 1) g.set(x, y, 0xffffff, Math.round(220 * (1 - d)));
+    }
+  return g;
 }

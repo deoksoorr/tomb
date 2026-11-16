@@ -1351,6 +1351,31 @@ describe("3번 집 안 가구: 방(집)의 1인 자리와 use 중계", () => {
     expect(events(b)).toContainEqual({ t: "seatDenied", seatId: spotSeatId("hang", 60, 90) });
   });
 
+  it("11/16 집 안 해먹(hammockIn): 방에서만, 한 명만, 마을 해먹과 같은 hammock 자세로 눕는다", () => {
+    const HAMMOCK = spotSeatId("hammockIn", 160, 110);
+    expect(HAMMOCK.startsWith("i_")).toBe(true);
+    const { core, join } = setup(3, 20_000, true);
+    const a = join("a", 0, { x: 162, y: 116 });
+    const b = join("b", 0, { x: 158, y: 116 });
+    clear(a, b);
+    core.message(a, send({ t: "sit", seatId: HAMMOCK }), 0);
+    core.message(b, send({ t: "sit", seatId: HAMMOCK }), 0);
+    expect(events(a)).toEqual([{ t: "seat", seatId: HAMMOCK, sid: 1 }]);
+    expect(events(b)).toContainEqual({ t: "seatDenied", seatId: HAMMOCK });
+    core.message(a, move(160, 110, STATE.hammock), 10);
+    core.tick(50);
+    expect(core.peer(1)).toMatchObject({ seatId: HAMMOCK, state: STATE.hammock });
+    // 일어나면 풀린다
+    core.message(a, move(162, 118, STATE.walk), 200);
+    core.message(b, send({ t: "sit", seatId: HAMMOCK }), 300);
+    expect(core.peer(2)?.seatId).toBe(HAMMOCK);
+    // 월드 채널에서는 받지 않는다 (마을 해먹 자리 "m_"는 그대로 월드 것)
+    const world = setup();
+    const c = world.join("c", 0, { x: 160, y: 110 });
+    world.core.message(c, send({ t: "sit", seatId: HAMMOCK }), 0);
+    expect(events(c)).toContainEqual({ t: "seatDenied", seatId: HAMMOCK });
+  });
+
   it("use: 방에서만 다른 사람에게 중계하고 USE_INTERVAL_MS 안의 연타는 버린다", () => {
     const { core, join } = setup(3, 20_000, true);
     const a = join("a");

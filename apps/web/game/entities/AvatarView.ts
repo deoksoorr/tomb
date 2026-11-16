@@ -747,6 +747,8 @@ export class AvatarView {
     if (kind === "quack") return this.say("꽥!", now);
     // 11/16 범퍼카 빵빵: 머리 위 "빵빵!" 말풍선만 (몸짓 없음)
     if (kind === "honk") return this.say("빵빵!", now);
+    // 11/16 등대 등불 켜기: 몸짓 없이 (바닷가 장면이 불빛을 켠다)
+    if (kind === "lamp") return;
     const s = this.state;
     if (s === "swim" || s === "dive" || s === "hang" || s === "swing" || s === "hammock" || s === "sitGround" || s === "sitChair" || s === "jump") return;
     if (s === "boat" || s === "seesaw" || s === "trampoline" || s === "carousel" || s === "bumper") return;

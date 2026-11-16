@@ -1255,7 +1255,8 @@ export class ChannelCore<C extends object> {
     }
     this.seats.set(seatKey(map, seatId), p.sid);
     p.seatId = seatId;
-    if (!(seat.mobile && slide)) {
+    // 11/16 r13 떠다니는 자리(바닷가 튜브)는 바다 어디서든 올라타요 → 탄 곳 그대로 (앵커로 끌어가지 않아요)
+    if (!(seat.mobile && (slide || seat.drift))) {
       p.x = p.tx = seat.x;
       p.y = p.ty = seat.y;
     }

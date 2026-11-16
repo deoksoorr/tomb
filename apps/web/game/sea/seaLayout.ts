@@ -1,7 +1,6 @@
 import {
   SEA_BOARD,
   SEA_BOARDWALK,
-  SEA_BOAT,
   SEA_BOUNDS,
   SEA_BREAKWATER,
   SEA_BREAKWATER_TIP,
@@ -24,7 +23,6 @@ import {
   seaLotFront,
   seaLotGate,
   SEA_PIER,
-  SEA_PIER_END,
   SEA_REALTY,
   SEA_REALTY_DOOR,
   SEA_REALTY_H,
@@ -36,6 +34,9 @@ import {
   SEA_SPOTS,
   SEA_MATS,
   SEA_EDGE_SEATS,
+  SEA_PICNIC_TABLES,
+  SEA_BONFIRE,
+  SEA_GARDEN_BENCHES,
   seaLoungerCollider,
   SEA_TIDE_POOLS,
   SEA_WIDTH,
@@ -142,14 +143,29 @@ export const SEA_CRABS: readonly Pt[] = [
 export type SeaDecor = { kind: SeaDecorKind; x: number; y: number; v: number };
 
 /** 해먹을 걸 야자수 둘 (다음 차수에 그 사이에 해먹을 걸어요) */
+// r12 해먹 기둥 바로 바깥 (기둥이 야자수 줄기에 묶인 듯)
 export const SEA_PALMS: readonly Pt[] = [
-  { x: SEA_SPOTS.hammock.x - 30, y: SEA_SPOTS.hammock.y - 2 },
-  { x: SEA_SPOTS.hammock.x + 30, y: SEA_SPOTS.hammock.y - 2 },
+  { x: SEA_SPOTS.hammock.x - 26, y: SEA_SPOTS.hammock.y - 2 },
+  { x: SEA_SPOTS.hammock.x + 26, y: SEA_SPOTS.hammock.y - 2 },
 ];
+/** 11/16 r12 바닷가 음료 자판기 (매점 오른쪽 — 술·음료. 매점 왼쪽은 선착장 가는 길이라 비워 둬요) */
+export const SEA_VEND: Pt = { x: SEA_KIOSK.x + 42, y: SEA_KIOSK.y };
+/** r12 해먹 기둥 반 폭 (마을 해먹 소품과 같은 그림) */
+const SEA_HAMMOCK_HALF = 20;
 /** 산책로 가로등 (산책로 위쪽 가장자리) */
-export const SEA_LAMPS: readonly Pt[] = [80, 240, 400, 712, 880, 1040, 1232].map((x) => ({ x, y: SEA_BOARDWALK.y + 2 }));
+export const SEA_LAMPS: readonly Pt[] = [80, 240, 400, 712, 880, 1040, 1232, 1424, 1616].map((x) => ({ x, y: SEA_BOARDWALK.y + 2 }));
+/** 11/16 r12 동쪽 작은 만: 모래 언덕 위 야자수 (넓힌 땅) */
+export const SEA_COVE_PALMS: readonly Pt[] = [
+  { x: 1532, y: 372 },
+  { x: 1598, y: 396 },
+  { x: 1664, y: 366 },
+  { x: 1722, y: 404 },
+  { x: 1488, y: 300 },
+  { x: 1700, y: 300 },
+];
 /** 생선 상자 더미 (매점 옆) · 그물 말리는 틀 (11/16 r11 시장을 빼며 상자는 매점 옆 하나만) */
-export const SEA_CRATES: readonly Pt[] = [{ x: SEA_KIOSK.x + 40, y: SEA_KIOSK.y - 2 }];
+// r12 자판기에 자리를 내주고 매점 왼쪽 뒤로
+export const SEA_CRATES: readonly Pt[] = [{ x: SEA_KIOSK.x - 34, y: SEA_KIOSK.y - 18 }];
 export const SEA_NET_RACK: Pt = { x: 1000, y: 276 };
 /** 테트라포드 (방파제 양옆과 끝 둘레 — 그림만, 막는 건 protocol 난간) */
 export const SEA_TETRAPODS: readonly (Pt & { v: number })[] = (() => {
@@ -199,8 +215,8 @@ function buildTrees(): SeaTree[] {
     out.push({ kind: behindStop ? "bush" : "pine", x, y: behindStop ? 46 : y, v: i % 2 });
   }
   // 오른쪽 풀밭 소나무 몇 그루 (정류장 길을 비켜서)
-  for (let i = 0; i < 40 && out.length < 60; i++) {
-    const x = 990 + Math.floor(hashU(i, 5, 11) * 260);
+  for (let i = 0; i < 80 && out.length < 80; i++) {
+    const x = 990 + Math.floor(hashU(i, 5, 11) * (SEA_WIDTH - 1030));
     const y = 170 + Math.floor(hashU(i, 6, 11) * (SEA_BOARDWALK.y - 190));
     if (x > SEA_BOUNDS.maxX - 6 || keepClear(x, y, 22)) continue;
     if (out.some((t) => t.y > 100 && Math.hypot(t.x - x, t.y - y) < 40)) continue;
@@ -214,6 +230,7 @@ function buildTrees(): SeaTree[] {
   ])
     if (!keepClear(p.x, p.y, 6)) out.push({ kind: "bush", x: p.x, y: p.y, v: 1 });
   for (const p of SEA_PALMS) out.push({ kind: "palm", x: p.x, y: p.y, v: 0 });
+  for (const p of SEA_COVE_PALMS) out.push({ kind: "palm", x: p.x, y: p.y, v: 0 });
   // 11/16 별장 언덕 야자수 둘 (산책로 위 가장자리) · r11 별장마다 정원 덤불 한두 그루 (울타리 옆)
   out.push({ kind: "palm", x: 534, y: 300, v: 0 }, { kind: "palm", x: 22, y: 300, v: 0 });
   for (const l of SEA_LOTS)
@@ -233,7 +250,7 @@ function buildTrees(): SeaTree[] {
     out.push({ kind: hashU(i, 43, 3) < 0.4 ? "bush" : "pine", x, y, v: i % 2 });
   }
   // 11/16 시안: 풀밭 곳곳에 둥근 덤불 (사용자가 마음에 들어 했어요) — 건물·터·길·정류장을 비켜서
-  for (let i = 0; i < 90 && out.filter((t) => t.kind === "bush").length < 30; i++) {
+  for (let i = 0; i < 130 && out.filter((t) => t.kind === "bush").length < 42; i++) {
     const x = 24 + Math.floor(hashU(i, 31, 13) * (SEA_WIDTH - 48));
     const y = SEA_ROAD.y + SEA_ROAD.h + 16 + Math.floor(hashU(i, 32, 13) * (SEA_BOARDWALK.y - SEA_ROAD.y - SEA_ROAD.h - 28));
     if (keepClear(x, y, 14)) continue;
@@ -250,13 +267,17 @@ function nearRest(x: number, y: number, pad: number): boolean {
   for (const l of SEA_SPOTS.loungers) if (Math.abs(x - l.x) < 12 + pad && y > l.y - 44 - pad && y < l.y + pad) return true;
   for (const p of SEA_SPOTS.parasols) if (Math.abs(x - p.x) < 24 + pad && Math.abs(y - p.y) < 14 + pad) return true;
   for (const m of SEA_MATS) if (Math.abs(x - m.x) < 24 + pad && Math.abs(y - m.y) < 14 + pad) return true;
+  for (const t of SEA_PICNIC_TABLES) if (Math.abs(x - t.x) < 26 + pad && Math.abs(y - t.y) < 24 + pad) return true;
+  if (Math.hypot(x - SEA_BONFIRE.x, y - SEA_BONFIRE.y) < 34 + pad) return true;
+  if (Math.abs(x - SEA_SPOTS.hammock.x) < 30 + pad && Math.abs(y - SEA_SPOTS.hammock.y) < 14 + pad) return true;
+  if (Math.abs(x - SEA_VEND.x) < 16 + pad && Math.abs(y - SEA_VEND.y) < 14 + pad) return true;
   return false;
 }
 
 function buildDecor(): SeaDecor[] {
   const out: SeaDecor[] = [];
   // 백사장 위쪽 갯그령 (산책로 아래), 조개껍데기·떠밀려 온 나무
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 84; i++) {
     const x = 16 + Math.floor(hashU(i, 1, 21) * (SEA_WIDTH - 32));
     const y = SEA_SAND_Y0 + 6 + Math.floor(hashU(i, 2, 21) * 28);
     if (Math.abs(x - (SEA_PIER.x + SEA_PIER.w / 2)) < 40) continue;
@@ -284,8 +305,11 @@ function buildDecor(): SeaDecor[] {
     const side = l.gate === "s" ? [ { x: g.x - 24, y: g.y + 6 }, { x: g.x + 24, y: g.y + 6 } ] : [ { x: g.x - 8, y: g.y - 22 }, { x: g.x - 8, y: g.y + 26 } ];
     for (const p of side) if (!keepClear(p.x, p.y, 0)) out.push({ kind: "beachGrass", x: p.x, y: p.y, v: (p.x >> 3) % 3 });
   }
+  // r12 동쪽 작은 만: 모래 언덕 갯그령 덤불 (야자수 발치)
+  for (const p of SEA_COVE_PALMS)
+    for (const [dx, dy] of [[-14, 6], [12, 9], [2, 16]] as const) out.push({ kind: "beachGrass", x: p.x + dx, y: p.y + dy, v: (p.x + dx) % 3 });
   // 풀밭 들꽃 (해당화 빛)
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 56; i++) {
     const x = 20 + Math.floor(hashU(i, 6, 25) * (SEA_WIDTH - 40));
     const y = SEA_ROAD.y + SEA_ROAD.h + 8 + Math.floor(hashU(i, 7, 25) * (SEA_BOARDWALK.y - SEA_ROAD.y - SEA_ROAD.h - 14));
     if (keepClear(x, y, 4)) continue;
@@ -333,6 +357,12 @@ export function seaFurnitureColliders(): Rect[] {
     ...SEA_FURNITURE.filter((f) => !SEA_EDGE_SEATS.includes(f.id)).map(seaFurnitureCollider),
     ...SEA_SPOTS.parasols.map((p) => ({ x: p.x - 2, y: p.y - 3, w: 4, h: 3 })),
     ...SEA_SPOTS.loungers.map(seaLoungerCollider),
+    // 11/16 r12 피크닉 탁자 상판 · 모닥불 돌 · 해먹 기둥 · 자판기
+    ...SEA_PICNIC_TABLES.map((t) => ({ x: t.x - 20, y: t.y - 9, w: 40, h: 13 })),
+    { x: SEA_BONFIRE.x - 9, y: SEA_BONFIRE.y - 5, w: 18, h: 8 },
+    { x: SEA_SPOTS.hammock.x - SEA_HAMMOCK_HALF - 2, y: SEA_SPOTS.hammock.y - 4, w: 4, h: 4 },
+    { x: SEA_SPOTS.hammock.x + SEA_HAMMOCK_HALF - 2, y: SEA_SPOTS.hammock.y - 4, w: 4, h: 4 },
+    { x: SEA_VEND.x - 10, y: SEA_VEND.y - 8, w: 20, h: 8 },
   ];
 }
 
@@ -385,9 +415,10 @@ export const SEA_INTERACTABLES: readonly SeaInteractable[] = [
   }),
   { id: "realty", kind: "realty", x: SEA_REALTY_DOOR.x, y: SEA_REALTY_DOOR.y + 4, r: 22, label: "포구 부동산" },
   { id: "kiosk", kind: "kiosk", x: SEA_KIOSK.x, y: SEA_KIOSK.y + 12, r: 20, label: "매점" },
+  // 11/16 r12 음료 자판기 (술·음료는 여기서)
+  { id: "vending", kind: "vending", x: SEA_VEND.x, y: SEA_VEND.y + 10, r: 16, label: "자판기" },
   { id: "lighthouse", kind: "lighthouse", x: SEA_LIGHTHOUSE_DOOR.x, y: SEA_LIGHTHOUSE_DOOR.y + 6, r: 18, label: "등대 오르기" },
   { id: "keeper", kind: "keeper", x: SEA_KEEPER.x, y: SEA_KEEPER.y + 8, r: 20, label: "등대지기와 이야기하기" },
-  { id: "boat", kind: "boat", x: SEA_PIER_END.x + SEA_PIER_END.w - 8, y: SEA_BOAT.y, r: 20, label: "낚싯배" },
 ];
 
 // ── 밤 빛 ──
@@ -397,6 +428,8 @@ export const SEA_LIGHTS: readonly SeaLight[] = [
   // 정류장 지붕 등 · 시간표 불빛
   { x: SEA_BUS_STOP.x, y: SEA_BUS_STOP.y - SEA_SHELTER_H + 12, scale: 0.85, tint: 0xfff0c8, base: 0.85 },
   { x: SEA_BUS_TIMETABLE.x, y: SEA_BUS_TIMETABLE.y - 18, scale: 0.4, tint: 0xd8f0ff, base: 0.6 },
+  // 11/16 r12 정원 벤치 옆 등불 · 해변 모닥불은 SeaMap이 (켜졌을 때만)
+  ...SEA_GARDEN_BENCHES.map((b) => ({ x: b.x + 26, y: b.y - 30, scale: 0.7, tint: 0xffe2a8, base: 0.75 })),
   // 부동산 창 · 매점 창구
   { x: SEA_REALTY.x - 34, y: SEA_REALTY.y - 26, scale: 0.55, tint: 0xffe0a0, base: 0.75 },
   { x: SEA_KIOSK.x, y: SEA_KIOSK.y - 24, scale: 0.7, tint: 0xffe6b0, base: 0.85 },
@@ -424,6 +457,5 @@ export function zoneLabelAt(name: string): Pt | undefined {
 // 11/16 벤치·파라솔은 이제 진짜 자리 (막는 상자가 있어요) → 앉는 자리는 SEA_REST_SEATS·SEA_SEATS 테스트에서
 export const SEA_FUTURE_SPOTS: readonly Pt[] = [
   SEA_SPOTS.swing,
-  SEA_SPOTS.bonfire,
   ...SEA_SPOTS.sandcastles,
 ];

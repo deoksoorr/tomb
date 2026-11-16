@@ -95,7 +95,7 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
     if (!edit) return;
     setSaving(true);
     try {
-      const r = await housingApi.saveLayout(channel, house.tier, { items: edit.items, floor: edit.floor, wall: edit.wall });
+      const r = await housingApi.saveLayout(channel, house.tier, { items: edit.items, floor: edit.floor, wall: edit.wall }, house.zone === "sea" ? "sea" : "village");
       onMy(r);
       if (r.house) {
         onHouse(r.house);
@@ -116,7 +116,7 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
     if (!def) return;
     setBuying(true);
     try {
-      onMy(await housingApi.buyItem(itemId));
+      onMy(await housingApi.buyItem(itemId, house.zone === "sea" ? "sea" : "village"));
       void meStore.refresh();
       bridge.emit("house:tool", { action: "tryEnd", keep: true });
       setNotice(`${def.name} 사서 놓았어요. 저장하면 꾸밈 점수에 들어가요.`);
@@ -155,7 +155,7 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
               </span>
             )}
             <span className={styles.hudOwner} title={`${house.ownerName}의 ${tier.name}${tag ? ` · ${tag}` : ""}`}>
-              {house.ownerName}의 {tier.name}
+              {house.ownerName}의 {house.zone === "sea" ? `오두막 · ${tier.name}` : tier.name}
               {tag ? ` · ${tag}` : ""}
             </span>
           </span>
@@ -175,7 +175,7 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
             </button>
           )}
           <button type="button" className={ui.button} onClick={() => leave(true)}>
-            분양 사무소
+            {house.zone === "sea" ? "포구 부동산" : "분양 사무소"}
           </button>
           <button type="button" className={cx(ui.button, ui.quiet, ui.icon)} onClick={() => leave(false)} aria-label="집에서 나가기">
             <PixelIcon name="close" />

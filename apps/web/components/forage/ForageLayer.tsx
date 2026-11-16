@@ -15,6 +15,7 @@ import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { showToast } from "@/lib/hooks/useToasts";
+import { rideGate } from "@/lib/rideGate";
 import { derive } from "@/lib/rpg/formulas";
 import type { BugsResult, RpgPlay, RunResult } from "@/lib/rpg/types";
 import RunHud from "../rpg/RunHud";
@@ -111,6 +112,8 @@ export default function ForageLayer() {
 
   async function startGather(node: string) {
     if (busy.current || gather || insect) return;
+    // 11/16 곤충 채집은 따로 장면(미니게임)으로 간다 → 탈것에 탄 채로는 못 한다 (lib/rideGate)
+    if (gatherNodeById(node)?.kind === "bug" && rideGate("곤충 채집을 할")) return;
     busy.current = true;
     try {
       const r = await forageApi.gatherStart(node);

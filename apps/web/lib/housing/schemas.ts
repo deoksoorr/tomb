@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { furnitureById, HOUSING_CHANNELS, PLOT_TIERS, SORTS, VILLAGE_MAX_LOTS } from "./catalog";
+import { COTTAGE_STYLES, furnitureById, HOUSING_CHANNELS, PLOT_TIERS, SORTS, VILLAGE_MAX_LOTS } from "./catalog";
 import { checkGuestText, checkHouseName, checkIntro, type TextCheck } from "./text";
 
 // 하우징 요청 본문 검증 (zod). 배치의 칸·겹침·개수 검사는 lib/housing/layout.ts validateLayout이 한다.
@@ -30,16 +30,25 @@ export const housingChannel = z
 /** 마을 조회 `?ch=` (없으면 1채널: 채널이 생기기 전 화면 호환) */
 export const VillageQuerySchema = z.coerce.number("채널 번호가 올바르지 않아요.").pipe(housingChannel);
 
-export const ProfileSchema = z.object({ name: text(checkHouseName), intro: text(checkIntro) });
+/** 11/16 어느 집인지 (없으면 마을 집 — 예전 화면 호환) */
+export const zoneField = z.enum(["village", "sea"], "알 수 없는 집이에요.").optional();
+export const cottageStyle = z.enum(COTTAGE_STYLES.map((c) => c.id) as ["wood", "blue", "keeper"], "알 수 없는 오두막 모양이에요.");
+/** `?zone=sea` (없거나 다른 값이면 마을 집) */
+export const zoneOfQuery = (raw: string | null): "village" | "sea" => (raw === "sea" ? "sea" : "village");
+
+export const ProfileSchema = z.object({ name: text(checkHouseName), intro: text(checkIntro), zone: zoneField });
 /** 분양: ch 채널에서 lot을 주면 그 번지, 없으면 자동 배정. tier는 처음 살 터 크기 (없으면 작은 터: 예전 화면 호환) */
 export const CreateHouseSchema = ProfileSchema.extend({
   ch: housingChannel,
   tier: tierId.optional(),
   lot: z.number("번지가 올바르지 않아요.").int().min(1).max(VILLAGE_MAX_LOTS, "번지가 올바르지 않아요.").nullish(),
+  /** 11/16 오두막 겉모습 (zone sea) */
+  style: cottageStyle.optional(),
 });
+export const StyleSchema = z.object({ style: cottageStyle });
 export const ExteriorSchema = z.object({ ch: housingChannel, exterior: z.record(z.string(), z.string().max(40)) });
-export const UpgradeSchema = z.object({ ch: housingChannel, to: tierId });
-export const ItemSchema = z.object({ itemId });
+export const UpgradeSchema = z.object({ ch: housingChannel, to: tierId, zone: zoneField });
+export const ItemSchema = z.object({ itemId, zone: zoneField });
 
 const placed = z.object({
   u: z.string().max(8),
@@ -52,6 +61,7 @@ const placed = z.object({
 
 export const LayoutSchema = z.object({
   ch: housingChannel,
+  zone: zoneField,
   tier: tierId,
   layout: z.object({
     items: z.array(placed).max(200, "물건이 너무 많아요."),

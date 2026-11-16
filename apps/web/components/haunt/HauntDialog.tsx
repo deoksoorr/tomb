@@ -13,6 +13,7 @@ import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import h from "./haunt.module.css";
 import { isBetter, readBest, saveBest, type HauntBest } from "./record";
+import { rideGate } from "@/lib/rideGate";
 
 // 귀신의집 (월드의 귀신의집 문 앞 E → portal:open {kind:"haunt"}). 혼자 하는 공포 미로 — 포인트 보상 없음.
 // 들어가기 전 경고 → haunt:play(시드) → 미로 동안 위 작은 HUD·나가기·조이스틱 → haunt:ended → 결과(걸린 시간·놀란 횟수·내 최고 기록).
@@ -150,6 +151,8 @@ export default function HauntDialog({ onClose }: { onClose: () => void }) {
   }, [phase]);
 
   function enter() {
+    // 11/16 탈것에 탄 채로는 못 들어간다 (lib/rideGate — 안내 토스트). 의자·벤치면 일어나서
+    if (rideGate("귀신의 집에 들어갈")) return;
     bgmWas.current = bgm.getSnapshot().playing;
     if (bgmWas.current) bgm.pause();
     setOutcome(null);

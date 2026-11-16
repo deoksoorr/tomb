@@ -45,7 +45,12 @@ export type UseKind =
   | "spore"
   | "light"
   | "firefly"
-  | "pray";
+  | "pray"
+  // ── 11/16 바닷가 세트 ──
+  | "surf"
+  | "shell"
+  | "ring"
+  | "wheel";
 
 /** 집 씬에서 칸 (0,0)의 왼쪽 위 월드 좌표 */
 export type Frame = { ox: number; oy: number };
@@ -110,6 +115,12 @@ const USE_OF: Readonly<Record<string, UseKind>> = {
   candles: "light",
   firefly_jar: "firefly",
   memorial: "pray",
+  // 11/16 바닷가 세트 (해먹·라탄 의자·벤치는 자리 — houseSpots)
+  surfboard: "surf",
+  shell_decor: "shell",
+  life_ring: "ring",
+  ship_wheel: "wheel",
+  sea_lantern: "light",
 };
 
 /** 바닥에 깔린 물건(러그·꽃밭)은 위에 다른 가구가 있으면 그 가구를 먼저 고르게 조금 멀게 친다 */
@@ -151,6 +162,10 @@ export const USE_LABEL: Readonly<Record<UseKind, string>> = {
   light: "불 끄기",
   firefly: "병뚜껑 열기",
   pray: "꽃 놓고 묵념하기",
+  surf: "보드 타는 흉내 내기",
+  shell: "소라에 귀 대기",
+  ring: "구명 튜브 끼기",
+  wheel: "키 돌리기",
 };
 
 /** 가까이 있다고 보는 거리 (발 위치 ↔ 대상 사각형, px) */
@@ -182,6 +197,21 @@ function boxOf(p: Placed, def: FurnitureDef, f: Frame): Box {
   return { L, Tp, R: L + fp.w * T, B: Tp + fp.h * T, cx: L + (fp.w * T) / 2, cy: Tp + (fp.h * T) / 2, fw: fp.w, fh: fp.h };
 }
 
+/** 누운 그림(48×30)의 원점에서 아래 끝까지 (hammockArt HAMMOCK_H − 1 − LIE_ORIGIN_Y + 1) */
+const HAMMOCK_LIE_BELOW = 6;
+/** 누운 그림의 천 가운데 줄 (원점 기준 위로 px) — 90° 돌리면 옆으로 이만큼 비켜난다 */
+const HAMMOCK_FABRIC_UP = 6;
+/** 옆 해먹 그림(세로 3칸 + 솟는 12px)에서 천 가운데 (그림 아래 끝 기준 위로 px) */
+const HAMMOCK_SIDE_MID = 31;
+
+/** 11/16 집 안 해먹 자리 (d = 방향 0 앞 · 1 왼쪽 · 2 뒤 · 3 오른쪽). tilt = 누운 그림을 돌리는 각도 */
+export function seaHammockSpot(u: string, d: number, b: Pick<Box, "cx" | "B">): HouseSpot {
+  if (d % 2 === 0) return spot("hammockIn", "lie", u, b.cx, b.B - HAMMOCK_LIE_BELOW, DIR.down, true);
+  // 시계 방향 90°(왼쪽을 봄 → 머리가 위)면 천이 오른쪽으로 비켜나므로 앵커를 왼쪽으로, 반대면 오른쪽으로
+  const tilt = d === 1 ? 90 : -90;
+  return spot("hammockIn", "lie", u, b.cx + (d === 1 ? -HAMMOCK_FABRIC_UP : HAMMOCK_FABRIC_UP), b.B - HAMMOCK_SIDE_MID, DIR.down, true, { tilt });
+}
+
 /** 이 배치의 1인 자리 전부 */
 export function houseSpots(items: readonly Placed[], tier: TierShape, f: Frame): HouseSpot[] {
   const occ = buildOccupancy(items, tier);
@@ -201,7 +231,8 @@ export function houseSpots(items: readonly Placed[], tier: TierShape, f: Frame):
     const sd = def.spin && p.r >= SPIN_R0 ? spinDir(p.r) : -1;
     const r = def.turn ? p.r % 4 : Math.max(0, sd);
     switch (p.i) {
-      case "chair": {
+      case "chair":
+      case "rattan_chair": {
         if (sd <= 0) {
           // 앞을 보는 의자: 바로 위 칸이 책상·피아노면 그쪽을 보고 앉아 그 일을 한다 (예전 규칙)
           const above = standAt(p.x, p.y - 1);
@@ -253,6 +284,28 @@ export function houseSpots(items: readonly Placed[], tier: TierShape, f: Frame):
         break;
       case "bathtub":
         out.push(spot("tub", "bath", p.u, b.cx, b.B - 5, DIR.down, true));
+        break;
+      // 11/16 라탄 벤치 (네 방향): 두 자리. 앞을 보면 아래쪽에, 뒤를 보면 등받이가 사람 앞에 온다 (behind)
+      case "rattan_bench": {
+        const d = Math.max(0, sd);
+        const face = FACE_BY_R[d];
+        if (d % 2 === 0) {
+          const y = d === 0 ? b.B - 4 : b.Tp + 7;
+          const extra = d === 2 ? { behind: true } : {};
+          out.push(spot("chair", "sit", p.u, b.L + 8, y, face, true, extra), spot("chair", "sit", p.u, b.L + 24, y, face, true, extra));
+        } else {
+          // 옆을 봄: 앉는 판이 보는 쪽 (왼쪽을 보면 왼쪽 절반)
+          const x = d === 1 ? b.L + 6 : b.R - 6;
+          out.push(spot("chair", "sit", p.u, x, b.Tp + 12, face, true), spot("chair", "sit", p.u, x, b.Tp + 28, face, true));
+        }
+        break;
+      }
+      // 11/16 해먹 (네 방향): 마을 해먹과 같은 "해먹에 누운" 그림(sprites/hammockArt — 줄·천·몸이 함께 흔들린다)으로 눕는다.
+      // 방 서버가 받는 집 안 해먹 자리 "hammockIn". 앵커 = 누운 그림의 원점(LIE_ORIGIN) 자리:
+      //  - 앞·뒤(가로로 걸림): 누운 그림 아래 끝이 가구 칸 아래 끝에 오게 (기둥이 가구 그림 기둥과 겹친다)
+      //  - 옆(세로로 걸림): 누운 그림을 90° 돌려 천 가운데가 가구 칸 가운데 줄에, 천 길이가 위·아래 기둥 사이에 온다 (seaHammockSpot)
+      case "sea_hammock":
+        out.push(seaHammockSpot(p.u, Math.max(0, sd), b));
         break;
     }
   }
@@ -465,6 +518,12 @@ export const FRAME_LINES = [
 
 /** 추억 비석 앞 한 줄 */
 export const PRAY_LINES = ["잠시 고개를 숙였다.", "작은 꽃을 놓았다. 바람이 살랑.", "고마웠다고, 조용히 말했다."] as const;
+/** 11/16 바닷가 세트: 서핑보드 흉내 (a = 번호) · 조타륜 (a = 번호) · 소라 */
+export const SURF_LINES = ["파도 온다!", "균형 잡는 중…", "언젠가 진짜 바다에서!"] as const;
+export const WHEEL_LINES = ["돛을 올려라!", "어디로 가 볼까요", "수평선까지 전진!"] as const;
+export const SHELL_LINE = "바다 소리가 들려요";
+/** 구명 튜브를 끼고 있는 시간 (ms) */
+export const RING_WEAR_MS = 4000;
 
 /** 라디오 채널 (0 = 꺼짐). 켜면 BGM 플레이리스트를 차례로 돌린다. 서버 저장 범위와 같은 값 (lib/housing/states.ts) */
 export { RADIO_CHANNELS } from "@/lib/housing/states";

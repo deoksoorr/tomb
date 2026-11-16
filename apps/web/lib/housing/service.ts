@@ -7,7 +7,12 @@ import { HttpError } from "../http";
 import { kstDay, kstWeek } from "../store/accounts";
 import type { Me } from "../types";
 import {
+  cottageStyleOf,
+  DEFAULT_FLOOR,
+  DEFAULT_WALL,
+  defaultExterior,
   furnitureById,
+  houseLabel,
   isHousingChannel,
   LEGACY_HOUSING_CHANNEL,
   lotLabel,
@@ -15,10 +20,18 @@ import {
   nextTier,
   PLOT_TIERS,
   plotCost,
+  SEA_FLOOR,
+  SEA_LOT_COUNT,
+  SEA_STARTER,
+  SEA_WALL,
+  seaPlotCost,
+  seaUpgradeCost,
   sellPrice,
   tierById,
   villageLots,
   VILLAGE_MAX_LOTS,
+  type CottageStyleId,
+  type HouseZone,
   type PlotTierId,
 } from "./catalog";
 import { designCounts, designScore, validateExterior, validateLayout } from "./layout";
@@ -46,16 +59,25 @@ export function getHouseStore(): HouseStore {
   return g.__tombHouses;
 }
 
-/** 공개 집 id: 계정 id의 HMAC 앞 12자 (계정 id = 쿠키 신원이라 그대로 내보내지 않는다) */
-export function houseIdFor(accountId: string): string {
-  return createHmac("sha256", env.sessionSecret()).update(`house:${accountId}`).digest("base64url").slice(0, 12);
+/**
+ * 공개 집 id: 계정 id의 HMAC 앞 12자 (계정 id = 쿠키 신원이라 그대로 내보내지 않는다).
+ * 11/16 포구 오두막은 다른 HMAC (한 계정이 마을 집 하나 + 오두막 하나를 따로 가진다)
+ */
+export function houseIdFor(accountId: string, zone: HouseZone = "village"): string {
+  return createHmac("sha256", env.sessionSecret())
+    .update(zone === "sea" ? `seahouse:${accountId}` : `house:${accountId}`)
+    .digest("base64url")
+    .slice(0, 12);
 }
 
 const HOUSE_ID_RE = /^[A-Za-z0-9_-]{12}$/;
 export const isHouseId = (id: string) => HOUSE_ID_RE.test(id);
 
 export const houseNotFound = () => new HttpError(404, "NOT_FOUND", "그 집을 찾을 수 없어요.");
-const noHouse = () => new HttpError(409, "NO_HOUSE", "먼저 분양 사무소에서 내 집을 분양받아 주세요.");
+const noHouse = (zone: HouseZone = "village") =>
+  zone === "sea"
+    ? new HttpError(409, "NO_HOUSE", "먼저 포구 부동산에서 오두막을 분양받아 주세요.")
+    : new HttpError(409, "NO_HOUSE", "먼저 분양 사무소에서 내 집을 분양받아 주세요.");
 
 // 11/15: 집주인 이름은 운영자 집도 저장된 닉네임 그대로 (예전처럼 "대장"으로 바꾸지 않는다)
 export function toPublicHouse(r: HouseRecord): PublicHouse {
@@ -69,6 +91,7 @@ export function toSummary(r: HouseRecord): HouseSummary {
     id: r.id,
     ch: r.ch,
     lot: r.lot,
+    ...(r.zone === "sea" ? { zone: "sea" as const, style: r.style } : {}),
     name: r.name,
     ownerName: r.ownerName,
     tier: r.tier,
@@ -86,8 +109,8 @@ export async function findVisibleHouse(store: HouseStore, id: string): Promise<H
   return h;
 }
 
-export async function myHouse(store: HouseStore, accountId: string, me?: Me): Promise<MyHouseResponse> {
-  const id = houseIdFor(accountId);
+export async function myHouse(store: HouseStore, accountId: string, me?: Me, zone: HouseZone = "village"): Promise<MyHouseResponse> {
+  const id = houseIdFor(accountId, zone);
   // 잔액만 쓰므로 계정 전체를 읽지 않는다 (myBrief = HMGET 1개)
   const [h0, inventory, m] = await Promise.all([store.get(id), store.inventory(id), me ?? myBrief(accountId)]);
   // 마을이 생기기 전에 분양받은 집은 처음 열 때 번지를 받는다
@@ -95,9 +118,9 @@ export async function myHouse(store: HouseStore, accountId: string, me?: Me): Pr
   return { house: h ? toPublicHouse(h) : null, inventory, points: m.points };
 }
 
-const mustHave = async (store: HouseStore, accountId: string): Promise<HouseRecord> => {
-  const h = await store.get(houseIdFor(accountId));
-  if (!h) throw noHouse();
+const mustHave = async (store: HouseStore, accountId: string, zone: HouseZone = "village"): Promise<HouseRecord> => {
+  const h = await store.get(houseIdFor(accountId, zone));
+  if (!h) throw noHouse(zone);
   return h;
 };
 
@@ -107,9 +130,9 @@ const lotTaken = () => new HttpError(409, "LOT_TAKEN", "그 번지는 방금 다
  * 채널마다 주거 구역이 따로다. 내 집을 다루는 요청(외관·배치·넓히기)은 지금 있는 채널(ch)을 함께 보내고,
  * 내 집이 다른 채널에 있으면 거절한다 (다른 채널의 필지를 건드리지 못하게). ch가 없으면(서버 안 호출) 검사하지 않는다
  */
-export function assertChannel(h: Pick<HouseRecord, "ch" | "lot">, ch: number | undefined): void {
+export function assertChannel(h: Pick<HouseRecord, "ch" | "lot" | "zone">, ch: number | undefined): void {
   if (ch === undefined || ch === h.ch) return;
-  throw new HttpError(409, "WRONG_CHANNEL", `내 집은 ${lotLabel(h.ch, h.lot)}에 있어요. ${h.ch}채널로 옮긴 뒤 다시 해 주세요.`);
+  throw new HttpError(409, "WRONG_CHANNEL", `내 집은 ${houseLabel(h)}에 있어요. ${h.ch}채널로 옮긴 뒤 다시 해 주세요.`);
 }
 
 /** 채널 번호가 1..HOUSING_CHANNELS 밖 */
@@ -132,7 +155,7 @@ export async function buyPlot(
   // 바로 사기 값 = 작은 터 + 넓히기 값 누적 (업그레이드로 올린 것과 같은 값)
   const cost = plotCost(tier.id);
   const had = await store.get(id);
-  if (had) throw new HttpError(409, "ALREADY_OWNED", `이미 ${lotLabel(had.ch, had.lot)}에 내 집이 있어요. 한 계정에 하나만 분양받을 수 있어요.`);
+  if (had) throw new HttpError(409, "ALREADY_OWNED", `이미 ${lotLabel(had.ch, had.lot)}에 내 집이 있어요. 마을 집은 한 채만 가질 수 있어요.`);
   if (lot !== null && (!Number.isInteger(lot) || lot < 1 || lot > VILLAGE_MAX_LOTS))
     throw new HttpError(400, "INVALID_INPUT", `번지는 1~${VILLAGE_MAX_LOTS} 중에서 골라 주세요.`);
   // 11/15 비운 번지 (CLOSED_LOTS — 지금은 없다)
@@ -147,6 +170,99 @@ export async function buyPlot(
   return myHouse(store, accountId);
 }
 
+/** 11/16 오두막 시작 배치 (작은 방 10×8 기준. 넓은 터·대저택도 왼쪽 방에 같은 자리) */
+export function seaStarterLayout(): HouseLayout {
+  return {
+    floor: SEA_FLOOR,
+    wall: SEA_WALL,
+    items: [
+      { u: "s1", i: "sea_hammock", x: 1, y: 0, r: 4 },
+      { u: "s2", i: "surfboard", x: 5, y: 0, r: 4 },
+      { u: "s3", i: "life_ring", x: 7, y: 0, r: 4 },
+      { u: "s4", i: "shell_decor", x: 8, y: 3, r: 4 },
+      { u: "s5", i: "rattan_chair", x: 2, y: 3, r: 4 },
+    ],
+  };
+}
+
+/**
+ * 11/16 포구 오두막 분양: 채널마다 6터 (마을 번지와 따로). 값 = 같은 크기 마을 집 값 × 1.5, 마을 집이 이미 있으면 별장이라 × 2.
+ * 한 계정에 마을 집 하나 + 오두막 하나까지 (오두막 집 id가 따로라 둘째 오두막은 "exists"로 막힌다)
+ */
+export async function buyCottage(
+  store: HouseStore,
+  accountId: string,
+  name: string,
+  intro: string,
+  ownerName: string,
+  lot: number | null,
+  ch: number,
+  tierId: PlotTierId = PLOT_TIERS[0].id,
+  style: CottageStyleId = "wood",
+): Promise<MyHouseResponse> {
+  const id = houseIdFor(accountId, "sea");
+  if (!isHousingChannel(ch)) throw badChannel();
+  const tier = tierById(tierId);
+  if (!tier) throw new HttpError(400, "INVALID_INPUT", "알 수 없는 터 크기예요.");
+  if (lot !== null && (!Number.isInteger(lot) || lot < 1 || lot > SEA_LOT_COUNT))
+    throw new HttpError(400, "INVALID_INPUT", `오두막 터는 1~${SEA_LOT_COUNT}번 중에서 골라 주세요.`);
+  const [had, village] = await Promise.all([store.get(id), store.get(houseIdFor(accountId))]);
+  if (had) throw new HttpError(409, "ALREADY_OWNED", `이미 오두막이 있어요 (${houseLabel(had)}). 오두막은 한 채만 가질 수 있어요.`);
+  const villa = !!village;
+  const cost = seaPlotCost(tier.id, villa);
+  if (lot !== null && (await store.village(ch, "sea")).some((h) => h.lot === lot)) throw lotTaken();
+  // 시작 가구는 한 집 id에 한 번만 준다 (철거 뒤 다시 사면 가방에 남은 것만 그 자리에 놓는다)
+  const given = await store.hasStarter(id);
+  const owned = given ? await store.inventory(id) : null;
+  const layout = starterFor(seaStarterLayout(), owned);
+  const ext = defaultExterior();
+  await spend(accountId, cost, villa ? `villa:${tier.id}` : `cottage:${tier.id}`);
+  const r = await store.create({
+    id,
+    owner: accountId,
+    name,
+    intro,
+    ownerName,
+    tier: tier.id,
+    ch,
+    lot,
+    now: Date.now(),
+    paid: cost,
+    zone: "sea",
+    style: cottageStyleOf(style),
+    layout,
+    placed: designCounts(layout, ext),
+    placedScore: designScore(layout, ext),
+    starter: SEA_STARTER,
+  });
+  if (r === "exists") await refundAndThrow(accountId, cost, new HttpError(409, "ALREADY_OWNED", "이미 오두막이 있어요."));
+  if (r === "lot_taken") await refundAndThrow(accountId, cost, lotTaken());
+  if (r === "full") await refundAndThrow(accountId, cost, new HttpError(409, "VILLAGE_FULL", "이 채널 포구에는 빈 오두막 터가 없어요."));
+  return myHouse(store, accountId, undefined, "sea");
+}
+
+/** 가진 것만 남긴 시작 배치 (owned = null이면 시작 가구를 지금 주므로 그대로) */
+function starterFor(layout: HouseLayout, owned: Record<string, number> | null): HouseLayout {
+  if (!owned) return layout;
+  const left = { ...owned };
+  const items = layout.items.filter((p) => {
+    if ((left[p.i] ?? 0) < 1) return false;
+    left[p.i] -= 1;
+    return true;
+  });
+  return {
+    items,
+    floor: (owned[layout.floor] ?? 0) > 0 ? layout.floor : DEFAULT_FLOOR,
+    wall: (owned[layout.wall] ?? 0) > 0 ? layout.wall : DEFAULT_WALL,
+  };
+}
+
+/** 오두막 겉모습 바꾸기 (무료) */
+export async function setCottageStyle(store: HouseStore, accountId: string, style: CottageStyleId): Promise<MyHouseResponse> {
+  if (!(await store.setStyle(houseIdFor(accountId, "sea"), style, Date.now()))) throw noHouse("sea");
+  return myHouse(store, accountId, undefined, "sea");
+}
+
 // 옛 집 번지 보충(전체 목록 읽기 = 집 수만큼 명령)을 이미 해 본 저장소. 인스턴스마다 처음 한 번만 한다
 //  (지금 분양은 늘 번지를 받고, 번지 없는 옛 집도 주인이 내 집을 열면 myHouse가 번지를 준다 → 매 요청 훑을 필요가 없다)
 const legacyFilled = new WeakSet<HouseStore>();
@@ -157,8 +273,19 @@ export function resetLegacyLotFill(store: HouseStore) {
 }
 
 /** 한 채널의 분양 마을: 그 채널에 번지가 있는 집들의 외관·문패 (숨긴 집은 자리만) */
-export async function village(store: HouseStore, ch: number = LEGACY_HOUSING_CHANNEL, now = Date.now()): Promise<VillageResponse> {
+export async function village(store: HouseStore, ch: number = LEGACY_HOUSING_CHANNEL, now = Date.now(), zone: HouseZone = "village"): Promise<VillageResponse> {
   if (!isHousingChannel(ch)) throw badChannel();
+  if (zone === "sea") {
+    const sea = await store.village(ch, "sea");
+    return {
+      ch,
+      zone: "sea",
+      lots: SEA_LOT_COUNT,
+      houses: sea.filter((h) => !h.hidden).map((h) => ({ ...toSummary(h), exterior: h.exterior })),
+      taken: sea.filter((h) => h.hidden).map((h) => h.lot),
+      generatedAt: now,
+    };
+  }
   let all = await store.village(ch);
   // 마을이 생기기 전에 분양받은 집(번지·채널 없음 → 1채널)은 1채널 마을을 열 때 빈 번지를 받는다 (인스턴스마다 처음 한 번만 훑는다)
   if (ch === LEGACY_HOUSING_CHANNEL && !legacyFilled.has(store)) {
@@ -180,27 +307,34 @@ export async function village(store: HouseStore, ch: number = LEGACY_HOUSING_CHA
   };
 }
 
-export async function editProfile(store: HouseStore, accountId: string, name: string, intro: string): Promise<MyHouseResponse> {
-  if (!(await store.setProfile(houseIdFor(accountId), name, intro, Date.now()))) throw noHouse();
-  return myHouse(store, accountId);
+export async function editProfile(store: HouseStore, accountId: string, name: string, intro: string, zone: HouseZone = "village"): Promise<MyHouseResponse> {
+  if (!(await store.setProfile(houseIdFor(accountId, zone), name, intro, Date.now()))) throw noHouse(zone);
+  return myHouse(store, accountId, undefined, zone);
 }
 
-export async function upgradePlot(store: HouseStore, accountId: string, to: PlotTierId, ch?: number): Promise<MyHouseResponse> {
-  const h = await mustHave(store, accountId);
+/** 넓히기 값: 오두막은 배수를 곱한다 (마을 집이 지금 있으면 별장 배수) */
+async function upgradePrice(store: HouseStore, accountId: string, zone: HouseZone, base: number): Promise<number> {
+  if (zone !== "sea") return base;
+  return seaUpgradeCost(base, !!(await store.get(houseIdFor(accountId))));
+}
+
+export async function upgradePlot(store: HouseStore, accountId: string, to: PlotTierId, ch?: number, zone: HouseZone = "village"): Promise<MyHouseResponse> {
+  const h = await mustHave(store, accountId, zone);
   assertChannel(h, ch);
   const next = nextTier(h.tier);
   if (!next || next.id !== to) throw new HttpError(409, "BAD_TIER", "지금 터에서 바로 올릴 수 있는 크기가 아니에요.");
-  await spend(accountId, next.price, `upgrade:${to}`);
-  if (!(await store.upgrade(h.id, h.tier, to, Date.now(), next.price)))
-    await refundAndThrow(accountId, next.price, new HttpError(409, "CONFLICT", "터 크기가 이미 바뀌었어요. 다시 확인해 주세요."));
-  return myHouse(store, accountId);
+  const price = await upgradePrice(store, accountId, zone, next.price);
+  await spend(accountId, price, `upgrade:${to}`);
+  if (!(await store.upgrade(h.id, h.tier, to, Date.now(), price)))
+    await refundAndThrow(accountId, price, new HttpError(409, "CONFLICT", "터 크기가 이미 바뀌었어요. 다시 확인해 주세요."));
+  return myHouse(store, accountId, undefined, zone);
 }
 
 /** 11/16 discount = 단 칭호의 가구 할인율 (집 갈래 — 라우트가 lib/titlesServer wornPerk로 넘긴다. 순환 import를 피해 여기서 읽지 않는다) */
-export async function buyFurniture(store: HouseStore, accountId: string, itemId: string, discount = 0): Promise<MyHouseResponse> {
+export async function buyFurniture(store: HouseStore, accountId: string, itemId: string, discount = 0, zone: HouseZone = "village"): Promise<MyHouseResponse> {
   const def = furnitureById(itemId);
   if (!def) throw new HttpError(400, "INVALID_INPUT", "알 수 없는 물건이에요.");
-  const h = await mustHave(store, accountId);
+  const h = await mustHave(store, accountId, zone);
   const owned = (await store.inventory(h.id))[itemId] ?? 0;
   if (owned >= MAX_OWN_PER_ITEM) throw new HttpError(409, "MAX_OWNED", `${def.name}, 이미 ${MAX_OWN_PER_ITEM}개를 다 가졌어요.`);
   // 11/16 집 갈래 칭호의 가구 할인 (lib/titles — 원가 × (1 − 할인율), 1P 단위 내림. 되팔기 값은 원가 기준 그대로라 할인가보다 늘 싸다)
@@ -211,25 +345,25 @@ export async function buyFurniture(store: HouseStore, accountId: string, itemId:
     await refundAndThrow(
       accountId,
       price,
-      r === "max" ? new HttpError(409, "MAX_OWNED", `${def.name}, 이미 ${MAX_OWN_PER_ITEM}개를 다 가졌어요.`) : noHouse(),
+      r === "max" ? new HttpError(409, "MAX_OWNED", `${def.name}, 이미 ${MAX_OWN_PER_ITEM}개를 다 가졌어요.`) : noHouse(zone),
     );
-  return myHouse(store, accountId, me);
+  return myHouse(store, accountId, me, zone);
 }
 
-export async function sellFurniture(store: HouseStore, accountId: string, itemId: string): Promise<MyHouseResponse & { refunded: number }> {
+export async function sellFurniture(store: HouseStore, accountId: string, itemId: string, zone: HouseZone = "village"): Promise<MyHouseResponse & { refunded: number }> {
   const def = furnitureById(itemId);
   if (!def) throw new HttpError(400, "INVALID_INPUT", "알 수 없는 물건이에요.");
-  const h = await mustHave(store, accountId);
+  const h = await mustHave(store, accountId, zone);
   const r = await store.takeItem(h.id, itemId);
   if (r === "none") throw new HttpError(409, "NO_ITEM", "그 물건을 가지고 있지 않아요.");
   if (r === "placed") throw new HttpError(409, "PLACED", "모두 놓여 있어요. 먼저 집에서 치운 뒤 저장해 주세요.");
   const refunded = sellPrice(def);
   const me = await refund(accountId, refunded);
-  return { ...(await myHouse(store, accountId, me)), refunded };
+  return { ...(await myHouse(store, accountId, me, zone)), refunded };
 }
 
-export async function saveLayout(store: HouseStore, accountId: string, tier: PlotTierId, layout: HouseLayout, ch?: number): Promise<MyHouseResponse> {
-  const h = await mustHave(store, accountId);
+export async function saveLayout(store: HouseStore, accountId: string, tier: PlotTierId, layout: HouseLayout, ch?: number, zone: HouseZone = "village"): Promise<MyHouseResponse> {
+  const h = await mustHave(store, accountId, zone);
   assertChannel(h, ch);
   if (h.tier !== tier) throw new HttpError(409, "CONFLICT", "터 크기가 바뀌었어요. 다시 열어 주세요.");
   const v = validateLayout(layout, tier, await store.inventory(h.id));
@@ -239,7 +373,7 @@ export async function saveLayout(store: HouseStore, accountId: string, tier: Plo
   if (r === "no_house") throw noHouse();
   if (r === "tier") throw new HttpError(409, "CONFLICT", "터 크기가 바뀌었어요. 다시 열어 주세요.");
   if (r === "not_owned") throw new HttpError(409, "NOT_OWNED", "가진 것보다 많이 놓았어요. 가방을 다시 확인해 주세요.");
-  return myHouse(store, accountId);
+  return myHouse(store, accountId, undefined, zone);
 }
 
 export async function saveExterior(store: HouseStore, accountId: string, exterior: Record<string, unknown>, ch?: number): Promise<MyHouseResponse> {
@@ -368,12 +502,13 @@ export async function houseRank(
   staffId: string | null = null,
 ): Promise<{ rows: HouseRankRow[]; mine: HouseRankRow | null }> {
   const since = period === "week" ? kstWeekStart(now) : 0;
-  const staffHouse = staffId ? houseIdFor(staffId) : null;
+  // 11/16 포구 오두막도 같은 순위에 (번지 자리에 「포구 N번 오두막」). 운영자·내 집은 두 채 모두
+  const staffHouses = staffId ? new Set([houseIdFor(staffId), houseIdFor(staffId, "sea")]) : null;
   const pool = (await store.list("score", HOUSE_RANK_POOL)).filter(
-    (h) => !h.hidden && h.id !== staffHouse && Math.max(h.updatedAt, h.createdAt) >= since,
+    (h) => !h.hidden && !staffHouses?.has(h.id) && Math.max(h.updatedAt, h.createdAt) >= since,
   );
-  const myId = accountId ? houseIdFor(accountId) : null;
-  const all = pool.map((h, i) => ({ rank: i + 1, name: h.name, sub: `${lotLabel(h.ch, h.lot)} · ${h.ownerName}`, value: h.score, me: h.id === myId }));
+  const mine = accountId ? new Set([houseIdFor(accountId), houseIdFor(accountId, "sea")]) : null;
+  const all = pool.map((h, i) => ({ rank: i + 1, name: h.name, sub: `${houseLabel(h)} · ${h.ownerName}`, value: h.score, me: !!mine?.has(h.id) }));
   const mineAt = all.findIndex((r) => r.me);
   return { rows: all.slice(0, size), mine: mineAt >= size ? all[mineAt] : null };
 }

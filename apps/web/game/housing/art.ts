@@ -2,6 +2,7 @@ import { DEFAULT_FLOOR, DEFAULT_WALL, defaultExterior, furnitureById, type House
 import { footprint, SPIN_R0, spinDir } from "@/lib/housing/layout";
 import { darken, Grid, hash2, lighten, type Color } from "../sprites/pixel";
 import { facadeGrid } from "./exterior";
+import { isSeaArt, SEA_DRAW, SEA_EDGE, SEA_EDGE_A, SEA_FLOORS, SEA_PAPERS, SEA_SPIN, SEA_UP, SEA_WALL_CAP } from "./seaFurnitureArt";
 
 // 하우징 물건·바닥·담장 픽셀아트 (캔버스만 쓴다: 게임 텍스처와 UI 아이콘이 같은 그림).
 //  - 물건 그림 크기 = (w×16) × (h×16 + up). 아래쪽 h×16이 차지 칸이고, up만큼 위로 솟는다(책장·나무 등).
@@ -47,6 +48,8 @@ const UP: Record<string, number> = {
   wind_chime: 14,
   memorial: 6,
   ghost_cat: 2,
+  // 11/16 바닷가 세트 (seaFurnitureArt)
+  ...SEA_UP,
 };
 
 export const artUp = (id: string) => UP[id] ?? 0;
@@ -812,6 +815,8 @@ const DRAW: Record<string, Draw> = {
     g.hline(9, 10, H - 8, 0x4a5060);
     g.hline(12, 14, H - 6, 0xd8e0f0);
   },
+  // 11/16 바닷가 세트 (seaFurnitureArt)
+  ...SEA_DRAW,
 };
 
 // ── 4방향 가구 (catalog spin): 옆모습(왼쪽을 봄)·뒷모습. 오른쪽을 보는 모습은 옆모습을 좌우로 뒤집는다 ──
@@ -1047,6 +1052,8 @@ const SPIN_ART: Record<string, SpinArt> = {
       g.hline(3, 6, H - 6, 0xe8a050);
     },
   },
+  // 11/16 바닷가 세트 (seaFurnitureArt)
+  ...SEA_SPIN,
 };
 
 /** 4방향 가구 그림의 방향 (변형 이름의 d1~d3. 없으면 0 = 앞) */
@@ -1094,7 +1101,9 @@ export function furnitureGrid(id: string, variant = ""): Grid | null {
   const g = new Grid(W, H);
   const spin = sd ? SPIN_ART[id] : undefined;
   (spin ? (sd === 2 ? spin.back : spin.side) : draw)(g, W, H, variant);
-  if (id !== "rug" && id !== "flowerbed" && id !== "stone_path") g.outline(OUT, false, 170);
+  // 11/16 바닷가 세트는 포구 그림처럼 연한 갈색 테
+  if (isSeaArt(id)) g.outline(SEA_EDGE, false, SEA_EDGE_A);
+  else if (id !== "rug" && id !== "flowerbed" && id !== "stone_path") g.outline(OUT, false, 170);
   return g;
 }
 
@@ -1162,6 +1171,8 @@ const FLOOR: Record<string, Tile> = {
     for (const [dx, dy] of [[0, -1], [-1, 0], [1, 0], [0, 1]]) g.set(cx + dx, cy + dy, 0xf0b0c4);
     g.set(cx, cy, 0xffe080);
   },
+  // 11/16 갑판 마루 (seaFurnitureArt)
+  ...SEA_FLOORS,
 };
 
 export function floorGrid(id: string, variant: number): Grid {
@@ -1244,6 +1255,8 @@ const PAPER: Record<string, Tile> = {
     g.hline(0, 15, PAPER_Y1 - 10, 0x8a6040);
     g.rect(2, PAPER_Y1 - 8, 12, 7, 0x553522);
   },
+  // 11/16 하늘색 판자 벽 (seaFurnitureArt)
+  ...SEA_PAPERS,
 };
 
 export function wallGrid(id: string, variant: number): Grid {
@@ -1263,7 +1276,7 @@ export function wallGrid(id: string, variant: number): Grid {
 
 /** 옆벽·칸막이 벽 윗면 색 (벽 종류에 맞춘 어두운 테) */
 export function wallCapColor(id: string): Color {
-  return id === "wall_stone" ? 0x4a4842 : id === "wall_iron" ? 0x1e2438 : 0x3a2a1e;
+  return SEA_WALL_CAP[id] ?? (id === "wall_stone" ? 0x4a4842 : id === "wall_iron" ? 0x1e2438 : 0x3a2a1e);
 }
 
 /** 칸막이 벽 끝면(앞에서 보이는 면) 색 = 벽지 바탕 */

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   SEA_ARRIVE,
   SEA_BOARD,
-  SEA_BOAT,
   SEA_BREAKWATER,
   SEA_BREAKWATER_TIP,
   SEA_FLAT_Y0,
@@ -139,12 +138,12 @@ describe("seaLayout — 걷기", () => {
       expect(seaStandable(x, y), `${x},${y}`).toBe(true);
       expect(seaWet(x, y, 0), `${x},${y}`).toBe(true);
     }
-    expect(seaStandable(SEA_BOAT.x, SEA_BOAT.y)).toBe(false);
     expect(seaStandable(300, SEA_HEIGHT - 5)).toBe(false);
   });
   it("다음 차수 쉴거리 자리·좌석은 비어 있다", () => {
     for (const p of SEA_FUTURE_SPOTS) expect(seaStandable(p.x, p.y), `${p.x},${p.y}`).toBe(true);
-    for (const s of SEA_SEATS) expect(reachableNear(s.x, s.y + 9, 10), s.id).toBe(true);
+    // r12 뒤로 일어서는 자리(피크닉 탁자 북쪽·모닥불 북쪽 통나무·끝 걸터앉기)는 일어서는 쪽에서
+    for (const s of SEA_SEATS) expect(reachableNear(s.x, s.y + (s.standDy ?? 9), 10), s.id).toBe(true);
   });
 });
 

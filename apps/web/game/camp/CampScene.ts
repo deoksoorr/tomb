@@ -67,6 +67,7 @@ import { CampForage } from "./campForage";
 import { CAMP_SCENE, type CampFriend, type CampHost, type CampSceneData } from "./campHost";
 import { campLines, campNpcName, CAMP_WELCOME } from "./campTalk";
 import { campNeighborSeat, campPickSeat, CAMP_MULTI_SEAT } from "./campSit";
+import { publishRide, standForGate } from "@/lib/rideGate";
 import type { CampInteractable } from "./campTypes";
 
 // 11/15 언젠가 캠핑장 장면. 월드(마을)와 같은 채널 연결을 빌려 쓴다 (CampTrip이 net.divert로 소식을 넘겨준다).
@@ -581,6 +582,8 @@ export class CampScene extends Phaser.Scene {
     on.push(bridge.on("input:chat", ({ text }) => !this.covered && this.expr.chat(text, this.time.now)));
     on.push(bridge.on("input:mood", ({ mood }) => this.expr.setMood(mood)));
     on.push(bridge.on("input:ride", () => !this.locked && this.riding.toggle()));
+    // 11/16 사냥터·미니게임·집으로 가기 직전: 자리에서 일어난다 (lib/rideGate)
+    on.push(bridge.on("player:stand", () => standForGate(this.player, this.time.now, this.seatReq)));
     on.push(
       bridge.on("input:act", ({ kind }) => {
         if ((kind === "wave" || kind === "cheer") && !this.covered && !this.locked) this.doAct(kind);
@@ -1005,6 +1008,7 @@ export class CampScene extends Phaser.Scene {
     const L = this.atmos.levels;
     this.map.update(now, dt, view, { hour: this.hour, darkness: L.darkness, rain: L.rain, fog: L.fog });
     this.riding.update();
+    publishRide(pl, this.riding.on); // 11/16 탄 것·앉은 자리 → UI (lib/rideGate)
     this.forage.f.update(dt, view, s);
     for (const r of this.remotes.values()) r.update(pnow, view, s);
     this.declutterLabels(now, pnow);

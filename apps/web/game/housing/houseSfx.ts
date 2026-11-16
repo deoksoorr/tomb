@@ -33,7 +33,10 @@ export type HouseSound =
   | "squeak"
   | "rustle"
   | "marker"
-  | "sparkle";
+  | "sparkle"
+  // ── 11/16 바닷가 세트 ──
+  | "surf"
+  | "wheel";
 
 /** 거리 → 크기 (0..1): 가까우면 그대로, HEAR_FAR px 밖이면 안 들린다 */
 export const HEAR_FAR = 260;
@@ -206,6 +209,14 @@ export class HouseSfx extends AudioHost {
         break;
       case "sparkle": // 포자·반딧불 반짝
         [2637, 3136, 3520].forEach((f, i) => this.tone(ac, t + i * 0.07, 0.4, f, f, v * 0.04));
+        break;
+      case "surf": // 파도가 밀려왔다 빠지는 쏴아 (소라·서핑보드)
+        this.hiss(ac, t, 1.4, 260, 900, v * 0.14, "lowpass", 0.7);
+        this.hiss(ac, t + 0.5, 1.2, 1400, 500, v * 0.08, "bandpass", 0.6);
+        break;
+      case "wheel": // 나무 키가 도르륵 (톡톡 걸리는 소리 넷)
+        for (let i = 0; i < 4; i++) this.tone(ac, t + i * 0.09, 0.04, 520 - i * 30, 380, v * 0.1, "triangle", 0.002);
+        this.tone(ac, t, 0.4, 150, 120, v * 0.05, "sawtooth", 0.04);
         break;
     }
   }

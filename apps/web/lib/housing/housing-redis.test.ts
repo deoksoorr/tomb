@@ -122,7 +122,7 @@ describe.skipIf(!conn)("하우징 v4 (실제 Redis)", () => {
 
   it("예전 집(번지·외관 필드 없음)은 마을을 열 때 빈 번지를 하나씩 받고, 두 번 열어도 그대로", async () => {
     const olds = await Promise.all(Array.from({ length: 3 }, () => account(PLOT)));
-    const ids = olds.map(houseIdFor);
+    const ids = olds.map((a) => houseIdFor(a));
     for (const [i, owner] of olds.entries()) {
       // 마을 이전 형식: meta에 ch·lot·exterior가 없고 번지 색인에도 없다
       await raw.hset(HK.meta(ids[i]), { owner, name: `옛집${i}`, intro: "", ownerName: "옛주인", tier: "small", createdAt: "1", updatedAt: "1", likes: "0", placedScore: "0", items: "0" });

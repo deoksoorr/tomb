@@ -50,4 +50,8 @@ export const MAP_ICONS: Readonly<Record<string, MapIcon>> = {
   pier: icon("#f0d0a0", "#a07a58", ["o#o", ".#.", ".#.", ".#.", "###"]),
   /** 방파제 등대: 빨간 띠 등대 + 불빛 */
   lighthouse: icon("#ffffff", "#ff6a6a", [".o.", "###", ".#.", ".o.", ".#.", "###"]),
+  /** 11/16 r12 걸터앉는 자리 (선착장 끝·방파제 끝): 등받이 없는 의자 + 방석 */
+  seat: icon("#f8c8a0", "#ff8a7a", ["ooo", "###", "#.#"]),
+  /** 11/16 r12 해변 모닥불: 불꽃 + 장작 */
+  bonfire: icon("#ffb050", "#fff0a0", [".#.", "#o#", "###", "o.o"]),
 };

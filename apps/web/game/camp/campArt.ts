@@ -1730,7 +1730,7 @@ export function bbqSmokeArt(): Grid {
 /** 먹을 때 뜨는 접시 (메뉴마다 위에 올린 것이 다르다) */
 export function bbqPlateArt(id: string): Grid {
   // 11/15 마실 거리는 잔·사발·컵 그림
-  if (id === "beer" || id === "soju" || id === "makgeolli" || id === "coffee" || id === "hangover" || id === "highball" || id === "sunset" || id === "sikhye" || id === "cola") return drinkArt(id);
+  if (id === "beer" || id === "soju" || id === "makgeolli" || id === "coffee" || id === "hangover" || id === "highball" || id === "sunset" || id === "sikhye" || id === "cola" || id === "slush") return drinkArt(id);
   const g = new Grid(16, 10);
   g.ellipse(8, 6, 7, 3, 0xf8f4ec);
   g.ellipse(8, 6.5, 5, 1.8, 0xe8e2d6);
@@ -1744,6 +1744,58 @@ export function bbqPlateArt(id: string): Grid {
       g.set(x + 1, 4 + (x % 2), 0xc87a48);
     }
     g.set(6, 4, 0x8a4a28);
+  } else if (id === "hotdog") {
+    // 11/16 r12 바닷가 매점 핫도그: 막대에 꽂은 노릇한 반죽 + 케첩 줄 + 설탕
+    line(g, 2, 7, 6, 5, 0xd8c8a0);
+    g.ellipse(9.5, 3.5, 4.5, 1.8, 0xd89048);
+    g.hline(7, 12, 3, 0xeab060);
+    for (let x = 7; x <= 12; x += 2) g.set(x, 4, 0xd83a2a);
+    g.set(8, 2, 0xfffaf0);
+    g.set(11, 2, 0xfffaf0);
+  } else if (id === "tteokkochi") {
+    // 떡꼬치: 빨간 양념 떡 넷 + 꼬치 + 깨
+    line(g, 2, 7, 14, 2, 0xc8a070);
+    for (const [x, y] of [[4, 4], [6, 4], [8, 3], [10, 3]] as const) g.rect(x, y, 2, 2, 0xd84a32);
+    g.set(5, 4, 0xf07a5a);
+    g.set(9, 3, 0xf07a5a);
+    g.set(7, 3, 0xfff4d8);
+  } else if (id === "cupramen") {
+    // 컵라면: 하얀 컵 + 빨간 띠 + 뚜껑 반쯤 + 김 + 꼬불 면
+    g.rect(5, 3, 7, 5, 0xf8f4ec);
+    g.hline(5, 11, 5, 0xd84a3a);
+    g.hline(5, 11, 2, 0xf0d080);
+    g.set(7, 2, 0xe8b860);
+    g.set(9, 2, 0xe8b860);
+    g.set(6, 0, 0xe8e8f0);
+    g.set(10, 0, 0xe8e8f0);
+    g.set(8, 1, 0xe8e8f0);
+  } else if (id === "clams") {
+    // 조개구이: 입 벌린 조개 셋 (껍데기 + 속살)
+    for (const [cx, cy] of [[5, 4], [9, 3], [11, 5]] as const) {
+      g.ellipse(cx, cy, 2.2, 1.4, 0xd8c0a8);
+      g.set(cx, cy, 0xf2c8a0);
+      g.set(cx - 1, cy - 1, 0xf4ece0);
+    }
+    g.set(13, 2, 0x5a9a4a); // 파 한 조각
+  } else if (id === "sotteok") {
+    // 소떡소떡: 꼬치에 소시지·떡을 번갈아
+    line(g, 2, 7, 14, 1, 0xc8a070);
+    for (const [x, y, c] of [[3, 5, 0xb05a34], [5, 4, 0xf4ecdc], [7, 4, 0xb05a34], [9, 3, 0xf4ecdc], [11, 2, 0xb05a34]] as const) g.rect(x, y, 2, 2, c);
+    g.set(8, 3, 0xd84a32);
+    g.set(12, 2, 0xd84a32);
+  } else if (id === "bingsu") {
+    // 빙수: 그릇 위 눈꽃 얼음 산 + 팥 + 떡 한 알
+    g.ellipse(8, 5.5, 5, 1.6, 0x9ad0e8);
+    for (let y = 1; y < 6; y++) for (let x = 8 - (y + 1); x <= 8 + (y + 1); x++) g.set(x, y, y < 3 ? 0xffffff : 0xf0f6fa);
+    g.rect(7, 0, 3, 2, 0x8a3a3a);
+    g.set(8, 0, 0xa84a48);
+    g.set(5, 4, 0xf4ecdc);
+  } else if (id === "watermelon") {
+    // 수박 한 조각: 초록 껍질 + 빨간 속 + 까만 씨
+    for (let y = 1; y < 6; y++) for (let x = 8 - (6 - y); x <= 8 + (6 - y); x++) g.set(x, y, y >= 5 ? 0x4a9a4a : y === 4 ? 0xe8f0c8 : 0xf04a5a);
+    g.set(6, 2, 0x2a2420);
+    g.set(9, 3, 0x2a2420);
+    g.set(10, 2, 0x2a2420);
   } else if (id === "pork") {
     g.rect(4, 3, 4, 3, 0xd8826a);
     g.hline(4, 7, 4, 0xf2d8c8);
@@ -1796,9 +1848,18 @@ export function bbqPlateArt(id: string): Grid {
 
 
 /** 11/15 마실 거리: 맥주잔(거품)·소주잔과 초록 병·막걸리 사발·캠핑 커피 컵(김). 16×12, 원점 바닥 가운데 */
-export function drinkArt(id: "beer" | "soju" | "makgeolli" | "coffee" | "hangover" | "highball" | "sunset" | "sikhye" | "cola"): Grid {
+export function drinkArt(id: "beer" | "soju" | "makgeolli" | "coffee" | "hangover" | "highball" | "sunset" | "sikhye" | "cola" | "slush"): Grid {
   const g = new Grid(16, 12);
-  if (id === "highball") {
+  if (id === "slush") {
+    // 11/16 r12 바닷가 자판기 슬러시: 투명 컵에 파란 얼음 + 돔 뚜껑 + 숟가락 빨대
+    g.rect(5, 4, 6, 7, 0x6ab8f8);
+    g.hline(5, 10, 4, 0xa8dcff);
+    for (const [x, y] of [[6, 6], [9, 7], [7, 9]] as const) g.set(x, y, 0xd8f0ff);
+    g.hline(5, 10, 3, 0xe8f4fc);
+    g.hline(6, 9, 2, 0xe8f4fc);
+    g.vline(10, 0, 3, 0xf8e040);
+    g.hline(5, 10, 10, 0x3a88c8);
+  } else if (id === "highball") {
     // 11/16 바닷가: 키 큰 유리잔 + 연노랑 술 + 얼음 + 레몬
     g.rect(5, 2, 6, 9, 0xe8e0a0);
     g.vline(6, 3, 10, 0xf8f4d0);

@@ -14,6 +14,8 @@ import {
   SEA_REALTY_W,
   SEA_ROCKS,
   SEA_WIDTH,
+  SEA_SPOTS,
+  SEA_BONFIRE,
 } from "@tomb/protocol";
 import { inRect, SEA_TREES, seaGroundKind, type SeaGround } from "./seaLayout";
 
@@ -98,7 +100,7 @@ export function toSeaMinimap(x: number, y: number): { x: number; y: number } {
   return { x: x / SEA_MINIMAP_CELL, y: y / SEA_MINIMAP_CELL };
 }
 
-export type SeaLandmark = { id: string; label: string; x: number; y: number; kind: "bus" | "realty" | "kiosk" | "cottages" | "pier" | "lighthouse" | "rocks" };
+export type SeaLandmark = { id: string; label: string; x: number; y: number; kind: "bus" | "realty" | "kiosk" | "cottages" | "pier" | "lighthouse" | "rocks" | "seat" | "bonfire" };
 /** 미니맵 주요 장소 (UI가 작은 표시를 그려요) */
 export const SEA_LANDMARKS: readonly SeaLandmark[] = [
   { id: "bus", label: "버스 정류장", x: SEA_BUS_STOP.x, y: SEA_BUS_STOP.y, kind: "bus" },
@@ -109,6 +111,10 @@ export const SEA_LANDMARKS: readonly SeaLandmark[] = [
   { id: "pier", label: "선착장", x: SEA_PIER.x + SEA_PIER.w / 2, y: SEA_PIER_END.y, kind: "pier" },
   { id: "lighthouse", label: "방파제 등대", x: SEA_LIGHTHOUSE.x, y: SEA_LIGHTHOUSE.y - 10, kind: "lighthouse" },
   { id: "rocks", label: "갯바위", x: 110, y: 590, kind: "rocks" },
+  // 11/16 r12 걸터앉는 자리 (선착장 끝·방파제 끝) · 해변 모닥불
+  { id: "pierSeats", label: "걸터앉기", x: SEA_SPOTS.pierEnd.x, y: SEA_SPOTS.pierEnd.y + 8, kind: "seat" },
+  { id: "breakwaterSeats", label: "걸터앉기", x: SEA_SPOTS.breakwaterEnd.x, y: SEA_SPOTS.breakwaterEnd.y + 8, kind: "seat" },
+  { id: "bonfire", label: "모닥불", x: SEA_BONFIRE.x, y: SEA_BONFIRE.y, kind: "bonfire" },
 ];
 /** 주요 장소 표시 색 */
 export const SEA_LANDMARK_COLOR: Record<SeaLandmark["kind"], string> = {
@@ -119,4 +125,6 @@ export const SEA_LANDMARK_COLOR: Record<SeaLandmark["kind"], string> = {
   pier: "#d8b080",
   lighthouse: "#fff2a0",
   rocks: "#b8b0a4",
+  seat: "#f8c8a0",
+  bonfire: "#ffb050",
 };

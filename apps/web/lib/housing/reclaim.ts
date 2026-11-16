@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { staffAccountId } from "../staff";
 import { getAccounts, getGifts } from "../store";
 import { GIFT_KEEP_MS, type GiftRecord } from "../store/gifts";
-import { lotLabel, plotCost, RECLAIM_DAYS, RECLAIM_SINCE, reclaimLastSeen } from "./catalog";
+import { houseLabel, plotCost, RECLAIM_DAYS, RECLAIM_SINCE, reclaimLastSeen } from "./catalog";
 import { houseIdFor } from "./service";
 import type { HouseRecord, HouseStore } from "./store";
 
@@ -74,9 +74,9 @@ export async function sweepReclaim(
     if (h.owner === staff || !awaySince(seen[i]?.lastSeenAt ?? 0, cutoff, since)) continue;
     // 바로 앞에서 한 번 더 읽는다 (그 사이 돌아온 주인. Redis는 Lua 안에서 계정 해시를 직접 다시 본다)
     const [s] = await accounts.summaries([h.owner]);
-    const label = h.lot ? lotLabel(h.ch, h.lot) : `${h.ch}채널`;
+    const label = h.lot ? houseLabel(h) : `${h.ch}채널`;
     const points = refundOf(h);
-    const r = await store.reclaim(h.id, { owner: h.owner, tier: h.tier, ch: h.ch, points, cutoff, since, lastSeenAt: s?.lastSeenAt ?? 0, label, now });
+    const r = await store.reclaim(h.id, { owner: h.owner, tier: h.tier, ch: h.ch, points, cutoff, since, lastSeenAt: s?.lastSeenAt ?? 0, label, now, ...(h.zone === "sea" ? { zone: "sea" as const } : {}) });
     if (typeof r === "object") report.reclaimed.push({ id: h.id, name: h.name, ownerName: h.ownerName, label, points: r.points });
     else report.kept++;
   }
@@ -104,12 +104,14 @@ export function resetReclaimGate() {
  * 선물 id가 기록마다 정해져 있어, 보낸 뒤 기록을 지우기 전에 끊겨도 다음에 같은 선물을 다시 넣을 뿐이다
  */
 export async function deliverReclaim(store: HouseStore, accountId: string, now = Date.now()): Promise<string | null> {
-  const id = houseIdFor(accountId);
-  const list = await store.pendingReclaims(id);
-  if (!list.length) return null;
+  // 11/16 마을 집과 포구 오두막은 집 id가 따로다 (둘 다 본다)
+  const ids = [houseIdFor(accountId), houseIdFor(accountId, "sea")];
+  const lists = await Promise.all(ids.map((id) => store.pendingReclaims(id)));
+  const rows = ids.flatMap((id, i) => lists[i].map((p) => ({ id, p })));
+  if (!rows.length) return null;
   const [s] = await getAccounts().summaries([accountId]);
   let total = 0;
-  for (const p of list) {
+  for (const { id, p } of rows) {
     const gift: GiftRecord = {
       id: reclaimGiftId(id, p.at),
       from: RECLAIM_FROM,

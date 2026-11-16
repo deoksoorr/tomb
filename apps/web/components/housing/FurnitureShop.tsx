@@ -16,8 +16,10 @@ import ui from "../ui/ui.module.css";
 import styles from "./housing.module.css";
 import { fmt, FurnitureStage, FurnitureThumb } from "./parts";
 
-/** 갈래 탭 순서: 가구·사무실·자연·분위기·생활·바닥·벽지·외관(담장 등) */
-const CATS: FurnitureCategory[] = ["furniture", "dev", "nature", "mood", "living", "skin", "exterior"];
+/** 갈래 탭 순서: 가구·사무실·자연·분위기·생활·바닷가 세트·바닥·벽지·외관(담장 등) */
+const CATS: FurnitureCategory[] = ["furniture", "dev", "nature", "mood", "living", "sea", "skin", "exterior"];
+/** 11/16 포구 오두막: 외관 탭은 없다 (오두막 겉모습은 포구 부동산에서 고른다). 바닷가 세트부터 보여 준다 */
+const SEA_CATS: FurnitureCategory[] = ["sea", "furniture", "dev", "nature", "mood", "living", "skin"];
 const COUNTS = Object.fromEntries(CATS.map((c) => [c, FURNITURE.filter((f) => f.category === c).length])) as Record<FurnitureCategory, number>;
 
 type Props = {
@@ -56,7 +58,9 @@ function abilities(f: FurnitureDef, touch: boolean): string[] {
  * 산 물건은 하우징 가방에 들어가고, 놓지 않은 것은 절반 값에 되팔 수 있다.
  */
 export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Props) {
-  const [cat, setCat] = useState<FurnitureCategory>("furniture");
+  const zone = my.house?.zone === "sea" ? "sea" : "village";
+  const cats = zone === "sea" ? SEA_CATS : CATS;
+  const [cat, setCat] = useState<FurnitureCategory>(cats[0]);
   const [picked, setPicked] = useState<Partial<Record<FurnitureCategory, string>>>({});
   const [pending, setPending] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -129,11 +133,11 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
     setMsg(null);
     try {
       if (sell) {
-        const r = await housingApi.sellItem(def.id);
+        const r = await housingApi.sellItem(def.id, zone);
         onMy(r);
         setMsg(`${def.name} 하나를 ${r.refunded}P에 팔았어요.`);
       } else {
-        onMy(await housingApi.buyItem(def.id));
+        onMy(await housingApi.buyItem(def.id, zone));
         setMsg(`가방에 ${def.name} 하나를 넣었어요.`);
       }
       void meStore.refresh();
@@ -250,7 +254,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
           <p className={cx(styles.small, styles.fsHint)}>되팔면 산 값의 절반을 받아요. 놓아 둔 물건은 치우고 저장한 뒤에 팔 수 있어요.</p>
         </div>
         <div className={styles.fsTabs} role="tablist" aria-label="물건 갈래">
-          {CATS.map((c) => (
+          {cats.map((c) => (
             <button
               key={c}
               type="button"

@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import type { SeaViewKind } from "@tomb/protocol";
+import { tideLineY, type SeaViewKind } from "@tomb/protocol";
 import { addCanvasTexture } from "../assets/manifest";
 import { rainTile, snowTile } from "../sprites/skyScenery";
 import type { Levels } from "../world/ambienceMix";
@@ -18,7 +18,7 @@ import { noise1, shoreDelay, shoreReach, WaveTrain } from "./seaWaves";
 
 export type SeaViewSitter = { key: string; frame: number; slot: number; of: number };
 export { seaViewFore, seaViewLandmarks, seaViewProject, VIEW_FOCAL, type SeaViewFore, type SeaViewLandmarks } from "./seaViewGeom";
-import { seaViewProject, type SeaViewFore, type SeaViewLandmarks } from "./seaViewGeom";
+import { seaViewProject, VIEW_FOCAL, type SeaViewFore, type SeaViewLandmarks } from "./seaViewGeom";
 
 export type SeaViewFrame = {
   now: number;
@@ -62,7 +62,8 @@ let seq = 0;
 /** 장면마다 수평선 높이 (화면 높이 비율) — 선베드는 누워서 하늘이 넓어요 */
 /** 11/16 장면 종류: 앉은 자리 장면 + 등대 꼭대기 (오르기) */
 export type ViewKind = SeaViewKind | "lighthouse";
-const HORIZON: Record<ViewKind, number> = { beach: 0.42, mat: 0.42, parasol: 0.44, lounger: 0.6, pier: 0.36, breakwater: 0.4, lighthouse: 0.24 };
+// 11/16 r12 벤치는 눈높이를 조금 높여(내려다보듯) 수평선을 위로 — 모래밭이 잘 보이게
+const HORIZON: Record<ViewKind, number> = { beach: 0.34, mat: 0.42, parasol: 0.44, lounger: 0.6, pier: 0.36, breakwater: 0.4, lighthouse: 0.24 };
 
 export class SeaView {
   private readonly scene: ViewScene;
@@ -72,6 +73,8 @@ export class SeaView {
   private mat = 0;
   private foreSpec: SeaViewFore | null = null;
   private landSpec: SeaViewLandmarks | null = null;
+  /** 앉은 자리 (월드) — 물가 줄을 실제 거리로 */
+  private seatAt: { x: number; y: number } | null = null;
   private foreLoungers: { img: Phaser.GameObjects.Image; head: Phaser.GameObjects.Image }[] = [];
   private built = false;
   private dirty = false;
@@ -147,7 +150,8 @@ export class SeaView {
   }
 
   /** 장면 시작 (variant = 파라솔 갓 색, mat = 돗자리 색) */
-  begin(kind: ViewKind, variant: number, mat: number, fore: SeaViewFore | null = null, land: SeaViewLandmarks | null = null): void {
+  begin(kind: ViewKind, variant: number, mat: number, fore: SeaViewFore | null = null, land: SeaViewLandmarks | null = null, at: { x: number; y: number } | null = null): void {
+    this.seatAt = at;
     if (this.kind === kind && this.variant === variant && this.mat === mat && this.foreSpec === fore && this.landSpec === land) return;
     this.clear();
     this.kind = kind;
@@ -262,7 +266,7 @@ export class SeaView {
     this.puffs = [];
     const beachy = kind === "beach" || kind === "mat" || kind === "parasol" || kind === "lounger";
     if (beachy) {
-      const sandH = Math.round(VH * 0.5);
+      const sandH = Math.round(VH * 0.72);
       this.sand = this.add(sc.add.image(0, VH, this.tex(`${P}sand-${VW}-${sandH}`, () => V.sandBand(VW, sandH, 14))).setOrigin(0, 0).setDepth(10));
       const pts = Array.from({ length: Math.ceil(VW / RSTEP) + 1 }, (_, i) => ({ x: i * RSTEP, y: 0 }));
       this.wash = this.add(sc.add.rope(0, 0, this.tex(P + "px", () => V.whitePx()), undefined, pts, true).setDepth(11));
@@ -306,7 +310,8 @@ export class SeaView {
       this.beam = this.add(sc.add.image(Math.round(VW / 2), VH - 10, this.tex(P + "beam", () => V.beamWedge())).setOrigin(0, 0.5).setDepth(8).setBlendMode(Phaser.BlendModes.ADD).setVisible(false));
     } else if (kind === "pier") {
       // 11/16 묶인 낚싯배는 선착장 끝 동쪽 → 바다를 보면 왼쪽, 부표는 서쪽 → 오른쪽
-      this.moored = this.add(sc.add.image(Math.round(VW * 0.14), Math.round(VH * 0.8), Art.SEA_TEX.boat).setOrigin(0.5, 1).setDepth(13).setScale(2).setFlipX(true));
+      // 11/16 r13 낚싯배 대신 데크 동쪽(장면 왼쪽)에 매어 둔 제트스키
+      this.moored = this.add(sc.add.image(Math.round(VW * 0.14), Math.round(VH * 0.8), Art.SEA_TEX.jetski("side", 0)).setOrigin(0.5, 1).setDepth(13).setScale(3).setFlipX(true));
       this.buoy = this.add(sc.add.image(Math.round(VW * 0.82), Math.round(hz + (VH - hz) * 0.35), Art.SEA_TEX.buoy).setOrigin(0.5, 1).setDepth(13).setScale(2));
       this.fore.push(this.add(sc.add.image(0, VH, this.tex(`${P}deck-${VW}`, () => V.deckBand(VW))).setOrigin(0, 1).setDepth(20)));
     } else {
@@ -568,9 +573,13 @@ export class SeaView {
     if (!this.sand || !this.wash || !this.foam || !this.waves) return;
     const { VH } = this;
     const lounger = this.kind === "lounger";
-    const near = lounger ? 0.9 : 0.8;
-    const far = lounger ? 0.8 : 0.64;
-    const shoreY = Math.round(VH * (far + (near - far) * clamp01(f.tide)));
+    // 11/16 r12 사용자 "밀물 때 선베드가 물에 떠 있어요" → 물가 줄은 앉은 자리에서 지금 물가 선(물때)까지 실제 거리로 (원근, 지도와 같은 거리)
+    const at = this.seatAt;
+    const dLine = at ? Math.max(16, tideLineY(f.tide) - at.y) : 0;
+    const shoreY = at
+      ? Math.round(seaViewProject(0, dLine, this.VW, VH, this.hz)!.y)
+      : Math.round(VH * ((lounger ? 0.8 : 0.64) + ((lounger ? 0.9 : 0.8) - (lounger ? 0.8 : 0.64)) * clamp01(f.tide)));
+    const s0 = VIEW_FOCAL / Math.max(16, dLine);
     this.sand.setY(shoreY).setTint(shade);
     const ep = seaPal(night, warm, 0);
     const time = this.scene.time.now;
@@ -583,9 +592,11 @@ export class SeaView {
     const n = WV.length / 4;
     for (let i = 0; i < n; i++) {
       const x = i * RSTEP;
-      // 지도 파도 px를 장면 크기로 (가까운 물가라 지도보다 조금 크게)
-      const surge = this.reduced ? 2 : this.waves.surgeAt(time - shoreDelay(x * 3, time)) * shoreReach(x * 3, time) * 0.32;
-      const edge = Math.round(shoreY + surge);
+      // 파도가 밀려온 만큼(지도 px) 물가가 앉은 자리 쪽으로 — 원근으로 화면 줄로 (지도 동쪽 = 장면 왼쪽)
+      const wx = at ? at.x - (x - this.VW / 2) / s0 : x * 3;
+      const surgeW = this.reduced ? 2 : this.waves.surgeAt(time - shoreDelay(wx, time)) * shoreReach(wx, time);
+      const edge = at ? Math.round(seaViewProject(0, Math.max(14, dLine - surgeW), this.VW, VH, this.hz)!.y) : Math.round(shoreY + surgeW * 0.32);
+      const surge = edge - shoreY;
       const k = i * 4;
       WV[k] = x;
       WV[k + 1] = shoreY - 3;
@@ -754,7 +765,8 @@ export class SeaView {
       }
       if (img.texture.key !== r.key || img.frame.name !== String(r.frame)) img.setTexture(r.key, r.frame);
       const gap = r.of > 2 ? 30 : 40;
-      const x = VW / 2 + (r.slot - (r.of - 1) / 2) * gap;
+      // 11/16 r12 바다(남쪽)를 보니 서쪽 자리(앞 번호)는 화면 오른쪽 — 지도 동쪽 = 장면 왼쪽 (장면 앞 그림과 같은 규칙)
+      const x = VW / 2 - (r.slot - (r.of - 1) / 2) * gap;
       img
         .setVisible(!lounger)
         .setPosition(Math.round(x), VH + 10)

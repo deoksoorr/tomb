@@ -55,7 +55,7 @@ export default function CampBbq() {
 
 function BbqDialog({ stand, onClose }: { stand: BbqStand; onClose: () => void }) {
   const { me } = useMe();
-  const tab = stand === "grill" ? "food" : "drink";
+  const tab = stand === "grill" || stand === "kiosk" ? "food" : "drink";
   const [pending, setPending] = useState<BbqItemId | null>(null);
   const [error, setError] = useState<string | null>(null);
   // 지금 취기: 이 브라우저 기억, 서버 기록(다른 기기에서 마신 것) 중 큰 쪽
@@ -88,11 +88,15 @@ function BbqDialog({ stand, onClose }: { stand: BbqStand; onClose: () => void })
     }
   }
 
-  // 11/16 바닷가 매점: 술·음료·오징어구이 (bbqStands)
+  // 11/16 r12 바닷가: 매점은 먹거리, 바닷가 자판기는 술·음료 (bbqStands)
   const items = BBQ_MENU.filter((m) => bbqStands(m).includes(stand));
-  const title = stand === "kiosk" ? "포구 매점" : stand === "vending" ? "음료 자판기" : "야외 바베큐";
+  const title = stand === "kiosk" ? "포구 매점" : stand === "vending" || stand === "seaVend" ? "음료 자판기" : "야외 바베큐";
   const lead =
-    stand === "kiosk" ? "바닷바람 맞으며 한 잔 해요. 마실수록 볼이 발그레해져요." : tab === "drink" ? "버튼을 누르면 덜컹 떨어져요. 마실수록 볼이 발그레해져요." : "숯불에 막 구웠어요. 먹으면 몸이 커지거나 걸음이 빨라져요.";
+    stand === "kiosk"
+      ? "바닷바람 맞으며 한 입 해요. 먹으면 몸이 커지거나 걸음이 빨라져요."
+      : tab === "drink"
+        ? "버튼을 누르면 덜컹 떨어져요. 마실수록 볼이 발그레해져요."
+        : "숯불에 막 구웠어요. 먹으면 몸이 커지거나 걸음이 빨라져요.";
   return (
     <Dialog title={title} onClose={onClose} kind="confirm">
       <div className={styles.wrap}>

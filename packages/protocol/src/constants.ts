@@ -115,7 +115,8 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 // 46 = 해변 선베드·파라솔 줄 배치·선베드 수건·쉴거리 앉기 안내, 그림 오른쪽 잘림 공통 수정, 앉기 거절 다시 청하기 (바닷가 맵 6) — 모두 한 번 새로고침 (11/16)
 // 47 = 바닷물고기 10종·갯벌 캐기 10종·포구 시장, 포구 매점(술), 선베드 두 줄·막힘, 파라솔 겹침, 벤치 바다 보기 앞줄, 물때 범위 조정 (바닷가 맵 7) — 모두 한 번 새로고침 (11/16)
 // 48 = 바닷가 맵 세로 줄임·포구 시장 뺌·별장 흩어 놓기·선착장/방파제 짧게·바다 보기 좌우 원근·등대 오르기·등대지기·안개 무적 (바닷가 맵 8) — 모두 한 번 새로고침 (11/16)
-export const CLIENT_VERSION = 48;
+// 49 = 바닷가 오두막 분양·등대 등불·매점/자판기·피크닉 탁자·해변 모닥불·바다 아래 확장·튜브·제트스키·낚싯배 뺌·방파제 늘림·탈것 탄 채 사냥터 막기 (바닷가 맵 11) — 모두 한 번 새로고침 (11/16)
+export const CLIENT_VERSION = 49;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */
@@ -247,10 +248,10 @@ export function staffGateBody<T extends string>(body: T, staff: boolean): T | "h
 }
 
 /**
- * 한 번 하는 동작 (같은 채널에 보이고 들린다): 종 치기·물 튀기기·손 흔들기·환호·오리배 꽥(11/15)·범퍼카 빵빵(11/16).
+ * 한 번 하는 동작 (같은 채널에 보이고 들린다): 종 치기·물 튀기기·손 흔들기·환호·오리배 꽥(11/15)·범퍼카 빵빵(11/16)·등대 등불 켬(11/16, 바닷가).
  * 서버가 이 목록으로 받을 동작을 정한다 (늘리면 realtime 재배포). 옛 클라이언트는 모르는 동작을 그냥 버린다
  */
-export const ACT_KINDS = ["bell", "splash", "wave", "cheer", "quack", "honk"] as const;
+export const ACT_KINDS = ["bell", "splash", "wave", "cheer", "quack", "honk", "lamp"] as const;
 export type ActKind = (typeof ACT_KINDS)[number];
 
 /**

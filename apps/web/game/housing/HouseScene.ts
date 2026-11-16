@@ -27,8 +27,11 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { Atmosphere } from "../world/Atmosphere";
 import { Lighting, playerLightRadius } from "../world/Lighting";
 import type { LightSpot } from "../world/WorldMap";
+import { seaWindowGrid, seaYardCanvas, SEA_WIN_W, tideBucket } from "./seaRoom";
+import { tideNowLevel } from "../sea/tideClock";
 import { animFrames, artUp, drawsTurned, floorGrid, furnitureGrid, hasNightArt, itemVariant, noFootShadow, sconceGrid, wallCapColor, wallFaceColor, WALL_H, wallGrid, windowGrid, WINDOW_W, yardGrid } from "./art";
 import type { HouseEditState, HouseTool } from "./events";
+import { wornRingGrid } from "./seaFurnitureArt";
 import { HouseSfx, hearGain, type HouseSound } from "./houseSfx";
 import { HouseZoom } from "./houseZoom";
 import {
@@ -38,6 +41,10 @@ import {
   DRINKS,
   FRAME_LINES,
   PRAY_LINES,
+  RING_WEAR_MS,
+  SHELL_LINE,
+  SURF_LINES,
+  WHEEL_LINES,
   houseSpots,
   houseTargets,
   itemDepthY,
@@ -98,6 +105,8 @@ const PART_H = 26;
 /** 앞벽 높이 (윗면 + 바깥 면) */
 const FRONT_H = 14;
 const NO_SEATS: SeatRequester = { sit: () => undefined, stand: () => undefined };
+/** 11/16 집 안 해먹에 누운 사람 depth: 해먹 가구 그림(아래 끝 = 칸 아래 끝)보다 앞 (interact seaHammockSpot 앵커 기준) */
+const hammockDepth = (s: HouseSpot) => s.y + (s.tilt ? 32 : 7);
 const ZOOM_MIN = 1.5;
 const NEAR_SIGN = 22;
 /** 밤 판정 (Atmosphere glow: 낮 0.1 … 밤 1) */
@@ -179,6 +188,10 @@ export class HouseScene extends Phaser.Scene {
   private plants: Record<string, PlantState> = {};
   private plantClock = 0;
   private windows: { img: Phaser.GameObjects.Image; key: string }[] = [];
+  /** 11/16 오두막 남쪽 벽 바다 창 · 지금 그린 물때·낮밤 (바뀌면 마당 바다와 창을 다시 그린다) */
+  private seaWins: Phaser.GameObjects.Image[] = [];
+  private seaDrawn = "";
+  private seaCheckAt = 0;
   private sconces: { img: Phaser.GameObjects.Image; on: boolean }[] = [];
   private glows: Glow[] = [];
   private night = false;
@@ -253,6 +266,9 @@ export class HouseScene extends Phaser.Scene {
     this.openUntil = new Map();
     this.plants = {};
     this.windows = [];
+    this.seaWins = [];
+    this.seaDrawn = "";
+    this.seaCheckAt = 0;
     this.sconces = [];
     this.glows = [];
     this.remoteTick = new Map();
@@ -416,17 +432,24 @@ export class HouseScene extends Phaser.Scene {
   private drawGround(): void {
     this.ground?.destroy();
     const t = this.tier;
-    const key = `house-ground-${this.work.floor}-${t.id}`;
+    // 11/16 포구 오두막: 집 밖은 모래사장과 지금 물때의 바다 (seaRoom — 물때 0.1 단위·낮밤으로 다시 굽는다)
+    const sea = this.seaRoomKey();
+    const key = `house-ground-${this.work.floor}-${t.id}${sea ? `-${sea}` : ""}`;
     this.canvasTex(key, () => {
       const c = document.createElement("canvas");
       c.width = this.W;
       c.height = this.H;
       const ctx = c.getContext("2d")!;
       ctx.imageSmoothingEnabled = false;
-      const outside = [0, 1, 2, 3].map((v) => yardGrid(v).toCanvas());
       const inside = [0, 1, 2, 3].map((v) => floorGrid(this.work.floor, v).toCanvas());
-      for (let y = 0; y * T < this.H; y++) for (let x = 0; x * T < this.W; x++) ctx.drawImage(outside[(x * 7 + y * 3) % 4], x * T, y * T);
-      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      if (sea) {
+        ctx.drawImage(seaYardCanvas(this.W, this.H, this.tileY(t.h) + FRONT_H, tideBucket(tideNowLevel().level) / 10, this.night), 0, 0);
+        ctx.fillStyle = "rgba(0,0,0,0.12)";
+      } else {
+        const outside = [0, 1, 2, 3].map((v) => yardGrid(v).toCanvas());
+        for (let y = 0; y * T < this.H; y++) for (let x = 0; x * T < this.W; x++) ctx.drawImage(outside[(x * 7 + y * 3) % 4], x * T, y * T);
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+      }
       ctx.fillRect(0, 0, this.W, this.H);
       for (let y = 0; y < t.h; y++) for (let x = 0; x < t.w; x++) ctx.drawImage(inside[(x * 5 + y * 3) % 4], this.tileX(x), this.tileY(y));
       const L = this.tileX(0);
@@ -456,7 +479,14 @@ export class HouseScene extends Phaser.Scene {
       ctx.fillRect(gx + 5, bottom - 10, 2 * T - 10, 7);
       ctx.fillStyle = "#a8744a";
       for (let x = gx + 7; x < gx + 2 * T - 6; x += 4) ctx.fillRect(x, bottom - 8, 2, 3);
-      // 문 밖 길
+      // 문 밖 길 (오두막은 모래 위 짧은 널빤지 길)
+      if (sea) {
+        for (let y = bottom + FRONT_H - 4, i = 0; y < bottom + FRONT_H + 18; y += 4, i++) {
+          ctx.fillStyle = i % 2 ? "#b08a5e" : "#c49a6a";
+          ctx.fillRect(gx + 6, y, 2 * T - 12, 3);
+        }
+        return c;
+      }
       ctx.fillStyle = "#4a443a";
       ctx.fillRect(gx + 4, bottom + FRONT_H - 4, 2 * T - 8, this.H - bottom);
       ctx.fillStyle = "#5a5446";
@@ -478,6 +508,7 @@ export class HouseScene extends Phaser.Scene {
       return false;
     });
     this.wallBodies.clear(true, true);
+    this.seaWins = [];
     const t = this.tier;
     const wallId = this.work.wall;
     const L = this.tileX(0);
@@ -537,6 +568,15 @@ export class HouseScene extends Phaser.Scene {
       this.walls.push(fr);
       for (let yy = bottom + 8; yy < bottom + FRONT_H; yy += 3)
         this.walls.push(this.add.rectangle(x0, yy, x1 - x0, 1, 0x4a3020).setOrigin(0, 0).setDepth(bottom + FRONT_H + 0.1));
+      // 11/16 포구 오두막: 아래쪽(남쪽) 벽에 바다가 보이는 창 (양쪽 앞벽 가운데)
+      if (this.data0.house.zone === "sea" && x1 - x0 >= SEA_WIN_W + 10) {
+        const img = this.add
+          .image(Math.round((x0 + x1) / 2 - SEA_WIN_W / 2), bottom + 2, this.seaWindowKey())
+          .setOrigin(0, 0)
+          .setDepth(bottom + FRONT_H + 0.3);
+        this.walls.push(img);
+        this.seaWins.push(img);
+      }
     }
     // 현관 문틀 (기둥 + 열린 문짝)
     for (const gx of [gL - 2, gR - 1]) this.walls.push(this.add.rectangle(gx, bottom - 18, 3, 18 + FRONT_H, 0x3a2416).setOrigin(0, 0).setDepth(bottom + FRONT_H + 0.2));
@@ -571,6 +611,27 @@ export class HouseScene extends Phaser.Scene {
     const z = this.add.zone(x + w / 2, y + h / 2, w, h);
     z.removeFromDisplayList();
     this.wallBodies.add(z);
+  }
+
+  /** 오두막이면 지금 물때·낮밤 (그림 키 조각), 아니면 "" */
+  private seaRoomKey(): string {
+    if (this.data0.house.zone !== "sea") return "";
+    return `sea${tideBucket(tideNowLevel().level)}${this.night ? "n" : "d"}`;
+  }
+
+  private seaWindowKey(): string {
+    const k = this.seaRoomKey();
+    return this.canvasTex(`house-seawin-${k}`, () => seaWindowGrid(tideBucket(tideNowLevel().level) / 10, this.night).toCanvas());
+  }
+
+  /** 물때·낮밤이 바뀌었으면 바다 마당과 창을 다시 그린다 (오두막만, 몇 초에 한 번 본다) */
+  private refreshSeaRoom(force = false): void {
+    const k = this.seaRoomKey();
+    if (!k || (!force && k === this.seaDrawn)) return;
+    this.seaDrawn = k;
+    this.drawGround();
+    const win = this.seaWindowKey();
+    for (const w of this.seaWins) w.setTexture(win);
   }
 
   private windowKey(night: boolean, open: boolean): string {
@@ -644,8 +705,11 @@ export class HouseScene extends Phaser.Scene {
       case "pond":
         // 돌린 방향(세로 그림)·밤(달)·잔물결 장면
         return itemVariant(p.i, "", { r: p.r, night: this.night, frame: this.data0.reduced ? 0 : this.pondFrame });
+      case "sea_hammock":
+        return this.hammockBusy().has(p.u) ? "lie" : "";
       case "stone_lantern":
       case "candles":
+      case "sea_lantern":
         // 값 1 = 꺼짐 (처음부터 켜져 있던 가구)
         return this.toggles.get(p.u) ? "off" : "";
       default: {
@@ -670,7 +734,7 @@ export class HouseScene extends Phaser.Scene {
 
   /** 꺼 둔 석등·촛대 */
   private isDark(p: Placed): boolean {
-    return (p.i === "stone_lantern" || p.i === "candles") && !!this.toggles.get(p.u);
+    return (p.i === "stone_lantern" || p.i === "candles" || p.i === "sea_lantern") && !!this.toggles.get(p.u);
   }
 
   /** 물건 그림의 불투명도: 놓아 보는 물건은 반투명, 끌어서 못 놓는 자리면 더 흐리게 */
@@ -1066,7 +1130,69 @@ export class HouseScene extends Phaser.Scene {
         this.emitUse(t.u, i);
         return;
       }
+      // ── 11/16 바닷가 세트 ──
+      case "surf": {
+        // 보드 앞에서 폴짝: 파도 소리 + 물보라 + 한마디
+        const i = Math.floor(Math.random() * SURF_LINES.length);
+        p.jump(this.time.now, null);
+        this.sfx.play("surf");
+        this.fxPuffs(p.x, p.y - 2, [0xcdf0ec, 0x8dd9de, 0xffffff], 6, false);
+        p.view.say(SURF_LINES[i], performance.now());
+        this.emitUse(t.u, i);
+        return;
+      }
+      case "shell":
+        this.sfx.play("surf");
+        this.emote("tune");
+        p.view.say(SHELL_LINE, performance.now());
+        this.notice(`소라에 귀를 대 보니 ${SHELL_LINE}.`);
+        this.emitUse(t.u, 0);
+        return;
+      case "ring":
+        this.sfx.play("sheet", 0.7);
+        this.flashVariant(t.u, "empty", RING_WEAR_MS);
+        this.fxWornRing(() => ({ x: this.player.x, y: this.player.y }));
+        this.time.delayedCall(300, () => this.emote("laugh"));
+        this.notice("구명 튜브를 끼었어요. 둥둥!");
+        this.emitUse(t.u, 0);
+        return;
+      case "wheel": {
+        const i = Math.floor(Math.random() * WHEEL_LINES.length);
+        this.fxWheel(t.u, 1);
+        p.view.say(WHEEL_LINES[i], performance.now());
+        this.emitUse(t.u, i);
+        return;
+      }
     }
+  }
+
+  /** 11/16 조타륜 돌리기: 살이 두 번 돌아가고 도르륵 */
+  private fxWheel(u: string, gain: number): void {
+    this.sfx.play("wheel", gain);
+    this.flashVariant(u, "turn", 260);
+    if (!this.data0.reduced) this.time.delayedCall(420, () => this.flashVariant(u, "turn", 260));
+  }
+
+  /** 11/16 구명 튜브 끼기: 허리에 빨강·하양 고리를 RING_WEAR_MS 동안 두른다 (at = 그 사람 발 위치, 없어지면 끝) */
+  private fxWornRing(at: () => { x: number; y: number } | null): void {
+    const key = this.canvasTex("house-worn-ring", () => wornRingGrid().toCanvas());
+    const first = at();
+    if (!first) return;
+    const img = this.add.image(first.x, first.y - 7, key).setOrigin(0.5, 0.5);
+    const until = this.time.now + RING_WEAR_MS;
+    const ev = this.time.addEvent({
+      delay: 16,
+      loop: true,
+      callback: () => {
+        const pos = at();
+        if (!pos || this.time.now >= until || !img.active) {
+          ev.remove();
+          img.destroy();
+          return;
+        }
+        img.setPosition(Math.round(pos.x), Math.round(pos.y - 7)).setDepth(pos.y + INDOOR_FRONT + 1);
+      },
+    });
   }
 
   /** 연못 첨벙: 물가 앞쪽에서 잔물결 고리가 번진다 */
@@ -1235,9 +1361,36 @@ export class HouseScene extends Phaser.Scene {
     const mine = this.using && this.player.anchored ? this.using.spot.tilt ?? 0 : 0;
     if (mine) this.player.sprite.setAngle(mine);
     if (this.presence) for (const r of this.presence.remotes.values()) {
-      const t = r.stateId === STATE.lie ? tiltOf(r.seatId) : 0;
+      const t = r.stateId === STATE.lie || r.stateId === STATE.hammock ? tiltOf(r.seatId) : 0;
       if (t) r.view.sprite.setAngle(t);
+      // 11/16 집 안 해먹에 누운 사람: 해먹 가구 그림(기둥) 앞에
+      if (r.stateId === STATE.hammock) {
+        const s = r.seatId ? this.spots.find((x) => x.id === r.seatId) : undefined;
+        if (s?.kind === "hammockIn") {
+          r.view.depthOverride = hammockDepth(s);
+          r.view.sprite.setDepth(r.view.depthOverride);
+        }
+      }
     }
+    this.refreshHammocks();
+  }
+
+  /** 11/16 누가 누운 해먹 (나·같은 방 사람)의 배치 id */
+  private hammockBusy(): Set<string> {
+    const busy = new Set<string>();
+    if (this.using?.spot.kind === "hammockIn" && this.player.state === "hammock") busy.add(this.using.spot.u);
+    if (this.presence)
+      for (const r of this.presence.remotes.values()) {
+        if (r.stateId !== STATE.hammock || !r.seatId) continue;
+        const s = this.spots.find((x) => x.id === r.seatId);
+        if (s?.kind === "hammockIn") busy.add(s.u);
+      }
+    return busy;
+  }
+
+  /** 해먹 가구 그림: 누가 누우면 기둥만 (줄·천·몸은 누운 사람 그림이 그린다 — 마을 해먹과 같다) */
+  private refreshHammocks(): void {
+    for (const v of this.views.values()) if (v.p.i === "sea_hammock") this.refreshVariant(v.p.u);
   }
 
   /**
@@ -1295,6 +1448,11 @@ export class HouseScene extends Phaser.Scene {
     const pre = { x: this.player.x, y: this.player.y };
     if (s.kind === "chair") {
       this.player.sit({ id: s.id, furnitureId: s.u, x: s.x, y: s.y, facing: s.facing }, now, this.seatReq);
+    } else if (s.kind === "hammockIn") {
+      // 11/16 바닷가 세트 해먹: 마을 해먹과 같은 누운 그림 (줄·천·몸이 함께 흔들린다). 가구 그림은 기둥만 남긴다 (baseVariantOf)
+      this.player.attach("hammock", s.x, s.y, hammockDepth(s), now, this.seatReq, s.id);
+      this.seatReq.sit(s.id);
+      this.refreshHammocks();
     } else {
       const kind = s.kind === "bed" ? "lie" : s.kind === "book" ? "read" : "bath";
       this.player.attach(kind, s.x, s.y, s.y + INDOOR_FRONT, now, this.seatReq, s.id);
@@ -1500,6 +1658,27 @@ export class HouseScene extends Phaser.Scene {
         r?.view.emote("flower", now);
         r?.view.say(PRAY_LINES[a % PRAY_LINES.length], now);
         return;
+      // ── 11/16 바닷가 세트 ──
+      case "surf":
+        this.sfx.play("surf", gain);
+        if (r) this.fxPuffs(r.x, r.y - 2, [0xcdf0ec, 0x8dd9de, 0xffffff], 6, false);
+        r?.view.say(SURF_LINES[a % SURF_LINES.length], now);
+        return;
+      case "shell":
+        this.sfx.play("surf", gain);
+        r?.view.emote("tune", now);
+        r?.view.say(SHELL_LINE, now);
+        return;
+      case "ring":
+        this.sfx.play("sheet", gain * 0.7);
+        this.flashVariant(u, "empty", RING_WEAR_MS);
+        if (r) this.fxWornRing(() => (this.presence?.remotes.get(sid) === r ? { x: r.x, y: r.y } : null));
+        r?.view.emote("laugh", now);
+        return;
+      case "wheel":
+        this.fxWheel(u, gain);
+        r?.view.say(WHEEL_LINES[a % WHEEL_LINES.length], now);
+        return;
     }
   }
 
@@ -1686,6 +1865,13 @@ export class HouseScene extends Phaser.Scene {
     this.atmos.update(time, Math.min(delta, 100), this.view);
     const L = this.atmos.levels;
     const night = L.glow > NIGHT_GLOW;
+    if (this.data0.house.zone === "sea" && (night !== this.night || time >= this.seaCheckAt)) {
+      this.seaCheckAt = time + 5000;
+      const was = this.night;
+      this.night = night;
+      this.refreshSeaRoom();
+      this.night = was;
+    }
     if (night !== this.night) {
       this.night = night;
       this.updateWindows();

@@ -292,3 +292,11 @@
 .roomExpr .dockButton {
   background: var(--panel-solid);
 }
+
+/* 11/16 [사냥] → 사냥터 입구까지 걸어가는 중 안내 (누르면 멈춘다) */
+.walkHint {
+  padding: 4px 12px;
+  font-size: 12px;
+  background: var(--panel);
+  white-space: nowrap;
+}

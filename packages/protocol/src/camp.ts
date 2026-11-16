@@ -1,6 +1,6 @@
 import { DIR, STATE, type DirId } from "./types";
 import { MAP_HEIGHT, MAP_WIDTH, SPOT_KINDS, fishingWaterOf, seatSlot, spotKindOfState, type FishingSpot, type Campfire, type Furniture, type Seat, type SeatSlot } from "./world";
-import { SEA_ARRIVE, SEA_FISHING_SPOTS, SEA_REST_SEATS, SEA_HEIGHT, SEA_SEATS, SEA_WIDTH, seaFishingSpotById } from "./sea";
+import { SEA_ARRIVE, SEA_FISHING_SPOTS, SEA_JETSKI_RADIUS, SEA_REST_SEATS, SEA_RIDES, SEA_HEIGHT, SEA_SEATS, SEA_TUBE_RADIUS, SEA_WIDTH, seaFishingSpotById } from "./sea";
 
 // 11/15 두 번째 맵 「언젠가 캠핑장 · Someday Camp」 (1차: 맵·버스·앉기·NPC 말 걸기).
 // "언젠가 캠핑 가야지" 하고 장비만 사 두고 못 간 그곳 — 늦가을 숲, 계곡, 캠프파이어 광장, 번호 붙은 빈 데크 24자리.
@@ -286,6 +286,21 @@ const seaSlots = new Map<string, SeatSlot>(SEA_SEATS.map((s) => [s.id, { id: s.i
 for (const r of SEA_REST_SEATS) seaSlots.set(r.id, { id: r.id, kind: "seat", x: r.x, y: r.y, facing: r.facing, state: r.state, furnitureId: r.group });
 // 11/16 갯바위 낚시 자리도 정해진 자리로 (캠핑장 계곡 낚시 자리처럼 kind "fish")
 for (const f of SEA_FISHING_SPOTS) seaSlots.set(f.id, { id: f.id, kind: "fish", x: f.x, y: f.y, facing: f.facing, state: SPOT_KINDS.fish.state, furnitureId: null });
+// 11/16 r13 튜브·제트스키: 조각배처럼 앉은 채 움직이는 자리 (상태 boat, "타는" 자리라 커진 동안엔 못 타요).
+// 튜브는 바다 어디서든 올라타서 서버 자리를 앵커로 옮기지 않아요(drift)
+for (const r of SEA_RIDES)
+  seaSlots.set(r.id, {
+    id: r.id,
+    kind: "boat",
+    x: r.x,
+    y: r.y,
+    facing: DIR.down,
+    state: STATE.boat,
+    furnitureId: r.id,
+    mobile: true,
+    radius: r.kind === "tube" ? SEA_TUBE_RADIUS : SEA_JETSKI_RADIUS,
+    ...(r.kind === "tube" ? { drift: true } : {}),
+  });
 
 // ── 맵별 판정 (서버·클라이언트 공통) ──
 

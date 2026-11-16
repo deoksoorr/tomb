@@ -1,6 +1,5 @@
 import * as Phaser from "phaser";
 import {
-  SEA_BOAT,
   SEA_BREAKWATER,
   SEA_BREAKWATER_TIP,
   SEA_BUOYS,
@@ -13,6 +12,10 @@ import {
   BBQ_MENU,
   SEA_FURNITURE,
   SEA_EDGE_SEATS,
+  SEA_BONFIRE,
+  SEA_BONFIRE_LOGS,
+  SEA_GARDEN_BENCHES,
+  SEA_PICNIC_TABLES,
   SEA_SPOTS,
   SEA_LOUNGER_FRONT_Y,
   SEA_MATS,
@@ -36,8 +39,9 @@ import {
   seaLotSign,
   tideLineY,
 } from "@tomb/protocol";
-import { addCanvasTexture } from "../assets/manifest";
-import { bbqPlateArt, CAMP_TEX } from "../camp/campArt";
+import { addCanvasTexture, TEX } from "../assets/manifest";
+import { bbqPlateArt, CAMP_TEX, vendingArt, vendingLitArt } from "../camp/campArt";
+import { campfireRing, campfireSheet, FIRE_FRAMES, FIRE_H, FIRE_W, hammock as hammockCanvas, hammockPosts as hammockPostsCanvas, WP } from "../sprites/worldProps";
 import { DEPTH } from "../config";
 import { makeCanvas, mix } from "../sprites/pixel";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
@@ -143,6 +147,10 @@ export class SeaMap implements SeaMapApi {
   readonly height = SEA_HEIGHT;
   readonly colliders: Phaser.Physics.Arcade.StaticGroup;
   readonly furnitureColliders: Phaser.Physics.Arcade.StaticGroup;
+  /** 11/16 오두막 터 팻말 (터 번호 → 판). 포구 오두막(game/sea/seaHousing)이 분양 상태에 맞춰 숨겨요 */
+  readonly lotPlates = new Map<number, SignPlate>();
+  /** 11/16 오늘 등대 등불이 켜졌는지 (밤에 켜지 않았으면 등대가 어두워요. 안개 낀 날 스스로 켜지는 불은 그대로 — seaLamp) */
+  lampLit = false;
   readonly interactables: readonly SeaInteractable[] = Lay.SEA_INTERACTABLES;
   readonly staticLights: readonly SeaLight[] = Lay.SEA_LIGHTS;
 
@@ -188,7 +196,6 @@ export class SeaMap implements SeaMapApi {
   private lastTime = -1;
   /** 지금 물 (시험·장면용) */
   readonly waterState: SeaWaterState = { level: 1, lineY: TIDE_HIGH_Y, edgeY: TIDE_HIGH_Y, wetTop: TIDE_HIGH_Y };
-  private boat: Phaser.GameObjects.Image | null = null;
   private readonly buoys: { img: Phaser.GameObjects.Image; x: number; y: number; phase: number }[] = [];
   private readonly sprays: (Mote & { vy: number; vx: number; s: number })[] = [];
   /** 11/16 물가 조각마다: 이번 파도가 닿은 가장 높은 곳 (천천히 물러나요 — 그 사이에 레이스·젖은 윤기가 남아요) */
@@ -379,7 +386,8 @@ export class SeaMap implements SeaMapApi {
     for (const [cx, cy, cw, ch] of Art.SHELTER_FRONT) this.prop(T.shelter, SEA_BUS_STOP.x, SEA_BUS_STOP.y).setCrop(cx, cy, cw, ch);
     this.prop(T.busSign, SEA_BUS_SIGN.x, SEA_BUS_SIGN.y);
     this.prop(T.timetable, SEA_BUS_TIMETABLE.x, SEA_BUS_TIMETABLE.y);
-    for (const f of SEA_FURNITURE) if (!SEA_EDGE_SEATS.includes(f.id)) this.prop(T.bench, f.x, f.y, f.y);
+    // r12 피크닉 탁자 의자·모닥불 통나무는 따로 그려요 (addRestSpots)
+    for (const f of SEA_FURNITURE) if (!SEA_EDGE_SEATS.includes(f.id) && !/^p[TF]/.test(f.id)) this.prop(T.bench, f.x, f.y, f.y);
     // 11/16 쉴거리: 선베드(누운 사람이 위에 그려지게 받침보다 조금 뒤 depth) · 파라솔 돗자리(돗자리는 바닥, 갓은 앉은 사람 위) · 돗자리
     // 11/16 선베드 depth는 받침 − 4 (옆에 선 사람과 바르게 겹치게 — 누운 사람은 그보다 앞, SeaScene LOUNGER_LIE_FRONT)
     for (const l of SEA_SPOTS.loungers) this.prop(T.lounger, l.x, l.y, l.y - 4);
@@ -406,7 +414,7 @@ export class SeaMap implements SeaMapApi {
       this.cull(l.x + l.w / 2, l.y + l.h, s.add.image(x, y, key).setOrigin(0, 0).setDepth(l.y + l.h).setCrop(0, sz.front, sz.w, sz.h - sz.front));
       const sg = seaLotSign(l);
       // 11/16 「분양 준비 중」은 땅에 꽂은 작은 민트 칠 판 하나로 (예전 팻말 그림 + 두꺼운 판은 뺐어요). 터 번호는 출입구 기둥 패에
-      this.plate(sg.x, sg.y, "분양 준비 중", PLATE_MINT);
+      this.lotPlates.set(l.n, this.plate(sg.x, sg.y, "분양 준비 중", PLATE_MINT));
     }
     // 11/16 오두막 단지 우편함·등불 기둥 (골목 옆)
     this.prop(T.mailbox, SEA_LOT_MAILBOX.x, SEA_LOT_MAILBOX.y);
@@ -426,6 +434,111 @@ export class SeaMap implements SeaMapApi {
     }
     for (const p of Lay.SEA_CRATES) this.prop(T.crates, p.x, p.y);
     this.prop(T.netRack, Lay.SEA_NET_RACK.x, Lay.SEA_NET_RACK.y);
+    this.addRestSpots();
+  }
+
+  /** 11/16 r12 쉴 곳: 매점 옆 피크닉 탁자·음료 자판기, 해변 모닥불(밤에만 불), 해먹, 정원 벤치 등불, 끝 걸터앉기 방석 */
+  private addRestSpots(): void {
+    const T = Art.SEA_TEX;
+    const s = this.scene;
+    // 마을 그림(불·돌 고리·해먹)은 바닷가로 바로 오면 아직 없어요 → 여기서 구워요
+    const canvasTex = (key: string, build: () => HTMLCanvasElement, frameW?: number, frameH?: number): void => {
+      if (!s.textures.exists(key)) addCanvasTexture(s, key, { canvas: build(), frameW, frameH });
+    };
+    canvasTex(WP.fire, campfireSheet, FIRE_W, FIRE_H);
+    canvasTex(WP.fireRing, campfireRing);
+    canvasTex(WP.hammock, hammockCanvas);
+    canvasTex(WP.hammockPosts, hammockPostsCanvas);
+    // 피크닉 탁자: 북쪽 의자 판은 앉은 사람 뒤, 상판은 그 앞, 남쪽 의자 판은 탁자 앞 (남쪽 사람은 등을 보이며 탁자 앞에)
+    for (const t of SEA_PICNIC_TABLES) {
+      this.prop(T.picnicPlank, t.x, t.y - 8, t.y - 11, 0);
+      this.prop(T.picnicTop, t.x, t.y + 6, t.y, 0);
+      this.prop(T.picnicPlank, t.x, t.y + 14, t.y + 11, 0);
+    }
+    // 음료 자판기 (캠핑장 자판기 그림 — 밤엔 진열창이 밝아요)
+    this.prop(CAMP_TEX.vending, Lay.SEA_VEND.x, Lay.SEA_VEND.y, Lay.SEA_VEND.y, 2);
+    this.vendLit = this.cull(Lay.SEA_VEND.x, Lay.SEA_VEND.y, s.add.image(Lay.SEA_VEND.x, Lay.SEA_VEND.y + 2, CAMP_TEX.vendingLit).setOrigin(0.5, 1).setBlendMode(Phaser.BlendModes.ADD).setDepth(Lay.SEA_VEND.y + 0.5).setAlpha(0));
+    this.plate(Lay.SEA_VEND.x, Lay.SEA_VEND.y - 44, "음료");
+    // 해변 모닥불: 돌 고리 + 낮엔 꺼진 장작, 밤엔 마을 모닥불과 같은 불꽃·불티
+    const F = SEA_BONFIRE;
+    this.keep(s.add.image(F.x, F.y + 1, WP.fireRing).setOrigin(0.5, 0.5).setDepth(DEPTH.decal + 2).setScale(1.2));
+    this.bonfireAsh = this.prop(T.ashLogs, F.x, F.y + 3, F.y, 0);
+    if (!s.anims.exists("fx-campfire-burn")) {
+      s.anims.create({ key: "fx-campfire-burn", frames: Array.from({ length: FIRE_FRAMES }, (_, i) => ({ key: WP.fire, frame: i })), frameRate: this.reduced ? 4 : 10, repeat: -1 });
+    }
+    this.bonfire = this.keep(s.add.sprite(F.x, F.y + 2, WP.fire, 0).setOrigin(0.5, 1).setDepth(F.y).setScale(1.2).setVisible(false));
+    this.bonfire.play("fx-campfire-burn");
+    this.bonfireGlow = this.keep(s.add.image(F.x, F.y - 8, T.lampGlow).setBlendMode(Phaser.BlendModes.ADD).setTint(0xffa048).setScale(2.2).setDepth(DEPTH.lights + 1).setAlpha(0));
+    if (s.textures.exists(TEX.spark)) {
+      this.embers = this.keep(
+        s.add
+          .particles(F.x, F.y - 12, TEX.spark, {
+            lifespan: { min: 900, max: 1700 },
+            speedX: { min: -7, max: 7 },
+            speedY: { min: -30, max: -16 },
+            accelerationX: { min: -6, max: 6 },
+            scale: { start: 0.42, end: 0.08 },
+            alpha: { start: 1, end: 0 },
+            tint: [0xffd060, 0xff9a40, 0xff6a2a],
+            blendMode: Phaser.BlendModes.ADD,
+            frequency: this.reduced ? 520 : 180,
+            x: { min: -4, max: 4 },
+          })
+          .setDepth(DEPTH.lights + 3),
+      );
+      this.embers.stop();
+    }
+    for (const l of SEA_BONFIRE_LOGS) this.prop(T.driftLog, l.x, l.y + 3, l.y - 1, 0); // 앉은 사람 바로 뒤
+    // 해먹 (야자수 둘 사이 — 누가 누우면 기둥만 남기고 누운 사람 그림이 줄·천을 그려요)
+    const H = SEA_SPOTS.hammock;
+    this.hammock = this.prop(WP.hammock, H.x, H.y, H.y, 0);
+    // 정원 벤치 옆 등불
+    for (const b of SEA_GARDEN_BENCHES) {
+      this.prop(T.lamp, b.x + 26, b.y - 2);
+      this.lampGlows.push(this.cull(b.x + 26, b.y, s.add.image(b.x + 26, b.y - 34, T.lampGlow).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights + 1).setAlpha(0)));
+    }
+    // 끝 걸터앉기 방석 (선착장 끝·방파제 끝 같은 색 셋 — 앉는 자리가 눈에 띄게) + 작은 이름표
+    for (const f of SEA_FURNITURE) {
+      if (!SEA_EDGE_SEATS.includes(f.id)) continue;
+      f.seatOffsets.forEach((dx, i) => this.keep(s.add.image(f.x + dx, f.y + 3, T.cushion(i % 3)).setOrigin(0.5, 1).setDepth(SEA_DEPTH.deck + 2)));
+      this.addLabel(f.x, f.y + 14, "걸터앉기", 0xfff0c8, 1);
+    }
+  }
+
+  private bonfire: Phaser.GameObjects.Sprite | null = null;
+  private bonfireAsh: Phaser.GameObjects.Image | null = null;
+  private bonfireGlow: Phaser.GameObjects.Image | null = null;
+  private embers: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
+  private hammock: Phaser.GameObjects.Image | null = null;
+  private vendLit: Phaser.GameObjects.Image | null = null;
+  private fireBoost = false;
+  /** 해변 모닥불이 타고 있는지 (해 질 녘부터 — SeaScene이 불멍 구도를 이걸로 봐요) */
+  bonfireLit = false;
+
+  /** 불멍 중 (CampfireView가 불러요 — 마을 WorldMap.boostCampfire와 같은 뜻) */
+  boostCampfire(id: string | null): void {
+    this.fireBoost = id !== null;
+  }
+
+  /** 해먹에 누가 누웠으면 기둥만 (줄·천은 누운 사람 그림이) */
+  setHammockBusy(busy: boolean): void {
+    const tex = busy ? WP.hammockPosts : WP.hammock;
+    if (this.hammock && this.hammock.texture.key !== tex) this.hammock.setTexture(tex);
+  }
+
+  private updateBonfire(time: number, t: SeaTime): void {
+    const lit = t.darkness > 0.15 || t.dusk > 0.35;
+    if (lit !== this.bonfireLit) {
+      this.bonfireLit = lit;
+      this.bonfire?.setVisible(lit);
+      this.bonfireAsh?.setVisible(!lit);
+      if (lit) this.embers?.start();
+      else this.embers?.stop();
+    }
+    if (this.embers) this.embers.frequency = this.fireBoost ? (this.reduced ? 260 : 70) : this.reduced ? 520 : 180;
+    const a = lit ? 0.55 + (this.reduced ? 0 : 0.12 * Math.sin(time / 170) + 0.06 * Math.sin(time / 63)) : 0;
+    this.bonfireGlow?.setAlpha(a);
+    this.vendLit?.setAlpha(Math.max(0, this.lit) * 0.9);
   }
 
   /** 바닷가 쪽: 말뚝·테트라포드·바위·족욕 바위·배·부표 */
@@ -445,17 +558,17 @@ export class SeaMap implements SeaMapApi {
     // 11/16 게 (물이 빠졌을 때만 바위 둘레에 나와요)
     for (const c of Lay.SEA_CRABS) this.crabs.push({ img: this.cull(c.x, c.y, s.add.image(c.x, c.y + 1, T.crab).setOrigin(0.5, 1).setDepth(c.y).setAlpha(0)), x: c.x, y: c.y });
     this.prop(T.footbath, SEA_FOOTBATH.x, SEA_FOOTBATH.y + 8, SEA_FOOTBATH.y - 6, 0);
-    // 배·부표는 매 프레임 흔들려서 컬링하지 않아요 (몇 개뿐)
-    this.boat = this.keep(s.add.image(SEA_BOAT.x, SEA_BOAT.y + 6, T.boat).setOrigin(0.5, 1).setDepth(SEA_BOAT.y));
+    // 부표는 매 프레임 흔들려서 컬링하지 않아요 (몇 개뿐). 11/16 r13 낚싯배는 뺐어요 (그 자리에 제트스키 — SeaRides)
     SEA_BUOYS.forEach((b, i) => this.buoys.push({ img: this.keep(s.add.image(b.x, b.y, T.buoy).setOrigin(0.5, 1).setDepth(b.y)), x: b.x, y: b.y, phase: i * 1.9 }));
   }
 
   /** 11/16 간판 이름표 (판 아랫변 = y). 화면에서 늘 같은 크기라 멀리서도 읽혀요 */
-  private plate(x: number, y: number, text: string, style = PLATE_WOOD): void {
+  private plate(x: number, y: number, text: string, style = PLATE_WOOD): SignPlate {
     const p = new SignPlate(this.scene, this.atlas, x, y, text, style);
     this.keep(p.text);
     this.keep(p.bg);
     this.plates.push(p);
+    return p;
   }
 
   private addLabel(x: number, y: number, text: string, tint: number, alpha = 0.88, originY = 1): void {
@@ -655,6 +768,7 @@ export class SeaMap implements SeaMapApi {
     this.updateRocks(time);
     this.updateGlints(time, view, t);
     this.updateLights(time, t);
+    this.updateBonfire(time, t);
     if (this.gulls.length) this.updateGulls(time, Math.min(delta, 100), t);
   }
 
@@ -859,10 +973,6 @@ export class SeaMap implements SeaMapApi {
   private updateBoats(time: number): void {
     const amp = this.reduced ? 0.4 : 1;
     const rise = (this.level - 0.5) * 3;
-    if (this.boat) {
-      this.boat.setY(Math.round(SEA_BOAT.y + 6 + Math.sin(time / 1100) * 1.4 * amp - rise));
-      this.boat.setRotation(Math.sin(time / 1700) * 0.025 * amp);
-    }
     for (const b of this.buoys) {
       b.img.setY(Math.round(b.y + Math.sin(time / 800 + b.phase) * 1.6 * amp - rise));
       b.img.setRotation(Math.sin(time / 650 + b.phase) * 0.12 * amp);
@@ -1118,7 +1228,8 @@ export class SeaMap implements SeaMapApi {
       this.lit = on;
       for (const g of this.lampGlows) g.setAlpha(on * 0.85);
     }
-    const beacon = Math.max(on, Math.min(1, t.fog * 1.2) * 0.8);
+    // 11/16 켠 등실 빛은 은은하게 (사용자: 켜면 하얀 빛이 너무 세요 — 빛줄기는 seaLamp가 따로 돌려요). 안개 날 스스로 켜지는 불은 그대로
+    const beacon = Math.max(this.lampLit ? on * 0.45 : 0, Math.min(1, t.fog * 1.2) * 0.8);
     this.beacon?.setAlpha(beacon <= 0.01 ? 0 : beacon * (0.82 + (this.reduced ? 0 : 0.18 * Math.sin(time / 520))));
   }
 
@@ -1136,15 +1247,19 @@ export class SeaMap implements SeaMapApi {
     this.stars.length = 0;
     this.glows.length = 0;
     this.plates.length = 0;
+    this.lotPlates.clear();
     this.strips.length = 0;
     this.waterR = this.foamR = this.duskWaterR = this.duskFoamR = this.laceR = this.sheenR = null;
     this.reachTop.fill(Number.NaN);
     this.buoys.length = 0;
     this.lampGlows.length = 0;
+    this.bonfire = this.bonfireAsh = this.bonfireGlow = this.hammock = this.vendLit = null;
+    this.embers = null;
+    this.bonfireLit = false;
     this.rockFoams.length = 0;
     this.crabs.length = 0;
     this.water = this.foam = this.lace = this.shimmer = null;
-    this.wet = this.boat = this.beacon = this.depthShade = this.sheen = null;
+    this.wet = this.beacon = this.depthShade = this.sheen = null;
 
     this.golds.length = 0;
     for (const g of [this.colliders, this.furnitureColliders]) if (g.children) g.clear(true, true);
@@ -1205,6 +1320,22 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   for (let v = 0; v < 3; v++) tex(T.mat(v), () => Art.matArt(v));
   for (let v = 0; v < 2; v++) tex(T.parasol(v), () => Art.parasolArt(v));
   tex(T.lounger, Art.loungerArt);
+  // 11/16 r12 쉴 곳 그림 · 음료 자판기 (캠핑장 그림)
+  tex(T.picnicTop, Art.picnicTopArt);
+  tex(T.picnicPlank, Art.picnicPlankArt);
+  tex(T.ashLogs, Art.ashLogsArt);
+  tex(T.driftLog, Art.driftLogArt);
+  for (let v = 0; v < 3; v++) tex(T.cushion(v), () => Art.cushionArt(v));
+  // 11/16 r13 튜브 다섯 색 · 제트스키 두 색 (옆·앞·뒤) · 물살 자국
+  for (let v = 0; v < 5; v++) tex(T.tube(v), () => Art.tubeArt(v));
+  for (let v = 0; v < 2; v++) {
+    tex(T.jetski("side", v), () => Art.jetskiSideArt(v));
+    tex(T.jetski("front", v), () => Art.jetskiFbArt(true, v));
+    tex(T.jetski("back", v), () => Art.jetskiFbArt(false, v));
+  }
+  tex(T.wake, Art.wakeArt);
+  tex(CAMP_TEX.vending, vendingArt);
+  tex(CAMP_TEX.vendingLit, vendingLitArt);
   // 11/16 매점 먹거리·마실 거리 그림 (먹을 때 머리 위에 뜨는 접시·잔 — 캠핑장과 같은 그림, 바닷가에서 바로 들어오면 아직 없어요)
   for (const m of BBQ_MENU) tex(CAMP_TEX.bbqPlate(m.id), () => bbqPlateArt(m.id));
   tex(T.lotSign, Art.lotSignArt);

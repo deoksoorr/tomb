@@ -5,6 +5,7 @@ import type { InputHub } from "../input/InputHub";
 import type { KeyAction } from "../input/Keyboard";
 import type { GameContext } from "../scenes/context";
 import type { GlyphAtlas } from "../text/GlyphAtlas";
+import { seaHousingHost, type SeaHousingHost } from "../sea/seaHousingHost";
 import { HouseScene, type HouseSceneData } from "./HouseScene";
 import { VillageScene, type VillageSceneData } from "./VillageScene";
 
@@ -32,13 +33,15 @@ type WorldLike = Phaser.Scene & {
   standAtHouseDoor?: (lot: number) => void;
 };
 
-type Where = { at: "village" } | { at: "house"; from: "world" | "village"; lot: number } | null;
+type Where = { at: "village" } | { at: "house"; from: "world" | "village"; lot: number; zone?: "sea" } | null;
 
 export function installHousing(game: Phaser.Game, ctx: GameContext): void {
   game.scene.add("house", HouseScene, false);
   game.scene.add("village", VillageScene, false);
   let where: Where = null;
   let world: WorldLike | null = null;
+  /** 11/16 바닷가 장면에서 들어온 집 (포구 오두막·친구 집). 바닷가 장면은 scene:changed로 스스로 숨고 돌아온다 */
+  let sea: SeaHousingHost | null = null;
   /** 마지막 마을 정보 (집에서 마을로 돌아갈 때) */
   let lastVillage: { village: VillageResponse; myHouseId: string | null } | null = null;
 
@@ -55,10 +58,23 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
     return true;
   };
 
+  /** 바닷가 장면을 빌린다 (월드가 자고 있고 바닷가가 떠 있을 때) */
+  const hideSea = (): boolean => {
+    const h = seaHousingHost.current;
+    if (!h || !h.active() || ctx.disposed) return false;
+    sea = h;
+    return true;
+  };
+
   const showWorld = () => {
     const w = world;
     world = null;
     where = null;
+    if (sea) {
+      sea = null;
+      bridge.emit("scene:changed", { scene: "world" });
+      return;
+    }
     if (!w) return;
     w.scene.setVisible(true);
     if (w.rig) w.rig.enabled = true;
@@ -67,16 +83,19 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
     bridge.emit("scene:changed", { scene: "world" });
   };
 
-  const base = () => ({
-    atlas: world!.atlas!,
-    input: world!.hub!,
-    color: ctx.opts.color,
-    name: ctx.opts.name,
-    look: world!.player?.view.wearing ?? [],
-    // 입장 화면에서 고르지 않았으면 입장 토큰으로 받은 몸 (월드의 내 아바타가 가진 값이 정답)
-    body: world!.player?.view.bodyId ?? ctx.opts.body,
-    reduced: !!world!.reduced,
-  });
+  const base = () =>
+    sea
+      ? { atlas: sea.atlas, input: sea.hub, color: ctx.opts.color, name: ctx.opts.name, look: sea.look(), body: sea.body(), reduced: sea.reduced }
+      : {
+          atlas: world!.atlas!,
+          input: world!.hub!,
+          color: ctx.opts.color,
+          name: ctx.opts.name,
+          look: world!.player?.view.wearing ?? [],
+          // 입장 화면에서 고르지 않았으면 입장 토큰으로 받은 몸 (월드의 내 아바타가 가진 값이 정답)
+          body: world!.player?.view.bodyId ?? ctx.opts.body,
+          reduced: !!world!.reduced,
+        };
 
   const stopAll = () => {
     if (game.scene.isActive("house") || game.scene.isPaused("house")) game.scene.stop("house");
@@ -103,27 +122,33 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
   };
 
   /** 월드의 내 캐릭터를 그 번지 집 문 앞으로 (월드에서 들어온 집만. 2단지 번지는 메인 맵에 없어 그대로) */
-  const toDoor = (w: WorldLike | null, lot: number) => {
-    if (w?.standAtHouseDoor) w.standAtHouseDoor.call(w, lot);
+  const toDoor = (w: WorldLike | null, house: { lot: number; zone?: "sea" }) => {
+    // 11/16 포구 오두막: 바닷가에서 들어왔으면 그 터 앞으로 (마을에서 들어왔으면 마을 캐릭터는 그대로)
+    if (house.zone === "sea") {
+      sea?.standAtLot(house.lot);
+      return;
+    }
+    if (sea) return;
+    if (w?.standAtHouseDoor) w.standAtHouseDoor.call(w, house.lot);
   };
 
   const exitHouse = () => {
     if (where?.at !== "house") return;
-    const { from, lot } = where;
+    const { from, lot, zone } = where;
     game.scene.stop("house");
     if (from === "village" && lastVillage) {
       runVillage(lastVillage, lot);
       bridge.emit("house:left", { to: "village" });
     } else {
       // 나오면 언제나 그 집 문 앞 (들어가기 전 자리로 순간이동하지 않게)
-      toDoor(world, lot);
+      toDoor(world, { lot, zone });
       showWorld();
       bridge.emit("house:left", { to: "world" });
     }
   };
 
   const enterHouse = (house: PublicHouse, mine: boolean, edit: boolean) => {
-    if (!where && !hideWorld()) {
+    if (!where && !hideWorld() && !hideSea()) {
       // 들어갈 수 없으면 UI(집 HUD)도 닫는다 — 들어가지도 못했는데 위쪽 집 막대만 남아 닫히지 않던 문제
       bridge.emit("house:left", { to: "world" });
       // 11/15 캠핑장에 있으면 (월드가 자고 있다) 집은 마을에서 (11/16 바닷가도 같다)
@@ -134,9 +159,9 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
     const from = where?.at === "village" ? "village" : where?.at === "house" ? where.from : "world";
     stopAll();
     const data: HouseSceneData = { ...base(), house, mine, editing: edit, onExit: exitHouse };
-    where = { at: "house", from, lot: house.lot };
+    where = { at: "house", from, lot: house.lot, ...(house.zone === "sea" ? { zone: "sea" as const } : {}) };
     // 월드에서 들어온 집: 숨은 월드 캐릭터를 미리 문 앞에 세워 둔다 (새로고침 복원도 문 앞으로)
-    if (from === "world") toDoor(world, house.lot);
+    if (from === "world") toDoor(world, house);
     game.scene.run("house", data);
     bridge.emit("scene:changed", { scene: "house", place: "house", houseId: house.id });
   };
@@ -182,5 +207,6 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
     for (const off of offs) off();
     where = null;
     world = null;
+    sea = null;
   });
 }

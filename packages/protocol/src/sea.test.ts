@@ -44,7 +44,7 @@ describe("sea map (protocol)", () => {
     expect(B.clear.w).toBeGreaterThanOrEqual(B.w);
     expect(B.ship.y).toBeGreaterThan(SEA_DEEP_Y);
     for (const b of SEA_BUOYS) expect(b.x >= B.clear.x && b.x <= B.clear.x + B.clear.w && b.y >= B.clear.y && b.y <= B.clear.y + B.clear.h).toBe(false);
-    for (const r of SEA_ROCKS) expect(r.x + r.rx < B.clear.x || r.y + r.ry < B.clear.y).toBe(true);
+    for (const r of SEA_ROCKS) expect(r.x + r.rx < B.clear.x || r.y + r.ry < B.clear.y || r.x - r.rx > B.clear.x + B.clear.w).toBe(true);
     expect(B.gangway.x).toBeGreaterThanOrEqual(P.x);
     expect(B.gangway.y).toBeGreaterThanOrEqual(P.y);
     expect(B.gangway.y).toBeLessThanOrEqual(P.y + P.h);
@@ -115,20 +115,28 @@ describe("sea map (protocol)", () => {
     expect(SEA_REST_SEATS.filter((r) => r.kind === "parasol")).toHaveLength(0);
     expect(SEA_REST_SEATS.filter((r) => r.kind === "mat")).toHaveLength(0);
     for (const r of SEA_REST_SEATS) {
-      expect(seatSlotIn("sea", r.id)).toMatchObject({ kind: "seat", state: r.kind === "lounger" ? STATE.lie : STATE.sitGround, furnitureId: r.group });
+      expect(seatSlotIn("sea", r.id)).toMatchObject({ kind: "seat", state: r.kind === "lounger" ? STATE.lie : r.kind === "hammock" ? STATE.hammock : STATE.sitGround, furnitureId: r.group });
       expect(seatSlotIn("village", r.id)).toBeUndefined();
-      expect(seaViewOfSeat(r.id)).toBe(r.kind);
+      // 해먹은 누워서 바다를 봐요 (선베드 장면)
+      expect(seaViewOfSeat(r.id)).toBe(r.kind === "hammock" ? "lounger" : r.kind);
     }
-    for (const id of ["pS1-0", "pS4-1", "pE1", "pE2"]) expect(seatSlotIn("sea", id)).toMatchObject({ state: STATE.sitChair });
+    // r12 끝 걸터앉기는 끝마다 셋 · 피크닉 탁자 넷 · 모닥불 통나무 · 정원 벤치
+    for (const id of ["pS1-0", "pS4-1", "pE1-0", "pE1-2", "pE2-1", "pT1n-0", "pT2s-1", "pF1", "pF4", "pG1-0"]) expect(seatSlotIn("sea", id), id).toMatchObject({ state: STATE.sitChair });
+    expect(seaViewOfSeat("pT1n-0")).toBeNull();
+    expect(seaViewOfSeat("pF2")).toBeNull();
+    expect(seaViewOfSeat("pG1-1")).toBeNull();
+    expect(seaViewOfSeat("pH")).toBe("lounger");
     expect(seaViewOfSeat("pS2-0")).toBe("beach");
-    expect(seaViewOfSeat("pE1")).toBe("pier");
-    expect(seaViewOfSeat("pE2")).toBe("breakwater");
+    expect(seaViewOfSeat("pE1-1")).toBe("pier");
+    expect(seaViewOfSeat("pE2-0")).toBe("breakwater");
     expect(seaViewOfSeat("pB-0")).toBeNull();
     expect(seaViewOfSeat("pL-1")).toBeNull();
     expect(seaSeatGroup("pZ13")).toBe("pZ13");
     expect(seaSeatGroup("pS3-1")).toBe("pS3");
     // 끝 걸터앉기는 일어서면 데크 쪽(뒤)으로
-    expect(seaSeatById("pE1")?.standDy).toBeLessThan(0);
+    expect(seaSeatById("pE1-1")?.standDy).toBeLessThan(0);
+    expect(seaSeatById("pT1n-0")?.standDy).toBeLessThan(0);
+    expect(seaSeatById("pT1s-0")?.standDy).toBeUndefined();
     // id가 겹치지 않아요
     const ids = [...SEA_SEATS.map((s) => s.id), ...SEA_REST_SEATS.map((r) => r.id), ...SEA_FISHING_SPOTS.map((f) => f.id)];
     expect(new Set(ids).size).toBe(ids.length);

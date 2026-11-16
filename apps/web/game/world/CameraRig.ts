@@ -2,7 +2,7 @@ import * as Phaser from "phaser";
 import { MAP_WIDTH, mapHeight } from "@tomb/protocol";
 import { bridge } from "../bridge";
 import { CAMERA_FOLLOW_OFFSET_Y, CAMERA_LERP, LS_ZOOM } from "../config";
-import { approach, cameraBounds, clampZoom, defaultZoom, parseStoredZoom, pinchZoom, snapZoom, stepZoom } from "./cameraMath";
+import { approach, cameraBounds, clampZoom, defaultZoom, fitMinZoom, parseStoredZoom, pinchZoom, snapZoom, stepZoom } from "./cameraMath";
 
 // 카메라: 캐릭터를 lerp로 따라가고 맵 경계에서 멈춘다.
 //  - 휠 / camera:zoom: 0.5 단계 줌 (1.5~5), 지수 감쇠로 부드럽게. 마지막 줌은 localStorage(tomb.zoom)
@@ -103,6 +103,11 @@ export class CameraRig {
     this.applyBounds();
   }
 
+  /** 이 화면에서 맵 밖이 안 보이는 가장 작은 줌 */
+  private fitMin(): number {
+    return fitMinZoom(this.cam.width, this.cam.height, this.mapW, this.mapH);
+  }
+
   applyBounds(): void {
     const b = cameraBounds(this.cam.width / this.cam.zoom, this.cam.height / this.cam.zoom, this.mapW, this.mapH);
     this.cam.setBounds(b.x, b.y, b.w, b.h);
@@ -110,7 +115,8 @@ export class CameraRig {
 
   zoomBy(delta: number): void {
     if (this.cine) return;
-    this.target = stepZoom(this.target, delta);
+    // 11/16 맵에 맞춘 최소 줌보다 더 멀리 있던 목표면 거기서부터 한 칸
+    this.target = stepZoom(Math.max(this.target, delta > 0 ? this.fitMin() : 0), delta);
     this.persist();
     this.emitState();
   }
@@ -205,7 +211,8 @@ export class CameraRig {
       this.accent = approach(this.accent, ag, dt, ACCENT_TAU_MS);
       if (Math.abs(this.accent - ag) < 0.002) this.accent = ag;
     }
-    const eff = this.zoom * this.accent;
+    // 11/16 화면이 맵보다 크면(큰 모니터) 맵 밖 빈 곳이 안 보이게 그만큼 가까이 (마을·캠핑장·바닷가 모두)
+    const eff = Math.max(this.fitMin(), this.zoom * this.accent);
     if (cam.zoom !== eff) {
       cam.setZoom(eff);
       this.applyBounds();
