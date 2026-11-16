@@ -110,7 +110,6 @@ export class SeaView {
   private fore: Phaser.GameObjects.Image[] = [];
   private moored: Phaser.GameObjects.Image | null = null;
   private buoy: Phaser.GameObjects.Image | null = null;
-  private lighthouse: Phaser.GameObjects.Image | null = null;
   private lamp: { x: number; y: number } = { x: 0, y: 0 };
   private beam: Phaser.GameObjects.Image | null = null;
   private tetras: Phaser.GameObjects.Image[] = [];
@@ -261,7 +260,7 @@ export class SeaView {
     // 앞 그림 (장면마다)
     this.sand = this.wash = this.foam = null;
     this.fore = [];
-    this.moored = this.buoy = this.lighthouse = this.beam = null;
+    this.moored = this.buoy = this.beam = null;
     this.tetras = [];
     this.puffs = [];
     const beachy = kind === "beach" || kind === "mat" || kind === "parasol" || kind === "lounger";
@@ -315,13 +314,10 @@ export class SeaView {
       this.buoy = this.add(sc.add.image(Math.round(VW * 0.82), Math.round(hz + (VH - hz) * 0.35), Art.SEA_TEX.buoy).setOrigin(0.5, 1).setDepth(13).setScale(2));
       this.fore.push(this.add(sc.add.image(0, VH, this.tex(`${P}deck-${VW}`, () => V.deckBand(VW))).setOrigin(0, 1).setDepth(20)));
     } else {
-      // 방파제 끝: 등대는 앉은 자리 동쪽 → 바다를 보면 왼쪽에 크게, 아래 테트라포드 줄 (물보라가 부서져요)
-      const colH = Math.round(VH * 0.92);
-      const lx = 30;
-      this.lighthouse = this.add(sc.add.image(lx, VH, this.tex(`${P}lighthouse-${colH}`, () => V.lighthouseColumn(colH))).setOrigin(0.5, 1).setDepth(22));
-      this.lamp = { x: lx, y: VH - colH + 12 };
-      // 불빛은 등불에서 오른쪽 바다 쪽으로 (뾰족한 끝이 등불)
-      this.beam = this.add(sc.add.image(this.lamp.x, this.lamp.y, this.tex(P + "beam", () => V.beamWedge())).setOrigin(0, 0.5).setDepth(23).setBlendMode(Phaser.BlendModes.ADD).setVisible(false));
+      // 방파제 끝: 11/16 r14 사용자 — 등대는 앉은 자리 뒤(북쪽)라 보이지 않아요. 탁 트인 바다 + 아래 테트라포드 줄 (물보라가 부서져요)
+      // 밤엔 뒤에서 도는 등대 불빛이 하늘·바다 위를 옅게 훑어요 (등불은 화면 밖 위쪽 뒤)
+      this.lamp = { x: Math.round(VW * 0.5), y: -Math.round(VH * 0.1) };
+      this.beam = this.add(sc.add.image(this.lamp.x, this.lamp.y, this.tex(P + "beam", () => V.beamWedge())).setOrigin(0, 0.5).setDepth(3).setBlendMode(Phaser.BlendModes.ADD).setVisible(false));
       for (let x = 40, i = 0; x < VW + 8; x += 26 + (i % 2) * 6, i++) {
         const img = this.add(sc.add.image(x, VH + 6 - (i % 2) * 8, Art.SEA_TEX.tetra(i % 3)).setOrigin(0, 1).setDepth(20 + (i % 2)).setScale(2.4));
         this.tetras.push(img);
@@ -398,7 +394,7 @@ export class SeaView {
     this.puffs = [];
     this.gulls = [];
     this.sitters = [];
-    this.moored = this.buoy = this.lighthouse = this.beam = null;
+    this.moored = this.buoy = this.beam = null;
     this.rain = this.snow = this.fog = null;
     this.foreLoungers = [];
     this.landGfx = null;
@@ -629,8 +625,7 @@ export class SeaView {
       this.moored.setTint(shade).setY(Math.round(this.VH * 0.8 + Math.sin(now / 1100) * 1.6 * k)).setRotation(Math.sin(now / 1700) * 0.03 * k);
     }
     if (this.buoy) this.buoy.setTint(shade).setY(Math.round(this.hz + (this.VH - this.hz) * 0.35 + Math.sin(now / 800) * 1.4 * k)).setRotation(Math.sin(now / 650) * 0.14 * k);
-    if (this.lighthouse) {
-      this.lighthouse.setTint(mixRgb(shade, 0xffffff, 0.06));
+    if (this.kind === "breakwater") {
       for (const t of this.tetras) t.setTint(shade);
       // 물보라: 들쭉날쭉 (느린 잡음이 기분을 바꿔요) + 큰 파도 꼭대기엔 몰아서
       const big = this.waves?.bigPeak(now, this.lastBig);
@@ -671,7 +666,13 @@ export class SeaView {
       if (this.beam) {
         const on = clamp01((night - 0.3) * 2);
         const sweep = Math.sin(now / (this.reduced ? 6000 : 2600));
-        this.beam.setVisible(on > 0.01).setPosition(this.lamp.x, this.lamp.y).setScale(0.3 + 1.7 * Math.abs(sweep), 1 + 0.3 * Math.abs(sweep)).setAlpha(on * (0.35 + 0.65 * Math.abs(sweep)));
+        // 뒤에서 오는 빛이라 옅게, 바다 쪽(아래)으로 기울어 좌우로 훑어요
+        this.beam
+          .setVisible(on > 0.01)
+          .setPosition(this.lamp.x, this.lamp.y)
+          .setRotation(Math.PI / 2 + sweep * 0.9)
+          .setScale(1.2 + 0.6 * Math.abs(sweep), 1.4)
+          .setAlpha(on * 0.28 * (0.5 + 0.5 * Math.abs(sweep)));
       }
     }
   }

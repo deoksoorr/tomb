@@ -9,7 +9,7 @@ import { CosmeticFxView } from "./CosmeticFxView";
 import { DyeFxView } from "./DyeFxView";
 import { bodyFx, riderLift } from "../sprites/cosmeticFx";
 import type { EmoteIcon } from "../sprites/emotes";
-import { HAMMOCK_H, HAMMOCK_W, hammockLieKey, hammockLieSheet, lieFrameOf, LIE_ORIGIN_X, LIE_ORIGIN_Y } from "../sprites/hammockArt";
+import { HAMMOCK_H, HAMMOCK_W, hammockLieKey, hammockLieSheet, lieFrameOf, LIE_ORIGIN_X, LIE_ORIGIN_Y, type HammockSkin } from "../sprites/hammockArt";
 import { INDOOR_POSE_PERIOD, indoorPoseKey, indoorPoseSheet, isIndoorPose, POSE_H, POSE_W, type IndoorPose, type LieCover } from "../sprites/indoorPose";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { wrapChat } from "../logic/chatWrap";
@@ -123,6 +123,8 @@ export class AvatarView {
   /** 해먹 누운 그림을 쓰는 중 (텍스처가 아바타 시트가 아니다) */
   private lying = false;
   private lieKey = "";
+  /** 11/16 해먹 천 무늬 (포구 오두막 바닷가 해먹이면 "sea" — 집 씬이 정한다) */
+  private hammockSkin: HammockSkin = "village";
   private lieFrame = -1;
   /** 3번 집 안 자세(눕기·읽기·욕조) 그림을 쓰는 중 (텍스처가 sprites/indoorPose 시트) */
   private pose: IndoorPose | null = null;
@@ -683,10 +685,17 @@ export class AvatarView {
   }
 
   /** 해먹 누운 그림으로 (F5). 천이 해먹 소품과 픽셀 1:1로 겹치도록 표시 원점을 맞춘다 */
+  /** 11/16 해먹 천 무늬를 바꾼다 (누워 있으면 바로 다시 그린다) */
+  setHammockSkin(skin: HammockSkin): void {
+    if (skin === this.hammockSkin) return;
+    this.hammockSkin = skin;
+    if (this.state === "hammock" && this.lying) this.lieDown();
+  }
+
   private lieDown(): void {
-    const key = hammockLieKey(this.texKey);
+    const key = hammockLieKey(this.texKey, this.hammockSkin);
     if (!this.scene.textures.exists(key)) {
-      const lie = hammockLieSheet(this.body, this.color, this.look);
+      const lie = hammockLieSheet(this.body, this.color, this.look, this.hammockSkin);
       addCanvasTexture(this.scene, key, { canvas: lie.grid.toCanvas(), frameW: HAMMOCK_W, frameH: HAMMOCK_H });
       lieTops.set(key, lie.top);
     }

@@ -83,7 +83,7 @@ describe("sea map (protocol)", () => {
     const base = Date.UTC(2026, 10, 15, 15, 0, 0);
     const at = (min: number) => base + min * 60_000;
     expect(tideMinute(at(0))).toBeCloseTo(0);
-    const rock = seaFishingSpotById("f_1084_528")!;
+    const rock = seaFishingSpotById("f_1324_528")!;
     expect(rock).toBeDefined();
     // 11/16 r11 맵을 줄여 물가 만조 538 · 간조 620. 찌 자리 y 552, 여유 6 → 물 높이 0.902 이상이어야 물속 → 썰물 18.2분째에 말라요
     expect(TIDE_HIGH_Y).toBe(SEA_FLAT_Y0 + 50);
@@ -111,7 +111,8 @@ describe("sea map (protocol)", () => {
   it("11/16 쉴거리 자리: 선베드는 눕기(lie), 돗자리·파라솔은 바닥 앉기, 벤치·끝 걸터앉기는 의자 — 모두 바닷가 좌석이에요", () => {
     // 11/16 리조트 해변: 선베드·파라솔·선베드 한 벌 여섯 → 선베드 12, 파라솔 돗자리는 없어요, 돗자리 둘 (자리 넷)
     // 11/16 돗자리도 빼고 앞줄 선베드 10 → 선베드 22
-    expect(SEA_REST_SEATS.filter((r) => r.kind === "lounger")).toHaveLength(22);
+    // 11/16 r14 가운데로 옮기며 동쪽 백사장에 한 벌 둘 더 → 선베드 29
+    expect(SEA_REST_SEATS.filter((r) => r.kind === "lounger")).toHaveLength(29);
     expect(SEA_REST_SEATS.filter((r) => r.kind === "parasol")).toHaveLength(0);
     expect(SEA_REST_SEATS.filter((r) => r.kind === "mat")).toHaveLength(0);
     for (const r of SEA_REST_SEATS) {
@@ -147,10 +148,10 @@ describe("sea map (protocol)", () => {
     expect(onSeaRoad(200, SEA_ROAD.y + 20)).toBe(false);
     expect(SEA_ROAD.x).toBeLessThan(SEA_BUS_STOP.x - 60);
   });
-  it("다음 차수 자리: 오두막 터 6, 모래성 자리 3, 바다 보기 벤치 4", () => {
+  it("다음 차수 자리: 오두막 터 6, 모래성 자리 3, 바다 보기 벤치 5", () => {
     expect(SEA_LOTS).toHaveLength(6);
     expect(SEA_SPOTS.sandcastles).toHaveLength(3);
-    expect(SEA_SPOTS.benches).toHaveLength(4);
-    expect(SEA_SPOTS.loungers).toHaveLength(22); // 11/16 선베드 한 벌 여섯 (12) + 앞줄 10
+    expect(SEA_SPOTS.benches).toHaveLength(5);
+    expect(SEA_SPOTS.loungers).toHaveLength(29); // 11/16 r14 선베드 한 벌 여덟 (16) + 앞줄 13
   });
 });

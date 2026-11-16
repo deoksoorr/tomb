@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DIR, MAX_VALID_SPEED, SEA_JET_MIN_Y, SEA_JETSKI_SPEED, SEA_JETSKIS, SEA_PIER_END, SEA_TUBE_SPEED, seaJetWater, tideLineY } from "@tomb/protocol";
+import { DIR, MAX_VALID_SPEED, SEA_JET_MIN_Y, SEA_JETSKI_SPEED, SEA_JETSKIS, SEA_PIER, SEA_PIER_END, SEA_TUBE_SPEED, seaJetWater, tideLineY } from "@tomb/protocol";
 import { ROW_SPEED } from "../logic/boat";
 import { rideFacing, stepJet, stepTube, tubeReturnK, type RideMotion } from "./seaRideLogic";
 
@@ -37,7 +37,7 @@ describe("seaRideLogic (11/16 r13)", () => {
   });
   it("튜브는 헤엄보다 느리고, 물가로 저어 가면 모래에 내려요", () => {
     const level = 1;
-    const m = at(300, tideLineY(level) + 60);
+    const m = at(SEA_PIER.x - 240, tideLineY(level) + 60);
     let land: { x: number; y: number } | null = null;
     let max = 0;
     for (let i = 0; i < 1000 && !land; i++) {
@@ -51,11 +51,26 @@ describe("seaRideLogic (11/16 r13)", () => {
   });
   it("튜브는 바위·선착장에서 멈추고 내리지 않아요", () => {
     // 선착장 기둥 왼쪽에서 오른쪽으로 (만조, 선착장 머리 아래)
-    const m = at(580, 600);
+    const m = at(SEA_PIER.x - 20, 600);
     let land = null;
     for (let i = 0; i < 400; i++) land = stepTube(m, { ax: 1, ay: 0 }, 16, 1, 0).land ?? land;
     expect(land).toBeNull();
-    expect(m.x).toBeLessThan(600);
+    expect(m.x).toBeLessThan(SEA_PIER.x);
+  });
+  it("가만히 탄 튜브도 물결 따라 천천히 떠다니고, 물 밖으로는 안 나가요", () => {
+    const m = at(SEA_PIER.x - 200, 760);
+    const x0 = m.x;
+    const y0 = m.y;
+    let moved = 0;
+    for (let i = 0; i < 60 * 60; i++) {
+      const px = m.x;
+      const py = m.y;
+      const r = stepTube(m, { ax: 0, ay: 0 }, 16, 0.5, i * 16, 1.7);
+      expect(r.land).toBeNull();
+      moved = Math.max(moved, Math.hypot(m.x - x0, m.y - y0));
+      expect(Math.hypot(m.x - px, m.y - py) / 0.016).toBeLessThan(SEA_TUBE_SPEED);
+    }
+    expect(moved).toBeGreaterThan(8);
   });
   it("방향 · 돌아가기 비율", () => {
     expect(rideFacing(30, 2, DIR.down)).toBe(DIR.right);

@@ -35,15 +35,28 @@ function clampInput(i: RideInput): RideInput {
   return m > 1 ? { ax: i.ax / m, ay: i.ay / m } : i;
 }
 
-/** 튜브 한 걸음. level = 지금 물 높이, t = 시계 ms (물결) */
-export function stepTube(m: RideMotion, input: RideInput, dtMs: number, level: number, t: number): RideStep {
+/**
+ * 11/16 r14 사용자: 가만히 탄 튜브도 물결 따라 떠다녀요 — 빈 튜브와 같은 결의 흐름 (느린 옆 흐름 + 파도에 물가 쪽으로 살짝 밀렸다 돌아가요).
+ * 노를 저으면 그 위에 더해요. 세기는 px/s (서버 속도 검증보다 훨씬 작아요)
+ */
+export function tubeCurrent(t: number, phase = 0): { x: number; y: number } {
+  const TAU = Math.PI * 2;
+  return {
+    x: Math.sin(t / 7_000 + phase) * TUBE_CURRENT + Math.cos((t / 23_000) * TAU + phase) * 6,
+    y: Math.sin((t / 6_000) * TAU + phase * 0.7) * 4 + Math.sin(t / 11_000 + 1 + phase) * TUBE_CURRENT * 0.4,
+  };
+}
+
+/** 튜브 한 걸음. level = 지금 물 높이, t = 시계 ms (물결), phase = 튜브마다 다른 흐름 */
+export function stepTube(m: RideMotion, input: RideInput, dtMs: number, level: number, t: number, phase = 0): RideStep {
   const dt = Math.min(100, Math.max(0, dtMs));
   const i = clampInput(input);
   m.vx = approach(m.vx, i.ax * SEA_TUBE_SPEED, dt, TUBE_TAU);
   m.vy = approach(m.vy, i.ay * SEA_TUBE_SPEED, dt, TUBE_TAU);
-  // 물결: 옆으로 천천히 오가며 살짝 밀어요
-  const cx = Math.sin(t / 7_000) * TUBE_CURRENT;
-  const cy = Math.sin(t / 11_000 + 1) * TUBE_CURRENT * 0.4;
+  // 물결: 옆으로 천천히 오가며, 파도에 물가 쪽으로 살짝 밀렸다 돌아가요 (가만히 있어도 떠다녀요)
+  const c = tubeCurrent(t, phase);
+  const cx = c.x;
+  const cy = c.y;
   const nx = m.x + ((m.vx + cx) * dt) / 1000;
   const ny = m.y + ((m.vy + cy) * dt) / 1000;
   const out: RideStep = { land: null, shallow: false, bumped: false };

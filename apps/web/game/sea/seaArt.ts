@@ -10,6 +10,9 @@ import {
   SEA_LOT_GATE_W,
   SEA_PIER,
   SEA_PIER_END,
+  SEA_LOTS,
+  SEA_PONTOON,
+  SEA_PONTOON_RAMP,
   SEA_ROAD,
   SEA_ROAD_LOOP,
   SEA_ROCKS,
@@ -18,7 +21,7 @@ import {
 } from "@tomb/protocol";
 import { darken, Grid, lighten, mix, rng, type Color } from "../sprites/pixel";
 import type { SeaLot } from "@tomb/protocol";
-import { hashU, poolDepth, seaGroundKind, SEA_PLATFORM, type SeaGround } from "./seaLayout";
+import { hashU, pathEdgeDist, poolDepth, seaGroundKind, SEA_PLATFORM, type SeaGround } from "./seaLayout";
 import { SEA_TEX_PREFIX } from "./seaTypes";
 
 // 11/16 달물결 포구 픽셀 아트 (코드로 그려요, 마을·캠핑장 그림을 다시 쓰지 않고 새로).
@@ -183,6 +186,8 @@ export const SEA_TEX = {
   tube: (v: number) => `${P}tube${v}`,
   jetski: (d: "side" | "front" | "back", v: number) => `${P}jetski-${d}${v}`,
   wake: `${P}wake`,
+  pontoon: `${P}pontoon`,
+  pontoonRamp: `${P}pontoonRamp`,
   stone: (v: number) => `${P}stone${v}`,
   crab: `${P}crab`,
   ledge: `${P}ledge`,
@@ -934,6 +939,42 @@ export function pierEndArt(): Grid {
   softOutline(g);
   return g;
 }
+/** 11/16 r14 부잔교 (물에 뜬 발판 — 선착장보다 한 단계 짙은 판자 + 양옆 파란 부표 통). 원점 왼쪽 위 */
+export function pontoonArt(): Grid {
+  const W = SEA_PONTOON.w;
+  const H = SEA_PONTOON.h + 4;
+  const g = new Grid(W + 4, H);
+  for (let y = 0; y < H - 4; y++) {
+    const k = y % 7;
+    for (let x = 2; x < W + 2; x++) {
+      const grain = hashU(x >> 2, y, 61) < 0.12 && k !== 6;
+      g.set(x, y, k === 6 ? DECK.line : k === 0 ? DECK.mid : grain ? DECK.lo : mix(DECK.mid, DECK.lo, 0.35));
+    }
+  }
+  // 물에 잠긴 아래 테 · 양옆 부표 통 (하늘색)
+  g.rect(2, H - 4, W, 2, DECK.lo);
+  g.rect(2, H - 2, W, 2, 0x9ac8c8);
+  for (let y = 6; y < H - 6; y += 22) {
+    g.rect(0, y, 2, 10, 0x8ec8e8);
+    g.rect(W + 2, y, 2, 10, 0x6aa8d0);
+  }
+  softOutline(g);
+  return g;
+}
+/** 부잔교 다리 (선착장 몸통 → 부잔교, 가로 판자 + 난간 줄). 원점 왼쪽 위 */
+export function pontoonRampArt(): Grid {
+  const W = SEA_PONTOON_RAMP.w;
+  const H = SEA_PONTOON_RAMP.h + 3;
+  const g = new Grid(W, H);
+  for (let y = 0; y < H - 3; y++) for (let x = 0; x < W; x++) g.set(x, y, x % 6 === 5 ? DECK.line : y === 0 ? DECK.hi : DECK.mid);
+  g.rect(0, H - 3, W, 3, DECK.lo);
+  for (let x = 0; x < W; x++) {
+    g.set(x, 0, 0xc8b070);
+    g.set(x, H - 4, 0xc8b070);
+  }
+  softOutline(g);
+  return g;
+}
 /** 말뚝 (갈매기가 앉아요) */
 export function postArt(): Grid {
   const g = new Grid(8, 14);
@@ -1584,12 +1625,23 @@ function groundColor(x: number, y: number, k: SeaGround): Color {
       if ((y === mid || y === mid + 1) && (x >> 3) % 2 === 0 && x > SEA_ROAD.x + 16) c = RAMP.wall[0];
       return c;
     }
-    case "path":
-      return pick(RAMP.sand, 0.3 + fbm(x * 0.02, y * 0.02) * 0.45, x, y);
+    case "path": {
+      // 11/16 r14 밟혀 다져진 흙길: 가운데는 밝게, 가장자리는 한 단계 진하게 + 가장자리 자갈 몇 알
+      const e = pathEdgeDist(x, y); // 0 = 가장자리, 음수 = 안쪽
+      let t = 0.3 + fbm(x * 0.02, y * 0.02) * 0.45 + (e > -2.5 ? 0.22 : e < -6 ? -0.08 : 0);
+      if (e > -3.5 && hashU(x >> 1, y >> 1, 41) < 0.03) return (x + y) & 1 ? mix(RAMP.rock[1], RAMP.sand[2], 0.45) : mix(RAMP.rock[3], RAMP.sand[4], 0.5);
+      if (hashU(x, y, 43) < 0.03) t += 0.18;
+      return pick(RAMP.sand, t, x, y);
+    }
     case "yard":
       return pick(RAMP.sand, 0.12 + fbm(x * 0.015, y * 0.02) * 0.45, x, y);
-    case "lot":
-      return pick(RAMP.sand, 0.45 + fbm(x * 0.02, y * 0.025) * 0.45, x, y);
+    case "lot": {
+      // 11/16 r14 울타리·생울타리 안쪽 가장자리는 그늘 (AO)
+      let edge = 99;
+      for (const l of SEA_LOTS) if (x >= l.x - 2 && x <= l.x + l.w + 2 && y >= l.y - 2 && y <= l.y + l.h + 2) edge = Math.min(x - l.x, l.x + l.w - x, y - l.y, l.y + l.h - y);
+      const ao = edge < 6 ? (6 - edge) * 0.05 : 0;
+      return pick(RAMP.sand, 0.45 + fbm(x * 0.02, y * 0.025) * 0.45 + ao + (hashU(x, y, 47) < 0.04 ? 0.15 : 0), x, y);
+    }
     case "boardwalk": {
       const top = SEA_BOARDWALK.y;
       const plank = (x + (y - top > SEA_BOARDWALK.h / 2 ? 12 : 0)) % 36 === 0;
@@ -1599,7 +1651,27 @@ function groundColor(x: number, y: number, k: SeaGround): Color {
       const toFlat = SEA_FLAT_Y0 - y;
       // 갯벌 바로 앞은 젖은 모래 (위로 갈수록 마른 모래로 디더)
       if (toFlat < 28) return pick(RAMP.wet, (1 - toFlat / 28) * 0.9 + (fbm(x * 0.05, y * 0.075) - 0.5) * 0.3, x, y);
-      return pick(RAMP.sand, 0.12 + fbm(x * 0.009, y * 0.0125) * 0.6 + (y < SEA_SAND_Y0 + 12 ? 0.25 : 0), x, y);
+      // 11/16 r14 결: 산책로 바로 밑 그늘(3px) · 고운 모래 알갱이(두 톤) · 바람 물결 자국(모래 언덕 쪽, 잡음 자리) · 발자국 같은 오목한 자국 · 조개 부스러기
+      const under = y - SEA_SAND_Y0;
+      let t = 0.12 + fbm(x * 0.009, y * 0.0125) * 0.6 + (under < 12 ? 0.25 : 0) + (under < 3 ? 0.35 : 0);
+      const wind = fbm(x * 0.006 + 21, y * 0.01 + 3);
+      if (wind > 0.62 && under > 10 && toFlat > 40) {
+        const ph = (y + (fbm(x * 0.03, y * 0.05) - 0.5) * 10 + x * 0.12) / 5;
+        if (ph - Math.floor(ph) < 0.2) t += 0.12 * Math.min(1, (wind - 0.62) / 0.06);
+      }
+      const cx = x / 11 | 0;
+      const cy = y / 9 | 0;
+      if (hashU(cx, cy, 89) < 0.035) {
+        const lx = x - cx * 11;
+        const ly = y - cy * 9;
+        if ((lx === 4 || lx === 5) && ly === 3) return pick(RAMP.sand, Math.min(1, t + 0.3), x, y);
+        if ((lx === 4 || lx === 5) && ly === 4) return RAMP.sand[0];
+      }
+      const h = hashU(x, y, 91);
+      if (h < 0.045) t += 0.2;
+      else if (h > 0.975) return RAMP.sand[0];
+      if (h > 0.9992) return (x & 1) ? 0xfbe4e0 : 0xfffaf2;
+      return pick(RAMP.sand, t, x, y);
     }
     case "pool": {
       const d = poolDepth(x, y);
@@ -1627,7 +1699,29 @@ function groundColor(x: number, y: number, k: SeaGround): Color {
       // 풀밭: 남쪽(산책로 쪽)은 모래가 섞여요
       const sandy = Math.max(0, (y - (SEA_BOARDWALK.y - 58)) / 60); // 11/16 r11 산책로에서 재요
       if (sandy > 0 && fbm(x * 0.03, y * 0.03) < sandy * 0.6) return pick(RAMP.sand, 0.4, x, y);
-      return pick(RAMP.grass, 0.15 + fbm(x * 0.015, y * 0.0225) * 0.75 + (y > SEA_BOARDWALK.y - 6 ? 0.2 : 0), x, y);
+      // 11/16 r14 결: 울타리 바깥 그늘(AO) · 풀 포기(3px 짙은 잎 + 밝은 끝) · 토끼풀 무리(잡음 자리) · 작은 들꽃 · 잔 알갱이
+      let t = 0.15 + fbm(x * 0.015, y * 0.0225) * 0.75 + (y > SEA_BOARDWALK.y - 6 ? 0.2 : 0);
+      for (const l of SEA_LOTS) {
+        const dx = Math.max(l.x - x, 0, x - (l.x + l.w));
+        const dy = Math.max(l.y - y, 0, y - (l.y + l.h));
+        const d = Math.max(dx, dy);
+        if (d < 5) t += (5 - d) * 0.04;
+      }
+      const tx = x / 7 | 0;
+      const ty = y / 6 | 0;
+      if (hashU(tx, ty, 31) < 0.16) {
+        const ox = 2 + Math.floor(hashU(tx, ty, 32) * 3);
+        const lx = x - tx * 7;
+        const ly = y - ty * 6;
+        if (ly === 4 && (lx === ox - 1 || lx === ox + 1)) return RAMP.grass[4];
+        if (ly === 3 && lx === ox) return RAMP.grass[4];
+        if (ly === 2 && lx === ox) return RAMP.leaf[0];
+      }
+      if (fbm(x * 0.05 + 9, y * 0.05 + 4) > 0.68 && hashU(x >> 1, y >> 1, 33) < 0.3) return (x + y) & 1 ? RAMP.leaf[1] : RAMP.leaf[0];
+      const h = hashU(x, y, 35);
+      if (h > 0.9985) return h > 0.9995 ? 0xfff6d0 : 0xf8c8d8;
+      if (h < 0.05) t += 0.18;
+      return pick(RAMP.grass, t, x, y);
     }
   }
 }
@@ -1850,4 +1944,57 @@ export function wakeArt(): Grid {
       if (d < 1) g.set(x, y, 0xffffff, Math.round(220 * (1 - d)));
     }
   return g;
+}
+
+// ── 11/16 r14 사용자 "바닷가 사물이 납작해요 — 마을·캠핑장처럼 결을": 구운 그림 위에 한 번 더 (매 프레임 비용 없음) ──
+//  - 빛은 왼쪽 위: 몸통 테두리 중 오른쪽·아래가 비면 한 단계 어둡게(그늘 쪽 1px 테), 왼쪽·위가 비면 살짝 밝게
+//  - 안쪽은 잔잔한 결 (드문드문 한 톤 진하게·밝게 — 잡음 위치라 되풀이 무늬가 없어요)
+//  - wood: 나무 빛깔 칸에 짧은 가로 나뭇결
+// 테두리(SOFT_EDGE)·그림자(반투명)는 건드리지 않아요
+export type DetailOpts = { wood?: boolean; rim?: number; grain?: number; salt?: number };
+const EDGE_RGB = SOFT_EDGE;
+function woody(c: Color): boolean {
+  const r = (c >> 16) & 255;
+  const g = (c >> 8) & 255;
+  const b = c & 255;
+  return r >= 120 && r > g && g > b && r - b >= 40 && r - b <= 140;
+}
+export function detailPass(g: Grid, o: DetailOpts = {}): Grid {
+  const W = g.w;
+  const H = g.h;
+  const src = g.px.slice();
+  const rim = o.rim ?? 0.12;
+  const grain = o.grain ?? 0.05;
+  const salt = o.salt ?? 0;
+  const solid = (x: number, y: number): boolean => {
+    if (x < 0 || y < 0 || x >= W || y >= H) return false;
+    const v = src[y * W + x];
+    return (v & 255) >= 200 && v >>> 8 !== EDGE_RGB;
+  };
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      if (!solid(x, y)) continue;
+      const v = src[y * W + x];
+      const c = v >>> 8;
+      const r = !solid(x + 1, y);
+      const b = !solid(x, y + 1);
+      const l = !solid(x - 1, y);
+      const t = !solid(x, y - 1);
+      let out = c;
+      if ((r || b) && !l && !t) out = mix(c, 0x3a2c28, rim);
+      else if ((l || t) && !r && !b) out = mix(c, 0xffffff, rim * 0.6);
+      else if (!r && !b && !l && !t) {
+        const h = h2(x * 7 + salt, y * 13 + salt);
+        if (h < grain) out = mix(c, 0x3a2c28, 0.06);
+        else if (h > 1 - grain * 0.7) out = mix(c, 0xffffff, 0.07);
+        if (o.wood && woody(c) && h2((x >> 2) + salt, y * 3 + 7) < 0.2 && h2(x + 11, y + salt) < 0.85) out = mix(out, 0x5a3c28, 0.1);
+      }
+      if (out !== c) g.px[y * W + x] = ((out << 8) | (v & 255)) >>> 0;
+    }
+  return g;
+}
+/** 그림 꾸러미(Grid 또는 {grid})에 결을 더해요 */
+export function withDetail<T extends Grid | ArtOut>(out: T, o: DetailOpts = {}): T {
+  detailPass("grid" in out ? out.grid : out, o);
+  return out;
 }

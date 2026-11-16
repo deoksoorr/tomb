@@ -110,7 +110,7 @@ export const SEA_LANDMARKS: readonly SeaLandmark[] = [
   { id: "cottages", label: "별장", x: SEA_LOTS[2].x + SEA_LOTS[2].w / 2, y: SEA_LOTS[2].y + 20, kind: "cottages" },
   { id: "pier", label: "선착장", x: SEA_PIER.x + SEA_PIER.w / 2, y: SEA_PIER_END.y, kind: "pier" },
   { id: "lighthouse", label: "방파제 등대", x: SEA_LIGHTHOUSE.x, y: SEA_LIGHTHOUSE.y - 10, kind: "lighthouse" },
-  { id: "rocks", label: "갯바위", x: 110, y: 590, kind: "rocks" },
+  { id: "rocks", label: "갯바위", x: 350, y: 590, kind: "rocks" },
   // 11/16 r12 걸터앉는 자리 (선착장 끝·방파제 끝) · 해변 모닥불
   { id: "pierSeats", label: "걸터앉기", x: SEA_SPOTS.pierEnd.x, y: SEA_SPOTS.pierEnd.y + 8, kind: "seat" },
   { id: "breakwaterSeats", label: "걸터앉기", x: SEA_SPOTS.breakwaterEnd.x, y: SEA_SPOTS.breakwaterEnd.y + 8, kind: "seat" },

@@ -18,7 +18,6 @@ import ExteriorDialog from "./ExteriorDialog";
 import HouseHud from "./HouseHud";
 import styles from "./housing.module.css";
 import OfficeDialog from "./OfficeDialog";
-import SeaOffice from "./SeaOffice";
 import { rideGate } from "@/lib/rideGate";
 
 type Mode = { kind: "office" } | { kind: "pending" } | { kind: "village" } | { kind: "house"; house: PublicHouse; mine: boolean; edit: boolean };
@@ -384,19 +383,28 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
     );
   }
 
+  // 11/16 포구 부동산: 분양 사무소 창 그대로 (zone="sea" — 번지 이름·값·겉모습만 다르다)
   if (seaOffice && mode.kind === "office")
     return (
-      <SeaOffice
-        channel={channel}
+      <OfficeDialog
+        zone="sea"
+        villa={my ? !!my.house : myError ? false : null}
         my={seaMy}
         myError={seaError}
-        villa={my ? !!my.house : myError ? false : null}
         onMy={onSeaMy}
+        busy={busy}
+        visitError={visitError}
+        presetLot={intent?.zone === "sea" ? (intent.lot ?? null) : null}
+        channel={channel}
+        onClose={onClose}
         onEnterMine={enterSea}
         onVisit={(id) => void visit(id)}
-        onClose={onClose}
-        busy={busy}
-        presetLot={intent?.zone === "sea" ? (intent.lot ?? null) : null}
+        onVillage={(lot) => {
+          // 내 오두막 보러 가기: 바닷가면 그 터 앞으로 (창을 닫는다)
+          if (lot !== null) bridge.emit("sea:lot", { lot });
+          onClose();
+        }}
+        onExterior={() => undefined}
       />
     );
 

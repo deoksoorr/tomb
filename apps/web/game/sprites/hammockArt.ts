@@ -49,49 +49,66 @@ const STRIPE_B = 0xe8d6b0;
 const stripe = (tx: number): Color => (Math.floor((tx - FABRIC_X0) / 3) % 2 ? STRIPE_A : STRIPE_B);
 
 const ROPE = 0xc8b894;
+
+/**
+ * 11/16 해먹 천 무늬 (기본 = 마을 해먹 빨강·크림 줄무늬).
+ * "sea" = 포구 오두막 바닷가 세트 해먹: 산호·조개·물빛 넓은 띠 + 옅은 줄 + 부드러운 갈색 테 (game/housing/seaFurnitureArt 해먹과 같은 색)
+ */
+export type HammockSkin = "village" | "sea";
+type SkinDef = { stripe: (tx: number) => Color; rope: Color; out: Color };
+const SEA_BANDS: readonly Color[] = [0xf4b1a0, 0xfbe0cc, 0xade6e4];
+const SKINS: Record<HammockSkin, SkinDef> = {
+  village: { stripe: (tx) => stripe(tx), rope: ROPE, out: OUT },
+  sea: { stripe: (tx) => SEA_BANDS[Math.floor((tx - FABRIC_X0) / 4) % 3], rope: 0xd8c8a8, out: 0x5c4a42 },
+};
 /** 기둥 매듭 (해먹 소품의 기둥 x=3..5, 42..44 바로 안쪽) */
 const KNOT_L = { x: 6, y: 8 };
 const KNOT_R = { x: 41, y: 8 };
 
 /** 줄: 기둥 매듭 → 천 끝 (천이 dx, dy만큼 움직인 자리). 테두리는 기둥 위로 번지지 않게 기둥 칸에서 지운다 */
-export function hammockRopes(dx = 0, dy = 0): Grid {
+export function hammockRopes(dx = 0, dy = 0, skin: HammockSkin = "village"): Grid {
+  const K = SKINS[skin];
   const g = new Grid(HAMMOCK_W, HAMMOCK_H);
   const rope = (x0: number, y0: number, x1: number, y1: number) => {
     const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
-    for (let i = 0; i <= steps; i++) g.set(Math.round(x0 + ((x1 - x0) * i) / steps), Math.round(y0 + ((y1 - y0) * i) / steps), ROPE);
+    for (let i = 0; i <= steps; i++) g.set(Math.round(x0 + ((x1 - x0) * i) / steps), Math.round(y0 + ((y1 - y0) * i) / steps), K.rope);
   };
   rope(KNOT_L.x, KNOT_L.y, FABRIC_X0 + dx, fabricBackTop(FABRIC_X0) + dy);
   rope(KNOT_R.x, KNOT_R.y, FABRIC_X1 + dx, fabricBackTop(FABRIC_X1) + dy);
-  g.outline(OUT);
+  g.outline(K.out);
   for (let y = 0; y < HAMMOCK_H; y++)
     for (let x = 0; x < HAMMOCK_W; x++) if ((x < KNOT_L.x || x > KNOT_R.x) && g.get(x, y) !== 0) g.px[y * HAMMOCK_W + x] = 0;
   return g;
 }
 
 /** 뒤 천: 먼 쪽 테 + 주머니 안쪽 그늘 (테두리 포함) */
-export function fabricBack(): Grid {
+export function fabricBack(skin: HammockSkin = "village"): Grid {
+  const K = SKINS[skin];
   const g = new Grid(HAMMOCK_W, HAMMOCK_H);
   for (let tx = FABRIC_X0; tx <= FABRIC_X1; tx++) {
-    const c = stripe(tx);
+    const c = K.stripe(tx);
     const yb = fabricBackTop(tx);
     const yf = fabricFrontTop(tx);
     g.set(tx, yb, darken(c, 0.12));
     for (let y = yb + 1; y < yf; y++) g.set(tx, y, darken(c, 0.42));
   }
-  g.outline(OUT);
+  g.outline(K.out);
   return g;
 }
 
 /** 앞 천: 가까운 쪽 겉면 (윗줄 밝게, 아랫줄 그늘, 테두리 포함) */
-export function fabricFront(): Grid {
+export function fabricFront(skin: HammockSkin = "village"): Grid {
+  const K = SKINS[skin];
   const g = new Grid(HAMMOCK_W, HAMMOCK_H);
   for (let tx = FABRIC_X0; tx <= FABRIC_X1; tx++) {
-    const c = stripe(tx);
+    const c = K.stripe(tx);
     const yf = fabricFrontTop(tx);
     const yb = fabricBottom(tx);
     for (let y = yf; y <= yb; y++) g.set(tx, y, y === yf ? lighten(c, 0.14) : y === yb ? darken(c, 0.3) : c);
+    // 바닷가 해먹: 천 아래 술 장식 (가구 그림과 같다)
+    if (skin === "sea" && (tx - FABRIC_X0) % 3 === 1 && tx > FABRIC_X0 + 3 && tx < FABRIC_X1 - 3) g.set(tx, yb + 1, 0xf6efe2);
   }
-  g.outline(OUT);
+  g.outline(K.out);
   return g;
 }
 
@@ -106,7 +123,7 @@ export type HammockLie = { grid: Grid; /** 몸 맨 윗줄 (텍스처 y, 프레�
  * 해먹에 누운 사람 시트 (LIE_FRAMES장 가로로, 프레임 = HAMMOCK_W×HAMMOCK_H).
  * 몸 종류마다 그림 길이가 달라(동글이 18 … 키다리 26px) 몸 가운데를 천 가운데에 맞춘다.
  */
-export function hammockLieSheet(body: string, color: string, look: readonly string[] = []): HammockLie {
+export function hammockLieSheet(body: string, color: string, look: readonly string[] = [], skin: HammockSkin = "village"): HammockLie {
   const src = avatarFrameGrid(body, "down", AV_ANIM.hammock.col, color, look);
   // 그림이 있는 범위
   let x0 = AV_W;
@@ -121,15 +138,15 @@ export function hammockLieSheet(body: string, color: string, look: readonly stri
         y0 = Math.min(y0, y);
         y1 = Math.max(y1, y);
       }
-  const back = fabricBack();
-  const front = fabricFront();
+  const back = fabricBack(skin);
+  const front = fabricFront(skin);
   const sheet = new Grid(HAMMOCK_W * LIE_FRAMES, HAMMOCK_H);
   const ox = Math.round(FABRIC_CX - (y0 + y1) / 2);
   const midTop = fabricBackTop(Math.round(FABRIC_CX)) - BODY_ABOVE_RIM - BODY_SAG;
   let top = HAMMOCK_H;
   for (const dx of SWAY_DX) {
     const dy = swayLift(dx);
-    const ropes = hammockRopes(dx, dy);
+    const ropes = hammockRopes(dx, dy, skin);
     for (let b = 0; b < 2; b++) {
       const g = new Grid(HAMMOCK_W, HAMMOCK_H);
       g.draw(ropes, 0, 0);
@@ -162,4 +179,4 @@ export function hammockLieSheet(body: string, color: string, look: readonly stri
  * 11/16 "-hammock": 예전 "-lie"는 집 침대 자세(indoorPoseKey(key, "lie"))와 키가 같아, 해먹에 한 번 누운(또는 해먹에 누운 같은 생김새를 본)
  * 화면에서는 침대에 누워도 이미 만든 해먹 그림이 그대로 쓰였다 (텍스처는 씬끼리 같이 쓴다)
  */
-export const hammockLieKey = (avatarKey: string) => `${avatarKey}-hammock`;
+export const hammockLieKey = (avatarKey: string, skin: HammockSkin = "village") => (skin === "sea" ? `${avatarKey}-hammock-sea` : `${avatarKey}-hammock`);

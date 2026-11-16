@@ -10,6 +10,7 @@ import { DEPTH } from "../config";
 import type { InputHub } from "../input/InputHub";
 import type { GlyphAtlas } from "../text/GlyphAtlas";
 import type { Atmosphere } from "../world/Atmosphere";
+import { clampChars, DOOR_NAME_MAX } from "../text/fitLabel";
 import { PLATE_MINT, PLATE_WOOD, SignPlate } from "../world/SignPlate";
 import { COTTAGE_RISE, cottageBox, cottageCanvas } from "./seaCottageArt";
 import { seaHousingHost } from "./seaHousingHost";
@@ -27,6 +28,8 @@ import { SEA_TEX_PREFIX, type SeaInteractable } from "./seaTypes";
 const REFRESH_MS = 5 * 60_000;
 /** 켜지지 않은 등대를 밤에 다시 물어보는 간격 (act 소식을 놓쳤을 때) */
 const LAMP_POLL_MS = 3 * 60_000;
+/** 집에서 나오면 문 밑변에서 이만큼 아래에 선다 (마을 집 문 앞과 같은 느낌) */
+const DOOR_STAND = 10;
 /** 밤 그림으로 바꾸는 어둠 */
 const NIGHT_AT = 0.5;
 
@@ -59,12 +62,16 @@ type Built = {
   img: Phaser.GameObjects.Image;
   /** 밤 창문 불빛 */
   glows: Phaser.GameObjects.Image[];
+  /** 문 밑변 가운데 (월드) */
+  door: { x: number; y: number };
   body: Phaser.GameObjects.Zone;
   house: VillageHouse;
 };
 
 export class SeaHousing {
   private houses = new Map<number, VillageHouse>();
+  /** 맵 고정 상호작용 중 터를 뺀 것 (터는 syncInteractables가 분양 상태로 채운다) */
+  private baseInteractables: readonly SeaInteractable[] | null = null;
   /** 숨긴(관리자) 오두막이 있는 터 */
   private taken = new Set<number>();
   private readonly host: typeof seaHousingHost.current;
@@ -88,6 +95,7 @@ export class SeaHousing {
     // 맵의 「분양 준비 중」 팻말 대신 분양 상태 팻말을 세워요
     for (const p of d.map.lotPlates.values()) p.setVisible(false);
     for (const l of SEA_LOTS) this.setPlate(l, null);
+    this.syncInteractables();
     this.host = seaHousingHost.current = {
       atlas: d.atlas,
       hub: d.hub,
@@ -117,6 +125,7 @@ export class SeaHousing {
       this.houses = new Map(v.houses.map((h) => [h.lot, h]));
       this.taken = new Set(v.taken);
       for (const l of SEA_LOTS) this.draw(l);
+      this.syncInteractables();
     } catch {
       // 다음 주기에 다시
     } finally {
@@ -158,12 +167,15 @@ export class SeaHousing {
     const box = cottageBox(h.tier, l);
     const baseY = l.y + box.base;
     const img = s.add.image(l.x, l.y - COTTAGE_RISE, key).setOrigin(0, 0).setDepth(baseY);
-    // 집 몸통 (앞벽 밑동 띠). 지붕 뒤쪽은 걸어 들어가면 집 뒤에 가려져요
-    const bh = 16;
-    const body = s.add.zone(l.x + box.x + box.w / 2, baseY - bh / 2, box.w, bh);
+    // 집 몸통 전체를 막는다 (터 안쪽 윗변 ~ 앞벽 밑동 — 마을 집처럼 문 앞까지만 걸어가요)
+    const top = l.y + 4;
+    const bh = Math.max(8, baseY - top);
+    const body = s.add.zone(l.x + box.x + box.w / 2, top + bh / 2, box.w, bh);
     body.removeFromDisplayList();
     this.d.map.colliders.add(body);
-    this.built.set(l.n, { key, img, glows, body, house: h });
+    // 문 앞 (마을 집 문과 같은 자리 규칙: 문 밑변에서 4px 아래, 반지름 16)
+    const door = { x: l.x + art.door.x, y: l.y - COTTAGE_RISE + art.door.y };
+    this.built.set(l.n, { key, img, glows, body, house: h, door });
   }
 
   /** 터 팻말: 빈 터 「N번 터 분양 중」, 오두막이면 그 이름 */
@@ -179,12 +191,29 @@ export class SeaHousing {
     this.plates.set(l.n, p);
   }
 
-  /** 그 터 출입구 앞으로 */
+  /** 그 오두막 문 앞으로 (집에서 나올 때·내 집 가기 — 마을 집처럼 문 바로 앞). 오두막이 아직 안 그려졌으면 터 출입구 앞 */
   standAtLot(lot: number): void {
     const l = SEA_LOTS.find((x) => x.n === lot);
     if (!l || this.destroyed) return;
-    const f = seaLotFront(l, 14);
+    const b = this.built.get(lot);
+    const f = b ? { x: b.door.x, y: b.door.y + DOOR_STAND } : seaLotFront(l, 14);
     this.d.warp(f.x, f.y);
+  }
+
+  /**
+   * 터 상호작용을 지금 분양 상태로: 오두막이 있으면 그 문 앞(마을 집 문과 같은 자리·반지름·「○○ 들어가기」),
+   * 빈 터면 출입구 앞 「N번 터 분양 문의」. 맵의 고정 목록(seaLayout)에서 터 항목만 바꿔 끼운다
+   */
+  private syncInteractables(): void {
+    const map = this.d.map as unknown as { interactables: readonly SeaInteractable[] };
+    this.baseInteractables ??= map.interactables.filter((o) => o.kind !== "lot");
+    const lots = SEA_LOTS.map((l): SeaInteractable => {
+      const b = this.built.get(l.n);
+      if (b) return { id: `lot:${l.n}`, kind: "lot", lot: l.n, x: b.door.x, y: b.door.y + 4, r: 16, label: `${clampChars(b.house.name, DOOR_NAME_MAX)} 들어가기` };
+      const f = seaLotFront(l);
+      return { id: `lot:${l.n}`, kind: "lot", lot: l.n, x: f.x, y: f.y, r: 16, label: this.taken.has(l.n) ? `${l.n}번 오두막` : `${l.n}번 터 분양 문의` };
+    });
+    map.interactables = [...this.baseInteractables, ...lots];
   }
 
   /** E: 처리했으면 true (터·부동산). 등대는 등불을 먼저 보고 false (오르기는 장면이 해요) */
@@ -281,6 +310,7 @@ export class SeaHousing {
     if (night !== this.night) {
       this.night = night;
       for (const l of SEA_LOTS) this.draw(l);
+      this.syncInteractables();
     }
     if (Math.abs(s - this.plateScale) > 1e-4) {
       this.plateScale = s;

@@ -1,6 +1,6 @@
 import type { CottageStyleId, PlotTierId } from "@/lib/housing/catalog";
 import { Grid, lighten, mix, type Color } from "../sprites/pixel";
-import { fbm, pick, RAMP } from "./seaArt";
+import { detailPass, fbm, pick, RAMP } from "./seaArt";
 
 // 11/16 포구 오두막 바깥 그림 (나무 오두막·파란 지붕 어부집·등대지기 집). Phaser 없이 Grid로 그려요 (seaArt와 같은 바닷가 그림 규칙:
 // 디더로 섞은 부드러운 색 단계, 물체 둘레는 따뜻한 갈색의 연한 테, 빛은 왼쪽 위).
@@ -394,6 +394,8 @@ export function cottageCanvas(o: CottageArtOpts): {
   lights: { x: number; y: number }[];
 } {
   const b = cottageGrid(o);
+  // 11/16 r14 바닷가 사물 결 (빛은 왼쪽 위 · 그늘 쪽 1px 테 · 나뭇결 — seaArt detailPass)
+  detailPass(b.grid, { wood: true, salt: 5 });
   return { canvas: b.grid.toCanvas(), w: b.grid.w, h: b.grid.h, baseY: b.baseY, door: b.door, lights: b.lights };
 }
 

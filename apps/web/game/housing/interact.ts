@@ -200,7 +200,7 @@ function boxOf(p: Placed, def: FurnitureDef, f: Frame): Box {
 /** 누운 그림(48×30)의 원점에서 아래 끝까지 (hammockArt HAMMOCK_H − 1 − LIE_ORIGIN_Y + 1) */
 const HAMMOCK_LIE_BELOW = 6;
 /** 누운 그림의 천 가운데 줄 (원점 기준 위로 px) — 90° 돌리면 옆으로 이만큼 비켜난다 */
-const HAMMOCK_FABRIC_UP = 6;
+const HAMMOCK_FABRIC_UP = 8;
 /** 옆 해먹 그림(세로 3칸 + 솟는 12px)에서 천 가운데 (그림 아래 끝 기준 위로 px) */
 const HAMMOCK_SIDE_MID = 31;
 

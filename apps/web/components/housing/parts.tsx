@@ -3,7 +3,20 @@
 /* eslint-disable @next/next/no-img-element -- 캔버스로 만든 dataURL 픽셀아트라 next/image 최적화가 필요 없다 */
 import { useSyncExternalStore } from "react";
 import { facadePreview, furnitureIcon, furniturePreview } from "@/game/housing/art";
-import { defaultExterior, furnitureById, HOUSE_TITLES, houseTitle, nextTitle, PLOT_TIERS, plotCost, type HouseExteriorMap, type PlotTierId } from "@/lib/housing/catalog";
+import { cottagePreviewUrl } from "@/game/sea/seaCottageArt";
+import {
+  COTTAGE_STYLES,
+  defaultExterior,
+  furnitureById,
+  HOUSE_TITLES,
+  houseTitle,
+  nextTitle,
+  PLOT_TIERS,
+  plotCost,
+  type CottageStyleId,
+  type HouseExteriorMap,
+  type PlotTierId,
+} from "@/lib/housing/catalog";
 import styles from "./housing.module.css";
 
 const noop = () => () => undefined;
@@ -114,13 +127,13 @@ export function TitleProgress({ score }: { score: number }) {
 export const fmt = (n: number) => n.toLocaleString("ko-KR");
 
 /** 터 크기별로 마을에 서는 집 그림 (F2: 넓히면 집도 커지는 걸 미리 보여 준다) */
-export function TierCompare({ exterior, current }: { exterior?: HouseExteriorMap; current?: PlotTierId | null }) {
+export function TierCompare({ exterior, current, cottage }: { exterior?: HouseExteriorMap; current?: PlotTierId | null; cottage?: CottageStyleId }) {
   const client = useSyncExternalStore(noop, () => true, () => false);
   const ext = exterior ?? defaultExterior();
   return (
     <div className={styles.tierRow} role="list" aria-label="터 크기별 집 모습">
       {PLOT_TIERS.map((t) => {
-        const img = client ? facadePreview(ext, t.id, 1) : null;
+        const img = client ? (cottage ? cottagePreviewUrl(cottage, t.id, 1) : facadePreview(ext, t.id, 1)) : null;
         return (
           <figure key={t.id} className={styles.tierCard} data-current={t.id === current} role="listitem" style={{ margin: 0 }}>
             {img ? (
@@ -148,15 +161,34 @@ function tierHint(i: number): string {
   return `${PLOT_TIERS[0].name}에서 업그레이드로도 넓힐 수 있어요 (${steps})`;
 }
 
-/** 처음 분양할 터 크기 고르기: 세 크기를 카드로 나란히 (집 모습·방 크기·바로 사기 값) */
-export function TierPicker({ value, onChange, points, disabled }: { value: PlotTierId; onChange: (t: PlotTierId) => void; points: number; disabled?: boolean }) {
+/**
+ * 처음 분양할 터 크기 고르기: 세 크기를 카드로 나란히 (집 모습·방 크기·바로 사기 값).
+ * 11/16 cottage = 포구 오두막 (그 겉모습 그림), costOf·hintOf = 오두막 값(1.5배·별장 2배)
+ */
+export function TierPicker({
+  value,
+  onChange,
+  points,
+  disabled,
+  cottage,
+  costOf = plotCost,
+  hintOf = tierHint,
+}: {
+  value: PlotTierId;
+  onChange: (t: PlotTierId) => void;
+  points: number;
+  disabled?: boolean;
+  cottage?: CottageStyleId;
+  costOf?: (t: PlotTierId) => number;
+  hintOf?: (i: number) => string;
+}) {
   const client = useSyncExternalStore(noop, () => true, () => false);
   const ext = defaultExterior();
   return (
     <div className={styles.tierRow} role="radiogroup" aria-label="분양받을 터 크기">
       {PLOT_TIERS.map((t, i) => {
-        const img = client ? facadePreview(ext, t.id, 1) : null;
-        const cost = plotCost(t.id);
+        const img = client ? (cottage ? cottagePreviewUrl(cottage, t.id, 1) : facadePreview(ext, t.id, 1)) : null;
+        const cost = costOf(t.id);
         const short = points < cost;
         return (
           <button
@@ -183,7 +215,50 @@ export function TierPicker({ value, onChange, points, disabled }: { value: PlotT
               <strong>{fmt(cost)}P</strong>
               {short ? " · 모자라요" : ""}
             </span>
-            <span className={styles.small}>{tierHint(i)}</span>
+            <span className={styles.small}>{hintOf(i)}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 11/16 포구 오두막 겉모습 고르기: 세 모양을 카드로 나란히 (터 크기 카드와 같은 모양) */
+export function CottageStylePicker({
+  value,
+  onChange,
+  tier,
+  disabled,
+}: {
+  value: CottageStyleId;
+  onChange: (s: CottageStyleId) => void;
+  tier: PlotTierId;
+  disabled?: boolean;
+}) {
+  const client = useSyncExternalStore(noop, () => true, () => false);
+  return (
+    <div className={styles.tierRow} role="radiogroup" aria-label="오두막 겉모습">
+      {COTTAGE_STYLES.map((c) => {
+        const img = client ? cottagePreviewUrl(c.id, tier, 1) : null;
+        return (
+          <button
+            key={c.id}
+            type="button"
+            role="radio"
+            aria-checked={c.id === value}
+            className={styles.tierCard}
+            data-current={c.id === value}
+            data-pick="true"
+            disabled={disabled}
+            onClick={() => onChange(c.id)}
+          >
+            {img ? (
+              <img src={img.url} width={img.w} height={img.h} alt="" style={{ imageRendering: "pixelated" }} />
+            ) : (
+              <span style={{ width: 128, height: 104, display: "block" }} aria-hidden="true" />
+            )}
+            <strong>{c.name}</strong>
+            <span className={styles.small}>{c.desc}</span>
           </button>
         );
       })}

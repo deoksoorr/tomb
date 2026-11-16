@@ -8,12 +8,14 @@ import { isTouchUi } from "../input/keyHint";
 import type { MoveInput } from "../logic/movement";
 import { DEADZONE_ENTER } from "../logic/movement";
 import {
+  boatHull,
   boatOf,
   DOCKED_DIST,
   duckBump,
   duckLandNear,
   duckShoreRing,
   boatFacing,
+  hullBlocks,
   joinSeat,
   nearestDuckLanding,
   pickBoatSeat,
@@ -97,6 +99,10 @@ type BoatView = {
   strokeAt: number;
   wakeAt: number;
   fade: Phaser.Tweens.Tween | null;
+  /** 11/16 몸통 바닥 충돌 상자 (헤엄치는 사람이 뚫고 지나가지 않게 — logic/boat boatHull). 배 자리·방향을 따라 옮긴다 */
+  hull: Phaser.GameObjects.Zone;
+  /** 지난번 상자 (x,y,w,h) — 바뀔 때만 물리 트리를 고친다 */
+  hullKey: string;
 };
 
 export class BoatRide {
@@ -115,11 +121,15 @@ export class BoatRide {
   private auto: (DuckLanding & { until: number }) | null = null;
   private readonly drops: Phaser.GameObjects.Particles.ParticleEmitter;
   private readonly sign: Phaser.GameObjects.Image;
+  /** 11/16 배 몸통 충돌 (헤엄·잠수 중인 나만 막는다 — 배에 탔으면 어느 배에도 안 막힌다) */
+  private readonly hulls: Phaser.Physics.Arcade.StaticGroup;
+  private readonly hullCollider: Phaser.Physics.Arcade.Collider;
 
   constructor(private readonly host: BoatHost) {
     const scene = host.scene;
     ensureRideTextures(scene);
     ensureBoatTextures(scene);
+    this.hulls = scene.physics.add.staticGroup();
     let ducks = 0;
     BOATS.forEach((def, i) => {
       const dir = def.facing;
@@ -127,9 +137,18 @@ export class BoatRide {
       const tex = duck ? ducks++ : i;
       const back = scene.add.sprite(def.x, def.y, duck ? RIDE_TEX.duckBack(dir, tex) : RIDE_TEX.boatBack(def.seats, dir, tex), 0);
       const front = scene.add.sprite(def.x, def.y, duck ? RIDE_TEX.duckFront(dir, tex) : RIDE_TEX.boatFront(def.seats, dir, tex), 0);
-      const v: BoatView = { def, duck, tex, back, front, x: def.x, y: def.y, dir, mode: "docked", returnAt: 0, px: def.x, py: def.y, speed: 0, strokeAt: 0, wakeAt: 0, fade: null };
+      const hull = scene.add.zone(def.x, def.y, 1, 1).setOrigin(0, 0);
+      hull.removeFromDisplayList();
+      this.hulls.add(hull);
+      const v: BoatView = { def, duck, tex, back, front, x: def.x, y: def.y, dir, mode: "docked", returnAt: 0, px: def.x, py: def.y, speed: 0, strokeAt: 0, wakeAt: 0, fade: null, hull, hullKey: "" };
       this.place(v, 0);
+      this.syncHull(v);
       this.views.push(v);
+    });
+    // 헤엄·잠수 중일 때만, 보이는 배만 (사라졌다 나루터에 나타나는 중에는 막지 않는다). 배에 탄 나는 내 배·남의 배 모두 그대로
+    this.hullCollider = scene.physics.add.collider(host.player().sprite, this.hulls, undefined, (_pl, z) => {
+      const v = this.views.find((w) => w.hull === z);
+      return !!v && hullBlocks(this.host.player(), !v.fade);
     });
     // 오리배 선착장 팻말 (판자 왼쪽 둑) — 글씨 "오리배 · 2인승"은 WorldMap 이름표
     const sx = DUCK_DOCK_DECK.x - 12;
@@ -604,7 +623,18 @@ export class BoatRide {
       v.back.setTexture(v.duck ? RIDE_TEX.duckBack(v.dir, v.tex) : RIDE_TEX.boatBack(v.def.seats, v.dir, v.tex), frame);
       v.front.setTexture(v.duck ? RIDE_TEX.duckFront(v.dir, v.tex) : RIDE_TEX.boatFront(v.def.seats, v.dir, v.tex), frame);
       this.place(v, h.reduced ? 0 : Math.sin(wall / 520 + i * 1.3) * (v.duck ? 0.65 : 0.9));
+      this.syncHull(v);
     });
+  }
+
+  /** 몸통 충돌 상자를 배 자리·방향으로 (매어 둔 배·내린 자리에 떠 있는 배·누가 타고 가는 배 모두). 바뀔 때만 물리 트리를 고친다 */
+  private syncHull(v: BoatView): void {
+    const r = boatHull(v.def, v.dir, Math.round(v.x), Math.round(v.y));
+    const key = `${r.x},${r.y},${r.w},${r.h}`;
+    if (key === v.hullKey) return;
+    v.hullKey = key;
+    v.hull.setPosition(r.x, r.y).setSize(r.w, r.h);
+    (v.hull.body as Phaser.Physics.Arcade.StaticBody | null)?.updateFromGameObject();
   }
 
   /**
@@ -706,11 +736,13 @@ export class BoatRide {
   }
 
   destroy(): void {
+    this.hullCollider.destroy();
     for (const v of this.views) {
       v.fade?.stop();
       v.back.destroy();
       v.front.destroy();
     }
+    this.hulls.destroy(true);
     this.drops.destroy();
     this.sign.destroy();
     if (this.duckShown) bridge.emit("boat:duck", { riding: false });

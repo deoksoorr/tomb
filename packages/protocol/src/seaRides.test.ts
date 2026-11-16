@@ -4,9 +4,13 @@ import { MAX_VALID_SPEED, WALK_SPEED } from "./constants";
 import {
   SEA_HEIGHT,
   SEA_JET_MIN_Y,
+  SEA_LIGHTHOUSE,
   SEA_JETSKI_SPEED,
   SEA_JETSKIS,
   SEA_PIER_END,
+  SEA_PONTOON,
+  SEA_PONTOON_RAMP,
+  onSeaDeck,
   SEA_RIDES,
   SEA_TUBE_SPEED,
   SEA_TUBES,
@@ -47,17 +51,21 @@ describe("sea rides", () => {
     expect(SEA_JET_MIN_Y).toBeGreaterThan(TIDE_LOW_Y);
     for (const j of SEA_JETSKIS) {
       expect(seaJetWater(j.x, j.y), `${j.x},${j.y}`).toBe(true);
-      // 선착장 끝 데크 동쪽 가장자리 바로 옆 (데크에서 타요)
-      expect(j.x - (SEA_PIER_END.x + SEA_PIER_END.w)).toBeLessThan(30);
-      expect(j.y).toBeGreaterThan(SEA_PIER_END.y);
-      expect(j.y).toBeLessThan(SEA_PIER_END.y + SEA_PIER_END.h + 10);
+      // r14 부잔교 동쪽 가장자리 바로 옆 (부잔교에서 타고 내려요) — 선착장 끝 데크(낚시 자리·걸터앉기)와는 물길로 떨어져요
+      expect(j.x - (SEA_PONTOON.x + SEA_PONTOON.w)).toBeLessThan(30);
+      expect(j.y).toBeGreaterThan(SEA_PONTOON.y);
+      expect(j.y).toBeLessThan(SEA_PONTOON.y + SEA_PONTOON.h);
+      expect(SEA_PONTOON.x).toBeGreaterThan(SEA_PIER_END.x + SEA_PIER_END.w + 4);
+      // 부잔교 위는 마른 발판, 다리로 선착장 몸통과 이어져요
+      expect(onSeaDeck(SEA_PONTOON.x + 10, j.y)).toBe(true);
+      expect(onSeaDeck(SEA_PONTOON_RAMP.x + 18, SEA_PONTOON_RAMP.y + 6)).toBe(true);
     }
     expect(seaJetWater(400, SEA_JET_MIN_Y - 1)).toBe(false);
     expect(seaJetWater(400, 820)).toBe(true);
     // 선착장 끝·방파제·바위에는 못 들어가요
     expect(seaJetWater(SEA_PIER_END.x + 20, SEA_PIER_END.y + 20)).toBe(false);
-    expect(seaRideBlocked(1184, 690)).toBe(true);
-    expect(seaRideBlocked(1340, 660)).toBe(true);
+    expect(seaRideBlocked(SEA_LIGHTHOUSE.x, 690)).toBe(true);
+    expect(seaRideBlocked(1580, 660)).toBe(true);
   });
   it("속도: 튜브는 걷기보다 느리고, 제트스키는 조각배(46)의 두 배 — 둘 다 서버 속도 검증 안", () => {
     expect(SEA_TUBE_SPEED).toBeLessThan(WALK_SPEED);

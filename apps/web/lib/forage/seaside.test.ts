@@ -43,7 +43,7 @@ afterEach(() => vi.restoreAllMocks());
 const MIN = 60_000;
 const HIGH = Date.UTC(2026, 10, 15, 15, 0); // 11/16 0시 KST = 만조
 const LOW = HIGH + 90 * MIN; // 간조 한가운데 (갯벌 구멍이 모두 열려요)
-const ROCK = "f_1084_528"; // 방파제 쪽 바위 곶 (만조에 물속)
+const ROCK = "f_1324_528"; // 방파제 쪽 바위 곶 (만조에 물속)
 const LAKE = "f_1172_932"; // 마을 호수 잔교 끝
 const SEA_FISH = speciesOf("fish").filter((s) => s.where.includes("sea"));
 const FLAT = speciesOf("dig").filter((s) => s.where.includes("flat"));

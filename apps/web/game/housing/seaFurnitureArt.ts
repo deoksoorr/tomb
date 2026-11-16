@@ -179,15 +179,6 @@ function driftBase(g: Grid, x: number, y: number, w: number): void {
   g.set(x + 2, y + 1, R.drift[4]);
   g.set(x + w - 4, y + 2, R.drift[4]);
 }
-/** 회전한 타원 안인지 (a = 라디안). 안이면 중심에서 거리 비율(0..1), 밖이면 -1 */
-function inEllipse(x: number, y: number, cx: number, cy: number, rx: number, ry: number, a: number): number {
-  const dx = x - cx;
-  const dy = y - cy;
-  const u = (dx * Math.cos(a) + dy * Math.sin(a)) / rx;
-  const v = (-dx * Math.sin(a) + dy * Math.cos(a)) / ry;
-  const d = u * u + v * v;
-  return d <= 1 ? Math.sqrt(d) : -1;
-}
 
 /** 진주빛 소라 색 (밝음 → 어두움): 크림 · 연분홍 · 살구 · 모래갈색 */
 const CONCH = hexes(["#fffaf2", "#fbeadb", "#f6d3c0", "#e9b49e", "#cf9580", "#a8705e"]);
@@ -639,16 +630,35 @@ export const SEA_WALL_CAP: Record<string, Color> = { wall_sea: 0x4e6a7c, wall_sh
 export const isSeaArt = (id: string) => id in SEA_DRAW;
 
 /** 구명 튜브를 낀 사람 허리에 두르는 고리 그림 (가로 14 × 6) */
-export function wornRingGrid(): Grid {
-  const g = new Grid(14, 6);
-  for (let x = 0; x < 14; x++)
-    for (let y = 0; y < 6; y++) {
-      const dx = (x - 6.5) / 7;
-      const dy = (y - 2.5) / 3;
+/**
+ * 구명 튜브를 허리에 낀 모습 (빨강·하양 고리 — 위에서 비스듬히 본 납작한 고리).
+ * part: back = 몸 뒤로 지나가는 윗 반 (사람 뒤에 그린다), front = 몸 앞으로 지나가는 아랫 반 (사람 앞에 그린다).
+ * side = 옆을 볼 때 (고리를 옆에서 봐 좁다)
+ */
+export function wornRingGrid(part: "back" | "front" = "front", side = false): Grid {
+  const W = side ? 11 : 15;
+  const H = 7;
+  const g = new Grid(W, H);
+  const cx = (W - 1) / 2;
+  const cy = 3;
+  const rx = side ? 5 : 7;
+  const ry = 3;
+  for (let x = 0; x < W; x++)
+    for (let y = 0; y < H; y++) {
+      const dx = (x - cx) / rx;
+      const dy = (y - cy) / ry;
       const d = dx * dx + dy * dy;
-      if (d > 1 || (d < 0.3 && y < 3)) continue;
-      const seg = Math.floor(x / 3.5) % 2;
-      g.set(x, y, seg ? (y > 2 ? darken(R.coral[2], 0.08) : R.coral[1]) : y > 2 ? R.shell[2] : R.shell[0]);
+      // 고리 (가운데 구멍은 몸이 지나간다)
+      const hole = ((x - cx) / (rx - 3)) ** 2 + ((y - cy) / (ry - 1.6)) ** 2;
+      if (d > 1 || hole < 1) continue;
+      const back = y < cy || (y === cy && Math.abs(x - cx) < rx - 1);
+      if ((part === "back") !== back) continue;
+      // 빨강·하양 네 마디 (고리 둘레 각도로)
+      const ang = Math.atan2((y - cy) * (rx / ry), x - cx);
+      const seg = Math.floor(((ang + Math.PI) / (Math.PI * 2)) * 8) % 2;
+      const shade = back ? 0.18 : y > cy ? 0.1 : 0;
+      // 진짜 구명 튜브처럼 또렷한 빨강·하양 (멀리서도 허리에 낀 게 보이게)
+      g.set(x, y, seg ? darken(0xe0503e, shade) : darken(0xfff8ef, shade + 0.04));
     }
   g.outline(SEA_EDGE, false, SEA_EDGE_A);
   return g;

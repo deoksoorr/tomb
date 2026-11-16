@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SEA_FURNITURE, SEA_SPOTS } from "@tomb/protocol";
+import { SEA_FURNITURE, SEA_PIER, SEA_SPOTS } from "@tomb/protocol";
 import { seaViewFore, seaViewLandmarks, seaViewProject } from "./seaViewGeom";
 
 // 11/16 바다 보기 원근: 바다(남쪽)를 보고 앉아서 지도 동쪽이 장면 왼쪽 (사용자 확정)
@@ -23,7 +23,7 @@ describe("바다 보기 원근 (seaViewGeom)", () => {
 
   it("벤치 동쪽 파라솔은 장면 왼쪽 반에, 벤치 앞 줄은 모두 벤치 남쪽(앞)", () => {
     const benches = SEA_FURNITURE.filter((f) => f.id.startsWith("pS"));
-    expect(benches.length).toBe(4);
+    expect(benches.length).toBe(5); // r14 동쪽 백사장 벤치 하나 더
     for (const b of benches) {
       const { spec } = seaViewFore(b.x, b.y);
       expect(spec.loungers.length, b.id).toBeGreaterThan(0);
@@ -42,7 +42,7 @@ describe("바다 보기 원근 (seaViewGeom)", () => {
   });
 
   it("선착장 서쪽 선베드에서 보면 선착장은 장면 왼쪽", () => {
-    const l = SEA_SPOTS.loungers.find((q) => q.x > 380 && q.x < 560)!;
+    const l = SEA_SPOTS.loungers.find((q) => q.x > SEA_PIER.x - 180 && q.x < SEA_PIER.x - 40)!;
     const lm = seaViewLandmarks(l.x, l.y - 8);
     const pier = lm.strips.find((s) => s.kind === "pier");
     expect(pier).toBeDefined();

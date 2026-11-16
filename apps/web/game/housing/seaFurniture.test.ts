@@ -7,6 +7,8 @@ import { STATE_MAX, stateTarget } from "@/lib/housing/states";
 import type { HouseLayout, Placed } from "@/lib/housing/types";
 import { artUp, floorGrid, furnitureGrid, itemVariant, wallCapColor, wallGrid, WALL_H } from "./art";
 import { houseSpots, houseTargets, USE_LABEL } from "./interact";
+import { wornRingGrid } from "./seaFurnitureArt";
+import { HAMMOCK_H, HAMMOCK_W, hammockLieKey, hammockLieSheet, LIE_FRAMES } from "../sprites/hammockArt";
 
 // 11/16 바닷가 세트: 모든 가구가 네 방향 그림을 갖고, 어느 방향으로 놓아도 쓸 수 있다 (사용자 요구)
 
@@ -138,5 +140,50 @@ describe("바닷가 세트 쓰기 (네 방향 모두)", () => {
         const v = validateLayout(lay([at(f.id, r)]), "small", owned);
         expect(v.ok, `${f.id} r${r} ${v.ok ? "" : v.message}`).toBe(true);
       }
+  });
+
+  it("구명 튜브를 끼면 고리 윗 반은 몸 뒤, 아랫 반은 몸 앞 (둘이 겹치지 않고 합치면 고리), 옆을 보면 좁다", () => {
+    for (const side of [false, true]) {
+      const back = wornRingGrid("back", side);
+      const front = wornRingGrid("front", side);
+      expect(back.w).toBe(front.w);
+      let b = 0;
+      let f = 0;
+      let lowBack = 0;
+      for (let y = 0; y < back.h; y++)
+        for (let x = 0; x < back.w; x++) {
+          if (back.get(x, y) & 255) {
+            b++;
+            if (y > back.h / 2 + 1) lowBack++;
+          }
+          if (front.get(x, y) & 255) f++;
+        }
+      expect(b).toBeGreaterThan(4);
+      expect(f).toBeGreaterThan(4);
+      // 뒤 반쪽은 위쪽에 (아래 끝까지 내려오지 않는다)
+      expect(lowBack).toBe(0);
+    }
+    expect(wornRingGrid("front", true).w).toBeLessThan(wornRingGrid("front", false).w);
+  });
+
+  it("오두막 해먹에 누운 그림은 바닷가 해먹 무늬 (마을 해먹과 같은 크기·프레임, 다른 텍스처 키)", () => {
+    const village = hammockLieSheet("hood", "#9fc5a8");
+    const sea = hammockLieSheet("hood", "#9fc5a8", [], "sea");
+    expect(sea.grid.w).toBe(HAMMOCK_W * LIE_FRAMES);
+    expect(sea.grid.h).toBe(HAMMOCK_H);
+    let diff = 0;
+    for (let i = 0; i < sea.grid.px.length; i++) if (sea.grid.px[i] !== village.grid.px[i]) diff++;
+    expect(diff).toBeGreaterThan(50);
+    expect(hammockLieKey("av", "sea")).not.toBe(hammockLieKey("av"));
+  });
+
+  it("해먹에 누운 동안 가구 그림은 기둥만 (네 방향)", () => {
+    for (let r = SPIN_R0; r < SPIN_R0 + 4; r++) {
+      const full = furnitureGrid("sea_hammock", itemVariant("sea_hammock", "", { r }))!;
+      const posts = furnitureGrid("sea_hammock", itemVariant("sea_hammock", "lie", { r }))!;
+      const count = (g: typeof full) => g.px.filter((v) => v & 255).length;
+      expect(count(posts)).toBeLessThan(count(full) * 0.6);
+      expect(count(posts)).toBeGreaterThan(10);
+    }
   });
 });

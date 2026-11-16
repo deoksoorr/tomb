@@ -30,6 +30,8 @@ import {
   SEA_LOT_MAILBOX,
   SEA_PIER,
   SEA_PIER_END,
+  SEA_PONTOON,
+  SEA_PONTOON_RAMP,
   SEA_REALTY,
   SEA_ROCKS,
   SEA_TIDE_POOLS,
@@ -369,6 +371,9 @@ export class SeaMap implements SeaMapApi {
     const T = Art.SEA_TEX;
     this.keep(s.add.image(SEA_PIER.x, SEA_PIER.y, T.pier).setOrigin(0, 0).setDepth(SEA_DEPTH.deck));
     this.keep(s.add.image(SEA_PIER_END.x, SEA_PIER_END.y, T.pierEnd).setOrigin(0, 0).setDepth(SEA_DEPTH.deck + 1));
+    // 11/16 r14 제트스키 부잔교 (물에 떠서 선착장보다 낮게 — 선착장 판 아래 depth) · 다리
+    this.keep(s.add.image(SEA_PONTOON.x - 2, SEA_PONTOON.y, T.pontoon).setOrigin(0, 0).setDepth(SEA_DEPTH.deck - 2));
+    this.keep(s.add.image(SEA_PONTOON_RAMP.x, SEA_PONTOON_RAMP.y, T.pontoonRamp).setOrigin(0, 0).setDepth(SEA_DEPTH.deck - 1));
     this.keep(s.add.image(SEA_BREAKWATER.x, SEA_BREAKWATER.y, T.breakwater).setOrigin(0, 0).setDepth(SEA_DEPTH.deck));
     this.keep(s.add.image(SEA_BREAKWATER_TIP.x, SEA_BREAKWATER_TIP.y, T.tip).setOrigin(0, 0).setDepth(SEA_DEPTH.deck + 1));
   }
@@ -1280,15 +1285,15 @@ export type SeaTexBuild = () => Art.ArtOut | ReturnType<typeof Art.realtyArt>;
 export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?: boolean) => void): void {
   const T = Art.SEA_TEX;
   for (let v = 0; v < 2; v++) {
-    tex(T.pine(v), () => Art.pineArt(v));
-    tex(T.bush(v), () => Art.bushArt(v));
+    tex(T.pine(v), () => Art.withDetail(Art.pineArt(v), {}));
+    tex(T.bush(v), () => Art.withDetail(Art.bushArt(v), {}));
   }
-  tex(T.palm, Art.palmArt);
+  tex(T.palm, () => Art.withDetail(Art.palmArt(), {}));
   for (let v = 0; v < 3; v++) {
     tex(T.beachGrass(v), () => Art.beachGrassArt(v));
     tex(T.shell(v), () => Art.shellArt(v));
     tex(T.flower(v), () => Art.flowerArt(v));
-    tex(T.tetra(v), () => Art.tetraArt(v));
+    tex(T.tetra(v), () => Art.withDetail(Art.tetraArt(v), {}));
   }
   tex(T.drift, Art.driftArt);
   // 물 층은 바닷가에 내리자마자 보여요 → 앞쪽에
@@ -1305,59 +1310,61 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   tex(T.duskWater, Art.duskWaterArt);
   tex(T.duskFoam, Art.duskFoamArt);
   tex(T.goldStreak, Art.goldStreakArt);
-  tex(T.shelter, Art.shelterArt);
-  tex(T.busSign, Art.busSignArt);
-  tex(T.timetable, Art.timetableArt);
-  tex(T.bench, Art.benchArt);
-  tex(T.realty, Art.realtyArt);
-  tex(T.kiosk, Art.kioskArt);
-  for (const l of SEA_LOTS) tex(T.lot(l.n), () => Art.lotArt(l));
-  tex(T.mailbox, Art.mailboxArt);
-  tex(T.stone(0), () => Art.stoneArt(0));
-  tex(T.stone(1), () => Art.stoneArt(1));
+  tex(T.shelter, () => Art.withDetail(Art.shelterArt(), {}));
+  tex(T.busSign, () => Art.withDetail(Art.busSignArt(), {}));
+  tex(T.timetable, () => Art.withDetail(Art.timetableArt(), {}));
+  tex(T.bench, () => Art.withDetail(Art.benchArt(), { wood: true }));
+  tex(T.realty, () => Art.withDetail(Art.realtyArt(), {}));
+  tex(T.kiosk, () => Art.withDetail(Art.kioskArt(), {}));
+  for (const l of SEA_LOTS) tex(T.lot(l.n), () => Art.withDetail(Art.lotArt(l), { wood: true }));
+  tex(T.mailbox, () => Art.withDetail(Art.mailboxArt(), {}));
+  tex(T.stone(0), () => Art.withDetail(Art.stoneArt(0), {}));
+  tex(T.stone(1), () => Art.withDetail(Art.stoneArt(1), {}));
   tex(T.crab, Art.crabArt);
-  tex(T.ledge, Art.ledgeArt);
-  for (let v = 0; v < 3; v++) tex(T.mat(v), () => Art.matArt(v));
-  for (let v = 0; v < 2; v++) tex(T.parasol(v), () => Art.parasolArt(v));
-  tex(T.lounger, Art.loungerArt);
+  tex(T.ledge, () => Art.withDetail(Art.ledgeArt(), {}));
+  for (let v = 0; v < 3; v++) tex(T.mat(v), () => Art.withDetail(Art.matArt(v), {}));
+  for (let v = 0; v < 2; v++) tex(T.parasol(v), () => Art.withDetail(Art.parasolArt(v), {}));
+  tex(T.lounger, () => Art.withDetail(Art.loungerArt(), { wood: true }));
   // 11/16 r12 쉴 곳 그림 · 음료 자판기 (캠핑장 그림)
-  tex(T.picnicTop, Art.picnicTopArt);
-  tex(T.picnicPlank, Art.picnicPlankArt);
-  tex(T.ashLogs, Art.ashLogsArt);
-  tex(T.driftLog, Art.driftLogArt);
-  for (let v = 0; v < 3; v++) tex(T.cushion(v), () => Art.cushionArt(v));
+  tex(T.picnicTop, () => Art.withDetail(Art.picnicTopArt(), { wood: true }));
+  tex(T.picnicPlank, () => Art.withDetail(Art.picnicPlankArt(), { wood: true }));
+  tex(T.ashLogs, () => Art.withDetail(Art.ashLogsArt(), {}));
+  tex(T.driftLog, () => Art.withDetail(Art.driftLogArt(), { wood: true }));
+  for (let v = 0; v < 3; v++) tex(T.cushion(v), () => Art.withDetail(Art.cushionArt(v), {}));
   // 11/16 r13 튜브 다섯 색 · 제트스키 두 색 (옆·앞·뒤) · 물살 자국
-  for (let v = 0; v < 5; v++) tex(T.tube(v), () => Art.tubeArt(v));
+  for (let v = 0; v < 5; v++) tex(T.tube(v), () => Art.withDetail(Art.tubeArt(v), {}));
   for (let v = 0; v < 2; v++) {
-    tex(T.jetski("side", v), () => Art.jetskiSideArt(v));
-    tex(T.jetski("front", v), () => Art.jetskiFbArt(true, v));
-    tex(T.jetski("back", v), () => Art.jetskiFbArt(false, v));
+    tex(T.jetski("side", v), () => Art.withDetail(Art.jetskiSideArt(v), {}));
+    tex(T.jetski("front", v), () => Art.withDetail(Art.jetskiFbArt(true, v), {}));
+    tex(T.jetski("back", v), () => Art.withDetail(Art.jetskiFbArt(false, v), {}));
   }
   tex(T.wake, Art.wakeArt);
   tex(CAMP_TEX.vending, vendingArt);
   tex(CAMP_TEX.vendingLit, vendingLitArt);
   // 11/16 매점 먹거리·마실 거리 그림 (먹을 때 머리 위에 뜨는 접시·잔 — 캠핑장과 같은 그림, 바닷가에서 바로 들어오면 아직 없어요)
   for (const m of BBQ_MENU) tex(CAMP_TEX.bbqPlate(m.id), () => bbqPlateArt(m.id));
-  tex(T.lotSign, Art.lotSignArt);
-  tex(T.pier, Art.pierArt);
-  tex(T.pierEnd, Art.pierEndArt);
-  tex(T.post, Art.postArt);
-  tex(T.breakwater, Art.breakwaterArt);
-  tex(T.tip, Art.tipArt);
-  tex(T.lighthouse, Art.lighthouseArt);
+  tex(T.lotSign, () => Art.withDetail(Art.lotSignArt(), {}));
+  tex(T.pier, () => Art.withDetail(Art.pierArt(), { wood: true }));
+  tex(T.pierEnd, () => Art.withDetail(Art.pierEndArt(), { wood: true }));
+  tex(T.pontoon, () => Art.withDetail(Art.pontoonArt(), { wood: true }));
+  tex(T.pontoonRamp, () => Art.withDetail(Art.pontoonRampArt(), { wood: true }));
+  tex(T.post, () => Art.withDetail(Art.postArt(), { wood: true }));
+  tex(T.breakwater, () => Art.withDetail(Art.breakwaterArt(), {}));
+  tex(T.tip, () => Art.withDetail(Art.tipArt(), {}));
+  tex(T.lighthouse, () => Art.withDetail(Art.lighthouseArt(), {}));
   tex(T.keeper, Art.keeperArt);
-  tex(T.boat, Art.boatArt);
-  tex(T.buoy, Art.buoyArt);
+  tex(T.boat, () => Art.withDetail(Art.boatArt(), {}));
+  tex(T.buoy, () => Art.withDetail(Art.buoyArt(), {}));
   SEA_ROCKS.forEach((_r, i) => {
     tex(T.rock(i), () => Art.rockArt(i));
     tex(T.rockFoam(i), () => Art.rockFoamArt(i));
   });
-  tex(T.footbath, Art.footbathArt);
-  tex(T.lamp, Art.lampArt);
+  tex(T.footbath, () => Art.withDetail(Art.footbathArt(), {}));
+  tex(T.lamp, () => Art.withDetail(Art.lampArt(), {}));
   tex(T.lampGlow, () => Art.glowArt(24, 0xffe2a8, 1.8), true);
   tex(T.beaconGlow, () => Art.glowArt(48, 0xfff4c8, 1.5), true);
-  tex(T.crates, Art.cratesArt);
-  tex(T.netRack, Art.netRackArt);
+  tex(T.crates, () => Art.withDetail(Art.cratesArt(), { wood: true }));
+  tex(T.netRack, () => Art.withDetail(Art.netRackArt(), { wood: true }));
   tex(T.gull, Art.gullArt);
   tex(T.spray, Art.sprayArt);
   tex(T.sparkle, Art.sparkleArt);

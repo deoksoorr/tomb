@@ -1,8 +1,9 @@
 import * as Phaser from "phaser";
-import { DIR, SEA_JET_SHALLOW_MSG, SEA_JETSKI_SPEED, SEA_PIER_END, SEA_RIDES, SEA_TUBE_SPEED, onSeaDeck, seaTubeDriftAt, seaWet, type DirId, type SeaRide, type Sid } from "@tomb/protocol";
+import { DIR, SEA_JET_SHALLOW_MSG, SEA_JETSKI_SPEED, SEA_RIDES, seaJetDismount, SEA_TUBE_SPEED, onSeaDeck, seaTubeDriftAt, seaWet, type DirId, type SeaRide, type Sid } from "@tomb/protocol";
 import { BIG_RIDE_TOAST, myBig } from "../camp/foodState";
 import type { Player } from "../entities/Player";
 import type { RemoteAvatar } from "../entities/RemoteAvatar";
+import { hullBlocks } from "../logic/boat";
 import type { MoveInput } from "../logic/movement";
 import { RideSound } from "../world/RideSound";
 import { bystanderGain } from "../world/rides";
@@ -57,10 +58,15 @@ type View = {
   lastY: number;
   wakeAt: number;
   sprayAt: number;
+  /** 11/16 r14 헤엄치는 사람이 부딪히는 몸 (탄 사람 자신은 빼요) */
+  block: Phaser.GameObjects.Zone;
+  blockKey: string;
+  /** 내가 막 내린 놀거리는 잠깐 통과 (내린 자리에서 밀려나지 않게) */
+  passUntil: number;
 };
 
 /** 튜브에 탄 사람이 물에 잠기는 깊이 · 제트스키 안장 높이 (px) */
-const TUBE_SINK = -5;
+const TUBE_SINK = -2;
 const JET_LIFT = 4;
 /** 올라타는 거리 (튜브 가운데·매어 둔 자리에서) */
 const TUBE_REACH = 22;
@@ -76,6 +82,12 @@ const JET_RETURN_MS = 2500;
 const JET_FADE_MS = 500;
 /** 노 젓는 소리 간격 */
 const PADDLE_MS = 900;
+/** 내린 뒤 그 놀거리를 통과하는 시간 */
+const PASS_AFTER_LEAVE_MS = 2000;
+/** 부딪히는 몸 크기 (튜브는 작게 — 옆에서 E로 탈 수 있게, 제트스키는 방향마다) */
+const TUBE_BLOCK = { w: 14, h: 6 };
+const JET_BLOCK_SIDE = { w: 28, h: 8 };
+const JET_BLOCK_FB = { w: 12, h: 12 };
 
 export class SeaRides {
   private readonly views: View[] = [];
@@ -89,6 +101,8 @@ export class SeaRides {
   private paddleAt = 0;
   /** 이번 프레임에 탄 모습을 넣어 준 원격 아바타 (내리면 되돌려요) */
   private riders = new Set<RemoteAvatar>();
+  private readonly blocks: Phaser.Physics.Arcade.StaticGroup;
+  private readonly blockCollider: Phaser.Physics.Arcade.Collider;
 
   constructor(private readonly host: SeaRideHost) {
     const s = host.scene;
@@ -98,8 +112,27 @@ export class SeaRides {
       const key = tube ? T.tube(def.n) : T.jetski("side", def.n);
       const body = s.add.image(def.x, def.y, key).setOrigin(0.5, tube ? Art.TUBE_CY / Art.TUBE_H : 1);
       const front = tube ? s.add.image(def.x, def.y, key).setOrigin(0.5, Art.TUBE_CY / Art.TUBE_H).setCrop(0, Art.TUBE_CY, Art.TUBE_W, Art.TUBE_H - Art.TUBE_CY).setVisible(false) : null;
-      this.views.push({ def, body, front, x: def.x, y: def.y, dir: DIR.down, owner: null, leftFrom: null, leftAt: 0, speed: 0, lastX: def.x, lastY: def.y, wakeAt: 0, sprayAt: 0 });
+      const block = s.add.zone(def.x, def.y, 1, 1).setOrigin(0, 0);
+      block.removeFromDisplayList();
+      this.views.push({ def, body, front, x: def.x, y: def.y, dir: DIR.down, owner: null, leftFrom: null, leftAt: 0, speed: 0, lastX: def.x, lastY: def.y, wakeAt: 0, sprayAt: 0, block, blockKey: "", passUntil: 0 });
     }
+    // 11/16 r14 사용자: 헤엄치다 제트스키·튜브를 그냥 지나가요 → 부딪혀요 (내가 탄 것·막 내린 것은 빼요)
+    // 마을 배(BoatRide hullBlocks)와 같은 규칙: 헤엄·잠수 중이고 아무것도 안 탔을 때만, 보이는 놀거리만, 막 내린 것은 잠깐 통과.
+    // 떠다니는 빈 튜브가 가만히 있는 사람 쪽으로 밀려오면 밀어내지 않아요 (그 사람이 튜브 쪽으로 헤엄칠 때만 막아요)
+    this.blocks = s.physics.add.staticGroup();
+    for (const v of this.views) this.blocks.add(v.block);
+    this.blockCollider = s.physics.add.collider(host.player().sprite, this.blocks, undefined, (_a, b) => {
+      const v = this.views.find((w) => w.block === b);
+      const pl = host.player();
+      if (!v || v.owner === -1 || s.time.now < v.passUntil || v.body.alpha < 0.5 || !hullBlocks(pl, true)) return false;
+      if (v.def.kind === "tube" && v.owner === null) {
+        const bd = pl.sprite.body as Phaser.Physics.Arcade.Body | null;
+        const vx = bd?.velocity.x ?? 0;
+        const vy = bd?.velocity.y ?? 0;
+        return vx * (v.x - pl.x) + vy * (v.y - pl.y) > 0;
+      }
+      return true;
+    });
     for (let i = 0; i < (host.reduced ? 16 : 48); i++) this.wakes.push(s.add.image(0, 0, T.wake).setVisible(false).setDepth(0));
   }
 
@@ -192,10 +225,9 @@ export class SeaRides {
     if (!h.reduced) h.splash(v.x, v.y + 2);
   }
 
-  /** 제트스키에서 내려설 데크 자리 (매어 둔 자리 바로 옆 선착장 끝 데크 동쪽 가장자리) */
+  /** 제트스키에서 내려설 자리 (r14 매어 둔 자리 바로 옆 부잔교 위 — 다리로 선착장과 이어져요) */
   private jetDeckSpot(v: View): { x: number; y: number } {
-    const E = SEA_PIER_END;
-    return { x: E.x + E.w - 10, y: Math.max(E.y + 10, Math.min(E.y + E.h - 8, v.def.y - 4)) };
+    return seaJetDismount(v.def);
   }
 
   private leave(v: View, to: { x: number; y: number }, toast?: string): void {
@@ -212,6 +244,7 @@ export class SeaRides {
       v.leftAt = now;
     }
     v.owner = null;
+    v.passUntil = now + PASS_AFTER_LEAVE_MS;
     pl.leaveBoat(Math.round(to.x), Math.round(to.y), now);
     pl.view.ride = null;
     if (h.online()) h.stand();
@@ -264,7 +297,7 @@ export class SeaRides {
         this.leave(v, { x: m.x, y: m.y });
         return;
       }
-      const r = stepTube(m, move, dtMs, level, Date.now());
+      const r = stepTube(m, move, dtMs, level, Date.now(), v.def.n * 1.7);
       if (r.land) {
         this.leave(v, r.land);
         return;
@@ -399,9 +432,25 @@ export class SeaRides {
       v.body.setFlipX(v.dir === DIR.left).setPosition(x, y + 5).setDepth(v.y).setAlpha(alpha);
       lift = JET_LIFT + bob + (v.speed > 30 && !this.host.reduced ? Math.sin(wall / 70) * 0.6 : 0);
     }
-    const ride = { ox: 0, lift: Math.round(lift), depth: v.y + 1 };
+    this.syncBlock(v, x, y);
+    // 11/16 r14 사용자: 튜브에선 머리(와 어깨)만 고리 위로 — 헤엄 자세 그림으로 몸을 물에 담가요 (뒤 고리 < 사람 < 앞 고리)
+    const ride = { ox: 0, lift: Math.round(lift), depth: v.y + 1, ...(v.def.kind === "tube" ? { alt: "swim" as const } : {}) };
     if (v.owner === -1) this.host.player().view.ride = ride;
     else if (rider) rider.view.ride = ride;
+  }
+
+  /** 부딪히는 몸을 그림 자리·방향에 맞춰요 (바뀔 때만 — 마을 배 hull과 같은 방식) */
+  private syncBlock(v: View, x: number, y: number): void {
+    const side = v.def.kind === "jetski" && (v.dir === DIR.left || v.dir === DIR.right);
+    const sz = v.def.kind === "tube" ? TUBE_BLOCK : side ? JET_BLOCK_SIDE : JET_BLOCK_FB;
+    const cy = v.def.kind === "tube" ? y : y - 2;
+    const rx = Math.round(x - sz.w / 2);
+    const ry = Math.round(cy - sz.h / 2);
+    const key = `${rx},${ry},${sz.w},${sz.h}`;
+    if (key === v.blockKey) return;
+    v.blockKey = key;
+    v.block.setPosition(rx, ry).setSize(sz.w, sz.h);
+    (v.block.body as Phaser.Physics.Arcade.StaticBody | null)?.updateFromGameObject();
   }
 
   /** 움직이는 놀거리 뒤 물살 자국 (제트스키는 촘촘히 + 물보라) */
@@ -439,6 +488,8 @@ export class SeaRides {
     }
     this.views.length = 0;
     for (const w of this.wakes) w.destroy();
+    this.blockCollider.destroy();
+    this.blocks.destroy(true);
     this.wakes.length = 0;
     this.sound.destroy();
     this.engine.destroy();

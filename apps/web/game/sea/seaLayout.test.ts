@@ -19,6 +19,10 @@ import {
   seaLotFront,
   seaLotGate,
   SEA_PIER,
+  SEA_JETSKIS,
+  SEA_PONTOON_RAMP,
+  seaJetDismount,
+  onSeaDeck,
   SEA_PIER_END,
   SEA_ROCKS,
   SEA_SEATS,
@@ -139,6 +143,17 @@ describe("seaLayout — 걷기", () => {
       expect(seaWet(x, y, 0), `${x},${y}`).toBe(true);
     }
     expect(seaStandable(300, SEA_HEIGHT - 5)).toBe(false);
+  });
+  // 11/16 r14 제트스키 부잔교: 내려서는 자리·다리는 막히지 않고, 다리로 선착장 몸통(→ 백사장)과 이어져요
+  it("제트스키 부잔교에서 내려 선착장으로 걸어 나가요", () => {
+    for (const j of SEA_JETSKIS) {
+      const d = seaJetDismount(j);
+      expect(seaStandable(d.x, d.y), `${d.x},${d.y}`).toBe(true);
+      expect(onSeaDeck(d.x, d.y)).toBe(true);
+    }
+    const r = SEA_PONTOON_RAMP;
+    for (let x = r.x - 6; x <= r.x + r.w + 6; x += 4) expect(seaStandable(x, r.y + r.h / 2 + 2), `ramp ${x}`).toBe(true);
+    expect(seaStandable(SEA_PIER.x + SEA_PIER.w / 2, SEA_PIER.y + 20)).toBe(true);
   });
   it("다음 차수 쉴거리 자리·좌석은 비어 있다", () => {
     for (const p of SEA_FUTURE_SPOTS) expect(seaStandable(p.x, p.y), `${p.x},${p.y}`).toBe(true);
