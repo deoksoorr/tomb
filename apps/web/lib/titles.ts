@@ -495,45 +495,45 @@ export const equippedPerk = (equipped: readonly { itemId: string }[] | null | un
 
 const pct = (x: number) => Math.round(x * 100);
 
-/** 11/16 갈래 능력 한 마디 (긴 것 · 짧은 것 — 가방 칭호 카드) */
+/** 11/16 갈래 능력 한 마디 [긴 것(문장) · 짧은 것(가방 칭호 카드)] — 숫자만 봐도 뭔지 알게 쉬운 말로 */
 function groupText(p: TitlePerk): [string, string] | null {
   switch (p.group) {
     case "hunt":
-      return [`사냥 경험치 +${pct(p.huntExp)}%`, `사냥 EXP +${pct(p.huntExp)}%`];
+      return [`사냥에서 경험치를 ${pct(p.huntExp)}% 더 받아요.`, `사냥 경험치 +${pct(p.huntExp)}%`];
     case "tower":
-      return [`야근 빌딩 층마다 +${p.towerSec}초`, `층 +${p.towerSec}초`];
+      return [`야근 빌딩에서 층마다 제한 시간이 ${p.towerSec}초 늘어나요.`, `야근 빌딩 층마다 ${p.towerSec}초 더`];
     case "fish":
-      return [`큰 물고기 확률 +${pct(p.bigFish)}%`, `큰 물고기 +${pct(p.bigFish)}%`];
+      return [`직접 낚시할 때 큰 물고기가 ${pct(p.bigFish)}% 더 잘 걸려요.`, `큰 물고기 확률 +${pct(p.bigFish)}%`];
     case "forage":
-      return [`희귀 채집물 확률 +${pct(p.rareGather)}%`, `희귀 채집 +${pct(p.rareGather)}%`];
+      return [`채집할 때 희귀한 게 ${pct(p.rareGather)}% 더 잘 나와요.`, `희귀 채집 확률 +${pct(p.rareGather)}%`];
     case "stay":
-      return [`머무르기 보상 +${pct(p.stayBonus)}%`, `머무르기 +${pct(p.stayBonus)}%`];
+      return [`접속 시간 보너스를 ${pct(p.stayBonus)}% 더 받아요. 하루 최대치는 같아요.`, `접속 보너스 +${pct(p.stayBonus)}%`];
     case "look":
-      return [`상점·염색 ${pct(p.discount)}% 할인`, `할인 ${pct(p.discount)}%`];
+      return [`상점 물건과 염색권을 ${pct(p.discount)}% 싸게 사요.`, `상점 ${pct(p.discount)}% 할인`];
     case "quest":
-      return [`의뢰 도장 하나 더 받을 확률 ${pct(p.questStamp)}%`, `도장 하나 더 ${pct(p.questStamp)}%`];
+      return [`의뢰를 끝낼 때 ${pct(p.questStamp)}% 확률로 도장을 하나 더 받아요.`, `${pct(p.questStamp)}% 확률로 도장 +1`];
     case "dex":
-      return [`도감 새 칸 보상 +${pct(p.dexBonus)}%`, `도감 보상 +${pct(p.dexBonus)}%`];
+      return [`도감을 새로 채울 때 포인트를 ${pct(p.dexBonus)}% 더 받아요.`, `도감 포인트 +${pct(p.dexBonus)}%`];
     case "house":
-      return [`가구 ${pct(p.houseDiscount)}% 할인`, `가구 할인 ${pct(p.houseDiscount)}%`];
+      return [`가구를 ${pct(p.houseDiscount)}% 싸게 사요.`, `가구 ${pct(p.houseDiscount)}% 할인`];
     case "champ":
-      return ["반짝이는 발자국", "반짝 발자국"];
+      return ["걸으면 발밑에 반짝이는 별가루가 남아요.", "걸으면 별가루"];
     default:
       return null;
   }
 }
 
-/** 칭호 능력 한 줄 ("마을 이동 +3% · 큰 물고기 확률 +6%", 없으면 "") */
+/** 칭호 능력 문장 ("마을에서 3% 더 빨리 걸어요. 큰 물고기가 …", 없으면 "") */
 export function perkText(t: Pick<TitleDef, "id"> | null | undefined): string {
   const p = titlePerk(t?.id);
   const parts: string[] = [];
-  if (p.speed > 1) parts.push(`마을 이동 +${pct(p.speed - 1)}%`);
+  if (p.speed > 1) parts.push(`마을에서 ${pct(p.speed - 1)}% 더 빨리 걸어요.`);
   const g = groupText(p);
   if (g) parts.push(g[0]);
-  return parts.join(" · ");
+  return parts.join(" ");
 }
 
-/** 칭호 능력 짧게 ("이동 +3% · 큰 물고기 +6%", 없으면 "") — 가방 칭호 카드 */
+/** 칭호 능력 짧게 ("이동 +3% · 큰 물고기 확률 +6%", 없으면 "") — 가방 칭호 카드 */
 export function perkShort(t: Pick<TitleDef, "id"> | null | undefined): string {
   const p = titlePerk(t?.id);
   const parts: string[] = [];

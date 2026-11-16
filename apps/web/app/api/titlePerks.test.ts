@@ -134,13 +134,15 @@ describe("11/16 칭호 능력 갈래 표", () => {
   });
 
   it("문구: 긴 줄(알림·지금 칭호) · 짧은 줄(칭호 카드)", () => {
-    expect(perkText(titleDef("t_fishn1k"))).toBe("마을 이동 +3% · 큰 물고기 확률 +6%");
-    expect(perkShort(titleDef("t_fishn1k"))).toBe("이동 +3% · 큰 물고기 +6%");
-    expect(perkText(titleDef("t_floor100"))).toBe("마을 이동 +4% · 야근 빌딩 층마다 +6초");
-    expect(perkText(titleDef("t_first100"))).toBe("마을 이동 +6% · 야근 빌딩 층마다 +9초");
-    expect(perkText(titleDef("t_look600"))).toBe("마을 이동 +2% · 상점·염색 3% 할인");
-    expect(perkText(titleDef("t_champ_points"))).toBe("마을 이동 +5% · 반짝이는 발자국");
-    expect(perkShort(titleDef("t_quest300"))).toBe("이동 +2% · 도장 하나 더 5%");
+    expect(perkText(titleDef("t_fishn1k"))).toBe("마을에서 3% 더 빨리 걸어요. 직접 낚시할 때 큰 물고기가 6% 더 잘 걸려요.");
+    expect(perkShort(titleDef("t_fishn1k"))).toBe("이동 +3% · 큰 물고기 확률 +6%");
+    expect(perkText(titleDef("t_floor100"))).toBe("마을에서 4% 더 빨리 걸어요. 야근 빌딩에서 층마다 제한 시간이 6초 늘어나요.");
+    expect(perkShort(titleDef("t_floor100"))).toBe("이동 +4% · 야근 빌딩 층마다 6초 더");
+    expect(perkText(titleDef("t_first100"))).toBe("마을에서 6% 더 빨리 걸어요. 야근 빌딩에서 층마다 제한 시간이 9초 늘어나요.");
+    expect(perkText(titleDef("t_look600"))).toBe("마을에서 2% 더 빨리 걸어요. 상점 물건과 염색권을 3% 싸게 사요.");
+    expect(perkText(titleDef("t_champ_points"))).toBe("마을에서 5% 더 빨리 걸어요. 걸으면 발밑에 반짝이는 별가루가 남아요.");
+    expect(perkShort(titleDef("t_quest300"))).toBe("이동 +2% · 5% 확률로 도장 +1");
+    expect(perkShort(titleDef("t_stay50"))).toBe("이동 +2% · 접속 보너스 +5%");
     expect(perkText(titleDef("t_att7"))).toBe("");
     expect(perkShort(null)).toBe("");
     // 능력이 있는 칭호는 모두 문구가 있다 (콜론 이름표 없이)

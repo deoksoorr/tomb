@@ -97,7 +97,7 @@ describe("칭호 목록 (lib/titles)", () => {
     expect(RUN_SPEED * fastestPet * fastestTitle).toBeLessThan(MAX_VALID_SPEED);
     expect(titlePerk("t_hell")).toMatchObject({ group: "hunt", speed: 1.03, huntExp: 0.06, discount: 0 });
     expect(titlePerk(null)).toMatchObject({ group: "none", speed: 1 });
-    expect(perkText(titleDef("t_lv50"))).toBe("마을 이동 +4% · 사냥 경험치 +10%");
+    expect(perkText(titleDef("t_lv50"))).toBe("마을에서 4% 더 빨리 걸어요. 사냥에서 경험치를 10% 더 받아요.");
     expect(perkText(titleDef("t_kill100"))).toBe("");
   });
 

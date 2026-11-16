@@ -84,7 +84,7 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
             · 얻은 칭호 {earned ? total : "–"}/{LISTED.length}
             {staff && " · 운영자는 모든 칭호를 쓸 수 있어요"}
           </span>
-          {cur && perkText(cur) && <span className={styles.perkNow}>칭호 능력: {perkText(cur)}</span>}
+          {cur && perkText(cur) && <span className={styles.perkNow}><b>칭호 능력</b> {perkText(cur)}</span>}
         </p>
         {cur && (
           <button type="button" className={cx(ui.button, styles.off)} disabled={pending} onClick={() => toggle(cur)}>
