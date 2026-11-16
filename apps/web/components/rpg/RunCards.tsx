@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- 캔버스로 만든 dataURL 픽셀아트라 next/image 최적화가 필요 없다 */
 import { useEffect, useRef, useState } from "react";
 import { cardIconUrl } from "@/game/rpg/cards/cardArt";
-import { CARDS, cardText, RARITY_NAME, type CardId } from "@/lib/rpg/cards";
+import { CARDS, cardPromoLine, cardText, RARITY_NAME, type CardId } from "@/lib/rpg/cards";
 import type { RpgHud } from "@/lib/rpg/types";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
@@ -75,6 +75,11 @@ export default function RunCards({ run }: { run: NonNullable<RpgHud["run"]> }) {
             {RARITY_NAME[CARDS[shown].rarity]}
           </em>
           <span>{cardText(shown, run.kind)}</span>
+          {/* 11/17 팀장 승진이 있으면 실제로 받는 숫자 */}
+          {(() => {
+            const line = cardPromoLine(shown, run.cards.find((x) => x.id === shown)?.n ?? 1, { promote: run.cards.some((x) => x.id === "promote") ? 1 : 0 }, run.kind);
+            return line ? <span className={c.tipPromo}>{line}</span> : null;
+          })()}
         </div>
       )}
     </div>

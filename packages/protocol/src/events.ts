@@ -7,7 +7,7 @@ import { GOBLIN_ID_RE, type GoblinInfo } from "./npc";
 import type { AvatarDye } from "./dye";
 import { AWAY_HOUSE_RE, isAwayPlace, type AwayPlace } from "./friends";
 import type { PeerInfo, Sid } from "./types";
-import { isMapId, type AwayMapId, type MapId } from "./camp";
+import { isMapId, type AwayMapId, type ChatPlace, type MapId } from "./camp";
 import type { BbqItemId } from "./bbq";
 
 // 드문 이벤트는 짧은 JSON text 프레임. 이름과 색은 입장 때(welcome/join) 한 번만 보낸다.
@@ -68,6 +68,8 @@ export type C2S =
    * 채팅과 같은 도배 제한·가리기, 기록에는 남기지 않는다. 월드 채널만 (방은 버린다). 옛 서버는 모르는 t라 버린다
    */
   | { t: "whisper"; to: string; text: string }
+  /** 11/17 운영자만: 다람쥐 쿨다운 초기화 (운영자가 아니면 서버가 무시) */
+  | { t: "squirrelsReset" }
   /**
    * 11/16 최근 귓속말 상대가 지금 이 채널(마을·캠핑장)에 있는지 묻기 (WHO_ON_MAX명까지, 내가 아는 이름만 → 접속자 목록을 통째로 주지 않는다).
    * 서버가 WHO_ON_INTERVAL_MS 간격으로 whoOn으로 답한다. 월드 채널만. 옛 서버는 모르는 t라 버린다 (그러면 아무도 흐리게 하지 않는다)
@@ -156,7 +158,7 @@ export type S2C =
   | { t: "me" }
   /** 말풍선 자유 채팅 (보낸 사람 빼고, 서버가 가린 글. 옛 클라이언트는 모르는 t라 버린다). id = 줄 id(chatLog와 중복 제거), at = 서버 시각 */
   /** 11/16 채팅은 채널 전체(마을·캠핑장·바닷가)로 간다: name·staff·mgr = 다른 맵이라 화면에 없는 사람도 채팅창에 이름을 쓰게, m = 쓴 사람의 맵(캠핑장 "camp"·바닷가 "sea", 마을이면 없음) */
-  | { t: "chat"; sid: Sid; text: string; id?: string; at?: number; name?: string; staff?: true; mgr?: true; m?: AwayMapId }
+  | { t: "chat"; sid: Sid; text: string; id?: string; at?: number; name?: string; staff?: true; mgr?: true; /** 11/17 사냥 중이면 "hunt" */ m?: ChatPlace }
   /**
    * 11/16 귓속말 (받는 사람과 보낸 사람에게만, 서버가 가린 글. 기록에 남기지 않는다). from·fromName = 보낸 사람, to·toName = 받는 사람,
    * staff·mgr = 보낸 사람 딱지, toStaff·toMgr = 받는 사람 딱지. 옛 클라이언트는 모르는 t라 버린다
@@ -184,6 +186,8 @@ export type S2C =
    * 채널마다 SQUIRREL_RAIN_COOLDOWN_MS에 한 번 (서버 판정). by = 친 사람 이름, seed = 연출 난수 씨앗, at = 서버 시각. 옛 클라이언트는 모르는 t라 버린다
    */
   | { t: "squirrels"; by: string; seed: number; at: number }
+  /** 11/17 쿨다운 중에 운영자가 주문을 쳤다 → 그 운영자에게만 남은 시간 (ms) */
+  | { t: "squirrelsWait"; left: number }
   /** 11/15 누가 바베큐를 먹고 u(epoch ms)까지 커졌다 (같은 맵, 보낸 사람 포함). 옛 클라이언트는 모르는 t라 버린다 */
   | { t: "bbq"; sid: Sid; i: BbqItemId; u: number; /** 마실 거리: 마신 뒤 취기 단계·마신 시각 */ lv?: number; at?: number };
 
@@ -316,6 +320,8 @@ export function parseC2S(text: string): C2S | null {
       const text = normalizeChat(m.text);
       return text ? { t: "chat", text } : null;
     }
+    case "squirrelsReset":
+      return { t: "squirrelsReset" };
     case "whisper": {
       // 받는 사람 이름은 공백이 든 이름까지 (닉네임 12자 + 공백 여유). 실제 이름 맞추기는 서버가 접속자 목록으로 한다
       const to = typeof m.to === "string" && m.to.length <= NAME_MAX * 3 ? normalizeName(m.to) : "";

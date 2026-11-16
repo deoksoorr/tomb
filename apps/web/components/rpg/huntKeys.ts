@@ -12,6 +12,7 @@ export const HUNT_KEYS: readonly (readonly [string, string])[] = [
   ["X", "자동 스킬을 전부 켜고 꺼요"],
   ...POTIONS.filter((p) => p.key).map((p) => [p.key!, p.name] as const),
   ["Esc", "잠깐 멈춰요"],
+  ["Enter", "채팅해요 (같은 채널에 [사냥터]로 보여요)"],
   ["C", "능력치 판을 열고 닫아요"],
   ["H", "이 키 안내를 열고 닫아요"],
 ];
@@ -23,4 +24,5 @@ export const HUNT_TOUCH: readonly (readonly [string, string])[] = [
   ["스킬 칸", "누르면 스킬을 써요"],
   ["[자동] 누르고 스킬 칸", "그 칸을 자동으로 켜고 꺼요"],
   ["왼쪽 위 '스킬 자동'", "자동 스킬을 전부 켜고 꺼요"],
+  ["오른쪽 위 말풍선", "채팅해요 (같은 채널에 [사냥터]로 보여요)"],
 ];

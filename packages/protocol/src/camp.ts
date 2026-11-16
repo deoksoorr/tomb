@@ -25,6 +25,16 @@ export const MAP_NAME: Record<MapId, string> = { village: "마을", camp: "캠�
 export const MAP_TAG: Record<MapId, string> = { village: "[마을]", camp: "[캠핑장]", sea: "[바닷가]" };
 /** 와이어 m 값 → 마을 밖 맵이면 그 맵, 아니면 없음 (마을) */
 export const awayTag = (m: unknown): { m?: AwayMapId } => (isAwayMap(m) ? { m } : {});
+/**
+ * 11/17 채팅 줄을 쓴 곳 (chat·chatLog의 m): 마을 밖 맵 + 사냥터 "hunt" (사냥 중에도 채널 채팅을 쓴다 — 서버가 실내 장소 hunt로 붙인다).
+ * 없으면 마을. 옛 클라이언트는 "hunt"를 모르니 맵 표시 없이(마을 줄처럼) 본다
+ */
+export type ChatPlace = AwayMapId | "hunt";
+export const isChatPlace = (v: unknown): v is ChatPlace => isAwayMap(v) || v === "hunt";
+/** 와이어 m 값 → 채팅 줄 장소 표시 (마을이면 없음) */
+export const chatTagOf = (m: unknown): { m?: ChatPlace } => (isChatPlace(m) ? { m } : {});
+/** 11/17 채팅 줄 장소 표시 (다른 곳에서 쓴 줄 앞에) — 맵 표시 + [사냥터] */
+export const CHAT_PLACE_TAG: Record<MapId | "hunt", string> = { ...MAP_TAG, hunt: "[사냥터]" };
 /** 캠핑장 전체 이름 (표지판·첫 안내) */
 export const CAMP_TITLE = "언젠가 캠핑장";
 export const CAMP_TITLE_EN = "Someday Camp";

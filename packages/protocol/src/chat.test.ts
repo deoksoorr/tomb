@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CHAT_BURST, CHAT_MAX, CHAT_REFILL_MS, maskChat, matchWhisperTarget, newChatBucket, normalizeChat, takeChatToken } from "./chat";
 import { encodeEvent, parseC2S } from "./events";
+import { CHAT_PLACE_TAG, chatTagOf, isChatPlace } from "./camp";
 
 describe("말풍선 채팅: 정리·검증", () => {
   it("공백 정리, 공백만은 거절, 60자까지", () => {
@@ -111,5 +112,18 @@ describe("귓속말: 받는 사람 맞추기", () => {
     expect(parseC2S(JSON.stringify({ t: "whoOn", names: Array.from({ length: 9 }, (_, i) => `n${i}`) }))).toBeNull();
     expect(parseC2S('{"t":"whoOn","names":["진순",""]}')).toBeNull();
     expect(parseC2S('{"t":"whoOn","names":[1]}')).toBeNull();
+  });
+});
+
+describe("11/17 채팅 줄 장소 표시 (사냥터 포함)", () => {
+  it("camp·sea·hunt만 표시하고, 나머지는 마을(없음)", () => {
+    expect(chatTagOf("hunt")).toEqual({ m: "hunt" });
+    expect(chatTagOf("camp")).toEqual({ m: "camp" });
+    expect(chatTagOf("village")).toEqual({});
+    expect(chatTagOf("house")).toEqual({});
+    expect(isChatPlace("sea")).toBe(true);
+    expect(isChatPlace(undefined)).toBe(false);
+    expect(CHAT_PLACE_TAG.hunt).toBe("[사냥터]");
+    expect(CHAT_PLACE_TAG.camp).toBe("[캠핑장]");
   });
 });

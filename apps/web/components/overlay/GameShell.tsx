@@ -355,6 +355,13 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
 
   // 즐겨찾기 원형 목록은 내 캐릭터가 보이는 월드·마을·집에서만 (상점·사냥터·미니게임 제외)
   const canRadial = !scene || scene === "world" || scene === "house";
+  // 11/17 사냥터(야근 빌딩 포함)에서도 채널 채팅: 채팅창·Enter·터치 [채팅](사냥 HUD 멈춤 아래). 말은 월드 채널로 [사냥터] 줄
+  const huntChat = ready && scene === "hunt";
+  const chatHere = canRadial || huntChat;
+  // 사냥이 끝나면 열려 있던 터치 한 줄 입력칸은 닫는다 (마을로 돌아와 저절로 떠 있지 않게)
+  useBridgeEvent("scene:changed", ({ scene: next }) => {
+    if (scene === "hunt" && next !== "hunt") setChatOpen(false);
+  });
   /** 터치 메뉴·마을/집 버튼에서 원형 목록 열기 */
   const openRadial = () => {
     if (!canRadial) return;
@@ -414,6 +421,22 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [ready, quiet, roomQuiet, canRadial, chatOpen, coarse, iAmStaff]);
+
+  // 11/17 사냥 중 Enter: 채팅창 입력칸 (사냥 창이 게임 키를 막아 두므로 위 처리와 따로). 입력칸에 쓰는 동안 사냥 키는 RpgScene이 거른다
+  useEffect(() => {
+    if (!huntChat) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.code !== "Enter" && e.code !== "NumpadEnter") || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
+      const el = document.activeElement;
+      if (el instanceof HTMLElement && el.matches("input, textarea, select, [contenteditable], button, a[href], [role=button]")) return;
+      // 멈춤 창·안내서 같은 창이 떠 있으면 그 창 몫
+      if (chatOpen || document.querySelector("dialog[open]")) return;
+      e.preventDefault();
+      if (coarse || !focusChatLog()) setChatOpen(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [huntChat, chatOpen, coarse]);
 
   // 11/15: 단축키로 연 창은 같은 단축키로 닫는다 (I = 가방, T = 표현 창, 11/16 PANEL_KEYS 창들. Y 원형 목록은 ExprRadial이 직접 닫는다)
   const keyPanel = panel === "bag" ? "KeyI" : (Object.keys(PANEL_KEYS).find((k) => PANEL_KEYS[k] === panel) ?? null);
@@ -704,6 +727,12 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                     포인트 현황
                   </button>
                 )}
+                {/* 11/17 운영자만: 「다람쥐를 뿌려라」 채널 쿨타임 바로 풀기 */}
+                {iAmStaff && (
+                  <button type="button" className={cx(ui.button, ui.top, styles.topButton)} onClick={() => bridge.emit("fx:squirrelsReset")}>
+                    다람쥐 초기화
+                  </button>
+                )}
                 <button
                   type="button"
                   className={cx(ui.button, ui.icon, ui.top, styles.topButton)}
@@ -892,9 +921,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
         />
       )}
       {sayOpen && <SayDialog onClose={() => setSayOpen(false)} />}
-      {chatOpen && canRadial && !sayOpen && !riding && <ChatSheet onClose={() => setChatOpen(false)} />}
+      {chatOpen && chatHere && !sayOpen && !riding && <ChatSheet hunt={huntChat} onClose={() => setChatOpen(false)} />}
       {/* 채팅 기록창: 데스크톱은 바로 가기 줄 위 상자(입력칸 포함), 터치는 확성기 위에 글씨만 + [기록] 창([말하기] → 채팅 입력 줄). 채널을 옮기면 비운다 */}
-      {ready && <ChatLog mobile={coarse} room={`${scene === "house" ? "house" : "world"}:${channel}`} hidden={!canRadial || riding} />}
+      {ready && <ChatLog mobile={coarse} room={`${scene === "house" ? "house" : "world"}:${channel}`} hidden={!chatHere || riding} hunt={huntChat} />}
       {radial && canRadial && <ExprRadial onClose={() => setRadial(false)} />}
       {/* 마을·집 안: 월드 바로 가기 줄이 숨으니 [표현] 버튼만 왼쪽 아래에 따로 */}
       {ready && scene === "house" && !coarse && (
@@ -961,9 +990,17 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {panel === "housing" && (
         <HousingOffice key={housingIntent?.houseId ?? `${housingIntent?.zone ?? ""}${housingIntent?.lot ?? "office"}`} intent={housingIntent} channel={houseChannel} onClose={closePanel} />
       )}
-      {panel === "hunt" && <HuntLobby onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
+      {panel === "hunt" && <HuntLobby onClose={closePanel} onChat={coarse ? () => setChatOpen(true) : undefined} avatar={{ color: options.color, body: options.body }} />}
       {/* 11/15 마을의 야근 빌딩 (사냥 레벨 50 전이면 창 없이 경비원 한마디) */}
-      {panel === "tower" && <HuntLobby mode="tower" onClose={closePanel} onTaunt={() => showToast(towerTaunt(), 5_000)} avatar={{ color: options.color, body: options.body }} />}
+      {panel === "tower" && (
+        <HuntLobby
+          mode="tower"
+          onClose={closePanel}
+          onTaunt={() => showToast(towerTaunt(), 5_000)}
+          onChat={coarse ? () => setChatOpen(true) : undefined}
+          avatar={{ color: options.color, body: options.body }}
+        />
+      )}
       {panel === "wish" && <WishDialog onClose={closePanel} />}
       {panel === "lottery" && <LotteryDialog onClose={closePanel} />}
       {panel === "telescope" && <Telescope onClose={closePanel} />}

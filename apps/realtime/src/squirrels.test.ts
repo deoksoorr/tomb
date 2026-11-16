@@ -23,7 +23,7 @@ function setup(room = false) {
     random: () => 0.5,
   };
   const core = new ChannelCore<Conn>({ capacity: 10, graceMs: 20_000, room }, host);
-  const join = (id: string, o: { map?: "camp" | "sea" } = {}) => {
+  const join = (id: string, o: { map?: "camp" | "sea"; staff?: boolean } = {}) => {
     const c: Conn = { id, out: [] };
     const t: JoinTicket = {
       visitorId: id,
@@ -34,6 +34,7 @@ function setup(room = false) {
       body: "hood",
       ...(o.map === "camp" ? { camp: true as const, map: "camp" as const } : {}),
       ...(o.map === "sea" ? { sea: true as const, map: "sea" as const } : {}),
+      ...(o.staff ? { staff: true as const } : {}),
     };
     core.join(c, t, 0);
     return c;
@@ -109,6 +110,17 @@ describe("다람쥐를 뿌려라", () => {
     expect(rains(b)).toHaveLength(1);
   });
 
+  it("11/17 사냥터(실내 장소 hunt)에서 친 주문도 채널 전체에 쏟아진다", () => {
+    const { core, join } = setup();
+    const a = join("a");
+    const h = join("h");
+    core.message(h, send({ t: "away", on: true, p: "hunt" }), 0);
+    clear(a, h);
+    core.message(h, chat(SPELL), 1_000);
+    expect(chats(a)).toMatchObject([{ t: "chat", text: SPELL, name: "h", m: "hunt" }]);
+    for (const c of [a, h]) expect(rains(c)).toMatchObject([{ t: "squirrels", by: "h" }]);
+  });
+
   it("귓속말·주문이 아닌 말·집(방) 채팅은 아니다", () => {
     const { core, join } = setup();
     const a = join("a");
@@ -123,5 +135,38 @@ describe("다람쥐를 뿌려라", () => {
     room.core.message(r1, chat(SPELL), 1_000);
     expect(chats(r2)).toHaveLength(1);
     expect(rains(r2)).toEqual([]);
+  });
+
+  it("11/17 쿨다운 중에 친 주문: 운영자에게만 남은 시간, 다른 사람에게는 아무것도 안 간다", () => {
+    const { core, join } = setup();
+    const a = join("a");
+    const op = join("op", { staff: true });
+    core.message(a, chat(SPELL), 10_000);
+    clear(a, op);
+    core.message(op, chat(SPELL), 70_000);
+    const waits = (c: Conn) => events(c).filter((e) => e.t === "squirrelsWait");
+    expect(waits(op)).toEqual([{ t: "squirrelsWait", left: SQUIRREL_RAIN_COOLDOWN_MS - 60_000 }]);
+    expect(waits(a)).toEqual([]);
+    expect(rains(op)).toEqual([]);
+    clear(a, op);
+    core.message(a, chat(SPELL), 80_000);
+    expect(waits(a)).toEqual([]);
+    expect(waits(op)).toEqual([]);
+  });
+
+  it("11/17 운영자 초기화: 운영자만 쿨다운을 풀 수 있고, 풀면 바로 다시 쏟아진다", () => {
+    const { core, join } = setup();
+    const a = join("a");
+    const op = join("op", { staff: true });
+    core.message(a, chat(SPELL), 10_000);
+    core.message(a, send({ t: "squirrelsReset" }), 20_000);
+    clear(a, op);
+    core.message(a, chat(SPELL), 30_000);
+    expect(rains(op)).toEqual([]);
+    core.message(op, send({ t: "squirrelsReset" }), 40_000);
+    expect(events(op).filter((e) => e.t === "squirrelsWait")).toEqual([{ t: "squirrelsWait", left: 0 }]);
+    clear(a, op);
+    core.message(a, chat(SPELL), 50_000);
+    expect(rains(op)).toHaveLength(1);
   });
 });

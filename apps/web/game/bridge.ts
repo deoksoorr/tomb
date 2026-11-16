@@ -1,4 +1,4 @@
-import type { AvatarDye, AwayMapId, BbqItemId, BbqStand, FishWater, GraveEventKind, MapId, QueueStatus } from "@tomb/protocol";
+import type { AvatarDye, AwayMapId, BbqItemId, ChatPlace, BbqStand, FishWater, GraveEventKind, MapId, QueueStatus } from "@tomb/protocol";
 import type { NpcId } from "@/lib/forage/catalog";
 import type { PublicGrave } from "@/lib/types";
 import type { HouseEditState, HouseTool } from "@/game/housing/events";
@@ -162,7 +162,7 @@ export type GameEvents = {
   /** 47번: 다른 사람 캐릭터(또는 이름표)를 눌렀다 → UI가 작은 메뉴(신고하기)를 띄운다. ch = 월드 채널, room = 방 id */
   "peer:menu": { sid: number; name: string; ch?: number; room?: string; /** 그 사람 머리 위에 지금 떠 있는 자유 채팅 (신고에 붙인다) */ chat?: string };
   /** 채팅 기록창 한 줄: 같은 채널·방에서 받은 자유 채팅(가린 글) 또는 내가 보낸 글. 화면 메모리에만 1분. key = 서버 줄 id(중복 제거) */
-  "chat:line": { name: string; text: string; mine: boolean; key?: string; /** 운영자(실시간 서버가 알린 staff) → 이름 금색 */ staff?: true; /** 11/16 매니저(실시간 서버가 알린 mgr) → "매니저" 딱지 */ mgr?: true; /** 닉네임 꾸미기 id (lib/nameStyle nameStyleIds) */ ns?: string[]; /** 11/16 쓴 사람이 캠핑장·바닷가에 있었다 */ m?: AwayMapId; /** 11/16 귓속말 줄 (chatLog.ts ChatLine.w) */ w?: "out" | "in" | "fail" | "note" };
+  "chat:line": { name: string; text: string; mine: boolean; key?: string; /** 운영자(실시간 서버가 알린 staff) → 이름 금색 */ staff?: true; /** 11/16 매니저(실시간 서버가 알린 mgr) → "매니저" 딱지 */ mgr?: true; /** 닉네임 꾸미기 id (lib/nameStyle nameStyleIds) */ ns?: string[]; /** 11/16 쓴 사람이 캠핑장·바닷가에 있었다, 11/17 사냥 중이었다("hunt") */ m?: ChatPlace; /** 11/16 귓속말 줄 (chatLog.ts ChatLine.w) */ w?: "out" | "in" | "fail" | "note" };
   /** 11/16 최근 귓속말 상대가 지금 이 채널에 있는지 (input:whoOn의 답, 서버가 준 그대로). on = 있음, off = 없음 (sticky) */
   "whisper:online": { on: string[]; off: string[] };
   /** 방에 들어올 때 서버가 보낸 이 방의 최근 1분 채팅 (이 기기 시계로 옮긴 줄). ch = 월드 채널이면 그 번호 (방이면 없음) */
@@ -208,6 +208,8 @@ export type GameEvents = {
   "friend:presence": { key: string; name: string; on: boolean };
   /** 11/16 이스터에그 「다람쥐를 뿌려라」: 채널 누군가 주문을 쳤다 (실시간 서버 판정) → 지금 보이는 장면에 다람쥐가 쏟아진다 (game/fx/SquirrelRain) */
   "fx:squirrels": { by: string; seed: number; at: number };
+  /** 11/17 운영자 버튼 → 다람쥐 쿨다운 초기화 */
+  "fx:squirrelsReset": undefined;
   "minimap:dots": { me: { x: number; y: number }; others: number[]; residents?: number[]; /** 친구 (others에서 뺀 같은 채널 친구 위치, 하트로 그린다) */ friends?: number[]; /** 11/15 캠핑장이면 "camp", 11/16 바닷가면 "sea" (그 맵 바탕) */ map?: AwayMapId };
   /** 11/15 지금 맵 (캠핑장 장면이 뜨면 camp, 11/16 바닷가 장면이면 sea, 닫히면 village). HUD·미니맵·채팅·음악이 본다 (sticky) */
   "map:changed": { map: MapId };

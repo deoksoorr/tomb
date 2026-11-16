@@ -701,6 +701,13 @@
   color: #d8ceb0;
 }
 
+/* 11/17 팀장 승진이 붙은 실제 숫자 */
+.tip .tipPromo {
+  display: block;
+  margin-top: 2px;
+  color: #ffe08a;
+}
+
 /* 11/15 가진 카드: 지금 수치 → 더해진 수치 */
 .stackLine {
   max-width: 100%;

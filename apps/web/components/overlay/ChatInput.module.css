@@ -103,3 +103,12 @@
   background: var(--bg-deep);
   box-shadow: var(--px-border-strong);
 }
+
+/* 11/17 사냥 중 한 줄 입력칸: 사냥 HUD(.capture, z 40) 위로 */
+.huntBackdrop {
+  z-index: 45;
+}
+
+.huntSheet {
+  z-index: 46;
+}

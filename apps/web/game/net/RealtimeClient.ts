@@ -28,8 +28,8 @@ import {
   type GraveEventKind,
   type GoblinInfo,
   type MapId,
-  type AwayMapId,
-  awayTag,
+  type ChatPlace,
+  chatTagOf,
   mapOf,
   type BbqItemId,
   isBbqId,
@@ -128,6 +128,8 @@ export type NetCallbacks = {
   onFriend?(m: { key: string; name: string; on: boolean }): void;
   /** 11/16 이스터에그: 채널 누군가 「다람쥐를 뿌려라」 → 다람쥐가 쏟아진다 (맵 상관없이, 내 것 포함) */
   onSquirrels?(m: { by: string; seed: number; at: number }): void;
+  /** 11/17 운영자만: 쿨다운 중에 주문을 쳤다 → 남은 시간 (ms) */
+  onSquirrelsWait?(left: number): void;
   onMegaphone?(m: { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true; system?: true; replaces?: string; mgr?: true }): void;
   /**
    * 11/15 맵을 옮겼다 (switchMap의 답). map = 서버가 정한 지금 맵 (허락이 없으면 옮기기 전 맵 그대로),
@@ -140,10 +142,10 @@ export type NetCallbacks = {
 };
 
 /** 11/16 채팅에 실려 오는 보낸 사람 정보 (맵이 달라 화면에 없는 사람도 채팅창에 쓰게) */
-export type ChatMeta = { name?: string; staff?: true; mgr?: true; m?: AwayMapId };
+export type ChatMeta = { name?: string; staff?: true; mgr?: true; /** 11/17 사냥 중이면 "hunt" */ m?: ChatPlace };
 
 /** 맵이 바뀌어도 늘 처음 콜백(월드)이 받는 것: 계정·친구·확성기·내 몸 모양·고블린 보상 */
-const GLOBAL_CALLBACKS = ["onMegaphone", "onMeStale", "onFriend", "onSelfBody", "onGoblinGrant", "onSquirrels"] as const;
+const GLOBAL_CALLBACKS = ["onMegaphone", "onMeStale", "onFriend", "onSelfBody", "onGoblinGrant", "onSquirrels", "onSquirrelsWait"] as const;
 /** 맵 옮기기 답을 기다리는 시간 */
 const MAP_REPLY_MS = 4000;
 /** 맵 옮기기 답이 없을 때 다시 보내는 횟수 (서버는 맵 요청을 1초에 한 번만 받는다 — MAP_REPLY_MS 간격이면 넉넉하다) */
@@ -525,6 +527,11 @@ export class RealtimeClient {
     this.send({ t: "chat", text });
   }
 
+  /** 11/17 운영자만: 다람쥐 쿨다운 초기화 (운영자가 아니면 서버가 무시) */
+  squirrelsReset(): void {
+    if (this.online) this.send({ t: "squirrelsReset" });
+  }
+
   /** 11/16 귓속말 (정리된 글). 서버가 받는 사람을 다시 맞추고 받는 사람과 나에게 whisper로 돌려준다 → 그때 채팅창에 */
   whisper(to: string, text: string): void {
     if (this.online) this.send({ t: "whisper", to, text });
@@ -805,7 +812,7 @@ export class RealtimeClient {
               ...(typeof m.name === "string" && m.name ? { name: m.name.slice(0, 40) } : {}),
               ...(m.staff === true ? { staff: true as const } : {}),
               ...(m.mgr === true ? { mgr: true as const } : {}),
-              ...awayTag(m.m),
+              ...chatTagOf(m.m),
             });
           break;
         case "chatLog":
@@ -881,6 +888,9 @@ export class RealtimeClient {
           break;
         case "squirrels":
           this.cb.onSquirrels?.({ by: typeof m.by === "string" ? m.by : "", seed: Number(m.seed) >>> 0, at: Number(m.at) || Date.now() });
+          break;
+        case "squirrelsWait":
+          this.cb.onSquirrelsWait?.(Math.max(0, Number(m.left) || 0));
           break;
         case "peers": {
           this.peers.clear();

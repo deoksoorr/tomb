@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { CAMPFIRES, campfireOfSeat, dexBadgeCats, DIR, MAP_NAME, type AwayMapId, FURNITURE, LAKE_PIER, houseLot, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, sanitizeDye, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
+import { CAMPFIRES, campfireOfSeat, dexBadgeCats, DIR, MAP_NAME, type AwayMapId, FURNITURE, LAKE_PIER, houseLot, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, sanitizeDye, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, squirrelWaitText, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
 import { avatarColorSpec, type AppearanceChange } from "../sprites/avatar";
 import { saveResume, type ResumePose, type ResumeState } from "@/lib/resume";
 import { nameStyleIds } from "@/lib/nameStyle";
@@ -124,6 +124,8 @@ export class WorldScene extends Phaser.Scene {
   private meScreen!: MeScreen;
   /** 마을·집·사냥터 안 (말풍선·이모티콘은 그 방이 받는다) */
   private awayScene = false;
+  /** 11/17 사냥터 장면에 들어가 있다 (사냥 중에도 채널 채팅을 쓴다 — 말풍선 없이 [사냥터] 줄) */
+  private huntScene = false;
   private rig!: CameraRig;
   private player!: Player;
   private playerGlow!: Phaser.GameObjects.Image;
@@ -580,6 +582,7 @@ export class WorldScene extends Phaser.Scene {
         onMeStale: () => bridge.emit("me:stale"),
         onFriend: (m) => bridge.emit("friend:presence", m),
         onSquirrels: (m) => bridge.emit("fx:squirrels", m),
+        onSquirrelsWait: (left) => bridge.emit("toast", { message: squirrelWaitText(left) }),
         onSelfBody: (body) => {
           if (!isAvatarBody(body)) return;
           this.selfBody = body;
@@ -812,6 +815,7 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("net:status", (st) => this.onNetStatus(st)));
     // 휴식 중(탭이 숨겨져 게임 루프를 재움)은 실시간 연결에서 탭 숨김과 같게
     on.push(bridge.on("game:rest", ({ on: resting }) => this.net.setResting(resting)));
+    on.push(bridge.on("fx:squirrelsReset", () => this.net.squirrelsReset()));
     on.push(bridge.on("grave:focus", ({ graveId, walk }) => (this.trip.away ? this.toast("묘비는 마을에 있어요. 버스를 타고 마을로 돌아가요.") : this.focusGrave(graveId, walk))));
     // 11/16 [사냥] 버튼 → 사냥터 입구까지 걸어가기 (lib/huntWalk — 캠핑장·바닷가·탈것은 UI가 먼저 거른다). null = 그만 걷기
     on.push(bridge.on("portal:walkTo", ({ kind }) => this.walkToPortal(kind)));
@@ -837,6 +841,7 @@ export class WorldScene extends Phaser.Scene {
     on.push(
       bridge.on("scene:changed", ({ scene, place, houseId, stay }) => {
         this.awayScene = scene !== "world" && scene !== "shop";
+        this.huntScene = scene === "hunt";
         // 친구 위치용 장소 (친구 창에 "집 안"·"사냥터"처럼 보인다)
         const where = scene === "shop" ? "shop" : scene === "hunt" ? "hunt" : scene === "minigame" ? "game" : (place ?? "house");
         this.net.setAway(scene !== "world" && !stay, where, where === "house" ? houseId : undefined); // stay: 망원경 (RpgHostScene)
@@ -866,7 +871,14 @@ export class WorldScene extends Phaser.Scene {
     // 11/15 캠핑장에 있거나 버스를 타는 동안(trip.away)은 캠핑장 장면이 받는다
     on.push(bridge.on("input:say", ({ id }) => !this.awayScene && !this.trip.away && this.doSay(id)));
     on.push(bridge.on("input:emo", ({ id }) => !this.cleaned && !this.inShop && !this.awayScene && !this.trip.away && this.expr.emo(id, this.time.now)));
-    on.push(bridge.on("input:chat", ({ text }) => !this.cleaned && !this.inShop && !this.awayScene && !this.trip.away && this.expr.chat(text, this.time.now)));
+    on.push(
+      bridge.on("input:chat", ({ text }) => {
+        if (this.cleaned || this.inShop || this.trip.away) return;
+        // 11/17 사냥 중: 월드 채널 연결(실내 장소 hunt)로 보낸다 — 마을의 나는 숨어 있으니 말풍선 없이
+        if (this.huntScene) this.expr.chatHunting(text);
+        else if (!this.awayScene) this.expr.chat(text, this.time.now);
+      }),
+    );
     // 11/16 귓속말은 월드 채널 연결로 (마을·캠핑장·실내 어디서든 — 받는 사람은 같은 채널 누구나)
     on.push(bridge.on("input:whisper", ({ to, text }) => !this.cleaned && this.net.whisper(to, text)));
     on.push(bridge.on("input:whoOn", ({ names }) => !this.cleaned && this.net.whoOn(names)));

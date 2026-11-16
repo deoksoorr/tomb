@@ -286,7 +286,7 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
 }
 
 /** 폰 [채팅] 버튼으로 여는 한 줄 입력칸: 키보드 바로 위에 붙고, 보내거나 바깥을 누르면 닫힌다. 위에 같은 채널 채팅 기록(손가락 스크롤) */
-export function ChatSheet({ onClose }: { onClose: () => void }) {
+export function ChatSheet({ onClose, hunt = false }: { onClose: () => void; /** 11/17 사냥 중 (사냥 HUD 위로 띄운다) */ hunt?: boolean }) {
   const kb = useKeyboardInset();
   const lines = useChatLines();
   // 키보드가 내려가며 iOS가 페이지를 밀어 올린 채 남으면 게임 화면·터치 좌표가 어긋난다 → 닫을 때 원위치
@@ -302,14 +302,14 @@ export function ChatSheet({ onClose }: { onClose: () => void }) {
     <>
       {/* 바깥(게임 화면·조이스틱·행동 버튼)을 누르면 닫기 — iOS는 빈 곳을 눌러도 입력칸 포커스가 안 풀릴 때가 있어 막을 깐다 */}
       <div
-        className={styles.sheetBackdrop}
+        className={cx(styles.sheetBackdrop, hunt && styles.huntBackdrop)}
         onPointerDown={(e) => {
           e.preventDefault();
           onClose();
         }}
       />
       <div
-        className={styles.sheet}
+        className={cx(styles.sheet, hunt && styles.huntSheet)}
         role="dialog"
         aria-label="말풍선 채팅"
         // 키보드가 떠 있으면 홈 막대 여백(safe-area)은 필요 없다

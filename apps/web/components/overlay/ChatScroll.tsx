@@ -1,8 +1,8 @@
 "use client";
 
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { mapOf, type MapId } from "@tomb/protocol";
-import { chatAtBottom, chatLineAgo, chatLineDim, chatLineTone, chatPlaceTag, chatScrollAction, type ChatLine } from "@/game/logic/chatLog";
+import { mapOf } from "@tomb/protocol";
+import { chatAtBottom, chatLineAgo, chatLineDim, chatLineTone, chatPlaceTag, chatScrollAction, type ChatHere, type ChatLine } from "@/game/logic/chatLog";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
 import StyledName from "../ui/StyledName";
@@ -20,7 +20,7 @@ const SELF_TICK_MS = 15_000;
  * 11/16 memo: 새 줄이 올 때 이미 있던 줄은 다시 그리지 않는다 (사람이 많은 채널에서 채팅이 잦으면 줄 전체 재렌더가 무거웠다).
  * 그래서 줄마다 브리지를 구독하지 않고, 지금 맵(here)은 부모(ChatScroll)가 한 번 구해 넘긴다
  */
-export const ChatLineItem = memo(function ChatLineItem({ line, opacity, ago, here }: { line: ChatLine; opacity?: number; ago?: string | null; here: MapId | null }) {
+export const ChatLineItem = memo(function ChatLineItem({ line, opacity, ago, here }: { line: ChatLine; opacity?: number; ago?: string | null; here: ChatHere | null }) {
   // 11/16 다른 맵에서 쓴 줄 앞에 [캠핑장]·[바닷가]·[마을] (집 안·사냥터처럼 맵이 아닌 곳에서는 붙이지 않는다)
   const place = line.w ? null : chatPlaceTag(line, here);
   const name = (
@@ -87,7 +87,8 @@ export default function ChatScroll({ lines: shown, now, className, live = true }
   // 다른 맵에서 쓴 줄 표시([캠핑장]·[바닷가]·[마을])의 기준 = 지금 내가 있는 맵 (줄마다 구독하지 않고 여기서 한 번)
   const status = useBridgeValue("net:status");
   const scene = useBridgeValue("scene:changed")?.scene;
-  const here = !scene || scene === "world" ? mapOf(status?.map) : null;
+  // 11/17 사냥 중이면 사냥터 기준 (마을 줄은 [마을], 다른 사냥꾼 줄은 표시 없이)
+  const here: ChatHere | null = !scene || scene === "world" ? mapOf(status?.map) : scene === "hunt" ? "hunt" : null;
   // 막 받은 줄이 렌더 시각보다 늦을 수 있다 → 둘 중 늦은 쪽
   const at = now ?? Math.max(selfNow, shown.at(-1)?.at ?? 0);
 
