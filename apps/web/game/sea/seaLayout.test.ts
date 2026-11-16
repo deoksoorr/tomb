@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   SEA_ARRIVE,
   SEA_BOARD,
+  SEA_BOAT,
   SEA_BREAKWATER,
   SEA_BREAKWATER_TIP,
   SEA_FLAT_Y0,
@@ -98,14 +99,18 @@ describe("seaLayout — 걷기", () => {
         expect(seaStandable(x, y), `${x},${y}`).toBe(true);
       }
   });
-  it("먼바다는 막혀 있다", () => {
+  // 11/16 먼바다에서도 헤엄·잠수할 수 있게 막지 않아요 (늘 물속). 맵 아래 끝·묶인 낚싯배만 막아요
+  it("먼바다는 헤엄칠 수 있고 늘 물속, 낚싯배와 맵 아래 끝은 막혀 있다", () => {
     for (const [x, y] of [
       [300, 920],
       [900, 930],
-      [1260, 940],
-      [560, 950],
-    ])
-      expect(seaStandable(x, y), `${x},${y}`).toBe(false);
+      [560, 940],
+    ]) {
+      expect(seaStandable(x, y), `${x},${y}`).toBe(true);
+      expect(seaWet(x, y, 0), `${x},${y}`).toBe(true);
+    }
+    expect(seaStandable(SEA_BOAT.x, SEA_BOAT.y)).toBe(false);
+    expect(seaStandable(300, 955)).toBe(false);
   });
   it("다음 차수 쉴거리 자리·좌석은 비어 있다", () => {
     for (const p of SEA_FUTURE_SPOTS) expect(seaStandable(p.x, p.y), `${p.x},${p.y}`).toBe(true);

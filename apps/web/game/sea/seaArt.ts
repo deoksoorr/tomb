@@ -76,6 +76,7 @@ export const SEA_TEX = {
   glowDot: `${P}glowDot`,
   sheen: `${P}sheen`,
   depthShade: `${P}depthShade`,
+  sheenWet: `${P}sheenWet`,
   ground: (cx: number, cy: number) => `${P}ground-${cx}-${cy}`,
 } as const;
 
@@ -1027,55 +1028,119 @@ export function gullArt(): ArtOut {
 }
 
 // ── 물 (SeaMap이 물가 선에 맞춰 위치만 옮겨요) ──
-/** 11/16 파스텔 물: 민트·아쿠아 얕은 물 (먼바다 청록·연보라는 SeaMap의 깊이 그늘이 덮어요) */
-const WATER: { body: Color; deep: Color; light: Color; foam: Color } = { body: 0x84d8d0, deep: 0x6ec8c8, light: 0xc4f2ea, foam: 0xffffff };
-/** 물 몸통 타일 (반투명 — 아래 갯벌이 비쳐 얕은 물처럼 보여요) */
+// 11/16 사용자 참고 그림의 톤: 밝고 맑은 하늘빛 물. 깊이에 따라 가로 띠(얕은 물 → 연한 바다 → 바다 → 짙은 파랑)로 나뉘고
+// 띠 사이는 픽셀 디더로 섞어요. 어두운 물결 무늬는 없애고 밝은 물결 줄만 드문드문 (진흙빛·회색 없이)
+export const SEA_PAL = {
+  deep: 0x3b95e3,
+  sea: 0x6ac7ff,
+  light: 0x95e5ff,
+  shallow: 0xcef3ff,
+  foam: 0xeefbff,
+  wetSand: 0xeddcbe,
+  sand: 0xf7e8cf,
+  lightSand: 0xfdefd8,
+} as const;
+const WATER: { body: Color; deep: Color; light: Color; foam: Color } = { body: SEA_PAL.sea, deep: SEA_PAL.deep, light: SEA_PAL.light, foam: SEA_PAL.foam };
+const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+/** 디더 문턱 (0..1, 4×4 순서) */
+function bayer(x: number, y: number): number {
+  return (BAYER4[(y & 3) * 4 + (x & 3)] + 0.5) / 16;
+}
+/**
+ * 물 몸통 타일: 가로 64 × 세로 512. 세로는 반복하지 않아요 — 줄 = 물가 선(물때)에서 잰 깊이 + WATER_ROW0.
+ * 물가에서 멀어질수록 연한 바다 → 바다 → 짙은 파랑 (물이 빠지면 띠도 함께 내려가요). SeaMap이 tilePositionY를 맞춰요
+ */
 export const WATER_TILE_W = 64;
-export const WATER_TILE_H = 32;
+export const WATER_TILE_H = 512;
+/** 물가 선 바로 위로 밀려온 물(파도)도 담게 깊이 0을 이 줄에 둬요 */
+export const WATER_ROW0 = 64;
+/** 물가에서 깊이(px) → 물 색 띠 (디더 섞기 포함) */
+function waterBand(x: number, depth: number): Color {
+  const stops: [number, Color][] = [
+    [90, SEA_PAL.sea],
+    [230, SEA_PAL.deep],
+  ];
+  let c: Color = SEA_PAL.light;
+  for (let i = 0; i < stops.length; i++) {
+    const [y, col] = stops[i];
+    const prev = i === 0 ? SEA_PAL.light : stops[i - 1][1];
+    // 경계 앞뒤 24px을 디더로 섞어요 (가로로 뭉친 잡음 — 줄무늬가 서지 않게)
+    const t = (depth - (y - 24)) / 48;
+    if (t >= 1) c = col;
+    else if (t > 0) c = t > hashU(x >> 2, depth, 93) * 0.6 + hashU(x, depth, 94) * 0.4 ? col : prev;
+  }
+  return c;
+}
 export function waterArt(): Grid {
   const g = new Grid(WATER_TILE_W, WATER_TILE_H);
-  for (let y = 0; y < WATER_TILE_H; y++)
-    for (let x = 0; x < WATER_TILE_W; x++) {
-      const wave = Math.sin(((x + y * 2) / WATER_TILE_W) * Math.PI * 4) + Math.sin(((x * 2 - y) / WATER_TILE_W) * Math.PI * 2);
-      let c = wave > 1.4 ? WATER.light : wave < -1.3 ? WATER.deep : WATER.body;
-      if (hashU(x, y, 81) > 0.985) c = WATER.light;
-      g.set(x, y, c, c === WATER.light ? 226 : 214);
-    }
+  for (let y = 0; y < WATER_TILE_H; y++) {
+    for (let x = 0; x < WATER_TILE_W; x++) g.set(x, y, waterBand(x, y - WATER_ROW0));
+  }
+  // 밝은 물결 줄 (가로로 짧게, 드문드문 — 띠보다 한 단계 밝게)
+  const r = rng(1001);
+  for (let i = 0; i < 70; i++) {
+    const x = Math.floor(r() * WATER_TILE_W);
+    const y = Math.floor(r() * WATER_TILE_H);
+    const len = 4 + Math.floor(r() * 12);
+    const base = waterBand(x, y - WATER_ROW0);
+    const hi = base === SEA_PAL.deep ? 0x5aaef0 : base === SEA_PAL.sea ? SEA_PAL.light : SEA_PAL.shallow;
+    for (let k = 0; k < len; k++) g.set((x + k) % WATER_TILE_W, y, hi, k === 0 || k === len - 1 ? 150 : 255);
+  }
   return g;
 }
-/** 물가 거품 띠 (가로로 이어 붙는 128px). 위는 비고, 물결 모양 흰 거품 아래로 물 몸통과 같은 색 */
+/**
+ * 물가 거품 띠 (가로로 이어 붙는 128px, 세로 48). 위 끝은 고르지 않은 거품 덩어리·구멍 난 레이스(구멍으로 모래가 보여요),
+ * 그 아래 흰 물빛 → 얕은 물(아주 옅은 하늘빛) → 아래로 디더하며 투명해져 물 몸통과 섞여요
+ */
 export const FOAM_W = 128;
-export const FOAM_H = 16;
+export const FOAM_H = 48;
+/** 거품 위 끝이 이만큼 아래부터 (SeaMap이 물가 선에서 이만큼 위에 띠를 놓아요) */
+export const FOAM_TOP = 6;
 export function foamProfile(x: number): number {
-  return 5 + 2.4 * Math.sin((x / FOAM_W) * Math.PI * 2 * 3) + 1.4 * Math.sin((x / FOAM_W) * Math.PI * 2 * 7 + 1);
+  const a = (x / FOAM_W) * Math.PI * 2;
+  const blob = hashU(x >> 3, 0, 86) * 3 + hashU(x >> 1, 1, 86) * 1.2;
+  return Math.round(FOAM_TOP - 1 + 2.2 * Math.sin(a * 3) + 1.4 * Math.sin(a * 7 + 1) + blob - 2);
 }
 export function foamArt(): Grid {
   const g = new Grid(FOAM_W, FOAM_H);
   for (let x = 0; x < FOAM_W; x++) {
-    const p = Math.round(foamProfile(x));
+    const p = Math.max(0, foamProfile(x));
     for (let y = p; y < FOAM_H; y++) {
       const d = y - p;
-      if (d < 3) g.set(x, y, WATER.foam, 255);
-      else if (d < 5) g.set(x, y, hashU(x, y, 83) < 0.6 ? WATER.foam : WATER.light, 230);
-      else g.set(x, y, hashU(x, y, 84) < 0.06 ? WATER.light : WATER.body, 214);
+      if (d < 4) {
+        // 거품 머리: 흰 덩어리, 군데군데 구멍 (레이스)
+        if (d >= 2 && hashU(x >> 1, y, 87) < 0.22) continue;
+        g.set(x, y, d === 0 ? 0xffffff : WATER.foam);
+      } else if (d < 12) g.set(x, y, (d - 4) / 8 > hashU(x >> 1, y, 91) * 0.7 + hashU(x, y, 92) * 0.3 ? SEA_PAL.shallow : WATER.foam);
+      else if (d < 28) g.set(x, y, SEA_PAL.shallow);
+      // 아래로 갈수록 성기게 (가로로 뭉친 잡음 — 순서 디더는 조각마다 어긋나 세로 줄처럼 보였어요)
+      else if (hashU(x >> 2, y, 89) * 0.6 + hashU(x, y, 90) * 0.4 > (d - 28) / 18) g.set(x, y, SEA_PAL.shallow);
     }
+    // 흰 물결 조각 (거품 아래 얕은 물에 드문드문)
+    if (hashU(x, 2, 88) < 0.08) g.set(x, Math.min(FOAM_H - 1, p + 16 + Math.floor(hashU(x, 3, 88) * 10)), 0xffffff, 220);
   }
   return g;
 }
-/** 물러난 거품 자국 (가는 레이스 줄) */
+/** 물러난 거품 자국 (구멍 난 가는 레이스 줄, 128 × 6) */
 export function laceArt(): Grid {
   const g = new Grid(FOAM_W, 6);
   for (let x = 0; x < FOAM_W; x++) {
-    const y = Math.round(2.5 + 1.6 * Math.sin((x / FOAM_W) * Math.PI * 2 * 5 + 2));
-    if (hashU(x, 1, 85) < 0.8) g.set(x, y, WATER.foam, 200);
-    if (hashU(x, 2, 85) < 0.3) g.set(x, y + 1, WATER.foam, 140);
+    const y = Math.round(2.5 + 1.6 * Math.sin((x / FOAM_W) * Math.PI * 2 * 5 + 2) + (hashU(x >> 2, 0, 85) - 0.5) * 1.5);
+    if (hashU(x, 1, 85) < 0.7) g.set(x, Math.max(0, Math.min(5, y)), 0xffffff, 230);
+    if (hashU(x, 2, 85) < 0.3) g.set(x, Math.max(0, Math.min(5, y + 1)), WATER.foam, 160);
   }
+  return g;
+}
+/** 11/16 파도가 쓸고 간 젖은 윤기 (세로 그라데이션 — 아래(물 쪽)가 진하고 위로 옅게, 높이로 늘려 써요) */
+export function sheenWetArt(): Grid {
+  const g = new Grid(4, 32);
+  for (let y = 0; y < 32; y++) for (let x = 0; x < 4; x++) g.set(x, y, 0xfff8ee, Math.round(150 * (y / 31) ** 1.2));
   return g;
 }
 /** 젖은 모래 띠 (세로 그라데이션: 위는 투명, 아래로 짙게 — 높이로 늘려 써요) */
 export function wetArt(): Grid {
   const g = new Grid(4, 32);
-  for (let y = 0; y < 32; y++) for (let x = 0; x < 4; x++) g.set(x, y, 0x9a8486, Math.round(96 * (y / 31) ** 1.4));
+  for (let y = 0; y < 32; y++) for (let x = 0; x < 4; x++) g.set(x, y, 0xd8c09c, Math.round(110 * (y / 31) ** 1.3));
   return g;
 }
 /** 먼바다 반짝임 (투명 바탕에 밝은 물결 조각) */
@@ -1168,9 +1233,10 @@ const GC = {
   lot: [0xe6d4b4, 0xdccaa8, 0xeedec2] as const,
   platform: [0xe4e2ea, 0xccccd8] as const,
   road: [0x8e8ea0, 0x848496, 0x9a9aac] as const,
-  sand: [0xf8ebcc, 0xf2e2bc, 0xfcf3dc] as const,
-  flat: [0xc4b4b4, 0xbaaaac, 0xcec0be] as const,
-  deep: [0x76aed8, 0x6ea2d0, 0x84b8e0] as const,
+  // 11/16 참고 그림 톤: 밝은 크림 모래, 젖은 모래, 드러난 갯벌은 밝은 젖은 베이지(조금 차갑게)
+  sand: [0xf7e8cf, 0xf1dfc2, 0xfdefd8] as const,
+  flat: [0xe6dac4, 0xdfd2bb, 0xece2cf] as const,
+  deep: [0x3b95e3, 0x3b95e3, 0x5aaef0] as const,
 };
 
 /** 부드러운 값 잡음 (격자 해시를 겹선형 보간) 0..1 */
@@ -1247,47 +1313,39 @@ function groundColor(x: number, y: number, k: SeaGround): Color {
       return mix(DECK.mid, DECK.hi, hashU(Math.floor(x / 7), 0, 100) * 0.45);
     }
     case "sand": {
-      let c: Color = n < 0.15 ? GC.sand[1] : n > 0.88 ? GC.sand[2] : GC.sand[0];
-      if (hashU(x, y, 101) > 0.996) c = 0xf0d8c8; // 분홍 조개 가루 (드물게)
-      // 바람 결 (가는 물결무늬, 아주 옅게)
-      if (((y + Math.round(Math.sin(x * 0.04) * 3)) % 9 === 0) && hashU(x >> 2, y, 102) < 0.5) c = darken(c, 0.025);
-      // 갯벌 가까이는 촉촉하게
+      // 11/16 점 무늬 없이 크고 부드러운 얼룩만 (밝은 모래·젖은 모래 조각, 경계는 디더)
+      const n1 = smoothNoise(x / 46, y / 22, 131);
+      const n2 = smoothNoise(x / 90, y / 40, 132);
+      let c: Color = GC.sand[0];
+      if (n1 > 0.62 + bayer(x, y) * 0.06) c = GC.sand[2];
+      else if (n2 < 0.3 - bayer(x, y) * 0.05) c = GC.sand[1];
+      // 갯벌 가까이는 젖은 모래 (띠 경계는 디더)
       const toFlat = SEA_FLAT_Y0 - y;
-      if (toFlat < 16) c = mix(c, 0xe0ccbc, (16 - toFlat) / 16 * 0.55);
+      if (toFlat < 26 && toFlat / 26 < bayer(x, y)) c = SEA_PAL.wetSand;
       return c;
     }
     case "pool": {
       const d = poolDepth(x, y);
-      if (d < 0.18) return n < 0.5 ? 0xa89aa0 : 0xb2a4a8; // 젖은 테두리
-      let c: Color = d > 0.6 ? 0x84d0d4 : 0xaee6e2;
-      if (hashU(x >> 1, y, 103) > 0.94) c = 0xe0faf6;
-      if (hashU(x, y, 104) > 0.99) c = 0x9cc8a8; // 해초
+      if (d < 0.18) return SEA_PAL.wetSand; // 젖은 테두리
+      let c: Color = d > 0.6 ? SEA_PAL.light : d > 0.3 ? 0xb0ecff : SEA_PAL.shallow;
+      if (hashU(x >> 1, y, 103) > 0.95) c = 0xffffff;
       return c;
     }
     case "flat": {
-      let c: Color = n < 0.18 ? GC.flat[1] : n > 0.86 ? GC.flat[2] : GC.flat[0];
-      // 물결 자국 (가로로 굽이치는 줄)
+      // 11/16 드러난 갯벌: 밝은 젖은 베이지, 크고 부드러운 얼룩 + 아주 옅은 물결 자국 (어두운 점 없이)
+      const n1 = smoothNoise(x / 54, y / 26, 133);
+      let c: Color = n1 > 0.64 + bayer(x, y) * 0.05 ? GC.flat[2] : n1 < 0.3 - bayer(x, y) * 0.05 ? GC.flat[1] : GC.flat[0];
       const ry = y + Math.round(3 * Math.sin(x * 0.05 + y * 0.013));
-      if (ry % 8 === 0) c = darken(c, 0.06);
-      else if (ry % 8 === 1) c = lighten(c, 0.05);
-      if (hashU(x, y, 105) > 0.997) c = 0xf6eef0; // 조개 조각
-      if (hashU(x >> 1, y >> 1, 106) > 0.996) c = 0xa69498; // 게 구멍 (옅게)
-      // 모래 쪽 가장자리
+      if (ry % 10 === 0 && hashU(x >> 2, y, 134) < 0.7) c = darken(c, 0.035);
+      // 모래 쪽 가장자리 · 먼바다 쪽은 조금 더 촉촉하게
       const fromSand = y - SEA_FLAT_Y0;
-      if (fromSand < 10) c = mix(0xe0ccbc, c, Math.max(0, fromSand) / 10);
-      // 먼바다 쪽은 조금 더 촉촉하게 (푸른 기)
+      if (fromSand < 10 && fromSand / 10 < bayer(x, y)) c = SEA_PAL.wetSand;
       const toDeep = SEA_DEEP_Y - y;
-      if (toDeep < 24) c = mix(c, 0xa8b4c8, (24 - toDeep) / 24 * 0.5);
+      if (toDeep < 24 && toDeep / 24 < bayer(x, y)) c = 0xd8ccb4;
       return c;
     }
-    case "deep": {
-      let c: Color = n < 0.2 ? GC.deep[1] : n > 0.9 ? GC.deep[2] : GC.deep[0];
-      const wave = (y + Math.round(Math.sin(x * 0.07) * 2)) % 11 === 0 && hashU(x >> 3, y, 107) < 0.6;
-      if (wave) c = 0xa8d0ec;
-      const fromEdge = y - SEA_DEEP_Y;
-      if (fromEdge < 10) c = mix(0xa8b4c8, c, Math.max(0, fromEdge) / 10);
-      return c;
-    }
+    case "deep":
+      return SEA_PAL.deep;
     case "grass":
     default: {
       // 바닷가 풀밭: 남쪽(산책로 쪽)으로 갈수록 모래가 섞여요
@@ -1340,7 +1398,7 @@ export function* seaGroundSteps(cx: number, cy: number, size = SEA_CHUNK, band =
         const py = Math.round(hpt.y + y - oy);
         if (px < 0 || py < 0 || px >= w || py >= h) continue;
         // 11/16 파스텔: 구멍도 옅은 회보라로 (예전엔 짙은 갈색 점이 지저분해 보였어요)
-        put(out, (py * size + px) * 4, d > 0.6 ? (y < 0 ? 0xa89aa2 : 0xd4c8ca) : d > 0.3 ? 0x9c8c96 : 0x8a7a88);
+        put(out, (py * size + px) * 4, d > 0.6 ? (y < 0 ? 0xd2c2a8 : 0xf0e6d2) : d > 0.3 ? 0xc8b69c : 0xb8a68e);
       }
   return out;
 }

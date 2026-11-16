@@ -44,6 +44,7 @@ import type { NetCallbacks } from "../net/RealtimeClient";
 import type { NetPose } from "../net/sendThrottle";
 import { avatarColorSpec } from "../sprites/avatar";
 import { Atmosphere } from "../world/Atmosphere";
+import { Effects } from "../world/Effects";
 import { CameraRig } from "../world/CameraRig";
 import { Expressions } from "../world/Expressions";
 import { Fireworks } from "../world/Fireworks";
@@ -98,6 +99,8 @@ export class SeaScene extends Phaser.Scene {
   private expr!: Expressions;
   private riding!: Riding;
   private meScreen!: MeScreen;
+  /** 11/16 잠수할 때 물 튀김 (마을 Effects 그대로) */
+  private fx!: Effects;
   private fireworks: Fireworks | null = null;
   private seatReq!: SeatRequester;
   private furnitureCollider: Phaser.Physics.Arcade.Collider | null = null;
@@ -219,6 +222,7 @@ export class SeaScene extends Phaser.Scene {
     this.lighting = new Lighting(this);
     yield;
     this.seatHint = new SeatHint(this, h.atlas);
+    this.fx = new Effects(this, h.reduced);
     this.meScreen = new MeScreen(this);
     this.expr = new Expressions({
       player: () => this.player,
@@ -646,6 +650,13 @@ export class SeaScene extends Phaser.Scene {
       return;
     }
     if (a !== "interact") return;
+    // 11/16 물속이면 E = 잠수·떠오르기 (마을 강·호수와 같은 규칙 — 물이 덮은 갯벌·먼바다 어디서든)
+    if (pl.state === "swim" || pl.state === "dive") {
+      const diving = pl.state === "swim";
+      pl.toggleDive(now);
+      if (diving) this.fx.splash(pl.x, pl.y);
+      return;
+    }
     if (pl.sitting) {
       pl.stand(now, this.seatReq);
       return;
@@ -884,7 +895,8 @@ export class SeaScene extends Phaser.Scene {
     this.atmos.gather(longSit ? { x: pl.x, y: pl.y } : null);
     this.atmos.update(now, dt, view);
     // 물소리: 헤엄치면 물장구, 늘 파도 소리 (물가에 가까울수록 크게)
-    this.host.sfx.water(pl.state === "swim" ? "swim" : null, pl.state === "swim" && Math.hypot(this.move.ax, this.move.ay) >= DEADZONE_ENTER, pnow);
+    const wet = pl.state === "swim" || pl.state === "dive" ? pl.state : null;
+    this.host.sfx.water(wet, wet !== null && Math.hypot(this.move.ax, this.move.ay) >= DEADZONE_ENTER, pnow);
     const far = Math.max(0, tideLineY(this.tide) - pl.y);
     this.host.sfx.seaWaves(0.35 + 0.65 * Math.max(0, 1 - far / WAVE_FAR));
     this.fireworks?.update(now, dt, view);
@@ -938,7 +950,9 @@ export class SeaScene extends Phaser.Scene {
     const obj = !pl.sitting && !this.locked ? this.nearestObject(pl.x, pl.y) : null;
     const objSd = seat ? Math.hypot(seat.x - pl.x, seat.y - pl.y) : Infinity;
     const objOd = obj ? Math.hypot(obj.x - pl.x, obj.y - pl.y) : Infinity;
-    const other = obj && objOd <= objSd ? { x: obj.x, y: obj.y + 2, text: `${this.seatHint.prefix}${obj.label}` } : null;
+    let other = obj && objOd <= objSd ? { x: obj.x, y: obj.y + 2, text: `${this.seatHint.prefix}${obj.label}` } : null;
+    // 11/16 물속: 잠수·떠오르기 안내 (마을과 같은 글)
+    if (pl.state === "swim" || pl.state === "dive") other = { x: pl.x, y: pl.y + 2, text: `${this.seatHint.prefix}${pl.state === "swim" ? "잠수" : "떠오르기"}` };
     const bench = pl.state === "sitChair" && pl.seat && SEA_MULTI_SEAT.has(pl.seat.furnitureId);
     const keys = this.seatHint.prefix === "E ";
     const standText = bench ? (keys ? "←→ 옆자리 · ↑↓ 일어나기 · T 벤치 상태" : "좌우로 옆자리 · 위아래로 일어나기") : pl.state === "sitChair" && keys ? "이동하면 일어나요 · T 상태 고르기" : null;

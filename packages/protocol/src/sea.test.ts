@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAMP_SEATS, MAP_TAG, SEATS, SEA_ARRIVE, SEA_BOARD, SEA_SEATS, inMapBounds, isAwayMap, mapAllowed, mapOf, mapSpawn, seaColliders, seatSlotIn, SEA_HEIGHT, SEA_WIDTH, SEA_LOTS, SEA_SPOTS, SPAWN, tideLineY, TIDE_HIGH_Y, TIDE_LOW_Y, SEA_DEEP_Y } from "./index";
+import { CAMP_SEATS, MAP_TAG, SEATS, SEA_ARRIVE, SEA_BOARD, SEA_SEATS, inMapBounds, isAwayMap, mapAllowed, mapOf, mapSpawn, seaColliders, seatSlotIn, SEA_HEIGHT, SEA_WIDTH, SEA_LOTS, SEA_SPOTS, SPAWN, seaWet, tideLineY, TIDE_HIGH_Y, TIDE_LOW_Y, SEA_DEEP_Y } from "./index";
 
 // 11/16 달물결 포구: 세 번째 맵 (protocol sea.ts). 맵 id·허락·좌석·충돌 기본 규칙
 
@@ -28,10 +28,11 @@ describe("sea map (protocol)", () => {
     expect(seatSlotIn("sea", "qL1")).toBeUndefined();
     expect(seatSlotIn("sea", "lA-0")).toBeUndefined();
   });
-  it("도착·타는 자리는 막히지 않고, 먼바다는 막혀 있다", () => {
+  it("도착·타는 자리는 막히지 않고, 11/16 먼바다도 헤엄칠 수 있게 막지 않는다 (낚싯배만)", () => {
     expect(hit(SEA_ARRIVE.x, SEA_ARRIVE.y)).toBe(false);
     expect(hit(SEA_BOARD.x, SEA_BOARD.y)).toBe(false);
-    expect(hit(300, SEA_DEEP_Y + 20)).toBe(true);
+    expect(hit(300, SEA_DEEP_Y + 20)).toBe(false);
+    expect(seaWet(300, SEA_DEEP_Y + 20, 0)).toBe(true);
     // 갯벌은 물때와 상관없이 막지 않는다
     for (let y = TIDE_HIGH_Y + 4; y < TIDE_LOW_Y; y += 16) expect(hit(420, y), `${y}`).toBe(false);
     expect(tideLineY(1)).toBeLessThan(tideLineY(0));

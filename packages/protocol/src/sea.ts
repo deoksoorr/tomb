@@ -28,8 +28,9 @@ export const SEA_HEIGHT = SEA_ROWS * 16; // 960
 /**
  * 바닷가 배치 버전. 좌표가 바뀌는 개편마다 올려요 → 옛 바닷가 자리 기록(lib/resume.ts)은 위치를 버리고 정류장에서 시작해요.
  * 1 = 11/16 1차 바탕 (정류장·시장·부동산·오두막 터 6·산책로·백사장·갯벌·선착장·방파제·등대·갯바위)
+ * 2 = 11/16 정류장을 왼쪽으로 (오른쪽 위 미니맵에 가리지 않게) · 먼바다 띠에서도 헤엄·잠수 (막지 않아요)
  */
-export const SEA_MAP_VERSION = 1;
+export const SEA_MAP_VERSION = 2;
 
 type Rect = { x: number; y: number; w: number; h: number };
 type Pt = { x: number; y: number };
@@ -50,7 +51,7 @@ export const SEA_BOARDWALK = { x: 0, y: 388, w: SEA_WIDTH, h: 26 } as const;
 export const SEA_SAND_Y0 = SEA_BOARDWALK.y + SEA_BOARDWALK.h;
 /** 갯벌이 시작하는 줄 = 만조 물가 (물이 여기까지 차요). 이 위 백사장은 늘 말라 있어요 */
 export const SEA_FLAT_Y0 = 560;
-/** 먼바다가 시작하는 줄 (이 아래는 늘 물, 막혀요 — 선착장·방파제 끝만 걸어요) */
+/** 먼바다가 시작하는 줄 (이 아래는 늘 물 — 11/16부터 헤엄치고 잠수할 수 있어요, 맵 아래 끝·배만 막아요) */
 export const SEA_DEEP_Y = 900;
 
 // ── 물때 (11/16 사용자 확정) ──
@@ -121,7 +122,7 @@ export function tideLineY(level: number): number {
 export type SeaZoneId = "busStop" | "market" | "realty" | "cottages" | "beach" | "flat" | "pier" | "breakwater" | "rocks";
 export type SeaZone = { id: SeaZoneId; name: string } & Rect;
 export const SEA_ZONES: readonly SeaZone[] = [
-  { id: "busStop", name: "버스 정류장", x: 1060, y: 30, w: 200, h: 110 },
+  { id: "busStop", name: "버스 정류장", x: 950, y: 30, w: 200, h: 110 },
   { id: "market", name: "포구 시장", x: 700, y: 170, w: 272, h: 160 },
   { id: "realty", name: "포구 부동산", x: 546, y: 186, w: 132, h: 120 },
   { id: "cottages", name: "오두막 단지", x: 32, y: 156, w: 476, h: 228 },
@@ -133,14 +134,14 @@ export const SEA_ZONES: readonly SeaZone[] = [
 ];
 
 // ── 버스 정류장 (오른쪽 위) ── 지붕 받침 가운데. 지붕 아래 벤치(pB), 오른쪽에 노선 팻말, 왼쪽에 시간표.
-// 정류장 앞 보도 → 그 아래 버스 길. 내리자마자 오른쪽 아래 방파제 끝 등대와 바다가 먼저 보여요
-export const SEA_BUS_STOP = { x: 1150, y: 84 } as const;
+// 정류장 앞 보도 → 그 아래 버스 길. 11/16 오른쪽 끝(1150)에선 화면 오른쪽 위 미니맵에 가려서 조금 왼쪽(1040)으로 옮겼어요
+export const SEA_BUS_STOP = { x: 1040, y: 84 } as const;
 export const SEA_SHELTER_W = 64;
 export const SEA_SHELTER_H = 52;
-export const SEA_BUS_SIGN = { x: 1200, y: 90 } as const;
-export const SEA_BUS_TIMETABLE = { x: 1102, y: 88 } as const;
+export const SEA_BUS_SIGN = { x: SEA_BUS_STOP.x + 50, y: 90 } as const;
+export const SEA_BUS_TIMETABLE = { x: SEA_BUS_STOP.x - 48, y: 88 } as const;
 /** 버스에서 내리는 자리 (정류장 앞 보도). 처음 도착·새로고침 자리가 막혔을 때도 여기 */
-export const SEA_ARRIVE = { x: 1150, y: 100 } as const;
+export const SEA_ARRIVE = { x: SEA_BUS_STOP.x, y: 100 } as const;
 /** 버스에 타는 자리 (정류장 앞 보도 — 여기서 E) */
 export const SEA_BOARD = { x: SEA_BUS_STOP.x, y: SEA_BUS_STOP.y + 16 } as const;
 /** 버스 바퀴가 닿는 줄 (BusArrival laneY) · 오른쪽 끝에서 들어와요 */
@@ -332,22 +333,12 @@ export function seaRockCollider(r: { x: number; y: number; rx: number; ry: numbe
   return { x: r.x - r.rx * 0.8, y: r.y - r.ry * 0.7, w: r.rx * 1.6, h: r.ry * 1.2 };
 }
 
-/** 먼바다 (선착장 끝 데크·방파제 끝 데크만 비워요) */
+/**
+ * 먼바다: 11/16부터 헤엄·잠수할 수 있어 막지 않아요. 묶인 낚싯배 몸통만 막아요 (맵 아래 끝은 SEA_BOUNDS).
+ * 선착장·방파제 끝 데크 둘레는 난간(railColliders)이 막아서 물에서 데크로 바로 오르지는 못해요
+ */
 function deepSeaColliders(): Rect[] {
-  const y = SEA_DEEP_Y;
-  const h = SEA_HEIGHT - y;
-  const P = SEA_PIER_END;
-  const T = SEA_BREAKWATER_TIP;
-  return [
-    { x: 0, y, w: P.x, h },
-    { x: P.x + P.w, y, w: T.x - P.x - P.w, h },
-    { x: T.x + T.w, y, w: SEA_WIDTH - T.x - T.w, h },
-    { x: P.x, y: P.y + P.h, w: P.w, h: SEA_HEIGHT - P.y - P.h },
-    { x: T.x, y: T.y + T.h, w: T.w, h: SEA_HEIGHT - T.y - T.h },
-    // 선착장이 먼바다로 들어가는 목 (데크 위만 걸어요)
-    { x: P.x, y, w: SEA_PIER.x - P.x, h: P.y - y },
-    { x: SEA_PIER.x + SEA_PIER.w, y, w: P.x + P.w - SEA_PIER.x - SEA_PIER.w, h: P.y - y },
-  ];
+  return [{ x: SEA_BOAT.x - 34, y: SEA_BOAT.y - 12, w: 68, h: 16 }];
 }
 
 /** 선착장·방파제 난간 (머리 아래부터 양옆을 막아요 — 갯벌에서 올라타지 못해요) */

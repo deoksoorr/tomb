@@ -65,22 +65,23 @@ export class WaveTrain {
     if (this.setLeft > 0) {
       // 세트: 큰 파도가 연달아
       this.setLeft--;
-      dur = 6000 + r() * 3000;
-      amp = 13 + r() * 5;
+      dur = 6500 + r() * 3500;
+      amp = 26 + r() * 16;
       big = true;
       if (this.setLeft === 0) this.calmLeft = 1 + Math.floor(r() * 2);
     } else if (this.calmLeft > 0) {
       this.calmLeft--;
-      dur = 4000 + r() * 2200;
-      amp = 3 + r() * 2.5;
-    } else if (r() < 0.2) {
+      dur = 3500 + r() * 2500;
+      amp = 3 + r() * 3;
+    } else if (r() < 0.16) {
       this.setLeft = 1 + (r() < 0.45 ? 2 : 1);
-      dur = 6000 + r() * 3000;
-      amp = 12.5 + r() * 5;
+      dur = 6500 + r() * 3500;
+      amp = 24 + r() * 16;
       big = true;
     } else {
+      // 보통 파도도 높이가 넓게 퍼져요 (찰랑 ~ 제법 큰 파도)
       dur = 4000 + r() * 5000;
-      amp = 6 + r() * 5.5;
+      amp = 6 + r() * r() * 22;
     }
     // 다음 파도는 앞 파도가 다 빠지기 조금 전에 와요 (겹쳐서 이어져요)
     return { id: this.nextId++, t0, dur, amp, big };
@@ -121,8 +122,8 @@ export function shoreDelay(x: number, time: number): number {
   return (0.55 * noise1(x / 380 + time * 0.000025, 11) + 0.45 * noise1(x / 150 - time * 0.00004, 12)) * 2400;
 }
 
-/** x에서 밀려오는 폭 배율 (0.3..1.4) — 여러 겹 잡음 */
+/** x에서 밀려오는 폭 배율 (0.25..1.35) — 여러 겹 잡음 */
 export function shoreReach(x: number, time: number): number {
   const n = 0.5 * noise1(x / 260 + time * 0.00004, 21) + 0.3 * noise1(x / 110 - time * 0.00007, 22) + 0.2 * noise1(x / 46 + time * 0.0001, 23);
-  return 0.3 + 1.1 * n;
+  return 0.25 + 1.1 * n;
 }

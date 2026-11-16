@@ -18,12 +18,13 @@ describe("waves (물가 파도)", () => {
         big++;
       }
     }
-    expect(Math.max(...peaks)).toBeGreaterThan(13);
-    expect(Math.max(...peaks)).toBeLessThan(19);
+    // 11/16 사용자 "훨씬 크고 들쭉날쭉하게": 큰 파도는 모래 위로 멀리 (40px 남짓), 작은 건 찰랑
+    expect(Math.max(...peaks)).toBeGreaterThan(30);
+    expect(Math.max(...peaks)).toBeLessThan(43);
     expect(big).toBeGreaterThan(5);
     // 10분 동안 같은 높이로만 오지 않아요 (봉우리 높이가 넓게 퍼져요)
     const tops = peaks.filter((v, i) => i > 0 && i < peaks.length - 1 && v >= peaks[i - 1] && v > peaks[i + 1]);
-    expect(Math.max(...tops) - Math.min(...tops)).toBeGreaterThan(5);
+    expect(Math.max(...tops) - Math.min(...tops)).toBeGreaterThan(20);
   });
   it("같은 씨앗이면 같은 흐름", () => {
     const a = new WaveTrain(77, 0);
@@ -40,7 +41,7 @@ describe("waves (물가 파도)", () => {
     const delay = Array.from({ length: 40 }, (_, i) => shoreDelay(i * 32, 1000));
     expect(Math.max(...reach) - Math.min(...reach)).toBeGreaterThan(0.2);
     expect(Math.max(...delay) - Math.min(...delay)).toBeGreaterThan(300);
-    for (const r of reach) expect(r).toBeGreaterThanOrEqual(0.3);
+    for (const r of reach) expect(r).toBeGreaterThanOrEqual(0.25);
   });
 });
 
