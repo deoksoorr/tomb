@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "./redisUsage";
 import { findBan } from "./ban";
 import { env } from "./env";
 import { gearById } from "./rpg/catalog";
@@ -107,7 +108,7 @@ export class RedisHuntLevel implements HuntLevelStore {
   private redis: Redis;
   readonly fill: FillMark;
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "huntLevelRank");
     this.fill = new RedisFillMark(this.redis, FILL_KEY);
   }
   async put(accountId: string, score: number, weapon: string | null): Promise<void> {

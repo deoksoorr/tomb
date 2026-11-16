@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { K } from "./keys";
 
 // 50번 소원 분수: 계정당 하루(게임 날짜, 한국 시간 새벽 5시에 바뀐다) 한 번. 운영자 IP도 예외 없이 이 표 하나로 막는다 (lib/ratelimit와 따로).
@@ -32,7 +33,7 @@ export class RedisWishDay implements WishDayStore {
   private redis: Redis;
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "wishDay");
   }
 
   async claim(accountId: string, day: string): Promise<boolean> {

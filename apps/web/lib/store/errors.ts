@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 
 // 오류 모음 (외부 서비스 없이). 같은 오류는 해시로 묶어 하루마다 횟수·마지막 시각·샘플 1개만 둔다.
 // Redis: HASH errors:{YYYYMMDD} — `{해시}` → 샘플 JSON(처음 것), `{해시}:n` → 횟수, `{해시}:last` → 마지막 시각. 14일 보관
@@ -42,7 +43,7 @@ export class RedisErrors implements ErrorStore {
   private redis: Redis;
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "errors");
   }
 
   async record(day: string, hash: string, sample: ErrorSample, now: number): Promise<void> {

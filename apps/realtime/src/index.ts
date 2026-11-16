@@ -70,28 +70,37 @@ export default {
 // ── POST /internal/* (47번, 서버끼리) ──
 // 브라우저가 부르는 경로가 아니라 CORS가 없다. 서명이 틀리면 경로가 없는 것처럼 404.
 
+/** /internal/* 본문 상한 (바이트) */
+const INTERNAL_MAX_BYTES = 8_000 * 4;
 const INTERNAL_PATHS = new Set(["/internal/kick", "/internal/peer", "/internal/me", "/internal/where", "/internal/hello", "/internal/say"]);
 
 async function internal(req: Request, env: Env, path: string): Promise<Response> {
   const notFound = new Response("not found", { status: 404 });
   if (req.method !== "POST") return notFound;
+  // 서명을 보기 전에 본문 크기부터 (verifyInternal의 글자 수 상한과 같은 8KB) — 큰 본문을 통째로 읽어 메모리를 쓰지 않게
+  // (길이 머리글이 없는 요청은 예전처럼 읽고 글자 수로 거른다 — 서버 간 호출을 깨지 않게)
+  const len = Number(req.headers.get("content-length") ?? 0);
+  if (!req.headers.get(INTERNAL_SIG_HEADER) || !(len <= INTERNAL_MAX_BYTES)) return notFound;
   const r = await verifyInternal(env.JOIN_SECRET, await req.text(), req.headers.get(INTERNAL_SIG_HEADER));
   if (!r || `/internal/${r.op}` !== path) return notFound;
   if (r.op === "kick") {
     if (r.code !== CLOSE.KICKED && r.code !== CLOSE.BANNED) return new Response("bad code", { status: 400 });
     // 방문자가 어느 채널에 있는지 로비 등록이 늦거나 비어 있을 수 있어, 열린 채널 전부에 묻는다 (채널 수가 적다).
-    // 방(마을·집·사냥터)은 로비가 모른다 → 월드 소켓이 닫히면 클라이언트가 방도 정리한다
-    const info = await lobbyStub(env).info();
-    const counts = await Promise.all(
-      info.channels.map((c) =>
-        channelStub(env, c.id)
-          .expel(r.visitorIds, r.code)
-          .catch((e) => {
-            console.error("expel failed", c.id, e);
-            return 0;
-          }),
-      ),
-    );
+    // 방: 마을 방과 로비가 아는 사냥터 방(인원 보고)에도 보낸다 — 고친 클라이언트가 방 소켓을 붙든 채 남지 않게.
+    // 집 방은 로비가 모른다 → 월드 소켓이 닫히면 클라이언트가 정리한다
+    const [info, hunt] = await Promise.all([lobbyStub(env).info(), lobbyStub(env).huntRooms().catch(() => ({ rooms: {} as Record<string, number> }))]);
+    const rooms = ["village", ...Object.keys(hunt.rooms)].filter((id) => ROOM_ID_RE.test(id));
+    const expel = (label: string, stub: { expel(ids: string[], code: number): Promise<number> | number }) =>
+      Promise.resolve()
+        .then(() => stub.expel(r.visitorIds, r.code))
+        .catch((e) => {
+          console.error("expel failed", label, e);
+          return 0;
+        });
+    const counts = await Promise.all([
+      ...info.channels.map((c) => expel(String(c.id), channelStub(env, c.id))),
+      ...rooms.map((id) => expel(id, roomStub(env, id))),
+    ]);
     return Response.json({ expelled: counts.reduce((a, b) => a + b, 0) });
   }
   if (r.op === "me") {

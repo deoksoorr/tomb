@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { FRIEND_MAX, FRIEND_PENDING_MAX, FRIEND_REQUEST_KEEP_DAYS } from "@tomb/protocol";
 import type { MemoryAccounts } from "./accounts-memory";
 import { kstDay } from "./accounts";
@@ -228,7 +229,7 @@ export class RedisFriends implements FriendStore {
   private redis: Redis;
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "friends");
   }
 
   async lists(id: string, now: number): Promise<FriendLists> {

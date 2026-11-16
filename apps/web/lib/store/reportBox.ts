@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { env } from "../env";
 import type { UserReportReason } from "../reports";
 
@@ -170,7 +171,7 @@ export class RedisReportBox implements ReportBox {
   private redis: Redis;
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "reportBox");
   }
 
   async add(meta: CaseMeta, note: ReportNote, day: string): Promise<"ok" | "duplicate"> {

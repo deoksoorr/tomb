@@ -244,17 +244,58 @@
   min-width: 0;
 }
 
+/* 11/16 닉네임 12자 · 집 이름 20자: 집 이름 / 호칭 · 주인 / 번지 · 터를 한 줄씩, 넘치는 이름만 "…" */
+.listHead,
+.listMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .listName {
+  min-width: 0;
   overflow: hidden;
   color: var(--bone);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.listStat {
+.listMine {
+  flex: none;
+  padding: 0 4px;
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 10px;
+  box-shadow: inset 0 0 0 1px var(--candle);
+}
+
+.listMeta > :first-child {
+  flex: none;
+}
+
+.listWhere,
+.listOwner {
+  min-width: 0;
+  overflow: hidden;
   color: var(--muted);
   font-family: var(--font-small);
   font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.listOwner {
+  color: var(--text);
+}
+
+/* 점수 칸: 오른쪽 고정 폭 (자릿수가 달라도 줄마다 같은 자리) */
+.listStat {
+  min-width: 52px;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
   text-align: right;
   white-space: nowrap;
 }
@@ -295,6 +336,26 @@
   color: var(--bone);
   font-family: var(--font-read);
   font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 11/16 집 안 위쪽 줄: 점수(숫자 자리 고정) · 주인 · 터 (자리가 모자라면 다음 줄로, 그래도 넘치면 "…") */
+.hudScore {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.hudOwner {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { GRAVE_CHANNELS } from "./channels";
 import { REPORT_LOG_MAX, type ReportLogEntry, type ReportReason } from "../reports";
 import { DEFAULT_PASS_DAYS, type Grave, type GraveDecor, type PassReason } from "../types";
@@ -207,7 +208,7 @@ export class RedisStore implements GraveStore {
 
   constructor(conn: { url: string; token: string }) {
     // 응답을 원문 문자열로 받는다. 자동 JSON 파싱을 켜 두면 숫자처럼 생긴 id("1e5..")가 숫자로 바뀔 수 있다.
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "redis");
   }
 
   /** 묘비의 채널 (기록이 없으면 채널 개편 전 묘비 = 1채널) */

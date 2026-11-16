@@ -49,19 +49,23 @@ import { isPermanentJoinError, JoinLimiter, reusableToken, utf8Bytes, type Cache
 import { MoveThrottle, type NetPose } from "./sendThrottle";
 import { bodyFromWsUrl, SYNC_EVERY_MS, SyncPolicy } from "./syncPolicy";
 import { deviceHeaders } from "@/lib/deviceMark";
+import { CHANNEL_FULL_MSG, lobbyChannelFull } from "./switchPolicy";
 
 // 실시간 연결 (명세 3-2, 4-1).
 //  - (재)연결마다 POST /api/join 으로 새 토큰을 받는다 (토큰 60초 유효). 같은 채널로 돌아가면 서버 유예(20초) 안에서 sid·좌석 유지
 //  - wsUrl + &x=..&y=..(현재 위치)&v=CLIENT_VERSION 으로 접속 → welcome → join/leave/seat/emote/graveEvent JSON + 100ms 델타 SNAPSHOT
 //  - MOVE: 움직이는 동안 ≤10Hz, 상태가 바뀌면 즉시 1회, 정지·앉기 중엔 0회, 탭이 숨으면 멈추고 돌아오면 1회
 //  - 끊기면 0.5→1→2→4→8s(지터) 백오프. 실시간 서버가 없어도 게임은 혼자 그대로 돌아간다 (mode "offline")
-//  - 4001 만석: 로비를 보고 다른 채널로 최대 3회 → 그래도 안 되면 관람 모드(30초마다 로비 확인 후 합류)
+//  - 4001 만석: 로비를 보고 다른 채널로 최대 3회 → 그래도 안 되면 관람 모드(30초마다 로비 확인 후 합류).
+//    단 일부러 옮기는 채널 이동(switchChannel)은 꽉 찬 채널로 절대 가지 않는다: 떠나기 전에 로비를 보고 만석이면 그대로 있고,
+//    들어가는 순간 만석(경합)이면 다른 채널·관람 모드가 아니라 온 채널로 돌아온다 (switchPolicy)
 //  - 4002 다른 탭에서 접속: "replaced", 재접속하지 않음 / 4003 토큰 만료: 새 토큰으로 바로 재접속 / 4008 과다 전송
 //  - 4004 잘못된 요청: 자동 배정으로 다시 / /api/join 400: 재시도해도 소용없으니 offline + 안내 1회
 //  - 4010 옛 버전(큰 패치): 재접속하지 않고 app:outdated → UI가 업데이트 창을 띄워 새로고침한다
 //  - 4011 운영자 강퇴: 재접속하지 않고 안내만 / 4012 이용 제한: 재접속하지 않고 app:banned → UI가 새로고침(제한 화면)
-//  - 클라이언트가 끊는 경우: 의도적 퇴장(stop·채널 이동)만 1000, 타임아웃 등은 4000
-//    (서버는 1000을 "떠남"으로 보고 재연결 유예 없이 자리를 비운다)
+//  - 클라이언트가 끊는 경우: 의도적 퇴장(stop)만 1000, 채널 이동·타임아웃 등은 4000
+//    (서버는 1000을 "떠남"으로 보고 재연결 유예 없이 자리를 비운다. 채널 이동은 옛 자리를 유예로 남겨 두었다가
+//     새 채널에 들어가면 로비가 바로 정리하고(claim → kick), 새 채널이 꽉 차 거절되면 그 자리로 돌아온다)
 //  - 대기열(/api/join → queue): 혼자 걸으며 queueUrl을 QUEUE_POLL_MS마다 확인, admitted면 그 채널로 입장
 //  - 자가 복구: 탭이 보이는 동안 3분마다(PEER_SYNC_MS×3), 탭이 다시 보일 때, 이상 징후(모르는 sid의 스냅샷·인원 불일치)일 때만
 //    sync → peers로 원격 아바타 목록을 서버 기준으로 맞춘다 (가만히 있으면 서버를 깨우지 않는다. 숨은 탭은 핑만)
@@ -197,6 +201,12 @@ export class RealtimeClient {
   private readonly triedFull = new Set<number>();
   private fullRetries = 0;
   private redirected = false;
+  /** 일부러 채널을 옮기는 중: 돌아갈 채널 (새 채널이 꽉 차 거절되면 다른 채널로 가지 않고 여기로). welcome까지 */
+  private switchBack: number | null = null;
+  /** 그때 띄울 안내 (친구한테 가기면 친구 이름이 든 문장) */
+  private switchFullMsg = CHANNEL_FULL_MSG;
+  /** 채널 이동 전 로비 확인 순번 (늦게 온 확인이 새 요청을 덮지 않게) */
+  private switchSeq = 0;
   /** 실내(하위 장면)에 들어가 있다 (setAway) */
   private away = false;
   /** 친구 위치용: 어느 실내인지·집 안이면 그 집 id (setAway) */
@@ -337,12 +347,31 @@ export class RealtimeClient {
     this.closeSocket(1000, "bye");
   }
 
-  /** 게임 안 채널 이동: 연결을 닫고 새 채널에 입장. 위치는 지금 캐릭터 위치(씬이 먼저 처음 자리 SPAWN으로 옮겨 둔다) */
-  switchChannel(channel: number): void {
+  /**
+   * 게임 안 채널 이동 (채널 메뉴·친구한테 가기·내 집 가기·내 묘비 가기). 꽉 찬 채널로는 절대 옮기지 않는다:
+   *  1) 떠나기 전에 로비를 다시 받아 만석이면 지금 채널·자리 그대로 두고 안내 (channel:refused, back=false).
+   *     로비를 못 받으면 그냥 가 본다 — 서버가 막으면 2)로 돌아온다
+   *  2) 통과하면 channel:leave(장면이 지금 자리를 기억하고 처음 자리 SPAWN으로) → 연결을 닫고 새 채널에 입장.
+   *     위치는 지금 캐릭터 위치. 들어가는 순간 꽉 찼으면(경합) 온 채널로 돌아간다 (returnBack)
+   * fullMsg = 꽉 찼을 때 안내 (기본 CHANNEL_FULL_MSG)
+   */
+  async switchChannel(channel: number, fullMsg = CHANNEL_FULL_MSG): Promise<void> {
     if (this.stopped) return;
     if (channel === this.channel && this.online) return;
+    const seq = ++this.switchSeq;
+    const lobby = await fetchLobby();
+    if (seq !== this.switchSeq || this.stopped) return;
+    if (channel === this.channel && this.online) return;
+    if (lobbyChannelFull(lobby, channel)) {
+      this.refuse(channel, fullMsg, false);
+      return;
+    }
+    // 돌아갈 채널: 지금 채널 (접속이 끊겨 다시 붙는 중이면 붙으려던 채널, 관람·대기열이면 없음 → 예전 규칙)
+    const back = this.channel !== null && this.channel !== channel ? this.channel : null;
+    bridge.emit("channel:leave", { channel });
     this.pendingWarp = null; // 옛 채널에 보내려던 순간이동은 새 채널에 의미가 없다 (접속 좌표가 곧 위치)
-    this.closeSocket(1000, "switch");
+    // 1000이 아니라 4000: 옛 채널 자리를 유예로 남겨 둔다 (새 채널에 들어가면 로비가 바로 정리, 거절되면 그 자리로 돌아온다)
+    this.closeSocket(CLOSE_CLIENT_DROP, "switch");
     this.h.onReset();
     this.peers.clear();
     this.clearTimers();
@@ -350,10 +379,33 @@ export class RealtimeClient {
     this.fullRetries = 0;
     this.redirected = false;
     this.attempt = 0;
+    this.switchBack = back;
+    this.switchFullMsg = fullMsg;
     this.target = channel;
     this.channel = channel;
     this.setMode("connecting");
     void this.connect(channel);
+  }
+
+  /** 꽉 찬 채널이라 옮기지 않았다: 장면에 알리고(back이면 떠나기 전 자리로) 안내. 같은 안내도 누를 때마다 띄운다 */
+  private refuse(channel: number, message: string, back: boolean): void {
+    bridge.emit("channel:refused", { channel, message, back });
+    bridge.emit("toast", { message });
+  }
+
+  /** 일부러 옮기던 채널이 들어가는 순간 꽉 찼다: 다른 채널·관람 모드로 가지 않고 온 채널(유예로 남긴 자리)로 돌아간다 */
+  private returnBack(back: number): void {
+    const to = this.connectingTo ?? this.channel ?? back;
+    this.switchBack = null;
+    this.refuse(to, this.switchFullMsg, true);
+    this.triedFull.clear();
+    this.fullRetries = 0;
+    this.redirected = false;
+    this.attempt = 0;
+    this.target = back;
+    this.channel = back;
+    this.setMode(this.everOnline ? "reconnecting" : "connecting");
+    void this.connect(back);
   }
 
   /** "여기서 다시 접속": replaced/offline/대기 상태에서 처음부터 다시 */
@@ -366,6 +418,7 @@ export class RealtimeClient {
     this.triedFull.clear();
     this.fullRetries = 0;
     this.redirected = false;
+    this.switchBack = null;
     this.attempt = 0;
     this.token = null;
     this.setMode("connecting");
@@ -881,6 +934,7 @@ export class RealtimeClient {
     if (this.admittedTo !== null) this.toast(`자리가 나서 ${m.channel}채널로 들어왔어요`);
     else if (this.redirected) this.toast(`채널이 가득 차서 ${m.channel}채널로 들어왔어요`);
     this.redirected = false;
+    this.switchBack = null;
     this.admittedTo = null;
     this.stopQueue();
     this.triedFull.clear();
@@ -990,7 +1044,9 @@ export class RealtimeClient {
 
     switch (code) {
       case CLOSE.CHANNEL_FULL:
-        void this.handleFull();
+        // 일부러 옮기던 중이면 온 채널로, 처음 입장·재접속이면 다른 채널 → 관람 모드
+        if (this.switchBack !== null) this.returnBack(this.switchBack);
+        else void this.handleFull();
         return;
       case CLOSE.REPLACED:
         this.channel = null;

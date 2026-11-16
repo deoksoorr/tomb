@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { env } from "../env";
 import { DEX_CATS, DEX_REWARD, DEX_REWARD_TABLE, DEX_TIERS, dexCatOf, dexClaimKey, dexRewardOf, type DexCat } from "./catalog";
 import type { DexEntry, LifeDay } from "./types";
@@ -55,6 +56,8 @@ export const AUTO_TTL_SEC = 2 * 86_400;
 export interface ForageStore {
   /** 가방·도감·보상·오늘 기록·이번 창에 캔 지점 */
   snapshot(acct: string, day: string, window: number): Promise<Snapshot>;
+  /** 오늘 기록과 이번 창에 캔 지점만 (시작 확인용 — 가방·도감을 읽지 않는다, 명령 2개) */
+  today(acct: string, day: string, window: number): Promise<Pick<Snapshot, "day" | "taken">>;
   /** 남의 도감 구경용 (가방·오늘 기록 없이) */
   dex(acct: string): Promise<{ dex: Record<string, DexEntry>; claims: Record<string, string>; pay: DexPay }>;
   /** 도감 기록만 (입장 배지용 — 보상·지급 기록은 읽지 않는다, 명령 1개) */
@@ -231,6 +234,10 @@ export class MemoryForageStore implements ForageStore {
     };
   }
 
+  async today(acct: string, day: string, window: number) {
+    return { day: { ...(this.days.get(lk.day(acct, day)) ?? emptyDay()) }, taken: [...(this.took.get(lk.took(acct, window)) ?? [])] };
+  }
+
   async dex(acct: string) {
     const a = this.acct(acct);
     return { dex: dexFromHash(Object.fromEntries(a.dex)), claims: Object.fromEntries(a.claims), pay: payFromHash(Object.fromEntries(a.pay)) };
@@ -315,6 +322,20 @@ export class MemoryForageStore implements ForageStore {
   /** 가방의 그 칸 수 (동기 — 긴급 의뢰 메모리 저장소가 받기와 한 번에 본다) */
   bagNow(acct: string, id: string): number {
     return this.acct(acct).bag.get(id) ?? 0;
+  }
+
+  /** 11/16 도감에 한 마리 적기 (동기 — 긴급 의뢰 주머니 물고기). onlyNew면 이미 있을 때 그대로. 처음 등록이면 true */
+  dexNow(acct: string, id: string, day: string, size: number, onlyNew: boolean): boolean {
+    const a = this.acct(acct);
+    const had = Number(a.dex.get(`n:${id}`) ?? 0);
+    if (onlyNew && had > 0) return false;
+    a.dex.set(`n:${id}`, String(had + 1));
+    if (had === 0) {
+      a.dex.set(`first:${id}`, day);
+      this.credit(a, id);
+    }
+    if (size > Number(a.dex.get(`max:${id}`) ?? 0)) a.dex.set(`max:${id}`, String(size));
+    return had === 0;
   }
 
   /** 가방에 더하기 (동기, 칸 상한은 부르는 쪽이 본다 — 긴급 의뢰 상자 물고기) */
@@ -721,7 +742,7 @@ export class RedisForageStore implements ForageStore {
   private redis: Redis;
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "forage/store");
   }
 
   async snapshot(acct: string, day: string, window: number) {
@@ -747,6 +768,14 @@ export class RedisForageStore implements ForageStore {
   async dex(acct: string) {
     const [dex, claims, pay] = await Promise.all([this.redis.hgetall(lk.dex(acct)), this.redis.hgetall(lk.claims(acct)), this.redis.hgetall(lk.pay(acct))]);
     return { dex: dexFromHash(hashOf(dex)), claims: hashOf(claims), pay: payFromHash(hashOf(pay)) };
+  }
+
+  async today(acct: string, day: string, window: number) {
+    const p = this.redis.pipeline();
+    p.hgetall(lk.day(acct, day));
+    p.smembers(lk.took(acct, window));
+    const [d, took] = await p.exec<[unknown, unknown]>();
+    return { day: dayFromHash(hashOf(d)), taken: Array.isArray(took) ? took.map(String) : [] };
   }
 
   async dexEntries(acct: string) {

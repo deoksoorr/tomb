@@ -272,6 +272,13 @@ const seatKey = (map: MapId, id: string): string => (map === "camp" ? CAMP_SEAT_
 
 /** warp 서버 쿨다운. 클라이언트(WARP_COOLDOWN_MS 1초)보다 짧게 둬서 네트워크 지터로 정상 요청이 버려지지 않게 한다 */
 export const SERVER_WARP_COOLDOWN_MS = 800;
+/** 재접속 반복 제한: 이 시간 안에 REJOIN_MAX번까지만 다시 붙는다 (새로고침·끊김 재시도는 넉넉히 통과) */
+export const REJOIN_WINDOW_MS = 10_000;
+export const REJOIN_MAX = 6;
+/** 고블린 잡기: 순간이동 뒤 이만큼은 잡지 못한다 */
+export const GOBLIN_AFTER_TELEPORT_MS = 2000;
+/** 고블린 잡기: 클라이언트 목표 지점(tx,ty)을 인정하는 서버 위치와의 거리 (달리기 0.5초 남짓) */
+export const GOBLIN_TARGET_SLACK = 64;
 /** 입장·복귀 좌표가 다른 사람이 앉은 좌석 앵커에서 이 거리 안이면 그 좌석 앞(내려설 자리)으로 옮긴다 — 한 자리에 한 명 */
 export const SEAT_CLEAR_RADIUS = 6;
 /** 좌석 앞 내려설 자리 (클라이언트 standPoint의 STAND_OFFSET_Y와 같다) */
@@ -316,6 +323,8 @@ type Peer<C> = PeerRecord & {
   lastWhoOnAt?: number;
   /** 말풍선 채팅 도배 제한 (토큰 버킷). 재접속해도 피어에 남겨 다시 채워지지 않게 한다 */
   chatBucket?: ChatBucket;
+  /** 최근 다시 붙은 시각들 (재접속 반복으로 메시지 한도·쿨다운을 초기화하거나 welcome을 거듭 받는 것을 막는다) */
+  rejoins?: number[];
   /** 마지막으로 메시지를 받은 시각 (입장·복원 시각으로 시작). 유령 연결 판정에 ping 시각과 함께 쓴다 */
   lastSeenAt: number;
   /** attachment가 최신인지 */
@@ -518,6 +527,14 @@ export class ChannelCore<C extends object> {
    * - 접속 중이면 기존 소켓을 4002로 닫는다 (탭 여러 개로 자리 차지 방지. 죽은 연결의 재접속도 여기로 온다)
    */
   private takeOver(p: Peer<C>, conn: C, t: JoinTicket, now: number): void {
+    // 같은 토큰(60초)으로 짧은 시간에 거듭 다시 붙으면 새 소켓만 4008로 끊는다 (기존 연결·자리는 그대로)
+    const recent = (p.rejoins ?? []).filter((at) => now - at < REJOIN_WINDOW_MS);
+    if (recent.length >= REJOIN_MAX) {
+      p.rejoins = recent;
+      return this.host.close(conn, CLOSE.RATE_LIMITED, "rejoin too fast");
+    }
+    recent.push(now);
+    p.rejoins = recent;
     if (p.conn) {
       this.bySocket.delete(p.conn);
       this.host.persist(p.conn, null);
@@ -1428,8 +1445,14 @@ export class ChannelCore<C extends object> {
   /** 잡기 요청: 가장 먼저 닿은 한 명만. 위치는 서버가 아는 값(마지막 보고·서버 추적 위치 중 가까운 쪽)으로 잰다 */
   private onGoblinClaim(p: Peer<C>, id: string, now: number): void {
     if (!this.goblinOn || !p.conn || mapOfPeer(p) !== "village") return;
+    // 순간이동(warp·같은 맵 옮기기) 바로 뒤에는 잡지 못한다 — 고블린 위로 순간이동해 먼저 잡는 봇을 막는다
+    if (now - Math.max(p.lastWarpAt, p.lastMapAt ?? -Infinity) < GOBLIN_AFTER_TELEPORT_MS) return;
     this.goblinCheck(now);
-    const points = this.goblin.claim(id, p.visitorId, [{ x: p.tx, y: p.ty }, { x: p.x, y: p.y }], now);
+    this.chase(p, now); // 그동안 쌓인 속도 예산만큼 서버 위치를 먼저 따라잡는다
+    // 클라이언트가 보고한 목표 지점은 서버 위치 가까이일 때만 인정한다 (목표만 고블린 위에 찍는 속임 방지)
+    const positions = [{ x: p.x, y: p.y }];
+    if (Math.hypot(p.tx - p.x, p.ty - p.y) <= GOBLIN_TARGET_SLACK) positions.push({ x: p.tx, y: p.ty });
+    const points = this.goblin.claim(id, p.visitorId, positions, now);
     if (points === null) return;
     this.host.goblinChanged?.(this.goblin.state);
     this.broadcastMap("village", encodeEvent({ t: "goblinCaught", id, sid: p.sid, name: p.name, points }));

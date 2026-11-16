@@ -10,6 +10,7 @@ import { hash01 } from "../rules";
 //    (11/15 150%(최고 단계)에 닿으면 그 순간 일찍 끝난다 — 더 낼 수 없고 바로 보상을 받는다. urgentEndAt)
 //  - 보상 (1개 이상 낸 사람): 50% 도장 2 · 100% 도장 3 더 + 「수집가의 뒷주머니」 · 150% 마을 축제 1시간 (모두에게)
 //    가장 많이 낸 사람: 칭호 「긴급 배달왕」 하루 + 사이렌 모자 24시간 · 마지막 1분에 100%를 채운 사람: 칭호 「아슬아슬 마감」 하루
+//    (11/16 한 사람 상한(urgentCap)까지 다 낸 사람은 모두 공동 배달왕 — 아무도 상한까지 못 냈으면 예전처럼 가장 많이 낸 한 사람)
 //    (마지막 1분에 100%를 넘긴 사람이 없고 150%로 일찍 끝났으면 「아슬아슬 마감」은 150%를 채워 끝낸 사람 — urgentLastAcct)
 
 const MIN = 60_000;
@@ -54,10 +55,12 @@ export const URGENT_KINDS: readonly UrgentKind[] = ["fish", "herb", "ore", "dig"
 
 type KindDef = {
   cat: LifeCat;
-  /** 접속자 기준(URGENT_REF_ONLINE)일 때 목표 */
-  base: number;
+  /** 11/16 접속자 한 사람당 목표 (목표 = 이 값 × 시작할 때 접속자 수) */
+  per: number;
   /** 사람이 아주 적어도 이만큼은 */
   min: number;
+  /** 11/16 사람이 아주 많아도 이만큼까지 */
+  max: number;
   unit: "마리" | "개";
   /** 짧은 이름 (위쪽 막대) */
   label: string;
@@ -69,11 +72,12 @@ type KindDef = {
   nobody: string;
 };
 
+// 11/16 목표를 접속자 수에 그대로 비례하게 (예전: 20명 기준 생선 100에 2배 상한 → 한 사람이 모아 둔 걸 한 번에 내서 2초 만에 끝났다)
 export const URGENT_DEF: Readonly<Record<UrgentKind, KindDef>> = {
-  fish: { cat: "fish", base: 100, min: 15, unit: "마리", label: "회식용 생선", what: "사장님이 회식에 쓸 생선", noun: "생선", nobody: "사장님이 회식을 삼겹살집으로 바꿨대요." },
-  herb: { cat: "herb", base: 80, min: 12, unit: "개", label: "난초 화분용 약초", what: "대표님 난초 화분에 쓸 약초", noun: "약초", nobody: "대표님 난초는 결국 조화로 바꿨대요." },
-  ore: { cat: "ore", base: 60, min: 10, unit: "개", label: "감사 대비 광석", what: "감사에 대비할 광석", noun: "광석", nobody: "감사는 다음 달로 미뤄졌대요." },
-  dig: { cat: "dig", base: 30, min: 5, unit: "개", label: "시상식 트로피용 발굴품", what: "연말 시상식 트로피로 쓸 발굴품", noun: "발굴품", nobody: "시상식 트로피는 문구점에서 샀대요." },
+  fish: { cat: "fish", per: 8, min: 40, max: 800, unit: "마리", label: "회식용 생선", what: "사장님이 회식에 쓸 생선", noun: "생선", nobody: "사장님이 회식을 삼겹살집으로 바꿨대요." },
+  herb: { cat: "herb", per: 6, min: 30, max: 600, unit: "개", label: "난초 화분용 약초", what: "대표님 난초 화분에 쓸 약초", noun: "약초", nobody: "대표님 난초는 결국 조화로 바꿨대요." },
+  ore: { cat: "ore", per: 5, min: 25, max: 500, unit: "개", label: "감사 대비 광석", what: "감사에 대비할 광석", noun: "광석", nobody: "감사는 다음 달로 미뤄졌대요." },
+  dig: { cat: "dig", per: 2, min: 10, max: 200, unit: "개", label: "시상식 트로피용 발굴품", what: "연말 시상식 트로피로 쓸 발굴품", noun: "발굴품", nobody: "시상식 트로피는 문구점에서 샀대요." },
 };
 
 /** 시작 알림 한 줄 */
@@ -118,16 +122,45 @@ export function urgentSchedule(day: string, secret: string): UrgentSlot[] {
   });
 }
 
-/** 목표를 정하는 기준 접속자 수 (이만큼이면 기본 목표) */
+/** 11/16 접속자 수를 모를 때(로비 물음 실패) 이만큼으로 친다 */
 export const URGENT_REF_ONLINE = 20;
 
-/** 목표 수: 시작할 때 접속자 수에 맞춘다 (적으면 낮게, 많아도 기본의 2배까지). 5 단위 (발굴품은 1 단위) */
+/**
+ * 목표 수: 시작할 때 접속자 수 × 한 사람당 목표 (11/16 2배 상한 없이 비례, 종류별 최소·최대 안에서).
+ * 5 단위 (발굴품은 1 단위). 20명이면 생선 160 · 약초 120 · 광석 100 · 발굴품 40
+ */
 export function urgentGoal(kind: UrgentKind, online: number): number {
   const d = URGENT_DEF[kind];
-  const scale = Math.max(0.1, Math.min(2, (Number.isFinite(online) ? Math.max(0, online) : URGENT_REF_ONLINE) / URGENT_REF_ONLINE));
-  const raw = d.base * scale;
-  const step = d.base >= 60 ? 5 : 1;
-  return Math.max(d.min, Math.min(d.base * 2, Math.round(raw / step) * step));
+  const o = Number.isFinite(online) ? Math.max(0, online) : URGENT_REF_ONLINE;
+  const step = kind === "dig" ? 1 : 5;
+  return Math.max(d.min, Math.min(d.max, Math.round((d.per * o) / step) * step));
+}
+
+/** 11/16 한 사람이 한 의뢰에 낼 수 있는 몫 (목표에 대한 비율). 접속자가 적을 때(URGENT_FEW_ONLINE 미만)는 세 사람이면 채울 수 있게 크게 */
+export const URGENT_CAP_SHARE = 0.25;
+export const URGENT_CAP_SHARE_FEW = 0.4;
+export const URGENT_FEW_ONLINE = 10;
+
+/** 11/16 한 사람 상한: 모아 둔 것을 한 사람이 한 번에 내서 혼자 끝내지 못하게. 목표와 함께 시작할 때 정해 두고 바꾸지 않는다 */
+export function urgentCap(goal: number, online: number): number {
+  const o = Number.isFinite(online) ? Math.max(0, online) : URGENT_REF_ONLINE;
+  return Math.ceil(goal * (o >= URGENT_FEW_ONLINE ? URGENT_CAP_SHARE : URGENT_CAP_SHARE_FEW));
+}
+
+/** 11/16 한 사람 상한 안내 한 줄 (게시판). left = 앞으로 더 낼 수 있는 수 */
+export function urgentCapLine(kind: UrgentKind, cap: number, left: number): string {
+  const unit = URGENT_DEF[kind].unit;
+  if (left <= 0) return "이번 의뢰엔 낼 만큼 다 냈어요.";
+  return `한 사람이 ${cap}${unit}까지 낼 수 있어요. 지금 ${left}${unit} 더 낼 수 있어요.`;
+}
+
+/** 11/16 공동 배달왕 한 줄 (게시판 순위 위). kings = 상한까지 다 낸 사람 수. 한 명 이하면 빈 문자열 (예전처럼 1등이 배달왕) */
+export const urgentKingsLine = (kings: number) => (kings >= 2 ? `한 사람 몫을 다 채운 ${kings}명이 모두 배달왕이에요.` : "");
+
+/** 11/16 상한에 걸린 납품 거절 문구 */
+export function urgentCapError(kind: UrgentKind, cap: number, left: number): string {
+  const unit = URGENT_DEF[kind].unit;
+  return left > 0 ? `이번 의뢰는 한 사람이 ${cap}${unit}까지 낼 수 있어요. 앞으로 ${left}${unit} 더 낼 수 있어요.` : `이번 의뢰는 한 사람이 ${cap}${unit}까지 낼 수 있어요. 낼 만큼 다 냈어요.`;
 }
 
 export type UrgentStage = 0 | 50 | 100 | 150;
@@ -246,7 +279,7 @@ export type UrgentReward = {
   /** 단계 도장 (상자 도장은 box에) */
   stamps: number;
   box: BoxPrize | null;
-  /** 가장 많이 낸 사람 → 칭호 「긴급 배달왕」 + 사이렌 모자 */
+  /** 가장 많이 낸 사람(11/16 또는 한 사람 상한까지 다 낸 사람 모두) → 칭호 「긴급 배달왕」 + 사이렌 모자 */
   king: boolean;
   /** 마지막 1분에 100%를 채운 사람 → 칭호 「아슬아슬 마감」 */
   last: boolean;
@@ -254,9 +287,10 @@ export type UrgentReward = {
 
 /**
  * 보상 판정 (끝난 뒤, 막대가 멈춘 값으로). mine = 내가 낸 수 (0이면 보상 없음 → null).
- * 가장 많이 낸 사람은 50% 이상 닿았을 때만 (아무도 못 채운 판의 1등은 칭호 없음)
+ * 가장 많이 낸 사람은 50% 이상 닿았을 때만 (아무도 못 채운 판의 1등은 칭호 없음).
+ * 11/16 배달왕: 한 사람 상한(cap, 0 = 없음)까지 다 낸 사람은 모두 (공동 배달왕). 아무도 상한까지 못 냈으면 가장 많이 낸 한 사람(top — 먼저 닿은 사람이 위)
  */
-export function urgentReward(o: { id: string; acct: string; n: number; goal: number; mine: number; top: string | null; last: string | null }): UrgentReward | null {
+export function urgentReward(o: { id: string; acct: string; n: number; goal: number; cap: number; mine: number; top: string | null; last: string | null }): UrgentReward | null {
   if (o.mine <= 0) return null;
   const stage = urgentStage(o.n, o.goal);
   const stamps = (stage >= 50 ? URGENT_STAMPS[50] : 0) + (stage >= 100 ? URGENT_STAMPS[100] : 0);
@@ -264,7 +298,7 @@ export function urgentReward(o: { id: string; acct: string; n: number; goal: num
     stage,
     stamps,
     box: stage >= 100 ? openBox(`${o.id}|${o.acct}`) : null,
-    king: stage >= 50 && o.top === o.acct,
+    king: stage >= 50 && (o.top === o.acct || (o.cap > 0 && o.mine >= o.cap)),
     last: stage >= 100 && o.last === o.acct,
   };
 }

@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { env } from "../env";
 import { K } from "./keys";
 
@@ -63,7 +64,7 @@ function pairs(raw: unknown): [string, number][] {
 export class RedisSignals implements SignalStore {
   private redis: Redis;
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "signals");
   }
 
   async record(accountId: string, kind: SignalKind, hash: string, now: number) {

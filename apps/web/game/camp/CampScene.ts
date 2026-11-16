@@ -35,8 +35,9 @@ import { Player, type SeatRequester } from "../entities/Player";
 import { RemoteAvatar } from "../entities/RemoteAvatar";
 import { peerAt } from "../entities/peerHit";
 import { SeatHint } from "../entities/SeatHint";
-import { phraseOf, type SpeechBubble } from "../entities/SpeechBubble";
+import { phraseOf } from "../entities/SpeechBubble";
 import type { KeyAction } from "../input/Keyboard";
+import { keyJosa } from "../input/keyHint";
 import { besideFriend, FRIEND_ARRIVED } from "../logic/friendSpot";
 import { DEADZONE_ENTER, type MoveInput } from "../logic/movement";
 import { sideIntent, standPoint } from "../logic/sit";
@@ -47,7 +48,7 @@ import { Atmosphere } from "../world/Atmosphere";
 import { CameraRig } from "../world/CameraRig";
 import { Expressions } from "../world/Expressions";
 import { Fireworks } from "../world/Fireworks";
-import { declutter, type LabelBox } from "../world/labels";
+import { LabelLayout } from "../world/LabelLayout";
 import { Lighting, playerLightRadius } from "../world/Lighting";
 import { MeScreen } from "../world/MeScreen";
 import { addWorldTintBounds, worldTintOf } from "../world/worldTint";
@@ -114,9 +115,7 @@ export class CampScene extends Phaser.Scene {
   private readonly seats = new Map<string, Sid>();
   private readonly move: MoveInput = { ax: 0, ay: 0, run: false };
   private readonly view = new Phaser.Geom.Rectangle();
-  private readonly labelBoxes: (LabelBox & { t: Phaser.GameObjects.BitmapText | null })[] = [];
-  private readonly labelOrder: LabelBox[] = [];
-  private readonly bubbleBoxes: SpeechBubble[] = [];
+  private readonly labelLayout = new LabelLayout();
   private readonly unsubs: (() => void)[] = [];
   private friends: { ch: number; bySid: Map<Sid, string> } = { ch: 0, bySid: new Map() };
   private parked = false;
@@ -608,12 +607,22 @@ export class CampScene extends Phaser.Scene {
         }
       }),
     );
-    // 캠핑장에서 채널을 옮기면 새 채널 캠핑장 정류장에서 (마을이 SPAWN에서 시작하는 것과 같은 규칙)
+    // 캠핑장에서 채널을 옮기면 새 채널 캠핑장 정류장에서 (마을이 SPAWN에서 시작하는 것과 같은 규칙).
+    // 꽉 찬 채널이면 실시간 클라이언트가 떠나기 전에 막아 channel:leave가 오지 않는다. 들어가는 순간 꽉 차 돌아오면 떠나기 전 자리로
+    let channelBack: { x: number; y: number } | null = null;
     on.push(
-      bridge.on("channel:switch", () => {
+      bridge.on("channel:leave", () => {
         const pl = this.player;
+        channelBack = { x: pl.x, y: pl.y };
         if (pl.sitting) pl.stand(this.time.now, this.seatReq);
         pl.warp(CAMP_ARRIVE.x, CAMP_ARRIVE.y, this.time.now, null);
+        this.rig.recenter();
+      }),
+      bridge.on("channel:refused", ({ back }) => {
+        const b = channelBack;
+        channelBack = null;
+        if (!back || !b) return;
+        this.player.warp(b.x, b.y, this.time.now, null);
         this.rig.recenter();
       }),
     );
@@ -760,7 +769,7 @@ export class CampScene extends Phaser.Scene {
         this.toast("의뢰판이 아직 비어 있어요. 곧 의뢰가 붙어요.");
         break;
       case "sign":
-        this.toast("시간표에는 '다음 버스: 언젠가'라고 적혀 있어요. 그래도 E를 누르면 와요.");
+        this.toast(`시간표에는 '다음 버스: 언젠가'라고 적혀 있어요. 그래도 ${keyJosa("E", "를")} 누르면 와요.`);
         break;
       case "bbq":
       case "vending":
@@ -1064,59 +1073,16 @@ export class CampScene extends Phaser.Scene {
     if (Math.hypot(npc.x - this.player.x, npc.y - this.player.y) > TALK_LEAVE_DIST) this.closeTalk();
   }
 
+  /**
+   * 이름표·말풍선 겹침 풀기 (LabelLayout): 이름표는 이름·바탕판·칭호·1위 배지를 한 묶음으로 통째로 비키고(내 것은 제자리),
+   * 말풍선은 자리 잡은 이름표들을 피해 위로만 비킨다
+   */
   private declutterLabels(now: number, pnow: number): void {
-    let n = this.pushLabel(this.player.view.label, 0);
-    for (const r of this.remotes.values()) n = this.pushLabel(r.view.label, n);
-    const boxes = this.labelBoxes;
-    if (n >= 2) {
-      declutter(boxes, this.labelOrder, n);
-      for (let i = 0; i < n; i++) {
-        const b = boxes[i];
-        if (b.t && b.t.y !== b.y) b.t.setY(b.y);
-      }
-    }
-    const bubbles = this.bubbleBoxes;
-    let m = 0;
-    const me = this.player.view.speechAt(now);
-    if (me) bubbles[m++] = me;
-    for (const r of this.remotes.values()) {
-      const sb = r.view.speechAt(pnow);
-      if (sb) bubbles[m++] = sb;
-    }
-    bubbles.length = m;
-    if (!m) return;
-    let k = n;
-    for (let i = 0; i < m; i++) {
-      let b = boxes[k];
-      if (!b) boxes.push((b = { x: 0, y: 0, w: 0, h: 0, t: null }));
-      b.t = null;
-      b.x = bubbles[i].box.x;
-      b.y = bubbles[i].box.y;
-      b.w = bubbles[i].box.w;
-      b.h = bubbles[i].box.h;
-      k++;
-    }
-    declutter(boxes, this.labelOrder, k);
-    for (let i = 0; i < m; i++) {
-      const b = boxes[n + i];
-      if (b.y !== bubbles[i].box.y) bubbles[i].setBottom(b.y);
-    }
-    for (let i = 0; i < n; i++) {
-      const b = boxes[i];
-      if (b.t && b.t.y !== b.y) b.t.setY(b.y);
-    }
-  }
-
-  private pushLabel(t: Phaser.GameObjects.BitmapText, n: number): number {
-    if (!t.visible) return n;
-    let b = this.labelBoxes[n];
-    if (!b) this.labelBoxes.push((b = { x: 0, y: 0, w: 0, h: 0, t: null }));
-    b.t = t;
-    b.x = t.x;
-    b.y = t.y;
-    b.w = t.width + 2 / this.cameras.main.zoom;
-    b.h = t.height;
-    return n + 1;
+    const lay = this.labelLayout;
+    lay.begin();
+    lay.add(this.player.view, true, now);
+    for (const r of this.remotes.values()) lay.add(r.view, false, pnow);
+    lay.finish(1 / this.cameras.main.zoom);
   }
 
   private updateLighting(view: Phaser.Geom.Rectangle): void {

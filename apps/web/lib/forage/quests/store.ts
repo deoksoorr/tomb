@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../../redisUsage";
 import { env } from "../../env";
 import { K } from "../../store/keys";
 import { styleKey } from "../../store/style";
@@ -317,7 +318,7 @@ function hashOf(flat: unknown): Record<string, string> {
 export class RedisQuestStore implements QuestStore {
   private redis: Redis;
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "forage/quests/store");
   }
 
   async get(acct: string) {

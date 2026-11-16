@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { env } from "../env";
 
 // 칭호용 누적 기록 (계정마다): 다른 곳에 누적 값이 없는 것만 여기서 센다.
@@ -52,8 +53,10 @@ export class MemoryTitleStats implements TitleStatStore {
 
 export class RedisTitleStats implements TitleStatStore {
   private redis: Redis;
+  /** 이 인스턴스가 stay 칸이 이미 있는 것을 본 계정 (그 뒤로는 첫 값 채우기 HSETNX를 보내지 않는다 — 머무르기 기록마다 명령 1개 절약) */
+  private seeded = new Set<string>();
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "titleStats");
   }
   async get(accountId: string): Promise<TitleStats> {
     const r = (await this.redis.hmget(key(accountId), "stay", "quests", "qking", "urgKing", "urgLast")) as unknown;
@@ -62,11 +65,14 @@ export class RedisTitleStats implements TitleStatStore {
     return { stay: Number(v[0]) || 0, quests: Number(v[1]) || 0, qking: Number(v[2]) || 0, urgKing: Number(v[3]) || 0, urgLast: Number(v[4]) || 0 };
   }
   async addStay(accountId: string, by: number, todayTotal: number): Promise<number> {
+    if (this.seeded.has(accountId)) return Number(await this.redis.hincrby(key(accountId), "stay", by)) || 0;
     const [, n] = (await this.redis
       .pipeline()
       .hsetnx(key(accountId), "stay", String(Math.max(0, todayTotal - by)))
       .hincrby(key(accountId), "stay", by)
       .exec()) as [unknown, unknown];
+    if (this.seeded.size > 50_000) this.seeded.clear();
+    this.seeded.add(accountId);
     return Number(n) || 0;
   }
 }

@@ -120,6 +120,8 @@ export async function verifyJoinToken(
   }
   if (!c || typeof c !== "object") return null;
   const { visitorId, name, color, channel, exp, look, body: rawBody, room, dye, staff, dex, champ, camp, mgr } = c as Record<string, unknown>;
+  // 방 id가 있는데 형식이 틀리면 토큰째 버린다 (방 없는 채널 0 토큰 = 대기열 토큰으로 바뀌지 않게)
+  if (room !== undefined && !(typeof room === "string" && ROOM_ID_RE.test(room))) return null;
   if (
     typeof visitorId !== "string" ||
     typeof name !== "string" ||

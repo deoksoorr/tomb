@@ -63,6 +63,19 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
     expect((await store.snapshot(a, "20261113", 1)).day.fish).toBe(2);
   });
 
+  it("today: 오늘 기록·이번 창에 캔 지점은 snapshot과 같다", async () => {
+    const a = acct();
+    expect(await store.today(a, DAY, 3)).toEqual({ day: { fishP: 0, gatherP: 0, dexP: 0, fish: 0, gather: 0, auto: 0 }, taken: [] });
+    await store.grant(a, DAY, "gather", [{ id: "h_mugwort", size: 0 }], 99, { window: 3, node: "n_a" });
+    await store.grant(a, DAY, "fish", [{ id: "f_carp", size: 400 }], 99);
+    const t = await store.today(a, DAY, 3);
+    const s = await store.snapshot(a, DAY, 3);
+    expect(t).toEqual({ day: s.day, taken: s.taken });
+    expect(t.taken).toEqual(["n_a"]);
+    expect(t.day).toMatchObject({ fish: 1, gather: 1 });
+    expect((await store.today(a, DAY, 4)).taken).toEqual([]);
+  });
+
   it("한 칸이 가득 차면 가방에는 안 들어가도 도감엔 남는다", async () => {
     const a = acct();
     await store.grant(a, DAY, "fish", [{ id: "f_shoe", size: 0 }, { id: "f_shoe", size: 0 }], 2);

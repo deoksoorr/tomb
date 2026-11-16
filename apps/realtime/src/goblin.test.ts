@@ -17,7 +17,7 @@ import {
   type S2C,
 } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
-import { ChannelCore, type ChannelHost } from "./channel";
+import { ChannelCore, GOBLIN_AFTER_TELEPORT_MS, type ChannelHost } from "./channel";
 import { GoblinCore, type GoblinState } from "./goblin";
 
 // 22번 황금 고블린: 등장 일정 · 가장 먼저 닿은 한 명만 · 증서 · 저장/복원
@@ -138,6 +138,9 @@ describe("ChannelCore goblin", () => {
     const cur = core.forceGoblin(10_000)!;
     const t = 12_000;
     const at = goblinPos(cur, t);
+    // 걸어서 다가온 것처럼: 미리 근처로 옮겨 두고(순간이동 직후 잡기 금지 2초가 지난 뒤) 마지막 몇 픽셀만 움직인다
+    core.message(a, encodeEvent({ t: "warp", x: Math.round(at.x), y: Math.round(at.y) }), t - 3000);
+    core.message(b, encodeEvent({ t: "warp", x: Math.round(at.x), y: Math.round(at.y) }), t - 3000);
     moveTo(a, at.x + 3, at.y, t);
     moveTo(b, at.x - 3, at.y, t);
     core.message(a, encodeEvent({ t: "goblin", id: cur.id }), t);
@@ -171,12 +174,45 @@ describe("ChannelCore goblin", () => {
     const { core, join, events, moveTo } = setup();
     const a = join("a", 0);
     const cur = core.forceGoblin(1000)!;
-    const at = goblinPos(cur, 1200);
-    moveTo(a, at.x, at.y, 1200);
-    core.message(a, encodeEvent({ t: "goblin", id: cur.id }), 1200);
+    const at = goblinPos(cur, 4000);
+    core.message(a, encodeEvent({ t: "warp", x: Math.round(at.x), y: Math.round(at.y) }), 1000);
+    moveTo(a, at.x, at.y, 4000);
+    core.message(a, encodeEvent({ t: "goblin", id: cur.id }), 4000);
     await flush();
-    const a2 = join("a", 1500);
+    const a2 = join("a", 4500);
     expect(events(a2).filter((e) => e.t === "goblinGrant")).toHaveLength(1);
+  });
+
+  it("a reported target far from the server position does not count (target-only teleport)", async () => {
+    const { core, join, events, moveTo } = setup();
+    const a = join("a", 0);
+    const cur = core.forceGoblin(10_000)!;
+    const t = 10_100;
+    const at = goblinPos(cur, t);
+    // 고블린에서 멀리 떨어진 곳에 서 있다가 목표만 고블린 위로 찍는다 → 서버 위치는 예산만큼만 움직인다
+    core.message(a, encodeEvent({ t: "warp", x: Math.round(at.x + 400), y: Math.round(at.y) }), 5000);
+    moveTo(a, at.x, at.y, t);
+    core.message(a, encodeEvent({ t: "goblin", id: cur.id }), t);
+    await flush();
+    expect(events(a).filter((e) => e.t === "goblinCaught")).toHaveLength(0);
+  });
+
+  it("cannot claim right after a warp onto the goblin; can once the 2s guard passes", async () => {
+    const { core, join, events } = setup();
+    const a = join("a", 0);
+    const cur = core.forceGoblin(10_000)!;
+    const t = 10_500;
+    const at = goblinPos(cur, t);
+    core.message(a, encodeEvent({ t: "warp", x: Math.round(at.x), y: Math.round(at.y) }), t);
+    core.message(a, encodeEvent({ t: "goblin", id: cur.id }), t + 100);
+    await flush();
+    expect(events(a).filter((e) => e.t === "goblinCaught")).toHaveLength(0);
+    const later = t + GOBLIN_AFTER_TELEPORT_MS;
+    const at2 = goblinPos(cur, later);
+    core.message(a, encodeEvent({ t: "warp", x: Math.round(at2.x), y: Math.round(at2.y) }), later - GOBLIN_AFTER_TELEPORT_MS + 900);
+    core.message(a, encodeEvent({ t: "goblin", id: cur.id }), later + 900);
+    await flush();
+    expect(events(a).filter((e) => e.t === "goblinCaught")).toHaveLength(Math.hypot(goblinPos(cur, later + 900).x - Math.round(at2.x), goblinPos(cur, later + 900).y - Math.round(at2.y)) <= 40 ? 1 : 0);
   });
 
   it("is off without a signer (rooms/tests)", () => {

@@ -415,16 +415,22 @@ function HouseList({ onVisit, myId, busy }: { onVisit: (id: string) => void; myI
                 <span className={styles.rank} data-top={sort !== "new" && i < 3}>
                   {sort === "new" ? "·" : i + 1}
                 </span>
+                {/* 11/16 닉네임 12자 · 집 이름 20자: 집 이름 / 호칭 · 주인 / 번지 · 터를 한 줄씩, 넘치면 "…" (전체는 title). (내 집)은 잘리지 않게 따로 */}
                 <span className={styles.listMain}>
-                  <span className={styles.listName}>
-                    {h.name}
-                    {h.id === myId ? " (내 집)" : ""}
-                  </span>
-                  <span className={styles.row} style={{ gap: 6 }}>
-                    <TitleBadge score={h.score} />
-                    <span className={styles.small}>
-                      {lotLabel(h.ch, h.lot)} · {h.ownerName} · {tierById(h.tier)?.name}
+                  <span className={styles.listHead}>
+                    <span className={styles.listName} title={h.name}>
+                      {h.name}
                     </span>
+                    {h.id === myId && <span className={styles.listMine}>내 집</span>}
+                  </span>
+                  <span className={styles.listMeta}>
+                    <TitleBadge score={h.score} />
+                    <span className={styles.listOwner} title={h.ownerName}>
+                      {h.ownerName}
+                    </span>
+                  </span>
+                  <span className={styles.listWhere}>
+                    {lotLabel(h.ch, h.lot)} · {tierById(h.tier)?.name}
                   </span>
                 </span>
                 <span className={styles.listStat}>

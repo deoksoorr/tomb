@@ -18,6 +18,7 @@ import { SpeedTrail } from "./SpeedTrail";
 import { MoodView } from "./MoodView";
 import { StaffFxView } from "./StaffFxView";
 import { ChampBadgeView } from "./ChampBadgeView";
+import type { LabelUnit } from "../world/labels";
 import { NameStyleView } from "./NameStyleView";
 import { TitleView } from "./TitleView";
 import { markCharTint } from "../world/charTint";
@@ -74,10 +75,20 @@ const SEE_THRU_BIG = 1.6;
 const SEE_THRU_ALPHA = 0.5;
 /** 살아 있는 아바타 그림 (커진 몸이 같은 장면의 누구를 가리는지 본다) */
 const LIVE = new Set<AvatarView>();
+/** 겹침 풀기로 이름표 묶음이 비켜 오르내릴 때 따라가는 시간 (ms, 움직임 줄이기면 바로) */
+const LABEL_LIFT_MS = 110;
 
 export class AvatarView {
   readonly sprite: Phaser.GameObjects.Sprite;
   readonly label: Phaser.GameObjects.BitmapText;
+  /**
+   * 이름표 묶음(이름 + 바탕판 + 칭호·1위 배지·하는 일)의 크기·원래 자리 (sync가 매 프레임 잰다).
+   * 씬의 겹침 풀기(stackLabels)가 lift(위로 비킬 목표)를 적어 두면 다음 sync가 묶음 전체를 그만큼 부드럽게 올린다
+   * → 이름 글자만 따로 밀려 바탕판이 빈 채로 남는 일이 없다
+   */
+  readonly unit: LabelUnit = { x: 0, y: 0, w: 0, h: 0, tw: 0, th: 0, pin: false, lift: 0 };
+  /** 지금 실제로 올라가 있는 양 (unit.lift를 부드럽게 따라간다) */
+  private liftNow = 0;
   private bubble: Phaser.GameObjects.Image | null = null;
   /** 말풍선(say) — 처음 말할 때 만든다 */
   private speech: SpeechBubble | null = null;
@@ -935,7 +946,13 @@ export class AvatarView {
     // 오라(착용·전용)를 그릴 몸 자리 — 모든 자세에서 보이게 (auraFrame)
     const af = this.auraFrame(st, s.y, headY, labelY, waterDrop, sitLiftB, armsUp);
     const moodLift = this.moodFx?.lift(st) ?? 0;
-    this.label.setPosition(Math.round(st === "hammock" ? s.x : s.x - this.poseDx), labelY - moodLift);
+    // 겹침 풀기 목표(unit.lift)를 부드럽게 따라간다 — 이름표에 붙는 것(바탕판·칭호·배지·말풍선)은 모두 아래에서 이름표 자리 기준으로 놓이므로 함께 움직인다
+    const liftGoal = this.unit.lift;
+    if (this.liftNow !== liftGoal) {
+      this.liftNow = this.reduced || Math.abs(liftGoal - this.liftNow) < 0.5 ? liftGoal : this.liftNow + (liftGoal - this.liftNow) * Math.min(1, dt / LABEL_LIFT_MS);
+    }
+    const baseLabelY = labelY - moodLift;
+    this.label.setPosition(Math.round(st === "hammock" ? s.x : s.x - this.poseDx), baseLabelY - Math.round(this.liftNow));
     if (this.shadow) this.shadow.setPosition(s.x, s.y - 1).setDepth((this.depthOverride ?? s.y) - 0.5);
     if (this.label.scaleX !== labelScale) this.label.setScale(labelScale);
     const vis = s.visible;
@@ -1095,6 +1112,7 @@ export class AvatarView {
       d.setPosition(Math.round(this.label.x), Math.round(labelTop - labelScale)).setAlpha(fa).setVisible(vis && this.label.visible);
       labelTop -= d.height + labelScale;
     }
+    this.measureUnit(baseLabelY, labelTop, labelScale, side);
     if (this.speech) this.speech.place(this.label.x, labelTop - labelScale, labelScale, now, vis);
     // 벤치 상태를 고르면 기본 "…"은 띄우지 않는다
     const longSit = !speaking && !this.mood && this.sitSince > 0 && now - this.sitSince > SIT_IDLE_MS;
@@ -1111,6 +1129,41 @@ export class AvatarView {
       this.bubble.destroy();
       this.bubble = null;
     }
+  }
+
+  /**
+   * 이름표 묶음을 잰다 (겹침 풀기용, 월드 단위). baseLabelY = 비키기 전 이름표 아랫변, labelTop = 지금 묶음 꼭대기(말풍선 아래).
+   * 이름 줄 = 글자 + 바탕판 여백 + 옆 표시(친구 하트·도감 별), 윗칸 = 칭호·1위 배지·하는 일
+   */
+  private measureUnit(baseLabelY: number, labelTop: number, sc: number, side: number): void {
+    const u = this.unit;
+    const l = this.label;
+    const plate = this.nameFx?.topLift(sc) ?? 0;
+    const mark = Math.max(this.friendMark ? this.friendMark.width : 0, this.dexBadge ? this.dexBadge.width : 0);
+    u.x = l.x;
+    u.y = baseLabelY + plate;
+    u.w = l.width + 2 * (side + sc) + (mark > 0 ? 2 * (mark + 2 * sc) : 0);
+    u.h = l.height + 2 * plate;
+    const rowTop = l.y - l.height - plate;
+    u.th = Math.max(0, rowTop - labelTop);
+    let tw = 0;
+    if (u.th > 0) {
+      // 칭호 장식(「」 둘레 테두리·반짝이)까지 조금 넉넉히
+      if (this.titleView) tw = this.titleView.text.width + 8 * sc;
+      if (this.champBadge) tw = Math.max(tw, this.champBadge.width);
+      if (this.doingTag) tw = Math.max(tw, this.doingTag.width + 2 * sc);
+    }
+    u.tw = tw;
+  }
+
+  /** 이름표 묶음이 겹침 풀기에 들어가는지 (안 보이면 빠지고 목표도 0으로) */
+  get labelShown(): boolean {
+    return this.label.visible && this.sprite.visible;
+  }
+
+  /** 지금 실제로 올라가 있는 양 (말풍선 겹침 풀기의 장애물 자리) */
+  get labelLiftNow(): number {
+    return Math.round(this.liftNow);
   }
 
   /**

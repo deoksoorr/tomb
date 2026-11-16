@@ -10,6 +10,7 @@ import { forageApi } from "@/lib/forage/client";
 import { sunkenText } from "@/lib/forage/sunken";
 import type { AutoFishResponse, AutoFishStatus, CastResponse, CatchResult, SunkenCatch } from "@/lib/forage/types";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
+import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { showToast } from "@/lib/hooks/useToasts";
 import { tabHidden } from "@/lib/hooks/visibleAgain";
 import { cx } from "../ui/cx";
@@ -387,6 +388,8 @@ export default function FishingPanel({
   const busy = phase === "casting" || phase === "sending" || autoBusy || auto !== null;
   const label = auto ? "자동 낚시 중" : phase === "bite" ? "지금 당기기!" : phase === "reel" ? "누르고 있으면 감기" : phase === "wait" ? "기다리는 중…" : busy ? "…" : "찌 던지기";
   const caught = state?.today.fish ?? 0;
+  // 터치 기기(화면 버튼)는 키 대신 위의 큰 버튼으로 던지고 당긴다
+  const coarse = useMediaQuery("(pointer: coarse)");
 
   return (
     <div className={s.dock} role="region" aria-label="낚시">
@@ -455,7 +458,7 @@ export default function FishingPanel({
       </div>
       {/* 자동 낚시 켜기 버튼 바로 아래 안내 (감는 중엔 숨긴다) */}
       {phase !== "reel" && <p className={s.keys}>{AUTO_RANK_NOTE}</p>}
-      <p className={s.keys}>Space나 E로 던지고 당겨요. 감을 땐 누르고 있어요. Esc나 방향키로 일어나요.</p>
+      <p className={s.keys}>{coarse ? "큰 버튼으로 던지고 당겨요. 감을 땐 누르고 있어요." : "Space나 E로 던지고 당겨요. 감을 땐 누르고 있어요. Esc나 방향키로 일어나요."}</p>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { bridge, type UiEvents } from "@/game/bridge";
+import { keyJosa } from "@/game/input/keyHint";
 import { api } from "@/lib/api";
 import { earnRule } from "@/lib/economy";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
@@ -43,17 +44,17 @@ function tutorialSteps(touch: boolean): Step[] {
     { title: "상점", text: "유령 잡화점이에요. 주인장에게 말을 걸면 포인트로 꾸미기·폭죽을 살 수 있어요.", point: "shop" },
     {
       title: "낚시 잔교",
-      text: `낚시 의자 앞에서 ${touch ? "[상호작용]" : "E"}를 누르면 낚시를 해요. 잡은 물고기는 잔교 옆 어부 영감에게 팔아요. 수집 의뢰는 버스 정류장 마당 게시판에 있어요.`,
+      text: `낚시 의자 앞에서 ${keyJosa("E", "를", touch)} 누르면 낚시를 해요. 잡은 물고기는 잔교 옆 어부 영감에게 팔아요. 수집 의뢰는 버스 정류장 마당 게시판에 있어요.`,
       point: "fishing",
     },
     {
       title: "범퍼카장",
-      text: `강 건너 범퍼카장 입구에서 ${touch ? "[상호작용]" : "E"}를 누르면 범퍼카에 타요. 다른 사람 차와 쿵 부딪혀 보세요. ${touch ? "[빵빵!]" : "Space"}로 경적도 울려요.`,
+      text: `강 건너 범퍼카장 입구에서 ${keyJosa("E", "를", touch)} 누르면 범퍼카에 타요. 다른 사람 차와 쿵 부딪혀 보세요. ${touch ? "[빵빵!]" : "Space"}로 경적도 울려요.`,
       point: "bumper",
     },
     {
       title: "작은 묘역",
-      text: `한때 하다 만 것들이 쉬는 곳이에요. 묘비 앞에서 ${touch ? "[상호작용]" : "E"}를 누르면 꽃을 놓을 수 있어요. 꽃 하나에 ${earnRule("flower").points}P예요. 내 묘비도 메뉴에서 하나 세울 수 있어요.`,
+      text: `한때 하다 만 것들이 쉬는 곳이에요. 묘비 앞에서 ${touch ? "[살펴보기] 버튼을" : "E를"} 누르면 꽃을 놓을 수 있어요. 꽃 하나에 ${earnRule("flower").points}P예요. 내 묘비도 메뉴에서 하나 세울 수 있어요.`,
       point: "nearestGrave",
     },
     { title: "이제 자유롭게", text: "이 안내는 ⓘ 안내에서 언제든 다시 볼 수 있어요." },

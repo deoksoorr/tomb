@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { hh } from "../analytics";
 
 // 47번 방문 분석 저장소. 날짜는 KST YYYYMMDD, 시각은 KST 0~23. 모든 키는 ANALYTICS_TTL_SEC(90일) 뒤 저절로 지워진다.
@@ -187,7 +188,7 @@ export class RedisAnalytics implements AnalyticsStore {
   private redis: Redis;
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "analytics");
   }
 
   async hit(h: HitRecord): Promise<void> {
@@ -195,13 +196,14 @@ export class RedisAnalytics implements AnalyticsStore {
     for (const [f, capped] of hitFields(h)) args.push(f, capped ? "1" : "0");
     await this.redis.eval(HIT_LUA, [AK.day(h.day), AK.uniq(h.day), AK.uniqHour(h.day, h.hour)], args);
   }
+  // 카운터 더하기라 트랜잭션이 필요 없다 → 파이프라인 (Upstash는 MULTI·EXEC도 하나씩 세어 2개를 아낀다)
   async bump(day: string, hour: number, ev: DailyEvent): Promise<void> {
     const k = AK.day(day);
-    await this.redis.multi().hincrby(k, ev, 1).hincrby(k, `h:${hh(hour)}:${ev}`, 1).expire(k, ANALYTICS_TTL_SEC).exec();
+    await this.redis.pipeline().hincrby(k, ev, 1).hincrby(k, `h:${hh(hour)}:${ev}`, 1).expire(k, ANALYTICS_TTL_SEC).exec();
   }
   async stay(day: string, hour: number, sec: number): Promise<void> {
     const k = AK.day(day);
-    await this.redis.multi().hincrby(k, "stay", sec).hincrby(k, `h:${hh(hour)}:stay`, sec).expire(k, ANALYTICS_TTL_SEC).exec();
+    await this.redis.pipeline().hincrby(k, "stay", sec).hincrby(k, `h:${hh(hour)}:stay`, sec).expire(k, ANALYTICS_TTL_SEC).exec();
   }
   async concurrent(day: string, hour: number, n: number): Promise<void> {
     await this.redis.eval(CONC_LUA, [AK.conc(day)], [hh(hour), String(n), String(ANALYTICS_TTL_SEC)]);

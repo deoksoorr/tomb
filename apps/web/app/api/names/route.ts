@@ -1,4 +1,4 @@
-import { checkName, NAME_TAKEN_MESSAGE, nameKey } from "@tomb/protocol";
+import { checkName, checkNewName, NAME_TAKEN_MESSAGE, nameKey } from "@tomb/protocol";
 import { handler, HttpError, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { getVisitorId, requireVisitor } from "@/lib/session";
@@ -32,6 +32,9 @@ export const POST = handler(async (req) => {
   await rateLimit("join", req, visitorId);
   const accounts = getAccounts();
   const now = Date.now();
+  // 11/16 새로 짓는 이름은 8자까지 (휴면 뒤 내 옛 이름을 다시 쓰는 건 예전 길이 그대로)
+  const fresh = checkNewName(name, (await accounts.appearance(visitorId, now)).name);
+  if (!fresh.ok) throw new HttpError(400, "INVALID_INPUT", fresh.reason);
   // 휴면 판정을 먼저 한다 (계정 확인 없이 바로 부른 경우에도 재설정 대상이 되게)
   await accounts.visit(visitorId, now, false);
   const r = await accounts.claimName(visitorId, name, now);

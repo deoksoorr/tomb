@@ -13,7 +13,9 @@ import {
   URGENT_PICK_MAX,
   URGENT_STAMPS,
   urgentAnnounce,
+  urgentCapLine,
   urgentFilled,
+  urgentKingsLine,
   urgentRewardLine,
   urgentStage,
   type UrgentKind,
@@ -65,7 +67,10 @@ export default function UrgentPanel() {
 
   const bag = useMemo(() => state?.bag ?? {}, [state]);
   const done = (mine?.rows ?? []).filter((r) => r.done && r.mine > 0);
-  const myLive = live ? (mine?.rows.find((r) => r.id === ev.id)?.mine ?? 0) : 0;
+  const liveRow = live ? mine?.rows.find((r) => r.id === ev.id) : undefined;
+  const myLive = liveRow?.mine ?? 0;
+  // 11/16 한 사람 상한 (0 = 없음 — 그 전 의뢰). 내 줄에 있으면 그 값, 아직 못 받았으면 서버 전체 상태 값
+  const myCap = liveRow?.cap ?? ev?.cap ?? 0;
 
   async function claim(row: UrgentMineRow) {
     setBusy(true);
@@ -103,7 +108,7 @@ export default function UrgentPanel() {
 
   return (
     <div className={u.panel}>
-      {live && ev && <LiveCard ev={ev} now={now} mine={myLive} bag={bag} />}
+      {live && ev && <LiveCard ev={ev} now={now} mine={myLive} cap={myCap} bag={bag} />}
       {ev && !live && now >= ev.end && !done.some((r) => r.id === ev.id) && <EndedSummary ev={ev} now={now} />}
       {done.map((row) => (
         <ResultCard key={row.id} row={row} pub={ev && ev.id === row.id ? ev : null} now={now} fresh={fresh[row.id]} busy={busy} onClaim={() => void claim(row)} />
@@ -199,6 +204,7 @@ function Top3({ ev, ended = false }: { ev: UrgentLive; ended?: boolean }) {
   return (
     <>
       <p className={u.subhead}>가장 많이 낸 사람</p>
+      {(ev.kings ?? 0) >= 2 && <p className={ui.hint}>{urgentKingsLine(ev.kings ?? 0)}</p>}
       <ol className={u.top3}>
         {ev.top.map((t, i) => (
           <li key={`${t.name}-${i}`}>
@@ -215,10 +221,13 @@ function Top3({ ev, ended = false }: { ev: UrgentLive; ended?: boolean }) {
   );
 }
 
-/** 진행 중: 남은 시간·막대·단계·내 수·순위·납품 */
-function LiveCard({ ev, now, mine, bag }: { ev: UrgentLive; now: number; mine: number; bag: Record<string, number> }) {
+/** 진행 중: 남은 시간·막대·단계·내 수·순위·납품. cap = 11/16 한 사람 상한 (0 = 없음) */
+function LiveCard({ ev, now, mine, cap, bag }: { ev: UrgentLive; now: number; mine: number; cap: number; bag: Record<string, number> }) {
   const d = URGENT_DEF[ev.kind];
   const left = ev.end - now;
+  // 11/16 내가 앞으로 더 낼 수 있는 수 → 한 번에 고를 수 있는 수도 이만큼까지
+  const room = cap > 0 ? Math.max(0, cap - mine) : URGENT_PICK_MAX;
+  const limit = Math.min(URGENT_PICK_MAX, room);
   const rows = useMemo(
     () =>
       Object.entries(bag)
@@ -233,17 +242,22 @@ function LiveCard({ ev, now, mine, bag }: { ev: UrgentLive; now: number; mine: n
   const [pick, setPick] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  // 가방이 바뀌면 고른 수를 가진 만큼으로 줄인다
-  const picked = Object.fromEntries(rows.map((r) => [r.id, Math.min(r.n, pick[r.id] ?? 0)]).filter(([, n]) => (n as number) > 0)) as Record<string, number>;
-  const total = Object.values(picked).reduce((a, b) => a + b, 0);
+  // 가방이 바뀌면 고른 수를 가진 만큼으로, 11/16 낸 수가 바뀌면 더 낼 수 있는 만큼으로 줄인다
+  const picked: Record<string, number> = {};
+  let total = 0;
+  for (const r of rows) {
+    const k = Math.min(r.n, pick[r.id] ?? 0, limit - total);
+    if (k > 0) picked[r.id] = k;
+    total += Math.max(0, k);
+  }
   const pickAll = (common: boolean) => {
     const out: Record<string, number> = {};
-    let room = URGENT_PICK_MAX;
+    let rest = limit;
     for (const r of rows) {
       if (common && r.s.rarity > 2) continue;
-      const k = Math.min(r.n, room);
+      const k = Math.min(r.n, rest);
       if (k > 0) out[r.id] = k;
-      room -= k;
+      rest -= k;
     }
     setPick(out);
   };
@@ -300,7 +314,8 @@ function LiveCard({ ev, now, mine, bag }: { ev: UrgentLive; now: number; mine: n
             <div className={q.pickList} role="list">
               {rows.map(({ id, n, s }) => {
                 const v = picked[id] ?? 0;
-                const set = (x: number) => setPick({ ...picked, [id]: Math.max(0, Math.min(n, x)) });
+                const most = Math.min(n, v + limit - total);
+                const set = (x: number) => setPick({ ...picked, [id]: Math.max(0, Math.min(most, x)) });
                 return (
                   <div key={id} className={q.pickRow} role="listitem" data-on={v > 0 || undefined}>
                     <ItemIcon itemId={id} size={24} />
@@ -315,10 +330,10 @@ function LiveCard({ ev, now, mine, bag }: { ev: UrgentLive; now: number; mine: n
                         −
                       </button>
                       <span aria-live="polite">{v}</span>
-                      <button type="button" className={ui.button} disabled={busy || v >= n} onClick={() => set(v + 1)} aria-label={`${s.name} 하나 더`}>
+                      <button type="button" className={ui.button} disabled={busy || v >= most} onClick={() => set(v + 1)} aria-label={`${s.name} 하나 더`}>
                         +
                       </button>
-                      <button type="button" className={ui.button} disabled={busy || v >= n} onClick={() => set(n)} aria-label={`${s.name} 모두`}>
+                      <button type="button" className={ui.button} disabled={busy || v >= most} onClick={() => set(most)} aria-label={`${s.name} 모두`}>
                         모두
                       </button>
                     </span>
@@ -331,16 +346,17 @@ function LiveCard({ ev, now, mine, bag }: { ev: UrgentLive; now: number; mine: n
               가방에 낼 {KIND_SUBJ[ev.kind]} 없어요. {d.cat === "fish" ? "낚시로" : "채집으로"} 모아 와요.
             </p>
           )}
+          {cap > 0 && <p className={ui.hint}>{urgentCapLine(ev.kind, cap, room)}</p>}
           <div className={u.deliverRow}>
             <span className={u.quick}>
-              <button type="button" className={ui.button} disabled={busy || !rows.length} onClick={() => pickAll(true)}>
+              <button type="button" className={ui.button} disabled={busy || !rows.length || room <= 0} onClick={() => pickAll(true)}>
                 흔한 것만 고르기
               </button>
-              <button type="button" className={ui.button} disabled={busy || !rows.length} onClick={() => pickAll(false)}>
+              <button type="button" className={ui.button} disabled={busy || !rows.length || room <= 0} onClick={() => pickAll(false)}>
                 전부 고르기
               </button>
             </span>
-            <button type="button" className={cx(ui.button, ui.primary)} disabled={busy || total <= 0} onClick={() => void deliver()}>
+            <button type="button" className={cx(ui.button, ui.primary)} disabled={busy || total <= 0 || room <= 0} onClick={() => void deliver()}>
               {busy ? "내는 중…" : `${total}${d.unit} 납품`}
             </button>
           </div>

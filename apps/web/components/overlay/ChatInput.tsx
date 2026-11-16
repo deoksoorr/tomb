@@ -5,6 +5,7 @@ import { CHAT_MAX, CHAT_STORE_MAX, maskChat, nameKey, newChatBucket, normalizeCh
 import { bridge } from "@/game/bridge";
 import { isBareWhisper, isWhisperCommand, parseWhisper, whisperChips, whisperPrefill } from "@/game/logic/whisper";
 import { useBridgeEvent, useBridgeValue } from "@/lib/hooks/useBridge";
+import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { useWhisperPartners } from "@/lib/whisperPartners";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
@@ -64,6 +65,8 @@ type Props = {
 export default function ChatInput({ onSent, onCancel, autoFocus = false, className, id, placeholder = "머리 위 말풍선으로 한마디" }: Props) {
   const [text, setText] = useState(takePrefill);
   const [slow, setSlow] = useState(false);
+  // 터치 기기는 Enter 대신 [보내기]
+  const coarse = useMediaQuery("(pointer: coarse)");
   /** 11/16 귓속말을 못 보낸 까닭 (이름·할 말이 없음 등). 글을 고치면 지운다 */
   const [whisperHint, setWhisperHint] = useState<string | null>(null);
   /** 11/16 방향키로 고른 이름 칩 */
@@ -266,9 +269,11 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
         ) : masked ? (
           <span>일부 낱말·주소는 ***로 가려져요</span>
         ) : whisper && partners.length > 0 && isBareWhisper(text) ? (
-          <span>Enter를 누르면 {partners[0]}님에게 귓속말해요</span>
+          <span>
+            {coarse ? "보내면" : "Enter를 누르면"} {partners[0]}님에게 귓속말해요
+          </span>
         ) : whisper ? (
-          <span>귓속말은 받는 사람에게만 보여요. /w 하고 Enter면 최근 상대에게 바로 보내요</span>
+          <span>귓속말은 받는 사람에게만 보여요. /w 하고 {coarse ? "보내면" : "Enter면"} 최근 상대에게 바로 가요</span>
         ) : (
           <span>같은 채널에 보이고, 최근 {CHAT_STORE_MAX}줄은 하루 동안 남아요</span>
         )}

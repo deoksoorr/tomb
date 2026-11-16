@@ -12,6 +12,7 @@ import type { CatchResult, SunkenCatch } from "@/lib/forage/types";
 import { meStore } from "@/lib/hooks/useMe";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
+import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { showToast } from "@/lib/hooks/useToasts";
 import { derive } from "@/lib/rpg/formulas";
 import type { BugsResult, RpgPlay, RunResult } from "@/lib/rpg/types";
@@ -274,6 +275,8 @@ export default function ForageLayer() {
 function GatherDock({ gather, onCancel }: { gather: Gather; onCancel: () => void }) {
   useBlockingLayer(true);
   const [k, setK] = useState(0);
+  // 터치 기기는 Esc가 없어 버튼 글자에서 키를 뺀다
+  const coarse = useMediaQuery("(pointer: coarse)");
   useEffect(() => {
     let raf = 0;
     const start = gather.endsAt - gather.ms - 80;
@@ -305,7 +308,7 @@ function GatherDock({ gather, onCancel }: { gather: Gather; onCancel: () => void
       </div>
       <div className={s.actions}>
         <button type="button" className={cx(ui.button, ui.quiet)} style={{ flex: 1 }} onClick={onCancel}>
-          그만두기 (Esc)
+          {coarse ? "그만두기" : "그만두기 (Esc)"}
         </button>
       </div>
     </div>

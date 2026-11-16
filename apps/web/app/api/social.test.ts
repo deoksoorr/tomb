@@ -15,6 +15,7 @@ import type {
   StayBonusResponse,
 } from "@/lib/types";
 import * as adminGifts from "./admin/gifts/route";
+import * as adminPoints from "./admin/accounts/points/route";
 import * as adminMega from "./admin/megaphone/route";
 import * as devClock from "./dev/clock/route";
 import * as giftById from "./gifts/[id]/route";
@@ -272,5 +273,35 @@ describe("23번 확성기", () => {
     expect((await list(1)).entries.map((e) => e.id)).not.toContain(all.entry.id);
     expect((await adminMega.POST(call("/api/admin/megaphone", { admin: true, body: { id: "nope", hidden: true } }))).status).toBe(404);
     expect((await adminMega.GET(call("/api/admin/megaphone"))).status).toBe(401);
+  });
+});
+
+describe("11/16 관리자 선물·포인트 두 번 누르기", () => {
+  it("같은 요청 번호는 한 번만 보낸다 (두 번째는 처음 선물을 그대로 돌려준다), 번호가 다르면 따로", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOON + 6 * 86_400_000);
+    const v = await newVisitor("두번누름");
+    const body = { target: v.id, note: "한 번만", points: 30, requestId: "req-once-gift-1" };
+    const [a, b] = await Promise.all([adminGifts.POST(call("/api/admin/gifts", { admin: true, body })), adminGifts.POST(call("/api/admin/gifts", { admin: true, body }))]);
+    const codes = [a.status, b.status].sort();
+    // 동시에 오면 하나는 보내고(201) 하나는 처리 중(409). 뒤늦게 다시 오면 처음 선물(200)
+    expect(codes).toEqual([201, 409]);
+    const again = await adminGifts.POST(call("/api/admin/gifts", { admin: true, body }));
+    expect(again.status).toBe(200);
+    const list = await bodyOf<GiftListResponse>(gifts.GET(call("/api/gifts", { visitor: v })));
+    expect(list.gifts.filter((g) => g.note === "한 번만")).toHaveLength(1);
+    const other = await adminGifts.POST(call("/api/admin/gifts", { admin: true, body: { ...body, requestId: "req-once-gift-2" } }));
+    expect(other.status).toBe(201);
+  });
+
+  it("포인트 지급도 같은 번호는 한 번만", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOON + 6 * 86_400_000);
+    const v = await newVisitor("포인트두번");
+    setPoints(v, 100);
+    const body = { accountId: v.id, delta: 50, requestId: "req-once-points-1" };
+    const first = await bodyOf<{ points: number }>(adminPoints.POST(call("/api/admin/accounts/points", { admin: true, body })));
+    const second = await bodyOf<{ points: number }>(adminPoints.POST(call("/api/admin/accounts/points", { admin: true, body })));
+    expect(first.points).toBe(150);
+    expect(second.points).toBe(150);
+    expect((getAccounts() as unknown as { acct(id: string): { points: number } }).acct(v.id).points).toBe(150);
   });
 });

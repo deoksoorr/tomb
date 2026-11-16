@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import type { Notice } from "../types";
 
 // 공지사항. 관리자만 쓰고 수가 적으므로 HASH 하나(`notices`: id → JSON)에 두고 읽을 때 정렬한다.
@@ -41,7 +42,7 @@ export class RedisNotices implements NoticeStore {
   private redis: Redis;
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "notices");
   }
 
   async list(): Promise<Notice[]> {

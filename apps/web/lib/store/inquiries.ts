@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { env } from "../env";
 import type { InquiryCategory } from "../types";
 
@@ -91,7 +92,7 @@ export class RedisInquiries implements InquiryStore {
   private redis: Redis;
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "inquiries");
   }
 
   async add(rec: InquiryRecord): Promise<void> {

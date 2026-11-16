@@ -1,3 +1,4 @@
+import { rateLimit } from "@/lib/ratelimit";
 import { handler, HttpError, json } from "@/lib/http";
 import { VillageQuerySchema } from "@/lib/housing/schemas";
 import { sweepReclaimIfDue } from "@/lib/housing/reclaim";
@@ -27,6 +28,8 @@ function cachedVillage(ch: number, fresh: boolean): Promise<VillageResponse> {
  * 서버 메모리에도 1분 둔다 (`t`가 있는 저장 직후 요청은 빼고)
  */
 export const GET = handler(async (req) => {
+  // 공개 조회 (`?t=`는 서버 캐시를 건너뛰므로 IP 한도로 반복 호출을 막는다 — 메모리 한도라 Redis 명령 0)
+  await rateLimit("publicGet", req);
   const raw = req.nextUrl.searchParams.get("ch");
   const parsed = VillageQuerySchema.safeParse(raw ?? 1);
   if (!parsed.success) throw new HttpError(400, "INVALID_INPUT", "채널 번호가 올바르지 않아요.");

@@ -82,6 +82,9 @@ export function StartPanel({
   onGuide?: () => void;
 }) {
   const c = view.character;
+  // 터치 기기는 키 대신 화면 조작 안내
+  const coarse = useMediaQuery("(pointer: coarse)");
+  const how = (g: GameKind) => (coarse ? GAMES[g].howTouch : GAMES[g].how);
   const zone = zoneFor(diff, zoneId);
   const D = DIFFS[diff];
   const low = c.level < D.recLevel;
@@ -184,12 +187,12 @@ export function StartPanel({
             {monsters.join(", ")} 등이 나와요. 마지막엔 우두머리 {MONSTERS[zone.boss].name}도 나와요.
           </p>
         ) : (
-          <p className={s.meta}>{GAMES[game].how}</p>
+          <p className={s.meta}>{how(game)}</p>
         )}
         {low && <p className={s.warn}>권장 레벨보다 낮아요. 쓰러지면 보상이 절반이에요.</p>}
       </section>
 
-      <p className={s.meta}>{game === "hunt" ? GAMES.hunt.how : "끝나면 점수만큼 포인트와 EXP를 받아요."}</p>
+      <p className={s.meta}>{game === "hunt" ? how("hunt") : "끝나면 점수만큼 포인트와 EXP를 받아요."}</p>
 
       <div className={cx(s.startRow, s.startDock)}>
         {todayLine}
@@ -389,6 +392,8 @@ function shopAisles(): Aisle[] {
 export function ShopPanel({ view, busy, onBuy }: { view: RpgView; busy: boolean; onBuy: (id: string, qty: number) => void }) {
   const aisles = shopAisles();
   const [tab, setTab] = useState<string>(aisles[0].id);
+  // 단축키는 키보드 기기에서만 보인다
+  const coarse = useMediaQuery("(pointer: coarse)");
   const aisle = aisles.find((x) => x.id === tab) ?? aisles[0];
   const c = view.character;
   return (
@@ -424,7 +429,7 @@ export function ShopPanel({ view, busy, onBuy }: { view: RpgView; busy: boolean;
                 <p className={s.productName}>{p.name}</p>
                 <p className={s.meta}>{p.desc}</p>
                 <p className={s.meta}>
-                  가진 것 {c.potions[p.id] ?? 0}개{p.key ? ` · 단축키 ${p.key}` : " · 자동으로 먹어요"}
+                  가진 것 {c.potions[p.id] ?? 0}개{p.key ? (coarse ? "" : ` · 단축키 ${p.key}`) : " · 자동으로 먹어요"}
                 </p>
                 <span className={s.priceTag}>{pts(p.price)}</span>
                 <div className={s.productBuy}>

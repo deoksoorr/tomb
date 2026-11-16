@@ -1,4 +1,6 @@
-import { Redis } from "@upstash/redis";
+import { assertPointAmount } from "./pointAmount";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { CHAMP_ITEM_IDS, itemById, MAX_DECOR_PER_GRAVE, nameKey, PERMANENT_UNTIL, type CosmeticSlot } from "@tomb/protocol";
 import { CALENDAR_TTL_SEC, legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, earnRule, type EarnSource } from "../economy";
@@ -50,7 +52,8 @@ const WEEK_FN = `
 local function weekAdd(key, id, amount, now)
   if not now then return redis.call('ZINCRBY', key, amount, id) end
   local cur = math.floor(tonumber(redis.call('ZSCORE', key, id) or '0'))
-  redis.call('ZADD', key, string.format('%.17g', cur + amount + (${WEEK_TIE_SCALE} - now) / ${WEEK_TIE_SCALE}), id)
+  -- 새로 들어간 사람이면 1 (적립이 만료를 그때만 걸게)
+  return redis.call('ZADD', key, string.format('%.17g', cur + amount + (${WEEK_TIE_SCALE} - now) / ${WEEK_TIE_SCALE}), id)
 end
 `;
 
@@ -62,28 +65,37 @@ end
  * MemoryAccounts.credit과 같은 규칙. c = { acct, earn, rank, econ, week, id, dailyCap, balanceCap, ttl }
  */
 const CREDIT_FN = `${WEEK_FN}
+-- Upstash는 스크립트 안 redis.call도 하나씩 과금한다 → 같은 해시는 HMGET 한 번으로 읽고, 이미 아는 값은 다시 읽지 않는다.
+-- 부른 쪽이 쓰라고 c.points(잔액)·c.lifetime(모은 포인트, 기록 없으면 nil)·c.total(오늘 _total)을 적립 뒤 값으로 남긴다.
+-- c.earnTtlSet: 부른 쪽이 이미 c.earn 만료를 걸었으면 다시 걸지 않는다
 local function credit(c, source, points, dailyMax, ipKey, ipMax)
-  local got = tonumber(redis.call('HGET', c.earn, source) or '0')
-  local total = tonumber(redis.call('HGET', c.earn, '_total') or '0')
-  local bal = tonumber(redis.call('HGET', c.acct, 'points') or '0')
+  local e = redis.call('HMGET', c.earn, source, '_total')
+  local got = tonumber(e[1] or '0')
+  local total = tonumber(e[2] or '0')
+  local a = redis.call('HMGET', c.acct, 'points', 'lifetime')
+  local bal = tonumber(a[1] or '0')
+  c.points = bal
+  c.lifetime = tonumber(a[2] or '')
+  c.total = total
   -- c.outsideTotal: 하루 전체 한도(_total)에 막히지도, 더하지도 않는다 (접속 보너스)
   local amount = math.min(points, dailyMax - got, c.outsideTotal and points or c.dailyCap - total, c.balanceCap - bal)
   if ipKey then amount = math.min(amount, ipMax - tonumber(redis.call('HGET', ipKey, source) or '0')) end
   if amount <= 0 then return 0 end
-  redis.call('HINCRBY', c.earn, source, amount)
-  if not c.outsideTotal then redis.call('HINCRBY', c.earn, '_total', amount) end
-  redis.call('EXPIRE', c.earn, c.ttl)
+  -- 만료는 그 칸이 처음 생길 때만 건다 (더한 뒤 값 == 더한 값). 키가 처음 생길 때는 늘 칸도 처음이라 만료가 빠지지 않고,
+  -- 날짜·주마다 따로인 키라 지워지는 때도 거의 같다 (예전엔 적립마다 EXPIRE 4개)
+  local got2 = redis.call('HINCRBY', c.earn, source, amount)
+  if not c.outsideTotal then c.total = redis.call('HINCRBY', c.earn, '_total', amount) end
+  if not c.earnTtlSet and got2 == amount then redis.call('EXPIRE', c.earn, c.ttl) end
   if ipKey then
-    redis.call('HINCRBY', ipKey, source, amount)
-    redis.call('EXPIRE', ipKey, c.ttl)
+    if redis.call('HINCRBY', ipKey, source, amount) == amount then redis.call('EXPIRE', ipKey, c.ttl) end
   end
-  redis.call('HINCRBY', c.acct, 'points', amount)
-  redis.call('HSETNX', c.acct, 'lifetime', bal)
-  redis.call('ZADD', c.rank, redis.call('HINCRBY', c.acct, 'lifetime', amount), c.id)
-  weekAdd(c.week, c.id, amount, c.now)
-  redis.call('EXPIRE', c.week, ${WEEK_RANK_TTL_SEC})
-  redis.call('HINCRBY', c.econ, 'earn:' .. source, amount)
-  redis.call('EXPIRE', c.econ, ${ECON_TTL_SEC})
+  c.points = redis.call('HINCRBY', c.acct, 'points', amount)
+  -- 개편 전 계정: 모은 포인트가 없으면 지금 잔액에서 시작 (예전 HSETNX와 같다 — 위에서 없음을 확인했다)
+  if not a[2] then redis.call('HSET', c.acct, 'lifetime', bal) end
+  c.lifetime = redis.call('HINCRBY', c.acct, 'lifetime', amount)
+  redis.call('ZADD', c.rank, c.lifetime, c.id)
+  if weekAdd(c.week, c.id, amount, c.now) == 1 or not c.now then redis.call('EXPIRE', c.week, ${WEEK_RANK_TTL_SEC}) end
+  if redis.call('HINCRBY', c.econ, 'earn:' .. source, amount) == amount then redis.call('EXPIRE', c.econ, ${ECON_TTL_SEC}) end
   return amount
 end
 `;
@@ -149,19 +161,23 @@ if sid ~= '' and pv[2] == sid and last > 0 and elapsed <= tonumber(ARGV[13]) the
   ticks = math.max(1, math.min(tonumber(ARGV[12]), math.floor((elapsed + tonumber(ARGV[11])) / tick)))
   nextAt = math.min(now, last + ticks * tick)
 end
-redis.call('HSET', KEYS[1], 'presenceAt', tostring(nextAt))
-if sid ~= '' then redis.call('HSET', KEYS[1], 'presenceSid', sid) else redis.call('HDEL', KEYS[1], 'presenceSid') end
+if sid ~= '' then
+  redis.call('HSET', KEYS[1], 'presenceAt', tostring(nextAt), 'presenceSid', sid)
+else
+  redis.call('HSET', KEYS[1], 'presenceAt', tostring(nextAt))
+  redis.call('HDEL', KEYS[1], 'presenceSid')
+end
 -- 10번: 머문 기록은 포인트 한도와 상관없이 센다 (출석 도장 조건)
-redis.call('HINCRBY', KEYS[2], '_stay', ticks)
+local stay = redis.call('HINCRBY', KEYS[2], '_stay', ticks)
 -- 총 접속 시간: 센 기록 수 × 기록 길이(분)를 계정 해시 stayMin과 접속 시간 랭킹에 (lib/stayTime.ts)
 redis.call('ZADD', KEYS[6], redis.call('HINCRBY', KEYS[1], 'stayMin', ticks * math.floor(tonumber(ARGV[10]) / 60000)), ARGV[1])
 redis.call('EXPIRE', KEYS[2], ARGV[8])
-local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], week = KEYS[5], id = ARGV[1], dailyCap = tonumber(ARGV[6]), balanceCap = tonumber(ARGV[7]), ttl = ARGV[8], now = now }
+local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], week = KEYS[5], id = ARGV[1], dailyCap = tonumber(ARGV[6]), balanceCap = tonumber(ARGV[7]), ttl = ARGV[8], now = now, earnTtlSet = true }
 local amount = credit(c, 'presence', tonumber(ARGV[4]) * ticks, tonumber(ARGV[5]))
--- 화면이 바로 쓸 값도 같이 (머무르기 응답이 계정 전체를 다시 읽지 않게): 적립, 센 기록 수, 잔액, 모은 포인트, 오늘 쌓은 포인트, 오늘 머문 기록 수
-local bal = redis.call('HMGET', KEYS[1], 'points', 'lifetime')
-local points = tonumber(bal[1] or '0') or 0
-return { amount, ticks, points, tonumber(bal[2] or '') or points, tonumber(redis.call('HGET', KEYS[2], '_total') or '0'), tonumber(redis.call('HGET', KEYS[2], '_stay') or '0') }
+-- 화면이 바로 쓸 값도 같이 (머무르기 응답이 계정 전체를 다시 읽지 않게): 적립, 센 기록 수, 잔액, 모은 포인트, 오늘 쌓은 포인트, 오늘 머문 기록 수.
+-- 적립(credit)이 읽고 쓴 값을 그대로 쓴다 (다시 읽지 않는다)
+local points = tonumber(c.points) or 0
+return { amount, ticks, points, tonumber(c.lifetime) or points, tonumber(c.total) or 0, tonumber(stay) or 0 }
 `;
 
 // 접속 시간 보너스: 오늘 머문 기록(_stay)으로 열린 구간 중 안 받은 구간(_bonus 다음부터)을 한 번에. 없으면 -1.
@@ -671,7 +687,7 @@ export class RedisAccounts implements AccountStore {
   private redis: Redis;
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "accounts");
   }
 
   async get(id: string, day: string, now: number): Promise<AccountRecord> {
@@ -747,6 +763,7 @@ export class RedisAccounts implements AccountStore {
   }
 
   async spend(id: string, amount: number, reason: string, now: number): Promise<number | null> {
+    assertPointAmount(amount);
     const entry = JSON.stringify({ at: now, amount: -amount, reason });
     const r = Number(
       await this.redis.eval<string[], number>(SPEND_LUA, [K.acct(id), K.ledger(id), await econKeyFor(id, kstDay(now))], [
@@ -759,6 +776,7 @@ export class RedisAccounts implements AccountStore {
   }
 
   async refund(id: string, amount: number, reason: string, now: number): Promise<number> {
+    assertPointAmount(amount);
     const entry = JSON.stringify({ at: now, amount, reason });
     return Number(
       await this.redis.eval<string[], number>(REFUND_LUA, [K.acct(id), K.ledger(id), await econKeyFor(id, kstDay(now))], [
@@ -1145,7 +1163,8 @@ export class RedisAccounts implements AccountStore {
   }
 
   async pushActivity(id: string, item: ActivityItem): Promise<void> {
-    await this.redis.multi().lpush(K.activity(id), JSON.stringify(item)).ltrim(K.activity(id), 0, ACTIVITY_KEEP - 1).exec();
+    // 파이프라인으로 (MULTI·EXEC 2개 절약). 동시에 들어와도 LTRIM이 곧 개수를 맞춘다
+    await this.redis.pipeline().lpush(K.activity(id), JSON.stringify(item)).ltrim(K.activity(id), 0, ACTIVITY_KEEP - 1).exec();
   }
 
   async activity(id: string): Promise<{ items: ActivityItem[]; lastSeenAt: number }> {

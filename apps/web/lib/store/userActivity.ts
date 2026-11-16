@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { env } from "../env";
 import { K } from "./keys";
 
@@ -69,20 +70,28 @@ end
 return n
 `;
 
+/** 이 인스턴스가 이미 남긴 [계정, 날짜] 기억의 상한 (넘치면 비우고 다시 — 다시 보내도 SADD가 0이라 결과는 같다) */
+const RECORDED_MAX = 50_000;
+
 export class RedisActivity implements ActivityStore {
   private redis: Redis;
+  /** 이 인스턴스가 이미 남긴 "날짜|계정" (입장·재접속마다 EVAL을 다시 보내지 않게 — 그날 SET에 이미 있으면 스크립트도 아무것도 바꾸지 않는다) */
+  private recorded = new Set<string>();
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "userActivity");
   }
 
   async record(pairs: readonly (readonly [string, string])[]): Promise<number> {
-    if (!pairs.length) return 0;
+    const fresh = pairs.filter(([id, day]) => !this.recorded.has(`${day}|${id}`));
+    if (!fresh.length) return 0;
     const n = await this.redis.eval<string[], number>(
       RECORD_LUA,
-      [K.actDays, K.actSince, ...pairs.map(([, day]) => K.actDay(day))],
-      [String(ACT_DAY_TTL_SEC), ...pairs.flatMap(([id, day]) => [id, day])],
+      [K.actDays, K.actSince, ...fresh.map(([, day]) => K.actDay(day))],
+      [String(ACT_DAY_TTL_SEC), ...fresh.flatMap(([id, day]) => [id, day])],
     );
+    if (this.recorded.size + fresh.length > RECORDED_MAX) this.recorded.clear();
+    for (const [id, day] of fresh) this.recorded.add(`${day}|${id}`);
     return Number(n) || 0;
   }
 

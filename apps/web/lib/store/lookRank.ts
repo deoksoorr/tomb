@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { DYE_PARTS, itemById, type AvatarDye } from "@tomb/protocol";
 import { env } from "../env";
 import { MemoryFillMark, RedisFillMark, type FillMark } from "../rankFill";
@@ -118,12 +119,19 @@ function entriesOf(raw: unknown): [string, string][] {
   return [];
 }
 
+/** HMGET 결과 → 필드 순서대로 값 (자동 직렬화를 끄면 배열, 켜져 있으면 객체로 올 수도 있다) */
+function hmgetValues(raw: unknown, fields: readonly string[]): unknown[] {
+  if (Array.isArray(raw)) return raw;
+  if (raw && typeof raw === "object") return fields.map((f) => (raw as Record<string, unknown>)[f] ?? null);
+  return fields.map(() => null);
+}
+
 export class RedisLookRank implements LookRankStore {
   private redis: Redis;
   readonly fill: FillMark;
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "lookRank");
     this.fill = new RedisFillMark(this.redis, FILL_KEY);
   }
 
@@ -185,13 +193,14 @@ export class RedisLookRank implements LookRankStore {
   async nameStyles(ids: readonly string[], now: number): Promise<Map<string, string[]>> {
     const out = new Map<string, string[]>();
     if (!ids.length) return out;
-    // 한 사람당 2개 (이름 글자·이름표 필드) 파이프라인 한 번으로
+    // 한 사람당 HMGET 1개 (이름 글자·이름표 필드 둘을 한 번에), 파이프라인 한 번으로
     const p = this.redis.pipeline();
-    for (const id of ids) for (const f of NAME_FIELDS) p.hget(K.look(id), f);
+    for (const id of ids) p.hmget(K.look(id), ...NAME_FIELDS);
     const res = (await p.exec()) as unknown[];
     ids.forEach((id, i) => {
+      const got = hmgetValues(res[i], NAME_FIELDS);
       const worn = NAME_FIELDS.flatMap((slot, j) => {
-        const v = res[i * NAME_FIELDS.length + j];
+        const v = got[j];
         if (typeof v !== "string") return [];
         const [itemId, until] = v.split("|");
         return itemId && Number(until) > now && itemSlot(itemId) === slot ? [itemId] : [];

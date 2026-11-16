@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { HOUSE_LOTS, WORLD_LOTS } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
+import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { meStore } from "@/lib/hooks/useMe";
 import { lotLabel } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
@@ -12,6 +13,7 @@ import { cx } from "../ui/cx";
 import PixelIcon from "../ui/PixelIcon";
 import ui from "../ui/ui.module.css";
 import { hopChannel } from "./channelHop";
+import { houseChannelFullMsg } from "@/game/net/switchPolicy";
 import ExteriorDialog from "./ExteriorDialog";
 import HouseHud from "./HouseHud";
 import styles from "./housing.module.css";
@@ -127,14 +129,16 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
         setNotice(null);
         run();
       },
-      () => {
+      (full) => {
         hopOff.current = null;
         setBusy(false);
         setNotice(null);
-        const msg = `${h.ch}채널로 옮기지 못했어요. 채널이 가득 찼을 수 있어요. 잠시 뒤 다시 해 주세요.`;
+        // 꽉 찬 채널이면 게임이 옮기지 않고(지금 채널 그대로) 이미 토스트로 안내했다
+        const msg = full ?? `${h.ch}채널로 옮기지 못했어요. 잠시 뒤 다시 해 주세요.`;
         setVisitError(msg);
-        bridge.emit("toast", { message: msg });
+        if (!full) bridge.emit("toast", { message: msg });
       },
+      { fullMsg: houseChannelFullMsg(h.ch) },
     );
   }, []);
 
@@ -292,6 +296,8 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
     />
   );
 
+  // 터치 기기는 E 키 대신 [상호작용] 버튼
+  const coarse = useMediaQuery("(pointer: coarse)");
   if (mode.kind === "pending") return null;
 
   if (mode.kind === "house") {
@@ -340,7 +346,7 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
               분양 마을{villageCount ? <span className={styles.tag}> · 지금 {villageCount}명</span> : null}
             </span>
             <span className={styles.small}>
-              {channel}채널 · {h ? `내 집 ${lotLabel(h.ch, h.lot)} · ${h.name}` : "빈 자리 팻말에서 분양받을 수 있어요"} · 문 앞에서 E를 누르거나 집을 눌러 들어가요
+              {channel}채널 · {h ? `내 집 ${lotLabel(h.ch, h.lot)} · ${h.name}` : "빈 자리 팻말에서 분양받을 수 있어요"} · {coarse ? "문 앞에서 [상호작용] 버튼을 누르거나 집을 눌러 들어가요" : "문 앞에서 E를 누르거나 집을 눌러 들어가요"}
             </span>
           </div>
           <div className={styles.hudButtons}>

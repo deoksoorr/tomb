@@ -1,4 +1,4 @@
-import { NAME_TAKEN_MESSAGE } from "@tomb/protocol";
+import { checkNewName, NAME_TAKEN_MESSAGE } from "@tomb/protocol";
 import { handler, HttpError, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
@@ -17,6 +17,9 @@ export const POST = handler(async (req) => {
   await rateLimit("shop", req, visitorId);
   const accounts = getAccounts();
   const now = Date.now();
+  // 11/16 바꾸는 이름은 8자까지 (포인트·대기 기간을 쓰기 전에 거른다)
+  const fresh = checkNewName(name, (await accounts.appearance(visitorId, now)).name);
+  if (!fresh.ok) throw new HttpError(400, "INVALID_INPUT", fresh.reason);
   const r = await accounts.changeName(visitorId, name, now, NAME_CHANGE_PRICE, NAME_CHANGE_COOLDOWN_MS);
   if (!r.ok && r.reason === "cooldown") {
     const retry = String(Math.ceil((r.nextAllowedAt - now) / 1000));

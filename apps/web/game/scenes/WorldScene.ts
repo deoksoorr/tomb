@@ -13,9 +13,10 @@ import { isAttachKind, Player, type SeatRequester } from "../entities/Player";
 import { HAMMOCK_FRONT, RemoteAvatar, SWING_FRONT } from "../entities/RemoteAvatar";
 import { peerAt } from "../entities/peerHit";
 import { SeatHint } from "../entities/SeatHint";
-import { phraseOf, type SpeechBubble } from "../entities/SpeechBubble";
+import { phraseOf } from "../entities/SpeechBubble";
 import { InputHub } from "../input/InputHub";
 import type { KeyAction } from "../input/Keyboard";
+import { keyJosa } from "../input/keyHint";
 import { escape, overlaps, type Box } from "../logic/jump";
 import { DEADZONE_ENTER, type MoveInput } from "../logic/movement";
 import { nearestObject, pickInteraction } from "../logic/interact";
@@ -35,7 +36,7 @@ import { Fireworks } from "../world/Fireworks";
 import { GraveWalker } from "../world/GraveWalker";
 import { GraveField } from "../world/GraveField";
 import { graveChannelFor } from "../world/graveChannel";
-import { declutter, type LabelBox } from "../world/labels";
+import { LabelLayout } from "../world/LabelLayout";
 import { graveAt, nearestGrave, standSpot, type GravePlacement, type NearResult } from "../world/graveLayout";
 import { inWater, nearShopDoor, nearWater, standable, waterCurrent, type Interactable } from "../world/layout";
 import { nearestSafeGround, walkReachable } from "../world/walkReach";
@@ -149,6 +150,8 @@ export class WorldScene extends Phaser.Scene {
   private pendingBury: { id: string; at: number } | null = null;
   private readonly remoteBuried = new Map<string, number>();
   private recenterAt = 0;
+  /** 채널을 옮기려고 떠나기 전 자리 (새 채널이 꽉 차 돌아오면 여기로) */
+  private channelBack: { x: number; y: number; dir: DirId } | null = null;
   /** F17 미니맵 다음 알림 시각 (performance.now) */
   private minimapAt = 0;
   /** 친구: UI가 알려 준 이 채널의 친구 (sid → 이름). sid와 이름이 둘 다 맞는 사람만 친구로 그린다 */
@@ -185,10 +188,8 @@ export class WorldScene extends Phaser.Scene {
   private readonly fwView = new Phaser.Geom.Rectangle();
   private readonly near: NearResult = { p: null as unknown as GravePlacement, dist: 0 };
   private readonly resolveGrave = (id: string) => this.field.placement(id);
-  private readonly labelBoxes: (LabelBox & { t: Phaser.GameObjects.BitmapText | null })[] = [];
-  private readonly labelOrder: LabelBox[] = [];
+  private readonly labelLayout = new LabelLayout();
   private readonly hintBuf = { x: 0, y: 0, text: "", dim: false };
-  private readonly bubbleBoxes: SpeechBubble[] = [];
   private sayAt = -Infinity;
   private guide!: GuideArrow;
   private readonly swingRiders: number[] = [];
@@ -824,7 +825,9 @@ export class WorldScene extends Phaser.Scene {
       }),
     );
     on.push(bridge.on("grave:flowered", ({ graveId }) => this.playMyFlower(graveId)));
-    on.push(bridge.on("channel:switch", ({ channel }) => this.switchChannel(channel)));
+    on.push(bridge.on("channel:switch", ({ channel, fullMsg }) => this.switchChannel(channel, fullMsg)));
+    on.push(bridge.on("channel:leave", () => this.leaveForChannel()));
+    on.push(bridge.on("channel:refused", ({ back }) => back && this.backFromChannel()));
     // 실내(상점·집·분양 마을·사냥터·미니게임)에 들어가 있는 동안은 다른 사람 화면에서 숨긴다 (메인 맵의 나는 문 앞에 멈춰 있다)
     on.push(
       bridge.on("scene:changed", ({ scene, place, houseId, stay }) => {
@@ -1164,7 +1167,7 @@ export class WorldScene extends Phaser.Scene {
       const at = this.boats.fishingSpot();
       if (at) this.forage.fishFromBoat(at);
       // 11/15 오리배: E는 내리기 전용 (꽥은 Space만). 11/16 조종하는 사람은 가장 가까운 둑으로 저절로 저어 가서 내린다 (옆자리는 안내만)
-      else if (!this.boats.goAshore()) this.toast("둑 가까이 가면 E로 내릴 수 있어요");
+      else if (!this.boats.goAshore()) this.toast(`둑 가까이 가면 ${keyJosa("E", "로")} 내릴 수 있어요`);
       return;
     }
     // 조각배 위: E = 물가에서 내리기, 앉기·점프 없음
@@ -1364,22 +1367,42 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /**
-   * 게임 안 채널 이동 (19): 새 채널의 처음 자리(SPAWN)에서 시작한다. 앉은 자리·나무·그네는 놓고 간다
-   * (옛 채널은 1000으로 닫혀 바로 비워진다). 새로고침 복원(lib/resume.ts)은 이 길을 타지 않아 같은 채널의 같은 자리로 돌아온다.
+   * 게임 안 채널 이동 (19): 새 채널의 처음 자리(SPAWN)에서 시작한다. 앉은 자리·나무·그네는 놓고 간다.
+   * 꽉 찬 채널로는 옮기지 않는다 — 실시간 클라이언트가 먼저 로비를 보고, 통과해야 channel:leave가 온다 (그 전엔 그대로).
+   * 새로고침 복원(lib/resume.ts)은 이 길을 타지 않아 같은 채널의 같은 자리로 돌아온다.
    */
-  private switchChannel(channel: number): void {
+  private switchChannel(channel: number, fullMsg?: string): void {
     this.walker.cancel();
     if (this.net.online && this.net.channel === channel) return;
-    if (!this.inShop) {
-      const now = this.time.now;
-      this.leaveCampfire();
-      this.player.warp(SPAWN.x, SPAWN.y, now, this.seatReq);
-      this.player.dir = DIR.down;
-      this.player.view.apply(this.player.state, DIR.down, now);
-      this.rig.recenter();
-      this.recenterAt = 0;
-    }
-    this.net.switchChannel(channel);
+    void this.net.switchChannel(channel, fullMsg);
+  }
+
+  /** 채널을 실제로 떠난다: 지금 자리를 기억하고 처음 자리(SPAWN)로 */
+  private leaveForChannel(): void {
+    this.channelBack = null;
+    if (this.inShop) return;
+    const now = this.time.now;
+    this.channelBack = { x: this.player.x, y: this.player.y, dir: this.player.dir };
+    this.leaveCampfire();
+    this.player.warp(SPAWN.x, SPAWN.y, now, this.seatReq);
+    this.player.dir = DIR.down;
+    this.player.view.apply(this.player.state, DIR.down, now);
+    this.rig.recenter();
+    this.recenterAt = 0;
+  }
+
+  /** 옮기려던 채널이 들어가는 순간 꽉 차 온 채널로 돌아간다: 떠나기 전 자리로 (다시 접속할 때 이 좌표로 들어간다) */
+  private backFromChannel(): void {
+    const b = this.channelBack;
+    this.channelBack = null;
+    if (!b || this.inShop) return;
+    const now = this.time.now;
+    this.walker.cancel();
+    this.player.warp(b.x, b.y, now, this.seatReq);
+    this.player.dir = b.dir;
+    this.player.view.apply(this.player.state, b.dir, now);
+    this.rig.recenter();
+    this.recenterAt = 0;
   }
 
   /** 첫 방문 안내 대상 → 화살표를 띄울 월드 좌표 (대상 그림 위쪽) */
@@ -1963,62 +1986,16 @@ export class WorldScene extends Phaser.Scene {
     else this.graveLock = true;
   }
 
-  /** 이름표가 겹치면 위쪽 사람 이름표를 살짝 올린다 (모든 사람 이름이 보이게) */
-  /** 이름표·말풍선 겹침 풀기: 이름표를 먼저 풀고, 말풍선을 각자 이름표 위에 놓은 뒤 함께 한 번 더 (겹치면 위로) */
+  /**
+   * 이름표·말풍선 겹침 풀기 (LabelLayout): 이름표는 이름·바탕판·칭호·1위 배지를 한 묶음으로 통째로 비키고(내 것은 제자리),
+   * 말풍선은 자리 잡은 이름표들을 피해 위로만 비킨다
+   */
   private declutterLabels(now: number, pnow: number): void {
-    let n = this.pushLabel(this.player.view.label, 0);
-    for (const r of this.remotes.values()) n = this.pushLabel(r.view.label, n);
-    const boxes = this.labelBoxes;
-    if (n >= 2) {
-      declutter(boxes, this.labelOrder, n);
-      for (let i = 0; i < n; i++) {
-        const b = boxes[i];
-        if (b.t && b.t.y !== b.y) b.t.setY(b.y);
-      }
-    }
-    // 말풍선
-    const bubbles = this.bubbleBoxes;
-    let m = 0;
-    const me = this.player.view.speechAt(now);
-    if (me) bubbles[m++] = me;
-    for (const r of this.remotes.values()) {
-      const sb = r.view.speechAt(pnow);
-      if (sb) bubbles[m++] = sb;
-    }
-    bubbles.length = m;
-    if (!m) return;
-    let k = n;
-    for (let i = 0; i < m; i++) {
-      let b = boxes[k];
-      if (!b) boxes.push((b = { x: 0, y: 0, w: 0, h: 0, t: null }));
-      b.t = null;
-      b.x = bubbles[i].box.x;
-      b.y = bubbles[i].box.y;
-      b.w = bubbles[i].box.w;
-      b.h = bubbles[i].box.h;
-      k++;
-    }
-    declutter(boxes, this.labelOrder, k);
-    for (let i = 0; i < m; i++) {
-      const b = boxes[n + i];
-      if (b.y !== bubbles[i].box.y) bubbles[i].setBottom(b.y);
-    }
-    for (let i = 0; i < n; i++) {
-      const b = boxes[i];
-      if (b.t && b.t.y !== b.y) b.t.setY(b.y);
-    }
-  }
-
-  private pushLabel(t: Phaser.GameObjects.BitmapText, n: number): number {
-    if (!t.visible) return n;
-    let b = this.labelBoxes[n];
-    if (!b) this.labelBoxes.push((b = { x: 0, y: 0, w: 0, h: 0, t: null }));
-    b.t = t;
-    b.x = t.x;
-    b.y = t.y;
-    b.w = t.width + 2 / this.cameras.main.zoom;
-    b.h = t.height;
-    return n + 1;
+    const lay = this.labelLayout;
+    lay.begin();
+    lay.add(this.player.view, true, now);
+    for (const r of this.remotes.values()) lay.add(r.view, false, pnow);
+    lay.finish(1 / this.cameras.main.zoom);
   }
 
   /** 근처 빈 좌석 안내 + seat:near (UI가 모바일 앉기 버튼을 강조) */

@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { env } from "../env";
 
 // 관리자 감사 기록: 되돌릴 수 없는 계정 작업(지금은 접속 코드 재발급)을 누가·언제·누구에게 했는지 남긴다.
@@ -43,7 +44,7 @@ export class RedisAdminAudit implements AdminAuditStore {
     private key = AUDIT_KEY,
     private keep = AUDIT_KEEP,
   ) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "adminAudit");
   }
   async push(entry: AdminAuditEntry): Promise<void> {
     await this.redis

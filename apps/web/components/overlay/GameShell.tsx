@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 import dynamic from "next/dynamic";
 import { bridge, type GameStartOptions } from "@/game/bridge";
+import { isTouchUi } from "@/game/input/keyHint";
 import { api } from "@/lib/api";
 import { useBagNew } from "@/lib/hooks/useBagNew";
 import { useBridgeEvent, useBridgeValue } from "@/lib/hooks/useBridge";
@@ -59,6 +60,7 @@ import UpdateNotice from "./UpdateNotice";
 import styles from "./GameShell.module.css";
 import HousingOffice from "@/components/housing/HousingOffice";
 import { hopChannel } from "@/components/housing/channelHop";
+import { houseChannelFullMsg } from "@/game/net/switchPolicy";
 import { graveChannelFor } from "@/game/world/graveChannel";
 import type { PublicHouse } from "@/lib/housing/types";
 import { isRideablePet, isWorldLot } from "@tomb/protocol";
@@ -259,7 +261,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   // 탈 수 있는 펫을 데리고 다니기 시작하면 R 키 탑승을 알려 준다
   const ridePet = me?.equipped.find((e) => isRideablePet(e.itemId))?.itemId ?? null;
   useEffect(() => {
-    if (ridePet) showToast("R을 누르면 펫에 타요. 다시 누르면 내려요.", 7_000);
+    if (ridePet) showToast(isTouchUi() ? "[타기] 버튼을 누르면 펫에 타요. 다시 누르면 내려요." : "R을 누르면 펫에 타요. 다시 누르면 내려요.", 7_000);
   }, [ridePet]);
   const myGraves = useMyGraves(me?.graves ?? [], graves);
   const [openGraveId, setOpenGraveId] = useState<string | null>(null);
@@ -453,15 +455,20 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     if (here) return goToGrave(grave.id);
     setPanel(null);
     const { cache } = graves;
+    const stop = () => {
+      off();
+      offRefused();
+      clearTimeout(giveUp);
+    };
     const off = cache.subscribe(() => {
       const snap = cache.getSnapshot();
       if (snap.channel !== grave.channel || !snap.byId.has(grave.id)) return;
-      off();
-      clearTimeout(giveUp);
+      stop();
       bridge.emit("grave:focus", { graveId: grave.id, walk: true });
     });
-    // 채널을 못 옮기면(가득 참 등) 기다리지 않는다
-    const giveUp = setTimeout(off, 20_000);
+    // 채널을 못 옮기면 기다리지 않는다: 꽉 찬 채널이면 게임이 옮기지 않고 안내한다 (channel:refused), 그 밖엔 20초
+    const offRefused = bridge.on("channel:refused", ({ channel }) => channel === grave.channel && stop());
+    const giveUp = setTimeout(stop, 20_000);
     bridge.emit("channel:switch", { channel: grave.channel });
   }
 
@@ -478,7 +485,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           setPanel("housing");
         }
       },
-      () => showToast(`${house.ch}채널로 옮기지 못했어요. 채널이 가득 찼을 수 있어요. 잠시 뒤 다시 해 주세요.`),
+      // 꽉 찬 채널이면 게임이 옮기지 않고 이미 안내했다
+      (full) => !full && showToast(`${house.ch}채널로 옮기지 못했어요. 잠시 뒤 다시 해 주세요.`),
+      { fullMsg: houseChannelFullMsg(house.ch) },
     );
   }
 
@@ -824,7 +833,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {sayOpen && <SayDialog onClose={() => setSayOpen(false)} />}
       {chatOpen && canRadial && !sayOpen && !riding && <ChatSheet onClose={() => setChatOpen(false)} />}
       {/* 채팅 기록창: 데스크톱은 바로 가기 줄 위 상자(입력칸 포함), 터치는 확성기 위에 글씨만 + [기록] 창([말하기] → 채팅 입력 줄). 채널을 옮기면 비운다 */}
-      {ready && <ChatLog mobile={coarse} room={`${scene === "house" ? "house" : "world"}:${channel}`} hidden={!canRadial || riding} onChat={() => setChatOpen(true)} />}
+      {ready && <ChatLog mobile={coarse} room={`${scene === "house" ? "house" : "world"}:${channel}`} hidden={!canRadial || riding} />}
       {radial && canRadial && <ExprRadial onClose={() => setRadial(false)} />}
       {/* 마을·집 안: 월드 바로 가기 줄이 숨으니 [표현] 버튼만 왼쪽 아래에 따로 */}
       {ready && scene === "house" && !coarse && (

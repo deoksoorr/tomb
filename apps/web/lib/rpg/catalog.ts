@@ -761,23 +761,27 @@ export const zonesOf = (d: Difficulty): ZoneDef[] => ZONE_IDS.map((id) => HUNT_Z
 export const GAME_KINDS = ["hunt", "bugs", "stars"] as const;
 export type GameKind = (typeof GAME_KINDS)[number];
 
-export const GAMES: Record<GameKind, { name: string; desc: string; how: string; statNote: string }> = {
+/** how = 키보드·마우스 조작 안내, howTouch = 화면 버튼을 쓰는 터치 기기 조작 안내 */
+export const GAMES: Record<GameKind, { name: string; desc: string; how: string; howTouch: string; statNote: string }> = {
   hunt: {
     name: "사냥터",
     desc: "웨이브마다 몰려오는 몬스터를 물리쳐요. 장비, 스킬, 포션을 모두 써요.",
     how: "WASD나 방향키로 걷고, Space나 J로 공격해요. 누르고 있으면 계속 때려요. 1~5는 스킬, Q/E/R은 포션, Esc는 멈춤이에요.",
+    howTouch: "화면 왼쪽을 누른 채 끌면 걷고, [공격]을 누르면 때려요. 누르고 있으면 계속 때려요. 스킬 칸을 누르면 스킬을 써요.",
     statNote: "모든 능력치와 장비가 그대로 쓰여요",
   },
   bugs: {
     name: "벌레 잡기",
     desc: "아홉 개의 창에서 튀어나오는 벌레를 잡아요. 초록 체크와 줄 그어진 회색 벌레는 이미 잡은 거라 건드리면 안 돼요. 콤보가 쌓일수록 점수가 더 많이 올라요.",
     how: "칸 누르기 (클릭, 탭, Q W E / A S D / Z X C)",
+    howTouch: "벌레가 나온 칸을 눌러요.",
     statNote: "DEX가 높으면 벌레가 조금 더 오래 보이고, LUK가 높으면 황금 벌레가 자주 나와요",
   },
   stars: {
     name: "별자리 잇기",
     desc: "밤하늘에 별이 하나씩 떠올라요. 빛의 고리가 별에 닿을 때 누르면 별이 이어져요. 한 별자리를 하나도 놓치지 않고 이으면 도감에 올라가요.",
     how: "고리가 별에 겹칠 때 Space나 J를 눌러요. 클릭하거나 탭해도 돼요. 너무 일찍 누르면 놓쳐요.",
+    howTouch: "고리가 별에 겹칠 때 화면을 탭해요. 너무 일찍 누르면 놓쳐요.",
     statNote: "DEX가 높을수록 판정이 넉넉해져요",
   },
 };

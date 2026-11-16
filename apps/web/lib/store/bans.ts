@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { env } from "../env";
 
 // 47번 정지·IP 차단 저장소 + 계정별 최근 접속 IP(해시) 기록.
@@ -197,7 +198,7 @@ export class RedisBans implements BanStore {
   private redis: Redis;
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "bans");
   }
 
   async save(rec: BanRecord): Promise<void> {

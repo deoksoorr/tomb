@@ -5,6 +5,7 @@ import { TEX } from "../assets/manifest";
 import { DEPTH } from "../config";
 import { Player, type SeatRequester } from "../entities/Player";
 import type { InputHub } from "../input/InputHub";
+import { interactLabel } from "../input/keyHint";
 import type { KeyAction } from "../input/Keyboard";
 import type { MoveInput } from "../logic/movement";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
@@ -115,9 +116,10 @@ export class ShopScene extends Phaser.Scene {
     this.player.dir = DIR.up;
     this.physics.add.collider(this.player.sprite, walls);
 
-    atlas.ensure("E · 둘러보기");
+    const browse = interactLabel("둘러보기");
+    atlas.ensure(browse);
     this.prompt = this.add
-      .bitmapText(KEEPER.x, KEEPER.y - 24, FONT_KEY, "E · 둘러보기", FONT_PX)
+      .bitmapText(KEEPER.x, KEEPER.y - 24, FONT_KEY, browse, FONT_PX)
       .setOrigin(0.5, 1)
       .setTint(0xffe39a)
       .setDepth(DEPTH.labels)

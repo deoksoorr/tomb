@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { env } from "../env";
 
 // 칭호 알림 기록 (계정마다): 새 칭호 알림 창을 띄운 칭호(announced)와 가방 [칭호] 칸에서 본 칭호(seen).
@@ -43,7 +44,7 @@ export class MemoryTitleMarks implements TitleMarkStore {
 export class RedisTitleMarks implements TitleMarkStore {
   private redis: Redis;
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "titleMarks");
   }
   async get(accountId: string): Promise<TitleMarks> {
     const [ann, seen] = (await this.redis.pipeline().smembers(annKey(accountId)).smembers(seenKey(accountId)).exec()) as [unknown, unknown];

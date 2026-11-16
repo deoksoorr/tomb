@@ -33,6 +33,7 @@ import {
 import type { RpgView } from "@/lib/rpg/types";
 import { weaponStyleOf, weaponStyleText } from "@/lib/rpg/weapons";
 import { errorMessage } from "@/lib/api";
+import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { josa } from "@/lib/rpg/skillText";
 import { cx } from "../ui/cx";
 import { DollSlot, PaperDoll } from "../ui/PaperDoll";
@@ -750,6 +751,8 @@ function PotionList({
   onSell: (id: string, count?: number) => void;
 }) {
   const c = view.character;
+  // 단축키는 키보드 기기에서만 보인다 (터치는 사냥 화면의 물약 버튼)
+  const coarse = useMediaQuery("(pointer: coarse)");
   const potions = POTIONS.flatMap((p) => ((c.potions[p.id] ?? 0) > 0 ? [{ p, count: c.potions[p.id] }] : []));
   if (!potions.length) return <p className={g.note}>물약이 없어요. 상점에서 사거나 사냥터에서 주워요.</p>;
   return (
@@ -772,7 +775,7 @@ function PotionList({
               <span className={g.info}>
                 <span className={g.name}>{p.name}</span>
                 <span className={g.sub}>{p.desc}</span>
-                <span className={g.sub}>{p.key ? `단축키 ${p.key}` : "자동으로 먹어요"}</span>
+                <span className={g.sub}>{p.key ? (coarse ? "사냥 중 물약 버튼으로 먹어요" : `단축키 ${p.key}`) : "자동으로 먹어요"}</span>
               </span>
             </div>
             <div className={g.detail}>

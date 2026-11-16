@@ -5,6 +5,7 @@ import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
+import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { meStore } from "@/lib/hooks/useMe";
 import { DIFFICULTIES, DIFFS, GAMES, potionById, type Difficulty } from "@/lib/rpg/catalog";
 import { rpgApi } from "@/lib/rpg/client";
@@ -54,6 +55,8 @@ function readDiff(): Difficulty {
 
 export default function Telescope({ onClose }: { onClose: () => void }) {
   const [diff, setDiff] = useState<Difficulty>(readDiff);
+  // 터치 기기는 키 대신 탭 안내
+  const coarse = useMediaQuery("(pointer: coarse)");
   const [phase, setPhase] = useState<Phase>("intro");
   const [notice, setNotice] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -309,7 +312,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
           <b>{G.name}</b> {G.desc}
         </p>
         <p className={s.meta}>
-          망원경 속은 늘 밤하늘이라 낮에도 볼 수 있어요. 언덕에는 망원경이 두 대 있어요. 한 대에 한 사람씩 볼 수 있어요. {G.how}
+          망원경 속은 늘 밤하늘이라 낮에도 볼 수 있어요. 언덕에는 망원경이 두 대 있어요. 한 대에 한 사람씩 볼 수 있어요. {coarse ? G.howTouch : G.how}
         </p>
         <p className={starry ? s.levelUp : ui.hint} role="status">
           {starry

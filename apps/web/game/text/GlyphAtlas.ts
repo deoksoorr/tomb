@@ -88,6 +88,14 @@ export class GlyphAtlas {
     this.tex.refresh();
   }
 
+  /** 배율 1에서 이 줄의 폭 (px, 글자 진행 폭의 합 — BitmapText와 같은 charCode 단위). 없는 글자는 먼저 준비한다 */
+  measure(text: string): number {
+    this.ensure(text);
+    let w = 0;
+    for (let i = 0; i < text.length; i++) w += this.chars[text.charCodeAt(i)]?.xAdvance ?? 0;
+    return w;
+  }
+
   /** text에 쓰인 글자를 아틀라스에 준비한다 (글자 정보는 즉시, 텍스처 업로드는 렌더 직전에) */
   ensure(text: string): void {
     for (let i = 0; i < text.length; i++) {

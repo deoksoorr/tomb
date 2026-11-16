@@ -5,7 +5,7 @@ import { env } from "../env";
 import { peerOf } from "../ban";
 import { HttpError } from "../http";
 import { isStaff } from "../staff";
-import { earnPoints, getAccounts } from "../store";
+import { earnPoints, earnPointsOnly, getAccounts } from "../store";
 import { kstDay, kstWeek, loadMe } from "../store/accounts";
 import { capsMult, earnLimits, NO_BOOST, type EarnBoost } from "../pointEvent";
 import { earnBoost } from "../store/pointEvent";
@@ -159,7 +159,8 @@ export async function castLine(acct: string, spotId: string, now = Date.now(), i
   if (!water) throw new HttpError(400, "INVALID_INPUT", "여기서는 낚시를 할 수 없어요.");
   // 직접 던지면 자동 낚시는 끝난다 (둘을 한꺼번에 할 수 없다). 그때까지 낚은 것은 정산해 넣는다 (처음 등록 보상도 조용히 지급)
   if (await store.autoGet(acct)) await dexGainOf(store, acct, (await settleAuto(store, acct, now, true)).items, ip, now);
-  const snap = await store.snapshot(acct, kstDay(now), nodeWindow(now));
+  // 오늘 잡은 수만 본다 (가방·도감까지 읽는 snapshot은 명령 6개 → 2개)
+  const snap = await store.today(acct, kstDay(now), nodeWindow(now));
   if (snap.day.fish >= DAILY_CATCH_MAX.fish) throw new HttpError(429, "DAILY_LIMIT", "오늘은 물고기를 충분히 잡았어요. 내일 또 와요.");
   const cond = conditionsAt(now);
   // 11/15 긴급 의뢰 마을 축제: 희귀 이상 조금 더 (축제가 있을 수 있는 때에만 저장소를 본다)
@@ -227,7 +228,7 @@ export async function startAutoFish(acct: string, spotId: string, ch: number | n
   const water = anyFishingWaterOf(spotId);
   if (!water) throw new HttpError(400, "INVALID_INPUT", "여기서는 낚시를 할 수 없어요.");
   const prev = await settleAuto(store, acct, now, true);
-  const day = (await store.snapshot(acct, kstDay(now), nodeWindow(now))).day;
+  const day = (await store.today(acct, kstDay(now), nodeWindow(now))).day;
   if (day.fish >= DAILY_CATCH_MAX.fish) throw new HttpError(429, "DAILY_LIMIT", "오늘은 물고기를 충분히 잡았어요. 내일 또 와요.");
   if (day.auto >= AUTO_FISH_DAILY_MAX) throw new HttpError(429, "AUTO_LIMIT", `자동 낚시는 하루 ${AUTO_FISH_DAILY_MAX}마리까지예요. 직접 낚거나 내일 또 와요.`);
   const session = newAutoSession(newSeed(), spotId, water, ch, now);
@@ -281,7 +282,8 @@ export async function startGather(acct: string, nodeId: string, now = Date.now()
   const n = gatherNodeById(nodeId);
   if (!n) throw new HttpError(400, "INVALID_INPUT", "여기서는 캘 게 없어요.");
   const w = nodeWindow(now);
-  const snap = await store.snapshot(acct, kstDay(now), w);
+  // 오늘 기록·이번 창에 캔 지점만 (명령 2개)
+  const snap = await store.today(acct, kstDay(now), w);
   if (!nodeActive(acct, n, w) || snap.taken.includes(n.id)) throw new HttpError(409, "NODE_EMPTY", "지금은 비어 있어요. 조금 뒤에 다시 피어나요.");
   // 11/15 곤충 채집은 채집물 개수 한도를 채워도 할 수 있다 (곤충은 못 챙기고 포인트만 — 「곤충 채집」 포인트 한도는 따로)
   if (n.kind !== "bug" && snap.day.gather >= DAILY_CATCH_MAX.gather) throw new HttpError(429, "DAILY_LIMIT", "오늘은 충분히 모았어요. 내일 또 와요.");
@@ -338,7 +340,7 @@ export async function finishGather(acct: string, token: string, result: BugsResu
     }
     if (!items.length) message = "곤충이 모두 날아갔어요. 다섯 마리는 잡아야 하나라도 챙겨요.";
     // 11/15 채집물 개수 한도를 채웠으면 곤충은 못 챙기고 포인트만
-    if ((await store.snapshot(acct, kstDay(now), t.w)).day.gather >= DAILY_CATCH_MAX.gather) {
+    if ((await store.today(acct, kstDay(now), t.w)).day.gather >= DAILY_CATCH_MAX.gather) {
       items = [];
       message = "오늘은 곤충을 더 챙길 수 없어요. 포인트만 받아요.";
     }
@@ -350,7 +352,7 @@ export async function finishGather(acct: string, token: string, result: BugsResu
   if (!got) throw new HttpError(409, "NODE_EMPTY", "이미 캔 자리예요.");
   const dex = await dexGainOf(store, acct, got, ip, now);
   // 11/15 곤충 채집은 잡은 만큼 포인트도 (「곤충 채집」 하루 한도 — 옛 사냥터 벌레 잡기 한도 자리)
-  const points = bugPoints > 0 ? (await earnPoints(acct, "bugs", bugPoints, ip)).earned : 0;
+  const points = bugPoints > 0 ? (await earnPointsOnly(acct, "bugs", bugPoints, ip)).earned : 0;
   return { items: got satisfies CatchResult[], ...withDex(dex), state: await forageState(acct, now, store), ...(message ? { message } : {}), ...(n.kind === "bug" ? { points } : {}) };
 }
 

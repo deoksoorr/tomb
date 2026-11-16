@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { env } from "../env";
 import type { SameLevel } from "../sameUserRules";
 import { isRefMode, type RefMode } from "../referralRules";
@@ -437,7 +438,7 @@ const num = (v: unknown) => Math.floor(Number(v) || 0);
 export class RedisReferrals implements ReferralStore {
   private redis: Redis;
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "referrals");
   }
 
   async codeOf(accountId: string) {

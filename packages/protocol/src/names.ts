@@ -1,7 +1,10 @@
 // 유저이름 규칙: 2~12자, 한글·영문·숫자·공백·_ 만. 금칙어 필터. (클라이언트·서버 공용)
+// 11/16 새로 짓거나 바꾸는 이름은 8자까지 (checkNewName — 긴 이름이 이름표·부동산 목록에서 겹쳤다). 이미 있는 9~12자 이름은 그대로 쓸 수 있다
 
 export const NAME_MIN = 2;
 export const NAME_MAX = 12;
+/** 새로 짓거나 바꾸는 이름의 최대 글자 수 (이미 있는 이름은 NAME_MAX까지 그대로) */
+export const NAME_NEW_MAX = 8;
 const NAME_RE = /^[가-힣A-Za-z0-9 _]+$/;
 
 // 공백·_ 제거 + 소문자로 비교. 사칭 방지 단어 포함.
@@ -40,4 +43,15 @@ export function checkName(raw: unknown): NameCheck {
   // "대장"이나 "○○대장"은 계속 막는다 ("대장장이"처럼 다른 낱말 안에 든 건 된다). "운영자"·"관리자"는 위 금칙어
   if (flat === "대장" || flat.endsWith("대장")) return { ok: false, reason: "쓸 수 없는 단어가 들어 있어요." };
   return { ok: true, name };
+}
+
+/**
+ * 새로 짓거나 바꾸는 이름: checkName + NAME_NEW_MAX자까지. current(지금 내 이름)와 같은 이름이면 예전 길이 그대로 (휴면 뒤 옛 이름 다시 쓰기)
+ */
+export function checkNewName(raw: unknown, current?: string | null): NameCheck {
+  const r = checkName(raw);
+  if (!r.ok) return r;
+  if (current && nameKey(current) === nameKey(r.name)) return r;
+  if ([...r.name].length > NAME_NEW_MAX) return { ok: false, reason: `이름은 ${NAME_MIN}~${NAME_NEW_MAX}자로 지어 주세요.` };
+  return r;
 }

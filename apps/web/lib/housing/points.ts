@@ -1,5 +1,5 @@
 import { HttpError } from "../http";
-import { earnPoints, getAccounts, refundPoints, spendPoints } from "../store";
+import { earnPointsOnly, getAccounts, refundPoints, spendPoints } from "../store";
 import { loadMe } from "../store/accounts";
 import type { Me } from "../types";
 import { LIKE_REWARD } from "./catalog";
@@ -25,7 +25,7 @@ export async function refundAndThrow(accountId: string, amount: number, err: Htt
 }
 
 export async function rewardLike(ownerId: string, ip: string): Promise<number> {
-  return (await earnPoints(ownerId, "houseLike", LIKE_REWARD, ip)).earned;
+  return (await earnPointsOnly(ownerId, "houseLike", LIKE_REWARD, ip)).earned;
 }
 
 export async function myPoints(accountId: string): Promise<Me> {

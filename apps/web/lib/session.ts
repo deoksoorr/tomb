@@ -68,6 +68,28 @@ export function ipHash(req: NextRequest): string {
   return sha256Hex(`${clientIp(req)}|${env.sessionSecret()}`).slice(0, 16);
 }
 
+/**
+ * 대입 방지 한도용 IP 해시: IPv4는 주소 그대로, IPv6는 앞 64비트(한 회선이 보통 통째로 받는 대역)만.
+ * IPv6는 한 사람이 주소를 얼마든지 바꿀 수 있어 주소 단위로 세면 한도가 의미 없다
+ */
+export function ipNetHash(req: NextRequest): string {
+  const ip = clientIp(req);
+  const v6 = ip.includes(":") && !/^::ffff:\d+\.\d+\.\d+\.\d+$/i.test(ip) ? ipv6Prefix64(ip) : null;
+  return v6 ? sha256Hex(`net6:${v6}|${env.sessionSecret()}`).slice(0, 16) : ipHash(req);
+}
+
+/** IPv6 주소의 앞 4묶음 (펼친 형태). 읽을 수 없으면 null */
+export function ipv6Prefix64(raw: string): string | null {
+  const s = raw.trim().replace(/^\[|\]$/g, "").replace(/%.*$/, "").toLowerCase();
+  const halves = s.split("::");
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(":") : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+  const groups = halves.length === 2 ? [...head, ...Array<string>(Math.max(0, 8 - head.length - tail.length)).fill("0"), ...tail] : head;
+  if (groups.length !== 8 || !groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return null;
+  return groups.slice(0, 4).map((g) => parseInt(g, 16).toString(16)).join(":");
+}
+
 /** 길이가 달라도 시간이 새지 않도록 다이제스트끼리 상수 시간 비교 */
 export function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(createHash("sha256").update(a).digest(), createHash("sha256").update(b).digest());

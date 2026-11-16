@@ -1,5 +1,6 @@
 import { recordEvent } from "@/lib/analyticsService";
 import { handler, json } from "@/lib/http";
+import { rateLimit } from "@/lib/ratelimit";
 import { getVisitorId, newVisitorId, setSessionCookie } from "@/lib/session";
 import type { SessionResponse } from "@/lib/types";
 import { recordSignals, setDeviceCookie } from "@/lib/sameUser";
@@ -10,6 +11,7 @@ import { readBody, SessionSchema } from "@/lib/validate";
  * fresh면 기존 쿠키를 무시하고 새 계정으로 시작한다 ("새로 시작").
  */
 export const POST = handler(async (req) => {
+  await rateLimit("session", req);
   const { fresh } = await readBody(req, SessionSchema);
   const known = !fresh && (await getVisitorId(req));
   const visitorId = known || newVisitorId();

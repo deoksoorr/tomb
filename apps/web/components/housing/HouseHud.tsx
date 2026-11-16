@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { bridge } from "@/game/bridge";
 import type { HouseEditState, HouseTool } from "@/game/housing/events";
 import { errorMessage } from "@/lib/api";
+import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { meStore } from "@/lib/hooks/useMe";
 import { DEFAULT_FLOOR, DEFAULT_FLOOR_NAME, DEFAULT_WALL, DEFAULT_WALL_NAME, FURNITURE, furnitureById, LIKE_WEIGHT, tierById } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
@@ -138,18 +139,24 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
     <>
       <div className={cx(ui.panel, styles.hudTop)} role="region" aria-label="집 안">
         <div className={styles.hudInfo}>
-          <span className={styles.hudName}>{house.name}</span>
+          <span className={styles.hudName} title={house.name}>
+            {house.name}
+          </span>
+          {/* 11/16 닉네임 12자: 호칭·점수가 먼저, 주인 · 터는 맨 뒤에서 자리가 모자라면 다음 줄로 내려가 "…" (전체는 title) */}
           <span className={styles.row} style={{ gap: 6 }}>
             <TitleBadge score={score} />
-            <span className={styles.small}>
-              {house.ownerName}의 {tier.name} · 꾸밈 {fmt(score)}점 · 좋아요 {house.likes}
-              {tag ? ` · ${tag}` : ""}
+            <span className={styles.hudScore}>
+              꾸밈 {fmt(score)}점 · 좋아요 {house.likes}
             </span>
             {here?.online && (
               <span className={styles.tag}>
                 함께 {here.count}명{!mine && here.ownerHere ? " · 집주인이 집에 있어요" : ""}
               </span>
             )}
+            <span className={styles.hudOwner} title={`${house.ownerName}의 ${tier.name}${tag ? ` · ${tag}` : ""}`}>
+              {house.ownerName}의 {tier.name}
+              {tag ? ` · ${tag}` : ""}
+            </span>
           </span>
         </div>
         <div className={styles.hudButtons}>
@@ -269,13 +276,16 @@ function EditToolbar({
   const focus = selDef ?? trialDef;
   const mode = focus ? rotateMode(focus) : null;
   const rKey = mode === "turn" ? "R 돌리기" : mode === "flip" ? "R 뒤집기" : "R 돌리기·뒤집기";
+  // 터치 기기(화면 버튼을 쓰는 기기)는 키 안내 대신 손가락으로 하는 것만
+  const coarse = useMediaQuery("(pointer: coarse)");
   const skinName = (id: string) => (id === DEFAULT_FLOOR ? DEFAULT_FLOOR_NAME : id === DEFAULT_WALL ? DEFAULT_WALL_NAME : (furnitureById(id)?.name ?? id));
 
   return (
     <section className={cx(ui.panel, styles.toolbar)} aria-label="꾸미기 도구">
       <div className={styles.spread}>
         <p className={styles.small}>
-          끌어서 옮기기 · 방향키 한 칸 · {rKey} · Del 치우기 · Q/E 차례로 고르기 · 빈 곳을 끌면 화면 이동 (물건 {edit.items.length}/{maxItems})
+          {coarse ? "끌어서 옮기기 · 빈 곳을 끌면 화면 이동" : `끌어서 옮기기 · 방향키 한 칸 · ${rKey} · Del 치우기 · Q/E 차례로 고르기 · 빈 곳을 끌면 화면 이동`}
+          {` (물건 ${edit.items.length}/${maxItems})`}
         </p>
         <div className={styles.row}>
           <button type="button" className={ui.button} onClick={onShop}>
@@ -295,7 +305,10 @@ function EditToolbar({
           <FurnitureIcon itemId={trial.itemId} size={32} />
           <span className={ui.label}>
             {trialDef.name} 놓아 보는 중{" "}
-            <span className={styles.small}>· 끌어서 옮기고 R로 {rotateMode(trialDef) === "turn" ? "돌려" : "뒤집어"} 보세요. 저장은 안 돼요.</span>
+            <span className={styles.small}>
+              · 끌어서 옮기고 {coarse ? "" : "R로 "}
+              {rotateMode(trialDef) === "turn" ? "돌려" : "뒤집어"} 보세요. 저장은 안 돼요.
+            </span>
           </span>
           <button type="button" className={ui.button} onClick={() => tool({ action: "rotate" })} aria-label={`${trialDef.name} ${rotateMode(trialDef) === "turn" ? "돌리기" : "좌우 뒤집기"}`}>
             {ROTATE_LABEL[rotateMode(trialDef)]}

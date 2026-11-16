@@ -8,7 +8,7 @@ import { RemoteAvatar } from "../entities/RemoteAvatar";
 import { phraseOf } from "../entities/SpeechBubble";
 import type { GlyphAtlas } from "../text/GlyphAtlas";
 import { EMO_COOLDOWN_MS, EMO_SHOW_MS, emoIcon } from "../logic/emoBoard";
-import { declutter, type LabelBox } from "../world/labels";
+import { LabelLayout } from "../world/LabelLayout";
 import { MeScreen } from "../world/MeScreen";
 import { RoomClient, type RoomClientOptions, type RoomStatus } from "./RoomClient";
 import type { NetPose } from "./sendThrottle";
@@ -73,8 +73,7 @@ const PEER_CHECK_MS = 5000;
 export class RoomPresence {
   readonly client: RoomClient;
   readonly remotes = new Map<Sid, RemoteAvatar>();
-  private readonly boxes: (LabelBox & { t: Phaser.GameObjects.BitmapText | null })[] = [];
-  private readonly order: LabelBox[] = [];
+  private readonly labelLayout = new LabelLayout();
   private peerCheckAt = 0;
   private destroyed = false;
   private offLook: (() => void) | null = null;
@@ -315,7 +314,7 @@ export class RoomPresence {
       r.update(now, view, labelScale);
       if (depth !== undefined) r.view.sprite.setDepth(depth);
     }
-    this.declutter(now);
+    this.declutter(now, labelScale);
     const me = this.o.me?.sprite;
     if (this.meScreen && me) this.meScreen.update(me.x, me.y);
     if (this.client.online && now >= this.peerCheckAt) {
@@ -324,47 +323,14 @@ export class RoomPresence {
     }
   }
 
-  /** 이름표·말풍선이 겹치면 위쪽 것을 올린다 (내 아바타 포함) */
-  private declutter(now: number): void {
-    let n = 0;
+  /** 이름표·말풍선 겹침 풀기 (LabelLayout — 이름표 묶음은 통째로, 내 것은 제자리, 말풍선은 이름표를 피해 위로) */
+  private declutter(now: number, labelScale: number): void {
+    const lay = this.labelLayout;
+    lay.begin();
     const me = this.o.me;
-    if (me) n = this.pushView(me, n, now);
-    for (const r of this.remotes.values()) if (r.visible) n = this.pushView(r.view, n, now);
-    if (n < 2) return;
-    declutter(this.boxes, this.order, n);
-    for (let i = 0; i < n; i++) {
-      const b = this.boxes[i];
-      if (b.t) {
-        if (b.t.y !== b.y) b.t.setY(b.y);
-      } else this.bubbleOf[i]?.setBottom(b.y);
-    }
-  }
-
-  private readonly bubbleOf: (ReturnType<AvatarView["speechAt"]> | undefined)[] = [];
-
-  private pushView(v: AvatarView, n: number, now: number): number {
-    if (!v.label.visible) return n;
-    let b = this.boxes[n];
-    if (!b) this.boxes.push((b = { x: 0, y: 0, w: 0, h: 0, t: null }));
-    const t = v.label;
-    b.t = t;
-    b.x = t.x;
-    b.y = t.y;
-    b.w = t.width + 2 * (t.scaleX || 1);
-    b.h = t.height;
-    this.bubbleOf[n] = undefined;
-    n++;
-    const sp = v.speechAt(now);
-    if (!sp) return n;
-    let c = this.boxes[n];
-    if (!c) this.boxes.push((c = { x: 0, y: 0, w: 0, h: 0, t: null }));
-    c.t = null;
-    c.x = sp.box.x;
-    c.y = sp.box.y;
-    c.w = sp.box.w;
-    c.h = sp.box.h;
-    this.bubbleOf[n] = sp;
-    return n + 1;
+    if (me) lay.add(me, true, now);
+    for (const r of this.remotes.values()) lay.add(r.view, false, now);
+    lay.finish(labelScale);
   }
 
   /** 다른 사람 착용 목록: 사냥터 방이면 사냥 장비 규칙, 아니면 사냥 장비 표시를 뺀다 */

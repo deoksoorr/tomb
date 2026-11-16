@@ -50,6 +50,8 @@ import { STAY_BONUS_DAILY_MAX } from "@/lib/stayBonus";
 import { DORMANT_DAYS } from "@/lib/store/types";
 import { DEFAULT_PASS_DAYS, NAME_CHANGE_COOLDOWN_DAYS, NAME_CHANGE_PRICE, PRESENCE_INTERVAL_MS, SHRINE_KEEP_DAYS } from "@/lib/types";
 import { RESIDENTS } from "@/game/world/life/residentData";
+import { keyJosa, keyName } from "@/game/input/keyHint";
+import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { durationLabel, effectLabel, KIND_LABELS } from "../account/items";
 import Link from "next/link";
 import Dialog from "../ui/Dialog";
@@ -142,16 +144,17 @@ const FRIENDS: ReactNode[][] = [
   ["알림", "친구가 들어오거나 나가면 작은 알림이 떠요. 친구 창에서 끌 수 있어요."],
 ];
 
-const PLACES: ReactNode[][] = [
+/** 곳·탈것·채집 표: 터치 기기(화면 버튼)는 E 대신 [상호작용] 버튼으로 적는다 */
+const places = (touch: boolean): ReactNode[][] => [
   ["모닥불", "모닥불 광장", "곁에 앉아 같이 불멍해요"],
   ["소원 분수", "광장 입구", "하루 한 번 동전 던지기"],
   ["귀신의집", "광장 입구, 소원 분수 옆", "혼자 들어가는 공포 미로예요"],
-  ["유령 잡화점", "상점 주인장에게 E", "꾸미기, 폭죽, 확성기, 염색권을 팔아요"],
-  ["범퍼카장", "가운데 다리 건너 바로", "입구에서 E로 타요. 무료예요"],
+  ["유령 잡화점", touch ? "상점 주인장에게 [말 걸기]" : "상점 주인장에게 E", "꾸미기, 폭죽, 확성기, 염색권을 팔아요"],
+  ["범퍼카장", "가운데 다리 건너 바로", `입구에서 ${keyJosa("E", "로", touch)} 타요. 무료예요`],
   ["동물원", "서쪽 다리 건너 바로", `사육사에게 펫 분양 (${won(Math.min(...petPrices))}~${won(Math.max(...petPrices))}P)`],
   ["버스 정류장 마당", "주거 구역 오른쪽 아래, 마지막 골목 위", "의뢰 게시판, 긴급 의뢰 현판, 버스 정류장이 있어요"],
   ["낚시 잔교", "호수 서쪽, 호박밭 옆", "어부 영감 노점과 낚시 의자가 있어요"],
-  ["낚시", "호수 잔교, 호수 둑, 강둑, 연못, 조각배 위", "낚시 의자 앞에서 E"],
+  ["낚시", "호수 잔교, 호수 둑, 강둑, 연못, 조각배 위", `낚시 의자 앞에서 ${keyName("E", touch)}`],
   ["수집가", "오리 연못 북서쪽 둑", "약초, 광석, 발굴품, 곤충을 사 가요"],
   ["별 보기 언덕", "마을 북서쪽 언덕 꼭대기", "망원경 두 대로 별자리 잇기를 해요. 한 대에 한 사람씩 볼 수 있어요."],
   ["사냥터", "메뉴의 사냥터", "혼자나 같이 사냥하고 미니게임도 해요"],
@@ -163,20 +166,24 @@ const PLACES: ReactNode[][] = [
     `${RESIDENTS.slice(0, 2)
       .map((r) => r.name)
       .join("·")} 등, 저마다 맡은 구역`,
-    "다가가서 E로 말을 걸어요. 가끔 게임 팁도 알려 줘요.",
+    `다가가서 ${keyJosa("E", "로", touch)} 말을 걸어요. 가끔 게임 팁도 알려 줘요.`,
   ],
-  ["강아지·고양이", "모닥불 둘레 등 마을 곳곳", "다가가서 E로 쓰다듬어요"],
+  ["강아지·고양이", "모닥불 둘레 등 마을 곳곳", `다가가서 ${keyJosa("E", "로", touch)} 쓰다듬어요`],
 ];
 
-const RIDES: ReactNode[][] = [
-  ["관람차", `맨 아래 칸에서 E (칸당 ${FERRIS_CAR_SEATS}명)`, `한 바퀴(약 ${sec(FERRIS_PERIOD_MS)}초) 뒤 저절로`],
-  ["열기구", `언덕 출발장에서 E (${BALLOON_SEATS_EACH}명)`, `마을 위를 돌아 약 ${min(BALLOON_FLIGHT_MS)}분`],
-  ["도중에 내리기", "X 두 번 (E·Space도)", "앉기 버튼 두 번"],
+const rides = (touch: boolean): ReactNode[][] => [
+  ["관람차", `맨 아래 칸에서 ${keyName("E", touch)} (칸당 ${FERRIS_CAR_SEATS}명)`, `한 바퀴(약 ${sec(FERRIS_PERIOD_MS)}초) 뒤 저절로`],
+  ["열기구", `언덕 출발장에서 ${keyName("E", touch)} (${BALLOON_SEATS_EACH}명)`, `마을 위를 돌아 약 ${min(BALLOON_FLIGHT_MS)}분`],
+  touch ? ["도중에 내리기", "[앉기] 두 번", "[상호작용]·[점프]를 두 번 눌러도 돼요"] : ["도중에 내리기", "X 두 번 (E·Space도)", "휴대폰은 [앉기] 두 번"],
   ["시점 바꾸기", "V 또는 [시점 변경하기]", "[시점 변경하기]"],
-  ["조각배", "나루터에서 E (2인승)", "물가 가까이에서 E로 내려요"],
-  ["오리배", "오리 연못 선착장에서 E (2인승). Space는 꽥!", "물가에서 E로 내려요. [꽥!]도 있어요."],
-  ["범퍼카", "범퍼카장 입구에서 E (한 대에 1명, 8대)", "방향키로 달리고 Space로 빵빵 울려요. 입구 안쪽에서 E로 내려요."],
-  ["타는 펫", "R (데리고 있을 때)", "앉거나 낚시하거나 물에 들어가면 내려요"],
+  ["조각배", `나루터에서 ${keyName("E", touch)} (2인승)`, `물가 가까이에서 ${keyJosa("E", "로", touch)} 내려요`],
+  touch
+    ? ["오리배", "오리 연못 선착장에서 [상호작용] (2인승). [꽥!]을 누르면 꽥!", "물가에서 [상호작용] 버튼으로 내려요."]
+    : ["오리배", "오리 연못 선착장에서 E (2인승). Space는 꽥!", "물가에서 E로 내려요. 휴대폰은 [꽥!] 버튼이 있어요."],
+  touch
+    ? ["범퍼카", "범퍼카장 입구에서 [상호작용] (한 대에 1명, 8대)", "조이스틱으로 달리고 [빵빵!]으로 경적을 울려요. 입구 안쪽에서 [상호작용] 버튼으로 내려요."]
+    : ["범퍼카", "범퍼카장 입구에서 E (한 대에 1명, 8대)", "방향키로 달리고 Space로 빵빵 울려요. 입구 안쪽에서 E로 내려요."],
+  ["타는 펫", touch ? "[타기] (데리고 있을 때)" : "R (데리고 있을 때)", "앉거나 낚시하거나 물에 들어가면 내려요"],
 ];
 
 const HUNT_KEYS: ReactNode[][] = [
@@ -197,8 +204,8 @@ const SKILL_TREE: ReactNode[][] = [
   ["초기화", `레벨에 따라 ${respecCost(1)}~${RESPEC_MAX_COST}P가 들어요`],
 ];
 
-const FORAGE: ReactNode[][] = [
-  ["낚시", "의자 앞에서 E, 입질이 오면 꾹 눌러 감기", "물고기가 세게 당기면 잠깐 놓아요. 아주 가끔 물에 빠진 꾸미기도 걸려요."],
+const forage = (touch: boolean): ReactNode[][] => [
+  ["낚시", `의자 앞에서 ${keyName("E", touch)}, 입질이 오면 꾹 눌러 감기`, "물고기가 세게 당기면 잠깐 놓아요. 아주 가끔 물에 빠진 꾸미기도 걸려요."],
   [
     "자동 낚시",
     "낚시 중 [자동 낚시 켜기]",
@@ -209,7 +216,7 @@ const FORAGE: ReactNode[][] = [
   // 11/15 수집 의뢰 (lib/forage/quests)
   [
     "수집 의뢰",
-    "버스 정류장 마당 의뢰 게시판에서 E",
+    `버스 정류장 마당 의뢰 게시판에서 ${keyName("E", touch)}`,
     `오늘의 의뢰 ${QUEST_DAILY}개(새벽 5시에 새로, 하루 1번 무료로 바꾸기) · 이번 주 큰 의뢰 1개(월요일) · 모은 것을 납품하면 의뢰 도장 ${QUEST_STAMPS.easy}~${QUEST_STAMPS.hard}개, 큰 의뢰는 ${QUEST_STAMPS.weekly}개 · 끝낸 수로 칭호`,
   ],
   ["도장 교환소", "의뢰 게시판 → [도장 교환소]", "이달의 물건은 매달 1일 새벽 5시에 바뀌어요 · 염색권은 늘 · 도장은 사라지지 않고, 포인트로 못 바꾸고 남에게 못 줘요"],
@@ -226,6 +233,7 @@ const DYE: ReactNode[][] = [
 type Props = { onClose: () => void; onReplayTutorial: () => void };
 
 export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
+  const touch = useMediaQuery("(pointer: coarse)");
   const freeStyles = GRAVE_STYLES.filter((s) => s.free)
     .map((s) => s.name)
     .join(", ");
@@ -259,7 +267,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
 
         <section>
           <h3>마을 둘러보기</h3>
-          <Table head={["곳", "어디", "하는 일"]} rows={PLACES} />
+          <Table head={["곳", "어디", "하는 일"]} rows={places(touch)} />
           <ul className={styles.points}>
             <li>귀신의집에는 깜짝 놀라는 장면과 큰 소리가 있어요. 포인트는 주지 않아요.</li>
             <li>지도에 장소마다 표시가 있어요. 자세한 건 각 장소에서 안내해요.</li>
@@ -272,7 +280,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
 
         <section>
           <h3>탈것</h3>
-          <Table head={["탈것", "타기", "비고"]} rows={RIDES} />
+          <Table head={["탈것", "타기", "비고"]} rows={rides(touch)} />
           <ul className={styles.points}>
             <li>시점을 바꾸면 옆에서 보는 장면과 마을 위에서 내려다보는 장면을 오가요. 마지막에 고른 시점을 기억해요.</li>
             <li>펫은 한 번에 한 마리만 데리고 다녀요. 타는 펫은 동물원에서 분양받아요.</li>
@@ -335,7 +343,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
 
         <section>
           <h3>낚시·채집·도감</h3>
-          <Table head={["하는 일", "방법", "비고"]} rows={FORAGE} />
+          <Table head={["하는 일", "방법", "비고"]} rows={forage(touch)} />
         </section>
 
         <section>

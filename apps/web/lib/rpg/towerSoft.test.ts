@@ -135,6 +135,11 @@ describe("부드러운 거절 (한도 없음 — 의심 판: 보상은 주고 �
     expect(why(more).some((w) => w.startsWith("need:"))).toBe(true);
   });
 
+  it("깬 층 계획 몬스터를 절반 넘게 못 잡은 판(처치 없이 층 수만 적은 위조)은 거절", () => {
+    expect(evalTower(T(seed), { ...r, kills: {} }, el)).toMatchObject({ ok: false, code: "RESULT_REJECTED" });
+    expect(evalTower(T(seed), { ...r, floors: r.floors! * 3 }, el * 3)).toMatchObject({ ok: false, code: "RESULT_REJECTED" });
+  });
+
   it("거절은 위조가 확실한 형식·시간만: 서버 시간보다 긴 기록 · 층 수 범위(0~400) 밖 · 게임 종류", () => {
     expect(evalTower(T(seed), r, r.durationMs - 10_000)).toMatchObject({ ok: false, code: "TOO_FAST" });
     // 요청 왕복 여유(3초) 안은 받는다

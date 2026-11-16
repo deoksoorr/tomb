@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { env } from "../env";
 import { K } from "./keys";
 
@@ -93,7 +94,7 @@ function hmgetValues(got: unknown, fields: string[]): (string | null)[] {
 export class RedisGoogleLinks implements GoogleLinkStore {
   private redis: GoogleLinkRedis;
   constructor(conn: { url: string; token: string } | { client: GoogleLinkRedis }) {
-    this.redis = "client" in conn ? conn.client : new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = "client" in conn ? conn.client : redisClient(conn, "googleLinks");
   }
 
   async link(accountId: string, subHash: string, now: number): Promise<GoogleLinkResult> {
