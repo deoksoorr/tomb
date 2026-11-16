@@ -46,6 +46,7 @@ import {
   TOWER_TICKET_SEC,
   towerChestDrops,
   towerReach,
+  towerArrival,
   towerScore,
   towerSettle,
   towerZone,
@@ -680,7 +681,10 @@ async function finishTower(acct: string, start: number, seed: number, level: num
     console.warn("[tower] 의심 판", JSON.stringify({ why: v.suspect, ...info }));
     await towerOpsLog("[tower] 의심 판 (보상 지급·랭킹 제외)", { why: v.suspect.join(" | "), ...info, killsBy: result.kills, picks: result.cards ?? [] }, now);
   }
-  return settleTowerRun(acct, start, seed, v, result.potionsUsed, ipHash, now, sup);
+  // 11/16 도달 시각 (같은 층 랭킹 순서): 판 시작(서버가 티켓에 적은 시각 = now − elapsed) + 꼭대기 층을 깬 게임 시간.
+  // 판을 끝낸 시각(now)은 마지막 층에서 쓰러질 때까지·결과를 보낼 때까지가 더 붙어서 늦다. floorMs는 evalTower가 판 시간 안·깬 층 최소 시간 뒤로 자른 값
+  const at = towerArrival(now - elapsed, v.floorMs, now);
+  return settleTowerRun(acct, start, seed, v, result.potionsUsed, ipHash, now, sup, at);
 }
 
 /** 11/15 야근 빌딩 거절·의심 판 기록 (관리자 오류 모음 — 판마다 따로 묶이게 첫 줄에 계정·시각). 기록 실패는 조용히 */
@@ -710,6 +714,8 @@ async function settleTowerRun(
   ipHash: string,
   now: number,
   sup: boolean,
+  /** 11/16 꼭대기 층에 도달한 시각 (랭킹 점수·꼭대기 층 주인) */
+  at: number,
 ): Promise<RunFinishResponse> {
   const store = getRpgStore();
   const day = kstDay(now);
@@ -750,9 +756,9 @@ async function settleTowerRun(
   // 11/15 의심 판은 랭킹·주간 기록·서버 최초·최고층 기록 보유자·주간 사냥 레이스에서 뺀다 (st.newBest·newWeek도 false)
   const suspect = !!v.suspect;
   if (!staff) {
-    // 랭킹: 기록이 오른 판만 (주간·전체 — 파이프라인 한 번)
+    // 랭킹: 층이 오른 판만 (주간·전체 — 파이프라인 한 번). 11/16 같은 층을 다시 올라도 안 쓴다 (먼저 도달한 기록을 지킨다)
     if (st.newWeek || st.newBest) {
-      const score = towerScore(st.best, v.floorMs);
+      const score = towerScore(st.best, at);
       await getTowerStore()
         .record(acct, week, st.newWeek ? score : null, st.newBest ? score : null)
         .catch((e) => console.warn("[tower] 랭킹 기록 실패", e));
@@ -766,7 +772,7 @@ async function settleTowerRun(
       // 꼭대기 층 주인: 이 인스턴스가 본 꼭대기보다 높을 때만 Redis에 묻는다
       if (st.best > (topSeen.__tombTowerTop ?? 0)) {
         try {
-          const r = await getTowerStore().claimTop(acct, st.best, v.floorMs, now);
+          const r = await getTowerStore().claimTop(acct, st.best, v.floorMs, at);
           topSeen.__tombTowerTop = Math.max(r.prev?.floor ?? 0, r.took ? st.best : 0);
           if (r.took) {
             forgetTowerTitles();
@@ -816,7 +822,7 @@ async function settleTowerRun(
 
 /**
  * 11/15 관리자: 서버가 잘못 거절한 야근 빌딩 판을 대신 정산한다 (판 끝과 같은 정산 — 우두머리 상자는 새 시드로 다시 굴린다).
- * floors = 깬 층 수 (start층부터), floorMs = 마지막 층을 깬 시각(판 시작부터, 랭킹 동점 순서), kills = 주간 레이스 처치 수(모르면 0)
+ * floors = 깬 층 수 (start층부터), floorMs = 마지막 층을 깬 시각(판 시작부터, 엘리베이터 표시용 — 11/16 랭킹 동점 순서는 도달 시각), kills = 주간 레이스 처치 수(모르면 0)
  */
 export async function grantTowerRun(acct: string, o: { start: number; floors: number; floorMs: number; kills?: number }, now = Date.now()): Promise<RunFinishResponse> {
   const v: Extract<TowerVerdict, { ok: true }> = {
@@ -828,5 +834,6 @@ export async function grantTowerRun(acct: string, o: { start: number; floors: nu
     points: o.floors * TOWER_FLOOR_POINTS,
   };
   const seed = Math.floor(Math.random() * 2 ** 31);
-  return settleTowerRun(acct, o.start, seed, v, {}, "admin-grant", now, false);
+  // 11/16 도달 시각은 관리자가 대신 정산한 시각 (판 시작 시각을 모른다)
+  return settleTowerRun(acct, o.start, seed, v, {}, "admin-grant", now, false, now);
 }

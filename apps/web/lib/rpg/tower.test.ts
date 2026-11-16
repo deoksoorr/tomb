@@ -5,7 +5,6 @@ import { huntSpawnable } from "./plan";
 import { signTicket, verifyTicket } from "./ticket";
 import {
   climbTime,
-  betterRecord,
   checkTowerStart,
   cursesAt,
   evalTower, towerClean,
@@ -23,6 +22,9 @@ import {
   towerOfScore,
   towerPlan,
   towerScale,
+  towerArrival,
+  towerReachedLabel,
+  TOWER_EPOCH,
   towerScore,
   towerSettle,
   towerTaunt,
@@ -379,7 +381,7 @@ describe("보상 정산 (층 EXP · 4층 = 1판 · 상자 하루 15개 · 기록
     expect(towerChestDrops(42, 5, 1)).toEqual(towerChestDrops(42, 5, 1));
   });
 
-  it("최고 기록·이번 주 기록: 층 높은 순, 같으면 빨리 깬 쪽. 주가 바뀌면 이번 주는 0부터", () => {
+  it("최고 기록·이번 주 기록: 11/16 층이 오를 때만 (같은 층은 더 빨라도 그대로). 주가 바뀌면 이번 주는 0부터", () => {
     const s = {
       ...base,
       fBest: 12,
@@ -395,7 +397,12 @@ describe("보상 정산 (층 EXP · 4층 = 1판 · 상자 하루 15개 · 기록
       floors: 12,
       floorMs: 400_000,
     });
-    expect([same.newBest, same.newWeek]).toEqual([true, true]);
+    // 11/16 같은 층을 더 빨리 올라도 기록·랭킹은 그대로 (먼저 도달한 기록을 지킨다)
+    expect([same.newBest, same.newWeek]).toEqual([false, false]);
+    expect(same.patch).toMatchObject({ fBest: 12, fBestMs: 500_000, fWkBest: 12, fWkMs: 500_000 });
+    const higher = towerSettle(s, { day: DAY, week: WEEK, start: 11, floors: 3, floorMs: 200_000 });
+    expect([higher.best, higher.newBest, higher.newWeek]).toEqual([13, true, true]);
+    expect(higher.patch).toMatchObject({ fBest: 13, fBestMs: 200_000, fWkBest: 13, fWkMs: 200_000 });
     const slower = towerSettle(s, {
       day: DAY,
       week: WEEK,
@@ -428,15 +435,56 @@ describe("보상 정산 (층 EXP · 4층 = 1판 · 상자 하루 15개 · 기록
     expect([none.best, none.newBest, none.newWeek]).toEqual([0, false, false]);
   });
 
-  it("랭킹 점수: 층이 먼저, 같은 층이면 빠른 쪽이 위", () => {
-    expect(towerScore(30, 900_000)).toBeGreaterThan(towerScore(29, 1_000));
-    expect(towerScore(30, 800_000)).toBeGreaterThan(towerScore(30, 900_000));
-    expect(towerOfScore(towerScore(73, 1_234_567))).toEqual({
-      floor: 73,
-      ms: 1_234_567,
-    });
-    expect(betterRecord(5, 10, 5, 10)).toBe(false);
-    expect(betterRecord(0, 0, 0, 0)).toBe(false);
+  it("11/16 이번 주 첫 판은 전체 최고보다 낮아도 주간 기록이 생긴다 (그 주에 다시 같은 층이면 그대로)", () => {
+    const s = { ...base, fBest: 40, fBestMs: 900_000, fWk: "20261109", fWkBest: 40, fWkMs: 900_000 };
+    const first = towerSettle(s, { day: DAY, week: WEEK, start: 1, floors: 7, floorMs: 300_000 });
+    expect([first.newBest, first.newWeek]).toEqual([false, true]);
+    expect(first.patch).toMatchObject({ fWk: WEEK, fWkBest: 7, fWkMs: 300_000, fBest: 40 });
+    const again = towerSettle({ ...s, ...first.patch }, { day: DAY, week: WEEK, start: 1, floors: 7, floorMs: 200_000 });
+    expect([again.newBest, again.newWeek]).toEqual([false, false]);
+    expect(again.patch).toMatchObject({ fWkBest: 7, fWkMs: 300_000 });
+  });
+
+  it("11/16 랭킹 점수: 층이 먼저, 같은 층이면 먼저 도달한 쪽이 위", () => {
+    const t0 = Date.UTC(2026, 10, 16, 5, 32); // 11/16 오후 2:32 KST
+    expect(towerScore(30, t0 + 86_400_000)).toBeGreaterThan(towerScore(29, t0));
+    expect(towerScore(30, t0)).toBeGreaterThan(towerScore(30, t0 + 1000));
+    // 초 단위: 같은 초 안이면 같은 점수
+    expect(towerScore(30, t0 + 400)).toBe(towerScore(30, t0));
+    expect(towerOfScore(towerScore(73, t0))).toEqual({ floor: 73, at: t0 });
+    expect(towerOfScore(towerScore(73, t0 + 999))).toEqual({ floor: 73, at: t0 });
+    // 기준 시각 앞은 기준 시각으로, 15년 뒤까지 나머지 칸 안
+    expect(towerOfScore(towerScore(5, TOWER_EPOCH - 5000))).toEqual({ floor: 5, at: TOWER_EPOCH });
+    const far = TOWER_EPOCH + 15 * 365 * 86_400_000;
+    expect(towerOfScore(towerScore(400, far))).toEqual({ floor: 400, at: far });
+    expect(towerOfScore(towerScore(10_000, far)).floor).toBe(10_000);
+    expect(towerScore(10_000, far)).toBeLessThan(Number.MAX_SAFE_INTEGER);
+  });
+
+  it("11/16 옛 점수 (층 × 1e9 + 1e9 − 1 − 판 시간 ms): 알아보고, 같은 층이면 새 점수보다 위, 옛 점수끼리는 예전 순서", () => {
+    const legacy = (f: number, ms: number) => f * 1e9 + (1e9 - 1 - ms);
+    expect(towerOfScore(legacy(97, 1_234_567))).toEqual({ floor: 97, at: null, legacyMs: 1_234_567 });
+    // 판 시간 최대(티켓 12시간 + 여유)여도 옛 점수로 읽힌다
+    expect(towerOfScore(legacy(97, 43_300_000)).at).toBeNull();
+    const now = Date.UTC(2026, 10, 16, 5, 32);
+    expect(legacy(97, 43_300_000)).toBeGreaterThan(towerScore(97, TOWER_EPOCH));
+    expect(legacy(97, 43_300_000)).toBeGreaterThan(towerScore(97, now));
+    expect(legacy(97, 600_000)).toBeGreaterThan(legacy(97, 900_000));
+    // 한 층 위 새 점수는 아래층 옛 점수보다 위
+    expect(towerScore(98, now)).toBeGreaterThan(legacy(97, 0));
+    expect(towerOfScore(legacy(0, 0))).toEqual({ floor: 0, at: null, legacyMs: 0 });
+  });
+
+  it("11/16 도달 시각 문구 (한국 시간)·판에서 꼭대기 층을 깬 시각", () => {
+    expect(towerReachedLabel(Date.UTC(2026, 10, 16, 5, 32))).toBe("11월 16일 오후 2:32에 도달");
+    expect(towerReachedLabel(Date.UTC(2026, 10, 16, 0, 5))).toBe("11월 16일 오전 9:05에 도달");
+    expect(towerReachedLabel(Date.UTC(2026, 10, 15, 15, 7))).toBe("11월 16일 오전 12:07에 도달");
+    expect(towerReachedLabel(Date.UTC(2026, 10, 16, 3, 0))).toBe("11월 16일 오후 12:00에 도달");
+    expect(towerReachedLabel(Date.UTC(2026, 11, 31, 14, 59))).toBe("12월 31일 오후 11:59에 도달");
+    expect(towerReachedLabel(null)).toBe("11월 16일 이전에 도달");
+    expect(towerArrival(1_000_000, 300_000, 2_000_000)).toBe(1_300_000);
+    expect(towerArrival(1_000_000, 5_000_000, 2_000_000)).toBe(2_000_000);
+    expect(towerArrival(1_000_000, -5, 2_000_000)).toBe(1_000_000);
   });
 });
 
@@ -462,29 +510,30 @@ describe("기록 저장소 (서버 최초 · 꼭대기 층 · 주간 랭킹)", (
     expect(await st.topHolder()).toMatchObject({ accountId: "b", floor: 31 });
   });
 
-  it("주간·전체 랭킹 순서 (층 → 빠른 순), 주마다 따로", async () => {
+  it("주간·전체 랭킹 순서 (층 → 먼저 도달한 순), 주마다 따로", async () => {
     const st = new MemoryTowerStore();
+    const T = Date.UTC(2026, 10, 16, 3);
     await st.record(
       "a",
       WEEK,
-      towerScore(20, 600_000),
-      towerScore(20, 600_000),
+      towerScore(20, T + 600_000),
+      towerScore(20, T + 600_000),
     );
-    await st.record("b", WEEK, towerScore(20, 500_000), null);
+    await st.record("b", WEEK, towerScore(20, T + 500_000), null);
     await st.record(
       "c",
       WEEK,
-      towerScore(25, 900_000),
-      towerScore(25, 900_000),
+      towerScore(25, T + 900_000),
+      towerScore(25, T + 900_000),
     );
-    await st.record("d", "20261123", towerScore(40, 1), null);
+    await st.record("d", "20261123", towerScore(40, T), null);
     expect((await st.top(5, WEEK)).map((e) => e.accountId)).toEqual([
       "c",
       "b",
       "a",
     ]);
     expect((await st.top(5)).map((e) => e.accountId)).toEqual(["c", "a"]);
-    expect(await st.countAbove(towerScore(20, 600_000), WEEK)).toBe(2);
+    expect(await st.countAbove(towerScore(20, T + 600_000), WEEK)).toBe(2);
   });
 });
 

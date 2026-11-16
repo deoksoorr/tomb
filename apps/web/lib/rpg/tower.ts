@@ -468,15 +468,42 @@ export const TOWER_CHEST_GEAR_CHANCE = SG_CHEST_CHANCE;
 
 // ── 기록·랭킹 ──
 
-/** 랭킹 점수: 층 높은 순, 같으면 빨리 오른 순 (ms가 작을수록 크다). 2시간 = 720만 ms < 1e9 */
+/**
+ * 11/16 랭킹 점수: 층 높은 순, 같은 층이면 그 층에 먼저 도달한 사람이 위 (예전엔 「그 판 시작부터 빨리 깬 순」 —
+ * 체크포인트(10층마다)에서 시작한 판이 1층부터 오른 판보다 늘 빨라서 불공평했다).
+ * 점수 = 층 × 1e9 + (5e8 − 1 − TOWER_EPOCH부터 지난 초). 일찍 도달할수록 크다. 5억 초 ≈ 15년 넘게 쓴다.
+ * 이 바꿈 전에 쓴 점수(옛 점수)는 층 × 1e9 + (1e9 − 1 − 판 시간 ms)라서 나머지가 5e8 이상 (판 시간은 12시간 = 4,320만 ms 안).
+ * → 같은 층이면 옛 점수가 새 점수보다 위 (다 더 먼저 도달한 기록이니 「먼저 도달」 순서와 맞다), 옛 점수끼리는 예전 순서 그대로
+ */
 const MS_SCALE = 1e9;
-export const towerScore = (floor: number, ms: number) =>
+/** 도달 시각 칸 크기 (초). 나머지가 이 이상이면 옛 점수 */
+const AT_SCALE = 5e8;
+/** 11/16 도달 시각을 세는 기준 (2026-11-01 0시 KST) */
+export const TOWER_EPOCH = Date.UTC(2026, 9, 31, 15);
+export const towerScore = (floor: number, at: number) =>
   Math.max(0, Math.floor(floor)) * MS_SCALE +
-  (MS_SCALE - 1 - Math.min(MS_SCALE - 1, Math.max(0, Math.round(ms))));
-export const towerOfScore = (score: number) => ({
-  floor: Math.floor(score / MS_SCALE),
-  ms: MS_SCALE - 1 - (score % MS_SCALE),
-});
+  (AT_SCALE - 1 - Math.min(AT_SCALE - 1, Math.max(0, Math.floor((at - TOWER_EPOCH) / 1000))));
+/** 점수 → 층 · 도달 시각(ms, 옛 점수면 null — 그때는 legacyMs에 그 판 시간) */
+export type TowerScoreInfo = { floor: number; at: number | null; legacyMs?: number };
+export function towerOfScore(score: number): TowerScoreInfo {
+  const floor = Math.floor(score / MS_SCALE);
+  const frac = score - floor * MS_SCALE;
+  if (frac >= AT_SCALE) return { floor, at: null, legacyMs: MS_SCALE - 1 - frac };
+  return { floor, at: TOWER_EPOCH + (AT_SCALE - 1 - frac) * 1000 };
+}
+/** 11/16 옛 점수(도달 시각 없음)를 쓴 마지막 날 — 「11월 16일 이전에 도달」 (이전은 그날 포함) */
+export const TOWER_LEGACY_DAY = "11월 16일";
+/** 11/16 랭킹 줄 아래 말: 「11월 16일 오후 2:32에 도달」 (한국 시간). 옛 점수는 지어낸 시각 대신 「11월 16일 이전에 도달」 */
+export function towerReachedLabel(at: number | null): string {
+  if (at === null) return `${TOWER_LEGACY_DAY} 이전에 도달`;
+  const d = new Date(at + 9 * 3_600_000);
+  const h = d.getUTCHours();
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일 ${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${mm}에 도달`;
+}
+/** 11/16 그 판에서 꼭대기 층을 깬 시각: 판 시작(서버 티켓 시각) + 그 층을 깬 게임 시간(서버가 판 시간 안으로 자른 값). 판 시작~지금 안으로 */
+export const towerArrival = (runStart: number, floorMs: number, now: number) =>
+  Math.min(now, Math.max(runStart, runStart + Math.max(0, floorMs)));
 /** 11/16 오른 시간 「20분 14초」 (한 시간 넘으면 「1시간 3분 5초」, 1분 안이면 「42초」). 시계 모양 20:14는 시각으로 읽혀서 바꿨다 */
 export function climbTime(ms: number): string {
   const s = Math.max(0, Math.ceil(ms / 1000));
@@ -485,14 +512,6 @@ export function climbTime(ms: number): string {
   const sec = s % 60;
   return [h ? `${h}시간` : "", h || m ? `${m}분` : "", `${sec}초`].filter(Boolean).join(" ");
 }
-
-/** (f1, ms1)이 (f0, ms0)보다 나은 기록인가 */
-export const betterRecord = (
-  f1: number,
-  ms1: number,
-  f0: number,
-  ms0: number,
-) => f1 > f0 || (f1 > 0 && f1 === f0 && ms1 < ms0);
 
 /** 층 칭호 (동·은·금·금·전설) — lib/titles가 같은 값을 쓴다 */
 export const FLOOR_TITLE_FLOORS = [10, 20, 30, 50, 100] as const;
@@ -667,7 +686,7 @@ export function evalTower(
   if (needTotal > 0 && short * 2 > needTotal)
     return tReject("RESULT_REJECTED", "깬 층의 몬스터 기록이 너무 모자라요. 이번 판은 보상 없이 끝나요.", `need:${short}/${needTotal}`);
   if (short > 0) suspect.push(`need:${short} ${shortIds.slice(0, 6).join(",")}`);
-  // 마지막으로 층을 깬 시각 (같은 층이면 빨리 오른 순 랭킹): 판 시간 안, 깬 층의 최소 시간 뒤
+  // 마지막으로 층을 깬 시각 (판 시작부터 — 11/16 판 시작 시각에 더해 랭킹 도달 시각이 된다): 판 시간 안, 깬 층의 최소 시간 뒤
   const floorMs =
     k > 0
       ? Math.round(Math.min(eff, Math.max(minSec * 1000, r.floorMs ?? eff)))
@@ -770,8 +789,10 @@ export function towerSettle(
   const ms = a.floorMs;
   const wkBest = s.fWk === a.week ? s.fWkBest : 0;
   const wkMs = s.fWk === a.week ? s.fWkMs : 0;
-  const newBest = !a.suspect && betterRecord(best, ms, s.fBest, s.fBestMs);
-  const newWeek = !a.suspect && betterRecord(best, ms, wkBest, wkMs);
+  // 11/16 기록은 층이 오를 때만 (같은 층을 더 빨리 다시 올라도 그대로 — 랭킹은 그 층에 먼저 도달한 순이라 첫 도달을 지킨다).
+  // 이번 주 첫 판은 wkBest 0이라 전체 최고보다 낮아도 주간 기록이 생긴다
+  const newBest = !a.suspect && best > s.fBest;
+  const newWeek = !a.suspect && best > wkBest;
   return {
     patch: {
       tDay: d.tDay,
