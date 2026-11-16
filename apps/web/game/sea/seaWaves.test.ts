@@ -47,7 +47,7 @@ describe("waves (물가 파도)", () => {
 
 describe("minimap icons (글씨 없는 도트 그림)", () => {
   it("요청한 장소마다 그림이 있고 서로 달라요", () => {
-    const kinds = ["shop", "housing", "hunt", "tower", "busCamp", "busSea", "dock", "duck", "bus", "market", "realty", "kiosk", "pier", "lighthouse"];
+    const kinds = ["shop", "housing", "hunt", "tower", "busCamp", "busSea", "dock", "duck", "bus", "realty", "kiosk", "pier", "lighthouse"];
     const sigs = new Set<string>();
     for (const k of kinds) {
       const ic = MAP_ICONS[k];

@@ -1,5 +1,5 @@
 import type { Season, TimePhase, Weather } from "../ambience";
-import { SEA_DIG_HOLES, SEA_MARKET_STALLS } from "@tomb/protocol";
+import { SEA_DIG_HOLES } from "@tomb/protocol";
 import { CONSTELLATIONS } from "../rpg/constellations";
 // 11/16 도감 몬스터 칸 (사는 곳·희귀도 — lib/forage/mobDex)
 import { isMobId, MOB_DEX_IDS, mobRarity } from "./mobDex";
@@ -373,8 +373,8 @@ const NODE_BY_ID = new Map(GATHER_NODES.map((n) => [n.id, n]));
 export const gatherNodeById = (id: string): GatherNode | undefined => NODE_BY_ID.get(id);
 
 // ── NPC ── 물고기는 어부, 나머지는 수집가에게 판다 (NPC 앞에서만 — UI가 NPC 창에서만 판매를 연다)
-// 11/16 포구 시장 좌판 둘 (map "sea"): 생선 좌판 = 물고기 전부, 갯벌 좌판 = 갯벌에서 캔 것만 (where). 같은 판매 API·같은 하루 한도
-export type NpcId = "fishmonger" | "collector" | "harborFish" | "harborFlat";
+// 11/16 r11 사용자: 포구 시장을 뺐어요 → 바다 고기는 어부 영감, 갯벌에서 캔 것은 수집가 유령이 사요 (같은 판매 API·같은 하루 한도)
+export type NpcId = "fishmonger" | "collector";
 export type Npc = { id: NpcId; name: string; title: string; x: number; y: number; buys: readonly LifeCat[]; hello: string; map?: "sea"; where?: Where };
 export const NPCS: readonly Npc[] = [
   {
@@ -397,27 +397,6 @@ export const NPCS: readonly Npc[] = [
     y: 806,
     buys: ["bug", "herb", "ore", "dig"],
     hello: "남들이 지나친 것도 누군가에겐 보물이지요. 약초, 광석, 발굴품, 곤충 다 삽니다.",
-  },
-  {
-    id: "harborFish",
-    name: "포구 생선 좌판",
-    title: "생선 삽니다",
-    x: SEA_MARKET_STALLS[0].x,
-    y: SEA_MARKET_STALLS[0].y,
-    buys: ["fish"],
-    hello: "바다 고기든 민물 고기든 다 받아요. 싱싱할 때 넘겨요.",
-    map: "sea",
-  },
-  {
-    id: "harborFlat",
-    name: "갯벌 좌판",
-    title: "갯것 삽니다",
-    x: SEA_MARKET_STALLS[2].x,
-    y: SEA_MARKET_STALLS[2].y,
-    buys: ["dig"],
-    hello: "갯벌에서 캔 건 여기 두고 가요. 바지락 한 줌도 값 쳐줘요.",
-    map: "sea",
-    where: "flat",
   },
 ];
 /** 이 NPC가 이 종을 사는지 (11/16 갯벌 좌판은 갯벌에서 캔 것만) */

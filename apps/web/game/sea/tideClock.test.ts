@@ -39,9 +39,9 @@ describe("tide (protocol)", () => {
     expect(tideLineY(0.5)).toBe((TIDE_HIGH_Y + TIDE_LOW_Y) / 2);
   });
   it("만조엔 갯벌이 물속, 선착장 위는 젖지 않아요", () => {
-    expect(seaWet(400, 700, 1)).toBe(true);
-    expect(seaWet(400, 700, 0)).toBe(false);
-    expect(seaWet(SEA_PIER.x + 20, 700, 1)).toBe(false);
+    expect(seaWet(400, 580, 1)).toBe(true);
+    expect(seaWet(400, 580, 0)).toBe(false);
+    expect(seaWet(SEA_PIER.x + 20, SEA_PIER.y + SEA_PIER.h / 2, 1)).toBe(false);
     expect(seaWet(400, SEA_FLAT_Y0 - 20, 1)).toBe(false);
   });
 });

@@ -196,8 +196,9 @@ describe("sea map (11/16 달물결 포구)", () => {
   it("?m=sea goes to the sea only with the sea claim", async () => {
     expect(parseMap("sea")).toBe("sea");
     expect(parseMap("ocean")).toBe("village");
-    expect(parseSpawn("1200", "940", false, "sea")).toEqual({ x: 1200, y: 940 });
-    expect(parseSpawn("1200", "990", false, "sea")).toBeUndefined();
+    // 11/16 r11 바닷가 맵 높이 768 (걷는 범위 y 60 ~ 754)
+    expect(parseSpawn("1200", "740", false, "sea")).toEqual({ x: 1200, y: 740 });
+    expect(parseSpawn("1200", "790", false, "sea")).toBeUndefined();
     const exp = Math.floor(Date.now() / 1000) + 60;
     const base = { visitorId: "v_1234567890abcdef", name: "바다", color: AVATAR_COLORS[0], channel: 1, exp, look: [], body: "hood" };
     const withSea = await signJoinToken("secret", { ...base, sea: true });

@@ -83,22 +83,22 @@ describe("sea map (protocol)", () => {
     const base = Date.UTC(2026, 10, 15, 15, 0, 0);
     const at = (min: number) => base + min * 60_000;
     expect(tideMinute(at(0))).toBeCloseTo(0);
-    const rock = seaFishingSpotById("f_1092_614")!;
+    const rock = seaFishingSpotById("f_1084_528")!;
     expect(rock).toBeDefined();
-    // 11/16 물가 만조 610 · 간조 760 (간조에도 바다가 넉넉히 보이게). 찌 자리 y 638, 여유 6 → 물 높이 0.853 이상이어야 물속 → 썰물 22.5분째에 말라요
-    expect(TIDE_HIGH_Y).toBe(610);
-    expect(TIDE_LOW_Y).toBe(760);
-    expect(seaFishMinLevel(rock)).toBeCloseTo(0.8533, 3);
+    // 11/16 r11 맵을 줄여 물가 만조 538 · 간조 620. 찌 자리 y 552, 여유 6 → 물 높이 0.902 이상이어야 물속 → 썰물 18.2분째에 말라요
+    expect(TIDE_HIGH_Y).toBe(SEA_FLAT_Y0 + 50);
+    expect(TIDE_LOW_Y).toBe(SEA_FLAT_Y0 + 132);
+    expect(seaFishMinLevel(rock)).toBeCloseTo(0.9024, 3);
     expect(seaFishWet(rock, at(0))).toBe(true);
-    expect(seaFishWet(rock, at(22))).toBe(true);
-    expect(seaFishWet(rock, at(23))).toBe(false);
+    expect(seaFishWet(rock, at(18))).toBe(true);
+    expect(seaFishWet(rock, at(19))).toBe(false);
     expect(seaFishWet(rock, at(90))).toBe(false);
-    expect(seaFishWet(rock, at(157))).toBe(false);
-    expect(seaFishWet(rock, at(158))).toBe(true);
-    expect((seaFishDryAt(rock, at(20)) - at(0)) / 60_000).toBeCloseTo(22.51, 1);
+    expect(seaFishWet(rock, at(161))).toBe(false);
+    expect(seaFishWet(rock, at(162))).toBe(true);
+    expect((seaFishDryAt(rock, at(10)) - at(0)) / 60_000).toBeCloseTo(18.23, 1);
     expect(seaFishDryAt(rock, at(60))).toBe(at(60));
-    // 밀물로 다시 물속이 된 뒤에는 다음 썰물에 말라요 (한 바퀴 180분 + 22.5분)
-    expect((seaFishDryAt(rock, at(170)) - at(0)) / 60_000).toBeCloseTo(202.51, 1);
+    // 밀물로 다시 물속이 된 뒤에는 다음 썰물에 말라요 (한 바퀴 180분 + 18.2분)
+    expect((seaFishDryAt(rock, at(170)) - at(0)) / 60_000).toBeCloseTo(198.23, 1);
     // 갯바위 자리는 모두 만조엔 물속. 간조엔 찌 자리가 간조 물가보다 위인 자리만 말라요 (깊은 바위 앞과 선착장 끝은 늘 물속)
     for (const f of SEA_FISHING_SPOTS) {
       expect(seaFishWetAt(f, 1), f.id).toBe(true);

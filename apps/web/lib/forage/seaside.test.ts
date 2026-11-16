@@ -43,7 +43,7 @@ afterEach(() => vi.restoreAllMocks());
 const MIN = 60_000;
 const HIGH = Date.UTC(2026, 10, 15, 15, 0); // 11/16 0시 KST = 만조
 const LOW = HIGH + 90 * MIN; // 간조 한가운데 (갯벌 구멍이 모두 열려요)
-const ROCK = "f_1092_614"; // 방파제 쪽 바위 곶 (만조에 물속)
+const ROCK = "f_1084_528"; // 방파제 쪽 바위 곶 (만조에 물속)
 const LAKE = "f_1172_932"; // 마을 호수 잔교 끝
 const SEA_FISH = speciesOf("fish").filter((s) => s.where.includes("sea"));
 const FLAT = speciesOf("dig").filter((s) => s.where.includes("flat"));
@@ -173,20 +173,15 @@ describe("갯벌 캐기", () => {
   });
 });
 
-describe("포구 시장 판매", () => {
-  it("좌판 둘: 생선 좌판은 물고기 전부, 갯벌 좌판은 갯벌 것만 산다", () => {
-    const fish = npcById("harborFish")!;
-    const flat = npcById("harborFlat")!;
-    expect(NPCS.filter((n) => n.map === "sea")).toHaveLength(2);
-    expect(npcBuys(fish, speciesById("f_mackerel")!)).toBe(true);
-    expect(npcBuys(fish, speciesById("f_carp")!)).toBe(true);
-    expect(npcBuys(flat, speciesById("d_clam")!)).toBe(true);
-    expect(npcBuys(flat, speciesById("d_coin")!)).toBe(false);
-    expect(npcBuys(flat, speciesById("f_mackerel")!)).toBe(false);
-    // 마을 수집가 유령·어부 영감도 바닷가 것을 산다
+// 11/16 r11 사용자: 포구 시장을 뺐어요 → 바닷가에서 잡은 것은 마을 어부 영감·수집가 유령이 사요 (같은 판매 API·같은 하루 한도)
+describe("바닷가 것 판매 (마을 NPC)", () => {
+  it("어부 영감은 바다 고기도, 수집가 유령은 갯벌에서 캔 것도 산다. 바닷가 좌판 NPC는 없어요", () => {
+    expect(NPCS.filter((n) => n.map === "sea")).toHaveLength(0);
     expect(npcBuys(npcById("collector")!, speciesById("d_goldclam")!)).toBe(true);
+    expect(npcBuys(npcById("collector")!, speciesById("d_clam")!)).toBe(true);
     expect(npcBuys(npcById("fishmonger")!, speciesById("f_yellowtail")!)).toBe(true);
-    expect(SellSchema.safeParse({ npc: "harborFlat", items: { d_clam: 1 } }).success).toBe(true);
+    expect(npcBuys(npcById("fishmonger")!, speciesById("f_mackerel")!)).toBe(true);
+    expect(SellSchema.safeParse({ npc: "harborFlat", items: { d_clam: 1 } }).success).toBe(false);
   });
 
   it("같은 판매 API·같은 하루 한도 안에서만 (넘치는 만큼은 가방에 남는다)", async () => {
@@ -194,19 +189,18 @@ describe("포구 시장 판매", () => {
     const now = Date.now();
     const store = getForageStore();
     const day = kstDay(now);
-    await store.grant(a, day, "gather", [...Array.from({ length: 60 }, () => ({ id: "d_goldclam", size: 0 })), { id: "d_coin", size: 0 }], 99);
+    await store.grant(a, day, "gather", Array.from({ length: 60 }, () => ({ id: "d_goldclam", size: 0 })), 99);
     await store.grant(a, day, "fish", [{ id: "f_mackerel", size: 300 }], 99);
-    await expect(sellTo(a, "harborFlat", { d_coin: 1 }, "ip-sea", now)).rejects.toMatchObject({ status: 400 });
-    await expect(sellTo(a, "harborFlat", { f_mackerel: 1 }, "ip-sea", now)).rejects.toMatchObject({ status: 400 });
-    const r = await sellTo(a, "harborFlat", { d_goldclam: 60 }, "ip-sea", now);
+    await expect(sellTo(a, "collector", { f_mackerel: 1 }, "ip-sea", now)).rejects.toMatchObject({ status: 400 });
+    const r = await sellTo(a, "collector", { d_goldclam: 60 }, "ip-sea", now);
     const cap = earnRule("gather").dailyMax;
     expect(r.earned).toBeGreaterThan(0);
     expect(r.earned).toBeLessThanOrEqual(cap);
     expect(r.capped).toBe(true);
     expect(r.state.today.gatherP).toBe(r.earned);
     expect(r.state.bag.d_goldclam).toBe(60 - (r.sold.d_goldclam ?? 0));
-    // 생선 좌판은 낚시 판매 한도 (채집 판매 한도와 따로)
-    const f = await sellTo(a, "harborFish", { f_mackerel: 1 }, "ip-sea", now);
+    // 어부 영감은 낚시 판매 한도 (채집 판매 한도와 따로)
+    const f = await sellTo(a, "fishmonger", { f_mackerel: 1 }, "ip-sea", now);
     expect(f.sold).toEqual({ f_mackerel: 1 });
     expect(f.state.today.fishP).toBe(3);
   });

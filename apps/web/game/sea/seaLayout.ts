@@ -4,6 +4,7 @@ import {
   SEA_BOAT,
   SEA_BOUNDS,
   SEA_BREAKWATER,
+  SEA_BREAKWATER_TIP,
   SEA_BUS_SIGN,
   SEA_BUS_STOP,
   SEA_BUS_TIMETABLE,
@@ -22,10 +23,6 @@ import {
   SEA_LOT_LANE,
   seaLotFront,
   seaLotGate,
-  SEA_MARKET,
-  SEA_MARKET_H,
-  SEA_MARKET_STALLS,
-  SEA_MARKET_W,
   SEA_PIER,
   SEA_PIER_END,
   SEA_REALTY,
@@ -69,10 +66,11 @@ export function inRect(r: Rect, x: number, y: number, pad = 0): boolean {
 export type SeaPath = { id: string; hw: number; pts: readonly Pt[] };
 export const SEA_PATHS: readonly SeaPath[] = [
   // 정류장에서 산책로까지 (내리면 이 길로 내려가요)
-  { id: "stop", hw: 10, pts: [ { x: SEA_BUS_STOP.x, y: SEA_ROAD.y + SEA_ROAD.h }, { x: SEA_BUS_STOP.x - 4, y: 240 }, { x: 1120, y: 320 }, { x: 1120, y: SEA_BOARDWALK.y + 2 } ] },
+  // 11/16 r11 뭍을 줄이며 짧게 (6번 별장 서쪽 출입구 옆을 지나요)
+  { id: "stop", hw: 10, pts: [ { x: SEA_BUS_STOP.x, y: SEA_ROAD.y + SEA_ROAD.h }, { x: SEA_BUS_STOP.x - 4, y: 220 }, { x: 1080, y: 280 }, { x: 1080, y: SEA_BOARDWALK.y + 2 } ] },
   // 부동산 문 앞에서 산책로까지
   { id: "realty", hw: 9, pts: [ { x: SEA_REALTY_DOOR.x, y: SEA_REALTY_DOOR.y - 4 }, { x: SEA_REALTY_DOOR.x, y: SEA_BOARDWALK.y + 2 } ] },
-  // 11/16 오두막 단지 굽은 모래 골목 (산책로에서 올라와 터 사이로) · 동쪽 가지 골목
+  // 11/16 r11 위쪽 별장으로 가는 오솔길 · 아래쪽 별장 사이 디딤돌 골목
   { id: "lotLane", hw: 8, pts: SEA_LOT_LANE },
   { id: "lotBranch", hw: 6, pts: SEA_LOT_BRANCH },
   // 남쪽 출입구 터 → 산책로 (짧은 발길)
@@ -103,8 +101,6 @@ export type SeaGround = "hill" | "grass" | "platform" | "road" | "path" | "yard"
 
 /** 정류장 승강장 (포장 바닥, 지붕·팻말·시간표가 이 위에 서요) */
 export const SEA_PLATFORM: Rect = { x: SEA_BUS_TIMETABLE.x - 22, y: SEA_HILL_H, w: SEA_BUS_SIGN.x + 32 - (SEA_BUS_TIMETABLE.x - 22), h: SEA_ROAD.y - SEA_HILL_H };
-/** 시장 앞마당 (다져진 모래) */
-export const SEA_MARKET_YARD: Rect = { x: SEA_MARKET.x - SEA_MARKET_W / 2 - 14, y: SEA_MARKET.y - 12, w: SEA_MARKET_W + 28, h: SEA_BOARDWALK.y - (SEA_MARKET.y - 12) };
 
 /** (x,y)가 물웅덩이 안인지 (0 밖 ~ 1 가운데) */
 export function poolDepth(x: number, y: number): number {
@@ -130,7 +126,6 @@ export function seaGroundKind(x: number, y: number): SeaGround {
   if (inRect(SEA_PLATFORM, x, y)) return "platform";
   if (onSeaRoad(x, y)) return "road";
   for (const l of SEA_LOTS) if (inRect(l, x, y, -2)) return "lot";
-  if (inRect(SEA_MARKET_YARD, x, y)) return "yard";
   if (pathEdgeDist(x, y) <= wob * 0.6) return "path";
   return "grass";
 }
@@ -141,8 +136,8 @@ export type SeaTree = { kind: SeaTreeKind; x: number; y: number; v: number };
 export type SeaDecorKind = "beachGrass" | "shell" | "drift" | "flower" | "stone";
 /** 11/16 갯바위 둘레 게 둘 (물이 빠졌을 때만 나와요) */
 export const SEA_CRABS: readonly Pt[] = [
-  { x: 1078, y: 676 },
-  { x: 128, y: 742 },
+  { x: 1070, y: 566 },
+  { x: 128, y: 612 },
 ];
 export type SeaDecor = { kind: SeaDecorKind; x: number; y: number; v: number };
 
@@ -153,13 +148,9 @@ export const SEA_PALMS: readonly Pt[] = [
 ];
 /** 산책로 가로등 (산책로 위쪽 가장자리) */
 export const SEA_LAMPS: readonly Pt[] = [80, 240, 400, 712, 880, 1040, 1232].map((x) => ({ x, y: SEA_BOARDWALK.y + 2 }));
-/** 생선 상자 더미 (시장 양옆) · 그물 말리는 틀 */
-export const SEA_CRATES: readonly Pt[] = [
-  { x: SEA_MARKET.x - SEA_MARKET_W / 2 - 4, y: SEA_MARKET.y + 6 },
-  { x: SEA_MARKET.x + SEA_MARKET_W / 2 + 6, y: SEA_MARKET.y + 6 },
-  { x: SEA_KIOSK.x + 40, y: SEA_KIOSK.y - 2 },
-];
-export const SEA_NET_RACK: Pt = { x: 1010, y: 344 };
+/** 생선 상자 더미 (매점 옆) · 그물 말리는 틀 (11/16 r11 시장을 빼며 상자는 매점 옆 하나만) */
+export const SEA_CRATES: readonly Pt[] = [{ x: SEA_KIOSK.x + 40, y: SEA_KIOSK.y - 2 }];
+export const SEA_NET_RACK: Pt = { x: 1000, y: 276 };
 /** 테트라포드 (방파제 양옆과 끝 둘레 — 그림만, 막는 건 protocol 난간) */
 export const SEA_TETRAPODS: readonly (Pt & { v: number })[] = (() => {
   const out: (Pt & { v: number })[] = [];
@@ -176,7 +167,7 @@ export const SEA_PIER_POSTS: readonly Pt[] = (() => {
   const P = SEA_PIER;
   const onSide = (p: Pt) => p.y > SEA_FLAT_Y0 && p.y < P.y + P.h && (Math.abs(p.x - (P.x - 4)) < 3 || Math.abs(p.x - (P.x + P.w + 4)) < 3);
   const out: Pt[] = SEA_GULL_PERCHES.filter(onSide).map((p) => ({ x: p.x, y: p.y }));
-  for (let y = SEA_FLAT_Y0 + 30; y <= P.y + P.h - 10; y += 60)
+  for (let y = SEA_FLAT_Y0 + 24; y <= P.y + P.h - 10; y += 36)
     for (const x of [P.x - 4, P.x + P.w + 4]) {
       const yy = x < P.x ? y : y + 30;
       if (yy > P.y + P.h - 10 || out.some((q) => q.x === x && Math.abs(q.y - yy) < 34)) continue;
@@ -192,9 +183,8 @@ export function treeCollider(t: SeaTree): Rect {
 /** 나무·장식을 비켜야 하는 곳 (길·출입구·건물 앞·다음 차수 자리) */
 function keepClear(x: number, y: number, pad: number): boolean {
   if (pathEdgeDist(x, y) < pad) return true;
-  if (inRect(SEA_PLATFORM, x, y, pad) || inRect(SEA_MARKET_YARD, x, y, pad)) return true;
+  if (inRect(SEA_PLATFORM, x, y, pad)) return true;
   if (inRect({ x: SEA_REALTY.x - SEA_REALTY_W / 2, y: SEA_REALTY.y - SEA_REALTY_H, w: SEA_REALTY_W, h: SEA_REALTY_H + 20 }, x, y, pad)) return true;
-  if (inRect({ x: SEA_MARKET.x - SEA_MARKET_W / 2, y: SEA_MARKET.y - SEA_MARKET_H, w: SEA_MARKET_W, h: SEA_MARKET_H }, x, y, pad)) return true;
   for (const l of SEA_LOTS) if (inRect(l, x, y, pad + 6)) return true;
   if (Math.hypot(x - SEA_NET_RACK.x, y - SEA_NET_RACK.y) < 34 + pad) return true;
   return false;
@@ -211,21 +201,31 @@ function buildTrees(): SeaTree[] {
   // 오른쪽 풀밭 소나무 몇 그루 (정류장 길을 비켜서)
   for (let i = 0; i < 40 && out.length < 60; i++) {
     const x = 990 + Math.floor(hashU(i, 5, 11) * 260);
-    const y = 170 + Math.floor(hashU(i, 6, 11) * 200);
+    const y = 170 + Math.floor(hashU(i, 6, 11) * (SEA_BOARDWALK.y - 190));
     if (x > SEA_BOUNDS.maxX - 6 || keepClear(x, y, 22)) continue;
     if (out.some((t) => t.y > 100 && Math.hypot(t.x - x, t.y - y) < 40)) continue;
     out.push({ kind: hashU(i, 7, 11) < 0.25 ? "bush" : "pine", x, y, v: i % 2 });
   }
   // 왼쪽 위·부동산 옆 덤불
   for (const p of [
-    { x: 520, y: 190 },
-    { x: 686, y: 216 },
-    { x: 30, y: 380 },
+    { x: 540, y: 186 },
+    { x: 690, y: 190 },
+    { x: 180, y: 296 },
   ])
     if (!keepClear(p.x, p.y, 6)) out.push({ kind: "bush", x: p.x, y: p.y, v: 1 });
   for (const p of SEA_PALMS) out.push({ kind: "palm", x: p.x, y: p.y, v: 0 });
-  // 11/16 오두막 단지 야자수 둘 (모래 언덕 가장자리)
-  out.push({ kind: "palm", x: 534, y: 352, v: 0 }, { kind: "palm", x: 22, y: 380, v: 0 });
+  // 11/16 별장 언덕 야자수 둘 (산책로 위 가장자리) · r11 별장마다 정원 덤불 한두 그루 (울타리 옆)
+  out.push({ kind: "palm", x: 534, y: 300, v: 0 }, { kind: "palm", x: 22, y: 300, v: 0 });
+  for (const l of SEA_LOTS)
+    for (const [dx, dy] of [
+      [-12, 10],
+      [l.w + 12, l.h - 6],
+    ]) {
+      const x = l.x + dx;
+      const y = l.y + dy;
+      if (x < 24 || x > SEA_BOUNDS.maxX - 8 || keepClear(x, y, 2) || out.some((t) => Math.hypot(t.x - x, t.y - y) < 20)) continue;
+      out.push({ kind: "bush", x, y, v: Math.abs(l.n + dx) % 2 });
+    }
   // 11/16 버스 길을 줄인 자리 (맨 위 띠, 돌림 마당 왼쪽): 둥근 나무와 덤불을 번갈아
   for (let x = 30, i = 0; x < SEA_ROAD.x - SEA_ROAD_LOOP_PAD; x += 46 + Math.floor(hashU(i, 41, 3) * 30), i++) {
     const y = 92 + Math.floor(hashU(i, 42, 3) * 48);
@@ -278,15 +278,12 @@ function buildDecor(): SeaDecor[] {
     const n = Math.floor(Math.hypot(b.x - a.x, b.y - a.y) / 18);
     for (let k = 0; k < n; k++) out.push({ kind: "stone", x: Math.round(a.x + ((b.x - a.x) * (k + 0.5)) / n), y: Math.round(a.y + ((b.y - a.y) * (k + 0.5)) / n) + (k % 2 ? 2 : -2), v: k });
   }
-  for (const p of [
-    { x: 172, y: 246 },
-    { x: 352, y: 246 },
-    { x: 196, y: 372 },
-    { x: 530, y: 236 },
-    { x: 26, y: 254 },
-    { x: 350, y: 300 },
-  ])
-    out.push({ kind: "beachGrass", x: p.x, y: p.y, v: (p.x >> 3) % 3 });
+  // r11 별장마다 출입구 양옆 갯그령 (작은 정원)
+  for (const l of SEA_LOTS) {
+    const g = seaLotGate(l);
+    const side = l.gate === "s" ? [ { x: g.x - 24, y: g.y + 6 }, { x: g.x + 24, y: g.y + 6 } ] : [ { x: g.x - 8, y: g.y - 22 }, { x: g.x - 8, y: g.y + 26 } ];
+    for (const p of side) if (!keepClear(p.x, p.y, 0)) out.push({ kind: "beachGrass", x: p.x, y: p.y, v: (p.x >> 3) % 3 });
+  }
   // 풀밭 들꽃 (해당화 빛)
   for (let i = 0; i < 40; i++) {
     const x = 20 + Math.floor(hashU(i, 6, 25) * (SEA_WIDTH - 40));
@@ -302,12 +299,9 @@ export const SEA_DECOR: readonly SeaDecor[] = buildDecor();
 
 // ── 충돌 ──
 
-/** 시장 앞 좌판 턱 · 부동산 앞 꽃밭 (protocol 몸통 앞 그림 자리) */
+/** 부동산 앞 꽃밭 (protocol 몸통 앞 그림 자리) */
 export function seaFrontColliders(): Rect[] {
-  const mx = SEA_MARKET.x - SEA_MARKET_W / 2 + 4;
   return [
-    // 시장 좌판 턱 (가운데 셋 사이는 비워 사람이 시장 처마 아래까지 들어가요)
-    { x: mx, y: SEA_MARKET.y - 12, w: SEA_MARKET_W - 8, h: 8 },
     // 부동산 앞 꽃밭 (문 계단은 비워요)
     { x: SEA_REALTY.x - SEA_REALTY_W / 2 + 4, y: SEA_REALTY.y - 6, w: 44, h: 5 },
     { x: SEA_REALTY.x + SEA_REALTY_W / 2 - 48, y: SEA_REALTY.y - 6, w: 44, h: 5 },
@@ -378,21 +372,21 @@ export function seaWalkGrid(cell = 8): SeaWalkGrid {
   return { cell, cols, rows, cells };
 }
 
+/** 11/16 등대지기 (방파제 끝 데크, 등대 오른쪽) */
+export const SEA_KEEPER: Pt = { x: SEA_BREAKWATER_TIP.x + 80, y: SEA_BREAKWATER_TIP.y + 64 };
+
 // ── 상호작용 ──
 export const SEA_INTERACTABLES: readonly SeaInteractable[] = [
   { id: "bus:village", kind: "bus", x: SEA_BOARD.x, y: SEA_BOARD.y, r: 22, label: "마을행 버스 타기" },
   { id: "sign", kind: "sign", x: SEA_BUS_SIGN.x, y: SEA_BUS_SIGN.y + 12, r: 18, label: "표지판 보기" },
   ...SEA_LOTS.map((l): SeaInteractable => {
     const f = seaLotFront(l);
-    return { id: `lot:${l.n}`, kind: "lot", lot: l.n, x: f.x, y: f.y, r: 20, label: `${l.n}번 오두막 터` };
+    return { id: `lot:${l.n}`, kind: "lot", lot: l.n, x: f.x, y: f.y, r: 20, label: `${l.n}번 별장 터` };
   }),
   { id: "realty", kind: "realty", x: SEA_REALTY_DOOR.x, y: SEA_REALTY_DOOR.y + 4, r: 22, label: "포구 부동산" },
-  { id: "market", kind: "market", x: SEA_MARKET.x, y: SEA_MARKET_STALLS[1].y, r: 34, label: "포구 시장" },
-  // 11/16 2차: 양쪽 좌판 앞에서도 판매 창 (왼쪽 생선 좌판·오른쪽 갯벌 좌판 칸부터 — game/sea/seaMarket)
-  { id: "market:fish", kind: "market", x: SEA_MARKET_STALLS[0].x, y: SEA_MARKET_STALLS[0].y, r: 30, label: "생선 좌판" },
-  { id: "market:flat", kind: "market", x: SEA_MARKET_STALLS[2].x, y: SEA_MARKET_STALLS[2].y, r: 30, label: "갯벌 좌판" },
   { id: "kiosk", kind: "kiosk", x: SEA_KIOSK.x, y: SEA_KIOSK.y + 12, r: 20, label: "매점" },
-  { id: "lighthouse", kind: "lighthouse", x: SEA_LIGHTHOUSE_DOOR.x, y: SEA_LIGHTHOUSE_DOOR.y + 6, r: 18, label: "등대" },
+  { id: "lighthouse", kind: "lighthouse", x: SEA_LIGHTHOUSE_DOOR.x, y: SEA_LIGHTHOUSE_DOOR.y + 6, r: 18, label: "등대 오르기" },
+  { id: "keeper", kind: "keeper", x: SEA_KEEPER.x, y: SEA_KEEPER.y + 8, r: 20, label: "등대지기와 이야기하기" },
   { id: "boat", kind: "boat", x: SEA_PIER_END.x + SEA_PIER_END.w - 8, y: SEA_BOAT.y, r: 20, label: "낚싯배" },
 ];
 
@@ -403,8 +397,7 @@ export const SEA_LIGHTS: readonly SeaLight[] = [
   // 정류장 지붕 등 · 시간표 불빛
   { x: SEA_BUS_STOP.x, y: SEA_BUS_STOP.y - SEA_SHELTER_H + 12, scale: 0.85, tint: 0xfff0c8, base: 0.85 },
   { x: SEA_BUS_TIMETABLE.x, y: SEA_BUS_TIMETABLE.y - 18, scale: 0.4, tint: 0xd8f0ff, base: 0.6 },
-  // 시장 처마 등 셋 · 부동산 창 · 매점 창구
-  ...SEA_MARKET_STALLS.map((s) => ({ x: s.x, y: SEA_MARKET.y - 40, scale: 0.8, tint: 0xffd890, base: 0.8 })),
+  // 부동산 창 · 매점 창구
   { x: SEA_REALTY.x - 34, y: SEA_REALTY.y - 26, scale: 0.55, tint: 0xffe0a0, base: 0.75 },
   { x: SEA_KIOSK.x, y: SEA_KIOSK.y - 24, scale: 0.7, tint: 0xffe6b0, base: 0.85 },
   // 산책로 가로등
@@ -415,12 +408,12 @@ export const SEA_LIGHTS: readonly SeaLight[] = [
 
 /** 구역 이름표 자리 (사각형 위쪽 가운데가 어색한 곳만) */
 export const SEA_ZONE_LABEL_AT: Partial<Record<string, Pt>> = {
-  오두막단지: { x: 268, y: 160 },
+  별장: { x: 480, y: 120 },
   백사장: { x: 160, y: SEA_SAND_Y0 + 60 },
   갯벌: { x: 470, y: SEA_FLAT_Y0 + 36 },
   선착장: { x: SEA_PIER.x + SEA_PIER.w / 2, y: SEA_PIER.y - 6 },
   방파제: { x: SEA_BREAKWATER.x + SEA_BREAKWATER.w / 2, y: SEA_BREAKWATER.y - 6 },
-  갯바위: { x: 110, y: 606 },
+  갯바위: { x: 110, y: 516 },
 };
 /** 이름표 표에서 자리 찾기 (띄어쓰기 없이 비교) */
 export function zoneLabelAt(name: string): Pt | undefined {

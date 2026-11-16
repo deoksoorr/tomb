@@ -83,7 +83,7 @@ function rand(): number {
 const newSeed = () => Math.floor(rand() * 0x7fffffff);
 
 // 11/16 포구 시장 좌판도 같은 항목 한도 (생선 = 낚시 판매, 갯벌 = 채집 판매) — 새 포인트 항목이 없다
-const SOURCE_OF_NPC: Record<NpcId, Extract<EarnSource, "fish" | "gather">> = { fishmonger: "fish", collector: "gather", harborFish: "fish", harborFlat: "gather" };
+const SOURCE_OF_NPC: Record<NpcId, Extract<EarnSource, "fish" | "gather">> = { fishmonger: "fish", collector: "gather" };
 const DAY_FIELD = { fish: "fishP", gather: "gatherP", dex: "dexP" } as const;
 
 /** boost = 포인트 배수 이벤트 (lib/pointEvent) — 고른 항목이면 팔기·도감 한도 표시가 늘어난 값 */

@@ -8,8 +8,6 @@ import {
   SEA_KIOSK_W,
   SEA_LIGHTHOUSE,
   SEA_LOTS,
-  SEA_MARKET,
-  SEA_MARKET_W,
   SEA_PIER,
   SEA_PIER_END,
   SEA_REALTY,
@@ -67,7 +65,6 @@ export function* seaMinimapSteps(): Generator<void, void> {
   if (pixels) return;
   const out = new Uint8ClampedArray(SEA_MINIMAP_W * SEA_MINIMAP_H * 4);
   const trees = new Set(SEA_TREES.filter((t) => t.kind !== "bush").map((t) => Math.floor((t.y - 8) / SEA_MINIMAP_CELL) * SEA_MINIMAP_W + Math.floor(t.x / SEA_MINIMAP_CELL)));
-  const market = { x: SEA_MARKET.x - SEA_MARKET_W / 2, y: SEA_MARKET.y - 64, w: SEA_MARKET_W, h: 52 };
   const realty = { x: SEA_REALTY.x - SEA_REALTY_W / 2, y: SEA_REALTY.y - 56, w: SEA_REALTY_W, h: 50 };
   const kiosk = { x: SEA_KIOSK.x - SEA_KIOSK_W / 2, y: SEA_KIOSK.y - SEA_KIOSK_H / 2, w: SEA_KIOSK_W, h: SEA_KIOSK_H / 2 };
   const shelter = { x: SEA_BUS_STOP.x - 32, y: SEA_BUS_STOP.y - 26, w: 64, h: 26 };
@@ -79,7 +76,6 @@ export function* seaMinimapSteps(): Generator<void, void> {
       let c = GROUND[seaGroundKind(wx, wy)];
       if (trees.has(y * SEA_MINIMAP_W + x)) c = PINE;
       for (const l of SEA_LOTS) if (inRect(l, wx, wy) && !inRect(l, wx, wy, -SEA_MINIMAP_CELL)) c = FENCE;
-      if (inRect(market, wx, wy)) c = ROOF;
       if (inRect(realty, wx, wy)) c = REALTY_ROOF;
       if (inRect(kiosk, wx, wy)) c = KIOSK;
       if (inRect(shelter, wx, wy)) c = ROOF;
@@ -102,23 +98,21 @@ export function toSeaMinimap(x: number, y: number): { x: number; y: number } {
   return { x: x / SEA_MINIMAP_CELL, y: y / SEA_MINIMAP_CELL };
 }
 
-export type SeaLandmark = { id: string; label: string; x: number; y: number; kind: "bus" | "market" | "realty" | "kiosk" | "cottages" | "pier" | "lighthouse" | "rocks" };
+export type SeaLandmark = { id: string; label: string; x: number; y: number; kind: "bus" | "realty" | "kiosk" | "cottages" | "pier" | "lighthouse" | "rocks" };
 /** 미니맵 주요 장소 (UI가 작은 표시를 그려요) */
 export const SEA_LANDMARKS: readonly SeaLandmark[] = [
   { id: "bus", label: "버스 정류장", x: SEA_BUS_STOP.x, y: SEA_BUS_STOP.y, kind: "bus" },
-  { id: "market", label: "포구 시장", x: SEA_MARKET.x, y: SEA_MARKET.y - 40, kind: "market" },
   { id: "realty", label: "포구 부동산", x: SEA_REALTY.x, y: SEA_REALTY.y - 30, kind: "realty" },
   // 11/16 매점 (미니맵 아이스크림 그림 — 미니맵엔 글씨 없이 그림만)
   { id: "kiosk", label: "매점", x: SEA_KIOSK.x, y: SEA_KIOSK.y - 12, kind: "kiosk" },
-  { id: "cottages", label: "오두막 단지", x: 268, y: 270, kind: "cottages" },
+  { id: "cottages", label: "별장", x: SEA_LOTS[2].x + SEA_LOTS[2].w / 2, y: SEA_LOTS[2].y + 20, kind: "cottages" },
   { id: "pier", label: "선착장", x: SEA_PIER.x + SEA_PIER.w / 2, y: SEA_PIER_END.y, kind: "pier" },
   { id: "lighthouse", label: "방파제 등대", x: SEA_LIGHTHOUSE.x, y: SEA_LIGHTHOUSE.y - 10, kind: "lighthouse" },
-  { id: "rocks", label: "갯바위", x: 110, y: 700, kind: "rocks" },
+  { id: "rocks", label: "갯바위", x: 110, y: 590, kind: "rocks" },
 ];
 /** 주요 장소 표시 색 */
 export const SEA_LANDMARK_COLOR: Record<SeaLandmark["kind"], string> = {
   bus: "#ffd84a",
-  market: "#8ec4e0",
   realty: "#f0a080",
   kiosk: "#f8a8c8",
   cottages: "#e8dcc0",

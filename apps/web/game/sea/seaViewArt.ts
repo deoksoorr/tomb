@@ -158,6 +158,29 @@ export function lyingHead(): Grid {
   return g;
 }
 
+/** 11/16 등대 꼭대기 난간 (화면 아래 띠 — 쇠 난간 기둥과 가로대, 바닥 철판) */
+export function galleryRail(w: number): Grid {
+  const h = 30;
+  const g = new Grid(w, h);
+  for (let y = 22; y < h; y++) for (let x = 0; x < w; x++) g.set(x, y, pick(RAMP.rock, 0.45 + (y - 22) * 0.06, x, y));
+  for (const y of [6, 14]) for (let x = 0; x < w; x++) g.set(x, y, x % 2 ? RAMP.wall[1] : RAMP.wall[2]);
+  for (let x = 4; x < w; x += 22) for (let y = 4; y < 23; y++) g.set(x, y, RAMP.wall[0]);
+  soft(g);
+  return g;
+}
+/** 11/16 고래 물줄기 (흰 물방울이 위로 퍼져요) 24 × 20 */
+export function whaleSpout(): Grid {
+  const g = new Grid(24, 20);
+  const r = rng(17);
+  for (let i = 0; i < 46; i++) {
+    const a = -Math.PI / 2 + (r() - 0.5) * 1.4;
+    const d = r() * 16;
+    g.set(Math.round(12 + Math.cos(a) * d * 0.7), Math.round(18 + Math.sin(a) * d), 0xffffff, 150 + Math.floor(r() * 105));
+  }
+  g.ellipse(12, 18, 5, 1.3, 0x3a4a6a, 200);
+  return g;
+}
+
 /** 선착장 끝 데크 (화면 아래 띠 — 가로 판자, 끝 테, 못) */
 export function deckBand(w: number): Grid {
   const h = 26;

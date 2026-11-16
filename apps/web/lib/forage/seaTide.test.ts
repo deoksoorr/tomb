@@ -16,8 +16,8 @@ afterEach(() => vi.restoreAllMocks());
 
 const MIN = 60_000;
 const HIGH = Date.UTC(2026, 10, 15, 15, 0); // 11/16 0시 KST
-const ROCK = "f_1092_614"; // 방파제 쪽 바위 곶 (썰물 28.3분째에 말라요)
-const PIER = "f_604_930"; // 선착장 끝 (늘 깊은 물)
+const ROCK = "f_1084_528"; // 방파제 쪽 바위 곶 (r11: 썰물 18.2분째에 말라요)
+const PIER = "f_604_674"; // 선착장 끝 (늘 물)
 const acct = () => `t-seatide-${nanoid(8)}`;
 
 describe("갯바위 낚시 물때 (서버)", () => {
@@ -29,7 +29,7 @@ describe("갯바위 낚시 물때 (서버)", () => {
   it("만조엔 던질 수 있고, 물이 빠진 뒤엔 TIDE_OUT, 밀물에 다시 돼요", async () => {
     await expect(castLine(acct(), ROCK, HIGH + 10 * MIN)).resolves.toHaveProperty("ticket");
     await expect(castLine(acct(), ROCK, HIGH + 60 * MIN)).rejects.toMatchObject({ status: 409, code: "TIDE_OUT", message: SEA_TIDE_OUT_MSG });
-    await expect(castLine(acct(), ROCK, HIGH + 160 * MIN)).resolves.toHaveProperty("ticket");
+    await expect(castLine(acct(), ROCK, HIGH + 170 * MIN)).resolves.toHaveProperty("ticket");
   });
 
   it("선착장 끝은 간조에도 던질 수 있어요", async () => {
@@ -43,7 +43,7 @@ describe("갯바위 낚시 물때 (서버)", () => {
     const s = JSON.parse((await getForageStore().autoGet(a))!) as { end: number; tide?: true };
     expect(s.end).toBe(seaFishDryAt(seaFishingSpotById(ROCK)!, HIGH + 10 * MIN));
     expect(s.tide).toBe(true);
-    const mid = await syncAutoFish(a, HIGH + 20 * MIN);
+    const mid = await syncAutoFish(a, HIGH + 15 * MIN);
     expect(mid.auto).not.toBeNull();
     const r = await syncAutoFish(a, HIGH + 40 * MIN);
     expect(r.auto).toBeNull();

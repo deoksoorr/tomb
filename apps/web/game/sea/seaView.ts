@@ -17,8 +17,9 @@ import { noise1, shoreDelay, shoreReach, WaveTrain } from "./seaWaves";
 //  - 덮는 동안 월드 카메라는 쉬어요 (opaque) — SeaScene이 메인 카메라를 숨겨요
 
 export type SeaViewSitter = { key: string; frame: number; slot: number; of: number };
-/** 11/16 벤치 앞 줄 (벤치에서 본 파라솔·선베드 — 벤치 x에서 월드 px만큼 옆, row 0 = 바로 앞 줄, 1 = 그 앞 줄) */
-export type SeaViewFore = { parasols: readonly { dx: number; v: number }[]; loungers: readonly { dx: number; row: number }[] };
+export { seaViewFore, seaViewLandmarks, seaViewProject, VIEW_FOCAL, type SeaViewFore, type SeaViewLandmarks } from "./seaViewGeom";
+import { seaViewProject, type SeaViewFore, type SeaViewLandmarks } from "./seaViewGeom";
+
 export type SeaViewFrame = {
   now: number;
   dt: number;
@@ -34,6 +35,9 @@ export type SeaViewFrame = {
   sitters: readonly SeaViewSitter[];
   /** 벤치 앞 선베드마다 누운 사람이 있는지 (begin의 fore.loungers 차례) */
   lying?: readonly boolean[];
+  /** 11/16 등대 꼭대기: 유령선이 보이는 때 (토요일 밤) · 안개로 등불이 켜진 세기 */
+  ghost?: boolean;
+  fogLamp?: number;
 };
 
 const P = "seav-";
@@ -56,15 +60,18 @@ type Glint = { img: Phaser.GameObjects.Image; t0: number; life: number; on: bool
 let seq = 0;
 
 /** 장면마다 수평선 높이 (화면 높이 비율) — 선베드는 누워서 하늘이 넓어요 */
-const HORIZON: Record<SeaViewKind, number> = { beach: 0.42, mat: 0.42, parasol: 0.44, lounger: 0.6, pier: 0.36, breakwater: 0.4 };
+/** 11/16 장면 종류: 앉은 자리 장면 + 등대 꼭대기 (오르기) */
+export type ViewKind = SeaViewKind | "lighthouse";
+const HORIZON: Record<ViewKind, number> = { beach: 0.42, mat: 0.42, parasol: 0.44, lounger: 0.6, pier: 0.36, breakwater: 0.4, lighthouse: 0.24 };
 
 export class SeaView {
   private readonly scene: ViewScene;
   private readonly key: string;
-  private kind: SeaViewKind | null = null;
+  private kind: ViewKind | null = null;
   private variant = 0;
   private mat = 0;
   private foreSpec: SeaViewFore | null = null;
+  private landSpec: SeaViewLandmarks | null = null;
   private foreLoungers: { img: Phaser.GameObjects.Image; head: Phaser.GameObjects.Image }[] = [];
   private built = false;
   private dirty = false;
@@ -135,18 +142,19 @@ export class SeaView {
   get opaque(): boolean {
     return this.built && this.kind !== null;
   }
-  get active(): SeaViewKind | null {
+  get active(): ViewKind | null {
     return this.kind;
   }
 
   /** 장면 시작 (variant = 파라솔 갓 색, mat = 돗자리 색) */
-  begin(kind: SeaViewKind, variant: number, mat: number, fore: SeaViewFore | null = null): void {
-    if (this.kind === kind && this.variant === variant && this.mat === mat && this.foreSpec === fore) return;
+  begin(kind: ViewKind, variant: number, mat: number, fore: SeaViewFore | null = null, land: SeaViewLandmarks | null = null): void {
+    if (this.kind === kind && this.variant === variant && this.mat === mat && this.foreSpec === fore && this.landSpec === land) return;
     this.clear();
     this.kind = kind;
     this.variant = variant;
     this.mat = mat;
     this.foreSpec = fore;
+    this.landSpec = land;
     this.cover = 0;
   }
 
@@ -266,40 +274,50 @@ export class SeaView {
       const fs = this.foreSpec;
       this.foreLoungers = [];
       if (fs) {
-        const K = 1.7;
-        const backY = Math.round(VH * 0.93);
-        const frontY = Math.round(VH * 0.83);
         const lbKey = this.tex(P + "loungerBack", () => V.loungerBackArt());
         const headKey = this.tex(P + "head", () => V.lyingHead());
         for (const l of fs.loungers) {
-          const near = l.row === 0;
-          const sc2 = near ? 2.2 : 1.5;
-          const x = Math.round(VW / 2 + l.dx * K * (near ? 1 : 0.8));
-          const y = near ? backY : frontY;
-          const img = this.add(sc.add.image(x, y, lbKey).setOrigin(0.5, 1).setScale(sc2).setDepth(near ? 16 : 14));
-          const head = this.add(sc.add.image(x, y - 22 * sc2, headKey).setOrigin(0.5, 1).setScale(sc2).setDepth(near ? 16.5 : 14.5).setVisible(false));
+          const p = seaViewProject(l.dx, l.d, VW, VH, hz);
+          if (!p) continue;
+          const sc2 = Math.min(2.4, p.s);
+          const img = this.add(sc.add.image(Math.round(p.x), Math.round(p.y), lbKey).setOrigin(0.5, 1).setScale(sc2).setDepth(20 - l.d / 100));
+          const head = this.add(sc.add.image(Math.round(p.x), Math.round(p.y - 22 * sc2), headKey).setOrigin(0.5, 1).setScale(sc2).setDepth(20.01 - l.d / 100).setVisible(false));
           this.fore.push(img);
           this.foreLoungers.push({ img, head });
         }
-        for (const p of fs.parasols) {
-          const x = Math.round(VW / 2 + p.dx * K);
+        for (const q of fs.parasols) {
+          const p = seaViewProject(q.dx, q.d, VW, VH, hz);
+          if (!p) continue;
           // 갓이 화면 위를 다 덮지 않게 조금 작게 (선베드 줄 뒤에서 보는 크기)
-          this.fore.push(this.add(sc.add.image(x, backY - 6, Art.SEA_TEX.parasol(p.v)).setOrigin(0.5, 1).setScale(1.8).setDepth(17)));
+          this.fore.push(this.add(sc.add.image(Math.round(p.x), Math.round(p.y + 6), Art.SEA_TEX.parasol(q.v)).setOrigin(0.5, 1).setScale(Math.min(2, p.s * 0.75)).setDepth(20.5 - q.d / 100)));
         }
       }
+    }
+    // 11/16 앉은 자리에서 보이는 선착장·방파제·등대·낚싯배·갯바위 (멀수록 작고 수평선 가까이)
+    this.buildLandmarks();
+    if (beachy) {
+      // (모래 장면은 위에서 다 만들었어요)
+    } else if (kind === "lighthouse") {
+      // 11/16 등대 꼭대기: 난간 너머 바다가 넓게 · 가끔 먼 고래 물줄기 · 토요일 밤엔 유령선이 다가와요
+      this.fore.push(this.add(sc.add.image(0, VH, this.tex(`${P}rail-${VW}`, () => V.galleryRail(VW))).setOrigin(0, 1).setDepth(30)));
+      this.spout = this.add(sc.add.image(0, 0, this.tex(P + "spout", () => V.whaleSpout())).setOrigin(0.5, 1).setDepth(9).setVisible(false));
+      this.spoutAt = sc.time.now + 6000 + Math.random() * 12000;
+      this.ghost = this.add(sc.add.image(0, 0, Art.SEA_TEX.boat).setOrigin(0.5, 1).setDepth(9).setTint(0xb8f0d8).setAlpha(0).setVisible(false));
+      this.beam = this.add(sc.add.image(Math.round(VW / 2), VH - 10, this.tex(P + "beam", () => V.beamWedge())).setOrigin(0, 0.5).setDepth(8).setBlendMode(Phaser.BlendModes.ADD).setVisible(false));
     } else if (kind === "pier") {
-      this.moored = this.add(sc.add.image(Math.round(VW * 0.86), Math.round(VH * 0.8), Art.SEA_TEX.boat).setOrigin(0.5, 1).setDepth(13).setScale(2));
-      this.buoy = this.add(sc.add.image(Math.round(VW * 0.18), Math.round(hz + (VH - hz) * 0.35), Art.SEA_TEX.buoy).setOrigin(0.5, 1).setDepth(13).setScale(2));
+      // 11/16 묶인 낚싯배는 선착장 끝 동쪽 → 바다를 보면 왼쪽, 부표는 서쪽 → 오른쪽
+      this.moored = this.add(sc.add.image(Math.round(VW * 0.14), Math.round(VH * 0.8), Art.SEA_TEX.boat).setOrigin(0.5, 1).setDepth(13).setScale(2).setFlipX(true));
+      this.buoy = this.add(sc.add.image(Math.round(VW * 0.82), Math.round(hz + (VH - hz) * 0.35), Art.SEA_TEX.buoy).setOrigin(0.5, 1).setDepth(13).setScale(2));
       this.fore.push(this.add(sc.add.image(0, VH, this.tex(`${P}deck-${VW}`, () => V.deckBand(VW))).setOrigin(0, 1).setDepth(20)));
     } else {
-      // 방파제 끝: 오른쪽에 등대 기둥, 아래 테트라포드 줄 (물보라가 부서져요)
+      // 방파제 끝: 등대는 앉은 자리 동쪽 → 바다를 보면 왼쪽에 크게, 아래 테트라포드 줄 (물보라가 부서져요)
       const colH = Math.round(VH * 0.92);
-      const lx = VW - 30;
+      const lx = 30;
       this.lighthouse = this.add(sc.add.image(lx, VH, this.tex(`${P}lighthouse-${colH}`, () => V.lighthouseColumn(colH))).setOrigin(0.5, 1).setDepth(22));
       this.lamp = { x: lx, y: VH - colH + 12 };
-      // 불빛은 등불에서 왼쪽 바다 쪽으로 (뾰족한 끝이 등불)
-      this.beam = this.add(sc.add.image(this.lamp.x, this.lamp.y, this.tex(P + "beam", () => V.beamWedge())).setOrigin(1, 0.5).setDepth(23).setBlendMode(Phaser.BlendModes.ADD).setFlipX(true).setVisible(false));
-      for (let x = -8, i = 0; x < VW - 40; x += 26 + (i % 2) * 6, i++) {
+      // 불빛은 등불에서 오른쪽 바다 쪽으로 (뾰족한 끝이 등불)
+      this.beam = this.add(sc.add.image(this.lamp.x, this.lamp.y, this.tex(P + "beam", () => V.beamWedge())).setOrigin(0, 0.5).setDepth(23).setBlendMode(Phaser.BlendModes.ADD).setVisible(false));
+      for (let x = 40, i = 0; x < VW + 8; x += 26 + (i % 2) * 6, i++) {
         const img = this.add(sc.add.image(x, VH + 6 - (i % 2) * 8, Art.SEA_TEX.tetra(i % 3)).setOrigin(0, 1).setDepth(20 + (i % 2)).setScale(2.4));
         this.tetras.push(img);
       }
@@ -322,6 +340,44 @@ export class SeaView {
     this.built = true;
   }
 
+  private spout: Phaser.GameObjects.Image | null = null;
+  private spoutAt = 0;
+  private spoutT0 = -1;
+  private spoutX = 0;
+  private ghost: Phaser.GameObjects.Image | null = null;
+  private landGfx: Phaser.GameObjects.Graphics | null = null;
+  private landSprites: Phaser.GameObjects.Image[] = [];
+  private buildLandmarks(): void {
+    const lm = this.landSpec;
+    this.landSprites = [];
+    this.landGfx = null;
+    if (!lm) return;
+    const sc = this.scene;
+    const { VW, VH, hz } = this;
+    const g = (this.landGfx = this.add(sc.add.graphics().setDepth(13)));
+    for (const st of lm.strips) {
+      const d0 = Math.max(st.d0, 26);
+      if (st.d1 <= d0) continue;
+      const a = seaViewProject(st.dx - st.w / 2, d0, VW, VH, hz);
+      const b = seaViewProject(st.dx + st.w / 2, d0, VW, VH, hz);
+      const c = seaViewProject(st.dx + st.w / 2, st.d1, VW, VH, hz);
+      const e = seaViewProject(st.dx - st.w / 2, st.d1, VW, VH, hz);
+      if (!a || !b || !c || !e) continue;
+      if (Math.max(a.x, b.x, c.x, e.x) < -10 || Math.min(a.x, b.x, c.x, e.x) > VW + 10) continue;
+      const top = st.kind === "pier" ? Art.RAMP.wood[2] : Art.RAMP.rock[1];
+      const side = st.kind === "pier" ? Art.RAMP.wood[4] : Art.RAMP.rock[3];
+      // 옆면 (물 위로 조금 솟은 두께)
+      g.fillStyle(side, 1).fillPoints([ { x: a.x, y: a.y }, { x: b.x, y: b.y }, { x: b.x, y: b.y + 3 * a.s }, { x: a.x, y: a.y + 3 * a.s } ], true);
+      g.fillStyle(top, 1).fillPoints([ { x: a.x, y: a.y }, { x: b.x, y: b.y }, { x: c.x, y: c.y }, { x: e.x, y: e.y } ], true);
+      g.lineStyle(1, side, 0.8).lineBetween(a.x, a.y, e.x, e.y).lineBetween(b.x, b.y, c.x, c.y);
+    }
+    for (const sp of lm.sprites) {
+      const p = seaViewProject(sp.dx, sp.d, VW, VH, hz);
+      if (!p || p.x < -60 || p.x > VW + 60) continue;
+      this.landSprites.push(this.add(sc.add.image(Math.round(p.x), Math.round(p.y), sp.key).setOrigin(0.5, 1).setScale(Math.max(0.25, Math.min(2.4, p.s * sp.scale))).setDepth(13.5 - sp.d / 1000)));
+    }
+  }
+
   private clear(): void {
     for (const o of this.objs) o.destroy();
     this.objs = [];
@@ -340,6 +396,10 @@ export class SeaView {
     this.moored = this.buoy = this.lighthouse = this.beam = null;
     this.rain = this.snow = this.fog = null;
     this.foreLoungers = [];
+    this.landGfx = null;
+    this.landSprites = [];
+    this.spout = this.ghost = null;
+    this.spoutT0 = -1;
     this.skyKey = this.seaKey = "";
   }
 
@@ -353,11 +413,13 @@ export class SeaView {
       const v = this.variant;
       const m = this.mat;
       const fs = this.foreSpec;
+      const ls = this.landSpec;
       this.clear();
       this.kind = k;
       this.variant = v;
       this.mat = m;
       this.foreSpec = fs;
+      this.landSpec = ls;
       this.build();
     }
     this.scene.cameras.main.setVisible(true);
@@ -548,7 +610,10 @@ export class SeaView {
   private updateFore(f: SeaViewFrame, shade: number, night: number): void {
     const now = f.now;
     const k = this.reduced ? 0.3 : 1;
+    if (this.kind === "lighthouse") this.updateLookout(f, night);
     for (const img of this.fore) img.setTint(shade);
+    for (const img of this.landSprites) img.setTint(mixRgb(shade, 0xb8c4d8, 0.15));
+    this.landGfx?.setAlpha(1 - night * 0.45);
     if (this.moored) {
       this.moored.setTint(shade).setY(Math.round(this.VH * 0.8 + Math.sin(now / 1100) * 1.6 * k)).setRotation(Math.sin(now / 1700) * 0.03 * k);
     }
@@ -597,6 +662,47 @@ export class SeaView {
         const sweep = Math.sin(now / (this.reduced ? 6000 : 2600));
         this.beam.setVisible(on > 0.01).setPosition(this.lamp.x, this.lamp.y).setScale(0.3 + 1.7 * Math.abs(sweep), 1 + 0.3 * Math.abs(sweep)).setAlpha(on * (0.35 + 0.65 * Math.abs(sweep)));
       }
+    }
+  }
+
+  /** 11/16 등대 꼭대기: 고래 물줄기(가끔) · 유령선(토요일 밤) · 밤엔 등대 불빛이 바다를 훑어요 */
+  private updateLookout(f: SeaViewFrame, night: number): void {
+    const { VW, hz } = this;
+    const now = f.now;
+    if (this.spout) {
+      if (this.spoutT0 < 0 && now >= this.spoutAt && night < 0.8) {
+        this.spoutT0 = now;
+        this.spoutX = VW * (0.15 + Math.random() * 0.7);
+      }
+      if (this.spoutT0 >= 0) {
+        const u = (now - this.spoutT0) / 2600;
+        if (u >= 1) {
+          this.spoutT0 = -1;
+          this.spout.setVisible(false);
+          this.spoutAt = now + (this.reduced ? 40000 : 18000) + Math.random() * 30000;
+        } else this.spout.setVisible(true).setPosition(Math.round(this.spoutX), hz + 6).setScale(0.6 + Math.sin(Math.PI * Math.min(1, u * 1.6)) * 0.8).setAlpha(Math.sin(Math.PI * u) * 0.9);
+      }
+    }
+    if (this.ghost) {
+      const on = !!f.ghost;
+      this.ghost.setVisible(on);
+      if (on) {
+        // 수평선에서 천천히 다가와요 (4분에 한 번 처음부터)
+        const u = ((now / 240000) % 1 + 1) % 1;
+        this.ghost
+          .setPosition(Math.round(VW * (0.2 + 0.25 * u)), Math.round(hz + 4 + u * 40))
+          .setScale(0.5 + u * 1.3)
+          .setAlpha((0.35 + 0.2 * Math.sin(now / 700)) * Math.min(1, u * 5));
+      }
+    }
+    if (this.beam) {
+      const on = Math.max(Math.min(1, (night - 0.3) * 2), f.fogLamp ?? 0);
+      const sweep = Math.sin(now / (this.reduced ? 7000 : 3200));
+      this.beam
+        .setVisible(on > 0.01)
+        .setRotation(-Math.PI / 2 + sweep * 1.1)
+        .setScale(1.4 + Math.abs(sweep) * 0.6, 1.2)
+        .setAlpha(on * 0.55);
     }
   }
 

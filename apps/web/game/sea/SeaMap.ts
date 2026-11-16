@@ -25,7 +25,6 @@ import {
   SEA_LOTS,
   SEA_LOT_LANTERNS,
   SEA_LOT_MAILBOX,
-  SEA_MARKET,
   SEA_PIER,
   SEA_PIER_END,
   SEA_REALTY,
@@ -393,8 +392,6 @@ export class SeaMap implements SeaMapApi {
     SEA_MATS.forEach((m, i) => this.prop(T.mat(i % 3 === 1 ? 1 : i % 3 === 2 ? 2 : 0), m.x, m.y + 8, FLAT + m.y, 2));
     // 시장·부동산·매점 (현판 글씨는 판 크기에 맞춰 월드 크기 그대로)
     // 11/16 간판 글씨는 판 위에 뜨는 이름표로 (사용자: "간판 글씨가 안 읽혀요" — 늘 같은 화면 크기, 진한 판에 밝은 글씨)
-    this.prop(T.market, SEA_MARKET.x, SEA_MARKET.y, SEA_MARKET.y, 3);
-    this.plate(SEA_MARKET.x, SEA_MARKET.y - 95, "포구 시장"); // 현판(물고기 그림) 위에 선 작은 나무 간판
     this.prop(T.realty, SEA_REALTY.x, SEA_REALTY.y, SEA_REALTY.y, 3);
     this.plate(SEA_REALTY.x, SEA_REALTY.y - 55, "포구 부동산"); // 문 위 현판(작은 집 그림) 위
     this.prop(T.kiosk, SEA_KIOSK.x, SEA_KIOSK.y, SEA_KIOSK.y, 3);
@@ -419,6 +416,9 @@ export class SeaMap implements SeaMapApi {
     }
     // 등대 (끝 데크 뒤쪽)
     this.prop(T.lighthouse, SEA_LIGHTHOUSE.x, SEA_LIGHTHOUSE.y, SEA_LIGHTHOUSE.y, 3);
+    // 11/16 등대지기 (말을 걸면 다음 갯벌 열리는 때를 알려줘요)
+    this.prop(T.keeper, Lay.SEA_KEEPER.x, Lay.SEA_KEEPER.y, Lay.SEA_KEEPER.y, 1);
+    this.addLabel(Lay.SEA_KEEPER.x, Lay.SEA_KEEPER.y - 30, "등대지기", 0xffe8b0, 1);
     // 가로등·생선 상자·그물 틀
     for (const p of Lay.SEA_LAMPS) {
       this.prop(T.lamp, p.x, p.y);
@@ -467,7 +467,7 @@ export class SeaMap implements SeaMapApi {
   private addLabels(): void {
     for (const z of SEA_ZONES) {
       // 정류장은 노선 팻말 글씨, 시장·부동산은 현판 글씨로
-      if (z.id === "busStop" || z.id === "market" || z.id === "realty") continue;
+      if (z.id === "busStop" || z.id === "realty") continue;
       const at = Lay.zoneLabelAt(z.name) ?? { x: z.x + z.w / 2, y: z.y + 10 };
       this.addLabel(at.x, at.y, z.name, z.id === "flat" || z.id === "pier" || z.id === "breakwater" ? 0xc8e4ec : 0xf0dcb0, 0.66);
     }
@@ -1161,7 +1161,7 @@ export function clampEdges(scene: Phaser.Scene, key: string): void {
 }
 
 /** 바닷가 그림 굽는 목록 (SeaMap이 장면을 만들 때, 또는 버스 창밖 연출 동안 seaPrebake가 조금씩) */
-export type SeaTexBuild = () => Art.ArtOut | ReturnType<typeof Art.marketArt>;
+export type SeaTexBuild = () => Art.ArtOut | ReturnType<typeof Art.realtyArt>;
 export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?: boolean) => void): void {
   const T = Art.SEA_TEX;
   for (let v = 0; v < 2; v++) {
@@ -1194,7 +1194,6 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   tex(T.busSign, Art.busSignArt);
   tex(T.timetable, Art.timetableArt);
   tex(T.bench, Art.benchArt);
-  tex(T.market, Art.marketArt);
   tex(T.realty, Art.realtyArt);
   tex(T.kiosk, Art.kioskArt);
   for (const l of SEA_LOTS) tex(T.lot(l.n), () => Art.lotArt(l));
@@ -1215,6 +1214,7 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   tex(T.breakwater, Art.breakwaterArt);
   tex(T.tip, Art.tipArt);
   tex(T.lighthouse, Art.lighthouseArt);
+  tex(T.keeper, Art.keeperArt);
   tex(T.boat, Art.boatArt);
   tex(T.buoy, Art.buoyArt);
   SEA_ROCKS.forEach((_r, i) => {

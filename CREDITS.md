@@ -146,4 +146,5 @@
 - 사냥 손맛(NEXT 2·16·40번) 11개: kill(처치), swish·thud·stab·clack·twang·flick·ink(무기 방식마다 공격 소리), warn(몬스터 경고), slam(몬스터 내려찍기·폭발), roar(우두머리 단계) — 64kbps, 각 1.5~10KB. hit·crit·miss·levelup은 같은 때 다시 만들었다.
 - 11/16 sea-loop(바닷가 파도·물거품·먼 갈매기 24초 루프, 약 -22 LUFS, 56kbps)은 `scripts/gen-sea-loop.mjs`가 합성했어요 (자체 제작, **CC0**).
 - 11/16 gull-1·2·3(바닷가 갈매기 울음 한 번씩, 1초 안팎, 48kbps 모노)은 `scripts/gen-gull.mjs`가 합성했어요 (자체 제작, **CC0**). 녹음·남의 소리는 쓰지 않았어요.
+- 11/16 foghorn(안개 낀 날 등대 무적, 2.8초, 48kbps 모노)은 `scripts/gen-foghorn.mjs`가 합성했어요 (자체 제작, **CC0**).
 - 모두 `scripts/gen-bgm.mjs`가 코드로 합성한 자체 제작 음원이며 **CC0**입니다. 대부분 약 -16 LUFS(봉우리가 날카로운 splash·swing은 약 -17~-18, 아주 짧은 tick은 -21), true peak ≤ -1.6 dBTP로 맞췄습니다.

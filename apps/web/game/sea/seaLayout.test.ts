@@ -6,6 +6,10 @@ import {
   SEA_BREAKWATER,
   SEA_BREAKWATER_TIP,
   SEA_FLAT_Y0,
+  SEA_DEEP_Y,
+  SEA_HEIGHT,
+  SEA_BOARDWALK,
+  SEA_SAND_Y0,
   SEA_FOOTBATH,
   SEA_LIGHTHOUSE_DOOR,
   SEA_LOTS,
@@ -15,7 +19,6 @@ import {
   SEA_MATS,
   seaLotFront,
   seaLotGate,
-  SEA_MARKET_STALLS,
   SEA_PIER,
   SEA_PIER_END,
   SEA_ROCKS,
@@ -77,8 +80,7 @@ describe("seaLayout — 걷기", () => {
   it("상호작용마다 걸어서 닿는 자리가 가까이 있다", () => {
     for (const o of SEA_INTERACTABLES) expect(reachableNear(o.x, o.y, o.r), o.id).toBe(true);
   });
-  it("시장 앞·오두막 터 출입구·선착장 끝·등대 문·족욕 바위까지 걸어서 가요", () => {
-    for (const s of SEA_MARKET_STALLS) expect(reachableNear(s.x, s.y, 10)).toBe(true);
+  it("별장 터 출입구·선착장 끝·등대 문·족욕 바위까지 걸어서 가요", () => {
     // 11/16 터마다 출입구 쪽이 달라요 (seaLotFront)
     for (const l of SEA_LOTS) {
       const f = seaLotFront(l);
@@ -113,9 +115,10 @@ describe("seaLayout — 걷기", () => {
   });
   it("선착장 머리·가운데·끝, 방파제 몸통·끝 데크에 설 수 있다", () => {
     const px = SEA_PIER.x + SEA_PIER.w / 2;
-    for (const y of [SEA_PIER.y + 10, 700, SEA_PIER_END.y + 30]) expect(seaStandable(px, y), `pier ${y}`).toBe(true);
+    // 11/16 r11 맵을 줄이며 선착장·방파제도 짧게
+    for (const y of [SEA_PIER.y + 10, SEA_PIER.y + SEA_PIER.h / 2, SEA_PIER_END.y + 30]) expect(seaStandable(px, y), `pier ${y}`).toBe(true);
     const bx = SEA_BREAKWATER.x + SEA_BREAKWATER.w / 2;
-    for (const y of [SEA_BREAKWATER.y + 10, 700]) expect(seaStandable(bx, y), `breakwater ${y}`).toBe(true);
+    for (const y of [SEA_BREAKWATER.y + 10, SEA_BREAKWATER.y + SEA_BREAKWATER.h - 10]) expect(seaStandable(bx, y), `breakwater ${y}`).toBe(true);
     expect(seaStandable(SEA_BREAKWATER_TIP.x + 14, SEA_BREAKWATER_TIP.y + SEA_BREAKWATER_TIP.h - 4)).toBe(true);
   });
   it("갯벌은 물때와 상관없이 늘 걷는다 (바위만 빼고)", () => {
@@ -129,15 +132,15 @@ describe("seaLayout — 걷기", () => {
   // 11/16 먼바다에서도 헤엄·잠수할 수 있게 막지 않아요 (늘 물속). 맵 아래 끝·묶인 낚싯배만 막아요
   it("먼바다는 헤엄칠 수 있고 늘 물속, 낚싯배와 맵 아래 끝은 막혀 있다", () => {
     for (const [x, y] of [
-      [300, 920],
-      [900, 930],
-      [560, 940],
+      [300, SEA_DEEP_Y + 20],
+      [900, SEA_DEEP_Y + 30],
+      [560, SEA_DEEP_Y + 40],
     ]) {
       expect(seaStandable(x, y), `${x},${y}`).toBe(true);
       expect(seaWet(x, y, 0), `${x},${y}`).toBe(true);
     }
     expect(seaStandable(SEA_BOAT.x, SEA_BOAT.y)).toBe(false);
-    expect(seaStandable(300, 955)).toBe(false);
+    expect(seaStandable(300, SEA_HEIGHT - 5)).toBe(false);
   });
   it("다음 차수 쉴거리 자리·좌석은 비어 있다", () => {
     for (const p of SEA_FUTURE_SPOTS) expect(seaStandable(p.x, p.y), `${p.x},${p.y}`).toBe(true);
@@ -147,23 +150,24 @@ describe("seaLayout — 걷기", () => {
 
 describe("seaLayout — 물·바닥", () => {
   it("만조엔 선착장 위는 마르고 갯벌은 잠긴다, 간조엔 갯벌이 드러난다", () => {
-    expect(seaWet(SEA_PIER.x + 20, 700, 1)).toBe(false);
-    expect(seaWet(400, 700, 1)).toBe(true);
-    expect(seaWet(400, 700, 0)).toBe(false);
-    expect(seaWet(SEA_BREAKWATER.x + 20, 700, 1)).toBe(false);
+    const py = SEA_PIER.y + SEA_PIER.h / 2;
+    expect(seaWet(SEA_PIER.x + 20, py, 1)).toBe(false);
+    expect(seaWet(400, 580, 1)).toBe(true);
+    expect(seaWet(400, 580, 0)).toBe(false);
+    expect(seaWet(SEA_BREAKWATER.x + 20, SEA_BREAKWATER.y + 60, 1)).toBe(false);
   });
   it("바닥 종류가 띠 순서대로다", () => {
     // 11/16 버스 길은 오른쪽 끝 ~ 돌림 마당까지만, 그 왼쪽 띠는 풀밭
     expect(seaGroundKind(1200, 125)).toBe("road");
     expect(seaGroundKind(600, 125)).toBe("grass");
-    expect(seaGroundKind(600, 401)).toBe("boardwalk");
-    expect(seaGroundKind(300, 480)).toBe("sand");
-    expect(seaGroundKind(560, 720)).toBe("flat");
-    expect(seaGroundKind(400, 950)).toBe("deep");
+    expect(seaGroundKind(600, SEA_BOARDWALK.y + 13)).toBe("boardwalk");
+    expect(seaGroundKind(300, SEA_SAND_Y0 + 60)).toBe("sand");
+    expect(seaGroundKind(560, SEA_FLAT_Y0 + 100)).toBe("flat");
+    expect(seaGroundKind(400, SEA_DEEP_Y + 30)).toBe("deep");
     expect(seaGroundKind(400, 20)).toBe("hill");
   });
   it("선착장 말뚝에 갈매기 자리가 있다, 밤 빛은 맵 안", () => {
-    expect(SEA_PIER_POSTS.length).toBeGreaterThan(6);
+    expect(SEA_PIER_POSTS.length).toBeGreaterThanOrEqual(5); // 11/16 r11 선착장이 짧아졌어요
     for (const l of SEA_LIGHTS) expect(l.y).toBeGreaterThan(0);
   });
   it("미니맵 바탕 크기와 주요 장소", () => {

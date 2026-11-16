@@ -46,6 +46,7 @@ export class Sfx extends AudioHost {
     super("sfx");
     for (const url of Object.values(FILES)) void preloadSound(url);
     for (const url of GULLS) void preloadSound(url);
+    void preloadSound("/sfx/foghorn.mp3");
   }
 
   protected override onMixChanged(): void {
@@ -221,6 +222,23 @@ export class Sfx extends AudioHost {
     });
     if (started) this.voices++;
     else pn?.disconnect();
+  }
+
+  /** 11/16 안개 낀 날 등대 무적 한 번 (바닷가, 환경음 갈래 — scripts/gen-foghorn.mjs) */
+  foghorn(gain = 0.6): void {
+    const vol = this.busGain("amb");
+    const url = "/sfx/foghorn.mp3";
+    if (vol <= 0 || this.hidden || soundMissing(url) || this.voices >= MAX_VOICES) return;
+    const ac = this.audio("amb");
+    if (!ac) return;
+    const started = playBuffer(ac, this.output, url, {
+      gain: Math.max(0, Math.min(1, vol * gain * 0.6)),
+      rate: 0.96 + Math.random() * 0.08,
+      onEnded: () => {
+        this.voices = Math.max(0, this.voices - 1);
+      },
+    });
+    if (started) this.voices++;
   }
 
   /** 14번 그네 삐걱 한 번 (앞으로·뒤로). 그네 진자 한 주기마다 씬이 부른다 */

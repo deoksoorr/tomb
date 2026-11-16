@@ -136,7 +136,6 @@ export const SEA_TEX = {
   mat: (v: number) => `${P}mat${v}`,
   parasol: (v: number) => `${P}parasol${v}`,
   lounger: `${P}lounger`,
-  market: `${P}market`,
   realty: `${P}realty`,
   kiosk: `${P}kiosk`,
   lot: (n: number) => `${P}lot${n}`,
@@ -148,6 +147,7 @@ export const SEA_TEX = {
   tip: `${P}tip`,
   tetra: (v: number) => `${P}tetra${v}`,
   lighthouse: `${P}lighthouse`,
+  keeper: `${P}keeper`,
   boat: `${P}boat`,
   buoy: `${P}buoy`,
   rock: (i: number) => `${P}rock${i}`,
@@ -212,14 +212,6 @@ type Pal3 = { hi: Color; mid: Color; lo: Color };
 type Pal4 = Pal3 & { deep: Color };
 
 /** 소금기에 바랜 흰 칠 나무 */
-/** 11/16 현판 그림 (글씨는 판 위에 뜨는 이름표가 맡아요 — 판에는 작은 그림만): 물고기 */
-function fishIcon(g: Grid, x: number, y: number, c: Color): void {
-  g.ellipse(x + 4, y + 2.5, 4, 2.2, c);
-  g.set(x + 9, y + 1, c);
-  g.set(x + 9, y + 4, c);
-  g.rect(x + 8, y + 2, 2, 2, c);
-  g.set(x + 2, y + 2, 0xfffaf0);
-}
 /** 작은 집 (지붕 세모 + 몸) */
 function houseIcon(g: Grid, x: number, y: number, roof: Color, wall: Color): void {
   for (let k = 0; k < 4; k++) g.hline(x + 3 - k, x + 4 + k, y + k, roof);
@@ -577,96 +569,28 @@ export function loungerArt(): Grid {
   return g;
 }
 
-// ── 포구 시장 ── 긴 단층 건물, 차양 셋 아래 좌판 (생선·조개·미역). 받침 = 좌판 앞 (SEA_MARKET.y)
-export const MARKET_ART_W = 280;
-export const MARKET_ART_H = 124;
-/** 지붕 앞 현판 가운데 (그림 원점 기준 — 글씨는 SeaMap) */
-export const MARKET_SIGN = { dx: 0, dy: -88 } as const;
-const AWNINGS: readonly [Color, Color][] = [
-  [RAMP.umbC[1], RAMP.wall[0]],
-  [RAMP.towel[1], RAMP.wall[0]],
-  [RAMP.umbY[1], RAMP.wall[0]],
-];
-export function marketArt(): Grid {
-  const W = MARKET_ART_W;
-  const H = MARKET_ART_H;
-  const g = new Grid(W, H);
-  const base = H - 3;
-  const wallBot = base - 12;
-  const wallTop = 44;
-  // 벽 (흰 칠 판자, 아래는 바랜 하늘빛 판)
-  for (let y = wallTop; y <= wallBot; y++)
-    for (let x = 6; x < W - 6; x++) {
-      const lower = y > wallBot - 12;
-      const seam = (x - 6) % 8 === 0;
-      g.set(x, y, lower ? (seam ? ROOF_BLUE.lo : ROOF_BLUE.mid) : seam ? PAINT.lo : hashU(x, y, 41) < 0.05 ? PAINT.lo : PAINT.mid);
-    }
-  // 지붕 (하늘빛 슬레이트, 처마가 벽 밖으로)
-  const roofTop = 10;
-  for (let y = roofTop; y < wallTop + 4; y++) {
-    const k = (y - roofTop) / (wallTop + 4 - roofTop);
-    const inset = Math.round((1 - k) * 14);
-    for (let x = inset; x < W - inset; x++) {
-      const row = Math.floor((y - roofTop) / 4);
-      const c = (y - roofTop) % 4 === 3 ? ROOF_LILAC.deep : (x + row * 5) % 11 === 0 ? ROOF_LILAC.lo : row % 2 ? ROOF_LILAC.mid : lighten(ROOF_LILAC.mid, 0.08);
-      g.set(x, y, c);
-    }
-  }
-  g.hline(14, W - 15, roofTop, ROOF_LILAC.hi);
-  g.hline(0, W - 1, wallTop + 3, ROOF_LILAC.deep);
-  // 지붕 앞 현판 (11/16 글씨는 위에 뜨는 이름표 — 판에는 물고기·조개 그림)
-  const sx = W / 2 - 34;
-  g.rect(sx, 26, 68, 13, 0xfff8ee);
-  for (let k = 0; k < 4; k++) fishIcon(g, sx + 6 + k * 15, 30, [0x7ec8d8, 0xf8a8a0, 0x9edcd0, 0xf8c88c][k]);
-  frame(g, sx - 1, 25, 70, 15, DRIFTWOOD.line);
-  g.rect(sx - 1, 39, 2, 6, DRIFTWOOD.lo);
-  g.rect(sx + 67, 39, 2, 6, DRIFTWOOD.lo);
-  // 창 (양 끝)
-  for (const wx of [14, W - 36]) {
-    g.rect(wx, wallTop + 10, 22, 14, RAMP.glass[1]);
-    g.hline(wx, wx + 21, wallTop + 17, PAINT.line);
-    g.vline(wx + 11, wallTop + 10, wallTop + 23, PAINT.line);
-    frame(g, wx - 1, wallTop + 9, 24, 16, PAINT.line);
-  }
-  // 좌판 셋: 차양 + 어두운 안쪽 + 앞 진열대 (생선·조개·미역)
-  const stallW = 70;
-  for (let i = 0; i < 3; i++) {
-    const cx = W / 2 + (i - 1) * 88;
-    const x0 = cx - stallW / 2;
-    g.rect(x0 + 4, wallTop + 14, stallW - 8, wallBot - wallTop - 14, RAMP.wood[3]);
-    // 안쪽 선반 물건
-    for (let k = 0; k < 8; k++) g.rect(x0 + 8 + k * 7, wallTop + 18, 5, 4, [0xc8b090, 0x9ac0d0, 0xe0a060, 0x8a9a6a][(k + i) % 4]);
-    // 차양 (줄무늬, 끝은 물결)
-    const [a, b] = AWNINGS[i];
-    const ay = wallTop + 4;
-    for (let y = ay; y < ay + 11; y++)
-      for (let x = x0 - 2; x < x0 + stallW + 2; x++) {
-        const stripe = Math.floor((x - x0 + 2) / 6) % 2 === 0;
-        const shade = y > ay + 7;
-        g.set(x, y, stripe ? (shade ? darken(a, 0.18) : a) : shade ? darken(b, 0.12) : b);
-      }
-    for (let x = x0 - 2; x < x0 + stallW + 2; x++) if (Math.floor((x - x0 + 2) / 3) % 2 === 0) g.set(x, ay + 11, Math.floor((x - x0 + 2) / 6) % 2 === 0 ? darken(a, 0.18) : darken(b, 0.12));
-    // 진열대 (나무 상자 + 얼음 + 물건)
-    const ty = wallBot + 1;
-    g.rect(x0, ty, stallW, 10, DECK.mid);
-    g.hline(x0, x0 + stallW - 1, ty, DECK.hi);
-    g.hline(x0, x0 + stallW - 1, ty + 9, DECK.line);
-    for (let k = 0; k < 4; k++) g.vline(x0 + 17 * k + 1, ty + 1, ty + 9, DECK.lo);
-    const goods = i === 0 ? "fish" : i === 1 ? "shell" : "weed";
-    for (let k = 0; k < 4; k++) {
-      const bx = x0 + 3 + k * 17;
-      g.rect(bx, ty - 3, 14, 4, 0xe8f4f8); // 얼음
-      if (goods === "fish")
-        for (let f = 0; f < 3; f++) {
-          g.hline(bx + 1 + f * 4, bx + 3 + f * 4, ty - 4 + (f % 2), 0x9ab4c4);
-          g.set(bx + 1 + f * 4, ty - 5 + (f % 2), 0x5a7486);
-        }
-      else if (goods === "shell") for (let f = 0; f < 4; f++) g.ellipse(bx + 2 + f * 3.3, ty - 3, 1.6, 1.3, [0xd88a5a, 0x8a6a5a, 0xf0d8c0][(f + k) % 3]);
-      else for (let f = 0; f < 5; f++) g.vline(bx + 2 + f * 2.5, ty - 5, ty - 2, f % 2 ? 0x3a5a3a : 0x5a6a34);
-    }
-  }
+/** 11/16 등대지기: 남색 선원 모자·노란 비옷의 작은 할아버지 (16 × 24, 원점 가운데 아래) */
+export function keeperArt(): Grid {
+  const g = new Grid(16, 24);
+  // 비옷
+  g.rect(3, 11, 10, 11, RAMP.umbY[1]);
+  g.vline(3, 12, 21, RAMP.umbY[0]);
+  g.vline(12, 12, 21, RAMP.umbY[2]);
+  g.hline(5, 10, 15, RAMP.umbY[2]);
+  // 얼굴·흰 수염
+  g.rect(4, 5, 8, 6, 0xf4d8bc);
+  g.rect(4, 9, 8, 3, RAMP.wall[0]);
+  g.set(6, 7, 0x3a3440);
+  g.set(9, 7, 0x3a3440);
+  // 선원 모자
+  g.rect(3, 2, 10, 3, 0x2f3f6a);
+  g.hline(2, 13, 5, 0x24304f);
+  g.set(8, 3, RAMP.umbY[0]);
+  // 장화
+  g.rect(4, 22, 3, 2, 0x3a3440);
+  g.rect(9, 22, 3, 2, 0x3a3440);
   softOutline(g);
-  shadow(g, W / 2, base + 1, W / 2 - 6, 2, 56);
+  shadow(g, 8, 23, 6, 1.2, 50);
   return g;
 }
 
@@ -1687,7 +1611,7 @@ function groundColor(x: number, y: number, k: SeaGround): Color {
     case "grass":
     default: {
       // 풀밭: 남쪽(산책로 쪽)은 모래가 섞여요
-      const sandy = Math.max(0, (y - 330) / 60);
+      const sandy = Math.max(0, (y - (SEA_BOARDWALK.y - 58)) / 60); // 11/16 r11 산책로에서 재요
       if (sandy > 0 && fbm(x * 0.03, y * 0.03) < sandy * 0.6) return pick(RAMP.sand, 0.4, x, y);
       return pick(RAMP.grass, 0.15 + fbm(x * 0.015, y * 0.0225) * 0.75 + (y > SEA_BOARDWALK.y - 6 ? 0.2 : 0), x, y);
     }
