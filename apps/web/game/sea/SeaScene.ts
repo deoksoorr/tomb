@@ -242,7 +242,7 @@ export class SeaScene extends Phaser.Scene {
       act: (kind) => this.doAct(kind),
     });
     this.riding = new Riding({ player: () => this.player, net: () => h.net, remotes: () => this.remotes, toast: (m) => this.toast(m) });
-    this.forage = new SeaForage({ scene: this, atlas: h.atlas, reduced: h.reduced, colliders: this.map.colliders, player: () => this.player, net: () => h.net, seats: () => this.seats, remotes: () => this.remotes, toast: (m) => this.toast(m) });
+    this.forage = new SeaForage({ scene: this, atlas: h.atlas, reduced: h.reduced, colliders: this.map.colliders, player: () => this.player, net: () => h.net, seats: () => this.seats, remotes: () => this.remotes, toast: (m) => this.toast(m), tide: () => this.tide });
     yield;
 
     this.applyArrivalPose();
@@ -989,7 +989,8 @@ export class SeaScene extends Phaser.Scene {
     let other = obj && objOd <= objSd ? { x: obj.x, y: obj.y + 2, text: `${this.seatHint.prefix}${obj.label}` } : null;
     // 11/16 갯바위 낚시 자리 안내 ("E 낚시하기")
     const fo = !pl.sitting && !this.locked ? this.forage.nearest(pl.x, pl.y) : null;
-    if (fo && Math.hypot(fo.x - pl.x, fo.y - pl.y) <= Math.min(objSd, objOd)) other = { x: fo.x, y: fo.y + 2, text: `${this.seatHint.prefix}${fo.label}` };
+    if (fo && Math.hypot(fo.x - pl.x, fo.y - pl.y) <= Math.min(objSd, objOd))
+      other = { x: fo.x, y: fo.y + 2, text: this.forage.isDry(fo) ? "물이 빠져서 지금은 낚시할 수 없어요" : `${this.seatHint.prefix}${fo.label}` };
     // 11/16 물속: 잠수·떠오르기 안내 (마을과 같은 글)
     if (pl.state === "swim" || pl.state === "dive") other = { x: pl.x, y: pl.y + 2, text: `${this.seatHint.prefix}${pl.state === "swim" ? "잠수" : "떠오르기"}` };
     const bench = pl.state === "sitChair" && pl.seat && SEA_MULTI_SEAT.has(pl.seat.furnitureId);

@@ -44,6 +44,8 @@ export type AutoSession = {
   segs: [number, number][];
   /** 정산까지 마친 물고기 번호 (1부터, 한도로 못 받은 것 포함) */
   done: number;
+  /** 11/16 바닷가 갯바위: end가 물이 빠지는 때 (끝나면 ended "tide") */
+  tide?: true;
 };
 
 export function newAutoSession(seed: number, spot: string, water: "lake" | "river", ch: number | null, now: number): AutoSession {

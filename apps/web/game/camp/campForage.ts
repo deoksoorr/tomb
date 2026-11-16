@@ -43,6 +43,8 @@ export class CampFishMarkers implements ForageZone {
     private readonly scene: Phaser.Scene,
     private readonly reduced: boolean,
     spots: readonly FishingSpot[] = CAMP_FISHING_SPOTS,
+    /** 11/16 바닷가: 물이 빠져 찌 자리가 마른 자리는 꽂아 둔 낚싯대·찌를 걷어요 */
+    private readonly dry: (s: FishingSpot) => boolean = () => false,
   ) {
     ensureZoneTextures(scene);
     for (const s of spots) this.markers.push(this.make(s));
@@ -86,7 +88,7 @@ export class CampFishMarkers implements ForageZone {
     for (const m of this.markers) {
       const s = m.spot;
       const owner = seats.get(s.id);
-      const busy = mine === s.id || owner !== undefined;
+      const busy = mine === s.id || owner !== undefined || this.dry(s);
       if (busy !== m.busy) {
         m.busy = busy;
         m.rod.setVisible(!busy);

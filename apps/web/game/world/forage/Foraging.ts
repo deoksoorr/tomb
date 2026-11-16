@@ -49,6 +49,8 @@ export type ForageDeps = {
   map?: "camp" | "sea";
   /** 낚시 자리 표시 (의자·꽂아 둔 낚싯대·찌). 없으면 마을 FishZoneView */
   zone?: ForageZone;
+  /** 11/16 지금 이 자리에서 낚을 수 없는 까닭 (바닷가: 물이 빠져 찌 자리가 마름). null이면 낚을 수 있어요 */
+  blocked?: (spot: FishingSpot) => string | null;
 };
 
 /** 낚시 자리 표시 (마을 FishZoneView · 캠핑장 game/camp/campForage) */
@@ -283,6 +285,11 @@ export class Foraging {
   private sitAt(id: string): void {
     const spot = this.spotById(id);
     if (!spot) return;
+    const why = this.d.blocked?.(spot);
+    if (why) {
+      this.d.toast(why);
+      return;
+    }
     const net = this.d.net();
     const judged = net.online && this.serverKnows;
     const owner = this.d.seats().get(spot.id);
@@ -771,6 +778,14 @@ export class Foraging {
           }
         }
       } else if (pl.state !== "sitGround" || Math.hypot(pl.x - f.x, pl.y - f.y) > 6) this.dropFishing();
+      else {
+        // 11/16 바닷가: 낚는 동안 물이 빠져 찌 자리가 마르면 안내하고 일어나요
+        const why = this.d.blocked?.(f);
+        if (why) {
+          this.d.toast(why);
+          this.leave();
+        }
+      }
     }
     if (this.rodPhase === "reel" && now >= this.reelTickAt) {
       this.reelTickAt = now + 110 - this.tension * 40;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAMP_SEATS, MAP_TAG, SEATS, SEA_ARRIVE, SEA_BOARD, SEA_SEATS, inMapBounds, isAwayMap, mapAllowed, mapOf, mapSpawn, seaColliders, seatSlotIn, SEA_HEIGHT, SEA_WIDTH, SEA_LOTS, SEA_SPOTS, SPAWN, seaWet, tideLineY, SEA_GHOST_BERTH, SEA_PIER_END, SEA_FISHING_SPOTS, FISHING_SPOTS, CAMP_FISHING_SPOTS, anyFishingWaterOf, SEA_BUOYS, SEA_ROCKS, onSeaRoad, SEA_ROAD, SEA_BUS_STOP, TIDE_HIGH_Y, TIDE_LOW_Y, SEA_DEEP_Y } from "./index";
+import { CAMP_SEATS, MAP_TAG, SEATS, SEA_ARRIVE, SEA_BOARD, SEA_SEATS, inMapBounds, isAwayMap, mapAllowed, mapOf, mapSpawn, seaColliders, seatSlotIn, SEA_HEIGHT, SEA_WIDTH, SEA_LOTS, SEA_SPOTS, SPAWN, seaWet, tideLineY, SEA_GHOST_BERTH, SEA_PIER_END, SEA_FISHING_SPOTS, seaFishingSpotById, seaFishMinLevel, seaFishWet, seaFishWetAt, seaFishDryAt, tideMinute, FISHING_SPOTS, CAMP_FISHING_SPOTS, anyFishingWaterOf, SEA_BUOYS, SEA_ROCKS, onSeaRoad, SEA_ROAD, SEA_BUS_STOP, TIDE_HIGH_Y, TIDE_LOW_Y, SEA_DEEP_Y } from "./index";
 
 // 11/16 달물결 포구: 세 번째 맵 (protocol sea.ts). 맵 id·허락·좌석·충돌 기본 규칙
 
@@ -65,6 +65,34 @@ describe("sea map (protocol)", () => {
       expect(seaWet(f.x, f.y, 1)).toBe(false);
     }
     expect(SEA_FISHING_SPOTS.length).toBeGreaterThanOrEqual(6);
+  });
+  it("11/16 갯바위 낚시 물때: 만조엔 물속, 썰물 중 정해진 분에 마르고, 밀물에 다시 물속. 선착장 끝은 늘 물속", () => {
+    // 한국 자정 = 물때 0분 (만조)
+    const base = Date.UTC(2026, 10, 15, 15, 0, 0);
+    const at = (min: number) => base + min * 60_000;
+    expect(tideMinute(at(0))).toBeCloseTo(0);
+    const rock = seaFishingSpotById("f_1092_614")!;
+    expect(rock).toBeDefined();
+    // 찌 자리 y 638, 여유 6 → 물 높이 0.775 이상이어야 물속 → 썰물 28.3분째에 말라요
+    expect(seaFishMinLevel(rock)).toBeCloseTo(0.775, 3);
+    expect(seaFishWet(rock, at(0))).toBe(true);
+    expect(seaFishWet(rock, at(28))).toBe(true);
+    expect(seaFishWet(rock, at(29))).toBe(false);
+    expect(seaFishWet(rock, at(90))).toBe(false);
+    expect(seaFishWet(rock, at(151))).toBe(false);
+    expect(seaFishWet(rock, at(152))).toBe(true);
+    expect((seaFishDryAt(rock, at(20)) - at(0)) / 60_000).toBeCloseTo(28.32, 1);
+    expect(seaFishDryAt(rock, at(60))).toBe(at(60));
+    // 밀물로 다시 물속이 된 뒤에는 다음 썰물에 말라요 (한 바퀴 180분 + 28.3분)
+    expect((seaFishDryAt(rock, at(170)) - at(0)) / 60_000).toBeCloseTo(208.32, 1);
+    // 갯바위 자리는 모두 만조엔 물속, 간조엔 말라요
+    for (const f of SEA_FISHING_SPOTS) {
+      expect(seaFishWetAt(f, 1), f.id).toBe(true);
+      const pier = f.y > SEA_PIER_END.y;
+      expect(seaFishWetAt(f, 0), f.id).toBe(pier);
+      if (pier) for (let m = 0; m < 180; m += 7) expect(seaFishWet(f, at(m))).toBe(true);
+      if (pier) expect(seaFishDryAt(f, at(50))).toBe(Infinity);
+    }
   });
   it("11/16 버스 길은 오른쪽 끝에서 정류장을 지난 돌림 마당까지만", () => {
     expect(onSeaRoad(SEA_WIDTH - 2, SEA_ROAD.y + 20)).toBe(true);

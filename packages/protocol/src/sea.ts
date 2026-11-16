@@ -363,9 +363,9 @@ export const SEA_SPOTS = {
  * 바닷물고기 도감이 아직 없어서 물 종류는 호수(lake) 물고기로 둬요 (다음 차수에 바다 물고기를 더하면 "sea"로).
  * id = "f_x_y" (마을·캠핑장 낚시 자리 id와 겹치지 않아요 — sea.test가 봐요). 앉아 있는 동안은 물이 차도 그대로 앉아 있어요
  */
-const rockSpot = (i: number): FishingSpot => {
+const rockSpot = (i: number, dx = 0): FishingSpot => {
   const r = SEA_ROCKS[i];
-  const x = Math.round(r.x);
+  const x = Math.round(r.x + dx);
   // 바위 그림 밑동 바로 앞 (사람이 바위 앞에 그려지고, 일어서도 바위에 걸리지 않게)
   const y = Math.round(r.y + r.ry * 0.7 + 4);
   return { id: `f_${x}_${y}`, water: "lake", x, y, facing: DIR.down };
@@ -376,7 +376,7 @@ export const SEA_FISHING_SPOTS: readonly FishingSpot[] = [
   rockSpot(1),
   rockSpot(3),
   // 방파제 쪽 바위 곶
-  rockSpot(8),
+  rockSpot(8, -8), // 찌가 아래 바위(9번)에 가리지 않게 조금 왼쪽
   rockSpot(11),
   // 물가 사이 바위
   rockSpot(15),
@@ -388,6 +388,47 @@ export const SEA_FISHING_SPOTS: readonly FishingSpot[] = [
 export const SEA_FISHING_LEDGES: readonly Rect[] = SEA_FISHING_SPOTS.filter((f) => !onSeaDeckBase(f.x, f.y)).map((f) => ({ x: f.x - 15, y: f.y - 6, w: 30, h: 14 }));
 export function seaFishingSpotById(id: string): FishingSpot | undefined {
   return SEA_FISHING_SPOTS.find((s) => s.id === id);
+}
+
+// ── 11/16 갯바위 낚시 물때 규칙 ── 찌가 떨어지는 곳(자리 앞 SEA_FISH_CAST px)이 물속이어야 낚을 수 있어요.
+// 물가 선은 물때 평균 선(tideLineY — 파도로 오르내리는 꾸밈은 빼요)에 여유(SEA_FISH_WET_MARGIN)를 둬요.
+// 클라이언트(자리 안내·낚시 중 끝내기)와 웹 서버(던지기·자동 낚시 켜기)가 같은 계산을 써요. 선착장 끝은 늘 깊은 물이에요
+/** 찌가 떨어지는 거리 (game/world/forage/Foraging CAST_DIST와 같아요) */
+export const SEA_FISH_CAST = 24;
+/** 찌 자리가 물가 선보다 이만큼은 더 바다 쪽이어야 해요 (px) */
+export const SEA_FISH_WET_MARGIN = 6;
+export const SEA_TIDE_OUT_MSG = "물이 빠져서 지금은 낚시할 수 없어요. 물이 들어오면 다시 와요.";
+const FISH_STEP: Record<number, [number, number]> = { [DIR.down]: [0, 1], [DIR.up]: [0, -1], [DIR.left]: [-1, 0], [DIR.right]: [1, 0] };
+/** 찌가 떨어지는 곳 */
+export function seaFishBobber(spot: FishingSpot): Pt {
+  const [dx, dy] = FISH_STEP[spot.facing] ?? [0, 1];
+  return { x: spot.x + dx * SEA_FISH_CAST, y: spot.y + dy * SEA_FISH_CAST };
+}
+/** 이 물 높이(0..1)보다 높아야 찌 자리가 물속이에요 (0 이하면 늘 물속, 1 넘으면 늘 마름) */
+export function seaFishMinLevel(spot: FishingSpot): number {
+  const wetLine = seaFishBobber(spot).y - SEA_FISH_WET_MARGIN;
+  return (TIDE_LOW_Y - wetLine) / (TIDE_LOW_Y - TIDE_HIGH_Y);
+}
+/** 물 높이 level에서 찌 자리가 물속인지 (클라이언트는 화면 물때 level로) */
+export function seaFishWetAt(spot: FishingSpot, level: number): boolean {
+  return level >= seaFishMinLevel(spot);
+}
+/** 지금(nowMs) 찌 자리가 물속인지 (서버·클라이언트 공통) */
+export function seaFishWet(spot: FishingSpot, nowMs: number): boolean {
+  return seaFishWetAt(spot, tideLevel(nowMs));
+}
+/**
+ * 지금 물속이면 물이 빠져 찌 자리가 마르는 시각 (epoch ms), 늘 물속이면 Infinity, 지금 말라 있으면 nowMs.
+ * level = 0.5 + 0.5·cos(2πt/주기) ≥ L  ⇔  t ≤ T0 또는 t ≥ 주기 − T0  (T0 = 주기/2π · acos(2L − 1))
+ */
+export function seaFishDryAt(spot: FishingSpot, nowMs: number): number {
+  const L = seaFishMinLevel(spot);
+  if (L <= 0) return Infinity;
+  if (!seaFishWet(spot, nowMs)) return nowMs;
+  const T0 = (TIDE_PERIOD_MIN / (2 * Math.PI)) * Math.acos(Math.max(-1, Math.min(1, 2 * L - 1)));
+  const t = tideMinute(nowMs);
+  const ahead = t <= T0 ? T0 - t : TIDE_PERIOD_MIN - t + T0;
+  return nowMs + ahead * 60_000;
 }
 /** 갯벌 구멍 (다음 차수 캐기 자리 — 물이 빠지면 드러나요) */
 export const SEA_DIG_HOLES: readonly Pt[] = [

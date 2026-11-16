@@ -79,8 +79,8 @@ export type AutoFishResponse = {
   dropped: number;
   /** 이번에 건진 물에 빠진 꾸미기 (items와 따로, 한도에는 같이 센다) */
   gear: SunkenCatch[];
-  /** 세션이 끝난 까닭 (끄기·시간 다 됨). 켜져 있으면 없음 */
-  ended?: "stop" | "time";
+  /** 세션이 끝난 까닭 (끄기·시간 다 됨·11/16 물이 빠짐). 켜져 있으면 없음 */
+  ended?: "stop" | "time" | "tide";
   /** 이번 정산으로 도감에 처음 등록한 보상 */
   dex?: DexGain;
   state: ForageState;

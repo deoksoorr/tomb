@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { SEA_TIDE_OUT_MSG } from "@tomb/protocol";
 import { bridge, type ForageRodPhase } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import { onBackgroundChange } from "@/lib/background";
@@ -188,6 +189,7 @@ export default function FishingPanel({
       rod("idle");
       go("ready");
       if (r.ended === "time") setMsg({ text: "자동 낚시 시간이 다 됐어요 (한 번에 최대 6시간)" });
+      else if (r.ended === "tide") setMsg({ text: SEA_TIDE_OUT_MSG });
       else setMsg({ text: "자동 낚시를 껐어요. 찌를 던져 보세요" });
     }
   }

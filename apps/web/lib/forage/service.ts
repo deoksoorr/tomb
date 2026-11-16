@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { anyFishingWaterOf } from "@tomb/protocol";
+import { anyFishingWaterOf, seaFishDryAt, seaFishingSpotById, seaFishWet, SEA_TIDE_OUT_MSG } from "@tomb/protocol";
 import { BALANCE_CAP, earnRule, type EarnSource } from "../economy";
 import { env } from "../env";
 import { peerOf } from "../ban";
@@ -154,6 +154,12 @@ async function claimOrThrow(store: ForageStore, acct: string, nonce: string): Pr
 
 // ── 낚시 ──
 
+/** 11/16 바닷가 갯바위 자리: 찌 자리(자리 앞)가 지금 물때에 물속이 아니면 못 던져요 (protocol seaFishWet — 클라이언트와 같은 계산) */
+function tideGate(spotId: string, now: number): void {
+  const sea = seaFishingSpotById(spotId);
+  if (sea && !seaFishWet(sea, now)) throw new HttpError(409, "TIDE_OUT", SEA_TIDE_OUT_MSG);
+}
+
 /** g = 물에 빠진 꾸미기를 고를 난수 (아주 드물게, 던질 때 서버가 정한다), alt = 꾸미기를 다 가졌을 때 대신 줄 물고기 */
 type FishPayload = { k: "fish"; sp: string; sz: number; g?: number; alt?: string };
 
@@ -162,6 +168,7 @@ export async function castLine(acct: string, spotId: string, now = Date.now(), i
   // 정해진 낚시 자리 또는 배 위 가상 자리(boat:river·boat:lake) — 물 종류로 물고기를 고른다
   const water = anyFishingWaterOf(spotId);
   if (!water) throw new HttpError(400, "INVALID_INPUT", "여기서는 낚시를 할 수 없어요.");
+  tideGate(spotId, now);
   // 직접 던지면 자동 낚시는 끝난다 (둘을 한꺼번에 할 수 없다). 그때까지 낚은 것은 정산해 넣는다 (처음 등록 보상도 조용히 지급)
   if (await store.autoGet(acct)) await dexGainOf(store, acct, (await settleAuto(store, acct, now, true)).items, ip, now);
   // 오늘 잡은 수만 본다 (가방·도감까지 읽는 snapshot은 명령 6개 → 2개)
@@ -233,11 +240,19 @@ export async function startAutoFish(acct: string, spotId: string, ch: number | n
   const store = getForageStore();
   const water = anyFishingWaterOf(spotId);
   if (!water) throw new HttpError(400, "INVALID_INPUT", "여기서는 낚시를 할 수 없어요.");
+  tideGate(spotId, now);
   const prev = await settleAuto(store, acct, now, true);
   const day = (await store.today(acct, kstDay(now), nodeWindow(now))).day;
   if (day.fish >= DAILY_CATCH_MAX.fish) throw new HttpError(429, "DAILY_LIMIT", "오늘은 물고기를 충분히 잡았어요. 내일 또 와요.");
   if (day.auto >= AUTO_FISH_DAILY_MAX) throw new HttpError(429, "AUTO_LIMIT", `자동 낚시는 하루 ${AUTO_FISH_DAILY_MAX}마리까지예요. 직접 낚거나 내일 또 와요.`);
   const session = newAutoSession(newSeed(), spotId, water, ch, now);
+  // 11/16 갯바위 자리는 물이 빠져 찌 자리가 마르는 때에 자동 낚시도 끝나요
+  const sea = seaFishingSpotById(spotId);
+  const dryAt = sea ? seaFishDryAt(sea, now) : Infinity;
+  if (dryAt < session.end) {
+    session.end = dryAt;
+    session.tide = true;
+  }
   // 그 사이 다른 탭이 먼저 켰으면 그쪽을 정산하고 다시
   for (let i = 0; i < 3 && !(await store.autoSwap(acct, null, JSON.stringify(session))); i++) {
     const more = await settleAuto(store, acct, now, true);

@@ -28,7 +28,7 @@ export type AutoSettled = {
   items: CatchResult[];
   dropped: number;
   gear: SunkenCatch[];
-  ended?: "stop" | "time";
+  ended?: "stop" | "time" | "tide";
 };
 
 /** 정산: 지금까지 낚은 번호 중 아직 안 받은 것을 그 시각 조건으로 굴려 그날(게임 날짜, 새벽 5시 경계) 한도 안에서 넣는다. stop이면 세션을 끝낸다 */
@@ -49,7 +49,7 @@ export async function settleAuto(store: ForageStore, acct: string, now: number, 
     const next: AutoSession = { ...beaten, done: Math.max(cur.done, total) };
     if (!(await store.autoSwap(acct, raw, finish ? null : JSON.stringify(next)))) continue;
     const { items, dropped, gear } = await grantRange(store, acct, beaten, cur.done + 1, total, now);
-    return { session: finish ? null : next, items, dropped, gear, ...(finish ? { ended: stop ? ("stop" as const) : ("time" as const) } : {}) };
+    return { session: finish ? null : next, items, dropped, gear, ...(finish ? { ended: stop ? ("stop" as const) : cur.tide ? ("tide" as const) : ("time" as const) } : {}) };
   }
   throw new Error("[forage] 자동 낚시 정산이 계속 겹쳤어요");
 }
