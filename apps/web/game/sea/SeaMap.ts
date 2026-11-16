@@ -516,12 +516,12 @@ export class SeaMap implements SeaMapApi {
       this.prop(T.lamp, b.x + 26, b.y - 2);
       this.lampGlows.push(this.cull(b.x + 26, b.y, s.add.image(b.x + 26, b.y - 34, T.lampGlow).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights + 1).setAlpha(0)));
     }
-    // 끝 걸터앉기 방석 (선착장 끝·방파제 끝 같은 색 셋 — 앉는 자리가 눈에 띄게) + 작은 이름표
+    // 끝 걸터앉기 방석 (선착장 끝·방파제 끝 같은 색 셋 — 앉는 자리가 눈에 띄게)
+    // 11/16 r19 사용자: 지도 위 「걸터앉기」 글씨는 빼요 (방석만 — 가까이 가면 E 안내가 떠요)
     for (const f of SEA_FURNITURE) {
       if (!SEA_EDGE_SEATS.includes(f.id)) continue;
       // r18 방석은 데크 가장자리 바로 안쪽 (앉은 사람은 그 위 가장자리에 걸터앉아요)
       f.seatOffsets.forEach((dx, i) => this.keep(s.add.image(f.x + dx, f.y - 1, T.cushion(i % 3)).setOrigin(0.5, 1).setDepth(SEA_DEPTH.deck + 2)));
-      this.addLabel(f.x, f.y + 14, "걸터앉기", 0xfff0c8, 1);
     }
   }
 
