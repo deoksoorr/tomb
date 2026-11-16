@@ -40,6 +40,7 @@ import {
   insectRolls,
   nodeActive,
   NODE_DENSITY,
+  NODE_WINDOW_MS,
   nodeWindow,
   pickWeighted,
   reelMinMs,
@@ -301,7 +302,7 @@ describe("굴리기", () => {
     const all = activeNodes("acct-x", now, new Set());
     expect(all.length).toBeGreaterThan(5);
     expect(activeNodes("acct-x", now, new Set([all[0].id])).map((x) => x.id)).not.toContain(all[0].id);
-    expect(nodeWindow(now + 15 * 60_000)).toBe(nodeWindow(now) + 1);
+    expect(nodeWindow(now + NODE_WINDOW_MS)).toBe(nodeWindow(now) + 1);
     expect(hash01("a")).not.toBe(hash01("b"));
   });
 

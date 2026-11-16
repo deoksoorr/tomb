@@ -27,6 +27,7 @@ import {
   HOOK_WINDOW_MS,
   insectRolls,
   nodeActive,
+  nodeSeed,
   nodeWindow,
   pickGather,
   pickWeighted,
@@ -96,7 +97,7 @@ function toState(acct: string, snap: Snapshot, now: number, boost: EarnBoost = N
     titles: titlesOf(snap.dex, snap.claims, snap.pay.marks),
     reward: rewardState(snap.claims, snap.pay),
     today: { ...snap.day, fishCap: earnRule("fish").dailyMax * capsMult(boost, "fish"), gatherCap: earnRule("gather").dailyMax * capsMult(boost, "gather"), dexCap: earnRule("dex").dailyMax * capsMult(boost, "dex"), autoCap: AUTO_FISH_DAILY_MAX },
-    nodes: { ids: activeNodes(acct, now, new Set(snap.taken)).map((n) => n.id), refreshAt: windowEndsAt(w) },
+    nodes: { ids: activeNodes(acct, now, new Set(snap.taken)).map((n) => n.id), refreshAt: windowEndsAt(w), seed: nodeSeed(acct) },
   };
 }
 

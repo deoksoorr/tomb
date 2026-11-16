@@ -3,6 +3,8 @@ import { SEA_DIG_HOLES } from "@tomb/protocol";
 import { CONSTELLATIONS } from "../rpg/constellations";
 // 11/16 도감 몬스터 칸 (사는 곳·희귀도 — lib/forage/mobDex)
 import { isMobId, MOB_DEX_IDS, mobRarity } from "./mobDex";
+// 11/16 바닷가 뭍 채집 지점 (풀밭 곤충·정원 약초·백사장 모래·갯바위 광석·갯벌 구멍 더)
+import { SEA_LAND_NODES } from "./seaNodes";
 
 // 낚시·채집·도감 (NEXT.md 4·32·51) 카탈로그 — 서버(lib/forage/service)와 UI·게임이 같은 표를 쓴다 (순수 데이터).
 // 값(가격·확률)은 서버만 믿는다. 잡는 순간 무엇이 걸렸는지는 서버가 굴려 저장해 두고, 끝낼 때 확인한다.
@@ -283,7 +285,7 @@ const campNode = (kind: NodeKind, where: Where, x: number, y: number): GatherNod
  * game/camp/campLayout.test가 서 있을 수 있는 곳·물 밖·자리와 떨어짐을 본다 (나무는 이 자리를 비켜 선다)
  */
 export const CAMP_GATHER_NODES: readonly GatherNode[] = [
-  // 곤충 수풀 (7): 산책로 숲·위쪽 숲·캠핑카 뒤 숲, 데크 고리 안 풀밭
+  // 곤충 수풀 (7 + 11/16 4): 산책로 숲·위쪽 숲·캠핑카 뒤 숲, 데크 고리 안 풀밭
   campNode("bug", "forest", 1196, 440),
   campNode("bug", "forest", 1122, 340),
   campNode("bug", "forest", 860, 170),
@@ -291,7 +293,12 @@ export const CAMP_GATHER_NODES: readonly GatherNode[] = [
   campNode("bug", "forest", 250, 300),
   campNode("bug", "meadow", 470, 330),
   campNode("bug", "meadow", 770, 470),
-  // 약초 (7): 산책로·계곡 숲, 위쪽 숲, 타프 옆 숲, 산꼭대기 아래, 데크 고리 안 풀밭
+  // 11/16 더 (덜 쓰던 곳): 서쪽 데크 뒤 숲 · 아래 숲 · 데크 고리 안 풀밭 · 계곡 동쪽 숲
+  campNode("bug", "forest", 162, 452),
+  campNode("bug", "forest", 702, 644),
+  campNode("bug", "meadow", 618, 412),
+  campNode("bug", "forest", 1102, 552),
+  // 약초 (7 + 11/16 3): 산책로·계곡 숲, 위쪽 숲, 타프 옆 숲, 산꼭대기 아래, 데크 고리 안 풀밭
   campNode("herb", "forest", 1210, 360),
   campNode("herb", "forest", 1110, 450),
   campNode("herb", "forest", 900, 130),
@@ -299,17 +306,28 @@ export const CAMP_GATHER_NODES: readonly GatherNode[] = [
   campNode("herb", "forest", 880, 600),
   campNode("herb", "hill", 1216, 260),
   campNode("herb", "meadow", 720, 300),
-  // 광석 (5): 산꼭대기 바위·큰 바위 둘레
+  // 11/16 더: 서북쪽 숲 · 아래 숲 · 위쪽 숲
+  campNode("herb", "forest", 200, 194),
+  campNode("herb", "forest", 582, 560),
+  campNode("herb", "forest", 752, 194),
+  // 광석 (5 + 11/16 3): 산꼭대기 바위·큰 바위 둘레
   campNode("ore", "hill", 1248, 214),
   campNode("ore", "hill", 1072, 190),
   campNode("ore", "hill", 1100, 62),
   campNode("ore", "hill", 980, 334),
   campNode("ore", "hill", 1120, 656),
-  // 발굴 (4): 낙엽 숲 (위쪽 숲·산책로 옆·타프 아래 숲)
+  // 11/16 더: 산꼭대기 둘 · 계곡 아래 바위
+  campNode("ore", "hill", 1180, 130),
+  campNode("ore", "hill", 1132, 250),
+  campNode("ore", "hill", 970, 680),
+  // 발굴 (4 + 11/16 2): 낙엽 숲 (위쪽 숲·산책로 옆·타프 아래 숲)
   campNode("dig", "forest", 640, 150),
   campNode("dig", "forest", 300, 140),
   campNode("dig", "forest", 1190, 600),
   campNode("dig", "forest", 880, 770),
+  // 11/16 더: 아래 숲 · 서쪽 숲
+  campNode("dig", "forest", 540, 728),
+  campNode("dig", "forest", 300, 560),
 ];
 
 /**
@@ -319,7 +337,7 @@ export const SEA_GATHER_NODES: readonly GatherNode[] = SEA_DIG_HOLES.map((h) => 
 
 /** lib/forage/forage.test.ts가 서 있을 수 있는 자리·물 밖·소품/좌석과 떨어짐을 검사한다 */
 export const GATHER_NODES: readonly GatherNode[] = [
-  // 약초 (14)
+  // 약초 (14 + 11/16 6)
   node("herb", "forest", 396, 794), // 11/15 오리 연못이 넓어져 둑 위로 옮김 (아래 숲 지점들도). 11/16 연못·범퍼카장이 또 넓어져 물·마당에 든 지점을 둑으로
   node("herb", "forest", 596, 966),
   node("herb", "forest", 498, 796),
@@ -334,7 +352,14 @@ export const GATHER_NODES: readonly GatherNode[] = [
   node("herb", "hill", 160, 96),
   node("herb", "hill", 300, 200),
   node("herb", "lakeside", 1150, 1000),
-  // 광석 (8)
+  // 11/16 더 (6): 언덕 · 강가 서쪽 · 오리 연못 둘레 둘 · 호박밭 · 호수 북쪽 물가
+  node("herb", "hill", 214, 174),
+  node("herb", "forest", 160, 656),
+  node("herb", "forest", 600, 824),
+  node("herb", "forest", 348, 782),
+  node("herb", "meadow", 1037, 874),
+  node("herb", "lakeside", 1200, 806),
+  // 광석 (8 + 11/16 4)
   node("ore", "hill", 48, 200),
   node("ore", "hill", 144, 160),
   node("ore", "hill", 330, 160),
@@ -343,7 +368,12 @@ export const GATHER_NODES: readonly GatherNode[] = [
   node("ore", "cave", 840, 150),
   node("ore", "cave", 880, 92),
   node("ore", "cave", 950, 90),
-  // 발굴 (8)
+  // 11/16 더 (4): 언덕 둘 · 동굴 앞 둘
+  node("ore", "hill", 220, 60),
+  node("ore", "hill", 40, 132),
+  node("ore", "cave", 914, 150),
+  node("ore", "cave", 812, 78),
+  // 발굴 (8 + 11/16 4)
   node("dig", "meadow", 1000, 872),
   node("dig", "meadow", 1080, 942),
   node("dig", "meadow", 1060, 1004), // 11/16 호박밭 나무 자리가 바뀌어 조금 동쪽으로
@@ -352,7 +382,12 @@ export const GATHER_NODES: readonly GatherNode[] = [
   node("dig", "forest", 316, 946),
   node("dig", "hill", 250, 120),
   node("dig", "lakeside", 1390, 1000),
-  // 곤충 수풀 (9)
+  // 11/16 더 (4): 언덕 아래 · 오리 연못 서쪽 · 호박밭 · 호수 북쪽 물가
+  node("dig", "hill", 190, 234),
+  node("dig", "forest", 348, 872),
+  node("dig", "meadow", 911, 970),
+  node("dig", "lakeside", 1284, 800),
+  // 곤충 수풀 (9 + 11/16 6)
   node("bug", "forest", 450, 780),
   node("bug", "forest", 546, 794),
   node("bug", "forest", 322, 920),
@@ -362,10 +397,19 @@ export const GATHER_NODES: readonly GatherNode[] = [
   node("bug", "meadow", 960, 962),
   node("bug", "lakeside", 1390, 940),
   node("bug", "lakeside", 1290, 1000),
+  // 11/16 더 (6, 덜 쓰던 곳): 언덕 · 동굴 앞 · 강가 둘(서쪽·가운데 다리 옆) · 오리 연못 아래 · 호박밭 동쪽
+  node("bug", "hill", 358, 234),
+  node("bug", "cave", 740, 110),
+  node("bug", "forest", 298, 656),
+  node("bug", "lakeside", 584, 654),
+  node("bug", "forest", 474, 998),
+  node("bug", "meadow", 1103, 898),
   // 11/15 캠핑장 (map: "camp")
   ...CAMP_GATHER_NODES,
   // 11/16 바닷가 갯벌 (map: "sea")
   ...SEA_GATHER_NODES,
+  // 11/16 바닷가 뭍 지점·갯벌 구멍 더 (lib/forage/seaNodes)
+  ...SEA_LAND_NODES,
 ];
 /** 그 맵의 채집 지점인지 (마을 지점은 map이 없다) */
 export const nodeOnMap = (n: GatherNode, map: "village" | "camp" | "sea"): boolean => (n.map ?? "village") === map;

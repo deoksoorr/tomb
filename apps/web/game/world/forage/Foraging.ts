@@ -73,7 +73,7 @@ const ROD_RETRY_MS = 1500;
 /** 배에서는 좌우로만 앉는다 → 낚싯대도 좌우로 */
 const sideOf = (dir: number): DirId => (dir === DIR.left ? DIR.left : DIR.right);
 type NodeView = { node: GatherNode; img: Phaser.GameObjects.Image; aura: NodeAura };
-/** 창(15분)이 끝나기 이만큼 전부터 지점이 깜빡인다 */
+/** 창(11/16 10분)이 끝나기 이만큼 전부터 지점이 깜빡인다 */
 const NODE_BLINK_MS = 10_000;
 /** "뿅" 소리가 들리는 거리 (새로 핀 지점이 이 안에 있을 때만) */
 const NODE_HEAR = 260;

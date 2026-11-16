@@ -122,8 +122,11 @@ export const REEL_MAX_MS = 60_000;
 
 // ── 채집 ──
 
-/** 채집 지점이 다시 피는 단위. 같은 창(15분) 안에서는 한 번 캔 자리가 비어 있다 */
-export const NODE_WINDOW_MS = 15 * 60_000;
+/**
+ * 채집 지점이 다시 피는 단위. 같은 창 안에서는 한 번 캔 자리가 비어 있다.
+ * 11/16 사용자 "채집 지점이 너무 적고 늦게 다시 펴요" → 15분 → 10분 (지점도 맵마다 반쯤 더 — lib/forage/catalog). 하루 한도·포인트 한도는 그대로
+ */
+export const NODE_WINDOW_MS = 10 * 60_000;
 /** 창마다 지점이 피어 있을 확률 (사람마다 따로 굴린다) */
 // 11/16 갯벌 구멍(clam)은 물이 빠진 동안만 캘 수 있어서 조금 더 자주 피어요
 export const NODE_DENSITY: Record<NodeKind, number> = { herb: 0.6, ore: 0.5, dig: 0.4, bug: 0.55, clam: 0.6 };
@@ -144,17 +147,40 @@ export function hash01(s: string): number {
 }
 
 /**
+ * 11/16 사람마다 채집 지점 씨앗 (계정 id를 화면에 보내지 않으려고 해시만). 서버가 상태(nodes.seed)에 실어 보내면
+ * 화면이 다음 창에 피는 지점을 스스로 계산한다 (nodeIdsAt) → 창이 짧아져도 창마다 서버에 묻지 않는다
+ */
+export const nodeSeed = (acct: string): string => Math.floor(hash01(`node|${acct}`) * 2 ** 32).toString(36);
+
+/** 씨앗으로 이 창에 이 지점이 피어 있는지 (서버·화면 공통) */
+export function nodeActiveSeed(seed: string, n: GatherNode, w: number): boolean {
+  return hash01(`${seed}|${n.id}|${w}`) < NODE_DENSITY[n.kind];
+}
+
+/**
  * 이 사람에게 이 창에 이 지점이 피어 있는지 — 사람마다·창마다 결정적.
  * 채널 공용(먼저 캔 사람이 가져감)이 아니라 사람마다 따로 피어서 새치기·자리 다툼이 없고, 서버는 지점 상태를 들고 있지 않아도 된다
  */
 export function nodeActive(acct: string, n: GatherNode, w: number): boolean {
-  return hash01(`${acct}|${n.id}|${w}`) < NODE_DENSITY[n.kind];
+  return nodeActiveSeed(nodeSeed(acct), n, w);
 }
+
+/** 씨앗으로 창 w에 피는 지점 id 전부 (새 창이라 아직 캔 것이 없다 — 화면이 창이 바뀔 때 서버에 묻지 않고 쓴다) */
+export function nodeIdsAt(seed: string, w: number): string[] {
+  return GATHER_NODES.filter((n) => nodeActiveSeed(seed, n, w)).map((n) => n.id);
+}
+
+/**
+ * 11/16 화면은 창 NODE_SYNC_WINDOWS개마다 한 번만 서버에서 상태를 다시 받고(w % 3 === 0), 그 사이 창은 nodeIdsAt으로 스스로 바꾼다.
+ * 10분 창 × 3 = 30분마다 한 번 → 예전(15분 창마다 한 번)보다 상태 읽기가 절반 (components/forage/forageStore)
+ */
+export const NODE_SYNC_WINDOWS = 3;
 
 /** 지금 이 사람에게 피어 있는 지점 (이번 창에 이미 캔 것 제외) */
 export function activeNodes(acct: string, now: number, taken: ReadonlySet<string>): GatherNode[] {
   const w = nodeWindow(now);
-  return GATHER_NODES.filter((n) => !taken.has(n.id) && nodeActive(acct, n, w));
+  const seed = nodeSeed(acct);
+  return GATHER_NODES.filter((n) => !taken.has(n.id) && nodeActiveSeed(seed, n, w));
 }
 
 /** 게이지 시간 (ms) */

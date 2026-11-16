@@ -14,7 +14,7 @@ import { ensureZoneTextures, ZTEX } from "../world/forage/zoneArt";
 // - 계곡 물가 낚시 자리(protocol CAMP_FISHING_SPOTS, 강 물고기): 마을 낚시와 같은 1인 자리·같은 낚시 창·같은 연출.
 //   자리마다 낚시 의자 + 꽂아 둔 낚싯대 + 찌·물결 + 가까이 오면 낚싯바늘 말풍선 (마을 납품 부두 FishZoneView의 자리 표시와 같은 그림)
 // - 채집 지점(lib/forage/catalog CAMP_GATHER_NODES): 산책로 숲 곤충·약초, 산꼭대기·큰 바위 광석, 낙엽 숲 발굴.
-//   서버가 마을 지점과 함께 알려 주고(forage:nodes) Foraging이 캠핑장 것만 그린다. 하루 한도·도감·15분 창은 마을과 같이 센다.
+//   서버가 마을 지점과 함께 알려 주고(forage:nodes) Foraging이 캠핑장 것만 그린다. 하루 한도·도감·피어나는 창(11/16 10분)은 마을과 같이 센다.
 // - 팔기(어부 영감·수집가 유령)와 의뢰 게시판은 마을에만.
 
 /** 바라보는 방향 → 단위 벡터 */
