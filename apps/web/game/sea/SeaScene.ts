@@ -98,6 +98,7 @@ import type { SeaInteractable } from "./seaTypes";
 import { tideNow, tideNowLevel, tideWarnNow } from "./tideClock";
 import { SeaHousing } from "./seaHousing";
 import { publishRide, standForGate } from "@/lib/rideGate";
+import { qaUrlAllowed } from "@/lib/qaUrl";
 
 /** 11/16 선베드에 누운 사람 depth (누운 자리 y + 이만큼 — 선베드 받침 − 4보다 앞) */
 const LOUNGER_LIE_FRONT = 10;
@@ -434,7 +435,7 @@ export class SeaScene extends Phaser.Scene {
 
   private debugMark(key: string, ms: number): void {
     const w = window as unknown as { __tombBoot?: Record<string, unknown> };
-    if (!new URLSearchParams(window.location.search).has("debug")) return;
+    if (!qaUrlAllowed() || !new URLSearchParams(window.location.search).has("debug")) return;
     w.__tombBoot = { ...(w.__tombBoot ?? {}), [key]: Math.round(ms * 10) / 10 };
   }
 

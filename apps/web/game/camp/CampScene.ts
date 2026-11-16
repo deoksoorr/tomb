@@ -72,6 +72,7 @@ import { campLines, campNpcName, CAMP_WELCOME } from "./campTalk";
 import { campNeighborSeat, campPickSeat, CAMP_MULTI_SEAT } from "./campSit";
 import { publishRide, standForGate } from "@/lib/rideGate";
 import type { CampInteractable } from "./campTypes";
+import { qaUrlAllowed } from "@/lib/qaUrl";
 
 // 11/15 언젠가 캠핑장 장면. 월드(마을)와 같은 채널 연결을 빌려 쓴다 (CampTrip이 net.divert로 소식을 넘겨준다).
 // 그리는 것: 캠핑장 맵(CampMap) · 내 캐릭터 · 같은 캠핑장에 있는 사람 · 분위기(한국 시간 색조·날씨) · 어둠과 빛.
@@ -291,7 +292,7 @@ export class CampScene extends Phaser.Scene {
 
   private debugMark(key: string, ms: number): void {
     const w = window as unknown as { __tombBoot?: Record<string, unknown> };
-    if (!new URLSearchParams(window.location.search).has("debug")) return;
+    if (!qaUrlAllowed() || !new URLSearchParams(window.location.search).has("debug")) return;
     w.__tombBoot = { ...(w.__tombBoot ?? {}), [key]: Math.round(ms * 10) / 10 };
   }
 

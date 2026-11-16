@@ -1,5 +1,5 @@
 /**
- * 11/16 주소 시험 값(?time·?tod·?weather·?season·?tide·?thunder)은 테스트서버와 로컬에서만 먹는다.
+ * 11/16 주소 시험 값(?time·?tod·?weather·?season·?tide·?thunder·?debug)은 테스트서버와 로컬에서만 먹는다.
  * 실서버 빌드(VERCEL_ENV=production)는 next.config가 NEXT_PUBLIC_QA_URL="0"을 박아 두어 빈 주소로 본다.
  */
 export const qaUrlAllowed = (flag: string | undefined = process.env.NEXT_PUBLIC_QA_URL): boolean => flag !== "0";
