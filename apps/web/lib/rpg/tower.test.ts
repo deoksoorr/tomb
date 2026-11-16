@@ -4,6 +4,7 @@ import { monsterStats } from "./formulas";
 import { huntSpawnable } from "./plan";
 import { signTicket, verifyTicket } from "./ticket";
 import {
+  climbTime,
   betterRecord,
   checkTowerStart,
   cursesAt,
@@ -548,5 +549,15 @@ describe("11/15 테마 졸개 (옥상 정전기 불꽃)", () => {
     kills[minion] = (kills[minion] ?? 0) + (floors + 1) * MINION_FLOOR_ALLOW;
     const v = evalTower({ seed, level: 50, start, gp: 3 }, { game: "hunt", durationMs: 3_000_000, kills, floors, floorMs: 2_900_000, wavesCleared: 0, died: true, potionsUsed: {} } as never, 3_100_000, { lax: true });
     expect(towerClean(v), JSON.stringify(v)).toBe(true);
+  });
+});
+
+describe("11/16 오른 시간 글자", () => {
+  it("시계 모양 대신 「분 초」로", () => {
+    expect(climbTime(20 * 60_000 + 14_000)).toBe("20분 14초");
+    expect(climbTime(42_000)).toBe("42초");
+    expect(climbTime(3_785_000)).toBe("1시간 3분 5초");
+    expect(climbTime(3_600_000)).toBe("1시간 0분 0초");
+    expect(climbTime(13_400)).toBe("14초");
   });
 });

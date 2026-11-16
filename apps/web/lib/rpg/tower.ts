@@ -477,6 +477,15 @@ export const towerOfScore = (score: number) => ({
   floor: Math.floor(score / MS_SCALE),
   ms: MS_SCALE - 1 - (score % MS_SCALE),
 });
+/** 11/16 오른 시간 「20분 14초」 (한 시간 넘으면 「1시간 3분 5초」, 1분 안이면 「42초」). 시계 모양 20:14는 시각으로 읽혀서 바꿨다 */
+export function climbTime(ms: number): string {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return [h ? `${h}시간` : "", h || m ? `${m}분` : "", `${sec}초`].filter(Boolean).join(" ");
+}
+
 /** (f1, ms1)이 (f0, ms0)보다 나은 기록인가 */
 export const betterRecord = (
   f1: number,

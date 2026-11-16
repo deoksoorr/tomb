@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import {
+  climbTime,
   CURSES,
   cursesAt,
   TOWER_CHECKPOINT_EVERY,
@@ -15,7 +16,6 @@ import type { RpgView } from "@/lib/rpg/types";
 import { CHEST_COSMETIC_CHANCE, SG_PITY } from "@/lib/rpg/setGearRoll";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
-import { mmss } from "./format";
 import { PioneerLine } from "./Endgame";
 import s from "./rpg.module.css";
 
@@ -73,7 +73,7 @@ export default function TowerEntrance({
           <div className={s.liftDisplay} aria-label="이번 주 최고 층">
             <span>이번 주</span>
             <b>{t.week ? `${t.week.floor}F` : "--"}</b>
-            {t.week && <span>{mmss(t.week.ms)}</span>}
+            {t.week && <span>{climbTime(t.week.ms)}</span>}
           </div>
           <div className={s.liftDisplay} aria-label="오늘 연 우두머리 상자">
             <span>오늘 연 상자</span>

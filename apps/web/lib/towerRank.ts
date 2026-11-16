@@ -1,6 +1,6 @@
 import { findBan } from "./ban";
 import { getHuntLevelStore } from "./huntLevelRank";
-import { towerOfScore } from "./rpg/tower";
+import { climbTime, towerOfScore } from "./rpg/tower";
 import {
   getTowerStore,
   type TowerEntry,
@@ -12,15 +12,9 @@ import type { RankRow } from "./types";
 
 // 11/15 야근 빌딩 랭킹: 주간 최고 층(이번 주 월요일 새벽 5시부터) · 전체 최고 층. 층 높은 순, 같으면 그 층을 빨리 깬 순.
 // 기록은 판 끝에 기록이 오를 때만 쓴다 (lib/rpg/service finishTower → lib/rpg/towerStore). 운영자는 처음부터 안 쓰고, 정지 계정은 읽을 때 뺀다.
-// value = 층, sub = 그 판에서 그 층을 깬 시각 (판 시작부터)
+// value = 층, sub = 그 판 시작부터 그 층을 깰 때까지 걸린 시간 (11/16 「20분 14초만에 올라감」)
 
 const EXTRA = 10;
-
-/** 12:34 (판 시작부터 그 층을 깬 시각) */
-const mmss = (ms: number) => {
-  const s = Math.ceil(ms / 1000);
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-};
 
 export type TowerRankRow = RankRow & { accountId: string };
 
@@ -72,7 +66,7 @@ export async function towerRank(
       name: info.get(e.accountId)?.name ?? NO_NAME,
       value: t.floor,
       me: e.accountId === me,
-      sub: `${mmss(t.ms)}에 올라감`,
+      sub: `${climbTime(t.ms)}만에 올라감`,
     };
   };
   const rows = list.map((e, i) => row(e, i + 1));
