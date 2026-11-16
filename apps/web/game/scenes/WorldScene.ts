@@ -579,6 +579,7 @@ export class WorldScene extends Phaser.Scene {
         onMegaphone: (m) => bridge.emit("megaphone:heard", m),
         onMeStale: () => bridge.emit("me:stale"),
         onFriend: (m) => bridge.emit("friend:presence", m),
+        onSquirrels: (m) => bridge.emit("fx:squirrels", m),
         onSelfBody: (body) => {
           if (!isAvatarBody(body)) return;
           this.selfBody = body;

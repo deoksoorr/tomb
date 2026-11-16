@@ -126,6 +126,8 @@ export type NetCallbacks = {
   onMeStale?(): void;
   /** 친구가 들어왔다·나갔다 (실시간 서버가 밀어 준다) */
   onFriend?(m: { key: string; name: string; on: boolean }): void;
+  /** 11/16 이스터에그: 채널 누군가 「다람쥐를 뿌려라」 → 다람쥐가 쏟아진다 (맵 상관없이, 내 것 포함) */
+  onSquirrels?(m: { by: string; seed: number; at: number }): void;
   onMegaphone?(m: { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true; system?: true; replaces?: string; mgr?: true }): void;
   /**
    * 11/15 맵을 옮겼다 (switchMap의 답). map = 서버가 정한 지금 맵 (허락이 없으면 옮기기 전 맵 그대로),
@@ -141,7 +143,7 @@ export type NetCallbacks = {
 export type ChatMeta = { name?: string; staff?: true; mgr?: true; m?: AwayMapId };
 
 /** 맵이 바뀌어도 늘 처음 콜백(월드)이 받는 것: 계정·친구·확성기·내 몸 모양·고블린 보상 */
-const GLOBAL_CALLBACKS = ["onMegaphone", "onMeStale", "onFriend", "onSelfBody", "onGoblinGrant"] as const;
+const GLOBAL_CALLBACKS = ["onMegaphone", "onMeStale", "onFriend", "onSelfBody", "onGoblinGrant", "onSquirrels"] as const;
 /** 맵 옮기기 답을 기다리는 시간 */
 const MAP_REPLY_MS = 4000;
 /** 맵 옮기기 답이 없을 때 다시 보내는 횟수 (서버는 맵 요청을 1초에 한 번만 받는다 — MAP_REPLY_MS 간격이면 넉넉하다) */
@@ -876,6 +878,9 @@ export class RealtimeClient {
           break;
         case "friend":
           if (typeof m.key === "string" && typeof m.name === "string") this.cb.onFriend?.({ key: m.key, name: m.name, on: m.on === true });
+          break;
+        case "squirrels":
+          this.cb.onSquirrels?.({ by: typeof m.by === "string" ? m.by : "", seed: Number(m.seed) >>> 0, at: Number(m.at) || Date.now() });
           break;
         case "peers": {
           this.peers.clear();

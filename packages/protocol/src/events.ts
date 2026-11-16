@@ -179,6 +179,11 @@ export type S2C =
   | { t: "mapped"; m: MapId; peers: PeerInfo[]; seats: Record<string, Sid> }
   /** 11/15 채널 전체 인원이 바뀌었다 (들어옴·나감, 맵 상관없이 모두에게). 옛 클라이언트는 모르는 t라 버린다 */
   | { t: "count"; n: number }
+  /**
+   * 11/16 이스터에그: 누가 채팅에 「다람쥐를 뿌려라」를 쳤다 → 채널 전체(맵 상관없이, 보낸 사람 포함) 화면에 다람쥐가 쏟아진다.
+   * 채널마다 SQUIRREL_RAIN_COOLDOWN_MS에 한 번 (서버 판정). by = 친 사람 이름, seed = 연출 난수 씨앗, at = 서버 시각. 옛 클라이언트는 모르는 t라 버린다
+   */
+  | { t: "squirrels"; by: string; seed: number; at: number }
   /** 11/15 누가 바베큐를 먹고 u(epoch ms)까지 커졌다 (같은 맵, 보낸 사람 포함). 옛 클라이언트는 모르는 t라 버린다 */
   | { t: "bbq"; sid: Sid; i: BbqItemId; u: number; /** 마실 거리: 마신 뒤 취기 단계·마신 시각 */ lv?: number; at?: number };
 
