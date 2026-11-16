@@ -4,6 +4,7 @@ import { TEX } from "../assets/manifest";
 import { DEPTH, ZOOM_MIN } from "../config";
 import { LevelBlender, levelsFor, TRANSITION_MS, type Levels } from "./ambienceMix";
 import { isQuietHour, THUNDER_MIN_RAIN, thunderDelaySec, thunderFlash, thunderGapMs } from "./weatherMath";
+import { centerFade, gust, pulse, smooth01, wrapInto } from "./weatherNoise";
 import { WeatherSound } from "./WeatherSound";
 import { charTintOf } from "./charTint";
 import type { WorldTintControl } from "./worldTint";
@@ -12,6 +13,8 @@ import type { LightSpot } from "./WorldMap";
 // 분위기 레이어: [날씨 막(일반 섞기)] → KST 시간대 톤(곱하기 틴트 — 마을은 판 대신 셰이더가 그림마다 곱하고 캐릭터는 절반만, worldTint) → [어둠·빛 구멍은 Lighting] → 빛(가산) → 반딧불 → 날씨(비·눈·낙엽) → 안개 → 번개 → 비네트.
 // 톤·날씨는 lib/ambience(공용, 시계 기반)로 1분마다 다시 계산하고 바뀌면 2.5초 동안 섞는다.
 // 모든 레이어는 화면 고정 오브젝트 몇 개와 작은 풀(pool)로만 그려서 프레임당 비용이 일정하다.
+// 되풀이 무늬 없애기: 비·눈은 큰(256) 불규칙 타일 세 겹을 서로 안 맞는 속도로 흘리고, 바람·빗발 세기·화면 구석별 짙기를
+// 값 노이즈(weatherNoise)로 천천히 흔든다 (평균은 그대로). 안개·구름 그림자는 타일 대신 월드에 떠 있는 조각 몇 장이 바람 따라 흘러간다.
 // 소리: 비 세기·실내 여부를 게임 하나에 하나인 WeatherSound에 알려 주고(빗소리 루프), 센 비에는 가끔 천둥(번개 + 소리).
 // 번개 번쩍임은 prefers-reduced-motion이면 끈다(소리만). QA: ?weather=rain&thunder=1 이면 몇 초마다 천둥.
 
@@ -35,6 +38,16 @@ const TS_SCALE = 4;
 const FIREFLY_MAX = 26;
 const FIREFLY_MAX_REDUCED = 8;
 const SPLASH_POOL = 28;
+/** 비·눈 타일 한 변 (fx.rain/snow size와 같게) */
+const SHEET = 256;
+const FOG_PATCHES = 8;
+const CLOUD_PATCHES = 5;
+/** 안개·구름 조각 모양: 크기는 화면 긴 변에 대한 비율 */
+type PatchSpec = { size: [number, number]; aspect: [number, number]; rot: number; own: number };
+const FOG_SPEC: PatchSpec = { size: [0.45, 0.85], aspect: [0.45, 0.7], rot: 0.25, own: 2.2 };
+const CLOUD_SPEC: PatchSpec = { size: [0.7, 1.3], aspect: [0.5, 0.8], rot: 0.6, own: 1.5 };
+const FOG_COLOR = 0xd6dce2;
+const CLOUD_COLOR = 0x080a12;
 const LEAF_MAX = 22;
 const LEAF_MAX_REDUCED = 6;
 /** 낙엽 색 (주황·빨강·노랑·갈색) — [몸, 밝은 쪽, 잎자루] */
@@ -48,7 +61,9 @@ const leafKey = (i: number) => `fx-leaf-${i}`;
 
 type Firefly = { img: Phaser.GameObjects.Image; x: number; y: number; vx: number; vy: number; phase: number; orbit: number };
 type Light = { spot: LightSpot; img: Phaser.GameObjects.Image; phase: number };
-type Splash = { img: Phaser.GameObjects.Image; born: number };
+type Splash = { img: Phaser.GameObjects.Image; born: number; life: number; peak: number; grow: number };
+/** 안개·구름 조각 하나 (월드 좌표로 떠다닌다) */
+type Patch = { img: Phaser.GameObjects.Image; x: number; y: number; vx: number; vy: number; size: number; aspect: number; seed: number; born: number };
 type Leaf = { img: Phaser.GameObjects.Image; x: number; y: number; fall: number; phase: number; flutter: number };
 
 export class Atmosphere {
@@ -61,12 +76,13 @@ export class Atmosphere {
   private readonly haze: Phaser.GameObjects.Image;
   private readonly grade: boolean;
   private readonly vignette: Phaser.GameObjects.Image;
-  private readonly fogNear: Phaser.GameObjects.TileSprite;
-  private readonly fogFar: Phaser.GameObjects.TileSprite;
-  private readonly cloud: Phaser.GameObjects.TileSprite;
+  private readonly fog: Patch[];
+  private readonly clouds: Patch[];
   private readonly rainNear: Phaser.GameObjects.TileSprite;
+  private readonly rainMid: Phaser.GameObjects.TileSprite;
   private readonly rainFar: Phaser.GameObjects.TileSprite;
   private readonly snowNear: Phaser.GameObjects.TileSprite;
+  private readonly snowMid: Phaser.GameObjects.TileSprite;
   private readonly snowFar: Phaser.GameObjects.TileSprite;
   private readonly fireflies: Firefly[] = [];
   private staticLights: Light[] = [];
@@ -109,13 +125,30 @@ export class Atmosphere {
       const t = scene.add.tileSprite(0, 0, 16, 16, key).setScale(TS_SCALE).setTileScale(1 / TS_SCALE).setAlpha(0);
       return fixed(t, depth) as Phaser.GameObjects.TileSprite;
     };
-    this.cloud = tile(TEX.cloud, DEPTH.tint - 1);
     this.rainFar = tile(TEX.rainFar, DEPTH.weather);
+    this.rainMid = tile(TEX.rainMid, DEPTH.weather + 0.5);
     this.rainNear = tile(TEX.rainNear, DEPTH.weather + 1);
     this.snowFar = tile(TEX.snowFar, DEPTH.weather);
+    this.snowMid = tile(TEX.snowMid, DEPTH.weather + 0.5);
     this.snowNear = tile(TEX.snowNear, DEPTH.weather + 1);
-    this.fogFar = tile(TEX.fog, DEPTH.fog);
-    this.fogNear = tile(TEX.fog, DEPTH.fog + 1);
+    // 처음 위치는 랜덤 (타일이 늘 같은 자리에서 시작하지 않게)
+    for (const t of [this.rainFar, this.rainMid, this.rainNear, this.snowFar, this.snowMid, this.snowNear]) {
+      t.setTilePosition(Math.random() * SHEET, Math.random() * SHEET);
+    }
+    const patches = (n: number, depth: number, color: number): Patch[] =>
+      Array.from({ length: n }, () => ({
+        img: scene.add.image(0, 0, TEX.puff, 0).setDepth(depth).setTint(color).setVisible(false),
+        x: NaN,
+        y: 0,
+        vx: 0,
+        vy: 0,
+        size: 0.6,
+        aspect: 0.6,
+        seed: 0,
+        born: 0,
+      }));
+    this.clouds = patches(CLOUD_PATCHES, DEPTH.tint - 1, CLOUD_COLOR);
+    this.fog = patches(FOG_PATCHES, DEPTH.fog, FOG_COLOR);
 
     const n = reduced ? FIREFLY_MAX_REDUCED : FIREFLY_MAX;
     for (let i = 0; i < n; i++) {
@@ -123,7 +156,7 @@ export class Atmosphere {
       this.fireflies.push({ img, x: NaN, y: 0, vx: 0, vy: 0, phase: Math.random() * 10, orbit: 8 + Math.random() * 12 });
     }
     for (let i = 0; i < SPLASH_POOL; i++) {
-      this.splashes.push({ img: scene.add.image(0, 0, TEX.splash).setDepth(DEPTH.weather - 1).setVisible(false), born: 0 });
+      this.splashes.push({ img: scene.add.image(0, 0, TEX.splash).setDepth(DEPTH.weather - 1).setVisible(false), born: 0, life: 260, peak: 0.8, grow: 0.6 });
     }
     Atmosphere.ensureLeafTextures(scene);
     const nl = reduced ? LEAF_MAX_REDUCED : LEAF_MAX;
@@ -178,7 +211,7 @@ export class Atmosphere {
     this.tint.setPosition(cx, cy).setDisplaySize(w, h);
     this.haze.setPosition(cx, cy).setDisplaySize(w, h);
     this.flash.setPosition(cx, cy).setDisplaySize(w, h);
-    for (const t of [this.cloud, this.rainFar, this.rainNear, this.snowFar, this.snowNear, this.fogFar, this.fogNear]) {
+    for (const t of [this.rainFar, this.rainMid, this.rainNear, this.snowFar, this.snowMid, this.snowNear]) {
       t.setPosition(cx, cy).setSize(Math.ceil(w / TS_SCALE), Math.ceil(h / TS_SCALE));
     }
   }
@@ -249,48 +282,52 @@ export class Atmosphere {
     this.updateLights(this.staticLights, time, glow, view, spread);
     this.updateLights(this.gridLights, time, glow, view, spread);
 
-    // ── 월드에 붙은 화면 고정 타일: 타일 위치 = 카메라가 보는 월드 좌표 ──
-    const ox = cam.scrollX + cam.width / 2;
-    const oy = cam.scrollY + cam.height / 2;
-    const anchor = Atmosphere.anchor;
     const s = time / 1000;
     const drift = this.reduced ? 0.3 : 1;
+    /** 흔들림 폭 (움직임 줄이기면 작게) */
+    const g = this.reduced ? 0.4 : 1;
+    // 바람 [-1,1]: 7초쯤마다 바뀌는 돌풍. 비 기울기·눈 흩날림·안개·구름 흐름이 함께 따른다
+    const wind = gust(s / 7, 11) * g;
 
-    this.fogFar.setAlpha(L.fog * 0.55).setVisible(L.fog > 0.01);
-    this.fogNear.setAlpha(L.fog * 0.75).setVisible(L.fog > 0.01);
-    if (L.fog > 0.01) {
-      anchor(this.fogFar, ox, oy, 0.85, s * 3 * drift, s * 0.6 * drift);
-      anchor(this.fogNear, ox, oy, 1, s * 7 * drift, -s * 1.2 * drift);
-    }
-
-    this.cloud.setAlpha(L.cloud * 0.4).setVisible(L.cloud > 0.01);
-    if (L.cloud > 0.01) anchor(this.cloud, ox, oy, 1, -s * 9 * drift, -s * 4 * drift);
+    // ── 안개·구름 그림자: 월드에 떠 있는 조각들이 바람 따라 흐르고, 짙기가 조각마다 천천히 바뀐다 ──
+    this.updatePatches(this.fog, FOG_SPEC, L.fog * 0.8, true, s, dt, view, -(3 + 2.5 * wind) * drift, 0.5 * drift);
+    this.updatePatches(this.clouds, CLOUD_SPEC, L.cloud * 0.28, false, s, dt, view, -(9 + 5 * wind) * drift, 3 * drift);
 
     // 집 안에는 비·눈·낙엽이 내리지 않는다
     const rain = this.indoor ? 0 : L.rain;
     const snow = this.indoor ? 0 : L.snow;
-    const rainSpeed = this.reduced ? 0.35 : 1;
+    // 빗발 세기 출렁임 (평균 1): 몇 초씩 세게 퍼붓다가 잦아든다
+    const burst = pulse(s, 23, 0.35 * g, 9);
+    const rainSpeed = (this.reduced ? 0.35 : 1) * (1 + 0.12 * g * gust(s / 5, 31));
     // 11/16 사람이 잘 안 보인다는 문의로 빗줄기를 옅게 (먼 줄 0.45→0.26, 가까운 줄 0.6→0.3, 가까운 줄은 꽤 올 때만)
-    this.rainFar.setAlpha(rain * (this.reduced ? 0.2 : 0.26)).setVisible(rain > 0.01);
-    this.rainNear.setAlpha(this.reduced ? 0 : rain * 0.3).setVisible(!this.reduced && rain > 0.35);
+    const ra = rain * burst;
+    Atmosphere.layerAlpha(this.rainFar, rain > 0.01 ? ra * (this.reduced ? 0.2 : 0.26) : 0, s, 41, g);
+    Atmosphere.layerAlpha(this.rainMid, !this.reduced && rain > 0.2 ? ra * 0.2 : 0, s, 53, g);
+    Atmosphere.layerAlpha(this.rainNear, !this.reduced && rain > 0.35 ? ra * 0.3 : 0, s, 67, g);
     if (rain > 0.01) {
-      this.rainFar.tilePositionY -= dt * 0.22 * rainSpeed;
-      this.rainFar.tilePositionX += dt * 0.073 * rainSpeed;
-      this.rainNear.tilePositionY -= dt * 0.34 * rainSpeed;
-      this.rainNear.tilePositionX += dt * 0.113 * rainSpeed;
+      // 세 겹이 서로 안 맞는 속도(0.22·0.27·0.34px/ms)로, 바람에 따라 기울기가 0.23~0.43 사이로 흔들린다
+      const slant = 0.33 + 0.1 * wind;
+      const k = dt * rainSpeed;
+      Atmosphere.scroll(this.rainFar, k * 0.22 * slant, -k * 0.22);
+      Atmosphere.scroll(this.rainMid, k * 0.27 * (slant - 0.02), -k * 0.27);
+      Atmosphere.scroll(this.rainNear, k * 0.34 * (slant + 0.01), -k * 0.34);
     }
 
-    this.snowFar.setAlpha(snow * 0.7).setVisible(snow > 0.01);
-    this.snowNear.setAlpha(this.reduced ? 0 : snow * 0.9).setVisible(!this.reduced && snow > 0.15);
+    const sa = snow * pulse(s, 37, 0.25 * g, 11);
+    Atmosphere.layerAlpha(this.snowFar, snow > 0.01 ? sa * 0.7 : 0, s, 71, g);
+    Atmosphere.layerAlpha(this.snowMid, !this.reduced && snow > 0.1 ? sa * 0.8 : 0, s, 83, g);
+    Atmosphere.layerAlpha(this.snowNear, !this.reduced && snow > 0.15 ? sa * 0.9 : 0, s, 97, g);
     if (snow > 0.01) {
-      const k = this.reduced ? 0.4 : 1;
-      this.snowFar.tilePositionY -= dt * 0.012 * k;
-      this.snowFar.tilePositionX = Math.sin(s * 0.7) * 4;
-      this.snowNear.tilePositionY -= dt * 0.024 * k;
-      this.snowNear.tilePositionX = Math.sin(s * 0.9 + 1) * 7;
+      const k = dt * (this.reduced ? 0.4 : 1);
+      // 가로: 바람(공통) + 겹마다 다른 흔들림. 세로: 겹마다 빠르기가 조금씩 출렁인다
+      const side = (layer: number, seed: number) => (0.003 + 0.006 * wind + 0.007 * g * gust(s / 2.7, seed)) * layer;
+      const fall = (v: number, seed: number) => v * (1 + 0.2 * g * gust(s / 4, seed));
+      Atmosphere.scroll(this.snowFar, k * side(0.6, 101), -k * fall(0.012, 103));
+      Atmosphere.scroll(this.snowMid, k * side(0.8, 107), -k * fall(0.017, 109));
+      Atmosphere.scroll(this.snowNear, k * side(1, 113), -k * fall(0.024, 127));
     }
 
-    this.updateSplashes(time, dt, rain, view);
+    this.updateSplashes(time, dt, rain * burst, view);
     this.updateLeaves(time, dt, this.indoor ? 0 : L.leaves, view);
     this.updateFireflies(time, dt, L.fireflies, view);
   }
@@ -367,11 +404,102 @@ export class Atmosphere {
     }
   }
 
-  /** 화면 고정 TileSprite의 무늬를 월드 좌표에 붙인다 (ox,oy: 카메라 중심의 월드 좌표). 매 프레임 클로저를 만들지 않게 static */
-  private static anchor(t: Phaser.GameObjects.TileSprite, ox: number, oy: number, par: number, dx: number, dy: number): void {
-    const hw = (t.width * TS_SCALE) / 2;
-    const hh = (t.height * TS_SCALE) / 2;
-    t.setTilePosition((ox - hw) * par + dx, (oy - hh) * par + dy);
+  /** 타일 무늬를 흘린다 (값이 한없이 커지지 않게 타일 한 변으로 감는다) */
+  private static scroll(t: Phaser.GameObjects.TileSprite, dx: number, dy: number): void {
+    t.tilePositionX = (t.tilePositionX + dx) % SHEET;
+    t.tilePositionY = (t.tilePositionY + dy) % SHEET;
+  }
+
+  /**
+   * 화면 고정 비·눈 겹의 짙기: 네 구석을 따로 흔들어 (평균 1) 화면 한쪽이 더 퍼붓는 빗발이 지나가는 것처럼.
+   * 매 프레임 클로저를 만들지 않게 static
+   */
+  private static layerAlpha(t: Phaser.GameObjects.TileSprite, a: number, s: number, seed: number, g: number): void {
+    if (a <= 0.003) {
+      if (t.visible) t.setVisible(false);
+      return;
+    }
+    const c = 0.4 * g;
+    const p = s / 5;
+    // alpha 세터로 먼저 그리기 플래그를 켠다 (구석별 setAlpha는 플래그를 건드리지 않는다)
+    t.alpha = a;
+    t.setAlpha(
+      a * (1 + c * gust(p, seed)),
+      a * (1 + c * gust(p, seed + 1)),
+      a * (1 + c * gust(p, seed + 2)),
+      a * (1 + c * gust(p, seed + 3)),
+    ).setVisible(true);
+  }
+
+  /** 조각 모양을 새로 고른다 (화면 밖에서 다시 들어올 때마다 — 같은 조각이 되풀이되지 않게) */
+  private static reroll(p: Patch, spec: PatchSpec, s: number): void {
+    const r = Math.random;
+    p.size = spec.size[0] + (spec.size[1] - spec.size[0]) * r();
+    p.aspect = spec.aspect[0] + (spec.aspect[1] - spec.aspect[0]) * r();
+    p.vx = (r() * 2 - 1) * spec.own;
+    p.vy = (r() * 2 - 1) * spec.own * 0.6;
+    p.seed = Math.floor(r() * 100_000);
+    p.born = s;
+    p.img
+      .setFrame(Math.floor(r() * 4))
+      .setFlip(r() < 0.5, r() < 0.5)
+      .setRotation((r() * 2 - 1) * spec.rot);
+  }
+
+  /**
+   * 안개·구름 조각: 월드 좌표에 떠 있어 걸으면 지나쳐 가고, 바람(wx,wy px/s)에 자기 속도를 더해 흐른다.
+   * 화면(+조각 반지름) 밖으로 나가면 반대편 밖으로 감아 새 모양으로 들어온다 (3초 동안 서서히).
+   * 짙기는 조각마다 노이즈로 0.44~1배 사이를 천천히 오가고, 안개는 화면 한가운데(내 캐릭터)를 덮을수록 옅다.
+   */
+  private updatePatches(
+    list: Patch[],
+    spec: PatchSpec,
+    level: number,
+    fadeCenter: boolean,
+    s: number,
+    dt: number,
+    view: Phaser.Geom.Rectangle,
+    wx: number,
+    wy: number,
+  ): void {
+    if (level < 0.004) {
+      for (const p of list) {
+        if (p.img.visible) p.img.setVisible(false);
+        p.x = NaN;
+      }
+      return;
+    }
+    const k = dt / 1000;
+    const base = Math.max(view.width, view.height);
+    const cx = view.centerX;
+    const cy = view.centerY;
+    const drift = this.reduced ? 0.3 : 1;
+    for (const p of list) {
+      const w = base * p.size * (1 + 0.08 * gust(s / 11, p.seed + 7));
+      const h = w * p.aspect;
+      const m = Math.max(w, h) / 2 + 4;
+      if (Number.isNaN(p.x)) {
+        Atmosphere.reroll(p, spec, s);
+        p.x = view.x - m + Math.random() * (view.width + 2 * m);
+        p.y = view.y - m + Math.random() * (view.height + 2 * m);
+        p.born = s - 3 * Math.random(); // 처음에는 이미 대부분 떠 있게
+      } else {
+        p.x += (wx + p.vx * drift) * k;
+        p.y += (wy + p.vy * drift) * k;
+        const lx = view.x - m;
+        const ly = view.y - m;
+        const sx = view.width + 2 * m;
+        const sy = view.height + 2 * m;
+        if (p.x < lx || p.x >= lx + sx || p.y < ly || p.y >= ly + sy) {
+          p.x = wrapInto(p.x, lx, sx);
+          p.y = wrapInto(p.y, ly, sy);
+          Atmosphere.reroll(p, spec, s);
+        }
+      }
+      let a = level * (0.72 + 0.28 * gust(s / 13, p.seed)) * smooth01(0, 3, s - p.born);
+      if (fadeCenter) a *= centerFade(Math.hypot((p.x - cx) / (w / 2), (p.y - cy) / (h / 2)));
+      p.img.setPosition(p.x, p.y).setDisplaySize(w, h).setAlpha(a).setVisible(a > 0.004);
+    }
   }
 
   private updateLights(lights: Light[], time: number, glow: number, view: Phaser.Geom.Rectangle, spread: number): void {
@@ -390,9 +518,9 @@ export class Atmosphere {
   private updateSplashes(time: number, dt: number, rain: number, view: Phaser.Geom.Rectangle): void {
     for (const sp of this.splashes) {
       if (!sp.img.visible) continue;
-      const t = (time - sp.born) / 260;
+      const t = (time - sp.born) / sp.life;
       if (t >= 1) sp.img.setVisible(false);
-      else sp.img.setAlpha(0.8 * (1 - t)).setScale(0.7 + t * 0.6);
+      else sp.img.setAlpha(sp.peak * (1 - t)).setScale(0.7 + t * sp.grow);
     }
     if (this.reduced || rain < 0.05) return;
     // 비 세기에 비례한 물튐. 화면에 보이는 바닥에 무작위로 떨어진다
@@ -407,9 +535,14 @@ export class Atmosphere {
         }
       }
       if (!sp) break;
+      // 자리·수명·밝기·퍼짐을 매번 따로 뽑는다 (격자·같은 박자로 보이지 않게)
       sp.born = time;
+      sp.life = 190 + Math.random() * 150;
+      sp.peak = 0.55 + Math.random() * 0.35;
+      sp.grow = 0.35 + Math.random() * 0.5;
       sp.img
         .setPosition(view.x + Math.random() * view.width, view.y + Math.random() * view.height)
+        .setFlipX(Math.random() < 0.5)
         .setDepth(DEPTH.decal + 2)
         .setVisible(true);
     }
