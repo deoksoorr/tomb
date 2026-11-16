@@ -149,7 +149,7 @@ describe("sea map (11/16 달물결 포구)", () => {
     expect(core.peer(1)).toMatchObject({ seatId: l.id, state: STATE.lie });
     core.message(a, move(l.x, l.y + 12, STATE.walk), 300);
     expect(core.peer(1)?.seatId ?? null).toBeNull();
-    const m = SEA_REST_SEATS.find((r) => r.kind === "parasol")!;
+    const m = SEA_REST_SEATS.find((r) => r.kind === "mat")!;
     const b = join("b", { sea: true, map: "sea", spawn: { x: m.x, y: m.y + 4 } });
     core.message(b, send({ t: "sit", seatId: m.id }), 0);
     expect(core.peer(2)).toMatchObject({ seatId: m.id, state: STATE.sitGround });
@@ -159,6 +159,37 @@ describe("sea map (11/16 달물결 포구)", () => {
     const v = join("v", { spawn: { x: m.x, y: m.y } });
     core.message(v, send({ t: "sit", seatId: m.id }), 0);
     expect(events(v)).toContainEqual({ t: "seatDenied", seatId: m.id });
+  });
+
+  it("11/16 a fresh player who rode the bus can sit on every new seaside seat kind, and the others at the sea see it", () => {
+    const { core, join } = setup();
+    // 바닷가에 먼저 와 있는 사람 (보는 사람)
+    const w = join("w", { sea: true, map: "sea" });
+    // 마을에서 버스로 온 사람
+    const a = join("a", { sea: true });
+    core.message(a, toSea(), 0);
+    const kinds = [
+      { id: "pS1-0", state: STATE.sitChair },
+      { id: "pE1", state: STATE.sitChair },
+      { id: "pE2", state: STATE.sitChair },
+      ...SEA_REST_SEATS.filter((r, i, all) => all.findIndex((q) => q.kind === r.kind) === i).map((r) => ({ id: r.id, state: r.state })),
+    ];
+    let t = 1000;
+    for (const k of kinds) {
+      const slot = seaSeatById(k.id) ?? SEA_REST_SEATS.find((r) => r.id === k.id)!;
+      clear(a, w);
+      // 걸어서 자리 앞으로 (서버 속도 예산 안에서 — 순간이동 대신 위치를 알려요)
+      core.message(a, send({ t: "warp", x: slot.x, y: slot.y + 8 }), t);
+      core.message(a, move(slot.x, slot.y + 8, STATE.idle), t + 50);
+      core.message(a, send({ t: "sit", seatId: k.id }), t + 100);
+      expect(events(a), k.id).not.toContainEqual({ t: "seatDenied", seatId: k.id });
+      expect(core.peer(2), k.id).toMatchObject({ seatId: k.id, state: k.state });
+      expect(events(w), k.id).toContainEqual({ t: "seat", seatId: k.id, sid: 2 });
+      // 일어나기 (다음 자리로)
+      core.message(a, move(slot.x, slot.y + 10, STATE.idle), t + 400);
+      expect(core.peer(2)?.seatId ?? null, k.id).toBeNull();
+      t += 2000;
+    }
   });
 
   it("?m=sea goes to the sea only with the sea claim", async () => {

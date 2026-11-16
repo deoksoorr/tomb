@@ -33,8 +33,9 @@ export const SEA_HEIGHT = SEA_ROWS * 16; // 960
  *     · 오두막 터 6을 굽은 골목을 따라 흩어 놓음 (크기·출입구 쪽·울타리가 터마다 달라요) · 갯바위 구간 (방파제 쪽 곶·물가 바위)
  * 4 = 11/16 갯바위 낚시 자리·발판 (물이 차도 마른 자리) · 오두막 벤치를 조금 아래로, 두 자리 간격 20
  * 5 = 11/16 쉴거리 (백사장 벤치 4·선베드 6·파라솔 돗자리 2·돗자리 3·끝 걸터앉기 2) — 벤치·파라솔 기둥이 막아요
+ * 6 = 11/16 백사장을 선베드·파라솔·선베드 한 벌 여섯으로 나란히 (선베드 12), 벤치는 산책로 아래로, 파라솔 돗자리는 빼고 돗자리 둘
  */
-export const SEA_MAP_VERSION = 5;
+export const SEA_MAP_VERSION = 6;
 
 type Rect = { x: number; y: number; w: number; h: number };
 type Pt = { x: number; y: number };
@@ -320,31 +321,25 @@ export const SEA_TIDE_POOLS: readonly { x: number; y: number; rx: number; ry: nu
 
 // ── 다음 차수 자리 (쉴거리·갯벌 캐기·모래성 등). 지금은 그리기만 하거나 비워 둬요 ──
 /** 쉴거리 자리 (사용자 확정 배치). 앉기·장면 전환은 다음 차수 */
+/** 11/16 백사장 선베드 한 벌(선베드·파라솔·선베드) 가운데 x — 선착장 머리·매점·모닥불·해먹 자리를 비켜서 */
+export const SEA_BEACH_UNITS: readonly number[] = [160, 280, 400, 780, 900, 1020];
+/** 선베드 받침 y (머리는 위, 발은 바다 쪽) */
+export const SEA_LOUNGER_Y = 500;
+/** 바다 보기 벤치 x (선베드 한 벌 사이 틈) */
+export const SEA_BEACH_BENCH_X: readonly number[] = [220, 340, 840, 960];
 export const SEA_SPOTS = {
-  /** 바다 보기 벤치 4 (백사장 아래쪽, 바다를 봐요) */
-  benches: [
-    { x: 316, y: 540, facing: DIR.down },
-    { x: 458, y: 540, facing: DIR.down },
-    { x: 790, y: 540, facing: DIR.down },
-    { x: 946, y: 540, facing: DIR.down },
-  ],
-  /** 선베드 6 */
-  loungers: [
-    { x: 196, y: 446 },
-    { x: 246, y: 446 },
-    { x: 296, y: 446 },
-    { x: 836, y: 446 },
-    { x: 886, y: 446 },
-    { x: 936, y: 446 },
-  ],
-  /** 파라솔 돗자리 2 */
-  parasols: [
-    { x: 254, y: 494 },
-    { x: 900, y: 494 },
-  ],
+  /** 바다 보기 벤치 4 — 11/16 사용자: 선베드 줄 뒤(산책로 바로 아래)로, 선베드 사이 틈에서 바다를 봐요 */
+  benches: SEA_BEACH_BENCH_X.map((x) => ({ x, y: 432, facing: DIR.down })),
+  /** 선베드 12 — 11/16 사용자 "리조트 해변처럼": 선베드·파라솔·선베드 한 벌을 백사장에 나란히 (바다를 봐요). 받침 y */
+  loungers: SEA_BEACH_UNITS.flatMap((c) => [
+    { x: c - 24, y: SEA_LOUNGER_Y },
+    { x: c + 24, y: SEA_LOUNGER_Y },
+  ]),
+  /** 파라솔 6 (선베드 한 벌 가운데 — 갓이 두 선베드 머리 쪽을 덮어요) */
+  parasols: SEA_BEACH_UNITS.map((c) => ({ x: c, y: SEA_LOUNGER_Y - 12 })),
   /** 야자수 해먹 (나무 둘 사이) · 해변 그네 */
   hammock: { x: 80, y: 446 },
-  swing: { x: 1056, y: 456 },
+  swing: { x: 1096, y: 456 },
   /** 해변 모닥불 (마을 서쪽 모닥불을 옮겨 와요) */
   bonfire: { x: 470, y: 470 },
   /** 모래성 자리 3 (갯벌 바로 앞, 만조 앞뒤에 무너져요) */
@@ -490,25 +485,16 @@ export const SEA_SEATS: readonly Seat[] = SEA_FURNITURE.flatMap((f) =>
  */
 export type SeaRestKind = "lounger" | "parasol" | "mat";
 export type SeaRestSeat = { id: string; group: string; kind: SeaRestKind; x: number; y: number; facing: DirId; state: StateId };
-/** 11/16 돗자리 셋 (구덩이·길·벤치를 비켜서) */
+/** 11/16 돗자리 둘 (선베드 줄 앞, 선착장 머리 양옆 — 구덩이·길·벤치를 비켜서) */
 export const SEA_MATS: readonly Pt[] = [
-  { x: 548, y: 470 },
-  { x: 760, y: 506 },
-  { x: 1012, y: 512 },
+  { x: 552, y: 540 },
+  { x: 712, y: 540 },
 ];
 /** 선베드에 누운 사람 발 위치 (선베드 그림 받침에서 위로) */
 export const SEA_LOUNGER_LIE_DY = -8;
 export const SEA_REST_SEATS: readonly SeaRestSeat[] = [
   ...SEA_SPOTS.loungers.map((l, i): SeaRestSeat => ({ id: `pZ${i + 1}`, group: `pZ${i + 1}`, kind: "lounger", x: l.x, y: l.y + SEA_LOUNGER_LIE_DY, facing: DIR.down, state: STATE.lie })),
-  // 파라솔 돗자리: 기둥 둘레 넷 (뒷줄 둘·앞줄 둘)
-  ...SEA_SPOTS.parasols.flatMap((p, i) =>
-    [
-      [-11, -5],
-      [11, -5],
-      [-11, 7],
-      [11, 7],
-    ].map(([dx, dy], k): SeaRestSeat => ({ id: `pP${i + 1}-${k}`, group: `pP${i + 1}`, kind: "parasol", x: p.x + dx, y: p.y + dy, facing: DIR.down, state: STATE.sitGround })),
-  ),
+  // 11/16 파라솔 돗자리는 선베드 한 벌(파라솔 아래 선베드 둘)로 바꿨어요
   ...SEA_MATS.flatMap((m, i) =>
     [-10, 10].map((dx, k): SeaRestSeat => ({ id: `pM${i + 1}-${k}`, group: `pM${i + 1}`, kind: "mat", x: m.x + dx, y: m.y + 2, facing: DIR.down, state: STATE.sitGround })),
   ),

@@ -113,6 +113,8 @@ export class SeaScene extends Phaser.Scene {
   private forage!: SeaForage;
   /** 11/16 쉴거리 자리 (선베드 눕기·돗자리 바닥 앉기 — 의자 좌석 체계 밖, 서버 좌석은 같아요) */
   private rest: SeaRestSeat | null = null;
+  /** 거절된 쉴거리 자리를 한 번 더 청했는지 */
+  private restRetry: string | null = null;
   /** 11/16 바다 보기 장면 (앉아 있을 때 「바다 보기」·V로 켜고 끄기, 일어나면 꺼져요) */
   private seaView: SeaView | null = null;
   private viewOn = false;
@@ -222,6 +224,7 @@ export class SeaScene extends Phaser.Scene {
 
     const spawn = this.spawnPoint();
     this.player = new Player(this, h.atlas, spawn.x, spawn.y, h.color, h.name, isAvatarBody(h.body) ? h.body : "hood");
+    this.player.view.lieCover = "towel"; // 11/16 선베드에 누우면 하늘빛 수건
     this.player.titleSpeed = true;
     this.player.view.setLook([...h.look]);
     // 물때: 물이 덮은 갯벌이면 헤엄 (선착장·방파제 위는 마른 땅)
@@ -416,8 +419,19 @@ export class SeaScene extends Phaser.Scene {
       onSeatDenied: (seatId) => {
         if (this.forage.f.seatDenied(seatId)) return;
         if (this.rest?.id === seatId) {
+          // 11/16 사용자 "빈 자리인데 누가 먼저 앉았다고 해요": 내 좌석표에 주인이 없으면(서버가 앞 자리를 늦게 놓은 경우 등) 한 번 더 청해 봐요.
+          // 진짜 주인이 있을 때만 "누가 먼저"를 띄워요
+          const owner = this.seats.get(seatId);
+          if (owner === undefined && this.restRetry !== seatId) {
+            this.restRetry = seatId;
+            this.time.delayedCall(400, () => {
+              if (!this.cleaned && this.rest?.id === seatId && this.host.net.online) this.host.net.sit(seatId);
+            });
+            return;
+          }
+          this.restRetry = null;
           this.leaveRest(this.time.now);
-          this.toast("누가 먼저 앉았어요");
+          this.toast(owner !== undefined ? "누가 먼저 앉았어요" : "자리를 잡지 못했어요. 다시 눌러 주세요");
           return;
         }
         if (this.player.seat?.id === seatId) this.player.seatDenied(seatId, this.time.now);
@@ -538,6 +552,7 @@ export class SeaScene extends Phaser.Scene {
     prev?.destroy();
     const r = new RemoteAvatar(this, this.host.atlas, p.sid, p.name, avatarColorSpec(p.color, sanitizeDye(p.dye)), p, performance.now(), p.look ?? [], isAvatarBody(p.body) ? p.body : "hood");
     r.map = "sea"; // 좌석 id를 바닷가 자리로 풀어요 (앉은 사람을 벤치 앞에 고정)
+    r.view.lieCover = "towel"; // 11/16 바닷가에서 눕는 곳은 선베드뿐 → 이불 대신 하늘빛 수건
     r.view.setDexBadge(p.dex);
     r.view.setChamp(p.champ);
     r.view.setStaff(p.staff === true);
@@ -743,12 +758,12 @@ export class SeaScene extends Phaser.Scene {
     else if (seat) this.sitOn(seat, now);
   }
 
-  /** 11/16 가까운 빈 쉴거리 자리 (반지름 18) */
+  /** 11/16 가까운 빈 쉴거리 자리 (반지름 22 — 선베드 발치·돗자리 가장자리에서도) */
   private pickRest(x: number, y: number): SeaRestSeat | null {
     const net = this.host.net;
     const mine = net.online ? net.mySid : null;
     let best: SeaRestSeat | null = null;
-    let bd = 18;
+    let bd = 22;
     for (const r of SEA_REST_SEATS) {
       const d = Math.hypot(r.x - x, r.y - y);
       if (d >= bd) continue;
@@ -770,6 +785,7 @@ export class SeaScene extends Phaser.Scene {
       pl.sit(null, now, null);
     }
     this.rest = r;
+    this.restRetry = null;
     const net = this.host.net;
     if (net.online) net.sit(r.id);
   }
@@ -1158,17 +1174,24 @@ export class SeaScene extends Phaser.Scene {
   private updateSeatHint(now: number, labelScale: number): void {
     const pl = this.player;
     const net = this.host.net;
-    const seat: Seat | null = pl.sitting || this.locked ? null : seaPickSeat(pl.x, pl.y, net.online ? this.seats : EMPTY_SEATS, net.online ? net.mySid : null);
-    const id = seat ? seat.id : null;
+    const free = !pl.sitting && !this.rest && !this.locked && pl.state !== "lie";
+    let seat: Seat | null = free ? seaPickSeat(pl.x, pl.y, net.online ? this.seats : EMPTY_SEATS, net.online ? net.mySid : null) : null;
+    // 11/16 쉴거리 자리(선베드·파라솔·돗자리)가 더 가까우면 그 자리 안내 (사용자: 파라솔 앞에서 앉기 안내가 안 떠요)
+    const rest = free ? this.pickRest(pl.x, pl.y) : null;
+    const restNear = !!rest && (!seat || Math.hypot(rest.x - pl.x, rest.y - pl.y) < Math.hypot(seat.x - pl.x, seat.y - pl.y));
+    if (restNear) seat = null;
+    const id = restNear ? rest!.id : seat ? seat.id : null;
     if (id !== this.nearSeatId) {
       this.nearSeatId = id;
-      bridge.emit("seat:near", seat ? { seatId: seat.id, kind: seat.id.includes("-") ? "bench" : "chair" } : null);
+      bridge.emit("seat:near", restNear ? { seatId: rest!.id, kind: "bench" } : seat ? { seatId: seat.id, kind: seat.id.includes("-") ? "bench" : "chair" } : null);
     }
     const sittingFor = pl.sitting && pl.view.sitSince > 0 ? now - pl.view.sitSince : -1;
     const obj = !pl.sitting && !this.locked ? this.nearestObject(pl.x, pl.y) : null;
-    const objSd = seat ? Math.hypot(seat.x - pl.x, seat.y - pl.y) : Infinity;
+    const objSd = seat ? Math.hypot(seat.x - pl.x, seat.y - pl.y) : restNear ? Math.hypot(rest!.x - pl.x, rest!.y - pl.y) : Infinity;
     const objOd = obj ? Math.hypot(obj.x - pl.x, obj.y - pl.y) : Infinity;
     let other = obj && objOd <= objSd ? { x: obj.x, y: obj.y + 2, text: `${this.seatHint.prefix}${obj.label}` } : null;
+    // 쉴거리 자리 안내는 자리 위에 (라벨 depth라 파라솔 갓보다 위에 그려져요)
+    if (!other && restNear) other = { x: rest!.x, y: rest!.y - 4, text: `${this.seatHint.prefix}${rest!.kind === "lounger" ? "눕기" : "앉기"}` };
     // 11/16 갯바위 낚시 자리 안내 ("E 낚시하기")
     const fo = !pl.sitting && !this.locked ? this.forage.nearest(pl.x, pl.y) : null;
     if (fo && Math.hypot(fo.x - pl.x, fo.y - pl.y) <= Math.min(objSd, objOd))

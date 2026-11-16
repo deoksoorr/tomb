@@ -36,6 +36,21 @@ function span(g: Grid): { x0: number; x1: number; y0: number } {
   return { x0: Math.max(0, x0), x1: Math.min(AV_W - 1, x1), y0 };
 }
 
+/** 11/16 누운 자세 덮개: quilt = 집 침대 이불(보라, 예전 그대로), towel = 바닷가 선베드 하늘빛 수건 (가슴 아래만 — 선베드 그림 RAMP.towel과 같은 색) */
+export type LieCover = "quilt" | "towel";
+const TOWEL = [0xcdeef6, 0xa9dcec, 0x8cc8de] as const;
+function towel(g: Grid, top: number): void {
+  const t = top + 3;
+  for (let y = t; y < AV_H - 1; y++)
+    for (let x = 2; x < AV_W - 2; x++) {
+      // 가로 줄무늬 (흰 줄 두 개) · 아래로 갈수록 그늘
+      const stripe = y === t + 3 || y === t + 7;
+      g.set(x, y, y === t ? TOWEL[0] : stripe ? 0xf4fbfd : y > AV_H - 4 ? TOWEL[2] : TOWEL[1]);
+    }
+  // 술 (아래 끝)
+  for (let x = 3; x < AV_W - 3; x += 2) g.set(x, AV_H - 1, TOWEL[2]);
+}
+
 function quilt(g: Grid, top: number): void {
   for (let y = top; y < AV_H; y++)
     for (let x = 1; x < AV_W - 1; x++) {
@@ -125,7 +140,7 @@ function bathe(g: Grid, neck: number, f: number): void {
 }
 
 /** 자세 시트 (가로 INDOOR_POSE_FRAMES장) */
-export function indoorPoseSheet(kind: IndoorPose, body: string, color: string, look: readonly string[] = []): Grid {
+export function indoorPoseSheet(kind: IndoorPose, body: string, color: string, look: readonly string[] = [], cover: LieCover = "quilt"): Grid {
   const b = bodyOf(body);
   const shoulder = BODY_METRICS[b].shoulder;
   const col = kind === "read" ? AV_ANIM.idle.col : AV_ANIM.hammock.col;
@@ -135,7 +150,10 @@ export function indoorPoseSheet(kind: IndoorPose, body: string, color: string, l
     const s = span(g);
     // 어깨선 (발바닥 y=27에서 shoulder만큼 위). 머리가 작은 몸도 얼굴은 보이게 머리 맨 위에서 최소 7px 아래
     const neck = Math.max(AV_H - 1 - shoulder - 1, s.y0 + 7);
-    if (kind === "lie") {
+    if (kind === "lie" && cover === "towel") {
+      // 선베드: 수건이 숨 쉬듯 1px (z는 없어요 — 햇볕 쬐는 중)
+      towel(g, neck + f);
+    } else if (kind === "lie") {
       quilt(g, neck + f);
       if (f === 1) {
         // 작은 z
@@ -154,7 +172,7 @@ export function indoorPoseSheet(kind: IndoorPose, body: string, color: string, l
 }
 
 /** 자세 텍스처 키 (아바타 시트 키 + 접미사) */
-export const indoorPoseKey = (avatarKey: string, kind: IndoorPose) => `${avatarKey}-${kind}`;
+export const indoorPoseKey = (avatarKey: string, kind: IndoorPose, cover: LieCover = "quilt") => `${avatarKey}-${kind}${kind === "lie" && cover === "towel" ? "-towel" : ""}`;
 
 /** 자세마다 프레임 바꾸는 주기 (ms) */
 export const INDOOR_POSE_PERIOD: Record<IndoorPose, number> = { lie: 2600, read: 3200, bath: 900 };

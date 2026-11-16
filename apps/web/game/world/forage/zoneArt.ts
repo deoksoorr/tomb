@@ -59,9 +59,9 @@ function barrel(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
-/** 낚시 의자: 낮은 나무 의자 + 미끼 통. 앉으면 사람에 가려진다. 12×8 */
+/** 낚시 의자: 낮은 나무 의자 + 미끼 통. 앉으면 사람에 가려진다. 13×8 (11/16 미끼 통 오른쪽 테가 잘려 한 칸 넓혔어요) */
 function stool(): HTMLCanvasElement {
-  const g = new Grid(12, 8);
+  const g = new Grid(13, 8);
   g.rect(1, 2, 8, 2, 0xb07a44);
   g.hline(1, 8, 2, 0xd09a5a);
   g.vline(2, 4, 6, WOOD_DARK);

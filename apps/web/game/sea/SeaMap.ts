@@ -378,10 +378,8 @@ export class SeaMap implements SeaMapApi {
     for (const f of SEA_FURNITURE) if (!SEA_EDGE_SEATS.includes(f.id)) this.prop(T.bench, f.x, f.y, f.y);
     // 11/16 쉴거리: 선베드(누운 사람이 위에 그려지게 받침보다 조금 뒤 depth) · 파라솔 돗자리(돗자리는 바닥, 갓은 앉은 사람 위) · 돗자리
     for (const l of SEA_SPOTS.loungers) this.prop(T.lounger, l.x, l.y, l.y - 20);
-    SEA_SPOTS.parasols.forEach((p, i) => {
-      this.prop(T.mat(i === 0 ? 2 : 0), p.x, p.y + 10, FLAT + p.y, 2);
-      this.prop(T.parasol(i), p.x, p.y, p.y + 12);
-    });
+    // 11/16 파라솔은 선베드 한 벌 가운데 (갓이 선베드 둘의 머리 쪽 위로)
+    SEA_SPOTS.parasols.forEach((p, i) => this.prop(T.parasol(i % 2), p.x, p.y, p.y + 12));
     SEA_MATS.forEach((m, i) => this.prop(T.mat(i % 3 === 1 ? 1 : i % 3 === 2 ? 2 : 0), m.x, m.y + 8, FLAT + m.y, 2));
     // 시장·부동산·매점 (현판 글씨는 판 크기에 맞춰 월드 크기 그대로)
     // 11/16 간판 글씨는 판 위에 뜨는 이름표로 (사용자: "간판 글씨가 안 읽혀요" — 늘 같은 화면 크기, 진한 판에 밝은 글씨)

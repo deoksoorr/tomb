@@ -10,7 +10,7 @@ import { DyeFxView } from "./DyeFxView";
 import { bodyFx, riderLift } from "../sprites/cosmeticFx";
 import type { EmoteIcon } from "../sprites/emotes";
 import { HAMMOCK_H, HAMMOCK_W, hammockLieKey, hammockLieSheet, lieFrameOf, LIE_ORIGIN_X, LIE_ORIGIN_Y } from "../sprites/hammockArt";
-import { INDOOR_POSE_PERIOD, indoorPoseKey, indoorPoseSheet, isIndoorPose, POSE_H, POSE_W, type IndoorPose } from "../sprites/indoorPose";
+import { INDOOR_POSE_PERIOD, indoorPoseKey, indoorPoseSheet, isIndoorPose, POSE_H, POSE_W, type IndoorPose, type LieCover } from "../sprites/indoorPose";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { wrapChat } from "../logic/chatWrap";
 import { SpeechBubble } from "./SpeechBubble";
@@ -127,6 +127,8 @@ export class AvatarView {
   /** 3번 집 안 자세(눕기·읽기·욕조) 그림을 쓰는 중 (텍스처가 sprites/indoorPose 시트) */
   private pose: IndoorPose | null = null;
   private poseFrame = -1;
+  /** 11/16 누운 자세(lie) 덮개: 집 침대는 이불(quilt), 바닷가 선베드는 하늘빛 수건(towel) — 씬이 정해요 */
+  lieCover: LieCover = "quilt";
   state: StateName = "idle";
   dir: DirId = DIR.down;
   /** 앉기 시작한 시각 (앉아 있지 않으면 0) */
@@ -702,9 +704,9 @@ export class AvatarView {
   /** 3번 집 안 자세 그림으로 (프레임 크기·원점이 아바타와 같다) */
   private indoorPose(kind: IndoorPose): void {
     if (this.lying) this.getUp("idle", this.dir);
-    const key = indoorPoseKey(this.texKey, kind);
+    const key = indoorPoseKey(this.texKey, kind, this.lieCover);
     if (!this.scene.textures.exists(key)) {
-      addCanvasTexture(this.scene, key, { canvas: indoorPoseSheet(kind, this.body, this.color, this.look).toCanvas(), frameW: POSE_W, frameH: POSE_H });
+      addCanvasTexture(this.scene, key, { canvas: indoorPoseSheet(kind, this.body, this.color, this.look, this.lieCover).toCanvas(), frameW: POSE_W, frameH: POSE_H });
     }
     if (this.pose === kind && this.sprite.texture.key === key) return;
     this.pose = kind;

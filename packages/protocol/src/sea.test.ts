@@ -95,9 +95,10 @@ describe("sea map (protocol)", () => {
     }
   });
   it("11/16 쉴거리 자리: 선베드는 눕기(lie), 돗자리·파라솔은 바닥 앉기, 벤치·끝 걸터앉기는 의자 — 모두 바닷가 좌석이에요", () => {
-    expect(SEA_REST_SEATS.filter((r) => r.kind === "lounger")).toHaveLength(6);
-    expect(SEA_REST_SEATS.filter((r) => r.kind === "parasol")).toHaveLength(8);
-    expect(SEA_REST_SEATS.filter((r) => r.kind === "mat").length).toBeGreaterThanOrEqual(4);
+    // 11/16 리조트 해변: 선베드·파라솔·선베드 한 벌 여섯 → 선베드 12, 파라솔 돗자리는 없어요, 돗자리 둘 (자리 넷)
+    expect(SEA_REST_SEATS.filter((r) => r.kind === "lounger")).toHaveLength(12);
+    expect(SEA_REST_SEATS.filter((r) => r.kind === "parasol")).toHaveLength(0);
+    expect(SEA_REST_SEATS.filter((r) => r.kind === "mat")).toHaveLength(4);
     for (const r of SEA_REST_SEATS) {
       expect(seatSlotIn("sea", r.id)).toMatchObject({ kind: "seat", state: r.kind === "lounger" ? STATE.lie : STATE.sitGround, furnitureId: r.group });
       expect(seatSlotIn("village", r.id)).toBeUndefined();
@@ -109,7 +110,7 @@ describe("sea map (protocol)", () => {
     expect(seaViewOfSeat("pE2")).toBe("breakwater");
     expect(seaViewOfSeat("pB-0")).toBeNull();
     expect(seaViewOfSeat("pL-1")).toBeNull();
-    expect(seaSeatGroup("pP1-3")).toBe("pP1");
+    expect(seaSeatGroup("pM2-1")).toBe("pM2");
     expect(seaSeatGroup("pS3-1")).toBe("pS3");
     // 끝 걸터앉기는 일어서면 데크 쪽(뒤)으로
     expect(seaSeatById("pE1")?.standDy).toBeLessThan(0);
@@ -127,6 +128,6 @@ describe("sea map (protocol)", () => {
     expect(SEA_LOTS).toHaveLength(6);
     expect(SEA_SPOTS.sandcastles).toHaveLength(3);
     expect(SEA_SPOTS.benches).toHaveLength(4);
-    expect(SEA_SPOTS.loungers).toHaveLength(6);
+    expect(SEA_SPOTS.loungers).toHaveLength(12); // 11/16 선베드 한 벌 여섯
   });
 });
