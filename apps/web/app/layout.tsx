@@ -2,14 +2,14 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { preload } from "react-dom";
 import VisitTracker from "@/components/VisitTracker";
-import { IS_PRODUCTION, SITE_DESCRIPTION, SITE_TITLE, shareMetadata, siteUrl } from "./seo";
+import { HOME_TITLE, IS_PRODUCTION, SITE_DESCRIPTION, SITE_TITLE, shareMetadata, siteUrl } from "./seo";
 import "./globals.css";
 import "./pretendard.css";
 
 export const metadata: Metadata = {
   metadataBase: siteUrl(),
   // 테스트 서버(운영이 아닌 배포)는 브라우저 탭 제목 앞에 [스테이징]을 붙여 실제 서버와 헷갈리지 않게 (페이지 제목에도 적용)
-  title: IS_PRODUCTION ? SITE_TITLE : { default: `[스테이징] ${SITE_TITLE}`, template: "[스테이징] %s" },
+  title: IS_PRODUCTION ? HOME_TITLE : { default: `[스테이징] ${SITE_TITLE}`, template: "[스테이징] %s" },
   description: SITE_DESCRIPTION,
   ...shareMetadata("/api/og"),
   // 운영이 아닌 배포(미리보기·테스트 서버)는 검색에 올리지 않는다

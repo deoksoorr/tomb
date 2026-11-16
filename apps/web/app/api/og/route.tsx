@@ -20,6 +20,10 @@ const C = {
 
 let font: Promise<Buffer> | undefined;
 const loadFont = () => (font ??= readFile(join(process.cwd(), "assets/fonts/Galmuri11-Bold.ttf")));
+/** 11/16 사이트 카드 바탕: 실제 게임 화면 (밤 모닥불 광장에 모인 유령들, 1200×630). 예전 묘비 그림은 묘역 컨셉 때 것 */
+let village: Promise<string> | undefined;
+const loadVillage = () =>
+  (village ??= readFile(join(process.cwd(), "assets/og/village-night.png")).then((b) => `data:image/png;base64,${b.toString("base64")}`));
 
 /** 없거나 숨겨졌거나 저장소 오류면 사이트 카드로 대신한다 (크롤러에는 에러보다 카드가 낫다) */
 async function findGrave(id: string | null): Promise<GraveRecord | null> {
@@ -33,7 +37,7 @@ async function findGrave(id: string | null): Promise<GraveRecord | null> {
 
 export async function GET(req: NextRequest) {
   const grave = await findGrave(req.nextUrl.searchParams.get("grave"));
-  return new ImageResponse(grave ? <GraveCard grave={grave} /> : <SiteCard />, {
+  return new ImageResponse(grave ? <GraveCard grave={grave} /> : <SiteCard bg={await loadVillage()} />, {
     width: 1200,
     height: 630,
     fonts: [{ name: "Galmuri11", data: await loadFont(), weight: 700, style: "normal" }],
@@ -93,21 +97,31 @@ function Stone({ width, height, children }: { width: number; height: number; chi
   );
 }
 
-function SiteCard() {
+/** 사이트 카드: 게임 화면 위 아래쪽을 어둡게 깔고 제목·한 줄 소개 */
+function SiteCard({ bg }: { bg: string }) {
   return (
-    <Frame>
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 170 }}>
-        <div style={{ fontSize: 120 }}>At one time...</div>
-        <div style={{ fontSize: 40, color: C.muted, marginTop: 28 }}>유령들이 모여 사는 도트 마을</div>
-      </div>
+    <div style={{ width: "100%", height: "100%", display: "flex", position: "relative", background: C.bg, color: C.ink, fontFamily: "Galmuri11" }}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- satori(ImageResponse)는 img만 그린다 */}
+      <img src={bg} width={1200} height={630} alt="" style={{ position: "absolute", left: 0, top: 0, width: 1200, height: 630 }} />
       <div
-        style={{ position: "absolute", left: 0, right: 0, bottom: 0, display: "flex", justifyContent: "center", gap: 70, alignItems: "flex-end" }}
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: 300,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "flex-end",
+          padding: "0 70px 48px",
+          background: "linear-gradient(to bottom, rgba(14,15,20,0) 0%, rgba(14,15,20,0.82) 45%, rgba(14,15,20,0.94) 100%)",
+        }}
       >
-        {[90, 130, 70, 150, 100, 120, 80].map((h, i) => (
-          <Stone key={i} width={Math.round(h * 0.7)} height={h} />
-        ))}
+        <div style={{ fontSize: 84, lineHeight: 1 }}>At one time...</div>
+        <div style={{ fontSize: 38, color: "#efe3b8", marginTop: 20 }}>유령들이 모여 사는 도트 마을</div>
+        <div style={{ fontSize: 28, color: "#b9b29c", marginTop: 10 }}>설치 없이 브라우저에서 여럿이 같이 놀아요</div>
       </div>
-    </Frame>
+    </div>
   );
 }
 

@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 
 export const SITE_TITLE = "At one time...";
+/** 11/16 첫 화면·공유 카드 제목: 게임 이름 + 무슨 게임인지 한 줄 (이름만으로는 검색어와 맞는 말이 없었다) */
+export const HOME_TITLE = "At one time... | 유령들이 모여 사는 도트 마을 브라우저 게임";
 export const SITE_DESCRIPTION =
-  "At one time...은 유령들이 모여 사는 아늑한 도트 마을이에요. 여러 사람과 실시간으로 만나 모닥불 앞에서 쉬어요. 사냥하고, 낚시하고, 야근 빌딩을 오르고, 내 집을 꾸며요. 설치 없이 브라우저에서 바로 할 수 있어요.";
+  "At one time...은 유령들이 모여 사는 아늑한 도트 마을이에요. 설치 없이 브라우저에서 여러 사람과 실시간으로 만나요. 모닥불 앞에서 쉬고, 캠핑장에 놀러 가고, 사냥과 낚시, 범퍼카, 행운권 추첨, 내 집 꾸미기를 즐겨요.";
 
 // 페이지가 openGraph를 덮어쓰면 레이아웃 값이 통째로 바뀌므로 공유 카드 필드는 매번 전부 채운다.
 export function shareMetadata(image: string): Metadata {
@@ -11,13 +13,13 @@ export function shareMetadata(image: string): Metadata {
       type: "website",
       locale: "ko_KR",
       siteName: SITE_TITLE,
-      title: SITE_TITLE,
+      title: HOME_TITLE,
       description: SITE_DESCRIPTION,
-      images: [{ url: image, alt: SITE_TITLE }],
+      images: [{ url: image, alt: "밤 모닥불 광장에 모인 유령 캐릭터들 (At one time... 게임 화면)" }],
     },
     twitter: {
       card: "summary_large_image",
-      title: SITE_TITLE,
+      title: HOME_TITLE,
       description: SITE_DESCRIPTION,
       images: [image],
     },
@@ -74,7 +76,7 @@ export function pageMetadata(path: string, title: string, description: string): 
       url: path,
       title,
       description,
-      images: [{ url: image, alt: SITE_TITLE }],
+      images: [{ url: image, alt: "밤 모닥불 광장에 모인 유령 캐릭터들 (At one time... 게임 화면)" }],
     },
     twitter: { card: "summary_large_image", title, description, images: [image] },
   };
