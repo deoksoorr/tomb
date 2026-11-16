@@ -5,6 +5,7 @@ import { flushSync } from "react-dom";
 import dynamic from "next/dynamic";
 import { bridge, type GameStartOptions } from "@/game/bridge";
 import { api } from "@/lib/api";
+import { useBagNew } from "@/lib/hooks/useBagNew";
 import { useBridgeEvent, useBridgeValue } from "@/lib/hooks/useBridge";
 import { useGraves } from "@/lib/hooks/useGraves";
 import { useGameKeyboardGuard } from "@/lib/hooks/useKeyBlock";
@@ -531,7 +532,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   }
 
   const disconnected = status?.mode === "replaced" || status?.mode === "offline";
-  const bagCount = me ? Object.values(me.inventory).reduce((n, c) => n + Math.max(0, c), 0) : 0;
+  // 11/16 가방 버튼: 물건 개수를 모두 더한 숫자 대신 새로 생긴 물건이 있을 때만 점
+  const bagNew = useBagNew(me?.accountId, me?.inventory, panel === "bag");
   const fireworkCount = me ? fireworkEntries(me).reduce((n, e) => n + e.count, 0) : 0;
 
   return (
@@ -691,11 +693,10 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 <PixelIcon name="bag" />
                 가방
                 <span className={styles.dockKey} aria-hidden="true">I</span>
-                {bagCount > 0 && <span className={styles.badge}>{bagCount}</span>}
-                {titleNew && (
+                {(titleNew || bagNew) && (
                   <>
                     <span className={styles.dot} aria-hidden="true" />
-                    <span className="visually-hidden"> (새 칭호 있음)</span>
+                    <span className="visually-hidden"> ({titleNew ? "새 칭호" : "새로 생긴 물건"} 있음)</span>
                   </>
                 )}
               </button>
@@ -849,7 +850,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
         <MenuSheet
           canBury={!inShop}
           myGraveCount={me ? me.graves.length : null}
-          bagCount={bagCount}
+          bagNew={bagNew}
           fireworkCount={fireworkCount}
           unreadNotice={unreadNotice}
           activityUnread={me?.activityUnread ?? 0}

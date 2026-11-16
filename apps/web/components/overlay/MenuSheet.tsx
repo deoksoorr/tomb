@@ -39,7 +39,8 @@ export type MenuTarget =
 type Props = {
   canBury: boolean;
   myGraveCount: number | null;
-  bagCount: number;
+  /** 11/16 가방에 새로 생긴 물건이 있음 (예전 숫자 배지 대신 점) */
+  bagNew: boolean;
   fireworkCount: number;
   unreadNotice: boolean;
   activityUnread: number;
@@ -78,7 +79,7 @@ type Entry = {
 export default function MenuSheet({
   canBury,
   myGraveCount,
-  bagCount,
+  bagNew,
   fireworkCount,
   unreadNotice,
   activityUnread,
@@ -101,7 +102,7 @@ export default function MenuSheet({
   const entries: Entry[] = [
     { target: "say", icon: "chat", label: "표현 (T)", desc: "말풍선·이모티콘으로 인사하기" },
     { target: "favs", icon: "spark", label: "즐겨찾기 표현 (Y)", desc: "별 표시한 표현을 바로 보내기" },
-    { target: "bag", icon: "bag", label: "가방 (I)", desc: titleNew ? "새 칭호를 얻었어요!" : "꾸미기·폭죽·잡은 것 꺼내기", badge: bagCount ? String(bagCount) : undefined, dot: titleNew },
+    { target: "bag", icon: "bag", label: "가방 (I)", desc: titleNew ? "새 칭호를 얻었어요!" : bagNew ? "새로 생긴 물건이 있어요" : "꾸미기·폭죽·잡은 것 꺼내기", dot: titleNew || bagNew },
     { target: "hunt", icon: "sword", label: "사냥터", desc: "몬스터를 잡고 포인트 모으기" },
     { target: "dex", icon: "book", label: "도감", desc: "물고기·곤충·약초 모으기" },
     { target: "housing", icon: "house", label: "집·분양 마을", desc: "내 집 분양받고 꾸미기" },
