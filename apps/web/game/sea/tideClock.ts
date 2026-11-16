@@ -1,4 +1,5 @@
 import { TIDE_PERIOD_MIN, tideLevel, tideMinute, tidePhase, type TidePhase } from "@tomb/protocol";
+import { qaSearch } from "@/lib/qaUrl";
 
 // 11/16 바닷가 물때 시계 (화면 쪽). 물 높이는 protocol tideLevel(한국 시각만으로 계산) 그대로이고,
 // 시험용으로만 시각을 밀 수 있어요: 주소 ?tide=분(한 바퀴 안의 분, 0 = 만조) 또는 ?debug=1일 때 window.__tombTide.set(분).
@@ -29,7 +30,7 @@ export function onTideShift(f: () => void): () => void {
 
 /** 주소 ?tide=분 (시험용) */
 export function applyTideQuery(search: string): void {
-  const raw = new URLSearchParams(search).get("tide");
+  const raw = new URLSearchParams(qaSearch(search)).get("tide");
   if (raw !== null && /^\d{1,3}(\.\d+)?$/.test(raw)) setTideMinute(Number(raw));
 }
 

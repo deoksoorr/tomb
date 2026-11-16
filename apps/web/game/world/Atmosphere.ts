@@ -9,6 +9,7 @@ import { WeatherSound } from "./WeatherSound";
 import { charTintOf } from "./charTint";
 import type { WorldTintControl } from "./worldTint";
 import type { LightSpot } from "./WorldMap";
+import { qaSearch } from "@/lib/qaUrl";
 
 // 분위기 레이어: [날씨 막(일반 섞기)] → KST 시간대 톤(곱하기 틴트 — 마을은 판 대신 셰이더가 그림마다 곱하고 캐릭터는 절반만, worldTint) → [어둠·빛 구멍은 Lighting] → 빛(가산) → 반딧불 → 날씨(비·눈·낙엽) → 안개 → 번개 → 비네트.
 // 톤·날씨는 lib/ambience(공용, 시계 기반)로 1분마다 다시 계산하고 바뀌면 2.5초 동안 섞는다.
@@ -110,7 +111,7 @@ export class Atmosphere {
     this.indoor = opts.indoor ?? false;
     this.grade = opts.grade ?? !this.indoor;
     this.shaderTint = opts.shaderTint ?? null;
-    this.forceThunder = new URLSearchParams(search).get("thunder") === "1";
+    this.forceThunder = new URLSearchParams(qaSearch(search)).get("thunder") === "1";
     this.sound = opts.sound === false ? null : WeatherSound.of(scene);
     this.blender = new LevelBlender(this.targetLevels(), TRANSITION_MS);
 

@@ -1,6 +1,8 @@
 // 한국 시간(KST) 기준 하늘 톤과 날씨. 서버 없이 시계만으로 계산하므로 같은 순간의 모든 방문자가 같은 하늘을 본다.
 // 게임(Phaser 틴트·오버레이·파티클)과 입장 화면(CSS 배경)이 같은 값을 쓴다. 1분마다 다시 계산하면 된다.
 
+import { qaSearch } from "./qaUrl";
+
 const HOUR = 3_600_000;
 const KST_OFFSET = 9 * HOUR;
 /** 날씨가 바뀌는 단위 (KST 기준 30분 블록 — 2시간은 안개·비가 너무 오래 간다는 의견) */
@@ -201,8 +203,9 @@ export const TOD_HOURS = {
  * QA용 덮어쓰기: `?time=dawn|day|dusk|night|0~23` , `?weather=clear|cloudy|fog|rain|snow` , `?season=spring|summer|autumn|winter`
  * `?tod=dawn|morning|day|sunset|evening|night|deepnight` 는 time 보다 먼저 본다 (바깥 7구간 색 확인용)
  */
-export function parseAmbienceOverride(search: string): AmbienceOverride {
-  const q = new URLSearchParams(search);
+export function parseAmbienceOverride(search: string, qaFlag?: string): AmbienceOverride {
+  // 실서버에서는 시험 값을 무시해요 (lib/qaUrl)
+  const q = new URLSearchParams(qaSearch(search, qaFlag));
   const out: AmbienceOverride = {};
   const tod = q.get("tod");
   const t = q.get("time");

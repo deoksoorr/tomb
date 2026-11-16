@@ -15,6 +15,7 @@ import { CampScene } from "./camp/CampScene";
 import { SeaScene } from "./sea/SeaScene";
 import { applyTideQuery, setTideMinute } from "./sea/tideClock";
 import { installWorldTint } from "./world/worldTint";
+import { qaUrlAllowed } from "@/lib/qaUrl";
 
 // Phaser 게임 생성. GameCanvas가 브라우저에서만 동적 import 한다 (Phaser는 이 경로로만 로드된다).
 
@@ -61,7 +62,7 @@ export function createGame(parent: HTMLElement, opts: GameStartOptions): GameHan
   if (opts.debug) (window as unknown as { __tombGame?: Phaser.Game }).__tombGame = game;
   // 11/16 바닷가 물때 시험: 주소 ?tide=분 (한 바퀴 안의 분, 0 = 만조 · 90 = 간조), ?debug=1이면 콘솔에서 __tombTide.set(분)·__tombTide.set(null)
   applyTideQuery(window.location.search);
-  if (opts.debug) (window as unknown as { __tombTide?: { set(min: number | null): void } }).__tombTide = { set: (min) => setTideMinute(min) };
+  if (opts.debug && qaUrlAllowed()) (window as unknown as { __tombTide?: { set(min: number | null): void } }).__tombTide = { set: (min) => setTideMinute(min) };
 
   let destroyed = false;
   return {
