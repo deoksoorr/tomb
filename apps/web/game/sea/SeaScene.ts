@@ -156,6 +156,8 @@ export class SeaScene extends Phaser.Scene {
   private rest: SeaRestSeat | null = null;
   /** 11/16 등대 꼭대기에 올라가 있는지 · 오른 자리 (여기서 움직이면 내려와요) */
   private lookout = false;
+  /** 11/16 r19 등대 꼭대기 대신 동전 망원경으로 보는 중 (어느 망원경인지 — 망원경마다 흔들림 결이 달라요) */
+  private scopeLook: number | null = null;
   private lookoutAt = { x: 0, y: 0 };
   private foghornAt = 0;
   /** 거절된 쉴거리 자리를 한 번 더 청했는지 */
@@ -964,9 +966,10 @@ export class SeaScene extends Phaser.Scene {
   private viewKindNow(): { kind: ViewKind; group: string; mat: number; variant: number } | null {
     const pl = this.player;
     // 11/16 등대 꼭대기에 올라가 있는 동안 (움직이면 내려와요)
-    if (this.lookout) return { kind: "lighthouse", group: "lighthouse", mat: 0, variant: 0 };
-    // 11/16 r19 동전 망원경 앞에 서 있으면 (낮·밤 모두) 바다 보기 버튼·V
-    if (this.stars?.viewSpot()) return { kind: "lighthouse", group: "scope", mat: 0, variant: 0 };
+    if (this.lookout) return this.scopeLook !== null ? { kind: "binocular", group: "scope", mat: 0, variant: this.scopeLook } : { kind: "lighthouse", group: "lighthouse", mat: 0, variant: 0 };
+    // 11/16 r19 동전 망원경 앞에 서 있으면 (낮·밤 모두) 바다 보기 버튼·V → 망원경 속 장면 (등대 장면이 아니에요)
+    const spot = this.stars?.viewSpot();
+    if (spot) return { kind: "binocular", group: "scope", mat: 0, variant: Math.max(0, SEA_SCOPES.indexOf(spot)) };
     const id = this.rest ? this.rest.id : pl.state === "sitChair" && pl.seat ? pl.seat.id : null;
     if (!id) return null;
     const kind = seaViewOfSeat(id);
@@ -1049,6 +1052,7 @@ export class SeaScene extends Phaser.Scene {
     if (v.group === "scope") {
       // 망원경으로 보는 바다: 움직이면 내려와요 (등대 꼭대기와 같아요)
       this.lookout = true;
+      this.scopeLook = v.variant;
       this.lookoutAt = { x: this.player.x, y: this.player.y };
     }
     this.viewOn = true;
@@ -1061,6 +1065,7 @@ export class SeaScene extends Phaser.Scene {
 
   private leaveView(): void {
     this.lookout = false;
+    this.scopeLook = null;
     if (!this.viewOn) return;
     this.viewOn = false;
     this.seaView?.end(this.host.reduced ? 0 : 1);
@@ -1141,6 +1146,7 @@ export class SeaScene extends Phaser.Scene {
         if (this.rest) this.leaveRest(now);
         if (pl.sitting) pl.stand(now, this.seatReq);
         this.lookout = true;
+        this.scopeLook = null;
         this.lookoutAt = { x: pl.x, y: pl.y };
         this.toggleView();
         break;

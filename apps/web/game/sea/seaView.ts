@@ -61,10 +61,12 @@ type Glint = { img: Phaser.GameObjects.Image; t0: number; life: number; on: bool
 let seq = 0;
 
 /** 장면마다 수평선 높이 (화면 높이 비율) — 선베드는 누워서 하늘이 넓어요 */
-/** 11/16 장면 종류: 앉은 자리 장면 + 등대 꼭대기 (오르기) */
-export type ViewKind = SeaViewKind | "lighthouse";
+/** 11/16 장면 종류: 앉은 자리 장면 + 등대 꼭대기 (오르기) + r19 동전 망원경 속 (탁 트인 먼바다만, 쌍안경 가림막) */
+export type ViewKind = SeaViewKind | "lighthouse" | "binocular";
 // 11/16 r12 벤치는 눈높이를 조금 높여(내려다보듯) 수평선을 위로 — 모래밭이 잘 보이게
-const HORIZON: Record<ViewKind, number> = { beach: 0.34, mat: 0.42, parasol: 0.44, lounger: 0.6, hammock: 0.66, pier: 0.36, breakwater: 0.4, lighthouse: 0.24 };
+/** 11/16 r19 망원경 가림막을 화면보다 넓게 그리는 여백 (흔들려도 가장자리가 안 보여요) */
+const BINO_PAD = 8;
+const HORIZON: Record<ViewKind, number> = { beach: 0.34, mat: 0.42, parasol: 0.44, lounger: 0.6, hammock: 0.66, pier: 0.36, breakwater: 0.4, lighthouse: 0.24, binocular: 0.46 };
 
 export class SeaView {
   private readonly scene: ViewScene;
@@ -332,6 +334,10 @@ export class SeaView {
       this.spoutAt = sc.time.now + 6000 + Math.random() * 12000;
       this.ghost = this.add(sc.add.image(0, 0, Art.SEA_TEX.boat).setOrigin(0.5, 1).setDepth(9).setTint(0xb8f0d8).setAlpha(0).setVisible(false));
       this.beam = this.add(sc.add.image(Math.round(VW / 2), VH - 10, this.tex(P + "beam", () => V.beamWedge())).setOrigin(0, 0.5).setDepth(8).setBlendMode(Phaser.BlendModes.ADD).setVisible(false));
+    } else if (kind === "binocular") {
+      // 11/16 r19 동전 망원경 속: 땅·선착장·방파제·등대 없이 먼바다만 (가까이 당겨 본 수평선 · 지나는 배 · 밤 오징어잡이배 · 갈매기).
+      // 두 원이 겹친 쌍안경 가림막이 맨 앞 (날씨보다 앞) — 손으로 든 것처럼 살짝 흔들려요
+      this.binoMask = this.add(sc.add.image(Math.round(VW / 2), Math.round(VH / 2), this.tex(`${P}bino-${VW}-${VH}`, () => V.binocularMask(VW, VH, BINO_PAD))).setOrigin(0.5, 0.5).setDepth(50));
     } else if (kind === "pier") {
       // 11/16 묶인 낚싯배는 선착장 끝 동쪽 → 바다를 보면 왼쪽, 부표는 서쪽 → 오른쪽
       // 11/16 r16 사용자: 바다 보기 장면엔 제트스키를 그리지 않아요 (탁 트인 바다)
@@ -365,6 +371,8 @@ export class SeaView {
   }
 
   private spout: Phaser.GameObjects.Image | null = null;
+  /** 11/16 r19 동전 망원경 가림막 */
+  private binoMask: Phaser.GameObjects.Image | null = null;
   private spoutAt = 0;
   private spoutT0 = -1;
   private spoutX = 0;
@@ -423,6 +431,7 @@ export class SeaView {
     this.landGfx = null;
     this.landSprites = [];
     this.spout = this.ghost = null;
+    this.binoMask = null;
     this.spoutT0 = -1;
     this.skyKey = this.seaKey = "";
   }
@@ -664,6 +673,13 @@ export class SeaView {
     const now = f.now;
     const k = this.reduced ? 0.3 : 1;
     if (this.kind === "lighthouse") this.updateLookout(f, night);
+    // 11/16 r19 망원경 가림막: 손으로 든 것처럼 천천히 살짝 흔들려요 (망원경마다 흔들림 결이 조금 달라요). 움직임 줄이기면 멈춰요
+    if (this.binoMask) {
+      const ph = this.variant * 1.7;
+      const sx = this.reduced ? 0 : Math.sin(now / 1900 + ph) * 3 + Math.sin(now / 730 + ph) * 0.8;
+      const sy = this.reduced ? 0 : Math.sin(now / 2300 + ph * 0.6) * 2;
+      this.binoMask.setPosition(Math.round(this.VW / 2 + sx), Math.round(this.VH / 2 + sy));
+    }
     // 11/16 r15 해먹: 천이 좌우로 살랑 흔들리며 살짝 기울어요 (앞 천·야자 잎만 — 장면 카메라는 그대로). 움직임 줄이기면 멈춰요
     if (this.kind === "hammock" && !this.reduced) {
       const sw = Math.sin(now / 1400);

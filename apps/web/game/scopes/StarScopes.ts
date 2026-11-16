@@ -137,14 +137,14 @@ export class StarScopes {
     pl.view.apply(pl.state, pl.dir, now);
     this.held = { id, spot: s };
     if (!judged || owner === net.mySid) {
-      this.open(s);
+      this.open();
       return;
     }
     this.pending = { id, until: performance.now() + 1500 };
     net.sit(id);
   }
 
-  private open(s: ScopeSpot): void {
+  private open(): void {
     this.pending = null;
     playLife(this.d.sfx, "sparkle", 0.3);
     bridge.emit("portal:open", { kind: "telescope" });
@@ -153,7 +153,7 @@ export class StarScopes {
   /** 좌석 알림: 내 자리가 확정되면 연다, 남이 먼저 잡았으면 비켜선다 */
   onSeat(seatId: string, sid: Sid | null): void {
     const me = this.d.net().mySid;
-    if (this.pending?.id === seatId && sid === me && this.held) this.open(this.held.spot);
+    if (this.pending?.id === seatId && sid === me && this.held) this.open();
     else if (sid !== null && sid !== me && this.held?.id === seatId) this.lost(seatId);
   }
 
@@ -162,7 +162,7 @@ export class StarScopes {
     if (this.held?.id !== seatId && this.pending?.id !== seatId) return false;
     // 주인이 없는데 거절 = 이 자리 종류를 모르는 옛 서버 → 판정 없이 그냥 본다
     if (this.d.seats().get(seatId) === undefined && this.held) {
-      this.open(this.held.spot);
+      this.open();
       return true;
     }
     this.lost(seatId);
@@ -189,7 +189,7 @@ export class StarScopes {
     const tag = this.held?.spot.kind === "telescope";
     if (tag || this.tagged) pl.view.setDoing(tag ? STARGAZE_TAG : null);
     this.tagged = tag;
-    if (this.pending && performance.now() > this.pending.until && this.held) this.open(this.held.spot);
+    if (this.pending && performance.now() > this.pending.until && this.held) this.open();
   }
 
   destroy(): void {

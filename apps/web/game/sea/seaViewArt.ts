@@ -490,3 +490,52 @@ export function stoneEdge(w: number): Grid {
   g.hline(0, w - 1, 0, 0x3a2820);
   return g;
 }
+
+/**
+ * 11/16 r19 동전 망원경 속: 두 원이 겹친 쌍안경 구멍만 뚫린 어두운 가림막 (가장자리는 부드럽게 흐리고 살짝 푸른 테).
+ * pad만큼 넓게 그려 흔들려도 가장자리가 드러나지 않아요. 캔버스 (원점 왼쪽 위)
+ */
+export function binocularMask(w: number, h: number, pad: number): HTMLCanvasElement {
+  const W = w + pad * 2;
+  const H = h + pad * 2;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const g = c.getContext("2d");
+  if (!g) return c;
+  g.fillStyle = "#05070b";
+  g.fillRect(0, 0, W, H);
+  const r = Math.round(Math.min(h * 0.47, w * 0.27));
+  const cy = H / 2;
+  const off = r * 0.72;
+  g.globalCompositeOperation = "destination-out";
+  for (const cx of [W / 2 - off, W / 2 + off]) {
+    const grad = g.createRadialGradient(cx, cy, r * 0.86, cx, cy, r);
+    grad.addColorStop(0, "rgba(0,0,0,1)");
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(cx, cy, r, 0, Math.PI * 2);
+    g.fill();
+  }
+  // 렌즈 가장자리의 옅은 푸른 테 (안쪽으로 살짝 번져요) — 두 원이 겹친 가운데에는 테를 넣지 않아요 (다른 원 안은 잘라내요)
+  g.globalCompositeOperation = "source-over";
+  const centers = [W / 2 - off, W / 2 + off];
+  centers.forEach((cx, i) => {
+    const other = centers[1 - i];
+    g.save();
+    g.beginPath();
+    g.rect(0, 0, W, H);
+    g.arc(other, cy, r * 0.97, 0, Math.PI * 2);
+    g.clip("evenodd");
+    const grad = g.createRadialGradient(cx, cy, r * 0.78, cx, cy, r * 0.98);
+    grad.addColorStop(0, "rgba(40,70,110,0)");
+    grad.addColorStop(1, "rgba(40,70,110,0.22)");
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(cx, cy, r * 0.98, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+  });
+  return c;
+}
