@@ -46,6 +46,11 @@ export function whisperPrefill(name: string): string {
   return `/귓 ${name} `;
 }
 
+/** 11/16 이름 없이 명령만 친 상태 ("/w", "/귓", 뒤 공백 포함): 이때 Enter면 가장 최근 귓속말 상대로 채운다 */
+export function isBareWhisper(raw: string): boolean {
+  return /^\/(?:귓|w)\s*$/i.test(raw.normalize("NFC").trimStart());
+}
+
 // ── 최근 귓속말 상대 ──
 
 /** 최근 귓속말 상대 최대 수 (서버에 접속 여부를 한 번에 물어볼 수 있는 수와 같다) */

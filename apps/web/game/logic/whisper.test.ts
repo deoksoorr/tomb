@@ -1,6 +1,6 @@
 import { CHAT_MAX } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
-import { WHISPER_PARTNERS_MAX, addPartner, filterPartners, isWhisperCommand, parseWhisper, readPartners, whisperChips, whisperPrefill } from "./whisper";
+import { WHISPER_PARTNERS_MAX, addPartner, filterPartners, isBareWhisper, isWhisperCommand, parseWhisper, readPartners, whisperChips, whisperPrefill } from "./whisper";
 
 describe("귓속말 명령 나누기", () => {
   it("/귓·/w로 시작할 때만 귓속말 (다른 /로 시작하는 글·평범한 글은 아니다)", () => {
@@ -34,6 +34,13 @@ describe("귓속말 명령 나누기", () => {
 
   it("캐릭터 메뉴가 채우는 글은 그대로 나눌 수 있다", () => {
     expect(parseWhisper(whisperPrefill("진 순") + "안녕", ["진 순"])).toEqual({ kind: "send", to: "진 순", text: "안녕" });
+  });
+});
+
+describe("명령만 친 귓속말 (/w + Enter → 최근 상대)", () => {
+  it("이름 없이 /w·/귓만 쳤을 때만 (뒤 공백 포함)", () => {
+    for (const t of ["/w", "/W", "/귓", " /w ", "/귓  "]) expect(isBareWhisper(t)).toBe(true);
+    for (const t of ["/w 진순", "/귓 진순 안녕", "/wave", "/답", "w", ""]) expect(isBareWhisper(t)).toBe(false);
   });
 });
 

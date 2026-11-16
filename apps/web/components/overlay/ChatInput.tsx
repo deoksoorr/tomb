@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { CHAT_MAX, CHAT_STORE_MAX, maskChat, nameKey, newChatBucket, normalizeChat, takeChatToken } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
-import { isReplyCommand, isWhisperCommand, parseWhisper, whisperChips, whisperPrefill } from "@/game/logic/whisper";
+import { isBareWhisper, isReplyCommand, isWhisperCommand, parseWhisper, whisperChips, whisperPrefill } from "@/game/logic/whisper";
 import { useBridgeEvent, useBridgeValue } from "@/lib/hooks/useBridge";
 import { useWhisperPartners, whisperPartners } from "@/lib/whisperPartners";
 import { cx } from "../ui/cx";
@@ -181,6 +181,14 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
       choose(inline[picked]);
       return;
     }
+    // 11/16 "/w"(또는 "/귓")만 치고 Enter → 가장 최근에 주고받은 사람으로 바로 채운다 (할 말만 치면 된다)
+    if (e.key === "Enter" && isBareWhisper(text)) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (partners.length > 0) choose(partners[0]);
+      else setWhisperHint("아직 귓속말한 사람이 없어요. 「/w 닉네임 할 말」로 보내 보세요");
+      return;
+    }
     if (e.key === "Escape" && chipsOpen) {
       e.preventDefault();
       e.stopPropagation();
@@ -283,8 +291,10 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
           <span>일부 낱말·주소는 ***로 가려져요</span>
         ) : whisper && replyTo && isReplyCommand(text) ? (
           <span>{replyTo}님에게 답장해요</span>
+        ) : whisper && partners.length > 0 && isBareWhisper(text) ? (
+          <span>Enter를 누르면 {partners[0]}님에게 귓속말해요</span>
         ) : whisper ? (
-          <span>귓속말은 받는 사람에게만 보이고 남지 않아요</span>
+          <span>귓속말은 받는 사람에게만 보여요. /w 하고 Enter면 최근 상대에게 바로 보내요</span>
         ) : (
           <span>같은 채널에 보이고, 최근 {CHAT_STORE_MAX}줄은 하루 동안 남아요</span>
         )}
