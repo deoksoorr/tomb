@@ -56,6 +56,7 @@ import { WeatherSound } from "../world/WeatherSound";
 import { createBusArrival } from "../bus/BusArrival";
 import type { BusArrivalApi } from "../bus/busTypes";
 import { SeaMap } from "./SeaMap";
+import { SeaToneTint } from "./seaTone";
 import { SEA_SCENE, type SeaFriend, type SeaHost, type SeaSceneData } from "./seaHost";
 import { seaNeighborSeat, seaPickSeat, SEA_MULTI_SEAT } from "./seaSit";
 import type { SeaInteractable } from "./seaTypes";
@@ -212,7 +213,8 @@ export class SeaScene extends Phaser.Scene {
     yield;
     const tint = worldTintOf(this.game);
     if (tint) addWorldTintBounds(this, tint);
-    this.atmos = new Atmosphere(this, h.reduced, window.location.search, { shaderTint: tint });
+    // 11/16 바닷가 색조 (노을은 라벤더, 밤은 깊은 파랑 — sea/seaTone)
+    this.atmos = new Atmosphere(this, h.reduced, window.location.search, { shaderTint: tint ? new SeaToneTint(tint) : null });
     this.atmos.setStaticLights(this.map.staticLights.map((l) => ({ ...l })));
     this.lighting = new Lighting(this);
     yield;
@@ -322,7 +324,7 @@ export class SeaScene extends Phaser.Scene {
       pl.view.apply(pl.state, DIR.down, this.time.now);
       const done = () => {
         this.locked = false;
-        this.bus?.depart(() => this.dropBus());
+        this.departBus();
       };
       if (this.host.reduced) {
         pl.view.fade = 1;
@@ -765,11 +767,13 @@ export class SeaScene extends Phaser.Scene {
     const pl = this.player;
     if (pl.sitting) pl.stand(this.time.now, this.seatReq);
     this.riding.dismount(false);
+    // 11/16 내려 준 버스가 아직 흐려지는 중이면 치워요 (그 버스가 사라질 때 새 버스까지 지워 버스가 오지 않던 문제)
+    this.dropBus();
     this.bus = createBusArrival(this, this.busOptions());
     this.bus.arrive(() => {
       if (this.cleaned) return;
       const go = () => {
-        this.bus?.depart(() => this.dropBus());
+        this.departBus();
         this.host.goVillage(null);
       };
       net.setAway(true, "bus");
@@ -783,6 +787,15 @@ export class SeaScene extends Phaser.Scene {
   private dropBus(): void {
     this.bus?.destroy();
     this.bus = null;
+  }
+
+  /** 11/16 지금 버스를 떠나보내요. 사라지면 그 버스만 치워요 (그 사이 새로 부른 버스는 건드리지 않게) */
+  private departBus(): void {
+    const bus = this.bus;
+    bus?.depart(() => {
+      bus.destroy();
+      if (this.bus === bus) this.bus = null;
+    });
   }
 
   /** 같은 채널 바닷가의 친구 옆으로 (캠핑장 goToFriend와 같은 규칙) */

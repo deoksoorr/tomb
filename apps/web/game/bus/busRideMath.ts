@@ -16,6 +16,20 @@ export function rideOrder(route: BusRoute = "camp"): readonly RideSegment[] {
   return route === "sea" ? SEA_RIDE_ORDER : RIDE_ORDER;
 }
 
+/**
+ * 11/16 그림을 굽는 순서 (파노라마 왼쪽 끝 → 오른쪽 끝). 캠핑장은 가는 길 순서 그대로, 바닷가는 거꾸로 (바다가 왼쪽 끝).
+ * 마을 바닷가행 정류장은 버스가 왼쪽에서 들어와 오른쪽으로, 포구 정류장은 오른쪽에서 들어와요 → 창밖은 캠핑장 노선과 반대로 흘러야 해서
+ * 바닷가 그림은 반대로 굽고 반대로 훑어요 (글씨가 든 그림을 뒤집지 않고 흐르는 쪽만 바꿔요)
+ */
+export function bakeOrder(route: BusRoute = "camp"): readonly RideSegment[] {
+  return route === "sea" ? [...SEA_RIDE_ORDER].reverse() : RIDE_ORDER;
+}
+
+/** 11/16 파노라마를 오른쪽 끝에서 왼쪽으로 훑는지 (= 창밖 풍경이 오른쪽으로 흘러요). 캠핑장은 돌아오는 길, 바닷가는 가는 길 */
+export function rideReversed(leg: BusLeg, route: BusRoute = "camp"): boolean {
+  return (leg === "toVillage") !== (route === "sea");
+}
+
 export function segmentsFor(leg: BusLeg, route: BusRoute = "camp"): readonly RideSegment[] {
   const order = rideOrder(route);
   return leg === "toCamp" ? order : [...order].reverse();

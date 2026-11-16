@@ -214,10 +214,12 @@ function buildDecor(): SeaDecor[] {
     if (Math.abs(x - (SEA_PIER.x + SEA_PIER.w / 2)) < 40) continue;
     out.push({ kind: "beachGrass", x, y, v: i % 3 });
   }
+  // 11/16 파스텔 정리: 조개·떠밀려 온 나무를 절반쯤으로 줄여 모래를 깨끗하게 (떠밀려 온 나무는 드물게)
   for (let i = 0; i < 46; i++) {
+    if (hashU(i, 9, 23) < 0.5) continue;
     const x = 20 + Math.floor(hashU(i, 3, 23) * (SEA_WIDTH - 40));
     const y = SEA_SAND_Y0 + 44 + Math.floor(hashU(i, 4, 23) * (SEA_FLAT_Y0 - SEA_SAND_Y0 - 50));
-    out.push({ kind: hashU(i, 5, 23) < 0.12 ? "drift" : "shell", x, y, v: i % 3 });
+    out.push({ kind: hashU(i, 5, 23) < 0.06 ? "drift" : "shell", x, y, v: i % 3 });
   }
   // 풀밭 들꽃 (해당화 빛)
   for (let i = 0; i < 40; i++) {

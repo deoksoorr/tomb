@@ -2,7 +2,7 @@ import * as Phaser from "phaser";
 import { ambienceAt, timePhase } from "@/lib/ambience";
 import { ART_H, buildCaption, buildInterior, buildSky, LAYERS, VIEW_MAX, WIN_BOT, WIN_TOP, type LayerSpec } from "./busRideArt";
 import { GULL_FRAMES, LEAF_COLORS, rideBake, type RideBake } from "./busRideBake";
-import { captionAlpha, captionAt, distanceAt, lightsOn, segmentAt, segmentsFor, shakeAt, skyColors, starsOn, strapAngle, type RideSegment } from "./busRideMath";
+import { captionAlpha, captionAt, distanceAt, lightsOn, rideReversed, segmentAt, segmentsFor, shakeAt, skyColors, starsOn, strapAngle, type RideSegment } from "./busRideMath";
 import { css } from "../sprites/pixel";
 import { BUS_RIDE_MS, BUS_RIDE_SCENE, BUS_TEX_PREFIX, type BusRideControl, type BusRideData, type BusRoute } from "./busTypes";
 
@@ -104,7 +104,8 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
     this.ride = data;
     this.route = data.route ?? "camp";
     this.order = segmentsFor(data.leg, this.route);
-    this.rev = data.leg === "toVillage";
+    // 11/16 바닷가 노선은 캠핑장과 반대로 흘러요 (busRideMath rideReversed)
+    this.rev = rideReversed(data.leg, this.route);
     this.endAt = null;
     this.pending = false;
     this.skipped = false;

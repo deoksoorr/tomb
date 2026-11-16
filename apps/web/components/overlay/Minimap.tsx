@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { bridge } from "@/game/bridge";
-import { BALLOON_ICON, BUMPER_ICON, BUS_ICON, FERRIS_ICON, FISH_ICON, LANDMARK_COLOR, LANDMARKS, MINIMAP_H, MINIMAP_W, minimapPixels, NODE_DOT_COLOR, PAW_ICON, toMinimap } from "@/game/world/minimapArt";
+import { BALLOON_ICON, BUMPER_ICON, FERRIS_ICON, FISH_ICON, LANDMARK_COLOR, LANDMARKS, MINIMAP_H, MINIMAP_W, minimapPixels, NODE_DOT_COLOR, PAW_ICON, toMinimap } from "@/game/world/minimapArt";
 import type { AwayMapId, MapId } from "@tomb/protocol";
 import { CAMP_LANDMARK_COLOR, CAMP_LANDMARKS, CAMP_MINIMAP_H, CAMP_MINIMAP_W, campMinimapPixels, toCampMinimap } from "@/game/camp/campMinimap";
 import { SEA_LANDMARK_COLOR, SEA_LANDMARKS, SEA_MINIMAP_H, SEA_MINIMAP_W, seaMinimapPixels, toSeaMinimap } from "@/game/sea/seaMinimap";
 import { gatherNodeById } from "@/lib/forage/catalog";
+import { MAP_ICONS } from "@/game/world/minimapIcons";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
@@ -64,6 +65,21 @@ function awayImage(map: AwayMapId): HTMLCanvasElement {
   return c;
 }
 
+/** 11/16 장소 도트 그림 (글씨 없이): 칸마다 검은 테 3×3을 먼저, 그 위에 색 1×1. 그림이 없는 종류면 false */
+function drawIcon(ctx: CanvasRenderingContext2D, kind: string, x: number, y: number): boolean {
+  const ic = MAP_ICONS[kind];
+  if (!ic) return false;
+  const px = Math.round(x);
+  const py = Math.round(y);
+  ctx.fillStyle = "rgba(0,0,0,0.75)";
+  for (const [dx, dy] of ic.px) ctx.fillRect(px + dx - 1, py + dy - 1, 3, 3);
+  for (const [dx, dy, acc] of ic.px) {
+    ctx.fillStyle = acc ? ic.accent : ic.color;
+    ctx.fillRect(px + dx, py + dy, 1, 1);
+  }
+  return true;
+}
+
 /** 테두리 두른 동그란 점 (지도 칸 단위 좌표·반지름) */
 function dot(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, line: number, fill: string, edge: string) {
   ctx.beginPath();
@@ -114,6 +130,7 @@ function drawAway(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, map: Away
   ctx.drawImage(awayImage(map), 0, 0);
   for (const l of M.landmarks) {
     const p = toMap(l.x, l.y);
+    if (drawIcon(ctx, l.kind, p.x, p.y)) continue;
     const big = M.big.has(l.kind);
     ctx.fillStyle = "rgba(0,0,0,0.6)";
     ctx.fillRect(Math.round(p.x) - 2, Math.round(p.y) - 2, big ? 5 : 4, big ? 5 : 4);
@@ -178,6 +195,8 @@ export default function Minimap() {
     ctx.drawImage(baseImage(), 0, 0);
     for (const l of LANDMARKS) {
       const p = toMinimap(l.x, l.y);
+      // 11/16 잡화점·분양 사무소·사냥터·야근 빌딩·정류장 둘·조각배·오리배는 도트 그림으로
+      if (drawIcon(ctx, l.kind, p.x, p.y)) continue;
       if (l.kind === "fish") {
         // 낚시터: 테두리를 두른 작은 물고기
         const px = Math.round(p.x);
@@ -190,11 +209,11 @@ export default function Minimap() {
         ctx.fillRect(px + 1, py - 1, 1, 1); // 눈
         continue;
       }
-      if (l.kind === "ferris" || l.kind === "balloon" || l.kind === "bumper" || l.kind === "busCamp" || l.kind === "busSea") {
+      if (l.kind === "ferris" || l.kind === "balloon" || l.kind === "bumper") {
         // 관람차·열기구·범퍼카: 테두리를 두른 작은 그림
         const px = Math.round(p.x);
         const py = Math.round(p.y);
-        const icon = l.kind === "ferris" ? FERRIS_ICON : l.kind === "balloon" ? BALLOON_ICON : l.kind === "bumper" ? BUMPER_ICON : BUS_ICON;
+        const icon = l.kind === "ferris" ? FERRIS_ICON : l.kind === "balloon" ? BALLOON_ICON : BUMPER_ICON;
         ctx.fillStyle = "rgba(0,0,0,0.7)";
         for (const [dx, dy] of icon) ctx.fillRect(px + dx - 1, py + dy - 1, 3, 3);
         ctx.fillStyle = LANDMARK_COLOR[l.kind];

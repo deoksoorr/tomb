@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BUS_RIDE_MS } from "./busTypes";
-import { BLEND, captionAlpha, skyColors, captionAt, distanceAt, lightsOn, RIDE_ORDER, rideOrder, SEA_RIDE_ORDER, segmentAt, segmentsFor, shakeAt, speedAt, starsOn, strapAngle } from "./busRideMath";
+import { bakeOrder, BLEND, captionAlpha, rideReversed, skyColors, captionAt, distanceAt, lightsOn, RIDE_ORDER, rideOrder, SEA_RIDE_ORDER, segmentAt, segmentsFor, shakeAt, speedAt, starsOn, strapAngle } from "./busRideMath";
 
 describe("버스 창밖 연출 계산", () => {
   it("가는 길은 마을 → 고속도로 → 단풍 국도 → 숲길, 돌아오는 길은 반대", () => {
@@ -14,6 +14,13 @@ describe("버스 창밖 연출 계산", () => {
     expect(segmentsFor("toCamp", "sea")).toEqual(["village", "highway", "coast", "sea"]);
     expect(segmentsFor("toVillage", "sea")).toEqual(["sea", "coast", "highway", "village"]);
     expect(SEA_RIDE_ORDER).toEqual(["village", "highway", "coast", "sea"]);
+    // 11/16 창밖 흐르는 쪽: 캠핑장은 그대로(가는 길 왼쪽으로), 바닷가는 두 길 모두 반대 — 그림은 바다가 왼쪽 끝이 되게 거꾸로 구워요
+    expect(rideReversed("toCamp", "camp")).toBe(false);
+    expect(rideReversed("toVillage", "camp")).toBe(true);
+    expect(rideReversed("toCamp", "sea")).toBe(true);
+    expect(rideReversed("toVillage", "sea")).toBe(false);
+    expect(bakeOrder("camp")).toEqual(RIDE_ORDER);
+    expect(bakeOrder("sea")).toEqual(["sea", "coast", "highway", "village"]);
     expect(rideOrder("camp")).toBe(RIDE_ORDER);
     expect(segmentsFor("toCamp", "camp")).toEqual(segmentsFor("toCamp"));
   });

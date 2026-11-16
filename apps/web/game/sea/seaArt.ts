@@ -21,11 +21,13 @@ import { hashU, poolDepth, seaGroundKind, SEA_PLATFORM, type SeaGround } from ".
 import { SEA_TEX_PREFIX } from "./seaTypes";
 
 // 11/16 달물결 포구 픽셀 아트 (코드로 그려요, 마을·캠핑장 그림을 다시 쓰지 않고 새로).
-// 늦가을 바닷가: 바랜 하늘빛 지붕, 흰 칠이 벗겨진 나무, 소금기에 바랜 모래, 회갈색 갯벌. 원점 = 바닥 가운데 (0.5, 1),
+// 11/16 사용자 "고물상 같아요" → 파스텔 바닷가로: 크림빛 모래, 민트·아쿠아 얕은 물에서 청록·연보라 먼바다로, 복숭아·민트·라일락·버터색 지붕과 차양,
+// 깨끗한 산책로, 지저분한 점·잔해는 줄이고, 갯벌은 따뜻한 회보라(토프), 바위는 푸른 회색. 원점 = 바닥 가운데 (0.5, 1),
 // 맨 아래 줄 근처는 그림자 (캠핑장 그림과 같은 규칙). 모든 함수는 순수(Grid·RGBA 배열)라 Phaser 없이도 돌아요.
 // 텍스처 키는 SEA_TEX 값 (모두 "sea-"로 시작). 한 번 구우면 장면을 닫아도 남겨 둬요.
 
-const OUT = 0x26201c;
+/** 테두리 (파스텔에 맞게 조금 옅은 자줏빛 먹색) */
+const OUT = 0x4a4250;
 const P = SEA_TEX_PREFIX;
 
 export const SEA_TEX = {
@@ -69,6 +71,11 @@ export const SEA_TEX = {
   shimmer: `${P}shimmer`,
   spray: `${P}spray`,
   sparkle: `${P}sparkle`,
+  /** 11/16 물 빛: 반짝이는 별·밤 물빛 점·지나가는 빛 띠·먼바다 깊이 그늘 */
+  star: `${P}star`,
+  glowDot: `${P}glowDot`,
+  sheen: `${P}sheen`,
+  depthShade: `${P}depthShade`,
   ground: (cx: number, cy: number) => `${P}ground-${cx}-${cy}`,
 } as const;
 
@@ -102,15 +109,34 @@ type Pal3 = { hi: Color; mid: Color; lo: Color };
 type Pal4 = Pal3 & { deep: Color };
 
 /** 소금기에 바랜 흰 칠 나무 */
-const PAINT: Pal3 & { line: Color } = { hi: 0xf2ece0, mid: 0xdcd4c4, lo: 0xb4aa98, line: 0x6a6052 };
+/** 11/16 현판 그림 (글씨는 판 위에 뜨는 이름표가 맡아요 — 판에는 작은 그림만): 물고기 */
+function fishIcon(g: Grid, x: number, y: number, c: Color): void {
+  g.ellipse(x + 4, y + 2.5, 4, 2.2, c);
+  g.set(x + 9, y + 1, c);
+  g.set(x + 9, y + 4, c);
+  g.rect(x + 8, y + 2, 2, 2, c);
+  g.set(x + 2, y + 2, 0xfffaf0);
+}
+/** 작은 집 (지붕 세모 + 몸) */
+function houseIcon(g: Grid, x: number, y: number, roof: Color, wall: Color): void {
+  for (let k = 0; k < 4; k++) g.hline(x + 3 - k, x + 4 + k, y + k, roof);
+  g.rect(x + 1, y + 4, 6, 4, wall);
+  g.rect(x + 3, y + 5, 2, 3, roof);
+}
+
+const PAINT: Pal3 & { line: Color } = { hi: 0xfdf8ee, mid: 0xf2eadc, lo: 0xd8ccbc, line: 0x8a7e86 };
 /** 비바람에 바랜 회갈색 나무 (선착장·울타리 말뚝) */
-const DRIFTWOOD: Pal3 & { line: Color } = { hi: 0xc8b49a, mid: 0xa8927a, lo: 0x82705c, line: 0x4e4236 };
+const DRIFTWOOD: Pal3 & { line: Color } = { hi: 0xeedcc0, mid: 0xd8c0a0, lo: 0xb89e82, line: 0x8a7468 };
 /** 선착장 판자 */
-const DECK: Pal3 & { line: Color } = { hi: 0xc9a77a, mid: 0xab8a60, lo: 0x876a48, line: 0x4c3a28 };
+const DECK: Pal3 & { line: Color } = { hi: 0xf2dcb4, mid: 0xe4c89c, lo: 0xcca880, line: 0xa48468 };
 /** 바랜 하늘빛 지붕 */
-const ROOF_BLUE: Pal4 = { hi: 0x8cc0d4, mid: 0x5e98b4, lo: 0x3e7090, deep: 0x2c5068 };
-const CONCRETE: Pal3 & { line: Color } = { hi: 0xc8c6bc, mid: 0xaeaba2, lo: 0x8a877e, line: 0x666258 };
-const BASALT: Pal4 = { hi: 0x9a948a, mid: 0x787268, lo: 0x5a554e, deep: 0x403c38 };
+/** 지붕·몸통 기본 (파스텔 민트) */
+const ROOF_BLUE: Pal4 = { hi: 0xc8f0e4, mid: 0x9edcd0, lo: 0x78c2b8, deep: 0x5aa29c };
+/** 11/16 파스텔 지붕 (복숭아·라일락·버터) */
+const ROOF_PEACH: Pal4 = { hi: 0xffd8c4, mid: 0xf8b8a0, lo: 0xe49a84, deep: 0xc87e6e };
+const ROOF_LILAC: Pal4 = { hi: 0xe8dcf8, mid: 0xcab8ec, lo: 0xac9ad4, deep: 0x8e7eb8 };
+const CONCRETE: Pal3 & { line: Color } = { hi: 0xf0f0f4, mid: 0xdcdce6, lo: 0xc0c2d0, line: 0x9a9cae };
+const BASALT: Pal4 = { hi: 0xd4dce8, mid: 0xb4c0d2, lo: 0x95a2b8, deep: 0x7a86a0 };
 
 const DIGITS: readonly string[] = ["111101101101111", "010110010010111", "111001111100111", "111001111001111", "101101111001001", "111100111001111", "111100111101111", "111001010010010", "111101111101111", "111101111001111"];
 function drawNumber(g: Grid, n: number, x: number, y: number, c: Color): void {
@@ -124,8 +150,8 @@ function drawNumber(g: Grid, n: number, x: number, y: number, c: Color): void {
 
 // ── 나무·풀 ──
 
-const PINE: Pal4 = { hi: 0x6e8e58, mid: 0x4e6e42, lo: 0x3a5434, deep: 0x283c28 };
-const TRUNK: Pal3 = { hi: 0x9a7456, mid: 0x7a5840, lo: 0x56402e };
+const PINE: Pal4 = { hi: 0x9cc896, mid: 0x7aae7c, lo: 0x5e9268, deep: 0x4a7a5a };
+const TRUNK: Pal3 = { hi: 0xc8a088, mid: 0xa8826c, lo: 0x8a6858 };
 
 /** 해송 (바닷바람에 한쪽으로 기운 소나무) */
 export function pineArt(v: number): Grid {
@@ -300,7 +326,7 @@ export function shelterArt(): Grid {
     for (let x = 0; x < W; x++) {
       const ridge = x % 4;
       const c = ridge === 0 ? ROOF_BLUE.hi : ridge === 3 ? ROOF_BLUE.lo : ROOF_BLUE.mid;
-      g.set(x, y, hashU(x, y, 31) < 0.06 ? 0xb07a52 : c); // 녹 자국 조금
+      g.set(x, y, c);
     }
   g.hline(0, W - 1, 13, ROOF_BLUE.deep);
   g.hline(0, W - 1, 4, lighten(ROOF_BLUE.hi, 0.3));
@@ -333,7 +359,6 @@ export function busSignArt(): Grid {
   frame(g, 1, 17, 28, 13, 0xf4f0e4);
   g.hline(4, 25, 21, 0xf4f0e4);
   g.hline(4, 18, 25, 0xb8d8ec);
-  g.set(3, 29, 0xb07a52);
   g.outline(OUT);
   shadow(g, 14, base + 1, 4, 1.2, 60);
   return g;
@@ -377,9 +402,9 @@ export const MARKET_ART_H = 124;
 /** 지붕 앞 현판 가운데 (그림 원점 기준 — 글씨는 SeaMap) */
 export const MARKET_SIGN = { dx: 0, dy: -88 } as const;
 const AWNINGS: readonly [Color, Color][] = [
-  [0xd8503c, 0xf4ecdc],
-  [0x3e7aa8, 0xf4ecdc],
-  [0xe0a03a, 0xf4ecdc],
+  [0xf8a8a0, 0xfff8ee],
+  [0x9edcd0, 0xfff8ee],
+  [0xf8dc8c, 0xfff8ee],
 ];
 export function marketArt(): Grid {
   const W = MARKET_ART_W;
@@ -402,15 +427,16 @@ export function marketArt(): Grid {
     const inset = Math.round((1 - k) * 14);
     for (let x = inset; x < W - inset; x++) {
       const row = Math.floor((y - roofTop) / 4);
-      const c = (y - roofTop) % 4 === 3 ? ROOF_BLUE.deep : (x + row * 5) % 11 === 0 ? ROOF_BLUE.lo : row % 2 ? ROOF_BLUE.mid : lighten(ROOF_BLUE.mid, 0.08);
+      const c = (y - roofTop) % 4 === 3 ? ROOF_LILAC.deep : (x + row * 5) % 11 === 0 ? ROOF_LILAC.lo : row % 2 ? ROOF_LILAC.mid : lighten(ROOF_LILAC.mid, 0.08);
       g.set(x, y, c);
     }
   }
-  g.hline(14, W - 15, roofTop, ROOF_BLUE.hi);
-  g.hline(0, W - 1, wallTop + 3, ROOF_BLUE.deep);
-  // 지붕 앞 현판 (글씨는 SeaMap)
+  g.hline(14, W - 15, roofTop, ROOF_LILAC.hi);
+  g.hline(0, W - 1, wallTop + 3, ROOF_LILAC.deep);
+  // 지붕 앞 현판 (11/16 글씨는 위에 뜨는 이름표 — 판에는 물고기·조개 그림)
   const sx = W / 2 - 34;
-  g.rect(sx, 26, 68, 13, 0xf4ecd8);
+  g.rect(sx, 26, 68, 13, 0xfff8ee);
+  for (let k = 0; k < 4; k++) fishIcon(g, sx + 6 + k * 15, 30, [0x7ec8d8, 0xf8a8a0, 0x9edcd0, 0xf8c88c][k]);
   frame(g, sx - 1, 25, 70, 15, DRIFTWOOD.line);
   g.rect(sx - 1, 39, 2, 6, DRIFTWOOD.lo);
   g.rect(sx + 67, 39, 2, 6, DRIFTWOOD.lo);
@@ -426,7 +452,7 @@ export function marketArt(): Grid {
   for (let i = 0; i < 3; i++) {
     const cx = W / 2 + (i - 1) * 88;
     const x0 = cx - stallW / 2;
-    g.rect(x0 + 4, wallTop + 14, stallW - 8, wallBot - wallTop - 14, 0x4a3a30);
+    g.rect(x0 + 4, wallTop + 14, stallW - 8, wallBot - wallTop - 14, 0x8a7a8c);
     // 안쪽 선반 물건
     for (let k = 0; k < 8; k++) g.rect(x0 + 8 + k * 7, wallTop + 18, 5, 4, [0xc8b090, 0x9ac0d0, 0xe0a060, 0x8a9a6a][(k + i) % 4]);
     // 차양 (줄무늬, 끝은 물결)
@@ -485,13 +511,14 @@ export function realtyArt(): Grid {
     const half = Math.round(((y - peak) / (wallTop + 3 - peak)) * (W / 2 + 2)) + 6;
     for (let x = W / 2 - half; x < W / 2 + half; x++) {
       const row = Math.floor((y - peak) / 4);
-      const c = (y - peak) % 4 === 3 ? 0x7a3226 : (x + row * 3) % 9 === 0 ? 0x9a4430 : row % 2 ? 0xc05a3e : 0xb24e36;
+      const c = (y - peak) % 4 === 3 ? ROOF_PEACH.deep : (x + row * 3) % 9 === 0 ? ROOF_PEACH.lo : row % 2 ? ROOF_PEACH.mid : lighten(ROOF_PEACH.mid, 0.06);
       g.set(x, y, c);
     }
   }
-  g.hline(0, W - 1, wallTop + 2, 0x5a2a1e);
-  // 현판 (문 위, 글씨는 SeaMap)
-  g.rect(W / 2 - 40, wallTop + 4, 80, 12, 0xf4ecd8);
+  g.hline(0, W - 1, wallTop + 2, ROOF_PEACH.deep);
+  // 현판 (문 위 — 11/16 글씨는 위에 뜨는 이름표, 판에는 작은 집 셋)
+  g.rect(W / 2 - 40, wallTop + 4, 80, 12, 0xfff8ee);
+  for (let k = 0; k < 3; k++) houseIcon(g, W / 2 - 22 + k * 16, wallTop + 6, [ROOF_PEACH.lo, ROOF_LILAC.lo, ROOF_BLUE.lo][k], 0xf2eadc);
   frame(g, W / 2 - 41, wallTop + 3, 82, 14, PAINT.line);
   // 문 (가운데) + 계단
   const dx = W / 2 - 9;
@@ -514,7 +541,7 @@ export function realtyArt(): Grid {
   g.rect(W - 37, wallBot - 28, 11, 2, 0xb24e36);
   // 꽃밭 (양옆)
   for (const fx of [8, W - 50]) {
-    g.rect(fx, wallBot + 1, 42, 4, 0x8a6a4a);
+    g.rect(fx, wallBot + 1, 42, 4, 0xc8a890);
     for (let x = fx + 2; x < fx + 40; x += 4) {
       g.set(x, wallBot, 0x5a8a44);
       g.set(x + 1, wallBot - 1, [0xf0a0b8, 0xf8e8a0, 0xe86a8a][(x >> 2) % 3]);
@@ -537,16 +564,20 @@ export function kioskArt(): Grid {
   // 몸통 (하늘빛 판자)
   for (let y = 20; y <= base - 1; y++) for (let x = 4; x < W - 4; x++) g.set(x, y, (x - 4) % 6 === 0 ? ROOF_BLUE.lo : ROOF_BLUE.mid);
   // 창구 (과자·음료)
-  g.rect(9, 26, W - 18, 14, 0x3a3430);
+  g.rect(9, 26, W - 18, 14, 0x7e7090);
   for (let k = 0; k < 6; k++) g.rect(11 + k * 7, 29, 5, 4, [0xe85a3a, 0xf2c444, 0xf8f0e0, 0x7ab85a][k % 4]);
   for (let k = 0; k < 6; k++) g.rect(11 + k * 7, 35, 5, 3, [0xd8a060, 0xe8d8a8][k % 2]);
   g.rect(6, 40, W - 12, 3, DECK.mid);
   g.hline(6, W - 7, 40, DECK.hi);
   // 차양 (빨강·흰 줄무늬)
-  for (let y = 14; y < 22; y++) for (let x = 1; x < W - 1; x++) g.set(x, y, Math.floor(x / 5) % 2 ? (y > 19 ? 0xd8ccb8 : 0xf4ecdc) : y > 19 ? 0xb8402e : 0xd8503c);
-  for (let x = 1; x < W - 1; x += 2) g.set(x, 22, Math.floor(x / 5) % 2 ? 0xd8ccb8 : 0xb8402e);
-  // 지붕 위 간판 (글씨는 SeaMap)
-  g.rect(12, 2, W - 24, 11, 0xf4ecd8);
+  for (let y = 14; y < 22; y++) for (let x = 1; x < W - 1; x++) g.set(x, y, Math.floor(x / 5) % 2 ? (y > 19 ? 0xf0e4d4 : 0xfff8ee) : y > 19 ? 0xf0c878 : 0xf8dc8c);
+  for (let x = 1; x < W - 1; x += 2) g.set(x, 22, Math.floor(x / 5) % 2 ? 0xf0e4d4 : 0xf0c878);
+  // 지붕 위 간판 (11/16 글씨는 위에 뜨는 이름표 — 판에는 아이스크림 그림)
+  g.rect(12, 2, W - 24, 11, 0xfff8ee);
+  for (const [ix, c] of [[W / 2 - 8, 0xf8a8a0], [W / 2 + 2, 0x9edcd0]] as const) {
+    g.ellipse(ix + 3, 5.5, 2.6, 2.2, c);
+    for (let k = 0; k < 4; k++) g.hline(ix + 1 + (k >> 1), ix + 5 - (k >> 1), 7 + k, 0xe8c08a);
+  }
   frame(g, 11, 1, W - 22, 13, PAINT.line);
   g.outline(OUT);
   shadow(g, W / 2, base + 1, W / 2 - 3, 2, 56);
@@ -629,9 +660,13 @@ export function lotSignArt(): Grid {
   const base = H - 3;
   g.rect(8, 12, 2, base - 12, DRIFTWOOD.lo);
   g.rect(W - 10, 12, 2, base - 12, DRIFTWOOD.lo);
-  g.rect(2, 2, W - 4, 14, 0xf4ecd8);
+  g.rect(2, 2, W - 4, 14, 0xfff8ee);
   frame(g, 1, 1, W - 2, 16, DRIFTWOOD.line);
-  g.hline(2, W - 3, 15, 0xd8ccb0);
+  g.hline(2, W - 3, 15, 0xeee0cc);
+  // 11/16 글씨는 위에 뜨는 이름표 — 판에는 작은 집과 분홍 띠
+  houseIcon(g, W / 2 - 4, 4, ROOF_PEACH.lo, 0xf2eadc);
+  g.hline(5, W / 2 - 8, 9, 0xf8b8a0);
+  g.hline(W / 2 + 8, W - 6, 9, 0xf8b8a0);
   g.outline(OUT);
   shadow(g, W / 2, base + 1, W / 2 - 6, 1.2, 50);
   return g;
@@ -648,7 +683,7 @@ export function pierArt(): Grid {
     for (let x = 0; x < W; x++) {
       let c: Color = k === 5 ? DECK.line : k === 0 ? DECK.hi : hashU(x, y, 51) < 0.05 ? DECK.lo : DECK.mid;
       if (x < 2 || x >= W - 2) c = x === 0 || x === W - 1 ? DECK.line : DECK.lo;
-      if ((k === 2 || k === 3) && (x === 4 || x === W - 5)) c = 0x5a5650; // 못
+      if ((k === 2 || k === 3) && (x === 4 || x === W - 5)) c = 0xb0a4a8; // 못
       g.set(x, y, c);
     }
   }
@@ -668,8 +703,8 @@ export function pierEndArt(): Grid {
   }
   // 앞 테 (두께 + 물에 젖은 아래)
   g.rect(0, H - 6, W, 3, DECK.lo);
-  g.rect(0, H - 3, W, 3, 0x4a3e30);
-  for (let x = 3; x < W; x += 12) g.rect(x, H - 6, 3, 6, 0x3e3226);
+  g.rect(0, H - 3, W, 3, 0xb09078);
+  for (let x = 3; x < W; x += 12) g.rect(x, H - 6, 3, 6, 0xa48468);
   g.outline(OUT);
   return g;
 }
@@ -682,7 +717,7 @@ export function postArt(): Grid {
   g.ellipse(4, 3, 2.2, 1.3, DRIFTWOOD.hi);
   g.hline(2, 5, 7, 0xc8b070); // 밧줄
   g.hline(2, 5, 8, 0xa08850);
-  g.rect(2, 10, 4, 2, 0x5a6a4a); // 물이끼
+  g.rect(2, 10, 4, 2, 0x9ac8b8); // 물이끼
   g.outline(OUT);
   return g;
 }
@@ -702,7 +737,7 @@ export function breakwaterArt(): Grid {
       g.set(x, y, c);
     }
   // 가운데 노란 안전선
-  for (let y = 4; y < H; y += 10) g.rect(W / 2 - 1, y, 2, 5, 0xd8b84a);
+  for (let y = 4; y < H; y += 10) g.rect(W / 2 - 1, y, 2, 5, 0xf8dc8c);
   return g;
 }
 /** 끝 데크 (등대가 서는 넓은 판). 원점 = 왼쪽 위 (SEA_BREAKWATER_TIP) */
@@ -719,8 +754,8 @@ export function tipArt(): Grid {
       g.set(x, y, c);
     }
   g.rect(0, H - 6, W, 3, CONCRETE.lo);
-  g.rect(0, H - 3, W, 3, 0x4e5a52); // 젖은 아랫단·물이끼
-  for (let x = 2; x < W; x += 5) g.set(x, H - 2, 0x3a6a4a);
+  g.rect(0, H - 3, W, 3, 0xa4b4c4); // 젖은 아랫단
+  for (let x = 2; x < W; x += 5) g.set(x, H - 2, 0x9ac8b8);
   g.outline(OUT);
   return g;
 }
@@ -733,7 +768,7 @@ export function tetraArt(v: number): Grid {
   for (const [dx, dy] of legs) g.ellipse(10 + dx, 9 + dy, 2, 1.6, lighten(c, 0.15));
   g.ellipse(10, 9, 3, 2.5, c);
   g.recolor((x, y) => !g.filled(x, y + 1), darken(c, 0.25));
-  g.recolor((x, y) => y > 13 && hashU(x, y, v) < 0.5, 0x4e6a52); // 물이끼
+  g.recolor((x, y) => y > 13 && hashU(x, y, v) < 0.4, 0x9ac8b8); // 물이끼
   g.outline(OUT);
   return g;
 }
@@ -859,12 +894,12 @@ export function rockArt(i: number): Grid {
     const x = Math.round(cx + (r() - 0.5) * R.rx * 1.6);
     const y = Math.round(topY + (r() - 0.3) * R.ry * 1.2);
     if (g.filled(x, y) && g.filled(x + 1, y)) {
-      g.set(x, y, 0xece4d4);
-      if (r() < 0.4) g.set(x + 1, y, 0xc8c0b0);
+      g.set(x, y, 0xf4f0f8);
+      if (r() < 0.4) g.set(x + 1, y, 0xdcdce8);
     }
   }
   for (let x = 0; x < W; x++)
-    for (let y = base - 7; y <= base; y++) if (g.filled(x, y) && hashU(x, y, i + 3) < 0.55) g.set(x, y, hashU(x, y, 9) < 0.5 ? 0x3a5034 : 0x4e4a34);
+    for (let y = base - 5; y <= base; y++) if (g.filled(x, y) && hashU(x, y, i + 3) < 0.4) g.set(x, y, hashU(x, y, 9) < 0.5 ? 0x8ab8a8 : 0x9ac4b4);
   g.outline(OUT);
   return g;
 }
@@ -873,8 +908,8 @@ export function footbathArt(): Grid {
   const g = new Grid(52, 26);
   g.ellipse(26, 13, 24, 10, BASALT.mid);
   g.ellipse(26, 11, 22, 8, BASALT.hi);
-  g.ellipse(26, 12, 14, 5.5, 0x5aa4b8);
-  g.ellipse(24, 11, 8, 2.5, 0x8ccfe0);
+  g.ellipse(26, 12, 14, 5.5, 0x8adcd8);
+  g.ellipse(24, 11, 8, 2.5, 0xc4f2ec);
   g.recolor((x, y) => y > 18, BASALT.lo);
   for (let k = 0; k < 10; k++) g.set(8 + k * 4, 6 + (k % 3), 0xe8e0d0);
   g.outline(OUT);
@@ -885,12 +920,12 @@ export function footbathArt(): Grid {
 export function lampArt(): Grid {
   const g = new Grid(10, 40);
   const base = 37;
-  g.rect(4, 10, 2, base - 10, 0x3e4448);
-  g.rect(3, base - 2, 4, 3, 0x3e4448);
-  g.rect(2, 3, 6, 7, 0x3e4448);
-  g.rect(3, 4, 4, 5, 0xfff0c0);
-  g.rect(1, 2, 8, 2, 0x2e3438);
-  g.set(5, 1, 0x2e3438);
+  g.rect(4, 10, 2, base - 10, 0x8a90b0);
+  g.rect(3, base - 2, 4, 3, 0x8a90b0);
+  g.rect(2, 3, 6, 7, 0x8a90b0);
+  g.rect(3, 4, 4, 5, 0xfff4c8);
+  g.rect(1, 2, 8, 2, 0x6e74a0);
+  g.set(5, 1, 0x6e74a0);
   g.outline(OUT);
   shadow(g, 5, base + 1, 3, 1, 60);
   return g;
@@ -992,7 +1027,8 @@ export function gullArt(): ArtOut {
 }
 
 // ── 물 (SeaMap이 물가 선에 맞춰 위치만 옮겨요) ──
-const WATER: { body: Color; deep: Color; light: Color; foam: Color } = { body: 0x4f9cb4, deep: 0x3a84a0, light: 0x8ccfe0, foam: 0xf0faf8 };
+/** 11/16 파스텔 물: 민트·아쿠아 얕은 물 (먼바다 청록·연보라는 SeaMap의 깊이 그늘이 덮어요) */
+const WATER: { body: Color; deep: Color; light: Color; foam: Color } = { body: 0x84d8d0, deep: 0x6ec8c8, light: 0xc4f2ea, foam: 0xffffff };
 /** 물 몸통 타일 (반투명 — 아래 갯벌이 비쳐 얕은 물처럼 보여요) */
 export const WATER_TILE_W = 64;
 export const WATER_TILE_H = 32;
@@ -1003,7 +1039,7 @@ export function waterArt(): Grid {
       const wave = Math.sin(((x + y * 2) / WATER_TILE_W) * Math.PI * 4) + Math.sin(((x * 2 - y) / WATER_TILE_W) * Math.PI * 2);
       let c = wave > 1.4 ? WATER.light : wave < -1.3 ? WATER.deep : WATER.body;
       if (hashU(x, y, 81) > 0.985) c = WATER.light;
-      g.set(x, y, c, c === WATER.light ? 214 : 200);
+      g.set(x, y, c, c === WATER.light ? 226 : 214);
     }
   return g;
 }
@@ -1019,9 +1055,9 @@ export function foamArt(): Grid {
     const p = Math.round(foamProfile(x));
     for (let y = p; y < FOAM_H; y++) {
       const d = y - p;
-      if (d < 2) g.set(x, y, WATER.foam, 240);
-      else if (d < 4) g.set(x, y, hashU(x, y, 83) < 0.55 ? WATER.foam : WATER.light, 210);
-      else g.set(x, y, hashU(x, y, 84) < 0.06 ? WATER.light : WATER.body, 200);
+      if (d < 3) g.set(x, y, WATER.foam, 255);
+      else if (d < 5) g.set(x, y, hashU(x, y, 83) < 0.6 ? WATER.foam : WATER.light, 230);
+      else g.set(x, y, hashU(x, y, 84) < 0.06 ? WATER.light : WATER.body, 214);
     }
   }
   return g;
@@ -1039,7 +1075,7 @@ export function laceArt(): Grid {
 /** 젖은 모래 띠 (세로 그라데이션: 위는 투명, 아래로 짙게 — 높이로 늘려 써요) */
 export function wetArt(): Grid {
   const g = new Grid(4, 32);
-  for (let y = 0; y < 32; y++) for (let x = 0; x < 4; x++) g.set(x, y, 0x3e3428, Math.round(130 * (y / 31) ** 1.4));
+  for (let y = 0; y < 32; y++) for (let x = 0; x < 4; x++) g.set(x, y, 0x9a8486, Math.round(96 * (y / 31) ** 1.4));
   return g;
 }
 /** 먼바다 반짝임 (투명 바탕에 밝은 물결 조각) */
@@ -1050,7 +1086,7 @@ export function shimmerArt(): Grid {
     const x = Math.floor(r() * 128);
     const y = Math.floor(r() * 64);
     const w = 3 + Math.floor(r() * 6);
-    for (let k = 0; k < w; k++) g.set((x + k) % 128, y, 0xd8f2f8, k === 0 || k === w - 1 ? 110 : 170);
+    for (let k = 0; k < w; k++) g.set((x + k) % 128, y, 0xf0fcff, k === 0 || k === w - 1 ? 120 : 190);
   }
   return g;
 }
@@ -1076,22 +1112,65 @@ export function sparkleArt(): Grid {
   return g;
 }
 
+/** 11/16 햇빛 반짝임 (십자 별, ADD로 겹쳐요) 9×9 */
+export function starArt(): Grid {
+  const g = new Grid(9, 9);
+  for (let k = 0; k <= 4; k++) {
+    const a = 255 - k * 48;
+    for (const [x, y] of [[4 + k, 4], [4 - k, 4], [4, 4 + k], [4, 4 - k]] as const) g.set(x, y, 0xffffff, a);
+  }
+  for (const [x, y] of [[3, 3], [5, 3], [3, 5], [5, 5]] as const) g.set(x, y, 0xfffbe8, 120);
+  return g;
+}
+/** 11/16 밤 물가 물빛 (작고 둥근 빛 점, ADD) 7×7 */
+export function glowDotArt(): Grid {
+  const g = new Grid(7, 7);
+  for (let y = 0; y < 7; y++)
+    for (let x = 0; x < 7; x++) {
+      const d = Math.hypot(x - 3, y - 3) / 3.5;
+      if (d < 1) g.set(x, y, 0xffffff, Math.round(255 * (1 - d) ** 1.8));
+    }
+  return g;
+}
+/** 11/16 물 위를 천천히 지나가는 빛 띠 (가로로 부드럽게, 위 끝은 흐리게) 64×32 */
+export function sheenArt(): Grid {
+  const g = new Grid(64, 32);
+  for (let y = 0; y < 32; y++)
+    for (let x = 0; x < 64; x++) {
+      const bell = Math.exp(-(((x - 31.5) / 16) ** 2));
+      const top = Math.min(1, y / 6);
+      g.set(x, y, 0xffffff, Math.round(255 * bell * top));
+    }
+  return g;
+}
+/** 11/16 먼바다 깊이 그늘 (위는 투명, 아래로 청록·연보라) 4×64 */
+export function depthShadeArt(): Grid {
+  const g = new Grid(4, 64);
+  for (let y = 0; y < 64; y++) {
+    const k = y / 63;
+    const c = mix(0x6cc4d0, 0x8a9ee6, k);
+    for (let x = 0; x < 4; x++) g.set(x, y, c, Math.round(170 * k ** 1.3));
+  }
+  return g;
+}
+
 // ── 바닥 (덩어리마다 RGBA로 굽는다) ──
 
 export const SEA_CHUNK = 512;
 
+// 11/16 파스텔 바닥 (크림 모래·연두 풀·토프 갯벌·청록에서 연보라로 가는 먼바다)
 const GC = {
-  hill: [0x4c5a38, 0x3e4a2e, 0x5a6842] as const,
-  hillRock: [0x8a8478, 0x6e6a62] as const,
-  grass: [0x8a9150, 0x7a8246, 0x9aa05e, 0x6e7840] as const,
-  path: [0xc0a77a, 0xb0966a, 0xceb88c] as const,
-  yard: [0xd2bf94, 0xc4b084, 0xdccaa0] as const,
-  lot: [0xa48a64, 0x947a56, 0xb49a72] as const,
-  platform: [0xb4b0a6, 0x928e86] as const,
-  road: [0x55524e, 0x4a4744, 0x625f5a] as const,
-  sand: [0xe2cc96, 0xd4bc84, 0xecd9a8] as const,
-  flat: [0x857862, 0x76695a, 0x93876e] as const,
-  deep: [0x2a6080, 0x24546e, 0x326c8c] as const,
+  hill: [0x8ab486, 0x7aa67a, 0x9ac494] as const,
+  hillRock: [0xc4ccd8, 0xaeb6c6] as const,
+  grass: [0xb4d494, 0xa6c888, 0xc2dea2, 0x98bc7e] as const,
+  path: [0xf0e0c0, 0xe6d4b0, 0xf6ead0] as const,
+  yard: [0xf6eacc, 0xeee0c0, 0xfaf2dc] as const,
+  lot: [0xe6d4b4, 0xdccaa8, 0xeedec2] as const,
+  platform: [0xe4e2ea, 0xccccd8] as const,
+  road: [0x8e8ea0, 0x848496, 0x9a9aac] as const,
+  sand: [0xf8ebcc, 0xf2e2bc, 0xfcf3dc] as const,
+  flat: [0xc4b4b4, 0xbaaaac, 0xcec0be] as const,
+  deep: [0x76aed8, 0x6ea2d0, 0x84b8e0] as const,
 };
 
 /** 부드러운 값 잡음 (격자 해시를 겹선형 보간) 0..1 */
@@ -1126,33 +1205,33 @@ function groundColor(x: number, y: number, k: SeaGround): Color {
     case "hill": {
       const rock = smoothNoise(x / 14, y / 10, 91) > 0.66;
       if (rock) return n < 0.3 ? GC.hillRock[1] : GC.hillRock[0];
-      if (hashU(x >> 1, y >> 1, 92) < 0.08) return 0x8a6a40; // 솔잎
+      if (hashU(x >> 1, y >> 1, 92) < 0.03) return 0xc8b490; // 솔잎
       return n < 0.2 ? GC.hill[1] : n > 0.85 ? GC.hill[2] : GC.hill[0];
     }
     case "platform": {
       if (x % 12 === 0 || y % 10 === 0) return GC.platform[1];
-      if (y >= SEA_PLATFORM.y + SEA_PLATFORM.h - 3) return 0xd0ccc0; // 연석
+      if (y >= SEA_PLATFORM.y + SEA_PLATFORM.h - 3) return 0xf0eef4; // 연석
       return hashU(x >> 1, y >> 1, 93) < 0.05 ? GC.platform[1] : GC.platform[0];
     }
     case "road": {
       let c: Color = n < 0.12 ? GC.road[1] : n > 0.9 ? GC.road[2] : GC.road[0];
-      if (y < SEA_ROAD.y + 3 || y > SEA_ROAD.y + SEA_ROAD.h - 3) c = n < 0.5 ? 0x9a968c : 0xb4b0a4; // 연석
+      if (y < SEA_ROAD.y + 3 || y > SEA_ROAD.y + SEA_ROAD.h - 3) c = n < 0.5 ? 0xdcdce4 : 0xeeeef2; // 연석
       // 정류장 앞 노란 정차 칸
       if (x >= BAY.x0 && x <= BAY.x1 && y >= BAY.y0 && y <= BAY.y1) {
         const onEdge = y <= BAY.y0 + 1 || y >= BAY.y1 - 1 ? (x >> 2) % 2 === 0 : x <= BAY.x0 + 1 || x >= BAY.x1 - 1;
-        if (onEdge) c = 0xe8c040;
+        if (onEdge) c = 0xf8dc8c;
         return c;
       }
       // 바랜 가운데 점선 (흰색)
       const mid = SEA_ROAD.y + Math.floor(SEA_ROAD.h / 2);
-      if ((y === mid || y === mid + 1) && (x >> 3) % 2 === 0 && hashU(x >> 3, 1, 95) < 0.8) c = 0xc8c4b8;
+      if ((y === mid || y === mid + 1) && (x >> 3) % 2 === 0) c = 0xf4f2ec;
       return c;
     }
     case "path":
-      if (hashU(x, y, 96) > 0.975) return 0xe8dcc4; // 조개 부스러기
+      if (hashU(x, y, 96) > 0.99) return 0xfff8ec; // 조개 부스러기
       return n < 0.16 ? GC.path[1] : n > 0.86 ? GC.path[2] : GC.path[0];
     case "yard":
-      if (hashU(x, y, 97) > 0.97) return 0xf4ecdc;
+      if (hashU(x, y, 97) > 0.99) return 0xfffaf0;
       return n < 0.15 ? GC.yard[1] : n > 0.88 ? GC.yard[2] : GC.yard[0];
     case "lot":
       if (hashU(x >> 1, y >> 1, 98) < 0.06) return GC.grass[1];
@@ -1163,50 +1242,50 @@ function groundColor(x: number, y: number, k: SeaGround): Color {
       if (y <= top + 2 || y >= bot - 2) return y === top || y === bot ? DECK.line : DECK.lo; // 테 판
       const k = x % 7;
       if (k === 6) return DECK.line;
-      if ((y === top + 5 || y === bot - 5) && k === 3) return 0x5a5650; // 못
+      if ((y === top + 5 || y === bot - 5) && k === 3) return 0xb8aab0; // 못
       if (k === 0) return DECK.hi;
-      return hashU(x, y >> 2, 99) < 0.08 ? DECK.lo : mix(DECK.mid, DECK.hi, hashU(Math.floor(x / 7), 0, 100) * 0.4);
+      return mix(DECK.mid, DECK.hi, hashU(Math.floor(x / 7), 0, 100) * 0.45);
     }
     case "sand": {
       let c: Color = n < 0.15 ? GC.sand[1] : n > 0.88 ? GC.sand[2] : GC.sand[0];
-      if (hashU(x, y, 101) > 0.975) c = 0xb89c6a;
-      // 바람 결 (가는 물결무늬)
-      if (((y + Math.round(Math.sin(x * 0.04) * 3)) % 9 === 0) && hashU(x >> 2, y, 102) < 0.5) c = darken(c, 0.06);
+      if (hashU(x, y, 101) > 0.996) c = 0xf0d8c8; // 분홍 조개 가루 (드물게)
+      // 바람 결 (가는 물결무늬, 아주 옅게)
+      if (((y + Math.round(Math.sin(x * 0.04) * 3)) % 9 === 0) && hashU(x >> 2, y, 102) < 0.5) c = darken(c, 0.025);
       // 갯벌 가까이는 촉촉하게
       const toFlat = SEA_FLAT_Y0 - y;
-      if (toFlat < 16) c = mix(c, 0xb49a72, (16 - toFlat) / 16 * 0.55);
+      if (toFlat < 16) c = mix(c, 0xe0ccbc, (16 - toFlat) / 16 * 0.55);
       return c;
     }
     case "pool": {
       const d = poolDepth(x, y);
-      if (d < 0.18) return n < 0.5 ? 0x5e5444 : 0x6a5e4c; // 젖은 테두리
-      let c: Color = d > 0.6 ? 0x3f88a0 : 0x5aa4b8;
-      if (hashU(x >> 1, y, 103) > 0.94) c = 0x9ad8e6;
-      if (hashU(x, y, 104) > 0.985) c = 0x3a6a3a; // 해초
+      if (d < 0.18) return n < 0.5 ? 0xa89aa0 : 0xb2a4a8; // 젖은 테두리
+      let c: Color = d > 0.6 ? 0x84d0d4 : 0xaee6e2;
+      if (hashU(x >> 1, y, 103) > 0.94) c = 0xe0faf6;
+      if (hashU(x, y, 104) > 0.99) c = 0x9cc8a8; // 해초
       return c;
     }
     case "flat": {
       let c: Color = n < 0.18 ? GC.flat[1] : n > 0.86 ? GC.flat[2] : GC.flat[0];
       // 물결 자국 (가로로 굽이치는 줄)
       const ry = y + Math.round(3 * Math.sin(x * 0.05 + y * 0.013));
-      if (ry % 8 === 0) c = darken(c, 0.14);
-      else if (ry % 8 === 1) c = lighten(c, 0.08);
-      if (hashU(x, y, 105) > 0.996) c = 0xcfc2ac; // 조개 조각
-      if (hashU(x >> 1, y >> 1, 106) > 0.993) c = 0x4a4034; // 게 구멍
+      if (ry % 8 === 0) c = darken(c, 0.06);
+      else if (ry % 8 === 1) c = lighten(c, 0.05);
+      if (hashU(x, y, 105) > 0.997) c = 0xf6eef0; // 조개 조각
+      if (hashU(x >> 1, y >> 1, 106) > 0.996) c = 0xa69498; // 게 구멍 (옅게)
       // 모래 쪽 가장자리
       const fromSand = y - SEA_FLAT_Y0;
-      if (fromSand < 10) c = mix(0xb49a72, c, Math.max(0, fromSand) / 10);
-      // 먼바다 쪽은 더 질고 어둡게
+      if (fromSand < 10) c = mix(0xe0ccbc, c, Math.max(0, fromSand) / 10);
+      // 먼바다 쪽은 조금 더 촉촉하게 (푸른 기)
       const toDeep = SEA_DEEP_Y - y;
-      if (toDeep < 24) c = mix(c, 0x4e5650, (24 - toDeep) / 24 * 0.6);
+      if (toDeep < 24) c = mix(c, 0xa8b4c8, (24 - toDeep) / 24 * 0.5);
       return c;
     }
     case "deep": {
       let c: Color = n < 0.2 ? GC.deep[1] : n > 0.9 ? GC.deep[2] : GC.deep[0];
       const wave = (y + Math.round(Math.sin(x * 0.07) * 2)) % 11 === 0 && hashU(x >> 3, y, 107) < 0.6;
-      if (wave) c = 0x4a8aa8;
+      if (wave) c = 0xa8d0ec;
       const fromEdge = y - SEA_DEEP_Y;
-      if (fromEdge < 10) c = mix(0x4e5650, c, Math.max(0, fromEdge) / 10);
+      if (fromEdge < 10) c = mix(0xa8b4c8, c, Math.max(0, fromEdge) / 10);
       return c;
     }
     case "grass":
@@ -1214,7 +1293,7 @@ function groundColor(x: number, y: number, k: SeaGround): Color {
       // 바닷가 풀밭: 남쪽(산책로 쪽)으로 갈수록 모래가 섞여요
       const sandy = Math.max(0, (y - 300) / 90);
       if (hashU(x >> 1, y >> 1, 108) < sandy * 0.35) return n < 0.5 ? GC.sand[1] : GC.sand[0];
-      if (n > 0.95) return 0xb0b068;
+      if (n > 0.97) return 0xd8e8b0;
       const g0 = n < 0.18 ? GC.grass[1] : n > 0.86 ? GC.grass[2] : GC.grass[0];
       return hashU(x >> 3, y >> 3, 109) < 0.18 ? mix(g0, GC.grass[3], 0.5) : g0;
     }
@@ -1260,7 +1339,8 @@ export function* seaGroundSteps(cx: number, cy: number, size = SEA_CHUNK, band =
         const px = Math.round(hpt.x + x - ox);
         const py = Math.round(hpt.y + y - oy);
         if (px < 0 || py < 0 || px >= w || py >= h) continue;
-        put(out, (py * size + px) * 4, d > 0.6 ? (y < 0 ? 0x5e5444 : 0x9a8e76) : d > 0.3 ? 0x4a4034 : 0x2e2820);
+        // 11/16 파스텔: 구멍도 옅은 회보라로 (예전엔 짙은 갈색 점이 지저분해 보였어요)
+        put(out, (py * size + px) * 4, d > 0.6 ? (y < 0 ? 0xa89aa2 : 0xd4c8ca) : d > 0.3 ? 0x9c8c96 : 0x8a7a88);
       }
   return out;
 }

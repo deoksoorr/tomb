@@ -363,7 +363,7 @@ function tombstone(ctx: Ctx, x: number, base: number): void {
   px(ctx, x, base - 5, 4, 1, 0xb4b2a8);
 }
 
-function midObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: number, r: () => number, signs: { ic: boolean; icName: string }): void {
+function midObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: number, r: () => number, signs: { ic: boolean; icName: string; left: boolean }): void {
   const ground = HORIZON + 12 - 34; // 중간 층의 땅 줄 (층 좌표)
   switch (seg) {
     case "village": {
@@ -419,12 +419,10 @@ function midObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: num
         px(ctx, cx - 47, ground - 69, 1, 32, 0xf0f0e8);
         px(ctx, cx + 46, ground - 69, 1, 32, 0xf0f0e8);
         pixelText(ctx, signs.icName, cx - 30, ground - 67, 0xf4f4ec);
-        // 화살표 (나가는 길 → 오른쪽): 줄기 + 세모 머리, 모두 판 안
+        // 화살표 (나가는 길 쪽): 줄기 + 세모 머리, 모두 판 안. 11/16 바닷가 노선은 그림을 거꾸로 구워 왼쪽을 가리켜요
         px(ctx, cx - 14, ground - 47, 28, 2, 0xf4f4ec);
-        px(ctx, cx + 14, ground - 50, 2, 8, 0xf4f4ec);
-        px(ctx, cx + 16, ground - 49, 2, 6, 0xf4f4ec);
-        px(ctx, cx + 18, ground - 48, 2, 4, 0xf4f4ec);
-        px(ctx, cx + 20, ground - 47, 2, 2, 0xf4f4ec);
+        const dir = signs.left ? -1 : 1;
+        for (let k = 0; k < 4; k++) px(ctx, cx + dir * (14 + k * 2) - (dir < 0 ? 2 : 0), ground - 50 + k, 2, 8 - k * 2, 0xf4f4ec);
         px(lights, cx - 48, ground - 70, 96, 34, 0x1e3a2a); // 밤에 표지판이 은은하게 빛난다
       }
       break;
@@ -669,7 +667,7 @@ export function* panoramaSteps(spec: LayerSpec, order: readonly RideSegment[], d
   }
   // 소품
   const r = rng(seed);
-  const signs = { ic: false, icName: order.includes("sea") ? "달물결 IC" : "언젠가 IC" };
+  const signs = { ic: false, icName: order.includes("sea") ? "달물결 IC" : "언젠가 IC", left: order[0] === "sea" };
   for (let i = 0; i < 4; i++) {
     yield;
     const [x0, x1] = segRange(spec, dist, width, i);

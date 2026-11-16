@@ -339,7 +339,7 @@ export class CampScene extends Phaser.Scene {
       pl.view.apply(pl.state, DIR.up, this.time.now);
       const done = () => {
         this.locked = false;
-        this.bus?.depart(() => this.dropBus());
+        this.departBus();
       };
       if (this.host.reduced) {
         pl.view.fade = 1;
@@ -884,11 +884,13 @@ export class CampScene extends Phaser.Scene {
     if (pl.sitting) pl.stand(this.time.now, this.seatReq);
     this.leaveCampfire();
     this.riding.dismount(false);
+    // 11/16 내려 준 버스가 아직 흐려지는 중이면 치워요 (그 버스가 사라질 때 새 버스까지 지워 버스가 오지 않던 문제)
+    this.dropBus();
     this.bus = createBusArrival(this, { doorX: CAMP_BUS_STOP.x, laneY: CAMP_ROAD.y + CAMP_ROAD.h - 6, fromLeft: true, reduced: this.host.reduced, leave: "fade", waitMs: CAMP_BUS_WAIT_MS });
     this.bus.arrive(() => {
       if (this.cleaned) return;
       const go = () => {
-        this.bus?.depart(() => this.dropBus());
+        this.departBus();
         this.host.goVillage(null);
       };
       net.setAway(true, "bus");
@@ -902,6 +904,15 @@ export class CampScene extends Phaser.Scene {
   private dropBus(): void {
     this.bus?.destroy();
     this.bus = null;
+  }
+
+  /** 11/16 지금 버스를 떠나보내요. 사라지면 그 버스만 치워요 (그 사이 새로 부른 버스는 건드리지 않게) */
+  private departBus(): void {
+    const bus = this.bus;
+    bus?.depart(() => {
+      bus.destroy();
+      if (this.bus === bus) this.bus = null;
+    });
   }
 
   /** 같은 채널 캠핑장의 친구 옆으로 (마을 goToFriend와 같은 규칙) */

@@ -102,12 +102,14 @@ export function toSeaMinimap(x: number, y: number): { x: number; y: number } {
   return { x: x / SEA_MINIMAP_CELL, y: y / SEA_MINIMAP_CELL };
 }
 
-export type SeaLandmark = { id: string; label: string; x: number; y: number; kind: "bus" | "market" | "realty" | "cottages" | "pier" | "lighthouse" | "rocks" };
+export type SeaLandmark = { id: string; label: string; x: number; y: number; kind: "bus" | "market" | "realty" | "kiosk" | "cottages" | "pier" | "lighthouse" | "rocks" };
 /** 미니맵 주요 장소 (UI가 작은 표시를 그려요) */
 export const SEA_LANDMARKS: readonly SeaLandmark[] = [
   { id: "bus", label: "버스 정류장", x: SEA_BUS_STOP.x, y: SEA_BUS_STOP.y, kind: "bus" },
   { id: "market", label: "포구 시장", x: SEA_MARKET.x, y: SEA_MARKET.y - 40, kind: "market" },
   { id: "realty", label: "포구 부동산", x: SEA_REALTY.x, y: SEA_REALTY.y - 30, kind: "realty" },
+  // 11/16 매점 (미니맵 아이스크림 그림 — 미니맵엔 글씨 없이 그림만)
+  { id: "kiosk", label: "매점", x: SEA_KIOSK.x, y: SEA_KIOSK.y - 12, kind: "kiosk" },
   { id: "cottages", label: "오두막 단지", x: 268, y: 270, kind: "cottages" },
   { id: "pier", label: "선착장", x: SEA_PIER.x + SEA_PIER.w / 2, y: SEA_PIER_END.y, kind: "pier" },
   { id: "lighthouse", label: "방파제 등대", x: SEA_LIGHTHOUSE.x, y: SEA_LIGHTHOUSE.y - 10, kind: "lighthouse" },
@@ -118,6 +120,7 @@ export const SEA_LANDMARK_COLOR: Record<SeaLandmark["kind"], string> = {
   bus: "#ffd84a",
   market: "#8ec4e0",
   realty: "#f0a080",
+  kiosk: "#f8a8c8",
   cottages: "#e8dcc0",
   pier: "#d8b080",
   lighthouse: "#fff2a0",

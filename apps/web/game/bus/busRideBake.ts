@@ -1,6 +1,6 @@
 import type * as Phaser from "phaser";
 import { buildCaption, buildClouds, buildEndSign, buildGull, buildLeaf, buildStars, buildStrap, buildSunbeam, LAYERS, panoramaSteps } from "./busRideArt";
-import { captionAt, rideOrder } from "./busRideMath";
+import { bakeOrder, captionAt } from "./busRideMath";
 import { BUS_RIDE_MS, BUS_TEX_PREFIX, type BusLeg, type BusRoute } from "./busTypes";
 
 // 11/15 버스 창밖 연출 그림 미리 굽기예요.
@@ -104,7 +104,7 @@ export class RideBake {
     for (let i = 0; i < LAYERS.length; i++) {
       const spec = LAYERS[i];
       if (this.textures.exists(this.key(`l-${spec.id}`))) continue;
-      const g = panoramaSteps(spec, rideOrder(this.route), this.dist, this.seed * 7 + i * 131);
+      const g = panoramaSteps(spec, bakeOrder(this.route), this.dist, this.seed * 7 + i * 131);
       let r = g.next();
       while (!r.done) {
         yield;

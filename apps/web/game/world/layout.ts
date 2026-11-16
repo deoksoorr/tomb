@@ -1123,7 +1123,7 @@ export function bridgeAt(x: number, y: number): boolean {
 }
 
 /** 미니맵·안내용 주요 장소 (F17) */
-export type Landmark = { id: string; label: string; x: number; y: number; kind: "fire" | "grave" | "shop" | "hunt" | "housing" | "shrine" | "dock" | "telescope" | "wish" | "bell" | "fish" | "zoo" | "haunt" | "ferris" | "balloon" | "tower" | "bumper" | "busCamp" | "busSea" };
+export type Landmark = { id: string; label: string; x: number; y: number; kind: "fire" | "grave" | "shop" | "hunt" | "housing" | "shrine" | "dock" | "telescope" | "wish" | "bell" | "fish" | "zoo" | "haunt" | "ferris" | "balloon" | "tower" | "bumper" | "busCamp" | "busSea" | "duck" };
 export const LANDMARKS: readonly Landmark[] = [
   { id: "fire", label: "큰 모닥불", x: PLAZA_FIRE.x, y: PLAZA_FIRE.y, kind: "fire" },
   ...GRAVE_AREAS.map((a) => ({ id: `grave${a.id}`, label: a.name, x: a.aisleX, y: a.y0 + a.dy / 2, kind: "grave" as const })),
@@ -1145,4 +1145,6 @@ export const LANDMARKS: readonly Landmark[] = [
   // 11/16 정류장 둘 (가는 곳이 달라 이름도 따로)
   { id: "busCamp", label: "캠핑장행 정류장", x: BUS_STOP.x, y: BUS_STOP.y + 8, kind: "busCamp" },
   { id: "busSea", label: "바닷가행 정류장", x: SEA_STOP.x, y: SEA_STOP.y + 8, kind: "busSea" },
+  // 11/16 오리배 선착장 (미니맵 오리 그림)
+  { id: "duck", label: "오리배", x: DUCK_DOCK.x, y: DUCK_DOCK.y, kind: "duck" },
 ];
