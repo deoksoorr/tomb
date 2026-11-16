@@ -165,3 +165,11 @@
     transition: none;
   }
 }
+
+/* 11/16 포인트 이벤트로 한도를 넘어 받은 몫 (이벤트가 끝나 한도가 돌아온 뒤에 보인다) */
+.extra {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--candle);
+  font-size: 11px;
+}

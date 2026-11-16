@@ -32,10 +32,11 @@ export default function EarnGauge({ me }: { me: Me }) {
       <div className={styles.head}>
         <h3 className={styles.title}>오늘 받은 포인트</h3>
         <span className={styles.totalNums}>
-          <b>{fmt(total.value)}</b> / {fmt(total.max)}
+          <b>{fmt(total.earned)}</b> / {fmt(total.max)}
         </span>
       </div>
       <Bar g={total} big label="오늘 받은 포인트" />
+      {total.extra > 0 && <p className={styles.extra}>이벤트로 {fmt(total.extra)}P 더 받았어요</p>}
       <p className={styles.note}>
         {boost.caps.length > 0 ? `포인트 ${boost.mult}배 이벤트 중에는 표시한 항목의 한도도 ${boost.mult}배예요. ` : ""}
         {total.full ? "오늘 한도를 다 채웠어요. " : ""}한도는 한국 시간 {DAY_RESET_TEXT}에 새로 시작해요. 다음 초기화까지 <span className={styles.nowrap}>{resetLeftText(msUntilDayReset(now))}</span> 남았어요.
@@ -86,9 +87,10 @@ export function Row({ r }: { r: GaugeRow }) {
         {r.full && <span className={styles.done}>다 채웠어요</span>}
       </span>
       <span className={styles.nums}>
-        {fmt(r.value)} / {fmt(r.max)}
+        {fmt(r.earned)} / {fmt(r.max)}
       </span>
       <Bar g={r} label={r.label} />
+      {r.extra > 0 && <span className={styles.extra}>이벤트로 {fmt(r.extra)}P 더 받았어요</span>}
     </li>
   );
 }

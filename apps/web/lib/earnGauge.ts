@@ -18,13 +18,18 @@ export function earnedBySource(entries: Iterable<readonly [string, unknown]>): P
   return out;
 }
 
-export type Gauge = { value: number; max: number; ratio: number; full: boolean };
+/**
+ * value = 막대에 쓰는 값 (0..max로 자른다), earned = 실제로 받은 값, extra = 한도를 넘어 받은 몫.
+ * 11/16 한도를 넘어 받는 건 포인트 이벤트로 한도가 늘어 있던 동안 받은 몫뿐이다 (끄면 한도가 돌아와도 받은 건 그대로)
+ */
+export type Gauge = { value: number; earned: number; extra: number; max: number; ratio: number; full: boolean };
 
-/** 막대 하나: 값은 0..max로 자르고(넘쳐도 100%), 한도가 0이면 비어 있는 막대 */
+/** 막대 하나: 막대는 0..max로 자르고(넘쳐도 100%), 숫자는 실제로 받은 값. 한도가 0이면 비어 있는 막대 */
 export function gaugeOf(earned: number, max: number): Gauge {
   const m = Math.max(0, Math.floor(max) || 0);
-  const value = Math.min(m, Math.max(0, Math.floor(earned) || 0));
-  return { value, max: m, ratio: m > 0 ? value / m : 0, full: m > 0 && value >= m };
+  const got = Math.max(0, Math.floor(earned) || 0);
+  const value = Math.min(m, got);
+  return { value, earned: got, extra: Math.max(0, got - m), max: m, ratio: m > 0 ? value / m : 0, full: m > 0 && value >= m };
 }
 
 /** 많이 쓰는 항목 (위에 늘 보인다). 나머지는 접어 둔다 */

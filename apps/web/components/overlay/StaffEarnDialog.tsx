@@ -165,7 +165,7 @@ function Person({ v, open, onToggle }: { v: StaffEarnView; open: boolean; onTogg
       <button type="button" className={styles.head} aria-expanded={open} onClick={onToggle}>
         <span className={styles.name}>{v.name}</span>
         <span className={gauge.totalNums}>
-          <b>{fmt(total.value)}</b> / {fmt(total.max)}
+          <b>{fmt(total.earned)}</b> / {fmt(total.max)}
         </span>
         <span className={styles.pct}>{v.pct}%</span>
       </button>
