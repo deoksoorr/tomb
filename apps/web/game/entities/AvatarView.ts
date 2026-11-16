@@ -593,7 +593,9 @@ export class AvatarView {
   private setTitle(id: string | null): void {
     this.wornTitle = id;
     // 11/16 1위·명예 갈래 칭호: 반짝이는 발자국 (매니저 전용 칭호는 능력이 없어 매니저 표시와 상관없다)
-    const spark = !this.reduced && titlePerk(id).sparkle;
+    // 11/16 발 칸 꾸미기(발자국 아이템)를 끼고 있으면 그 발자국만 보이게 별가루는 쉰다 (setLook이 look을 먼저 바꾸고 여기를 부른다)
+    const feet = this.look.some((i) => itemById(i)?.slot === "feet");
+    const spark = !this.reduced && !feet && titlePerk(id).sparkle;
     if (spark) this.titleSparkle ??= new TitleSparkle(this.scene);
     else if (this.titleSparkle) {
       this.titleSparkle.destroy();

@@ -517,7 +517,8 @@ function groupText(p: TitlePerk): [string, string] | null {
     case "house":
       return [`가구를 ${pct(p.houseDiscount)}% 싸게 사요.`, `가구 ${pct(p.houseDiscount)}% 할인`];
     case "champ":
-      return ["걸으면 발밑에 반짝이는 별가루가 남아요.", "걸으면 별가루"];
+      // 11/16 발 칸 꾸미기(발자국 아이템)를 끼면 그 발자국이 먼저 보이고 별가루는 쉰다 (AvatarView setTitle)
+      return ["걸으면 발밑에 반짝이는 별가루가 남아요. 발자국 아이템을 끼면 그 아이템이 먼저 보여요.", "걸으면 별가루"];
     default:
       return null;
   }

@@ -1,37 +1,107 @@
-/* 가방 [칭호] 칸: 얻은 칭호 흰 글자(누를 수 있음), 못 얻은 칭호 회색 + 얻는 방법, 낀 칭호는 금빛 테두리 */
+/* 가방 [칭호] 칸: 얻은 칭호 흰 글자, 못 얻은 칭호 회색 + 얻는 방법, 낀 칭호는 금빛 테두리
+   11/16 카드를 누르면 고르기만 (흰 안쪽 테두리) → 맨 위 자세히 칸에서 달고 뺀다 */
 
 .pane {
   display: grid;
   gap: 12px;
 }
 
-.now {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px 10px;
+/* 얻은 칭호 수 (자세히 칸 위 한 줄 — 스크롤하면 같이 올라간다) */
+.summary {
+  margin-bottom: -6px;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+/* 11/16 고른 칭호 자세히: 칸 맨 위에 붙어 있고(sticky) 높이가 고정이라 골라도 아래 카드가 움직이지 않는다.
+   긴 문장이 넘치는 드문 경우만 칸 안에서 스크롤 */
+.detail {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  height: 112px;
+  overflow-y: auto;
   padding: 8px 10px;
   background: var(--bg-deep);
   box-shadow: var(--px-border);
   color: var(--text);
-  font-size: 12px;
 }
 
-/* 머리 위 칭호와 같은 연한 금빛 */
-.nowName {
-  color: #f3d98a;
+.detailTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.detailHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 머리 위 칭호와 같은 연한 금빛 (못 얻은 칭호는 회색) */
+.detailName {
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 14px;
   font-weight: 400;
+  line-height: 18px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.detailName[data-earned] {
+  color: #f3d98a;
+}
+
+/* 단추 글이 바뀌어도 폭이 그대로 (「아직 못 얻었어요」가 들어가는 폭) */
+.wear {
+  flex: none;
+  min-width: 112px;
+}
+
+.detailHow {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.detailPerk {
+  color: var(--moss);
+  font-family: var(--font-small);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.detailPerk[data-none] {
+  color: var(--faint);
+}
+
+/* 낀 칭호 딱지 (카드·자세히 칸) */
+.worn {
+  flex: none;
+  padding: 0 4px;
+  background: #f3d98a;
+  color: #2a2110;
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 15px;
 }
 
 .count {
   color: var(--muted);
   font-family: var(--font-small);
   font-size: 10px;
-}
-
-.off {
-  min-height: 36px;
 }
 
 .group {
@@ -51,14 +121,14 @@
   gap: 6px;
 }
 
-/* 카드 높이는 갈래(도감·주간 1위·내 집)와 글 길이에 상관없이 모두 같게: 이름 한 줄 + 얻는 법 두 줄 */
+/* 카드 높이는 갈래(도감·주간 1위·내 집)와 글 길이에 상관없이 모두 같게: 이름 한 줄 + 얻는 법 두 줄 + 진행도 + 짧은 능력 한 줄 */
 .title {
   display: grid;
   align-content: start;
   gap: 2px;
   width: 100%;
   /* 카드 높이 통일: 이름 한 줄 · 얻는 방법 두 줄 · 진행도 · 칭호 능력이 딱 들어가는 높이 (아래가 비지 않게).
-     폰처럼 좁아 이름이 두 줄이 될 수 있는 화면만 한 줄만큼 더 */
+     11/16 이름도 한 줄로 줄여 폰에서도 같은 높이 */
   height: 94px;
   overflow: hidden;
   align-content: start;
@@ -68,21 +138,27 @@
   color: var(--faint);
   text-align: left;
   box-shadow: var(--px-border);
+  cursor: pointer;
   touch-action: manipulation;
 }
 
-/* 얻은 칭호: 흰 글자, 누를 수 있다 */
+/* 11/16 못 얻은 칭호도 눌러서 얻는 법을 본다 */
+.title:hover {
+  background: rgba(58, 60, 47, 0.6);
+}
+
+/* 얻은 칭호: 흰 글자 */
 .title[data-earned] {
   background: var(--surface);
   color: #f6f3ea;
-  cursor: pointer;
 }
 
-.title[data-earned]:hover:not(:disabled) {
+.title[data-earned]:hover {
   background: var(--surface-hover);
 }
 
-.title[aria-pressed="true"] {
+/* 낀 칭호: 금빛 테두리 + 「착용」 딱지 */
+.title[data-worn] {
   background: var(--moss-deep);
   box-shadow:
     0 -2px 0 0 #f3d98a,
@@ -91,25 +167,27 @@
     2px 0 0 0 #f3d98a;
 }
 
-.title:disabled:not([data-earned]) {
-  cursor: default;
+/* 11/16 고른 칭호: 흰 안쪽 테두리 (금빛·등급 테두리와 같이 보인다) */
+.title[aria-pressed="true"] {
+  outline: 2px solid #f6f3ea;
+  outline-offset: -4px;
 }
 
-/* 이름: 좁은 카드(폰)에서 긴 이름은 두 줄까지 (줄 높이 고정 — 글자 아랫부분이 잘리지 않게) */
+.title[aria-pressed="true"]:focus-visible {
+  outline-color: var(--candle);
+}
+
+/* 이름: 한 줄 (넘치면 줄임표 — 전체 이름은 위 자세히 칸에). 줄 높이 고정 — 글자 아랫부분이 잘리지 않게 */
 .name {
-  display: -webkit-box;
   min-width: 0;
   overflow: hidden;
   font-size: 13px;
   line-height: 17px;
-  overflow-wrap: anywhere;
-  word-break: keep-all;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.title[aria-pressed="true"] .name {
+.title[data-worn] .name {
   color: #f3d98a;
 }
 
@@ -162,31 +240,38 @@
   box-shadow: inset 0 0 0 1px currentColor;
 }
 
-.title[data-grade="bronze"] .grade {
+.title[data-grade="bronze"] .grade,
+.detailHead[data-grade="bronze"] .grade {
   color: #d9a777;
 }
 
-.title[data-grade="silver"] .grade {
+.title[data-grade="silver"] .grade,
+.detailHead[data-grade="silver"] .grade {
   color: #cfd8e6;
 }
 
-.title[data-grade="gold"] .grade {
+.title[data-grade="gold"] .grade,
+.detailHead[data-grade="gold"] .grade {
   color: #ffd76a;
 }
 
-.title[data-grade="legend"] .grade {
+.title[data-grade="legend"] .grade,
+.detailHead[data-grade="legend"] .grade {
   color: #ffb0e0;
 }
 
-.title[data-earned][data-grade="bronze"] .name {
+.title[data-earned][data-grade="bronze"] .name,
+.detailName[data-earned][data-grade="bronze"] {
   color: #f0c493;
 }
 
-.title[data-earned][data-grade="silver"] .name {
+.title[data-earned][data-grade="silver"] .name,
+.detailName[data-earned][data-grade="silver"] {
   color: #f1f5fb;
 }
 
-.title[data-earned][data-grade="gold"] .name {
+.title[data-earned][data-grade="gold"] .name,
+.detailName[data-earned][data-grade="gold"] {
   color: #ffd76a;
 }
 
@@ -210,18 +295,11 @@
     inset 0 0 14px rgba(194, 162, 255, 0.25);
 }
 
-.nowName[data-grade="legend"] {
+.detailName[data-earned][data-grade="legend"] {
   background: linear-gradient(90deg, #ff9a9a, #ffd27a, #b8f58a, #8ad8ff, #c2a2ff);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-}
-
-.perkNow {
-  display: block;
-  color: var(--moss);
-  font-family: var(--font-small);
-  font-size: 10px;
 }
 
 /* 칭호 능력 한 줄 (은 이상) */
@@ -290,8 +368,9 @@
 }
 
 @media (max-width: 560px) {
-  .title {
-    height: 112px;
+  /* 폰: 얻는 법·능력 문장이 두세 줄로 접힌다 */
+  .detail {
+    height: 150px;
   }
 }
 
@@ -322,7 +401,8 @@
 }
 
 /* 11/15 신화 (서버에 한 사람 — 서버 최초·꼭대기 층 주인·이번 주 최고층): 짙은 금빛 판 + 금테 + 흰금빛 이름에 빛줄기가 천천히 흐른다 (운영자 보라 없음) */
-.title[data-grade="mythic"] .grade {
+.title[data-grade="mythic"] .grade,
+.detailHead[data-grade="mythic"] .grade {
   color: #ffcf4a;
 }
 
@@ -335,7 +415,7 @@
 }
 
 .title[data-earned][data-grade="mythic"] .name,
-.nowName[data-grade="mythic"] {
+.detailName[data-earned][data-grade="mythic"] {
   background: linear-gradient(100deg, #e8a838 0%, #fff4c8 40%, #ffffff 50%, #fff4c8 60%, #e8a838 100%) 0 0 / 250% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -358,13 +438,14 @@
 
 @media (prefers-reduced-motion: reduce) {
   .title[data-earned][data-grade="mythic"] .name,
-  .nowName[data-grade="mythic"] {
+  .detailName[data-earned][data-grade="mythic"] {
     animation: none;
   }
 }
 
 /* 11/16 매니저 전용 「무급 마을 반장」: 짙은 청록 판 + 민트테 + 연민트·청록 이름 (매니저에게만 보인다) */
-.title[data-grade="manager"] .grade {
+.title[data-grade="manager"] .grade,
+.detailHead[data-grade="manager"] .grade {
   color: #5ff0c4;
 }
 
@@ -377,7 +458,7 @@
 }
 
 .title[data-earned][data-grade="manager"] .name,
-.nowName[data-grade="manager"] {
+.detailName[data-earned][data-grade="manager"] {
   background: linear-gradient(180deg, #dcfff2 20%, #22b89c 85%);
   -webkit-background-clip: text;
   background-clip: text;

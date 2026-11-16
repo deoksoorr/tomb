@@ -140,7 +140,8 @@ describe("11/16 칭호 능력 갈래 표", () => {
     expect(perkShort(titleDef("t_floor100"))).toBe("이동 +4% · 야근 빌딩 층마다 6초 더");
     expect(perkText(titleDef("t_first100"))).toBe("마을에서 6% 더 빨리 걸어요. 야근 빌딩에서 층마다 제한 시간이 9초 늘어나요.");
     expect(perkText(titleDef("t_look600"))).toBe("마을에서 2% 더 빨리 걸어요. 상점 물건과 염색권을 3% 싸게 사요.");
-    expect(perkText(titleDef("t_champ_points"))).toBe("마을에서 5% 더 빨리 걸어요. 걸으면 발밑에 반짝이는 별가루가 남아요.");
+    expect(perkText(titleDef("t_champ_points"))).toBe("마을에서 5% 더 빨리 걸어요. 걸으면 발밑에 반짝이는 별가루가 남아요. 발자국 아이템을 끼면 그 아이템이 먼저 보여요.");
+    expect(perkShort(titleDef("t_champ_points"))).toBe("이동 +5% · 걸으면 별가루");
     expect(perkShort(titleDef("t_quest300"))).toBe("이동 +2% · 5% 확률로 도장 +1");
     expect(perkShort(titleDef("t_stay50"))).toBe("이동 +2% · 접속 보너스 +5%");
     expect(perkText(titleDef("t_att7"))).toBe("");

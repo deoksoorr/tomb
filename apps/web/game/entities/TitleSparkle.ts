@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import { TEX } from "../assets/manifest";
 
 // 11/16 1위·명예 갈래 칭호(lib/titles TITLE_PERK_GROUP champ): 걸을 때 발자국 자리에 작은 금빛 반짝이가 잠깐 남았다 사라진다.
+// 11/16 발 칸 꾸미기(발자국 아이템)를 끼고 있으면 만들지 않는다 (AvatarView setTitle — 그 아이템 발자국이 먼저).
 // 화면 연출만 (서버·포인트와 무관). 착용 목록의 칭호로 정하므로 다른 사람 화면에도 같이 보인다 (AvatarView가 하나씩 가진다).
 // 몇 개만 만들어 돌려 쓴다 (풀). 움직임 줄이기면 아예 그리지 않는다.
 
