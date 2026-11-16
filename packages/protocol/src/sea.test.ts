@@ -118,15 +118,15 @@ describe("sea map (protocol)", () => {
     for (const r of SEA_REST_SEATS) {
       expect(seatSlotIn("sea", r.id)).toMatchObject({ kind: "seat", state: r.kind === "lounger" ? STATE.lie : r.kind === "hammock" ? STATE.hammock : STATE.sitGround, furnitureId: r.group });
       expect(seatSlotIn("village", r.id)).toBeUndefined();
-      // 해먹은 누워서 바다를 봐요 (선베드 장면)
-      expect(seaViewOfSeat(r.id)).toBe(r.kind === "hammock" ? "lounger" : r.kind);
+      // 11/16 r15 해먹은 해먹 장면
+      expect(seaViewOfSeat(r.id)).toBe(r.kind);
     }
     // r12 끝 걸터앉기는 끝마다 셋 · 피크닉 탁자 넷 · 모닥불 통나무 · 정원 벤치
     for (const id of ["pS1-0", "pS4-1", "pE1-0", "pE1-2", "pE2-1", "pT1n-0", "pT2s-1", "pF1", "pF4", "pG1-0"]) expect(seatSlotIn("sea", id), id).toMatchObject({ state: STATE.sitChair });
     expect(seaViewOfSeat("pT1n-0")).toBeNull();
     expect(seaViewOfSeat("pF2")).toBeNull();
     expect(seaViewOfSeat("pG1-1")).toBeNull();
-    expect(seaViewOfSeat("pH")).toBe("lounger");
+    expect(seaViewOfSeat("pH")).toBe("hammock");
     expect(seaViewOfSeat("pS2-0")).toBe("beach");
     expect(seaViewOfSeat("pE1-1")).toBe("pier");
     expect(seaViewOfSeat("pE2-0")).toBe("breakwater");

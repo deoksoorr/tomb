@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { tideLineY, type SeaViewKind } from "@tomb/protocol";
+import { SEA_WIDTH, tideLineY, type SeaViewKind } from "@tomb/protocol";
 import { addCanvasTexture } from "../assets/manifest";
 import { rainTile, snowTile } from "../sprites/skyScenery";
 import type { Levels } from "../world/ambienceMix";
@@ -19,6 +19,7 @@ import { noise1, shoreDelay, shoreReach, WaveTrain } from "./seaWaves";
 export type SeaViewSitter = { key: string; frame: number; slot: number; of: number };
 export { seaViewFore, seaViewLandmarks, seaViewProject, VIEW_FOCAL, type SeaViewFore, type SeaViewLandmarks } from "./seaViewGeom";
 import { seaViewProject, VIEW_FOCAL, type SeaViewFore, type SeaViewLandmarks } from "./seaViewGeom";
+import { shipsAt, squidBoatsAt } from "./seaShipsPlan";
 
 export type SeaViewFrame = {
   now: number;
@@ -63,7 +64,7 @@ let seq = 0;
 /** 11/16 장면 종류: 앉은 자리 장면 + 등대 꼭대기 (오르기) */
 export type ViewKind = SeaViewKind | "lighthouse";
 // 11/16 r12 벤치는 눈높이를 조금 높여(내려다보듯) 수평선을 위로 — 모래밭이 잘 보이게
-const HORIZON: Record<ViewKind, number> = { beach: 0.34, mat: 0.42, parasol: 0.44, lounger: 0.6, pier: 0.36, breakwater: 0.4, lighthouse: 0.24 };
+const HORIZON: Record<ViewKind, number> = { beach: 0.34, mat: 0.42, parasol: 0.44, lounger: 0.6, hammock: 0.66, pier: 0.36, breakwater: 0.4, lighthouse: 0.24 };
 
 export class SeaView {
   private readonly scene: ViewScene;
@@ -100,6 +101,11 @@ export class SeaView {
   private moon: Phaser.GameObjects.Image | null = null;
   private clouds: { img: Phaser.GameObjects.Image; x0: number; y: number; speed: number }[] = [];
   private boat: Phaser.GameObjects.Image | null = null;
+  /** 11/16 r15 수평선의 오징어잡이배 불빛 (등불 + 물에 비친 기둥) */
+  private squidLights: { glow: Phaser.GameObjects.Image; col: Phaser.GameObjects.Image }[] = [];
+  /** 11/16 r15 해먹 장면: 천 테두리 · 야자 잎 (살랑살랑 흔들려요) */
+  private hammockFrame: Phaser.GameObjects.Image | null = null;
+  private fronds: Phaser.GameObjects.Image[] = [];
   private boatT0 = -1;
   private sea: Phaser.GameObjects.Image | null = null;
   private crests: Phaser.GameObjects.TileSprite[] = [];
@@ -236,7 +242,7 @@ export class SeaView {
     this.sky = this.add(sc.add.tileSprite(0, 0, VW, hz + 2, this.tex(P + "px", () => V.whitePx())).setOrigin(0, 0).setDepth(0));
     this.skyKey = "";
     this.stars = this.add(sc.add.tileSprite(0, 0, VW, hz, this.tex(P + "stars", () => V.starTile())).setOrigin(0, 0).setDepth(1).setAlpha(0));
-    this.sun = this.add(sc.add.image(0, 0, this.tex(P + "sun", () => V.sunDisc(kind === "lounger" ? 10 : 8))).setDepth(2));
+    this.sun = this.add(sc.add.image(0, 0, this.tex(P + "sun", () => V.sunDisc(kind === "lounger" || kind === "hammock" ? 10 : 8))).setDepth(2));
     this.moon = this.add(sc.add.image(0, 0, this.tex(P + "moon", () => V.moonDisc())).setDepth(2));
     this.clouds = [];
     for (let i = 0; i < 4; i++) {
@@ -246,6 +252,12 @@ export class SeaView {
     this.boat = this.add(sc.add.image(-40, hz - 3, this.tex(P + "farBoat", () => V.farBoat())).setOrigin(0.5, 1).setDepth(4).setVisible(false));
     this.boatT0 = -1;
     this.nextBoat = sc.time.now + 8000 + Math.random() * 20000;
+    this.squidLights = [];
+    for (let i = 0; i < 4; i++)
+      this.squidLights.push({
+        glow: this.add(sc.add.image(0, hz, Art.SEA_TEX.lampGlow).setBlendMode(Phaser.BlendModes.ADD).setTint(0xe8ffd8).setDepth(7).setVisible(false)),
+        col: this.add(sc.add.image(0, hz, Art.SEA_TEX.lightColumn).setOrigin(0.5, 0).setBlendMode(Phaser.BlendModes.ADD).setDepth(6).setVisible(false)),
+      });
     // 바다 몸통 (시간대 색이 바뀔 때 다시 구워요) · 물결 마루 (먼 것은 느리고 옅게, 가까운 것은 빠르고 진하게)
     this.sea = this.add(sc.add.image(0, hz, this.tex(P + "px", () => V.whitePx())).setOrigin(0, 0).setDepth(5));
     this.seaKey = "";
@@ -263,7 +275,9 @@ export class SeaView {
     this.moored = this.buoy = this.beam = null;
     this.tetras = [];
     this.puffs = [];
-    const beachy = kind === "beach" || kind === "mat" || kind === "parasol" || kind === "lounger";
+    const beachy = kind === "beach" || kind === "mat" || kind === "parasol" || kind === "lounger" || kind === "hammock";
+    this.hammockFrame = null;
+    this.fronds = [];
     if (beachy) {
       const sandH = Math.round(VH * 0.72);
       this.sand = this.add(sc.add.image(0, VH, this.tex(`${P}sand-${VW}-${sandH}`, () => V.sandBand(VW, sandH, 14))).setOrigin(0, 0).setDepth(10));
@@ -273,6 +287,16 @@ export class SeaView {
       if (kind === "mat" || kind === "parasol") this.fore.push(this.add(sc.add.image(0, VH, this.tex(`${P}matEdge-${VW}-${this.mat}`, () => V.matEdge(VW, this.mat))).setOrigin(0, 1).setDepth(30)));
       if (kind === "parasol") this.fore.push(this.add(sc.add.image(0, 0, this.tex(`${P}fringe-${VW}-${this.variant}`, () => V.parasolFringe(VW, this.variant))).setOrigin(0, 0).setDepth(31)));
       if (kind === "lounger") this.fore.push(this.add(sc.add.image(Math.round(VW / 2), VH + 2, this.tex(P + "loungerFoot", () => V.loungerFoot())).setOrigin(0.5, 1).setDepth(30)));
+      if (kind === "hammock") {
+        // 11/16 r15 해먹 안에서: 아래·양옆은 처진 해먹 천, 위 두 구석엔 해먹을 건 야자 잎 (흔들흔들)
+        const fh = Math.round(VH * 0.42);
+        this.hammockFrame = this.add(sc.add.image(Math.round(VW / 2), VH + 6, this.tex(`${P}hammockFrame-${VW}-${fh}`, () => V.hammockFrame(VW + 24, fh))).setOrigin(0.5, 1).setDepth(30));
+        const fw = Math.round(VW * 0.34);
+        const fhh = Math.round(VH * 0.3);
+        const fk = this.tex(`${P}fronds-${fw}-${fhh}`, () => V.palmFronds(fw, fhh));
+        this.fronds = [this.add(sc.add.image(-6, -6, fk).setOrigin(0, 0).setDepth(31)), this.add(sc.add.image(VW + 6, -6, fk).setOrigin(1, 0).setFlipX(true).setDepth(31))];
+        this.fore.push(this.hammockFrame, ...this.fronds);
+      }
       // 11/16 벤치: 바로 앞 선베드 줄과 파라솔이 장면 앞쪽에 (가까운 줄이 크고 아래, 그 앞 줄은 조금 작고 위)
       const fs = this.foreSpec;
       this.foreLoungers = [];
@@ -459,18 +483,36 @@ export class SeaView {
       const x = ((c.x0 + (now / 1000) * c.speed * k) % (VW + 140)) - 70;
       c.img.setPosition(Math.round(x), c.y).setTint(cloudTint).setAlpha((i < 2 || grey > 0.2 ? 0.85 : 0.5) * (0.4 + 0.6 * Math.max(0.3, L.cloud + grey)) * (1 - night * 0.65));
     });
-    // 먼 배 (가끔 수평선을 지나가요)
+    // 11/16 r15 먼 배: 지도 먼바다를 지나는 그 배 (seaShipsPlan — 모두에게 같은 배)를 수평선에 작게. 바다를 보니 지도 동쪽 = 장면 왼쪽
     if (this.boat) {
-      if (this.boatT0 < 0 && now >= this.nextBoat && !this.reduced) this.boatT0 = now;
-      if (this.boatT0 >= 0) {
-        const x = -20 + ((now - this.boatT0) / 1000) * 3.2;
-        this.boat.setVisible(true).setPosition(Math.round(x), hz - 1 + Math.round(Math.sin(now / 900) * 0.6)).setTint(mixRgb(shade, 0x8090b0, 0.3));
-        if (x > VW + 20) {
-          this.boatT0 = -1;
-          this.boat.setVisible(false);
-          this.nextBoat = now + 40000 + Math.random() * 50000;
-        }
-      }
+      const ship = shipsAt(Date.now())[0];
+      if (ship) {
+        const key = ship.pass.kind === "fishing" ? P + "farBoat" : Art.SEA_TEX.ship(ship.pass.kind);
+        if (this.boat.texture.key !== key && this.scene.textures.exists(key)) this.boat.setTexture(key);
+        const x = VW * (1 - ship.x / SEA_WIDTH);
+        this.boat
+          .setVisible(true)
+          .setScale(ship.pass.kind === "fishing" ? 1 : 0.32)
+          .setFlipX(ship.pass.kind === "fishing" ? ship.pass.dir > 0 : ship.pass.dir > 0)
+          .setPosition(Math.round(x), hz - 1 + Math.round(Math.sin(now / 900) * 0.6))
+          .setTint(mixRgb(shade, 0x8090b0, 0.35))
+          .setAlpha(0.85);
+      } else this.boat.setVisible(false);
+    }
+    // 11/16 r15 밤: 수평선의 오징어잡이배 등불 (지도와 같은 배, 물에 비친 빛 기둥)
+    {
+      const on = Math.max(0, Math.min(1, (night - 0.35) / 0.35));
+      const boats = on > 0.01 ? squidBoatsAt(Date.now()) : [];
+      this.squidLights.forEach((l, i) => {
+        const b = boats[i];
+        l.glow.setVisible(!!b);
+        l.col.setVisible(!!b);
+        if (!b) return;
+        const x = Math.round(VW * (1 - b.x / SEA_WIDTH));
+        const fl = this.reduced ? 1 : 0.85 + 0.15 * Math.sin(now / 110 + i * 2);
+        l.glow.setPosition(x, hz - 1).setScale(0.9, 0.55).setAlpha(on * 0.8 * fl);
+        l.col.setPosition(x, hz).setScale(0.7, (0.5 + (this.reduced ? 0 : 0.12 * Math.sin(now / 500 + i))) * Math.max(1, (this.VH - hz) / 160)).setAlpha(on * 0.55);
+      });
     }
     // 물결 마루 흐름
     const [ca, cb] = this.crests;
@@ -568,7 +610,7 @@ export class SeaView {
   private updateShore(f: SeaViewFrame, shade: number, night: number, warm: number): void {
     if (!this.sand || !this.wash || !this.foam || !this.waves) return;
     const { VH } = this;
-    const lounger = this.kind === "lounger";
+    const lounger = this.kind === "lounger" || this.kind === "hammock";
     // 11/16 r12 사용자 "밀물 때 선베드가 물에 떠 있어요" → 물가 줄은 앉은 자리에서 지금 물가 선(물때)까지 실제 거리로 (원근, 지도와 같은 거리)
     const at = this.seatAt;
     const dLine = at ? Math.max(16, tideLineY(f.tide) - at.y) : 0;
@@ -618,6 +660,12 @@ export class SeaView {
     const now = f.now;
     const k = this.reduced ? 0.3 : 1;
     if (this.kind === "lighthouse") this.updateLookout(f, night);
+    // 11/16 r15 해먹: 천이 좌우로 살랑 흔들리며 살짝 기울어요 (앞 천·야자 잎만 — 장면 카메라는 그대로). 움직임 줄이기면 멈춰요
+    if (this.kind === "hammock" && !this.reduced) {
+      const sw = Math.sin(now / 1400);
+      this.hammockFrame?.setX(Math.round(this.VW / 2 + sw * 6)).setRotation(sw * 0.025);
+      this.fronds.forEach((fr, i) => fr.setY(-6 + Math.round(Math.sin(now / 1700 + i * 1.3) * 2)).setRotation(Math.sin(now / 2100 + i) * 0.02));
+    }
     for (const img of this.fore) img.setTint(shade);
     for (const img of this.landSprites) img.setTint(mixRgb(shade, 0xb8c4d8, 0.15));
     this.landGfx?.setAlpha(1 - night * 0.45);
@@ -757,7 +805,7 @@ export class SeaView {
   private updateSitters(list: readonly SeaViewSitter[], night: number): void {
     const { VW, VH } = this;
     const tint = mixRgb(0xffffff, 0x6a7090, 0.2 + night * 0.45);
-    const lounger = this.kind === "lounger";
+    const lounger = this.kind === "lounger" || this.kind === "hammock";
     this.sitters.forEach((img, i) => {
       const r = list[i];
       if (!r || !this.scene.textures.exists(r.key)) {

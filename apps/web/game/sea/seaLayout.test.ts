@@ -19,6 +19,7 @@ import {
   seaLotFront,
   seaLotGate,
   SEA_PIER,
+  SEA_ROAD,
   SEA_JETSKIS,
   SEA_PONTOON_RAMP,
   seaJetDismount,
@@ -172,7 +173,8 @@ describe("seaLayout — 물·바닥", () => {
   });
   it("바닥 종류가 띠 순서대로다", () => {
     // 11/16 버스 길은 오른쪽 끝 ~ 돌림 마당까지만, 그 왼쪽 띠는 풀밭
-    expect(seaGroundKind(1200, 125)).toBe("road");
+    expect(seaGroundKind(SEA_ROAD.x + 60, 125)).toBe("road");
+    expect(seaGroundKind(SEA_ROAD.x - 80, 125)).toBe("grass"); // r15 정류장을 동쪽 끝으로 옮기며 비운 자리
     expect(seaGroundKind(600, 125)).toBe("grass");
     expect(seaGroundKind(600, SEA_BOARDWALK.y + 13)).toBe("boardwalk");
     expect(seaGroundKind(300, SEA_SAND_Y0 + 60)).toBe("sand");

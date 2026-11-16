@@ -186,6 +186,11 @@ export const SEA_TEX = {
   tube: (v: number) => `${P}tube${v}`,
   jetski: (d: "side" | "front" | "back", v: number) => `${P}jetski-${d}${v}`,
   wake: `${P}wake`,
+  /** 11/16 r15 먼바다 배 (유조선·컨테이너선) · 오징어잡이배 · 등불 물빛 기둥 */
+  ship: (k: "tanker" | "cargo") => `${P}ship-${k}`,
+  squid: `${P}squid`,
+  squidLamps: `${P}squidLamps`,
+  lightColumn: `${P}lightColumn`,
   pontoon: `${P}pontoon`,
   pontoonRamp: `${P}pontoonRamp`,
   stone: (v: number) => `${P}stone${v}`,
@@ -1997,4 +2002,99 @@ export function detailPass(g: Grid, o: DetailOpts = {}): Grid {
 export function withDetail<T extends Grid | ArtOut>(out: T, o: DetailOpts = {}): T {
   detailPass("grid" in out ? out.grid : out, o);
   return out;
+}
+
+// ── 11/16 r15 먼바다 배 (멀리 있어 흐릿하게 — 그리는 쪽에서 안개 빛으로 덧칠해요) ──
+export const SHIP_W = { tanker: 128, cargo: 116 } as const;
+/** 유조선: 긴 붉은 배 밑 + 짙은 남색 옆구리 + 갑판 관 + 고물 쪽 흰 선교 (오른쪽이 뱃머리) */
+export function tankerArt(): Grid {
+  const W = SHIP_W.tanker;
+  const g = new Grid(W, 24);
+  for (let x = 2; x < W - 2; x++) {
+    const bow = x > W - 16 ? Math.round((x - (W - 16)) * 0.35) : 0;
+    for (let y = 13 + bow; y < 22; y++) g.set(x, y, y >= 19 ? 0xb8606a : y === 13 + bow ? 0x5a6a8e : 0x46557a);
+  }
+  // 갑판 관 · 가운데 통로
+  for (let x = 30; x < W - 20; x++) g.set(x, 12, 0x8a96aa);
+  for (let x = 34; x < W - 22; x += 9) g.rect(x, 10, 5, 2, 0xa8b2c2);
+  // 선교 (고물)
+  g.rect(8, 3, 16, 10, 0xeef0f2);
+  g.hline(8, 23, 3, 0xffffff);
+  for (let x = 10; x < 23; x += 3) g.set(x, 6, 0x8ab0c8);
+  g.rect(14, 0, 3, 3, 0x7a5a5a);
+  softOutline(g);
+  return g;
+}
+/** 컨테이너선: 남색 배 + 알록달록 상자 더미 + 고물 선교 */
+export function cargoArt(): Grid {
+  const W = SHIP_W.cargo;
+  const g = new Grid(W, 28);
+  for (let x = 2; x < W - 2; x++) {
+    const bow = x > W - 14 ? Math.round((x - (W - 14)) * 0.4) : 0;
+    for (let y = 17 + bow; y < 26; y++) g.set(x, y, y >= 23 ? 0xb06a62 : y === 17 + bow ? 0x4a6aa0 : 0x3e5a8a);
+  }
+  const box = [0xe8907a, 0x7ab8d8, 0xf0c870, 0x8cc89a, 0xc898d8, 0xe8e0d0];
+  const r = rng(515);
+  for (let x = 28; x < W - 16; x += 7)
+    for (let row = 0; row < 3; row++) {
+      if (row === 2 && r() < 0.4) continue;
+      g.rect(x, 14 - row * 4, 6, 3, box[Math.floor(r() * box.length)]);
+    }
+  g.rect(8, 5, 14, 12, 0xeef0f2);
+  g.hline(8, 21, 5, 0xffffff);
+  for (let x = 10; x < 21; x += 3) g.set(x, 8, 0x8ab0c8);
+  g.rect(13, 1, 3, 4, 0xd86a5a);
+  softOutline(g);
+  return g;
+}
+/** 오징어잡이배: 작은 흰 배 + 앞뒤 기둥 사이에 줄줄이 매단 등 (등은 따로 squidLampsArt — 밤에 더해 밝혀요) */
+export const SQUID_W = 50;
+export const SQUID_H = 28;
+const SQUID_BULBS: readonly [number, number][] = (() => {
+  const out: [number, number][] = [];
+  for (let x = 8; x <= 42; x += 4) out.push([x, 9 + Math.round(Math.sin(((x - 8) / 34) * Math.PI) * 2)]);
+  for (let x = 10; x <= 40; x += 5) out.push([x, 14]);
+  return out;
+})();
+export function squidArt(): Grid {
+  const g = new Grid(SQUID_W, SQUID_H);
+  for (let x = 4; x < SQUID_W - 4; x++) {
+    const bow = x > SQUID_W - 12 ? Math.round((x - (SQUID_W - 12)) * 0.5) : 0;
+    for (let y = 18 + bow; y < 25; y++) g.set(x, y, y >= 23 ? 0x5a7a9a : y === 18 + bow ? 0xf4f6f8 : 0xdde4ea);
+  }
+  g.rect(16, 13, 10, 5, 0xeef2f4);
+  g.set(18, 15, 0x7aa8c0);
+  g.set(21, 15, 0x7aa8c0);
+  // 기둥 둘 · 등 줄
+  g.vline(7, 6, 18, 0x8a8f9a);
+  g.vline(43, 6, 18, 0x8a8f9a);
+  for (let x = 7; x <= 43; x++) g.set(x, 7 + Math.round(Math.sin(((x - 7) / 36) * Math.PI) * 2), 0x9aa0aa);
+  for (const [x, y] of SQUID_BULBS) g.set(x, y, 0xe8ecd8);
+  softOutline(g);
+  return g;
+}
+/** 오징어잡이배 등불만 (ADD로 겹쳐 밤에 밝혀요 — 흰빛·연두빛 섞어) */
+export function squidLampsArt(): Grid {
+  const g = new Grid(SQUID_W, SQUID_H);
+  SQUID_BULBS.forEach(([x, y], i) => {
+    const c = i % 3 === 1 ? 0xd8ffd0 : 0xfffbe8;
+    g.set(x, y, c);
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) g.set(x + dx, y + dy, c, 120);
+  });
+  return g;
+}
+/** 물에 비친 불빛 기둥 (ADD, 위가 밝고 아래로 사라져요 — 그리는 쪽에서 위아래로 일렁여요) */
+export function lightColumnArt(): Grid {
+  const W = 8;
+  const H = 48;
+  const g = new Grid(W, H);
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      const k = 1 - y / H;
+      const side = 1 - Math.abs(x + 0.5 - W / 2) / (W / 2);
+      const broken = hashU(x, y >> 1, 97) < 0.25 + (1 - k) * 0.4 ? 0.35 : 1;
+      const a = Math.round(200 * k * k * side * broken);
+      if (a > 6) g.set(x, y, 0xfff4c8, a);
+    }
+  return g;
 }

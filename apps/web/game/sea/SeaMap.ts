@@ -1339,6 +1339,12 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
     tex(T.jetski("back", v), () => Art.withDetail(Art.jetskiFbArt(false, v), {}));
   }
   tex(T.wake, Art.wakeArt);
+  // 11/16 r15 먼바다 배 · 오징어잡이배 · 물빛 기둥
+  tex(T.ship("tanker"), () => Art.withDetail(Art.tankerArt(), {}));
+  tex(T.ship("cargo"), () => Art.withDetail(Art.cargoArt(), {}));
+  tex(T.squid, Art.squidArt);
+  tex(T.squidLamps, Art.squidLampsArt);
+  tex(T.lightColumn, Art.lightColumnArt);
   tex(CAMP_TEX.vending, vendingArt);
   tex(CAMP_TEX.vendingLit, vendingLitArt);
   // 11/16 매점 먹거리·마실 거리 그림 (먹을 때 머리 위에 뜨는 접시·잔 — 캠핑장과 같은 그림, 바닷가에서 바로 들어오면 아직 없어요)

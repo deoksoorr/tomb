@@ -371,3 +371,50 @@ export function starTile(): Grid {
   }
   return g;
 }
+
+// ── 11/16 r15 해먹에 누워 보는 바다 (사용자: 선베드 장면 말고 해먹 장면) ──
+/** 해먹 천 테두리: 아래는 넓게 처진 천(빨강·크림 줄무늬 — 바닷가 해먹 색), 양옆은 위로 올라가며 좁아져요. 가운데 위는 비어 바다·하늘이 보여요 */
+export function hammockFrame(w: number, h: number): Grid {
+  const g = new Grid(w, h);
+  const A = 0xc85a46;
+  const B = 0xe8d6b0;
+  for (let x = 0; x < w; x++) {
+    const u = (x + 0.5) / w - 0.5; // -0.5 ~ 0.5
+    // 아래 천 윗선: 가운데가 가장 낮고(처짐), 양옆으로 갈수록 높이 올라가요
+    const top = Math.round(h * (0.8 - Math.pow(Math.abs(u) * 2, 2.4) * 0.72));
+    for (let y = Math.max(0, top); y < h; y++) {
+      const band = Math.floor((x + (y - top) * 0.35) / 14) % 2 === 0;
+      const depth = (y - top) / Math.max(1, h - top);
+      let c = band ? A : B;
+      // 천 접힘: 윗선 바로 아래는 밝게, 아래로 갈수록 그늘
+      if (y - top < 2) c = band ? 0xe07a64 : 0xf8ecd4;
+      else c = mix(c, 0x3a2620, Math.min(0.35, depth * 0.4));
+      g.set(x, y, c);
+    }
+    // 윗선 테 (부드러운 갈색)
+    if (top >= 0 && top < h) g.set(x, top, 0x7a5a48);
+  }
+  return g;
+}
+/** 위 양쪽 구석의 야자 잎 (해먹을 건 두 야자수 — 아래로 늘어진 잎 몇 장). right = 오른쪽 구석용 (뒤집어 그려요) */
+export function palmFronds(w: number, h: number): Grid {
+  const g = new Grid(w, h);
+  const leaf = [0x4f8a5e, 0x63a06c, 0x7cb878];
+  const r = rng(808);
+  for (let k = 0; k < 6; k++) {
+    // 왼쪽 위 구석에서 오른쪽 아래로 휘어 늘어지는 잎
+    const len = w * (0.45 + r() * 0.5);
+    const droop = h * (0.25 + r() * 0.5);
+    const y0 = r() * h * 0.2;
+    for (let i = 0; i < len; i++) {
+      const t = i / len;
+      const x = Math.round(i);
+      const y = Math.round(y0 + droop * t * t);
+      const c = leaf[(k + (i >> 3)) % 3];
+      for (let d = 0; d < 3; d++) g.set(x, y + d, c);
+      // 잎맥 사이 갈래 (아래로 짧게)
+      if (i % 4 === 0) for (let j = 1; j < 5 + (1 - t) * 6; j++) g.set(x + (j >> 1), y + 2 + j, leaf[(k + j) % 3]);
+    }
+  }
+  return g;
+}

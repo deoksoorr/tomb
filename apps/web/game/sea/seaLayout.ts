@@ -68,7 +68,7 @@ export type SeaPath = { id: string; hw: number; pts: readonly Pt[] };
 export const SEA_PATHS: readonly SeaPath[] = [
   // 정류장에서 산책로까지 (내리면 이 길로 내려가요)
   // 11/16 r11 뭍을 줄이며 짧게 (6번 별장 서쪽 출입구 옆을 지나요)
-  { id: "stop", hw: 10, pts: [ { x: SEA_BUS_STOP.x, y: SEA_ROAD.y + SEA_ROAD.h }, { x: SEA_BUS_STOP.x - 4, y: 220 }, { x: 1320, y: 280 }, { x: 1320, y: SEA_BOARDWALK.y + 2 } ] },
+  { id: "stop", hw: 10, pts: [ { x: SEA_BUS_STOP.x, y: SEA_ROAD.y + SEA_ROAD.h }, { x: SEA_BUS_STOP.x - 4, y: 220 }, { x: SEA_BUS_STOP.x + 40, y: 280 }, { x: SEA_BUS_STOP.x + 40, y: SEA_BOARDWALK.y + 2 } ] },
   // 부동산 문 앞에서 산책로까지
   { id: "realty", hw: 9, pts: [ { x: SEA_REALTY_DOOR.x, y: SEA_REALTY_DOOR.y - 4 }, { x: SEA_REALTY_DOOR.x, y: SEA_BOARDWALK.y + 2 } ] },
   // 11/16 r11 위쪽 별장으로 가는 오솔길 · 아래쪽 별장 사이 디딤돌 골목

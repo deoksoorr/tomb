@@ -43,8 +43,9 @@ export const SEA_HEIGHT = SEA_ROWS * 16; // 960
  * 10 = 11/16 r12 맵 높이 768 → 960 (맨 아래 먼바다 띠만 더함 — 다른 좌표는 그대로)
  * 11 = 11/16 r13 방파제를 60px 바다 쪽으로 (끝 데크·등대·걸터앉기), 낚싯배 뺌, 튜브·제트스키
  * 12 = 11/16 r14 모든 것을 가운데로 (x +240 — 양쪽 바깥 띠가 같아요), 동쪽 백사장 선베드 두 벌·벤치, 서쪽 바위 해안
+ * 13 = 11/16 r14 제트스키 부잔교, 모닥불을 동쪽 빈 모래로, r15 정류장·버스 길을 동쪽 끝 가까이로 (+280)
  */
-export const SEA_MAP_VERSION = 12;
+export const SEA_MAP_VERSION = 13;
 
 type Rect = { x: number; y: number; w: number; h: number };
 type Pt = { x: number; y: number };
@@ -59,7 +60,8 @@ export const SEA_HILL_H = 56;
  * 버스 길 (맨 위). 11/16 사용자 "길이 쓸데없이 길어요" → 오른쪽 맵 끝에서 들어와 정류장을 조금 지난 돌림 마당(SEA_ROAD_LOOP)에서 끝나요.
  * 길 왼쪽 띠는 풀밭·덤불·나무. 바닥 장식이라 막지 않아요
  */
-export const SEA_ROAD = { x: 1160, y: 104, w: SEA_WIDTH - 1160, h: 42 } as const;
+// 11/16 r15 사용자: 정류장을 동쪽 끝 가까이로 → 버스 길도 짧게 (돌림 마당은 정류장 120px 서쪽)
+export const SEA_ROAD = { x: 1440, y: 104, w: SEA_WIDTH - 1440, h: 42 } as const;
 /** 버스 돌림 마당 (길 왼쪽 끝의 둥근 자리 — 가운데·반지름) */
 export const SEA_ROAD_LOOP = { x: SEA_ROAD.x, y: SEA_ROAD.y + SEA_ROAD.h / 2, r: 34 } as const;
 /** (x,y)가 버스 길(돌림 마당 포함) 위인지 */
@@ -149,7 +151,7 @@ export function tideLineY(level: number): number {
 export type SeaZoneId = "busStop" | "realty" | "cottages" | "beach" | "flat" | "pier" | "breakwater" | "rocks";
 export type SeaZone = { id: SeaZoneId; name: string } & Rect;
 export const SEA_ZONES: readonly SeaZone[] = [
-  { id: "busStop", name: "버스 정류장", x: 1190, y: 30, w: 200, h: 110 },
+  { id: "busStop", name: "버스 정류장", x: 1470, y: 30, w: 200, h: 110 }, // SEA_BUS_STOP.x − 90 (아래에서 정해요)
   { id: "realty", name: "포구 부동산", x: 786, y: 196, w: 132, h: 112 },
   { id: "cottages", name: "별장", x: 264, y: 64, w: 900, h: 236 },
   { id: "beach", name: "백사장", x: 0, y: SEA_SAND_Y0, w: SEA_WIDTH, h: SEA_FLAT_Y0 - SEA_SAND_Y0 },
@@ -161,7 +163,7 @@ export const SEA_ZONES: readonly SeaZone[] = [
 
 // ── 버스 정류장 (오른쪽 위) ── 지붕 받침 가운데. 지붕 아래 벤치(pB), 오른쪽에 노선 팻말, 왼쪽에 시간표.
 // 정류장 앞 보도 → 그 아래 버스 길. 11/16 오른쪽 끝(1150)에선 화면 오른쪽 위 미니맵에 가려서 조금 왼쪽(1040)으로 옮겼어요
-export const SEA_BUS_STOP = { x: 1280, y: 84 } as const;
+export const SEA_BUS_STOP = { x: 1560, y: 84 } as const;
 export const SEA_SHELTER_W = 64;
 export const SEA_SHELTER_H = 52;
 export const SEA_BUS_SIGN = { x: SEA_BUS_STOP.x + 50, y: 90 } as const;
@@ -578,12 +580,13 @@ export function seaRestSeatById(id: string): SeaRestSeat | undefined {
 }
 
 /** 11/16 바다 보기 장면 종류 (앉은 자리마다) */
-export type SeaViewKind = "beach" | "mat" | "parasol" | "lounger" | "pier" | "breakwater";
+// 11/16 r15 해먹은 따로 (해먹에 누워 보는 장면)
+export type SeaViewKind = "beach" | "mat" | "parasol" | "lounger" | "hammock" | "pier" | "breakwater";
 /** 이 자리에 앉아 있으면 볼 수 있는 바다 장면 (null = 바다 보기 없음 — 정류장·오두막 벤치) */
 export function seaViewOfSeat(seatId: string): SeaViewKind | null {
   const r = seaRestMap.get(seatId);
-  // 해먹은 누워서 바다를 봐요 (선베드 장면)
-  if (r) return r.kind === "hammock" ? "lounger" : r.kind;
+  // 11/16 r15 해먹은 해먹 장면 (선베드 장면 말고)
+  if (r) return r.kind;
   if (seatId.startsWith("pE1")) return "pier";
   if (seatId.startsWith("pE2")) return "breakwater";
   if (seatId.startsWith("pS")) return "beach";

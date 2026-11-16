@@ -79,6 +79,7 @@ import { BIG_SEAT_MAX, BIG_SEAT_TOAST, foodOfPeer, myBig, RIDING_EAT_TOAST } fro
 import { FoodFx } from "../camp/foodFx";
 import { SeaForage } from "./seaForage";
 import { SeaRides } from "./SeaRides";
+import { SeaHornSound, SeaShips } from "./seaShips";
 
 import { SeaView, seaViewFore, seaViewLandmarks, type SeaViewFore, type SeaViewSitter, type ViewKind } from "./seaView";
 import { ghostShipNight, keeperTideText } from "./seaKeeper";
@@ -130,6 +131,9 @@ export class SeaScene extends Phaser.Scene {
   private riding!: Riding;
   /** 11/16 r13 튜브·제트스키 */
   private rides: SeaRides | null = null;
+  /** 11/16 r15 먼바다 배·뱃고동·오징어잡이배 */
+  private ships: SeaShips | null = null;
+  private horn: SeaHornSound | null = null;
   /** 11/16 갯바위 낚시 (마을 낚시를 바닷가로) */
   private forage!: SeaForage;
   /** 11/16 포구 오두막·등대 등불 (game/sea/seaHousing) */
@@ -294,6 +298,8 @@ export class SeaScene extends Phaser.Scene {
     this.food = new FoodFx({ scene: this, reduced: h.reduced, sfx: h.sfx, player: () => this.player, remotes: () => this.remotes });
     this.seaView = new SeaView(this.game, h.reduced);
     this.campfire = new CampfireView(this, this.rig, this.map, h.reduced);
+    this.horn = new SeaHornSound();
+    this.ships = new SeaShips(this, h.reduced, (g, pan) => this.horn?.horn(g, pan));
     this.rides = new SeaRides({
       scene: this,
       reduced: h.reduced,
@@ -1298,6 +1304,7 @@ export class SeaScene extends Phaser.Scene {
     this.updateSeaView(now, dt, dusk);
     this.forage.f.update(dt, view, s);
     this.rides?.update(dt);
+    this.ships?.update(now, L.darkness, dusk, pl.x);
     for (const r of this.remotes.values()) r.update(pnow, view, s);
     this.declutterLabels(now, pnow);
     this.updateSeatHint(now, s);
@@ -1467,6 +1474,10 @@ export class SeaScene extends Phaser.Scene {
     this.campfire = null;
     this.rides?.destroy();
     this.rides = null;
+    this.ships?.destroy();
+    this.ships = null;
+    this.horn?.destroy();
+    this.horn = null;
     this.host.sfx.campfire(0);
     this.seaView?.destroy();
     this.seaView = null;
