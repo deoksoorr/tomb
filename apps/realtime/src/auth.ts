@@ -3,6 +3,7 @@ import {
   NAME_MAX,
   ROOM_ID_RE,
   isAvatarColor,
+  mapAllowed,
   normalizeName,
   verifyJoinToken,
   type JoinClaims,
@@ -51,8 +52,9 @@ export async function admit(
   // 토큰은 발급받은 채널에서만 쓸 수 있다(토큰 하나로 여러 채널 자리를 차지하지 못하게). 방 토큰은 채널에 못 쓴다
   if (!claims || claims.room !== undefined || claims.channel !== channel || !VISITOR_ID_RE.test(claims.visitorId)) return null;
   // 11/15 ?m=camp: 캠핑장 허락(camp)이 있는 토큰만 캠핑장으로. 없으면 마을 — 캠핑장 좌표는 마을에서 의미가 없으니 처음 자리에서
-  if (map === "camp" && !claims.camp) return ticketOf(claims, channel, undefined);
-  return { ...ticketOf(claims, channel, spawn), ...(map === "camp" ? { map: "camp" as const } : {}) };
+  // 11/16 ?m=sea: 바닷가도 같은 규칙 (허락 sea)
+  if (!mapAllowed(map, claims)) return ticketOf(claims, channel, undefined);
+  return { ...ticketOf(claims, channel, spawn), ...(map !== "village" ? { map } : {}) };
 }
 
 /** 검증된 클레임 → DO에 넘길 입장 정보. 이름 길이와 색 프리셋은 여기서도 한 번 더 맞춘다 */
@@ -60,7 +62,7 @@ function ticketOf(claims: JoinClaims, channel: number, spawn: Point | undefined)
   // 11/15: 운영자도 닉네임 그대로 (운영자 표시는 staff 클레임 — 화면이 「운영자」 칭호·금빛 이름표로 그린다)
   const name = [...normalizeName(claims.name)].slice(0, NAME_MAX).join("") || FALLBACK_NAME;
   const color = isAvatarColor(claims.color) ? claims.color : AVATAR_COLORS[0];
-  return { visitorId: claims.visitorId, name, color, channel, spawn, look: claims.look ?? [], body: claims.body ?? "hood", ...(claims.dye ? { dye: claims.dye } : {}), ...(claims.staff ? { staff: true as const } : {}), ...(claims.dex ? { dex: claims.dex } : {}), ...(claims.champ ? { champ: claims.champ } : {}), ...(claims.camp ? { camp: true as const } : {}), ...(claims.mgr ? { mgr: true as const } : {}) };
+  return { visitorId: claims.visitorId, name, color, channel, spawn, look: claims.look ?? [], body: claims.body ?? "hood", ...(claims.dye ? { dye: claims.dye } : {}), ...(claims.staff ? { staff: true as const } : {}), ...(claims.dex ? { dex: claims.dex } : {}), ...(claims.champ ? { champ: claims.champ } : {}), ...(claims.camp ? { camp: true as const } : {}), ...(claims.sea ? { sea: true as const } : {}), ...(claims.mgr ? { mgr: true as const } : {}) };
 }
 
 /** 대기열 토큰(channel = 0, Vercel이 TTL 600초로 발급)이면 visitorId. 채널 입장 토큰은 대기열에 쓸 수 없고 그 반대도 마찬가지다 */

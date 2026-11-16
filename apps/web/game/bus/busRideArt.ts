@@ -122,9 +122,19 @@ const SEG = {
   highway: { hill: 0x7684a0, hillHi: 0x96a2ba, ground: 0x6c7250, groundLo: 0x55555b, nearGround: 0x4a4a50 },
   maple: { hill: 0x986640, hillHi: 0xb07a46, ground: 0xa48048, groundLo: 0x8a6a3a, nearGround: 0x7a5a34 },
   forest: { hill: 0x3c5a4e, hillHi: 0x4a6a58, ground: 0x5c4a30, groundLo: 0x4a3c28, nearGround: 0x463824 },
+  // 11/16 바닷가 노선: 해송 숲 길(coast)은 낮은 솔숲 너머로 바다가 언뜻, 바닷길(sea)은 산 대신 수평선
+  coast: { hill: 0x2e4a3e, hillHi: 0x3e5e4c, ground: 0x4a7898, groundLo: 0x3e6a8a, nearGround: 0x8a7a5a },
+  sea: { hill: 0x4a7898, hillHi: 0x6a98b8, ground: 0x4a7898, groundLo: 0x3e6a8a, nearGround: 0x6a6a6e },
 } as const satisfies Record<RideSegment, Record<string, Color>>;
 
 const AUTUMN_LEAF: readonly Color[] = [0xc8482a, 0xe06a34, 0xe8a83a, 0xd88a2e, 0xb83c26];
+/** 11/16 바다색 (먼 물 → 가까운 물), 물 반짝임, 모래 */
+const SEA_FAR = 0x5a88a8;
+const SEA_MID = 0x3e6e90;
+const SEA_DEEP = 0x325c7c;
+const SEA_GLINT = 0xd8ecf4;
+const SAND = 0xd8c49a;
+const SAND_LO = 0xc0aa80;
 
 // ── 먼 층: 언덕·산·숲 실루엣 (윤곽은 두 구간 높이를 섞고, 색은 디더) ──
 function farTop(seg: RideSegment, x: number): number {
@@ -139,11 +149,25 @@ function farTop(seg: RideSegment, x: number): number {
       const saw = Math.abs(((x % 7) - 3.5) / 3.5); // 침엽수 뾰족한 줄
       return HORIZON - (24 + 5 * Math.sin(x * 0.03) + 8 * (1 - saw) * (0.6 + 0.4 * Math.sin(x * 0.37)));
     }
+    case "coast": {
+      // 11/16 낮은 해송 숲 줄 (둥글고 납작한 솔 덩어리)
+      const bump = Math.abs(Math.sin(x * 0.11)) * 4 + Math.abs(Math.sin(x * 0.043 + 1)) * 3;
+      return HORIZON - (5 + bump);
+    }
+    case "sea":
+      // 11/16 산이 없다 — 수평선 바로 위 아주 먼 섬 하나 둘만
+      return HORIZON - Math.max(0, 6 * Math.sin(x * 0.008 + 2) - 3);
   }
 }
 
 function farColor(seg: RideSegment, x: number, y: number, top: number): Color | -1 {
   const s = SEG[seg];
+  if (y >= HORIZON && (seg === "sea" || seg === "coast")) {
+    // 11/16 먼바다: 수평선 줄은 밝게, 가끔 반짝
+    if (y === HORIZON) return lighten(SEA_FAR, 0.12);
+    if (hash(x >> 1, y, 31) < 0.03) return SEA_GLINT;
+    return y >= HORIZON + 4 ? SEA_MID : SEA_FAR;
+  }
   if (y >= HORIZON) return y >= HORIZON + 4 ? s.groundLo : s.ground;
   if (y < top) return -1;
   if (y < top + 2) return s.hillHi;
@@ -152,6 +176,8 @@ function farColor(seg: RideSegment, x: number, y: number, top: number): Color | 
     const n = Math.sin(x * 0.19) * Math.sin(y * 0.43 + x * 0.05);
     if (n > 0.45) return AUTUMN_LEAF[Math.floor(hash(x >> 2, y >> 2, 3) * AUTUMN_LEAF.length)];
   }
+  if (seg === "sea") return y < top + 2 ? 0x7a98ac : 0x6a889c; // 아주 먼 섬 (옅은 푸른 회색)
+  if (seg === "coast" && hash(x, y, 33) < 0.05) return 0x24402e;
   if (seg === "village" && hash(x, y, 7) < 0.025) return 0xa86a3a; // 늦가을 나무 점
   if (seg === "highway" && y > top + 6 && hash(x >> 1, y >> 1, 9) < 0.05) return SEG.highway.hillHi;
   return s.hill;
@@ -167,6 +193,16 @@ function farObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: num
       px(ctx, x, base - 4, w, 4, 0x4a5262);
       px(ctx, x - 1, base - 6, w + 2, 2, 0x3a4050);
       if (r() < 0.6) px(lights, x + 2, base - 3, 1, 1, 0xffd27a);
+    }
+  } else if (seg === "sea") {
+    // 11/16 수평선의 고깃배 (작은 실루엣, 밤엔 집어등)
+    for (let x = x0 + 24; x < x1 - 12; x += 70 + r() * 90) {
+      const base = HORIZON - oy;
+      const w = 5 + Math.round(r() * 4);
+      px(ctx, x, base - 2, w, 2, 0x3a4a5a);
+      px(ctx, x + 2, base - 4, 2, 2, 0x4a5a6a);
+      px(lights, x + 1, base - 5, 1, 1, 0xfff0b0);
+      if (r() < 0.5) px(lights, x + w - 2, base - 4, 1, 1, 0xffe080);
     }
   } else if (seg === "highway") {
     // 먼 송전탑
@@ -191,7 +227,89 @@ function midPixel(seg: RideSegment, x: number, ly: number): Color | -1 {
   }
   if (seg === "maple" && hash(x, y, 11) < 0.08) return AUTUMN_LEAF[Math.floor(hash(x, y, 12) * AUTUMN_LEAF.length)];
   if (seg === "forest" && hash(x, y, 13) < 0.05) return 0xd8b040;
+  if (seg === "sea") {
+    // 11/16 가까운 바다 (물결 줄·반짝임) → 아래는 모래사장
+    if (y >= 116) return y >= 120 ? SAND_LO : y === 116 && (x + (x >> 3)) % 5 < 3 ? 0xf0f4f0 : SAND;
+    const wave = (y + Math.round(2 * Math.sin(x * 0.09 + y))) % 4 === 0;
+    if (wave && hash(x >> 2, y, 35) < 0.5) return lighten(SEA_MID, 0.14);
+    if (hash(x, y, 36) < 0.015) return SEA_GLINT;
+    return y > 108 ? SEA_DEEP : SEA_MID;
+  }
+  if (seg === "coast") {
+    // 11/16 모래 언덕 (갯그령 점)
+    if (hash(x, y, 37) < 0.06) return 0x7a8a4a;
+    return y > 112 ? SAND_LO : SAND;
+  }
   return y > 112 ? s.groundLo : s.ground;
+}
+
+/** 11/16 해송 (휘어진 줄기 + 납작한 솔 덩어리 층) */
+function seaPine(ctx: Ctx, x: number, base: number, h: number, lean: number): void {
+  const trunk = 0x4a3428;
+  for (let i = 0; i < h * 0.6; i++) px(ctx, x + Math.round(lean * (i / (h * 0.6)) * 4), base - i, 2, 1, trunk);
+  const tx = x + lean * 4;
+  const top = base - h * 0.6;
+  blob(ctx, tx + 1, top - 2, h * 0.3, h * 0.1, 0x24402e);
+  blob(ctx, tx - 3, top + 3, h * 0.24, h * 0.08, 0x2e4a3a);
+  blob(ctx, tx + 5, top + 5, h * 0.2, h * 0.07, 0x2e4a3a);
+  blob(ctx, tx, top - 4, h * 0.16, h * 0.05, 0x3e5e4a);
+}
+
+/** 11/16 파란 지붕 어부집 (창 불빛) */
+function fisherHouse(ctx: Ctx, lights: Ctx, x: number, base: number, w: number, r: () => number): void {
+  const wallH = 9 + Math.round(r() * 2);
+  px(ctx, x, base - wallH, w, wallH, 0xe8e4d8);
+  px(ctx, x, base - wallH, w, 1, 0xc8c4b8);
+  const roofY = base - wallH - 4;
+  px(ctx, x - 2, roofY, w + 4, 4, 0x3a6aa0);
+  px(ctx, x - 1, roofY, w + 2, 1, 0x5a8ac0);
+  for (let wx = x + 3; wx < x + w - 3; wx += 8) {
+    px(ctx, wx, base - wallH + 3, 3, 3, 0x3a4a5a);
+    if (r() < 0.7) px(lights, wx, base - wallH + 3, 3, 3, 0xffcf78);
+  }
+}
+
+/** 11/16 갈매기 실루엣 (날개 펼친 V) */
+function gullMark(ctx: Ctx, x: number, y: number, c: Color, big: boolean): void {
+  px(ctx, x, y, 1, 1, c);
+  px(ctx, x - 1, y - 1, 1, 1, c);
+  px(ctx, x + 1, y - 1, 1, 1, c);
+  if (big) {
+    px(ctx, x - 2, y - 1, 1, 1, c);
+    px(ctx, x + 2, y - 1, 1, 1, c);
+    px(ctx, x - 3, y, 1, 1, c);
+    px(ctx, x + 3, y, 1, 1, c);
+  }
+}
+
+/** 11/16 방파제 + 끝의 빨간·흰 등대 (중간 층 좌표, base = 물 줄). 밤엔 등불 */
+function breakwater(ctx: Ctx, lights: Ctx, x0: number, x1: number, base: number, r: () => number): void {
+  // 둑 (콘크리트) + 테트라포드
+  px(ctx, x0, base - 5, x1 - x0, 5, 0x9a9890);
+  px(ctx, x0, base - 5, x1 - x0, 1, 0xb8b6ae);
+  px(ctx, x0, base - 1, x1 - x0, 1, 0x6a6862);
+  for (let x = x0; x < x1 - 4; x += 5 + Math.round(r() * 2)) {
+    px(ctx, x, base - 1, 3, 2, 0x8a8880);
+    px(ctx, x + 1, base - 2, 1, 1, 0xaaa8a0);
+  }
+  // 물보라 몇 점
+  for (let i = 0; i < 4; i++) px(ctx, x0 + Math.round(r() * (x1 - x0)), base - 7 - Math.round(r() * 2), 2, 1, 0xf4f8f8);
+  // 등대 (빨강·흰 띠)
+  const lx = x1 - 6;
+  const h = 34;
+  for (let i = 0; i < h; i++) {
+    const wHalf = 3 + Math.round((i / h) * 2);
+    const band = Math.floor(i / 6) % 2 === 0 ? 0xf0ece4 : 0xc8402e;
+    px(ctx, lx - wHalf, base - 5 - i, wHalf * 2 + 1, 1, band);
+  }
+  const top = base - 5 - h;
+  px(ctx, lx - 3, top - 5, 7, 5, 0x3a4048);
+  px(ctx, lx - 2, top - 4, 5, 3, 0xffe8a0);
+  px(ctx, lx - 3, top - 7, 7, 2, 0xc8402e);
+  px(ctx, lx, top - 8, 1, 1, 0x3a4048);
+  px(lights, lx - 2, top - 4, 5, 3, 0xffe8a0);
+  // 밤 빛줄기 (옆으로 길게)
+  for (let k = 1; k < 26; k++) px(lights, lx + 2 + k, top - 3 - Math.floor(k / 9), 1, 1, k < 12 ? 0xb8a060 : 0x6a5a38);
 }
 
 /** 기와집 한 채 (중간 층 좌표, base = 땅 y) */
@@ -245,7 +363,7 @@ function tombstone(ctx: Ctx, x: number, base: number): void {
   px(ctx, x, base - 5, 4, 1, 0xb4b2a8);
 }
 
-function midObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: number, r: () => number, signs: { ic: boolean }): void {
+function midObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: number, r: () => number, signs: { ic: boolean; icName: string }): void {
   const ground = HORIZON + 12 - 34; // 중간 층의 땅 줄 (층 좌표)
   switch (seg) {
     case "village": {
@@ -288,7 +406,7 @@ function midObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: num
         px(ctx, x + 6, ground - 47, 3, 2, 0xd8d8c8);
         px(lights, x + 5, ground - 46, 5, 3, 0xffe6a0);
       }
-      // 초록 표지판 「언젠가 IC」 (구간 가운데 한 번)
+      // 초록 표지판 「언젠가 IC」 (구간 가운데 한 번 — 11/16 바닷가 노선은 「달물결 IC」)
       if (!signs.ic) {
         signs.ic = true;
         const cx = Math.round((x0 + x1) / 2);
@@ -300,7 +418,7 @@ function midObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: num
         px(ctx, cx - 47, ground - 38, 94, 1, 0xf0f0e8);
         px(ctx, cx - 47, ground - 69, 1, 32, 0xf0f0e8);
         px(ctx, cx + 46, ground - 69, 1, 32, 0xf0f0e8);
-        pixelText(ctx, "언젠가 IC", cx - 30, ground - 67, 0xf4f4ec);
+        pixelText(ctx, signs.icName, cx - 30, ground - 67, 0xf4f4ec);
         // 화살표 (나가는 길 → 오른쪽): 줄기 + 세모 머리, 모두 판 안
         px(ctx, cx - 14, ground - 47, 28, 2, 0xf4f4ec);
         px(ctx, cx + 14, ground - 50, 2, 8, 0xf4f4ec);
@@ -326,6 +444,35 @@ function midObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: num
         const larch = r() < 0.3;
         conifer(ctx, x, ground + 3 + Math.round(r() * 5), 30 + r() * 28, larch ? 0xc8a03a : r() < 0.5 ? 0x2e5040 : 0x3e6a50);
       }
+      break;
+    }
+    case "coast": {
+      // 11/16 해송 숲 사이 어부집 몇 채, 솔 사이로 바다가 언뜻
+      let x = x0 + 4;
+      while (x < x1 - 16) {
+        if (r() < 0.22) {
+          const w = 18 + Math.round(r() * 8);
+          fisherHouse(ctx, lights, x, ground + 3, w, r);
+          x += w + 10 + r() * 14;
+        } else {
+          seaPine(ctx, x, ground + 3 + Math.round(r() * 4), 26 + r() * 14, r() < 0.5 ? -1 : 1);
+          x += 12 + r() * 20;
+        }
+      }
+      for (let i = 0; i < 3; i++) gullMark(ctx, x0 + r() * (x1 - x0), 10 + r() * 16, 0xe8ecec, false);
+      break;
+    }
+    case "sea": {
+      // 11/16 바닷길: 방파제와 등대 (구간 앞쪽에 한 번 — 끝 팻말 옆에서 등대가 보이게), 갈매기 무리, 가까운 물 위 부표
+      const bx0 = Math.round(x0 + 60 + r() * 30);
+      breakwater(ctx, lights, bx0, bx0 + 110, ground - 6, r);
+      for (let x = x0 + 30; x < x1 - 10; x += 80 + r() * 70) {
+        // 빨간 부표
+        const y = ground - 2 + Math.round(r() * 4);
+        px(ctx, x, y - 3, 3, 3, 0xd0402e);
+        px(ctx, x, y, 3, 1, 0x2a4a64);
+      }
+      for (let i = 0; i < 9; i++) gullMark(ctx, x0 + r() * (x1 - x0), 6 + r() * 26, r() < 0.3 ? 0xd8dcdc : 0xf4f6f4, r() < 0.4);
       break;
     }
   }
@@ -356,6 +503,7 @@ function nearPixel(seg: RideSegment, x: number, y: number): Color | -1 {
   const s = SEG[seg];
   if (seg === "maple" && hash(x, y, 21) < 0.3) return AUTUMN_LEAF[Math.floor(hash(x, y, 22) * AUTUMN_LEAF.length)];
   if (seg === "forest" && hash(x, y, 23) < 0.2) return 0xd8b040;
+  if (seg === "coast" && hash(x, y, 25) < 0.15) return 0x7a8a4a;
   return s.nearGround;
 }
 
@@ -424,6 +572,41 @@ function nearObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: nu
       for (let x = x0 + 10; x < x1 - 10; x += 26 + r() * 30) blob(ctx, x, base - 4, 6, 3, AUTUMN_LEAF[Math.floor(r() * AUTUMN_LEAF.length)]);
       break;
     }
+    case "coast": {
+      // 11/16 모래 막이 나무 울타리 (낮은 말뚝 + 가로대) + 갯그령 덤불
+      for (let x = Math.floor(x0); x < x1; x += 10) {
+        px(ctx, x, base - 12, 2, 12, 0x8a6a48);
+        px(ctx, x, base - 12, 2, 1, 0xa88a64);
+      }
+      for (let x = Math.floor(x0); x < x1; x++) {
+        px(ctx, x, base - 9, 1, 1, 0x7a5a3c);
+        px(ctx, x, base - 5, 1, 1, 0x7a5a3c);
+      }
+      for (let x = x0 + 6; x < x1 - 6; x += 16 + r() * 22) for (let k = -3; k <= 3; k++) px(ctx, x + k, base - 8 + Math.abs(k), 1, 8 - Math.abs(k), 0x6a7a3e);
+      break;
+    }
+    case "sea": {
+      // 11/16 바닷가 방호벽 (흰 난간 + 파란 기둥) — 위로 바다가 그대로 보인다
+      for (let x = Math.floor(x0); x < x1; x++) {
+        px(ctx, x, base - 6, 1, 6, x % 3 === 0 ? 0x8a8a86 : 0x9a9a94);
+        px(ctx, x, base - 6, 1, 1, 0xb8b8b0);
+        px(ctx, x, base - 15, 1, 1, 0xe8ecec);
+        px(ctx, x, base - 11, 1, 1, 0xd8dcdc);
+      }
+      for (let x = Math.floor(x0); x < x1; x += 18) {
+        px(ctx, x, base - 16, 2, 10, 0x3a6aa0);
+        px(ctx, x, base - 16, 2, 1, 0x5a8ac0);
+        if (x % 72 === 0) px(lights, x, base - 17, 2, 1, 0xa8d8ff);
+      }
+      // 가로등 (밤에 켜진다)
+      for (let x = x0 + 60; x < x1 - 10; x += 130 + r() * 30) {
+        px(ctx, x, base - 50, 2, 34, 0x6a6e72);
+        px(ctx, x - 6, base - 50, 8, 2, 0x6a6e72);
+        px(ctx, x - 7, base - 49, 3, 2, 0xd8d8c8);
+        px(lights, x - 8, base - 48, 5, 3, 0xffe6a0);
+      }
+      break;
+    }
     case "forest": {
       // 굵은 나무 줄기가 휙휙 지나간다
       for (let x = x0 + 20; x < x1 - 10; x += 60 + r() * 80) {
@@ -486,7 +669,7 @@ export function* panoramaSteps(spec: LayerSpec, order: readonly RideSegment[], d
   }
   // 소품
   const r = rng(seed);
-  const signs = { ic: false };
+  const signs = { ic: false, icName: order.includes("sea") ? "달물결 IC" : "언젠가 IC" };
   for (let i = 0; i < 4; i++) {
     yield;
     const [x0, x1] = segRange(spec, dist, width, i);
@@ -505,8 +688,30 @@ export function* panoramaSteps(spec: LayerSpec, order: readonly RideSegment[], d
   return { canvas, lights: lc, width };
 }
 
-/** 창밖 끝 표지판: 캠핑장행 = 나무 표지판 「언젠가 캠핑장」, 마을행 = 버스 정류장 팻말 「마을 정류장」. 바닥 = 그림 맨 아래 줄 */
-export function buildEndSign(leg: "toCamp" | "toVillage"): HTMLCanvasElement {
+/**
+ * 창밖 끝 표지판: 캠핑장행 = 나무 표지판 「언젠가 캠핑장」, 마을행 = 버스 정류장 팻말 「마을 정류장」. 바닥 = 그림 맨 아래 줄.
+ * 11/16 바닷가행 = 바다색 정류장 팻말 「달물결 포구」 (아래에 물결 무늬)
+ */
+export function buildEndSign(leg: "toCamp" | "toVillage", route: "camp" | "sea" = "camp"): HTMLCanvasElement {
+  if (leg === "toCamp" && route === "sea") {
+    const { ctx: m } = makeCanvas(4, 4);
+    m.font = `12px "Galmuri11", "Galmuri9", monospace`;
+    const tw = Math.ceil(m.measureText("달물결 포구").width) + 14;
+    const W = Math.max(84, tw + 8);
+    const { canvas, ctx } = makeCanvas(W, 78);
+    const cx = Math.round(W / 2);
+    px(ctx, cx - 2, 20, 4, 58, 0x8a8e92);
+    px(ctx, cx - 1, 20, 1, 58, 0xb0b4b8);
+    px(ctx, 4, 2, W - 8, 24, 0x1e6a8e);
+    px(ctx, 5, 3, W - 10, 1, 0x5aa0c4);
+    pixelText(ctx, "달물결 포구", Math.round(cx - (tw - 14) / 2) - 1, 5, 0xf4f4ec);
+    // 물결 무늬 띠
+    for (let x = 6; x < W - 6; x++) px(ctx, x, 22 + (Math.floor(x / 3) % 2), 1, 1, 0xa8dcf0);
+    // 동그란 정류장 표시 (갈매기)
+    blob(ctx, cx, 36, 8, 8, 0x1e6a8e);
+    gullMark(ctx, cx, 37, 0xf4f4ec, true);
+    return canvas;
+  }
   if (leg === "toCamp") {
     const { canvas, ctx } = makeCanvas(112, 70);
     px(ctx, 16, 18, 4, 52, 0x5a3e28);
@@ -646,6 +851,27 @@ export function buildLeaf(c: Color): HTMLCanvasElement {
   px(ctx, 1, 0, 1, 3, c);
   px(ctx, 0, 1, 3, 1, c);
   px(ctx, 2, 0, 1, 1, lighten(c, 0.25));
+  return canvas;
+}
+
+/** 11/16 창밖을 나란히 나는 갈매기 (frame 0 = 날개 위, 1 = 날개 아래). 흰 몸·회색 날개 끝 */
+export function buildGull(frame: 0 | 1): HTMLCanvasElement {
+  const { canvas, ctx } = makeCanvas(9, 5);
+  const body = 0xf4f6f4;
+  const tip = 0x5a6068;
+  px(ctx, 3, 2, 3, 2, body);
+  px(ctx, 6, 2, 1, 1, 0xe8b040); // 부리
+  if (frame === 0) {
+    px(ctx, 1, 1, 2, 1, body);
+    px(ctx, 0, 0, 1, 1, tip);
+    px(ctx, 5, 1, 2, 1, body);
+    px(ctx, 7, 0, 1, 1, tip);
+  } else {
+    px(ctx, 1, 3, 2, 1, body);
+    px(ctx, 0, 4, 1, 1, tip);
+    px(ctx, 5, 3, 2, 1, body);
+    px(ctx, 7, 4, 1, 1, tip);
+  }
   return canvas;
 }
 

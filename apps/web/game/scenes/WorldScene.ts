@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { CAMPFIRES, campfireOfSeat, dexBadgeCats, DIR, FURNITURE, LAKE_PIER, houseLot, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, sanitizeDye, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
+import { CAMPFIRES, campfireOfSeat, dexBadgeCats, DIR, MAP_NAME, type AwayMapId, FURNITURE, LAKE_PIER, houseLot, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, sanitizeDye, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
 import { avatarColorSpec, type AppearanceChange } from "../sprites/avatar";
 import { saveResume, type ResumePose, type ResumeState } from "@/lib/resume";
 import { nameStyleIds } from "@/lib/nameStyle";
@@ -66,7 +66,7 @@ import { MeScreen } from "../world/MeScreen";
 import type { GameContext } from "./context";
 import { FEST_FIREWORK_MS, FEST_MS } from "@/lib/forage/quests/urgent";
 import type { ShopContext } from "./ShopScene";
-import { CampTrip, VILLAGE_BUS_LAND } from "../camp/CampTrip";
+import { CampTrip, villageLandFor } from "../camp/CampTrip";
 import { BIG_RIDE_TOAST, myBig, RIDE_OBJECT_KINDS } from "../camp/foodState";
 import type { CampFriend } from "../camp/campHost";
 
@@ -268,8 +268,9 @@ export class WorldScene extends Phaser.Scene {
       } else if (!initial) this.pendingFocus = opts.focusGraveId;
     }
     // 11/15 캠핑장에서 새로고침: 마을의 나는 버스 정류장에 세워 두고 캠핑장 장면이 그 자리를 잇는다 (create 끝에서)
-    const campResume = opts.resume?.where === "camp" ? opts.resume : null;
-    if (campResume) spawn = VILLAGE_BUS_LAND;
+    // 11/16 바닷가도 같다 (마을의 나는 바닷가행 정류장에)
+    const campResume = opts.resume?.where === "camp" || opts.resume?.where === "sea" ? opts.resume : null;
+    if (campResume?.where) spawn = villageLandFor(campResume.where);
     // 새로고침 직전 자리로 시작한다 (의자는 그 앞에 서서 앉는 동작으로 — 거절되면 바닥이 아니라 그 앞으로 돌아오게)
     this.resume = campResume ? null : (opts.resume ?? null);
     this.restoreSeat = null;
@@ -366,7 +367,7 @@ export class WorldScene extends Phaser.Scene {
       isFriend: (sid, name) => this.net.channel === this.friends.ch && this.friends.bySid.get(sid) === name,
       toast: (m) => this.toast(m),
     });
-    if (campResume) this.net.map = "camp";
+    if (campResume?.where) this.net.map = campResume.where;
     new HauntHouseView(this, this.map.colliders, this.reduced, () => this.player); // 귀신의집 건물·간판·등불·안개·근처 소리 (game/haunt)
     new TowerView(this, this.map.colliders, this.reduced, () => this.atmos?.levels.darkness ?? 0); // 11/15 야근 빌딩 (game/tower)
     this.life = new VillageLife({
@@ -844,11 +845,11 @@ export class WorldScene extends Phaser.Scene {
         for (const r of this.remotes.values()) r.view.setFriend(this.isFriend(r));
       }),
     );
-    // 11/15 친구가 캠핑장에 있으면 버스를 거쳐 그 옆으로 (캠핑장에 있는 동안은 캠핑장 장면이 받는다)
+    // 11/15 친구가 캠핑장에 있으면 버스를 거쳐 그 옆으로 (캠핑장에 있는 동안은 캠핑장 장면이 받는다). 11/16 바닷가도 같다
     on.push(
       bridge.on("friend:goto", ({ sid, name, x, y, map }) => {
         if (this.trip.away) return;
-        if (map === "camp") this.goToCampFriend({ sid, name, x, y });
+        if (map) this.goToCampFriend({ sid, name, x, y }, map);
         else this.goToFriend(sid, name, x, y);
       }),
     );
@@ -1293,8 +1294,12 @@ export class WorldScene extends Phaser.Scene {
         break;
       case "bus":
         // 11/15 주말 버스 정류장 (버스 정류장 마당): 캠핑장이 열린 서버면 버스가 온다 (CampTrip). 운영에서 닫혀 있으면 지금처럼 안내만
+        // 11/16 옛 묘역 아래 바닷가행 정류장 (bus:sea): 바닷가가 열린 서버면 바닷가 버스
         pl.faceTo(o.x, o.y - 20, now);
-        if (this.net.campOpen) this.trip.board();
+        if (o.id === "bus:sea") {
+          if (this.net.seaOpen) this.trip.board(null, "sea");
+          else this.toast("바닷가 가는 버스는 준비 중이에요.");
+        } else if (this.net.campOpen) this.trip.board();
         else this.toast("캠핑장 가는 버스는 준비 중이에요.");
         break;
       case "dock":
@@ -1476,15 +1481,15 @@ export class WorldScene extends Phaser.Scene {
     if (friend) this.goToFriend(friend.sid, friend.name, friend.x, friend.y);
   }
 
-  /** 11/15 캠핑장에 있는 친구한테 가기: 같은 채널이면 버스 창밖 연출만 보고 친구 옆에 내린다 */
-  private goToCampFriend(f: CampFriend): void {
+  /** 11/15 캠핑장에 있는 친구한테 가기: 같은 채널이면 버스 창밖 연출만 보고 친구 옆에 내린다. 11/16 바닷가 친구도 같다 */
+  private goToCampFriend(f: CampFriend, map: AwayMapId = "camp"): void {
     const notice = (message: string) => bridge.emit("friend:notice", { message });
     if (this.cleaned || !this.net.online) return;
-    if (!this.net.campOpen) return notice("지금은 캠핑장에 갈 수 없어요.");
+    if (!(map === "sea" ? this.net.seaOpen : this.net.campOpen)) return notice(`지금은 ${MAP_NAME[map]}에 갈 수 없어요.`);
     if (this.awayScene) return notice("마을로 나온 뒤에 친구한테 갈 수 있어요.");
     if (this.inShop) this.exitShop();
     this.leaveCampfire();
-    this.trip.board(f);
+    this.trip.board(f, map);
   }
 
   /**

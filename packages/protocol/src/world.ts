@@ -31,8 +31,10 @@ export const WALL_THICKNESS = 2 * TILE;
  * 11 = 납품 부두 없앰(잔교·데크·낚시 자리), 어부 노점 호박밭 옆, 강둑·호수 낚시 자리 — 새 충돌 자리에 옛 기록이 끼지 않게
  * (11/16 묘역 하나로 합침·범퍼카장 — 배포 때 12로 올릴 것: 묘비 줄·링크 테두리 자리에 옛 기록이 끼지 않게)
  * 12 = 묘역 하나로 합침(옛 묘역 8×4), 다리 건너 묘역 자리에 범퍼카장 — 새 충돌 자리에 옛 기록이 끼지 않게
+ * 13 = 행운권 판매대 충돌 · 범퍼카장 링크/오리 연못 넓힘
+ * 14 = 11/16 서쪽 모닥불을 치우고 바닷가행 정류장 — 새 충돌 자리에 옛 기록이 끼지 않게
  */
-export const MAP_VERSION = 13; // 13 = 행운권 판매대 충돌 · 범퍼카장 링크/오리 연못 넓힘 (11/16)
+export const MAP_VERSION = 14; // 14 = 서쪽 모닥불(fireW) 치우고 그 자리에 바닷가행 정류장(지붕·벤치 bU·팻말 충돌) (11/16)
 
 const CX = MAP_WIDTH / 2; // 720
 
@@ -574,10 +576,12 @@ export type Furniture = {
 // ── 모닥불 ── 둘러앉는 통나무(위·아래, 2인)와 그루터기(좌우, 1인). 앉으면 클라이언트가 "불멍" 구도로 바뀐다.
 // big = 광장 한가운데의 아주 큰 모닥불 (F1): 통나무 6개(위 3·아래 3)와 그루터기 4개가 넓게 둘러싼다.
 export type Campfire = { id: string; x: number; y: number; big?: boolean };
-/** 모닥불 자리 (불 받침 가운데). 광장 큰 모닥불 · 묘지기 모닥불(옛 묘역 아래 강가) · 호박밭 모닥불 */
+/**
+ * 모닥불 자리 (불 받침 가운데). 광장 큰 모닥불 · 호박밭 모닥불.
+ * 11/16 묘지기 모닥불(fireW, 옛 묘역 아래 강가 136,604)은 치우고 그 자리에 바닷가행 정류장을 세웠다 (둘레 통나무 kW* 자리도 같이 없어졌다)
+ */
 export const CAMPFIRES: readonly Campfire[] = [
   { id: "fireP", x: 720, y: 456, big: true },
-  { id: "fireW", x: 136, y: 604 },
   { id: "fireS", x: 968, y: 912 },
 ];
 /** 모닥불 중심에서 위 통나무·그루터기까지 (아래 통나무는 앉은 사람이 불을 가리지 않게 6px 더 아래) */
@@ -662,6 +666,7 @@ export const FURNITURE: readonly Furniture[] = [
   { id: "bZ", kind: "bench", x: 1100, y: 704, facing: DIR.down, seatOffsets: two },
   { id: "bD", kind: "bench", x: 1192, y: 744, facing: DIR.up, seatOffsets: two },
   { id: "bE", kind: "bench", x: 1330, y: 716, facing: DIR.down, seatOffsets: two }, // 주말 버스 정류장 지붕 아래 (game/world/fishZone.ts BUS_STOP)
+  { id: "bU", kind: "bench", x: 108, y: 592, facing: DIR.down, seatOffsets: two }, // 11/16 바닷가행 정류장 지붕 아래 (game/world/seaStop.ts SEA_STOP — 예전 서쪽 모닥불 자리)
   // ── 사냥터 동굴 앞 ──
   { id: "bQ", kind: "bench", x: 912, y: 112, facing: DIR.down, seatOffsets: two },
   // ── 범퍼카장 ── 링크를 내려다보는 구경 벤치 (예전 다리 건너 묘역 벤치를 옮겼다, id 그대로).

@@ -35,3 +35,8 @@
 .camp {
   height: calc(var(--minimap-w) * 0.625);
 }
+
+/* 11/16 바닷가 지도 (1280×960 → 4:3) */
+.sea {
+  height: calc(var(--minimap-w) * 0.75);
+}

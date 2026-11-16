@@ -10,7 +10,13 @@ export const BUS_RIDE_SCENE = "busRide";
 /** 창밖 연출 길이 */
 export const BUS_RIDE_MS = 8000;
 
+/**
+ * 가는 쪽. "toCamp" = 마을에서 나가는 길(캠핑장·바닷가 어느 쪽이든), "toVillage" = 마을로 돌아오는 길.
+ * 11/16 바닷가 노선이 생겨도 값은 그대로 둬요 (어디로 가는지는 BusRoute가 정해요)
+ */
 export type BusLeg = "toCamp" | "toVillage";
+/** 11/16 노선: camp = 언젠가 캠핑장 (단풍 국도·숲길), sea = 달물결 포구 (해송 숲·바닷길) */
+export type BusRoute = "camp" | "sea";
 
 export type BusArrivalOptions = {
   /** 문이 정류장 앞에 오도록 서는 x (문 가운데) */
@@ -38,6 +44,8 @@ export interface BusArrivalApi {
 
 export type BusRideData = {
   leg: BusLeg;
+  /** 11/16 노선 (없으면 캠핑장). 창밖 풍경·끝 표지판·자막이 노선마다 달라요 */
+  route?: BusRoute;
   reduced: boolean;
   /** 한국 시각 0~24 (하늘·창밖 색) */
   hour: number;

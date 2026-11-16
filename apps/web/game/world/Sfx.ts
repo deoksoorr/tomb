@@ -32,6 +32,8 @@ export class Sfx extends AudioHost {
   private voices = 0;
   /** 모닥불 타는 소리 (BGM 위에 은은한 루프, 환경음) */
   private readonly fire = new AmbientLoop(this, "/sfx/campfire.mp3", { gain: 0.75, bus: "amb" });
+  /** 11/16 바닷가 파도·갈매기 루프 (바닷가 맵에 있는 동안만, 환경음 — scripts/gen-sea-loop.mjs가 굽는다) */
+  private readonly sea = new AmbientLoop(this, "/sfx/sea-loop.mp3", { gain: 0.55, bus: "amb" });
   /** 14번 물소리: 수영하는 동안 물장구 루프 (잠수하면 먹먹하게, 환경음) */
   private readonly swim = new AmbientLoop(this, "/sfx/swim.mp3", { gain: 0.5, bus: "amb", filter: true });
   /** 잠수 중 다음 물방울 소리 시각 */
@@ -45,6 +47,7 @@ export class Sfx extends AudioHost {
   protected override onMixChanged(): void {
     this.fire.refresh();
     this.swim.refresh();
+    this.sea.refresh();
   }
 
   /**
@@ -179,6 +182,11 @@ export class Sfx extends AudioHost {
     this.bubbleAt = now + 1500 + Math.random() * 1400;
   }
 
+  /** 11/16 바닷가 파도 소리 크기 0..1 (바닷가 장면이 매 프레임 — 물가에 가까울수록 크게, 떠나면 0) */
+  seaWaves(level: number): void {
+    this.sea.set(level);
+  }
+
   /** 14번 그네 삐걱 한 번 (앞으로·뒤로). 그네 진자 한 주기마다 씬이 부른다 */
   swingCreak(gain = 0.6): void {
     this.play("swing", gain, 0.95 + Math.random() * 0.1, 6);
@@ -187,6 +195,7 @@ export class Sfx extends AudioHost {
   destroy(): void {
     this.fire.destroy();
     this.swim.destroy();
+    this.sea.destroy();
     this.closeAudio();
   }
 }

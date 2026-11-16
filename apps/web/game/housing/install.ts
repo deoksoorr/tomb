@@ -126,8 +126,8 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
     if (!where && !hideWorld()) {
       // 들어갈 수 없으면 UI(집 HUD)도 닫는다 — 들어가지도 못했는데 위쪽 집 막대만 남아 닫히지 않던 문제
       bridge.emit("house:left", { to: "world" });
-      // 11/15 캠핑장에 있으면 (월드가 자고 있다) 집은 마을에서
-      const inCamp = bridge.last("map:changed")?.map === "camp" || bridge.last("bus:state")?.riding === true;
+      // 11/15 캠핑장에 있으면 (월드가 자고 있다) 집은 마을에서 (11/16 바닷가도 같다)
+      const inCamp = (bridge.last("map:changed")?.map ?? "village") !== "village" || bridge.last("bus:state")?.riding === true;
       bridge.emit("toast", { message: inCamp ? "집은 마을에 있어요. 버스를 타고 마을로 돌아가요." : "지금은 집에 들어갈 수 없어요. 잠시 뒤 다시 해 주세요." });
       return;
     }
@@ -144,7 +144,7 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
   const offs = [
     bridge.on("village:enter", ({ village, myHouseId, spawnLot }) => {
       if (!where && !hideWorld()) {
-        if (bridge.last("map:changed")?.map === "camp") bridge.emit("toast", { message: "분양 마을은 마을에서 들어가요. 버스를 타고 마을로 돌아가요." });
+        if ((bridge.last("map:changed")?.map ?? "village") !== "village") bridge.emit("toast", { message: "분양 마을은 마을에서 들어가요. 버스를 타고 마을로 돌아가요." });
         return;
       }
       runVillage({ village, myHouseId }, spawnLot ?? null);

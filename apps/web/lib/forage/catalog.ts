@@ -283,7 +283,7 @@ export const GATHER_NODES: readonly GatherNode[] = [
   node("herb", "forest", 596, 966),
   node("herb", "forest", 498, 796),
   node("herb", "forest", 536, 1002),
-  node("herb", "forest", 60, 640),
+  node("herb", "forest", 206, 606), // 11/16 바닷가행 정류장 정차 칸(예전 60,640)을 비워 정류장 옆 풀밭으로
   node("herb", "forest", 412, 1000),
   node("herb", "forest", 324, 826),
   node("herb", "meadow", 956, 860),

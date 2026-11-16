@@ -29,7 +29,7 @@ export const AWAY_PLACE_LABEL: Record<AwayPlace, string> = {
 export const AWAY_HOUSE_RE = /^[A-Za-z0-9_-]{4,24}$/;
 
 /** 실시간 서버가 아는 한 사람의 자리 (내부 요청 /internal/where 응답). 좌표는 서버 위치. house = 들어가 있는 집 id */
-export type PeerWhere = { ch: number; sid: number; x: number; y: number; away?: true; place?: AwayPlace; house?: string; /** 11/15 캠핑장에 있으면 "camp" (없으면 마을) */ map?: "camp" };
+export type PeerWhere = { ch: number; sid: number; x: number; y: number; away?: true; place?: AwayPlace; house?: string; /** 11/15 캠핑장에 있으면 "camp", 11/16 바닷가면 "sea" (없으면 마을) */ map?: "camp" | "sea" };
 
 /**
  * 친구 퇴장 알림 유예: 연결이 끊기거나 채널을 나간 뒤 이 안에 다시 들어오면(새로고침·채널 이동·잠깐 끊김) 알리지 않는다

@@ -30,6 +30,8 @@ export type JoinClaims = {
   mgr?: true;
   /** 11/15 캠핑장에 갈 수 있다 (테스트 서버이거나 운영 CAMP_ENABLED=1일 때 Vercel이 넣는다). 없으면 버스를 타도 마을에 그대로 */
   camp?: true;
+  /** 11/16 바닷가(달물결 포구)에 갈 수 있다 (테스트 서버이거나 운영 SEA_ENABLED=1일 때 Vercel이 넣는다). 없으면 바닷가행 버스를 타도 마을에 그대로 */
+  sea?: true;
   /** 만료 시각 (unix seconds) */
   exp: number;
 };
@@ -119,7 +121,7 @@ export async function verifyJoinToken(
     return null;
   }
   if (!c || typeof c !== "object") return null;
-  const { visitorId, name, color, channel, exp, look, body: rawBody, room, dye, staff, dex, champ, camp, mgr } = c as Record<string, unknown>;
+  const { visitorId, name, color, channel, exp, look, body: rawBody, room, dye, staff, dex, champ, camp, sea, mgr } = c as Record<string, unknown>;
   // 방 id가 있는데 형식이 틀리면 토큰째 버린다 (방 없는 채널 0 토큰 = 대기열 토큰으로 바뀌지 않게)
   if (room !== undefined && !(typeof room === "string" && ROOM_ID_RE.test(room))) return null;
   if (
@@ -135,5 +137,5 @@ export async function verifyJoinToken(
   // 운영자 전용 몸·꾸미기는 토큰에 운영자 표시(staff)가 있을 때만 (없으면 후드 유령·빼고)
   const isStaff = staff === true;
   // 11/16 매니저 전용 칭호는 매니저 표시(mgr)가 있을 때만
-  return { visitorId, name, color, channel, exp, look: mgrGateLook(staffGateLook(sanitizeLook(look), isStaff), mgr === true), body: staffGateBody(isAvatarBody(rawBody) ? rawBody : "hood", isStaff), ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(typeof dye === "string" && dye ? { dye: unpackDye(dye) } : {}), ...(staff === true ? { staff: true as const } : {}), ...(isDexBadge(dex) ? { dex } : {}), ...(isChampValue(champ) ? { champ } : {}), ...(camp === true ? { camp: true as const } : {}), ...(mgr === true ? { mgr: true as const } : {}) };
+  return { visitorId, name, color, channel, exp, look: mgrGateLook(staffGateLook(sanitizeLook(look), isStaff), mgr === true), body: staffGateBody(isAvatarBody(rawBody) ? rawBody : "hood", isStaff), ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(typeof dye === "string" && dye ? { dye: unpackDye(dye) } : {}), ...(staff === true ? { staff: true as const } : {}), ...(isDexBadge(dex) ? { dex } : {}), ...(isChampValue(champ) ? { champ } : {}), ...(camp === true ? { camp: true as const } : {}), ...(sea === true ? { sea: true as const } : {}), ...(mgr === true ? { mgr: true as const } : {}) };
 }

@@ -67,8 +67,17 @@ export const LANDMARK_COLOR: Record<Landmark["kind"], string> = {
   balloon: "#ffb070",
   tower: "#ffb43c",
   bumper: "#ff8ab8",
+  // 11/16 정류장 둘: 캠핑장행은 초록 지붕, 바닷가행은 바다 빛
+  busCamp: "#9ae0a8",
+  busSea: "#5ac8f0",
 };
 
+/** 11/16 버스 정류장 아이콘 (네모난 버스 몸 + 바퀴 둘) — 캠핑장행·바닷가행은 색으로 가른다 */
+export const BUS_ICON: readonly (readonly [number, number])[] = [
+  [-2, -1], [-1, -1], [0, -1], [1, -1], [2, -1],
+  [-2, 0], [-1, 0], [0, 0], [1, 0], [2, 0],
+  [-1, 1], [1, 1],
+];
 /** 관람차 아이콘 (미니맵 px, 가운데 기준 — 동그란 바퀴 + 다리) */
 export const FERRIS_ICON: readonly (readonly [number, number])[] = [
   [-1, -3], [0, -3], [1, -3], [-2, -2], [2, -2], [-3, -1], [3, -1], [-3, 0], [0, 0], [3, 0], [-3, 1], [3, 1], [-2, 2], [2, 2], [-1, 3], [0, 3], [1, 3],

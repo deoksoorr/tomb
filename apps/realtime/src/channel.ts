@@ -18,6 +18,10 @@ import {
   takeChatToken,
   type ChatBucket,
   inMapBounds,
+  isAwayMap,
+  awayTag,
+  mapAllowed,
+  mapOf,
   mapHasSpotState,
   mapSpawn,
   parseC2S,
@@ -53,6 +57,7 @@ import {
   type AwayPlace,
   type C2S,
   type MapId,
+  type AwayMapId,
   type DirId,
   type Grant,
   type MoveMsg,
@@ -118,12 +123,14 @@ export type PeerRecord = {
   /** 이 연결로 자리를 잡은 시각. 로비의 채널 간 중복 정리(kick)가 더 새 연결을 내보내지 않게 비교한다 */
   joinedAt: number;
   /**
-   * 11/15 지금 있는 맵 (캠핑장이면 "camp", 없으면 마을 — 옛 attachment·예약·스냅샷도 마을).
-   * 같은 채널 안에서도 위치·말풍선·채팅·몸짓은 같은 맵 사람끼리만 주고받는다
+   * 11/15 지금 있는 맵 (캠핑장이면 "camp", 11/16 바닷가면 "sea", 없으면 마을 — 옛 attachment·예약·스냅샷도 마을).
+   * 같은 채널 안에서도 위치·말풍선·몸짓은 같은 맵 사람끼리만 주고받는다
    */
-  map?: "camp";
+  map?: AwayMapId;
   /** 11/15 입장 토큰에 캠핑장 허락(camp)이 있었다 → map 요청을 받아 준다 (재접속 때 새 토큰 값으로 바뀐다) */
   camp?: true;
+  /** 11/16 입장 토큰에 바닷가 허락(sea)이 있었다 */
+  sea?: true;
 };
 
 /** 재연결 유예 예약. until(ms)까지 sid·좌석·위치를 지킨다 */
@@ -156,8 +163,10 @@ export type JoinTicket = {
   mgr?: true;
   /** 11/15 캠핑장 허락 (JoinClaims.camp) */
   camp?: true;
-  /** 11/15 처음 들어갈 맵 (URL ?m=camp, 허락이 있을 때만 Worker가 넣는다). 없으면 마을 */
-  map?: "camp";
+  /** 11/16 바닷가 허락 (JoinClaims.sea) */
+  sea?: true;
+  /** 11/15 처음 들어갈 맵 (URL ?m=camp·?m=sea, 허락이 있을 때만 Worker가 넣는다). 없으면 마을 */
+  map?: AwayMapId;
 };
 
 /** ChannelCore가 바깥(DO)에 맡기는 부수 효과 */
@@ -263,12 +272,19 @@ export const AWAY_INTERVAL_MS = 150;
 export const MOOD_INTERVAL_MS = 800;
 /** 11/15 맵 옮기기(버스) 연결당 최소 간격 */
 export const MAP_INTERVAL_MS = 1_000;
-/** 캠핑장 좌석의 내부 키 접두어 (좌석표는 채널 하나라 좌표로 만든 소품 자리 id가 두 맵에서 겹칠 수 있다). 밖으로는 원래 id */
-const CAMP_SEAT_KEY = "@c:";
+/** 캠핑장·바닷가 좌석의 내부 키 접두어 (좌석표는 채널 하나라 좌표로 만든 소품 자리 id가 여러 맵에서 겹칠 수 있다). 밖으로는 원래 id */
+const SEAT_KEY_PREFIX: Record<AwayMapId, string> = { camp: "@c:", sea: "@s:" };
 /** 이 사람이 있는 맵 */
-const mapOfPeer = (p: { map?: "camp" }): MapId => (p.map === "camp" ? "camp" : "village");
+const mapOfPeer = (p: { map?: AwayMapId }): MapId => mapOf(p.map);
 /** 맵 + 와이어 좌석 id → 좌석표 키 */
-const seatKey = (map: MapId, id: string): string => (map === "camp" ? CAMP_SEAT_KEY + id : id);
+const seatKey = (map: MapId, id: string): string => (map === "village" ? id : SEAT_KEY_PREFIX[map] + id);
+/** 좌석표 키 → 그 맵과 와이어 id */
+const seatKeyMap = (key: string): { map: MapId; id: string } => {
+  for (const m of ["camp", "sea"] as const) if (key.startsWith(SEAT_KEY_PREFIX[m])) return { map: m, id: key.slice(SEAT_KEY_PREFIX[m].length) };
+  return { map: "village", id: key };
+};
+/** 저장·전송용 맵 표시 (마을이면 없음) */
+const mapField = (map: MapId): { map?: AwayMapId } => (map === "village" ? {} : { map });
 
 /** warp 서버 쿨다운. 클라이언트(WARP_COOLDOWN_MS 1초)보다 짧게 둬서 네트워크 지터로 정상 요청이 버려지지 않게 한다 */
 export const SERVER_WARP_COOLDOWN_MS = 800;
@@ -372,7 +388,7 @@ export class ChannelCore<C extends object> {
 
   /** 저장할 최근 채팅 (DO가 chatsChanged를 모아 부른다). 11/16 옛 캠핑장 키는 빈 값 → DO가 지운다 */
   chatSnapshot(map: MapId, now: number): RecentChat[] {
-    return map === "camp" ? [] : this.chatLog(now).snapshot(now);
+    return map !== "village" ? [] : this.chatLog(now).snapshot(now);
   }
 
   /** 그 방문자의 채팅 기록을 지운다 (강퇴·이용 제한). 지웠으면 저장 예약 */
@@ -386,9 +402,8 @@ export class ChannelCore<C extends object> {
   private seatsOf(map: MapId): Record<string, number> {
     const out: Record<string, number> = {};
     for (const [key, sid] of this.seats) {
-      const camp = key.startsWith(CAMP_SEAT_KEY);
-      if (camp !== (map === "camp")) continue;
-      out[camp ? key.slice(CAMP_SEAT_KEY.length) : key] = sid;
+      const k = seatKeyMap(key);
+      if (k.map === map) out[k.id] = sid;
     }
     return out;
   }
@@ -486,7 +501,7 @@ export class ChannelCore<C extends object> {
     const newSid = this.admits(t.visitorId) ? allocSid(this.peers) : null;
     if (newSid === null) return this.host.close(conn, CLOSE.CHANNEL_FULL, "channel full");
 
-    const map: MapId = t.map === "camp" && t.camp ? "camp" : "village";
+    const map: MapId = t.map && mapAllowed(t.map, t) ? t.map : "village";
     // 방은 크기를 모른다 (Worker가 u16 범위만 본다). 월드 채널은 그 맵 범위 안일 때만
     const spawn = t.spawn && (this.cfg.room || inMapBounds(map, t.spawn.x, t.spawn.y)) ? t.spawn : mapSpawn(map, SPAWN);
     const pos = this.clearOfSeats(spawn, undefined, map);
@@ -508,8 +523,9 @@ export class ChannelCore<C extends object> {
       ...(t.champ ? { champ: t.champ } : {}),
       ...(t.mgr ? { mgr: true as const } : {}),
       joinedAt: now,
-      ...(map === "camp" ? { map: "camp" as const } : {}),
+      ...mapField(map),
       ...(t.camp ? { camp: true as const } : {}),
+      ...(t.sea ? { sea: true as const } : {}),
     };
     const p = this.adoptNew(rec, conn, now);
     this.save(p);
@@ -555,10 +571,11 @@ export class ChannelCore<C extends object> {
     p.champ = t.champ || undefined;
     p.mgr = t.mgr ? true : undefined;
     p.camp = t.camp ? true : undefined;
+    p.sea = t.sea ? true : undefined;
     p.joinedAt = now;
     // 새 소켓을 붙이기 전에 옮긴다: 좌석 해제 알림은 다른 사람에게만 가고, 본인은 결과가 반영된 welcome을 처음으로 받는다
     // 11/15 다른 맵으로 다시 붙었다 (캠핑장에서 새로고침·허락이 없어진 토큰): 맵을 옮긴 뒤 welcome (옛 맵 leave · 새 맵 join)
-    const want: MapId = t.map === "camp" && t.camp ? "camp" : "village";
+    const want: MapId = t.map && mapAllowed(t.map, t) ? t.map : "village";
     if (want !== mapOfPeer(p)) {
       const to = t.spawn && inMapBounds(want, t.spawn.x, t.spawn.y) ? t.spawn : mapSpawn(want, SPAWN);
       this.switchMap(p, want, this.clearOfSeats(to, p.sid, want), now);
@@ -632,8 +649,8 @@ export class ChannelCore<C extends object> {
       // 22번: 서버 시계(고양이·유령·고블린을 모두가 같은 시각으로) + 지금 나와 있는 고블린
       ...(this.cfg.room ? {} : { now }),
       ...(goblin ? { goblin } : {}),
-      // 11/15 캠핑장에 있으면 알린다 (마을이면 없다 — 옛 서버와 같은 모양)
-      ...(map === "camp" ? { m: "camp" as const } : {}),
+      // 11/15 캠핑장·11/16 바닷가에 있으면 알린다 (마을이면 없다 — 옛 서버와 같은 모양)
+      ...awayTag(map),
       // 11/15 채널 전체 인원 (마을·캠핑장 합계 — HUD "N/40명"). 방에는 없다
       ...(this.cfg.room ? {} : { n: this.peers.size }),
     });
@@ -755,7 +772,7 @@ export class ChannelCore<C extends object> {
    * 친구 위치: 이 채널에 자리를 가진 모든 사람(접속 중 + 재연결 유예 중)의 방문자 id·sid·서버 위치·실내 여부.
    * 실시간 서버 안(Worker)에서만 쓰고, 웹 서버는 친구 사이인 계정만 골라 브라우저에 넘긴다
    */
-  roster(): { visitorId: string; sid: number; x: number; y: number; away?: true; place?: AwayPlace; house?: string; map?: "camp" }[] {
+  roster(): { visitorId: string; sid: number; x: number; y: number; away?: true; place?: AwayPlace; house?: string; map?: AwayMapId }[] {
     return [...this.peers.values()].map((p) => ({
       visitorId: p.visitorId,
       sid: p.sid,
@@ -764,7 +781,7 @@ export class ChannelCore<C extends object> {
       ...(p.away ? { away: true as const } : {}),
       ...(p.away && p.place ? { place: p.place } : {}),
       ...(p.away && p.house ? { house: p.house } : {}),
-      ...(p.map === "camp" ? { map: "camp" as const } : {}),
+      ...mapField(mapOfPeer(p)),
     }));
   }
 
@@ -950,7 +967,7 @@ export class ChannelCore<C extends object> {
         // 말풍선 채팅: 넘치면 조용히 버린다. 가린 글만 같은 채널·방에 중계하고, 늦게 온 사람용으로 기록에 둔다 (월드 채널은 저장소에도 모아 쓴다. 실내에 있으면 안 보이니 버린다)
         if (p.away || !takeChatToken((p.chatBucket ??= newChatBucket()), now)) return;
         // 11/16 채팅은 채널 전체(마을·캠핑장)로 — 줄마다 쓴 사람의 맵을 붙이고, 다른 맵 사람도 채팅창에 이름을 쓰게 이름·딱지를 싣는다
-        const camp = mapOfPeer(p) === "camp" ? { m: "camp" as const } : {};
+        const camp = awayTag(mapOfPeer(p));
         const tags = { ...(p.staff ? { staff: true as const } : {}), ...(p.mgr ? { mgr: true as const } : {}) };
         const c = this.chatLog(now).push({ sid: p.sid, visitorId: p.visitorId, name: p.name, text: maskChat(m.text), ...tags, ...camp }, now);
         this.host.chatsChanged?.("village");
@@ -1016,7 +1033,7 @@ export class ChannelCore<C extends object> {
    */
   private onMap(p: Peer<C>, target: MapId, at: Point, now: number): void {
     const cur = mapOfPeer(p);
-    const ok = (target === "village" || !!p.camp) && inMapBounds(target, at.x, at.y);
+    const ok = mapAllowed(target, p) && inMapBounds(target, at.x, at.y);
     if (ok && target === cur) {
       if (p.seatId) this.releaseSeat(p);
       if (p.state === STATE.sitChair || p.state === STATE.sitGround || spotKindOfState(p.state)) p.state = STATE.idle;
@@ -1051,7 +1068,7 @@ export class ChannelCore<C extends object> {
     this.dirty.delete(p.sid); // 새 맵 사람들은 join으로 지금 자리를 받는다
     p.budget = new MoveBudget(now);
     this.broadcastMap(from, encodeEvent({ t: "leave", sid: p.sid }), p.sid);
-    p.map = target === "camp" ? "camp" : undefined;
+    p.map = target === "village" ? undefined : target;
     this.broadcastMap(target, encodeEvent({ t: "join", ...this.info(p) }), p.sid);
     this.save(p);
     this.host.liveChanged?.(true);
@@ -1485,17 +1502,20 @@ export class ChannelCore<C extends object> {
     }
     if (this.dirty.size > 0) {
       // 11/15 맵마다 따로 묶어 그 맵 사람에게만 (마을 사람만 있으면 예전과 똑같이 한 번)
+      // 11/16 바닷가도 같은 방식으로 따로 묶는다
       const village: PeerState[] = [];
       let camp: PeerState[] | null = null;
+      let sea: PeerState[] | null = null;
       for (const sid of this.dirty) {
         const p = this.peers.get(sid);
         if (!p) continue;
         if (p.map === "camp") (camp ??= []).push(this.state(p));
+        else if (p.map === "sea") (sea ??= []).push(this.state(p));
         else village.push(this.state(p));
       }
       this.dirty.clear();
       // 엔트리 63개(512바이트)를 넘으면 나눠 보낸다. 같은 tick 번호를 쓴다.
-      for (const [map, entries] of [["village", village], ["camp", camp ?? []]] as const) {
+      for (const [map, entries] of [["village", village], ["camp", camp ?? []], ["sea", sea ?? []]] as const) {
         for (let i = 0; i < entries.length; i += SNAPSHOT_MAX_ENTRIES) {
           this.broadcastMap(map, encodeSnapshot(this.tickNo, entries.slice(i, i + SNAPSHOT_MAX_ENTRIES)));
         }
@@ -1625,8 +1645,7 @@ export class ChannelCore<C extends object> {
 
   /** 11/15 그 맵에 있는 접속자에게만 (except 제외). 옛 클라이언트는 언제나 마을에 있다 */
   private broadcastMap(map: MapId, data: string | ArrayBuffer, except?: number): void {
-    const camp = map === "camp";
-    for (const p of this.peers.values()) if (p.conn && p.sid !== except && (p.map === "camp") === camp) this.host.send(p.conn, data);
+    for (const p of this.peers.values()) if (p.conn && p.sid !== except && mapOfPeer(p) === map) this.host.send(p.conn, data);
   }
 
   private state(p: Peer<C>): PeerState {
@@ -1665,6 +1684,6 @@ export class ChannelCore<C extends object> {
     const ride = r.ride === true && !seatId && ridePetOfLook(look) ? { ride: true as const } : {};
     // 배 위 낚싯대는 조각배 자리에 앉아 있을 때만 이어 간다
     const rod = r.rod === true && seatId && boatSeatById(seatId) ? { rod: true as const } : {};
-    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), ...mood, ...ride, ...rod, ...(r.away === true ? { away: true as const } : {}), ...(r.away === true && isAwayPlace(r.place) ? { place: r.place } : {}), ...(r.away === true && r.place === "house" && typeof r.house === "string" ? { house: r.house } : {}), ...(r.staff === true ? { staff: true as const } : {}), ...(isDexBadge(r.dex) ? { dex: r.dex } : {}), ...(isChampValue(r.champ) ? { champ: r.champ } : {}), ...(r.mgr === true ? { mgr: true as const } : {}), joinedAt: r.joinedAt ?? 0, ...(r.map === "camp" ? { map: "camp" as const } : {}), ...(r.camp === true ? { camp: true as const } : {}), ...(isBbqEffect(r.bbq) ? { bbq: { i: r.bbq.i, u: r.bbq.u } } : {}), ...(isBbqEffect(r.spd) ? { spd: { i: r.spd.i, u: r.spd.u } } : {}), ...(isDrunkState(r.drunk) ? { drunk: { lv: r.drunk.lv, at: r.drunk.at } } : {}) };
+    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), ...mood, ...ride, ...rod, ...(r.away === true ? { away: true as const } : {}), ...(r.away === true && isAwayPlace(r.place) ? { place: r.place } : {}), ...(r.away === true && r.place === "house" && typeof r.house === "string" ? { house: r.house } : {}), ...(r.staff === true ? { staff: true as const } : {}), ...(isDexBadge(r.dex) ? { dex: r.dex } : {}), ...(isChampValue(r.champ) ? { champ: r.champ } : {}), ...(r.mgr === true ? { mgr: true as const } : {}), joinedAt: r.joinedAt ?? 0, ...(isAwayMap(r.map) ? { map: r.map } : {}), ...(r.camp === true ? { camp: true as const } : {}), ...(r.sea === true ? { sea: true as const } : {}), ...(isBbqEffect(r.bbq) ? { bbq: { i: r.bbq.i, u: r.bbq.u } } : {}), ...(isBbqEffect(r.spd) ? { spd: { i: r.spd.i, u: r.spd.u } } : {}), ...(isDrunkState(r.drunk) ? { drunk: { lv: r.drunk.lv, at: r.drunk.at } } : {}) };
   }
 }

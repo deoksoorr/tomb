@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAMP_ARRIVE, CAMP_MAP_VERSION, MAP_VERSION } from "@tomb/protocol";
+import { CAMP_ARRIVE, CAMP_MAP_VERSION, MAP_VERSION, SEA_ARRIVE, SEA_MAP_VERSION } from "@tomb/protocol";
 import { parseResume, saveResume, takeResume } from "./resume";
 
 // 11/15 캠핑장에서 새로고침: 캠핑장 자리로 돌아온다 (마을 좌표와 섞이지 않게 where·campMap을 따로 둔다)
@@ -30,5 +30,22 @@ describe("resume — 캠핑장 기록", () => {
     const r = parseResume(JSON.stringify({ ...camp, where: undefined, seatId: "lA-0", map: MAP_VERSION }), camp.savedAt);
     expect(r?.where).toBeUndefined();
     expect(r?.seatId).toBe("lA-0");
+  });
+});
+
+// 11/16 바닷가에서 새로고침: 캠핑장과 같은 규칙 (where "sea"·seaMap)
+describe("resume — 바닷가 기록", () => {
+  const sea = { channel: 2, x: 700, y: 640, seatId: null, pose: "sitGround" as const, dir: 0, savedAt: 2_000_000, name: "바다", color: "#e8d9b0", where: "sea" as const };
+  it("바닷가 자리를 그대로 잇는다 (배치 버전도 같이 저장)", () => {
+    const st = memStore();
+    saveResume(sea, st);
+    const raw = JSON.parse(st.m.values().next().value!);
+    expect(raw.seaMap).toBe(SEA_MAP_VERSION);
+    expect(raw.campMap).toBeUndefined();
+    expect(takeResume(sea.savedAt + 1000, st)).toEqual({ ...sea, bgm: false, map: MAP_VERSION, seaMap: SEA_MAP_VERSION, body: undefined });
+  });
+  it("바닷가 배치가 바뀐 뒤의 기록은 정류장에서", () => {
+    const r = parseResume(JSON.stringify({ ...sea, seaMap: SEA_MAP_VERSION + 1 }), sea.savedAt);
+    expect(r).toMatchObject({ where: "sea", x: SEA_ARRIVE.x, y: SEA_ARRIVE.y, pose: "idle" });
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { mapOf } from "@tomb/protocol";
 import { chatAtBottom, chatLineAgo, chatLineDim, chatLineTone, chatPlaceTag, chatScrollAction, type ChatLine } from "@/game/logic/chatLog";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
@@ -16,10 +17,10 @@ const SELF_TICK_MS = 15_000;
 
 /** 한 줄. opacity = 불투명도(폰 화면 글씨의 흐려짐·기록창의 지난 줄), ago = 지난 줄 옆 작은 시각 */
 export function ChatLineItem({ line, opacity, ago }: { line: ChatLine; opacity?: number; ago?: string | null }) {
-  // 11/16 다른 맵에서 쓴 줄 앞에 [캠핑장]·[마을] (집 안·사냥터처럼 맵이 아닌 곳에서는 붙이지 않는다)
+  // 11/16 다른 맵에서 쓴 줄 앞에 [캠핑장]·[바닷가]·[마을] (집 안·사냥터처럼 맵이 아닌 곳에서는 붙이지 않는다)
   const status = useBridgeValue("net:status");
   const scene = useBridgeValue("scene:changed")?.scene;
-  const here = !scene || scene === "world" ? (status?.map === "camp" ? "camp" : "village") : null;
+  const here = !scene || scene === "world" ? mapOf(status?.map) : null;
   const place = line.w ? null : chatPlaceTag(line, here);
   const name = (
     <b className={cx(styles.name, line.staff && styles.staff)}>

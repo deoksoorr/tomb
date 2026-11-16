@@ -1,4 +1,4 @@
-import type { AvatarDye, BbqItemId, BbqStand, GraveEventKind, QueueStatus } from "@tomb/protocol";
+import type { AvatarDye, AwayMapId, BbqItemId, BbqStand, GraveEventKind, MapId, QueueStatus } from "@tomb/protocol";
 import type { PublicGrave } from "@/lib/types";
 import type { HouseEditState, HouseTool } from "@/game/housing/events";
 import type { PublicHouse, VillageResponse } from "@/lib/housing/types";
@@ -27,8 +27,8 @@ export type NetStatus = {
   /** 나를 포함한 채널 인원 (마을·캠핑장 합계 — 맵이 달라도 채널 전체) */
   count: number;
   cap: number;
-  /** 11/15 지금 캠핑장이면 "camp" (없으면 마을) */
-  map?: "camp";
+  /** 11/15 지금 캠핑장이면 "camp", 11/16 바닷가면 "sea" (없으면 마을) */
+  map?: AwayMapId;
 };
 
 /** ?debug=1 HUD용. 1초마다 갱신 */
@@ -139,7 +139,7 @@ export type GameEvents = {
   /** 47번: 다른 사람 캐릭터(또는 이름표)를 눌렀다 → UI가 작은 메뉴(신고하기)를 띄운다. ch = 월드 채널, room = 방 id */
   "peer:menu": { sid: number; name: string; ch?: number; room?: string; /** 그 사람 머리 위에 지금 떠 있는 자유 채팅 (신고에 붙인다) */ chat?: string };
   /** 채팅 기록창 한 줄: 같은 채널·방에서 받은 자유 채팅(가린 글) 또는 내가 보낸 글. 화면 메모리에만 1분. key = 서버 줄 id(중복 제거) */
-  "chat:line": { name: string; text: string; mine: boolean; key?: string; /** 운영자(실시간 서버가 알린 staff) → 이름 금색 */ staff?: true; /** 11/16 매니저(실시간 서버가 알린 mgr) → "매니저" 딱지 */ mgr?: true; /** 닉네임 꾸미기 id (lib/nameStyle nameStyleIds) */ ns?: string[]; /** 11/16 쓴 사람이 캠핑장에 있었다 */ m?: "camp"; /** 11/16 귓속말 줄 (chatLog.ts ChatLine.w) */ w?: "out" | "in" | "fail" | "note" };
+  "chat:line": { name: string; text: string; mine: boolean; key?: string; /** 운영자(실시간 서버가 알린 staff) → 이름 금색 */ staff?: true; /** 11/16 매니저(실시간 서버가 알린 mgr) → "매니저" 딱지 */ mgr?: true; /** 닉네임 꾸미기 id (lib/nameStyle nameStyleIds) */ ns?: string[]; /** 11/16 쓴 사람이 캠핑장·바닷가에 있었다 */ m?: AwayMapId; /** 11/16 귓속말 줄 (chatLog.ts ChatLine.w) */ w?: "out" | "in" | "fail" | "note" };
   /** 11/16 최근 귓속말 상대가 지금 이 채널에 있는지 (input:whoOn의 답, 서버가 준 그대로). on = 있음, off = 없음 (sticky) */
   "whisper:online": { on: string[]; off: string[] };
   /** 방에 들어올 때 서버가 보낸 이 방의 최근 1분 채팅 (이 기기 시계로 옮긴 줄). ch = 월드 채널이면 그 번호 (방이면 없음) */
@@ -183,10 +183,10 @@ export type GameEvents = {
   "friend:notice": { message: string };
   /** 친구가 들어왔다(on)·나갔다 — 실시간 서버가 밀어 준 것 (key = 친구 창의 그 친구 키) */
   "friend:presence": { key: string; name: string; on: boolean };
-  "minimap:dots": { me: { x: number; y: number }; others: number[]; residents?: number[]; /** 친구 (others에서 뺀 같은 채널 친구 위치, 하트로 그린다) */ friends?: number[]; /** 11/15 캠핑장이면 "camp" (캠핑장 바탕) */ map?: "camp" };
-  /** 11/15 지금 맵 (캠핑장 장면이 뜨면 camp, 닫히면 village). HUD·미니맵·채팅·음악이 본다 (sticky) */
-  "map:changed": { map: "village" | "camp" };
-  /** 11/15 마을 ↔ 캠핑장 버스를 타고 가는 중 (sticky) */
+  "minimap:dots": { me: { x: number; y: number }; others: number[]; residents?: number[]; /** 친구 (others에서 뺀 같은 채널 친구 위치, 하트로 그린다) */ friends?: number[]; /** 11/15 캠핑장이면 "camp", 11/16 바닷가면 "sea" (그 맵 바탕) */ map?: AwayMapId };
+  /** 11/15 지금 맵 (캠핑장 장면이 뜨면 camp, 11/16 바닷가 장면이면 sea, 닫히면 village). HUD·미니맵·채팅·음악이 본다 (sticky) */
+  "map:changed": { map: MapId };
+  /** 11/15 마을 ↔ 캠핑장·바닷가 버스를 타고 가는 중 (sticky) */
   "bus:state": { riding: boolean };
   /** 11/15 캠핑장 NPC 대화 창 (null이면 닫기, sticky) */
   "camp:talk": { npc: string; name: string; lines: string[] } | null;
@@ -379,7 +379,7 @@ export type UiEvents = {
   /** 친구: 지금 채널에 있는 친구들 (그 채널의 sid·이름) → 게임이 이름표 옆 하트·미니맵 하트로 그린다 (sticky) */
   "friends:here": { ch: number; list: { sid: number; name: string }[] };
   /** 친구한테 가기 (같은 채널 마을): 친구 옆 걸을 수 있는 칸으로 순간이동. x,y = 서버가 알려 준 위치 (화면에 친구가 없을 때 쓴다) */
-  "friend:goto": { sid: number; name: string; x: number; y: number; /** 11/15 친구가 캠핑장에 있으면 "camp" (맵이 다르면 버스를 거쳐 간다) */ map?: "camp" };
+  "friend:goto": { sid: number; name: string; x: number; y: number; /** 11/15 친구가 캠핑장에 있으면 "camp", 11/16 바닷가면 "sea" (맵이 다르면 버스를 거쳐 간다) */ map?: AwayMapId };
   /** 11/15 캠핑장 대화 창: 다음 말 (E·Space·버튼) / 닫았다 */
   "camp:talkNext": undefined;
   /** 11/15 바베큐를 샀다 (증서) → 게임이 먹는 연출·커지기, 실시간 서버로 증서 */

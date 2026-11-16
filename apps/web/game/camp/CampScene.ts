@@ -601,6 +601,8 @@ export class CampScene extends Phaser.Scene {
     on.push(
       bridge.on("friend:goto", ({ sid, name, x, y, map }) => {
         if (map === "camp") this.goToFriend(sid, name, x, y);
+        // 11/16 바닷가 친구는 마을을 거쳐 가요 (버스가 마을에만 서요)
+        else if (map === "sea") bridge.emit("friend:notice", { message: "바닷가는 마을에서 버스를 타고 가요. 먼저 마을행 버스를 타요." });
         else {
           this.closeTalk();
           this.host.goVillage({ sid, name, x, y });

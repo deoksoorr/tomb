@@ -36,7 +36,8 @@ describe("dogs", () => {
       const spots = dogSpots(def, g);
       expect(spots.length, def.id).toBeGreaterThanOrEqual(4);
       for (const s of spots) expect(restable(g, s.x, s.y), `${def.id} ${s.x},${s.y}`).toBe(true);
-      expect(spots.some((s) => fireNear(s.x, s.y)), def.id).toBe(true);
+      // 11/16 점박이는 서쪽 모닥불이 없어져 모닥불 없이 풀밭에서만 쉰다 (fires 빈 목록)
+      if (def.fires.length) expect(spots.some((s) => fireNear(s.x, s.y)), def.id).toBe(true);
     }
     expect(CAMPFIRES.length).toBeGreaterThan(0);
   });

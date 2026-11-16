@@ -83,6 +83,7 @@ import {
   waterCurrent,
   type Rect,
 } from "./layout";
+import { SEA_STOP, SEA_STOP_BAY, SEA_STOP_LAND } from "./seaStop";
 
 const graves = (n: number) =>
   Array.from({ length: n }, (_, i) => ({ id: `g${i}`, ageDays: (i * 37) % 800, flowers: i % 9, revives: i % 5 }));
@@ -183,7 +184,8 @@ describe("컴팩트한 묘지 마을 맵 (F1)", () => {
     for (const k of ["maple", "ginkgo", "snowPine", "deadTree", "pine", "willow", "leaves", "pumpkin"]) expect(kinds.has(k as never), k).toBe(true);
     expect(props.filter((p) => p.kind === "blossom").length).toBe(0); // 봄꽃 나무는 없다
     const trees = props.filter((p) => isLiveTree(p.kind) || p.kind === "pine" || p.kind === "snowPine" || p.kind === "deadTree" || p.kind === "willow").length;
-    expect(trees).toBeGreaterThan(55);
+    // 11/16 서쪽 모닥불 자리에 바닷가행 정류장이 서며 강가 흩뿌림 나무 하나와 승강장 모서리 마른 나무 하나가 빠졌다 (54)
+    expect(trees).toBeGreaterThanOrEqual(54);
     expect(trees).toBeLessThan(140);
   });
 
@@ -244,7 +246,8 @@ describe("광장 놀거리 (50번: 가운데에도 상호작용)", () => {
       expect(i.label.length).toBeGreaterThan(0);
       expect(inWater(i.ax, i.ay), i.id).toBe(false);
     }
-    expect(items.filter((i) => i.kind === "tree").length).toBeGreaterThan(25);
+    // 11/16 바닷가행 정류장 자리의 매달릴 나무가 한 그루 빠졌다 (25)
+    expect(items.filter((i) => i.kind === "tree").length).toBeGreaterThanOrEqual(25);
   });
 
   it("광장 한가운데 큰 모닥불, 둘레에 그네·해먹·분수·놀거리·매달릴 나무가 고루 있다", () => {
@@ -351,12 +354,24 @@ describe("주거 구역 (분양 마을을 메인 맵에)", () => {
   });
 
   it("버스 정류장 마당의 주말 버스 정류장: 상호작용 \"bus\" 하나, 지붕 아래 벤치 bE, 앞에서 걸어서 닿는다", () => {
+    // 11/16 옛 묘역 아래 바닷가행 정류장(bus:sea)이 더해져 정류장이 둘
     const bus = interactables().filter((i) => i.kind === "bus");
-    expect(bus.map((i) => i.id)).toEqual(["bus:camp"]);
+    expect(bus.map((i) => i.id)).toEqual(["bus:camp", "bus:sea"]);
     expect(inside(WHARF_YARD, bus[0].x, bus[0].y)).toBe(true);
     const be = FURNITURE.find((f) => f.id === "bE")!;
     expect(Math.abs(be.x - bus[0].x)).toBeLessThan(8);
     expect(reachable()(bus[0].x, bus[0].y + 4)).toBe(true);
+  });
+
+  it("11/16 바닷가행 정류장: 옛 묘역 아래 강가 띠, 지붕 아래 벤치 bU, 앞에서 걸어서 닿고 정차 칸은 강·다리와 겹치지 않는다", () => {
+    const bus = interactables().find((i) => i.id === "bus:sea")!;
+    const bu = FURNITURE.find((f) => f.id === "bU")!;
+    expect(Math.abs(bu.x - SEA_STOP.x)).toBeLessThan(8);
+    expect(bus.y).toBeGreaterThan(GRAVE_AREAS[0].rect.y + GRAVE_AREAS[0].rect.h);
+    expect(reachable()(bus.x, bus.y + 4)).toBe(true);
+    expect(reachable()(SEA_STOP_LAND.x, SEA_STOP_LAND.y)).toBe(true);
+    for (let x = SEA_STOP_BAY.x; x <= SEA_STOP_BAY.x + SEA_STOP_BAY.w; x += 4) expect(inWater(x, SEA_STOP_BAY.y + SEA_STOP_BAY.h), `${x}`).toBe(false);
+    expect(CAMPFIRES.some((c) => c.id === "fireW")).toBe(false);
   });
 
   it("문·빈 필지 상호작용", () => {
@@ -577,8 +592,9 @@ describe("campfires (불멍)", () => {
   const all = [...colliders, ...fireColliders];
   const fireSeats = SEATS.filter((s) => campfireOfSeat(s.id));
 
-  it("3~5 campfires: one huge plaza fire (12+ seats), the rest 4~6 seats, all facing the fire (server-judged SEATS)", () => {
-    expect(CAMPFIRES.length).toBeGreaterThanOrEqual(3);
+  it("2~5 campfires: one huge plaza fire (12+ seats), the rest 4~6 seats, all facing the fire (server-judged SEATS)", () => {
+    // 11/16 서쪽 모닥불(fireW)을 치우고 바닷가행 정류장을 세웠다 → 광장 큰 불 + 호박밭 불 둘
+    expect(CAMPFIRES.length).toBeGreaterThanOrEqual(2);
     expect(CAMPFIRES.length).toBeLessThanOrEqual(5);
     expect(CAMPFIRES.filter((c) => c.big).length).toBe(1);
     const vec = { [DIR.up]: [0, -1], [DIR.down]: [0, 1], [DIR.left]: [-1, 0], [DIR.right]: [1, 0] } as Record<number, number[]>;

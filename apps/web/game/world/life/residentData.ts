@@ -238,8 +238,8 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "round",
     color: OCHRE,
     look: [],
-    home: { x: 150, y: 600, r: 100 }, // 묘지기 모닥불
-    perches: ["kWn", "kWs", "kWw", "kWe"],
+    home: { x: 150, y: 600, r: 100 }, // 예전 묘지기 모닥불 자리 (11/16 바닷가행 정류장이 됐다 — 정류장 벤치·강가 벤치에서 쉰다)
+    perches: ["bU", "lC"],
     grass: 3,
     legMs: 42_000,
     speed: 28,

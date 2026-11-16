@@ -28,6 +28,9 @@ import {
   type GraveEventKind,
   type GoblinInfo,
   type MapId,
+  type AwayMapId,
+  awayTag,
+  mapOf,
   type BbqItemId,
   isBbqId,
   type PeerInfo,
@@ -135,7 +138,7 @@ export type NetCallbacks = {
 };
 
 /** 11/16 채팅에 실려 오는 보낸 사람 정보 (맵이 달라 화면에 없는 사람도 채팅창에 쓰게) */
-export type ChatMeta = { name?: string; staff?: true; mgr?: true; m?: "camp" };
+export type ChatMeta = { name?: string; staff?: true; mgr?: true; m?: AwayMapId };
 
 /** 맵이 바뀌어도 늘 처음 콜백(월드)이 받는 것: 계정·친구·확성기·내 몸 모양·고블린 보상 */
 const GLOBAL_CALLBACKS = ["onMegaphone", "onMeStale", "onFriend", "onSelfBody", "onGoblinGrant"] as const;
@@ -180,6 +183,8 @@ export class RealtimeClient {
   map: MapId = "village";
   /** 11/15 이 서버는 캠핑장 버스가 다닌다 (입장 응답 campOpen) */
   campOpen = false;
+  /** 11/16 이 서버는 바닷가 버스가 다닌다 (입장 응답 seaOpen) */
+  seaOpen = false;
   /** 11/15 맵을 옮기는 중 (mapped를 기다린다 — 그 전에 온 옛 맵 소식은 버린다) */
   private mapPending: MapId | null = null;
   private mapTimer: ReturnType<typeof setTimeout> | null = null;
@@ -681,8 +686,9 @@ export class RealtimeClient {
     const p = this.h.getPose(this.pose);
     const sep = res.wsUrl.includes("?") ? "&" : "?";
     this.campOpen = res.campOpen === true;
-    // 11/15 캠핑장에 있으면 처음부터 캠핑장으로 (새로고침·채널 이동·재접속). 허락이 없는 토큰이면 서버가 마을로 받는다
-    const mapQ = this.map === "camp" ? "&m=camp" : "";
+    this.seaOpen = res.seaOpen === true;
+    // 11/15 캠핑장에 있으면 처음부터 캠핑장으로 (새로고침·채널 이동·재접속). 허락이 없는 토큰이면 서버가 마을로 받는다 (11/16 바닷가도 같다)
+    const mapQ = this.map !== "village" ? `&m=${this.map}` : "";
     const url = `${res.wsUrl}${sep}x=${Math.round(p.x)}&y=${Math.round(p.y)}${mapQ}&v=${CLIENT_VERSION}`;
     let ws: WebSocket;
     try {
@@ -797,7 +803,7 @@ export class RealtimeClient {
               ...(typeof m.name === "string" && m.name ? { name: m.name.slice(0, 40) } : {}),
               ...(m.staff === true ? { staff: true as const } : {}),
               ...(m.mgr === true ? { mgr: true as const } : {}),
-              ...(m.m === "camp" ? { m: "camp" as const } : {}),
+              ...awayTag(m.m),
             });
           break;
         case "chatLog":
@@ -908,7 +914,7 @@ export class RealtimeClient {
     this.mapPending = null;
     if (this.mapTimer) clearTimeout(this.mapTimer);
     this.mapTimer = null;
-    this.map = map === "camp" ? "camp" : "village";
+    this.map = mapOf(map);
     this.peers.clear();
     for (const p of peers) if (p.sid !== this.mySid) this.peers.add(p.sid);
     this.syncPolicy.mark(performance.now());
@@ -922,7 +928,7 @@ export class RealtimeClient {
     this.mySid = m.sid;
     this.channel = m.channel;
     // 11/15 서버가 아는 내 맵 (없으면 마을 — 허락이 없거나 옛 서버)
-    this.map = m.m === "camp" ? "camp" : "village";
+    this.map = mapOf(m.m);
     this.mapPending = null;
     this.total = typeof m.n === "number" && Number.isFinite(m.n) ? m.n : null;
     // 22번: 서버 시계 맞추기 (왕복 절반만큼 늦게 도착했다고 본다)
@@ -1253,7 +1259,7 @@ export class RealtimeClient {
     const channel = online || pending ? (this.channel ?? (typeof this.target === "number" ? this.target : null)) : null;
     // 나를 포함한 인원. 혼자 걷는 동안(관람·오프라인)은 나 하나
     // 11/15 HUD는 맵이 달라도 채널 전체 인원 (서버가 알려 준 값, 옛 서버면 같은 맵 사람 수)
-    const status = { mode: this.mode, channel, count: online ? (this.total ?? this.peers.size + 1) : 1, cap: this.cap, ...(this.map === "camp" ? { map: "camp" as const } : {}) };
+    const status = { mode: this.mode, channel, count: online ? (this.total ?? this.peers.size + 1) : 1, cap: this.cap, ...(this.map !== "village" ? { map: this.map } : {}) };
     const prev = bridge.last("net:status");
     // 재시도마다 같은 상태를 다시 보내지 않는다
     if (prev && prev.mode === status.mode && prev.channel === status.channel && prev.count === status.count && prev.cap === status.cap && prev.map === status.map) return;

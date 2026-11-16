@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { bridge } from "@/game/bridge";
-import { BALLOON_ICON, BUMPER_ICON, FERRIS_ICON, FISH_ICON, LANDMARK_COLOR, LANDMARKS, MINIMAP_H, MINIMAP_W, minimapPixels, NODE_DOT_COLOR, PAW_ICON, toMinimap } from "@/game/world/minimapArt";
+import { BALLOON_ICON, BUMPER_ICON, BUS_ICON, FERRIS_ICON, FISH_ICON, LANDMARK_COLOR, LANDMARKS, MINIMAP_H, MINIMAP_W, minimapPixels, NODE_DOT_COLOR, PAW_ICON, toMinimap } from "@/game/world/minimapArt";
+import type { AwayMapId, MapId } from "@tomb/protocol";
 import { CAMP_LANDMARK_COLOR, CAMP_LANDMARKS, CAMP_MINIMAP_H, CAMP_MINIMAP_W, campMinimapPixels, toCampMinimap } from "@/game/camp/campMinimap";
+import { SEA_LANDMARK_COLOR, SEA_LANDMARKS, SEA_MINIMAP_H, SEA_MINIMAP_W, seaMinimapPixels, toSeaMinimap } from "@/game/sea/seaMinimap";
 import { gatherNodeById } from "@/lib/forage/catalog";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
@@ -30,16 +32,36 @@ function baseImage(): HTMLCanvasElement {
   return baseCache;
 }
 
-/** 11/15 캠핑장 바탕 (캠핑장에 처음 갈 때 한 번 굽는다) */
-let campCache: HTMLCanvasElement | null = null;
-function campImage(): HTMLCanvasElement {
-  if (!campCache) {
-    campCache = document.createElement("canvas");
-    campCache.width = CAMP_MINIMAP_W;
-    campCache.height = CAMP_MINIMAP_H;
-    campCache.getContext("2d")?.putImageData(new ImageData(campMinimapPixels() as unknown as Uint8ClampedArray<ArrayBuffer>, CAMP_MINIMAP_W, CAMP_MINIMAP_H), 0, 0);
+/** 11/15 마을 밖 맵(캠핑장·11/16 바닷가) 지도 한 벌: 바탕 크기·굽기·좌표·주요 장소 */
+type AwayMinimap = {
+  w: number;
+  h: number;
+  pixels: () => Uint8ClampedArray;
+  to: (x: number, y: number) => { x: number; y: number };
+  landmarks: readonly { x: number; y: number; kind: string }[];
+  color: (kind: string) => string;
+  /** 큰 표시로 그리는 주요 장소 (캠핑장 모닥불 등) */
+  big: ReadonlySet<string>;
+  label: string;
+};
+const AWAY_MINIMAP: Record<AwayMapId, AwayMinimap> = {
+  camp: { w: CAMP_MINIMAP_W, h: CAMP_MINIMAP_H, pixels: campMinimapPixels, to: toCampMinimap, landmarks: CAMP_LANDMARKS, color: (k) => CAMP_LANDMARK_COLOR[k as keyof typeof CAMP_LANDMARK_COLOR] ?? "#ffffff", big: new Set(["fire"]), label: "캠핑장 지도" },
+  sea: { w: SEA_MINIMAP_W, h: SEA_MINIMAP_H, pixels: seaMinimapPixels, to: toSeaMinimap, landmarks: SEA_LANDMARKS, color: (k) => SEA_LANDMARK_COLOR[k as keyof typeof SEA_LANDMARK_COLOR] ?? "#ffffff", big: new Set(["lighthouse"]), label: "바닷가 지도" },
+};
+
+/** 11/15 캠핑장·바닷가 바탕 (그 맵에 처음 갈 때 한 번 굽는다) */
+const awayCache = new Map<AwayMapId, HTMLCanvasElement>();
+function awayImage(map: AwayMapId): HTMLCanvasElement {
+  let c = awayCache.get(map);
+  if (!c) {
+    const m = AWAY_MINIMAP[map];
+    c = document.createElement("canvas");
+    c.width = m.w;
+    c.height = m.h;
+    c.getContext("2d")?.putImageData(new ImageData(m.pixels() as unknown as Uint8ClampedArray<ArrayBuffer>, m.w, m.h), 0, 0);
+    awayCache.set(map, c);
   }
-  return campCache;
+  return c;
 }
 
 /** 테두리 두른 동그란 점 (지도 칸 단위 좌표·반지름) */
@@ -85,40 +107,42 @@ function readOpen(): boolean {
   }
 }
 
-/** 11/15 캠핑장 지도: 바탕·주요 장소·같은 캠핑장 사람 */
-function drawCamp(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, d: { me: { x: number; y: number }; others: number[]; friends?: number[] } | null, nodeIds: readonly string[] = []): void {
-  ctx.drawImage(campImage(), 0, 0);
-  for (const l of CAMP_LANDMARKS) {
-    const p = toCampMinimap(l.x, l.y);
-    const big = l.kind === "fire";
+/** 11/15 캠핑장 지도 (11/16 바닷가도 같은 방식): 바탕·주요 장소·같은 맵 사람 */
+function drawAway(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, map: AwayMapId, d: { me: { x: number; y: number }; others: number[]; friends?: number[] } | null, nodeIds: readonly string[] = []): void {
+  const M = AWAY_MINIMAP[map];
+  const toMap = M.to;
+  ctx.drawImage(awayImage(map), 0, 0);
+  for (const l of M.landmarks) {
+    const p = toMap(l.x, l.y);
+    const big = M.big.has(l.kind);
     ctx.fillStyle = "rgba(0,0,0,0.6)";
     ctx.fillRect(Math.round(p.x) - 2, Math.round(p.y) - 2, big ? 5 : 4, big ? 5 : 4);
-    ctx.fillStyle = CAMP_LANDMARK_COLOR[l.kind];
+    ctx.fillStyle = M.color(l.kind);
     ctx.fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, big ? 3 : 2, big ? 3 : 2);
   }
   // A-6 캠핑장 채집 지점 (나에게 피어 있는 것만, 종류 색의 작은 점)
   for (const id of nodeIds) {
     const n = gatherNodeById(id);
-    if (!n || n.map !== "camp") continue;
-    const p = toCampMinimap(n.x, n.y);
+    if (!n || n.map !== map) continue;
+    const p = toMap(n.x, n.y);
     ctx.fillStyle = "rgba(0,0,0,0.55)";
     ctx.fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, 3, 3);
     ctx.fillStyle = NODE_DOT_COLOR[n.kind] ?? "#ffffff";
     ctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
   }
   if (!d) return;
-  const unit = c.clientWidth / CAMP_MINIMAP_W || 1;
+  const unit = c.clientWidth / M.w || 1;
   const px = (n: number) => n / unit;
   for (let i = 0; i + 1 < d.others.length; i += 2) {
-    const p = toCampMinimap(d.others[i], d.others[i + 1]);
+    const p = toMap(d.others[i], d.others[i + 1]);
     dot(ctx, p.x, p.y, px(3), px(1.5), "#6fe3ff", "rgba(8,10,14,0.9)");
   }
   const fs = d.friends ?? [];
   for (let i = 0; i + 1 < fs.length; i += 2) {
-    const p = toCampMinimap(fs[i], fs[i + 1]);
+    const p = toMap(fs[i], fs[i + 1]);
     heart(ctx, p.x, p.y, px(4.5), px(1.5));
   }
-  const m = toCampMinimap(d.me.x, d.me.y);
+  const m = toMap(d.me.x, d.me.y);
   if (reducedMotion() || Math.floor(Date.now() / 600) % 2 === 0) {
     ctx.beginPath();
     ctx.arc(m.x, m.y, px(9), 0, Math.PI * 2);
@@ -133,9 +157,9 @@ function drawCamp(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, d: { me: 
 export default function Minimap() {
   const [open, setOpen] = useState(readOpen);
   const canvas = useRef<HTMLCanvasElement | null>(null);
-  const last = useRef<{ me: { x: number; y: number }; others: number[]; residents?: number[]; friends?: number[]; map?: "camp" } | null>(null);
-  /** 11/15 캠핑장에 있으면 캠핑장 지도 */
-  const [camp, setCamp] = useState(() => bridge.last("map:changed")?.map === "camp");
+  const last = useRef<{ me: { x: number; y: number }; others: number[]; residents?: number[]; friends?: number[]; map?: AwayMapId } | null>(null);
+  /** 11/15 캠핑장에 있으면 캠핑장 지도 (11/16 바닷가면 바닷가 지도) */
+  const [map, setMap] = useState<MapId>(() => bridge.last("map:changed")?.map ?? "village");
   /** 나에게 피어 있는 채집 지점 (forage:nodes) */
   const nodes = useRef<string[]>(bridge.last("forage:nodes")?.ids ?? []);
 
@@ -146,8 +170,9 @@ export default function Minimap() {
     // 지도 칸 좌표로 그리고 캔버스는 SCALE배 해상도
     ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
     ctx.imageSmoothingEnabled = false;
-    if (last.current?.map === "camp") {
-      drawCamp(ctx, c, last.current, nodes.current);
+    const away = last.current?.map;
+    if (away) {
+      drawAway(ctx, c, away, last.current, nodes.current);
       return;
     }
     ctx.drawImage(baseImage(), 0, 0);
@@ -165,11 +190,11 @@ export default function Minimap() {
         ctx.fillRect(px + 1, py - 1, 1, 1); // 눈
         continue;
       }
-      if (l.kind === "ferris" || l.kind === "balloon" || l.kind === "bumper") {
+      if (l.kind === "ferris" || l.kind === "balloon" || l.kind === "bumper" || l.kind === "busCamp" || l.kind === "busSea") {
         // 관람차·열기구·범퍼카: 테두리를 두른 작은 그림
         const px = Math.round(p.x);
         const py = Math.round(p.y);
-        const icon = l.kind === "ferris" ? FERRIS_ICON : l.kind === "balloon" ? BALLOON_ICON : BUMPER_ICON;
+        const icon = l.kind === "ferris" ? FERRIS_ICON : l.kind === "balloon" ? BALLOON_ICON : l.kind === "bumper" ? BUMPER_ICON : BUS_ICON;
         ctx.fillStyle = "rgba(0,0,0,0.7)";
         for (const [dx, dy] of icon) ctx.fillRect(px + dx - 1, py + dy - 1, 3, 3);
         ctx.fillStyle = LANDMARK_COLOR[l.kind];
@@ -247,8 +272,8 @@ export default function Minimap() {
 
   useBridgeEvent("minimap:dots", (d) => {
     last.current = d;
-    const inCamp = d.map === "camp";
-    if (inCamp !== camp) setCamp(inCamp);
+    const now = d.map ?? "village";
+    if (now !== map) setMap(now);
     else if (open) draw();
   });
 
@@ -257,7 +282,7 @@ export default function Minimap() {
     if (open) draw();
     // draw는 ref만 읽는다
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camp]);
+  }, [map]);
 
   useEffect(() => {
     if (open) draw();
@@ -277,10 +302,10 @@ export default function Minimap() {
       {open && (
         <canvas
           ref={canvas}
-          className={cx(styles.map, camp && styles.camp)}
-          width={(camp ? CAMP_MINIMAP_W : MINIMAP_W) * SCALE}
-          height={(camp ? CAMP_MINIMAP_H : MINIMAP_H) * SCALE}
-          aria-label={camp ? "캠핑장 지도 (노란 점이 나, 분홍 하트가 친구)" : "마을 지도 (노란 점이 나, 분홍 하트가 친구)"}
+          className={cx(styles.map, map === "camp" && styles.camp, map === "sea" && styles.sea)}
+          width={(map !== "village" ? AWAY_MINIMAP[map].w : MINIMAP_W) * SCALE}
+          height={(map !== "village" ? AWAY_MINIMAP[map].h : MINIMAP_H) * SCALE}
+          aria-label={`${map !== "village" ? AWAY_MINIMAP[map].label : "마을 지도"} (노란 점이 나, 분홍 하트가 친구)`}
           role="img"
         />
       )}

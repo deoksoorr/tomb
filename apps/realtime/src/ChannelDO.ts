@@ -34,7 +34,7 @@ const NONCE_PREFIX = "n:";
 const LIVE_KEY = "live";
 /** 22번 황금 고블린: 다음 등장 시각 + 지금 나와 있는 고블린(잡혔는지까지). 등장·잡힘·사라짐 때만 쓴다 */
 const GOBLIN_KEY = "goblin";
-/** 맵별 최근 채팅 저장 키 접두어 (+ "village" | "camp") */
+/** 맵별 최근 채팅 저장 키 접두어 (+ "village" | "camp". 11/16 지금은 "village" 하나에 모든 맵 줄) */
 const CHAT_PREFIX = "chat:";
 /** 채팅이 바뀐 뒤 저장하기까지 모으는 시간 (그 사이 줄은 한 번에 쓴다 — 맵마다 이 간격에 최대 한 번) */
 const CHAT_SAVE_MS = 5_000;

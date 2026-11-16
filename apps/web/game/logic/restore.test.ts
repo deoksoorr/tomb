@@ -1,27 +1,29 @@
 import { seatById } from "@tomb/protocol";
+
+// 11/16 서쪽 모닥불(kW*)을 치워 호박밭 모닥불(kS*) 둘레 자리로 본다
 import { describe, expect, it } from "vitest";
 import { anchorAt, fallbackSeat, nudgeSpot, OVERLAP_DIST, restoreAfterDenied, resumeSpot, type ResumeGround } from "./restore";
 import { standPoint } from "./sit";
 
-const kWn0 = seatById("kWn-0")!;
+const kSn0 = seatById("kSn-0")!;
 
 describe("자리 복원 — 한 자리에는 한 명", () => {
   it("거절된 좌석 대신 가장 가까운 빈 좌석 (거절된 좌석·남의 좌석은 제외)", () => {
-    const occupied = new Map([["kWn-0", 7]]);
-    const s = fallbackSeat(kWn0, occupied, 3)!;
-    expect(s.id).not.toBe("kWn-0");
-    expect(Math.hypot(s.x - kWn0.x, s.y - kWn0.y)).toBeLessThanOrEqual(56);
-    // 옆자리(kWn-1)도 누가 앉았으면 그다음
-    const s2 = fallbackSeat(kWn0, new Map([["kWn-0", 7], [s.id, 8]]), 3)!;
-    expect([s.id, "kWn-0"]).not.toContain(s2.id);
+    const occupied = new Map([["kSn-0", 7]]);
+    const s = fallbackSeat(kSn0, occupied, 3)!;
+    expect(s.id).not.toBe("kSn-0");
+    expect(Math.hypot(s.x - kSn0.x, s.y - kSn0.y)).toBeLessThanOrEqual(56);
+    // 옆자리(kSn-1)도 누가 앉았으면 그다음
+    const s2 = fallbackSeat(kSn0, new Map([["kSn-0", 7], [s.id, 8]]), 3)!;
+    expect([s.id, "kSn-0"]).not.toContain(s2.id);
   });
 
   it("주변 좌석이 모두 차 있으면 좌석 앞에 서되, 거기 선 사람과 겹치지 않게 비켜 선다", () => {
     const occupied = new Map<string, number>();
-    for (const id of ["kWn-0", "kWn-1", "kWs-0", "kWs-1", "kWw", "kWe"]) occupied.set(id, 9);
-    const front = standPoint(kWn0);
-    const r = restoreAfterDenied(kWn0, occupied, 3, [front]);
-    // 모닥불 서쪽 둘레 자리가 모두 찼고 반경 안에 다른 가구는 없다 → 앉지 않고 좌석 앞에 비켜 선다
+    for (const id of ["kSn-0", "kSn-1", "kSs-0", "kSs-1", "kSw", "kSe"]) occupied.set(id, 9);
+    const front = standPoint(kSn0);
+    const r = restoreAfterDenied(kSn0, occupied, 3, [front]);
+    // 모닥불 둘레 자리가 모두 찼고 반경 안에 다른 가구는 없다 → 앉지 않고 좌석 앞에 비켜 선다
     expect(r.seat).toBeNull();
     expect(Math.hypot(r.stand.x - front.x, r.stand.y - front.y)).toBeGreaterThanOrEqual(OVERLAP_DIST);
     expect(Math.hypot(r.stand.x - front.x, r.stand.y - front.y)).toBeLessThanOrEqual(30);

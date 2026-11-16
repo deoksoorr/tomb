@@ -3,6 +3,8 @@ import {
   CHAT_MAX,
   CHAT_RECENT_MAX,
   CHAT_STORE_MAX,
+  isAwayMap,
+  type AwayMapId,
   type ChatLogLine,
 } from "@tomb/protocol";
 
@@ -22,8 +24,8 @@ export type RecentChat = {
   staff?: true;
   /** 11/16 매니저가 쓴 줄 */
   mgr?: true;
-  /** 11/16 쓴 사람이 있던 맵 (캠핑장이면 "camp", 마을이면 없음) */
-  m?: "camp";
+  /** 11/16 쓴 사람이 있던 맵 (캠핑장 "camp"·바닷가 "sea", 마을이면 없음) */
+  m?: AwayMapId;
 };
 
 export class ChatRecent {
@@ -65,7 +67,7 @@ export class ChatRecent {
       text: l.text,
       ...(l.staff ? { staff: true as const } : {}),
       ...(l.mgr ? { mgr: true as const } : {}),
-      ...(l.m === "camp" ? { m: "camp" as const } : {}),
+      ...(isAwayMap(l.m) ? { m: l.m } : {}),
       ...(visitorId !== undefined && l.visitorId === visitorId
         ? { mine: true as const }
         : {}),
@@ -134,6 +136,6 @@ function readStored(v: unknown): RecentChat | null {
     text: l.text.slice(0, CHAT_MAX * 2),
     ...(l.staff === true ? { staff: true as const } : {}),
     ...(l.mgr === true ? { mgr: true as const } : {}),
-    ...(l.m === "camp" ? { m: "camp" as const } : {}),
+    ...(isAwayMap(l.m) ? { m: l.m } : {}),
   };
 }

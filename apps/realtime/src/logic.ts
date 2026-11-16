@@ -1,4 +1,4 @@
-import { MAX_VALID_SPEED, MEGAPHONE_TTL_MS, MIN_CLIENT_VERSION, RATE_LIMIT_KICK_SEC, RATE_LIMIT_PER_SEC, encodeEvent, inMapBounds, parseClientVersion, type InternalSay, type MapId } from "@tomb/protocol";
+import { MAX_VALID_SPEED, MEGAPHONE_TTL_MS, MIN_CLIENT_VERSION, RATE_LIMIT_KICK_SEC, RATE_LIMIT_PER_SEC, encodeEvent, inMapBounds, mapOf, parseClientVersion, type InternalSay, type MapId } from "@tomb/protocol";
 
 // Workers 런타임 API에 의존하지 않는 작은 순수 로직. vitest로 단위 테스트한다(logic.test.ts).
 
@@ -112,9 +112,9 @@ export function parseSpawn(xs: string | null, ys: string | null, room = false, m
   return (room ? x <= 0xffff && y <= 0xffff : inMapBounds(map, x, y)) ? { x, y } : undefined;
 }
 
-/** ?m= 맵 (11/15). "camp"만 캠핑장, 나머지는 마을 */
+/** ?m= 맵 (11/15). "camp"는 캠핑장, 11/16 "sea"는 바닷가, 나머지는 마을 */
 export function parseMap(raw: string | null): MapId {
-  return raw === "camp" ? "camp" : "village";
+  return mapOf(raw);
 }
 
 /**
