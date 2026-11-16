@@ -108,7 +108,7 @@ describe("admitRoom", () => {
 
 describe("readConfig", () => {
   it("uses defaults and rejects invalid values", () => {
-    expect(readConfig({})).toEqual({ capacity: 40, maxChannels: 10, baseChannels: 2, threshold: 0.8, graceMs: 20_000 });
+    expect(readConfig({})).toEqual({ capacity: 60, maxChannels: 10, baseChannels: 2, threshold: 0.8, graceMs: 20_000 });
     expect(
       readConfig({ CHANNEL_CAPACITY: "25", MAX_CHANNELS: "3", BASE_CHANNELS: "3", AUTO_OPEN_THRESHOLD: "0.5", RECONNECT_GRACE_SEC: "0" }),
     ).toEqual({ capacity: 25, maxChannels: 3, baseChannels: 3, threshold: 0.5, graceMs: 0 });
