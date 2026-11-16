@@ -85,7 +85,8 @@ import { SeaForage } from "./seaForage";
 import { SeaLife } from "./seaLife";
 import { SeaRides } from "./SeaRides";
 import { SeaKayaks } from "./SeaKayaks";
-import { resolveHulls, SHIP_GAIN } from "../logic/bounce";
+import { remoteTouch, type SeaHull } from "./SeaRides";
+import { resolveHulls, SHIP_GAIN, strongerGain, type BounceKind } from "../logic/bounce";
 import { seaStandable } from "./seaLayout";
 import { shipHulls, shipWakeAt, type ShipHull } from "./seaShipsPlan";
 import { StarScopes } from "../scopes/StarScopes";
@@ -346,7 +347,9 @@ export class SeaScene extends Phaser.Scene {
         ...(this.rides?.hullBoxes() ?? []),
         ...(this.kayaks?.hullBoxes() ?? []),
         // 11/16 r19 지나가는 배·오징어잡이배도 단단해요 (세게 밀어내요)
-        ...this.shipHullsNow.map((s) => ({ id: s.id, box: s.box, empty: false, ship: { heavy: s.heavy, vx: s.vx, vy: s.vy } })),
+        ...this.shipHullsNow.map((s) => ({ id: s.id, box: s.box, empty: false, vx: s.vx, vy: s.vy, ship: { heavy: s.heavy } })),
+        // 11/16 r19 물에 있는 다른 사람 (헤엄·잠수 — 탄 사람은 놀거리 몸으로 들어 있어요)
+        ...this.swimmersNow,
       ],
       shipHit: (heavy, x, y) => this.shipHit(heavy, x, y),
       wake: (x, y) => shipWakeAt(x, y, this.shipHullsNow),
@@ -1332,8 +1335,9 @@ export class SeaScene extends Phaser.Scene {
     this.host.hub.read(this.move);
     if (this.host.hub.isBlocked || this.locked) this.move.ax = this.move.ay = 0;
     const started = pl.update(this.benchInput(now), now, this.seatReq);
-    // 11/16 r19 움직이는 배 몸통 (이번 프레임 — 놀거리·헤엄이 같이 써요)
+    // 11/16 r19 움직이는 배 몸통 · 물에 있는 다른 사람 (이번 프레임 — 놀거리·헤엄이 같이 써요)
     this.shipHullsNow = shipHulls(Date.now(), this.atmos.levels.darkness > 0.3);
+    this.updateSwimmers(dt);
     // 11/16 r13 튜브·제트스키 조종 (Player.update는 탄 동안 움직이지 않아요)
     this.rides?.steer(this.move, dt);
     this.kayaks?.steer(this.move, dt);
@@ -1580,18 +1584,63 @@ export class SeaScene extends Phaser.Scene {
    */
   private shipPush(now: number): void {
     const pl = this.player;
-    if (!pl.inWater || pl.inBoat || !this.shipHullsNow.length) return;
+    if (!pl.inWater || pl.inBoat) return;
     const body = pl.sprite.body as Phaser.Physics.Arcade.Body;
     const ox = body.x - pl.x;
     const oy = body.y - pl.y;
     const m = { x: pl.x, y: pl.y, vx: body.velocity.x, vy: body.velocity.y };
     const ok = (x: number, y: number) => (pl.water?.(x, y) ?? true) && seaStandable(x, y) && !onSeaDeck(x, y);
-    const hit = resolveHulls(m, (x, y) => ({ x: x + ox, y: y + oy, w: body.width, h: body.height }), this.shipHullsNow.map((s) => s.box), ok);
-    if (!hit) return;
+    // 배 (단단히 다 밀어내요) + 물에 있는 다른 사람 (서서 겹친 건 조금씩 — 덜컥 튀지 않게)
+    const ships = this.shipHullsNow.length;
+    const all = [
+      ...this.shipHullsNow.map((s) => ({ box: s.box, vx: s.vx, vy: s.vy, kind: undefined as BounceKind | undefined })),
+      ...this.swimmersNow.map((s) => ({ box: s.box, vx: s.vx ?? 0, vy: s.vy ?? 0, kind: s.kind })),
+    ];
+    const hit = resolveHulls(m, (x, y) => ({ x: x + ox, y: y + oy, w: body.width, h: body.height }), all.map((s) => s.box), ok, {
+      gentle: (i) => i >= ships,
+      vel: (i) => all[i],
+    });
+    if (!hit) {
+      // 다른 사람(헤엄·그 사람이 탄 놀거리·카약)이 가까이 닿았어요 — 그쪽 화면에선 이미 튕겨 나가 겹치지 않아요 → 나도 튕겨요
+      const ridden = [...(this.rides?.hullBoxes() ?? []), ...(this.kayaks?.hullBoxes() ?? [])].filter((h) => h.remote);
+      const t = remoteTouch({ x: pl.x + ox, y: pl.y + oy, w: body.width, h: body.height }, m, [...this.swimmersNow, ...ridden]);
+      if (t && pl.knock(t.contact, now, "swim", { rvx: t.o.vx ?? 0, rvy: t.o.vy ?? 0, gain: strongerGain("swim", t.o.kind) }) > 0 && !this.host.reduced) this.fx.splash(pl.x - t.contact.nx * 5, pl.y - t.contact.ny * 3);
+      return;
+    }
     if (m.x !== pl.x || m.y !== pl.y) body.reset(m.x, m.y);
-    const s = this.shipHullsNow[hit.index];
-    const sp = pl.knock(hit.contact, now, "swim", { gain: SHIP_GAIN[s.heavy], minInto: 0, rvx: s.vx, rvy: s.vy });
-    if (sp > 0) this.shipHit(s.heavy, pl.x - hit.contact.nx * 6, pl.y - hit.contact.ny * 4);
+    const o = all[hit.index];
+    if (hit.index < ships) {
+      const s = this.shipHullsNow[hit.index];
+      const sp = pl.knock(hit.contact, now, "swim", { gain: SHIP_GAIN[s.heavy], minInto: 0, rvx: s.vx, rvy: s.vy });
+      if (sp > 0) this.shipHit(s.heavy, pl.x - hit.contact.nx * 6, pl.y - hit.contact.ny * 4);
+      return;
+    }
+    // 헤엄치는 사람끼리는 살살, 다른 사람이 탄 것이면 그것만큼 세게 (서로 다가간 만큼)
+    const sp = pl.knock(hit.contact, now, "swim", { rvx: o.vx, rvy: o.vy, gain: strongerGain("swim", o.kind) });
+    if (sp > 0 && !this.host.reduced) this.fx.splash(pl.x - hit.contact.nx * 5, pl.y - hit.contact.ny * 3);
+  }
+
+  /** 11/16 r19 물에 있는 다른 사람 (헤엄·잠수 중, 보이는 사람) — 작은 몸 상자 · 속도 (지난 자리에서) */
+  private swimmersNow: SeaHull[] = [];
+  private readonly swimPrev = new Map<Sid, { x: number; y: number; vx: number; vy: number }>();
+  private updateSwimmers(dt: number): void {
+    const out: SeaHull[] = [];
+    const seen = new Set<Sid>();
+    for (const r of this.remotes.values()) {
+      if (!r.visible || r.away || (r.stateId !== STATE.swim && r.stateId !== STATE.dive)) continue;
+      seen.add(r.sid);
+      const p = this.swimPrev.get(r.sid);
+      const k = Math.min(1, Math.max(1, dt) / 120);
+      const vx = p && dt > 0 ? p.vx + (((r.x - p.x) / Math.max(1, dt)) * 1000 - p.vx) * k : 0;
+      const vy = p && dt > 0 ? p.vy + (((r.y - p.y) / Math.max(1, dt)) * 1000 - p.vy) * k : 0;
+      // 순간이동(300px/s 넘게)은 속도로 치지 않아요
+      const sv = { vx: Math.abs(vx) > 300 ? 0 : vx, vy: Math.abs(vy) > 300 ? 0 : vy };
+      this.swimPrev.set(r.sid, { x: r.x, y: r.y, ...sv });
+      // 내 몸 상자와 같은 크기 (Player BODY 8×5, 발 위)
+      out.push({ id: `p:${r.sid}`, box: { x: Math.round(r.x - 4), y: Math.round(r.y - 5), w: 8, h: 5 }, empty: false, ...sv, kind: "swim", remote: true });
+    }
+    for (const sid of this.swimPrev.keys()) if (!seen.has(sid)) this.swimPrev.delete(sid);
+    this.swimmersNow = out;
   }
 
   /** 11/16 r19 배에 부딪혔어요: 큰 물보라 (큰 배는 더 크게) · 화물선·유조선은 뱃고동도 */

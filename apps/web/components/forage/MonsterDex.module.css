@@ -39,6 +39,17 @@
   object-fit: contain;
 }
 
+/* 11/16 번호(최대 세 자리)·처치 표시가 그림에 가려 잘리던 것: 글씨를 그림 위로, 그림은 조금 작게 + 칸 안에서 살짝 아래로 */
+.cell {
+  padding-top: 6px;
+}
+
+.cell > span {
+  z-index: 1;
+  line-height: 1;
+  text-shadow: 0 0 2px var(--surface), 0 0 2px var(--surface);
+}
+
 .cell[data-known="true"][data-role="boss"] {
   box-shadow:
     0 0 0 1px var(--danger),

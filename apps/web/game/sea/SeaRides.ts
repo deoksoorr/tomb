@@ -4,7 +4,7 @@ import { BIG_RIDE_TOAST, myBig } from "../camp/foodState";
 import type { Player } from "../entities/Player";
 import type { RemoteAvatar } from "../entities/RemoteAvatar";
 import { hullBlocks } from "../logic/boat";
-import { Bounce, knockMove, nudgeAmp, nudgeOffset, resolveHulls, SHIP_GAIN, touchContact, type Box } from "../logic/bounce";
+import { Bounce, knockMove, nudgeAmp, nudgeOffset, resolveHulls, SHIP_GAIN, strongerGain, touchContact, touchHit, type BounceKind, type Box } from "../logic/bounce";
 import type { MoveInput } from "../logic/movement";
 import { RideSound } from "../world/RideSound";
 import { bystanderGain } from "../world/rides";
@@ -48,7 +48,24 @@ export type SeaRideHost = {
 };
 
 /** 11/16 r19 놀거리 하나의 몸 상자 (id = 놀거리 id · 카약은 pK1 같은 카약 id, empty = 아무도 안 탐) */
-export type SeaHull = { id: string; box: Box; empty: boolean; ship?: { heavy: "big" | "medium"; vx: number; vy: number } };
+/**
+ * 11/16 r19 사용자 "바다에서는 오브젝트가 서로 다 튕겨야 해": 놀거리·카약·배·물에 있는 다른 사람 모두.
+ * vx·vy = 그것의 속도 (다른 사람이 탄 것·헤엄치는 사람·배 — 서로 다가간 만큼 세게), kind = 그것의 종류 (더 센 쪽 세기로)
+ */
+/** remote = 다른 사람 (헤엄·그 사람이 탄 것) — 가까이 닿기만 해도 튕겨요 (logic/bounce touchHit) */
+export type SeaHull = { id: string; box: Box; empty: boolean; vx?: number; vy?: number; kind?: BounceKind; ship?: { heavy: "big" | "medium" }; remote?: boolean };
+
+/**
+ * 11/16 r19 겹치지 않았어도 다른 사람과 가까이 닿았고 서로 다가가는 중이면 튕기기 (상대는 자기 화면에서 이미 튕겨 나가 겹치지 않아요).
+ * 튕겼으면 그 상대 (밀어내지는 않아요)
+ */
+export function remoteTouch(me: Box, mv: { vx: number; vy: number }, others: readonly SeaHull[]): { contact: { nx: number; ny: number; depth: number }; o: SeaHull; rvx: number; rvy: number } | null {
+  const rs = others.filter((o) => o.remote);
+  const t = touchHit(me, rs.map((o) => o.box));
+  if (!t) return null;
+  const o = rs[t.index];
+  return { contact: t.contact, o, rvx: mv.vx - (o.vx ?? 0), rvy: mv.vy - (o.vy ?? 0) };
+}
 
 type View = {
   def: SeaRide;
@@ -68,6 +85,9 @@ type View = {
   lastY: number;
   wakeAt: number;
   sprayAt: number;
+  /** 11/16 r19 지금 속도 (px/s — 다른 사람이 탄 것을 받을 때 서로 다가간 만큼) */
+  vx: number;
+  vy: number;
   /** 11/16 r19 받혀 살짝 밀린 쪽 · 세기 · 때 (빈 놀거리 그림만) */
   nudge: { nx: number; ny: number; amp: number; at: number } | null;
   /** 11/16 r14 헤엄치는 사람이 부딪히는 몸 (탄 사람 자신은 빼요) */
@@ -128,7 +148,7 @@ export class SeaRides {
         : s.add.image(def.x, def.y, key).setOrigin(0.5, 1).setVisible(false);
       const block = s.add.zone(def.x, def.y, 1, 1).setOrigin(0, 0);
       block.removeFromDisplayList();
-      this.views.push({ def, body, front, x: def.x, y: def.y, dir: DIR.down, owner: null, leftFrom: null, leftAt: 0, speed: 0, lastX: def.x, lastY: def.y, wakeAt: 0, sprayAt: 0, nudge: null, block, blockKey: "", passUntil: 0 });
+      this.views.push({ def, body, front, x: def.x, y: def.y, dir: DIR.down, owner: null, leftFrom: null, leftAt: 0, speed: 0, lastX: def.x, lastY: def.y, wakeAt: 0, sprayAt: 0, vx: 0, vy: 0, nudge: null, block, blockKey: "", passUntil: 0 });
     }
     // 11/16 r14 사용자: 헤엄치다 제트스키·튜브를 그냥 지나가요 → 부딪혀요 (내가 탄 것·막 내린 것은 빼요)
     // 마을 배(BoatRide hullBlocks)와 같은 규칙: 헤엄·잠수 중이고 아무것도 안 탔을 때만, 보이는 놀거리만, 막 내린 것은 잠깐 통과.
@@ -338,18 +358,30 @@ export class SeaRides {
     const ok = tube ? (x: number, y: number) => seaTubeWater(x, y, level) : (x: number, y: number) => seaJetWater(x, y);
     knockMove(m, this.bounce.take(dtMs), ok, this.bounce);
     const others = h.hulls().filter((o) => o.id !== v.def.id);
-    const hit = resolveHulls(m, (x, y) => rideBox(v.def.kind, m.dir, x, y), others.map((o) => o.box), ok);
+    const hit = resolveHulls(m, (x, y) => rideBox(v.def.kind, m.dir, x, y), others.map((o) => o.box), ok, {
+      gentle: (i) => !others[i].ship,
+      vel: (i) => ({ vx: others[i].vx ?? 0, vy: others[i].vy ?? 0 }),
+    });
     if (hit) {
       const o = others[hit.index];
-      // 움직이는 배: 배 속도만큼 서로 다가간 것으로 쳐서 세게 (가만히 있다 배에 밀려도 튕겨요)
+      // 서로 다가간 만큼 (움직이는 배·다른 사람이 탄 것·헤엄치는 사람 — 가만히 있다 받혀도 튕겨요), 더 센 쪽 세기로
+      const rvx = hit.vx - (o.vx ?? 0);
+      const rvy = hit.vy - (o.vy ?? 0);
       const sp = o.ship
-        ? this.bounce.hit(now, hit.contact, v.def.kind, hit.vx - o.ship.vx, hit.vy - o.ship.vy, { gain: SHIP_GAIN[o.ship.heavy], minInto: 0 })
-        : this.bounce.hit(now, hit.contact, v.def.kind, hit.vx, hit.vy);
+        ? this.bounce.hit(now, hit.contact, v.def.kind, rvx, rvy, { gain: SHIP_GAIN[o.ship.heavy], minInto: 0 })
+        : this.bounce.hit(now, hit.contact, v.def.kind, rvx, rvy, { gain: strongerGain(v.def.kind, o.kind) });
       if (sp > 0) {
         this.sound.thump(tube ? 0.3 : 0.55, tube ? 1.3 : 1.05);
         if (o.ship) h.shipHit(o.ship.heavy, m.x - hit.contact.nx * 8, m.y - hit.contact.ny * 4);
         else if (!h.reduced) h.splash(m.x - hit.contact.nx * 8, m.y - hit.contact.ny * 4);
         if (o.empty) h.nudge(o.id, -hit.contact.nx, -hit.contact.ny, nudgeAmp(sp));
+      }
+    } else {
+      // 다른 사람이 가까이 닿았어요 (그쪽 화면에선 이미 튕겨 나갔어요) → 나도 튕겨요
+      const t = remoteTouch(rideBox(v.def.kind, m.dir, m.x, m.y), m, others);
+      if (t && this.bounce.hit(now, t.contact, v.def.kind, t.rvx, t.rvy, { gain: strongerGain(v.def.kind, t.o.kind) }) > 0) {
+        this.sound.thump(tube ? 0.3 : 0.55, tube ? 1.3 : 1.05);
+        if (!h.reduced) h.splash(m.x - t.contact.nx * 8, m.y - t.contact.ny * 4);
       }
     }
     v.x = m.x;
@@ -367,7 +399,8 @@ export class SeaRides {
     const now = this.host.scene.time.now;
     const c = touchContact({ x: pl.body.x, y: pl.body.y, w: pl.body.width, h: pl.body.height }, { x: zb.x, y: zb.y, w: zb.width, h: zb.height });
     if (!c) return;
-    const sp = pl.knock(c, now);
+    // 11/16 r19 다른 사람이 탄 제트스키·튜브가 나를 받아도 튕겨요 (그것의 속도만큼, 더 센 쪽 세기로)
+    const sp = pl.knock(c, now, "swim", { rvx: v.vx, rvy: v.vy, gain: strongerGain("swim", v.def.kind) });
     if (sp <= 0) return;
     this.sound.thump(0.22, 1.4);
     if (!this.host.reduced) this.host.splash(pl.x - c.nx * 5, pl.y - c.ny * 3);
@@ -376,7 +409,18 @@ export class SeaRides {
 
   /** 11/16 r19 놀거리 몸 상자들 (부딪혀 튕기기 — 사라지는 중인 제트스키는 빼요) */
   hullBoxes(): SeaHull[] {
-    return this.views.filter((v) => v.body.alpha >= 0.5).map((v) => ({ id: v.def.id, box: rideBox(v.def.kind, v.dir, Math.round(v.x), Math.round(v.y)), empty: v.owner === null }));
+    return this.views
+      .filter((v) => v.body.alpha >= 0.5)
+      .map((v) => ({
+        id: v.def.id,
+        box: rideBox(v.def.kind, v.dir, Math.round(v.x), Math.round(v.y)),
+        empty: v.owner === null,
+        vx: v.vx,
+        vy: v.vy,
+        kind: v.def.kind,
+        // 다른 사람이 탄 것
+        ...(v.owner !== null && v.owner !== -1 ? { remote: true } : {}),
+      }));
   }
 
   /** 받힌 빈 놀거리를 살짝 밀어요 (그림만 — 곧 제자리) */
@@ -451,6 +495,11 @@ export class SeaRides {
       const dt = Math.max(1, dtMs);
       const inst = (Math.hypot(v.x - v.lastX, v.y - v.lastY) / dt) * 1000;
       v.speed = inst > 400 ? v.speed : v.speed + (inst - v.speed) * Math.min(1, dt / 160);
+      if (inst <= 400) {
+        const kk = Math.min(1, dt / 120);
+        v.vx += (((v.x - v.lastX) / dt) * 1000 - v.vx) * kk;
+        v.vy += (((v.y - v.lastY) / dt) * 1000 - v.vy) * kk;
+      }
       v.lastX = v.x;
       v.lastY = v.y;
       this.draw(v, now, wall, rider);

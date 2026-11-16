@@ -331,7 +331,7 @@ function EditToolbar({
               onClick={() => onBuyTrial(trialDef.id)}
               aria-label={`${trialDef.name}, ${trialCost}포인트에 사서 이 자리에 놓기`}
             >
-              {buying ? "…" : `${fmt(trialCost)}P${my.points < trialCost ? " · 모자라요" : " · 사서 놓기"}`}
+              {buying ? "…" : `${fmt(trialCost)}P${my.points < trialCost ? ` · ${fmt(trialCost - my.points)}P 부족해요` : " · 사서 놓기"}`}
             </button>
           )}
           <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => tool({ action: "tryEnd", keep: false })}>

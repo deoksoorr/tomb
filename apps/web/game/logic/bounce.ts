@@ -139,6 +139,10 @@ export function knockMove(p: { x: number; y: number }, d: { dx: number; dy: numb
 }
 
 export type HullHit = { contact: Contact; index: number; vx: number; vy: number };
+/** 11/16 r19 거의 서서 겹친 것(내리자마자·태어나자마자 겹친 사람·놀거리)은 한 번에 이만큼씩만 떼어 놓아요 (덜컥 튀지 않게) */
+export const GENTLE_STEP = 1.2;
+/** 겹친 것의 속도 (움직이는 다른 사람·놀거리·배) — 서로 다가간 만큼으로 들이받음을 재요 */
+export type HullOpts = { gentle?: (index: number) => boolean; vel?: (index: number) => { vx: number; vy: number } };
 
 /**
  * 내 몸 상자가 다른 것들과 겹쳤으면: 겹친 만큼 밖으로 밀어내고(갈 수 있을 때만 — 데크 쪽이면 그대로), 들이받던 속도는 버려요.
@@ -149,6 +153,7 @@ export function resolveHulls(
   box: (x: number, y: number) => Box,
   others: readonly Box[],
   ok: (x: number, y: number) => boolean,
+  opts: HullOpts = {},
 ): HullHit | null {
   let first: HullHit | null = null;
   const vx = m.vx;
@@ -157,6 +162,10 @@ export function resolveHulls(
     const c = hullContact(box(m.x, m.y), o);
     if (!c) return;
     first ??= { contact: c, index, vx, vy };
+    // 거의 서서 겹쳤으면 (서로 다가가는 속도가 작으면) 조금씩만 떼어 놓아요
+    const ov = opts.vel?.(index) ?? { vx: 0, vy: 0 };
+    const into = -((vx - ov.vx) * c.nx + (vy - ov.vy) * c.ny);
+    const cap = opts.gentle?.(index) && into < BOUNCE_MIN_INTO ? GENTLE_STEP : Infinity;
     // 덜 겹친 쪽으로 밀어내요. 그쪽이 데크·바위·땅이면 다른 쪽(옆 → 반대)으로 — 물 쪽으로만, 갈 곳이 없으면 그대로 (가두지도 파묻지도 않아요)
     const me = box(m.x, m.y);
     const dxL = me.x + me.w - o.x;
@@ -174,8 +183,10 @@ export function resolveHulls(
     ];
     const t = tries.find(([dx, dy]) => ok(m.x + dx, m.y + dy));
     if (t) {
-      m.x += t[0];
-      m.y += t[1];
+      const len = Math.hypot(t[0], t[1]);
+      const k = len > cap ? cap / len : 1;
+      m.x += t[0] * k;
+      m.y += t[1] * k;
     }
     const vn = m.vx * c.nx + m.vy * c.ny;
     if (vn < 0) {
@@ -203,4 +214,24 @@ export function nudgeAmp(speed: number): number {
 export function touchContact(me: Box, o: Box): Contact | null {
   const g = 1.5;
   return hullContact({ x: me.x - g, y: me.y - g, w: me.w + g * 2, h: me.h + g * 2 }, o);
+}
+
+/** 11/16 r19 둘이 부딪히면 더 센 쪽 세기로 (제트스키가 헤엄치는 사람을 받으면 제트스키만큼 세게 튕겨요) */
+export function strongerGain(a: BounceKind, b?: BounceKind): { base: number; k: number; max: number } {
+  if (!b) return BOUNCE_GAIN[a];
+  return BOUNCE_GAIN[a].max >= BOUNCE_GAIN[b].max ? BOUNCE_GAIN[a] : BOUNCE_GAIN[b];
+}
+
+/**
+ * 11/16 r19 다른 사람(헤엄·탄 것)과는 각자 자기 화면에서 먼저 닿은 쪽이 튕겨 나가, 다른 쪽 화면에선 겹치기 전에 멀어져요.
+ * 그래서 겹치지 않아도 이만큼 가까이 닿으면 (서로 다가가는 중이면) 나도 튕겨요 — 둘 다 튕겨요. 밀어내지는 않아요
+ */
+export const TOUCH_MARGIN = 6;
+export function touchHit(me: Box, others: readonly Box[], margin = TOUCH_MARGIN): { contact: Contact; index: number } | null {
+  const big = { x: me.x - margin, y: me.y - margin, w: me.w + margin * 2, h: me.h + margin * 2 };
+  for (let i = 0; i < others.length; i++) {
+    const c = hullContact(big, others[i]);
+    if (c) return { contact: c, index: i };
+  }
+  return null;
 }

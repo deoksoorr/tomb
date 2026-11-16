@@ -121,7 +121,7 @@ export default function ExteriorDialog({
             {toBuy.length > 0 && (
               <p className={cx(styles.small, short && styles.error)}>
                 미리보는 중이에요. 안 산 아이템 {toBuy.length}개({toBuy.map((id) => furnitureById(id)?.name).join(", ")})는 모두 {fmt(cost)}P예요.
-                {short ? ` ${fmt(cost - my.points)}P 모자라요.` : ""}
+                {short ? ` ${fmt(cost - my.points)}P 부족해요.` : ""}
               </p>
             )}
             <div className={styles.row}>
