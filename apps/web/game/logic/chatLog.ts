@@ -4,7 +4,7 @@
 // 방에 들어올 때 서버가 보내 주는 최근 기록(chatLog — 서버가 잠들었다 깨도 맵별 최근 50줄은 남는다)은 받은 줄과
 // 서버 줄 id(key)로 합친다 (내가 쓴 줄은 글·시각으로 맞춘다).
 
-import { CHAT_HISTORY_MS, CHAT_MAX, CHAT_RECENT_MAX, CHAT_RECENT_MS } from "@tomb/protocol";
+import { CHAT_HISTORY_MS, CHAT_MAX, CHAT_RECENT_MAX, CHAT_RECENT_MS, MAP_TAG, awayTag, mapOf, type AwayMapId, type MapId } from "@tomb/protocol";
 
 /** "방금 오간 글"로 보는 시간: 폰 화면 글씨가 떠 있는 시간, 기록창에서 흐려지지 않는 시간 */
 export const CHAT_LOG_TTL_MS = CHAT_RECENT_MS;
@@ -38,8 +38,8 @@ export type ChatLine = {
   mgr?: true;
   /** 보낸 사람의 닉네임 꾸미기 id (이름 글자·이름표 — 게임이 아는 그 사람 착용 목록에서). 없으면 그냥 이름 */
   ns?: string[];
-  /** 11/16 쓴 사람이 있던 맵 (캠핑장이면 "camp", 없으면 마을) → 다른 맵에서 보면 [캠핑장]·[마을] (chatPlaceTag) */
-  m?: "camp";
+  /** 11/16 쓴 사람이 있던 맵 (캠핑장 "camp"·바닷가 "sea", 없으면 마을) → 다른 맵에서 보면 [캠핑장]·[바닷가]·[마을] (chatPlaceTag) */
+  m?: AwayMapId;
   /**
    * 11/16 귓속말 줄 (이 화면에만, 서버 기록에는 없다). out = 내가 보냄(name = 받는 사람), in = 받음(name = 보낸 사람),
    * fail = 못 보냄 안내, note = 쓰는 법 안내 (둘 다 text만). 채팅창에 "[귓속말] 나 → 진순: …"처럼 분홍색으로
@@ -132,18 +132,18 @@ export function readChatLog(serverNow: unknown, raw: unknown, localNow: number):
     if (typeof l.id !== "string" || !l.id || l.id.length > 64 || typeof l.at !== "number" || !Number.isFinite(l.at)) continue;
     if (typeof l.name !== "string" || typeof l.text !== "string" || !l.text) continue;
     const age = Math.max(0, serverNow - l.at);
-    out.push({ key: l.id, name: l.name.slice(0, 40), text: l.text.slice(0, CHAT_MAX * 2), mine: l.mine === true, ...(l.staff === true ? { staff: true } : {}), ...(l.mgr === true ? { mgr: true } : {}), ...(l.m === "camp" ? { m: "camp" as const } : {}), at: localNow - age });
+    out.push({ key: l.id, name: l.name.slice(0, 40), text: l.text.slice(0, CHAT_MAX * 2), mine: l.mine === true, ...(l.staff === true ? { staff: true } : {}), ...(l.mgr === true ? { mgr: true } : {}), ...awayTag(l.m), at: localNow - age });
   }
   return out;
 }
 
 /**
- * 11/16 다른 맵에서 쓴 줄 앞 표시: 지금 보는 맵(here)과 쓴 사람의 맵이 다르면 "[캠핑장]"·"[마을]", 같거나 맵을 모르면(집 안 등) null
+ * 11/16 다른 맵에서 쓴 줄 앞 표시: 지금 보는 맵(here)과 쓴 사람의 맵이 다르면 "[캠핑장]"·"[바닷가]"·"[마을]", 같거나 맵을 모르면(집 안 등) null
  */
-export function chatPlaceTag(line: Pick<ChatLine, "m">, here: "camp" | "village" | null): string | null {
+export function chatPlaceTag(line: Pick<ChatLine, "m">, here: MapId | null): string | null {
   if (!here) return null;
-  const from = line.m === "camp" ? "camp" : "village";
-  return from === here ? null : from === "camp" ? "[캠핑장]" : "[마을]";
+  const from = mapOf(line.m);
+  return from === here ? null : MAP_TAG[from];
 }
 
 /**

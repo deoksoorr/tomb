@@ -9,6 +9,7 @@ import {
   CAMP_OFFICE,
   CAMP_OFFICE_H,
   CAMP_OFFICE_W,
+  CAMP_SCOPES,
   CAMP_TARP,
   CAMP_VANS,
   CAMP_WIDTH,
@@ -109,7 +110,7 @@ export function toCampMinimap(x: number, y: number): { x: number; y: number } {
   return { x: x / CAMP_MINIMAP_CELL, y: y / CAMP_MINIMAP_CELL };
 }
 
-export type CampLandmark = { id: string; label: string; x: number; y: number; kind: "bus" | "office" | "fire" | "lookout" | "tarp" | "van" | "stream" };
+export type CampLandmark = { id: string; label: string; x: number; y: number; kind: "bus" | "office" | "fire" | "lookout" | "tarp" | "van" | "stream" | "telescope" };
 /** 미니맵 주요 장소 (UI가 작은 표시를 그린다) */
 export const CAMP_LANDMARKS: readonly CampLandmark[] = [
   { id: "bus", label: "버스 정류장", x: CAMP_BUS_STOP.x, y: CAMP_BUS_STOP.y, kind: "bus" },
@@ -119,6 +120,8 @@ export const CAMP_LANDMARKS: readonly CampLandmark[] = [
   { id: "tarp", label: "큰 타프", x: CAMP_TARP.x + CAMP_TARP.w / 2, y: CAMP_TARP.y + CAMP_TARP.h / 2, kind: "tarp" },
   { id: "vans", label: "캠핑카", x: CAMP_VANS[1].x, y: CAMP_VANS[1].y - 10, kind: "van" },
   { id: "stream", label: "계곡", x: 1046, y: 470, kind: "stream" },
+  // 11/16 별 망원경 (전망대 계단 아래·계곡 둑 — 미니맵 망원경 그림)
+  ...CAMP_SCOPES.map((s): CampLandmark => ({ id: s.id, label: s.name, x: s.x, y: s.y, kind: "telescope" })),
 ];
 /** 주요 장소 표시 색 */
 export const CAMP_LANDMARK_COLOR: Record<CampLandmark["kind"], string> = {
@@ -129,4 +132,5 @@ export const CAMP_LANDMARK_COLOR: Record<CampLandmark["kind"], string> = {
   tarp: "#f0a060",
   van: "#e8e0c8",
   stream: "#9ad8ff",
+  telescope: "#fff2a0",
 };

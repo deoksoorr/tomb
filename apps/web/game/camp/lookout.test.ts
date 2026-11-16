@@ -27,8 +27,9 @@ describe("전망대 망원경 (lookoutMath)", () => {
     expect(scopeCaption(5, [])).toBe("5번 데크는 비어 있어요.");
     expect(scopeCaption(3, tentViews([{ deck: 3, lit: true }]))).toBe("3번 데크 텐트에 불이 켜져 있어요.");
     expect(scopeCaption(null, [])).toMatch(/방향키/);
-    // 터치 기기는 조이스틱·[상호작용] 버튼으로 안내한다
-    expect(scopeCaption(null, [], true)).toBe("조이스틱으로 둘러봐요. [상호작용] 버튼을 누르면 내려놓아요.");
+    // 터치 기기는 조이스틱·화면 탭으로 안내한다 (11/16 r19 바라보는 동안엔 행동 버튼이 숨어요 · 데스크톱은 Esc)
+    expect(scopeCaption(null, [], true)).toBe("조이스틱으로 둘러봐요. 화면을 탭하면 내려놓아요.");
+    expect(scopeCaption(null, [])).toMatch(/Esc/);
   });
   it("가운데에 가까운 데크를 고르고, 불빛 깜빡임은 0.55~1", () => {
     expect(aimedDeck(CAMP_DECKS[6])).toBe(7);

@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { CAMPFIRES, campfireOfSeat, dexBadgeCats, DIR, FURNITURE, LAKE_PIER, houseLot, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, sanitizeDye, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
+import { CAMPFIRES, campfireOfSeat, dexBadgeCats, DIR, MAP_NAME, type AwayMapId, FURNITURE, LAKE_PIER, houseLot, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, sanitizeDye, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
 import { avatarColorSpec, type AppearanceChange } from "../sprites/avatar";
 import { saveResume, type ResumePose, type ResumeState } from "@/lib/resume";
 import { nameStyleIds } from "@/lib/nameStyle";
@@ -66,9 +66,10 @@ import { MeScreen } from "../world/MeScreen";
 import type { GameContext } from "./context";
 import { FEST_FIREWORK_MS, FEST_MS } from "@/lib/forage/quests/urgent";
 import type { ShopContext } from "./ShopScene";
-import { CampTrip, VILLAGE_BUS_LAND } from "../camp/CampTrip";
+import { CampTrip, villageLandFor } from "../camp/CampTrip";
 import { BIG_RIDE_TOAST, myBig, RIDE_OBJECT_KINDS } from "../camp/foodState";
 import type { CampFriend } from "../camp/campHost";
+import { publishRide, rideBlocked, standForGate } from "@/lib/rideGate";
 
 // 월드 씬: 맵·묘비·내 캐릭터·원격 아바타·분위기·조명·카메라·네트워크를 묶고 bridge 이벤트를 처리한다.
 // 유령 잡화점에 들어가면 이 씬은 숨기만 하고(업데이트·연결은 유지) 상점 씬이 그 위에 그려진다.
@@ -268,8 +269,9 @@ export class WorldScene extends Phaser.Scene {
       } else if (!initial) this.pendingFocus = opts.focusGraveId;
     }
     // 11/15 캠핑장에서 새로고침: 마을의 나는 버스 정류장에 세워 두고 캠핑장 장면이 그 자리를 잇는다 (create 끝에서)
-    const campResume = opts.resume?.where === "camp" ? opts.resume : null;
-    if (campResume) spawn = VILLAGE_BUS_LAND;
+    // 11/16 바닷가도 같다 (마을의 나는 바닷가행 정류장에)
+    const campResume = opts.resume?.where === "camp" || opts.resume?.where === "sea" ? opts.resume : null;
+    if (campResume?.where) spawn = villageLandFor(campResume.where);
     // 새로고침 직전 자리로 시작한다 (의자는 그 앞에 서서 앉는 동작으로 — 거절되면 바닥이 아니라 그 앞으로 돌아오게)
     this.resume = campResume ? null : (opts.resume ?? null);
     this.restoreSeat = null;
@@ -366,7 +368,7 @@ export class WorldScene extends Phaser.Scene {
       isFriend: (sid, name) => this.net.channel === this.friends.ch && this.friends.bySid.get(sid) === name,
       toast: (m) => this.toast(m),
     });
-    if (campResume) this.net.map = "camp";
+    if (campResume?.where) this.net.map = campResume.where;
     new HauntHouseView(this, this.map.colliders, this.reduced, () => this.player); // 귀신의집 건물·간판·등불·안개·근처 소리 (game/haunt)
     new TowerView(this, this.map.colliders, this.reduced, () => this.atmos?.levels.darkness ?? 0); // 11/15 야근 빌딩 (game/tower)
     this.life = new VillageLife({
@@ -810,6 +812,8 @@ export class WorldScene extends Phaser.Scene {
     // 휴식 중(탭이 숨겨져 게임 루프를 재움)은 실시간 연결에서 탭 숨김과 같게
     on.push(bridge.on("game:rest", ({ on: resting }) => this.net.setResting(resting)));
     on.push(bridge.on("grave:focus", ({ graveId, walk }) => (this.trip.away ? this.toast("묘비는 마을에 있어요. 버스를 타고 마을로 돌아가요.") : this.focusGrave(graveId, walk))));
+    // 11/16 [사냥] 버튼 → 사냥터 입구까지 걸어가기 (lib/huntWalk — 캠핑장·바닷가·탈것은 UI가 먼저 거른다). null = 그만 걷기
+    on.push(bridge.on("portal:walkTo", ({ kind }) => this.walkToPortal(kind)));
     on.push(
       bridge.on("grave:buried", ({ graveId }) => {
         this.net.graveEvent("buried", graveId);
@@ -844,11 +848,11 @@ export class WorldScene extends Phaser.Scene {
         for (const r of this.remotes.values()) r.view.setFriend(this.isFriend(r));
       }),
     );
-    // 11/15 친구가 캠핑장에 있으면 버스를 거쳐 그 옆으로 (캠핑장에 있는 동안은 캠핑장 장면이 받는다)
+    // 11/15 친구가 캠핑장에 있으면 버스를 거쳐 그 옆으로 (캠핑장에 있는 동안은 캠핑장 장면이 받는다). 11/16 바닷가도 같다
     on.push(
       bridge.on("friend:goto", ({ sid, name, x, y, map }) => {
         if (this.trip.away) return;
-        if (map === "camp") this.goToCampFriend({ sid, name, x, y });
+        if (map) this.goToCampFriend({ sid, name, x, y }, map);
         else this.goToFriend(sid, name, x, y);
       }),
     );
@@ -867,6 +871,8 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("input:whoOn", ({ names }) => !this.cleaned && this.net.whoOn(names)));
     on.push(bridge.on("input:mood", ({ mood }) => !this.cleaned && !this.trip.away && this.expr.setMood(mood)));
     on.push(bridge.on("input:ride", () => !this.cleaned && !this.inShop && !this.trip.away && !this.tripLock && this.riding.toggle()));
+    // 11/16 사냥터·미니게임·집으로 가기 직전 (lib/rideGate): 의자·그네 같은 자리에서 일어난다 (캠핑장·바닷가에 있으면 그 장면이 받는다)
+    on.push(bridge.on("player:stand", () => !this.cleaned && !this.inShop && !this.trip.away && standForGate(this.player, this.time.now, this.seatReq)));
     on.push(bridge.on("guide:point", ({ target, label }) => !this.trip.away && this.guide.set(target ? this.resolveGuide(target, label) : null)));
     on.push(bridge.on("world:lot", ({ lot, label }) => (this.trip.away ? this.toast("마을로 돌아간 뒤에 볼 수 있어요.") : this.showLot(lot, label))));
     on.push(
@@ -994,6 +1000,18 @@ export class WorldScene extends Phaser.Scene {
       bridge.emit("grave:open", { graveId: id });
     }
     this.startNet();
+  }
+
+  /** 11/16 입구까지 걷기 (null = 그만). 마을 밖(캠핑장·바닷가·버스)·실내에서는 걷지 않는다 */
+  private walkToPortal(kind: "hunt" | null): void {
+    if (this.cleaned) return;
+    if (!kind) {
+      if (this.walker.portal) this.walker.cancel();
+      return;
+    }
+    if (this.trip.away || this.awayScene || this.tripLock) return;
+    if (this.inShop) this.exitShop();
+    this.walker.goPortal(kind, this.time.now);
   }
 
   /** walk=true: 길을 찾아 그 묘비 앞까지 걸어간다 (41번, 순간이동 없음). false: 카메라만 */
@@ -1293,8 +1311,12 @@ export class WorldScene extends Phaser.Scene {
         break;
       case "bus":
         // 11/15 주말 버스 정류장 (버스 정류장 마당): 캠핑장이 열린 서버면 버스가 온다 (CampTrip). 운영에서 닫혀 있으면 지금처럼 안내만
+        // 11/16 옛 묘역 아래 바닷가행 정류장 (bus:sea): 바닷가가 열린 서버면 바닷가 버스
         pl.faceTo(o.x, o.y - 20, now);
-        if (this.net.campOpen) this.trip.board();
+        if (o.id === "bus:sea") {
+          if (this.net.seaOpen) this.trip.board(null, "sea");
+          else this.toast("바닷가 가는 버스는 준비 중이에요.");
+        } else if (this.net.campOpen) this.trip.board();
         else this.toast("캠핑장 가는 버스는 준비 중이에요.");
         break;
       case "dock":
@@ -1476,15 +1498,18 @@ export class WorldScene extends Phaser.Scene {
     if (friend) this.goToFriend(friend.sid, friend.name, friend.x, friend.y);
   }
 
-  /** 11/15 캠핑장에 있는 친구한테 가기: 같은 채널이면 버스 창밖 연출만 보고 친구 옆에 내린다 */
-  private goToCampFriend(f: CampFriend): void {
+  /** 11/15 캠핑장에 있는 친구한테 가기: 같은 채널이면 버스 창밖 연출만 보고 친구 옆에 내린다. 11/16 바닷가 친구도 같다 */
+  private goToCampFriend(f: CampFriend, map: AwayMapId = "camp"): void {
     const notice = (message: string) => bridge.emit("friend:notice", { message });
     if (this.cleaned || !this.net.online) return;
-    if (!this.net.campOpen) return notice("지금은 캠핑장에 갈 수 없어요.");
+    if (!(map === "sea" ? this.net.seaOpen : this.net.campOpen)) return notice(`지금은 ${MAP_NAME[map]}에 갈 수 없어요.`);
     if (this.awayScene) return notice("마을로 나온 뒤에 친구한테 갈 수 있어요.");
+    // 11/16 오리배·범퍼카 같은 탈것에 탄 채로는 버스를 타지 않는다 (lib/rideGate — 사냥터 입구와 같은 규칙)
+    const why = rideBlocked(`${MAP_NAME[map]}에 갈`);
+    if (why) return notice(why);
     if (this.inShop) this.exitShop();
     this.leaveCampfire();
-    this.trip.board(f);
+    this.trip.board(f, map);
   }
 
   /**
@@ -1631,6 +1656,8 @@ export class WorldScene extends Phaser.Scene {
     } else if (kind === "honk") {
       // 11/16 범퍼카 빵빵 (경적·헤드라이트 깜빡은 BumperRide, "빵빵!" 말풍선은 AvatarView.playAct)
       this.bumper.honkFx(x, y, mine, d);
+    } else if (kind === "lamp") {
+      // 11/16 바닷가 등대 등불 (바닷가 장면만 쓴다 — 마을에서는 아무것도 하지 않는다)
     } else if (d < 400 || mine) {
       // 손 흔들기·환호 이모티콘은 아바타가 이름표 위에 띄운다 (AvatarView.playAct). 여기는 환호 반짝임과 소리 (이모티콘과 같은 톡 — 환호는 높게)
       this.fx.actSparks(x, y, kind);
@@ -1833,6 +1860,8 @@ export class WorldScene extends Phaser.Scene {
     this.life.update(dt, view, s);
     this.forage.update(dt, view, s);
     this.riding.update();
+    // 11/16 탄 것·앉은 자리 → UI (사냥터·미니게임·집 입구가 본다, lib/rideGate)
+    publishRide(pl, this.riding.on);
     this.zoo.update(now, view);
     this.zoo.scaleLabels(s);
 

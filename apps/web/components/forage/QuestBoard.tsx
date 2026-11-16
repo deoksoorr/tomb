@@ -66,7 +66,7 @@ export default function QuestBoard({ only }: { only?: LifeCat }) {
       forageStore.takeFromBag(r.used);
       bridge.emit("forage:coin");
       setOpen(null);
-      setNotice(`「${card.text}」 납품 완료! 의뢰 도장 +${r.earned}`);
+      setNotice(`「${card.text}」 납품 완료! 의뢰 도장 +${r.earned}${r.bonus ? " (칭호 덕분에 하나 더)" : ""}`);
     } catch (e) {
       setNotice(errorMessage(e));
       void forageStore.refresh();

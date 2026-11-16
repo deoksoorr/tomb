@@ -86,16 +86,21 @@ async function payFrom(
   max: number,
   ip: string | undefined,
   now: number,
+  bonus = 0,
 ): Promise<{ taken: number; earned: number; paid: number; me: Me | null }> {
   const taken = await store.takeDexPending(acct, cat, max);
   if (taken <= 0) return { taken: 0, earned: 0, paid: 0, me: null };
+  // 11/16 도감 갈래 칭호: 꺼낸 보상 × bonus를 같은 적립에 얹는다 (적립 한 번 — 명령이 늘지 않는다).
+  // 도감 하루 한도·하루 전체 한도·지갑 상한은 그대로라 한도에 걸리면 원래 보상부터 채우고, 못 받은 덧붙임은 쌓아 두지 않는다
+  const extra = bonus > 0 ? dexBonusOf(taken, bonus) : 0;
   let earned = 0;
   let paid = 0;
   let me: Me | null = null;
   try {
-    const r = await earnPoints(acct, "dex", taken, ip);
+    const r = await earnPoints(acct, "dex", taken + extra, ip);
     earned = r.earned;
-    paid = r.paid;
+    // 받은 보상 기록은 원래 보상 몫만 (보상 값 단위 — 덧붙임은 받을 보상에 되돌리지 않는다)
+    paid = Math.min(taken, r.paid);
     me = r.me;
   } finally {
     // 적립이 실패해도 꺼낸 것은 받을 보상으로 되돌린다 (받은 기록은 보상 값 단위로)
@@ -104,6 +109,9 @@ async function payFrom(
   if (earned > 0) await store.addDay(acct, kstDay(now), "dexP", earned);
   return { taken, earned, paid, me };
 }
+
+/** 11/16 도감 새 칸 보상 덧붙임 (보상 × 비율을 1P 단위로 반올림, 비율이 있으면 최소 1P) */
+export const dexBonusOf = (points: number, bonus: number): number => (points > 0 && bonus > 0 ? Math.max(1, Math.round(points * bonus)) : 0);
 
 /**
  * 등록 경로(낚시·채집·자동 낚시·별자리)에서 부른다: 이번에 처음 등록된 칸들의 보상을 그 자리에서 지급하고 결과를 돌려준다.
@@ -115,9 +123,12 @@ export async function payNewDex(
   granted: readonly { id: string; isNew: boolean }[],
   ip: string | undefined,
   now: number,
+  bonusOf?: () => Promise<number>,
 ): Promise<DexGain | undefined> {
   const fresh = granted.filter((g) => g.isNew && dexRewardOf(g.id) > 0);
   if (!fresh.length) return undefined;
+  // 11/16 도감 갈래 칭호의 새 칸 보상 비율 (새로 등록한 게 있을 때만 묻는다 — 부르는 쪽이 lib/titlesServer wornPerk로. 순환 import를 피해 여기서 읽지 않는다)
+  const bonus = bonusOf ? await bonusOf().catch(() => 0) : 0;
   // 정산 전 계정이면 지금 정산 (이번 등록도 정산에 들어가 받을 보상에 쌓인다)
   await ensureDexSettled(store, acct, null, now);
   const byCat = new Map<DexCat, number>();
@@ -131,7 +142,7 @@ export async function payNewDex(
   let me: Me | null = null;
   for (const [cat, n] of byCat) {
     points += n;
-    const r = await payFrom(store, acct, cat, n, ip, now);
+    const r = await payFrom(store, acct, cat, n, ip, now, bonus);
     earned += r.earned;
     paid += r.paid;
     me = r.me ?? me;

@@ -1,15 +1,38 @@
-import type { BusLeg } from "./busTypes";
+import type { BusLeg, BusRoute } from "./busTypes";
 
 // 버스 창밖 연출(BusRideScene)의 순수 계산 — 시간 → 달린 거리·구간·섞기·흔들림·자막. Phaser 없음 (busRide.test.ts).
 // 거리는 0..1 비율. 출발할 때 천천히 붙는 속도, 끝에 정류장 앞에서 멈춘다 (속도 = 사다리꼴, 가속·감속은 부드럽게).
 
-export type RideSegment = "village" | "highway" | "maple" | "forest";
+/** 11/16 coast = 해송 숲·모래 언덕 사이로 바다가 언뜻 보이는 길, sea = 탁 트인 바닷길 (방파제·등대·고깃배·갈매기) */
+export type RideSegment = "village" | "highway" | "maple" | "forest" | "coast" | "sea";
 
-/** 가는 길 순서 (돌아오는 길은 반대) */
+/** 가는 길 순서 (돌아오는 길은 반대) — 캠핑장 노선 */
 export const RIDE_ORDER: readonly RideSegment[] = ["village", "highway", "maple", "forest"];
+/** 11/16 바닷가 노선 가는 길 순서 */
+export const SEA_RIDE_ORDER: readonly RideSegment[] = ["village", "highway", "coast", "sea"];
 
-export function segmentsFor(leg: BusLeg): readonly RideSegment[] {
-  return leg === "toCamp" ? RIDE_ORDER : [...RIDE_ORDER].reverse();
+/** 노선의 가는 길 순서 (그림은 늘 이 순서로 구워요) */
+export function rideOrder(route: BusRoute = "camp"): readonly RideSegment[] {
+  return route === "sea" ? SEA_RIDE_ORDER : RIDE_ORDER;
+}
+
+/**
+ * 11/16 그림을 굽는 순서 (파노라마 왼쪽 끝 → 오른쪽 끝). 캠핑장은 가는 길 순서 그대로, 바닷가는 거꾸로 (바다가 왼쪽 끝).
+ * 마을 바닷가행 정류장은 버스가 왼쪽에서 들어와 오른쪽으로, 포구 정류장은 오른쪽에서 들어와요 → 창밖은 캠핑장 노선과 반대로 흘러야 해서
+ * 바닷가 그림은 반대로 굽고 반대로 훑어요 (글씨가 든 그림을 뒤집지 않고 흐르는 쪽만 바꿔요)
+ */
+export function bakeOrder(route: BusRoute = "camp"): readonly RideSegment[] {
+  return route === "sea" ? [...SEA_RIDE_ORDER].reverse() : RIDE_ORDER;
+}
+
+/** 11/16 파노라마를 오른쪽 끝에서 왼쪽으로 훑는지 (= 창밖 풍경이 오른쪽으로 흘러요). 캠핑장은 돌아오는 길, 바닷가는 가는 길 */
+export function rideReversed(leg: BusLeg, route: BusRoute = "camp"): boolean {
+  return (leg === "toVillage") !== (route === "sea");
+}
+
+export function segmentsFor(leg: BusLeg, route: BusRoute = "camp"): readonly RideSegment[] {
+  const order = rideOrder(route);
+  return leg === "toCamp" ? order : [...order].reverse();
 }
 
 /** 출발 가속 시간 비율 · 도착 감속 시간 비율 (전체 시간에 대해) */
@@ -99,9 +122,10 @@ export function starsOn(hour: number): boolean {
 }
 
 /** 자막 한 줄 (해요체, 짧게). 처음 2.4초는 출발 안내, 마지막 2.8초는 다음 정류장, 그 사이는 없다 */
-export function captionAt(ms: number, total: number, leg: BusLeg): string | null {
-  if (ms < 2400) return leg === "toCamp" ? "언젠가 캠핑장행 버스가 출발해요." : "마을로 돌아가는 버스예요.";
-  if (ms > total - 2800) return leg === "toCamp" ? "다음 정류장은 언젠가 캠핑장이에요." : "다음 정류장은 마을이에요.";
+export function captionAt(ms: number, total: number, leg: BusLeg, route: BusRoute = "camp"): string | null {
+  const sea = route === "sea";
+  if (ms < 2400) return leg === "toCamp" ? (sea ? "달물결 포구행 버스가 출발해요." : "언젠가 캠핑장행 버스가 출발해요.") : "마을로 돌아가는 버스예요.";
+  if (ms > total - 2800) return leg === "toCamp" ? (sea ? "다음 정류장은 달물결 포구예요." : "다음 정류장은 언젠가 캠핑장이에요.") : "다음 정류장은 마을이에요.";
   return null;
 }
 

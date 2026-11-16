@@ -197,8 +197,10 @@ describe("높은 층 (100층 위·400층 상한): 숫자가 깨지지 않는다"
       if (isBossFloor(f)) expect(p[1].boss).toBe(true);
       expect(floorMinSec(p)).toBe(10);
     }
-    expect(towerOfScore(towerScore(400, 7_199_999))).toEqual({ floor: 400, ms: 7_199_999 });
-    expect(towerOfScore(towerScore(10_000, 43_000_000))).toEqual({ floor: 10_000, ms: 43_000_000 });
+    // 11/16 점수 = 층 × 1e9 + 먼저 도달한 시각 (초)
+    const at = Date.UTC(2027, 0, 1);
+    expect(towerOfScore(towerScore(400, at))).toEqual({ floor: 400, at });
+    expect(towerOfScore(towerScore(10_000, at))).toEqual({ floor: 10_000, at });
     expect(towerScore(10_000, 0)).toBeLessThan(Number.MAX_SAFE_INTEGER);
   });
 

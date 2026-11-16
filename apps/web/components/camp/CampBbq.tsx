@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BBQ_MENU, bbqStand, DRUNK_MAX, drunkLevel, type BbqItem, type BbqItemId, type BbqStand } from "@tomb/protocol";
+import { BBQ_MENU, bbqStands, DRUNK_MAX, drunkLevel, type BbqItem, type BbqItemId, type BbqStand } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { bbqPlateArt } from "@/game/camp/campArt";
 import { myFood } from "@/game/camp/foodState";
@@ -41,7 +41,7 @@ function Icon({ id }: { id: BbqItemId }) {
 /** 효과 한 줄 (메뉴 소개 뒤) */
 function effectText(m: BbqItem): string {
   if (m.kind === "grow") return m.scale >= 2 && Number.isInteger(m.scale) ? `${minutes(m.ms)}분 동안 몸이 ${m.scale}배로 커져요.` : `${minutes(m.ms)}분 동안 ${Math.round((m.scale - 1) * 100)}% 커져요.`;
-  if (m.kind === "speed") return `${minutes(m.ms)}분 동안 마을·캠핑장에서 ${Math.round((m.speed - 1) * 100)}% 빨리 걸어요.${m.trail ? " 걸으면 잔상이 따라와요." : ""}`;
+  if (m.kind === "speed") return `${minutes(m.ms)}분 동안 마을·캠핑장·바닷가에서 ${Math.round((m.speed - 1) * 100)}% 빨리 걸어요.${m.trail ? " 걸으면 잔상이 따라와요." : ""}`;
   if (m.kind === "sober") return "마시면 취기가 한 단계 내려가요.";
   return "한 잔마다 취기가 하나씩 올라요. 10분에 하나씩 깨요.";
 }
@@ -55,7 +55,7 @@ export default function CampBbq() {
 
 function BbqDialog({ stand, onClose }: { stand: BbqStand; onClose: () => void }) {
   const { me } = useMe();
-  const tab = stand === "vending" ? "drink" : "food";
+  const tab = stand === "grill" || stand === "kiosk" ? "food" : "drink";
   const [pending, setPending] = useState<BbqItemId | null>(null);
   const [error, setError] = useState<string | null>(null);
   // 지금 취기: 이 브라우저 기억, 서버 기록(다른 기기에서 마신 것) 중 큰 쪽
@@ -88,12 +88,20 @@ function BbqDialog({ stand, onClose }: { stand: BbqStand; onClose: () => void })
     }
   }
 
-  const items = BBQ_MENU.filter((m) => bbqStand(m) === stand);
+  // 11/16 r12 바닷가: 매점은 먹거리, 바닷가 자판기는 술·음료 (bbqStands)
+  const items = BBQ_MENU.filter((m) => bbqStands(m).includes(stand));
+  const title = stand === "kiosk" ? "포구 매점" : stand === "vending" || stand === "seaVend" ? "음료 자판기" : "야외 바베큐";
+  const lead =
+    stand === "kiosk"
+      ? "바닷바람 맞으며 한 입 해요. 먹으면 몸이 커지거나 걸음이 빨라져요."
+      : tab === "drink"
+        ? "버튼을 누르면 덜컹 떨어져요. 마실수록 볼이 발그레해져요."
+        : "숯불에 막 구웠어요. 먹으면 몸이 커지거나 걸음이 빨라져요.";
   return (
-    <Dialog title={stand === "vending" ? "음료 자판기" : "야외 바베큐"} onClose={onClose} kind="confirm">
+    <Dialog title={title} onClose={onClose} kind="confirm">
       <div className={styles.wrap}>
         <div className={styles.wrap}>
-          <p className={styles.lead}>{tab === "drink" ? "버튼을 누르면 덜컹 떨어져요. 마실수록 볼이 발그레해져요." : "숯불에 막 구웠어요. 먹으면 몸이 커지거나 걸음이 빨라져요."}</p>
+          <p className={styles.lead}>{lead}</p>
           <ul className={styles.menu}>
             {items.map((m) => (
               <li key={m.id} className={styles.row}>
@@ -112,7 +120,7 @@ function BbqDialog({ stand, onClose }: { stand: BbqStand; onClose: () => void })
                   onClick={() => void buy(m)}
                   disabled={pending !== null || (me ? me.points < m.price : false)}
                 >
-                  {pending === m.id ? (m.cat === "drink" ? "뽑는 중…" : "굽는 중…") : `${m.price}P`}
+                  {pending === m.id ? (stand === "kiosk" ? "받는 중…" : m.cat === "drink" ? "뽑는 중…" : "굽는 중…") : `${m.price}P`}
                 </button>
               </li>
             ))}

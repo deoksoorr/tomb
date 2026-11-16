@@ -25,8 +25,9 @@ import StarsHud from "./StarsHud";
 import s from "./rpg.module.css";
 import { readStarsRecords, saveStarsRecord, StarsDexCard, StarsInfo, StarsPreview } from "./TelescopeExtras";
 import x from "./TelescopeExtras.module.css";
+import { rideGate } from "@/lib/rideGate";
 
-// 22번 별 보기 언덕의 망원경 (월드에서 망원경 앞 E → portal:open {kind:"telescope"}).
+// 22번 별 보기 언덕의 망원경 (월드에서 망원경 앞 E → portal:open {kind:"telescope"}). 11/16 마을 곳곳·캠핑장·바닷가 망원경도 같은 창 (game/scopes)
 // 사냥터 로비에 있던 "별자리 잇기"를 여기서 한다. 판 시작·결과 검증은 사냥터와 같은 /api/rpg/run (game "stars") —
 // 시드로 다시 만든 별 계획으로 결과 상한을 검사하고, 판 시작 시각이 진짜 맑은 밤(KST)이면 포인트 ×1.5 (lib/stargaze).
 // 망원경 속은 언제나 밤하늘이라 낮에도 할 수 있다.
@@ -128,6 +129,12 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
   }
 
   async function start() {
+    // 11/16 탈것에 탄 채로는 못 한다 (lib/rideGate). 의자·벤치면 일어나서
+    const why = rideGate("별자리 잇기를 할");
+    if (why) {
+      setNotice(why);
+      return;
+    }
     setPhase("starting");
     setNotice(null);
     try {
@@ -312,7 +319,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
           <b>{G.name}</b> {G.desc}
         </p>
         <p className={s.meta}>
-          망원경 속은 늘 밤하늘이라 낮에도 볼 수 있어요. 언덕에는 망원경이 두 대 있어요. 한 대에 한 사람씩 볼 수 있어요. {coarse ? G.howTouch : G.how}
+          망원경 속은 늘 밤하늘이라 낮에도 볼 수 있어요. 별 보기 언덕 말고도 광장·다리·호숫가·쉼터, 캠핑장과 바닷가에도 망원경이 있어요. 한 대에 한 사람씩 볼 수 있어요. {coarse ? G.howTouch : G.how}
         </p>
         <p className={starry ? s.levelUp : ui.hint} role="status">
           {starry

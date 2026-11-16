@@ -7,7 +7,7 @@ import { npcPortraitUrl } from "@/game/world/forage/art";
 import { errorMessage } from "@/lib/api";
 import { DAILY_EARN_CAP } from "@/lib/economy";
 import { boostedTotalCap } from "@/lib/pointEvent";
-import { CAT_LABEL, LIFE_CATS, npcById, RARITY_LABEL, speciesById, type NpcId } from "@/lib/forage/catalog";
+import { CAT_LABEL, LIFE_CATS, npcBuys, npcById, RARITY_LABEL, speciesById, type NpcId } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { cx } from "../ui/cx";
@@ -20,6 +20,12 @@ import s from "./forage.module.css";
 // NPC 판매 창 (어부 영감 = 물고기, 수집가 유령 = 약초·광석·발굴품·곤충). NPC 앞에서 E를 눌렀을 때만 열린다.
 // 비싼 것부터 오늘 남은 한도 안에서 판다 (서버가 정한다). 못 판 것은 가방에 그대로 남아 내일 팔 수 있다.
 // 11/15: NPC는 사기만 한다. 수집 의뢰·도장 교환소는 버스 정류장 마당 의뢰 게시판 한 곳 (WharfBoard)
+// 11/16 r11: 포구 시장을 빼서 바다 고기는 어부 영감, 갯벌에서 캔 것은 수집가 유령에게 팔아요
+
+const EMPTY: Record<NpcId, string> = {
+  fishmonger: "팔 물고기가 없어요. 호수 잔교나 강둑, 바닷가 갯바위에서 낚아 와요.",
+  collector: "팔 게 없어요. 숲·풀밭·언덕·갯벌에서 캐거나 수풀에서 곤충을 잡아 와요.",
+};
 
 export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () => void }) {
   const npc = npcById(npcId)!;
@@ -28,20 +34,20 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
   const [pick, setPick] = useState<Record<string, number> | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [portrait] = useState(() => (typeof document === "undefined" ? "" : npcPortraitUrl(npc.id)));
+  const portrait = useMemo(() => (typeof document === "undefined" ? "" : npcPortraitUrl(npc.id)), [npc.id]);
 
   const rows = useMemo(() => {
     const bag = state?.bag ?? {};
     return Object.entries(bag)
       .map(([id, n]) => ({ sp: speciesById(id), n }))
-      .filter((r): r is { sp: NonNullable<typeof r.sp>; n: number } => !!r.sp && npc.buys.includes(r.sp.cat) && r.n > 0)
+      .filter((r): r is { sp: NonNullable<typeof r.sp>; n: number } => !!r.sp && npcBuys(npc, r.sp) && r.n > 0)
       .sort((a, b) => LIFE_CATS.indexOf(a.sp.cat) - LIFE_CATS.indexOf(b.sp.cat) || b.sp.price - a.sp.price);
   }, [state, npc]);
 
   // F16: 처음엔 아무것도 고르지 않은 상태(0개) → [고른 것 팔기]는 −/+로 고른 만큼, [전부 팔기]는 가진 것 전부
   const qty = (id: string, owned: number) => Math.min(owned, pick?.[id] ?? 0);
   const total = rows.reduce((n, r) => n + qty(r.sp.id, r.n) * r.sp.price, 0);
-  const source = npc.id === "fishmonger" ? "fish" : "gather";
+  const source = npc.buys.includes("fish") ? "fish" : "gather";
   const soldToday = state ? (source === "fish" ? state.today.fishP : state.today.gatherP) : 0;
   const cap = state ? (source === "fish" ? state.today.fishCap : state.today.gatherCap) : 0;
 
@@ -93,10 +99,10 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
             <span>
               오늘 모은 포인트 <strong>{me?.todayEarned ?? 0}</strong> / {me?.earnBoost ? boostedTotalCap(me.earnBoost) : DAILY_EARN_CAP}P
             </span>
-            <span>사는 것: {npc.buys.map((c) => CAT_LABEL[c]).join("·")}</span>
+            <span>사는 것: {npc.where === "flat" ? "갯벌에서 캔 것" : npc.buys.map((c) => CAT_LABEL[c]).join("·")}</span>
           </div>
           {rows.length === 0 ? (
-            <p className={s.empty}>{npc.id === "fishmonger" ? "팔 물고기가 없어요. 호수 잔교나 강둑·연못가 낚시 의자에서 낚아 와요." : "팔 게 없어요. 숲·풀밭·언덕에서 캐거나 수풀에서 곤충을 잡아 와요."}</p>
+            <p className={s.empty}>{EMPTY[npc.id]}</p>
           ) : (
             <div className={s.sellList} role="list">
               {rows.map(({ sp, n }) => {

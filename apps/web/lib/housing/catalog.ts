@@ -33,7 +33,7 @@ export const plotCost = (id: PlotTierId): number => {
   return PLOT_TIERS.slice(0, i + 1).reduce((sum, t) => sum + t.price, 0);
 };
 
-export type FurnitureCategory = "furniture" | "living" | "dev" | "nature" | "mood" | "skin" | "exterior";
+export type FurnitureCategory = "furniture" | "living" | "dev" | "nature" | "mood" | "sea" | "skin" | "exterior";
 
 export const CATEGORY_LABELS: Record<FurnitureCategory, string> = {
   furniture: "가구",
@@ -41,6 +41,7 @@ export const CATEGORY_LABELS: Record<FurnitureCategory, string> = {
   dev: "사무실",
   nature: "자연",
   mood: "분위기",
+  sea: "바닷가 세트",
   skin: "바닥·벽지",
   exterior: "외관",
 };
@@ -116,15 +117,30 @@ export const FURNITURE: readonly FurnitureDef[] = [
   { id: "wind_chime", name: "풍경", desc: "바람이 불면 맑은 소리가 난다.", category: "mood", price: 120, score: 7, w: 1, h: 1, use: "흔들기" },
   { id: "memorial", name: "추억 비석", desc: "내 집 마당에 세우는 작은 비석.", category: "mood", price: 140, score: 8, w: 1, h: 1, use: "꽃 놓고 묵념" },
   { id: "ghost_cat", name: "잠든 유령 고양이", desc: "방석 위에서 반투명하게 졸고 있다.", category: "mood", price: 300, score: 16, w: 1, h: 1, use: "쓰다듬기" },
+  // ── 11/16 바닷가 세트 (포구 오두막 기본 가구 + 가구점). 모두 네 방향으로 돌린다 (spin) ──
+  { id: "sea_hammock", name: "해먹", desc: "기둥 둘 사이에 걸친 줄무늬 해먹. 누우면 살랑살랑 흔들린다.", category: "sea", price: 380, score: 19, w: 3, h: 1, spin: true, use: "해먹에 눕기" },
+  { id: "rattan_chair", name: "라탄 의자", desc: "등나무로 엮은 둥근 의자. 바닷바람이 솔솔 통한다.", category: "sea", price: 140, score: 7, w: 1, h: 1, spin: true, use: "앉기" },
+  { id: "rattan_bench", name: "라탄 벤치", desc: "둘이 나란히 앉기 좋은 등나무 벤치.", category: "sea", price: 240, score: 12, w: 2, h: 1, spin: true, use: "앉기 (2자리)" },
+  { id: "surfboard", name: "서핑보드", desc: "벽에 세워 둔 하늘색 보드. 파도만 오면 언제든.", category: "sea", price: 220, score: 11, w: 1, h: 1, spin: true, use: "보드 타는 흉내" },
+  { id: "shell_decor", name: "소라 장식", desc: "유목 받침에 올린 커다란 소라. 귀를 대면 바다 소리가 난다.", category: "sea", price: 100, score: 5, w: 1, h: 1, spin: true, use: "바다 소리 듣기" },
+  { id: "life_ring", name: "구명 튜브", desc: "말뚝에 걸어 둔 빨강·하양 구명 튜브.", category: "sea", price: 120, score: 6, w: 1, h: 1, spin: true, use: "구명 튜브 끼기" },
+  { id: "sea_lantern", name: "뱃등", desc: "고깃배에서 쓰던 놋쇠 등. 밤바다처럼 은은하다.", category: "sea", price: 200, score: 10, w: 1, h: 1, spin: true, light: { color: 0xffd08a, r: 28 }, use: "불 켜기·끄기" },
+  { id: "ship_wheel", name: "조타륜", desc: "낡은 배에서 떼어 온 나무 키. 돌리면 어디든 갈 것 같다.", category: "sea", price: 260, score: 13, w: 1, h: 1, spin: true, use: "키 돌리기" },
   // ── 바닥·벽지 스킨 (기본 낡은 장판·나무 판자 벽은 무료). id는 예전 마당 시절 그대로 (가진 것·저장된 배치 유지) ──
   { id: "floor_moss", name: "초록 카펫", desc: "이끼처럼 폭신한 초록 카펫.", category: "skin", price: 220, score: 10, w: 1, h: 1, skin: "floor" },
   { id: "floor_wood", name: "나무 마루", desc: "길쭉한 널을 엇갈려 깐 반들반들한 마루.", category: "skin", price: 340, score: 14, w: 1, h: 1, skin: "floor" },
   { id: "floor_stone", name: "대리석 바닥", desc: "반듯하게 다듬은 회색 판석.", category: "skin", price: 280, score: 12, w: 1, h: 1, skin: "floor" },
   { id: "floor_tile", name: "체크 타일", desc: "크림색과 갈색이 번갈아 깔린 타일.", category: "skin", price: 240, score: 11, w: 1, h: 1, skin: "floor" },
   { id: "floor_petal", name: "꽃잎 카펫", desc: "분홍 꽃잎 무늬를 수놓은 카펫.", category: "skin", price: 500, score: 20, w: 1, h: 1, skin: "floor" },
+  { id: "floor_deck", name: "갑판 마루", desc: "바닷바람에 바랜 옅은 나무 널 마루.", category: "skin", price: 340, score: 14, w: 1, h: 1, skin: "floor" },
+  { id: "floor_sand", name: "모래빛 타일", desc: "모래색 타일 사이사이 작은 조개 무늬.", category: "skin", price: 300, score: 12, w: 1, h: 1, skin: "floor" },
+  { id: "floor_mosaic", name: "물빛 모자이크", desc: "하늘색·청록 조각을 촘촘히 박은 바닥.", category: "skin", price: 380, score: 15, w: 1, h: 1, skin: "floor" },
   { id: "wall_stone", name: "돌벽", desc: "회색 돌을 차곡차곡 쌓은 서늘한 벽.", category: "skin", price: 280, score: 12, w: 1, h: 1, skin: "wall" },
   { id: "wall_hedge", name: "풀잎 벽지", desc: "연둣빛 잎사귀 무늬 벽지.", category: "skin", price: 260, score: 10, w: 1, h: 1, skin: "wall" },
   { id: "wall_paper", name: "꽃무늬 벽지", desc: "크림색 바탕에 작은 장미가 흩어진 벽지.", category: "skin", price: 240, score: 11, w: 1, h: 1, skin: "wall" },
+  { id: "wall_sea", name: "하늘색 판자 벽", desc: "하늘빛으로 칠한 판자 벽. 창밖 바다와 닮았다.", category: "skin", price: 300, score: 12, w: 1, h: 1, skin: "wall" },
+  { id: "wall_shell", name: "조개 벽지", desc: "크림색 바탕에 조개와 불가사리가 흩어진 벽지.", category: "skin", price: 280, score: 11, w: 1, h: 1, skin: "wall" },
+  { id: "wall_driftwood", name: "유목 판자 벽", desc: "바랜 회갈색 가로 널. 오래된 배 창고 같다.", category: "skin", price: 320, score: 13, w: 1, h: 1, skin: "wall" },
   { id: "wall_iron", name: "남색 장식 벽지", desc: "짙은 남색 바탕에 금빛 무늬가 들어간 고풍스러운 벽지.", category: "skin", price: 420, score: 18, w: 1, h: 1, skin: "wall" },
   // ── 외관 (마을에서 보이는 집 바깥. 자리마다 하나씩 고른다) ──
   ...ext("roof", [
@@ -202,6 +218,9 @@ export const sellPrice = (def: FurnitureDef) => Math.floor(def.price * SELL_BACK
 /** 한 종류를 이만큼까지 가질 수 있다 */
 export const MAX_OWN_PER_ITEM = 20;
 
+/** 11/16 가구는 마을 집·오두막 공용 가방: 가진 것이 모두 다른 집에 놓여 있을 때 (가방·상점·저장 오류가 같은 말) */
+export const AWAY_MSG = "다른 집에 놓여 있어요. 거기서 치우면 여기 놓을 수 있어요.";
+
 /** 꾸밈 점수 = 놓은 물건 점수 합 + 좋아요 × LIKE_WEIGHT */
 export const LIKE_WEIGHT = 3;
 /** 좋아요를 받으면 주인이 받는 포인트 (lib/economy.ts의 houseLike 규칙과 같은 값) */
@@ -236,6 +255,7 @@ export const STYLE_TAGS: Record<Exclude<FurnitureCategory, "skin" | "exterior">,
   dev: "야근 감성",
   nature: "숲속 정원",
   mood: "달빛 정취",
+  sea: "바닷바람 오두막",
 };
 
 export const SORTS = ["score", "likes", "new"] as const;
@@ -296,3 +316,37 @@ export const RECLAIM_WARN_DAYS = 5;
 export const RECLAIM_SINCE = Date.UTC(2026, 10, 15, 20, 0, 0);
 /** 정리 기준이 되는 마지막 접속: 실제 마지막 접속과 RECLAIM_SINCE 중 늦은 것 (0 = 기록 없음 → 비우지 않는다) */
 export const reclaimLastSeen = (lastSeenAt: number, since: number = RECLAIM_SINCE): number => (lastSeenAt > 0 ? Math.max(lastSeenAt, since) : 0);
+
+// ── 11/16 포구 오두막 (바닷가 별장) ──
+
+/** 집이 있는 곳: 마을 주거 구역 또는 달물결 포구 오두막 터 */
+export type HouseZone = "village" | "sea";
+export const isHouseZone = (z: unknown): z is HouseZone => z === "village" || z === "sea";
+/** 포구 오두막 터 수 (채널마다, protocol SEA_LOTS와 같다) */
+export const SEA_LOT_COUNT = 6;
+/** 오두막 값 = 같은 크기 마을 집 값 × 이 배수. 마을 집이 이미 있으면 별장이라 SEA_VILLA_RATE */
+export const SEA_COTTAGE_RATE = 1.5;
+export const SEA_VILLA_RATE = 2;
+export const seaRate = (villa: boolean) => (villa ? SEA_VILLA_RATE : SEA_COTTAGE_RATE);
+/** 오두막 바로 사기 값 (마을 plotCost × 배수, 10P 단위 올림) */
+export const seaPlotCost = (id: PlotTierId, villa: boolean): number => Math.ceil((plotCost(id) * seaRate(villa)) / 10) * 10;
+/** 오두막 넓히기 값 */
+export const seaUpgradeCost = (price: number, villa: boolean): number => Math.ceil((price * seaRate(villa)) / 10) * 10;
+
+export type CottageStyleId = "wood" | "blue" | "keeper";
+export const COTTAGE_STYLES: readonly { id: CottageStyleId; name: string; desc: string }[] = [
+  { id: "wood", name: "나무 오두막", desc: "통나무 벽에 낮은 지붕, 처마에 그물을 걸었어요." },
+  { id: "blue", name: "파란 지붕 어부집", desc: "하얀 회벽에 파란 함석지붕을 얹었어요." },
+  { id: "keeper", name: "등대지기 집", desc: "빨강·하양 줄무늬 벽에 작은 망루가 있어요." },
+];
+export const isCottageStyle = (s: unknown): s is CottageStyleId => COTTAGE_STYLES.some((c) => c.id === s);
+export const cottageStyleOf = (s: unknown): CottageStyleId => (isCottageStyle(s) ? s : "wood");
+/** "3채널 포구 2번 오두막" */
+export const seaLotLabel = (ch: number, lot: number) => `${ch}채널 포구 ${lot}번 오두막`;
+/** 집 번지 표시 (오두막이면 포구 번호) */
+export const houseLabel = (h: { ch: number; lot: number; zone?: HouseZone }) => (h.zone === "sea" ? seaLotLabel(h.ch, h.lot) : lotLabel(h.ch, h.lot));
+/** 오두막 기본 바닥·벽 (분양 때 가방에 넣어 준다) */
+export const SEA_FLOOR = "floor_deck";
+export const SEA_WALL = "wall_sea";
+/** 오두막 분양 때 함께 주는 가구 (가방 +1씩, 한 집에 한 번만) */
+export const SEA_STARTER: readonly string[] = ["sea_hammock", "rattan_chair", "surfboard", "shell_decor", "life_ring", SEA_FLOOR, SEA_WALL];

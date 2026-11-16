@@ -11,8 +11,8 @@ import type { AvatarDye, AwayPlace } from "@tomb/protocol";
 export type FriendWhere =
   | { at: "offline" }
   | { at: "unknown" }
-  /** map = 11/15 캠핑장에 있으면 "camp" (없으면 마을) */
-  | { at: "world"; ch: number; sid: number; x: number; y: number; map?: "camp" }
+  /** map = 11/15 캠핑장에 있으면 "camp", 11/16 바닷가면 "sea" (없으면 마을) */
+  | { at: "world"; ch: number; sid: number; x: number; y: number; map?: "camp" | "sea" }
   | {
       at: "away";
       ch: number;

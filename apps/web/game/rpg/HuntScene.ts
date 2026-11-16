@@ -3002,7 +3002,8 @@ export class HuntScene extends RpgScene {
 
   /** 지금 판(보통 사냥) 또는 지금 층(야근 빌딩)이 끝나는 시각 */
   private get runLimitMs(): number {
-    return this.play.tower ? this.floorAt + towerFloorSec(this.floor) * 1000 : this.limitMs;
+    // 11/16 야근 빌딩 갈래 칭호면 층마다 몇 초 더 (play.tower.bonusSec)
+    return this.play.tower ? this.floorAt + (towerFloorSec(this.floor) + (this.play.tower.bonusSec ?? 0)) * 1000 : this.limitMs;
   }
 
   /** 층 클리어: 우두머리 층이면 체력 회복 + 상자(오늘 남은 만큼 — 서버와 같은 굴림), 잠시 뒤 엘리베이터 */

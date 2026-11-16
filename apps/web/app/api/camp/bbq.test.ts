@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { BBQ_MENU, DRUNK_MAX, DRUNK_STEP_MS, verifyGrant } from "@tomb/protocol";
+import { BBQ_MENU, bbqStands, DRUNK_MAX, DRUNK_STEP_MS, verifyGrant } from "@tomb/protocol";
 import { getAccounts } from "@/lib/store";
 import { kstDay } from "@/lib/store/accounts";
 import { env } from "@/lib/env";
@@ -44,7 +44,8 @@ describe("POST /api/camp/bbq", () => {
     const accounts = getAccounts();
     await accounts.earn(v.visitorId, "hunt", kstDay(), { amount: 400 });
     let points = (await accounts.get(v.visitorId, kstDay(), Date.now())).points;
-    const foods = BBQ_MENU.filter((m) => m.cat === "food");
+    // 캠핑장 그릴 먹거리 (stand를 안 보내는 옛 클라이언트 — 바닷가 매점 먹거리는 r12부터 매점에서만)
+    const foods = BBQ_MENU.filter((m) => m.cat === "food" && bbqStands(m).includes("grill"));
     // 예전 하루 한도(6접시)를 넘겨 메뉴를 두 바퀴 먹는다
     for (let i = 0; i < foods.length * 2; i++) {
       const m = foods[i % foods.length];
@@ -134,6 +135,27 @@ describe("POST /api/camp/bbq", () => {
     expect((await buy("pork", "vending")).status).toBe(400);
     expect((await buy("beer", "vending")).status).toBe(200);
     expect((await buy("pork", "grill")).status).toBe(200);
+  });
+
+  it("11/16 r12 바닷가: 매점은 먹거리만, 술·음료는 바닷가 자판기(seaVend). 맥주·소주·컨디숑은 캠핑장 자판기에도", async () => {
+    const v = await newVisitor();
+    await getAccounts().earn(v.visitorId, "hunt", kstDay(), { amount: 300 });
+    const buy = (item: string, stand?: string) => bbq.POST(call("/api/camp/bbq", v, "POST", stand ? { item, stand } : { item }));
+    expect((await buy("highball", "seaVend")).status).toBe(200);
+    expect((await buy("highball", "kiosk")).status).toBe(400);
+    expect((await buy("sunset", "vending")).status).toBe(400);
+    expect((await buy("squid", "grill")).status).toBe(400);
+    expect((await buy("squid", "kiosk")).status).toBe(200);
+    expect((await buy("hotdog", "kiosk")).status).toBe(200);
+    expect((await buy("hotdog", "seaVend")).status).toBe(400);
+    expect((await buy("slush", "seaVend")).status).toBe(200);
+    expect((await buy("slush")).status).toBe(400);
+    expect((await buy("beer", "seaVend")).status).toBe(200);
+    expect((await buy("beer", "kiosk")).status).toBe(400);
+    expect((await buy("pork", "kiosk")).status).toBe(400);
+    // 하이볼·맥주 두 잔 → 취기 2
+    const st = (await (await bbq.GET(call("/api/camp/bbq", v, "GET"))).json()) as BbqStatusResponse;
+    expect(st.drunk).toBe(2);
   });
 
   it("캠핑장이 닫힌 운영 서버에서는 없는 경로 (CAMP_ENABLED=1이면 열린다)", async () => {

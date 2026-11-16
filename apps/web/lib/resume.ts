@@ -5,7 +5,7 @@
 //  - 좌석은 서버가 최종 판정한다: 그 사이 다른 사람이 앉았으면 가까운 빈자리, 없으면 그 옆에 선다 (WorldScene)
 //  - 맵 배치 버전(MAP_VERSION)이 다른 기록(맵 개편 전 화면이 남긴 것)은 채널·입장 정보만 쓰고 자리는 입구(SPAWN)에서 시작한다
 
-import { CAMP_ARRIVE, CAMP_MAP_VERSION, MAP_VERSION, SPAWN } from "@tomb/protocol";
+import { CAMP_ARRIVE, CAMP_MAP_VERSION, MAP_VERSION, SEA_ARRIVE, SEA_MAP_VERSION, SPAWN } from "@tomb/protocol";
 
 export const RESUME_KEY = "tomb.resume";
 /** 이보다 오래된 기록은 쓰지 않는다 */
@@ -32,10 +32,12 @@ export type ResumeState = {
   bgm?: boolean;
   /** 저장할 때의 맵 배치 버전 (MAP_VERSION). 다르면 자리는 버린다 */
   map?: number;
-  /** 11/15 캠핑장에 있었으면 "camp" (좌표·좌석은 캠핑장 것). 없으면 마을 */
-  where?: "camp";
+  /** 11/15 캠핑장에 있었으면 "camp", 11/16 바닷가면 "sea" (좌표·좌석은 그 맵 것). 없으면 마을 */
+  where?: "camp" | "sea";
   /** 캠핑장 배치 버전 (CAMP_MAP_VERSION). 다르면 자리는 버리고 정류장에서 */
   campMap?: number;
+  /** 11/16 바닷가 배치 버전 (SEA_MAP_VERSION). 다르면 자리는 버리고 정류장에서 */
+  seaMap?: number;
 };
 /** 캠핑장에서 되살리는 자세 (캠핑장엔 그네·배·놀이기구가 없다) */
 const CAMP_POSES: readonly ResumePose[] = ["idle", "sitGround", "sitChair"];
@@ -57,7 +59,7 @@ export function parseResume(raw: string | null, now: number): ResumeState | null
   if (!isNum(r.channel) || !Number.isInteger(r.channel) || r.channel < 1) return null;
   if (!isNum(r.x) || !isNum(r.y) || r.x < 0 || r.y < 0 || r.x > 0xffff || r.y > 0xffff) return null;
   if (typeof r.name !== "string" || !r.name || typeof r.color !== "string" || !r.color) return null;
-  if (r.where === "camp") return parseCamp(r, r.channel, r.savedAt, r.name, r.color, r.x, r.y);
+  if (r.where === "camp" || r.where === "sea") return parseAway(r.where, r, r.channel, r.savedAt, r.name, r.color, r.x, r.y);
   // 맵이 바뀐 뒤의 옛 기록: 채널은 잇고 자리는 입구에서 (옛 좌표·좌석 id는 새 맵에서 엉뚱한 곳일 수 있다)
   const sameMap = r.map === MAP_VERSION;
   const pose = sameMap && POSES.includes(r.pose as ResumePose) ? (r.pose as ResumePose) : "idle";
@@ -78,15 +80,17 @@ export function parseResume(raw: string | null, now: number): ResumeState | null
   };
 }
 
-/** 11/15 캠핑장 기록: 배치 버전이 같으면 그 자리, 아니면 버스에서 내리는 자리 */
-function parseCamp(r: Record<string, unknown>, channel: number, savedAt: number, name: string, color: string, x: number, y: number): ResumeState {
-  const same = r.campMap === CAMP_MAP_VERSION;
+/** 11/15 캠핑장 기록 (11/16 바닷가도 같은 규칙): 배치 버전이 같으면 그 자리, 아니면 버스에서 내리는 자리 */
+function parseAway(where: "camp" | "sea", r: Record<string, unknown>, channel: number, savedAt: number, name: string, color: string, x: number, y: number): ResumeState {
+  const sea = where === "sea";
+  const same = sea ? r.seaMap === SEA_MAP_VERSION : r.campMap === CAMP_MAP_VERSION;
+  const arrive = sea ? SEA_ARRIVE : CAMP_ARRIVE;
   const pose = same && CAMP_POSES.includes(r.pose as ResumePose) ? (r.pose as ResumePose) : "idle";
   const seatId = pose === "sitChair" && typeof r.seatId === "string" && r.seatId ? r.seatId : null;
   return {
     channel,
-    x: same ? x : CAMP_ARRIVE.x,
-    y: same ? y : CAMP_ARRIVE.y,
+    x: same ? x : arrive.x,
+    y: same ? y : arrive.y,
     seatId,
     pose: pose === "sitChair" && !seatId ? "sitGround" : pose,
     dir: isNum(r.dir) && Number.isInteger(r.dir) && r.dir >= 0 && r.dir <= 3 ? r.dir : 0,
@@ -96,8 +100,8 @@ function parseCamp(r: Record<string, unknown>, channel: number, savedAt: number,
     body: typeof r.body === "string" ? r.body : undefined,
     bgm: r.bgm === true,
     map: MAP_VERSION,
-    where: "camp",
-    campMap: CAMP_MAP_VERSION,
+    where,
+    ...(sea ? { seaMap: SEA_MAP_VERSION } : { campMap: CAMP_MAP_VERSION }),
   };
 }
 
@@ -130,10 +134,10 @@ export function setResumeExtras(fn: () => Partial<Pick<ResumeState, "bgm">>): vo
   extras = fn;
 }
 
-export function saveResume(s: Omit<ResumeState, "bgm" | "map" | "campMap">, storage: Pick<Storage, "setItem"> | null = sessionStore()): void {
+export function saveResume(s: Omit<ResumeState, "bgm" | "map" | "campMap" | "seaMap">, storage: Pick<Storage, "setItem"> | null = sessionStore()): void {
   if (!storage) return;
   try {
-    storage.setItem(RESUME_KEY, JSON.stringify({ ...s, ...extras(), map: MAP_VERSION, ...(s.where === "camp" ? { campMap: CAMP_MAP_VERSION } : {}) }));
+    storage.setItem(RESUME_KEY, JSON.stringify({ ...s, ...extras(), map: MAP_VERSION, ...(s.where === "camp" ? { campMap: CAMP_MAP_VERSION } : s.where === "sea" ? { seaMap: SEA_MAP_VERSION } : {}) }));
   } catch {
     // 저장소를 못 쓰면 입구에서 다시 시작할 뿐이다
   }

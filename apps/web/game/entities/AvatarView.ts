@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
 import { champAuraOn, CHAT_SHOW_MS, dexBadgeCats, DIR, isChampBits, isChampValue, isNameSlot, itemById, ridePetOfLook, sanitizeDye, titleOfLook, type ActKind, type DirId, type StateName } from "@tomb/protocol";
 import { hasNameStyle, nameStyleRef } from "@/lib/nameStyle";
-import { headTitle } from "@/lib/titles";
+import { headTitle, titlePerk } from "@/lib/titles";
 import { addCanvasTexture, avatarActAnimKey, avatarAnimKey, avatarFrame, ensureAvatarTexture, TEX } from "../assets/manifest";
 import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, handAnchor, waterSink, type AppearanceChange } from "../sprites/avatar";
@@ -9,12 +9,13 @@ import { CosmeticFxView } from "./CosmeticFxView";
 import { DyeFxView } from "./DyeFxView";
 import { bodyFx, riderLift } from "../sprites/cosmeticFx";
 import type { EmoteIcon } from "../sprites/emotes";
-import { HAMMOCK_H, HAMMOCK_W, hammockLieKey, hammockLieSheet, lieFrameOf, LIE_ORIGIN_X, LIE_ORIGIN_Y } from "../sprites/hammockArt";
-import { INDOOR_POSE_PERIOD, indoorPoseKey, indoorPoseSheet, isIndoorPose, POSE_H, POSE_W, type IndoorPose } from "../sprites/indoorPose";
+import { HAMMOCK_H, HAMMOCK_W, hammockLieKey, hammockLieSheet, lieFrameOf, LIE_ORIGIN_X, LIE_ORIGIN_Y, type HammockSkin } from "../sprites/hammockArt";
+import { INDOOR_POSE_PERIOD, indoorPoseKey, indoorPoseSheet, isIndoorPose, POSE_H, POSE_W, type IndoorPose, type LieCover } from "../sprites/indoorPose";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { wrapChat } from "../logic/chatWrap";
 import { SpeechBubble } from "./SpeechBubble";
 import { SpeedTrail } from "./SpeedTrail";
+import { TitleSparkle } from "./TitleSparkle";
 import { MoodView } from "./MoodView";
 import { StaffFxView } from "./StaffFxView";
 import { ChampBadgeView } from "./ChampBadgeView";
@@ -122,10 +123,14 @@ export class AvatarView {
   /** 해먹 누운 그림을 쓰는 중 (텍스처가 아바타 시트가 아니다) */
   private lying = false;
   private lieKey = "";
+  /** 11/16 해먹 천 무늬 (포구 오두막 바닷가 해먹이면 "sea" — 집 씬이 정한다) */
+  private hammockSkin: HammockSkin = "village";
   private lieFrame = -1;
   /** 3번 집 안 자세(눕기·읽기·욕조) 그림을 쓰는 중 (텍스처가 sprites/indoorPose 시트) */
   private pose: IndoorPose | null = null;
   private poseFrame = -1;
+  /** 11/16 누운 자세(lie) 덮개: 집 침대는 이불(quilt), 바닷가 선베드는 하늘빛 수건(towel) — 씬이 정해요 */
+  lieCover: LieCover = "quilt";
   state: StateName = "idle";
   dir: DirId = DIR.down;
   /** 앉기 시작한 시각 (앉아 있지 않으면 0) */
@@ -144,6 +149,8 @@ export class AvatarView {
   private blush: Phaser.GameObjects.Image | null = null;
   /** 11/15 번개 닭꼬치: 걸을 때 몸 뒤로 잔상 */
   private trail: SpeedTrail | null = null;
+  /** 11/16 1위·명예 갈래 칭호의 반짝이는 발자국 (화면 연출만 — 움직임 줄이기면 없음) */
+  private titleSparkle: TitleSparkle | null = null;
   /** 커진 몸이 뒤 사람을 가리면 1 → SEE_THRU_ALPHA (부드럽게) */
   private seeThru = 1;
   private seeThruAt = 0;
@@ -589,6 +596,15 @@ export class AvatarView {
    *  11/15 운영자 표시면 낀 칭호 대신 운영자 전용 「운영자」 (한 줄만 — 착용 목록이 아니라 서명된 staff 표시로만 뜬다) */
   private setTitle(id: string | null): void {
     this.wornTitle = id;
+    // 11/16 1위·명예 갈래 칭호: 반짝이는 발자국 (매니저 전용 칭호는 능력이 없어 매니저 표시와 상관없다)
+    // 11/16 발 칸 꾸미기(발자국 아이템)를 끼고 있으면 그 발자국만 보이게 별가루는 쉰다 (setLook이 look을 먼저 바꾸고 여기를 부른다)
+    const feet = this.look.some((i) => itemById(i)?.slot === "feet");
+    const spark = !this.reduced && !feet && titlePerk(id).sparkle;
+    if (spark) this.titleSparkle ??= new TitleSparkle(this.scene);
+    else if (this.titleSparkle) {
+      this.titleSparkle.destroy();
+      this.titleSparkle = null;
+    }
     const t = headTitle(id, !!this.staffFx, this.mgr);
     if (t === "staff") {
       (this.titleView ??= new TitleView(this.scene, this.atlas, this.label.depth, this.reduced)).setStaff();
@@ -669,10 +685,17 @@ export class AvatarView {
   }
 
   /** 해먹 누운 그림으로 (F5). 천이 해먹 소품과 픽셀 1:1로 겹치도록 표시 원점을 맞춘다 */
+  /** 11/16 해먹 천 무늬를 바꾼다 (누워 있으면 바로 다시 그린다) */
+  setHammockSkin(skin: HammockSkin): void {
+    if (skin === this.hammockSkin) return;
+    this.hammockSkin = skin;
+    if (this.state === "hammock" && this.lying) this.lieDown();
+  }
+
   private lieDown(): void {
-    const key = hammockLieKey(this.texKey);
+    const key = hammockLieKey(this.texKey, this.hammockSkin);
     if (!this.scene.textures.exists(key)) {
-      const lie = hammockLieSheet(this.body, this.color, this.look);
+      const lie = hammockLieSheet(this.body, this.color, this.look, this.hammockSkin);
       addCanvasTexture(this.scene, key, { canvas: lie.grid.toCanvas(), frameW: HAMMOCK_W, frameH: HAMMOCK_H });
       lieTops.set(key, lie.top);
     }
@@ -690,9 +713,9 @@ export class AvatarView {
   /** 3번 집 안 자세 그림으로 (프레임 크기·원점이 아바타와 같다) */
   private indoorPose(kind: IndoorPose): void {
     if (this.lying) this.getUp("idle", this.dir);
-    const key = indoorPoseKey(this.texKey, kind);
+    const key = indoorPoseKey(this.texKey, kind, this.lieCover);
     if (!this.scene.textures.exists(key)) {
-      addCanvasTexture(this.scene, key, { canvas: indoorPoseSheet(kind, this.body, this.color, this.look).toCanvas(), frameW: POSE_W, frameH: POSE_H });
+      addCanvasTexture(this.scene, key, { canvas: indoorPoseSheet(kind, this.body, this.color, this.look, this.lieCover).toCanvas(), frameW: POSE_W, frameH: POSE_H });
     }
     if (this.pose === kind && this.sprite.texture.key === key) return;
     this.pose = kind;
@@ -733,6 +756,8 @@ export class AvatarView {
     if (kind === "quack") return this.say("꽥!", now);
     // 11/16 범퍼카 빵빵: 머리 위 "빵빵!" 말풍선만 (몸짓 없음)
     if (kind === "honk") return this.say("빵빵!", now);
+    // 11/16 등대 등불 켜기: 몸짓 없이 (바닷가 장면이 불빛을 켠다)
+    if (kind === "lamp") return;
     const s = this.state;
     if (s === "swim" || s === "dive" || s === "hang" || s === "swing" || s === "hammock" || s === "sitGround" || s === "sitChair" || s === "jump") return;
     if (s === "boat" || s === "seesaw" || s === "trampoline" || s === "carousel" || s === "bumper") return;
@@ -981,6 +1006,7 @@ export class AvatarView {
       if (this.blush.visible !== on) this.blush.setVisible(on);
     }
     this.trail?.sync(now, s, (st === "walk" || st === "run") && !this.mountedIn(st), vis, this.fade, this.big);
+    this.titleSparkle?.sync(now, s.x, s.y, s.depth, (st === "walk" || st === "run") && !this.mountedIn(st), vis, this.fade);
     const bx = s.x - this.poseDx;
     const fa = this.fade;
     // 11/15 크게 커진 몸 바로 뒤(위쪽)에 다른 사람이 서 있으면 몸을 반투명하게 → 가려진 사람이 보인다
@@ -1391,6 +1417,8 @@ export class AvatarView {
     this.bigGlow = null;
     this.trail?.destroy();
     this.trail = null;
+    this.titleSparkle?.destroy();
+    this.titleSparkle = null;
     this.blush?.destroy();
     this.blush = null;
     this.sprite.destroy();

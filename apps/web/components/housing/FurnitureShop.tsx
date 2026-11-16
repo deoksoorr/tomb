@@ -4,19 +4,22 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { animFrames } from "@/game/housing/art";
 import { errorMessage } from "@/lib/api";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
-import { meStore } from "@/lib/hooks/useMe";
-import { CATEGORY_LABELS, FURNITURE, MAX_OWN_PER_ITEM, sellPrice, type FurnitureCategory, type FurnitureDef } from "@/lib/housing/catalog";
+import { meStore, useMe } from "@/lib/hooks/useMe";
+import { AWAY_MSG, CATEGORY_LABELS, FURNITURE, MAX_OWN_PER_ITEM, sellPrice, type FurnitureCategory, type FurnitureDef } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
 import { rotateMode } from "@/lib/housing/layout";
 import type { MyHouseResponse } from "@/lib/housing/types";
+import { discountedPrice, equippedPerk } from "@/lib/titles";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import styles from "./housing.module.css";
 import { fmt, FurnitureStage, FurnitureThumb } from "./parts";
 
-/** 갈래 탭 순서: 가구·사무실·자연·분위기·생활·바닥·벽지·외관(담장 등) */
-const CATS: FurnitureCategory[] = ["furniture", "dev", "nature", "mood", "living", "skin", "exterior"];
+/** 갈래 탭 순서: 가구·사무실·자연·분위기·생활·바닷가 세트·바닥·벽지·외관(담장 등) */
+const CATS: FurnitureCategory[] = ["furniture", "dev", "nature", "mood", "living", "sea", "skin", "exterior"];
+/** 11/16 포구 오두막: 외관 탭은 없다 (오두막 겉모습은 포구 부동산에서 고른다). 바닷가 세트부터 보여 준다 */
+const SEA_CATS: FurnitureCategory[] = ["sea", "furniture", "dev", "nature", "mood", "living", "skin"];
 const COUNTS = Object.fromEntries(CATS.map((c) => [c, FURNITURE.filter((f) => f.category === c).length])) as Record<FurnitureCategory, number>;
 
 type Props = {
@@ -55,7 +58,9 @@ function abilities(f: FurnitureDef, touch: boolean): string[] {
  * 산 물건은 하우징 가방에 들어가고, 놓지 않은 것은 절반 값에 되팔 수 있다.
  */
 export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Props) {
-  const [cat, setCat] = useState<FurnitureCategory>("furniture");
+  const zone = my.house?.zone === "sea" ? "sea" : "village";
+  const cats = zone === "sea" ? SEA_CATS : CATS;
+  const [cat, setCat] = useState<FurnitureCategory>(cats[0]);
   const [picked, setPicked] = useState<Partial<Record<FurnitureCategory, string>>>({});
   const [pending, setPending] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -69,6 +74,10 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
   const phone = useMediaQuery("(max-width: 560px)");
   const coarse = useMediaQuery("(pointer: coarse)");
   const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
+  // 11/16 집 갈래 칭호의 가구 할인 (서버가 같은 규칙으로 깎는다 — lib/titles discountedPrice)
+  const { me } = useMe();
+  const houseDiscount = equippedPerk(me?.equipped).houseDiscount;
+  const cost = (f: FurnitureDef) => discountedPrice(f.price, houseDiscount);
 
   const items = FURNITURE.filter((f) => f.category === cat);
   const shown = items.find((f) => f.id === picked[cat]) ?? items[0];
@@ -124,11 +133,11 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
     setMsg(null);
     try {
       if (sell) {
-        const r = await housingApi.sellItem(def.id);
+        const r = await housingApi.sellItem(def.id, zone);
         onMy(r);
         setMsg(`${def.name} 하나를 ${r.refunded}P에 팔았어요.`);
       } else {
-        onMy(await housingApi.buyItem(def.id));
+        onMy(await housingApi.buyItem(def.id, zone));
         setMsg(`가방에 ${def.name} 하나를 넣었어요.`);
       }
       void meStore.refresh();
@@ -140,11 +149,16 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
   }
 
   function detail(f: FurnitureDef) {
-    const owned = my.inventory[f.id] ?? 0;
-    const free = owned - (placed[f.id] ?? 0);
-    const short = my.points < f.price;
+    // 11/16 가구는 두 집 공용: here = 이 집에서 쓸 수 있는 것, away = 다른 집에 놓인 것, owned = 가진 것 전부
+    const here = my.inventory[f.id] ?? 0;
+    const away = my.away?.[f.id] ?? 0;
+    const owned = here + away;
+    const placedHere = placed[f.id] ?? 0;
+    const free = here - placedHere;
+    const short = my.points < cost(f);
     const full = owned >= MAX_OWN_PER_ITEM;
     const once = (!!f.skin || !!f.ext) && owned > 0;
+    const allAway = free < 1 && away > 0 && placedHere === 0;
     const r = turn.id === f.id ? turn.r : 0;
     // 돌리는 물건(turn)·4방향 가구(spin)는 4방향, 아니면 좌우 뒤집기 2방향
     const four = rotateMode(f) === "turn";
@@ -186,8 +200,16 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
           <p className={styles.fsScore}>
             {placeable(f) && <span className={styles.fsSize}>{f.w}×{f.h}칸</span>}
             꾸밈 점수 <strong>+{f.score}</strong>
-            {owned > 0 && <span className={styles.small}> · 가진 것 {owned}{placed[f.id] ? ` (놓은 것 ${placed[f.id]})` : ""}</span>}
+            {owned > 0 && (
+              <span className={styles.small}>
+                {" "}
+                · 가진 것 {owned}
+                {placedHere ? ` · 여기 놓은 것 ${placedHere}` : ""}
+                {away ? ` · 다른 집에 ${away} · 남은 것 ${Math.max(0, free)}` : ""}
+              </span>
+            )}
           </p>
+          {allAway && <p className={styles.small}>{AWAY_MSG}</p>}
           {abilities(f, coarse).length > 0 && (
             <ul className={styles.fsAbilities} aria-label="할 수 있는 일">
               {abilities(f, coarse).map((a) => (
@@ -201,9 +223,9 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
               className={cx(ui.button, ui.primary)}
               disabled={pending !== null || short || full || once}
               onClick={() => act(f, false)}
-              aria-label={`${f.name}, ${f.price}포인트에 사기`}
+              aria-label={`${f.name}, ${cost(f)}포인트에 사기${cost(f) < f.price ? ` (칭호 할인, 원래 ${f.price}포인트)` : ""}`}
             >
-              {pending === f.id ? "…" : once ? "가짐" : full ? "더 못 가져요" : `${fmt(f.price)}P${short ? " · 모자라요" : " · 사기"}`}
+              {pending === f.id ? "…" : once ? "가짐" : full ? "더 못 가져요" : `${fmt(cost(f))}P${short ? " · 모자라요" : " · 사기"}`}
             </button>
             {owned > 0 && (
               <button
@@ -212,7 +234,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
                 disabled={pending !== null || free < 1}
                 onClick={() => act(f, true)}
                 aria-label={`${f.name} 하나를 ${sellPrice(f)}포인트에 되팔기`}
-                title={free < 1 ? "놓여 있는 물건은 먼저 치운 뒤 저장해야 팔 수 있어요" : undefined}
+                title={allAway ? AWAY_MSG : free < 1 ? "놓여 있는 물건은 먼저 치운 뒤 저장해야 팔 수 있어요" : undefined}
               >
                 되팔기 {sellPrice(f)}P
               </button>
@@ -245,7 +267,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
           <p className={cx(styles.small, styles.fsHint)}>되팔면 산 값의 절반을 받아요. 놓아 둔 물건은 치우고 저장한 뒤에 팔 수 있어요.</p>
         </div>
         <div className={styles.fsTabs} role="tablist" aria-label="물건 갈래">
-          {CATS.map((c) => (
+          {cats.map((c) => (
             <button
               key={c}
               type="button"
@@ -265,7 +287,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
           {shown && detail(shown)}
           <ul ref={listRef} className={styles.fsGrid} aria-label={`${CATEGORY_LABELS[cat]} 목록`}>
             {items.map((f) => {
-              const owned = my.inventory[f.id] ?? 0;
+              const owned = (my.inventory[f.id] ?? 0) + (my.away?.[f.id] ?? 0);
               return (
                 <li key={f.id}>
                   <button
@@ -273,13 +295,13 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
                     className={styles.fsTile}
                     aria-pressed={shown?.id === f.id}
                     title={`${f.name} — ${f.desc}`}
-                    aria-label={`${f.name}, ${f.price}포인트, 꾸밈 +${f.score}${owned > 0 ? `, ${owned}개 가짐` : ""}`}
+                    aria-label={`${f.name}, ${cost(f)}포인트, 꾸밈 +${f.score}${owned > 0 ? `, ${owned}개 가짐` : ""}`}
                     onClick={() => setPicked((p) => ({ ...p, [cat]: f.id }))}
                   >
                     <FurnitureThumb itemId={f.id} ext={!!f.ext} />
                     <span className={styles.fsTileName}>{f.name}</span>
                     <span className={styles.fsTilePrice}>
-                      {fmt(f.price)}P
+                      {fmt(cost(f))}P
                       {owned > 0 && <span className={styles.fsBadge}>{(f.skin || f.ext) ? "가짐" : `×${owned}`}</span>}
                     </span>
                   </button>

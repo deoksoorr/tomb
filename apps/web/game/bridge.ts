@@ -1,4 +1,5 @@
-import type { AvatarDye, BbqItemId, BbqStand, GraveEventKind, QueueStatus } from "@tomb/protocol";
+import type { AvatarDye, AwayMapId, BbqItemId, BbqStand, FishWater, GraveEventKind, MapId, QueueStatus } from "@tomb/protocol";
+import type { NpcId } from "@/lib/forage/catalog";
 import type { PublicGrave } from "@/lib/types";
 import type { HouseEditState, HouseTool } from "@/game/housing/events";
 import type { PublicHouse, VillageResponse } from "@/lib/housing/types";
@@ -8,6 +9,7 @@ import type { CardChoice, CardOfferView } from "@/lib/rpg/cards";
 import type { ResumeState } from "@/lib/resume";
 import type { SoundMix } from "@/lib/soundMix";
 import type { IncomingChatLine } from "@/game/logic/chatLog";
+import type { RideStatus } from "@/lib/ridePolicy";
 
 // React(UI 오버레이) ↔ Phaser(게임) 사이의 유일한 통로. 양쪽은 서로를 직접 import하지 않는다.
 // "sticky" 이벤트는 마지막 값을 기억해서, 늦게 구독한 쪽도 last()로 현재 값을 읽을 수 있다.
@@ -27,8 +29,8 @@ export type NetStatus = {
   /** 나를 포함한 채널 인원 (마을·캠핑장 합계 — 맵이 달라도 채널 전체) */
   count: number;
   cap: number;
-  /** 11/15 지금 캠핑장이면 "camp" (없으면 마을) */
-  map?: "camp";
+  /** 11/15 지금 캠핑장이면 "camp", 11/16 바닷가면 "sea" (없으면 마을) */
+  map?: AwayMapId;
 };
 
 /** ?debug=1 HUD용. 1초마다 갱신 */
@@ -74,6 +76,11 @@ export type GameEvents = {
    * cancelled = 이동·점프·클릭 등 입력으로 그만둠, unreachable = 길이 없음(또는 도중에 막힘)
    */
   "grave:walk": { graveId: string; status: "started" | "arrived" | "cancelled" | "unreachable" };
+  /**
+   * 11/16 [사냥] 버튼 → 사냥터 입구까지 걷기 상태 (sticky, lib/huntWalk). started = 걷기 시작, arrived = 도착 (곧 portal:open),
+   * cancelled = 방향키·조이스틱·다시 누르기 등으로 그만둠, unreachable = 길이 없음(또는 도중에 막힘)
+   */
+  "portal:walk": { kind: "hunt"; status: "started" | "arrived" | "cancelled" | "unreachable" };
   "net:status": NetStatus;
   "net:stats": NetStats;
   /** 일부러 옮기는 채널 이동이 로비 확인을 통과해 지금 채널을 떠난다 → 장면이 지금 자리를 기억하고 새 채널 처음 자리로 */
@@ -89,7 +96,19 @@ export type GameEvents = {
   /** 카메라 상태. detached=true면 우클릭 드래그로 시점을 옮겨서 내 캐릭터를 따라가지 않는 중 (UI가 "내 캐릭터로" 버튼 표시) */
   "camera:state": { detached: boolean; zoom: number };
   /** 화면 연출 모드 (sticky). campfire = 모닥불에 앉아 카메라가 불멍 구도로 바뀐 상태 → UI는 HUD를 은은하게 줄인다 */
-  "view:mode": { mode: "normal" | "campfire" | "sky" };
+  "view:mode": { mode: "normal" | "campfire" | "sky" | "sea" };
+  /**
+   * 11/16 r19 바라보는 장면(바닷가 바다 보기·등대·동전 망원경, 캠핑장 전망대 망원경)이 켜져 있거나 켜지고 꺼지는 중 (sticky).
+   * 이 동안 게임 단축키는 채팅·V·Esc·움직이는 키만 가요 (lib/viewKeyGuard), 터치 버튼도 채팅·바다 보기만 남겨요
+   */
+  "view:busy": { on: boolean };
+  /** 11/16 r19 바라보는 장면에서 Esc: 장면이 나가요 */
+  "view:exit": undefined;
+  /**
+   * 11/16 바닷가 바다 보기 (sticky, null = 숨김): 바다를 볼 수 있는 자리(백사장 벤치·선베드·돗자리·선착장 끝·방파제 끝)에 앉아 있으면
+   * UI가 「바다 보기」(on이면 「돌아가기」) 버튼과 V 단축키를 띄워요
+   */
+  "sea:hud": { on: boolean } | null;
   /**
    * 놀이기구 2 하늘 시점 안내 (sticky, null = 숨김). sky = 관람차·열기구 하늘 시점이라 UI가 HUD를 줄이고 이 안내를 띄운다.
    * place = 지나가는 곳 이름(열기구), hint = 조작 안내, left = 내릴 때까지 남은 초,
@@ -104,7 +123,11 @@ export type GameEvents = {
    * 월드의 특별한 장소와 상호작용: 사냥터 입구 / 분양 사무소(하우징) / 성황당 → UI가 해당 창을 연다.
    * 주거 구역(메인 맵의 분양 마을): 집 문이면 houseId(그 집으로 들어가기), 빈 필지 팻말이면 lot(그 번지로 분양 문의)
    */
-  "portal:open": { kind: "hunt" | "housing" | "shrine" | "telescope" | "wish" | "haunt" | "tower" | "lottery"; houseId?: string; lot?: number };
+  "portal:open": { kind: "hunt" | "housing" | "shrine" | "telescope" | "wish" | "haunt" | "tower" | "lottery"; houseId?: string; lot?: number; zone?: "sea" };
+  /** 11/16 포구 오두막이 바뀌었다 (분양·겉모습·넓히기·이름) → 바닷가 장면이 오두막을 다시 받아 그린다 */
+  "sea:cottages": undefined;
+  /** 11/16 바닷가에서 그 오두막 터 앞으로 (내 집 가기) */
+  "sea:lot": { lot: number };
   /** 22번 황금 고블린을 내가 가장 먼저 잡았다 → UI가 증서로 /api/goblin에 보상을 받는다 */
   "goblin:grant": { id: string; grant: string; points: number };
   /** 23번 확성기 한마디가 실시간 서버에서 왔다 (내 것 포함) → UI의 확성기 창에 띄운다 */
@@ -139,7 +162,7 @@ export type GameEvents = {
   /** 47번: 다른 사람 캐릭터(또는 이름표)를 눌렀다 → UI가 작은 메뉴(신고하기)를 띄운다. ch = 월드 채널, room = 방 id */
   "peer:menu": { sid: number; name: string; ch?: number; room?: string; /** 그 사람 머리 위에 지금 떠 있는 자유 채팅 (신고에 붙인다) */ chat?: string };
   /** 채팅 기록창 한 줄: 같은 채널·방에서 받은 자유 채팅(가린 글) 또는 내가 보낸 글. 화면 메모리에만 1분. key = 서버 줄 id(중복 제거) */
-  "chat:line": { name: string; text: string; mine: boolean; key?: string; /** 운영자(실시간 서버가 알린 staff) → 이름 금색 */ staff?: true; /** 11/16 매니저(실시간 서버가 알린 mgr) → "매니저" 딱지 */ mgr?: true; /** 닉네임 꾸미기 id (lib/nameStyle nameStyleIds) */ ns?: string[]; /** 11/16 쓴 사람이 캠핑장에 있었다 */ m?: "camp"; /** 11/16 귓속말 줄 (chatLog.ts ChatLine.w) */ w?: "out" | "in" | "fail" | "note" };
+  "chat:line": { name: string; text: string; mine: boolean; key?: string; /** 운영자(실시간 서버가 알린 staff) → 이름 금색 */ staff?: true; /** 11/16 매니저(실시간 서버가 알린 mgr) → "매니저" 딱지 */ mgr?: true; /** 닉네임 꾸미기 id (lib/nameStyle nameStyleIds) */ ns?: string[]; /** 11/16 쓴 사람이 캠핑장·바닷가에 있었다 */ m?: AwayMapId; /** 11/16 귓속말 줄 (chatLog.ts ChatLine.w) */ w?: "out" | "in" | "fail" | "note" };
   /** 11/16 최근 귓속말 상대가 지금 이 채널에 있는지 (input:whoOn의 답, 서버가 준 그대로). on = 있음, off = 없음 (sticky) */
   "whisper:online": { on: string[]; off: string[] };
   /** 방에 들어올 때 서버가 보낸 이 방의 최근 1분 채팅 (이 기기 시계로 옮긴 줄). ch = 월드 채널이면 그 번호 (방이면 없음) */
@@ -183,10 +206,10 @@ export type GameEvents = {
   "friend:notice": { message: string };
   /** 친구가 들어왔다(on)·나갔다 — 실시간 서버가 밀어 준 것 (key = 친구 창의 그 친구 키) */
   "friend:presence": { key: string; name: string; on: boolean };
-  "minimap:dots": { me: { x: number; y: number }; others: number[]; residents?: number[]; /** 친구 (others에서 뺀 같은 채널 친구 위치, 하트로 그린다) */ friends?: number[]; /** 11/15 캠핑장이면 "camp" (캠핑장 바탕) */ map?: "camp" };
-  /** 11/15 지금 맵 (캠핑장 장면이 뜨면 camp, 닫히면 village). HUD·미니맵·채팅·음악이 본다 (sticky) */
-  "map:changed": { map: "village" | "camp" };
-  /** 11/15 마을 ↔ 캠핑장 버스를 타고 가는 중 (sticky) */
+  "minimap:dots": { me: { x: number; y: number }; others: number[]; residents?: number[]; /** 친구 (others에서 뺀 같은 채널 친구 위치, 하트로 그린다) */ friends?: number[]; /** 11/15 캠핑장이면 "camp", 11/16 바닷가면 "sea" (그 맵 바탕) */ map?: AwayMapId };
+  /** 11/15 지금 맵 (캠핑장 장면이 뜨면 camp, 11/16 바닷가 장면이면 sea, 닫히면 village). HUD·미니맵·채팅·음악이 본다 (sticky) */
+  "map:changed": { map: MapId };
+  /** 11/15 마을 ↔ 캠핑장·바닷가 버스를 타고 가는 중 (sticky) */
   "bus:state": { riding: boolean };
   /** 11/15 캠핑장 NPC 대화 창 (null이면 닫기, sticky) */
   "camp:talk": { npc: string; name: string; lines: string[] } | null;
@@ -210,6 +233,11 @@ export type GameEvents = {
   "boat:duck": { riding: boolean };
   /** 11/16 범퍼카에 타 있음 (sticky) → 터치 [점프] 버튼이 [빵빵!]이 된다 (범퍼카 위 Space = 빵빵) */
   "bumper:riding": { riding: boolean };
+  /**
+   * 11/16 내 캐릭터가 지금 탄 것·앉은 자리 (sticky, 마을·캠핑장·바닷가 장면이 바뀔 때만 알린다 — lib/rideGate publishRide).
+   * 사냥터·미니게임·집으로 가는 입구가 이걸 보고 탈것이면 막고, 앉아 있으면 player:stand로 일으켜 세운다 (lib/ridePolicy)
+   */
+  "player:ride": RideStatus;
   /** 내 캐릭터의 화면 위치 (CSS px, 뷰포트 기준). ui:radial이 열려 있는 동안 움직일 때만 */
   "me:screen": { x: number; y: number };
 };
@@ -219,8 +247,12 @@ export type GameEvents = {
 export type UiEvents = {
   /** 관람차·열기구 탑승 중 [시점 변경하기] (버튼·V): 2D 장면 ↔ 맵 위 보기 */
   "sky:view": undefined;
+  /** 11/16 바다 보기 켜기·끄기 (버튼·V) */
+  "sea:view": undefined;
   /** 동물원 타는 펫 올라타기·내리기 (모바일·HUD 버튼, 데스크톱은 R) */
   "input:ride": undefined;
+  /** 11/16 다른 장면으로 가기 직전: 의자·벤치·그네·해먹 같은 자리에 있으면 일어난다 (탈것은 lib/rideGate가 먼저 막는다) */
+  "player:stand": undefined;
   /**
    * 지금 채널의 묘비 목록 (등록 순 = 격자 순서). 받을 때마다 월드를 다시 맞춘다.
    * 채널마다 묘지가 따로라, 게임은 channel이 자기 채널과 다른 목록은 무시하고 채널을 옮기면 묘비를 바로 비운다.
@@ -237,6 +269,8 @@ export type UiEvents = {
    * walk=false면 카메라만 그 묘비로 (랭킹 등)
    */
   "grave:focus": { graveId: string; walk: boolean };
+  /** 11/16 [사냥] 버튼: 내 캐릭터가 길을 찾아 그 입구까지 걸어가 도착하면 portal:open (순간이동 없음, 진행은 portal:walk). null = 그만 걷기 */
+  "portal:walkTo": { kind: "hunt" | null };
   /** 내가 방금 묘비를 세움: 카메라 이동 + 흙 덮이는 연출 + graveEvent(buried) 전송 */
   "grave:buried": { graveId: string };
   /** 내가 묘비를 수정/이장함: graveEvent 전송 */
@@ -379,7 +413,7 @@ export type UiEvents = {
   /** 친구: 지금 채널에 있는 친구들 (그 채널의 sid·이름) → 게임이 이름표 옆 하트·미니맵 하트로 그린다 (sticky) */
   "friends:here": { ch: number; list: { sid: number; name: string }[] };
   /** 친구한테 가기 (같은 채널 마을): 친구 옆 걸을 수 있는 칸으로 순간이동. x,y = 서버가 알려 준 위치 (화면에 친구가 없을 때 쓴다) */
-  "friend:goto": { sid: number; name: string; x: number; y: number; /** 11/15 친구가 캠핑장에 있으면 "camp" (맵이 다르면 버스를 거쳐 간다) */ map?: "camp" };
+  "friend:goto": { sid: number; name: string; x: number; y: number; /** 11/15 친구가 캠핑장에 있으면 "camp", 11/16 바닷가면 "sea" (맵이 다르면 버스를 거쳐 간다) */ map?: AwayMapId };
   /** 11/15 캠핑장 대화 창: 다음 말 (E·Space·버튼) / 닫았다 */
   "camp:talkNext": undefined;
   /** 11/15 바베큐를 샀다 (증서) → 게임이 먹는 연출·커지기, 실시간 서버로 증서 */
@@ -390,8 +424,8 @@ export type UiEvents = {
 };
 
 export type ForageUse =
-  | { kind: "fish"; spot: string; water: "lake" | "river" }
-  | { kind: "npc"; npc: "fishmonger" | "collector" }
+  | { kind: "fish"; spot: string; water: FishWater }
+  | { kind: "npc"; npc: NpcId }
   | { kind: "node"; node: string }
   /** 11/15 버스 정류장 마당 의뢰 게시판 → 수집 의뢰판 */
   | { kind: "board" };
@@ -412,6 +446,8 @@ const STICKY = new Set<keyof AllEvents>([
   "graves:mine",
   "seat:near",
   "view:mode",
+  "view:busy",
+  "sea:hud",
   "audio:settings",
   "queue:status",
   "scene:changed",
@@ -426,6 +462,7 @@ const STICKY = new Set<keyof AllEvents>([
   "ride:state",
   "boat:duck",
   "bumper:riding",
+  "player:ride",
   "ui:radial",
   "sky:hud",
   "friends:here",
@@ -436,6 +473,7 @@ const STICKY = new Set<keyof AllEvents>([
   "map:changed",
   "bus:state",
   "camp:talk",
+  "portal:walk",
 ]);
 
 class Bridge {
@@ -469,6 +507,7 @@ class Bridge {
     this.lastValues.delete("net:status");
     this.lastValues.delete("ready");
     this.lastValues.delete("camera:state");
+    this.lastValues.delete("player:ride");
   }
 }
 

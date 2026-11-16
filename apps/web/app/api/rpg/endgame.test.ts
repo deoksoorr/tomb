@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { tExpToNext, TRANSCEND_EXP_MUL } from "@/lib/rpg/endgame";
-import { floorTExp, TOWER_FLOOR_POINTS, towerPlan, towerZone } from "@/lib/rpg/tower";
+import { floorTExp, TOWER_FLOOR_POINTS, towerOfScore, towerPlan, towerReachedLabel, towerZone } from "@/lib/rpg/tower";
 import { getTowerStore } from "@/lib/rpg/towerStore";
 import { getErrors, getMegaphone } from "@/lib/store";
 import { cardOffer, CARD_IDS } from "@/lib/rpg/cards";
@@ -12,7 +12,7 @@ import { forgetEndgameLaunch } from "@/lib/rpg/service";
 import { getRpgStore } from "@/lib/rpg/store";
 import type { CharacterState, RpgView, RunFinishResponse, RunStartResponse } from "@/lib/rpg/types";
 import { setStaff } from "@/lib/staff";
-import { kstDay } from "@/lib/store/accounts";
+import { kstDay, kstWeek } from "@/lib/store/accounts";
 import * as session from "../session/route";
 import * as finish from "./run/finish/route";
 import * as start from "./run/start/route";
@@ -216,6 +216,48 @@ describe("야근 빌딩 판 끝 정산", () => {
     const s2 = await begin(v, 1);
     const q = await end(v, s2, climbed(s2, 3, { died: false, quit: true }), climbMs(3));
     expect(q.reward.tower).toMatchObject({ floors: 3, best: 3 });
+  });
+
+  it("11/16 같은 층이면 먼저 도달한 사람이 위: 도달 시각 = 판 시작 + 그 층을 깬 시간, 같은 층을 다시 올라도 점수 그대로", async () => {
+    const a = await newVisitor();
+    const t0 = Date.now();
+    const sa = await begin(a, 1);
+    const t1 = Date.now();
+    await end(a, sa, climbed(sa, 12), climbMs(12));
+    const scoreA = (await getTowerStore().scoreOf(a.id))!;
+    const ta = towerOfScore(scoreA);
+    expect(ta.floor).toBe(12);
+    expect(ta.at).toBeGreaterThanOrEqual(Math.floor((t0 + 12 * 45_000) / 1000) * 1000);
+    expect(ta.at).toBeLessThanOrEqual(t1 + 12 * 45_000);
+    expect(await getTowerStore().scoreOf(a.id, kstWeek(t0))).toBe(scoreA);
+    // 한 시간 뒤 체크포인트(11층)에서 시작해 1분 반 만에 12층: 판은 빨라도 늦게 도달했으니 아래
+    const b = await newVisitor({ level: 50, fBest: 10 });
+    vi.spyOn(Date, "now").mockReturnValue(t1 + 3_600_000);
+    const sb = await begin(b, 11);
+    await end(b, sb, climbed(sb, 2), climbMs(2));
+    const scoreB = (await getTowerStore().scoreOf(b.id))!;
+    expect(towerOfScore(scoreB).floor).toBe(12);
+    expect(scoreA).toBeGreaterThan(scoreB);
+    // 먼저 오른 사람이 같은 층을 더 빨리 다시 올라도 점수(도달 시각)는 그대로
+    vi.spyOn(Date, "now").mockReturnValue(t1 + 7_200_000);
+    const sa2 = await begin(a, 11);
+    const r2 = await end(a, sa2, climbed(sa2, 2), climbMs(2));
+    expect(r2.reward.tower).toMatchObject({ best: 12, newBest: false, newWeek: false });
+    expect(await getTowerStore().scoreOf(a.id)).toBe(scoreA);
+    // 랭킹 줄 아래: 「11월 16일 오후 2:32에 도달」
+    const board = (await (await rank.GET(call("/api/rank?board=tower&period=all&me=1", a))).json()) as { rows: { value: number; me: boolean; sub?: string }[]; mine: { sub?: string } | null };
+    const mine = board.rows.find((x) => x.me) ?? board.mine;
+    expect(mine?.sub).toBe(towerReachedLabel(ta.at));
+    expect(mine?.sub).toMatch(/^\d+월 \d+일 오[전후] \d+:\d\d에 도달$/);
+  });
+
+  it("11/16 이번 주 첫 판은 전체 최고보다 낮은 층이어도 주간 랭킹에 들어간다 (전체 랭킹은 그대로)", async () => {
+    const v = await newVisitor({ level: 50, fBest: 40, fBestMs: 900_000, fWk: "20200106", fWkBest: 40, fWkMs: 900_000 });
+    const s = await begin(v, 1);
+    const r = await end(v, s, climbed(s, 3), climbMs(3));
+    expect(r.reward.tower).toMatchObject({ best: 3, newBest: false, newWeek: true });
+    expect(towerOfScore((await getTowerStore().scoreOf(v.id, kstWeek(Date.now())))!).floor).toBe(3);
+    expect(await getTowerStore().scoreOf(v.id)).toBeNull();
   });
 
   it("11/15 우두머리 상자는 하루 개수 제한 없음", async () => {

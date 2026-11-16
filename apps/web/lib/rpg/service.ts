@@ -5,7 +5,7 @@ import { earnPointsOnly, getAccounts, refundPoints, spendPoints } from "../store
 import { kstDay, kstWeek } from "../store/accounts";
 import { capsMult } from "../pointEvent";
 import { earnBoost } from "../store/pointEvent";
-import { forgetTitles, forgetTowerTitles } from "../titlesServer";
+import { forgetTitles, forgetTowerTitles, wornPerk } from "../titlesServer";
 import { earnRule } from "../economy";
 import { env } from "../env";
 import { HttpError } from "../http";
@@ -46,6 +46,7 @@ import {
   TOWER_TICKET_SEC,
   towerChestDrops,
   towerReach,
+  towerArrival,
   towerScore,
   towerSettle,
   towerZone,
@@ -389,6 +390,9 @@ export async function startRun(
   };
 }
 
+/** 11/16 도감 갈래 칭호의 새 칸 보상 비율 (새로 등록한 게 있을 때만 부른다 — lib/forage/dexReward payNewDex) */
+const dexBonus = (acct: string, now: number) => async () => (await wornPerk(acct, now)).dexBonus;
+
 /** 코디 드롭 하나에 시도해 볼 후보 수 (이미 가진 것이면 다음 것) */
 const COSMETIC_TRIES = 8;
 
@@ -462,7 +466,7 @@ async function registerStars(
     const list = done.map((d) => (keep.includes(d) ? { id: d.id, isNew: isNew[k++] ?? false, perfect: d.perfect } : { id: d.id, isNew: false, perfect: d.perfect, later: true }));
     let dex: DexGain | undefined;
     try {
-      dex = await payNewDex(store, acct, list, ip, now);
+      dex = await payNewDex(store, acct, list, ip, now, dexBonus(acct, now));
     } catch (e) {
       // 못 준 보상은 받을 도감 보상에 남아 도감 창에서 받는다
       console.error("[rpg] 별자리 도감 보상 지급 실패", e);
@@ -494,7 +498,7 @@ export async function recordMobKills(
     const fresh = granted.filter((g) => g.isNew).map((g) => g.id);
     let dex: DexGain | undefined;
     try {
-      dex = await payNewDex(store, acct, granted, ip, now);
+      dex = await payNewDex(store, acct, granted, ip, now, dexBonus(acct, now));
     } catch (e) {
       // 못 준 보상은 받을 도감 보상에 남아 도감 창에서 받는다
       console.error("[rpg] 몬스터 도감 보상 지급 실패", e);
@@ -544,13 +548,16 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   // 11/15 연습 판(그날 초월 구간을 다 쓴 판)은 드롭이 없다
   const vDrops = t.td && testServerEnv() ? t.td : t.tt === "practice" ? [] : v.drops;
   // 11/15 초월 판: 판 EXP × 배율 × 그날 구간 비율 → 초월 EXP (일반 EXP는 레벨 50이라 어차피 버려진다)
-  const tGain = t.tt ? Math.round(v.exp * TRANSCEND_EXP_MUL * RUN_TIERS[t.tt].rate) : 0;
+  // 11/16 사냥 갈래 칭호: 사냥 판 경험치 + (초월 EXP도 이 값에서. 별자리 잇기 판은 그대로, 포인트와는 무관 — lib/titles)
+  const huntExp = t.g === "hunt" ? (await wornPerk(acct, now)).huntExp : 0;
+  const exp = huntExp > 0 ? Math.round(v.exp * (1 + huntExp)) : v.exp;
+  const tGain = t.tt ? Math.round(exp * TRANSCEND_EXP_MUL * RUN_TIERS[t.tt].rate) : 0;
 
   const done = await http(
     store.update(acct, (s) => {
       let cur = s;
       if (result.game === "hunt") cur = consumePotions(cur, result.potionsUsed).state;
-      const g = t.tt ? gainTranscend(cur, tGain) : gainExp(cur, v.exp);
+      const g = t.tt ? gainTranscend(cur, tGain) : gainExp(cur, exp);
       const dr = addDrops(g.state, vDrops);
       return {
         state: { ...dr.state, runs: dr.state.runs + 1 },
@@ -578,17 +585,20 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   const pointsRaw = nightBonus ? Math.round(v.points * STARRY_NIGHT_BONUS) : v.points;
   // 사냥은 사냥 한도, 곤충·별자리는 미니게임 한도 (사냥 화면의 오늘 사냥 포인트(daily.points)에는 사냥 몫만)
   const earned = pointsRaw > 0 ? (await earnPointsOnly(acct, t.g, pointsRaw, ipHash)).earned : 0;
-  const daily = await store.addDaily(acct, kstDay(now), { points: t.g === "hunt" ? earned : 0, runs: 1, exp: v.exp });
+  const daily = await store.addDaily(acct, kstDay(now), { points: t.g === "hunt" ? earned : 0, runs: 1, exp });
   if (t.g === "hunt") await recordEvent("hunt", now); // 47번 방문 분석: 사냥 판 수
   // 49번 랭킹: 사냥터별 최단 클리어·처치 수 (난이도 = 사냥터). 운영자 계정은 순위에 남기지 않는다.
   // 11/15: 자기 레벨이 그 사냥터가 열리는 레벨(티켓의 사냥터 t.z)보다 10 넘게 높으면 랭킹에 아예 넣지 않는다 —
   // 주간 레이스뿐 아니라 전체 처치 수·최단 기록도 (사용자 요청 "다 적정 레벨만 세게"). 지나간 기록은 그대로
-  if (v.hunt && (v.hunt.kills > 0 || v.hunt.clearMs !== null) && !staff && countsForRace(t.lv, t.d, zoneFor(t.d, t.z)))
-    await getAccounts().recordHunt(acct, t.d, v.hunt, kstWeek(now), true);
+  // 11/16 최단 클리어는 사냥터(t.z — 없던 옛 티켓은 그 난이도 첫 사냥터)별로 남긴다
+  const runZone = zoneFor(t.d, t.z);
+  if (v.hunt && (v.hunt.kills > 0 || v.hunt.clearMs !== null) && !staff && countsForRace(t.lv, t.d, runZone))
+    await getAccounts().recordHunt(acct, runZone.id, v.hunt, kstWeek(now), true);
   return {
     reward: {
       score: v.score,
-      exp: v.exp,
+      exp,
+      ...(exp > v.exp ? { titleExp: exp - v.exp } : {}),
       pointsRaw,
       points: earned,
       capped: earned < pointsRaw,
@@ -680,7 +690,10 @@ async function finishTower(acct: string, start: number, seed: number, level: num
     console.warn("[tower] 의심 판", JSON.stringify({ why: v.suspect, ...info }));
     await towerOpsLog("[tower] 의심 판 (보상 지급·랭킹 제외)", { why: v.suspect.join(" | "), ...info, killsBy: result.kills, picks: result.cards ?? [] }, now);
   }
-  return settleTowerRun(acct, start, seed, v, result.potionsUsed, ipHash, now, sup);
+  // 11/16 도달 시각 (같은 층 랭킹 순서): 판 시작(서버가 티켓에 적은 시각 = now − elapsed) + 꼭대기 층을 깬 게임 시간.
+  // 판을 끝낸 시각(now)은 마지막 층에서 쓰러질 때까지·결과를 보낼 때까지가 더 붙어서 늦다. floorMs는 evalTower가 판 시간 안·깬 층 최소 시간 뒤로 자른 값
+  const at = towerArrival(now - elapsed, v.floorMs, now);
+  return settleTowerRun(acct, start, seed, v, result.potionsUsed, ipHash, now, sup, at);
 }
 
 /** 11/15 야근 빌딩 거절·의심 판 기록 (관리자 오류 모음 — 판마다 따로 묶이게 첫 줄에 계정·시각). 기록 실패는 조용히 */
@@ -710,6 +723,8 @@ async function settleTowerRun(
   ipHash: string,
   now: number,
   sup: boolean,
+  /** 11/16 꼭대기 층에 도달한 시각 (랭킹 점수·꼭대기 층 주인) */
+  at: number,
 ): Promise<RunFinishResponse> {
   const store = getRpgStore();
   const day = kstDay(now);
@@ -750,9 +765,9 @@ async function settleTowerRun(
   // 11/15 의심 판은 랭킹·주간 기록·서버 최초·최고층 기록 보유자·주간 사냥 레이스에서 뺀다 (st.newBest·newWeek도 false)
   const suspect = !!v.suspect;
   if (!staff) {
-    // 랭킹: 기록이 오른 판만 (주간·전체 — 파이프라인 한 번)
+    // 랭킹: 층이 오른 판만 (주간·전체 — 파이프라인 한 번). 11/16 같은 층을 다시 올라도 안 쓴다 (먼저 도달한 기록을 지킨다)
     if (st.newWeek || st.newBest) {
-      const score = towerScore(st.best, v.floorMs);
+      const score = towerScore(st.best, at);
       await getTowerStore()
         .record(acct, week, st.newWeek ? score : null, st.newBest ? score : null)
         .catch((e) => console.warn("[tower] 랭킹 기록 실패", e));
@@ -766,7 +781,7 @@ async function settleTowerRun(
       // 꼭대기 층 주인: 이 인스턴스가 본 꼭대기보다 높을 때만 Redis에 묻는다
       if (st.best > (topSeen.__tombTowerTop ?? 0)) {
         try {
-          const r = await getTowerStore().claimTop(acct, st.best, v.floorMs, now);
+          const r = await getTowerStore().claimTop(acct, st.best, v.floorMs, at);
           topSeen.__tombTowerTop = Math.max(r.prev?.floor ?? 0, r.took ? st.best : 0);
           if (r.took) {
             forgetTowerTitles();
@@ -816,7 +831,7 @@ async function settleTowerRun(
 
 /**
  * 11/15 관리자: 서버가 잘못 거절한 야근 빌딩 판을 대신 정산한다 (판 끝과 같은 정산 — 우두머리 상자는 새 시드로 다시 굴린다).
- * floors = 깬 층 수 (start층부터), floorMs = 마지막 층을 깬 시각(판 시작부터, 랭킹 동점 순서), kills = 주간 레이스 처치 수(모르면 0)
+ * floors = 깬 층 수 (start층부터), floorMs = 마지막 층을 깬 시각(판 시작부터, 엘리베이터 표시용 — 11/16 랭킹 동점 순서는 도달 시각), kills = 주간 레이스 처치 수(모르면 0)
  */
 export async function grantTowerRun(acct: string, o: { start: number; floors: number; floorMs: number; kills?: number }, now = Date.now()): Promise<RunFinishResponse> {
   const v: Extract<TowerVerdict, { ok: true }> = {
@@ -828,5 +843,6 @@ export async function grantTowerRun(acct: string, o: { start: number; floors: nu
     points: o.floors * TOWER_FLOOR_POINTS,
   };
   const seed = Math.floor(Math.random() * 2 ** 31);
-  return settleTowerRun(acct, o.start, seed, v, {}, "admin-grant", now, false);
+  // 11/16 도달 시각은 관리자가 대신 정산한 시각 (판 시작 시각을 모른다)
+  return settleTowerRun(acct, o.start, seed, v, {}, "admin-grant", now, false, now);
 }

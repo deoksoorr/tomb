@@ -1,6 +1,6 @@
 import type { Season } from "../../ambience";
 import { addDays, dayStartMs } from "../../gameDay";
-import { CAT_LABEL, LIFE_CATS, PHASE_LABEL, SEASON_LABEL, SPECIES, WEATHER_LABEL, speciesById, type LifeCat, type Rarity, type Species } from "../catalog";
+import { CAT_LABEL, isSeasideSpecies, LIFE_CATS, PHASE_LABEL, SEASON_LABEL, SPECIES, WEATHER_LABEL, speciesById, type LifeCat, type Rarity, type Species } from "../catalog";
 import { conditionsAt, hash01, type Cond } from "../rules";
 import { QUEST_DAILY, QUEST_STAMPS, isHardSlot, slotStamps } from "./catalog";
 
@@ -38,7 +38,8 @@ const SP_MIN_BLOCKS = 12;
 const fitsCond = (s: Species, c: Cond) =>
   (!s.time || s.time.includes(c.phase)) && (!s.weather || s.weather.includes(c.weather)) && (!s.season || s.season.includes(c.season));
 
-const POOL = SPECIES.filter((s) => !s.junk);
+// 11/16 바닷가에서만 나오는 것(바닷물고기·갯벌)은 의뢰에 내지 않는다 (예전 의뢰가 그대로 나오게 — 납품은 갈래·희귀도가 맞으면 받는다)
+const POOL = SPECIES.filter((s) => !s.junk && !isSeasideSpecies(s));
 
 const availCache = new Map<string, Map<string, number>>();
 /** 그 게임 날짜(새벽 5시 ~ 다음 날 새벽 5시)에 종마다 나오는 30분 칸 수 */

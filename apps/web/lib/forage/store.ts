@@ -20,7 +20,8 @@ import type { DexEntry, LifeDay } from "./types";
 //  - forage:{a}:used:{n}    STRING 끝낸 티켓 표시 (SET NX, 1일) → 같은 티켓을 두 번 낼 수 없다
 //  - forage:{a}:hour:{h}    STRING 이번 한 시간 동안 시작한 수 (INCR, 1시간)
 //  - forage:{a}:day:{게임 날짜}   HASH  fishP/gatherP/dexP(판 포인트) · fish/gather(잡은 수) (2일)
-//  - forage:{a}:took:{w}    SET   이 창(15분)에 캔 채집 지점 id (2시간)
+//  - forage:{a}:tk:{b}      SET   11/16 창 TOOK_BUCKET개(10분 × 3 = 30분)를 한 키로: `${창}:${지점 id}` (40분).
+//                                창을 15분 → 10분으로 줄이며 창마다 키를 만들지 않게 묶었다 (예전 took:{창} = 15분마다 한 키·2시간)
 //  - forage:{a}:auto        STRING 자동 낚시 세션 JSON (lib/forage/auto.ts, 바꿀 때는 이전 값과 같을 때만 = 비교 후 교체)
 
 export type ClaimResult = { status: "ok"; payload: string } | { status: "reused" | "stale" };
@@ -49,7 +50,18 @@ export type DayField = keyof LifeDay;
 
 const USED_TTL_SEC = 86_400;
 const DAY_TTL_SEC = 2 * 86_400;
-const TOOK_TTL_SEC = 2 * 3_600;
+/** 11/16 캔 지점 키 하나에 묶는 창 수 (10분 창 × 3 = 30분에 키 하나 — 예전 15분 창마다 하나보다 적다) */
+export const TOOK_BUCKET = 3;
+/** 묶음 키 보관: 묶음(30분)이 끝나고 진행 중인 채집(최대 2분 반)까지 넉넉히 */
+export const TOOK_TTL_SEC = 40 * 60;
+/** 창 w의 캔 지점 멤버 (`${w}:${지점}`) → 그 창 것만 지점 id로 */
+const tookMember = (w: number, node: string) => `${w}:${node}`;
+const takenIn = (members: Iterable<unknown>, w: number): string[] => {
+  const p = `${w}:`;
+  const out: string[] = [];
+  for (const m of members) if (typeof m === "string" && m.startsWith(p)) out.push(m.slice(p.length));
+  return out;
+};
 /** 자동 낚시 세션 보관 (켜 둔 채 떠나도 다음 날 돌아와 정산할 수 있게) */
 export const AUTO_TTL_SEC = 2 * 86_400;
 
@@ -129,7 +141,8 @@ export const lk = {
   used: (a: string, n: string) => `forage:${a}:used:${n}`,
   hour: (a: string, h: string) => `forage:${a}:hour:${h}`,
   day: (a: string, d: string) => `forage:${a}:day:${d}`,
-  took: (a: string, w: number) => `forage:${a}:took:${w}`,
+  /** 창 w가 든 묶음 키 (창 TOOK_BUCKET개마다 하나) */
+  took: (a: string, w: number) => `forage:${a}:tk:${Math.floor(w / TOOK_BUCKET)}`,
   auto: (a: string) => `forage:${a}:auto`,
   pay: (a: string) => `forage:${a}:dexpay`,
 };
@@ -230,12 +243,12 @@ export class MemoryForageStore implements ForageStore {
       claims: Object.fromEntries(a.claims),
       pay: payFromHash(Object.fromEntries(a.pay)),
       day: { ...(this.days.get(lk.day(acct, day)) ?? emptyDay()) },
-      taken: [...(this.took.get(lk.took(acct, window)) ?? [])],
+      taken: takenIn(this.took.get(lk.took(acct, window)) ?? [], window),
     };
   }
 
   async today(acct: string, day: string, window: number) {
-    return { day: { ...(this.days.get(lk.day(acct, day)) ?? emptyDay()) }, taken: [...(this.took.get(lk.took(acct, window)) ?? [])] };
+    return { day: { ...(this.days.get(lk.day(acct, day)) ?? emptyDay()) }, taken: takenIn(this.took.get(lk.took(acct, window)) ?? [], window) };
   }
 
   async dex(acct: string) {
@@ -272,8 +285,9 @@ export class MemoryForageStore implements ForageStore {
       const k = lk.took(acct, take.window);
       let s = this.took.get(k);
       if (!s) this.took.set(k, (s = new Set()));
-      if (s.has(take.node)) return null;
-      s.add(take.node);
+      const m = tookMember(take.window, take.node);
+      if (s.has(m)) return null;
+      s.add(m);
     }
     const dk = lk.day(acct, day);
     const d = this.days.get(dk) ?? emptyDay();
@@ -508,7 +522,7 @@ redis.call('DEL', KEYS[2])
 return v
 `;
 
-// KEYS: bag, dex, day, took, dexpay  ARGV: day, countField, take('1'/'0'), node, tookTtl, dayTtl, stackMax, 개수, (id, size, cat, 보상)...
+// KEYS: bag, dex, day, took, dexpay  ARGV: day, countField, take('1'/'0'), `${창}:${지점}`, tookTtl, dayTtl, stackMax, 개수, (id, size, cat, 보상)...
 // 돌려주는 값: 'taken' 또는 아이템마다 "id:{kept}{isNew}{record}" (각 0/1). 처음 등록이면 정산한 계정만 p:{cat}에 보상을 쌓는다
 export const GRANT_LUA = `
 local settled = redis.call('HEXISTS', KEYS[5], 'settled') == 1
@@ -761,7 +775,7 @@ export class RedisForageStore implements ForageStore {
       claims: hashOf(claims),
       pay: payFromHash(hashOf(pay)),
       day: dayFromHash(hashOf(d)),
-      taken: Array.isArray(took) ? took.map(String) : [],
+      taken: Array.isArray(took) ? takenIn(took, window) : [],
     };
   }
 
@@ -775,7 +789,7 @@ export class RedisForageStore implements ForageStore {
     p.hgetall(lk.day(acct, day));
     p.smembers(lk.took(acct, window));
     const [d, took] = await p.exec<[unknown, unknown]>();
-    return { day: dayFromHash(hashOf(d)), taken: Array.isArray(took) ? took.map(String) : [] };
+    return { day: dayFromHash(hashOf(d)), taken: Array.isArray(took) ? takenIn(took, window) : [] };
   }
 
   async dexEntries(acct: string) {
@@ -794,7 +808,7 @@ export class RedisForageStore implements ForageStore {
   }
 
   async grant(acct: string, day: string, count: "fish" | "gather", items: GrantItem[], stackMax: number, take?: { window: number; node: string }) {
-    const argv = [day, count, take ? "1" : "0", take?.node ?? "", String(TOOK_TTL_SEC), String(DAY_TTL_SEC), String(stackMax), String(items.length), ...grantArgs(items)];
+    const argv = [day, count, take ? "1" : "0", take ? tookMember(take.window, take.node) : "", String(TOOK_TTL_SEC), String(DAY_TTL_SEC), String(stackMax), String(items.length), ...grantArgs(items)];
     const r = await this.redis.eval<string[], unknown>(
       GRANT_LUA,
       [lk.bag(acct), lk.dex(acct), lk.day(acct, day), lk.took(acct, take?.window ?? 0), lk.pay(acct)],

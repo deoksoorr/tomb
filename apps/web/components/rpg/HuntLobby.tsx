@@ -31,6 +31,7 @@ import type { RpgView, RunReward, RunResult } from "@/lib/rpg/types";
 import type { HotAuto } from "@/lib/rpg/hotbar";
 import { readItem } from "@/lib/storage";
 import { LS } from "@/lib/types";
+import { equippedPerk } from "@/lib/titles";
 import { currentLook } from "../account/items";
 import { resolveAvatar } from "../account/wardrobe";
 import { cx } from "../ui/cx";
@@ -49,6 +50,7 @@ import ItemIcon from "../ui/ItemIcon";
 import RunHud from "./RunHud";
 import TowerEntrance, { towerBoostAllowed } from "./TowerEntrance";
 import s from "./rpg.module.css";
+import { rideGate } from "@/lib/rideGate";
 
 // 사냥터 입구 창 (월드의 사냥터 입구에서 portal:open {kind:"hunt"} → UI가 이 컴포넌트를 띄운다).
 // 11/15 mode="tower": 마을의 야근 빌딩 (portal:open {kind:"tower"}) — 첫 탭이 엘리베이터 버튼판(TowerEntrance), 판·결과 흐름은 같다.
@@ -121,6 +123,8 @@ export default function HuntLobby({
   const [view, setView] = useState<RpgView | null>(null);
   // 장비창 가운데 내 아바타 (게임 속 색·몸 + 지금 입은 꾸미기)
   const { me } = useMe();
+  // 11/16 야근 빌딩 갈래 칭호: 층마다 더하는 제한 시간 (초)
+  const towerSec = equippedPerk(me?.equipped).towerSec;
   const [savedColor] = useState(() => readItem(LS.color));
   const [openedAt] = useState(() => Date.now());
   const figure = {
@@ -262,6 +266,12 @@ export default function HuntLobby({
   };
 
   async function start(game = cur.game, difficulty = cur.diff, towerFloor?: number, boost = false) {
+    // 11/16 오리배·조각배 같은 탈것에 탄 채로는 못 간다 (끝나고 돌아오면 다시 배 위였다). 의자·벤치면 일어나서 간다
+    const why = rideGate(tower ? "야근 빌딩에 갈" : "사냥터에 갈");
+    if (why) {
+      setNotice(why);
+      return;
+    }
     setPhase("starting");
     setNotice(null);
     try {
@@ -305,6 +315,8 @@ export default function HuntLobby({
                 pity: res.view.character.sgPity ?? 0,
                 // 11/15 테스트 서버 슈퍼 계정만 (서버가 준 superHunter — 운영 서버에서는 늘 없다)
                 ...(boost && res.view.superHunter && towerBoostAllowed() ? { boost: true } : {}),
+                // 11/16 야근 빌딩 갈래 칭호: 층마다 제한 시간 + (lib/titles towerSec)
+                ...(towerSec > 0 ? { bonusSec: towerSec } : {}),
               },
             }
           : {}),
@@ -638,6 +650,8 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
             <div>
               <strong>+{(r.transcend ? r.transcend.exp : r.exp).toLocaleString("ko-KR")}</strong>
               {r.transcend ? "초월 EXP" : "EXP"}
+              {/* 11/16 사냥 갈래 칭호로 더 받은 몫 */}
+              {!r.transcend && r.titleExp ? <small> (칭호 +{r.titleExp.toLocaleString("ko-KR")})</small> : null}
             </div>
             <div>
               <strong>+{r.points}</strong>포인트

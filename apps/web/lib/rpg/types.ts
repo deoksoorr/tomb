@@ -195,6 +195,8 @@ export type Drop = {
 export type RunReward = {
   score: number;
   exp: number;
+  /** 11/16 exp 가운데 사냥 갈래 칭호로 더 받은 몫 (없으면 빠진다) */
+  titleExp?: number;
   /** 계산된 포인트 (한도 전) */
   pointsRaw: number;
   /** 실제로 들어온 포인트 */
@@ -280,6 +282,8 @@ export type RpgPlay = {
     pity?: number;
     /** 11/15 테스트 서버 슈퍼 계정만: 무적·공격력 ×20 (높은 층 구경용). 서버는 이 값을 받지도 믿지도 않는다 — 운영 서버에서는 화면이 켜지 못한다 */
     boost?: boolean;
+    /** 11/16 야근 빌딩 갈래 칭호: 층마다 더하는 제한 시간 (초, lib/titles towerSec). 층 제한 시간은 화면만 재고 서버는 최소 시간만 본다 */
+    bonusSec?: number;
   };
   /** 11/15 연습 판 (초월 구간을 다 써서 드롭이 없다) — 바닥 드롭 연출을 하지 않는다 */
   noDrops?: boolean;

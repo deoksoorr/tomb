@@ -4,7 +4,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
 import { lookPartName } from "@/lib/lookScore";
 import { speciesOf } from "@/lib/forage/catalog";
-import { DIFFICULTIES, gearById, ZONES, type Difficulty } from "@/lib/rpg/catalog";
+import { DIFFICULTIES, DIFFS, gearById, ZONE_IDS, zonesOf, type ZoneId } from "@/lib/rpg/catalog";
 import { stayText } from "@/lib/stayTime";
 import type { PublicGrave, RankBoard, RankPeriod, RankResponse } from "@/lib/types";
 import RpgIcon from "../rpg/RpgIcon";
@@ -83,7 +83,7 @@ export default function RankingList({ graves, onPick }: Props) {
   const [tab, setTab] = useState<Tab>("points");
   const [period, setPeriod] = useState<RankPeriod>("week");
   const [hunt, setHunt] = useState<HuntMode>("huntBest");
-  const [zone, setZone] = useState<Difficulty>(DIFFICULTIES[0]);
+  const [zone, setZone] = useState<ZoneId>(ZONE_IDS[0]);
   const [fish, setFish] = useState("all");
   const baseId = useId();
   const flowered = useMemo(
@@ -137,7 +137,7 @@ export default function RankingList({ graves, onPick }: Props) {
             ))}
           </div>
           {tab === "house" && <span className={styles.hint}>안팎에 놓은 물건 점수에 좋아요 × 3을 더해요.</span>}
-          {tab === "tower" && <span className={styles.hint}>높이 오른 순이에요. 같으면 빨리 오른 순이에요. 이번 주 1위는 다음 한 주 동안 신화 칭호 「지난주 최고층」을 달아요.</span>}
+          {tab === "tower" && <span className={styles.hint}>높이 오른 순이에요. 같은 층이면 먼저 오른 사람이 위예요. 이번 주 1위는 다음 한 주 동안 신화 칭호 「지난주 최고층」을 달아요.</span>}
           {tab === "fish" && <span className={styles.hint}>직접 낚은 물고기만 올라요. 자동 낚시로 낚은 것은 도감에만 남아요.</span>}
           {tab === "fish" && (
             <select className={styles.zone} value={fish} onChange={(e) => setFish(e.target.value)} aria-label="물고기">
@@ -160,11 +160,16 @@ export default function RankingList({ graves, onPick }: Props) {
                 </button>
               </div>
               {hunt === "huntBest" && (
-                <select className={styles.zone} value={zone} onChange={(e) => setZone(e.target.value as Difficulty)} aria-label="사냥터">
+                // 11/16 사냥터 12곳 전부 (난이도별로 묶고, 열리는 레벨 순)
+                <select className={styles.zone} value={zone} onChange={(e) => setZone(e.target.value as ZoneId)} aria-label="사냥터">
                   {DIFFICULTIES.map((d) => (
-                    <option key={d} value={d}>
-                      {ZONES[d].name}
-                    </option>
+                    <optgroup key={d} label={DIFFS[d].name}>
+                      {zonesOf(d).map((z) => (
+                        <option key={z.id} value={z.id}>
+                          {z.name}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
               )}
@@ -204,7 +209,7 @@ export default function RankingList({ graves, onPick }: Props) {
 }
 
 /** 서버 랭킹 한 판. 내 줄은 강조하고, 50위 밖이면 맨 아래에 따로 */
-function BoardRanking({ board, period, zone, fish }: { board: RankBoard; period: RankPeriod; zone: Difficulty; fish: string }) {
+function BoardRanking({ board, period, zone, fish }: { board: RankBoard; period: RankPeriod; zone: ZoneId; fish: string }) {
   const [data, setData] = useState<RankResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 

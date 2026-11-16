@@ -4,6 +4,7 @@ import { bridge } from "../../bridge";
 import { DEPTH } from "../../config";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../../text/GlyphAtlas";
 import { BUS_BAY, BUS_PLATFORM, BUS_SHELTER_H, BUS_STOP, BUS_TIMETABLE, BUS_TIMETABLE_H, FISH_DECOR, fishZoneColliders, WHARF_BOARD, WHARF_BOARD_H, WHARF_CURB, WHARF_PLACARD } from "../fishZone";
+import { SEA_STOP, SEA_STOP_BAY, SEA_STOP_PLATFORM, SEA_STOP_SHELTER_H, SEA_STOP_SIGN, SEA_STOP_TIMETABLE } from "../seaStop";
 import { FTEX } from "./art";
 import { ensureZoneTextures, ZTEX } from "./zoneArt";
 
@@ -13,6 +14,10 @@ import { ensureZoneTextures, ZTEX } from "./zoneArt";
 //   누가 앉으면 꽂아 둔 낚싯대·찌는 치우고(그 사람의 낚싯대를 Foraging이 그린다) 의자만 남긴다.
 // - 가까이 오면 의자 위에 낚싯바늘 말풍선이 떠오른다 (남이 쓰는 자리는 회색). "E 낚시하기" 안내는 WorldScene의 상호작용 안내.
 // - 11/15 버스 정류장 마당: 의뢰 게시판·긴급 의뢰 현판 이름표, 주말 버스 정류장 (정류장 지붕·노선 팻말·시간표 글씨, 골목 바닥의 버스 정차 칸)
+// - 11/16 옛 묘역 아래 바닷가행 정류장 (seaStop.ts): 승강장·바다 빛 지붕·물결 팻말·시간표·강가 길 정차 칸. 충돌은 layout.staticColliders
+
+/** 정류장 이름표 색 (운영 버전 정류장 이름표와 같아요) */
+const STOP_LABEL = 0xc8f0d8;
 
 /** 바라보는 방향 → 단위 벡터 */
 const STEP: Record<number, [number, number]> = { [DIR.down]: [0, 1], [DIR.up]: [0, -1], [DIR.left]: [-1, 0], [DIR.right]: [1, 0] };
@@ -53,7 +58,7 @@ export class FishZoneView {
   constructor(private readonly d: FishZoneDeps) {
     const scene = d.scene;
     ensureZoneTextures(scene);
-    for (const t of ["의뢰 게시판", "긴급 의뢰", "버스 정류장", "언젠가 캠핑장행 · Someday Camp", "다음 버스: 언젠가"]) d.atlas.ensure(t);
+    for (const t of ["의뢰 게시판", "긴급 의뢰", "버스 정류장", "다음 버스: 언젠가", "바닷가 버스 정류장"]) d.atlas.ensure(t);
     // 바닥 장식 층 (11/15 정류장 다듬기): 위 마당 테두리 연석 → 정류장 승강장(판석·점자 블록·연석) → 골목의 버스 정차 칸
     scene.add.image(WHARF_CURB.x, WHARF_CURB.y, ZTEX.wharfCurb).setOrigin(0, 0).setDepth(DEPTH.decal + 1);
     scene.add.image(BUS_PLATFORM.x, BUS_PLATFORM.y, ZTEX.busPlatform).setOrigin(0, 0).setDepth(DEPTH.decal + 2);
@@ -68,8 +73,16 @@ export class FishZoneView {
     this.placardLabel = this.label(WHARF_PLACARD.x, WHARF_PLACARD.y - 31, "긴급 의뢰", 0xd8c8b0, 1, 0.7);
     this.placardFx = scene.add.graphics().setDepth(WHARF_PLACARD.y + 2);
     // 정류장 이름과 노선은 지붕 위에 두 줄로 (예전엔 팻말 위 노선 글씨가 지붕 이름표와 겹쳤다)
-    this.label(BUS_STOP.x, BUS_STOP.y - BUS_SHELTER_H - 1, "버스 정류장\n언젠가 캠핑장행 · Someday Camp", 0xc8f0d8, 1).setCenterAlign();
+    // 11/16 정류장은 간판 없이 떠 있는 이름표만 (운영 버전과 같은 글씨·크기·색). 바닷가행 정류장은 「바닷가 버스 정류장」
+    this.label(BUS_STOP.x, BUS_STOP.y - BUS_SHELTER_H - 1, "버스 정류장", STOP_LABEL, 1);
     this.label(BUS_TIMETABLE.x, BUS_TIMETABLE.y - BUS_TIMETABLE_H - 1, "다음 버스: 언젠가", 0xe8e0d0, 1, 0.85);
+    // 11/16 바닷가행 정류장 (옛 묘역 아래 강가): 승강장 → 지붕·팻말·시간표 → 강가 길 정차 칸. 지붕 그림은 벤치(bU)보다 뒤에
+    scene.add.image(SEA_STOP_PLATFORM.x, SEA_STOP_PLATFORM.y, ZTEX.busPlatform).setOrigin(0, 0).setDepth(DEPTH.decal + 2);
+    scene.add.image(SEA_STOP_BAY.x + SEA_STOP_BAY.w / 2, SEA_STOP_BAY.y + SEA_STOP_BAY.h / 2, ZTEX.busBay).setDepth(DEPTH.decal + 2);
+    scene.add.image(SEA_STOP.x, SEA_STOP.y + 1, ZTEX.seaShelter).setOrigin(0.5, 1).setDepth(SEA_STOP.y - 14);
+    scene.add.image(SEA_STOP_SIGN.x, SEA_STOP_SIGN.y + 1, ZTEX.seaSign).setOrigin(0.5, 1).setDepth(SEA_STOP_SIGN.y);
+    scene.add.image(SEA_STOP_TIMETABLE.x, SEA_STOP_TIMETABLE.y + 1, ZTEX.decor("timetable")).setOrigin(0.5, 1).setDepth(SEA_STOP_TIMETABLE.y);
+    this.label(SEA_STOP.x, SEA_STOP.y - SEA_STOP_SHELTER_H - 1, "바닷가 버스 정류장", STOP_LABEL, 1);
     for (const s of FISHING_SPOTS) this.markers.push(this.makeMarker(s));
   }
 

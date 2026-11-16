@@ -1,6 +1,6 @@
 import { css, Grid, makeCanvas, radial, rng } from "./pixel";
 
-// 연출용 작은 텍스처: 빛, 반딧불, 먼지, 꽃잎, 흙, 말풍선, 촛불, 유령불, 안개/비/눈/구름 그림자 타일, 비네트.
+// 연출용 작은 텍스처: 빛, 반딧불, 먼지, 꽃잎, 흙, 말풍선, 촛불, 유령불, 안개·구름 그림자 조각, 비/눈 타일, 비네트.
 
 export function glow(): HTMLCanvasElement {
   return radial(64, [
@@ -171,67 +171,111 @@ function tileNoise(size: number, period: number, seed: number): Float32Array {
   return out;
 }
 
-function noiseCanvas(size: number, octaves: [number, number][], seed: number, color: [number, number, number], alpha: (v: number) => number) {
-  const { canvas, ctx } = makeCanvas(size, size);
-  const acc = new Float32Array(size * size);
-  let total = 0;
-  octaves.forEach(([period, weight], i) => {
-    const n = tileNoise(size, period, seed + i * 101);
-    for (let k = 0; k < acc.length; k++) acc[k] += n[k] * weight;
-    total += weight;
-  });
-  const img = ctx.createImageData(size, size);
-  for (let k = 0; k < acc.length; k++) {
-    const v = acc[k] / total;
-    img.data[k * 4] = color[0];
-    img.data[k * 4 + 1] = color[1];
-    img.data[k * 4 + 2] = color[2];
-    img.data[k * 4 + 3] = Math.round(255 * Math.max(0, Math.min(1, alpha(v))));
+/**
+ * 안개·구름 그림자 조각 (흰색, 쓰는 쪽에서 tint): size×size 프레임 frames개를 가로로.
+ * 둥근 빛무리를 노이즈로 일그러뜨려 가장자리가 들쭉날쭉하고 속도 고르지 않다 — 여러 장을 겹쳐 흘려보내면 벽지처럼 되풀이되지 않는다
+ */
+export function puff(size = 128, frames = 4): HTMLCanvasElement {
+  const { canvas, ctx } = makeCanvas(size * frames, size);
+  const img = ctx.createImageData(size * frames, size);
+  const W = size * frames;
+  for (let f = 0; f < frames; f++) {
+    const edge = tileNoise(size, 5, 311 + f * 37);
+    const edge2 = tileNoise(size, 11, 523 + f * 41);
+    const body = tileNoise(size, 7, 733 + f * 43);
+    // 프레임마다 무게중심을 조금씩 옮겨 모양이 서로 다르게
+    const r = rng(97 + f);
+    const cx = size * (0.44 + 0.12 * r());
+    const cy = size * (0.44 + 0.12 * r());
+    const rad = size * 0.47;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const k = y * size + x;
+        const d = Math.hypot(x - cx, y - cy) / rad;
+        // 가장자리 반지름을 노이즈로 0.6~1.0배 흔든다
+        const rr = d / (0.6 + 0.3 * edge[k] + 0.1 * edge2[k]);
+        const t = Math.max(0, Math.min(1, (1 - rr) / 0.8));
+        const fall = t * t * (3 - 2 * t);
+        const a = fall * (0.55 + 0.45 * body[k]);
+        const o = (y * W + f * size + x) * 4;
+        img.data[o] = 255;
+        img.data[o + 1] = 255;
+        img.data[o + 2] = 255;
+        img.data[o + 3] = Math.round(255 * Math.max(0, Math.min(1, a)));
+      }
+    }
   }
   ctx.putImageData(img, 0, 0);
   return canvas;
 }
 
-export function fog(): HTMLCanvasElement {
-  return noiseCanvas(256, [[4, 1], [8, 0.5], [16, 0.25]], 7, [214, 220, 226], (v) => (v - 0.35) * 1.6);
+/** 무늬 몰림 정도: 낮은 주파수 노이즈로 한 타일 안에서도 촘촘한 곳·성긴 곳이 생긴다 (받을 확률 0.2~1) */
+function clumpAccept(dens: Float32Array, size: number, x: number, y: number, u: number): boolean {
+  return u < Math.min(1, 0.2 + 1.2 * dens[y * size + x]);
 }
 
-export function cloudShadow(): HTMLCanvasElement {
-  return noiseCanvas(256, [[3, 1], [6, 0.4]], 19, [8, 10, 18], (v) => (v - 0.5) * 2.2);
-}
+export type RainSheet = { size: number; count: number; seed: number; len: [number, number]; alpha: [number, number] };
 
-/** 비스듬한 빗줄기 타일 (이음매 없음) */
-export function rain(density: number, seed: number): HTMLCanvasElement {
-  const size = 64;
+/**
+ * 비스듬한 빗줄기 타일 (이음매 없음). 줄마다 길이·기울기·밝기가 다르고, 꼬리는 흐리고 머리(아래)는 밝다.
+ * 타일 안에서도 빗줄기가 몰린 곳·빈 곳이 있어서 크게 이어 붙여도 격자처럼 보이지 않는다
+ */
+export function rain(o: RainSheet): HTMLCanvasElement {
+  const { size } = o;
   const { canvas, ctx } = makeCanvas(size, size);
-  const r = rng(seed);
-  ctx.fillStyle = css(0xcfdcea, 0.55);
-  for (let i = 0; i < density; i++) {
+  const r = rng(o.seed);
+  const dens = tileNoise(size, 4, o.seed + 7);
+  const [l0, l1] = o.len;
+  const [a0, a1] = o.alpha;
+  let placed = 0;
+  for (let tries = 0; placed < o.count && tries < o.count * 30; tries++) {
     const x0 = Math.floor(r() * size);
     const y0 = Math.floor(r() * size);
-    const len = 4 + Math.floor(r() * 4);
+    if (!clumpAccept(dens, size, x0, y0, r())) continue;
+    placed++;
+    // 짧은 줄이 많고 긴 줄은 드물게
+    const len = l0 + Math.floor((l1 - l0 + 1) * Math.pow(r(), 1.6));
+    const q = r();
+    const step = q < 0.55 ? 3 : q < 0.8 ? 4 : q < 0.93 ? 2.5 : 5;
+    const a = a0 + (a1 - a0) * r();
+    const col = r() < 0.15 ? 0xe6eef8 : r() < 0.3 ? 0xb8c8da : 0xcfdcea;
     for (let k = 0; k < len; k++) {
-      const x = (x0 - Math.floor(k / 3) + size) % size;
+      const x = (((x0 - Math.floor(k / step)) % size) + size) % size;
       const y = (y0 + k) % size;
+      ctx.fillStyle = css(col, a * (0.4 + (0.6 * (k + 1)) / len));
       ctx.fillRect(x, y, 1, 1);
     }
   }
   return canvas;
 }
 
-export function snow(density: number, seed: number): HTMLCanvasElement {
-  const size = 64;
+export type SnowSheet = { size: number; count: number; seed: number; big: number; cross: number };
+
+/** 눈송이 타일: 한 점·2×2 송이·십자 송이가 섞이고, 밝기·몰림이 고르지 않다 */
+export function snow(o: SnowSheet): HTMLCanvasElement {
+  const { size } = o;
   const { canvas, ctx } = makeCanvas(size, size);
-  const r = rng(seed);
-  for (let i = 0; i < density; i++) {
+  const r = rng(o.seed);
+  const dens = tileNoise(size, 4, o.seed + 13);
+  const px = (x: number, y: number, a: number) => {
+    ctx.fillStyle = css(0xf4f8ff, a);
+    ctx.fillRect(((x % size) + size) % size, ((y % size) + size) % size, 1, 1);
+  };
+  let placed = 0;
+  for (let tries = 0; placed < o.count && tries < o.count * 30; tries++) {
     const x = Math.floor(r() * size);
     const y = Math.floor(r() * size);
-    ctx.fillStyle = css(0xf4f8ff, 0.6 + r() * 0.4);
-    ctx.fillRect(x, y, 1, 1);
-    if (r() < 0.3) {
-      ctx.fillStyle = css(0xf4f8ff, 0.45);
-      ctx.fillRect((x + 1) % size, y, 1, 1);
-      ctx.fillRect(x, (y + 1) % size, 1, 1);
+    if (!clumpAccept(dens, size, x, y, r())) continue;
+    placed++;
+    const a = 0.5 + r() * 0.5;
+    const q = r();
+    px(x, y, a);
+    if (q < o.cross) {
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) px(x + dx, y + dy, a * 0.5);
+    } else if (q < o.cross + o.big) {
+      px(x + 1, y, a * 0.55);
+      px(x, y + 1, a * 0.55);
+      px(x + 1, y + 1, a * 0.3);
     }
   }
   return canvas;

@@ -180,7 +180,8 @@ export type JoinRequest = {
  */
 export type JoinResponse =
   /** campOpen = 11/15 이 서버는 캠핑장 버스가 다닌다 (토큰에도 허락이 들어 있다). 없으면 정류장은 "준비 중" */
-  | { mode: "channel"; channel: number; token: string; wsUrl: string; campOpen?: true }
+  /** seaOpen = 11/16 이 서버는 바닷가 버스가 다닌다 (토큰에 sea 허락) */
+  | { mode: "channel"; channel: number; token: string; wsUrl: string; campOpen?: true; seaOpen?: true }
   /** 전체 400명이 차서 대기열. queueUrl을 QUEUE_POLL_MS마다 GET하면 QueueStatus가 온다(토큰 10분 유효) */
   | { mode: "queue"; queueUrl: string }
   | { mode: "spectator" };
@@ -453,7 +454,7 @@ export type MyGraveStatusResponse = { active: PublicGrave | null; passDays: numb
 /** house = 하우징 꾸밈 점수 (F11: 주간 = 이번 주에 꾸민 집, 전체 = 모든 집) */
 /** look = 외형 꾸미기 점수 (지금 착용 중인 코디 파츠 가격대 점수 합, 기간 구분 없음 — lib/lookScore.ts) */
 /** huntLevel = 사냥터 캐릭터 레벨 (같으면 경험치, 기간 구분 없음 — lib/huntLevelRank.ts) */
-/** tower = 11/15 야근 빌딩 최고 층 (이번 주·전체, 층 높은 순 → 빨리 오른 순. value = 층, sub = 그 층을 깬 시각 — lib/towerRank.ts) */
+/** tower = 11/15 야근 빌딩 최고 층 (이번 주·전체, 층 높은 순 → 그 층에 먼저 도달한 순. value = 층, sub = 도달한 시각 — lib/towerRank.ts) */
 export const RANK_BOARDS = ["points", "huntKills", "huntBest", "house", "fish", "look", "huntLevel", "tower", "stay"] as const;
 export type RankBoard = (typeof RANK_BOARDS)[number];
 /** week = 이번 주(월요일 새벽 5시부터, lib/gameDay), all = 전체 */
@@ -468,7 +469,7 @@ export type RankRow = { rank: number; name: string; value: number; me: boolean; 
 export type RankResponse = {
   board: RankBoard;
   period: RankPeriod;
-  /** huntBest의 사냥터 (난이도 id) */
+  /** huntBest의 사냥터 id (11/16 사냥터별 — 난이도 id로 물어도 그 난이도 첫 사냥터 id로 돌려준다) */
   zone?: string;
   /** fish(최대어)의 물고기 id, 모든 물고기면 "all" */
   fish?: string;

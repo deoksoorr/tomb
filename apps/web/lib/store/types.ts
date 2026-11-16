@@ -241,7 +241,8 @@ export interface AccountStore {
    * 접속 시간 보너스 받기 (원자적): 오늘 머문 기록으로 열린 구간 중 아직 안 받은 구간을 한꺼번에 받는다.
    * 받을 구간이 없으면 null. 받은 구간은 하루 상한(DAILY_EARN_CAP)에 막혀 덜 들어와도 받은 것으로 친다
    */
-  claimStayBonus(id: string, day: string): Promise<{ earned: number; count: number } | null>;
+  /** bonus = 11/16 단 칭호의 머무르기 보상 비율 (구간 보너스 × (1 + bonus), 하루 상한은 그대로 — lib/stayBonus stayBonusAmounts) */
+  claimStayBonus(id: string, day: string, bonus?: number): Promise<{ earned: number; count: number } | null>;
   /**
    * 모은 포인트 상위 limit명 + me의 순위(없으면 null). week(그 주 월요일 YYYYMMDD)를 주면 그 주에 모은 포인트 순위.
    * RankEntry.points = 순위 값
@@ -261,15 +262,22 @@ export interface AccountStore {
    * 사냥터 한 판 기록 (49번 랭킹): 처치 수 합계(전체·그 주)를 올리고, 클리어했으면(clearMs) 그 사냥터의
    * 최단 기록(전체·그 주)을 더 짧을 때만 바꾼다. 원자적.
    * weekly = false: 그 주 기록(주간 레이스 사냥 처치·주간 최단)은 건너뛰고 전체 기록만 (자기 레벨보다 한참 쉬운 사냥터)
+   * 11/16 zone = 사냥터 id (ZONE_IDS). 깬 기록은 그 난이도 칭호용 판(rank:hunt:clear:{난이도})에도 남긴다.
+   * 처치 수만 올릴 때(clearMs = null)는 zone이 최단 기록에 쓰이지 않는다 (야근 빌딩은 "hell")
    */
   recordHunt(id: string, zone: string, run: { kills: number; clearMs: number | null }, week: string, weekly?: boolean): Promise<void>;
-  /** 사냥 랭킹: kills = 처치 수 많은 순, best = 그 사냥터 최단 클리어 순(ms, 작을수록 위). week가 없으면 전체 */
+  /**
+   * 사냥 랭킹: kills = 처치 수 많은 순, best = 그 사냥터 최단 클리어 순(ms, 작을수록 위). week가 없으면 전체.
+   * 11/16 zone = 사냥터 id (없으면 쉬움 첫 사냥터). 난이도 첫 사냥터면 옛 난이도 판 기록도 합쳐 보인다 (lib/store/huntBoards)
+   */
   huntRank(
     board: "kills" | "best",
     limit: number,
     me: string | null,
     opts: { zone?: string; week?: string },
   ): Promise<{ rows: RankEntry[]; mine: RankEntry | null }>;
+  /** 11/16 그 난이도의 사냥터를 하나라도 끝까지 깬 적이 있는지 (옛 난이도 판 포함 — 칭호 「어려움·지옥 완주」) */
+  huntCleared(id: string, difficulty: string): Promise<boolean>;
   /**
    * 입장 기록: 이름·색·몸 모양은 계정에 아직 값이 없을 때만 저장한다 (코드로 시작·이어서 들어온 기기의 다른 값이
    * 덮어쓰지 않게). 이름은 이름 색인과 함께 등록하고, 다른 계정이 쓰는 이름이면 저장하지 않는다.
@@ -354,6 +362,8 @@ export interface AccountStore {
    * 입장 토큰·착용 증서로 다른 사람 머리 위에도 보인다. 얻었는지는 호출자(lib/titlesServer)가 확인한다
    */
   setTitle(id: string, titleId: string | null): Promise<void>;
+  /** 11/16 지금 단 칭호 id만 (착용 해시 "title" 칸 HGET 1번 — 칭호 능력 기억이 없을 때만 lib/titlesServer wornTitle이 부른다) */
+  wornTitle(id: string, now: number): Promise<string | null>;
   /**
    * 가방에서 1개 쓰고 묘비에 꾸미기를 놓는다 (만료된 것 정리, 최대 개수를 넘으면 가장 오래된 것 교체).
    * 묘비가 없으면 null, 가방에 없으면 "no_item". 주인 확인은 호출자가 한다

@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { anyFishingWaterOf } from "@tomb/protocol";
+import { anyFishingWaterOf, SEA_DIG_CLOSED_MSG, seaDigOpen, seaFishDryAt, seaFishingSpotById, seaFishWet, SEA_TIDE_OUT_MSG, tideLevel } from "@tomb/protocol";
 import { BALANCE_CAP, earnRule, type EarnSource } from "../economy";
 import { env } from "../env";
 import { peerOf } from "../ban";
@@ -10,7 +10,7 @@ import { kstDay, kstWeek, loadMe } from "../store/accounts";
 import { capsMult, earnLimits, NO_BOOST, type EarnBoost } from "../pointEvent";
 import { earnBoost } from "../store/pointEvent";
 import type { BugsResult } from "../rpg/types";
-import { DAILY_CATCH_MAX, dexBadgeBits, dexIdsOf, gatherNodeById, NODE_CAT, npcById, speciesById, STACK_MAX, type DexCat, type NpcId } from "./catalog";
+import { DAILY_CATCH_MAX, dexBadgeBits, dexIdsOf, gatherNodeById, NODE_CAT, npcBuys, npcById, speciesById, STACK_MAX, type DexCat, type NpcId } from "./catalog";
 import { claimPendingDex, ensureDexSettled, payNewDex, reachedTitleKeys, rewardState, titlesOf } from "./dexReward";
 import {
   activeNodes,
@@ -27,15 +27,19 @@ import {
   HOOK_WINDOW_MS,
   insectRolls,
   nodeActive,
+  nodeSeed,
   nodeWindow,
+  pickGather,
   pickWeighted,
   REEL_MAX_MS,
   REEL_SLACK_MS,
   reelMinMs,
+  rollFishSize10,
   rollSize10,
   verifyBugs,
   insectPoints,
   windowEndsAt,
+  withHighTide,
 } from "./rules";
 import { AUTO_FISH_DAILY_MAX, newAutoSession } from "./auto";
 import { autoStatus, settleAuto, type AutoSettled } from "./autoSettle";
@@ -45,6 +49,7 @@ import { festivalOn } from "./quests/urgentService";
 import { pickSunkenCosmetic, SUNKEN_CHANCE, sunkenFallbackFish, sunkenName } from "./sunken";
 import { grantSunkenCosmetic, ownedPermanent } from "./sunkenGrant";
 import { getForageStore, type GrantItem, type ForageStore, type Snapshot } from "./store";
+import { wornPerk } from "../titlesServer";
 import { signForageTicket, verifyForageTicket, type ForageTicket } from "./ticket";
 import type {
   AutoFishResponse,
@@ -78,6 +83,7 @@ function rand(): number {
 }
 const newSeed = () => Math.floor(rand() * 0x7fffffff);
 
+// 11/16 포구 시장 좌판도 같은 항목 한도 (생선 = 낚시 판매, 갯벌 = 채집 판매) — 새 포인트 항목이 없다
 const SOURCE_OF_NPC: Record<NpcId, Extract<EarnSource, "fish" | "gather">> = { fishmonger: "fish", collector: "gather" };
 const DAY_FIELD = { fish: "fishP", gather: "gatherP", dex: "dexP" } as const;
 
@@ -91,7 +97,7 @@ function toState(acct: string, snap: Snapshot, now: number, boost: EarnBoost = N
     titles: titlesOf(snap.dex, snap.claims, snap.pay.marks),
     reward: rewardState(snap.claims, snap.pay),
     today: { ...snap.day, fishCap: earnRule("fish").dailyMax * capsMult(boost, "fish"), gatherCap: earnRule("gather").dailyMax * capsMult(boost, "gather"), dexCap: earnRule("dex").dailyMax * capsMult(boost, "dex"), autoCap: AUTO_FISH_DAILY_MAX },
-    nodes: { ids: activeNodes(acct, now, new Set(snap.taken)).map((n) => n.id), refreshAt: windowEndsAt(w) },
+    nodes: { ids: activeNodes(acct, now, new Set(snap.taken)).map((n) => n.id), refreshAt: windowEndsAt(w), seed: nodeSeed(acct) },
   };
 }
 
@@ -118,13 +124,15 @@ export async function forageState(acct: string, now = Date.now(), store: ForageS
 /** 처음 등록 보상 지급 (lib/forage/dexReward). 지급이 실패해도 잡은 결과는 그대로 — 쌓인 보상은 도감 창에서 받는다 */
 async function dexGainOf(store: ForageStore, acct: string, items: readonly { id: string; isNew: boolean }[], ip: string | undefined, now: number) {
   try {
-    return await payNewDex(store, acct, items, ip, now);
+    return await payNewDex(store, acct, items, ip, now, dexBonusFor(acct, now));
   } catch (e) {
     console.error("[forage] 도감 보상 지급 실패", e);
     return undefined;
   }
 }
 const withDex = (dex: DexGain | undefined) => (dex ? { dex } : {});
+/** 11/16 도감 갈래 칭호의 새 칸 보상 비율 (새로 등록한 게 있을 때만 부른다 — lib/forage/dexReward payNewDex) */
+const dexBonusFor = (acct: string, now: number) => async () => (await wornPerk(acct, now)).dexBonus;
 
 /** 도감 칸 채운 비율 (%, 내림). 별자리 칸도 같은 방식 (완성한 별자리 수) */
 export function dexPercent(dex: Record<string, { n: number }>, cat: DexCat): number {
@@ -149,6 +157,12 @@ async function claimOrThrow(store: ForageStore, acct: string, nonce: string): Pr
 
 // ── 낚시 ──
 
+/** 11/16 바닷가 갯바위 자리: 찌 자리(자리 앞)가 지금 물때에 물속이 아니면 못 던져요 (protocol seaFishWet — 클라이언트와 같은 계산) */
+function tideGate(spotId: string, now: number): void {
+  const sea = seaFishingSpotById(spotId);
+  if (sea && !seaFishWet(sea, now)) throw new HttpError(409, "TIDE_OUT", SEA_TIDE_OUT_MSG);
+}
+
 /** g = 물에 빠진 꾸미기를 고를 난수 (아주 드물게, 던질 때 서버가 정한다), alt = 꾸미기를 다 가졌을 때 대신 줄 물고기 */
 type FishPayload = { k: "fish"; sp: string; sz: number; g?: number; alt?: string };
 
@@ -157,6 +171,7 @@ export async function castLine(acct: string, spotId: string, now = Date.now(), i
   // 정해진 낚시 자리 또는 배 위 가상 자리(boat:river·boat:lake) — 물 종류로 물고기를 고른다
   const water = anyFishingWaterOf(spotId);
   if (!water) throw new HttpError(400, "INVALID_INPUT", "여기서는 낚시를 할 수 없어요.");
+  tideGate(spotId, now);
   // 직접 던지면 자동 낚시는 끝난다 (둘을 한꺼번에 할 수 없다). 그때까지 낚은 것은 정산해 넣는다 (처음 등록 보상도 조용히 지급)
   if (await store.autoGet(acct)) await dexGainOf(store, acct, (await settleAuto(store, acct, now, true)).items, ip, now);
   // 오늘 잡은 수만 본다 (가방·도감까지 읽는 snapshot은 명령 6개 → 2개)
@@ -164,10 +179,12 @@ export async function castLine(acct: string, spotId: string, now = Date.now(), i
   if (snap.day.fish >= DAILY_CATCH_MAX.fish) throw new HttpError(429, "DAILY_LIMIT", "오늘은 물고기를 충분히 잡았어요. 내일 또 와요.");
   const cond = conditionsAt(now);
   // 11/15 긴급 의뢰 마을 축제: 희귀 이상 조금 더 (축제가 있을 수 있는 때에만 저장소를 본다)
-  const fest = await festivalOn(now);
+  // 11/16 낚시 갈래 칭호: 큰 물고기 확률 (단 칭호는 기억에서 — lib/titlesServer wornPerk)
+  const [fest, perk] = await Promise.all([festivalOn(now), wornPerk(acct, now)]);
   const s = pickWeighted(candidates("fish", water, cond), rand(), (x) => festWeight(x.rarity, fest));
   if (!s) throw new HttpError(409, "NO_FISH", "지금은 아무것도 물지 않아요.");
-  const size = rollSize10(s, rand());
+  // 11/16 바다 낚시: 만조 앞뒤엔 큰 놈 확률을 더 얹는다 (rules withHighTide — 시각만으로 계산, 저장소 명령 없음)
+  const size = rollFishSize10(s, rand, water === "sea" ? withHighTide(perk.bigFish, tideLevel(now)) : perk.bigFish);
   const power = fishPower(s, size);
   const bite = now + biteDelayMs(rand(), cond);
   const nonce = nanoid(16);
@@ -227,11 +244,19 @@ export async function startAutoFish(acct: string, spotId: string, ch: number | n
   const store = getForageStore();
   const water = anyFishingWaterOf(spotId);
   if (!water) throw new HttpError(400, "INVALID_INPUT", "여기서는 낚시를 할 수 없어요.");
+  tideGate(spotId, now);
   const prev = await settleAuto(store, acct, now, true);
   const day = (await store.today(acct, kstDay(now), nodeWindow(now))).day;
   if (day.fish >= DAILY_CATCH_MAX.fish) throw new HttpError(429, "DAILY_LIMIT", "오늘은 물고기를 충분히 잡았어요. 내일 또 와요.");
   if (day.auto >= AUTO_FISH_DAILY_MAX) throw new HttpError(429, "AUTO_LIMIT", `자동 낚시는 하루 ${AUTO_FISH_DAILY_MAX}마리까지예요. 직접 낚거나 내일 또 와요.`);
   const session = newAutoSession(newSeed(), spotId, water, ch, now);
+  // 11/16 갯바위 자리는 물이 빠져 찌 자리가 마르는 때에 자동 낚시도 끝나요
+  const sea = seaFishingSpotById(spotId);
+  const dryAt = sea ? seaFishDryAt(sea, now) : Infinity;
+  if (dryAt < session.end) {
+    session.end = dryAt;
+    session.tide = true;
+  }
   // 그 사이 다른 탭이 먼저 켰으면 그쪽을 정산하고 다시
   for (let i = 0; i < 3 && !(await store.autoSwap(acct, null, JSON.stringify(session))); i++) {
     const more = await settleAuto(store, acct, now, true);
@@ -281,6 +306,8 @@ export async function startGather(acct: string, nodeId: string, now = Date.now()
   const store = getForageStore();
   const n = gatherNodeById(nodeId);
   if (!n) throw new HttpError(400, "INVALID_INPUT", "여기서는 캘 게 없어요.");
+  // 11/16 갯벌 구멍: 물이 빠져 구멍이 드러났을 때만 (protocol seaDigOpen — 화면과 같은 계산, 저장소를 읽기 전에 막는다)
+  if (n.kind === "clam" && !seaDigOpen(n, now)) throw new HttpError(409, "TIDE_IN", SEA_DIG_CLOSED_MSG);
   const w = nodeWindow(now);
   // 오늘 기록·이번 창에 캔 지점만 (명령 2개)
   const snap = await store.today(acct, kstDay(now), w);
@@ -300,8 +327,9 @@ export async function startGather(acct: string, nodeId: string, now = Date.now()
     const ticket = await signForageTicket(secret, { n: nonce, a: acct, k: "gather", x: n.id, t: now, w, m: 0, s: seed });
     return { ticket, mode: "bugs", kind: "bug", seed, timeLimitSec: BUG_ROUND_SEC, night: phase === "night" || phase === "dusk", phase };
   }
-  const fest = await festivalOn(now);
-  const s = pickWeighted(candidates(NODE_CAT[n.kind], n.where, conditionsAt(now)), rand(), (x) => festWeight(x.rarity, fest));
+  // 11/16 채집 갈래 칭호: 희귀 채집물 확률 (단 칭호는 기억에서 — lib/titlesServer wornPerk)
+  const [fest, perk] = await Promise.all([festivalOn(now), wornPerk(acct, now)]);
+  const s = pickGather(candidates(NODE_CAT[n.kind], n.where, conditionsAt(now)), rand, (x) => festWeight(x.rarity, fest), perk.rareGather);
   if (!s) throw new HttpError(409, "NODE_EMPTY", "지금은 비어 있어요. 조금 뒤에 다시 피어나요.");
   const items = Array.from({ length: gatherCount(n.kind, rand()) }, () => ({ id: s.id, size: 0 }));
   const ms = GATHER_MS[n.kind];
@@ -330,8 +358,10 @@ export async function finishGather(acct: string, token: string, result: BugsResu
     const common = candidates("bug", n.where, cond, (s) => s.rarity <= 2);
     const rarePool = candidates("bug", n.where, cond, (s) => s.rarity >= 3);
     items = [];
+    // 11/16 채집 갈래 칭호: 흔한 곤충 몫 하나하나가 그 확률로 희귀 곤충이 된다
+    const rareUp = r.common > 0 && rarePool.length ? (await wornPerk(acct, now)).rareGather : 0;
     for (let i = 0; i < r.common; i++) {
-      const s = pickWeighted(common, rand());
+      const s = rareUp > 0 && rand() < rareUp ? pickWeighted(rarePool, rand()) : pickWeighted(common, rand());
       if (s) items.push({ id: s.id, size: rollSize10(s, rand()) });
     }
     for (let i = 0; i < r.rare; i++) {
@@ -372,7 +402,7 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
   const units: { id: string; price: number }[] = [];
   for (const [id, raw] of Object.entries(want)) {
     const s = speciesById(id);
-    if (!s || !npc.buys.includes(s.cat)) throw new HttpError(400, "INVALID_INPUT", `${npc.name}은(는) 그건 안 사요.`);
+    if (!s || !npcBuys(npc, s)) throw new HttpError(400, "INVALID_INPUT", `${npc.name}은(는) 그건 안 사요.`);
     const n = Math.min(Math.max(0, Math.floor(raw)), snap.bag[id] ?? 0);
     for (let i = 0; i < n; i++) units.push({ id, price: s.price });
   }

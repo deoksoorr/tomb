@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 
 export const SITE_TITLE = "At one time...";
 /** 11/16 첫 화면·공유 카드 제목: 게임 이름 + 무슨 게임인지 한 줄 (이름만으로는 검색어와 맞는 말이 없었다) */
-export const HOME_TITLE = "At one time... | 유령들이 모여 사는 도트 마을 브라우저 게임";
+// 11/16 네이버 서치어드바이저 권장(제목 40자·설명 80자 안쪽)에 맞춰 줄였다 — 구글도 짧은 설명을 그대로 쓴다
+export const HOME_TITLE = "At one time... | 유령들이 사는 도트 마을 브라우저 게임";
 export const SITE_DESCRIPTION =
-  "At one time...은 유령들이 모여 사는 아늑한 도트 마을이에요. 설치 없이 브라우저에서 여러 사람과 실시간으로 만나요. 모닥불 앞에서 쉬고, 캠핑장에 놀러 가고, 사냥과 낚시, 범퍼카, 행운권 추첨, 내 집 꾸미기를 즐겨요.";
+  "유령들이 모여 사는 도트 마을이에요. 설치 없이 브라우저에서 여럿이 만나 모닥불 앞에서 쉬고 캠핑, 사냥, 낚시, 내 집 꾸미기를 즐겨요.";
 
 // 페이지가 openGraph를 덮어쓰면 레이아웃 값이 통째로 바뀌므로 공유 카드 필드는 매번 전부 채운다.
 export function shareMetadata(image: string): Metadata {

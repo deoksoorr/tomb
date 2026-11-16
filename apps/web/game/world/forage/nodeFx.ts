@@ -11,7 +11,7 @@ import { makeCanvas } from "../../sprites/pixel";
 export const NTEX = { glow: "forage-fx-glow", beam: "forage-fx-beam", star: "forage-fx-star", puff: "forage-fx-puff" } as const;
 
 /** 종류별 빛 색 */
-export const NODE_GLOW: Record<string, number> = { herb: 0x9cff8a, ore: 0x9ad8ff, dig: 0xffd27a, bug: 0xfff0a0 };
+export const NODE_GLOW: Record<string, number> = { herb: 0x9cff8a, ore: 0x9ad8ff, dig: 0xffd27a, bug: 0xfff0a0, clam: 0x9af0e8 };
 
 export function ensureNodeFxTextures(scene: Phaser.Scene): void {
   const tx = scene.textures;

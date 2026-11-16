@@ -23,7 +23,8 @@ import { getTitleMarks, type TitleMarks } from "./store/titleMarks";
 import { getReferrals } from "./store/referrals";
 import { getTitleStats } from "./store/titleStats";
 import type { EquippedItem } from "./store/types";
-import { earnedTitleIds, titleDef, titlePerk, type TitleFacts, type TitleMetric } from "./titles";
+import { earnedTitleIds, titleDef, titlePerk, type TitleFacts, type TitleMetric, type TitlePerk } from "./titles";
+import { forgetWornTitle, recallWornTitle, rememberWornTitle } from "./wornTitle";
 
 // 칭호를 얻었는지 서버에서 확인 (가방 [칭호] 칸 목록·진행도·착용 검증·새 칭호 알림). 읽기에 실패한 갈래는 "아직 없음"으로 본다
 // (그 갈래 칭호를 잠깐 못 낄 뿐, 이미 낀 칭호는 그대로). 한 번 알린 칭호는 기록이 내려가도 얻은 것으로 남는다.
@@ -34,7 +35,7 @@ import { earnedTitleIds, titleDef, titlePerk, type TitleFacts, type TitleMetric 
 //    칭호를 달거나 빼고, 알림·본 기록을 남기면 그 계정 기억을 지운다 (forgetTitles). 도감 등록·1위 지급 결과는 길어야 FACTS_TTL_MS 늦게 보인다.
 //  - 명예의 전당(주간 1위 기록)은 모든 계정이 같이 쓰므로 HALL_TTL_MS 동안 한 번만 읽는다.
 //  - 계정 기록은 필요한 칸만 (연속 출석·몸·착용·염색 — 3명령), 사냥 처치·어려움/지옥 완주는 점수 하나씩만 (3명령).
-//  - 한 번 새로 읽기 = 도감 3 + 집 2 + 사냥 캐릭터 1 + 계정 3 + 사냥 기록 3 + 접속 시간 1 + 추천 1 + 알림 기록 2 ≈ 16명령 (예전 약 46).
+//  - 한 번 새로 읽기 = 도감 3 + 집 2 + 사냥 캐릭터 1 + 계정 3 + 사냥 기록 5 + 접속 시간 1 + 추천 1 + 알림 기록 2 ≈ 18명령 (예전 약 46. 11/16 사냥터별 랭킹으로 완주 판 +2).
 
 /** 명예의 전당에서 훑는 주 수 (10년) */
 const HALL_WEEKS = 520;
@@ -59,6 +60,8 @@ const memo = () => (g.__tombTitleFacts ??= new Map());
 export function forgetTitles(accountId?: string): void {
   if (accountId) memo().delete(accountId);
   else memo().clear();
+  // 11/16 칭호 능력용 단 칭호 기억도 (lib/wornTitle — 다음 loadMe·wornTitle이 새로 적는다)
+  forgetWornTitle(accountId);
 }
 
 /** 11/15 신화 칭호 주인을 기억하는 시간 (서버 최초·꼭대기 층 주인·지난주 최고층 1위 — 모든 계정이 같이 쓴다) */
@@ -90,7 +93,7 @@ async function hall(now: number): Promise<ChampWeek[]> {
   return h;
 }
 
-/** 계정 기록에서 칭호에 필요한 칸만 + 사냥 기록 점수 (Redis면 파이프라인 6명령, 메모리면 저장소 함수) */
+/** 계정 기록에서 칭호에 필요한 칸만 + 사냥 기록 점수 (Redis면 파이프라인 8명령, 메모리면 저장소 함수) */
 async function light(accountId: string, now: number): Promise<Light> {
   const conn = env.redis();
   if (!conn) {
@@ -99,21 +102,25 @@ async function light(accountId: string, now: number): Promise<Light> {
       accounts.get(accountId, kstDay(now), now),
       getStyleStore(accounts).get(accountId),
       accounts.huntRank("kills", 1, accountId, {}).then((r) => r.mine?.points ?? 0),
-      accounts.huntRank("best", 1, accountId, { zone: "hard" }).then((r) => (r.mine ? 1 : 0)),
-      accounts.huntRank("best", 1, accountId, { zone: "hell" }).then((r) => (r.mine ? 1 : 0)),
+      accounts.huntCleared(accountId, "hard").then((x) => (x ? 1 : 0)),
+      accounts.huntCleared(accountId, "hell").then((x) => (x ? 1 : 0)),
     ]);
     return { streak: a.streak, body: a.body, equipped: a.equipped, dye: style.dye, kills, hard, hell };
   }
   const redis = (g.__tombTitleRedis ??= redisClient(conn, "titlesServer"));
-  const [acct, look, style, kills, hard, hell] = (await redis
+  // 11/16 어려움·지옥 완주: 옛 난이도 판 + 사냥터별로 바뀐 뒤의 난이도 판 (lib/store/huntBoards)
+  const [acct, look, style, kills, hardOld, hardNew, hellOld, hellNew] = (await redis
     .pipeline()
     .hmget(K.acct(accountId), "streak", "body")
     .hgetall(K.look(accountId))
     .hgetall(styleKey(accountId))
     .zscore(K.rankHuntKills, accountId)
     .zscore(K.rankHuntBest("hard"), accountId)
+    .zscore(K.rankHuntClear("hard"), accountId)
     .zscore(K.rankHuntBest("hell"), accountId)
+    .zscore(K.rankHuntClear("hell"), accountId)
     .exec()) as unknown[];
+  const has = (...xs: unknown[]) => (xs.some((x) => x !== null && x !== undefined) ? 1 : 0);
   const pairs = (raw: unknown): [string, string][] => {
     if (Array.isArray(raw)) {
       const out: [string, string][] = [];
@@ -136,8 +143,8 @@ async function light(accountId: string, now: number): Promise<Light> {
     equipped,
     dye,
     kills: Math.floor(Number(kills) || 0),
-    hard: hard === null || hard === undefined ? 0 : 1,
-    hell: hell === null || hell === undefined ? 0 : 1,
+    hard: has(hardOld, hardNew),
+    hell: has(hellOld, hellNew),
   };
 }
 
@@ -286,11 +293,30 @@ export async function earnedTitles(accountId: string, now = Date.now()): Promise
   return (await titleStatus(accountId, now)).earned;
 }
 
-/** 단 칭호의 상점 할인율 (칭호 기억에서 — 칭호를 바꾸면 기억을 지우므로 늘 지금 칭호. 읽기에 실패하면 0) */
-export async function titleDiscount(accountId: string, now = Date.now()): Promise<number> {
+/**
+ * 11/16 지금 단 칭호 (칭호 능력용). Redis 명령 아끼기: ① 단 칭호 기억(lib/wornTitle — loadMe가 적는다) ② 칭호 사실 기억 ③ 둘 다 없을 때만
+ * 착용 해시 "title" 칸 HGET 1번 (계정마다 인스턴스당 WORN_TTL_MS에 많아야 한 번). 읽기에 실패하면 칭호 없음
+ */
+export async function wornTitle(accountId: string, now = Date.now()): Promise<string | null> {
+  const known = recallWornTitle(accountId, now);
+  if (known !== undefined) return known;
+  const hit = memo().get(accountId);
+  if (hit && now - hit.at < FACTS_TTL_MS) return hit.equipped;
   try {
-    return titlePerk((await titleStatus(accountId, now)).equipped).discount;
+    const id = await getAccounts().wornTitle(accountId, now);
+    rememberWornTitle(accountId, id ? [id] : [], now);
+    return id;
   } catch {
-    return 0;
+    return null;
   }
+}
+
+/** 11/16 단 칭호의 능력 (서버가 정하는 보상·확률·할인 — lib/titles titlePerk) */
+export async function wornPerk(accountId: string, now = Date.now()): Promise<TitlePerk> {
+  return titlePerk(await wornTitle(accountId, now));
+}
+
+/** 단 칭호의 상점·염색 할인율 (패션 갈래 칭호만 — 읽기에 실패하면 0) */
+export async function titleDiscount(accountId: string, now = Date.now()): Promise<number> {
+  return (await wornPerk(accountId, now)).discount;
 }

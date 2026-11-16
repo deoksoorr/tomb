@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import {
+  climbTime,
   CURSES,
   cursesAt,
   TOWER_CHECKPOINT_EVERY,
@@ -11,11 +12,12 @@ import {
   TOWER_THEMES,
 } from "@/lib/rpg/tower";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
+import { useMe } from "@/lib/hooks/useMe";
+import { equippedPerk } from "@/lib/titles";
 import type { RpgView } from "@/lib/rpg/types";
 import { CHEST_COSMETIC_CHANCE, SG_PITY } from "@/lib/rpg/setGearRoll";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
-import { mmss } from "./format";
 import { PioneerLine } from "./Endgame";
 import s from "./rpg.module.css";
 
@@ -43,6 +45,8 @@ export default function TowerEntrance({
   const [boost, setBoost] = useState(true);
   // 터치 기기는 Esc 대신 [멈춤]에서 나간다
   const coarse = useMediaQuery("(pointer: coarse)");
+  // 11/16 야근 빌딩 갈래 칭호: 층마다 제한 시간 + (판에서는 HuntScene이 같은 값을 더한다)
+  const towerSec = equippedPerk(useMe().me?.equipped).towerSec;
   const eg = view.endgame!;
   const t = eg.tower;
   const lit = t.checkpoints;
@@ -73,7 +77,7 @@ export default function TowerEntrance({
           <div className={s.liftDisplay} aria-label="이번 주 최고 층">
             <span>이번 주</span>
             <b>{t.week ? `${t.week.floor}F` : "--"}</b>
-            {t.week && <span>{mmss(t.week.ms)}</span>}
+            {t.week && <span>{climbTime(t.week.ms)}</span>}
           </div>
           <div className={s.liftDisplay} aria-label="오늘 연 우두머리 상자">
             <span>오늘 연 상자</span>
@@ -112,7 +116,7 @@ export default function TowerEntrance({
             {start}층부터
           </b>{" "}
           테마는 다섯 층마다 바뀌어요. {TOWER_THEMES.length}곳 중 어디가 나올지는 타 봐야 알아요.
-          몬스터는 층이 오를수록 조금씩 세져요. 이 층은 1층보다 ×{towerHpMul(start).toFixed(2)}예요. 한 층은 {towerFloorSec(start)}초예요.
+          몬스터는 층이 오를수록 조금씩 세져요. 이 층은 1층보다 ×{towerHpMul(start).toFixed(2)}예요. 한 층은 {towerFloorSec(start) + towerSec}초예요{towerSec > 0 ? ` (칭호 덕분에 ${towerSec}초 더)` : ""}.
           5층마다 우두머리가 나와요. 잡으면 체력이 30% 차고 상자가 열려요.
         </p>
         <p className={s.meta}>

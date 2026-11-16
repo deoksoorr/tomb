@@ -130,7 +130,20 @@ export class Grid {
         if (n) add.push(x, y);
       }
     }
+    // 11/16 사용자 "그림 오른쪽이 잘려 있어요": 오른쪽 끝 열까지 칠한 그림은 테가 캔버스 밖(x = w)으로 나가 잘린 면이 그대로 보였어요.
+    // 왼쪽 끝 열은 비어 있는데(= 이어 붙이는 타일이 아니라 물체) 오른쪽 끝 열이 칠해져 있으면, 그 끝 픽셀을 테 색으로 덮어 면을 닫아요.
+    // (크기·원점은 그대로라 배치가 바뀌지 않아요. 그림을 넉넉히 다시 그린 곳은 이 경우가 생기지 않아요)
+    const right = this.w - 1;
+    let leftEmpty = true;
+    for (let y = 0; y < this.h && leftEmpty; y++) if (this.filled(0, y)) leftEmpty = false;
     for (let i = 0; i < add.length; i += 2) this.set(add[i], add[i + 1], c, a);
+    if (leftEmpty && right > 0)
+      for (let y = 0; y < this.h; y++) {
+        const v = this.get(right, y);
+        if ((v & 255) === 0) continue;
+        // 칠해진 픽셀 위에 테 색을 섞어요 (반투명 테면 그만큼만, 픽셀은 불투명 그대로)
+        this.set(right, y, mix(v >>> 8, c, a / 255), v & 255);
+      }
   }
 
   /** 좌우 반전 복사본 */

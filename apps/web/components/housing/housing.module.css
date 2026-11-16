@@ -1001,3 +1001,50 @@
     display: none;
   }
 }
+
+/*
+ * 11/16 포구 오두막 카드 줄 (겉모습·터 크기): 셋이 같은 너비·높이로 한 줄에 (폰에서도 세 칸).
+ * 카드 안 줄(그림·이름·설명…)은 subgrid로 세 카드가 같은 줄에 맞춘다. 그림 칸은 셋 중 가장 큰 그림 비율로 같게, 그림은 아래(땅)에 맞춘다
+ */
+.pickGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 8px;
+  row-gap: 0;
+}
+
+.pickGrid > .tierCard {
+  display: grid;
+  grid-template-rows: subgrid;
+  align-content: stretch;
+  align-items: start;
+  row-gap: 4px;
+  min-width: 0;
+}
+
+.pickBox {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+  max-width: 132px;
+  justify-self: center;
+}
+
+.pickBox img {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+}
+
+@media (max-width: 480px) {
+  .pickGrid {
+    column-gap: 6px;
+  }
+
+  .pickGrid > .tierCard[data-pick="true"] {
+    padding: 6px 4px;
+    font-size: 12px;
+  }
+}

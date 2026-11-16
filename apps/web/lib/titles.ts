@@ -7,7 +7,7 @@ import { HOUSE_TITLES } from "./housing/catalog";
 //  - 얻는 방법: 도감 절반·전부 / 주간 1위 (랭킹별 · 누적 횟수) / 집 꾸밈 점수 / 사냥 레벨·누적 처치·어려운 사냥터 완주·초월 레벨·야근 빌딩 층·개척자 /
 //    낚시 누적·가장 큰 물고기 / 채집 누적 / 연속 출석 / 누적 접속 시간 / 꾸미기 점수
 //  - 한 번 얻은 칭호는 기록이 내려가도(연속 출석이 끊기거나 집 점수·꾸미기 점수가 내려가도) 남는다 — 서버가 알린 칭호 기록을 함께 본다 (lib/titlesServer)
-//  - 칭호 능력: 단 칭호 하나의 등급만큼 마을 이동 속도 + · 상점 구입 할인 (TITLE_PERKS)
+//  - 칭호 능력: 단 칭호 하나만 — 등급만큼 마을 이동 속도 + (모두) · 칭호 갈래마다 다른 능력 (11/16 TITLE_PERK_GROUP · PERK_VALUES)
 // 얻었는지는 서버(lib/titlesServer)가 판단하고, 착용도 얻은 칭호만 받는다 (운영자 계정은 모두 얻은 것으로 본다).
 
 /** 11/16 manager = 매니저 전용 (관리자가 임명한 계정만 — 등급 순서 밖의 특별 등급, 칭호 능력 없음) */
@@ -16,20 +16,225 @@ export const TITLE_GRADES: readonly TitleGrade[] = ["bronze", "silver", "gold", 
 export const TITLE_GRADE_NAMES: Record<TitleGrade, string> = { bronze: "동", silver: "은", gold: "금", legend: "전설", mythic: "신화", manager: "매니저" };
 
 /**
- * 칭호 능력 (단 칭호 하나만): 등급이 높을수록 크다. 값은 여기 한 곳.
- *  - speed: 마을 걷기·달리기 속도 배율 (사냥터·놀이기구·배 등에는 없다). 전설 1.07 × 가장 빠른 타는 펫 1.35 = 1.44 → 실시간 서버 속도 검증(달리기 × 1.5) 안
- *  - discount: 상점 구입 할인율 (상점의 모든 물건·영구 소장. 집 가구·사냥 장비·물약은 해당 없음). 할인가 = 원가 × (1 − 할인율)을 1P 단위로 내림, 할인이 있으면 최소 1P는 깎인다
+ * 11/16 칭호 능력 (단 칭호 하나만) — 등급이 세기, 칭호 갈래(TITLE_PERK_GROUP)가 무슨 능력인지. 값은 여기 한 곳.
+ *  - 공통: 모든 칭호가 등급만큼 마을 걷기·달리기 속도 + (GRADE_SPEED — 사냥터·놀이기구·배 등에는 없다)
+ *  - 갈래 능력: 은·금·전설 값(PERK_VALUES), 신화 = 전설 × 1.5를 알맞게 반올림, 동·매니저는 없음
+ *  - 속도 상한: 신화 1.06 (+ 1위·명예 갈래 0.02 = 1.08) × 가장 빠른 타는 펫 1.35 = 1.458 → 실시간 서버 속도 검증(달리기 × 1.5) 안,
+ *    화면도 땅 위 배율을 MAX_GROUND_MUL(1.48)로 한 번 더 자른다 (game/entities/Player)
+ *  - 포인트 하루 한도는 그대로: 머무르기 보상·도감 새 칸 보상은 원래 항목 한도 안에서만 늘고, 나머지는 확률·편의·할인
  */
-export const TITLE_PERKS: Readonly<Record<TitleGrade, { speed: number; discount: number }>> = {
-  bronze: { speed: 1, discount: 0 },
-  silver: { speed: 1.02, discount: 0.02 },
-  gold: { speed: 1.04, discount: 0.04 },
-  legend: { speed: 1.07, discount: 0.07 },
-  // 11/15 신화: 능력은 전설과 같다 (실시간 서버 속도 검증 안 — 위 speed 설명)
-  mythic: { speed: 1.07, discount: 0.07 },
+export const GRADE_SPEED: Readonly<Record<TitleGrade, number>> = {
+  bronze: 1,
+  silver: 1.02,
+  gold: 1.03,
+  legend: 1.04,
+  mythic: 1.06,
   // 11/16 매니저 칭호: 혜택은 칭호와 채팅 딱지뿐 (능력 없음)
-  manager: { speed: 1, discount: 0 },
+  manager: 1,
 };
+
+/**
+ * 11/16 칭호 능력 갈래 (무슨 능력인지):
+ *  hunt 사냥 경험치 · tower 야근 빌딩 층 제한 시간 · fish 큰 물고기 확률 · forage 희귀 채집물 확률 · stay 머무르기 보상 ·
+ *  look 상점·염색 할인 · quest 의뢰 도장 추가 확률 · dex 도감 새 칸 보상 · house 가구 할인 · champ 1위·명예 (속도 덧붙임 + 반짝이는 발자국) · none 없음
+ */
+export type PerkGroup = "hunt" | "tower" | "fish" | "forage" | "stay" | "look" | "quest" | "dex" | "house" | "champ" | "none";
+type PerkGrade = "silver" | "gold" | "legend" | "mythic";
+
+/** 갈래 능력 값 (은 · 금 · 전설 · 신화). %는 비율(0.06 = 6%), tower는 층마다 더하는 초 */
+export const PERK_VALUES: Readonly<Record<Exclude<PerkGroup, "none">, Readonly<Record<PerkGrade, number>>>> = {
+  hunt: { silver: 0.03, gold: 0.06, legend: 0.1, mythic: 0.15 },
+  tower: { silver: 2, gold: 4, legend: 6, mythic: 9 },
+  fish: { silver: 0.03, gold: 0.06, legend: 0.1, mythic: 0.15 },
+  forage: { silver: 0.03, gold: 0.06, legend: 0.1, mythic: 0.15 },
+  // 신화는 15 × 1.5 = 22.5 → 22 (내림 — 포인트 갈래라 조금 아껴서)
+  stay: { silver: 0.05, gold: 0.1, legend: 0.15, mythic: 0.22 },
+  look: { silver: 0.03, gold: 0.05, legend: 0.08, mythic: 0.12 },
+  quest: { silver: 0.05, gold: 0.1, legend: 0.15, mythic: 0.22 },
+  dex: { silver: 0.05, gold: 0.1, legend: 0.15, mythic: 0.22 },
+  house: { silver: 0.03, gold: 0.05, legend: 0.08, mythic: 0.12 },
+  // 1위·명예: 공통 속도 위에 +2% (등급과 상관없이 — 속도 상한 때문에 신화도 같다)
+  champ: { silver: 0.02, gold: 0.02, legend: 0.02, mythic: 0.02 },
+};
+
+/**
+ * 11/16 칭호 id → 능력 갈래 (모든 칭호를 하나씩 — 빠지면 타입 검사가 막는다).
+ * 신화(서버에 한 사람) 칭호는 모두 야근 빌딩 끝판 기록이라 tower (최초 ★100·최초 +15도 끝판 성장이라 같은 갈래)
+ */
+export const TITLE_PERK_GROUP: Readonly<Record<TitleId, PerkGroup>> = {
+  // 도감: 물고기 → 낚시, 곤충·약초버섯·광석·발굴품 → 채집, 별자리·몬스터 → 도감
+  t_fish50: "fish",
+  t_fish100: "fish",
+  t_bug50: "forage",
+  t_bug100: "forage",
+  t_herb50: "forage",
+  t_herb100: "forage",
+  t_ore50: "forage",
+  t_ore100: "forage",
+  t_dig50: "forage",
+  t_dig100: "forage",
+  t_star50: "dex",
+  t_star100: "dex",
+  t_mob50: "dex",
+  t_mob100: "dex",
+  // 주간 1위 · 누적 1위 · 개척자 · 추천 이웃 → 1위·명예
+  t_champ_points: "champ",
+  t_champ_hunt: "champ",
+  t_champ_fish: "champ",
+  t_champ3: "champ",
+  t_champ10: "champ",
+  t_pioneer: "champ",
+  t_ref3: "champ",
+  t_ref10: "champ",
+  // 집 꾸밈 점수 → 가구 할인
+  t_house50: "house",
+  t_house150: "house",
+  t_house400: "house",
+  t_house900: "house",
+  // 사냥 레벨 · 누적 처치 · 어려움·지옥 완주 → 사냥 경험치
+  t_lv10: "hunt",
+  t_lv20: "hunt",
+  t_lv30: "hunt",
+  t_lv40: "hunt",
+  t_lv50: "hunt",
+  t_kill100: "hunt",
+  t_kill1k: "hunt",
+  t_kill5k: "hunt",
+  t_kill20k: "hunt",
+  t_hard: "hunt",
+  t_hell: "hunt",
+  // 초월 레벨 · 야근 빌딩 층 · 세트 장비 · 강화 → 야근 빌딩 (끝판 성장)
+  t_tlv60: "tower",
+  t_tlv75: "tower",
+  t_tlv90: "tower",
+  t_tlv100: "tower",
+  t_floor10: "tower",
+  t_floor20: "tower",
+  t_floor30: "tower",
+  t_floor50: "tower",
+  t_floor100: "tower",
+  t_sgOvertime: "tower",
+  t_sgApproval: "tower",
+  t_sgMeeting: "tower",
+  t_sgTrip: "tower",
+  t_enh15: "tower",
+  // 신화 (서버 최초 30·50·100층 · 첫 ★100 · 꼭대기 층 주인 · 지난주 최고층 · 최초 +15)
+  t_first30: "tower",
+  t_first50: "tower",
+  t_first100: "tower",
+  t_firstStar100: "tower",
+  t_topFloor: "tower",
+  t_weekFloor: "tower",
+  t_firstEnh15: "tower",
+  // 낚시 누적 · 가장 큰 물고기 → 큰 물고기 확률
+  t_fishn50: "fish",
+  t_fishn300: "fish",
+  t_fishn1k: "fish",
+  t_fishn3k: "fish",
+  t_big50: "fish",
+  t_big100: "fish",
+  t_big150: "fish",
+  // 채집 누적 → 희귀 채집물 확률
+  t_gath100: "forage",
+  t_gath500: "forage",
+  t_gath2k: "forage",
+  t_gath5k: "forage",
+  // 연속 출석 · 누적 접속 → 머무르기 보상
+  t_att7: "stay",
+  t_att30: "stay",
+  t_att100: "stay",
+  t_att365: "stay",
+  t_stay1: "stay",
+  t_stay10: "stay",
+  t_stay50: "stay",
+  t_stay100: "stay",
+  t_stay300: "stay",
+  // 꾸미기 점수 → 상점·염색 할인
+  t_look200: "look",
+  t_look600: "look",
+  t_look1500: "look",
+  t_look3000: "look",
+  // 수집 의뢰 · 수집왕 · 긴급 의뢰 → 의뢰 도장
+  t_quest50: "quest",
+  t_quest300: "quest",
+  t_quest1k: "quest",
+  t_quest2500: "quest",
+  t_qking: "quest",
+  t_urgKing: "quest",
+  t_urgLast: "quest",
+  // 매니저 전용: 능력 없음
+  t_mgr: "none",
+};
+
+/** 칭호 능력 한 벌 (갈래가 아닌 칸은 0). 서버(보상·확률)와 화면(속도·표시)이 같이 쓴다 */
+export type TitlePerk = {
+  group: PerkGroup;
+  /** 마을 걷기·달리기 속도 배율 (공통 등급 + 1위·명예 갈래 덧붙임) */
+  speed: number;
+  /** 상점·염색(영구 소장 포함) 할인율 — 패션 */
+  discount: number;
+  /** 집 가구 할인율 — 집 */
+  houseDiscount: number;
+  /** 사냥 판 경험치 비율 + — 사냥 */
+  huntExp: number;
+  /** 야근 빌딩 층마다 더하는 제한 시간 (초) — 야근 빌딩 */
+  towerSec: number;
+  /** 크기를 한 번 더 굴려 큰 쪽을 가질 확률 — 낚시 */
+  bigFish: number;
+  /** 채집물을 희귀 이상에서 뽑을 확률 — 채집 */
+  rareGather: number;
+  /** 머무르기 보상 비율 + (하루 상한 안) — 출석·접속 */
+  stayBonus: number;
+  /** 의뢰 도장을 하나 더 받을 확률 — 수집 의뢰 */
+  questStamp: number;
+  /** 도감 새 칸 보상 비율 + (도감 하루 한도 안) — 도감 */
+  dexBonus: number;
+  /** 반짝이는 발자국 (화면 연출만) — 1위·명예 */
+  sparkle: boolean;
+};
+
+const NO_PERK: TitlePerk = {
+  group: "none",
+  speed: 1,
+  discount: 0,
+  houseDiscount: 0,
+  huntExp: 0,
+  towerSec: 0,
+  bigFish: 0,
+  rareGather: 0,
+  stayBonus: 0,
+  questStamp: 0,
+  dexBonus: 0,
+  sparkle: false,
+};
+
+/** 등급의 갈래 능력 값 (동·매니저·none = 0) */
+export function perkValue(group: PerkGroup, grade: TitleGrade): number {
+  if (group === "none" || grade === "bronze" || grade === "manager") return 0;
+  return PERK_VALUES[group][grade];
+}
+
+/** 갈래 + 등급 → 능력 한 벌 */
+export function perkOf(group: PerkGroup, grade: TitleGrade): TitlePerk {
+  const v = perkValue(group, grade);
+  const speed = Math.round((GRADE_SPEED[grade] + (group === "champ" ? v : 0)) * 1000) / 1000;
+  if (speed === 1 && v === 0) return NO_PERK;
+  return {
+    ...NO_PERK,
+    group: v > 0 ? group : "none",
+    speed,
+    ...(group === "look" ? { discount: v } : {}),
+    ...(group === "house" ? { houseDiscount: v } : {}),
+    ...(group === "hunt" ? { huntExp: v } : {}),
+    ...(group === "tower" ? { towerSec: v } : {}),
+    ...(group === "fish" ? { bigFish: v } : {}),
+    ...(group === "forage" ? { rareGather: v } : {}),
+    ...(group === "stay" ? { stayBonus: v } : {}),
+    ...(group === "quest" ? { questStamp: v } : {}),
+    ...(group === "dex" ? { dexBonus: v } : {}),
+    ...(group === "champ" && v > 0 ? { sparkle: true } : {}),
+  };
+}
 
 export type TitleGroup = "dex" | "hunt" | "life" | "fish" | "look" | "champ" | "house" | "town";
 export const TITLE_GROUP_NAMES: Record<TitleGroup, string> = {
@@ -280,24 +485,63 @@ export function headTitle(wornId: string | null | undefined, staff: boolean, mgr
 export const titleOfLookDef = (look: readonly string[] | null | undefined): TitleDef | null => titleDef(titleOfLook(look));
 
 /** 칭호 능력 (모르는 칭호·칭호 없음이면 능력 없음) */
-export function titlePerk(id: string | null | undefined): { speed: number; discount: number } {
+export function titlePerk(id: string | null | undefined): TitlePerk {
   const t = titleDef(id);
-  return t ? TITLE_PERKS[t.grade] : TITLE_PERKS.bronze;
+  return t ? perkOf(TITLE_PERK_GROUP[t.id], t.grade) : NO_PERK;
 }
 
-/** 칭호 능력 한 줄 ("이동 속도 +4% · 상점 4% 할인", 없으면 "") */
-export function perkText(grade: TitleGrade): string {
-  const p = TITLE_PERKS[grade];
+/** 11/16 내 정보(me.equipped)에서 단 칭호의 능력 (화면 표시용 — 서버는 lib/titlesServer wornPerk로 같은 값을 쓴다) */
+export const equippedPerk = (equipped: readonly { itemId: string }[] | null | undefined): TitlePerk => titlePerk(titleOfLook(equipped?.map((e) => e.itemId)));
+
+const pct = (x: number) => Math.round(x * 100);
+
+/** 11/16 갈래 능력 한 마디 [긴 것(문장) · 짧은 것(가방 칭호 카드)] — 숫자만 봐도 뭔지 알게 쉬운 말로 */
+function groupText(p: TitlePerk): [string, string] | null {
+  switch (p.group) {
+    case "hunt":
+      return [`사냥에서 경험치를 ${pct(p.huntExp)}% 더 받아요.`, `사냥 경험치 +${pct(p.huntExp)}%`];
+    case "tower":
+      return [`야근 빌딩에서 층마다 제한 시간이 ${p.towerSec}초 늘어나요.`, `야근 빌딩 층마다 ${p.towerSec}초 더`];
+    case "fish":
+      return [`직접 낚시할 때 큰 물고기가 ${pct(p.bigFish)}% 더 잘 걸려요.`, `큰 물고기 확률 +${pct(p.bigFish)}%`];
+    case "forage":
+      return [`채집할 때 희귀한 게 ${pct(p.rareGather)}% 더 잘 나와요.`, `희귀 채집 확률 +${pct(p.rareGather)}%`];
+    case "stay":
+      return [`접속 시간 보너스를 ${pct(p.stayBonus)}% 더 받아요. 하루 최대치는 같아요.`, `접속 보너스 +${pct(p.stayBonus)}%`];
+    case "look":
+      return [`상점 물건과 염색권을 ${pct(p.discount)}% 싸게 사요.`, `상점 ${pct(p.discount)}% 할인`];
+    case "quest":
+      return [`의뢰를 끝낼 때 ${pct(p.questStamp)}% 확률로 도장을 하나 더 받아요.`, `${pct(p.questStamp)}% 확률로 도장 +1`];
+    case "dex":
+      return [`도감을 새로 채울 때 포인트를 ${pct(p.dexBonus)}% 더 받아요.`, `도감 포인트 +${pct(p.dexBonus)}%`];
+    case "house":
+      return [`가구를 ${pct(p.houseDiscount)}% 싸게 사요.`, `가구 ${pct(p.houseDiscount)}% 할인`];
+    case "champ":
+      // 11/16 발 칸 꾸미기(발자국 아이템)를 끼면 그 발자국이 먼저 보이고 별가루는 쉰다 (AvatarView setTitle)
+      return ["걸으면 발밑에 반짝이는 별가루가 남아요. 발자국 아이템을 끼면 그 아이템이 먼저 보여요.", "걸으면 별가루"];
+    default:
+      return null;
+  }
+}
+
+/** 칭호 능력 문장 ("마을에서 3% 더 빨리 걸어요. 큰 물고기가 …", 없으면 "") */
+export function perkText(t: Pick<TitleDef, "id"> | null | undefined): string {
+  const p = titlePerk(t?.id);
   const parts: string[] = [];
-  if (p.speed > 1) parts.push(`마을 이동 속도 +${Math.round((p.speed - 1) * 100)}%`);
-  if (p.discount > 0) parts.push(`상점 ${Math.round(p.discount * 100)}% 할인`);
-  return parts.join(" · ");
+  if (p.speed > 1) parts.push(`마을에서 ${pct(p.speed - 1)}% 더 빨리 걸어요.`);
+  const g = groupText(p);
+  if (g) parts.push(g[0]);
+  return parts.join(" ");
 }
 
-/** 칭호 능력 짧게 ("이동 +4% · 할인 4%", 없으면 "") — 가방 칭호 카드 */
-export function perkShort(grade: TitleGrade): string {
-  const p = TITLE_PERKS[grade];
-  return p.speed > 1 ? `이동 +${Math.round((p.speed - 1) * 100)}% · 할인 ${Math.round(p.discount * 100)}%` : "";
+/** 칭호 능력 짧게 ("이동 +3% · 큰 물고기 확률 +6%", 없으면 "") — 가방 칭호 카드 */
+export function perkShort(t: Pick<TitleDef, "id"> | null | undefined): string {
+  const p = titlePerk(t?.id);
+  const parts: string[] = [];
+  if (p.speed > 1) parts.push(`이동 +${pct(p.speed - 1)}%`);
+  const g = groupText(p);
+  if (g) parts.push(g[1]);
+  return parts.join(" · ");
 }
 
 /** 할인가: 원가 × (1 − 할인율)을 1P 단위로 내림, 할인이 있으면 최소 1P는 깎는다 (값이 0이면 그대로) */

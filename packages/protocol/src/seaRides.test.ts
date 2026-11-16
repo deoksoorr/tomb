@@ -1,0 +1,160 @@
+import { describe, expect, it } from "vitest";
+import { seatSlotIn } from "./camp";
+import { MAX_VALID_SPEED, WALK_SPEED } from "./constants";
+import {
+  SEA_HEIGHT,
+  SEA_JET_MIN_Y,
+  SEA_LIGHTHOUSE,
+  SEA_JETSKI_SPEED,
+  SEA_JETSKIS,
+  SEA_PIER_END,
+  SEA_PONTOON,
+  SEA_PONTOON_RAMP,
+  SEA_PIER,
+  SEA_PIER_ARM,
+  SEA_KAYAKS,
+  SEA_KAYAK_SEATS,
+  SEA_KAYAK_DOCK,
+  SEA_KAYAK_WALK,
+  SEA_KAYAK_WALK_HEAD,
+  SEA_SPOTS,
+  SEA_LOUNGER_FRONT_Y,
+  seaLoungerCollider,
+  SEA_KAYAK_SPEED,
+  SEA_DECKS,
+  SEA_FLAT_Y0,
+  seaKayakSeatById,
+  seaKayakWater,
+  seaKayakDismount,
+  SEA_SEATS,
+  SEA_FISHING_SPOTS,
+  seaFishBobber,
+  seaFishMinLevel,
+  onSeaDeck,
+  SEA_RIDES,
+  SEA_TUBE_SPEED,
+  SEA_TUBES,
+  SEA_WIDTH,
+  TIDE_LOW_Y,
+  seaJetWater,
+  seaRideBlocked,
+  seaRideById,
+  seaTubeDriftAt,
+  seaTubeWater,
+} from "./sea";
+import { STATE } from "./types";
+
+// 11/16 r13 바다 놀거리 (튜브·제트스키)
+describe("sea rides", () => {
+  it("빈 튜브는 하루 내내 어느 물때에도 물 위·맵 안에서 떠다니고 아무것에도 닿지 않아요", () => {
+    const day = 24 * 3600_000;
+    for (let i = 0; i < SEA_TUBES.length; i++)
+      for (let t = 0; t < day; t += 37_000)
+        for (const level of [0, 0.3, 0.7, 1]) {
+          const p = seaTubeDriftAt(i, t, level);
+          expect(seaTubeWater(p.x, p.y, level), `tube ${i} t ${t} level ${level} (${p.x},${p.y})`).toBe(true);
+          expect(p.x).toBeGreaterThan(0);
+          expect(p.x).toBeLessThan(SEA_WIDTH);
+          expect(p.y).toBeLessThan(SEA_HEIGHT);
+        }
+  });
+  it("튜브끼리 떨어져 있어요 (같은 시각)", () => {
+    for (let t = 0; t < 600_000; t += 10_000)
+      for (let a = 0; a < SEA_TUBES.length; a++)
+        for (let b = a + 1; b < SEA_TUBES.length; b++) {
+          const p = seaTubeDriftAt(a, t, 0.5);
+          const q = seaTubeDriftAt(b, t, 0.5);
+          expect(Math.hypot(p.x - q.x, p.y - q.y)).toBeGreaterThan(30);
+        }
+  });
+  it("제트스키는 깊은 물만: 간조 물가보다 바깥, 매어 둔 자리는 다닐 수 있는 물이고 선착장 끝 데크 바로 아래", () => {
+    expect(SEA_JET_MIN_Y).toBeGreaterThan(TIDE_LOW_Y);
+    for (const j of SEA_JETSKIS) {
+      expect(seaJetWater(j.x, j.y), `${j.x},${j.y}`).toBe(true);
+      // r14 부잔교 동쪽 가장자리 바로 옆 (부잔교에서 타고 내려요) — 선착장 끝 데크(낚시 자리·걸터앉기)와는 물길로 떨어져요
+      expect(j.x - (SEA_PONTOON.x + SEA_PONTOON.w)).toBeLessThan(30);
+      expect(j.y).toBeGreaterThan(SEA_PONTOON.y);
+      expect(j.y).toBeLessThan(SEA_PONTOON.y + SEA_PONTOON.h);
+      expect(SEA_PONTOON.x).toBeGreaterThan(SEA_PIER_END.x + SEA_PIER_END.w + 4);
+      // 부잔교 위는 마른 발판, 다리로 선착장 몸통과 이어져요
+      expect(onSeaDeck(SEA_PONTOON.x + 10, j.y)).toBe(true);
+      expect(onSeaDeck(SEA_PONTOON_RAMP.x + 18, SEA_PONTOON_RAMP.y + 6)).toBe(true);
+    }
+    expect(seaJetWater(400, SEA_JET_MIN_Y - 1)).toBe(false);
+    expect(seaJetWater(400, 820)).toBe(true);
+    // 선착장 끝·방파제·바위에는 못 들어가요
+    expect(seaJetWater(SEA_PIER_END.x + 20, SEA_PIER_END.y + 20)).toBe(false);
+    expect(seaRideBlocked(SEA_LIGHTHOUSE.x, 690)).toBe(true);
+    expect(seaRideBlocked(1580, 660)).toBe(true);
+  });
+  // 11/16 r15 사용자: 선착장 끝 데크는 걸터앉기만 — 낚시 자리는 몸통 양옆 발판으로, 걸터앉기·부잔교 다리와 40px 넘게 (방파제도 같은 규칙)
+  it("낚시 자리는 걸터앉기·부잔교 다리와 40px 넘게 떨어지고, 선착장 낚시 자리는 늘 물속", () => {
+    const edge = SEA_SEATS.filter((q) => q.furnitureId === "pE1" || q.furnitureId === "pE2");
+    expect(edge.length).toBe(6);
+    const R = SEA_PONTOON_RAMP;
+    for (const f of SEA_FISHING_SPOTS) {
+      for (const q of edge) expect(Math.hypot(f.x - q.x, f.y - q.y), `${f.id} ↔ ${q.id}`).toBeGreaterThanOrEqual(40);
+      const dx = Math.max(R.x - f.x, 0, f.x - (R.x + R.w));
+      const dy = Math.max(R.y - f.y, 0, f.y - (R.y + R.h));
+      expect(Math.hypot(dx, dy), `${f.id} ↔ ramp`).toBeGreaterThanOrEqual(40);
+    }
+    // r15 선착장 서쪽 낚시 가지에 나란히 둘
+    const pier = SEA_FISHING_SPOTS.filter((f) => f.x >= SEA_PIER_ARM.x && f.x <= SEA_PIER_ARM.x + SEA_PIER_ARM.w && f.y >= SEA_PIER_ARM.y && f.y <= SEA_PIER_ARM.y + SEA_PIER_ARM.h);
+    expect(pier.map((f) => f.id).sort()).toEqual(["f_782_660", "f_814_660"]);
+    expect(SEA_PIER.y + SEA_PIER.h).toBeGreaterThan(SEA_PIER_ARM.y + SEA_PIER_ARM.h);
+    for (const f of pier) {
+      expect(seaFishMinLevel(f)).toBeLessThanOrEqual(0);
+      expect(onSeaDeck(seaFishBobber(f).x, seaFishBobber(f).y)).toBe(false);
+    }
+  });
+  it("속도: 튜브는 걷기보다 느리고, 제트스키는 조각배(46)의 두 배 — 둘 다 서버 속도 검증 안", () => {
+    expect(SEA_TUBE_SPEED).toBeLessThan(WALK_SPEED);
+    expect(SEA_JETSKI_SPEED).toBe(46 * 2);
+    expect(SEA_JETSKI_SPEED).toBeLessThan(MAX_VALID_SPEED);
+  });
+  it("서버 좌석: 조각배처럼 움직이는 자리(상태 boat), 튜브는 떠다니는 자리(탄 곳 그대로)", () => {
+    expect(SEA_RIDES.map((r) => r.id)).toEqual(["pU1", "pU2", "pU3", "pU4", "pU5", "pJ1", "pJ2"]);
+    for (const r of SEA_RIDES) {
+      const s = seatSlotIn("sea", r.id)!;
+      expect(s).toMatchObject({ kind: "boat", state: STATE.boat, mobile: true, furnitureId: r.id });
+      expect(!!s.drift).toBe(r.kind === "tube");
+      expect(seaRideById(r.id)).toBe(r);
+      expect(seatSlotIn("village", r.id)).toBeUndefined();
+    }
+  });
+  // 11/16 r18 2인승 카약
+  it("카약 자리: 같은 카약 두 자리(가구 = 카약), 움직이는 자리·탄 곳 그대로, 매어 둔 자리는 간조에도 물", () => {
+    expect(SEA_KAYAK_SEATS.map((q) => q.id)).toEqual(["pK1-0", "pK1-1", "pK2-0", "pK2-1", "pK3-0", "pK3-1"]);
+    for (const q of SEA_KAYAK_SEATS) {
+      expect(seatSlotIn("sea", q.id)).toMatchObject({ kind: "boat", state: STATE.boat, mobile: true, drift: true, furnitureId: q.kayak });
+      expect(seaKayakSeatById(q.id)).toBe(q);
+    }
+    for (const k of SEA_KAYAKS) {
+      expect(seaKayakWater(k.x, k.y, 0), `${k.x},${k.y}`).toBe(true);
+      const d = seaKayakDismount(k);
+      expect(onSeaDeck(d.x, d.y)).toBe(true);
+    }
+    // 카약 선착장은 데크 (난간·데크 몸 규칙 같아요), 백사장과 다리로 이어져요
+    expect(SEA_DECKS).toContain(SEA_KAYAK_DOCK);
+    expect(SEA_DECKS).toContain(SEA_KAYAK_WALK);
+    expect(SEA_KAYAK_WALK.y).toBeLessThan(SEA_FLAT_Y0);
+    // r19 다리는 둘이 나란히 걸을 만큼 넓고(40px 이상), 백사장 쪽 입구 판은 더 넓어요. 입구 위 앞줄 선베드 틈은 입구보다 좁지 않아요
+    expect(SEA_KAYAK_WALK.w).toBeGreaterThanOrEqual(40);
+    expect(SEA_DECKS).toContain(SEA_KAYAK_WALK_HEAD);
+    expect(SEA_KAYAK_WALK_HEAD.w).toBeGreaterThan(SEA_KAYAK_WALK.w);
+    expect(SEA_KAYAK_WALK_HEAD.x).toBeLessThan(SEA_KAYAK_WALK.x);
+    expect(SEA_KAYAK_WALK_HEAD.x + SEA_KAYAK_WALK_HEAD.w).toBeGreaterThan(SEA_KAYAK_WALK.x + SEA_KAYAK_WALK.w);
+    expect(SEA_KAYAK_WALK_HEAD.y).toBeLessThan(SEA_FLAT_Y0);
+    const front = SEA_SPOTS.loungers.filter((l) => l.y === SEA_LOUNGER_FRONT_Y).map(seaLoungerCollider);
+    const mid = SEA_KAYAK_WALK.x + SEA_KAYAK_WALK.w / 2;
+    const left = Math.max(...front.filter((r) => r.x + r.w <= mid).map((r) => r.x + r.w));
+    const right = Math.min(...front.filter((r) => r.x >= mid).map((r) => r.x));
+    expect(right - left).toBeGreaterThanOrEqual(SEA_KAYAK_WALK.w + 8);
+    for (const r of front) expect(r.y + r.h).toBeLessThanOrEqual(SEA_KAYAK_WALK_HEAD.y);
+    expect(SEA_KAYAK_SPEED).toBeGreaterThan(SEA_TUBE_SPEED);
+    expect(SEA_KAYAK_SPEED).toBeLessThan(46);
+    // 마른 갯벌(간조)은 못 다녀요, 얕은 물은 다녀요
+    expect(seaKayakWater(1300, 560, 0)).toBe(false);
+    expect(seaKayakWater(1300, 640, 0)).toBe(true);
+  });
+});

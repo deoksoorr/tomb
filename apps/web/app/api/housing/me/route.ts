@@ -1,16 +1,16 @@
 import { handler, json } from "@/lib/http";
-import { CreateHouseSchema, ProfileSchema } from "@/lib/housing/schemas";
-import { buyPlot, editProfile, getHouseStore, myHouse } from "@/lib/housing/service";
+import { CreateHouseSchema, ProfileSchema, zoneOfQuery } from "@/lib/housing/schemas";
+import { buyCottage, buyPlot, editProfile, getHouseStore, myHouse } from "@/lib/housing/service";
 import type { MyHouseResponse } from "@/lib/housing/types";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
 import { myBrief } from "@/lib/housing/points";
 import { readBody } from "@/lib/validate";
 
-/** 내 집 + 가진 물건 + 포인트 (방문자별이라 캐시하지 않는다) */
+/** 내 집 + 가진 물건 + 포인트 (방문자별이라 캐시하지 않는다). 11/16 `?zone=sea` = 내 포구 오두막 */
 export const GET = handler(async (req) => {
   const visitorId = await requireVisitor(req);
-  return json<MyHouseResponse>(await myHouse(getHouseStore(), visitorId));
+  return json<MyHouseResponse>(await myHouse(getHouseStore(), visitorId, undefined, zoneOfQuery(req.nextUrl.searchParams.get("zone"))));
 });
 
 /**
@@ -22,14 +22,19 @@ export const POST = handler(async (req) => {
   const body = await readBody(req, CreateHouseSchema);
   await rateLimit("shop", req, visitorId);
   const me = await myBrief(visitorId);
-  const house = await buyPlot(getHouseStore(), visitorId, body.name, body.intro, me.name ?? "이름 없는 유령", body.lot ?? null, body.ch, body.tier);
+  const ownerName = me.name ?? "이름 없는 유령";
+  // 11/16 `zone: "sea"` = 포구 오두막 (값 1.5배, 마을 집이 있으면 별장 2배. style = 겉모습)
+  const house =
+    body.zone === "sea"
+      ? await buyCottage(getHouseStore(), visitorId, body.name, body.intro, ownerName, body.lot ?? null, body.ch, body.tier, body.style)
+      : await buyPlot(getHouseStore(), visitorId, body.name, body.intro, ownerName, body.lot ?? null, body.ch, body.tier);
   return json<MyHouseResponse>(house, { status: 201 });
 });
 
 /** 이름·소개 바꾸기 (무료) */
 export const PATCH = handler(async (req) => {
   const visitorId = await requireVisitor(req);
-  const { name, intro } = await readBody(req, ProfileSchema);
+  const { name, intro, zone } = await readBody(req, ProfileSchema);
   await rateLimit("shop", req, visitorId);
-  return json<MyHouseResponse>(await editProfile(getHouseStore(), visitorId, name, intro));
+  return json<MyHouseResponse>(await editProfile(getHouseStore(), visitorId, name, intro, zone));
 });

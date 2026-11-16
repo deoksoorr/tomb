@@ -95,6 +95,10 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
     expect(await store.grant(a, DAY, "gather", [{ id: "o_coal", size: 0 }], 99, { window: 8, node: "o48_200" })).not.toBeNull();
     const s7 = await store.snapshot(a, DAY, 7);
     expect(s7.taken.sort()).toEqual(["b874_1088", "o48_200"]);
+    // 11/16 창 셋(6·7·8)이 한 키에 묶여도 창마다 따로 센다
+    expect((await store.today(a, DAY, 8)).taken).toEqual(["o48_200"]);
+    expect((await store.today(a, DAY, 6)).taken).toEqual([]);
+    expect((await store.today(a, DAY, 9)).taken).toEqual([]);
     expect(s7.bag.o_coal).toBe(2);
     expect(s7.day.gather).toBe(2);
   });

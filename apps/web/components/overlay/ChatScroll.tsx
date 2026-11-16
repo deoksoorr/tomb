@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { mapOf, type MapId } from "@tomb/protocol";
 import { chatAtBottom, chatLineAgo, chatLineDim, chatLineTone, chatPlaceTag, chatScrollAction, type ChatLine } from "@/game/logic/chatLog";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
@@ -14,12 +15,13 @@ import styles from "./ChatLog.module.css";
 /** 기록창이 스스로 시각을 다시 보는 간격 (지난 줄 흐림·"N분 전" — now를 받지 않을 때) */
 const SELF_TICK_MS = 15_000;
 
-/** 한 줄. opacity = 불투명도(폰 화면 글씨의 흐려짐·기록창의 지난 줄), ago = 지난 줄 옆 작은 시각 */
-export function ChatLineItem({ line, opacity, ago }: { line: ChatLine; opacity?: number; ago?: string | null }) {
-  // 11/16 다른 맵에서 쓴 줄 앞에 [캠핑장]·[마을] (집 안·사냥터처럼 맵이 아닌 곳에서는 붙이지 않는다)
-  const status = useBridgeValue("net:status");
-  const scene = useBridgeValue("scene:changed")?.scene;
-  const here = !scene || scene === "world" ? (status?.map === "camp" ? "camp" : "village") : null;
+/**
+ * 한 줄. opacity = 불투명도(폰 화면 글씨의 흐려짐·기록창의 지난 줄), ago = 지난 줄 옆 작은 시각, here = 지금 내가 있는 맵 (맵이 아닌 곳이면 null).
+ * 11/16 memo: 새 줄이 올 때 이미 있던 줄은 다시 그리지 않는다 (사람이 많은 채널에서 채팅이 잦으면 줄 전체 재렌더가 무거웠다).
+ * 그래서 줄마다 브리지를 구독하지 않고, 지금 맵(here)은 부모(ChatScroll)가 한 번 구해 넘긴다
+ */
+export const ChatLineItem = memo(function ChatLineItem({ line, opacity, ago, here }: { line: ChatLine; opacity?: number; ago?: string | null; here: MapId | null }) {
+  // 11/16 다른 맵에서 쓴 줄 앞에 [캠핑장]·[바닷가]·[마을] (집 안·사냥터처럼 맵이 아닌 곳에서는 붙이지 않는다)
   const place = line.w ? null : chatPlaceTag(line, here);
   const name = (
     <b className={cx(styles.name, line.staff && styles.staff)}>
@@ -57,7 +59,7 @@ export function ChatLineItem({ line, opacity, ago }: { line: ChatLine; opacity?:
       {ago && <span className={styles.ago}> · {ago}</span>}
     </li>
   );
-}
+});
 
 type Props = {
   lines: ChatLine[];
@@ -82,6 +84,10 @@ export default function ChatScroll({ lines: shown, now, className, live = true }
     const t = setInterval(() => setSelfNow(Date.now()), SELF_TICK_MS);
     return () => clearInterval(t);
   }, [now]);
+  // 다른 맵에서 쓴 줄 표시([캠핑장]·[바닷가]·[마을])의 기준 = 지금 내가 있는 맵 (줄마다 구독하지 않고 여기서 한 번)
+  const status = useBridgeValue("net:status");
+  const scene = useBridgeValue("scene:changed")?.scene;
+  const here = !scene || scene === "world" ? mapOf(status?.map) : null;
   // 막 받은 줄이 렌더 시각보다 늦을 수 있다 → 둘 중 늦은 쪽
   const at = now ?? Math.max(selfNow, shown.at(-1)?.at ?? 0);
 
@@ -117,7 +123,7 @@ export default function ChatScroll({ lines: shown, now, className, live = true }
         }}
       >
         {shown.map((l) => (
-          <ChatLineItem key={l.id} line={l} opacity={chatLineDim(l, at)} ago={chatLineAgo(l, at)} />
+          <ChatLineItem key={l.id} line={l} opacity={chatLineDim(l, at)} ago={chatLineAgo(l, at)} here={here} />
         ))}
       </ol>
       {unread && (

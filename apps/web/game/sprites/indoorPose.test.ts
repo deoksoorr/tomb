@@ -29,10 +29,21 @@ describe("bath pose water", () => {
 // 11/16 운영 버그: 해먹 누운 텍스처 키("-lie")가 침대 자세 키와 같아, 해먹에 한 번 누운 화면에서는 침대에 누워도 해먹 그림이 나왔다.
 // Phaser 텍스처는 씬끼리 같이 쓰므로 생김새 하나에서 나오는 자세 텍스처 키는 모두 달라야 한다.
 describe("pose texture keys never collide", () => {
-  it("hammock, bed, read, bath each get their own key", () => {
+  it("hammock, bed (quilt), sun lounger (towel), read, bath each get their own key", () => {
     const av = "avatar-e8d9b0";
-    const keys = [hammockLieKey(av), indoorPoseKey(av, "lie"), indoorPoseKey(av, "read"), indoorPoseKey(av, "bath")];
-    expect(new Set(keys).size).toBe(keys.length);
-    for (const k of keys) expect(k).not.toBe(av);
+    const keys = [
+      hammockLieKey(av),
+      indoorPoseKey(av, "lie"),
+      indoorPoseKey(av, "lie", "quilt"),
+      indoorPoseKey(av, "lie", "towel"),
+      indoorPoseKey(av, "read"),
+      indoorPoseKey(av, "bath"),
+    ];
+    // 침대 기본 덮개 = 이불 (같은 키)
+    expect(keys[1]).toBe(keys[2]);
+    const distinct = [keys[0], keys[1], keys[3], keys[4], keys[5]];
+    expect(new Set(distinct).size).toBe(distinct.length);
+    // 아바타 시트 키 자체와도 겹치지 않는다
+    for (const k of distinct) expect(k).not.toBe(av);
   });
 });

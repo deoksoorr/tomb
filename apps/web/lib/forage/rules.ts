@@ -46,11 +46,43 @@ export function pickWeighted(list: readonly Species[], rand: number, mult?: (s: 
   return list[list.length - 1];
 }
 
+/**
+ * 11/16 바다 낚시 만조 덤: 물 높이가 이 위(만조 앞뒤 약 30분)면 큰 놈 확률(크기 한 번 더 굴리기)을 더 얹는다.
+ * 낚시 갈래 칭호 확률과 겹치면 둘 중 하나라도 걸리면 (1 − (1−a)(1−b))
+ */
+export const SEA_HIGH_TIDE_LEVEL = 0.75;
+export const SEA_HIGH_TIDE_BIG = 0.3;
+export const withHighTide = (chance: number, level: number): number => (level >= SEA_HIGH_TIDE_LEVEL ? 1 - (1 - chance) * (1 - SEA_HIGH_TIDE_BIG) : chance);
+
 /** 크기 (0.1cm 단위 정수 = cm×10). 큰 것일수록 드물다. 크기를 재지 않는 것은 0 */
 export function rollSize10(s: Species, rand: number): number {
   if (!s.size) return 0;
   const [lo, hi] = s.size;
   return Math.round((lo + (hi - lo) * Math.pow(rand, 1.8)) * 10);
+}
+
+/**
+ * 11/16 낚시 갈래 칭호(큰 물고기 확률): chance 확률로 크기를 한 번 더 굴려 큰 쪽을 갖는다 (rand: [0,1) 난수 함수).
+ * chance가 0이면 예전과 똑같이 한 번만 굴린다 (난수도 하나만 쓴다)
+ */
+export function rollFishSize10(s: Species, rand: () => number, chance = 0): number {
+  const a = rollSize10(s, rand());
+  return chance > 0 && rand() < chance ? Math.max(a, rollSize10(s, rand())) : a;
+}
+
+/** 희귀 이상 (RARITY_LABEL 3 = 희귀) */
+export const RARE_MIN = 3;
+
+/**
+ * 11/16 채집 갈래 칭호(희귀 채집물 확률): chance 확률로 희귀 이상에서만 뽑는다 (그런 게 없으면 보통 뽑기).
+ * chance가 0이면 예전과 똑같이 pickWeighted 한 번 (난수도 하나만 쓴다)
+ */
+export function pickGather(list: readonly Species[], rand: () => number, mult?: (s: Species) => number, chance = 0): Species | null {
+  if (chance > 0 && rand() < chance) {
+    const rare = list.filter((s) => s.rarity >= RARE_MIN);
+    if (rare.length) return pickWeighted(rare, rand(), mult);
+  }
+  return pickWeighted(list, rand(), mult);
 }
 
 export const sizeText = (size10: number) => (size10 > 0 ? `${(size10 / 10).toFixed(1)}cm` : "");
@@ -90,10 +122,14 @@ export const REEL_MAX_MS = 60_000;
 
 // ── 채집 ──
 
-/** 채집 지점이 다시 피는 단위. 같은 창(15분) 안에서는 한 번 캔 자리가 비어 있다 */
-export const NODE_WINDOW_MS = 15 * 60_000;
+/**
+ * 채집 지점이 다시 피는 단위. 같은 창 안에서는 한 번 캔 자리가 비어 있다.
+ * 11/16 사용자 "채집 지점이 너무 적고 늦게 다시 펴요" → 15분 → 10분 (지점도 맵마다 반쯤 더 — lib/forage/catalog). 하루 한도·포인트 한도는 그대로
+ */
+export const NODE_WINDOW_MS = 10 * 60_000;
 /** 창마다 지점이 피어 있을 확률 (사람마다 따로 굴린다) */
-export const NODE_DENSITY: Record<NodeKind, number> = { herb: 0.6, ore: 0.5, dig: 0.4, bug: 0.55 };
+// 11/16 갯벌 구멍(clam)은 물이 빠진 동안만 캘 수 있어서 조금 더 자주 피어요
+export const NODE_DENSITY: Record<NodeKind, number> = { herb: 0.6, ore: 0.5, dig: 0.4, bug: 0.55, clam: 0.6 };
 export const nodeWindow = (now: number) => Math.floor(now / NODE_WINDOW_MS);
 export const windowEndsAt = (w: number) => (w + 1) * NODE_WINDOW_MS;
 
@@ -111,26 +147,49 @@ export function hash01(s: string): number {
 }
 
 /**
+ * 11/16 사람마다 채집 지점 씨앗 (계정 id를 화면에 보내지 않으려고 해시만). 서버가 상태(nodes.seed)에 실어 보내면
+ * 화면이 다음 창에 피는 지점을 스스로 계산한다 (nodeIdsAt) → 창이 짧아져도 창마다 서버에 묻지 않는다
+ */
+export const nodeSeed = (acct: string): string => Math.floor(hash01(`node|${acct}`) * 2 ** 32).toString(36);
+
+/** 씨앗으로 이 창에 이 지점이 피어 있는지 (서버·화면 공통) */
+export function nodeActiveSeed(seed: string, n: GatherNode, w: number): boolean {
+  return hash01(`${seed}|${n.id}|${w}`) < NODE_DENSITY[n.kind];
+}
+
+/**
  * 이 사람에게 이 창에 이 지점이 피어 있는지 — 사람마다·창마다 결정적.
  * 채널 공용(먼저 캔 사람이 가져감)이 아니라 사람마다 따로 피어서 새치기·자리 다툼이 없고, 서버는 지점 상태를 들고 있지 않아도 된다
  */
 export function nodeActive(acct: string, n: GatherNode, w: number): boolean {
-  return hash01(`${acct}|${n.id}|${w}`) < NODE_DENSITY[n.kind];
+  return nodeActiveSeed(nodeSeed(acct), n, w);
 }
+
+/** 씨앗으로 창 w에 피는 지점 id 전부 (새 창이라 아직 캔 것이 없다 — 화면이 창이 바뀔 때 서버에 묻지 않고 쓴다) */
+export function nodeIdsAt(seed: string, w: number): string[] {
+  return GATHER_NODES.filter((n) => nodeActiveSeed(seed, n, w)).map((n) => n.id);
+}
+
+/**
+ * 11/16 화면은 창 NODE_SYNC_WINDOWS개마다 한 번만 서버에서 상태를 다시 받고(w % 3 === 0), 그 사이 창은 nodeIdsAt으로 스스로 바꾼다.
+ * 10분 창 × 3 = 30분마다 한 번 → 예전(15분 창마다 한 번)보다 상태 읽기가 절반 (components/forage/forageStore)
+ */
+export const NODE_SYNC_WINDOWS = 3;
 
 /** 지금 이 사람에게 피어 있는 지점 (이번 창에 이미 캔 것 제외) */
 export function activeNodes(acct: string, now: number, taken: ReadonlySet<string>): GatherNode[] {
   const w = nodeWindow(now);
-  return GATHER_NODES.filter((n) => !taken.has(n.id) && nodeActive(acct, n, w));
+  const seed = nodeSeed(acct);
+  return GATHER_NODES.filter((n) => !taken.has(n.id) && nodeActiveSeed(seed, n, w));
 }
 
 /** 게이지 시간 (ms) */
-export const GATHER_MS: Record<Exclude<NodeKind, "bug">, number> = { herb: 2_600, ore: 3_800, dig: 4_800 };
+export const GATHER_MS: Record<Exclude<NodeKind, "bug">, number> = { herb: 2_600, ore: 3_800, dig: 4_800, clam: 4_200 };
 export const GATHER_SLACK_MS = 400;
 /** 게이지를 시작하고 이 시간 안에 끝내야 한다 */
 export const GATHER_TTL_SEC = 90;
 
-/** 게이지 채집 한 번에 나오는 것: 대부분 1개, 가끔 같은 것 2개 (광석·약초) */
+/** 게이지 채집 한 번에 나오는 것: 대부분 1개, 가끔 같은 것 2개 (광석·약초·11/16 갯벌) */
 export function gatherCount(kind: NodeKind, rand: number): number {
   return kind !== "dig" && rand < 0.18 ? 2 : 1;
 }

@@ -180,6 +180,24 @@ function nodeArt(kind: string, f: number, night: boolean): HTMLCanvasElement {
       g.outline(OUT, false, 160);
       return g.toCanvas();
     }
+    case "clam": {
+      // 11/16 갯벌 구멍: 젖은 펄 둔덕에 숨구멍 둘·조개 끝·뽀글 거품
+      const g = new Grid(16, 10);
+      g.ellipse(8, 7, 6.5, 2.6, 0x5a4a3c);
+      g.recolor((x, y) => y <= 5, 0x6e5c4a);
+      g.set(5, 6, 0x261e18);
+      g.set(10, 7, 0x261e18);
+      g.set(11, 7, 0x261e18);
+      g.ellipse(7.5, 5, 1.6, 1, 0xd8ccb4);
+      g.set(7, 5, 0x9a8a72);
+      // 거품 (프레임마다 오르내린다)
+      const by = f ? 2 : 3;
+      g.set(5, by, 0xdcecf4);
+      g.set(11, by + 1, 0xdcecf4);
+      g.set(12, by - 1, 0xf4fbff);
+      g.outline(OUT, false, 160);
+      return g.toCanvas();
+    }
     default: {
       // 곤충 수풀: 동그란 덤불 + 낮엔 나비, 밤엔 반딧불
       const g = new Grid(18, 16);
@@ -228,7 +246,7 @@ function bang(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
-export const NODE_KINDS = ["herb", "ore", "dig", "bug"] as const;
+export const NODE_KINDS = ["herb", "ore", "dig", "bug", "clam"] as const;
 
 export function ensureForageTextures(scene: Phaser.Scene, night: boolean): void {
   const tx = scene.textures;

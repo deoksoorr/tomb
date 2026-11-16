@@ -3,10 +3,10 @@ import { redisClient } from "../redisUsage";
 import { env } from "../env";
 
 // 11/15 야근 빌딩 기록 저장소 (랭킹·서버 최초·꼭대기 층 주인). 캐릭터 기록(최고 층·이번 주 최고)은 캐릭터 JSON에 있고,
-// 여기는 여러 사람을 줄 세우거나 한 사람만 갖는 값만 둔다. 기록이 오를 때만 쓴다 (판마다 쓰지 않는다).
+// 여기는 여러 사람을 줄 세우거나 한 사람만 갖는 값만 둔다. 층이 오를 때만 쓴다 (판마다 쓰지 않는다 — 11/16 같은 층은 처음 도달한 점수를 지킨다).
 //
 // Redis 키
-//  - rpg:tower:all          ZSET 계정 → 점수(층 × 1e9 + 빠른 시각, lib/rpg/tower towerScore). 전체 최고 층 랭킹
+//  - rpg:tower:all          ZSET 계정 → 점수(층 × 1e9 + 먼저 도달한 시각, lib/rpg/tower towerScore — 11/16 예전엔 빨리 오른 시간). 전체 최고 층 랭킹
 //  - rpg:tower:w:{주}       ZSET 같은 점수, 그 주(월요일 YYYYMMDD) 최고 층 랭킹 (60일 뒤 지워진다 — 지난주 1위 칭호를 그 다음 주에 읽는다)
 //  - rpg:tower:first        HASH 칭호 id → "계정|시각" (서버 최초 — HSETNX로 처음 한 사람만)
 //  - rpg:tower:top          STRING "계정|층|ms|시각" 꼭대기 층 주인 (더 높은 층만 빼앗는다 — 같으면 먼저 오른 사람)

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { SEA_TIDE_OUT_MSG, type FishWater } from "@tomb/protocol";
 import { bridge, type ForageRodPhase } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import { onBackgroundChange } from "@/lib/background";
@@ -43,7 +44,7 @@ export default function FishingPanel({
   onLeave,
 }: {
   spot: string;
-  water: "lake" | "river";
+  water: FishWater;
   onCatch: (r: CatchResult) => void;
   /** 물에 빠진 꾸미기를 건졌을 때 (영구 소장) */
   onSunken: (c: SunkenCatch) => void;
@@ -188,6 +189,7 @@ export default function FishingPanel({
       rod("idle");
       go("ready");
       if (r.ended === "time") setMsg({ text: "자동 낚시 시간이 다 됐어요 (한 번에 최대 6시간)" });
+      else if (r.ended === "tide") setMsg({ text: SEA_TIDE_OUT_MSG });
       else setMsg({ text: "자동 낚시를 껐어요. 찌를 던져 보세요" });
     }
   }
@@ -394,7 +396,7 @@ export default function FishingPanel({
   return (
     <div className={s.dock} role="region" aria-label="낚시">
       <div className={s.dockHead}>
-        <strong>낚시 · {water === "lake" ? "호수" : "강"}</strong>
+        <strong>낚시 · {water === "sea" ? "바다" : water === "lake" ? "호수" : "강"}</strong>
         <span>
           오늘 {caught}/{DAILY_CATCH_MAX.fish}마리
         </span>

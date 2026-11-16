@@ -34,6 +34,7 @@ import { CAVE_TORCHES, FIRE_FRAMES, OFFICE_H, TORCH_TINT, WP } from "../sprites/
 import { BIG_FIRE_FRAMES, FENCE_H_W, GRAVE_GATE_H, GY } from "../sprites/graveyardProps";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { FISH_ZONE_LIGHTS } from "./fishZone";
+import { SEA_STOP_LIGHTS } from "./seaStop";
 import { ZOO_LIGHTS } from "./zoo/zooLayout";
 import { HAUNT_LIGHTS } from "../haunt/hauntLayout";
 import { TOWER_LIGHTS } from "../tower/towerLayout";
@@ -199,6 +200,8 @@ export class WorldMap {
     this.addLabel(DUCK_DOCK_DECK.x - 12, DUCK_DOCK_DECK.y - 22, "오리배 · 2인승", 0xfff0b8, 1, 0.92);
     // 버스 정류장 마당 등불 (게시판·정류장 지붕·시간표). 장식 그림은 forage/FishZoneView
     this.staticLights.push(...FISH_ZONE_LIGHTS);
+    // 11/16 바닷가행 정류장 지붕 등·시간표 (그림은 forage/FishZoneView)
+    this.staticLights.push(...SEA_STOP_LIGHTS);
     // 동물원 등불 (정문 석등·아치·분양 노점). 울타리·우리·동물·사육사 그림은 zoo/ZooView
     this.staticLights.push(...ZOO_LIGHTS);
     // 귀신의집 보라·초록 벽등·간판·깨진 창 (그림은 haunt/HauntHouseView)

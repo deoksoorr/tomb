@@ -24,6 +24,7 @@ import { parseArgs } from "node:util";
 import WebSocket from "ws";
 import {
   AVATAR_COLORS,
+  CLIENT_VERSION,
   CLOSE,
   DIR,
   PING,
@@ -229,7 +230,8 @@ class Bot {
     this.closed = null;
     this.peers.clear();
     const path = room ? `/room/${encodeURIComponent(room)}` : `/ch/${channel}`;
-    const ws = new WebSocket(`${WS_URL}${path}?t=${token}&x=${Math.round(this.x)}&y=${Math.round(this.y)}`, {
+    // 클라이언트 버전(v)이 없으면 서버가 옛 화면으로 보고 4010으로 거절한다 (실제 클라이언트처럼 붙인다)
+    const ws = new WebSocket(`${WS_URL}${path}?t=${token}&x=${Math.round(this.x)}&y=${Math.round(this.y)}&v=${CLIENT_VERSION}`, {
       headers: { Origin: ORIGIN },
     });
     this.ws = ws;
@@ -471,7 +473,7 @@ async function teardown(bots: Bot[]): Promise<void> {
 
 /** 봇이 아닌 한 번짜리 접속 시도 (403/4003/4004 확인용) */
 function attempt(path: string, origin = ORIGIN): Promise<ConnectResult> {
-  const ws = new WebSocket(`${WS_URL}${path}`, { headers: { Origin: origin } });
+  const ws = new WebSocket(`${WS_URL}${path}${path.includes("?") ? "&" : "?"}v=${CLIENT_VERSION}`, { headers: { Origin: origin } });
   return new Promise((resolve) => {
     ws.on("message", (data) => {
       const m = parseS2C((data as Buffer).toString());

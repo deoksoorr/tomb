@@ -32,6 +32,8 @@ export class RemoteAvatar {
   private readonly out: InterpOut = { x: 0, y: 0, state: STATE.idle, dir: DIR.down };
   /** 서버 좌석 점유표에서 이 사람이 차지한 1인 자리 (의자·벤치 좌석 또는 나무·그네·해먹) */
   seatId: string | null = null;
+  /** 11/16 누운 사람을 자리보다 이만큼 앞 depth로 (집 침대 INDOOR_FRONT, 바닷가 선베드는 선베드 받침 앞까지) */
+  lieFront = INDOOR_FRONT;
   /**
    * 11/16 이 아바타가 있는 맵 (좌석 id를 그 맵 자리로 푼다). 캠핑장 씬이 "camp"로 둔다 — 마을 좌석표로만 찾으면 캠핑장 의자(q…)를 못 찾아
    * 앉은 사람이 자리에 고정되지 않고 depth도 의자보다 낮아 통나무·캠핑 의자·벤치 뒤에 가려졌다
@@ -131,7 +133,8 @@ export class RemoteAvatar {
     else if (o.state === STATE.swing) this.view.depthOverride = y + SWING_FRONT;
     else if (o.state === STATE.hang) this.view.depthOverride = y + 0.5;
     else if (o.state === STATE.hammock) this.view.depthOverride = y + HAMMOCK_FRONT;
-    else if (o.state === STATE.lie || o.state === STATE.read || o.state === STATE.bath) this.view.depthOverride = y + INDOOR_FRONT;
+    else if (o.state === STATE.lie) this.view.depthOverride = y + this.lieFront;
+    else if (o.state === STATE.read || o.state === STATE.bath) this.view.depthOverride = y + INDOOR_FRONT;
     this.x = x;
     this.y = y;
     // 실내: 다 들어갔으면 그리지 않는다 (위치 갱신은 계속 — 나오면 문 앞에서 나타난다)

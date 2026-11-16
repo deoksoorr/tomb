@@ -44,6 +44,7 @@ import {
   TELESCOPE,
   TELESCOPE_2,
   TILE,
+  VILLAGE_SCOPES,
   WALL_THICKNESS,
   graveSlot,
   GRAVEYARD_CAPACITY,
@@ -58,6 +59,7 @@ import {
 import { facadeInfo } from "../housing/art";
 import { clampChars, DOOR_NAME_MAX } from "../text/fitLabel";
 import { BUS_E_RADIUS, BUS_STOP, fishZoneColliders, inFishZone } from "./fishZone";
+import { inSeaStop, SEA_STOP, SEA_STOP_E_RADIUS, seaStopColliders } from "./seaStop";
 import { stargazeColliders, stargazeInteractables } from "./life/stargazeLayout";
 import { RIDE_KEEPOUT, rideColliders, rideInteractables, WISH_FOUNTAIN } from "./rides";
 import { SKY_KEEPOUT, skyColliders, skyInteractables } from "./skyMath";
@@ -503,9 +505,8 @@ const HAND_PROPS: readonly PropDef[] = [
   P("lamp", 968, 440),
   P("lamp", 968, 580),
   P("lamp", 968, 720),
-  // ── 강변 (북쪽 둑) · 묘지기 모닥불 ──
+  // ── 강변 (북쪽 둑) ── 11/16 묘지기 모닥불 옆 마른 나무(58,572)는 바닷가행 승강장 모서리에 걸려 뺐다
   P("willow", 262, 640, 0),
-  P("deadTree", 58, 572, 1),
   P("lantern", 420, 646),
   P("lantern", 548, 650),
   P("lantern", 844, 656),
@@ -584,6 +585,7 @@ function freeForProp(placed: readonly PropDef[], x: number, y: number, gap: numb
   if (inWaterBody(x, y, 10) || inWaterBody(x, y - 10, 4)) return false;
   for (const d of DECKS) if (inRect(d, x, y, 14)) return false;
   if (inFishZone(x, y, 10)) return false; // 예전 납품 부두 자리 (버스 정류장 마당·호수 북동쪽 둑 — fishZone.ts)
+  if (inSeaStop(x, y, 8)) return false; // 11/16 바닷가행 정류장·버스 길 (seaStop.ts — 예전 서쪽 모닥불 자리)
   if (inZoo(x, y, 14)) return false; // 동물원 (울타리·우리·장식은 zoo/zooLayout.ts)
   const k = groundKind(Math.floor(x / TILE), Math.floor(y / TILE));
   if (k !== "grass" && k !== "hill") return false;
@@ -803,6 +805,7 @@ export function staticColliders(): Rect[] {
   out.push(...rideColliders()); // 50번 광장 놀거리 받침 (rides.ts)
   out.push(...skyColliders()); // 관람차 다리·받침, 열기구 출발장 팻말 (skyRides.ts)
   out.push(...fishZoneColliders()); // 낚시터 아치 기둥·노점 마당 장식 (fishZone.ts)
+  out.push(...seaStopColliders()); // 11/16 바닷가행 정류장 지붕·팻말·시간표 (seaStop.ts)
   out.push(...zooColliders()); // 동물원 울타리·우리·노점·사육사 (zoo/zooLayout.ts)
   out.push(...hauntColliders()); // 귀신의집 건물 몸체 (haunt/hauntLayout.ts)
   out.push(...towerColliders()); // 11/15 야근 빌딩 로비·몸체 (tower/towerLayout.ts)
@@ -1047,7 +1050,10 @@ const PORTALS: readonly Interactable[] = [
   { id: "dock:duck", kind: "dock", x: DUCK_DOCK.x, y: DUCK_DOCK.y, r: 14, ax: DUCK_DOCK.x, ay: DUCK_DOCK.y, label: "오리배 타기" },
   // 11/15 주말 버스 정류장 (버스 정류장 마당). E → 캠핑장 버스 (운영에서 닫혀 있으면 안내만).
   // 승강장·정차 칸 앞 어디서든 되게 넓게 (예전 r 20은 지붕 바로 앞 한 점이라 잘 안 잡혔다). 지붕 아래 벤치 바로 앞은 앉기가 더 가깝다
-  { id: "bus:camp", kind: "bus", x: BUS_STOP.x - 6, y: BUS_STOP.y + 22, r: BUS_E_RADIUS, ax: BUS_STOP.x - 6, ay: BUS_STOP.y + 22, label: "버스 정류장" },
+  // 11/16 정류장이 둘이 되며 안내 글에 가는 곳을 붙였다
+  { id: "bus:camp", kind: "bus", x: BUS_STOP.x - 6, y: BUS_STOP.y + 22, r: BUS_E_RADIUS, ax: BUS_STOP.x - 6, ay: BUS_STOP.y + 22, label: "캠핑장행 버스 타기" },
+  // 11/16 바닷가행 정류장 (옛 묘역 아래 강가, seaStop.ts). E → 바닷가 버스 (운영에서 닫혀 있으면 안내만)
+  { id: "bus:sea", kind: "bus", x: SEA_STOP.x + 6, y: SEA_STOP.y + 22, r: SEA_STOP_E_RADIUS, ax: SEA_STOP.x + 6, ay: SEA_STOP.y + 22, label: "바닷가행 버스 타기" },
   // 동물원 사육사 (노점 앞) → 펫 분양 창
   { id: "zoo:keeper", kind: "zoo", x: ZOOKEEPER_SPOT.x, y: ZOOKEEPER_SPOT.y, r: 20, ax: ZOOKEEPER_SPOT.x, ay: ZOOKEEPER_SPOT.y, label: "사육사에게 펫 분양 받기" },
 ];
@@ -1118,7 +1124,7 @@ export function bridgeAt(x: number, y: number): boolean {
 }
 
 /** 미니맵·안내용 주요 장소 (F17) */
-export type Landmark = { id: string; label: string; x: number; y: number; kind: "fire" | "grave" | "shop" | "hunt" | "housing" | "shrine" | "dock" | "telescope" | "wish" | "bell" | "fish" | "zoo" | "haunt" | "ferris" | "balloon" | "tower" | "bumper" };
+export type Landmark = { id: string; label: string; x: number; y: number; kind: "fire" | "grave" | "shop" | "hunt" | "housing" | "shrine" | "dock" | "telescope" | "wish" | "bell" | "fish" | "zoo" | "haunt" | "ferris" | "balloon" | "tower" | "bumper" | "busCamp" | "busSea" | "duck" };
 export const LANDMARKS: readonly Landmark[] = [
   { id: "fire", label: "큰 모닥불", x: PLAZA_FIRE.x, y: PLAZA_FIRE.y, kind: "fire" },
   ...GRAVE_AREAS.map((a) => ({ id: `grave${a.id}`, label: a.name, x: a.aisleX, y: a.y0 + a.dy / 2, kind: "grave" as const })),
@@ -1131,10 +1137,17 @@ export const LANDMARKS: readonly Landmark[] = [
   { id: "fish", label: "낚시 잔교", x: LAKE_PIER.x + 24, y: LAKE_PIER.y + 8, kind: "fish" },
   { id: "zoo", label: "동물원", x: ZOOKEEPER.x - 16, y: ZOOKEEPER.y + 40, kind: "zoo" },
   { id: "telescope", label: "망원경", x: TELESCOPE.x, y: TELESCOPE.y, kind: "telescope" },
+  // 11/16 마을 곳곳 망원경 (광장·다리·호숫가·쉼터 — protocol VILLAGE_SCOPES)
+  ...VILLAGE_SCOPES.map((t, i) => ({ id: `telescope${i + 3}`, label: t.name, x: t.x, y: t.y, kind: "telescope" as const })),
   { id: "wish", label: "소원 분수", x: WISH_FOUNTAIN.x, y: WISH_FOUNTAIN.y, kind: "wish" },
   { id: "haunt", label: "귀신의집", x: HAUNT_HOUSE.x, y: HAUNT_HOUSE.y - 8, kind: "haunt" },
   { id: "tower", label: "야근 빌딩", x: TOWER.x, y: TOWER.y - 8, kind: "tower" },
   { id: "ferris", label: "관람차", x: FERRIS.x, y: FERRIS.y - 30, kind: "ferris" },
   { id: "balloon", label: "열기구 타는 곳", x: BALLOON_PAD.x, y: BALLOON_PAD.y - 4, kind: "balloon" },
   { id: "bumper", label: "범퍼카장", x: BUMPER_LANDMARK.x, y: BUMPER_LANDMARK.y, kind: "bumper" },
+  // 11/16 정류장 둘 (가는 곳이 달라 이름도 따로)
+  { id: "busCamp", label: "캠핑장행 정류장", x: BUS_STOP.x, y: BUS_STOP.y + 8, kind: "busCamp" },
+  { id: "busSea", label: "바닷가행 정류장", x: SEA_STOP.x, y: SEA_STOP.y + 8, kind: "busSea" },
+  // 11/16 오리배 선착장 (미니맵 오리 그림)
+  { id: "duck", label: "오리배", x: DUCK_DOCK.x, y: DUCK_DOCK.y, kind: "duck" },
 ];

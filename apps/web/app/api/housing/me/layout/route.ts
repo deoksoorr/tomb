@@ -12,7 +12,7 @@ import { readBody } from "@/lib/validate";
  */
 export const PUT = handler(async (req) => {
   const visitorId = await requireVisitor(req);
-  const { ch, tier, layout } = await readBody(req, LayoutSchema);
+  const { ch, tier, layout, zone } = await readBody(req, LayoutSchema);
   await rateLimit("shop", req, visitorId);
-  return json<MyHouseResponse>(await saveLayout(getHouseStore(), visitorId, tier, layout, ch));
+  return json<MyHouseResponse>(await saveLayout(getHouseStore(), visitorId, tier, layout, ch, zone));
 });

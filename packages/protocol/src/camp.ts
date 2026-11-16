@@ -1,5 +1,6 @@
 import { DIR, STATE, type DirId } from "./types";
 import { MAP_HEIGHT, MAP_WIDTH, SPOT_KINDS, fishingWaterOf, seatSlot, spotKindOfState, type FishingSpot, type Campfire, type Furniture, type Seat, type SeatSlot } from "./world";
+import { SEA_ARRIVE, SEA_FISHING_SPOTS, SEA_JETSKI_RADIUS, SEA_KAYAK_RADIUS, SEA_KAYAK_SEATS, SEA_REST_SEATS, SEA_RIDES, SEA_HEIGHT, SEA_SEATS, SEA_TUBE_RADIUS, SEA_WIDTH, seaFishingSpotById } from "./sea";
 
 // 11/15 두 번째 맵 「언젠가 캠핑장 · Someday Camp」 (1차: 맵·버스·앉기·NPC 말 걸기).
 // "언젠가 캠핑 가야지" 하고 장비만 사 두고 못 간 그곳 — 늦가을 숲, 계곡, 캠프파이어 광장, 번호 붙은 빈 데크 24자리.
@@ -11,11 +12,19 @@ import { MAP_HEIGHT, MAP_WIDTH, SPOT_KINDS, fishingWaterOf, seatSlot, spotKindOf
 //  - 옛 클라이언트는 맵을 모른다 → 언제나 마을. 서버가 캠핑장 사람을 옛 클라이언트에 보내지 않는다.
 // 좌표는 캠핑장 맵 안의 월드 픽셀 (마을과 따로, 16px 타일). 서버는 좌석 판정·범위 검사에, 클라이언트는 그림·충돌에 쓴다.
 
-export type MapId = "village" | "camp";
-export const MAP_IDS: readonly MapId[] = ["village", "camp"];
-export const isMapId = (v: unknown): v is MapId => v === "village" || v === "camp";
+// 11/16 세 번째 맵 「달물결 포구」("sea", protocol sea.ts)도 같은 규칙이에요. 마을 밖 맵(AwayMapId)은 입장 토큰 허락(camp·sea)이 있어야 가요.
+export type MapId = "village" | "camp" | "sea";
+/** 마을이 아닌 맵 (버스로 가는 곳). 와이어의 m·map 값은 이 둘 중 하나이거나 없어요(마을) */
+export type AwayMapId = Exclude<MapId, "village">;
+export const MAP_IDS: readonly MapId[] = ["village", "camp", "sea"];
+export const isMapId = (v: unknown): v is MapId => v === "village" || v === "camp" || v === "sea";
+export const isAwayMap = (v: unknown): v is AwayMapId => v === "camp" || v === "sea";
 /** 맵 이름 (친구 위치 "3채널 캠핑장"처럼) */
-export const MAP_NAME: Record<MapId, string> = { village: "마을", camp: "캠핑장" };
+export const MAP_NAME: Record<MapId, string> = { village: "마을", camp: "캠핑장", sea: "바닷가" };
+/** 11/16 채팅 줄 맵 표시 (다른 맵에서 쓴 줄 앞에) */
+export const MAP_TAG: Record<MapId, string> = { village: "[마을]", camp: "[캠핑장]", sea: "[바닷가]" };
+/** 와이어 m 값 → 마을 밖 맵이면 그 맵, 아니면 없음 (마을) */
+export const awayTag = (m: unknown): { m?: AwayMapId } => (isAwayMap(m) ? { m } : {});
 /** 캠핑장 전체 이름 (표지판·첫 안내) */
 export const CAMP_TITLE = "언젠가 캠핑장";
 export const CAMP_TITLE_EN = "Someday Camp";
@@ -28,8 +37,9 @@ export const CAMP_HEIGHT = CAMP_ROWS * 16; // 800
  * 캠핑장 배치 버전. 좌표가 바뀌는 개편마다 올린다 → 옛 캠핑장 자리 기록(lib/resume.ts)은 위치를 버리고 정류장에서 시작한다.
  * 1 = 11/15 1차 (정류장·관리소·광장·데크 24·계곡·산책로·전망대·캠핑카 3·큰 타프)
  * 2 = 정류장을 위로 (화면 아래 채팅창에 가리지 않게) · 캠핑카 앞 캠핑 도구(의자 앉기) — 정류장·길 자리가 바뀌어서
+ * 3 = 11/16 별 망원경 둘 (전망대 계단 아래·계곡 둑 받침 충돌, scopes.ts CAMP_SCOPES) — 새 충돌 자리에 옛 기록이 끼지 않게
  */
-export const CAMP_MAP_VERSION = 2;
+export const CAMP_MAP_VERSION = 3;
 
 type Rect = { x: number; y: number; w: number; h: number };
 
@@ -159,7 +169,7 @@ export function campFishingSpotById(id: string): FishingSpot | undefined {
 }
 /** 낚시 자리 id → 물 종류 (마을 자리·배 위 가상 자리·캠핑장 계곡 자리). 웹 서버(lib/forage)가 쓴다 */
 export function anyFishingWaterOf(id: string): FishingSpot["water"] | null {
-  return fishingWaterOf(id) ?? campFishingSpotById(id)?.water ?? null;
+  return fishingWaterOf(id) ?? campFishingSpotById(id)?.water ?? seaFishingSpotById(id)?.water ?? null;
 }
 
 // ── 전망대 (오른쪽 위 산꼭대기) ── 나무 데크 (난간, 아래쪽 가운데 계단)
@@ -271,17 +281,47 @@ export function campCampfireOfSeat(seatId: string): Campfire | null {
 const campSlots = new Map<string, SeatSlot>(CAMP_SEATS.map((s) => [s.id, { id: s.id, kind: "seat", x: s.x, y: s.y, facing: s.facing, state: STATE.sitChair, furnitureId: s.furnitureId }]));
 // 계곡 낚시 자리도 정해진 자리로 받는다 (마을 낚시 자리처럼 kind "fish")
 for (const f of CAMP_FISHING_SPOTS) campSlots.set(f.id, { id: f.id, kind: "fish", x: f.x, y: f.y, facing: f.facing, state: SPOT_KINDS.fish.state, furnitureId: null });
+/** 11/16 바닷가 좌석 (정류장 벤치 — 쉴거리 자리는 다음 차수에 여기에 더해요) */
+const seaSlots = new Map<string, SeatSlot>(SEA_SEATS.map((s) => [s.id, { id: s.id, kind: "seat", x: s.x, y: s.y, facing: s.facing, state: STATE.sitChair, furnitureId: s.furnitureId }]));
+// 11/16 쉴거리 자리 (선베드 눕기·돗자리 바닥 앉기) — 자리마다 상태가 달라요 (MOVE 상태가 다르면 자리를 놓아요)
+for (const r of SEA_REST_SEATS) seaSlots.set(r.id, { id: r.id, kind: "seat", x: r.x, y: r.y, facing: r.facing, state: r.state, furnitureId: r.group });
+// 11/16 갯바위 낚시 자리도 정해진 자리로 (캠핑장 계곡 낚시 자리처럼 kind "fish")
+for (const f of SEA_FISHING_SPOTS) seaSlots.set(f.id, { id: f.id, kind: "fish", x: f.x, y: f.y, facing: f.facing, state: SPOT_KINDS.fish.state, furnitureId: null });
+// 11/16 r13 튜브·제트스키: 조각배처럼 앉은 채 움직이는 자리 (상태 boat, "타는" 자리라 커진 동안엔 못 타요).
+// 튜브는 바다 어디서든 올라타서 서버 자리를 앵커로 옮기지 않아요(drift)
+for (const r of SEA_RIDES)
+  seaSlots.set(r.id, {
+    id: r.id,
+    kind: "boat",
+    x: r.x,
+    y: r.y,
+    facing: DIR.down,
+    state: STATE.boat,
+    furnitureId: r.id,
+    mobile: true,
+    radius: r.kind === "tube" ? SEA_TUBE_RADIUS : SEA_JETSKI_RADIUS,
+    ...(r.kind === "tube" ? { drift: true } : {}),
+  });
+// 11/16 r18 2인승 카약: 같은 카약 두 자리 (가구 id = 카약). 같이 타기는 노 젓는 사람 곁이면 바다 위에서도 (조각배 2인승과 같은 서버 규칙)
+for (const q of SEA_KAYAK_SEATS)
+  seaSlots.set(q.id, { id: q.id, kind: "boat", x: q.x, y: q.y, facing: DIR.down, state: STATE.boat, furnitureId: q.kayak, mobile: true, radius: SEA_KAYAK_RADIUS, drift: true });
 
 // ── 맵별 판정 (서버·클라이언트 공통) ──
 
-/** 맵 id 정규화: "camp"만 캠핑장, 나머지(없음·옛 값)는 마을 */
+/** 맵 id 정규화: "camp"는 캠핑장, "sea"는 바닷가, 나머지(없음·옛 값)는 마을 */
 export function mapOf(m: unknown): MapId {
-  return m === "camp" ? "camp" : "village";
+  return isAwayMap(m) ? m : "village";
+}
+
+/** 11/16 이 입장 허락(토큰 camp·sea)으로 그 맵에 갈 수 있는지. 마을은 언제나 */
+export function mapAllowed(map: MapId, perm: { camp?: true; sea?: true }): boolean {
+  return map === "village" || (map === "camp" && perm.camp === true) || (map === "sea" && perm.sea === true);
 }
 
 /** 서버 검증용: 그 맵 안 (담 두께는 따지지 않는다) */
 export function inMapBounds(map: MapId, x: number, y: number): boolean {
   if (map === "camp") return x >= 0 && x <= CAMP_WIDTH && y >= 0 && y <= CAMP_HEIGHT;
+  if (map === "sea") return x >= 0 && x <= SEA_WIDTH && y >= 0 && y <= SEA_HEIGHT;
   return x >= 0 && x <= MAP_WIDTH && y >= 0 && y <= MAP_HEIGHT;
 }
 
@@ -291,7 +331,7 @@ export function inMapBounds(map: MapId, x: number, y: number): boolean {
  */
 export function seatSlotIn(map: MapId, id: string): SeatSlot | undefined {
   if (map === "village") return seatSlot(id);
-  const s = campSlots.get(id);
+  const s = (map === "sea" ? seaSlots : campSlots).get(id);
   if (s) return s;
   const spot = seatSlot(id);
   // 마을에만 있는 정해진 자리(배·관람차·열기구·낚시 자리)와 마을 의자는 캠핑장에 없다 → 형식만 보는 소품 자리만
@@ -306,7 +346,7 @@ export function mapHasSpotState(map: MapId, state: number): boolean {
   return k !== "boat" && k !== "ferris" && k !== "balloon";
 }
 
-/** 그 맵의 처음 자리 (캠핑장은 버스에서 내리는 자리) */
+/** 그 맵의 처음 자리 (캠핑장·바닷가는 버스에서 내리는 자리) */
 export function mapSpawn(map: MapId, villageSpawn: { x: number; y: number }): { x: number; y: number } {
-  return map === "camp" ? CAMP_ARRIVE : villageSpawn;
+  return map === "camp" ? CAMP_ARRIVE : map === "sea" ? SEA_ARRIVE : villageSpawn;
 }

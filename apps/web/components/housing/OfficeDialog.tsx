@@ -2,17 +2,27 @@
 
 import { useEffect, useId, useState } from "react";
 import { errorMessage, isAbortError } from "@/lib/api";
+import { SEA_LOTS } from "@tomb/protocol";
 import {
+  COTTAGE_STYLES,
   HOUSE_INTRO_MAX,
   HOUSE_NAME_MAX,
+  houseLabel,
   LIKE_WEIGHT,
   lotLabel,
   nextTier,
+  PLOT_TIERS,
   plotCost,
   RECLAIM_DAYS,
+  SEA_COTTAGE_RATE,
+  SEA_VILLA_RATE,
+  seaLotLabel,
+  seaPlotCost,
+  seaUpgradeCost,
   SORT_LABELS,
   SORTS,
   tierById,
+  type CottageStyleId,
   type HouseSort,
   type PlotTierId,
 } from "@/lib/housing/catalog";
@@ -24,7 +34,7 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import styles from "./housing.module.css";
-import { fmt, TierCompare, TierPicker, TitleBadge, TitleProgress } from "./parts";
+import { CottageStylePicker, fmt, TierCompare, TierPicker, TitleBadge, TitleProgress } from "./parts";
 
 type Tab = "mine" | "browse";
 
@@ -47,6 +57,13 @@ type Props = {
   inVillage?: boolean;
   /** 지금 채널 (채널마다 주거 구역이 따로다. 분양은 이 채널의 빈 필지에) */
   channel: number;
+  /**
+   * 11/16 "sea" = 포구 부동산 (달물결 포구 오두막). 창 모양·탭·카드·버튼은 분양 사무소와 같고
+   * 번지 이름(포구 N번 오두막)·값(1.5배, 마을 집이 있으면 별장 2배)·겉모습(오두막 세 모양)만 다르다
+   */
+  zone?: "sea";
+  /** 포구: 마을 집이 있는지 (별장 값). 모르면 null */
+  villa?: boolean | null;
 };
 
 /** 분양 사무소 창: 내 집(분양·넓히기·들어가기) + 분양지 둘러보기·랭킹 */
@@ -65,24 +82,31 @@ export default function OfficeDialog({
   presetLot,
   inVillage,
   channel,
+  zone,
+  villa = null,
 }: Props) {
   const [tab, setTab] = useState<Tab>(initialTab ?? "mine");
   const id = useId();
+  const sea = zone === "sea";
   return (
-    <Dialog title="분양 사무소" onClose={onClose}>
+    <Dialog title={sea ? "포구 부동산" : "분양 사무소"} onClose={onClose}>
       <div className={styles.stack}>
         <div className={styles.spread}>
           <p className={styles.small}>
-            광장 동쪽 주거 구역에 집들이 있어요. 채널마다 주거 구역이 따로 있어요. 지금 {channel}채널의 빈 자리를 골라 분양받아요.
+            {sea
+              ? `달물결 포구 곳곳에 오두막 터가 ${SEA_LOTS.length}곳 있어요. 채널마다 터가 따로 있어요. 지금 ${channel}채널의 빈 터를 골라 분양받아요.`
+              : `광장 동쪽 주거 구역에 집들이 있어요. 채널마다 주거 구역이 따로 있어요. 지금 ${channel}채널의 빈 자리를 골라 분양받아요.`}
           </p>
-          <button type="button" className={cx(ui.button, ui.primary)} onClick={() => (inVillage ? onClose() : onVillage(null))} disabled={busy}>
-            {inVillage ? "마을로 돌아가기" : "주거 구역 보기"}
-          </button>
+          {!sea && (
+            <button type="button" className={cx(ui.button, ui.primary)} onClick={() => (inVillage ? onClose() : onVillage(null))} disabled={busy}>
+              {inVillage ? "마을로 돌아가기" : "주거 구역 보기"}
+            </button>
+          )}
         </div>
         <div className={styles.warn} role="note">
           <strong>
             <span className={styles.warnTag}>주의</span>
-            {RECLAIM_DAYS}일 동안 접속하지 않으면 집이 철거돼요
+            {RECLAIM_DAYS}일 동안 접속하지 않으면 {sea ? "오두막도" : "집이"} 철거돼요
           </strong>
           <p>집 가격은 100% 선물함으로 돌려드리고, 가구는 그대로 저장돼요. 철거된 자리는 다른 사람이 분양받을 수 있어요.</p>
         </div>
@@ -98,7 +122,7 @@ export default function OfficeDialog({
               className={styles.tab}
               onClick={() => setTab(t)}
             >
-              {t === "mine" ? "내 집" : "둘러보기 · 랭킹"}
+              {t === "mine" ? (sea ? "내 오두막" : "내 집") : "둘러보기 · 랭킹"}
             </button>
           ))}
         </div>
@@ -114,6 +138,8 @@ export default function OfficeDialog({
               channel={channel}
               onVillage={onVillage}
               onExterior={onExterior}
+              zone={zone}
+              villa={villa}
             />
           ) : (
             <HouseList onVisit={onVisit} myId={my?.house?.id ?? null} busy={busy} />
@@ -139,6 +165,8 @@ function MyPlot({
   channel,
   onVillage,
   onExterior,
+  zone,
+  villa,
 }: {
   my: MyHouseResponse | null;
   error: string | null;
@@ -149,18 +177,26 @@ function MyPlot({
   channel: number;
   onVillage: (spawnLot: number | null, mine?: boolean) => void;
   onExterior: () => void;
+  zone?: "sea";
+  villa: boolean | null;
 }) {
+  const sea = zone === "sea";
   const [lot, setLot] = useState<number | null>(presetLot);
   const [free, setFree] = useState<number[] | null>(null);
+  /** 오두막 겉모습 (분양 때 고르고, 분양 뒤 「겉모습 바꾸기」로 바꾼다) */
+  const [style, setStyle] = useState<CottageStyleId>("wood");
+  const [restyle, setRestyle] = useState(false);
   const noHouse = !!my && !my.house;
   useEffect(() => {
     if (!noHouse) return;
     let alive = true;
     housingApi
-      .village(channel)
+      .village(channel, false, sea ? "sea" : "village")
       .then((v) => {
         if (!alive) return;
         const used = new Set([...v.houses.map((h) => h.lot), ...v.taken]);
+        // 11/16 포구: 그 채널의 오두막 터 중 빈 터
+        if (sea) return setFree(SEA_LOTS.map((l) => l.n).filter((l) => !used.has(l)));
         // 메인 맵 주거 구역(1..WORLD_LOTS)의 빈 필지 먼저. 다 찼으면 예전처럼 분양 마을(2단지) 번지
         const all = Array.from({ length: Math.max(v.lots + 4, WORLD_LOTS) }, (_, i) => i + 1).filter((l) => isOpenLot(l) && !used.has(l)); // 11/15 없앤 번지 빼고
         const near = all.filter((l) => l <= WORLD_LOTS);
@@ -170,7 +206,7 @@ function MyPlot({
     return () => {
       alive = false;
     };
-  }, [noHouse, channel]);
+  }, [noHouse, channel, sea]);
   const [name, setName] = useState("");
   const [intro, setIntro] = useState("");
   const [pending, setPending] = useState(false);
@@ -183,7 +219,9 @@ function MyPlot({
   if (!my) return <p className={styles.muted}>{error ?? "분양 장부를 펼치는 중…"}</p>;
 
   const plot = tierById(pick)!;
-  const cost = plotCost(pick);
+  const seaCost = (t: PlotTierId) => seaPlotCost(t, !!villa);
+  const cost = sea ? seaCost(pick) : plotCost(pick);
+  const labelOf = (ch: number, l: number) => (sea ? seaLotLabel(ch, l) : lotLabel(ch, l));
   async function run(fn: () => Promise<MyHouseResponse>, done: string) {
     setPending(true);
     setMsg(null);
@@ -220,24 +258,28 @@ function MyPlot({
       </label>
       {withLot && (
         <label className={ui.field} htmlFor={`${fid}-lot`}>
-          <span className={ui.label}>번지 ({channel}채널 주거 구역의 자리)</span>
+          <span className={ui.label}>{sea ? `오두막 터 (${channel}채널 포구의 자리)` : `번지 (${channel}채널 주거 구역의 자리)`}</span>
           <select
             id={`${fid}-lot`}
             className={ui.input}
             value={lot ?? ""}
             onChange={(e) => setLot(e.target.value ? Number(e.target.value) : null)}
           >
-            <option value="">가장 앞의 빈 번지 (자동)</option>
+            <option value="">{sea ? "가장 앞의 빈 터 (자동)" : "가장 앞의 빈 번지 (자동)"}</option>
             {(free ?? []).map((l) => (
               <option key={l} value={l}>
-                {l}번지{l > WORLD_LOTS ? " (2단지)" : ""}
+                {sea ? `${l}번 터${SEA_LOTS.find((x) => x.n === l)?.deck ? " (바다 쪽 데크)" : ""}` : `${l}번지${l > WORLD_LOTS ? " (2단지)" : ""}`}
               </option>
             ))}
-            {lot !== null && !free?.includes(lot) && <option value={lot}>{lot}번지</option>}
+            {lot !== null && !free?.includes(lot) && <option value={lot}>{sea ? `${lot}번 터` : `${lot}번지`}</option>}
           </select>
         </label>
       )}
-      {withLot && <p className={styles.warnLine}>{RECLAIM_DAYS}일 동안 접속하지 않으면 집이 철거돼요. 집 가격은 100% 돌려드리고 가구는 그대로 저장돼요.</p>}
+      {withLot && (
+        <p className={styles.warnLine}>
+          {RECLAIM_DAYS}일 동안 접속하지 않으면 {sea ? "오두막이" : "집이"} 철거돼요. 집 가격은 100% 돌려드리고 가구는 그대로 저장돼요.
+        </p>
+      )}
       <button type="submit" className={cx(ui.button, ui.primary)} disabled={pending || busy || !name.trim()}>
         {pending ? "처리 중…" : submit}
       </button>
@@ -247,27 +289,46 @@ function MyPlot({
   const h = my.house;
   if (!h) {
     const short = my.points < cost;
-    // 오래 비워 정리된 예전 집의 가구 (가방에 남아 있다)
+    // 가방에 남은 가구: 오래 비워 정리된 예전 집 것 + 11/16 다른 집과 함께 쓰는 공용 가방 (다른 집에 놓인 건 빼고)
     const kept = Object.values(my.inventory).reduce((n, c) => n + c, 0);
     return (
       <div className={styles.stack}>
         <div className={styles.card}>
-          <p className={styles.houseName}>나만의 집을 분양받아 보세요</p>
+          <p className={styles.houseName}>{sea ? "바닷가 오두막을 분양받아 보세요" : "나만의 집을 분양받아 보세요"}</p>
           <p className={styles.muted}>
-            주거 구역에 내 터를 드려요. 큰 터를 바로 살 수도 있고, 작은 터로 시작해 나중에 넓혀도 돼요. 가구와 소품으로 꾸미면 꾸밈 점수가 올라요. 놀러 온 사람들이 좋아요와 방명록을 남겨 줘요.
+            {sea
+              ? "포구의 오두막 터를 드려요. 해먹·라탄 의자·서핑보드·소라 장식·구명 튜브가 놓인 채로 시작해요. 방 아래쪽 창으로 지금 물때의 바다가 보여요."
+              : "주거 구역에 내 터를 드려요. 큰 터를 바로 살 수도 있고, 작은 터로 시작해 나중에 넓혀도 돼요. 가구와 소품으로 꾸미면 꾸밈 점수가 올라요. 놀러 온 사람들이 좋아요와 방명록을 남겨 줘요."}
           </p>
-          {kept > 0 && <p className={styles.tag}>예전 집의 가구 {kept}개가 그대로 저장돼 있어요. 새 집을 분양받으면 다시 놓을 수 있어요.</p>}
-          <TierPicker value={pick} onChange={setPick} points={my.points} disabled={pending || busy} />
+          {sea && (
+            <p className={styles.tag}>
+              {villa === null ? "값을 확인하는 중…" : villa ? `마을 집이 있어서 별장 값이에요 (마을 집 값의 ${SEA_VILLA_RATE}배).` : `마을 집 값의 ${SEA_COTTAGE_RATE}배예요. 마을 집이 있으면 별장이라 ${SEA_VILLA_RATE}배예요.`}
+            </p>
+          )}
+          {kept > 0 && <p className={styles.tag}>가방에 가구 {kept}개가 있어요. 분양받으면 바로 놓을 수 있어요.</p>}
+          <TierPicker
+            value={pick}
+            onChange={setPick}
+            points={my.points}
+            disabled={pending || busy}
+            {...(sea ? { cottage: style, costOf: seaCost, hintOf: (i: number) => seaHint(i, !!villa) } : {})}
+          />
+          {sea && <CottageStylePicker value={style} onChange={setStyle} tier={pick} disabled={pending || busy} />}
           <p className={styles.points}>
             {plot.name} 분양가 <strong>{fmt(cost)}P</strong> · 내 포인트 <strong>{fmt(my.points)}P</strong>
           </p>
-          {lot !== null && <p className={styles.tag}>고른 자리: {lotLabel(channel, lot)}</p>}
+          {lot !== null && <p className={styles.tag}>고른 자리: {labelOf(channel, lot)}</p>}
           {short && <p className={styles.error}>포인트가 {fmt(cost - my.points)}P 모자라요. 출석이나 헌화로 더 모으거나, 작은 터를 골라 주세요.</p>}
+          {sea && free?.length === 0 && <p className={styles.error}>{channel}채널 포구에는 빈 오두막 터가 없어요. 다른 채널에서 찾아봐요.</p>}
         </div>
         {!short &&
+          !(sea && (villa === null || free?.length === 0)) &&
           form(
-            `${lot ? `${lotLabel(channel, lot)}에 ` : `${channel}채널에 `}${plot.name} 분양받기 (${fmt(cost)}P)`,
-            () => run(() => housingApi.buyPlot(channel, name, intro, lot, pick), `분양을 축하해요! ${channel}채널 주거 구역에 ${plot.name} 집이 생겼어요.`),
+            `${lot ? `${labelOf(channel, lot)}에 ` : `${channel}채널${sea ? " 포구" : ""}에 `}${plot.name} ${sea ? "오두막 " : ""}분양받기 (${fmt(cost)}P)`,
+            () =>
+              sea
+                ? run(() => housingApi.buyCottage(channel, name, intro, lot, pick, style), `분양을 축하해요! ${channel}채널 포구에 ${plot.name} 오두막이 생겼어요.`)
+                : run(() => housingApi.buyPlot(channel, name, intro, lot, pick), `분양을 축하해요! ${channel}채널 주거 구역에 ${plot.name} 집이 생겼어요.`),
             true,
           )}
         <p className={styles.notice} role="status">
@@ -279,6 +340,8 @@ function MyPlot({
 
   const tier = tierById(h.tier)!;
   const up = nextTier(h.tier);
+  // 오두막 넓히기 값은 배수를 곱한다 (마을 집이 있으면 별장 배수 — 서버 upgradePlot과 같은 규칙)
+  const upPrice = up ? (sea ? seaUpgradeCost(up.price, !!villa) : up.price) : 0;
   const tag = styleTag(h.layout);
   /** 내 집이 지금 채널이 아닌 다른 채널에 있다 (보러 가기·들어가기·꾸미기는 그 채널로 옮긴 뒤) */
   const away = h.ch !== channel;
@@ -291,11 +354,14 @@ function MyPlot({
         </div>
         {h.intro && <p className={styles.muted}>{h.intro}</p>}
         <p className={styles.small}>
-          {lotLabel(h.ch, h.lot)} · {tier.name} {tier.w}×{tier.h}칸 · 물건 {h.layout.items.length}/{tier.maxItems}개{tag ? ` · ${tag}` : ""}
+          {houseLabel(h)} · {tier.name} {tier.w}×{tier.h}칸 · 물건 {h.layout.items.length}/{tier.maxItems}개{tag ? ` · ${tag}` : ""}
+          {sea ? ` · ${COTTAGE_STYLES.find((c) => c.id === h.style)?.name ?? COTTAGE_STYLES[0].name}` : ""}
         </p>
         {away && (
           <p className={styles.tag}>
-            내 집은 {h.ch}채널에 있어요. 지금은 {channel}채널이에요. 아래 버튼을 누르면 {h.ch}채널로 옮긴 다음 가요.
+            {sea
+              ? `내 오두막은 ${h.ch}채널 포구에 있어요. 지금은 ${channel}채널이에요. 꾸미기·넓히기는 ${h.ch}채널에서 할 수 있어요.`
+              : `내 집은 ${h.ch}채널에 있어요. 지금은 ${channel}채널이에요. 아래 버튼을 누르면 ${h.ch}채널로 옮긴 다음 가요.`}
           </p>
         )}
         <p className={styles.score}>
@@ -307,17 +373,25 @@ function MyPlot({
         <TitleProgress score={h.score} />
         <div className={styles.row}>
           <button type="button" className={cx(ui.button, ui.primary)} onClick={() => onEnter(false)} disabled={busy}>
-            내 집 들어가기
+            {sea ? "오두막 들어가기" : "내 집 들어가기"}
           </button>
-          <button type="button" className={ui.button} onClick={() => onEnter(true)} disabled={busy}>
+          <button type="button" className={ui.button} onClick={() => onEnter(true)} disabled={busy || (sea && away)}>
             들어가서 꾸미기
           </button>
-          <button type="button" className={ui.button} onClick={onExterior} disabled={busy}>
-            외관 꾸미기
-          </button>
-          <button type="button" className={ui.button} onClick={() => onVillage(h.lot, true)} disabled={busy}>
-            {away ? `${h.ch}채널 내 집 보러 가기` : "내 집 보러 가기"}
-          </button>
+          {sea ? (
+            <button type="button" className={ui.button} onClick={() => setRestyle((v) => !v)} disabled={busy} aria-expanded={restyle}>
+              겉모습 바꾸기
+            </button>
+          ) : (
+            <button type="button" className={ui.button} onClick={onExterior} disabled={busy}>
+              외관 꾸미기
+            </button>
+          )}
+          {!(sea && away) && (
+            <button type="button" className={ui.button} onClick={() => onVillage(h.lot, true)} disabled={busy}>
+              {sea ? "내 오두막 보러 가기" : away ? `${h.ch}채널 내 집 보러 가기` : "내 집 보러 가기"}
+            </button>
+          )}
           <button
             type="button"
             className={cx(ui.button, ui.quiet)}
@@ -332,7 +406,18 @@ function MyPlot({
           </button>
         </div>
       </div>
-      {editing && form("저장", () => run(() => housingApi.editProfile(name, intro), "바꿨어요."))}
+      {sea && restyle && (
+        <div className={styles.card}>
+          <p className={styles.muted}>오두막 겉모습은 무료로 바꿀 수 있어요. 포구에 선 오두막 그림이 바로 바뀌어요.</p>
+          <CottageStylePicker
+            value={h.style ?? "wood"}
+            tier={h.tier}
+            disabled={pending || busy}
+            onChange={(s) => s !== (h.style ?? "wood") && void run(() => housingApi.setCottageStyle(s), `${COTTAGE_STYLES.find((c) => c.id === s)?.name}으로 바꿨어요.`)}
+          />
+        </div>
+      )}
+      {editing && form("저장", () => run(() => housingApi.editProfile(name, intro, sea ? "sea" : "village"), "바꿨어요."))}
       <div className={styles.card}>
         <p className={styles.points}>
           내 포인트 <strong>{fmt(my.points)}P</strong>
@@ -340,22 +425,24 @@ function MyPlot({
         {up ? (
           <>
             <p className={styles.muted}>
-              집은 한 채만 가질 수 있어요. 대신 {up.name}({up.w}×{up.h}칸, 물건 {up.maxItems}개)으로 넓힐 수 있어요. 놓아 둔 물건은 그대로예요. 마을에 있는 집도 더 크게 바뀌어요.
+              {sea
+                ? `오두막은 한 채만 가질 수 있어요. 대신 ${up.name}(${up.w}×${up.h}칸, 물건 ${up.maxItems}개)으로 넓힐 수 있어요. 놓아 둔 물건은 그대로예요. 포구에 선 오두막도 더 크게 바뀌어요.`
+                : `집은 한 채만 가질 수 있어요. 대신 ${up.name}(${up.w}×${up.h}칸, 물건 ${up.maxItems}개)으로 넓힐 수 있어요. 놓아 둔 물건은 그대로예요. 마을에 있는 집도 더 크게 바뀌어요.`}
             </p>
-            <TierCompare exterior={h.exterior} current={h.tier} />
+            <TierCompare exterior={h.exterior} current={h.tier} {...(sea ? { cottage: h.style ?? "wood" } : {})} />
             <button
               type="button"
               className={ui.button}
-              disabled={pending || busy || my.points < up.price || away}
-              onClick={() => run(() => housingApi.upgrade(channel, up.id), `${up.name}으로 넓혔어요!`)}
+              disabled={pending || busy || my.points < upPrice || away}
+              onClick={() => run(() => housingApi.upgrade(channel, up.id, sea ? "sea" : "village"), `${up.name}으로 넓혔어요!`)}
             >
-              {fmt(up.price)}P로 {up.name} 만들기{away ? ` · ${h.ch}채널에서 할 수 있어요` : my.points < up.price ? " · 모자라요" : ""}
+              {fmt(upPrice)}P로 {up.name} 만들기{away ? ` · ${h.ch}채널에서 할 수 있어요` : my.points < upPrice ? " · 모자라요" : ""}
             </button>
           </>
         ) : (
           <>
             <p className={styles.muted}>가장 넓은 {tier.name}이에요.</p>
-            <TierCompare exterior={h.exterior} current={h.tier} />
+            <TierCompare exterior={h.exterior} current={h.tier} {...(sea ? { cottage: h.style ?? "wood" } : {})} />
           </>
         )}
       </div>
@@ -430,7 +517,7 @@ function HouseList({ onVisit, myId, busy }: { onVisit: (id: string) => void; myI
                     </span>
                   </span>
                   <span className={styles.listWhere}>
-                    {lotLabel(h.ch, h.lot)} · {tierById(h.tier)?.name}
+                    {houseLabel(h)} · {tierById(h.tier)?.name}
                   </span>
                 </span>
                 <span className={styles.listStat}>
@@ -443,4 +530,16 @@ function HouseList({ onVisit, myId, busy }: { onVisit: (id: string) => void; myI
       )}
     </div>
   );
+}
+
+/** 11/16 오두막 터 크기 카드 아래 안내 (넓히기 값도 같은 배수) */
+function seaHint(i: number, villa: boolean): string {
+  if (i === 0) {
+    const up = PLOT_TIERS[1];
+    return up ? `분양받은 뒤 더 큰 터로 넓힐 수 있어요 (${up.name} +${fmt(seaUpgradeCost(up.price, villa))}P)` : "";
+  }
+  const steps = PLOT_TIERS.slice(0, i + 1)
+    .map((t, k) => `${fmt(k === 0 ? seaPlotCost(t.id, villa) : seaUpgradeCost(t.price, villa))}P`)
+    .join(" + ");
+  return `${PLOT_TIERS[0].name}에서 업그레이드로도 넓힐 수 있어요 (${steps})`;
 }

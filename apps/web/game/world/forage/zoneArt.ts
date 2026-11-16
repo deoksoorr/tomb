@@ -14,6 +14,9 @@ export const ZTEX = {
   /** 11/15 정류장 승강장 바닥 · 위 마당 테두리 연석 */
   busPlatform: "fishzone-bus-platform",
   wharfCurb: "fishzone-wharf-curb",
+  /** 11/16 바닷가행 정류장 (옛 묘역 아래): 바다 빛 지붕·바다 포스터 지붕, 물결 판 노선 팻말 */
+  seaShelter: "fishzone-sea-shelter",
+  seaSign: "fishzone-sea-sign",
 } as const;
 
 const OUT = 0x16121a;
@@ -56,9 +59,9 @@ function barrel(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
-/** 낚시 의자: 낮은 나무 의자 + 미끼 통. 앉으면 사람에 가려진다. 12×8 */
+/** 낚시 의자: 낮은 나무 의자 + 미끼 통. 앉으면 사람에 가려진다. 13×8 (11/16 미끼 통 오른쪽 테가 잘려 한 칸 넓혔어요) */
 function stool(): HTMLCanvasElement {
-  const g = new Grid(12, 8);
+  const g = new Grid(13, 8);
   g.rect(1, 2, 8, 2, 0xb07a44);
   g.hline(1, 8, 2, 0xd09a5a);
   g.vline(2, 4, 6, WOOD_DARK);
@@ -185,8 +188,20 @@ function placard(): HTMLCanvasElement {
 const ROOF = { hi: 0x7fb08a, mid: 0x5a8a66, lo: 0x3e6a4c };
 const STEEL = { hi: 0xb8bcc0, mid: 0x8a9096, lo: 0x5e646a };
 
+/** 11/16 바닷가행 정류장 지붕 색 (바다 빛 파랑) */
+const SEA_ROOF = { hi: 0x7ab8d8, mid: 0x4a88b0, lo: 0x2e6488 };
+
 /** 정류장 지붕: 둥근 초록 지붕(흰 테) + 기둥 넷 + 뒷벽 유리(캠핑장 포스터 한 장) + 지붕 아래 작은 등. 벤치는 가구(bE)가 따로. 64×50 */
 function busShelter(): HTMLCanvasElement {
+  return shelterArt(ROOF, "camp");
+}
+
+/** 11/16 바닷가행 정류장 지붕: 바다 빛 지붕 + 포스터는 달밤 바다·등대. 벤치는 가구(bU)가 따로 */
+function seaShelter(): HTMLCanvasElement {
+  return shelterArt(SEA_ROOF, "sea");
+}
+
+function shelterArt(roof: { hi: number; mid: number; lo: number }, poster: "camp" | "sea"): HTMLCanvasElement {
   const W = BUS_SHELTER_W;
   const H = BUS_SHELTER_H;
   const g = new Grid(W, H);
@@ -200,19 +215,36 @@ function busShelter(): HTMLCanvasElement {
   // 유리 반사
   for (let k = 0; k < 6; k++) g.set(9 + k, gy0 + 9 - k, 0xe8f6ff, 200);
   for (let k = 0; k < 4; k++) g.set(W - 14 + k, gy0 + 7 - k, 0xe8f6ff, 200);
-  // 포스터 (캠핑장: 밤하늘·산·텐트·모닥불)
   const px = (W >> 1) + 4;
   const py = gy0 + 2;
-  g.rect(px, py, 14, 12, 0x2a3a5a);
-  g.set(px + 3, py + 2, 0xfff2c0);
-  g.set(px + 10, py + 1, 0xfff2c0);
-  for (let k = 0; k < 6; k++) g.hline(px + k, px + 13 - k, py + 6 + k > py + 11 ? py + 11 : py + 6 + k, 0x3a5a4a);
-  g.rect(px, py + 9, 14, 3, 0x4a7a4a);
-  g.set(px + 4, py + 7, 0xe8a040);
-  g.hline(px + 3, px + 5, py + 8, 0xe8a040);
-  g.hline(px + 2, px + 6, py + 9, 0xd8803a);
-  g.set(px + 10, py + 9, 0xffb040);
-  g.set(px + 10, py + 8, 0xffd060);
+  if (poster === "sea") {
+    // 포스터 (바닷가: 달밤 하늘·수평선·물결·빨간 등대)
+    g.rect(px, py, 14, 12, 0x1e3050);
+    g.set(px + 3, py + 2, 0xfff2c0);
+    g.set(px + 4, py + 2, 0xfff2c0);
+    g.set(px + 3, py + 3, 0xfff2c0);
+    g.rect(px, py + 7, 14, 5, 0x2a5a88);
+    g.hline(px, px + 13, py + 7, 0x7ab8d8);
+    for (let x = px + 1; x < px + 13; x += 3) g.set(x, py + 9, 0xd8f0ff);
+    g.rect(px + 10, py + 3, 2, 5, 0xf0ece0);
+    g.set(px + 10, py + 5, 0xc8483a);
+    g.set(px + 11, py + 5, 0xc8483a);
+    g.set(px + 10, py + 2, 0xffd060);
+    g.set(px + 11, py + 2, 0xffd060);
+  }
+  // 포스터 (캠핑장: 밤하늘·산·텐트·모닥불)
+  if (poster === "camp") {
+    g.rect(px, py, 14, 12, 0x2a3a5a);
+    g.set(px + 3, py + 2, 0xfff2c0);
+    g.set(px + 10, py + 1, 0xfff2c0);
+    for (let k = 0; k < 6; k++) g.hline(px + k, px + 13 - k, py + 6 + k > py + 11 ? py + 11 : py + 6 + k, 0x3a5a4a);
+    g.rect(px, py + 9, 14, 3, 0x4a7a4a);
+    g.set(px + 4, py + 7, 0xe8a040);
+    g.hline(px + 3, px + 5, py + 8, 0xe8a040);
+    g.hline(px + 2, px + 6, py + 9, 0xd8803a);
+    g.set(px + 10, py + 9, 0xffb040);
+    g.set(px + 10, py + 8, 0xffd060);
+  }
   // 기둥 (앞 둘은 몸 앞에서도 보인다 — 가늘게)
   for (const x of [3, W - 5]) {
     g.rect(x, 10, 2, H - 12, STEEL.mid);
@@ -223,10 +255,10 @@ function busShelter(): HTMLCanvasElement {
   for (let x = 0; x < W; x++) {
     const t = (x - (W - 1) / 2) / ((W - 1) / 2);
     const top = 2 + Math.round(t * t * 4);
-    for (let y = top; y <= 10; y++) g.set(x, y, y === top ? ROOF.hi : y >= 9 ? ROOF.lo : ROOF.mid);
+    for (let y = top; y <= 10; y++) g.set(x, y, y === top ? roof.hi : y >= 9 ? roof.lo : roof.mid);
     g.set(x, 11, 0xf0ece0);
   }
-  for (let x = 4; x < W - 4; x += 6) g.vline(x, 4, 9, ROOF.lo);
+  for (let x = 4; x < W - 4; x += 6) g.vline(x, 4, 9, roof.lo);
   // 지붕 아래 등 (밤 빛 = FISH_ZONE_LIGHTS)
   const lx = W >> 1;
   g.rect(lx - 3, 12, 6, 2, 0x4a4a52);
@@ -241,6 +273,15 @@ function busShelter(): HTMLCanvasElement {
 
 /** 노선 팻말: 줄무늬 기둥 + 둥근 버스 표지(파란 판·흰 버스) + 아래 작은 판(텐트 그림). 18×44 */
 function busSign(): HTMLCanvasElement {
+  return signArt("camp");
+}
+
+/** 11/16 바닷가행 노선 팻말: 아래 작은 판에 물결과 갈매기 */
+function seaSign(): HTMLCanvasElement {
+  return signArt("sea");
+}
+
+function signArt(plate: "camp" | "sea"): HTMLCanvasElement {
   const W = BUS_SIGN_W;
   const H = BUS_SIGN_H;
   const g = new Grid(W, H);
@@ -260,11 +301,21 @@ function busSign(): HTMLCanvasElement {
   g.set(cx - 3, 10, 0x1f1d1a);
   g.set(cx + 2, 10, 0x1f1d1a);
   g.hline(cx - 4, cx + 3, 9, 0xffffff);
-  // 아래 작은 판: 텐트 (캠핑장행)
+  // 아래 작은 판: 텐트 (캠핑장행) · 11/16 물결과 갈매기 (바닷가행)
   g.rect(cx - 6, 18, 12, 8, 0xf4ead2);
   g.hline(cx - 6, cx + 5, 18, 0xd8ccb0);
-  for (let k = 0; k < 4; k++) g.hline(cx - k - 1, cx + k, 20 + k, 0x4a7a4a);
-  g.set(cx, 23, 0x2a3a2a);
+  if (plate === "camp") {
+    for (let k = 0; k < 4; k++) g.hline(cx - k - 1, cx + k, 20 + k, 0x4a7a4a);
+    g.set(cx, 23, 0x2a3a2a);
+  } else {
+    for (let x = cx - 5; x <= cx + 4; x++) g.set(x, 23 + ((x + 1) % 4 < 2 ? 0 : 1), 0x3a7ab0);
+    g.hline(cx - 5, cx + 4, 25, 0x3a7ab0);
+    g.set(cx - 2, 20, 0x3a3a40);
+    g.set(cx - 1, 21, 0x3a3a40);
+    g.set(cx, 20, 0x3a3a40);
+    g.set(cx + 1, 21, 0x3a3a40);
+    g.set(cx + 2, 20, 0x3a3a40);
+  }
   g.outline(OUT);
   for (let x = cx - 3; x <= cx + 3; x++) g.set(x, H - 1, 0x000000, 60);
   return g.toCanvas();
@@ -392,4 +443,6 @@ export function ensureZoneTextures(scene: Phaser.Scene): void {
   tx.addCanvas(ZTEX.busBay, busBay());
   tx.addCanvas(ZTEX.busPlatform, busPlatform());
   tx.addCanvas(ZTEX.wharfCurb, wharfCurb());
+  tx.addCanvas(ZTEX.seaShelter, seaShelter());
+  tx.addCanvas(ZTEX.seaSign, seaSign());
 }

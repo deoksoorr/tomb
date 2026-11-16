@@ -6,7 +6,7 @@ import { itemLookScore, lookScore } from "@/lib/lookScore";
 import { getAccounts } from "@/lib/store";
 import { kstDay, lookOf } from "@/lib/store/accounts";
 import { getChamp } from "@/lib/store/champ";
-import { discountedPrice, earnedTitleIds, perkText, progressText, titleDef, titleLabel, titlePerk, TITLE_GRADES, TITLE_GROUPS, TITLE_PERKS, TITLES } from "@/lib/titles";
+import { discountedPrice, earnedTitleIds, GRADE_SPEED, perkText, PERK_VALUES, progressText, titleDef, titleLabel, titlePerk, TITLE_GRADES, TITLE_GROUPS, TITLES } from "@/lib/titles";
 import type { ApiError, TitlesResponse, WearResponse } from "@/lib/types";
 import { wardrobeEntries } from "@/components/account/wardrobe";
 import * as marks from "./me/titles/marks/route";
@@ -86,23 +86,19 @@ describe("칭호 목록 (lib/titles)", () => {
     expect(progressText(titleDef("t_kill5k")!, 1234)).toBe("1,234 / 5,000");
   });
 
-  it("칭호 능력: 등급이 높을수록 크고, 가장 빠른 타는 펫과 겹쳐도 실시간 서버 속도 검증(달리기 × 1.5) 안", () => {
-    expect(TITLE_PERKS.bronze).toEqual({ speed: 1, discount: 0 });
-    // 동 → 전설은 오르고, 11/15 신화는 전설과 같다 (속도 검증 상한 안)
-    // 11/16 매니저 칭호는 능력이 없다 (혜택은 칭호·오라뿐)
-    expect(TITLE_PERKS.manager).toEqual({ speed: 1, discount: 0 });
-    const steps = TITLE_GRADES.filter((g) => g !== "mythic" && g !== "manager");
-    for (let i = 1; i < steps.length; i++) {
-      expect(TITLE_PERKS[steps[i]].speed).toBeGreaterThan(TITLE_PERKS[steps[i - 1]].speed);
-      expect(TITLE_PERKS[steps[i]].discount).toBeGreaterThan(TITLE_PERKS[steps[i - 1]].discount);
-    }
-    expect(TITLE_PERKS.mythic).toEqual(TITLE_PERKS.legend);
+  it("칭호 능력: 공통 속도는 등급이 높을수록 크고, 가장 빠른 타는 펫과 겹쳐도 실시간 서버 속도 검증(달리기 × 1.5) 안", () => {
+    // 11/16 동은 없음, 은 2 · 금 3 · 전설 4 · 신화 6%, 매니저 칭호는 능력이 없다
+    expect(GRADE_SPEED).toEqual({ bronze: 1, silver: 1.02, gold: 1.03, legend: 1.04, mythic: 1.06, manager: 1 });
+    const steps = TITLE_GRADES.filter((g) => g !== "manager");
+    for (let i = 1; i < steps.length; i++) expect(GRADE_SPEED[steps[i]]).toBeGreaterThan(GRADE_SPEED[steps[i - 1]]);
     const fastestPet = Math.max(...ZOO_PETS.map((p) => p.ride?.speed ?? 1));
-    expect(RUN_SPEED * fastestPet * TITLE_PERKS.mythic.speed).toBeLessThan(MAX_VALID_SPEED);
-    expect(titlePerk("t_hell")).toEqual(TITLE_PERKS.gold);
-    expect(titlePerk(null)).toEqual(TITLE_PERKS.bronze);
-    expect(perkText("legend")).toBe("마을 이동 속도 +7% · 상점 7% 할인");
-    expect(perkText("bronze")).toBe("");
+    const fastestTitle = Math.max(...TITLES.map((t) => titlePerk(t.id).speed));
+    expect(fastestTitle).toBeLessThanOrEqual(GRADE_SPEED.mythic + PERK_VALUES.champ.legend);
+    expect(RUN_SPEED * fastestPet * fastestTitle).toBeLessThan(MAX_VALID_SPEED);
+    expect(titlePerk("t_hell")).toMatchObject({ group: "hunt", speed: 1.03, huntExp: 0.06, discount: 0 });
+    expect(titlePerk(null)).toMatchObject({ group: "none", speed: 1 });
+    expect(perkText(titleDef("t_lv50"))).toBe("마을에서 4% 더 빨리 걸어요. 사냥에서 경험치를 10% 더 받아요.");
+    expect(perkText(titleDef("t_kill100"))).toBe("");
   });
 
   it("할인가: 원가 × (1 − 할인율)을 1P 단위로 내림, 할인이 있으면 최소 1P", () => {
@@ -222,22 +218,30 @@ describe("운영자 · 칭호 능력 · 누적 접속 시간", () => {
     );
   });
 
-  it("단 칭호 등급만큼 상점 값이 깎인다 (이용권·영구 소장)", async () => {
+  it("11/16 패션 갈래 칭호만 상점 값이 깎인다 (이용권·영구 소장), 다른 갈래는 그대로", async () => {
     const v = await newVisitor();
     setPoints(v, 10_000);
-    // 금 등급 칭호 (도감 전부)
+    // 금 등급 낚시 칭호 (도감 전부): 할인 없음
     await getForageStore().markDexTitles(v.visitorId, ["fish:100"], kstDay());
     forgetTitles();
     expect((await titles.POST(call("/api/me/titles", v, { id: "t_fish100" }))).status).toBe(200);
+    const b0 = (await getAccounts().get(v.visitorId, kstDay(), Date.now())).points;
+    expect((await buy.POST(call("/api/shop/buy", v, { itemId: "hat_cat" }))).status).toBe(200);
+    expect(b0 - (await getAccounts().get(v.visitorId, kstDay(), Date.now())).points).toBe(itemById("hat_cat")!.price);
+    // 금 등급 패션 칭호 (꾸미기 점수 1,500 — 시험이라 바로 단다): 5% 할인
+    await getAccounts().setTitle(v.visitorId, "t_look1500");
+    forgetTitles(v.visitorId);
     const before = (await getAccounts().get(v.visitorId, kstDay(), Date.now())).points;
-    const res = await buy.POST(call("/api/shop/buy", v, { itemId: "hat_cat" }));
+    const res = await buy.POST(call("/api/shop/buy", v, { itemId: "hat_flower" }));
     expect(res.status).toBe(200);
     const mid = (await getAccounts().get(v.visitorId, kstDay(), Date.now())).points;
-    expect(before - mid).toBe(discountedPrice(itemById("hat_cat")!.price, TITLE_PERKS.gold.discount));
+    expect(PERK_VALUES.look.gold).toBe(0.05);
+    expect(before - mid).toBe(discountedPrice(itemById("hat_flower")!.price, PERK_VALUES.look.gold));
+    expect(before - mid).toBeLessThan(itemById("hat_flower")!.price);
     const p = await permanent.POST(call("/api/shop/permanent", v, { itemId: "hat_straw" }));
     expect(p.status).toBe(200);
     const after = (await getAccounts().get(v.visitorId, kstDay(), Date.now())).points;
-    expect(mid - after).toBe(discountedPrice(permanentPrice("hat_straw")!, TITLE_PERKS.gold.discount));
+    expect(mid - after).toBe(discountedPrice(permanentPrice("hat_straw")!, PERK_VALUES.look.gold));
   });
 
   it("누적 접속 시간: 받아 준 머무르기만 센다 (처음이면 그날 머문 기록부터)", async () => {

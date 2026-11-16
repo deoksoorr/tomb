@@ -67,6 +67,10 @@ export const LANDMARK_COLOR: Record<Landmark["kind"], string> = {
   balloon: "#ffb070",
   tower: "#ffb43c",
   bumper: "#ff8ab8",
+  // 11/16 정류장 둘: 캠핑장행은 초록 지붕, 바닷가행은 바다 빛
+  busCamp: "#9ae0a8",
+  busSea: "#5ac8f0",
+  duck: "#ffe060",
 };
 
 /** 관람차 아이콘 (미니맵 px, 가운데 기준 — 동그란 바퀴 + 다리) */

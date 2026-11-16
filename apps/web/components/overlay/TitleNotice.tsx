@@ -139,7 +139,7 @@ export default function TitleNotice() {
                 <span className={styles.grade}>{TITLE_GRADE_NAMES[t.grade]}</span> 「{t.name}」
               </b>
               <span className={styles.how}>{t.how.replace(/(하)?면$/, "")}</span>
-              {perkText(t.grade) && <span className={styles.perk}>칭호 능력: {perkText(t.grade)}</span>}
+              {perkText(t) && <span className={styles.perk}><b>칭호 능력</b> {perkText(t)}</span>}
             </li>
           ))}
         </ul>

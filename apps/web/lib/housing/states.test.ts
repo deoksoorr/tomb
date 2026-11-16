@@ -3,13 +3,16 @@ import { roomPlan } from "./rooms";
 import { defaultExterior, tierById } from "./catalog";
 import { houseStates, setHouseState, waterPlant } from "./service";
 import { keepState, liveStates, placedSig, stateSigs, stateTarget, WINDOW_SIG } from "./states";
-import { MemoryHouseStore } from "./store";
+import { MemoryHouseStore, type HousePair } from "./store";
 import type { HouseLayout, Placed } from "./types";
 
 // 3번 가구 상태 저장: 나갔다 와도·나중에 온 사람도 그대로, 치우거나 옮기면 정리
 
 const lay = (items: Placed[]): HouseLayout => ({ items, floor: "floor_grass", wall: "wall_fence" });
 const ID = "abcdefghijkl";
+/** 오두막 없는 집 하나 (공용 가방 = 이 집 id) */
+const solo = (id: string): HousePair => ({ village: id, sea: `${id}-sea` });
+
 const FIRE: Placed = { u: "f1", i: "fireplace", x: 1, y: 1, r: 0 };
 const LAMP: Placed = { u: "l1", i: "floor_lamp", x: 5, y: 1, r: 0 };
 const RADIO: Placed = { u: "r1", i: "radio", x: 3, y: 4, r: 0 };
@@ -18,8 +21,8 @@ const POT: Placed = { u: "p1", i: "pot", x: 6, y: 4, r: 0 };
 async function setup(items: Placed[] = [FIRE, LAMP, RADIO, POT]) {
   const store = new MemoryHouseStore();
   await store.create({ id: ID, owner: "own", name: "집", intro: "", ownerName: "주인", tier: "small", lot: null, now: 1 });
-  for (const p of items) await store.addItem(ID, p.i, 20);
-  await store.saveDesign(ID, "small", lay(items), null, {}, 1, 2);
+  for (const p of items) await store.addItem(solo(ID), "village", p.i, 20);
+  await store.saveDesign(solo(ID), "village", "small", lay(items), null, {}, 1, 2);
   return store;
 }
 
@@ -77,20 +80,20 @@ describe("가구 상태 저장 (메모리 저장소 + 서비스)", () => {
     await setHouseState(store, ID, "w0", 1);
     await waterPlant(store, ID, "p1", 10);
     // 벽난로는 그대로, 스탠드는 옮기고, 라디오·화분은 치운다
-    await store.saveDesign(ID, "small", lay([FIRE, { ...LAMP, x: 6 }]), null, {}, 1, 3);
+    await store.saveDesign(solo(ID), "village", "small", lay([FIRE, { ...LAMP, x: 6 }]), null, {}, 1, 3);
     expect(await store.states(ID)).toEqual({ f1: { a: 1, s: placedSig(FIRE) }, w0: { a: 1, s: WINDOW_SIG } });
     expect(await store.plants(ID)).toEqual({});
     expect((await houseStates(store, ID)).states).toEqual({ f1: 1, w0: 1 });
     // 외관만 저장하면 그대로
-    await store.saveDesign(ID, "small", null, defaultExterior(), {}, 1, 4);
+    await store.saveDesign(solo(ID), "village", "small", null, defaultExterior(), {}, 1, 4);
     expect((await houseStates(store, ID)).states).toEqual({ f1: 1, w0: 1 });
   });
 
   it("같은 배치 id에 다른 가구를 놓으면 예전 상태는 쓰이지 않는다", async () => {
     const store = await setup();
     await setHouseState(store, ID, "f1", 1);
-    await store.addItem(ID, "floor_lamp", 20);
-    await store.saveDesign(ID, "small", lay([{ ...LAMP, u: "f1", x: FIRE.x, y: FIRE.y }]), null, {}, 1, 3);
+    await store.addItem(solo(ID), "village", "floor_lamp", 20);
+    await store.saveDesign(solo(ID), "village", "small", lay([{ ...LAMP, u: "f1", x: FIRE.x, y: FIRE.y }]), null, {}, 1, 3);
     expect((await houseStates(store, ID)).states).toEqual({});
   });
 });

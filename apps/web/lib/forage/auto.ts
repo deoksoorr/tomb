@@ -1,3 +1,4 @@
+import type { FishWater } from "@tomb/protocol";
 import type { Species } from "./catalog";
 import { BITE_MAX_MS, BITE_MIN_MS, candidates, conditionsAt, hash01, reelMinMs, rollSize10, sizeText, weightOf, type Cond } from "./rules";
 
@@ -32,7 +33,7 @@ export type AutoSession = {
   /** 결정적 난수 시드 */
   seed: number;
   spot: string;
-  water: "lake" | "river";
+  water: FishWater;
   /** 켤 때 있던 채널 (모르면 null) */
   ch: number | null;
   start: number;
@@ -44,9 +45,11 @@ export type AutoSession = {
   segs: [number, number][];
   /** 정산까지 마친 물고기 번호 (1부터, 한도로 못 받은 것 포함) */
   done: number;
+  /** 11/16 바닷가 갯바위: end가 물이 빠지는 때 (끝나면 ended "tide") */
+  tide?: true;
 };
 
-export function newAutoSession(seed: number, spot: string, water: "lake" | "river", ch: number | null, now: number): AutoSession {
+export function newAutoSession(seed: number, spot: string, water: FishWater, ch: number | null, now: number): AutoSession {
   return { v: 1, seed, spot, water, ch, start: now, end: now + AUTO_FISH_MAX_MS, beat: now, segs: [], done: 0 };
 }
 
@@ -136,7 +139,7 @@ export function pickAuto(list: readonly Species[], rand: number): Species | null
  * k번째 물고기: 그 시각의 조건으로, 시드 + 번호로 결정적으로 (같은 입력 → 같은 결과).
  * 크기는 직접 낚을 때와 같은 분포(rollSize10). 내 도감 최대 기록에는 들어가고, 최대어 순위에는 넣지 않는다
  */
-export function rollAutoCatch(seed: number, k: number, water: "lake" | "river", at: number, cond: Cond = conditionsAt(at)) {
+export function rollAutoCatch(seed: number, k: number, water: FishWater, at: number, cond: Cond = conditionsAt(at)) {
   const s = pickAuto(candidates("fish", water, cond), hash01(`auto|${seed}|${k}|sp`));
   if (!s) return null;
   return { id: s.id, size: rollSize10(s, hash01(`auto|${seed}|${k}|sz`)), at };

@@ -108,14 +108,18 @@ export function toFriendWhere(w: PeerWhere | undefined, reached: boolean): Frien
   if (!reached) return { at: "unknown" };
   if (!w) return { at: "offline" };
   if (w.away) return { at: "away", ch: w.ch, sid: w.sid, place: w.place ?? null, ...(w.place === "house" && w.house ? { houseId: w.house } : {}) };
-  return { at: "world", ch: w.ch, sid: w.sid, x: w.x, y: w.y, ...(w.map === "camp" ? { map: "camp" as const } : {}) };
+  return { at: "world", ch: w.ch, sid: w.sid, x: w.x, y: w.y, ...(w.map === "camp" || w.map === "sea" ? { map: w.map } : {}) };
 }
 
-/** 친구 집 id (분양받았고 숨겨지지 않았으면) */
+/** 친구 집 id (분양받았고 숨겨지지 않았으면). 11/16 마을 집이 없으면 포구 오두막 */
 async function houseOf(accountId: string): Promise<string | null> {
   const id = houseIdFor(accountId);
   const h = await getHouseStore().get(id);
-  return h && !h.hidden ? id : null;
+  if (h && !h.hidden) return id;
+  if (h) return null;
+  const seaId = houseIdFor(accountId, "sea");
+  const sea = await getHouseStore().get(seaId);
+  return sea && !sea.hidden ? seaId : null;
 }
 
 /** 내 목록에서 key가 가리키는 계정 */

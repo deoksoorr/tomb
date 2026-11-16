@@ -11,6 +11,15 @@ export function snapZoom(z: number): number {
   return clampZoom(Math.round(z / ZOOM_STEP) * ZOOM_STEP);
 }
 
+/**
+ * 11/16 이 화면에서 맵 밖(빈 곳)이 안 보이는 가장 작은 줌 (사용자: 32인치 모니터에서 가장 멀리 보면 양옆이 비어요).
+ * 전체 최소 줌보다 작아지지는 않아요. 화면이 맵보다 아주 크면 이 값이 커져서 덜 멀리 보여요
+ */
+export function fitMinZoom(viewW: number, viewH: number, mapW: number, mapH: number): number {
+  if (!(viewW > 0 && viewH > 0 && mapW > 0 && mapH > 0)) return ZOOM_MIN;
+  return Math.max(ZOOM_MIN, viewW / mapW, viewH / mapH);
+}
+
 /** 휠·버튼 한 칸: 현재 목표에서 0.5 단계 이동 */
 export function stepZoom(target: number, delta: number): number {
   if (!delta) return snapZoom(target);

@@ -77,7 +77,8 @@ export function aimedDeck(aim: Pt, maxDist = 60): number | null {
 
 /** 렌즈 아래 한 줄 안내. touch = 화면 버튼을 쓰는 기기 (조이스틱으로 겨누고 [상호작용]으로 내려놓는다) */
 export function scopeCaption(deck: number | null, tents: readonly LookoutTentView[], touch = false): string {
-  if (deck === null) return touch ? "조이스틱으로 둘러봐요. [상호작용] 버튼을 누르면 내려놓아요." : "방향키로 둘러봐요. E를 누르면 내려놓아요.";
+  // 11/16 r19 바라보는 동안엔 게임 단축키·행동 버튼이 막혀요 → Esc(데스크톱)·화면 탭(터치)으로 내려놓아요
+  if (deck === null) return touch ? "조이스틱으로 둘러봐요. 화면을 탭하면 내려놓아요." : "방향키로 둘러봐요. Esc를 누르면 내려놓아요.";
   const t = tents.find((v) => v.deck === deck);
   if (!t) return `${deck}번 데크는 비어 있어요.`;
   if (t.lit) return `${deck}번 데크 텐트에 불이 켜져 있어요.`;

@@ -1,10 +1,10 @@
 import * as Phaser from "phaser";
 import { ambienceAt, timePhase } from "@/lib/ambience";
 import { ART_H, buildCaption, buildInterior, buildSky, LAYERS, VIEW_MAX, WIN_BOT, WIN_TOP, type LayerSpec } from "./busRideArt";
-import { LEAF_COLORS, rideBake, type RideBake } from "./busRideBake";
-import { captionAlpha, captionAt, distanceAt, lightsOn, segmentAt, segmentsFor, shakeAt, skyColors, starsOn, strapAngle, type RideSegment } from "./busRideMath";
+import { GULL_FRAMES, LEAF_COLORS, rideBake, type RideBake } from "./busRideBake";
+import { captionAlpha, captionAt, distanceAt, lightsOn, rideReversed, segmentAt, segmentsFor, shakeAt, skyColors, starsOn, strapAngle, type RideSegment } from "./busRideMath";
 import { css } from "../sprites/pixel";
-import { BUS_RIDE_MS, BUS_RIDE_SCENE, BUS_TEX_PREFIX, type BusRideControl, type BusRideData } from "./busTypes";
+import { BUS_RIDE_MS, BUS_RIDE_SCENE, BUS_TEX_PREFIX, type BusRideControl, type BusRideData, type BusRoute } from "./busTypes";
 
 // 8초 버스 창밖 연출 (화면 전체). 버스 안 창가 자리에서 본 창밖: 여러 겹 파노라마가 시차로 흐르고(busRideArt),
 // 가는 길은 마을 → 고속도로 → 단풍 국도 → 숲길 → 「언젠가 캠핑장」 표지판 앞에서 멈춘다 (돌아오는 길은 반대, 끝은 마을 정류장).
@@ -12,6 +12,7 @@ import { BUS_RIDE_MS, BUS_RIDE_SCENE, BUS_TEX_PREFIX, type BusRideControl, type 
 // 11/15 창밖 그림(파노라마·표지판·자막)은 busRideBake가 미리 조금씩 굽고 지우지 않아요.
 // 덜 구워졌으면 검은 화면에서 프레임마다 조금씩 마저 굽고 시작해요. 하늘·버스 안만 장면이 굽고 끝날 때 지워요.
 // 끝나거나 skip()이면 짧게 어두워진 뒤 onDone을 한 번 부르고 스스로 멈춘다.
+// 11/16 바닷가 노선(route "sea"): 마을 → 고속도로 → 해송 숲 길 → 바닷길(방파제·등대) → 「달물결 포구」 팻말. 낙엽 대신 갈매기가 나란히 날아요.
 
 const FADE_IN_MS = 350;
 const HOLD_MS = 450;
@@ -19,6 +20,9 @@ const FADE_OUT_MS = 320;
 const SKIP_FADE_MS = 200;
 const LEAVES = 14;
 const LEAVES_REDUCED = 4;
+/** 11/16 바닷가 노선 창밖 갈매기 수 */
+const GULLS = 6;
+const GULLS_REDUCED = 2;
 /** 덜 구운 그림을 마저 굽는 한 프레임 예산 (ms) */
 const BAKE_MS = 6;
 
@@ -42,6 +46,8 @@ type Leaf = { img: Phaser.GameObjects.Image; x: number; y: number; vy: number; p
 
 export class BusRideScene extends Phaser.Scene implements BusRideControl {
   private ride!: BusRideData;
+  /** 11/16 노선 (없으면 캠핑장) */
+  private route: BusRoute = "camp";
   private keys: string[] = [];
   private order: readonly RideSegment[] = [];
   private dist = 0;
@@ -96,8 +102,10 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
 
   init(data: BusRideData): void {
     this.ride = data;
-    this.order = segmentsFor(data.leg);
-    this.rev = data.leg === "toVillage";
+    this.route = data.route ?? "camp";
+    this.order = segmentsFor(data.leg, this.route);
+    // 11/16 바닷가 노선은 캠핑장과 반대로 흘러요 (busRideMath rideReversed)
+    this.rev = rideReversed(data.leg, this.route);
     this.endAt = null;
     this.pending = false;
     this.skipped = false;
@@ -114,7 +122,7 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
   }
 
   create(): void {
-    this.bake = rideBake(this.textures, this.ride.reduced);
+    this.bake = rideBake(this.textures, this.ride.reduced, this.route);
     this.dist = this.bake.dist;
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanup, this);
     this.events.once(Phaser.Scenes.Events.DESTROY, this.cleanup, this);
@@ -171,8 +179,10 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
     this.sign = this.add.image(0, 0, bake.key(`sign-${leg}`)).setOrigin(0, 1).setTint(tint);
     this.outside.add(this.sign);
 
-    const leafKeys = LEAF_COLORS.map((_, i) => bake.key(`leaf-${i}`));
-    const n = reduced ? LEAVES_REDUCED : LEAVES;
+    // 11/16 바닷가 노선은 낙엽 대신 갈매기 (같은 풀을 써요 — 날갯짓은 update에서 그림을 바꿔요)
+    const sea = this.route === "sea";
+    const leafKeys = sea ? [bake.key("gull-0")] : LEAF_COLORS.map((_, i) => bake.key(`leaf-${i}`));
+    const n = sea ? (reduced ? GULLS_REDUCED : GULLS) : reduced ? LEAVES_REDUCED : LEAVES;
     for (let i = 0; i < n; i++) {
       const img = this.add.image(0, 0, leafKeys[i % leafKeys.length]).setOrigin(0.5).setAlpha(0);
       this.outside.add(img);
@@ -243,7 +253,7 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
 
     // 구간 비중 (낙엽·햇살)
     const seg = segmentAt(d);
-    const w: Record<RideSegment, number> = { village: 0, highway: 0, maple: 0, forest: 0 };
+    const w: Record<RideSegment, number> = { village: 0, highway: 0, maple: 0, forest: 0, coast: 0, sea: 0 };
     w[this.order[seg.index]] += 1 - seg.blend;
     if (seg.index < 3) w[this.order[seg.index + 1]] += seg.blend;
     const leafW = Math.min(1, w.maple + w.forest);
@@ -251,7 +261,9 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
     const winH = (WIN_BOT - WIN_TOP) * S;
     const W = this.scale.width;
     const dt = Math.min(delta, 50) / 1000; // 프레임이 밀려도 낙엽이 한 줄로 몰리지 않게
-    for (const lf of this.leaves) {
+    if (this.route === "sea") this.updateGulls(ms, dt, v, way, Math.min(1, w.sea + w.coast * 0.4), winTop, winH, W);
+    // 캠핑장 노선: 단풍 국도·숲길에서 낙엽이 창밖을 스쳐요
+    for (const lf of this.route === "sea" ? [] : this.leaves) {
       lf.x -= (way * (v * 1.25 + 18) * S * dt) / W;
       lf.y += lf.vy * dt;
       if (way > 0 ? lf.x < -0.05 : lf.x > 1.05) {
@@ -273,7 +285,7 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
     this.straps.forEach((s, i) => s.setAngle(ang + (reduced ? 0 : Math.sin(ms * 0.003 + i) * 1.5)));
 
     // 자막
-    const text = captionAt(ms, BUS_RIDE_MS, this.ride.leg);
+    const text = captionAt(ms, BUS_RIDE_MS, this.ride.leg, this.route);
     if (text !== this.captionText) {
       this.captionText = text;
       this.caption?.destroy();
@@ -293,6 +305,33 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
       this.fade.setAlpha(Math.max(this.fade.alpha, k));
       if (k >= 1) this.finish();
     } else this.fade.setAlpha(Math.max(0, 1 - ms / FADE_IN_MS));
+  }
+
+  /**
+   * 11/16 바닷가 노선 갈매기: 버스와 나란히 날아 창밖에서 천천히 앞뒤로 오가요 (풍경보다 훨씬 느리게).
+   * 날갯짓은 그림 두 장을 번갈아 (reduced면 날개를 편 채로)
+   */
+  private updateGulls(ms: number, dt: number, v: number, way: number, weight: number, winTop: number, winH: number, W: number): void {
+    const S = this.S;
+    const reduced = this.ride.reduced;
+    const frames = Array.from({ length: GULL_FRAMES }, (_, i) => this.bake.key(`gull-${i}`));
+    for (const g of this.leaves) {
+      // 버스보다 조금 느려서 아주 천천히 뒤로 밀려나요
+      g.x -= (way * (v * 0.08 + 6) * S * dt) / W;
+      g.y = Math.min(0.42, Math.max(0.04, g.y + Math.sin(ms * 0.0011 + g.phase) * 0.02 * dt));
+      if (way > 0 ? g.x < -0.05 : g.x > 1.05) {
+        g.x = way > 0 ? 1.03 + Math.random() * 0.2 : -0.03 - Math.random() * 0.2;
+        g.y = 0.06 + Math.random() * 0.3;
+      }
+      const f = reduced ? 0 : Math.floor((ms + g.phase * 400) / 180) % GULL_FRAMES;
+      g.img
+        .setTexture(frames[f])
+        .setFlipX(way < 0)
+        .setPosition(Math.round(g.x * W), Math.round(winTop + g.y * winH + (reduced ? 0 : Math.sin(ms * 0.004 + g.phase) * S)))
+        .setScale(S)
+        .setRotation(0)
+        .setAlpha(weight * (this.night ? 0.55 : 0.95));
+    }
   }
 
   // ── 안쪽 ──

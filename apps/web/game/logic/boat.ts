@@ -1,5 +1,5 @@
 import { BOAT_BACK_SEAT, BOAT_SEATS, BOATS, boatKind, DIR, DUCK_DOCK_DECK, DUCK_POND, DUCK_SIDE_SEAT, STEP_STONES, type Boat, type BoatKind, type BoatSeat, type DirId, type Sid } from "@tomb/protocol";
-import { BOAT_BACK_SEAT_Y } from "../sprites/rideProps";
+import { BOAT_BACK_SEAT_Y, boatRowerX, boatW } from "../sprites/rideProps";
 import { DECKS, inWater, inWaterBody, type Rect } from "../world/layout";
 
 // 조각배(50번) 규칙 — 순수 함수라 테스트한다 (그림·네트워크는 world/BoatRide.ts).
@@ -362,4 +362,38 @@ export function steerToward(x: number, y: number, tx: number, ty: number): { ax:
   if (d < 2) return { ax: 0, ay: 0 };
   const k = Math.max(0.35, Math.min(1, d / 28));
   return { ax: (dx / d) * k, ay: (dy / d) * k };
+}
+
+// ── 11/16 매어 둔·떠 있는 배를 헤엄쳐 뚫고 지나가지 않게 (사용자) ──
+// 배마다 몸통이 물 위에 닿는 바닥(발자국)을 막는다 (BoatRide가 정적 충돌 상자로 배 자리·방향을 따라 옮긴다).
+// 헤엄·잠수 중인 사람만 막는다: 걷는 사람(판자·둑)은 그대로, 배에 탄 사람은 어느 배에도 막히지 않는다 (내 배는 물론, 노 젓기는 BoatRide가 따로).
+// 배에 타는 곳(나루터·선착장 판자 끝, 반지름 14)은 뭍이라 막는 상자 밖이다 — 타기는 그대로
+
+/**
+ * 배 몸통 바닥 상자 (노 젓는 자리 = 오리배는 왼쪽 자리 x,y 기준, 방향별). 그림의 몸통(노·지붕·머리 제외)에서 끝을 조금 깎았다.
+ * 조각배 옆모습 = 뱃머리·고물 가로, 앞·뒷모습 = 세로로 길다 (2인승은 뒷자리만큼 더). 오리배는 두 자리 가운데가 몸통 가운데
+ */
+export function boatHull(boat: Boat, dir: DirId, x: number, y: number): Rect {
+  const side = dir === DIR.left || dir === DIR.right;
+  if (boatKind(boat) === "duck") {
+    const cx = x + DUCK_SIDE_SEAT / 2;
+    if (side) return { x: cx - 17, y: y - 7, w: 34, h: 13 };
+    return { x: cx - 15, y: y - 10, w: 30, h: 16 };
+  }
+  const two = boat.seats === 2;
+  if (side) {
+    // 그림 몸통(프레임 2 … W−3)에서 양 끝 2px씩. 뱃머리가 왼쪽이면 그림을 뒤집어 노 젓는 자리가 W−rx−1
+    const W = boatW(boat.seats);
+    const ax = dir === DIR.right ? boatRowerX(boat.seats) : W - boatRowerX(boat.seats) - 1;
+    return { x: x - ax + 4, y: y - 8, w: W - 8, h: 10 };
+  }
+  // 앞모습(down) = 고물이 위, 뒷모습(up) = 뱃머리가 위. 2인승 뒷자리는 BOAT_BACK_SEAT_Y만큼 (앞모습 위, 뒷모습 아래)
+  const gap = two ? BOAT_BACK_SEAT_Y : 0;
+  if (dir === DIR.down) return { x: x - 8, y: y - 16 - gap, w: 17, h: 21 + gap };
+  return { x: x - 8, y: y - 20, w: 17, h: 24 + gap };
+}
+
+/** 배가 이 사람을 막는지: 헤엄·잠수 중이고 배에 타 있지 않을 때(탄 사람은 내 배든 남의 배든 막히지 않는다), 배가 보일 때(나루터로 돌아가며 사라지는 중이 아닐 때)만 */
+export function hullBlocks(p: { inWater: boolean; boatSeatId: string | null }, shown: boolean): boolean {
+  return shown && p.inWater && p.boatSeatId === null;
 }

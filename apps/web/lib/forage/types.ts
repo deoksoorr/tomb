@@ -1,3 +1,4 @@
+import type { FishWater } from "@tomb/protocol";
 import type { TimePhase } from "../ambience";
 import type { Me } from "../types";
 import type { DexCat, DexTier, LifeCat, NodeKind, NpcId } from "./catalog";
@@ -24,8 +25,11 @@ export type ForageState = {
   /** 종마다 처음 등록 보상: 칸별 받을 보상(한도에 걸려 쌓인 것)과 받은 보상 */
   reward: DexRewardState;
   today: LifeDay & { fishCap: number; gatherCap: number; dexCap: number; autoCap: number };
-  /** 지금 나에게 피어 있는 채집 지점 id와 다음에 다시 피는 시각 */
-  nodes: { ids: string[]; refreshAt: number };
+  /**
+   * 지금 나에게 피어 있는 채집 지점 id와 다음에 다시 피는 시각.
+   * seed = 11/16 내 채집 지점 씨앗 (lib/forage/rules nodeIdsAt — 화면이 다음 창 지점을 서버에 묻지 않고 계산한다). 옛 서버 응답엔 없다
+   */
+  nodes: { ids: string[]; refreshAt: number; seed?: string };
 };
 
 /** 도감 보상 (칸별). got = 이 칸에서 지금까지 받은 포인트 (예전 단계 보상 포함), pending = 아직 못 받은 것 */
@@ -58,7 +62,7 @@ export type SunkenCatch = { id: string; name: string; kept: boolean; instead?: s
 /** 자동 낚시 상태 (켜져 있을 때) */
 export type AutoFishStatus = {
   spot: string;
-  water: "lake" | "river";
+  water: FishWater;
   startedAt: number;
   /** 이 시각이 지나면 더 낚지 않는다 (한 세션 최대 길이) */
   endsAt: number;
@@ -79,8 +83,8 @@ export type AutoFishResponse = {
   dropped: number;
   /** 이번에 건진 물에 빠진 꾸미기 (items와 따로, 한도에는 같이 센다) */
   gear: SunkenCatch[];
-  /** 세션이 끝난 까닭 (끄기·시간 다 됨). 켜져 있으면 없음 */
-  ended?: "stop" | "time";
+  /** 세션이 끝난 까닭 (끄기·시간 다 됨·11/16 물이 빠짐). 켜져 있으면 없음 */
+  ended?: "stop" | "time" | "tide";
   /** 이번 정산으로 도감에 처음 등록한 보상 */
   dex?: DexGain;
   state: ForageState;

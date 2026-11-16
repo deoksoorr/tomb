@@ -22,12 +22,15 @@ export default function MobileControls({
   onRadial,
   onChat,
   chatOpen = false,
+  viewing = false,
 }: {
   onSay: () => void;
   onRadial: () => void;
   /** 없으면 [채팅] 버튼을 안 보인다 (상점·사냥터 등 말풍선이 없는 곳) */
   onChat?: () => void;
   chatOpen?: boolean;
+  /** 11/16 r19 바라보는 장면 중: [채팅]만 남기고 행동 버튼을 숨겨요 (조이스틱은 움직여 나가기로 남아요) */
+  viewing?: boolean;
 }) {
   const [running, setRunning] = useState(false);
   // sticky라 마운트 전에 다가간 묘비·좌석도 바로 반영된다
@@ -49,7 +52,7 @@ export default function MobileControls({
   return (
     <>
       <FloatingStick className={styles.stickZone} hidden={chatOpen} onStick={(x, y) => bridge.emit("input:joystick", { x, y })} onTap={tapCanvasAt} />
-      <div className={styles.actions} data-hidden={chatOpen || undefined}>
+      <div className={styles.actions} data-hidden={chatOpen || undefined} data-viewing={viewing || undefined}>
         <button
           type="button"
           className={styles.action}

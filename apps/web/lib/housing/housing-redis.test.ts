@@ -9,9 +9,13 @@ import { env } from "../env";
 import { getAccounts } from "../store";
 import { kstDay } from "../store/accounts";
 import { defaultExterior, furnitureById, PLOT_TIERS } from "./catalog";
-import { buyFurniture, buyPlot, getHouseStore, houseIdFor, houseStates, resetLegacyLotFill, saveExterior, sellFurniture, setHouseState, village } from "./service";
+import { buyFurniture, buyPlot, getHouseStore, houseIdFor, housePair, houseStates, resetLegacyLotFill, saveExterior, sellFurniture, setHouseState, village } from "./service";
 import { placedSig, WINDOW_SIG } from "./states";
+import type { HousePair } from "./store";
 import { HK, RedisHouseStore } from "./store-redis";
+
+/** 오두막 없는 집 하나 (공용 가방 = 이 집 id) */
+const solo = (id: string): HousePair => ({ village: id, sea: `${id}-sea` });
 import type { MyHouseResponse, VillageResponse } from "./types";
 
 // 하우징 v4 계약: 실제 Redis(일회용 DB)에서만. 분양 번지 Lua·외관·마을 목록·예전 집 번지 배정
@@ -96,7 +100,7 @@ describe.skipIf(!conn)("하우징 v4 (실제 Redis)", () => {
     await expect(sellFurniture(store, visitorId, "roof_red")).rejects.toMatchObject({ code: "PLACED" });
     // 저장소에 그대로 남았는지 (다시 읽기)
     expect((await store.get(house.id))!.exterior.roof).toBe("roof_red");
-    expect((await store.inventory(house.id)).roof_red).toBe(1);
+    expect((await store.inventory(housePair(visitorId), "village")).have.roof_red).toBe(1);
     // 기본으로 돌리면 다시 팔 수 있다
     await saveExterior(store, visitorId, {});
     expect((await sellFurniture(store, visitorId, "roof_red")).refunded).toBeGreaterThan(0);
@@ -122,7 +126,7 @@ describe.skipIf(!conn)("하우징 v4 (실제 Redis)", () => {
 
   it("예전 집(번지·외관 필드 없음)은 마을을 열 때 빈 번지를 하나씩 받고, 두 번 열어도 그대로", async () => {
     const olds = await Promise.all(Array.from({ length: 3 }, () => account(PLOT)));
-    const ids = olds.map(houseIdFor);
+    const ids = olds.map((a) => houseIdFor(a));
     for (const [i, owner] of olds.entries()) {
       // 마을 이전 형식: meta에 ch·lot·exterior가 없고 번지 색인에도 없다
       await raw.hset(HK.meta(ids[i]), { owner, name: `옛집${i}`, intro: "", ownerName: "옛주인", tier: "small", createdAt: "1", updatedAt: "1", likes: "0", placedScore: "0", items: "0" });
@@ -156,8 +160,8 @@ describe.skipIf(!conn)("하우징 v4 (실제 Redis)", () => {
     const radio = { u: "r1", i: "radio", x: 3, y: 4, r: 0 };
     const pot = { u: "p1", i: "pot", x: 6, y: 4, r: 0 };
     const lay = (items: (typeof fire)[]) => ({ items, floor: "floor_grass", wall: "wall_fence" });
-    for (const p of [fire, lamp, radio, pot]) await store.addItem(id, p.i, 20);
-    expect(await store.saveDesign(id, "small", lay([fire, lamp, radio, pot]), null, {}, 1, 2)).toBe("ok");
+    for (const p of [fire, lamp, radio, pot]) await store.addItem(solo(id), "village", p.i, 20);
+    expect(await store.saveDesign(solo(id), "village", "small", lay([fire, lamp, radio, pot]), null, {}, 1, 2)).toBe("ok");
     await setHouseState(store, id, "f1", 1);
     await setHouseState(store, id, "l1", 1);
     await setHouseState(store, id, "r1", 3);
@@ -168,7 +172,7 @@ describe.skipIf(!conn)("하우징 v4 (실제 Redis)", () => {
     expect(await raw.hexists(HK.states(id), "r1")).toBe(0);
     await raw.hset(HK.states(id), { junk: "{깨짐" });
     // 벽난로는 그대로, 스탠드는 옮기고, 화분은 치운다
-    expect(await store.saveDesign(id, "small", lay([fire, { ...lamp, x: 6 }]), null, {}, 1, 3)).toBe("ok");
+    expect(await store.saveDesign(solo(id), "village", "small", lay([fire, { ...lamp, x: 6 }]), null, {}, 1, 3)).toBe("ok");
     expect(await store.states(id)).toEqual({ f1: { a: 1, s: placedSig(fire) }, w0: { a: 1, s: WINDOW_SIG } });
     expect(await store.plants(id)).toEqual({});
     expect((await houseStates(store, id)).states).toEqual({ f1: 1, w0: 1 });

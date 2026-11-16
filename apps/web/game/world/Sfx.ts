@@ -22,6 +22,9 @@ const FILES: Record<SfxName, string> = {
   clack: "/sfx/clack.mp3",
 };
 
+/** 11/16 바닷가 갈매기 울음 셋 (scripts/gen-gull.mjs가 굽는다, 환경음 갈래) */
+const GULLS = ["/sfx/gull-1.mp3", "/sfx/gull-2.mp3", "/sfx/gull-3.mp3"];
+
 /** 파일마다 따르는 소리 갈래 (없으면 효과음) */
 const FILE_BUS: Partial<Record<SfxName, SoundBus>> = { bubble: "amb" };
 
@@ -32,6 +35,8 @@ export class Sfx extends AudioHost {
   private voices = 0;
   /** 모닥불 타는 소리 (BGM 위에 은은한 루프, 환경음) */
   private readonly fire = new AmbientLoop(this, "/sfx/campfire.mp3", { gain: 0.75, bus: "amb" });
+  /** 11/16 바닷가 파도·갈매기 루프 (바닷가 맵에 있는 동안만, 환경음 — scripts/gen-sea-loop.mjs가 굽는다) */
+  private readonly sea = new AmbientLoop(this, "/sfx/sea-loop.mp3", { gain: 0.55, bus: "amb" });
   /** 14번 물소리: 수영하는 동안 물장구 루프 (잠수하면 먹먹하게, 환경음) */
   private readonly swim = new AmbientLoop(this, "/sfx/swim.mp3", { gain: 0.5, bus: "amb", filter: true });
   /** 잠수 중 다음 물방울 소리 시각 */
@@ -40,11 +45,14 @@ export class Sfx extends AudioHost {
   constructor() {
     super("sfx");
     for (const url of Object.values(FILES)) void preloadSound(url);
+    for (const url of GULLS) void preloadSound(url);
+    void preloadSound("/sfx/foghorn.mp3");
   }
 
   protected override onMixChanged(): void {
     this.fire.refresh();
     this.swim.refresh();
+    this.sea.refresh();
   }
 
   /**
@@ -179,6 +187,60 @@ export class Sfx extends AudioHost {
     this.bubbleAt = now + 1500 + Math.random() * 1400;
   }
 
+  /** 11/16 바닷가 파도 소리 크기 0..1 (바닷가 장면이 매 프레임 — 물가에 가까울수록 크게, 떠나면 0) */
+  seaWaves(level: number): void {
+    this.sea.set(level);
+  }
+
+  /**
+   * 11/16 갈매기 울음 한 번 (바닷가). gain 0..1 (거리·상황), pan -1(왼쪽)..1(오른쪽). 셋 중 하나를 높낮이를 조금 바꿔 내요.
+   * 환경음 갈래(볼륨·음소거)를 따라요
+   */
+  gull(gain = 0.6, pan = 0): void {
+    const vol = this.busGain("amb");
+    const url = GULLS[Math.floor(Math.random() * GULLS.length)];
+    if (vol <= 0 || this.hidden || soundMissing(url) || this.voices >= MAX_VOICES) return;
+    const ac = this.audio("amb");
+    if (!ac) return;
+    let out: AudioNode = this.output;
+    let pn: StereoPannerNode | null = null;
+    try {
+      pn = ac.createStereoPanner();
+      pn.pan.value = Math.max(-1, Math.min(1, pan)) * 0.8;
+      pn.connect(this.output);
+      out = pn;
+    } catch {
+      pn = null;
+    }
+    const started = playBuffer(ac, out, url, {
+      gain: Math.max(0, Math.min(1, vol * gain * 0.55)),
+      rate: 0.88 + Math.random() * 0.26,
+      onEnded: () => {
+        this.voices = Math.max(0, this.voices - 1);
+        pn?.disconnect();
+      },
+    });
+    if (started) this.voices++;
+    else pn?.disconnect();
+  }
+
+  /** 11/16 안개 낀 날 등대 무적 한 번 (바닷가, 환경음 갈래 — scripts/gen-foghorn.mjs) */
+  foghorn(gain = 0.6): void {
+    const vol = this.busGain("amb");
+    const url = "/sfx/foghorn.mp3";
+    if (vol <= 0 || this.hidden || soundMissing(url) || this.voices >= MAX_VOICES) return;
+    const ac = this.audio("amb");
+    if (!ac) return;
+    const started = playBuffer(ac, this.output, url, {
+      gain: Math.max(0, Math.min(1, vol * gain * 0.6)),
+      rate: 0.96 + Math.random() * 0.08,
+      onEnded: () => {
+        this.voices = Math.max(0, this.voices - 1);
+      },
+    });
+    if (started) this.voices++;
+  }
+
   /** 14번 그네 삐걱 한 번 (앞으로·뒤로). 그네 진자 한 주기마다 씬이 부른다 */
   swingCreak(gain = 0.6): void {
     this.play("swing", gain, 0.95 + Math.random() * 0.1, 6);
@@ -187,6 +249,7 @@ export class Sfx extends AudioHost {
   destroy(): void {
     this.fire.destroy();
     this.swim.destroy();
+    this.sea.destroy();
     this.closeAudio();
   }
 }

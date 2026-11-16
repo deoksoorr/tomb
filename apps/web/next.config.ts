@@ -8,7 +8,8 @@ const appVersion = process.env.VERCEL_DEPLOYMENT_ID || process.env.VERCEL_GIT_CO
 const nextConfig: NextConfig = {
   // 모노레포의 TS 소스 패키지를 그대로 번들한다
   transpilePackages: ["@tomb/protocol"],
-  env: { NEXT_PUBLIC_APP_VERSION: appVersion },
+  // 11/16 주소 시험 값(?weather·?tide 등)은 실서버 빌드에서 끈다 (lib/qaUrl)
+  env: { NEXT_PUBLIC_APP_VERSION: appVersion, NEXT_PUBLIC_QA_URL: process.env.VERCEL_ENV === "production" ? "0" : "1" },
   poweredByHeader: false,
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders() }];

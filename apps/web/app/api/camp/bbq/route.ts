@@ -1,7 +1,8 @@
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { BBQ_MENU, BBQ_STANDS, bbqItem, bbqStand, drinkOne, drunkLevel, drunkUntil, GRANT_TTL_SEC, signGrant, soberOne } from "@tomb/protocol";
+import { BBQ_MENU, BBQ_STANDS, bbqItem, bbqStands, drinkOne, drunkLevel, drunkUntil, GRANT_TTL_SEC, signGrant, soberOne, type BbqStand } from "@tomb/protocol";
 import { campOpen } from "@/lib/camp";
+import { seaOpen } from "@/lib/sea";
 import { BBQ_NOT_TIPSY_MESSAGE, BBQ_WRONG_STAND_MESSAGE, type BbqResponse, type BbqStatusResponse } from "@/lib/campBbq";
 import { env } from "@/lib/env";
 import { handler, HttpError, json, notFound } from "@/lib/http";
@@ -16,7 +17,7 @@ const BbqSchema = z.object({ item: z.enum(BBQ_MENU.map((m) => m.id) as [string, 
 /** 11/15 캠핑장 바베큐: 지금 취기 단계 (다른 기기에서 마셨어도 메뉴 창이 안다) */
 export const GET = handler(async (req) => {
   const visitorId = await requireVisitor(req);
-  if (!campOpen()) throw notFound();
+  if (!campOpen() && !seaOpen()) throw notFound();
   const drunk = await getBbqDay().drunk(visitorId);
   return json<BbqStatusResponse>({ drunk: drunkLevel(drunk, Date.now()) });
 });
@@ -28,12 +29,16 @@ export const GET = handler(async (req) => {
  */
 export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
-  if (!campOpen()) throw notFound();
+  if (!campOpen() && !seaOpen()) throw notFound();
   const { item: id, stand } = await readBody(req, BbqSchema);
   await rateLimit("shop", req, visitorId);
   const item = bbqItem(id)!;
-  // 먹거리는 바베큐 그릴, 마실 거리는 음료 자판기에서만 판다
-  if (stand && bbqStand(item) !== stand) throw new HttpError(400, "WRONG_STAND", BBQ_WRONG_STAND_MESSAGE);
+  // 먹거리는 바베큐 그릴, 마실 거리는 음료 자판기, 11/16 바닷가 매점 메뉴는 매점에서만 판다 (bbqStands)
+  if (stand && !bbqStands(item).includes(stand as BbqStand)) throw new HttpError(400, "WRONG_STAND", BBQ_WRONG_STAND_MESSAGE);
+  // 11/16 r12 stand를 안 보내는 옛 캠핑장 클라이언트는 캠핑장(그릴·자판기) 메뉴만 (바닷가 매점·자판기 메뉴는 파는 곳을 밝혀야 해요)
+  if (!stand && !bbqStands(item).some((s) => s === "grill" || s === "vending")) throw new HttpError(400, "WRONG_STAND", BBQ_WRONG_STAND_MESSAGE);
+  // 바닷가 매점·바닷가 자판기(r12)는 바닷가가 열린 서버에서만, 그릴·캠핑장 자판기(그리고 stand를 안 보내는 옛 클라이언트)는 캠핑장이 열린 서버에서만
+  if (stand === "kiosk" || stand === "seaVend" ? !seaOpen() : !campOpen()) throw notFound();
   const days = getBbqDay();
   // 컨디숑(술 깨기): 취기가 없으면 포인트를 쓰지 않고 안내만
   if (item.kind === "sober") {

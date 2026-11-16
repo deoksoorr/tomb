@@ -1,0 +1,61 @@
+/* 11/16 바다 보기 버튼: 아래 가운데 (관람차 시점 바꾸기 버튼과 같은 자리·모양) */
+.dock {
+  position: fixed;
+  bottom: calc(var(--safe-bottom, 0px) + 84px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 11;
+}
+
+.view {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  min-width: 132px;
+  justify-content: center;
+  padding: 8px 18px;
+  border: 1px solid rgba(160, 222, 230, 0.6);
+  border-radius: 8px;
+  background: rgba(10, 16, 24, 0.72);
+  color: #bdf0f2;
+  font: inherit;
+  font-size: 0.95rem;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.view:hover {
+  background: rgba(22, 32, 44, 0.85);
+}
+
+.view:focus-visible {
+  outline: 2px solid #bdf0f2;
+  outline-offset: 2px;
+}
+
+.key {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #dfe8ea;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+/* 터치: 확성기 창·행동 버튼 위 */
+@media (pointer: coarse) {
+  .key {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .dock {
+    bottom: var(--hud-bottom, calc(var(--safe-bottom, 0px) + 150px));
+  }
+}

@@ -11,6 +11,7 @@ import { STAY_TICK_MINUTES, stayFillDays } from "../stayTime";
 import type { ActivityItem, GiftItem, Grave, GraveDecor } from "../types";
 import { kstDay, weekOfDay } from "./accounts";
 import { giftTermUntil } from "./gifts";
+import { DEFAULT_HUNT_ZONE, huntDiffOf, legacyHuntBoard } from "./huntBoards";
 import type { MemoryStore } from "./memory";
 import { earnBoost } from "./pointEvent";
 import {
@@ -317,7 +318,7 @@ export class MemoryAccounts implements AccountStore {
     };
   }
 
-  async claimStayBonus(id: string, day: string): Promise<{ earned: number; count: number } | null> {
+  async claimStayBonus(id: string, day: string, bonus = 0): Promise<{ earned: number; count: number } | null> {
     const boost = await earnBoost();
     const a = this.acct(id);
     this.today(a, day);
@@ -326,7 +327,7 @@ export class MemoryAccounts implements AccountStore {
     if (tiers <= claimed) return null;
     a.earned.set("_bonus", tiers);
     // 하루 전체 한도(800)와 별개: 자기 하루 상한(145P)·지갑 상한만 본다
-    return { earned: this.credit(a, "stayBonus", day, { amount: stayBonusSum(claimed, tiers), boost }, true, true), count: tiers - claimed };
+    return { earned: this.credit(a, "stayBonus", day, { amount: stayBonusSum(claimed, tiers, bonus), boost }, true, true), count: tiers - claimed };
   }
 
   /** value가 null인 계정은 순위에서 뺀다. asc면 작을수록 위. tie = 같은 값일 때 먼저 달성한 순번 (작을수록 위, 주간 랭킹) */
@@ -400,6 +401,10 @@ export class MemoryAccounts implements AccountStore {
     const wk = `${zone}|${week}`;
     if (ms < (h.best.get(zone) ?? Infinity)) h.best.set(zone, ms);
     if (weekly && ms < (h.bestWeek.get(wk) ?? Infinity)) h.bestWeek.set(wk, ms);
+    // 11/16 칭호용 난이도 판 (그 난이도 어느 사냥터든 — Redis rank:hunt:clear:{난이도})
+    const diff = huntDiffOf(zone);
+    const ck = `clear:${diff}`;
+    if (diff && ms < (h.best.get(ck) ?? Infinity)) h.best.set(ck, ms);
   }
 
   async huntRank(
@@ -420,8 +425,24 @@ export class MemoryAccounts implements AccountStore {
         false,
         week ? (a) => a.hunt?.killsWeekAt?.get(week) ?? 0 : undefined,
       );
-    const zone = opts.zone ?? "easy";
-    return this.board(limit, me, (a) => (week ? a.hunt?.bestWeek.get(`${zone}|${week}`) : a.hunt?.best.get(zone)) ?? null, true);
+    const zone = opts.zone ?? DEFAULT_HUNT_ZONE;
+    // 11/16 난이도 첫 사냥터면 옛 난이도 판 기록도 합친다 (더 짧은 쪽 — Redis는 옛 판을 그 사냥터 판에 합쳐 둔다)
+    const legacy = legacyHuntBoard(zone);
+    const of = (a: Acct, z: string) => (week ? a.hunt?.bestWeek.get(`${z}|${week}`) : a.hunt?.best.get(z)) ?? Infinity;
+    return this.board(
+      limit,
+      me,
+      (a) => {
+        const v = Math.min(of(a, zone), legacy ? of(a, legacy) : Infinity);
+        return v === Infinity ? null : v;
+      },
+      true,
+    );
+  }
+
+  async huntCleared(id: string, difficulty: string): Promise<boolean> {
+    const best = this.accts.get(id)?.hunt?.best;
+    return !!best && (best.has(difficulty) || best.has(`clear:${difficulty}`));
   }
 
   async enter(id: string, profile: Profile, now: number): Promise<void> {
@@ -726,6 +747,11 @@ export class MemoryAccounts implements AccountStore {
     // 칭호는 꾸미기 부위가 아니지만 같은 착용 칸 지도에 "title"로 둔다 (Redis의 착용 해시 필드와 같다)
     if (titleId) a.look.set(TITLE_FIELD, { itemId: titleId, until: PERMANENT_UNTIL });
     else a.look.delete(TITLE_FIELD);
+  }
+
+  async wornTitle(id: string, now: number): Promise<string | null> {
+    const t = this.accts.get(id)?.look.get(TITLE_FIELD);
+    return t && t.until > now ? t.itemId : null;
   }
 
   async unequip(id: string, slot: CosmeticSlot, now: number): Promise<boolean> {

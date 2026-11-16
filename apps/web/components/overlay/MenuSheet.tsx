@@ -55,6 +55,8 @@ type Props = {
   titleNew?: boolean;
   /** 운영자 계정: 친구 기능을 쓸 수 없어 친구 타일 대신 포인트 현황 타일 */
   noFriends?: boolean;
+  /** 11/16 탈것에 타 있어 사냥터에 못 가는 이유 (타일을 흐리게, 설명 대신) — lib/rideGate */
+  huntBlocked?: string | null;
   onPick: (target: MenuTarget) => void;
   onClose: () => void;
 };
@@ -69,6 +71,8 @@ type Entry = {
   dot?: boolean;
   redDot?: boolean;
   primary?: boolean;
+  /** 지금은 못 쓰는 타일 (흐리게, 설명에 이유) — 누르면 onPick이 안내한다 */
+  off?: boolean;
 };
 
 /**
@@ -89,6 +93,7 @@ export default function MenuSheet({
   friendIncoming = 0,
   titleNew = false,
   noFriends = false,
+  huntBlocked = null,
   onPick,
   onClose,
 }: Props) {
@@ -103,7 +108,7 @@ export default function MenuSheet({
     { target: "say", icon: "chat", label: "표현 (T)", desc: "말풍선·이모티콘으로 인사하기" },
     { target: "favs", icon: "spark", label: "즐겨찾기 표현 (Y)", desc: "별 표시한 표현을 바로 보내기" },
     { target: "bag", icon: "bag", label: "가방 (I)", desc: titleNew ? "새 칭호를 얻었어요!" : bagNew ? "새로 생긴 물건이 있어요" : "꾸미기·폭죽·잡은 것 꺼내기", dot: titleNew || bagNew },
-    { target: "hunt", icon: "sword", label: "사냥터", desc: "몬스터를 잡고 포인트 모으기" },
+    { target: "hunt", icon: "sword", label: "사냥터", desc: huntBlocked ?? "몬스터를 잡고 포인트 모으기", off: !!huntBlocked },
     { target: "dex", icon: "book", label: "도감", desc: "물고기·곤충·약초 모으기" },
     { target: "housing", icon: "house", label: "집·분양 마을", desc: "내 집 분양받고 꾸미기" },
     ...(fireworkCount > 0
@@ -149,6 +154,8 @@ export default function MenuSheet({
       key={e.target}
       type="button"
       className={cx(ui.button, styles.entry, e.primary && ui.primary)}
+      aria-disabled={e.off ? true : undefined}
+      title={e.off ? e.desc : undefined}
       onClick={() => onPick(e.target)}
     >
       <span className={styles.tileIcon} aria-hidden="true">

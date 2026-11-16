@@ -5,11 +5,12 @@ import { bridge } from "@/game/bridge";
 import type { HouseEditState, HouseTool } from "@/game/housing/events";
 import { errorMessage } from "@/lib/api";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
-import { meStore } from "@/lib/hooks/useMe";
-import { DEFAULT_FLOOR, DEFAULT_FLOOR_NAME, DEFAULT_WALL, DEFAULT_WALL_NAME, FURNITURE, furnitureById, LIKE_WEIGHT, tierById } from "@/lib/housing/catalog";
+import { meStore, useMe } from "@/lib/hooks/useMe";
+import { AWAY_MSG, DEFAULT_FLOOR, DEFAULT_FLOOR_NAME, DEFAULT_WALL, DEFAULT_WALL_NAME, FURNITURE, furnitureById, LIKE_WEIGHT, tierById } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
 import { layoutCounts, placedScore, ROTATE_LABEL, rotateMode, styleTag, totalScore } from "@/lib/housing/layout";
 import type { MyHouseResponse, PublicHouse } from "@/lib/housing/types";
+import { discountedPrice, equippedPerk } from "@/lib/titles";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import PixelIcon from "../ui/PixelIcon";
@@ -94,7 +95,7 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
     if (!edit) return;
     setSaving(true);
     try {
-      const r = await housingApi.saveLayout(channel, house.tier, { items: edit.items, floor: edit.floor, wall: edit.wall });
+      const r = await housingApi.saveLayout(channel, house.tier, { items: edit.items, floor: edit.floor, wall: edit.wall }, house.zone === "sea" ? "sea" : "village");
       onMy(r);
       if (r.house) {
         onHouse(r.house);
@@ -115,7 +116,7 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
     if (!def) return;
     setBuying(true);
     try {
-      onMy(await housingApi.buyItem(itemId));
+      onMy(await housingApi.buyItem(itemId, house.zone === "sea" ? "sea" : "village"));
       void meStore.refresh();
       bridge.emit("house:tool", { action: "tryEnd", keep: true });
       setNotice(`${def.name} 사서 놓았어요. 저장하면 꾸밈 점수에 들어가요.`);
@@ -154,7 +155,7 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
               </span>
             )}
             <span className={styles.hudOwner} title={`${house.ownerName}의 ${tier.name}${tag ? ` · ${tag}` : ""}`}>
-              {house.ownerName}의 {tier.name}
+              {house.ownerName}의 {house.zone === "sea" ? `오두막 · ${tier.name}` : tier.name}
               {tag ? ` · ${tag}` : ""}
             </span>
           </span>
@@ -174,7 +175,7 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
             </button>
           )}
           <button type="button" className={ui.button} onClick={() => leave(true)}>
-            분양 사무소
+            {house.zone === "sea" ? "포구 부동산" : "분양 사무소"}
           </button>
           <button type="button" className={cx(ui.button, ui.quiet, ui.icon)} onClick={() => leave(false)} aria-label="집에서 나가기">
             <PixelIcon name="close" />
@@ -264,12 +265,17 @@ function EditToolbar({
   const counts = layoutCounts({ items: edit.items, floor: edit.floor, wall: edit.wall });
   const sel = edit.selected ? edit.items.find((p) => p.u === edit.selected) : undefined;
   const selDef = sel && furnitureById(sel.i);
-  const owned = FURNITURE.filter((f) => !f.skin && !f.ext && (my.inventory[f.id] ?? 0) > 0);
+  // 11/16 가구는 두 집 공용 가방: 다른 집에 다 놓인 것도 보여 주고, 누르면 거기서 치우라고 알려 준다
+  const away = (id: string) => my.away?.[id] ?? 0;
+  const owned = FURNITURE.filter((f) => !f.skin && !f.ext && ((my.inventory[f.id] ?? 0) > 0 || away(f.id) > 0));
   const floors = [DEFAULT_FLOOR, ...FURNITURE.filter((f) => f.skin === "floor" && (my.inventory[f.id] ?? 0) > 0).map((f) => f.id)];
   const walls = [DEFAULT_WALL, ...FURNITURE.filter((f) => f.skin === "wall" && (my.inventory[f.id] ?? 0) > 0).map((f) => f.id)];
   const tool = (t: HouseTool) => bridge.emit("house:tool", t);
   const trial = edit.trial;
   const trialDef = trial ? furnitureById(trial.itemId) : undefined;
+  // 11/16 집 갈래 칭호의 가구 할인 (서버가 같은 규칙으로 깎는다)
+  const { me } = useMe();
+  const trialCost = trialDef ? discountedPrice(trialDef.price, equippedPerk(me?.equipped).houseDiscount) : 0;
   // 가방에 남은 게 있으면 사지 않고 바로 놓을 수 있다
   const trialLeft = trial ? (my.inventory[trial.itemId] ?? 0) - (counts[trial.itemId] ?? 0) : 0;
   // R·단추가 하는 일은 고른 가구에 따라: 네 방향으로 돌리기 / 좌우 뒤집기 (상점 미리보기와 같은 구분)
@@ -321,11 +327,11 @@ function EditToolbar({
             <button
               type="button"
               className={cx(ui.button, ui.primary)}
-              disabled={buying || saving || my.points < trialDef.price}
+              disabled={buying || saving || my.points < trialCost}
               onClick={() => onBuyTrial(trialDef.id)}
-              aria-label={`${trialDef.name}, ${trialDef.price}포인트에 사서 이 자리에 놓기`}
+              aria-label={`${trialDef.name}, ${trialCost}포인트에 사서 이 자리에 놓기`}
             >
-              {buying ? "…" : `${fmt(trialDef.price)}P${my.points < trialDef.price ? " · 모자라요" : " · 사서 놓기"}`}
+              {buying ? "…" : `${fmt(trialCost)}P${my.points < trialCost ? " · 모자라요" : " · 사서 놓기"}`}
             </button>
           )}
           <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => tool({ action: "tryEnd", keep: false })}>
@@ -370,16 +376,20 @@ function EditToolbar({
         <div className={styles.palette} role="group" aria-label="가방: 눌러서 놓기">
           {owned.map((f) => {
             const left = (my.inventory[f.id] ?? 0) - (counts[f.id] ?? 0);
+            const elsewhere = left < 1 && away(f.id) > 0;
             return (
               <button
                 key={f.id}
                 type="button"
                 className={styles.paletteItem}
-                disabled={left < 1}
-                onClick={() => tool({ action: "place", itemId: f.id })}
-                aria-label={`${f.name} 놓기, 남은 개수 ${left}`}
+                disabled={left < 1 && !elsewhere}
+                aria-disabled={elsewhere || undefined}
+                style={elsewhere ? { opacity: 0.55 } : undefined}
+                title={elsewhere ? AWAY_MSG : undefined}
+                onClick={() => (elsewhere ? bridge.emit("house:notice", { message: `${f.name}, ${AWAY_MSG}` }) : tool({ action: "place", itemId: f.id }))}
+                aria-label={elsewhere ? `${f.name}, ${AWAY_MSG}` : `${f.name} 놓기, 남은 개수 ${left}`}
               >
-                <span className={styles.count}>{left}</span>
+                <span className={styles.count}>{Math.max(0, left)}</span>
                 <FurnitureIcon itemId={f.id} size={36} />
                 <span className={styles.paletteLabel}>{f.name}</span>
               </button>

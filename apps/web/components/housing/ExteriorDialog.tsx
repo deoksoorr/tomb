@@ -4,11 +4,12 @@
 import { useState, useSyncExternalStore } from "react";
 import { facadePreview } from "@/game/housing/art";
 import { errorMessage } from "@/lib/api";
-import { meStore } from "@/lib/hooks/useMe";
+import { meStore, useMe } from "@/lib/hooks/useMe";
 import { EXT_SLOTS, FURNITURE, furnitureById, isExtBase, LIKE_WEIGHT, lotLabel, tierById, type ExtSlot } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
 import { designScore, exteriorScore } from "@/lib/housing/layout";
 import type { HouseExterior, MyHouseResponse } from "@/lib/housing/types";
+import { discountedPrice, equippedPerk } from "@/lib/titles";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
@@ -49,7 +50,11 @@ export default function ExteriorDialog({
   const owns = (id: string) => isExtBase(id) || (my.inventory[id] ?? 0) > 0;
   // 미리보기로 입혀 본, 아직 안 산 아이템
   const toBuy = EXT_SLOTS.map((s) => draft[s.slot]).filter((id) => !owns(id));
-  const cost = toBuy.reduce((sum, id) => sum + (furnitureById(id)?.price ?? 0), 0);
+  // 11/16 집 갈래 칭호의 가구 할인 (서버가 하나씩 같은 규칙으로 깎는다)
+  const { me } = useMe();
+  const houseDiscount = equippedPerk(me?.equipped).houseDiscount;
+  const priceOf = (price: number) => discountedPrice(price, houseDiscount);
+  const cost = toBuy.reduce((sum, id) => sum + priceOf(furnitureById(id)?.price ?? 0), 0);
   const short = cost > my.points;
 
   async function apply() {
@@ -158,11 +163,11 @@ export default function ExteriorDialog({
                       aria-pressed={draft[slot] === f.id}
                       onClick={() => set(slot, f.id)}
                       title={f.desc}
-                      aria-label={owned ? `${f.name}, 꾸밈 +${f.score}` : `${f.name} 입혀 보기, ${f.price}포인트, 꾸밈 +${f.score}`}
+                      aria-label={owned ? `${f.name}, 꾸밈 +${f.score}` : `${f.name} 입혀 보기, ${priceOf(f.price)}포인트, 꾸밈 +${f.score}`}
                       {...peek(slot, f.id)}
                     >
                       {f.name}
-                      <span className={styles.small}>{owned ? `가짐 · 꾸밈 +${f.score}` : `${fmt(f.price)}P · 꾸밈 +${f.score}`}</span>
+                      <span className={styles.small}>{owned ? `가짐 · 꾸밈 +${f.score}` : `${fmt(priceOf(f.price))}P · 꾸밈 +${f.score}`}</span>
                     </button>
                   );
                 })}

@@ -5,7 +5,7 @@ import { getAccounts, getGifts } from "../store";
 import { kstDay } from "../store/accounts";
 import { DEFAULT_FLOOR, DEFAULT_WALL, furnitureById, PLOT_TIERS, plotCost, reclaimLastSeen, sellPrice } from "./catalog";
 import { DAY_MS, deliverReclaim, RECLAIM_FROM, RECLAIM_MS, RECLAIM_SINCE, refundOf, sweepReclaim } from "./reclaim";
-import { buyFurniture, buyPlot, getHouseStore, houseIdFor, saveLayout, sellFurniture, upgradePlot, village } from "./service";
+import { buyFurniture, buyPlot, getHouseStore, houseIdFor, housePair, saveLayout, sellFurniture, upgradePlot, village } from "./service";
 import { MemoryHouseStore } from "./store";
 
 // 오래 비운 집 정리: 메모리 저장소에서만 (실제 Redis를 건드리지 않는다)
@@ -119,7 +119,7 @@ describe.skipIf(!!conn)("오래 비운 집 정리", () => {
     await saveLayout(store, owner, "small", { items: [{ u: "a", i: "desk", x: 0, y: 0, r: 0 }], floor: DEFAULT_FLOOR, wall: DEFAULT_WALL });
     const id = houseIdFor(owner);
     expect(await reclaimedIds(T + RECLAIM_MS + 1)).toContain(id);
-    expect(await store.inventory(id)).toEqual({ desk: 1 });
+    expect((await store.inventory(housePair(owner), "village")).have).toEqual({ desk: 1 });
 
     // 돌아와 다시 분양: 가방은 그대로, 집 안은 비어 있다 → 되팔 수도 있다
     await accounts.visit(owner, T + RECLAIM_MS + 2, true);

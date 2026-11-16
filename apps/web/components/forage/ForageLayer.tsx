@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { FishWater } from "@tomb/protocol";
 import { bridge, type ForageUse } from "@/game/bridge";
 import { meadowTone } from "@/game/rpg/meadowLayout";
 import type { TimePhase } from "@/lib/ambience";
@@ -14,6 +15,7 @@ import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { showToast } from "@/lib/hooks/useToasts";
+import { rideGate } from "@/lib/rideGate";
 import { derive } from "@/lib/rpg/formulas";
 import type { BugsResult, RpgPlay, RunResult } from "@/lib/rpg/types";
 import RunHud from "../rpg/RunHud";
@@ -67,7 +69,7 @@ function insectPlay(seed: number, timeLimitSec: number, night: boolean, phase?: 
 }
 
 export default function ForageLayer() {
-  const [fishing, setFishing] = useState<{ spot: string; water: "lake" | "river" } | null>(null);
+  const [fishing, setFishing] = useState<{ spot: string; water: FishWater } | null>(null);
   const [npc, setNpc] = useState<NpcId | null>(null);
   /** 11/15 버스 정류장 마당 의뢰 게시판 (수집 의뢰판만 — NPC 창의 [의뢰] 칸과 같은 QuestBoard) */
   const [board, setBoard] = useState(false);
@@ -110,6 +112,8 @@ export default function ForageLayer() {
 
   async function startGather(node: string) {
     if (busy.current || gather || insect) return;
+    // 11/16 곤충 채집은 따로 장면(미니게임)으로 간다 → 탈것에 탄 채로는 못 한다 (lib/rideGate)
+    if (gatherNodeById(node)?.kind === "bug" && rideGate("곤충 채집을 할")) return;
     busy.current = true;
     try {
       const r = await forageApi.gatherStart(node);
@@ -297,7 +301,7 @@ function GatherDock({ gather, onCancel }: { gather: Gather; onCancel: () => void
     };
   }, [gather, onCancel]);
   const n = gatherNodeById(gather.node);
-  const verb = n?.kind === "ore" ? "광석 캐는 중…" : n?.kind === "dig" ? "땅 파는 중…" : "약초 캐는 중…";
+  const verb = n?.kind === "ore" ? "광석 캐는 중…" : n?.kind === "dig" ? "땅 파는 중…" : n?.kind === "clam" ? "갯벌 캐는 중…" : "약초 캐는 중…";
   return (
     <div className={s.dock} role="region" aria-label={n ? NODE_LABEL[n.kind] : "채집"}>
       <p className={s.status} role="status">

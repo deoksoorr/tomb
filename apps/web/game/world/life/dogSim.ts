@@ -47,7 +47,8 @@ export type DogDef = {
 export const DOGS: readonly DogDef[] = [
   { id: "baekgu", name: "백구", variant: 0, home: { x: 720, y: 420, r: 170 }, fires: ["fireP"], grass: 6, legMs: 22_000, speed: 42 },
   { id: "nureong", name: "누렁이", variant: 1, home: { x: 900, y: 860, r: 150 }, fires: ["fireS"], grass: 6, legMs: 24_000, speed: 40 },
-  { id: "jeombak", name: "점박이", variant: 2, home: { x: 250, y: 560, r: 160 }, fires: ["fireW"], grass: 6, legMs: 20_000, speed: 44 },
+  // 11/16 묘지기 모닥불(fireW)을 치워 바닷가행 정류장이 됐다 → 점박이는 강가 풀밭에서만 쉰다
+  { id: "jeombak", name: "점박이", variant: 2, home: { x: 250, y: 560, r: 160 }, fires: [], grass: 6, legMs: 20_000, speed: 44 },
   // 우유: 사용자가 실제로 키우는 비숑. 광장 모닥불 둘레에 살고, 모닥불 앞에서 잘 잔다
   {
     id: "uyu",

@@ -68,7 +68,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
 
   const { color, body } = resolveAvatar(avatar, me, savedColor);
   const staffView = me?.staff === true;
-  /** 단 칭호의 상점 할인 (lib/titles TITLE_PERKS — 서버가 같은 규칙으로 깎는다) */
+  /** 단 칭호의 상점·염색 할인 (11/16 패션 갈래 칭호만 — lib/titles. 서버가 같은 규칙으로 깎는다) */
   const discount = me ? titlePerk(titleOfLook(me.equipped.map((e) => e.itemId))).discount : 0;
   const all = listed(tab, staffView);
   const items = all.filter((item) => tab !== "cosmetic" || matchesSlot(item.slot, slotFilter));

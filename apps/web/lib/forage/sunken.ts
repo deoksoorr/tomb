@@ -1,4 +1,4 @@
-import { ITEMS, isShopListed, type ItemDef } from "@tomb/protocol";
+import { ITEMS, isShopListed, type FishWater, type ItemDef } from "@tomb/protocol";
 import { candidates, hash01, pickWeighted, type Cond } from "./rules";
 import type { Species } from "./catalog";
 
@@ -39,7 +39,7 @@ export function pickSunkenCosmetic(rand: number, owned: ReadonlySet<string> = ne
 export const sunkenName = (item: Pick<ItemDef, "name">) => `물에 빠진 ${item.name}`;
 
 /** 다 가졌을 때 대신 줄 물고기: 그 물·조건의 희귀(★3 이상) 중 하나, 없으면 원래 걸린 것 */
-export function sunkenFallbackFish(water: "lake" | "river", c: Cond, rand: number, orig: Species): Species {
+export function sunkenFallbackFish(water: FishWater, c: Cond, rand: number, orig: Species): Species {
   return pickWeighted(candidates("fish", water, c, (s) => s.rarity >= 3 && !s.junk), rand) ?? orig;
 }
 

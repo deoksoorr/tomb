@@ -14,7 +14,7 @@ import { ensureZoneTextures, ZTEX } from "../world/forage/zoneArt";
 // - 계곡 물가 낚시 자리(protocol CAMP_FISHING_SPOTS, 강 물고기): 마을 낚시와 같은 1인 자리·같은 낚시 창·같은 연출.
 //   자리마다 낚시 의자 + 꽂아 둔 낚싯대 + 찌·물결 + 가까이 오면 낚싯바늘 말풍선 (마을 납품 부두 FishZoneView의 자리 표시와 같은 그림)
 // - 채집 지점(lib/forage/catalog CAMP_GATHER_NODES): 산책로 숲 곤충·약초, 산꼭대기·큰 바위 광석, 낙엽 숲 발굴.
-//   서버가 마을 지점과 함께 알려 주고(forage:nodes) Foraging이 캠핑장 것만 그린다. 하루 한도·도감·15분 창은 마을과 같이 센다.
+//   서버가 마을 지점과 함께 알려 주고(forage:nodes) Foraging이 캠핑장 것만 그린다. 하루 한도·도감·피어나는 창(11/16 10분)은 마을과 같이 센다.
 // - 팔기(어부 영감·수집가 유령)와 의뢰 게시판은 마을에만.
 
 /** 바라보는 방향 → 단위 벡터 */
@@ -35,29 +35,32 @@ type Marker = {
   busy: boolean;
 };
 
-/** 계곡 낚시 자리 표시 (Foraging의 ForageZone) */
+/** 계곡 낚시 자리 표시 (Foraging의 ForageZone). 11/16 바닷가 갯바위 낚시 자리도 같은 표시 (spots로 넘겨요, 아래를 보는 자리도) */
 export class CampFishMarkers implements ForageZone {
   private readonly markers: Marker[] = [];
 
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly reduced: boolean,
+    spots: readonly FishingSpot[] = CAMP_FISHING_SPOTS,
+    /** 11/16 바닷가: 물이 빠져 찌 자리가 마른 자리는 꽂아 둔 낚싯대·찌를 걷어요 */
+    private readonly dry: (s: FishingSpot) => boolean = () => false,
   ) {
     ensureZoneTextures(scene);
-    for (const s of CAMP_FISHING_SPOTS) this.markers.push(this.make(s));
+    for (const s of spots) this.markers.push(this.make(s));
   }
 
   private make(s: FishingSpot): Marker {
     const scene = this.scene;
-    const [dx] = STEP[s.facing];
+    const [dx, dy] = STEP[s.facing];
     scene.add.image(s.x, s.y + 2, ZTEX.stool).setOrigin(0.5, 1).setDepth(s.y - 1);
-    // 꽂아 둔 낚싯대: 의자 옆 받침대 → 물 쪽으로 비스듬히 → 늘어진 줄 (계곡 자리는 모두 옆을 본다)
-    const hx = s.x - dx * 2;
+    // 꽂아 둔 낚싯대: 의자 옆 받침대 → 물 쪽으로 비스듬히 → 늘어진 줄 (계곡 자리는 옆, 바닷가 자리는 아래를 봐요)
+    const hx = dy ? s.x + 7 : s.x - dx * 2;
     const hy = s.y + 3;
-    const tipX = hx + dx * 12;
-    const tipY = hy - 9;
-    const bx = s.x + dx * CAST;
-    const by = s.y - 2;
+    const tipX = dy ? hx + 3 : hx + dx * 12;
+    const tipY = dy ? hy - 10 + dy * 4 : hy - 9;
+    const bx = dy ? hx + 3 : s.x + dx * CAST;
+    const by = dy ? s.y + dy * CAST : s.y - 2;
     const rod = scene.add.graphics().setDepth(s.y + 1);
     rod.lineStyle(1, 0x3a2a1a, 1).lineBetween(hx - 1, hy, hx - 1, hy - 4).lineBetween(hx + 1, hy, hx + 1, hy - 4);
     rod.lineStyle(1, 0x7a5432, 1).lineBetween(hx, hy - 3, tipX, tipY);
@@ -85,7 +88,7 @@ export class CampFishMarkers implements ForageZone {
     for (const m of this.markers) {
       const s = m.spot;
       const owner = seats.get(s.id);
-      const busy = mine === s.id || owner !== undefined;
+      const busy = mine === s.id || owner !== undefined || this.dry(s);
       if (busy !== m.busy) {
         m.busy = busy;
         m.rod.setVisible(!busy);
