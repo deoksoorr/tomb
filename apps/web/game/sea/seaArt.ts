@@ -86,11 +86,43 @@ export function fbm(x: number, y: number, px = 0): number {
   return vnoise(x, y, px) * 0.6 + vnoise(x * 2, y * 2.1, px * 2) * 0.3 + vnoise(x * 4, y * 4.3, px * 4) * 0.1;
 }
 /** 물체 둘레 연한 테 색·불투명도 (뒷배경을 따뜻한 갈색 쪽으로 48%) */
-// 11/16 r16 사용자 톤 맞추기: 캠핑장·마을처럼 짙은 따뜻한 갈색 1px 테 (반투명 말고 또렷하게) — 색상은 그대로
-const SOFT_EDGE = 0x3a2820;
-const SOFT_EDGE_A = 255;
-function softOutline(g: Grid): void {
-  g.outline(SOFT_EDGE, false, SOFT_EDGE_A);
+// 11/16 r17 사용자: 테두리가 "따로 놀지" 않게 — 한 가지 짙은 선 대신 물건마다 제 색에서 나온 테두리 (닿은 칸의 가장 짙은 색을
+// 한 단계 더 짙고 살짝 따뜻하게). 건물·나무·구조물은 조금 더 또렷하게, 바위·백사장 소품은 더 부드럽게. 테두리 칸은 불투명도 254로 표시해요
+const SOFT_EDGE = 0x5a463a;
+const LIGHT_EDGE = 0x8a7464;
+const TONE_STRONG = 0.42;
+const TONE_SOFT = 0.3;
+/** 제 색 테두리 (빈 칸 중 몸에 닿은 칸만, 가장 짙은 이웃 색 → 더 짙게 + 따뜻하게) */
+export function toneOutline(g: Grid, k = TONE_STRONG): void {
+  const W = g.w;
+  const H = g.h;
+  const src = g.px.slice();
+  const lum = (c: number) => ((c >> 16) & 255) * 0.3 + ((c >> 8) & 255) * 0.55 + (c & 255) * 0.15;
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      if ((src[y * W + x] & 255) !== 0) continue;
+      let best = -1;
+      let bl = 1e9;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        const v = src[ny * W + nx];
+        if ((v & 255) < 200) continue;
+        const c = v >>> 8;
+        const l = lum(c);
+        if (l < bl) {
+          bl = l;
+          best = c;
+        }
+      }
+      if (best < 0) continue;
+      const out = mix(mix(best, 0x000000, k), 0x4a2e22, 0.25);
+      g.px[y * W + x] = ((out << 8) | 254) >>> 0;
+    }
+}
+function softOutline(g: Grid, light = false): void {
+  toneOutline(g, light ? TONE_SOFT : TONE_STRONG);
 }
 /** 둥근 덩어리 (원 여러 개를 합친 모양, 빛은 왼쪽 위 — 아래 가장자리는 한 단계 진하게) */
 function blobPaint(g: Grid, circles: readonly (readonly [number, number, number])[], ramp: readonly Color[], rimDark = true, salt = 0): void {
@@ -217,7 +249,7 @@ function shadow(g: Grid, cx: number, cy: number, rx: number, ry: number, a = 64)
       const dx = (x + 0.5 - cx) / rx;
       const dy = (y + 0.5 - cy) / ry;
       // r16 바닥에 닿은 그림자를 조금 더 진하게 (물건이 땅에 앉아 보이게)
-      if (dx * dx + dy * dy <= 1 && !g.filled(x, y)) g.set(x, y, 0x3e4060, Math.min(170, Math.round(a * 1.15 * (1 - (dx * dx + dy * dy) * 0.5))));
+      if (dx * dx + dy * dy <= 1 && !g.filled(x, y)) g.set(x, y, 0x3e4060, Math.min(150, Math.round(a * 1.0 * (1 - (dx * dx + dy * dy) * 0.5))));
     }
 }
 
@@ -388,7 +420,7 @@ export function shellArt(v: number): Grid {
   g.ellipse(3, 2.5, 2.4, 1.8, c);
   g.set(3, 1, lighten(c, 0.4));
   if (v === 1) g.set(2, 3, darken(c, 0.25));
-  softOutline(g);
+  softOutline(g, true);
   return g;
 }
 
@@ -397,7 +429,7 @@ export function driftArt(): Grid {
   line(g, 2, 5, 23, 3, DRIFTWOOD.mid, 2);
   line(g, 2, 4, 23, 2, DRIFTWOOD.hi);
   line(g, 16, 3, 20, 0, DRIFTWOOD.lo);
-  softOutline(g);
+  softOutline(g, true);
   shadow(g, 13, 7, 11, 1, 40);
   return g;
 }
@@ -510,7 +542,7 @@ export function benchArt(): Grid {
   for (let x = 4; x < 38; x += 7) if (hashU(x, 2, 5) < 0.5) g.set(x, 10, 0xe8e4d8); // 칠 벗겨진 자국
   g.rect(4, 13, 2, 3, 0x5a5650);
   g.rect(36, 13, 2, 3, 0x5a5650);
-  softOutline(g);
+  softOutline(g, true);
   shadow(g, 21, 16, 19, 1.4, 56);
   return g;
 }
@@ -533,7 +565,7 @@ export function matArt(v: number): Grid {
     g.set(x, 1, ramp[2]);
     g.set(x, MAT_H + 2, ramp[2]);
   }
-  softOutline(g);
+  softOutline(g, true);
   shadow(g, (MAT_W + 4) / 2, MAT_H + 2, MAT_W / 2, 1.2, 40);
   return g;
 }
@@ -562,7 +594,7 @@ export function parasolArt(v: number): Grid {
     }
   g.rect(cx - 1, 0, 2, 3, RAMP.wall[1]);
   fabricFolds(g, { x0: 1, y0: 2, x1: PARASOL_W - 2, y1: 17 }, PARASOL_W / 8, 0.07);
-  softOutline(g);
+  softOutline(g, true);
   shadow(g, cx, base + 1, 4, 1, 60);
   return g;
 }
@@ -590,7 +622,7 @@ export function loungerArt(): Grid {
   g.rect(x0 + 2, 18, x1 - x0 - 3, 10, RAMP.towel[0]);
   g.hline(x0 + 2, x1 - 2, 27, RAMP.towel[2]);
   fabricFolds(g, { x0: x0 + 2, y0: 18, x1: x1 - 2, y1: 27 }, 6, 0.08);
-  softOutline(g);
+  softOutline(g, true);
   shadow(g, LOUNGER_W / 2, LOUNGER_H - 3, LOUNGER_W / 2, 1.6, 50);
   return g;
 }
@@ -632,7 +664,7 @@ export function realtyArt(): Grid {
   const W = REALTY_ART_W;
   const H = REALTY_ART_H;
   const g = new Grid(W, H);
-  const OUTV = 0x1f1d1a;
+  // r17 테두리는 제 색에서 (아래 toneOutline)
   const wall = { hi: 0xd9d0bc, mid: 0xc2b89f, lo: 0x9e957f };
   const roof = { hi: 0x4f8478, mid: 0x3d6a62, lo: 0x2c4f4a };
   g.rect(6, 24, 48, 26, wall.mid);
@@ -665,7 +697,7 @@ export function realtyArt(): Grid {
   // 우편함
   g.rect(52, 40, 4, 4, 0xb85a4a);
   g.vline(54, 44, 49, 0x6e5238);
-  g.outline(OUTV);
+  toneOutline(g, TONE_STRONG);
   shadow(g, 30, 51.5, 27, 1.6, 70);
   return g;
 }
@@ -699,7 +731,7 @@ export function kioskArt(): Grid {
     for (let k = 0; k < 4; k++) g.hline(ix + 1 + (k >> 1), ix + 5 - (k >> 1), 7 + k, 0xe8c08a);
   }
   frame(g, 11, 1, W - 22, 13, PAINT.line);
-  softOutline(g);
+  softOutline(g, true);
   shadow(g, W / 2, base + 1, W / 2 - 3, 2, 56);
   return g;
 }
@@ -854,7 +886,7 @@ export function ledgeArt(): Grid {
     71,
   );
   for (let x = 0; x < 34; x++) for (let y = 13; y < 17; y++) if (g.filled(x, y) && hashU(x, y, 72) < 0.3) g.set(x, y, RAMP.roofM[2]);
-  softOutline(g);
+  softOutline(g, true);
   return g;
 }
 /** 11/16 디딤돌 (둥근 납작 돌) */
@@ -875,7 +907,7 @@ export function crabArt(): Grid {
   g.set(10, 1, RAMP.roofC[2]);
   g.set(5, 3, 0x3a3440);
   g.set(7, 3, 0x3a3440);
-  softOutline(g);
+  softOutline(g, true);
   return g;
 }
 
@@ -1054,7 +1086,7 @@ export function tetraArt(v: number): Grid {
   g.ellipse(10, 9, 3, 2.5, c);
   g.recolor((x, y) => !g.filled(x, y + 1), darken(c, 0.25));
   g.recolor((x, y) => y > 13 && hashU(x, y, v) < 0.4, 0x9ac8b8); // 물이끼
-  softOutline(g);
+  softOutline(g, true);
   return g;
 }
 
@@ -1147,7 +1179,7 @@ export function buoyArt(): Grid {
   g.ellipse(5, 8, 4, 3.6, 0xd8443a);
   g.hline(2, 8, 7, 0xf2eee6);
   g.set(3, 6, 0xf08a7a);
-  softOutline(g);
+  softOutline(g, true);
   for (let x = 1; x < 10; x++) if (x % 2) g.set(x, 13, 0xe8f6f4, 180);
   return g;
 }
@@ -1286,7 +1318,7 @@ export function rockArt(i: number): Grid {
   }
   // 젖은 아래 끝 (옅은 민트 몇 점)
   for (let x = 0; x < W; x++) for (let y = base - 3; y <= base; y++) if (g.filled(x, y) && hashU(x, y, i + 3) < 0.2) g.set(x, y, RAMP.roofM[2]);
-  softOutline(g);
+  softOutline(g, true);
   // 둘레 자갈 (바위 밖 모래·갯벌 위 작은 돌 몇 알)
   for (let k = 0; k < 3 + Math.floor(r() * 4); k++) {
     const x = Math.round(cx + (r() < 0.5 ? -1 : 1) * (R.rx * (0.9 + r() * 0.3)));
@@ -1326,7 +1358,7 @@ export function footbathArt(): Grid {
   g.ellipse(24, 11, 8, 2.5, 0xc4f2ec);
   g.recolor((x, y) => y > 18, BASALT.lo);
   for (let k = 0; k < 10; k++) g.set(8 + k * 4, 6 + (k % 3), 0xe8e0d0);
-  softOutline(g);
+  softOutline(g, true);
   return g;
 }
 
@@ -1934,7 +1966,7 @@ export function picnicTopArt(): Grid {
   for (let y = 4; y < 10; y++) for (let x = 16; x < 30; x++) if (((x >> 1) + (y >> 1)) % 2) g.set(x, y, 0xf2a49a);
   g.rect(34, 4, 3, 3, 0xfdf6ec);
   g.set(35, 4, 0x9ad6e6);
-  softOutline(g);
+  softOutline(g, true);
   shadow(g, 23, 15.5, 20, 1.6, 52);
   return g;
 }
@@ -1946,7 +1978,7 @@ export function picnicPlankArt(): Grid {
   g.hline(2, 33, 3, PICNIC[4]);
   g.rect(5, 4, 2, 2, PICNIC[4]);
   g.rect(29, 4, 2, 2, PICNIC[4]);
-  softOutline(g);
+  softOutline(g, true);
   shadow(g, 18, 5.5, 15, 1, 48);
   return g;
 }
@@ -1962,7 +1994,7 @@ export function ashLogsArt(): Grid {
   }
   for (const [x, y] of [[10, 4], [11, 5], [9, 6], [12, 6]]) g.set(x, y, 0x3a3230);
   g.set(11, 4, 0x6a6460);
-  softOutline(g);
+  softOutline(g, true);
   return g;
 }
 /** 물에 씻긴 통나무 의자 (1인, 18×10, 원점 가운데 아래) */
@@ -1974,7 +2006,7 @@ export function driftLogArt(): Grid {
     g.vline(ex, 3, 6, 0xeedcbc);
     g.set(ex, 4, 0xc8aa80);
   }
-  softOutline(g);
+  softOutline(g, true);
   shadow(g, 9, 8.5, 8, 1.1, 50);
   return g;
 }
@@ -1985,7 +2017,7 @@ export function cushionArt(v: number): Grid {
   for (let y = 1; y < 5; y++) for (let x = 1; x < 11; x++) if (!((x === 1 || x === 10) && (y === 1 || y === 4))) g.set(x, y, y === 1 ? ramp[0] : y === 4 ? ramp[2] : ramp[1]);
   g.set(5, 2, ramp[2]);
   g.set(6, 2, ramp[2]);
-  softOutline(g);
+  softOutline(g, true);
   return g;
 }
 
@@ -2016,7 +2048,7 @@ export function tubeArt(v: number): Grid {
     }
   g.set(7, 4, 0xffffff);
   g.set(8, 4, 0xffffff);
-  softOutline(g);
+  softOutline(g, true);
   return g;
 }
 
@@ -2106,13 +2138,14 @@ export function detailPass(g: Grid, o: DetailOpts = {}): Grid {
   const W = g.w;
   const H = g.h;
   const src = g.px.slice();
-  const rim = o.rim ?? 0.2; // r16 그늘 쪽을 한두 단계 더 깊게
+  const rim = o.rim ?? 0.15; // r16 그늘 쪽을 깊게 → r17 캠핑장 세기에 맞춰 조금 덜
   const grain = o.grain ?? 0.05;
   const salt = o.salt ?? 0;
   const solid = (x: number, y: number): boolean => {
     if (x < 0 || y < 0 || x >= W || y >= H) return false;
     const v = src[y * W + x];
-    return (v & 255) >= 200 && v >>> 8 !== EDGE_RGB;
+    // 테두리(불투명도 254)·그림자(반투명)는 몸이 아니에요
+    return (v & 255) === 255 && v >>> 8 !== EDGE_RGB && v >>> 8 !== LIGHT_EDGE;
   };
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {

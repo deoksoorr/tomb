@@ -1,6 +1,6 @@
 import type { CottageStyleId, PlotTierId } from "@/lib/housing/catalog";
 import { Grid, lighten, mix, type Color } from "../sprites/pixel";
-import { detailPass, fbm, pick, RAMP } from "./seaArt";
+import { detailPass, fbm, pick, RAMP, toneOutline } from "./seaArt";
 
 // 11/16 포구 오두막 바깥 그림 (나무 오두막·파란 지붕 어부집·등대지기 집). Phaser 없이 Grid로 그려요 (seaArt와 같은 바닷가 그림 규칙:
 // 디더로 섞은 부드러운 색 단계, 물체 둘레는 따뜻한 갈색의 연한 테, 빛은 왼쪽 위).
@@ -46,8 +46,8 @@ const PAL = {
   stone: hexes(["#e5e3dc", "#d2cfc6", "#bdb9ae", "#a7a297"]),
 } as const;
 // 11/16 r16 톤 맞추기: 캠핑장·마을처럼 짙은 따뜻한 갈색 1px 테
-const EDGE = 0x3a2820;
-const EDGE_A = 255;
+const EDGE = 0x5a463a; // r17 캠핑장 테두리 세기에 맞춰
+
 const WARM = 0xffd890;
 const WARM_HI = 0xfff2c4;
 
@@ -334,7 +334,8 @@ export function cottageGrid(o: CottageArtOpts): Built {
     const lamp = towerAt(h, tx, towerW, roofTop - 6, base - 1, o.night);
     if (o.night) lights.push(lamp);
   }
-  h.outline(EDGE, false, EDGE_A);
+  // r17 제 색에서 나온 테두리 (바닷가 사물과 같은 규칙 — 집은 조금 더 또렷하게)
+  toneOutline(h, 0.42);
   g.draw(h, 0, 0);
 
   // ── 앞마루 (데크 터: 바다를 보는 나무 마루 + 난간, 가운데는 내려가는 틈) ──

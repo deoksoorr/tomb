@@ -673,12 +673,21 @@ function deepSeaColliders(): Rect[] {
 }
 
 /** 선착장·방파제 난간 (머리 아래부터 양옆을 막아요 — 갯벌에서 올라타지 못해요) */
-/** 난간 칸 크기 */
+/** 난간 칸 크기 · 두께(칸 수 — 몸통 반폭보다 두껍게) */
 export const SEA_RAIL_CELL = 4;
+export const SEA_RAIL_DEPTH = 3;
 /**
  * 11/16 r15 사용자: 데크 가장자리 어디서도 물로 걸어 내려가지 못하게 (물에서 올라오지도 못하게) — 데크 합집합 둘레를 4px 칸으로 빙 둘러 막아요.
  * 백사장(갯벌 위쪽, SEA_FLAT_Y0 위) 쪽은 열어 둬서 선착장·방파제 머리로 걸어 올라가요. 같은 줄의 칸은 이어 붙여 상자 수를 줄여요
  */
+/**
+ * 11/16 r17 데크 바깥(물·갯벌)에 있는 사람만 막는 데크 몸 전체 (머리 쪽 백사장 줄은 열어 둬요) — 난간을 스쳐도 데크 안으로 밀려 들어가지 못해요.
+ * 클라이언트는 "지금 데크 위가 아닐 때"만 이 상자와 부딪혀요 (데크 위 사람은 난간이 막아요)
+ */
+export function seaDeckFootprints(): Rect[] {
+  const y0 = SEA_FLAT_Y0 + 4;
+  return SEA_DECKS.filter((r) => r.y + r.h > y0).map((r) => ({ x: r.x, y: Math.max(r.y, y0), w: r.w, h: r.y + r.h - Math.max(r.y, y0) }));
+}
 function railColliders(): Rect[] {
   const C = SEA_RAIL_CELL;
   const inDeck = (cx: number, cy: number) => {
@@ -691,12 +700,15 @@ function railColliders(): Rect[] {
     for (let cy = Math.floor(r.y / C); cy < Math.ceil((r.y + r.h) / C); cy++)
       for (let cx = Math.floor(r.x / C); cx < Math.ceil((r.x + r.w) / C); cx++) {
         if (!inDeck(cx, cy)) continue;
-        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-          const nx = cx + dx;
-          const ny = cy + dy;
-          if (inDeck(nx, ny) || ny * C < SEA_FLAT_Y0) continue;
-          rails.add(`${nx},${ny}`);
-        }
+        // r17 사용자 "난간을 스치면 데크 안으로 튀어 들어가요" → 난간을 바깥쪽으로 3칸(12px) 두껍게, 모서리(대각선)도 빈틈없이
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]] as const)
+          for (let d = 1; d <= SEA_RAIL_DEPTH; d++) {
+            const nx = cx + dx * d;
+            const ny = cy + dy * d;
+            if (inDeck(nx, ny)) break;
+            if (ny * C < SEA_FLAT_Y0) break;
+            rails.add(`${nx},${ny}`);
+          }
       }
   const cells = [...rails].map((k) => k.split(",").map(Number) as [number, number]).sort((a, b) => a[1] - b[1] || a[0] - b[0]);
   const out: Rect[] = [];

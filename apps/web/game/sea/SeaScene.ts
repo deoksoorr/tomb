@@ -28,6 +28,8 @@ import {
   seaCampfireOfSeat,
   SEA_CAMPFIRE,
   seaWet,
+  SEA_DECKS,
+  SEA_FLAT_Y0,
   type SeaRestSeat,
   tideLineY,
   type ActKind,
@@ -265,6 +267,8 @@ export class SeaScene extends Phaser.Scene {
     // 물때: 물이 덮은 갯벌이면 헤엄 (선착장·방파제 위는 마른 땅)
     this.player.water = (x, y) => seaWet(x, y, this.tide);
     this.physics.add.collider(this.player.sprite, this.map.colliders);
+    // 11/16 r17 사용자 "난간을 스치면 데크 안으로 튀어 들어가요" → 데크 밖(물·갯벌)에 있으면 데크 몸 전체와 부딪혀요 (데크 위면 난간만)
+    this.physics.add.collider(this.player.sprite, this.map.deckBlocks, undefined, () => !this.player.inBoat && this.deckSide === false);
     this.furnitureCollider = this.physics.add.collider(this.player.sprite, this.map.furnitureColliders);
     this.player.onLand = () => undefined;
     this.playerGlow = this.add.image(spawn.x, spawn.y, TEX.glow).setBlendMode(Phaser.BlendModes.ADD).setTint(0xffe2a8).setDepth(DEPTH.lights);
@@ -1254,6 +1258,7 @@ export class SeaScene extends Phaser.Scene {
     const started = pl.update(this.benchInput(now), now, this.seatReq);
     // 11/16 r13 튜브·제트스키 조종 (Player.update는 탄 동안 움직이지 않아요)
     this.rides?.steer(this.move, dt);
+    this.deckGuard();
     if (this.furnitureCollider) this.furnitureCollider.active = !pl.airborne;
     if (net.online && pnow >= this.peerCheckAt) {
       this.peerCheckAt = pnow + PEER_CHECK_MS;
@@ -1435,6 +1440,35 @@ export class SeaScene extends Phaser.Scene {
     const friends: number[] = [];
     for (const r of this.remotes.values()) if (!r.away) (r.view.friend ? friends : others).push(Math.round(r.x), Math.round(r.y));
     bridge.emit("minimap:dots", { me: { x: Math.round(this.player.x), y: Math.round(this.player.y) }, others, friends, map: "sea" });
+  }
+
+  /**
+   * 11/16 r17 사용자 "난간을 스치면 데크 안으로 튀어 들어가요" — 데크 안/밖을 기억해 두고(순간이동은 새로 정해요),
+   * 머리(백사장 쪽)가 아닌 곳으로 데크 안팎이 바뀌면 바로 앞 자리로 되돌려요. 데크 밖이면 데크 몸 전체와 부딪혀요(deckBlocks)
+   */
+  private deckSide: boolean | null = null;
+  private deckLast = { x: 0, y: 0 };
+  private deckGuard(): void {
+    const pl = this.player;
+    if (pl.inBoat) {
+      this.deckSide = null;
+      return;
+    }
+    const inDeck = (x: number, y: number) => y > SEA_FLAT_Y0 + 4 && SEA_DECKS.some((r) => x > r.x && x < r.x + r.w && y > r.y && y < r.y + r.h);
+    const on = SEA_DECKS.some((r) => pl.x >= r.x && pl.x <= r.x + r.w && pl.y >= r.y && pl.y <= r.y + r.h);
+    const jump = Math.hypot(pl.x - this.deckLast.x, pl.y - this.deckLast.y) > 24;
+    if (this.deckSide === null || jump) this.deckSide = on;
+    else if (this.deckSide !== on) {
+      // 머리 쪽(백사장 줄)에서 오르내리는 건 괜찮아요. 그 밖은 난간을 스치다 튄 것 → 되돌려요
+      const sideways = this.deckSide ? !inDeck(pl.x, pl.y) && pl.y > SEA_FLAT_Y0 + 4 : inDeck(pl.x, pl.y);
+      if (sideways) {
+        pl.warp(this.deckLast.x, this.deckLast.y, this.time.now, null);
+        return;
+      }
+      this.deckSide = on;
+    }
+    this.deckLast.x = pl.x;
+    this.deckLast.y = pl.y;
   }
 
   /** 11/16 r13 튜브·제트스키를 타고 있는지 (장면을 바꾸는 입구를 막는 공용 "타는 중" 검사가 불러요) */

@@ -23,6 +23,7 @@ import {
   SEA_PONTOON,
   SEA_DECKS,
   SEA_RAIL_CELL,
+  seaDeckFootprints,
   SEA_ROAD,
   SEA_JETSKIS,
   SEA_PONTOON_RAMP,
@@ -34,7 +35,7 @@ import {
   TIDE_LOW_Y,
   seaWet,
 } from "@tomb/protocol";
-import { SEA_FUTURE_SPOTS, SEA_INTERACTABLES, SEA_LIGHTS, SEA_PIER_POSTS, seaGroundKind, seaStandable, seaWalkGrid } from "./seaLayout";
+import { SEA_FUTURE_SPOTS, SEA_INTERACTABLES, SEA_LIGHTS, SEA_PIER_POSTS, seaFurnitureColliders, seaGroundKind, seaStandable, seaStaticColliders, seaWalkGrid } from "./seaLayout";
 import { SEA_LANDMARKS, SEA_MINIMAP_H, SEA_MINIMAP_W, seaMinimapPixels, toSeaMinimap } from "./seaMinimap";
 
 // 11/16 달물결 포구 배치: 내리는 자리에서 걸어서 갈 곳에 다 닿는지, 갯벌은 물때와 상관없이 늘 걷는지, 먼바다는 막히는지
@@ -170,6 +171,51 @@ describe("seaLayout — 걷기", () => {
     // 데크 안쪽은 걸을 수 있어요 (선착장 몸통 · 낚시 가지 · 다리 · 부잔교 · 끝 데크)
     for (const [x, y] of [[SEA_PIER.x + 20, SEA_PIER.y + 60], [SEA_PIER_ARM.x + 30, SEA_PIER_ARM.y + 14], [SEA_PONTOON_RAMP.x + 26, SEA_PONTOON_RAMP.y + 20], [SEA_PONTOON.x + 16, SEA_PONTOON.y + 60], [SEA_PIER_END.x + 48, SEA_PIER_END.y + 22]])
       expect(seaStandable(x, y), `${x},${y}`).toBe(true);
+  });
+  // 11/16 r17 사용자 "난간을 스치며 움직이면 데크 안으로 튀어 들어가요" — 물·갯벌에서 데크 가장자리를 비스듬히 스치며 가도 데크 안으로 못 들어가요
+  it("데크 바깥에서 가장자리를 스치며 움직여도 데크 안으로 들어가지 않아요 (여러 각도·속도)", () => {
+    const rects = [...seaStaticColliders(), ...seaFurnitureColliders()];
+    const foot = seaDeckFootprints();
+    const hit = (x: number, y: number, list: readonly { x: number; y: number; w: number; h: number }[]) => list.find((r) => x - 4 < r.x + r.w && x + 4 > r.x && y - 5 < r.y + r.h && y > r.y);
+    const active = (x: number, y: number) => (onSeaDeck(x, y) ? rects : [...rects, ...foot]);
+    const step = (p: { x: number; y: number }, dx: number, dy: number) => {
+      const list = active(p.x, p.y);
+      let nx = p.x + dx;
+      let r = hit(nx, p.y, list);
+      if (r) nx = dx > 0 ? r.x - 4.01 : r.x + r.w + 4.01;
+      if (hit(nx, p.y, list)) nx = p.x;
+      let ny = p.y + dy;
+      r = hit(nx, ny, list);
+      if (r) ny = dy > 0 ? r.y - 0.01 : r.y + r.h + 5.01;
+      if (hit(nx, ny, list)) ny = p.y;
+      p.x = nx;
+      p.y = ny;
+    };
+    let runs = 0;
+    for (const d of SEA_DECKS) {
+      if (d.y + d.h < SEA_FLAT_Y0 + 20) continue;
+      const y0 = Math.max(d.y, SEA_FLAT_Y0 + 24);
+      // 네 변 바깥 20px에서 출발, 변을 따라 비스듬히(데크 쪽으로) 스쳐 가요
+      const starts = [
+        { x: d.x - 20, y: (y0 + d.y + d.h) / 2, dirs: [[1, 0.6], [1, -0.6], [1, 0.1], [0.3, 1]] },
+        { x: d.x + d.w + 20, y: (y0 + d.y + d.h) / 2, dirs: [[-1, 0.6], [-1, -0.6], [-1, 0.1], [-0.3, 1]] },
+        { x: d.x + d.w / 2, y: d.y + d.h + 20, dirs: [[0.6, -1], [-0.6, -1], [0.1, -1], [1, -0.3]] },
+      ];
+      for (const st of starts)
+        for (const [vx, vy] of st.dirs)
+          for (const speed of [34, 60, 120]) {
+            const p = { x: st.x, y: st.y };
+            if (onSeaDeck(p.x, p.y) || p.y > SEA_HEIGHT - 20) continue;
+            runs++;
+            const m = Math.hypot(vx, vy);
+            for (let i = 0; i < 240; i++) {
+              step(p, (vx / m) * speed * 0.016, (vy / m) * speed * 0.016);
+              // 데크 몸(난간 안쪽) 안에 들어가면 안 돼요 (갯바위 낚시 발판은 데크가 아니라 괜찮아요)
+              expect(foot.some((r) => p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h), `deck ${d.x},${d.y} from ${st.x},${st.y} dir ${vx},${vy} @${speed} at ${p.x.toFixed(1)},${p.y.toFixed(1)} step ${i}`).toBe(false);
+            }
+          }
+    }
+    expect(runs).toBeGreaterThan(40);
   });
   // 11/16 r14 제트스키 부잔교: 내려서는 자리·다리는 막히지 않고, 다리로 선착장 몸통(→ 백사장)과 이어져요
   it("제트스키 부잔교에서 내려 선착장으로 걸어 나가요", () => {

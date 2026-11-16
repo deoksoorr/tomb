@@ -41,6 +41,7 @@ import {
   TIDE_HIGH_Y,
   seaLotSign,
   tideLineY,
+  seaDeckFootprints,
 } from "@tomb/protocol";
 import { addCanvasTexture, TEX } from "../assets/manifest";
 import { bbqPlateArt, CAMP_TEX, vendingArt, vendingLitArt } from "../camp/campArt";
@@ -150,6 +151,8 @@ export class SeaMap implements SeaMapApi {
   readonly height = SEA_HEIGHT;
   readonly colliders: Phaser.Physics.Arcade.StaticGroup;
   readonly furnitureColliders: Phaser.Physics.Arcade.StaticGroup;
+  /** 11/16 r17 데크 몸 전체 (데크 밖에 있는 사람만 부딪혀요 — 난간을 스쳐도 데크 안으로 밀려 들어가지 못하게) */
+  readonly deckBlocks: Phaser.Physics.Arcade.StaticGroup;
   /** 11/16 오두막 터 팻말 (터 번호 → 판). 포구 오두막(game/sea/seaHousing)이 분양 상태에 맞춰 숨겨요 */
   readonly lotPlates = new Map<number, SignPlate>();
   /** 11/16 오늘 등대 등불이 켜졌는지 (밤에 켜지 않았으면 등대가 어두워요. 안개 낀 날 스스로 켜지는 불은 그대로 — seaLamp) */
@@ -232,6 +235,7 @@ export class SeaMap implements SeaMapApi {
   ) {
     this.colliders = scene.physics.add.staticGroup();
     this.furnitureColliders = scene.physics.add.staticGroup();
+    this.deckBlocks = scene.physics.add.staticGroup();
     if (!staged) {
       const g = this.parts();
       while (!g.next().done);
@@ -257,6 +261,7 @@ export class SeaMap implements SeaMapApi {
       if (++n % 40 === 0) yield;
     }
     for (const r of Lay.seaFurnitureColliders()) this.addCollider(this.furnitureColliders, r);
+    for (const r of seaDeckFootprints()) this.addCollider(this.deckBlocks, r);
     yield;
     this.addGroundDecor();
     yield;
@@ -1272,7 +1277,7 @@ export class SeaMap implements SeaMapApi {
     this.wet = this.beacon = this.depthShade = this.sheen = null;
 
     this.golds.length = 0;
-    for (const g of [this.colliders, this.furnitureColliders]) if (g.children) g.clear(true, true);
+    for (const g of [this.colliders, this.furnitureColliders, this.deckBlocks]) if (g.children) g.clear(true, true);
     // 그림(sea- 텍스처)은 지우지 않아요. 다시 올 때 굽지 않게 남겨 둬요
   }
 }
