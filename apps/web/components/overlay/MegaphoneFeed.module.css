@@ -5,15 +5,15 @@
   justify-items: start;
 }
 
-/* 터치: 왼쪽 아래 조이스틱(120px, MobileControls) 바로 위. 버튼 줄은 아래에 두고 펼친 기록은 위로 자란다.
+/* 터치: 11/16 왼쪽 위 [메뉴] 줄 바로 아래 (예전엔 조이스틱 위 — 그 자리는 채팅이 쓴다). 버튼 줄이 위, 펼친 기록은 아래로 자란다.
    폭은 화면 절반쯤 (가로 폰에서는 가운데 내 캐릭터를 가리지 않게 260px까지) */
 .floating {
   position: absolute;
   z-index: 1;
-  bottom: calc(var(--safe-bottom) + 120px + 8px);
+  top: calc(var(--safe-top) + var(--top-h) + var(--top-gap));
   left: var(--safe-left);
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
   align-items: flex-start;
   width: min(260px, calc(50vw - var(--safe-left)));
   font-size: 12px;
@@ -55,10 +55,10 @@
   max-height: 120px;
 }
 
-/* 가로 폰처럼 낮은 화면: 펼친 기록이 위쪽 줄(메뉴·음악)까지 닿지 않게 더 낮게 */
+/* 가로 폰처럼 낮은 화면: 펼친 기록이 아래 조이스틱·채팅까지 닿지 않게 더 낮게 */
 @media (max-height: 520px) {
   .floating .log {
-    max-height: min(120px, calc(100dvh - var(--safe-top) - var(--top-h) - var(--safe-bottom) - 120px - 8px - 30px - 6px - 16px));
+    max-height: min(120px, calc(100dvh - var(--safe-top) - var(--top-h) - var(--top-gap) - 30px - 6px - var(--safe-bottom) - 240px));
   }
 }
 

@@ -62,8 +62,8 @@
 
 @media (pointer: coarse) {
   .box {
-    /* 왼쪽 위 [메뉴] 줄 바로 아래 (예전엔 오른쪽 미니맵 아래라 지도와 겹쳐 보였다) */
-    top: calc(var(--safe-top) + var(--top-h) + var(--top-gap));
+    /* 왼쪽 위 [메뉴] 줄 아래, 확성기 버튼 줄(≈30px) 밑 (11/16 확성기가 [메뉴] 바로 아래로 왔다) */
+    top: calc(var(--safe-top) + var(--top-h) + var(--top-gap) + 38px);
     right: auto;
     left: var(--safe-left);
     bottom: auto;
