@@ -123,12 +123,15 @@ function roofAt(g: Grid, x0: number, x1: number, top: number, eave: number, ramp
       let v = 0.12 + t * 0.55 + side * 0.18 + (fbm(x * 0.3, y * 0.4) - 0.5) * 0.18;
       if (kind === "shingle") {
         const row = Math.floor((y - top) / 3);
+        // 11/16 r14 기와 줄: 줄 윗선은 빛, 아랫선은 그늘, 엇갈린 이음 (캠핑장 지붕 결처럼)
         if ((y - top) % 3 === 2) v += 0.28;
+        else if ((y - top) % 3 === 0) v -= 0.1;
         else if ((x + row * 2) % 5 === 0) v += 0.18;
       } else if (kind === "tin") {
         if ((x - a) % 3 === 0) v += 0.25;
         else if ((x - a) % 3 === 1) v -= 0.08;
       } else if ((y - top) % 4 === 3) v += 0.16;
+      else if ((y - top) % 4 === 0) v -= 0.08;
       g.set(x, y, pick(ramp, cl(v), x, y));
     }
     // 용마루 (맨 위 한 줄은 밝게) · 처마 끝 (진하게)
@@ -176,11 +179,14 @@ function wallsAt(g: Grid, style: CottageStyleId, x0: number, x1: number, top: nu
       if (style === "wood") {
         // 통나무 벽: 4줄마다 한 통 (위는 밝고 아래는 진하게)
         const k = (y - top) % 4;
-        g.set(x, y, pick(RAMP.wood, cl(0.18 + k * 0.17 + side * 0.15 + n), x, y));
+        // 11/16 r14 통나무 결: 짧은 가로 나뭇결 (통마다 자리가 달라요)
+        const grain = (x * 7 + Math.floor((y - top) / 4) * 13) % 11 === 0 && k !== 0 ? 0.12 : 0;
+        g.set(x, y, pick(RAMP.wood, cl(0.18 + k * 0.17 + side * 0.15 + n + grain), x, y));
       } else if (style === "blue") {
         // 흰 회벽 + 아래 돌 띠
         if (y >= base - 3) g.set(x, y, pick(PAL.stone, cl(0.3 + (y - (base - 3)) * 0.2 + n), x, y));
-        else g.set(x, y, pick(RAMP.wall, cl(0.08 + side * 0.3 + (y - top) / (base - top) * 0.25 + n), x, y));
+        // 11/16 r14 회벽 결: 아주 옅은 알갱이 (캠핑장 벽처럼)
+        else g.set(x, y, pick(RAMP.wall, cl(0.08 + side * 0.3 + (y - top) / (base - top) * 0.25 + n + ((x * 5 + y * 3) % 13 === 0 ? 0.1 : 0)), x, y));
       } else {
         // 빨강·하양 가로 줄무늬
         const band = Math.floor((base - 1 - y) / 5) % 2 === 0;

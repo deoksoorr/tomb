@@ -102,7 +102,7 @@ export class SeaView {
   private clouds: { img: Phaser.GameObjects.Image; x0: number; y: number; speed: number }[] = [];
   private boat: Phaser.GameObjects.Image | null = null;
   /** 11/16 r15 수평선의 오징어잡이배 불빛 (등불 + 물에 비친 기둥) */
-  private squidLights: { glow: Phaser.GameObjects.Image; col: Phaser.GameObjects.Image }[] = [];
+  private squidLights: { glow: Phaser.GameObjects.Image; col: Phaser.GameObjects.Image; hull?: Phaser.GameObjects.Image }[] = [];
   /** 11/16 r15 해먹 장면: 천 테두리 · 야자 잎 (살랑살랑 흔들려요) */
   private hammockFrame: Phaser.GameObjects.Image | null = null;
   private fronds: Phaser.GameObjects.Image[] = [];
@@ -257,6 +257,7 @@ export class SeaView {
       this.squidLights.push({
         glow: this.add(sc.add.image(0, hz, Art.SEA_TEX.lampGlow).setBlendMode(Phaser.BlendModes.ADD).setTint(0xe8ffd8).setDepth(7).setVisible(false)),
         col: this.add(sc.add.image(0, hz, Art.SEA_TEX.lightColumn).setOrigin(0.5, 0).setBlendMode(Phaser.BlendModes.ADD).setDepth(6).setVisible(false)),
+        hull: this.add(sc.add.image(0, hz, this.tex(`${P}far-squid`, () => V.farShip("squid"))).setOrigin(0.5, V.FAR_SHIP_WL.squid / (V.FAR_SHIP_WL.squid + 4)).setDepth(6.5).setVisible(false)),
       });
     // 바다 몸통 (시간대 색이 바뀔 때 다시 구워요) · 물결 마루 (먼 것은 느리고 옅게, 가까운 것은 빠르고 진하게)
     this.sea = this.add(sc.add.image(0, hz, this.tex(P + "px", () => V.whitePx())).setOrigin(0, 0).setDepth(5));
@@ -487,14 +488,17 @@ export class SeaView {
     if (this.boat) {
       const ship = shipsAt(Date.now())[0];
       if (ship) {
-        const key = ship.pass.kind === "fishing" ? P + "farBoat" : Art.SEA_TEX.ship(ship.pass.kind);
-        if (this.boat.texture.key !== key && this.scene.textures.exists(key)) this.boat.setTexture(key);
+        // 11/16 r15 사용자: 물에 잠긴 작은 도트 배 (늘이지 않아요, 원점 = 물높이) — 수평선 바로 아래 바다 위에
+        const kind = ship.pass.kind;
+        const key = this.tex(`${P}far-${kind}`, () => V.farShip(kind));
+        if (this.boat.texture.key !== key) this.boat.setTexture(key).setOrigin(0.5, V.FAR_SHIP_WL[kind] / (V.FAR_SHIP_WL[kind] + 4));
         const x = VW * (1 - ship.x / SEA_WIDTH);
         this.boat
           .setVisible(true)
-          .setScale(ship.pass.kind === "fishing" ? 1 : 0.32)
-          .setFlipX(ship.pass.kind === "fishing" ? ship.pass.dir > 0 : ship.pass.dir > 0)
-          .setPosition(Math.round(x), hz - 1 + Math.round(Math.sin(now / 900) * 0.6))
+          .setScale(1)
+          // 그림 뱃머리는 오른쪽 — 장면은 지도와 좌우가 반대라 서→동(dir 1)이면 왼쪽으로 가요
+          .setFlipX(ship.pass.dir > 0)
+          .setPosition(Math.round(x), hz + 2 + Math.round(Math.sin(now / 900) * 0.5))
           .setTint(mixRgb(shade, 0x8090b0, 0.35))
           .setAlpha(0.85);
       } else this.boat.setVisible(false);
@@ -507,10 +511,12 @@ export class SeaView {
         const b = boats[i];
         l.glow.setVisible(!!b);
         l.col.setVisible(!!b);
+        if (!b) l.hull?.setVisible(false);
         if (!b) return;
         const x = Math.round(VW * (1 - b.x / SEA_WIDTH));
         const fl = this.reduced ? 1 : 0.85 + 0.15 * Math.sin(now / 110 + i * 2);
-        l.glow.setPosition(x, hz - 1).setScale(0.9, 0.55).setAlpha(on * 0.8 * fl);
+        l.glow.setPosition(x, hz).setScale(0.9, 0.55).setAlpha(on * 0.8 * fl);
+        l.hull?.setVisible(true).setPosition(x, hz + 2).setTint(mixRgb(shade, 0x6a7894, 0.5)).setAlpha(on);
         l.col.setPosition(x, hz).setScale(0.7, (0.5 + (this.reduced ? 0 : 0.12 * Math.sin(now / 500 + i))) * Math.max(1, (this.VH - hz) / 160)).setAlpha(on * 0.55);
       });
     }

@@ -13,7 +13,7 @@ const SHIP_DEPTH = SEA_DEPTH.shimmer + 6;
 const MAX_SHIPS = 2;
 const MAX_SQUID = 4;
 
-type ShipView = { body: Phaser.GameObjects.Image; wake: Phaser.GameObjects.Image; light: Phaser.GameObjects.Image; slot: number };
+type ShipView = { body: Phaser.GameObjects.Image; wake: Phaser.GameObjects.Image; light: Phaser.GameObjects.Image; refl: Phaser.GameObjects.Image; slot: number };
 type SquidView = { hull: Phaser.GameObjects.Image; lamps: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Image; cols: Phaser.GameObjects.Image[] };
 
 /** 뱃고동 (파일 없이 합성 — 낮게 깔리는 두 음 + 멀리서 들리듯 낮은 통과 필터. 환경음 갈래 볼륨을 따라요) */
@@ -80,7 +80,9 @@ export class SeaShips {
       const wake = s.add.image(0, 0, T.wake).setDepth(SHIP_DEPTH - 1).setVisible(false);
       const body = s.add.image(0, 0, T.ship("tanker")).setOrigin(0.5, 1).setDepth(SHIP_DEPTH).setVisible(false);
       const light = s.add.image(0, 0, T.lampGlow).setBlendMode(Phaser.BlendModes.ADD).setDepth(SHIP_DEPTH + 1).setVisible(false);
-      this.ships.push({ body, wake, light, slot: -1 });
+      // r15 물빛 반사 (물높이 아래로 깨진 짙은 줄 — 배가 물에 잠겨 보여요)
+      const refl = s.add.image(0, 0, T.shipReflect("tanker")).setOrigin(0.5, 0).setDepth(SHIP_DEPTH - 1).setVisible(false);
+      this.ships.push({ body, wake, light, refl, slot: -1 });
     }
     for (let i = 0; i < MAX_SQUID; i++) {
       const cols = [0, 1, 2].map(() => s.add.image(0, 0, T.lightColumn).setOrigin(0.5, 0).setBlendMode(Phaser.BlendModes.ADD).setDepth(SHIP_DEPTH - 2).setVisible(false));
@@ -103,6 +105,7 @@ export class SeaShips {
         v.body.setVisible(false);
         v.wake.setVisible(false);
         v.light.setVisible(false);
+        v.refl.setVisible(false);
         return;
       }
       this.drawShip(v, s.pass, s.x, now, haze, darkness);
@@ -140,7 +143,8 @@ export class SeaShips {
     const key = p.kind === "fishing" ? T.boat : T.ship(p.kind);
     if (v.body.texture.key !== key) v.body.setTexture(key);
     const bob = this.reduced ? 0 : Math.sin(now / 1500 + p.slot) * 0.6;
-    const scale = p.kind === "fishing" ? 0.8 : 1;
+    // r15 사용자: 지도와 같은 도트 크기 (늘이지 않아요)
+    const scale = 1;
     const bodyAlpha = darkness > 0.5 ? 0.55 : 0.78;
     v.body
       .setVisible(true)
@@ -151,6 +155,15 @@ export class SeaShips {
       .setTint(haze)
       .setAlpha(bodyAlpha);
     if (v.slot !== p.slot) v.slot = p.slot;
+    const rk = T.shipReflect(p.kind);
+    if (v.refl.texture.key !== rk) v.refl.setTexture(rk);
+    v.refl
+      .setVisible(true)
+      .setPosition(Math.round(x), Math.round(p.y + bob))
+      .setFlipX(p.dir < 0)
+      .setScale(1, this.reduced ? 1 : 1 + 0.15 * Math.sin(now / 700 + p.slot))
+      .setTint(haze)
+      .setAlpha(bodyAlpha);
     // 고물 뒤로 옅은 물살 자국
     const w = (p.kind === "fishing" ? 34 : Art.SHIP_W[p.kind]) * scale;
     v.wake
@@ -185,6 +198,7 @@ export class SeaShips {
       v.body.destroy();
       v.wake.destroy();
       v.light.destroy();
+      v.refl.destroy();
     }
     for (const v of this.squids) {
       v.hull.destroy();

@@ -17,7 +17,7 @@ afterEach(() => vi.restoreAllMocks());
 const MIN = 60_000;
 const HIGH = Date.UTC(2026, 10, 15, 15, 0); // 11/16 0시 KST
 const ROCK = "f_1324_528"; // 방파제 쪽 바위 곶 (r11: 썰물 18.2분째에 말라요)
-const PIER = "f_824_674"; // 선착장 끝 (늘 물) — r12 끝 데크를 넓히며 자리를 옮겼어요
+const PIER = "f_814_660"; // 선착장 끝 (늘 물) — r12 끝 데크를 넓히며 자리를 옮겼어요
 const acct = () => `t-seatide-${nanoid(8)}`;
 
 describe("갯바위 낚시 물때 (서버)", () => {

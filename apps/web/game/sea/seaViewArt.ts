@@ -418,3 +418,55 @@ export function palmFronds(w: number, h: number): Grid {
   }
   return g;
 }
+
+// ── 11/16 r15 사용자: 바다 장면의 먼 배는 물에 잠겨 있어야 해요 (물 위에 떠 보이지 않게) ──
+// 지도와 같은 도트 크기(장면 1px = 지도 1px)로 작게 그리고 늘이지 않아요. 원점 = 가운데 물높이(waterline).
+// 물 아래는 그리지 않고, 물높이 줄은 한 단계 짙게, 뱃머리 물결 두어 점 + 아래로 깨진 물빛 반사 두 줄.
+export type FarShipKind = "tanker" | "cargo" | "fishing" | "squid";
+export const FAR_SHIP_WL: Record<FarShipKind, number> = { tanker: 7, cargo: 8, fishing: 6, squid: 5 };
+export function farShip(kind: FarShipKind): Grid {
+  const W = kind === "tanker" ? 34 : kind === "cargo" ? 30 : kind === "squid" ? 16 : 14;
+  const wl = FAR_SHIP_WL[kind];
+  const g = new Grid(W, wl + 4);
+  const hull = kind === "tanker" ? 0x55648a : kind === "cargo" ? 0x4a6aa0 : 0xe8eef2;
+  const band = kind === "fishing" || kind === "squid" ? 0x8a9ab0 : 0x2e3a58;
+  // 물 위 옆구리 (뱃머리 쪽이 오른쪽으로 살짝 올라가요)
+  for (let x = 1; x < W - 1; x++) {
+    const bow = x >= W - 4 ? 1 : 0;
+    g.set(x, wl - 2 - bow, mix(hull, 0xffffff, 0.12));
+    g.set(x, wl - 1, hull);
+    g.set(x, wl, band);
+  }
+  if (kind === "tanker") {
+    g.rect(3, 1, 5, wl - 3, 0xeef0f2);
+    g.set(4, 2, 0x8ab0c8);
+    g.set(6, 2, 0x8ab0c8);
+    g.hline(10, W - 6, wl - 3, 0x8a96aa);
+  } else if (kind === "cargo") {
+    g.rect(2, 1, 4, wl - 3, 0xeef0f2);
+    g.set(3, 2, 0x8ab0c8);
+    const box = [0xe8907a, 0x7ab8d8, 0xf0c870, 0x8cc89a];
+    for (let x = 8; x < W - 4; x += 3) {
+      g.rect(x, wl - 4, 2, 2, box[(x >> 1) % 4]);
+      if ((x >> 2) % 2) g.rect(x, wl - 6, 2, 2, box[(x + 1) % 4]);
+    }
+  } else if (kind === "fishing") {
+    g.rect(4, wl - 5, 4, 3, 0xf4f6f8);
+    g.vline(9, 0, wl - 2, 0x8a7a6a);
+    g.set(5, wl - 4, 0x7aa8c0);
+  } else {
+    // 오징어잡이배: 낮은 흰 배 + 기둥 둘 + 등 줄 (등빛은 그리는 쪽이 더해요)
+    g.vline(2, 0, wl - 2, 0x8a8f9a);
+    g.vline(W - 3, 0, wl - 2, 0x8a8f9a);
+    for (let x = 2; x <= W - 3; x++) g.set(x, 1, 0xe8ecd8);
+  }
+  // 뱃머리 물결 · 물빛 반사 (깨진 줄)
+  g.set(W - 1, wl, 0xffffff, 200);
+  g.set(W - 2, wl - 1, 0xffffff, 140);
+  for (let x = 1; x < W - 1; x++) {
+    if (hashU(x, 1, 31) < 0.6) g.set(x, wl + 1, band, 110);
+    if (hashU(x, 2, 31) < 0.35) g.set(x + ((x >> 2) & 1), wl + 2, hull, 70);
+    if (hashU(x, 3, 31) < 0.12) g.set(x, wl + 3, 0xffffff, 90);
+  }
+  return g;
+}

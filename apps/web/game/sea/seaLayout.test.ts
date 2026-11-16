@@ -19,6 +19,10 @@ import {
   seaLotFront,
   seaLotGate,
   SEA_PIER,
+  SEA_PIER_ARM,
+  SEA_PONTOON,
+  SEA_DECKS,
+  SEA_RAIL_CELL,
   SEA_ROAD,
   SEA_JETSKIS,
   SEA_PONTOON_RAMP,
@@ -93,8 +97,10 @@ describe("seaLayout — 걷기", () => {
     }
     // 11/16 갯바위 낚시 자리: 앞(바다 쪽)에서 걸어 닿고, 일어서는 자리(앞 9px)에 설 수 있어요
     for (const f of SEA_FISHING_SPOTS) {
-      expect(reachableNear(f.x, f.y + 9, 14), `fish ${f.id}`).toBe(true);
-      expect(seaStandable(f.x, f.y + 9), `fish stand ${f.id}`).toBe(true);
+      // r15 선착장 낚시 가지 위 자리는 그 자리에서 앉고 일어서요 (앞은 난간)
+      const sy = onSeaDeck(f.x, f.y) ? f.y : f.y + 9;
+      expect(reachableNear(f.x, sy, 14), `fish ${f.id}`).toBe(true);
+      expect(seaStandable(f.x, sy), `fish stand ${f.id}`).toBe(true);
     }
     // 11/16 쉴거리 자리(선베드·돗자리·파라솔)와 바다 보기 벤치·끝 걸터앉기에 걸어서 닿아요
     for (const r of SEA_REST_SEATS) expect(reachableNear(r.x, r.y + 8, 12), r.id).toBe(true);
@@ -127,7 +133,7 @@ describe("seaLayout — 걷기", () => {
   });
   it("갯벌은 물때와 상관없이 늘 걷는다 (바위만 빼고)", () => {
     const inRock = (x: number, y: number) => SEA_ROCKS.some((r) => Math.abs(x - r.x) < r.rx + 6 && Math.abs(y - r.y) < r.ry + 8);
-    for (const x of [300, 420, 520, 760, 900, 1040, 1100])
+    for (const x of [300, 420, 520, 760, 980, 1040, 1100])
       for (let y = SEA_FLAT_Y0 + 2; y <= TIDE_LOW_Y; y += 6) {
         if (inRock(x, y)) continue;
         expect(seaStandable(x, y), `${x},${y}`).toBe(true);
@@ -137,13 +143,33 @@ describe("seaLayout — 걷기", () => {
   it("먼바다는 헤엄칠 수 있고 늘 물속, 낚싯배와 맵 아래 끝은 막혀 있다", () => {
     for (const [x, y] of [
       [300, SEA_DEEP_Y + 20],
-      [900, SEA_DEEP_Y + 30],
+      [1000, SEA_DEEP_Y + 30],
       [560, SEA_DEEP_Y + 40],
     ]) {
       expect(seaStandable(x, y), `${x},${y}`).toBe(true);
       expect(seaWet(x, y, 0), `${x},${y}`).toBe(true);
     }
     expect(seaStandable(300, SEA_HEIGHT - 5)).toBe(false);
+  });
+  // 11/16 r15 사용자: 데크(선착장·끝 데크·낚시 가지·부잔교·다리·방파제) 가장자리에서 물로 걸어 내려가지 못해요 — 둘레가 빈틈없이 막혀 있어요
+  it("데크 가장자리 바로 바깥 물(갯벌 위 포함)은 걸을 수 없어요", () => {
+    const C = SEA_RAIL_CELL;
+    const inDeck = (x: number, y: number) => SEA_DECKS.some((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
+    let edges = 0;
+    for (const r of SEA_DECKS)
+      for (let y = r.y + C / 2; y < r.y + r.h; y += C)
+        for (let x = r.x + C / 2; x < r.x + r.w; x += C)
+          for (const [dx, dy] of [[C, 0], [-C, 0], [0, C], [0, -C]] as const) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (inDeck(nx, ny) || ny - C / 2 < SEA_FLAT_Y0) continue;
+            edges++;
+            expect(seaStandable(nx, ny + 2), `${nx},${ny} next to deck`).toBe(false);
+          }
+    expect(edges).toBeGreaterThan(100);
+    // 데크 안쪽은 걸을 수 있어요 (선착장 몸통 · 낚시 가지 · 다리 · 부잔교 · 끝 데크)
+    for (const [x, y] of [[SEA_PIER.x + 20, SEA_PIER.y + 60], [SEA_PIER_ARM.x + 30, SEA_PIER_ARM.y + 14], [SEA_PONTOON_RAMP.x + 26, SEA_PONTOON_RAMP.y + 20], [SEA_PONTOON.x + 16, SEA_PONTOON.y + 60], [SEA_PIER_END.x + 48, SEA_PIER_END.y + 22]])
+      expect(seaStandable(x, y), `${x},${y}`).toBe(true);
   });
   // 11/16 r14 제트스키 부잔교: 내려서는 자리·다리는 막히지 않고, 다리로 선착장 몸통(→ 백사장)과 이어져요
   it("제트스키 부잔교에서 내려 선착장으로 걸어 나가요", () => {

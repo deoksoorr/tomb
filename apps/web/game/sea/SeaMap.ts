@@ -30,6 +30,7 @@ import {
   SEA_LOT_MAILBOX,
   SEA_PIER,
   SEA_PIER_END,
+  SEA_PIER_ARM,
   SEA_PONTOON,
   SEA_PONTOON_RAMP,
   SEA_REALTY,
@@ -371,6 +372,8 @@ export class SeaMap implements SeaMapApi {
     const T = Art.SEA_TEX;
     this.keep(s.add.image(SEA_PIER.x, SEA_PIER.y, T.pier).setOrigin(0, 0).setDepth(SEA_DEPTH.deck));
     this.keep(s.add.image(SEA_PIER_END.x, SEA_PIER_END.y, T.pierEnd).setOrigin(0, 0).setDepth(SEA_DEPTH.deck + 1));
+    // 11/16 r15 서쪽 낚시 가지 (몸통보다 한 단 아래 depth — 몸통 가장자리가 위에 겹쳐요)
+    this.keep(s.add.image(SEA_PIER_ARM.x, SEA_PIER_ARM.y, T.pierArm).setOrigin(0, 0).setDepth(SEA_DEPTH.deck - 1));
     // 11/16 r14 제트스키 부잔교 (물에 떠서 선착장보다 낮게 — 선착장 판 아래 depth) · 다리
     this.keep(s.add.image(SEA_PONTOON.x - 2, SEA_PONTOON.y, T.pontoon).setOrigin(0, 0).setDepth(SEA_DEPTH.deck - 2));
     this.keep(s.add.image(SEA_PONTOON_RAMP.x, SEA_PONTOON_RAMP.y, T.pontoonRamp).setOrigin(0, 0).setDepth(SEA_DEPTH.deck - 1));
@@ -1342,6 +1345,9 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   // 11/16 r15 먼바다 배 · 오징어잡이배 · 물빛 기둥
   tex(T.ship("tanker"), () => Art.withDetail(Art.tankerArt(), {}));
   tex(T.ship("cargo"), () => Art.withDetail(Art.cargoArt(), {}));
+  tex(T.shipReflect("tanker"), () => Art.shipReflectArt(Art.SHIP_W.tanker));
+  tex(T.shipReflect("cargo"), () => Art.shipReflectArt(Art.SHIP_W.cargo));
+  tex(T.shipReflect("fishing"), () => Art.shipReflectArt(34));
   tex(T.squid, Art.squidArt);
   tex(T.squidLamps, Art.squidLampsArt);
   tex(T.lightColumn, Art.lightColumnArt);
@@ -1353,6 +1359,7 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   tex(T.pier, () => Art.withDetail(Art.pierArt(), { wood: true }));
   tex(T.pierEnd, () => Art.withDetail(Art.pierEndArt(), { wood: true }));
   tex(T.pontoon, () => Art.withDetail(Art.pontoonArt(), { wood: true }));
+  tex(T.pierArm, () => Art.withDetail(Art.pierArmArt(), { wood: true }));
   tex(T.pontoonRamp, () => Art.withDetail(Art.pontoonRampArt(), { wood: true }));
   tex(T.post, () => Art.withDetail(Art.postArt(), { wood: true }));
   tex(T.breakwater, () => Art.withDetail(Art.breakwaterArt(), {}));

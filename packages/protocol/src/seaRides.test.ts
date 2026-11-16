@@ -10,6 +10,12 @@ import {
   SEA_PIER_END,
   SEA_PONTOON,
   SEA_PONTOON_RAMP,
+  SEA_PIER,
+  SEA_PIER_ARM,
+  SEA_SEATS,
+  SEA_FISHING_SPOTS,
+  seaFishBobber,
+  seaFishMinLevel,
   onSeaDeck,
   SEA_RIDES,
   SEA_TUBE_SPEED,
@@ -66,6 +72,26 @@ describe("sea rides", () => {
     expect(seaJetWater(SEA_PIER_END.x + 20, SEA_PIER_END.y + 20)).toBe(false);
     expect(seaRideBlocked(SEA_LIGHTHOUSE.x, 690)).toBe(true);
     expect(seaRideBlocked(1580, 660)).toBe(true);
+  });
+  // 11/16 r15 사용자: 선착장 끝 데크는 걸터앉기만 — 낚시 자리는 몸통 양옆 발판으로, 걸터앉기·부잔교 다리와 40px 넘게 (방파제도 같은 규칙)
+  it("낚시 자리는 걸터앉기·부잔교 다리와 40px 넘게 떨어지고, 선착장 낚시 자리는 늘 물속", () => {
+    const edge = SEA_SEATS.filter((q) => q.furnitureId === "pE1" || q.furnitureId === "pE2");
+    expect(edge.length).toBe(6);
+    const R = SEA_PONTOON_RAMP;
+    for (const f of SEA_FISHING_SPOTS) {
+      for (const q of edge) expect(Math.hypot(f.x - q.x, f.y - q.y), `${f.id} ↔ ${q.id}`).toBeGreaterThanOrEqual(40);
+      const dx = Math.max(R.x - f.x, 0, f.x - (R.x + R.w));
+      const dy = Math.max(R.y - f.y, 0, f.y - (R.y + R.h));
+      expect(Math.hypot(dx, dy), `${f.id} ↔ ramp`).toBeGreaterThanOrEqual(40);
+    }
+    // r15 선착장 서쪽 낚시 가지에 나란히 둘
+    const pier = SEA_FISHING_SPOTS.filter((f) => f.x >= SEA_PIER_ARM.x && f.x <= SEA_PIER_ARM.x + SEA_PIER_ARM.w && f.y >= SEA_PIER_ARM.y && f.y <= SEA_PIER_ARM.y + SEA_PIER_ARM.h);
+    expect(pier.map((f) => f.id).sort()).toEqual(["f_782_660", "f_814_660"]);
+    expect(SEA_PIER.y + SEA_PIER.h).toBeGreaterThan(SEA_PIER_ARM.y + SEA_PIER_ARM.h);
+    for (const f of pier) {
+      expect(seaFishMinLevel(f)).toBeLessThanOrEqual(0);
+      expect(onSeaDeck(seaFishBobber(f).x, seaFishBobber(f).y)).toBe(false);
+    }
   });
   it("속도: 튜브는 걷기보다 느리고, 제트스키는 조각배(46)의 두 배 — 둘 다 서버 속도 검증 안", () => {
     expect(SEA_TUBE_SPEED).toBeLessThan(WALK_SPEED);
