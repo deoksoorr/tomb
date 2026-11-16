@@ -89,7 +89,12 @@ export type GameEvents = {
   /** 카메라 상태. detached=true면 우클릭 드래그로 시점을 옮겨서 내 캐릭터를 따라가지 않는 중 (UI가 "내 캐릭터로" 버튼 표시) */
   "camera:state": { detached: boolean; zoom: number };
   /** 화면 연출 모드 (sticky). campfire = 모닥불에 앉아 카메라가 불멍 구도로 바뀐 상태 → UI는 HUD를 은은하게 줄인다 */
-  "view:mode": { mode: "normal" | "campfire" | "sky" };
+  "view:mode": { mode: "normal" | "campfire" | "sky" | "sea" };
+  /**
+   * 11/16 바닷가 바다 보기 (sticky, null = 숨김): 바다를 볼 수 있는 자리(백사장 벤치·선베드·돗자리·선착장 끝·방파제 끝)에 앉아 있으면
+   * UI가 「바다 보기」(on이면 「돌아가기」) 버튼과 V 단축키를 띄워요
+   */
+  "sea:hud": { on: boolean } | null;
   /**
    * 놀이기구 2 하늘 시점 안내 (sticky, null = 숨김). sky = 관람차·열기구 하늘 시점이라 UI가 HUD를 줄이고 이 안내를 띄운다.
    * place = 지나가는 곳 이름(열기구), hint = 조작 안내, left = 내릴 때까지 남은 초,
@@ -219,6 +224,8 @@ export type GameEvents = {
 export type UiEvents = {
   /** 관람차·열기구 탑승 중 [시점 변경하기] (버튼·V): 2D 장면 ↔ 맵 위 보기 */
   "sky:view": undefined;
+  /** 11/16 바다 보기 켜기·끄기 (버튼·V) */
+  "sea:view": undefined;
   /** 동물원 타는 펫 올라타기·내리기 (모바일·HUD 버튼, 데스크톱은 R) */
   "input:ride": undefined;
   /**
@@ -412,6 +419,7 @@ const STICKY = new Set<keyof AllEvents>([
   "graves:mine",
   "seat:near",
   "view:mode",
+  "sea:hud",
   "audio:settings",
   "queue:status",
   "scene:changed",

@@ -1,4 +1,4 @@
-import { DIR, type DirId } from "./types";
+import { DIR, STATE, type DirId, type StateId } from "./types";
 import type { Furniture, FishingSpot, Seat } from "./world";
 
 // 11/16 세 번째 맵 「달물결 포구」 (1차 바탕: 맵·버스·물때·갈매기). 캠핑장처럼 같은 채널(같은 Channel DO) 안의 따로 된 맵이에요.
@@ -32,8 +32,9 @@ export const SEA_HEIGHT = SEA_ROWS * 16; // 960
  * 3 = 11/16 버스 길을 오른쪽 끝 ~ 정류장 지나 돌림 마당까지만 (나머지는 풀밭·나무) · 유령선 자리를 비우려고 부표 하나를 옮김
  *     · 오두막 터 6을 굽은 골목을 따라 흩어 놓음 (크기·출입구 쪽·울타리가 터마다 달라요) · 갯바위 구간 (방파제 쪽 곶·물가 바위)
  * 4 = 11/16 갯바위 낚시 자리·발판 (물이 차도 마른 자리) · 오두막 벤치를 조금 아래로, 두 자리 간격 20
+ * 5 = 11/16 쉴거리 (백사장 벤치 4·선베드 6·파라솔 돗자리 2·돗자리 3·끝 걸터앉기 2) — 벤치·파라솔 기둥이 막아요
  */
-export const SEA_MAP_VERSION = 4;
+export const SEA_MAP_VERSION = 5;
 
 type Rect = { x: number; y: number; w: number; h: number };
 type Pt = { x: number; y: number };
@@ -456,15 +457,88 @@ export const SEA_GULL_PERCHES: readonly Pt[] = [
 ];
 
 // ── 앉는 자리 (좌석 판정은 서버) ── id는 마을·캠핑장 좌석과 겹치지 않게 모두 "p"로 시작해요
+/** 11/16 선착장 끝·방파제 끝 걸터앉기 (다리를 데크 끝 밖으로 늘어뜨려요 — 그림·충돌 없는 자리) */
+export const SEA_EDGE_SEATS: readonly string[] = ["pE1", "pE2"];
 export const SEA_FURNITURE: readonly Furniture[] = [
   // 정류장 지붕 아래 벤치
   { id: "pB", kind: "bench", x: SEA_BUS_STOP.x, y: SEA_BUS_STOP.y - 8, facing: DIR.down, seatOffsets: [-12, 12] },
   // 11/16 오두막 단지 함께 쓰는 벤치 (5·6번 터 사이 앞, 바다 쪽을 봐요). 두 자리 간격은 캠핑장 벤치처럼 20 (울타리와 겹치지 않게 조금 아래로)
   { id: "pL", kind: "bench", x: 362, y: 384, facing: DIR.down, seatOffsets: [-10, 10] },
+  // 11/16 백사장 바다 보기 벤치 4 (바다를 봐요)
+  ...SEA_SPOTS.benches.map((b, i): Furniture => ({ id: `pS${i + 1}`, kind: "bench", x: b.x, y: b.y, facing: DIR.down, seatOffsets: [-10, 10] })),
+  // 11/16 끝 걸터앉기 (선착장 끝 가운데 · 방파제 끝 데크)
+  { id: "pE1", kind: "chair", x: SEA_SPOTS.pierEnd.x, y: SEA_SPOTS.pierEnd.y, facing: DIR.down, seatOffsets: [0] },
+  { id: "pE2", kind: "chair", x: SEA_SPOTS.breakwaterEnd.x, y: SEA_SPOTS.breakwaterEnd.y, facing: DIR.down, seatOffsets: [0] },
 ];
 export const SEA_SEATS: readonly Seat[] = SEA_FURNITURE.flatMap((f) =>
-  f.seatOffsets.map((dx, i) => ({ id: f.seatOffsets.length > 1 ? `${f.id}-${i}` : f.id, furnitureId: f.id, x: f.x + dx, y: f.y, facing: f.facing as DirId })),
+  f.seatOffsets.map((dx, i) => ({
+    id: f.seatOffsets.length > 1 ? `${f.id}-${i}` : f.id,
+    furnitureId: f.id,
+    x: f.x + dx,
+    y: f.y,
+    facing: f.facing as DirId,
+    // 끝 걸터앉기는 일어서면 데크 쪽(뒤)으로 — 앞은 물이에요
+    ...(SEA_EDGE_SEATS.includes(f.id) ? { standDy: -10 } : {}),
+  })),
 );
+
+/**
+ * 11/16 쉴거리 자리 (의자가 아닌 자리): 선베드(눕기) · 파라솔 돗자리(넷이 둘러앉기) · 돗자리(둘).
+ * 서버 좌석(seaSlots)으로 한 자리에 한 명. 상태: 선베드 = lie (누운 자세), 돗자리 = sitGround (바닥 앉기)
+ *  - group = 같은 선베드·돗자리 (같이 앉은 사람을 바다 장면에 뒷모습으로 그려요)
+ *  - x·y = 자리 발 위치, facing = 앉아서 보는 쪽 (모두 바다 쪽 아래)
+ */
+export type SeaRestKind = "lounger" | "parasol" | "mat";
+export type SeaRestSeat = { id: string; group: string; kind: SeaRestKind; x: number; y: number; facing: DirId; state: StateId };
+/** 11/16 돗자리 셋 (구덩이·길·벤치를 비켜서) */
+export const SEA_MATS: readonly Pt[] = [
+  { x: 548, y: 470 },
+  { x: 760, y: 506 },
+  { x: 1012, y: 512 },
+];
+/** 선베드에 누운 사람 발 위치 (선베드 그림 받침에서 위로) */
+export const SEA_LOUNGER_LIE_DY = -8;
+export const SEA_REST_SEATS: readonly SeaRestSeat[] = [
+  ...SEA_SPOTS.loungers.map((l, i): SeaRestSeat => ({ id: `pZ${i + 1}`, group: `pZ${i + 1}`, kind: "lounger", x: l.x, y: l.y + SEA_LOUNGER_LIE_DY, facing: DIR.down, state: STATE.lie })),
+  // 파라솔 돗자리: 기둥 둘레 넷 (뒷줄 둘·앞줄 둘)
+  ...SEA_SPOTS.parasols.flatMap((p, i) =>
+    [
+      [-11, -5],
+      [11, -5],
+      [-11, 7],
+      [11, 7],
+    ].map(([dx, dy], k): SeaRestSeat => ({ id: `pP${i + 1}-${k}`, group: `pP${i + 1}`, kind: "parasol", x: p.x + dx, y: p.y + dy, facing: DIR.down, state: STATE.sitGround })),
+  ),
+  ...SEA_MATS.flatMap((m, i) =>
+    [-10, 10].map((dx, k): SeaRestSeat => ({ id: `pM${i + 1}-${k}`, group: `pM${i + 1}`, kind: "mat", x: m.x + dx, y: m.y + 2, facing: DIR.down, state: STATE.sitGround })),
+  ),
+];
+const seaRestMap = new Map(SEA_REST_SEATS.map((s) => [s.id, s]));
+export function seaRestSeatById(id: string): SeaRestSeat | undefined {
+  return seaRestMap.get(id);
+}
+
+/** 11/16 바다 보기 장면 종류 (앉은 자리마다) */
+export type SeaViewKind = "beach" | "mat" | "parasol" | "lounger" | "pier" | "breakwater";
+/** 이 자리에 앉아 있으면 볼 수 있는 바다 장면 (null = 바다 보기 없음 — 정류장·오두막 벤치) */
+export function seaViewOfSeat(seatId: string): SeaViewKind | null {
+  const r = seaRestMap.get(seatId);
+  if (r) return r.kind;
+  if (seatId === "pE1") return "pier";
+  if (seatId === "pE2") return "breakwater";
+  if (seatId.startsWith("pS")) return "beach";
+  return null;
+}
+/** 같은 자리 묶음 (벤치·돗자리·선베드) */
+export function seaSeatGroup(seatId: string): string {
+  const r = seaRestMap.get(seatId);
+  if (r) return r.group;
+  return seatSeaFurniture(seatId);
+}
+function seatSeaFurniture(seatId: string): string {
+  const i = seatId.indexOf("-");
+  return i < 0 ? seatId : seatId.slice(0, i);
+}
 const seaSeatMap = new Map(SEA_SEATS.map((s) => [s.id, s]));
 export function seaSeatById(id: string): Seat | undefined {
   return seaSeatMap.get(id);

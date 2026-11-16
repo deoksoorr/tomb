@@ -1,4 +1,4 @@
-import { AVATAR_COLORS, CAMP_ARRIVE, DIR, SEA_ARRIVE, SPAWN, STATE, decodeSnapshot, encodeEvent, encodeMove, seaSeatById, SEA_FISHING_SPOTS, signJoinToken, type C2S, type S2C, type StateId } from "@tomb/protocol";
+import { AVATAR_COLORS, CAMP_ARRIVE, DIR, SEA_ARRIVE, SPAWN, STATE, decodeSnapshot, encodeEvent, encodeMove, seaSeatById, SEA_FISHING_SPOTS, SEA_REST_SEATS, signJoinToken, type C2S, type S2C, type StateId } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import { admit } from "./auth";
 import { ChannelCore, MAP_INTERVAL_MS, type ChannelHost, type JoinTicket } from "./channel";
@@ -137,6 +137,28 @@ describe("sea map (11/16 달물결 포구)", () => {
     const v = join("v", { spawn: { x: f.x, y: f.y } });
     core.message(v, send({ t: "sit", seatId: f.id }), 0);
     expect(events(v)).toContainEqual({ t: "seatDenied", seatId: f.id });
+  });
+
+  it("11/16 rest seats: lounger keeps the lying state, mats keep sitting on the ground, moving releases", () => {
+    const { core, join } = setup();
+    const l = SEA_REST_SEATS.find((r) => r.kind === "lounger")!;
+    const a = join("a", { sea: true, map: "sea", spawn: { x: l.x, y: l.y + 4 } });
+    core.message(a, send({ t: "sit", seatId: l.id }), 0);
+    expect(core.peer(1)).toMatchObject({ seatId: l.id, state: STATE.lie });
+    core.message(a, move(l.x, l.y, STATE.lie), 50);
+    expect(core.peer(1)).toMatchObject({ seatId: l.id, state: STATE.lie });
+    core.message(a, move(l.x, l.y + 12, STATE.walk), 300);
+    expect(core.peer(1)?.seatId ?? null).toBeNull();
+    const m = SEA_REST_SEATS.find((r) => r.kind === "parasol")!;
+    const b = join("b", { sea: true, map: "sea", spawn: { x: m.x, y: m.y + 4 } });
+    core.message(b, send({ t: "sit", seatId: m.id }), 0);
+    expect(core.peer(2)).toMatchObject({ seatId: m.id, state: STATE.sitGround });
+    core.message(b, move(m.x, m.y, STATE.sitGround), 50);
+    expect(core.peer(2)?.seatId).toBe(m.id);
+    // 마을 사람은 바닷가 쉴거리 자리에 앉을 수 없어요
+    const v = join("v", { spawn: { x: m.x, y: m.y } });
+    core.message(v, send({ t: "sit", seatId: m.id }), 0);
+    expect(events(v)).toContainEqual({ t: "seatDenied", seatId: m.id });
   });
 
   it("?m=sea goes to the sea only with the sea claim", async () => {

@@ -37,6 +37,8 @@ import {
   SEA_SAND_Y0,
   SEA_SHELTER_H,
   SEA_SPOTS,
+  SEA_MATS,
+  SEA_EDGE_SEATS,
   SEA_TIDE_POOLS,
   SEA_WIDTH,
   seaColliders,
@@ -241,6 +243,15 @@ function buildTrees(): SeaTree[] {
   return out;
 }
 
+/** 11/16 쉴거리(벤치·선베드·파라솔·돗자리) 둘레에는 조개·풀을 두지 않아요 */
+function nearRest(x: number, y: number, pad: number): boolean {
+  for (const b of SEA_SPOTS.benches) if (Math.abs(x - b.x) < 22 + pad && y > b.y - 12 - pad && y < b.y + pad) return true;
+  for (const l of SEA_SPOTS.loungers) if (Math.abs(x - l.x) < 12 + pad && y > l.y - 44 - pad && y < l.y + pad) return true;
+  for (const p of SEA_SPOTS.parasols) if (Math.abs(x - p.x) < 24 + pad && Math.abs(y - p.y) < 14 + pad) return true;
+  for (const m of SEA_MATS) if (Math.abs(x - m.x) < 24 + pad && Math.abs(y - m.y) < 14 + pad) return true;
+  return false;
+}
+
 function buildDecor(): SeaDecor[] {
   const out: SeaDecor[] = [];
   // 백사장 위쪽 갯그령 (산책로 아래), 조개껍데기·떠밀려 온 나무
@@ -248,6 +259,7 @@ function buildDecor(): SeaDecor[] {
     const x = 16 + Math.floor(hashU(i, 1, 21) * (SEA_WIDTH - 32));
     const y = SEA_SAND_Y0 + 6 + Math.floor(hashU(i, 2, 21) * 28);
     if (Math.abs(x - (SEA_PIER.x + SEA_PIER.w / 2)) < 40) continue;
+    if (nearRest(x, y, 18)) continue;
     out.push({ kind: "beachGrass", x, y, v: i % 3 });
   }
   // 11/16 파스텔 정리: 조개·떠밀려 온 나무를 절반쯤으로 줄여 모래를 깨끗하게 (떠밀려 온 나무는 드물게)
@@ -255,6 +267,7 @@ function buildDecor(): SeaDecor[] {
     if (hashU(i, 9, 23) < 0.5) continue;
     const x = 20 + Math.floor(hashU(i, 3, 23) * (SEA_WIDTH - 40));
     const y = SEA_SAND_Y0 + 44 + Math.floor(hashU(i, 4, 23) * (SEA_FLAT_Y0 - SEA_SAND_Y0 - 50));
+    if (nearRest(x, y, 14)) continue;
     out.push({ kind: hashU(i, 5, 23) < 0.06 ? "drift" : "shell", x, y, v: i % 3 });
   }
   // 11/16 오두막 골목 디딤돌 (가지 골목을 따라) · 터 둘레 갯그령 덤불
@@ -318,8 +331,9 @@ export function seaFurnitureCollider(f: Furniture): Rect {
   if (f.kind === "bench") return { x: f.x - 20, y: f.y - 7, w: 40, h: 7 };
   return { x: f.x - 6, y: f.y - 6, w: 12, h: 6 };
 }
+/** 11/16 끝 걸터앉기는 그림·충돌이 없어요 (데크 끝). 파라솔은 기둥만 막아요 (선베드·돗자리는 낮아서 지나가요) */
 export function seaFurnitureColliders(): Rect[] {
-  return SEA_FURNITURE.map(seaFurnitureCollider);
+  return [...SEA_FURNITURE.filter((f) => !SEA_EDGE_SEATS.includes(f.id)).map(seaFurnitureCollider), ...SEA_SPOTS.parasols.map((p) => ({ x: p.x - 2, y: p.y - 3, w: 4, h: 3 }))];
 }
 
 let standRects: Rect[] | null = null;
@@ -405,10 +419,9 @@ export function zoneLabelAt(name: string): Pt | undefined {
 }
 
 /** 해먹 자리 등 다음 차수 쉴거리 자리는 비어 있어야 해요 (테스트용) */
+// 11/16 벤치·파라솔은 이제 진짜 자리 (막는 상자가 있어요) → 앉는 자리는 SEA_REST_SEATS·SEA_SEATS 테스트에서
 export const SEA_FUTURE_SPOTS: readonly Pt[] = [
-  ...SEA_SPOTS.benches,
   ...SEA_SPOTS.loungers,
-  ...SEA_SPOTS.parasols,
   SEA_SPOTS.swing,
   SEA_SPOTS.bonfire,
   ...SEA_SPOTS.sandcastles,

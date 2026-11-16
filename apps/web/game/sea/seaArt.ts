@@ -133,6 +133,9 @@ export const SEA_TEX = {
   busSign: `${P}busSign`,
   timetable: `${P}timetable`,
   bench: `${P}bench`,
+  mat: (v: number) => `${P}mat${v}`,
+  parasol: (v: number) => `${P}parasol${v}`,
+  lounger: `${P}lounger`,
   market: `${P}market`,
   realty: `${P}realty`,
   kiosk: `${P}kiosk`,
@@ -493,6 +496,82 @@ export function benchArt(): Grid {
   g.rect(36, 13, 2, 3, 0x5a5650);
   softOutline(g);
   shadow(g, 21, 16, 19, 1.4, 56);
+  return g;
+}
+
+// ── 11/16 쉴거리 (해변 벤치는 benchArt) ──
+/** 돗자리 (줄무늬 천, 가장자리 술). v: 0 = 하늘 줄무늬, 1 = 노랑, 2 = 분홍. 원점 = 가운데 아래 */
+export const MAT_W = 44;
+export const MAT_H = 26;
+export function matArt(v: number): Grid {
+  const g = new Grid(MAT_W + 4, MAT_H + 4);
+  const ramp = v === 0 ? RAMP.towel : v === 1 ? RAMP.umbY : RAMP.umbC;
+  for (let y = 2; y < MAT_H + 2; y++)
+    for (let x = 2; x < MAT_W + 2; x++) {
+      const stripe = ((x - 2) >> 3) % 2 === 0;
+      // 아래로 갈수록(앞) 조금 밝게, 줄무늬는 흰 천과 번갈아
+      g.set(x, y, stripe ? ramp[y > MAT_H - 2 ? 2 : y < 6 ? 0 : 1] : y > MAT_H - 2 ? RAMP.wall[2] : RAMP.wall[0]);
+    }
+  // 앞뒤 술
+  for (let x = 3; x < MAT_W + 2; x += 2) {
+    g.set(x, 1, ramp[2]);
+    g.set(x, MAT_H + 2, ramp[2]);
+  }
+  softOutline(g);
+  shadow(g, (MAT_W + 4) / 2, MAT_H + 2, MAT_W / 2, 1.2, 40);
+  return g;
+}
+/** 파라솔 (줄무늬 갓 + 기둥). 갓과 기둥 아래를 따로 그려요 (사람 위로 갓이 덮이게). 원점 = 기둥 밑 */
+export const PARASOL_W = 52;
+export const PARASOL_H = 46;
+export function parasolArt(v: number): Grid {
+  const g = new Grid(PARASOL_W, PARASOL_H);
+  const cx = PARASOL_W / 2;
+  const base = PARASOL_H - 2;
+  // 기둥
+  g.rect(cx - 1, 12, 2, base - 12, RAMP.wall[2]);
+  g.vline(cx - 1, 12, base - 1, RAMP.wall[0]);
+  // 갓: 위가 둥근 넓은 반원, 여덟 쪽 줄무늬 (두 색 번갈아), 아래 끝은 물결 술
+  const ramp = v === 0 ? RAMP.umbC : RAMP.umbY;
+  for (let y = 2; y < 18; y++)
+    for (let x = 1; x < PARASOL_W - 1; x++) {
+      const dx = (x + 0.5 - cx) / (cx - 1);
+      const dy = (y - 15) / 13;
+      if (dx * dx + dy * dy > 1 || y > 15 + (x % 6 < 3 ? 1 : 0)) continue;
+      const seg = Math.floor(((Math.atan2(dy, dx) + Math.PI) / Math.PI) * 8) % 2;
+      const light = 1 - (dx * -0.5 + dy * -0.6 + 0.4);
+      g.set(x, y, seg ? pick(ramp, 0.15 + light * 0.5, x, y) : pick(RAMP.wall, 0.1 + light * 0.4, x, y));
+    }
+  g.rect(cx - 1, 0, 2, 3, RAMP.wall[1]);
+  softOutline(g);
+  shadow(g, cx, base + 1, 4, 1, 60);
+  return g;
+}
+/** 선베드 (뒤가 비스듬히 선 흰 나무 침대, 머리는 위, 발은 바다 쪽 아래). 원점 = 가운데 아래 */
+export const LOUNGER_W = 22;
+export const LOUNGER_H = 44;
+export function loungerArt(): Grid {
+  const g = new Grid(LOUNGER_W, LOUNGER_H);
+  const x0 = 3;
+  const x1 = LOUNGER_W - 4;
+  // 등받이 (위 14줄, 조금 세워져 짧아 보여요)
+  for (let y = 2; y < 15; y++) for (let x = x0; x <= x1; x++) g.set(x, y, (y & 1) === 0 ? RAMP.wall[0] : RAMP.wall[2]);
+  g.hline(x0, x1, 15, RAMP.wood[3]);
+  // 누운 판 (가로 판자)
+  for (let y = 16; y < LOUNGER_H - 6; y++) for (let x = x0; x <= x1; x++) g.set(x, y, (y - 16) % 4 === 3 ? RAMP.wall[2] : RAMP.wall[0]);
+  // 다리
+  for (const [x, y] of [
+    [x0, LOUNGER_H - 6],
+    [x1 - 1, LOUNGER_H - 6],
+    [x0, 15],
+    [x1 - 1, 15],
+  ])
+    g.rect(x, y, 2, 3, RAMP.wood[4]);
+  // 수건 한 장 (하늘빛)
+  g.rect(x0 + 2, 18, x1 - x0 - 3, 10, RAMP.towel[0]);
+  g.hline(x0 + 2, x1 - 2, 27, RAMP.towel[2]);
+  softOutline(g);
+  shadow(g, LOUNGER_W / 2, LOUNGER_H - 3, LOUNGER_W / 2, 1.6, 50);
   return g;
 }
 

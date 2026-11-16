@@ -22,6 +22,9 @@ const FILES: Record<SfxName, string> = {
   clack: "/sfx/clack.mp3",
 };
 
+/** 11/16 바닷가 갈매기 울음 셋 (scripts/gen-gull.mjs가 굽는다, 환경음 갈래) */
+const GULLS = ["/sfx/gull-1.mp3", "/sfx/gull-2.mp3", "/sfx/gull-3.mp3"];
+
 /** 파일마다 따르는 소리 갈래 (없으면 효과음) */
 const FILE_BUS: Partial<Record<SfxName, SoundBus>> = { bubble: "amb" };
 
@@ -42,6 +45,7 @@ export class Sfx extends AudioHost {
   constructor() {
     super("sfx");
     for (const url of Object.values(FILES)) void preloadSound(url);
+    for (const url of GULLS) void preloadSound(url);
   }
 
   protected override onMixChanged(): void {
@@ -185,6 +189,38 @@ export class Sfx extends AudioHost {
   /** 11/16 바닷가 파도 소리 크기 0..1 (바닷가 장면이 매 프레임 — 물가에 가까울수록 크게, 떠나면 0) */
   seaWaves(level: number): void {
     this.sea.set(level);
+  }
+
+  /**
+   * 11/16 갈매기 울음 한 번 (바닷가). gain 0..1 (거리·상황), pan -1(왼쪽)..1(오른쪽). 셋 중 하나를 높낮이를 조금 바꿔 내요.
+   * 환경음 갈래(볼륨·음소거)를 따라요
+   */
+  gull(gain = 0.6, pan = 0): void {
+    const vol = this.busGain("amb");
+    const url = GULLS[Math.floor(Math.random() * GULLS.length)];
+    if (vol <= 0 || this.hidden || soundMissing(url) || this.voices >= MAX_VOICES) return;
+    const ac = this.audio("amb");
+    if (!ac) return;
+    let out: AudioNode = this.output;
+    let pn: StereoPannerNode | null = null;
+    try {
+      pn = ac.createStereoPanner();
+      pn.pan.value = Math.max(-1, Math.min(1, pan)) * 0.8;
+      pn.connect(this.output);
+      out = pn;
+    } catch {
+      pn = null;
+    }
+    const started = playBuffer(ac, out, url, {
+      gain: Math.max(0, Math.min(1, vol * gain * 0.55)),
+      rate: 0.88 + Math.random() * 0.26,
+      onEnded: () => {
+        this.voices = Math.max(0, this.voices - 1);
+        pn?.disconnect();
+      },
+    });
+    if (started) this.voices++;
+    else pn?.disconnect();
   }
 
   /** 14번 그네 삐걱 한 번 (앞으로·뒤로). 그네 진자 한 주기마다 씬이 부른다 */

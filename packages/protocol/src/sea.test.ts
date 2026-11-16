@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAMP_SEATS, MAP_TAG, SEATS, SEA_ARRIVE, SEA_BOARD, SEA_SEATS, inMapBounds, isAwayMap, mapAllowed, mapOf, mapSpawn, seaColliders, seatSlotIn, SEA_HEIGHT, SEA_WIDTH, SEA_LOTS, SEA_SPOTS, SPAWN, seaWet, tideLineY, SEA_GHOST_BERTH, SEA_PIER_END, SEA_FISHING_SPOTS, seaFishingSpotById, seaFishMinLevel, seaFishWet, seaFishWetAt, seaFishDryAt, tideMinute, FISHING_SPOTS, CAMP_FISHING_SPOTS, anyFishingWaterOf, SEA_BUOYS, SEA_ROCKS, onSeaRoad, SEA_ROAD, SEA_BUS_STOP, TIDE_HIGH_Y, TIDE_LOW_Y, SEA_DEEP_Y } from "./index";
+import { CAMP_SEATS, MAP_TAG, SEATS, SEA_ARRIVE, SEA_BOARD, SEA_SEATS, inMapBounds, isAwayMap, mapAllowed, mapOf, mapSpawn, seaColliders, seatSlotIn, SEA_HEIGHT, SEA_WIDTH, SEA_LOTS, SEA_SPOTS, SPAWN, seaWet, tideLineY, SEA_GHOST_BERTH, SEA_PIER_END, SEA_FISHING_SPOTS, SEA_REST_SEATS, seaViewOfSeat, seaSeatGroup, seaSeatById, STATE, seaFishingSpotById, seaFishMinLevel, seaFishWet, seaFishWetAt, seaFishDryAt, tideMinute, FISHING_SPOTS, CAMP_FISHING_SPOTS, anyFishingWaterOf, SEA_BUOYS, SEA_ROCKS, onSeaRoad, SEA_ROAD, SEA_BUS_STOP, TIDE_HIGH_Y, TIDE_LOW_Y, SEA_DEEP_Y } from "./index";
 
 // 11/16 달물결 포구: 세 번째 맵 (protocol sea.ts). 맵 id·허락·좌석·충돌 기본 규칙
 
@@ -93,6 +93,29 @@ describe("sea map (protocol)", () => {
       if (pier) for (let m = 0; m < 180; m += 7) expect(seaFishWet(f, at(m))).toBe(true);
       if (pier) expect(seaFishDryAt(f, at(50))).toBe(Infinity);
     }
+  });
+  it("11/16 쉴거리 자리: 선베드는 눕기(lie), 돗자리·파라솔은 바닥 앉기, 벤치·끝 걸터앉기는 의자 — 모두 바닷가 좌석이에요", () => {
+    expect(SEA_REST_SEATS.filter((r) => r.kind === "lounger")).toHaveLength(6);
+    expect(SEA_REST_SEATS.filter((r) => r.kind === "parasol")).toHaveLength(8);
+    expect(SEA_REST_SEATS.filter((r) => r.kind === "mat").length).toBeGreaterThanOrEqual(4);
+    for (const r of SEA_REST_SEATS) {
+      expect(seatSlotIn("sea", r.id)).toMatchObject({ kind: "seat", state: r.kind === "lounger" ? STATE.lie : STATE.sitGround, furnitureId: r.group });
+      expect(seatSlotIn("village", r.id)).toBeUndefined();
+      expect(seaViewOfSeat(r.id)).toBe(r.kind);
+    }
+    for (const id of ["pS1-0", "pS4-1", "pE1", "pE2"]) expect(seatSlotIn("sea", id)).toMatchObject({ state: STATE.sitChair });
+    expect(seaViewOfSeat("pS2-0")).toBe("beach");
+    expect(seaViewOfSeat("pE1")).toBe("pier");
+    expect(seaViewOfSeat("pE2")).toBe("breakwater");
+    expect(seaViewOfSeat("pB-0")).toBeNull();
+    expect(seaViewOfSeat("pL-1")).toBeNull();
+    expect(seaSeatGroup("pP1-3")).toBe("pP1");
+    expect(seaSeatGroup("pS3-1")).toBe("pS3");
+    // 끝 걸터앉기는 일어서면 데크 쪽(뒤)으로
+    expect(seaSeatById("pE1")?.standDy).toBeLessThan(0);
+    // id가 겹치지 않아요
+    const ids = [...SEA_SEATS.map((s) => s.id), ...SEA_REST_SEATS.map((r) => r.id), ...SEA_FISHING_SPOTS.map((f) => f.id)];
+    expect(new Set(ids).size).toBe(ids.length);
   });
   it("11/16 버스 길은 오른쪽 끝에서 정류장을 지난 돌림 마당까지만", () => {
     expect(onSeaRoad(SEA_WIDTH - 2, SEA_ROAD.y + 20)).toBe(true);

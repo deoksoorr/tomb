@@ -683,7 +683,15 @@ export const FURNITURE: readonly Furniture[] = [
   ...campfireSeats(),
 ];
 
-export type Seat = { id: string; furnitureId: string; x: number; y: number; facing: DirId };
+export type Seat = {
+  id: string;
+  furnitureId: string;
+  x: number;
+  y: number;
+  facing: DirId;
+  /** 11/16 일어설 때 내려설 자리 (앉은 자리에서 y로, 없으면 아래 STAND_OFFSET_Y) — 바닷가 끝 걸터앉기는 뒤(데크 쪽)로 */
+  standDy?: number;
+};
 
 /** 좌석 id: 의자는 furniture id 그대로, 벤치는 `${id}-${i}` */
 export const SEATS: readonly Seat[] = FURNITURE.flatMap((f) =>

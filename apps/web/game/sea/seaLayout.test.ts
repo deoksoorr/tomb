@@ -11,6 +11,8 @@ import {
   SEA_LOTS,
   SEA_DIG_HOLES,
   SEA_FISHING_SPOTS,
+  SEA_REST_SEATS,
+  SEA_MATS,
   seaLotFront,
   seaLotGate,
   SEA_MARKET_STALLS,
@@ -88,6 +90,12 @@ describe("seaLayout — 걷기", () => {
       expect(reachableNear(f.x, f.y + 9, 14), `fish ${f.id}`).toBe(true);
       expect(seaStandable(f.x, f.y + 9), `fish stand ${f.id}`).toBe(true);
     }
+    // 11/16 쉴거리 자리(선베드·돗자리·파라솔)와 바다 보기 벤치·끝 걸터앉기에 걸어서 닿아요
+    for (const r of SEA_REST_SEATS) expect(reachableNear(r.x, r.y + 8, 12), r.id).toBe(true);
+    for (const s of SEA_SEATS) expect(reachableNear(s.x, s.y + (s.standDy ?? 9), 10), s.id).toBe(true);
+    // 쉴거리는 구덩이·길을 막지 않아요 (갯벌 캐기 구멍과 떨어져 있고, 돗자리 위는 걸을 수 있어요)
+    for (const r of SEA_REST_SEATS) for (const h of SEA_DIG_HOLES) expect(Math.hypot(r.x - h.x, r.y - h.y), `${r.id}/${h.x}`).toBeGreaterThan(60);
+    for (const m of SEA_MATS) for (const dx of [-16, 0, 16]) expect(seaStandable(m.x + dx, m.y), `mat ${m.x}`).toBe(true);
     // 11/16 갯벌 캐기 구멍은 바위가 늘어도 다 걸어서 닿아요
     for (const h of SEA_DIG_HOLES) expect(reachableNear(h.x, h.y, 10), `hole ${h.x},${h.y}`).toBe(true);
     expect(reachableNear(SEA_PIER_END.x + SEA_PIER_END.w / 2, SEA_PIER_END.y + SEA_PIER_END.h - 6, 8)).toBe(true);

@@ -72,6 +72,7 @@ import ZooLayer from "@/components/zoo/ZooLayer";
 import WishDialog from "@/components/plaza/WishDialog";
 import LotteryDialog from "@/components/plaza/LotteryDialog";
 import SkyHud from "@/components/sky/SkyHud";
+import SeaViewHud from "@/components/sea/SeaViewHud";
 import UrgentHud from "@/components/forage/UrgentHud";
 import FoodGauge from "@/components/camp/FoodGauge";
 import Telescope from "@/components/rpg/Telescope";
@@ -332,7 +333,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   // 불멍(모닥불) 중에는 HUD를 은은하게
   // 불멍·놀이기구 하늘 시점(관람차·열기구)에서는 HUD를 은은하게 줄인다
   const viewMode = useBridgeValue("view:mode")?.mode;
-  const campfire = viewMode === "campfire" || viewMode === "sky";
+  // 11/16 바닷가 바다 보기 장면도 같이
+  const campfire = viewMode === "campfire" || viewMode === "sky" || viewMode === "sea";
   // 첫 방문 안내: 계정이 아직 안 봤으면 저절로, 안내(ⓘ)에서 다시 보기
   const [tutorialOn, setTutorialOn] = useState<boolean | null>(null);
   const showTutorial = ready && !away && (tutorialOn ?? (me ? !me.tutorialDone : false));
@@ -563,6 +565,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {ready && <ZooLayer />}
       {/* 놀이기구 2: 관람차·열기구 안내 (지나가는 곳·남은 시간) */}
       {ready && <SkyHud />}
+      {/* 11/16 바닷가: 앉아 있을 때 「바다 보기」 (V) */}
+      {ready && <SeaViewHud />}
       {/* 11/15 긴급 의뢰: 시작 알림 · 위쪽 남은 시간·서버 전체 막대 (마을 어디서든) */}
       {ready && <UrgentHud />}
 

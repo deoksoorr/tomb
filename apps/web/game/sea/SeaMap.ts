@@ -11,6 +11,9 @@ import {
   SEA_FLAT_Y0,
   SEA_FOOTBATH,
   SEA_FURNITURE,
+  SEA_EDGE_SEATS,
+  SEA_SPOTS,
+  SEA_MATS,
   SEA_FISHING_LEDGES,
   SEA_GHOST_BERTH,
   SEA_GULL_PERCHES,
@@ -196,6 +199,8 @@ export class SeaMap implements SeaMapApi {
   private nextSprayAt = 0;
   private readonly glints: Mote[] = [];
   private readonly lampGlows: Phaser.GameObjects.Image[] = [];
+  /** 11/16 갈매기가 날아오르며 울 때 (월드 좌표, 놀라서인지) */
+  onGullCall: ((x: number, y: number, scared: boolean) => void) | null = null;
   private readonly rockFoams: { img: Phaser.GameObjects.Image; y: number; phase: number }[] = [];
   private readonly crabs: { img: Phaser.GameObjects.Image; x: number; y: number }[] = [];
   private beacon: Phaser.GameObjects.Image | null = null;
@@ -370,7 +375,14 @@ export class SeaMap implements SeaMapApi {
     for (const [cx, cy, cw, ch] of Art.SHELTER_FRONT) this.prop(T.shelter, SEA_BUS_STOP.x, SEA_BUS_STOP.y).setCrop(cx, cy, cw, ch);
     this.prop(T.busSign, SEA_BUS_SIGN.x, SEA_BUS_SIGN.y);
     this.prop(T.timetable, SEA_BUS_TIMETABLE.x, SEA_BUS_TIMETABLE.y);
-    for (const f of SEA_FURNITURE) this.prop(T.bench, f.x, f.y, f.y);
+    for (const f of SEA_FURNITURE) if (!SEA_EDGE_SEATS.includes(f.id)) this.prop(T.bench, f.x, f.y, f.y);
+    // 11/16 쉴거리: 선베드(누운 사람이 위에 그려지게 받침보다 조금 뒤 depth) · 파라솔 돗자리(돗자리는 바닥, 갓은 앉은 사람 위) · 돗자리
+    for (const l of SEA_SPOTS.loungers) this.prop(T.lounger, l.x, l.y, l.y - 20);
+    SEA_SPOTS.parasols.forEach((p, i) => {
+      this.prop(T.mat(i === 0 ? 2 : 0), p.x, p.y + 10, FLAT + p.y, 2);
+      this.prop(T.parasol(i), p.x, p.y, p.y + 12);
+    });
+    SEA_MATS.forEach((m, i) => this.prop(T.mat(i % 3 === 1 ? 1 : i % 3 === 2 ? 2 : 0), m.x, m.y + 8, FLAT + m.y, 2));
     // 시장·부동산·매점 (현판 글씨는 판 크기에 맞춰 월드 크기 그대로)
     // 11/16 간판 글씨는 판 위에 뜨는 이름표로 (사용자: "간판 글씨가 안 읽혀요" — 늘 같은 화면 크기, 진한 판에 밝은 글씨)
     this.prop(T.market, SEA_MARKET.x, SEA_MARKET.y, SEA_MARKET.y, 3);
@@ -555,6 +567,8 @@ export class SeaMap implements SeaMapApi {
             this.perchTaken[g.perch] = null;
             g.perch = -1;
             g.img.setFrame(5);
+            // 11/16 날아오를 때 가끔 울어요 (SeaScene이 거리로 크기를 정해요)
+            if (Math.random() < (scared ? 0.7 : 0.35)) this.onGullCall?.(g.x, g.y, scared);
             const away = scared ? 1 : 0.6;
             this.newCircle(g, time);
             const ax = g.cx + Math.cos(g.ang) * g.rad;
@@ -1172,6 +1186,9 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   tex(T.stone(1), () => Art.stoneArt(1));
   tex(T.crab, Art.crabArt);
   tex(T.ledge, Art.ledgeArt);
+  for (let v = 0; v < 3; v++) tex(T.mat(v), () => Art.matArt(v));
+  for (let v = 0; v < 2; v++) tex(T.parasol(v), () => Art.parasolArt(v));
+  tex(T.lounger, Art.loungerArt);
   tex(T.lotSign, Art.lotSignArt);
   tex(T.pier, Art.pierArt);
   tex(T.pierEnd, Art.pierEndArt);

@@ -18,7 +18,13 @@ import {
   isPhraseId,
   sanitizeDye,
   seaSeatById,
+  SEA_REST_SEATS,
+  SEA_SEATS,
+  seaSeatGroup,
+  seaViewOfSeat,
   seaWet,
+  type SeaRestSeat,
+  type SeaViewKind,
   tideLineY,
   type ActKind,
   type PeerInfo,
@@ -63,6 +69,8 @@ import { SEA_SCENE, type SeaFriend, type SeaHost, type SeaSceneData } from "./se
 import { seaNeighborSeat, seaPickSeat, SEA_MULTI_SEAT } from "./seaSit";
 import { BIG_SEAT_MAX, BIG_SEAT_TOAST, myBig } from "../camp/foodState";
 import { SeaForage } from "./seaForage";
+import { SeaView, type SeaViewSitter } from "./seaView";
+import { avatarFrame } from "../assets/manifest";
 import type { SeaInteractable } from "./seaTypes";
 import { tideNow, tideNowLevel, tideWarnNow } from "./tideClock";
 
@@ -103,6 +111,13 @@ export class SeaScene extends Phaser.Scene {
   private riding!: Riding;
   /** 11/16 갯바위 낚시 (마을 낚시를 바닷가로) */
   private forage!: SeaForage;
+  /** 11/16 쉴거리 자리 (선베드 눕기·돗자리 바닥 앉기 — 의자 좌석 체계 밖, 서버 좌석은 같아요) */
+  private rest: SeaRestSeat | null = null;
+  /** 11/16 바다 보기 장면 (앉아 있을 때 「바다 보기」·V로 켜고 끄기, 일어나면 꺼져요) */
+  private seaView: SeaView | null = null;
+  private viewOn = false;
+  private viewAt = 0;
+  private viewHud = "";
   private meScreen!: MeScreen;
   /** 11/16 잠수할 때 물 튀김 (마을 Effects 그대로) */
   private fx!: Effects;
@@ -242,6 +257,14 @@ export class SeaScene extends Phaser.Scene {
       act: (kind) => this.doAct(kind),
     });
     this.riding = new Riding({ player: () => this.player, net: () => h.net, remotes: () => this.remotes, toast: (m) => this.toast(m) });
+    this.seaView = new SeaView(this.game, h.reduced);
+    this.seaView.onGullCall = (vol, pan) => this.host.sfx.gull(vol, pan);
+    // 지도의 갈매기가 날아오르며 울면: 가까울수록 크게, 내 쪽 좌우로
+    this.map.onGullCall = (x, y, scared) => {
+      const d = Math.hypot(x - this.player.x, y - this.player.y);
+      if (d > 420 || this.viewOn) return;
+      this.host.sfx.gull((scared ? 0.9 : 0.6) * Math.max(0.15, 1 - d / 420), Math.max(-1, Math.min(1, (x - this.player.x) / 260)));
+    };
     this.forage = new SeaForage({ scene: this, atlas: h.atlas, reduced: h.reduced, colliders: this.map.colliders, player: () => this.player, net: () => h.net, seats: () => this.seats, remotes: () => this.remotes, toast: (m) => this.toast(m), tide: () => this.tide });
     yield;
 
@@ -392,6 +415,11 @@ export class SeaScene extends Phaser.Scene {
       },
       onSeatDenied: (seatId) => {
         if (this.forage.f.seatDenied(seatId)) return;
+        if (this.rest?.id === seatId) {
+          this.leaveRest(this.time.now);
+          this.toast("누가 먼저 앉았어요");
+          return;
+        }
         if (this.player.seat?.id === seatId) this.player.seatDenied(seatId, this.time.now);
       },
       onEmote: () => undefined,
@@ -573,6 +601,8 @@ export class SeaScene extends Phaser.Scene {
     on.push(bridge.on("input:chat", ({ text }) => !this.covered && this.expr.chat(text, this.time.now)));
     on.push(bridge.on("input:mood", ({ mood }) => this.expr.setMood(mood)));
     on.push(bridge.on("input:ride", () => !this.locked && this.riding.toggle()));
+    // 11/16 바다 보기 켜기·끄기 (「바다 보기」 버튼·V)
+    on.push(bridge.on("sea:view", () => this.toggleView()));
     on.push(
       bridge.on("input:act", ({ kind }) => {
         if ((kind === "wave" || kind === "cheer") && !this.covered && !this.locked) this.doAct(kind);
@@ -625,6 +655,7 @@ export class SeaScene extends Phaser.Scene {
     on.push(
       bridge.on("scene:changed", ({ scene }) => {
         this.covered = scene !== "world";
+        if (this.covered) this.leaveView();
         this.scene.setVisible(!this.covered && !this.parked);
         this.rig.enabled = !this.covered;
         if (!this.covered) this.host.hub.setHandler((a) => this.onAction(a));
@@ -663,8 +694,14 @@ export class SeaScene extends Phaser.Scene {
     const mySid = h.net.online ? h.net.mySid : null;
     if (a === "sit") {
       if (moving || pl.inWater) return;
-      if (pl.sitting) pl.stand(now, this.seatReq);
-      else this.sitOn(seaPickSeat(pl.x, pl.y, occupied, mySid), now);
+      if (this.rest) this.leaveRest(now);
+      else if (pl.sitting) pl.stand(now, this.seatReq);
+      else {
+        const seat = seaPickSeat(pl.x, pl.y, occupied, mySid);
+        const r = this.pickRest(pl.x, pl.y);
+        if (r && (!seat || Math.hypot(r.x - pl.x, r.y - pl.y) < Math.hypot(seat.x - pl.x, seat.y - pl.y))) this.useRest(r, now);
+        else this.sitOn(seat, now);
+      }
       return;
     }
     if (a !== "interact") return;
@@ -675,11 +712,24 @@ export class SeaScene extends Phaser.Scene {
       if (diving) this.fx.splash(pl.x, pl.y);
       return;
     }
+    if (this.rest) {
+      this.leaveRest(now);
+      return;
+    }
     if (pl.sitting) {
       pl.stand(now, this.seatReq);
       return;
     }
     const seat = moving ? null : seaPickSeat(pl.x, pl.y, occupied, mySid);
+    // 11/16 쉴거리 자리 (선베드·돗자리)가 좌석보다 가까우면 그것부터
+    const rest = moving ? null : this.pickRest(pl.x, pl.y);
+    if (rest && (!seat || Math.hypot(rest.x - pl.x, rest.y - pl.y) < Math.hypot(seat.x - pl.x, seat.y - pl.y))) {
+      const ob = this.nearestObject(pl.x, pl.y);
+      if (!ob || Math.hypot(ob.x - pl.x, ob.y - pl.y) > Math.hypot(rest.x - pl.x, rest.y - pl.y)) {
+        this.useRest(rest, now);
+        return;
+      }
+    }
     const obj = this.nearestObject(pl.x, pl.y);
     const sd = seat ? Math.hypot(seat.x - pl.x, seat.y - pl.y) : Infinity;
     const od = obj ? Math.hypot(obj.x - pl.x, obj.y - pl.y) : Infinity;
@@ -691,6 +741,133 @@ export class SeaScene extends Phaser.Scene {
     }
     if (obj && od <= sd) this.useObject(obj);
     else if (seat) this.sitOn(seat, now);
+  }
+
+  /** 11/16 가까운 빈 쉴거리 자리 (반지름 18) */
+  private pickRest(x: number, y: number): SeaRestSeat | null {
+    const net = this.host.net;
+    const mine = net.online ? net.mySid : null;
+    let best: SeaRestSeat | null = null;
+    let bd = 18;
+    for (const r of SEA_REST_SEATS) {
+      const d = Math.hypot(r.x - x, r.y - y);
+      if (d >= bd) continue;
+      const owner = net.online ? this.seats.get(r.id) : undefined;
+      if (owner !== undefined && owner !== mine) continue;
+      best = r;
+      bd = d;
+    }
+    return best;
+  }
+
+  /** 11/16 쉴거리 자리에: 선베드는 누워요(lie), 돗자리는 바닥에 앉아요 (서버 좌석을 잡아요) */
+  private useRest(r: SeaRestSeat, now: number): void {
+    const pl = this.player;
+    if (r.kind === "lounger") pl.attach("lie", r.x, r.y, r.y + 2, now, this.seatReq, r.id);
+    else {
+      pl.warp(r.x, r.y, now, this.seatReq);
+      pl.dir = r.facing;
+      pl.sit(null, now, null);
+    }
+    this.rest = r;
+    const net = this.host.net;
+    if (net.online) net.sit(r.id);
+  }
+
+  /** 쉴거리 자리에서 일어나기 (서버 좌석은 다음 MOVE가 놓아요) */
+  private leaveRest(now: number): void {
+    const r = this.rest;
+    if (!r) return;
+    this.rest = null;
+    const pl = this.player;
+    if (r.kind === "lounger") pl.leaveAnchor(now);
+    else if (pl.sitting) pl.stand(now, null);
+  }
+
+  /** 지금 앉은 자리에서 볼 수 있는 바다 장면 (없으면 null) */
+  private viewKindNow(): { kind: SeaViewKind; group: string; mat: number; variant: number } | null {
+    const pl = this.player;
+    const id = this.rest ? this.rest.id : pl.state === "sitChair" && pl.seat ? pl.seat.id : null;
+    if (!id) return null;
+    const kind = seaViewOfSeat(id);
+    if (!kind) return null;
+    const group = seaSeatGroup(id);
+    // 돗자리 색 (SeaMap과 같게): 파라솔 1번 = 분홍 돗자리·산호 갓, 2번 = 하늘 돗자리·노랑 갓, 돗자리 n번 = n % 3
+    const n = Number(group.slice(2)) - 1;
+    const mat = kind === "parasol" ? (n === 0 ? 2 : 0) : kind === "mat" ? n % 3 : 0;
+    return { kind, group, mat, variant: kind === "parasol" ? n : mat };
+  }
+
+  /** 11/16 바다 보기: 앉아 있는 동안 버튼·V를 띄우고, 켜져 있으면 장면을 그려요 (덮는 동안 월드 카메라는 쉬어요) */
+  private updateSeaView(now: number, dt: number, dusk: number): void {
+    const v = this.locked || this.covered ? null : this.viewKindNow();
+    if (!v && this.viewOn) this.leaveView();
+    const hud = v ? (this.viewOn ? "on" : "off") : "";
+    if (hud !== this.viewHud) {
+      this.viewHud = hud;
+      bridge.emit("sea:hud", v ? { on: this.viewOn } : null);
+    }
+    const sv = this.seaView;
+    if (!sv) return;
+    if (this.viewOn && v) {
+      const fade = this.host.reduced ? 1 : Math.min(1, (now - this.viewAt) / 600);
+      sv.frame({ now, dt, levels: this.atmos.levels, hour: this.hour, dusk, tide: this.tide, fade, sitters: this.viewSitters(v.group) });
+      this.cameras.main.setVisible(!(sv.opaque && fade >= 1));
+    } else sv.idle(dt);
+  }
+
+  /**
+   * 11/16 갈매기 울음 (지도 보기): 6~20초마다 가끔, 가끔 두세 번 이어서. 밤엔 거의 없고 비 오면 드물게.
+   * 날아오르는 갈매기는 SeaMap.onGullCall이 따로 (가까우면 크게)
+   */
+  private gullAt = 0;
+  private gullAmbience(now: number, far: number): void {
+    if (this.gullAt === 0) this.gullAt = now + 4000 + Math.random() * 8000;
+    if (now < this.gullAt) return;
+    const L = this.atmos.levels;
+    const night = L.darkness > 0.6;
+    const quiet = night ? 0.1 : L.rain > 0.3 ? 0.45 : 1;
+    this.gullAt = now + (6000 + Math.random() * 14000) / quiet;
+    if (night && Math.random() < 0.7) return;
+    // 물가에서 멀면 조금 작게 (마을 쪽 언덕에서도 들려요)
+    const vol = (0.35 + Math.random() * 0.35) * (0.5 + 0.5 * Math.max(0, 1 - far / 400));
+    const n = Math.random() < 0.25 ? 2 + Math.floor(Math.random() * 2) : 1;
+    const pan = Math.random() * 1.6 - 0.8;
+    for (let i = 0; i < n; i++) this.time.delayedCall(i * (260 + Math.random() * 380), () => !this.cleaned && this.host.sfx.gull(vol * (1 - i * 0.12), pan));
+  }
+
+  /** 「바다 보기」 켜기·끄기 (React 버튼·V) */
+  private toggleView(): void {
+    if (this.cleaned || this.covered || this.locked) return;
+    const v = this.viewKindNow();
+    if (!v || this.viewOn) return this.leaveView();
+    this.viewOn = true;
+    this.viewAt = this.time.now;
+    this.seaView?.begin(v.kind, v.variant, v.mat);
+    bridge.emit("view:mode", { mode: "sea" });
+  }
+
+  private leaveView(): void {
+    if (!this.viewOn) return;
+    this.viewOn = false;
+    this.seaView?.end(this.host.reduced ? 0 : 1);
+    this.cameras.main.setVisible(true);
+    if (bridge.last("view:mode")?.mode === "sea") bridge.emit("view:mode", { mode: "normal" });
+  }
+
+  /** 바다 보기: 같은 자리 묶음에 앉은 사람 (나 포함) — 뒷모습 */
+  private viewSitters(group: string): SeaViewSitter[] {
+    const ids = [...SEA_SEATS.filter((s) => s.furnitureId === group).map((s) => s.id), ...SEA_REST_SEATS.filter((r) => r.group === group).map((r) => r.id)];
+    const out: SeaViewSitter[] = [];
+    const push = (seatId: string | null, key: string, state: "sitChair" | "sitGround") => {
+      const slot = seatId ? ids.indexOf(seatId) : -1;
+      if (slot >= 0) out.push({ key, frame: avatarFrame(state, DIR.up), slot: slot % 2 === 0 && ids.length === 4 ? slot : slot, of: ids.length });
+    };
+    const pl = this.player;
+    const mine = this.rest ? this.rest.id : pl.seat?.id ?? null;
+    push(mine, pl.view.sprite.texture.key, pl.state === "sitChair" ? "sitChair" : "sitGround");
+    for (const r of this.remotes.values()) if (r.seatId && r.visible && !r.away) push(r.seatId, r.view.sprite.texture.key, r.stateId === STATE.sitChair ? "sitChair" : "sitGround");
+    return out;
   }
 
   /** 앉기 (null = 땅바닥). 11/16 2배 넘게 커졌으면 정류장 지붕 밑 벤치(pB)에는 못 앉아요 — 지붕이 얼굴을 가려요 (캠핑장 정류장과 같은 규칙) */
@@ -923,6 +1100,9 @@ export class SeaScene extends Phaser.Scene {
     if (this.tone) this.tone.dusk = dusk;
     this.map.update(now, dt, view, { hour: this.hour, darkness: L.darkness, rain: L.rain, fog: L.fog, tide: this.tide, trend: this.trend, actors: this.actors, dusk });
     this.riding.update();
+    // 11/16 쉴거리 자리: 자세가 풀리면(움직임·일어남) 놓아요
+    if (this.rest && (this.rest.kind === "lounger" ? pl.state !== "lie" : pl.state !== "sitGround" || Math.hypot(pl.x - this.rest.x, pl.y - this.rest.y) > 3)) this.rest = null;
+    this.updateSeaView(now, dt, dusk);
     this.forage.f.update(dt, view, s);
     for (const r of this.remotes.values()) r.update(pnow, view, s);
     this.declutterLabels(now, pnow);
@@ -934,7 +1114,9 @@ export class SeaScene extends Phaser.Scene {
     const wet = pl.state === "swim" || pl.state === "dive" ? pl.state : null;
     this.host.sfx.water(wet, wet !== null && Math.hypot(this.move.ax, this.move.ay) >= DEADZONE_ENTER, pnow);
     const far = Math.max(0, tideLineY(this.tide) - pl.y);
-    this.host.sfx.seaWaves(0.35 + 0.65 * Math.max(0, 1 - far / WAVE_FAR));
+    // 바다 보기 중엔 파도 소리를 크게 · 갈매기 울음 (바다 보기 장면은 지나가는 갈매기가 울어요)
+    this.host.sfx.seaWaves(this.viewOn ? 1 : 0.35 + 0.65 * Math.max(0, 1 - far / WAVE_FAR));
+    if (!this.viewOn) this.gullAmbience(now, far);
     this.fireworks?.update(now, dt, view);
     this.updateLighting(view);
     net.tick(pnow);
@@ -1060,6 +1242,10 @@ export class SeaScene extends Phaser.Scene {
     this.host.sfx.water(null, false, performance.now());
     this.clearRemotes();
     this.expr?.destroy();
+    this.leaveView();
+    this.seaView?.destroy();
+    this.seaView = null;
+    bridge.emit("sea:hud", null);
     this.forage?.f.destroy();
     this.meScreen?.destroy();
     this.rig?.destroy();
