@@ -6,7 +6,7 @@ import { kstDay, kstWeek, loadMe } from "../../store/accounts";
 import type { MemoryAccounts } from "../../store/accounts-memory";
 import { getStyleStore, type MemoryStyle } from "../../store/style";
 import { getTitleStats, type MemoryTitleStats } from "../../store/titleStats";
-import { forgetTitles } from "../../titlesServer";
+import { forgetTitles, wornPerk } from "../../titlesServer";
 import { conditionsAt } from "../rules";
 import { getForageStore, type MemoryForageStore } from "../store";
 import { inMonthShop, isOneTime, monthPreview, monthRewards, nextMonth, QUEST_ALWAYS, QUEST_DAILY, QUEST_REROLLS, QUEST_TITLE_STEPS, questRewardById, STAMP_CAP, type QuestReward } from "./catalog";
@@ -85,6 +85,15 @@ function questOf(board: QuestBoard, key: string): Quest & { done: boolean } {
   return q;
 }
 
+function rand(): number {
+  const a = new Uint32Array(1);
+  crypto.getRandomValues(a);
+  return a[0] / 2 ** 32;
+}
+
+/** 11/16 칭호로 더 받는 도장 수 (chance 확률로 1, r: [0,1) 난수) */
+export const questBonus = (chance: number, r: number): number => (chance > 0 && r < chance ? 1 : 0);
+
 /** 납품: 고른 것(pick)이 의뢰에 맞으면 가방에서 빼고 도장 (원자적) */
 export async function deliverQuest(acct: string, key: string, pick: Record<string, number>, now = Date.now()): Promise<QuestDeliverResponse> {
   const store = questStore();
@@ -96,7 +105,9 @@ export async function deliverQuest(acct: string, key: string, pick: Record<strin
   const bad = pickError(q, items);
   if (bad) throw new HttpError(400, "QUEST_PICK", bad);
   const target = key === "w" ? ({ kind: "week" } as const) : ({ kind: "day", slot: Number(key.slice(1)), reroll: questView(row, board.day, board.week, QUEST_DAILY).reroll } as const);
-  const r = await store.deliver(acct, board.day, board.week, target, q.stamps, STAMP_CAP, items);
+  // 11/16 수집 의뢰 갈래 칭호: 그 확률로 도장 하나 더 (도장 상한 STAMP_CAP은 그대로 — 저장소가 자른다)
+  const bonus = questBonus((await wornPerk(acct, now)).questStamp, rand());
+  const r = await store.deliver(acct, board.day, board.week, target, q.stamps + bonus, STAMP_CAP, items);
   if (r.status !== "ok") {
     if (r.status === "done") throw new HttpError(409, "QUEST_DONE", "이미 끝낸 의뢰예요.");
     if (r.status === "changed") throw new HttpError(409, "QUEST_CHANGED", "의뢰가 바뀌었어요. 의뢰판을 다시 열어 주세요.");
@@ -112,7 +123,7 @@ export async function deliverQuest(acct: string, key: string, pick: Record<strin
     daily: board.daily.map((d) => (d.key === key ? { ...d, done: true } : d)),
     weekly: key === "w" ? { ...board.weekly, done: true } : board.weekly,
   };
-  return { board: next, used: items, earned: q.stamps };
+  return { board: next, used: items, earned: q.stamps + bonus, ...(bonus ? { bonus } : {}) };
 }
 
 /** 오늘 의뢰 하나 바꾸기 (하루 한 번, 무료) */

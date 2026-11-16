@@ -12,6 +12,7 @@ import { champWireFor } from "./champ";
 import { K } from "./keys";
 import { earnBoost } from "./pointEvent";
 import { getStyleStore } from "./style";
+import { rememberWornTitle } from "../wornTitle";
 import type { AccountRecord, AccountStore } from "./types";
 
 // 계정·포인트 공용 도우미 (라우트가 쓴다). 날짜 키는 게임 날짜 YYYYMMDD — 한국 시간 새벽 5시에 바뀐다 (lib/gameDay).
@@ -89,6 +90,8 @@ export async function loadMe(accounts: AccountStore, accountId: string, now = Da
   // 11/16 매니저 (관리자가 임명 — 전용 칭호. 착용 증서에 실려 다른 사람 화면에도)
   // 포인트 배수 이벤트 (오늘 포인트 게이지의 항목·전체 한도, 인스턴스 캐시라 저장소를 거의 묻지 않는다)
   const [a, style, champ, manager, boost] = await Promise.all([accounts.get(accountId, day, now), getStyleStore(accounts).get(accountId), champWireFor(accountId, staff, now).catch(() => 0), isManager(accountId, now), earnBoost(now)]);
+  // 11/16 단 칭호를 기억해 둔다 (칭호 능력 — 계정을 읽지 않는 낚시·채집·사냥 흐름이 Redis를 다시 묻지 않게, lib/wornTitle)
+  rememberWornTitle(accountId, lookOf(a), now);
   return {
     ...toMe(accountId, a, day, now),
     body: shownBody(a.body, staff),

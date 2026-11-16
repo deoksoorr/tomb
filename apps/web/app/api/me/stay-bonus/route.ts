@@ -6,6 +6,7 @@ import { isStaff } from "@/lib/staff";
 import { STAY_BONUS_EVERY_MINUTES } from "@/lib/stayBonus";
 import { getAccounts } from "@/lib/store";
 import { kstDay, loadMe } from "@/lib/store/accounts";
+import { wornPerk } from "@/lib/titlesServer";
 import type { StayBonusResponse } from "@/lib/types";
 
 /**
@@ -19,7 +20,8 @@ export const POST = handler(async (req) => {
   if (await isStaff(visitorId)) throw new HttpError(403, "STAFF_NO_REWARD", "운영자 계정은 접속 시간 보너스를 받지 않아요.");
   const accounts = getAccounts();
   const now = serverNow(visitorId); // 운영은 Date.now() (개발 QA만 시계를 앞당길 수 있다)
-  const r = await accounts.claimStayBonus(visitorId, kstDay(now));
+  // 11/16 출석·접속 갈래 칭호: 구간 보너스 + (하루 상한 145P는 그대로 — lib/stayBonus stayBonusAmounts)
+  const r = await accounts.claimStayBonus(visitorId, kstDay(now), (await wornPerk(visitorId, now)).stayBonus);
   if (!r) throw new HttpError(409, "NOT_YET", `아직 받을 보너스가 없어요. ${STAY_BONUS_EVERY_MINUTES}분 머물 때마다 생겨요.`);
   return json<StayBonusResponse>({ ...r, me: await loadMe(accounts, visitorId, now) });
 });

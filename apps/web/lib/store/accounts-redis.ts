@@ -5,7 +5,7 @@ import { CHAMP_ITEM_IDS, itemById, MAX_DECOR_PER_GRAVE, nameKey, PERMANENT_UNTIL
 import { CALENDAR_TTL_SEC, legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, earnRule, type EarnSource } from "../economy";
 import { earnedBySource } from "../earnGauge";
-import { STAY_BONUS_AMOUNTS, STAY_BONUS_EVERY_TICKS } from "../stayBonus";
+import { stayBonusAmounts, STAY_BONUS_EVERY_TICKS } from "../stayBonus";
 import { STAY_TICK_MINUTES, stayFillDays } from "../stayTime";
 import type { ActivityItem, Grave, GraveDecor } from "../types";
 import { econKeyFor, kstDay, rankValue, WEEK_RANK_TTL_SEC, WEEK_TIE_SCALE, weekOfDay } from "./accounts";
@@ -852,7 +852,7 @@ export class RedisAccounts implements AccountStore {
     return { earned, ticks, points, lifetimePoints, todayEarned, stayTicks };
   }
 
-  async claimStayBonus(id: string, day: string): Promise<{ earned: number; count: number } | null> {
+  async claimStayBonus(id: string, day: string, bonus = 0): Promise<{ earned: number; count: number } | null> {
     const lim = earnLimits(await earnBoost(), "stayBonus");
     const [earned, count] = await this.redis.eval<string[], [number, number]>(
       STAY_BONUS_LUA,
@@ -865,7 +865,8 @@ export class RedisAccounts implements AccountStore {
         String(BALANCE_CAP),
         String(EARN_TTL_SEC),
         String(Date.now()),
-        ...STAY_BONUS_AMOUNTS.map((n) => String(n * lim.points)),
+        // 11/16 단 칭호의 머무르기 보상 + (구간 값만 커지고 하루 상한 dailyMax는 그대로 — credit이 자른다)
+        ...stayBonusAmounts(bonus).map((n) => String(n * lim.points)),
       ],
     );
     return Number(earned) < 0 ? null : { earned: Number(earned), count: Number(count) };
@@ -1159,6 +1160,13 @@ export class RedisAccounts implements AccountStore {
     // 착용 해시의 "title" 필드 (만료 없음 = PERMANENT_UNTIL). 읽기·만료 정리는 다른 착용품과 같다
     if (titleId) await this.redis.hset(K.look(id), { title: `${titleId}|${PERMANENT_UNTIL}` });
     else await this.redis.hdel(K.look(id), "title");
+  }
+
+  async wornTitle(id: string, now: number): Promise<string | null> {
+    const v = await this.redis.hget<string>(K.look(id), "title");
+    if (typeof v !== "string") return null;
+    const [itemId, until] = v.split("|");
+    return itemId && Number(until) > now ? itemId : null;
   }
 
   async unequip(id: string, slot: CosmeticSlot, now: number): Promise<boolean> {

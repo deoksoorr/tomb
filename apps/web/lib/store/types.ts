@@ -241,7 +241,8 @@ export interface AccountStore {
    * 접속 시간 보너스 받기 (원자적): 오늘 머문 기록으로 열린 구간 중 아직 안 받은 구간을 한꺼번에 받는다.
    * 받을 구간이 없으면 null. 받은 구간은 하루 상한(DAILY_EARN_CAP)에 막혀 덜 들어와도 받은 것으로 친다
    */
-  claimStayBonus(id: string, day: string): Promise<{ earned: number; count: number } | null>;
+  /** bonus = 11/16 단 칭호의 머무르기 보상 비율 (구간 보너스 × (1 + bonus), 하루 상한은 그대로 — lib/stayBonus stayBonusAmounts) */
+  claimStayBonus(id: string, day: string, bonus?: number): Promise<{ earned: number; count: number } | null>;
   /**
    * 모은 포인트 상위 limit명 + me의 순위(없으면 null). week(그 주 월요일 YYYYMMDD)를 주면 그 주에 모은 포인트 순위.
    * RankEntry.points = 순위 값
@@ -361,6 +362,8 @@ export interface AccountStore {
    * 입장 토큰·착용 증서로 다른 사람 머리 위에도 보인다. 얻었는지는 호출자(lib/titlesServer)가 확인한다
    */
   setTitle(id: string, titleId: string | null): Promise<void>;
+  /** 11/16 지금 단 칭호 id만 (착용 해시 "title" 칸 HGET 1번 — 칭호 능력 기억이 없을 때만 lib/titlesServer wornTitle이 부른다) */
+  wornTitle(id: string, now: number): Promise<string | null>;
   /**
    * 가방에서 1개 쓰고 묘비에 꾸미기를 놓는다 (만료된 것 정리, 최대 개수를 넘으면 가장 오래된 것 교체).
    * 묘비가 없으면 null, 가방에 없으면 "no_item". 주인 확인은 호출자가 한다

@@ -19,7 +19,7 @@ export const POST = handler(async (req) => {
   await rateLimit("shop", req, visitorId);
   const accounts = getAccounts();
   const item = itemById(itemId)!;
-  // 단 칭호의 상점 할인 (lib/titles TITLE_PERKS — 원가 × (1 − 할인율), 1P 단위 내림)
+  // 단 칭호의 상점 할인 (11/16 패션 갈래 칭호만 — lib/titles PERK_VALUES.look. 원가 × (1 − 할인율), 1P 단위 내림)
   const price = discountedPrice(item.price, await titleDiscount(visitorId));
   const result = await accounts.buy(visitorId, itemId, price, { unique: item.kind === "cosmetic" });
   if (result === "owned") throw new HttpError(409, "ALREADY_OWNED", "이미 가지고 있거나 착용 중이에요.");

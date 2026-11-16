@@ -53,6 +53,30 @@ export function rollSize10(s: Species, rand: number): number {
   return Math.round((lo + (hi - lo) * Math.pow(rand, 1.8)) * 10);
 }
 
+/**
+ * 11/16 낚시 갈래 칭호(큰 물고기 확률): chance 확률로 크기를 한 번 더 굴려 큰 쪽을 갖는다 (rand: [0,1) 난수 함수).
+ * chance가 0이면 예전과 똑같이 한 번만 굴린다 (난수도 하나만 쓴다)
+ */
+export function rollFishSize10(s: Species, rand: () => number, chance = 0): number {
+  const a = rollSize10(s, rand());
+  return chance > 0 && rand() < chance ? Math.max(a, rollSize10(s, rand())) : a;
+}
+
+/** 희귀 이상 (RARITY_LABEL 3 = 희귀) */
+export const RARE_MIN = 3;
+
+/**
+ * 11/16 채집 갈래 칭호(희귀 채집물 확률): chance 확률로 희귀 이상에서만 뽑는다 (그런 게 없으면 보통 뽑기).
+ * chance가 0이면 예전과 똑같이 pickWeighted 한 번 (난수도 하나만 쓴다)
+ */
+export function pickGather(list: readonly Species[], rand: () => number, mult?: (s: Species) => number, chance = 0): Species | null {
+  if (chance > 0 && rand() < chance) {
+    const rare = list.filter((s) => s.rarity >= RARE_MIN);
+    if (rare.length) return pickWeighted(rare, rand(), mult);
+  }
+  return pickWeighted(list, rand(), mult);
+}
+
 export const sizeText = (size10: number) => (size10 > 0 ? `${(size10 / 10).toFixed(1)}cm` : "");
 
 // ── 낚시 ──

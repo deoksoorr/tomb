@@ -318,7 +318,7 @@ export class MemoryAccounts implements AccountStore {
     };
   }
 
-  async claimStayBonus(id: string, day: string): Promise<{ earned: number; count: number } | null> {
+  async claimStayBonus(id: string, day: string, bonus = 0): Promise<{ earned: number; count: number } | null> {
     const boost = await earnBoost();
     const a = this.acct(id);
     this.today(a, day);
@@ -327,7 +327,7 @@ export class MemoryAccounts implements AccountStore {
     if (tiers <= claimed) return null;
     a.earned.set("_bonus", tiers);
     // 하루 전체 한도(800)와 별개: 자기 하루 상한(145P)·지갑 상한만 본다
-    return { earned: this.credit(a, "stayBonus", day, { amount: stayBonusSum(claimed, tiers), boost }, true, true), count: tiers - claimed };
+    return { earned: this.credit(a, "stayBonus", day, { amount: stayBonusSum(claimed, tiers, bonus), boost }, true, true), count: tiers - claimed };
   }
 
   /** value가 null인 계정은 순위에서 뺀다. asc면 작을수록 위. tie = 같은 값일 때 먼저 달성한 순번 (작을수록 위, 주간 랭킹) */
@@ -747,6 +747,11 @@ export class MemoryAccounts implements AccountStore {
     // 칭호는 꾸미기 부위가 아니지만 같은 착용 칸 지도에 "title"로 둔다 (Redis의 착용 해시 필드와 같다)
     if (titleId) a.look.set(TITLE_FIELD, { itemId: titleId, until: PERMANENT_UNTIL });
     else a.look.delete(TITLE_FIELD);
+  }
+
+  async wornTitle(id: string, now: number): Promise<string | null> {
+    const t = this.accts.get(id)?.look.get(TITLE_FIELD);
+    return t && t.until > now ? t.itemId : null;
   }
 
   async unequip(id: string, slot: CosmeticSlot, now: number): Promise<boolean> {

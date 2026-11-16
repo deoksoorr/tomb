@@ -28,10 +28,12 @@ import {
   insectRolls,
   nodeActive,
   nodeWindow,
+  pickGather,
   pickWeighted,
   REEL_MAX_MS,
   REEL_SLACK_MS,
   reelMinMs,
+  rollFishSize10,
   rollSize10,
   verifyBugs,
   insectPoints,
@@ -45,6 +47,7 @@ import { festivalOn } from "./quests/urgentService";
 import { pickSunkenCosmetic, SUNKEN_CHANCE, sunkenFallbackFish, sunkenName } from "./sunken";
 import { grantSunkenCosmetic, ownedPermanent } from "./sunkenGrant";
 import { getForageStore, type GrantItem, type ForageStore, type Snapshot } from "./store";
+import { wornPerk } from "../titlesServer";
 import { signForageTicket, verifyForageTicket, type ForageTicket } from "./ticket";
 import type {
   AutoFishResponse,
@@ -118,13 +121,15 @@ export async function forageState(acct: string, now = Date.now(), store: ForageS
 /** 처음 등록 보상 지급 (lib/forage/dexReward). 지급이 실패해도 잡은 결과는 그대로 — 쌓인 보상은 도감 창에서 받는다 */
 async function dexGainOf(store: ForageStore, acct: string, items: readonly { id: string; isNew: boolean }[], ip: string | undefined, now: number) {
   try {
-    return await payNewDex(store, acct, items, ip, now);
+    return await payNewDex(store, acct, items, ip, now, dexBonusFor(acct, now));
   } catch (e) {
     console.error("[forage] 도감 보상 지급 실패", e);
     return undefined;
   }
 }
 const withDex = (dex: DexGain | undefined) => (dex ? { dex } : {});
+/** 11/16 도감 갈래 칭호의 새 칸 보상 비율 (새로 등록한 게 있을 때만 부른다 — lib/forage/dexReward payNewDex) */
+const dexBonusFor = (acct: string, now: number) => async () => (await wornPerk(acct, now)).dexBonus;
 
 /** 도감 칸 채운 비율 (%, 내림). 별자리 칸도 같은 방식 (완성한 별자리 수) */
 export function dexPercent(dex: Record<string, { n: number }>, cat: DexCat): number {
@@ -164,10 +169,11 @@ export async function castLine(acct: string, spotId: string, now = Date.now(), i
   if (snap.day.fish >= DAILY_CATCH_MAX.fish) throw new HttpError(429, "DAILY_LIMIT", "오늘은 물고기를 충분히 잡았어요. 내일 또 와요.");
   const cond = conditionsAt(now);
   // 11/15 긴급 의뢰 마을 축제: 희귀 이상 조금 더 (축제가 있을 수 있는 때에만 저장소를 본다)
-  const fest = await festivalOn(now);
+  // 11/16 낚시 갈래 칭호: 큰 물고기 확률 (단 칭호는 기억에서 — lib/titlesServer wornPerk)
+  const [fest, perk] = await Promise.all([festivalOn(now), wornPerk(acct, now)]);
   const s = pickWeighted(candidates("fish", water, cond), rand(), (x) => festWeight(x.rarity, fest));
   if (!s) throw new HttpError(409, "NO_FISH", "지금은 아무것도 물지 않아요.");
-  const size = rollSize10(s, rand());
+  const size = rollFishSize10(s, rand, perk.bigFish);
   const power = fishPower(s, size);
   const bite = now + biteDelayMs(rand(), cond);
   const nonce = nanoid(16);
@@ -300,8 +306,9 @@ export async function startGather(acct: string, nodeId: string, now = Date.now()
     const ticket = await signForageTicket(secret, { n: nonce, a: acct, k: "gather", x: n.id, t: now, w, m: 0, s: seed });
     return { ticket, mode: "bugs", kind: "bug", seed, timeLimitSec: BUG_ROUND_SEC, night: phase === "night" || phase === "dusk", phase };
   }
-  const fest = await festivalOn(now);
-  const s = pickWeighted(candidates(NODE_CAT[n.kind], n.where, conditionsAt(now)), rand(), (x) => festWeight(x.rarity, fest));
+  // 11/16 채집 갈래 칭호: 희귀 채집물 확률 (단 칭호는 기억에서 — lib/titlesServer wornPerk)
+  const [fest, perk] = await Promise.all([festivalOn(now), wornPerk(acct, now)]);
+  const s = pickGather(candidates(NODE_CAT[n.kind], n.where, conditionsAt(now)), rand, (x) => festWeight(x.rarity, fest), perk.rareGather);
   if (!s) throw new HttpError(409, "NODE_EMPTY", "지금은 비어 있어요. 조금 뒤에 다시 피어나요.");
   const items = Array.from({ length: gatherCount(n.kind, rand()) }, () => ({ id: s.id, size: 0 }));
   const ms = GATHER_MS[n.kind];
@@ -330,8 +337,10 @@ export async function finishGather(acct: string, token: string, result: BugsResu
     const common = candidates("bug", n.where, cond, (s) => s.rarity <= 2);
     const rarePool = candidates("bug", n.where, cond, (s) => s.rarity >= 3);
     items = [];
+    // 11/16 채집 갈래 칭호: 흔한 곤충 몫 하나하나가 그 확률로 희귀 곤충이 된다
+    const rareUp = r.common > 0 && rarePool.length ? (await wornPerk(acct, now)).rareGather : 0;
     for (let i = 0; i < r.common; i++) {
-      const s = pickWeighted(common, rand());
+      const s = rareUp > 0 && rand() < rareUp ? pickWeighted(rarePool, rand()) : pickWeighted(common, rand());
       if (s) items.push({ id: s.id, size: rollSize10(s, rand()) });
     }
     for (let i = 0; i < r.rare; i++) {

@@ -88,8 +88,8 @@ export class Player {
   /** 11/15 캠핑장 먹거리·마실 거리 효과 (마을·캠핑장 = titleSpeed인 장면에서만 — 집·상점에는 없다) */
   private food: MyFoodView | null = null;
   /**
-   * 단 칭호의 마을 이동 속도 (lib/titles TITLE_PERKS). 마을(WorldScene)만 켠다 — 상점·집·분양 마을 안은 그대로,
-   * 물속·놀이기구·배는 원래 속도 (서버 속도 검증 안: 전설 1.07 × 타는 펫 1.35 < 1.5)
+   * 단 칭호의 마을 이동 속도 (lib/titles GRADE_SPEED + 11/16 1위·명예 갈래 +2%). 마을(WorldScene)만 켠다 — 상점·집·분양 마을 안은 그대로,
+   * 물속·놀이기구·배는 원래 속도 (서버 속도 검증 안: 가장 빠른 1.08 × 타는 펫 1.35 = 1.458 < 1.5, 그리고 MAX_GROUND_MUL로 자른다)
    */
   titleSpeed = false;
   private titleLook: readonly string[] | null = null;

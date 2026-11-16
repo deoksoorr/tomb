@@ -23,7 +23,8 @@ import { getTitleMarks, type TitleMarks } from "./store/titleMarks";
 import { getReferrals } from "./store/referrals";
 import { getTitleStats } from "./store/titleStats";
 import type { EquippedItem } from "./store/types";
-import { earnedTitleIds, titleDef, titlePerk, type TitleFacts, type TitleMetric } from "./titles";
+import { earnedTitleIds, titleDef, titlePerk, type TitleFacts, type TitleMetric, type TitlePerk } from "./titles";
+import { forgetWornTitle, recallWornTitle, rememberWornTitle } from "./wornTitle";
 
 // 칭호를 얻었는지 서버에서 확인 (가방 [칭호] 칸 목록·진행도·착용 검증·새 칭호 알림). 읽기에 실패한 갈래는 "아직 없음"으로 본다
 // (그 갈래 칭호를 잠깐 못 낄 뿐, 이미 낀 칭호는 그대로). 한 번 알린 칭호는 기록이 내려가도 얻은 것으로 남는다.
@@ -59,6 +60,8 @@ const memo = () => (g.__tombTitleFacts ??= new Map());
 export function forgetTitles(accountId?: string): void {
   if (accountId) memo().delete(accountId);
   else memo().clear();
+  // 11/16 칭호 능력용 단 칭호 기억도 (lib/wornTitle — 다음 loadMe·wornTitle이 새로 적는다)
+  forgetWornTitle(accountId);
 }
 
 /** 11/15 신화 칭호 주인을 기억하는 시간 (서버 최초·꼭대기 층 주인·지난주 최고층 1위 — 모든 계정이 같이 쓴다) */
@@ -290,11 +293,30 @@ export async function earnedTitles(accountId: string, now = Date.now()): Promise
   return (await titleStatus(accountId, now)).earned;
 }
 
-/** 단 칭호의 상점 할인율 (칭호 기억에서 — 칭호를 바꾸면 기억을 지우므로 늘 지금 칭호. 읽기에 실패하면 0) */
-export async function titleDiscount(accountId: string, now = Date.now()): Promise<number> {
+/**
+ * 11/16 지금 단 칭호 (칭호 능력용). Redis 명령 아끼기: ① 단 칭호 기억(lib/wornTitle — loadMe가 적는다) ② 칭호 사실 기억 ③ 둘 다 없을 때만
+ * 착용 해시 "title" 칸 HGET 1번 (계정마다 인스턴스당 WORN_TTL_MS에 많아야 한 번). 읽기에 실패하면 칭호 없음
+ */
+export async function wornTitle(accountId: string, now = Date.now()): Promise<string | null> {
+  const known = recallWornTitle(accountId, now);
+  if (known !== undefined) return known;
+  const hit = memo().get(accountId);
+  if (hit && now - hit.at < FACTS_TTL_MS) return hit.equipped;
   try {
-    return titlePerk((await titleStatus(accountId, now)).equipped).discount;
+    const id = await getAccounts().wornTitle(accountId, now);
+    rememberWornTitle(accountId, id ? [id] : [], now);
+    return id;
   } catch {
-    return 0;
+    return null;
   }
+}
+
+/** 11/16 단 칭호의 능력 (서버가 정하는 보상·확률·할인 — lib/titles titlePerk) */
+export async function wornPerk(accountId: string, now = Date.now()): Promise<TitlePerk> {
+  return titlePerk(await wornTitle(accountId, now));
+}
+
+/** 단 칭호의 상점·염색 할인율 (패션 갈래 칭호만 — 읽기에 실패하면 0) */
+export async function titleDiscount(accountId: string, now = Date.now()): Promise<number> {
+  return (await wornPerk(accountId, now)).discount;
 }

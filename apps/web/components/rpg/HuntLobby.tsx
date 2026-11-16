@@ -31,6 +31,7 @@ import type { RpgView, RunReward, RunResult } from "@/lib/rpg/types";
 import type { HotAuto } from "@/lib/rpg/hotbar";
 import { readItem } from "@/lib/storage";
 import { LS } from "@/lib/types";
+import { equippedPerk } from "@/lib/titles";
 import { currentLook } from "../account/items";
 import { resolveAvatar } from "../account/wardrobe";
 import { cx } from "../ui/cx";
@@ -121,6 +122,8 @@ export default function HuntLobby({
   const [view, setView] = useState<RpgView | null>(null);
   // 장비창 가운데 내 아바타 (게임 속 색·몸 + 지금 입은 꾸미기)
   const { me } = useMe();
+  // 11/16 야근 빌딩 갈래 칭호: 층마다 더하는 제한 시간 (초)
+  const towerSec = equippedPerk(me?.equipped).towerSec;
   const [savedColor] = useState(() => readItem(LS.color));
   const [openedAt] = useState(() => Date.now());
   const figure = {
@@ -305,6 +308,8 @@ export default function HuntLobby({
                 pity: res.view.character.sgPity ?? 0,
                 // 11/15 테스트 서버 슈퍼 계정만 (서버가 준 superHunter — 운영 서버에서는 늘 없다)
                 ...(boost && res.view.superHunter && towerBoostAllowed() ? { boost: true } : {}),
+                // 11/16 야근 빌딩 갈래 칭호: 층마다 제한 시간 + (lib/titles towerSec)
+                ...(towerSec > 0 ? { bonusSec: towerSec } : {}),
               },
             }
           : {}),
@@ -638,6 +643,8 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
             <div>
               <strong>+{(r.transcend ? r.transcend.exp : r.exp).toLocaleString("ko-KR")}</strong>
               {r.transcend ? "초월 EXP" : "EXP"}
+              {/* 11/16 사냥 갈래 칭호로 더 받은 몫 */}
+              {!r.transcend && r.titleExp ? <small> (칭호 +{r.titleExp.toLocaleString("ko-KR")})</small> : null}
             </div>
             <div>
               <strong>+{r.points}</strong>포인트

@@ -5,11 +5,12 @@ import { bridge } from "@/game/bridge";
 import type { HouseEditState, HouseTool } from "@/game/housing/events";
 import { errorMessage } from "@/lib/api";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
-import { meStore } from "@/lib/hooks/useMe";
+import { meStore, useMe } from "@/lib/hooks/useMe";
 import { DEFAULT_FLOOR, DEFAULT_FLOOR_NAME, DEFAULT_WALL, DEFAULT_WALL_NAME, FURNITURE, furnitureById, LIKE_WEIGHT, tierById } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
 import { layoutCounts, placedScore, ROTATE_LABEL, rotateMode, styleTag, totalScore } from "@/lib/housing/layout";
 import type { MyHouseResponse, PublicHouse } from "@/lib/housing/types";
+import { discountedPrice, equippedPerk } from "@/lib/titles";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import PixelIcon from "../ui/PixelIcon";
@@ -270,6 +271,9 @@ function EditToolbar({
   const tool = (t: HouseTool) => bridge.emit("house:tool", t);
   const trial = edit.trial;
   const trialDef = trial ? furnitureById(trial.itemId) : undefined;
+  // 11/16 집 갈래 칭호의 가구 할인 (서버가 같은 규칙으로 깎는다)
+  const { me } = useMe();
+  const trialCost = trialDef ? discountedPrice(trialDef.price, equippedPerk(me?.equipped).houseDiscount) : 0;
   // 가방에 남은 게 있으면 사지 않고 바로 놓을 수 있다
   const trialLeft = trial ? (my.inventory[trial.itemId] ?? 0) - (counts[trial.itemId] ?? 0) : 0;
   // R·단추가 하는 일은 고른 가구에 따라: 네 방향으로 돌리기 / 좌우 뒤집기 (상점 미리보기와 같은 구분)
@@ -321,11 +325,11 @@ function EditToolbar({
             <button
               type="button"
               className={cx(ui.button, ui.primary)}
-              disabled={buying || saving || my.points < trialDef.price}
+              disabled={buying || saving || my.points < trialCost}
               onClick={() => onBuyTrial(trialDef.id)}
-              aria-label={`${trialDef.name}, ${trialDef.price}포인트에 사서 이 자리에 놓기`}
+              aria-label={`${trialDef.name}, ${trialCost}포인트에 사서 이 자리에 놓기`}
             >
-              {buying ? "…" : `${fmt(trialDef.price)}P${my.points < trialDef.price ? " · 모자라요" : " · 사서 놓기"}`}
+              {buying ? "…" : `${fmt(trialCost)}P${my.points < trialCost ? " · 모자라요" : " · 사서 놓기"}`}
             </button>
           )}
           <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => tool({ action: "tryEnd", keep: false })}>

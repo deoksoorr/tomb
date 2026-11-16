@@ -4,11 +4,12 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { animFrames } from "@/game/housing/art";
 import { errorMessage } from "@/lib/api";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
-import { meStore } from "@/lib/hooks/useMe";
+import { meStore, useMe } from "@/lib/hooks/useMe";
 import { CATEGORY_LABELS, FURNITURE, MAX_OWN_PER_ITEM, sellPrice, type FurnitureCategory, type FurnitureDef } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
 import { rotateMode } from "@/lib/housing/layout";
 import type { MyHouseResponse } from "@/lib/housing/types";
+import { discountedPrice, equippedPerk } from "@/lib/titles";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
@@ -69,6 +70,10 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
   const phone = useMediaQuery("(max-width: 560px)");
   const coarse = useMediaQuery("(pointer: coarse)");
   const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
+  // 11/16 집 갈래 칭호의 가구 할인 (서버가 같은 규칙으로 깎는다 — lib/titles discountedPrice)
+  const { me } = useMe();
+  const houseDiscount = equippedPerk(me?.equipped).houseDiscount;
+  const cost = (f: FurnitureDef) => discountedPrice(f.price, houseDiscount);
 
   const items = FURNITURE.filter((f) => f.category === cat);
   const shown = items.find((f) => f.id === picked[cat]) ?? items[0];
@@ -142,7 +147,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
   function detail(f: FurnitureDef) {
     const owned = my.inventory[f.id] ?? 0;
     const free = owned - (placed[f.id] ?? 0);
-    const short = my.points < f.price;
+    const short = my.points < cost(f);
     const full = owned >= MAX_OWN_PER_ITEM;
     const once = (!!f.skin || !!f.ext) && owned > 0;
     const r = turn.id === f.id ? turn.r : 0;
@@ -201,9 +206,9 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
               className={cx(ui.button, ui.primary)}
               disabled={pending !== null || short || full || once}
               onClick={() => act(f, false)}
-              aria-label={`${f.name}, ${f.price}포인트에 사기`}
+              aria-label={`${f.name}, ${cost(f)}포인트에 사기${cost(f) < f.price ? ` (칭호 할인, 원래 ${f.price}포인트)` : ""}`}
             >
-              {pending === f.id ? "…" : once ? "가짐" : full ? "더 못 가져요" : `${fmt(f.price)}P${short ? " · 모자라요" : " · 사기"}`}
+              {pending === f.id ? "…" : once ? "가짐" : full ? "더 못 가져요" : `${fmt(cost(f))}P${short ? " · 모자라요" : " · 사기"}`}
             </button>
             {owned > 0 && (
               <button
@@ -273,13 +278,13 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
                     className={styles.fsTile}
                     aria-pressed={shown?.id === f.id}
                     title={`${f.name} — ${f.desc}`}
-                    aria-label={`${f.name}, ${f.price}포인트, 꾸밈 +${f.score}${owned > 0 ? `, ${owned}개 가짐` : ""}`}
+                    aria-label={`${f.name}, ${cost(f)}포인트, 꾸밈 +${f.score}${owned > 0 ? `, ${owned}개 가짐` : ""}`}
                     onClick={() => setPicked((p) => ({ ...p, [cat]: f.id }))}
                   >
                     <FurnitureThumb itemId={f.id} ext={!!f.ext} />
                     <span className={styles.fsTileName}>{f.name}</span>
                     <span className={styles.fsTilePrice}>
-                      {fmt(f.price)}P
+                      {fmt(cost(f))}P
                       {owned > 0 && <span className={styles.fsBadge}>{(f.skin || f.ext) ? "가짐" : `×${owned}`}</span>}
                     </span>
                   </button>

@@ -5,7 +5,7 @@ import { earnPointsOnly, getAccounts, refundPoints, spendPoints } from "../store
 import { kstDay, kstWeek } from "../store/accounts";
 import { capsMult } from "../pointEvent";
 import { earnBoost } from "../store/pointEvent";
-import { forgetTitles, forgetTowerTitles } from "../titlesServer";
+import { forgetTitles, forgetTowerTitles, wornPerk } from "../titlesServer";
 import { earnRule } from "../economy";
 import { env } from "../env";
 import { HttpError } from "../http";
@@ -390,6 +390,9 @@ export async function startRun(
   };
 }
 
+/** 11/16 도감 갈래 칭호의 새 칸 보상 비율 (새로 등록한 게 있을 때만 부른다 — lib/forage/dexReward payNewDex) */
+const dexBonus = (acct: string, now: number) => async () => (await wornPerk(acct, now)).dexBonus;
+
 /** 코디 드롭 하나에 시도해 볼 후보 수 (이미 가진 것이면 다음 것) */
 const COSMETIC_TRIES = 8;
 
@@ -463,7 +466,7 @@ async function registerStars(
     const list = done.map((d) => (keep.includes(d) ? { id: d.id, isNew: isNew[k++] ?? false, perfect: d.perfect } : { id: d.id, isNew: false, perfect: d.perfect, later: true }));
     let dex: DexGain | undefined;
     try {
-      dex = await payNewDex(store, acct, list, ip, now);
+      dex = await payNewDex(store, acct, list, ip, now, dexBonus(acct, now));
     } catch (e) {
       // 못 준 보상은 받을 도감 보상에 남아 도감 창에서 받는다
       console.error("[rpg] 별자리 도감 보상 지급 실패", e);
@@ -495,7 +498,7 @@ export async function recordMobKills(
     const fresh = granted.filter((g) => g.isNew).map((g) => g.id);
     let dex: DexGain | undefined;
     try {
-      dex = await payNewDex(store, acct, granted, ip, now);
+      dex = await payNewDex(store, acct, granted, ip, now, dexBonus(acct, now));
     } catch (e) {
       // 못 준 보상은 받을 도감 보상에 남아 도감 창에서 받는다
       console.error("[rpg] 몬스터 도감 보상 지급 실패", e);
@@ -545,13 +548,16 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   // 11/15 연습 판(그날 초월 구간을 다 쓴 판)은 드롭이 없다
   const vDrops = t.td && testServerEnv() ? t.td : t.tt === "practice" ? [] : v.drops;
   // 11/15 초월 판: 판 EXP × 배율 × 그날 구간 비율 → 초월 EXP (일반 EXP는 레벨 50이라 어차피 버려진다)
-  const tGain = t.tt ? Math.round(v.exp * TRANSCEND_EXP_MUL * RUN_TIERS[t.tt].rate) : 0;
+  // 11/16 사냥 갈래 칭호: 사냥 판 경험치 + (초월 EXP도 이 값에서. 별자리 잇기 판은 그대로, 포인트와는 무관 — lib/titles)
+  const huntExp = t.g === "hunt" ? (await wornPerk(acct, now)).huntExp : 0;
+  const exp = huntExp > 0 ? Math.round(v.exp * (1 + huntExp)) : v.exp;
+  const tGain = t.tt ? Math.round(exp * TRANSCEND_EXP_MUL * RUN_TIERS[t.tt].rate) : 0;
 
   const done = await http(
     store.update(acct, (s) => {
       let cur = s;
       if (result.game === "hunt") cur = consumePotions(cur, result.potionsUsed).state;
-      const g = t.tt ? gainTranscend(cur, tGain) : gainExp(cur, v.exp);
+      const g = t.tt ? gainTranscend(cur, tGain) : gainExp(cur, exp);
       const dr = addDrops(g.state, vDrops);
       return {
         state: { ...dr.state, runs: dr.state.runs + 1 },
@@ -579,7 +585,7 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   const pointsRaw = nightBonus ? Math.round(v.points * STARRY_NIGHT_BONUS) : v.points;
   // 사냥은 사냥 한도, 곤충·별자리는 미니게임 한도 (사냥 화면의 오늘 사냥 포인트(daily.points)에는 사냥 몫만)
   const earned = pointsRaw > 0 ? (await earnPointsOnly(acct, t.g, pointsRaw, ipHash)).earned : 0;
-  const daily = await store.addDaily(acct, kstDay(now), { points: t.g === "hunt" ? earned : 0, runs: 1, exp: v.exp });
+  const daily = await store.addDaily(acct, kstDay(now), { points: t.g === "hunt" ? earned : 0, runs: 1, exp });
   if (t.g === "hunt") await recordEvent("hunt", now); // 47번 방문 분석: 사냥 판 수
   // 49번 랭킹: 사냥터별 최단 클리어·처치 수 (난이도 = 사냥터). 운영자 계정은 순위에 남기지 않는다.
   // 11/15: 자기 레벨이 그 사냥터가 열리는 레벨(티켓의 사냥터 t.z)보다 10 넘게 높으면 랭킹에 아예 넣지 않는다 —
@@ -591,7 +597,8 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   return {
     reward: {
       score: v.score,
-      exp: v.exp,
+      exp,
+      ...(exp > v.exp ? { titleExp: exp - v.exp } : {}),
       pointsRaw,
       points: earned,
       capped: earned < pointsRaw,

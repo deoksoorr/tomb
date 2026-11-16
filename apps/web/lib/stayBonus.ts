@@ -18,9 +18,20 @@ export function stayBonusTiers(stayTicks: number): number {
   return Math.min(Math.floor(Math.max(0, stayTicks) / STAY_BONUS_EVERY_TICKS), STAY_BONUS_AMOUNTS.length);
 }
 
-/** 받은 구간 수(claimed) 다음부터 upTo 구간까지의 보너스 합 */
-export function stayBonusSum(claimed: number, upTo: number): number {
-  return STAY_BONUS_AMOUNTS.slice(Math.max(0, claimed), Math.max(0, upTo)).reduce((n, p) => n + p, 0);
+/**
+ * 11/16 출석·접속 갈래 칭호(머무르기 보상 +): 구간별 보너스 × (1 + bonus)를 1P 단위로 반올림.
+ * 하루 상한(STAY_BONUS_DAILY_MAX = 칭호 없는 7구간 합)은 그대로라 칭호가 있으면 상한에 더 일찍 닿을 뿐 하루에 더 받지는 않는다
+ * (저장소 credit이 항목 하루 상한에서 자른다 — accounts-redis STAY_BONUS_LUA · MemoryAccounts.claimStayBonus)
+ */
+export function stayBonusAmounts(bonus = 0): number[] {
+  return bonus > 0 ? STAY_BONUS_AMOUNTS.map((n) => Math.round(n * (1 + bonus))) : [...STAY_BONUS_AMOUNTS];
+}
+
+/** 받은 구간 수(claimed) 다음부터 upTo 구간까지의 보너스 합 (bonus = 칭호 머무르기 보상 비율, 하루 상한에서 자른다) */
+export function stayBonusSum(claimed: number, upTo: number, bonus = 0): number {
+  const a = stayBonusAmounts(bonus);
+  const upToSum = (k: number) => Math.min(STAY_BONUS_DAILY_MAX, a.slice(0, Math.max(0, k)).reduce((n, p) => n + p, 0));
+  return Math.max(0, upToSum(upTo) - upToSum(claimed));
 }
 
 export type StayBonusState = {
@@ -33,14 +44,17 @@ export type StayBonusState = {
   ticksToNext: number | null;
 };
 
-export function stayBonusState(stayTicks: number, claimed: number): StayBonusState {
+/** bonus = 11/16 단 칭호의 머무르기 보상 비율 (화면 표시용 — 서버가 같은 규칙으로 준다) */
+export function stayBonusState(stayTicks: number, claimed: number, bonus = 0): StayBonusState {
   const tiers = stayBonusTiers(stayTicks);
   const from = Math.min(Math.max(0, claimed), tiers);
   const max = STAY_BONUS_AMOUNTS.length;
+  // 11/16 칭호로 하루 상한에 먼저 닿았으면 남은 구간은 0P라 받을 것도 끝난 것으로
+  const full = bonus > 0 && stayBonusSum(0, claimed, bonus) >= STAY_BONUS_DAILY_MAX;
   return {
-    count: tiers - from,
-    points: stayBonusSum(from, tiers),
-    done: claimed >= max,
+    count: full ? 0 : tiers - from,
+    points: full ? 0 : stayBonusSum(from, tiers, bonus),
+    done: claimed >= max || full,
     ticksToNext: tiers >= max ? null : (tiers + 1) * STAY_BONUS_EVERY_TICKS - stayTicks,
   };
 }

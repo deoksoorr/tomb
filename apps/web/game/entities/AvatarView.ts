@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
 import { champAuraOn, CHAT_SHOW_MS, dexBadgeCats, DIR, isChampBits, isChampValue, isNameSlot, itemById, ridePetOfLook, sanitizeDye, titleOfLook, type ActKind, type DirId, type StateName } from "@tomb/protocol";
 import { hasNameStyle, nameStyleRef } from "@/lib/nameStyle";
-import { headTitle } from "@/lib/titles";
+import { headTitle, titlePerk } from "@/lib/titles";
 import { addCanvasTexture, avatarActAnimKey, avatarAnimKey, avatarFrame, ensureAvatarTexture, TEX } from "../assets/manifest";
 import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, handAnchor, waterSink, type AppearanceChange } from "../sprites/avatar";
@@ -15,6 +15,7 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { wrapChat } from "../logic/chatWrap";
 import { SpeechBubble } from "./SpeechBubble";
 import { SpeedTrail } from "./SpeedTrail";
+import { TitleSparkle } from "./TitleSparkle";
 import { MoodView } from "./MoodView";
 import { StaffFxView } from "./StaffFxView";
 import { ChampBadgeView } from "./ChampBadgeView";
@@ -144,6 +145,8 @@ export class AvatarView {
   private blush: Phaser.GameObjects.Image | null = null;
   /** 11/15 번개 닭꼬치: 걸을 때 몸 뒤로 잔상 */
   private trail: SpeedTrail | null = null;
+  /** 11/16 1위·명예 갈래 칭호의 반짝이는 발자국 (화면 연출만 — 움직임 줄이기면 없음) */
+  private titleSparkle: TitleSparkle | null = null;
   /** 커진 몸이 뒤 사람을 가리면 1 → SEE_THRU_ALPHA (부드럽게) */
   private seeThru = 1;
   private seeThruAt = 0;
@@ -589,6 +592,13 @@ export class AvatarView {
    *  11/15 운영자 표시면 낀 칭호 대신 운영자 전용 「운영자」 (한 줄만 — 착용 목록이 아니라 서명된 staff 표시로만 뜬다) */
   private setTitle(id: string | null): void {
     this.wornTitle = id;
+    // 11/16 1위·명예 갈래 칭호: 반짝이는 발자국 (매니저 전용 칭호는 능력이 없어 매니저 표시와 상관없다)
+    const spark = !this.reduced && titlePerk(id).sparkle;
+    if (spark) this.titleSparkle ??= new TitleSparkle(this.scene);
+    else if (this.titleSparkle) {
+      this.titleSparkle.destroy();
+      this.titleSparkle = null;
+    }
     const t = headTitle(id, !!this.staffFx, this.mgr);
     if (t === "staff") {
       (this.titleView ??= new TitleView(this.scene, this.atlas, this.label.depth, this.reduced)).setStaff();
@@ -981,6 +991,7 @@ export class AvatarView {
       if (this.blush.visible !== on) this.blush.setVisible(on);
     }
     this.trail?.sync(now, s, (st === "walk" || st === "run") && !this.mountedIn(st), vis, this.fade, this.big);
+    this.titleSparkle?.sync(now, s.x, s.y, s.depth, (st === "walk" || st === "run") && !this.mountedIn(st), vis, this.fade);
     const bx = s.x - this.poseDx;
     const fa = this.fade;
     // 11/15 크게 커진 몸 바로 뒤(위쪽)에 다른 사람이 서 있으면 몸을 반투명하게 → 가려진 사람이 보인다
@@ -1391,6 +1402,8 @@ export class AvatarView {
     this.bigGlow = null;
     this.trail?.destroy();
     this.trail = null;
+    this.titleSparkle?.destroy();
+    this.titleSparkle = null;
     this.blush?.destroy();
     this.blush = null;
     this.sprite.destroy();

@@ -132,7 +132,7 @@ describe("11/16 매니저 전용 칭호", () => {
   it("이름·등급: 운영자 칭호와 다른 특별 등급, 칭호 능력 없음, 매니저 표시 없이는 머리 위에 뜨지 않는다", () => {
     const t = titleDef(MANAGER_TITLE_ID)!;
     expect(t).toMatchObject({ name: MANAGER_TITLE.name, grade: "manager", manager: true, transient: true });
-    expect(titlePerk(MANAGER_TITLE_ID)).toEqual({ speed: 1, discount: 0 });
+    expect(titlePerk(MANAGER_TITLE_ID)).toMatchObject({ group: "none", speed: 1, discount: 0 });
     expect(headTitle(MANAGER_TITLE_ID, false, true)).toBe(t);
     expect(headTitle(MANAGER_TITLE_ID, false, false)).toBeNull();
     expect(headTitle(MANAGER_TITLE_ID, true, true)).toBe("staff");

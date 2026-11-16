@@ -84,7 +84,7 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
             · 얻은 칭호 {earned ? total : "–"}/{LISTED.length}
             {staff && " · 운영자는 모든 칭호를 쓸 수 있어요"}
           </span>
-          {cur && perkText(cur.grade) && <span className={styles.perkNow}>칭호 능력: {perkText(cur.grade)}</span>}
+          {cur && perkText(cur) && <span className={styles.perkNow}>칭호 능력: {perkText(cur)}</span>}
         </p>
         {cur && (
           <button type="button" className={cx(ui.button, styles.off)} disabled={pending} onClick={() => toggle(cur)}>
@@ -164,7 +164,9 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
                       aria-busy={loading || undefined}
                       aria-pressed={on}
                       disabled={!got || pending}
-                      aria-label={`${t.name}, ${loading ? "불러오는 중" : got ? (on ? "착용 중, 누르면 빼기" : "얻은 칭호, 누르면 달기") : `아직 못 얻음. ${t.how}`}`}
+                      aria-label={`${t.name}, ${loading ? "불러오는 중" : got ? (on ? "착용 중, 누르면 빼기" : "얻은 칭호, 누르면 달기") : `아직 못 얻음. ${t.how}`}${perkText(t) ? `. 칭호 능력 ${perkText(t)}` : ""}`}
+                      // 11/16 칭호 능력 전체 문구 (카드에는 짧게)
+                      title={perkText(t) || undefined}
                       onClick={() => toggle(t)}
                     >
                       <span className={styles.top}>
@@ -184,7 +186,7 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
                       {/* 11/15 개척자: 번호·달성 날짜 */}
                       {got && t.metric === "pioneer" && progress.pioneer ? <span className={styles.progress}>{pioneerText(progress.pioneer, progress.pioneerAt)}</span> : null}
                       {staff && <span className={styles.progress}>운영자</span>}
-                      {perkShort(t.grade) && <span className={styles.perk}>{perkShort(t.grade)}</span>}
+                      {perkShort(t) && <span className={styles.perk}>{perkShort(t)}</span>}
                     </button>
                   </li>
                 );
