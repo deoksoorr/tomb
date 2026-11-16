@@ -1,6 +1,6 @@
 // 서버·클라이언트가 공유하는 상수. 용량 관련 값은 실제로는 Worker 환경변수로 덮어쓴다(기본값만 여기 둔다).
 
-export const DEFAULT_CHANNEL_CAPACITY = 40;
+export const DEFAULT_CHANNEL_CAPACITY = 60;
 export const DEFAULT_MAX_CHANNELS = 10;
 /**
  * 평소 열어 두는 채널 수 (1..BASE). 그 위 채널은 열린 채널이 모두 혼잡(AUTO_OPEN_THRESHOLD)하면 하나씩 열리고,
