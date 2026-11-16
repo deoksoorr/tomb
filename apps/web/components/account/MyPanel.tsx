@@ -23,6 +23,7 @@ import styles from "./MyPanel.module.css";
 import MyHouseLine from "../housing/MyHouseLine";
 import { isOnline, useFriends } from "@/lib/hooks/useFriends";
 import PixelIcon from "../ui/PixelIcon";
+import ReferralRewardTable from "./ReferralRewardTable";
 import ReferralSection from "./ReferralSection";
 import type { PublicHouse } from "@/lib/housing/types";
 
@@ -128,6 +129,9 @@ export default function MyPanel({
         </section>
 
         <EarnGauge me={me} />
+
+        {/* 11/16 추천 보상 공식 (운영자 계정은 추천에 참여하지 않는다) */}
+        {!me.staff && <ReferralRewardTable />}
 
         <NameSection me={me} googleLinked={!!googleStatus?.linked} />
 
