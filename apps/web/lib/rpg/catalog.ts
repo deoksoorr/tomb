@@ -238,11 +238,13 @@ export type DifficultyDef = {
   dropMaxLevel: number;
 };
 
+// 11/17 지옥 EXP 배율 11 → 4: 지옥 사냥터 한 판이 열리는 레벨에서 약 3레벨씩 올려 줬다(40→50을 3~4판에). 이제 한 판 약 1레벨 —
+// 보통·어려움과 흐름을 맞추고, 레벨 30에 어려움(Lv.22 사냥터)을 도는 것보다 조금 낫게. 초월 EXP는 endgame TRANSCEND_EXP_MUL로 그대로 맞춘다
 export const DIFFS: Record<Difficulty, DifficultyDef> = {
   easy: { id: "easy", name: "쉬움", recLevel: 1, monsterLevel: 3, hpMul: 1, atkMul: 1, defMul: 1, expMul: 1, huntPoints: 20, miniPoints: 12, miniExp: 40, dropChance: 0.04, bossDropChance: 0.15, cosmeticChance: 0.006, dropMaxLevel: 8 },
   normal: { id: "normal", name: "보통", recLevel: 8, monsterLevel: 12, hpMul: 2.6, atkMul: 2.3, defMul: 2.5, expMul: 2.6, huntPoints: 35, miniPoints: 20, miniExp: 90, dropChance: 0.05, bossDropChance: 0.135, cosmeticChance: 0.009, dropMaxLevel: 18 },
   hard: { id: "hard", name: "어려움", recLevel: 18, monsterLevel: 24, hpMul: 6, atkMul: 4.6, defMul: 5, expMul: 5.5, huntPoints: 55, miniPoints: 30, miniExp: 180, dropChance: 0.06, bossDropChance: 0.12, cosmeticChance: 0.012, dropMaxLevel: 30 },
-  hell: { id: "hell", name: "지옥", recLevel: 30, monsterLevel: 38, hpMul: 13, atkMul: 8.5, defMul: 9, expMul: 11, huntPoints: 80, miniPoints: 45, miniExp: 320, dropChance: 0.07, bossDropChance: 0.1, cosmeticChance: 0.015, dropMaxLevel: 50 },
+  hell: { id: "hell", name: "지옥", recLevel: 30, monsterLevel: 38, hpMul: 13, atkMul: 8.5, defMul: 9, expMul: 4, huntPoints: 80, miniPoints: 45, miniExp: 320, dropChance: 0.07, bossDropChance: 0.1, cosmeticChance: 0.015, dropMaxLevel: 50 },
 };
 
 // ── 몬스터 ──
