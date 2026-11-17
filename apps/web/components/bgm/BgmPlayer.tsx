@@ -34,6 +34,16 @@ export default function BgmPlayer({ compact = false }: { compact?: boolean }) {
 
   const transport = (
     <>
+      {/* 11/17 이전 곡 (재생 단추 앞) */}
+      <button
+        type="button"
+        className={cx(ui.button, ui.quiet, ui.icon)}
+        onClick={() => bgm.prev()}
+        disabled={!state.hasPrev}
+        aria-label="이전 곡"
+      >
+        <PixelIcon name="prev" />
+      </button>
       <button
         type="button"
         className={cx(ui.button, ui.quiet, ui.icon)}
