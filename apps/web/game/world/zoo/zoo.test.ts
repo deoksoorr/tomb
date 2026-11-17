@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DIR, FURNITURE, SPAWN, ZOO, ZOO_EAST_GATE, ZOO_GATE, ZOOKEEPER, ZOO_PETS, isRideablePet } from "@tomb/protocol";
+import { DIR, FURNITURE, SPAWN, ZOO, ZOO_EAST_GATE, ZOO_GATE, ZOOKEEPER, ZOO_PETS, isRideablePet, type DirId } from "@tomb/protocol";
 import { SHOP_COSMETICS, entryStatus, wearAction } from "@/components/account/wardrobe";
 import { COSMETIC_FX, CosmeticFxSim, FX_ART, fxIconGrid, mountOf, petPoseFrame, riderLift, UNKNOWN_PET_STANDIN, type FxCmd, type FxInput } from "../../sprites/cosmeticFx";
 import { MOUNT_FRAMES, MOUNT_H, MOUNT_W, mountFrames } from "../../sprites/mountArt";
@@ -294,6 +294,22 @@ describe("11/17 새 펫: 멈춤·귀여운 동작·옛 화면 호환", () => {
     }
     for (const f of spec.pose.act) expect(seen.has(f), String(f)).toBe(true);
     expect(seen.has(spec.pose.idle[0])).toBe(true);
+  });
+
+  it("11/17 타는 펫은 주인을 따라 위아래로 걸으면 앞·뒷모습(몸+덧그림), 옆으로 걸으면 옆모습 · 옆모습 그림만 있는 펫은 늘 옆모습", () => {
+    const frames = (id: string, dir: DirId) => {
+      const sim = new CosmeticFxSim();
+      sim.setLook([id]);
+      const out: FxCmd[] = [];
+      sim.step(base({ moving: true, dir }), out);
+      out.length = 0;
+      sim.step(base({ moving: true, dir, now: 1100 }), out);
+      return out.filter((c) => c.layer === "body").map((c) => c.frame);
+    };
+    expect(frames("pet_hound", DIR.down).map((f) => Math.floor(f / 2) * 2)).toEqual([2, 6]);
+    expect(frames("pet_hound", DIR.up).map((f) => Math.floor(f / 2) * 2)).toEqual([4, 8]);
+    expect(frames("pet_hound", DIR.right).every((f) => f < 2)).toBe(true);
+    expect(frames("pet_cat", DIR.down).every((f) => f < 2)).toBe(true);
   });
 
   it("11/17 탈것에 타 있으면(petOff) 걷는 펫도 타는 펫도 안 그리고, 내리면 바로 옆에서 다시 나와요", () => {

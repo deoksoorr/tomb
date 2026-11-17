@@ -1724,6 +1724,15 @@ export class CosmeticFxSim {
       out.push(cmd(s.glowArt ?? "wispGlow", s.glowFrame ?? 0, px + (flip ? -1 : 1) * s.glowAt[0], py + sink - s.glowAt[1], { alpha: pulse * (sink ? 0.5 : 1), layer: "light", depth: 0 }));
     } else if (s.glow) out.push(cmd("wispGlow", 0, px, py - 5, { oy: 0.5, alpha: 0.8, layer: "light", depth: 0 }));
     // 잠긴 만큼 내려 그리고 그 줄 수만큼 아래를 잘라 낸다 → 수면(py) 위로 머리·등만
+    // 11/17 타는 펫(옆·앞·뒤 그림이 다 있는 것)은 주인을 따라 위아래로 걸을 때 앞·뒷모습으로 (몸 + 머리·엉덩이 덧그림 — 탈 때와 같은 두 장).
+    // 다른 펫은 옆모습 그림만 있어 그대로 옆으로 걷는다
+    if (s.mount && walking && !wet && (f.dir === DIR.down || f.dir === DIR.up)) {
+      const base = (f.dir === DIR.down ? 2 : 4) + (frame % 2);
+      const over = (f.dir === DIR.down ? 6 : 8) + (frame % 2);
+      out.push(cmd(s.art, base, px, py, { oy: 1, alpha: s.alpha ?? 1, layer: "body", depth: this.petY }));
+      out.push(cmd(s.art, over, px, py, { oy: 1, alpha: s.alpha ?? 1, layer: "body", depth: this.petY + 0.01 }));
+      return;
+    }
     out.push(cmd(s.art, frame, px, py + sink, { oy: 1, sx, sy, flip, alpha: s.alpha ?? 1, layer: "body", depth: this.petY, ...(sink ? { crop: sink } : {}) }));
   }
 

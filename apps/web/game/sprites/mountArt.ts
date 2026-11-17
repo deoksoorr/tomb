@@ -914,9 +914,20 @@ function sleighFrontOver(g: Grid, f: number): void {
   g.set(23, 12, r.dark);
   for (const [x, y] of [[18, 10], [17, 9], [18, 9], [16, 8], [22, 10], [23, 9], [22, 9], [24, 8]] as const) g.set(x, y, r.antler);
 }
-/** 뒷모습 (탄 사람 뒤): 앞코 · 루돌프에게 이어진 가슴끈 둘 (루돌프는 탄 사람에 가려 끈만 보인다) */
+/** 뒷모습 (탄 사람 뒤): 앞코 · 루돌프에게 이어진 가슴끈 둘. 끈 끝 위쪽에 멀리 루돌프 뒷모습 — 탈 때는 탄 사람에 가리고, 11/17 안 타고 따라올 때(위로 걷기) 보인다 */
 function sleighBack(g: Grid): void {
   const c = SL;
+  const r = RD;
+  // 루돌프 뒷모습 (엉덩이·흰 꼬리·뒷다리, 머리 위로 뿔 끝)
+  for (const x of [18, 22]) {
+    g.vline(x, 5, 7, r.dark);
+    g.set(x, 8, r.hoof);
+  }
+  g.ellipse(20, 3.4, 3.2, 2.4, r.body);
+  g.recolor((x, y) => y <= 1 && x >= 18 && x <= 22, r.back);
+  g.set(20, 3, r.belly);
+  g.set(20, 4, r.belly);
+  for (const [x, y] of [[17, 0], [16, 0], [23, 0], [24, 0]] as const) g.set(x, y, r.antler);
   for (let i = 0; i <= 8; i++) {
     g.set(13 + Math.round(i * 0.5), 8 - i, c.strap);
     g.set(27 - Math.round(i * 0.5), 8 - i, c.strap);
