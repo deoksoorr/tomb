@@ -27,10 +27,17 @@ export function stayBonusAmounts(bonus = 0): number[] {
   return bonus > 0 ? STAY_BONUS_AMOUNTS.map((n) => Math.round(n * (1 + bonus))) : [...STAY_BONUS_AMOUNTS];
 }
 
-/** 받은 구간 수(claimed) 다음부터 upTo 구간까지의 보너스 합 (bonus = 칭호 머무르기 보상 비율, 하루 상한에서 자른다) */
-export function stayBonusSum(claimed: number, upTo: number, bonus = 0): number {
-  const a = stayBonusAmounts(bonus);
-  const upToSum = (k: number) => Math.min(STAY_BONUS_DAILY_MAX, a.slice(0, Math.max(0, k)).reduce((n, p) => n + p, 0));
+/**
+ * 11/17 지난주 포인트왕 혜택 (화면 표시용 — 서버는 lib/champPerks로 같은 계산): m100 = 구간 값에 곱하는 배수 (100 = 1배, 150 = 1.5배, 구간마다 반올림),
+ * cap = 하루 상한. 없으면 그대로
+ */
+export type StayBonusChamp = { m100: number; cap: number };
+
+/** 받은 구간 수(claimed) 다음부터 upTo 구간까지의 보너스 합 (bonus = 칭호 머무르기 보상 비율, 하루 상한에서 자른다. champ = 포인트왕 배수·상한) */
+export function stayBonusSum(claimed: number, upTo: number, bonus = 0, champ?: StayBonusChamp): number {
+  const a = stayBonusAmounts(bonus).map((n) => (champ ? Math.floor((n * champ.m100 + 50) / 100) : n));
+  const cap = champ?.cap ?? STAY_BONUS_DAILY_MAX;
+  const upToSum = (k: number) => Math.min(cap, a.slice(0, Math.max(0, k)).reduce((n, p) => n + p, 0));
   return Math.max(0, upToSum(upTo) - upToSum(claimed));
 }
 
@@ -44,16 +51,16 @@ export type StayBonusState = {
   ticksToNext: number | null;
 };
 
-/** bonus = 11/16 단 칭호의 머무르기 보상 비율 (화면 표시용 — 서버가 같은 규칙으로 준다) */
-export function stayBonusState(stayTicks: number, claimed: number, bonus = 0): StayBonusState {
+/** bonus = 11/16 단 칭호의 머무르기 보상 비율, champ = 11/17 포인트왕 배수·상한 (화면 표시용 — 서버가 같은 규칙으로 준다) */
+export function stayBonusState(stayTicks: number, claimed: number, bonus = 0, champ?: StayBonusChamp): StayBonusState {
   const tiers = stayBonusTiers(stayTicks);
   const from = Math.min(Math.max(0, claimed), tiers);
   const max = STAY_BONUS_AMOUNTS.length;
   // 11/16 칭호로 하루 상한에 먼저 닿았으면 남은 구간은 0P라 받을 것도 끝난 것으로
-  const full = bonus > 0 && stayBonusSum(0, claimed, bonus) >= STAY_BONUS_DAILY_MAX;
+  const full = (bonus > 0 || !!champ) && stayBonusSum(0, claimed, bonus, champ) >= (champ?.cap ?? STAY_BONUS_DAILY_MAX);
   return {
     count: full ? 0 : tiers - from,
-    points: full ? 0 : stayBonusSum(from, tiers, bonus),
+    points: full ? 0 : stayBonusSum(from, tiers, bonus, champ),
     done: claimed >= max || full,
     ticksToNext: tiers >= max ? null : (tiers + 1) * STAY_BONUS_EVERY_TICKS - stayTicks,
   };

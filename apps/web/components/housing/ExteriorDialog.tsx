@@ -9,6 +9,7 @@ import { EXT_SLOTS, FURNITURE, furnitureById, isExtBase, LIKE_WEIGHT, lotLabel, 
 import { housingApi } from "@/lib/housing/client";
 import { designScore, exteriorScore } from "@/lib/housing/layout";
 import type { HouseExterior, MyHouseResponse } from "@/lib/housing/types";
+import { furnitureDiscount } from "@/lib/champPerks";
 import { discountedPrice, equippedPerk } from "@/lib/titles";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -52,7 +53,8 @@ export default function ExteriorDialog({
   const toBuy = EXT_SLOTS.map((s) => draft[s.slot]).filter((id) => !owns(id));
   // 11/16 집 갈래 칭호의 가구 할인 (서버가 하나씩 같은 규칙으로 깎는다)
   const { me } = useMe();
-  const houseDiscount = equippedPerk(me?.equipped).houseDiscount;
+  // 11/17 포인트왕 할인과 겹치면 큰 것 하나 (lib/champPerks)
+  const houseDiscount = furnitureDiscount(equippedPerk(me?.equipped).houseDiscount, me?.champ);
   const priceOf = (price: number) => discountedPrice(price, houseDiscount);
   const cost = toBuy.reduce((sum, id) => sum + priceOf(furnitureById(id)?.price ?? 0), 0);
   const short = cost > my.points;

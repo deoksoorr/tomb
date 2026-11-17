@@ -2,8 +2,9 @@
 
 import { PHASE_LABELS, WEATHER_LABELS } from "@/lib/ambience";
 import { ATTEND_STAY_MINUTES, attendLeftText } from "@/lib/attendStay";
-import { DAILY_EARN_CAP } from "@/lib/economy";
-import { boostedTotalCap } from "@/lib/pointEvent";
+import { champBoards } from "@tomb/protocol";
+import { champTotalCap } from "@/lib/champPerks";
+import { NO_BOOST } from "@/lib/pointEvent";
 import { useAmbience } from "@/lib/hooks/useAmbience";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { useMe } from "@/lib/hooks/useMe";
@@ -18,8 +19,8 @@ export default function TodayFacts({ show = ALL }: { show?: readonly TodayFact[]
   const ambience = useAmbience();
   const status = useBridgeValue("net:status");
   const att = me?.attendance;
-  // 포인트 배수 이벤트 날은 늘어난 항목 몫만큼 하루 한도도 늘어난다 (lib/pointEvent)
-  const cap = me?.earnBoost ? boostedTotalCap(me.earnBoost) : DAILY_EARN_CAP;
+  // 포인트 배수 이벤트 날은 늘어난 항목 몫만큼 하루 한도도 늘어난다 (lib/pointEvent). 11/17 지난주 1위면 1위 몫도 (lib/champPerks)
+  const cap = champTotalCap(me?.earnBoost ?? NO_BOOST, champBoards(me?.champ));
   const left = me ? Math.max(0, cap - me.todayEarned) : null;
   const facts = {
     attend: {

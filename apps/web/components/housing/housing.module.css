@@ -944,6 +944,13 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 11/17 할인 전 원래 값 (칭호·포인트왕 할인이 붙었을 때, 그어서 흐리게) */
+.fsOldPrice {
+  margin-right: 4px;
+  opacity: 0.6;
+  font-size: 0.9em;
+}
+
 .fsBadge {
   padding: 0 3px;
   background: var(--moss-deep);

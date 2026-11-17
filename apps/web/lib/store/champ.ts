@@ -1,6 +1,6 @@
 import type { Redis } from "@upstash/redis";
 import { redisClient } from "../redisUsage";
-import { CHAMP_AURA_OFF, champBitsOf, champBoards, type ChampBoard } from "@tomb/protocol";
+import { CHAMP_AURA_OFF, CHAMP_BOARDS, champBitsOf, champBoards, type ChampBoard } from "@tomb/protocol";
 import { env } from "../env";
 import { gameWeek, prevWeek, weekEndMs, weekStartMs } from "../gameDay";
 import { testServerEnv } from "../rpg/superHunter";
@@ -240,6 +240,16 @@ export function primeChampCache(rec: ChampWeek, now = Date.now()): void {
  * 자격 = 지난주(이번 주 월요일 새벽 5시에 마감한 주) 1위. 이번 주가 끝나면 저절로 다음 주 1위로 넘어간다
  */
 export async function champBitsFor(accountId: string, now = Date.now()): Promise<number> {
+  const boards = await champBoardsFor(accountId, now);
+  if (!boards.length) return 0;
+  return champBitsOf(boards, await getChamp().auraOff(accountId));
+}
+
+/**
+ * 11/17 지금 그 계정이 1위인 랭킹 (CHAMP_BOARDS 순서, 아니면 []) — 1위 1주일 혜택(lib/champPerks)의 자격. 배지·오라(champBitsFor)와 같은 기록이라
+ * 지난주 1위면 바로 붙고 이번 주가 끝나면 저절로 넘어간다. 오라 끔 설정은 읽지 않는다 (적립마다 불려도 지난주 기록은 프로세스 캐시)
+ */
+export async function champBoardsFor(accountId: string, now = Date.now()): Promise<ChampBoard[]> {
   const rec = await champWeekCached(prevWeek(kstWeekOf(now)), now);
   const boards = rec?.winners.filter((w) => w.accountId === accountId).map((w) => w.board) ?? [];
   // 테스트 서버에서만: 운영자 시험 1위를 더한다 (운영에서는 읽지도 않는다)
@@ -247,9 +257,11 @@ export async function champBitsFor(accountId: string, now = Date.now()): Promise
     const t = await getChamp().test(accountId, now);
     for (const b of champBoards(t?.bits)) if (!boards.includes(b)) boards.push(b);
   }
-  if (!boards.length) return 0;
-  return champBitsOf(boards, await getChamp().auraOff(accountId));
+  return CHAMP_BOARDS.filter((b) => boards.includes(b));
 }
+
+/** 1위 혜택 자격 읽기: 저장소를 못 읽으면 혜택 없이 (적립·구매가 1위 기록 때문에 실패하지 않게) */
+export const champBoardsSafe = (accountId: string, now = Date.now()): Promise<ChampBoard[]> => champBoardsFor(accountId, now).catch(() => []);
 
 /**
  * 입장 토큰·착용 증서·내 정보에 싣는 champ 값: 1위면 champBitsFor 그대로, 1위가 아닌 31번 운영자가 "운영자 오라 보이기"를 껐으면

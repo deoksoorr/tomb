@@ -1,4 +1,4 @@
-import type { CosmeticSlot } from "@tomb/protocol";
+import type { ChampBoard, CosmeticSlot } from "@tomb/protocol";
 import type { AttendClaim, CalendarMonthRecord } from "../calendar";
 import type { EarnSource } from "../economy";
 import type { EarnBoost } from "../pointEvent";
@@ -140,9 +140,10 @@ export function presenceCatchup(last: number, now: number, sameSid: boolean): { 
 
 /**
  * 적립 선택값: amount(없으면 항목 기본 점수), ipHash(주면 같은 IP 합계도 항목 한도 × ATTEND_ACCOUNTS_PER_IP로 막는다),
- * boost(포인트 배수 이벤트 — 고른 항목이면 적립·항목 한도·같은 IP 한도가 배수, 하루 전체 한도는 늘어난 몫만큼. 없으면 저장소가 지금 설정을 읽는다, lib/pointEvent earnLimits)
+ * boost(포인트 배수 이벤트 — 고른 항목이면 적립·항목 한도·같은 IP 한도가 배수, 하루 전체 한도는 늘어난 몫만큼. 없으면 저장소가 지금 설정을 읽는다, lib/pointEvent earnLimits),
+ * champ(11/17 지금 1위인 랭킹 — 1위 1주일 혜택의 %·한도, 레이스에서 빼는 몫. 없으면 저장소가 지난주 1위 기록을 읽는다, lib/champPerks earnTerms)
  */
-export type EarnOptions = { amount?: number; ipHash?: string; boost?: EarnBoost };
+export type EarnOptions = { amount?: number; ipHash?: string; boost?: EarnBoost; champ?: readonly ChampBoard[] };
 export type Profile = { name?: string | null; color?: string | null; body?: string | null };
 export type RankEntry = { accountId: string; name: string | null; points: number; rank: number };
 

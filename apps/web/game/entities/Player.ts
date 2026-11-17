@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import { DIR, isAvatarBody, JUMP_MS, STATE, titleOfLook, type DirId, type Seat, type StateName } from "@tomb/protocol";
+import { champSpeedAdd } from "@/lib/champPerks";
 import { titlePerk } from "@/lib/titles";
 import { canJump, jumpHeight, shadowScale } from "../logic/jump";
 import { emptyMove, faceToward, resolveMove, type MoveInput } from "../logic/movement";
@@ -35,7 +36,10 @@ export const SWIM_SPEED = 0.6;
 /** 11/16 r18 물가 경계에서 헤엄↔걷기가 바뀌기까지 (ms) */
 export const WET_HOLD_MS = 160;
 export const DIVE_SPEED = 0.45;
-/** 땅 위 걸음 배율 상한 (타는 펫 × 칭호 × 캠핑장 먹거리). 실시간 서버는 달리기 × 1.5를 넘는 이동을 버린다 → 그 안쪽 */
+/**
+ * 땅 위 걸음 배율 상한 (타는 펫 × 칭호(+ 11/17 다관왕 0.01) × 캠핑장 먹거리). 실시간 서버는 달리기 × 1.5를 넘는 이동을 버린다 → 그 안쪽.
+ * 먹거리 없이 가장 빠른 조합 = (1.08 + 0.01) × 1.35 = 1.4715 < 1.48 (lib/champPerks CHAMP_MULTI_SPEED)
+ */
 export const MAX_GROUND_MUL = 1.48;
 
 /** 붙어 있는 자세(앵커): 나무·그네·해먹 + 50번 시소·트램펄린·회전목마 */
@@ -101,7 +105,8 @@ export class Player {
   private food: MyFoodView | null = null;
   /**
    * 단 칭호의 마을 이동 속도 (lib/titles GRADE_SPEED + 11/16 1위·명예 갈래 +2%). 마을(WorldScene)만 켠다 — 상점·집·분양 마을 안은 그대로,
-   * 물속·놀이기구·배는 원래 속도 (서버 속도 검증 안: 가장 빠른 1.08 × 타는 펫 1.35 = 1.458 < 1.5, 그리고 MAX_GROUND_MUL로 자른다)
+   * 물속·놀이기구·배는 원래 속도 (서버 속도 검증 안: 가장 빠른 1.08 × 타는 펫 1.35 = 1.458 < 1.5, 그리고 MAX_GROUND_MUL로 자른다).
+   * 11/17 다관왕(지난주 2·3관왕)은 같은 자리에 +0.01 → (1.08 + 0.01) × 1.35 = 1.4715 < 1.48 (착용 증서로 온 1위 값 — 서버가 정한 값)
    */
   titleSpeed = false;
   private titleLook: readonly string[] | null = null;
@@ -308,7 +313,7 @@ export class Player {
       this.titleMul = titlePerk(titleOfLook(this.titleLook)).speed;
     }
     // 땅 위 배율: 타는 펫 × 칭호 × 11/15 캠핑장 먹거리 — 실시간 서버 속도 검증(달리기 × 1.5) 안에서 (MAX_GROUND_MUL)
-    const mul = wet ? (this.diving ? DIVE_SPEED : SWIM_SPEED) : Math.min(MAX_GROUND_MUL, this.rideMul * (this.titleSpeed ? this.titleMul : 1) * this.boost);
+    const mul = wet ? (this.diving ? DIVE_SPEED : SWIM_SPEED) : Math.min(MAX_GROUND_MUL, this.rideMul * (this.titleSpeed ? this.titleMul + champSpeedAdd(this.view.champBits) : 1) * this.boost);
     // 강물에 떠내려가는 만큼 (가만히 있어도 흘러간다)
     const cur = wet && this.current ? this.current(this.x, this.y) : null;
     const cvx = cur ? cur.vx : 0;

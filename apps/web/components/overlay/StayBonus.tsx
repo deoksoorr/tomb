@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { champBoards } from "@tomb/protocol";
+import { champStayBonus } from "@/lib/champPerks";
 import { api, errorMessage } from "@/lib/api";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { showToast } from "@/lib/hooks/useToasts";
@@ -22,7 +24,8 @@ export default function StayBonus() {
   const ticks = me ? Math.floor(me.attendance.stayMinutes / 10) : 0;
   const claimed = me?.attendance.bonusClaimed ?? 0;
   // 11/16 출석·접속 갈래 칭호면 받을 보너스도 그만큼 (서버가 같은 규칙으로 준다 — 하루 상한은 그대로)
-  const state = stayBonusState(ticks, claimed, equippedPerk(me?.equipped).stayBonus);
+  // 11/17 지난주 포인트왕이면 구간마다 1.5배, 상한도 그만큼 (lib/champPerks)
+  const state = stayBonusState(ticks, claimed, equippedPerk(me?.equipped).stayBonus, champStayBonus(champBoards(me?.champ)));
   const [pending, setPending] = useState(false);
   const [pop, setPop] = useState<string | null>(null);
   // 받은 뒤 잠깐 보여 줄 안내 (done: 오늘 하루치를 다 받음). 시간이 지나면 지우고 창을 숨긴다
@@ -63,7 +66,7 @@ export default function StayBonus() {
           : res.me.staff
             ? `운영자 계정은 포인트가 늘 가득이라 0P (보너스 ${res.count}개)`
             : `지갑이 가득 차서 0P (보너스 ${res.count}개)`;
-      const done = stayBonusState(Math.floor(res.me.attendance.stayMinutes / 10), res.me.attendance.bonusClaimed, equippedPerk(res.me.equipped).stayBonus).done;
+      const done = stayBonusState(Math.floor(res.me.attendance.stayMinutes / 10), res.me.attendance.bonusClaimed, equippedPerk(res.me.equipped).stayBonus, champStayBonus(champBoards(res.me.champ))).done;
       setNotice({ text, done });
       setTimeout(() => setNotice(null), done ? 4_000 : 2_500);
     } catch (e) {

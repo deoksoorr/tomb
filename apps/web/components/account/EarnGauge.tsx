@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { champBoards } from "@tomb/protocol";
 import { earnGaugeRows, resetLeftText, type Gauge, type GaugeRow } from "@/lib/earnGauge";
 import { DAY_RESET_TEXT, msUntilDayReset } from "@/lib/gameDay";
 import { NO_BOOST } from "@/lib/pointEvent";
@@ -21,7 +22,8 @@ export default function EarnGauge({ me }: { me: Me }) {
 
   // 포인트 배수 이벤트 날은 고른 항목 한도가 늘어난 값으로 (서버가 me.earnBoost로 알려 준다)
   const boost = me.earnBoost ?? NO_BOOST;
-  const view = earnGaugeRows(me.todayEarned, me.earnedBy, boost);
+  // 11/17 지난주 1위면 혜택 항목 한도 + (서버가 같은 계산으로 막는다 — lib/champPerks)
+  const view = earnGaugeRows(me.todayEarned, me.earnedBy, boost, champBoards(me.champ));
   const { total, main, rest } = view;
   // 운영자 계정은 출석 도장·접속 시간 보너스(7일 연속·한 달 개근 포함)를 받지 않는다 → 따로 세는 줄을 뺀다
   const separate = me.staff ? [] : view.separate;
@@ -84,6 +86,7 @@ export function Row({ r }: { r: GaugeRow }) {
       <span className={styles.label}>
         {r.label}
         {r.boosted && <span className={styles.boosted}>{r.boosted}배</span>}
+        {r.champ ? <span className={styles.boosted}>1위 +{fmt(r.champ)}P</span> : null}
         {r.full && <span className={styles.done}>다 채웠어요</span>}
       </span>
       <span className={styles.nums}>

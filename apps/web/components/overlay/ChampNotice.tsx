@@ -5,6 +5,7 @@ import { bridge } from "@/game/bridge";
 import { champRecheckDelay } from "@/lib/champClock";
 import { CHAMP_TITLE, champHatOf, itemName, type ChampBoard } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
+import { champPerkLines } from "@/lib/champPerks";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { showToast } from "@/lib/hooks/useToasts";
 import { onVisibleAgain, tabHidden } from "@/lib/hooks/visibleAgain";
@@ -161,6 +162,20 @@ export default function ChampNotice() {
             <span>
               <b>+{(notice.points * n).toLocaleString("ko-KR")}P</b>
               <span className={styles.note}>지갑에 들어왔어요</span>
+            </span>
+          </li>
+          {/* 11/17 1주일 혜택 (자격이 붙어 있는 동안 서버가 준다 — lib/champPerks) */}
+          <li>
+            <span className={styles.sparkle} aria-hidden="true">
+              ★
+            </span>
+            <span>
+              <b>1주일 혜택</b>
+              {champPerkLines(notice.boards).map((line) => (
+                <span key={line} className={styles.note}>
+                  {line}
+                </span>
+              ))}
             </span>
           </li>
         </ul>

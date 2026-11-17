@@ -7,7 +7,9 @@ import { HttpError, notFound } from "../http";
 import { PASSED_RECENT_MS, type ActivityItem, type Grave, type GraveListResponse, type Me, type PublicGrave } from "../types";
 import { kstDay, loadMe } from "./accounts";
 import { isGraveId } from "../validate";
-import { paidOf, pointsMult, type EarnBoost } from "../pointEvent";
+import type { ChampBoard } from "@tomb/protocol";
+import { earnTerms, paidOfTerms } from "../champPerks";
+import type { EarnBoost } from "../pointEvent";
 import { MemoryAccounts } from "./accounts-memory";
 import { RedisAccounts } from "./accounts-redis";
 import { MemoryStore } from "./memory";
@@ -17,6 +19,7 @@ import { MemoryGifts, RedisGifts, type GiftStore } from "./gifts";
 import { MemoryFriends, RedisFriends, type FriendStore } from "./friends";
 import { MemoryMegaphone, RedisMegaphone, type MegaphoneStore } from "./megaphone";
 import { MemoryNotices, RedisNotices, type NoticeStore } from "./notices";
+import { champBoardsSafe } from "./champ";
 import { earnBoost } from "./pointEvent";
 import { MemoryWishDay, RedisWishDay, type WishDayStore } from "./wishDay";
 import { MemoryBbqDay, RedisBbqDay, type BbqDayStore } from "./bbqDay";
@@ -77,7 +80,8 @@ export function getAccounts(): AccountStore {
  * 항목 한도 × ATTEND_ACCOUNTS_PER_IP로 막는다 (계정 여러 개로 농사 방지).
  * 모은 포인트(lifetimePoints)·포인트 랭킹도 같이 오른다. earned = 실제로 쌓인 점수 (한도면 0).
  * 포인트 배수 이벤트 중(그 항목을 골랐을 때)이면 earned는 늘어난 점수다. paid = 그게 amount로 얼마어치인지 (이벤트가 아니면 earned와 같다) —
- * 값 단위로 한도를 계산해 못 받은 만큼을 되돌리는 쪽(낚시·채집 팔기 등)은 paid를 쓴다. 그런 쪽은 미리 읽은 boost를 넘겨 같은 배수로 맞춘다
+ * 값 단위로 한도를 계산해 못 받은 만큼을 되돌리는 쪽(낚시·채집 팔기 등)은 paid를 쓴다. 그런 쪽은 미리 읽은 boost를 넘겨 같은 배수로 맞춘다.
+ * 11/17 1위 혜택(낚시왕 판매 +20% 등)도 같은 배수에 더해진다 — champ를 주면 그 자격으로, 없으면 지난주 1위 기록을 읽는다 (lib/champPerks)
  */
 export async function earnPoints(
   accountId: string,
@@ -85,8 +89,9 @@ export async function earnPoints(
   amount?: number,
   ip?: string,
   boost?: EarnBoost,
+  champ?: readonly ChampBoard[],
 ): Promise<{ earned: number; paid: number; me: Me }> {
-  const r = await earnPointsOnly(accountId, source, amount, ip, boost);
+  const r = await earnPointsOnly(accountId, source, amount, ip, boost, champ);
   return { ...r, me: await loadMe(getAccounts(), accountId) };
 }
 
@@ -100,11 +105,12 @@ export async function earnPointsOnly(
   amount?: number,
   ip?: string,
   boost?: EarnBoost,
+  champ?: readonly ChampBoard[],
 ): Promise<{ earned: number; paid: number }> {
   const now = Date.now();
-  const b = boost ?? (await earnBoost(now));
-  const earned = await getAccounts().earn(accountId, source, kstDay(now), { amount, ipHash: ip, boost: b });
-  return { earned, paid: paidOf(earned, amount ?? earnRule(source).points, pointsMult(b, source)) };
+  const [b, c] = await Promise.all([boost ?? earnBoost(now), champ ?? champBoardsSafe(accountId, now)]);
+  const earned = await getAccounts().earn(accountId, source, kstDay(now), { amount, ipHash: ip, boost: b, champ: c });
+  return { earned, paid: paidOfTerms(earned, amount ?? earnRule(source).points, earnTerms(b, source, c)) };
 }
 
 /**

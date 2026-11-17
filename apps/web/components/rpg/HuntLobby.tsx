@@ -655,6 +655,8 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
               {r.transcend ? "초월 EXP" : "EXP"}
               {/* 11/16 사냥 갈래 칭호로 더 받은 몫 */}
               {!r.transcend && r.titleExp ? <small> (칭호 +{r.titleExp.toLocaleString("ko-KR")})</small> : null}
+              {/* 11/17 사냥왕(지난주 1위) 혜택으로 더 받은 몫 (초월 판·야근 빌딩은 초월 EXP 몫) */}
+              {r.champExp ? <small> (사냥왕 +{r.champExp.toLocaleString("ko-KR")})</small> : null}
             </div>
             <div>
               <strong>+{r.points}</strong>포인트
