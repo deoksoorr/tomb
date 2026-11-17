@@ -36,7 +36,7 @@ const TRACK_MAX = 70;
 const TRACK_MS = 9_000;
 /** 서버 답을 기다리는 시간 */
 const PENDING_MS = 6_000;
-const LABEL_TINT = 0xcfdcea;
+const LABEL_TINT = 0xf2f6ff;
 /** 막힌 동작 안내 간격 */
 const BLOCK_TOAST_MS = 2_500;
 
@@ -341,7 +341,7 @@ export class CampSnowmen {
     const scene = this.d.scene;
     const img = scene.add.image(s.x, s.y + FOOT, "__DEFAULT").setOrigin(0.5, 1).setDepth(s.y);
     this.d.atlas.ensure(s.by);
-    const label = scene.add.bitmapText(s.x, s.y, FONT_KEY, s.by, FONT_PX).setOrigin(0.5, 1).setDepth(DEPTH.labels - 2).setTint(LABEL_TINT).setAlpha(0.9);
+    const label = scene.add.bitmapText(s.x, s.y, FONT_KEY, s.by, FONT_PX).setOrigin(0.5, 1).setDepth(DEPTH.labels - 2).setTint(LABEL_TINT);
     const v: ManView = { s, img, label, stage: -1, puddleUntil: 0 };
     this.men.set(s.id, v);
     this.restage(v, this.d.net().serverNow());
@@ -398,7 +398,8 @@ export class CampSnowmen {
     }
     for (const v of this.men.values()) {
       if (v.puddleUntil || !this.on) continue;
-      if (v.label.scaleX !== labelScale * 0.84) v.label.setScale(labelScale * 0.84);
+      // 11/18 사용자 「이름이 작아서 안 보여요」: 0.84배 → 사람 이름표보다 조금 크게(1.25배), 흐리게 하지 않고 밝게
+      if (v.label.scaleX !== labelScale * 1.25) v.label.setScale(labelScale * 1.25);
       v.label.setPosition(Math.round(v.s.x), Math.round(v.s.y - Art.snowmanTop(v.stage) - 1));
     }
     if (this.held) this.syncHeld();

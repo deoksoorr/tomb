@@ -53,6 +53,7 @@ export function snowPlaceOk(x: number, y: number, others: Iterable<Pt> = []): bo
 // ── 눈더미 자리 ──
 
 /** 눈더미를 둘 대략의 자리 (구역마다 하나 — 정류장 앞 풀밭·데크 바깥 눈밭·타프 옆·계곡 건너 산책로·캠핑카 골목 끝) */
+// 11/18 사용자 「여기저기」: 가장자리 위주 7곳 → 캠핑장 전체에 고르게 13곳 (가까운 빈 눈밭으로 맞춰지고 서로 120px 넘게 떨어진다)
 const PILE_ANCHORS: readonly Pt[] = [
   { x: 330, y: 560 },
   { x: 880, y: 590 },
@@ -61,6 +62,12 @@ const PILE_ANCHORS: readonly Pt[] = [
   { x: 1180, y: 470 },
   { x: CAMP_FIRE.x + 300, y: CAMP_FIRE.y + 30 },
   { x: 700, y: 610 },
+  { x: 140, y: 380 },
+  { x: 560, y: 150 },
+  { x: 1080, y: 300 },
+  { x: 190, y: 700 },
+  { x: 1100, y: 700 },
+  { x: 470, y: 440 },
 ];
 
 let piles: Pt[] | null = null;
