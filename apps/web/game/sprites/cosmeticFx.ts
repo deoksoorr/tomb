@@ -1,5 +1,5 @@
 import { bodyTier, champAuraOn, CHAMP_AURA_OFF, champBoards, CHAMP_BOARDS, DIR, itemById, type DirId } from "@tomb/protocol";
-import { foxSheet, MOUNT_FRAMES, MOUNT_H, MOUNT_W, mountLift, mountSheet, mountSideOver, type MountKind } from "./mountArt";
+import { foxSheet, MOUNT_FRAMES, MOUNT_H, MOUNT_SIDE_SHIFT, MOUNT_W, mountLift, mountSheet, mountSideOver, type MountKind } from "./mountArt";
 import { kstHour, parseAmbienceOverride, timePhase } from "@/lib/ambience";
 import { CUTE_FX, CUTE_FX_ART, cuteIconGrid } from "./cuteFx";
 import { THEME_FX, THEME_FX_ART, themeIconGrid } from "./themeFx";
@@ -1743,12 +1743,14 @@ export class CosmeticFxSim {
       if (Number.isNaN(this.petRestAt)) this.petRestAt = t;
       frame = petPoseFrame(s.pose, s.idleFps, f.still || f.reduced ? -1 : t - this.petRestAt)[0];
     }
-    out.push(cmd(s.art, frame, x, y, { oy: 1, flip: f.dir === DIR.left, layer: "body", depth: f.y - 0.2 }));
+    // 11/17 옆모습이면 탈것을 앞으로 조금 밀어 탄 사람이 뒤쪽에 앉아 보이게 (MOUNT_SIDE_SHIFT — 루돌프 썰매)
+    const sx = !view && s.mount ? x + (MOUNT_SIDE_SHIFT[s.mount] ?? 0) * (f.dir === DIR.left ? -1 : 1) : x;
+    out.push(cmd(s.art, frame, sx, y, { oy: 1, flip: f.dir === DIR.left, layer: "body", depth: f.y - 0.2 }));
     if (view) out.push(cmd(s.art, (f.dir === DIR.down ? 6 : 8) + fr, x, y, { oy: 1, layer: "body", depth: f.y + 0.2 }));
     else {
       // 옆모습 덧그림 (썰매 옆판 — 탄 사람 다리가 썰매 안에 들어간다)
       const over = s.mount ? mountSideOver(s.mount) : null;
-      if (over !== null) out.push(cmd(s.art, over, x, y, { oy: 1, flip: f.dir === DIR.left, layer: "body", depth: f.y + 0.2 }));
+      if (over !== null) out.push(cmd(s.art, over, sx, y, { oy: 1, flip: f.dir === DIR.left, layer: "body", depth: f.y + 0.2 }));
     }
   }
 

@@ -14,6 +14,11 @@ export const MOUNT_H = 22;
 export const MOUNT_FRAMES = 10;
 export type MountKind = "hound" | "goose" | "deer" | "carp" | "alpaca" | "polar" | "sleigh";
 /** 탄 사람의 발바닥이 오는 줄 (그림 맨 위에서) → 들어 올리는 높이 = MOUNT_H - 1 - 이 값 */
+/**
+ * 11/17 옆모습에서 탈것을 보는 쪽(앞)으로 미는 칸 — 탄 사람이 탈것 가운데보다 뒤쪽에 앉아 보이게.
+ * 루돌프 썰매는 앞에 루돌프가 있어 가운데에 앉으면 너무 앞으로 쏠려 보였다 (사용자 피드백)
+ */
+export const MOUNT_SIDE_SHIFT: Partial<Record<MountKind, number>> = { sleigh: 7 };
 export const MOUNT_SEAT: Record<MountKind, number> = { hound: 10, goose: 11, deer: 9, carp: 9, alpaca: 10, polar: 9, sleigh: 15 };
 /** 탄 사람을 들어 올리는 높이 (px) */
 export function mountLift(kind: MountKind): number {
