@@ -48,8 +48,8 @@
   margin-top: -8px;
 }
 
-/* 11/17 r2 채널 줄 안 시간·날씨: 위 가운데 빈 곳이 좁으면 숨긴다 (오른쪽 단추와 겹치지 않게 — GameShell .topCenter 컨테이너) */
-@container (max-width: 270px) {
+/* 11/17 r3 채널 줄 안 시간·날씨: 좁은 데스크톱 창(1100 미만)에서는 숨긴다 (화면 가운데 채널 칸이 오른쪽 단추와 겹치지 않게) */
+@media (max-width: 1099px) {
   .pill .ambience {
     display: none;
   }
