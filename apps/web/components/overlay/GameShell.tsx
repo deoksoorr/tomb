@@ -355,8 +355,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
 
   // 즐겨찾기 원형 목록은 내 캐릭터가 보이는 월드·마을·집에서만 (상점·사냥터·미니게임 제외)
   const canRadial = !scene || scene === "world" || scene === "house";
-  // 11/17 사냥터(야근 빌딩 포함)에서도 채널 채팅: 채팅창·Enter·터치 [채팅](사냥 HUD 멈춤 아래). 말은 월드 채널로 [사냥터] 줄
-  const huntChat = ready && scene === "hunt";
+  // 11/17 사냥터(야근 빌딩 포함)에서도 채널 채팅: 채팅창·Enter. 말은 월드 채널로 [사냥터] 줄
+  // 11/17 손가락 기기(coarse)는 사냥 중 채팅을 아예 끈다: 기록 상자가 스킬 칸·상단 HUD와 겹쳤다. 기록·입력 줄 모두 숨고, 나오면 원래대로
+  const huntChat = ready && scene === "hunt" && !coarse;
   const chatHere = canRadial || huntChat;
   // 사냥이 끝나면 열려 있던 터치 한 줄 입력칸은 닫는다 (마을로 돌아와 저절로 떠 있지 않게)
   useBridgeEvent("scene:changed", ({ scene: next }) => {
@@ -990,14 +991,13 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {panel === "housing" && (
         <HousingOffice key={housingIntent?.houseId ?? `${housingIntent?.zone ?? ""}${housingIntent?.lot ?? "office"}`} intent={housingIntent} channel={houseChannel} onClose={closePanel} />
       )}
-      {panel === "hunt" && <HuntLobby onClose={closePanel} onChat={coarse ? () => setChatOpen(true) : undefined} avatar={{ color: options.color, body: options.body }} />}
+      {panel === "hunt" && <HuntLobby onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
       {/* 11/15 마을의 야근 빌딩 (사냥 레벨 50 전이면 창 없이 경비원 한마디) */}
       {panel === "tower" && (
         <HuntLobby
           mode="tower"
           onClose={closePanel}
           onTaunt={() => showToast(towerTaunt(), 5_000)}
-          onChat={coarse ? () => setChatOpen(true) : undefined}
           avatar={{ color: options.color, body: options.body }}
         />
       )}

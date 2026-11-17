@@ -112,11 +112,8 @@ export default function HuntLobby({
   avatar,
   mode = "hunt",
   onTaunt,
-  onChat,
 }: {
   onClose: () => void;
-  /** 11/17 사냥 중 [채팅] 버튼 (손가락 기기 — GameShell이 한 줄 입력칸을 연다) */
-  onChat?: () => void;
   avatar?: { color: string; body?: string };
   mode?: "hunt" | "tower";
   /** 야근 빌딩: 레벨이 모자라 못 들어갈 때 (경비원 한마디) */
@@ -390,7 +387,7 @@ export default function HuntLobby({
     const r = run.current;
     return (
       <>
-        {r && <RunHud game={r.game} hotbar={r.hotbar} onPause={pause} onChat={onChat} {...(r.tower ? { title: "야근 빌딩" } : {})} />}
+        {r && <RunHud game={r.game} hotbar={r.hotbar} onPause={pause} {...(r.tower ? { title: "야근 빌딩" } : {})} />}
         {phase === "submitting" && (
           <div className={s.submitting} role="status">
             결과를 정리하는 중…
