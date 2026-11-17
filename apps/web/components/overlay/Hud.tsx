@@ -12,6 +12,7 @@ import type { Toast } from "@/lib/hooks/useToasts";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import styles from "./Hud.module.css";
+import { SnackBar } from "../sea/GullSnacks";
 import PointEventBadge from "./PointEventBadge";
 
 const MODE_TEXT: Record<Exclude<NetMode, "online">, string> = {
@@ -80,6 +81,8 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
         ) : (
           <PointEventBadge compact />
         )}
+        {/* 11/17 r2 가진 갈매기 과자 · [과자 던지기] (터치 화면: 오른쪽 위 지도 단추 아래 — 아래 조작 단추·왼쪽 공지를 가리지 않게) */}
+        {tideLine && <SnackBar compact />}
       </>
     );
   }
@@ -113,6 +116,8 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
         </span>
       )}
       <PointEventBadge />
+      {/* 11/17 r2 가진 갈매기 과자 · [과자 던지기] (물때 줄 아래) */}
+      {tide && <SnackBar />}
     </div>
   );
 }

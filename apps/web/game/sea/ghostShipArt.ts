@@ -1,8 +1,35 @@
+import { SEA_PIER_END } from "@tomb/protocol";
 import { darken, Grid, lighten, mix, type Color } from "../sprites/pixel";
 import { pick, toneOutline } from "./seaArt";
 import { hashU } from "./seaLayout";
-import { deckBack, deckFront, deckWidth, G_DECK_X0, G_DECK_X1, G_MASTS, G_WATER, GHOST_ART_H, GHOST_ART_W, GHOST_PLANK } from "./ghostShipLayout";
+import {
+  deckBack,
+  deckFront,
+  deckWidth,
+  G_BACK_ROW,
+  G_CABIN,
+  G_DECK_CY,
+  G_DECK_X0,
+  G_DECK_X1,
+  G_LADDER_X,
+  G_MASTS,
+  G_MERCHANT,
+  G_WALK_X0,
+  G_WALK_X1,
+  G_WATER,
+  GHOST_ART_H,
+  GHOST_ART_W,
+  GHOST_ORIGIN,
+  GHOST_PLANK,
+  onGhostDeckArt,
+  walkBottom,
+  walkTop,
+} from "./ghostShipLayout";
 import { SEA_TEX_PREFIX } from "./seaTypes";
+
+/** 널빤지 걷는 띠 (그림 y) — 고물 난간이 열린 자리 */
+const G_PLANK_GY0 = GHOST_PLANK.y0 - GHOST_ORIGIN.y;
+const G_PLANK_GY1 = GHOST_PLANK.y1 - GHOST_ORIGIN.y;
 
 // 11/17 유령선 그림 (코드로 그리는 픽셀 아트 — 포구 그림 seaArt와 같은 규칙: 색 단계 사이 4×4 디더, 제 색 테두리, 빛은 왼쪽 위).
 // 마을·캠핑장·포구 어느 것보다 공들여: 바닷물에 바랜 청회색 나무 배, 이끼 낀 물높이, 녹색 도깨비불 창,
@@ -18,6 +45,8 @@ export const GHOST_TEX = {
   stalls: `${P}ghost-stalls`,
   merchant: `${P}ghost-merchant`,
   plank: `${P}ghost-plank`,
+  plankFront: `${P}ghost-plank-front`,
+  gatePost: `${P}ghost-gate-post`,
   mist: `${P}ghost-mist`,
   glow: `${P}ghost-glow`,
   windows: `${P}ghost-windows`,
@@ -29,6 +58,9 @@ const hexes = (a: readonly string[]): readonly Color[] => a.map((h) => parseInt(
 const WOOD = hexes(["#a9b4ae", "#8e9b98", "#748283", "#5e6c70", "#4a575e", "#38444d", "#28323b"]);
 /** 갑판 판자 (햇볕·소금에 바래 연한 회갈색) */
 const PLANK = hexes(["#c7c4b0", "#b2b19e", "#9c9d8c", "#878a7b", "#717669"]);
+/** 11/17 r2 걷는 마당 판자 (밝게 — 걸을 수 있는 곳이 한눈에) · 뒤쪽 막힌 줄 판자 (어둡게 바랜 청회색) */
+const DECK_LIT = hexes(["#ebe6cf", "#dcd7be", "#cac6ac", "#b4b298", "#9c9c86"]);
+const DECK_DIM = hexes(["#8e958c", "#7c847d", "#6a736f", "#5a6362", "#4a5356"]);
 /** 옆구리 아래 이끼·물때 */
 const MOSS = hexes(["#7a9a7e", "#5d7f66", "#456a55", "#33554a"]);
 const IRON = 0x3c3f4a;
@@ -41,12 +73,13 @@ export const GHOST_GREEN = [0xeafff2, 0xb8ffd8, 0x7dffb0, 0x3ac888, 0x1e8a62] as
 /** 돛 (반투명 — 바다가 비쳐요) */
 const SAIL = hexes(["#f2fbf6", "#e0f3ec", "#c8e7de", "#a9d3c9", "#8ebdb4"]);
 
-// ── 배 뒤 판: 갑판 · 뒤 뱃전 안쪽 · 돛대·밧줄 · 고물 선실 · 뱃머리 기둥 ──
+// ── 배 뒤 판: 갑판 · 뒤 뱃전 안쪽 · 돛대·밧줄 · 고물 선실 · 뱃머리 기둥 · 뒤쪽 줄 짐 · 고물 난간 ──
+// 11/17 r2 걷는 마당은 밝은 판자, 뒤쪽 막힌 줄은 어둡게 바랜 판자 + 낮은 밧줄 난간 · 통 · 상자로 막아요 (그림 = 충돌)
 export function ghostBackArt(): Grid {
   const W = GHOST_ART_W;
   const H = GHOST_ART_H;
   const g = new Grid(W, H);
-  // 갑판 판자: 가로로 긴 널 (줄마다 이음매가 엇갈려요), 가운데가 볼록 (빛이 왼쪽 위)
+  // 갑판 판자: 가로로 긴 널 (줄마다 이음매가 엇갈려요). 마당은 밝게, 뒤쪽 줄·뱃머리 끝은 어둡게
   for (let x = G_DECK_X0; x <= G_DECK_X1; x++) {
     const yb = Math.round(deckBack(x));
     const yf = Math.round(deckFront(x));
@@ -55,18 +88,22 @@ export function ghostBackArt(): Grid {
       const row = Math.floor((y - yb) / 4);
       const seam = (x + row * 13) % 26 === 0;
       const edge = y === yb || (y - yb) % 4 === 0;
-      const shade = 0.15 + ((y - yb) / Math.max(1, yf - yb)) * 0.35 + (hashU(x >> 2, row, 711) - 0.5) * 0.25 + (x > 150 ? 0.08 : 0);
-      g.set(x, y, edge || seam ? PLANK[4] : pick(PLANK, shade, x, y));
+      const walk = onGhostDeckArt(x, y);
+      const shade = 0.12 + ((y - yb) / Math.max(1, yf - yb)) * 0.3 + (hashU(x >> 2, row, 711) - 0.5) * 0.22;
+      if (walk) g.set(x, y, edge || seam ? DECK_LIT[4] : pick(DECK_LIT, shade, x, y));
+      else g.set(x, y, edge || seam ? WOOD[5] : pick(DECK_DIM, shade + 0.15, x, y));
     }
   }
-  // 갑판 위 낡은 얼룩 · 못 자국 · 물에 젖은 자리 (가장자리 쪽)
-  for (let i = 0; i < 70; i++) {
-    const x = G_DECK_X0 + 8 + Math.floor(hashU(i, 1, 713) * (G_DECK_X1 - G_DECK_X0 - 16));
-    const yb = deckBack(x);
-    const yf = deckFront(x);
-    const y = Math.round(yb + 2 + hashU(i, 2, 713) * (yf - yb - 4));
-    if (!g.filled(x, y)) continue;
-    g.set(x, y, hashU(i, 3, 713) < 0.5 ? PLANK[3] : 0x6e8a80);
+  // 마당 가장자리: 뒤쪽 줄 그늘 (마당 위 가장자리 한 줄 어둡게) · 마당 판자 못 자국
+  for (let x = G_WALK_X0; x <= G_WALK_X1; x++) {
+    const t = Math.ceil(walkTop(x));
+    if (onGhostDeckArt(x, t)) g.set(x, t, DECK_LIT[3]);
+  }
+  for (let i = 0; i < 90; i++) {
+    const x = G_WALK_X0 + 4 + Math.floor(hashU(i, 1, 713) * (G_WALK_X1 - G_WALK_X0 - 8));
+    const y = Math.round(walkTop(x) + 2 + hashU(i, 2, 713) * (walkBottom(x) - walkTop(x) - 4));
+    if (!onGhostDeckArt(x, y)) continue;
+    g.set(x, y, hashU(i, 3, 713) < 0.6 ? DECK_LIT[3] : 0x9ab0a4);
   }
   // 뒤 뱃전 (안쪽 면이 보여요): 갑판 뒤 가장자리 위로 8줄 + 난간 머리 + 기둥
   for (let x = G_DECK_X0 + 2; x <= G_DECK_X1 - 1; x++) {
@@ -79,16 +116,41 @@ export function ghostBackArt(): Grid {
     if (x % 12 === 0) g.vline(x, yb - h - 1, yb - 1, WOOD[4]);
   }
   // 뱃전 판 구멍 (해진 데로 녹빛이 비쳐요)
-  for (const [x, dy] of [[70, 4], [118, 3], [140, 5]] as const) {
+  for (const [x, dy] of [[78, 4], [126, 3], [168, 5]] as const) {
     const yb = Math.round(deckBack(x));
     g.rect(x, yb - dy - 2, 3, 2, 0x274a42);
     g.set(x + 1, yb - dy - 1, GHOST_GREEN[3]);
   }
-  // 고물 선실 (오른쪽 뒤, 갤리온 고물 누각): 판자 벽 · 금테 · 아치 창 셋(녹빛) · 문 · 지붕 난간 · 지붕 가운데 큰 등
-  const cx0 = 148;
-  const cx1 = 182;
-  const cTop = 84;
-  const cBase = 118;
+  // 뒤쪽 줄 짐 (뱃머리 쪽 — 마당 밖이라 막혀요): 감은 밧줄 · 통 셋 · 나무 상자 · 닻
+  const barrel = (cx: number, by: number) => {
+    for (let y = by - 9; y <= by; y++) {
+      const half = 3 + (y > by - 8 && y < by - 1 ? 1 : 0);
+      for (let x = cx - half; x <= cx + half; x++) g.set(x, y, pick(WOOD, 0.2 + (x - cx + half) / (half * 2 + 1) * 0.5, x, y));
+    }
+    g.hline(cx - 4, cx + 4, by - 7, IRON);
+    g.hline(cx - 4, cx + 4, by - 2, IRON);
+    g.hline(cx - 3, cx + 3, by - 9, WOOD[0]);
+  };
+  const crate = (x0: number, by: number, w: number, h: number) => {
+    g.rect(x0, by - h, w, h, WOOD[3]);
+    g.hline(x0, x0 + w - 1, by - h, WOOD[1]);
+    g.vline(x0, by - h, by, WOOD[2]);
+    for (let k = 0; k < w; k++) g.set(x0 + k, by - h + Math.round((k / (w - 1)) * (h - 1)), WOOD[5]);
+    g.rect(x0, by - h, w, 1, WOOD[1]);
+  };
+  const coil = (cx: number, cy: number) => {
+    g.ellipse(cx, cy, 5, 2.6, 0x8a7a5a);
+    g.ellipse(cx, cy, 3.4, 1.6, 0x6a5a40);
+    g.ellipse(cx, cy, 1.6, 0.8, 0x3a3428);
+    g.set(cx - 3, cy - 1, 0xb09a70);
+  };
+  coil(24, 136);
+  barrel(48, 126);
+  crate(70, 126, 10, 7);
+  barrel(127, 125);
+  crate(146, 126, 8, 6);
+  // 고물 선실 (오른쪽 뒤, 갤리온 고물 누각): 판자 벽 · 금테 · 아치 창 셋(녹빛) · 문 · 지붕 난간
+  const { x0: cx0, x1: cx1, top: cTop, base: cBase } = G_CABIN;
   for (let y = cTop; y <= cBase; y++)
     for (let x = cx0; x <= cx1; x++) {
       const t = (x - cx0) / (cx1 - cx0);
@@ -105,7 +167,7 @@ export function ghostBackArt(): Grid {
     g.set(x, cTop - 6 - arch, WOOD[1]);
   }
   // 아치 창 셋 (쇠 창살 · 녹빛)
-  for (const wx of [154, 165, 176]) {
+  for (const wx of GHOST_CABIN_WINDOWS) {
     g.rect(wx - 3, cTop + 7, 7, 9, IRON);
     g.rect(wx - 2, cTop + 8, 5, 8, GHOST_GREEN[2]);
     g.hline(wx - 1, wx + 1, cTop + 6, IRON);
@@ -115,16 +177,18 @@ export function ghostBackArt(): Grid {
     g.set(wx + 1, cTop + 9, GHOST_GREEN[1]);
     g.hline(wx - 3, wx + 3, cTop + 16, GOLD_LO); // 창턱
   }
-  // 문 (가운데 아래) · 금 손잡이 · 문 위 해골 장식
-  g.rect(162, cTop + 20, 7, cBase - cTop - 20, 0x262b34);
-  g.vline(162, cTop + 20, cBase, WOOD[5]);
-  g.hline(162, 168, cTop + 20, WOOD[5]);
-  g.set(167, cTop + 27, GOLD);
-  g.rect(164, cTop + 17, 3, 2, BONE);
-  // 벽 아래 금띠
+  // 문 (가운데 아래) · 금 손잡이 · 문 위 해골 장식 · 문 앞 디딤판
+  const dx0 = Math.round((cx0 + cx1) / 2) - 3;
+  g.rect(dx0, cTop + 22, 7, cBase - cTop - 22, 0x262b34);
+  g.vline(dx0, cTop + 22, cBase, WOOD[5]);
+  g.hline(dx0, dx0 + 6, cTop + 22, WOOD[5]);
+  g.set(dx0 + 5, cTop + 30, GOLD);
+  g.rect(dx0 + 2, cTop + 19, 3, 2, BONE);
+  // 벽 아래 금띠 · 벽 밑동 그늘
   g.hline(cx0, cx1, cBase - 2, GOLD_LO);
+  g.hline(cx0, cx1, cBase, WOOD[5]);
   // 돛대 셋: 둥근 기둥 (왼쪽 밝게) + 쇠테 · 활대 둘 · 망대(큰 돛대)
-  for (const m of G_MASTS) {
+  G_MASTS.forEach((m, i) => {
     for (let y = m.top; y <= m.base; y++) {
       g.set(m.x - 1, y, WOOD[1]);
       g.set(m.x, y, WOOD[3]);
@@ -135,36 +199,38 @@ export function ghostBackArt(): Grid {
         g.set(m.x + 1, y, IRON);
       }
     }
-    const span = m.x === 104 ? 30 : m.x === 52 ? 24 : 18;
-    for (const yy of m.x === 164 ? [m.top + 6] : [m.top + 6, m.top + Math.round((m.base - m.top) * 0.42)]) {
+    // 받침 쇠고리 (갑판에 박힌 자리)
+    g.hline(m.x - 2, m.x + 2, m.base, IRON);
+    const span = i === 1 ? 30 : i === 0 ? 24 : 18;
+    for (const yy of i === 2 ? [m.top + 6] : [m.top + 6, m.top + Math.round((m.base - m.top) * 0.42)]) {
       const s = yy === m.top + 6 ? Math.round(span * 0.78) : span;
       g.hline(m.x - s, m.x + s, yy, WOOD[3]);
       g.hline(m.x - s, m.x + s, yy + 1, WOOD[5]);
       g.set(m.x - s - 1, yy, WOOD[4]);
       g.set(m.x + s + 1, yy, WOOD[4]);
     }
-    if (m.x === 104) {
+    if (i === 1) {
       // 망대 (큰 돛대 위쪽)
       g.rect(m.x - 5, m.top + 16, 11, 3, WOOD[3]);
       g.hline(m.x - 5, m.x + 5, m.top + 16, WOOD[1]);
       for (let x = m.x - 5; x <= m.x + 5; x += 2) g.set(x, m.top + 15, WOOD[4]);
     }
-  }
+  });
   // 밧줄 (돛대 꼭대기 → 뱃머리 끝 · 고물 · 돛대끼리). 늘어진 줄은 살짝 처져요
-  const rope = (x0: number, y0: number, x1: number, y1: number, sag: number) => {
+  const rope = (x0: number, y0: number, x1: number, y1: number, sag: number, c = 0x4a4640, a = 200) => {
     const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
     for (let i = 0; i <= n; i++) {
       const t = i / n;
       const x = Math.round(x0 + (x1 - x0) * t);
       const y = Math.round(y0 + (y1 - y0) * t + Math.sin(t * Math.PI) * sag);
-      if (!g.filled(x, y) || (g.get(x, y) & 255) < 255) g.set(x, y, 0x4a4640, 200);
+      if (!g.filled(x, y) || (g.get(x, y) & 255) < 255) g.set(x, y, c, a);
     }
   };
   const [fore, main, mizz] = G_MASTS;
-  rope(fore.x, fore.top + 1, 2, 116, 4);
+  rope(fore.x, fore.top + 1, 2, G_DECK_CY - 14, 4);
   rope(fore.x, fore.top + 1, main.x, main.top + 18, 3);
   rope(main.x, main.top + 1, mizz.x, mizz.top + 1, 5);
-  rope(mizz.x, mizz.top + 1, 200, 98, 3);
+  rope(mizz.x, mizz.top + 1, W - 6, Math.round(deckBack(G_DECK_X1)) - 10, 3);
   rope(main.x, main.top + 1, fore.x + 14, deckBack(fore.x + 14) - 9, 2);
   rope(main.x, main.top + 1, main.x + 26, deckBack(main.x + 26) - 9, 2);
   // 줄사다리 (큰 돛대 옆 · 망대까지): 가로 칸
@@ -173,10 +239,43 @@ export function ghostBackArt(): Grid {
   // 뱃머리 기둥 (서쪽으로 길게) + 줄
   for (let i = 0; i < 18; i++) {
     const x = G_DECK_X0 + 2 - i;
-    const y = Math.round(118 - i * 0.55);
+    const y = Math.round(G_DECK_CY - 12 - i * 0.55);
     g.set(x, y, WOOD[2]);
     g.set(x, y + 1, WOOD[4]);
   }
+  // 뒤쪽 줄과 마당 사이 낮은 밧줄 난간 (좌판·선실이 없는 틈 — 짧은 놋쇠 기둥 + 처진 밧줄)
+  const railY = G_BACK_ROW - 2;
+  const gaps: [number, number][] = [
+    [G_WALK_X0 + 6, STALLS_G.x + 2],
+    [STALLS_G.x + 40, G_MERCHANT.x - 8],
+    [G_MERCHANT.x + 8, STALLS_G.x + 72],
+    [STALLS_G.x + 110, G_CABIN.x0],
+  ];
+  for (const [a, b] of gaps) {
+    if (b - a < 4) continue;
+    const posts: number[] = [];
+    for (let x = a; x < b; x += 10) posts.push(x);
+    posts.push(b);
+    for (const px of posts) {
+      g.vline(px, railY - 4, railY + 1, GOLD_LO);
+      g.set(px, railY - 4, GOLD);
+    }
+    for (let k = 0; k + 1 < posts.length; k++) rope(posts[k], railY - 3, posts[k + 1], railY - 3, 1.2, 0x8a7a5a, 255);
+  }
+  // 고물 난간 (고물 끝 — 널빤지 자리만 열려 있어요. 열린 자리 양옆 기둥 등불은 따로 그려요)
+  const sx = G_DECK_X1;
+  const sb = Math.round(deckBack(sx));
+  const sf = Math.round(deckFront(sx));
+  const open0 = G_PLANK_GY0 - 1;
+  const open1 = G_PLANK_GY1 + 1;
+  for (let y = sb - 6; y <= sf; y++) {
+    if (y >= open0 && y <= open1) continue;
+    g.set(sx - 1, y, WOOD[1]);
+    g.set(sx, y, WOOD[3]);
+    g.set(sx + 1, y, WOOD[5]);
+  }
+  // 열린 자리 앞 문턱 (금빛 쇠붙이)
+  g.vline(sx, open0 + 1, open1 - 1, GOLD_LO);
   // 등 매다는 고리 (활대 끝 · 고물) — 등불 빛은 따로(ADD)
   for (const [x, y] of GHOST_LAMPS) {
     g.vline(x, y - 4, y - 2, IRON);
@@ -191,12 +290,14 @@ export function ghostBackArt(): Grid {
 
 /** 배에 매단 녹색 등불 자리 (그림 좌표 — 빛 번짐도 여기에) */
 export const GHOST_LAMPS: readonly (readonly [number, number])[] = [
-  [24, 112],
-  [52 - 24, 22 + 34],
-  [104 + 30, 4 + 47],
-  [165, 72],
-  [164 - 15, 42 + 9],
+  [22, G_DECK_CY - 18],
+  [G_MASTS[0].x - 24, G_MASTS[0].top + 34],
+  [G_MASTS[1].x + 30, G_MASTS[1].top + 47],
+  [G_MASTS[2].x + 1, G_CABIN.top - 12],
+  [G_MASTS[2].x - 15, G_MASTS[2].top + 9],
 ];
+/** 선실 아치 창 자리 (그림 x) */
+export const GHOST_CABIN_WINDOWS: readonly number[] = [G_CABIN.x0 + 8, Math.round((G_CABIN.x0 + G_CABIN.x1) / 2), G_CABIN.x1 - 8];
 
 // ── 배 앞 판: 앞 뱃전 · 옆구리 · 물높이 이끼 · 녹빛 창 · 뱃머리 장식 · 밧줄 사다리 ──
 export function ghostFrontArt(): Grid {
@@ -260,14 +361,15 @@ export function ghostFrontArt(): Grid {
     } else for (let k = 0; k < 3 + (i % 4); k++) g.set(x + (k % 2), y + k, k % 2 ? MOSS[3] : MOSS[2]);
   }
   // 바랜 금빛 띠 (고물 장식) · 이름판 자리 (글씨 대신 해골 문양)
-  for (let x = 170; x < 194; x++) {
+  const nx = G_DECK_X1 - 24;
+  for (let x = G_DECK_X1 - 32; x < G_DECK_X1 - 6; x++) {
     const y = Math.round(deckFront(Math.min(G_DECK_X1, x))) + 4;
     g.set(x, y, x % 4 === 0 ? GOLD_LO : GOLD);
   }
-  g.rect(176, Math.round(deckFront(180)) + 7, 12, 6, 0x2a2f38);
-  g.rect(180, Math.round(deckFront(180)) + 8, 4, 3, BONE);
-  g.set(181, Math.round(deckFront(180)) + 9, IRON);
-  g.set(183, Math.round(deckFront(180)) + 9, IRON);
+  g.rect(nx, Math.round(deckFront(nx + 4)) + 7, 12, 6, 0x2a2f38);
+  g.rect(nx + 4, Math.round(deckFront(nx + 4)) + 8, 4, 3, BONE);
+  g.set(nx + 5, Math.round(deckFront(nx + 4)) + 9, IRON);
+  g.set(nx + 7, Math.round(deckFront(nx + 4)) + 9, IRON);
   // 뱃머리 장식: 등불을 든 유령 여인상 (뱃머리 끝 아래)
   const fx = G_DECK_X0 - 3;
   const fy = Math.round(deckFront(G_DECK_X0 + 4)) + 2;
@@ -276,7 +378,7 @@ export function ghostFrontArt(): Grid {
   g.set(fx - 3, fy + 1, GHOST_GREEN[1]);
   g.set(fx - 3, fy + 2, GHOST_GREEN[2]);
   // 밧줄 사다리 (앞 뱃전에서 물까지 늘어져요): 양쪽 줄 + 나무 디딤판
-  const lx = 74;
+  const lx = G_LADDER_X;
   const ly0 = Math.round(deckFront(lx)) - 5;
   const ly1 = G_WATER + 6;
   for (let y = ly0; y <= ly1; y++) {
@@ -297,7 +399,7 @@ export function sheerLift(gx: number): number {
   return 0;
 }
 /** 앞 옆구리 녹빛 창 자리 (그림 x) */
-export const GHOST_PORTS: readonly number[] = [46, 92, 120, 148];
+export const GHOST_PORTS: readonly number[] = [50, 128, 164, 200];
 
 /** 녹빛 창 · 선실 창 빛만 (ADD로 겹쳐 밤에 환하게) */
 export function ghostWindowsArt(): Grid {
@@ -311,20 +413,20 @@ export function ghostWindowsArt(): Grid {
       }
   };
   for (const px of GHOST_PORTS) dot(px, Math.round(deckFront(px)) + 10, 2);
-  for (const wx of [154, 165, 176]) dot(wx, 96, 2);
+  for (const wx of GHOST_CABIN_WINDOWS) dot(wx, G_CABIN.top + 12, 2);
   return g;
 }
 
 // ── 돛 (반투명, 해진 밑단 · 구멍 · 덧댄 천 · 큰 돛엔 흐릿한 해골 문양) ──
 export const GHOST_SAILS: readonly { w: number; h: number; gx: number; gy: number; skull?: true; tri?: true }[] = [
   // 앞돛대: 윗돛 · 아랫돛
-  { w: 36, h: 22, gx: 52, gy: 29 },
-  { w: 46, h: 30, gx: 52, gy: 64 },
+  { w: 36, h: 22, gx: G_MASTS[0].x, gy: G_MASTS[0].top + 7 },
+  { w: 46, h: 30, gx: G_MASTS[0].x, gy: G_MASTS[0].top + 42 },
   // 큰 돛대: 윗돛 · 아랫돛 (해골)
-  { w: 46, h: 30, gx: 104, gy: 11 },
-  { w: 58, h: 38, gx: 104, gy: 52, skull: true },
+  { w: 46, h: 30, gx: G_MASTS[1].x, gy: G_MASTS[1].top + 7 },
+  { w: 58, h: 38, gx: G_MASTS[1].x, gy: G_MASTS[1].top + 48, skull: true },
   // 뒷돛대: 세모 돛
-  { w: 30, h: 36, gx: 150, gy: 50, tri: true },
+  { w: 30, h: 36, gx: G_MASTS[2].x - 14, gy: G_MASTS[2].top + 8, tri: true },
 ];
 export function ghostSailArt(i: number): Grid {
   const s = GHOST_SAILS[i];
@@ -393,10 +495,10 @@ export function ghostFlagArt(): { grid: Grid; frameW: number; frameH: number } {
 }
 
 // ── 장터 좌판 둘 (갑판 뒤쪽) ──
-export const STALLS_W = 96;
+export const STALLS_W = 110;
 export const STALLS_H = 46;
 /** 좌판 그림 왼쪽 위의 배 그림 좌표 */
-export const STALLS_G = { x: 58, y: 82 } as const;
+export const STALLS_G = { x: 84 - 2, y: G_BACK_ROW - 46 + 2 } as const;
 export function ghostStallsArt(): Grid {
   const g = new Grid(STALLS_W, STALLS_H);
   const stall = (x0: number, cloth: readonly Color[], awnA: Color, awnB: Color, goods: (x: number, y: number) => void) => {
@@ -461,7 +563,7 @@ export function ghostStallsArt(): Grid {
     g.set(x0 + 33, top - 2, GOLD);
   });
   // 좌판 B (청록 천 · 복숭아/청록 차양): 해골 등 · 접은 천 더미 · 진주 접시 · 소라
-  stall(54, hexes(["#4f8a8a", "#3e7476", "#305e62", "#244a4e"]), 0xf2c4a8, 0x3e7476, (x0, top) => {
+  stall(72, hexes(["#4f8a8a", "#3e7476", "#305e62", "#244a4e"]), 0xf2c4a8, 0x3e7476, (x0, top) => {
     // 해골 등
     g.rect(x0 + 4, top - 7, 6, 5, BONE);
     g.rect(x0 + 5, top - 2, 4, 2, BONE);
@@ -545,24 +647,95 @@ export function ghostMerchantArt(): { grid: Grid; frameW: number; frameH: number
   return { grid: g, frameW: W, frameH: H };
 }
 
-// ── 널빤지 (고물 ↔ 선착장 끝): 가로로 긴 판 + 양옆 밧줄 난간 ──
-export const PLANK_W = GHOST_PLANK.x1 - GHOST_PLANK.x0;
-export const PLANK_H = 16;
+// ── 널빤지 (고물 ↔ 선착장 끝): 가로질러 깐 밝은 판자 + 양옆 밧줄 난간 ──
+// 11/17 r2 사용자 "다리가 좁고 어디로 걷는지 몰라요" → 걷는 폭(18px)을 판자 그대로 그려요. 판 = 걷는 띠 (GHOST_PLANK_WALK).
+//  plank = 판자 · 뒤(북쪽) 밧줄 난간 · 선착장 끝 서쪽 가장자리 밧줄 (사람 뒤) / plankFront = 앞(남쪽) 밧줄 난간 (사람 앞 — 다리를 가려요)
+/** 널빤지 그림 왼쪽 위 (월드) · 크기 */
+export const PLANK_IMG = { x: GHOST_PLANK.x0, y: GHOST_PLANK.y0 - 38, w: SEA_PIER_END.x + 10 - GHOST_PLANK.x0, h: 64 } as const;
+/** 기둥 높이 (밧줄 머리) */
+const POST_H = 10;
 export function ghostPlankArt(): Grid {
-  const W = PLANK_W;
-  const g = new Grid(W, PLANK_H);
-  for (let x = 0; x < W; x++) {
-    const sag = Math.round(Math.sin((x / (W - 1)) * Math.PI) * 2);
-    for (let y = 6; y < 12; y++) g.set(x, y + sag, x % 7 === 0 ? PLANK[4] : pick(PLANK, 0.25 + (y - 6) * 0.08 + (hashU(x >> 2, y, 761) - 0.5) * 0.2, x, y));
-    g.set(x, 12 + sag, WOOD[5]);
-    // 밧줄 난간 (뒤 · 앞)
-    g.set(x, 1 + sag + Math.round(Math.sin((x / (W - 1)) * Math.PI) * 1), 0x8a7a5a, 220);
-    g.set(x, 14 + sag, 0x6a5a40, 220);
-    if (x % 18 === 2) {
-      g.vline(x, 1 + sag, 6 + sag, WOOD[3]);
-      g.vline(x, 12 + sag, 14 + sag, WOOD[3]);
+  const { w: W, h: H } = PLANK_IMG;
+  const g = new Grid(W, H);
+  const y0 = GHOST_PLANK.y0 - PLANK_IMG.y;
+  const y1 = GHOST_PLANK.y1 - PLANK_IMG.y;
+  const pierX = SEA_PIER_END.x - PLANK_IMG.x;
+  // 물 위 그늘 (판 아래 — 살짝 비쳐요)
+  for (let x = 2; x < pierX; x++) for (let y = y1 + 2; y < y1 + 5; y++) g.set(x, y, 0x1a3040, 90 - (y - y1 - 2) * 25);
+  // 옆 받침보 (짙은 나무) · 가로질러 깐 판자 (5px 마다 이음매, 못 두 줄)
+  for (let x = 0; x < W - 2; x++) {
+    g.set(x, y0 - 1, WOOD[4]);
+    g.set(x, y1 + 1, WOOD[5]);
+    for (let y = y0; y <= y1; y++) {
+      const board = Math.floor(x / 5);
+      const seam = x % 5 === 4;
+      const shade = 0.12 + ((y - y0) / (y1 - y0)) * 0.3 + (hashU(board, y >> 2, 761) - 0.5) * 0.3;
+      g.set(x, y, seam ? DECK_LIT[4] : pick(DECK_LIT, shade, x, y));
+      if (!seam && x % 5 === 1 && (y === y0 + 1 || y === y1 - 1)) g.set(x, y, 0x8a8678);
     }
   }
+  // 선착장 데크에 얹힌 끝 (쇠 띠)
+  g.rect(pierX + 1, y0, 2, y1 - y0 + 1, IRON);
+  // 뒤(북쪽) 밧줄 난간: 고물 기둥 ↔ 선착장 기둥 (두 가닥, 살짝 처져요)
+  const rope = (xa: number, ya: number, xb: number, yb: number, sag: number, c: Color) => {
+    const n = Math.max(1, Math.abs(xb - xa), Math.abs(yb - ya));
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      g.set(Math.round(xa + (xb - xa) * t), Math.round(ya + (yb - ya) * t + Math.sin(t * Math.PI) * sag), c);
+    }
+  };
+  const nTop = y0 - 2 - POST_H;
+  rope(0, nTop + 1, pierX + 2, nTop + 1, 3, 0x9a8a62);
+  rope(0, nTop + 5, pierX + 2, nTop + 5, 2, 0x7a6a48);
+  // 선착장 끝 서쪽 가장자리 밧줄 (모서리 기둥 ↔ 다리 입구 북쪽 기둥 — 여기까지 막히고 그 아래가 열린 자리예요)
+  const cornerY = SEA_PIER_END.y + 2 - PLANK_IMG.y;
+  const cx = pierX + 2;
+  g.vline(cx, cornerY - POST_H + 2, cornerY, WOOD[3]);
+  g.set(cx, cornerY - POST_H + 1, WOOD[1]);
+  rope(cx, cornerY - POST_H + 3, cx, nTop + 1, 0, 0x9a8a62);
+  for (let y = cornerY - POST_H + 3; y <= nTop + 1; y++) g.set(cx + 1, y, 0x6a5a40);
+  toneOutline(g, 0.34);
+  return g;
+}
+/** 앞(남쪽) 밧줄 난간 (사람 앞에 그려요 — 깊이 = 널빤지 남쪽 가장자리) */
+export function ghostPlankFrontArt(): Grid {
+  const { w: W, h: H } = PLANK_IMG;
+  const g = new Grid(W, H);
+  const y1 = GHOST_PLANK.y1 - PLANK_IMG.y;
+  const pierX = SEA_PIER_END.x - PLANK_IMG.x;
+  const sTop = y1 + 2 - POST_H;
+  for (let x = 0; x <= pierX + 2; x++) {
+    const t = x / (pierX + 2);
+    g.set(x, Math.round(sTop + 1 + Math.sin(t * Math.PI) * 3), 0x9a8a62);
+    g.set(x, Math.round(sTop + 5 + Math.sin(t * Math.PI) * 2), 0x7a6a48);
+  }
+  toneOutline(g, 0.34);
+  return g;
+}
+/** 다리 입구 기둥 등불 (고물 둘 · 선착장 끝 둘 — 원점 아래 가운데) */
+export const GATE_POST_W = 9;
+export const GATE_POST_H = POST_H + 9;
+export function ghostGatePostArt(): Grid {
+  const g = new Grid(GATE_POST_W, GATE_POST_H);
+  const cx = 4;
+  // 기둥 (둥근 나무 · 왼쪽 밝게) · 밧줄 매듭
+  for (let y = 8; y < GATE_POST_H; y++) {
+    g.set(cx - 1, y, WOOD[1]);
+    g.set(cx, y, WOOD[3]);
+    g.set(cx + 1, y, WOOD[5]);
+  }
+  g.hline(cx - 1, cx + 1, GATE_POST_H - 1, WOOD[5]);
+  g.set(cx - 2, 10, 0x9a8a62);
+  g.set(cx + 2, 10, 0x9a8a62);
+  g.set(cx + 2, 14, 0x7a6a48);
+  // 등불 (쇠 갓 · 녹빛 불 · 아래 받침)
+  g.hline(cx - 2, cx + 2, 0, IRON);
+  g.set(cx, 0, IRON_HI);
+  g.rect(cx - 2, 1, 5, 6, IRON);
+  g.rect(cx - 1, 2, 3, 4, GHOST_GREEN[1]);
+  g.set(cx - 1, 2, GHOST_GREEN[0]);
+  g.set(cx, 3, GHOST_GREEN[0]);
+  g.hline(cx - 3, cx + 3, 7, IRON_HI);
   toneOutline(g, 0.36);
   return g;
 }
@@ -621,6 +794,8 @@ export function forEachGhostTexture(tex: (key: string, build: () => Grid | { gri
   tex(T.stalls, ghostStallsArt);
   tex(T.merchant, ghostMerchantArt);
   tex(T.plank, ghostPlankArt);
+  tex(T.plankFront, ghostPlankFrontArt);
+  tex(T.gatePost, ghostGatePostArt);
   tex(T.mist, ghostMistArt, true);
   tex(T.glow, ghostGlowArt, true);
   tex(T.windows, ghostWindowsArt);

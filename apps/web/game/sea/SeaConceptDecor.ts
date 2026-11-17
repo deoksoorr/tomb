@@ -7,6 +7,7 @@ import { bridge } from "../bridge";
 import { DEPTH } from "../config";
 import { breathPuff, bulbGlowSheet, doorWreath, giftPile, snowCap, snowGlint, snowman, snowRoof, type Bulb, type SnowCapOpts } from "../sprites/winterArt";
 import { addTwinkle } from "../world/conceptLights";
+import { GULL_TEX, GULL_VEND_W } from "./gullArt";
 import * as Art from "./seaArt";
 import { cottageRoofArea } from "./seaCottageArt";
 import * as Lay from "./seaLayout";
@@ -112,6 +113,9 @@ function skinOf(name: string): Skin | null {
     case "realty":
       // 마을 분양 사무소와 같은 그림: 지붕 13~23줄 (간판·간판 다리는 빼요), 문 위 리스 + 처마 전구
       return { roof: (_x, y, c) => y >= 13 && y <= 23 && lum(c) > 60, xmas: eaveDress({ x: 3, y: 24 }, { x: 56, y: 24 }, 3, { x: 25, y: 34 }) };
+    case "gullVend":
+      // 11/17 r2 과자 자판기: 차양·위에 앉은 갈매기 머리에 소복이 · 크리스마스엔 차양 끝 전구 줄
+      return { cap: { depth: 2 }, xmas: eaveDress({ x: 1, y: 10 }, { x: GULL_VEND_W - 2, y: 10 }, 1) };
     case "kiosk":
       // 차양 위에 소복이 · 크리스마스엔 차양 끝 전구 + 앞판 리스
       return { cap: { depth: 3 }, xmas: eaveDress({ x: 2, y: 23 }, { x: Art.KIOSK_ART_W - 3, y: 23 }, 2, { x: Art.KIOSK_ART_W / 2 - 5, y: 44 }) };
@@ -299,6 +303,7 @@ export class SeaConceptDecor {
       [T.shelter, SEA_BUS_STOP.x, SEA_BUS_STOP.y + 2, 0.5, 1],
       [T.realty, SEA_REALTY.x, SEA_REALTY.y + 2, 0.5, 1],
       [T.kiosk, SEA_KIOSK.x, SEA_KIOSK.y + 3, 0.5, 1],
+      [GULL_TEX.vend, Lay.SEA_SNACK_VEND.x, Lay.SEA_SNACK_VEND.y + 2, 0.5, 1],
       [T.lighthouse, SEA_LIGHTHOUSE.x, SEA_LIGHTHOUSE.y + 3, 0.5, 1],
       ...SEA_LOTS.map((l): [string, number, number, number, number] => [T.lot(l.n), l.x - 2, l.y - Art.LOT_RISE, 0, 0]),
     ];

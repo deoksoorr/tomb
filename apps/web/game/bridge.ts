@@ -112,6 +112,10 @@ export type GameEvents = {
    * UI가 「바다 보기」(on이면 「돌아가기」) 버튼과 V 단축키를 띄워요
    */
   "sea:hud": { on: boolean } | null;
+  /** 11/17 r2 지금 갈매기 과자를 던질 수 있는지 (sticky — 던질 수 있으면 던질 과자, 아니면 null). 과자 칸의 [과자 던지기] 버튼이 봐요 */
+  "sea:snack:can": { kind: "plain" | "spicy" } | null;
+  /** 11/17 r2 선착장 길목 과자 자판기 앞 E → UI가 과자 자판기 창을 열어요 */
+  "sea:snack:vend": undefined;
   /**
    * 놀이기구 2 하늘 시점 안내 (sticky, null = 숨김). sky = 관람차·열기구 하늘 시점이라 UI가 HUD를 줄이고 이 안내를 띄운다.
    * place = 지나가는 곳 이름(열기구), hint = 조작 안내, left = 내릴 때까지 남은 초,
@@ -271,6 +275,8 @@ export type UiEvents = {
   "sea:ghost:call": { call: "on" | "off" | null };
   /** 11/17 포구 갈매기 과자 (sticky): 가진 과자 · 손에 든 과자 (매점 창·게임이 서로 알려요) */
   "sea:gull:snacks": { plain: number; spicy: number; hand: "plain" | "spicy" };
+  /** 11/17 r2 과자 칸의 [과자 던지기] 버튼 → 가장 가까운 갈매기 쪽으로 던져요 (E와 같은 일 — 다른 E 대상이 가까워도) */
+  "sea:snack:throw": undefined;
   /** 동물원 타는 펫 올라타기·내리기 (모바일·HUD 버튼, 데스크톱은 R) */
   "input:ride": undefined;
   /** 11/16 다른 장면으로 가기 직전: 의자·벤치·그네·해먹 같은 자리에 있으면 일어난다 (탈것은 lib/rideGate가 먼저 막는다) */
@@ -472,6 +478,7 @@ const STICKY = new Set<keyof AllEvents>([
   "view:mode",
   "view:busy",
   "sea:hud",
+  "sea:snack:can",
   "sea:ghost:call",
   "sea:gull:snacks",
   "audio:settings",

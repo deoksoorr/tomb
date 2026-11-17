@@ -55,8 +55,9 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { PLATE_LABEL, PLATE_LOT_FREE, SignPlate } from "../world/SignPlate";
 import { worldTintOf } from "../world/worldTint";
 import { forEachGhostTexture } from "./ghostShipArt";
-import { forEachGullTexture, GULL_TEX } from "./gullArt";
-import { hotLevel, HOT_MS } from "@/lib/sea/gull";
+import { GHOST_HULL } from "./ghostShipLayout";
+import { forEachGullTexture, GULL_TEX, GULL_VEND_H } from "./gullArt";
+import { eatSpicy, gullHotLevel, gullHotOver, heldHot, holdHot, type GullHot } from "@/lib/sea/gull";
 import * as Art from "./seaArt";
 import { noise1, shoreDelay, shoreReach, WaveTrain } from "./seaWaves";
 import * as Lay from "./seaLayout";
@@ -131,7 +132,9 @@ type Mote = { img: Phaser.GameObjects.Image; x: number; y: number; t0: number; l
 type Perch = { x: number; y: number; lift: number };
 type GullMode = "circle" | "land" | "perch" | "flee" | "feed";
 /** 11/17 과자 받아먹기: 받아먹는 갈매기(catch) 하나 + 둘레를 맴도는 갈매기(swirl) */
-type GullFeedJob = { tx: number; ty: number; t0: number; fx: number; fy: number; role: "catch" | "swirl"; ang: number; dir: 1 | -1; hot: boolean; piece: number; done: boolean };
+// r2 hover = 과자 자리까지 날아오는 시간 (멀리서 오면 길게 — 어디서 던져도 갈매기가 자연스럽게 날아와요)
+// r2 hotHold = 매운 과자를 먹으러 오는 빨간 갈매기의 멈춰 둔 빨간 시간 (lib/sea/gull holdHot — 오는 동안 하얘지지 않게)
+type GullFeedJob = { tx: number; ty: number; t0: number; fx: number; fy: number; role: "catch" | "swirl"; ang: number; dir: 1 | -1; hot: boolean; piece: number; done: boolean; hover: number; hotHold: number | null };
 type Gull = {
   img: Phaser.GameObjects.Image;
   mode: GullMode;
@@ -153,13 +156,13 @@ type Gull = {
   perch: number;
   until: number;
   phase: number;
-  /** 11/17 과자 받아먹는 중 · 매운 과자를 먹은 때 (빨개져요 — 0이면 아니에요) */
+  /** 11/17 과자 받아먹는 중 · 매운 과자를 먹고 빨개진 상태 (lib/sea/gull GullHot — 없으면 하얘요) */
   feed: GullFeedJob | null;
-  hotAt: number;
+  hot: GullHot | null;
   steamAt: number;
   flameAt: number;
 };
-type Piece = { img: Phaser.GameObjects.Image; x0: number; y0: number; x1: number; y1: number; t0: number; dur: number; on: boolean };
+type Piece = { img: Phaser.GameObjects.Image; x0: number; y0: number; x1: number; y1: number; t0: number; dur: number; on: boolean; life: number };
 type Puff = { img: Phaser.GameObjects.Image; x: number; y: number; t0: number; on: boolean };
 type Flame = { img: Phaser.GameObjects.Image; g: Gull | null; t0: number };
 /** 과자를 보고 몰려오는 갈매기 수 · 받아먹기까지 (ms) */
@@ -167,6 +170,9 @@ const FEED_GULLS = 5;
 const FEED_HOVER_MS = 900;
 const FEED_DIVE_MS = 380;
 const FEED_SWIRL_MS = 2800;
+/** r2 멀리서 날아오는 빠르기 (px/ms) · 가장 긴 날아오기 */
+const FEED_FLY_SPEED = 0.32;
+const FEED_HOVER_MAX_MS = 2600;
 
 /** 시험·장면용: 지금 물가 선 (물 몸통이 시작하는 y, 밀려옴 포함) */
 export type SeaWaterState = { level: number; lineY: number; edgeY: number; wetTop: number };
@@ -512,6 +518,11 @@ export class SeaMap implements SeaMapApi {
     this.prop(CAMP_TEX.vending, Lay.SEA_VEND.x, Lay.SEA_VEND.y, Lay.SEA_VEND.y, 2);
     this.vendLit = this.cull(Lay.SEA_VEND.x, Lay.SEA_VEND.y, s.add.image(Lay.SEA_VEND.x, Lay.SEA_VEND.y + 2, CAMP_TEX.vendingLit).setOrigin(0.5, 1).setBlendMode(Phaser.BlendModes.ADD).setDepth(Lay.SEA_VEND.y + 0.5).setAlpha(0));
     this.plate(Lay.SEA_VEND.x, Lay.SEA_VEND.y - 44, "음료");
+    // 11/17 r2 과자 자판기 (선착장 길목 — 위에 갈매기가 앉아 있어요. 밤엔 진열창이 밝아요)
+    const V = Lay.SEA_SNACK_VEND;
+    this.prop(GULL_TEX.vend, V.x, V.y, V.y, 2);
+    this.snackLit = this.cull(V.x, V.y, s.add.image(V.x, V.y + 2, GULL_TEX.vendLit).setOrigin(0.5, 1).setBlendMode(Phaser.BlendModes.ADD).setDepth(V.y + 0.5).setAlpha(0));
+    this.plate(V.x, V.y - GULL_VEND_H - 6, "과자");
     // 해변 모닥불: 돌 고리 + 낮엔 꺼진 장작, 밤엔 마을 모닥불과 같은 불꽃·불티
     const F = SEA_BONFIRE;
     this.keep(s.add.image(F.x, F.y + 1, WP.fireRing).setOrigin(0.5, 0.5).setDepth(DEPTH.decal + 2).setScale(1.2));
@@ -565,6 +576,7 @@ export class SeaMap implements SeaMapApi {
   private embers: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
   private hammock: Phaser.GameObjects.Image | null = null;
   private vendLit: Phaser.GameObjects.Image | null = null;
+  private snackLit: Phaser.GameObjects.Image | null = null;
   private fireBoost = false;
   /** 해변 모닥불이 타고 있는지 (해 질 녘부터 — SeaScene이 불멍 구도를 이걸로 봐요) */
   bonfireLit = false;
@@ -593,6 +605,7 @@ export class SeaMap implements SeaMapApi {
     const a = lit ? 0.55 + (this.reduced ? 0 : 0.12 * Math.sin(time / 170) + 0.06 * Math.sin(time / 63)) : 0;
     this.bonfireGlow?.setAlpha(a);
     this.vendLit?.setAlpha(Math.max(0, this.lit) * 0.9);
+    this.snackLit?.setAlpha(Math.max(0, this.lit) * 0.9);
   }
 
   /** 바닷가 쪽: 말뚝·테트라포드·바위·족욕 바위·배·부표 */
@@ -672,7 +685,7 @@ export class SeaMap implements SeaMapApi {
     for (let i = 0; i < this.perches.length; i++) this.perchTaken.push(null);
     for (let i = 0; i < GULLS; i++) {
       const img = this.keep(s.add.image(0, 0, Art.SEA_TEX.gull, 1).setOrigin(0.5, 1).setDepth(OVERHEAD));
-      const g: Gull = { img, mode: "circle", x: 0, y: 0, cx: 0, cy: 0, rad: 60, ang: 0, spd: 0.001, fx: 0, fy: 0, tx: 0, ty: 0, t0: 0, dur: 1, perch: -1, until: 0, phase: Math.random() * 4000, feed: null, hotAt: 0, steamAt: 0, flameAt: 0 };
+      const g: Gull = { img, mode: "circle", x: 0, y: 0, cx: 0, cy: 0, rad: 60, ang: 0, spd: 0.001, fx: 0, fy: 0, tx: 0, ty: 0, t0: 0, dur: 1, perch: -1, until: 0, phase: Math.random() * 4000, feed: null, hot: null, steamAt: 0, flameAt: 0 };
       this.gulls.push(g);
       // 처음엔 반쯤은 앉아 있어요
       if (i % 2 === 0 && this.freePerch(i) >= 0) {
@@ -687,6 +700,25 @@ export class SeaMap implements SeaMapApi {
     return this.gulls.some((g) => Math.hypot(g.x - x, g.y - y) <= r);
   }
 
+  /** 11/17 r2 (x,y)에서 가장 가까운 갈매기 자리 (과자를 그쪽으로 던져요) — 없으면 null */
+  nearestGull(x: number, y: number): { x: number; y: number } | null {
+    let best: Gull | null = null;
+    let bd = Infinity;
+    for (const g of this.gulls) {
+      const d = Math.hypot(g.x - x, g.y - y);
+      if (d < bd) {
+        bd = d;
+        best = g;
+      }
+    }
+    return best ? { x: best.x, y: best.y } : null;
+  }
+
+  /** 시험용: 갈매기 빨간 정도 (차례대로) */
+  gullHotLevels(now: number): number[] {
+    return this.gulls.map((g) => gullHotLevel(g.hot, now));
+  }
+
   /**
    * 11/17 과자를 던졌어요: (fx,fy)에서 (tx,ty)로 조각이 포물선으로 날아가고, 가까운 갈매기 다섯이 몰려와 맴돌다 하나가 낚아채요.
    * hot = 매운 새우 과자 (받아먹은 갈매기가 30초 빨개져요). 같은 바닷가 사람의 던지기도 여기로 와요 (실시간 act)
@@ -696,12 +728,12 @@ export class SeaMap implements SeaMapApi {
     const s = this.scene;
     let pi = this.pieces.findIndex((p) => !p.on);
     if (pi < 0 && this.pieces.length < 6) {
-      this.pieces.push({ img: this.keep(s.add.image(0, 0, GULL_TEX.piece(hot)).setVisible(false)), x0: 0, y0: 0, x1: 0, y1: 0, t0: 0, dur: 1, on: false });
+      this.pieces.push({ img: this.keep(s.add.image(0, 0, GULL_TEX.piece(hot)).setVisible(false)), x0: 0, y0: 0, x1: 0, y1: 0, t0: 0, dur: 1, on: false, life: 3200 });
       pi = this.pieces.length - 1;
     }
     if (pi < 0) pi = 0;
     const pc = this.pieces[pi];
-    Object.assign(pc, { x0: fx, y0: fy - 14, x1: tx, y1: ty, t0: now, dur: 460, on: true });
+    Object.assign(pc, { x0: fx, y0: fy - 14, x1: tx, y1: ty, t0: now, dur: 460, on: true, life: 3200 });
     pc.img.setTexture(GULL_TEX.piece(hot)).setVisible(true).setDepth(OVERHEAD - 1);
     const free = this.gulls.filter((g) => g.mode !== "feed").sort((a, b) => Math.hypot(a.x - tx, a.y - ty) - Math.hypot(b.x - tx, b.y - ty));
     free.slice(0, FEED_GULLS).forEach((g, i) => {
@@ -710,8 +742,12 @@ export class SeaMap implements SeaMapApi {
         g.perch = -1;
       }
       g.mode = "feed";
-      g.feed = { tx, ty, t0: now + i * 90, fx: g.x, fy: g.y, role: i === 0 ? "catch" : "swirl", ang: Math.random() * Math.PI * 2, dir: Math.random() < 0.5 ? 1 : -1, hot, piece: pi, done: false };
+      const hover = Math.max(FEED_HOVER_MS, Math.min(FEED_HOVER_MAX_MS, Math.hypot(g.x - tx, g.y - ty) / FEED_FLY_SPEED));
+      // r2 이미 빨간 갈매기는 매운 과자를 먹으러 오는 동안 빨간 시간을 멈춰 두고 빨간 채로 (하얘지지 않게 — 받아먹는 순간 30초 다시)
+      g.feed = { tx, ty, t0: now + i * 90, fx: g.x, fy: g.y, role: i === 0 ? "catch" : "swirl", ang: Math.random() * Math.PI * 2, dir: Math.random() < 0.5 ? 1 : -1, hot, piece: pi, done: false, hover, hotHold: holdHot(g.hot, now, hot) };
       g.img.setDepth(OVERHEAD);
+      // 조각은 받아먹을 때까지 떠 있어요 (멀리서 오면 그만큼 오래)
+      if (i === 0) pc.life = Math.max(pc.life, hover + FEED_DIVE_MS + 600);
     });
     this.onGullCall?.(tx, ty, false);
   }
@@ -719,21 +755,22 @@ export class SeaMap implements SeaMapApi {
   /** 11/17 과자 받아먹기 한 프레임 (끝나면 다시 맴돌러 가요) */
   private updateFeed(g: Gull, time: number): void {
     const f = g.feed!;
+    if (f.hotHold !== null && !f.done) g.hot = heldHot(f.hotHold, time);
     const t = Math.max(0, time - f.t0);
     const ease = (k: number) => k * k * (3 - 2 * k);
     if (f.role === "catch") {
       const hx = f.tx + 10 * f.dir;
       const hy = f.ty - 34;
-      if (t < FEED_HOVER_MS) {
-        const k = ease(t / FEED_HOVER_MS);
+      if (t < f.hover) {
+        const k = ease(t / f.hover);
         g.x = f.fx + (hx - f.fx) * k;
         g.y = f.fy + (hy - f.fy) * k - Math.sin(k * Math.PI) * 14;
         this.flap(g, time, hx < f.fx, 1);
         return;
       }
-      if (t < FEED_HOVER_MS + FEED_DIVE_MS) {
+      if (t < f.hover + FEED_DIVE_MS) {
         // 낚아채러 쏜살같이 내려와요 (날개를 접어요)
-        const k = (t - FEED_HOVER_MS) / FEED_DIVE_MS;
+        const k = (t - f.hover) / FEED_DIVE_MS;
         g.x = hx + (f.tx - hx) * k;
         g.y = hy + (f.ty - 4 - hy) * k * k;
         g.img.setFrame(2).setFlipX(f.dir > 0);
@@ -748,7 +785,8 @@ export class SeaMap implements SeaMapApi {
         }
         this.onGullCall?.(g.x, g.y, false);
         if (f.hot) {
-          g.hotAt = time;
+          // r2 이미 빨간 갈매기는 빨간 채로 30초 다시 (하얀 갈매기만 0.6초에 걸쳐 빨개져요)
+          g.hot = eatSpicy(g.hot, time);
           g.steamAt = time;
           g.flameAt = time + 500;
         }
@@ -764,11 +802,11 @@ export class SeaMap implements SeaMapApi {
     const a = f.ang + (t / 360) * f.dir;
     const ox = f.tx + Math.cos(a) * r;
     const oy = f.ty - 30 + Math.sin(a) * r * 0.42 + Math.sin(t / 170 + f.ang) * 2;
-    const k = ease(Math.min(1, t / 800));
+    const k = ease(Math.min(1, t / Math.max(800, f.hover)));
     g.x = f.fx + (ox - f.fx) * k;
     g.y = f.fy + (oy - f.fy) * k;
     this.flap(g, time, Math.sin(a) * f.dir > 0, 1);
-    if (t > FEED_SWIRL_MS) {
+    if (t > FEED_SWIRL_MS + f.hover - FEED_HOVER_MS) {
       g.feed = null;
       if (Math.random() < 0.5) this.onGullCall?.(g.x, g.y, false);
       this.newCircle(g, time);
@@ -784,18 +822,18 @@ export class SeaMap implements SeaMapApi {
       const x = pc.x0 + (pc.x1 - pc.x0) * k;
       const y = pc.y0 + (pc.y1 - pc.y0) * k - Math.sin(k * Math.PI) * 26;
       pc.img.setPosition(Math.round(x), Math.round(y)).setRotation(this.reduced ? 0 : k * 6);
-      // 아무도 못 받으면 3초 뒤 물에 가라앉아요
-      if (time - pc.t0 > 3200) {
+      // 아무도 못 받으면 3초(멀리서 오는 중이면 그만큼 더) 뒤 물에 가라앉아요
+      if (time - pc.t0 > pc.life) {
         pc.on = false;
         pc.img.setVisible(false);
       }
     }
     const s = this.scene;
     for (const g of this.gulls) {
-      if (!g.hotAt) continue;
-      const lv = hotLevel(time - g.hotAt);
-      if (time - g.hotAt >= HOT_MS) {
-        g.hotAt = 0;
+      if (!g.hot) continue;
+      const lv = gullHotLevel(g.hot, time);
+      if (gullHotOver(g.hot, time)) {
+        g.hot = null;
         g.img.clearTint();
         continue;
       }
@@ -843,7 +881,7 @@ export class SeaMap implements SeaMapApi {
     for (const fl of this.flames) {
       if (!fl.g) continue;
       const k = (time - fl.t0) / 340;
-      if (k >= 1 || !fl.g.hotAt) {
+      if (k >= 1 || !fl.g.hot) {
         fl.g = null;
         fl.img.setVisible(false);
         continue;
@@ -1469,9 +1507,11 @@ export class SeaMap implements SeaMapApi {
         if (bottom <= top || Math.random() > want * (this.reduced ? 0.02 : 0.08)) continue;
         g.x = Math.round(view.x + Math.random() * view.width);
         g.y = Math.round(top + Math.random() * (bottom - top));
-        // 11/16 유령선 자리는 비워 둬요 (다음 차수에 배가 들어와요)
+        // 11/16 유령선 자리는 비워 둬요 (11/17 r2 커진 배 몸까지)
         const C = SEA_GHOST_BERTH.clear;
+        const G = GHOST_HULL;
         if (g.x >= C.x && g.x <= C.x + C.w && g.y >= C.y && g.y <= C.y + C.h) continue;
+        if (g.x >= G.x && g.x <= G.x + G.w && g.y >= G.y && g.y <= G.y + G.h) continue;
         g.t0 = time;
         g.life = (this.reduced ? 1400 : 600) + Math.random() * 900;
         g.s = 0.6 + Math.random() * 0.7;
@@ -1537,7 +1577,7 @@ export class SeaMap implements SeaMapApi {
     this.reachTop.fill(Number.NaN);
     this.buoys.length = 0;
     this.lampGlows.length = 0;
-    this.bonfire = this.bonfireAsh = this.bonfireGlow = this.hammock = this.vendLit = null;
+    this.bonfire = this.bonfireAsh = this.bonfireGlow = this.hammock = this.vendLit = this.snackLit = null;
     this.embers = null;
     this.bonfireLit = false;
     this.rockFoams.length = 0;

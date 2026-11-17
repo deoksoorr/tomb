@@ -88,12 +88,12 @@ import { SeaRides } from "./SeaRides";
 import { SeaKayaks } from "./SeaKayaks";
 import { remoteTouch, type SeaHull } from "./SeaRides";
 import { resolveHulls, SHIP_GAIN, strongerGain, type BounceKind } from "../logic/bounce";
-import { seaStandable } from "./seaLayout";
+import { seaSnackZone, seaStandable } from "./seaLayout";
 import { shipHulls, shipWakeAt, type ShipHull } from "./seaShipsPlan";
 import { StarScopes } from "../scopes/StarScopes";
 import { SeaHornSound, SeaShips } from "./seaShips";
 import { GhostShip } from "./GhostShip";
-import { FEATHER_MSG, SNACK, SNACK_NONE_MSG, type SnackKind } from "@/lib/sea/gull";
+import { FEATHER_MSG, SNACK_NONE_MSG, type SnackKind } from "@/lib/sea/gull";
 import { gullApi, publishSnacks } from "@/lib/sea/gullClient";
 import { errorMessage } from "@/lib/api";
 
@@ -647,6 +647,7 @@ export class SeaScene extends Phaser.Scene {
         if (kind === "gull" || kind === "gullHot") {
           const r = this.remotes.get(sid);
           if (r?.visible) {
+            // r2 우리 화면에서도 그 사람에게 가장 가까운 갈매기 쪽으로 (갈매기 자리는 화면마다 달라요 — 같은 규칙으로 몰려와요)
             const t = this.snackTarget(r.x, r.y, r.view.dir);
             this.map.feedGulls(r.x, r.y, t.x, t.y, kind === "gullHot", this.time.now);
           }
@@ -824,6 +825,15 @@ export class SeaScene extends Phaser.Scene {
     on.push(bridge.on("player:stand", () => standForGate(this.player, this.time.now, this.seatReq)));
     // 11/16 바다 보기 켜기·끄기 (「바다 보기」 버튼·V)
     on.push(bridge.on("sea:view", () => this.toggleView()));
+    // 11/17 r2 F 키·과자 칸의 [과자 던지기] 버튼 (E는 탈것·자리·자판기 같은 상호작용만 — 사용자: E가 겹쳐 카약을 못 탔어요)
+    on.push(
+      bridge.on("sea:snack:throw", () => {
+        if (this.covered || this.locked || this.host.hub.isBlocked) return;
+        if (this.throwSnack()) return;
+        const s = bridge.last("sea:gull:snacks");
+        if (!s || s.plain + s.spicy <= 0) this.toast(SNACK_NONE_MSG);
+      }),
+    );
     // 11/16 r19 바라보는 장면에서 Esc (lib/viewKeyGuard)
     on.push(bridge.on("view:exit", () => this.leaveView()));
     // 11/16 매점에서 샀어요: 증서를 실시간 서버로 보내고 먹어요
@@ -963,8 +973,6 @@ export class SeaScene extends Phaser.Scene {
     if (a !== "interact") return;
     // 11/17 유령선: 상인 앞이면 장터 창, 헤엄치다 사다리 앞이면 오르기
     if (this.ghost?.interact()) return;
-    // 11/17 손에 든 과자가 있고 갈매기가 가까우면 던지기
-    if (!moving && this.throwSnack()) return;
     // 11/16 r13 가까운 빈 튜브·제트스키가 있으면 타기 (헤엄치는 중에도 — 잠수보다 먼저)
     if (!moving && (this.rides?.interact() || this.kayaks?.interact() || this.stars?.interact())) return;
     // 11/16 물속이면 E = 잠수·떠오르기 (마을 강·호수와 같은 규칙 — 물이 덮은 갯벌·먼바다 어디서든)
@@ -1227,6 +1235,13 @@ export class SeaScene extends Phaser.Scene {
       case "realty":
         // 11/16 포구 오두막: 빈 터·부동산 → 포구 부동산 창, 오두막 → 그 집 안으로 (seaHousing)
         this.housing?.use(o);
+        break;
+      case "snackVend":
+        // 11/17 r2 과자 자판기 (갈매기 과자·매운 새우 과자) → UI 창
+        if (this.rest) this.leaveRest(this.time.now);
+        if (this.player.sitting) this.player.stand(this.time.now, this.seatReq);
+        this.player.faceTo(o.x, o.y - 10, this.time.now);
+        bridge.emit("sea:snack:vend");
         break;
       case "kiosk":
       case "vending":
@@ -1562,9 +1577,6 @@ export class SeaScene extends Phaser.Scene {
     if (lifeHint) other = lifeHint;
     const rideHint = !this.locked ? (this.rides?.hint(this.seatHint.prefix) ?? this.kayaks?.hint(this.seatHint.prefix) ?? this.stars?.hint(this.seatHint.prefix) ?? null) : null;
     if (rideHint) other = rideHint;
-    // 11/17 갈매기 과자 던지기 안내
-    const snack = !this.locked && !rideHint ? this.snackReady() : null;
-    if (snack) other = { x: pl.x, y: pl.y + 2, text: `${this.seatHint.prefix}${SNACK[snack].name} 던지기` };
     // 11/17 유령선 상인·밧줄 사다리 안내
     const ghostHint = !this.locked ? (this.ghost?.hint(this.seatHint.prefix) ?? null) : null;
     if (ghostHint) other = ghostHint;
@@ -1572,6 +1584,7 @@ export class SeaScene extends Phaser.Scene {
     const keys = this.seatHint.prefix === "E ";
     const standText = bench ? (keys ? "←→ 옆자리 · ↑↓ 일어나기 · T 벤치 상태" : "좌우로 옆자리 · 위아래로 일어나기") : pl.state === "sitChair" && keys ? "이동하면 일어나요 · T 상태 고르기" : null;
     this.seatHint.update(other ? null : seat, pl, sittingFor, false, labelScale, other, standText);
+    this.publishSnackCan();
   }
 
   private declutterLabels(now: number, pnow: number): void {
@@ -1701,27 +1714,37 @@ export class SeaScene extends Phaser.Scene {
     this.toast(SEA_DRUNK_MSG);
   }
 
-  /** 11/17 던질 과자 (손에 든 것, 없으면 다른 것) — 갈매기가 가까이 있고 던질 수 있는 자세일 때만 */
+  /**
+   * 11/17 던질 과자 (손에 든 것, 없으면 다른 것) — 던질 수 있는 자세일 때만.
+   * r2 사용자: 갈매기가 날아다니는 백사장·갯벌·선착장·방파제 어디서든 (예전엔 갈매기가 170px 안에 있을 때만 — 백사장·방파제에선 거의 못 던졌어요).
+   * r2 E와 나눠 F 키·과자 칸 버튼으로만 던져요 (E 상호작용과 겹치지 않아 가까운 자리·탈것과 상관없어요)
+   */
   private snackReady(): SnackKind | null {
     const s = bridge.last("sea:gull:snacks");
     const pl = this.player;
     if (!s || (s.plain <= 0 && s.spicy <= 0)) return null;
     if (pl.inBoat || pl.inWater || pl.sitting || pl.anchored || pl.airborne || this.rest) return null;
-    if (!this.map.gullNear(pl.x, pl.y, 170)) return null;
-    // 매점·버스·자리 같은 E 거리가 가까우면 그것부터 (과자는 그 밖에서 던져요)
-    if (this.nearestObject(pl.x, pl.y) || this.pickRest(pl.x, pl.y) || this.forage.nearest(pl.x, pl.y)) return null;
-    const net = this.host.net;
-    if (seaPickSeat(pl.x, pl.y, net.online ? this.seats : EMPTY_SEATS, net.online ? net.mySid : null)) return null;
+    if (!seaSnackZone(pl.x, pl.y) || !this.map.nearestGull(pl.x, pl.y)) return null;
     const hand = s.hand;
     return s[hand] > 0 ? hand : hand === "plain" ? "spicy" : "plain";
   }
   private snackAt = -Infinity;
-  /** 던지는 자리 (바라보는 쪽으로 몇 걸음 앞) */
+  /** 던지는 자리: r2 가장 가까운 갈매기 쪽으로 몇 걸음 앞 (갈매기가 없으면 바라보는 쪽) */
   private snackTarget(x: number, y: number, dir: number): { x: number; y: number } {
-    const d = dir === DIR.left ? [-1, 0] : dir === DIR.right ? [1, 0] : dir === DIR.up ? [0, -1] : [0, 1];
+    const g = this.map.nearestGull(x, y);
+    const len = g ? Math.hypot(g.x - x, g.y - y) : 0;
+    const d = g && len > 1 ? [(g.x - x) / len, (g.y - y) / len] : dir === DIR.left ? [-1, 0] : dir === DIR.right ? [1, 0] : dir === DIR.up ? [0, -1] : [0, 1];
     return { x: x + d[0] * 34, y: y + d[1] * 26 + 6 };
   }
-  /** 11/17 갈매기에게 과자 던지기 (서버가 과자를 쓰고 깃털을 굴려요) — 던졌으면 true */
+  /** 지금 던질 수 있는 과자를 UI(과자 칸 [과자 던지기])에 알려요 — 바뀔 때만 */
+  private snackCan: SnackKind | null | undefined = undefined;
+  private publishSnackCan(): void {
+    const k = !this.locked && !this.covered ? this.snackReady() : null;
+    if (k === this.snackCan) return;
+    this.snackCan = k;
+    bridge.emit("sea:snack:can", k ? { kind: k } : null);
+  }
+  /** 11/17 갈매기에게 과자 던지기 (서버가 과자를 쓰고 깃털을 굴려요) — 던졌으면 true (F 키·과자 칸 버튼) */
   private throwSnack(): boolean {
     const kind = this.snackReady();
     if (!kind) return false;
@@ -1729,6 +1752,11 @@ export class SeaScene extends Phaser.Scene {
     if (now - this.snackAt < 1600) return true;
     this.snackAt = now;
     const pl = this.player;
+    // r2 던지자마자 숫자를 줄여요 (서버 답이 오면 그 값으로 맞춰요)
+    const last = bridge.last("sea:gull:snacks");
+    if (last) bridge.emit("sea:gull:snacks", { ...last, [kind]: Math.max(0, last[kind] - 1) });
+    const t0 = this.snackTarget(pl.x, pl.y, pl.dir);
+    pl.faceTo(t0.x, t0.y, now);
     void gullApi.throw(kind).then(
       (r) => {
         if (this.cleaned) return;
@@ -1896,6 +1924,7 @@ export class SeaScene extends Phaser.Scene {
     this.seaView?.destroy();
     this.seaView = null;
     bridge.emit("sea:hud", null);
+    bridge.emit("sea:snack:can", null);
     if (this.viewBusy) bridge.emit("view:busy", { on: false });
     this.viewBusy = false;
     this.forage?.f.destroy();

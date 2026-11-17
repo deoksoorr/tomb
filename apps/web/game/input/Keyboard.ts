@@ -1,6 +1,7 @@
 // 키보드 입력. Phaser 키보드 플러그인 대신 window 이벤트를 직접 받는다:
 //  - 입력창(input/textarea/select/contenteditable)에 포커스가 있으면 무시 → 폼에서 WASD·스페이스가 그대로 입력됨
 //  - Space = 점프, E = 상호작용 (Enter는 말풍선 채팅 입력칸), X/C = 앉기, 1 = 손 흔들기, 2 = 환호 (감정표현), 3~9 = 이모티콘 판 3~9번 칸 (5번), R = 타는 펫 타기·내리기
+//  - 11/17 r2 F = 바닷가 갈매기 과자 던지기 (E와 나눴어요 — 장면 상호작용이 아니라 onSnack으로 따로 보내요)
 //  - 오버레이 버튼에 "지금" 포커스가 남아 있으면 Space/Enter는 버튼 몫으로 둔다.
 //    (UI가 게임 키를 누르면 캡처 단계에서 버튼을 blur 하므로 e.target이 아닌 document.activeElement로 판단한다.
 //     그래야 HUD 버튼을 클릭한 직후의 첫 Space도 게임 상호작용이 된다)
@@ -28,6 +29,8 @@ const WAVE = new Set(["Digit1", "Numpad1"]);
 const CHEER = new Set(["Digit2", "Numpad2"]);
 /** 동물원 타는 펫 올라타기·내리기 */
 const RIDE = new Set(["KeyR"]);
+/** 11/17 r2 갈매기 과자 던지기 (사용자: E가 탈것 타기와 겹쳐 카약·제트스키·튜브를 못 탔어요) */
+const SNACK = new Set(["KeyF"]);
 /** 숫자 키 3~9 → 이모티콘 판 칸 */
 const EMO_KEYS: Readonly<Record<string, EmoKeyAction>> = {
   Digit3: "emo3",
@@ -64,7 +67,10 @@ export class KeyboardInput {
   private blocked = false;
   private attached = false;
 
-  constructor(private readonly onAction: (a: KeyAction) => void) {}
+  constructor(
+    private readonly onAction: (a: KeyAction) => void,
+    private readonly onSnack: () => void = () => {},
+  ) {}
 
   attach(): void {
     if (this.attached) return;
@@ -113,7 +119,7 @@ export class KeyboardInput {
     if (this.blocked || e.isComposing || isEditable(e.target) || isEditable(document.activeElement)) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const code = e.code;
-    const relevant = UP.has(code) || DOWN.has(code) || LEFT.has(code) || RIGHT.has(code) || RUN.has(code) || SIT.has(code) || INTERACT.has(code) || JUMP.has(code) || WAVE.has(code) || CHEER.has(code) || RIDE.has(code) || code in EMO_KEYS;
+    const relevant = UP.has(code) || DOWN.has(code) || LEFT.has(code) || RIGHT.has(code) || RUN.has(code) || SIT.has(code) || INTERACT.has(code) || JUMP.has(code) || WAVE.has(code) || CHEER.has(code) || RIDE.has(code) || SNACK.has(code) || code in EMO_KEYS;
     if (!relevant) return;
     if ((code === "Space" || code === "Enter") && isButtonLike(document.activeElement)) return;
     if (SCROLL_KEYS.has(code)) e.preventDefault();
@@ -126,6 +132,7 @@ export class KeyboardInput {
     else if (WAVE.has(code)) this.onAction("wave");
     else if (CHEER.has(code)) this.onAction("cheer");
     else if (RIDE.has(code)) this.onAction("ride");
+    else if (SNACK.has(code)) this.onSnack();
     else if (code in EMO_KEYS) this.onAction(EMO_KEYS[code]);
   };
 

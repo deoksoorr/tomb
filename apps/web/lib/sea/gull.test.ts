@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { speciesById, npcBuys, NPCS } from "../forage/catalog";
 import { candidates } from "../forage/rules";
-import { FEATHER_CHANCE, FEATHER_ID, hotLevel, HOT_MS, RED_FEATHER_ID, rollFeather, SNACK, SNACK_DAY_LIMIT } from "./gull";
+import { eatSpicy, FEATHER_CHANCE, FEATHER_ID, gullHotLevel, gullHotOver, heldHot, holdHot, hotLevel, HOT_FADE_MS, HOT_MS, HOT_RAMP_MS, RED_FEATHER_ID, rollFeather, SNACK, SNACK_DAY_LIMIT, type GullHot } from "./gull";
 import { MemoryGullStore } from "./gullStore";
 
 // 11/17 포구 갈매기 과자 순수 규칙 · 저장소
@@ -58,5 +58,51 @@ describe("갈매기 과자 (gull)", () => {
     expect(await s.get("a", "20261117")).toMatchObject({ spicy: 3, bought: 10 });
     const e = new MemoryGullStore();
     expect(await e.take("b", "plain")).toBe(false);
+  });
+
+  // 11/17 r2 사용자 "빨간 갈매기가 매운 과자를 또 먹으러 오다 하얘진 뒤 먹었어요"
+  it("빨간 갈매기가 매운 과자를 또 먹으면 하얘지지 않고 빨간 채로 30초를 다시 세요", () => {
+    let h: GullHot | null = eatSpicy(null, 0);
+    // 처음엔 하얀 데서 0.6초에 걸쳐 빨개져요
+    expect(gullHotLevel(h, 0)).toBe(0);
+    expect(gullHotLevel(h, HOT_RAMP_MS)).toBe(1);
+    // 20초 뒤 다시 매운 과자: 먹는 순간에도 꽉 찬 빨강 · 거기서 30초
+    h = eatSpicy(h, 20_000);
+    for (let t = 20_000; t <= 20_000 + HOT_MS - HOT_FADE_MS; t += 50) expect(gullHotLevel(h, t), `${t}`).toBe(1);
+    expect(gullHotOver(h, 20_000 + HOT_MS - 1)).toBe(false);
+    expect(gullHotOver(h, 20_000 + HOT_MS)).toBe(true);
+    // 빠지는 중(마지막 4초)에 먹어도 바로 꽉 찬 빨강
+    const fading = eatSpicy(null, 0);
+    const t1 = HOT_MS - 1000;
+    expect(gullHotLevel(fading, t1)).toBeLessThan(1);
+    expect(gullHotLevel(eatSpicy(fading, t1), t1)).toBe(1);
+    // 다 하얘진 뒤엔 다시 0.6초에 걸쳐
+    expect(gullHotLevel(eatSpicy(fading, HOT_MS + 10), HOT_MS + 10)).toBe(0);
+  });
+
+  it("매운 과자를 먹으러 오는 동안 빨간 갈매기는 빨간 채로 (시간이 끝나거나 빠지지 않아요)", () => {
+    const h = eatSpicy(null, 0);
+    // 29초째(빠지는 중)에 불려 와서 3초 동안 날아와요 → 오는 동안 내내 꽉 찬 빨강, 먹으면 또 30초
+    const call = HOT_MS - 1000;
+    const held = holdHot(h, call, true);
+    expect(held).not.toBeNull();
+    for (let t = call; t <= call + 3000; t += 50) expect(gullHotLevel(heldHot(held!, t), t), `${t}`).toBe(1);
+    const ate = eatSpicy(heldHot(held!, call + 3000), call + 3000);
+    expect(gullHotLevel(ate, call + 3000 + HOT_MS - HOT_FADE_MS - 1)).toBe(1);
+    // 받아먹지 못하고 떠나면 멈췄던 데서 다시 흘러요 (곧 빠지기 시작해요 — 30초가 다시 늘지는 않아요)
+    const left = heldHot(held!, call + 3000);
+    expect(gullHotOver(left, call + 3000 + HOT_FADE_MS + 2)).toBe(true);
+    // 일반 과자를 먹으러 오면 붙잡지 않아요 (빨간 시간이 끝날 때까지 빨강)
+    expect(holdHot(h, call, false)).toBeNull();
+    // 하얀 갈매기는 매운 과자를 먹으러 와도 하얀 채로 (먹고 나서 빨개져요)
+    expect(holdHot(null, call, true)).toBeNull();
+    expect(holdHot(h, HOT_MS + 5, true)).toBeNull();
+  });
+
+  it("빨간 정도: 0.6초에 빨개지고 마지막 4초에 돌아와요 (예전 값 그대로)", () => {
+    expect(hotLevel(300)).toBeCloseTo(0.5);
+    expect(hotLevel(300, false)).toBe(1);
+    expect(hotLevel(HOT_MS - HOT_FADE_MS / 2)).toBeCloseTo(0.5);
+    expect(hotLevel(HOT_MS)).toBe(0);
   });
 });

@@ -7,7 +7,7 @@ import type { Me } from "../types";
 import { rollFeather, SNACK, SNACK_DAY_LIMIT, SNACK_LIMIT_MSG, SNACK_NONE_MSG, type GullSnacks, type SnackKind } from "./gull";
 import { getGullStore } from "./gullStore";
 
-// 11/17 포구 갈매기 과자 (서버): 매점에서 사기 (하루 둘 합쳐 10개) · 던지기 (하나 쓰고 깃털 굴리기 — 10%, 매운 과자는 그중 40% 붉은 깃털).
+// 11/17 포구 갈매기 과자 (서버): 과자 자판기에서 사기 (하루 둘 합쳐 10개) · 던지기 (하나 쓰고 깃털 굴리기 — 10%, 매운 과자는 그중 40% 붉은 깃털).
 // 서버는 갈매기 위치를 몰라요 (어디서 던져도 같은 값 — 깃털 확률은 던진 횟수로만, 과자는 하루 10개라 남길 이득이 없어요).
 
 const snacks = (s: { plain: number; spicy: number; bought: number }): GullSnacks => ({ plain: s.plain, spicy: s.spicy, bought: s.bought, limit: SNACK_DAY_LIMIT });

@@ -14,13 +14,13 @@ import s from "./GhostLayer.module.css";
 //  - 갑판의 유령 상인 앞에서 E → 게임이 sea:ghost:open → 장터 창
 //  - 운영자 계정이 바닷가에 있으면 왼쪽 위에 운영자에게만 보이는 「유령선 부르기·보내기·시간표대로」 (서버가 운영자인지 다시 확인해요)
 
-export default function GhostLayer() {
+export default function GhostLayer({ avatar }: { avatar?: { color: string; body?: string } }) {
   const [open, setOpen] = useState(false);
   useBridgeEvent("sea:ghost:open", () => setOpen(true));
   return (
     <>
       <GhostStaffHud />
-      {open && <GhostShop onClose={() => setOpen(false)} />}
+      {open && <GhostShop onClose={() => setOpen(false)} avatar={avatar} />}
     </>
   );
 }
