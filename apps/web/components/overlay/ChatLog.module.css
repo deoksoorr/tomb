@@ -115,6 +115,59 @@
   transform: translateX(-50%);
 }
 
+/* 11/17 크기 단계 (chatSize): 작게 = 최근 세 줄·좁게, 크게 = 열네 줄까지 (위쪽 확성기 창에 닿지 않게 낮은 화면에선 줄이되 보통보다 작아지진 않는다) */
+.box[data-size="small"] {
+  width: min(360px, calc(100vw - var(--safe-left) - var(--safe-right)));
+}
+
+.box[data-size="small"] .log {
+  height: calc(3 * 1.45em + 2px);
+}
+
+.box[data-size="large"] .log {
+  height: max(calc(8 * 1.45em + 7px), min(calc(14 * 1.45em + 13px), calc(100vh - 500px)));
+}
+
+/* 크기 탭: 상자 오른쪽 위 모서리에 붙은 작은 [−][+] (기록 글자를 가리지 않게 상자 바깥 위로). 평소엔 옅게, 상자에 올리면 또렷하게 */
+.sizeTab {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  display: flex;
+  background: rgba(17, 18, 15, 0.62);
+  box-shadow: var(--px-border);
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+
+.box:hover .sizeTab,
+.sizeTab:focus-within {
+  opacity: 1;
+}
+
+.sizeBtn {
+  width: 24px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--bone);
+  font-family: var(--font-small);
+  font-size: 13px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.sizeBtn:hover:not(:disabled) {
+  color: var(--candle);
+}
+
+.sizeBtn:disabled {
+  color: var(--muted);
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* 입력칸 아래 안내 줄은 쓰는 중에만 */
 .input:not(:focus-within) > p,
 .input:not(:focus-within) > [data-chips] {
@@ -239,4 +292,13 @@
 
 .huntBox .log {
   height: calc(6 * 1.45em + 5px);
+}
+
+/* 11/17 사냥 중 크기 단계: 폭은 그대로(스킬 칸에 닿지 않게), 줄 수만 셋·여섯·아홉 */
+.huntBox[data-size="small"] .log {
+  height: calc(3 * 1.45em + 2px);
+}
+
+.huntBox[data-size="large"] .log {
+  height: max(calc(6 * 1.45em + 5px), min(calc(9 * 1.45em + 8px), calc(100vh - 560px)));
 }

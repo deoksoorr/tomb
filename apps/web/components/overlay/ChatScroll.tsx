@@ -104,6 +104,17 @@ export default function ChatScroll({ lines: shown, now, className, live = true }
     else if (act === "unread") setUnread(true);
   }, [lastId, shown.length]);
 
+  // 11/17 칸 높이가 바뀌면(데스크톱 채팅창 크기 단계) 맨 아래를 보던 중이면 계속 맨 아래로
+  useEffect(() => {
+    const el = logRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (stick.current) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const toBottom = () => {
     const el = logRef.current;
     if (el) el.scrollTop = el.scrollHeight;

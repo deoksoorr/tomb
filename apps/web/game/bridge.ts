@@ -10,6 +10,7 @@ import type { ResumeState } from "@/lib/resume";
 import type { SoundMix } from "@/lib/soundMix";
 import type { IncomingChatLine } from "@/game/logic/chatLog";
 import type { RideStatus } from "@/lib/ridePolicy";
+import type { Ambience } from "@/lib/ambience";
 
 // React(UI 오버레이) ↔ Phaser(게임) 사이의 유일한 통로. 양쪽은 서로를 직접 import하지 않는다.
 // "sticky" 이벤트는 마지막 값을 기억해서, 늦게 구독한 쪽도 last()로 현재 값을 읽을 수 있다.
@@ -212,6 +213,11 @@ export type GameEvents = {
   "fx:squirrels": { by: string; seed: number; at: number };
   /** 11/17 운영자 버튼 → 다람쥐 쿨다운 초기화 */
   "fx:squirrelsReset": undefined;
+  /**
+   * 11/17 장면(Atmosphere)이 하늘·날씨 목표를 다시 잡을 때마다 (1분마다, 날씨가 바뀌는 30분 경계엔 그 순간) 그 값을 알린다.
+   * 화면 위 시간대·날씨 글(useAmbience)이 장면 날씨와 같은 순간에 바뀌게 이 값을 그대로 쓴다
+   */
+  "ambience:now": Ambience;
   "minimap:dots": { me: { x: number; y: number }; others: number[]; residents?: number[]; /** 친구 (others에서 뺀 같은 채널 친구 위치, 하트로 그린다) */ friends?: number[]; /** 11/15 캠핑장이면 "camp", 11/16 바닷가면 "sea" (그 맵 바탕) */ map?: AwayMapId };
   /** 11/15 지금 맵 (캠핑장 장면이 뜨면 camp, 11/16 바닷가 장면이면 sea, 닫히면 village). HUD·미니맵·채팅·음악이 본다 (sticky) */
   "map:changed": { map: MapId };
