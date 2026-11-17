@@ -4,12 +4,14 @@ import { tierUntil } from "../attendTiers";
 import { legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { earnedBySource } from "../earnGauge";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, earnRule, type EarnSource } from "../economy";
-import { earnLimits, NO_BOOST } from "../pointEvent";
+import { askOf, earnTerms, raceField, raceShare, stayBonusAsk } from "../champPerks";
+import { NO_BOOST } from "../pointEvent";
 import { staffAccountIdNow } from "../staff";
-import { stayBonusSum, stayBonusTiers } from "../stayBonus";
+import { stayBonusAmounts, stayBonusTiers } from "../stayBonus";
 import { STAY_TICK_MINUTES, stayFillDays } from "../stayTime";
 import type { ActivityItem, GiftItem, Grave, GraveDecor } from "../types";
 import { kstDay, weekOfDay } from "./accounts";
+import { champBoardsSafe } from "./champ";
 import { giftTermUntil } from "./gifts";
 import { DEFAULT_HUNT_ZONE, huntDiffOf, legacyHuntBoard } from "./huntBoards";
 import type { MemoryStore } from "./memory";
@@ -160,20 +162,23 @@ export class MemoryAccounts implements AccountStore {
 
   /**
    * 항목별·하루 전체·지갑 한도(+ ipHash가 있으면 같은 IP의 그 항목 합계) 안에서 적립.
-   * lib/store/accounts-redis.ts의 Lua credit과 같은 규칙
+   * lib/store/accounts-redis.ts의 Lua credit과 같은 규칙.
+   * pre = 배수까지 이미 곱한 값 (머무르기 몰아서 정산·접속 시간 보너스 — Lua와 같은 순서로 계산한 값): ask = 줄 값, race = 레이스에 드는 값
    */
-  private credit(a: Acct, source: EarnSource, day: string, opts: EarnOptions = {}, capless = false, outsideTotal = false): number {
+  private credit(a: Acct, source: EarnSource, day: string, opts: EarnOptions & { pre?: { ask: number; race: number } } = {}, capless = false, outsideTotal = false): number {
     this.today(a, day);
     const rule = earnRule(source);
     const got = a.earned.get(source) ?? 0;
     const total = a.earned.get("_total") ?? 0;
     // 포인트 배수 이벤트: 고른 항목이면 적립·항목 한도·같은 IP 한도가 배수, 하루 전체 한도는 늘어난 몫만큼 (지갑 상한은 그대로, lib/pointEvent)
-    const lim = earnLimits(opts.boost ?? NO_BOOST, source);
-    const dailyMax = rule.dailyMax * lim.caps;
+    // 11/17 1위 혜택: %는 이벤트 배수에 더하고, 한도는 고정 몫을 더한다 (lib/champPerks earnTerms)
+    const t = earnTerms(opts.boost ?? NO_BOOST, source, opts.champ ?? []);
+    const base = opts.amount ?? rule.points;
+    const ask = opts.pre ? opts.pre.ask : askOf(base, t.m100);
     const ipKey = opts.ipHash ? `${opts.ipHash}:${day}:${source}` : null;
-    const ipLeft = ipKey ? dailyMax * ATTEND_ACCOUNTS_PER_IP - (this.ipEarned.get(ipKey) ?? 0) : Infinity;
+    const ipLeft = ipKey ? t.dailyMax * ATTEND_ACCOUNTS_PER_IP - (this.ipEarned.get(ipKey) ?? 0) : Infinity;
     // capless: 출석 달력 보상은 하루 전체 한도에 막히지 않는다 (accounts-redis.ts CLAIM_LUA와 같은 규칙)
-    const amount = Math.min((opts.amount ?? rule.points) * lim.points, dailyMax - got, capless ? Infinity : lim.total - total, BALANCE_CAP - a.points, ipLeft);
+    const amount = Math.min(ask, t.dailyMax - got, capless ? Infinity : t.total - total, BALANCE_CAP - a.points, ipLeft);
     if (!(amount > 0)) return 0;
     a.earned.set(source, got + amount);
     // 접속 보너스는 하루 전체 한도와 별개라 _total에 더하지 않는다 (accounts-redis.ts credit의 outsideTotal)
@@ -181,9 +186,19 @@ export class MemoryAccounts implements AccountStore {
     if (ipKey) this.ipEarned.set(ipKey, (this.ipEarned.get(ipKey) ?? 0) + amount);
     a.points += amount;
     this.addLifetime(a, amount);
-    const weeks = (a.weeks ??= new Map());
-    weeks.set(weekOfDay(day), (weeks.get(weekOfDay(day)) ?? 0) + amount);
-    (a.weeksAt ??= new Map()).set(weekOfDay(day), ++this.tieSeq);
+    // 11/17 1위 혜택이 붙은 항목: 1위가 아니었으면 받았을 몫만 주간 포인트 레이스에 (칸이 없으면 오늘 그 항목 적립이 모두 레이스 몫이었다)
+    let race = amount;
+    if (t.champ) {
+      const rf = raceField(source);
+      const rGot = a.earned.get(rf) ?? got;
+      race = raceShare(amount, opts.pre ? opts.pre.race : (base * t.race100) / 100, t.raceMax - rGot);
+      a.earned.set(rf, rGot + race);
+    }
+    if (race > 0) {
+      const weeks = (a.weeks ??= new Map());
+      weeks.set(weekOfDay(day), (weeks.get(weekOfDay(day)) ?? 0) + race);
+      (a.weeksAt ??= new Map()).set(weekOfDay(day), ++this.tieSeq);
+    }
     this.stat(a, day, `earn:${source}`, amount);
     return amount;
   }
@@ -265,8 +280,8 @@ export class MemoryAccounts implements AccountStore {
   }
 
   async earn(id: string, source: EarnSource, day: string, opts: EarnOptions = {}): Promise<number> {
-    const boost = opts.boost ?? (await earnBoost());
-    return this.credit(this.acct(id), source, day, { ...opts, boost });
+    const [boost, champ] = await Promise.all([opts.boost ?? earnBoost(), opts.champ ?? champBoardsSafe(id)]);
+    return this.credit(this.acct(id), source, day, { ...opts, boost, champ });
   }
 
   async spend(id: string, amount: number, reason: string, now: number): Promise<number | null> {
@@ -295,7 +310,7 @@ export class MemoryAccounts implements AccountStore {
   }
 
   async presenceTick(id: string, day: string, now: number, sid = ""): Promise<PresenceTick | null> {
-    const boost = await earnBoost(now);
+    const [boost, champ] = await Promise.all([earnBoost(now), champBoardsSafe(id, now)]);
     const a = this.acct(id);
     // 몰아서 정산 규칙은 accounts-redis.ts PRESENCE_LUA와 같다 (presenceCatchup)
     const c = presenceCatchup(a.presenceAt ?? 0, now, !!sid && a.presenceSid === sid);
@@ -307,7 +322,10 @@ export class MemoryAccounts implements AccountStore {
     a.earned.set("_stay", (a.earned.get("_stay") ?? 0) + c.ticks);
     // 총 접속 시간 (accounts-redis.ts PRESENCE_LUA의 stayMin과 같다)
     a.stayMin = (a.stayMin ?? 0) + c.ticks * STAY_TICK_MINUTES;
-    const earned = this.credit(a, "presence", day, { amount: earnRule("presence").points * c.ticks, boost });
+    // 11/17 포인트왕 머무르기 +%: 기록 1번 값 × 배수를 센 기록 수만큼 곱한 뒤 반올림 (accounts-redis.ts PRESENCE_LUA와 같은 순서)
+    const per = earnRule("presence").points;
+    const t = earnTerms(boost, "presence", champ);
+    const earned = this.credit(a, "presence", day, { boost, champ, pre: { ask: askOf(per * c.ticks, t.m100), race: (per * t.race100 * c.ticks) / 100 } });
     return {
       earned,
       ticks: c.ticks,
@@ -319,15 +337,18 @@ export class MemoryAccounts implements AccountStore {
   }
 
   async claimStayBonus(id: string, day: string, bonus = 0): Promise<{ earned: number; count: number } | null> {
-    const boost = await earnBoost();
+    const [boost, champ] = await Promise.all([earnBoost(), champBoardsSafe(id)]);
     const a = this.acct(id);
     this.today(a, day);
     const tiers = stayBonusTiers(a.earned.get("_stay") ?? 0);
     const claimed = a.earned.get("_bonus") ?? 0;
     if (tiers <= claimed) return null;
     a.earned.set("_bonus", tiers);
-    // 하루 전체 한도(800)와 별개: 자기 하루 상한(145P)·지갑 상한만 본다
-    return { earned: this.credit(a, "stayBonus", day, { amount: stayBonusSum(claimed, tiers, bonus), boost }, true, true), count: tiers - claimed };
+    // 하루 전체 한도(800)와 별개: 자기 하루 상한(145P, 이벤트·1위면 그만큼 더)·지갑 상한만 본다.
+    // 구간 값 × 배수를 구간마다 반올림해 더한다 (accounts-redis.ts STAY_BONUS_LUA와 같은 규칙 — 11/17 포인트왕은 배수에 50%를 더한다)
+    const v = stayBonusAsk(stayBonusAmounts(bonus), earnTerms(boost, "stayBonus", champ));
+    const sum = (xs: number[]) => xs.slice(claimed, tiers).reduce((n, x) => n + x, 0);
+    return { earned: this.credit(a, "stayBonus", day, { boost, champ, pre: { ask: sum(v.pay), race: sum(v.race) } }, true, true), count: tiers - claimed };
   }
 
   /** value가 null인 계정은 순위에서 뺀다. asc면 작을수록 위. tie = 같은 값일 때 먼저 달성한 순번 (작을수록 위, 주간 랭킹) */

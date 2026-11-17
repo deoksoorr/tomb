@@ -9,6 +9,7 @@ import { AWAY_MSG, CATEGORY_LABELS, FURNITURE, MAX_OWN_PER_ITEM, sellPrice, type
 import { housingApi } from "@/lib/housing/client";
 import { rotateMode } from "@/lib/housing/layout";
 import type { MyHouseResponse } from "@/lib/housing/types";
+import { furnitureDiscount } from "@/lib/champPerks";
 import { discountedPrice, equippedPerk } from "@/lib/titles";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -74,9 +75,10 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
   const phone = useMediaQuery("(max-width: 560px)");
   const coarse = useMediaQuery("(pointer: coarse)");
   const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
-  // 11/16 집 갈래 칭호의 가구 할인 (서버가 같은 규칙으로 깎는다 — lib/titles discountedPrice)
+  // 11/16 집 갈래 칭호의 가구 할인 (서버가 같은 규칙으로 깎는다 — lib/titles discountedPrice).
+  // 11/17 포인트왕(지난주 1위) 20%와 겹치면 큰 것 하나만 (lib/champPerks)
   const { me } = useMe();
-  const houseDiscount = equippedPerk(me?.equipped).houseDiscount;
+  const houseDiscount = furnitureDiscount(equippedPerk(me?.equipped).houseDiscount, me?.champ);
   const cost = (f: FurnitureDef) => discountedPrice(f.price, houseDiscount);
 
   const items = FURNITURE.filter((f) => f.category === cat);
@@ -223,9 +225,21 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
               className={cx(ui.button, ui.primary)}
               disabled={pending !== null || short || full || once}
               onClick={() => act(f, false)}
-              aria-label={`${f.name}, ${cost(f)}포인트에 사기${cost(f) < f.price ? ` (칭호 할인, 원래 ${f.price}포인트)` : ""}`}
+              aria-label={`${f.name}, ${cost(f)}포인트에 사기${cost(f) < f.price ? ` (할인, 원래 ${f.price}포인트)` : ""}`}
             >
-              {pending === f.id ? "…" : once ? "가짐" : full ? "더 못 가져요" : `${fmt(cost(f))}P${short ? ` · ${fmt(cost(f) - my.points)}P 부족해요` : " · 사기"}`}
+              {pending === f.id ? (
+                "…"
+              ) : once ? (
+                "가짐"
+              ) : full ? (
+                "더 못 가져요"
+              ) : (
+                <span>
+                  {/* 할인이 붙으면 원래 값을 그어서 같이 */}
+                  {cost(f) < f.price && <s className={styles.fsOldPrice}>{fmt(f.price)}P</s>}
+                  {`${fmt(cost(f))}P${short ? ` · ${fmt(cost(f) - my.points)}P 부족해요` : " · 사기"}`}
+                </span>
+              )}
             </button>
             {owned > 0 && (
               <button
@@ -301,6 +315,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
                     <FurnitureThumb itemId={f.id} ext={!!f.ext} />
                     <span className={styles.fsTileName}>{f.name}</span>
                     <span className={styles.fsTilePrice}>
+                      {cost(f) < f.price && <s className={styles.fsOldPrice}>{fmt(f.price)}P</s>}
                       {fmt(cost(f))}P
                       {owned > 0 && <span className={styles.fsBadge}>{(f.skin || f.ext) ? "가짐" : `×${owned}`}</span>}
                     </span>

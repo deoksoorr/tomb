@@ -84,7 +84,9 @@ describe("초월 판 (지옥 사냥)", () => {
     const r = await end(v, s);
     expect(r.reward.transcend).toBeUndefined();
     expect(r.view.endgame).toBeUndefined();
-    expect(r.reward.newLevel).toBeGreaterThan(45);
+    // 11/17 지옥 EXP 배율 11→4: Lv.42 사냥터 한 판이 레벨 45 필요량(약 7,600) 언저리라 레벨이 꼭 오르지는 않는다 → 일반 EXP가 들어왔는지만 본다
+    expect(r.reward.exp).toBeGreaterThan(0);
+    expect(r.reward.newLevel).toBeGreaterThanOrEqual(45);
   });
 });
 

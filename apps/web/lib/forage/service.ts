@@ -7,7 +7,10 @@ import { HttpError } from "../http";
 import { isStaff } from "../staff";
 import { earnPoints, earnPointsOnly, getAccounts } from "../store";
 import { kstDay, kstWeek, loadMe } from "../store/accounts";
-import { capsMult, earnLimits, NO_BOOST, type EarnBoost } from "../pointEvent";
+import type { ChampBoard } from "@tomb/protocol";
+import { earnTerms } from "../champPerks";
+import { capsMult, NO_BOOST, type EarnBoost } from "../pointEvent";
+import { champBoardsSafe } from "../store/champ";
 import { earnBoost } from "../store/pointEvent";
 import type { BugsResult } from "../rpg/types";
 import { DAILY_CATCH_MAX, dexBadgeBits, dexIdsOf, gatherNodeById, NODE_CAT, npcBuys, npcById, speciesById, STACK_MAX, type DexCat, type NpcId } from "./catalog";
@@ -87,8 +90,8 @@ const newSeed = () => Math.floor(rand() * 0x7fffffff);
 const SOURCE_OF_NPC: Record<NpcId, Extract<EarnSource, "fish" | "gather">> = { fishmonger: "fish", collector: "gather" };
 const DAY_FIELD = { fish: "fishP", gather: "gatherP", dex: "dexP" } as const;
 
-/** boost = 포인트 배수 이벤트 (lib/pointEvent) — 고른 항목이면 팔기·도감 한도 표시가 늘어난 값 */
-function toState(acct: string, snap: Snapshot, now: number, boost: EarnBoost = NO_BOOST): ForageState {
+/** boost = 포인트 배수 이벤트 (lib/pointEvent) — 고른 항목이면 팔기·도감 한도 표시가 늘어난 값. champ = 11/17 지금 1위인 랭킹 (낚시왕이면 물고기 팔기 한도 + — lib/champPerks) */
+function toState(acct: string, snap: Snapshot, now: number, boost: EarnBoost = NO_BOOST, champ: readonly ChampBoard[] = []): ForageState {
   const w = nodeWindow(now);
   return {
     bag: snap.bag,
@@ -96,7 +99,7 @@ function toState(acct: string, snap: Snapshot, now: number, boost: EarnBoost = N
     claims: snap.claims,
     titles: titlesOf(snap.dex, snap.claims, snap.pay.marks),
     reward: rewardState(snap.claims, snap.pay),
-    today: { ...snap.day, fishCap: earnRule("fish").dailyMax * capsMult(boost, "fish"), gatherCap: earnRule("gather").dailyMax * capsMult(boost, "gather"), dexCap: earnRule("dex").dailyMax * capsMult(boost, "dex"), autoCap: AUTO_FISH_DAILY_MAX },
+    today: { ...snap.day, fishCap: earnTerms(boost, "fish", champ).dailyMax, gatherCap: earnRule("gather").dailyMax * capsMult(boost, "gather"), dexCap: earnRule("dex").dailyMax * capsMult(boost, "dex"), autoCap: AUTO_FISH_DAILY_MAX },
     nodes: { ids: activeNodes(acct, now, new Set(snap.taken)).map((n) => n.id), refreshAt: windowEndsAt(w), seed: nodeSeed(acct) },
   };
 }
@@ -117,8 +120,8 @@ async function readSnap(store: ForageStore, acct: string, now: number): Promise<
 }
 
 export async function forageState(acct: string, now = Date.now(), store: ForageStore = getForageStore()): Promise<ForageState> {
-  const [snap, boost] = await Promise.all([readSnap(store, acct, now), earnBoost(now)]);
-  return toState(acct, snap, now, boost);
+  const [snap, boost, champ] = await Promise.all([readSnap(store, acct, now), earnBoost(now), champBoardsSafe(acct, now)]);
+  return toState(acct, snap, now, boost, champ);
 }
 
 /** 처음 등록 보상 지급 (lib/forage/dexReward). 지급이 실패해도 잡은 결과는 그대로 — 쌓인 보상은 도감 창에서 받는다 */
@@ -235,7 +238,7 @@ async function autoResponse(store: ForageStore, acct: string, r: AutoSettled, no
     gear: r.gear,
     ...(r.ended ? { ended: r.ended } : {}),
     ...withDex(dex),
-    state: toState(acct, snap, now, await earnBoost(now)),
+    state: toState(acct, snap, now, await earnBoost(now), await champBoardsSafe(acct, now)),
   };
 }
 
@@ -398,7 +401,7 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
   if (!npc) throw new HttpError(400, "INVALID_INPUT", "그런 상인은 없어요.");
   const source = SOURCE_OF_NPC[npc.id];
   const day = kstDay(now);
-  const [snap, acc, boost] = await Promise.all([store.snapshot(acct, day, nodeWindow(now)), getAccounts().get(acct, day, now), earnBoost(now)]);
+  const [snap, acc, boost, champ] = await Promise.all([store.snapshot(acct, day, nodeWindow(now)), getAccounts().get(acct, day, now), earnBoost(now), champBoardsSafe(acct, now)]);
   const units: { id: string; price: number }[] = [];
   for (const [id, raw] of Object.entries(want)) {
     const s = speciesById(id);
@@ -407,11 +410,10 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
     for (let i = 0; i < n; i++) units.push({ id, price: s.price });
   }
   if (!units.length) throw new HttpError(409, "NOTHING_TO_SELL", "팔 게 없어요.");
-  // 남은 한도(포인트)를 값 단위로: 포인트 배수 이벤트로 이 항목을 골랐으면 한도는 caps배, 판 값은 points배로 들어온다 (lib/pointEvent)
-  const lim = earnLimits(boost, source);
-  let left = Math.floor(
-    Math.min(earnRule(source).dailyMax * lim.caps - snap.day[DAY_FIELD[source]], lim.total - acc.todayEarned, BALANCE_CAP - acc.points) / lim.points,
-  );
+  // 남은 한도(포인트)를 값 단위로: 포인트 배수 이벤트로 이 항목을 골랐으면 한도는 caps배, 판 값은 points배로 들어온다 (lib/pointEvent).
+  // 11/17 낚시왕: 판 값은 (이벤트 배수 + 20%)배, 한도는 + 150P (lib/champPerks — 저장소 적립과 같은 계산)
+  const t = earnTerms(boost, source, champ);
+  let left = Math.floor((Math.min(t.dailyMax - snap.day[DAY_FIELD[source]], t.total - acc.todayEarned, BALANCE_CAP - acc.points) * 100) / t.m100);
   units.sort((a, b) => b.price - a.price);
   const plan: Record<string, number> = {};
   let value = 0;
@@ -422,9 +424,9 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
     plan[u.id] = (plan[u.id] ?? 0) + 1;
   }
   const capped = value < units.reduce((n, u) => n + u.price, 0);
-  if (!value) return { sold: {}, earned: 0, capped: true, state: toState(acct, snap, now, boost), me: await loadMe(getAccounts(), acct, now) };
+  if (!value) return { sold: {}, earned: 0, capped: true, state: toState(acct, snap, now, boost, champ), me: await loadMe(getAccounts(), acct, now) };
   if (!(await store.remove(acct, plan))) throw new HttpError(409, "BAG_CHANGED", "가방이 바뀌었어요. 다시 골라 주세요.");
-  const { earned, paid, me } = await earnPoints(acct, source, value, ipHash, boost);
+  const { earned, paid, me } = await earnPoints(acct, source, value, ipHash, boost, champ);
   if (paid < value) {
     // 그 사이 다른 적립으로 한도가 줄었다 → 값을 못 받은 만큼(싼 것부터) 가방에 되돌린다
     const soldUnits = Object.entries(plan)

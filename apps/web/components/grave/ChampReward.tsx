@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { CHAMP_HAT, CHAMP_TITLE, champBitsOf, champHatOf, DIR, itemName, type ChampBoard } from "@tomb/protocol";
+import { champBoardPerkLines } from "@/lib/champPerks";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { OutfitStage, STAGE_H, STAGE_W } from "../shop/outfitStage";
 import ItemIcon from "../ui/ItemIcon";
@@ -45,24 +46,38 @@ export function AuraPreview({ bits, look, label, scale = 1, staff = false }: { b
   return <canvas ref={ref} className={styles.auraCanvas} width={STAGE_W} height={STAGE_H} style={scale === 1 ? undefined : { width: STAGE_W * scale, height: STAGE_H * scale }} role="img" aria-label={label} />;
 }
 
-/** 한 랭킹 1위 보상 줄: 오라 미리보기 · 모자 · 배지 · 포인트 (아래에 짧은 이름) */
+/**
+ * 한 랭킹 1위 보상 칸: 「1위 보상」 제목 + 오라 미리보기 · 모자 · 배지 · 포인트 (아래에 짧은 이름) +
+ * 11/17 다음 주 1주일 혜택 (lib/champPerks — 서버가 같은 표로 준다)
+ */
 export function ChampReward({ board, points }: { board: ChampBoard; points: number }) {
   const hat = CHAMP_HAT[board];
   return (
-    <div className={styles.rewardRow} aria-label={`1위 보상: ${itemName(hat)} · ${CHAMP_AURA_NAME[board]} · 지난주 ${CHAMP_TITLE[board]} 배지 · ${points.toLocaleString("ko-KR")}P`}>
-      <AuraPreview bits={champBitsOf([board])} look={[hat]} label={`${CHAMP_AURA_NAME[board]} 미리보기`} />
-      <div className={styles.rewardItems}>
-        <span className={styles.rewardHat}>
-          <ItemIcon itemId={hat} size={24} />
-          <span className={styles.rewardName}>{itemName(hat)}</span>
-        </span>
-        <span className={styles.badge} data-board={board}>
-          ♛ 지난주 {CHAMP_TITLE[board]}
-        </span>
-        <span className={styles.rewardPoints}>+{points.toLocaleString("ko-KR")}P</span>
-        <span className={styles.rewardCaption}>
-          {itemName(hat)} · {CHAMP_AURA_NAME[board]}
-        </span>
+    <div className={styles.rewardBox}>
+      <span className={styles.rewardHead}>1위 보상</span>
+      <div className={styles.rewardRow} aria-label={`1위 보상: ${itemName(hat)}, ${CHAMP_AURA_NAME[board]}, 지난주 ${CHAMP_TITLE[board]} 배지, ${points.toLocaleString("ko-KR")}P`}>
+        <AuraPreview bits={champBitsOf([board])} look={[hat]} label={`${CHAMP_AURA_NAME[board]} 미리보기`} />
+        <div className={styles.rewardItems}>
+          <span className={styles.rewardHat}>
+            <ItemIcon itemId={hat} size={24} />
+            <span className={styles.rewardName}>{itemName(hat)}</span>
+          </span>
+          <span className={styles.badge} data-board={board}>
+            ♛ 지난주 {CHAMP_TITLE[board]}
+          </span>
+          <span className={styles.rewardPoints}>+{points.toLocaleString("ko-KR")}P</span>
+          <span className={styles.rewardCaption}>
+            {itemName(hat)} · {CHAMP_AURA_NAME[board]}
+          </span>
+        </div>
+      </div>
+      <div className={styles.rewardPerks}>
+        <span className={styles.rewardPerkHead}>다음 주 1주일 혜택</span>
+        <ul>
+          {champBoardPerkLines(board).map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
       </div>
     </div>
   );

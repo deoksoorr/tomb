@@ -221,6 +221,31 @@
   font-size: 11px;
 }
 
+/* 11/17 1위 1주일 혜택 (끝나는 시각 + 혜택 목록) */
+.champPerks {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.champPerkHead {
+  margin: 0;
+  color: #ffe27a;
+  font-size: 12px;
+}
+
+.champPerkList {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding-left: 16px;
+  color: var(--text);
+  font-family: var(--font-small);
+  font-size: 11px;
+}
+
 .champEmpty {
   display: grid;
   justify-items: center;

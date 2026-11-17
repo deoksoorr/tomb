@@ -7,7 +7,9 @@ import { calendarOf, grantAttendTiers } from "../calendarView";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES, earnRule, type EarnSource } from "../economy";
 import { env } from "../env";
 import type { Grave } from "../types";
+import { prevWeek } from "../gameDay";
 import { kstDay, kstWeek, kstYesterday, weekOfDay } from "./accounts";
+import { primeChampCache } from "./champ";
 
 /** 사냥 하루 한도 (11/15: 600 → 1200 — 숫자를 시험에 박지 않는다) */
 const HUNT_MAX = earnRule("hunt").dailyMax;
@@ -880,6 +882,69 @@ function contract(make: () => Kit) {
     const ra = rows.find((r) => r.accountId === a)!;
     const rb = rows.find((r) => r.accountId === b)!;
     expect(rb.rank).toBeLessThan(ra.rank);
+  });
+
+  // 11/17 주간 레이스 1위 1주일 혜택 (lib/champPerks): %는 이벤트 배수에 더하고, 한도는 고정 몫을 더하고, 1위 몫은 주간 레이스에서 뺀다
+  it("1위 혜택: 낚시왕이 이벤트 날 팔면 지갑·오늘 합계는 2.2배, 레이스는 2배만 (한도 750에서 끝 경계까지)", async () => {
+    const id = newId();
+    const plain = newId();
+    const week = weekOfDay(DAY);
+    const boost = { mult: 2, on: ["fish" as const], caps: ["fish" as const] };
+    const sell = (who: string, value: number, champ: ("fish" | "points")[] = ["fish"]) => accounts.earn(who, "fish", DAY, { amount: value, boost, champ });
+    // 판 값 100 → 100 × (2 + 0.2) = 220. 레이스에는 이벤트 몫까지 200
+    expect(await sell(id, 100)).toBe(220);
+    expect(await accounts.get(id, DAY, 0)).toMatchObject({ points: 220, todayEarned: 220, earnedBy: { fish: 220 } });
+    expect((await accounts.pointRank(10_000, id, week)).mine?.points).toBe(200);
+    // 한도 = 300 × 2 + 150 = 750. 220씩 두 번 더 → 660, 레이스 600 (1위가 아닌 사람의 한도와 같다)
+    expect(await sell(id, 100)).toBe(220);
+    expect(await sell(id, 100)).toBe(220);
+    expect((await accounts.pointRank(10_000, id, week)).mine?.points).toBe(600);
+    // 끝 경계: 남은 한도 90만 받고, 늘어난 한도 덕에 받은 몫이라 레이스에는 0
+    expect(await sell(id, 100)).toBe(90);
+    expect(await sell(id, 100)).toBe(0);
+    const a = await accounts.get(id, DAY, 0);
+    expect(a).toMatchObject({ points: 750, todayEarned: 750, lifetimePoints: 750, earnedBy: { fish: 750 } });
+    expect((await accounts.pointRank(10_000, id, week)).mine?.points).toBe(600);
+    // 1위가 아닌 사람: 이벤트 2배, 한도 600, 받은 만큼 모두 레이스
+    for (let i = 0; i < 4; i++) await sell(plain, 100, []);
+    expect(await accounts.get(plain, DAY, 0)).toMatchObject({ points: 600, todayEarned: 600 });
+    expect((await accounts.pointRank(10_000, plain, week)).mine?.points).toBe(600);
+  });
+
+  it("1위 혜택: 이벤트가 없는 날 낚시왕은 1.2배·한도 450, 다른 랭킹 1위는 물고기 혜택 없음", async () => {
+    const id = newId();
+    const other = newId();
+    const week = weekOfDay(DAY);
+    const none = { mult: 1, on: [], caps: [] };
+    expect(await accounts.earn(id, "fish", DAY, { amount: 25, boost: none, champ: ["fish"] })).toBe(30);
+    expect((await accounts.pointRank(10_000, id, week)).mine?.points).toBe(25);
+    // 한도 450: 300을 넘어 받은 몫은 레이스에 들지 않는다 (300 − 25 = 275까지만 더 레이스)
+    expect(await accounts.earn(id, "fish", DAY, { amount: 500, boost: none, champ: ["fish"] })).toBe(420);
+    expect(await accounts.get(id, DAY, 0)).toMatchObject({ points: 450, todayEarned: 450 });
+    expect((await accounts.pointRank(10_000, id, week)).mine?.points).toBe(300);
+    expect(await accounts.earn(other, "fish", DAY, { amount: 25, boost: none, champ: ["points", "huntKills"] })).toBe(25);
+    // 사냥왕: 사냥터 한도 1200 + 300, 1200을 넘은 몫은 레이스 밖
+    expect(await accounts.earn(other, "hunt", DAY, { amount: 1500, boost: none, champ: ["points", "huntKills"] })).toBe(HUNT_MAX + 300);
+    expect((await accounts.pointRank(10_000, other, week)).mine?.points).toBe(25 + HUNT_MAX);
+  });
+
+  it("1위 혜택: 포인트왕 머무르기 +15%(5 → 6P)와 접속 시간 보너스 1.5배, 레이스에는 원래 몫만 (지난주 1위 기록에서 바로)", async () => {
+    const id = newId();
+    const now = Date.now();
+    // 지금 1위 = 지난주 기록 (저장소가 지난주 1위 기록을 읽는다 — 프로세스 캐시에 넣어 둔다. 머무르기 시각이 앞으로 가도 캐시가 남게 마지막 기록 시각으로)
+    primeChampCache({ week: prevWeek(kstWeek(now)), winners: [{ board: "points", accountId: id, name: "포인트왕", value: 1 }], settledAt: now }, now + 3 * PRESENCE_MIN_GAP_MS);
+    const day = kstDay(now);
+    const week = weekOfDay(day);
+    let t = now;
+    for (let i = 0; i < 3; i++) {
+      expect((await accounts.presenceTick(id, day, t))?.earned).toBe(6);
+      t += PRESENCE_MIN_GAP_MS;
+    }
+    expect((await accounts.pointRank(10_000, id, week)).mine?.points).toBe(15);
+    // 첫 구간 10P × 1.5 = 15P, 레이스에는 10P
+    expect(await accounts.claimStayBonus(id, day)).toEqual({ earned: 15, count: 1 });
+    expect(await accounts.get(id, day, 0)).toMatchObject({ points: 18 + 15, todayEarned: 18 });
+    expect((await accounts.pointRank(10_000, id, week)).mine?.points).toBe(15 + 10);
   });
 
   it("사냥 기록: 처치 수는 더하고, 최단 클리어는 더 짧을 때만 바뀐다 (전체·주간, 사냥터별)", async () => {

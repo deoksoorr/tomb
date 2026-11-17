@@ -5,8 +5,9 @@ import { useMemo, useState } from "react";
 import { bridge } from "@/game/bridge";
 import { npcPortraitUrl } from "@/game/world/forage/art";
 import { errorMessage } from "@/lib/api";
-import { DAILY_EARN_CAP } from "@/lib/economy";
-import { boostedTotalCap } from "@/lib/pointEvent";
+import { champBoards } from "@tomb/protocol";
+import { CHAMP_FISH_NOTE, champTotalCap } from "@/lib/champPerks";
+import { NO_BOOST } from "@/lib/pointEvent";
 import { CAT_LABEL, LIFE_CATS, npcBuys, npcById, RARITY_LABEL, speciesById, type NpcId } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
 import { meStore, useMe } from "@/lib/hooks/useMe";
@@ -97,9 +98,11 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
               오늘 판 값 <strong>{soldToday}</strong> / {cap}P
             </span>
             <span>
-              오늘 모은 포인트 <strong>{me?.todayEarned ?? 0}</strong> / {me?.earnBoost ? boostedTotalCap(me.earnBoost) : DAILY_EARN_CAP}P
+              오늘 모은 포인트 <strong>{me?.todayEarned ?? 0}</strong> / {champTotalCap(me?.earnBoost ?? NO_BOOST, champBoards(me?.champ))}P
             </span>
             <span>사는 것: {npc.where === "flat" ? "갯벌에서 캔 것" : npc.buys.map((c) => CAT_LABEL[c]).join("·")}</span>
+            {/* 11/17 낚시왕(지난주 1위) 혜택: 판 값 +%, 한도 + (서버가 같은 계산으로 준다 — lib/champPerks) */}
+            {source === "fish" && champBoards(me?.champ).includes("fish") && <span>{CHAMP_FISH_NOTE}</span>}
           </div>
           {rows.length === 0 ? (
             <p className={s.empty}>{EMPTY[npc.id]}</p>

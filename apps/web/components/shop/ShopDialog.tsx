@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { isNameSlot, isPermanentUntil, isShopListed, ITEMS, permanentPrice, SHOP_KINDS, titleOfLook, type ItemDef, type ItemKind } from "@tomb/protocol";
+import { champBoards, isNameSlot, isPermanentUntil, isShopListed, ITEMS, permanentPrice, SHOP_KINDS, titleOfLook, type ItemDef, type ItemKind } from "@tomb/protocol";
+import { CHAMP_SHOP_NOTE, champShopDiscount, pickDiscount } from "@/lib/champPerks";
 import { discountedPrice, titlePerk } from "@/lib/titles";
 import { api, errorMessage } from "@/lib/api";
 import { dyeApi } from "@/lib/dye/client";
@@ -69,7 +70,10 @@ export default function ShopDialog({ onClose, avatar }: Props) {
   const { color, body } = resolveAvatar(avatar, me, savedColor);
   const staffView = me?.staff === true;
   /** 단 칭호의 상점·염색 할인 (11/16 패션 갈래 칭호만 — lib/titles. 서버가 같은 규칙으로 깎는다) */
-  const discount = me ? titlePerk(titleOfLook(me.equipped.map((e) => e.itemId))).discount : 0;
+  const titleOff = me ? titlePerk(titleOfLook(me.equipped.map((e) => e.itemId))).discount : 0;
+  /** 11/17 포인트왕(지난주 1위) 20% (염색권은 빼고). 칭호 할인과 겹치면 큰 것 하나만 — 서버도 같은 함수 (lib/champPerks) */
+  const champ = champBoards(me?.champ);
+  const discountOf = (item: Pick<ItemDef, "kind">) => pickDiscount(titleOff, champShopDiscount(champ, "shop", item.kind));
   const all = listed(tab, staffView);
   const items = all.filter((item) => tab !== "cosmetic" || matchesSlot(item.slot, slotFilter));
   const shown = all.find((i) => i.id === (hoverId ?? picked[tab])) ?? all[0];
@@ -103,7 +107,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
 
 
   function buyButton(item: ItemDef) {
-    const cost = discountedPrice(item.price, discount);
+    const cost = discountedPrice(item.price, discountOf(item));
     const short = me !== null && me.points < cost;
     const blocked = me ? cosmeticBlock(item, me.inventory, me.equipped, openedAt, me.stash) : null;
     return (
@@ -112,7 +116,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
         className={cx(ui.button, ui.primary, styles.buy)}
         onClick={() => buy(item)}
         disabled={!me || short || blocked !== null || pending !== null}
-        aria-label={`${item.name}, ${cost}포인트에 사기${cost < item.price ? ` (칭호 할인, 원래 ${item.price}포인트)` : ""}`}
+        aria-label={`${item.name}, ${cost}포인트에 사기${cost < item.price ? ` (할인, 원래 ${item.price}포인트)` : ""}`}
       >
         {pending === item.id ? (
           "사는 중…"
@@ -151,7 +155,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
   function foreverButton(item: ItemDef) {
     const base = permanentPrice(item.id);
     if (base === null) return null;
-    const price = discountedPrice(base, discount);
+    const price = discountedPrice(base, discountOf(item));
     const short = me !== null && me.points < price;
     const has = forever(item);
     return (
@@ -189,7 +193,10 @@ export default function ShopDialog({ onClose, avatar }: Props) {
           <p className={styles.balance}>
             내 포인트 <strong>{me ? me.points.toLocaleString("ko-KR") : "–"}</strong>
           </p>
-          <p className={styles.topHint}>산 물건은 가방에 들어가요</p>
+          <p className={styles.topHint}>
+            {/* 11/17 포인트왕 혜택 안내 (염색 탭은 할인이 없어 다른 탭에서만) */}
+            {champShopDiscount(champ, "shop") > 0 && tab !== "dye" ? `${CHAMP_SHOP_NOTE} ` : ""}산 물건은 가방에 들어가요
+          </p>
         </div>
         {!me && error && <p className={ui.error}>{error}</p>}
 
@@ -304,7 +311,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
                       <span className={styles.tileName}>{item.name}</span>
                       {item.kind === "cosmetic" && <LookScoreBadge itemId={item.id} />}
                       <span className={styles.tilePrice}>
-                        {item.staff ? "운영자" : <Price price={item.price} cost={discountedPrice(item.price, discount)} />}
+                        {item.staff ? "운영자" : <Price price={item.price} cost={discountedPrice(item.price, discountOf(item))} />}
                         {forever(item) ? <span className={styles.badge}>영구</span> : worn(item) ? <span className={styles.badge}>착용</span> : n > 0 || stashed(item) ? <span className={styles.badge}>보유</span> : null}
                       </span>
                     </button>

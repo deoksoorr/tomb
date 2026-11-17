@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { CHAMP_ALL, champBadgeText, champBoards, CHAMP_TITLE, isChampBits, isChampItem } from "@tomb/protocol";
 import { api } from "@/lib/api";
+import { champPerkHead, champPerkLines } from "@/lib/champPerks";
+import { nextWeekStartMs } from "@/lib/gameDay";
 import type { Me } from "@/lib/types";
 import { AuraPreview, CHAMP_AURA_NAME } from "../grave/ChampReward";
 import { cx } from "../ui/cx";
@@ -25,7 +27,8 @@ function whenText(ms: number): string {
 /**
  * 가방 [레이스 보상] 칸: 주간 랭킹 1위 보상을 한곳에.
  *  ① 맨 위: "전용 오라 보이기" 켜기·끄기 (1위일 때만) ② 지금 자격(랭킹·끝나는 시각)과 배지·전용 오라 미리보기
- *  ③ 빌려 받은 전용 모자 (쓰기·벗기, 남은 기간). 일반 꾸미기 목록에는 전용 모자가 섞이지 않는다
+ *  ③ 11/17 1주일 혜택: 지금 붙어 있는 혜택과 끝나는 시각 (서버가 정한 자격 — lib/champPerks)
+ *  ④ 빌려 받은 전용 모자 (쓰기·벗기, 남은 기간). 일반 꾸미기 목록에는 전용 모자가 섞이지 않는다
  *  1위 자격도 모자도 없으면 안내 + [레이스 보기]
  */
 export default function ChampRewardsTab({
@@ -61,7 +64,7 @@ export default function ChampRewardsTab({
     return (
       <div className={styles.champEmpty}>
         <p>이번 주 레이스에서 1위를 하면 여기에 보상이 들어와요.</p>
-        <p className={styles.meta}>포인트, 사냥 처치, 낚시 랭킹에서 1위를 하면 전용 모자와 오라, 이름표 배지, 1,000P를 받아요.</p>
+        <p className={styles.meta}>포인트, 사냥 처치, 낚시 랭킹에서 1위를 하면 전용 모자와 오라, 이름표 배지, 1,000P를 받고 다음 주 1주일 동안 혜택이 붙어요.</p>
         {onOpenRace && (
           <button type="button" className={cx(ui.button, ui.primary)} onClick={onOpenRace}>
             레이스 보기
@@ -101,6 +104,17 @@ export default function ChampRewardsTab({
               {staff && <span className={styles.meta}>운영자 계정은 게임에서 운영자 오라가 먼저 보여요. 배지와 전용 모자는 그대로 붙어요.</span>}
             </div>
           </div>
+        </section>
+      )}
+      {bits > 0 && (
+        <section className={styles.champPerks} aria-label="1주일 혜택">
+          {/* 끝나는 시각은 서버가 알려 준 자격 끝(/api/champ/me), 받기 전에는 이번 주 마감 (월요일 새벽 5시) */}
+          <p className={styles.champPerkHead}>{champPerkHead(bits, until || nextWeekStartMs(now))}</p>
+          <ul className={styles.champPerkList}>
+            {champPerkLines(boards).map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
         </section>
       )}
       <section className={styles.section} aria-label="전용 모자">

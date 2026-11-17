@@ -197,6 +197,8 @@ export type RunReward = {
   exp: number;
   /** 11/16 exp 가운데 사냥 갈래 칭호로 더 받은 몫 (없으면 빠진다) */
   titleExp?: number;
+  /** 11/17 사냥왕(지난주 1위) 혜택으로 더 받은 몫 — 초월 판·야근 빌딩이면 초월 EXP 몫 (없으면 빠진다, lib/champPerks) */
+  champExp?: number;
   /** 계산된 포인트 (한도 전) */
   pointsRaw: number;
   /** 실제로 들어온 포인트 */

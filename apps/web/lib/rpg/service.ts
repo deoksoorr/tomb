@@ -3,10 +3,10 @@ import { itemById } from "@tomb/protocol";
 import { recordEvent } from "../analyticsService";
 import { earnPointsOnly, getAccounts, refundPoints, spendPoints } from "../store";
 import { kstDay, kstWeek } from "../store/accounts";
-import { capsMult } from "../pointEvent";
+import { champHuntExp, champTranscendExp, earnTerms } from "../champPerks";
+import { champBoardsSafe } from "../store/champ";
 import { earnBoost } from "../store/pointEvent";
 import { forgetTitles, forgetTowerTitles, wornPerk } from "../titlesServer";
-import { earnRule } from "../economy";
 import { env } from "../env";
 import { HttpError } from "../http";
 import { recordError } from "../errors";
@@ -78,7 +78,6 @@ import type { CharacterState, DailyStats, Drop, RpgView, SoldInfo, RunFinishResp
 // 사냥터 서버 로직 (라우트는 세션 확인·입력 검증·레이트리밋만 하고 여기로 넘긴다).
 // 포인트는 백엔드 공용 함수(earnPoints/spendPoints)로만 움직인다. 사냥터 자체에는 포인트 장부가 없다.
 
-const HUNT_CAP = earnRule("hunt").dailyMax;
 const hourBucket = (now: number) => String(Math.floor(now / 3_600_000));
 
 /** 순수 함수의 RpgError를 라우트 handler가 아는 HttpError로 바꾼다 */
@@ -134,8 +133,8 @@ export async function rpgView(acct: string, store: RpgStore = getRpgStore(), now
     store.runsThisHour(acct, hourBucket(now)),
     earnBoost(now),
   ]);
-  // 포인트 배수 이벤트로 사냥터를 고른 날은 사냥 한도도 늘어난 값으로 보여 준다 (lib/pointEvent)
-  const huntCap = HUNT_CAP * capsMult(boost, "hunt");
+  // 포인트 배수 이벤트로 사냥터를 고른 날은 사냥 한도도 늘어난 값으로 보여 준다 (lib/pointEvent). 11/17 사냥왕이면 + 300P (lib/champPerks)
+  const huntCap = earnTerms(boost, "hunt", await champBoardsSafe(acct, now)).dailyMax;
   const stored = fitAll(loaded, sup);
   // 슈퍼 계정: 화면에는 최대 레벨·넉넉한 스킬·능력치 포인트로 보인다 (저장값은 그대로)
   const character = sup
@@ -549,9 +548,14 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   const vDrops = t.td && testServerEnv() ? t.td : t.tt === "practice" ? [] : v.drops;
   // 11/15 초월 판: 판 EXP × 배율 × 그날 구간 비율 → 초월 EXP (일반 EXP는 레벨 50이라 어차피 버려진다)
   // 11/16 사냥 갈래 칭호: 사냥 판 경험치 + (초월 EXP도 이 값에서. 별자리 잇기 판은 그대로, 포인트와는 무관 — lib/titles)
-  const huntExp = t.g === "hunt" ? (await wornPerk(acct, now)).huntExp : 0;
-  const exp = huntExp > 0 ? Math.round(v.exp * (1 + huntExp)) : v.exp;
-  const tGain = t.tt ? Math.round(exp * TRANSCEND_EXP_MUL * RUN_TIERS[t.tt].rate) : 0;
+  // 11/17 사냥왕(지난주 1위): 사냥 판 경험치 +15% (칭호 %에 더한다), 초월 판은 초월 EXP +10% (일반 EXP는 레벨 50이라 버려져 +15%를 얹지 않는다 — lib/champPerks)
+  const [huntExp, champ] = t.g === "hunt" ? await Promise.all([wornPerk(acct, now).then((p) => p.huntExp), champBoardsSafe(acct, now)]) : [0, []];
+  const titled = huntExp > 0 ? Math.round(v.exp * (1 + huntExp)) : v.exp;
+  const champExpRate = t.tt ? 0 : champHuntExp(champ);
+  const exp = champExpRate > 0 ? Math.round(v.exp * (1 + huntExp + champExpRate)) : titled;
+  const tBase = t.tt ? Math.round(titled * TRANSCEND_EXP_MUL * RUN_TIERS[t.tt].rate) : 0;
+  const tChamp = t.tt ? champTranscendExp(champ) : 0;
+  const tGain = tChamp > 0 ? Math.round(titled * TRANSCEND_EXP_MUL * RUN_TIERS[t.tt!].rate * (1 + tChamp)) : tBase;
 
   const done = await http(
     store.update(acct, (s) => {
@@ -598,7 +602,9 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
     reward: {
       score: v.score,
       exp,
-      ...(exp > v.exp ? { titleExp: exp - v.exp } : {}),
+      ...(titled > v.exp ? { titleExp: titled - v.exp } : {}),
+      // 11/17 사냥왕 혜택으로 더 받은 몫 (초월 판이면 초월 EXP 몫)
+      ...(t.tt ? (tGain > tBase ? { champExp: tGain - tBase } : {}) : exp > titled ? { champExp: exp - titled } : {}),
       pointsRaw,
       points: earned,
       capped: earned < pointsRaw,
@@ -729,13 +735,15 @@ async function settleTowerRun(
   const store = getRpgStore();
   const day = kstDay(now);
   const week = kstWeek(now);
+  // 11/17 사냥왕(지난주 1위): 층마다 받은 초월 EXP +10% (lib/champPerks)
+  const tChamp = champTranscendExp(await champBoardsSafe(acct, now));
   const done = await http(
     store.update(acct, (s) => {
       const cur = consumePotions(s, potionsUsed).state;
       // 11/15 의심 판(부드러운 거절): 층·초월 EXP·상자·포인트는 그대로, 최고·주간 기록은 그대로 두고 체크포인트만 연다 (fSus)
       const st: TowerSettle = towerSettle(cur, { day, week, start, floors: v.floors, floorMs: v.floorMs, suspect: !!v.suspect });
       const settled = { ...cur, ...st.patch };
-      const g = gainTranscend(settled, st.tExp);
+      const g = gainTranscend(settled, tChamp > 0 ? Math.round(st.tExp * (1 + tChamp)) : st.tExp);
       // 11/15 상자마다 세트 장비 천장을 이어서 센다 (게임이 판 안에서 같은 순서로 센다) · 슈퍼 계정 시험 드롭(sup)
       let pity = cur.sgPity ?? 0;
       const rolled = st.chests.flatMap((f) => {
@@ -821,7 +829,8 @@ async function settleTowerRun(
       lostDrops: done.result.lost,
       ...(mobs?.dex ? { dexReward: mobs.dex } : {}),
       ...(mobs?.fresh.length ? { newMobs: mobs.fresh } : {}),
-      transcend: { exp: st.tExp, tier: lastTier, levelsGained: done.result.levels, tLevel: state.tLevel },
+      transcend: { exp: tChamp > 0 ? Math.round(st.tExp * (1 + tChamp)) : st.tExp, tier: lastTier, levelsGained: done.result.levels, tLevel: state.tLevel },
+      ...(tChamp > 0 && Math.round(st.tExp * (1 + tChamp)) > st.tExp ? { champExp: Math.round(st.tExp * (1 + tChamp)) - st.tExp } : {}),
       tower: { start, floors: v.floors, best: st.best, newBest: st.newBest, newWeek: st.newWeek, runs: st.runs, chests: st.chests, emptyChests: st.emptyChests, titles, ...(suspect ? { suspect: true } : {}) },
       ...(pioneer ? { pioneer } : {}),
     },

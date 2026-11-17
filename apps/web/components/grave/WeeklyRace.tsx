@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CHAMP_BOARDS, CHAMP_TITLE, champBitsOf, type ChampBoard } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
+import { CHAMP_MULTI_NOTE } from "@/lib/champPerks";
 import { tabHidden } from "@/lib/hooks/visibleAgain";
 import type { ChampAvatar, ChampResponse, RaceResponse, RaceRow } from "@/lib/types";
 import AvatarThumb from "../account/AvatarThumb";
@@ -84,7 +85,7 @@ export default function WeeklyRace() {
         <span className={styles.when}> · 월요일 새벽 5시</span>
       </p>
       <p className={styles.reward}>
-        1위는 전용 모자(한 주), 전용 오라, 이름표 배지와 {(champ?.points ?? CHAMP_POINTS_DEFAULT).toLocaleString("ko-KR")}P를 받아요.
+        1위는 전용 모자(한 주), 전용 오라, 이름표 배지와 {(champ?.points ?? CHAMP_POINTS_DEFAULT).toLocaleString("ko-KR")}P를 받고, 다음 주 1주일 동안 랭킹마다 다른 혜택이 붙어요.
         {/* 11/16 사냥 칸 안에 두 줄로 있던 안내 (그 칸만 길어져 창에 스크롤이 생겼다) → 위 안내 줄로 */}
         <br />
         사냥 처치는 내 레벨이 그 사냥터가 열리는 레벨보다 10 넘게 높으면 세지 않아요.
@@ -132,6 +133,8 @@ export default function WeeklyRace() {
       )}
       <section className={styles.hallBox} aria-label="여러 랭킹 1위면 합쳐진 오라">
         <h3 className={styles.title}>여러 랭킹에서 1위면 다관왕 모자와 합쳐진 오라를 받아요</h3>
+        {/* 11/17 다관왕 혜택 (lib/champPerks CHAMP_MULTI_SPEED) */}
+        <p className={styles.reward}>{CHAMP_MULTI_NOTE}</p>
         <ComboAuras />
       </section>
     </div>

@@ -20,7 +20,8 @@ export const TITLE_GRADE_NAMES: Record<TitleGrade, string> = { bronze: "동", si
  *  - 공통: 모든 칭호가 등급만큼 마을 걷기·달리기 속도 + (GRADE_SPEED — 사냥터·놀이기구·배 등에는 없다)
  *  - 갈래 능력: 은·금·전설 값(PERK_VALUES), 신화 = 전설 × 1.5를 알맞게 반올림, 동·매니저는 없음
  *  - 속도 상한: 신화 1.06 (+ 1위·명예 갈래 0.02 = 1.08) × 가장 빠른 타는 펫 1.35 = 1.458 → 실시간 서버 속도 검증(달리기 × 1.5) 안,
- *    화면도 땅 위 배율을 MAX_GROUND_MUL(1.48)로 한 번 더 자른다 (game/entities/Player)
+ *    화면도 땅 위 배율을 MAX_GROUND_MUL(1.48)로 한 번 더 자른다 (game/entities/Player).
+ *    11/17 지난주 다관왕은 같은 자리에 +0.01 (lib/champPerks CHAMP_MULTI_SPEED) → (1.08 + 0.01) × 1.35 = 1.4715 < 1.48 < 1.5
  *  - 포인트 하루 한도는 그대로: 머무르기 보상·도감 새 칸 보상은 원래 항목 한도 안에서만 늘고, 나머지는 확률·편의·할인
  */
 export const GRADE_SPEED: Readonly<Record<TitleGrade, number>> = {
