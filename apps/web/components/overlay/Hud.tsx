@@ -12,6 +12,7 @@ import type { Toast } from "@/lib/hooks/useToasts";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import styles from "./Hud.module.css";
+import { SnackBar } from "../sea/GullSnacks";
 import PointEventBadge from "./PointEventBadge";
 
 const MODE_TEXT: Record<Exclude<NetMode, "online">, string> = {
@@ -80,6 +81,8 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
         ) : (
           <PointEventBadge compact />
         )}
+        {/* 11/17 r2 가진 갈매기 과자 · [과자 던지기] (터치 화면: 오른쪽 위 지도 단추 아래 — 아래 조작 단추·왼쪽 공지를 가리지 않게) */}
+        {tideLine && <SnackBar compact />}
       </>
     );
   }
@@ -99,12 +102,13 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
             {MODE_TEXT[mode === "online" ? "connecting" : mode]}
           </span>
         )}
-        {ambience && (
-          <span className={cx(ui.top, styles.ambience)} title="한국 시간 기준">
-            {PHASE_LABELS[ambience.phase]} · {WEATHER_LABELS[ambience.weather]}
-          </span>
-        )}
       </div>
+      {/* 11/17 시간·날씨는 채널 줄 아래 한 줄로 (채널 줄에 장소 정식 이름이 붙으면서 1280 폭에서 오른쪽 위 단추에 가려졌다) */}
+      {ambience && (
+        <span className={cx(ui.top, styles.ambience)} title="한국 시간 기준">
+          {PHASE_LABELS[ambience.phase]} · {WEATHER_LABELS[ambience.weather]}
+        </span>
+      )}
       {/* 11/16 바닷가 물때 시계: 채널 줄 아래 한 줄 (위 줄 단추들과 겹치지 않게) */}
       {tide && (
         <span className={cx(ui.top, styles.tide)} title="물때는 3시간마다 돌아요" role="status">
@@ -112,6 +116,8 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
         </span>
       )}
       <PointEventBadge />
+      {/* 11/17 r2 가진 갈매기 과자 · [과자 던지기] (물때 줄 아래) */}
+      {tide && <SnackBar />}
     </div>
   );
 }

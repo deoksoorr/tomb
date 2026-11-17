@@ -6,6 +6,9 @@ import { GlyphAtlas } from "../text/GlyphAtlas";
 import { Atmosphere } from "../world/Atmosphere";
 import { Lighting } from "../world/Lighting";
 import { WorldMap } from "../world/WorldMap";
+import { isSnowy, parseConceptOverride, type MapConcept } from "@/lib/mapConcept";
+import { startMapConceptSync } from "@/lib/mapConceptClient";
+import { bridge } from "../bridge";
 
 // 입장 화면 배경: 진짜 월드 맵(WorldMap — 맵이 바뀌면 배경도 그대로 따라 바뀐다)을 천천히 둘러보는 카메라.
 // 시간대·날씨(Atmosphere, 소리 없음)·밤 조명(Lighting)은 게임과 같고, 내 캐릭터·다른 사람·실시간 연결·묘비 목록은 없다.
@@ -63,6 +66,21 @@ export class PreviewScene extends Phaser.Scene {
     this.atmos.setStaticLights(this.map.staticLights);
     this.atmos.setGridLights(this.map.gridLights);
     this.lighting = new Lighting(this);
+    // 11/17 입장 화면 배경도 맵 컨셉(겨울·크리스마스)을 따른다 — 마을 장면(WorldScene)과 같은 규칙: 주소 시험 값(?concept=)이 있으면 그것만, 없으면 관리자가 고른 값
+    const qa = parseConceptOverride(window.location.search);
+    const applyConcept = (c: MapConcept) => {
+      this.map?.setConcept(c);
+      this.atmos?.setSnowy(isSnowy(c));
+    };
+    applyConcept(qa ?? bridge.last("map:concept")?.concept ?? "default");
+    if (!qa) {
+      const off = bridge.on("map:concept", ({ concept }) => applyConcept(concept));
+      const stopSync = startMapConceptSync();
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+        off();
+        stopSync();
+      });
+    }
     const cam = this.cameras.main;
     cam.setRoundPixels(true);
     this.applyZoom();

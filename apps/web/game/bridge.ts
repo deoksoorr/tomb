@@ -6,10 +6,13 @@ import type { PublicHouse, VillageResponse } from "@/lib/housing/types";
 import type { RpgAction, RpgHud, RpgPlay, RunResult } from "@/lib/rpg/types";
 import type { HotAuto } from "@/lib/rpg/hotbar";
 import type { CardChoice, CardOfferView } from "@/lib/rpg/cards";
+import type { ProcView } from "@/lib/rpg/procs";
 import type { ResumeState } from "@/lib/resume";
 import type { SoundMix } from "@/lib/soundMix";
 import type { IncomingChatLine } from "@/game/logic/chatLog";
 import type { RideStatus } from "@/lib/ridePolicy";
+import type { Ambience } from "@/lib/ambience";
+import type { MapConcept } from "@/lib/mapConcept";
 
 // React(UI 오버레이) ↔ Phaser(게임) 사이의 유일한 통로. 양쪽은 서로를 직접 import하지 않는다.
 // "sticky" 이벤트는 마지막 값을 기억해서, 늦게 구독한 쪽도 last()로 현재 값을 읽을 수 있다.
@@ -109,6 +112,10 @@ export type GameEvents = {
    * UI가 「바다 보기」(on이면 「돌아가기」) 버튼과 V 단축키를 띄워요
    */
   "sea:hud": { on: boolean } | null;
+  /** 11/17 r2 지금 갈매기 과자를 던질 수 있는지 (sticky — 던질 수 있으면 던질 과자, 아니면 null). 과자 칸의 [과자 던지기] 버튼이 봐요 */
+  "sea:snack:can": { kind: "plain" | "spicy" } | null;
+  /** 11/17 r2 선착장 길목 과자 자판기 앞 E → UI가 과자 자판기 창을 열어요 */
+  "sea:snack:vend": undefined;
   /**
    * 놀이기구 2 하늘 시점 안내 (sticky, null = 숨김). sky = 관람차·열기구 하늘 시점이라 UI가 HUD를 줄이고 이 안내를 띄운다.
    * place = 지나가는 곳 이름(열기구), hint = 조작 안내, left = 내릴 때까지 남은 초,
@@ -198,6 +205,8 @@ export type GameEvents = {
   "rpg:auto": HotAuto;
   /** 11/15 야근 빌딩 능력 카드 고르기 (sticky, null = 닫힘). 게임은 멈춘 채 rpg:cardPick을 기다린다 */
   "rpg:cards": CardOfferView | null;
+  /** 11/17 발동형 카드·세트 장비 효과가 터짐 (game/rpg/procToast showProc) → 화면 오른쪽(폰은 위 가운데)에 그 그림을 2초 */
+  "rpg:proc": ProcView;
   /** 귀신의집 미로 진행 (초당 4번): 걸린 시간·놀란 횟수 (game/haunt → components/haunt) */
   "haunt:hud": { ms: number; scares: number };
   /** 귀신의집이 끝남 (출구로 빠져나옴 = escaped, 아니면 중간에 나감). 월드는 이미 다시 보인다 */
@@ -212,6 +221,11 @@ export type GameEvents = {
   "fx:squirrels": { by: string; seed: number; at: number };
   /** 11/17 운영자 버튼 → 다람쥐 쿨다운 초기화 */
   "fx:squirrelsReset": undefined;
+  /**
+   * 11/17 장면(Atmosphere)이 하늘·날씨 목표를 다시 잡을 때마다 (1분마다, 날씨가 바뀌는 30분 경계엔 그 순간) 그 값을 알린다.
+   * 화면 위 시간대·날씨 글(useAmbience)이 장면 날씨와 같은 순간에 바뀌게 이 값을 그대로 쓴다
+   */
+  "ambience:now": Ambience;
   "minimap:dots": { me: { x: number; y: number }; others: number[]; residents?: number[]; /** 친구 (others에서 뺀 같은 채널 친구 위치, 하트로 그린다) */ friends?: number[]; /** 11/15 캠핑장이면 "camp", 11/16 바닷가면 "sea" (그 맵 바탕) */ map?: AwayMapId };
   /** 11/15 지금 맵 (캠핑장 장면이 뜨면 camp, 11/16 바닷가 장면이면 sea, 닫히면 village). HUD·미니맵·채팅·음악이 본다 (sticky) */
   "map:changed": { map: MapId };
@@ -255,6 +269,14 @@ export type UiEvents = {
   "sky:view": undefined;
   /** 11/16 바다 보기 켜기·끄기 (버튼·V) */
   "sea:view": undefined;
+  /** 11/17 유령선 갑판에서 유령 상인 앞 E → UI가 유령선 특가 장터 창을 열어요 */
+  "sea:ghost:open": undefined;
+  /** 11/17 운영자 시험 부르기 상태 (sticky — 운영자 HUD가 서버에서 받아 알려요. 일반 계정은 늘 null) */
+  "sea:ghost:call": { call: "on" | "off" | null };
+  /** 11/17 포구 갈매기 과자 (sticky): 가진 과자 · 손에 든 과자 (매점 창·게임이 서로 알려요) */
+  "sea:gull:snacks": { plain: number; spicy: number; hand: "plain" | "spicy" };
+  /** 11/17 r2 과자 칸의 [과자 던지기] 버튼 → 가장 가까운 갈매기 쪽으로 던져요 (E와 같은 일 — 다른 E 대상이 가까워도) */
+  "sea:snack:throw": undefined;
   /** 동물원 타는 펫 올라타기·내리기 (모바일·HUD 버튼, 데스크톱은 R) */
   "input:ride": undefined;
   /** 11/16 다른 장면으로 가기 직전: 의자·벤치·그네·해먹 같은 자리에 있으면 일어난다 (탈것은 lib/rideGate가 먼저 막는다) */
@@ -406,6 +428,8 @@ export type UiEvents = {
   "forage:coin": undefined;
   /** 11/15 긴급 의뢰 마을 축제 (sticky): until = 축제가 끝나는 시각 ms (0 = 축제 없음) → 게임이 폭죽을 저절로 쏘고 모닥불을 금빛으로 */
   "urgent:fest": { until: number };
+  /** 11/17 마을 맵 컨셉 (sticky, lib/mapConcept): 관리자가 고른 판 → 마을 그림을 겨울·크리스마스로 (주소 ?concept= 시험 값이 있으면 그쪽이 먼저) */
+  "map:concept": { concept: MapConcept };
   /** 11/15 긴급 의뢰가 진행 중에 100%를 넘긴 순간 (한 번): 마을 하늘에 축하 폭죽 한 발 */
   "urgent:goal": undefined;
   /** 11/15 긴급 의뢰 현판 (sticky, null = 없음): 버스 정류장 마당 긴급 의뢰 현판에 서버 전체 막대를 그린다. frac = 낸 수 ÷ (목표 × 1.5), stage = 닿은 단계 */
@@ -454,6 +478,9 @@ const STICKY = new Set<keyof AllEvents>([
   "view:mode",
   "view:busy",
   "sea:hud",
+  "sea:snack:can",
+  "sea:ghost:call",
+  "sea:gull:snacks",
   "audio:settings",
   "queue:status",
   "scene:changed",
@@ -475,6 +502,7 @@ const STICKY = new Set<keyof AllEvents>([
   "house:follow",
   "rpg:cards",
   "urgent:fest",
+  "map:concept",
   "urgent:board",
   "map:changed",
   "bus:state",

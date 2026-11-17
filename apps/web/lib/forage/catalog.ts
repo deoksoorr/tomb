@@ -259,7 +259,17 @@ const FLAT_DIGS: Species[] = [
   { id: "d_goldclam", cat: "dig", name: "금빛 바지락", rarity: 5, price: 80, where: ["flat"], time: ["day"], weather: ["clear"], desc: "전설. 맑은 날 갯벌에서 금빛으로 반짝인다. 월급날 통장 같은 빛." },
 ];
 
-export const SPECIES: readonly Species[] = [...FISH, ...SEA_FISH, ...BUGS, ...HERBS, ...ORES, ...DIGS, ...FLAT_DIGS];
+// ── 11/17 갈매기 깃털 (2) ── 포구에서 갈매기에게 과자를 던지면 가끔 고마움으로 떨어뜨려요 (서버 lib/sea/gullService가 굴려요).
+// 채집 지점·낚시로는 나오지 않아요 (where "sea"인 발굴품 — 채집 지점엔 바다가 없고, 낚시는 물고기만). 도감은 발굴품 칸에 같이 들어가요 (발굴품 36종)
+const GULL_DIGS: Species[] = [
+  { id: "d_gullfeather", cat: "dig", name: "갈매기 깃털", rarity: 1, price: 3, where: ["sea"], desc: "과자 고마워요, 끼룩. 바닷바람 냄새가 배어 있다." },
+  { id: "d_redfeather", cat: "dig", name: "붉은 갈매기 깃털", rarity: 2, price: 6, where: ["sea"], desc: "매운 새우 과자를 먹고 빨개진 갈매기가 떨어뜨렸다. 아직 따끈하다." },
+];
+
+/** 채집·낚시가 아니라 갈매기에게서만 받는 종 (시험이 「어딘가에서 잡힌다」를 이 둘만 빼고 봐요) */
+export const GULL_FEATHER_IDS: readonly string[] = GULL_DIGS.map((s) => s.id);
+
+export const SPECIES: readonly Species[] = [...FISH, ...SEA_FISH, ...BUGS, ...HERBS, ...ORES, ...DIGS, ...FLAT_DIGS, ...GULL_DIGS];
 const BY_ID = new Map(SPECIES.map((s) => [s.id, s]));
 export const speciesById = (id: string): Species | undefined => BY_ID.get(id);
 export const speciesOf = (cat: LifeCat): Species[] => SPECIES.filter((s) => s.cat === cat);

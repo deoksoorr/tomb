@@ -24,6 +24,7 @@ import {
   type Furniture,
 } from "@tomb/protocol";
 import type { VillageHouse, VillageResponse } from "@/lib/housing/types";
+import type { MapConcept } from "@/lib/mapConcept";
 import { addCanvasTexture, TEX } from "../assets/manifest";
 import { DEPTH } from "../config";
 import { drawEmptyLot, drawHouseLot, scaleLotLabel, type LotGfx } from "../housing/worldLots";
@@ -33,6 +34,7 @@ import { BENCH_UP_BACK_ROW } from "../sprites/props";
 import { CAVE_TORCHES, FIRE_FRAMES, OFFICE_H, TORCH_TINT, WP } from "../sprites/worldProps";
 import { BIG_FIRE_FRAMES, FENCE_H_W, GRAVE_GATE_H, GY } from "../sprites/graveyardProps";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
+import { ConceptDecor, registerSheet, skin, type Actor } from "./ConceptDecor";
 import { FISH_ZONE_LIGHTS } from "./fishZone";
 import { SEA_STOP_LIGHTS } from "./seaStop";
 import { ZOO_LIGHTS } from "./zoo/zooLayout";
@@ -92,6 +94,8 @@ const CAMPFIRE_ART_SCALE = 1.2;
 const TEX_KIOSK = "world-lottery-kiosk";
 
 type Culled = Phaser.GameObjects.Image | Phaser.GameObjects.Sprite;
+/** 11/17 맵 컨셉에 따라 텍스처를 바꿔 끼우는 그림 (base = 기본 그림 키, crop = 잘라 그린 칸이면 다시 자른다) */
+type Skinned = { img: Phaser.GameObjects.Image; base: string; prop?: PropDef; crop?: [number, number, number, number] };
 
 export class WorldMap {
   readonly colliders: Phaser.Physics.Arcade.StaticGroup;
@@ -141,6 +145,12 @@ export class WorldMap {
   >();
   private festival = false;
   private readonly reduced: boolean;
+  /** 11/17 맵 컨셉 (lib/mapConcept): 겉모습만 바꾼다 — 바닥 덩어리·소품·오두막·집 텍스처 + 장식(ConceptDecor) */
+  private concept: MapConcept = "default";
+  private readonly skinned: Skinned[] = [];
+  private readonly decor: ConceptDecor;
+  private lastVillage: { village: VillageResponse | null; mine: string | null } | null = null;
+  private houseLots = new Set<number>();
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -150,12 +160,15 @@ export class WorldMap {
     this.gridColliders = scene.physics.add.staticGroup();
     this.furnitureColliders = scene.physics.add.staticGroup();
     this.reduced = typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    this.decor = new ConceptDecor(scene, this.reduced, (x, y, o) => this.cull(x, y, o));
 
     // 정문 (윗담 가운데)
-    scene.add.image(MAP_WIDTH / 2, 2 * TILE + 2, TEX.gate).setOrigin(0.5, 1).setDepth(2 * TILE);
+    this.skin(scene.add.image(MAP_WIDTH / 2, 2 * TILE + 2, TEX.gate).setOrigin(0.5, 1).setDepth(2 * TILE), TEX.gate);
 
     for (const p of allProps()) {
-      this.cull(p.x, p.y, this.addPropImage(p));
+      const img = this.addPropImage(p);
+      if (p.kind !== "mist") this.skin(img, img.texture.key, p);
+      this.cull(p.x, p.y, img);
       this.addPropBody(p, this.colliders, this.staticLights);
     }
     for (const f of FURNITURE) this.addFurniture(f);
@@ -166,21 +179,21 @@ export class WorldMap {
     this.addWaterShimmer();
 
     // 유령 잡화점 오두막
-    scene.add.image(SHOP.x, SHOP.y + 2, TEX.shopHut).setOrigin(0.5, 1).setDepth(SHOP.y);
+    this.skin(scene.add.image(SHOP.x, SHOP.y + 2, TEX.shopHut).setOrigin(0.5, 1).setDepth(SHOP.y), TEX.shopHut);
     this.addCollider(this.colliders, shopCollider());
     for (const dx of [-14, 14]) this.staticLights.push({ x: SHOP.x + dx, y: SHOP.y - 17, scale: 0.4, tint: 0xffc870, base: 0.5 });
     this.addLabel(SHOP.x, SHOP.y - SHOP_HUT_H + 3, "유령 잡화점", 0xe8dcc0, 1); // 지붕(굴뚝) 바로 위
 
     // 분양 사무소 (주거 구역 어귀)
     const O = HOUSING_OFFICE;
-    scene.add.image(O.x, O.y + 2, WP.office).setOrigin(0.5, 1).setDepth(O.y);
+    this.skin(scene.add.image(O.x, O.y + 2, WP.office).setOrigin(0.5, 1).setDepth(O.y), WP.office);
     this.addCollider(this.colliders, officeCollider());
     for (const dx of [-15, 14]) this.staticLights.push({ x: O.x + dx, y: O.y - 16, scale: 0.4, tint: 0xffd98a, base: 0.5 });
     this.addLabel(O.x, O.y - OFFICE_H + 6, "분양 사무소", 0xd8e4ec, 1); // 지붕 바로 위
 
     // 사냥터 입구 (윗담의 바위 동굴 + 횃불)
     const caveY = HUNT_GATE.y - 8;
-    scene.add.image(HUNT_GATE.x, caveY, WP.cave).setOrigin(0.5, 1).setDepth(caveY);
+    this.skin(scene.add.image(HUNT_GATE.x, caveY, WP.cave).setOrigin(0.5, 1).setDepth(caveY), WP.cave);
     for (const [dx, dy] of CAVE_TORCHES) this.staticLights.push({ x: HUNT_GATE.x + dx, y: caveY + dy - 1, scale: 0.55, tint: TORCH_TINT, base: 0.8 });
     // 이름은 동굴 입구 안쪽 어둠 위에 + 길가 팻말 (F6: 스폰에서 바로 보이게)
     this.addLabel(HUNT_GATE.x, caveY - 13, "사냥터", 0xf0c8a0, 0.5, 0.95); // 동굴 입구(어두운 굴 안)에 — 위쪽 화면 막대에 가리지 않게
@@ -221,6 +234,8 @@ export class WorldMap {
     const S = LOTTERY_KIOSK;
     addCanvasTexture(this.scene, TEX_KIOSK, { canvas: lotteryKioskArt(), frameW: KIOSK_ART_W, frameH: KIOSK_ART_H });
     const img = this.scene.add.image(S.x, S.y + 2, TEX_KIOSK, 0).setOrigin(0.5, 1).setDepth(S.y);
+    registerSheet(TEX_KIOSK, KIOSK_ART_W, KIOSK_ART_H);
+    this.skin(img, TEX_KIOSK);
     if (!this.reduced) this.scene.time.addEvent({ delay: 700, loop: true, callback: () => img.setFrame(img.frame.name === "0" ? 1 : 0) });
     for (const r of lotteryColliders()) this.addCollider(this.colliders, r);
     this.staticLights.push(...KIOSK_LIGHTS);
@@ -235,7 +250,7 @@ export class WorldMap {
       const k = `${x},${y}`;
       if (posts.has(k)) return;
       posts.add(k);
-      this.cull(x, y, scene.add.image(x, y + 2, GY.fencePost).setOrigin(0.5, 1).setDepth(y + 1));
+      this.cull(x, y, this.skin(scene.add.image(x, y + 2, GY.fencePost).setOrigin(0.5, 1).setDepth(y + 1), GY.fencePost));
     };
     for (const f of FENCE_RUNS) {
       this.addCollider(this.colliders, fenceCollider(f));
@@ -244,17 +259,18 @@ export class WorldMap {
           const w = Math.min(FENCE_H_W, f.x1 - x);
           const img = scene.add.image(x, f.y0 + 1, GY.fenceH).setOrigin(0, 1).setDepth(f.y0);
           if (w < FENCE_H_W) img.setCrop(0, 0, w, img.height);
+          this.skin(img, GY.fenceH, undefined, w < FENCE_H_W ? [0, 0, w, img.height] : undefined);
           this.cull(x + w / 2, f.y0, img);
         }
       } else {
-        for (let y = f.y0 + 8; y <= f.y1; y += 8) this.cull(f.x0, y, scene.add.image(f.x0, y + 1, GY.fenceV).setOrigin(0.5, 1).setDepth(y));
+        for (let y = f.y0 + 8; y <= f.y1; y += 8) this.cull(f.x0, y, this.skin(scene.add.image(f.x0, y + 1, GY.fenceV).setOrigin(0.5, 1).setDepth(y), GY.fenceV));
       }
       post(f.x0, f.y0);
       post(f.x1, f.y1);
     }
     for (const g of ARCH_GATES) {
       const c = gateCenter(g);
-      this.cull(c.x, c.y, scene.add.image(c.x, c.y + 2, GY.gate).setOrigin(0.5, 1).setDepth(c.y + 2));
+      this.cull(c.x, c.y, this.skin(scene.add.image(c.x, c.y + 2, GY.gate).setOrigin(0.5, 1).setDepth(c.y + 2), GY.gate));
       const area = GRAVE_AREAS.find((a) => a.id === g.area)!;
       this.addLabel(c.x, c.y - GRAVE_GATE_H + 2, area.name, 0xe6dcc8, 1, 0.92);
     }
@@ -372,7 +388,7 @@ export class WorldMap {
     if (p.kind === "swing") {
       // 그네: 틀은 탄 사람 뒤에, 줄·판은 따로 (누가 타면 숨긴다 — 아바타가 자기 줄·판과 함께 앞뒤로 흔들린다)
       const frame = this.scene.add.image(p.x, p.y + 1, this.propTexture(p)).setOrigin(0.5, 1).setDepth(p.y - SWING_BEHIND);
-      const seat = this.scene.add.image(p.x, p.y + 1, WP.swingSeat).setOrigin(0.5, 1).setDepth(p.y - SWING_BEHIND + 1);
+      const seat = this.skin(this.scene.add.image(p.x, p.y + 1, WP.swingSeat).setOrigin(0.5, 1).setDepth(p.y - SWING_BEHIND + 1), WP.swingSeat);
       this.swingSeats.set(p.x * 65536 + p.y, seat);
       this.cull(p.x, p.y, seat);
       return frame;
@@ -433,7 +449,7 @@ export class WorldMap {
           break;
         }
       }
-      const tex = busy ? WP.hammockPosts : WP.hammock;
+      const tex = skin(this.scene, busy ? WP.hammockPosts : WP.hammock, this.concept);
       if (img.texture.key !== tex) img.setTexture(tex);
     }
   }
@@ -469,10 +485,11 @@ export class WorldMap {
       if (up) {
         const back = this.scene.add.image(f.x, f.y + 2, key).setOrigin(0.5, 1).setDepth(f.y + 1.2);
         back.setCrop(0, BENCH_UP_BACK_ROW, back.width, back.height - BENCH_UP_BACK_ROW);
+        this.skin(back, key, undefined, [0, BENCH_UP_BACK_ROW, back.width, back.height - BENCH_UP_BACK_ROW]);
         this.cull(f.x, f.y, back);
       }
     } else key = f.facing === 1 ? TEX.chairLeft : f.facing === 2 ? TEX.chairRight : TEX.chairDown;
-    this.cull(f.x, f.y, this.scene.add.image(f.x, f.y + 2, key).setOrigin(0.5, 1).setDepth(f.y));
+    this.cull(f.x, f.y, this.skin(this.scene.add.image(f.x, f.y + 2, key).setOrigin(0.5, 1).setDepth(f.y), key));
     this.addCollider(this.furnitureColliders, furnitureCollider(f));
   }
 
@@ -703,7 +720,8 @@ export class WorldMap {
   setHouses(village: VillageResponse | null, myHouseId: string | null): boolean {
     const houses = (village?.houses ?? []).filter((h) => h.lot >= 1 && h.lot <= WORLD_LOTS);
     const taken = new Set((village?.taken ?? []).filter((l) => l <= WORLD_LOTS));
-    const key = `${myHouseId}|${[...taken].join(",")}|${houses.map((h) => `${h.id}:${h.lot}:${h.tier}:${h.name}:${h.ownerName}:${h.score}:${JSON.stringify(h.exterior)}`).join("|")}`;
+    this.lastVillage = { village, mine: myHouseId };
+    const key = `${this.concept}|${myHouseId}|${[...taken].join(",")}|${houses.map((h) => `${h.id}:${h.lot}:${h.tier}:${h.name}:${h.ownerName}:${h.score}:${JSON.stringify(h.exterior)}`).join("|")}`;
     if (key === this.houseKey) return false;
     this.houseKey = key;
     for (const o of this.houseObjs) o.destroy();
@@ -724,17 +742,19 @@ export class WorldMap {
     }
     this.houseItems = items;
     this.items = [...this.fixedItems, ...this.houseItems, ...this.extraItems];
+    this.houseLots = new Set(byLot.keys());
+    this.decor.setLots(this.houseLots);
     return true;
   }
 
   // 필지 그림은 game/housing/worldLots.ts (F2: 터 크기별 집·마당·울타리·밤 창 불빛·굴뚝 연기)
   private drawHouse(h: VillageHouse, lot: (typeof HOUSE_LOTS)[number], mine: boolean): void {
-    this.addLotGfx(drawHouseLot(this.scene, this.atlas, lot, { w: HOUSE_LOT_W, h: HOUSE_LOT_H }, h, mine, { reduced: this.reduced }), lot);
+    this.addLotGfx(drawHouseLot(this.scene, this.atlas, lot, { w: HOUSE_LOT_W, h: HOUSE_LOT_H }, h, mine, { reduced: this.reduced, concept: this.concept }), lot);
     this.addCollider(this.gridColliders, houseCollider(lot, h.tier));
   }
 
   private drawEmptyLot(lot: (typeof HOUSE_LOTS)[number], taken: boolean): void {
-    this.addLotGfx(drawEmptyLot(this.scene, this.atlas, lot, { w: HOUSE_LOT_W, h: HOUSE_LOT_H }, taken, { reduced: this.reduced }), lot);
+    this.addLotGfx(drawEmptyLot(this.scene, this.atlas, lot, { w: HOUSE_LOT_W, h: HOUSE_LOT_H }, taken, { reduced: this.reduced, concept: this.concept }), lot);
   }
 
   private addLotGfx(d: LotGfx, lot: (typeof HOUSE_LOTS)[number]): void {
@@ -758,6 +778,7 @@ export class WorldMap {
     const cy0 = Math.max(0, Math.floor((view.y - 64) / CHUNK));
     const cy1 = Math.min(CHUNK_ROWS - 1, Math.floor((view.bottom + 64) / CHUNK));
     for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) if (!this.chunks.has(cy * CHUNK_COLS + cx)) this.makeChunk(cx, cy);
+    this.decor.update(view);
 
     const a0 = Math.max(0, Math.floor((view.x - CULL_PAD) / CELL));
     const a1 = Math.min(CELL_COLS - 1, Math.floor((view.right + CULL_PAD) / CELL));
@@ -792,17 +813,71 @@ export class WorldMap {
     return n;
   }
 
+  private chunkKey(cx: number, cy: number, concept = this.concept): string {
+    return concept === "default" ? `ground2-${cx}-${cy}` : `ground2-${concept === "christmas" ? "winter" : concept}-${cx}-${cy}`;
+  }
+
   private makeChunk(cx: number, cy: number): void {
-    const key = `ground2-${cx}-${cy}`;
+    const key = this.chunkKey(cx, cy);
     if (!this.scene.textures.exists(key)) {
-      addCanvasTexture(this.scene, key, { canvas: drawGroundChunk(cx, cy) });
+      addCanvasTexture(this.scene, key, { canvas: drawGroundChunk(cx, cy, this.concept) });
       clampEdges(this.scene, key);
     }
     const img = this.scene.add.image(cx * CHUNK, cy * CHUNK, key).setOrigin(0, 0).setDepth(DEPTH.ground);
     this.chunks.set(cy * CHUNK_COLS + cx, img);
   }
 
+  /** 기본 그림 키로 만든 그림을 컨셉 텍스처 목록에 올리고 지금 컨셉 그림을 입힌다 */
+  private skin<T extends Phaser.GameObjects.Image>(img: T, base: string, prop?: PropDef, crop?: [number, number, number, number]): T {
+    const s: Skinned = { img, base, prop, crop };
+    this.skinned.push(s);
+    if (this.concept !== "default") this.applySkin(s);
+    return img;
+  }
+
+  private applySkin(s: Skinned): void {
+    if (!s.img.active) return;
+    // 해먹은 누운 사람이 있으면 기둥만 (updateHammocks가 다음 프레임에 맞춘다)
+    const key = skin(this.scene, s.base, this.concept, s.prop);
+    if (s.img.texture.key === key) return;
+    const frame = s.img.frame.name;
+    s.img.setTexture(key, this.scene.textures.get(key).has(frame) ? frame : undefined);
+    if (s.crop) s.img.setCrop(...s.crop);
+  }
+
+  /**
+   * 11/17 맵 컨셉을 바꾼다 (lib/mapConcept): 바닥 덩어리를 다시 굽고, 소품·오두막·집 텍스처를 바꿔 끼우고, 장식을 다시 세운다.
+   * 길·충돌·상호작용·빛 자리는 그대로다. 같은 값이면 아무것도 하지 않는다
+   */
+  setConcept(concept: MapConcept): void {
+    if (concept === this.concept) return;
+    const prev = this.concept;
+    this.concept = concept;
+    for (const s of this.skinned) this.applySkin(s);
+    // 바닥: 화면 근처 덩어리만 다시 만든다 (이전 판 텍스처는 버린다 — 겨울·크리스마스는 같은 바닥)
+    for (const img of this.chunks.values()) img.destroy();
+    this.chunks.clear();
+    for (let cy = 0; cy < CHUNK_ROWS; cy++)
+      for (let cx = 0; cx < CHUNK_COLS; cx++) {
+        const old = this.chunkKey(cx, cy, prev);
+        if (old !== this.chunkKey(cx, cy) && this.scene.textures.exists(old)) this.scene.textures.remove(old);
+      }
+    this.lastCull = "";
+    this.decor.apply(concept, this.houseLots);
+    if (this.lastVillage) this.setHouses(this.lastVillage.village, this.lastVillage.mine);
+  }
+
+  get mapConcept(): MapConcept {
+    return this.concept;
+  }
+
+  /** 입김을 낼 사람들 (WorldScene이 한 번) */
+  setActors(fn: () => Iterable<Actor & { key: object }>): void {
+    this.decor.setActors(fn);
+  }
+
   destroy(): void {
+    this.decor.destroy();
     this.colliders.clear(true, true);
     this.gridColliders.clear(true, true);
     this.furnitureColliders.clear(true, true);

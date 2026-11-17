@@ -1,0 +1,53 @@
+/* 11/17 운영자에게만 보이는 유령선 시험 버튼 (바닷가 왼쪽 위, 녹빛 테) */
+.hud {
+  position: fixed;
+  top: calc(var(--safe-top, 0px) + 112px);
+  left: 12px;
+  z-index: 11;
+  display: grid;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px solid rgba(125, 255, 176, 0.55);
+  border-radius: 8px;
+  background: rgba(10, 22, 20, 0.8);
+  color: #c8ffe0;
+  font-size: 12px;
+  pointer-events: auto;
+}
+
+.title {
+  font-size: 11px;
+  color: #8fd8b4;
+}
+
+.row {
+  display: flex;
+  gap: 4px;
+}
+
+.btn {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid #2e5a4c;
+  border-radius: 6px;
+  background: #142a24;
+  color: #c8ffe0;
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.btn[aria-pressed="true"] {
+  border-color: #7dffb0;
+  background: #1e7a58;
+  color: #eafff2;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+}
+
+.msg {
+  font-size: 11px;
+  color: #b8ffd8;
+}

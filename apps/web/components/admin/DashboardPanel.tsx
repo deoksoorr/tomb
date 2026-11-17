@@ -66,7 +66,8 @@ export default function DashboardPanel({ toast, onAuthLost, lobby, graveCount, r
   const live = lobby && lobby !== "error" ? lobby : null;
   const openCount = reportsOpen ?? reports?.openCount ?? null;
   const recentBans = bans ? [...bans.bans].sort((a, b) => b.startAt - a.startAt).slice(0, RECENT) : null;
-  const refTotal = report ? report.referrers.reduce((n, r) => n + r.count, 0) : 0;
+  // 11/17 유입 경로는 위 추이 기간과 상관없이 오늘(한국 시각) 기준 — 기간별은 유입 분석 메뉴에서
+  const refTotal = report ? report.todayReferrers.reduce((n, r) => n + r.count, 0) : 0;
 
   return (
     <section className={an.wrap} aria-label="대시보드">
@@ -154,8 +155,8 @@ export default function DashboardPanel({ toast, onAuthLost, lobby, graveCount, r
           </div>
           {report ? (
             <>
-              <RankList title={`어디서 왔나 (${report.breakdownLabel})`} total={refTotal} rows={report.referrers.map((r) => ({ key: REF_LABELS[r.cat], count: r.count }))} keepZero />
-              <RankList title="리퍼러 도메인 상위 5" rows={report.domains} limit={5} empty="다른 사이트에서 온 방문이 아직 없어요." />
+              <RankList title="어디서 왔나 (오늘)" total={refTotal} rows={report.todayReferrers.map((r) => ({ key: REF_LABELS[r.cat], count: r.count }))} keepZero />
+              <RankList title="리퍼러 도메인 상위 5 (오늘)" rows={report.todayDomains} limit={5} empty="오늘은 다른 사이트에서 온 방문이 아직 없어요." />
             </>
           ) : (
             <Loading />

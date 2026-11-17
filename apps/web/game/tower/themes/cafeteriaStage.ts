@@ -63,6 +63,10 @@ const PROJ_CAP = 18;
 
 const osc = (wave: "sine" | "square" | "triangle" | "sawtooth", at: number, dur: number, f0: number, f1: number, gain: number, x: Partial<Layer> = {}): Layer => ({ src: "osc", wave, at, dur, f0, f1, gain, atk: 0.004, env: "perc", ...x });
 const nz = (at: number, dur: number, gain: number, f0: number, f1: number, q = 1.4, x: Partial<Layer> = {}): Layer => ({ src: "noise", at, dur, gain, atk: 0.004, env: "perc", flt: { type: "bandpass", f0, f1, q }, ...x });
+/** 11/17 철 메뉴 (겨울·크리스마스판 메뉴판 글씨) */
+const WINTER_DISHES = ["떡국", "어묵탕", "동지 팥죽", "굴국밥", "부대찌개", "호빵과 우동"] as const;
+const XMAS_DISHES = ["로스트 치킨", "미트볼 스파게티", "딸기 케이크", "칠면조 샌드위치", "크림 스튜", "핫초코와 쿠키"] as const;
+
 type Snd = "chime" | "bubble" | "splash" | "whistle" | "clank" | "suck" | "can" | "pinch" | "menu";
 const SOUNDS: Record<Snd, Layer[]> = {
   // 점심시간 알림 (딩동댕)
@@ -358,9 +362,17 @@ export class CafeteriaStage implements TowerThemeRuntime {
     this.host.float(x, y, text, color);
   }
 
+  /** 이 층 메뉴 (11/17 겨울·크리스마스판은 철 메뉴 — 이름만, 기믹은 그대로) */
+  private dish(): string {
+    const c = this.host.concept;
+    if (c === "default") return cfDish(this.floor);
+    const list = c === "christmas" ? XMAS_DISHES : WINTER_DISHES;
+    return list[(this.floor * 7 + 3) % list.length];
+  }
+
   title(): string {
     const name = CF_ROOM_NAMES[this.room] ?? "";
-    const dish = this.boss ? "특식" : `오늘은 ${cfDish(this.floor)}`;
+    const dish = this.boss ? "특식" : `오늘은 ${this.dish()}`;
     return this.visit > 0 ? `${name} · ${dish} · ${this.loop.name}` : `${name} · ${dish}`;
   }
 
@@ -385,8 +397,10 @@ export class CafeteriaStage implements TowerThemeRuntime {
       );
     this.keep(sc.add.image(m.x + 4, m.y + 7, skey).setOrigin(0, 0).setDepth(D_SIGN));
     const font = '"Galmuri11", "Galmuri9", monospace';
-    this.menuHead = this.keep(sc.add.text(m.x + 86, m.y + 3, "오늘의 메뉴", { fontFamily: font, fontSize: "14px", color: "#c8e8c8", resolution: 2 }).setOrigin(0.5, 0).setScale(0.5).setDepth(D_SIGN));
-    this.menuText = this.keep(sc.add.text(m.x + 86, m.y + 12, this.boss ? "특식 · 갈비찜" : cfDish(this.floor), { fontFamily: font, fontSize: "18px", color: "#ffffff", resolution: 2 }).setOrigin(0.5, 0).setScale(0.5).setDepth(D_SIGN));
+    // 11/17 겨울판은 겨울 메뉴, 크리스마스판은 크리스마스 특식 (분필 글씨 색도 빨강·초록)
+    const xmas = this.host.concept === "christmas";
+    this.menuHead = this.keep(sc.add.text(m.x + 86, m.y + 3, xmas ? "크리스마스 특식" : "오늘의 메뉴", { fontFamily: font, fontSize: "14px", color: xmas ? "#ff9a9a" : "#c8e8c8", resolution: 2 }).setOrigin(0.5, 0).setScale(0.5).setDepth(D_SIGN));
+    this.menuText = this.keep(sc.add.text(m.x + 86, m.y + 12, this.boss ? (xmas ? "특식 · 칠면조 구이" : "특식 · 갈비찜") : this.dish(), { fontFamily: font, fontSize: "18px", color: xmas ? "#d8f8c8" : "#ffffff", resolution: 2 }).setOrigin(0.5, 0).setScale(0.5).setDepth(D_SIGN));
 
     // 김 (국솥·조리실 화구) · 불꽃 · 국물 방울
     this.steam = new FxPool(sc, T.soft, 44, 9020, false);

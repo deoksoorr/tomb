@@ -30,6 +30,9 @@ export type AnalyticsReport = {
   /** 오늘(KST) 요약 */
   today: SeriesPoint & { newVisits: number; returningVisits: number };
   series: SeriesPoint[];
+  /** 11/17 대시보드용: 기간과 상관없이 오늘(한국 시각) 유입 분류·리퍼러 도메인 */
+  todayReferrers: { cat: RefCategory; count: number }[];
+  todayDomains: Ranked;
   /** 유입·기기 분석을 모은 기간 이름 ("오늘", "최근 30일" …) */
   breakdownLabel: string;
   referrers: { cat: RefCategory; count: number }[];
@@ -164,12 +167,16 @@ export async function buildReport(store: AnalyticsStore, range: AnalyticsRange, 
 
   const bRaws = await store.days(breakdownDays);
   const refs = ranked(bRaws, "ref:", 10);
+  const todayRaws = todayRaw ? [todayRaw] : [];
+  const todayRefs = ranked(todayRaws, "ref:", 10);
   return {
     range,
     today: { ...point("오늘", [todayRaw], todayUnique), newVisits: field(todayRaw, "v:new"), returningVisits: field(todayRaw, "v:ret") },
     series,
     breakdownLabel,
     referrers: REF_CATEGORIES.map((cat) => ({ cat, count: refs.find((r) => r.key === cat)?.count ?? 0 })),
+    todayReferrers: REF_CATEGORIES.map((cat) => ({ cat, count: todayRefs.find((r) => r.key === cat)?.count ?? 0 })),
+    todayDomains: ranked(todayRaws, "dom:"),
     domains: ranked(bRaws, "dom:"),
     utm: ranked(bRaws, "utm:"),
     landings: ranked(bRaws, "land:"),

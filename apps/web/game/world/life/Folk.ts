@@ -1,5 +1,7 @@
 import type * as Phaser from "phaser";
 import { DIR, WALK_SPEED, type DirId } from "@tomb/protocol";
+import type { MapConcept } from "@/lib/mapConcept";
+import { currentMapConcept } from "@/lib/mapConceptClient";
 import { DEPTH } from "../../config";
 import { AvatarView } from "../../entities/AvatarView";
 import type { Player } from "../../entities/Player";
@@ -12,6 +14,7 @@ import type { Lighting } from "../Lighting";
 import type { Sfx } from "../Sfx";
 import { ensureFolkTextures, FTEX } from "./folkArt";
 import { blankFolkPose, FolkSim, pickFolkLine, type FolkAct, type FolkDef, type FolkLineCtx, type FolkPose, type FolkState, type FolkWorld } from "./folkSim";
+import { conceptLook, pickConceptLine } from "./npcOutfits";
 import { playLife } from "./sounds";
 import { ensureLifeTextures, LTEX, type CatFrame, type DogFrame } from "./sprites";
 
@@ -20,6 +23,7 @@ import { ensureLifeTextures, LTEX, type CatFrame, type DogFrame } from "./sprite
 // - 유령은 사람 아바타 그림(AvatarView) + 손 소품(folkArt), 동물은 마을 강아지·고양이 그림. 이름표는 마을 주민처럼 연한 초록.
 // - 말 걸기(E): 말풍선은 내 화면에만. 말하는 동안 멈춰 나를 보고, 끝나면 공유 자리로 슬며시 돌아간다.
 // - 길 막지 않기: 몸 충돌이 없고, 쉬는 자리에 내가 바짝 서면 옆으로 한 걸음 비켜 선다 (내 화면에서만).
+// - 11/17 맵 컨셉(겨울·크리스마스판)이면 유령 주민은 계절 옷을 입고(npcOutfits) 가끔 계절 한마디. 판이 바뀌면 1초 안에 갈아입는다.
 // - 집에 들어가면(away) 흐려지며 사라지고, 나올 땐 문 앞에서 흐려지며 나타난다.
 
 const LABEL = 0xa8e6a0;
@@ -82,6 +86,9 @@ export class Folk {
   private seed = -1;
   private talkAt = -Infinity;
   private destroyed = false;
+  /** 11/17 지금 입은 판 (1초마다 확인) */
+  private concept: MapConcept = currentMapConcept();
+  private conceptAt = 0;
 
   constructor(private readonly d: FolkDeps) {
     ensureLifeTextures(d.scene);
@@ -141,6 +148,14 @@ export class Folk {
     const now = this.d.scene.time.now;
     const pnow = performance.now();
     const k = Math.min(1, (dt / 1000) * 3);
+    if (pnow - this.conceptAt > 1000) {
+      this.conceptAt = pnow;
+      const c = currentMapConcept();
+      if (c !== this.concept) {
+        this.concept = c;
+        for (const r of this.list) r.av?.setLook(conceptLook(r.sim.def.id, r.sim.def.look ?? [], c));
+      }
+    }
     for (const r of this.list) {
       const p = r.sim.at(t, r.pose);
       const target = p.hidden ? 0 : 1;
@@ -214,7 +229,7 @@ export class Folk {
     const def = r.sim.def;
     let v = r.av;
     if (!v) {
-      v = r.av = new AvatarView(this.d.scene, this.d.atlas, r.x, r.y, def.color ?? "#e8d9b0", def.name, false, def.look ?? [], def.body ?? "hood");
+      v = r.av = new AvatarView(this.d.scene, this.d.atlas, r.x, r.y, def.color ?? "#e8d9b0", def.name, false, conceptLook(def.id, def.look ?? [], this.concept), def.body ?? "hood");
       v.label.setTint(LABEL);
       v.sprite.anims.timeScale = Math.max(0.5, Math.min(1, def.speed / WALK_SPEED + 0.15));
     }
@@ -382,7 +397,7 @@ export class Folk {
     if (pnow - this.talkAt < 700) return true;
     this.talkAt = pnow;
     const now = this.d.scene.time.now;
-    const line = pickFolkLine(r.sim.def, this.d.lineCtx(), Math.random, Date.now(), r.lastLine);
+    const line = (r.sim.def.kind === "ghost" ? pickConceptLine(r.sim.def.id, this.concept, Math.random, r.lastLine) : null) ?? pickFolkLine(r.sim.def, this.d.lineCtx(), Math.random, Date.now(), r.lastLine);
     r.lastLine = line;
     pl.faceTo(r.x, r.y, now);
     if (r.sim.def.kind !== "ghost") {

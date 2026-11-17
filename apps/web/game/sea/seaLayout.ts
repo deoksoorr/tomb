@@ -150,6 +150,20 @@ export const SEA_PALMS: readonly Pt[] = [
 ];
 /** 11/16 r12 바닷가 음료 자판기 (매점 오른쪽 — 술·음료. 매점 왼쪽은 선착장 가는 길이라 비워 둬요) */
 export const SEA_VEND: Pt = { x: SEA_KIOSK.x + 42, y: SEA_KIOSK.y };
+/**
+ * 11/17 r2 사용자: 갈매기 과자는 따로 「과자 자판기」에서 (매점 창에서 뺐어요). 선착장 들어가는 길목 서쪽 (피크닉 탁자와 선착장 머리 사이) —
+ * 선착장으로 걸어가는 사람 눈에 바로 띄어요. 동쪽 짝은 선착장 망원경
+ */
+export const SEA_SNACK_VEND: Pt = { x: SEA_PIER.x - 12, y: SEA_PIER.y - 2 };
+/**
+ * 11/17 r2 갈매기 과자를 던질 수 있는 곳: 갈매기가 날아다니는 산책로 아래 전부 (산책로·백사장·갯벌·선착장·방파제·카약 선착장·유령선 갑판).
+ * 물속·탈것 위·앉은 동안은 장면이 빼요. 위쪽 별장·언덕·정류장은 아니에요
+ */
+export function seaSnackZone(x: number, y: number): boolean {
+  return y >= SEA_BOARDWALK.y && x >= 0 && x <= SEA_BOUNDS.maxX + 8;
+}
+/** 과자 자판기 막는 상자 (그림 몸통 바닥) */
+export const SEA_SNACK_VEND_BOX = { x: SEA_SNACK_VEND.x - 10, y: SEA_SNACK_VEND.y - 16, w: 20, h: 16 } as const;
 /** r12 해먹 기둥 반 폭 (마을 해먹 소품과 같은 그림) */
 const SEA_HAMMOCK_HALF = 20;
 /** 산책로 가로등 (산책로 위쪽 가장자리) */
@@ -273,6 +287,7 @@ function nearRest(x: number, y: number, pad: number): boolean {
   if (Math.hypot(x - SEA_BONFIRE.x, y - SEA_BONFIRE.y) < 34 + pad) return true;
   if (Math.abs(x - SEA_SPOTS.hammock.x) < 30 + pad && Math.abs(y - SEA_SPOTS.hammock.y) < 14 + pad) return true;
   if (Math.abs(x - SEA_VEND.x) < 16 + pad && Math.abs(y - SEA_VEND.y) < 14 + pad) return true;
+  if (Math.abs(x - SEA_SNACK_VEND.x) < 16 + pad && Math.abs(y - SEA_SNACK_VEND.y) < 14 + pad) return true;
   return false;
 }
 
@@ -363,6 +378,7 @@ export function seaFurnitureColliders(): Rect[] {
     { x: SEA_SPOTS.hammock.x - SEA_HAMMOCK_HALF - 2, y: SEA_SPOTS.hammock.y - 4, w: 4, h: 4 },
     { x: SEA_SPOTS.hammock.x + SEA_HAMMOCK_HALF - 2, y: SEA_SPOTS.hammock.y - 4, w: 4, h: 4 },
     { x: SEA_VEND.x - 10, y: SEA_VEND.y - 18, w: 20, h: 18 },
+    { ...SEA_SNACK_VEND_BOX },
   ];
 }
 
@@ -417,6 +433,8 @@ export const SEA_INTERACTABLES: readonly SeaInteractable[] = [
   { id: "kiosk", kind: "kiosk", x: SEA_KIOSK.x, y: SEA_KIOSK.y + 12, r: 20, label: "매점" },
   // 11/16 r12 음료 자판기 (술·음료는 여기서)
   { id: "vending", kind: "vending", x: SEA_VEND.x, y: SEA_VEND.y + 10, r: 16, label: "자판기" },
+  // 11/17 r2 과자 자판기 (갈매기 과자·매운 새우 과자)
+  { id: "snackVend", kind: "snackVend", x: SEA_SNACK_VEND.x - 2, y: SEA_SNACK_VEND.y + 9, r: 14, label: "과자 자판기" },
   { id: "lighthouse", kind: "lighthouse", x: SEA_LIGHTHOUSE_DOOR.x, y: SEA_LIGHTHOUSE_DOOR.y + 6, r: 18, label: "등대 오르기" },
   { id: "keeper", kind: "keeper", x: SEA_KEEPER.x, y: SEA_KEEPER.y + 8, r: 20, label: "등대지기와 이야기하기" },
 ];

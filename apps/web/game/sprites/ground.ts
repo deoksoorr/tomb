@@ -1,6 +1,9 @@
 import { GRAVE_AREAS, HILL, HILL_CLIFF, HILL_STAIRS, HOUSE_LOT_H, HOUSE_LOT_W, HOUSE_LOTS, MAP_HEIGHT, MAP_WIDTH, PONDS, RIVER_HALF_W, RIVER_PATH, STEP_STONE_R, STEP_STONES, TELESCOPE, TELESCOPE_2, TILE } from "@tomb/protocol";
 import { DECKS, deckRails, ELLIPSES, ellipseD, groundKind, PLAZA_FIRE, PLAZA_RECT, PLAZA_TREES, riverDist, type GroundKind, type Rect } from "../world/layout";
-import { css, darken, hash2, lighten, makeCanvas, rng, type Color } from "./pixel";
+import { isSnowy, type MapConcept } from "@/lib/mapConcept";
+import { css, darken, hash2, lighten, makeCanvas, mix, rng, vnoise, type Color } from "./pixel";
+import { SNOW } from "./winterArt";
+import { iceAt, iceEdge, snowRim, WINTER_WATER, winterizeGround } from "./winterGround";
 
 // 바닥 타일을 캔버스에 미리 구워 둔다. CHUNK × CHUNK 정사각 덩어리로 나눠 굽고, 화면 근처 덩어리만 만든다 (WorldMap).
 // 가을~초겨울 기준의 차분한 색(마른 풀·낙엽·이끼 낀 묘역 흙·자갈길)으로 그리고, 밤 톤은 월드 틴트가 입힌다.
@@ -269,8 +272,12 @@ const isSoft = (k: GroundKind) => k === "grass" || k === "hill" || k === "grave"
 const isWall = (k: GroundKind) => k === "wallTop" || k === "wallFace" || k === "wallSide";
 const edgeColor = (k: GroundKind): Color => (k === "hill" ? C.hill : k === "grave" ? C.grave : C.grass);
 
-/** 덩어리 하나를 그린다. (cx, cy) = 덩어리 칸 (0,0 = 맵 왼쪽 위) */
-export function drawGroundChunk(cx: number, cy = 0): HTMLCanvasElement {
+/**
+ * 덩어리 하나를 그린다. (cx, cy) = 덩어리 칸 (0,0 = 맵 왼쪽 위).
+ * 11/17 concept가 겨울·크리스마스면 다 구운 바닥을 겨울 바닥으로 바꾸고(winterGround), 물·판자·봉분·광장·언덕은 겨울 그림으로
+ */
+export function drawGroundChunk(cx: number, cy = 0, concept: MapConcept = "default"): HTMLCanvasElement {
+  const winter = isSnowy(concept);
   if (!tileCache) tileCache = buildTiles();
   const tiles = tileCache;
   const { canvas, ctx } = makeCanvas(CHUNK, CHUNK);
@@ -371,30 +378,14 @@ export function drawGroundChunk(cx: number, cy = 0): HTMLCanvasElement {
 
   const area: Rect = { x: cx * CHUNK, y: cy * CHUNK, w: CHUNK, h: CHUNK };
   shadeSoftGround(ctx, area, tx0, ty0);
-  drawPlaza(ctx, area);
-  drawLots(ctx, area);
-  drawGraveyards(ctx, area);
-  drawHill(ctx, area);
-  drawWater(ctx, area);
-  drawDecks(ctx, area);
+  if (winter) winterizeGround(ctx, area, tx0, ty0);
+  drawPlaza(ctx, area, winter);
+  if (!winter) drawLots(ctx, area);
+  drawGraveyards(ctx, area, winter);
+  drawHill(ctx, area, winter);
+  drawWater(ctx, area, winter);
+  drawDecks(ctx, area, winter);
   return canvas;
-}
-
-/** 부드러운 값 노이즈 0..1 (격자 scale px, 결정적) */
-function vnoise(x: number, y: number, scale: number, salt: number): number {
-  const gx = x / scale;
-  const gy = y / scale;
-  const x0 = Math.floor(gx);
-  const y0 = Math.floor(gy);
-  const fx = gx - x0;
-  const fy = gy - y0;
-  const sx = fx * fx * (3 - 2 * fx);
-  const sy = fy * fy * (3 - 2 * fy);
-  const a = hash2(x0, y0, salt);
-  const b = hash2(x0 + 1, y0, salt);
-  const c = hash2(x0, y0 + 1, salt);
-  const d = hash2(x0 + 1, y0 + 1, salt);
-  return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
 }
 
 /**
@@ -445,7 +436,7 @@ function shadeSoftGround(ctx: CanvasRenderingContext2D, area: Rect, tx0: number,
 }
 
 /** 광장: 가장자리 돌 테두리 + 우물 둘레 둥근 무늬 포석 + 나무 둘레 흙 화단 */
-function drawPlaza(ctx: CanvasRenderingContext2D, area: Rect): void {
+function drawPlaza(ctx: CanvasRenderingContext2D, area: Rect, winter = false): void {
   const P = PLAZA_RECT;
   if (!overlaps({ x: P.x - 4, y: P.y - 4, w: P.w + 8, h: P.h + 8 }, area)) return;
   const ox = area.x;
@@ -490,7 +481,9 @@ function drawPlaza(ctx: CanvasRenderingContext2D, area: Rect): void {
         const wy = t.y + y;
         if (wx < ox || wy < oy || wx >= ox + area.w || wy >= oy + area.h) continue;
         const edgeRing = (x * x) / 144 + (y * y) / 49 > 0.72;
-        px(ctx, wx - ox, wy - oy, edgeRing ? 0x6a675e : hash2(wx, wy, 83) < 0.18 ? C.leaves[Math.floor(hash2(wx, wy, 85) * 5)] : C.dirtDark);
+        // 겨울: 화단은 눈 둔덕 (위는 밝고 아래 가장자리는 그늘)
+        if (winter) px(ctx, wx - ox, wy - oy, edgeRing ? (y > 0 ? 0x9aabbd : SNOW.lo) : y < -2 ? SNOW.hi : SNOW.mid);
+        else px(ctx, wx - ox, wy - oy, edgeRing ? 0x6a675e : hash2(wx, wy, 83) < 0.18 ? C.leaves[Math.floor(hash2(wx, wy, 85) * 5)] : C.dirtDark);
       }
   }
 }
@@ -517,7 +510,7 @@ function drawLots(ctx: CanvasRenderingContext2D, area: Rect): void {
 }
 
 /** 묘역 땅: 철책 안쪽 가장자리 그늘 + 묘비 자리마다 살짝 솟은 흙 봉분 (철책·문은 소품) */
-function drawGraveyards(ctx: CanvasRenderingContext2D, area: Rect): void {
+function drawGraveyards(ctx: CanvasRenderingContext2D, area: Rect, winter = false): void {
   for (const a of GRAVE_AREAS) {
     const g = a.rect;
     if (!overlaps({ x: g.x - 4, y: g.y - 4, w: g.w + 8, h: g.h + 8 }, area)) continue;
@@ -539,6 +532,11 @@ function drawGraveyards(ctx: CanvasRenderingContext2D, area: Rect): void {
             const wx = x + xx;
             const wy = y + yy;
             if (wx < area.x || wy < area.y || wx >= area.x + area.w || wy >= area.y + area.h) continue;
+            if (winter) {
+              // 눈 덮인 봉분: 위는 하얗고 아래 가장자리는 푸른 그늘
+              px(ctx, wx - area.x, wy - area.y, e > 0.7 ? (yy > 0 ? 0x93a5ba : SNOW.lo) : yy < -6 ? SNOW.hi : SNOW.mid);
+              continue;
+            }
             const shade = e > 0.7 ? 0x2f332a : yy < -6 ? 0x4a4e3c : 0x40443a;
             px(ctx, wx - area.x, wy - area.y, hash2(wx, wy, 87) < 0.08 ? C.moss : shade);
           }
@@ -546,8 +544,11 @@ function drawGraveyards(ctx: CanvasRenderingContext2D, area: Rect): void {
   }
 }
 
+const SUMMER_LIP = [[-3, 0x8e9888], [-2, 0xa6b0a0], [-1, 0x7a8474]] as const;
+const WINTER_LIP = [[-3, 0xc2ceda], [-2, 0xf2f6f9], [-1, 0x9aabbd]] as const;
+
 /** 별 보기 언덕 (F3): 절벽 위 밝은 턱, 꼭대기 돌 마당(망원경 자리) */
-function drawHill(ctx: CanvasRenderingContext2D, area: Rect): void {
+function drawHill(ctx: CanvasRenderingContext2D, area: Rect, winter = false): void {
   const H = { x: HILL.x, y: HILL.y, w: HILL.w, h: HILL.h };
   if (!overlaps({ x: H.x, y: H.y, w: H.w + TILE, h: H.h + HILL_CLIFF }, area)) return;
   const bottom = H.y + H.h;
@@ -556,14 +557,14 @@ function drawHill(ctx: CanvasRenderingContext2D, area: Rect): void {
   for (let x = H.x; x < right; x++) {
     if (x >= HILL_STAIRS.x && x < HILL_STAIRS.x + HILL_STAIRS.w) continue;
     if (x < area.x || x >= area.x + area.w) continue;
-    for (const [dy, c] of [[-3, 0x8e9888], [-2, 0xa6b0a0], [-1, 0x7a8474]] as const) {
+    for (const [dy, c] of winter ? WINTER_LIP : SUMMER_LIP) {
       const y = bottom + dy;
       if (y >= area.y && y < area.y + area.h) px(ctx, x - area.x, y - area.y, c);
     }
   }
   for (let y = H.y; y < bottom; y++) {
     if (y < area.y || y >= area.y + area.h) continue;
-    for (const [dx, c] of [[-3, 0x8e9888], [-2, 0xa6b0a0], [-1, 0x7a8474]] as const) {
+    for (const [dx, c] of winter ? WINTER_LIP : SUMMER_LIP) {
       const x = right + dx;
       if (x >= area.x && x < area.x + area.w) px(ctx, x - area.x, y - area.y, c);
     }
@@ -590,6 +591,8 @@ function drawHill(ctx: CanvasRenderingContext2D, area: Rect): void {
         const cell = (Math.floor((wx + (Math.floor(wy / 5) % 2) * 3) / 6) * 7 + Math.floor(wy / 5) * 13) % 5;
         c = (wx % 6 === 0 || wy % 5 === 0) ? 0x5e5f58 : cell < 2 ? 0x8a8c84 : cell < 4 ? 0x7e8078 : 0x939589;
       }
+      // 겨울: 줄눈엔 눈, 돌은 서리 + 군데군데 눈 (망원경 둘레는 밟혀 조금 비었다)
+      if (winter) c = depth < 2 ? c : (c === 0x5e5f58 || vnoise(wx, wy, 9, 97) > 0.6) ? SNOW.mid : mix(c, 0xdfe6ee, 0.35);
       px(ctx, wx - area.x, wy - area.y, c);
     }
 }
@@ -597,7 +600,7 @@ function drawHill(ctx: CanvasRenderingContext2D, area: Rect): void {
 /** 물(강·호수·연못) 픽셀. 이미지 데이터로 한 번에 쓴다 (물이 걸치는 덩어리만) */
 const RIVER_Y0 = Math.min(...RIVER_PATH.map((p) => p.y)) - RIVER_HALF_W - 4;
 const RIVER_Y1 = Math.max(...RIVER_PATH.map((p) => p.y)) + RIVER_HALF_W + 4;
-function drawWater(ctx: CanvasRenderingContext2D, area: Rect): void {
+function drawWater(ctx: CanvasRenderingContext2D, area: Rect, winter = false): void {
   const boxes: Rect[] = [{ x: 0, y: RIVER_Y0, w: MAP_WIDTH, h: RIVER_Y1 - RIVER_Y0 }, ...ELLIPSES.map((e) => ({ x: e.x - e.rx - 6, y: e.y - e.ry - 6, w: e.rx * 2 + 12, h: e.ry * 2 + 12 }))];
   const hit = boxes.filter((b) => overlaps(b, area));
   if (!hit.length) return;
@@ -622,14 +625,34 @@ function drawWater(ctx: CanvasRenderingContext2D, area: Rect): void {
       // 가장 가까운(정규화 거리가 가장 작은) 타원 물
       let ld = Infinity;
       let ldy = 0;
+      let pond = false;
       for (const e of ELLIPSES) {
         const v = ellipseD(e, wx, wy);
         if (v < ld) {
           ld = v;
           ldy = (wy - e.y) / e.ry;
+          pond = e !== ELLIPSES[0];
         }
       }
       const i = (y * w + x) * 4;
+      if (winter && (rd <= RIVER_HALF_W || ld <= 1)) {
+        // 겨울 물: 가장자리부터 언 얼음(연못은 넓게, 호수·강은 물가만) + 얼음 끝 흰 테 + 차갑고 짙은 물
+        const t = ld <= 1 ? ld : rd / RIVER_HALF_W;
+        const edge = iceEdge(Math.floor(wx), Math.floor(wy), ld <= 1 && pond);
+        const fx = Math.floor(wx);
+        const fy = Math.floor(wy);
+        if (t > edge + 0.035) put(i, iceAt(fx, fy));
+        else if (t > edge) put(i, SNOW.hi);
+        else {
+          const j = (hash2(fx, fy, 49) - 0.5) * 0.18;
+          let c: Color = t + j < 0.35 ? WINTER_WATER.dark : WINTER_WATER.water;
+          if (t > edge - 0.05) c = 0x18303c; // 얼음 밑 그늘
+          else if (hash2(Math.floor(wx / 6), fy, 47) < 0.05) c = WINTER_WATER.light; // 찬 물결
+          else if (ldy < -0.2 && t < edge * 0.7 && hash2(fx >> 1, fy, 51) < 0.08) c = 0x5a8294; // 하늘 비침
+          put(i, c);
+        }
+        continue;
+      }
       if (rd <= RIVER_HALF_W || ld <= 1) {
         let c: Color;
         if (ld <= 1) {
@@ -645,14 +668,15 @@ function drawWater(ctx: CanvasRenderingContext2D, area: Rect): void {
         if (hash2(Math.floor(wx), Math.floor(wy), 41) < 0.025) c = C.waterLight;
         put(i, c);
       } else if (rd <= RIVER_HALF_W + 2.5 || (ld <= 1.07 && ld > 1)) {
-        // 둑 테두리 (젖은 돌·모래)
-        put(i, hash2(Math.floor(wx), Math.floor(wy), 43) < 0.5 ? C.rim : C.rimDark);
+        // 둑 테두리 (젖은 돌·모래). 겨울엔 눈에 덮인다
+        if (winter) put(i, snowRim(Math.floor(wx), Math.floor(wy)));
+        else put(i, hash2(Math.floor(wx), Math.floor(wy), 43) < 0.5 ? C.rim : C.rimDark);
       }
     }
   }
   ctx.putImageData(img, 0, y0 - area.y);
-  // 연못 수련잎 (작은 연못만, 결정적 자리)
-  for (const p of PONDS)
+  // 연못 수련잎 (작은 연못만, 결정적 자리). 겨울엔 없다
+  for (const p of winter ? [] : PONDS)
     for (let k = 0; k < 7; k++) {
       const a = hash2(k, p.x, 91) * Math.PI * 2;
       const rr = 0.45 + hash2(k, p.y, 93) * 0.4;
@@ -674,14 +698,14 @@ function drawWater(ctx: CanvasRenderingContext2D, area: Rect): void {
       for (let xx = -r; xx <= r; xx++) {
         const e = (xx * xx) / (r * r) + (yy * yy) / (r * 0.8 * (r * 0.8));
         if (e > 1) continue;
-        px(ctx, s.x + xx - area.x, s.y + yy - area.y, yy < -1 ? lighten(C.stone, 0.15) : yy > 2 ? darken(C.stone, 0.25) : C.stone);
+        px(ctx, s.x + xx - area.x, s.y + yy - area.y, yy < -1 ? (winter ? SNOW.hi : lighten(C.stone, 0.15)) : yy > 2 ? darken(C.stone, 0.25) : winter && yy < 1 ? SNOW.mid : C.stone);
       }
     px(ctx, s.x - 2 - area.x, s.y - 3 - area.y, C.snow, 3, 1);
   }
 }
 
 /** 판자 (다리·나루터·잔교). 세로로 긴 판자는 가로 널, 가로로 긴 판자는 세로 널 + 양옆 난간 */
-function drawDecks(ctx: CanvasRenderingContext2D, area: Rect): void {
+function drawDecks(ctx: CanvasRenderingContext2D, area: Rect, winter = false): void {
   for (const dk of DECKS) {
     if (!overlaps(dk, area)) continue;
     const x = dk.x - area.x;
@@ -711,5 +735,21 @@ function drawDecks(ctx: CanvasRenderingContext2D, area: Rect): void {
     else ctx.fillRect(x + 2, y + dk.h, dk.w - 2, 2);
     // 서리
     for (let k = 0; k < Math.max(dk.w, dk.h); k += 5) if (hash2(dk.x + k, dk.y, 53) < 0.4) px(ctx, x + (vertical ? 3 + (k % (dk.w - 6)) : k), y + (vertical ? k : 2), C.snowShade, 2, 1);
+    // 겨울: 판자 위 눈 (가운데 밟힌 길만 판자가 드러난다)
+    if (winter) snowDeck(ctx, dk, area, vertical);
   }
+}
+
+function snowDeck(ctx: CanvasRenderingContext2D, dk: Rect, area: Rect, vertical: boolean): void {
+  const x0 = Math.max(dk.x, area.x);
+  const y0 = Math.max(dk.y, area.y);
+  const x1 = Math.min(dk.x + dk.w, area.x + area.w);
+  const y1 = Math.min(dk.y + dk.h, area.y + area.h);
+  for (let wy = y0; wy < y1; wy++)
+    for (let wx = x0; wx < x1; wx++) {
+      // 가운데 밟힌 줄과의 거리 (0 = 가운데, 1 = 가장자리)
+      const t = vertical ? Math.abs(wx - dk.x - dk.w / 2) / (dk.w / 2) : Math.abs(wy - dk.y - dk.h / 2) / (dk.h / 2);
+      const n = vnoise(wx, wy, 6, 99);
+      if (t + n * 0.5 > 0.78) px(ctx, wx - area.x, wy - area.y, n > 0.7 ? SNOW.hi : t > 0.92 ? SNOW.lo : SNOW.mid);
+    }
 }

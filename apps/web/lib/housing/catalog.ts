@@ -74,6 +74,8 @@ export type FurnitureDef = {
   ext?: ExtSlot;
   /** 집 안에서 E로 할 수 있는 일 (상점 안내용 짧은 말. 실제 동작은 game/housing/interact.ts) */
   use?: string;
+  /** 11/17 유령선 한정: 가구점에 없고 토요일 밤 유령선 장터에서만 팔아요 (lib/sea/ghostShip) */
+  ghost?: true;
 };
 
 export const FURNITURE: readonly FurnitureDef[] = [
@@ -116,6 +118,8 @@ export const FURNITURE: readonly FurnitureDef[] = [
   { id: "firefly_jar", name: "반딧불 병", desc: "잡아 둔 반딧불이 천천히 떠다닌다.", category: "mood", price: 160, score: 9, w: 1, h: 1, light: { color: 0xd8ff8a, r: 20 }, use: "뚜껑 열기 (반딧불이 날아올라요)" },
   { id: "wind_chime", name: "풍경", desc: "바람이 불면 맑은 소리가 난다.", category: "mood", price: 120, score: 7, w: 1, h: 1, use: "흔들기" },
   { id: "memorial", name: "추억 비석", desc: "내 집 마당에 세우는 작은 비석.", category: "mood", price: 140, score: 8, w: 1, h: 1, use: "꽃 놓고 묵념" },
+  // 11/17 유령선 한정 (가구점엔 없어요 — 토요일 밤 유령선 장터)
+  { id: "ghost_lamp", name: "해골 등불", desc: "유령선 돛대에 걸려 있던 해골 등. 녹색 도깨비불이 눈구멍으로 새어 나와요.", category: "mood", price: 680, score: 30, w: 1, h: 1, light: { color: 0x7dffb0, r: 36 }, use: "불 켜기·끄기", ghost: true },
   { id: "ghost_cat", name: "잠든 유령 고양이", desc: "방석 위에서 반투명하게 졸고 있다.", category: "mood", price: 300, score: 16, w: 1, h: 1, use: "쓰다듬기" },
   // ── 11/16 바닷가 세트 (포구 오두막 기본 가구 + 가구점). 모두 네 방향으로 돌린다 (spin) ──
   { id: "sea_hammock", name: "해먹", desc: "기둥 둘 사이에 걸친 줄무늬 해먹. 누우면 살랑살랑 흔들린다.", category: "sea", price: 380, score: 19, w: 3, h: 1, spin: true, use: "해먹에 눕기" },

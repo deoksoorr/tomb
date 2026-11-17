@@ -1,6 +1,10 @@
-import { Grid, mix, rng, type Color } from "../sprites/pixel";
+import type { MapConcept } from "@/lib/mapConcept";
+import { Grid, hash2, mix, rng, vnoise, type Color } from "../sprites/pixel";
+import { ICE, SNOW, snowCap, type Bulb } from "../sprites/winterArt";
+import { drawBulbs, snowField, XMAS_BULBS } from "../sprites/winterScenery";
 import { fbm, pick, RAMP } from "./seaArt";
 import { hashU } from "./seaLayout";
+import { drawString, putPx, snowDeck, type Img } from "./seaWinterArt";
 
 // 11/16 바다 보기 장면 그림 (순수 계산 — Phaser 없음). 하늘·바다·모래에는 테두리를 두지 않고 시안 단계(RAMP)로 부드럽게 디더해요.
 // 물체(돗자리·파라솔·선베드·데크·등대·테트라포드)는 연한 갈색 테를 둘러요 (지도 그림과 같은 방식).
@@ -65,13 +69,21 @@ export function crestTile(seed: number): Grid {
   return g;
 }
 
-/** 모래 띠 (위는 젖은 모래, 아래로 마른 모래). 조개 몇 개 */
-export function sandBand(w: number, h: number, wetRows: number): Grid {
+/** 모래 띠 (위는 젖은 모래, 아래로 마른 모래). 조개 몇 개. 11/17 snowy = 겨울·크리스마스판 (마른 모래엔 눈, 군데군데 모래가 드러나고 젖은 모래는 차갑게) */
+export function sandBand(w: number, h: number, wetRows: number, snowy = false): Grid {
   const g = new Grid(w, h);
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++) {
       const n = fbm(x / 24, y / 10);
-      const c = y < wetRows ? pick(RAMP.wet, 0.1 + (y / wetRows) * 0.3 + n * 0.25, x, y) : pick(RAMP.sand, 0.15 + n * 0.45 + ((y - wetRows) / h) * 0.2, x, y);
+      let c = y < wetRows ? pick(RAMP.wet, 0.1 + (y / wetRows) * 0.3 + n * 0.25, x, y) : pick(RAMP.sand, 0.15 + n * 0.45 + ((y - wetRows) / h) * 0.2, x, y);
+      if (snowy) {
+        // 물가 쪽은 녹아 젖은 모래 (서리 점), 뒤로 갈수록 눈이 덮어요 (물가에서 먼 아래쪽일수록 두껍게)
+        const cover = (y - wetRows - 3) / 10 + (vnoise(x, y * 2, 14, 81) - 0.5) * 0.9;
+        if (y < wetRows) c = hash2(x, y, 83) < 0.04 ? ICE.hi : mix(c, 0x5a6c7c, 0.3);
+        else if (cover > 0.15) c = snowField(1 + n * 0.25 - 0.1, x, y);
+        else if (cover > -0.1) c = mix(c, SNOW.lo, 0.55);
+        else c = mix(c, 0x8a96a4, 0.18);
+      }
       g.set(x, y, c);
     }
   const r = rng(77);
@@ -538,4 +550,143 @@ export function binocularMask(w: number, h: number, pad: number): HTMLCanvasElem
     g.restore();
   });
   return c;
+}
+
+// ── 11/17 겨울·크리스마스판 앞 그림 (lib/mapConcept) ──
+// 기본 그림을 그대로 그린 다음 눈을 얹어요 (윗면 snowCap · 데크는 seaWinterArt.snowDeck). 크리스마스판은 전구를 찍고 그 자리를 돌려줘요
+// (빛 겹은 장면이 winterScenery.bulbGlowPair로 두 장 만들어 번갈아 보여요).
+
+export type ViewPart = "deck" | "rail" | "stone" | "mat" | "fringe" | "lounger" | "loungerBack" | "hammock" | "fronds";
+
+function withImg<T>(c: HTMLCanvasElement, fn: (m: Img) => T): T {
+  const ctx = c.getContext("2d")!;
+  const img = ctx.getImageData(0, 0, c.width, c.height);
+  const out = fn({ w: img.width, h: img.height, d: img.data });
+  ctx.putImageData(img, 0, 0);
+  return out;
+}
+
+/** 열마다 맨 위(top) 또는 맨 아래(bottom) 그림 픽셀 y (없으면 -1) */
+function edgeY(m: Img, x: number, from: "top" | "bottom"): number {
+  if (from === "top") {
+    for (let y = 0; y < m.h; y++) if (m.d[(y * m.w + x) * 4 + 3] > 120) return y;
+  } else for (let y = m.h - 1; y >= 0; y--) if (m.d[(y * m.w + x) * 4 + 3] > 120) return y;
+  return -1;
+}
+
+/** 가로 전구 줄을 seg 간격 마디마다 늘어지게 (y 줄, 마디 사이 sag) */
+function stringRow(m: Img, x0: number, x1: number, y: number, seg: number, sag: number): Bulb[] {
+  const out: Bulb[] = [];
+  for (let x = x0; x < x1; x += seg) out.push(...drawString(m, { x, y }, { x: Math.min(x1, x + seg), y }, sag));
+  return out;
+}
+
+/** 앞 그림 한 장을 그 판으로 (기본판이면 그대로) */
+export function dressViewPart(part: ViewPart, g: Grid, concept: MapConcept): { canvas: HTMLCanvasElement; bulbs: Bulb[] } {
+  let c = g.toCanvas();
+  if (concept === "default") return { canvas: c, bulbs: [] };
+  const xmas = concept === "christmas";
+  const W = c.width;
+  const H = c.height;
+  let bulbs: Bulb[] = [];
+  switch (part) {
+    case "deck":
+      // 선착장 끝 판자: 군데군데 눈 (앞 테 위는 소복이) · 크리스마스엔 앞 테 아래로 전구 줄
+      withImg(c, (m) => snowDeck(m, 0, 3));
+      c = snowCap(c, { depth: 2, maxY: H, seed: 85 });
+      if (xmas) bulbs = withImg(c, (m) => stringRow(m, -6, W + 6, 6, 44, 4));
+      break;
+    case "rail":
+      // 등대 난간: 가로대·바닥 철판 위에 눈 · 크리스마스엔 위 가로대에 솔잎 화환 + 기둥 사이로 늘어진 전구 줄 + 기둥마다 빨간 리본
+      c = snowCap(c, { depth: 2, maxY: H, seed: 87 });
+      if (xmas)
+        bulbs = withImg(c, (m) => {
+          for (let x = 0; x < W; x++) putPx(m, x, 5, (x & 1) === 0 ? 0x2b5a36 : 0x3e7a48);
+          for (let x = 4; x < W; x += 22) {
+            putPx(m, x - 1, 4, 0xd8323a);
+            putPx(m, x + 1, 4, 0xd8323a);
+            putPx(m, x, 5, 0xf2d060);
+          }
+          return stringRow(m, 4, W, 7, 22, 4);
+        });
+      break;
+    case "stone":
+      // 방파제 돌 데크 가장자리: 윗면 블록에 눈 얼룩 + 윗면 눈 · 크리스마스엔 앞면 위로 전구 줄
+      withImg(c, (m) => {
+        for (let y = 1; y < 12; y++)
+          for (let x = 0; x < W; x++) {
+            const n = vnoise(x, y * 3, 9, 89) + (12 - y) * 0.02;
+            if (n > 0.6) putPx(m, x, y, n > 0.72 ? SNOW.hi : SNOW.mid);
+          }
+      });
+      c = snowCap(c, { depth: 2, maxY: H, seed: 91 });
+      if (xmas) bulbs = withImg(c, (m) => stringRow(m, -8, W + 8, 12, 56, 3));
+      break;
+    case "mat":
+      c = snowCap(c, { depth: 1, maxY: H, seed: 93 });
+      break;
+    case "lounger":
+    case "loungerBack":
+      c = snowCap(c, { depth: part === "lounger" ? 2 : 1, maxY: H - 2, seed: 95 });
+      break;
+    case "fringe":
+      // 파라솔 갓 끝: 겨울엔 술 끝마다 작은 고드름, 크리스마스엔 술 끝을 따라 전구
+      bulbs = withImg(c, (m) => {
+        const out: Bulb[] = [];
+        for (let x = 1; x < W - 1; x++) {
+          const y = edgeY(m, x, "bottom");
+          if (y < 0) continue;
+          if (xmas && x % 7 === 3) {
+            const b = { x, y: y + 1, c: XMAS_BULBS[(x >> 3) % XMAS_BULBS.length] };
+            putPx(m, b.x, b.y, b.c);
+            out.push(b);
+          } else if (!xmas && x % 5 === 2 && hash2(x, y, 97) < 0.7) {
+            const len = 1 + Math.floor(hash2(x, 0, 99) * 3);
+            for (let k = 1; k <= len; k++) putPx(m, x, y + k, k === len ? ICE.lo : ICE.mid);
+          }
+        }
+        return out;
+      });
+      break;
+    case "hammock":
+      // 해먹 천 윗선에 눈 한 줄 · 크리스마스엔 윗선을 따라 전구
+      c = snowCap(c, { depth: 1, maxY: H, seed: 101 });
+      if (xmas)
+        bulbs = withImg(c, (m) => {
+          const out: Bulb[] = [];
+          for (let x = 4; x < W - 4; x += 6) {
+            const y = edgeY(m, x, "top");
+            if (y < 0) continue;
+            const b = { x, y: y + 2, c: XMAS_BULBS[(x / 6) % XMAS_BULBS.length | 0] };
+            putPx(m, b.x, b.y, b.c);
+            out.push(b);
+          }
+          return out;
+        });
+      break;
+    case "fronds":
+      // 야자 잎 위에 눈 · 크리스마스엔 잎을 감은 전구
+      c = snowCap(c, { depth: 2, maxY: H, seed: 103 });
+      if (xmas)
+        bulbs = withImg(c, (m) => {
+          const out: Bulb[] = [];
+          for (let y = 1; y < H; y++)
+            for (let x = 0; x < W; x++) {
+              const i = (y * W + x) * 4;
+              if (m.d[i + 3] < 200 || m.d[i + 1] < m.d[i] + 20 || hash2(x, y, 105) > 0.03) continue;
+              const b = { x, y, c: XMAS_BULBS[Math.floor(hash2(x, y, 107) * XMAS_BULBS.length)] };
+              putPx(m, x, y, b.c);
+              out.push(b);
+            }
+          return out;
+        });
+      break;
+  }
+  if (bulbs.length) drawBulbs(c, bulbs);
+  return { canvas: c, bulbs };
+}
+
+/** 11/17 겨울판 하늘·바다: 하늘은 차갑게, 바다는 잿빛 푸른 쪽으로 (얼리지 않아요). k = 세기 (밤엔 장면이 줄여요) */
+export function wintryWater(c: Color, k: number): Color {
+  return mix(c, 0x5a7890, k);
 }

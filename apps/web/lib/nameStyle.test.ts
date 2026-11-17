@@ -55,11 +55,11 @@ describe("색 정의", () => {
     expect(nameColorSpec(null)).toBeNull();
   });
 
-  it("종류: 단색 8 · 그라데이션 6 · 움직이는 5 (빛 테두리·무지개·별가루·불꽃 + 11/15 의뢰 나뭇잎)", () => {
+  it("종류: 단색 8 · 그라데이션 6 · 움직이는 6 (빛 테두리·무지개·별가루·불꽃 + 11/15 의뢰 나뭇잎 + 12월 크리스마스 별가루)", () => {
     const kinds = Object.values(NAME_COLORS).map((s) => (s.kind === "fx" ? s.fx : s.kind));
     expect(kinds.filter((k) => k === "solid").length).toBe(8);
     expect(kinds.filter((k) => k === "gradient").length).toBe(6);
-    expect(kinds.filter((k) => k !== "solid" && k !== "gradient").sort()).toEqual(["flame", "glow", "leaves", "rainbow", "stars"]);
+    expect(kinds.filter((k) => k !== "solid" && k !== "gradient").sort()).toEqual(["flame", "glow", "leaves", "rainbow", "stars", "stars"]);
   });
 
   it("11/15 새해 복 이름표: 다홍 판 + 금가루 (판 양끝에서만 떠오르고 결정적), 상점엔 없다", () => {

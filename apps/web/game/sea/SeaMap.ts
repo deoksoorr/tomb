@@ -50,14 +50,21 @@ import { addCanvasTexture, TEX } from "../assets/manifest";
 import { bbqPlateArt, CAMP_TEX, vendingArt, vendingLitArt } from "../camp/campArt";
 import { campfireRing, campfireSheet, FIRE_FRAMES, FIRE_H, FIRE_W, hammock as hammockCanvas, hammockPosts as hammockPostsCanvas, WP } from "../sprites/worldProps";
 import { DEPTH } from "../config";
+import { seasonKey } from "../sprites/npcSeasonArt";
 import { makeCanvas, mix } from "../sprites/pixel";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { PLATE_LABEL, PLATE_LOT_FREE, SignPlate } from "../world/SignPlate";
 import { worldTintOf } from "../world/worldTint";
+import { forEachGhostTexture } from "./ghostShipArt";
+import { GHOST_HULL } from "./ghostShipLayout";
+import { forEachGullTexture, GULL_TEX, GULL_VEND_H } from "./gullArt";
+import { eatSpicy, gullHotLevel, gullHotOver, heldHot, holdHot, type GullHot } from "@/lib/sea/gull";
 import * as Art from "./seaArt";
 import { noise1, shoreDelay, shoreReach, WaveTrain } from "./seaWaves";
 import * as Lay from "./seaLayout";
 import { type SeaInteractable, type SeaLight, type SeaMapApi, type SeaTime } from "./seaTypes";
+import { isSnowy, type MapConcept } from "@/lib/mapConcept";
+import { ICE_BAND_H, ICE_BAND_TEX_H, ICE_BAND_W, iceBandArt } from "./seaWinterArt";
 
 // 11/16 달물결 포구 맵 (SeaMapApi 구현): 바닥(덩어리 텍스처, 화면 근처만), 건물·소품(칸 컬링, y 정렬), 이름표, 충돌,
 // 물때 그림(물가 선·물거품·물러난 거품 자국·젖은 모래·먼바다 반짝임), 배와 부표 흔들림, 물보라, 갈매기 여덟 마리, 밤 가로등·등대 불빛.
@@ -65,6 +72,8 @@ import { type SeaInteractable, type SeaLight, type SeaMapApi, type SeaTime } fro
 // 그림은 정류장 근처·버스 여행 동안 seaPrebake가 조금씩 구워요. 한 번 구운 "sea-" 텍스처는 지우지 않아요.
 // 매 프레임 일은 물 층 위치 옮기기와 작은 풀(물보라 10·반짝임 10·갈매기 8)뿐이라 가벼워요.
 
+/** 11/17 겨울·크리스마스판 물가 살얼음 띠 텍스처 (seaWinterArt) */
+export const SEA_ICE_TEX = "sea-iceBand";
 /** 소품 컬링 칸 */
 const CELL = 256;
 const CELL_COLS = Math.ceil(SEA_WIDTH / CELL);
@@ -122,7 +131,11 @@ const GULLS = 8;
 type Culled = Phaser.GameObjects.Image | Phaser.GameObjects.BitmapText;
 type Mote = { img: Phaser.GameObjects.Image; x: number; y: number; t0: number; life: number };
 type Perch = { x: number; y: number; lift: number };
-type GullMode = "circle" | "land" | "perch" | "flee";
+type GullMode = "circle" | "land" | "perch" | "flee" | "feed";
+/** 11/17 과자 받아먹기: 받아먹는 갈매기(catch) 하나 + 둘레를 맴도는 갈매기(swirl) */
+// r2 hover = 과자 자리까지 날아오는 시간 (멀리서 오면 길게 — 어디서 던져도 갈매기가 자연스럽게 날아와요)
+// r2 hotHold = 매운 과자를 먹으러 오는 빨간 갈매기의 멈춰 둔 빨간 시간 (lib/sea/gull holdHot — 오는 동안 하얘지지 않게)
+type GullFeedJob = { tx: number; ty: number; t0: number; fx: number; fy: number; role: "catch" | "swirl"; ang: number; dir: 1 | -1; hot: boolean; piece: number; gen: number; done: boolean; hover: number; hotHold: number | null };
 type Gull = {
   img: Phaser.GameObjects.Image;
   mode: GullMode;
@@ -144,7 +157,26 @@ type Gull = {
   perch: number;
   until: number;
   phase: number;
+  /** 11/17 과자 받아먹는 중 · 매운 과자를 먹고 빨개진 상태 (lib/sea/gull GullHot — 없으면 하얘요) */
+  feed: GullFeedJob | null;
+  hot: GullHot | null;
+  steamAt: number;
+  flameAt: number;
 };
+/** 던진 과자 조각. gen = 이 조각을 새로 쓸 때마다 하나씩 (11/17 r3 여러 사람이 한꺼번에 던져 조각을 다시 쓸 때, 앞 조각을 먹으러 오던 갈매기가 새 조각을 지우지 않게) */
+type Piece = { img: Phaser.GameObjects.Image; x0: number; y0: number; x1: number; y1: number; t0: number; dur: number; on: boolean; life: number; gen: number };
+type Puff = { img: Phaser.GameObjects.Image; x: number; y: number; t0: number; on: boolean };
+type Flame = { img: Phaser.GameObjects.Image; g: Gull | null; t0: number };
+/** 과자를 보고 몰려오는 갈매기 수 · 받아먹기까지 (ms) */
+const FEED_GULLS = 5;
+/** 한꺼번에 날아다닐 수 있는 과자 조각 (11/17 r3 6 → 16: 바닷가 여러 사람이 동시에 던져도 서로 조각을 빼앗지 않게) */
+const MAX_PIECES = 16;
+const FEED_HOVER_MS = 900;
+const FEED_DIVE_MS = 380;
+const FEED_SWIRL_MS = 2800;
+/** r2 멀리서 날아오는 빠르기 (px/ms) · 가장 긴 날아오기 */
+const FEED_FLY_SPEED = 0.32;
+const FEED_HOVER_MAX_MS = 2600;
 
 /** 시험·장면용: 지금 물가 선 (물 몸통이 시작하는 y, 밀려옴 포함) */
 export type SeaWaterState = { level: number; lineY: number; edgeY: number; wetTop: number };
@@ -188,6 +220,12 @@ export class SeaMap implements SeaMapApi {
   private readonly pTop = new Float32Array(RN);
   private water: Phaser.GameObjects.Rope | null = null;
   private foam: Phaser.GameObjects.Rope | null = null;
+  /** 11/17 겨울·크리스마스판: 물가 살얼음 띠 · 바닥 덩어리를 눈 덮인 그림으로 · 물빛을 차갑게 (lib/mapConcept) */
+  private iceR: Phaser.GameObjects.Rope | null = null;
+  private snowy = false;
+  /** 11/17 NPC 옷 판 (등대지기) */
+  private npcConcept: MapConcept = "default";
+  private keeperImg: Phaser.GameObjects.Image | null = null;
   private readonly waves = new WaveTrain((Date.now() ^ 0x5eaf00d) >>> 0);
   private lastBig = 0;
   /** 11/16 먼바다 깊이 그늘·지나가는 빛 띠·반짝이는 별·밤 물빛 */
@@ -226,6 +264,10 @@ export class SeaMap implements SeaMapApi {
   private beacon: Phaser.GameObjects.Image | null = null;
   private lit = -1;
   private readonly gulls: Gull[] = [];
+  /** 11/17 던진 과자 조각 · 빨개진 갈매기 김 · 불꽃 입김 (풀) */
+  private readonly pieces: Piece[] = [];
+  private readonly puffs: Puff[] = [];
+  private readonly flames: Flame[] = [];
   private readonly perches: Perch[] = [];
   private readonly perchTaken: (number | null)[] = [];
 
@@ -351,6 +393,8 @@ export class SeaMap implements SeaMapApi {
     this.duskWaterR = strip(T.duskWater, SEA_DEPTH.water + 1, false);
     this.foamR = strip(T.foam, SEA_DEPTH.foam);
     this.duskFoamR = strip(T.duskFoam, SEA_DEPTH.foam + 1, false);
+    // 11/17 살얼음은 거품 위 (물가 선에 붙어 떠 있고, 밀려온 파도는 그 너머까지 올라가요)
+    this.iceR = strip(SEA_ICE_TEX, SEA_DEPTH.foam + 2, this.snowy);
     this.water = this.waterR;
     this.foam = this.foamR;
     // 11/16 깊이 띠는 물 몸통 그림이 맡아요 (따로 덮던 그늘은 뺐어요)
@@ -447,7 +491,7 @@ export class SeaMap implements SeaMapApi {
     // 등대 (끝 데크 뒤쪽)
     this.prop(T.lighthouse, SEA_LIGHTHOUSE.x, SEA_LIGHTHOUSE.y, SEA_LIGHTHOUSE.y, 3);
     // 11/16 등대지기 (말을 걸면 다음 갯벌 열리는 때를 알려줘요)
-    this.prop(T.keeper, Lay.SEA_KEEPER.x, Lay.SEA_KEEPER.y, Lay.SEA_KEEPER.y, 1);
+    this.keeperImg = this.prop(seasonKey(T.keeper, this.npcConcept), Lay.SEA_KEEPER.x, Lay.SEA_KEEPER.y, Lay.SEA_KEEPER.y, 1);
     this.addLabel(Lay.SEA_KEEPER.x, Lay.SEA_KEEPER.y - 30, "등대지기", 0xffe8b0, 1);
     // 가로등·생선 상자·그물 틀
     for (const p of Lay.SEA_LAMPS) {
@@ -481,6 +525,11 @@ export class SeaMap implements SeaMapApi {
     this.prop(CAMP_TEX.vending, Lay.SEA_VEND.x, Lay.SEA_VEND.y, Lay.SEA_VEND.y, 2);
     this.vendLit = this.cull(Lay.SEA_VEND.x, Lay.SEA_VEND.y, s.add.image(Lay.SEA_VEND.x, Lay.SEA_VEND.y + 2, CAMP_TEX.vendingLit).setOrigin(0.5, 1).setBlendMode(Phaser.BlendModes.ADD).setDepth(Lay.SEA_VEND.y + 0.5).setAlpha(0));
     this.plate(Lay.SEA_VEND.x, Lay.SEA_VEND.y - 44, "음료");
+    // 11/17 r2 과자 자판기 (선착장 길목 — 위에 갈매기가 앉아 있어요. 밤엔 진열창이 밝아요)
+    const V = Lay.SEA_SNACK_VEND;
+    this.prop(GULL_TEX.vend, V.x, V.y, V.y, 2);
+    this.snackLit = this.cull(V.x, V.y, s.add.image(V.x, V.y + 2, GULL_TEX.vendLit).setOrigin(0.5, 1).setBlendMode(Phaser.BlendModes.ADD).setDepth(V.y + 0.5).setAlpha(0));
+    this.plate(V.x, V.y - GULL_VEND_H - 6, "과자");
     // 해변 모닥불: 돌 고리 + 낮엔 꺼진 장작, 밤엔 마을 모닥불과 같은 불꽃·불티
     const F = SEA_BONFIRE;
     this.keep(s.add.image(F.x, F.y + 1, WP.fireRing).setOrigin(0.5, 0.5).setDepth(DEPTH.decal + 2).setScale(1.2));
@@ -534,6 +583,7 @@ export class SeaMap implements SeaMapApi {
   private embers: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
   private hammock: Phaser.GameObjects.Image | null = null;
   private vendLit: Phaser.GameObjects.Image | null = null;
+  private snackLit: Phaser.GameObjects.Image | null = null;
   private fireBoost = false;
   /** 해변 모닥불이 타고 있는지 (해 질 녘부터 — SeaScene이 불멍 구도를 이걸로 봐요) */
   bonfireLit = false;
@@ -562,6 +612,7 @@ export class SeaMap implements SeaMapApi {
     const a = lit ? 0.55 + (this.reduced ? 0 : 0.12 * Math.sin(time / 170) + 0.06 * Math.sin(time / 63)) : 0;
     this.bonfireGlow?.setAlpha(a);
     this.vendLit?.setAlpha(Math.max(0, this.lit) * 0.9);
+    this.snackLit?.setAlpha(Math.max(0, this.lit) * 0.9);
   }
 
   /** 바닷가 쪽: 말뚝·테트라포드·바위·족욕 바위·배·부표 */
@@ -641,13 +692,228 @@ export class SeaMap implements SeaMapApi {
     for (let i = 0; i < this.perches.length; i++) this.perchTaken.push(null);
     for (let i = 0; i < GULLS; i++) {
       const img = this.keep(s.add.image(0, 0, Art.SEA_TEX.gull, 1).setOrigin(0.5, 1).setDepth(OVERHEAD));
-      const g: Gull = { img, mode: "circle", x: 0, y: 0, cx: 0, cy: 0, rad: 60, ang: 0, spd: 0.001, fx: 0, fy: 0, tx: 0, ty: 0, t0: 0, dur: 1, perch: -1, until: 0, phase: Math.random() * 4000 };
+      const g: Gull = { img, mode: "circle", x: 0, y: 0, cx: 0, cy: 0, rad: 60, ang: 0, spd: 0.001, fx: 0, fy: 0, tx: 0, ty: 0, t0: 0, dur: 1, perch: -1, until: 0, phase: Math.random() * 4000, feed: null, hot: null, steamAt: 0, flameAt: 0 };
       this.gulls.push(g);
       // 처음엔 반쯤은 앉아 있어요
       if (i % 2 === 0 && this.freePerch(i) >= 0) {
         const pi = this.freePerch(i);
         this.sitGull(g, pi, 0, i);
       } else this.newCircle(g, 0, true);
+    }
+  }
+
+  /** 11/17 (x,y) 둘레 r 안에 갈매기가 있는지 (과자 던지기 안내) */
+  gullNear(x: number, y: number, r: number): boolean {
+    return this.gulls.some((g) => Math.hypot(g.x - x, g.y - y) <= r);
+  }
+
+  /** 11/17 r2 (x,y)에서 가장 가까운 갈매기 자리 (과자를 그쪽으로 던져요) — 없으면 null */
+  nearestGull(x: number, y: number): { x: number; y: number } | null {
+    let best: Gull | null = null;
+    let bd = Infinity;
+    for (const g of this.gulls) {
+      const d = Math.hypot(g.x - x, g.y - y);
+      if (d < bd) {
+        bd = d;
+        best = g;
+      }
+    }
+    return best ? { x: best.x, y: best.y } : null;
+  }
+
+  /** 시험용: 갈매기 빨간 정도 (차례대로) */
+  gullHotLevels(now: number): number[] {
+    return this.gulls.map((g) => gullHotLevel(g.hot, now));
+  }
+
+  /**
+   * 11/17 과자를 던졌어요: (fx,fy)에서 (tx,ty)로 조각이 포물선으로 날아가고, 가까운 갈매기 다섯이 몰려와 맴돌다 하나가 낚아채요.
+   * hot = 매운 새우 과자 (받아먹은 갈매기가 30초 빨개져요). 같은 바닷가 사람의 던지기도 여기로 와요 (실시간 act)
+   */
+  feedGulls(fx: number, fy: number, tx: number, ty: number, hot: boolean, now: number): void {
+    if (!this.gulls.length) return;
+    const s = this.scene;
+    let pi = this.pieces.findIndex((p) => !p.on);
+    if (pi < 0 && this.pieces.length < MAX_PIECES) {
+      this.pieces.push({ img: this.keep(s.add.image(0, 0, GULL_TEX.piece(hot)).setVisible(false)), x0: 0, y0: 0, x1: 0, y1: 0, t0: 0, dur: 1, on: false, life: 3200, gen: 0 });
+      pi = this.pieces.length - 1;
+    }
+    // 11/17 r3 다 쓰는 중이면 가장 오래된 조각을 다시 써요 (예전엔 늘 0번 — 막 날아가던 조각을 빼앗았어요)
+    if (pi < 0) pi = this.pieces.reduce((best, p, i) => (p.t0 < this.pieces[best].t0 ? i : best), 0);
+    const pc = this.pieces[pi];
+    Object.assign(pc, { x0: fx, y0: fy - 14, x1: tx, y1: ty, t0: now, dur: 460, on: true, life: 3200, gen: pc.gen + 1 });
+    pc.img.setTexture(GULL_TEX.piece(hot)).setVisible(true).setDepth(OVERHEAD - 1);
+    const dist = (g: Gull) => Math.hypot(g.x - tx, g.y - ty);
+    const team = this.gulls.filter((g) => g.mode !== "feed").sort((a, b) => dist(a) - dist(b)).slice(0, FEED_GULLS);
+    // 11/17 r3 여러 사람이 한꺼번에 던져 놀고 있는 갈매기가 없으면, 다른 과자 둘레를 맴돌기만 하던(받아먹는 역할이 아닌) 갈매기 하나를 데려와
+    // 받아먹게 해요 — 조각이 아무도 안 먹고 가라앉는 일이 없게. 받아먹으러 가던 갈매기는 빼앗지 않아요
+    if (!team.length) {
+      const helper = this.gulls.filter((g) => g.feed && g.feed.role === "swirl" && !g.feed.done).sort((a, b) => dist(a) - dist(b))[0];
+      if (helper) {
+        if (helper.feed!.hotHold !== null) helper.hot = heldHot(helper.feed!.hotHold, now); // 맴돌던 동안 멈춰 둔 빨간 시간을 그대로 이어요
+        team.push(helper);
+      }
+    }
+    team.forEach((g, i) => {
+      if (g.perch >= 0) {
+        this.perchTaken[g.perch] = null;
+        g.perch = -1;
+      }
+      g.mode = "feed";
+      const hover = Math.max(FEED_HOVER_MS, Math.min(FEED_HOVER_MAX_MS, Math.hypot(g.x - tx, g.y - ty) / FEED_FLY_SPEED));
+      // r2 이미 빨간 갈매기는 매운 과자를 먹으러 오는 동안 빨간 시간을 멈춰 두고 빨간 채로 (하얘지지 않게 — 받아먹는 순간 30초 다시)
+      g.feed = { tx, ty, t0: now + i * 90, fx: g.x, fy: g.y, role: i === 0 ? "catch" : "swirl", ang: Math.random() * Math.PI * 2, dir: Math.random() < 0.5 ? 1 : -1, hot, piece: pi, gen: pc.gen, done: false, hover, hotHold: holdHot(g.hot, now, hot) };
+      g.img.setDepth(OVERHEAD);
+      // 조각은 받아먹을 때까지 떠 있어요 (멀리서 오면 그만큼 오래)
+      if (i === 0) pc.life = Math.max(pc.life, hover + FEED_DIVE_MS + 600);
+    });
+    this.onGullCall?.(tx, ty, false);
+  }
+
+  /** 11/17 과자 받아먹기 한 프레임 (끝나면 다시 맴돌러 가요) */
+  private updateFeed(g: Gull, time: number): void {
+    const f = g.feed!;
+    if (f.hotHold !== null && !f.done) g.hot = heldHot(f.hotHold, time);
+    const t = Math.max(0, time - f.t0);
+    const ease = (k: number) => k * k * (3 - 2 * k);
+    if (f.role === "catch") {
+      const hx = f.tx + 10 * f.dir;
+      const hy = f.ty - 34;
+      if (t < f.hover) {
+        const k = ease(t / f.hover);
+        g.x = f.fx + (hx - f.fx) * k;
+        g.y = f.fy + (hy - f.fy) * k - Math.sin(k * Math.PI) * 14;
+        this.flap(g, time, hx < f.fx, 1);
+        return;
+      }
+      if (t < f.hover + FEED_DIVE_MS) {
+        // 낚아채러 쏜살같이 내려와요 (날개를 접어요)
+        const k = (t - f.hover) / FEED_DIVE_MS;
+        g.x = hx + (f.tx - hx) * k;
+        g.y = hy + (f.ty - 4 - hy) * k * k;
+        g.img.setFrame(2).setFlipX(f.dir > 0);
+        return;
+      }
+      if (!f.done) {
+        f.done = true;
+        const pc = this.pieces[f.piece];
+        // r3 그 사이 이 조각을 다른 과자가 다시 썼으면(gen이 달라요) 지우지 않아요
+        if (pc && pc.gen === f.gen) {
+          pc.on = false;
+          pc.img.setVisible(false);
+        }
+        this.onGullCall?.(g.x, g.y, false);
+        if (f.hot) {
+          // r2 이미 빨간 갈매기는 빨간 채로 30초 다시 (하얀 갈매기만 0.6초에 걸쳐 빨개져요)
+          g.hot = eatSpicy(g.hot, time);
+          g.steamAt = time;
+          g.flameAt = time + 500;
+        }
+      }
+      // 물고 날아올라 다시 맴돌러 가요 (빨개진 갈매기는 허둥지둥 빠르게)
+      g.feed = null;
+      this.newCircle(g, time);
+      this.flyTo(g, "flee", g.cx + Math.cos(g.ang) * g.rad, g.cy + Math.sin(g.ang) * g.rad * 0.55 - 30, time, f.hot ? 0.16 : 0.1);
+      return;
+    }
+    // 둘레를 퍼덕이며 맴돌아요 (기울어진 고리 — 몇 마리는 위아래로 출렁)
+    const r = 20 + (Math.floor(f.ang * 10) % 3) * 7;
+    const a = f.ang + (t / 360) * f.dir;
+    const ox = f.tx + Math.cos(a) * r;
+    const oy = f.ty - 30 + Math.sin(a) * r * 0.42 + Math.sin(t / 170 + f.ang) * 2;
+    const k = ease(Math.min(1, t / Math.max(800, f.hover)));
+    g.x = f.fx + (ox - f.fx) * k;
+    g.y = f.fy + (oy - f.fy) * k;
+    this.flap(g, time, Math.sin(a) * f.dir > 0, 1);
+    if (t > FEED_SWIRL_MS + f.hover - FEED_HOVER_MS) {
+      g.feed = null;
+      if (Math.random() < 0.5) this.onGullCall?.(g.x, g.y, false);
+      this.newCircle(g, time);
+      this.flyTo(g, "flee", g.cx + Math.cos(g.ang) * g.rad, g.cy + Math.sin(g.ang) * g.rad * 0.55 - 30, time, 0.1);
+    }
+  }
+
+  /** 11/17 던진 조각 · 빨개진 갈매기 (붉은 빛 · 김 · 불꽃 입김 · 허둥지둥) */
+  private updateSnacks(time: number): void {
+    for (const pc of this.pieces) {
+      if (!pc.on) continue;
+      const k = Math.min(1, (time - pc.t0) / pc.dur);
+      const x = pc.x0 + (pc.x1 - pc.x0) * k;
+      const y = pc.y0 + (pc.y1 - pc.y0) * k - Math.sin(k * Math.PI) * 26;
+      pc.img.setPosition(Math.round(x), Math.round(y)).setRotation(this.reduced ? 0 : k * 6);
+      // 아무도 못 받으면 3초(멀리서 오는 중이면 그만큼 더) 뒤 물에 가라앉아요
+      if (time - pc.t0 > pc.life) {
+        pc.on = false;
+        pc.img.setVisible(false);
+      }
+    }
+    const s = this.scene;
+    for (const g of this.gulls) {
+      if (!g.hot) continue;
+      const lv = gullHotLevel(g.hot, time);
+      if (gullHotOver(g.hot, time)) {
+        g.hot = null;
+        g.img.clearTint();
+        continue;
+      }
+      g.img.setTint(mixColor(0xffffff, 0xff4a36, lv));
+      // 허둥지둥: 맴도는 동안 이리저리 흔들려요
+      if (g.mode === "circle" && !this.reduced) {
+        g.x += Math.sin(time / 70 + g.phase) * 1.6 * lv;
+        g.y += Math.cos(time / 95 + g.phase) * 1.2 * lv;
+        g.img.setPosition(Math.round(g.x), Math.round(g.y));
+      }
+      if (time >= g.steamAt && lv > 0.3) {
+        g.steamAt = time + 220 + Math.random() * 160;
+        let p = this.puffs.find((q) => !q.on);
+        if (!p && this.puffs.length < 16) {
+          p = { img: this.keep(s.add.image(0, 0, GULL_TEX.steam).setVisible(false)), x: 0, y: 0, t0: 0, on: false };
+          this.puffs.push(p);
+        }
+        if (p) Object.assign(p, { x: g.x + (Math.random() - 0.5) * 6, y: g.y - 12, t0: time, on: true });
+      }
+      if (time >= g.flameAt && lv > 0.5 && !this.reduced) {
+        g.flameAt = time + 1100 + Math.random() * 1600;
+        let fl = this.flames.find((q) => !q.g);
+        if (!fl && this.flames.length < 6) {
+          fl = { img: this.keep(s.add.image(0, 0, GULL_TEX.flame, 0).setOrigin(0, 0.5).setBlendMode(Phaser.BlendModes.ADD).setVisible(false)), g: null, t0: 0 };
+          this.flames.push(fl);
+        }
+        if (fl) Object.assign(fl, { g, t0: time });
+      }
+    }
+    for (const p of this.puffs) {
+      if (!p.on) continue;
+      const k = (time - p.t0) / 900;
+      if (k >= 1) {
+        p.on = false;
+        p.img.setVisible(false);
+        continue;
+      }
+      p.img
+        .setVisible(true)
+        .setPosition(Math.round(p.x + Math.sin(k * 5 + p.t0) * 2), Math.round(p.y - k * 16))
+        .setScale(0.8 + k * 1.4)
+        .setAlpha((1 - k) * 0.95)
+        .setDepth(OVERHEAD + 1);
+    }
+    for (const fl of this.flames) {
+      if (!fl.g) continue;
+      const k = (time - fl.t0) / 340;
+      if (k >= 1 || !fl.g.hot) {
+        fl.g = null;
+        fl.img.setVisible(false);
+        continue;
+      }
+      const left = fl.g.img.flipX;
+      fl.img
+        .setVisible(true)
+        .setFrame(k < 0.4 ? 0 : 1)
+        .setFlipX(left)
+        .setOrigin(left ? 1 : 0, 0.5)
+        .setPosition(Math.round(fl.g.x + (left ? -6 : 6)), Math.round(fl.g.y - 7))
+        .setAlpha(1 - k * 0.7)
+        .setDepth(OVERHEAD + 2);
     }
   }
 
@@ -742,6 +1008,9 @@ export class SeaMap implements SeaMapApi {
           this.flap(g, time, Math.cos(g.ang) * g.spd < 0, 0.35);
           return;
         }
+        case "feed":
+          this.updateFeed(g, time);
+          return;
         case "land":
         case "flee": {
           const k = Math.min(1, (time - g.t0) / g.dur);
@@ -760,6 +1029,7 @@ export class SeaMap implements SeaMapApi {
       }
     });
     for (const g of this.gulls) if (g.mode !== "perch") g.img.setPosition(Math.round(g.x), Math.round(g.y));
+    this.updateSnacks(time);
   }
 
   /** 날갯짓 (가끔 미끄러지듯 활공) */
@@ -825,14 +1095,35 @@ export class SeaMap implements SeaMapApi {
   }
 
   private makeChunk(cx: number, cy: number): void {
-    const key = Art.SEA_TEX.ground(cx, cy);
+    const key = this.chunkTex(cx, cy);
+    this.chunks.set(cy * CHUNK_COLS + cx, this.keep(this.scene.add.image(cx * CHUNK, cy * CHUNK, key).setOrigin(0, 0).setDepth(DEPTH.ground)));
+  }
+
+  /** 바닥 덩어리 텍스처 (지금 판 — 겨울·크리스마스면 눈 덮인 그림). 없으면 지금 굽어요 */
+  private chunkTex(cx: number, cy: number): string {
+    const key = this.snowy ? Art.SEA_TEX.groundWinter(cx, cy) : Art.SEA_TEX.ground(cx, cy);
     if (!this.scene.textures.exists(key)) {
       const { canvas, ctx } = makeCanvas(CHUNK, CHUNK);
-      ctx.putImageData(new ImageData(Art.seaGroundPixels(cx, cy) as unknown as Uint8ClampedArray<ArrayBuffer>, CHUNK, CHUNK), 0, 0);
+      ctx.putImageData(new ImageData(Art.seaGroundPixels(cx, cy, CHUNK, this.snowy) as unknown as Uint8ClampedArray<ArrayBuffer>, CHUNK, CHUNK), 0, 0);
       addCanvasTexture(this.scene, key, { canvas });
       clampEdges(this.scene, key);
     }
-    this.chunks.set(cy * CHUNK_COLS + cx, this.keep(this.scene.add.image(cx * CHUNK, cy * CHUNK, key).setOrigin(0, 0).setDepth(DEPTH.ground)));
+    return key;
+  }
+
+  /**
+   * 11/17 맵 컨셉 (lib/mapConcept): 겨울·크리스마스면 바닥을 눈 덮인 그림으로 바꾸고 물가에 살얼음, 물빛을 차갑게.
+   * 배치·충돌·물때는 그대로예요. 이미 깔린 바닥 덩어리는 그 자리에서 그림만 바꿔요 (없는 그림은 지금 구워요)
+   */
+  setConcept(concept: MapConcept): void {
+    // 11/17 등대지기도 이 판 옷으로 (겨울 ↔ 크리스마스는 바닥이 같아도 옷은 바뀐다)
+    this.npcConcept = concept;
+    this.keeperImg?.setTexture(seasonKey(Art.SEA_TEX.keeper, concept));
+    const snowy = isSnowy(concept);
+    if (snowy === this.snowy) return;
+    this.snowy = snowy;
+    for (const [i, img] of this.chunks) img.setTexture(this.chunkTex(i % CHUNK_COLS, Math.floor(i / CHUNK_COLS)));
+    this.iceR?.setVisible(snowy);
   }
 
   /** 글씨는 화면에서 늘 같은 크기 (1/zoom) */
@@ -859,8 +1150,9 @@ export class SeaMap implements SeaMapApi {
     const night = Math.min(1, t.darkness);
     // 물은 땅 색조 곱하기에서 빠져 있어요 → 같은 색조(저녁 주황은 빼고)를 직접 곱하고, 밤엔 깊은 남색으로 조금 더
     const world = this.tintNow(t.dusk);
-    const waterTint = mulColor(world, mix(0xffffff, 0x8c9ce0, night * 0.6));
-    const foamTint = mulColor(world, mix(0xffffff, 0xd4dcff, night * 0.5));
+    // 11/17 겨울·크리스마스판: 물빛을 차갑게 (민트·아쿠아 → 잿빛 도는 푸른빛 — 얼리지는 않아요)
+    const waterTint = mulColor(mulColor(world, mix(0xffffff, 0x8c9ce0, night * 0.6)), this.snowy ? 0xcadced : 0xffffff);
+    const foamTint = mulColor(mulColor(world, mix(0xffffff, 0xd4dcff, night * 0.5)), this.snowy ? 0xeaf2fa : 0xffffff);
     const duskOn = t.dusk > 0.01 && !this.reduced ? t.dusk : t.dusk > 0.5 ? 1 : 0;
     const scrollX = this.reduced ? 0 : time * 0.003;
     const foamScroll = this.reduced ? 0 : time * 0.006;
@@ -946,6 +1238,7 @@ export class SeaMap implements SeaMapApi {
       LU[k + 3] = 6 / Art.LACE_TEX_H;
       LA[i * 2] = LA[i * 2 + 1] = gap > 2 ? Math.min(0.9, gap / 10) * laceA : 0;
     }
+    this.updateIce(time, lineY, foamTint);
     for (const r of this.strips) r.dirty = false;
     water.colors.fill(waterTint);
     foam.colors.fill(foamTint);
@@ -991,6 +1284,33 @@ export class SeaMap implements SeaMapApi {
         .setAlpha((0.16 - 0.08 * night) * (1 - t.rain * 0.6) * (1 - t.fog * 0.5))
         .setTint(night > 0.5 ? 0xc8d8ff : 0xfffcf0);
     }
+  }
+
+  /**
+   * 11/17 물가 살얼음 띠: 물때 물가 선(파도 밀려옴은 빼고)에 붙어 떠 있어요. 물결 따라 아주 조금 오르내리고 천천히 옆으로 흘러요.
+   * 파도는 그 아래로 지나 백사장까지 올라가요 (얼음은 거품 위 depth)
+   */
+  private updateIce(time: number, lineY: number, tint: number): void {
+    const ice = this.iceR;
+    if (!ice || !this.snowy) return;
+    const V = ice.vertices;
+    const U = ice.uv;
+    const drift = this.reduced ? 0 : time * 0.0012;
+    for (let i = 0; i < RN; i++) {
+      const x = i * RSTEP;
+      const bob = this.reduced ? 0 : Math.sin(time / 1500 + x * 0.021) * 0.7;
+      const y = Math.round(lineY + 2 + bob + (noise1(x / 90, 31) - 0.5) * 3);
+      const k = i * 4;
+      V[k] = x;
+      V[k + 1] = y;
+      V[k + 2] = x;
+      V[k + 3] = y + ICE_BAND_H;
+      U[k] = U[k + 2] = (x + drift) / ICE_BAND_W;
+      U[k + 1] = 0;
+      U[k + 3] = ICE_BAND_H / ICE_BAND_TEX_H;
+    }
+    ice.colors.fill(tint);
+    ice.alphas.fill(0.92);
   }
 
   /** 낚싯배·부표: 물결 따라 흔들리고, 물이 차면 조금 떠올라요 */
@@ -1209,9 +1529,11 @@ export class SeaMap implements SeaMapApi {
         if (bottom <= top || Math.random() > want * (this.reduced ? 0.02 : 0.08)) continue;
         g.x = Math.round(view.x + Math.random() * view.width);
         g.y = Math.round(top + Math.random() * (bottom - top));
-        // 11/16 유령선 자리는 비워 둬요 (다음 차수에 배가 들어와요)
+        // 11/16 유령선 자리는 비워 둬요 (11/17 r2 커진 배 몸까지)
         const C = SEA_GHOST_BERTH.clear;
+        const G = GHOST_HULL;
         if (g.x >= C.x && g.x <= C.x + C.w && g.y >= C.y && g.y <= C.y + C.h) continue;
+        if (g.x >= G.x && g.x <= G.x + G.w && g.y >= G.y && g.y <= G.y + G.h) continue;
         g.t0 = time;
         g.life = (this.reduced ? 1400 : 600) + Math.random() * 900;
         g.s = 0.6 + Math.random() * 0.7;
@@ -1273,11 +1595,11 @@ export class SeaMap implements SeaMapApi {
     this.plates.length = 0;
     this.lotPlates.clear();
     this.strips.length = 0;
-    this.waterR = this.foamR = this.duskWaterR = this.duskFoamR = this.laceR = this.sheenR = null;
+    this.waterR = this.foamR = this.duskWaterR = this.duskFoamR = this.laceR = this.sheenR = this.iceR = null;
     this.reachTop.fill(Number.NaN);
     this.buoys.length = 0;
     this.lampGlows.length = 0;
-    this.bonfire = this.bonfireAsh = this.bonfireGlow = this.hammock = this.vendLit = null;
+    this.bonfire = this.bonfireAsh = this.bonfireGlow = this.hammock = this.vendLit = this.snackLit = null;
     this.embers = null;
     this.bonfireLit = false;
     this.rockFoams.length = 0;
@@ -1329,6 +1651,7 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   tex(T.duskWater, Art.duskWaterArt);
   tex(T.duskFoam, Art.duskFoamArt);
   tex(T.goldStreak, Art.goldStreakArt);
+  tex(SEA_ICE_TEX, iceBandArt);
   tex(T.shelter, () => Art.withDetail(Art.shelterArt(), {}));
   tex(T.busSign, () => Art.withDetail(Art.busSignArt(), {}));
   tex(T.timetable, () => Art.withDetail(Art.timetableArt(), {}));
@@ -1391,6 +1714,7 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   tex(T.tip, () => Art.withDetail(Art.tipArt(), {}));
   tex(T.lighthouse, () => Art.withDetail(Art.lighthouseArt(), {}));
   tex(T.keeper, Art.keeperArt);
+  for (const c of ["winter", "christmas"] as const) tex(seasonKey(T.keeper, c), () => Art.keeperArt(c));
   tex(T.boat, () => Art.withDetail(Art.boatArt(), {}));
   tex(T.buoy, () => Art.withDetail(Art.buoyArt(), {}));
   SEA_ROCKS.forEach((_r, i) => {
@@ -1406,6 +1730,16 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   tex(T.gull, Art.gullArt);
   tex(T.spray, Art.sprayArt);
   tex(T.sparkle, Art.sparkleArt);
+  // 11/17 유령선 (토요일 밤 장터 — 미리 구워 둬요)
+  forEachGhostTexture(tex);
+  // 11/17 갈매기 과자 (던지는 조각 · 빨개진 갈매기 김·불꽃)
+  forEachGullTexture(tex);
+}
+
+/** 두 색 섞기 (0xRRGGBB, t 0..1) */
+function mixColor(a: number, b: number, t: number): number {
+  const c = (s: number) => Math.round(((a >> s) & 255) + (((b >> s) & 255) - ((a >> s) & 255)) * t);
+  return (c(16) << 16) | (c(8) << 8) | c(0);
 }
 
 /** 두 색 곱하기 (0xRRGGBB) */

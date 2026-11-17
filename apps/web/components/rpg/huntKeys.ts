@@ -6,6 +6,8 @@ import { POTIONS } from "@/lib/rpg/catalog";
 export const HUNT_KEYS: readonly (readonly [string, string])[] = [
   ["WASD · 방향키", "걸어요"],
   ["Space · J · 마우스 왼쪽", "공격해요. 누르고 있으면 계속 때려요"],
+  // 11/17 낙법 (Space는 공격이라 Z·K)
+  ["Z · K", "보는 쪽으로 굴러요. 구르는 동안은 안 맞아요 (6초마다)"],
   ["1 ~ 5", "스킬을 써요"],
   ["F", "궁극기를 써요. 자동은 안 돼요"],
   ["Shift+1~5 · 칸 우클릭", "그 칸을 자동으로 켜고 꺼요"],
@@ -21,6 +23,7 @@ export const HUNT_KEYS: readonly (readonly [string, string])[] = [
 export const HUNT_TOUCH: readonly (readonly [string, string])[] = [
   ["화면 왼쪽 아무 데나", "누른 채 끌면 걸어요"],
   ["화면 오른쪽 · [공격]", "누르면 공격해요. 누르고 있으면 계속 때려요"],
+  ["[구르기]", "보는 쪽으로 굴러요. 구르는 동안은 안 맞아요 (6초마다)"],
   ["스킬 칸", "누르면 스킬을 써요"],
   ["[자동] 누르고 스킬 칸", "그 칸을 자동으로 켜고 꺼요"],
   ["왼쪽 위 '스킬 자동'", "자동 스킬을 전부 켜고 꺼요"],

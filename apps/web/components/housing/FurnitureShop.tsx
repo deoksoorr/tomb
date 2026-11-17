@@ -21,7 +21,7 @@ import { fmt, FurnitureStage, FurnitureThumb } from "./parts";
 const CATS: FurnitureCategory[] = ["furniture", "dev", "nature", "mood", "living", "sea", "skin", "exterior"];
 /** 11/16 포구 오두막: 외관 탭은 없다 (오두막 겉모습은 포구 부동산에서 고른다). 바닷가 세트부터 보여 준다 */
 const SEA_CATS: FurnitureCategory[] = ["sea", "furniture", "dev", "nature", "mood", "living", "skin"];
-const COUNTS = Object.fromEntries(CATS.map((c) => [c, FURNITURE.filter((f) => f.category === c).length])) as Record<FurnitureCategory, number>;
+const COUNTS = Object.fromEntries(CATS.map((c) => [c, FURNITURE.filter((f) => f.category === c && !f.ghost).length])) as Record<FurnitureCategory, number>;
 
 type Props = {
   my: MyHouseResponse;
@@ -81,7 +81,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
   const houseDiscount = furnitureDiscount(equippedPerk(me?.equipped).houseDiscount, me?.champ);
   const cost = (f: FurnitureDef) => discountedPrice(f.price, houseDiscount);
 
-  const items = FURNITURE.filter((f) => f.category === cat);
+  const items = FURNITURE.filter((f) => f.category === cat && !f.ghost); // 11/17 유령선 한정은 가구점에 없어요
   const shown = items.find((f) => f.id === picked[cat]) ?? items[0];
   const frames = shown ? animFrames(shown.id) : 1;
 

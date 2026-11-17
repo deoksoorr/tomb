@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import * as P from "@tomb/protocol";
+import * as L from "./seaLayout";
 import {
   SEA_ARRIVE,
   SEA_BOARD,
@@ -292,5 +294,44 @@ describe("seaLayout — 물·바닥", () => {
       expect(m.x).toBeLessThan(SEA_MINIMAP_W);
       expect(m.y).toBeLessThan(SEA_MINIMAP_H);
     }
+  });
+});
+
+// 11/17 r2 과자 자판기 (선착장 길목) · 과자를 던질 수 있는 곳
+describe("과자 자판기 · 과자 던지는 곳", () => {
+  it("자판기는 선착장 머리 옆 모래밭이고 다른 막힌 것·자리와 겹치지 않아요. 앞에 서서 E를 눌러요", () => {
+    const V = L.SEA_SNACK_VEND;
+    const B = L.SEA_SNACK_VEND_BOX;
+    // 선착장 들어가는 길목 (선착장 머리 서쪽, 머리보다 조금 위)
+    expect(V.x).toBeLessThan(P.SEA_PIER.x);
+    expect(P.SEA_PIER.x - V.x).toBeLessThan(30);
+    expect(Math.abs(V.y - P.SEA_PIER.y)).toBeLessThan(16);
+    expect(V.y).toBeGreaterThan(P.SEA_SAND_Y0);
+    expect(V.y).toBeLessThan(P.SEA_FLAT_Y0);
+    // 다른 막는 상자와 겹치지 않아요 (자기 상자 빼고)
+    const others = [...L.seaStaticColliders(), ...L.seaFurnitureColliders()].filter((r) => !(r.x === B.x && r.y === B.y && r.w === B.w));
+    for (const r of others) expect(r.x < B.x + B.w && r.x + r.w > B.x && r.y < B.y + B.h && r.y + r.h > B.y, JSON.stringify(r)).toBe(false);
+    // 선착장 머리 길(선착장 폭)을 막지 않아요
+    expect(B.x + B.w).toBeLessThanOrEqual(P.SEA_PIER.x);
+    // E 자리: 서 있을 수 있고, 매점·음료 자판기·망원경 E 자리와 떨어져 있어요
+    const o = L.SEA_INTERACTABLES.find((i) => i.kind === "snackVend")!;
+    expect(o).toBeDefined();
+    expect(L.seaStandable(o.x, o.y)).toBe(true);
+    for (const i of L.SEA_INTERACTABLES) if (i !== o) expect(Math.hypot(i.x - o.x, i.y - o.y), i.id).toBeGreaterThan(i.r + o.r);
+    for (const sc of P.SEA_SCOPES) expect(Math.hypot(sc.x - o.x, sc.y - o.y)).toBeGreaterThan(40);
+    // 선착장 머리 가운데로 걸어 들어가는 사람은 자판기 E 판정에 걸리지 않아요
+    expect(Math.hypot(P.SEA_PIER.x + P.SEA_PIER.w / 2 - o.x, P.SEA_PIER.y - o.y)).toBeGreaterThan(o.r);
+  });
+  it("과자는 백사장·갯벌·선착장·방파제·산책로 어디서든 던져요 (위쪽 별장·정류장은 아니에요)", () => {
+    const at = (x: number, y: number) => L.seaSnackZone(x, y);
+    expect(at(600, 400)).toBe(true); // 백사장
+    expect(at(500, 560)).toBe(true); // 갯벌
+    expect(at(P.SEA_PIER.x + 20, P.SEA_PIER.y + 120)).toBe(true); // 선착장
+    expect(at(P.SEA_PIER_END.x + 40, P.SEA_PIER_END.y + 20)).toBe(true); // 선착장 끝
+    expect(at(P.SEA_BREAKWATER.x + 20, P.SEA_BREAKWATER.y + 60)).toBe(true); // 방파제
+    expect(at(P.SEA_BREAKWATER_TIP.x + 40, P.SEA_BREAKWATER_TIP.y + 40)).toBe(true); // 방파제 끝
+    expect(at(800, P.SEA_BOARDWALK.y + 10)).toBe(true); // 산책로
+    for (const l of P.SEA_LOTS) expect(at(l.x + l.w / 2, l.y + l.h / 2), `별장 ${l.n}`).toBe(false);
+    expect(at(P.SEA_BUS_STOP.x, P.SEA_BUS_STOP.y)).toBe(false);
   });
 });

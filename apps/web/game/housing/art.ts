@@ -48,6 +48,7 @@ const UP: Record<string, number> = {
   wind_chime: 14,
   memorial: 6,
   ghost_cat: 2,
+  ghost_lamp: 18, // 11/17 유령선 한정 해골 등불 (기둥 위 매단 해골)
   // 11/16 바닷가 세트 (seaFurnitureArt)
   ...SEA_UP,
 };
@@ -622,6 +623,59 @@ const DRAW: Record<string, Draw> = {
     g.rect(5, H - 17, 6, 4, v === "off" ? 0x2a2622 : 0xffd080);
     g.rect(2, H - 21, 12, 3, STONE_D);
     g.rect(6, H - 24, 4, 3, STONE);
+  },
+  // 11/17 유령선 한정 「해골 등불」: 따개비 낀 유목 기둥 + 팔에 매단 쇠사슬 + 해골 등 (눈구멍·이 사이로 녹색 도깨비불)
+  ghost_lamp: (g, _W, H, v) => {
+    const off = v === "off";
+    const wood = 0x6a5a4e;
+    const woodHi = 0x8e7c6a;
+    const woodLo = 0x4a3e36;
+    const iron = 0x3a3e4a;
+    const bone = 0xeee6d2;
+    const boneLo = 0xc4b89c;
+    const boneHi = 0xfffaf0;
+    const glow = off ? 0x2a2e30 : 0x7dffb0;
+    const glowHi = off ? 0x3a3e40 : 0xe0fff0;
+    // 받침 돌 · 따개비
+    g.rect(2, H - 4, 12, 3, 0x6a7280);
+    g.hline(3, 12, H - 4, 0x8a92a0);
+    g.set(4, H - 3, 0xd8d4c8);
+    g.set(11, H - 3, 0xd8d4c8);
+    // 기둥 (왼쪽) + 위 팔 (오른쪽으로 뻗어요)
+    g.rect(3, 4, 3, H - 7, wood);
+    g.vline(3, 4, H - 4, woodHi);
+    g.vline(5, 4, H - 4, woodLo);
+    for (const y of [9, 15, 22]) if (y < H - 5) g.set(4, y, woodLo); // 나뭇결 옹이
+    g.rect(3, 3, 11, 2, wood);
+    g.hline(3, 13, 3, woodHi);
+    g.set(5, 5, woodLo); // 팔 받침
+    g.set(6, 5, woodLo);
+    // 쇠사슬
+    for (let y = 5; y <= 8; y++) g.set(11, y, y % 2 ? iron : 0x5a5e6a);
+    // 해골 (머리통 7×5 + 턱 5×2)
+    const sx = 8;
+    const sy = 9;
+    g.rect(sx + 1, sy, 5, 1, bone);
+    g.rect(sx, sy + 1, 7, 4, bone);
+    g.hline(sx + 1, sx + 3, sy + 1, boneHi);
+    g.vline(sx + 6, sy + 1, sy + 4, boneLo);
+    g.rect(sx + 1, sy + 5, 5, 2, bone);
+    g.hline(sx + 1, sx + 5, sy + 6, boneLo);
+    // 눈구멍 둘 · 코 · 이 사이 (불빛이 새어 나와요)
+    g.rect(sx + 1, sy + 2, 2, 2, glow);
+    g.rect(sx + 4, sy + 2, 2, 2, glow);
+    if (!off) {
+      g.set(sx + 1, sy + 2, glowHi);
+      g.set(sx + 4, sy + 2, glowHi);
+    }
+    g.set(sx + 3, sy + 4, off ? 0x4a4440 : glow);
+    for (const x of [sx + 2, sx + 4]) g.set(x, sy + 5, off ? 0x4a4440 : glow);
+    // 정수리 도깨비불
+    if (!off) {
+      g.set(sx + 3, sy - 1, glow);
+      g.set(sx + 3, sy - 2, glowHi);
+      g.set(sx + 2, sy - 1, 0x3ac888);
+    }
   },
   candles: (g, _W, H, v) => {
     g.rect(4, H - 3, 8, 2, 0x8a7040);

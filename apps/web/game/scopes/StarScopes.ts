@@ -1,5 +1,7 @@
 import * as Phaser from "phaser";
 import { DIR, scopeSeatId, type ScopeSpot, type Sid } from "@tomb/protocol";
+import { isSnowy, parseConceptOverride, type MapConcept } from "@/lib/mapConcept";
+import { currentMapConcept } from "@/lib/mapConceptClient";
 import { bridge } from "../bridge";
 import type { Player } from "../entities/Player";
 import { STARGAZE_TAG } from "../entities/RemoteAvatar";
@@ -7,6 +9,7 @@ import { SPOT_TAKEN_HINT, SPOT_TAKEN_TOAST } from "../logic/spots";
 import { isTouchUi } from "../input/keyHint";
 import type { Sfx } from "../world/Sfx";
 import { playLife } from "../world/life/sounds";
+import { snowCap } from "../sprites/winterArt";
 import { campScopeGrid, coinScopeGrid, SCOPE_TEX } from "./scopeArt";
 import { SCOPE_E_RADIUS, scopeBaseRect } from "./scopeGeom";
 
@@ -16,6 +19,7 @@ import { SCOPE_E_RADIUS, scopeBaseRect } from "./scopeGeom";
 // 11/16 r19 사용자: 마을·캠핑장처럼 E는 언제나(낮에도) 별자리 잇기. 바닷가 동전 망원경 앞에서는 따로 「바다 보기」(V·아래 버튼 — 장면이 seaView로).
 //  - 캠핑장: 충돌·E 안내는 캠핑장 배치(campLayout)가 맡고, 이 모듈은 그림·자리 청하기만 (use)
 //  - 바닷가: 바닷가 맵 모듈을 건드리지 않게 그림·충돌(맵 충돌 묶음에 더한다)·E(interact)·안내(hint)까지 여기서
+//  - 11/17 맵 컨셉(겨울·크리스마스): 망원경 머리·받침 위에 눈 (그림 키 뒤에 -snow). 관리자가 바꾸면 바로 (주소 시험 값이 있으면 그것만)
 
 export type StarScopesDeps = {
   spots: readonly ScopeSpot[];
@@ -40,8 +44,19 @@ export function ensureScopeTextures(scene: Phaser.Scene): void {
   if (!tx.exists(SCOPE_TEX.coin)) tx.addCanvas(SCOPE_TEX.coin, coinScopeGrid().toCanvas());
 }
 
+/** 11/17 겨울·크리스마스판 망원경 그림 (원래 그림 위에 눈) */
+function snowyScopeKey(scene: Phaser.Scene, key: string): string {
+  const k = `${key}-snow`;
+  if (scene.textures.exists(k)) return k;
+  const src = scene.textures.get(key).getSourceImage();
+  if (!(src instanceof HTMLCanvasElement)) return key;
+  scene.textures.addCanvas(k, snowCap(src, { depth: 2, maxY: src.height - 2, seed: 109 }));
+  return k;
+}
+
 export class StarScopes {
   private readonly images: Phaser.GameObjects.Image[] = [];
+  private offConcept: (() => void) | null = null;
   private readonly zones: Phaser.GameObjects.Zone[] = [];
   private held: { id: string; spot: ScopeSpot } | null = null;
   private pending: { id: string; until: number } | null = null;
@@ -63,6 +78,16 @@ export class StarScopes {
         this.zones.push(z);
       }
     }
+    // 11/17 맵 컨셉
+    this.applyConcept(currentMapConcept());
+    if (typeof window !== "undefined" && !parseConceptOverride(window.location.search)) this.offConcept = bridge.on("map:concept", ({ concept }) => this.applyConcept(concept));
+  }
+
+  /** 11/17 판에 맞춘 그림 (겨울·크리스마스는 눈 얹은 그림) */
+  private applyConcept(c: MapConcept): void {
+    const key = this.d.style === "camp" ? SCOPE_TEX.camp : SCOPE_TEX.coin;
+    const k = isSnowy(c) ? snowyScopeKey(this.scene, key) : key;
+    for (const img of this.images) if (img.active && img.texture?.key !== k) img.setTexture(k);
   }
 
   /** 앞자리가 가까운 망원경 (E 범위 안) */
@@ -193,6 +218,8 @@ export class StarScopes {
   }
 
   destroy(): void {
+    this.offConcept?.();
+    this.offConcept = null;
     for (const i of this.images) i.destroy();
     // 11/16 장면이 닫힐 때(SHUTDOWN)는 Phaser가 충돌 그룹을 먼저 지워 children이 없어요 — 그대로 remove하면 예외가 나
     // 게임 루프가 멈췄어요 (바닷가 → 마을 버스 창밖이 그대로 멈춤). 그룹이 살아 있을 때만 빼고, 아니면 영역만 지워요

@@ -132,12 +132,12 @@ export class NameStyleView {
   /** 이름표 옆에 붙는 표시(친구 하트·도감 별)가 바탕판 밖으로 비켜설 거리 (월드 단위) */
   sidePad(sc: number): number {
     if (!this.plateOn) return 0;
-    return (PAD_X + 1 + (this.plateSpec?.kind === "ribbon" ? 4 : this.plateSpec?.kind === "wave" ? WAVE_PAD : this.plateSpec?.kind === "newyear" ? NY_PAD + 7 : 0)) * sc;
+    return (PAD_X + 1 + (this.plateSpec?.kind === "ribbon" ? 4 : this.plateSpec?.kind === "wave" ? WAVE_PAD : this.plateSpec?.kind === "newyear" ? NY_PAD + 7 : this.plateSpec?.kind === "holly" ? 4 : 0)) * sc;
   }
 
   /** 이름표 위에 얹는 것(1위 배지·말풍선)을 올릴 높이 (월드 단위) */
   topLift(sc: number): number {
-    return this.plateOn ? (PAD_Y + 1 + (this.plateSpec?.kind === "cloud" || this.plateSpec?.kind === "tomb" || this.plateSpec?.kind === "wave" || this.plateSpec?.kind === "newyear" ? 1 : 0)) * sc : 0;
+    return this.plateOn ? (PAD_Y + 1 + (this.plateSpec?.kind === "cloud" || this.plateSpec?.kind === "tomb" || this.plateSpec?.kind === "wave" || this.plateSpec?.kind === "newyear" ? 1 : this.plateSpec?.kind === "card" || this.plateSpec?.kind === "holly" ? 2 : 0)) * sc : 0;
   }
 
   /** 빛 무리·반짝이·내 표시를 꾸미기에 맞춰 만들거나 치운다 */
@@ -556,6 +556,73 @@ export function drawPlate(g: Phaser.GameObjects.Graphics, p: NamePlateSpec, w: n
         g.fillStyle(0xfff2b0, 1).fillRect(kx, ky, u, u);
         g.fillStyle(p.dots[1], 1).fillRect(kx, ky + 2 * u, u, 3 * u);
         g.fillStyle(p.edge, 1).fillRect(kx, ky + 5 * u, u, u);
+      }
+      break;
+    }
+    case "knit": {
+      // 11/17 니트 이름표: 와인빛 털실 판 + 위아래 크림 골지 단 + 꽈배기 무늬 (밝은 V 땀이 세로로)
+      g.fillStyle(p.edge, 1).fillRoundedRect(L - u, T - u, W + 2 * u, H + 2 * u, 2 * u);
+      g.fillStyle(p.fill, p.alpha).fillRect(L, T, W, H);
+      for (let x = L + 3 * u; x < R - 2 * u; x += 6 * u)
+        for (let y = T + 2 * u; y < B - 2 * u; y += 2 * u) {
+          g.fillStyle(p.dots[1], 0.55).fillRect(x, y, u, u).fillRect(x + 2 * u, y, u, u);
+          g.fillStyle(p.dots[1], 0.35).fillRect(x + u, y + u, u, u);
+        }
+      // 골지 단 (밝은·어두운 번갈아)
+      for (let x = L; x < R; x += 2 * u) {
+        g.fillStyle(p.dots[0], 1).fillRect(x, T - u, u, 2 * u).fillRect(x, B - u, u, 2 * u);
+        g.fillStyle(p.dots[0], 0.7).fillRect(x + u, T - u, u, 2 * u).fillRect(x + u, B - u, u, 2 * u);
+      }
+      break;
+    }
+    case "card": {
+      // 11/17 사원증 이름표: 은빛 테 남색 카드 + 위 파란 띠 + 줄을 거는 은빛 집게
+      g.fillStyle(p.edge, 1).fillRoundedRect(L - u, T - u, W + 2 * u, H + 2 * u, 2 * u);
+      g.fillStyle(p.fill, p.alpha).fillRoundedRect(L, T, W, H, u);
+      g.fillStyle(p.light, 1).fillRect(L, T, W, u);
+      for (let x = L + 2 * u; x < R - 2 * u; x += 3 * u) g.fillStyle(p.dots[1], 0.7).fillRect(x, T, u, u);
+      const mx = Math.round((L + R) / 2 / u) * u;
+      g.fillStyle(p.dots[0], 1).fillRect(mx - 2 * u, T - 3 * u, 4 * u, 2 * u);
+      g.fillStyle(0x2a3040, 1).fillRect(mx - u, T - 2 * u, 2 * u, u);
+      // 오른쪽 아래 바코드
+      for (let i = 0; i < 4; i++) g.fillStyle(p.dots[1], 0.5).fillRect(R - (3 + i) * u - (i % 2) * u, B - 2 * u, u, u);
+      break;
+    }
+    case "beach": {
+      // 11/17 모래사장 이름표: 모래 판 + 위 물거품 띠 + 오른쪽 아래 불가사리 · 왼쪽 아래 분홍 조개 · 모래알
+      g.fillStyle(p.edge, 1).fillRoundedRect(L - u, T - u, W + 2 * u, H + 2 * u, 3 * u);
+      g.fillStyle(p.fill, p.alpha).fillRoundedRect(L, T, W, H, 2 * u);
+      g.fillStyle(p.dots[2], 1).fillRect(L + u, T, W - 2 * u, u);
+      for (let x = L + 2 * u; x < R - 2 * u; x += 4 * u) g.fillStyle(0xffffff, 0.95).fillRect(x, T - u, 2 * u, u);
+      for (let x = L + 3 * u, k = 0; x < R - 3 * u; x += 5 * u, k++) g.fillStyle(p.edge, 0.35).fillRect(x, T + Math.round(H * (k % 2 ? 0.75 : 0.45) / u) * u, u, u);
+      // 불가사리 (+ 모양 + 가운데 밝게)
+      const sx = R - 2 * u;
+      const sy = B - u;
+      g.fillStyle(p.dots[0], 1).fillRect(sx - u, sy, 3 * u, u).fillRect(sx, sy - u, u, 3 * u);
+      g.fillStyle(0xffd0a0, 1).fillRect(sx, sy, u, u);
+      // 조개
+      g.fillStyle(p.dots[1], 1).fillRect(L, B - 2 * u, 3 * u, u).fillRect(L + u, B - u, u, u);
+      g.fillStyle(0xfff0f4, 1).fillRect(L + u, B - 2 * u, u, u);
+      break;
+    }
+    case "holly": {
+      // 12월 크리스마스 호랑가시 이름표: 금테 상록 판 + 위를 덮은 눈(군데군데 흘러내린 눈) + 위 양 귀퉁이 호랑가시 잎 둘·빨간 열매 셋
+      const [berry, leaf, snow] = p.dots;
+      g.fillStyle(p.edge, 1).fillRoundedRect(L - u, T - u, W + 2 * u, H + 2 * u, 2 * u);
+      g.fillStyle(p.fill, p.alpha).fillRoundedRect(L, T, W, H, u);
+      g.fillStyle(p.light, p.alpha).fillRect(L, B - 2 * u, W, u);
+      g.fillStyle(snow, 1).fillRoundedRect(L - u, T - 2 * u, W + 2 * u, 2 * u, u);
+      for (let x = L + 3 * u, k = 0; x < R - 3 * u; x += 5 * u, k++) g.fillStyle(snow, 1).fillRect(x, T, u, (k % 2 ? 2 : 1) * u);
+      for (const s of [-1, 1]) {
+        const cx0 = s < 0 ? L + u : R - 2 * u;
+        const cy0 = T - u;
+        // 잎 (뾰족한 끝 + 가운데 잎맥)
+        g.fillStyle(leaf, 1).fillRect(cx0 - 4 * u, cy0, 3 * u, 2 * u).fillRect(cx0 + 2 * u, cy0, 3 * u, 2 * u);
+        g.fillStyle(leaf, 1).fillRect(cx0 - 5 * u, cy0 + u, u, u).fillRect(cx0 + 5 * u, cy0 + u, u, u);
+        g.fillStyle(0x2a6a30, 1).fillRect(cx0 - 3 * u, cy0 + u, 2 * u, u).fillRect(cx0 + 2 * u, cy0 + u, 2 * u, u);
+        // 열매 셋
+        g.fillStyle(berry, 1).fillRect(cx0 - u, cy0 - u, 2 * u, 2 * u).fillRect(cx0 + u, cy0, u, u).fillRect(cx0, cy0 + u, u, u);
+        g.fillStyle(0xffb0b0, 1).fillRect(cx0 - u, cy0 - u, u, u);
       }
       break;
     }

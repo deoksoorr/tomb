@@ -138,6 +138,30 @@ function plateIcon(p: NamePlateSpec): Grid {
       g.hline(x0, x0 + w - 1, y0, p.light);
       g.hline(x0 + 1, x0 + w - 2, y0 + h - 2, p.edge);
       break;
+    case "knit":
+      // 와인빛 판 + 꽈배기 V 땀 (골지 단은 테두리 다음에)
+      g.rect(x0, y0, w, h, p.fill);
+      for (const cx of [x0 + 2, x0 + 8]) {
+        g.set(cx, y0 + 2, p.dots[1]);
+        g.set(cx + 2, y0 + 2, p.dots[1]);
+        g.set(cx + 1, y0 + 3, p.dots[1]);
+        g.set(cx, y0 + 5, p.dots[1]);
+        g.set(cx + 2, y0 + 5, p.dots[1]);
+      }
+      break;
+    case "card":
+      g.rect(x0, y0, w, h, p.fill);
+      g.hline(x0, x0 + w - 1, y0, p.light);
+      g.hline(x0, x0 + w - 1, y0 + 1, p.light);
+      break;
+    case "beach":
+      g.rect(x0, y0, w, h, p.fill);
+      g.hline(x0, x0 + w - 1, y0, p.dots[2]);
+      break;
+    case "holly":
+      g.rect(x0, y0, w, h, p.fill);
+      g.hline(x0, x0 + w - 1, y0 + h - 2, p.light);
+      break;
     default:
       g.rect(x0, y0, w, h, p.fill);
       g.hline(x0, x0 + w - 1, y0, p.light);
@@ -166,6 +190,41 @@ function plateIcon(p: NamePlateSpec): Grid {
     g.set(x0 + 2, y0 - 3, p.dots[0]);
     g.set(x0 + w - 3, y0 - 2, p.dots[0]);
     g.set(x0 + 6, y0 - 4, 0xfff2b0);
+  } else if (p.kind === "knit") {
+    // 위아래 크림 골지 단
+    for (let x = x0 - 1; x <= x0 + w; x++) {
+      g.set(x, y0 - 1, x % 2 ? p.dots[0] : 0xd8c8a8);
+      g.set(x, y0 + h, x % 2 ? p.dots[0] : 0xd8c8a8);
+    }
+  } else if (p.kind === "card") {
+    // 줄을 거는 은빛 집게 + 오른쪽 아래 바코드
+    g.hline(7, 9, y0 - 2, p.dots[0]);
+    g.set(8, y0 - 1, p.dots[0]);
+    g.set(x0 + w - 2, y0 + h - 2, p.dots[1]);
+    g.set(x0 + w - 4, y0 + h - 2, p.dots[1]);
+  } else if (p.kind === "beach") {
+    // 물거품 · 불가사리 · 조개
+    g.set(x0 + 2, y0 - 1, 0xffffff);
+    g.set(x0 + 7, y0 - 1, 0xffffff);
+    const sx = x0 + w - 2;
+    const sy = y0 + h - 2;
+    g.set(sx, sy, 0xffd0a0);
+    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) g.set(sx + dx, sy + dy, p.dots[0]);
+    g.set(x0 + 1, y0 + h - 2, p.dots[1]);
+    g.set(x0 + 2, y0 + h - 2, p.dots[1]);
+  } else if (p.kind === "holly") {
+    // 위를 덮은 눈 + 양 귀퉁이 호랑가시 (잎 둘 + 빨간 열매)
+    g.hline(x0, x0 + w - 1, y0 - 1, p.dots[2]);
+    g.set(x0 + 4, y0, p.dots[2]);
+    g.set(x0 + 8, y0, p.dots[2]);
+    for (const cx of [x0, x0 + w - 1]) {
+      g.set(cx - 1, y0 - 1, p.dots[1]);
+      g.set(cx + 1, y0 - 1, p.dots[1]);
+      g.set(cx - 1, y0 - 2, p.dots[1]);
+      g.set(cx + 1, y0 - 2, p.dots[1]);
+      g.set(cx, y0 - 2, p.dots[0]);
+      g.set(cx, y0 - 3, p.dots[0]);
+    }
   } else if (p.kind === "star") {
     g.set(x0 + 1, y0 + 1, p.dots[0]);
     g.set(x0 + w - 2, y0 + h - 2, p.dots[0]);

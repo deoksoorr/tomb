@@ -35,6 +35,7 @@ import {
   isIndoorSpot,
   isSeatMood,
   ridePetOfLook,
+  lookWithPetFallback,
   boatSeatById,
   balloonBoarding,
   balloonSeatById,
@@ -52,6 +53,7 @@ import {
   isBbqEffect,
   isDrunkState,
   bbqBig,
+  drunkNoSea,
   bbqItem,
   isRideSpotKind,
   type DrunkState,
@@ -1141,7 +1143,8 @@ export class ChannelCore<C extends object> {
       this.save(p);
       this.host.liveChanged?.(true);
       const extra = { ...(g.dye !== undefined ? { dye: p.dye ?? {} } : {}), ...(g.body !== undefined ? { body: p.body } : {}), ...(g.champ !== undefined ? { champ: p.champ ?? 0 } : {}), ...(g.mgr !== undefined ? { mgr: p.mgr ? (1 as const) : (0 as const) } : {}) };
-      this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "look", sid: p.sid, look: p.look, ...extra }));
+      // 11/17 새 펫은 옛 화면용 비슷한 펫을 덧붙여 보낸다 (protocol PET_FALLBACK — 저장하는 p.look은 그대로)
+      this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "look", sid: p.sid, look: lookWithPetFallback(p.look), ...extra }));
       // 타던 펫을 집에 두거나 타지 못하는 펫으로 바꿨으면 내린다
       if (p.ride && !ridePetOfLook(p.look)) this.clearRide(p);
       return;
@@ -1238,6 +1241,8 @@ export class ChannelCore<C extends object> {
     if (seat && holder === p.sid) return this.sendTo(p, { t: "seat", seatId, sid: p.sid }); // 재요청: 이미 내 자리
     // 11/15 바베큐로 커진 동안에는 타는 자리(그네·배·놀이기구·범퍼카)에 못 앉는다
     if (seat && this.tooBigToRide(p, seat.kind, now)) return this.sendTo(p, { t: "seatDenied", seatId });
+    // 11/17 바닷가 놀거리(튜브·제트스키·카약)는 술이 깰 때까지 못 타요 (클라이언트도 「술 마시고 물에…」로 막아요)
+    if (seat && map === "sea" && seat.kind === "boat" && drunkNoSea(p.drunk, now)) return this.sendTo(p, { t: "seatDenied", seatId });
     // 긴 벤치에서 앉은 채 옆자리로: 같은 가구의 다른 좌석이면 거리와 상관없이 옮겨 앉는다
     const old = p.seatId ? seatSlotIn(map, p.seatId) : undefined;
     const slide = !!seat && !!old && old.furnitureId !== null && old.furnitureId === seat.furnitureId;
@@ -1700,7 +1705,7 @@ export class ChannelCore<C extends object> {
       ...this.state(p),
       name: p.name,
       color: p.color,
-      look: p.look,
+      look: lookWithPetFallback(p.look),
       body: p.body,
       ...(hasDye(p.dye) ? { dye: p.dye } : {}),
       ...(p.mood ? { mood: p.mood } : {}),

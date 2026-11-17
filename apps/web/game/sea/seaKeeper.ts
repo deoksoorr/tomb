@@ -1,4 +1,5 @@
 import { nextTideOpenAt, TIDE_PERIOD_MS, tideOpen } from "@tomb/protocol";
+import { qaSearch } from "@/lib/qaUrl";
 
 // 11/16 등대지기 (등대 옆 사람): 다음 갯벌이 열리는 때 셋을 알려줘요 · 유령선이 보이는 밤 (토요일 밤 — 다음 차수에 진짜 배가 들어와요)
 
@@ -20,9 +21,9 @@ export function keeperTideText(nowMs: number): string {
   return tideOpen(nowMs) ? `지금 갯벌이 열려 있어요. 다음엔 ${a}, ${b}, ${c}에 물이 빠져요.` : `물이 빠지는 때는 ${a}, ${b}, ${c}이에요. 그때 갯벌을 걸어 봐요.`;
 }
 
-/** 유령선이 보이는 밤: 토요일 밤 20시 ~ 일요일 새벽 2시 (한국 시각). ?ghost=1이면 늘 */
-export function ghostShipNight(nowMs: number, search = typeof window !== "undefined" ? window.location.search : ""): boolean {
-  if (/[?&]ghost=1\b/.test(search)) return true;
+/** 유령선이 보이는 밤 (등대 꼭대기 먼바다 풍경): 토요일 밤 20시 ~ 일요일 새벽 2시 (한국 시각). ?ghost=1이면 늘 — 11/17 실서버는 주소 시험 값을 막아요 (lib/qaUrl) */
+export function ghostShipNight(nowMs: number, search = typeof window !== "undefined" ? window.location.search : "", qaFlag?: string): boolean {
+  if (/[?&]ghost=1\b/.test(qaSearch(search, qaFlag))) return true;
   const d = new Date(nowMs + KST);
   const day = d.getUTCDay();
   const h = d.getUTCHours();

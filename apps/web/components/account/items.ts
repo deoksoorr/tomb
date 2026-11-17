@@ -59,6 +59,7 @@ export function effectLabel(item: ItemDef): string {
   if (item.kind === "megaphone") return `한 번 외치면 사라져요 (기록은 ${durationLabel(MEGAPHONE_TTL_MS)} 뒤 사라져요)`;
   if (item.kind === "dye") return "한 번 염색하면 사라져요 (접속이 끊겨도 남은 시간 안에는 이어서 할 수 있어요)";
   if (item.kind === "firework") return "한 번 쏘면 사라져요 (채널 모두가 봐요)";
+  if (item.kind === "box") return "가방에서 열면 사라져요";
   return item.kind === "graveStyle" ? "묘비를 세우거나 디자인을 바꿀 때 1개 써요" : "한 번 쓰면 사라져요";
 }
 

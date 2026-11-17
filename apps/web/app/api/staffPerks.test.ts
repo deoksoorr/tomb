@@ -59,7 +59,9 @@ describe("운영자 폭죽 무제한", () => {
     vi.spyOn(Date, "now").mockReturnValue(NOON);
     const op = await newVisitor("폭죽운영자");
     await setStaff(op.id);
-    for (const itemId of FIREWORKS) {
+    for (const [i, itemId] of FIREWORKS.entries()) {
+      // 상점 요청 한도(분당 20회)보다 폭죽 종류가 많다: 15발마다 1분씩 넘긴다
+      vi.spyOn(Date, "now").mockReturnValue(NOON + Math.floor(i / 15) * 61_000);
       const res = await bodyOf<UseItemResponse>(fire(op, itemId));
       expect(await verifyGrant(SECRET, res.grant!)).toMatchObject({ kind: "firework", visitorId: op.id, item: itemId });
       expect(res.me.staff).toBe(true);

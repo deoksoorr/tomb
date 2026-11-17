@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { DIR, FURNITURE, SPAWN, ZOO, ZOO_EAST_GATE, ZOO_GATE, ZOOKEEPER, ZOO_PETS, isRideablePet } from "@tomb/protocol";
+import { DIR, FURNITURE, SPAWN, ZOO, ZOO_EAST_GATE, ZOO_GATE, ZOOKEEPER, ZOO_PETS, isRideablePet, type DirId } from "@tomb/protocol";
 import { SHOP_COSMETICS, entryStatus, wearAction } from "@/components/account/wardrobe";
-import { COSMETIC_FX, CosmeticFxSim, FX_ART, fxIconGrid, mountOf, riderLift, type FxCmd, type FxInput } from "../../sprites/cosmeticFx";
-import { MOUNT_FRAMES, MOUNT_H, MOUNT_W } from "../../sprites/mountArt";
+import { COSMETIC_FX, CosmeticFxSim, FX_ART, fxIconGrid, mountOf, petPoseFrame, riderLift, UNKNOWN_PET_STANDIN, type FxCmd, type FxInput } from "../../sprites/cosmeticFx";
+import { MOUNT_FRAMES, MOUNT_H, MOUNT_W, mountFrames } from "../../sprites/mountArt";
 import { groundKind, interactables, LANDMARKS, staticColliders, walkableGrid, WALK } from "../layout";
 import { ZOO_DECOR, ZOO_FENCES, ZOO_PENS, zooColliders, ZOOKEEPER_SPOT } from "./zooLayout";
 import { roamRect, ZOO_ANIMALS, zooPose } from "./zooSim";
@@ -155,7 +155,10 @@ describe("펫 그림·타는 모습", () => {
       if (isRideablePet(p.id)) {
         const spec = COSMETIC_FX[p.id];
         const art = FX_ART[(spec as { art: keyof typeof FX_ART }).art];
-        expect([art.w, art.h, art.frames]).toEqual([MOUNT_W, MOUNT_H, MOUNT_FRAMES]);
+        // 11/17 알파카·북극곰은 기본 10장 뒤에 멈춤·동작 옆모습을 덧붙인다
+        expect([art.w, art.h]).toEqual([MOUNT_W, MOUNT_H]);
+        expect(art.frames).toBe(mountFrames(mountOf(p.id)!));
+        expect(art.frames).toBeGreaterThanOrEqual(MOUNT_FRAMES);
         expect(riderLift(p.id)).toBeGreaterThanOrEqual(8);
         expect(riderLift(p.id)).toBeLessThanOrEqual(14);
       }
@@ -201,6 +204,147 @@ describe("펫 그림·타는 모습", () => {
     }
     const settled = out.find((c) => c.art === "mountHound")!;
     expect(100 - settled.x).toBeGreaterThan(16); // 뒤쪽으로 넉넉히
+  });
+});
+
+describe("11/17 새 펫: 멈춤·귀여운 동작·옛 화면 호환", () => {
+  const base = (o: Partial<FxInput> = {}): FxInput => ({
+    now: 1000,
+    dt: 16,
+    x: 100,
+    y: 200,
+    headY: 200,
+    dir: DIR.right,
+    moving: false,
+    hidden: false,
+    artTop: 18,
+    shoulder: 7,
+    hand: { dx: 5, up: 8 },
+    reduced: false,
+    ...o,
+  });
+  const NEW = ["pet_hog", "pet_ducks", "pet_gull", "pet_jelly", "pet_snowy", "pet_fly", "pet_otter", "pet_panda", "pet_paca", "pet_polar"];
+
+  it("새 펫은 모두 멈춤·동작 프레임이 시트 안에 있다", () => {
+    for (const id of NEW) {
+      const s = COSMETIC_FX[id];
+      expect(s?.kind, id).toBe("pet");
+      if (s?.kind !== "pet" || !s.pose) throw new Error(id);
+      const n = FX_ART[s.art].frames;
+      for (const f of [...s.pose.idle, ...s.pose.act]) expect(f, id).toBeLessThan(n);
+      expect(s.pose.act.length * s.pose.actMs, id).toBeLessThan(s.pose.every);
+      if (s.pose.lift) expect(s.pose.lift.length, id).toBe(s.pose.act.length);
+    }
+  });
+
+  it("멈추자마자는 앉아 쉬고, 오래 서 있으면 가끔 동작, 움직임 줄이기는 첫 멈춤 프레임", () => {
+    const pose = { idle: [2, 3], act: [4, 5], actMs: 100, every: 1000, lift: [0, 2] };
+    expect(petPoseFrame(pose, 2, 0)).toEqual([2, 0]);
+    expect(petPoseFrame(pose, 2, 600)).toEqual([3, 0]);
+    expect(petPoseFrame(pose, 2, 850)).toEqual([4, 0]);
+    expect(petPoseFrame(pose, 2, 950)).toEqual([5, 2]);
+    expect(petPoseFrame(pose, 2, -1)).toEqual([2, 0]);
+  });
+
+  it("걸으면 걷기 두 장, 오래 멈추면 동작 프레임", () => {
+    const sim = new CosmeticFxSim();
+    sim.setLook(["pet_hog"]);
+    const out: FxCmd[] = [];
+    sim.step(base({ moving: true }), out);
+    expect(out.find((c) => c.art === "pkHedgehog")!.frame).toBeLessThan(2);
+    const seen = new Set<number>();
+    for (let t = 0; t < 9000; t += 50) {
+      out.length = 0;
+      sim.step(base({ now: 1000 + t }), out);
+      seen.add(out.find((c) => c.art === "pkHedgehog")!.frame);
+    }
+    expect([...seen].sort()).toEqual([2, 3, 4, 5]);
+  });
+
+  it("12월 루돌프 썰매: 옆모습은 탄 사람 앞에 썰매 옆판을 덧그리고, 탄 채로 멈추면 루돌프가 쉬다가 눈을 긁는다", () => {
+    expect(mountOf("xm_sleigh")).toBe("sleigh");
+    const spec = COSMETIC_FX.xm_sleigh;
+    if (spec?.kind !== "pet" || !spec.pose) throw new Error("xm_sleigh");
+    const art = FX_ART[spec.art];
+    // 11/17 52칸: 루돌프가 옆으로 눌려 보였다
+    expect([art.w, art.h, art.frames]).toEqual([52, MOUNT_H, mountFrames("sleigh")]);
+    expect(riderLift("xm_sleigh")).toBeGreaterThan(0);
+    const sim = new CosmeticFxSim();
+    sim.setLook(["xm_sleigh"]);
+    const out: FxCmd[] = [];
+    // 옆으로 달리기: 썰매(탄 사람 뒤) + 옆판(앞)
+    sim.step(base({ riding: true, moving: true }), out);
+    const ride = out.filter((c) => c.art === "mountSleigh");
+    expect(ride.map((c) => [c.frame < 2, c.depth > 200])).toEqual([
+      [true, false],
+      [false, true],
+    ]);
+    // 11/17 옆모습에선 썰매를 앞으로 밀어 탄 사람이 뒤칸 쪽에 앉는다 (오른쪽을 보면 +, 썰매와 옆판이 같이)
+    expect(ride.map((c) => c.x - Math.round(base({}).x))).toEqual([13, 13]);
+    // 앞·뒷모습은 기존처럼 덧그림 6·8번대
+    out.length = 0;
+    sim.step(base({ riding: true, moving: true, dir: DIR.down }), out);
+    expect(out.filter((c) => c.art === "mountSleigh").map((c) => c.frame >= 6)).toEqual([false, true]);
+    // 탄 채로 멈춰 오래 있으면 멈춤·동작 프레임 (긁기 포함)
+    const seen = new Set<number>();
+    for (let t = 0; t < 6000; t += 50) {
+      out.length = 0;
+      sim.step(base({ riding: true, moving: false, now: 2000 + t }), out);
+      seen.add(out.filter((c) => c.art === "mountSleigh")[0].frame);
+    }
+    for (const f of spec.pose.act) expect(seen.has(f), String(f)).toBe(true);
+    expect(seen.has(spec.pose.idle[0])).toBe(true);
+  });
+
+  it("11/17 타는 펫은 주인을 따라 위아래로 걸으면 앞·뒷모습(몸+덧그림), 옆으로 걸으면 옆모습 · 옆모습 그림만 있는 펫은 늘 옆모습", () => {
+    const frames = (id: string, dir: DirId) => {
+      const sim = new CosmeticFxSim();
+      sim.setLook([id]);
+      const out: FxCmd[] = [];
+      sim.step(base({ moving: true, dir }), out);
+      out.length = 0;
+      sim.step(base({ moving: true, dir, now: 1100 }), out);
+      return out.filter((c) => c.layer === "body").map((c) => c.frame);
+    };
+    expect(frames("pet_hound", DIR.down).map((f) => Math.floor(f / 2) * 2)).toEqual([2, 6]);
+    expect(frames("pet_hound", DIR.up).map((f) => Math.floor(f / 2) * 2)).toEqual([4, 8]);
+    expect(frames("pet_hound", DIR.right).every((f) => f < 2)).toBe(true);
+    expect(frames("pet_cat", DIR.down).every((f) => f < 2)).toBe(true);
+  });
+
+  it("11/17 탈것에 타 있으면(petOff) 걷는 펫도 타는 펫도 안 그리고, 내리면 바로 옆에서 다시 나와요", () => {
+    for (const id of ["pet_hound", "xm_sleigh"]) {
+      const sim = new CosmeticFxSim();
+      sim.setLook([id]);
+      const out: FxCmd[] = [];
+      sim.step(base({ x: 100, y: 200 }), out);
+      expect(out.length, id).toBeGreaterThan(0);
+      out.length = 0;
+      sim.step(base({ x: 600, y: 300, petOff: true, riding: true }), out);
+      expect(out, id).toEqual([]);
+      out.length = 0;
+      sim.step(base({ x: 600, y: 300 }), out);
+      const p = out[0];
+      expect(Math.hypot(p.x - 600, p.y - 300), id).toBeLessThan(40);
+    }
+  });
+
+  it("실시간 서버가 덧붙인 옛 화면용 펫은 그리지 않고, 모르는 새 펫만 오면 기본 펫", () => {
+    const sim = new CosmeticFxSim();
+    const out: FxCmd[] = [];
+    sim.setLook(["pet_otter", "pet_cat"]);
+    sim.step(base(), out);
+    expect(out.map((c) => c.art).filter((a) => a === "pkOtter" || a === "petCat")).toEqual(["pkOtter"]);
+    out.length = 0;
+    sim.setLook(["hat_crown", "pet_from_future"]);
+    sim.step(base(), out);
+    const standin = COSMETIC_FX[UNKNOWN_PET_STANDIN];
+    expect(out.some((c) => standin.kind === "pet" && c.art === standin.art)).toBe(true);
+    out.length = 0;
+    // 더 새 펫 + 덧붙인 옛 펫이면 아는 펫(덧붙인 것)을 그린다
+    sim.setLook(["pet_from_future", "pet_cat"]);
+    sim.step(base(), out);
+    expect(out.filter((c) => c.art === "petCat")).toHaveLength(1);
   });
 });
 

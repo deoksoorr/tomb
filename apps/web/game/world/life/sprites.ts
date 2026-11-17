@@ -1,4 +1,6 @@
 import * as Phaser from "phaser";
+import type { MapConcept } from "@/lib/mapConcept";
+import { seasonKey } from "../../sprites/npcSeasonArt";
 import { darken, Grid, lighten, makeCanvas, type Color } from "../../sprites/pixel";
 
 // 22번 마을 생물 그림 (코드로 그리는 픽셀아트): 고양이 5색 × 자세, 꼬마 유령 3색, 황금 고블린, 망원경, 반짝이·별똥별.
@@ -6,9 +8,10 @@ import { darken, Grid, lighten, makeCanvas, type Color } from "../../sprites/pix
 
 export const LTEX = {
   cat: (v: number, f: CatFrame) => `life-cat-${v}-${f}`,
-  ghost: (v: number, f: number) => `life-ghost-${v}-${f}`,
+  /** 11/17 꼬마 유령·고블린은 판마다 따로 (기본판은 예전 키 그대로) */
+  ghost: (v: number, f: number, concept: MapConcept = "default") => seasonKey(`life-ghost-${v}-${f}`, concept),
   dog: (v: number, f: DogFrame) => `life-dog-${v}-${f}`,
-  goblin: (f: number) => `life-goblin-${f}`,
+  goblin: (f: number, concept: MapConcept = "default") => seasonKey(`life-goblin-${f}`, concept),
   telescope: "life-telescope",
   sparkle: "life-sparkle",
   heart: "life-heart",
@@ -253,7 +256,7 @@ const GHOST_COLORS: readonly GhostColors[] = [
 ];
 
 /** 꼬마 유령 (11×13, 2장: 꼬리 물결) */
-function ghost(v: number, f: number): HTMLCanvasElement {
+function ghostGrid(v: number, f: number): Grid {
   const c = GHOST_COLORS[v % GHOST_COLORS.length];
   const g = new Grid(11, 13);
   g.ellipse(5.5, 5, 4.4, 4.4, c.body);
@@ -268,11 +271,50 @@ function ghost(v: number, f: number): HTMLCanvasElement {
   g.set(8, 5, c.cheek);
   g.set(3, 2, lighten(c.body, 0.6));
   g.outline(darken(c.body, 0.45), false, 150);
+  return g;
+}
+
+/**
+ * 11/17 꼬마 유령 겨울·크리스마스판 (13×17 — 모자 자리만큼 위로 키운다, 몸은 (1, 4)에. 원점 가운데 아래라 서 있는 자리는 같다).
+ * 겨울 = 몸 색에 맞춘 털모자 + 작은 목도리, 크리스마스 = 반투명 산타 모자 + 빨강 초록 목도리
+ */
+function seasonGhost(v: number, f: number, concept: MapConcept): HTMLCanvasElement {
+  const c = GHOST_COLORS[v % GHOST_COLORS.length];
+  const g = new Grid(13, 17);
+  g.draw(ghostGrid(v, f), 1, 4);
+  const xmas = concept === "christmas";
+  // 목도리 (입 아래 한 줄 + 오른쪽으로 늘어진 끝)
+  const sc = xmas ? 0xd23a44 : darken(c.cheek, 0.15);
+  const sc2 = xmas ? 0x2e8a4e : 0xf8f6f0;
+  for (let x = 2; x <= 10; x++) g.set(x, 11, Math.floor(x / 2) % 2 ? sc2 : sc);
+  g.set(8, 12, sc);
+  g.set(8, 13, sc2);
+  const hat = new Grid(13, 17);
+  if (xmas) {
+    // 반투명 산타 모자 (털 단 + 빨간 고깔이 오른쪽으로 늘어진다 + 방울)
+    for (let x = 3; x <= 9; x++) hat.set(x, 5, 0xf8f8ff, 210);
+    for (let x = 4; x <= 8; x++) hat.set(x, 4, x === 4 ? 0xf8a0a8 : 0xe8505c, 190);
+    for (let x = 5; x <= 8; x++) hat.set(x, 3, 0xe8505c, 190);
+    hat.set(8, 2, 0xd23a44, 190);
+    hat.set(9, 2, 0xd23a44, 190);
+    hat.set(10, 3, 0xffffff, 230);
+    hat.set(10, 4, 0xe8eaf4, 200);
+  } else {
+    // 털모자 (몸 볼 색 털실 + 흰 골지 단 + 방울)
+    const k = darken(c.cheek, 0.1);
+    for (let x = 3; x <= 9; x++) hat.set(x, 5, (x + 1) % 2 ? 0xf8f6f0 : 0xe4e0d8);
+    for (let x = 3; x <= 9; x++) hat.set(x, 4, x === 9 ? darken(k, 0.2) : k);
+    for (let x = 4; x <= 8; x++) hat.set(x, 3, x === 4 ? lighten(k, 0.3) : k);
+    hat.set(6, 2, 0xf8f6f0);
+    hat.set(5, 2, 0xffffff);
+    hat.outline(darken(k, 0.45), false, 170);
+  }
+  g.draw(hat, 0, 0);
   return g.toCanvas();
 }
 
 /** 황금 고블린(보너스 요정) (15×16, 3장: 서 있기·달리기 2). 넥타이를 맨 사무실 요정이 보너스 주머니를 든다 */
-function goblin(f: number): HTMLCanvasElement {
+function goblinGrid(f: number): Grid {
   const gold = 0xf2c84b;
   const hi = 0xfff0a0;
   const sh = 0xc8962a;
@@ -319,6 +361,47 @@ function goblin(f: number): HTMLCanvasElement {
   g.set(6, 3, hi);
   g.set(7, 2, hi);
   g.outline(0x5a3a10, false, 230);
+  return g;
+}
+
+/**
+ * 11/17 황금 고블린 겨울·크리스마스판 (15×20 — 모자 자리만큼 위로, 몸은 (0, 4)에).
+ * 겨울 = 빨간 방울 털모자 + 줄무늬 목도리, 크리스마스 = 금방울 달린 꼬마 요정 모자 + 빨간 목도리 (보너스 요정이니 산타 조수)
+ */
+function seasonGoblin(f: number, concept: MapConcept): HTMLCanvasElement {
+  const g = new Grid(15, 20);
+  g.draw(goblinGrid(f), 0, 4);
+  const xmas = concept === "christmas";
+  // 목도리 (셔츠 위 + 왼쪽으로 늘어진 끝)
+  const sc = xmas ? 0xd23a44 : 0x3a6ab8;
+  const sc2 = 0xf8f6f0;
+  for (let x = 4; x <= 10; x++) g.set(x, 12, x % 2 ? sc : sc2);
+  g.set(4, 13, sc);
+  g.set(4, 14, sc2);
+  const hat = new Grid(15, 20);
+  if (xmas) {
+    // 요정 모자: 빨강·흰 지그재그 챙 + 초록 고깔이 오른쪽으로 말리고 끝에 금방울
+    for (let x = 3; x <= 11; x++) hat.set(x, 6, x % 2 ? 0xd23a44 : 0xf8f6f0);
+    for (let x = 4; x <= 10; x++) hat.set(x, 5, x >= 9 ? 0x1f6a3c : 0x2e9a4e);
+    for (let x = 5; x <= 8; x++) hat.set(x, 4, x === 8 ? 0x1f6a3c : 0x2e9a4e);
+    hat.set(7, 3, 0x2e9a4e);
+    hat.set(8, 2, 0x2e9a4e);
+    hat.set(9, 1, 0x1f6a3c);
+    hat.set(10, 2, 0xf2c84a);
+    hat.set(10, 3, 0xb88a22);
+  } else {
+    // 빨간 털모자 (흰 골지 단 + 흰 방울)
+    for (let x = 3; x <= 11; x++) hat.set(x, 6, x % 2 ? 0xf8f6f0 : 0xe4e0d8);
+    for (let x = 4; x <= 10; x++) hat.set(x, 5, x >= 9 ? 0xa8303a : 0xd8434f);
+    for (let x = 5; x <= 9; x++) hat.set(x, 4, x === 5 ? 0xf0808a : 0xd8434f);
+    hat.set(7, 3, 0xf8f6f0);
+    hat.set(6, 3, 0xffffff);
+    hat.set(8, 3, 0xe4e0d8);
+  }
+  hat.outline(0x5a3a10, false, 230);
+  g.draw(hat, 0, 0);
+  // 금방울 반짝 (외곽선 위로)
+  if (xmas) g.set(10, 2, 0xfff2b0);
   return g.toCanvas();
 }
 
@@ -401,8 +484,13 @@ export function ensureLifeTextures(scene: Phaser.Scene): void {
   if (tx.exists(LTEX.telescope)) return;
   for (let v = 0; v < CAT_VARIANTS; v++) for (const f of CAT_FRAMES) tx.addCanvas(LTEX.cat(v, f), cat(v, f));
   for (let v = 0; v < DOG_VARIANTS; v++) for (const f of DOG_FRAMES) tx.addCanvas(LTEX.dog(v, f), dog(v, f));
-  for (let v = 0; v < GHOST_VARIANTS; v++) for (let f = 0; f < 2; f++) tx.addCanvas(LTEX.ghost(v, f), ghost(v, f));
-  for (let f = 0; f < 3; f++) tx.addCanvas(LTEX.goblin(f), goblin(f));
+  for (let v = 0; v < GHOST_VARIANTS; v++) for (let f = 0; f < 2; f++) tx.addCanvas(LTEX.ghost(v, f), ghostGrid(v, f).toCanvas());
+  for (let f = 0; f < 3; f++) tx.addCanvas(LTEX.goblin(f), goblinGrid(f).toCanvas());
+  // 11/17 겨울·크리스마스판 (맵 컨셉 — VillageLife가 판에 맞춰 고른다)
+  for (const c of ["winter", "christmas"] as const) {
+    for (let v = 0; v < GHOST_VARIANTS; v++) for (let f = 0; f < 2; f++) tx.addCanvas(LTEX.ghost(v, f, c), seasonGhost(v, f, c));
+    for (let f = 0; f < 3; f++) tx.addCanvas(LTEX.goblin(f, c), seasonGoblin(f, c));
+  }
   tx.addCanvas(LTEX.telescope, telescope());
   tx.addCanvas(LTEX.sparkle, sparkle());
   tx.addCanvas(LTEX.heart, heart());

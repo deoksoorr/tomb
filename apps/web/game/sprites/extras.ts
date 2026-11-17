@@ -1,3 +1,5 @@
+import type { MapConcept } from "@/lib/mapConcept";
+import { seasonApron, seasonHat, seasonScarf, seasonSnow } from "./npcSeasonArt";
 import { darken, Grid, lighten, rng, type Color } from "./pixel";
 
 // 꾸미기·상점 소품: 묘비 꾸미기(화환·리본·작은 석등·유령 고양이), 꽃잎, 유령 잡화점 오두막과 실내.
@@ -302,8 +304,8 @@ export function shopCounter(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
-/** 유령 주인장: 둥근 모자를 쓴 홑이불 유령 2프레임 (16×22) */
-export function shopKeeper(): HTMLCanvasElement {
+/** 유령 주인장: 둥근 모자를 쓴 홑이불 유령 2프레임 (16×22). 11/17 겨울판 = 체크 목도리·모자에 눈, 크리스마스판 = 반투명 산타 모자·호랑가시 앞치마 */
+export function shopKeeper(concept: MapConcept = "default"): HTMLCanvasElement {
   const g = new Grid(32, 22);
   for (let f = 0; f < 2; f++) {
     const o = f * 16;
@@ -322,11 +324,19 @@ export function shopKeeper(): HTMLCanvasElement {
       b.set(cx + 1, 9, 0x8a6a40);
     }
     b.set(8, 12, 0xe8a0b0);
-    // 모자
-    b.hline(3, 13, 4, 0x3a2c4a);
-    b.rect(5, 1, 7, 3, 0x4a3a5e);
-    b.hline(5, 11, 3, 0xc8463c);
+    if (concept === "winter") {
+      // 막 눈길을 걷다 들어온 듯 (체크 목도리 + 모자 위 눈)
+      seasonScarf(b, 3, 13, 15, { c: 0x6a3a5e, c2: 0xe8c070, pat: "check", thick: true, tail: 4 });
+    } else if (concept === "christmas") seasonApron(b, 4, 12, 15, 17, 0xf4ecd8, 0x2e8a4e, true);
+    // 모자 (크리스마스판은 외곽선 다음에 반투명 산타 모자)
+    if (concept !== "christmas") {
+      b.hline(3, 13, 4, 0x3a2c4a);
+      b.rect(5, 1, 7, 3, 0x4a3a5e);
+      b.hline(5, 11, 3, 0xc8463c);
+      if (concept === "winter") seasonSnow(b, 5, 11, 1);
+    }
     b.outline(0x7a8ea0, false, 200);
+    if (concept === "christmas") seasonHat(b, 8, 10, 6, 5, { kind: "ghostSanta", c: 0xf08a9a });
     g.draw(b, o, f ? 1 : 0);
   }
   return g.toCanvas();

@@ -956,6 +956,28 @@ export class RooftopStage implements TowerThemeRuntime {
   private tickRain(now: number, dt: number): void {
     const g = this.fxG;
     const R = this.rain;
+    // 11/17 겨울·크리스마스판: 비 대신 눈보라 (돌풍을 더 세게 타고 비스듬히, 송이마다 살랑살랑) — 판정 없는 그림
+    if (this.host.concept !== "default") {
+      const sx = 22 + this.wind.x * 3.4;
+      g.fillStyle(0xe4eef8, this.w.blackout ? 0.5 : 0.75);
+      for (let i = 0; i < R.x.length; i++) {
+        const vy = R.v[i] * 0.2 + this.wind.y * 2;
+        R.x[i] += (sx + (this.host.reduced ? 0 : Math.sin(now / 520 + i * 1.7) * 16)) * dt;
+        R.y[i] += vy * dt;
+        if (R.y[i] > AH + 4 || R.x[i] < -30 || R.x[i] > AW + 30) {
+          R.y[i] = -4 - this.rnd() * 12;
+          R.x[i] = this.rnd() * (AW + 60) - 30 - sx * 0.6;
+        }
+        const big = R.len[i] > 12.5;
+        g.fillRect(R.x[i], R.y[i], big ? 2 : 1, big ? 2 : 1);
+      }
+      // 웅덩이에 떨어져 녹는 눈 (가끔 작은 물결)
+      if (this.puddles.length && this.rnd() < dt * 4) {
+        const p = this.puddles[Math.floor(this.rnd() * this.puddles.length)];
+        this.splash(p.x + (this.rnd() - 0.5) * p.rx * 1.4, p.y + (this.rnd() - 0.5) * p.ry, { ms: 620, tint: 0xb8d8ff, s0: 0.5, s1: 1.2, a: 0.5, tex: T.ripple });
+      }
+      return;
+    }
     const slant = 30 + this.wind.x * 2.4;
     const vy0 = this.wind.y * 2;
     g.lineStyle(1, 0x9ac0f0, this.w.blackout ? 0.3 : 0.4);

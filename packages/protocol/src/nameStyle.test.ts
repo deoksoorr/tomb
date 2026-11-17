@@ -30,17 +30,18 @@ import {
 // 닉네임 꾸미기: 이름 글자(nameColor)·이름표 바탕판(namePlate) 두 부위. 상점(24시간·영구), 착용 증서·입장 토큰으로 다른 사람에게 보인다.
 
 // 11/15 수집 의뢰 이름 꾸미기(q_name_*)는 상점 것이 아니라 따로 (도장 교환소 전용 — 아래 착용 증서 길이에는 들어간다)
-const names = ITEMS.filter((i) => isNameSlot(i.slot) && !i.quest);
+// 상점 닉네임 꾸미기만 (수집 의뢰 보상·12월 크리스마스 한정은 뺀다)
+const names = ITEMS.filter((i) => isNameSlot(i.slot) && !i.quest && !i.event);
 const byPrefix = (p: string) => names.filter((i) => i.id.startsWith(p));
 const prices = (list: readonly ItemDef[]) => list.map((i) => i.price);
 
 describe("닉네임 꾸미기 아이템", () => {
-  it("단색 8 · 그라데이션 6 · 빛나고 움직이는 4 (이름 글자) + 바탕판 6 (이름표)", () => {
+  it("단색 8 · 그라데이션 6 · 빛나고 움직이는 4 (이름 글자) + 바탕판 9 (이름표 — 11/17 니트·사원증·모래사장)", () => {
     expect(byPrefix("nc_").map((i) => i.id)).toEqual(["nc_sakura", "nc_sky", "nc_mint", "nc_lemon", "nc_lilac", "nc_orange", "nc_silver", "nc_dawn"]);
     expect(byPrefix("ng_").map((i) => i.id)).toEqual(["ng_sunset", "ng_sea", "ng_aurora", "ng_peach", "ng_forest", "ng_grape"]);
     expect(byPrefix("nf_").map((i) => i.id)).toEqual(["nf_glow", "nf_rainbow", "nf_stars", "nf_flame"]);
-    expect(byPrefix("np_").map((i) => i.id)).toEqual(["np_wood", "np_ribbon", "np_cloud", "np_wreath", "np_tomb", "np_star"]);
-    expect(names.length).toBe(24);
+    expect(byPrefix("np_").map((i) => i.id)).toEqual(["np_wood", "np_ribbon", "np_cloud", "np_wreath", "np_tomb", "np_star", "np_knit", "np_card", "np_beach"]);
+    expect(names.length).toBe(27);
     for (const i of names) {
       expect(i.slot).toBe(i.id.startsWith("np_") ? "namePlate" : "nameColor");
       // 다른 캐릭터 꾸미기처럼 24시간 이용권으로 상점에 나오고, 운영자·1위 전용이 아니다

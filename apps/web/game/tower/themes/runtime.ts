@@ -4,6 +4,7 @@ import type { PatternId } from "@/lib/rpg/patterns";
 import type { Layer } from "../../rpg/skillSound";
 import type { RpgSound } from "../../rpg/sfx";
 import type { TelegraphLayer } from "../../rpg/telegraph";
+import type { MapConcept } from "@/lib/mapConcept";
 
 // 11/15 야근 빌딩 테마 실행부 연결점: HuntScene이 층마다(테마가 있으면) 하나 만들고, 몇 군데에서만 부른다.
 // 테마는 몬스터 행동·피해 배율·쓰러짐 가로채기·플레이어 이동 손질·매 프레임 연출을 맡는다 (지도 그림·충돌은 arena/).
@@ -33,6 +34,8 @@ export type ThemeHost = {
   readonly scene: Phaser.Scene;
   readonly tele: TelegraphLayer;
   readonly reduced: boolean;
+  /** 11/17 이 판의 맵 컨셉 (겨울·크리스마스 — 그림만 바꾼다) */
+  readonly concept: MapConcept;
   now(): number;
   floor(): number;
   /** 11/15 그 판에서 이 테마에 몇 번째로 왔나 (0부터 — 판 모양·몬스터 성질이 바뀐다) */

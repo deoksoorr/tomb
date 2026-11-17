@@ -751,6 +751,24 @@ export function lotLayers(ext: HouseExteriorMap, tier: string, size: LotSize = D
   return out;
 }
 
+/**
+ * 11/17 겨울판(lib/mapConcept): 집 그림에서 지붕인 픽셀 (1 = 지붕). drawHouse와 같은 순서로 벽이 앞 채 지붕을 가리는 것까지 따른다.
+ * 처마 그늘 줄은 지붕이 아니다
+ */
+export function roofMask(tier: string, size: LotSize = DEFAULT_SIZE): Grid {
+  const p = housePlan(tier, size);
+  const g = new Grid(p.W, p.H);
+  for (const b of p.blocks) {
+    g.rect(b.x, p.baseY - b.wallH, b.w, b.wallH, 0, 0);
+    const roof = new Grid(p.W, p.H);
+    drawRoof(roof, "roof_slate", b, p.baseY);
+    const shadeY = p.baseY - b.wallH + 2;
+    for (let y = 0; y < p.H; y++)
+      for (let x = 0; x < p.W; x++) if (roof.filled(x, y) && !(y === shadeY && roof.get(x, y) >>> 8 === 0x1e1812)) g.set(x, y, 0xffffff);
+  }
+  return g;
+}
+
 /** 밤 색조 (미리보기용: 곱하기) */
 const NIGHT_TINT = 0x5a6690;
 

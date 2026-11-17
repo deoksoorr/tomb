@@ -14,6 +14,8 @@ import {
   type SpotKind,
 } from "@tomb/protocol";
 import { ambienceAt, parseAmbienceOverride, type AmbienceOverride } from "@/lib/ambience";
+import type { MapConcept } from "@/lib/mapConcept";
+import { currentMapConcept } from "@/lib/mapConceptClient";
 import { bridge } from "../../bridge";
 import { DEPTH } from "../../config";
 import type { Player } from "../../entities/Player";
@@ -120,6 +122,9 @@ export class VillageLife {
   private petAt = -Infinity;
   private labelScale = 1 / 3;
   private destroyed = false;
+  /** 11/17 지금 판 (꼬마 유령·고블린 옷) */
+  private concept: MapConcept = "default";
+  private conceptAt = 0;
   /** 까마귀 연못의 까마귀 (crowSim — 고양이처럼 채널 시드 + 서버 시계) */
   private readonly crows: Crows;
   /** 돌아다니는 마을 주민 (residentSim — 고양이처럼 채널 시드 + 서버 시계, 관리자 설정으로 수 조절) */
@@ -215,6 +220,11 @@ export class VillageLife {
   update(dt: number, view: Phaser.Geom.Rectangle, labelScale: number): void {
     if (this.destroyed) return;
     const pnow = performance.now();
+    // 11/17 맵 컨셉 (꼬마 유령·고블린 겨울·크리스마스 옷 — 1초마다 확인)
+    if (pnow >= this.conceptAt) {
+      this.conceptAt = pnow + 1000;
+      this.concept = currentMapConcept();
+    }
     const t = this.serverNow();
     this.labelScale = labelScale;
     this.updateAmbience(t);
@@ -321,7 +331,7 @@ export class VillageLife {
         // 유령: 둥실 떠 있고, 다가가면 수줍게 흐려지며 살짝 떠오른다
         hopY += 5 + Math.sin(pnow / 520 + c.sim.index) * 2;
         const shy = dist < 30 && pnow > c.petUntil;
-        c.img.setTexture(LTEX.ghost(c.sim.def.variant, Math.floor(pnow / 320) % 2));
+        c.img.setTexture(LTEX.ghost(c.sim.def.variant, Math.floor(pnow / 320) % 2, this.concept));
         c.img.setFlipX(face < 0);
         c.img.setAlpha(shy ? this.ghostAlpha * 0.45 : this.ghostAlpha);
         if (shy) hopY += 4;
@@ -463,7 +473,7 @@ export class VillageLife {
     // 달릴 땐 다리를 번갈아, 서 있을 땐 콩콩 (가까이 오면 더 높이)
     const frame = p.dash ? 1 + (Math.floor(pnow / 90) % 2) : 0;
     const bounce = p.dash ? Math.abs(Math.sin(pnow / 70)) * 2 : Math.abs(Math.sin(pnow / (dist < 60 ? 110 : 260))) * (dist < 60 ? 5 : 2);
-    g.img.setVisible(true).setTexture(LTEX.goblin(frame)).setFlipX(p.face < 0).setPosition(Math.round(p.x), Math.round(p.y - bounce)).setDepth(p.y);
+    g.img.setVisible(true).setTexture(LTEX.goblin(frame, this.concept)).setFlipX(p.face < 0).setPosition(Math.round(p.x), Math.round(p.y - bounce)).setDepth(p.y);
     g.label.setVisible(true).setPosition(p.x, p.y - bounce - 18).setScale(labelScale);
     if (pnow - g.sparkAt > (this.d.reduced ? 400 : 130)) {
       g.sparkAt = pnow;

@@ -23,10 +23,13 @@ import {
   SEA_SAND_Y0,
   SEA_WIDTH,
 } from "@tomb/protocol";
+import type { MapConcept } from "@/lib/mapConcept";
+import { seasonHat, seasonHolly, seasonMitt, seasonScarf, seasonSnow } from "../sprites/npcSeasonArt";
 import { darken, Grid, lighten, mix, rng, type Color } from "../sprites/pixel";
 import type { SeaLot } from "@tomb/protocol";
 import { hashU, pathEdgeDist, poolDepth, seaGroundKind, SEA_PLATFORM, type SeaGround } from "./seaLayout";
 import { SEA_TEX_PREFIX } from "./seaTypes";
+import { seaWinterColor } from "./seaWinterGround";
 
 // 11/16 달물결 포구 픽셀 아트 (코드로 그려요, 마을·캠핑장 그림을 다시 쓰지 않고 새로).
 // 11/16 사용자 "고물상 같아요" → 파스텔 바닷가로: 크림빛 모래, 민트·아쿠아 얕은 물에서 청록·연보라 먼바다로, 복숭아·민트·라일락·버터색 지붕과 차양,
@@ -245,6 +248,8 @@ export const SEA_TEX = {
   duskFoam: `${P}duskFoam`,
   goldStreak: `${P}goldStreak`,
   ground: (cx: number, cy: number) => `${P}ground-${cx}-${cy}`,
+  /** 11/17 겨울·크리스마스판 바닥 덩어리 (seaWinterGround) */
+  groundWinter: (cx: number, cy: number) => `${P}groundw-${cx}-${cy}`,
 } as const;
 
 /** 그리드 + (스프라이트 시트면) 프레임 크기 */
@@ -636,8 +641,9 @@ export function loungerArt(): Grid {
   return g;
 }
 
-/** 11/16 등대지기: 남색 선원 모자·노란 비옷의 작은 할아버지 (16 × 24, 원점 가운데 아래) */
-export function keeperArt(): Grid {
+/** 11/16 등대지기: 남색 선원 모자·노란 비옷의 작은 할아버지 (16 × 24, 원점 가운데 아래).
+ *  11/17 겨울판 = 모자 위 눈·남색 뜨개 목도리·벙어리장갑, 크리스마스판 = 산타 모자·빨강 초록 목도리·비옷에 호랑가시 */
+export function keeperArt(concept: MapConcept = "default"): Grid {
   const g = new Grid(16, 24);
   // 비옷
   g.rect(3, 11, 10, 11, RAMP.umbY[1]);
@@ -649,10 +655,25 @@ export function keeperArt(): Grid {
   g.rect(4, 9, 8, 3, RAMP.wall[0]);
   g.set(6, 7, 0x3a3440);
   g.set(9, 7, 0x3a3440);
-  // 선원 모자
-  g.rect(3, 2, 10, 3, 0x2f3f6a);
-  g.hline(2, 13, 5, 0x24304f);
-  g.set(8, 3, RAMP.umbY[0]);
+  if (concept === "christmas") {
+    seasonHat(g, 8, 8, 5, 4, { kind: "santa" });
+    seasonScarf(g, 3, 12, 11, { c: 0xd23a44, c2: 0x2e8a4e, pat: "stripe", thick: true, tail: 4 });
+    seasonHolly(g, 10, 16);
+  } else {
+    // 선원 모자
+    g.rect(3, 2, 10, 3, 0x2f3f6a);
+    g.hline(2, 13, 5, 0x24304f);
+    g.set(8, 3, RAMP.umbY[0]);
+    if (concept === "winter") {
+      seasonSnow(g, 3, 12, 2);
+      seasonScarf(g, 3, 12, 11, { c: 0x2f3f6a, c2: 0xf4f0e6, pat: "stripe", thick: true, tail: 4 });
+    }
+  }
+  if (concept !== "default") {
+    // 비옷 소매 끝 벙어리장갑
+    seasonMitt(g, 1, 15, concept === "winter" ? 0xd8463a : 0x2e8a4e);
+    seasonMitt(g, 13, 15, concept === "winter" ? 0xd8463a : 0x2e8a4e);
+  }
   // 장화
   g.rect(4, 22, 3, 2, 0x3a3440);
   g.rect(9, 22, 3, 2, 0x3a3440);
@@ -1910,16 +1931,16 @@ function groundColor(x: number, y: number, k: SeaGround): Color {
   }
 }
 
-/** 바닥 덩어리 RGBA (SEA_CHUNK × SEA_CHUNK) */
-export function seaGroundPixels(cx: number, cy: number, size = SEA_CHUNK): Uint8ClampedArray {
-  const steps = seaGroundSteps(cx, cy, size);
+/** 바닥 덩어리 RGBA (SEA_CHUNK × SEA_CHUNK). winter = 11/17 겨울·크리스마스판 (눈 덮인 바닥) */
+export function seaGroundPixels(cx: number, cy: number, size = SEA_CHUNK, winter = false): Uint8ClampedArray {
+  const steps = seaGroundSteps(cx, cy, size, 32, winter);
   let r = steps.next();
   while (!r.done) r = steps.next();
   return r.value;
 }
 
 /** 바닥 덩어리를 줄 묶음(band줄)마다 멈추며 굽는다 (seaPrebake — 버스 창밖 연출 동안 조금씩). 끝나면 RGBA를 돌려준다 */
-export function* seaGroundSteps(cx: number, cy: number, size = SEA_CHUNK, band = 32): Generator<void, Uint8ClampedArray> {
+export function* seaGroundSteps(cx: number, cy: number, size = SEA_CHUNK, band = 32, winter = false): Generator<void, Uint8ClampedArray> {
   const out = new Uint8ClampedArray(size * size * 4);
   const ox = cx * size;
   const oy = cy * size;
@@ -1936,7 +1957,8 @@ export function* seaGroundSteps(cx: number, cy: number, size = SEA_CHUNK, band =
         // 경계 칸(언덕·길·산책로·갯벌 가장자리)은 2px 칸 대신 그 점의 종류로 (가로줄이 계단지지 않게)
         let k = kinds[(y >> 1) * hw + (x >> 1)];
         if (k === "boardwalk" || k === "road" || k === "platform" || k === "deep" || k === "pool") k = seaGroundKind(ox + x, oy + y);
-        put(out, (y * size + x) * 4, groundColor(ox + x, oy + y, k));
+        const c = groundColor(ox + x, oy + y, k);
+        put(out, (y * size + x) * 4, winter ? seaWinterColor(ox + x, oy + y, k, c) : c);
       }
     yield;
   }

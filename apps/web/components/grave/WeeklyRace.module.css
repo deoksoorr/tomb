@@ -36,6 +36,21 @@
   text-align: center;
 }
 
+/* 11/17 레이스 세 칸: 높이를 맞추고, 남는 자리는 1위 보상 아래에 두어 시상대·내 순위 줄이 세 칸 모두 같은 높이에 오게 */
+.raceBoards {
+  align-items: stretch;
+}
+
+.raceBoards .board {
+  display: flex;
+  flex-direction: column;
+}
+
+.raceBoards .board > .podium,
+.raceBoards .board > .none {
+  margin-top: auto;
+}
+
 .board {
   display: grid;
   gap: 6px;

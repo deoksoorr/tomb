@@ -42,6 +42,28 @@ const VAN = 0xd8d0b8;
 const TARP = 0xc8783a;
 const LOOKOUT = 0xa07a50;
 
+/**
+ * 11/17 겨울·크리스마스 판 색 (기본 색 → 겨울 색, game/world/minimapWinter가 바꾼다): 숲 바닥은 눈밭, 흙길·광장은 진흙빛,
+ * 계곡은 차가운 물, 침엽수 숲은 눈 쌓인 짙은 초록, 단풍 숲은 앙상한 회갈색, 지붕·캠핑카·타프·데크는 눈
+ */
+export const CAMP_WINTER_PALETTE: ReadonlyMap<number, number> = new Map([
+  [GROUND.grass, 0xd6dee6],
+  [GROUND.deckPad, 0xd6dee6],
+  [GROUND.path, 0x6a5a4a],
+  [GROUND.plaza, 0x6e6052],
+  [GROUND.road, 0x3e3c3c],
+  [GROUND.water, 0x3a6878],
+  [GROUND.bank, 0xc8d2dc],
+  [GROUND.rock, 0xc4ccd4],
+  [FOREST, 0x5a7064],
+  [FOREST_WARM, 0x9a9088],
+  [DECK, 0xc8bcac],
+  [ROOF, 0xe4eaf0],
+  [VAN, 0xeef2f6],
+  [TARP, 0xdcc4b0],
+  [LOOKOUT, 0xc4b8a8],
+]);
+
 /** 나무가 선 칸 (미니맵 1px 단위) → 숲 색 (침엽수 짙은 초록, 단풍·노란 잎 따뜻한 색) */
 function forestCells(): Map<number, number> {
   const m = new Map<number, number>();

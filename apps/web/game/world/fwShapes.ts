@@ -1,5 +1,6 @@
 // 폭죽 무늬의 순수 계산: 어떤 불티가 어느 방향·속도로 언제 나오는지 (Phaser 없이).
-// 게임(Fireworks.ts)과 상점·폭죽 창의 미리보기(components/shop/FireworkPreview)가 같은 코드로 터뜨린다.
+// 게임(Fireworks.ts)과 상점·폭죽 창의 미리보기(components/shop/FireworkPreview)가 같은 코드로 터뜨리고,
+// 불티 처음 상태(sparkState)·움직임(stepSpark)·꼬리(sparkTrail)·밝기(sparkLook)·로켓 꼬리(rocketTrail)도 함께 쓴다.
 
 import { burstSpeed, finaleTimes, FW_BASE_RADIUS, heartPoint, sampleTextMask, type FireworkPlan } from "./fxMath";
 
@@ -16,7 +17,19 @@ export type FwPattern =
   | "crossette"
   | "fountain"
   | "waterfall"
-  | "smile";
+  | "smile"
+  | "twinring"
+  | "butterfly"
+  | "snow"
+  | "strobe"
+  | "chameleon"
+  | "glitter"
+  | "palm";
+
+/** 프레임이 느릴 때 입자 수 배율 (dtAvg = 프레임 시간 이동 평균 ms). 게임과 미리보기가 같은 기준으로 줄인다 */
+export function slowFactor(dtAvg: number): number {
+  return dtAvg > 24 ? 0.55 : dtAvg > 19 ? 0.8 : 1;
+}
 
 /** 불티 기본 중력 (월드 px/s²) */
 export const FW_GRAVITY = 26;
@@ -67,6 +80,21 @@ export type SparkSpec = {
   fadeFrom?: number;
   /** 이 불티가 생길 때 작은 터지는 소리 (늦게 터지는 반짝이의 첫 불티) */
   pop?: boolean;
+  /** 이 나이(ms)가 되면 색이 color2로 바뀐다 (색이 바뀌는 국화) */
+  color2?: number;
+  colorAt?: number;
+  /** 꼬리: 이 간격(ms)마다 지나간 자리에 작은 불티를 남긴다 (버드나무 가지·야자수 잎·금가루) */
+  trail?: number;
+  /** 꼬리 불티 수명(ms)·색(없으면 그때 불티 색)·중력(금가루는 떨어진다)·점멸 */
+  trailLife?: number;
+  trailColor?: number;
+  trailFall?: number;
+  trailStrobe?: number;
+  /** 밝기 배율 (꼬리처럼 은은한 불티) */
+  bright?: number;
+  /** 점멸 주기(ms)와 어긋남(0..1): 처음부터 깜빡인다 (별빛 점멸·금가루) */
+  strobe?: number;
+  strobeOff?: number;
 };
 
 export type BurstOpts = {
@@ -112,6 +140,36 @@ export function smilePoints(face: number, eye: number, mouth: number): { x: numb
   for (let i = 0; i < mouth; i++) {
     const a = Math.PI * (0.18 + 0.64 * (mouth > 1 ? i / (mouth - 1) : 0.5));
     out.push({ x: Math.cos(a) * 0.56, y: 0.02 + Math.sin(a) * 0.5, part: "mouth" });
+  }
+  return out;
+}
+
+/** 나비 날개 둘레 위의 점 (t: 0..2π, 반지름 대략 1). 위 날개가 크고 아래 날개가 작다, 몸은 세로 */
+export function butterflyPoint(t: number): { x: number; y: number } {
+  const up = Math.sin(t) < 0;
+  const r = Math.pow(Math.abs(Math.sin(2 * t)), 0.7) * (up ? 1 : 0.68);
+  return { x: Math.cos(t) * r * 1.12, y: Math.sin(t) * r * 0.86 + (up ? -0.04 : 0.06) };
+}
+
+/** 눈꽃 점들: 여섯 갈래 줄기 + 줄기마다 양옆 잔가지 두 쌍 (반지름 1 기준, k = 촘촘함) */
+export function snowPoints(k: number): { x: number; y: number; tip: boolean }[] {
+  const out: { x: number; y: number; tip: boolean }[] = [];
+  const stem = Math.max(3, Math.round(7 * k));
+  for (let a = 0; a < 6; a++) {
+    const ang = -Math.PI / 2 + (a / 6) * Math.PI * 2;
+    const ux = Math.cos(ang);
+    const uy = Math.sin(ang);
+    for (let i = 1; i <= stem; i++) out.push({ x: (ux * i) / stem, y: (uy * i) / stem, tip: i === stem });
+    for (const [at, len] of [
+      [0.48, 0.32],
+      [0.74, 0.2],
+    ] as const) {
+      const bn = Math.max(1, Math.round(3 * k * (len / 0.32)));
+      for (const side of [-1, 1]) {
+        const b = ang + (side * Math.PI) / 3;
+        for (let j = 1; j <= bn; j++) out.push({ x: ux * at + (Math.cos(b) * len * j) / bn, y: uy * at + (Math.sin(b) * len * j) / bn, tip: j === bn });
+      }
+    }
   }
   return out;
 }
@@ -176,6 +234,196 @@ export function burstSparks(pattern: FwPattern, R: number, colors: readonly numb
       });
       break;
     }
+    case "twinring": {
+      // 고리 두 겹: 비스듬히 누운 바깥 고리(토성 고리처럼 납작) + 안쪽 동그란 고리, 가운데 반짝
+      const n = o.budget(46);
+      const m = o.budget(30);
+      const L = 1500 * life;
+      const sp = burstSpeed(R, 1.1, (L * 0.8) / 1000);
+      const tilt = (rnd() - 0.5) * 0.5 + 0.25;
+      const ct = Math.cos(tilt);
+      const st = Math.sin(tilt);
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const x = Math.cos(a);
+        const y = Math.sin(a) * 0.36;
+        add({ vx: (x * ct - y * st) * sp, vy: (x * st + y * ct) * sp, life: L + rnd() * 200, color: colors[i % 2], size, drag: 1.1, grav: g * 0.55 });
+      }
+      const inner = FW_COLORS.cyan;
+      for (let i = 0; i < m; i++) {
+        const a = (i / m) * Math.PI * 2;
+        add({ vx: Math.cos(a) * sp * 0.52, vy: Math.sin(a) * sp * 0.52, life: L * 0.9 + rnd() * 150, color: inner[i % 2], size: size * 0.9, drag: 1.1, grav: g * 0.55 });
+      }
+      const c = o.budget(6);
+      for (let i = 0; i < c; i++) {
+        const a = (i / c) * Math.PI * 2;
+        add({ vx: Math.cos(a) * 6 * s, vy: Math.sin(a) * 6 * s, life: 800 * life, color: 0xffffff, size: size * 0.8, drag: 1.5, grav: g * 0.3 });
+      }
+      break;
+    }
+    case "butterfly": {
+      // 나비: 하트처럼 모양을 지키며 커진다. 날개 둘레(보라·분홍) + 금빛 몸통과 더듬이
+      const n = o.budget(76);
+      const sp = 54 * (R / (FW_BASE_RADIUS * 1.15));
+      for (let i = 0; i < n; i++) {
+        const t = (i / n) * Math.PI * 2;
+        const p = butterflyPoint(t);
+        const edge = Math.abs(Math.sin(2 * t)) > 0.8;
+        add({ vx: p.x * sp, vy: p.y * sp, life: (1550 + rnd() * 300) * life, color: edge ? FW_COLORS.pink[i % 2] : colors[i % colors.length], size, drag: 0.5, grav: g * 0.4 });
+      }
+      const body = Math.max(3, Math.round(o.budget(10) * 0.6));
+      for (let i = 0; i < body; i++) {
+        const y = -0.28 + (0.56 * i) / Math.max(1, body - 1);
+        add({ vx: 0, vy: y * sp, life: (1500 + rnd() * 200) * life, color: FW_COLORS.gold[i % 2], size: size * 0.9, drag: 0.5, grav: g * 0.4 });
+      }
+      for (const side of [-1, 1]) {
+        for (const d of [0.16, 0.3]) add({ vx: side * d * 0.5 * sp, vy: (-0.3 - d) * sp, life: 1400 * life, color: 0xfff4d0, size: size * 0.75, drag: 0.5, grav: g * 0.4 });
+      }
+      break;
+    }
+    case "snow": {
+      // 눈꽃: 여섯 갈래 줄기와 잔가지가 모양 그대로 커진다. 가지 끝은 처음부터 반짝인다
+      const k = Math.min(1, o.budget(100) / 100);
+      const pts = snowPoints(k);
+      const sp = 52 * (R / (FW_BASE_RADIUS * 1.15));
+      const tilt = (rnd() - 0.5) * 0.3;
+      const ct = Math.cos(tilt);
+      const st = Math.sin(tilt);
+      pts.forEach((p, i) => {
+        const x = p.x * ct - p.y * st;
+        const y = p.x * st + p.y * ct;
+        add({
+          vx: x * sp,
+          vy: y * sp,
+          life: (1700 + rnd() * 250) * life,
+          color: p.tip ? 0xffffff : colors[i % colors.length],
+          size: p.tip ? size * 1.1 : size * 0.85,
+          drag: 0.5,
+          grav: g * 0.3,
+          strobe: p.tip && !o.reduced ? 160 : undefined,
+          strobeOff: (i * 0.37) % 1,
+        });
+      });
+      const c = o.budget(6);
+      for (let i = 0; i < c; i++) {
+        const a = (i / c) * Math.PI * 2 + Math.PI / 6;
+        add({ vx: Math.cos(a) * 5 * s, vy: Math.sin(a) * 5 * s, life: 1100 * life, color: FW_COLORS.cyan[i % 2], size: size * 0.9, drag: 1.2, grav: g * 0.2 });
+      }
+      break;
+    }
+    case "strobe": {
+      // 별빛 점멸: 둥글게 흩어져 금방 멈추고, 저마다 다른 박자로 오래 깜빡인다
+      const n = o.budget(56);
+      for (let i = 0; i < n; i++) {
+        const a = rnd() * Math.PI * 2;
+        const d = R * Math.sqrt(rand(0.1, 1));
+        const sp = burstSpeed(d, 3, 0.55);
+        add({
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp,
+          life: (2000 + rnd() * 600) * life,
+          color: i % 4 === 0 ? colors[2] : i % 4 === 1 ? FW_COLORS.violet[1] : 0xffffff,
+          size: size * rand(0.8, 1.05),
+          drag: 3,
+          grav: g * 0.22,
+          fadeFrom: 0.55,
+          strobe: o.reduced ? undefined : rand(110, 180),
+          strobeOff: rnd(),
+        });
+      }
+      break;
+    }
+    case "chameleon": {
+      // 색바꿈 국화: 짧은 꼬리를 끌며 퍼지다가 가는 길 중간에 빨강 → 초록, 안쪽은 보라 → 금빛으로 바뀐다
+      const n = o.budget(54);
+      const m = o.budget(24);
+      const L = 1550 * life;
+      for (let i = 0; i < n; i++) {
+        // 공 모양: 3차원으로 고르게 퍼진 방향을 화면에 비춘다 (가장자리가 짙고 안쪽도 찬 국화)
+        const a = (i / n) * Math.PI * 2 + rnd() * 0.08;
+        const z = ((i * 0.618) % 1) * 2 - 1;
+        const sp = burstSpeed(R * Math.sqrt(1 - z * z * 0.85) * rand(0.95, 1.04), 1.3, 1.2);
+        add({
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp,
+          life: L + rnd() * 300,
+          color: colors[i % 2],
+          color2: FW_COLORS.green[i % 2],
+          colorAt: 520 + rnd() * 90,
+          size,
+          drag: 1.3,
+          grav: g * 0.8,
+          trail: 60,
+          trailLife: 300,
+        });
+      }
+      const sp2 = burstSpeed(R * 0.48, 1.3, 1.1);
+      for (let i = 0; i < m; i++) {
+        const a = (i / m) * Math.PI * 2 + 0.13;
+        add({
+          vx: Math.cos(a) * sp2,
+          vy: Math.sin(a) * sp2,
+          life: L * 0.85,
+          color: FW_COLORS.violet[i % 2],
+          color2: FW_COLORS.gold[i % 2],
+          colorAt: 760 + rnd() * 80,
+          size: size * 0.9,
+          drag: 1.3,
+          grav: g * 0.7,
+        });
+      }
+      break;
+    }
+    case "glitter": {
+      // 금가루: 금빛으로 퍼진 불티가 지나가며 반짝이는 금가루를 흘리고, 금가루는 깜빡이며 천천히 떨어진다
+      const n = o.budget(34);
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + rnd() * 0.1;
+        const sp = burstSpeed(R * rand(0.75, 1), 2, 0.9);
+        add({
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp,
+          life: (1900 + rnd() * 300) * life,
+          color: colors[i % colors.length],
+          size,
+          drag: 2,
+          grav: g * 0.5,
+          trail: 85,
+          trailLife: 1450,
+          trailColor: i % 2 ? 0xfff4d0 : 0xffd070,
+          trailFall: 30,
+          trailStrobe: 90,
+        });
+      }
+      break;
+    }
+    case "palm": {
+      // 야자수: 굵은 잎 일곱 장이 위·옆으로 뻗었다가 무겁게 휘어 내린다 (꼬리가 잎이 된다). 가운데 금빛 열매
+      const fronds = 7;
+      for (let f = 0; f < fronds; f++) {
+        const a = -Math.PI / 2 + (f / (fronds - 1) - 0.5) * Math.PI * 1.45 + (rnd() - 0.5) * 0.08;
+        const sp = burstSpeed(R * rand(0.92, 1.05), 1.2, 1);
+        add({
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp,
+          life: (1500 + rnd() * 200) * life,
+          color: colors[f % 2],
+          size: size * 1.45,
+          drag: 1.2,
+          grav: g * 2,
+          trail: 32,
+          trailLife: 680,
+          trailColor: colors[2],
+        });
+      }
+      const c = o.budget(12);
+      for (let i = 0; i < c; i++) {
+        const a = (i / c) * Math.PI * 2;
+        const sp = burstSpeed(R * 0.22, 1.6, 0.8);
+        add({ vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 900 * life, color: FW_COLORS.gold[i % 3], size: size * 0.9, drag: 1.6, grav: g * 0.8 });
+      }
+      break;
+    }
     case "ring": {
       const n = o.budget(56);
       const L = 1500 * life;
@@ -188,13 +436,25 @@ export function burstSparks(pattern: FwPattern, R: number, colors: readonly numb
       break;
     }
     case "willow": {
-      // 금빛 버드나무: 오래 남아 아래로 늘어진다
-      const n = o.budget(60);
-      const L = 2400 * life;
+      // 금빛 버드나무: 빠르게 퍼졌다가 공기에 붙잡혀 멈추고, 천천히 떨어지며 지나간 자리에 꼬리를 남긴다.
+      // 꼬리가 바깥으로 뻗었다 아래로 휘는 길을 그대로 그려서 축 늘어진 가지가 된다
+      const n = o.budget(34);
+      const L = 2700 * life;
       for (let i = 0; i < n; i++) {
-        const a = (i / n) * Math.PI * 2 + rnd() * 0.1;
-        const sp = burstSpeed(R * rand(0.8, 1.05), 1.6, 1.1);
-        add({ vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: L + rnd() * 600, color: colors[i % colors.length], size: size * 0.9, drag: 1.6, grav: g * 1.6 });
+        const a = (i / n) * Math.PI * 2 + rnd() * 0.12;
+        const sp = burstSpeed(R * rand(0.8, 1.02), 2.4, 0.9);
+        add({
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp,
+          life: L + rnd() * 500,
+          color: colors[i % colors.length],
+          size: size * 0.85,
+          drag: 2.4,
+          grav: g * 1.25,
+          trail: 60,
+          trailLife: 950,
+          trailColor: i % 3 === 0 ? 0xffd070 : 0xd8963c,
+        });
       }
       break;
     }
@@ -376,8 +636,8 @@ export function burstSparks(pattern: FwPattern, R: number, colors: readonly numb
 
 // ── 아이템 → 발사 계획 ──
 
-/** 로켓 한 발: 발밑 기준 가로 dx, 지연 delay(ms), 솟는 높이 h(월드 px) */
-export type FwShot = { dx: number; delay: number; h: number; colors: readonly number[]; pattern: FwPattern; ground?: boolean };
+/** 로켓 한 발: 발밑 기준 가로 dx, 지연 delay(ms), 솟는 높이 h(월드 px), 반경 배율 scale (3단 불꽃탑) */
+export type FwShot = { dx: number; delay: number; h: number; colors: readonly number[]; pattern: FwPattern; ground?: boolean; scale?: number };
 
 /** 특별 연출 (로켓이 아닌 것) */
 export type FwSpecial = "meteor" | "letter" | "finale";
@@ -416,6 +676,29 @@ export function fireworkShots(item: string, plan: FireworkPlan, bigH = FW_BURST_
       return one("waterfall", FW_COLORS.silver, H + 14);
     case "fw_big":
       return one("brocade", FW_COLORS.gold, bigH);
+    case "fw_twinring":
+      return one("twinring", FW_COLORS.pink, H + 6);
+    case "fw_butterfly":
+      return one("butterfly", FW_COLORS.violet, H + 6);
+    case "fw_snow":
+      return one("snow", FW_COLORS.silver, H + 8);
+    case "fw_strobe":
+      return one("strobe", FW_COLORS.silver, H + 6);
+    case "fw_chameleon":
+      return one("chameleon", FW_COLORS.red, H + 8);
+    case "fw_glitter":
+      return one("glitter", FW_COLORS.gold, H + 12);
+    case "fw_palm":
+      return one("palm", FW_COLORS.green, H + 8);
+    case "fw_tower": {
+      // 3단 불꽃탑: 한 자리에서 세 발이 점점 높이, 점점 크게
+      const gap = plan.spanMs / 2;
+      return [
+        { dx: 0, delay: 0, h: H - 44, colors: FW_COLORS.red, pattern: "peony", scale: 0.45 },
+        { dx: 0, delay: gap, h: H - 14, colors: FW_COLORS.gold, pattern: "ring", scale: 0.62 },
+        { dx: 0, delay: gap * 2, h: H + 18, colors: FW_COLORS.silver, pattern: "double", scale: 0.85 },
+      ];
+    }
   }
   switch (plan.power) {
     case 2:
@@ -433,6 +716,14 @@ export function fireworkShots(item: string, plan: FireworkPlan, bigH = FW_BURST_
     default:
       return one("peony", FW_COLORS.gold);
   }
+}
+
+/** 솟는 로켓이 한 번(35ms마다) 남기는 꼬리 불티 (로켓 머리 기준). 대형은 굵게 두 줄, 야자수는 오래 남는 금빛 줄기 */
+export function rocketTrail(pattern: FwPattern, power: number, rnd: () => number = Math.random): SparkSpec[] {
+  const out: SparkSpec[] = [{ vx: (rnd() - 0.5) * 6, vy: 8 + rnd() * 8, life: 380, color: 0xffe8b0, size: 1, drag: 1.3, grav: FW_GRAVITY }];
+  if (power >= 4) out.push({ ox: (rnd() - 0.5) * 2, oy: 2, vx: (rnd() - 0.5) * 10, vy: 10 + rnd() * 10, life: 520, color: 0xffc070, size: 1.2, drag: 1.3, grav: FW_GRAVITY });
+  if (pattern === "palm") out.push({ ox: (rnd() - 0.5) * 1.5, oy: 1, vx: (rnd() - 0.5) * 2, vy: 2 + rnd() * 3, life: 950, color: 0xffb860, size: 1.3, drag: 2, grav: 6, bright: 0.85 });
+  return out;
 }
 
 /** 피날레 한 발: 화면 비율 자리 (fx,fy), 반경 h(화면 짧은 변 비율) */
@@ -535,10 +826,64 @@ export function letterSparks(mask: LetterMask, f: number, size: number, count: n
 
 // ── 불티 움직임 (게임·미리보기 공통) ──
 
-export type SparkState = { x: number; y: number; vx: number; vy: number; age: number; life: number; drag: number; grav: number; size: number; swapAt: number; fadeFrom: number };
+export type SparkState = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  age: number;
+  life: number;
+  drag: number;
+  grav: number;
+  size: number;
+  swapAt: number;
+  fadeFrom: number;
+  color?: number;
+  color2?: number;
+  colorAt?: number;
+  /** 꼬리 간격(ms, 0이면 없음)·다음 꼬리를 남길 나이 */
+  trailEvery?: number;
+  trailNext?: number;
+  trailLife?: number;
+  trailColor?: number;
+  trailFall?: number;
+  trailStrobe?: number;
+  bright?: number;
+  strobe?: number;
+  strobeOff?: number;
+};
 
-/** dt(ms)만큼 움직인다 */
-export function stepSpark(p: SparkState, dt: number, rnd: () => number = Math.random): void {
+/** 불티 처음 상태: 터진 자리 (bx,by) + spec (게임·미리보기 공통) */
+export function sparkState(bx: number, by: number, s: SparkSpec): SparkState {
+  return {
+    x: bx + (s.ox ?? 0),
+    y: by + (s.oy ?? 0),
+    vx: s.vx,
+    vy: s.vy,
+    age: 0,
+    life: s.life,
+    drag: s.drag,
+    grav: s.grav,
+    size: s.size,
+    swapAt: s.swapAt ?? Infinity,
+    fadeFrom: s.fadeFrom ?? 0,
+    color: s.color,
+    color2: s.color2,
+    colorAt: s.color2 === undefined ? Infinity : (s.colorAt ?? Infinity),
+    trailEvery: s.trail ?? 0,
+    trailNext: s.trail ?? Infinity,
+    trailLife: s.trailLife ?? 0,
+    trailColor: s.trailColor,
+    trailFall: s.trailFall ?? 0,
+    trailStrobe: s.trailStrobe,
+    bright: s.bright ?? 1,
+    strobe: s.strobe ?? 0,
+    strobeOff: s.strobeOff ?? 0,
+  };
+}
+
+/** dt(ms)만큼 움직인다. 색이 바뀐 순간이면 true (게임은 그때 물들이기를 바꾼다) */
+export function stepSpark(p: SparkState, dt: number, rnd: () => number = Math.random): boolean {
   const s = dt / 1000;
   if (p.age >= p.swapAt) {
     // 글자 모양으로 머물던 불티가 이제 흘러내린다
@@ -552,12 +897,43 @@ export function stepSpark(p: SparkState, dt: number, rnd: () => number = Math.ra
   p.vy = p.vy * drag + p.grav * s;
   p.x += p.vx * s;
   p.y += p.vy * s;
+  if (p.colorAt !== undefined && p.age >= p.colorAt && p.color2 !== undefined) {
+    p.colorAt = Infinity;
+    p.color = p.color2;
+    return true;
+  }
+  return false;
 }
 
-/** 지금 나이에서의 밝기·크기 (끝무렵엔 반짝이며 사라진다) */
+/**
+ * 꼬리를 남길 때가 됐으면 그 꼬리 불티 (불티 지금 자리 기준, 아니면 null). 게임·미리보기가 매 걸음 뒤에 부른다.
+ * 꼬리는 거의 제자리에 남아 은은하게 사라진다 (금가루는 깜빡이며 떨어진다). reduced면 절반만
+ */
+export function sparkTrail(p: SparkState, reduced: boolean): SparkSpec | null {
+  const every = p.trailEvery ?? 0;
+  if (every <= 0 || p.age < (p.trailNext ?? Infinity)) return null;
+  p.trailNext = p.age + every * (reduced ? 2 : 1);
+  const u = Math.min(1, p.age / p.life);
+  const fall = p.trailFall ?? 0;
+  return {
+    vx: p.vx * 0.05,
+    vy: p.vy * 0.05 + (fall > 0 ? 4 : 1.5),
+    life: Math.max(60, (p.trailLife ?? 300) * (1 - 0.45 * u)),
+    color: p.trailColor ?? p.color ?? 0xffffff,
+    size: p.size * 0.72,
+    drag: fall > 0 ? 1.4 : 3,
+    grav: fall > 0 ? fall : 5,
+    bright: 0.78 * (1 - 0.4 * u),
+    strobe: reduced ? undefined : p.trailStrobe,
+    strobeOff: (p.age / 97) % 1,
+  };
+}
+
+/** 지금 나이에서의 밝기·크기 (끝무렵엔 반짝이며 사라진다, 점멸 불티는 처음부터 깜빡인다) */
 export function sparkLook(p: SparkState, reduced: boolean): { alpha: number; scale: number } {
   const u = p.age / p.life;
-  const twinkle = u > 0.6 && !reduced ? (Math.floor(p.age / 60 + p.size * 7) % 2 ? 0.5 : 1) : 1;
+  const strobe = p.strobe ?? 0;
+  const twinkle = strobe > 0 && !reduced ? (((p.age / strobe + (p.strobeOff ?? 0)) % 1) < 0.5 ? 1 : 0.12) : u > 0.6 && !reduced ? (Math.floor(p.age / 60 + p.size * 7) % 2 ? 0.5 : 1) : 1;
   const v = p.fadeFrom > 0 ? (u < p.fadeFrom ? 0 : (u - p.fadeFrom) / (1 - p.fadeFrom)) : u;
-  return { alpha: (1 - v * v) * twinkle, scale: p.size * (1 - 0.4 * u) };
+  return { alpha: (1 - v * v) * twinkle * (p.bright ?? 1), scale: p.size * (1 - 0.4 * u) };
 }

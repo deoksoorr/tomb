@@ -90,8 +90,8 @@ export default function WeeklyRace() {
         <br />
         사냥 처치는 내 레벨이 그 사냥터가 열리는 레벨보다 10 넘게 높으면 세지 않아요.
       </p>
-      {/* 시상대 3개: 넓은 창은 가로로 나란히, 좁은 창은 세로로 */}
-      <div className={styles.boards}>
+      {/* 시상대 3개: 넓은 창은 가로로 나란히, 좁은 창은 세로로. 11/17 칸 높이를 맞추고 시상대·내 순위 줄을 아래로 붙인다 (낚시 칸만 물고기 이름 줄이 있어 길어졌다) */}
+      <div className={`${styles.boards} ${styles.raceBoards}`}>
         {race.boards.map((b) => (
           <section key={b.board} className={styles.board} aria-label={`이번 주 ${BOARD_NAME[b.board]} 레이스`}>
             <h3 className={styles.title}>

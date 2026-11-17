@@ -1,4 +1,7 @@
-import { darken, Grid, lighten, mix, rng, type Color } from "./pixel";
+import type { MapConcept } from "@/lib/mapConcept";
+import { darken, Grid, hash2, lighten, mix, rng, vnoise, type Color } from "./pixel";
+import { ICE, SNOW } from "./winterArt";
+import { bulbGlowPair, drawBulbs, guessTone, miniXmasTree, snowField, winterizeCanvas } from "./winterScenery";
 
 // 놀이기구 2 탑승 중 장면 (옆에서 본 2D 도트 풍경) 그림 — 코드로 그린다. SkyStage가 탈 때 한 번 만들어 텍스처로 캐시하고 층을 움직이기만 한다.
 //  - 모든 색은 낮 기준. 시간대·날씨 색은 SkyStage가 층마다 곱해(tint) 입히고, 밤 불빛은 따로 그린 불빛 층(lights)을 밤에만 켠다
@@ -18,6 +21,8 @@ export type Band = {
   fires: (Spot & { big: boolean })[];
   /** 땅 아래를 채우는 색 */
   fill: Color;
+  /** 11/17 크리스마스판 전구 빛 두 장 (번갈아 켠다) — 없으면 없음 */
+  xmas?: [HTMLCanvasElement, HTMLCanvasElement];
 };
 
 const OUT = 0x24231f;
@@ -403,16 +408,23 @@ function grassBody(p: Pen, x0: number, x1: number, y0: number, seed: number, pal
 
 // ── 공통: 먼 산 능선 · 하늘 ──
 
-/** 먼 산 능선 두 겹 (가로로 이어짐) */
-export function mountains(w = 384, h = 64, seed = 3): Band {
+/** 먼 산 능선 두 겹 (가로로 이어짐). 11/17 snowy = 겨울·크리스마스판 (먼 능선은 눈에 덮이고, 앞 능선은 마루와 골짜기 줄에 눈) */
+export function mountains(w = 384, h = 64, seed = 3, snowy = false): Band {
   const p = new Pen(w, h, true);
-  const back = 0x8b97a8;
-  const front = 0x6f7f87;
+  const back = snowy ? 0xbfcad8 : 0x8b97a8;
+  const front = snowy ? 0x8c9eb0 : 0x6f7f87;
   for (let x = 0; x < w; x++) {
     const tb = Math.round(h * 0.28 + ridge(x, w, seed, h * 0.2, [2, 5, 11]));
-    for (let y = Math.max(0, tb); y < h; y++) p.set(x, y, y < tb + 2 && tb < h * 0.2 ? 0xdfe6ea : back);
+    for (let y = Math.max(0, tb); y < h; y++) {
+      if (!snowy) p.set(x, y, y < tb + 2 && tb < h * 0.2 ? 0xdfe6ea : back);
+      else p.set(x, y, y < tb + 3 + Math.floor(hash2(x, 0, 41) * 4) ? SNOW.mid : hash2(x >> 1, y, 43) < 0.08 ? SNOW.lo : back);
+    }
     const tf = Math.round(h * 0.55 + ridge(x, w, seed + 4, h * 0.16, [3, 7, 13]));
-    for (let y = Math.max(0, tf); y < h; y++) p.set(x, y, y === tf ? lighten(front, 0.15) : front);
+    for (let y = Math.max(0, tf); y < h; y++) {
+      if (!snowy) p.set(x, y, y === tf ? lighten(front, 0.15) : front);
+      // 마루 눈 + 비탈을 타고 내려온 눈 줄 (골짜기 결)
+      else p.set(x, y, y < tf + 2 ? SNOW.hi : y - tf < 3 + 5 * vnoise(x, 0, 6, 45) && hash2(x, y, 47) < 0.7 ? SNOW.lo : front);
+    }
   }
   return p.band(front);
 }
@@ -1140,4 +1152,84 @@ export function balloonRig(W: number, H: number, colors: readonly [Color, Color]
   for (let x = 6; x < W; x += 12) g.set(x, rim + 1, 0xd8b890);
   for (let x = 0; x < W; x++) g.set(x, rim - 1, OUT);
   return { canvas: g.toCanvas(), burner: { x: Math.round(cx), y: by - 2 }, rim };
+}
+
+// ── 11/17 겨울·크리스마스판 (lib/mapConcept — 장면을 다 그린 뒤 winterScenery로 한 번 훑어요) ──
+// 풀밭·언덕 → 눈밭, 활엽수는 그루마다 잎 진 나무 또는 눈 덮인 상록수, 소나무는 상록수, 지붕은 통째로 눈, 강·호수는 차가운 물빛에 얼음 조각,
+// 흙둑·밭·호박밭은 눈 아래, 광장 돌바닥은 줄눈에 눈. 크리스마스는 처마 끝 전구 + 상록수 전구 + 광장 트리(trees 자리)
+
+const FOLIAGE = new Set<Color>([TREE.hi, TREE.mid, TREE.lo, 0x4f5e3c, 0x5f6e48, 0x4c5a3a, 0x5c6a46, 0x3c4830, 0x4e5c3c, 0x56653f, 0x51603f]);
+const CONIFER = new Set<Color>([PINE.hi, PINE.mid, PINE.lo]);
+const ROOF_SET = new Set<Color>(ROOFS.flatMap((r) => [r, lighten(r, 0.12), darken(r, 0.25), darken(r, 0.3)]));
+const FIELDS: readonly Color[] = [0x8a8a52, 0x7a6a48, 0x6f7f4a, 0x9a9058];
+const FIELD_SET = new Set<Color>(FIELDS);
+const FURROW_SET = new Set<Color>(FIELDS.map((c) => darken(c, 0.12)));
+/** 고정 색 → 겨울 색 */
+const FIXED = new Map<Color, Color>([
+  // 강·호수 (먼저 물가 줄은 살얼음)
+  [WATER.hi, ICE.mid],
+  [0x7aa0bc, ICE.lo],
+  [WATER.mid, 0x44687a],
+  [0x648cab, 0x3a5a6c],
+  [WATER.lo, 0x2b4856],
+  [WATER.deep, 0x1f3844],
+  // 흙둑 → 눈둑
+  [DIRT.hi, SNOW.lo],
+  [DIRT.mid, SNOW.shade],
+  [DIRT.lo, SNOW.deep],
+  // 생울타리 → 잎 진 덤불 · 갈대 → 마른 갈대 · 꽃 → 눈 반짝임
+  [0x4a5a36, 0x6a5e58],
+  [0x6f7a44, 0x9a8e60],
+  [0xf0e080, SNOW.hi],
+  [0xe8a0c0, SNOW.hi],
+  [0xb0c0f0, SNOW.hi],
+  // 호박밭은 눈 아래 둔덕
+  [0xd9832e, SNOW.mid],
+  [0xb86622, SNOW.lo],
+  [0x5a7a3a, SNOW.lo],
+  [0x5a3a1c, SNOW.shade],
+]);
+
+function skyTone(c: Color, x: number, y: number): Color | -1 {
+  const f = FIXED.get(c);
+  if (f !== undefined) {
+    // 물 위 얼음 조각 (큰 얼룩)
+    if ((c === WATER.mid || c === WATER.lo || c === 0x648cab) && vnoise(x, y, 6, 51) > 0.76) return hash2(x, y, 53) < 0.2 ? ICE.hi : ICE.mid;
+    return f;
+  }
+  if (c === COBBLE.line) return SNOW.lo;
+  if (c === COBBLE.a || c === COBBLE.b) return vnoise(x, y, 14, 55) > 0.62 ? SNOW.mid : mix(c, 0xdfe6ee, 0.35);
+  if (FIELD_SET.has(c)) return snowField(1.05, x, y);
+  if (FURROW_SET.has(c)) return SNOW.lo;
+  return guessTone(c, x, y);
+}
+
+/**
+ * 층 하나를 그 판의 그림으로 (기본판은 그대로). trees = 크리스마스판 광장 트리 자리 (바닥 가운데, 층 좌표) · treeH = 트리 높이
+ */
+export function seasonBand(b: Band, concept: MapConcept, o: { trees?: readonly Spot[]; treeH?: number } = {}): Band {
+  if (concept === "default") return b;
+  const xmas = concept === "christmas";
+  const { canvas, bulbs } = winterizeCanvas(b.base, {
+    tone: skyTone,
+    roof: (c) => ROOF_SET.has(c),
+    foliage: (c) => FOLIAGE.has(c),
+    conifer: (c) => CONIFER.has(c),
+    bareShare: 0.45,
+    cap: { depth: 2, maxY: b.h },
+    xmas: xmas ? { eaves: true, treeRate: 0.035 } : undefined,
+  });
+  const stars: Spot[] = [];
+  if (xmas)
+    for (const t of o.trees ?? []) {
+      const tr = miniXmasTree(o.treeH ?? 34);
+      const ox = Math.round(t.x - tr.ax);
+      const oy = Math.round(t.y - tr.canvas.height + 1);
+      canvas.getContext("2d")?.drawImage(tr.canvas, ox, oy);
+      for (const bl of tr.bulbs) bulbs.push({ x: bl.x + ox, y: bl.y + oy, c: bl.c });
+      stars.push({ x: tr.star.x + ox, y: tr.star.y + oy });
+    }
+  if (xmas) drawBulbs(canvas, bulbs);
+  const fill = skyTone(b.fill, 7, 7);
+  return { ...b, base: canvas, fill: fill === -1 ? b.fill : fill, xmas: xmas && (bulbs.length || stars.length) ? bulbGlowPair(b.w, b.h, bulbs, stars) : undefined };
 }

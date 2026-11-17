@@ -37,6 +37,7 @@ import PassedPanel from "./PassedPanel";
 import ReportsPanel from "./ReportsPanel";
 import PointEventPanel from "./PointEventPanel";
 import LotteryPanel from "./LotteryPanel";
+import MapConceptPanel from "./MapConceptPanel";
 import ResidentsPanel from "./ResidentsPanel";
 import StaffPanel from "./StaffPanel";
 import SystemPanel from "./SystemPanel";
@@ -177,6 +178,8 @@ export default function AdminApp() {
     inquiries: { n: inquiriesNew ?? 0, tone: "warn" },
   };
   const choose = (id: PanelId) => {
+    // 11/17 대시보드를 누르거나 지금 보는 메뉴를 다시 누르면 새로고침 없이 최신 숫자로 다시 받는다 (다른 메뉴는 열 때마다 새로 받는다)
+    if (id === "dashboard" || id === panel) reload();
     go(id);
     setMenuOpen(false);
   };
@@ -369,6 +372,7 @@ export default function AdminApp() {
           {panel === "residents" && <ResidentsPanel key={version} {...p} />}
           {panel === "pointEvent" && <PointEventPanel key={version} {...p} />}
           {panel === "lottery" && <LotteryPanel key={version} {...p} />}
+          {panel === "mapConcept" && <MapConceptPanel key={version} {...p} />}
           {panel === "graveRules" && <PassedPanel key={version} {...p} part="settings" onChanged={reload} />}
 
           {panel === "errors" && <ErrorsPanel key={version} {...p} />}

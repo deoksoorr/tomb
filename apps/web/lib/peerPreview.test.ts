@@ -4,8 +4,8 @@ import { aloneLine, elsewhereCount, elsewhereLine, hereLabel } from "./peerPrevi
 describe("채널 이동 창: 지금 맵 기준 같이 있는 사람", () => {
   it("바닷가에 나 혼자, 채널에는 3명 → 다른 곳에 2명", () => {
     expect(elsewhereCount(3, 0)).toBe(2);
-    expect(aloneLine("sea", 2)).toBe("달물결 포구에는 지금 나 혼자예요. 이 채널 다른 곳에 2명 있어요.");
-    expect(aloneLine("camp", 1)).toBe("언젠가 캠핑장에는 지금 나 혼자예요. 이 채널 다른 곳에 1명 있어요.");
+    expect(aloneLine("sea", 2)).toBe("달물결 포구에는 지금 나 혼자예요. 이 맵이 아닌 곳에 2명 더 있어요.");
+    expect(aloneLine("camp", 1)).toBe("언젠가 캠핑장에는 지금 나 혼자예요. 이 맵이 아닌 곳에 1명 더 있어요.");
   });
 
   it("채널 전체에 나 혼자면 확성기 안내", () => {
@@ -14,7 +14,7 @@ describe("채널 이동 창: 지금 맵 기준 같이 있는 사람", () => {
 
   it("같이 있는 사람이 있으면 맵 이름을 붙이고, 다른 곳 인원은 덧붙인다", () => {
     expect(hereLabel("village")).toBe("기억숲 마을에 같이 있는 사람");
-    expect(elsewhereLine(elsewhereCount(5, 2))).toBe("이 채널 다른 곳에 2명 더 있어요.");
+    expect(elsewhereLine(elsewhereCount(5, 2))).toBe("이 맵이 아닌 곳에 2명 더 있어요.");
     expect(elsewhereLine(elsewhereCount(3, 2))).toBeNull();
   });
 

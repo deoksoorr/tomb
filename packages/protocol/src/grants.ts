@@ -71,7 +71,9 @@ export async function verifyGrant(
       ...(isChampField(g.champ) ? { champ: g.champ } : {}),
       ...(g.mgr === 0 || g.mgr === 1 ? { mgr: g.mgr } : {}),
     };
-  if (g.kind === "firework" && isFireworkId(g.item) && typeof g.nonce === "string" && g.nonce.length <= 32)
+  // 폭죽 id: 아는 폭죽이거나, 실시간 서버보다 웹이 먼저 배포돼 아직 모르는 새 폭죽(fw_ + 영소문자·숫자). 증서는 Vercel 서명이라 믿고 중계만 한다
+  // (받는 옛 클라이언트는 모르는 폭죽을 기본 금빛 폭죽으로 터뜨린다)
+  if (g.kind === "firework" && (isFireworkId(g.item) || isNewFireworkId(g.item)) && typeof g.nonce === "string" && g.nonce.length <= 32)
     return { kind: "firework", visitorId: g.visitorId, item: g.item, nonce: g.nonce, exp: g.exp };
   if (g.kind === "goblin" && typeof g.points === "number" && Number.isInteger(g.points) && g.points > 0 && g.points <= 1000 && typeof g.nonce === "string" && g.nonce.length <= 32)
     return { kind: "goblin", visitorId: g.visitorId, points: g.points, nonce: g.nonce, exp: g.exp };
@@ -126,4 +128,9 @@ export async function verifyGrant(
 /** 착용 증서의 주간 1위 값: 0(1위 아님), 1위 비트(+ 오라 끔 표시), 또는 오라 끔 표시만(운영자 오라를 끈 운영자) */
 function isChampField(v: unknown): v is number {
   return typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= (CHAMP_ALL | CHAMP_AURA_OFF);
+}
+
+/** 아직 카탈로그에 없는 새 폭죽 id 모양 (fw_ + 영소문자·숫자 1~20자) */
+function isNewFireworkId(id: unknown): id is string {
+  return typeof id === "string" && /^fw_[a-z0-9]{1,20}$/.test(id);
 }

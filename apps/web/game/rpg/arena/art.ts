@@ -12,6 +12,11 @@ import { cafeteriaFloor, cafeteriaWall, CF_PROPS, CF_SIDE } from "../../tower/th
 // 11/15 야근 빌딩 옥상 정원 폭풍·임원층 바닥·벽·소품
 import { rooftopFloor, rooftopWall, RF_PROPS, RF_SIDE } from "../../tower/themes/rooftopMap";
 import { execFloor, execWall, EX_PROPS, EX_SIDE } from "../../tower/themes/execMap";
+// 11/17 겨울판·크리스마스판 (lib/mapConcept): 바닥 눈밭·벽 겹·소품 손질·바닥 장식
+import type { MapConcept } from "@/lib/mapConcept";
+import { isTowerZoneId } from "@/lib/rpg/catalog";
+import { conceptAmbient, decorArt, decorPlan, dressProp, dustSnow, isOutdoorZone, PROP_PAD, snowGround, wallOverlay } from "./conceptArt";
+import { paintGroundSnow, paintSnowy, withConcept } from "./paintConcept";
 
 // 40번 사냥터 그림 (캔버스 2D, Phaser 없이 — 로비 미리보기도 같은 함수로 그린다).
 // 바닥(벽·무늬·납작한 구역 포함)은 한 장, 키 있는 소품은 따로 (깊이 정렬), 움직이는 것(벨트·창밖·문)은 Arena가 따로 띄운다.
@@ -98,6 +103,8 @@ function skyline(c: Ctx, y0: number, h: number, body: Color, win: Color, salt: n
     R(c, x, y0 + h - bh, w, bh, body);
     for (let yy = y0 + h - bh + 3; yy < y0 + h - 2; yy += 4)
       for (let xx = x + 2; xx < x + w - 2; xx += 4) if (hash2(xx, yy, salt) < 0.35) R(c, xx, yy, 2, 2, win);
+    // 11/17 겨울: 옥상마다 쌓인 눈 (밤이라 푸르스름하게)
+    if (paintSnowy()) for (let xx = x; xx < x + w; xx++) R(c, xx, y0 + h - bh - (hash2(xx, k, salt + 9) < 0.3 ? 1 : 0), 1, 1 + (hash2(xx, k, salt + 8) < 0.5 ? 1 : 0), hash2(xx, 1, salt + 7) < 0.6 ? 0xb8c6d8 : 0x98a8c0);
     x += w + 1;
     k++;
   }
@@ -325,6 +332,12 @@ const THEMES: Record<ZoneId, Theme> = {
       }
       R(c, 0, TOP - 6, AW, 6, 0x1a2420);
       for (let x = 0; x < AW; x += 3) R(c, x, TOP - 6 - Math.floor(hash2(x, 3, 74) * 4), 1, 4, 0x3a5030);
+      if (paintSnowy()) {
+        // 11/17 겨울: 줄기에 붙은 눈 · 이끼에 서리 · 덤불 위 눈
+        for (let x = 0; x < AW; x += 18) for (let y = 2; y < TOP - 6; y += 3) if (hash2(x, y, 75) < 0.35) R(c, x, y, 2, 1, 0x8a9cb0);
+        for (let x = 0; x < AW; x++) R(c, x, TOP - 6 - Math.floor(hash2(x, 3, 74) * 4) - 1, 1, 2, hash2(x, 4, 75) < 0.6 ? 0x9aaabc : 0x7a8a9e);
+        R(c, 0, TOP - 3, AW, 3, 0x8a9cb0);
+      }
     },
   },
   "homework-desert": {
@@ -341,16 +354,19 @@ const THEMES: Record<ZoneId, Theme> = {
       speckle(c, 0, 0, AW, AH, 0x9a7a4a, 0.008, 83);
     },
     wall(c) {
+      // 11/17 겨울: 흐린 겨울 하늘 · 옅은 해 · 눈 덮인 메사
+      const snowy = paintSnowy();
       // 하늘 → 지평선
-      for (let y = 0; y < TOP; y++) R(c, 0, y, AW, 1, mix(0x8ac8e8, 0xf0dca0, y / TOP));
-      E(c, 360, 9, 6, 6, 0xfff4c0);
+      for (let y = 0; y < TOP; y++) R(c, 0, y, AW, 1, snowy ? mix(0x9ab4d4, 0xe2eaf2, y / TOP) : mix(0x8ac8e8, 0xf0dca0, y / TOP));
+      E(c, 360, 9, 6, 6, snowy ? 0xf2f2ea : 0xfff4c0);
       E(c, 360, 9, 4, 4, 0xffffff);
       // 먼 메사
       for (const [x, w, h] of [[20, 70, 10], [140, 50, 7], [230, 90, 12], [380, 60, 8]] as const) {
-        R(c, x, TOP - 4 - h, w, h + 4, 0xc89a68);
-        R(c, x + 3, TOP - 4 - h, w - 6, 2, 0xd8b080);
+        R(c, x, TOP - 4 - h, w, h + 4, snowy ? 0xa89488 : 0xc89a68);
+        R(c, x + 3, TOP - 4 - h, w - 6, 2, snowy ? 0xeef3f8 : 0xd8b080);
+        if (snowy) for (let xx = x + 1; xx < x + w - 1; xx++) R(c, xx, TOP - 2 - h, 1, 1 + Math.floor(hash2(xx, h, 84) * 4), hash2(xx, 2, 84) < 0.5 ? 0xdfe8f0 : 0xc8d4e2);
       }
-      R(c, 0, TOP - 4, AW, 4, 0xd0ac70);
+      R(c, 0, TOP - 4, AW, 4, snowy ? 0xdfe8f0 : 0xd0ac70);
     },
   },
   "burnout-abyss": {
@@ -405,7 +421,9 @@ const THEMES: Record<ZoneId, Theme> = {
         R(c, x, y, 1, 1, 0x2a2a3a);
         if (x % 9 === 0) R(c, x - 1, y + 1, 2, 2, [0xff6a6a, 0xffd04a, 0x6ad0ff, 0x8aff8a][(x / 9) % 4]);
       }
-      R(c, 0, TOP - 2, AW, 2, 0x2a2a40);
+      R(c, 0, TOP - 2, AW, 2, paintSnowy() ? 0x8a94b8 : 0x2a2a40);
+      // 11/17 겨울: 시계탑 지붕 눈
+      if (paintSnowy()) R(c, 212, 0, 24, 1, 0xb8c6d8);
     },
   },
   "quarter-close": {
@@ -1115,17 +1133,38 @@ export function propCanvas(kind: string, v = 0, flip = false): HTMLCanvasElement
   return f.canvas;
 }
 
-/** 바닥 한 장: 바닥 무늬 → 무늬·지형 → 벽 → 그림자 */
-export function floorCanvas(l: ArenaLayout): HTMLCanvasElement {
-  const { canvas, ctx } = makeCanvas(AW, AH);
-  const th = THEMES[l.zone];
-  th.floor(ctx, l);
-  for (const d of l.decals) decal(ctx, d);
-  for (const r of l.regions) regionBase(ctx, r);
-  wallShade(ctx);
-  sideWalls(ctx, th.side);
-  th.wall(ctx, l);
-  return canvas;
+/**
+ * 바닥 한 장: 바닥 무늬 → 무늬·지형 → 벽 → 그림자.
+ * 11/17 concept: 겨울·크리스마스판 — 바깥 사냥터는 바닥을 눈밭으로(기믹 구역·야근 빌딩 기믹 무늬는 그대로, 일반 무늬는 눈가루), 벽 그림은 각자 겨울 손질
+ */
+export function floorCanvas(l: ArenaLayout, concept: MapConcept = "default"): HTMLCanvasElement {
+  const snowOut = concept !== "default" && isOutdoorZone(l.zone);
+  return withConcept(
+    concept,
+    () => {
+      const { canvas, ctx } = makeCanvas(AW, AH);
+      const th = THEMES[l.zone];
+      th.floor(ctx, l);
+      paintGroundSnow(ctx);
+      if (snowOut && l.decals.length && !isTowerZoneId(l.zone)) {
+        const t = makeCanvas(AW, AH);
+        for (const d of l.decals) decal(t.ctx, d);
+        dustSnow(t.canvas);
+        ctx.drawImage(t.canvas, 0, 0);
+      } else for (const d of l.decals) decal(ctx, d);
+      for (const r of l.regions) regionBase(ctx, r);
+      wallShade(ctx);
+      sideWalls(ctx, th.side);
+      th.wall(ctx, l);
+      return canvas;
+    },
+    snowOut ? (c) => snowGround(c, [], 77 + l.variant) : null,
+  );
+}
+
+/** 11/17 소품 그림 (겨울·크리스마스판이면 손질 — 위로 PROP_PAD만큼 큰 그림과 전구 자리) */
+export function conceptPropCanvas(kind: string, v: number, flip: boolean, zone: ZoneId, concept: MapConcept): { canvas: HTMLCanvasElement; bulbs: { x: number; y: number; c: Color }[] } {
+  return withConcept(concept, () => dressProp(propCanvas(kind, v, flip), kind, v, flip, zone, concept));
 }
 
 // ── 움직이는 것들의 작은 그림 ──
@@ -1222,10 +1261,13 @@ export const PARTICLE_COLORS: Record<ZoneId, Color[]> = {
 };
 
 /** 로비 카드 미리보기: 지도 + 소품 + 우두머리와 몬스터 몇 마리 (반 크기) */
-export function arenaPreview(l: ArenaLayout, monsters: MonsterId[], scale = 0.5): HTMLCanvasElement {
+export function arenaPreview(l: ArenaLayout, monsters: MonsterId[], scale = 0.5, concept: MapConcept = "default"): HTMLCanvasElement {
   const full = makeCanvas(AW, AH);
   const c = full.ctx;
-  c.drawImage(floorCanvas(l), 0, 0);
+  const floor = floorCanvas(l, concept);
+  c.drawImage(floor, 0, 0);
+  // 11/17 겨울·크리스마스판: 벽 겹 (창 서리·전구 줄·리스)
+  if (concept !== "default") c.drawImage(wallOverlay(l, concept, floor).canvas, 0, 0);
   for (const r of l.regions) {
     if (r.kind === "vine") c.drawImage(vineCanvas(r.w, r.h, (r.id ?? 0) + 7), r.x, r.y);
     if (r.kind === "conveyor") {
@@ -1237,9 +1279,15 @@ export function arenaPreview(l: ArenaLayout, monsters: MonsterId[], scale = 0.5)
     y: p.y,
     draw: () => {
       const m = PROP_META[p.kind];
-      c.drawImage(propCanvas(p.kind, p.v ?? 0, !!p.flip), Math.round(p.x - m.w / 2), Math.round(p.y - m.h));
+      if (concept === "default") c.drawImage(propCanvas(p.kind, p.v ?? 0, !!p.flip), Math.round(p.x - m.w / 2), Math.round(p.y - m.h));
+      else c.drawImage(conceptPropCanvas(p.kind, p.v ?? 0, !!p.flip, l.zone, concept).canvas, Math.round(p.x - m.w / 2), Math.round(p.y - m.h - PROP_PAD));
     },
   }));
+  // 11/17 바닥 장식 (트리·선물·히터·눈사람)
+  for (const d of decorPlan(l, concept)) {
+    const a = decorArt(d, isOutdoorZone(l.zone));
+    items.push({ y: d.y, draw: () => c.drawImage(a.canvas, Math.round(d.x - a.canvas.width / 2), Math.round(d.y - a.canvas.height)) });
+  }
   const spots = [
     { x: l.start.x + 30, y: l.start.y + 6 },
     { x: l.start.x - 70, y: l.start.y + 24 },
@@ -1253,7 +1301,7 @@ export function arenaPreview(l: ArenaLayout, monsters: MonsterId[], scale = 0.5)
   });
   items.sort((a, b) => a.y - b.y).forEach((it) => it.draw());
   // 조명·분위기
-  const tone = AMBIENT[l.zone];
+  const tone = conceptAmbient(l.zone, AMBIENT[l.zone], concept);
   if (tone.alpha > 0) {
     c.globalCompositeOperation = "multiply";
     c.fillStyle = css(tone.color, tone.alpha);

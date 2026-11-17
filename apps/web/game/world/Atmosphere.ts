@@ -1,8 +1,8 @@
 import * as Phaser from "phaser";
-import { ambienceAt, kstHour, parseAmbienceOverride, type AmbienceOverride } from "@/lib/ambience";
+import { ambienceAt, kstHour, parseAmbienceOverride, type Ambience, type AmbienceOverride } from "@/lib/ambience";
 import { TEX } from "../assets/manifest";
 import { DEPTH, ZOOM_MIN } from "../config";
-import { LevelBlender, levelsFor, TRANSITION_MS, type Levels } from "./ambienceMix";
+import { LevelBlender, levelsFor, recheckDelay, TRANSITION_MS, type Levels } from "./ambienceMix";
 import { isQuietHour, THUNDER_MIN_RAIN, thunderDelaySec, thunderFlash, thunderGapMs } from "./weatherMath";
 import { centerFade, gust, pulse, smooth01, wrapInto } from "./weatherNoise";
 import { WeatherSound } from "./WeatherSound";
@@ -10,9 +10,11 @@ import { charTintOf } from "./charTint";
 import type { WorldTintControl } from "./worldTint";
 import type { LightSpot } from "./WorldMap";
 import { qaSearch } from "@/lib/qaUrl";
+import { bridge } from "../bridge";
 
 // 분위기 레이어: [날씨 막(일반 섞기)] → KST 시간대 톤(곱하기 틴트 — 마을은 판 대신 셰이더가 그림마다 곱하고 캐릭터는 절반만, worldTint) → [어둠·빛 구멍은 Lighting] → 빛(가산) → 반딧불 → 날씨(비·눈·낙엽) → 안개 → 번개 → 비네트.
-// 톤·날씨는 lib/ambience(공용, 시계 기반)로 1분마다 다시 계산하고 바뀌면 2.5초 동안 섞는다.
+// 톤·날씨는 lib/ambience(공용, 시계 기반)로 1분마다(날씨가 바뀌는 30분 경계엔 그 순간) 다시 계산하고 바뀌면 2.5초 동안 섞는다.
+// 11/17 같은 값을 bridge ambience:now로 알려 화면 위 시간대·날씨 글이 장면과 같은 순간에 바뀐다.
 // 모든 레이어는 화면 고정 오브젝트 몇 개와 작은 풀(pool)로만 그려서 프레임당 비용이 일정하다.
 // 되풀이 무늬 없애기: 비·눈은 큰(256) 불규칙 타일 세 겹을 서로 안 맞는 속도로 흘리고, 바람·빗발 세기·화면 구석별 짙기를
 // 값 노이즈(weatherNoise)로 천천히 흔든다 (평균은 그대로). 안개·구름 그림자는 타일 대신 월드에 떠 있는 조각 몇 장이 바람 따라 흘러간다.
@@ -92,6 +94,7 @@ export class Atmosphere {
   private splashAcc = 0;
   private gatherTarget: { x: number; y: number } | null = null;
   private readonly leaves: Leaf[] = [];
+  private snowy = false;
   private readonly flash: Phaser.GameObjects.Image;
   private readonly indoor: boolean;
   private readonly sound: WeatherSound | null;
@@ -243,18 +246,40 @@ export class Atmosphere {
   }
 
   private targetLevels(): Levels {
-    return levelsFor(ambienceAt(Date.now(), this.override), this.grade);
+    return levelsFor(this.ambience(Date.now()), this.grade);
+  }
+
+  /**
+   * 하늘·날씨 목표를 다시 잡는다. 1분마다 보되 날씨가 바뀌는 30분 경계에 걸리면 그 순간에 맞춰 본다 (모든 방문자가 같은 때 바뀌게).
+   * 같은 값을 화면 위 시간대·날씨 글에도 알린다 (바뀌지 않아도 — 장면이 날씨를 알려 주는 중이라는 표시)
+   */
+  private recheck(time: number): void {
+    const now = Date.now();
+    const a = this.ambience(now);
+    this.nextCheck = time + recheckDelay(now, a.nextWeatherAt, RECHECK_MS);
+    this.blender.setTarget(levelsFor(a, this.grade), time);
+    bridge.emit("ambience:now", a);
   }
 
   get levels(): Levels {
     return this.blender.current;
   }
 
+  /** 11/17 겨울·크리스마스 맵 컨셉 (lib/mapConcept): 나무가 앙상하니 가을 낙엽을 날리지 않는다 */
+  setSnowy(on: boolean): void {
+    if (this.snowy === on) return;
+    this.snowy = on;
+    this.nextCheck = 0; // 비 → 눈 바꿈을 바로
+  }
+
+  /** 지금 하늘·날씨. 겨울·크리스마스 판에서는 비 대신 눈이 온다 (그림만 — 날씨 계산·다른 장면은 그대로) */
+  private ambience(now: number): Ambience {
+    const a = ambienceAt(now, this.override);
+    return this.snowy && a.weather === "rain" ? { ...a, weather: "snow" } : a;
+  }
+
   update(time: number, dt: number, view: Phaser.Geom.Rectangle): void {
-    if (time >= this.nextCheck) {
-      this.nextCheck = time + RECHECK_MS;
-      this.blender.setTarget(this.targetLevels(), time);
-    }
+    if (time >= this.nextCheck) this.recheck(time);
     const L = this.blender.update(time);
     const cam = this.scene.cameras.main;
     this.sound?.report(L.rain, this.indoor);
@@ -329,7 +354,7 @@ export class Atmosphere {
     }
 
     this.updateSplashes(time, dt, rain * burst, view);
-    this.updateLeaves(time, dt, this.indoor ? 0 : L.leaves, view);
+    this.updateLeaves(time, dt, this.indoor || this.snowy ? 0 : L.leaves, view);
     this.updateFireflies(time, dt, L.fireflies, view);
   }
 

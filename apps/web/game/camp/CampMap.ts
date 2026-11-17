@@ -24,12 +24,15 @@ import {
   type CampNpcId,
 } from "@tomb/protocol";
 import { kstHour } from "@/lib/ambience";
+import { isSnowy, type MapConcept } from "@/lib/mapConcept";
 import { addCanvasTexture } from "../assets/manifest";
 import { DEPTH } from "../config";
+import { seasonKey } from "../sprites/npcSeasonArt";
 import { makeCanvas, mix } from "../sprites/pixel";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import * as Art from "./campArt";
 import * as Lay from "./campLayout";
+import { CAMP_XTREE, CampConceptDecor, campSkin, type CampActor } from "./CampConceptDecor";
 import { CAMP_TEX_PREFIX, type CampInteractable, type CampLight, type CampMapApi, type CampTime } from "./campTypes";
 
 // 11/15 언젠가 캠핑장 맵 (CampMapApi 구현): 바닥(덩어리 텍스처, 화면 근처만), 나무·소품(칸 컬링, y 정렬), 이름표,
@@ -37,6 +40,7 @@ import { CAMP_TEX_PREFIX, type CampInteractable, type CampLight, type CampMapApi
 // NPC(별지기 밤만, 기타 캠퍼 밤 9~11시), 캠핑카 문(문간 자리에 누가 앉으면 열린다).
 // 그림은 정류장 근처·버스 여행 동안 campPrebake가 조금씩 구워요. 한 번 구운 "camp-" 텍스처는 지우지 않아요 (다시 갈 때 멈추지 않게).
 // 매 프레임 일은 작은 풀(불티 8·반짝임 16·반딧불 10·다람쥐 3)과 컬링 칸 경계가 바뀔 때만이라 마을보다 가볍다.
+// 11/17 맵 컨셉(겨울·크리스마스, lib/mapConcept): 그림 키를 campSkin으로 바꿔 끼우고(배치·충돌은 그대로), 장식은 CampConceptDecor.
 
 /** 소품 컬링 칸 */
 const CELL = 256;
@@ -49,6 +53,8 @@ const CHUNK_ROWS = Math.ceil(CAMP_HEIGHT / CHUNK);
 const FLAT = DEPTH.decal;
 /** 머리 위 (줄 조명·타프 천·물안개) — 어둠 막(DEPTH.dark)보다는 아래 */
 const OVERHEAD = 90_000;
+/** 11/17 크리스마스판 줄 조명 전구 색 (빨강·금·초록·파랑·흰) */
+const XMAS_BULBS: readonly number[] = [0xff6a5a, 0xffd25a, 0x7ae08a, 0x7ac8ff, 0xfff2d8];
 
 type Culled = Phaser.GameObjects.Image | Phaser.GameObjects.Sprite | Phaser.GameObjects.BitmapText;
 type Npc = { id: CampNpcId; img: Phaser.GameObjects.Image; label: Phaser.GameObjects.BitmapText; x: number; y: number; on: boolean; phase: number; frame: number };
@@ -63,7 +69,11 @@ export class CampMap implements CampMapApi {
   readonly colliders: Phaser.Physics.Arcade.StaticGroup;
   readonly furnitureColliders: Phaser.Physics.Arcade.StaticGroup;
   readonly interactables: readonly CampInteractable[] = Lay.CAMP_INTERACTABLES;
-  readonly staticLights: readonly CampLight[] = Lay.CAMP_LIGHTS;
+  /** 11/17 판마다 다른 밤 빛 (크리스마스판은 트리 빛 + 랜턴·화롯대가 더 따뜻하고 넓게) */
+  private lights: readonly CampLight[] = Lay.CAMP_LIGHTS;
+  get staticLights(): readonly CampLight[] {
+    return this.lights;
+  }
 
   private readonly objs: Phaser.GameObjects.GameObject[] = [];
   private readonly chunks = new Map<number, Phaser.GameObjects.Image>();
@@ -98,6 +108,11 @@ export class CampMap implements CampMapApi {
   private destroyed = false;
   /** 11/15 나눠 만들기를 시작했어요 (parts는 한 번만) */
   private started = false;
+  /** 11/17 맵 컨셉: 지금 판과 판마다 그림을 바꿔 끼울 것 (기본 그림 키) */
+  private concept: MapConcept;
+  private readonly skinned: { o: Phaser.GameObjects.Image; base: string }[] = [];
+  private decor: CampConceptDecor | null = null;
+  private actors: () => Iterable<CampActor> = () => [];
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -105,7 +120,11 @@ export class CampMap implements CampMapApi {
     private readonly reduced: boolean,
     /** true면 장면이 parts()를 프레임마다 조금씩 불러요 (버스 창밖 연출 동안 멈추지 않게) */
     staged = false,
+    /** 11/17 처음 판 (겨울·크리스마스면 처음부터 그 그림으로) */
+    concept: MapConcept = "default",
   ) {
+    this.concept = concept;
+    this.lights = lightsFor(concept);
     this.hour = kstHour(Date.now());
     this.colliders = scene.physics.add.staticGroup();
     this.furnitureColliders = scene.physics.add.staticGroup();
@@ -154,11 +173,65 @@ export class CampMap implements CampMapApi {
     yield;
 
     // 타프 천 (머리 위, 아래에 서면 옅어진다)
-    this.tarp = this.keep(scene.add.image(CAMP_TARP.x + CAMP_TARP.w / 2, CAMP_TARP.y + CAMP_TARP.h / 2 - 22, Art.CAMP_TEX.tarp).setDepth(OVERHEAD - 5).setAlpha(this.tarpAlpha));
+    this.tarp = this.keep(this.track(scene.add.image(CAMP_TARP.x + CAMP_TARP.w / 2, CAMP_TARP.y + CAMP_TARP.h / 2 - 22, this.skin(Art.CAMP_TEX.tarp)), Art.CAMP_TEX.tarp).setDepth(OVERHEAD - 5).setAlpha(this.tarpAlpha));
     // 일출빛 (전망대 너머) · 은하수 (밤 하늘, 화면을 따라온다)
     this.sunGlow = this.keep(scene.add.image(Art.CAMP_SUNRISE.x, Art.CAMP_SUNRISE.y, Art.CAMP_TEX.sunGlow).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights + 3).setScale(3.2).setVisible(false));
     this.milky = this.keep(scene.add.image(0, 0, Art.CAMP_TEX.milkyWay).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.fireflies - 1).setVisible(false));
     this.addPools();
+    yield;
+    // 11/17 겨울·크리스마스 장식 (기본 판이면 아무것도 세우지 않는다)
+    this.decor = new CampConceptDecor(scene, this.reduced, (x, y, o) => this.cullExtra(x, y, o), () => this.actors());
+    this.decor.apply(this.concept);
+  }
+
+  // ── 11/17 맵 컨셉 ──
+
+  /** 이 판의 그림 키 (처음 쓰면 굽는다) */
+  private skin(base: string): string {
+    return campSkin(this.scene, base, this.concept);
+  }
+
+  /** 판마다 그림을 바꿔 끼울 이미지로 적어 둔다 */
+  private track<T extends Phaser.GameObjects.Image>(o: T, base: string): T {
+    this.skinned.push({ o, base });
+    return o;
+  }
+
+  /** 입김을 낼 사람들 (CampScene이 한 번 넣는다) */
+  setActors(fn: () => Iterable<CampActor>): void {
+    this.actors = fn;
+  }
+
+  /** 판을 바꾼다: 그림 키를 다시 고르고(바닥 덩어리 포함), 장식을 다시 세우고, 줄 조명 색·밤 빛을 고친다 */
+  setConcept(c: MapConcept): void {
+    if (c === this.concept || this.destroyed) return;
+    this.concept = c;
+    this.lights = lightsFor(c);
+    for (const { o, base } of this.skinned) if (o.active) o.setTexture(this.skin(base), o.frame.name);
+    for (const [k, img] of this.chunks) {
+      const cx = k % CHUNK_COLS;
+      const cy = Math.floor(k / CHUNK_COLS);
+      img.setTexture(this.chunkKey(cx, cy));
+    }
+    // 11/17 NPC도 이 판 옷으로 (지금 프레임 그대로)
+    for (const n of this.npcs.values()) n.img.setTexture(seasonKey(Art.CAMP_TEX.npc(n.id), c), n.frame);
+    this.lit = -1;
+    this.sunsetK = -1;
+    this.decor?.apply(c);
+  }
+
+  /** 장식 그림을 컬링 칸에 넣는다 (장식이 지워지면 칸에서도 빠진다) */
+  private cullExtra(x: number, y: number, o: Phaser.GameObjects.Image): void {
+    const k = Math.floor(Math.max(0, y) / CELL) * CELL_COLS + Math.floor(Math.max(0, Math.min(CAMP_WIDTH - 1, x)) / CELL);
+    let list = this.cells.get(k);
+    if (!list) this.cells.set(k, (list = []));
+    list.push(o);
+    o.setVisible(this.shownCells.has(k));
+    o.once(Phaser.GameObjects.Events.DESTROY, () => {
+      const l = this.cells.get(k);
+      const i = l ? l.indexOf(o) : -1;
+      if (l && i >= 0) l.splice(i, 1);
+    });
   }
 
   // ── 텍스처 ──
@@ -201,7 +274,7 @@ export class CampMap implements CampMapApi {
 
   /** 받침 가운데(바닥) 원점 그림 — 그림 맨 아래 lift줄이 그림자라 그만큼 내린다 */
   private prop(key: string, x: number, y: number, depth = y, lift = 2): Phaser.GameObjects.Image {
-    return this.cull(x, y, this.scene.add.image(x, y + lift, key).setOrigin(0.5, 1).setDepth(depth));
+    return this.cull(x, y, this.track(this.scene.add.image(x, y + lift, this.skin(key)).setOrigin(0.5, 1).setDepth(depth), key));
   }
 
   private addGroundDecor(): void {
@@ -211,14 +284,15 @@ export class CampMap implements CampMapApi {
       this.prop(key, d.x, d.y, FLAT + d.y, 1);
     }
     // 데크 24 (바닥 높이 — 위를 걸어 다닌다)
-    for (const d of CAMP_DECKS) this.cull(d.x, d.y, this.scene.add.image(d.x - 19, d.y - 17, T.deck(d.n)).setOrigin(0, 0).setDepth(FLAT + 2000 + d.y));
+    const flat = (x: number, y: number, key: string) => this.track(this.scene.add.image(x, y, this.skin(key)).setOrigin(0, 0), key);
+    for (const d of CAMP_DECKS) this.cull(d.x, d.y, flat(d.x - 19, d.y - 17, T.deck(d.n)).setDepth(FLAT + 2000 + d.y));
     // 통나무 다리
     const bp = Art.bridgePlacement();
-    this.cull(bp.x + Art.BRIDGE_W / 2, bp.y + Art.BRIDGE_H / 2, this.scene.add.image(bp.x, bp.y, T.bridge).setOrigin(0, 0).setDepth(FLAT + 2600));
+    this.cull(bp.x + Art.BRIDGE_W / 2, bp.y + Art.BRIDGE_H / 2, flat(bp.x, bp.y, T.bridge).setDepth(FLAT + 2600));
     // 전망대 바닥(뒤·옆 난간 포함)과 앞 난간·계단
     const L = CAMP_LOOKOUT;
-    this.cull(L.x + L.w / 2, L.y + L.h / 2, this.scene.add.image(L.x, L.y, T.lookoutFloor).setOrigin(0, 0).setDepth(FLAT + 3000));
-    this.cull(L.x + L.w / 2, L.y + L.h, this.scene.add.image(L.x, L.y + L.h - 12, T.lookoutFront).setOrigin(0, 0).setDepth(L.y + L.h));
+    this.cull(L.x + L.w / 2, L.y + L.h / 2, flat(L.x, L.y, T.lookoutFloor).setDepth(FLAT + 3000));
+    this.cull(L.x + L.w / 2, L.y + L.h, flat(L.x, L.y + L.h - 12, T.lookoutFront).setDepth(L.y + L.h));
   }
 
   private addTrees(): void {
@@ -343,7 +417,7 @@ export class CampMap implements CampMapApi {
   private addNpcs(): void {
     const s = this.scene;
     for (const n of CAMP_NPCS) {
-      const img = this.keep(s.add.image(n.x, n.y + 1, Art.CAMP_TEX.npc(n.id), 0).setOrigin(0.5, 1).setDepth(n.y));
+      const img = this.keep(s.add.image(n.x, n.y + 1, seasonKey(Art.CAMP_TEX.npc(n.id), this.concept), 0).setOrigin(0.5, 1).setDepth(n.y));
       if (n.facing === 1) img.setFlipX(true);
       this.atlas.ensure(n.name);
       const label = this.keep(s.add.bitmapText(n.x, n.y - Art.NPC_H + 2, FONT_KEY, n.name, FONT_PX).setOrigin(0.5, 1).setTint(0xffe8b0).setDepth(DEPTH.labels - 1));
@@ -415,7 +489,10 @@ export class CampMap implements CampMapApi {
     const v = this.vans.get(`v${m[1]}`);
     if (!v || v.open === taken) return;
     v.open = taken;
-    v.img.setTexture(Art.CAMP_TEX.van(v.i, taken));
+    const base = Art.CAMP_TEX.van(v.i, taken);
+    const sk = this.skinned.find((s) => s.o === v.img);
+    if (sk) sk.base = base;
+    v.img.setTexture(this.skin(base));
   }
 
   npcVisible(id: CampNpcId): boolean {
@@ -449,6 +526,7 @@ export class CampMap implements CampMapApi {
     this.updateSquirrels(time, t);
     this.updateMist(time, t);
     this.updateSky(time, view, t);
+    this.decor?.update(time, view);
   }
 
   private updateCulling(view: Phaser.Geom.Rectangle): void {
@@ -480,14 +558,20 @@ export class CampMap implements CampMapApi {
   }
 
   private makeChunk(cx: number, cy: number): void {
-    const key = Art.CAMP_TEX.ground(cx, cy);
+    this.chunks.set(cy * CHUNK_COLS + cx, this.keep(this.scene.add.image(cx * CHUNK, cy * CHUNK, this.chunkKey(cx, cy)).setOrigin(0, 0).setDepth(DEPTH.ground)));
+  }
+
+  /** 이 판의 바닥 덩어리 텍스처 키 (없으면 굽는다 — 11/17 겨울·크리스마스는 겨울 바닥) */
+  private chunkKey(cx: number, cy: number): string {
+    const winter = isSnowy(this.concept);
+    const key = winter ? Art.CAMP_TEX.winterGround(cx, cy) : Art.CAMP_TEX.ground(cx, cy);
     if (!this.scene.textures.exists(key)) {
       const { canvas, ctx } = makeCanvas(CHUNK, CHUNK);
-      ctx.putImageData(new ImageData(Art.campGroundPixels(cx, cy) as unknown as Uint8ClampedArray<ArrayBuffer>, CHUNK, CHUNK), 0, 0);
+      ctx.putImageData(new ImageData(Art.campGroundPixels(cx, cy, CHUNK, winter) as unknown as Uint8ClampedArray<ArrayBuffer>, CHUNK, CHUNK), 0, 0);
       addCanvasTexture(this.scene, key, { canvas });
       clampEdges(this.scene, key);
     }
-    this.chunks.set(cy * CHUNK_COLS + cx, this.keep(this.scene.add.image(cx * CHUNK, cy * CHUNK, key).setOrigin(0, 0).setDepth(DEPTH.ground)));
+    return key;
   }
 
   /** 글씨는 화면에서 늘 같은 크기 (1/zoom) */
@@ -521,8 +605,15 @@ export class CampMap implements CampMapApi {
     const changed = Math.abs(on - this.lit) > 0.02;
     if (changed) {
       this.lit = on;
+      // 11/17 크리스마스판은 전구마다 색을 돌린다 (꺼져 있을 때도 색 전구가 보이게)
+      const xmas = this.concept === "christmas";
       const tint = mix(0x8a7a60, 0xfff4c8, on);
-      for (const b of this.bulbs) b.img.setTint(tint);
+      this.bulbs.forEach((b, i) => {
+        const c = XMAS_BULBS[i % XMAS_BULBS.length];
+        b.img.setTint(xmas ? mix(mix(c, 0x6a6058, 0.45), c, on) : tint);
+        if (xmas) b.glow.setTint(c);
+        else b.glow.clearTint();
+      });
       this.vendingLit?.setAlpha(0.15 + 0.7 * on);
     }
     if (on <= 0.01) {
@@ -538,7 +629,8 @@ export class CampMap implements CampMapApi {
 
   /** 노을(17~19시)에 단풍·노란 잎이 붉게 */
   private updateSunset(hour: number): void {
-    const k = hour >= 16.6 && hour <= 19.4 ? Math.sin(((hour - 16.6) / 2.8) * Math.PI) : 0;
+    // 11/17 겨울 판은 잎이 진 나무라 물들 잎이 없다
+    const k = !isSnowy(this.concept) && hour >= 16.6 && hour <= 19.4 ? Math.sin(((hour - 16.6) / 2.8) * Math.PI) : 0;
     if (Math.abs(k - this.sunsetK) < 0.04) return;
     this.sunsetK = k;
     const tint = mix(0xffffff, 0xff9a78, k * 0.7);
@@ -633,7 +725,8 @@ export class CampMap implements CampMapApi {
   /** 반딧불 (밤, 비 안 오는 날): 계곡 물가와 광장 둘레 */
   private updateFireflies(time: number, t: CampTime): void {
     const night = t.hour >= 19.5 || t.hour < 4.5;
-    const on = night && t.rain < 0.3;
+    // 11/17 겨울 판엔 반딧불이 없다
+    const on = night && t.rain < 0.3 && !isSnowy(this.concept);
     this.fireflies.forEach((f, i) => {
       if (!on) {
         if (f.t0 >= 0) {
@@ -753,6 +846,9 @@ export class CampMap implements CampMapApi {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.decor?.destroy();
+    this.decor = null;
+    this.skinned.length = 0;
     for (const o of this.objs) o.destroy();
     this.objs.length = 0;
     this.cells.clear();
@@ -841,6 +937,8 @@ export function forEachCampTexture(tex: (key: string, build: CampTexBuild, linea
   tex(T.busSign, Art.busSignArt);
   tex(T.timetable, Art.timetableArt);
   for (const n of CAMP_NPCS) tex(T.npc(n.id), () => Art.npcArt(n.id));
+  // 11/17 겨울·크리스마스판 NPC 옷 (판마다 따로 — 판이 바뀌면 setConcept가 갈아 끼운다)
+  for (const c of ["winter", "christmas"] as const) for (const n of CAMP_NPCS) tex(seasonKey(T.npc(n.id), c), () => Art.npcArt(n.id, c));
   tex(T.squirrel, Art.squirrelArt);
   tex(T.milkyWay, Art.milkyWayArt, true);
   tex(T.mist, Art.mistArt, true);
@@ -849,4 +947,13 @@ export function forEachCampTexture(tex: (key: string, build: CampTexBuild, linea
   tex(T.ember, Art.emberArt);
   tex(T.firefly, Art.fireflyArt);
   tex(T.drip, Art.dripArt);
+}
+
+/** 11/17 판마다 밤 빛: 크리스마스판은 광장 트리 빛을 더하고, 랜턴·화롯대·창 불빛을 더 따뜻하고 넓게 */
+function lightsFor(c: MapConcept): readonly CampLight[] {
+  if (c !== "christmas") return Lay.CAMP_LIGHTS;
+  return [
+    ...Lay.CAMP_LIGHTS.map((l) => ({ ...l, scale: l.scale * 1.18, tint: mix(l.tint, 0xffb060, 0.25), base: Math.min(1, l.base + 0.08) })),
+    { x: CAMP_XTREE.x, y: CAMP_XTREE.y - 34, scale: 1.3, tint: 0xffd890, base: 0.8 },
+  ];
 }

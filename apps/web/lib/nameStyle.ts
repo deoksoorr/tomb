@@ -25,7 +25,9 @@ export type NameColorSpec =
 
 // 11/15 wave = 수집 의뢰 「물결 이름표」: 깊은 물빛 판 위로 물결 윤슬이 흘러간다 (dots = 물거품·윤슬 색)
 // 11/15 newyear = 수집 의뢰 「새해 복 이름표」: 붉은 비단 판 + 금테 + 양옆 복 매듭(술 달린 금 매듭), 금가루가 둥실 떠오른다
-export type NamePlateKind = "wood" | "ribbon" | "cloud" | "wreath" | "tomb" | "star" | "wave" | "newyear";
+// 11/17 knit = 니트 이름표 (위아래 골지 단 + 꽈배기 무늬), card = 사원증 이름표 (파란 띠 + 위 집게), beach = 모래사장 이름표 (물거품 띠 + 불가사리·조개)
+// 12월 holly = 크리스마스 「호랑가시 이름표」: 눈 덮인 초록 판 + 금테 + 양끝 호랑가시 잎·빨간 열매
+export type NamePlateKind = "wood" | "ribbon" | "cloud" | "wreath" | "tomb" | "star" | "wave" | "newyear" | "knit" | "card" | "beach" | "holly";
 /** 이름표 바탕판: fill 바탕 · light 위쪽 밝은 띠 · edge 테두리 · dots 장식 점 색 (꽃·별·못·이끼) */
 export type NamePlateSpec = { kind: NamePlateKind; fill: number; light: number; edge: number; dots: readonly number[]; /** 바탕 투명도 */ alpha: number };
 
@@ -54,6 +56,8 @@ export const NAME_COLORS: Readonly<Record<string, NameColorSpec>> = {
   nf_flame: { kind: "fx", fx: "flame", stops: [0xffe066, 0xff8a3a], halo: 0xff8a3a },
   // 11/15 수집 의뢰 보상 (도장 교환소 전용): 새순 연두 → 잎 초록 → 짙은 잎 초록 (짙은 쪽도 밤 외곽선과 7:1 이상)
   q_name_leaf: { kind: "fx", fx: "leaves", stops: [0xeaffa0, 0xa8ec68, 0x5cc96a] },
+  // 12월 크리스마스 이벤트 한정: 빨강 → 눈빛 하양 → 초록 + 별가루 (빨강·초록도 밤 외곽선과 7:1 이상으로 밝게)
+  xm_name: { kind: "fx", fx: "stars", stops: [0xff8a98, 0xfff6f0, 0x8cf0a8] },
 };
 
 export const NAME_PLATES: Readonly<Record<string, NamePlateSpec>> = {
@@ -67,6 +71,13 @@ export const NAME_PLATES: Readonly<Record<string, NamePlateSpec>> = {
   q_name_wave: { kind: "wave", fill: 0x175a7e, light: 0x4fb8d8, edge: 0x0b2a40, dots: [0xe4fbff, 0x8fe2f0], alpha: 0.94 },
   // 11/15 수집 의뢰 보상 (월 교환소): 짙은 다홍 판 (밝은 글자가 또렷) · edge = 금테 · dots = [금 매듭·금가루, 매듭 술 다홍]
   q_name_newyear: { kind: "newyear", fill: 0x9a1c26, light: 0xd8483a, edge: 0xe8b23a, dots: [0xffd25a, 0xff6a4a], alpha: 0.95 },
+  // 11/17 테마 꾸미기: 니트 (와인빛 털실 · dots = [골지 단 크림, 꽈배기 밝은 줄]), 사원증 (남색 카드 · 파란 띠 · dots = [집게 은빛, 띠 글자 하양]),
+  // 모래사장 (모래 판 · dots = [불가사리 주황, 조개 분홍, 물거품 하늘])
+  np_knit: { kind: "knit", fill: 0x7a2a3a, light: 0x9a3e4e, edge: 0x3e1018, dots: [0xf2e4c8, 0xb85a68], alpha: 0.96 },
+  np_card: { kind: "card", fill: 0x22305a, light: 0x3a7ad8, edge: 0xc8d4e8, dots: [0xd8dce8, 0xf4f8ff], alpha: 0.96 },
+  np_beach: { kind: "beach", fill: 0xc8a466, light: 0xe8cc92, edge: 0x7a5a2a, dots: [0xff8a4a, 0xffc0d0, 0x8ad8f0], alpha: 0.95 },
+  // 12월 크리스마스 이벤트 한정: 짙은 상록 판 + 금테 + 위 눈 덮개 · dots = [열매 빨강, 잎 초록, 눈 하양]
+  xm_plate: { kind: "holly", fill: 0x1e4a30, light: 0x2e6a44, edge: 0xe8c25a, dots: [0xe8323c, 0x4fae5a, 0xf8fbff], alpha: 0.95 },
 };
 
 export function nameColorSpec(id: string | null | undefined): NameColorSpec | null {

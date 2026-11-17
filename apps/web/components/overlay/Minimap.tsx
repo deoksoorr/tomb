@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { bridge } from "@/game/bridge";
 import { BALLOON_ICON, BUMPER_ICON, FERRIS_ICON, FISH_ICON, LANDMARK_COLOR, LANDMARKS, MINIMAP_H, MINIMAP_W, minimapPixels, NODE_DOT_COLOR, PAW_ICON, toMinimap } from "@/game/world/minimapArt";
 import { SEA_SCOPES, type AwayMapId, type MapId } from "@tomb/protocol";
-import { CAMP_LANDMARK_COLOR, CAMP_LANDMARKS, CAMP_MINIMAP_H, CAMP_MINIMAP_W, campMinimapPixels, toCampMinimap } from "@/game/camp/campMinimap";
+import { CAMP_LANDMARK_COLOR, CAMP_LANDMARKS, CAMP_MINIMAP_H, CAMP_MINIMAP_W, CAMP_WINTER_PALETTE, campMinimapPixels, toCampMinimap } from "@/game/camp/campMinimap";
 import { SEA_LANDMARK_COLOR, SEA_LANDMARKS, SEA_MINIMAP_H, SEA_MINIMAP_W, seaMinimapPixels, toSeaMinimap } from "@/game/sea/seaMinimap";
 import { gatherNodeById } from "@/lib/forage/catalog";
 import { MAP_ICONS } from "@/game/world/minimapIcons";
+import { SEA_WINTER_PALETTE, winterizeMinimap } from "@/game/world/minimapWinter";
+import { isSnowy } from "@/lib/mapConcept";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
@@ -22,15 +24,18 @@ const STORE_KEY = "tomb.minimap";
 /** 캔버스 해상도 배율: 지도 1칸을 3×3 픽셀로 그려 화면에서 크게 늘려도 점이 또렷하게 (바탕 그림은 같은 그림을 그대로 확대) */
 const SCALE = 3;
 
-let baseCache: HTMLCanvasElement | null = null;
+let baseCache: { concept: string; canvas: HTMLCanvasElement } | null = null;
+/** 마을 바탕 (11/17 맵 컨셉이 바뀌면 다시 굽는다 — bridge map:concept) */
 function baseImage(): HTMLCanvasElement {
-  if (!baseCache) {
-    baseCache = document.createElement("canvas");
-    baseCache.width = MINIMAP_W;
-    baseCache.height = MINIMAP_H;
-    baseCache.getContext("2d")?.putImageData(new ImageData(minimapPixels() as unknown as Uint8ClampedArray<ArrayBuffer>, MINIMAP_W, MINIMAP_H), 0, 0);
+  const concept = bridge.last("map:concept")?.concept ?? "default";
+  if (!baseCache || baseCache.concept !== concept) {
+    const canvas = document.createElement("canvas");
+    canvas.width = MINIMAP_W;
+    canvas.height = MINIMAP_H;
+    canvas.getContext("2d")?.putImageData(new ImageData(minimapPixels(concept) as unknown as Uint8ClampedArray<ArrayBuffer>, MINIMAP_W, MINIMAP_H), 0, 0);
+    baseCache = { concept, canvas };
   }
-  return baseCache;
+  return baseCache.canvas;
 }
 
 /** 11/15 마을 밖 맵(캠핑장·11/16 바닷가) 지도 한 벌: 바탕 크기·굽기·좌표·주요 장소 */
@@ -44,24 +49,29 @@ type AwayMinimap = {
   /** 큰 표시로 그리는 주요 장소 (캠핑장 모닥불 등) */
   big: ReadonlySet<string>;
   label: string;
+  /** 11/17 겨울·크리스마스 판 색 (기본 색 → 겨울 색, 목록에 없는 색은 minimapWinter가 짐작) */
+  winter: ReadonlyMap<number, number>;
 };
 const AWAY_MINIMAP: Record<AwayMapId, AwayMinimap> = {
-  camp: { w: CAMP_MINIMAP_W, h: CAMP_MINIMAP_H, pixels: campMinimapPixels, to: toCampMinimap, landmarks: CAMP_LANDMARKS, color: (k) => CAMP_LANDMARK_COLOR[k as keyof typeof CAMP_LANDMARK_COLOR] ?? "#ffffff", big: new Set(["fire"]), label: "캠핑장 지도" },
+  camp: { w: CAMP_MINIMAP_W, h: CAMP_MINIMAP_H, pixels: campMinimapPixels, to: toCampMinimap, landmarks: CAMP_LANDMARKS, color: (k) => CAMP_LANDMARK_COLOR[k as keyof typeof CAMP_LANDMARK_COLOR] ?? "#ffffff", big: new Set(["fire"]), label: "캠핑장 지도", winter: CAMP_WINTER_PALETTE },
   // 11/16 바닷가 동전 망원경은 바닷가 맵 모듈 밖(protocol scopes.ts)에 있어서 여기서 덧붙인다
-  sea: { w: SEA_MINIMAP_W, h: SEA_MINIMAP_H, pixels: seaMinimapPixels, to: toSeaMinimap, landmarks: [...SEA_LANDMARKS, ...SEA_SCOPES.map((s) => ({ x: s.x, y: s.y, kind: "telescope" }))], color: (k) => SEA_LANDMARK_COLOR[k as keyof typeof SEA_LANDMARK_COLOR] ?? "#ffffff", big: new Set(["lighthouse"]), label: "바닷가 지도" },
+  sea: { w: SEA_MINIMAP_W, h: SEA_MINIMAP_H, pixels: seaMinimapPixels, to: toSeaMinimap, landmarks: [...SEA_LANDMARKS, ...SEA_SCOPES.map((s) => ({ x: s.x, y: s.y, kind: "telescope" }))], color: (k) => SEA_LANDMARK_COLOR[k as keyof typeof SEA_LANDMARK_COLOR] ?? "#ffffff", big: new Set(["lighthouse"]), label: "바닷가 지도", winter: SEA_WINTER_PALETTE },
 };
 
-/** 11/15 캠핑장·바닷가 바탕 (그 맵에 처음 갈 때 한 번 굽는다) */
-const awayCache = new Map<AwayMapId, HTMLCanvasElement>();
+/** 11/15 캠핑장·바닷가 바탕 (그 맵에 처음 갈 때 한 번 굽는다). 11/17 겨울·크리스마스 판이면 겨울 색 바탕을 따로 (bridge map:concept) */
+const awayCache = new Map<string, HTMLCanvasElement>();
 function awayImage(map: AwayMapId): HTMLCanvasElement {
-  let c = awayCache.get(map);
+  const snowy = isSnowy(bridge.last("map:concept")?.concept ?? "default");
+  const key = `${map}${snowy ? "~winter" : ""}`;
+  let c = awayCache.get(key);
   if (!c) {
     const m = AWAY_MINIMAP[map];
     c = document.createElement("canvas");
     c.width = m.w;
     c.height = m.h;
-    c.getContext("2d")?.putImageData(new ImageData(m.pixels() as unknown as Uint8ClampedArray<ArrayBuffer>, m.w, m.h), 0, 0);
-    awayCache.set(map, c);
+    const px = snowy ? winterizeMinimap(m.pixels(), m.winter) : m.pixels();
+    c.getContext("2d")?.putImageData(new ImageData(px as unknown as Uint8ClampedArray<ArrayBuffer>, m.w, m.h), 0, 0);
+    awayCache.set(key, c);
   }
   return c;
 }

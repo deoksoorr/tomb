@@ -24,8 +24,10 @@ import {
 import type { AttackArea, Derived } from "@/lib/rpg/formulas";
 import type { RpgHud } from "@/lib/rpg/types";
 import type { WeaponStyle } from "@/lib/rpg/weapons";
+import { cardProc } from "@/lib/rpg/procs";
 import { bridge } from "../../bridge";
 import { FXT } from "../combatFx";
+import { showProc } from "../procToast";
 import type { Layer } from "../skillSound";
 import { CARD_SND, CDT, ensureCardTextures } from "./cardFx";
 
@@ -398,7 +400,8 @@ export class CardRun<M extends CardMon> {
     if (s.halfday && this.halfReady) {
       this.halfReady = false;
       const p = this.h.player();
-      this.h.float(p.x, p.y - 26, "반차 썼어요", "#f0d070", 10);
+      // 11/17 「발동」 표시 (화면 오른쪽에 카드) — 머리 위 글자 대신
+      showProc(cardProc("halfday"));
       this.h.ring(p.x, p.y, 0xf0d070, 26);
       this.h.synth("card-block", CARD_SND.block);
       return 0;
@@ -1132,19 +1135,21 @@ export class CardRun<M extends CardMon> {
     return this.s.reviveHp;
   }
 
-  /** 무한 야근: 쓰러지는 순간 한 번 (true면 일어났다 — 체력(reviveHp)·무적은 부르는 쪽이) */
+  /**
+   * 무한 야근: 쓰러지는 순간 한 번 (true면 일어난다). 11/17 쓰러짐 → 카드 발동 → 일어남 연출·체력(reviveHp)·무적·발동 표시는 부르는 쪽(HuntScene 부활 연출)이
+   */
   revive(): boolean {
     if (!this.s.revive || this.reviveUsed) return false;
     this.reviveUsed = true;
     // 11/17 쓰러졌다 일어난 것은 「30% 아래로 떨어진 순간」이 아니다 (부활 체력이 반올림으로 30%에 살짝 못 미쳐도 연차가 바로 터지지 않게)
     this.leaveAbove = false;
-    const p = this.h.player();
-    this.h.ring(p.x, p.y, 0xffd84a, 60);
-    this.burst(p.x, p.y - 10, 0xffd84a, 24);
-    this.h.flash("무한 야근! 다시 일어났어요", 2200);
-    this.h.synth("card-revive", CARD_SND.revive);
-    this.h.shake(260, 0.006);
     return true;
+  }
+
+  /** 11/17 부활 연출이 일어나는 순간: 금빛 조각 (고리·흔들림은 연출이) */
+  reviveBurst(): void {
+    const p = this.h.player();
+    this.burst(p.x, p.y - 10, 0xffd84a, 24);
   }
 
   // ── 11/15 등급 개편 카드 (회식 2차·사내 정치·법인카드·탕비실 간식·반차·믹스커피·연차 몰아 쓰기) ──
@@ -1175,7 +1180,7 @@ export class CardRun<M extends CardMon> {
       const p = this.h.player();
       this.h.ring(p.x, p.y, 0x7ad0f0, 46);
       this.burst(p.x, p.y - 10, 0x7ad0f0, 18);
-      this.h.flash("연차 몰아 쓰기! 3초 동안 무적이에요", 1800);
+      showProc(cardProc("leave", { leaveAspd: s.leaveAspd }));
       this.h.synth("card-revive", CARD_SND.revive);
     }
     const mask = (now < this.temp.until ? 1 : 0) | (now < this.leaveUntil ? 2 : 0);
@@ -1208,8 +1213,7 @@ export class CardRun<M extends CardMon> {
     this.temp = { key: pk.key, v, until: now + 5000 };
     this.buffMask |= 1;
     this.h.refresh();
-    const p = this.h.player();
-    this.h.float(p.x, p.y - 30, `법인카드! ${pk.label} +${Math.round(v * 100)}%`, "#e8c86a", 10);
+    showProc(cardProc("corpcard", { perk: pk.label, perkV: v }));
     this.h.synth("card-pick", CARD_SND.pick);
   }
 

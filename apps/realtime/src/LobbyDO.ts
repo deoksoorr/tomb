@@ -151,6 +151,11 @@ export class LobbyDO extends DurableObject<Env> {
     if (at === undefined || at === channel) this.dropFriend(visitorId);
   }
 
+  /** Worker /internal/online → 11/17 로비가 아는 접속 중인 방문자 id (채널 명단과 합친다) */
+  onlineVisitors(): string[] {
+    return this.visitors.ids();
+  }
+
   /** Worker /internal/hello → 웹이 입장 토큰을 주기 직전: 이 사람이 들고 날 때 알릴 친구들 */
   friendHello(visitorId: string, name: string, key: string, friends: string[]): void {
     this.friends.hello(visitorId, name, key, friends);

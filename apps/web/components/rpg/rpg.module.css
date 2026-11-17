@@ -951,6 +951,61 @@ button.hotSlot:disabled {
   font-size: 13px;
 }
 
+/* ── 11/17 낙법: PC는 물약과 스킬 사이 칸(Z), 손가락 기기는 공격 버튼 위 [구르기] ── */
+.dodgeSlot {
+  margin: 0 6px;
+}
+
+/* 남은 쿨타임 초 (시계 위에 크게) */
+.coolSec {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-small);
+  font-size: 14px;
+  color: var(--bone);
+  text-shadow:
+    1px 0 0 #0a0b09,
+    -1px 0 0 #0a0b09,
+    0 1px 0 #0a0b09,
+    0 -1px 0 #0a0b09;
+  pointer-events: none;
+}
+
+.actionPad {
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.dodgeBtn {
+  width: 56px;
+  height: 56px;
+  padding-bottom: 8px;
+  pointer-events: auto;
+  background: color-mix(in srgb, var(--panel) 80%, #3c5a78);
+}
+
+.dodgeLabel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 2px;
+  font-family: var(--font-small);
+  font-size: 9px;
+  color: var(--bone);
+  text-align: center;
+}
+
+@media (pointer: coarse) {
+  .dodgeSlot {
+    display: none;
+  }
+}
+
 .joystick {
   position: relative;
   width: 112px;

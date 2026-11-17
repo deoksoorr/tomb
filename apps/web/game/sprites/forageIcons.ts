@@ -556,6 +556,9 @@ const DIG_ART: Record<string, () => Grid> = {
   d_seacuc: () => art(["..k...k...k...", ".dddddddddddd.", "dkddkddkddkddd", "dddddddddddddd", ".dddddddddddd.", "..k...k...k..."], { d: 0x4a3a32, k: 0x7a5a48 }),
   d_nakji: () => art(["...hhhh.....", "..hhwehh....", "..hhhhhh....", "...hhhh.....", ".l.l.ll.l...", "l..l.l..l.l.", "l.l...l..l.l", ".l...l..l..l"], { h: 0xb87a6a, w: 0xffffff, e: 0x101014, l: 0xd8988a }),
   d_penshell: () => art(["...........d", ".........ddl", ".......ddlld", ".....ddlldld", "...ddlldldld", ".ddlldldldld", "ddlldldldldl", ".ddddddddddd"], { d: 0x3a3028, l: 0x8a7a6a }),
+  // 11/17 갈매기 깃털 (하얀 깃 · 회색 끝 · 깃대) · 붉은 갈매기 깃털 (매운 과자 빛 — 끝에 작은 김)
+  d_gullfeather: () => art(["........ww", ".......wwg", "......wwwg", ".....wwwg.", "....wwwgg.", "...wwlgg..", "..wwlgg...", ".wllgg....", ".lgg......", "q........."], { w: 0xfbfbf6, l: 0xd8dde4, g: 0x8a96a6, q: 0xc8a060 }),
+  d_redfeather: () => art(["........s.", ".......rrs", "......rrro", ".....rrro.", "....rrroo.", "...rrhoo..", "..rrhoo...", ".rhhoo....", ".hoo......", "q........."], { r: 0xff7a5a, h: 0xffc0a0, o: 0xd83a2a, s: 0xffffff, q: 0xc8a060 }),
   d_goldclam: () => art(["...llll..k", ".lllmllll.", "lmllkllmll", "llmllmllml", "lllmlllmll", "mllllmllll", ".llmllllm.", "..mmmmmm.."], { l: 0xffd060, m: 0xc8902a, k: 0xffffff }),
   d_goldkey: () => art([".yyyy........", "yhhhhy.......", "yh..hyyyyyyyy", "yh..hyhhhhhhy", "yhhhhy...y.y.", ".yyyy....y.y.", "rr.rr........", ".rrr........."], { y: 0xffd060, h: 0xc8902a, r: 0xd83a3a }),
 };

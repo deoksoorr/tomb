@@ -4,7 +4,7 @@ import { setAudioSessionType } from "@/lib/audioSession";
 import { sharedAudioContext } from "@/lib/sharedAudio";
 import { readItem, writeItem } from "@/lib/storage";
 import { LS } from "@/lib/types";
-import { FIRST_PLAYLIST_ID, nextShuffled, parseManifest, pickTrack, randomStart, shuffledOrder, trackSrc, type Playlist, type Track } from "./manifest";
+import { FIRST_PLAYLIST_ID, nextShuffled, parseManifest, pickTrack, randomStart, shuffledOrder, trackSrc, withAllPlaylist, type Playlist, type Track } from "./manifest";
 import { silentWav } from "./silence";
 
 // BGM 엔진 (싱글턴). iOS는 audio.volume을 무시하므로 볼륨·크로스페이드는 모두 Web Audio GainNode로 한다.
@@ -20,6 +20,8 @@ import { silentWav } from "./silence";
 const MANIFEST_URL = `/bgm/tracks.json?v=${encodeURIComponent(process.env.NEXT_PUBLIC_APP_VERSION ?? "dev")}`;
 const CROSSFADE_SEC = 1.5;
 const PAUSE_FADE_SEC = 0.25;
+/** [이전 곡]으로 돌아갈 수 있는 곡 수 */
+const HISTORY_MAX = 50;
 /** 곡이 끝나기 이만큼 전에 다음 곡으로 크로스페이드를 시작한다 (끝난 뒤 넘기면 사이가 뚝 끊긴다) */
 const TAIL_SEC = CROSSFADE_SEC + 1;
 const DEFAULT_VOLUME = 0.5;
@@ -32,6 +34,8 @@ export type BgmState = {
   playing: boolean;
   volume: number;
   muted: boolean;
+  /** 11/17 [이전 곡]으로 돌아갈 곡이 있다 */
+  hasPrev: boolean;
 };
 
 export const INITIAL_BGM_STATE: BgmState = {
@@ -42,6 +46,7 @@ export const INITIAL_BGM_STATE: BgmState = {
   playing: false,
   volume: DEFAULT_VOLUME,
   muted: false,
+  hasPrev: false,
 };
 
 /** file: 이 덱에 걸려 있는 곡. token: 예약된 일시정지를 무효화하는 번호 */
@@ -64,6 +69,8 @@ class BgmEngine {
   /** 지금 플레이리스트를 섞은 재생 순서 (곡 번호들). 다음 곡은 이 순서를 따라가고 한 바퀴 돌면 다시 섞는다 */
   private order: number[] = [];
   private failures = 0;
+  /** 11/17 지나온 곡 (목록·곡 번호). [이전 곡]은 여기서 하나씩 꺼낸다 — 틀다 실패한 곡은 넣지 않는다 */
+  private history: { playlistId: string; index: number }[] = [];
   private unlocked = false;
   /** 탭이 숨을 때 멈춘 덱 (돌아오면 이어서 튼다) */
   private readonly hiddenPaused = new Set<Deck>();
@@ -83,9 +90,10 @@ class BgmEngine {
       const playlists = await fetch(MANIFEST_URL)
         .then((r) => (r.ok ? r.json() : null))
         .then(parseManifest)
+        .then(withAllPlaylist)
         .catch(() => []);
-      // 처음 들어오면 저장해 둔 목록과 상관없이 로파이의 아무 곡부터 (그 뒤 고른 목록은 이 탭에서 그대로 따른다)
-      const start = randomStart(playlists);
+      // 처음 들어오면 저장해 둔 목록과 상관없이 첫 목록(FIRST_PLAYLIST_ID, 지금은 눈꽃 캐럴)의 아무 곡부터 (그 뒤 고른 목록은 이 탭에서 그대로 따른다)
+      const start = randomStart(playlists, FIRST_PLAYLIST_ID);
       const startTracks = playlists.find((p) => p.id === start.playlistId)?.tracks.length ?? 0;
       this.order = shuffledOrder(startTracks, start.index);
       const savedVolume = readItem(LS.volume);
@@ -137,22 +145,50 @@ class BgmEngine {
     else this.play();
   }
 
-  next(): void {
+  next(skipBroken = false): void {
+    if (!skipBroken) this.remember();
     const step = nextShuffled(this.order, this.state.index, this.tracks().length);
     this.order = step.order;
-    this.set({ index: step.index });
+    this.set({ index: step.index, hasPrev: this.history.length > 0 });
     if (this.state.playing) {
       if (this.ctx && this.ctx.state !== "running") void this.ctx.resume().catch(() => undefined);
       this.startTrack();
     }
   }
 
+  /** 11/17 [이전 곡]: 바로 전에 듣던 곡으로 (목록을 바꿨으면 그 목록으로 돌아간다). 다음 곡 순서는 그 곡부터 다시 섞는다 */
+  prev(): void {
+    let back = this.history.pop();
+    while (back && !this.state.playlists.find((p) => p.id === back!.playlistId)?.tracks[back.index]) back = this.history.pop();
+    if (!back) {
+      this.set({ hasPrev: false });
+      return;
+    }
+    const length = this.state.playlists.find((p) => p.id === back.playlistId)?.tracks.length ?? 0;
+    if (back.playlistId !== this.state.playlistId || this.order.length !== length) this.order = shuffledOrder(length, back.index);
+    this.set({ playlistId: back.playlistId, index: back.index, hasPrev: this.history.length > 0 });
+    if (this.state.playing) {
+      if (this.ctx && this.ctx.state !== "running") void this.ctx.resume().catch(() => undefined);
+      this.startTrack();
+    }
+  }
+
+  /** 지금 곡을 지나온 곡에 넣는다 (같은 곡이 연달아 쌓이지 않게) */
+  private remember(): void {
+    if (!currentTrack(this.state)) return;
+    const last = this.history[this.history.length - 1];
+    if (last && last.playlistId === this.state.playlistId && last.index === this.state.index) return;
+    this.history.push({ playlistId: this.state.playlistId, index: this.state.index });
+    if (this.history.length > HISTORY_MAX) this.history.shift();
+  }
+
   /** 목록을 누를 때마다 그 목록의 아무 곡부터 (같은 목록을 다시 누르면 지금 곡 말고 다른 곡). 다음부터는 섞은 순서로 */
   setPlaylist(id: string): void {
     const length = this.state.playlists.find((p) => p.id === id)?.tracks.length ?? 0;
     const index = pickTrack(length, id === this.state.playlistId ? this.state.index : null);
+    this.remember();
     this.order = shuffledOrder(length, index);
-    this.set({ playlistId: id, index });
+    this.set({ playlistId: id, index, hasPrev: this.history.length > 0 });
     if (this.state.playing) this.startTrack();
   }
 
@@ -237,6 +273,7 @@ class BgmEngine {
     on("play", () => this.play());
     on("pause", () => this.pause());
     on("nexttrack", () => this.next());
+    on("previoustrack", () => this.prev());
   }
 
   private sessionFile = "";
@@ -394,7 +431,7 @@ class BgmEngine {
     if (!deck.file || deck !== this.decks[this.active] || !this.state.playing) return;
     this.failures++;
     if (this.failures >= this.tracks().length) this.set({ playing: false });
-    else this.next();
+    else this.next(true);
   }
 }
 

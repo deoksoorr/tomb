@@ -294,6 +294,18 @@ const P: Record<string, Painter> = {
   sk_cup(g, m, a) {
     P.cup(g, m, a);
   },
+  /** 11/17 낙법: 웅크려 구르는 몸 + 도는 줄 + 뒤에 남는 바람 줄 */
+  dodge(g, m, a) {
+    g.ellipse(10, 9, 4.5, 4.5, m);
+    for (let t = 0; t < 14; t++) {
+      const ang = Math.PI * 0.9 + (t / 14) * Math.PI * 1.3;
+      g.set(10 + Math.cos(ang) * 3, 9 + Math.sin(ang) * 3, lighten(m, 0.4));
+    }
+    g.ellipse(11, 6, 1.6, 1.6, lighten(m, 0.55));
+    g.rect(1, 6, 4, 1, a);
+    g.rect(2, 9, 3, 1, a);
+    g.rect(1, 12, 4, 1, a);
+  },
   // ── 11/12 장비 추가분 ──
   namecard(g, m, a) {
     g.rect(2, 4, 11, 7, darken(m, 0.15));

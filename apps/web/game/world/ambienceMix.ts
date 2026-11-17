@@ -27,6 +27,14 @@ export const INDOOR_SHADE = 0x070812;
 
 export const TRANSITION_MS = 2500;
 
+/**
+ * 11/17 다음에 하늘·날씨를 다시 볼 때까지 (ms). 평소엔 every(1분)마다, 날씨가 바뀌는 경계(nextWeatherAt)가 그 안이면 경계 바로 뒤에.
+ * 1분 주기만 쓰면 장면마다 30분 경계보다 최대 1분 늦게 바뀌었다
+ */
+export function recheckDelay(now: number, nextWeatherAt: number, every: number): number {
+  return Math.min(every, Math.max(50, nextWeatherAt - now + 50));
+}
+
 const BASE_FOG: Record<TimePhase, number> = { night: 0.1, dawn: 0.16, day: 0.04, dusk: 0.08 };
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 

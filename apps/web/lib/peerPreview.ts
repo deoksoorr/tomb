@@ -13,7 +13,7 @@ export function elsewhereCount(channelCount: number, namesHere: number): number 
 
 /** 지금 맵에 아무도 없을 때 한 줄 */
 export function aloneLine(map: MapId, elsewhere: number): string {
-  if (elsewhere > 0) return `${PLACE_TITLE[map]}에는 지금 나 혼자예요. 이 채널 다른 곳에 ${elsewhere}명 있어요.`;
+  if (elsewhere > 0) return `${PLACE_TITLE[map]}에는 지금 나 혼자예요. 이 맵이 아닌 곳에 ${elsewhere}명 더 있어요.`;
   return "지금은 이 채널에 나 혼자 있어요. 확성기로 사람을 불러 보세요.";
 }
 
@@ -21,4 +21,4 @@ export function aloneLine(map: MapId, elsewhere: number): string {
 export const hereLabel = (map: MapId): string => `${PLACE_TITLE[map]}에 같이 있는 사람`;
 
 /** 목록 아래 덧붙임 (다른 곳에 아무도 없으면 null) */
-export const elsewhereLine = (elsewhere: number): string | null => (elsewhere > 0 ? `이 채널 다른 곳에 ${elsewhere}명 더 있어요.` : null);
+export const elsewhereLine = (elsewhere: number): string | null => (elsewhere > 0 ? `이 맵이 아닌 곳에 ${elsewhere}명 더 있어요.` : null);

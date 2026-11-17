@@ -656,6 +656,7 @@ export class HouseScene extends Phaser.Scene {
       case "stone_lantern":
       case "candles":
       case "sea_lantern":
+      case "ghost_lamp":
         // 값 1 = 꺼짐 (처음부터 켜져 있던 가구)
         return this.toggles.get(p.u) ? "off" : "";
       default: {
@@ -680,7 +681,7 @@ export class HouseScene extends Phaser.Scene {
 
   /** 꺼 둔 석등·촛대 */
   private isDark(p: Placed): boolean {
-    return (p.i === "stone_lantern" || p.i === "candles" || p.i === "sea_lantern") && !!this.toggles.get(p.u);
+    return (p.i === "stone_lantern" || p.i === "candles" || p.i === "sea_lantern" || p.i === "ghost_lamp") && !!this.toggles.get(p.u);
   }
 
   /** 물건 그림의 불투명도: 놓아 보는 물건은 반투명, 끌어서 못 놓는 자리면 더 흐리게 */

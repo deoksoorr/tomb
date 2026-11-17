@@ -1,5 +1,7 @@
 import { css, darken, hash2, lighten, mix, type Color } from "../../sprites/pixel";
 import { settleSpawns } from "./spawnFix";
+// 11/17 겨울판·크리스마스판 손질 (바닥 눈밭·벽 너머 도시 지붕 눈)
+import { paintGroundSnow, paintSnowy } from "../../rpg/arena/paintConcept";
 import { blockRoom } from "@/lib/rpg/towerSchedule";
 import { RF_BOSS_ROOM, RF_ROOM_SALT, RF_ROOMS } from "@/lib/rpg/towerThemes/rooftop";
 
@@ -307,7 +309,12 @@ export function rooftopFloor(c: Ctx, l: { variant: number; decals: readonly Deca
   for (let k = 0; k < 500; k++) c.fillRect(Math.floor(hash2(k, 1, 903 + l.variant) * AW), Math.floor(hash2(k, 2, 903 + l.variant) * AH), 1, 1);
   // 무늬: 넓은 것 먼저 (데크·패드 → 매트·웅덩이)
   const order = (d: Decal) => (d.kind === "rf_deck" || d.kind === "rf_pad" || d.kind === "rf_heli" ? 0 : d.kind === "rf_puddle" ? 2 : 1);
-  for (const d of [...l.decals].sort((p, q) => order(p) - order(q))) decal(c, d);
+  for (const d of [...l.decals].sort((p, q) => order(p) - order(q))) {
+    // 11/17 겨울판: 바닥(데크·패드까지)은 눈밭으로, 매트·웅덩이·배관 같은 기믹 무늬는 눈 위에 그대로 (arena/paintConcept)
+    if (order(d) > 0) paintGroundSnow(c);
+    decal(c, d);
+  }
+  paintGroundSnow(c);
 }
 
 function woodDeck(c: Ctx, x0: number, y0: number, w: number, h: number, base: Color, salt: number): void {
@@ -487,7 +494,8 @@ export function rfSkyline(v: number): RfSkyline {
 export function rooftopWall(c: Ctx, l: { variant: number }): void {
   // 밤하늘 (위가 짙다) + 낮게 깔린 비구름
   for (let y = 0; y < 22; y++) R(c, 0, y, AW, 1, mix(0x0c0e1c, 0x2a2440, y / 22));
-  for (let k = 0; k < 40; k++) E(c, hash2(k, 1, 91 + l.variant) * AW, 2 + hash2(k, 2, 91) * 8, 18 + hash2(k, 3, 91) * 20, 3, 0x2a2c44, 0.5);
+  const snowy = paintSnowy();
+  for (let k = 0; k < 40; k++) E(c, hash2(k, 1, 91 + l.variant) * AW, 2 + hash2(k, 2, 91) * 8, 18 + hash2(k, 3, 91) * 20, 3, snowy ? 0x3a3e56 : 0x2a2c44, 0.5);
   // 도시 건물 실루엣 (불 꺼진 창 — 켜진 창은 실행부가 깜빡인다)
   let x = -4;
   let k = 0;
@@ -500,6 +508,8 @@ export function rooftopWall(c: Ctx, l: { variant: number }): void {
     R(c, x, top, w, h + 1, body);
     R(c, x, top, w, 1, lighten(body, 0.12));
     if (hash2(k, 6, salt) < 0.3) R(c, x + Math.floor(w / 2), top - 3, 1, 3, 0x3a3e4a);
+    // 겨울: 지붕에 쌓인 눈 (밤이라 푸르스름하게)
+    if (snowy) for (let xx = x; xx < x + w; xx++) R(c, xx, top - (hash2(xx, k, salt + 3) < 0.3 ? 1 : 0), 1, 1 + (hash2(xx, k, salt + 4) < 0.5 ? 1 : 0), hash2(xx, 1, salt + 5) < 0.6 ? 0xb8c6d8 : 0x9aaac0);
     for (let yy = top + 2; yy < 20; yy += 3) for (let xx = x + 2; xx < x + w - 2; xx += 3) R(c, xx, yy, 1, 1, 0x1a1c28);
     x += w + 1;
     k++;
@@ -512,6 +522,15 @@ export function rooftopWall(c: Ctx, l: { variant: number }): void {
   R(c, 0, 21, AW, 1, 0x6a7078);
   R(c, 0, 22, AW, 1, 0x50565e);
   for (let xx = 0; xx < AW; xx += 2) if (hash2(xx, 9, 61) < 0.35) R(c, xx, 23 + Math.floor(hash2(xx, 8, 61) * 6), 1, 2, 0x2e3238);
+  if (snowy) {
+    // 겨울: 난간 손잡이·콘크리트 턱 위 눈, 턱 아래 고드름
+    for (let xx = 0; xx < AW; xx++) {
+      R(c, xx, 15, 1, 1, hash2(xx, 2, 63) < 0.7 ? 0xdce6f0 : 0xb8c6d8);
+      R(c, xx, 20 - (hash2(xx, 3, 63) < 0.25 ? 1 : 0), 1, 2 + (hash2(xx, 3, 63) < 0.25 ? 1 : 0), hash2(xx, 4, 63) < 0.6 ? 0xe6edf3 : 0xcad6e2);
+    }
+    for (let xx = 2; xx < AW; xx += 5) R(c, xx + Math.floor(hash2(xx, 5, 63) * 3), 23, 1, 1 + Math.floor(hash2(xx, 6, 63) * 3), 0xc4e0ee, 0.85);
+    return;
+  }
   // 빗물 자국
   for (let xx = 3; xx < AW; xx += 7) R(c, xx, 23, 1, 2 + Math.floor(hash2(xx, 4, 62) * 5), 0x30363e);
 }

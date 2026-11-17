@@ -7,6 +7,8 @@ import type { IncomingChatLine } from "../logic/chatLog";
 import type { PublicGrave } from "@/lib/types";
 import { TEX } from "../assets/manifest";
 import { bridge, type NetStatus, type UiEvents } from "../bridge";
+import { isSnowy, parseConceptOverride, type MapConcept } from "@/lib/mapConcept";
+import { startMapConceptSync } from "@/lib/mapConceptClient";
 import { DEPTH, GRAVE_NEAR_RADIUS, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { GraveTooltip } from "../entities/Grave";
 import { isAttachKind, Player, type SeatRequester } from "../entities/Player";
@@ -906,6 +908,22 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("look:set", (e) => this.applyLook(e.look, e.lookGrant, e)));
     this.festUntil = bridge.last("urgent:fest")?.until ?? 0;
     on.push(bridge.on("urgent:fest", ({ until }) => (this.festUntil = until)));
+    // 11/17 마을 맵 컨셉 (lib/mapConcept): 주소 시험 값(?concept=, 실서버는 막힘)이 있으면 그것만, 없으면 관리자가 고른 값을 따른다
+    const conceptQa = parseConceptOverride(window.location.search);
+    const applyConcept = (c: MapConcept) => {
+      this.map.setConcept(c);
+      this.atmos.setSnowy(isSnowy(c));
+    };
+    applyConcept(conceptQa ?? bridge.last("map:concept")?.concept ?? "default");
+    if (!conceptQa) {
+      on.push(bridge.on("map:concept", ({ concept }) => !this.cleaned && applyConcept(concept)));
+      on.push(startMapConceptSync());
+    }
+    // 시험 값은 화면(미니맵)도 같이 보게 알린다 — 서버 값 확인은 돌리지 않으니 덮어쓰이지 않는다
+    else if (bridge.last("map:concept")?.concept !== conceptQa) bridge.emit("map:concept", { concept: conceptQa });
+    // 입김: 내 캐릭터 + 다른 사람 (WorldMap 장식이 화면 근처만 고른다)
+    const self = { key: {} as object, x: 0, y: 0, dir: DIR.down as DirId };
+    this.map.setActors(() => this.breathers(self));
     // 11/15 긴급 의뢰 100% 달성: 축하 폭죽 한 발
     on.push(
       bridge.on("urgent:goal", () => {
@@ -1670,8 +1688,8 @@ export class WorldScene extends Phaser.Scene {
     } else if (kind === "honk") {
       // 11/16 범퍼카 빵빵 (경적·헤드라이트 깜빡은 BumperRide, "빵빵!" 말풍선은 AvatarView.playAct)
       this.bumper.honkFx(x, y, mine, d);
-    } else if (kind === "lamp") {
-      // 11/16 바닷가 등대 등불 (바닷가 장면만 쓴다 — 마을에서는 아무것도 하지 않는다)
+    } else if (kind === "lamp" || kind === "gull" || kind === "gullHot") {
+      // 11/16 바닷가 등대 등불 · 11/17 갈매기 과자 (바닷가 장면만 쓴다 — 마을에서는 아무것도 하지 않는다)
     } else if (d < 400 || mine) {
       // 손 흔들기·환호 이모티콘은 아바타가 이름표 위에 띄운다 (AvatarView.playAct). 여기는 환호 반짝임과 소리 (이모티콘과 같은 톡 — 환호는 높게)
       this.fx.actSparks(x, y, kind);
@@ -1726,6 +1744,18 @@ export class WorldScene extends Phaser.Scene {
    * 11/15 긴급 의뢰 마을 축제 (150%): 모닥불이 금빛, 하늘에 폭죽이 저절로 오른다 (처음 30초만) (보는 화면 아래쪽에서 쏘아 화면 안에서 터지게).
    * 폭죽 아이템 없이 그림만 — 서버·다른 사람에게 보내지 않는다 (모두가 같은 축제 상태를 보고 저마다 쏜다). 움직임 줄이기면 드물게
    */
+  /** 11/17 겨울 입김을 낼 사람들 (내 캐릭터 + 마을에 있는 다른 사람). self는 재사용하는 내 자리 */
+  private *breathers(self: { key: object; x: number; y: number; dir: DirId }): Iterable<{ key: object; x: number; y: number; dir: DirId }> {
+    const pl = this.player;
+    if (pl && !this.trip.away && !this.inShop) {
+      self.x = pl.x;
+      self.y = pl.y;
+      self.dir = pl.dir;
+      yield self;
+    }
+    for (const r of this.remotes.values()) if (r.map === "village") yield { key: r, x: r.x, y: r.y, dir: r.netDir };
+  }
+
   private updateFestival(now: number): void {
     const on = Date.now() < this.festUntil;
     if (on !== this.festOn) {

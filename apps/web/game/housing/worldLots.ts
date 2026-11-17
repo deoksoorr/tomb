@@ -2,12 +2,16 @@ import * as Phaser from "phaser";
 import { ambienceAt, parseAmbienceOverride } from "@/lib/ambience";
 import { houseTitle } from "@/lib/housing/catalog";
 import type { VillageHouse } from "@/lib/housing/types";
+import { isSnowy, type MapConcept } from "@/lib/mapConcept";
 import { addCanvasTexture } from "../assets/manifest";
 import { DEPTH } from "../config";
 import { WP } from "../sprites/worldProps";
 import { fitFirst } from "../text/fitLabel";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { emptyLotLayers, litAlpha, lotLayers, type LotSize } from "./exterior";
+import { snowGrid, snowLawn } from "../sprites/winterArt";
+import { addTwinkle } from "../world/conceptLights";
+import { winterLotLayers } from "./winterLots";
 
 // 필지 한 칸을 Phaser 오브젝트로 세운다 (메인 맵 주거 구역 WorldMap.setHouses · 분양 마을 VillageScene 공용).
 //  마당(바닥 깊이) → 집(깊이 = 집 밑변) → 밤 창 불빛(집 바로 위, 시간대에 따라 알파) → 앞 울타리·우편함·간판·가로등(깊이 = 필지 아랫변)
@@ -29,7 +33,8 @@ export type LotGfx = {
   door: { x: number; y: number } | null;
 };
 
-export type LotOpts = { reduced: boolean; labelDepth?: number };
+/** concept: 11/17 마을 맵 컨셉 (겨울·크리스마스면 눈 덮인 층 — game/housing/winterLots). 없으면 기본 */
+export type LotOpts = { reduced: boolean; labelDepth?: number; concept?: MapConcept };
 
 const texKey = (prefix: string, tier: string, size: LotSize, ext: object) => `lot-${prefix}-${tier}-${size.w}x${size.h}-${Object.values(ext).join("-")}`;
 
@@ -42,16 +47,29 @@ export function drawHouseLot(scene: Phaser.Scene, atlas: GlyphAtlas, lot: LotSpo
   const L = lotLayers(h.exterior, h.tier, size);
   const info = L.info;
   const base = lot.y + info.baseY;
-  const ground = scene.add.image(lot.x, lot.y, canvasTex(scene, texKey("ground", h.tier, size, h.exterior), () => L.ground.toCanvas())).setOrigin(0, 0).setDepth(DEPTH.decal + 1);
-  const back = scene.add.image(lot.x, lot.y, canvasTex(scene, texKey("back", h.tier, size, {}), () => L.back.toCanvas())).setOrigin(0, 0).setDepth(lot.y + L.backBase);
-  const house = scene.add.image(lot.x, lot.y, canvasTex(scene, texKey("house", h.tier, size, h.exterior), () => L.house.toCanvas())).setOrigin(0, 0).setDepth(base);
+  // 겨울·크리스마스: 같은 자리·크기의 눈 덮인 층 (텍스처 키 앞에 컨셉)
+  const concept = opts.concept ?? "default";
+  const W = isSnowy(concept) ? winterLotLayers(L, h.exterior, h.tier, size, concept) : null;
+  const pre = W ? `${concept}-` : "";
+  const ground = scene.add.image(lot.x, lot.y, canvasTex(scene, pre + texKey("ground", h.tier, size, h.exterior), () => (W ?? L).ground.toCanvas())).setOrigin(0, 0).setDepth(DEPTH.decal + 1);
+  const back = scene.add.image(lot.x, lot.y, canvasTex(scene, pre + texKey("back", h.tier, size, {}), () => (W ?? L).back.toCanvas())).setOrigin(0, 0).setDepth(lot.y + L.backBase);
+  const house = scene.add.image(lot.x, lot.y, canvasTex(scene, pre + texKey("house", h.tier, size, h.exterior), () => (W ?? L).house.toCanvas())).setOrigin(0, 0).setDepth(base);
   const lit = scene.add
     .image(lot.x, lot.y, canvasTex(scene, texKey("lit", h.tier, size, h.exterior), () => L.lit.toCanvas()))
     .setOrigin(0, 0)
     .setDepth(base + 0.01);
   trackLit(scene, lit);
-  const front = scene.add.image(lot.x, lot.y, canvasTex(scene, texKey("front", h.tier, size, h.exterior), () => L.front.toCanvas())).setOrigin(0, 0).setDepth(lot.y + size.h - 2);
+  const front = scene.add.image(lot.x, lot.y, canvasTex(scene, pre + texKey("front", h.tier, size, h.exterior), () => (W ?? L).front.toCanvas())).setOrigin(0, 0).setDepth(lot.y + size.h - 2);
   const objs: Phaser.GameObjects.GameObject[] = [ground, back, house, lit, front];
+  const images = [ground, back, house, lit, front];
+  // 크리스마스: 처마 전구 빛 겹 (두 장 번갈아 반짝, 밤에 환하게)
+  if (W?.glow) {
+    const gk = pre + texKey("glow", h.tier, size, h.exterior);
+    if (!scene.textures.exists(gk)) addCanvasTexture(scene, gk, { canvas: W.glow, frameW: size.w, frameH: size.h });
+    const glow = addTwinkle(scene, gk, lot.x, lot.y, 0, 0, { reduced: opts.reduced, phase: lot.lot % 2 });
+    objs.push(glow);
+    images.push(glow);
+  }
   // 굴뚝 연기 (움직임 줄이기면 끈다)
   if (!opts.reduced && scene.textures.exists(WP.smoke))
     for (const [i, c] of info.chimneys.entries()) {
@@ -90,7 +108,7 @@ export function drawHouseLot(scene: Phaser.Scene, atlas: GlyphAtlas, lot: LotSpo
   ];
   return {
     objs,
-    images: [ground, back, house, lit, front],
+    images,
     labels,
     lights: info.lights.map((l) => ({ x: lot.x + l.x, y: lot.y + l.y, scale: l.r / 40, tint: l.color, base: 0.5 })),
     body: { x: lot.x + info.body.x, y: lot.y + info.body.y, w: info.body.w, h: info.body.h },
@@ -125,8 +143,17 @@ export function scaleLotLabel(l: Phaser.GameObjects.BitmapText, s: number): void
 export function drawEmptyLot(scene: Phaser.Scene, atlas: GlyphAtlas, lot: LotSpot, size: LotSize, taken: boolean, opts: LotOpts): LotGfx {
   const L = emptyLotLayers(taken, size);
   const kind = taken ? "taken" : "free";
-  const ground = scene.add.image(lot.x, lot.y, canvasTex(scene, `lot-empty-ground-${kind}-${size.w}x${size.h}`, () => L.ground.toCanvas())).setOrigin(0, 0).setDepth(DEPTH.decal + 1);
-  const front = scene.add.image(lot.x, lot.y, canvasTex(scene, `lot-empty-front-${kind}-${size.w}x${size.h}`, () => L.front.toCanvas())).setOrigin(0, 0).setDepth(lot.y + L.signY);
+  // 겨울·크리스마스: 빈 집터도 눈밭 (팻말·말뚝 윗면에 눈)
+  const snowy = isSnowy(opts.concept ?? "default");
+  const pre = snowy ? "snow-" : "";
+  const ground = scene.add
+    .image(lot.x, lot.y, canvasTex(scene, `${pre}lot-empty-ground-${kind}-${size.w}x${size.h}`, () => (snowy ? snowLawn(L.ground) : L.ground).toCanvas()))
+    .setOrigin(0, 0)
+    .setDepth(DEPTH.decal + 1);
+  const front = scene.add
+    .image(lot.x, lot.y, canvasTex(scene, `${pre}lot-empty-front-${kind}-${size.w}x${size.h}`, () => (snowy ? snowGrid(L.front, 1) : L.front).toCanvas()))
+    .setOrigin(0, 0)
+    .setDepth(lot.y + L.signY);
   // 11/15 「분양 중」을 「누가 사는 중」으로 읽은 사람이 있어서 → 빈 집터 (E로 분양받기)
   const text = taken ? `${lot.lot}번지 · 공사 중` : `${lot.lot}번지 · 빈 집터`;
   atlas.ensure(text);

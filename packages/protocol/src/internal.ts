@@ -13,6 +13,7 @@ import { hmacSign, hmacVerify } from "./token";
 //  - POST /internal/say   { id, name, text, at, replaces?, exp } → 11/15 마을 공지 한 줄을 열린 채널 모두의 확성기 줄에 지금 띄운다
 //                          (긴급 의뢰 시작·끝, 최고층 기록 등 — 웹이 확성기 기록에 남긴 것과 같은 id. replaces = 이 줄로 바꿔 끼울 앞 공지 id)
 //  - POST /internal/pin   { scope, ch, pin, exp }          → 11/17 확성기 창 고정 공지가 바뀌었다 (channel이면 그 채널만, all이면 사람이 있는 채널 모두. pin null = 지움)
+//  - POST /internal/online { exp }                         → 11/17 관리자 선물: 지금 접속 중인 방문자 id 전부 (채널·맵·방 상관없이, 한 번씩)
 
 export const INTERNAL_SIG_HEADER = "X-Tomb-Internal";
 /** 내부 요청 유효 시간 (초). 서버끼리라 짧게 */
@@ -31,7 +32,9 @@ export type InternalHello = { op: "hello"; visitorId: string; name: string; key:
 export type InternalSay = { op: "say"; id: string; name: string; text: string; at: number; replaces?: string; exp: number };
 /** 11/17 고정 공지 바뀜 (웹이 저장한 뒤). scope all이면 ch 0. pin = 새 공지 글·쓴 사람·쓴 시각, null = 지움 */
 export type InternalPin = { op: "pin"; scope: "channel" | "all"; ch: number; pin: { text: string; name: string; at: number } | null; exp: number };
-export type InternalRequest = InternalKick | InternalPeer | InternalMe | InternalWhere | InternalHello | InternalSay | InternalPin;
+/** 11/17 지금 접속 중인 방문자 id 전부 (관리자 선물 「지금 접속 중인 사람 모두」). 응답 { visitorIds: string[] } */
+export type InternalOnline = { op: "online"; exp: number };
+export type InternalRequest = InternalKick | InternalPeer | InternalMe | InternalWhere | InternalHello | InternalSay | InternalPin | InternalOnline;
 /** 마을 공지 한 줄 최대 길이 (확성기 60자보다 넉넉히 — 시스템이 만든 문장이라 서명만 확인한다) */
 export const INTERNAL_SAY_MAX = 200;
 const SAY_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
@@ -109,6 +112,7 @@ export async function verifyInternal(
     if (!ids.every((v) => typeof v === "string" && VISITOR_RE.test(v))) return null;
     return { op: "where", visitorIds: ids as string[], ...(r.fresh === true ? { fresh: true } : {}), exp: r.exp };
   }
+  if (r.op === "online") return { op: "online", exp: r.exp };
   if (r.op === "peer") {
     if (typeof r.sid !== "number" || !Number.isInteger(r.sid) || r.sid < 0) return null;
     const hasCh = typeof r.ch === "number" && Number.isInteger(r.ch) && r.ch >= 1;

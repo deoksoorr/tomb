@@ -6,6 +6,7 @@ import { CHAT_LOG_TTL_MS, chatChannelOf, visibleChatLines, type ChatLine } from 
 import { cx } from "../ui/cx";
 import ChatInput from "./ChatInput";
 import { chatStore, setChatShown, useChatLines } from "./chatLines";
+import { readChatSize, saveChatSize, stepChatSize, type ChatSize } from "./chatSize";
 import ChatScroll from "./ChatScroll";
 import styles from "./ChatLog.module.css";
 
@@ -13,6 +14,7 @@ import styles from "./ChatLog.module.css";
 // 방에 들어올 때(입장·새로고침·재접속·실내에서 복귀) 서버가 그 방의 최근 기록(chat:log — 하루 안, 서버가 잠들었다 깨도
 // 맵별 최근 50줄)을 보내 주면 서버 줄 id로 겹치지 않게 합친다. 5분 지난 줄은 흐리게 + "N분 전".
 //  - 데스크톱: 왼쪽 아래 바로 가기 줄 바로 위 반투명 상자. 상자 안에서 스크롤(하단 고정), 아래에 입력칸 (Enter 포커스 → Enter 전송 → Esc·빈 Enter 해제)
+//    11/17 상자 오른쪽 위 [−][+]로 크기 단계. [−]를 누를수록 세로로 줄고 맨 끝은 입력칸만 남는다. 이 브라우저에 기억한다 (chatSize)
 //  - 모바일: 조이스틱 바로 위 반투명 상자에 기록이 늘 보인다 (손가락 스크롤). 입력은 행동 버튼 [채팅] 하나로 (11/16 [기록] 버튼·기록 창은 없앴다).
 //    채팅 입력 줄(ChatSheet)에도 같은 기록이 위에 붙는다.
 
@@ -95,11 +97,26 @@ function MobileChat({ all, now }: { all: ChatLine[]; now: number }) {
   );
 }
 
-/** 데스크톱: 반투명 상자 + 스크롤 기록(하단 고정) + 입력칸 */
+/** 데스크톱: 반투명 상자 + 스크롤 기록(하단 고정) + 입력칸. 11/17 오른쪽 위 탭 [−][+]로 크기 단계 */
 function DesktopBox({ lines: shown, now, hunt }: { lines: ChatLine[]; now: number; hunt: boolean }) {
+  // 게임이 뜬 뒤에만 그려지므로(ready) 처음 값을 바로 저장소에서 읽어도 서버 렌더와 어긋나지 않는다
+  const [size, setSize] = useState<ChatSize>(readChatSize);
+  const step = (dir: 1 | -1) => {
+    const next = stepChatSize(size, dir);
+    setSize(next);
+    saveChatSize(next);
+  };
   return (
-    <section className={cx(styles.box, hunt && styles.huntBox)} aria-label="채팅">
-      {shown.length > 0 && <ChatScroll lines={shown} now={now} />}
+    <section className={cx(styles.box, hunt && styles.huntBox)} data-size={size} aria-label="채팅">
+      <div className={styles.sizeTab}>
+        <button type="button" className={styles.sizeBtn} onClick={() => step(-1)} disabled={size === "input"} aria-label="채팅창 줄이기" title="채팅창 줄이기">
+          −
+        </button>
+        <button type="button" className={styles.sizeBtn} onClick={() => step(1)} disabled={size === "large"} aria-label="채팅창 키우기" title="채팅창 키우기">
+          +
+        </button>
+      </div>
+      {size !== "input" && shown.length > 0 && <ChatScroll lines={shown} now={now} />}
       <ChatInput id={INPUT_ID} className={styles.input} placeholder="Enter로 채팅" onCancel={() => document.getElementById(INPUT_ID)?.blur()} />
     </section>
   );

@@ -51,8 +51,20 @@ export function trackSrc(file: string, base: string | undefined = process.env.NE
   return b + file.slice("/bgm".length);
 }
 
-/** 곡 목록을 받기 전 자리 표시용 플레이리스트 (실제 첫 곡은 randomStart가 아무 플레이리스트에서 고른다 — 11/15 로파이 고정 → 무작위) */
-export const FIRST_PLAYLIST_ID = "lofi";
+/** 11/17 모든 목록의 곡을 한데 섞어 듣는 「전곡」 (tracks.json에는 없고 받은 뒤 맨 앞에 만들어 붙인다) */
+export const ALL_PLAYLIST_ID = "all";
+
+/** 곡이 있는 목록이 둘 이상이면 맨 앞에 「전곡」을 붙인다 (같은 파일은 한 번만) */
+export function withAllPlaylist(playlists: readonly Playlist[]): Playlist[] {
+  const real = playlists.filter((p) => p.id !== ALL_PLAYLIST_ID);
+  if (real.filter((p) => p.tracks.length > 0).length < 2) return real;
+  const seen = new Set<string>();
+  const tracks = real.flatMap((p) => p.tracks).filter((t) => !seen.has(t.file) && seen.add(t.file));
+  return [{ id: ALL_PLAYLIST_ID, title: "전곡", tracks }, ...real];
+}
+
+/** 처음 들어오면 트는 플레이리스트 (곡은 그 안에서 무작위). 11/15 로파이 고정 → 무작위, 11/17 눈꽃 캐럴 고정 (사용자 요청) */
+export const FIRST_PLAYLIST_ID = "carol";
 
 /**
  * 처음 들어올 때 시작할 곡: 아무 플레이리스트의 아무 곡. firstId를 주면 그 플레이리스트의 아무 곡 (없으면 아무 플레이리스트).

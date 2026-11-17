@@ -1,5 +1,6 @@
 import { AVATAR_COLORS, CAMP_ARRIVE, DIR, SEA_ARRIVE, SEA_KAYAKS, SEA_KAYAK_SPEED, SEA_JETSKIS, SEA_JETSKI_SPEED, SEA_TUBE_SPEED, SPAWN, STATE, decodeSnapshot, encodeEvent, encodeMove, seaSeatById, SEA_FISHING_SPOTS, SEA_REST_SEATS, signJoinToken, type C2S, type S2C, type StateId } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
+import type { Grant } from "@tomb/protocol";
 import { admit } from "./auth";
 import { ChannelCore, MAP_INTERVAL_MS, type ChannelHost, type JoinTicket } from "./channel";
 import { parseMap, parseSpawn } from "./logic";
@@ -8,7 +9,7 @@ import { parseMap, parseSpawn } from "./logic";
 
 type Conn = { id: string; out: (string | ArrayBuffer)[] };
 
-function setup() {
+function setup(o0: { grants?: boolean } = {}) {
   const host: ChannelHost<Conn> = {
     send: (c, d) => void c.out.push(d),
     close: () => {},
@@ -20,7 +21,8 @@ function setup() {
     lastPing: () => 0,
     visitorJoined: () => {},
     visitorLeft: () => {},
-    verifyGrant: async () => null,
+    // 11/17 술 시험: 증서를 그대로 믿어요 (진짜 서명은 camp.test)
+    verifyGrant: async (token) => (o0.grants ? (JSON.parse(token) as Grant) : null),
     claimNonce: () => true,
   };
   const core = new ChannelCore<Conn>({ capacity: 10, graceMs: 20_000 }, host);
@@ -266,6 +268,22 @@ describe("sea map (11/16 달물결 포구)", () => {
     const c = join("c", { sea: true, map: "sea", spawn: { x: Math.round(x), y: Math.round(y) + 12 } });
     core.message(c, send({ t: "sit", seatId: "pK1-1" }), 3200);
     expect(events(c)).toContainEqual({ t: "seatDenied", seatId: "pK1-1" });
+  });
+
+  // 11/17 사용자: 술에 취한 동안엔 바다 놀거리를 못 타요 (튜브·제트스키·카약), 바닷가 벤치는 그대로
+  it("11/17 drunk peers are refused sea rides until sober, benches still work", async () => {
+    const { core, join } = setup({ grants: true });
+    const k = SEA_KAYAKS[0];
+    const a = join("a", { sea: true, map: "sea", spawn: { x: k.x, y: k.y - 26 } });
+    core.message(a, send({ t: "bbq", grant: JSON.stringify({ kind: "bbq", visitorId: "a", exp: 9e12, item: "soju", until: 1_000 + 600_000, lv: 1, at: 1_000, nonce: "s1" }) }), 1_000);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(core.peer(1)?.drunk).toEqual({ lv: 1, at: 1_000 });
+    core.message(a, send({ t: "sit", seatId: "pK1-0" }), 2_000);
+    expect(events(a)).toContainEqual({ t: "seatDenied", seatId: "pK1-0" });
+    expect(core.peer(1)?.seatId ?? null).toBeNull();
+    // 10분 뒤 술이 깨면 탈 수 있어요
+    core.message(a, send({ t: "sit", seatId: "pK1-0" }), 1_000 + 600_000);
+    expect(core.peer(1)).toMatchObject({ seatId: "pK1-0", state: STATE.boat });
   });
 
   it("?m=sea goes to the sea only with the sea claim", async () => {

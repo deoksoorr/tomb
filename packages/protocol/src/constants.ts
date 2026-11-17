@@ -151,7 +151,8 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 // 68 = 지옥 사냥터 경험치 배율 11→4 (한 판 약 3레벨 → 약 1레벨, 초월 경험치는 그대로) — 모두 한 번 새로고침 (11/17)
 // 69 = 주간 레이스 1위 1주일 혜택(사냥왕·낚시왕·포인트왕, 다관왕 이동 속도), 레이스 창 1위 보상 안내, 상점 할인 표시 — 모두 한 번 새로고침 (11/17)
 // 70 = 확성기 고정 공지, 폰 사냥 중 채팅 끄기, 마을 이름 「기억숲 마을」·화면 위 채널 표시·채널 창 문구, 레이스 창 1주일 혜택 상자 — 모두 한 번 새로고침 (11/17)
-export const CLIENT_VERSION = 70;
+// 71 = 겨울·크리스마스 맵 컨셉(마을·캠핑장·바닷가·사냥터·야근 빌딩·NPC 옷), 유령선 특가 장터, 갈매기 과자, 낙법, 넋 흡혈 조정, 새 폭죽·코디·펫·루돌프 썰매, 접속자 전체 선물, 배경음악 목록 교체 — 모두 한 번 새로고침 (11/17)
+export const CLIENT_VERSION = 71;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */
@@ -286,7 +287,8 @@ export function staffGateBody<T extends string>(body: T, staff: boolean): T | "h
  * 한 번 하는 동작 (같은 채널에 보이고 들린다): 종 치기·물 튀기기·손 흔들기·환호·오리배 꽥(11/15)·범퍼카 빵빵(11/16)·등대 등불 켬(11/16, 바닷가).
  * 서버가 이 목록으로 받을 동작을 정한다 (늘리면 realtime 재배포). 옛 클라이언트는 모르는 동작을 그냥 버린다
  */
-export const ACT_KINDS = ["bell", "splash", "wave", "cheer", "quack", "honk", "lamp"] as const;
+// 11/17 gull = 포구 갈매기에게 과자 던지기 · gullHot = 매운 새우 과자 (같은 바닷가 사람 화면에 갈매기가 몰려들어요 — 매운 과자는 받아먹은 갈매기가 30초 빨개져요)
+export const ACT_KINDS = ["bell", "splash", "wave", "cheer", "quack", "honk", "lamp", "gull", "gullHot"] as const;
 export type ActKind = (typeof ACT_KINDS)[number];
 
 /**
