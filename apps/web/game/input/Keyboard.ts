@@ -111,6 +111,11 @@ export class KeyboardInput {
     out.ay = (this.any(DOWN_KEYS) ? 1 : 0) - (this.any(UP_KEYS) ? 1 : 0);
   }
 
+  /** 11/18 Space를 누르고 있는지 (캠핑장 눈덩이 굴리기 — 누르는 순간은 jump로도 온다) */
+  get jumpHeld(): boolean {
+    return this.down.has("Space");
+  }
+
   get running(): boolean {
     return this.down.has("ShiftLeft") || this.down.has("ShiftRight");
   }

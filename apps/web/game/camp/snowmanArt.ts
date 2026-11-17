@@ -228,6 +228,71 @@ export function rollingBallSheet(s: BallSize): { grid: Grid; frameW: number; fra
   return { grid: g, frameW: w, frameH: h };
 }
 
+// ── 안고 다니는 눈덩이 ──
+
+/** 안은 덩이를 보는 방향: 앞(아래를 볼 때)·옆(오른쪽 기준, 왼쪽은 좌우 반전)·뒤(위를 볼 때 — 몸에 가려 가장자리만 보인다) */
+export type CarryView = "front" | "side" | "back";
+export const CARRY_VIEWS: readonly CarryView[] = ["front", "side", "back"];
+/** 털장갑 (빨강 뜨개 — 어떤 옷 색이어도 「두 손으로 안았다」가 보이게) */
+const MITTEN = { hi: 0xe46a62, mid: 0xc23e44, lo: 0x8c2834 } as const;
+
+/** 안은 덩이 한 장 크기 (양옆 장갑 자리 포함, 그림자 없음) */
+export function carryFrameSize(s: BallSize): { w: number; h: number; cy: number } {
+  const r = BALL_R[s];
+  const ry = r * BALL_SQUASH;
+  const h = Math.ceil(ry * 2) + 5;
+  return { w: Math.ceil(r * 2) + 8, h, cy: h - 3 - ry };
+}
+
+/** 털장갑 하나 (3×3 + 외곽선). x, y = 왼쪽 위 */
+function mitten(g: Grid, x: number, y: number): void {
+  const m = new Grid(5, 5);
+  m.set(2, 1, MITTEN.mid);
+  m.set(1, 2, MITTEN.mid);
+  m.set(2, 2, MITTEN.hi);
+  m.set(3, 2, MITTEN.mid);
+  m.set(1, 3, MITTEN.lo);
+  m.set(2, 3, MITTEN.mid);
+  m.set(3, 3, MITTEN.lo);
+  m.outline(darken(MITTEN.lo, 0.35));
+  g.draw(m, x - 1, y - 1);
+}
+
+/**
+ * 품에 안은 눈덩이 (크기 s, 보는 방향 v). 굴리지 않을 때 몸 앞에 들고 걷는 모습이다.
+ * 앞: 덩이 아래쪽 양옆을 장갑 두 개가 받친다. 옆: 몸 쪽 가장자리에 장갑 하나, 아래 앞쪽에 반대 손이 살짝.
+ * 뒤: 앞과 같다 (장면이 몸 뒤에 두면 덩이는 가려지고 양옆 장갑·가장자리만 보인다)
+ */
+export function carriedBallArt(s: BallSize, v: CarryView): Grid {
+  const { w, cy } = carryFrameSize(s);
+  const g = new Grid(w, carryFrameSize(s).h);
+  const r = BALL_R[s];
+  const ry = r * BALL_SQUASH;
+  const cx = w / 2;
+  snowBall(g, cx, cy, r, ry, s + 7);
+  glint(g, cx, cy, r);
+  g.outline(EDGE);
+  const low = Math.round(cy + ry * 0.25);
+  if (v === "front" || v === "back") {
+    // 뒷모습은 몸에 가려지니 장갑을 한 칸씩 바깥으로
+    const out = v === "back" ? 1 : 0;
+    mitten(g, Math.round(cx - r - 1.5) - out, low);
+    mitten(g, Math.round(cx + r - 1.5) + out, low);
+  } else if (v === "side") {
+    mitten(g, Math.round(cx - r - 1.5), low - 1);
+    mitten(g, Math.round(cx + r * 0.2), Math.round(cy + ry - 2));
+  }
+  return g;
+}
+
+/** 안은 덩이 시트 (앞·옆·뒤 3장) */
+export function carriedBallSheet(s: BallSize): { grid: Grid; frameW: number; frameH: number } {
+  const { w, h } = carryFrameSize(s);
+  const g = new Grid(w * CARRY_VIEWS.length, h);
+  CARRY_VIEWS.forEach((v, i) => g.draw(carriedBallArt(s, v), i * w, 0));
+  return { grid: g, frameW: w, frameH: h };
+}
+
 /** 굴린 자국 한 점 (다져진 눈 — 반투명, 장면이 시간이 지나면 지운다) */
 export function rollTrackArt(s: BallSize): Grid {
   const r = Math.ceil(BALL_R[s] * 0.7);

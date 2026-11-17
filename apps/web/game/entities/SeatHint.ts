@@ -30,6 +30,7 @@ export class SeatHint {
     this.text = scene.add
       .bitmapText(0, 0, FONT_KEY, this.sitLabel, FONT_PX)
       .setOrigin(0.5, 0)
+      .setCenterAlign() // 두 줄 안내(눈덩이 들고 있을 때)도 가운데로
       .setTint(TINT)
       .setDepth(DEPTH.labels - 2)
       .setVisible(false);

@@ -5,6 +5,7 @@ import type { BallSize } from "./snowmanArt";
 
 // 11/17 캠핑장 눈사람 만들기 — 장면 없이 도는 판정 (테스트한다).
 // 눈더미 자리 · 굴린 거리 → 크기 · 내려놓을 수 있는 자리 · 쌓을 수 있는지 · 녹는 단계.
+// 11/18 들고 다니기와 굴리기를 나눴다: 안고 걸으면 그대로, 굴릴 때(Space·[굴리기]를 누른 채)만 커진다 (heldStep · carryAt).
 
 type Pt = { x: number; y: number };
 
@@ -20,6 +21,17 @@ export const PUDDLE_MS = 20_000;
 /** 굴린 거리 → 크기 */
 export function sizeForRoll(dist: number): BallSize {
   return dist >= SNOWBALL_GROW_AT[1] ? 2 : dist >= SNOWBALL_GROW_AT[0] ? 1 : 0;
+}
+
+/**
+ * 들고 있는 덩이가 한 걸음(moved px) 움직였을 때: 굴리는 중(rolling)이고 눈이 묻는 바닥(grows)이면 굴린 거리를 더하고 크기를 다시 본다.
+ * 안고만 걸으면 그대로다. 몸통(2)이 가장 크다
+ */
+export function heldStep(h: { size: BallSize; dist: number }, moved: number, rolling: boolean, grows: boolean): { size: BallSize; dist: number } {
+  if (!rolling || !grows || moved <= 0) return { size: h.size, dist: h.dist };
+  const dist = h.dist + moved;
+  const size = sizeForRoll(dist);
+  return { size: size > h.size ? size : h.size, dist };
 }
 
 /** 굴리면 커지는 바닥인지 (눈 덮인 풀밭·바위 마당·광장 바깥 — 흙길·녹은 땅·물·버스 길은 아니다) */
@@ -135,5 +147,25 @@ export function ballFront(x: number, y: number, dir: number, r: number): Pt {
       return { x, y: y - Math.max(5, r * 0.9) - 3 };
     default:
       return { x, y: y + r * 1.8 + 3 };
+  }
+}
+
+/**
+ * 품에 안은 덩이 자리 (덩이 가운데, 화면 px). handUp = 발바닥에서 손까지 높이 (sprites/avatar handAnchor), r·ry = 덩이 반지름, scale = 바베큐로 커진 배율.
+ *  - 앞(아래를 볼 때): 몸 앞으로 내밀어 낮게 안는다 (덩이 아래가 발끝보다 조금 앞 — 머리가 큰 아바타라 높이 들면 얼굴을 다 가린다)
+ *  - 옆: 몸 앞쪽 손 높이 · 위(뒷모습): 몸 뒤에 (depth -) 손 높이 — 양옆 장갑만 삐져나온다
+ */
+export function carryAt(x: number, y: number, dir: number, r: number, ry: number, handUp: number, scale = 1): { x: number; y: number; depth: number } {
+  const lift = (scale - 1) * handUp * 0.6;
+  switch (dir) {
+    case 1:
+    case 2: {
+      const up = Math.max(ry + 1.5, handUp - 3) * scale;
+      return { x: x + (dir === 1 ? -1 : 1) * (r * 0.5 + 4) * scale, y: y - up, depth: y + 0.4 };
+    }
+    case 3:
+      return { x, y: y - Math.max(ry + 1.5, handUp + 1) * scale, depth: y - 0.4 };
+    default:
+      return { x, y: y + 3 - ry - lift, depth: y + 0.4 };
   }
 }

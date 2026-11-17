@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { flushSync } from "react-dom";
 import { bridge } from "@/game/bridge";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
@@ -16,6 +16,7 @@ import styles from "./MobileControls.module.css";
  * 터치 기기 전용: 왼쪽 떠다니는 조이스틱(11/15 — 왼쪽 아무 데나 누르면 그 자리에, 짧은 탭은 아래 캔버스로 넘겨 소품·사람 누르기) + 우하단 [상호작용] [점프] [달리기] [앉기]
  * + 점프 왼쪽에 작은 [표현] (누르면 표현 창, 길게 누르면 즐겨찾기 원형 — 아래 바로 가기 줄이 없어져 여기로)
  * + 그 위 같은 크기 [채팅] (누르면 키보드 위 한 줄 입력칸, ChatSheet). 채팅 중에는 조이스틱·버튼을 숨긴다.
+ * 11/18 캠핑장 눈덩이를 들고 있으면 [점프] 자리가 [굴리기]가 된다 (RollButton — 누르고 있는 동안 굴리기, 떼면 다시 안기).
  */
 export default function MobileControls({
   onSay,
@@ -41,6 +42,8 @@ export default function MobileControls({
   const duck = useBridgeValue("boat:duck")?.riding === true;
   // 11/16 범퍼카 위에서도 점프 대신 빵빵
   const car = useBridgeValue("bumper:riding")?.riding === true;
+  // 11/18 캠핑장 눈덩이를 들고 있으면 점프 대신 굴리기 (들고 있는 동안 점프는 막혀 있다)
+  const snowball = useBridgeValue("camp:snowball")?.held === true;
   useTouchGuards();
 
   function toggleRun() {
@@ -62,15 +65,19 @@ export default function MobileControls({
         >
           {inShop ? "말 걸기" : nearGrave ? "살펴보기" : "상호작용"}
         </button>
-        <button
-          type="button"
-          className={styles.action}
-          data-slot="jump"
-          aria-label={duck ? "꽥! 오리배 경적" : car ? "빵빵! 범퍼카 경적" : undefined}
-          {...pressProps(() => bridge.emit("input:jump"))}
-        >
-          {duck ? "꽥!" : car ? "빵빵!" : "점프"}
-        </button>
+        {snowball ? (
+          <RollButton off={chatOpen || viewing} />
+        ) : (
+          <button
+            type="button"
+            className={styles.action}
+            data-slot="jump"
+            aria-label={duck ? "꽥! 오리배 경적" : car ? "빵빵! 범퍼카 경적" : undefined}
+            {...pressProps(() => bridge.emit("input:jump"))}
+          >
+            {duck ? "꽥!" : car ? "빵빵!" : "점프"}
+          </button>
+        )}
         <button
           type="button"
           className={styles.action}
@@ -110,6 +117,72 @@ export default function MobileControls({
         <RideButton variant="touch" className={styles.action} />
       </div>
     </>
+  );
+}
+
+/**
+ * 11/18 [굴리기] (눈덩이를 들고 있을 때 [점프] 자리): 누르고 있는 동안 굴리기(input:roll on), 떼면 다시 안기.
+ * 누른 손가락을 붙잡아(setPointerCapture) 버튼 밖으로 미끄러져도 뗄 때까지 굴린다. 누르는 동안은 눌린 모습에 덩이 그림이 돈다.
+ * off(채팅 입력·바라보는 장면)이거나 버튼이 사라지면(내려놓음) 뗀 것으로 친다.
+ */
+function RollButton({ off }: { off: boolean }) {
+  const [held, setHeld] = useState(false);
+  const pointer = useRef<number | null>(null);
+
+  function release() {
+    if (pointer.current === null) return;
+    pointer.current = null;
+    setHeld(false);
+    bridge.emit("input:roll", { on: false });
+  }
+
+  useEffect(() => {
+    if (off) release();
+  });
+  // 내려놓아 버튼이 사라지면 뗀 것으로
+  useEffect(
+    () => () => {
+      if (pointer.current !== null) bridge.emit("input:roll", { on: false });
+    },
+    [],
+  );
+
+  function onDown(e: PointerEvent<HTMLButtonElement>) {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (pointer.current !== null) return;
+    e.preventDefault();
+    pointer.current = e.pointerId;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // 붙잡지 못해도 pointerup·cancel로 뗀다
+    }
+    setHeld(true);
+    bridge.emit("input:roll", { on: true });
+  }
+
+  function onUp(e: PointerEvent<HTMLButtonElement>) {
+    if (e.pointerId === pointer.current) release();
+  }
+
+  return (
+    <button
+      type="button"
+      className={cx(styles.action, styles.roll)}
+      data-slot="jump"
+      data-held={held || undefined}
+      aria-pressed={held}
+      aria-label="굴리기: 누른 채 걸으면 눈덩이가 굴러가며 커져요"
+      onPointerDown={onDown}
+      onPointerUp={onUp}
+      onPointerCancel={onUp}
+      onLostPointerCapture={onUp}
+    >
+      <span className={styles.rollIcon}>
+        <PixelIcon name="snowball" size={18} />
+      </span>
+      {held ? "굴리는 중" : "굴리기"}
+    </button>
   );
 }
 

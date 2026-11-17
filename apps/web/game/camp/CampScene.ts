@@ -724,8 +724,10 @@ export class CampScene extends Phaser.Scene {
     }
     const pl = this.player;
     const now = this.time.now;
-    // 11/17 눈덩이를 굴리는 동안: 점프·앉기·탈것은 내려놓은 다음에 (E는 내려놓기)
-    if ((a === "jump" || a === "sit" || a === "ride") && this.snow?.blocks()) return;
+    // 11/17 눈덩이를 들고 있는 동안: 앉기·탈것은 내려놓은 다음에 (E는 내려놓기).
+    // 11/18 점프 키(Space·터치 [굴리기])는 굴리기라 점프하지 않는다 — 누르고 있는지는 update가 hub.rollHeld로 본다
+    if (a === "jump" && this.snow?.holding) return;
+    if ((a === "sit" || a === "ride") && this.snow?.blocks()) return;
     if (a === "jump") {
       pl.jump(now, this.seatReq);
       return;
@@ -1055,8 +1057,9 @@ export class CampScene extends Phaser.Scene {
       this.scope.update(now, dt, this.move, this.atmos.levels.darkness);
       this.move.ax = this.move.ay = 0;
     }
-    // 11/17 눈덩이를 굴리는 동안은 걷기만 (달리면 덩이가 앞질러 가 버린다)
-    if (this.snow?.holding) this.move.run = false;
+    // 11/17 눈덩이를 굴리는 동안은 걷기만 (달리면 덩이가 앞질러 가 버린다). 11/18 품에 안고는 달려도 된다
+    const rollHeld = this.host.hub.rollHeld && !this.locked && !this.scope.isOpen;
+    if (this.snow?.holding && rollHeld) this.move.run = false;
     const started = pl.update(this.benchInput(now), now, this.seatReq);
     this.stars?.update();
     if (this.furnitureCollider) this.furnitureCollider.active = !pl.airborne;
@@ -1090,7 +1093,7 @@ export class CampScene extends Phaser.Scene {
     publishRide(pl, this.riding.on); // 11/16 탄 것·앉은 자리 → UI (lib/rideGate)
     this.forage.f.update(dt, view, s);
     this.life?.update(dt, view, s);
-    this.snow?.update(s);
+    this.snow?.update(s, rollHeld);
     for (const r of this.remotes.values()) r.update(pnow, view, s);
     this.declutterLabels(now, pnow);
     this.updateSeatHint(now, s);

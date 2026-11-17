@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { campSnowSpotOk } from "@tomb/protocol";
-import { snowmanArt, snowmanLook, SNOWMAN_H, SNOWMAN_W, stackArt } from "./snowmanArt";
-import { campSnowPiles, meltStage, sizeForRoll, snowPlaceOk, stackCheck, stackDone, SNOWBALL_GROW_AT } from "./snowmanLogic";
+import { BALL_R, carriedBallSheet, carryFrameSize, snowmanArt, snowmanLook, SNOWMAN_H, SNOWMAN_W, stackArt, type BallSize } from "./snowmanArt";
+import { campSnowPiles, carryAt, heldStep, meltStage, sizeForRoll, snowPlaceOk, stackCheck, stackDone, SNOWBALL_GROW_AT } from "./snowmanLogic";
 
 // 11/17 캠핑장 눈사람 만들기: 굴린 거리 → 크기, 쌓기 순서, 눈더미 자리, 같은 씨앗 → 같은 모습
 describe("snowman logic", () => {
@@ -9,6 +9,40 @@ describe("snowman logic", () => {
     expect(sizeForRoll(0)).toBe(0);
     expect(sizeForRoll(SNOWBALL_GROW_AT[0])).toBe(1);
     expect(sizeForRoll(SNOWBALL_GROW_AT[1])).toBe(2);
+  });
+  it("11/18 안고 걸으면 안 커지고, 굴릴 때만 커진다 (몸통이 가장 크다)", () => {
+    let h: { size: BallSize; dist: number } = { size: 0, dist: 0 };
+    for (let i = 0; i < 200; i++) h = heldStep(h, 5, false, true);
+    expect(h).toEqual({ size: 0, dist: 0 });
+    // 흙길처럼 눈이 안 묻는 바닥에서 굴려도 그대로
+    expect(heldStep(h, 50, true, false)).toEqual(h);
+    const sizes: BallSize[] = [];
+    for (let i = 0; i < 200; i++) {
+      h = heldStep(h, 5, true, true);
+      if (sizes[sizes.length - 1] !== h.size) sizes.push(h.size);
+    }
+    expect(sizes).toEqual([0, 1, 2]);
+    // 몸통을 들고 다시 안았다가 굴려도 몸통 (더 커지지도 작아지지도 않는다)
+    expect(heldStep({ size: 2, dist: 0 }, 5, true, true).size).toBe(2);
+  });
+  it("11/18 안은 덩이: 아래를 보면 몸 앞에 낮게, 옆이면 그쪽, 위를 보면 몸 뒤", () => {
+    for (const s of [0, 1, 2] as const) {
+      const r = BALL_R[s];
+      const down = carryAt(100, 200, 0, r, r * 0.9, 10);
+      expect(down.depth).toBeGreaterThan(200);
+      expect(down.y + r * 0.9).toBeGreaterThan(200);
+      expect(down.y + r * 0.9).toBeLessThanOrEqual(203);
+      expect(carryAt(100, 200, 3, r, r * 0.9, 10).y).toBeLessThan(down.y);
+      expect(carryAt(100, 200, 1, r, r * 0.9, 10).x).toBeLessThan(100);
+      expect(carryAt(100, 200, 2, r, r * 0.9, 10).x).toBeGreaterThan(100);
+      expect(carryAt(100, 200, 3, r, r * 0.9, 10).depth).toBeLessThan(200);
+      // 커지면 더 높이 안는다
+      expect(carryAt(100, 200, 0, r, r * 0.9, 10, 2).y).toBeLessThan(down.y);
+      const sh = carriedBallSheet(s);
+      const fr = carryFrameSize(s);
+      expect([sh.frameW, sh.frameH]).toEqual([fr.w, fr.h]);
+      expect(sh.grid.w).toBe(fr.w * 3);
+    }
   });
   it("더 작은 덩이만 위에 올리고, 몸통·배·머리면 완성", () => {
     const st = { id: 1, x: 0, y: 0, sizes: [2 as const] as (0 | 1 | 2)[] };
