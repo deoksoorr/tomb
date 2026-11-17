@@ -4,7 +4,7 @@ import { setAudioSessionType } from "@/lib/audioSession";
 import { sharedAudioContext } from "@/lib/sharedAudio";
 import { readItem, writeItem } from "@/lib/storage";
 import { LS } from "@/lib/types";
-import { FIRST_PLAYLIST_ID, nextShuffled, parseManifest, pickTrack, randomStart, shuffledOrder, trackSrc, type Playlist, type Track } from "./manifest";
+import { FIRST_PLAYLIST_ID, nextShuffled, parseManifest, pickTrack, randomStart, shuffledOrder, trackSrc, withAllPlaylist, type Playlist, type Track } from "./manifest";
 import { silentWav } from "./silence";
 
 // BGM 엔진 (싱글턴). iOS는 audio.volume을 무시하므로 볼륨·크로스페이드는 모두 Web Audio GainNode로 한다.
@@ -83,6 +83,7 @@ class BgmEngine {
       const playlists = await fetch(MANIFEST_URL)
         .then((r) => (r.ok ? r.json() : null))
         .then(parseManifest)
+        .then(withAllPlaylist)
         .catch(() => []);
       // 처음 들어오면 저장해 둔 목록과 상관없이 로파이의 아무 곡부터 (그 뒤 고른 목록은 이 탭에서 그대로 따른다)
       const start = randomStart(playlists);

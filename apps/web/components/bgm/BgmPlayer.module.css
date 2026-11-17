@@ -126,6 +126,11 @@
   white-space: nowrap;
 }
 
+/* 11/17 「전곡 섞어 듣기」는 목록 3×3 위에 한 줄 가득 */
+.listAll {
+  grid-column: 1 / -1;
+}
+
 .volume {
   flex: 1;
   min-width: 0;

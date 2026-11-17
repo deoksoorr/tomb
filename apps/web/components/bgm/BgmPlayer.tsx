@@ -9,7 +9,7 @@ import Dialog from "../ui/Dialog";
 import PixelIcon from "../ui/PixelIcon";
 import ui from "../ui/ui.module.css";
 import { bgm, currentTrack, INITIAL_BGM_STATE } from "./engine";
-import { needsAttribution, type Playlist } from "./manifest";
+import { ALL_PLAYLIST_ID, needsAttribution, type Playlist } from "./manifest";
 import styles from "./BgmPlayer.module.css";
 
 /**
@@ -98,17 +98,17 @@ export default function BgmPlayer({ compact = false }: { compact?: boolean }) {
                 <button
                   key={p.id}
                   type="button"
-                  className={cx(ui.button, p.id === state.playlistId && ui.primary, styles.listButton)}
+                  className={cx(ui.button, p.id === state.playlistId && ui.primary, styles.listButton, p.id === ALL_PLAYLIST_ID && styles.listAll)}
                   onClick={() => {
                     bgm.setPlaylist(p.id);
                     if (!bgm.getSnapshot().playing) bgm.play();
                   }}
                   disabled={p.tracks.length === 0}
                   aria-pressed={p.id === state.playlistId}
-                  title={`${p.title} · ${p.tracks.length}곡 (누를 때마다 다른 곡부터)`}
+                  title={p.id === ALL_PLAYLIST_ID ? `모든 목록 ${p.tracks.length}곡을 섞어서 들어요` : `${p.title} · ${p.tracks.length}곡 (누를 때마다 다른 곡부터)`}
                   data-playlist={p.id}
                 >
-                  {p.title}
+                  {p.id === ALL_PLAYLIST_ID ? `전곡 섞어 듣기 · ${p.tracks.length}곡` : p.title}
                   {p.isNew && <span className={styles.newTag}>NEW</span>}
                 </button>
               ))}
@@ -204,7 +204,8 @@ const BUSES: readonly [SoundBus, string, string][] = [
 
 /** CC BY 계열만 저작자·출처를 밝힌다. 그 밖의 곡은 제목과 라이선스만 */
 function BgmCredits({ playlists, now, onClose }: { playlists: Playlist[]; now: string | null; onClose: () => void }) {
-  const withTracks = playlists.filter((p) => p.tracks.length > 0);
+  // 「전곡」은 다른 목록을 모은 것이라 음원 정보에서는 뺀다
+  const withTracks = playlists.filter((p) => p.tracks.length > 0 && p.id !== ALL_PLAYLIST_ID);
   const total = withTracks.reduce((n, p) => n + p.tracks.length, 0);
   return (
     <Dialog title="음원 정보" onClose={onClose}>
