@@ -1,16 +1,16 @@
 // 11/17 넋 거두기(so_drain) 흡혈 규칙 (순수): 사냥 화면(HuntScene.strike)이 맞힐 때마다 부른다.
 //  - 한 번 맞힘: 준 피해 × 흡혈 비율, 최대 HP의 3%까지 (예전 그대로)
-//  - 광역기(opts.aoe)·소환(길동무 넋·망자의 초롱)으로 맞힌 건 3분의 1만
-//  - 모든 맞힘을 합쳐 1초(지난 1000ms)에 최대 HP의 5%까지 — 예전엔 상한이 없어 광역기 한 번에 HP가 몇 번이나 꽉 찼다
+//  - 광역기(opts.aoe)·소환(길동무 넋·망자의 초롱)으로 맞힌 건 절반만 (11/18 3분의 1 → 절반 — 127층 클리어자가 60층도 버거워졌다는 피드백)
+//  - 모든 맞힘을 합쳐 1초(지난 1000ms)에 최대 HP의 8%까지 (11/18 5% → 8%) — 예전엔 상한이 없어 광역기 한 번에 HP가 몇 번이나 꽉 찼다
 // 시각은 판 시간(ms). 저주의 받는 회복 절반(healMul)은 부르는 쪽이 이 값에 곱한다.
 
 /** 한 번 맞힐 때 최대 (최대 HP 비율) */
 export const STEAL_HIT_CAP = 0.03;
 /** 1초 동안 모든 맞힘을 합친 최대 (최대 HP 비율) */
-export const STEAL_SEC_CAP = 0.05;
+export const STEAL_SEC_CAP = 0.08;
 export const STEAL_WINDOW_MS = 1000;
 /** 광역기·소환 맞힘의 흡혈 배율 */
-export const STEAL_SPLASH_MUL = 1 / 3;
+export const STEAL_SPLASH_MUL = 1 / 2;
 
 /** 맞힌 방법: 한 대상(기본 공격·단일 스킬) · 광역기 · 소환 */
 export type StealKind = "single" | "aoe" | "summon";

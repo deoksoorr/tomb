@@ -257,7 +257,7 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     synergy: [{ with: ["fr_collar"], text: "최대 HP가 늘면 회복량도 커져요" }],
   },
   so_drain: {
-    summary: "배워 두면 내가 준 피해의 일부만큼 HP가 차요. 한 번에 최대 HP의 3%, 1초에 모두 합쳐 5%까지예요. 광역기와 소환이 맞힌 건 3분의 1만 차요.",
+    summary: "배워 두면 내가 준 피해의 일부만큼 HP가 차요. 한 번에 최대 HP의 3%, 1초에 모두 합쳐 8%까지예요. 광역기와 소환이 맞힌 건 절반만 차요.",
     flavor: "넋은 가져가되, 조금은 나눠 받는다.",
     types: ["heal"],
     synergy: [{ with: ["fr_blizzard", "em_brazier", "so_wisp"], text: "자주 여러 번 때리는 스킬과 같이 쓰면 HP가 꾸준히 차요" }],
@@ -445,7 +445,7 @@ function effectRows(id: SkillId, lv: number): [string, string][] {
         ["흡혈", `준 피해의 ${pct(SKILL_FX.so_drain(lv).steal)}`],
         ["한 번 최대", `최대 HP의 ${pct(STEAL_HIT_CAP)}`],
         ["1초 최대", `최대 HP의 ${pct(STEAL_SEC_CAP)} (모든 맞힘을 합쳐서)`],
-        ["광역기와 소환", "3분의 1만"],
+        ["광역기와 소환", "절반만"],
       ];
     case "so_swift": {
       const f = SKILL_FX.so_swift(lv);
