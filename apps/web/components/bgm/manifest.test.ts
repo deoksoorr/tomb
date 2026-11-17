@@ -15,7 +15,7 @@ describe("parseManifest", () => {
       ["citypop", "노을 시티팝", 50],
       ["lofi", "로파이", 15],
     ]);
-    expect(lists.filter((p) => p.isNew).map((p) => p.id)).toEqual(["retrowinter"]);
+    expect(lists.filter((p) => p.isNew).map((p) => p.id)).toEqual(["retrowinter", "carol", "citypop"]);
     // 처음엔 레트로 겨울 마을부터
     expect(FIRST_PLAYLIST_ID).toBe("retrowinter");
     expect(lists.some((p) => p.id === FIRST_PLAYLIST_ID)).toBe(true);
