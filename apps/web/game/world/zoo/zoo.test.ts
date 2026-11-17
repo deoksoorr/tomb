@@ -266,7 +266,8 @@ describe("11/17 새 펫: 멈춤·귀여운 동작·옛 화면 호환", () => {
     const spec = COSMETIC_FX.xm_sleigh;
     if (spec?.kind !== "pet" || !spec.pose) throw new Error("xm_sleigh");
     const art = FX_ART[spec.art];
-    expect([art.w, art.h, art.frames]).toEqual([40, MOUNT_H, mountFrames("sleigh")]);
+    // 11/17 52칸: 루돌프가 옆으로 눌려 보였다
+    expect([art.w, art.h, art.frames]).toEqual([52, MOUNT_H, mountFrames("sleigh")]);
     expect(riderLift("xm_sleigh")).toBeGreaterThan(0);
     const sim = new CosmeticFxSim();
     sim.setLook(["xm_sleigh"]);
@@ -278,6 +279,8 @@ describe("11/17 새 펫: 멈춤·귀여운 동작·옛 화면 호환", () => {
       [true, false],
       [false, true],
     ]);
+    // 11/17 옆모습에선 썰매를 앞으로 밀어 탄 사람이 뒤칸 쪽에 앉는다 (오른쪽을 보면 +, 썰매와 옆판이 같이)
+    expect(ride.map((c) => c.x - Math.round(base({}).x))).toEqual([13, 13]);
     // 앞·뒷모습은 기존처럼 덧그림 6·8번대
     out.length = 0;
     sim.step(base({ riding: true, moving: true, dir: DIR.down }), out);

@@ -18,7 +18,7 @@ export type MountKind = "hound" | "goose" | "deer" | "carp" | "alpaca" | "polar"
  * 11/17 옆모습에서 탈것을 보는 쪽(앞)으로 미는 칸 — 탄 사람이 탈것 가운데보다 뒤쪽에 앉아 보이게.
  * 루돌프 썰매는 앞에 루돌프가 있어 가운데에 앉으면 너무 앞으로 쏠려 보였다 (사용자 피드백)
  */
-export const MOUNT_SIDE_SHIFT: Partial<Record<MountKind, number>> = { sleigh: 7 };
+export const MOUNT_SIDE_SHIFT: Partial<Record<MountKind, number>> = { sleigh: 13 };
 export const MOUNT_SEAT: Record<MountKind, number> = { hound: 10, goose: 11, deer: 9, carp: 9, alpaca: 10, polar: 9, sleigh: 15 };
 /** 탄 사람을 들어 올리는 높이 (px) */
 export function mountLift(kind: MountKind): number {
@@ -674,9 +674,12 @@ function polarSit(g: Grid, pose: "open" | "blink" | "yawn" | "yawnWide"): void {
 }
 
 // ── 12월 루돌프 썰매 (이벤트 한정 타는 펫): 빨간 나무 썰매 · 금빛 테두리와 썰매 날 · 앞코에 방울 · 뒤칸에 선물 자루, 앞에서 꼬마 루돌프(xm_deer와 같은 색)가 끈다 ──
-// 루돌프까지 들어가도록 이 그림만 40칸 너비 (탄 사람은 가운데 x 20). 옆모습은 탄 사람 앞에 썰매 옆판을 한 번 더 덧그려(sideOver) 다리가 썰매 안에 들어간다.
+// 루돌프까지 들어가도록 이 그림만 52칸 너비 (11/17 40 → 52: 루돌프가 옆으로 눌려 보였다 — 몸을 길게, 썰매와 사이를 띄움).
+// 앞·뒷모습은 예전 40칸 그림을 가운데(x 26)로 6칸 옮겨 그린다 (SLEIGH_PAD). 옆모습 탄 사람 자리는 MOUNT_SIDE_SHIFT. 옆모습은 탄 사람 앞에 썰매 옆판을 한 번 더 덧그려(sideOver) 다리가 썰매 안에 들어간다.
 // 달릴 때(0~5) 썰매 날 뒤·발굽 밑에 눈가루가 날리고(under — 외곽선 없이) 방울이 흔들린다. 멈춤 10·11, 동작 12·13 = 루돌프가 앞발로 눈을 긁는다.
-const SLEIGH_W = 40;
+const SLEIGH_W = 52;
+/** 앞·뒷모습(40칸 기준 그림)을 넓힌 프레임 가운데로 옮기는 칸 */
+const SLEIGH_PAD = (SLEIGH_W - 40) / 2;
 const SL = { red: 0xd42c3c, redLo: 0x9a1c2c, redHi: 0xec5a5e, gold: 0xf2c84a, goldHi: 0xfff2b0, goldLo: 0xb88a22, sack: 0x9a6a3a, sackHi: 0xc89a62, sackLo: 0x6e4826, rope: 0xe8cf98, box1: 0x3aa05a, box2: 0x4a8ad8, ribbon: 0xff4a5a, holly: 0x2e8a4a, strap: 0x6a3a1a, snow: 0xf4faff, snowLo: 0xcfe6f6, line: 0x3a1418 };
 const RD = { antler: 0xe0b878, dark: 0x8a5430, head: 0xb07440, back: 0xc88a52, body: 0xa86a3c, far: 0x6a3e22, belly: 0xf2dcb8, eye: 0x2a1a14, nose: 0xff3a44, collar: 0xd42c3c, hoof: 0x4a3020 };
 
@@ -744,59 +747,63 @@ function sleighBell(g: Grid, sw: number): void {
   g.set(28 + sw, 14, SL.gold);
   g.set(28 + sw, 15, SL.goldLo);
 }
-/** 옆모습 루돌프 (가슴끈으로 썰매를 끈다). pose: walk(f로 다리 번갈아) · stand · blink · paw(앞발 들기) · scrape(앞발로 긁기) */
+/** 옆모습 루돌프 (가슴끈으로 썰매를 끈다). pose: walk(f로 다리 번갈아) · stand · blink · paw(앞발 들기) · scrape(앞발로 긁기)
+ *  11/17 몸을 길게(11칸) · 목을 세우고 · 썰매와 다섯 칸 띄웠다. 뒷다리 36·37, 앞다리 44·45 */
 function reindeerSide(g: Grid, pose: "walk" | "stand" | "blink" | "paw" | "scrape", f = 0): void {
   const c = RD;
   const nod = pose === "paw" || pose === "scrape" ? 1 : 0;
-  // 가슴끈 (금 버클)
-  g.hline(28, 31, 14, SL.strap);
-  g.set(30, 14, SL.gold);
+  // 가슴끈 (썰매 앞코에서 루돌프 엉덩이까지 · 금 버클)
+  g.hline(28, 35, 14, SL.strap);
+  g.set(31, 14, SL.gold);
   // 먼 쪽 다리 (달릴 때는 아래 reindeerGallop이 네 다리를 함께 그린다)
   if (pose !== "walk")
-    for (const x of [32, 37]) {
+    for (const x of [37, 45]) {
       g.vline(x, 16, 20, c.far);
       g.set(x, 21, c.hoof);
     }
-  // 몸 · 등 줄무늬 · 배
-  g.ellipse(34.5, 13.5, 3.6, 2.2, c.body);
-  g.recolor((x, y) => x >= 31 && y === 11, c.back);
-  g.recolor((x, y) => x >= 32 && x <= 37 && y === 15, c.belly);
-  g.set(30, 12, c.belly); // 꼬리
-  g.set(30, 11, c.belly);
-  // 목 · 머리 (앞발로 긁을 땐 고개를 살짝 숙인다). 맨 오른쪽 열은 외곽선이 덮으니 코는 한 칸 안쪽에
-  g.rect(35, 9 + nod, 2, 4, c.head);
-  g.ellipse(36.8, 8.4 + nod, 1.9, 1.6, c.head);
-  g.set(38, 9 + nod, c.belly);
-  g.set(38, 8 + nod, c.nose);
-  if (pose === "blink") g.set(37, 8 + nod, c.dark);
-  else g.set(37, 7 + nod, c.eye);
-  g.set(35, 7 + nod, c.dark); // 귀
-  // 뿔
-  g.vline(36, 4 + nod, 6 + nod, c.antler);
-  g.set(35, 4 + nod, c.antler);
-  g.set(37, 3 + nod, c.antler);
-  g.set(34, 5 + nod, c.antler);
-  g.set(38, 5 + nod, c.antler);
+  // 몸 · 등 줄무늬 · 배 · 꼬리
+  g.ellipse(40.5, 13.4, 5.6, 2.4, c.body);
+  g.recolor((x, y) => x >= 36 && x <= 46 && y === 11, c.back);
+  g.recolor((x, y) => x >= 37 && x <= 44 && y === 15, c.belly);
+  g.set(34, 12, c.belly);
+  g.set(34, 11, c.belly);
+  // 목 (앞으로 비스듬히 세운다) · 머리 (앞발로 긁을 땐 고개를 살짝 숙인다). 맨 오른쪽 열은 외곽선이 덮으니 코는 한 칸 안쪽에
+  g.rect(44, 9 + nod, 2, 4, c.head);
+  g.set(46, 9 + nod, c.head);
+  g.set(46, 10 + nod, c.head);
+  g.ellipse(48, 7.4 + nod, 2.2, 1.6, c.head);
+  g.set(50, 8 + nod, c.belly);
+  g.set(50, 7 + nod, c.nose);
+  if (pose === "blink") g.set(48, 7 + nod, c.dark);
+  else g.set(48, 6 + nod, c.eye);
+  g.set(46, 6 + nod, c.dark); // 귀
+  // 뿔 (가지 셋)
+  g.vline(47, 3 + nod, 5 + nod, c.antler);
+  g.set(46, 3 + nod, c.antler);
+  g.set(45, 2 + nod, c.antler);
+  g.set(48, 2 + nod, c.antler);
+  g.set(49, 3 + nod, c.antler);
+  g.set(44, 4 + nod, c.antler);
   // 빨간 목걸이 + 금방울 (달릴 때 흔들)
-  g.hline(35, 36, 11 + nod, c.collar);
-  g.set(pose === "walk" && f ? 37 : 36, 12 + nod, SL.gold);
+  g.hline(44, 46, 11 + nod, c.collar);
+  g.set(pose === "walk" && f ? 46 : 45, 12 + nod, SL.gold);
   // 가까운 쪽 다리
   if (pose === "paw") {
     // 앞발을 들어 올린다
-    g.vline(31, 16, 20, c.dark);
-    g.set(31, 21, c.hoof);
-    g.set(36, 16, c.dark);
-    g.set(37, 17, c.dark);
-    g.set(38, 17, c.hoof);
+    g.vline(36, 16, 20, c.dark);
+    g.set(36, 21, c.hoof);
+    g.set(44, 16, c.dark);
+    g.set(45, 17, c.dark);
+    g.set(46, 17, c.hoof);
   } else if (pose === "scrape") {
     // 앞발로 눈을 긁어 뒤로 쓸어 내린다
-    g.vline(31, 16, 20, c.dark);
-    g.set(31, 21, c.hoof);
-    g.vline(36, 16, 19, c.dark);
-    g.set(37, 20, c.hoof);
+    g.vline(36, 16, 20, c.dark);
+    g.set(36, 21, c.hoof);
+    g.vline(44, 16, 19, c.dark);
+    g.set(45, 20, c.hoof);
   } else if (pose === "walk") reindeerGallop(g, f);
   else
-    for (const x of [31, 36]) {
+    for (const x of [36, 44]) {
       g.vline(x, 16, 20, c.dark);
       g.set(x, 21, c.hoof);
     }
@@ -808,15 +815,15 @@ function reindeerGallop(g: Grid, f: number): void {
     pts.forEach(([x, y], i) => g.set(x, y, i === pts.length - 1 ? c.hoof : col));
   };
   if (f === 0) {
-    leg([[33, 16], [33, 17], [33, 18], [32, 19], [32, 20], [32, 21]], c.far);
-    leg([[36, 16], [36, 17], [36, 18], [37, 19], [37, 20], [37, 21]], c.far);
-    leg([[32, 16], [32, 17], [31, 18], [31, 19], [30, 20], [30, 21]], c.dark);
-    leg([[37, 16], [37, 17], [38, 18], [38, 19], [38, 20], [38, 21]], c.dark);
+    leg([[38, 16], [38, 17], [38, 18], [37, 19], [37, 20], [37, 21]], c.far);
+    leg([[44, 16], [44, 17], [44, 18], [45, 19], [45, 20], [45, 21]], c.far);
+    leg([[37, 16], [37, 17], [36, 18], [36, 19], [35, 20], [35, 21]], c.dark);
+    leg([[45, 16], [45, 17], [46, 18], [46, 19], [47, 20], [47, 21]], c.dark);
   } else {
-    leg([[32, 16], [32, 17], [32, 18], [32, 19], [32, 20], [32, 21]], c.far);
-    leg([[37, 16], [37, 17], [37, 18], [37, 19], [37, 20]], c.far);
-    leg([[33, 16], [33, 17], [33, 18], [33, 19], [33, 20], [33, 21]], c.dark);
-    leg([[36, 16], [36, 17], [36, 18], [35, 19], [35, 20]], c.dark);
+    leg([[37, 16], [37, 17], [37, 18], [37, 19], [37, 20], [37, 21]], c.far);
+    leg([[45, 16], [45, 17], [45, 18], [45, 19], [45, 20]], c.far);
+    leg([[38, 16], [38, 17], [38, 18], [38, 19], [38, 20], [38, 21]], c.dark);
+    leg([[44, 16], [44, 17], [44, 18], [43, 19], [43, 20]], c.dark);
   }
 }
 function sleighSide(g: Grid, f: number): void {
@@ -838,7 +845,7 @@ function sleighRest(pose: "stand" | "blink" | "paw" | "scrape"): Draw {
 }
 /** 앞발로 긁어 튀긴 눈 (외곽선 위에 덧그린다) */
 function sleighScrapeSnow(g: Grid, f: number): void {
-  const pts = f ? [[38, 21], [39, 20], [35, 20], [34, 19], [39, 18]] : [[39, 21], [38, 20], [39, 19]];
+  const pts = f ? [[46, 21], [47, 20], [43, 20], [42, 19], [47, 18]] : [[47, 21], [46, 20], [47, 19]];
   for (const [x, y] of pts) g.set(x, y, SL.snow, 235);
 }
 /** 달릴 때 눈가루 (몸 밑에 외곽선 없이). side = 썰매 날 뒤 + 발굽 밑, 그 밖은 양쪽 날 밑 */
@@ -846,11 +853,11 @@ function sleighSpray(side: boolean): Draw {
   return (g, f) => {
     const pts = side
       ? f
-        ? [[0, 18], [1, 18], [1, 20], [2, 17], [0, 21], [2, 19], [0, 15], [34, 21], [35, 20], [39, 21]]
-        : [[1, 19], [0, 20], [0, 19], [3, 18], [1, 16], [2, 21], [0, 17], [34, 20], [35, 21], [30, 21]]
+        ? [[0, 18], [1, 18], [1, 20], [2, 17], [0, 21], [2, 19], [0, 15], [37, 21], [38, 20], [47, 21]]
+        : [[1, 19], [0, 20], [0, 19], [3, 18], [1, 16], [2, 21], [0, 17], [36, 20], [37, 21], [34, 21]]
       : f
-        ? [[9, 20], [10, 18], [30, 19], [31, 21]]
-        : [[10, 21], [9, 19], [31, 20], [30, 18]];
+        ? [[9 + SLEIGH_PAD, 20], [10 + SLEIGH_PAD, 18], [30 + SLEIGH_PAD, 19], [31 + SLEIGH_PAD, 21]]
+        : [[10 + SLEIGH_PAD, 21], [9 + SLEIGH_PAD, 19], [31 + SLEIGH_PAD, 20], [30 + SLEIGH_PAD, 18]];
     pts.forEach(([x, y], i) => g.set(x, y, i % 2 ? SL.snowLo : SL.snow, 220));
   };
 }
@@ -946,6 +953,15 @@ function sleighBackOver(g: Grid, f: number): void {
   g.set(26 - f, 17, c.gold);
 }
 
+/** 40칸 기준으로 그린 앞·뒷모습을 넓힌 썰매 프레임 가운데로 옮겨 그린다 */
+function padded(draw: Draw): Draw {
+  return (g, f) => {
+    const one = new Grid(40, MOUNT_H);
+    draw(one, f);
+    g.draw(one, SLEIGH_PAD, 0);
+  };
+}
+
 const VIEWS: Record<MountKind, Views> = {
   hound: { side: houndSide, front: houndFront, back: houndBack, frontOver: houndHeadFront, backOver: houndBackBody, line: HOUND.line },
   goose: { side: gooseSide, front: gooseFront, back: gooseBack, frontOver: (g) => gooseNeckFront(g), backOver: gooseBackBody, line: GOOSE.line },
@@ -955,10 +971,10 @@ const VIEWS: Record<MountKind, Views> = {
   polar: { side: polarSide, front: polarFront, back: polarBack, frontOver: (g) => polarHeadFront(g), backOver: polarBackBody, line: POLAR.line, extra: [(g) => polarSit(g, "open"), (g) => polarSit(g, "blink"), (g) => polarSit(g, "yawn"), (g) => polarSit(g, "yawnWide")] },
   sleigh: {
     side: sleighSide,
-    front: (g) => sleighFront(g),
-    back: (g) => sleighBack(g),
-    frontOver: sleighFrontOver,
-    backOver: sleighBackOver,
+    front: padded((g) => sleighFront(g)),
+    back: padded((g) => sleighBack(g)),
+    frontOver: padded(sleighFrontOver),
+    backOver: padded(sleighBackOver),
     line: SL.line,
     w: SLEIGH_W,
     under: (g, f, view) => sleighSpray(view === "side")(g, f),
