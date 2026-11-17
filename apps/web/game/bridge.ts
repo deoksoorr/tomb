@@ -233,6 +233,8 @@ export type GameEvents = {
   "bus:state": { riding: boolean };
   /** 11/15 캠핑장 NPC 대화 창 (null이면 닫기, sticky) */
   "camp:talk": { npc: string; name: string; lines: string[] } | null;
+  /** 11/18 캠핑장 눈덩이를 들고 있음 (sticky) → 터치 [점프] 버튼이 [굴리기]가 된다 (누르고 있는 동안 굴리기, 떼면 안기) */
+  "camp:snowball": { held: boolean };
   /** 11/15 캠핑장 바베큐 그릴 앞에서 E → 메뉴 창 */
   "camp:bbq:open": { stand: BbqStand };
   /** 채널 이동 창: 지금 같은 채널에 보이는 사람들 닉네임 (peers:ask에 답한다, 나는 빼고). map = 지금 맵 (11/17 그 맵에 보이는 사람만이라서) */
@@ -314,6 +316,8 @@ export type UiEvents = {
   "input:sit": undefined;
   /** 점프 (모바일 버튼). 데스크톱은 Space */
   "input:jump": undefined;
+  /** 11/18 캠핑장 눈덩이 [굴리기] 버튼을 누르고 있음(on)·뗌. 데스크톱은 Space를 누르고 있는 동안 */
+  "input:roll": { on: boolean };
   /** 감정표현 (모바일 버튼). 데스크톱은 1=wave, 2=cheer */
   "input:act": { kind: "wave" | "cheer" };
   /** 정해진 문장 말풍선 (PHRASES id). 지금 있는 공간(채널·방)에 보낸다 */
@@ -507,6 +511,7 @@ const STICKY = new Set<keyof AllEvents>([
   "map:changed",
   "bus:state",
   "camp:talk",
+  "camp:snowball",
   "portal:walk",
 ]);
 

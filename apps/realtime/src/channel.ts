@@ -58,6 +58,8 @@ import {
   isRideSpotKind,
   type DrunkState,
   BBQ_INTERVAL_MS,
+  SNOWMAN_BUILD_INTERVAL_MS,
+  SNOWMAN_REACH,
   type BbqEffect,
   type AvatarDye,
   type AwayPlace,
@@ -76,6 +78,7 @@ import {
 import { ChatRecent, type RecentChat } from "./chatRecent";
 import { MoveBudget, RateLimiter, allocSid, dist, stepToward, type Point } from "./logic";
 import { GoblinCore, type GoblinState } from "./goblin";
+import { SnowmanYard } from "./snowmen";
 
 // 채널 하나의 상태 머신. ChannelDO는 소켓·스토리지·타이머만 이어 주고 판정은 전부 여기서 동기적으로 한다.
 // Workers API를 쓰지 않으므로 Node에서 그대로 단위 테스트하고(channel.test.ts) 부하 테스트의 틱 벤치마크에도 쓴다.
@@ -220,6 +223,8 @@ export interface ChannelHost<C> {
   loadChats?(map: MapId): unknown;
   /** 그 맵의 최근 채팅이 바뀌었다 → 모아서 chatSnapshot()을 저장한다 */
   chatsChanged?(map: MapId): void;
+  /** 11/17 캠핑장 눈사람 목록이 바뀌었다 (세움·넘쳐 녹음) → 저장 (DO가 잠들었다 깨면 restoreSnowmen으로 되살린다) */
+  snowmenChanged?(list: unknown): void;
 }
 
 /**
@@ -345,6 +350,8 @@ type Peer<C> = PeerRecord & {
   lastMapAt?: number;
   /** 11/16 귓속말 상대 접속 확인 (없으면 아직 안 씀) */
   lastWhoOnAt?: number;
+  /** 11/17 캠핑장 눈사람 세우기 (없으면 아직 안 씀) */
+  lastSnowmanAt?: number;
   /** 말풍선 채팅 도배 제한 (토큰 버킷). 재접속해도 피어에 남겨 다시 채워지지 않게 한다 */
   chatBucket?: ChatBucket;
   /** 최근 다시 붙은 시각들 (재접속 반복으로 메시지 한도·쿨다운을 초기화하거나 welcome을 거듭 받는 것을 막는다) */
@@ -380,6 +387,8 @@ export class ChannelCore<C extends object> {
   private whisperSeq = 0;
   /** 11/16 「다람쥐를 뿌려라」가 마지막으로 쏟아진 시각 (채널 쿨다운, 메모리에만) */
   private squirrelAt = -Infinity;
+  /** 11/17 캠핑장에 서 있는 눈사람 (메모리에만) */
+  private readonly snowmen = new SnowmanYard();
 
   private chatLog(now: number): ChatRecent {
     if (!this.chats) {
@@ -664,6 +673,8 @@ export class ChannelCore<C extends object> {
       // 11/15 채널 전체 인원 (마을·캠핑장 합계 — HUD "N/40명"). 방에는 없다
       ...(this.cfg.room ? {} : { n: this.peers.size }),
     });
+    // 11/17 캠핑장이면 지금 서 있는 눈사람
+    if (!this.cfg.room && map === "camp") this.sendTo(p, { t: "snowmen", list: this.snowmen.all(now) });
     // 고블린을 잡았는데 증서를 받기 전에 끊겼다 → 다시 보낸다 (웹은 같은 고블린을 한 번만 지급한다)
     const owed = this.goblinOn ? this.goblin.grantFor(p.visitorId, now) : null;
     if (owed) this.sendTo(p, { t: "goblinGrant", ...owed });
@@ -1011,7 +1022,26 @@ export class ChannelCore<C extends object> {
         if (now - (p.lastMapAt ?? -Infinity) < MAP_INTERVAL_MS) return;
         p.lastMapAt = now;
         return this.onMap(p, m.m, { x: m.x, y: m.y }, now);
+      case "snowman":
+        return this.onSnowman(p, m.x, m.y, now);
     }
+  }
+
+  /**
+   * 11/17 캠핑장 눈사람 세우기: 캠핑장에 있고(실내 아님) 간격을 지켰고 서버 위치 바로 앞이면, 씨앗을 붙여 같은 캠핑장 모두에게 (세운 사람 포함).
+   * 넘쳐서 먼저 녹인 것은 snowmanGone. 거절은 세운 사람에게만 snowmanDenied (화면은 머리 덩이를 다시 손에 든다)
+   */
+  private onSnowman(p: Peer<C>, x: number, y: number, now: number): void {
+    if (this.cfg.room || mapOfPeer(p) !== "camp" || p.away) return;
+    if (now - (p.lastSnowmanAt ?? -Infinity) < SNOWMAN_BUILD_INTERVAL_MS) return this.sendTo(p, { t: "snowmanDenied", why: "wait" });
+    if (dist(p, { x, y }) > SNOWMAN_REACH) return this.sendTo(p, { t: "snowmanDenied", why: "spot" });
+    const seed = Math.floor((this.host.random ? this.host.random() : Math.random()) * 0x7fffffff);
+    const r = this.snowmen.build(p.visitorId, p.name, x, y, now, seed);
+    if (!r.ok) return this.sendTo(p, { t: "snowmanDenied", why: r.why });
+    p.lastSnowmanAt = now;
+    this.host.snowmenChanged?.(this.snowmen.snapshot());
+    this.broadcastMap("camp", encodeEvent({ t: "snowman", s: r.s, sid: p.sid }));
+    for (const id of r.gone) this.broadcastMap("camp", encodeEvent({ t: "snowmanGone", id }));
   }
 
   /**
@@ -1081,6 +1111,7 @@ export class ChannelCore<C extends object> {
     }
     const map = mapOfPeer(p);
     this.sendTo(p, { t: "mapped", m: map, peers: this.othersOf(p), seats: this.seatsOf(map) });
+    if (ok && target !== cur && map === "camp") this.sendTo(p, { t: "snowmen", list: this.snowmen.all(now) });
     if (ok && target !== cur) this.sendChatLog(p, now);
   }
 
@@ -1479,6 +1510,11 @@ export class ChannelCore<C extends object> {
   /** 저장해 둔 고블린 상태 (DO 생성자) */
   restoreGoblin(raw: unknown): void {
     if (this.goblinOn) this.goblin.restore(raw);
+  }
+
+  /** 11/17 저장해 둔 캠핑장 눈사람 (DO가 잠들었다 깨어날 때) */
+  restoreSnowmen(raw: unknown, now = Date.now()): void {
+    if (!this.cfg.room) this.snowmen.restore(raw, now);
   }
 
   /** DO가 고블린 때문에 깨어나야 하는 시각 (없으면 null) */

@@ -67,6 +67,7 @@ import { BIG_RIDE_TOAST, BIG_SEAT_TOAST, bigSeatBlocked, foodOfPeer, myBig, RIDI
 import { CAMP_BBQ } from "./campLayout";
 import { CampForage } from "./campForage";
 import { CampLife } from "./campLife";
+import { CampSnowmen } from "./CampSnowmen";
 import { CAMP_SCENE, type CampFriend, type CampHost, type CampSceneData } from "./campHost";
 import { campLines, campNpcName, CAMP_WELCOME } from "./campTalk";
 import { campNeighborSeat, campPickSeat, CAMP_MULTI_SEAT } from "./campSit";
@@ -114,6 +115,8 @@ export class CampScene extends Phaser.Scene {
   private forage!: CampForage;
   /** 11/16 캠핑장 주민 (돌아다니는 캠퍼 유령들 — game/camp/campLife) */
   private life: CampLife | null = null;
+  /** 11/17 눈사람 만들기 (겨울·크리스마스 판 — game/camp/CampSnowmen) */
+  private snow: CampSnowmen | null = null;
   /** 전망대 망원경 (망원 뷰) */
   private scope!: LookoutScope;
   /** 11/16 별 망원경 (전망대 계단 아래·계곡 둑 — 별자리 잇기, game/scopes) */
@@ -264,6 +267,7 @@ export class CampScene extends Phaser.Scene {
     yield;
     this.forage = new CampForage({ scene: this, atlas: h.atlas, reduced: h.reduced, colliders: this.map.colliders, player: () => this.player, net: () => h.net, seats: () => this.seats, remotes: () => this.remotes, toast: (m) => this.toast(m) });
     this.life = new CampLife({ scene: this, atlas: h.atlas, sfx: h.sfx, reduced: h.reduced, player: () => this.player, net: () => h.net, override: this.hourOverride });
+    this.snow = new CampSnowmen({ scene: this, atlas: h.atlas, sfx: h.sfx, reduced: h.reduced, player: () => this.player, net: () => h.net, toast: (m) => this.toast(m), concept });
     this.stars = new StarScopes(this, { spots: CAMP_SCOPES, style: "camp", player: () => this.player, net: () => h.net, seats: () => this.seats, judged: () => this.spotsJudged, toast: (m) => this.toast(m), sfx: h.sfx });
 
     yield;
@@ -456,6 +460,10 @@ export class CampScene extends Phaser.Scene {
       onGoblinGone: () => undefined,
       onGoblinCaught: () => undefined,
       onBbq: (sid, item, until, lv, at) => this.food.onBbq(sid, sid === this.host.net.mySid, item, until, lv, at),
+      onSnowmen: (list) => this.snow?.onSnowmen(list),
+      onSnowman: (s, sid) => this.snow?.onSnowman(s, sid === this.host.net.mySid),
+      onSnowmanGone: (id) => this.snow?.onGone(id),
+      onSnowmanDenied: (why) => this.snow?.onDenied(why),
       onMapped: (map, peers, seats) => {
         if (map !== "camp") return this.host.bail();
         this.clearRemotes();
@@ -599,6 +607,7 @@ export class CampScene extends Phaser.Scene {
   private applyConcept(c: MapConcept): void {
     if (this.cleaned || !this.map) return;
     this.map.setConcept(c);
+    this.snow?.setConcept(c);
     this.atmos.setSnowy(isSnowy(c));
     this.atmos.setStaticLights(this.map.staticLights.map((l) => ({ ...l })));
   }
@@ -627,7 +636,7 @@ export class CampScene extends Phaser.Scene {
     on.push(bridge.on("input:emo", ({ id }) => !this.covered && !this.locked && this.expr.emo(id, this.time.now)));
     on.push(bridge.on("input:chat", ({ text }) => !this.covered && this.expr.chat(text, this.time.now)));
     on.push(bridge.on("input:mood", ({ mood }) => this.expr.setMood(mood)));
-    on.push(bridge.on("input:ride", () => !this.locked && this.riding.toggle()));
+    on.push(bridge.on("input:ride", () => !this.locked && !this.snow?.blocks() && this.riding.toggle()));
     // 11/16 사냥터·미니게임·집으로 가기 직전: 자리에서 일어난다 (lib/rideGate)
     on.push(bridge.on("player:stand", () => standForGate(this.player, this.time.now, this.seatReq)));
     on.push(
@@ -663,6 +672,7 @@ export class CampScene extends Phaser.Scene {
     let channelBack: { x: number; y: number } | null = null;
     on.push(
       bridge.on("channel:leave", () => {
+        this.snow?.dropHeld();
         const pl = this.player;
         channelBack = { x: pl.x, y: pl.y };
         if (pl.sitting) pl.stand(this.time.now, this.seatReq);
@@ -714,6 +724,10 @@ export class CampScene extends Phaser.Scene {
     }
     const pl = this.player;
     const now = this.time.now;
+    // 11/17 눈덩이를 들고 있는 동안: 앉기·탈것은 내려놓은 다음에 (E는 내려놓기).
+    // 11/18 점프 키(Space·터치 [굴리기])는 굴리기라 점프하지 않는다 — 누르고 있는지는 update가 hub.rollHeld로 본다
+    if (a === "jump" && this.snow?.holding) return;
+    if ((a === "sit" || a === "ride") && this.snow?.blocks()) return;
     if (a === "jump") {
       pl.jump(now, this.seatReq);
       return;
@@ -747,7 +761,13 @@ export class CampScene extends Phaser.Scene {
       pl.stand(now, this.seatReq);
       return;
     }
+    if (this.snow?.holding) {
+      this.snow.interact();
+      return;
+    }
     if (this.life?.talk()) return;
+    // 11/17 눈더미 앞이면 눈 뭉치기, 내려놓은 내 덩이 앞이면 다시 들기
+    if (this.snow?.interact()) return;
     const seat = moving ? null : campPickSeat(pl.x, pl.y, occupied, mySid);
     const obj = this.nearestObject(pl.x, pl.y);
     const sd = seat ? Math.hypot(seat.x - pl.x, seat.y - pl.y) : Infinity;
@@ -867,7 +887,8 @@ export class CampScene extends Phaser.Scene {
       bridge.emit("peer:menu", { sid: hit.sid, name: hit.name, ch: h.net.channel, ...(chat ? { chat } : {}) });
       return;
     }
-    // 오브젝트를 탭: 가까이 서 있으면 E와 같다
+    // 오브젝트를 탭: 가까이 서 있으면 E와 같다 (눈덩이를 굴리는 동안은 E로 먼저 내려놓는다)
+    if (this.snow?.holding) return;
     const pl = this.player;
     let best: CampInteractable | null = null;
     let bd = 18;
@@ -938,6 +959,7 @@ export class CampScene extends Phaser.Scene {
     }
     this.closeTalk();
     this.locked = true;
+    this.snow?.dropHeld();
     const pl = this.player;
     if (pl.sitting) pl.stand(this.time.now, this.seatReq);
     this.leaveCampfire();
@@ -984,6 +1006,7 @@ export class CampScene extends Phaser.Scene {
     const at = live ? { x: live.x, y: live.y } : { x: fx, y: fy };
     this.closeTalk();
     this.leaveCampfire();
+    this.snow?.dropHeld();
     const pl = this.player;
     const now = this.time.now;
     if (pl.sitting) pl.stand(now, this.seatReq);
@@ -1034,6 +1057,9 @@ export class CampScene extends Phaser.Scene {
       this.scope.update(now, dt, this.move, this.atmos.levels.darkness);
       this.move.ax = this.move.ay = 0;
     }
+    // 11/17 눈덩이를 굴리는 동안은 걷기만 (달리면 덩이가 앞질러 가 버린다). 11/18 품에 안고는 달려도 된다
+    const rollHeld = this.host.hub.rollHeld && !this.locked && !this.scope.isOpen;
+    if (this.snow?.holding && rollHeld) this.move.run = false;
     const started = pl.update(this.benchInput(now), now, this.seatReq);
     this.stars?.update();
     if (this.furnitureCollider) this.furnitureCollider.active = !pl.airborne;
@@ -1067,6 +1093,7 @@ export class CampScene extends Phaser.Scene {
     publishRide(pl, this.riding.on); // 11/16 탄 것·앉은 자리 → UI (lib/rideGate)
     this.forage.f.update(dt, view, s);
     this.life?.update(dt, view, s);
+    this.snow?.update(s, rollHeld);
     for (const r of this.remotes.values()) r.update(pnow, view, s);
     this.declutterLabels(now, pnow);
     this.updateSeatHint(now, s);
@@ -1137,6 +1164,9 @@ export class CampScene extends Phaser.Scene {
     // 불멍 구도에서는 화면을 가리지 않게 앉기 안내를 띄우지 않는다 (마을과 같다)
     const lifeHint = !pl.sitting && !this.locked ? this.life?.hint(this.seatHint.prefix) : null;
     if (lifeHint) other = lifeHint;
+    // 11/17 눈사람 만들기: 굴리는 중이면 언제나 그 안내, 아니면 다른 안내가 없을 때 눈더미·내 덩이
+    const snowHint = !pl.sitting && !this.locked ? (this.snow?.hint(this.seatHint.prefix) ?? null) : null;
+    if (snowHint && (this.snow?.holding || !other)) other = snowHint;
     this.seatHint.update(other ? null : seat, pl, sittingFor, this.talking !== null || this.campfire.active !== null, labelScale, other, standText);
   }
 
@@ -1231,6 +1261,8 @@ export class CampScene extends Phaser.Scene {
     this.forage?.f.destroy();
     this.life?.destroy();
     this.life = null;
+    this.snow?.destroy();
+    this.snow = null;
     this.meScreen?.destroy();
     this.rig?.destroy();
     this.atmos?.destroy();

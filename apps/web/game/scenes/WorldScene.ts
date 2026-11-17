@@ -870,6 +870,7 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("input:sit", () => this.hub.dispatch("sit")));
     on.push(bridge.on("input:interact", () => this.hub.dispatch("interact")));
     on.push(bridge.on("input:jump", () => this.hub.dispatch("jump")));
+    on.push(bridge.on("input:roll", ({ on: v }) => this.hub.setRollHold(v)));
     // 마을·집 안이면 그 방(RoomPresence)이 받는다
     // 11/15 캠핑장에 있거나 버스를 타는 동안(trip.away)은 캠핑장 장면이 받는다
     on.push(bridge.on("input:say", ({ id }) => !this.awayScene && !this.trip.away && this.doSay(id)));

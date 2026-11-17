@@ -9,6 +9,8 @@ export class InputHub {
   private joyX = 0;
   private joyY = 0;
   private runToggle = false;
+  /** 11/18 터치 [굴리기]를 누르고 있음 */
+  private rollTouch = false;
   private blocked = false;
   private handler: ((a: KeyAction) => void) | null = null;
 
@@ -48,10 +50,22 @@ export class InputHub {
     this.runToggle = on;
   }
 
+  setRollHold(on: boolean): void {
+    this.rollTouch = on;
+  }
+
+  /** 11/18 굴리기를 누르고 있는지 (Space 또는 터치 [굴리기]) */
+  get rollHeld(): boolean {
+    return !this.blocked && (this.rollTouch || this.keys.jumpHeld);
+  }
+
   setBlocked(b: boolean): void {
     this.blocked = b;
     this.keys.setBlocked(b);
-    if (b) this.joyX = this.joyY = 0;
+    if (b) {
+      this.joyX = this.joyY = 0;
+      this.rollTouch = false;
+    }
   }
 
   get isBlocked(): boolean {
