@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { shakeEnabled } from "@/lib/shakePref";
 
 // 11/17 쓰러졌다 다시 일어나는 연출 (무한 야근 카드·부활 쿠키, 세트 장비 「연차」는 짧은 판).
 //  쓰러짐(0.6초, 화면이 흑백 쪽으로 바랜다) → 「카드 발동」 표시가 크게 → 빛 기둥·고리와 함께 일어남 → 이어서 (1.5초 무적은 HuntScene이)
@@ -117,7 +118,7 @@ export class DownCut {
       .setDepth(9e5);
     // 줌을 쓰는 카메라라 화면 크기 막은 줌 역수만큼 키운다
     this.veil.setScale(1 / cam.zoom).setPosition(cam.width * 0.5 * (1 - 1 / cam.zoom), cam.height * 0.5 * (1 - 1 / cam.zoom));
-    if (!o.reduced) cam.shake(140, 0.004);
+    if (!o.reduced && shakeEnabled()) cam.shake(140, 0.004);
     this.apply();
   }
 
@@ -169,7 +170,7 @@ export class DownCut {
       .setDepth(this.o.y + 1)
       .setScale(0.4, 1)
       .setAlpha(0.95);
-    if (!this.o.reduced) this.scene.cameras.main.shake(this.o.kind === "vacation" ? 90 : 200, 0.005);
+    if (!this.o.reduced && shakeEnabled()) this.scene.cameras.main.shake(this.o.kind === "vacation" ? 90 : 200, 0.005);
   }
 
   private end(): void {

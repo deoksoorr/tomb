@@ -19,6 +19,7 @@ import { CHEST_COSMETIC_CHANCE, SG_PITY } from "@/lib/rpg/setGearRoll";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import { PioneerLine } from "./Endgame";
+import ShakeToggle from "./ShakeToggle";
 import s from "./rpg.module.css";
 
 // 11/15 야근 빌딩 입구 (마을의 야근 빌딩 → portal:open {kind:"tower"} → HuntLobby mode="tower"의 첫 탭).
@@ -128,6 +129,8 @@ export default function TowerEntrance({
           <span className={s.meta}>
             몇 번이든 다시 오를 수 있어요.
           </span>
+          {/* 11/17 사냥터 고르는 화면과 같은 설정 (이 기기에 기억 — 한쪽에서 끄면 둘 다 꺼져요) */}
+          <ShakeToggle />
           <button
             type="button"
             className={cx(ui.button, ui.primary, s.start)}
