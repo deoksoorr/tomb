@@ -135,15 +135,18 @@
   height: max(calc(8 * 1.45em + 7px), min(calc(14 * 1.45em + 13px), calc(100vh - 500px)));
 }
 
-/* 크기 탭: 상자 오른쪽 위 모서리에 붙은 작은 [−][+] (기록 글자를 가리지 않게 상자 바깥 위로). 평소엔 옅게, 상자에 올리면 또렷하게 */
+/* 크기 탭: 상자 오른쪽 위 모서리에 붙은 작은 [−][+] (기록 글자를 가리지 않게 상자 바깥 위로). 평소엔 옅게, 상자에 올리면 또렷하게.
+   11/17 r2 테두리 없이 옅은 바탕 + 뒤를 살짝 흐리게 (배경 없는 채팅과 어울리게 — 사용자) */
 .sizeTab {
   position: absolute;
-  right: 0;
+  right: 8px;
   bottom: 100%;
   display: flex;
-  background: rgba(17, 18, 15, 0.62);
-  box-shadow: var(--px-border);
-  opacity: 0.55;
+  background: rgba(20, 18, 24, 0.32);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  border-radius: 3px;
+  opacity: 0.8;
   transition: opacity 0.15s;
 }
 
@@ -153,6 +156,7 @@
 }
 
 .sizeBtn {
+  text-shadow: var(--chat-outline) !important;
   width: 24px;
   height: 18px;
   padding: 0;
@@ -173,6 +177,40 @@
   color: var(--muted);
   opacity: 0.5;
   cursor: default;
+}
+
+/* 11/17 r2 데스크톱 입력칸: 쓰기 전(Enter 전)엔 까만 칸 없이 안내 글만 (기록과 같은 테두리 글자), Enter로 쓰기 시작하면 칸이 보인다.
+   칸은 채팅 영역 끝까지, [보내기]는 칸 안 오른쪽 끝에 — 쓰는 중에만 보인다 */
+.box .input [data-row] {
+  position: relative;
+}
+
+.box .input input[type="text"] {
+  padding-right: 64px;
+}
+
+.box .input:not(:focus-within) input[type="text"] {
+  background: transparent;
+  box-shadow: none;
+}
+
+.box .input:not(:focus-within) input[type="text"]::placeholder {
+  color: var(--bone);
+  text-shadow: var(--chat-outline);
+}
+
+.box .input [data-row] > button[type="submit"] {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  bottom: 4px;
+  min-height: 0;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.box .input:not(:focus-within) [data-row] > button[type="submit"] {
+  display: none;
 }
 
 /* 입력칸 아래 안내 줄은 쓰는 중에만 */
