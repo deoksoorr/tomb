@@ -63,8 +63,8 @@ export function withAllPlaylist(playlists: readonly Playlist[]): Playlist[] {
   return [{ id: ALL_PLAYLIST_ID, title: "전곡", tracks }, ...real];
 }
 
-/** 곡 목록을 받기 전 자리 표시용 플레이리스트 (실제 첫 곡은 randomStart가 아무 플레이리스트에서 고른다 — 11/15 로파이 고정 → 무작위) */
-export const FIRST_PLAYLIST_ID = "lofi";
+/** 처음 들어오면 트는 플레이리스트 (곡은 그 안에서 무작위). 11/15 로파이 고정 → 무작위, 11/17 눈꽃 캐럴 고정 (사용자 요청) */
+export const FIRST_PLAYLIST_ID = "carol";
 
 /**
  * 처음 들어올 때 시작할 곡: 아무 플레이리스트의 아무 곡. firstId를 주면 그 플레이리스트의 아무 곡 (없으면 아무 플레이리스트).

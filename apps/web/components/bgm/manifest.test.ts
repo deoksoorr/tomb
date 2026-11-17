@@ -7,19 +7,15 @@ import { ALL_PLAYLIST_ID, FIRST_PLAYLIST_ID, needsAttribution, nextShuffled, par
 describe("parseManifest", () => {
   it("저장소의 tracks.json은 모든 플레이리스트에 곡이 있다", () => {
     const lists = parseManifest(tracksJson);
-    // 로파이·재즈·어쿠스틱 기타는 픽사베이 곡으로 바꾸고, 나머지 5개는 예전 그대로 (11/15 빗소리 뺌)
-    expect(lists.map((p) => [p.id, p.title])).toEqual([
-      ["lofi", "로파이"],
-      ["acoustic", "어쿠스틱 기타"],
-      ["jazz", "재즈"],
-      ["orgel", "오르골"],
-      ["piano", "피아노"],
-      ["chiptune", "8비트"],
-      ["ambient", "앰비언트"],
-      ["retro", "레트로 RPG"],
+    // 11/17 목록 대격변: 로파이만 남기고, 직접 만든 눈꽃 캐럴·노을 시티팝 (50곡씩)
+    expect(lists.map((p) => [p.id, p.title, p.tracks.length])).toEqual([
+      ["carol", "눈꽃 캐럴", 50],
+      ["citypop", "노을 시티팝", 50],
+      ["lofi", "로파이", 15],
     ]);
-    // 새로 바꾼 세 목록에만 NEW 딱지
-    expect(lists.filter((p) => p.isNew).map((p) => p.id)).toEqual(["lofi", "acoustic", "jazz"]);
+    expect(lists.filter((p) => p.isNew).map((p) => p.id)).toEqual(["carol", "citypop"]);
+    // 처음엔 눈꽃 캐럴부터
+    expect(FIRST_PLAYLIST_ID).toBe("carol");
     expect(lists.some((p) => p.id === FIRST_PLAYLIST_ID)).toBe(true);
     expect(lists.every((p) => p.tracks.length > 0)).toBe(true);
   });
