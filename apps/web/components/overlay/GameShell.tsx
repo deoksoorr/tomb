@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { flushSync } from "react-dom";
 import dynamic from "next/dynamic";
 import { bridge, type GameStartOptions } from "@/game/bridge";
@@ -293,6 +293,37 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const coarse = useMediaQuery("(pointer: coarse)");
   // 데스크톱인데 창이 좁으면 윗줄에 채널 표시 자리가 없다 → 아래 안내 줄로
   const narrow = useMediaQuery("(max-width: 700px)");
+  // 11/17 r2 긴급: 위 가운데 채널·날씨 칸은 화면 가운데가 아니라 왼쪽 음악 칸과 오른쪽 단추 줄 사이 빈 곳의 가운데에 둔다
+  // (날씨를 채널 줄 안에 한 줄로 되돌리면서, 1280 폭에서 오른쪽 단추와 겹치지 않게)
+  const topLeftRef = useRef<HTMLDivElement>(null);
+  const topRightRef = useRef<HTMLDivElement>(null);
+  const [centerBox, setCenterBox] = useState<CSSProperties | undefined>(undefined);
+  useLayoutEffect(() => {
+    const l = topLeftRef.current;
+    const r = topRightRef.current;
+    if (!l || !r) return;
+    const fit = () => {
+      const lb = (l.firstElementChild ?? l).getBoundingClientRect();
+      const rb = r.getBoundingClientRect();
+      const host = r.offsetParent?.getBoundingClientRect();
+      if (!host || rb.width === 0) return setCenterBox(undefined);
+      const from = lb.right - host.left + 8;
+      const to = rb.left - host.left - 8;
+      if (to - from < 120) return setCenterBox(undefined);
+      const next = { left: `${Math.round((from + to) / 2)}px`, width: `${Math.round(to - from)}px` };
+      setCenterBox((cur) => (cur && cur.left === next.left && cur.width === next.width ? cur : next));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(l);
+    ro.observe(r);
+    window.addEventListener("resize", fit);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", fit);
+    };
+    // 위쪽 줄이 새로 그려질 때(입장·터치 배치 바뀜)만 다시 붙인다 — 크기 변화는 ResizeObserver가 본다
+  }, [ready, coarse, narrow]);
   const scene = useBridgeValue("scene:changed")?.scene;
   const inShop = scene === "shop";
   // 집·사냥터·미니게임 안에서는 그 화면이 자기 HUD를 그린다. 월드 HUD는 숨기기만 한다(BGM 플레이어는 계속 살아 있게)
@@ -686,7 +717,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
             </div>
           ) : (
             <>
-              <div className={styles.topLeft}>
+              <div className={styles.topLeft} ref={topLeftRef}>
                 <BgmPlayer />
                 {/* 11/15 먹거리 효과 게이지 (효과가 있을 때만) */}
                 <FoodGauge />
@@ -694,11 +725,11 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 <MegaphoneFeed channel={channel} />
               </div>
               {!narrow && (
-                <div className={styles.topCenter}>
+                <div className={styles.topCenter} style={centerBox}>
                   <Hud onOpenChannels={() => setPanel("channels")} />
                 </div>
               )}
-              <div className={styles.topRight}>
+              <div className={styles.topRight} ref={topRightRef}>
                 {/* 불멍·놀이기구 중엔 아래 바로 가기 줄(폭죽 포함)이 숨으니 폭죽만 위쪽 줄 맨 앞에 */}
                 {campfire && <FireworkButton variant="top" onOpen={() => setPanel("fireworks")} />}
                 {/* 운영자 계정은 출석 도장을 받지 않는다 → 출석 달력 버튼을 뺀다 */}

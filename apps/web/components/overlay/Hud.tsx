@@ -94,6 +94,12 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
           <button type="button" className={cx(ui.button, ui.top, styles.pill)} onClick={onOpenChannels} aria-haspopup="dialog">
             <span className={styles.live} aria-hidden="true" />
             {`${channel}채널 ${place} · ${status?.count}/${status?.cap}명`}
+            {/* 11/17 r2 긴급: 시간·날씨를 다시 채널 줄 안으로 한 줄 (아래 줄로 내렸더니 긴급 의뢰 띠를 가렸다) */}
+            {ambience && (
+              <span className={styles.ambience} title="한국 시간 기준">
+                {` · ${PHASE_LABELS[ambience.phase]} · ${WEATHER_LABELS[ambience.weather]}`}
+              </span>
+            )}
             <span className="visually-hidden">, 채널 이동</span>
           </button>
         ) : (
@@ -102,13 +108,12 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
             {MODE_TEXT[mode === "online" ? "connecting" : mode]}
           </span>
         )}
+        {mode !== "online" && ambience && (
+          <span className={cx(ui.top, styles.ambience)} title="한국 시간 기준">
+            {PHASE_LABELS[ambience.phase]} · {WEATHER_LABELS[ambience.weather]}
+          </span>
+        )}
       </div>
-      {/* 11/17 시간·날씨는 채널 줄 아래 한 줄로 (채널 줄에 장소 정식 이름이 붙으면서 1280 폭에서 오른쪽 위 단추에 가려졌다) */}
-      {ambience && (
-        <span className={cx(ui.top, styles.ambience)} title="한국 시간 기준">
-          {PHASE_LABELS[ambience.phase]} · {WEATHER_LABELS[ambience.weather]}
-        </span>
-      )}
       {/* 11/16 바닷가 물때 시계: 채널 줄 아래 한 줄 (위 줄 단추들과 겹치지 않게) */}
       {tide && (
         <span className={cx(ui.top, styles.tide)} title="물때는 3시간마다 돌아요" role="status">

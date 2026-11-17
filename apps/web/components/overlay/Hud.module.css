@@ -42,6 +42,13 @@
   color: var(--muted);
 }
 
+/* 11/17 r2 채널 줄 안 시간·날씨: 위 가운데 빈 곳이 좁으면 숨긴다 (오른쪽 단추와 겹치지 않게 — GameShell .topCenter 컨테이너) */
+@container (max-width: 270px) {
+  .pill .ambience {
+    display: none;
+  }
+}
+
 /* 11/16 바닷가 물때 시계 (바다 빛 글자) */
 .tide {
   color: #9ad8ff;
