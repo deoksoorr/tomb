@@ -60,6 +60,7 @@
     {
       "id": "carol",
       "title": "눈꽃 캐럴",
+      "isNew": true,
       "tracks": [
         { "file": "/bgm/carol/carol-01.mp3", "title": "눈꽃 내리는 광장", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 97 },
         { "file": "/bgm/carol/carol-02.mp3", "title": "광장 트리에 불 켜는 날", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 124 },
@@ -116,6 +117,7 @@
     {
       "id": "citypop",
       "title": "노을 시티팝",
+      "isNew": true,
       "tracks": [
         { "file": "/bgm/citypop/citypop-01.mp3", "title": "노을 지는 포구의 오후", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 202 },
         { "file": "/bgm/citypop/citypop-02.mp3", "title": "퇴근길 바다 쪽으로 돌아가기", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 182 },
