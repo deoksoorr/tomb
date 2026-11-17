@@ -175,7 +175,7 @@ type HitOpts = {
   skill?: BranchId;
   /** 광역 스킬 (재의 심장 패시브) */
   aoe?: boolean;
-  /** 11/17 소환(길동무 넋·망자의 초롱)이 친 것 — 흡혈은 광역처럼 3분의 1 (lib/rpg/lifesteal) */
+  /** 11/17 소환(길동무 넋·망자의 초롱)이 친 것 — 흡혈은 광역처럼 절반 (lib/rpg/lifesteal) */
   summon?: boolean;
   /** 맞은 적 둔화 ms */
   slowMs?: number;
@@ -1124,7 +1124,7 @@ export class HuntScene extends RpgScene {
     this.hurtMonster(m, dmg, crit, nth, opts);
     if (this.cards && opts.basic) this.cards.onBasicHit(m);
     else if (this.cards && opts.skill) this.cards.onSkillHit(m);
-    // 넋 거두기 패시브: 준 피해의 일부를 HP로 (한 번에 최대 HP의 3%, 광역기·소환은 3분의 1, 1초에 모두 합쳐 5%까지 — lib/rpg/lifesteal)
+    // 넋 거두기 패시브: 준 피해의 일부를 HP로 (한 번에 최대 HP의 3%, 광역기·소환은 절반, 1초에 모두 합쳐 8%까지 — lib/rpg/lifesteal)
     const stolen =
       this.mods.steal > 0 && !this.died && this.hp < d.maxHp
         ? stealHeal(this.stealBook, this.now, { dmg, steal: this.mods.steal, maxHp: d.maxHp, missing: d.maxHp - this.hp, kind: opts.summon ? "summon" : opts.aoe ? "aoe" : "single" })

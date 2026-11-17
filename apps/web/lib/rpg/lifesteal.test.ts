@@ -3,6 +3,7 @@ import { STEAL_HIT_CAP, STEAL_SEC_CAP, stealHeal, type StealBook, type StealKind
 import { SKILL_FX } from "./skillTree";
 
 // 11/17 넋 거두기 흡혈 너프: 1초 상한 5% · 광역기와 소환 3분의 1 · 비율 레벨당 1.5%
+// 11/18 완화(127층 클리어자가 60층도 버거워졌다): 1초 상한 8% · 광역기와 소환 절반
 
 const MAX = 1000;
 
@@ -32,10 +33,10 @@ describe("흡혈 한 번", () => {
     expect(hit([], 0, 10_000)).toBeCloseTo(MAX * STEAL_HIT_CAP);
   });
 
-  it("광역기와 소환은 3분의 1", () => {
-    expect(hit([], 0, 200, "aoe")).toBeCloseTo(5);
-    expect(hit([], 0, 200, "summon")).toBeCloseTo(5);
-    expect(hit([], 0, 10_000, "aoe")).toBeCloseTo(10);
+  it("광역기와 소환은 절반", () => {
+    expect(hit([], 0, 200, "aoe")).toBeCloseTo(7.5);
+    expect(hit([], 0, 200, "summon")).toBeCloseTo(7.5);
+    expect(hit([], 0, 10_000, "aoe")).toBeCloseTo(15);
   });
 
   it("가득 차 있거나 흡혈이 없으면 안 차고 적지도 않는다", () => {
@@ -49,7 +50,7 @@ describe("흡혈 한 번", () => {
 });
 
 describe("1초 상한", () => {
-  it("모든 맞힘을 합쳐 1초에 최대 HP 5%까지, 1초가 지나면 다시 찬다", () => {
+  it("모든 맞힘을 합쳐 1초에 최대 HP 8%까지, 1초가 지나면 다시 찬다", () => {
     const book: StealBook = [];
     let sum = 0;
     for (let t = 0; t < 1000; t += 100) sum += hit(book, t, 1000);
@@ -59,7 +60,7 @@ describe("1초 상한", () => {
     expect(hit(book, 1050, 1000)).toBe(0);
   });
 
-  it("예시: 별빛 행렬 한 번 (보이는 적 20마리 × 5번, 860ms 안) — 옛 규칙 200% → 이제 5%", () => {
+  it("예시: 별빛 행렬 한 번 (보이는 적 20마리 × 5번, 860ms 안) — 옛 규칙 200% → 이제 8%", () => {
     const hitAt = SKILL_FX.so_procession(3).hitAt;
     expect(hitAt.length).toBe(5);
     expect(hitAt[hitAt.length - 1] - hitAt[0]).toBeLessThan(1000);
@@ -73,16 +74,16 @@ describe("1초 상한", () => {
       }
     // 옛 규칙: 한 마리 맞힐 때마다 20(2%)씩 100번 = 최대 HP의 200% (HP가 두 번 꽉 찬다)
     expect(old / MAX).toBeCloseTo(2);
-    // 이제: 광역 3분의 1(약 10)씩이지만 1초 상한에 막혀 5%
-    expect(now / MAX).toBeCloseTo(0.05);
+    // 이제: 광역 절반(약 15)씩이지만 1초 상한에 막혀 8%
+    expect(now / MAX).toBeCloseTo(0.08);
   });
 
-  it("한 대상만 꾸준히 때리면 (초당 3번, 한 번 피해 400) 1초에 5%", () => {
+  it("한 대상만 꾸준히 때리면 (초당 3번, 한 번 피해 400) 1초에 8%", () => {
     const book: StealBook = [];
     let sum = 0;
     for (let t = 0; t < 3000; t += 333) sum += hit(book, t, 400);
-    // 1초마다 30 + 20(상한까지) → 3초에 약 15%
-    expect(sum / MAX).toBeLessThanOrEqual(0.15 + 1e-9);
-    expect(sum / MAX).toBeGreaterThan(0.12);
+    // 1초마다 30 + 30 + 20(상한까지) → 3초에 약 24%
+    expect(sum / MAX).toBeLessThanOrEqual(0.24 + 1e-9);
+    expect(sum / MAX).toBeGreaterThan(0.2);
   });
 });

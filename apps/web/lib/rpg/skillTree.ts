@@ -153,7 +153,7 @@ export const SKILL_FX = {
   // ── 넋 인도자 ──
   so_wisp: (lv: number) => ({ n: lv >= 4 ? 3 : 2, mult: 0.9 + 0.14 * lv, range: 130 }),
   so_lamp: (lv: number) => ({ healPct: 0.1 + 0.04 * lv, rootMs: 500 }),
-  // 11/17 흡혈 너프의 보상: 레벨당 1% → 1.5% (대신 광역기·소환 3분의 1, 1초에 최대 HP 5%까지 — lib/rpg/lifesteal)
+  // 11/17 흡혈 너프의 보상: 레벨당 1% → 1.5% (대신 광역기·소환 절반, 1초에 최대 HP 8%까지 — lib/rpg/lifesteal, 11/18 완화)
   so_drain: (lv: number) => ({ steal: 0.015 * lv }),
   so_swift: (lv: number) => ({ move: 0.15 + 0.05 * lv, aspd: 0.08 + 0.04 * lv, durMs: 8000 }),
   so_friend: (lv: number) => ({ durMs: 10_000 + 2000 * lv, atkPct: 0.35 + 0.1 * lv, everyMs: 800 }),
@@ -554,7 +554,7 @@ export const SKILLS: readonly SkillDef[] = [
     requires: [{ id: "so_wisp", level: 1 }],
     ...passive,
     describe: (lv) =>
-      `내가 준 피해의 ${pct1(FX.so_drain(lv).steal)}만큼 HP가 차요. 광역기와 소환이 맞힌 건 3분의 1만 차고, 모두 합쳐 1초에 최대 HP의 ${pct(STEAL_SEC_CAP)}까지예요.`,
+      `내가 준 피해의 ${pct1(FX.so_drain(lv).steal)}만큼 HP가 차요. 광역기와 소환이 맞힌 건 절반만 차고, 모두 합쳐 1초에 최대 HP의 ${pct(STEAL_SEC_CAP)}까지예요.`,
     art: { shape: "sk_drain", main: S.color, accent: 0xe84a6a },
   },
   {
