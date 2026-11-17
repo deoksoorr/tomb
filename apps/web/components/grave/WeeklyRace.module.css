@@ -36,8 +36,10 @@
   text-align: center;
 }
 
-/* 11/17 레이스 세 칸: 높이를 맞추고, 남는 자리는 1위 보상 아래에 두어 시상대·내 순위 줄이 세 칸 모두 같은 높이에 오게 */
-.raceBoards {
+/* 11/17 레이스 세 칸: 높이를 맞추고(가장 긴 낚시 칸에 맞춰), 시상대는 1위 보상 바로 아래 같은 높이에서 시작하고
+   남는 자리는 시상대 아래로 — 맨 아래 「내 순위」 줄이 세 칸 모두 같은 높이에 온다.
+   r2: 아래쪽 .boards { align-items: start }가 같은 우선순위로 뒤에 있어 늘이기가 안 먹었다 → .boards.raceBoards로 */
+.boards.raceBoards {
   align-items: stretch;
 }
 
@@ -46,8 +48,7 @@
   flex-direction: column;
 }
 
-.raceBoards .board > .podium,
-.raceBoards .board > .none {
+.raceBoards .board > .mine {
   margin-top: auto;
 }
 
