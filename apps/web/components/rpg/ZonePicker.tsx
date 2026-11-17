@@ -4,6 +4,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { DIFFICULTIES, DIFFS, gearById, MONSTERS, zonesOf, type ZoneDef, type ZoneId } from "@/lib/rpg/catalog";
 import { fetchHuntCrowd, type HuntCrowd } from "@/lib/rpg/client";
+import { isSnowy, type MapConcept } from "@/lib/mapConcept";
+import { currentMapConcept } from "@/lib/mapConceptClient";
 import { cx } from "../ui/cx";
 import s from "./rpg.module.css";
 
@@ -14,9 +16,10 @@ import s from "./rpg.module.css";
 
 const previews = new Map<string, string>();
 
-/** 지도 미리보기 (처음 볼 때 한 번 그리고 모듈에 담아 둔다). 그림 코드는 사냥 씬과 같다 */
-function useZonePreview(z: ZoneDef): string | null {
-  const [url, setUrl] = useState<string | null>(() => previews.get(z.id) ?? null);
+/** 지도 미리보기 (처음 볼 때 한 번 그리고 모듈에 담아 둔다). 그림 코드는 사냥 씬과 같다. 11/17 맵 컨셉(겨울·크리스마스)마다 따로 */
+function useZonePreview(z: ZoneDef, concept: MapConcept): string | null {
+  const pk = `${z.id}-${concept}`;
+  const [url, setUrl] = useState<string | null>(() => previews.get(pk) ?? null);
   useEffect(() => {
     if (url) return;
     let alive = true;
@@ -26,9 +29,9 @@ function useZonePreview(z: ZoneDef): string | null {
         const [{ arenaPreview }, { buildLayout }] = await Promise.all([import("@/game/rpg/arena/art"), import("@/game/rpg/arena/layout")]);
         if (!alive) return;
         try {
-          const c = arenaPreview(buildLayout(z.id, 0), [z.boss, ...z.pool], 0.5);
+          const c = arenaPreview(buildLayout(z.id, 0), [z.boss, ...z.pool], 0.5, concept);
           const u = c.toDataURL();
-          previews.set(z.id, u);
+          previews.set(pk, u);
           setUrl(u);
         } catch {
           /* 캔버스를 못 쓰면 색 상자로 */
@@ -40,7 +43,7 @@ function useZonePreview(z: ZoneDef): string | null {
       alive = false;
       window.clearTimeout(t);
     };
-  }, [z, url]);
+  }, [z, url, concept, pk]);
   return url;
 }
 
@@ -56,9 +59,17 @@ export const zoneUnlockAll = (): boolean => {
 export const zoneOpen = (z: ZoneDef, level: number, all = false) => all || level >= z.unlockLevel;
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, "0")}`;
+/** 11/17 겨울·크리스마스판 카드 바탕: 바닥색에 눈빛을 섞는다 */
+const frost = (c: number, concept: MapConcept) => {
+  if (!isSnowy(concept)) return c;
+  const ch = (s: number) => Math.round(((c >> s) & 255) * 0.62 + ((0xdfe8f2 >> s) & 255) * 0.38) << s;
+  return ch(16) | ch(8) | ch(0);
+};
 
 function ZoneCard({ z, level, selected, all, crowd, onPick }: { z: ZoneDef; level: number; selected: boolean; all: boolean; crowd: number; onPick: () => void }) {
-  const url = useZonePreview(z);
+  // 11/17 맵 컨셉 (로비를 여는 동안 한 번 — 사냥 입장 때도 같은 값을 읽는다)
+  const [concept] = useState(currentMapConcept);
+  const url = useZonePreview(z, concept);
   const open = zoneOpen(z, level, all);
   return (
     <button
@@ -73,7 +84,7 @@ function ZoneCard({ z, level, selected, all, crowd, onPick }: { z: ZoneDef; leve
       <span
         className={s.zonePreview}
         style={{
-          background: `linear-gradient(135deg, ${hex(z.floor[0])}, ${hex(z.floor[1])})`,
+          background: `linear-gradient(135deg, ${hex(frost(z.floor[0], concept))}, ${hex(frost(z.floor[1], concept))})`,
         }}
       >
         {url && <img src={url} alt="" width={224} height={144} />}

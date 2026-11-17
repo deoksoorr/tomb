@@ -8,6 +8,11 @@ import { AMBIENT, arrowCanvas, beltCanvas, doorLeafCanvas, elevatorLeafCanvas, f
 import { AH, allSolids, AW, buildLayout, collide, COLS, CELL, FlowField, freeGrid, inRegion, nearestFree, PROP_META, SIDE, standable, TOP, type ArenaLayout, type LayoutCtx, type Pt, type Region, type Solid } from "./layout";
 // 11/15 야근 빌딩 끝없는 회의실: 층마다 다른 방 그림·회의 연장(방이 좁아짐)·마커 벽·커피 웅덩이
 import { MeetingArena } from "../../tower/themes/meetingRoomArena";
+// 11/17 겨울판·크리스마스판 (lib/mapConcept): 눈 덮인 바닥·소품 손질·벽 겹·바닥 장식·내리는 눈·입김 — 겉모습만
+import type { MapConcept } from "@/lib/mapConcept";
+import { conceptSuffix } from "../../sprites/winterScenery";
+import { conceptAmbient, conceptParticleColors } from "./conceptArt";
+import { ArenaConcept } from "./conceptStage";
 
 // 40번 사냥터 실행부: 지도 그리기(바닥·소품·조명·입자) + 지형 기믹 + 몬스터 길찾기·충돌 + 우두머리가 화날 때 졸개 부르기.
 // HuntScene은 몇 군데에서만 부른다 — 만들 때(new Arena), 이동·충돌(collide·steer·playerVelocity·speedMul), 매 프레임(update).
@@ -225,6 +230,8 @@ export class Arena {
     private readonly hooks: ArenaHooks,
     /** 11/15 야근 빌딩: 층·판 시드 (층마다 배치를 고르는 테마용) */
     ctx?: LayoutCtx,
+    /** 11/17 맵 컨셉 (판을 시작할 때 정한다 — 판 도중엔 바뀌지 않는다) */
+    readonly concept: MapConcept = "default",
   ) {
     this.zone = HUNT_ZONES[zoneId];
     this.layout = buildLayout(zoneId, seed, ctx);
@@ -240,8 +247,15 @@ export class Arena {
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
     this.build();
-    if (zoneId === "mt_meeting") this.mt = new MeetingArena(scene, this.layout, seed, ctx?.floor ?? 6, ctx?.runSeed ?? seed, hooks, ctx?.start ?? 1);
+    if (zoneId === "mt_meeting") this.mt = new MeetingArena(scene, this.layout, seed, ctx?.floor ?? 6, ctx?.runSeed ?? seed, hooks, ctx?.start ?? 1, concept);
+    // 11/17 벽 겹·바닥 장식 (회의실 가구 자리를 피하려고 지도 실행부 다음에)
+    this.cx?.build(this.floorKey, this.mt?.furnitureBoxes() ?? []);
   }
+
+  private floorKey = "";
+
+  /** 11/17 겨울·크리스마스판 실행부 (기본판이면 null) */
+  private cx: ArenaConcept | null = null;
 
   /** 11/15 끝없는 회의실 지도 (다른 사냥터는 null) */
   mt: MeetingArena | null = null;
@@ -262,13 +276,18 @@ export class Arena {
     const l = this.layout;
     const z = l.zone;
     sc.cameras.main.setBackgroundColor("#0b0a10");
-    this.keep(sc.add.image(0, 0, addCanvas(sc, TEX.floor(z, l.variant), () => floorCanvas(l))).setOrigin(0, 0).setDepth(D_FLOOR));
+    const cx = this.concept !== "default" ? new ArenaConcept(sc, l, this.concept, this.hooks.reduced, AMBIENT[z].alpha) : null;
+    this.cx = cx;
+    const floorKey = (this.floorKey = addCanvas(sc, TEX.floor(z, l.variant) + conceptSuffix(this.concept), () => floorCanvas(l, this.concept)));
+    this.keep(sc.add.image(0, 0, floorKey).setOrigin(0, 0).setDepth(D_FLOOR));
     for (const p of l.props) {
-      const key = addCanvas(sc, TEX.prop(p.kind, p.v ?? 0, !!p.flip), () => propCanvas(p.kind, p.v ?? 0, !!p.flip));
+      const base = TEX.prop(p.kind, p.v ?? 0, !!p.flip);
+      const key = cx ? cx.propKey(p, base) : addCanvas(sc, base, () => propCanvas(p.kind, p.v ?? 0, !!p.flip));
       const meta = PROP_META[p.kind];
       // 납작한 것(의자·벤치·카트)은 사람보다 아래, 나머지는 발밑 y로 깊이 정렬
       const flat = !meta.solid;
       this.keep(sc.add.image(Math.round(p.x), Math.round(p.y), key).setOrigin(0.5, 1).setDepth(flat ? p.y - 14 : p.y));
+      cx?.propGlow(key, p);
     }
     addCanvas(sc, TEX.px, () => {
       const c = document.createElement("canvas");
@@ -286,7 +305,7 @@ export class Arena {
 
   private buildLighting(): void {
     const sc = this.scene;
-    const tone = AMBIENT[this.layout.zone];
+    const tone = conceptAmbient(this.layout.zone, AMBIENT[this.layout.zone], this.concept);
     if (tone.alpha > 0) {
       const c = Phaser.Display.Color.IntegerToColor(tone.color);
       const k = tone.alpha;
@@ -385,7 +404,9 @@ export class Arena {
     }
     const sc0 = STORM[z];
     if (sc0) {
-      const tint = this.keep(sc.add.rectangle(-200, -200, AW + 400, AH + 400, sc0.hazeColor).setOrigin(0, 0).setDepth(D_WEATHER).setAlpha(0));
+      // 11/17 겨울판 사막: 모래바람에 눈이 섞여 하얗게 흐려진다
+      const haze = this.concept !== "default" && z === "homework-desert" ? 0xe4e8ec : sc0.hazeColor;
+      const tint = this.keep(sc.add.rectangle(-200, -200, AW + 400, AH + 400, haze).setOrigin(0, 0).setDepth(D_WEATHER).setAlpha(0));
       this.storm = { cfg: sc0, tint, next: sc0.first, until: 0, wind: 1, warned: false, level: 0, flips: [], rainAt: 0 };
     }
     if (z === "burnout-abyss") {
@@ -401,7 +422,7 @@ export class Arena {
 
   private newParticle(initial: boolean): Particle {
     const z = this.layout.zone;
-    const cols = PARTICLE_COLORS[z];
+    const cols = conceptParticleColors(z, PARTICLE_COLORS[z], this.concept);
     const col = cols[Math.floor(this.rnd() * cols.length)];
     const img = this.scene.add.image(0, 0, TEX.px).setTint(col).setDepth(D_PARTICLE);
     const p: Particle = { img, vx: 0, vy: 0, life: 0, max: 1, tw: this.rnd() * 6 };
@@ -581,8 +602,9 @@ export class Arena {
 
   // ── 매 프레임 ──
 
-  update(now: number, dt: number, player: Pt, mons: readonly ArenaMon[]): void {
+  update(now: number, dt: number, player: Pt, mons: readonly ArenaMon[], face: Pt | null = null): void {
     this.player = { x: player.x, y: player.y };
+    this.cx?.update(now, dt, player, face, this.storm && now < this.storm.until ? this.storm.wind * 40 : 0);
     this.flow.update(player.x, player.y);
     this.tickMonsters(now, dt, mons);
     this.tickGimmicks(now, dt, player, mons);
@@ -1035,5 +1057,7 @@ export class Arena {
     this.glows.clear();
     this.mt?.destroy();
     this.mt = null;
+    this.cx?.destroy();
+    this.cx = null;
   }
 }

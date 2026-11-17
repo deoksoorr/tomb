@@ -38,7 +38,8 @@ function E(c: Ctx, cx: number, cy: number, rx: number, ry: number, col: Color, a
 
 // ── 바닥·벽 (층마다 한 장: 방 종류·카펫 색·뒷벽·창밖 풍경·층 번호판) ──
 
-export type MtView = { time: MtTime; rain: boolean };
+/** 창밖 때 · 비 (11/17 snow = 겨울·크리스마스판 — 지붕마다 눈, 비 대신 눈이 내린다) */
+export type MtView = { time: MtTime; rain: boolean; snow?: boolean };
 
 /** 카펫: 결이 엇갈린 24px 타일 + 의자 바퀴 자국 */
 function carpet(c: Ctx, a: Color, b: Color, salt: number): void {
@@ -124,6 +125,8 @@ function cityView(c: Ctx, x0: number, y0: number, w: number, h: number, v: MtVie
       for (let yy = y0 + h - bh + 2; yy < y0 + h - 1; yy += 3)
         for (let xx = x + 1; xx < x + bx - 1; xx += 3) if (hash2(xx, yy, salt + sl) < lit) R(c, xx, yy, 1, 1, v.time === "day" ? 0x9ac0e0 : 0xffe08a);
       if (hash2(k, 7, salt) < 0.2) R(c, x + bx / 2, y0 + h - bh - 3, 1, 3, col);
+      // 11/17 겨울: 지붕에 쌓인 눈 (밤엔 푸르스름하게)
+      if (v.snow) for (let xx = x; xx < x + bx; xx++) R(c, xx, y0 + h - bh - (hash2(xx, k, salt + 5) < 0.3 ? 1 : 0), 1, 1 + (hash2(xx, k, salt + 6) < 0.5 ? 1 : 0), v.time === "night" || v.time === "dawn" ? 0xb8c6d8 : 0xeef3f8);
       x += bx + 1;
       k++;
     }

@@ -62,6 +62,6 @@ export function startMapConceptSync(): () => void {
  * 없으면 맵 장면이 알린 값(bridge map:concept). 장면은 열 때 한 번 읽고, 열려 있는 동안엔 가끔 다시 물어 바뀌면 다시 그린다
  */
 export function currentMapConcept(): MapConcept {
-  const search = typeof window === "undefined" ? "" : window.location.search;
+  const search = typeof window === "undefined" ? "" : (window.location?.search ?? "");
   return parseConceptOverride(search) ?? bridge.last("map:concept")?.concept ?? "default";
 }

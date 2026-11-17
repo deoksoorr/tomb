@@ -33,7 +33,7 @@ const D_SPARK = 9045;
 const T = {
   soft: "ex-soft",
   px: "ex-px",
-  sky: (night: boolean) => `ex-sky-${night ? 1 : 0}`,
+  sky: (night: boolean, snow = false) => `ex-sky-${night ? 1 : 0}${snow ? "-w" : ""}`,
   chand: "ex-chand",
   pile: "ex-pile",
   paper: "ex-paper",
@@ -70,7 +70,7 @@ type Snd = keyof typeof SOUNDS;
 
 // ── 그림 ──
 
-function ensureTextures(sc: Phaser.Scene): void {
+function ensureTextures(sc: Phaser.Scene, snow = false): void {
   const add = (key: string, make: () => HTMLCanvasElement) => {
     if (!sc.textures.exists(key)) sc.textures.addCanvas(key, make());
   };
@@ -85,6 +85,8 @@ function ensureTextures(sc: Phaser.Scene): void {
     return canvas;
   });
   for (const night of [false, true]) add(T.sky(night), () => skyCanvas(night));
+  // 11/17 겨울·크리스마스판 창밖 (눈 덮인 지붕·흐린 하늘 — 내리는 눈은 arena/conceptStage가 창마다 흘린다)
+  if (snow) for (const night of [false, true]) add(T.sky(night, true), () => skyCanvas(night, true));
   add(T.chand, () => {
     const { canvas, ctx: c } = makeCanvas(36, 28);
     R(c, 17, 0, 2, 6, 0xb08a40);
@@ -215,13 +217,13 @@ function ensureTextures(sc: Phaser.Scene): void {
 }
 
 /** 창밖: 하늘 + 먼 빌딩 + 가까운 빌딩 불빛 (낮은 금빛 오후, 밤은 짙은 남색) */
-function skyCanvas(night: boolean): HTMLCanvasElement {
+function skyCanvas(night: boolean, snow = false): HTMLCanvasElement {
   const { canvas, ctx: c } = makeCanvas(AW, EX_TOP);
   const R = (x: number, y: number, w: number, h: number, col: Color, a = 1) => {
     c.fillStyle = css(col, a);
     c.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
   };
-  const [top, bot] = night ? [0x060a1c, 0x1a2244] : [0x6a9ad8, 0xffd29a];
+  const [top, bot] = night ? (snow ? [0x101628, 0x2a3450] : [0x060a1c, 0x1a2244]) : snow ? [0x8aa6c8, 0xe6e2dc] : [0x6a9ad8, 0xffd29a];
   for (let y = 0; y < EX_TOP; y++) R(0, y, AW, 1, mix(top, bot, y / EX_TOP));
   if (night) for (let i = 0; i < 60; i++) R(hash2(i, 1, 3) * AW, hash2(i, 2, 3) * 20, 1, 1, 0xe8f0ff, 0.4 + hash2(i, 3, 3) * 0.5);
   else {
@@ -235,7 +237,8 @@ function skyCanvas(night: boolean): HTMLCanvasElement {
     for (let k = 0; k < 6; k++) R(hash2(k, 7, 1) * AW, 6 + hash2(k, 8, 1) * 14, 30 + hash2(k, 9, 1) * 40, 3, 0xfff4e8, 0.45);
   }
   // 강과 다리 (멀리)
-  R(0, EX_TOP - 9, AW, 9, night ? 0x0a1426 : 0x8ab0d0);
+  // (겨울엔 살얼음 낀 강)
+  R(0, EX_TOP - 9, AW, 9, night ? (snow ? 0x22324a : 0x0a1426) : snow ? 0xc4d8e8 : 0x8ab0d0);
   for (let x = 0; x < AW; x += 6) R(x, EX_TOP - 8, 3, 1, night ? 0x3a5a8a : 0xffffff, night ? 0.6 : 0.35);
   for (const [col, hk, sl] of [
     [night ? 0x141c34 : 0x7a8ab0, 26, 11],
@@ -254,6 +257,8 @@ function skyCanvas(night: boolean): HTMLCanvasElement {
         R(x + bw / 2, by - 5, 1, 5, col);
         if (night) R(x + bw / 2, by - 6, 1, 1, 0xff3a3a);
       }
+      // 겨울: 지붕에 쌓인 눈
+      if (snow) for (let xx = x; xx < x + bw; xx++) R(xx, by - (hash2(xx, k, sl + 3) < 0.3 ? 1 : 0), 1, 1 + (hash2(xx, k, sl + 4) < 0.5 ? 1 : 0), night ? 0xb8c6d8 : 0xf2f6fa);
       x += bw + 1;
       k++;
     }
@@ -401,7 +406,7 @@ export class ExecStage implements TowerThemeRuntime {
     };
     this.rainNext = this.t0 + 3500;
     this.tour.next = this.t0 + this.rules.tourFirst;
-    ensureTextures(this.sc);
+    ensureTextures(this.sc, host.concept !== "default");
     this.build();
   }
 
@@ -428,7 +433,7 @@ export class ExecStage implements TowerThemeRuntime {
     const night = this.rules.night;
     // 창밖 (창마다 잘라 보여 준다)
     this.wins = exWindows(this.room);
-    for (const w of this.wins) this.keep(sc.add.image(0, 0, T.sky(night)).setOrigin(0, 0).setCrop(w.x, w.y, w.w, w.h - 2).setDepth(D_SKY));
+    for (const w of this.wins) this.keep(sc.add.image(0, 0, T.sky(night, this.host.concept !== "default")).setOrigin(0, 0).setCrop(w.x, w.y, w.w, w.h - 2).setDepth(D_SKY));
     if (this.wins.length) {
       // 밤엔 비행기 불빛, 낮엔 반사광이 창을 가로지른다
       this.plane = this.keep(sc.add.image(-20, 10, T.px).setDepth(D_SKY + 1).setTint(night ? 0xff4a4a : 0xffffff).setScale(0.6));

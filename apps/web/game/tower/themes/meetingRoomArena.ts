@@ -9,6 +9,11 @@ import type { ArenaHooks, ArenaMon } from "../../rpg/arena/Arena";
 import type { ArenaLayout, Pt } from "../../rpg/arena/layout";
 import { bankTileCanvas, hazardCanvas, mtBackgroundCanvas, mtBoards, mtClockAt, mtFurnCanvas, mtWindows, pillarCanvas, puddleCanvas, stripesCanvas, type MtView } from "./meetingRoomArt";
 import { MT_ROOM_NAMES, MT_ROOM_TYPES, mtRoomPlan, type MtRoomPlan } from "./meetingRoomMap";
+// 11/17 겨울판·크리스마스판: 창밖 눈(지붕 눈·서리·창턱 눈, 비 대신 눈) · 가구 손질(담요·책상 트리·전구)
+import type { MapConcept } from "@/lib/mapConcept";
+import { dressProp, PROP_PAD, windowWinter, type Rect } from "../../rpg/arena/conceptArt";
+import { bulbGlow } from "../../rpg/arena/conceptStage";
+import { conceptSuffix } from "../../sprites/winterScenery";
 
 // 11/15 끝없는 회의실 지도 실행부 (arena/Arena가 이 테마 층마다 하나 만든다):
 //  - 층마다 다른 바닥 그림 한 장 (방 종류·카펫·뒷벽·창밖 때와 비·층 번호판) + 가구 + 때마다 다른 빛 (노을 줄무늬·야근 형광등·새벽 푸른빛)
@@ -85,6 +90,8 @@ export class MeetingArena {
     private readonly hooks: ArenaHooks,
     /** 11/15 판 시작 층 (테마 순서가 판마다 다르다 — 회의실에 몇 번째로 왔는지) */
     readonly start = 1,
+    /** 11/17 맵 컨셉 */
+    private readonly concept: MapConcept = "default",
   ) {
     MT_ARENAS.set(scene, this);
     this.plan = mtRoomPlan(MT_ROOM_TYPES[layout.variant % MT_ROOM_TYPES.length], seed);
@@ -93,13 +100,18 @@ export class MeetingArena {
     this.clock0 = meetingClock(at.pos, at.visit);
     this.loop = at.visit;
     // 비는 바깥이 보이는 방에서만 (거울 유리·교육장 스크린 벽은 창이 없다)
-    this.view = { time: meetingTime(this.clock0), rain: this.rnd() < 0.3 && mtWindows(this.plan.wall).length > 0 };
+    this.view = { time: meetingTime(this.clock0), rain: this.rnd() < 0.3 && mtWindows(this.plan.wall).length > 0, snow: concept !== "default" };
     this.full = { ...this.plan.room0 };
     this.room = { ...this.full };
     this.settled = { ...this.full };
     const sc = scene;
-    const key = `mt-bg-${floor}-${seed}`;
-    if (!sc.textures.exists(key)) sc.textures.addCanvas(key, mtBackgroundCanvas(this.plan, floor, this.view, seed & 0xffff));
+    const key = `mt-bg-${floor}-${seed}${conceptSuffix(concept)}`;
+    if (!sc.textures.exists(key)) {
+      const bg = mtBackgroundCanvas(this.plan, floor, this.view, seed & 0xffff);
+      // 11/17 겨울: 창마다 서리·창턱 눈·종이 눈송이
+      if (this.view.snow) for (const [i, w] of mtWindows(this.plan.wall).entries()) windowWinter(bg.getContext("2d")!, w, { night: this.view.time === "night", salt: 500 + i * 7 + (seed & 31), paper: true });
+      sc.textures.addCanvas(key, bg);
+    }
     this.keep(sc.add.image(0, 0, key).setOrigin(0, 0).setDepth(D_BG));
     this.buildFurniture();
     this.buildLight();
@@ -120,7 +132,8 @@ export class MeetingArena {
     this.hazard = this.keep(sc.add.tileSprite(0, 0, 1, 1, tex("mt-hazard", hazardCanvas)).setOrigin(0, 0).setDepth(D_HAZARD).setVisible(false));
     this.hands = this.keep(sc.add.graphics().setDepth(D_BOARD));
     this.board = this.keep(sc.add.graphics().setDepth(D_BOARD));
-    this.rain = this.view.rain && mtWindows(this.plan.wall).length ? this.keep(sc.add.graphics().setDepth(D_BOARD + 1)) : null;
+    // 11/17 겨울·크리스마스판은 창이 있으면 늘 눈이 내린다
+    this.rain = (this.view.rain || this.view.snow) && mtWindows(this.plan.wall).length ? this.keep(sc.add.graphics().setDepth(D_BOARD + 1)) : null;
     this.wallG = this.keep(sc.add.graphics().setDepth(-470));
   }
 
@@ -131,7 +144,7 @@ export class MeetingArena {
 
   /** 층 이름 (입장 안내): "17:25 · 노을 회의 · 교육장" */
   get title(): string {
-    return `${clockText(this.clock0)} · ${MT_ROOM_NAMES[this.plan.type]}${this.view.rain ? " · 비" : ""}`;
+    return `${clockText(this.clock0)} · ${MT_ROOM_NAMES[this.plan.type]}${this.view.rain ? (this.view.snow ? " · 눈" : " · 비") : ""}`;
   }
 
   // ── 그리기 ──
@@ -145,18 +158,25 @@ export class MeetingArena {
         this.keep(sc.add.image(f.x, f.y + 3, k).setOrigin(0.5, 1).setDepth(f.y));
         continue;
       }
-      const k = `mt-furn-${f.kind}-${f.w}-${f.h}-${f.v ?? 0}-${f.flip ? 1 : 0}`;
+      const k = `mt-furn-${f.kind}-${f.w}-${f.h}-${f.v ?? 0}-${f.flip ? 1 : 0}${conceptSuffix(this.concept)}`;
       let ox = 0;
       let oy = 0;
       if (!sc.textures.exists(k)) {
         const c = mtFurnCanvas(f);
-        sc.textures.addCanvas(k, c.canvas);
-        sc.textures.get(k).customData = { ox: c.ox, oy: c.oy };
+        // 11/17 겨울·크리스마스판 가구 손질 (위로 PROP_PAD만큼 큰 그림 — 원점을 그만큼 내린다)
+        const d = this.concept === "default" ? null : dressProp(c.canvas, `mt_${f.kind}`, f.v ?? 0, !!f.flip, "mt_meeting", this.concept);
+        sc.textures.addCanvas(k, d ? d.canvas : c.canvas);
+        sc.textures.get(k).customData = { ox: c.ox, oy: c.oy + (d ? PROP_PAD : 0), bulbs: d?.bulbs ?? [] };
       }
-      const cd = sc.textures.get(k).customData as { ox: number; oy: number };
+      const cd = sc.textures.get(k).customData as { ox: number; oy: number; bulbs?: { x: number; y: number; c: number }[] };
       ox = cd.ox;
       oy = cd.oy;
       const img = sc.add.image(Math.round(f.x - ox), Math.round(f.y - (f.circle ? 0 : 0) - oy), k).setOrigin(0, 0);
+      if (cd.bulbs?.length) {
+        const src = sc.textures.get(k).getSourceImage() as HTMLCanvasElement;
+        const g = bulbGlow(sc, k, src.width, src.height, cd.bulbs, [], img.x, img.y, 0, 0, { reduced: this.hooks.reduced, alpha: 0.7 });
+        if (g) this.keep(g);
+      }
       // 의자·러그처럼 납작한 것은 사람 아래, 나머지는 바닥 앞 끝 y로 깊이 정렬
       img.setDepth(f.kind === "chair" ? f.y - 12 : f.circle ? f.y + f.w * 0.3 : f.y);
       this.keep(img);
@@ -536,6 +556,19 @@ export class MeetingArena {
 
   private drawRain(now: number): void {
     const g = this.rain!.clear();
+    // 11/17 겨울: 비 대신 눈송이가 천천히 흔들리며 내린다
+    if (this.view.snow) {
+      g.fillStyle(0xffffff, 0.85);
+      for (const w of mtWindows(this.plan.wall)) {
+        const n = Math.round(w.w / 5);
+        for (let i = 0; i < n; i++) {
+          const x = w.x + ((i * 37.3 + now * 0.004 * (1 + (i % 3) * 0.3) + Math.sin(now / 700 + i) * 3 + w.w * 4) % w.w);
+          const y = w.y + ((i * 13.7 + now * 0.018 * (1 + (i % 2) * 0.4)) % w.h);
+          g.fillRect(x, y, i % 4 === 0 ? 2 : 1, i % 4 === 0 ? 2 : 1);
+        }
+      }
+      return;
+    }
     g.lineStyle(1, 0xc8d8f0, 0.45);
     for (const w of mtWindows(this.plan.wall)) {
       const n = Math.round(w.w / 7);
@@ -545,6 +578,11 @@ export class MeetingArena {
         g.lineBetween(x, y, x - 1, Math.min(w.y + w.h, y + 4));
       }
     }
+  }
+
+  /** 11/17 가구 자리 (겨울·크리스마스 바닥 장식이 피한다) */
+  furnitureBoxes(): Rect[] {
+    return this.plan.furn.map((f) => (f.circle ? { x: f.x - f.w / 2 - 4, y: f.y - f.w / 2 - 12, w: f.w + 8, h: f.w + 16 } : { x: f.x - f.w / 2 - 4, y: f.y - f.h - 16, w: f.w + 8, h: f.h + 20 }));
   }
 
   destroy(): void {

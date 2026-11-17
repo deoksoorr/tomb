@@ -64,6 +64,8 @@ import { nextPity } from "@/lib/rpg/setGearRoll";
 import { towerSound } from "../tower/towerSound";
 import { TOWER_THEME_RUNTIMES } from "../tower/themes";
 import type { ThemeHost, TowerThemeRuntime } from "../tower/themes/runtime";
+import type { MapConcept } from "@/lib/mapConcept";
+import { currentMapConcept } from "@/lib/mapConceptClient";
 
 // 사냥터: 위에서 내려다보는 실시간 전투. 웨이브는 서버가 준 시드의 계획(huntPlan)대로 나온다.
 //  - 웨이브 i는 앞 웨이브를 다 잡았고 i×8초가 지났을 때, 또는 앞 웨이브 뒤 35초가 지나면 나온다
@@ -246,6 +248,8 @@ export class HuntScene extends RpgScene {
   private intro: MonsterIntro | null = null;
   private seenMons = new Set<MonsterId>();
   private theme: TowerThemeRuntime | null = null;
+  /** 11/17 이 판의 맵 컨셉 (겉모습만 — 사냥터·빌딩 그림) */
+  private concept: MapConcept = "default";
   private chestsLeft = 0;
   /** 11/15 세트 장비: 싸움 효과 · 상자 천장(세트 장비 없이 연 상자 수 — 서버와 같은 값에서 센다) · 손에 든 무기 */
   private sg = new SetGearRun({});
@@ -444,6 +448,8 @@ export class HuntScene extends RpgScene {
     this.dirRow = DIR_ROW.down;
 
     // 40번: 사냥터마다 다른 지도 (바닥·벽·소품 충돌·조명·입자·지형 기믹) — game/rpg/arena
+    // 11/17 맵 컨셉(겨울·크리스마스)은 판을 시작할 때 한 번 읽는다 (판 도중 바뀌면 다음 판부터)
+    this.concept = currentMapConcept();
     this.obstacles = [];
     this.arena = new Arena(this, zone.id, play.tower ? floorSeed(play.seed, this.floor) : play.seed, (this.arenaHooks = {
       hurtPlayer: (dmg) => this.hurtPlayer(dmg),
@@ -468,7 +474,7 @@ export class HuntScene extends RpgScene {
       shake: (ms, k) => this.fx.shake(ms, k),
       maxHp: () => this.dv.maxHp,
       reduced: this.data0.reduced,
-    }), play.tower ? { floor: this.floor, runSeed: play.seed, start: play.tower.start } : undefined);
+    }), play.tower ? { floor: this.floor, runSeed: play.seed, start: play.tower.start } : undefined, this.concept);
     this.px = this.arena.start.x;
     this.py = this.arena.start.y;
 
@@ -646,6 +652,7 @@ export class HuntScene extends RpgScene {
         return sc.tele;
       },
       reduced: this.data0.reduced,
+      concept: this.concept,
       now: () => sc.now,
       floor: () => sc.floor,
       visit: () => (sc.play.tower ? towerBlock(sc.play.seed, sc.play.tower.start, sc.floor).visit : 0),
@@ -2968,7 +2975,7 @@ export class HuntScene extends RpgScene {
     this.mons = this.mons.filter((m) => m.alive);
     this.separate();
     // 40번: 지형 기믹·우두머리 졸개·조명·입자
-    this.arena.update(now, dt, { x: this.px, y: this.py }, this.mons);
+    this.arena.update(now, dt, { x: this.px, y: this.py }, this.mons, this.face);
     this.theme?.update(now, dt);
     // 2번 바닥 경고 · 40번 내 투사체 · 16번 콤보
     this.tele.update(now);
@@ -3325,7 +3332,7 @@ export class HuntScene extends RpgScene {
       this.arena.destroy();
       this.bossChest?.destroy();
       this.bossChest = null;
-      this.arena = new Arena(this, this.zone.id, floorSeed(this.play.seed, f), this.arenaHooks, { floor: f, runSeed: this.play.seed, start: this.play.tower!.start });
+      this.arena = new Arena(this, this.zone.id, floorSeed(this.play.seed, f), this.arenaHooks, { floor: f, runSeed: this.play.seed, start: this.play.tower!.start }, this.concept);
       this.theme = this.makeTheme();
       this.px = this.arena.start.x;
       this.py = this.arena.start.y;
