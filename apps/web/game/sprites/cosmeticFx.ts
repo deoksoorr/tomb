@@ -1325,6 +1325,8 @@ export type FxInput = {
   riding?: boolean;
   /** 점프 높이 (타고 있을 때 펫도 같이 뛴다) */
   hop?: number;
+  /** 11/17 배·카약·제트스키·놀이기구 같은 탈것에 타 있다: 펫을 아예 그리지 않고, 내리면 바로 옆에서 다시 나타난다 (사용자 요청) */
+  petOff?: boolean;
   /** 주인이 물에서 수영(swim)·잠수(dive) 중: 걷는 펫도 따라 들어가 헤엄치거나 수면 아래로 (나는 펫은 물 위를 그대로 난다) */
   water?: "swim" | "dive" | null;
   /** 아바타 그림의 실제 depth (앉기·집 안 자세·놀거리는 발 y와 다르게 덮어쓴다). 없으면 y */
@@ -1645,6 +1647,10 @@ export class CosmeticFxSim {
   }
 
   private pet(s: PetSpec, f: FxInput, t: number, out: FxCmd[]): void {
+    if (f.petOff) {
+      this.petOn = false;
+      return;
+    }
     if (s.mount && f.riding) return this.mounted(s, f, t, out);
     const back = petBack(f.dir);
     const far = s.far ?? 1;

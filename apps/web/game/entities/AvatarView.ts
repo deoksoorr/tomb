@@ -1096,6 +1096,8 @@ export class AvatarView {
           hand: handAnchor(this.body, d === DIR.left ? "left" : d === DIR.right ? "right" : d === DIR.up ? "up" : "down"),
           reduced: this.reduced,
           riding: this.mountedIn(st),
+          // 11/17 탈것(강 조각배·오리배, 바다 카약·제트스키, 놀이기구)에 타 있으면 펫은 숨긴다
+          petOff: this.ride !== null || st === "boat",
           hop: this.hop,
           water: st === "swim" || st === "dive" ? st : null,
           // 앉기(피아노·책상·벤치)·집 안 자세는 그림 depth를 덮어쓴다: 날개 앞뒤도 그 값 기준이어야 몸에 안 가린다

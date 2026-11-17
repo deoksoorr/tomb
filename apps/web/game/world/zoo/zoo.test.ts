@@ -296,6 +296,23 @@ describe("11/17 새 펫: 멈춤·귀여운 동작·옛 화면 호환", () => {
     expect(seen.has(spec.pose.idle[0])).toBe(true);
   });
 
+  it("11/17 탈것에 타 있으면(petOff) 걷는 펫도 타는 펫도 안 그리고, 내리면 바로 옆에서 다시 나와요", () => {
+    for (const id of ["pet_hound", "xm_sleigh"]) {
+      const sim = new CosmeticFxSim();
+      sim.setLook([id]);
+      const out: FxCmd[] = [];
+      sim.step(base({ x: 100, y: 200 }), out);
+      expect(out.length, id).toBeGreaterThan(0);
+      out.length = 0;
+      sim.step(base({ x: 600, y: 300, petOff: true, riding: true }), out);
+      expect(out, id).toEqual([]);
+      out.length = 0;
+      sim.step(base({ x: 600, y: 300 }), out);
+      const p = out[0];
+      expect(Math.hypot(p.x - 600, p.y - 300), id).toBeLessThan(40);
+    }
+  });
+
   it("실시간 서버가 덧붙인 옛 화면용 펫은 그리지 않고, 모르는 새 펫만 오면 기본 펫", () => {
     const sim = new CosmeticFxSim();
     const out: FxCmd[] = [];
