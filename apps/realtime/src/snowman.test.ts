@@ -93,7 +93,7 @@ describe("snowman in channel", () => {
     expect(ts.indexOf("snowmen")).toBeGreaterThan(ts.indexOf("mapped"));
     expect(of(w, "snowmen")[0].list).toHaveLength(1);
   });
-  it("너무 잦으면 wait, 멀리 세우면 spot, 마을에서는 무시", () => {
+  it("너무 잦으면 wait, 11/18 멀리 세워도 된다(내 위치와 거리 안 봄), 마을에서는 무시", () => {
     const { core, join } = setup();
     const a = join("a", { camp: true, spawn: SPOT });
     const v = join("v");
@@ -101,7 +101,8 @@ describe("snowman in channel", () => {
     core.message(a, send({ t: "snowman", x: SPOT.x + 30, y: SPOT.y }), 20);
     expect(of(a, "snowmanDenied")).toEqual([{ t: "snowmanDenied", why: "wait" }]);
     core.message(a, send({ t: "snowman", x: SPOT.x + 200, y: SPOT.y }), 10 + SNOWMAN_BUILD_INTERVAL_MS);
-    expect(of(a, "snowmanDenied").at(-1)).toEqual({ t: "snowmanDenied", why: "spot" });
+    expect(of(a, "snowmanDenied")).toHaveLength(1);
+    expect(of(a, "snowman")).toHaveLength(2);
     core.message(v, send({ t: "snowman", x: 600, y: 700 }), 10);
     expect(of(v, "snowmanDenied")).toEqual([]);
     expect(of(v, "snowman")).toEqual([]);
