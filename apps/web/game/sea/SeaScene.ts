@@ -1746,7 +1746,8 @@ export class SeaScene extends Phaser.Scene {
     const kind = this.snackReady();
     if (!kind) return false;
     const now = this.time.now;
-    if (now - this.snackAt < 1600) return true;
+    // 11/17 r3 실시간 서버가 동작(act)을 2초에 한 번만 다른 사람에게 넘겨요 — 던지는 간격도 2초로 맞춰 다른 화면에서 빠지는 던지기가 없게
+    if (now - this.snackAt < 2000) return true;
     this.snackAt = now;
     const pl = this.player;
     // r2 던지자마자 숫자를 줄여요 (서버 답이 오면 그 값으로 맞춰요)
