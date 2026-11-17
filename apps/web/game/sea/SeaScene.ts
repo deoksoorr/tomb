@@ -105,6 +105,9 @@ import { tideNow, tideNowLevel, tideWarnNow } from "./tideClock";
 import { SeaHousing } from "./seaHousing";
 import { publishRide, standForGate } from "@/lib/rideGate";
 import { qaUrlAllowed } from "@/lib/qaUrl";
+import { isSnowy, parseConceptOverride, type MapConcept } from "@/lib/mapConcept";
+import { startMapConceptSync } from "@/lib/mapConceptClient";
+import { SeaConceptDecor, seaConceptNow, type SeaActor } from "./SeaConceptDecor";
 
 /** 11/16 선베드에 누운 사람 depth (누운 자리 y + 이만큼 — 선베드 받침 − 4보다 앞) */
 const LOUNGER_LIE_FRONT = 10;
@@ -163,6 +166,11 @@ export class SeaScene extends Phaser.Scene {
   private life: SeaLife | null = null;
   /** 11/16 포구 오두막·등대 등불 (game/sea/seaHousing) */
   private housing: SeaHousing | null = null;
+  /** 11/17 맵 컨셉 (겨울·크리스마스판 — game/sea/SeaConceptDecor) · 입김 낼 사람 목록 (프레임마다 다시 채워요) */
+  private concept: SeaConceptDecor | null = null;
+  private readonly breathers: SeaActor[] = [];
+  private readonly selfKey = {};
+  private readonly breatherFn = (): SeaActor[] => this.breathersNow();
   /** 11/16 매점 먹거리·마실 거리 효과 (캠핑장 바베큐 효과 그대로 — game/camp/foodFx) */
   private food!: FoodFx;
   /** 11/16 쉴거리 자리 (선베드 눕기·돗자리 바닥 앉기 — 의자 좌석 체계 밖, 서버 좌석은 같아요) */
@@ -282,6 +290,9 @@ export class SeaScene extends Phaser.Scene {
     const h = this.host;
     const canvas = this.game.canvas;
     this.map = new SeaMap(this, h.atlas, h.reduced, true);
+    // 11/17 맵 컨셉: 바닥 덩어리를 처음부터 그 판 그림으로 (나머지 그림·장식은 장면을 다 만든 뒤에)
+    const concept0 = seaConceptNow();
+    this.map.setConcept(concept0);
     yield* this.map.parts();
     const b = SEA_BOUNDS;
     this.physics.world.setBounds(b.minX, b.minY, b.maxX - b.minX, b.maxY - b.minY);
@@ -437,6 +448,11 @@ export class SeaScene extends Phaser.Scene {
       toast: (m) => this.toast(m),
       act: (kind) => h.net.act(kind),
     });
+    yield;
+    // 11/17 맵 컨셉 (겨울·크리스마스판 그림·장식 — 조금씩)
+    this.concept = new SeaConceptDecor(this, { reduced: h.reduced, map: this.map, ships: () => this.ships });
+    this.atmos.setSnowy(isSnowy(concept0));
+    yield* this.concept.apply(concept0);
     yield;
 
     this.applyArrivalPose();
@@ -862,6 +878,14 @@ export class SeaScene extends Phaser.Scene {
       }),
     );
     on.push(bridge.on("peers:ask", () => bridge.emit("peers:list", { names: [...this.remotes.values()].map((r) => r.name), map: "sea" })));
+    // 11/17 맵 컨셉 (마을과 같은 방식): 주소 시험 값(?concept=, 실서버는 막힘)이 있으면 그것만, 없으면 관리자가 고른 값을 따라 바로 바꿔요
+    const conceptQa = parseConceptOverride(window.location.search);
+    if (!conceptQa) {
+      on.push(bridge.on("map:concept", ({ concept }) => !this.cleaned && this.applyConcept(concept)));
+      on.push(startMapConceptSync());
+      const last = bridge.last("map:concept")?.concept;
+      if (last && last !== this.concept?.current) this.applyConcept(last);
+    }
     on.push(
       bridge.on("firework:fire", ({ item }) => {
         this.fw().launch(item, this.player.x, this.player.y, this.rig.frameView(this.view), true, this.host.name);
@@ -876,6 +900,13 @@ export class SeaScene extends Phaser.Scene {
         if (!this.covered) this.host.hub.setHandler((a) => this.onAction(a));
       }),
     );
+  }
+
+  /** 11/17 판이 바뀌었어요 → 그림·장식·눈 날씨를 바로 */
+  private applyConcept(c: MapConcept): void {
+    if (!this.concept || c === this.concept.current) return;
+    this.concept.applyNow(c);
+    this.atmos.setSnowy(isSnowy(c));
   }
 
   private fw(): Fireworks {
@@ -1427,6 +1458,7 @@ export class SeaScene extends Phaser.Scene {
     if (this.tone) this.tone.dusk = dusk;
     this.housing?.update(now, L.darkness, L.fog, s);
     this.map.update(now, dt, view, { hour: this.hour, darkness: L.darkness, rain: L.rain, fog: L.fog, tide: this.tide, trend: this.trend, actors: this.actors, dusk });
+    this.concept?.update(view, this.breatherFn);
     this.riding.update();
     publishRide(pl, this.riding.on, this.rides?.kind ?? (this.kayaks?.isRiding ? "kayak" : null)); // 11/16 탄 것·앉은 자리 → UI (lib/rideGate). 튜브·제트스키 같은 새 자세도 저절로 막힌다
     // 11/16 쉴거리 자리: 자세가 풀리면(움직임·일어남) 놓아요
@@ -1822,6 +1854,16 @@ export class SeaScene extends Phaser.Scene {
     this.lighting?.resize();
   }
 
+  /** 11/17 입김 낼 사람: 내 캐릭터 + 같은 바닷가 사람 (물속·탈것 위는 빼요) */
+  private breathersNow(): SeaActor[] {
+    const out = this.breathers;
+    out.length = 0;
+    const pl = this.player;
+    if (!pl.inWater && !pl.inBoat) out.push({ key: this.selfKey, x: pl.x, y: pl.y, dir: pl.dir });
+    for (const r of this.remotes.values()) if (r.visible && !r.away && !seaWet(r.x, r.y, this.tide)) out.push({ key: r, x: r.x, y: r.y, dir: r.netDir });
+    return out;
+  }
+
   private cleanup(): void {
     if (this.cleaned) return;
     this.cleaned = true;
@@ -1861,6 +1903,8 @@ export class SeaScene extends Phaser.Scene {
     this.life = null;
     this.housing?.destroy();
     this.housing = null;
+    this.concept?.destroy();
+    this.concept = null;
     this.meScreen?.destroy();
     this.rig?.destroy();
     this.atmos?.destroy();

@@ -37,6 +37,26 @@ export function cottageBox(tier: PlotTierId, lot: { w: number; h: number }): Cot
   return { x, y: top, w: s.w, h: s.base - top, base: s.base, doorX: x + Math.round(s.w / 2) };
 }
 
+/**
+ * 11/17 겨울·크리스마스판 (game/sea/SeaConceptDecor): 그림 좌표의 지붕 사다리꼴(용마루 top ~ 처마 eave, 가운데 cx·위아래 반폭)과
+ * 문 위 자리. 등대지기 집은 망루(towerX0 오른쪽)를 지붕에서 빼요. cottageGrid와 같은 계산이에요
+ */
+export function cottageRoofArea(style: CottageStyleId, tier: PlotTierId, lot: { w: number; h: number }): { cx: number; top: number; eave: number; halfTop: number; halfEave: number; towerX0: number; door: { x: number; top: number } } {
+  const s = SIZE[tier] ?? SIZE.small;
+  const box = cottageBox(tier, lot);
+  const x0 = box.x;
+  const x1 = box.x + s.w;
+  const base = COTTAGE_RISE + s.base;
+  const wallTop = base - s.wall;
+  const top = wallTop - s.roof + 2;
+  const towerW = style === "keeper" ? Math.max(12, Math.round(s.w * 0.17)) : 0;
+  const bodyX1 = style === "keeper" ? x1 - towerW + 3 : x1;
+  const W = bodyX1 - x0;
+  const ridge = Math.round(W * 0.56);
+  const doorH = Math.min(s.wall - 4, tier === "manor" ? 16 : 14);
+  return { cx: (x0 + bodyX1) / 2, top, eave: wallTop + 1, halfTop: ridge / 2, halfEave: (W + 8) / 2, towerX0: style === "keeper" ? x1 - towerW : Infinity, door: { x: box.doorX, top: base - doorH } };
+}
+
 const hexes = (a: readonly string[]): readonly Color[] => a.map((h) => parseInt(h.slice(1), 16));
 const PAL = {
   shingle: hexes(["#e4b48a", "#d29e74", "#bc875f", "#a3714f", "#8a5e43"]),

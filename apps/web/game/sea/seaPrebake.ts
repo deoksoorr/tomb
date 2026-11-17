@@ -4,6 +4,8 @@ import { addCanvasTexture } from "../assets/manifest";
 import { makeCanvas } from "../sprites/pixel";
 import * as Art from "./seaArt";
 import { clampEdges, forEachSeaTexture, type SeaTexBuild } from "./SeaMap";
+import { isSnowy } from "@/lib/mapConcept";
+import { seaConceptNow } from "./SeaConceptDecor";
 
 // 11/16 바닷가 그림 미리 굽기 (캠핑장 campPrebake와 같은 틀): 버스를 기다리는 동안·창밖 연출 동안 프레임마다 조금씩(예산 ms) 구워요.
 // 여기서 구워 두면 SeaMap은 이미 있는 텍스처를 건너뛰어요 (tex·makeChunk가 exists를 봐요).
@@ -70,15 +72,16 @@ export class SeaPrebake {
       this.fresh.push(key);
       yield;
     }
-    // 바닥 덩어리: 도착하는 곳에 가까운 것부터, 줄 묶음마다 끊어서
+    // 바닥 덩어리: 도착하는 곳에 가까운 것부터, 줄 묶음마다 끊어서. 11/17 겨울·크리스마스판이면 눈 덮인 바닥으로 (SeaMap과 같은 키)
+    const winter = isSnowy(seaConceptNow());
     const chunks: { cx: number; cy: number; d: number }[] = [];
     for (let cy = 0; cy < Math.ceil(SEA_HEIGHT / CHUNK); cy++)
       for (let cx = 0; cx < Math.ceil(SEA_WIDTH / CHUNK); cx++) chunks.push({ cx, cy, d: Math.hypot(cx * CHUNK + CHUNK / 2 - this.near.x, cy * CHUNK + CHUNK / 2 - this.near.y) });
     chunks.sort((a, b) => a.d - b.d);
     for (const { cx, cy } of chunks) {
-      const key = Art.SEA_TEX.ground(cx, cy);
+      const key = winter ? Art.SEA_TEX.groundWinter(cx, cy) : Art.SEA_TEX.ground(cx, cy);
       if (tex.exists(key)) continue;
-      const g = Art.seaGroundSteps(cx, cy, CHUNK, 16);
+      const g = Art.seaGroundSteps(cx, cy, CHUNK, 16, winter);
       let r = g.next();
       while (!r.done) {
         yield;

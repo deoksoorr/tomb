@@ -15,7 +15,16 @@ const SHIP_DEPTH = SEA_DEPTH.shimmer + 6;
 const MAX_SHIPS = 2;
 const MAX_SQUID = 4;
 
-type ShipView = { body: Phaser.GameObjects.Image; wake: Phaser.GameObjects.Image; bow: Phaser.GameObjects.Image; light: Phaser.GameObjects.Image; refl: Phaser.GameObjects.Image; slot: number };
+type ShipView = {
+  body: Phaser.GameObjects.Image;
+  wake: Phaser.GameObjects.Image;
+  bow: Phaser.GameObjects.Image;
+  light: Phaser.GameObjects.Image;
+  refl: Phaser.GameObjects.Image;
+  /** 11/17 크리스마스판 장식 줄 전구 빛 (SeaConceptDecor가 구운 「배 그림 키~xglow」 두 장을 번갈아) */
+  xmas: Phaser.GameObjects.Image;
+  slot: number;
+};
 type SquidView = {
   hull: Phaser.GameObjects.Image;
   lamps: Phaser.GameObjects.Image;
@@ -29,6 +38,8 @@ type SquidView = {
 const LIGHT_DEPTH = DEPTH.lights + 2;
 /** 전구 빛을 따로 얹을 자리 (등 줄에서 몇 개 골라요) */
 const BULB_PICK = [0, 3, 6, 9, 11, 14];
+/** 11/17 크리스마스판 오징어잡이배 전구 빛 색 (빨강·금·초록·하늘·분홍·흰빛을 돌려요) */
+const XMAS_BULBS = [0xff6a6a, 0xffd870, 0x8aff9a, 0x8ae0ff, 0xff9ae0, 0xffffff];
 
 /** 뱃고동 (파일 없이 합성 — 낮게 깔리는 두 음 + 멀리서 들리듯 낮은 통과 필터. 환경음 갈래 볼륨을 따라요) */
 export class SeaHornSound extends AudioHost {
@@ -81,6 +92,8 @@ export class SeaShips {
   private readonly ships: ShipView[] = [];
   private readonly squids: SquidView[] = [];
   private readonly horned = new Set<number>();
+  /** 11/17 크리스마스판 (오징어잡이배 전구를 알록달록하게, 지나가는 배에 장식 줄 빛) */
+  private xmasOn = false;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -98,7 +111,8 @@ export class SeaShips {
       const refl = s.add.image(0, 0, T.shipReflect("tanker")).setOrigin(0.5, 0).setDepth(SHIP_DEPTH - 1).setVisible(false);
       // r19 뱃머리 물결 (배가 단단해지며 — 가까운 튜브·카약이 이 물결에 흔들려요)
       const bow = s.add.image(0, 0, T.wake).setDepth(SHIP_DEPTH - 1).setVisible(false);
-      this.ships.push({ body, wake, bow, light, refl, slot: -1 });
+      const xmas = s.add.image(0, 0, T.lampGlow).setOrigin(0.5, 1).setBlendMode(Phaser.BlendModes.ADD).setDepth(LIGHT_DEPTH).setVisible(false);
+      this.ships.push({ body, wake, bow, light, refl, xmas, slot: -1 });
     }
     for (let i = 0; i < MAX_SQUID; i++) {
       const cols = [0, 1, 2, 3, 4].map(() => s.add.image(0, 0, T.lightColumn).setOrigin(0.5, 0).setBlendMode(Phaser.BlendModes.ADD).setDepth(LIGHT_DEPTH - 1).setVisible(false));
@@ -109,6 +123,14 @@ export class SeaShips {
       const bulbs = BULB_PICK.map((_, j) => s.add.image(0, 0, T.lampGlow).setBlendMode(Phaser.BlendModes.ADD).setTint(j % 2 ? 0xd8ffd0 : 0xffffff).setDepth(LIGHT_DEPTH + 2).setVisible(false));
       this.squids.push({ hull, lamps, glow, cols, bulbs, pool });
     }
+  }
+
+  /** 11/17 크리스마스판 켜기·끄기 (lib/mapConcept — SeaConceptDecor가 불러요) */
+  setXmas(on: boolean): void {
+    if (this.xmasOn === on) return;
+    this.xmasOn = on;
+    for (const v of this.squids) v.bulbs.forEach((g, j) => g.setTint(on ? XMAS_BULBS[j % XMAS_BULBS.length] : j % 2 ? 0xd8ffd0 : 0xffffff));
+    if (!on) for (const v of this.ships) v.xmas.setVisible(false);
   }
 
   /** darkness 0 낮 ~ 1 밤, dusk 0..1 (노을), px = 내 캐릭터 x (뱃고동 좌우) */
@@ -125,6 +147,7 @@ export class SeaShips {
         v.bow.setVisible(false);
         v.light.setVisible(false);
         v.refl.setVisible(false);
+        v.xmas.setVisible(false);
         return;
       }
       this.drawShip(v, s.pass, s.x, now, haze, darkness);
@@ -222,6 +245,18 @@ export class SeaShips {
       .setTint(0xffe2a8)
       .setScale(0.5)
       .setAlpha(lit * 0.8);
+    // 11/17 크리스마스판: 장식 줄 전구 빛 (낮엔 은은하게, 밤엔 환하게 — 0.7초마다 두 장을 번갈아)
+    const xk = `${key}~xglow`;
+    const dress = this.xmasOn && this.scene.textures.exists(xk);
+    v.xmas.setVisible(dress);
+    if (dress) {
+      if (v.xmas.texture.key !== xk) v.xmas.setTexture(xk, 0);
+      v.xmas
+        .setFrame(this.reduced ? 0 : Math.floor(now / 700) % 2)
+        .setPosition(v.body.x, v.body.y)
+        .setFlipX(v.body.flipX)
+        .setAlpha(bodyAlpha * (0.3 + 0.7 * Math.max(0, Math.min(1, (darkness - 0.15) * 2))));
+    }
   }
 
   private maybeHorn(p: ShipPass, wall: number, x: number, px: number, darkness: number): void {
@@ -243,6 +278,7 @@ export class SeaShips {
       v.bow.destroy();
       v.light.destroy();
       v.refl.destroy();
+      v.xmas.destroy();
     }
     for (const v of this.squids) {
       v.hull.destroy();

@@ -61,6 +61,8 @@ import * as Art from "./seaArt";
 import { noise1, shoreDelay, shoreReach, WaveTrain } from "./seaWaves";
 import * as Lay from "./seaLayout";
 import { type SeaInteractable, type SeaLight, type SeaMapApi, type SeaTime } from "./seaTypes";
+import { isSnowy, type MapConcept } from "@/lib/mapConcept";
+import { ICE_BAND_H, ICE_BAND_TEX_H, ICE_BAND_W, iceBandArt } from "./seaWinterArt";
 
 // 11/16 달물결 포구 맵 (SeaMapApi 구현): 바닥(덩어리 텍스처, 화면 근처만), 건물·소품(칸 컬링, y 정렬), 이름표, 충돌,
 // 물때 그림(물가 선·물거품·물러난 거품 자국·젖은 모래·먼바다 반짝임), 배와 부표 흔들림, 물보라, 갈매기 여덟 마리, 밤 가로등·등대 불빛.
@@ -68,6 +70,8 @@ import { type SeaInteractable, type SeaLight, type SeaMapApi, type SeaTime } fro
 // 그림은 정류장 근처·버스 여행 동안 seaPrebake가 조금씩 구워요. 한 번 구운 "sea-" 텍스처는 지우지 않아요.
 // 매 프레임 일은 물 층 위치 옮기기와 작은 풀(물보라 10·반짝임 10·갈매기 8)뿐이라 가벼워요.
 
+/** 11/17 겨울·크리스마스판 물가 살얼음 띠 텍스처 (seaWinterArt) */
+export const SEA_ICE_TEX = "sea-iceBand";
 /** 소품 컬링 칸 */
 const CELL = 256;
 const CELL_COLS = Math.ceil(SEA_WIDTH / CELL);
@@ -206,6 +210,9 @@ export class SeaMap implements SeaMapApi {
   private readonly pTop = new Float32Array(RN);
   private water: Phaser.GameObjects.Rope | null = null;
   private foam: Phaser.GameObjects.Rope | null = null;
+  /** 11/17 겨울·크리스마스판: 물가 살얼음 띠 · 바닥 덩어리를 눈 덮인 그림으로 · 물빛을 차갑게 (lib/mapConcept) */
+  private iceR: Phaser.GameObjects.Rope | null = null;
+  private snowy = false;
   private readonly waves = new WaveTrain((Date.now() ^ 0x5eaf00d) >>> 0);
   private lastBig = 0;
   /** 11/16 먼바다 깊이 그늘·지나가는 빛 띠·반짝이는 별·밤 물빛 */
@@ -373,6 +380,8 @@ export class SeaMap implements SeaMapApi {
     this.duskWaterR = strip(T.duskWater, SEA_DEPTH.water + 1, false);
     this.foamR = strip(T.foam, SEA_DEPTH.foam);
     this.duskFoamR = strip(T.duskFoam, SEA_DEPTH.foam + 1, false);
+    // 11/17 살얼음은 거품 위 (물가 선에 붙어 떠 있고, 밀려온 파도는 그 너머까지 올라가요)
+    this.iceR = strip(SEA_ICE_TEX, SEA_DEPTH.foam + 2, this.snowy);
     this.water = this.waterR;
     this.foam = this.foamR;
     // 11/16 깊이 띠는 물 몸통 그림이 맡아요 (따로 덮던 그늘은 뺐어요)
@@ -1029,14 +1038,32 @@ export class SeaMap implements SeaMapApi {
   }
 
   private makeChunk(cx: number, cy: number): void {
-    const key = Art.SEA_TEX.ground(cx, cy);
+    const key = this.chunkTex(cx, cy);
+    this.chunks.set(cy * CHUNK_COLS + cx, this.keep(this.scene.add.image(cx * CHUNK, cy * CHUNK, key).setOrigin(0, 0).setDepth(DEPTH.ground)));
+  }
+
+  /** 바닥 덩어리 텍스처 (지금 판 — 겨울·크리스마스면 눈 덮인 그림). 없으면 지금 굽어요 */
+  private chunkTex(cx: number, cy: number): string {
+    const key = this.snowy ? Art.SEA_TEX.groundWinter(cx, cy) : Art.SEA_TEX.ground(cx, cy);
     if (!this.scene.textures.exists(key)) {
       const { canvas, ctx } = makeCanvas(CHUNK, CHUNK);
-      ctx.putImageData(new ImageData(Art.seaGroundPixels(cx, cy) as unknown as Uint8ClampedArray<ArrayBuffer>, CHUNK, CHUNK), 0, 0);
+      ctx.putImageData(new ImageData(Art.seaGroundPixels(cx, cy, CHUNK, this.snowy) as unknown as Uint8ClampedArray<ArrayBuffer>, CHUNK, CHUNK), 0, 0);
       addCanvasTexture(this.scene, key, { canvas });
       clampEdges(this.scene, key);
     }
-    this.chunks.set(cy * CHUNK_COLS + cx, this.keep(this.scene.add.image(cx * CHUNK, cy * CHUNK, key).setOrigin(0, 0).setDepth(DEPTH.ground)));
+    return key;
+  }
+
+  /**
+   * 11/17 맵 컨셉 (lib/mapConcept): 겨울·크리스마스면 바닥을 눈 덮인 그림으로 바꾸고 물가에 살얼음, 물빛을 차갑게.
+   * 배치·충돌·물때는 그대로예요. 이미 깔린 바닥 덩어리는 그 자리에서 그림만 바꿔요 (없는 그림은 지금 구워요)
+   */
+  setConcept(concept: MapConcept): void {
+    const snowy = isSnowy(concept);
+    if (snowy === this.snowy) return;
+    this.snowy = snowy;
+    for (const [i, img] of this.chunks) img.setTexture(this.chunkTex(i % CHUNK_COLS, Math.floor(i / CHUNK_COLS)));
+    this.iceR?.setVisible(snowy);
   }
 
   /** 글씨는 화면에서 늘 같은 크기 (1/zoom) */
@@ -1063,8 +1090,9 @@ export class SeaMap implements SeaMapApi {
     const night = Math.min(1, t.darkness);
     // 물은 땅 색조 곱하기에서 빠져 있어요 → 같은 색조(저녁 주황은 빼고)를 직접 곱하고, 밤엔 깊은 남색으로 조금 더
     const world = this.tintNow(t.dusk);
-    const waterTint = mulColor(world, mix(0xffffff, 0x8c9ce0, night * 0.6));
-    const foamTint = mulColor(world, mix(0xffffff, 0xd4dcff, night * 0.5));
+    // 11/17 겨울·크리스마스판: 물빛을 차갑게 (민트·아쿠아 → 잿빛 도는 푸른빛 — 얼리지는 않아요)
+    const waterTint = mulColor(mulColor(world, mix(0xffffff, 0x8c9ce0, night * 0.6)), this.snowy ? 0xcadced : 0xffffff);
+    const foamTint = mulColor(mulColor(world, mix(0xffffff, 0xd4dcff, night * 0.5)), this.snowy ? 0xeaf2fa : 0xffffff);
     const duskOn = t.dusk > 0.01 && !this.reduced ? t.dusk : t.dusk > 0.5 ? 1 : 0;
     const scrollX = this.reduced ? 0 : time * 0.003;
     const foamScroll = this.reduced ? 0 : time * 0.006;
@@ -1150,6 +1178,7 @@ export class SeaMap implements SeaMapApi {
       LU[k + 3] = 6 / Art.LACE_TEX_H;
       LA[i * 2] = LA[i * 2 + 1] = gap > 2 ? Math.min(0.9, gap / 10) * laceA : 0;
     }
+    this.updateIce(time, lineY, foamTint);
     for (const r of this.strips) r.dirty = false;
     water.colors.fill(waterTint);
     foam.colors.fill(foamTint);
@@ -1195,6 +1224,33 @@ export class SeaMap implements SeaMapApi {
         .setAlpha((0.16 - 0.08 * night) * (1 - t.rain * 0.6) * (1 - t.fog * 0.5))
         .setTint(night > 0.5 ? 0xc8d8ff : 0xfffcf0);
     }
+  }
+
+  /**
+   * 11/17 물가 살얼음 띠: 물때 물가 선(파도 밀려옴은 빼고)에 붙어 떠 있어요. 물결 따라 아주 조금 오르내리고 천천히 옆으로 흘러요.
+   * 파도는 그 아래로 지나 백사장까지 올라가요 (얼음은 거품 위 depth)
+   */
+  private updateIce(time: number, lineY: number, tint: number): void {
+    const ice = this.iceR;
+    if (!ice || !this.snowy) return;
+    const V = ice.vertices;
+    const U = ice.uv;
+    const drift = this.reduced ? 0 : time * 0.0012;
+    for (let i = 0; i < RN; i++) {
+      const x = i * RSTEP;
+      const bob = this.reduced ? 0 : Math.sin(time / 1500 + x * 0.021) * 0.7;
+      const y = Math.round(lineY + 2 + bob + (noise1(x / 90, 31) - 0.5) * 3);
+      const k = i * 4;
+      V[k] = x;
+      V[k + 1] = y;
+      V[k + 2] = x;
+      V[k + 3] = y + ICE_BAND_H;
+      U[k] = U[k + 2] = (x + drift) / ICE_BAND_W;
+      U[k + 1] = 0;
+      U[k + 3] = ICE_BAND_H / ICE_BAND_TEX_H;
+    }
+    ice.colors.fill(tint);
+    ice.alphas.fill(0.92);
   }
 
   /** 낚싯배·부표: 물결 따라 흔들리고, 물이 차면 조금 떠올라요 */
@@ -1477,7 +1533,7 @@ export class SeaMap implements SeaMapApi {
     this.plates.length = 0;
     this.lotPlates.clear();
     this.strips.length = 0;
-    this.waterR = this.foamR = this.duskWaterR = this.duskFoamR = this.laceR = this.sheenR = null;
+    this.waterR = this.foamR = this.duskWaterR = this.duskFoamR = this.laceR = this.sheenR = this.iceR = null;
     this.reachTop.fill(Number.NaN);
     this.buoys.length = 0;
     this.lampGlows.length = 0;
@@ -1533,6 +1589,7 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   tex(T.duskWater, Art.duskWaterArt);
   tex(T.duskFoam, Art.duskFoamArt);
   tex(T.goldStreak, Art.goldStreakArt);
+  tex(SEA_ICE_TEX, iceBandArt);
   tex(T.shelter, () => Art.withDetail(Art.shelterArt(), {}));
   tex(T.busSign, () => Art.withDetail(Art.busSignArt(), {}));
   tex(T.timetable, () => Art.withDetail(Art.timetableArt(), {}));
