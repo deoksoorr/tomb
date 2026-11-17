@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { bridge } from "@/game/bridge";
+import { useEffect, useState } from "react";
 import { errorMessage, request } from "@/lib/api";
 import { DAY_RESET_TEXT } from "@/lib/gameDay";
-import { useBridgeEvent } from "@/lib/hooks/useBridge";
-import { STAFF_EARN_MAX_NAMES, STAFF_EARN_TODAY_MAX, staffEarnViews, type StaffEarnRequest, type StaffEarnResponse, type StaffEarnView } from "@/lib/staffEarn";
+import { useBridgeValue } from "@/lib/hooks/useBridge";
+import { STAFF_EARN_TODAY_MAX, staffEarnViews, type StaffEarnRequest, type StaffEarnResponse, type StaffEarnView } from "@/lib/staffEarn";
 import { Bar, Row } from "../account/EarnGauge";
 import gauge from "../account/EarnGauge.module.css";
 import { cx } from "../ui/cx";
@@ -15,8 +14,6 @@ import styles from "./StaffEarnDialog.module.css";
 
 /** 창을 연 동안 다시 묻는 간격 */
 const REFRESH_MS = 30_000;
-/** 지금 채널 사람들을 게임에 물은 뒤 이만큼 답이 없으면 마을 밖(캠핑장·집·사냥터 …)으로 본다 */
-const PEERS_WAIT_MS = 1_500;
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 const fetchEarn = (body: StaffEarnRequest) =>
@@ -26,19 +23,16 @@ type Mode = "channel" | "today";
 
 /**
  * 운영자 전용 「포인트 현황」: 사람마다 오늘(새벽 5시 기준) 받은 포인트가 하루 한도를 얼마나 채웠는지.
- * 지금 채널 사람들(게임이 아는 이름) 또는 오늘 들어온 모든 계정. 한 줄을 누르면 항목별 게이지를 편다.
+ * 지금 채널에 접속한 사람 모두(맵 상관없이) 또는 오늘 들어온 모든 계정. 한 줄을 누르면 항목별 게이지를 편다.
  * only = 캐릭터 메뉴에서 고른 한 사람만 (탭 없이 펼친 채로)
  */
 export default function StaffEarnDialog({ onClose, only }: { onClose: () => void; only?: string }) {
   const [mode, setMode] = useState<Mode>("channel");
   const [fullOnly, setFullOnly] = useState(false);
-  const [peers, setPeers] = useState<string[] | null>(null);
-  const [noWorld, setNoWorld] = useState(false);
   const [data, setData] = useState<StaffEarnResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [round, setRound] = useState(0);
   const [openName, setOpenName] = useState<string | null>(only ?? null);
-  const answered = useRef(false);
   // 탭을 바꾸면 앞 탭 결과를 지우고 새로 받는다
   const pickMode = (m: Mode) => {
     if (m === mode) return;
@@ -47,30 +41,15 @@ export default function StaffEarnDialog({ onClose, only }: { onClose: () => void
     setError(null);
   };
 
-  // 지금 채널 사람들 이름 (월드가 peers:list로 답한다, 나는 빠진다)
-  useBridgeEvent("peers:list", ({ names }) => {
-    answered.current = true;
-    setNoWorld(false);
-    setPeers(names.slice(0, STAFF_EARN_MAX_NAMES));
-  });
-  useEffect(() => {
-    if (only || mode !== "channel") return;
-    answered.current = false;
-    bridge.emit("peers:ask");
-    const t = setTimeout(() => {
-      if (!answered.current) setNoWorld(true);
-    }, PEERS_WAIT_MS);
-    return () => clearTimeout(t);
-  }, [only, mode, round]);
-
-  // 30초마다 다시 (지금 채널이면 사람 목록부터)
+  // 30초마다 다시
   useEffect(() => {
     const t = setInterval(() => setRound((r) => r + 1), REFRESH_MS);
     return () => clearInterval(t);
   }, []);
 
-  const names = only ? [only] : peers;
-  const ask: StaffEarnRequest | null = mode === "today" && !only ? { mode: "today" } : names?.length ? { mode: "names", names } : null;
+  // 11/17 지금 채널 = 그 채널에 접속한 사람 모두 (맵·집·사냥터 상관없이 — 서버가 실시간 서버에 묻는다). 예전엔 지금 맵에 보이는 사람만이었다
+  const channel = useBridgeValue("net:status")?.channel ?? null;
+  const ask: StaffEarnRequest | null = only ? { mode: "names", names: [only] } : mode === "today" ? { mode: "today" } : channel !== null ? { mode: "channel", channel } : null;
   // 요청 하나 = 물을 내용 + 몇 번째 새로 보기. 마지막으로 끝난 요청과 다르면 불러오는 중
   const reqKey = ask ? `${round}#${JSON.stringify(ask)}` : null;
   const [doneKey, setDoneKey] = useState<string | null>(null);
@@ -94,8 +73,9 @@ export default function StaffEarnDialog({ onClose, only }: { onClose: () => void
   const views = data ? staffEarnViews(data.rows, data.boost) : [];
   const fullCount = views.filter((v) => v.full).length;
   const shown = fullOnly ? views.filter((v) => v.full) : views;
-  const channelEmpty = mode === "channel" && !only && peers !== null && peers.length === 0;
-  const waiting = !data && !error && !channelEmpty && !(mode === "channel" && noWorld && !only);
+  const channelEmpty = mode === "channel" && !only && !!data && data.rows.length === 0;
+  const noChannel = mode === "channel" && !only && channel === null;
+  const waiting = !data && !error && !noChannel;
 
   return (
     <Dialog title={only ? `${only}님의 포인트 현황` : "포인트 현황"} onClose={onClose} fitHeight>
@@ -135,10 +115,10 @@ export default function StaffEarnDialog({ onClose, only }: { onClose: () => void
             {error}
           </p>
         )}
-        {mode === "channel" && !only && noWorld && <p className={styles.empty}>지금 채널 사람들은 마을에 있을 때만 볼 수 있어요.</p>}
+        {noChannel && <p className={styles.empty}>채널에 들어가 있을 때 볼 수 있어요.</p>}
         {channelEmpty && <p className={styles.empty}>지금 채널에 다른 사람이 없어요.</p>}
         {waiting && <p className={styles.empty}>불러오는 중이에요.</p>}
-        {data && !channelEmpty && !(mode === "channel" && noWorld && !only) && (
+        {data && !channelEmpty && (
           <>
             {shown.length === 0 && (
               <p className={styles.empty}>{only ? "이 사람의 계정을 찾지 못했어요." : fullOnly ? "아직 한도를 다 채운 사람이 없어요." : mode === "today" ? "오늘 들어온 사람이 없어요." : "오늘 포인트를 받은 사람이 없어요."}</p>
