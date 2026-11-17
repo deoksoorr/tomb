@@ -1,0 +1,132 @@
+import { CAMP_DECKS, CAMP_DECK_H, CAMP_DECK_W, CAMP_FIRE, CAMP_SEATS, SNOWMAN_GAP, campSnowSpotOk } from "@tomb/protocol";
+import * as Lay from "./campLayout";
+import { campMeltAt } from "./campWinter";
+import type { BallSize } from "./snowmanArt";
+
+// 11/17 캠핑장 눈사람 만들기 — 장면 없이 도는 판정 (테스트한다).
+// 눈더미 자리 · 굴린 거리 → 크기 · 내려놓을 수 있는 자리 · 쌓을 수 있는지 · 녹는 단계.
+
+type Pt = { x: number; y: number };
+
+/** 굴린 거리(px)가 이만큼 넘으면 다음 크기 (머리 → 배 → 몸통) */
+export const SNOWBALL_GROW_AT: readonly [number, number] = [150, 360];
+/** 눈더미·내려놓은 덩이 앞에서 E가 닿는 거리 */
+export const SNOW_REACH = 20;
+/** 내 화면에만 있는 내려놓은 덩이 수 (넘치면 가장 오래된 것이 사라진다) */
+export const LOCAL_STACKS_MAX = 4;
+/** 다 녹은 뒤 물웅덩이가 남는 시간 */
+export const PUDDLE_MS = 20_000;
+
+/** 굴린 거리 → 크기 */
+export function sizeForRoll(dist: number): BallSize {
+  return dist >= SNOWBALL_GROW_AT[1] ? 2 : dist >= SNOWBALL_GROW_AT[0] ? 1 : 0;
+}
+
+/** 굴리면 커지는 바닥인지 (눈 덮인 풀밭·바위 마당·광장 바깥 — 흙길·녹은 땅·물·버스 길은 아니다) */
+export function snowRollGrows(x: number, y: number): boolean {
+  const k = Lay.campGroundKind(x, y);
+  return (k === "grass" || k === "rock" || k === "plaza" || k === "deckPad") && !campMeltAt(x, y);
+}
+
+/** 데크 위·바로 앞 (텐트 칠 자리라 비워 둔다) */
+function onDeck(x: number, y: number, pad = 6): boolean {
+  return CAMP_DECKS.some((d) => Math.abs(d.x - x) < CAMP_DECK_W / 2 + pad && y > d.y - CAMP_DECK_H / 2 - pad && y < d.y + CAMP_DECK_H / 2 + pad + 6);
+}
+
+/**
+ * 눈덩이·눈사람을 내려놓을 수 있는 자리 (서버 campSnowSpotOk보다 좁게): 눈 바닥이고 걸을 수 있고(양옆도) 데크·앉는 자리·상호작용 자리가 아닌 곳.
+ * others = 이미 서 있는 눈사람·내려놓은 덩이 (SNOWMAN_GAP만큼 떨어져야 한다)
+ */
+export function snowPlaceOk(x: number, y: number, others: Iterable<Pt> = []): boolean {
+  if (!campSnowSpotOk(x, y)) return false;
+  const k = Lay.campGroundKind(x, y);
+  if (k !== "grass" && k !== "plaza" && k !== "rock" && k !== "path") return false;
+  if (campMeltAt(x, y)) return false;
+  if (!Lay.campStandable(x, y) || !Lay.campStandable(x - 6, y) || !Lay.campStandable(x + 6, y)) return false;
+  if (onDeck(x, y)) return false;
+  if (CAMP_SEATS.some((s) => Math.abs(s.x - x) < 12 && Math.abs(s.y - y) < 12)) return false;
+  if (Lay.CAMP_INTERACTABLES.some((o) => o.kind !== "deck" && Math.hypot(o.x - x, o.y - y) < o.r)) return false;
+  for (const o of others) if (Math.hypot(o.x - x, (o.y - y) * 1.4) < SNOWMAN_GAP) return false;
+  return true;
+}
+
+// ── 눈더미 자리 ──
+
+/** 눈더미를 둘 대략의 자리 (구역마다 하나 — 정류장 앞 풀밭·데크 바깥 눈밭·타프 옆·계곡 건너 산책로·캠핑카 골목 끝) */
+const PILE_ANCHORS: readonly Pt[] = [
+  { x: 330, y: 560 },
+  { x: 880, y: 590 },
+  { x: 360, y: 210 },
+  { x: 880, y: 200 },
+  { x: 1180, y: 470 },
+  { x: CAMP_FIRE.x + 300, y: CAMP_FIRE.y + 30 },
+  { x: 700, y: 610 },
+];
+
+let piles: Pt[] | null = null;
+/** 눈더미 자리 (앵커 근처 가장 가까운 빈 눈밭 — 나무·데크·앉는 자리·상호작용·길과 떨어진 곳). 한 번만 계산 */
+export function campSnowPiles(): readonly Pt[] {
+  if (piles) return piles;
+  const out: Pt[] = [];
+  for (const a of PILE_ANCHORS) {
+    let best: Pt | null = null;
+    let bd = Infinity;
+    const R = 80;
+    for (let y = a.y - R; y <= a.y + R; y += 4)
+      for (let x = a.x - R; x <= a.x + R; x += 4) {
+        const d = (x - a.x) ** 2 + (y - a.y) ** 2;
+        if (d >= bd || d > R * R) continue;
+        if (Lay.campGroundKind(x, y) !== "grass" || Lay.pathEdgeDist(x, y, 8) < 8) continue;
+        if (!snowPlaceOk(x, y) || !Lay.campStandable(x - 16, y) || !Lay.campStandable(x + 16, y) || !Lay.campStandable(x, y - 8)) continue;
+        if (Lay.CAMP_TREES.some((t) => Math.abs(t.x - x) < 24 && y > t.y - 20 && y < t.y + 24)) continue;
+        if (Lay.CAMP_DECOR.some((t) => Math.abs(t.x - x) < 18 && Math.abs(t.y - y) < 10)) continue;
+        if (onDeck(x, y, 16)) continue;
+        if (Lay.CAMP_INTERACTABLES.some((o) => Math.hypot(o.x - x, o.y - y) < o.r + 16)) continue;
+        if (out.some((p) => Math.hypot(p.x - x, p.y - y) < 120)) continue;
+        bd = d;
+        best = { x, y };
+      }
+    if (best) out.push(best);
+  }
+  piles = out;
+  return out;
+}
+
+// ── 쌓기 ──
+
+/** 내 화면에만 있는 내려놓은 덩이 (아래부터 크기) */
+export type LocalStack = { id: number; x: number; y: number; sizes: BallSize[]; /** 서버에 세우기를 보냈다 (답을 기다린다) */ pending?: number };
+
+/** 그 덩이 위에 이 크기를 올릴 수 있는지: ok · full(이미 세 단) · bigger(위가 더 작거나 같다) */
+export function stackCheck(st: LocalStack, size: BallSize): "ok" | "full" | "bigger" {
+  if (st.sizes.length >= 3) return "full";
+  const top = st.sizes[st.sizes.length - 1];
+  return size < top ? "ok" : "bigger";
+}
+
+/** 세 단(몸통·배·머리)이 다 쌓였나 */
+export function stackDone(st: LocalStack): boolean {
+  return st.sizes.length === 3 && st.sizes[0] === 2 && st.sizes[1] === 1 && st.sizes[2] === 0;
+}
+
+// ── 녹기 ──
+
+/** 녹은 정도(protocol snowmanMelt 0..1) → 그림 단계 0~3 */
+export function meltStage(melt: number): number {
+  if (melt <= 0) return 0;
+  return melt < 0.4 ? 1 : melt < 0.8 ? 2 : 3;
+}
+
+/** 굴리는 동안 눈덩이 자리: 발 앞 (방향 dir — 0 아래·1 왼쪽·2 오른쪽·3 위, 반지름 r) */
+export function ballFront(x: number, y: number, dir: number, r: number): Pt {
+  switch (dir) {
+    case 1:
+      return { x: x - r - 7, y: y + 1 };
+    case 2:
+      return { x: x + r + 7, y: y + 1 };
+    case 3:
+      return { x, y: y - Math.max(5, r * 0.9) - 3 };
+    default:
+      return { x, y: y + r * 1.8 + 3 };
+  }
+}

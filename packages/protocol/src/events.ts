@@ -9,6 +9,7 @@ import { AWAY_HOUSE_RE, isAwayPlace, type AwayPlace } from "./friends";
 import type { PeerInfo, Sid } from "./types";
 import { isMapId, type AwayMapId, type ChatPlace, type MapId } from "./camp";
 import type { BbqItemId } from "./bbq";
+import type { SnowmanDenyWhy, SnowmanInfo } from "./snowman";
 
 // 드문 이벤트는 짧은 JSON text 프레임. 이름과 색은 입장 때(welcome/join) 한 번만 보낸다.
 
@@ -82,6 +83,11 @@ export type C2S =
   | { t: "map"; m: MapId; x: number; y: number }
   /** 11/15 캠핑장 바베큐 한 접시 증서 (웹이 포인트를 쓰고 서명). 서버가 검증해 같은 맵에 bbq로 알린다. 옛 서버는 버린다 */
   | { t: "bbq"; grant: string }
+  /**
+   * 11/17 캠핑장 눈사람을 다 쌓았다 (x,y = 눈사람 발 위치). 서버가 자리·간격을 보고 씨앗을 붙여 같은 캠핑장에 snowman으로 알린다.
+   * 굴리기·쌓는 중간 과정은 보내지 않는다. 옛 서버는 모르는 t라 버린다
+   */
+  | { t: "snowman"; x: number; y: number }
   /**
    * 11/13 함께 사냥: 내 공격·스킬 동작 (사냥터 방 전용, 보여 주기만 — 판정·몬스터는 각자). 서버는 HUNT_ACT_INTERVAL_MS 간격으로
    * 같은 사냥터 방의 다른 사람에게만 중계하고 저장하지 않는다. 옛 서버는 모르는 t라 버린다
@@ -191,7 +197,16 @@ export type S2C =
   /** 11/15 누가 바베큐를 먹고 u(epoch ms)까지 커졌다 (같은 맵, 보낸 사람 포함). 옛 클라이언트는 모르는 t라 버린다 */
   | { t: "bbq"; sid: Sid; i: BbqItemId; u: number; /** 마실 거리: 마신 뒤 취기 단계·마신 시각 */ lv?: number; at?: number }
   /** 11/17 확성기 창 고정 공지가 바뀌었다 (운영자가 쓰거나 지움, 사람이 있는 채널 모두에게). 옛 클라이언트는 모르는 t라 버린다 */
-  | MegaPinMsg;
+  | MegaPinMsg
+  // ── 11/17 캠핑장 눈사람 (옛 클라이언트는 모르는 t라 버린다) ──
+  /** 받는 사람에게만: 캠핑장에 들어왔다(welcome·mapped 다음) → 지금 서 있는 눈사람 전부 */
+  | { t: "snowmen"; list: SnowmanInfo[] }
+  /** 누가 눈사람을 세웠다 (같은 캠핑장, 세운 사람 포함). sid = 세운 사람 */
+  | { t: "snowman"; s: SnowmanInfo; sid: Sid }
+  /** 개수가 넘쳐 서버가 먼저 녹였다 (같은 캠핑장). 제때 녹는 것은 알리지 않는다 (각자 시각으로) */
+  | { t: "snowmanGone"; id: string }
+  /** 세운 사람에게만: 세우지 못했다 */
+  | { t: "snowmanDenied"; why: SnowmanDenyWhy };
 
 /** 23번 확성기 방송 (보낸 사람에게도 간다) */
 /** staff = 운영자 계정이 외친 것 (Vercel이 증서에 넣은 것만 → 이름 금색) */
@@ -366,6 +381,8 @@ export function parseC2S(text: string): C2S | null {
     }
     case "bbq":
       return typeof m.grant === "string" && m.grant.length <= MAX_GRANT_LEN ? { t: "bbq", grant: m.grant } : null;
+    case "snowman":
+      return isNum(m.x) && isNum(m.y) ? { t: "snowman", x: Math.round(m.x), y: Math.round(m.y) } : null;
     case "map":
       return isMapId(m.m) && isNum(m.x) && isNum(m.y) ? { t: "map", m: m.m, x: Math.round(m.x), y: Math.round(m.y) } : null;
     case "use":

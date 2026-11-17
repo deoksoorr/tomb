@@ -34,6 +34,8 @@ const NONCE_PREFIX = "n:";
 const LIVE_KEY = "live";
 /** 22번 황금 고블린: 다음 등장 시각 + 지금 나와 있는 고블린(잡혔는지까지). 등장·잡힘·사라짐 때만 쓴다 */
 const GOBLIN_KEY = "goblin";
+/** 11/17 캠핑장 눈사람 목록 (세움·넘쳐 녹음 때만 쓴다 — 잠들었다 깨어나도 그대로 서 있게) */
+const SNOW_KEY = "snow";
 /** 맵별 최근 채팅 저장 키 접두어 (+ "village" | "camp". 11/16 지금은 "village" 하나에 모든 맵 줄) */
 const CHAT_PREFIX = "chat:";
 /** 채팅이 바뀐 뒤 저장하기까지 모으는 시간 (그 사이 줄은 한 번에 쓴다 — 맵마다 이 간격에 최대 한 번) */
@@ -95,6 +97,7 @@ export class ChannelDO extends DurableObject<Env> {
     const revived = this.core.restore(active, reserved, Date.now(), Array.isArray(live) ? live : [], Math.max(graceMs, RESTART_GRACE_MIN_MS));
     this.liveSavedAt = Date.now();
     if (this.room === null) this.core.restoreGoblin(ctx.storage.kv.get(GOBLIN_KEY));
+    if (this.room === null) this.core.restoreSnowmen(ctx.storage.kv.get(SNOW_KEY));
     if (revived > 0) {
       console.log(`channel ${this.channel}: restored ${revived} peer(s) from live snapshot`);
       this.scheduleReport();
@@ -209,6 +212,14 @@ export class ChannelDO extends DurableObject<Env> {
         },
         chatsChanged: (map) => {
           if (!room) this.scheduleChatSave(map);
+        },
+        snowmenChanged: (list) => {
+          if (room) return;
+          try {
+            ctx.storage.kv.put(SNOW_KEY, list);
+          } catch (e) {
+            console.error("snowman save failed", e);
+          }
         },
         goblinChanged: (s) => {
           if (room) return;
