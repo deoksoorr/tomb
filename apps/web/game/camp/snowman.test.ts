@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { campSnowSpotOk } from "@tomb/protocol";
 import { BALL_R, carriedBallSheet, carryFrameSize, snowmanArt, snowmanLook, SNOWMAN_H, SNOWMAN_W, stackArt, type BallSize } from "./snowmanArt";
-import { campSnowPiles, carryAt, heldStep, meltStage, sizeForRoll, snowPlaceOk, stackCheck, stackDone, SNOWBALL_GROW_AT } from "./snowmanLogic";
+import { ballFront, campSnowPiles, carryAt, heldStep, meltStage, rectsOverlap, sizeForRoll, snowmanBlockRect, snowPlaceOk, stackBlockRect, stackCheck, stackDone, SNOWBALL_GROW_AT } from "./snowmanLogic";
 
 // 11/17 캠핑장 눈사람 만들기: 굴린 거리 → 크기, 쌓기 순서, 눈더미 자리, 같은 씨앗 → 같은 모습
 describe("snowman logic", () => {
@@ -81,5 +81,25 @@ describe("snowman logic", () => {
       expect([g.w, g.h]).toEqual([SNOWMAN_W, SNOWMAN_H]);
     }
     expect(stackArt([2, 1, 0]).h).toBeLessThanOrEqual(SNOWMAN_H);
+  });
+});
+
+// 11/18 눈사람·덩이는 못 지나간다 (밑동 충돌 상자) — 그래도 덩이 바로 앞에 서서 올릴 수는 있어야 한다
+describe("snow walls", () => {
+  const foot = (x: number, y: number) => ({ x: x - 4, y: y - 5, w: 8, h: 5 });
+  it("덩이에 올리는 자리(발 앞)에 서면 내 발이 덩이 밑동과 겹치지 않는다 (네 방향·모든 크기)", () => {
+    for (const s of [0, 1, 2] as const)
+      for (const dir of [0, 1, 2, 3]) {
+        const at = ballFront(0, 0, dir, BALL_R[s]);
+        // 덩이가 (at)에 있을 때 그 앞에 선 내 발 (0,0)
+        expect(rectsOverlap(foot(0, 0), stackBlockRect(at.x, at.y)), `${s}/${dir}`).toBe(false);
+      }
+  });
+  it("눈사람 밑동은 가운데를 막고, 옆으로 비껴가면 지나간다", () => {
+    const r = snowmanBlockRect(100, 100);
+    expect(rectsOverlap(foot(100, 100), r)).toBe(true);
+    expect(rectsOverlap(foot(100, 103), r)).toBe(true);
+    expect(rectsOverlap(foot(111, 100), r)).toBe(false);
+    expect(rectsOverlap(foot(100, 106), r)).toBe(false);
   });
 });

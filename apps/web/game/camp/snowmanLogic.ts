@@ -6,6 +6,7 @@ import type { BallSize } from "./snowmanArt";
 // 11/17 캠핑장 눈사람 만들기 — 장면 없이 도는 판정 (테스트한다).
 // 눈더미 자리 · 굴린 거리 → 크기 · 내려놓을 수 있는 자리 · 쌓을 수 있는지 · 녹는 단계.
 // 11/18 들고 다니기와 굴리기를 나눴다: 안고 걸으면 그대로, 굴릴 때(Space·[굴리기]를 누른 채)만 커진다 (heldStep · carryAt).
+// 11/18 눈사람·덩이는 밑동에 작은 충돌 상자 (snowmanBlockRect · stackBlockRect) — 녹는 마지막 단계·물웅덩이는 지나간다.
 
 type Pt = { x: number; y: number };
 
@@ -13,8 +14,6 @@ type Pt = { x: number; y: number };
 export const SNOWBALL_GROW_AT: readonly [number, number] = [150, 360];
 /** 눈더미·내려놓은 덩이 앞에서 E가 닿는 거리 */
 export const SNOW_REACH = 20;
-/** 내 화면에만 있는 내려놓은 덩이 수 (넘치면 가장 오래된 것이 사라진다) */
-export const LOCAL_STACKS_MAX = 4;
 /** 다 녹은 뒤 물웅덩이가 남는 시간 */
 export const PUDDLE_MS = 20_000;
 
@@ -113,8 +112,8 @@ export function campSnowPiles(): readonly Pt[] {
 
 // ── 쌓기 ──
 
-/** 내 화면에만 있는 내려놓은 덩이 (아래부터 크기) */
-export type LocalStack = { id: number; x: number; y: number; sizes: BallSize[]; /** 서버에 세우기를 보냈다 (답을 기다린다) */ pending?: number };
+/** 내려놓은 덩이 (아래부터 크기) */
+export type LocalStack = { sizes: BallSize[] };
 
 /** 그 덩이 위에 이 크기를 올릴 수 있는지: ok · full(이미 세 단) · bigger(위가 더 작거나 같다) */
 export function stackCheck(st: LocalStack, size: BallSize): "ok" | "full" | "bigger" {
@@ -127,6 +126,27 @@ export function stackCheck(st: LocalStack, size: BallSize): "ok" | "full" | "big
 export function stackDone(st: LocalStack): boolean {
   return st.sizes.length === 3 && st.sizes[0] === 2 && st.sizes[1] === 1 && st.sizes[2] === 0;
 }
+
+// ── 11/18 못 지나가게 (밑동 충돌 상자) ──
+
+export type Rect = { x: number; y: number; w: number; h: number };
+
+/** 다 세운 눈사람 밑동 (발 위치 x,y — 몸통 아래쪽만. 위에서 오면 몸통 뒤에, 아래에서 오면 앞에 선다) */
+export function snowmanBlockRect(x: number, y: number): Rect {
+  return { x: x - 6, y: y - 5, w: 12, h: 5 };
+}
+
+/** 내려놓은 덩이 밑동 (바로 앞에 서서 올리고 다시 들 수 있게 작게) */
+export function stackBlockRect(x: number, y: number): Rect {
+  return { x: x - 4, y: y - 4, w: 8, h: 4 };
+}
+
+export function rectsOverlap(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+/** 이 녹는 단계부터는 막지 않는다 (마지막 단계 — 거의 다 녹았다) */
+export const MELT_PASS_STAGE = 3;
 
 // ── 녹기 ──
 

@@ -267,7 +267,7 @@ export class CampScene extends Phaser.Scene {
     yield;
     this.forage = new CampForage({ scene: this, atlas: h.atlas, reduced: h.reduced, colliders: this.map.colliders, player: () => this.player, net: () => h.net, seats: () => this.seats, remotes: () => this.remotes, toast: (m) => this.toast(m) });
     this.life = new CampLife({ scene: this, atlas: h.atlas, sfx: h.sfx, reduced: h.reduced, player: () => this.player, net: () => h.net, override: this.hourOverride });
-    this.snow = new CampSnowmen({ scene: this, atlas: h.atlas, sfx: h.sfx, reduced: h.reduced, player: () => this.player, net: () => h.net, toast: (m) => this.toast(m), concept });
+    this.snow = new CampSnowmen({ scene: this, atlas: h.atlas, sfx: h.sfx, reduced: h.reduced, player: () => this.player, net: () => h.net, remotes: () => this.remotes, myName: () => h.name, toast: (m) => this.toast(m), concept });
     this.stars = new StarScopes(this, { spots: CAMP_SCOPES, style: "camp", player: () => this.player, net: () => h.net, seats: () => this.seats, judged: () => this.spotsJudged, toast: (m) => this.toast(m), sfx: h.sfx });
 
     yield;
@@ -406,6 +406,7 @@ export class CampScene extends Phaser.Scene {
       onLeave: (sid) => {
         this.remotes.get(sid)?.destroy();
         this.remotes.delete(sid);
+        this.snow?.onPeerLeave(sid);
         for (const [seatId, owner] of this.seats) if (owner === sid) this.setSeat(seatId, null);
       },
       onSnapshot: (entries, t) => {
@@ -460,13 +461,17 @@ export class CampScene extends Phaser.Scene {
       onGoblinGone: () => undefined,
       onGoblinCaught: () => undefined,
       onBbq: (sid, item, until, lv, at) => this.food.onBbq(sid, sid === this.host.net.mySid, item, until, lv, at),
-      onSnowmen: (list) => this.snow?.onSnowmen(list),
-      onSnowman: (s, sid) => this.snow?.onSnowman(s, sid === this.host.net.mySid),
+      onSnowmen: (list, stacks) => this.snow?.onSnowmen(list, stacks),
+      onSnowman: (s, sid, st) => this.snow?.onSnowman(s, sid, st),
       onSnowmanGone: (id) => this.snow?.onGone(id),
-      onSnowmanDenied: (why) => this.snow?.onDenied(why),
+      onSnowmanDenied: (why, a, id) => this.snow?.onDenied(why, a, id),
+      onSnowHold: (sid, h) => this.snow?.setPeerHold(sid, h),
+      onSnowStack: (st, h) => this.snow?.onStack(st, h),
+      onSnowStackGone: (id, sid, took) => this.snow?.onStackGone(id, sid, took),
       onMapped: (map, peers, seats) => {
         if (map !== "camp") return this.host.bail();
         this.clearRemotes();
+        this.snow?.onWelcome();
         this.syncSeats(seats);
         for (const p of peers) this.addRemote(p);
         this.spotsJudged = true;
@@ -486,6 +491,7 @@ export class CampScene extends Phaser.Scene {
       return;
     }
     this.clearRemotes();
+    this.snow?.onWelcome();
     this.spotsJudged = m.spots === true;
     this.syncSeats(m.seats);
     for (const p of m.peers) this.addRemote(p);
@@ -556,6 +562,7 @@ export class CampScene extends Phaser.Scene {
     this.forage?.f.applyPeer(p);
     r.setAway(p.away === true, performance.now(), true);
     r.view.setFriend(this.isFriend(r));
+    this.snow?.applyPeer(p);
     if (!r.seatId) for (const [seatId, owner] of this.seats) if (owner === p.sid) r.seatId = seatId;
     this.remotes.set(p.sid, r);
   }
@@ -581,6 +588,7 @@ export class CampScene extends Phaser.Scene {
       this.riding.applyPeer(r, p);
       r.setAway(p.away === true, now);
       r.applyFood(foodOfPeer(p)); // 11/15 바베큐 효과 (커지기·빨라지기·취기)
+      this.snow?.applyPeer(p); // 11/18 들고 있는 눈덩이
       const last = r.interp.latest;
       if (!last || Math.hypot(last.x - p.x, last.y - p.y) > TELEPORT_DIST / 2) r.push(now, p.x, p.y, p.state, p.dir);
     }
@@ -588,6 +596,7 @@ export class CampScene extends Phaser.Scene {
       if (keep.has(sid)) continue;
       r.destroy();
       this.remotes.delete(sid);
+      this.snow?.setPeerHold(sid, null);
     }
     this.syncSeats(seats);
   }
@@ -595,6 +604,7 @@ export class CampScene extends Phaser.Scene {
   private clearRemotes(): void {
     for (const r of this.remotes.values()) r.destroy();
     this.remotes.clear();
+    this.snow?.clearPeers();
   }
 
   private isFriend(r: RemoteAvatar): boolean {

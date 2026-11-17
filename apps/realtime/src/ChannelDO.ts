@@ -36,6 +36,8 @@ const LIVE_KEY = "live";
 const GOBLIN_KEY = "goblin";
 /** 11/17 캠핑장 눈사람 목록 (세움·넘쳐 녹음 때만 쓴다 — 잠들었다 깨어나도 그대로 서 있게) */
 const SNOW_KEY = "snow";
+/** 11/18 캠핑장 쌓는 중인 덩이 (내려놓기·올리기·다시 들기 때 쓴다 — 잠들었다 깨어나도 그대로 놓여 있게) */
+const SNOW_STACK_KEY = "snowStack";
 /** 맵별 최근 채팅 저장 키 접두어 (+ "village" | "camp". 11/16 지금은 "village" 하나에 모든 맵 줄) */
 const CHAT_PREFIX = "chat:";
 /** 채팅이 바뀐 뒤 저장하기까지 모으는 시간 (그 사이 줄은 한 번에 쓴다 — 맵마다 이 간격에 최대 한 번) */
@@ -98,6 +100,7 @@ export class ChannelDO extends DurableObject<Env> {
     this.liveSavedAt = Date.now();
     if (this.room === null) this.core.restoreGoblin(ctx.storage.kv.get(GOBLIN_KEY));
     if (this.room === null) this.core.restoreSnowmen(ctx.storage.kv.get(SNOW_KEY));
+    if (this.room === null) this.core.restoreSnowStacks(ctx.storage.kv.get(SNOW_STACK_KEY));
     if (revived > 0) {
       console.log(`channel ${this.channel}: restored ${revived} peer(s) from live snapshot`);
       this.scheduleReport();
@@ -219,6 +222,14 @@ export class ChannelDO extends DurableObject<Env> {
             ctx.storage.kv.put(SNOW_KEY, list);
           } catch (e) {
             console.error("snowman save failed", e);
+          }
+        },
+        snowStacksChanged: (list) => {
+          if (room) return;
+          try {
+            ctx.storage.kv.put(SNOW_STACK_KEY, list);
+          } catch (e) {
+            console.error("snow stack save failed", e);
           }
         },
         goblinChanged: (s) => {

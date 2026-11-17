@@ -37,8 +37,16 @@ import {
   type BbqItemId,
   isBbqId,
   parseSnowmanInfo,
+  parseSnowHold,
+  parseSnowStackInfo,
+  isSnowBall,
+  isSnowmanDenyWhy,
+  type SnowAct,
+  type SnowBall,
+  type SnowHold,
   type SnowmanDenyWhy,
   type SnowmanInfo,
+  type SnowStackInfo,
   type PeerInfo,
   type PeerState,
   type QueueStatus,
@@ -148,14 +156,20 @@ export type NetCallbacks = {
   /** 11/15 바베큐 한 접시·한 잔 (같은 맵, 내 것 포함). 마실 거리면 lv·at = 취기 */
   onBbq?(sid: Sid, item: BbqItemId, until: number, lv?: number, at?: number): void;
   // ── 11/17 캠핑장 눈사람 (캠핑장 장면만 받는다) ──
-  /** 캠핑장에 들어왔다: 지금 서 있는 눈사람 전부 */
-  onSnowmen?(list: SnowmanInfo[]): void;
-  /** 누가 세웠다 (내 것 포함, sid = 세운 사람) */
-  onSnowman?(s: SnowmanInfo, sid: Sid): void;
+  /** 캠핑장에 들어왔다: 지금 서 있는 눈사람 전부와 11/18 쌓는 중인 덩이 전부 */
+  onSnowmen?(list: SnowmanInfo[], stacks: SnowStackInfo[]): void;
+  /** 누가 세웠다 (내 것 포함, sid = 세운 사람, st = 눈사람으로 바뀐 덩이) */
+  onSnowman?(s: SnowmanInfo, sid: Sid, st?: string): void;
   /** 개수가 넘쳐 서버가 먼저 녹였다 */
   onSnowmanGone?(id: string): void;
-  /** 내가 세우려던 것을 서버가 거절했다 */
-  onSnowmanDenied?(why: SnowmanDenyWhy): void;
+  /** 내 내려놓기·올리기·다시 들기(a)를 서버가 받지 않았다 */
+  onSnowmanDenied?(why: SnowmanDenyWhy, a?: SnowAct, id?: string): void;
+  /** 11/18 누가 들고 있는 눈덩이가 바뀌었다 (나 빼고) */
+  onSnowHold?(sid: Sid, h: SnowHold | null): void;
+  /** 11/18 덩이가 놓였다·바뀌었다 (내 것은 확인). h = 주인이 이제 든 크기 (없으면 빈손) */
+  onSnowStack?(st: SnowStackInfo, h?: SnowBall): void;
+  /** 11/18 덩이가 사라졌다. took = 주인이 마지막 덩이를 다시 들었다 */
+  onSnowStackGone?(id: string, sid: Sid, took?: SnowBall): void;
 };
 
 /** 11/16 채팅에 실려 오는 보낸 사람 정보 (맵이 달라 화면에 없는 사람도 채팅창에 쓰게) */
@@ -168,7 +182,7 @@ const MAP_REPLY_MS = 4000;
 /** 맵 옮기기 답이 없을 때 다시 보내는 횟수 (서버는 맵 요청을 1초에 한 번만 받는다 — MAP_REPLY_MS 간격이면 넉넉하다) */
 const MAP_RETRIES = 2;
 /** 맵을 옮기는 중에 버리는 옛 맵 소식 (사람·자리·몸짓·말풍선) */
-const OLD_MAP_EVENTS = new Set(["join", "leave", "seat", "emote", "graveEvent", "look", "act", "say", "emo", "chat", "mood", "ride", "rod", "away", "firework", "peers", "goblin", "goblinGone", "goblinCaught", "chatLog", "bbq", "snowman", "snowmanGone"]);
+const OLD_MAP_EVENTS = new Set(["join", "leave", "seat", "emote", "graveEvent", "look", "act", "say", "emo", "chat", "mood", "ride", "rod", "away", "firework", "peers", "goblin", "goblinGone", "goblinCaught", "chatLog", "bbq", "snowman", "snowmanGone", "snowHold", "snowStack", "snowStackGone"]);
 
 export type NetOptions = { name: string; color: string; channel: number | "auto"; debug?: boolean; body?: string };
 
@@ -531,10 +545,33 @@ export class RealtimeClient {
     this.send({ t: "bbq", grant });
   }
 
-  /** 11/17 캠핑장 눈사람을 다 쌓았다 (발 위치). 서버가 씨앗을 붙여 같은 캠핑장에 알린다. 접속 중이 아니면 false */
-  snowman(x: number, y: number): boolean {
+  // ── 11/18 캠핑장 눈사람 만드는 과정 (접속 중이 아니면 false — 보내지 않는다) ──
+
+  /** 들고 있는 눈덩이가 바뀌었다 (바뀔 때만, CampSnowmen이 SNOW_HOLD_SEND_MS로 모아 보낸다) */
+  snowHold(h: SnowHold | null): boolean {
     if (!this.online) return false;
-    this.send({ t: "snowman", x: Math.round(x), y: Math.round(y) });
+    this.send({ t: "snowHold", h });
+    return true;
+  }
+
+  /** 들고 있던 덩이를 (x,y)에 새로 내려놓는다 */
+  snowPut(x: number, y: number, s: SnowBall): boolean {
+    if (!this.online) return false;
+    this.send({ t: "snowPut", x: Math.round(x), y: Math.round(y), s });
+    return true;
+  }
+
+  /** 들고 있던 덩이를 내 덩이 위에 올린다 (세 단째면 서버가 눈사람을 세운다) */
+  snowAdd(id: string, s: SnowBall): boolean {
+    if (!this.online) return false;
+    this.send({ t: "snowAdd", id, s });
+    return true;
+  }
+
+  /** 내 덩이 맨 위를 다시 든다 */
+  snowTake(id: string): boolean {
+    if (!this.online) return false;
+    this.send({ t: "snowTake", id });
     return true;
   }
 
@@ -803,18 +840,33 @@ export class RealtimeClient {
             this.h.onBbq?.(m.sid, m.i, m.u, typeof m.lv === "number" ? m.lv : undefined, typeof m.at === "number" ? m.at : undefined);
           break;
         case "snowmen":
-          if (Array.isArray(m.list)) this.h.onSnowmen?.(m.list.map(parseSnowmanInfo).filter((s): s is SnowmanInfo => s !== null));
+          if (Array.isArray(m.list))
+            this.h.onSnowmen?.(
+              m.list.map(parseSnowmanInfo).filter((s): s is SnowmanInfo => s !== null),
+              (Array.isArray(m.stacks) ? m.stacks : []).map(parseSnowStackInfo).filter((s): s is SnowStackInfo => s !== null),
+            );
           break;
         case "snowman": {
           const s = parseSnowmanInfo(m.s);
-          if (s) this.h.onSnowman?.(s, m.sid);
+          if (s) this.h.onSnowman?.(s, m.sid, typeof m.st === "string" ? m.st : undefined);
           break;
         }
+        case "snowHold":
+          if (typeof m.sid === "number") this.h.onSnowHold?.(m.sid, parseSnowHold(m.h));
+          break;
+        case "snowStack": {
+          const st = parseSnowStackInfo(m.st);
+          if (st) this.h.onSnowStack?.(st, isSnowBall(m.h) ? m.h : undefined);
+          break;
+        }
+        case "snowStackGone":
+          if (typeof m.id === "string" && typeof m.sid === "number") this.h.onSnowStackGone?.(m.id, m.sid, isSnowBall(m.took) ? m.took : undefined);
+          break;
         case "snowmanGone":
           if (typeof m.id === "string") this.h.onSnowmanGone?.(m.id);
           break;
         case "snowmanDenied":
-          this.h.onSnowmanDenied?.(m.why === "wait" ? "wait" : "spot");
+          this.h.onSnowmanDenied?.(isSnowmanDenyWhy(m.why) ? m.why : "spot", m.a === "put" || m.a === "add" || m.a === "take" ? m.a : undefined, typeof m.id === "string" ? m.id : undefined);
           break;
         case "count":
           if (typeof m.n === "number" && Number.isFinite(m.n)) {
