@@ -1,11 +1,14 @@
 import * as Phaser from "phaser";
 import { DIR } from "@tomb/protocol";
+import { isSnowy, type MapConcept } from "@/lib/mapConcept";
+import { currentMapConcept } from "@/lib/mapConceptClient";
 import { addCanvasTexture } from "../assets/manifest";
 import { CosmeticFxView, type CfxDepth } from "../entities/CosmeticFxView";
 import { avatarArtTop, BODY_METRICS, bodyOf, handAnchor } from "../sprites/avatar";
 import { radial } from "../sprites/pixel";
 import * as art from "../sprites/skyScenery";
 import { BALLOON_COLORS, CAR_COLORS, SKY_TEX } from "../sprites/skyProps";
+import { conceptSuffix, coolSky } from "../sprites/winterScenery";
 import type { Levels } from "./ambienceMix";
 import { mixRgb, mulRgb } from "./skyGrade";
 import { balloonRouteS, carAngle, ferrisLift, flightLift, routeLength, routeSegments, type BalloonState } from "./skyMath";
@@ -17,6 +20,8 @@ import { balloonRouteS, carAngle, ferrisLift, flightLift, routeLength, routeSegm
 //  - 열기구: 항로 위 거리만큼 땅 띠가 옆으로 흐르고(구역 차례 = 실제 항로), 높이(flightLift)만큼 땅이 내려간다. 이륙장 둘레는 이륙·착륙 때만 보인다
 //  - 시간대·날씨: 층마다 월드 색(Atmosphere levels)을 곱하고, 하늘 그라데이션·별·달·구름·비·눈·안개, 밤 불빛 층, 폭죽
 //  - 시작·끝은 검은 화면으로 덮었다 걷는다 (fade). 끝난 뒤에는 cover로 월드 화면 위 검은 막만 걷는다
+//  - 11/17 맵 컨셉(lib/mapConcept): 겨울·크리스마스판이면 층을 눈 덮인 그림으로 (skyScenery.seasonBand — 판마다 텍스처 키가 따로),
+//    하늘빛은 조금 차갑게, 크리스마스판은 처마·상록수·광장 트리 전구가 두 장 번갈아 반짝인다. 타는 동안 판이 바뀌면 1초 안에 다시 그린다
 
 /** look·body·champ = 착용 오라·전용 오라를 장면 안에서도 그리려고 (없으면 그림만) */
 export type StageRider = { key: string; frame: number; index: number; look?: readonly string[]; body?: string; champ?: number; staff?: boolean };
@@ -52,7 +57,7 @@ class StageScene extends Phaser.Scene {
   }
 }
 
-type Meta = { w: number; h: number; fill: number; glint: boolean; fires: art.Band["fires"] };
+type Meta = { w: number; h: number; fill: number; glint: boolean; xmas: boolean; fires: art.Band["fires"] };
 const metas = new Map<string, Meta>();
 
 type Fire = { img: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Image; x: number; y: number; big: boolean };
@@ -61,6 +66,8 @@ type BandView = {
   img: Phaser.GameObjects.TileSprite;
   lit: Phaser.GameObjects.TileSprite;
   gl: [Phaser.GameObjects.TileSprite, Phaser.GameObjects.TileSprite] | null;
+  /** 11/17 크리스마스판 전구 빛 두 장 */
+  xm: [Phaser.GameObjects.TileSprite, Phaser.GameObjects.TileSprite] | null;
   fill: Phaser.GameObjects.Image;
   haze: Phaser.GameObjects.Image;
   fires: Fire[];
@@ -120,6 +127,9 @@ export class SkyStage {
   private jetGlow: Phaser.GameObjects.Image | null = null;
   private burner = { x: 0, y: 0 };
   private stripK = 0.9;
+  /** 11/17 맵 컨셉 (탈 때 읽고, 타는 동안 1초마다 다시 묻는다) */
+  private concept: MapConcept = "default";
+  private conceptCheck = 0;
 
   constructor(
     private readonly game: Phaser.Game,
@@ -152,6 +162,8 @@ export class SkyStage {
     this.kind = kind;
     this.unit = unit;
     this.cover = 0;
+    this.concept = currentMapConcept();
+    this.conceptCheck = 0;
   }
 
   /** 탑승 장면 끝: 물체를 지우고, 월드 화면 위 검은 막(cover)을 남긴다 */
@@ -252,14 +264,18 @@ export class SkyStage {
     let m = metas.get(key);
     if (m && this.scene.textures.exists(key)) return m;
     const b = make();
-    for (const k of [key, key + ":lit", key + ":g0", key + ":g1"]) if (this.scene.textures.exists(k)) this.scene.textures.remove(k);
+    for (const k of [key, key + ":lit", key + ":g0", key + ":g1", key + ":x0", key + ":x1"]) if (this.scene.textures.exists(k)) this.scene.textures.remove(k);
     addCanvasTexture(this.scene, key, { canvas: b.base });
     addCanvasTexture(this.scene, key + ":lit", { canvas: b.lights });
     if (b.glint) {
       addCanvasTexture(this.scene, key + ":g0", { canvas: b.glint[0] });
       addCanvasTexture(this.scene, key + ":g1", { canvas: b.glint[1] });
     }
-    m = { w: b.w, h: b.h, fill: b.fill, glint: !!b.glint, fires: b.fires };
+    if (b.xmas) {
+      addCanvasTexture(this.scene, key + ":x0", { canvas: b.xmas[0] });
+      addCanvasTexture(this.scene, key + ":x1", { canvas: b.xmas[1] });
+    }
+    m = { w: b.w, h: b.h, fill: b.fill, glint: !!b.glint, xmas: !!b.xmas, fires: b.fires };
     metas.set(key, m);
     return m;
   }
@@ -282,13 +298,15 @@ export class SkyStage {
     const img = ts(key);
     const gl: BandView["gl"] = meta.glint ? [ts(key + ":g0"), ts(key + ":g1")] : null;
     const lit = ts(key + ":lit");
+    const xm: BandView["xm"] = meta.xmas ? [ts(key + ":x0"), ts(key + ":x1")] : null;
+    for (const o of xm ?? []) o.setBlendMode(Phaser.BlendModes.ADD);
     const fires: Fire[] = meta.fires.map((f) => {
       const glow = this.add(sc.add.image(0, 0, P + "glow").setBlendMode(Phaser.BlendModes.ADD).setTint(0xffa040));
       const img = this.add(sc.add.image(0, 0, f.big ? P + "fire-b" : P + "fire-s", 0).setOrigin(0.5, 1));
       return { img, glow, x: f.x, y: f.y, big: f.big };
     });
     const haze = this.pxImg();
-    return { meta, img, lit, gl, fill, haze, fires, air };
+    return { meta, img, lit, gl, xm, fill, haze, fires, air };
   }
 
   private build(): void {
@@ -326,14 +344,18 @@ export class SkyStage {
       const img = this.add(sc.add.image(0, 0, P + "cloud" + (i % 4)).setOrigin(0.5, 1));
       this.clouds.push({ img, x0: (i * 0.37 + 0.1) * 997, y: 0.1 + ((i * 0.29) % 0.22), speed: 0.6 + (i % 3) * 0.35, par: 0.06 + (i % 2) * 0.04 });
     }
-    // 층
+    // 층 (11/17 판마다 키 꼬리가 달라요 — 기본판은 예전 키 그대로)
     this.bands = {};
-    this.bands.mtn = this.makeBand(P + "mtn", () => art.mountains(384, 64, 3), [0.42, 0.5, 0.3]);
+    const cc = this.concept;
+    const cs = conceptSuffix(cc);
+    const season = (make: () => art.Band, o?: { trees?: art.Spot[]; treeH?: number }) => () => art.seasonBand(make(), cc, o);
+    this.bands.mtn = this.makeBand(P + "mtn" + cs, () => art.mountains(384, 64, 3, isSnowy(cc)), [0.42, 0.5, 0.3]);
     if (this.kind === "ferris") {
-      this.bands.far = this.makeBand(P + "f-far", () => art.ferrisFar(), [0.26, 0.42, 0.22]);
+      this.bands.far = this.makeBand(P + "f-far" + cs, season(() => art.ferrisFar()), [0.26, 0.42, 0.22]);
       this.birdsMake();
-      this.bands.mid = this.makeBand(P + "f-mid", () => art.ferrisMid(), [0.1, 0.3, 0.12]);
-      this.bands.near = this.makeBand(P + "f-near", () => art.ferrisNear(), [0.02, 0.14, 0.04]);
+      this.bands.mid = this.makeBand(P + "f-mid" + cs, season(() => art.ferrisMid()), [0.1, 0.3, 0.12]);
+      // 크리스마스판: 광장 모닥불 옆 트리
+      this.bands.near = this.makeBand(P + "f-near" + cs, season(() => art.ferrisNear(), { trees: [{ x: 372, y: 80 }], treeH: 44 }), [0.02, 0.14, 0.04]);
       // 바퀴 살·다른 칸
       this.wheel = this.add(sc.add.graphics());
       this.cars = [];
@@ -345,20 +367,21 @@ export class SkyStage {
         this.cars.push({ back, front, c });
       }
     } else {
-      this.bands.far = this.makeBand(P + "b-far", () => art.balloonFar(), [0.26, 0.42, 0.22]);
+      this.bands.far = this.makeBand(P + "b-far" + cs, season(() => art.balloonFar()), [0.26, 0.42, 0.22]);
       this.birdsMake();
-      this.bands.mid = this.makeBand(P + "b-mid", () => art.balloonMid(), [0.12, 0.3, 0.12]);
+      this.bands.mid = this.makeBand(P + "b-mid" + cs, season(() => art.balloonMid()), [0.12, 0.3, 0.12]);
       const L = routeLength();
       this.stripK = Math.min(0.9, (4000 - STRIP_M * 2) / L) * (this.reduced ? 0.4 : 1);
       const k = this.stripK;
-      this.bands.strip = this.makeBand(P + "b-strip" + (this.reduced ? "-r" : ""), () =>
-        art.balloonStrip(
-          Math.ceil(L * k + STRIP_M * 2),
-          routeSegments().map((g) => ({ x0: STRIP_M + g.s0 * k, x1: STRIP_M + g.s1 * k, id: g.id })),
-        ),
+      const segs = routeSegments().map((g) => ({ x0: STRIP_M + g.s0 * k, x1: STRIP_M + g.s1 * k, id: g.id }));
+      // 크리스마스판: 광장 구역 모닥불 옆 트리
+      const plazaTrees = segs.filter((g) => g.id === "plaza" && g.x1 - g.x0 > 90).map((g) => ({ x: Math.round((g.x0 + g.x1) / 2 + 50), y: art.STRIP_GROUND + 36 }));
+      this.bands.strip = this.makeBand(
+        P + "b-strip" + (this.reduced ? "-r" : "") + cs,
+        season(() => art.balloonStrip(Math.ceil(L * k + STRIP_M * 2), segs), { trees: plazaTrees, treeH: 40 }),
         [0.03, 0.16, 0.05],
       );
-      this.bands.field = this.makeBand(P + "b-field", () => art.balloonField(), [0, 0.08, 0.02]);
+      this.bands.field = this.makeBand(P + "b-field" + cs, season(() => art.balloonField()), [0, 0.08, 0.02]);
       this.front = [];
       for (let i = 0; i < 2; i++) {
         const img = this.add(sc.add.image(0, 0, P + "cloud" + (i === 0 ? 3 : 1)).setOrigin(0.5, 1).setScale(2));
@@ -427,6 +450,15 @@ export class SkyStage {
 
   frame(f: StageFrame): void {
     if (!this.kind || !this.scene.ready) return;
+    // 11/17 타는 동안 관리자가 판을 바꾸면 층을 다시 그린다 (1초마다 확인)
+    if (f.now >= this.conceptCheck) {
+      this.conceptCheck = f.now + 1000;
+      const c = currentMapConcept();
+      if (c !== this.concept) {
+        this.concept = c;
+        this.dirty = true;
+      }
+    }
     if (this.dirty || !this.built) {
       this.dirty = false;
       const kind = this.kind;
@@ -444,7 +476,12 @@ export class SkyStage {
     const tb = L.tint & 255;
     const warm = clamp01((tr - tb) / 95) * (1 - night * 0.8);
     const grey = clamp01(L.cloud * 0.45 + L.rain * 0.8 + L.fog * 0.5 + L.snow * 0.35);
-    const pal = skyPalette(night, warm, grey, L.tint);
+    let pal = skyPalette(night, warm, grey, L.tint);
+    // 11/17 겨울·크리스마스판: 하늘빛을 조금 차갑게 (밤엔 거의 그대로)
+    if (isSnowy(this.concept)) {
+      const ck = 0.2 * (1 - night * 0.8);
+      pal = { top: coolSky(pal.top, ck), mid: coolSky(pal.mid, ck), low: coolSky(pal.low, ck) };
+    }
     const shade = mulRgb(L.tint, gray(1 - 0.58 * clamp01(L.darkness)));
     const lightsA = clamp01((night - 0.12) * 1.7);
     this.skyUpdate(f.now, pal);
@@ -512,6 +549,16 @@ export class SkyStage {
       const k = 0.85 * (1 - a.night * 0.65);
       b.gl[0].setAlpha(k * ph);
       b.gl[1].setAlpha(k * (1 - ph));
+    }
+    // 11/17 크리스마스 전구: 0.7초마다 두 장을 번갈아 (움직임 줄이기면 반반 그대로). 낮엔 은은하게, 해 질 녘·밤엔 환하게
+    if (b.xm) {
+      const xa = 0.3 + 0.7 * a.lightsA;
+      const on = this.reduced ? -1 : Math.floor(now / 700) % 2;
+      b.xm.forEach((o, i) => {
+        o.setPosition(0, top);
+        o.tilePositionX = scroll;
+        o.setAlpha(on < 0 ? xa * 0.6 : i === on ? xa : xa * 0.2);
+      });
     }
     const fy = top + m.h;
     b.fill.setPosition(-1, fy).setDisplaySize(VW + 2, Math.max(0, VH - fy + 2)).setTint(mulRgb(m.fill, a.shade)).setVisible(fy < VH);

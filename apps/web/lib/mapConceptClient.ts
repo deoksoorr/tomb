@@ -1,6 +1,6 @@
 import { bridge } from "@/game/bridge";
 import { onVisibleAgain, tabHidden } from "./hooks/visibleAgain";
-import { MAP_CONCEPT_NOTICE_PREFIX, normalizeConcept, type MapConceptResponse } from "./mapConcept";
+import { MAP_CONCEPT_NOTICE_PREFIX, normalizeConcept, parseConceptOverride, type MapConcept, type MapConceptResponse } from "./mapConcept";
 
 // 11/17 마을 맵 컨셉 클라이언트 사본 (게임 화면). 마을 장면이 떠 있는 동안만 돈다 (WorldScene.bindBridge가 켜고 끈다).
 //  - /api/map-concept(CDN 30초)을 처음에 한 번, 그 뒤 앞에 있는 탭만 1분마다
@@ -55,4 +55,13 @@ export function startMapConceptSync(): () => void {
     stop?.();
     stop = null;
   };
+}
+
+/**
+ * 11/17 지금 판 (시점이 바뀌는 장면 — 관람차·열기구 하늘, 바다 보기, 버스 창밖, 망원경): 주소 시험 값(?concept=, 실서버는 막힘)이 먼저,
+ * 없으면 맵 장면이 알린 값(bridge map:concept). 장면은 열 때 한 번 읽고, 열려 있는 동안엔 가끔 다시 물어 바뀌면 다시 그린다
+ */
+export function currentMapConcept(): MapConcept {
+  const search = typeof window === "undefined" ? "" : window.location.search;
+  return parseConceptOverride(search) ?? bridge.last("map:concept")?.concept ?? "default";
 }

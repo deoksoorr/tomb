@@ -1,6 +1,8 @@
 import * as Phaser from "phaser";
 import { DIR, isOpenLot } from "@tomb/protocol";
 import { VILLAGE_COLS } from "@/lib/housing/catalog";
+import { isSnowy, type MapConcept } from "@/lib/mapConcept";
+import { currentMapConcept } from "@/lib/mapConceptClient";
 import type { VillageHouse, VillageResponse } from "@/lib/housing/types";
 import { bridge } from "../bridge";
 import { DEPTH } from "../config";
@@ -8,6 +10,7 @@ import { Player, type SeatRequester } from "../entities/Player";
 import type { InputHub } from "../input/InputHub";
 import type { KeyAction } from "../input/Keyboard";
 import { interactLabel } from "../input/keyHint";
+import { conceptSuffix, guessTone, snowField, winterizeCanvas, XMAS_BULBS } from "../sprites/winterScenery";
 import { emoSlotOfKey } from "../logic/emoBoard";
 import type { MoveInput } from "../logic/movement";
 import { RoomPresence } from "../net/RoomPresence";
@@ -65,6 +68,9 @@ export const lotOrigin = (lot: number) => {
   return { x: MARGIN_X + col * (LOT_W + GAP), y: TOP + row * (LOT_H + STREET) };
 };
 
+/** 밝기 (11/17 겨울판 마당 눈밭 명암) */
+const lum = (c: number) => 0.3 * ((c >> 16) & 255) + 0.59 * ((c >> 8) & 255) + 0.11 * (c & 255);
+
 export class VillageScene extends Phaser.Scene {
   private d!: VillageSceneData;
   private W = 0;
@@ -89,6 +95,8 @@ export class VillageScene extends Phaser.Scene {
   private exiting = false;
   private armed = false;
   private onTap = (e: PointerEvent) => this.handleTap(e);
+  /** 11/17 맵 컨셉 (마을 장면이 알린 판 — 들어올 때 읽어요): 겨울·크리스마스면 눈 덮인 마당·나무·집 */
+  private concept: MapConcept = "default";
 
   constructor() {
     super("village");
@@ -111,6 +119,7 @@ export class VillageScene extends Phaser.Scene {
     this.H = TOP + rows * (LOT_H + STREET) + BOTTOM;
     this.cameras.main.setBackgroundColor("#0e100c");
     this.bodies = this.physics.add.staticGroup();
+    this.concept = currentMapConcept();
 
     this.drawGround(rows);
     this.drawStreetProps(rows);
@@ -149,6 +158,7 @@ export class VillageScene extends Phaser.Scene {
     this.physics.world.setBounds(8, 8, this.W - 16, this.H - 8);
 
     this.atmos = new Atmosphere(this, this.d.reduced, window.location.search);
+    this.atmos.setSnowy(isSnowy(this.concept));
     this.lighting = new Lighting(this);
     this.playerGlow = this.add.image(sx, sy, "fx-glow").setBlendMode(Phaser.BlendModes.ADD).setTint(0xffe2a8).setDepth(DEPTH.lights);
     const spots: LightSpot[] = this.glow.map((l) => ({ x: l.x, y: l.y, scale: l.r / 40, tint: 0xffc070, base: 0.5 }));
@@ -177,22 +187,38 @@ export class VillageScene extends Phaser.Scene {
   // ── 그리기 ──
 
   private drawGround(rows: number): void {
-    const key = `village-ground-${rows}`;
+    // 11/17 겨울·크리스마스판: 마당 풀빛은 눈밭으로, 골목 돌은 차갑게 + 줄눈에 눈 (판마다 키가 따로)
+    const snowy = isSnowy(this.concept);
+    const key = `village-ground-${rows}${conceptSuffix(this.concept)}`;
     if (!this.textures.exists(key)) {
       const c = document.createElement("canvas");
       c.width = this.W;
       c.height = this.H;
       const ctx = c.getContext("2d")!;
-      const grass = [0, 1, 2, 3].map((v) => yardGrid(v).toCanvas());
+      const grass = [0, 1, 2, 3].map((v) => {
+        const g = yardGrid(v).toCanvas();
+        // 마당 풀빛은 짙어서(상록수로 짐작해요) 밝기 비율만 살려 모두 눈밭으로
+        return snowy ? winterizeCanvas(g, { tone: (c, x, y) => (guessTone(c, x, y) === -1 ? -1 : snowField(0.85 + (lum(c) - 60) / 200, x, y)), cap: false }).canvas : g;
+      });
       for (let y = 0; y * T < this.H; y++) for (let x = 0; x * T < this.W; x++) ctx.drawImage(grass[(x * 7 + y * 3) % 4], x * T, y * T);
-      ctx.fillStyle = "rgba(0,0,0,0.22)";
+      ctx.fillStyle = snowy ? "rgba(20,30,50,0.12)" : "rgba(0,0,0,0.22)";
       ctx.fillRect(0, 0, this.W, this.H);
       // 골목(가로) · 샛길(세로) · 입구
       const cobble = (x: number, y: number, w: number, h: number) => {
-        ctx.fillStyle = "#3a3630";
+        ctx.fillStyle = snowy ? "#4c5058" : "#3a3630";
         ctx.fillRect(x, y, w, h);
-        ctx.fillStyle = "#46413a";
+        ctx.fillStyle = snowy ? "#5e636c" : "#46413a";
         for (let j = y + 2; j < y + h - 2; j += 6) for (let i = x + ((j / 6) % 2) * 5; i < x + w - 4; i += 10) ctx.fillRect(i, j, 7, 4);
+        if (!snowy) return;
+        // 길가에 치워 둔 눈둑
+        ctx.fillStyle = "#c9d4df";
+        if (w > h) {
+          ctx.fillRect(x, y, w, 2);
+          ctx.fillRect(x, y + h - 2, w, 2);
+        } else {
+          ctx.fillRect(x, y, 2, h);
+          ctx.fillRect(x + w - 2, y, 2, h);
+        }
       };
       for (let r = 0; r < rows; r++) cobble(16, TOP + r * (LOT_H + STREET) + LOT_H + 8, this.W - 32, STREET - 16);
       for (let c2 = 1; c2 < VILLAGE_COLS; c2++) {
@@ -238,14 +264,30 @@ export class VillageScene extends Phaser.Scene {
 
   private tree(x: number, y: number): void {
     this.add.rectangle(x, y, 4, 10, 0x4a3424).setOrigin(0.5, 1).setDepth(y);
-    this.add.ellipse(x, y - 14, 22, 20, 0x2e4a30).setDepth(y + 0.1);
-    this.add.ellipse(x - 3, y - 17, 12, 10, 0x3c5e3a).setDepth(y + 0.2);
+    if (!isSnowy(this.concept)) {
+      this.add.ellipse(x, y - 14, 22, 20, 0x2e4a30).setDepth(y + 0.1);
+      this.add.ellipse(x - 3, y - 17, 12, 10, 0x3c5e3a).setDepth(y + 0.2);
+      return;
+    }
+    // 11/17 겨울·크리스마스판: 눈 덮인 상록수 (위쪽이 하얗게) · 크리스마스엔 작은 전구 몇 알
+    this.add.ellipse(x, y - 14, 22, 20, 0x2b4136).setDepth(y + 0.1);
+    this.add.ellipse(x - 1, y - 18, 18, 11, 0xdfe7ee).setDepth(y + 0.2);
+    this.add.ellipse(x - 3, y - 20, 9, 5, 0xf6f9fc).setDepth(y + 0.3);
+    if (this.concept === "christmas")
+      for (const [i, [dx, dy]] of [
+        [-6, -10],
+        [3, -8],
+        [7, -13],
+        [-2, -6],
+        [-8, -15],
+      ].entries())
+        this.add.rectangle(x + dx, y + dy, 2, 2, XMAS_BULBS[(i + Math.round(y)) % XMAS_BULBS.length]).setDepth(y + 0.4);
   }
 
   private drawHouse(h: VillageHouse): void {
     const o = lotOrigin(h.lot);
     const spot = { lot: h.lot, x: o.x, y: o.y + LOT_H - FACADE_H };
-    const d = drawHouseLot(this, this.d.atlas, spot, { w: FACADE_W, h: FACADE_H }, h, h.id === this.d.myHouseId, { reduced: this.d.reduced, labelDepth: DEPTH.labels });
+    const d = drawHouseLot(this, this.d.atlas, spot, { w: FACADE_W, h: FACADE_H }, h, h.id === this.d.myHouseId, { reduced: this.d.reduced, labelDepth: DEPTH.labels, concept: this.concept });
     // 충돌: 몸체 (문 앞은 막지 않게 아래 4px 남김)
     const b = d.body!;
     const z = this.add.zone(b.x + b.w / 2, b.y + b.h / 2 - 2, b.w, b.h - 4);
@@ -259,7 +301,7 @@ export class VillageScene extends Phaser.Scene {
   private drawEmptyLot(lot: number, taken: boolean): void {
     const o = lotOrigin(lot);
     const spot = { lot, x: o.x, y: o.y + LOT_H - FACADE_H };
-    const d = drawEmptyLot(this, this.d.atlas, spot, { w: FACADE_W, h: FACADE_H }, taken, { reduced: this.d.reduced, labelDepth: DEPTH.labels });
+    const d = drawEmptyLot(this, this.d.atlas, spot, { w: FACADE_W, h: FACADE_H }, taken, { reduced: this.d.reduced, labelDepth: DEPTH.labels, concept: this.concept });
     this.labels.push(...d.labels);
     if (!taken) this.spots.push({ kind: "lot", lot, x: spot.x + FACADE_W / 2, y: spot.y + FACADE_H - 16 });
   }

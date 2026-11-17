@@ -1,4 +1,7 @@
-import { css, darken, lighten, makeCanvas, rng, type Color } from "../sprites/pixel";
+import { isSnowy, type MapConcept } from "@/lib/mapConcept";
+import { css, darken, hash2, lighten, makeCanvas, mix, rng, vnoise, type Color } from "../sprites/pixel";
+import { doorWreath, SNOW, snowCap, type Bulb } from "../sprites/winterArt";
+import { bulbGlowPair, drawBulbs, miniXmasTree, snowField, winterizeCanvas, XMAS_BULBS } from "../sprites/winterScenery";
 import type { RideSegment } from "./busRideMath";
 
 // 버스 창밖 연출 그림 (코드로 그린 픽셀 아트). 그림 단위는 "그림 픽셀" — 장면이 화면에 맞게 정수 배(S)로 키운다.
@@ -6,6 +9,8 @@ import type { RideSegment } from "./busRideMath";
 // 창밖은 층마다 긴 파노라마 한 장 (먼 산 · 중간 집·나무·방음벽 · 차 · 가까운 담·가드레일·전봇대·나무 줄기).
 // 층의 파노라마는 구간 4개를 차례로 잇고, 경계는 픽셀 디더로 섞는다 → 시차로 달리면 다음 구간이 오른쪽에서 스며 들어온다.
 // 밤 불빛(창문·석등·가로등·차 불빛)은 층마다 따로 한 장 (가산으로 겹친다).
+// 11/17 맵 컨셉(lib/mapConcept): 겨울·크리스마스판은 다 그린 층을 한 번 훑어 눈 덮인 산·들·지붕·나무로 (busWinter — winterScenery),
+// 크리스마스판은 마을·어촌 처마 전구, 마을 돌담 솔잎 화환, 마을 트리, 방파제 전구 + 반짝이는 빛 두 장(xmas), 끝 표지판 리스.
 
 export const ART_H = 180;
 export const WIN_TOP = 20;
@@ -28,7 +33,17 @@ export const LAYERS: readonly LayerSpec[] = [
   { id: "near", factor: 1, y0: 0, h: 124 },
 ];
 
-export type Panorama = { canvas: HTMLCanvasElement; lights: HTMLCanvasElement | null; width: number };
+/** xmas = 11/17 크리스마스판 전구 빛 두 장 (번갈아 보여요) */
+export type Panorama = { canvas: HTMLCanvasElement; lights: HTMLCanvasElement | null; width: number; xmas?: [HTMLCanvasElement, HTMLCanvasElement] | null };
+
+/** 11/17 크리스마스 장식 (그리는 동안 모아 두었다가, 눈을 입힌 다음에 찍어요 — 눈 칠하기가 전구 색을 바꾸지 않게) */
+type Deco = { xmas: boolean; bulbs: Bulb[]; stars: { x: number; y: number }[]; post: ((ctx: Ctx, lights: Ctx) => void)[] };
+
+/** 처마 밑 전구 줄 (x0..x1, y) — 3px마다 색을 돌려요 */
+function eaveBulbs(deco: Deco | undefined, x0: number, x1: number, y: number): void {
+  if (!deco?.xmas) return;
+  for (let x = Math.round(x0); x <= x1; x += 3) deco.bulbs.push({ x, y: Math.round(y), c: XMAS_BULBS[(x >> 1) % XMAS_BULBS.length] });
+}
 
 const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
@@ -256,13 +271,14 @@ function seaPine(ctx: Ctx, x: number, base: number, h: number, lean: number): vo
 }
 
 /** 11/16 파란 지붕 어부집 (창 불빛) */
-function fisherHouse(ctx: Ctx, lights: Ctx, x: number, base: number, w: number, r: () => number): void {
+function fisherHouse(ctx: Ctx, lights: Ctx, x: number, base: number, w: number, r: () => number, deco?: Deco): void {
   const wallH = 9 + Math.round(r() * 2);
   px(ctx, x, base - wallH, w, wallH, 0xe8e4d8);
   px(ctx, x, base - wallH, w, 1, 0xc8c4b8);
   const roofY = base - wallH - 4;
   px(ctx, x - 2, roofY, w + 4, 4, 0x3a6aa0);
   px(ctx, x - 1, roofY, w + 2, 1, 0x5a8ac0);
+  eaveBulbs(deco, x - 1, x + w + 1, roofY + 4);
   for (let wx = x + 3; wx < x + w - 3; wx += 8) {
     px(ctx, wx, base - wallH + 3, 3, 3, 0x3a4a5a);
     if (r() < 0.7) px(lights, wx, base - wallH + 3, 3, 3, 0xffcf78);
@@ -313,7 +329,7 @@ function breakwater(ctx: Ctx, lights: Ctx, x0: number, x1: number, base: number,
 }
 
 /** 기와집 한 채 (중간 층 좌표, base = 땅 y) */
-function house(ctx: Ctx, lights: Ctx, x: number, base: number, w: number, r: () => number): void {
+function house(ctx: Ctx, lights: Ctx, x: number, base: number, w: number, r: () => number, deco?: Deco): void {
   const wallH = 9 + Math.round(r() * 3);
   px(ctx, x, base - wallH, w, wallH, 0xd8ccb0);
   px(ctx, x, base - wallH, w, 1, 0xb8aa8c);
@@ -325,6 +341,7 @@ function house(ctx: Ctx, lights: Ctx, x: number, base: number, w: number, r: () 
   px(ctx, x - 4, roofY + 1, 1, 1, 0x4a5060);
   px(ctx, x + w + 3, roofY + 1, 1, 1, 0x4a5060);
   for (let rx = x - 2; rx < x + w + 3; rx += 2) px(ctx, rx, roofY + 5, 1, 1, 0x3a404e);
+  eaveBulbs(deco, x - 2, x + w + 2, roofY + 6);
   // 창 (밤에 불빛)
   for (let wx = x + 2; wx < x + w - 3; wx += 7) {
     px(ctx, wx + 1, base - wallH + 3, 3, 3, 0x3a3630);
@@ -363,7 +380,7 @@ function tombstone(ctx: Ctx, x: number, base: number): void {
   px(ctx, x, base - 5, 4, 1, 0xb4b2a8);
 }
 
-function midObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: number, r: () => number, signs: { ic: boolean; icName: string; left: boolean }): void {
+function midObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: number, r: () => number, signs: { ic: boolean; icName: string; left: boolean }, deco?: Deco): void {
   const ground = HORIZON + 12 - 34; // 중간 층의 땅 줄 (층 좌표)
   switch (seg) {
     case "village": {
@@ -372,13 +389,27 @@ function midObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: num
         const k = r();
         if (k < 0.42) {
           const w = 18 + Math.round(r() * 14);
-          house(ctx, lights, x, ground + Math.round(r() * 3), w, r);
+          house(ctx, lights, x, ground + Math.round(r() * 3), w, r, deco);
           x += w + 8 + r() * 14;
         } else if (k < 0.62) {
           stoneLantern(ctx, lights, x + 3, ground + 2);
           x += 12 + r() * 10;
         } else if (k < 0.82) {
-          roundTree(ctx, x + 6, ground + 2, 22 + r() * 12, AUTUMN_LEAF[Math.floor(r() * AUTUMN_LEAF.length)]);
+          const th = 22 + r() * 12;
+          const leaf = AUTUMN_LEAF[Math.floor(r() * AUTUMN_LEAF.length)];
+          // 11/17 크리스마스판: 마을 나무 몇 그루는 전구 단 트리로 (눈을 입힌 다음에 그려요)
+          if (deco?.xmas && r() < 0.45) {
+            const tx = x + 6;
+            const tb = ground + 2;
+            deco.post.push((c) => {
+              const t = miniXmasTree(Math.round(th * 1.05));
+              const ox = Math.round(tx - t.ax);
+              const oy = Math.round(tb - t.canvas.height + 1);
+              c.drawImage(t.canvas, ox, oy);
+              for (const b of t.bulbs) deco.bulbs.push({ x: b.x + ox, y: b.y + oy, c: b.c });
+              deco.stars.push({ x: t.star.x + ox, y: t.star.y + oy });
+            });
+          } else roundTree(ctx, x + 6, ground + 2, th, leaf);
           x += 14 + r() * 10;
         } else {
           // 작은 묘역: 낮은 울타리와 묘비 몇 개
@@ -434,7 +465,7 @@ function midObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: num
       }
       // 길가 농가 하나 (밤에 창 불빛)
       const fx = x0 + (x1 - x0) * (0.3 + r() * 0.4);
-      house(ctx, lights, fx, ground + 4, 20, r);
+      house(ctx, lights, fx, ground + 4, 20, r, deco);
       break;
     }
     case "forest": {
@@ -450,7 +481,7 @@ function midObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: num
       while (x < x1 - 16) {
         if (r() < 0.22) {
           const w = 18 + Math.round(r() * 8);
-          fisherHouse(ctx, lights, x, ground + 3, w, r);
+          fisherHouse(ctx, lights, x, ground + 3, w, r, deco);
           x += w + 10 + r() * 14;
         } else {
           seaPine(ctx, x, ground + 3 + Math.round(r() * 4), 26 + r() * 14, r() < 0.5 ? -1 : 1);
@@ -464,6 +495,8 @@ function midObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: num
       // 11/16 바닷길: 방파제와 등대 (구간 앞쪽에 한 번 — 끝 팻말 옆에서 등대가 보이게), 갈매기 무리, 가까운 물 위 부표
       const bx0 = Math.round(x0 + 60 + r() * 30);
       breakwater(ctx, lights, bx0, bx0 + 110, ground - 6, r);
+      // 11/17 크리스마스판: 방파제 위 전구 줄
+      if (deco?.xmas) for (let x = bx0 + 2; x < bx0 + 100; x += 4) deco.bulbs.push({ x, y: ground - 12 + (((x - bx0) >> 2) % 2), c: XMAS_BULBS[(x >> 2) % XMAS_BULBS.length] });
       for (let x = x0 + 30; x < x1 - 10; x += 80 + r() * 70) {
         // 빨간 부표
         const y = ground - 2 + Math.round(r() * 4);
@@ -505,10 +538,25 @@ function nearPixel(seg: RideSegment, x: number, y: number): Color | -1 {
   return s.nearGround;
 }
 
-function nearObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: number, r: () => number): void {
+function nearObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: number, r: () => number, deco?: Deco): void {
   const base = 124;
   switch (seg) {
     case "village": {
+      // 11/17 크리스마스판: 돌담 위 솔잎 화환이 물결처럼 늘어지고 전구가 4px마다
+      if (deco?.xmas) {
+        const xa = Math.floor(x0);
+        const xb = x1;
+        deco.post.push((c) => {
+          for (let x = xa; x < xb; x++) {
+            const t = ((x - xa) % 24) / 24;
+            const y = base - 13 + Math.round(Math.sin(t * Math.PI) * 3);
+            px(c, x, y, 1, 2, (x & 1) === 0 ? 0x2b5a36 : 0x3e7a48);
+            if ((x - xa) % 4 === 2) deco.bulbs.push({ x, y: y + 1, c: XMAS_BULBS[(x >> 2) % XMAS_BULBS.length] });
+            // 리본 매듭 (화환이 매달린 자리)
+            if ((x - xa) % 24 === 0) px(c, x - 1, y - 1, 3, 2, 0xd8323a);
+          }
+        });
+      }
       // 낮은 돌담 + 담 위 석등
       for (let x = Math.floor(x0); x < x1; x += 8) {
         const sh = (x / 8) % 2 ? 0x8a8678 : 0x7a766a;
@@ -566,7 +614,7 @@ function nearObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: nu
           }
         }
       }
-      // 낙엽 더미
+      // 낙엽 더미 (11/17 겨울판은 눈 더미 — busWinter가 아래 땅 줄의 단풍색을 눈으로 바꿔요)
       for (let x = x0 + 10; x < x1 - 10; x += 26 + r() * 30) blob(ctx, x, base - 4, 6, 3, AUTUMN_LEAF[Math.floor(r() * AUTUMN_LEAF.length)]);
       break;
     }
@@ -624,8 +672,8 @@ function nearObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: nu
 }
 
 /** 층 하나의 파노라마 (구간 4개를 잇는다) */
-export function buildPanorama(spec: LayerSpec, order: readonly RideSegment[], dist: number, seed: number): Panorama {
-  const g = panoramaSteps(spec, order, dist, seed);
+export function buildPanorama(spec: LayerSpec, order: readonly RideSegment[], dist: number, seed: number, concept: MapConcept = "default"): Panorama {
+  const g = panoramaSteps(spec, order, dist, seed, concept);
   let r = g.next();
   while (!r.done) r = g.next();
   return r.value;
@@ -638,7 +686,7 @@ const PANO_COLS = 96;
  * 11/15 층 하나의 파노라마를 조금씩 구워요. 열 묶음·구간 소품마다 한 번씩 쉬어요(yield).
  * 다 구우면 Panorama를 돌려줘요. 한꺼번에 구우면 느린 기기에서 한 프레임이 길어졌어요.
  */
-export function* panoramaSteps(spec: LayerSpec, order: readonly RideSegment[], dist: number, seed: number): Generator<void, Panorama> {
+export function* panoramaSteps(spec: LayerSpec, order: readonly RideSegment[], dist: number, seed: number, concept: MapConcept = "default"): Generator<void, Panorama> {
   const width = Math.ceil(spec.factor * dist) + VIEW_MAX + CENTER_OFF;
   const { canvas, ctx } = makeCanvas(width, spec.h);
   const { canvas: lc, ctx: lctx } = makeCanvas(width, spec.h);
@@ -668,13 +716,14 @@ export function* panoramaSteps(spec: LayerSpec, order: readonly RideSegment[], d
   // 소품
   const r = rng(seed);
   const signs = { ic: false, icName: order.includes("sea") ? "달물결 IC" : "언젠가 IC", left: order[0] === "sea" };
+  const deco: Deco = { xmas: concept === "christmas", bulbs: [], stars: [], post: [] };
   for (let i = 0; i < 4; i++) {
     yield;
     const [x0, x1] = segRange(spec, dist, width, i);
     const seg = order[i];
     if (spec.id === "far") farObjects(ctx, lctx, seg, x0, x1, r);
-    else if (spec.id === "mid") midObjects(ctx, lctx, seg, x0, x1, r, signs);
-    else if (spec.id === "near") nearObjects(ctx, lctx, seg, x0, x1, r);
+    else if (spec.id === "mid") midObjects(ctx, lctx, seg, x0, x1, r, signs, deco);
+    else if (spec.id === "near") nearObjects(ctx, lctx, seg, x0, x1, r, deco);
     else if (seg === "highway") {
       // 차: 반대편 차로에 띄엄띄엄 (가끔 트럭)
       for (let x = x0 + 20; x < x1 - 40; ) {
@@ -683,14 +732,122 @@ export function* panoramaSteps(spec: LayerSpec, order: readonly RideSegment[], d
       }
     }
   }
-  return { canvas, lights: lc, width };
+  if (!isSnowy(concept)) return { canvas, lights: lc, width };
+  // 11/17 겨울·크리스마스판: 한 번 훑어 눈을 입히고, 크리스마스 장식은 그 위에
+  yield;
+  const out = busWinter(spec, canvas);
+  yield;
+  const octx = out.getContext("2d")!;
+  for (const f of deco.post) f(octx, lctx);
+  drawBulbs(out, deco.bulbs);
+  drawBulbs(lc, deco.bulbs);
+  const xmas = deco.bulbs.length || deco.stars.length ? bulbGlowPair(width, spec.h, deco.bulbs, deco.stars) : null;
+  return { canvas: out, lights: lc, width, xmas };
+}
+
+// ── 11/17 겨울·크리스마스판 색 (그림에서 쓰는 색만 콕 집어 바꿔요 — 표지판·차·바다 색은 그대로) ──
+const ROUND_LEAVES = new Set<Color>([...AUTUMN_LEAF, 0xe8b83a].flatMap((c) => [c, darken(c, 0.18), lighten(c, 0.22)]));
+const CONIFERS = new Set<Color>([0x2e5040, 0x3e6a50, 0x24402e, 0x2e4a3a, 0x3e5e4a].flatMap((c) => [c, lighten(c, 0.08)]));
+const LARCH = new Set<Color>([0xc8a03a, lighten(0xc8a03a, 0.08)]);
+const ROOFS = new Set<Color>([0x4a5060, 0x5a6272, 0x3a404e, 0x3a6aa0, 0x5a8ac0, 0x4a5262, 0x3a4050]);
+/** 단풍·은행 낙엽 점 (땅에 떨어진 것) → 눈. 땅 줄 아래(층 좌표 y 이상)만 */
+const LEAF_GROUND_Y: Record<LayerId, number> = { far: 999, mid: 76, cars: 999, near: 116 };
+const LEAF_DOTS = new Set<Color>([...AUTUMN_LEAF, 0xd8b040]);
+
+function busTone(layer: LayerId): (c: Color, x: number, y: number) => Color | -1 {
+  return (c, x, y) => {
+    if (y >= LEAF_GROUND_Y[layer] && LEAF_DOTS.has(c)) return snowField(1, x, y);
+    switch (c) {
+      // 먼 산·언덕
+      case SEG.village.hill:
+        return hash2(x >> 1, y, 61) < 0.06 ? 0x8a807c : snowField(0.96, x, y);
+      case SEG.highway.hill:
+        // 먼 큰 산: 푸른 그늘에 눈 줄
+        return vnoise(x, y, 5, 63) > 0.55 ? SNOW.lo : 0xaebdcf;
+      case SEG.maple.hill:
+        // 잎 진 숲 비탈: 눈 사이로 회갈색 가지
+        return hash2(x, y, 65) < 0.32 ? 0x857876 : SNOW.lo;
+      case SEG.forest.hill:
+      case SEG.coast.hill:
+        // 상록수 숲: 눈 쌓인 초록에 눈 점 (옆 구간과 디더로 섞여도 바둑판이 도드라지지 않게 밝게)
+        return hash2(x, y, 67) < 0.22 ? SNOW.lo : mix(c, SNOW.shade, 0.45);
+      case SEG.village.hillHi:
+      case SEG.highway.hillHi:
+        return SNOW.hi;
+      case SEG.maple.hillHi:
+      case SEG.forest.hillHi:
+      case SEG.coast.hillHi:
+        return SNOW.mid;
+      case 0xa86a3a: // 먼 마을 늦가을 나무 점 → 잎 진 나무
+        return 0x6a5e5a;
+      case 0x7a98ac: // 아주 먼 섬 꼭대기
+        return SNOW.lo;
+      // 땅·들
+      case SEG.village.ground:
+      case SEG.village.groundLo:
+      case SEG.highway.ground:
+      case SEG.maple.ground:
+      case SEG.maple.groundLo:
+      case SEG.forest.ground:
+      case SEG.forest.groundLo:
+      case SEG.village.nearGround:
+      case SEG.maple.nearGround:
+      case SEG.forest.nearGround:
+      case 0x7e8458:
+        return snowField(c === SEG.village.groundLo || c === SEG.maple.groundLo || c === SEG.forest.groundLo ? 0.92 : 1, x, y);
+      // 모래 → 눈 덮인 모래 (군데군데 모래가 드러나요)
+      case SAND:
+      case SAND_LO:
+      case SEG.coast.nearGround:
+        return vnoise(x, y, 8, 69) > 0.62 ? mix(c, SNOW.lo, 0.35) : snowField(c === SAND ? 1.02 : 0.94, x, y);
+      // 마른 풀·덤불·고사리
+      case 0x7a8a4a:
+      case 0x6a7a3e:
+        return 0x9a8e60;
+      case 0x5a6a3a:
+        return mix(SNOW.lo, 0x6a5e58, 0.35);
+      case 0x4a7a3a:
+        return SNOW.lo;
+      default:
+        return -1;
+    }
+  };
+}
+
+/** 다 그린 층 한 장을 겨울로 (새 캔버스). 차 층은 지붕에 눈만 */
+function busWinter(spec: LayerSpec, canvas: HTMLCanvasElement): HTMLCanvasElement {
+  if (spec.id === "cars") return snowCap(canvas, { depth: 1, seed: 71 });
+  return winterizeCanvas(canvas, {
+    tone: busTone(spec.id),
+    roof: (c) => ROOFS.has(c),
+    foliage: (c, _x, y) => y < LEAF_GROUND_Y[spec.id] && ROUND_LEAVES.has(c),
+    // 낙엽송은 그림이 바늘잎 모양이라 상록수처럼 (잎 진 회색 원뿔은 어색해요)
+    conifer: (c) => CONIFERS.has(c) || LARCH.has(c),
+    bareShare: 0.7,
+    // 가까운 층 맨 위(천장에 가린 곳)는 빼고
+    cap: { depth: spec.id === "far" ? 1 : 2, seed: 73 },
+  }).canvas;
 }
 
 /**
  * 창밖 끝 표지판: 캠핑장행 = 나무 표지판 「언젠가 캠핑장」, 마을행 = 버스 정류장 팻말 「기억숲 마을」. 바닥 = 그림 맨 아래 줄.
  * 11/16 바닷가행 = 바다색 정류장 팻말 「달물결 포구」 (아래에 물결 무늬)
  */
-export function buildEndSign(leg: "toCamp" | "toVillage", route: "camp" | "sea" = "camp"): HTMLCanvasElement {
+export function buildEndSign(leg: "toCamp" | "toVillage", route: "camp" | "sea" = "camp", concept: MapConcept = "default"): HTMLCanvasElement {
+  const c = endSignArt(leg, route, !isSnowy(concept));
+  if (!isSnowy(concept)) return c;
+  // 11/17 겨울·크리스마스판: 판 위에 눈, 크리스마스판은 기둥(판 아래)에 리스
+  const out = snowCap(c, { depth: 2, maxY: c.height - 1, seed: 75 });
+  if (concept === "christmas") {
+    const w = doorWreath();
+    const pole = leg === "toCamp" && route === "camp" ? 18 : Math.round(out.width / 2);
+    const y = leg === "toCamp" && route === "camp" ? 50 : 46;
+    out.getContext("2d")?.drawImage(w, pole - Math.floor(w.width / 2), y);
+  }
+  return out;
+}
+
+function endSignArt(leg: "toCamp" | "toVillage", route: "camp" | "sea", leaves: boolean): HTMLCanvasElement {
   if (leg === "toCamp" && route === "sea") {
     const { ctx: m } = makeCanvas(4, 4);
     m.font = `12px "Galmuri11", "Galmuri9", monospace`;
@@ -727,10 +884,12 @@ export function buildEndSign(leg: "toCamp" | "toVillage", route: "camp" | "sea" 
     px(ctx, ex, 30, ew, 18, 0x6a4a2e);
     px(ctx, ex + 1, 31, ew - 2, 1, 0x8a6440);
     pixelText(ctx, "Someday Camp", ex + 4, 31, 0xe8d8b0);
-    // 낙엽 몇 장
-    px(ctx, 28, 3, 2, 2, 0xe8a83a);
-    px(ctx, 80, 2, 2, 2, 0xc8482a);
-    px(ctx, 56, 26, 2, 1, 0xd8b040);
+    // 낙엽 몇 장 (11/17 겨울판은 없어요)
+    if (leaves) {
+      px(ctx, 28, 3, 2, 2, 0xe8a83a);
+      px(ctx, 80, 2, 2, 2, 0xc8482a);
+      px(ctx, 56, 26, 2, 1, 0xd8b040);
+    }
     return canvas;
   }
   const { canvas, ctx } = makeCanvas(84, 76);

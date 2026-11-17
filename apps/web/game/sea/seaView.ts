@@ -1,7 +1,10 @@
 import * as Phaser from "phaser";
 import { SEA_WIDTH, tideLineY, type SeaViewKind } from "@tomb/protocol";
+import { isSnowy, type MapConcept } from "@/lib/mapConcept";
+import { currentMapConcept } from "@/lib/mapConceptClient";
 import { addCanvasTexture } from "../assets/manifest";
 import { rainTile, snowTile } from "../sprites/skyScenery";
+import { bulbGlowPair, conceptSuffix, coolSky } from "../sprites/winterScenery";
 import type { Levels } from "../world/ambienceMix";
 import { mixRgb } from "../world/skyGrade";
 import * as Art from "./seaArt";
@@ -15,6 +18,9 @@ import { noise1, shoreDelay, shoreReach, WaveTrain } from "./seaWaves";
 //  - 시간대: 한국 시각으로 해·달 위치, 노을(금빛 길), 밤(별·달빛·등대 불빛). 비·눈·안개
 //  - 같이 앉은 사람은 아래쪽에 뒷모습으로
 //  - 덮는 동안 월드 카메라는 쉬어요 (opaque) — SeaScene이 메인 카메라를 숨겨요
+//  - 11/17 맵 컨셉(lib/mapConcept): 겨울·크리스마스판이면 모래엔 눈, 앞 그림(데크·난간·돌 가장자리·선베드·해먹·야자 잎)에 눈,
+//    하늘은 차갑게·바다는 잿빛 푸르게(얼리지 않아요). 크리스마스판은 난간·데크·파라솔·해먹·야자 잎 전구 + 지도 장식(등대 나선 전구 등) 빛이 반짝여요.
+//    보는 동안 판이 바뀌면 1.5초 안에 다시 그려요. 등대·바위 같은 지도 그림은 SeaConceptDecor가 텍스처 자리에서 이미 바꿔 둬서 그대로 써요
 
 export type SeaViewSitter = { key: string; frame: number; slot: number; of: number };
 export { seaViewFore, seaViewLandmarks, seaViewProject, VIEW_FOCAL, type SeaViewFore, type SeaViewLandmarks } from "./seaViewGeom";
@@ -129,6 +135,10 @@ export class SeaView {
   private fog: Phaser.GameObjects.Image | null = null;
   /** 갈매기가 화면 가운데 근처를 지나며 울 때 (소리: 크기 0..1, 좌우 -1..1) */
   onGullCall: ((vol: number, pan: number) => void) | null = null;
+  /** 11/17 맵 컨셉 (볼 때 읽고, 보는 동안 1.5초마다 다시 물어요) */
+  private concept: MapConcept = "default";
+  /** 11/17 크리스마스 전구 빛 (base 그림을 따라다녀요). b가 없으면 a는 프레임 두 장 시트 */
+  private xglow: { base: Phaser.GameObjects.Image; a: Phaser.GameObjects.Image; b: Phaser.GameObjects.Image | null }[] = [];
 
   constructor(
     private readonly game: Phaser.Game,
@@ -167,6 +177,7 @@ export class SeaView {
     this.foreSpec = fore;
     this.landSpec = land;
     this.cover = 0;
+    this.concept = currentMapConcept();
   }
 
   /** 장면 끝: 물체를 지우고 월드 화면 위에 검은 막(cover)을 남겨 걷어요 */
@@ -230,6 +241,29 @@ export class SeaView {
     return o;
   }
 
+  /** 11/17 앞 그림을 지금 판으로 구운 텍스처 키 (크리스마스 전구가 있으면 빛 두 장도 키~xg0·~xg1로) */
+  private dressed(key: string, part: V.ViewPart, make: () => { toCanvas(): HTMLCanvasElement }): string {
+    const k = key + conceptSuffix(this.concept);
+    if (this.scene.textures.exists(k)) return k;
+    const out = V.dressViewPart(part, make() as Parameters<typeof V.dressViewPart>[1], this.concept);
+    addCanvasTexture(this.scene, k, { canvas: out.canvas });
+    if (out.bulbs.length) {
+      const [a, b] = bulbGlowPair(out.canvas.width, out.canvas.height, out.bulbs);
+      addCanvasTexture(this.scene, k + "~xg0", { canvas: a });
+      addCanvasTexture(this.scene, k + "~xg1", { canvas: b });
+    }
+    return k;
+  }
+
+  /** 11/17 그림 위에 크리스마스 전구 빛을 얹어요 (dressed 빛 두 장, 또는 지도 장식의 ~xglow 시트) */
+  private addGlow(base: Phaser.GameObjects.Image): void {
+    const sc = this.scene;
+    const k = base.texture.key;
+    const mk = (key: string, frame?: number) => this.add(sc.add.image(base.x, base.y, key, frame).setBlendMode(Phaser.BlendModes.ADD).setDepth(base.depth + 0.001).setAlpha(0));
+    if (sc.textures.exists(k + "~xg0") && sc.textures.exists(k + "~xg1")) this.xglow.push({ base, a: mk(k + "~xg0"), b: mk(k + "~xg1") });
+    else if (this.concept === "christmas" && sc.textures.exists(k + "~xglow")) this.xglow.push({ base, a: mk(k + "~xglow", 0), b: null });
+  }
+
   // ── 만들기 ──
 
   private build(): void {
@@ -283,20 +317,21 @@ export class SeaView {
     this.fronds = [];
     if (beachy) {
       const sandH = Math.round(VH * 0.72);
-      this.sand = this.add(sc.add.image(0, VH, this.tex(`${P}sand-${VW}-${sandH}`, () => V.sandBand(VW, sandH, 14))).setOrigin(0, 0).setDepth(10));
+      const snowy = isSnowy(this.concept);
+      this.sand = this.add(sc.add.image(0, VH, this.tex(`${P}sand-${VW}-${sandH}${snowy ? "-w" : ""}`, () => V.sandBand(VW, sandH, 14, snowy))).setOrigin(0, 0).setDepth(10));
       const pts = Array.from({ length: Math.ceil(VW / RSTEP) + 1 }, (_, i) => ({ x: i * RSTEP, y: 0 }));
       this.wash = this.add(sc.add.rope(0, 0, this.tex(P + "px", () => V.whitePx()), undefined, pts, true).setDepth(11));
       this.foam = this.add(sc.add.rope(0, 0, Art.SEA_TEX.foam, undefined, pts.map((p) => ({ ...p })), true).setDepth(12));
-      if (kind === "mat" || kind === "parasol") this.fore.push(this.add(sc.add.image(0, VH, this.tex(`${P}matEdge-${VW}-${this.mat}`, () => V.matEdge(VW, this.mat))).setOrigin(0, 1).setDepth(30)));
-      if (kind === "parasol") this.fore.push(this.add(sc.add.image(0, 0, this.tex(`${P}fringe-${VW}-${this.variant}`, () => V.parasolFringe(VW, this.variant))).setOrigin(0, 0).setDepth(31)));
-      if (kind === "lounger") this.fore.push(this.add(sc.add.image(Math.round(VW / 2), VH + 2, this.tex(P + "loungerFoot", () => V.loungerFoot())).setOrigin(0.5, 1).setDepth(30)));
+      if (kind === "mat" || kind === "parasol") this.fore.push(this.add(sc.add.image(0, VH, this.dressed(`${P}matEdge-${VW}-${this.mat}`, "mat", () => V.matEdge(VW, this.mat))).setOrigin(0, 1).setDepth(30)));
+      if (kind === "parasol") this.fore.push(this.add(sc.add.image(0, 0, this.dressed(`${P}fringe-${VW}-${this.variant}`, "fringe", () => V.parasolFringe(VW, this.variant))).setOrigin(0, 0).setDepth(31)));
+      if (kind === "lounger") this.fore.push(this.add(sc.add.image(Math.round(VW / 2), VH + 2, this.dressed(P + "loungerFoot", "lounger", () => V.loungerFoot())).setOrigin(0.5, 1).setDepth(30)));
       if (kind === "hammock") {
         // 11/16 r15 해먹 안에서: 아래·양옆은 처진 해먹 천, 위 두 구석엔 해먹을 건 야자 잎 (흔들흔들)
         const fh = Math.round(VH * 0.42);
-        this.hammockFrame = this.add(sc.add.image(Math.round(VW / 2), VH + 6, this.tex(`${P}hammockFrame-${VW}-${fh}`, () => V.hammockFrame(VW + 24, fh))).setOrigin(0.5, 1).setDepth(30));
+        this.hammockFrame = this.add(sc.add.image(Math.round(VW / 2), VH + 6, this.dressed(`${P}hammockFrame-${VW}-${fh}`, "hammock", () => V.hammockFrame(VW + 24, fh))).setOrigin(0.5, 1).setDepth(30));
         const fw = Math.round(VW * 0.34);
         const fhh = Math.round(VH * 0.3);
-        const fk = this.tex(`${P}fronds-${fw}-${fhh}`, () => V.palmFronds(fw, fhh));
+        const fk = this.dressed(`${P}fronds-${fw}-${fhh}`, "fronds", () => V.palmFronds(fw, fhh));
         this.fronds = [this.add(sc.add.image(-6, -6, fk).setOrigin(0, 0).setDepth(31)), this.add(sc.add.image(VW + 6, -6, fk).setOrigin(1, 0).setFlipX(true).setDepth(31))];
         this.fore.push(this.hammockFrame, ...this.fronds);
       }
@@ -304,7 +339,7 @@ export class SeaView {
       const fs = this.foreSpec;
       this.foreLoungers = [];
       if (fs) {
-        const lbKey = this.tex(P + "loungerBack", () => V.loungerBackArt());
+        const lbKey = this.dressed(P + "loungerBack", "loungerBack", () => V.loungerBackArt());
         const headKey = this.tex(P + "head", () => V.lyingHead());
         for (const l of fs.loungers) {
           const p = seaViewProject(l.dx, l.d, VW, VH, hz);
@@ -329,7 +364,7 @@ export class SeaView {
       // (모래 장면은 위에서 다 만들었어요)
     } else if (kind === "lighthouse") {
       // 11/16 등대 꼭대기: 난간 너머 바다가 넓게 · 가끔 먼 고래 물줄기 · 토요일 밤엔 유령선이 다가와요
-      this.fore.push(this.add(sc.add.image(0, VH, this.tex(`${P}rail-${VW}`, () => V.galleryRail(VW))).setOrigin(0, 1).setDepth(30)));
+      this.fore.push(this.add(sc.add.image(0, VH, this.dressed(`${P}rail-${VW}`, "rail", () => V.galleryRail(VW))).setOrigin(0, 1).setDepth(30)));
       this.spout = this.add(sc.add.image(0, 0, this.tex(P + "spout", () => V.whaleSpout())).setOrigin(0.5, 1).setDepth(9).setVisible(false));
       this.spoutAt = sc.time.now + 6000 + Math.random() * 12000;
       this.ghost = this.add(sc.add.image(0, 0, Art.SEA_TEX.boat).setOrigin(0.5, 1).setDepth(9).setTint(0xb8f0d8).setAlpha(0).setVisible(false));
@@ -342,14 +377,14 @@ export class SeaView {
       // 11/16 묶인 낚싯배는 선착장 끝 동쪽 → 바다를 보면 왼쪽, 부표는 서쪽 → 오른쪽
       // 11/16 r16 사용자: 바다 보기 장면엔 제트스키를 그리지 않아요 (탁 트인 바다)
       this.buoy = this.add(sc.add.image(Math.round(VW * 0.82), Math.round(hz + (VH - hz) * 0.35), Art.SEA_TEX.buoy).setOrigin(0.5, 1).setDepth(13).setScale(2));
-      this.fore.push(this.add(sc.add.image(0, VH, this.tex(`${P}deck-${VW}`, () => V.deckBand(VW))).setOrigin(0, 1).setDepth(20)));
+      this.fore.push(this.add(sc.add.image(0, VH, this.dressed(`${P}deck-${VW}`, "deck", () => V.deckBand(VW))).setOrigin(0, 1).setDepth(20)));
     } else {
       // 방파제 끝: 11/16 r14 사용자 — 등대는 앉은 자리 뒤(북쪽)라 보이지 않아요. 탁 트인 바다 + 아래 테트라포드 줄 (물보라가 부서져요)
       // 밤엔 뒤에서 도는 등대 불빛이 하늘·바다 위를 옅게 훑어요 (등불은 화면 밖 위쪽 뒤)
       this.lamp = { x: Math.round(VW * 0.5), y: -Math.round(VH * 0.1) };
       this.beam = this.add(sc.add.image(this.lamp.x, this.lamp.y, this.tex(P + "beam", () => V.beamWedge())).setOrigin(0, 0.5).setDepth(3).setBlendMode(Phaser.BlendModes.ADD).setVisible(false));
       // 11/16 r16 사용자: 지도엔 걸터앉기 앞에 테트라포드가 없어요 → 방파제 끝 돌 데크 가장자리만 (물보라는 그 가장자리에 부서져요)
-      const edge = this.add(sc.add.image(0, VH, this.tex(`${P}stoneEdge-${VW}`, () => V.stoneEdge(VW))).setOrigin(0, 1).setDepth(20));
+      const edge = this.add(sc.add.image(0, VH, this.dressed(`${P}stoneEdge-${VW}`, "stone", () => V.stoneEdge(VW))).setOrigin(0, 1).setDepth(20));
       this.tetras.push(edge);
       for (let i = 0; i < (this.reduced ? 4 : 16); i++)
         this.puffs.push({ img: this.add(sc.add.image(0, 0, this.tex(P + "puff", () => V.splashPuff())).setOrigin(0.5, 1).setDepth(21).setVisible(false)), x: 0, y: 0, vy: 0, t0: 0, life: 0, on: false });
@@ -366,6 +401,9 @@ export class SeaView {
     this.rain = this.add(sc.add.tileSprite(0, 0, VW, VH, this.tex(P + "rain", () => rainTile())).setOrigin(0, 0).setDepth(40).setVisible(false));
     this.snow = this.add(sc.add.tileSprite(0, 0, VW, VH, this.tex(P + "snow", () => snowTile())).setOrigin(0, 0).setDepth(40).setVisible(false));
     this.fog = this.add(sc.add.image(0, 0, P + "px").setOrigin(0, 0).setDisplaySize(VW, VH).setDepth(41).setAlpha(0));
+    // 11/17 크리스마스 전구 빛 (앞 그림 · 지도 장식)
+    this.xglow = [];
+    if (this.concept === "christmas") for (const img of [...this.fore, ...this.tetras, ...this.landSprites]) this.addGlow(img);
     this.ensureBlack();
     this.built = true;
   }
@@ -434,6 +472,7 @@ export class SeaView {
     this.binoMask = null;
     this.spoutT0 = -1;
     this.skyKey = this.seaKey = "";
+    this.xglow = [];
   }
 
   // ── 매 프레임 ──
@@ -466,6 +505,12 @@ export class SeaView {
     // 색 다시 굽기 (1.5초마다 확인)
     if (now >= this.palCheck) {
       this.palCheck = now + 1500;
+      // 11/17 보는 동안 관리자가 판을 바꾸면 다음 프레임에 다시 그려요
+      const c = currentMapConcept();
+      if (c !== this.concept) {
+        this.concept = c;
+        this.dirty = true;
+      }
       this.rebake(night, warm, grey);
     }
     // 앞 그림 색: 밤엔 푸르게 어둡게, 노을엔 따뜻하게
@@ -542,6 +587,7 @@ export class SeaView {
     this.updateGlints(now, f.dt, night, warm, grey, sunOn > 0.05 ? sx : null, moonOn > 0.05 ? mx : null);
     this.updateShore(f, shade, night, warm);
     this.updateFore(f, shade, night);
+    this.updateXmas(now, night);
     this.updateGulls(now, night, L.rain, shade);
     this.updateSitters(f.sitters, night);
     this.foreLoungers.forEach((l, i) => l.head.setVisible(!!f.lying?.[i]).setTint(mixRgb(0xffffff, 0x2a3050, night * 0.5)));
@@ -563,7 +609,7 @@ export class SeaView {
   /** 하늘·바다 몸통 색이 바뀌었으면 다시 구워요 (옛 텍스처는 지워요) */
   private rebake(night: number, warm: number, grey: number): void {
     const q = (c: number) => (c >> 3) & 0x1f1f1f;
-    const sp = skyPal(night, warm, grey);
+    const sp = this.skyPalC(night, warm, grey);
     const skyKey = `${P}sky-${this.hz}-${q(sp.top)}-${q(sp.mid)}-${q(sp.low)}`;
     if (skyKey !== this.skyKey && this.sky) {
       const old = this.skyKey;
@@ -573,7 +619,7 @@ export class SeaView {
       this.skyKey = skyKey;
       if (old && this.scene.textures.exists(old)) this.scene.textures.remove(old);
     }
-    const ep = seaPal(night, warm, grey);
+    const ep = this.seaPalC(night, warm, grey);
     const seaKey = `${P}sea-${this.VW}-${this.VH - this.hz}-${q(ep.far)}-${q(ep.mid)}-${q(ep.near)}`;
     if (seaKey !== this.seaKey && this.sea) {
       const old = this.seaKey;
@@ -583,6 +629,37 @@ export class SeaView {
       this.sea.setTexture(seaKey);
       this.seaKey = seaKey;
       if (old && this.scene.textures.exists(old)) this.scene.textures.remove(old);
+    }
+  }
+
+  /** 11/17 판에 맞춘 하늘 색 (겨울·크리스마스판은 차갑게 — 밤엔 거의 그대로) */
+  private skyPalC(night: number, warm: number, grey: number): Pal {
+    const p = skyPal(night, warm, grey);
+    if (!isSnowy(this.concept)) return p;
+    const k = 0.2 * (1 - night * 0.8);
+    return { top: coolSky(p.top, k), mid: coolSky(p.mid, k), low: coolSky(p.low, k) };
+  }
+
+  /** 11/17 판에 맞춘 바다 색 (겨울·크리스마스판은 잿빛 푸르게 — 얼리지는 않아요) */
+  private seaPalC(night: number, warm: number, grey: number): V.SeaPal {
+    const p = seaPal(night, warm, grey);
+    if (!isSnowy(this.concept)) return p;
+    const k = 0.24 * (1 - night * 0.7);
+    return { far: V.wintryWater(p.far, k), mid: V.wintryWater(p.mid, k), near: V.wintryWater(p.near, k * 0.8) };
+  }
+
+  /** 11/17 크리스마스 전구 빛: 그림을 따라다니며 0.7초마다 번갈아 (움직임 줄이기면 반반 그대로). 낮엔 은은하게, 밤엔 환하게 */
+  private updateXmas(now: number, night: number): void {
+    if (!this.xglow.length) return;
+    const xa = 0.3 + 0.7 * clamp01((night - 0.1) / 0.5);
+    const on = this.reduced ? -1 : Math.floor(now / 700) % 2;
+    for (const g of this.xglow) {
+      const b = g.base;
+      for (const o of g.b ? [g.a, g.b] : [g.a]) o.setPosition(b.x, b.y).setOrigin(b.originX, b.originY).setScale(b.scaleX, b.scaleY).setRotation(b.rotation).setFlipX(b.flipX).setVisible(b.visible);
+      if (g.b) {
+        g.a.setAlpha(on < 0 ? xa * 0.6 : on === 0 ? xa : xa * 0.2);
+        g.b.setAlpha(on < 0 ? xa * 0.6 : on === 1 ? xa : xa * 0.2);
+      } else g.a.setFrame(on < 0 ? 0 : on).setAlpha(xa);
     }
   }
 
@@ -633,7 +710,7 @@ export class SeaView {
       : Math.round(VH * ((lounger ? 0.8 : 0.64) + ((lounger ? 0.9 : 0.8) - (lounger ? 0.8 : 0.64)) * clamp01(f.tide)));
     const s0 = VIEW_FOCAL / Math.max(16, dLine);
     this.sand.setY(shoreY).setTint(shade);
-    const ep = seaPal(night, warm, 0);
+    const ep = this.seaPalC(night, warm, 0);
     const time = this.scene.time.now;
     const scroll = this.reduced ? 0 : time * 0.006;
     const W = this.wash;

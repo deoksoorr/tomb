@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import { ambienceAt, parseAmbienceOverride, timePhase } from "@/lib/ambience";
+import { isSnowy } from "@/lib/mapConcept";
 import { ART_H, buildCaption, buildInterior, buildSky, HORIZON, LAYERS, VIEW_MAX, WIN_BOT, WIN_TOP, type LayerSpec } from "./busRideArt";
 import { GULL_FRAMES, LEAF_COLORS, rideBake, type RideBake } from "./busRideBake";
 import { captionAlpha, captionAt, distanceAt, lightsOn, rideReversed, segmentAt, segmentsFor, shakeAt, skyColors, starsOn, strapAngle, type RideSegment } from "./busRideMath";
@@ -18,6 +19,8 @@ import { gust, pulse } from "../world/weatherNoise";
 // 11/16 바닷가 노선(route "sea"): 마을 → 고속도로 → 해송 숲 길 → 바닷길(방파제·등대) → 「달물결 포구」 팻말. 낙엽 대신 갈매기가 나란히 날아요.
 // 11/17 마을 날씨도 창밖에 (같은 ambienceAt — QA ?weather 포함): 비는 빗줄기 + 창에 맺혀 흘러내리는 물방울, 눈은 날리는 눈발,
 // 안개는 먼 산·중간 층이 흐려져요. 그림은 busRideBake가 미리 굽고, 날씨가 없으면 아무것도 만들지 않아요.
+// 11/17 맵 컨셉: 겨울·크리스마스판 창밖은 눈 덮인 풍경(busRideBake가 판마다 따로 구워요) — 낙엽은 날리지 않고,
+// 크리스마스판은 전구 빛 두 장을 0.6초마다 번갈아 (낮엔 은은하게, 밤엔 환하게).
 
 const FADE_IN_MS = 350;
 const HOLD_MS = 450;
@@ -46,7 +49,7 @@ const D = {
   fade: 30,
 } as const;
 
-type LayerView = { spec: LayerSpec; img: Phaser.GameObjects.Image; lights: Phaser.GameObjects.Image | null };
+type LayerView = { spec: LayerSpec; img: Phaser.GameObjects.Image; lights: Phaser.GameObjects.Image | null; xmas: [Phaser.GameObjects.Image, Phaser.GameObjects.Image] | null };
 type Leaf = { img: Phaser.GameObjects.Image; x: number; y: number; vy: number; phase: number };
 /** 11/17 창에 맺힌 물방울 (x·y는 창 안쪽 그림 픽셀). 맺혀 있다가 holdUntil이 지나면 흘러내리며 자국을 남긴다 */
 type GlassDrop = { img: Phaser.GameObjects.Image; trail: Phaser.GameObjects.Image; x: number; y: number; sx: number; sy: number; holdUntil: number; running: boolean; born: number; seed: number };
@@ -202,7 +205,13 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
       const lights = this.lightAlpha > 0 && this.textures.exists(litKey) ? this.add.image(0, 0, litKey).setOrigin(0, 0).setBlendMode(Phaser.BlendModes.ADD).setAlpha(this.lightAlpha) : null;
       this.outside.add(img);
       if (lights) this.outside.add(lights);
-      this.layers.push({ spec, img, lights });
+      // 11/17 크리스마스판 전구 빛 (두 장 번갈아)
+      const xk = [bake.key(`l-${spec.id}-x0`), bake.key(`l-${spec.id}-x1`)];
+      const xmas = xk.every((k) => this.textures.exists(k))
+        ? (xk.map((k) => this.add.image(0, 0, k).setOrigin(0, 0).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0)) as [Phaser.GameObjects.Image, Phaser.GameObjects.Image])
+        : null;
+      if (xmas) this.outside.add(xmas);
+      this.layers.push({ spec, img, lights, xmas });
       // 11/17 날씨 겹: 먼 산 뒤로 안개 둑, 중간 층 위로 안개 막·먼 빗줄기·먼 눈발, 가까운 층 위로 옅은 안개
       if (spec.id === "far") this.addFar(tint);
       else if (spec.id === "mid") this.addMid(tint);
@@ -215,7 +224,8 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
     // 11/16 바닷가 노선은 낙엽 대신 갈매기 (같은 풀을 써요 — 날갯짓은 update에서 그림을 바꿔요)
     const sea = this.route === "sea";
     const leafKeys = sea ? [bake.key("gull-0")] : LEAF_COLORS.map((_, i) => bake.key(`leaf-${i}`));
-    const n = sea ? (reduced ? GULLS_REDUCED : GULLS) : reduced ? LEAVES_REDUCED : LEAVES;
+    // 11/17 겨울·크리스마스판은 나무가 앙상해 낙엽을 날리지 않아요
+    const n = sea ? (reduced ? GULLS_REDUCED : GULLS) : isSnowy(bake.concept) ? 0 : reduced ? LEAVES_REDUCED : LEAVES;
     for (let i = 0; i < n; i++) {
       const img = this.add.image(0, 0, leafKeys[i % leafKeys.length]).setOrigin(0.5).setAlpha(0);
       this.outside.add(img);
@@ -415,6 +425,11 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
       const x = -Math.round(scroll * S);
       l.img.x = x;
       if (l.lights) l.lights.x = x;
+      if (l.xmas) {
+        const xa = 0.35 + 0.65 * Math.min(1, this.lightAlpha * 1.4);
+        const on = reduced ? -1 : Math.floor(ms / 600) % 2;
+        l.xmas.forEach((o, i) => o.setX(x).setAlpha(on < 0 ? xa * 0.6 : i === on ? xa : xa * 0.2));
+      }
     }
     const v = delta > 0 ? Math.min(600, Math.abs(near - this.lastNear) / (delta / 1000)) : 0; // 가까운 층 속도 (그림 px/s)
     const way = this.rev ? -1 : 1; // 풍경이 흐르는 쪽 (1 = 왼쪽으로)
@@ -535,6 +550,7 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
     for (const l of this.layers) {
       l.img.setScale(S).setY(y(l.spec.y0));
       l.lights?.setScale(S).setY(y(l.spec.y0));
+      for (const o of l.xmas ?? []) o.setScale(S).setY(y(l.spec.y0));
     }
     // 끝 표지판: 마지막에 화면 가운데로 온다 (가까운 층과 같이 움직인다)
     // 돌아가는 길은 그림의 처음(마을 쪽)이 마지막에 온다
