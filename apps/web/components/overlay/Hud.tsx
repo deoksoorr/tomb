@@ -38,7 +38,7 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
   const mode = status?.mode ?? "connecting";
   const channel = status?.channel ?? null;
   // 11/15 캠핑장: 같은 채널을 마을과 나눠 쓴다 → "3채널 캠핑장 · 12/40명" (인원은 맵 상관없이 채널 전체). 11/16 바닷가도 "3채널 바닷가"
-  // 11/17 마을도 이름을 붙이고, 넓은 화면은 정식 이름("3채널 기억숲 마을 · 12/60명"), 좁은 화면은 짧은 이름
+  // 11/17 마을도 이름을 붙이고 넓은 화면은 정식 이름("3채널 기억숲 마을 · 12/60명"). 좁은 화면(모바일)은 채널만 ("3채널 12/60")
   const place = hudPlace(status?.map, compact);
   // 11/16 바닷가에 있는 동안만 물때 시계
   const tide = useTideText(status?.map === "sea");
@@ -46,7 +46,7 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
   if (compact) {
     const where =
       mode === "online" && channel !== null
-        ? `${channel}채널 ${place} ${status?.count}/${status?.cap}`
+        ? `${channel}채널 ${status?.count}/${status?.cap}`
         : MODE_TEXT[mode === "online" ? "connecting" : mode];
     const sky = ambience ? ` · ${PHASE_LABELS[ambience.phase]}·${WEATHER_LABELS[ambience.weather]}` : "";
     const tideLine = tide ? <span className={cx(ui.top, styles.tide, styles.tideCompact)} role="status">{tide}</span> : null;

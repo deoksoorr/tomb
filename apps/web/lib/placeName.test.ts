@@ -9,8 +9,8 @@ describe("화면 위 채널 표시의 장소 이름", () => {
     expect(hudPlace("sea", false)).toBe("달물결 포구");
   });
 
-  it("좁은 화면은 짧은 이름", () => {
-    expect(hudPlace(undefined, true)).toBe("마을");
-    expect(hudPlace("sea", true)).toBe("바닷가");
+  it("좁은 화면은 채널만 (장소 이름 없음)", () => {
+    expect(hudPlace(undefined, true)).toBeNull();
+    expect(hudPlace("sea", true)).toBeNull();
   });
 });
