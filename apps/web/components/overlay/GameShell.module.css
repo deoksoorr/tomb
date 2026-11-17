@@ -109,6 +109,8 @@
   transform: translateX(-50%);
   display: flex;
   justify-content: center;
+  /* 11/17 r2 칸이 좁으면 채널 줄 안 시간·날씨는 숨긴다 (Hud .ambience) */
+  container-type: inline-size;
 }
 
 .topRight {
