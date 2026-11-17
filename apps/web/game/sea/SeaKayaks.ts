@@ -110,7 +110,8 @@ export class SeaKayaks {
     if (this.host.player().boatSeatId === id) return -1;
     const sid = this.host.seats().get(id);
     if (sid === undefined) return null;
-    return sid === this.host.mySid() ? -1 : sid;
+    // 11/17 방금 내렸는데 서버 좌석표가 아직 나로 남아 있으면 빈 자리로 (SeaRides.ownerOf와 같은 까닭)
+    return sid === this.host.mySid() ? null : sid;
   }
 
   // ── 타기·내리기 ──

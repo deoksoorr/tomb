@@ -362,7 +362,7 @@ export class SeaScene extends Phaser.Scene {
           this.drunkToast(this.time.now);
           return false;
         }
-        if (this.riding.on) this.riding.dismount(true);
+        this.riding.stepOff();
         if (this.rest) this.leaveRest(this.time.now);
         return true;
       },

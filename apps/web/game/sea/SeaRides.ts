@@ -193,7 +193,8 @@ export class SeaRides {
     if (this.host.player().boatSeatId === v.def.id) return -1;
     const sid = this.host.seats().get(v.def.id);
     if (sid === undefined) return null;
-    return sid === this.host.mySid() ? -1 : sid;
+    // 11/17 내가 방금 내렸는데 서버 좌석표가 아직 나로 남아 있으면(다음 걸음에 풀려요) 빈 걸로 — 내 캐릭터가 계속 탄 그림(view.ride)으로 남아 펫이 안 보였어요
+    return sid === this.host.mySid() ? null : sid;
   }
 
   // ── 타기·내리기 ──

@@ -108,6 +108,14 @@ export class Riding {
     this.publish();
   }
 
+  /** 11/17 놀거리(제트스키·카약·튜브)에 오르려고 잠깐 내린다 — 다시 설 수 있게 되면 저절로 다시 올라탄다 */
+  stepOff(): void {
+    if (!this.riding) return;
+    const pet = ridePetOfLook(this.d.player().view.wearing);
+    this.dismount(true);
+    this.resume = pet;
+  }
+
   /** 매 프레임: 자리·물·펫 바꾸기면 내린다, UI 버튼 상태 */
   update(): void {
     const pl = this.d.player();

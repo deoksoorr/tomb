@@ -40,6 +40,19 @@ describe("타는 펫 다시 올라타기", () => {
     expect(sent).toEqual([true, false, true]);
   });
 
+  it("바닷가 놀거리에 오르려고 잠깐 내린 것(stepOff)도 내려서면 다시 타요", () => {
+    const { pl, r } = setup();
+    r.toggle();
+    r.stepOff();
+    expect(r.on).toBe(false);
+    pl.inBoat = true;
+    r.update();
+    expect(r.on).toBe(false);
+    pl.inBoat = false;
+    r.update();
+    expect(r.on).toBe(true);
+  });
+
   it("R 키로 직접 내렸거나 펫을 바꿨으면 다시 타지 않아요", () => {
     const a = setup();
     a.r.toggle();
