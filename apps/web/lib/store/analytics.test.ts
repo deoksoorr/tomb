@@ -146,6 +146,10 @@ describe("47번 보고서", () => {
     expect(r.referrers.map((x) => x.cat)).toEqual(["direct", "search", "sns", "messenger", "other"]);
     expect(r.domains[0]).toEqual({ key: "google.com", count: 2 });
     expect(r.devices).toEqual([{ key: "mobile", count: 3 }, { key: "desktop", count: 1 }]);
+    // 11/17 대시보드 유입 경로는 기간과 상관없이 오늘만 (어제 11/11의 search 한 번은 빠진다)
+    expect(r.todayReferrers.find((x) => x.cat === "search")?.count).toBe(1);
+    expect(r.todayReferrers.find((x) => x.cat === "sns")?.count).toBe(1);
+    expect(r.todayDomains).toEqual([{ key: "google.com", count: 1 }, { key: "t.co", count: 1 }]);
 
     const h = await buildReport(s, "hour", now);
     expect(h.series).toHaveLength(24);
