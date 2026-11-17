@@ -70,10 +70,11 @@
   white-space: nowrap;
 }
 
-/* 11/16 터치 화면: 위 가장자리 바 바로 아래 가운데에 물때 줄 → 포인트 이벤트 띠 순서로 쌓는 묶음 */
+/* 11/16 터치 화면: 위 가장자리 바 바로 아래 가운데에 물때 줄 → 포인트 이벤트 띠 순서로 쌓는 묶음.
+   11/17 왼쪽 위 긴급 의뢰 칩·고정 공지 칩(펼치면 넓어진다)과 겹치지 않게 그 높이만큼 내린다 */
 .compactStack {
   position: absolute;
-  top: calc(var(--top-h) + 6px + var(--urgent-h, 0px));
+  top: calc(var(--top-h) + 6px + var(--urgent-h, 0px) + var(--pin-h, 0px));
   left: 50%;
   display: flex;
   flex-direction: column;
@@ -101,7 +102,7 @@
 /* 터치 화면: 위 가장자리 바 바로 아래 가운데 (바의 배치에 끼지 않게 띄운다). 좁으면 두 줄 */
 .eventCompact {
   position: absolute;
-  top: calc(var(--top-h) + 6px + var(--urgent-h, 0px));
+  top: calc(var(--top-h) + 6px + var(--urgent-h, 0px) + var(--pin-h, 0px));
   left: 50%;
   max-width: calc(100% - 16px);
   height: auto;

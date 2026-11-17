@@ -777,7 +777,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
               </div>
             </>
           )}
-          {/* 23번 확성기 창: 터치는 왼쪽 아래 조이스틱 위에 따로 (데스크톱은 왼쪽 위 음악 아래) */}
+          {/* 23번 확성기 창: 데스크톱은 왼쪽 위 음악 아래. 11/17 터치는 확성기 줄 없이 고정 공지 칩만 (긴급 의뢰 칩 아래) */}
           {coarse && <MegaphoneFeed channel={channel} floating />}
           {/* 바로 가기 줄: 데스크톱만 왼쪽 아래 모서리. 터치는 위쪽 [메뉴] 시트에 모두 있고 [표현]만 행동 버튼 옆(MobileControls) */}
           {!coarse && (

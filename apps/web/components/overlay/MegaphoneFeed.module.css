@@ -6,19 +6,56 @@
   justify-items: start;
 }
 
-/* 터치: 11/16 왼쪽 위 [메뉴] 줄 바로 아래 (예전엔 조이스틱 위 — 그 자리는 채팅이 쓴다). 버튼 줄이 위, 펼친 기록은 아래로 자란다.
-   폭은 화면 절반쯤 (가로 폰에서는 가운데 내 캐릭터를 가리지 않게 260px까지) */
-.floating {
+/* 11/17 터치: 확성기 줄 대신 고정 공지 칩 하나. 왼쪽 위 [메뉴] 줄 아래, 긴급 의뢰 칩이 떠 있으면 그 아래로 (--urgent-h, UrgentHud).
+   펼친 공지는 칩 아래로 자란다 (오른쪽 위 [지도] 단추보다 아래라 화면 폭 가까이, 360px까지) */
+.pinChipBox {
   position: absolute;
   z-index: 1;
-  /* 11/17 r2 긴급 의뢰 막대가 떠 있으면 그 아래로 (--urgent-h, UrgentHud) */
   top: calc(var(--safe-top) + var(--top-h) + var(--top-gap) + var(--urgent-h, 0px));
   left: var(--safe-left);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  width: min(260px, calc(50vw - var(--safe-left)));
+  gap: 4px;
+  width: min(360px, calc(100vw - var(--safe-left) - var(--safe-right)));
   font-size: 12px;
+  pointer-events: none;
+}
+
+.pinChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 2px 8px;
+  border: 0;
+  background: rgba(30, 25, 14, 0.9);
+  box-shadow:
+    0 -2px 0 0 #c9962e,
+    0 2px 0 0 #c9962e,
+    -2px 0 0 0 #c9962e,
+    2px 0 0 0 #c9962e;
+  color: #ffd36a;
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.pinChipOpen {
+  background: #3a2c12;
+}
+
+/* 펼친 공지 칸 (pins 모양 그대로, 칩 아래) */
+.pinSheet {
+  max-height: 40vh;
+}
+
+.pinWrite {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 2px;
 }
 
 .bar {
@@ -147,17 +184,6 @@
   box-shadow: var(--px-border);
   font-size: 12px;
   pointer-events: auto;
-}
-
-.floating .log {
-  max-height: 120px;
-}
-
-/* 가로 폰처럼 낮은 화면: 펼친 기록이 아래 조이스틱·채팅까지 닿지 않게 더 낮게 */
-@media (max-height: 520px) {
-  .floating .log {
-    max-height: min(120px, calc(100dvh - var(--safe-top) - var(--top-h) - var(--top-gap) - 30px - 6px - var(--safe-bottom) - 240px));
-  }
 }
 
 .line {

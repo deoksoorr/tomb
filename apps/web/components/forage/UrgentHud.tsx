@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { clockText, FEST_FIREWORK_MS, FEST_MS, URGENT_DEF, URGENT_LAST_MS, URGENT_NOBODY_LINE, urgentFilled, urgentRewardLine, urgentStage } from "@/lib/forage/quests/urgent";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
+import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { showToast } from "@/lib/hooks/useToasts";
 import { useUrgent } from "./urgentStore";
 import u from "./urgent.module.css";
@@ -34,6 +35,7 @@ function useUrgentSpace(): (el: HTMLElement | null) => void {
 //  - 끝나면 막대가 멈추고 결과 · 축제 남은 시간. 닫기(×)로 숨기면 새 의뢰가 뜨기 전까지 다시 안 뜬다 (11/16 — 이 브라우저가 기억)
 //    (11/15 아무도 내지 않았으면 막대 없이 한 줄만 몇 초 보여 주고 저절로 내린다. 「게시판에서 보상 받기」는 내가 받을 보상이 있을 때만)
 // 사냥·미니게임 중에는 숨긴다 (그 화면 위쪽 막대와 겹치지 않게)
+// 11/17 터치 화면: 평소엔 한 줄 칩([긴급] 11:37 40%)으로 접어 두고, 누르면 지금 막대가 펼쳐진다 (다시 누르면 접힌다). 불꽃축제 타이머도 같은 식
 
 /** "00:30" (남은 ms, 분도 두 자리) */
 const mmss = (ms: number) => {
@@ -72,6 +74,10 @@ export default function UrgentHud() {
     }
   };
   const toasted = useRef(new Set<string>());
+  const coarse = useMediaQuery("(pointer: coarse)");
+  // 터치 화면에서 칩을 펼쳤는지 (데스크톱은 늘 펼친 막대)
+  const [open, setOpen] = useState(false);
+  const toggle = () => setOpen(!open);
   const ev = pub?.ev ?? null;
   // 아무도 내지 않고 끝났으면 한 줄을 몇 초 보여 주고 저절로 닫는다 (닫기 ×도 그대로)
   const nobodyId = ev && now >= ev.end && ev.n <= 0 ? ev.id : null;
@@ -127,8 +133,19 @@ export default function UrgentHud() {
           </span>
         </div>
       )}
-      {fireworks && (
-        <div ref={space} className={u.fwTimer} role="status" aria-label={`불꽃축제 남은 시간 ${mmss(fwLeft)}`}>
+      {fireworks && coarse && !open && (
+        <div ref={space} className={u.chipRow}>
+          <button type="button" className={u.chip} data-fest onClick={toggle} aria-expanded={false} aria-label={`불꽃축제 남은 시간 ${mmss(fwLeft)}, 펼치기`}>
+            <span className={u.fwSpark} aria-hidden="true">
+              ✦
+            </span>
+            <span className={u.chipFest}>불꽃축제</span>
+            <span className={u.chipClock}>{mmss(fwLeft)}</span>
+          </button>
+        </div>
+      )}
+      {fireworks && (!coarse || open) && (
+        <div ref={space} className={u.fwTimer} data-open={coarse || undefined} onClick={coarse ? toggle : undefined} role="status" aria-label={`불꽃축제 남은 시간 ${mmss(fwLeft)}`}>
           <span className={u.fwSpark} aria-hidden="true">
             ✦
           </span>
@@ -137,7 +154,18 @@ export default function UrgentHud() {
           <small>목표의 150%를 채웠어요! 모닥불이 1시간 동안 금빛으로 타요.</small>
         </div>
       )}
-      {hidden !== ev.id && !fireworks && nobody && (
+      {hidden !== ev.id && !fireworks && nobody && coarse && (
+        <div ref={space} className={u.chipRow} role="status" aria-label="긴급 의뢰">
+          <span className={u.chip} data-done>
+            <span className={u.tag}>긴급 끝</span>
+            <span className={u.chipText}>아무도 오지 않았어요</span>
+          </span>
+          <button type="button" className={u.chipClose} onClick={() => setHidden(ev.id)} aria-label="긴급 의뢰 막대 닫기">
+            ×
+          </button>
+        </div>
+      )}
+      {hidden !== ev.id && !fireworks && nobody && !coarse && (
         <div ref={space} className={u.hud} data-done role="status" aria-label="긴급 의뢰">
           <div className={u.hudTop}>
             <span className={u.endLine}>{URGENT_NOBODY_LINE}</span>
@@ -147,10 +175,49 @@ export default function UrgentHud() {
           </div>
         </div>
       )}
-      {hidden !== ev.id && !fireworks && !nobody && (
-        <div ref={space} className={u.hud} data-hurry={hurry || undefined} data-done={!live || undefined} data-fest={fest || undefined} role="status" aria-label="긴급 의뢰">
+      {hidden !== ev.id && !fireworks && !nobody && coarse && !open && (
+        <div ref={space} className={u.chipRow} role="status" aria-label="긴급 의뢰">
+          <button
+            type="button"
+            className={u.chip}
+            data-hurry={hurry || undefined}
+            data-done={!live || undefined}
+            data-fest={fest || undefined}
+            onClick={toggle}
+            aria-expanded={false}
+          >
+            <span className={u.tag}>{live ? "긴급" : "긴급 끝"}</span>
+            {live && (
+              <span className={u.chipClock} aria-label={`남은 시간 ${clockText(left)}`}>
+                {clockText(left)}
+              </span>
+            )}
+            <span className={u.chipPct}>{pct}%</span>
+            {canClaim && <span className={u.chipClaim}>보상</span>}
+            <span className="visually-hidden">, 펼치기</span>
+          </button>
+          {!live && (
+            <button type="button" className={u.chipClose} onClick={() => setHidden(ev.id)} aria-label="긴급 의뢰 막대 닫기">
+              ×
+            </button>
+          )}
+        </div>
+      )}
+      {hidden !== ev.id && !fireworks && !nobody && (!coarse || open) && (
+        <div
+          ref={space}
+          className={u.hud}
+          data-hurry={hurry || undefined}
+          data-done={!live || undefined}
+          data-fest={fest || undefined}
+          data-open={coarse || undefined}
+          onClick={coarse ? toggle : undefined}
+          role="status"
+          aria-label="긴급 의뢰"
+        >
           <div className={u.hudTop}>
-            <span className={u.tag}>{live ? "긴급 의뢰" : "긴급 의뢰 끝"}</span>
+            {/* 터치 화면은 칩과 같이 짧게 (좁은 막대 첫 줄에 남은 시간·접기까지 들어가게) */}
+            <span className={u.tag}>{coarse ? (live ? "긴급" : "긴급 끝") : live ? "긴급 의뢰" : "긴급 의뢰 끝"}</span>
             <span className={u.what}>
               {d.label} {ev.goal}
               {d.unit}
@@ -160,8 +227,30 @@ export default function UrgentHud() {
                 {clockText(left)}
               </span>
             ) : null}
+            {coarse && (
+              <button
+                type="button"
+                className={u.fold}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggle();
+                }}
+                aria-expanded={true}
+                aria-label="긴급 의뢰 접기"
+              >
+                ▴
+              </button>
+            )}
             {!live && (
-              <button type="button" className={u.close} onClick={() => setHidden(ev.id)} aria-label="긴급 의뢰 막대 닫기">
+              <button
+                type="button"
+                className={u.close}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setHidden(ev.id);
+                }}
+                aria-label="긴급 의뢰 막대 닫기"
+              >
                 ×
               </button>
             )}
