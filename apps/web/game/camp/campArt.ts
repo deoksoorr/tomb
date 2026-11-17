@@ -13,6 +13,9 @@ import {
   campStreamX,
   type CampNpcId,
 } from "@tomb/protocol";
+import type { MapConcept } from "@/lib/mapConcept";
+import { seasonHat, seasonHolly, seasonMitt, seasonNose, seasonScarf, seasonSnow } from "../sprites/npcSeasonArt";
+import type { NpcWear } from "../sprites/npcWear";
 import { darken, Grid, lighten, mix, rng, type Color } from "../sprites/pixel";
 import { CAMP_SUMMIT, campGroundKind, hashU, pathEdgeDist, type CampGround } from "./campLayout";
 import { CAMP_TEX_PREFIX } from "./campTypes";
@@ -1039,7 +1042,53 @@ const NPC_LOOKS: Record<CampNpcId, NpcLook> = {
   stargazer: { skin: 0xecd8c8, hair: 0x2a2a3a, top: 0x2e3a6a, topLo: 0x1e284a, bottom: 0x2e3a6a, hat: "hood", hatC: 0x2e3a6a, extra: "stars" },
   guitarist: { skin: 0xf2d4b6, hair: 0x5a3a24, top: 0xc84a3a, topLo: 0x8a2e26, bottom: 0x4a5a6a, hat: "beanie", hatC: 0xe8b040, extra: "guitar" },
 };
-function npcFrame(g: Grid, ox: number, L: NpcLook, f: number): void {
+
+/**
+ * 11/17 겨울·크리스마스판 옷 (맵 컨셉). coat = 겉옷 색 [밝은, 그늘] (quilt = 누빔 패딩), hat = 원래 모자 대신 쓰는 모자(npcWear와 같은 그림),
+ * snowHat = 원래 모자 위 눈, holly = 호랑가시 자리 [dx, 머리 윗면 기준 dy], apron = 앞치마 색 [바탕, 띠]
+ */
+type NpcSeason = {
+  coat?: [Color, Color];
+  quilt?: boolean;
+  scarf?: { c: Color; c2?: Color; pat?: "solid" | "stripe" | "check" | "dots"; thick?: boolean; tail?: number };
+  mitt?: Color;
+  boot?: Color;
+  hat?: NonNullable<NpcWear["hat"]>;
+  snowHat?: boolean;
+  holly?: readonly [number, number][];
+  nose?: boolean;
+  apron?: [Color, Color];
+};
+const NPC_SEASON: Record<CampNpcId, { winter: NpcSeason; christmas: NpcSeason }> = {
+  // 언젠가 씨 (관리소): 같은 올리브색 누빔 패딩 + 빨간 목도리, 크리스마스엔 레인저 모자 띠에 호랑가시
+  keeper: {
+    winter: { coat: [0x6e8a4a, 0x4e6a34], quilt: true, scarf: { c: 0xc8463c, thick: true, tail: -4 }, mitt: 0x9a7448, boot: 0x5a3a24, snowHat: true },
+    christmas: { scarf: { c: 0xd23a44, c2: 0x2e8a4e, pat: "stripe", thick: true, tail: -4 }, mitt: 0xd23a44, boot: 0x5a3a24, holly: [[-2, 0], [2, 0]] },
+  },
+  // 매점 알바 (상인): 남색 패딩 + 빨간 방울 털모자, 크리스마스엔 산타 모자 + 초록 앞치마에 호랑가시
+  clerk: {
+    winter: { coat: [0x4a6a9a, 0x34507a], quilt: true, hat: { kind: "beanie", c: 0xe0563c, c2: 0xf8f6f0 }, scarf: { c: 0xf0c040, c2: 0xe0563c, pat: "stripe", tail: 2 }, mitt: 0xe0563c, boot: 0x3a3a48 },
+    christmas: { hat: { kind: "santa" }, scarf: { c: 0xf8f6f0, c2: 0xd23a44, pat: "stripe", tail: 2 }, apron: [0x2e8a4e, 0xd23a44], holly: [[-1, 12]], mitt: 0xd23a44, boot: 0x3a3a48 },
+  },
+  // 계곡 할머니: 보라 꽃무늬 누빔 + 분홍 목도리, 크리스마스엔 두건에 호랑가시 + 초록 숄
+  granny: {
+    winter: { coat: [0x8a5aa0, 0x6a4080], quilt: true, scarf: { c: 0xf0a0b8, c2: 0xf8f6f0, pat: "dots", thick: true, tail: -4 }, mitt: 0xf0a0b8, boot: 0x3a6a9a, snowHat: true },
+    christmas: { coat: [0x8a5aa0, 0x6a4080], scarf: { c: 0x2e8a4e, c2: 0xf8f6f0, pat: "check", thick: true, tail: -4 }, mitt: 0xd23a44, boot: 0x3a6a9a, holly: [[-2, 0], [3, 1]] },
+  },
+  // 별지기: 별빛 노란 목도리·장갑, 크리스마스엔 루돌프 머리띠 + 빨간 코
+  stargazer: {
+    winter: { scarf: { c: 0xf0d040, c2: 0x2e3a6a, pat: "stripe", tail: 2 }, mitt: 0xf0d040, boot: 0x1e284a, snowHat: true },
+    christmas: { hat: { kind: "antler", c: 0xf0c040 }, nose: true, scarf: { c: 0xd23a44, c2: 0xf8f6f0, pat: "stripe", tail: 2 }, mitt: 0xd23a44, boot: 0x1e284a },
+  },
+  // 기타 캠퍼: 노란 털모자에 방울 + 남색 체크 목도리, 크리스마스엔 산타 모자
+  guitarist: {
+    winter: { hat: { kind: "beanie", c: 0xe8b040, c2: 0xf8f6f0 }, scarf: { c: 0x3a5a8a, c2: 0x9ab0d0, pat: "check", thick: true, tail: -4 }, boot: 0x4a3a2a },
+    christmas: { hat: { kind: "santa" }, scarf: { c: 0x2e8a4e, c2: 0xf8f6f0, pat: "stripe", thick: true, tail: -4 }, boot: 0x4a3a2a },
+  },
+};
+
+function npcFrame(g: Grid, ox: number, L0: NpcLook, f: number, S: NpcSeason = {}): void {
+  const L = S.coat ? { ...L0, top: S.coat[0], topLo: S.coat[1] } : L0;
   const cx = ox + NPC_W / 2;
   const base = NPC_H - 2;
   const bob = f; // 숨쉬기: 몸통 위쪽이 1px 오르내린다
@@ -1048,6 +1097,13 @@ function npcFrame(g: Grid, ox: number, L: NpcLook, f: number): void {
   g.rect(cx + 1, base - 6, 3, 5, L.bottom);
   g.rect(cx - 4, base - 1, 3, 1, 0x3a2a20);
   g.rect(cx + 1, base - 1, 3, 1, 0x3a2a20);
+  if (S.boot) {
+    // 장화 (위 단은 밝게)
+    for (const x of [cx - 4, cx + 1]) {
+      g.rect(x, base - 3, 3, 3, S.boot);
+      g.hline(x, x + 2, base - 3, lighten(S.boot, 0.3));
+    }
+  }
   // 몸통
   const by = base - 15 + bob;
   g.rect(cx - 5, by, 10, 10 - bob, L.top);
@@ -1056,14 +1112,28 @@ function npcFrame(g: Grid, ox: number, L: NpcLook, f: number): void {
   g.rect(cx + 5, by + 1, 2, 7, L.topLo);
   g.set(cx - 7, by + 8, L.skin);
   g.set(cx + 6, by + 8, L.skin);
+  if (S.quilt) {
+    // 누빔 패딩 (몸통·팔에 가로 박음질)
+    for (const y of [by + 3, by + 6]) {
+      g.hline(cx - 5, cx + 3, y, L.topLo);
+      g.set(cx - 7, y, L.topLo);
+      g.set(cx + 6, y, darken(L.topLo, 0.15));
+    }
+  }
+  if (S.mitt) {
+    seasonMitt(g, cx - 7, by + 6, S.mitt);
+    seasonMitt(g, cx + 5, by + 6, S.mitt);
+  }
   if (L.extra === "vest") {
     g.rect(cx - 5, by, 3, 9, 0x9a7448);
     g.rect(cx + 2, by, 3, 9, 0x9a7448);
     g.set(cx - 4, by + 3, 0xf2c444); // 배지
   }
   if (L.extra === "apron") {
-    g.rect(cx - 4, by + 2, 8, 9, 0xe68a38);
-    g.hline(cx - 4, cx + 3, by + 5, 0xc8702e);
+    const [ap, band] = S.apron ?? [0xe68a38, 0xc8702e];
+    g.rect(cx - 4, by + 2, 8, 9, ap);
+    g.hline(cx - 4, cx + 3, by + 5, band);
+    if (S.apron) for (let x = cx - 4; x <= cx + 3; x++) g.set(x, by + 10, (x + 20) % 2 ? 0xf8f6f0 : band);
   }
   if (L.extra === "stars") {
     // 망토 (넓게) + 별 무늬
@@ -1084,31 +1154,42 @@ function npcFrame(g: Grid, ox: number, L: NpcLook, f: number): void {
   g.set(cx + 2, hy + 5, 0x2a2018);
   g.set(cx - 3, hy + 6, 0xf0a090); // 볼
   g.set(cx + 3, hy + 6, 0xf0a090);
-  if (L.hat === "ranger") {
+  // 목도리 (턱 밑 — 머리 다음에 그려야 가운데가 보인다)
+  if (S.scarf) seasonScarf(g, cx - 5, cx + 4, by, { ...S.scarf, tail: S.scarf.tail === undefined ? null : cx + S.scarf.tail });
+  if (S.nose) seasonNose(g, cx - 1, hy + 6);
+  // 계절 모자를 쓰면 원래 모자는 벗는다 (원래 모자 위 눈은 snowHat)
+  const hat = S.hat ? undefined : L.hat;
+  if (S.hat) seasonHat(g, cx, hy + 4, 5, hy, S.hat);
+  if (hat === "ranger") {
     g.rect(cx - 7, hy + 1, 15, 2, L.hatC!);
     g.rect(cx - 4, hy - 2, 9, 3, L.hatC!);
     g.hline(cx - 4, cx + 4, hy, 0x6a4a2a);
     g.rect(cx - 2, hy + 7, 5, 1, L.hair); // 콧수염
   }
-  if (L.hat === "cap") {
+  if (hat === "cap") {
     g.rect(cx - 4, hy - 1, 9, 3, L.hatC!);
     g.rect(cx + 1, hy + 1, 6, 1, L.hatC!);
   }
-  if (L.hat === "scarf") {
+  if (hat === "scarf") {
     g.rect(cx - 5, hy - 1, 11, 4, L.hatC!);
     g.vline(cx - 5, hy + 2, hy + 6, L.hatC!);
     g.vline(cx + 5, hy + 2, hy + 6, L.hatC!);
     g.set(cx - 2, hy, 0xf4f0e4);
     g.set(cx + 2, hy + 1, 0xf4f0e4);
   }
-  if (L.hat === "hood") {
+  if (hat === "hood") {
     g.rect(cx - 5, hy - 1, 11, 3, L.hatC!);
     g.vline(cx - 5, hy, hy + 7, L.hatC!);
     g.vline(cx + 5, hy, hy + 7, L.hatC!);
   }
-  if (L.hat === "beanie") {
+  if (hat === "beanie") {
     g.rect(cx - 4, hy - 2, 9, 4, L.hatC!);
     g.set(cx, hy - 3, 0xf4f0e4);
+  }
+  if (S.snowHat) {
+    // 원래 모자 꼭대기에 소복한 눈
+    if (hat === "ranger") seasonSnow(g, cx - 4, cx + 4, hy - 3);
+    else if (hat === "scarf" || hat === "hood") seasonSnow(g, cx - 4, cx + 4, hy - 2);
   }
   if (L.extra === "rod") {
     line(g, cx + 6, by + 6, cx + 9, hy - 6, 0x7a5a3a);
@@ -1121,11 +1202,14 @@ function npcFrame(g: Grid, ox: number, L: NpcLook, f: number): void {
     line(g, cx + 2, by + 6 - bob, cx + 8, by + 1, 0x6a4a2a);
     g.set(cx + 4 - f, by + 6, 0xf2d4b6); // 줄 튕기는 손
   }
+  for (const [dx, dy] of S.holly ?? []) seasonHolly(g, cx + dx, hy + dy);
 }
-export function npcArt(id: CampNpcId): ArtOut {
+/** NPC 2프레임 (11/17 concept = 겨울·크리스마스판 옷) */
+export function npcArt(id: CampNpcId, concept: MapConcept = "default"): ArtOut {
   const L = NPC_LOOKS[id];
+  const S = concept === "default" ? undefined : NPC_SEASON[id][concept];
   const g = new Grid(NPC_W * 2, NPC_H);
-  for (let f = 0; f < 2; f++) npcFrame(g, f * NPC_W, L, f);
+  for (let f = 0; f < 2; f++) npcFrame(g, f * NPC_W, L, f, S);
   if (id === "stargazer") {
     // 망원경 (등에 메지 않고 옆에 세워 둔다)
     for (let f = 0; f < 2; f++) {

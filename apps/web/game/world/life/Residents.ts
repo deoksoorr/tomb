@@ -2,11 +2,14 @@ import type * as Phaser from "phaser";
 import { SEATS, WALK_SPEED, type Seat, type Sid } from "@tomb/protocol";
 import { activeResidentCount, normalizeResidentSettings, RESIDENTS_DEFAULT, type ResidentSettings } from "@/lib/residents";
 import { isBackground } from "@/lib/background";
+import type { MapConcept } from "@/lib/mapConcept";
+import { currentMapConcept } from "@/lib/mapConceptClient";
 import { AvatarView } from "../../entities/AvatarView";
 import type { Player } from "../../entities/Player";
 import { SAY_MS } from "../../entities/SpeechBubble";
 import { faceToward } from "../../logic/movement";
 import type { GlyphAtlas } from "../../text/GlyphAtlas";
+import { conceptLook, pickConceptLine } from "./npcOutfits";
 import { pickLine, RESIDENTS, type LineContext } from "./residentData";
 import { blankResidentPose, restActOf, ResidentSim, seatMoodOf, type RestAct, type ResidentPose } from "./residentSim";
 
@@ -14,6 +17,7 @@ import { blankResidentPose, restActOf, ResidentSim, seatMoodOf, type RestAct, ty
 // - 위치: residentSim (채널 시드 + 서버 시계) → 같은 채널 모두가 같은 자리. 네트워크·서버 비용 0.
 // - 모습: 사람 아바타 그림(AvatarView)을 그대로 쓰고, 이름표만 연한 초록으로 구분한다. 처음 화면에 들어올 때 만든다.
 // - 말 걸기(E·모바일 상호작용): 머리 위 말풍선은 내 화면에만. 말하는 동안 멈춰 나를 보고, 끝나면 공유 자리로 슬며시 돌아간다.
+// - 11/17 맵 컨셉(겨울·크리스마스판)이면 계절 옷을 입고(npcOutfits) 가끔 계절 한마디. 판이 바뀌면 1초 안에 갈아입는다.
 // - 관리자 설정(켜기/끄기·주민 수)은 /api/residents를 10분마다 확인하고, 바뀌면 흐려지며 나타나거나 사라진다.
 
 /** 주민 이름표 색 (사람 이름표보다 연한 초록) */
@@ -60,6 +64,9 @@ export class Residents {
   private talkAt = -Infinity;
   private destroyed = false;
   private readonly seatById = new Map<string, Seat>(SEATS.map((s) => [s.id, s]));
+  /** 11/17 지금 입은 판 (1초마다 확인) */
+  private concept: MapConcept = currentMapConcept();
+  private conceptAt = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -120,6 +127,14 @@ export class Residents {
     const pnow = performance.now();
     const n = this.settings ? Math.min(RESIDENTS.length, activeResidentCount(this.settings)) : 0;
     const k = Math.min(1, (dt / 1000) * 2.5);
+    if (pnow - this.conceptAt > 1000) {
+      this.conceptAt = pnow;
+      const c = currentMapConcept();
+      if (c !== this.concept) {
+        this.concept = c;
+        for (const r of this.list) r.view?.setLook(conceptLook(r.sim.def.id, r.sim.def.look, c));
+      }
+    }
     // 사람이 앉은 자리: 서버 좌석표 + (오프라인이어도) 내 캐릭터가 앉은 자리
     const taken = (id: string): boolean => {
       if (seats.has(id)) return true;
@@ -180,7 +195,7 @@ export class Residents {
 
   private makeView(r: ResidentView, x: number, y: number): AvatarView {
     const def = r.sim.def;
-    const v = new AvatarView(this.scene, this.atlas, x, y, def.color, def.name, false, def.look, def.body);
+    const v = new AvatarView(this.scene, this.atlas, x, y, def.color, def.name, false, conceptLook(def.id, def.look, this.concept), def.body);
     v.label.setTint(RESIDENT_LABEL);
     // 사람보다 천천히 걷는 만큼 발도 천천히
     v.sprite.anims.timeScale = Math.max(0.5, Math.min(1, def.speed / WALK_SPEED + 0.15));
@@ -241,7 +256,7 @@ export class Residents {
       r.holdDir = sitting && r.pose.state === "sitChair" ? r.pose.dir : faceToward(r.x, r.y, pl.x, pl.y, r.pose.dir);
     }
     r.talkUntil = pnow + SAY_MS + 600;
-    const line = pickLine(r.sim.def, ctx, Math.random, r.lastLine);
+    const line = pickConceptLine(r.sim.def.id, this.concept, Math.random, r.lastLine) ?? pickLine(r.sim.def, ctx, Math.random, r.lastLine);
     r.lastLine = line;
     r.view.say(line, now);
     pl.faceTo(r.x, r.y, now);

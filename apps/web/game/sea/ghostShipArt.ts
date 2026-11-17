@@ -1,4 +1,6 @@
 import { SEA_PIER_END } from "@tomb/protocol";
+import type { MapConcept } from "@/lib/mapConcept";
+import { seasonHat, seasonHolly, seasonKey, seasonMitt, seasonScarf, seasonSnow } from "../sprites/npcSeasonArt";
 import { darken, Grid, lighten, mix, type Color } from "../sprites/pixel";
 import { pick, toneOutline } from "./seaArt";
 import { hashU } from "./seaLayout";
@@ -589,7 +591,8 @@ export function ghostStallsArt(): Grid {
 // ── 유령 상인 (반투명 선장 유령 — 등불을 들고 둥실, 2장) ──
 export const MERCHANT_W = 24;
 export const MERCHANT_H = 34;
-export function ghostMerchantArt(): { grid: Grid; frameW: number; frameH: number } {
+/** 11/17 겨울판 = 삼각 모자에 눈·뜨개 목도리·등불 든 장갑, 크리스마스판 = 반투명 산타 모자·외투에 호랑가시·빨간 목도리 */
+export function ghostMerchantArt(concept: MapConcept = "default"): { grid: Grid; frameW: number; frameH: number } {
   const W = MERCHANT_W;
   const H = MERCHANT_H;
   const g = new Grid(W * 2, H);
@@ -619,15 +622,27 @@ export function ghostMerchantArt(): { grid: Grid; frameW: number; frameH: number
     one.hline(cx - 3, cx + 2, 12, 0xffffff);
     one.hline(cx - 2, cx + 1, 13, 0xf0f6f4);
     one.set(cx - 4, 10, 0xc8e8e0);
-    // 삼각 선장 모자 (금테 · 해골)
-    one.rect(cx - 4, 2, 9, 3, 0x2e3346);
-    one.hline(cx - 7, cx + 7, 5, 0x2e3346);
-    one.set(cx - 7, 4, 0x2e3346);
-    one.set(cx + 7, 4, 0x2e3346);
-    one.hline(cx - 7, cx + 7, 6, GOLD);
-    one.set(cx, 3, BONE);
-    one.set(cx - 2, 1, 0x4a5270);
-    one.hline(cx - 2, cx + 2, 1, 0x4a5270);
+    if (concept !== "default") {
+      const xmas = concept === "christmas";
+      seasonScarf(one, cx - 4, cx + 4, 14, xmas ? { c: 0xd23a44, c2: 0xf8f6f0, pat: "stripe", tail: cx - 3 } : { c: 0x3a8a7a, c2: 0xdff4ee, pat: "check", tail: cx - 3 });
+      if (xmas) seasonHolly(one, cx + 3, 18);
+    }
+    // 삼각 선장 모자 (금테 · 해골) — 크리스마스판은 외곽선 다음에 반투명 산타 모자
+    if (concept !== "christmas") {
+      one.rect(cx - 4, 2, 9, 3, 0x2e3346);
+      one.hline(cx - 7, cx + 7, 5, 0x2e3346);
+      one.set(cx - 7, 4, 0x2e3346);
+      one.set(cx + 7, 4, 0x2e3346);
+      one.hline(cx - 7, cx + 7, 6, GOLD);
+      one.set(cx, 3, BONE);
+      one.set(cx - 2, 1, 0x4a5270);
+      one.hline(cx - 2, cx + 2, 1, 0x4a5270);
+      if (concept === "winter") {
+        seasonSnow(one, cx - 3, cx + 3, 1);
+        one.set(cx - 7, 4, 0xf8f6f0);
+        one.set(cx + 7, 4, 0xf8f6f0);
+      }
+    }
     // 팔 · 등불 (오른손 — 2장째엔 살짝 흔들려요)
     const lx = cx + 8;
     const ly = 18 + f;
@@ -641,7 +656,9 @@ export function ghostMerchantArt(): { grid: Grid; frameW: number; frameH: number
     one.rect(cx - 9, 19, 5, 4, 0xf2ead2);
     one.vline(cx - 7, 19, 22, 0xb8a888);
     one.set(cx - 8, 20, 0x6a5a40);
+    if (concept !== "default") seasonMitt(one, lx - 1, ly - 3, concept === "winter" ? 0x3a8a7a : 0xd23a44);
     toneOutline(one, 0.3);
+    if (concept === "christmas") seasonHat(one, cx, 9, 5, 5, { kind: "ghostSanta", c: 0xf07a8a });
     g.draw(one, f * W, 0);
   }
   return { grid: g, frameW: W, frameH: H };
@@ -793,6 +810,8 @@ export function forEachGhostTexture(tex: (key: string, build: () => Grid | { gri
   tex(T.flag, ghostFlagArt);
   tex(T.stalls, ghostStallsArt);
   tex(T.merchant, ghostMerchantArt);
+  // 11/17 겨울·크리스마스판 상인 옷 (GhostShip이 판에 맞춰 고른다)
+  for (const c of ["winter", "christmas"] as const) tex(seasonKey(T.merchant, c), () => ghostMerchantArt(c));
   tex(T.plank, ghostPlankArt);
   tex(T.plankFront, ghostPlankFrontArt);
   tex(T.gatePost, ghostGatePostArt);

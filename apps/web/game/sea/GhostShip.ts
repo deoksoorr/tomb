@@ -1,11 +1,13 @@
 import * as Phaser from "phaser";
 import { SEA_PIER_END } from "@tomb/protocol";
 import { qaSearch } from "@/lib/qaUrl";
+import { currentMapConcept } from "@/lib/mapConceptClient";
 import { ghostClock, ghostPresence, type GhostCall, type GhostPhase } from "@/lib/sea/ghostShip";
 import { bridge } from "../bridge";
 import { DEPTH } from "../config";
 import type { Player } from "../entities/Player";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
+import { seasonKey } from "../sprites/npcSeasonArt";
 import * as Art from "./seaArt";
 import { SEA_DEPTH } from "./SeaMap";
 import { FLAG_H, GATE_POST_H, GHOST_LAMPS, GHOST_SAILS, GHOST_TEX, MERCHANT_H, PLANK_IMG, STALLS_G, STALLS_H } from "./ghostShipArt";
@@ -56,6 +58,9 @@ export class GhostShip {
   private readonly flag: Phaser.GameObjects.Image;
   private readonly stalls: Phaser.GameObjects.Image;
   private readonly merchant: Phaser.GameObjects.Image;
+  /** 11/17 상인 옷 그림 (맵 컨셉 — 1초마다 확인) */
+  private merchantKey: string = GHOST_TEX.merchant;
+  private conceptAt = 0;
   private readonly plank: Phaser.GameObjects.Image;
   private readonly plankFront: Phaser.GameObjects.Image;
   /** 다리 입구 기둥 등불 넷 (고물 둘 · 선착장 끝 둘) · 그 빛 */
@@ -280,9 +285,13 @@ export class GhostShip {
       .setAlpha(a);
     // 유령 상인: 둥실 떠서 등불을 흔들어요
     const mb = calm ? 0 : Math.round(Math.sin(now / 800) * 1.5);
+    if (now >= this.conceptAt) {
+      this.conceptAt = now + 1000;
+      this.merchantKey = seasonKey(GHOST_TEX.merchant, currentMapConcept());
+    }
     this.merchant
       .setVisible(true)
-      .setFrame(calm ? 0 : Math.floor(now / 420) % 2)
+      .setTexture(this.merchantKey, calm ? 0 : Math.floor(now / 420) % 2)
       .setPosition(GHOST_MERCHANT.x + this.dx, GHOST_MERCHANT.y + bob - 2 + mb)
       .setAlpha(p * 0.9);
     this.sign

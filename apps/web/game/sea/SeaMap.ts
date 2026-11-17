@@ -50,6 +50,7 @@ import { addCanvasTexture, TEX } from "../assets/manifest";
 import { bbqPlateArt, CAMP_TEX, vendingArt, vendingLitArt } from "../camp/campArt";
 import { campfireRing, campfireSheet, FIRE_FRAMES, FIRE_H, FIRE_W, hammock as hammockCanvas, hammockPosts as hammockPostsCanvas, WP } from "../sprites/worldProps";
 import { DEPTH } from "../config";
+import { seasonKey } from "../sprites/npcSeasonArt";
 import { makeCanvas, mix } from "../sprites/pixel";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { PLATE_LABEL, PLATE_LOT_FREE, SignPlate } from "../world/SignPlate";
@@ -222,6 +223,9 @@ export class SeaMap implements SeaMapApi {
   /** 11/17 겨울·크리스마스판: 물가 살얼음 띠 · 바닥 덩어리를 눈 덮인 그림으로 · 물빛을 차갑게 (lib/mapConcept) */
   private iceR: Phaser.GameObjects.Rope | null = null;
   private snowy = false;
+  /** 11/17 NPC 옷 판 (등대지기) */
+  private npcConcept: MapConcept = "default";
+  private keeperImg: Phaser.GameObjects.Image | null = null;
   private readonly waves = new WaveTrain((Date.now() ^ 0x5eaf00d) >>> 0);
   private lastBig = 0;
   /** 11/16 먼바다 깊이 그늘·지나가는 빛 띠·반짝이는 별·밤 물빛 */
@@ -487,7 +491,7 @@ export class SeaMap implements SeaMapApi {
     // 등대 (끝 데크 뒤쪽)
     this.prop(T.lighthouse, SEA_LIGHTHOUSE.x, SEA_LIGHTHOUSE.y, SEA_LIGHTHOUSE.y, 3);
     // 11/16 등대지기 (말을 걸면 다음 갯벌 열리는 때를 알려줘요)
-    this.prop(T.keeper, Lay.SEA_KEEPER.x, Lay.SEA_KEEPER.y, Lay.SEA_KEEPER.y, 1);
+    this.keeperImg = this.prop(seasonKey(T.keeper, this.npcConcept), Lay.SEA_KEEPER.x, Lay.SEA_KEEPER.y, Lay.SEA_KEEPER.y, 1);
     this.addLabel(Lay.SEA_KEEPER.x, Lay.SEA_KEEPER.y - 30, "등대지기", 0xffe8b0, 1);
     // 가로등·생선 상자·그물 틀
     for (const p of Lay.SEA_LAMPS) {
@@ -1112,6 +1116,9 @@ export class SeaMap implements SeaMapApi {
    * 배치·충돌·물때는 그대로예요. 이미 깔린 바닥 덩어리는 그 자리에서 그림만 바꿔요 (없는 그림은 지금 구워요)
    */
   setConcept(concept: MapConcept): void {
+    // 11/17 등대지기도 이 판 옷으로 (겨울 ↔ 크리스마스는 바닥이 같아도 옷은 바뀐다)
+    this.npcConcept = concept;
+    this.keeperImg?.setTexture(seasonKey(Art.SEA_TEX.keeper, concept));
     const snowy = isSnowy(concept);
     if (snowy === this.snowy) return;
     this.snowy = snowy;
@@ -1707,6 +1714,7 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   tex(T.tip, () => Art.withDetail(Art.tipArt(), {}));
   tex(T.lighthouse, () => Art.withDetail(Art.lighthouseArt(), {}));
   tex(T.keeper, Art.keeperArt);
+  for (const c of ["winter", "christmas"] as const) tex(seasonKey(T.keeper, c), () => Art.keeperArt(c));
   tex(T.boat, () => Art.withDetail(Art.boatArt(), {}));
   tex(T.buoy, () => Art.withDetail(Art.buoyArt(), {}));
   SEA_ROCKS.forEach((_r, i) => {

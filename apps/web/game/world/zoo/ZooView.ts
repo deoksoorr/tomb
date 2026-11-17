@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import { ZOO, ZOO_GATE, ZOOKEEPER } from "@tomb/protocol";
+import { currentMapConcept } from "@/lib/mapConceptClient";
 import { addCanvasTexture, TEX } from "../../assets/manifest";
 import { DEPTH } from "../../config";
 import { FX_ART } from "../../sprites/cosmeticFx";
@@ -39,6 +40,8 @@ export class ZooView {
   private readonly animals: AnimalView[] = [];
   private readonly keeper: Phaser.GameObjects.Image;
   private keeperFrame = -1;
+  private concept = currentMapConcept();
+  private conceptAt = 0;
   private readonly labels: Phaser.GameObjects.BitmapText[] = [];
   private shown = true;
   private readonly statics: Phaser.GameObjects.GameObject[] = [];
@@ -182,9 +185,14 @@ export class ZooView {
     }
     if (!on) return;
     const f = this.d.reduced ? 0 : Math.floor(now / 700) % 2;
-    if (f !== this.keeperFrame) {
+    if (f !== this.keeperFrame || now >= this.conceptAt) {
       this.keeperFrame = f;
-      this.keeper.setTexture(ZTEX.keeper(f));
+      // 11/17 맵 컨셉 옷 (1초마다 확인)
+      if (now >= this.conceptAt) {
+        this.conceptAt = now + 1000;
+        this.concept = currentMapConcept();
+      }
+      this.keeper.setTexture(ZTEX.keeper(f, this.concept));
     }
     const t = this.d.serverNow();
     const seed = this.d.seed();

@@ -4,6 +4,8 @@ import { COVERING_HATS, drawBackGear, drawHandGear, drawHandGlow, drawHeadGear, 
 import { COSMETIC_FX_IDS } from "./cosmeticFx";
 // 11/15 사냥 중 입은 세트 장비 (착용 목록의 "sgw.…" — game/sprites/setGearWear)
 import { drawSetSpark, drawWearAcc, drawWearArmor, drawWearHead, isTopWear, sgHeadCovers, sgWearOf, sparkFrame, SGW_PREFIX, type SgWear } from "./setGearWear";
+// 11/17 NPC 계절 옷 (겨울·크리스마스판 주민 — 착용 목록의 "nw.…")
+import { drawNwBoots, drawNwCoat, drawNwGlow, drawNwScarf, drawNwTop, npcWearOf, nwHatCovers, nwHatWorn, NW_PREFIX, type NpcWear, type NwCtx } from "./npcWear";
 
 // 방문자 아바타 6종 (모두 오리지널 디자인, 같은 색 팔레트 규칙):
 //  hood  두건 쓴 작은 순례자 (두건 끝이 새싹처럼 접힘, 어두운 얼굴 구멍에 눈 두 점)
@@ -184,11 +186,11 @@ type Pal = {
 const SHEET_COSMETICS = ["hat_straw", "hat_cat", "hat_flower", "hat_halo", "hand_lantern", "neck_scarf", ...GEAR_SHEET_IDS] as const;
 /** 아바타가 그리는 꾸미기 전체: 시트에 그려지는 것 + AvatarView가 따로 붙이는 것(날개·유령 친구·발자국 꽃·안개) */
 export const SPRITE_COSMETICS = [...SHEET_COSMETICS, "back_wings", "pet_ghost", "feet_flowers", "aura_fog", ...COSMETIC_FX_IDS] as const;
-type Gear = { hat: "hat_straw" | "hat_cat" | "hat_flower" | "hat_halo" | null; lantern: boolean; scarf: boolean; /** F8 추가분 (avatarGear.ts) */ extra: ExtraGear; /** 11/15 사냥 중 세트 장비 */ sg: SgWear };
+type Gear = { hat: "hat_straw" | "hat_cat" | "hat_flower" | "hat_halo" | null; lantern: boolean; scarf: boolean; /** F8 추가분 (avatarGear.ts) */ extra: ExtraGear; /** 11/15 사냥 중 세트 장비 */ sg: SgWear; /** 11/17 NPC 계절 옷 */ nw: NpcWear | null };
 
 export function gearOf(look: readonly string[]): Gear {
   const hat = look.find((id) => id === "hat_straw" || id === "hat_cat" || id === "hat_flower" || id === "hat_halo") as Gear["hat"] | undefined;
-  return { hat: hat ?? null, lantern: look.includes("hand_lantern"), scarf: look.includes("neck_scarf"), extra: extraGearOf(look), sg: sgWearOf(look) };
+  return { hat: hat ?? null, lantern: look.includes("hand_lantern"), scarf: look.includes("neck_scarf"), extra: extraGearOf(look), sg: sgWearOf(look), nw: npcWearOf(look) };
 }
 
 /** 시트 키에 들어가는 꾸미기 부분 (같은 조합이면 텍스처를 같이 쓴다) */
@@ -196,7 +198,9 @@ export function lookKey(look: readonly string[]): string {
   const base = (SHEET_COSMETICS as readonly string[]).filter((id) => look.includes(id));
   // 11/15 사냥 중 세트 장비 조합도 시트 키에 (장비가 바뀔 때만 시트를 새로 만든다)
   const sg = look.filter((id) => id.startsWith(SGW_PREFIX)).sort();
-  return [...base, ...sg].join(".");
+  // 11/17 NPC 계절 옷 한 벌
+  const nw = look.filter((id) => id.startsWith(NW_PREFIX)).slice(0, 1);
+  return [...base, ...sg, ...nw].join(".");
 }
 
 /**
@@ -457,7 +461,14 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   const { cx, hy } = m;
   // 25번: 뼈대 (프리미엄 외형은 처음 6종 중 하나)
   const fb = BODY_BASE[body];
-  const headWorn = !!gear.hat || (!!gear.extra.head && gear.extra.head !== "hat_glasses");
+  // 11/17 NPC 계절 옷: 장갑 낀 손(손 흔들기·환호) · 장화 색
+  const nw = gear.nw;
+  if (nw?.mitt) pal = { ...pal, hand: nw.mitt, handLo: darken(nw.mitt, 0.2) };
+  if (nw?.boot) pal = { ...pal, feet: nw.boot.c };
+  const nwc: NwCtx | null = nw
+    ? { view, fb, body, m, sit: pose.sit, bob: pose.bob, hem: pose.hem, f0: pose.f0, f1: pose.f1, lie: !!pose.lie, sink: !!pose.sink, arms: pose.arms ?? "none", handBusy: gear.lantern || !!gear.extra.hand || body === "catmask" || body === "collector" }
+    : null;
+  const headWorn = !!gear.hat || (!!gear.extra.head && gear.extra.head !== "hat_glasses") || nwHatWorn(nw);
   const side = view === "side";
   const sitDrop = pose.sit === 1 ? 3 : pose.sit === 2 ? 2 : 0;
 
@@ -551,6 +562,8 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
 
   // 25번: 몸통 덧그림 (정장·고양이 탈 셔츠·왕관 망토·저승사자 도포)
   drawBodyExtra(g, body, "torso", view, pose, m, pal, headWorn);
+  // 11/17 NPC 계절 외투 (몸통 위)
+  if (nw && nwc) drawNwCoat(g, nwc, nw);
 
   // ── 팔 (머리보다 먼저: 머리와 겹치는 곳은 머리가 덮는다) ──
   drawArms(g, view, pose, m, pal, false);
@@ -566,7 +579,8 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   // ── 목도리 (두건·키다리는 기본 천 목도리, 나머지는 목도리를 했을 때만) ──
   const plainNeck = body === "hood" || body === "tall";
   // 11/15 세트 갑옷을 입으면 기본 천 목도리는 옷깃에 가린다
-  if ((plainNeck && !gear.sg.a) || gear.scarf) {
+  if (nw?.scarf && nwc) drawNwScarf(g, nwc, nw);
+  else if ((plainNeck && !gear.sg.a) || gear.scarf) {
     const sy = m.neck;
     const half = fb === "round" ? 6 : fb === "sheet" ? 6 : fb === "tall" ? 3 : 4;
     for (let x = cx - half; x < cx + half; x++) if (g.filled(x, sy) || x >= cx - half + 1) g.set(x, sy, pal.scarf);
@@ -590,7 +604,7 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
     if (fb === "hood" || fb === "tall") g.recolor((x, y) => y === Math.floor(hy + m.ry - 1) && Math.abs(x + 0.5 - cx) < m.rx - 1, pal.hoodLo);
   }
 
-  const hatCovers = COVERING_HATS.has(gear.hat ?? "") || COVERING_HATS.has(gear.extra.head ?? "") || sgHeadCovers(gear.sg);
+  const hatCovers = COVERING_HATS.has(gear.hat ?? "") || COVERING_HATS.has(gear.extra.head ?? "") || sgHeadCovers(gear.sg) || nwHatCovers(nw);
   if ((body === "hood" || body === "suit" || body === "box") && !hatCovers) {
     // 두건 끝: 새싹처럼 접힌 꼭지
     if (view === "down") {
@@ -645,6 +659,8 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   }
   const sgTop = [gear.sg.a, gear.sg.h, ...gear.sg.c].some(isTopWear);
   if (sgTop) drawSetSpark(g, sgSpots.length ? sgSpots : [[cx, m.shY]], sparkFrame(pose));
+  // 11/17 NPC 계절 옷: 앞치마·장갑·브로치·루돌프 코·모자 (귀는 그 위로)
+  if (nw && nwc) drawNwTop(g, nwc, nw, fb === "round" ? m.top - 1 : m.top);
 
   // 귀는 모자 위로 튀어나오게 모자 다음에 (고양이 탈의 귀 안쪽은 늘 분홍 — 포인트 색은 사원증 줄)
   if (fb === "cat") drawCatEars(g, view, m, body === "catmask" ? { ...pal, accent: null } : pal);
@@ -686,6 +702,7 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
 
   // 17번 매달리기: 손으로 잡는 가지 (빈칸에만 → 몸·머리 뒤에 놓이고 외곽선이 함께 둘러진다)
   if (pose.arms === "up") drawHangBranch(g, m, view);
+  if (nw && nwc) drawNwBoots(g, nwc, nw);
   g.outline(pal.line);
   // 25번: 외곽선 밖으로 가늘게 뻗는 덧그림 (고양이 탈 수염)
   drawBodyAfterOutline(g, body, view, pose, m);
@@ -694,6 +711,8 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   if (gear.extra.hand) drawHandGlow(g, view, gear.extra.hand, m);
   if (gear.extra.head) drawHeadGlow(g, view, gear.extra.head, m, fb === "round" ? m.top - 1 : m.top);
   if (gear.hat === "hat_halo") drawHalo(g, m, view);
+  // 11/17 유령 산타 모자(반투명 — 외곽선 없이) · 방울 반짝
+  if (nw && nwc) drawNwGlow(g, nwc, nw, fb === "round" ? m.top - 1 : m.top);
   // 손 흔들기·환호: 팔 없는 몸은 몸 전체를 기울이고, 손은 밝은 색 + 외곽선으로 몸 밖에 크게 그린다
   const tilt = (fb === "round" || fb === "sheet") && pose.tilt ? pose.tilt : 0;
   if (tilt) g = shear(g, tilt);

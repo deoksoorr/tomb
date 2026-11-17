@@ -23,6 +23,8 @@ import {
   SEA_SAND_Y0,
   SEA_WIDTH,
 } from "@tomb/protocol";
+import type { MapConcept } from "@/lib/mapConcept";
+import { seasonHat, seasonHolly, seasonMitt, seasonScarf, seasonSnow } from "../sprites/npcSeasonArt";
 import { darken, Grid, lighten, mix, rng, type Color } from "../sprites/pixel";
 import type { SeaLot } from "@tomb/protocol";
 import { hashU, pathEdgeDist, poolDepth, seaGroundKind, SEA_PLATFORM, type SeaGround } from "./seaLayout";
@@ -639,8 +641,9 @@ export function loungerArt(): Grid {
   return g;
 }
 
-/** 11/16 등대지기: 남색 선원 모자·노란 비옷의 작은 할아버지 (16 × 24, 원점 가운데 아래) */
-export function keeperArt(): Grid {
+/** 11/16 등대지기: 남색 선원 모자·노란 비옷의 작은 할아버지 (16 × 24, 원점 가운데 아래).
+ *  11/17 겨울판 = 모자 위 눈·남색 뜨개 목도리·벙어리장갑, 크리스마스판 = 산타 모자·빨강 초록 목도리·비옷에 호랑가시 */
+export function keeperArt(concept: MapConcept = "default"): Grid {
   const g = new Grid(16, 24);
   // 비옷
   g.rect(3, 11, 10, 11, RAMP.umbY[1]);
@@ -652,10 +655,25 @@ export function keeperArt(): Grid {
   g.rect(4, 9, 8, 3, RAMP.wall[0]);
   g.set(6, 7, 0x3a3440);
   g.set(9, 7, 0x3a3440);
-  // 선원 모자
-  g.rect(3, 2, 10, 3, 0x2f3f6a);
-  g.hline(2, 13, 5, 0x24304f);
-  g.set(8, 3, RAMP.umbY[0]);
+  if (concept === "christmas") {
+    seasonHat(g, 8, 8, 5, 4, { kind: "santa" });
+    seasonScarf(g, 3, 12, 11, { c: 0xd23a44, c2: 0x2e8a4e, pat: "stripe", thick: true, tail: 4 });
+    seasonHolly(g, 10, 16);
+  } else {
+    // 선원 모자
+    g.rect(3, 2, 10, 3, 0x2f3f6a);
+    g.hline(2, 13, 5, 0x24304f);
+    g.set(8, 3, RAMP.umbY[0]);
+    if (concept === "winter") {
+      seasonSnow(g, 3, 12, 2);
+      seasonScarf(g, 3, 12, 11, { c: 0x2f3f6a, c2: 0xf4f0e6, pat: "stripe", thick: true, tail: 4 });
+    }
+  }
+  if (concept !== "default") {
+    // 비옷 소매 끝 벙어리장갑
+    seasonMitt(g, 1, 15, concept === "winter" ? 0xd8463a : 0x2e8a4e);
+    seasonMitt(g, 13, 15, concept === "winter" ? 0xd8463a : 0x2e8a4e);
+  }
   // 장화
   g.rect(4, 22, 3, 2, 0x3a3440);
   g.rect(9, 22, 3, 2, 0x3a3440);

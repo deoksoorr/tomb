@@ -1,4 +1,6 @@
 import type * as Phaser from "phaser";
+import { MAP_CONCEPTS, type MapConcept } from "@/lib/mapConcept";
+import { seasonHat, seasonHolly, seasonKey, seasonMitt, seasonScarf, seasonSnow } from "../../sprites/npcSeasonArt";
 import { forageIconCanvas } from "../../sprites/forageIcons";
 import { darken, Grid, lighten, type Color } from "../../sprites/pixel";
 
@@ -6,7 +8,8 @@ import { darken, Grid, lighten, type Color } from "../../sprites/pixel";
 // 처음 쓸 때 장면 텍스처에 한 번 올린다 (ensureForageTextures). 발 위치가 그림 맨 아래 줄 가운데다.
 
 export const FTEX = {
-  npc: (id: string, f: number) => `forage-npc-${id}-${f}`,
+  /** 11/17 판마다 따로 (기본판은 예전 키 그대로) */
+  npc: (id: string, f: number, concept: MapConcept = "default") => seasonKey(`forage-npc-${id}-${f}`, concept),
   stall: (id: string) => `forage-stall-${id}`,
   node: (kind: string, f: number) => `forage-node-${kind}-${f}`,
   bobber: "forage-bobber",
@@ -30,8 +33,9 @@ function ghostBody(g: Grid, ox: number, oy: number, body: Color, frame: number):
   g.set(ox + 10, oy + 7, 0x1a1620);
 }
 
-/** 어부 영감: 노란 우비 모자·회색 수염·멜빵, 손에 생선 한 마리. 24×26 */
-function fishmonger(frame: number): HTMLCanvasElement {
+/** 어부 영감: 노란 우비 모자·회색 수염·멜빵, 손에 생선 한 마리. 24×26.
+ *  11/17 겨울판 = 수염 밑 두툼한 목도리·모자 위 눈·벙어리장갑, 크리스마스판 = 산타 모자·멜빵에 호랑가시·빨강 초록 목도리 */
+function fishmonger(frame: number, concept: MapConcept = "default"): HTMLCanvasElement {
   const g = new Grid(24, 26);
   const ox = 4;
   const oy = 7;
@@ -40,15 +44,25 @@ function fishmonger(frame: number): HTMLCanvasElement {
   g.rect(ox + 3, oy + 12, 11, 5, 0x3a5a8a);
   g.vline(ox + 5, oy + 8, oy + 12, 0x3a5a8a);
   g.vline(ox + 11, oy + 8, oy + 12, 0x3a5a8a);
+  // 목도리 (수염 밑으로 양옆·끝만 보인다)
+  if (concept === "winter") seasonScarf(g, ox + 2, ox + 14, oy + 9, { c: 0xc8463c, thick: true, tail: ox + 3 });
+  else if (concept === "christmas") seasonScarf(g, ox + 2, ox + 14, oy + 9, { c: 0xd23a44, c2: 0x2e8a4e, pat: "stripe", thick: true, tail: ox + 3 });
   // 수염
   g.ellipse(ox + 8, oy + 11, 3.4, 2, 0xb8b8b0);
   g.set(ox + 8, oy + 10, 0xd8a090);
-  // 우비 모자 (사우웨스터): 넓은 챙
-  const hat = 0xf0c030;
-  g.rect(ox + 3, oy - 2, 11, 5, hat);
-  g.hline(ox + 1, ox + 15, oy + 3, darken(hat, 0.15));
-  g.hline(ox, ox + 16, oy + 4, darken(hat, 0.15));
-  g.recolor((x, y) => y <= oy - 1 && x >= ox + 10, lighten(hat, 0.2));
+  if (concept === "christmas") {
+    // 산타 모자 + 멜빵 끝 호랑가시
+    seasonHat(g, ox + 8, oy + 8, 6, oy + 2, { kind: "santa" });
+    seasonHolly(g, ox + 11, oy + 13);
+  } else {
+    // 우비 모자 (사우웨스터): 넓은 챙
+    const hat = 0xf0c030;
+    g.rect(ox + 3, oy - 2, 11, 5, hat);
+    g.hline(ox + 1, ox + 15, oy + 3, darken(hat, 0.15));
+    g.hline(ox, ox + 16, oy + 4, darken(hat, 0.15));
+    g.recolor((x, y) => y <= oy - 1 && x >= ox + 10, lighten(hat, 0.2));
+    if (concept === "winter") seasonSnow(g, ox + 3, ox + 13, oy - 3);
+  }
   // 손에 든 생선 (오른쪽)
   const fx = ox + 15;
   const fy = oy + 11 + (frame ? 1 : 0);
@@ -56,12 +70,15 @@ function fishmonger(frame: number): HTMLCanvasElement {
   g.set(fx + 5, fy - 1, 0x6a8090);
   g.set(fx + 5, fy + 1, 0x6a8090);
   g.set(fx + 1, fy - 1, 0x101014);
+  // 생선 잡은 장갑 낀 손
+  if (concept !== "default") seasonMitt(g, fx - 1, fy - 1, concept === "winter" ? 0x3a5a8a : 0x2e8a4e);
   g.outline(OUT);
   return g.toCanvas();
 }
 
-/** 수집가 유령: 보라 망토·둥근 안경·커다란 배낭(잡동사니가 삐죽), 허리춤 작은 등불. 24×26 */
-function collector(frame: number): HTMLCanvasElement {
+/** 수집가 유령: 보라 망토·둥근 안경·커다란 배낭(잡동사니가 삐죽), 허리춤 작은 등불. 24×26.
+ *  11/17 겨울판 = 겨자색 털모자·초록 목도리·배낭에 눈, 크리스마스판 = 반투명 산타 모자·망토에 호랑가시·빨간 목도리 */
+function collector(frame: number, concept: MapConcept = "default"): HTMLCanvasElement {
   const g = new Grid(24, 26);
   const ox = 5;
   const oy = 7;
@@ -78,6 +95,13 @@ function collector(frame: number): HTMLCanvasElement {
   // 망토 (보라)
   g.rect(ox + 2, oy + 11, 13, 6, 0x6a4a9a);
   g.recolor((x, y) => y >= oy + 11 && y <= oy + 16 && x >= ox + 11, 0x5a3a88);
+  if (concept === "winter") {
+    seasonScarf(g, ox + 2, ox + 14, oy + 11, { c: 0x3a9a72, c2: 0xe8e0c8, pat: "stripe", tail: ox + 11 });
+    seasonSnow(g, ox - 4, ox + 3, oy + 1);
+  } else if (concept === "christmas") {
+    seasonScarf(g, ox + 2, ox + 14, oy + 11, { c: 0xd23a44, c2: 0xf8f6f0, pat: "dots", tail: ox + 11 });
+    seasonHolly(g, ox + 5, oy + 14);
+  }
   // 둥근 안경
   for (const cx of [6, 10]) {
     g.set(ox + cx - 1, oy + 7, 0xe8c24a);
@@ -90,7 +114,10 @@ function collector(frame: number): HTMLCanvasElement {
   const ly = oy + 12 + (frame ? 1 : 0);
   g.rect(lx, ly, 3, 3, 0xffd060);
   g.set(lx + 1, ly - 1, 0x5a5a64);
+  if (concept === "winter") seasonHat(g, ox + 8, oy + 8, 6, oy + 2, { kind: "beanie", c: 0xd8a83a, c2: 0x6a4a9a });
   g.outline(OUT);
+  // 유령이라 산타 모자도 비쳐 보이게 (외곽선 없이)
+  if (concept === "christmas") seasonHat(g, ox + 8, oy + 8, 6, oy + 2, { kind: "ghostSanta", c: 0xf08a9a });
   return g.toCanvas();
 }
 
@@ -251,10 +278,11 @@ export const NODE_KINDS = ["herb", "ore", "dig", "bug", "clam"] as const;
 export function ensureForageTextures(scene: Phaser.Scene, night: boolean): void {
   const tx = scene.textures;
   if (!tx.exists(FTEX.bobber)) {
-    for (let f = 0; f < 2; f++) {
-      tx.addCanvas(FTEX.npc("fishmonger", f), fishmonger(f));
-      tx.addCanvas(FTEX.npc("collector", f), collector(f));
-    }
+    for (const c of MAP_CONCEPTS)
+      for (let f = 0; f < 2; f++) {
+        tx.addCanvas(FTEX.npc("fishmonger", f, c), fishmonger(f, c));
+        tx.addCanvas(FTEX.npc("collector", f, c), collector(f, c));
+      }
     tx.addCanvas(FTEX.stall("fishmonger"), fishStall());
     tx.addCanvas(FTEX.stall("collector"), collectorMat());
     tx.addCanvas(FTEX.bobber, bobber());

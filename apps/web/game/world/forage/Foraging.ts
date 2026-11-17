@@ -1,6 +1,7 @@
 import * as Phaser from "phaser";
 import { boatFishingSpotId, CAMP_FISHING_SPOTS, campFishingSpotById, DIR, FISHING_SPOTS, fishingSpotById, SEA_FISHING_SPOTS, seaFishingSpotById, STATE, type DirId, type FishingSpot, type PeerInfo, type Sid, type WelcomeMsg } from "@tomb/protocol";
 import { ambienceAt, parseAmbienceOverride, type AmbienceOverride } from "@/lib/ambience";
+import { currentMapConcept } from "@/lib/mapConceptClient";
 import { gatherNodeById, NODE_LABEL, nodeOnMap, NPCS, type GatherNode, type Npc } from "@/lib/forage/catalog";
 import { bridge, type ForageRodPhase } from "../../bridge";
 import { DEPTH } from "../../config";
@@ -136,7 +137,7 @@ export class Foraging {
     this.zone = d.zone ?? new FishZoneView({ scene, atlas: d.atlas, reduced: d.reduced, addCollider: (x, y, w, h) => this.addCollider(x, y, w, h) });
     // 어부 영감·수집가 유령은 마을에만 (캠핑장에서 잡은 것도 마을에서 판다)
     for (const npc of this.mapId === "village" ? VILLAGE_NPCS : []) {
-      const img = scene.add.image(npc.x, npc.y + 1, FTEX.npc(npc.id, 0)).setOrigin(0.5, 1).setDepth(npc.y);
+      const img = scene.add.image(npc.x, npc.y + 1, FTEX.npc(npc.id, 0, currentMapConcept())).setOrigin(0.5, 1).setDepth(npc.y);
       const stall = npc.id === "fishmonger" ? { dx: -22, dy: 2 } : { dx: -20, dy: 6 }; // 어부 노점은 호수 낚시 잔교 서쪽 끝 (catalog NPCS)
       scene.add.image(npc.x + stall.dx, npc.y + stall.dy, FTEX.stall(npc.id)).setOrigin(0.5, 1).setDepth(npc.y + stall.dy);
       const label = scene.add.bitmapText(npc.x, npc.y - 27, FONT_KEY, npc.name, FONT_PX).setOrigin(0.5, 1).setTint(0xffe8b0).setDepth(DEPTH.labels - 1);
@@ -754,8 +755,10 @@ export class Foraging {
     if (now >= this.frameAt) {
       this.frameAt = now + 520;
       this.frame ^= 1;
+      // 11/17 맵 컨셉 옷 (판이 바뀌면 다음 박자에 갈아입는다 — 움직임 줄이기면 첫 프레임 그대로)
+      const concept = currentMapConcept();
+      for (const n of this.npcImgs) n.img.setTexture(FTEX.npc(n.npc.id, this.d.reduced ? 0 : this.frame, concept));
       if (!this.d.reduced) {
-        for (const n of this.npcImgs) n.img.setTexture(FTEX.npc(n.npc.id, this.frame));
         for (const v of this.nodes.values()) v.img.setTexture(FTEX.node(v.node.kind, this.frame));
       }
     }

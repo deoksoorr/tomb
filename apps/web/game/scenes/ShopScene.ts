@@ -1,7 +1,10 @@
 import * as Phaser from "phaser";
 import { DIR } from "@tomb/protocol";
 import { bridge } from "../bridge";
-import { TEX } from "../assets/manifest";
+import { currentMapConcept } from "@/lib/mapConceptClient";
+import { addCanvasTexture, TEX } from "../assets/manifest";
+import { shopKeeper } from "../sprites/extras";
+import { seasonKey } from "../sprites/npcSeasonArt";
 import { DEPTH } from "../config";
 import { Player, type SeatRequester } from "../entities/Player";
 import type { InputHub } from "../input/InputHub";
@@ -78,8 +81,14 @@ export class ShopScene extends Phaser.Scene {
     this.add.image(64, 30, TEX.shopShelf1).setOrigin(0.5, 1).setDepth(30);
     this.add.image(W - 64, 30, TEX.shopShelf2).setOrigin(0.5, 1).setDepth(30);
     this.add.image(W - 28, 30, TEX.shopShelf0).setOrigin(0.5, 1).setDepth(30).setFlipX(true);
-    this.keeper = this.add.sprite(KEEPER.x, KEEPER.y, TEX.shopKeeper, 0).setOrigin(0.5, 1).setDepth(KEEPER.y).setAlpha(0.92);
-    if (!this.ctx.reduced) this.keeper.play("fx-keeper-float");
+    // 11/17 맵 컨셉: 겨울·크리스마스판이면 주인장도 계절 옷 (들어올 때 한 번 읽는다)
+    const concept = currentMapConcept();
+    const keeperKey = seasonKey(TEX.shopKeeper, concept);
+    const floatAnim = concept === "default" ? "fx-keeper-float" : `fx-keeper-float-${concept}`;
+    if (keeperKey !== TEX.shopKeeper) addCanvasTexture(this, keeperKey, { canvas: shopKeeper(concept), frameW: 16, frameH: 22 });
+    if (!this.anims.exists(floatAnim)) this.anims.create({ key: floatAnim, frames: [0, 1].map((frame) => ({ key: keeperKey, frame })), frameRate: 2, repeat: -1 });
+    this.keeper = this.add.sprite(KEEPER.x, KEEPER.y, keeperKey, 0).setOrigin(0.5, 1).setDepth(KEEPER.y).setAlpha(0.92);
+    if (!this.ctx.reduced) this.keeper.play(floatAnim);
     this.add.image(W / 2, 66, TEX.shopCounter).setOrigin(0.5, 1).setDepth(66);
     // 통·상자
     this.add.rectangle(22, 136, 16, 14, 0x5a4028).setDepth(136).setStrokeStyle(1, 0x2e2018);

@@ -1,4 +1,6 @@
 import type * as Phaser from "phaser";
+import { MAP_CONCEPTS, type MapConcept } from "@/lib/mapConcept";
+import { seasonHat, seasonHolly, seasonKey, seasonMitt, seasonNose, seasonScarf, seasonSnow } from "../../sprites/npcSeasonArt";
 import { darken, Grid, lighten } from "../../sprites/pixel";
 
 // 동물원 그림 (코드로 그리는 픽셀아트): 나무 울타리·정문 아치·사육사·분양 노점·우리 장식(쉼터·건초·여물통·개집·바위 굴·횃대·연못·팻말).
@@ -9,7 +11,8 @@ export const ZTEX = {
   fenceV: "zoo-fence-v",
   post: "zoo-post",
   arch: "zoo-arch",
-  keeper: (f: number) => `zoo-keeper-${f}`,
+  /** 11/17 판마다 따로 (기본판은 예전 키 그대로) */
+  keeper: (f: number, concept: MapConcept = "default") => seasonKey(`zoo-keeper-${f}`, concept),
   stall: "zoo-stall",
   trough: "zoo-trough",
   hay: "zoo-hay",
@@ -92,8 +95,9 @@ function arch(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
-/** 사육사 (24×28): 사파리 모자·초록 멜빵 작업복·목에 호루라기, 손에 먹이 양동이. 유령 몸 (어부·수집가와 같은 계열) */
-function keeper(frame: number): HTMLCanvasElement {
+/** 사육사 (24×28): 사파리 모자·초록 멜빵 작업복·목에 호루라기, 손에 먹이 양동이. 유령 몸 (어부·수집가와 같은 계열).
+ *  11/17 겨울판 = 모자 위 눈·곰 발바닥 같은 갈색 목도리·장갑, 크리스마스판 = 루돌프 머리띠·빨간 코·호랑가시 */
+function keeper(frame: number, concept: MapConcept = "default"): HTMLCanvasElement {
   const g = new Grid(24, 28);
   const ox = 4;
   const oy = 9;
@@ -116,14 +120,26 @@ function keeper(frame: number): HTMLCanvasElement {
   g.vline(ox + 5, oy + 9, oy + 12, suit);
   g.vline(ox + 11, oy + 9, oy + 12, suit);
   g.rect(ox + 7, oy + 13, 3, 2, darken(suit, 0.25));
+  if (concept === "winter") seasonScarf(g, ox + 3, ox + 13, oy + 10, { c: 0x9a6a3c, c2: 0xe8d0a8, pat: "dots", thick: true, tail: ox + 4 });
+  else if (concept === "christmas") {
+    seasonScarf(g, ox + 3, ox + 13, oy + 10, { c: 0xd23a44, c2: 0xf8f6f0, pat: "stripe", tail: ox + 4 });
+    seasonHolly(g, ox + 11, oy + 14);
+  }
   // 호루라기
   g.set(ox + 8, oy + 11, 0xd8d8e0);
-  // 사파리 모자 (넓은 챙, 갈색 띠)
-  const hat = 0xd8c08a;
-  g.ellipse(ox + 8, oy + 1, 5.5, 3.2, hat);
-  g.hline(ox, ox + 16, oy + 3, darken(hat, 0.12));
-  g.hline(ox + 4, ox + 12, oy + 2, 0x8a5a32);
-  g.recolor((x, y) => y <= oy && x >= ox + 10, lighten(hat, 0.18));
+  if (concept === "christmas") {
+    // 루돌프 사육사: 사파리 모자 대신 뿔 머리띠 + 빨간 코
+    seasonHat(g, ox + 8, oy + 8, 6, oy + 2, { kind: "antler", c: 0x4a7a3a });
+    seasonNose(g, ox + 7, oy + 9);
+  } else {
+    // 사파리 모자 (넓은 챙, 갈색 띠)
+    const hat = 0xd8c08a;
+    g.ellipse(ox + 8, oy + 1, 5.5, 3.2, hat);
+    g.hline(ox, ox + 16, oy + 3, darken(hat, 0.12));
+    g.hline(ox + 4, ox + 12, oy + 2, 0x8a5a32);
+    g.recolor((x, y) => y <= oy && x >= ox + 10, lighten(hat, 0.18));
+    if (concept === "winter") seasonSnow(g, ox + 4, ox + 12, oy - 2);
+  }
   // 먹이 양동이 (오른손, 살짝 흔들)
   const bx = ox + 15;
   const by = oy + 12 + (frame ? 1 : 0);
@@ -131,6 +147,7 @@ function keeper(frame: number): HTMLCanvasElement {
   g.hline(bx, bx + 3, by, 0xc8d8e8);
   g.set(bx + 1, by - 1, 0xe8c24a);
   g.set(bx + 2, by - 1, 0x7ac84a);
+  if (concept !== "default") seasonMitt(g, bx - 1, by - 1, concept === "winter" ? 0x9a6a3c : 0x2e8a4e);
   g.outline(OUT);
   return g.toCanvas();
 }
@@ -295,7 +312,7 @@ export function ensureZooTextures(scene: Phaser.Scene): void {
   tx.addCanvas(ZTEX.fenceV, fenceV());
   tx.addCanvas(ZTEX.post, post());
   tx.addCanvas(ZTEX.arch, arch());
-  for (let f = 0; f < 2; f++) tx.addCanvas(ZTEX.keeper(f), keeper(f));
+  for (const c of MAP_CONCEPTS) for (let f = 0; f < 2; f++) tx.addCanvas(ZTEX.keeper(f, c), keeper(f, c));
   tx.addCanvas(ZTEX.stall, stall());
   tx.addCanvas(ZTEX.trough, trough());
   tx.addCanvas(ZTEX.hay, hay());

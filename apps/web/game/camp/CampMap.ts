@@ -27,6 +27,7 @@ import { kstHour } from "@/lib/ambience";
 import { isSnowy, type MapConcept } from "@/lib/mapConcept";
 import { addCanvasTexture } from "../assets/manifest";
 import { DEPTH } from "../config";
+import { seasonKey } from "../sprites/npcSeasonArt";
 import { makeCanvas, mix } from "../sprites/pixel";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import * as Art from "./campArt";
@@ -212,6 +213,8 @@ export class CampMap implements CampMapApi {
       const cy = Math.floor(k / CHUNK_COLS);
       img.setTexture(this.chunkKey(cx, cy));
     }
+    // 11/17 NPC도 이 판 옷으로 (지금 프레임 그대로)
+    for (const n of this.npcs.values()) n.img.setTexture(seasonKey(Art.CAMP_TEX.npc(n.id), c), n.frame);
     this.lit = -1;
     this.sunsetK = -1;
     this.decor?.apply(c);
@@ -414,7 +417,7 @@ export class CampMap implements CampMapApi {
   private addNpcs(): void {
     const s = this.scene;
     for (const n of CAMP_NPCS) {
-      const img = this.keep(s.add.image(n.x, n.y + 1, Art.CAMP_TEX.npc(n.id), 0).setOrigin(0.5, 1).setDepth(n.y));
+      const img = this.keep(s.add.image(n.x, n.y + 1, seasonKey(Art.CAMP_TEX.npc(n.id), this.concept), 0).setOrigin(0.5, 1).setDepth(n.y));
       if (n.facing === 1) img.setFlipX(true);
       this.atlas.ensure(n.name);
       const label = this.keep(s.add.bitmapText(n.x, n.y - Art.NPC_H + 2, FONT_KEY, n.name, FONT_PX).setOrigin(0.5, 1).setTint(0xffe8b0).setDepth(DEPTH.labels - 1));
@@ -934,6 +937,8 @@ export function forEachCampTexture(tex: (key: string, build: CampTexBuild, linea
   tex(T.busSign, Art.busSignArt);
   tex(T.timetable, Art.timetableArt);
   for (const n of CAMP_NPCS) tex(T.npc(n.id), () => Art.npcArt(n.id));
+  // 11/17 겨울·크리스마스판 NPC 옷 (판마다 따로 — 판이 바뀌면 setConcept가 갈아 끼운다)
+  for (const c of ["winter", "christmas"] as const) for (const n of CAMP_NPCS) tex(seasonKey(T.npc(n.id), c), () => Art.npcArt(n.id, c));
   tex(T.squirrel, Art.squirrelArt);
   tex(T.milkyWay, Art.milkyWayArt, true);
   tex(T.mist, Art.mistArt, true);

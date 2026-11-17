@@ -1,6 +1,8 @@
 import * as Phaser from "phaser";
 import { BUMPER_RINK, BUMPER_SEATS, BUMPER_YARD, DIR, STATE, bumperSeatById, type BumperSeat, type Sid, type WelcomeMsg } from "@tomb/protocol";
+import { currentMapConcept } from "@/lib/mapConceptClient";
 import { bridge } from "../bridge";
+import { seasonKey } from "../sprites/npcSeasonArt";
 import { DEPTH } from "../config";
 import { keyJosa } from "../input/keyHint";
 import type { MoveInput } from "../logic/movement";
@@ -109,6 +111,9 @@ export class BumperRide {
   private readonly scenery: Phaser.GameObjects.GameObject[] = [];
   private readonly bulbs: { img: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Image; i: number }[] = [];
   private readonly glows: { img: Phaser.GameObjects.Image; base: number }[] = [];
+  /** 11/17 매표소 (창 안 유령 직원이 맵 컨셉 옷을 입는다 — 1초마다 확인) */
+  private booth: Phaser.GameObjects.Image | null = null;
+  private boothAt = 0;
   private lastSeat: string | null = null;
   private honkAt = -Infinity;
   private boardedAt = -Infinity;
@@ -187,7 +192,7 @@ export class BumperRide {
     const sg = s.add.image(BUMPER_ARCH.x, top + 3, BTEX.signGlow).setOrigin(0.5, 1).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights).setAlpha(0);
     this.keep(sg);
     this.glows.push({ img: sg, base: 0.85 });
-    this.keep(s.add.image(BUMPER_BOOTH.x, BUMPER_BOOTH.y + 1, BTEX.booth).setOrigin(0.5, 1).setDepth(BUMPER_BOOTH.y));
+    this.booth = this.keep(s.add.image(BUMPER_BOOTH.x, BUMPER_BOOTH.y + 1, seasonKey(BTEX.booth, currentMapConcept())).setOrigin(0.5, 1).setDepth(BUMPER_BOOTH.y));
     // 밤: 「무료」 글씨도 불이 켜진다
     const bg = s.add.image(BUMPER_BOOTH.x, BUMPER_BOOTH.y + 1, BTEX.boothGlow).setOrigin(0.5, 1).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights).setAlpha(0);
     this.keep(bg);
@@ -528,6 +533,11 @@ export class BumperRide {
         c.front?.setVisible(near);
         if (!near) c.beam?.setVisible(false);
       }
+    }
+    if (near && this.booth?.active && performance.now() >= this.boothAt) {
+      this.boothAt = performance.now() + 1000;
+      const key = seasonKey(BTEX.booth, currentMapConcept());
+      if (this.booth.texture.key !== key) this.booth.setTexture(key);
     }
     if (!near && !pl.inCar) return;
     if (!this.built) this.build();

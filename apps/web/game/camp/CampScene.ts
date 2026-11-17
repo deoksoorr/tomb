@@ -908,7 +908,7 @@ export class CampScene extends Phaser.Scene {
   private talkTo(id: CampNpcId): void {
     const turn = this.talkTurn.get(id) ?? 0;
     this.talkTurn.set(id, turn + 1);
-    this.openTalk(id, campLines(id, turn), true);
+    this.openTalk(id, campLines(id, turn, campConceptNow()), true);
   }
 
   private openTalk(id: CampNpcId, lines: readonly string[], near: boolean): void {

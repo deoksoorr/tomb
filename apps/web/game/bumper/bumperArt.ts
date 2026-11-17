@@ -1,5 +1,7 @@
 import type * as Phaser from "phaser";
 import { BUMPER_GATE, BUMPER_RIM, BUMPER_RINK } from "@tomb/protocol";
+import type { MapConcept } from "@/lib/mapConcept";
+import { seasonKey } from "../sprites/npcSeasonArt";
 import { darken, hash2, lighten, makeCanvas, mix } from "../sprites/pixel";
 
 // 범퍼카장 그림 (11/16, 코드로 그리는 픽셀아트). 브라우저에서만 부른다 — 처음 가까이 갔을 때 한 번 굽는다 (BumperView).
@@ -302,7 +304,8 @@ const FREE_GLYPHS: readonly (readonly string[])[] = [
   // 료
   [" XXXXX ", "     X ", " XXXXX ", " X     ", " XXXXX ", "       ", "  X X  ", "  X X  ", "XXXXXXX"],
 ];
-function boothCanvas(): HTMLCanvasElement {
+/** 11/17 concept = 겨울판(창 안 유령 직원 털모자 + 차양 위 눈) · 크리스마스판(작은 산타 모자 + 목도리) */
+function boothCanvas(concept: MapConcept = "default"): HTMLCanvasElement {
   const b = new Buf(BOOTH_W, BOOTH_H);
   const o = BOOTH_SIGN_H - 7; // 팻말이 커진 만큼 차양·몸통을 아래로
   // 몸통
@@ -315,6 +318,21 @@ function boothCanvas(): HTMLCanvasElement {
   // 창 안 유령 직원
   const ghost = ["..###..", ".#####.", "#o#o###", "#######", "#######"];
   ghost.forEach((row, j) => [...row].forEach((ch, i) => (ch === "#" ? b.set(10 + i, 19 + o + j, 0xf8fff8) : ch === "o" ? b.set(10 + i, 19 + o + j, 0x302838) : 0)));
+  if (concept === "winter") {
+    // 털모자 (파랑 + 흰 방울)
+    b.rect(11, 18 + o, 5, 2, 0x3a6ab8);
+    b.rect(11, 19 + o, 5, 1, 0xe4e0d8);
+    b.set(13, 17 + o, 0xffffff);
+    b.rect(11, 23 + o, 5, 1, 0xd8434f);
+  } else if (concept === "christmas") {
+    // 작은 산타 모자 (흰 털 단 + 오른쪽으로 늘어진 고깔 + 방울) + 초록 목도리
+    b.rect(10, 19 + o, 7, 1, 0xffffff);
+    b.rect(11, 18 + o, 5, 1, 0xd23a44);
+    b.rect(12, 17 + o, 4, 1, 0xd23a44);
+    b.set(16, 17 + o, 0xd23a44);
+    b.set(17, 18 + o, 0xffffff);
+    b.rect(11, 23 + o, 5, 1, 0x2e8a4e);
+  }
   // 계산대
   b.rect(5, 25 + o, 18, 2, 0xc89a60);
   b.rect(5, 25 + o, 18, 1, 0xe0b878);
@@ -325,6 +343,7 @@ function boothCanvas(): HTMLCanvasElement {
       b.set(x, y, y === 7 + o ? (s ? 0xffa0c8 : 0xffffff) : s ? 0xf0609a : 0xf4ecf0);
     }
   for (let x = 1; x < BOOTH_W - 1; x++) if (x % 3 !== 0) b.set(x, 13 + o, Math.floor((x - 1) / 3) % 2 === 0 ? 0xd04880 : 0xd8d0d8);
+  if (concept !== "default") for (let x = 1; x < BOOTH_W - 1; x++) b.set(x, 7 + o, (x + 20) % 3 === 0 ? 0xd9dce6 : 0xfbfbf8); // 차양 위 눈
   // 지붕 위 「무료」 팻말 (기둥 둘)
   // 판 = 테두리 1px + 글씨 테두리 1px + 글씨 + 테두리·그림자 2px (왼쪽 끝은 예전 팻말 자리 그대로 — 입구 간판에 가리지 않게)
   b.rect(4, 0, 21, BOOTH_SIGN_H, 0x1e5a2e);
@@ -676,5 +695,6 @@ export function ensureBumperSign(scene: Phaser.Scene): void {
     add(scene, BTEX.signGlow, s.glow);
   }
   add(scene, BTEX.booth, boothCanvas());
+  for (const c of ["winter", "christmas"] as const) add(scene, seasonKey(BTEX.booth, c), boothCanvas(c));
   add(scene, BTEX.boothGlow, boothGlowCanvas());
 }
