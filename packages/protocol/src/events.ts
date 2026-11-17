@@ -9,7 +9,7 @@ import { AWAY_HOUSE_RE, isAwayPlace, type AwayPlace } from "./friends";
 import type { PeerInfo, Sid } from "./types";
 import { isMapId, type AwayMapId, type ChatPlace, type MapId } from "./camp";
 import type { BbqItemId } from "./bbq";
-import type { SnowmanDenyWhy, SnowmanInfo } from "./snowman";
+import { SNOWMAN_ID_RE, isSnowBall, type SnowAct, type SnowBall, type SnowHold, type SnowmanDenyWhy, type SnowmanInfo, type SnowStackInfo } from "./snowman";
 
 // 드문 이벤트는 짧은 JSON text 프레임. 이름과 색은 입장 때(welcome/join) 한 번만 보낸다.
 
@@ -83,11 +83,15 @@ export type C2S =
   | { t: "map"; m: MapId; x: number; y: number }
   /** 11/15 캠핑장 바베큐 한 접시 증서 (웹이 포인트를 쓰고 서명). 서버가 검증해 같은 맵에 bbq로 알린다. 옛 서버는 버린다 */
   | { t: "bbq"; grant: string }
-  /**
-   * 11/17 캠핑장 눈사람을 다 쌓았다 (x,y = 눈사람 발 위치). 서버가 자리·간격을 보고 씨앗을 붙여 같은 캠핑장에 snowman으로 알린다.
-   * 굴리기·쌓는 중간 과정은 보내지 않는다. 옛 서버는 모르는 t라 버린다
-   */
-  | { t: "snowman"; x: number; y: number }
+  // ── 11/18 캠핑장 눈사람 만드는 과정 (v73 — 11/17 snowman { x, y } 한 번 보내던 것을 바꿨다). 옛 서버는 모르는 t라 버린다 ──
+  /** 들고 있는 눈덩이가 바뀌었다 (집기·크기 바뀜·굴리기 시작/멈춤·버리기). h = null이면 빈손. 바뀔 때만 보낸다 */
+  | { t: "snowHold"; h: SnowHold | null }
+  /** 들고 있던 덩이(s)를 (x,y)에 새로 내려놓는다. 서버가 자리·간격을 보고 같은 캠핑장에 snowStack */
+  | { t: "snowPut"; x: number; y: number; s: SnowBall }
+  /** 들고 있던 덩이(s)를 내 덩이 id 위에 올린다. 세 단째면 서버가 바로 눈사람을 세운다 (snowman) */
+  | { t: "snowAdd"; id: string; s: SnowBall }
+  /** 내 덩이 id의 맨 위를 다시 든다 */
+  | { t: "snowTake"; id: string }
   /**
    * 11/13 함께 사냥: 내 공격·스킬 동작 (사냥터 방 전용, 보여 주기만 — 판정·몬스터는 각자). 서버는 HUNT_ACT_INTERVAL_MS 간격으로
    * 같은 사냥터 방의 다른 사람에게만 중계하고 저장하지 않는다. 옛 서버는 모르는 t라 버린다
@@ -199,14 +203,24 @@ export type S2C =
   /** 11/17 확성기 창 고정 공지가 바뀌었다 (운영자가 쓰거나 지움, 사람이 있는 채널 모두에게). 옛 클라이언트는 모르는 t라 버린다 */
   | MegaPinMsg
   // ── 11/17 캠핑장 눈사람 (옛 클라이언트는 모르는 t라 버린다) ──
-  /** 받는 사람에게만: 캠핑장에 들어왔다(welcome·mapped 다음) → 지금 서 있는 눈사람 전부 */
-  | { t: "snowmen"; list: SnowmanInfo[] }
-  /** 누가 눈사람을 세웠다 (같은 캠핑장, 세운 사람 포함). sid = 세운 사람 */
-  | { t: "snowman"; s: SnowmanInfo; sid: Sid }
+  /** 받는 사람에게만: 캠핑장에 들어왔다(welcome·mapped 다음) → 지금 서 있는 눈사람 전부, 11/18 쌓는 중인 덩이 전부(stacks) */
+  | { t: "snowmen"; list: SnowmanInfo[]; stacks?: SnowStackInfo[] }
+  /** 누가 눈사람을 세웠다 (같은 캠핑장, 세운 사람 포함). sid = 세운 사람, st = 눈사람으로 바뀐 덩이 id (그 덩이를 지우고 세운 사람은 빈손) */
+  | { t: "snowman"; s: SnowmanInfo; sid: Sid; st?: string }
   /** 개수가 넘쳐 서버가 먼저 녹였다 (같은 캠핑장). 제때 녹는 것은 알리지 않는다 (각자 시각으로) */
   | { t: "snowmanGone"; id: string }
-  /** 세운 사람에게만: 세우지 못했다 */
-  | { t: "snowmanDenied"; why: SnowmanDenyWhy };
+  /** 보낸 사람에게만: 내려놓기·올리기·다시 들기(a)를 받지 않았다. id = 그 덩이 (add·take) */
+  | { t: "snowmanDenied"; why: SnowmanDenyWhy; a?: SnowAct; id?: string }
+  // ── 11/18 만드는 과정 (같은 캠핑장) ──
+  /** 누가 들고 있는 눈덩이가 바뀌었다 (보낸 사람 빼고) */
+  | { t: "snowHold"; sid: Sid; h: SnowHold | null }
+  /**
+   * 덩이가 놓였다·바뀌었다 (같은 캠핑장, 주인 포함 — 주인에게는 받아들였다는 확인). 주인(st.sid)은 이제 h를 들고 있다 (다시 들기),
+   * h가 없으면 빈손 (내려놓기·올리기)
+   */
+  | { t: "snowStack"; st: SnowStackInfo; h?: SnowBall }
+  /** 덩이가 사라졌다 (같은 캠핑장). took = 주인이 마지막 덩이를 다시 들어서 (주인은 이제 그 크기를 들고 있다). 없으면 주인 손은 그대로 */
+  | { t: "snowStackGone"; id: string; sid: Sid; took?: SnowBall };
 
 /** 23번 확성기 방송 (보낸 사람에게도 간다) */
 /** staff = 운영자 계정이 외친 것 (Vercel이 증서에 넣은 것만 → 이름 금색) */
@@ -381,8 +395,18 @@ export function parseC2S(text: string): C2S | null {
     }
     case "bbq":
       return typeof m.grant === "string" && m.grant.length <= MAX_GRANT_LEN ? { t: "bbq", grant: m.grant } : null;
-    case "snowman":
-      return isNum(m.x) && isNum(m.y) ? { t: "snowman", x: Math.round(m.x), y: Math.round(m.y) } : null;
+    case "snowHold": {
+      if (m.h === null) return { t: "snowHold", h: null };
+      const h = m.h as Record<string, unknown> | undefined;
+      if (!h || typeof h !== "object" || !isSnowBall(h.s)) return null;
+      return { t: "snowHold", h: h.r === true ? { s: h.s, r: true } : { s: h.s } };
+    }
+    case "snowPut":
+      return isNum(m.x) && isNum(m.y) && isSnowBall(m.s) ? { t: "snowPut", x: Math.round(m.x), y: Math.round(m.y), s: m.s } : null;
+    case "snowAdd":
+      return typeof m.id === "string" && SNOWMAN_ID_RE.test(m.id) && isSnowBall(m.s) ? { t: "snowAdd", id: m.id, s: m.s } : null;
+    case "snowTake":
+      return typeof m.id === "string" && SNOWMAN_ID_RE.test(m.id) ? { t: "snowTake", id: m.id } : null;
     case "map":
       return isMapId(m.m) && isNum(m.x) && isNum(m.y) ? { t: "map", m: m.m, x: Math.round(m.x), y: Math.round(m.y) } : null;
     case "use":

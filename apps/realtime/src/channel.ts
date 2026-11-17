@@ -59,6 +59,13 @@ import {
   type DrunkState,
   BBQ_INTERVAL_MS,
   SNOWMAN_BUILD_INTERVAL_MS,
+  SNOW_ACT_INTERVAL_MS,
+  SNOW_HOLD_INTERVAL_MS,
+  parseSnowHold,
+  type SnowBall,
+  type SnowHold,
+  type SnowAct,
+  type SnowmanDenyWhy,
   type BbqEffect,
   type AvatarDye,
   type AwayPlace,
@@ -77,7 +84,7 @@ import {
 import { ChatRecent, type RecentChat } from "./chatRecent";
 import { MoveBudget, RateLimiter, allocSid, dist, stepToward, type Point } from "./logic";
 import { GoblinCore, type GoblinState } from "./goblin";
-import { SnowmanYard } from "./snowmen";
+import { SnowStackYard, SnowmanYard } from "./snowmen";
 
 // 채널 하나의 상태 머신. ChannelDO는 소켓·스토리지·타이머만 이어 주고 판정은 전부 여기서 동기적으로 한다.
 // Workers API를 쓰지 않으므로 Node에서 그대로 단위 테스트하고(channel.test.ts) 부하 테스트의 틱 벤치마크에도 쓴다.
@@ -139,6 +146,8 @@ export type PeerRecord = {
   camp?: true;
   /** 11/16 입장 토큰에 바닷가 허락(sea)이 있었다 */
   sea?: true;
+  /** 11/18 캠핑장에서 들고 있는 눈덩이 (늦게 온 사람도 PeerInfo로 본다). 캠핑장을 떠나거나 다시 붙으면 지운다 */
+  snow?: SnowHold;
 };
 
 /** 재연결 유예 예약. until(ms)까지 sid·좌석·위치를 지킨다 */
@@ -224,6 +233,8 @@ export interface ChannelHost<C> {
   chatsChanged?(map: MapId): void;
   /** 11/17 캠핑장 눈사람 목록이 바뀌었다 (세움·넘쳐 녹음) → 저장 (DO가 잠들었다 깨면 restoreSnowmen으로 되살린다) */
   snowmenChanged?(list: unknown): void;
+  /** 11/18 쌓는 중인 덩이 목록이 바뀌었다 (내려놓기·올리기·다시 들기·사라짐) → 저장 (깨면 restoreSnowStacks) */
+  snowStacksChanged?(list: unknown): void;
 }
 
 /**
@@ -351,6 +362,9 @@ type Peer<C> = PeerRecord & {
   lastWhoOnAt?: number;
   /** 11/17 캠핑장 눈사람 세우기 (없으면 아직 안 씀) */
   lastSnowmanAt?: number;
+  /** 11/18 눈덩이 내려놓기·올리기·다시 들기 / 들고 있는 상태 알림 (없으면 아직 안 씀) */
+  lastSnowActAt?: number;
+  lastSnowHoldAt?: number;
   /** 말풍선 채팅 도배 제한 (토큰 버킷). 재접속해도 피어에 남겨 다시 채워지지 않게 한다 */
   chatBucket?: ChatBucket;
   /** 최근 다시 붙은 시각들 (재접속 반복으로 메시지 한도·쿨다운을 초기화하거나 welcome을 거듭 받는 것을 막는다) */
@@ -388,6 +402,14 @@ export class ChannelCore<C extends object> {
   private squirrelAt = -Infinity;
   /** 11/17 캠핑장에 서 있는 눈사람 (메모리에만) */
   private readonly snowmen = new SnowmanYard();
+  /** 11/18 캠핑장에 쌓는 중인 덩이 (메모리 + 저장소) */
+  private readonly stacks = new SnowStackYard();
+  /** 그 방문자가 지금 이 채널 캠핑장에 있나 (유예 중 포함 — 덩이 주인 확인) */
+  private readonly inCamp = (visitorId: string): boolean => {
+    const sid = this.byVisitor.get(visitorId);
+    const q = sid === undefined ? undefined : this.peers.get(sid);
+    return !!q && mapOfPeer(q) === "camp";
+  };
 
   private chatLog(now: number): ChatRecent {
     if (!this.chats) {
@@ -599,6 +621,12 @@ export class ChannelCore<C extends object> {
       this.switchMap(p, want, this.clearOfSeats(to, p.sid, want), now);
     } else if (t.spawn) this.relocate(p, t.spawn);
 
+    // 11/18 다시 붙었다 (새로고침이면 빈손): 들고 있던 눈덩이는 지운다. 들고 있으면 웹이 welcome 뒤에 다시 알린다
+    if (p.snow) {
+      p.snow = undefined;
+      this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "snowHold", sid: p.sid, h: null }), p.sid);
+    }
+
     p.conn = conn;
     p.until = 0;
     this.bySocket.set(conn, p.sid);
@@ -673,7 +701,7 @@ export class ChannelCore<C extends object> {
       ...(this.cfg.room ? {} : { n: this.peers.size }),
     });
     // 11/17 캠핑장이면 지금 서 있는 눈사람
-    if (!this.cfg.room && map === "camp") this.sendTo(p, { t: "snowmen", list: this.snowmen.all(now) });
+    if (!this.cfg.room && map === "camp") this.sendSnowmen(p, now);
     // 고블린을 잡았는데 증서를 받기 전에 끊겼다 → 다시 보낸다 (웹은 같은 고블린을 한 번만 지급한다)
     const owed = this.goblinOn ? this.goblin.grantFor(p.visitorId, now) : null;
     if (owed) this.sendTo(p, { t: "goblinGrant", ...owed });
@@ -1021,26 +1049,126 @@ export class ChannelCore<C extends object> {
         if (now - (p.lastMapAt ?? -Infinity) < MAP_INTERVAL_MS) return;
         p.lastMapAt = now;
         return this.onMap(p, m.m, { x: m.x, y: m.y }, now);
-      case "snowman":
-        return this.onSnowman(p, m.x, m.y, now);
+      case "snowHold":
+        return this.onSnowHold(p, m.h, now);
+      case "snowPut":
+      case "snowAdd":
+      case "snowTake":
+        return this.onSnowAct(p, m, now);
     }
   }
 
+  /** 11/17 캠핑장에 들어왔다: 지금 서 있는 눈사람과 11/18 쌓는 중인 덩이 */
+  private sendSnowmen(p: Peer<C>, now: number): void {
+    this.sendTo(p, { t: "snowmen", list: this.snowmen.all(now), stacks: this.stacks.all(now, this.inCamp) });
+  }
+
+  /** 캠핑장에서 눈을 만질 수 있는 사람인지 (월드 채널 캠핑장, 실내 아님) */
+  private snowOk(p: Peer<C>): boolean {
+    return !this.cfg.room && mapOfPeer(p) === "camp" && !p.away;
+  }
+
   /**
-   * 11/17 캠핑장 눈사람 세우기: 캠핑장에 있고(실내 아님) 간격을 지켰고 서버 위치 바로 앞이면, 씨앗을 붙여 같은 캠핑장 모두에게 (세운 사람 포함).
-   * 넘쳐서 먼저 녹인 것은 snowmanGone. 거절은 세운 사람에게만 snowmanDenied (화면은 머리 덩이를 다시 손에 든다)
+   * 11/18 들고 있는 눈덩이가 바뀌었다 (집기·크기·굴리기·버리기). 같은 캠핑장 다른 사람에게만 알리고, 늦게 온 사람은 PeerInfo.snow로 받는다.
+   * 웹은 바뀔 때만 SNOW_HOLD_SEND_MS 넘게 띄워 보낸다 → 이보다 잦으면 버린다 (도배 방지)
    */
-  private onSnowman(p: Peer<C>, x: number, y: number, now: number): void {
-    if (this.cfg.room || mapOfPeer(p) !== "camp" || p.away) return;
-    if (now - (p.lastSnowmanAt ?? -Infinity) < SNOWMAN_BUILD_INTERVAL_MS) return this.sendTo(p, { t: "snowmanDenied", why: "wait" });
-    // 11/18 사용자 「내 위치에서 멀어도 상관없게」: 서버 위치와의 거리는 보지 않는다 (자리 판정·간격·4초 간격만)
-    const seed = Math.floor((this.host.random ? this.host.random() : Math.random()) * 0x7fffffff);
-    const r = this.snowmen.build(p.visitorId, p.name, x, y, now, seed);
-    if (!r.ok) return this.sendTo(p, { t: "snowmanDenied", why: r.why });
-    p.lastSnowmanAt = now;
-    this.host.snowmenChanged?.(this.snowmen.snapshot());
-    this.broadcastMap("camp", encodeEvent({ t: "snowman", s: r.s, sid: p.sid }));
-    for (const id of r.gone) this.broadcastMap("camp", encodeEvent({ t: "snowmanGone", id }));
+  private onSnowHold(p: Peer<C>, h: SnowHold | null, now: number): void {
+    if (!this.snowOk(p)) return;
+    if (now - (p.lastSnowHoldAt ?? -Infinity) < SNOW_HOLD_INTERVAL_MS) return;
+    p.lastSnowHoldAt = now;
+    if (sameHold(p.snow, h)) return;
+    this.setHold(p, h ?? undefined);
+    this.broadcastMap("camp", encodeEvent({ t: "snowHold", sid: p.sid, h }), p.sid);
+  }
+
+  /** 들고 있는 눈덩이를 바꿔 적는다 (알림은 부른 쪽이) */
+  private setHold(p: Peer<C>, h: SnowHold | undefined): void {
+    p.snow = h;
+    this.save(p);
+  }
+
+  /**
+   * 11/18 덩이 내려놓기(snowPut)·올리기(snowAdd)·다시 들기(snowTake). 자리·간격·주인·쌓는 순서를 서버가 보고,
+   * 받으면 같은 캠핑장 모두(주인 포함 — 확인)에게 snowStack·snowStackGone, 세 단째를 올리면 그 자리에 눈사람을 세운다 (snowman.st).
+   * 거절은 보낸 사람에게만 snowmanDenied (+ 내 덩이면 지금 모양을 다시 — 웹이 미리 바꾼 화면을 맞춘다. 없는 덩이면 snowStackGone,
+   * 남의 덩이면 더 보내지 않는다 — 그 모양은 이미 모두가 받았다)
+   */
+  private onSnowAct(p: Peer<C>, m: Extract<C2S, { t: "snowPut" | "snowAdd" | "snowTake" }>, now: number): void {
+    if (!this.snowOk(p)) return;
+    const a: SnowAct = m.t === "snowPut" ? "put" : m.t === "snowAdd" ? "add" : "take";
+    const id = m.t === "snowPut" ? undefined : m.id;
+    const deny = (why: SnowmanDenyWhy) => {
+      this.sendTo(p, { t: "snowmanDenied", why, a, ...(id ? { id } : {}) });
+      if (!id) return;
+      const st = this.stacks.mine(p.visitorId, id);
+      if (st) this.sendTo(p, { t: "snowStack", st });
+      else if (!this.stacks.has(id)) this.sendTo(p, { t: "snowStackGone", id, sid: p.sid });
+    };
+    if (now - (p.lastSnowActAt ?? -Infinity) < SNOW_ACT_INTERVAL_MS) return deny("wait");
+    this.stacks.prune(now, this.inCamp);
+    if (m.t === "snowTake") {
+      const r = this.stacks.take(p.visitorId, m.id, now);
+      if (!r.ok) return deny(r.why);
+      p.lastSnowActAt = now;
+      this.setHold(p, { s: r.s });
+      this.stacksChanged();
+      if (r.st) return this.broadcastMap("camp", encodeEvent({ t: "snowStack", st: r.st, h: r.s }));
+      return this.broadcastMap("camp", encodeEvent({ t: "snowStackGone", id: m.id, sid: p.sid, took: r.s }));
+    }
+    if (m.t === "snowPut") {
+      const r = this.stacks.put(p.visitorId, p.sid, m.x, m.y, m.s, now, this.snowmen.spots(now));
+      if (!r.ok) return deny(r.why);
+      p.lastSnowActAt = now;
+      this.setHold(p, undefined);
+      this.stacksChanged();
+      for (const g of r.gone) this.broadcastMap("camp", encodeEvent({ t: "snowStackGone", id: g, sid: p.sid }));
+      return this.broadcastMap("camp", encodeEvent({ t: "snowStack", st: r.st }));
+    }
+    const cur = this.stacks.mine(p.visitorId, m.id);
+    if (!cur) return deny("lost");
+    const sizes: SnowBall[] = [...cur.sizes, m.s];
+    // 세 단째: 눈사람을 세울 수 있을 때만 올린다 (못 세우면 두 단 그대로 — 웹은 머리를 다시 든다)
+    if (sizes.length === 3) {
+      if (now - (p.lastSnowmanAt ?? -Infinity) < SNOWMAN_BUILD_INTERVAL_MS) return deny("wait");
+      const st = this.stacks.add(p.visitorId, m.id, m.s, now);
+      if (!st.ok) return deny(st.why);
+      if (!SnowStackYard.done(st.st)) return; // 크기 순서는 add가 이미 봤다 (세 단이면 언제나 몸통·배·머리)
+      const seed = Math.floor((this.host.random ? this.host.random() : Math.random()) * 0x7fffffff);
+      // 11/18 사용자 「내 위치에서 멀어도 상관없게」: 서버 위치와의 거리는 보지 않는다 (자리 판정·간격·4초 간격만)
+      const r = this.snowmen.build(p.visitorId, p.name, cur.x, cur.y, now, seed);
+      if (!r.ok) {
+        this.stacks.take(p.visitorId, m.id, now);
+        return deny(r.why);
+      }
+      p.lastSnowActAt = now;
+      p.lastSnowmanAt = now;
+      this.stacks.remove(m.id);
+      this.setHold(p, undefined);
+      this.stacksChanged();
+      this.host.snowmenChanged?.(this.snowmen.snapshot());
+      this.broadcastMap("camp", encodeEvent({ t: "snowman", s: r.s, sid: p.sid, st: m.id }));
+      for (const g of r.gone) this.broadcastMap("camp", encodeEvent({ t: "snowmanGone", id: g }));
+      return;
+    }
+    const r = this.stacks.add(p.visitorId, m.id, m.s, now);
+    if (!r.ok) return deny(r.why);
+    p.lastSnowActAt = now;
+    this.setHold(p, undefined);
+    this.stacksChanged();
+    this.broadcastMap("camp", encodeEvent({ t: "snowStack", st: r.st }));
+  }
+
+  private stacksChanged(): void {
+    this.host.snowStacksChanged?.(this.stacks.snapshot());
+  }
+
+  /** 11/18 캠핑장을 떠났다 (다른 맵·퇴장): 들고 있던 눈덩이를 지우고, 쌓던 덩이를 캠핑장 사람들에게서 지운다 */
+  private leaveSnow(p: Peer<C>): void {
+    p.snow = undefined;
+    const gone = this.stacks.dropOwner(p.visitorId);
+    if (!gone.length) return;
+    this.stacksChanged();
+    for (const st of gone) this.broadcastMap("camp", encodeEvent({ t: "snowStackGone", id: st.id, sid: st.sid }), p.sid);
   }
 
   /**
@@ -1110,7 +1238,7 @@ export class ChannelCore<C extends object> {
     }
     const map = mapOfPeer(p);
     this.sendTo(p, { t: "mapped", m: map, peers: this.othersOf(p), seats: this.seatsOf(map) });
-    if (ok && target !== cur && map === "camp") this.sendTo(p, { t: "snowmen", list: this.snowmen.all(now) });
+    if (ok && target !== cur && map === "camp") this.sendSnowmen(p, now);
     if (ok && target !== cur) this.sendChatLog(p, now);
   }
 
@@ -1123,6 +1251,7 @@ export class ChannelCore<C extends object> {
     const from = mapOfPeer(p);
     if (p.seatId) this.releaseSeat(p);
     if (p.state === STATE.sitChair || p.state === STATE.sitGround || spotKindOfState(p.state)) p.state = STATE.idle;
+    if (from === "camp" && !this.cfg.room) this.leaveSnow(p);
     p.away = undefined;
     p.place = undefined;
     p.house = undefined;
@@ -1516,6 +1645,11 @@ export class ChannelCore<C extends object> {
     if (!this.cfg.room) this.snowmen.restore(raw, now);
   }
 
+  /** 11/18 저장해 둔 쌓는 중인 덩이 (DO가 잠들었다 깨어날 때 — 접속자를 되살린 다음에 부른다) */
+  restoreSnowStacks(raw: unknown, now = Date.now()): void {
+    if (!this.cfg.room) this.stacks.restore(raw, now);
+  }
+
   /** DO가 고블린 때문에 깨어나야 하는 시각 (없으면 null) */
   goblinDue(): number | null {
     return this.goblinOn ? this.goblin.due(this.online) : null;
@@ -1629,6 +1763,7 @@ export class ChannelCore<C extends object> {
       p.conn = null;
     }
     if (p.seatId) this.releaseSeat(p);
+    if (mapOfPeer(p) === "camp" && !this.cfg.room) this.leaveSnow(p);
     this.peers.delete(p.sid);
     this.byVisitor.delete(p.visitorId);
     this.dirty.delete(p.sid);
@@ -1754,6 +1889,7 @@ export class ChannelCore<C extends object> {
       ...(p.bbq ? { bbq: p.bbq } : {}),
       ...(p.spd ? { spd: p.spd } : {}),
       ...(p.drunk ? { drunk: p.drunk } : {}),
+      ...(p.snow && p.map === "camp" ? { snow: p.snow } : {}),
     };
   }
 
@@ -1767,6 +1903,18 @@ export class ChannelCore<C extends object> {
     const ride = r.ride === true && !seatId && ridePetOfLook(look) ? { ride: true as const } : {};
     // 배 위 낚싯대는 조각배 자리에 앉아 있을 때만 이어 간다
     const rod = r.rod === true && seatId && boatSeatById(seatId) ? { rod: true as const } : {};
-    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), ...mood, ...ride, ...rod, ...(r.away === true ? { away: true as const } : {}), ...(r.away === true && isAwayPlace(r.place) ? { place: r.place } : {}), ...(r.away === true && r.place === "house" && typeof r.house === "string" ? { house: r.house } : {}), ...(r.staff === true ? { staff: true as const } : {}), ...(isDexBadge(r.dex) ? { dex: r.dex } : {}), ...(isChampValue(r.champ) ? { champ: r.champ } : {}), ...(r.mgr === true ? { mgr: true as const } : {}), joinedAt: r.joinedAt ?? 0, ...(isAwayMap(r.map) ? { map: r.map } : {}), ...(r.camp === true ? { camp: true as const } : {}), ...(r.sea === true ? { sea: true as const } : {}), ...(isBbqEffect(r.bbq) ? { bbq: { i: r.bbq.i, u: r.bbq.u } } : {}), ...(isBbqEffect(r.spd) ? { spd: { i: r.spd.i, u: r.spd.u } } : {}), ...(isDrunkState(r.drunk) ? { drunk: { lv: r.drunk.lv, at: r.drunk.at } } : {}) };
+    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), ...mood, ...ride, ...rod, ...(r.away === true ? { away: true as const } : {}), ...(r.away === true && isAwayPlace(r.place) ? { place: r.place } : {}), ...(r.away === true && r.place === "house" && typeof r.house === "string" ? { house: r.house } : {}), ...(r.staff === true ? { staff: true as const } : {}), ...(isDexBadge(r.dex) ? { dex: r.dex } : {}), ...(isChampValue(r.champ) ? { champ: r.champ } : {}), ...(r.mgr === true ? { mgr: true as const } : {}), joinedAt: r.joinedAt ?? 0, ...(isAwayMap(r.map) ? { map: r.map } : {}), ...(r.camp === true ? { camp: true as const } : {}), ...(r.sea === true ? { sea: true as const } : {}), ...(isBbqEffect(r.bbq) ? { bbq: { i: r.bbq.i, u: r.bbq.u } } : {}), ...(isBbqEffect(r.spd) ? { spd: { i: r.spd.i, u: r.spd.u } } : {}), ...(isDrunkState(r.drunk) ? { drunk: { lv: r.drunk.lv, at: r.drunk.at } } : {}), ...snowOfRecord(r) };
   }
+}
+
+/** 11/18 저장 형태의 들고 있는 눈덩이 (캠핑장에 있을 때만, 모양이 맞을 때만) */
+function snowOfRecord(r: PeerRecord): { snow?: SnowHold } {
+  const h = r.map === "camp" ? parseSnowHold(r.snow) : null;
+  return h ? { snow: h } : {};
+}
+
+/** 들고 있는 상태가 같은지 */
+function sameHold(a: SnowHold | undefined, b: SnowHold | null): boolean {
+  if (!a || !b) return !a && !b;
+  return a.s === b.s && !!a.r === !!b.r;
 }

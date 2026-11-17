@@ -1,5 +1,6 @@
 import type { BbqItemId } from "./bbq";
 import type { AvatarDye } from "./dye";
+import type { SnowHold } from "./snowman";
 
 /** 캐릭터 상태 머신 값. 바이너리로 u8 전송. */
 export const STATE = {
@@ -107,4 +108,6 @@ export type PeerInfo = PeerState & {
   spd?: { i: BbqItemId; u: number };
   /** 11/15 캠핑장 맥주·소주·막걸리: 취기 (at 무렵 lv단계, 10분에 1씩 깬다). 옛 클라이언트는 무시한다 */
   drunk?: { lv: number; at: number };
+  /** 11/18 캠핑장 눈사람: 들고 있는 눈덩이 (s = 크기, r = 굴리는 중). 옛 클라이언트는 무시한다 */
+  snow?: SnowHold;
 };
