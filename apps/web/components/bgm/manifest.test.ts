@@ -8,15 +8,15 @@ describe("parseManifest", () => {
   it("저장소의 tracks.json은 모든 플레이리스트에 곡이 있다", () => {
     const lists = parseManifest(tracksJson);
     // 11/17 목록 대격변: 로파이만 남기고, 직접 만든 눈꽃 캐럴·노을 시티팝 (50곡씩)
-    // 11/17 r2 직접 만든 레트로 겨울 마을 50곡을 맨 앞에 (처음엔 이 목록부터)
+    // 11/17 r2 직접 만든 레트로 50곡을 맨 앞에 (처음엔 이 목록부터)
     expect(lists.map((p) => [p.id, p.title, p.tracks.length])).toEqual([
-      ["retrowinter", "레트로 겨울 마을", 50],
+      ["retrowinter", "레트로", 50],
       ["carol", "눈꽃 캐럴", 50],
       ["citypop", "노을 시티팝", 50],
       ["lofi", "로파이", 15],
     ]);
     expect(lists.filter((p) => p.isNew).map((p) => p.id)).toEqual(["retrowinter", "carol", "citypop"]);
-    // 처음엔 레트로 겨울 마을부터
+    // 처음엔 레트로부터
     expect(FIRST_PLAYLIST_ID).toBe("retrowinter");
     expect(lists.some((p) => p.id === FIRST_PLAYLIST_ID)).toBe(true);
     expect(lists.every((p) => p.tracks.length > 0)).toBe(true);
