@@ -1,11 +1,10 @@
-import { CAMP_TITLE, SEA_TITLE, VILLAGE_TITLE, type MapId } from "@tomb/protocol";
+import type { MapId } from "@tomb/protocol";
+import { PLACE_TITLE } from "./placeName";
 
 // 11/17 채널 이동 창 "지금 여기" 카드의 같이 있는 사람 문구.
 // 게임은 지금 맵(마을·캠핑장·바닷가)에 보이는 사람만 안다 → 채널 인원(로비)과 견줘서 다른 곳에 있는 사람 수도 알려 준다.
 // 채널 인원은 로비 캐시만큼(최대 몇 초) 늦을 수 있어 0 아래로는 세지 않는다.
 // 장소는 정식 이름으로 부른다 (기억숲 마을·언젠가 캠핑장·달물결 포구)
-
-const PLACE_TITLE: Record<MapId, string> = { village: VILLAGE_TITLE, camp: CAMP_TITLE, sea: SEA_TITLE };
 
 /** 지금 맵에 같이 있는 사람 말고, 이 채널 다른 곳에 있는 사람 수 (나는 빼고) */
 export function elsewhereCount(channelCount: number, namesHere: number): number {
