@@ -57,7 +57,7 @@ export class Riding {
     const pl = this.d.player();
     const pet = ridePetOfLook(pl.view.wearing);
     if (!pet) {
-      this.d.toast("탈 수 있는 펫이 없어요. 큰 개, 왕거위, 달빛 사슴은 동물원 사육사에게 데려올 수 있어요.");
+      this.d.toast("탈 수 있는 펫이 없어요. 타는 펫은 동물원 사육사에게 데려올 수 있어요.");
       return;
     }
     if (pl.inWater) {

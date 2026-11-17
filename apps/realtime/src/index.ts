@@ -27,6 +27,7 @@
  *   POST /internal/where     친구 Vercel → 이 서버: 그 방문자들이 지금 어느 채널·자리에 있는지 (WHERE_CACHE_MS 기억). 본문 서명 필수
  *   POST /internal/say       11/15 Vercel → 이 서버: 마을 공지 한 줄을 사람이 있는 채널 모두의 확성기 줄에 지금 띄운다. 본문 서명 필수
  *   POST /internal/pin       11/17 Vercel → 이 서버: 확성기 창 고정 공지가 바뀌었다 (그 채널 하나, 모든 채널이면 사람이 있는 채널 모두). 본문 서명 필수
+ *   POST /internal/online    11/17 Vercel → 이 서버: 지금 접속 중인 방문자 id 전부 (관리자 선물 「지금 접속 중인 사람 모두」). 본문 서명 필수
  */
 import { CLOSE, HUNT_ROOMS_CACHE_SEC, INTERNAL_SIG_HEADER, LOBBY_CACHE_SEC, ROOM_ID_RE, WHERE_CACHE_MS, verifyInternal, type PeerWhere } from "@tomb/protocol";
 import type { JoinTicket } from "./channel";
@@ -42,6 +43,7 @@ import {
   rejectSocket,
 } from "./auth";
 import { type Env, channelStub, lobbyStub, readConfig, roomStub } from "./config";
+import { mergeOnline } from "./lobbyState";
 import { IsolateMemo, isOutdatedClient, parseChannel, parseMap, parseSpawn, pinEvent, sayRelay } from "./logic";
 
 export { ChannelDO } from "./ChannelDO";
@@ -73,7 +75,7 @@ export default {
 
 /** /internal/* 본문 상한 (바이트) */
 const INTERNAL_MAX_BYTES = 8_000 * 4;
-const INTERNAL_PATHS = new Set(["/internal/kick", "/internal/peer", "/internal/me", "/internal/where", "/internal/hello", "/internal/say", "/internal/pin"]);
+const INTERNAL_PATHS = new Set(["/internal/kick", "/internal/peer", "/internal/me", "/internal/where", "/internal/hello", "/internal/say", "/internal/pin", "/internal/online"]);
 
 async function internal(req: Request, env: Env, path: string): Promise<Response> {
   const notFound = new Response("not found", { status: 404 });
@@ -155,6 +157,18 @@ async function internal(req: Request, env: Env, path: string): Promise<Response>
       ),
     );
     return Response.json({ sent: sent.filter(Boolean).length });
+  }
+  if (r.op === "online") {
+    // 11/17 관리자 선물: 사람이 있는 채널들의 지금 명단(기억을 건너뛰고) + 로비 등록 → 한 번씩
+    const lobby = lobbyStub(env);
+    const [map, registry] = await Promise.all([
+      whereMap(env, true),
+      lobby.onlineVisitors().catch((e) => {
+        console.error("onlineVisitors failed", e);
+        return [] as string[];
+      }),
+    ]);
+    return Response.json({ visitorIds: mergeOnline([[...map.keys()].map((visitorId) => ({ visitorId }))], registry) });
   }
   if (r.op === "hello") {
     await lobbyStub(env).friendHello(r.visitorId, r.name, r.key, r.friends);

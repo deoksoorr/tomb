@@ -35,7 +35,8 @@ function tinted(kind: "spark" | "glow", color: number): HTMLCanvasElement {
 /** 하늘의 작은 별 (고정 자리) */
 const STARS = Array.from({ length: 22 }, (_, i) => ({ x: (i * 97.3) % STAGE_W, y: ((i * 53.7) % (STAGE_H * 0.62)) + 3, a: 0.25 + ((i * 31) % 10) / 20 }));
 
-function draw(ctx: CanvasRenderingContext2D, st: FireworkStage, k: number): void {
+/** 무대 한 장면 그리기 (k = 논리 1px의 캔버스 px). 폭죽 창 카드의 정지 그림도 같은 함수로 그린다 */
+export function drawStage(ctx: CanvasRenderingContext2D, st: Pick<FireworkStage, "sparks" | "blooms" | "heads" | "glow">, k: number): void {
   const W = STAGE_W * k;
   const H = STAGE_H * k;
   ctx.globalCompositeOperation = "source-over";
@@ -118,11 +119,12 @@ export default function FireworkPreview({ itemId, label = "", className }: { ite
     let raf = 0;
     let last = performance.now();
     const loop = (now: number) => {
-      // 탭이 가려졌다 돌아오면 한꺼번에 몰아 계산하지 않는다
-      const dt = Math.min(50, now - last);
+      // 탭이 가려졌다 돌아오면 한꺼번에 몰아 계산하지 않는다. 한도는 게임(WorldScene)과 같은 100ms —
+      // 더 낮으면 프레임이 느린 기기에서 미리보기만 느리게 흘러 실제와 박자가 어긋난다
+      const dt = Math.min(100, now - last);
       last = now;
       stage.step(dt);
-      draw(ctx, stage, k);
+      drawStage(ctx, stage, k);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);

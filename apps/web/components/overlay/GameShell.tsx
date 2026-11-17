@@ -76,6 +76,7 @@ import WishDialog from "@/components/plaza/WishDialog";
 import LotteryDialog from "@/components/plaza/LotteryDialog";
 import SkyHud from "@/components/sky/SkyHud";
 import SeaViewHud from "@/components/sea/SeaViewHud";
+import GhostLayer from "@/components/sea/GhostLayer";
 import UrgentHud from "@/components/forage/UrgentHud";
 import FoodGauge from "@/components/camp/FoodGauge";
 import Telescope from "@/components/rpg/Telescope";
@@ -645,6 +646,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {ready && <SkyHud />}
       {/* 11/16 바닷가: 앉아 있을 때 「바다 보기」 (V) */}
       {ready && <SeaViewHud />}
+      {ready && <GhostLayer />}
       {/* 11/15 긴급 의뢰: 시작 알림 · 위쪽 남은 시간·서버 전체 막대 (마을 어디서든) */}
       {ready && <UrgentHud />}
 

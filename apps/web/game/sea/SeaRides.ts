@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { DIR, SEA_JET_SHALLOW_MSG, SEA_JETSKI_SPEED, SEA_RIDES, seaJetDismount, seaJetWater, SEA_TUBE_SPEED, onSeaDeck, seaTubeDriftAt, seaTubeWater, seaWet, type DirId, type SeaRide, type Sid } from "@tomb/protocol";
+import { DIR, SEA_HEIGHT, SEA_JET_SHALLOW_MSG, SEA_JETSKI_SPEED, SEA_RIDES, SEA_WIDTH, seaJetDismount, seaJetWater, SEA_TUBE_SPEED, onSeaDeck, seaTubeDriftAt, seaTubeWater, seaWet, type DirId, type SeaRide, type Sid } from "@tomb/protocol";
 import { BIG_RIDE_TOAST, myBig } from "../camp/foodState";
 import type { Player } from "../entities/Player";
 import type { RemoteAvatar } from "../entities/RemoteAvatar";
@@ -9,7 +9,8 @@ import type { MoveInput } from "../logic/movement";
 import { RideSound } from "../world/RideSound";
 import { bystanderGain } from "../world/rides";
 import * as Art from "./seaArt";
-import { rideBox, stepJet, stepTube, tubeReturnK, type RideMotion } from "./seaRideLogic";
+import { rideBox, stepJet, stepTube, type RideMotion } from "./seaRideLogic";
+import { planRideReturn, returnBlend, returnPoseAt, tubeReturnWater, type ReturnPlan } from "./seaRideReturn";
 import { SeaEngineSound } from "./seaRideSound";
 
 // 11/16 r13 바다 놀거리 (사용자): 튜브 다섯 · 제트스키 둘. 그림·타기·움직임·소리를 한곳에서 (마을 조각배 BoatRide와 같은 흐름).
@@ -80,6 +81,9 @@ type View = {
   /** 탄 사람이 내린 자리 · 때 (빈 튜브가 길로 돌아가요, 제트스키는 매어 둔 자리로) */
   leftFrom: { x: number; y: number } | null;
   leftAt: number;
+  /** 11/17 빈 튜브가 물 위로만 돌아가는 길 (for = 이 길을 만든 leftFrom — 새로 내리면 다시 찾아요) · 물결에 사라지는 정도 */
+  ret: { plan: ReturnPlan; for: { x: number; y: number }; fx: number } | null;
+  fade: number;
   speed: number;
   lastX: number;
   lastY: number;
@@ -148,7 +152,7 @@ export class SeaRides {
         : s.add.image(def.x, def.y, key).setOrigin(0.5, 1).setVisible(false);
       const block = s.add.zone(def.x, def.y, 1, 1).setOrigin(0, 0);
       block.removeFromDisplayList();
-      this.views.push({ def, body, front, x: def.x, y: def.y, dir: DIR.down, owner: null, leftFrom: null, leftAt: 0, speed: 0, lastX: def.x, lastY: def.y, wakeAt: 0, sprayAt: 0, vx: 0, vy: 0, nudge: null, block, blockKey: "", passUntil: 0 });
+      this.views.push({ def, body, front, x: def.x, y: def.y, dir: DIR.down, owner: null, leftFrom: null, leftAt: 0, ret: null, fade: 1, speed: 0, lastX: def.x, lastY: def.y, wakeAt: 0, sprayAt: 0, vx: 0, vy: 0, nudge: null, block, blockKey: "", passUntil: 0 });
     }
     // 11/16 r14 사용자: 헤엄치다 제트스키·튜브를 그냥 지나가요 → 부딪혀요 (내가 탄 것·막 내린 것은 빼요)
     // 마을 배(BoatRide hullBlocks)와 같은 규칙: 헤엄·잠수 중이고 아무것도 안 탔을 때만, 보이는 놀거리만, 막 내린 것은 잠깐 통과.
@@ -201,7 +205,8 @@ export class SeaRides {
     let best: View | null = null;
     let bd = Infinity;
     for (const v of this.views) {
-      if (v.owner !== null) continue;
+      // 11/17 물결에 사라진 동안엔 못 타요
+      if (v.owner !== null || v.body.alpha < 0.5) continue;
       const tube = v.def.kind === "tube";
       if (!tube && (v.leftFrom || !onSeaDeck(pl.x, pl.y))) continue;
       const d = Math.hypot(v.x - pl.x, v.y - pl.y);
@@ -255,6 +260,8 @@ export class SeaRides {
     this.bounce.reset();
     v.owner = -1;
     v.leftFrom = null;
+    v.ret = null;
+    v.fade = 1;
     if (h.online()) h.sit(v.def.id);
     this.sound.play("boat-board", 0.6, v.def.kind === "tube" ? 1.15 : 0.9);
     if (!h.reduced) h.splash(v.x, v.y + 2);
@@ -468,14 +475,11 @@ export class SeaRides {
         }
       } else if (v.def.kind === "tube") {
         const d = seaTubeDriftAt(v.def.n, wall, level);
-        if (v.leftFrom) {
-          const k = tubeReturnK(Math.hypot(d.x - v.leftFrom.x, d.y - v.leftFrom.y), now - v.leftAt);
-          v.x = v.leftFrom.x + (d.x - v.leftFrom.x) * k;
-          v.y = v.leftFrom.y + (d.y - v.leftFrom.y) * k;
-          if (k >= 1) v.leftFrom = null;
-        } else {
+        if (v.leftFrom) this.tubeReturn(v, d, now, level);
+        else {
           v.x = d.x;
           v.y = d.y;
+          v.fade = 1;
         }
       } else if (v.leftFrom) {
         // 빈 제트스키가 바다 한가운데 (탄 사람이 접속을 끊음): 잠시 뒤 사라졌다가 매어 둔 자리에 나타나요
@@ -520,6 +524,39 @@ export class SeaRides {
     this.engine.set(engineLevel, engineRpm, performance.now());
   }
 
+  /**
+   * 11/17 사용자 버그 "버려 둔 놀거리가 다리 위를 지나 돌아가요" → 빈 튜브는 물 위로만 찾은 길(seaRideReturn)로 떠다니는 길 가운데로 돌아가며
+   * 조금씩 그 길의 흐름에 섞여요. 길이 없거나 너무 멀면 물결과 함께 사라졌다 제자리에 나타나요
+   */
+  private tubeReturn(v: View, drift: { x: number; y: number }, now: number, level: number): void {
+    const from = v.leftFrom!;
+    const home = { x: v.def.x, y: v.def.y };
+    if (v.ret?.for !== from) v.ret = { plan: planRideReturn(from, home, tubeReturnWater(level), SEA_WIDTH, SEA_HEIGHT), for: from, fx: 0 };
+    const t = now - v.leftAt;
+    const p = returnPoseAt(v.ret.plan, from, home, t);
+    const w = returnBlend(v.ret.plan, t);
+    v.x = p.x + (drift.x - home.x) * w;
+    v.y = p.y + (drift.y - home.y) * w;
+    v.fade = p.alpha;
+    this.returnRipple(v, p.at, v.ret);
+    if (p.done) {
+      v.leftFrom = null;
+      v.ret = null;
+    }
+  }
+
+  /** 사라지기 시작할 때 · 다시 나타날 때 물결 한 번씩 */
+  private returnRipple(v: View, at: "from" | "to" | "path", ret: { plan: ReturnPlan; fx: number }): void {
+    if (ret.plan.kind !== "fade" || this.host.reduced) return;
+    if (at === "from" && ret.fx === 0) {
+      ret.fx = 1;
+      this.host.splash(v.x, v.y + 2);
+    } else if (at === "to" && ret.fx < 2 && v.fade > 0) {
+      ret.fx = 2;
+      this.host.splash(v.x, v.y + 2);
+    }
+  }
+
   private draw(v: View, now: number, wall: number, rider: RemoteAvatar | null): void {
     const T = Art.SEA_TEX;
     const ridden = v.owner !== null;
@@ -531,7 +568,7 @@ export class SeaRides {
     if (v.nudge && now - v.nudge.at > 1000) v.nudge = null;
     const x = Math.round(v.x + (v.nudge?.nx ?? 0) * nd);
     const y = Math.round(v.y + bob + (v.nudge?.ny ?? 0) * nd);
-    let alpha = 1;
+    let alpha = ridden ? 1 : v.fade;
     if (!ridden && v.def.kind === "jetski" && v.leftFrom) {
       const t = now - v.leftAt - JET_RETURN_MS;
       alpha = t <= 0 ? 1 : t < JET_FADE_MS ? 1 - t / JET_FADE_MS : t < JET_FADE_MS * 2 ? (t - JET_FADE_MS) / JET_FADE_MS : 1;

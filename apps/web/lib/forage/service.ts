@@ -51,7 +51,7 @@ import { festWeight } from "./quests/urgent";
 import { festivalOn } from "./quests/urgentService";
 import { pickSunkenCosmetic, SUNKEN_CHANCE, sunkenFallbackFish, sunkenName } from "./sunken";
 import { grantSunkenCosmetic, ownedPermanent } from "./sunkenGrant";
-import { getForageStore, type GrantItem, type ForageStore, type Snapshot } from "./store";
+import { getForageStore, type GrantItem, type Granted, type ForageStore, type Snapshot } from "./store";
 import { wornPerk } from "../titlesServer";
 import { signForageTicket, verifyForageTicket, type ForageTicket } from "./ticket";
 import type {
@@ -494,4 +494,14 @@ export async function dexBadgeOf(acct: string): Promise<number> {
   } catch {
     return 0;
   }
+}
+
+// ── 11/17 포구 갈매기 깃털 (lib/sea/gullService가 굴린 결과를 가방·도감에) ──
+
+/** 갈매기가 떨어뜨린 깃털을 가방에 (채집 한 번으로 세요) · 처음이면 도감 보상 */
+export async function grantGullFeather(acct: string, id: string, now = Date.now(), ip?: string): Promise<{ item: Granted | null; dex?: DexGain }> {
+  const store = getForageStore();
+  const got = await store.grant(acct, kstDay(now), "gather", [{ id, size: 0 }], STACK_MAX);
+  const dex = await dexGainOf(store, acct, got ?? [], ip, now);
+  return { item: got?.[0] ?? null, ...withDex(dex) };
 }

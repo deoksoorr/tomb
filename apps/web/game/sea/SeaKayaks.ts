@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { DIR, SEA_KAYAK_DOCK, SEA_KAYAKS, seaKayakDismount, seaKayakSeatById, seaKayakWater, tideLineY, type DirId, type Sid } from "@tomb/protocol";
+import { DIR, SEA_HEIGHT, SEA_KAYAK_DOCK, SEA_KAYAKS, SEA_WIDTH, seaKayakDismount, seaKayakSeatById, seaKayakWater, tideLineY, type DirId, type Sid } from "@tomb/protocol";
 import { BIG_RIDE_TOAST, myBig } from "../camp/foodState";
 import type { RemoteAvatar } from "../entities/RemoteAvatar";
 import { hullBlocks } from "../logic/boat";
@@ -7,7 +7,8 @@ import { Bounce, knockMove, nudgeAmp, nudgeOffset, resolveHulls, SHIP_GAIN, stro
 import type { MoveInput } from "../logic/movement";
 import { RideSound } from "../world/RideSound";
 import * as Art from "./seaArt";
-import { kayakBox, kayakSeatOffset, stepKayak, tubeReturnK, type RideMotion } from "./seaRideLogic";
+import { kayakBox, kayakSeatOffset, stepKayak, type RideMotion } from "./seaRideLogic";
+import { kayakReturnWater, planRideReturn, returnPoseAt, type ReturnPlan } from "./seaRideReturn";
 import { remoteTouch, type SeaHull, type SeaRideHost } from "./SeaRides";
 
 // 11/16 r18 사용자: 카약 선착장 2인승 카약 셋. 마을 2인승 조각배와 같은 흐름 (서버 좌석 두 자리 — 같은 카약 = 같은 가구).
@@ -33,6 +34,9 @@ type View = {
   seat: [Sid | -1 | null, Sid | -1 | null];
   leftFrom: { x: number; y: number } | null;
   leftAt: number;
+  /** 11/17 빈 카약이 물 위로만 돌아가는 길 (for = 이 길을 만든 leftFrom) · 물결에 사라지는 정도 */
+  ret: { plan: ReturnPlan; for: { x: number; y: number }; fx: number } | null;
+  fade: number;
   speed: number;
   lastX: number;
   lastY: number;
@@ -80,13 +84,13 @@ export class SeaKayaks {
       const block = s.add.zone(p.x, p.y, 1, 1).setOrigin(0, 0);
       block.removeFromDisplayList();
       this.blocks.add(block);
-      this.views.push({ n, moor: p, body, paddles, covers, x: p.x, y: p.y, dir: DIR.right, seat: [null, null], leftFrom: null, leftAt: 0, speed: 0, lastX: p.x, lastY: p.y, wakeAt: 0, block, blockKey: "", passUntil: 0, vx: 0, vy: 0, nudge: null });
+      this.views.push({ n, moor: p, body, paddles, covers, x: p.x, y: p.y, dir: DIR.right, seat: [null, null], leftFrom: null, leftAt: 0, ret: null, fade: 1, speed: 0, lastX: p.x, lastY: p.y, wakeAt: 0, block, blockKey: "", passUntil: 0, vx: 0, vy: 0, nudge: null });
     });
     for (let i = 0; i < (host.reduced ? 8 : 24); i++) this.wakes.push(s.add.image(0, 0, T.wake).setVisible(false));
     // 헤엄치는 사람은 카약에 부딪혀요 (마을 배 hullBlocks와 같은 규칙 — 내 카약·막 내린 카약은 빼요)
     this.blockCollider = s.physics.add.collider(host.player().sprite, this.blocks, (_a, b) => this.swimBump(b as Phaser.GameObjects.Zone), (_a, b) => {
       const v = this.views.find((w) => w.block === b);
-      return !!v && v.seat[0] !== -1 && v.seat[1] !== -1 && s.time.now >= v.passUntil && hullBlocks(host.player(), true);
+      return !!v && v.seat[0] !== -1 && v.seat[1] !== -1 && s.time.now >= v.passUntil && v.fade >= 0.5 && hullBlocks(host.player(), true);
     });
   }
 
@@ -118,7 +122,8 @@ export class SeaKayaks {
     let bd = Infinity;
     for (const v of this.views) {
       const d = Math.hypot(v.x - pl.x, v.y - pl.y);
-      if (d > BOARD_REACH + 8 || d >= bd) continue;
+      // 11/17 물결에 사라진 동안엔 못 타요
+      if (d > BOARD_REACH + 8 || d >= bd || v.fade < 0.5) continue;
       const k: 0 | 1 | null = v.seat[0] === null && v.seat[1] === null ? 0 : v.seat[1] === null && v.seat[0] !== null ? 1 : null;
       if (k === null) continue;
       best = { v, k };
@@ -171,6 +176,8 @@ export class SeaKayaks {
     pl.board(`pK${v.n + 1}-${k}`, at.x, at.y, v.dir, now, null);
     v.seat[k] = -1;
     v.leftFrom = null;
+    v.ret = null;
+    v.fade = 1;
     if (k === 0) {
       this.motion = { x: v.x, y: v.y, vx: 0, vy: 0, dir: v.dir };
       this.bounce.reset();
@@ -326,7 +333,8 @@ export class SeaKayaks {
 
   /** 11/16 r19 카약 몸 상자들 (부딪혀 튕기기) */
   hullBoxes(): SeaHull[] {
-    return this.views.map((v) => {
+    // 11/17 물결에 사라진 동안엔 부딪히지 않아요
+    return this.views.filter((v) => v.fade >= 0.5).map((v) => {
       const remote = (v.seat[0] !== null && v.seat[0] !== -1) || (v.seat[1] !== null && v.seat[1] !== -1);
       return { id: `pK${v.n + 1}`, box: kayakBox(v.dir, Math.round(v.x), Math.round(v.y)), empty: v.seat[0] === null && v.seat[1] === null, vx: v.vx, vy: v.vy, kind: "kayak" as const, ...(remote ? { remote: true } : {}) };
     });
@@ -367,19 +375,14 @@ export class SeaKayaks {
       } else if (ref && ref.who === -1 && ref.k === 1 && drv === null) {
         // 나 혼자 앞자리 (곧 뒤로 옮겨요) — 그대로
       } else if (!ref) {
-        // 빈 카약: 내린 자리에서 매어 둔 자리로 천천히 (튜브처럼)
-        if (v.leftFrom) {
-          const k = tubeReturnK(Math.hypot(v.moor.x - v.leftFrom.x, v.moor.y - v.leftFrom.y), now - v.leftAt);
-          v.x = v.leftFrom.x + (v.moor.x - v.leftFrom.x) * k;
-          v.y = v.leftFrom.y + (v.moor.y - v.leftFrom.y) * k;
-          if (k >= 1) {
-            v.leftFrom = null;
-            v.dir = DIR.right;
-          }
-        } else {
+        // 빈 카약: 내린 자리에서 매어 둔 자리로 천천히. 11/17 사용자 버그 "다리 위를 지나 돌아가요" → 물 위로만 찾은 길로 (seaRideReturn),
+        // 길이 없거나 너무 멀면 물결과 함께 사라졌다 선착장 앞에 나타나요
+        if (v.leftFrom) this.returnHome(v, now);
+        else {
           v.x = v.moor.x;
           v.y = v.moor.y;
           v.dir = DIR.right;
+          v.fade = 1;
         }
       }
       const dt = Math.max(1, dtMs);
@@ -399,6 +402,32 @@ export class SeaKayaks {
     this.riders = seen;
   }
 
+  private returnHome(v: View, now: number): void {
+    const from = v.leftFrom!;
+    if (v.ret?.for !== from) v.ret = { plan: planRideReturn(from, v.moor, kayakReturnWater(this.host.tide()), SEA_WIDTH, SEA_HEIGHT), for: from, fx: 0 };
+    const p = returnPoseAt(v.ret.plan, from, v.moor, now - v.leftAt, v.dir);
+    v.x = p.x;
+    v.y = p.y;
+    if (p.dir !== null) v.dir = p.dir;
+    v.fade = p.alpha;
+    // 사라지기 시작할 때 · 다시 나타날 때 물결 한 번씩
+    if (v.ret.plan.kind === "fade" && !this.host.reduced) {
+      if (p.at === "from" && v.ret.fx === 0) {
+        v.ret.fx = 1;
+        this.host.splash(v.x, v.y + 2);
+      } else if (p.at === "to" && v.ret.fx < 2 && p.alpha > 0) {
+        v.ret.fx = 2;
+        this.host.splash(v.x, v.y + 2);
+      }
+    }
+    if (p.done) {
+      v.leftFrom = null;
+      v.ret = null;
+      v.dir = DIR.right;
+      v.fade = 1;
+    }
+  }
+
   private draw(v: View, now: number, wall: number, seen: Set<RemoteAvatar>, remotes: ReadonlyMap<Sid, RemoteAvatar>): void {
     const T = Art.SEA_TEX;
     const side = v.dir === DIR.left || v.dir === DIR.right;
@@ -413,7 +442,7 @@ export class SeaKayaks {
     if (v.nudge && now - v.nudge.at > 1000) v.nudge = null;
     const x = Math.round(v.x + (v.nudge?.nx ?? 0) * nd);
     const y = Math.round(v.y + bob + (v.nudge?.ny ?? 0) * nd);
-    v.body.setPosition(x, y).setFlipX(v.dir === DIR.left).setFlipY(v.dir === DIR.up).setDepth(v.y - 2);
+    v.body.setPosition(x, y).setFlipX(v.dir === DIR.left).setFlipY(v.dir === DIR.up).setDepth(v.y - 2).setAlpha(empty ? v.fade : 1);
     this.syncBlock(v, x, y, side);
     // 탄 사람 · 노 (둘 다 같은 시계로 저어요 — 움직일 때만)
     const rowing = v.speed > 6 && !this.host.reduced;

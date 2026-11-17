@@ -19,11 +19,16 @@ import {
   LETTER_HOLD,
   letterMask,
   letterSparks,
+  rocketTrail,
+  slowFactor,
   sparkLook,
+  sparkState,
+  sparkTrail,
   stepSpark,
   type FwPattern as Pattern,
   type LetterMask,
   type SparkSpec,
+  type SparkState,
 } from "./fwShapes";
 import type { Lighting } from "./Lighting";
 import type { Sfx } from "./Sfx";
@@ -37,6 +42,11 @@ import type { Sfx } from "./Sfx";
 //  3 fw_willow    금빛 버드나무: 오래 남아 아래로 늘어진다
 //  3 fw_crossette 이중 폭발: 첫 불꽃 끝에서 저마다 다시 터진다
 //  3 fw_smile     웃는 얼굴               3 fw_waterfall 폭포: 가로 불꽃 줄에서 커튼처럼 흘러내린다
+//  2 fw_twinring  고리 두 겹: 비스듬한 바깥 고리 + 안쪽 고리   2 fw_butterfly 나비
+//  2 fw_snow      눈꽃: 여섯 갈래, 가지 끝이 반짝            2 fw_strobe    별빛 점멸: 멈춰서 저마다 깜빡인다
+//  3 fw_chameleon 색바꿈 국화: 꼬리를 끌다 빨강 → 초록       3 fw_glitter   금가루: 깜빡이는 금가루가 흘러내린다
+//  3 fw_palm      야자수: 금빛 줄기 + 휘어 내리는 초록 잎    3 fw_tower     3단 불꽃탑: 한 자리에서 점점 높이·크게
+//  버드나무·야자수·금가루·색바꿈 국화는 불티가 지나간 자리에 꼬리(fwShapes.sparkTrail)를 남긴다
 //  4 fw_big    대형: 반경 2.8배 이상(화면 대부분), 잔상이 길고 뒤늦게 반짝이는 불티, 화면이 살짝 흔들리고 어둠이 걷힌다
 //  fw_meteor   별똥별 비: 하늘 레이어(모두가 본다)에 10~14줄기가 비스듬히 긋고 지나가며 끝에서 반짝 (power 3)
 //  fw_letter   글자 폭죽: 쏜 사람 이름이 불꽃 글자로 떠올라 잠깐 머문 뒤 흘러내린다 (power 3)
@@ -56,23 +66,10 @@ const GLOW_TAU = 900;
 
 type Mode = "world" | "sky" | "finale" | "signal";
 
-type Spark = {
+/** 불티 하나: 움직임·꼬리·밝기는 미리보기와 같은 SparkState (fwShapes) */
+type Spark = SparkState & {
   img: Phaser.GameObjects.Image;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  age: number;
-  life: number;
   sky: boolean;
-  /** 공기 저항 (하트는 작게 해서 모양이 오래 남는다) */
-  drag: number;
-  grav: number;
-  size: number;
-  /** 이 나이(ms)가 되면 공기 저항·중력을 바꾼다 (글자 모양으로 멈춰 있다가 흘러내리기). 없으면 Infinity */
-  swapAt: number;
-  /** 수명의 이 비율까지는 밝게 유지, 그 뒤로 사라진다 (0이면 처음부터 서서히) */
-  fadeFrom: number;
 };
 /** 별똥별 한 줄기 (화면 비율 좌표) */
 type Meteor = MeteorStreak & { t0: number; trailAt: number; head: Phaser.GameObjects.Image | null; color: number; loud: boolean };
@@ -100,6 +97,8 @@ type Rocket = {
   label?: string;
   /** 분수: 땅에서 바로 뿜는다 (솟지 않는다) */
   ground?: boolean;
+  /** 반경 배율 (3단 불꽃탑) */
+  scale?: number;
 };
 type Flash = { x: number; y: number; age: number; r: number; ms: number };
 type Timer = { at: number; run: () => void };
@@ -199,8 +198,9 @@ export class Fireworks {
     for (const s of fireworkShots(item, plan, h)) {
       if (s.ground && mode !== "world") continue; // 분수는 땅에서 뿜는다: 화면 밖이면 보이지 않는다
       // 화면 안에서 쏘면 보이는 영역 안에서 터지게 맞춘다 (불멍처럼 가까이 당긴 구도에서 위로 잘리지 않게)
-      const fit = mode === "world" && !s.ground ? fitBurst(x + s.dx, y, s.h, r, view) : { h: s.h, r };
-      this.rockets.push({ x: x + s.dx, y, t0: now, delay: s.delay, h: fit.h, r: fit.r, colors: s.colors, pattern: s.pattern, plan, mode, loud: mine, big: false, trailAt: 0, launched: false, ground: s.ground });
+      const rs = r * (s.scale ?? 1);
+      const fit = mode === "world" && !s.ground ? fitBurst(x + s.dx, y, s.h, rs, view) : { h: s.h, r: rs };
+      this.rockets.push({ x: x + s.dx, y, t0: now, delay: s.delay, h: fit.h, r: fit.r, colors: s.colors, pattern: s.pattern, plan, mode, loud: mine, big: false, trailAt: 0, launched: false, ground: s.ground, scale: s.scale });
     }
   }
 
@@ -291,24 +291,28 @@ export class Fireworks {
 
   /** 이번 폭발에 쓸 수 있는 입자 수 (풀 한도 + 느린 프레임) */
   private budget(want: number): number {
-    const slow = this.dtAvg > 24 ? 0.55 : this.dtAvg > 19 ? 0.8 : 1;
+    const slow = slowFactor(this.dtAvg);
     const room = this.free.length + (CAP - this.made);
     return Math.max(0, Math.min(Math.round(want * this.k * slow), room - 16));
   }
 
   private spawn(x: number, y: number, vx: number, vy: number, life: number, color: number, sky: boolean, size: number, drag = 1.3, grav = GRAVITY): Spark | null {
+    return this.spawnState(sparkState(x, y, { vx, vy, life, color, size, drag, grav }), sky);
+  }
+
+  private spawnState(st: SparkState, sky: boolean): Spark | null {
     const img = this.take();
     if (!img) return null;
     img
       .setActive(true)
       .setVisible(true)
-      .setTint(color)
+      .setTint(st.color ?? 0xffffff)
       .setScrollFactor(sky ? 0 : 1)
       .setDepth(sky ? DEPTH.weather - 3 : DEPTH.lights + 10)
-      .setPosition(x, y)
-      .setScale(size)
+      .setPosition(st.x, st.y)
+      .setScale(st.size)
       .setAlpha(1);
-    const sp: Spark = { img, x, y, vx, vy, age: 0, life, sky, drag, grav, size, swapAt: Infinity, fadeFrom: 0 };
+    const sp: Spark = Object.assign(st, { img, sky });
     this.sparks.push(sp);
     return sp;
   }
@@ -384,11 +388,7 @@ export class Fireworks {
   }
 
   private spawnSpec(bx: number, by: number, s: SparkSpec, sky: boolean): void {
-    const sp = this.spawn(bx + (s.ox ?? 0), by + (s.oy ?? 0), s.vx, s.vy, s.life, s.color, sky, s.size, s.drag, s.grav);
-    if (sp) {
-      if (s.swapAt !== undefined) sp.swapAt = s.swapAt;
-      if (s.fadeFrom !== undefined) sp.fadeFrom = s.fadeFrom;
-    }
+    this.spawnState(sparkState(bx, by, s), sky);
     if (s.pop) this.sfx.play("burst", sky ? 0.2 : 0.35, 1.7);
   }
 
@@ -440,8 +440,8 @@ export class Fireworks {
     if (r.mode === "sky") {
       const p = this.skyPoint(r.x, view);
       // 멀리 하늘에서: 1~3은 작게, 대형은 화면 짧은 변의 22% 반경
-      const R = big ? (0.22 * Math.min(cam.width, cam.height)) / cam.zoom : FW_BASE_RADIUS * plan.radius * 0.6;
-      this.bloom(p.x, p.y, r.colors[0], true, big ? R / 18 : (r.pattern === "heart" ? 1.6 : 1.3) * 0.6);
+      const R = (big ? (0.22 * Math.min(cam.width, cam.height)) / cam.zoom : FW_BASE_RADIUS * plan.radius * 0.6) * (r.scale ?? 1);
+      this.bloom(p.x, p.y, r.colors[0], true, big ? R / 18 : (r.pattern === "heart" ? 1.6 : 1.3) * 0.6 * (r.scale ?? 1));
       this.explode(p.x, p.y, R, r.pattern, r.colors, true, plan.life, big ? 0.9 : 0.7);
       if (big) this.brighten(plan, r.colors[1], 0.5);
       this.sfx.play("burst", 0.35 * plan.volume, big ? 0.8 : 1);
@@ -450,7 +450,7 @@ export class Fireworks {
     const bx = r.x;
     const by = r.y - r.h;
     this.flashes.push({ x: bx, y: by, age: 0, r: plan.light, ms: plan.lightMs });
-    this.bloom(bx, by, big ? 0xfff0c8 : r.colors[0], false, big ? r.r / 16 : r.pattern === "heart" ? 1.6 : 1.3, big ? 760 : 520);
+    this.bloom(bx, by, big ? 0xfff0c8 : r.colors[0], false, big ? r.r / 16 : (r.pattern === "heart" ? 1.6 : 1.3) * (r.scale ?? 1), big ? 760 : 520);
     this.explode(bx, by, r.r, r.pattern, r.colors, false, plan.life, 1);
     if (big) {
       this.brighten(plan, 0xffe6c0, 1);
@@ -491,11 +491,10 @@ export class Fireworks {
           const p = this.toSky(r.x * cam.width + Math.sin(t / 60) * 1.5, sy);
           this.spawn(p.x, p.y, (Math.random() - 0.5) * 4, 6 + Math.random() * 6, 360, 0xffe8b0, true, 0.8, 1.3, 8);
         } else if (r.mode !== "sky") {
-          // 로켓 꼬리: 솟는 동안 작은 불티 (대형은 굵게 두 줄)
+          // 로켓 꼬리: 솟는 동안 작은 불티 (대형은 굵게 두 줄, 야자수는 오래 남는 줄기 — 미리보기와 같은 rocketTrail)
           const ry = r.y - 8 - (r.h - 8) * e;
           const rx = r.x + Math.sin(t / 70) * 0.8;
-          this.spawn(rx, ry, (Math.random() - 0.5) * 6, 8 + Math.random() * 8, 380, 0xffe8b0, false, 1);
-          if (r.plan.power >= 4) this.spawn(rx + (Math.random() - 0.5) * 2, ry + 2, (Math.random() - 0.5) * 10, 10 + Math.random() * 10, 520, 0xffc070, false, 1.2);
+          for (const s of rocketTrail(r.pattern, r.plan.power)) this.spawnSpec(rx, ry, s, false);
         }
       }
       if (k >= 1) {
@@ -525,9 +524,12 @@ export class Fireworks {
         if (i < this.sparks.length) this.sparks[i] = lastSpark;
         continue;
       }
-      stepSpark(p, dt);
+      if (stepSpark(p, dt)) p.img.setTint(p.color ?? 0xffffff);
       const look = sparkLook(p, this.reduced);
       p.img.setPosition(p.x, p.y).setAlpha(look.alpha).setScale(look.scale);
+      // 꼬리 (버드나무 가지·금가루): 풀이 바닥나면 꼬리부터 건너뛴다
+      const tail = sparkTrail(p, this.reduced);
+      if (tail && this.free.length + (CAP - this.made) > 24) this.spawnState(sparkState(p.x, p.y, tail), p.sky);
     }
     for (let i = this.flashes.length - 1; i >= 0; i--) {
       this.flashes[i].age += dt;

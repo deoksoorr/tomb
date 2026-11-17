@@ -234,6 +234,50 @@
   animation: npNewyear 3s linear infinite;
 }
 
+/* 11/17 니트 이름표: 위아래 크림 골지 단 + 세로 꽈배기 무늬 */
+.wrap[data-plate="knit"] {
+  border-radius: 3px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 5px, color-mix(in srgb, var(--np-light) 70%, transparent) 5px 6px),
+    var(--np-fill);
+  box-shadow:
+    inset 0 2px 0 var(--np-dot),
+    inset 0 -2px 0 var(--np-dot),
+    0 0 0 1px var(--np-edge);
+}
+
+/* 11/17 사원증 이름표: 은빛 테 남색 카드 + 위 파란 띠 */
+.wrap[data-plate="card"] {
+  border-radius: 3px;
+  box-shadow:
+    inset 0 2px 0 var(--np-light),
+    0 0 0 1px var(--np-edge);
+}
+
+/* 11/17 모래사장 이름표: 위 물거품 띠 + 오른쪽 아래 불가사리 */
+.wrap[data-plate="beach"] {
+  border-radius: 5px;
+  background:
+    radial-gradient(circle at calc(100% - 5px) calc(100% - 4px), var(--np-dot) 0 1.5px, transparent 2px),
+    var(--np-fill);
+  box-shadow:
+    inset 0 2px 0 #8ad8f0,
+    0 0 0 1px var(--np-edge);
+}
+
+/* 12월 호랑가시 이름표: 눈 덮인 상록 판 + 금테 + 양 귀퉁이 빨간 열매 */
+.wrap[data-plate="holly"] {
+  border-radius: 3px;
+  padding: 0 7px;
+  background:
+    radial-gradient(circle at 3px 4px, var(--np-dot) 0 1.5px, transparent 2px),
+    radial-gradient(circle at calc(100% - 3px) 4px, var(--np-dot) 0 1.5px, transparent 2px),
+    var(--np-fill);
+  box-shadow:
+    inset 0 2px 0 #f8fbff,
+    0 0 0 1px var(--np-edge);
+}
+
 @keyframes npNewyear {
   to {
     background-position: 0 0, 0 0, 11px -3px, 0 0;

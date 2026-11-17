@@ -40,6 +40,23 @@ export function hash2(x: number, y: number, salt = 0): number {
   return (h >>> 0) / 4294967296;
 }
 
+/** 부드러운 값 노이즈 0..1 (격자 scale px, 결정적) */
+export function vnoise(x: number, y: number, scale: number, salt: number): number {
+  const gx = x / scale;
+  const gy = y / scale;
+  const x0 = Math.floor(gx);
+  const y0 = Math.floor(gy);
+  const fx = gx - x0;
+  const fy = gy - y0;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sy = fy * fy * (3 - 2 * fy);
+  const a = hash2(x0, y0, salt);
+  const b = hash2(x0 + 1, y0, salt);
+  const c = hash2(x0, y0 + 1, salt);
+  const d = hash2(x0 + 1, y0 + 1, salt);
+  return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
+}
+
 /** 시드 고정 난수 (mulberry32) */
 export function rng(seed: number): () => number {
   let a = seed >>> 0;

@@ -54,6 +54,9 @@ import { makeCanvas, mix } from "../sprites/pixel";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { PLATE_LABEL, PLATE_LOT_FREE, SignPlate } from "../world/SignPlate";
 import { worldTintOf } from "../world/worldTint";
+import { forEachGhostTexture } from "./ghostShipArt";
+import { forEachGullTexture, GULL_TEX } from "./gullArt";
+import { hotLevel, HOT_MS } from "@/lib/sea/gull";
 import * as Art from "./seaArt";
 import { noise1, shoreDelay, shoreReach, WaveTrain } from "./seaWaves";
 import * as Lay from "./seaLayout";
@@ -122,7 +125,9 @@ const GULLS = 8;
 type Culled = Phaser.GameObjects.Image | Phaser.GameObjects.BitmapText;
 type Mote = { img: Phaser.GameObjects.Image; x: number; y: number; t0: number; life: number };
 type Perch = { x: number; y: number; lift: number };
-type GullMode = "circle" | "land" | "perch" | "flee";
+type GullMode = "circle" | "land" | "perch" | "flee" | "feed";
+/** 11/17 과자 받아먹기: 받아먹는 갈매기(catch) 하나 + 둘레를 맴도는 갈매기(swirl) */
+type GullFeedJob = { tx: number; ty: number; t0: number; fx: number; fy: number; role: "catch" | "swirl"; ang: number; dir: 1 | -1; hot: boolean; piece: number; done: boolean };
 type Gull = {
   img: Phaser.GameObjects.Image;
   mode: GullMode;
@@ -144,7 +149,20 @@ type Gull = {
   perch: number;
   until: number;
   phase: number;
+  /** 11/17 과자 받아먹는 중 · 매운 과자를 먹은 때 (빨개져요 — 0이면 아니에요) */
+  feed: GullFeedJob | null;
+  hotAt: number;
+  steamAt: number;
+  flameAt: number;
 };
+type Piece = { img: Phaser.GameObjects.Image; x0: number; y0: number; x1: number; y1: number; t0: number; dur: number; on: boolean };
+type Puff = { img: Phaser.GameObjects.Image; x: number; y: number; t0: number; on: boolean };
+type Flame = { img: Phaser.GameObjects.Image; g: Gull | null; t0: number };
+/** 과자를 보고 몰려오는 갈매기 수 · 받아먹기까지 (ms) */
+const FEED_GULLS = 5;
+const FEED_HOVER_MS = 900;
+const FEED_DIVE_MS = 380;
+const FEED_SWIRL_MS = 2800;
 
 /** 시험·장면용: 지금 물가 선 (물 몸통이 시작하는 y, 밀려옴 포함) */
 export type SeaWaterState = { level: number; lineY: number; edgeY: number; wetTop: number };
@@ -226,6 +244,10 @@ export class SeaMap implements SeaMapApi {
   private beacon: Phaser.GameObjects.Image | null = null;
   private lit = -1;
   private readonly gulls: Gull[] = [];
+  /** 11/17 던진 과자 조각 · 빨개진 갈매기 김 · 불꽃 입김 (풀) */
+  private readonly pieces: Piece[] = [];
+  private readonly puffs: Puff[] = [];
+  private readonly flames: Flame[] = [];
   private readonly perches: Perch[] = [];
   private readonly perchTaken: (number | null)[] = [];
 
@@ -641,13 +663,191 @@ export class SeaMap implements SeaMapApi {
     for (let i = 0; i < this.perches.length; i++) this.perchTaken.push(null);
     for (let i = 0; i < GULLS; i++) {
       const img = this.keep(s.add.image(0, 0, Art.SEA_TEX.gull, 1).setOrigin(0.5, 1).setDepth(OVERHEAD));
-      const g: Gull = { img, mode: "circle", x: 0, y: 0, cx: 0, cy: 0, rad: 60, ang: 0, spd: 0.001, fx: 0, fy: 0, tx: 0, ty: 0, t0: 0, dur: 1, perch: -1, until: 0, phase: Math.random() * 4000 };
+      const g: Gull = { img, mode: "circle", x: 0, y: 0, cx: 0, cy: 0, rad: 60, ang: 0, spd: 0.001, fx: 0, fy: 0, tx: 0, ty: 0, t0: 0, dur: 1, perch: -1, until: 0, phase: Math.random() * 4000, feed: null, hotAt: 0, steamAt: 0, flameAt: 0 };
       this.gulls.push(g);
       // 처음엔 반쯤은 앉아 있어요
       if (i % 2 === 0 && this.freePerch(i) >= 0) {
         const pi = this.freePerch(i);
         this.sitGull(g, pi, 0, i);
       } else this.newCircle(g, 0, true);
+    }
+  }
+
+  /** 11/17 (x,y) 둘레 r 안에 갈매기가 있는지 (과자 던지기 안내) */
+  gullNear(x: number, y: number, r: number): boolean {
+    return this.gulls.some((g) => Math.hypot(g.x - x, g.y - y) <= r);
+  }
+
+  /**
+   * 11/17 과자를 던졌어요: (fx,fy)에서 (tx,ty)로 조각이 포물선으로 날아가고, 가까운 갈매기 다섯이 몰려와 맴돌다 하나가 낚아채요.
+   * hot = 매운 새우 과자 (받아먹은 갈매기가 30초 빨개져요). 같은 바닷가 사람의 던지기도 여기로 와요 (실시간 act)
+   */
+  feedGulls(fx: number, fy: number, tx: number, ty: number, hot: boolean, now: number): void {
+    if (!this.gulls.length) return;
+    const s = this.scene;
+    let pi = this.pieces.findIndex((p) => !p.on);
+    if (pi < 0 && this.pieces.length < 6) {
+      this.pieces.push({ img: this.keep(s.add.image(0, 0, GULL_TEX.piece(hot)).setVisible(false)), x0: 0, y0: 0, x1: 0, y1: 0, t0: 0, dur: 1, on: false });
+      pi = this.pieces.length - 1;
+    }
+    if (pi < 0) pi = 0;
+    const pc = this.pieces[pi];
+    Object.assign(pc, { x0: fx, y0: fy - 14, x1: tx, y1: ty, t0: now, dur: 460, on: true });
+    pc.img.setTexture(GULL_TEX.piece(hot)).setVisible(true).setDepth(OVERHEAD - 1);
+    const free = this.gulls.filter((g) => g.mode !== "feed").sort((a, b) => Math.hypot(a.x - tx, a.y - ty) - Math.hypot(b.x - tx, b.y - ty));
+    free.slice(0, FEED_GULLS).forEach((g, i) => {
+      if (g.perch >= 0) {
+        this.perchTaken[g.perch] = null;
+        g.perch = -1;
+      }
+      g.mode = "feed";
+      g.feed = { tx, ty, t0: now + i * 90, fx: g.x, fy: g.y, role: i === 0 ? "catch" : "swirl", ang: Math.random() * Math.PI * 2, dir: Math.random() < 0.5 ? 1 : -1, hot, piece: pi, done: false };
+      g.img.setDepth(OVERHEAD);
+    });
+    this.onGullCall?.(tx, ty, false);
+  }
+
+  /** 11/17 과자 받아먹기 한 프레임 (끝나면 다시 맴돌러 가요) */
+  private updateFeed(g: Gull, time: number): void {
+    const f = g.feed!;
+    const t = Math.max(0, time - f.t0);
+    const ease = (k: number) => k * k * (3 - 2 * k);
+    if (f.role === "catch") {
+      const hx = f.tx + 10 * f.dir;
+      const hy = f.ty - 34;
+      if (t < FEED_HOVER_MS) {
+        const k = ease(t / FEED_HOVER_MS);
+        g.x = f.fx + (hx - f.fx) * k;
+        g.y = f.fy + (hy - f.fy) * k - Math.sin(k * Math.PI) * 14;
+        this.flap(g, time, hx < f.fx, 1);
+        return;
+      }
+      if (t < FEED_HOVER_MS + FEED_DIVE_MS) {
+        // 낚아채러 쏜살같이 내려와요 (날개를 접어요)
+        const k = (t - FEED_HOVER_MS) / FEED_DIVE_MS;
+        g.x = hx + (f.tx - hx) * k;
+        g.y = hy + (f.ty - 4 - hy) * k * k;
+        g.img.setFrame(2).setFlipX(f.dir > 0);
+        return;
+      }
+      if (!f.done) {
+        f.done = true;
+        const pc = this.pieces[f.piece];
+        if (pc) {
+          pc.on = false;
+          pc.img.setVisible(false);
+        }
+        this.onGullCall?.(g.x, g.y, false);
+        if (f.hot) {
+          g.hotAt = time;
+          g.steamAt = time;
+          g.flameAt = time + 500;
+        }
+      }
+      // 물고 날아올라 다시 맴돌러 가요 (빨개진 갈매기는 허둥지둥 빠르게)
+      g.feed = null;
+      this.newCircle(g, time);
+      this.flyTo(g, "flee", g.cx + Math.cos(g.ang) * g.rad, g.cy + Math.sin(g.ang) * g.rad * 0.55 - 30, time, f.hot ? 0.16 : 0.1);
+      return;
+    }
+    // 둘레를 퍼덕이며 맴돌아요 (기울어진 고리 — 몇 마리는 위아래로 출렁)
+    const r = 20 + (Math.floor(f.ang * 10) % 3) * 7;
+    const a = f.ang + (t / 360) * f.dir;
+    const ox = f.tx + Math.cos(a) * r;
+    const oy = f.ty - 30 + Math.sin(a) * r * 0.42 + Math.sin(t / 170 + f.ang) * 2;
+    const k = ease(Math.min(1, t / 800));
+    g.x = f.fx + (ox - f.fx) * k;
+    g.y = f.fy + (oy - f.fy) * k;
+    this.flap(g, time, Math.sin(a) * f.dir > 0, 1);
+    if (t > FEED_SWIRL_MS) {
+      g.feed = null;
+      if (Math.random() < 0.5) this.onGullCall?.(g.x, g.y, false);
+      this.newCircle(g, time);
+      this.flyTo(g, "flee", g.cx + Math.cos(g.ang) * g.rad, g.cy + Math.sin(g.ang) * g.rad * 0.55 - 30, time, 0.1);
+    }
+  }
+
+  /** 11/17 던진 조각 · 빨개진 갈매기 (붉은 빛 · 김 · 불꽃 입김 · 허둥지둥) */
+  private updateSnacks(time: number): void {
+    for (const pc of this.pieces) {
+      if (!pc.on) continue;
+      const k = Math.min(1, (time - pc.t0) / pc.dur);
+      const x = pc.x0 + (pc.x1 - pc.x0) * k;
+      const y = pc.y0 + (pc.y1 - pc.y0) * k - Math.sin(k * Math.PI) * 26;
+      pc.img.setPosition(Math.round(x), Math.round(y)).setRotation(this.reduced ? 0 : k * 6);
+      // 아무도 못 받으면 3초 뒤 물에 가라앉아요
+      if (time - pc.t0 > 3200) {
+        pc.on = false;
+        pc.img.setVisible(false);
+      }
+    }
+    const s = this.scene;
+    for (const g of this.gulls) {
+      if (!g.hotAt) continue;
+      const lv = hotLevel(time - g.hotAt);
+      if (time - g.hotAt >= HOT_MS) {
+        g.hotAt = 0;
+        g.img.clearTint();
+        continue;
+      }
+      g.img.setTint(mixColor(0xffffff, 0xff4a36, lv));
+      // 허둥지둥: 맴도는 동안 이리저리 흔들려요
+      if (g.mode === "circle" && !this.reduced) {
+        g.x += Math.sin(time / 70 + g.phase) * 1.6 * lv;
+        g.y += Math.cos(time / 95 + g.phase) * 1.2 * lv;
+        g.img.setPosition(Math.round(g.x), Math.round(g.y));
+      }
+      if (time >= g.steamAt && lv > 0.3) {
+        g.steamAt = time + 220 + Math.random() * 160;
+        let p = this.puffs.find((q) => !q.on);
+        if (!p && this.puffs.length < 16) {
+          p = { img: this.keep(s.add.image(0, 0, GULL_TEX.steam).setVisible(false)), x: 0, y: 0, t0: 0, on: false };
+          this.puffs.push(p);
+        }
+        if (p) Object.assign(p, { x: g.x + (Math.random() - 0.5) * 6, y: g.y - 12, t0: time, on: true });
+      }
+      if (time >= g.flameAt && lv > 0.5 && !this.reduced) {
+        g.flameAt = time + 1100 + Math.random() * 1600;
+        let fl = this.flames.find((q) => !q.g);
+        if (!fl && this.flames.length < 6) {
+          fl = { img: this.keep(s.add.image(0, 0, GULL_TEX.flame, 0).setOrigin(0, 0.5).setBlendMode(Phaser.BlendModes.ADD).setVisible(false)), g: null, t0: 0 };
+          this.flames.push(fl);
+        }
+        if (fl) Object.assign(fl, { g, t0: time });
+      }
+    }
+    for (const p of this.puffs) {
+      if (!p.on) continue;
+      const k = (time - p.t0) / 900;
+      if (k >= 1) {
+        p.on = false;
+        p.img.setVisible(false);
+        continue;
+      }
+      p.img
+        .setVisible(true)
+        .setPosition(Math.round(p.x + Math.sin(k * 5 + p.t0) * 2), Math.round(p.y - k * 16))
+        .setScale(0.8 + k * 1.4)
+        .setAlpha((1 - k) * 0.95)
+        .setDepth(OVERHEAD + 1);
+    }
+    for (const fl of this.flames) {
+      if (!fl.g) continue;
+      const k = (time - fl.t0) / 340;
+      if (k >= 1 || !fl.g.hotAt) {
+        fl.g = null;
+        fl.img.setVisible(false);
+        continue;
+      }
+      const left = fl.g.img.flipX;
+      fl.img
+        .setVisible(true)
+        .setFrame(k < 0.4 ? 0 : 1)
+        .setFlipX(left)
+        .setOrigin(left ? 1 : 0, 0.5)
+        .setPosition(Math.round(fl.g.x + (left ? -6 : 6)), Math.round(fl.g.y - 7))
+        .setAlpha(1 - k * 0.7)
+        .setDepth(OVERHEAD + 2);
     }
   }
 
@@ -742,6 +942,9 @@ export class SeaMap implements SeaMapApi {
           this.flap(g, time, Math.cos(g.ang) * g.spd < 0, 0.35);
           return;
         }
+        case "feed":
+          this.updateFeed(g, time);
+          return;
         case "land":
         case "flee": {
           const k = Math.min(1, (time - g.t0) / g.dur);
@@ -760,6 +963,7 @@ export class SeaMap implements SeaMapApi {
       }
     });
     for (const g of this.gulls) if (g.mode !== "perch") g.img.setPosition(Math.round(g.x), Math.round(g.y));
+    this.updateSnacks(time);
   }
 
   /** 날갯짓 (가끔 미끄러지듯 활공) */
@@ -1406,6 +1610,16 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   tex(T.gull, Art.gullArt);
   tex(T.spray, Art.sprayArt);
   tex(T.sparkle, Art.sparkleArt);
+  // 11/17 유령선 (토요일 밤 장터 — 미리 구워 둬요)
+  forEachGhostTexture(tex);
+  // 11/17 갈매기 과자 (던지는 조각 · 빨개진 갈매기 김·불꽃)
+  forEachGullTexture(tex);
+}
+
+/** 두 색 섞기 (0xRRGGBB, t 0..1) */
+function mixColor(a: number, b: number, t: number): number {
+  const c = (s: number) => Math.round(((a >> s) & 255) + (((b >> s) & 255) - ((a >> s) & 255)) * t);
+  return (c(16) << 16) | (c(8) << 8) | c(0);
 }
 
 /** 두 색 곱하기 (0xRRGGBB) */

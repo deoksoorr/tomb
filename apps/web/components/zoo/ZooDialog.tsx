@@ -102,7 +102,7 @@ export default function ZooDialog({ onClose }: { onClose: () => void }) {
           <p>
             어서 와요! 여기 아이들은 한 번 데려가면 평생 가족이에요. 한 번에 한 마리만 데리고 다닐 수 있어요. 나머지는 집에서 기다려요.
             <br />
-            <span className={s.muted}>큰 개·왕거위·달빛 사슴은 등에 태워 줘요.</span>
+            <span className={s.muted}>탈것 표시가 있는 아이들은 등에 태워 줘요.</span>
           </p>
         </div>
         <p className={s.balance}>

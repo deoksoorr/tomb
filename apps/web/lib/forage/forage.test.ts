@@ -23,8 +23,7 @@ import {
   NPCS,
   SPECIES,
   speciesOf,
-  type Where,
-} from "./catalog";
+  type Where, GULL_FEATHER_IDS } from "./catalog";
 import { autoRareFactor, pickAuto } from "./auto";
 import { sunkenFallbackFish } from "./sunken";
 import {
@@ -99,7 +98,8 @@ describe("카탈로그", () => {
       if (!nodeWheres.has(cat)) nodeWheres.set(cat, new Set());
       nodeWheres.get(cat)!.add(n.where);
     }
-    for (const s of SPECIES) {
+    // 11/17 갈매기 깃털은 채집·낚시가 아니라 포구 갈매기에게서만 (lib/sea/gull.test)
+    for (const s of SPECIES.filter((x) => !GULL_FEATHER_IDS.includes(x.id))) {
       const wheres = s.cat === "fish" ? fishWheres : nodeWheres.get(s.cat)!;
       const ok = [...wheres].some((w) => ALL_CONDS.some((c) => fits(s, w, c)));
       expect(ok, `${s.id} ${s.name}`).toBe(true);
@@ -133,14 +133,14 @@ describe("카탈로그", () => {
     expect(FIRST_IDS).toHaveLength(78);
     const ids = new Set(SPECIES.map((s) => s.id));
     for (const id of FIRST_IDS) expect(ids.has(id), id).toBe(true);
-    // 2차: 물고기 40 · 곤충 30 · 약초 28 · 광석 20 · 발굴품 24. 11/16 바닷가: 바닷물고기 10 → 물고기 50, 갯벌 10 → 발굴품 34
-    expect(LIFE_CATS.map((c) => speciesOf(c).length)).toEqual([50, 30, 28, 20, 34]);
+    // 2차: 물고기 40 · 곤충 30 · 약초 28 · 광석 20 · 발굴품 24. 11/16 바닷가: 바닷물고기 10 → 물고기 50, 갯벌 10 → 발굴품 34. 11/17 갈매기 깃털 2 → 발굴품 36
+    expect(LIFE_CATS.map((c) => speciesOf(c).length)).toEqual([50, 30, 28, 20, 36]);
   });
 
   it("실제 한 해의 하늘(시간대·날씨·계절)에서 모든 종이 잡힐 때가 있다", () => {
     // 여름 눈처럼 실제로는 없는 조합만 맞는 종이 생기지 않게 (ALL_CONDS보다 엄격)
     expect(REAL_CONDS.some((c) => c.season === "summer" && c.weather === "snow")).toBe(false);
-    for (const s of SPECIES) {
+    for (const s of SPECIES.filter((x) => !GULL_FEATHER_IDS.includes(x.id))) {
       const ok = [...wheresOf(s.cat)].some((w) => REAL_CONDS.some((c) => fits(s, w, c) && candidates(s.cat, w, c).includes(s)));
       expect(ok, `${s.id} ${s.name}`).toBe(true);
     }

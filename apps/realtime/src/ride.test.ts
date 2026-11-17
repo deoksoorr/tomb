@@ -160,3 +160,22 @@ describe("배 위 낚싯대 (rod)", () => {
     expect(room.core.peer(1)?.rod).toBeUndefined();
   });
 });
+
+describe("11/17 새 펫 옛 화면 호환", () => {
+  it("새 타는 펫(알파카)도 올라타고, 다른 사람에게 보낼 때만 옛 화면용 비슷한 펫을 덧붙인다 (저장한 착용 목록은 그대로)", () => {
+    const { core, join } = setup();
+    const a = join("a", ["pet_paca", "hat_crown"]);
+    const b = join("b", ["pet_cat"]);
+    clear(a, b);
+    core.message(a, send({ t: "ride", on: true }), 0);
+    expect(core.peer(1)?.ride).toBe(true);
+    expect(core.peer(1)?.look).toEqual(["pet_paca", "hat_crown"]);
+    // 늦게 온 사람의 입장 정보 · 다른 사람 입장 알림
+    const c = join("c", [], undefined, 100);
+    expect(welcome(c).peers.find((p) => p.sid === 1)?.look).toEqual(["pet_paca", "hat_crown", "pet_deer"]);
+    expect(welcome(c).peers.find((p) => p.sid === 2)?.look).toEqual(["pet_cat"]);
+    const d = join("d", ["pet_otter"], undefined, 200);
+    const joined = events(a).find((e) => e.t === "join" && e.sid === core.peer(4)?.sid) as Extract<S2C, { t: "join" }> | undefined;
+    expect(d && joined?.look).toEqual(["pet_otter", "pet_cat"]);
+  });
+});

@@ -151,6 +151,15 @@ export function drinkOne(prev: DrunkState | null | undefined, now: number): Drun
   return { lv: Math.min(DRUNK_MAX, drunkLevel(prev, now) + 1), at: now };
 }
 
+/**
+ * 11/17 사용자: 술에 취한 동안(한 단계라도)은 바닷가에서 물에 들어가거나 놀거리(튜브·제트스키·카약)를 타지 못해요.
+ * 클라이언트는 물가에서 막고 물에 있으면 뭍으로 올려 보내요, 서버는 놀거리 자리를 거절해요 (channel onSit)
+ */
+export const SEA_DRUNK_MSG = "술 마시고 물에 들어가면 위험해요. 술이 깬 뒤에 다시 와요.";
+export function drunkNoSea(s: DrunkState | null | undefined, now: number): boolean {
+  return drunkLevel(s, now) > 0;
+}
+
 /** 지금 커진 배율 (커지기 효과가 없거나 끝났으면 1) */
 export function bbqBig(e: BbqEffect | null | undefined, now: number): number {
   return bbqActive(e, now) ? (bbqItem(e.i)?.scale ?? 1) : 1;

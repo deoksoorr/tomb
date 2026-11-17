@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
-import { isChampItem, type ItemKind } from "@tomb/protocol";
+import { isChampItem, XMAS_BOX_ID, type ItemKind } from "@tomb/protocol";
 import { errorMessage } from "@/lib/api";
 import type { GraveCache } from "@/lib/hooks/useGraves";
 import { useMe } from "@/lib/hooks/useMe";
@@ -11,6 +11,7 @@ import { LS } from "@/lib/types";
 import Dialog from "../ui/Dialog";
 import ForageBag from "../forage/ForageBag";
 import PocketOpen from "../forage/PocketOpen";
+import XmasBoxOpen from "../xmas/XmasBoxOpen";
 import BagDyeSection, { dyeTicketCount } from "../dye/BagDyeSection";
 import ItemIcon from "../ui/ItemIcon";
 import { cx } from "../ui/cx";
@@ -24,7 +25,7 @@ import TitlesPane from "./TitlesPane";
 import { resolveAvatar, wardrobeEntries, type SlotFilter } from "./wardrobe";
 import styles from "./BagDialog.module.css";
 
-// 11/15 box = 긴급 의뢰 「수집가의 뒷주머니」 (맨 앞, [열기])
+// 11/15 box = 긴급 의뢰 「수집가의 뒷주머니」·12월 「크리스마스 선물상자」 (맨 앞, [열기])
 const OTHER_KINDS: ItemKind[] = ["box", "firework", "megaphone", "decor", "graveStyle"];
 /** look = [지금 모습](장비창), wear = [꾸미기](부위별 카드 목록 — components/account/WardrobePanes) */
 type BagTab = "look" | "wear" | "title" | "other" | "dye" | "forage" | "race";
@@ -52,8 +53,8 @@ export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace
   const [notice, setNotice] = useState<string | null>(null);
   /** 묘비에 놓으려고 고른 꾸미기 */
   const [placing, setPlacing] = useState<string | null>(null);
-  /** 11/15 상자 여는 창 (그때 가진 상자 수) */
-  const [opening, setOpening] = useState<number | null>(null);
+  /** 11/15 상자 여는 창 (어느 상자 · 그때 가진 상자 수). 12월 크리스마스 선물상자는 따로 연다 */
+  const [opening, setOpening] = useState<{ id: string; count: number } | null>(null);
   const baseId = useId();
   const [savedColor] = useState(() => readItem(LS.color));
   // 남은 시간 기준 시각 (렌더 중에 시계를 읽지 않는다): 30초마다 + 무엇을 한 직후
@@ -170,7 +171,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace
                             <span className={styles.meta}>{item.desc}</span>
                           </span>
                           {kind === "box" && (
-                            <button type="button" className={cx(ui.button, ui.primary)} disabled={pending} onClick={() => setOpening(count)}>
+                            <button type="button" className={cx(ui.button, ui.primary)} disabled={pending} onClick={() => setOpening({ id: item.id, count })}>
                               열기
                             </button>
                           )}
@@ -255,7 +256,12 @@ export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace
           {notice}
         </p>
       </div>
-      {opening !== null && <PocketOpen count={opening} onClose={() => setOpening(null)} />}
+      {opening !== null &&
+        (opening.id === XMAS_BOX_ID ? (
+          <XmasBoxOpen count={opening.count} onClose={() => setOpening(null)} />
+        ) : (
+          <PocketOpen count={opening.count} onClose={() => setOpening(null)} />
+        ))}
     </Dialog>
   );
 }

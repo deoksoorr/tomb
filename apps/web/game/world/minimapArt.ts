@@ -1,4 +1,5 @@
 import { HOUSE_LOT_H, HOUSE_LOT_W, HOUSE_LOTS, MAP_HEIGHT, MAP_WIDTH, TILE } from "@tomb/protocol";
+import { isSnowy, type MapConcept } from "@/lib/mapConcept";
 import { DECKS, groundKind, inWaterBody, LANDMARKS, type GroundKind, type Landmark } from "./layout";
 
 // F17 미니맵 바탕 (순수 계산 — DOM 없이 테스트한다). 월드 MINIMAP_CELL px = 미니맵 1px.
@@ -27,17 +28,33 @@ const GROUND: Record<GroundKind, number> = {
 const WATER = 0x3d6878;
 const DECK = 0x8a6a48;
 const LOT = 0x5a4e40;
+/** 11/17 겨울·크리스마스 맵 컨셉 (lib/mapConcept): 눈밭·진흙길·얼음 물 */
+const WINTER_GROUND: Record<GroundKind, number> = {
+  ...GROUND,
+  grass: 0xd2dbe2,
+  grave: 0xb4bfca,
+  hill: 0xe2e8ec,
+  dirt: 0x6a5a4a,
+  gate: 0x6a5a4a,
+  stone: 0xa6abb0,
+  cobble: 0x8c9096,
+  gravel: 0x9c9fa2,
+};
+const WINTER_WATER = 0x5c8ea4;
+const WINTER_LOT = 0xc4ced8;
 
-/** 미니맵 바탕 픽셀 (RGBA, MINIMAP_W × MINIMAP_H) */
-export function minimapPixels(): Uint8ClampedArray {
+/** 미니맵 바탕 픽셀 (RGBA, MINIMAP_W × MINIMAP_H). concept가 겨울·크리스마스면 눈 덮인 색 */
+export function minimapPixels(concept: MapConcept = "default"): Uint8ClampedArray {
+  const snowy = isSnowy(concept);
+  const ground = snowy ? WINTER_GROUND : GROUND;
   const out = new Uint8ClampedArray(MINIMAP_W * MINIMAP_H * 4);
   for (let y = 0; y < MINIMAP_H; y++)
     for (let x = 0; x < MINIMAP_W; x++) {
       const wx = x * MINIMAP_CELL + MINIMAP_CELL / 2;
       const wy = y * MINIMAP_CELL + MINIMAP_CELL / 2;
-      let c = GROUND[groundKind(Math.floor(wx / TILE), Math.floor(wy / TILE))];
-      if (HOUSE_LOTS.some((l) => wx >= l.x + 8 && wx <= l.x + HOUSE_LOT_W - 8 && wy >= l.y + 30 && wy <= l.y + HOUSE_LOT_H - 10)) c = LOT;
-      if (inWaterBody(wx, wy, -1)) c = WATER;
+      let c = ground[groundKind(Math.floor(wx / TILE), Math.floor(wy / TILE))];
+      if (HOUSE_LOTS.some((l) => wx >= l.x + 8 && wx <= l.x + HOUSE_LOT_W - 8 && wy >= l.y + 30 && wy <= l.y + HOUSE_LOT_H - 10)) c = snowy ? WINTER_LOT : LOT;
+      if (inWaterBody(wx, wy, -1)) c = snowy ? WINTER_WATER : WATER;
       if (DECKS.some((d) => wx >= d.x && wx <= d.x + d.w && wy >= d.y && wy <= d.y + d.h)) c = DECK;
       const i = (y * MINIMAP_W + x) * 4;
       out[i] = (c >> 16) & 255;

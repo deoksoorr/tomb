@@ -11,6 +11,7 @@ import type { SoundMix } from "@/lib/soundMix";
 import type { IncomingChatLine } from "@/game/logic/chatLog";
 import type { RideStatus } from "@/lib/ridePolicy";
 import type { Ambience } from "@/lib/ambience";
+import type { MapConcept } from "@/lib/mapConcept";
 
 // React(UI 오버레이) ↔ Phaser(게임) 사이의 유일한 통로. 양쪽은 서로를 직접 import하지 않는다.
 // "sticky" 이벤트는 마지막 값을 기억해서, 늦게 구독한 쪽도 last()로 현재 값을 읽을 수 있다.
@@ -261,6 +262,12 @@ export type UiEvents = {
   "sky:view": undefined;
   /** 11/16 바다 보기 켜기·끄기 (버튼·V) */
   "sea:view": undefined;
+  /** 11/17 유령선 갑판에서 유령 상인 앞 E → UI가 유령선 특가 장터 창을 열어요 */
+  "sea:ghost:open": undefined;
+  /** 11/17 운영자 시험 부르기 상태 (sticky — 운영자 HUD가 서버에서 받아 알려요. 일반 계정은 늘 null) */
+  "sea:ghost:call": { call: "on" | "off" | null };
+  /** 11/17 포구 갈매기 과자 (sticky): 가진 과자 · 손에 든 과자 (매점 창·게임이 서로 알려요) */
+  "sea:gull:snacks": { plain: number; spicy: number; hand: "plain" | "spicy" };
   /** 동물원 타는 펫 올라타기·내리기 (모바일·HUD 버튼, 데스크톱은 R) */
   "input:ride": undefined;
   /** 11/16 다른 장면으로 가기 직전: 의자·벤치·그네·해먹 같은 자리에 있으면 일어난다 (탈것은 lib/rideGate가 먼저 막는다) */
@@ -412,6 +419,8 @@ export type UiEvents = {
   "forage:coin": undefined;
   /** 11/15 긴급 의뢰 마을 축제 (sticky): until = 축제가 끝나는 시각 ms (0 = 축제 없음) → 게임이 폭죽을 저절로 쏘고 모닥불을 금빛으로 */
   "urgent:fest": { until: number };
+  /** 11/17 마을 맵 컨셉 (sticky, lib/mapConcept): 관리자가 고른 판 → 마을 그림을 겨울·크리스마스로 (주소 ?concept= 시험 값이 있으면 그쪽이 먼저) */
+  "map:concept": { concept: MapConcept };
   /** 11/15 긴급 의뢰가 진행 중에 100%를 넘긴 순간 (한 번): 마을 하늘에 축하 폭죽 한 발 */
   "urgent:goal": undefined;
   /** 11/15 긴급 의뢰 현판 (sticky, null = 없음): 버스 정류장 마당 긴급 의뢰 현판에 서버 전체 막대를 그린다. frac = 낸 수 ÷ (목표 × 1.5), stage = 닿은 단계 */
@@ -460,6 +469,8 @@ const STICKY = new Set<keyof AllEvents>([
   "view:mode",
   "view:busy",
   "sea:hud",
+  "sea:ghost:call",
+  "sea:gull:snacks",
   "audio:settings",
   "queue:status",
   "scene:changed",
@@ -481,6 +492,7 @@ const STICKY = new Set<keyof AllEvents>([
   "house:follow",
   "rpg:cards",
   "urgent:fest",
+  "map:concept",
   "urgent:board",
   "map:changed",
   "bus:state",

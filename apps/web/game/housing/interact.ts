@@ -121,6 +121,7 @@ const USE_OF: Readonly<Record<string, UseKind>> = {
   life_ring: "ring",
   ship_wheel: "wheel",
   sea_lantern: "light",
+  ghost_lamp: "light",
 };
 
 /** 바닥에 깔린 물건(러그·꽃밭)은 위에 다른 가구가 있으면 그 가구를 먼저 고르게 조금 멀게 친다 */

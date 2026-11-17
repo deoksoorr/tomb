@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { ITEMS, itemById, itemName, type ItemDef } from "@tomb/protocol";
+import { ITEMS, itemById, itemName, XMAS_BOX_ID, type ItemDef } from "@tomb/protocol";
+import type { GiftOnlinePreview } from "@/lib/giftOnline";
 import { ApiRequestError, errorMessage } from "@/lib/api";
 import { BALANCE_CAP } from "@/lib/economy";
 import {
@@ -51,17 +52,19 @@ const lineText = (i: GiftItem) =>
 const manyText = (first: string, count: number) =>
   count > 1 ? `${first} 외 ${count - 1}명` : first;
 
-/** 아이템 묶음: 캐릭터 꾸미기는 부위별, 나머지는 종류별 (실제 카탈로그에 있는 것만, 운영자 전용 꾸미기는 뺀다) */
-const PICKABLE = ITEMS.filter((i) => !i.staff);
+/** 아이템 묶음: 캐릭터 꾸미기는 부위별, 나머지는 종류별 (실제 카탈로그에 있는 것만, 운영자 전용 꾸미기는 뺀다).
+ *  12월 이벤트 한정(크리스마스 선물상자·세트)은 맨 앞 「12월 이벤트」 묶음에 따로 (선물상자가 맨 앞) */
+const PICKABLE = ITEMS.filter((i) => !i.staff).sort((a, b) => Number(b.id === XMAS_BOX_ID) - Number(a.id === XMAS_BOX_ID));
 const groupOf = (i: ItemDef) =>
-  i.kind === "cosmetic" && i.slot ? `cosmetic:${i.slot}` : i.kind;
+  i.event ? "event" : i.kind === "cosmetic" && i.slot ? `cosmetic:${i.slot}` : i.kind;
 const GROUPS: { key: string; label: string }[] = [
+  ...(PICKABLE.some((i) => i.event) ? [{ key: "event", label: "12월 이벤트" }] : []),
   ...SLOT_ORDER.filter((s) =>
     PICKABLE.some((i) => i.kind === "cosmetic" && i.slot === s),
   ).map((s) => ({ key: `cosmetic:${s}`, label: `꾸미기·${SLOT_NAMES[s]}` })),
   ...[
     ...new Set(
-      PICKABLE.filter((i) => i.kind !== "cosmetic").map((i) => i.kind),
+      PICKABLE.filter((i) => i.kind !== "cosmetic" && !i.event).map((i) => i.kind),
     ),
   ].map((k) => ({ key: k, label: KIND_LABELS[k] ?? k })),
 ];
@@ -76,7 +79,10 @@ export default function GiftsPanel({ toast, onAuthLost, preset, onPresetUsed }: 
     toast,
     onAuthLost,
   );
-  const [mode, setMode] = useState<"all" | "pick">("pick");
+  const [mode, setMode] = useState<"all" | "pick" | "online">("pick");
+  /** 11/17 지금 접속 중인 사람 수 (「지금 접속 중인 사람 모두」를 고르거나 확인을 누를 때 새로 묻는다) */
+  const [online, setOnline] = useState<GiftOnlinePreview | null>(null);
+  const [onlineBusy, setOnlineBusy] = useState(false);
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<AdminAccountRow[] | null>(null);
   /** 고른 계정 (고른 순서, 같은 계정은 한 번만, 최대 GIFT_MAX_TARGETS명) */
@@ -102,6 +108,24 @@ export default function GiftsPanel({ toast, onAuthLost, preset, onPresetUsed }: 
   const fail = (e: unknown) => {
     if (e instanceof ApiRequestError && e.status === 401) onAuthLost();
     else toast(errorMessage(e));
+  };
+
+  async function loadOnline(): Promise<GiftOnlinePreview | null> {
+    setOnlineBusy(true);
+    try {
+      const r = await socialAdminApi.giftOnlinePreview();
+      setOnline(r);
+      return r;
+    } catch (err) {
+      fail(err);
+      return null;
+    } finally {
+      setOnlineBusy(false);
+    }
+  }
+  const pickOnline = () => {
+    setMode("online");
+    void loadOnline();
   };
 
   async function search(e: FormEvent) {
@@ -168,7 +192,9 @@ export default function GiftsPanel({ toast, onAuthLost, preset, onPresetUsed }: 
   const payload = {
     ...(mode === "all"
       ? { target: "all" }
-      : { targets: picked.map((a) => ({ id: a.accountId, name: a.name })) }),
+      : mode === "online"
+        ? { target: "online" }
+        : { targets: picked.map((a) => ({ id: a.accountId, name: a.name })) }),
     from: from.trim() || null,
     note: note.trim(),
     points,
@@ -179,12 +205,16 @@ export default function GiftsPanel({ toast, onAuthLost, preset, onPresetUsed }: 
   const ready =
     payload.note.length > 0 &&
     (points > 0 || items.length > 0) &&
-    (mode === "all" || picked.length > 0);
+    (mode === "all" || (mode === "online" ? (online?.count ?? 0) > 0 : picked.length > 0));
   const firstName = picked[0]?.name ?? "이름 없음";
   const targetText =
     mode === "all"
       ? "전체 (보낸 시각 이전에 들어온 모든 계정)"
-      : picked.length === 0
+      : mode === "online"
+        ? online
+          ? `지금 접속 중인 ${online.count.toLocaleString("ko-KR")}명`
+          : "접속 중인 사람을 세는 중이에요"
+        : picked.length === 0
         ? "아직 안 골랐어요"
         : picked.length === 1
           ? `${firstName} (${picked[0].accountId})`
@@ -194,6 +224,8 @@ export default function GiftsPanel({ toast, onAuthLost, preset, onPresetUsed }: 
     e.preventDefault();
     if (!ready || busy) return;
     if (!armed) {
+      // 지금 접속 중인 사람 모두: 확인을 누를 때 수를 새로 세어 「지금 접속 중인 N명에게 보내요」로 한 번 더 확인받는다
+      if (mode === "online" && !((await loadOnline())?.count ?? 0)) return;
       setArmedSig(sig);
       if (request?.sig !== sig) setRequest({ id: crypto.randomUUID().replace(/-/g, ""), sig });
       return;
@@ -201,7 +233,19 @@ export default function GiftsPanel({ toast, onAuthLost, preset, onPresetUsed }: 
     setBusy(true);
     setArmedSig(null);
     try {
-      await socialAdminApi.sendGift({ ...payload, requestId: request?.sig === sig ? request.id : null });
+      const requestId = request?.sig === sig ? request.id : null;
+      if (mode === "online") {
+        const { from, note: n, points: p, items: list } = payload;
+        const r = await socialAdminApi.sendGiftOnline({ from, note: n, points: p, items: list, requestId, expect: online?.count ?? 0 });
+        setRequest(null);
+        toast(`지금 접속 중인 ${r.sent.toLocaleString("ko-KR")}명에게 선물을 보냈어요.`);
+        setNote("");
+        setPoints(0);
+        setLines([]);
+        setVersion((v) => v + 1);
+        return;
+      }
+      await socialAdminApi.sendGift({ ...payload, requestId });
       setRequest(null);
       toast(
         mode === "all"
@@ -253,8 +297,31 @@ export default function GiftsPanel({ toast, onAuthLost, preset, onPresetUsed }: 
             >
               전체
             </button>
+            <button
+              type="button"
+              className={ui.button}
+              aria-pressed={mode === "online"}
+              onClick={pickOnline}
+            >
+              지금 접속 중인 사람 모두
+            </button>
           </div>
-          {mode === "all" ? (
+          {mode === "online" ? (
+            <div className={social.row}>
+              <p className={ui.hint} role="status">
+                {onlineBusy && !online
+                  ? "접속 중인 사람을 세는 중이에요."
+                  : !online
+                    ? "아직 세지 못했어요."
+                    : !online.reachable
+                      ? "실시간 서버에 닿지 못했어요. 잠시 뒤 다시 세어 주세요."
+                      : `지금 접속 중인 사람은 ${online.count.toLocaleString("ko-KR")}명이에요. 운영자와 정지 계정은 빼고 세요. 채널, 맵, 집, 사냥터 어디에 있든 한 번씩 들어가요.`}
+              </p>
+              <button type="button" className={ui.button} disabled={onlineBusy} onClick={() => void loadOnline()}>
+                다시 세기
+              </button>
+            </div>
+          ) : mode === "all" ? (
             <p className={ui.hint}>
               지금까지 들어온 모든 계정이 받을 수 있어요 (보낸 뒤에 처음 들어온
               계정은 제외). 계정마다 복사하지 않고 받을 때 처리해요.
@@ -591,7 +658,9 @@ export default function GiftsPanel({ toast, onAuthLost, preset, onPresetUsed }: 
             disabled={busy || !ready}
           >
             {armed
-              ? mode === "all"
+              ? mode === "online"
+                ? `지금 접속 중인 ${(online?.count ?? 0).toLocaleString("ko-KR")}명에게 보내요. 한 번 더 누르면 보내요`
+                : mode === "all"
                 ? "정말 전체에게 보낼까요? (한 번 더 누르기)"
                 : picked.length > 1
                   ? `${picked.length}명에게 보낼까요? (한 번 더 누르기)`

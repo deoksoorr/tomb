@@ -67,7 +67,7 @@ describe("카탈로그 (바닷가)", () => {
     expect(SEA_FISH).toHaveLength(10);
     expect(FLAT).toHaveLength(10);
     expect(dexIdsOf("fish")).toHaveLength(50);
-    expect(dexIdsOf("dig")).toHaveLength(34);
+    expect(dexIdsOf("dig")).toHaveLength(36); // 11/17 갈매기 깃털 둘
     for (const s of [...SEA_FISH, ...FLAT]) {
       expect(dexCatOf(s.id), s.id).toBe(s.cat);
       expect(dexRewardOf(s.id), s.id).toBe(DEX_NEW_REWARD[s.rarity]);
@@ -83,9 +83,9 @@ describe("카탈로그 (바닷가)", () => {
     expect(new Set(SPECIES.map((s) => s.id)).size).toBe(SPECIES.length);
   });
 
-  it("칭호 기준은 늘어난 칸 수로 (물고기 25·50종, 발굴품 17·34종)", () => {
+  it("칭호 기준은 늘어난 칸 수로 (물고기 25·50종, 발굴품 18·36종 — 11/17 갈매기 깃털 둘)", () => {
     expect([dexTitleNeed("fish", 50), dexTitleNeed("fish", 100)]).toEqual([25, 50]);
-    expect([dexTitleNeed("dig", 50), dexTitleNeed("dig", 100)]).toEqual([17, 34]);
+    expect([dexTitleNeed("dig", 50), dexTitleNeed("dig", 100)]).toEqual([18, 36]);
   });
 
   it("이미 붙은 칭호(붙은 표시·예전 단계 보상)는 칸이 늘어도 그대로 남는다", () => {

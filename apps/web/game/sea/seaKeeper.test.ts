@@ -22,6 +22,8 @@ describe("등대지기 (seaKeeper)", () => {
     expect(ghostShipNight(Date.UTC(2026, 10, 21, 8, 0), "")).toBe(false); // 토 17시
     expect(ghostShipNight(Date.UTC(2026, 10, 21, 16, 30), "")).toBe(true); // 일 01:30
     expect(ghostShipNight(Date.UTC(2026, 10, 18, 12, 0), "")).toBe(false); // 수 21시
-    expect(ghostShipNight(Date.UTC(2026, 10, 18, 12, 0), "?ghost=1")).toBe(true);
+    expect(ghostShipNight(Date.UTC(2026, 10, 18, 12, 0), "?ghost=1", "1")).toBe(true);
+    // 11/17 실서버(NEXT_PUBLIC_QA_URL=0)는 주소로 부르지 못해요
+    expect(ghostShipNight(Date.UTC(2026, 10, 18, 12, 0), "?ghost=1", "0")).toBe(false);
   });
 });

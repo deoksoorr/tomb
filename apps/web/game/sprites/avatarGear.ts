@@ -1,6 +1,9 @@
 import type { AvatarBody } from "@tomb/protocol";
 import { CUTE_BACK, CUTE_COVERING, CUTE_HAND, CUTE_HEAD, CUTE_NECK, drawCuteBack, drawCuteHand, drawCuteHead, drawCuteNeck } from "./cuteGear";
 import { darken, Grid } from "./pixel";
+import { drawGhostHead, drawGhostHeadGlow, GHOST_HEAD } from "./ghostGear";
+import { drawThemeBack, drawThemeHand, drawThemeNeck, THEME_BACK, THEME_HAND, THEME_NECK } from "./themeGear";
+import { drawXmasBack, drawXmasGlow, drawXmasHand, drawXmasHead, drawXmasNeck, XMAS_BACK, XMAS_COVERING, XMAS_HAND, XMAS_HEAD, XMAS_NECK } from "./xmasGear";
 
 // F8 캐릭터 꾸미기 추가분 중 "아바타 시트에 같이 그려지는 것" (avatar.ts drawFrame이 부른다):
 //  머리 9종(비니·헤드폰·왕관·리본·고깔·안경·마법사 모자·체육대회 모자·새싹), 목 5종(넥타이·사원증·나비넥타이·방울·꽃 목걸이),
@@ -28,15 +31,15 @@ export type GearM = {
 
 // 추가분 2(11/12): 머리 5·목 5·손 5·등 3 + 31번 운영자 전용(왕관·완장·명부·등불·도포)
 // 주간 랭킹 1위 전용 머리 3종 (금화 왕관·붉은 깃털 투구·황금 물고기 모자 — protocol CHAMP_HAT)
-export const GEAR_HEAD = ["hat_beanie", "hat_headphones", "hat_crown", "hat_ribbon", "hat_party", "hat_glasses", "hat_wizard", "hat_cap", "hat_sprout", "hat_beret", "hat_hardhat", "hat_chef", "hat_horns", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat", "champ_duo_ph", "champ_duo_pf", "champ_duo_hf", "champ_triple", "q_hat_angler", "q_hat_miner", "q_hat_snow", "u_hat_siren", ...CUTE_HEAD] as const;
-export const GEAR_NECK = ["neck_tie", "neck_badge", "neck_bowtie", "neck_bell", "neck_lei", "neck_collar", "neck_whistle", "neck_camera", "neck_pearl", "neck_medal", "staff_armband", ...CUTE_NECK] as const;
-export const GEAR_HAND = ["hand_coffee", "hand_briefcase", "hand_phone", "hand_lantern_blue", "hand_donut", "hand_clipboard", "hand_mic", "hand_bouquet", "hand_wand", "staff_ledger", "staff_lamp", "q_hand_net", "q_hand_brush", "q_hand_wishlamp", ...CUTE_HAND] as const;
-export const GEAR_BACK = ["back_backpack", "back_cape", "back_shell", "back_guitar", "back_jetpack", "staff_robe", "q_back_cape", ...CUTE_BACK] as const;
+export const GEAR_HEAD = ["hat_beanie", "hat_headphones", "hat_crown", "hat_ribbon", "hat_party", "hat_glasses", "hat_wizard", "hat_cap", "hat_sprout", "hat_beret", "hat_hardhat", "hat_chef", "hat_horns", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat", "champ_duo_ph", "champ_duo_pf", "champ_duo_hf", "champ_triple", "q_hat_angler", "q_hat_miner", "q_hat_snow", "u_hat_siren", ...CUTE_HEAD, ...GHOST_HEAD, ...XMAS_HEAD] as const;
+export const GEAR_NECK = ["neck_tie", "neck_badge", "neck_bowtie", "neck_bell", "neck_lei", "neck_collar", "neck_whistle", "neck_camera", "neck_pearl", "neck_medal", "staff_armband", ...CUTE_NECK, ...XMAS_NECK, ...THEME_NECK] as const;
+export const GEAR_HAND = ["hand_coffee", "hand_briefcase", "hand_phone", "hand_lantern_blue", "hand_donut", "hand_clipboard", "hand_mic", "hand_bouquet", "hand_wand", "staff_ledger", "staff_lamp", "q_hand_net", "q_hand_brush", "q_hand_wishlamp", ...CUTE_HAND, ...XMAS_HAND, ...THEME_HAND] as const;
+export const GEAR_BACK = ["back_backpack", "back_cape", "back_shell", "back_guitar", "back_jetpack", "staff_robe", "q_back_cape", ...CUTE_BACK, ...XMAS_BACK, ...THEME_BACK] as const;
 /** 시트에 그려지는 추가 꾸미기 전부 (시트 키에 들어간다) */
 export const GEAR_SHEET_IDS: readonly string[] = [...GEAR_HEAD, ...GEAR_NECK, ...GEAR_HAND, ...GEAR_BACK];
 
 /** 두건·키다리 끝·동글이 새싹을 덮는 모자 (그 위에 꼭지를 그리지 않는다) */
-export const COVERING_HATS: ReadonlySet<string> = new Set(["hat_straw", "hat_cat", "hat_beanie", "hat_crown", "hat_party", "hat_wizard", "hat_cap", "hat_beret", "hat_hardhat", "hat_chef", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat", "champ_duo_ph", "champ_duo_pf", "champ_duo_hf", "champ_triple", "q_hat_angler", "q_hat_miner", "q_hat_snow", "u_hat_siren", ...CUTE_COVERING]);
+export const COVERING_HATS: ReadonlySet<string> = new Set(["hat_straw", "hat_cat", "hat_beanie", "hat_crown", "hat_party", "hat_wizard", "hat_cap", "hat_beret", "hat_hardhat", "hat_chef", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat", "champ_duo_ph", "champ_duo_pf", "champ_duo_hf", "champ_triple", "q_hat_angler", "q_hat_miner", "q_hat_snow", "u_hat_siren", ...CUTE_COVERING, ...GHOST_HEAD, ...XMAS_COVERING]);
 
 export type ExtraGear = { head: string | null; neck: string | null; hand: string | null; back: string | null };
 
@@ -75,6 +78,10 @@ function eyes(body: AvatarBody, view: GearView, m: GearM): { xs: number[]; y: nu
 export function drawHeadGear(g: Grid, view: GearView, id: string, m: GearM, body: AvatarBody, top: number): void {
   // 11/15: 말랑 꾸미기 묶음은 cuteGear.ts
   if ((CUTE_HEAD as readonly string[]).includes(id)) return drawCuteHead(g, view, id, m, top);
+  // 11/17 유령선 한정은 ghostGear.ts
+  if ((GHOST_HEAD as readonly string[]).includes(id)) return drawGhostHead(g, view, id, m, top);
+  // 12월 크리스마스 이벤트 한정은 xmasGear.ts
+  if ((XMAS_HEAD as readonly string[]).includes(id)) return drawXmasHead(g, view, id, m, top);
   const { cx, hy } = m;
   const side = view === "side";
   const rx = Math.round(m.rx);
@@ -635,6 +642,9 @@ const RAINBOW_GEMS = [0xff4a5a, 0xffa030, 0xfff06a, 0x5ae08a, 0x4ab0ff, 0xb87aff
 
 export function drawNeckGear(g: Grid, view: GearView, id: string, m: GearM, body: AvatarBody): void {
   if ((CUTE_NECK as readonly string[]).includes(id)) return drawCuteNeck(g, view, id, m, body);
+  if ((XMAS_NECK as readonly string[]).includes(id)) return drawXmasNeck(g, view, id, m, body);
+  // 11/17 테마 꾸미기 묶음은 themeGear.ts
+  if ((THEME_NECK as readonly string[]).includes(id)) return drawThemeNeck(g, view, id, m, body);
   const { cx, neck } = m;
   const side = view === "side";
   const wide = body === "round" || body === "sheet";
@@ -837,6 +847,8 @@ export function drawNeckGear(g: Grid, view: GearView, id: string, m: GearM, body
 /** 손에 든 것. 외곽선 전에 칠한다 */
 export function drawHandGear(g: Grid, view: GearView, id: string, m: GearM): void {
   if ((CUTE_HAND as readonly string[]).includes(id)) return drawCuteHand(g, view, id, m);
+  if ((XMAS_HAND as readonly string[]).includes(id)) return drawXmasHand(g, view, id, m);
+  if ((THEME_HAND as readonly string[]).includes(id)) return drawThemeHand(g, view, id, m);
   if (view === "up") return;
   const x = m.hx;
   const y = m.hY;
@@ -972,6 +984,7 @@ export function drawHandGear(g: Grid, view: GearView, id: string, m: GearM): voi
 /** 외곽선 뒤에도 밝게 남는 점 (화면·불빛) */
 export function drawHandGlow(g: Grid, view: GearView, id: string, m: GearM): void {
   if (view === "up") return;
+  if ((XMAS_HAND as readonly string[]).includes(id)) return drawXmasGlow(g, view, null, id, m, 0);
   if (id === "hand_phone") {
     g.set(m.hx - 1, m.hY, 0x9ad8ff);
     g.set(m.hx, m.hY + 1, 0x9ad8ff);
@@ -988,6 +1001,8 @@ export function drawHandGlow(g: Grid, view: GearView, id: string, m: GearM): voi
 
 /** 외곽선 뒤에도 밝게 남는 점 (머리 꾸미기): 광부 헬멧 이마 등불 */
 export function drawHeadGlow(g: Grid, view: GearView, id: string, m: GearM, top: number): void {
+  if ((GHOST_HEAD as readonly string[]).includes(id)) return drawGhostHeadGlow(g, view, id, m, top);
+  if ((XMAS_HEAD as readonly string[]).includes(id)) return drawXmasGlow(g, view, id, null, m, top);
   if (id === "u_hat_siren") {
     // 경광등 돔은 외곽선 뒤에도 밝게
     g.set(m.cx - 1, top - 4, 0xffd0c4);
@@ -1017,6 +1032,8 @@ export function drawHeadGlow(g: Grid, view: GearView, id: string, m: GearM, top:
  */
 export function drawBackGear(g: Grid, view: GearView, id: string, m: GearM, body: AvatarBody, layer: "back" | "front", hem: number, sit: number): void {
   if ((CUTE_BACK as readonly string[]).includes(id)) return drawCuteBack(g, view, id, m, body, layer, hem, sit);
+  if ((XMAS_BACK as readonly string[]).includes(id)) return drawXmasBack(g, view, id, m, body, layer, hem, sit);
+  if ((THEME_BACK as readonly string[]).includes(id)) return drawThemeBack(g, view, id, m, body, layer, hem, sit);
   const { cx, shY, shL, shR } = m;
   const side = view === "side";
   const up = view === "up";

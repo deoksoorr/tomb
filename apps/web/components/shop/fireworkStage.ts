@@ -15,7 +15,11 @@ import {
   LETTER_FALLBACK,
   letterMask,
   letterSparks,
+  rocketTrail,
+  slowFactor,
   sparkLook,
+  sparkState,
+  sparkTrail,
   stepSpark,
   type FwPattern,
   type LetterMask,
@@ -34,7 +38,7 @@ const CAP = 700;
 
 export type StageSpark = SparkState & { color: number; alpha: number; scale: number };
 export type StageBloom = { x: number; y: number; color: number; scale: number; age: number; ms: number };
-type Rocket = { x: number; y: number; bx: number; by: number; at: number; rise: number; r: number; colors: readonly number[]; pattern: FwPattern; size: number; ground?: boolean; trailAt: number };
+type Rocket = { x: number; y: number; bx: number; by: number; at: number; rise: number; r: number; colors: readonly number[]; pattern: FwPattern; size: number; ground?: boolean; trailAt: number; scale?: number; finale?: boolean };
 type Meteor = { at: number; dur: number; x0: number; y0: number; dx: number; dy: number; size: number; color: number; trailAt: number; head: { x: number; y: number; alpha: number } | null };
 
 export class FireworkStage {
@@ -62,7 +66,9 @@ export class FireworkStage {
     this.fire();
   }
 
-  private budget = (want: number) => Math.max(0, Math.min(Math.round(want * this.k), CAP - this.sparks.length));
+  /** 프레임 시간 이동 평균 (게임처럼 느리면 입자 수를 줄인다 — 같은 기기에서 게임과 같은 밀도로 보이게) */
+  private dtAvg = 16;
+  private budget = (want: number) => Math.max(0, Math.min(Math.round(want * this.k * slowFactor(this.dtAvg)), CAP - this.sparks.length));
 
   private fire(): void {
     const { plan, item } = this;
@@ -80,7 +86,7 @@ export class FireworkStage {
       for (const s of finaleShots(plan, 300)) {
         const bx = s.fx * STAGE_W;
         const by = s.fy * STAGE_H;
-        this.rockets.push({ x: bx, y: STAGE_H * 0.96, bx, by, at: now + s.delay, rise: FW_SKY_RISE_MS, r: s.h * Math.min(STAGE_W, STAGE_H), colors: s.colors, pattern: s.pattern, size: s.big ? 1.15 : 1, trailAt: 0 });
+        this.rockets.push({ x: bx, y: STAGE_H * 0.96, bx, by, at: now + s.delay, rise: FW_SKY_RISE_MS, r: s.h * Math.min(STAGE_W, STAGE_H), colors: s.colors, pattern: s.pattern, size: s.big ? 1.15 : 1, trailAt: 0, finale: true });
       }
       return;
     }
@@ -97,30 +103,16 @@ export class FireworkStage {
     }
     for (const s of fireworkShots(item, plan, h)) {
       const x = FEET.x + s.dx;
-      const fit = s.ground ? { h: s.h, r } : fitBurst(x, FEET.y, s.h, r, stage);
+      const rs = r * (s.scale ?? 1);
+      const fit = s.ground ? { h: s.h, r: rs } : fitBurst(x, FEET.y, s.h, rs, stage);
       const rise = s.ground ? 1 : plan.power >= 4 ? FW_RISE_MS * 1.15 : FW_RISE_MS;
-      this.rockets.push({ x, y: FEET.y, bx: x, by: FEET.y - fit.h, at: now + s.delay, rise, r: fit.r, colors: s.colors, pattern: s.pattern, size: 1, ground: s.ground, trailAt: 0 });
+      this.rockets.push({ x, y: FEET.y, bx: x, by: FEET.y - fit.h, at: now + s.delay, rise, r: fit.r, colors: s.colors, pattern: s.pattern, size: 1, ground: s.ground, trailAt: 0, scale: s.scale });
     }
   }
 
   private spawn(x: number, y: number, s: SparkSpec): void {
     if (this.sparks.length >= CAP) return;
-    this.sparks.push({
-      x: x + (s.ox ?? 0),
-      y: y + (s.oy ?? 0),
-      vx: s.vx,
-      vy: s.vy,
-      age: 0,
-      life: s.life,
-      drag: s.drag,
-      grav: s.grav,
-      size: s.size,
-      swapAt: s.swapAt ?? Infinity,
-      fadeFrom: s.fadeFrom ?? 0,
-      color: s.color,
-      alpha: 1,
-      scale: s.size,
-    });
+    this.sparks.push({ ...sparkState(x, y, s), color: s.color, alpha: 1, scale: s.size });
   }
 
   private spawnAll(x: number, y: number, specs: readonly SparkSpec[]): void {
@@ -142,7 +134,7 @@ export class FireworkStage {
       return;
     }
     const big = plan.power >= 4 || plan.sky;
-    if (!r.ground) this.blooms.push({ x: r.bx, y: r.by, color: big ? 0xfff0c8 : r.colors[0], scale: big ? r.r / 16 : r.pattern === "heart" ? 1.6 : 1.3, age: 0, ms: big ? 700 : 520 });
+    if (!r.ground) this.blooms.push({ x: r.bx, y: r.by, color: big ? 0xfff0c8 : r.colors[0], scale: big ? r.r / 16 : (r.pattern === "heart" ? 1.6 : 1.3) * (r.scale ?? 1), age: 0, ms: big ? 700 : 520 });
     this.spawnAll(r.bx, r.by, burstSparks(r.pattern, r.r, r.colors, { life: plan.life, size: r.size, budget: this.budget, reduced: this.reduced }));
     if (plan.lift > 0) this.glow = Math.min(plan.lift, this.glow + plan.lift * (plan.sky ? 0.5 : 1));
   }
@@ -150,6 +142,7 @@ export class FireworkStage {
   /** dt(ms)만큼 진행 */
   step(dt: number): void {
     this.t += dt;
+    this.dtAvg += (Math.min(100, dt) - this.dtAvg) * 0.1;
     const t = this.t;
     for (let i = this.timers.length - 1; i >= 0; i--) {
       if (t < this.timers[i].at) continue;
@@ -166,7 +159,9 @@ export class FireworkStage {
       if (t >= r.trailAt && k < 1) {
         r.trailAt = t + (this.reduced ? 90 : 35);
         const ry = r.y + (r.by - r.y) * e;
-        this.spawn(r.x + Math.sin(u / 70) * 0.8, ry, { vx: (Math.random() - 0.5) * 6, vy: 8 + Math.random() * 8, life: 380, color: 0xffe8b0, size: 1, drag: 1.3, grav: 26 });
+        // 게임과 같은 로켓 꼬리 (피날레 로켓은 한 줄)
+        const tail = r.finale ? rocketTrail("peony", 1) : rocketTrail(r.pattern, this.plan.power);
+        for (const s of tail) this.spawn(r.x + Math.sin(u / 70) * 0.8, ry, s);
       }
       if (k >= 1) {
         this.rockets.splice(i, 1);
@@ -214,6 +209,8 @@ export class FireworkStage {
       const look = sparkLook(p, this.reduced);
       p.alpha = look.alpha;
       p.scale = look.scale;
+      const tail = sparkTrail(p, this.reduced);
+      if (tail) this.spawn(p.x, p.y, tail);
     }
     this.glow *= Math.exp(-dt / 900);
     // 다 끝나면 잠깐 쉬고 다시 쏜다
@@ -225,4 +222,40 @@ export class FireworkStage {
       this.fire();
     }
   }
+}
+
+/** 폭죽 창 카드의 정지 그림: 한 번 터뜨려 보며 불꽃이 가장 활짝 핀 순간을 골라 그 장면을 복사해 둔다 */
+export type StageSnapshot = Pick<FireworkStage, "sparks" | "blooms" | "heads" | "glow">;
+
+export function stillScene(item: string, label = "", maxMs = 4200): StageSnapshot {
+  const st = new FireworkStage(item, false, label);
+  let best: StageSnapshot = { sparks: [], blooms: [], heads: [], glow: 0 };
+  let bestScore = -1;
+  const dt = 16;
+  for (let t = 0; t < maxMs; t += dt) {
+    st.step(dt);
+    if (t % 48 !== 0 || st.sparks.length < 8) continue;
+    // 점수 = 밝기(제곱 합 — 흐려지면 크게 깎인다) × 퍼진 정도 (갓 터진 섬광보다 활짝 핀 순간, 흐려지기 전)
+    let sum = 0;
+    let bright = 0;
+    let cx = 0;
+    let cy = 0;
+    for (const p of st.sparks) {
+      sum += p.alpha;
+      bright += p.alpha * p.alpha;
+      cx += p.x * p.alpha;
+      cy += p.y * p.alpha;
+    }
+    if (sum <= 0) continue;
+    cx /= sum;
+    cy /= sum;
+    let spread = 0;
+    for (const p of st.sparks) spread += Math.hypot(p.x - cx, p.y - cy) * p.alpha;
+    const score = bright * Math.sqrt(spread / sum + 1);
+    if (score > bestScore) {
+      bestScore = score;
+      best = { sparks: st.sparks.map((p) => ({ ...p })), blooms: st.blooms.map((b) => ({ ...b })), heads: st.heads.map((h) => ({ ...h })), glow: st.glow };
+    }
+  }
+  return best;
 }

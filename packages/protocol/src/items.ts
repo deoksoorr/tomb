@@ -40,6 +40,10 @@ export type ItemDef = {
   quest?: true;
   /** 11/15 긴급 의뢰 보상 (가장 많이 낸 사람의 사이렌 모자): 상점 목록에 없고 살 수 없다. 받으면 24시간 빌려 입는다 (값 0 → 꾸미기 점수 0) */
   urgent?: true;
+  /** 11/17 유령선 한정: 상점 목록에 없고 토요일 밤 유령선 장터에서만 영구로 산다 (값 = price × 영구 배율 — web lib/sea/ghostShip GHOST_LIMITED) */
+  ghost?: true;
+  /** 12월 크리스마스 이벤트 한정: 상점 목록에 없고 살 수 없다. 관리자가 선물함으로 뿌리는 「크리스마스 선물상자」(xm_box)를 열면 영구로 나온다 (web lib/xmas/box) */
+  event?: true;
   /** 11/15 수집 의뢰 보상 등급 (프리미엄 외형 등급과 같은 색·연출: 일반·고급·희귀·전설) */
   grade?: "common" | "fine" | "rare" | "legend";
   /** kind = "unlock": 여는 것 (emo = 의뢰 이모티콘 묶음 QUEST_EMO_IDS, body = 외형 body) */
@@ -57,17 +61,39 @@ function cosmetics(rows: readonly (readonly [string, CosmeticSlot, string, strin
   return rows.map(([id, slot, name, desc, price]) => ({ id, kind: "cosmetic", slot, name, desc, price, durationMs: COSMETIC_DURATION_MS }));
 }
 
+/** 12월 크리스마스 이벤트 꾸미기 등급 (선물상자에서 나올 때의 색·연출. 확률은 web lib/xmas/box.ts XMAS_BOX_TABLE) */
+const XMAS_GRADES: Readonly<Record<string, NonNullable<ItemDef["grade"]>>> = {
+  xm_bells: "common",
+  xm_name: "common",
+  xm_scarf: "fine",
+  xm_cane: "fine",
+  xm_plate: "fine",
+  xm_crown: "rare",
+  xm_snow: "rare",
+  xm_cape: "rare",
+  xm_deer: "legend",
+  xm_sleigh: "legend",
+};
+
 export const ITEMS: readonly ItemDef[] = [
   { id: "fw_small", kind: "firework", name: "작은 폭죽", desc: "밤하늘에 한 발. 채널 모두가 함께 봐요.", price: 60, power: 1 },
   { id: "fw_fountain", kind: "firework", name: "분수 폭죽", desc: "발밑에서 금빛 불티가 솟구쳐요. 탕비실 커피 머신보다 화끈하게.", price: 80, power: 1 },
   { id: "fw_ring", kind: "firework", name: "고리 폭죽", desc: "청록 고리가 동그랗게 퍼져요. 회의실 원형 테이블 같은 평화.", price: 100, power: 1 },
   { id: "fw_heart", kind: "firework", name: "하트 폭죽", desc: "하트 모양으로 퍼지는 분홍 불꽃.", price: 120, power: 2 },
+  { id: "fw_twinring", kind: "firework", name: "고리 두 겹 폭죽", desc: "비스듬한 분홍 고리 안에 청록 고리가 한 겹 더. 토성이 놀러 왔어요.", price: 130, power: 2 },
   { id: "fw_star", kind: "firework", name: "별 폭죽", desc: "노란 오각별이 반짝. 이번 달 고과는 별 다섯 개.", price: 140, power: 2 },
+  { id: "fw_butterfly", kind: "firework", name: "나비 폭죽", desc: "보랏빛 나비가 날개를 활짝 펴요. 퇴근길 발걸음처럼 가볍게.", price: 150, power: 2 },
+  { id: "fw_snow", kind: "firework", name: "눈꽃 폭죽", desc: "여섯 갈래 눈꽃이 피고 가지 끝이 반짝여요.", price: 160, power: 2 },
   { id: "fw_spiral", kind: "firework", name: "나선 폭죽", desc: "불꽃이 빙글빙글 돌며 풀려요. 결재 라인처럼 돌고 돌아.", price: 170, power: 2 },
+  { id: "fw_strobe", kind: "firework", name: "별빛 점멸 폭죽", desc: "흩어진 불티가 멈춰 서서 저마다 깜빡여요. 야근하는 사무실 창문처럼.", price: 180, power: 2 },
   { id: "fw_triple", kind: "firework", name: "삼연발 폭죽", desc: "세 발이 연달아 터져요.", price: 200, power: 3 },
+  { id: "fw_chameleon", kind: "firework", name: "색바꿈 국화", desc: "꼬리를 끌며 빨갛게 퍼지다가 중간에 초록으로 바뀌어요.", price: 210, power: 3 },
   { id: "fw_willow", kind: "firework", name: "버드나무 폭죽", desc: "금빛 가지가 축 늘어지며 오래 남아요. 금요일 오후의 어깨처럼.", price: 220, power: 3 },
+  { id: "fw_glitter", kind: "firework", name: "금가루 폭죽", desc: "반짝이는 금가루가 천천히 흩날리며 내려와요. 성과급도 이렇게 내리면 좋겠어요.", price: 230, power: 3 },
   { id: "fw_crossette", kind: "firework", name: "이중 폭발", desc: "한 번 터지고, 그 끝에서 또 터져요. 회식 2차처럼.", price: 240, power: 3 },
+  { id: "fw_palm", kind: "firework", name: "야자수 폭죽", desc: "금빛 줄기 끝에서 초록 잎이 휘어져 내려요. 마음만은 휴양지.", price: 250, power: 3 },
   { id: "fw_smile", kind: "firework", name: "스마일 폭죽", desc: "하늘에 웃는 얼굴이 떠요. 월급날 표정 그대로.", price: 280, power: 3 },
+  { id: "fw_tower", kind: "firework", name: "3단 불꽃탑", desc: "한 자리에서 세 발이 점점 높이, 점점 크게 터져요.", price: 290, power: 3 },
   { id: "fw_waterfall", kind: "firework", name: "폭포 폭죽", desc: "불꽃 줄에서 은빛 불티가 커튼처럼 쏟아져요.", price: 300, power: 3 },
   { id: "fw_big", kind: "firework", name: "대형 폭죽", desc: "화면을 가득 채우는 커다란 불꽃.", price: 380, power: 4 },
   { id: "fw_meteor", kind: "firework", name: "별똥별", desc: "하늘을 가로지르는 별똥별 비가 쏟아져요.", price: 260, power: 3 },
@@ -242,6 +268,54 @@ export const ITEMS: readonly ItemDef[] = [
     ["pet_ham", "pet", "꼬마 햄찌", "볼 빵빵한 꼬마 햄스터가 종종걸음으로 따라와요.", 500],
     ["pet_mochi", "pet", "찹쌀 토끼", "말랑말랑 하얀 토끼가 통통 튀며 따라와요.", 600],
   ]),
+  // ── 11/17 유령선 한정 꾸미기 (토요일 밤 유령선 장터에서만 영구로 — 값 = price × 영구 배율). 그림 web game/sprites/ghostGear.ts ──
+  ...cosmetics([
+    ["gh_capt", "head", "유령 선장 모자", "녹색 도깨비불이 깃든 낡은 삼각 선장 모자. 유령선에서만 팔아요.", 420],
+    ["gh_mist", "aura", "안개 오라", "발치에 바다 안개가 낮게 깔리고 녹색 불씨가 떠다녀요. 유령선에서만 팔아요.", 450],
+  ]).map((it): ItemDef => ({ ...it, ghost: true })),
+  // ── 11/17 테마 꾸미기 묶음 (적은 부위 위주: 등·목·손·발·이름표). 겨울 니트 · 회사원 정장 소품 · 캠핑룩 · 바닷가룩.
+  //    다른 꾸미기와 같은 24시간·영구(×4) 규칙. 그림: 등·목·손 web game/sprites/themeGear.ts · 발자국 themeFx.ts · 이름표 lib/nameStyle.ts
+  ...cosmetics([
+    // 겨울 니트
+    ["neck_knit", "neck", "꽈배기 니트 목도리", "할머니 손뜨개 꽈배기 무늬. 출근길 칼바람도 끄떡없어요.", 100],
+    ["back_shawl", "back", "체크 담요 숄", "사무실 의자에 늘 걸려 있던 그 담요. 어깨에 두르면 반차 기분.", 180],
+    ["np_knit", "namePlate", "니트 이름표", "포근한 털실 꽈배기 무늬 위에 이름을 떠 넣어요.", 140],
+    // 회사원 정장 소품
+    ["back_jacket", "back", "어깨 걸친 재킷", "퇴근길엔 재킷을 어깨에 툭. 넥타이는 이미 주머니 속.", 140],
+    ["np_card", "namePlate", "사원증 이름표", "파란 띠 사원증에 이름이 또박또박. 삑, 출입 허가.", 120],
+    // 캠핑룩
+    ["back_camppack", "back", "캠핑 배낭", "돌돌 만 침낭을 얹은 큰 배낭. 주말엔 무조건 숲으로.", 160],
+    ["neck_bandana", "neck", "등산 반다나", "주황 바탕에 흰 점무늬. 산꼭대기 인증 사진 필수품.", 60],
+    ["hand_mug", "hand", "캠핑 머그", "법랑 머그에 코코아가 모락모락. 불멍엔 이게 최고.", 80],
+    ["feet_embers", "feet", "모닥불 불씨 걸음", "걸음마다 작은 불씨가 톡톡 튀어 올라요.", 180],
+    // 바닷가룩
+    ["back_surf", "back", "서핑보드", "파도 기다리는 중. 일단 메고 다니면 서퍼예요.", 240],
+    ["neck_shell", "neck", "조개 목걸이", "바닷가에서 주운 조개를 엮었어요. 파도 소리가 들릴지도.", 100],
+    ["hand_icecream", "hand", "아이스크림 콘", "녹기 전에 빨리! 딸기 한 스쿱, 바닐라 한 스쿱.", 60],
+    ["feet_sand", "feet", "모래사장 발자국", "모래 위에 콕콕 발자국. 가끔 작은 조개가 빼꼼.", 100],
+    ["np_beach", "namePlate", "모래사장 이름표", "따끈한 모래 위에 불가사리와 조개를 콕콕.", 160],
+  ]),
+  // ── 12월 크리스마스 이벤트 한정 (event: 상점 목록에 없고 살 수 없다 — 관리자가 선물함으로 뿌리는 선물상자에서만 영구로).
+  //    빨간 벨벳 · 흰 털 · 금빛 · 얼음빛이 한 벌로 이어진다. price = 꾸미기 점수용 가치 (영구 가치 = ×4, 펫도 같은 식)
+  //    그림: 머리·목·손·등 web game/sprites/xmasGear.ts · 발자국·오라·펫 xmasFx.ts · 이름 lib/nameStyle.ts. 나올 확률은 web lib/xmas/box.ts XMAS_BOX_TABLE
+  //    id가 짧은 까닭: 착용 증서 길이 (부위마다 가장 긴 id보다 길지 않게)
+  ...([
+    ...cosmetics([
+      ["xm_crown", "head", "눈꽃 왕관", "얼음 결정으로 빚은 은빛 왕관. 가운데 눈꽃 보석이 반짝여요. 12월 이벤트 한정.", 360],
+      ["xm_scarf", "neck", "리본 목도리", "흰 털 단을 두른 빨간 목도리에 금방울 리본. 걸으면 딸랑. 12월 이벤트 한정.", 160],
+      ["xm_cane", "hand", "별 지팡이 사탕", "빨강·하양 줄무늬 지팡이 사탕 끝에 금별이 반짝. 12월 이벤트 한정.", 200],
+      ["xm_cape", "back", "털 달린 빨간 망토", "흰 털 깃과 밑단을 두른 빨간 벨벳 망토. 등에 금실 눈꽃 자수. 12월 이벤트 한정.", 400],
+      ["xm_bells", "feet", "썰매 방울 걸음", "걸음마다 금방울이 딸랑, 눈송이가 포슬. 12월 이벤트 한정.", 160],
+      ["xm_snow", "aura", "눈송이 오라", "커다란 눈 결정이 몸 둘레를 천천히 돌며 반짝여요. 12월 이벤트 한정.", 400],
+      ["xm_deer", "pet", "꼬마 루돌프", "빨간 코가 반짝이는 꼬마 순록. 목에 금방울을 달고 종종 따라와요. 12월 이벤트 한정.", 300],
+      ["xm_name", "nameColor", "크리스마스 이름", "빨강·하양·초록으로 물든 이름에 별가루가 반짝. 12월 이벤트 한정.", 200],
+      ["xm_plate", "namePlate", "호랑가시 이름표", "눈 덮인 초록 판 양끝에 호랑가시 잎과 빨간 열매. 12월 이벤트 한정.", 240],
+      // 타는 펫 (EVENT_RIDES — 속도 1.3, 가장 빠른 사슴 1.35보다 느리다). 그림 web game/sprites/mountArt.ts
+      ["xm_sleigh", "pet", "루돌프 썰매", "꼬마 루돌프가 끄는 빨간 나무 썰매. 뒤칸엔 선물 자루가 한가득이에요. 12월 이벤트 한정. (타고 다닐 수 있어요)", 700],
+    ]).map((it): ItemDef => ({ ...it, grade: XMAS_GRADES[it.id] })),
+    // 선물상자: 받으면 가방(소모품)에 들어가고 [열기]로 연다 (web /api/xmas/open — 무엇이 나올지는 서버가 정한다)
+    { id: "xm_box", kind: "box", grade: "rare", name: "크리스마스 선물상자", desc: "금빛 리본으로 묶은 빨간 상자. 열면 크리스마스 한정 꾸미기 하나가 나와요.", price: 0 },
+  ] satisfies ItemDef[]).map((it): ItemDef => ({ ...it, event: true })),
   // ── 31번 운영자 전용 꾸미기 (값 0: 운영자만 상점에서 영구로 받는다. 일반 계정은 사거나 입을 수 없다) ──
   ...cosmetics([
     ["staff_crown", "head", "운영자 왕관", "마을을 지키는 운영자의 검은 왕관. 운영자 전용.", 0],
@@ -268,6 +342,17 @@ export const ITEMS: readonly ItemDef[] = [
   { id: "pet_hound", kind: "cosmetic", slot: "pet", name: "듬직한 큰 개", desc: "등에 태워 주는 커다란 개. 출근길이 두 배로 즐거워요. (타고 다닐 수 있어요)", price: 2000, durationMs: COSMETIC_DURATION_MS },
   { id: "pet_goose", kind: "cosmetic", slot: "pet", name: "왕거위", desc: "아무도 못 말리는 거위. 등에 타면 뒤뚱뒤뚱 신나게 달려요. (타고 다닐 수 있어요)", price: 2400, durationMs: COSMETIC_DURATION_MS },
   { id: "pet_deer", kind: "cosmetic", slot: "pet", name: "달빛 사슴", desc: "별빛 뿔을 단 사슴. 등에 타면 바람처럼 가볍게 달려요. (타고 다닐 수 있어요)", price: 3000, durationMs: COSMETIC_DURATION_MS },
+  // 11/17 동물원 새 펫 묶음 (그림 web game/sprites/petPack.ts · 타는 펫 mountArt.ts). 옛 화면에는 PET_FALLBACK의 비슷한 펫으로 보인다
+  { id: "pet_hog", kind: "cosmetic", slot: "pet", name: "밤송이 고슴도치", desc: "등에 단풍잎을 얹은 고슴도치. 오래 쉬면 동그랗게 말아 데굴데굴 굴러요.", price: 500, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_ducks", kind: "cosmetic", slot: "pet", name: "아기 오리 삼총사", desc: "노란 솜털 아기 오리 셋이 줄지어 종종 따라와요. 가끔 차례로 폴짝 뛰어요.", price: 550, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_gull", kind: "cosmetic", slot: "pet", name: "솜털 아기 갈매기", desc: "바닷바람을 좋아하는 아기 갈매기. 날아 보려고 파닥파닥 폴짝 뛰어요.", price: 550, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_jelly", kind: "cosmetic", slot: "pet", name: "몽글 해파리", desc: "분홍빛 해파리가 둥둥 떠서 따라와요. 물 위에서도 둥실둥실해요.", price: 650, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_snowy", kind: "cosmetic", slot: "pet", name: "꼬마 눈사람", desc: "목도리를 두른 꼬마 눈사람이 통통 튀어요. 가끔 만세 하면 눈송이가 반짝여요.", price: 700, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_fly", kind: "cosmetic", slot: "pet", name: "반딧불이 무리", desc: "작은 반딧불이 다섯이 반짝반짝 따라와요. 가끔 모여서 하트를 그려요.", price: 750, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_otter", kind: "cosmetic", slot: "pet", name: "조약돌 수달", desc: "조약돌을 꼭 안고 다니는 수달. 쉴 때는 벌러덩 누워 배 위에서 콩콩 두드려요.", price: 950, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_panda", kind: "cosmetic", slot: "pet", name: "꼬마 레서판다", desc: "줄무늬 꼬리가 폭신한 레서판다. 가끔 뒷발로 벌떡 서서 두 팔을 번쩍 들어요.", price: 1100, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_paca", kind: "cosmetic", slot: "pet", name: "뭉게 알파카", desc: "구름처럼 폭신한 알파카. 등에 타면 담요 위에서 사뿐사뿐 달려요. (타고 다닐 수 있어요)", price: 2200, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_polar", kind: "cosmetic", slot: "pet", name: "포근 북극곰", desc: "목도리를 두른 북극곰. 등에 타면 묵직하고 든든하게 달려요. (타고 다닐 수 있어요)", price: 2700, durationMs: COSMETIC_DURATION_MS },
   // ── 11/15 수집 의뢰 보상 (도장 교환소 전용 — quest: 상점·포인트로는 못 산다. price = 꾸미기 점수용 가치(영구 가치 = ×4, 펫도 같은 식이라
   //    동물원 펫 값에 맞춰 희귀 펫 240 → 960, 타는 잉어 600 → 2,400), 꾸미기는 영구로 받는다) ──
   //    그림: 머리·손·등 avatarGear.ts · 오라·펫·타는 펫 cosmeticFx.ts · 이름 lib/nameStyle.ts · 외형 avatar.ts · 이모티콘 emoArt.ts
@@ -382,9 +467,17 @@ export function styleItemId(id: string): string | null {
  */
 export const SHOP_KINDS: readonly ItemKind[] = ["firework", "cosmetic", "graveStyle", "megaphone", "dye"];
 /** 상점 목록에 나오는지. 펫은 상점에서 팔지 않는다 (동물원 사육사에게서 영구로만 — ZOO_PETS) */
-export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot; staff?: true; champ?: true; quest?: true; urgent?: true }): boolean {
-  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet" && !item.staff && !item.champ && !item.quest && !item.urgent;
+export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot; staff?: true; champ?: true; quest?: true; urgent?: true; ghost?: true; event?: true }): boolean {
+  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet" && !item.staff && !item.champ && !item.quest && !item.urgent && !item.ghost && !item.event;
 }
+/** 12월 크리스마스 이벤트 한정인지 (상점·포인트로 살 수 없다 — 선물상자에서만) */
+export function isEventItem(id: unknown): boolean {
+  return typeof id === "string" && byId.get(id)?.event === true;
+}
+/** 크리스마스 선물상자 아이템 id */
+export const XMAS_BOX_ID = "xm_box";
+/** 크리스마스 선물상자에서 나오는 꾸미기 id 전부 (카탈로그 순서) */
+export const XMAS_SET_IDS: readonly string[] = ITEMS.filter((i) => i.event && i.kind === "cosmetic").map((i) => i.id);
 
 const byId = new Map(ITEMS.map((i) => [i.id, i]));
 export function itemById(id: string): ItemDef | undefined {
@@ -517,21 +610,33 @@ export const ZOO_PETS: readonly PetDef[] = [
   { id: "pet_slime", price: 450 },
   { id: "pet_duck", price: 450 },
   { id: "pet_ham", price: 500 }, // 11/15 말랑 꾸미기 묶음
+  { id: "pet_hog", price: 500 }, // 11/17 새 펫 묶음 (이하 같은 표시)
   { id: "pet_bird", price: 550 },
+  { id: "pet_ducks", price: 550 }, // 11/17
+  { id: "pet_gull", price: 550 }, // 11/17
   { id: "pet_mochi", price: 600 }, // 11/15 말랑 꾸미기 묶음
   { id: "pet_ghost", price: 650 },
+  { id: "pet_jelly", price: 650 }, // 11/17
   { id: "pet_wisp", price: 700 },
+  { id: "pet_snowy", price: 700 }, // 11/17
+  { id: "pet_fly", price: 750 }, // 11/17
   { id: "pet_cat", price: 900 },
   { id: "pet_dog", price: 900 },
+  { id: "pet_otter", price: 950 }, // 11/17
+  { id: "pet_panda", price: 1100 }, // 11/17
   { id: "pet_fox", price: 1200 },
   { id: "pet_hound", price: 2000, ride: { speed: 1.25 } },
+  { id: "pet_paca", price: 2200, ride: { speed: 1.2 } }, // 11/17
   { id: "pet_goose", price: 2400, ride: { speed: 1.2 } },
+  { id: "pet_polar", price: 2700, ride: { speed: 1.3 } }, // 11/17
   { id: "pet_deer", price: 3000, ride: { speed: 1.35 } },
 ];
 const petMap = new Map(ZOO_PETS.map((p) => [p.id, p]));
 /** 11/15 수집 의뢰 보상 타는 펫 (사육사에게서 팔지 않는다 — petDef·petPrice엔 없고, 타기 규칙만 같다). 속도는 같은 1.35 이하 규칙 */
 export const QUEST_RIDES: readonly PetDef[] = [{ id: "q_ride_carp", price: 0, ride: { speed: 1.3 } }];
-const rideMap = new Map([...ZOO_PETS, ...QUEST_RIDES].filter((p) => p.ride).map((p) => [p.id, p.ride!]));
+/** 12월 크리스마스 선물상자 전용 타는 펫 (사육사에게서 팔지 않는다 — event). 같은 1.35 이하 규칙 */
+export const EVENT_RIDES: readonly PetDef[] = [{ id: "xm_sleigh", price: 0, ride: { speed: 1.3 } }];
+const rideMap = new Map([...ZOO_PETS, ...QUEST_RIDES, ...EVENT_RIDES].filter((p) => p.ride).map((p) => [p.id, p.ride!]));
 /** 동물원 펫이면 그 정의 */
 export function petDef(id: string): PetDef | undefined {
   return petMap.get(id);
@@ -557,6 +662,33 @@ export function ridePetOfLook(look: readonly string[] | null | undefined): strin
 /** 타고 걷는 속도 배율 (타는 펫이 아니면 1) */
 export function rideSpeed(id: string | null | undefined): number {
   return (id && rideMap.get(id)?.speed) || 1;
+}
+
+// 11/17 옛 화면 호환: 새 펫 → 옛 화면이 아는 비슷한 펫 (타는 펫은 타는 펫으로). 실시간 서버가 다른 사람에게 착용 목록을 보낼 때 끝(칭호 앞)에 덧붙인다.
+// 옛 화면은 모르는 새 펫 id를 건너뛰고 이 펫을 그리고, 새 화면은 앞의 펫 하나만 그린다 (web cosmeticFx CosmeticFxSim.setLook).
+// 저장·검증하는 착용 목록(sanitizeLook)에는 넣지 않는다 — 보낼 때만.
+export const PET_FALLBACK: Readonly<Record<string, string>> = {
+  pet_hog: "pet_ham",
+  pet_ducks: "pet_duck",
+  pet_gull: "pet_bird",
+  pet_jelly: "pet_wisp",
+  pet_snowy: "pet_slime",
+  pet_fly: "pet_wisp",
+  pet_otter: "pet_cat",
+  pet_panda: "pet_fox",
+  pet_paca: "pet_deer",
+  pet_polar: "pet_hound",
+  xm_sleigh: "pet_deer",
+};
+/** 다른 사람에게 보낼 착용 목록: 새 펫이면 옛 화면용 비슷한 펫을 칭호 앞(없으면 끝)에 덧붙인다. 해당 없으면 그대로 */
+export function lookWithPetFallback(look: readonly string[]): string[] {
+  const pet = petOfLook(look);
+  const fb = pet ? PET_FALLBACK[pet] : undefined;
+  if (!fb) return [...look];
+  const out = [...look];
+  const at = out.findIndex((id) => isTitleId(id));
+  out.splice(at < 0 ? out.length : at, 0, fb);
+  return out;
 }
 
 // ── 닉네임 꾸미기: 착용 목록에서 이름 글자·이름표 바탕판 (그리기는 web lib/nameStyle.ts) ──

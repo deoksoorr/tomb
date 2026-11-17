@@ -8,6 +8,9 @@ import { myFood } from "@/game/camp/foodState";
 import { errorMessage, request } from "@/lib/api";
 import type { BbqResponse, BbqStatusResponse } from "@/lib/campBbq";
 import { meStore, useMe } from "@/lib/hooks/useMe";
+import { snackBagIcon } from "@/game/sea/gullArt";
+import { SNACK, SNACK_KINDS, type SnackKind } from "@/lib/sea/gull";
+import { gullApi, publishSnacks, setSnackHand, snackHand } from "@/lib/sea/gullClient";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
@@ -125,6 +128,7 @@ function BbqDialog({ stand, onClose }: { stand: BbqStand; onClose: () => void })
               </li>
             ))}
           </ul>
+          {stand === "kiosk" && <GullSnacks />}
           <p className={styles.foot}>
             {tab === "drink" ? (tipsy >= DRUNK_MAX ? "취기가 끝까지 올랐어요. 더 마시면 깨는 시간만 늘어요." : tipsy > 0 ? `지금 취기는 ${tipsy}단계예요.` : "몇 잔이든 마실 수 있어요.") : "몇 접시든 먹을 수 있어요."}
             {me && ` 내 포인트는 ${me.points.toLocaleString("ko-KR")}P예요.`}
@@ -137,5 +141,70 @@ function BbqDialog({ stand, onClose }: { stand: BbqStand; onClose: () => void })
         )}
       </div>
     </Dialog>
+  );
+}
+
+/** 11/17 포구 갈매기 과자 (매점 아래 칸): 갈매기 과자 · 매운 새우 과자. 하루 둘 합쳐 10개, 손에 든 과자를 갈매기 가까이에서 E로 던져요 */
+function GullSnacks() {
+  const [st, setSt] = useState<{ plain: number; spicy: number; bought: number; limit: number } | null>(null);
+  const [hand, setHand] = useState<SnackKind>(snackHand);
+  const [pending, setPending] = useState<SnackKind | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const icons = useMemo(() => {
+    try {
+      return { plain: snackBagIcon(false).toCanvas().toDataURL(), spicy: snackBagIcon(true).toCanvas().toDataURL() };
+    } catch {
+      return { plain: "", spicy: "" };
+    }
+  }, []);
+  useEffect(() => {
+    gullApi.get().then((r) => {
+      setSt(r);
+      publishSnacks(r);
+    }, () => {});
+  }, []);
+  async function buy(kind: SnackKind) {
+    setPending(kind);
+    setMsg(null);
+    try {
+      const r = await gullApi.buy(kind);
+      meStore.set(r.me);
+      setSt(r);
+      setHand(kind);
+      setSnackHand(kind);
+      publishSnacks(r);
+      setMsg(`${SNACK[kind].name}를 손에 들었어요. 갈매기 가까이에서 E로 던져요.`);
+    } catch (e) {
+      setMsg(errorMessage(e));
+    } finally {
+      setPending(null);
+    }
+  }
+  const left = st ? Math.max(0, st.limit - st.bought) : 0;
+  return (
+    <section className={styles.gull} aria-label="갈매기 과자">
+      <p className={styles.gullTitle}>갈매기 과자 {st && <span className={styles.note}>오늘 {left}개 더 살 수 있어요</span>}</p>
+      <ul className={styles.menu}>
+        {SNACK_KINDS.map((k) => (
+          <li key={k} className={styles.row}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- 그 자리에서 그린 작은 픽셀 그림 */}
+            {icons[k] ? <img className={styles.icon} src={icons[k]} alt="" aria-hidden="true" /> : <span className={styles.icon} aria-hidden="true" />}
+            <span className={styles.text}>
+              <b>{SNACK[k].name}</b>
+              <span className={styles.note}>
+                {k === "spicy" ? "받아먹은 갈매기가 30초 동안 빨개져요. 가끔 붉은 깃털을 줘요." : "던지면 갈매기들이 몰려와요. 가끔 고맙다며 깃털을 줘요."} {st ? `가진 것 ${st[k]}개.` : ""}
+              </span>
+              <button type="button" className={cx(ui.button, styles.hand)} aria-pressed={hand === k} onClick={() => (setHand(k), setSnackHand(k))}>
+                {hand === k ? "손에 들었어요" : "손에 들기"}
+              </button>
+            </span>
+            <button type="button" className={cx(ui.button, ui.primary, styles.buy)} onClick={() => void buy(k)} disabled={pending !== null || !st || left <= 0}>
+              {pending === k ? "받는 중…" : `${SNACK[k].price}P`}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {msg && <p className={styles.note}>{msg}</p>}
+    </section>
   );
 }

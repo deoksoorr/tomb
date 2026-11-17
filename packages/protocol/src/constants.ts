@@ -286,7 +286,8 @@ export function staffGateBody<T extends string>(body: T, staff: boolean): T | "h
  * 한 번 하는 동작 (같은 채널에 보이고 들린다): 종 치기·물 튀기기·손 흔들기·환호·오리배 꽥(11/15)·범퍼카 빵빵(11/16)·등대 등불 켬(11/16, 바닷가).
  * 서버가 이 목록으로 받을 동작을 정한다 (늘리면 realtime 재배포). 옛 클라이언트는 모르는 동작을 그냥 버린다
  */
-export const ACT_KINDS = ["bell", "splash", "wave", "cheer", "quack", "honk", "lamp"] as const;
+// 11/17 gull = 포구 갈매기에게 과자 던지기 · gullHot = 매운 새우 과자 (같은 바닷가 사람 화면에 갈매기가 몰려들어요 — 매운 과자는 받아먹은 갈매기가 30초 빨개져요)
+export const ACT_KINDS = ["bell", "splash", "wave", "cheer", "quack", "honk", "lamp", "gull", "gullHot"] as const;
 export type ActKind = (typeof ACT_KINDS)[number];
 
 /**

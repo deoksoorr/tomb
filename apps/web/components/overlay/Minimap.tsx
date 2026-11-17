@@ -22,15 +22,18 @@ const STORE_KEY = "tomb.minimap";
 /** 캔버스 해상도 배율: 지도 1칸을 3×3 픽셀로 그려 화면에서 크게 늘려도 점이 또렷하게 (바탕 그림은 같은 그림을 그대로 확대) */
 const SCALE = 3;
 
-let baseCache: HTMLCanvasElement | null = null;
+let baseCache: { concept: string; canvas: HTMLCanvasElement } | null = null;
+/** 마을 바탕 (11/17 맵 컨셉이 바뀌면 다시 굽는다 — bridge map:concept) */
 function baseImage(): HTMLCanvasElement {
-  if (!baseCache) {
-    baseCache = document.createElement("canvas");
-    baseCache.width = MINIMAP_W;
-    baseCache.height = MINIMAP_H;
-    baseCache.getContext("2d")?.putImageData(new ImageData(minimapPixels() as unknown as Uint8ClampedArray<ArrayBuffer>, MINIMAP_W, MINIMAP_H), 0, 0);
+  const concept = bridge.last("map:concept")?.concept ?? "default";
+  if (!baseCache || baseCache.concept !== concept) {
+    const canvas = document.createElement("canvas");
+    canvas.width = MINIMAP_W;
+    canvas.height = MINIMAP_H;
+    canvas.getContext("2d")?.putImageData(new ImageData(minimapPixels(concept) as unknown as Uint8ClampedArray<ArrayBuffer>, MINIMAP_W, MINIMAP_H), 0, 0);
+    baseCache = { concept, canvas };
   }
-  return baseCache;
+  return baseCache.canvas;
 }
 
 /** 11/15 마을 밖 맵(캠핑장·11/16 바닷가) 지도 한 벌: 바탕 크기·굽기·좌표·주요 장소 */

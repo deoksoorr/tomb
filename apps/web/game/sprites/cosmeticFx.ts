@@ -1,7 +1,10 @@
-import { bodyTier, champAuraOn, CHAMP_AURA_OFF, champBoards, CHAMP_BOARDS, DIR, type DirId } from "@tomb/protocol";
-import { foxSheet, MOUNT_FRAMES, MOUNT_H, MOUNT_W, mountLift, mountSheet, type MountKind } from "./mountArt";
+import { bodyTier, champAuraOn, CHAMP_AURA_OFF, champBoards, CHAMP_BOARDS, DIR, itemById, type DirId } from "@tomb/protocol";
+import { foxSheet, MOUNT_FRAMES, MOUNT_H, MOUNT_W, mountLift, mountSheet, mountSideOver, type MountKind } from "./mountArt";
 import { kstHour, parseAmbienceOverride, timePhase } from "@/lib/ambience";
 import { CUTE_FX, CUTE_FX_ART, cuteIconGrid } from "./cuteFx";
+import { THEME_FX, THEME_FX_ART, themeIconGrid } from "./themeFx";
+import { XMAS_FX, XMAS_FX_ART, XMAS_GEAR_FX, xmasAura, xmasIconGrid, type XmasMotion } from "./xmasFx";
+import { PET_PACK_ART, PET_PACK_FX, petPackIconGrid } from "./petPack";
 import { Grid, type Color } from "./pixel";
 
 // F8 캐릭터 꾸미기 추가분 중 "아바타 시트 밖에 따로 그리는 연출" (날개 2종·우산·풍선·발자국 5종·오라 6종·펫 6종).
@@ -608,6 +611,34 @@ export const FX_ART = {
       rows(g, f ? ["..b.", ".bb.", ".bwb", "bwwb", "bwwb", ".bb."] : [".b..", ".bb.", "bwb.", "bwwb", "bwwb", ".bb."], { b: 0x5ad8ff, w: 0xd8faff });
     }),
   },
+  // 11/17 유령선 한정 「안개 오라」: 발치에 낮게 깔리는 바다 안개 한 뭉치 (가장자리로 갈수록 옅게) · 녹색 도깨비불 불씨
+  ghMist: {
+    w: 18,
+    h: 6,
+    frames: 2,
+    build: frames(18, 6, 2, (g, f, ox) => {
+      for (let y = 0; y < 6; y++)
+        for (let x = 0; x < 18; x++) {
+          const dx = (x + 0.5 - 9) / 9;
+          const dy = (y + 0.5 - 3.2) / 3;
+          // 두 겹 타원 + 프레임마다 다른 결 (일렁여요)
+          const wob = Math.sin(x * 0.9 + f * 2.1) * 0.12;
+          const d = dx * dx + (dy + wob) * (dy + wob);
+          if (d >= 1) continue;
+          const core = 1 - d;
+          const c = y < 2 ? 0xeafff4 : y < 4 ? 0xcdeee4 : 0xa8d8d0;
+          g.set(ox + x, y, c, Math.round(40 + core * 120));
+        }
+    }),
+  },
+  ghEmber: {
+    w: 3,
+    h: 4,
+    frames: 2,
+    build: frames(3, 4, 2, (g, f) => {
+      rows(g, f ? [".w.", "wgw", ".g.", ".d."] : [".g.", "gwg", ".g.", "..d"], { w: 0xe8fff0, g: 0x7dffb0, d: 0x3ac888 });
+    }),
+  },
   soulMist: {
     w: 5,
     h: 3,
@@ -1079,6 +1110,12 @@ export const FX_ART = {
   },
   // 11/15: 말랑 꾸미기 묶음 (cuteFx.ts)
   ...CUTE_FX_ART,
+  // 12월 크리스마스 이벤트 한정 (xmasFx.ts)
+  ...XMAS_FX_ART,
+  // 11/17 테마 꾸미기 묶음 (themeFx.ts)
+  ...THEME_FX_ART,
+  // 11/17: 동물원 새 펫 묶음 (petPack.ts)
+  ...PET_PACK_ART,
 } satisfies Record<string, ArtDef>;
 
 export type FxArtId = keyof typeof FX_ART;
@@ -1093,13 +1130,19 @@ function fill(w: number, h: number, c: Color, a: number): Grid {
 
 /** mount = 타는 펫 (그림은 mountArt 시트, 따라올 때는 몸집만큼 far배 떨어져 걷는다) */
 /** slide = 걷는 동안 가끔 배로 미끄러진다 (그림 프레임 2, 꼬마 펭귄) */
-type PetSpec = { kind: "pet"; art: FxArtId; hover: number; fps: number; idleFps: number; alpha?: number; squash?: boolean; glow?: boolean; mount?: MountKind; far?: number; slide?: boolean };
+/**
+ * pose = 11/17 새 펫: 멈췄을 때 idle 프레임을 idleFps로 돌고, 오래 서 있으면 every마다 act 프레임을 actMs씩 한 번 보여 준다 (귀여운 동작).
+ * lift = 동작 프레임마다 들어 올리는 높이 (폴짝). 없으면 걷기 두 장을 천천히 (예전 펫)
+ */
+type PetPose = { idle: readonly number[]; act: readonly number[]; actMs: number; every: number; lift?: readonly number[] };
+/** glowArt·glowFrame·glowAt = 번짐 그림을 바꿔 그 자리에 (펫 그림 아래 가운데 기준 [오른쪽을 볼 때 dx, 위로 up] — 꼬마 루돌프 코). 없으면 도깨비불 번짐을 몸 가운데에 */
+type PetSpec = { kind: "pet"; art: FxArtId; hover: number; fps: number; idleFps: number; alpha?: number; squash?: boolean; glow?: boolean; glowArt?: FxArtId; glowFrame?: number; glowAt?: readonly [number, number]; mount?: MountKind; far?: number; slide?: boolean; pose?: PetPose; /** 12월 루돌프 썰매: 타고 멈춰 있어도 옆모습이면 pose(멈춤·동작)를 쓴다 */ rideRest?: boolean };
 type TrailSpec = { kind: "trail"; art: FxArtId; step: number; life: number; motion: "prints" | "splash" | "rise" | "scatter" | "pop"; light?: boolean };
 /** 추가분 2: fall = 머리 위에서 떨어짐, float = 옆에서 떠오름, steam = 머리 위로 김, ring = 몸 둘레를 돈다 (art로 그림을 고른다) */
 type AuraSpec = {
   kind: "aura";
   /** tier* = 25번 프리미엄 외형 등급 연출 (꾸미기가 아니라 몸에 딸린다) */
-  motion: "orbit" | "snow" | "petals" | "cloud" | "notes" | "zzz" | "fall" | "float" | "steam" | "ring" | "tierFine" | "tierRare" | "tierLegend" | "champ" | "qFireflies" | "qNightfish" | "qCapeDust" | "qLamp" | "qSnowGlobe" | "qSnowPuff" | "qWishGlow" | "uSiren";
+  motion: "orbit" | "snow" | "petals" | "cloud" | "notes" | "zzz" | "fall" | "float" | "steam" | "ring" | "tierFine" | "tierRare" | "tierLegend" | "champ" | "qFireflies" | "qNightfish" | "qCapeDust" | "qLamp" | "qSnowGlobe" | "qSnowPuff" | "qWishGlow" | "uSiren" | "gMist" | XmasMotion;
   art?: FxArtId;
   light?: boolean;
   /** champ = 주간 랭킹 1위 오라 테마 (champTheme) */
@@ -1143,6 +1186,8 @@ export const COSMETIC_FX: Readonly<Record<string, FxSpec>> = {
   // 31번 운영자 전용
   staff_steps: { kind: "trail", art: "soulMist", step: 8, life: 1600, motion: "rise", light: true },
   staff_souls: { kind: "aura", motion: "ring", art: "soulFlame", light: true },
+  // 11/17 유령선 한정
+  gh_mist: { kind: "aura", motion: "gMist", light: true },
   pet_cat: { kind: "pet", art: "petCat", hover: 0, fps: 7, idleFps: 1.5 },
   pet_dog: { kind: "pet", art: "petDog", hover: 0, fps: 8, idleFps: 3 },
   pet_duck: { kind: "pet", art: "petDuck", hover: 0, fps: 5, idleFps: 1 },
@@ -1163,6 +1208,12 @@ export const COSMETIC_FX: Readonly<Record<string, FxSpec>> = {
   q_ride_carp: { kind: "pet", art: "mountCarp", hover: 0, fps: 4, idleFps: 1.5, mount: "carp", far: 1.7 },
   // 11/15: 말랑 꾸미기 묶음 (cuteFx.ts)
   ...CUTE_FX,
+  // 12월 크리스마스 이벤트 한정 (xmasFx.ts)
+  ...XMAS_FX,
+  // 11/17 테마 꾸미기 묶음 (themeFx.ts)
+  ...THEME_FX,
+  // 11/17: 동물원 새 펫 묶음 (petPack.ts)
+  ...PET_PACK_FX,
 };
 
 /** 이 펫이 타는 펫이면 그 그림 종류 (아니면 null) */
@@ -1187,6 +1238,8 @@ export const GEAR_EXTRA_FX: Readonly<Record<string, FxSpec>> = {
   q_hand_wishlamp: { kind: "aura", motion: "qWishGlow", light: true },
   // 11/15 긴급 의뢰: 사이렌 모자 경광등이 빙글빙글 (빨강·파랑 빛줄기)
   u_hat_siren: { kind: "aura", motion: "uSiren", light: true },
+  // 12월 크리스마스: 눈꽃 왕관 결정 반짝 · 지팡이 사탕 별빛 (xmasFx.ts)
+  ...XMAS_GEAR_FX,
 };
 
 /**
@@ -1338,6 +1391,13 @@ export function petSinkTarget(water: FxInput["water"], hover: number, h: number)
   return water === "dive" ? h + 1 : Math.round(h * PET_SWIM_SINK);
 }
 
+/** 11/17 이 빌드가 모르는 펫 id를 받았을 때 대신 보여 줄 펫 (새 실시간 서버 + 옛 화면) */
+export const UNKNOWN_PET_STANDIN = "pet_slime";
+/** 이 빌드가 모르는 펫 id인지 (꾸미기 목록에 없는 pet_·q_pet_·q_ride_) */
+export function isUnknownPetId(id: unknown): boolean {
+  return typeof id === "string" && /^(pet_|q_pet_|q_ride_)/.test(id) && !itemById(id);
+}
+
 /** 몸 뒤쪽으로 조금 떨어진 펫 자리 (그림자 유령 친구와 같은 값) */
 export function petBack(dir: DirId): [number, number] {
   return dir === DIR.left ? [12, -1] : dir === DIR.right ? [-12, -1] : dir === DIR.up ? [7, 5] : [-9, -5];
@@ -1345,6 +1405,21 @@ export function petBack(dir: DirId): [number, number] {
 
 function heading(dir: DirId): [number, number] {
   return dir === DIR.left ? [-1, 0] : dir === DIR.right ? [1, 0] : dir === DIR.up ? [0, -1] : [0, 1];
+}
+
+/**
+ * 11/17 멈춘 펫의 프레임·들어 올림: rest = 멈춘 뒤 ms (-1 = 멈춘 그림·움직임 줄이기 → 첫 멈춤 프레임).
+ * every마다 끝 무렵 act를 actMs씩 한 번 (멈추자마자는 하지 않는다 — 처음은 every - 동작 길이 뒤)
+ */
+export function petPoseFrame(p: PetPose, idleFps: number, rest: number): [number, number] {
+  if (rest < 0) return [p.idle[0], 0];
+  const len = p.act.length * p.actMs;
+  const cyc = rest % p.every;
+  if (cyc >= p.every - len) {
+    const i = Math.min(p.act.length - 1, Math.floor((cyc - (p.every - len)) / p.actMs));
+    return [p.act[i], p.lift?.[i] ?? 0];
+  }
+  return [p.idle[Math.floor((rest / 1000) * idleFps) % p.idle.length], 0];
 }
 
 /** 0..1 결정적 난수 (입자마다 고정된 흩어짐) */
@@ -1376,10 +1451,19 @@ export class CosmeticFxSim {
   private kiteX = 0;
   private kiteY = 0;
   private kiteOn = false;
+  /** 11/17 펫이 멈춰 선 시각 (걷는 중이면 NaN) — 오래 서 있으면 귀여운 동작 */
+  private petRestAt = NaN;
 
   /** body = 몸 id (프리미엄 외형 등급 연출을 함께 건다), champ = 주간 랭킹 1위 값 (1위 오라를 함께 건다 — 착용 오라와 자리를 나눠 둘 다 보인다) */
   setLook(look: readonly string[], body?: string | null, champ?: number, staff?: boolean): void {
-    const next = look.filter((id) => id in COSMETIC_FX || id in GEAR_EXTRA_FX).map((id) => [id, COSMETIC_FX[id] ?? GEAR_EXTRA_FX[id]] as [string, FxSpec]);
+    // 11/17 펫은 앞의 한 마리만 (실시간 서버가 옛 화면용으로 끝에 덧붙인 비슷한 펫은 그리지 않는다 — protocol PET_FALLBACK)
+    let pets = 0;
+    const next = look
+      .filter((id) => id in COSMETIC_FX || id in GEAR_EXTRA_FX)
+      .map((id) => [id, COSMETIC_FX[id] ?? GEAR_EXTRA_FX[id]] as [string, FxSpec])
+      .filter(([, s]) => s.kind !== "pet" || pets++ === 0);
+    // 이 빌드가 모르는 새 펫만 왔으면 기본 펫으로 (아무것도 안 따라오는 것보다 낫다)
+    if (!pets && look.some(isUnknownPetId)) next.push(["@pet", COSMETIC_FX[UNKNOWN_PET_STANDIN]]);
     const tier = bodyFx(body);
     if (tier) next.push(["@body", tier]);
     // 31번 운영자 오라가 우선 (본인이 끄면 champ에 CHAMP_AURA_OFF) — 아니면 주간 1위 오라
@@ -1593,8 +1677,15 @@ export class CosmeticFxSim {
     const fps = walking ? s.fps : s.idleFps;
     // 꼬마 펭귄: 걷는 동안 4.2초에 한 번 1.1초쯤 배로 미끄러진다 (뒤뚱 흔들림 없이 바닥에 붙어)
     const sliding = !!s.slide && walking && !wet && !f.reduced && !f.still && t % 4200 > 3100;
-    const frame = sliding ? 2 : Math.floor((t / 1000) * (wet ? fps * 0.6 : fps)) % 2;
-    let lift = s.hover;
+    let frame = sliding ? 2 : Math.floor((t / 1000) * (wet ? fps * 0.6 : fps)) % 2;
+    // 11/17 새 펫: 멈추면 앉아 눈을 깜빡이고, 오래 서 있으면 가끔 귀여운 동작 (물에서는 헤엄치는 걷기 그대로)
+    let poseLift = 0;
+    if (walking || wet) this.petRestAt = NaN;
+    else if (s.pose) {
+      if (Number.isNaN(this.petRestAt)) this.petRestAt = t;
+      [frame, poseLift] = petPoseFrame(s.pose, s.idleFps, f.still || f.reduced ? -1 : t - this.petRestAt);
+    }
+    let lift = s.hover + poseLift;
     let sx = 1;
     let sy = 1;
     if (s.hover) lift += f.reduced ? 0 : Math.sin(t / 420) * 1.5;
@@ -1621,7 +1712,11 @@ export class CosmeticFxSim {
         return; // 수면 아래: 몸·빛은 그리지 않는다
       }
     }
-    if (s.glow) out.push(cmd("wispGlow", 0, px, py - 5, { oy: 0.5, alpha: 0.8, layer: "light", depth: 0 }));
+    if (s.glow && s.glowAt) {
+      // 그림 속 한 점(루돌프 코)에서 번진다 — 보는 쪽에 따라 좌우가 바뀌고, 천천히 깜빡인다
+      const pulse = f.reduced ? 0.85 : 0.7 + 0.3 * Math.sin(t / 380);
+      out.push(cmd(s.glowArt ?? "wispGlow", s.glowFrame ?? 0, px + (flip ? -1 : 1) * s.glowAt[0], py + sink - s.glowAt[1], { alpha: pulse * (sink ? 0.5 : 1), layer: "light", depth: 0 }));
+    } else if (s.glow) out.push(cmd("wispGlow", 0, px, py - 5, { oy: 0.5, alpha: 0.8, layer: "light", depth: 0 }));
     // 잠긴 만큼 내려 그리고 그 줄 수만큼 아래를 잘라 낸다 → 수면(py) 위로 머리·등만
     out.push(cmd(s.art, frame, px, py + sink, { oy: 1, sx, sy, flip, alpha: s.alpha ?? 1, layer: "body", depth: this.petY, ...(sink ? { crop: sink } : {}) }));
   }
@@ -1641,8 +1736,20 @@ export class CosmeticFxSim {
     const x = Math.round(f.x);
     const y = Math.round(f.y - (f.hop ?? 0));
     const view = f.dir === DIR.down ? 2 : f.dir === DIR.up ? 4 : 0;
-    out.push(cmd(s.art, view + fr, x, y, { oy: 1, flip: f.dir === DIR.left, layer: "body", depth: f.y - 0.2 }));
+    let frame = view + fr;
+    // 12월 루돌프 썰매: 탄 채로 옆을 보고 멈춰 있으면 루돌프가 쉬다가 앞발로 눈을 긁는다
+    if (walking || !s.rideRest || !s.pose) this.petRestAt = NaN;
+    else if (!view) {
+      if (Number.isNaN(this.petRestAt)) this.petRestAt = t;
+      frame = petPoseFrame(s.pose, s.idleFps, f.still || f.reduced ? -1 : t - this.petRestAt)[0];
+    }
+    out.push(cmd(s.art, frame, x, y, { oy: 1, flip: f.dir === DIR.left, layer: "body", depth: f.y - 0.2 }));
     if (view) out.push(cmd(s.art, (f.dir === DIR.down ? 6 : 8) + fr, x, y, { oy: 1, layer: "body", depth: f.y + 0.2 }));
+    else {
+      // 옆모습 덧그림 (썰매 옆판 — 탄 사람 다리가 썰매 안에 들어간다)
+      const over = s.mount ? mountSideOver(s.mount) : null;
+      if (over !== null) out.push(cmd(s.art, over, x, y, { oy: 1, flip: f.dir === DIR.left, layer: "body", depth: f.y + 0.2 }));
+    }
   }
 
   private trail(s: TrailSpec, f: FxInput, out: FxCmd[]): void {
@@ -1805,6 +1912,41 @@ export class CosmeticFxSim {
       case "uSiren":
         sirenFx(f, t, out);
         break;
+      case "xSnow":
+      case "xCrown":
+      case "xCane":
+        // 12월 크리스마스 (xmasFx.ts): 그리기 도우미를 넘겨 그 파일이 그린다
+        xmasAura(s.motion, f, t, {
+          push: (art, frame, x, y, o) => out.push(cmd(art, frame, x, y, o)),
+          around: (z, o, light) => around(f, z, o, light),
+          night: !!f.still || isNight(f.now),
+          depth: bodyDepth(f),
+        });
+        break;
+      case "gMist": {
+        // 11/17 안개 오라: 발치에 안개 뭉치 다섯이 천천히 옆으로 흘러가며 일렁이고 (뒤쪽 뭉치는 몸 뒤로),
+        // 녹색 도깨비불 불씨 넷이 안개에서 피어올라 머리 높이에서 사라져요
+        const calm = f.reduced || !!f.still;
+        for (let i = 0; i < 5; i++) {
+          const ph = calm ? i / 5 : (t / 5200 + i / 5 + h01(i, 31) * 0.1) % 1;
+          const a = h01(i, 32) * Math.PI * 2 + ph * Math.PI * 2;
+          const z = Math.sin(a);
+          const x = bx + Math.cos(a) * (9 + h01(i, 33) * 4);
+          const y = f.headY + 1 + z * 2.5;
+          const al = (0.55 + 0.35 * Math.sin(ph * Math.PI)) * (z < 0 ? 0.75 : 1);
+          out.push(cmd("ghMist", Math.floor(t / 700 + i) % 2, Math.round(x), Math.round(y), { alpha: al, sx: 0.8 + 0.3 * h01(i, 34), layer: z < 0 ? "body" : "ground", depth: z < 0 ? bodyDepth(f) - 0.25 : 0, flip: i % 2 === 0 }));
+        }
+        for (let i = 0; i < 4; i++) {
+          const ph = calm ? (i + 0.5) / 4 : (t / 2400 + i / 4 + h01(i, 35) * 0.2) % 1;
+          const a = h01(i, 36) * Math.PI * 2 + t / 1800;
+          const z = Math.sin(a);
+          const x = bx + Math.cos(a) * (6 + h01(i, 37) * 5) + Math.sin(t / 300 + i) * 1.2;
+          const y = f.headY - ph * (f.artTop + 4);
+          const al = Math.sin(ph * Math.PI);
+          out.push(cmd("ghEmber", Math.floor(t / 180 + i) % 2, Math.round(x), Math.round(y), around(f, z, { alpha: al }, true)));
+        }
+        break;
+      }
       case "snow":
       case "petals": {
         const petals = s.motion === "petals";
@@ -2424,6 +2566,14 @@ export function fxIconGrid(id: string): Grid | null {
     case "aura_money":
       for (const [x, y, f] of [[1, 2, 0], [9, 1, 1], [4, 7, 1], [10, 9, 0], [2, 12, 0]] as const) blit(g, "bill", f, x, y);
       return g;
+    case "gh_mist":
+      // 11/17 안개 오라 아이콘: 안개 두 겹 + 불씨 셋
+      blit(g, "ghMist", 0, -1, 10);
+      blit(g, "ghMist", 1, 2, 7);
+      blit(g, "ghEmber", 0, 4, 2);
+      blit(g, "ghEmber", 1, 10, 0);
+      blit(g, "ghEmber", 0, 12, 5);
+      return g;
     case "staff_souls":
       blit(g, "soulFlame", 0, 2, 8);
       blit(g, "soulFlame", 1, 10, 2);
@@ -2485,7 +2635,10 @@ export function fxIconGrid(id: string): Grid | null {
     case "q_ride_carp":
     case "pet_hound":
     case "pet_goose":
-    case "pet_deer": {
+    case "pet_deer":
+    case "pet_paca":
+    case "pet_polar":
+    case "xm_sleigh": {
       // 24×22 옆모습을 16×16에 줄여 담는다 (칸마다 가장 가까운 픽셀)
       const a = FX_ART[(COSMETIC_FX[id] as PetSpec).art];
       const src = a.build();
@@ -2502,7 +2655,7 @@ export function fxIconGrid(id: string): Grid | null {
       return g;
     }
     default:
-      // 11/15: 말랑 꾸미기 묶음 (시트 그림·따로 그리는 연출 둘 다)
-      return cuteIconGrid(id);
+      // 11/15: 말랑 꾸미기 묶음 (시트 그림·따로 그리는 연출 둘 다) · 11/17 동물원 새 펫
+      return cuteIconGrid(id) ?? petPackIconGrid(id) ?? xmasIconGrid(id) ?? themeIconGrid(id);
   }
 }

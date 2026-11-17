@@ -37,6 +37,7 @@ import PassedPanel from "./PassedPanel";
 import ReportsPanel from "./ReportsPanel";
 import PointEventPanel from "./PointEventPanel";
 import LotteryPanel from "./LotteryPanel";
+import MapConceptPanel from "./MapConceptPanel";
 import ResidentsPanel from "./ResidentsPanel";
 import StaffPanel from "./StaffPanel";
 import SystemPanel from "./SystemPanel";
@@ -369,6 +370,7 @@ export default function AdminApp() {
           {panel === "residents" && <ResidentsPanel key={version} {...p} />}
           {panel === "pointEvent" && <PointEventPanel key={version} {...p} />}
           {panel === "lottery" && <LotteryPanel key={version} {...p} />}
+          {panel === "mapConcept" && <MapConceptPanel key={version} {...p} />}
           {panel === "graveRules" && <PassedPanel key={version} {...p} part="settings" onChanged={reload} />}
 
           {panel === "errors" && <ErrorsPanel key={version} {...p} />}

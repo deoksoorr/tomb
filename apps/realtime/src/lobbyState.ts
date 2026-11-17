@@ -133,4 +133,20 @@ export class VisitorRegistry {
   channelOf(visitorId: string): number | undefined {
     return this.where.get(visitorId);
   }
+
+  /** 11/17 등록된 방문자 id 전부 (관리자 선물 「지금 접속 중인 사람 모두」 — 채널 명단과 합친다) */
+  ids(): string[] {
+    return [...this.where.keys()];
+  }
+}
+
+/**
+ * 11/17 지금 접속 중인 방문자 id (한 번씩): 사람이 있는 채널들의 명단(방·캠핑장·바닷가에 있어도 월드 채널 자리가 남는다) +
+ * 로비 등록. 명단 순서대로, 등록에만 있는 것은 뒤에
+ */
+export function mergeOnline(rosters: readonly (readonly { visitorId: string }[])[], registry: readonly string[]): string[] {
+  const seen = new Set<string>();
+  for (const r of rosters) for (const { visitorId } of r) seen.add(visitorId);
+  for (const v of registry) seen.add(v);
+  return [...seen];
 }

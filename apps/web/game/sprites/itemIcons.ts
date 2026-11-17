@@ -1,4 +1,5 @@
 import { isPaidShape, type GraveShape } from "../graveShape";
+import { ghostGearIcon } from "./ghostGear";
 import { GEAR_SHEET_IDS } from "./avatarGear";
 import { COSMETIC_FX_IDS, fxIconGrid } from "./cosmeticFx";
 import { ghostCat, miniLantern } from "./extras";
@@ -612,6 +613,122 @@ function fwWaterfall(): Grid {
   return g;
 }
 
+function fwTwinRing(): Grid {
+  const g = blank();
+  // 비스듬히 누운 분홍 바깥 고리 + 안쪽 청록 고리
+  for (let i = 0; i < 28; i++) {
+    const a = (i / 28) * Math.PI * 2;
+    const x = Math.cos(a) * 7;
+    const y = Math.sin(a) * 3.3;
+    g.set(Math.round(8 + x * 0.96 - y * 0.28), Math.round(7 + x * 0.28 + y * 0.96), i % 2 ? 0xff8fb8 : 0xffc2d6);
+  }
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2;
+    g.set(Math.round(8 + Math.cos(a) * 3.2), Math.round(7 + Math.sin(a) * 3.2), i % 2 ? 0x8fe0ff : 0xd8f6ff);
+  }
+  g.set(8, 7, 0xffffff);
+  g.outline(OUT, false, 120);
+  return g;
+}
+
+function fwButterfly(): Grid {
+  const g = blank();
+  // 보라 날개(가장자리 분홍) + 금빛 몸통·더듬이
+  const rows = ["11.......11", "1221...1221", "12221.12221", "1222212222.", ".11222221..", "...1222....", "..122.221..", ".1221.1221.", ".111...111."];
+  rows.forEach((r, y) => [...r].forEach((v, x) => v !== "." && g.set(x + 2, y + 3, v === "1" ? 0xff8fb8 : 0xd0a0ff)));
+  g.vline(7, 4, 11, 0xffe08a);
+  g.set(7, 3, 0xfff4d0);
+  g.set(6, 2, 0xfff4d0, 200);
+  g.set(8, 2, 0xfff4d0, 200);
+  g.outline(OUT, false, 120);
+  return g;
+}
+
+function fwSnow(): Grid {
+  const g = blank();
+  // 여섯 갈래 눈꽃: 줄기 + 잔가지, 끝은 흰빛
+  for (let a = 0; a < 6; a++) {
+    const ang = -Math.PI / 2 + (a / 6) * Math.PI * 2;
+    for (let d = 1; d <= 6; d++) g.set(Math.round(8 + Math.cos(ang) * d), Math.round(8 + Math.sin(ang) * d), d === 6 ? 0xffffff : 0xbcd0ff);
+    for (const side of [-1, 1]) {
+      const b = ang + (side * Math.PI) / 3;
+      const bx = 8 + Math.cos(ang) * 3.5;
+      const by = 8 + Math.sin(ang) * 3.5;
+      g.set(Math.round(bx + Math.cos(b) * 1.6), Math.round(by + Math.sin(b) * 1.6), 0xd8f6ff);
+    }
+  }
+  g.set(8, 8, 0x8fe0ff);
+  g.outline(0x22304a, false, 140);
+  return g;
+}
+
+function fwStrobe(): Grid {
+  const g = blank();
+  // 흩어져 깜빡이는 별빛 (밝은 것은 십자, 어두운 것은 점)
+  for (const [x, y, big] of [[4, 4, 1], [11, 3, 1], [7, 8, 1], [12, 11, 1], [3, 12, 1]] as const) star(g, x, y, big ? 0xe2ecff : 0xbcd0ff);
+  for (const [x, y] of [[8, 2], [14, 7], [2, 8], [9, 13], [6, 14], [13, 15]]) g.set(x, y, 0xd0a0ff, 170);
+  return g;
+}
+
+function fwChameleon(): Grid {
+  const g = blank();
+  // 국화 불꽃: 안쪽은 빨강, 바깥 끝은 초록 (가는 길에 색이 바뀐다)
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    for (let d = 2; d <= 7; d++) {
+      const c = d <= 3 ? 0xff4a4a : d <= 4 ? 0xff7a62 : d < 7 ? 0x62e07e : 0xa6ff9a;
+      if (d === 7 && i % 2) continue;
+      g.set(Math.round(8 + Math.cos(a) * d), Math.round(8 + Math.sin(a) * d), c, d === 4 ? 200 : 255);
+    }
+  }
+  g.set(8, 8, 0xffffff);
+  g.outline(OUT, false, 110);
+  return g;
+}
+
+function fwGlitter(): Grid {
+  const g = blank();
+  // 위에서 퍼진 금빛 불꽃 + 아래로 흩날리는 금가루
+  rays(g, 8, 5, 3, 0xfff4d0, 0xffe08a, 0xffb860);
+  for (const [x, y, c] of [[3, 9, 0xffd070], [5, 11, 0xfff4d0], [7, 13, 0xffd070], [9, 10, 0xfff4d0], [11, 12, 0xffd070], [13, 9, 0xfff4d0], [4, 14, 0xfff4d0], [10, 15, 0xffd070], [12, 14, 0xfff4d0], [6, 9, 0xffe08a]] as const) g.set(x, y, c);
+  star(g, 12, 12, 0xffe08a);
+  g.outline(OUT, false, 110);
+  return g;
+}
+
+function fwPalm(): Grid {
+  const g = blank();
+  // 금빛 줄기 + 위에서 휘어 내리는 초록 잎 다섯 장
+  g.vline(8, 7, 15, 0xffb860);
+  g.set(8, 15, 0xffe08a, 140);
+  for (const dir of [-1, 1]) {
+    for (const [dx, dy] of [[1, -1], [2, -2], [3, -2], [4, -2], [5, -1], [6, 0], [6, 1]] as const) g.set(8 + dir * dx, 5 + dy, 0x62e07e);
+    for (const [dx, dy] of [[1, 0], [2, 0], [3, 1], [4, 2], [4, 3]] as const) g.set(8 + dir * dx, 6 + dy, 0xa6ff9a);
+  }
+  g.vline(8, 2, 4, 0xa6ff9a);
+  g.set(8, 6, 0xffe08a);
+  g.set(7, 6, 0xffe08a);
+  g.set(9, 6, 0xffe08a);
+  g.outline(OUT, false, 120);
+  return g;
+}
+
+function fwTower(): Grid {
+  const g = blank();
+  // 한 줄기 위로 세 송이: 아래 빨강(작게) · 가운데 금빛 고리 · 위 은빛(크게)
+  g.vline(8, 11, 15, 0xffb860);
+  for (const [cy, r, c] of [[12, 1.6, 0xff7a62], [8, 2.4, 0xffe08a], [3.5, 3.2, 0xe2ecff]] as const) {
+    const n = r < 2 ? 6 : r < 3 ? 10 : 12;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      g.set(Math.round(8 + Math.cos(a) * r * 1.5), Math.round(cy + Math.sin(a) * r), c);
+    }
+  }
+  g.set(8, 4, 0xffffff);
+  g.outline(OUT, false, 120);
+  return g;
+}
+
 function fwLetter(): Grid {
   const g = blank();
   // 불꽃 점으로 쓴 "Hi" + 아래 로켓 꼬리
@@ -912,6 +1029,8 @@ function gearIcon(id: string): Grid | null {
     g.outline(OUT, false, 170);
     return g;
   }
+  const gh = ghostGearIcon(id);
+  if (gh) return gh;
   const a = GEAR_ICONS[id];
   if (!a) return null;
   const g = blank();
@@ -1007,6 +1126,22 @@ function base(itemId: string): HTMLCanvasElement {
       return fwSmile().toCanvas();
     case "fw_waterfall":
       return fwWaterfall().toCanvas();
+    case "fw_twinring":
+      return fwTwinRing().toCanvas();
+    case "fw_butterfly":
+      return fwButterfly().toCanvas();
+    case "fw_snow":
+      return fwSnow().toCanvas();
+    case "fw_strobe":
+      return fwStrobe().toCanvas();
+    case "fw_chameleon":
+      return fwChameleon().toCanvas();
+    case "fw_glitter":
+      return fwGlitter().toCanvas();
+    case "fw_palm":
+      return fwPalm().toCanvas();
+    case "fw_tower":
+      return fwTower().toCanvas();
     default: {
       // F8 추가 꾸미기 (시트 그림 → 문자 아이콘, 따로 그리는 연출 → 그 그림으로 만든 아이콘)
       const f8 = gearIcon(itemId) ?? questUnlockIcon(itemId) ?? fxIconGrid(itemId) ?? megaphoneIcon(itemId) ?? dyeIcon(itemId) ?? nameStyleIcon(itemId) ?? bodyIconGrid(itemId);
@@ -1021,6 +1156,7 @@ function base(itemId: string): HTMLCanvasElement {
 export const ICON_IDS: readonly string[] = [
   "fw_small", "fw_heart", "fw_triple", "fw_big", "fw_grand", "fw_meteor", "fw_letter",
   "fw_fountain", "fw_ring", "fw_star", "fw_spiral", "fw_willow", "fw_crossette", "fw_smile", "fw_waterfall",
+  "fw_twinring", "fw_butterfly", "fw_snow", "fw_strobe", "fw_chameleon", "fw_glitter", "fw_palm", "fw_tower",
   "hat_straw", "hat_cat", "hat_flower", "hat_halo", "hand_lantern", "aura_firefly", "aura_fog", "neck_scarf",
   "back_wings", "pet_ghost", "feet_flowers",
   "decor_candles", "decor_wreath", "decor_ribbon", "decor_lantern", "decor_ghostcat", "decor_stars",
@@ -1039,6 +1175,8 @@ export const ICON_IDS: readonly string[] = [
   "q_body_collector",
   // 11/15 긴급 의뢰 상자
   "u_box_pocket",
+  // 12월 크리스마스 선물상자
+  "xm_box",
 ];
 
 /** 이 아이템에 전용 아이콘이 있는지 (없으면 물음표 아이콘). 꾸미기 랭킹의 프리미엄 외형("body:{id}")도 그림이 있다 */

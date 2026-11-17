@@ -5,7 +5,8 @@ describe("items", () => {
   it("ids are unique and prices positive", () => {
     expect(new Set(ITEMS.map((i) => i.id)).size).toBe(ITEMS.length);
     // 31번 운영자 전용·주간 1위 전용 꾸미기·11/15 긴급 의뢰 사이렌 모자·11/15 수집 의뢰 보상(이모티콘 묶음·외형·확정 염색권)만 값 0 (운영자만 영구로 받는다 / 1위만 빌려 입는다 / 도장 교환소에서만)
-    expect(ITEMS.every((i) => i.price > 0 || i.staff || i.champ || i.urgent || i.quest)).toBe(true);
+    // 12월 크리스마스 선물상자(event 상자)도 값 0 — 관리자 선물로만
+    expect(ITEMS.every((i) => i.price > 0 || i.staff || i.champ || i.urgent || i.quest || (i.event && i.kind === "box"))).toBe(true);
   });
   it("sanitizeLook keeps one cosmetic per slot and drops unknown/non-cosmetic ids", () => {
     expect(sanitizeLook(["hat_cat", "hat_straw", "fw_small", "nope", "aura_firefly"])).toEqual(["hat_cat", "aura_firefly"]);
@@ -39,6 +40,13 @@ describe("grants", () => {
     const exp = Math.floor(Date.now() / 1000) + 60;
     expect(await verifyGrant("other", await signGrant(s, { kind: "look", visitorId: "v", look: [], exp }))).toBeNull();
     expect(await verifyGrant(s, await signGrant(s, { kind: "firework", visitorId: "v", item: "hat_cat", nonce: "n", exp }))).toBeNull();
+    expect(await verifyGrant(s, await signGrant(s, { kind: "firework", visitorId: "v", item: "fw_<b>", nonce: "n", exp }))).toBeNull();
+  });
+  it("실시간 서버가 아직 모르는 새 폭죽(fw_ + 영소문자·숫자)도 서명만 맞으면 중계한다", async () => {
+    const exp = Math.floor(Date.now() / 1000) + 60;
+    const fw = await verifyGrant(s, await signGrant(s, { kind: "firework", visitorId: "v", item: "fw_future2", nonce: "n", exp }));
+    expect(fw).toMatchObject({ kind: "firework", item: "fw_future2" });
+    expect(await verifyGrant(s, await signGrant(s, { kind: "firework", visitorId: "v", item: "fw_palm", nonce: "n", exp }))).toMatchObject({ item: "fw_palm" });
   });
   it("grants and join tokens are not interchangeable", async () => {
     const join = await signJoinToken(s, { visitorId: "v", name: "n", color: "#fff", channel: 1 });

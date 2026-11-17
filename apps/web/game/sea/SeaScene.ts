@@ -79,7 +79,8 @@ import { SeaMap } from "./SeaMap";
 import { duskWeight, SeaToneTint } from "./seaTone";
 import { SEA_SCENE, type SeaFriend, type SeaHost, type SeaSceneData } from "./seaHost";
 import { seaNeighborSeat, seaPickSeat, SEA_MULTI_SEAT } from "./seaSit";
-import { BIG_SEAT_MAX, BIG_SEAT_TOAST, foodOfPeer, myBig, RIDING_EAT_TOAST } from "../camp/foodState";
+import { BIG_SEAT_MAX, BIG_SEAT_TOAST, foodOfPeer, myBig, myFood, RIDING_EAT_TOAST } from "../camp/foodState";
+import { SEA_DRUNK_MSG, seaDrunkBlocked, seaDrunkStep } from "./seaDrunk";
 import { FoodFx } from "../camp/foodFx";
 import { SeaForage } from "./seaForage";
 import { SeaLife } from "./seaLife";
@@ -91,6 +92,10 @@ import { seaStandable } from "./seaLayout";
 import { shipHulls, shipWakeAt, type ShipHull } from "./seaShipsPlan";
 import { StarScopes } from "../scopes/StarScopes";
 import { SeaHornSound, SeaShips } from "./seaShips";
+import { GhostShip } from "./GhostShip";
+import { FEATHER_MSG, SNACK, SNACK_NONE_MSG, type SnackKind } from "@/lib/sea/gull";
+import { gullApi, publishSnacks } from "@/lib/sea/gullClient";
+import { errorMessage } from "@/lib/api";
 
 import { SeaView, seaViewFore, seaViewLandmarks, type SeaViewFore, type SeaViewSitter, type ViewKind } from "./seaView";
 import { ghostShipNight, keeperTideText } from "./seaKeeper";
@@ -149,6 +154,8 @@ export class SeaScene extends Phaser.Scene {
   private stars: StarScopes | null = null;
   /** 11/16 r15 먼바다 배·뱃고동·오징어잡이배 */
   private ships: SeaShips | null = null;
+  /** 11/17 토요일 밤 유령선 특가 장터 */
+  private ghost: GhostShip | null = null;
   private horn: SeaHornSound | null = null;
   /** 11/16 갯바위 낚시 (마을 낚시를 바닷가로) */
   private forage!: SeaForage;
@@ -285,7 +292,8 @@ export class SeaScene extends Phaser.Scene {
     this.player.titleSpeed = true;
     this.player.view.setLook([...h.look]);
     // 물때: 물이 덮은 갯벌이면 헤엄 (선착장·방파제 위는 마른 땅)
-    this.player.water = (x, y) => seaWet(x, y, this.tide);
+    // 11/17 유령선 널빤지·갑판 위는 마른 자리
+    this.player.water = (x, y) => seaWet(x, y, this.tide) && !this.ghost?.walkable(x, y);
     this.physics.add.collider(this.player.sprite, this.map.colliders);
     // 11/16 r17 사용자 "난간을 스치면 데크 안으로 튀어 들어가요" → 데크 밖(물·갯벌)에 있으면 데크 몸 전체와 부딪혀요 (데크 위면 난간만)
     this.physics.add.collider(this.player.sprite, this.map.deckBlocks, undefined, () => !this.player.inBoat && this.deckSide === false);
@@ -338,6 +346,11 @@ export class SeaScene extends Phaser.Scene {
       tide: () => this.tide,
       splash: (x, y) => this.fx.splash(x, y),
       beforeBoard: () => {
+        // 11/17 술에 취한 동안엔 튜브·제트스키·카약을 못 타요 (서버도 거절해요)
+        if (seaDrunkBlocked(myFood().drunk, Date.now())) {
+          this.drunkToast(this.time.now);
+          return false;
+        }
         if (this.riding.on) this.riding.dismount(true);
         if (this.rest) this.leaveRest(this.time.now);
         return true;
@@ -345,6 +358,8 @@ export class SeaScene extends Phaser.Scene {
       // 11/16 r19 놀거리끼리 부딪혀 튕기기 (튜브·제트스키·카약 모두)
       hulls: () => [
         ...(this.rides?.hullBoxes() ?? []),
+        // 11/17 대 있는 유령선 몸 (단단해요)
+        ...(this.ghostHull()),
         ...(this.kayaks?.hullBoxes() ?? []),
         // 11/16 r19 지나가는 배·오징어잡이배도 단단해요 (세게 밀어내요)
         ...this.shipHullsNow.map((s) => ({ id: s.id, box: s.box, empty: false, vx: s.vx, vy: s.vy, ship: { heavy: s.heavy } })),
@@ -360,6 +375,22 @@ export class SeaScene extends Phaser.Scene {
     });
     // 11/16 r18 2인승 카약 (튜브·제트스키와 같은 바탕)
     this.kayaks = new SeaKayaks(this.rides.host);
+    // 11/17 유령선 (토요일 밤 9~11시 · 운영자 시험 부르기)
+    this.ghost = new GhostShip({
+      scene: this,
+      atlas: h.atlas,
+      reduced: h.reduced,
+      player: () => this.player,
+      colliders: this.map.colliders,
+      toast: (m) => this.toast(m),
+      splash: (x, y) => this.fx.splash(x, y),
+      warp: (x, y) => {
+        const now = this.time.now;
+        if (this.rest) this.leaveRest(now);
+        this.player.warp(x, y, now, this.seatReq);
+        h.net.warp(x, y);
+      },
+    });
     this.stars = new StarScopes(this, {
       spots: SEA_SCOPES,
       style: "coin",
@@ -431,6 +462,8 @@ export class SeaScene extends Phaser.Scene {
     h.hub.setHandler((a) => this.onAction(a));
     this.bindBridge();
     bridge.emit("map:changed", { map: "sea" });
+    // 11/17 가진 갈매기 과자 (던지기 안내)
+    void gullApi.get().then(publishSnacks, () => {});
     if (this.data0.arrive === "bus") this.arriveByBus();
     else if (this.data0.arrive === "friend") bridge.emit("friend:notice", { message: FRIEND_ARRIVED });
     this.maybeWelcome();
@@ -594,6 +627,14 @@ export class SeaScene extends Phaser.Scene {
       onFirework: (sid, item, x, y) => this.fw().launch(item, x, y, this.rig.frameView(this.view), false, this.remotes.get(sid)?.name ?? ""),
       onAct: (sid, kind) => {
         if (kind === "lamp") this.housing?.onLampAct();
+        // 11/17 같은 바닷가 사람이 갈매기에게 과자를 던졌어요 → 우리 화면 갈매기도 그 앞으로 몰려가요
+        if (kind === "gull" || kind === "gullHot") {
+          const r = this.remotes.get(sid);
+          if (r?.visible) {
+            const t = this.snackTarget(r.x, r.y, r.view.dir);
+            this.map.feedGulls(r.x, r.y, t.x, t.y, kind === "gullHot", this.time.now);
+          }
+        }
         const r = this.remotes.get(sid);
         if (r?.visible) r.view.playAct(kind, performance.now());
       },
@@ -889,6 +930,10 @@ export class SeaScene extends Phaser.Scene {
       return;
     }
     if (a !== "interact") return;
+    // 11/17 유령선: 상인 앞이면 장터 창, 헤엄치다 사다리 앞이면 오르기
+    if (this.ghost?.interact()) return;
+    // 11/17 손에 든 과자가 있고 갈매기가 가까우면 던지기
+    if (!moving && this.throwSnack()) return;
     // 11/16 r13 가까운 빈 튜브·제트스키가 있으면 타기 (헤엄치는 중에도 — 잠수보다 먼저)
     if (!moving && (this.rides?.interact() || this.kayaks?.interact() || this.stars?.interact())) return;
     // 11/16 물속이면 E = 잠수·떠오르기 (마을 강·호수와 같은 규칙 — 물이 덮은 갯벌·먼바다 어디서든)
@@ -1341,7 +1386,9 @@ export class SeaScene extends Phaser.Scene {
     // 11/16 r13 튜브·제트스키 조종 (Player.update는 탄 동안 움직이지 않아요)
     this.rides?.steer(this.move, dt);
     this.kayaks?.steer(this.move, dt);
+    this.ghost?.update(now, this.atmos.levels.darkness, this.rig.frameView(this.view), this.rig.labelScale);
     this.deckGuard();
+    this.drunkGuard(now);
     this.shipPush(now);
     if (this.furnitureCollider) this.furnitureCollider.active = !pl.airborne;
     if (net.online && pnow >= this.peerCheckAt) {
@@ -1483,6 +1530,12 @@ export class SeaScene extends Phaser.Scene {
     if (lifeHint) other = lifeHint;
     const rideHint = !this.locked ? (this.rides?.hint(this.seatHint.prefix) ?? this.kayaks?.hint(this.seatHint.prefix) ?? this.stars?.hint(this.seatHint.prefix) ?? null) : null;
     if (rideHint) other = rideHint;
+    // 11/17 갈매기 과자 던지기 안내
+    const snack = !this.locked && !rideHint ? this.snackReady() : null;
+    if (snack) other = { x: pl.x, y: pl.y + 2, text: `${this.seatHint.prefix}${SNACK[snack].name} 던지기` };
+    // 11/17 유령선 상인·밧줄 사다리 안내
+    const ghostHint = !this.locked ? (this.ghost?.hint(this.seatHint.prefix) ?? null) : null;
+    if (ghostHint) other = ghostHint;
     const bench = pl.state === "sitChair" && pl.seat && SEA_MULTI_SEAT.has(pl.seat.furnitureId);
     const keys = this.seatHint.prefix === "E ";
     const standText = bench ? (keys ? "←→ 옆자리 · ↑↓ 일어나기 · T 벤치 상태" : "좌우로 옆자리 · 위아래로 일어나기") : pl.state === "sitChair" && keys ? "이동하면 일어나요 · T 상태 고르기" : null;
@@ -1523,6 +1576,7 @@ export class SeaScene extends Phaser.Scene {
       this.life?.addLights(lit);
       // 11/16 r19 오징어잡이배 · 등대 빛줄기도 밤 어둠을 밝혀요
       this.ships?.addLights(lit, L.darkness);
+      this.ghost?.addLights(lit, L.darkness);
       this.housing?.addLights(lit);
     }
     lit.end();
@@ -1544,8 +1598,8 @@ export class SeaScene extends Phaser.Scene {
   private deckLast = { x: 0, y: 0 };
   private deckGuard(): void {
     const pl = this.player;
-    // 탄 동안·앉은 동안(끝 걸터앉기는 데크 가장자리 바깥에 앉아요)은 보지 않아요 — 일어서면 새로 정해요
-    if (pl.inBoat || pl.sitting) {
+    // 탄 동안·앉은 동안(끝 걸터앉기는 데크 가장자리 바깥에 앉아요)·11/17 유령선 위는 보지 않아요 — 일어서면·내리면 새로 정해요
+    if (pl.inBoat || pl.sitting || this.ghost?.aboard) {
       this.deckSide = null;
       return;
     }
@@ -1573,6 +1627,104 @@ export class SeaScene extends Phaser.Scene {
     }
     this.deckLast.x = pl.x;
     this.deckLast.y = pl.y;
+  }
+
+  /**
+   * 11/17 사용자: 술에 취한 채로는 바다에 못 들어가요. 물가에서 들어서는 걸음은 되돌리고, 물에 있는 동안 취하면(물이 차오르거나 놀거리 위)
+   * 놀거리에서 내리고 가까운 뭍으로 올려 보내요. 취기는 내 효과(foodState)로 봐요 — 다른 사람 화면은 그 사람 자리를 따라가요
+   */
+  private drunkDry: { x: number; y: number } | null = null;
+  private drunkToastAt = -Infinity;
+  private drunkGuard(now: number): void {
+    const pl = this.player;
+    if (!seaDrunkBlocked(myFood().drunk, Date.now()) || pl.sitting || pl.anchored) {
+      this.drunkDry = null;
+      return;
+    }
+    if (pl.inBoat) {
+      this.rides?.dismount();
+      this.kayaks?.dismount();
+      this.drunkToast(now);
+      return;
+    }
+    const step = seaDrunkStep(pl.x, pl.y, this.drunkDry, this.tide, seaStandable);
+    if (step.kind === "ok") {
+      this.drunkDry = { x: pl.x, y: pl.y };
+      return;
+    }
+    if (step.kind === "stuck") return;
+    if (step.kind === "back") (pl.sprite.body as Phaser.Physics.Arcade.Body).reset(step.x, step.y);
+    else {
+      pl.warp(step.x, step.y, now, this.seatReq);
+      this.host.net.warp(step.x, step.y);
+      this.rig.recenter();
+      if (!this.host.reduced) this.fx.splash(step.x, step.y + 6);
+    }
+    this.drunkDry = { x: step.x, y: step.y };
+    this.drunkToast(now);
+  }
+  private drunkToast(now: number): void {
+    if (now - this.drunkToastAt < 3000) return;
+    this.drunkToastAt = now;
+    this.toast(SEA_DRUNK_MSG);
+  }
+
+  /** 11/17 던질 과자 (손에 든 것, 없으면 다른 것) — 갈매기가 가까이 있고 던질 수 있는 자세일 때만 */
+  private snackReady(): SnackKind | null {
+    const s = bridge.last("sea:gull:snacks");
+    const pl = this.player;
+    if (!s || (s.plain <= 0 && s.spicy <= 0)) return null;
+    if (pl.inBoat || pl.inWater || pl.sitting || pl.anchored || pl.airborne || this.rest) return null;
+    if (!this.map.gullNear(pl.x, pl.y, 170)) return null;
+    // 매점·버스·자리 같은 E 거리가 가까우면 그것부터 (과자는 그 밖에서 던져요)
+    if (this.nearestObject(pl.x, pl.y) || this.pickRest(pl.x, pl.y) || this.forage.nearest(pl.x, pl.y)) return null;
+    const net = this.host.net;
+    if (seaPickSeat(pl.x, pl.y, net.online ? this.seats : EMPTY_SEATS, net.online ? net.mySid : null)) return null;
+    const hand = s.hand;
+    return s[hand] > 0 ? hand : hand === "plain" ? "spicy" : "plain";
+  }
+  private snackAt = -Infinity;
+  /** 던지는 자리 (바라보는 쪽으로 몇 걸음 앞) */
+  private snackTarget(x: number, y: number, dir: number): { x: number; y: number } {
+    const d = dir === DIR.left ? [-1, 0] : dir === DIR.right ? [1, 0] : dir === DIR.up ? [0, -1] : [0, 1];
+    return { x: x + d[0] * 34, y: y + d[1] * 26 + 6 };
+  }
+  /** 11/17 갈매기에게 과자 던지기 (서버가 과자를 쓰고 깃털을 굴려요) — 던졌으면 true */
+  private throwSnack(): boolean {
+    const kind = this.snackReady();
+    if (!kind) return false;
+    const now = this.time.now;
+    if (now - this.snackAt < 1600) return true;
+    this.snackAt = now;
+    const pl = this.player;
+    void gullApi.throw(kind).then(
+      (r) => {
+        if (this.cleaned) return;
+        publishSnacks(r);
+        const t = this.snackTarget(pl.x, pl.y, pl.dir);
+        this.map.feedGulls(pl.x, pl.y, t.x, t.y, kind === "spicy", this.time.now);
+        this.doAct(kind === "spicy" ? "gullHot" : "gull");
+        if (r.feather) {
+          const id = r.feather;
+          this.time.delayedCall(1700, () => {
+            if (this.cleaned) return;
+            bridge.emit("forage:pop", { itemId: id, sparkle: id === "d_redfeather" });
+            this.toast(FEATHER_MSG[id] ?? "갈매기가 깃털을 떨어뜨렸어요.");
+          });
+        }
+      },
+      (e) => {
+        this.toast(errorMessage(e) || SNACK_NONE_MSG);
+        void gullApi.get().then(publishSnacks, () => {});
+      },
+    );
+    return true;
+  }
+
+  /** 11/17 대 있는 유령선 몸 (놀거리가 부딪혀 튕겨요 — 큰 배처럼) */
+  private ghostHull(): SeaHull[] {
+    const b = this.ghost?.hullBox();
+    return b ? [{ id: "ghost", box: b, empty: false, vx: 0, vy: 0, ship: { heavy: "big" } }] : [];
   }
 
   /** 11/16 r19 지금 지나가는 배 몸통 (프레임마다) */
@@ -1694,6 +1846,8 @@ export class SeaScene extends Phaser.Scene {
     this.stars = null;
     this.ships?.destroy();
     this.ships = null;
+    this.ghost?.destroy();
+    this.ghost = null;
     this.horn?.destroy();
     this.horn = null;
     this.host.sfx.campfire(0);

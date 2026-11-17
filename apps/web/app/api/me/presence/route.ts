@@ -11,6 +11,7 @@ import { getTitleStats } from "@/lib/store/titleStats";
 import { recordActive } from "@/lib/store/userActivity";
 import { referralOnPresence } from "@/lib/referralService";
 import { ensureLotterySettled } from "@/lib/lotteryService";
+import { ensureGhostNotice } from "@/lib/sea/ghostService";
 import { STAY_TICK_MINUTES } from "@/lib/attendStay";
 import type { PresenceResponse } from "@/lib/types";
 
@@ -38,6 +39,8 @@ export const POST = handler(async (req) => {
   runAfter(() => sampleConcurrency());
   // 행운권: 토요일 저녁 8시가 지나면 접속해 있는 화면의 머무르기 기록이 추첨을 시작한다 (끝난 회차는 프로세스가 기억해 건너뛴다)
   runAfter(() => ensureLotterySettled());
+  // 11/17 토요일 밤 8시 50분: 유령선 안개 공지 (주마다 한 번 — 안개·정박 시간이 아니면 아무것도 안 읽어요). 개발 시계와 상관없이 진짜 시각으로
+  runAfter(() => ensureGhostNotice());
   // 칭호용 누적 접속 시간 (받아 준 기록만, 처음이면 오늘 머문 기록부터. 몰아서 센 만큼). 실패해도 머무르기는 그대로
   // 몰아서 센 기록도 한 번에 (Redis 2명령)
   if (tick && tick.ticks > 0) await getTitleStats().addStay(visitorId, tick.ticks, tick.stayTicks).catch((e) => console.error("[titles] 접속 시간 기록 실패", e));

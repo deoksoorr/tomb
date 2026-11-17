@@ -8,8 +8,9 @@ import { env } from "../env";
 export const AUDIT_KEY = "admin:audit";
 export const AUDIT_KEEP = 200;
 
-/** codeReissue = 관리자 코드 재발급, googleLink·googleUnlink = 본인의 구글 연결·끊기 (따로 쌓는다 — getGoogleAudit) */
-export type AdminAuditAction = "codeReissue" | "googleLink" | "googleUnlink";
+/** codeReissue = 관리자 코드 재발급, googleLink·googleUnlink = 본인의 구글 연결·끊기 (따로 쌓는다 — getGoogleAudit),
+ *  giftOnline = 11/17 지금 접속 중인 사람 모두에게 선물 (accountId = 첫 선물 id, count = 받은 계정 수, detail = 보낸 것) */
+export type AdminAuditAction = "codeReissue" | "googleLink" | "googleUnlink" | "giftOnline";
 export type AdminAuditEntry = {
   at: number;
   /** 처리자 (lib/ban.ts adminActor — "관리자" 또는 "관리자(닉네임)") */
@@ -18,6 +19,10 @@ export type AdminAuditEntry = {
   accountId: string;
   /** 그때 대상 닉네임 */
   name: string | null;
+  /** 11/17 여러 계정에 한 번에 한 작업의 대상 수 (giftOnline) */
+  count?: number;
+  /** 11/17 한 일 요약 (giftOnline = 보낸 포인트·아이템) */
+  detail?: string;
 };
 
 export interface AdminAuditStore {

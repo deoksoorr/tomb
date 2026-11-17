@@ -335,9 +335,11 @@ export async function upgradePlot(store: HouseStore, accountId: string, to: Plot
 }
 
 /** 11/16 discount = 단 칭호의 가구 할인율 (집 갈래 — 라우트가 lib/titlesServer wornPerk로 넘긴다. 순환 import를 피해 여기서 읽지 않는다) */
-export async function buyFurniture(store: HouseStore, accountId: string, itemId: string, discount = 0, zone: HouseZone = "village"): Promise<MyHouseResponse> {
+/** 11/17 ghostSale = 유령선 장터에서 사요 (유령선 한정 가구는 이때만 — lib/sea/ghostService) */
+export async function buyFurniture(store: HouseStore, accountId: string, itemId: string, discount = 0, zone: HouseZone = "village", ghostSale = false): Promise<MyHouseResponse> {
   const def = furnitureById(itemId);
   if (!def) throw new HttpError(400, "INVALID_INPUT", "알 수 없는 물건이에요.");
+  if (def.ghost && !ghostSale) throw new HttpError(400, "INVALID_INPUT", "유령선 한정은 토요일 밤 유령선 장터에서만 팔아요.");
   await mustHave(store, accountId, zone);
   // 가구는 두 집 공용 가방 (다른 집에 놓인 것까지), 바닥·벽지·외관은 이 집 것만 센다
   const bag = await store.inventory(housePair(accountId), zone);

@@ -14,7 +14,7 @@ export const RADIO_CHANNELS = 4;
  * 상태가 남는 가구 → 값의 최댓값 (0..max).
  * 석등·촛대는 처음부터 켜져 있던 가구라 값 1 = 꺼짐 (저장 안 된 0이 예전처럼 켜진 모습)
  */
-export const STATE_MAX: Readonly<Record<string, number>> = { fireplace: 1, floor_lamp: 1, radio: RADIO_CHANNELS, stone_lantern: 1, candles: 1, sea_lantern: 1 };
+export const STATE_MAX: Readonly<Record<string, number>> = { fireplace: 1, floor_lamp: 1, radio: RADIO_CHANNELS, stone_lantern: 1, candles: 1, sea_lantern: 1, ghost_lamp: 1 };
 /** 창문 열림 (0/1) */
 export const WINDOW_MAX = 1;
 /** 창문 상태의 서명 (창문은 터 크기로 정해지고 배치로는 바뀌지 않는다) */

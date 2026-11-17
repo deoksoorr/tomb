@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { ambienceAt, kstHour, parseAmbienceOverride, type AmbienceOverride } from "@/lib/ambience";
+import { ambienceAt, kstHour, parseAmbienceOverride, type Ambience, type AmbienceOverride } from "@/lib/ambience";
 import { TEX } from "../assets/manifest";
 import { DEPTH, ZOOM_MIN } from "../config";
 import { LevelBlender, levelsFor, recheckDelay, TRANSITION_MS, type Levels } from "./ambienceMix";
@@ -94,6 +94,7 @@ export class Atmosphere {
   private splashAcc = 0;
   private gatherTarget: { x: number; y: number } | null = null;
   private readonly leaves: Leaf[] = [];
+  private snowy = false;
   private readonly flash: Phaser.GameObjects.Image;
   private readonly indoor: boolean;
   private readonly sound: WeatherSound | null;
@@ -245,7 +246,7 @@ export class Atmosphere {
   }
 
   private targetLevels(): Levels {
-    return levelsFor(ambienceAt(Date.now(), this.override), this.grade);
+    return levelsFor(this.ambience(Date.now()), this.grade);
   }
 
   /**
@@ -254,7 +255,7 @@ export class Atmosphere {
    */
   private recheck(time: number): void {
     const now = Date.now();
-    const a = ambienceAt(now, this.override);
+    const a = this.ambience(now);
     this.nextCheck = time + recheckDelay(now, a.nextWeatherAt, RECHECK_MS);
     this.blender.setTarget(levelsFor(a, this.grade), time);
     bridge.emit("ambience:now", a);
@@ -262,6 +263,19 @@ export class Atmosphere {
 
   get levels(): Levels {
     return this.blender.current;
+  }
+
+  /** 11/17 겨울·크리스마스 맵 컨셉 (lib/mapConcept): 나무가 앙상하니 가을 낙엽을 날리지 않는다 */
+  setSnowy(on: boolean): void {
+    if (this.snowy === on) return;
+    this.snowy = on;
+    this.nextCheck = 0; // 비 → 눈 바꿈을 바로
+  }
+
+  /** 지금 하늘·날씨. 겨울·크리스마스 판에서는 비 대신 눈이 온다 (그림만 — 날씨 계산·다른 장면은 그대로) */
+  private ambience(now: number): Ambience {
+    const a = ambienceAt(now, this.override);
+    return this.snowy && a.weather === "rain" ? { ...a, weather: "snow" } : a;
   }
 
   update(time: number, dt: number, view: Phaser.Geom.Rectangle): void {
@@ -340,7 +354,7 @@ export class Atmosphere {
     }
 
     this.updateSplashes(time, dt, rain * burst, view);
-    this.updateLeaves(time, dt, this.indoor ? 0 : L.leaves, view);
+    this.updateLeaves(time, dt, this.indoor || this.snowy ? 0 : L.leaves, view);
     this.updateFireflies(time, dt, L.fireflies, view);
   }
 
