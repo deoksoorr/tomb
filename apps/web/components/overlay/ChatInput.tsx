@@ -232,7 +232,7 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
           )}
         </div>
       )}
-      <div className={styles.row}>
+      <div className={styles.row} data-row="">
         <input
           ref={ref}
           id={id}

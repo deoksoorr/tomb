@@ -58,7 +58,20 @@
   white-space: nowrap;
 }
 
-/* ── 데스크톱: 왼쪽 아래 바로 가기 줄(36px) 바로 위, 게임 패널 톤의 반투명 상자 ── */
+/* 11/17 채팅 글자 검은 테두리 (뒤 배경 칸 없이 눈밭·밤에도 읽히게 — 네 방향 + 살짝 번짐) */
+.box,
+.mobileBox {
+  --chat-outline: -1px 0 0 #000, 1px 0 0 #000, 0 -1px 0 #000, 0 1px 0 #000, 0 0 4px rgba(0, 0, 0, 0.75);
+  text-shadow: var(--chat-outline);
+}
+
+/* 입력칸·단추 글자는 테두리 없이 (제 바탕이 있다) */
+.box input,
+.box button {
+  text-shadow: none;
+}
+
+/* ── 데스크톱: 왼쪽 아래 바로 가기 줄(36px) 바로 위. 11/17 뒤 배경 칸 없이 글자 테두리로 (입력칸·[−][+]는 그대로) ── */
 .box {
   position: fixed;
   /* 게임 화면 안내층(.overlay, z 10 — 토스트·안내 띠가 여기 있음)보다 아래: 겹치면 안내문이 채팅창 위로 온다 */
@@ -69,8 +82,6 @@
   gap: 6px;
   width: min(520px, calc(100vw - var(--safe-left) - var(--safe-right)));
   padding: 6px 8px 8px;
-  background: rgba(17, 18, 15, 0.62);
-  box-shadow: var(--px-border);
   font-family: var(--font-chat);
   font-size: 13px;
 }
@@ -124,15 +135,18 @@
   height: max(calc(8 * 1.45em + 7px), min(calc(14 * 1.45em + 13px), calc(100vh - 500px)));
 }
 
-/* 크기 탭: 상자 오른쪽 위 모서리에 붙은 작은 [−][+] (기록 글자를 가리지 않게 상자 바깥 위로). 평소엔 옅게, 상자에 올리면 또렷하게 */
+/* 크기 탭: 상자 오른쪽 위 모서리에 붙은 작은 [−][+] (기록 글자를 가리지 않게 상자 바깥 위로). 평소엔 옅게, 상자에 올리면 또렷하게.
+   11/17 r2 테두리 없이 옅은 바탕 + 뒤를 살짝 흐리게 (배경 없는 채팅과 어울리게 — 사용자) */
 .sizeTab {
   position: absolute;
-  right: 0;
+  right: 8px;
   bottom: 100%;
   display: flex;
-  background: rgba(17, 18, 15, 0.62);
-  box-shadow: var(--px-border);
-  opacity: 0.55;
+  background: rgba(20, 18, 24, 0.32);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  border-radius: 3px;
+  opacity: 0.8;
   transition: opacity 0.15s;
 }
 
@@ -142,6 +156,7 @@
 }
 
 .sizeBtn {
+  text-shadow: var(--chat-outline) !important;
   width: 24px;
   height: 18px;
   padding: 0;
@@ -164,6 +179,40 @@
   cursor: default;
 }
 
+/* 11/17 r2 데스크톱 입력칸: 쓰기 전(Enter 전)엔 까만 칸 없이 안내 글만 (기록과 같은 테두리 글자), Enter로 쓰기 시작하면 칸이 보인다.
+   칸은 채팅 영역 끝까지, [보내기]는 칸 안 오른쪽 끝에 — 쓰는 중에만 보인다 */
+.box .input [data-row] {
+  position: relative;
+}
+
+.box .input input[type="text"] {
+  padding-right: 64px;
+}
+
+.box .input:not(:focus-within) input[type="text"] {
+  background: transparent;
+  box-shadow: none;
+}
+
+.box .input:not(:focus-within) input[type="text"]::placeholder {
+  color: var(--bone);
+  text-shadow: var(--chat-outline);
+}
+
+.box .input [data-row] > button[type="submit"] {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  bottom: 4px;
+  min-height: 0;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.box .input:not(:focus-within) [data-row] > button[type="submit"] {
+  display: none;
+}
+
 /* 입력칸 아래 안내 줄은 쓰는 중에만 */
 .input:not(:focus-within) > p,
 .input:not(:focus-within) > [data-chips] {
@@ -179,22 +228,25 @@
 
 
 
-/* 11/16 모바일 채팅 상자: 조이스틱 바로 위에 늘 보이는 반투명 기록 (손가락으로 위로 올려 지난 줄 읽기). 입력은 행동 버튼 [채팅] */
+/* 11/16 모바일 채팅 기록: 조이스틱 바로 위에 늘 보인다 (손가락으로 위로 올려 지난 줄 읽기). 입력은 행동 버튼 [채팅]
+   11/17 뒤 배경 칸 없이 화면 폭 가득(양옆 12px), 글자 검은 테두리. 지난 줄 시각("N분 전")은 뺀다 */
 .mobileBox {
   position: fixed;
   /* 게임 안내층(.overlay·집 안 .roomTouch, z 10 — 조이스틱 영역이 왼쪽을 덮는다) 위라야 스크롤된다 */
   z-index: 11;
-  left: var(--safe-left);
+  left: 12px;
   bottom: var(--chat-bottom);
   display: flex;
   flex-direction: column;
-  width: min(300px, 72vw);
-  padding: 4px 8px;
-  background: rgba(17, 18, 15, 0.5);
-  box-shadow: var(--px-border);
+  width: calc(100vw - 24px);
+  padding: 0;
   font-family: var(--font-chat);
   font-size: 13px;
   pointer-events: auto;
+}
+
+.mobileBox .ago {
+  display: none;
 }
 
 /* 모바일 채팅 상자 안 기록: 다섯 줄 높이, 넘치면 손가락으로 위로 올려 읽는다 (맨 아래 줄 고정은 ChatScroll) */
@@ -244,6 +296,14 @@
 .line .name.staff {
   color: #ffd36a;
   text-shadow: 0 0 6px rgba(255, 190, 64, 0.55);
+}
+
+/* 배경 없는 채팅 기록에서는 테두리 위에 금빛 */
+.box .line .name.staff,
+.mobileBox .line .name.staff {
+  text-shadow:
+    var(--chat-outline),
+    0 0 6px rgba(255, 190, 64, 0.55);
 }
 
 
