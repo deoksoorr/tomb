@@ -579,6 +579,7 @@ export class WorldScene extends Phaser.Scene {
         onGoblinCaught: (id, sid, name, points) => this.life.onGoblinCaught(id, sid, name, points),
         onGoblinGrant: (id, grant, points) => this.life.onGoblinGrant(id, grant, points),
         onMegaphone: (m) => bridge.emit("megaphone:heard", m),
+        onMegaPin: (m) => bridge.emit("megaphone:pin", m),
         onMeStale: () => bridge.emit("me:stale"),
         onFriend: (m) => bridge.emit("friend:presence", m),
         onSquirrels: (m) => bridge.emit("fx:squirrels", m),

@@ -1,4 +1,4 @@
-import { MAX_VALID_SPEED, MEGAPHONE_TTL_MS, MIN_CLIENT_VERSION, RATE_LIMIT_KICK_SEC, RATE_LIMIT_PER_SEC, encodeEvent, inMapBounds, mapOf, parseClientVersion, type InternalSay, type MapId } from "@tomb/protocol";
+import { MAX_VALID_SPEED, MEGAPHONE_TTL_MS, MIN_CLIENT_VERSION, RATE_LIMIT_KICK_SEC, RATE_LIMIT_PER_SEC, encodeEvent, inMapBounds, mapOf, parseClientVersion, type InternalPin, type InternalSay, type MapId } from "@tomb/protocol";
 
 // Workers 런타임 API에 의존하지 않는 작은 순수 로직. vitest로 단위 테스트한다(logic.test.ts).
 
@@ -136,6 +136,13 @@ export function sayRelay(r: Pick<InternalSay, "id" | "name" | "text" | "at" | "r
   return { nonce: `s:${r.id}`, until: r.at + MEGAPHONE_TTL_MS, data };
 }
 
+// ── 11/17 확성기 창 고정 공지 (/internal/pin) ──
+
+/** 웹이 알린 고정 공지 바뀜을 채널에 보낼 megaPin 이벤트로 (모든 채널 공지는 ch 0) */
+export function pinEvent(r: Pick<InternalPin, "scope" | "ch" | "pin">): string {
+  const ch = r.scope === "all" ? 0 : r.ch;
+  return encodeEvent({ t: "megaPin", scope: r.scope, ch, pin: r.pin ? { scope: r.scope, ch, text: r.pin.text, name: r.pin.name, at: r.pin.at } : null });
+}
 
 // ── 11/17 아이솔레이트 메모 (GET /lobby·/hunt-rooms) ──
 // 값을 ttlMs 동안 다시 쓴다. 실패는 기억하지 않는다(다음 요청이 다시 묻는다).

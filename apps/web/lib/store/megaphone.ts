@@ -1,12 +1,13 @@
 import type { Redis } from "@upstash/redis";
 import { redisClient } from "../redisUsage";
-import { MEGAPHONE_TTL_MS } from "@tomb/protocol";
+import { MEGAPHONE_TTL_MS, type MegaPin, type MegaphoneScope } from "@tomb/protocol";
 import type { MegaphoneEntry } from "../types";
 import { K } from "./keys";
 
 // 23번 확성기 기록. 최근 MEGA_KEEP개를 LIST 하나에 두고(최신 먼저), 관리자가 숨긴 id는 SET에 따로 둔다
 // (기록 JSON을 고치지 않아도 되고, 숨김 해제도 SREM 한 번). 계정마다 도배 제한 간격은 SET NX PX로 잡는다.
 // 외친 지 MEGAPHONE_TTL_MS(5분)가 지난 기록은 목록에서 빼고 저장소에서도 지운다 (Redis는 키 TTL + 읽을 때 LREM 정리).
+// 11/17 고정 공지(운영자)는 채널마다 하나 + 모든 채널 하나를 STRING JSON으로 둔다. 지울 때까지 남고, 읽기는 MGET 한 번.
 
 /** 저장하는 기록 수 (관리자 화면은 이만큼, 유저 창은 그중 MEGA_SHOW개) */
 export const MEGA_KEEP = 100;
@@ -17,6 +18,16 @@ export const MEGAPHONE_COOLDOWN_MS = 30_000;
 
 /** 저장 형태: 공개 기록 + 외친 계정 (관리자만 본다) */
 export type MegaRecord = MegaphoneEntry & { accountId: string };
+
+/** 고정 공지 저장 형태: 공개 모양 + 쓴 계정 */
+export type PinRecord = MegaPin & { accountId: string };
+/** 한 채널에서 보이는 고정 공지 (그 채널 것 + 모든 채널 것) */
+export type PinPair = { channel: PinRecord | null; all: PinRecord | null };
+
+/** 화면에 보낼 고정 공지 (그 채널 것 먼저, 모든 채널 것 다음. 쓴 계정은 빼고) */
+export function pinList(p: PinPair): MegaPin[] {
+  return [p.channel, p.all].flatMap((r) => (r ? [{ scope: r.scope, ch: r.ch, text: r.text, name: r.name, at: r.at }] : []));
+}
 
 /** 아직 보여 줄 기록인지 (외친 지 5분이 안 됐는지) */
 export const megaLive = (at: number, now: number) => now - at < MEGAPHONE_TTL_MS;
@@ -31,12 +42,18 @@ export interface MegaphoneStore {
   recent(limit: number, now?: number): Promise<(MegaRecord & { hidden: boolean })[]>;
   /** 숨기기·다시 보이기. 기록에 없는 id면 false */
   setHidden(id: string, hidden: boolean): Promise<boolean>;
+  /** 11/17 그 채널에서 보이는 고정 공지 (채널 것·모든 채널 것) */
+  pins(ch: number): Promise<PinPair>;
+  /** 11/17 고정 공지 쓰기·지우기 (rec null). scope all이면 ch는 보지 않는다 */
+  setPin(scope: MegaphoneScope, ch: number, rec: PinRecord | null): Promise<void>;
 }
 
 export class MemoryMegaphone implements MegaphoneStore {
   private log: MegaRecord[] = [];
   private hidden = new Set<string>();
   private cool = new Map<string, number>();
+  /** 고정 공지: 채널 번호 → 공지, 0 = 모든 채널 */
+  private pinned = new Map<number, PinRecord>();
 
   async cooldown(accountId: string, ms: number, now: number): Promise<number> {
     const until = this.cool.get(accountId) ?? 0;
@@ -68,6 +85,14 @@ export class MemoryMegaphone implements MegaphoneStore {
     if (hidden) this.hidden.add(id);
     else this.hidden.delete(id);
     return true;
+  }
+  async pins(ch: number): Promise<PinPair> {
+    return { channel: this.pinned.get(ch) ?? null, all: this.pinned.get(0) ?? null };
+  }
+  async setPin(scope: MegaphoneScope, ch: number, rec: PinRecord | null): Promise<void> {
+    const at = scope === "all" ? 0 : ch;
+    if (rec) this.pinned.set(at, rec);
+    else this.pinned.delete(at);
   }
 }
 
@@ -126,5 +151,25 @@ export class RedisMegaphone implements MegaphoneStore {
     p.pexpire(K.megaHidden, MEGAPHONE_TTL_MS);
     await p.exec();
     return true;
+  }
+  async pins(ch: number): Promise<PinPair> {
+    const [c, a] = (await this.redis.mget<(string | null)[]>(K.megaPin(ch), K.megaPinAll)) ?? [];
+    return { channel: parsePin(c), all: parsePin(a) };
+  }
+  async setPin(scope: MegaphoneScope, ch: number, rec: PinRecord | null): Promise<void> {
+    const key = scope === "all" ? K.megaPinAll : K.megaPin(ch);
+    if (rec) await this.redis.set(key, JSON.stringify(rec));
+    else await this.redis.del(key);
+  }
+}
+
+/** 저장된 고정 공지 JSON (깨졌거나 없으면 null) */
+function parsePin(raw: string | null | undefined): PinRecord | null {
+  if (!raw) return null;
+  try {
+    const r = JSON.parse(raw) as PinRecord;
+    return r && typeof r.text === "string" && r.text ? r : null;
+  } catch {
+    return null;
   }
 }

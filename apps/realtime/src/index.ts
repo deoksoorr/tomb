@@ -26,6 +26,7 @@
  *   POST /internal/hello     친구 Vercel → 이 서버: 입장 직전 "들고 날 때 알릴 친구들" 등록 (로비가 들어옴·나감을 밀어 준다). 본문 서명 필수
  *   POST /internal/where     친구 Vercel → 이 서버: 그 방문자들이 지금 어느 채널·자리에 있는지 (WHERE_CACHE_MS 기억). 본문 서명 필수
  *   POST /internal/say       11/15 Vercel → 이 서버: 마을 공지 한 줄을 사람이 있는 채널 모두의 확성기 줄에 지금 띄운다. 본문 서명 필수
+ *   POST /internal/pin       11/17 Vercel → 이 서버: 확성기 창 고정 공지가 바뀌었다 (그 채널 하나, 모든 채널이면 사람이 있는 채널 모두). 본문 서명 필수
  */
 import { CLOSE, HUNT_ROOMS_CACHE_SEC, INTERNAL_SIG_HEADER, LOBBY_CACHE_SEC, ROOM_ID_RE, WHERE_CACHE_MS, verifyInternal, type PeerWhere } from "@tomb/protocol";
 import type { JoinTicket } from "./channel";
@@ -41,7 +42,7 @@ import {
   rejectSocket,
 } from "./auth";
 import { type Env, channelStub, lobbyStub, readConfig, roomStub } from "./config";
-import { IsolateMemo, isOutdatedClient, parseChannel, parseMap, parseSpawn, sayRelay } from "./logic";
+import { IsolateMemo, isOutdatedClient, parseChannel, parseMap, parseSpawn, pinEvent, sayRelay } from "./logic";
 
 export { ChannelDO } from "./ChannelDO";
 export { LobbyDO } from "./LobbyDO";
@@ -72,7 +73,7 @@ export default {
 
 /** /internal/* 본문 상한 (바이트) */
 const INTERNAL_MAX_BYTES = 8_000 * 4;
-const INTERNAL_PATHS = new Set(["/internal/kick", "/internal/peer", "/internal/me", "/internal/where", "/internal/hello", "/internal/say"]);
+const INTERNAL_PATHS = new Set(["/internal/kick", "/internal/peer", "/internal/me", "/internal/where", "/internal/hello", "/internal/say", "/internal/pin"]);
 
 async function internal(req: Request, env: Env, path: string): Promise<Response> {
   const notFound = new Response("not found", { status: 404 });
@@ -133,6 +134,25 @@ async function internal(req: Request, env: Env, path: string): Promise<Response>
               return false;
             }),
         ),
+    );
+    return Response.json({ sent: sent.filter(Boolean).length });
+  }
+  if (r.op === "pin") {
+    // 11/17 고정 공지: 운영자가 쓰거나 지울 때만 온다 (드물다). 채널 공지는 그 채널 DO 하나만 (로비를 묻지 않는다 — 비었으면 보낼 사람이 없을 뿐),
+    // 모든 채널 공지는 로비 한 번 + 사람이 있는 채널마다 한 번
+    const data = pinEvent(r);
+    let ids: number[];
+    if (r.scope === "channel") ids = parseChannel(String(r.ch), readConfig(env).maxChannels) === null ? [] : [r.ch];
+    else ids = (await lobbyStub(env).info()).channels.filter((c) => c.count > 0).map((c) => c.id);
+    const sent = await Promise.all(
+      ids.map((id) =>
+        channelStub(env, id)
+          .pinRelay(data)
+          .catch((e) => {
+            console.error("pin relay failed", id, e);
+            return false;
+          }),
+      ),
     );
     return Response.json({ sent: sent.filter(Boolean).length });
   }

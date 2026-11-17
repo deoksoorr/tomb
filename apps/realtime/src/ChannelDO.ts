@@ -270,6 +270,11 @@ export class ChannelDO extends DurableObject<Env> {
     return this.core.relayedMegaphone(nonce, until, data);
   }
 
+  /** 11/17 확성기 창 고정 공지가 바뀌었다 (Worker의 /internal/pin, RPC). 이 채널 모두에게 보낸다 */
+  pinRelay(data: string): boolean {
+    return this.core.relayedPin(data);
+  }
+
   /** Lobby DO가 상태를 다시 맞출 때 부른다 (RPC) */
   getCount(): { count: number; seq: number } {
     return { count: this.core.count, seq: this.nextSeq() };

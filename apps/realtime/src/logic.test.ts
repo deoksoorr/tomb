@@ -1,6 +1,6 @@
 import { CLIENT_VERSION, MAP_WIDTH, MAX_VALID_SPEED, RUN_SPEED } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
-import { IsolateMemo, MoveBudget, RateLimiter, allocSid, isOutdatedClient, parseChannel, parseSpawn, sayRelay, stepToward } from "./logic";
+import { IsolateMemo, MoveBudget, RateLimiter, allocSid, isOutdatedClient, parseChannel, parseSpawn, pinEvent, sayRelay, stepToward } from "./logic";
 
 describe("RateLimiter", () => {
   it("drops messages over 20/s for the rest of that second", () => {
@@ -91,6 +91,14 @@ describe("isOutdatedClient (큰 패치 강제 새로고침)", () => {
     expect(isOutdatedClient("2", 2)).toBe(false);
     expect(isOutdatedClient("x", 2)).toBe(true);
     expect(isOutdatedClient(String(CLIENT_VERSION))).toBe(false); // 지금 빌드의 클라이언트는 언제나 받는다
+  });
+});
+
+describe("pinEvent (11/17 고정 공지 → megaPin)", () => {
+  it("채널 공지는 그 채널, 모든 채널 공지는 ch 0. 지우면 pin null", () => {
+    expect(JSON.parse(pinEvent({ scope: "channel", ch: 4, pin: { text: "안내", name: "운영자", at: 7 } }))).toEqual({ t: "megaPin", scope: "channel", ch: 4, pin: { scope: "channel", ch: 4, text: "안내", name: "운영자", at: 7 } });
+    expect(JSON.parse(pinEvent({ scope: "all", ch: 0, pin: { text: "안내", name: "운영자", at: 7 } })).pin).toEqual({ scope: "all", ch: 0, text: "안내", name: "운영자", at: 7 });
+    expect(JSON.parse(pinEvent({ scope: "all", ch: 0, pin: null }))).toEqual({ t: "megaPin", scope: "all", ch: 0, pin: null });
   });
 });
 

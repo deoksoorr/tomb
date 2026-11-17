@@ -108,6 +108,8 @@ export const K = {
   megaLog: "mega:log", // LIST 확성기 기록 JSON, 최신 먼저 최대 MEGA_KEEP개
   megaHidden: "mega:hidden", // SET 관리자가 숨긴 기록 id
   megaCool: (id: string) => `mega:cool:${id}`, // STRING NX PX 계정별 도배 제한
+  megaPin: (ch: number) => `mega:pin:ch:${ch}`, // STRING 11/17 그 채널 고정 공지 JSON {scope, ch, text, name, at, accountId} (지울 때까지, TTL 없음)
+  megaPinAll: "mega:pin:all", // STRING 11/17 모든 채널 고정 공지 JSON (같은 모양, ch 0)
 
   // ── 친구 (lib/store/friends.ts) ──
   friends: (id: string) => `fr:${id}`, // ZSET 친구 계정 id → 맺은 시각 (양쪽에 똑같이)

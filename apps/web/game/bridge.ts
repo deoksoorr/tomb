@@ -1,4 +1,4 @@
-import type { AvatarDye, AwayMapId, BbqItemId, ChatPlace, BbqStand, FishWater, GraveEventKind, MapId, QueueStatus } from "@tomb/protocol";
+import type { AvatarDye, AwayMapId, BbqItemId, ChatPlace, BbqStand, FishWater, GraveEventKind, MapId, MegaPinMsg, QueueStatus } from "@tomb/protocol";
 import type { NpcId } from "@/lib/forage/catalog";
 import type { PublicGrave } from "@/lib/types";
 import type { HouseEditState, HouseTool } from "@/game/housing/events";
@@ -147,6 +147,8 @@ export type GameEvents = {
     /** 이 줄로 바꿔 끼울 앞 공지 id (긴급 의뢰 끝 → 시작 공지를 뺀다) */
     replaces?: string;
   };
+  /** 11/17 확성기 창 고정 공지가 바뀌었다 (운영자가 쓰거나 지움, 실시간 서버 /internal/pin) → 확성기 창 맨 위 칸을 바꾼다 */
+  "megaphone:pin": MegaPinMsg;
   /** 상점 맵에 들어감/나옴 (UI가 HUD 일부를 바꿀 때) */
   "scene:changed": {
     scene: "world" | "shop" | "hunt" | "minigame" | "house";

@@ -18,6 +18,8 @@ import {
   encodeEvent,
   encodeMove,
   parseS2C,
+  parseMegaPinMsg,
+  type MegaPinMsg,
   pickChannel,
   type ActKind,
   type AwayPlace,
@@ -132,6 +134,8 @@ export type NetCallbacks = {
   /** 11/17 운영자만: 쿨다운 중에 주문을 쳤다 → 남은 시간 (ms) */
   onSquirrelsWait?(left: number): void;
   onMegaphone?(m: { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true; system?: true; replaces?: string; mgr?: true }): void;
+  /** 11/17 확성기 창 고정 공지가 바뀌었다 (운영자가 쓰거나 지움) */
+  onMegaPin?(m: MegaPinMsg): void;
   /**
    * 11/15 맵을 옮겼다 (switchMap의 답). map = 서버가 정한 지금 맵 (허락이 없으면 옮기기 전 맵 그대로),
    * peers·seats = 그 맵 사람(나 빼고)과 그 사람들이 앉은 자리
@@ -146,7 +150,7 @@ export type NetCallbacks = {
 export type ChatMeta = { name?: string; staff?: true; mgr?: true; /** 11/17 사냥 중이면 "hunt" */ m?: ChatPlace };
 
 /** 맵이 바뀌어도 늘 처음 콜백(월드)이 받는 것: 계정·친구·확성기·내 몸 모양·고블린 보상 */
-const GLOBAL_CALLBACKS = ["onMegaphone", "onMeStale", "onFriend", "onSelfBody", "onGoblinGrant", "onSquirrels", "onSquirrelsWait"] as const;
+const GLOBAL_CALLBACKS = ["onMegaphone", "onMegaPin", "onMeStale", "onFriend", "onSelfBody", "onGoblinGrant", "onSquirrels", "onSquirrelsWait"] as const;
 /** 맵 옮기기 답을 기다리는 시간 */
 const MAP_REPLY_MS = 4000;
 /** 맵 옮기기 답이 없을 때 다시 보내는 횟수 (서버는 맵 요청을 1초에 한 번만 받는다 — MAP_REPLY_MS 간격이면 넉넉하다) */
@@ -898,6 +902,12 @@ export class RealtimeClient {
               ...(typeof m.replaces === "string" ? { replaces: m.replaces } : {}),
             });
           break;
+        // 11/17 확성기 창 고정 공지 (모양이 틀리면 버린다)
+        case "megaPin": {
+          const pin = parseMegaPinMsg(m as unknown as Record<string, unknown>);
+          if (pin) this.cb.onMegaPin?.(pin);
+          break;
+        }
         case "me":
           this.cb.onMeStale?.();
           break;

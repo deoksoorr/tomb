@@ -41,6 +41,9 @@ import {
   graveTier,
   mapHeight,
   parseC2S,
+  parseMegaPinMsg,
+  parseS2C,
+  MEGA_PIN_MAX,
   pickChannel,
   signJoinToken,
   verifyJoinToken,
@@ -125,6 +128,30 @@ describe("events", () => {
     expect(parseC2S('{"t":"hunt","k":"atk","a":0,"w":"Big Sword"}')).toEqual({ t: "hunt", k: "atk", a: 0 });
     expect(parseC2S('{"t":"hunt","k":"dance","a":0}')).toBeNull();
     expect(parseC2S('{"t":"hunt","k":"atk"}')).toBeNull();
+  });
+
+  it("11/17 고정 공지 megaPin: 쓰기·지우기 모양만 받고, 모든 채널은 ch 0으로, 모르는 필드는 뺀다", () => {
+    const pin = { text: "오늘 밤 9시 점검이에요.", name: "운영자", at: 5 };
+    const raw = (o: object) => parseS2C(JSON.stringify(o)) as unknown as Record<string, unknown>;
+    expect(parseMegaPinMsg(raw({ t: "megaPin", scope: "channel", ch: 2, pin: { ...pin, x: 1 } }))).toEqual({ t: "megaPin", scope: "channel", ch: 2, pin: { scope: "channel", ch: 2, ...pin } });
+    expect(parseMegaPinMsg(raw({ t: "megaPin", scope: "all", ch: 7, pin }))).toEqual({ t: "megaPin", scope: "all", ch: 0, pin: { scope: "all", ch: 0, ...pin } });
+    expect(parseMegaPinMsg(raw({ t: "megaPin", scope: "channel", ch: 1, pin: null }))).toEqual({ t: "megaPin", scope: "channel", ch: 1, pin: null });
+    expect(parseMegaPinMsg(raw({ t: "megaPin", scope: "channel", ch: 1, pin: { ...pin, text: "가".repeat(MEGA_PIN_MAX) } }))?.pin?.text).toHaveLength(MEGA_PIN_MAX);
+    for (const bad of [
+      { t: "megaPin", scope: "moon", ch: 1, pin: null },
+      { t: "megaPin", scope: "channel", ch: 0, pin: null },
+      { t: "megaPin", scope: "channel", ch: "1", pin: null },
+      { t: "megaPin", scope: "channel", ch: 1 },
+      { t: "megaPin", scope: "channel", ch: 1, pin: { ...pin, text: "" } },
+      { t: "megaPin", scope: "channel", ch: 1, pin: { ...pin, text: "가".repeat(MEGA_PIN_MAX + 1) } },
+      { t: "megaphone", scope: "channel", ch: 1, pin: null },
+    ])
+      expect(parseMegaPinMsg(raw(bad))).toBeNull();
+  });
+
+  it("옛 클라이언트: parseS2C는 모르는 t도 객체로 넘긴다 (받는 쪽 switch가 모르는 t를 버린다 — 연결은 그대로)", () => {
+    expect(parseS2C('{"t":"megaPin","scope":"all","ch":0,"pin":null}')).toEqual({ t: "megaPin", scope: "all", ch: 0, pin: null });
+    expect(parseS2C("{")).toBeNull();
   });
 });
 

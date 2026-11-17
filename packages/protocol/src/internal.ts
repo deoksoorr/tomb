@@ -1,4 +1,5 @@
 import { ROOM_ID_RE } from "./constants";
+import { MEGA_PIN_MAX } from "./events";
 import { FRIEND_KEY_RE, FRIEND_MAX, WHERE_MAX_IDS } from "./friends";
 import { hmacSign, hmacVerify } from "./token";
 
@@ -11,6 +12,7 @@ import { hmacSign, hmacVerify } from "./token";
 //  - POST /internal/hello { visitorId, name, key, friends, exp } → 친구: 입장 직전 "이 사람이 들어오면·나가면 이 친구들에게 알려 달라"
 //  - POST /internal/say   { id, name, text, at, replaces?, exp } → 11/15 마을 공지 한 줄을 열린 채널 모두의 확성기 줄에 지금 띄운다
 //                          (긴급 의뢰 시작·끝, 최고층 기록 등 — 웹이 확성기 기록에 남긴 것과 같은 id. replaces = 이 줄로 바꿔 끼울 앞 공지 id)
+//  - POST /internal/pin   { scope, ch, pin, exp }          → 11/17 확성기 창 고정 공지가 바뀌었다 (channel이면 그 채널만, all이면 사람이 있는 채널 모두. pin null = 지움)
 
 export const INTERNAL_SIG_HEADER = "X-Tomb-Internal";
 /** 내부 요청 유효 시간 (초). 서버끼리라 짧게 */
@@ -27,7 +29,9 @@ export type InternalWhere = { op: "where"; visitorIds: string[]; fresh?: boolean
 export type InternalHello = { op: "hello"; visitorId: string; name: string; key: string; friends: string[]; exp: number };
 /** 마을 공지 방송 (웹이 남긴 시스템 확성기 줄). at = 남긴 시각(ms) */
 export type InternalSay = { op: "say"; id: string; name: string; text: string; at: number; replaces?: string; exp: number };
-export type InternalRequest = InternalKick | InternalPeer | InternalMe | InternalWhere | InternalHello | InternalSay;
+/** 11/17 고정 공지 바뀜 (웹이 저장한 뒤). scope all이면 ch 0. pin = 새 공지 글·쓴 사람·쓴 시각, null = 지움 */
+export type InternalPin = { op: "pin"; scope: "channel" | "all"; ch: number; pin: { text: string; name: string; at: number } | null; exp: number };
+export type InternalRequest = InternalKick | InternalPeer | InternalMe | InternalWhere | InternalHello | InternalSay | InternalPin;
 /** 마을 공지 한 줄 최대 길이 (확성기 60자보다 넉넉히 — 시스템이 만든 문장이라 서명만 확인한다) */
 export const INTERNAL_SAY_MAX = 200;
 const SAY_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
@@ -86,6 +90,18 @@ export async function verifyInternal(
     if (typeof r.at !== "number" || !Number.isFinite(r.at) || r.at <= 0) return null;
     if (r.replaces !== undefined && (typeof r.replaces !== "string" || !SAY_ID_RE.test(r.replaces))) return null;
     return { op: "say", id: r.id, name: r.name, text: r.text, at: r.at, ...(r.replaces !== undefined ? { replaces: r.replaces } : {}), exp: r.exp };
+  }
+  if (r.op === "pin") {
+    if (r.scope !== "channel" && r.scope !== "all") return null;
+    const ch = r.ch;
+    if (typeof ch !== "number" || !Number.isInteger(ch) || (r.scope === "all" ? ch !== 0 : ch < 1)) return null;
+    if (r.pin === null) return { op: "pin", scope: r.scope, ch, pin: null, exp: r.exp };
+    const p = r.pin as Record<string, unknown> | undefined;
+    if (!p || typeof p !== "object") return null;
+    if (typeof p.text !== "string" || !p.text || [...p.text].length > MEGA_PIN_MAX) return null;
+    if (typeof p.name !== "string" || p.name.length > 40) return null;
+    if (typeof p.at !== "number" || !Number.isFinite(p.at) || p.at <= 0) return null;
+    return { op: "pin", scope: r.scope, ch, pin: { text: p.text, name: p.name, at: p.at }, exp: r.exp };
   }
   if (r.op === "where") {
     const ids = r.visitorIds;
