@@ -43,17 +43,11 @@ export function SnackBar({ compact = false }: { compact?: boolean }) {
   const can = useBridgeValue("sea:snack:can");
   const icons = useSnackIcons();
   if (map !== "sea" || !snacks) return null;
-  const total = snacks.plain + snacks.spicy;
   const held = thrownKind(snacks);
   return (
     <div className={s.bar} data-compact={compact || undefined} role="group" aria-label="가진 갈매기 과자">
-      {total <= 0 ? (
-        <span className={s.empty}>
-          {icons.plain && <img className={s.chipIcon} src={icons.plain} alt="" aria-hidden="true" />}
-          과자 자판기에서 사요
-        </span>
-      ) : (
-        <>
+      {/* 11/17 다 써도 개수 칸(0)만 그대로 보여요 — 「자판기에서 사요」 안내는 뺐어요 (사용자: 계속 떠서 거슬려요) */}
+      <>
           <span className={s.chips}>
             {SNACK_KINDS.map((k) => (
               <button
@@ -78,8 +72,7 @@ export function SnackBar({ compact = false }: { compact?: boolean }) {
               <b className={s.count}>{snacks[can.kind]}</b>
             </button>
           )}
-        </>
-      )}
+      </>
     </div>
   );
 }

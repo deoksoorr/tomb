@@ -829,9 +829,8 @@ export class SeaScene extends Phaser.Scene {
     on.push(
       bridge.on("sea:snack:throw", () => {
         if (this.covered || this.locked || this.host.hub.isBlocked) return;
-        if (this.throwSnack()) return;
-        const s = bridge.last("sea:gull:snacks");
-        if (!s || s.plain + s.spicy <= 0) this.toast(SNACK_NONE_MSG);
+        // 11/17 과자가 없으면 조용히 아무 일 없어요 (「자판기에서 사 와요」 안내는 뺐어요 — 사용자 요청)
+        this.throwSnack();
       }),
     );
     // 11/16 r19 바라보는 장면에서 Esc (lib/viewKeyGuard)
