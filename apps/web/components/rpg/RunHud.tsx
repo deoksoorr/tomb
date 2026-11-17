@@ -34,6 +34,9 @@ const BUFF_NAMES: Record<string, string> = {
   fr_ward: "얼음 방패",
 };
 
+/** 11/17 낙법 칸 그림 (game/rpg/icons dodge) */
+const DODGE_ART = { shape: "dodge", main: 0x9fc5e8, accent: 0xf2ead3 };
+
 /** 아이콘 위 원형 쿨다운 (남은 비율만큼 시계 방향으로 어둡게) */
 const ring = (left: number) => ({ background: `conic-gradient(rgba(10, 11, 9, 0.75) ${Math.round(left * 360)}deg, transparent 0deg)` });
 
@@ -157,6 +160,9 @@ export default function RunHud({
     bridge.emit("rpg:action", a);
   };
   const stop = (e: React.PointerEvent) => e.stopPropagation();
+  // 11/17 낙법 남은 쿨타임 (칸·버튼에 시계와 남은 초)
+  const dodgeLeft = hud?.dodge?.left ?? 0;
+  const dodgeSec = Math.ceil((hud?.dodge?.ms ?? 0) / 1000);
 
   // 11/15 스킬 칸: 왼쪽 누름 = 쓰기, 우클릭 = 그 칸 자동 켜기·끄기.
   // [자동] 설정 중(손가락용, 데스크톱도 됨)에는 칸을 눌러도 쓰지 않고 자동만 바꾼다. 다시 [자동]을 누르거나 6초 가만있으면 끝
@@ -404,6 +410,19 @@ export default function RunHud({
                   </button>
                 );
               })}
+              {/* 11/17 낙법 칸 (Z): 물약과 스킬 사이. 손가락 기기는 공격 버튼 위 [구르기]가 대신한다 */}
+              <button
+                type="button"
+                className={cx(s.skillBtn, s.dodgeSlot)}
+                onPointerDown={(e) => act(e, { kind: "dodge" })}
+                aria-label={`낙법 (Z)${dodgeSec > 0 ? `, ${dodgeSec}초 뒤에 다시 써요` : ""}`}
+                title="낙법 (Z · K). 보는 쪽으로 구르고, 구르는 동안은 안 맞아요"
+              >
+                <RpgIcon art={DODGE_ART} size={32} />
+                <span className={s.skillKey}>Z</span>
+                {dodgeLeft > 0 && <span className={s.cool} style={ring(dodgeLeft)} />}
+                {dodgeSec > 0 && <span className={s.coolSec}>{dodgeSec}</span>}
+              </button>
               {hotbar.map((id, i) => {
                 const sk = SKILLS.find((x) => x.id === id);
                 const cd = hud?.cooldowns[i] ?? 0;
@@ -453,24 +472,38 @@ export default function RunHud({
                 </button>
               )}
             </div>
-            <button
-              type="button"
-              className={cx(s.skillBtn, s.attack, s.touchOnly, hud?.attackBuffered && s.buffered)}
-              onPointerDown={(e) => {
-                act(e, { kind: "attack" });
-                // 누르고 있으면 지금 방향으로 계속 공격
-                holding.current = e.pointerId;
-                e.currentTarget.setPointerCapture(e.pointerId);
-                bridge.emit("rpg:action", { kind: "hold", on: true });
-              }}
-              onPointerUp={release}
-              onPointerCancel={release}
-              onLostPointerCapture={release}
-              aria-label="공격. 누르고 있으면 계속 때려요"
-            >
-              {(hud?.attack ?? 0) > 0 && <span className={s.cool} style={ring(hud!.attack!)} />}
-              <span className={s.attackLabel}>공격</span>
-            </button>
+            {/* 11/17 손가락: 공격 버튼 바로 위에 [구르기] (스킬 칸과 떨어진 오른쪽 끝 세로 줄) */}
+            <div className={cx(s.actionPad, s.touchOnly)}>
+              <button
+                type="button"
+                className={cx(s.skillBtn, s.dodgeBtn)}
+                onPointerDown={(e) => act(e, { kind: "dodge" })}
+                aria-label={`구르기${dodgeSec > 0 ? `, ${dodgeSec}초 뒤에 다시 써요` : ". 구르는 동안은 안 맞아요"}`}
+              >
+                <RpgIcon art={DODGE_ART} size={32} />
+                <span className={s.dodgeLabel}>구르기</span>
+                {dodgeLeft > 0 && <span className={s.cool} style={ring(dodgeLeft)} />}
+                {dodgeSec > 0 && <span className={s.coolSec}>{dodgeSec}</span>}
+              </button>
+              <button
+                type="button"
+                className={cx(s.skillBtn, s.attack, s.touchOnly, hud?.attackBuffered && s.buffered)}
+                onPointerDown={(e) => {
+                  act(e, { kind: "attack" });
+                  // 누르고 있으면 지금 방향으로 계속 공격
+                  holding.current = e.pointerId;
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  bridge.emit("rpg:action", { kind: "hold", on: true });
+                }}
+                onPointerUp={release}
+                onPointerCancel={release}
+                onLostPointerCapture={release}
+                aria-label="공격. 누르고 있으면 계속 때려요"
+              >
+                {(hud?.attack ?? 0) > 0 && <span className={s.cool} style={ring(hud!.attack!)} />}
+                <span className={s.attackLabel}>공격</span>
+              </button>
+            </div>
           </>
         )}
         {game !== "hunt" && (

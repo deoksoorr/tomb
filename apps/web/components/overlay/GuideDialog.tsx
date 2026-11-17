@@ -189,6 +189,7 @@ const rides = (touch: boolean): ReactNode[][] => [
 
 const HUNT_KEYS: ReactNode[][] = [
   ["공격", "Space · J", "공격 버튼"],
+  ["낙법", "Z · K (6초마다, 구르는 동안 안 맞아요)", "구르기 버튼"],
   ["스킬", `1~${SKILL_SLOTS}, 궁극기는 F`, "스킬 버튼"],
   ["스킬 자동", "칸 오른쪽 클릭 (X는 전부)", "[자동]을 누른 뒤 칸 누르기"],
   ["키 안내", "H", "—"],

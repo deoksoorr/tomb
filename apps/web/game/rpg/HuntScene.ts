@@ -49,6 +49,10 @@ import { SetGearRun } from "./setGearRun";
 import { HeldWeapon } from "./heldWeapon";
 import { huntLook } from "../sprites/setGearWear";
 import { SelfLight } from "./selfLight";
+// 11/17 낙법(회피 구르기): 쿨타임·무적 규칙은 lib/rpg/dodge, 연출은 dodgeFx
+import { DODGE_DIST, dodgeCooldown, NO_DODGE, rollDir, rolling, rollT, rollTravel, startDodge, type Dodge } from "@/lib/rpg/dodge";
+import { DodgeFx, dodgeSound, rollPose } from "./dodgeFx";
+import { stealHeal, type StealBook } from "@/lib/rpg/lifesteal";
 import { enhOfId } from "@/lib/rpg/setGear";
 import { nextPity } from "@/lib/rpg/setGearRoll";
 import { towerSound } from "../tower/towerSound";
@@ -163,6 +167,8 @@ type HitOpts = {
   skill?: BranchId;
   /** 광역 스킬 (재의 심장 패시브) */
   aoe?: boolean;
+  /** 11/17 소환(길동무 넋·망자의 초롱)이 친 것 — 흡혈은 광역처럼 3분의 1 (lib/rpg/lifesteal) */
+  summon?: boolean;
   /** 맞은 적 둔화 ms */
   slowMs?: number;
   /** 연출 무게 0~4 (skillMoves.SKILL_LOOK): 히트스톱·찌그러짐 */
@@ -309,6 +315,14 @@ export class HuntScene extends RpgScene {
   private holdAim: { x: number; y: number } | null = null;
   /** 11/15 공격 방향 고정: 휘두르는 동안(이 시각까지) 걷는 방향이 바라보는 쪽을 덮어쓰지 않는다 → 물러나며 쳐도 겨냥한 적을 친다 */
   private faceLockUntil = 0;
+  /** 11/17 낙법: 마지막 구르기(시작·다시 구를 수 있는 때), 구르는 쪽, 지금까지 굴러 간 비율, 이번 구르기에 "회피"를 띄웠는지 */
+  private dodge: Dodge = NO_DODGE;
+  private rollVec = { x: 0, y: 1 };
+  private rollDone = 1;
+  private rollSaid = false;
+  private dodgeFx!: DodgeFx;
+  /** 11/17 넋 거두기: 지난 1초 동안 흡혈로 찬 양 (1초 상한) */
+  private stealBook: StealBook = [];
   /** 11/15 자동 스킬: 설정(칸·전체 스위치·궁극기 SP 남김) · 마지막 자동 시전 · 마지막으로 싸운(치거나 맞은) 시각 */
   private auto: HotAuto = cleanAuto(null, []);
   private autoAt = 0;
@@ -503,6 +517,10 @@ export class HuntScene extends RpgScene {
     this.holdOn = false;
     this.holdAim = null;
     this.faceLockUntil = 0;
+    this.dodge = NO_DODGE;
+    this.stealBook = [];
+    this.rollDone = 1;
+    this.rollSaid = false;
     this.auto = cleanAuto(play.hotAuto, play.hotbar);
     this.autoAt = 0;
     this.fightAt = -1e9;
@@ -517,6 +535,7 @@ export class HuntScene extends RpgScene {
     this.mv = new SkillMoves(this, this.skfx);
     this.dmg = new DamageNumbers(this, this.data0.reduced, this.skfx.mobile);
     this.tele = new TelegraphLayer(this);
+    this.dodgeFx = new DodgeFx(this, this.data0.reduced);
     this.patHost = this.makePatternHost();
     this.wstyle = weaponStyleOf(play.equip.weapon ? gearById(play.equip.weapon) : undefined);
     this.chain = 0;
@@ -692,6 +711,8 @@ export class HuntScene extends RpgScene {
     // 판이 끝나 드롭만 줍는 중: 걷기만 (결과가 잡혀 있으니 포션·스킬은 막는다)
     if (this.endSnap || this.cards?.picking) return;
     if (code === "Space" || code === "KeyJ") this.attack(true);
+    // 11/17 낙법: Z(왼손 — WASD·Space와 같이) · K(오른손 — 방향키·J와 같이). Space는 공격이라 비어 있는 키로
+    else if (code === "KeyZ" || code === "KeyK") this.roll();
     // 11/15 숫자 1~5 = 스킬 칸 (Shift+숫자 = 그 칸 자동 켜기·끄기), F = 궁극기 칸, X = 자동 전체 스위치
     else if (/^Digit[1-5]$/.test(code)) {
       const slot = Number(code.slice(5)) - 1;
@@ -713,6 +734,7 @@ export class HuntScene extends RpgScene {
     } else if (a.kind === "skill") this.useSkill(a.slot);
     else if (a.kind === "auto") this.toggleAuto(a.slot);
     else if (a.kind === "potion") this.usePotion(a.id);
+    else if (a.kind === "dodge") this.roll();
   }
 
   /** 11/15 칸 자동 켜기·끄기 (slot) / 전체 스위치 ("all" — 칸마다 정한 것은 그대로). 바뀌면 화면(HuntLobby)이 캐릭터에 저장한다 */
@@ -857,7 +879,8 @@ export class HuntScene extends RpgScene {
    */
   private attack(press: boolean): void {
     if (this.died || this.status.has("freeze", this.now)) return;
-    if (this.now < this.atkReadyAt || this.now < this.rootUntil) {
+    // 11/17 구르는 중에 누른 공격은 버퍼에 (일어나는 순간 나간다)
+    if (this.now < this.atkReadyAt || this.now < this.rootUntil || rolling(this.dodge, this.now)) {
       if (press) this.atkBuffered = true;
       return;
     }
@@ -1082,9 +1105,13 @@ export class HuntScene extends RpgScene {
     this.hurtMonster(m, dmg, crit, nth, opts);
     if (this.cards && opts.basic) this.cards.onBasicHit(m);
     else if (this.cards && opts.skill) this.cards.onSkillHit(m);
-    // 넋 거두기 패시브: 준 피해의 일부를 HP로 (한 번에 최대 HP의 3%까지)
-    if (this.mods.steal > 0 && !this.died && this.hp < d.maxHp) {
-      this.hp = Math.min(d.maxHp, this.hp + Math.min(d.maxHp * 0.03, dmg * this.mods.steal) * this.curse.healMul);
+    // 넋 거두기 패시브: 준 피해의 일부를 HP로 (한 번에 최대 HP의 3%, 광역기·소환은 3분의 1, 1초에 모두 합쳐 5%까지 — lib/rpg/lifesteal)
+    const stolen =
+      this.mods.steal > 0 && !this.died && this.hp < d.maxHp
+        ? stealHeal(this.stealBook, this.now, { dmg, steal: this.mods.steal, maxHp: d.maxHp, missing: d.maxHp - this.hp, kind: opts.summon ? "summon" : opts.aoe ? "aoe" : "single" })
+        : 0;
+    if (stolen > 0) {
+      this.hp = Math.min(d.maxHp, this.hp + stolen * this.curse.healMul);
       this.mv.drainWisp({ x: m.x, y: m.y - MONSTERS[m.id].size / 2 }, { x: this.px, y: this.py });
       this.passiveSnd("so_drain", 260);
     }
@@ -1322,7 +1349,8 @@ export class HuntScene extends RpgScene {
     const def = skillById(id);
     if (!def || def.kind !== "active" || lv < 1) return false;
     if ((this.skillReady[id] ?? 0) > this.now) return false;
-    if (this.died || this.status.has("freeze", this.now)) return false;
+    // 11/17 구르는 중에는 스킬을 쓰지 않는다 (몸 옮기기 스킬과 겹치지 않게 — 자동 스킬은 구른 뒤에 다시 본다)
+    if (this.died || this.status.has("freeze", this.now) || rolling(this.dodge, this.now)) return false;
     if (this.status.has("silence", this.now)) {
       if (quiet) return false;
       this.flash("침묵 상태라 스킬을 못 써요", 900);
@@ -1993,7 +2021,7 @@ export class HuntScene extends RpgScene {
     this.passiveSnd("so_lantern", 120, "tick");
     this.passiveSnd("so_kinship", 1500);
     if (!t.group || t.group.closed) t.group = this.dmg.group(t.sprite.x, t.sprite.y - 36, "soul", t.everyMs + 500, 3);
-    this.strike(best, t.atkPct * this.dv.skillPower * (1 + this.mods.summonPct), true, 0, { skill: "soul", kb: 0.5, weight: 1, group: t.group });
+    this.strike(best, t.atkPct * this.dv.skillPower * (1 + this.mods.summonPct), true, 0, { skill: "soul", kb: 0.5, weight: 1, group: t.group, summon: true });
   }
 
   private potionLeft(id: string): number {
@@ -2028,10 +2056,58 @@ export class HuntScene extends RpgScene {
     this.sfx.play("potion", 0.7);
   }
 
+  /**
+   * 11/17 낙법: 보는 쪽(방향 입력이 있으면 그쪽)으로 0.4초 구른다. 구르는 동안은 몬스터 공격·장판·투사체를 받지 않는다 (hurtPlayer·투사체 판정).
+   * 쿨타임 6초 (lib/rpg/dodge). 쓰러짐·빙결·묶임(엘리베이터·시전 중)이면 못 구른다. 쿨타임 중에는 조용히 넘긴다 (HUD 칸에 남은 초가 보인다)
+   */
+  private roll(): void {
+    const now = this.now;
+    if (this.died || this.endSnap || this.lift || now < this.rootUntil || this.status.has("freeze", now)) return;
+    const next = startDodge(this.dodge, now);
+    if (!next) return;
+    this.dodge = next;
+    const a0 = this.axis();
+    const a = this.status.has("confuse", now) ? { x: -a0.x, y: -a0.y } : a0;
+    this.rollVec = rollDir(a, this.face);
+    this.setFace(this.rollVec.x, this.rollVec.y);
+    this.faceLockUntil = 0;
+    this.rollDone = 0;
+    this.rollSaid = false;
+    this.dodgeFx.start(this.px, this.py, this.rollVec);
+    this.sfx.synth("dodge", dodgeSound(), 120);
+  }
+
+  /** 낙법으로 굴러 가는 중 (매 프레임): 지난 프레임부터 지금까지 굴러 간 만큼 옮긴다 (벽·소품 충돌은 걷기와 같다). 굴렀으면 true */
+  private rollStep(now: number): boolean {
+    if (this.rollDone >= 1) return false;
+    const t = rollT(this.dodge, now);
+    const done = rollTravel(t);
+    const step = DODGE_DIST * (done - this.rollDone);
+    this.rollDone = done;
+    const p = {
+      x: Phaser.Math.Clamp(this.px + this.rollVec.x * step, WALL + PLAYER_R, W - WALL - PLAYER_R),
+      y: Phaser.Math.Clamp(this.py + this.rollVec.y * step, WALL + PLAYER_R + 8, H - WALL - 2),
+    };
+    for (const o of this.obstacles) this.pushOut(p, o, PLAYER_R);
+    this.arena.collide(p, PLAYER_R);
+    this.px = p.x;
+    this.py = p.y;
+    if (done >= 1) this.dodgeFx.land(this.px, this.py, this.rollVec);
+    return true;
+  }
+
   /** 맞으면 true (무적·회피 시간·보호막이 다 막으면 false). src가 있으면 상태 이상을 굴린다 */
   private hurtPlayer(dmg: number, src?: HitSrc): boolean {
     // 판이 끝나 드롭만 줍는 중에는 다치지 않는다 (지형 함정이 결과를 바꾸지 않게)
     if (this.died || this.endSnap || this.now < this.hurtUntil || this.buff("invuln")) return false;
+    // 11/17 낙법으로 구르는 중: 무엇이든 받지 않는다 (카드 「반차」 같은 첫 공격 막기도 쓰지 않는다). 한 번 구를 때 "회피"를 한 번 띄운다
+    if (rolling(this.dodge, this.now)) {
+      if (!this.rollSaid) {
+        this.rollSaid = true;
+        this.floatText(this.px, this.py - 22, "회피", "#d8ecff", 10);
+      }
+      return false;
+    }
     // 11/15 테스트 서버 슈퍼 계정의 야근 빌딩 구경 (무적) — 화면이 슈퍼 계정에만 켠다 (lib/rpg/types RpgPlay.tower.boost)
     if (this.play.tower?.boost) return false;
     this.hurtUntil = this.now + HURT_IFRAME_MS;
@@ -2652,12 +2728,14 @@ export class HuntScene extends RpgScene {
       const frozen = this.status.has("freeze", now);
       const a0 = this.axis();
       const a = this.status.has("confuse", now) ? { x: -a0.x, y: -a0.y } : a0;
-      const moving = Math.hypot(a.x, a.y) > 0.15 && now >= this.rootUntil && !frozen;
+      // 11/17 낙법으로 구르는 동안은 걷기 입력·지형 밀림 없이 구르는 쪽으로만
+      const rolled = this.rollStep(now);
+      const moving = !rolled && Math.hypot(a.x, a.y) > 0.15 && now >= this.rootUntil && !frozen;
       // 40번 지형: 늪·덩굴은 느리게, 웅덩이는 미끄럽게, 컨베이어·문·바람은 밀어낸다
       const spd = moving ? d.move * (1 + this.buff("so_swift")) * this.status.moveMul(now) * this.arena.speedMul(this.px, this.py) : 0;
-      const v0 = this.arena.playerVelocity(a.x * spd, a.y * spd, this.px, this.py, dt, now);
+      const v0 = rolled ? { x: 0, y: 0 } : this.arena.playerVelocity(a.x * spd, a.y * spd, this.px, this.py, dt, now);
       // 11/15 냉각수 웅덩이: 미끄러진다
-      const v = this.theme?.playerVelocity ? this.theme.playerVelocity(v0, dt) : v0;
+      const v = !rolled && this.theme?.playerVelocity ? this.theme.playerVelocity(v0, dt) : v0;
       if (v.x || v.y) {
         this.px = Phaser.Math.Clamp(this.px + v.x * dt, WALL + PLAYER_R, W - WALL - PLAYER_R);
         this.py = Phaser.Math.Clamp(this.py + v.y * dt, WALL + PLAYER_R + 8, H - WALL - 2);
@@ -2672,9 +2750,10 @@ export class HuntScene extends RpgScene {
         if (now >= this.faceLockUntil) this.setFace(a.x, a.y);
         this.walkT += delta;
       }
-      this.movingNow = moving;
-      if (this.me) this.me.apply(moving ? "walk" : "idle", (this.dirRow as DirId) ?? DIR.down, this.time.now);
-      else this.player.setFrame(avFrame(this.dirRow, moving ? 2 + (Math.floor(this.walkT / 120) % 4) : Math.floor(now / 500) % 2));
+      this.movingNow = moving || rolled;
+      if (rolled) this.walkT += delta;
+      if (this.me) this.me.apply(this.movingNow ? "walk" : "idle", (this.dirRow as DirId) ?? DIR.down, this.time.now);
+      else this.player.setFrame(avFrame(this.dirRow, this.movingNow ? 2 + (Math.floor(this.walkT / 120) % 4) : Math.floor(now / 500) % 2));
       // 버퍼에 한 번 있거나, 공격 키·마우스·손가락을 누르고 있으면 쿨다운이 끝나는 순간 친다
       const held = this.holdOn || this.keys.has("Space") || this.keys.has("KeyJ");
       // 11/15 야근 빌딩도 기본 공격은 직접 (자동 공격 없음) — 서서 치면 멈추면 집중으로 더 빠르다
@@ -2693,6 +2772,12 @@ export class HuntScene extends RpgScene {
       this.me.sync(this.time.now, 1 / this.cameras.main.zoom);
     }
     this.player.setPosition(Math.round(this.px), Math.round(this.py)).setDepth(this.py);
+    // 11/17 낙법: 굴러가는 쪽으로 몸을 숙였다 일어나며 살짝 뜬다 + 잔상 (AvatarView.sync가 매 프레임 기울기를 되돌리므로 그 뒤에 입힌다)
+    if (rolling(this.dodge, now)) {
+      const pose = rollPose(rollT(this.dodge, now), this.rollVec.x < -0.2 ? -1 : 1, this.data0.reduced);
+      this.player.setAngle(pose.angle).setY(this.player.y - pose.lift);
+      this.dodgeFx.trail(this.player, now);
+    } else if (!this.me && this.player.angle !== 0) this.player.setAngle(0);
     this.player.setAlpha(this.died ? 0.5 : this.buff("invuln") ? 0.55 + 0.3 * Math.sin(now / 60) : 1);
     this.pShadow.setPosition(this.px, this.py);
     this.held?.update(Math.round(this.px), Math.round(this.py), this.face.x, this.face.y, this.py, this.player.alpha, now);
@@ -2717,7 +2802,7 @@ export class HuntScene extends RpgScene {
             this.passiveSnd("so_friend", 120, "tick");
             this.passiveSnd("so_kinship", 1500);
             if (!h.group || h.group.closed) h.group = this.dmg.group(h.sprite.x, h.sprite.y - 30, "soul", 1300, 3);
-            this.strike(t, this.buff("so_friend") * this.dv.skillPower * (1 + this.mods.summonPct), true, 0, { skill: "soul", weight: 1, group: h.group });
+            this.strike(t, this.buff("so_friend") * this.dv.skillPower * (1 + this.mods.summonPct), true, 0, { skill: "soul", weight: 1, group: h.group, summon: true });
           }
         }
       }
@@ -2772,7 +2857,8 @@ export class HuntScene extends RpgScene {
       s.x += (s.vx + wind + (tw?.x ?? 0)) * dt;
       s.y += (s.vy + (tw?.y ?? 0)) * dt;
       s.sprite.setPosition(s.x, s.y);
-      if (Math.hypot(s.x - this.px, s.y - (this.py - 8)) < 8) {
+      // 11/17 낙법으로 구르는 중이면 투사체가 몸을 지나간다
+      if (!rolling(this.dodge, now) && Math.hypot(s.x - this.px, s.y - (this.py - 8)) < 8) {
         s.until = 0;
         this.hurtPlayer(damage(s.dmg, 1, d.def, Math.random(), false), s.src);
       }
@@ -2817,6 +2903,8 @@ export class HuntScene extends RpgScene {
       skillSp: this.play.hotbar.map((id) => (id ? (skillById(id)?.sp(this.play.skills[id] ?? 1) ?? 0) : 0)),
       auto: { slots: this.play.hotbar.map((id, i) => i < SKILL_SLOTS && !!id && this.auto.ids.includes(id)), on: this.auto.on, keepUlt: this.auto.keepUlt },
       attack: Math.max(0, (this.atkReadyAt - now) / this.atkCdMs),
+      // 11/17 낙법 쿨타임 (스킬 칸 옆 칸·폰 구르기 버튼)
+      dodge: dodgeCooldown(this.dodge, now),
       peers: this.presence ? this.peers || undefined : undefined,
       attackBuffered: this.atkBuffered,
       potions: Object.fromEntries(Object.keys(this.play.potions).map((id) => [id, this.potionLeft(id)])),

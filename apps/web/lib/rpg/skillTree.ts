@@ -5,6 +5,7 @@
 // 각 스킬: 선행 스킬(필요 랭크), 단(아래 단에 쓴 포인트로 열림), 최대 랭크, 랭크별 수치(SKILL_FX), 액티브/패시브.
 // 게임(효과)과 UI(설명)·서버(검증, skillRules.ts)가 같이 쓴다. 이 파일은 catalog.ts의 타입만 가져온다 (순환 없음).
 import type { IconArt } from "./catalog";
+import { STEAL_SEC_CAP } from "./lifesteal";
 
 export const BRANCHES = ["ember", "frost", "soul"] as const;
 export type BranchId = (typeof BRANCHES)[number];
@@ -117,6 +118,8 @@ export type SkillDef = {
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 const sec = (ms: number) => `${Math.round(ms / 100) / 10}초`;
+/** 소수 한 자리 % (흡혈 1.5%처럼 반 퍼센트가 있는 값) */
+const pct1 = (n: number) => `${Math.round(n * 1000) / 10}%`;
 
 /** 스킬 수치 (랭크 lv). 게임(효과)과 UI(설명)·테스트(밸런스)가 같이 쓴다 */
 // 11/15 스킬 피해 손질: 한 번이 평타 한 방보다 확실히 세게 (단일기·한 점 폭발은 평타의 3~5배, 넓은 광역은 그대로 마리당 3~4배).
@@ -150,12 +153,14 @@ export const SKILL_FX = {
   // ── 넋 인도자 ──
   so_wisp: (lv: number) => ({ n: lv >= 4 ? 3 : 2, mult: 0.9 + 0.14 * lv, range: 130 }),
   so_lamp: (lv: number) => ({ healPct: 0.1 + 0.04 * lv, rootMs: 500 }),
-  so_drain: (lv: number) => ({ steal: 0.01 * lv }),
+  // 11/17 흡혈 너프의 보상: 레벨당 1% → 1.5% (대신 광역기·소환 3분의 1, 1초에 최대 HP 5%까지 — lib/rpg/lifesteal)
+  so_drain: (lv: number) => ({ steal: 0.015 * lv }),
   so_swift: (lv: number) => ({ move: 0.15 + 0.05 * lv, aspd: 0.08 + 0.04 * lv, durMs: 8000 }),
   so_friend: (lv: number) => ({ durMs: 10_000 + 2000 * lv, atkPct: 0.35 + 0.1 * lv, everyMs: 800 }),
   so_chain: (lv: number) => ({ radius: 96, stunMs: 500 + 120 * lv, vuln: 0.05 * lv, vulnMs: 3000, mult: 0.9 + 0.16 * lv }),
-  so_veil: (lv: number) => ({ dist: 72, safeMs: 800 + 300 * lv }),
-  so_harvest: (lv: number) => ({ radius: 54, ticks: 3, gapMs: 400, mult: 0.85 + 0.15 * lv, healPerHit: 0.015, healCap: 0.08, reach: 130 }),
+  // 11/17 흡혈 너프 보상: 무적 0.8초 + 0.3초/레벨 → 1초 + 0.35초/레벨
+  so_veil: (lv: number) => ({ dist: 72, safeMs: 1000 + 350 * lv }),
+  so_harvest: (lv: number) => ({ radius: 54, ticks: 3, gapMs: 400, mult: 0.85 + 0.15 * lv, healPerHit: 0.015, healCap: 0.12, reach: 130 }),
   so_lantern: (lv: number) => ({ durMs: 8000 + 1500 * lv, atkPct: 0.4 + 0.1 * lv, everyMs: 700, range: 110 }),
   so_procession: (lv: number) => ({ screen: true, hitAt: [900, 1100, 1300, 1500, 1760] as const, castMs: 2300, mult: 0.55 + 0.1 * lv, healPct: 0.1 + 0.05 * lv }),
   so_kinship: (lv: number) => ({ summonPct: 0.15 * lv, durPct: 0.1 * lv }),
@@ -548,7 +553,8 @@ export const SKILLS: readonly SkillDef[] = [
     maxLevel: 5,
     requires: [{ id: "so_wisp", level: 1 }],
     ...passive,
-    describe: (lv) => `내가 준 피해의 ${pct(FX.so_drain(lv).steal)}만큼 HP가 차요.`,
+    describe: (lv) =>
+      `내가 준 피해의 ${pct1(FX.so_drain(lv).steal)}만큼 HP가 차요. 광역기와 소환이 맞힌 건 3분의 1만 차고, 모두 합쳐 1초에 최대 HP의 ${pct(STEAL_SEC_CAP)}까지예요.`,
     art: { shape: "sk_drain", main: S.color, accent: 0xe84a6a },
   },
   {

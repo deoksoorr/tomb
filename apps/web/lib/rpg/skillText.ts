@@ -3,6 +3,7 @@
 // 시너지는 실제 규칙(패시브 보정·약화·둔화·끌어오기·공격력 버프)에 있는 것만 적는다. 판정은 게임·서버가 한다.
 import { BRANCH_INFO, SKILL_FX, skillById, SKILLS, TIERS, type SkillDef, type SkillId } from "./skillTree";
 import { spentIn, tierGate, type Alloc } from "./skillRules";
+import { STEAL_HIT_CAP, STEAL_SEC_CAP } from "./lifesteal";
 
 /** 스킬 유형 태그 (아이콘 + 글자) */
 export type SkillTypeTag =
@@ -256,7 +257,7 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     synergy: [{ with: ["fr_collar"], text: "최대 HP가 늘면 회복량도 커져요" }],
   },
   so_drain: {
-    summary: "배워 두면 내가 준 피해의 일부만큼 HP가 차요. 한 번에 최대 HP의 3%까지예요.",
+    summary: "배워 두면 내가 준 피해의 일부만큼 HP가 차요. 한 번에 최대 HP의 3%, 1초에 모두 합쳐 5%까지예요. 광역기와 소환이 맞힌 건 3분의 1만 차요.",
     flavor: "넋은 가져가되, 조금은 나눠 받는다.",
     types: ["heal"],
     synergy: [{ with: ["fr_blizzard", "em_brazier", "so_wisp"], text: "자주 여러 번 때리는 스킬과 같이 쓰면 HP가 꾸준히 차요" }],
@@ -440,7 +441,12 @@ function effectRows(id: SkillId, lv: number): [string, string][] {
       return [["회복", `최대 HP의 ${pct(f.healPct)} + INT×3`], ["멈춰 서기", sec(f.rootMs)]];
     }
     case "so_drain":
-      return [["흡혈", `준 피해의 ${pct(SKILL_FX.so_drain(lv).steal)}`], ["한 번 최대", "최대 HP의 3%"]];
+      return [
+        ["흡혈", `준 피해의 ${pct(SKILL_FX.so_drain(lv).steal)}`],
+        ["한 번 최대", `최대 HP의 ${pct(STEAL_HIT_CAP)}`],
+        ["1초 최대", `최대 HP의 ${pct(STEAL_SEC_CAP)} (모든 맞힘을 합쳐서)`],
+        ["광역기와 소환", "3분의 1만"],
+      ];
     case "so_swift": {
       const f = SKILL_FX.so_swift(lv);
       return [["이동 속도", `+${pct(f.move)}`], ["공격 속도", `+${pct(f.aspd)}`], ["지속", sec(f.durMs)]];

@@ -1,10 +1,13 @@
 import * as Phaser from "phaser";
-import { ambienceAt, timePhase } from "@/lib/ambience";
-import { ART_H, buildCaption, buildInterior, buildSky, LAYERS, VIEW_MAX, WIN_BOT, WIN_TOP, type LayerSpec } from "./busRideArt";
+import { ambienceAt, parseAmbienceOverride, timePhase } from "@/lib/ambience";
+import { ART_H, buildCaption, buildInterior, buildSky, HORIZON, LAYERS, VIEW_MAX, WIN_BOT, WIN_TOP, type LayerSpec } from "./busRideArt";
 import { GULL_FRAMES, LEAF_COLORS, rideBake, type RideBake } from "./busRideBake";
 import { captionAlpha, captionAt, distanceAt, lightsOn, rideReversed, segmentAt, segmentsFor, shakeAt, skyColors, starsOn, strapAngle, type RideSegment } from "./busRideMath";
 import { css } from "../sprites/pixel";
 import { BUS_RIDE_MS, BUS_RIDE_SCENE, BUS_TEX_PREFIX, type BusRideControl, type BusRideData, type BusRoute } from "./busTypes";
+// 11/17 창밖 날씨: 세기는 busWeather(순수), 흔들림은 마을 날씨와 같은 노이즈
+import { dropHoldMs, dropVelocity, fallVelocity, glassDropCount, NO_RIDE_WEATHER, rideWeather, type RideWeather } from "./busWeather";
+import { gust, pulse } from "../world/weatherNoise";
 
 // 8초 버스 창밖 연출 (화면 전체). 버스 안 창가 자리에서 본 창밖: 여러 겹 파노라마가 시차로 흐르고(busRideArt),
 // 가는 길은 마을 → 고속도로 → 단풍 국도 → 숲길 → 「언젠가 캠핑장」 표지판 앞에서 멈춘다 (돌아오는 길은 반대, 끝은 마을 정류장).
@@ -13,6 +16,8 @@ import { BUS_RIDE_MS, BUS_RIDE_SCENE, BUS_TEX_PREFIX, type BusRideControl, type 
 // 덜 구워졌으면 검은 화면에서 프레임마다 조금씩 마저 굽고 시작해요. 하늘·버스 안만 장면이 굽고 끝날 때 지워요.
 // 끝나거나 skip()이면 짧게 어두워진 뒤 onDone을 한 번 부르고 스스로 멈춘다.
 // 11/16 바닷가 노선(route "sea"): 마을 → 고속도로 → 해송 숲 길 → 바닷길(방파제·등대) → 「달물결 포구」 팻말. 낙엽 대신 갈매기가 나란히 날아요.
+// 11/17 마을 날씨도 창밖에 (같은 ambienceAt — QA ?weather 포함): 비는 빗줄기 + 창에 맺혀 흘러내리는 물방울, 눈은 날리는 눈발,
+// 안개는 먼 산·중간 층이 흐려져요. 그림은 busRideBake가 미리 굽고, 날씨가 없으면 아무것도 만들지 않아요.
 
 const FADE_IN_MS = 350;
 const HOLD_MS = 450;
@@ -43,6 +48,11 @@ const D = {
 
 type LayerView = { spec: LayerSpec; img: Phaser.GameObjects.Image; lights: Phaser.GameObjects.Image | null };
 type Leaf = { img: Phaser.GameObjects.Image; x: number; y: number; vy: number; phase: number };
+/** 11/17 창에 맺힌 물방울 (x·y는 창 안쪽 그림 픽셀). 맺혀 있다가 holdUntil이 지나면 흘러내리며 자국을 남긴다 */
+type GlassDrop = { img: Phaser.GameObjects.Image; trail: Phaser.GameObjects.Image; x: number; y: number; sx: number; sy: number; holdUntil: number; running: boolean; born: number; seed: number };
+
+/** 물방울 자국 최대 길이 (그림 px) */
+const TRAIL_MAX = 26;
 
 export class BusRideScene extends Phaser.Scene implements BusRideControl {
   private ride!: BusRideData;
@@ -95,6 +105,17 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
    */
   private back!: Phaser.GameObjects.Rectangle;
   private lastNear = 0;
+  /** 11/17 창밖 날씨 세기 · 겹 (없는 날씨는 null) · 노이즈 시각 기준(초) */
+  private wx: RideWeather = NO_RIDE_WEATHER;
+  private rainFar: Phaser.GameObjects.TileSprite | null = null;
+  private rainNear: Phaser.GameObjects.TileSprite | null = null;
+  private snowFar: Phaser.GameObjects.TileSprite | null = null;
+  private snowNear: Phaser.GameObjects.TileSprite | null = null;
+  private fogBank: Phaser.GameObjects.TileSprite | null = null;
+  private fogFar: Phaser.GameObjects.Image | null = null;
+  private fogNear: Phaser.GameObjects.Image | null = null;
+  private drops: GlassDrop[] = [];
+  private wt0 = 0;
 
   constructor() {
     super(BUS_RIDE_SCENE);
@@ -119,6 +140,10 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
     this.interior = null;
     this.keys = [];
     this.lastNear = 0;
+    this.wx = NO_RIDE_WEATHER;
+    this.rainFar = this.rainNear = this.snowFar = this.snowNear = this.fogBank = null;
+    this.fogFar = this.fogNear = null;
+    this.drops = [];
   }
 
   create(): void {
@@ -145,7 +170,11 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
   private build(): void {
     const { hour, leg, reduced } = this.ride;
     const bake = this.bake;
-    const amb = ambienceAt(Date.now(), { hour });
+    // 11/17 날씨는 마을과 같은 시계·같은 QA 덮어쓰기 (?weather) — 시각은 버스를 부른 쪽이 정한 hour
+    const amb = ambienceAt(Date.now(), { ...parseAmbienceOverride(typeof window === "undefined" ? "" : window.location.search), hour });
+    this.wx = rideWeather(amb.weather, amb.intensity);
+    this.wt0 = (Date.now() / 1000) % 100_000;
+    if (this.wx.rain || this.wx.snow || this.wx.fog) bake.ensureWeather();
     const phase = timePhase(hour);
     this.night = lightsOn(hour);
     this.lightAlpha = this.night ? 0.5 + 0.45 * amb.palette.lightGlow : 0;
@@ -174,6 +203,10 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
       this.outside.add(img);
       if (lights) this.outside.add(lights);
       this.layers.push({ spec, img, lights });
+      // 11/17 날씨 겹: 먼 산 뒤로 안개 둑, 중간 층 위로 안개 막·먼 빗줄기·먼 눈발, 가까운 층 위로 옅은 안개
+      if (spec.id === "far") this.addFar(tint);
+      else if (spec.id === "mid") this.addMid(tint);
+      else if (spec.id === "near" && this.wx.fog > 0) this.fogNear = this.addTo(this.add.image(0, 0, bake.key("fog")).setOrigin(0, 0).setTint(this.fogTint(tint)));
     }
 
     this.sign = this.add.image(0, 0, bake.key(`sign-${leg}`)).setOrigin(0, 1).setTint(tint);
@@ -188,6 +221,16 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
       this.outside.add(img);
       this.leaves.push({ img, x: Math.random(), y: Math.random(), vy: 0.08 + Math.random() * 0.1, phase: Math.random() * 6 });
     }
+    // 11/17 가까운 빗줄기·눈발 (낙엽·갈매기 앞), 창에 맺히는 물방울 (버스 안 그림 바로 아래 — 창틀·기둥이 가린다)
+    if (this.wx.rain > 0.3 && !reduced) this.rainNear = this.addTo(this.tile(`rain-near-${this.rev ? "r" : "l"}`).setTint(this.rainTint()));
+    if (this.wx.snow > 0.15 && !reduced) this.snowNear = this.addTo(this.tile("snow-near").setTint(this.snowTint()));
+    const nd = glassDropCount(this.wx.rain, reduced);
+    for (let i = 0; i < nd; i++) {
+      const trail = this.add.image(0, 0, bake.key("trail")).setOrigin(0.5, 1).setDepth(D.fills + 0.4).setVisible(false);
+      const img = this.add.image(0, 0, bake.key(`drop-${i % 3}`)).setOrigin(0.5, 0.5).setDepth(D.fills + 0.5).setAlpha(0);
+      const d: GlassDrop = { img, trail, x: 0, y: 0, sx: 0, sy: 0, holdUntil: 0, running: false, born: 0, seed: 300 + i * 7 };
+      this.drops.push(d);
+    }
     const beamKey = bake.key("beam");
     for (let i = 0; i < 3; i++) {
       const b = this.add.image(0, 0, beamKey).setOrigin(0.5, 0).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0);
@@ -200,7 +243,136 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
     this.fade = this.add.rectangle(0, 0, 1, 1, 0x000000).setOrigin(0, 0).setDepth(D.fade).setAlpha(1);
 
     this.layout();
+    // 물방울은 창 폭을 안 다음 흩뿌린다 (처음엔 맺혀 있는 시간을 엇갈리게)
+    for (const d of this.drops) this.respawnDrop(d, -Math.random() * 2500);
     this.scale.on(Phaser.Scale.Events.RESIZE, this.layout, this);
+  }
+
+  // ── 11/17 창밖 날씨 ──
+
+  private addTo<T extends Phaser.GameObjects.GameObject>(o: T): T {
+    this.outside.add(o);
+    return o;
+  }
+
+  /** 미리 구운 날씨 타일 한 겹 (창 크기·배율은 layout) */
+  private tile(name: string): Phaser.GameObjects.TileSprite {
+    return this.add
+      .tileSprite(0, 0, 16, 16, this.bake.key(name))
+      .setOrigin(0, 0)
+      .setTilePosition(Math.random() * 64, Math.random() * 64);
+  }
+
+  /** 먼 산 바로 뒤에 깔리는 안개 둑 (구름 그림을 옅게 — 천천히 흐른다) */
+  private addFar(tint: number): void {
+    if (this.wx.fog <= 0) return;
+    this.fogBank = this.addTo(this.tile("clouds").setTint(this.fogTint(tint)));
+  }
+
+  /** 중간 층 위: 안개 막 (먼 산·중간 집이 흐려진다), 먼 빗줄기·눈발 */
+  private addMid(tint: number): void {
+    if (this.wx.fog > 0) this.fogFar = this.addTo(this.add.image(0, 0, this.bake.key("fog")).setOrigin(0, 0).setTint(this.fogTint(tint)));
+    if (this.wx.rain > 0) this.rainFar = this.addTo(this.tile(`rain-far-${this.rev ? "r" : "l"}`).setTint(this.rainTint()));
+    if (this.wx.snow > 0) this.snowFar = this.addTo(this.tile("snow-far").setTint(this.snowTint()));
+  }
+
+  /** 안개 색: 밝은 회색에 시간대 색조를 곱한다 (노을이면 붉게, 밤이면 어둡게) */
+  private fogTint(tint: number): number {
+    const ch = (sh: number) => Math.round((((0xd6dce2 >> sh) & 255) * ((tint >> sh) & 255)) / 255) << sh;
+    return (ch(16) | ch(8) | ch(0)) >>> 0;
+  }
+
+  private rainTint(): number {
+    return this.night ? 0x7d879c : 0xd4def0;
+  }
+
+  private snowTint(): number {
+    return this.night ? 0xb8c0d8 : 0xffffff;
+  }
+
+  /** 물방울을 창 위쪽 아무 데나 새로 맺히게 (now: 장면 ms) */
+  private respawnDrop(d: GlassDrop, now: number): void {
+    const winH = WIN_BOT - WIN_TOP;
+    d.x = 4 + Math.random() * Math.max(1, this.viewW - 8);
+    d.y = 3 + Math.random() * winH * 0.7;
+    d.sx = d.x;
+    d.sy = d.y;
+    d.running = false;
+    d.born = now;
+    d.holdUntil = now + dropHoldMs(this.wx.rain, Math.random());
+    d.seed += 13;
+    d.trail.setVisible(false);
+  }
+
+  /**
+   * 날씨 겹 움직이기 (매 프레임). s: 노이즈 시각(초), v: 가까운 층 빠르기(그림 px/s), way: 풍경이 흐르는 쪽.
+   * 세기는 마을처럼 몇 초씩 세졌다 잦아들고(pulse), 바람(gust)이 기울기·흩날림을 흔든다
+   */
+  private updateWeather(ms: number, dt: number, v: number, way: 1 | -1): void {
+    const wx = this.wx;
+    if (!wx.rain && !wx.snow && !wx.fog) return;
+    const reduced = this.ride.reduced;
+    const g = reduced ? 0.4 : 1;
+    const s = this.wt0 + ms / 1000;
+    const wind = gust(s / 7, 11) * g;
+    const k = reduced ? 0.35 : 1;
+    const scroll = (t: Phaser.GameObjects.TileSprite | null, vel: { x: number; y: number }, a: number) => {
+      if (!t) return;
+      t.tilePositionX = (t.tilePositionX + vel.x * k * dt) % 64;
+      t.tilePositionY = (t.tilePositionY - vel.y * k * dt) % 64;
+      t.setAlpha(a);
+    };
+    if (wx.rain) {
+      const ra = wx.rain * pulse(s, 23, 0.35 * g, 9);
+      scroll(this.rainFar, fallVelocity("rain", false, v, way, wind), ra * (this.night ? 0.4 : 0.5));
+      scroll(this.rainNear, fallVelocity("rain", true, v, way, wind), ra * (this.night ? 0.45 : 0.6));
+    }
+    if (wx.snow) {
+      const sa = wx.snow * pulse(s, 37, 0.25 * g, 11);
+      scroll(this.snowFar, fallVelocity("snow", false, v, way, wind), sa * 0.8);
+      scroll(this.snowNear, fallVelocity("snow", true, v, way, wind), sa * 0.95);
+    }
+    if (wx.fog) {
+      // 짙기가 천천히 출렁이고, 안개 둑은 먼 산보다 조금 빨리 흐른다
+      const fa = wx.fog * (1 + 0.15 * g * gust(s / 6, 61));
+      this.fogFar?.setAlpha(Math.min(0.85, fa * 0.72));
+      this.fogNear?.setAlpha(fa * 0.2);
+      if (this.fogBank) {
+        this.fogBank.tilePositionX += way * (v * 0.25 + 3 + 2 * wind) * dt;
+        this.fogBank.setAlpha(Math.min(0.9, fa * 0.75));
+      }
+    }
+    // 창 물방울: 맺혀 있다가 흘러내린다 (버스가 빠를수록 뒤로 비스듬히). 창 아래나 옆으로 나가면 다른 자리에 새로 맺힌다
+    if (!this.drops.length) return;
+    const S = this.S;
+    const a0 = Math.min(1, wx.rain * 1.2) * (this.night ? 0.6 : 0.9);
+    const winH = WIN_BOT - WIN_TOP;
+    for (const d of this.drops) {
+      if (ms < d.born) continue;
+      if (!d.running && ms >= d.holdUntil) d.running = true;
+      if (d.running) {
+        const vel = dropVelocity(v, way, gust(ms / 700, d.seed));
+        d.x += vel.x * dt;
+        d.y += vel.y * dt;
+        if (d.y > winH - 3 || d.x < -2 || d.x > this.viewW + 2) {
+          this.respawnDrop(d, ms);
+          continue;
+        }
+        const dx = d.sx - d.x;
+        const dy = d.sy - d.y;
+        const len = Math.min(TRAIL_MAX, Math.hypot(dx, dy));
+        if (len > 1) {
+          d.trail
+            .setVisible(true)
+            .setPosition(Math.round(d.x * S), Math.round(this.offY + (WIN_TOP + d.y) * S))
+            .setRotation(Math.atan2(dx, -dy))
+            .setDisplaySize(S, len * S)
+            .setAlpha(a0 * 0.8);
+        }
+      }
+      const fadeIn = Math.min(1, (ms - d.born) / 300);
+      d.img.setScale(S).setPosition(Math.round(d.x * S), Math.round(this.offY + (WIN_TOP + d.y) * S)).setAlpha(a0 * fadeIn);
+    }
   }
 
   /** E·탭으로 건너뛰기: 짧게 어두워지고 끝 */
@@ -277,6 +449,7 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
         .setRotation(reduced ? 0 : Math.sin(ms * 0.006 + lf.phase) * 0.8)
         .setAlpha(leafW * (this.night ? 0.6 : 0.95));
     }
+    this.updateWeather(ms, dt, v, way as 1 | -1);
     const beamA = w.forest * this.dayLight * 0.2;
     this.beams.forEach((b, i) => b.setAlpha(beamA * (0.75 + 0.25 * Math.sin(ms * 0.0015 + i * 2))));
 
@@ -368,6 +541,10 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
     this.signX = (this.rev ? 0 : this.dist) + this.viewW / 2 - this.sign.width / 2;
     this.sign.setScale(S).setY(y(124));
     this.beams.forEach((b, i) => b.setScale(S).setPosition(Math.round(W * (0.22 + i * 0.3)), y(WIN_TOP)));
+    // 11/17 날씨 겹: 창 전체 (그림 픽셀 단위로 그려 S배 — 창밖 그림과 같은 굵기)
+    for (const t of [this.rainFar, this.rainNear, this.snowFar, this.snowNear]) t?.setPosition(0, y(WIN_TOP)).setSize(Math.ceil(W / S), WIN_BOT - WIN_TOP).setScale(S);
+    this.fogBank?.setPosition(0, y(HORIZON - 34)).setSize(Math.ceil(W / S), 40).setScale(S);
+    for (const f of [this.fogFar, this.fogNear]) f?.setPosition(0, y(WIN_TOP)).setDisplaySize(W, winH);
 
     // 버스 안 (화면 폭마다 다시 굽는다)
     const key = this.tex("interior", buildInterior(this.viewW + 1, this.night));

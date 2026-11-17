@@ -1,5 +1,5 @@
 import type * as Phaser from "phaser";
-import { buildCaption, buildClouds, buildEndSign, buildGull, buildLeaf, buildStars, buildStrap, buildSunbeam, LAYERS, panoramaSteps } from "./busRideArt";
+import { buildCaption, buildClouds, buildDropTrail, buildEndSign, buildFogBand, buildGlassDrop, buildGull, buildLeaf, buildRainTile, buildSnowTile, buildStars, buildStrap, buildSunbeam, LAYERS, panoramaSteps } from "./busRideArt";
 import { bakeOrder, captionAt } from "./busRideMath";
 import { BUS_RIDE_MS, BUS_TEX_PREFIX, type BusLeg, type BusRoute } from "./busTypes";
 
@@ -17,6 +17,21 @@ export const LEAF_COLORS = [0xc8482a, 0xe06a34, 0xe8a83a, 0xd8b040] as const;
 /** 11/16 바닷가 노선 창밖 갈매기 날갯짓 그림 수 */
 export const GULL_FRAMES = 2;
 const LEGS: readonly BusLeg[] = ["toCamp", "toVillage"];
+
+/** 11/17 창밖 날씨 그림 [이름, 굽기] — 빗줄기는 흐르는 쪽마다(l = 풍경이 왼쪽으로, r = 오른쪽으로), 눈발·안개 막·창 물방울·물 자국 */
+const WEATHER_ART: readonly [string, (seed: number) => HTMLCanvasElement][] = [
+  ["rain-far-l", (s) => buildRainTile(s + 11, false, 1)],
+  ["rain-near-l", (s) => buildRainTile(s + 13, true, 1)],
+  ["rain-far-r", (s) => buildRainTile(s + 11, false, -1)],
+  ["rain-near-r", (s) => buildRainTile(s + 13, true, -1)],
+  ["snow-far", (s) => buildSnowTile(s + 17, false)],
+  ["snow-near", (s) => buildSnowTile(s + 19, true)],
+  ["fog", () => buildFogBand()],
+  ["drop-0", () => buildGlassDrop(0)],
+  ["drop-1", () => buildGlassDrop(1)],
+  ["drop-2", () => buildGlassDrop(2)],
+  ["trail", () => buildDropTrail()],
+];
 
 /** 글꼴이 아직이면 글자 그림을 조금 기다려요 (프레임 수) */
 const FONT_WAIT_FRAMES = 90;
@@ -65,6 +80,14 @@ export class RideBake {
   /** 구운 텍스처가 아직 다 있는지 봐요 (누가 지웠으면 다시 구워야 해요) */
   intact(): boolean {
     return !this.finished || LAYERS.every((s) => this.textures.exists(this.key(`l-${s.id}`)));
+  }
+
+  /**
+   * 11/17 날씨 그림이 빠졌으면 지금 구워요 (작은 그림 몇 장이라 한 프레임에 끝나요).
+   * 날씨 그림이 생기기 전에 다 구운 굽기(같은 탭에서 이미 버스를 탔다)도 그대로 쓰게
+   */
+  ensureWeather(): void {
+    for (const [name, build] of WEATHER_ART) if (!this.textures.exists(this.key(name))) this.add(name, build(this.seed));
   }
 
   /** budgetMs 동안만 구워요. 다 구웠으면 true */
@@ -131,6 +154,11 @@ export class RideBake {
     ];
     for (const [name, build] of small) {
       if (!this.textures.exists(this.key(name))) this.add(name, build());
+      yield;
+    }
+    // 11/17 창밖 날씨 (맑은 날에도 미리 — 여행 중에 날씨가 바뀌어도 바로 쓰게)
+    for (const [name, build] of WEATHER_ART) {
+      if (!this.textures.exists(this.key(name))) this.add(name, build(this.seed));
       yield;
     }
     // 글자 그림 (끝 표지판·자막): 글꼴이 늦으면 조금 기다려요

@@ -324,6 +324,8 @@ export type RpgHud = {
   /** 사냥터: 공격 쿨다운 남은 비율 0..1, 쿨다운 중 눌러 둔 공격이 있는지 */
   attack?: number;
   attackBuffered?: boolean;
+  /** 11/17 사냥터 낙법: 남은 쿨타임 비율 0..1과 ms (lib/rpg/dodge) */
+  dodge?: { left: number; ms: number };
   potions: Record<string, number>;
   buffs: { id: string; leftMs: number }[];
   /** 사냥터: 몬스터가 건 상태 이상 (lib/rpg/status) — 체력바 옆에 아이콘·남은 시간 */
@@ -352,5 +354,7 @@ export type RpgAction =
   /** 11/15 칸 자동 켜기·끄기 (칸 우클릭·길게 누르기). "all" = 전체 스위치 (X) */
   | { kind: "auto"; slot: number | "all" }
   | { kind: "potion"; id: string }
+  /** 11/17 사냥터 낙법 (Z·K, 폰 [구르기] 버튼) */
+  | { kind: "dodge" }
   /** 버그 잡기 칸 누르기 */
   | { kind: "slot"; slot: number };

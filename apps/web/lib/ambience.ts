@@ -115,17 +115,16 @@ function hash01(n: number, salt: number): number {
 
 /**
  * 30분 블록마다 바뀌는 결정적 랜덤 날씨. 맑음이 가장 잦고 안개는 드물게.
- * 눈은 11~3월에만 온다 (그 밖의 달에는 흐림). 한겨울(12~2월)에는 비 오는 블록의 절반이 눈으로 바뀐다.
+ * 11/17 비·흐림을 줄이고 맑음·눈을 늘렸다 (사용자 요청 — 한겨울 패턴을 눈 오는 달 모두에): 맑음 55 · 흐림 10 · 안개 7 · 비 5 · 눈 23 (%).
+ * 눈은 11~3월에만 온다 (그 밖의 달에는 눈 자리가 맑음 → 맑음 78).
  * month: QA용 계절 덮어쓰기 (없으면 KST 달)
  */
 export function weatherAt(now: number, month: number = kstMonth(now)): { weather: Weather; intensity: number; nextWeatherAt: number } {
   const block = Math.floor((now + KST_OFFSET) / WEATHER_BLOCK_MS);
   const u = hash01(block, 1);
-  let weather: Weather = u < 0.45 ? "clear" : u < 0.65 ? "cloudy" : u < 0.73 ? "fog" : u < 0.92 ? "rain" : "snow";
-  const deepWinter = month === 12 || month <= 2;
-  const snowy = deepWinter || month === 11 || month === 3;
-  if (weather === "snow" && !snowy) weather = "cloudy";
-  if (weather === "rain" && deepWinter && hash01(block, 3) < 0.5) weather = "snow";
+  let weather: Weather = u < 0.55 ? "clear" : u < 0.65 ? "cloudy" : u < 0.72 ? "fog" : u < 0.77 ? "rain" : "snow";
+  const snowy = month === 12 || month <= 3 || month === 11;
+  if (weather === "snow" && !snowy) weather = "clear";
   return {
     weather,
     intensity: 0.4 + 0.6 * hash01(block, 2),

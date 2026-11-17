@@ -913,3 +913,83 @@ export function buildCaption(text: string): HTMLCanvasElement {
   pixelText(ctx, text, 8, 3, 0xf6eedc);
   return canvas;
 }
+
+// ── 11/17 창밖 날씨 (마을과 같은 날씨 — busWeather) ──
+// 모두 그림 픽셀 단위 흰색으로 그리고, 장면이 낮·밤 색을 틴트로 입혀요. 비·눈은 타일(겹마다 다른 빽빽함), 창에 맺히는 물방울은 작은 그림.
+
+/** 비·눈 타일 한 변 (그림 픽셀) */
+export const WEATHER_TILE = 64;
+
+/**
+ * 빗줄기 타일: 버스가 달리니 위 앞쪽에서 아래 뒤쪽으로 비스듬히 (dir 1 = 풍경이 왼쪽으로 흐르는 쪽, -1 = 반대).
+ * near면 길고 진하게
+ */
+export function buildRainTile(seed: number, near: boolean, dir: 1 | -1): HTMLCanvasElement {
+  const S = WEATHER_TILE;
+  const { canvas, ctx } = makeCanvas(S, S);
+  const r = rng(seed);
+  const n = near ? 26 : 44;
+  for (let i = 0; i < n; i++) {
+    const x0 = Math.floor(r() * S);
+    const y0 = Math.floor(r() * S);
+    const len = near ? 5 + Math.floor(r() * 4) : 3 + Math.floor(r() * 3);
+    const a = (near ? 0.55 : 0.35) + r() * 0.35;
+    // 두 칸 내려갈 때 한 칸 옆으로 (타일 가장자리는 감아서 이어지게)
+    for (let k = 0; k < len; k++) px(ctx, (((x0 - dir * Math.floor(k / 2)) % S) + S) % S, (y0 + k) % S, 1, 1, 0xffffff, a * (0.55 + 0.45 * (k / len)));
+  }
+  return canvas;
+}
+
+/** 눈송이 타일: 먼 겹은 1px 점, 가까운 겹은 2px 덩이와 가끔 십자 */
+export function buildSnowTile(seed: number, near: boolean): HTMLCanvasElement {
+  const S = WEATHER_TILE;
+  const { canvas, ctx } = makeCanvas(S, S);
+  const r = rng(seed);
+  const n = near ? 14 : 34;
+  for (let i = 0; i < n; i++) {
+    const x = Math.floor(r() * (S - 3));
+    const y = Math.floor(r() * (S - 3));
+    if (!near) px(ctx, x, y, 1, 1, 0xffffff, 0.55 + r() * 0.45);
+    else if (r() < 0.25) {
+      px(ctx, x + 1, y, 1, 3, 0xffffff, 0.9);
+      px(ctx, x, y + 1, 3, 1, 0xffffff, 0.9);
+    } else px(ctx, x, y, 2, 2, 0xffffff, 0.75 + r() * 0.25);
+  }
+  return canvas;
+}
+
+/** 안개 막 (위 → 아래 1px 폭). 지평선 둘레가 가장 짙고 하늘·땅 쪽은 옅게 */
+export function buildFogBand(): HTMLCanvasElement {
+  const h = WIN_BOT - WIN_TOP;
+  const { canvas, ctx } = makeCanvas(1, h);
+  for (let y = 0; y < h; y++) {
+    const d = (WIN_TOP + y - HORIZON) / 26;
+    px(ctx, 0, y, 1, 1, 0xffffff, 0.45 + 0.55 * Math.exp(-d * d));
+  }
+  return canvas;
+}
+
+/** 창에 맺힌 물방울 (size 0 작게 · 1 보통 · 2 크게): 맑은 몸 + 위 왼쪽 반짝 + 아래 오른쪽 그늘 테 */
+export function buildGlassDrop(size: 0 | 1 | 2): HTMLCanvasElement {
+  const w = 3 + size;
+  const h = 4 + size;
+  const { canvas, ctx } = makeCanvas(w, h);
+  // 둥근 몸 (네 귀퉁이를 비운다)
+  px(ctx, 1, 0, w - 2, h, 0xdce8f4, 0.5);
+  px(ctx, 0, 1, w, h - 2, 0xdce8f4, 0.5);
+  // 그늘 테 (아래·오른쪽)
+  px(ctx, 1, h - 1, w - 2, 1, 0x5a6678, 0.75);
+  px(ctx, w - 1, 1, 1, h - 2, 0x5a6678, 0.55);
+  // 반짝
+  px(ctx, 1, 1, 1, 1, 0xffffff, 1);
+  if (size > 0) px(ctx, 1, 2, 1, 1, 0xffffff, 0.7);
+  return canvas;
+}
+
+/** 흘러내린 물방울 자국 (1px 폭, 위로 갈수록 옅게 — 장면이 길이만큼 늘인다) */
+export function buildDropTrail(): HTMLCanvasElement {
+  const h = 16;
+  const { canvas, ctx } = makeCanvas(1, h);
+  for (let y = 0; y < h; y++) px(ctx, 0, y, 1, 1, 0xdfe8f2, 0.08 + 0.55 * (y / (h - 1)));
+  return canvas;
+}
