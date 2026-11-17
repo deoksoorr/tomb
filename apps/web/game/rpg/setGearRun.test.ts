@@ -85,6 +85,44 @@ describe("세트 장비 싸움 효과", () => {
     expect(r.killHeal(1000)).toBe(10);
   });
 
+  it("11/17 발동 표시: 연차는 버틴 순간, 결재 완료는 우두머리마다 30% 아래로 처음 떨어진 순간, 야근 4세트는 30% 위에서 아래로 떨어지는 순간", () => {
+    const r = new SetGearRun({
+      weapon: encodeSg(mk({ L: 1, g: 3 })),
+      head: encodeSg(mk({ p: 2, u: 3, L: 3 })),
+    });
+    expect(r.takeProcs()).toEqual([]);
+    const boss = {};
+    r.hitMul(0, { crit: false, boss: true, hpRatio: 0.5, basic: false, who: boss });
+    expect(r.takeProcs()).toEqual([]);
+    r.hitMul(0, { crit: false, boss: true, hpRatio: 0.2, basic: false, who: boss });
+    r.hitMul(0, { crit: false, boss: true, hpRatio: 0.1, basic: false, who: boss });
+    expect(r.takeProcs()).toEqual(["bossLow"]);
+    r.hitMul(0, { crit: false, boss: true, hpRatio: 0.1, basic: false, who: {} });
+    expect(r.takeProcs()).toEqual(["bossLow"]);
+    expect(r.saveFromDeath()).toBe(true);
+    expect(r.saveFromDeath()).toBe(false);
+    expect(r.takeProcs()).toEqual(["vacation"]);
+    // 그림: 그 전설 옵션이 붙은 장비 (직급까지)
+    expect(r.procIcon("vacation")).toEqual({ icon: { shape: "sg:023", main: 0, accent: 0 }, grade: 3 });
+    expect(r.procIcon("bossLow")?.icon.shape).toBe("sg:003");
+
+    const o = new SetGearRun(four(0));
+    o.watch(80, 100);
+    o.watch(25, 100);
+    o.watch(20, 100);
+    expect(o.takeProcs()).toEqual(["overtimeFour"]);
+    o.watch(50, 100);
+    o.watch(10, 100);
+    expect(o.takeProcs()).toEqual(["overtimeFour"]);
+    expect(o.procIcon("overtimeFour")?.icon.shape).toBe("sg:003");
+    // 4세트가 아니면 아무것도
+    const none = new SetGearRun({});
+    none.watch(80, 100);
+    none.watch(10, 100);
+    expect(none.takeProcs()).toEqual([]);
+    expect(none.procIcon("vacation")).toBeNull();
+  });
+
   it("강화 무기 빛: +10 푸른 · +13 보랏 · +15 금 반짝임", () => {
     expect(weaponGlow(9)).toBeNull();
     expect(weaponGlow(10)?.color).toBe(0x4aa8ff);

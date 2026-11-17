@@ -73,6 +73,9 @@ import { campNeighborSeat, campPickSeat, CAMP_MULTI_SEAT } from "./campSit";
 import { publishRide, standForGate } from "@/lib/rideGate";
 import type { CampInteractable } from "./campTypes";
 import { qaUrlAllowed } from "@/lib/qaUrl";
+import { isSnowy, parseConceptOverride, type MapConcept } from "@/lib/mapConcept";
+import { startMapConceptSync } from "@/lib/mapConceptClient";
+import { campConceptNow, type CampActor } from "./CampConceptDecor";
 
 // 11/15 언젠가 캠핑장 장면. 월드(마을)와 같은 채널 연결을 빌려 쓴다 (CampTrip이 net.divert로 소식을 넘겨준다).
 // 그리는 것: 캠핑장 맵(CampMap) · 내 캐릭터 · 같은 캠핑장에 있는 사람 · 분위기(한국 시간 색조·날씨) · 어둠과 빛.
@@ -212,8 +215,12 @@ export class CampScene extends Phaser.Scene {
     const t0 = performance.now();
     const h = this.host;
     const canvas = this.game.canvas;
-    this.map = new CampMap(this, h.atlas, h.reduced, true);
+    // 11/17 맵 컨셉 (겨울·크리스마스): 처음부터 그 판 그림으로 만든다 (바뀌면 bindBridge가 바로 바꿔 끼운다)
+    const concept = campConceptNow();
+    this.map = new CampMap(this, h.atlas, h.reduced, true, concept);
     yield* this.map.parts();
+    const me: CampActor = { key: {}, x: 0, y: 0, dir: DIR.down };
+    this.map.setActors(() => this.breathers(me));
     this.physics.world.setBounds(CAMP_BOUNDS.minX, CAMP_BOUNDS.minY, CAMP_BOUNDS.maxX - CAMP_BOUNDS.minX, CAMP_BOUNDS.maxY - CAMP_BOUNDS.minY);
 
     const spawn = this.spawnPoint();
@@ -236,6 +243,7 @@ export class CampScene extends Phaser.Scene {
     if (tint) addWorldTintBounds(this, tint);
     this.atmos = new Atmosphere(this, h.reduced, window.location.search, { shaderTint: tint });
     this.atmos.setStaticLights(this.map.staticLights.map((l) => ({ ...l })));
+    this.atmos.setSnowy(isSnowy(concept));
     this.lighting = new Lighting(this);
     yield;
     this.seatHint = new SeatHint(this, h.atlas);
@@ -587,8 +595,34 @@ export class CampScene extends Phaser.Scene {
 
   // ── bridge (UI → 캠핑장) ──
 
+  /** 11/17 판을 바꾼다 (그림·장식·밤 빛·눈 날씨) */
+  private applyConcept(c: MapConcept): void {
+    if (this.cleaned || !this.map) return;
+    this.map.setConcept(c);
+    this.atmos.setSnowy(isSnowy(c));
+    this.atmos.setStaticLights(this.map.staticLights.map((l) => ({ ...l })));
+  }
+
+  /** 입김을 낼 사람 (내 캐릭터 + 같은 캠핑장 사람) */
+  private *breathers(me: CampActor): Iterable<CampActor> {
+    const pl = this.player;
+    if (pl && !this.parked) {
+      me.x = pl.x;
+      me.y = pl.y;
+      me.dir = pl.dir;
+      yield me;
+    }
+    for (const r of this.remotes.values()) yield { key: r, x: r.x, y: r.y, dir: r.netDir };
+  }
+
   private bindBridge(): void {
     const on = this.unsubs;
+    // 11/17 맵 컨셉: 주소 시험 값(?concept=, 실서버는 막힘)이 있으면 그것만, 없으면 관리자가 고른 값 (1분 확인·공지로 바로)
+    this.applyConcept(campConceptNow());
+    if (!parseConceptOverride(window.location.search)) {
+      on.push(bridge.on("map:concept", ({ concept }) => this.applyConcept(concept)));
+      on.push(startMapConceptSync());
+    }
     on.push(bridge.on("input:say", ({ id }) => !this.covered && this.doSay(id)));
     on.push(bridge.on("input:emo", ({ id }) => !this.covered && !this.locked && this.expr.emo(id, this.time.now)));
     on.push(bridge.on("input:chat", ({ text }) => !this.covered && this.expr.chat(text, this.time.now)));

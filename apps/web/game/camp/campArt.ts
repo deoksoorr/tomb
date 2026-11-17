@@ -16,6 +16,7 @@ import {
 import { darken, Grid, lighten, mix, rng, type Color } from "../sprites/pixel";
 import { CAMP_SUMMIT, campGroundKind, hashU, pathEdgeDist, type CampGround } from "./campLayout";
 import { CAMP_TEX_PREFIX } from "./campTypes";
+import { campWinterGroundColor, campWinterStoneColor } from "./campWinter";
 
 // 11/15 언젠가 캠핑장 픽셀 아트 (코드로 그린다, 마을 그림 재탕 없이 새로).
 // 늦가을 숲(노란 낙엽 + 침엽수), 마을보다 밝고 따뜻한 색. 원점 = 바닥 가운데 (0.5, 1), 맨 아래 줄 근처는 그림자 (마을 props와 같은 규칙).
@@ -72,6 +73,8 @@ export const CAMP_TEX = {
   firefly: `${P}firefly`,
   drip: `${P}drip`,
   ground: (cx: number, cy: number) => `${P}ground-${cx}-${cy}`,
+  /** 11/17 겨울·크리스마스 판 바닥 덩어리 */
+  winterGround: (cx: number, cy: number) => `${P}wground-${cx}-${cy}`,
   // 11/15 캠핑카 앞 캠핑 도구 · 문패 팻말
   foldTable: `${P}foldTable`,
   campChairFront: (i: number) => `${P}campChairF${i}`,
@@ -1360,16 +1363,16 @@ function groundColor(x: number, y: number, k: CampGround, nearPath: boolean): Co
   }
 }
 
-/** 바닥 덩어리 RGBA (CAMP_CHUNK × CAMP_CHUNK, 맵 밖은 가장자리 숲 바닥) */
-export function campGroundPixels(cx: number, cy: number, size = CAMP_CHUNK): Uint8ClampedArray {
-  const steps = campGroundSteps(cx, cy, size);
+/** 바닥 덩어리 RGBA (CAMP_CHUNK × CAMP_CHUNK, 맵 밖은 가장자리 숲 바닥). 11/17 winter = 겨울·크리스마스 판 바닥 (campWinter) */
+export function campGroundPixels(cx: number, cy: number, size = CAMP_CHUNK, winter = false): Uint8ClampedArray {
+  const steps = campGroundSteps(cx, cy, size, 32, winter);
   let r = steps.next();
   while (!r.done) r = steps.next();
   return r.value;
 }
 
 /** 바닥 덩어리를 줄 묶음(band줄)마다 멈추며 굽는다 — 버스 창밖 연출 동안 프레임마다 조금씩 (campPrebake). 끝나면 RGBA를 돌려준다 */
-export function* campGroundSteps(cx: number, cy: number, size = CAMP_CHUNK, band = 32): Generator<void, Uint8ClampedArray> {
+export function* campGroundSteps(cx: number, cy: number, size = CAMP_CHUNK, band = 32, winter = false): Generator<void, Uint8ClampedArray> {
   const out = new Uint8ClampedArray(size * size * 4);
   const ox = cx * size;
   const oy = cy * size;
@@ -1380,6 +1383,8 @@ export function* campGroundSteps(cx: number, cy: number, size = CAMP_CHUNK, band
   const hw = Math.ceil(w / 2);
   const kinds: CampGround[] = new Array(hw * Math.ceil(h / 2));
   const near = new Uint8Array(kinds.length);
+  // 11/17 겨울 판: 흙길 가장자리까지 거리 (길가 눈둑) — 흙길 칸만
+  const edge = winter ? new Float32Array(kinds.length) : null;
   // band줄씩 (짝수 줄에서 끊어 2px 칸 표가 묶음 안에서 끝난다)
   const step = Math.max(2, band & ~1);
   for (let y0 = 0; y0 < h; y0 += step) {
@@ -1390,11 +1395,13 @@ export function* campGroundSteps(cx: number, cy: number, size = CAMP_CHUNK, band
         const kd = campGroundKind(ox + x, oy + y);
         kinds[i] = kd;
         near[i] = kd === "grass" && pathEdgeDist(ox + x, oy + y, 12) < 10 ? 1 : 0;
+        if (edge && kd === "path") edge[i] = pathEdgeDist(ox + x, oy + y);
       }
     for (let y = y0; y < y1; y++)
       for (let x = 0; x < w; x++) {
         const i = (y >> 1) * hw + (x >> 1);
-        put(out, (y * size + x) * 4, groundColor(ox + x, oy + y, kinds[i], near[i] === 1));
+        const c0 = groundColor(ox + x, oy + y, kinds[i], near[i] === 1);
+        put(out, (y * size + x) * 4, edge ? campWinterGroundColor(ox + x, oy + y, kinds[i], c0, near[i] === 1, edge[i]) : c0);
       }
     yield;
   }
@@ -1408,13 +1415,13 @@ export function* campGroundSteps(cx: number, cy: number, size = CAMP_CHUNK, band
         const py = Math.round(s.y + y - oy);
         if (px < 0 || py < 0 || px >= size || py >= size) continue;
         const c = d > 0.75 ? (y > 0 ? 0x5a5650 : 0x8a857a) : y < -1 ? STONE.hi : hashU(px, py, 81) < 0.15 ? STONE.moss : STONE.mid;
-        put(out, (py * size + px) * 4, c);
+        put(out, (py * size + px) * 4, winter && d <= 0.75 ? campWinterStoneColor(c, y, px, py) : c);
       }
     // 돌 아래 물살 거품
     for (let x = -6; x <= 6; x++) {
       const px = Math.round(s.x + x - ox);
       const py = Math.round(s.y + 6 - oy);
-      if (px >= 0 && py >= 0 && px < size && py < size && hashU(px, py, 83) < 0.7) put(out, (py * size + px) * 4, GC.water.foam);
+      if (px >= 0 && py >= 0 && px < size && py < size && hashU(px, py, 83) < 0.7) put(out, (py * size + px) * 4, winter ? 0xdcecf2 : GC.water.foam);
     }
   }
   return out;

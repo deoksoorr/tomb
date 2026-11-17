@@ -4,6 +4,8 @@ import { addCanvasTexture } from "../assets/manifest";
 import { makeCanvas } from "../sprites/pixel";
 import * as Art from "./campArt";
 import { clampEdges, forEachCampTexture, type CampTexBuild } from "./CampMap";
+import { campConceptNow, forEachCampSkin } from "./CampConceptDecor";
+import { isSnowy } from "@/lib/mapConcept";
 
 // 11/15 캠핑장 그림 미리 굽기: 버스를 기다리는 동안·창밖 연출 동안 프레임마다 조금씩(예산 ms) 굽는다.
 // 예전엔 캠핑장 장면을 만들 때 그림 120여 장 + 바닥 덩어리 6장(장당 30ms 남짓)을 한 프레임에 몰아 구워
@@ -79,16 +81,27 @@ export class CampPrebake {
       this.fresh.push(key);
       yield;
     }
+    // 11/17 겨울·크리스마스 판이면 눈 얹은 그림과 겨울 바닥을 굽는다 (판은 굽기 시작할 때 값 — 도중에 바뀌면 CampMap이 그때 굽는다)
+    const concept = campConceptNow();
+    const skins: [string, (scene: Phaser.Scene) => string][] = [];
+    forEachCampSkin(concept, (base, build) => skins.push([base, build]));
+    for (const [base, build] of skins) {
+      this.cur = base;
+      const key = build(this.scene);
+      if (key !== base) this.fresh.push(key);
+      yield;
+    }
+    const winter = isSnowy(concept);
     // 바닥 덩어리: 도착하는 곳에 가까운 것부터, 줄 묶음마다 끊어서
     const chunks: { cx: number; cy: number; d: number }[] = [];
     for (let cy = 0; cy < Math.ceil(CAMP_HEIGHT / CHUNK); cy++)
       for (let cx = 0; cx < Math.ceil(CAMP_WIDTH / CHUNK); cx++) chunks.push({ cx, cy, d: Math.hypot(cx * CHUNK + CHUNK / 2 - this.near.x, cy * CHUNK + CHUNK / 2 - this.near.y) });
     chunks.sort((a, b) => a.d - b.d);
     for (const { cx, cy } of chunks) {
-      const key = Art.CAMP_TEX.ground(cx, cy);
+      const key = winter ? Art.CAMP_TEX.winterGround(cx, cy) : Art.CAMP_TEX.ground(cx, cy);
       if (tex.exists(key)) continue;
       this.cur = key;
-      const g = Art.campGroundSteps(cx, cy, CHUNK, 16);
+      const g = Art.campGroundSteps(cx, cy, CHUNK, 16, winter);
       let r = g.next();
       while (!r.done) {
         yield;

@@ -6,6 +6,7 @@ import type { PublicHouse, VillageResponse } from "@/lib/housing/types";
 import type { RpgAction, RpgHud, RpgPlay, RunResult } from "@/lib/rpg/types";
 import type { HotAuto } from "@/lib/rpg/hotbar";
 import type { CardChoice, CardOfferView } from "@/lib/rpg/cards";
+import type { ProcView } from "@/lib/rpg/procs";
 import type { ResumeState } from "@/lib/resume";
 import type { SoundMix } from "@/lib/soundMix";
 import type { IncomingChatLine } from "@/game/logic/chatLog";
@@ -200,6 +201,8 @@ export type GameEvents = {
   "rpg:auto": HotAuto;
   /** 11/15 야근 빌딩 능력 카드 고르기 (sticky, null = 닫힘). 게임은 멈춘 채 rpg:cardPick을 기다린다 */
   "rpg:cards": CardOfferView | null;
+  /** 11/17 발동형 카드·세트 장비 효과가 터짐 (game/rpg/procToast showProc) → 화면 오른쪽(폰은 위 가운데)에 그 그림을 2초 */
+  "rpg:proc": ProcView;
   /** 귀신의집 미로 진행 (초당 4번): 걸린 시간·놀란 횟수 (game/haunt → components/haunt) */
   "haunt:hud": { ms: number; scares: number };
   /** 귀신의집이 끝남 (출구로 빠져나옴 = escaped, 아니면 중간에 나감). 월드는 이미 다시 보인다 */

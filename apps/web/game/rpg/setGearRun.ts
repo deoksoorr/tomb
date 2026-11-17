@@ -1,5 +1,6 @@
-import type { GearSlot } from "@/lib/rpg/catalog";
-import { sgCombat, type SgCombat } from "@/lib/rpg/setGear";
+import type { GearSlot, IconArt } from "@/lib/rpg/catalog";
+import type { SgProcKind } from "@/lib/rpg/procs";
+import { equippedSg, SG_SETS, sgCombat, type SgCombat, type SgItem } from "@/lib/rpg/setGear";
 
 // 11/15 세트 장비 싸움 효과 (판 하나 동안): 옵션(치명타 피해·우두머리 피해·받는 피해·물약·재사용 시간)·4세트 효과·전설 옵션.
 // 능력치에 바로 붙는 것(공격력·공속·치명·체력·SP·이속·스킬 피해 %, 2세트 효과)은 derive가 이미 넣었다 (판 시작 derived).
@@ -34,10 +35,18 @@ export class SetGearRun {
   private boostAt = -1;
   private nextSkillCut = false;
   private vacationUsed = false;
+  private readonly items: SgItem[];
+  /** 11/17 발동 표시를 띄울 효과 (HuntScene이 매 프레임 takeProcs로 가져가 showProc) */
+  private procs: SgProcKind[] = [];
+  /** 야근 4세트: 지난번에 본 체력이 30% 이상이었나 (위에서 아래로 떨어지는 순간만 알린다) */
+  private lowAbove = true;
+  /** 결재 완료: 30% 아래로 떨어진 걸 이미 알린 우두머리 */
+  private bossLowSeen = new WeakSet<object>();
 
   constructor(equip: Partial<Record<GearSlot, string | null>>) {
     this.c = sgCombat(equip);
     this.four = new Set(this.c.four);
+    this.items = equippedSg(equip);
   }
 
   get active(): boolean {
@@ -61,7 +70,7 @@ export class SetGearRun {
    * 주는 피해 배율 (몬스터가 맞을 때마다): 치명타 피해·우두머리 피해·결재 완료(우두머리 30% 아래)·출장 4세트(3초 안 맞으면 다음 기본 공격 +40%).
    * crit이면 결재 4세트 공속 버프를 켠다
    */
-  hitMul(now: number, o: { crit: boolean; boss: boolean; hpRatio: number; basic: boolean }): number {
+  hitMul(now: number, o: { crit: boolean; boss: boolean; hpRatio: number; basic: boolean; who?: object }): number {
     let k = 1;
     if (o.crit) {
       // 치명타는 1.5배 → 옵션만큼 더 (1.5 + 0.15 = 1.65배)
@@ -70,7 +79,13 @@ export class SetGearRun {
     }
     if (o.boss) {
       k *= 1 + this.c.bossDmg;
-      if (this.c.legends.includes(1) && o.hpRatio < SG_FX.bossLow) k *= 1 + SG_FX.bossLowDmg;
+      if (this.c.legends.includes(1) && o.hpRatio < SG_FX.bossLow) {
+        k *= 1 + SG_FX.bossLowDmg;
+        if (o.who && !this.bossLowSeen.has(o.who)) {
+          this.bossLowSeen.add(o.who);
+          this.procs.push("bossLow");
+        }
+      }
     }
     if (o.basic && this.four.has("trip") && (now - this.lastHurt >= SG_FX.tripIdleMs || now === this.boostAt)) {
       this.boostAt = now;
@@ -97,7 +112,32 @@ export class SetGearRun {
   saveFromDeath(): boolean {
     if (!this.c.legends.includes(3) || this.vacationUsed) return false;
     this.vacationUsed = true;
+    this.procs.push("vacation");
     return true;
+  }
+
+  /** 11/17 매 프레임 체력을 본다: 야근 4세트는 30% 위에서 아래로 떨어지는 순간 알린다 (아래에 머무는 동안은 한 번만) */
+  watch(hp: number, maxHp: number): void {
+    const low = hp > 0 && hp < maxHp * SG_FX.overtimeLowHp;
+    if (this.four.has("overtime") && low && this.lowAbove) this.procs.push("overtimeFour");
+    this.lowAbove = !low;
+  }
+
+  /** 11/17 쌓인 발동 효과를 꺼낸다 (꺼내면 비운다) */
+  takeProcs(): SgProcKind[] {
+    if (!this.procs.length) return [];
+    const out = this.procs;
+    this.procs = [];
+    return out;
+  }
+
+  /** 11/17 발동 표시에 쓸 장비 그림과 직급: 그 전설 옵션이 붙은 장비, 세트 효과면 그 세트 장비 (무기 먼저) */
+  procIcon(kind: SgProcKind): { icon: IconArt; grade: number } | null {
+    const pick =
+      kind === "overtimeFour"
+        ? this.items.filter((it) => SG_SETS[it.s] === "overtime").sort((a, b) => a.p - b.p)[0]
+        : this.items.find((it) => it.L === (kind === "vacation" ? 3 : 1));
+    return pick ? { icon: { shape: `sg:${pick.s}${pick.p}${pick.g}`, main: 0, accent: 0 }, grade: pick.g } : null;
   }
 
   /** 물약 회복 배율 */

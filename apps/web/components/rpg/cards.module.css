@@ -842,3 +842,253 @@
   font-size: 9px;
   white-space: nowrap;
 }
+
+/* ── 11/17 「발동」 표시 (ProcToasts): 오른쪽에서 미끄러져 들어와 2초, 여러 장이면 아래로 쌓인다 ── */
+
+.procStack {
+  position: fixed;
+  top: max(22%, calc(var(--safe-top, 0px) + 120px));
+  right: calc(var(--safe-right, 0px) + 12px);
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.proc {
+  --proc: var(--candle);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 10px;
+  width: 248px;
+  padding: 8px 12px 8px 8px;
+  background: linear-gradient(90deg, rgba(14, 13, 20, 0.94), rgba(14, 13, 20, 0.84));
+  box-shadow:
+    0 0 0 2px var(--proc),
+    0 0 18px color-mix(in srgb, var(--proc) 40%, transparent),
+    4px 4px 0 rgba(0, 0, 0, 0.45);
+  color: var(--bone);
+  animation: procIn 340ms cubic-bezier(0.2, 1.35, 0.4, 1) both;
+}
+
+.procArt {
+  display: block;
+  width: 72px;
+  height: 72px;
+  image-rendering: pixelated;
+  box-shadow: 0 0 0 2px var(--proc);
+  flex: none;
+}
+
+/* 장비 그림 (16칸): 바탕을 깔고 안쪽에 정수배로 */
+.procIcon {
+  box-sizing: border-box;
+  padding: 4px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--proc) 30%, #1a1822), #12111a 75%);
+}
+
+.procText {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  word-break: keep-all;
+}
+
+.procName {
+  font-size: 13px;
+  color: var(--bone);
+}
+
+.procFire {
+  font-size: 18px;
+  line-height: 1.1;
+  letter-spacing: 1px;
+  color: var(--proc);
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.7),
+    0 0 10px color-mix(in srgb, var(--proc) 60%, transparent);
+  animation: procFire 340ms 120ms cubic-bezier(0.2, 1.8, 0.4, 1) both;
+}
+
+.procLine {
+  font-family: var(--font-small);
+  font-size: 11px;
+  color: var(--text);
+}
+
+.procLeft {
+  font-family: var(--font-small);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.procOut {
+  animation: procOut 260ms ease-in forwards;
+}
+
+@keyframes procIn {
+  from {
+    transform: translateX(calc(100% + 24px));
+    opacity: 0;
+  }
+}
+
+@keyframes procOut {
+  to {
+    transform: translateX(calc(100% + 24px));
+    opacity: 0;
+  }
+}
+
+@keyframes procFire {
+  from {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+/* 부활: 쌓인 줄 맨 위에 크게 */
+.procBig {
+  grid-template-columns: auto;
+  justify-items: center;
+  gap: 8px;
+  width: auto;
+  min-width: 220px;
+  padding: 14px 22px 12px;
+  text-align: center;
+  animation: procPop 420ms cubic-bezier(0.2, 1.5, 0.4, 1) both;
+}
+
+.procBig .procArt {
+  width: 144px;
+  height: 144px;
+}
+
+.procBig .procIcon {
+  padding: 8px;
+}
+
+.procBig .procFire {
+  font-size: 26px;
+}
+
+.procBig .procName {
+  font-size: 15px;
+}
+
+.procBig.procOut {
+  animation: procFade 260ms ease-in forwards;
+}
+
+@keyframes procPop {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+}
+
+@keyframes procFade {
+  to {
+    transform: scale(1.08);
+    opacity: 0;
+  }
+}
+
+/* 폰 (손가락·좁은 화면): 스킬 칸·조이스틱을 가리지 않게 위쪽 가운데에 작게 */
+@media (pointer: coarse), (max-width: 560px) {
+  .procStack {
+    /* HP·SP 판과 [능력] 버튼 아래 */
+    top: calc(var(--safe-top, 0px) + 150px);
+    left: 50%;
+    right: auto;
+    align-items: center;
+    gap: 4px;
+    transform: translateX(-50%);
+  }
+
+  .proc {
+    gap: 6px;
+    width: 200px;
+    padding: 4px 8px 4px 4px;
+  }
+
+  .proc .procArt {
+    width: 48px;
+    height: 48px;
+  }
+
+  .proc .procIcon {
+    padding: 8px;
+  }
+
+  .procName {
+    font-size: 11px;
+  }
+
+  .procFire {
+    font-size: 14px;
+  }
+
+  .procLine {
+    font-size: 10px;
+  }
+
+  .procLeft {
+    display: none;
+  }
+
+  .proc {
+    animation-name: procDrop;
+  }
+
+  .proc.procOut {
+    animation-name: procLift;
+  }
+
+  .procBig {
+    min-width: 0;
+    padding: 8px 14px;
+  }
+
+  .procBig .procArt {
+    width: 72px;
+    height: 72px;
+  }
+
+  .procBig .procIcon {
+    padding: 4px;
+  }
+
+  .procBig .procFire {
+    font-size: 20px;
+  }
+
+  .procBig .procLeft {
+    display: block;
+  }
+}
+
+@keyframes procDrop {
+  from {
+    transform: translateY(-16px);
+    opacity: 0;
+  }
+}
+
+@keyframes procLift {
+  to {
+    transform: translateY(-16px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .proc,
+  .procFire,
+  .procOut {
+    animation-duration: 1ms;
+  }
+}

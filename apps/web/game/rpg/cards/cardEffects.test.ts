@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MonsterId } from "@/lib/rpg/catalog";
 import {
   CARD_IDS,
@@ -14,6 +14,8 @@ import {
   type CardStats,
 } from "@/lib/rpg/cards";
 import type { Derived } from "@/lib/rpg/formulas";
+import type { ProcView } from "@/lib/rpg/procs";
+import { bridge } from "../../bridge";
 import { CardRun, type CardHost, type CardMon } from "./CardRun";
 
 // 11/17 야근 빌딩 능력 카드 전수 조사: 카드에 적힌 숫자 = 실제로 붙는 숫자 (1장·최대 겹침·팀장 승진),
@@ -684,5 +686,42 @@ describe("11/17 팀장 승진 (다른 카드 수치 ×1.5)", () => {
     run.update(0.016);
     expect(w.refresh).toBeGreaterThan(mid);
     expect(run.derive(BASE).aspd).toBeCloseTo(2);
+  });
+});
+
+describe("11/17 발동 표시 (rpg:proc)", () => {
+  const seen: ProcView[] = [];
+  const off = bridge.on("rpg:proc", (p) => seen.push(p));
+  beforeEach(() => {
+    seen.length = 0;
+  });
+  afterAll(off);
+
+  it("반차가 막는 순간 · 연차 몰아 쓰기가 터지는 순간 · 법인카드 혜택이 붙는 순간에 카드 그림으로 한 장씩", () => {
+    const { run, give, w } = harness();
+    give("halfday");
+    give("leave");
+    give("corpcard");
+    run.incoming(500, true);
+    expect(seen.map((p) => p.key)).toEqual(["card:halfday"]);
+    expect(seen[0]).toMatchObject({ name: "반차", art: { card: "halfday" }, left: "다음 층에서 다시 차요" });
+    w.hp = 100;
+    run.update(0.016);
+    expect(seen.map((p) => p.key)).toEqual(["card:halfday", "card:leave"]);
+    expect(seen[1].line).toBe("3초 무적, 공격 속도 +50%");
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    run.onKill(mon("scope_creep" as MonsterId));
+    expect(seen[2]).toMatchObject({ key: "card:corpcard", line: "5초 동안 공격력 +40%" });
+    // 반차를 이미 쓴 층에서는 다시 안 뜬다
+    run.incoming(500, true);
+    expect(seen.filter((p) => p.key === "card:halfday")).toHaveLength(1);
+    expect(new Set(seen.map((p) => p.seq)).size).toBe(seen.length);
+  });
+
+  it("무한 야근은 revive()만으로는 띄우지 않는다 (부활 연출이 쓰러진 뒤 크게 띄운다)", () => {
+    const { run, give } = harness();
+    give("overtime");
+    expect(run.revive()).toBe(true);
+    expect(seen).toEqual([]);
   });
 });

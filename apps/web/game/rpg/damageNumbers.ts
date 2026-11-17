@@ -1,10 +1,12 @@
 import * as Phaser from "phaser";
+import { addHurt, type HurtCell, type HurtKind } from "./hurtTally";
 
 // 피해 숫자 (큰 도트 숫자 + 외곽선, 색 체계별 그라데이션). 글자는 코드로 그린 5×7 도트를 굵게 한 자체 글꼴.
 //  - 타격마다 숫자가 새로 튀어나와 같은 자리 근처에 조금씩 흩어져 겹친다 (새 숫자가 위에 덮어씀) — 짧게 튀었다 사라진다
 //  - 연타 묶음(스킬 한 번)이 끝나면 "12 HIT" + 합계 "3,240"을 크게 회전·확대 팝
 //  - 치명타: 금→빨강 그라데이션 · 더 크게 · 흔들림 · 위에 "CRITICAL" (별 튐은 SkillFx가 맞은 자리에)
-//  - 색 체계: 기본 공격(흰·살구) / 스킬(갈래 색) / 치명타(금·빨강) / 회복(초록 +) / 내가 맞음(빨강 -) / 상태 이상(보라 -) / 합계(금)
+//  - 색 체계: 기본 공격(흰·살구) / 스킬(갈래 색) / 치명타(금·빨강) / 회복(초록 +) / 내가 맞음(빨강 -) / 몬스터 지속 피해(보라 -) / 방패가 막음(파랑 -) / 합계(금)
+//  - 11/17 내가 받은 피해(taken): 실제로 깎인 체력 하나만 빨강으로, 지속 피해는 같은 빨강 조금 작게, 방패가 막은 몫은 파랑. 0.3초 안에 또 맞으면 합친다 (hurtTally)
 // 동시에 떠 있는 숫자 상한 (휴대폰 40) — 넘으면 가장 오래된 숫자부터 거둔다. 글자 이미지는 풀에서 재사용.
 
 export type NumStyle = "basic" | "ember" | "frost" | "soul" | "crit" | "heal" | "hurt" | "dot" | "total" | "shield";
@@ -20,7 +22,7 @@ const STYLES: Record<NumStyle, { top: string; mid: string; bot: string; edge: st
   hurt: { top: "#ffe0e0", mid: "#ff7a7a", bot: "#d01a2a", edge: "#280206" },
   dot: { top: "#f4e0ff", mid: "#c88aff", bot: "#7a3ac0", edge: "#1a0630" },
   total: { top: "#ffffff", mid: "#ffe066", bot: "#ff8a1a", edge: "#2a0c00", glint: "#ffffff" },
-  shield: { top: "#ffffff", mid: "#bff4f0", bot: "#4ac8c0", edge: "#062a28" },
+  shield: { top: "#ffffff", mid: "#b8dcff", bot: "#3a82e8", edge: "#061a3a" },
 };
 
 /** 5×7 도트 글자 (# = 칠함). 너비는 글자마다 다르다 */
@@ -157,6 +159,8 @@ export class DamageNumbers {
   private pool: Phaser.GameObjects.Image[] = [];
   private groups: DmgGroup[] = [];
   private seq = 0;
+  /** 11/17 합치는 중인 내 피해 숫자 (종류마다 하나) */
+  private tally: Partial<Record<HurtKind, { cell: HurtCell | null; num: Num | null; x: number; y: number }>> = {};
   readonly cap: number;
 
   constructor(
@@ -201,14 +205,31 @@ export class DamageNumbers {
     this.spawn(`+${Math.round(n)}`, "heal", x, y, big ? 1.4 : 1, "pop", 900, 0, 0);
   }
 
-  /** 내가 맞음 (-빨강) */
-  hurt(x: number, y: number, n: number): void {
-    this.spawn(`-${Math.round(n)}`, "hurt", x + (Math.random() - 0.5) * 4, y, 1.1, "pop", 700, 0, (Math.random() - 0.5) * 8);
+  /**
+   * 11/17 내가 받은 피해: hit = 실제로 깎인 체력(빨강), dot = 지속 피해(같은 빨강, 조금 작게), block = 방패가 막은 몫(파랑).
+   * 0.3초 안에 같은 종류가 또 오면 앞 숫자를 지우고 합계를 그 자리에 다시 띄운다
+   */
+  taken(kind: HurtKind, x: number, y: number, n: number): void {
+    const now = performance.now();
+    const prev = this.tally[kind];
+    const r = addHurt(prev?.cell ?? null, now, Math.round(n));
+    if (!r.shown || !r.cell) return;
+    let ax = x;
+    let ay = y;
+    if (r.merged && prev) {
+      ax = prev.x;
+      ay = prev.y;
+      const i = prev.num ? this.nums.indexOf(prev.num) : -1;
+      if (i >= 0) this.drop(i);
+    }
+    const k = kind === "dot" ? 0.85 : kind === "block" ? 0.9 : 1.1;
+    const num = this.spawn(`-${r.cell.n}`, kind === "block" ? "shield" : "hurt", ax, ay, k, "pop", kind === "dot" ? 600 : 700, 0, kind === "hit" ? (Math.random() - 0.5) * 8 : 4);
+    this.tally[kind] = { cell: r.cell, num, x: ax, y: ay };
   }
 
-  /** 상태 이상 지속 피해 (-보라) · 방패가 막음 (-청록) */
-  minor(x: number, y: number, n: number, style: "dot" | "shield" = "dot"): void {
-    this.spawn(`-${Math.round(n)}`, style, x, y, 0.8, "pop", 600, 0, 4);
+  /** 몬스터 지속 피해 (-보라) */
+  minor(x: number, y: number, n: number): void {
+    this.spawn(`-${Math.round(n)}`, "dot", x, y, 0.8, "pop", 600, 0, 4);
   }
 
   /** 합계 팝: "12 HIT" + "3,240" */
@@ -226,7 +247,7 @@ export class DamageNumbers {
     return img;
   }
 
-  private spawn(text: string, style: NumStyle, x: number, y: number, k: number, kind: Kind, life: number, delay: number, hx: number): void {
+  private spawn(text: string, style: NumStyle, x: number, y: number, k: number, kind: Kind, life: number, delay: number, hx: number): Num {
     ensureFont(this.scene, style);
     // 상한: 가장 오래된 작은 숫자부터 거둔다 (합계는 남긴다)
     while (this.nums.length >= this.cap) {
@@ -247,6 +268,7 @@ export class DamageNumbers {
     const n: Num = { glyphs, offs, x, y, age: 0, life, k, kind, delay, hx };
     this.nums.push(n);
     this.place(n);
+    return n;
   }
 
   private drop(i: number): void {
