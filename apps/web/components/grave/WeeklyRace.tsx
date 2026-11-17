@@ -158,14 +158,13 @@ function HallColumn({ board, champ }: { board: ChampBoard; champ: ChampResponse 
         {CHAMP_TITLE[board]}
       </span>
       {last ? (
-        <div className={styles.hallTop} data-me={last.me === true}>
+        <div className={styles.hallTop} data-me={last.me === true} title={last.sub ?? undefined}>
           <Avatar a={last.avatar} label={`지난주 ${CHAMP_TITLE[board]} ${last.name}`} scale={1.1} champ={lastBits(champ, last.name)} />
           <span className={styles.lastText}>
             <span className={styles.hallWeek}>지난주 · {weekLabel(champ.week)}</span>
             <b>
               <StyledName name={last.name} look={last.avatar.look} />
             </b>
-            {last.sub && <span className={styles.sub}>{last.sub}</span>}
             <span className={styles.value}>{valueText(board, last.value)}</span>
           </span>
         </div>
