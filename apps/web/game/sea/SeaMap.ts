@@ -134,7 +134,7 @@ type GullMode = "circle" | "land" | "perch" | "flee" | "feed";
 /** 11/17 과자 받아먹기: 받아먹는 갈매기(catch) 하나 + 둘레를 맴도는 갈매기(swirl) */
 // r2 hover = 과자 자리까지 날아오는 시간 (멀리서 오면 길게 — 어디서 던져도 갈매기가 자연스럽게 날아와요)
 // r2 hotHold = 매운 과자를 먹으러 오는 빨간 갈매기의 멈춰 둔 빨간 시간 (lib/sea/gull holdHot — 오는 동안 하얘지지 않게)
-type GullFeedJob = { tx: number; ty: number; t0: number; fx: number; fy: number; role: "catch" | "swirl"; ang: number; dir: 1 | -1; hot: boolean; piece: number; done: boolean; hover: number; hotHold: number | null };
+type GullFeedJob = { tx: number; ty: number; t0: number; fx: number; fy: number; role: "catch" | "swirl"; ang: number; dir: 1 | -1; hot: boolean; piece: number; gen: number; done: boolean; hover: number; hotHold: number | null };
 type Gull = {
   img: Phaser.GameObjects.Image;
   mode: GullMode;
@@ -162,11 +162,14 @@ type Gull = {
   steamAt: number;
   flameAt: number;
 };
-type Piece = { img: Phaser.GameObjects.Image; x0: number; y0: number; x1: number; y1: number; t0: number; dur: number; on: boolean; life: number };
+/** 던진 과자 조각. gen = 이 조각을 새로 쓸 때마다 하나씩 (11/17 r3 여러 사람이 한꺼번에 던져 조각을 다시 쓸 때, 앞 조각을 먹으러 오던 갈매기가 새 조각을 지우지 않게) */
+type Piece = { img: Phaser.GameObjects.Image; x0: number; y0: number; x1: number; y1: number; t0: number; dur: number; on: boolean; life: number; gen: number };
 type Puff = { img: Phaser.GameObjects.Image; x: number; y: number; t0: number; on: boolean };
 type Flame = { img: Phaser.GameObjects.Image; g: Gull | null; t0: number };
 /** 과자를 보고 몰려오는 갈매기 수 · 받아먹기까지 (ms) */
 const FEED_GULLS = 5;
+/** 한꺼번에 날아다닐 수 있는 과자 조각 (11/17 r3 6 → 16: 바닷가 여러 사람이 동시에 던져도 서로 조각을 빼앗지 않게) */
+const MAX_PIECES = 16;
 const FEED_HOVER_MS = 900;
 const FEED_DIVE_MS = 380;
 const FEED_SWIRL_MS = 2800;
@@ -727,16 +730,27 @@ export class SeaMap implements SeaMapApi {
     if (!this.gulls.length) return;
     const s = this.scene;
     let pi = this.pieces.findIndex((p) => !p.on);
-    if (pi < 0 && this.pieces.length < 6) {
-      this.pieces.push({ img: this.keep(s.add.image(0, 0, GULL_TEX.piece(hot)).setVisible(false)), x0: 0, y0: 0, x1: 0, y1: 0, t0: 0, dur: 1, on: false, life: 3200 });
+    if (pi < 0 && this.pieces.length < MAX_PIECES) {
+      this.pieces.push({ img: this.keep(s.add.image(0, 0, GULL_TEX.piece(hot)).setVisible(false)), x0: 0, y0: 0, x1: 0, y1: 0, t0: 0, dur: 1, on: false, life: 3200, gen: 0 });
       pi = this.pieces.length - 1;
     }
-    if (pi < 0) pi = 0;
+    // 11/17 r3 다 쓰는 중이면 가장 오래된 조각을 다시 써요 (예전엔 늘 0번 — 막 날아가던 조각을 빼앗았어요)
+    if (pi < 0) pi = this.pieces.reduce((best, p, i) => (p.t0 < this.pieces[best].t0 ? i : best), 0);
     const pc = this.pieces[pi];
-    Object.assign(pc, { x0: fx, y0: fy - 14, x1: tx, y1: ty, t0: now, dur: 460, on: true, life: 3200 });
+    Object.assign(pc, { x0: fx, y0: fy - 14, x1: tx, y1: ty, t0: now, dur: 460, on: true, life: 3200, gen: pc.gen + 1 });
     pc.img.setTexture(GULL_TEX.piece(hot)).setVisible(true).setDepth(OVERHEAD - 1);
-    const free = this.gulls.filter((g) => g.mode !== "feed").sort((a, b) => Math.hypot(a.x - tx, a.y - ty) - Math.hypot(b.x - tx, b.y - ty));
-    free.slice(0, FEED_GULLS).forEach((g, i) => {
+    const dist = (g: Gull) => Math.hypot(g.x - tx, g.y - ty);
+    const team = this.gulls.filter((g) => g.mode !== "feed").sort((a, b) => dist(a) - dist(b)).slice(0, FEED_GULLS);
+    // 11/17 r3 여러 사람이 한꺼번에 던져 놀고 있는 갈매기가 없으면, 다른 과자 둘레를 맴돌기만 하던(받아먹는 역할이 아닌) 갈매기 하나를 데려와
+    // 받아먹게 해요 — 조각이 아무도 안 먹고 가라앉는 일이 없게. 받아먹으러 가던 갈매기는 빼앗지 않아요
+    if (!team.length) {
+      const helper = this.gulls.filter((g) => g.feed && g.feed.role === "swirl" && !g.feed.done).sort((a, b) => dist(a) - dist(b))[0];
+      if (helper) {
+        if (helper.feed!.hotHold !== null) helper.hot = heldHot(helper.feed!.hotHold, now); // 맴돌던 동안 멈춰 둔 빨간 시간을 그대로 이어요
+        team.push(helper);
+      }
+    }
+    team.forEach((g, i) => {
       if (g.perch >= 0) {
         this.perchTaken[g.perch] = null;
         g.perch = -1;
@@ -744,7 +758,7 @@ export class SeaMap implements SeaMapApi {
       g.mode = "feed";
       const hover = Math.max(FEED_HOVER_MS, Math.min(FEED_HOVER_MAX_MS, Math.hypot(g.x - tx, g.y - ty) / FEED_FLY_SPEED));
       // r2 이미 빨간 갈매기는 매운 과자를 먹으러 오는 동안 빨간 시간을 멈춰 두고 빨간 채로 (하얘지지 않게 — 받아먹는 순간 30초 다시)
-      g.feed = { tx, ty, t0: now + i * 90, fx: g.x, fy: g.y, role: i === 0 ? "catch" : "swirl", ang: Math.random() * Math.PI * 2, dir: Math.random() < 0.5 ? 1 : -1, hot, piece: pi, done: false, hover, hotHold: holdHot(g.hot, now, hot) };
+      g.feed = { tx, ty, t0: now + i * 90, fx: g.x, fy: g.y, role: i === 0 ? "catch" : "swirl", ang: Math.random() * Math.PI * 2, dir: Math.random() < 0.5 ? 1 : -1, hot, piece: pi, gen: pc.gen, done: false, hover, hotHold: holdHot(g.hot, now, hot) };
       g.img.setDepth(OVERHEAD);
       // 조각은 받아먹을 때까지 떠 있어요 (멀리서 오면 그만큼 오래)
       if (i === 0) pc.life = Math.max(pc.life, hover + FEED_DIVE_MS + 600);
@@ -779,7 +793,8 @@ export class SeaMap implements SeaMapApi {
       if (!f.done) {
         f.done = true;
         const pc = this.pieces[f.piece];
-        if (pc) {
+        // r3 그 사이 이 조각을 다른 과자가 다시 썼으면(gen이 달라요) 지우지 않아요
+        if (pc && pc.gen === f.gen) {
           pc.on = false;
           pc.img.setVisible(false);
         }
