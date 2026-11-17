@@ -197,15 +197,14 @@ function lastBits(champ: ChampResponse, name: string): number {
 /** 시상대 한 칸: 캐릭터 + 받침(등수) + 이름·값 */
 function Step({ row, board, place }: { row: RaceRow; board: ChampBoard; place: number }) {
   return (
-    <li className={styles.step} data-place={place} data-me={row.me}>
+    <li className={styles.step} data-place={place} data-me={row.me} title={row.sub ?? undefined}>
       <Avatar a={row.avatar} label={`${place}등 ${row.name}`} scale={place === 1 ? 1.7 : 1.4} />
       <span className={styles.block}>{place}</span>
       <span className={styles.who}>
         <StyledName name={row.name} look={row.avatar.look} />
         {row.me && " (나)"}
       </span>
-      {/* 물고기 이름과 길이를 한 줄에 넣으면 좁은 칸에서 잘려서 두 줄로 */}
-      {row.sub && <span className={styles.sub}>{row.sub}</span>}
+      {/* 11/17 r2 물고기 이름 줄은 뺐다 (사용자: 길이만 — 낚시 칸만 길어져 세 칸 높이가 어긋났다). 이름은 마우스를 올리면 보여요 */}
       <span className={styles.value}>{valueText(board, row.value)}</span>
     </li>
   );
