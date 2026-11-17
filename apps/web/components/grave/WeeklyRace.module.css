@@ -217,21 +217,28 @@
   font-size: 10px;
 }
 
+/* 11/17 1주일 혜택: 짧은 꼬리표 한두 줄 (긴 문장은 내 정보 [혜택] 탭) */
 .rewardPerks {
   display: grid;
-  gap: 2px;
-  padding: 4px 6px;
-  background: var(--bg-deep);
+  gap: 3px;
 }
 
 .rewardPerks ul {
-  display: grid;
-  gap: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
   margin: 0;
-  padding-left: 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.rewardPerks li {
+  padding: 1px 5px;
+  background: var(--bg-deep);
   color: var(--text);
   font-family: var(--font-small);
   font-size: 10px;
+  white-space: nowrap;
 }
 
 /* 1위 보상 줄: 전용 오라 미리보기 · 전용 모자 · 배지 · 포인트 */

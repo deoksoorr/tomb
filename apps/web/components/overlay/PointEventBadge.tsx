@@ -79,13 +79,18 @@ function subscribe(onChange: () => void) {
   };
 }
 
-/** 지금 켜져 있으면 안내 띠. compact = 터치 화면 위 가장자리 바 아래 */
-export default function PointEventBadge({ compact = false }: { compact?: boolean }) {
-  const snap = useSyncExternalStore(
+/** 11/17 마지막으로 받은 이벤트와 받은 시각 (안내 띠와 내 정보 [혜택] 탭이 같은 값을 나눠 쓴다. 서버 렌더에서는 null) */
+export function usePointEvent(): { event: PointEvent | null; at: number } | null {
+  return useSyncExternalStore(
     subscribe,
     () => current,
     () => null,
   );
+}
+
+/** 지금 켜져 있으면 안내 띠. compact = 터치 화면 위 가장자리 바 아래 */
+export default function PointEventBadge({ compact = false }: { compact?: boolean }) {
+  const snap = usePointEvent();
   const ev = snap?.event ?? null;
   // 1분마다 + 끝나는 순간에 다시 그린다 (끝 문구의 "오늘·내일"과 사라지는 때)
   const [now, setNow] = useState(() => Date.now());

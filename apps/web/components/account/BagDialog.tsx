@@ -38,10 +38,12 @@ type Props = {
   avatar?: { color: string; body?: string };
   /** [레이스 보상] 칸이 비었을 때 [레이스 보기] (이번 주 레이스 창) */
   onOpenRace?: () => void;
+  /** 11/17 [레이스 보상] 칸의 [혜택 보기] (내 정보 [혜택] 탭) */
+  onOpenPerks?: () => void;
 };
 
 /** 가방: [지금 모습] 장비창(입은 것), [꾸미기] 부위별 목록·입어 보기, [소모품: 폭죽·확성기·묘비 꾸미기] 쓰기·묘비에 놓기 */
-export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace }: Props) {
+export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace, onOpenPerks }: Props) {
   const { me, error } = useMe();
   const [tab, setTab] = useState<BagTab>("look");
   /** [꾸미기] 부위 칩 ([지금 모습]의 부위 칸을 누르면 그 부위로) */
@@ -147,7 +149,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace
           ) : tab === "forage" ? (
             <ForageBag />
           ) : tab === "race" ? (
-            <ChampRewardsTab me={me} now={now} pending={pending} act={act} onOpenRace={onOpenRace} />
+            <ChampRewardsTab me={me} now={now} pending={pending} act={act} onOpenRace={onOpenRace} onOpenPerks={onOpenPerks} />
           ) : (
             <div className={styles.others}>
               {others.length === 0 && <p className={styles.empty}>폭죽·확성기·묘비 꾸미기 같은 소모품이 없어요. 상점에서 포인트로 살 수 있어요.</p>}

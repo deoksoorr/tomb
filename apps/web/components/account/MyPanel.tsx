@@ -19,6 +19,7 @@ import { InquiryButton } from "../notice/InquiryDialog";
 import EarnGauge from "./EarnGauge";
 import GoogleSection, { GoogleBadge, useGoogleStatus } from "./GoogleSection";
 import MyGraves from "./MyGraves";
+import PerksTab from "./PerksTab";
 import styles from "./MyPanel.module.css";
 import MyHouseLine from "../housing/MyHouseLine";
 import { isOnline, useFriends } from "@/lib/hooks/useFriends";
@@ -43,12 +44,22 @@ type Props = {
   houseChannel: number;
   onGoToMyHouse: (house: PublicHouse) => void;
   onOpenHousing: () => void;
+  /** 11/17 보고 있는 탭 ([내 정보] · [혜택]). 가방 [레이스 보상]·1위 알림의 [혜택 보기]가 [혜택]으로 연다 */
+  tab: MyTab;
+  onTab: (tab: MyTab) => void;
   onClose: () => void;
 };
 
+/** info = 포인트·묘비·코드 등 원래 내 정보, perks = 지금 붙어 있는 혜택 (components/account/PerksTab) */
+export type MyTab = "info" | "perks";
+const MY_TABS: readonly (readonly [MyTab, string])[] = [
+  ["info", "내 정보"],
+  ["perks", "혜택"],
+];
+
 type Ending = "leave" | "logout" | null;
 
-/** 내 정보: 포인트·출석, 내 묘비, 개인 코드, 접속 종료·로그아웃 (가방은 HUD의 [가방]) */
+/** 내 정보: [내 정보] 포인트·출석, 내 묘비, 개인 코드, 접속 종료·로그아웃 / [혜택] 지금 붙어 있는 혜택 (가방은 HUD의 [가방]) */
 export default function MyPanel({
   myGraves,
   onGoToMyGrave,
@@ -60,6 +71,8 @@ export default function MyPanel({
   houseChannel,
   onGoToMyHouse,
   onOpenHousing,
+  tab,
+  onTab,
   onClose,
 }: Props) {
   const { me, error } = useMe();
@@ -67,6 +80,7 @@ export default function MyPanel({
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const codeButtonId = useId();
+  const tabsId = useId();
   // 꾸미기 점수의 만료 판정 기준 시각 (렌더 중에 시계를 읽지 않는다)
   const [openedAt] = useState(() => Date.now());
   // 구글 연결 상태 (닉네임 옆 표시와 아래 구글 계정 칸이 같이 쓴다. 구글 설정이 없으면 null)
@@ -113,113 +127,137 @@ export default function MyPanel({
 
   return (
     <Dialog title="내 정보" onClose={onClose}>
-      <div className={styles.panel}>
-        <section className={styles.points} aria-label="포인트">
-          <p className={styles.balance}>
-            <strong>{me.points.toLocaleString("ko-KR")}</strong> 포인트
-          </p>
-          {/* 운영자 계정은 출석 도장을 받지 않는다 → 출석 줄을 뺀다 */}
-          {!me.staff && (
-            <p className={styles.sub}>
-              연속 출석 {me.attendance.streak}일
-              {me.attendance.today && " · 오늘 출석 완료"}
-            </p>
-          )}
-          <p className={styles.sub}>내 꾸미기 점수 {lookScore(me, openedAt)}점 (지금 입은 코디 기준)</p>
-        </section>
-
-        <EarnGauge me={me} />
-
-        {/* 11/16 추천 보상 공식 (운영자 계정은 추천에 참여하지 않는다) */}
-        {!me.staff && <ReferralRewardTable />}
-
-        <NameSection me={me} googleLinked={!!googleStatus?.linked} />
-
-        <DexBadgeLine />
-
-        <section className={styles.section}>
-          <h3 className={styles.heading}>내 묘비</h3>
-          <MyGraves entries={myGraves.entries} pending={myGraves.pending} onGo={onGoToMyGrave} onBury={onBury} />
-        </section>
-
-        <section className={styles.section}>
-          <h3 className={styles.heading}>내 집</h3>
-          <MyHouseLine channel={houseChannel} onGo={onGoToMyHouse} onOffice={onOpenHousing} />
-        </section>
-
-        {onOpenFriends && <FriendsLine onOpen={onOpenFriends} />}
-
-        <ReferralSection />
-
-        <CodeSection me={me} buttonId={codeButtonId} />
-
-        <GoogleSection me={me} status={googleStatus} onStatus={setGoogleStatus} />
-
-        <div className={styles.endButtons}>
-          <button type="button" className={cx(ui.button, styles.leave)} onClick={onOpenShrine}>
-            성황당 (이장한 묘비)
-          </button>
-          <InquiryButton className={styles.leave} />
+      <div className={styles.tabbed}>
+        <div className={styles.tabs} role="tablist" aria-label="내 정보 칸">
+          {MY_TABS.map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              id={`${tabsId}-${k}`}
+              aria-selected={tab === k}
+              aria-controls={`${tabsId}-panel`}
+              className={styles.tab}
+              onClick={() => onTab(k)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
-
-        <section className={styles.section}>
-          {ending === "leave" ? (
-            <div className={styles.confirm}>
-              <p>마을을 떠날까요?</p>
-              <div className={styles.confirmButtons}>
-                <button type="button" className={cx(ui.button, ui.danger)} onClick={onLeave} autoFocus>
-                  떠나기
-                </button>
-                <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setEnding(null)}>
-                  머무르기
-                </button>
-              </div>
-            </div>
-          ) : ending === "logout" ? (
-            <div className={styles.confirm}>
-              <p>
-                {me.hasCode
-                  ? "로그아웃할까요? 다시 들어오려면 개인 코드가 필요해요. 이 기기에 저장된 코드도 지워지니 먼저 적어 두세요."
-                  : "코드를 발급받지 않으면 이 계정으로 다시 들어올 수 없어요."}
-              </p>
-              <div className={styles.confirmButtons}>
-                {!me.hasCode && (
-                  <button type="button" className={cx(ui.button, ui.primary)} onClick={goToCode} autoFocus>
-                    코드 발급하기
-                  </button>
-                )}
-                <button type="button" className={cx(ui.button, ui.danger)} onClick={logout} disabled={pending}>
-                  {me.hasCode ? "로그아웃" : "그래도 로그아웃"}
-                </button>
-                <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setEnding(null)}>
-                  그만두기
-                </button>
-              </div>
-            </div>
+        <div id={`${tabsId}-panel`} role="tabpanel" aria-labelledby={`${tabsId}-${tab}`} className={styles.tabPanel}>
+          {tab === "perks" ? (
+            <PerksTab me={me} />
           ) : (
-            <div className={styles.endButtons}>
-              <button type="button" className={cx(ui.button, styles.leave)} onClick={() => setEnding("leave")}>
-                접속 종료
-              </button>
-              <button type="button" className={cx(ui.button, styles.leave)} onClick={() => setEnding("logout")}>
-                로그아웃
-              </button>
+            <div className={styles.panel}>
+              <section className={styles.points} aria-label="포인트">
+                <p className={styles.balance}>
+                  <strong>{me.points.toLocaleString("ko-KR")}</strong> 포인트
+                </p>
+                {/* 운영자 계정은 출석 도장을 받지 않는다 → 출석 줄을 뺀다 */}
+                {!me.staff && (
+                  <p className={styles.sub}>
+                    연속 출석 {me.attendance.streak}일
+                    {me.attendance.today && " · 오늘 출석 완료"}
+                  </p>
+                )}
+                <p className={styles.sub}>내 꾸미기 점수 {lookScore(me, openedAt)}점 (지금 입은 코디 기준)</p>
+              </section>
+
+              <EarnGauge me={me} />
+
+              {/* 11/16 추천 보상 공식 (운영자 계정은 추천에 참여하지 않는다) */}
+              {!me.staff && <ReferralRewardTable />}
+
+              <NameSection me={me} googleLinked={!!googleStatus?.linked} />
+
+              <DexBadgeLine />
+
+              <section className={styles.section}>
+                <h3 className={styles.heading}>내 묘비</h3>
+                <MyGraves entries={myGraves.entries} pending={myGraves.pending} onGo={onGoToMyGrave} onBury={onBury} />
+              </section>
+
+              <section className={styles.section}>
+                <h3 className={styles.heading}>내 집</h3>
+                <MyHouseLine channel={houseChannel} onGo={onGoToMyHouse} onOffice={onOpenHousing} />
+              </section>
+
+              {onOpenFriends && <FriendsLine onOpen={onOpenFriends} />}
+
+              <ReferralSection />
+
+              <CodeSection me={me} buttonId={codeButtonId} />
+
+              <GoogleSection me={me} status={googleStatus} onStatus={setGoogleStatus} />
+
+              <div className={styles.endButtons}>
+                <button type="button" className={cx(ui.button, styles.leave)} onClick={onOpenShrine}>
+                  성황당 (이장한 묘비)
+                </button>
+                <InquiryButton className={styles.leave} />
+              </div>
+
+              <section className={styles.section}>
+                {ending === "leave" ? (
+                  <div className={styles.confirm}>
+                    <p>마을을 떠날까요?</p>
+                    <div className={styles.confirmButtons}>
+                      <button type="button" className={cx(ui.button, ui.danger)} onClick={onLeave} autoFocus>
+                        떠나기
+                      </button>
+                      <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setEnding(null)}>
+                        머무르기
+                      </button>
+                    </div>
+                  </div>
+                ) : ending === "logout" ? (
+                  <div className={styles.confirm}>
+                    <p>
+                      {me.hasCode
+                        ? "로그아웃할까요? 다시 들어오려면 개인 코드가 필요해요. 이 기기에 저장된 코드도 지워지니 먼저 적어 두세요."
+                        : "코드를 발급받지 않으면 이 계정으로 다시 들어올 수 없어요."}
+                    </p>
+                    <div className={styles.confirmButtons}>
+                      {!me.hasCode && (
+                        <button type="button" className={cx(ui.button, ui.primary)} onClick={goToCode} autoFocus>
+                          코드 발급하기
+                        </button>
+                      )}
+                      <button type="button" className={cx(ui.button, ui.danger)} onClick={logout} disabled={pending}>
+                        {me.hasCode ? "로그아웃" : "그래도 로그아웃"}
+                      </button>
+                      <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setEnding(null)}>
+                        그만두기
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={styles.endButtons}>
+                    <button type="button" className={cx(ui.button, styles.leave)} onClick={() => setEnding("leave")}>
+                      접속 종료
+                    </button>
+                    <button type="button" className={cx(ui.button, styles.leave)} onClick={() => setEnding("logout")}>
+                      로그아웃
+                    </button>
+                  </div>
+                )}
+                <p className={styles.notice} role="status">
+                  {notice}
+                </p>
+              </section>
+
+              <p className={styles.legal}>
+                <Link href="/privacy" target="_blank">
+                  개인정보처리방침
+                </Link>
+                {" · "}
+                <Link href="/terms" target="_blank">
+                  이용약관
+                </Link>
+              </p>
             </div>
           )}
-          <p className={styles.notice} role="status">
-            {notice}
-          </p>
-        </section>
-
-        <p className={styles.legal}>
-          <Link href="/privacy" target="_blank">
-            개인정보처리방침
-          </Link>
-          {" · "}
-          <Link href="/terms" target="_blank">
-            이용약관
-          </Link>
-        </p>
+        </div>
       </div>
     </Dialog>
   );

@@ -174,6 +174,14 @@ export function champBoardPerkLines(board: ChampBoard): string[] {
   ];
 }
 
+/** 11/17 레이스 창 「1위 보상」 칸에 붙이는 짧은 혜택 꼬리표 (긴 문장은 내 정보 [혜택] 탭 — champBoardPerkLines) */
+export function champBoardPerkTags(board: ChampBoard): string[] {
+  if (board === "huntKills") return [`사냥 경험치 +${pctText(CHAMP_HUNT_EXP)}`, `초월 경험치 +${pctText(CHAMP_TRANSCEND_EXP)}`, `사냥 한도 +${CHAMP_EARN.huntKills.hunt!.cap}P`];
+  if (board === "fish") return [`물고기 값 +${CHAMP_EARN.fish.fish!.pct}%`, `팔기 한도 +${CHAMP_EARN.fish.fish!.cap}P`];
+  const pres = CHAMP_EARN.points.presence!;
+  return [`꾸미기와 가구 ${pctText(CHAMP_SHOP_DISCOUNT)} 할인`, `머무르기 +${pres.pct}%`, `접속 보너스 ${(100 + STAY_PCT) / 100}배`];
+}
+
 /** 차지한 랭킹들의 혜택 문장 (다관왕이면 이동 속도 줄까지) */
 export function champPerkLines(boards: readonly ChampBoard[]): string[] {
   const set = CHAMP_BOARDS.filter((b) => boards.includes(b));

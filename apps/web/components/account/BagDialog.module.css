@@ -222,28 +222,23 @@
 }
 
 /* 11/17 1위 1주일 혜택 (끝나는 시각 + 혜택 목록) */
+/* 11/17 1주일 혜택 바로 가기 한 줄 (목록은 내 정보 [혜택] 탭) */
 .champPerks {
-  display: grid;
-  gap: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 8px;
   background: var(--bg-deep);
   box-shadow: var(--px-border);
 }
 
 .champPerkHead {
+  flex: 1 1 180px;
   margin: 0;
   color: #ffe27a;
   font-size: 12px;
-}
-
-.champPerkList {
-  display: grid;
-  gap: 3px;
-  margin: 0;
-  padding-left: 16px;
-  color: var(--text);
-  font-family: var(--font-small);
-  font-size: 11px;
 }
 
 .champEmpty {

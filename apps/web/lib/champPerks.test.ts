@@ -3,6 +3,7 @@ import { champBitsOf, CHAMP_AURA_OFF } from "@tomb/protocol";
 import {
   askOf,
   champEarnPerk,
+  champBoardPerkTags,
   champPerkHead,
   champPerkLines,
   champShopDiscount,
@@ -191,6 +192,13 @@ describe("1위 혜택 — 2관왕·3관왕", () => {
     expect(champPerkLines(["fish"])).toHaveLength(2);
     // 문구 규칙: 「라벨: 설명」 콜론과 「A · B」 나열이 없다
     for (const l of three) expect(l).not.toMatch(/:| · /);
+  });
+
+  it("레이스 창 짧은 꼬리표는 같은 표의 숫자를 쓴다", () => {
+    expect(champBoardPerkTags("huntKills")).toEqual(["사냥 경험치 +15%", "초월 경험치 +10%", "사냥 한도 +300P"]);
+    expect(champBoardPerkTags("fish")).toEqual(["물고기 값 +20%", "팔기 한도 +150P"]);
+    expect(champBoardPerkTags("points")).toEqual(["꾸미기와 가구 20% 할인", "머무르기 +15%", "접속 보너스 1.5배"]);
+    for (const b of ["points", "huntKills", "fish"] as const) for (const t of champBoardPerkTags(b)) expect(t).not.toMatch(/:| · /);
   });
 
   it("2관왕이면 두 랭킹의 적립 혜택이 각자 항목에 붙는다", () => {
