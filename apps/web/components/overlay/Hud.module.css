@@ -42,6 +42,12 @@
   color: var(--muted);
 }
 
+/* 11/17 r2 데스크톱: 채널 줄 아래 줄들(물때·포인트 이벤트·과자) 앞에 긴급 의뢰 막대 높이만큼 비운다 */
+.urgentGap {
+  height: var(--urgent-h, 0px);
+  margin-top: -8px;
+}
+
 /* 11/17 r2 채널 줄 안 시간·날씨: 위 가운데 빈 곳이 좁으면 숨긴다 (오른쪽 단추와 겹치지 않게 — GameShell .topCenter 컨테이너) */
 @container (max-width: 270px) {
   .pill .ambience {
@@ -67,7 +73,7 @@
 /* 11/16 터치 화면: 위 가장자리 바 바로 아래 가운데에 물때 줄 → 포인트 이벤트 띠 순서로 쌓는 묶음 */
 .compactStack {
   position: absolute;
-  top: calc(var(--top-h) + 6px);
+  top: calc(var(--top-h) + 6px + var(--urgent-h, 0px));
   left: 50%;
   display: flex;
   flex-direction: column;
@@ -95,7 +101,7 @@
 /* 터치 화면: 위 가장자리 바 바로 아래 가운데 (바의 배치에 끼지 않게 띄운다). 좁으면 두 줄 */
 .eventCompact {
   position: absolute;
-  top: calc(var(--top-h) + 6px);
+  top: calc(var(--top-h) + 6px + var(--urgent-h, 0px));
   left: 50%;
   max-width: calc(100% - 16px);
   height: auto;

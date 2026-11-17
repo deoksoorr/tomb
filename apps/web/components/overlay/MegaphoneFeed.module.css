@@ -11,7 +11,8 @@
 .floating {
   position: absolute;
   z-index: 1;
-  top: calc(var(--safe-top) + var(--top-h) + var(--top-gap));
+  /* 11/17 r2 긴급 의뢰 막대가 떠 있으면 그 아래로 (--urgent-h, UrgentHud) */
+  top: calc(var(--safe-top) + var(--top-h) + var(--top-gap) + var(--urgent-h, 0px));
   left: var(--safe-left);
   display: flex;
   flex-direction: column;

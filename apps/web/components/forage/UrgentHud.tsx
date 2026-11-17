@@ -7,6 +7,27 @@ import { showToast } from "@/lib/hooks/useToasts";
 import { useUrgent } from "./urgentStore";
 import u from "./urgent.module.css";
 
+/**
+ * 11/17 r2 긴급: 위쪽 막대(긴급 의뢰·불꽃축제)가 떠 있는 동안 그 높이를 --urgent-h(문서 루트)로 알린다.
+ * 같은 자리 아래에 붙는 것들(터치 확성기 줄·고정 공지, 접속 보너스, 물때·포인트 이벤트 줄)이 그만큼 내려가 막대를 가리지 않게
+ */
+function useUrgentSpace(): (el: HTMLElement | null) => void {
+  const [el, setEl] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!el) return;
+    const put = () => root.style.setProperty("--urgent-h", `${Math.ceil(el.getBoundingClientRect().height) + 10}px`);
+    put();
+    const ro = new ResizeObserver(put);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty("--urgent-h");
+    };
+  }, [el]);
+  return setEl;
+}
+
 // 11/15: 긴급 의뢰 위쪽 막대 (GameShell이 게임이 뜨면 붙인다 — 마을 어디서든 보인다).
 //  - 시작하면 확성기처럼 큰 알림 한 번 (의뢰마다 한 번만 — urgentStore가 정한다)
 //  - 진행 중: 남은 시간(마지막 1분은 붉게 깜빡) · 서버 전체 막대(50%·100%·150% 눈금)
@@ -37,6 +58,7 @@ const readClosed = (): string | null => {
 const fill = (n: number, goal: number) => `${Math.min(100, goal > 0 ? (n / (goal * 1.5)) * 100 : 0)}%`;
 
 export default function UrgentHud() {
+  const space = useUrgentSpace();
   const { pub, mine, announce: ann } = useUrgent();
   const scene = useBridgeValue("scene:changed")?.scene;
   const [now, setNow] = useState(() => Date.now());
@@ -106,7 +128,7 @@ export default function UrgentHud() {
         </div>
       )}
       {fireworks && (
-        <div className={u.fwTimer} role="status" aria-label={`불꽃축제 남은 시간 ${mmss(fwLeft)}`}>
+        <div ref={space} className={u.fwTimer} role="status" aria-label={`불꽃축제 남은 시간 ${mmss(fwLeft)}`}>
           <span className={u.fwSpark} aria-hidden="true">
             ✦
           </span>
@@ -116,7 +138,7 @@ export default function UrgentHud() {
         </div>
       )}
       {hidden !== ev.id && !fireworks && nobody && (
-        <div className={u.hud} data-done role="status" aria-label="긴급 의뢰">
+        <div ref={space} className={u.hud} data-done role="status" aria-label="긴급 의뢰">
           <div className={u.hudTop}>
             <span className={u.endLine}>{URGENT_NOBODY_LINE}</span>
             <button type="button" className={u.close} onClick={() => setHidden(ev.id)} aria-label="긴급 의뢰 막대 닫기">
@@ -126,7 +148,7 @@ export default function UrgentHud() {
         </div>
       )}
       {hidden !== ev.id && !fireworks && !nobody && (
-        <div className={u.hud} data-hurry={hurry || undefined} data-done={!live || undefined} data-fest={fest || undefined} role="status" aria-label="긴급 의뢰">
+        <div ref={space} className={u.hud} data-hurry={hurry || undefined} data-done={!live || undefined} data-fest={fest || undefined} role="status" aria-label="긴급 의뢰">
           <div className={u.hudTop}>
             <span className={u.tag}>{live ? "긴급 의뢰" : "긴급 의뢰 끝"}</span>
             <span className={u.what}>

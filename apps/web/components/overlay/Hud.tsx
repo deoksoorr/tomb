@@ -13,7 +13,7 @@ import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import styles from "./Hud.module.css";
 import { SnackBar } from "../sea/GullSnacks";
-import PointEventBadge from "./PointEventBadge";
+import PointEventBadge, { usePointEvent } from "./PointEventBadge";
 
 const MODE_TEXT: Record<Exclude<NetMode, "online">, string> = {
   connecting: "채널에 들어가는 중…",
@@ -34,6 +34,7 @@ export function queueText(status: QueueStatus | undefined): string {
 
 /** 상단 가운데: 채널·인원, 시간대·날씨 (+ 포인트 2배 이벤트 중이면 그 아래 안내 띠). compact(터치 화면 위 가장자리 바)는 작은 한 줄 */
 export default function Hud({ onOpenChannels, compact = false }: { onOpenChannels: () => void; compact?: boolean }) {
+  const eventSnap = usePointEvent();
   const status = useBridgeValue("net:status");
   const ambience = useAmbience();
   const mode = status?.mode ?? "connecting";
@@ -114,6 +115,8 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
           </span>
         )}
       </div>
+      {/* 11/17 r2 긴급 의뢰 막대가 떠 있으면 그 높이만큼 비우고 아래 줄들을 그 밑으로 */}
+      {(tide || eventSnap?.event) && <div className={styles.urgentGap} aria-hidden="true" />}
       {/* 11/16 바닷가 물때 시계: 채널 줄 아래 한 줄 (위 줄 단추들과 겹치지 않게) */}
       {tide && (
         <span className={cx(ui.top, styles.tide)} title="물때는 3시간마다 돌아요" role="status">
