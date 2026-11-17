@@ -1,16 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { speciesById, npcBuys, NPCS } from "../forage/catalog";
 import { candidates } from "../forage/rules";
-import { eatSpicy, FEATHER_CHANCE, FEATHER_ID, gullHotLevel, gullHotOver, heldHot, holdHot, hotLevel, HOT_FADE_MS, HOT_MS, HOT_RAMP_MS, RED_FEATHER_ID, rollFeather, SNACK, SNACK_DAY_LIMIT, type GullHot } from "./gull";
+import { eatSpicy, FEATHER_CHANCE, FEATHER_ID, gullHotLevel, gullHotOver, heldHot, holdHot, hotLevel, HOT_FADE_MS, HOT_MS, HOT_RAMP_MS, RED_FEATHER_ID, rollFeather, SNACK, SNACK_DAY_LIMIT, type GullHot, SNACK_NO_LIMIT, SNACK_HOLD_MAX, RED_FEATHER_SHARE } from "./gull";
 import { MemoryGullStore } from "./gullStore";
 
 // 11/17 포구 갈매기 과자 순수 규칙 · 저장소
 describe("갈매기 과자 (gull)", () => {
-  it("값은 작고 매운 과자가 조금 더 비싸요 · 하루 10개", () => {
+  // 11/17 하루 한도는 풀었다 (사용자 요청) — 과자 값이 깃털 기대값보다 훨씬 커서 사도 포인트를 버는 길이 안 생겨야 한다
+  it("값은 작고 매운 과자가 조금 더 비싸요 · 하루 한도는 사실상 없어요 · 사서 던져도 포인트가 늘지 않아요", () => {
     expect(SNACK.plain.price).toBe(5);
     expect(SNACK.spicy.price).toBeGreaterThan(SNACK.plain.price);
     expect(SNACK.spicy.price).toBeLessThanOrEqual(10);
-    expect(SNACK_DAY_LIMIT).toBe(10);
+    expect(SNACK_DAY_LIMIT).toBeGreaterThanOrEqual(SNACK_NO_LIMIT);
+    const red = speciesById(RED_FEATHER_ID)!.price;
+    const plain = speciesById(FEATHER_ID)!.price;
+    expect(FEATHER_CHANCE * plain).toBeLessThan(SNACK.plain.price);
+    expect(FEATHER_CHANCE * ((1 - RED_FEATHER_SHARE) * plain + RED_FEATHER_SHARE * red)).toBeLessThan(SNACK.spicy.price);
   });
 
   it("깃털은 10%로만, 매운 과자는 그중 일부가 붉은 깃털", () => {
@@ -46,16 +51,17 @@ describe("갈매기 과자 (gull)", () => {
     expect(hotLevel(HOT_MS)).toBe(0);
   });
 
-  it("저장소: 하루 둘 합쳐 10개, 물리기, 쓰기", async () => {
+  it("저장소: 하루 10개를 넘어도 사져요 · 들고 있는 상한에서 멈춰요 · 물리기, 쓰기", async () => {
     const s = new MemoryGullStore();
-    for (let i = 0; i < 6; i++) expect((await s.buy("a", "20261117", "plain")).status).toBe("ok");
+    for (let i = 0; i < 12; i++) expect((await s.buy("a", "20261117", "plain")).status).toBe("ok");
     for (let i = 0; i < 4; i++) expect((await s.buy("a", "20261117", "spicy")).status).toBe("ok");
-    expect((await s.buy("a", "20261117", "plain")).status).toBe("limit");
-    expect((await s.buy("a", "20261118", "plain")).status).toBe("ok"); // 다음 날
-    await s.unbuy("a", "20261118", "plain");
-    expect(await s.get("a", "20261118")).toEqual({ plain: 6, spicy: 4, bought: 0 });
+    for (let i = 12; i < SNACK_HOLD_MAX; i++) await s.buy("a", "20261117", "plain");
+    expect((await s.buy("a", "20261117", "plain")).status).toBe("full");
+    expect((await s.buy("a", "20261118", "spicy")).status).toBe("ok"); // 다음 날
+    await s.unbuy("a", "20261118", "spicy");
+    expect(await s.get("a", "20261118")).toEqual({ plain: SNACK_HOLD_MAX, spicy: 4, bought: 0 });
     expect(await s.take("a", "spicy")).toBe(true);
-    expect(await s.get("a", "20261117")).toMatchObject({ spicy: 3, bought: 10 });
+    expect(await s.get("a", "20261117")).toMatchObject({ spicy: 3, bought: SNACK_HOLD_MAX + 4 });
     const e = new MemoryGullStore();
     expect(await e.take("b", "plain")).toBe(false);
   });

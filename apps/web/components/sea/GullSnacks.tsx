@@ -7,7 +7,7 @@ import { snackBagIcon } from "@/game/sea/gullArt";
 import { errorMessage } from "@/lib/api";
 import { useBridgeEvent, useBridgeValue } from "@/lib/hooks/useBridge";
 import { meStore, useMe } from "@/lib/hooks/useMe";
-import { SNACK, SNACK_KINDS, type GullSnacks, type SnackKind } from "@/lib/sea/gull";
+import { SNACK, SNACK_KINDS, SNACK_NO_LIMIT, type GullSnacks, type SnackKind } from "@/lib/sea/gull";
 import { gullApi, publishSnacks, setSnackHand } from "@/lib/sea/gullClient";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -132,7 +132,7 @@ function SnackVend({ onClose }: { onClose: () => void }) {
               </span>
             ))}
           </span>
-          <span className={s.left}>{left === null ? "오늘 살 수 있는 개수를 보는 중…" : left > 0 ? `오늘 ${left}개 더 살 수 있어요` : "오늘은 다 샀어요. 내일 새벽 5시에 다시 팔아요."}</span>
+          <span className={s.left}>{left === null ? "불러오는 중…" : st && st.limit >= SNACK_NO_LIMIT ? `하나에 ${SNACK.plain.price}P, 매운 건 ${SNACK.spicy.price}P예요` : left > 0 ? `오늘 ${left}개 더 살 수 있어요` : "오늘은 다 샀어요. 내일 새벽 5시에 다시 팔아요."}</span>
         </div>
         <ul className={s.menu}>
           {SNACK_KINDS.map((k) => (

@@ -35,16 +35,13 @@ const pts = async (id: string) => (await getAccounts().get(id, kstDay(), Date.no
 const code = async (r: Response) => ((await r.json()) as { error: { code: string } }).error.code;
 
 describe("11/17 포구 갈매기 과자 — 서버 흐름", () => {
-  it("사면 포인트가 줄고 과자가 늘어요 · 하루 둘 합쳐 10개", async () => {
+  it("사면 포인트가 줄고 과자가 늘어요 · 11/17 하루 10개를 넘어도 사져요", async () => {
     const v = await newVisitor();
     const before = await pts(v.id);
-    for (let i = 0; i < 6; i++) expect((await gull.POST(req(v, { op: "buy", kind: "plain" }))).status).toBe(200);
+    for (let i = 0; i < 8; i++) expect((await gull.POST(req(v, { op: "buy", kind: "plain" }))).status).toBe(200);
     for (let i = 0; i < 4; i++) expect((await gull.POST(req(v, { op: "buy", kind: "spicy" }))).status).toBe(200);
-    expect(before - (await pts(v.id))).toBe(6 * SNACK.plain.price + 4 * SNACK.spicy.price);
-    const over = await gull.POST(req(v, { op: "buy", kind: "plain" }));
-    expect(over.status).toBe(409);
-    expect(await code(over)).toBe("SNACK_LIMIT");
-    expect(await (await gull.GET(req(v))).json()).toEqual({ plain: 6, spicy: 4, bought: 10, limit: 10 });
+    expect(before - (await pts(v.id))).toBe(8 * SNACK.plain.price + 4 * SNACK.spicy.price);
+    expect(await (await gull.GET(req(v))).json()).toMatchObject({ plain: 8, spicy: 4, bought: 12 });
   });
 
   it("포인트가 모자라면 과자도 하루 개수도 그대로", async () => {

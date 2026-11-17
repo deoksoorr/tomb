@@ -11,8 +11,13 @@ export const SNACK = {
   plain: { name: "갈매기 과자", price: 5 },
   spicy: { name: "매운 새우 과자", price: 8 },
 } as const satisfies Record<SnackKind, { name: string; price: number }>;
-/** 하루에 살 수 있는 과자 (두 가지를 합쳐서) */
-export const SNACK_DAY_LIMIT = 10;
+/**
+ * 하루에 살 수 있는 과자 (두 가지를 합쳐서). 11/17 사용자 요청으로 사실상 풀었다 (10 → 9999).
+ * 과자 값(5·8P)이 깃털 기대값(약 0.3~0.4P)보다 훨씬 커서 많이 사도 포인트를 버는 길이 안 생긴다 (포인트를 쓰는 곳). 들고 있는 상한(SNACK_HOLD_MAX)은 그대로
+ */
+export const SNACK_DAY_LIMIT = 9999;
+/** 이보다 크면 하루 한도가 없는 것으로 보고 화면에 남은 개수를 안 보여 줘요 */
+export const SNACK_NO_LIMIT = 1000;
 /** 한 사람이 들고 있을 수 있는 과자 (가지마다) */
 export const SNACK_HOLD_MAX = 30;
 /** 던질 때 깃털이 떨어질 확률 · 매운 과자 깃털 중 붉은 깃털 */
