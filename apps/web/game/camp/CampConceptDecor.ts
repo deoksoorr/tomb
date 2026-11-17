@@ -13,6 +13,7 @@ import {
   doorWreath,
   giftPile,
   lightString,
+  lightStringOrigin,
   snowCap,
   snowGlint,
   snowman,
@@ -412,11 +413,13 @@ export class CampConceptDecor {
     const dy = Math.round(b[1] - a[1]);
     const sag = Math.max(5, Math.round(Math.hypot(dx, dy) * 0.09));
     const key = `${P}concept-string-${dx}-${dy}-${sag}`;
-    const s = lightString(dx, dy, sag);
+    // 같은 줄은 한 번만 굽는다 (집이 바뀌어 줄을 다시 걸 때는 자리만 셈한다)
     if (!scene.textures.exists(key)) {
+      const s = lightString(dx, dy, sag);
       addCanvasTexture(scene, key, { canvas: s.canvas });
       addCanvasTexture(scene, `${key}~glow`, { canvas: bulbGlowSheet(s.canvas.width, s.canvas.height, s.bulbs), frameW: s.canvas.width, frameH: s.canvas.height });
     }
+    const s = lightStringOrigin(dx, dy);
     const x = a[0] - s.ox;
     const y = a[1] - s.oy;
     // 줄은 기둥 머리 높이에 걸린다 — 깊이는 두 받침 중 앞쪽 기준 (그 앞을 지나는 사람·나무가 가린다)

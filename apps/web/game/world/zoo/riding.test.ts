@@ -91,3 +91,48 @@ describe("타는 펫 다시 올라타기", () => {
     expect(b.r.on).toBe(true);
   });
 });
+
+// 11/17 DO 요청 수: 서버가 계속 거절(확인 없음)해도 1.5초마다 끝없이 다시 보내지 않아요
+describe("올라타기 재전송 간격", () => {
+  it("확인이 없으면 15초 동안은 1.5초마다, 그 뒤로는 15초마다 다시 보내요 (1분에 13번 이하)", () => {
+    const { r, sent } = setup();
+    const real = Date.now;
+    let t = 1_000_000;
+    Date.now = () => t;
+    try {
+      r.toggle();
+      for (let i = 0; i < 60 * 60; i++) {
+        t += 1000 / 60;
+        r.update();
+      }
+    } finally {
+      Date.now = real;
+    }
+    // 처음 1번 + 빠른 재전송 10번 + 늦춘 재전송 (60 − 약 16.5초) / 15초 ≈ 2~3번
+    expect(sent.length).toBeLessThanOrEqual(14);
+    expect(sent.length).toBeGreaterThanOrEqual(12);
+    expect(sent.every((on) => on)).toBe(true);
+  });
+
+  it("확인을 받았거나 다시 접속하면 다시 1.5초 간격부터", () => {
+    const { r, sent } = setup();
+    const real = Date.now;
+    let t = 1_000_000;
+    Date.now = () => t;
+    try {
+      r.toggle();
+      for (let i = 0; i < 30 * 60; i++) {
+        t += 1000 / 60;
+        r.update();
+      }
+      r.onRide(7, true);
+      const n = sent.length;
+      r.onWelcome();
+      t += 1600;
+      r.update();
+      expect(sent.length).toBe(n + 2);
+    } finally {
+      Date.now = real;
+    }
+  });
+});

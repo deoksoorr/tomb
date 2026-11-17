@@ -69,6 +69,8 @@ export class GhostShip {
   private readonly lamps: Phaser.GameObjects.Image[];
   private readonly wakes: Phaser.GameObjects.Image[];
   private readonly mists: Mist[] = [];
+  /** 지금 숨겨 둔 상태 (배가 없는 한 주 내내 매 프레임 다시 숨기지 않게 — draw가 그리면 false) */
+  private hidden = false;
   private readonly sign: Phaser.GameObjects.BitmapText;
   private readonly hull: Phaser.GameObjects.Zone;
   private readonly hullCollider: Phaser.Physics.Arcade.Collider;
@@ -246,11 +248,14 @@ export class GhostShip {
   }
 
   private hideAll(): void {
+    if (this.hidden) return;
+    this.hidden = true;
     for (const o of [this.back, this.front, this.windows, this.reflect, this.flag, this.stalls, this.merchant, this.plank, this.plankFront, this.sign, ...this.sails, ...this.lamps, ...this.wakes, ...this.posts, ...this.postGlows]) o.setVisible(false);
     for (const m of this.mists) m.img.setVisible(false);
   }
 
   private draw(now: number, darkness: number, p: number, view: Phaser.Geom.Rectangle): void {
+    this.hidden = false;
     const O = GHOST_ORIGIN;
     const calm = this.h.reduced;
     // 물결 따라 천천히 오르내려요 (1px) · 유령선답게 아주 살짝 숨 쉬듯 투명해졌다 짙어져요

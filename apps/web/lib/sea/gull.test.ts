@@ -60,10 +60,10 @@ describe("갈매기 과자 (gull)", () => {
     expect((await s.buy("a", "20261118", "spicy")).status).toBe("ok"); // 다음 날
     await s.unbuy("a", "20261118", "spicy");
     expect(await s.get("a", "20261118")).toEqual({ plain: SNACK_HOLD_MAX, spicy: 4, bought: 0 });
-    expect(await s.take("a", "spicy")).toBe(true);
+    expect(await s.take("a", "20261117", "spicy")).toEqual({ plain: SNACK_HOLD_MAX, spicy: 3, bought: SNACK_HOLD_MAX + 4 });
     expect(await s.get("a", "20261117")).toMatchObject({ spicy: 3, bought: SNACK_HOLD_MAX + 4 });
     const e = new MemoryGullStore();
-    expect(await e.take("b", "plain")).toBe(false);
+    expect(await e.take("b", "20261117", "plain")).toBeNull();
   });
 
   // 11/17 r2 사용자 "빨간 갈매기가 매운 과자를 또 먹으러 오다 하얘진 뒤 먹었어요"

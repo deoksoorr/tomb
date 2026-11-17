@@ -68,4 +68,12 @@ describe("11/17 포구 갈매기 과자 — 서버 흐름", () => {
     const snap = await getForageStore().snapshot(v.id, kstDay(), 0);
     expect(snap.bag.d_redfeather).toBe(1);
   });
+
+  it("11/17 1분에 30번(2초마다) 던져도 상점 한도에 막히지 않아요", async () => {
+    const v = await newVisitor();
+    for (let i = 0; i < 30; i++) await gull.POST(req(v, { op: "buy", kind: i % 2 ? "spicy" : "plain" })).catch(() => null);
+    let blocked = 0;
+    for (let i = 0; i < 30; i++) if ((await gull.POST(req(v, { op: "throw", kind: "plain" }))).status === 429) blocked++;
+    expect(blocked).toBe(0);
+  });
 });

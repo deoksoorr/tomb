@@ -36,8 +36,9 @@ export async function buySnack(acct: string, kind: SnackKind, now = Date.now()):
 export type SnackThrowResult = GullSnacks & { kind: SnackKind; feather: string | null; dex?: DexGain };
 /** 갈매기에게 하나 던지기 → 깃털 (없으면 null). rand는 시험용 */
 export async function throwSnack(acct: string, kind: SnackKind, now = Date.now(), ip?: string, rand: () => number = Math.random): Promise<SnackThrowResult> {
-  const store = getGullStore();
-  if (!(await store.take(acct, kind))) throw new HttpError(409, "NO_SNACK", SNACK_NONE_MSG);
+  // 쓰고 남은 개수까지 한 번에 받아요 (Redis 1명령)
+  const left = await getGullStore().take(acct, kstDay(now), kind);
+  if (!left) throw new HttpError(409, "NO_SNACK", SNACK_NONE_MSG);
   const id = rollFeather(kind, rand(), rand());
   let dex: DexGain | undefined;
   let feather: string | null = null;
@@ -50,6 +51,5 @@ export async function throwSnack(acct: string, kind: SnackKind, now = Date.now()
     feather = g?.item ? id : null;
     dex = g?.dex;
   }
-  const s = snacks(await store.get(acct, kstDay(now)));
-  return { ...s, kind, feather, ...(dex ? { dex } : {}) };
+  return { ...snacks(left), kind, feather, ...(dex ? { dex } : {}) };
 }

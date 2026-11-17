@@ -4,7 +4,7 @@ import { conceptSuffix } from "../../sprites/winterScenery";
 import { bulbGlowSheet, breathPuff, type Bulb } from "../../sprites/winterArt";
 import { RTEX } from "../sprites";
 import { conceptPropCanvas } from "./art";
-import { decorArt, decorPlan, isOutdoorZone, snowTileCanvas, wallOverlay, zoneNight, zoneWindows, type Rect } from "./conceptArt";
+import { decorArt, decorPlan, isOutdoorZone, snowTileCanvas, wallOverlay, zoneNight, zoneWindows, type DecorArt, type Rect } from "./conceptArt";
 import { AH, AW, type ArenaLayout, type Prop, type Pt } from "./layout";
 
 // 11/17 사냥터·야근 빌딩 겨울판·크리스마스판 실행부 (Arena가 판마다 하나 — 기본판이면 만들지 않는다).
@@ -29,6 +29,8 @@ const TEX = {
 /** 소품 그림 키마다 전구 자리 (텍스처는 씬을 넘어 남으니 전구 자리도 모듈에 남긴다) */
 const BULBS = new Map<string, Bulb[]>();
 const STARS = new Map<string, { x: number; y: number }[]>();
+/** 바닥 장식 키마다 히터 빛 자리 (구운 뒤에는 그림을 다시 굽지 않고 이것만 읽는다) */
+const GLOWS = new Map<string, DecorArt["glow"] | null>();
 
 type Twinkle = { img: Phaser.GameObjects.Image; ph: number };
 const TWINKLES = new WeakMap<Phaser.Scene, { list: Set<Twinkle>; tick: number }>();
@@ -191,12 +193,15 @@ export class ArenaConcept {
     // 바닥 장식
     for (const d of decorPlan(l, this.concept, extra)) {
       const k = TEX.decor(d.kind, d.v, this.suffix + (this.outdoor ? "o" : ""));
-      const art = decorArt(d, this.outdoor);
-      if (!sc.textures.exists(k)) {
-        sc.textures.addCanvas(k, art.canvas);
-        BULBS.set(k, art.bulbs);
-        STARS.set(k, art.stars);
+      // 처음 한 번만 굽는다 (방·층이 바뀔 때마다 같은 그림을 다시 굽지 않게)
+      if (!sc.textures.exists(k) || !GLOWS.has(k)) {
+        const a = decorArt(d, this.outdoor);
+        if (!sc.textures.exists(k)) sc.textures.addCanvas(k, a.canvas);
+        BULBS.set(k, a.bulbs);
+        STARS.set(k, a.stars);
+        GLOWS.set(k, a.glow ?? null);
       }
+      const art = { glow: GLOWS.get(k) ?? null };
       const src = sc.textures.get(k).getSourceImage() as HTMLCanvasElement;
       this.keep(sc.add.image(d.x, d.y, k).setOrigin(0.5, 1).setDepth(d.y));
       const ox = Math.round(d.x - src.width / 2);

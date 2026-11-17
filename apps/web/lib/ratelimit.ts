@@ -26,6 +26,8 @@ const LIMITS = {
   // 화면마다 주기적으로 부르므로 detail보다 넉넉히 — 주소만 바꿔 캐시를 피하는 도배만 막는다 (메모리 한도, Redis 명령 0)
   publicGet: { visitor: null, ip: 600, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   shop: { visitor: 20, ip: 60, windowSec: MIN, message: "상점 요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  // 11/17 갈매기 과자 던지기: 2초에 한 번(1분 30번)까지 던질 수 있어 상점 한도(20)로는 계속 던지다 막혔다 — 따로 넉넉히 (메모리 한도)
+  gullThrow: { visitor: 40, ip: 120, windowSec: MIN, message: "조금만 천천히 던져 주세요." },
   // 사냥 스킬 트리: 한 랭크에 한 번씩 누르므로 (초기화 뒤 다시 찍기 등) 상점보다 넉넉히
   rpgSkill: { visitor: 90, ip: 240, windowSec: MIN, message: "스킬을 너무 빨리 찍고 있어요. 잠시 뒤에 다시 시도해 주세요." },
   inquiry: { visitor: 3, ip: 3, windowSec: DAY, message: "문의는 하루에 3번까지 보낼 수 있어요." },

@@ -571,18 +571,23 @@ export function bulbGlowSheet(w: number, h: number, bulbs: readonly Bulb[], star
   return canvas;
 }
 
+const LIGHT_PAD = 3;
+
+/** 전구 줄 그림 안에서 첫 점이 놓인 자리 (lightString의 ox·oy와 같다 — 이미 구운 줄은 그림을 다시 굽지 않고 자리만 셈한다) */
+export function lightStringOrigin(dx: number, dy: number): { ox: number; oy: number } {
+  return { ox: LIGHT_PAD + (dx < 0 ? -dx : 0), oy: LIGHT_PAD - Math.min(0, dy) };
+}
+
 /**
  * 두 점을 잇는 전구 줄 (늘어진 전선 + 전구). 그림 원점은 왼쪽 위, ox·oy = 첫 점이 그림 안에서 놓인 자리.
  * 전선은 늘어진 포물선, 전구는 6px마다 색을 돌려 단다
  */
 export function lightString(dx: number, dy: number, sag: number): { canvas: HTMLCanvasElement; bulbs: Bulb[]; ox: number; oy: number } {
-  const pad = 3;
-  const minY = Math.min(0, dy);
+  const pad = LIGHT_PAD;
   const w = Math.abs(dx) + pad * 2 + 1;
   const h = Math.abs(dy) + sag + pad * 2 + 2;
   const g = new Grid(w, h);
-  const ox = pad + (dx < 0 ? -dx : 0);
-  const oy = pad - minY;
+  const { ox, oy } = lightStringOrigin(dx, dy);
   const n = Math.max(2, Math.ceil(Math.hypot(dx, dy)));
   const bulbs: Bulb[] = [];
   let prev: [number, number] | null = null;

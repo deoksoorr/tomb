@@ -14,6 +14,7 @@ import {
   giftPile,
   hollyBed,
   lightString,
+  lightStringOrigin,
   snowCap,
   snowGlint,
   snowman,
@@ -328,11 +329,13 @@ export class ConceptDecor {
     const dy = b[1] - a[1];
     const sag = Math.max(5, Math.round(Math.abs(dx) * 0.07));
     const key = `concept-string-${dx}-${dy}-${sag}`;
-    const s = lightString(dx, dy, sag);
+    // 같은 줄은 한 번만 굽는다 (집이 바뀌어 줄을 다시 걸 때는 자리만 셈한다)
     if (!scene.textures.exists(key)) {
+      const s = lightString(dx, dy, sag);
       addCanvasTexture(scene, key, { canvas: s.canvas });
       addCanvasTexture(scene, `${key}~glow`, { canvas: bulbGlowSheet(s.canvas.width, s.canvas.height, s.bulbs), frameW: s.canvas.width, frameH: s.canvas.height });
     }
+    const s = lightStringOrigin(dx, dy);
     const x = a[0] - s.ox;
     const y = a[1] - s.oy;
     // 줄은 가로등 머리 높이에 걸린다 — 깊이는 아래 끝(받침) 기준으로 사람보다 뒤
