@@ -55,8 +55,8 @@ export function campSnowSpotOk(x: number, y: number): boolean {
   // 버스 길·정류장 지붕과 내리는 보도
   if (inBox(x, y, CAMP_ROAD.x, CAMP_ROAD.y - 4, CAMP_ROAD.x + CAMP_ROAD.w + 8, CAMP_ROAD.y + CAMP_ROAD.h + 4)) return false;
   if (inBox(x, y, CAMP_BUS_STOP.x - 40, CAMP_BUS_STOP.y - 16, CAMP_BUS_STOP.x + 40, CAMP_BUS_STOP.y + 22)) return false;
-  // 모닥불 둘레 (눈이 녹은 젖은 땅)
-  if (Math.hypot(x - CAMP_FIRE.x, (y - CAMP_FIRE.y) * 1.2) < 76) return false;
+  // 모닥불 자리만 (11/18 사용자 「모닥불 근처도 되게」 — 예전엔 녹은 땅 둘레 76px을 막았다)
+  if (Math.hypot(x - CAMP_FIRE.x, (y - CAMP_FIRE.y) * 1.2) < 26) return false;
   // 전망대 데크·관리소·캠핑카
   if (inBox(x, y, CAMP_LOOKOUT.x - 6, CAMP_LOOKOUT.y - 6, CAMP_LOOKOUT.x + CAMP_LOOKOUT.w + 6, CAMP_LOOKOUT.y + CAMP_LOOKOUT.h + 10)) return false;
   if (inBox(x, y, CAMP_OFFICE.x - CAMP_OFFICE_W / 2 - 6, CAMP_OFFICE.y - CAMP_OFFICE_H, CAMP_OFFICE.x + CAMP_OFFICE_W / 2 + 6, CAMP_OFFICE.y + 8)) return false;

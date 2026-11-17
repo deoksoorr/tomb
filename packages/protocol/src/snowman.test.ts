@@ -19,11 +19,12 @@ describe("snowman wire", () => {
 });
 
 describe("snowman spot", () => {
-  it("눈밭은 되고, 물·버스 길·모닥불 둘레·관리소·맵 밖은 안 된다", () => {
+  it("눈밭은 되고, 물·버스 길·모닥불 자리·관리소·맵 밖은 안 된다 (11/18 모닥불 근처는 돼요)", () => {
     expect(campSnowSpotOk(330, 540)).toBe(true);
     expect(campSnowSpotOk(campStreamX(400), 400)).toBe(false);
     expect(campSnowSpotOk(CAMP_ROAD.x + 60, CAMP_ROAD.y + 20)).toBe(false);
-    expect(campSnowSpotOk(CAMP_FIRE.x + 30, CAMP_FIRE.y)).toBe(false);
+    expect(campSnowSpotOk(CAMP_FIRE.x + 10, CAMP_FIRE.y)).toBe(false);
+    expect(campSnowSpotOk(CAMP_FIRE.x + 40, CAMP_FIRE.y)).toBe(true);
     expect(campSnowSpotOk(CAMP_OFFICE.x, CAMP_OFFICE.y - 20)).toBe(false);
     expect(campSnowSpotOk(-5, 300)).toBe(false);
     expect(campSnowSpotOk(CAMP_ARRIVE.x, CAMP_ARRIVE.y)).toBe(false);

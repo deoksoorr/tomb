@@ -59,7 +59,6 @@ import {
   type DrunkState,
   BBQ_INTERVAL_MS,
   SNOWMAN_BUILD_INTERVAL_MS,
-  SNOWMAN_REACH,
   type BbqEffect,
   type AvatarDye,
   type AwayPlace,
@@ -1034,7 +1033,7 @@ export class ChannelCore<C extends object> {
   private onSnowman(p: Peer<C>, x: number, y: number, now: number): void {
     if (this.cfg.room || mapOfPeer(p) !== "camp" || p.away) return;
     if (now - (p.lastSnowmanAt ?? -Infinity) < SNOWMAN_BUILD_INTERVAL_MS) return this.sendTo(p, { t: "snowmanDenied", why: "wait" });
-    if (dist(p, { x, y }) > SNOWMAN_REACH) return this.sendTo(p, { t: "snowmanDenied", why: "spot" });
+    // 11/18 사용자 「내 위치에서 멀어도 상관없게」: 서버 위치와의 거리는 보지 않는다 (자리 판정·간격·4초 간격만)
     const seed = Math.floor((this.host.random ? this.host.random() : Math.random()) * 0x7fffffff);
     const r = this.snowmen.build(p.visitorId, p.name, x, y, now, seed);
     if (!r.ok) return this.sendTo(p, { t: "snowmanDenied", why: r.why });

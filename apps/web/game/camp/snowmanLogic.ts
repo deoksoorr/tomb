@@ -53,7 +53,7 @@ export function snowPlaceOk(x: number, y: number, others: Iterable<Pt> = []): bo
   if (!campSnowSpotOk(x, y)) return false;
   const k = Lay.campGroundKind(x, y);
   if (k !== "grass" && k !== "plaza" && k !== "rock" && k !== "path") return false;
-  if (campMeltAt(x, y)) return false;
+  // 11/18 녹은 땅(모닥불 둘레)에도 세울 수 있게 (사용자) — 모닥불 자리 자체는 campSnowSpotOk가 막는다
   if (!Lay.campStandable(x, y) || !Lay.campStandable(x - 6, y) || !Lay.campStandable(x + 6, y)) return false;
   if (onDeck(x, y)) return false;
   if (CAMP_SEATS.some((s) => Math.abs(s.x - x) < 12 && Math.abs(s.y - y) < 12)) return false;
