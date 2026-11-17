@@ -647,7 +647,7 @@ export class SeaScene extends Phaser.Scene {
         if (kind === "gull" || kind === "gullHot") {
           const r = this.remotes.get(sid);
           if (r?.visible) {
-            // r2 우리 화면에서도 그 사람에게 가장 가까운 갈매기 쪽으로 (갈매기 자리는 화면마다 달라요 — 같은 규칙으로 몰려와요)
+            // r3 우리 화면에서도 그 사람이 보고 있는 방향 앞으로 (갈매기 자리는 화면마다 달라요 — 같은 규칙으로 몰려와요)
             const t = this.snackTarget(r.x, r.y, r.view.dir);
             this.map.feedGulls(r.x, r.y, t.x, t.y, kind === "gullHot", this.time.now);
           }
@@ -1728,12 +1728,10 @@ export class SeaScene extends Phaser.Scene {
     return s[hand] > 0 ? hand : hand === "plain" ? "spicy" : "plain";
   }
   private snackAt = -Infinity;
-  /** 던지는 자리: r2 가장 가까운 갈매기 쪽으로 몇 걸음 앞 (갈매기가 없으면 바라보는 쪽) */
+  /** 과자가 떨어지는 자리: 11/17 r3 내가 보고 있는 방향으로 던져요 (사용자 요청 — 예전엔 가장 가까운 갈매기 쪽). 갈매기들이 그 자리로 몰려와요 */
   private snackTarget(x: number, y: number, dir: number): { x: number; y: number } {
-    const g = this.map.nearestGull(x, y);
-    const len = g ? Math.hypot(g.x - x, g.y - y) : 0;
-    const d = g && len > 1 ? [(g.x - x) / len, (g.y - y) / len] : dir === DIR.left ? [-1, 0] : dir === DIR.right ? [1, 0] : dir === DIR.up ? [0, -1] : [0, 1];
-    return { x: x + d[0] * 34, y: y + d[1] * 26 + 6 };
+    const d = dir === DIR.left ? [-1, 0] : dir === DIR.right ? [1, 0] : dir === DIR.up ? [0, -1] : [0, 1];
+    return { x: x + d[0] * 48, y: y + d[1] * 36 + 6 };
   }
   /** 지금 던질 수 있는 과자를 UI(과자 칸 [과자 던지기])에 알려요 — 바뀔 때만 */
   private snackCan: SnackKind | null | undefined = undefined;

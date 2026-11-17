@@ -17,7 +17,7 @@ import s from "./GullSnacks.module.css";
 // 11/17 r2 포구 갈매기 과자 UI (사용자 피드백):
 //  - 과자 자판기 창: 선착장 길목 「과자 자판기」 앞 E (게임 sea:snack:vend). 매점 창에서 옮겼어요 — 값·하루 10개는 그대로 (서버 lib/sea/gullService)
 //  - 과자 칸: 바닷가에 있는 동안 물때 줄 아래에 가진 과자 개수 (손에 든 과자 강조 · 눌러서 바꿔 들어요) +
-//    던질 수 있는 곳이면 [과자 던지기] (가장 가까운 갈매기 쪽으로 — 게임 sea:snack:throw). 없으면 자판기 안내
+//    던질 수 있는 곳이면 [과자 던지기] (보고 있는 방향으로 — 게임 sea:snack:throw). 다 써도 개수 칸(0)만
 
 /** 과자 봉지 그림 (16×16, 한 번만 그려요) */
 function useSnackIcons(): Record<SnackKind, string> {
