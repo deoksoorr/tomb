@@ -210,35 +210,44 @@
   gap: 4px;
 }
 
-.rewardHead,
-.rewardPerkHead {
+.rewardHead {
   color: var(--candle);
   font-family: var(--font-small);
   font-size: 10px;
 }
 
-/* 11/17 1주일 혜택: 짧은 꼬리표 한두 줄 (긴 문장은 내 정보 [혜택] 탭) */
-.rewardPerks {
-  display: grid;
-  gap: 3px;
-}
-
-.rewardPerks ul {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+/* 11/17 1위 1주일 혜택 상자 (ChampPerksBox): 안내 한 줄 + 랭킹마다 한 칸 (순위 칸과 같은 3열) */
+.perkNote {
   margin: 0;
-  padding: 0;
-  list-style: none;
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 11px;
 }
 
-.rewardPerks li {
-  padding: 1px 5px;
+/* 세 칸 높이를 맞춘다 (글 줄 수가 달라도 칸 아래 끝이 나란히) */
+.perkGrid {
+  align-items: stretch;
+}
+
+.perkCol {
+  display: grid;
+  justify-items: start;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px;
   background: var(--bg-deep);
+}
+
+.perkCol ul {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding-left: 1em;
   color: var(--text);
   font-family: var(--font-small);
-  font-size: 10px;
-  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 /* 1위 보상 줄: 전용 오라 미리보기 · 전용 모자 · 배지 · 포인트 */
