@@ -70,6 +70,8 @@ export class SeaKayaks {
   private readonly bounce = new Bounce();
   private strokeAt = 0;
   private riders = new Set<RemoteAvatar>();
+  /** 11/17 긴급: 노 젓는 사람의 카약 자리에 붙여 그리는 원격 동승자 (posOverride를 넣은 사람) */
+  private pinned = new Set<RemoteAvatar>();
   private readonly blocks: Phaser.Physics.Arcade.StaticGroup;
   private readonly blockCollider: Phaser.Physics.Arcade.Collider;
 
@@ -353,6 +355,7 @@ export class SeaKayaks {
     const wall = Date.now();
     const remotes = h.remotes();
     const seen = new Set<RemoteAvatar>();
+    const pinned = new Set<RemoteAvatar>();
     for (const v of this.views) {
       const before: [Sid | -1 | null, Sid | -1 | null] = [v.seat[0], v.seat[1]];
       v.seat = [this.seatOwner(v.n, 0), this.seatOwner(v.n, 1)];
@@ -386,6 +389,16 @@ export class SeaKayaks {
           v.fade = 1;
         }
       }
+      // 11/17 긴급 (사용자 "카약 둘이 타면 뒷사람이 튕겨 나가요"): 원격 동승자는 자기 네트워크 위치(지연·보간)로 그려
+      // 노 젓는 쪽이 움직이면 카약 밖 뒤로 처져 보였다 → 조각배(BoatRide.prepare)처럼 노 젓는 사람 카약의 자리에 붙여 그린다
+      if (drv !== null && pas !== null && pas !== -1) {
+        const rp = remotes.get(pas);
+        if (rp) {
+          const at = this.seatPos(v, 1);
+          rp.posOverride = { x: at.x, y: at.y };
+          pinned.add(rp);
+        }
+      }
       const dt = Math.max(1, dtMs);
       const inst = (Math.hypot(v.x - v.lastX, v.y - v.lastY) / dt) * 1000;
       v.speed = inst > 300 ? v.speed : v.speed + (inst - v.speed) * Math.min(1, dt / 160);
@@ -401,6 +414,8 @@ export class SeaKayaks {
     }
     for (const r of this.riders) if (!seen.has(r)) r.view.ride = null;
     this.riders = seen;
+    for (const r of this.pinned) if (!pinned.has(r)) r.posOverride = null;
+    this.pinned = pinned;
   }
 
   private returnHome(v: View, now: number): void {
@@ -510,6 +525,8 @@ export class SeaKayaks {
     this.dismount();
     for (const r of this.riders) r.view.ride = null;
     this.riders.clear();
+    for (const r of this.pinned) r.posOverride = null;
+    this.pinned.clear();
     for (const v of this.views) {
       v.body.destroy();
       for (const p of v.paddles) p.destroy();
