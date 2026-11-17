@@ -2,7 +2,7 @@
   "playlists": [
     {
       "id": "retrowinter",
-      "title": "레트로 겨울 마을",
+      "title": "레트로",
       "isNew": true,
       "tracks": [
         { "file": "/bgm/retrowinter/retrowinter-01.mp3", "title": "돌길 마을 화롯가", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 116 },
