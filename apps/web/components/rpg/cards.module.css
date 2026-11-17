@@ -1092,3 +1092,12 @@
     animation-duration: 1ms;
   }
 }
+
+/* 11/17 폰·패드 사냥(야근 빌딩 포함)은 꼭 필요한 것만 (상태창·스킬·물약·멈춤 — 사용자 결정): 능력치 판과 [능력] 단추는 숨긴다.
+   빌딩에서 고른 카드는 위 상태창에 따로 보인다 */
+@media (pointer: coarse) {
+  .statOpen,
+  .statBox {
+    display: none;
+  }
+}

@@ -2827,3 +2827,10 @@ button.hotSlot:disabled {
 .towerDrops b {
   color: var(--bone);
 }
+
+/* 11/17 폰·패드 사냥은 꼭 필요한 것만: 조작 키 안내 [?] 단추도 숨긴다 (안내서는 멈춤 창에서 볼 수 있어요) */
+@media (pointer: coarse) {
+  .helpBtn {
+    display: none;
+  }
+}
