@@ -1,0 +1,195 @@
+/* 11/17 내 정보 [혜택] 탭: 지금 붙어 있는 혜택 카드 (1위 · 칭호 · 포인트 이벤트) */
+.perks {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.card {
+  --accent: var(--candle);
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+  border-left: 3px solid var(--accent);
+}
+
+.card[data-kind="title"] {
+  --accent: #cfd8e6;
+}
+
+.card[data-kind="event"] {
+  --accent: var(--moss);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.icon {
+  flex: none;
+  width: 18px;
+  color: var(--accent);
+  font-size: 16px;
+  line-height: 1;
+  text-align: center;
+}
+
+.heading {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--bone);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.chip {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--font-small);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.chip[data-grade="bronze"] {
+  border-color: #d9a777;
+  color: #d9a777;
+}
+
+.chip[data-grade="silver"] {
+  border-color: #cfd8e6;
+  color: #cfd8e6;
+}
+
+.chip[data-grade="gold"] {
+  border-color: #ffd76a;
+  color: #ffd76a;
+}
+
+.chip[data-grade="legend"],
+.chip[data-grade="mythic"] {
+  border-color: #ffb0e0;
+  color: #ffb0e0;
+}
+
+.who {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-small);
+  font-size: 11px;
+}
+
+.until {
+  margin: 0;
+  color: #ffe27a;
+  font-family: var(--font-small);
+  font-size: 11px;
+}
+
+.who + .until {
+  margin-top: -4px;
+}
+
+.card[data-kind="event"] .until {
+  color: var(--moss);
+}
+
+.name {
+  margin: 0;
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 15px;
+}
+
+/* 랭킹 하나 (꼬리표 + 혜택 문장들) */
+.group {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+
+.board {
+  padding: 1px 4px;
+  border: 1px solid #ffd36a;
+  color: #ffe27a;
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.board[data-board="huntKills"] {
+  border-color: #ff7a5a;
+  color: #ffb0a0;
+}
+
+.board[data-board="fish"] {
+  border-color: #7ad8ff;
+  color: #b8ecff;
+}
+
+.lines {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 16px;
+  color: var(--text);
+  font-family: var(--font-small);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.extra {
+  margin: 0;
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 11px;
+}
+
+.meta {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+/* 포인트 이벤트에서 늘어나는 항목 꼬리표 */
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tags li {
+  padding: 1px 6px;
+  background: var(--moss-deep);
+  color: var(--bone);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 40px 12px;
+  text-align: center;
+}
+
+.emptyIcon {
+  color: var(--muted);
+  font-size: 24px;
+}
+
+.emptyHead {
+  margin: 0;
+  color: var(--bone);
+}

@@ -525,15 +525,18 @@ function groupText(p: TitlePerk): [string, string] | null {
   }
 }
 
-/** 칭호 능력 문장 ("마을에서 3% 더 빨리 걸어요. 큰 물고기가 …", 없으면 "") */
-export function perkText(t: Pick<TitleDef, "id"> | null | undefined): string {
+/** 11/17 칭호 능력 문장들 [이동 속도, 갈래 능력] (없는 칸은 빠진다) — 내 정보 [혜택] 탭이 한 줄씩 보여 준다 */
+export function perkLines(t: Pick<TitleDef, "id"> | null | undefined): string[] {
   const p = titlePerk(t?.id);
   const parts: string[] = [];
   if (p.speed > 1) parts.push(`마을에서 ${pct(p.speed - 1)}% 더 빨리 걸어요.`);
   const g = groupText(p);
   if (g) parts.push(g[0]);
-  return parts.join(" ");
+  return parts;
 }
+
+/** 칭호 능력 문장 ("마을에서 3% 더 빨리 걸어요. 큰 물고기가 …", 없으면 "") */
+export const perkText = (t: Pick<TitleDef, "id"> | null | undefined): string => perkLines(t).join(" ");
 
 /** 칭호 능력 짧게 ("이동 +3% · 큰 물고기 확률 +6%", 없으면 "") — 가방 칭호 카드 */
 export function perkShort(t: Pick<TitleDef, "id"> | null | undefined): string {

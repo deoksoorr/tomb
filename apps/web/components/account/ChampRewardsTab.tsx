@@ -3,8 +3,6 @@
 import { useEffect, useState } from "react";
 import { CHAMP_ALL, champBadgeText, champBoards, CHAMP_TITLE, isChampBits, isChampItem } from "@tomb/protocol";
 import { api } from "@/lib/api";
-import { champPerkHead, champPerkLines } from "@/lib/champPerks";
-import { nextWeekStartMs } from "@/lib/gameDay";
 import type { Me } from "@/lib/types";
 import { AuraPreview, CHAMP_AURA_NAME } from "../grave/ChampReward";
 import { cx } from "../ui/cx";
@@ -27,7 +25,7 @@ function whenText(ms: number): string {
 /**
  * 가방 [레이스 보상] 칸: 주간 랭킹 1위 보상을 한곳에.
  *  ① 맨 위: "전용 오라 보이기" 켜기·끄기 (1위일 때만) ② 지금 자격(랭킹·끝나는 시각)과 배지·전용 오라 미리보기
- *  ③ 11/17 1주일 혜택: 지금 붙어 있는 혜택과 끝나는 시각 (서버가 정한 자격 — lib/champPerks)
+ *  ③ 11/17 1주일 혜택: 목록은 내 정보 [혜택] 탭 한곳에 모으고 여기는 한 줄 + [혜택 보기]
  *  ④ 빌려 받은 전용 모자 (쓰기·벗기, 남은 기간). 일반 꾸미기 목록에는 전용 모자가 섞이지 않는다
  *  1위 자격도 모자도 없으면 안내 + [레이스 보기]
  */
@@ -37,12 +35,14 @@ export default function ChampRewardsTab({
   pending,
   act,
   onOpenRace,
+  onOpenPerks,
 }: {
   me: Me;
   now: number;
   pending: boolean;
   act: (task: () => Promise<void>, done: string) => Promise<void>;
   onOpenRace?: () => void;
+  onOpenPerks?: () => void;
 }) {
   const bits = isChampBits(me.champ) ? me.champ : 0;
   const [until, setUntil] = useState(0);
@@ -108,13 +108,12 @@ export default function ChampRewardsTab({
       )}
       {bits > 0 && (
         <section className={styles.champPerks} aria-label="1주일 혜택">
-          {/* 끝나는 시각은 서버가 알려 준 자격 끝(/api/champ/me), 받기 전에는 이번 주 마감 (월요일 새벽 5시) */}
-          <p className={styles.champPerkHead}>{champPerkHead(bits, until || nextWeekStartMs(now))}</p>
-          <ul className={styles.champPerkList}>
-            {champPerkLines(boards).map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
+          <p className={styles.champPerkHead}>혜택은 내 정보 [혜택] 탭에서 볼 수 있어요</p>
+          {onOpenPerks && (
+            <button type="button" className={ui.button} onClick={onOpenPerks}>
+              혜택 보기
+            </button>
+          )}
         </section>
       )}
       <section className={styles.section} aria-label="전용 모자">

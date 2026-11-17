@@ -28,7 +28,7 @@ import BagDialog from "../account/BagDialog";
 import FireworkDialog from "../account/FireworkDialog";
 import { fireworkEntries, pointsText, type MyGraveEntry } from "../account/items";
 import MyGraves from "../account/MyGraves";
-import MyPanel from "../account/MyPanel";
+import MyPanel, { type MyTab } from "../account/MyPanel";
 import ShrineDialog from "../account/ShrineDialog";
 import BgmPlayer from "../bgm/BgmPlayer";
 import BuryForm, { type BuryMode } from "../grave/BuryForm";
@@ -272,6 +272,13 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const [openGraveId, setOpenGraveId] = useState<string | null>(null);
   const [bury, setBury] = useState<BuryMode | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
+  /** 11/17 내 정보 창의 탭. [혜택 보기]는 [혜택] 탭으로 열고, 내 정보 창이 닫히면(어느 길로든) [내 정보]로 돌아간다 */
+  const [meTab, setMeTab] = useState<MyTab>("info");
+  const [lastPanel, setLastPanel] = useState<Panel | null>(null);
+  if (panel !== lastPanel) {
+    setLastPanel(panel);
+    if (panel !== "me") setMeTab("info");
+  }
   /** 오른쪽 접이식 랭킹 (L 키로도 열고 닫는다) */
   const [rankOpen, setRankOpen] = useState(false);
   /** 표현 창(T: 말풍선·이모티콘·벤치 상태)과 즐겨찾기 원형 목록(Y). 집·마을 HUD(panel "housing") 위에서도 열리게 panel과 따로 둔다 */
@@ -564,6 +571,12 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   function closePanel() {
     if (panel === "shop") bridge.emit("shop:closed");
     setPanel(null);
+  }
+
+  /** 11/17 내 정보 [혜택] 탭 바로 가기 (가방 [레이스 보상] · 1위 알림 창) */
+  function openPerks() {
+    setMeTab("perks");
+    setPanel("me");
   }
 
   /** 소식의 묘비: 지금 채널에 있으면 바로, 아니면 상세로 채널을 알아내 옮긴다 */
@@ -897,6 +910,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
             setHousingIntent(null);
             setPanel("housing");
           }}
+          tab={meTab}
+          onTab={setMeTab}
           onClose={closePanel}
         />
       )}
@@ -908,7 +923,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
         </Dialog>
       )}
       {panel === "bag" && (
-        <BagDialog cache={graves.cache} myGraves={myGraves.entries} onClose={closePanel} avatar={{ color: options.color, body: options.body }} onOpenRace={() => setPanel("race")} />
+        <BagDialog cache={graves.cache} myGraves={myGraves.entries} onClose={closePanel} avatar={{ color: options.color, body: options.body }} onOpenRace={() => setPanel("race")} onOpenPerks={openPerks} />
       )}
       {panel === "notices" && <NoticesDialog onClose={closePanel} />}
       {panel === "activity" && (
@@ -1007,7 +1022,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {panel === "haunt" && <HauntDialog onClose={closePanel} />}
       <GoblinClaim />
       {/* 주간 랭킹 1위 알림 창 (본인에게 한 번) */}
-      {ready && <ChampNotice />}
+      {ready && <ChampNotice onOpenPerks={openPerks} />}
       {ready && <TitleNotice />}
       {panel === "calendar" && <CalendarDialog onClose={closePanel} />}
       {panel === "gifts" && <GiftsDialog onClose={closePanel} onOpenCalendar={() => setPanel("calendar")} />}

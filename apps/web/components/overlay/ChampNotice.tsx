@@ -5,7 +5,7 @@ import { bridge } from "@/game/bridge";
 import { champRecheckDelay } from "@/lib/champClock";
 import { CHAMP_TITLE, champHatOf, itemName, type ChampBoard } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
-import { champPerkLines } from "@/lib/champPerks";
+import { champNamesText, champPerkLines } from "@/lib/champPerks";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { showToast } from "@/lib/hooks/useToasts";
 import { onVisibleAgain, tabHidden } from "@/lib/hooks/visibleAgain";
@@ -28,8 +28,9 @@ const RETURN_CHECK_MS = 30 * 60_000;
  *    새로고침 없이 내 화면·다른 사람 화면에 모자(가방)·배지·전용 오라가 붙거나 떨어진다
  *  - 아직 안 본 1위 알림이 있으면 그 자리에서 띄운다. 받은 것(전용 모자 대여·전용 오라·배지·포인트)을 보여 주고 [써 보기]로 모자를 바로 입는다.
  *    닫으면 그 주(시험 지급은 그 지급) 알림은 다시 안 뜬다
+ *  - 11/17 1주일 혜택은 한 줄 요약 + [혜택 보기] (목록은 내 정보 [혜택] 탭 한곳에)
  */
-export default function ChampNotice() {
+export default function ChampNotice({ onOpenPerks }: { onOpenPerks?: () => void }) {
   const { me } = useMe();
   const ready = !!me;
   const [notice, setNotice] = useState<{ week: string; boards: ChampBoard[]; points: number; test?: true } | null>(null);
@@ -164,18 +165,16 @@ export default function ChampNotice() {
               <span className={styles.note}>지갑에 들어왔어요</span>
             </span>
           </li>
-          {/* 11/17 1주일 혜택 (자격이 붙어 있는 동안 서버가 준다 — lib/champPerks) */}
+          {/* 11/17 1주일 혜택 (자격이 붙어 있는 동안 서버가 준다 — lib/champPerks). 목록은 [혜택 보기]로 */}
           <li>
             <span className={styles.sparkle} aria-hidden="true">
               ★
             </span>
             <span>
               <b>1주일 혜택</b>
-              {champPerkLines(notice.boards).map((line) => (
-                <span key={line} className={styles.note}>
-                  {line}
-                </span>
-              ))}
+              <span className={styles.note}>
+                {champNamesText(notice.boards)} 혜택 {champPerkLines(notice.boards).length}가지가 다음 발표까지 붙어요.
+              </span>
             </span>
           </li>
         </ul>
@@ -183,6 +182,18 @@ export default function ChampNotice() {
           <button type="button" className={cx(ui.button, ui.primary)} onClick={() => void tryOn()} disabled={pending}>
             써 보기
           </button>
+          {onOpenPerks && (
+            <button
+              type="button"
+              className={ui.button}
+              onClick={() => {
+                close();
+                onOpenPerks();
+              }}
+            >
+              혜택 보기
+            </button>
+          )}
           <button type="button" className={ui.button} onClick={close}>
             확인
           </button>

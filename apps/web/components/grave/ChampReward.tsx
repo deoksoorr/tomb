@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { CHAMP_HAT, CHAMP_TITLE, champBitsOf, champHatOf, DIR, itemName, type ChampBoard } from "@tomb/protocol";
-import { champBoardPerkLines } from "@/lib/champPerks";
+import { champBoardPerkTags } from "@/lib/champPerks";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { OutfitStage, STAGE_H, STAGE_W } from "../shop/outfitStage";
 import ItemIcon from "../ui/ItemIcon";
@@ -48,7 +48,7 @@ export function AuraPreview({ bits, look, label, scale = 1, staff = false }: { b
 
 /**
  * 한 랭킹 1위 보상 칸: 「1위 보상」 제목 + 오라 미리보기 · 모자 · 배지 · 포인트 (아래에 짧은 이름) +
- * 11/17 다음 주 1주일 혜택 (lib/champPerks — 서버가 같은 표로 준다)
+ * 11/17 다음 주 1주일 혜택을 짧은 꼬리표로 (lib/champPerks — 서버가 같은 표로 준다. 긴 문장은 1위가 된 사람의 내 정보 [혜택] 탭)
  */
 export function ChampReward({ board, points }: { board: ChampBoard; points: number }) {
   const hat = CHAMP_HAT[board];
@@ -72,10 +72,10 @@ export function ChampReward({ board, points }: { board: ChampBoard; points: numb
         </div>
       </div>
       <div className={styles.rewardPerks}>
-        <span className={styles.rewardPerkHead}>다음 주 1주일 혜택</span>
-        <ul>
-          {champBoardPerkLines(board).map((line) => (
-            <li key={line}>{line}</li>
+        <span className={styles.rewardPerkHead}>1주일 혜택</span>
+        <ul aria-label="1주일 혜택">
+          {champBoardPerkTags(board).map((tag) => (
+            <li key={tag}>{tag}</li>
           ))}
         </ul>
       </div>
