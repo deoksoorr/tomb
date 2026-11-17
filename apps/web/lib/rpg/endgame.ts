@@ -26,8 +26,9 @@ export function tExpToNext(t: number): number {
 /**
  * 판 EXP → 초월 EXP 배율. 11/15 실측(시드 400개 평균, 모든 몬스터·졸개·조각·정예까지 다 잡은 판, 레벨 50):
  * 분기 마감 전날 밤 23,837 · 구조조정 발표 날 27,937 → 평균 25,887 × 0.049 ≈ 1,268 (목표 1,275)
+ * 11/17 지옥 EXP 배율을 11 → 4로 낮춰(catalog DIFFS.hell) 판 EXP가 4/11이 됐다 → 배율을 11/4배(0.049 → 0.13475) 올려 초월 EXP는 그대로
  */
-export const TRANSCEND_EXP_MUL = 0.049;
+export const TRANSCEND_EXP_MUL = 0.13475;
 
 /** 초월 5레벨마다 능력치 1포인트 */
 export const transcendStatPoints = (t: number) => Math.floor(Math.max(0, Math.min(TRANSCEND_MAX, Math.floor(t))) / 5);
