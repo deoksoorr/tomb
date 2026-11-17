@@ -10,9 +10,11 @@ describe("데스크톱 채팅창 크기", () => {
     expect(parseChatSize("small")).toBe("small");
   });
 
-  it("한 단계씩, 끝에서는 그대로", () => {
+  it("한 단계씩 세로로 줄고, 맨 끝은 입력칸만. 끝에서는 그대로", () => {
     expect(stepChatSize("normal", -1)).toBe("small");
-    expect(stepChatSize("small", -1)).toBe("small");
+    expect(stepChatSize("small", -1)).toBe("input");
+    expect(stepChatSize("input", -1)).toBe("input");
+    expect(stepChatSize("input", 1)).toBe("small");
     expect(stepChatSize("normal", 1)).toBe("large");
     expect(stepChatSize("large", 1)).toBe("large");
   });

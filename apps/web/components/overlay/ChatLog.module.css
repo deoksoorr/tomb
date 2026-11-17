@@ -115,11 +115,7 @@
   transform: translateX(-50%);
 }
 
-/* 11/17 크기 단계 (chatSize): 작게 = 최근 세 줄·좁게, 크게 = 열네 줄까지 (위쪽 확성기 창에 닿지 않게 낮은 화면에선 줄이되 보통보다 작아지진 않는다) */
-.box[data-size="small"] {
-  width: min(360px, calc(100vw - var(--safe-left) - var(--safe-right)));
-}
-
+/* 11/17 크기 단계 (chatSize): 폭은 그대로, 세로만. 입력칸만 = 기록 숨김, 작게 = 최근 세 줄, 크게 = 열네 줄까지 (위쪽 확성기 창에 닿지 않게 낮은 화면에선 줄이되 보통보다 작아지진 않는다) */
 .box[data-size="small"] .log {
   height: calc(3 * 1.45em + 2px);
 }
