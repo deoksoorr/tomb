@@ -12,7 +12,8 @@ export const STAFF_EARN_MAX_NAMES = 60;
 export const STAFF_EARN_TODAY_MAX = 500;
 
 /** 요청: 지금 채널 사람들(이름) 또는 오늘 들어온 모든 계정 */
-export type StaffEarnRequest = { mode: "names"; names: string[] } | { mode: "today" };
+/** 11/17 channel = 그 채널에 지금 접속한 사람 모두 (마을·캠핑장·바닷가·집·사냥터 어디에 있든 — 실시간 서버에 묻는다) */
+export type StaffEarnRequest = { mode: "names"; names: string[] } | { mode: "today" } | { mode: "channel"; channel: number };
 
 /** 한 사람의 오늘 적립. total = 하루 합계, by = 항목별 */
 export type StaffEarnRow = { name: string; total: number; by: Partial<Record<EarnSource, number>> };

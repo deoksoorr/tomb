@@ -12,6 +12,14 @@ import type { ApiError } from "@/lib/types";
 import * as session from "./session/route";
 import * as earn from "./staff/earn/route";
 
+// 11/17 지금 채널 = 실시간 서버의 접속 명단 + 자리(채널) 조회 — 테스트에선 흉내
+const rt = vi.hoisted(() => ({ online: null as string[] | null, ch: new Map<string, number>() }));
+vi.mock("@/lib/ban", async (orig) => ({
+  ...(await orig<typeof import("@/lib/ban")>()),
+  onlineVisitorIds: async () => rt.online,
+  whereOf: async (ids: string[]) => Object.fromEntries(ids.filter((id) => rt.ch.has(id)).map((id) => [id, { ch: rt.ch.get(id)!, sid: 1, x: 0, y: 0 }])),
+}));
+
 // 운영자 「포인트 현황」: 운영자 세션만 · 이름/오늘 모드 · 오늘 값 · 운영자 자신 제외 · 포인트 배수 이벤트 한도 · 한 번에 읽기 · 요청 한도
 
 beforeAll(() => {
@@ -184,3 +192,19 @@ describe("Redis 읽기 모양 (가짜 클라이언트 — 실제 Redis에 붙지
     ]);
   });
 });
+
+describe("11/17 지금 채널 = 그 채널 접속자 모두 (맵 상관없이)", () => {
+  it("실시간 서버 명단에서 그 채널 사람만, 운영자 자신은 빼고 · 실시간 서버에 못 닿으면 503", async () => {
+    const [staff, a, b, c] = [await newVisitor("운영"), await newVisitor(), await newVisitor(), await newVisitor()];
+    await setStaff(staff.id);
+    await give(a.id, "fish", 10);
+    rt.online = [staff.id, a.id, b.id, c.id];
+    rt.ch = new Map([[staff.id, 1], [a.id, 1], [b.id, 1], [c.id, 2]]);
+    const r = await ok(await ask(staff, { mode: "channel", channel: 1 }));
+    expect(r.rows.map((x) => x.name).sort()).toEqual([a.name, b.name].sort());
+    expect(r.rows.find((x) => x.name === a.name)?.total).toBeGreaterThan(0);
+    rt.online = null;
+    expect((await ask(staff, { mode: "channel", channel: 1 })).status).toBe(503);
+  });
+});
+
