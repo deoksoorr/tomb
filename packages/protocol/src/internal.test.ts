@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CLOSE } from "./constants";
 import { WHERE_MAX_IDS } from "./friends";
+import { MEGA_PIN_MAX } from "./events";
 import { INTERNAL_KICK_MAX, INTERNAL_SAY_MAX, signInternal, verifyInternal } from "./internal";
 
 // 47번 서버 간 내부 요청 서명
@@ -25,6 +26,11 @@ describe("내부 요청 서명", () => {
     expect(await verifyInternal(S, say.body, say.sig, now)).toEqual({ op: "say", id: "urg-t1-a1", name: "공지", text: "긴급 의뢰(생선 15마리)는 아무도 오지 않은 채 끝났어요.", at: 123, replaces: "urg-t1-a0", exp: now + 20 });
     const say2 = await signInternal(S, { op: "say", id: "abc", name: "공지", text: "한 줄", at: 1, exp: now + 20 });
     expect(await verifyInternal(S, say2.body, say2.sig, now)).toEqual({ op: "say", id: "abc", name: "공지", text: "한 줄", at: 1, exp: now + 20 });
+    // 11/17 고정 공지 (쓰기·지우기, 모든 채널은 ch 0). 200자까지
+    const pin = await signInternal(S, { op: "pin", scope: "channel", ch: 3, pin: { text: "가".repeat(MEGA_PIN_MAX), name: "운영자", at: 9 }, exp: now + 20 });
+    expect(await verifyInternal(S, pin.body, pin.sig, now)).toEqual({ op: "pin", scope: "channel", ch: 3, pin: { text: "가".repeat(MEGA_PIN_MAX), name: "운영자", at: 9 }, exp: now + 20 });
+    const unpin = await signInternal(S, { op: "pin", scope: "all", ch: 0, pin: null, exp: now + 20 });
+    expect(await verifyInternal(S, unpin.body, unpin.sig, now)).toEqual({ op: "pin", scope: "all", ch: 0, pin: null, exp: now + 20 });
     const plain = await signInternal(S, { op: "where", visitorIds: ["x"], exp: now + 20 });
     expect(await verifyInternal(S, plain.body, plain.sig, now)).toEqual({ op: "where", visitorIds: ["x"], exp: now + 20 });
   });
@@ -63,6 +69,15 @@ describe("내부 요청 서명", () => {
       { op: "say", id: "a", name: "공지", text: "가".repeat(INTERNAL_SAY_MAX + 1), at: 1, exp: now + 5 },
       { op: "say", id: "a", name: "공지", text: "x", at: 0, exp: now + 5 },
       { op: "say", id: "a", name: "공지", text: "x", at: 1, replaces: "a b", exp: now + 5 },
+      { op: "pin", scope: "nope", ch: 1, pin: null, exp: now + 5 },
+      { op: "pin", scope: "channel", ch: 0, pin: null, exp: now + 5 },
+      { op: "pin", scope: "channel", ch: 1.5, pin: null, exp: now + 5 },
+      { op: "pin", scope: "all", ch: 3, pin: null, exp: now + 5 },
+      { op: "pin", scope: "channel", ch: 1, exp: now + 5 },
+      { op: "pin", scope: "channel", ch: 1, pin: { text: "", name: "운영", at: 1 }, exp: now + 5 },
+      { op: "pin", scope: "channel", ch: 1, pin: { text: "가".repeat(MEGA_PIN_MAX + 1), name: "운영", at: 1 }, exp: now + 5 },
+      { op: "pin", scope: "channel", ch: 1, pin: { text: "x", name: "운영", at: 0 }, exp: now + 5 },
+      { op: "pin", scope: "channel", ch: 1, pin: { text: "x", at: 1 }, exp: now + 5 },
       { op: "zap", exp: now + 5 },
     ];
     for (const b of bad) {

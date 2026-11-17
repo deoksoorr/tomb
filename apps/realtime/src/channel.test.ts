@@ -1299,6 +1299,22 @@ describe("23번 확성기", () => {
     expect(events(a).some((e) => e.t === "megaphone")).toBe(false);
     expect(core.relayedMegaphone("r1", 9e12, "{}")).toBe(false);
   });
+
+  it("11/17 고정 공지(megaPin)는 채널 모두에게 그대로 보내고, 방은 받지 않는다", () => {
+    const { core, join } = setup();
+    const [a, b] = [join("a"), join("b")];
+    clear(a);
+    clear(b);
+    const data = JSON.stringify({ t: "megaPin", scope: "all", ch: 0, pin: { scope: "all", ch: 0, text: "점검 안내", name: "운영자", at: 1 } });
+    expect(core.relayedPin(data)).toBe(true);
+    expect(events(a).filter((e) => e.t === "megaPin")).toEqual([JSON.parse(data)]);
+    expect(events(b).filter((e) => e.t === "megaPin")).toHaveLength(1);
+    const room = setup(3, 20_000, true);
+    const c = room.join("c");
+    clear(c);
+    expect(room.core.relayedPin(data)).toBe(false);
+    expect(events(c).some((e) => e.t === "megaPin")).toBe(false);
+  });
 });
 
 describe("3번 집 안 가구: 방(집)의 1인 자리와 use 중계", () => {

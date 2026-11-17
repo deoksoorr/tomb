@@ -56,6 +56,8 @@ const LIMITS = {
   staffEarn: { visitor: 12, ip: 30, windowSec: MIN, message: "포인트 현황을 너무 자주 불렀어요. 잠시 뒤에 다시 봐 주세요.", memory: true },
   // 23번 확성기: 계정마다 간격(MEGAPHONE_COOLDOWN_MS)과 별개로 하루 상한 (도배 방지)
   megaphone: { visitor: 20, ip: 60, windowSec: DAY, message: "확성기는 하루에 20번까지 쓸 수 있어요." },
+  // 11/17 확성기 창 고정 공지 쓰기·지우기 (운영자 계정만 — 연타로 실시간 서버를 깨우지 않게)
+  megaPin: { visitor: 10, ip: 30, windowSec: MIN, message: "공지를 너무 자주 바꿨어요. 잠시 뒤에 다시 해 주세요.", memory: true },
   // 47번 방문 분석 기록 (방문·체류 신호). 넘치면 조용히 버린다
   visit: { visitor: null, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요.", memory: true },
   // 방문자 쿠키 발급 (쿠키 없이 부르는 공개 경로라 IP 한도만 — 반복 호출로 가입 통계·기기 기록이 부풀지 않게)

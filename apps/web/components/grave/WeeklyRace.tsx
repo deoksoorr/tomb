@@ -8,7 +8,7 @@ import { tabHidden } from "@/lib/hooks/visibleAgain";
 import type { ChampAvatar, ChampResponse, RaceResponse, RaceRow } from "@/lib/types";
 import AvatarThumb from "../account/AvatarThumb";
 import StyledName from "../ui/StyledName";
-import { ChampReward, ComboAuras } from "./ChampReward";
+import { ChampPerksBox, ChampReward, ComboAuras } from "./ChampReward";
 import styles from "./WeeklyRace.module.css";
 
 // 이번 주 레이스 (화면 위 [레이스] 버튼 · 메뉴 시트 → 표준 창): 포인트·사냥 처치·낚시마다 1~3등 시상대(캐릭터 모습), 마감(월요일 새벽 5시, 한국 시간)까지 남은 시간,
@@ -120,6 +120,7 @@ export default function WeeklyRace() {
           </section>
         ))}
       </div>
+      <ChampPerksBox />
       {/* 명예의 전당: 랭킹마다 한 칸 (맨 앞 = 지난주 1위를 크게, 그 뒤로 지난 주들 1위를 작게). 넓은 창은 세 칸, 좁은 창은 세로로 */}
       {champ && (
         <section className={styles.hallBox} aria-label="명예의 전당">

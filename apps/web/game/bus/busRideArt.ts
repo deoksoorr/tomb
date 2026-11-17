@@ -687,7 +687,7 @@ export function* panoramaSteps(spec: LayerSpec, order: readonly RideSegment[], d
 }
 
 /**
- * 창밖 끝 표지판: 캠핑장행 = 나무 표지판 「언젠가 캠핑장」, 마을행 = 버스 정류장 팻말 「마을 정류장」. 바닥 = 그림 맨 아래 줄.
+ * 창밖 끝 표지판: 캠핑장행 = 나무 표지판 「언젠가 캠핑장」, 마을행 = 버스 정류장 팻말 「기억숲 마을」. 바닥 = 그림 맨 아래 줄.
  * 11/16 바닷가행 = 바다색 정류장 팻말 「달물결 포구」 (아래에 물결 무늬)
  */
 export function buildEndSign(leg: "toCamp" | "toVillage", route: "camp" | "sea" = "camp"): HTMLCanvasElement {
@@ -738,7 +738,7 @@ export function buildEndSign(leg: "toCamp" | "toVillage", route: "camp" | "sea" 
   px(ctx, 41, 18, 1, 58, 0xb0b4b8);
   px(ctx, 4, 2, 76, 22, 0x2a5a9a);
   px(ctx, 5, 3, 74, 1, 0x6a8aca);
-  pixelText(ctx, "마을 정류장", 9, 5, 0xf4f4ec);
+  pixelText(ctx, "기억숲 마을", 9, 5, 0xf4f4ec); // 11/17 마을 이름 (VILLAGE_TITLE)
   blob(ctx, 42, 34, 8, 8, 0x2a5a9a);
   px(ctx, 38, 31, 9, 6, 0xf4f4ec);
   px(ctx, 39, 32, 7, 3, 0x2a5a9a);

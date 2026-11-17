@@ -9,7 +9,7 @@ import { requireVisitor } from "@/lib/session";
 import { getAccounts, getMegaphone, NO_NAME } from "@/lib/store";
 import { kstDay, loadMe } from "@/lib/store/accounts";
 import { isGraveChannel } from "@/lib/store/channels";
-import { MEGA_KEEP, MEGA_SHOW, MEGAPHONE_COOLDOWN_MS } from "@/lib/store/megaphone";
+import { MEGA_KEEP, MEGA_SHOW, MEGAPHONE_COOLDOWN_MS, pinList } from "@/lib/store/megaphone";
 import type { MegaphoneEntry, MegaphoneListResponse, MegaphoneUseResponse } from "@/lib/types";
 import { isManager, managerIds } from "@/lib/managers";
 import { isStaff, staffAccountId } from "@/lib/staff";
@@ -18,12 +18,14 @@ import { CHAMP_NOTICE_ACCOUNT } from "@/lib/weeklyChamp";
 
 /**
  * 23번 확성기 최근 기록 `?channel=N`: 그 채널에서 외친 것 + 모든 채널 확성기 (관리자가 숨긴 것 빼고, 오래된 것 먼저 최대 20개).
- * 누구나 같은 내용을 보므로 CDN에 30초 캐시한다 (숨김 처리도 그 안에 반영된다. 새 방송은 실시간으로 온다)
+ * 누구나 같은 내용을 보므로 CDN에 30초 캐시한다 (숨김 처리도 그 안에 반영된다. 새 방송은 실시간으로 온다).
+ * 11/17 pins = 확성기 창 맨 위 고정 공지 (그 채널 것 먼저, 모든 채널 것 다음. 바뀌면 실시간 megaPin으로 온다)
  */
 export const GET = handler(async (req) => {
   const ch = Number(req.nextUrl.searchParams.get("channel") ?? 1);
   const channel = isGraveChannel(ch) ? ch : 1;
-  const [rows, staffId, mgrIds] = await Promise.all([getMegaphone().recent(MEGA_KEEP), staffAccountId(), managerIds().catch(() => new Set<string>())]);
+  const store = getMegaphone();
+  const [rows, staffId, mgrIds, pins] = await Promise.all([store.recent(MEGA_KEEP), staffAccountId(), managerIds().catch(() => new Set<string>()), store.pins(channel)]);
   // 11/15 뒤 공지가 바꿔 끼운 앞 공지(긴급 의뢰 시작 → 끝)는 뺀다
   const replaced = new Set(rows.flatMap((r) => (r.replaces ? [r.replaces] : [])));
   const entries: MegaphoneEntry[] = rows
@@ -40,7 +42,7 @@ export const GET = handler(async (req) => {
       return { id, name, text, scope, ch, at, ...(staff || system ? { staff: true as const } : {}), ...(system ? { system: true as const } : {}), ...(system && replaces ? { replaces } : {}), ...(mgr ? { mgr: true as const } : {}) };
     });
   return json<MegaphoneListResponse>(
-    { entries },
+    { entries, pins: pinList(pins) },
     { headers: { "cache-control": "no-store", "vercel-cdn-cache-control": "s-maxage=30, stale-while-revalidate=120" } },
   );
 });

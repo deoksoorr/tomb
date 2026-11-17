@@ -36,6 +36,102 @@
   color: var(--muted);
 }
 
+/* 11/17 고정 공지 (운영자): 바 아래·기록 위. 한 줄로 줄여 두고 누르면 모두 펼친다 */
+.pins {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  margin: 0;
+  padding: 4px 6px;
+  list-style: none;
+  background: rgba(30, 25, 14, 0.94);
+  box-shadow: var(--px-border-strong);
+  font-size: 12px;
+  pointer-events: auto;
+}
+
+.pinsOpen {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.pin {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pinBody {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  padding: 1px 0;
+  border: 0;
+  background: none;
+  color: var(--bone);
+  font: inherit;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pinTag {
+  flex: none;
+  padding: 0 4px;
+  background: #2a1838;
+  color: #ffd36a;
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 14px;
+  box-shadow: inset 0 0 0 1px #c9962e;
+}
+
+.pinTagAll {
+  background: #b4473e;
+  color: #fff3e6;
+  box-shadow: none;
+}
+
+.pinText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pinsOpen .pinText {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.pinMore {
+  flex: none;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.pinDel {
+  flex: none;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.pinDel:hover,
+.pinDel:focus-visible {
+  color: var(--danger);
+  text-decoration: underline;
+}
+
 .log {
   display: grid;
   gap: 2px;

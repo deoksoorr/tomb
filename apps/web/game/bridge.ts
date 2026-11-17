@@ -1,4 +1,4 @@
-import type { AvatarDye, AwayMapId, BbqItemId, ChatPlace, BbqStand, FishWater, GraveEventKind, MapId, QueueStatus } from "@tomb/protocol";
+import type { AvatarDye, AwayMapId, BbqItemId, ChatPlace, BbqStand, FishWater, GraveEventKind, MapId, MegaPinMsg, QueueStatus } from "@tomb/protocol";
 import type { NpcId } from "@/lib/forage/catalog";
 import type { PublicGrave } from "@/lib/types";
 import type { HouseEditState, HouseTool } from "@/game/housing/events";
@@ -147,6 +147,8 @@ export type GameEvents = {
     /** 이 줄로 바꿔 끼울 앞 공지 id (긴급 의뢰 끝 → 시작 공지를 뺀다) */
     replaces?: string;
   };
+  /** 11/17 확성기 창 고정 공지가 바뀌었다 (운영자가 쓰거나 지움, 실시간 서버 /internal/pin) → 확성기 창 맨 위 칸을 바꾼다 */
+  "megaphone:pin": MegaPinMsg;
   /** 상점 맵에 들어감/나옴 (UI가 HUD 일부를 바꿀 때) */
   "scene:changed": {
     scene: "world" | "shop" | "hunt" | "minigame" | "house";
@@ -219,8 +221,8 @@ export type GameEvents = {
   "camp:talk": { npc: string; name: string; lines: string[] } | null;
   /** 11/15 캠핑장 바베큐 그릴 앞에서 E → 메뉴 창 */
   "camp:bbq:open": { stand: BbqStand };
-  /** 채널 이동 창: 지금 같은 채널에 보이는 사람들 닉네임 (peers:ask에 답한다, 나는 빼고) */
-  "peers:list": { names: string[] };
+  /** 채널 이동 창: 지금 같은 채널에 보이는 사람들 닉네임 (peers:ask에 답한다, 나는 빼고). map = 지금 맵 (11/17 그 맵에 보이는 사람만이라서) */
+  "peers:list": { names: string[]; map: MapId };
 
   // ── 낚시·채집 (4·32번) ── (game/world/forage, components/forage)
   /** 낚시 자리에 앉음 / NPC 앞 / 채집 지점에서 E → UI가 낚시 창·판매 창·채집(게이지·곤충 미니게임)을 연다 */

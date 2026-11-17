@@ -10,7 +10,7 @@ import { MemoryGifts, RedisGifts, GIFT_KEEP_MS, type GiftRecord, type GiftStore 
 import { K } from "./keys";
 import { MemoryStore } from "./memory";
 import { MEGAPHONE_TTL_MS } from "@tomb/protocol";
-import { MEGA_KEEP, MemoryMegaphone, RedisMegaphone, type MegaphoneStore } from "./megaphone";
+import { MEGA_KEEP, MemoryMegaphone, pinList, RedisMegaphone, type MegaphoneStore } from "./megaphone";
 import type { AccountStore } from "./types";
 
 // 11번 선물함·23번 확성기 저장소 계약 (RedisGifts/RedisMegaphone은 Redis 환경변수가 있을 때 같은 시나리오)
@@ -215,6 +215,40 @@ function megaContract(make: () => { store: MegaphoneStore; cleanup(ids: string[]
     expect((await store.recent(MEGA_KEEP, now + MEGAPHONE_TTL_MS)).some((r) => r.id === fresh.id)).toBe(false);
     await cleanup([id]);
   });
+
+  it("11/17 고정 공지: 채널마다 하나 + 모든 채널 하나, 덮어쓰기·지우기, 쓴 사람·시각까지 남는다", async () => {
+    const { store, cleanup } = make();
+    // 실제 Redis에서도 다른 테스트와 겹치지 않게 쓰지 않는 큰 채널 번호
+    const [chA, chB] = [900 + Math.floor(Math.random() * 40), 950 + Math.floor(Math.random() * 40)];
+    const pin = (scope: "channel" | "all", ch: number, text: string) => ({ scope, ch, text, name: "운영자", at: 1_000, accountId: "staff-1" });
+    try {
+      expect(await store.pins(chA)).toEqual({ channel: null, all: null });
+      await store.setPin("channel", chA, pin("channel", chA, "A채널 공지"));
+      await store.setPin("all", chA, pin("all", 0, "모두 공지"));
+      expect(await store.pins(chA)).toEqual({ channel: pin("channel", chA, "A채널 공지"), all: pin("all", 0, "모두 공지") });
+      // 다른 채널은 모든 채널 공지만 보인다
+      expect(await store.pins(chB)).toEqual({ channel: null, all: pin("all", 0, "모두 공지") });
+      // 덮어쓰기 (모든 채널 공지는 어느 채널에서 써도 같은 칸)
+      await store.setPin("all", chB, pin("all", 0, "새 모두 공지"));
+      expect((await store.pins(chA)).all?.text).toBe("새 모두 공지");
+      expect(pinList(await store.pins(chA)).map((p) => [p.scope, p.text])).toEqual([
+        ["channel", "A채널 공지"],
+        ["all", "새 모두 공지"],
+      ]);
+      // 쓴 계정은 화면용 목록에 나가지 않는다
+      expect(pinList(await store.pins(chA))[0]).not.toHaveProperty("accountId");
+      await store.setPin("channel", chA, null);
+      expect(await store.pins(chA)).toEqual({ channel: null, all: pin("all", 0, "새 모두 공지") });
+      await store.setPin("all", chA, null);
+      expect(await store.pins(chA)).toEqual({ channel: null, all: null });
+      // 없는 것을 지워도 괜찮다
+      await store.setPin("channel", chB, null);
+    } finally {
+      await store.setPin("channel", chA, null);
+      await store.setPin("all", 0, null);
+      await cleanup([]);
+    }
+  });
 }
 
 describe("MemoryGifts", () =>
@@ -245,5 +279,5 @@ describe.skipIf(!redisEnv)("RedisGifts (실제 Redis, 개발용 DB에서만)", (
 describe.skipIf(!redisEnv)("RedisMegaphone (실제 Redis, 개발용 DB에서만)", () =>
   megaContract(() => {
     const raw = new Redis({ ...redisEnv!, automaticDeserialization: false });
-    return { store: new RedisMegaphone(redisEnv!), cleanup: async (ids) => void (await raw.del(...ids.map(K.megaCool))) };
+    return { store: new RedisMegaphone(redisEnv!), cleanup: async (ids) => void (ids.length && (await raw.del(...ids.map(K.megaCool)))) };
   }));

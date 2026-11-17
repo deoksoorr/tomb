@@ -189,7 +189,9 @@ export type S2C =
   /** 11/17 쿨다운 중에 운영자가 주문을 쳤다 → 그 운영자에게만 남은 시간 (ms) */
   | { t: "squirrelsWait"; left: number }
   /** 11/15 누가 바베큐를 먹고 u(epoch ms)까지 커졌다 (같은 맵, 보낸 사람 포함). 옛 클라이언트는 모르는 t라 버린다 */
-  | { t: "bbq"; sid: Sid; i: BbqItemId; u: number; /** 마실 거리: 마신 뒤 취기 단계·마신 시각 */ lv?: number; at?: number };
+  | { t: "bbq"; sid: Sid; i: BbqItemId; u: number; /** 마실 거리: 마신 뒤 취기 단계·마신 시각 */ lv?: number; at?: number }
+  /** 11/17 확성기 창 고정 공지가 바뀌었다 (운영자가 쓰거나 지움, 사람이 있는 채널 모두에게). 옛 클라이언트는 모르는 t라 버린다 */
+  | MegaPinMsg;
 
 /** 23번 확성기 방송 (보낸 사람에게도 간다) */
 /** staff = 운영자 계정이 외친 것 (Vercel이 증서에 넣은 것만 → 이름 금색) */
@@ -197,6 +199,31 @@ export type S2C =
 /** replaces = 이 줄로 바꿔 끼울 앞 공지 id (긴급 의뢰가 끝나면 시작 공지를 끝 공지로) */
 /** mgr = 11/16 매니저 계정이 외친 것 (Vercel이 증서에 넣은 것만 → "매니저" 딱지. 옛 클라이언트는 무시한다) */
 export type MegaphoneMsg = { t: "megaphone"; id: string; name: string; text: string; scope: MegaphoneScope; ch: number; at: number; staff?: true; system?: true; replaces?: string; mgr?: true };
+
+// ── 11/17 확성기 창 고정 공지 (운영자) ──
+// 채널마다 하나 + 모든 채널 하나. 저장은 웹(Redis)이 하고, 들어올 때는 확성기 기록과 같이 받는다(/api/megaphone).
+// 쓰거나 지우면 웹이 /internal/pin으로 실시간 서버에 알리고, 실시간 서버가 그 채널(또는 사람이 있는 채널 모두)에 megaPin을 한 번 보낸다.
+
+/** 고정 공지 최대 글자 수 (코드포인트) */
+export const MEGA_PIN_MAX = 200;
+/** 고정 공지 한 줄. scope channel = 그 채널(ch)만, all = 모든 채널(ch 0). name = 쓴 운영자 닉네임, at = 쓴 시각(ms) */
+export type MegaPin = { scope: MegaphoneScope; ch: number; text: string; name: string; at: number };
+/** 고정 공지가 바뀌었다. pin = 새 공지, null = 지움 (scope·ch로 어느 칸인지 안다) */
+export type MegaPinMsg = { t: "megaPin"; scope: MegaphoneScope; ch: number; pin: MegaPin | null };
+
+/** 받은 megaPin 검증 (클라이언트 수신용). 모양이 틀리면 null, 모르는 필드는 버린다 */
+export function parseMegaPinMsg(m: Record<string, unknown>): MegaPinMsg | null {
+  if (m.t !== "megaPin" || (m.scope !== "channel" && m.scope !== "all")) return null;
+  const scope = m.scope;
+  const ch = scope === "all" ? 0 : m.ch;
+  if (!Number.isInteger(ch) || (ch as number) < 0 || (scope === "channel" && (ch as number) < 1)) return null;
+  if (m.pin === null) return { t: "megaPin", scope, ch: ch as number, pin: null };
+  const p = m.pin as Record<string, unknown> | undefined;
+  if (!p || typeof p !== "object" || typeof p.text !== "string" || !p.text || [...p.text].length > MEGA_PIN_MAX) return null;
+  const name = typeof p.name === "string" ? p.name.slice(0, NAME_MAX * 2) : "";
+  const at = isNum(p.at) && p.at > 0 ? p.at : Date.now();
+  return { t: "megaPin", scope, ch: ch as number, pin: { scope, ch: ch as number, text: p.text, name, at } };
+}
 
 /** 11/16 whoOn 한 번에 물어볼 수 있는 이름 수 (최근 귓속말 상대 수와 같다) */
 export const WHO_ON_MAX = 8;

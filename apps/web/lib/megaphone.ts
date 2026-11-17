@@ -1,4 +1,4 @@
-import { MEGAPHONE_MAX } from "@tomb/protocol";
+import { MEGA_PIN_MAX, MEGAPHONE_MAX } from "@tomb/protocol";
 import { hasBanned } from "./housing/text";
 
 // 23번 확성기 문장 검사 (서버). 한 줄, 1~60자, 링크·금칙어 금지. 금칙어는 유저이름·방명록과 같은 목록(lib/housing/text.ts)
@@ -11,13 +11,25 @@ const REPEAT_RE = /(.)\1{7,}/u;
 
 export type MegaphoneTextCheck = { ok: true; text: string } | { ok: false; reason: string };
 
+/** 한 줄로 고른 글 (보이지 않는 글자·줄바꿈은 빈칸 하나로) */
+const oneLine = (raw: unknown) => (typeof raw === "string" ? raw.normalize("NFC").replace(INVISIBLE_RE, " ").replace(/\s+/g, " ").trim() : "");
+
 export function checkMegaphoneText(raw: unknown): MegaphoneTextCheck {
-  const text = typeof raw === "string" ? raw.normalize("NFC").replace(INVISIBLE_RE, " ").replace(/\s+/g, " ").trim() : "";
+  const text = oneLine(raw);
   const len = [...text].length;
   if (len < 1) return { ok: false, reason: "외칠 말을 적어 주세요." };
   if (len > MEGAPHONE_MAX) return { ok: false, reason: `확성기는 ${MEGAPHONE_MAX}자까지 외칠 수 있어요.` };
   if (URL_RE.test(text)) return { ok: false, reason: "링크는 넣을 수 없어요." };
   if (REPEAT_RE.test(text)) return { ok: false, reason: "같은 글자를 너무 많이 반복했어요." };
   if (hasBanned(text)) return { ok: false, reason: "쓸 수 없는 단어가 들어 있어요." };
+  return { ok: true, text };
+}
+
+/** 11/17 확성기 창 고정 공지 글 검사 (운영자만 쓴다 — 한 줄, 1~200자. 링크·금칙어는 운영자 판단에 맡긴다) */
+export function checkPinText(raw: unknown): MegaphoneTextCheck {
+  const text = oneLine(raw);
+  const len = [...text].length;
+  if (len < 1) return { ok: false, reason: "공지 글을 적어 주세요." };
+  if (len > MEGA_PIN_MAX) return { ok: false, reason: `공지는 ${MEGA_PIN_MAX}자까지 쓸 수 있어요.` };
   return { ok: true, text };
 }

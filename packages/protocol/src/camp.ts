@@ -35,6 +35,9 @@ export const isChatPlace = (v: unknown): v is ChatPlace => isAwayMap(v) || v ===
 export const chatTagOf = (m: unknown): { m?: ChatPlace } => (isChatPlace(m) ? { m } : {});
 /** 11/17 채팅 줄 장소 표시 (다른 곳에서 쓴 줄 앞에) — 맵 표시 + [사냥터] */
 export const CHAT_PLACE_TAG: Record<MapId | "hunt", string> = { ...MAP_TAG, hunt: "[사냥터]" };
+/** 11/17 마을 전체 이름 (버스 안내·마을행 표지판). 묘역 옆 숲과 추억 분위기. 짧게 부를 땐 MAP_NAME의 "마을" */
+export const VILLAGE_TITLE = "기억숲 마을";
+export const VILLAGE_TITLE_EN = "Memory Woods Village";
 /** 캠핑장 전체 이름 (표지판·첫 안내) */
 export const CAMP_TITLE = "언젠가 캠핑장";
 export const CAMP_TITLE_EN = "Someday Camp";

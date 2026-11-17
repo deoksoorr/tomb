@@ -1,6 +1,6 @@
 // web 안에서 공유하는 데이터 타입과 API 응답 형태 (계약). 바꿀 때는 모든 사용처를 같이 고친다.
 
-import { itemById, type AvatarDye, type ChampBoard } from "@tomb/protocol";
+import { itemById, type AvatarDye, type ChampBoard, type MegaPin } from "@tomb/protocol";
 import type { EarnSource } from "./economy";
 import type { EarnBoost } from "./pointEvent";
 
@@ -602,6 +602,9 @@ export type GiftClaimResponse = { gift: GiftEntry; me: Me; points: number };
 /** staff = 운영자 계정이 외친 것 (서버가 계정으로 판별 → 이름 금색) */
 export type MegaphoneEntry = { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true; /** 마을 공지(주간 1위 소식 등) 줄 — 금색이지만 "운영자" 딱지는 없다 */ system?: true; /** 11/15 이 줄로 바꿔 끼운 앞 공지 id (긴급 의뢰 끝 공지 → 시작 공지를 뺀다) */ replaces?: string; /** 11/16 매니저 계정이 외친 것 → "매니저" 딱지 */ mgr?: true };
 /** GET /api/megaphone?channel=N → 그 채널에서 보이는 최근 확성기 (모든 채널 확성기 포함, 숨긴 것 빼고, 오래된 것 먼저 최대 20개) */
-export type MegaphoneListResponse = { entries: MegaphoneEntry[] };
+/** pins = 11/17 확성기 창 맨 위 고정 공지 (그 채널 것 먼저, 모든 채널 것 다음, 최대 2개. 옛 서버는 없다) */
+export type MegaphoneListResponse = { entries: MegaphoneEntry[]; pins?: MegaPin[] };
+/** POST·DELETE /api/megaphone/pin → 운영자가 고정 공지를 쓰거나 지운 뒤 그 채널에서 보이는 고정 공지 */
+export type MegaPinResponse = { pins: MegaPin[] };
 /** POST /api/megaphone { itemId, text, channel } → 확성기 1개를 쓰고 증서를 받는다 (게임이 실시간 서버로 보낸다) */
 export type MegaphoneUseResponse = { entry: MegaphoneEntry; grant: string; me: Me };

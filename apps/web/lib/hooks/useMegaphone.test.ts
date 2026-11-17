@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MegaphoneEntry } from "@/lib/types";
 import { MEGAPHONE_TTL_MS } from "@tomb/protocol";
-import { dropReplaced, flashEndsAt, liveMegaphones, MEGA_FLASH_MS, MEGA_FLASH_QUEUED_MS, MEGA_QUEUE_MAX, megaphoneStore } from "./useMegaphone";
+import { applyPinMsg, dropReplaced, flashEndsAt, liveMegaphones, MEGA_FLASH_MS, MEGA_FLASH_QUEUED_MS, MEGA_QUEUE_MAX, megaphoneStore, sortPins } from "./useMegaphone";
 
 let n = 0;
 const entry = (text: string): MegaphoneEntry => ({ id: `m${++n}`, name: `이름${n}`, text, scope: "channel", ch: 1, at: Date.now() });
@@ -96,5 +96,37 @@ describe("확성기 가운데 표시 차례", () => {
     expect(megaphoneStore.getSnapshot().queue.map((e) => e.id)).not.toContain(start.id);
     // 서버 목록으로 다시 맞출 때도 (목록에 둘 다 있어도) 바꿔 끼운 쪽만
     expect(dropReplaced([start, other, end]).map((e) => e.id)).toEqual([other.id, end.id]);
+  });
+});
+
+describe("11/17 고정 공지 칸", () => {
+  const pin = (scope: "channel" | "all", ch: number, text: string) => ({ scope, ch, text, name: "운영자", at: 1 });
+
+  it("그 채널 것 먼저, 모든 채널 것 다음 (최대 2개)", () => {
+    expect(sortPins([pin("all", 0, "전체"), pin("channel", 2, "채널")]).map((p) => p.text)).toEqual(["채널", "전체"]);
+  });
+
+  it("실시간 바뀜: 같은 칸만 바꾸고, 다른 채널 공지는 상관없다(null)", () => {
+    const now = [pin("channel", 2, "채널"), pin("all", 0, "전체")];
+    expect(applyPinMsg(now, { t: "megaPin", scope: "channel", ch: 3, pin: pin("channel", 3, "3채널") }, 2)).toBeNull();
+    expect(applyPinMsg(now, { t: "megaPin", scope: "all", ch: 0, pin: null }, 2)?.map((p) => p.text)).toEqual(["채널"]);
+    expect(applyPinMsg(now, { t: "megaPin", scope: "channel", ch: 2, pin: pin("channel", 2, "새 글") }, 2)?.map((p) => p.text)).toEqual(["새 글", "전체"]);
+    expect(applyPinMsg([], { t: "megaPin", scope: "all", ch: 0, pin: pin("all", 0, "전체") }, 5)?.map((p) => p.text)).toEqual(["전체"]);
+  });
+
+  it("실시간으로 바뀐 공지는 잠시 서버 목록(CDN 옛것)으로 되돌리지 않고, 채널을 옮기면 새 채널 것으로 맞춘다", async () => {
+    const { socialApi } = await import("@/lib/socialApi");
+    const spy = vi.spyOn(socialApi, "megaphones").mockResolvedValue({ entries: [], pins: [pin("channel", 2, "옛 글")] });
+    megaphoneStore.applyPin({ t: "megaPin", scope: "channel", ch: 2, pin: pin("channel", 2, "새 글") }, 2);
+    await megaphoneStore.load(2);
+    expect(megaphoneStore.getSnapshot().pins.map((p) => p.text)).toEqual(["새 글"]);
+    spy.mockResolvedValue({ entries: [], pins: [pin("channel", 4, "4채널")] });
+    await megaphoneStore.load(4);
+    expect(megaphoneStore.getSnapshot().pins.map((p) => p.text)).toEqual(["4채널"]);
+    // 옛 서버(pins 없음)면 그대로 둔다
+    spy.mockResolvedValue({ entries: [] });
+    await megaphoneStore.load(4);
+    expect(megaphoneStore.getSnapshot().pins.map((p) => p.text)).toEqual(["4채널"]);
+    spy.mockRestore();
   });
 });

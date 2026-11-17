@@ -192,6 +192,15 @@ export async function sayAll(line: { id: string; name: string; text: string; at:
   return r ? r.sent : null;
 }
 
+/**
+ * 11/17 확성기 창 고정 공지가 바뀌었다 → 실시간 서버가 그 채널(모든 채널이면 사람이 있는 채널 모두)에 한 번 알린다.
+ * 보낸 채널 수, 실시간 서버에 닿지 못하면 null (그때는 들어올 때·10분마다 다시 받는 목록에서 보인다)
+ */
+export async function pinNotify(scope: "channel" | "all", ch: number, pin: { text: string; name: string; at: number } | null): Promise<number | null> {
+  const r = await internal<{ sent: number }>("/internal/pin", { op: "pin", scope, ch: scope === "all" ? 0 : ch, pin }, 2000);
+  return r ? r.sent : null;
+}
+
 /** 채널·방의 sid가 누구인지 (유저 신고). 없거나 실시간 서버에 닿지 못하면 null */
 export async function peerOf(where: { ch: number } | { room: string }, sid: number): Promise<{ visitorId: string; name: string } | null> {
   const r = await internal<{ peer: { visitorId: string; name: string } | null }>("/internal/peer", { op: "peer", ...where, sid });

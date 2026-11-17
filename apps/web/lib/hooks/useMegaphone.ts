@@ -1,13 +1,14 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { MEGAPHONE_TTL_MS } from "@tomb/protocol";
+import { MEGAPHONE_TTL_MS, type MegaPin, type MegaPinMsg } from "@tomb/protocol";
 import { socialApi } from "@/lib/socialApi";
 import { readItem, writeItem } from "@/lib/storage";
 import type { MegaphoneEntry } from "@/lib/types";
 
 // 23번 확성기 상태: 왼쪽 위 기록(최근 20개, 접힘) + 화면 가운데에 크게 뜨는 한마디(몇 초간, 여러 개면 차례로).
 // 기록은 서버 목록(/api/megaphone)이 기준이고, 실시간으로 온 것은 다음 목록에 실릴 때까지 덧붙여 둔다.
+// 11/17 맨 위 고정 공지(운영자)도 같은 목록에 실려 오고, 바뀌면 실시간 megaPin으로 온다 (따로 묻지 않는다).
 
 export const MEGA_FEED_MAX = 20;
 /** 방금 온 한마디를 가운데에 크게 보여 주는 시간 (기다리는 것이 없을 때) */
@@ -22,6 +23,20 @@ export function flashEndsAt(startedAt: number, waiting: number): number {
   return startedAt + (waiting > 0 ? MEGA_FLASH_QUEUED_MS : MEGA_FLASH_MS);
 }
 const COLLAPSED_KEY = "tomb.ui.megaphoneCollapsed";
+
+/** 실시간으로 바뀐 고정 공지는 이만큼 서버 목록보다 먼저 믿는다 (목록은 CDN에 30초 + 갱신 중 2분까지 옛것일 수 있다) */
+export const PIN_HOLD_MS = 3 * 60_000;
+
+/** 고정 공지 정렬: 그 채널 것 먼저, 모든 채널 것 다음 (최대 2개) */
+export function sortPins(pins: MegaPin[]): MegaPin[] {
+  return [...pins].sort((a, b) => (a.scope === b.scope ? 0 : a.scope === "channel" ? -1 : 1)).slice(0, 2);
+}
+
+/** 고정 공지 바뀜을 지금 칸들에 반영한다. 다른 채널 것이면 그대로 (null = 이 화면과 상관없다) */
+export function applyPinMsg(pins: MegaPin[], m: MegaPinMsg, channel: number): MegaPin[] | null {
+  if (m.scope === "channel" && m.ch !== channel) return null;
+  return sortPins([...pins.filter((p) => p.scope !== m.scope), ...(m.pin ? [m.pin] : [])]);
+}
 
 /** 외친 지 5분이 안 된 한마디만 (기록 목록은 열려 있는 동안에도 5분이 지나면 빠진다) */
 export function liveMegaphones(entries: MegaphoneEntry[], now: number): MegaphoneEntry[] {
@@ -45,15 +60,20 @@ export type MegaphoneState = {
   collapsed: boolean;
   /** 외치기 창 열림 */
   composing: boolean;
+  /** 11/17 맨 위 고정 공지 (그 채널 것 먼저, 모든 채널 것 다음) */
+  pins: MegaPin[];
 };
 
 class MegaphoneStore {
-  private state: MegaphoneState = { entries: [], flash: null, queue: [], flashUntil: 0, collapsed: false, composing: false };
+  private state: MegaphoneState = { entries: [], flash: null, queue: [], flashUntil: 0, collapsed: false, composing: false, pins: [] };
   private listeners = new Set<() => void>();
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
   private flashStartedAt = 0;
   private expiryTimer: ReturnType<typeof setTimeout> | null = null;
   private loaded = false;
+  /** 고정 공지를 마지막으로 맞춘 채널과, 실시간으로 바뀐 공지를 서버 목록보다 먼저 믿는 때 */
+  private pinCh = 0;
+  private pinHeldUntil = 0;
 
   subscribe = (fn: () => void) => {
     if (!this.loaded) {
@@ -87,10 +107,16 @@ class MegaphoneStore {
   /** 그 채널의 최근 기록으로 맞춘다 (관리자가 숨긴 것은 여기서 빠진다). 방금 온 것(1분 안)은 서버 목록에 아직 없어도 남긴다 */
   async load(channel: number): Promise<void> {
     try {
-      const { entries } = await socialApi.megaphones(channel);
+      const { entries, pins } = await socialApi.megaphones(channel);
       const ids = new Set(entries.map((e) => e.id));
       const fresh = this.state.entries.filter((e) => !ids.has(e.id) && e.at > Date.now() - 60_000 && (e.scope === "all" || e.ch === channel));
-      this.update({ entries: dropReplaced([...entries, ...fresh]).sort((a, b) => a.at - b.at).slice(-MEGA_FEED_MAX) });
+      // 고정 공지: 옛 서버(pins 없음)면 그대로, 방금 실시간으로 바뀐 것은 CDN 옛 목록으로 되돌리지 않는다 (채널을 옮겼으면 새 채널 것으로)
+      const takePins = !!pins && (channel !== this.pinCh || Date.now() >= this.pinHeldUntil);
+      this.pinCh = channel;
+      this.update({
+        entries: dropReplaced([...entries, ...fresh]).sort((a, b) => a.at - b.at).slice(-MEGA_FEED_MAX),
+        ...(takePins ? { pins: sortPins(pins) } : {}),
+      });
     } catch {
       // 다음 갱신 때 다시
     }
@@ -136,6 +162,22 @@ class MegaphoneStore {
     this.show(head);
   }
 
+  /** 11/17 고정 공지가 바뀌었다 (실시간 megaPin). 이 채널과 상관없는 것은 버린다 */
+  applyPin(m: MegaPinMsg, channel: number): void {
+    const pins = applyPinMsg(this.state.pins, m, channel);
+    if (!pins) return;
+    this.pinCh = channel;
+    this.pinHeldUntil = Date.now() + PIN_HOLD_MS;
+    this.update({ pins });
+  }
+
+  /** 11/17 운영자가 방금 쓰거나 지운 뒤 서버가 돌려준 그 채널 고정 공지 */
+  setPins(pins: MegaPin[], channel: number): void {
+    this.pinCh = channel;
+    this.pinHeldUntil = Date.now() + PIN_HOLD_MS;
+    this.update({ pins: sortPins(pins) });
+  }
+
   setCollapsed(collapsed: boolean): void {
     writeItem(COLLAPSED_KEY, collapsed ? "1" : "0");
     this.update({ collapsed });
@@ -151,7 +193,7 @@ export const megaphoneStore = new MegaphoneStore();
 /** 가방 등 다른 곳에서 외치기 창을 연다 */
 export const openMegaphone = () => megaphoneStore.compose(true);
 
-const SERVER: MegaphoneState = { entries: [], flash: null, queue: [], flashUntil: 0, collapsed: false, composing: false };
+const SERVER: MegaphoneState = { entries: [], flash: null, queue: [], flashUntil: 0, collapsed: false, composing: false, pins: [] };
 export function useMegaphone(): MegaphoneState {
   return useSyncExternalStore(megaphoneStore.subscribe, megaphoneStore.getSnapshot, () => SERVER);
 }

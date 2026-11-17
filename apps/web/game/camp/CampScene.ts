@@ -643,7 +643,7 @@ export class CampScene extends Phaser.Scene {
         this.rig.recenter();
       }),
     );
-    on.push(bridge.on("peers:ask", () => bridge.emit("peers:list", { names: [...this.remotes.values()].map((r) => r.name) })));
+    on.push(bridge.on("peers:ask", () => bridge.emit("peers:list", { names: [...this.remotes.values()].map((r) => r.name), map: "camp" })));
     on.push(
       bridge.on("firework:fire", ({ item }) => {
         // 증서는 월드가 서버로 보낸다 (net.firework) — 여기서는 내 자리에서 터뜨리기만

@@ -579,6 +579,7 @@ export class WorldScene extends Phaser.Scene {
         onGoblinCaught: (id, sid, name, points) => this.life.onGoblinCaught(id, sid, name, points),
         onGoblinGrant: (id, grant, points) => this.life.onGoblinGrant(id, grant, points),
         onMegaphone: (m) => bridge.emit("megaphone:heard", m),
+        onMegaPin: (m) => bridge.emit("megaphone:pin", m),
         onMeStale: () => bridge.emit("me:stale"),
         onFriend: (m) => bridge.emit("friend:presence", m),
         onSquirrels: (m) => bridge.emit("fx:squirrels", m),
@@ -947,7 +948,7 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("shop:closed", () => this.hub.setBlocked(bridge.last("ui:blockKeys")?.blocked ?? false)));
     on.push(bridge.on("wish:thrown", () => this.onWishThrown()));
     // 채널 이동 창의 "지금 이 채널에 있는 사람" 미리보기
-    on.push(bridge.on("peers:ask", () => !this.trip.away && bridge.emit("peers:list", { names: [...this.remotes.values()].map((r) => r.name) })));
+    on.push(bridge.on("peers:ask", () => !this.trip.away && bridge.emit("peers:list", { names: [...this.remotes.values()].map((r) => r.name), map: "village" })));
   }
 
   private applyLook(look: string[], grant: string, extra?: AppearanceChange): void {

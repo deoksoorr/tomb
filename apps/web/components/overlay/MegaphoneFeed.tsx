@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { useBridgeEvent } from "@/lib/hooks/useBridge";
+import { useEffect, useRef, useState } from "react";
+import type { MegaPin } from "@tomb/protocol";
+import { useBridgeEvent, useBridgeValue } from "@/lib/hooks/useBridge";
 import { tabHidden } from "@/lib/hooks/visibleAgain";
 import { megaphoneStore, openMegaphone, useMegaphone } from "@/lib/hooks/useMegaphone";
 import { reportStore } from "@/lib/reportClient";
@@ -10,6 +11,7 @@ import PixelIcon from "../ui/PixelIcon";
 import ui from "../ui/ui.module.css";
 import styles from "./MegaphoneFeed.module.css";
 import MegaphoneSpotlight from "./MegaphoneSpotlight";
+import { MegaPinDialog, MegaPinRemove } from "./MegaPinDialog";
 
 /** 기록을 다시 받는 간격 (관리자 숨김 반영·놓친 방송 보충. 새 방송은 실시간으로 오므로 10분, 숨긴 탭은 받지 않는다) */
 const RELOAD_MS = 10 * 60_000;
@@ -18,12 +20,20 @@ const RELOAD_MS = 10 * 60_000;
  * 23번 확성기 창 (데스크톱은 화면 왼쪽 위). 최근 20개는 펼쳐 볼 수 있다(접기 가능).
  * 새 한마디는 화면 가운데에 몇 초간 크게 뜨고(여러 개면 차례로), 기록의 그 줄도 잠깐 밝게 표시된다.
  * floating = 터치 화면: 왼쪽 위 [메뉴] 줄 바로 아래에 따로 띄운다 (펼친 기록은 아래로, 11/16)
+ * 11/17 바 아래·기록 위에 운영자 고정 공지(채널 것, 모든 채널 것 최대 2줄). 새 외침에 밀리지 않고, 한 줄로 줄였다가 누르면 펼친다.
+ * 기록을 접어 두면 첫 공지 한 줄만 (둘이면 +1). 운영자에게만 [공지 쓰기]·[지우기]
  */
 export default function MegaphoneFeed({ channel, floating = false }: { channel: number; floating?: boolean }) {
-  const { entries, flash, flashUntil, collapsed } = useMegaphone();
+  const { entries, flash, flashUntil, collapsed, pins } = useMegaphone();
   const logRef = useRef<HTMLOListElement>(null);
+  const iAmStaff = useBridgeValue("me:staff")?.on === true;
+  // 고정 공지 전체 펼침 · 운영자 쓰기 창 · 지울 공지
+  const [pinOpen, setPinOpen] = useState(false);
+  const [writing, setWriting] = useState(false);
+  const [removing, setRemoving] = useState<MegaPin | null>(null);
 
   useBridgeEvent("megaphone:heard", (m) => megaphoneStore.push(m));
+  useBridgeEvent("megaphone:pin", (m) => megaphoneStore.applyPin(m, channel));
   useEffect(() => {
     void megaphoneStore.load(channel);
     const t = setInterval(() => {
@@ -36,6 +46,10 @@ export default function MegaphoneFeed({ channel, floating = false }: { channel: 
     const el = logRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [entries, collapsed]);
+
+  // 기록을 접어 두면 첫 공지 한 줄만 (펼쳐 보면 모두)
+  const shownPins = collapsed && !pinOpen ? pins.slice(0, 1) : pins;
+  const hiddenPins = pins.length - shownPins.length;
 
   const toggle = () => {
     megaphoneStore.setCollapsed(!collapsed);
@@ -61,7 +75,36 @@ export default function MegaphoneFeed({ channel, floating = false }: { channel: 
         <button type="button" className={cx(ui.button, styles.shout)} onClick={openMegaphone}>
           외치기
         </button>
+        {iAmStaff && (
+          <button type="button" className={cx(ui.button, styles.shout)} onClick={() => setWriting(true)}>
+            공지 쓰기
+          </button>
+        )}
       </div>
+      {shownPins.length > 0 && (
+        <ul className={cx(styles.pins, pinOpen && styles.pinsOpen)} aria-label="고정 공지">
+          {shownPins.map((p) => (
+            <li key={p.scope} className={styles.pin}>
+              <button type="button" className={styles.pinBody} onClick={() => setPinOpen(!pinOpen)} aria-expanded={pinOpen} title={pinOpen ? undefined : p.text}>
+                {/* 모든 채널 공지는 딱지를 붉게 (전체 확성기와 같은 색) */}
+                <span className={cx(styles.pinTag, p.scope === "all" && styles.pinTagAll)}>공지</span>
+                <span className={styles.pinText}>{p.text}</span>
+                {hiddenPins > 0 && <span className={styles.pinMore}>+{hiddenPins}</span>}
+              </button>
+              {iAmStaff && (
+                <button
+                  type="button"
+                  className={styles.pinDel}
+                  aria-label={p.scope === "all" ? "모든 채널 공지 지우기" : `${channel}채널 공지 지우기`}
+                  onClick={() => setRemoving(p)}
+                >
+                  지우기
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
       {!collapsed && (
         <ol ref={logRef} className={styles.log} aria-label="최근 확성기 20개">
           {entries.length === 0 && <li className={styles.empty}>아직 아무도 외치지 않았어요.</li>}
@@ -92,6 +135,8 @@ export default function MegaphoneFeed({ channel, floating = false }: { channel: 
         </ol>
       )}
       <MegaphoneSpotlight entry={flash} until={flashUntil} />
+      {writing && iAmStaff && <MegaPinDialog channel={channel} pins={pins} onClose={() => setWriting(false)} />}
+      {removing && iAmStaff && <MegaPinRemove channel={channel} pin={removing} onClose={() => setRemoving(null)} />}
     </section>
   );
 }

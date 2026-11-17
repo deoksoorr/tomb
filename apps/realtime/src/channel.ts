@@ -1196,6 +1196,16 @@ export class ChannelCore<C extends object> {
     return true;
   }
 
+  /**
+   * 11/17 확성기 창 고정 공지가 바뀌었다 (Worker의 /internal/pin → RPC). 이 채널 모두에게 그대로 한 번 보낸다.
+   * 같은 내용을 두 번 받아도 화면은 같은 칸을 덮어쓸 뿐이라 nonce를 따로 잡지 않는다. 방은 받지 않는다 (월드 채널 소켓이 받는다)
+   */
+  relayedPin(data: string): boolean {
+    if (this.cfg.room) return false;
+    this.broadcast(data);
+    return true;
+  }
+
   /** 채널 단위 중복 제거: 같은 키는 windowMs에 한 번만 true */
   private once(key: string, windowMs: number, now: number): boolean {
     const last = this.recentEvents.get(key);
