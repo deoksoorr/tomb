@@ -101,7 +101,7 @@ export default function ReferralSection() {
         </li>
         <li>추천 보상 포인트는 한 달에 {REF_MONTH_CAP}명까지예요. 그 뒤로는 칭호에만 세요.</li>
         <li>내 친구가 데려온 이웃이 자리 잡으면 나도 {REF_GRAND_POINTS}P를 받아요. 한 달에 {REF_GRAND_MONTH_CAP}번까지예요.</li>
-        <li>한 사람이 여러 계정으로 받는 걸 막으려고 같은 기기나 같은 곳에서 가입했는지 살펴요. 겹치면 보상이 늦어지거나 없을 수 있어요.</li>
+        <li>한 사람이 여러 계정으로 받는 걸 막으려고 운영자가 확인한 뒤 보내 드려요.</li>
       </ul>
 
       {view.mine && <MyProgress mine={view.mine} />}

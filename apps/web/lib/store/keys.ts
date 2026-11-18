@@ -61,9 +61,9 @@ export const K = {
   earnIp: (ipHash: string, day: string) => `earnip:${ipHash}:${day}`, // HASH source → 그 IP 합계. 2일 TTL // ZSET 신고 기록이 있는 묘비 → 지금 세는 신고 수 (관리자 목록용)
   revivers: (id: string) => `grave:${id}:revivers`, // SET visitorId (지금 살려주세요 중)
   reviveEarned: (id: string) => `grave:${id}:reviveEarned`, // SET visitorId (포인트를 한 번 받은 사람, 취소해도 남김)
-  reports: (id: string) => `grave:${id}:reports`, // SET 신고한 IP 해시 (숨김 판정에 센다)
+  reports: (id: string) => `grave:${id}:reports`, // SET 숨김 판정에 세는 신고 계정 (11/18 전에는 IP 해시였다 — 남은 값도 한 명으로 센다)
   reporters: (id: string) => `grave:${id}:reporters`, // SET 신고한 visitorId (재신고 판정)
-  reportLog: (id: string) => `grave:${id}:reportlog`, // LIST {at, reason} JSON, 최신 먼저 최대 50개
+  reportLog: (id: string) => `grave:${id}:reportlog`, // LIST {at, reason, weak?, by?, name?} JSON, 최신 먼저 최대 50개 (by·name = 신고한 계정·캐릭터 이름, 11/18부터)
   decor: (id: string) => `grave:${id}:decor`, // ZSET `${itemId}|${nonce}` → 만료 시각(ms)
   flowerMark: (id: string, visitorId: string) => `flower:${id}:${visitorId}`, // STRING NX EX 86400
 

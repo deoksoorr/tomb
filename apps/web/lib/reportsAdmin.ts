@@ -73,15 +73,29 @@ export async function submitReport(reporterId: string, input: UserReportInput, n
     meta = { type: "megaphone", targetId: rec.id, accountId: rec.accountId, name: rec.name, preview: rec.text };
   }
   const chat = input.type === "user" && input.chat ? input.chat : undefined;
-  const note: ReportNote = { at: now, reason: input.reason, memo: input.memo, by: reporterId, ...(chat ? { chat } : {}) };
+  // 11/18 신고한 사람 이름도 남긴다 (관리자 신고함에서 누가 신고했는지 이름·계정 코드로 본다)
+  const byName = await displayName(reporterId, now).catch(() => NO_NAME);
+  const note: ReportNote = {
+    at: now,
+    reason: input.reason,
+    memo: input.memo,
+    by: reporterId,
+    ...(byName !== NO_NAME ? { byName } : {}),
+    ...(chat ? { chat } : {}),
+  };
   if ((await getReportBox().add(meta, note, kstDay(now))) === "duplicate")
     throw new HttpError(409, "ALREADY_REPORTED", "오늘은 이미 이 대상을 신고했어요. 내일 다시 신고할 수 있어요.");
 }
 
 // ── 관리자 신고 탭 ──
 
+/** 11/18 신고한 사람 한 명 (관리자가 이름·계정 코드로 구분). 옛 기록은 이름·계정이 없어 빠진다 */
+export type ReportWho = { accountId: string; name: string | null; at: number; weak?: true };
+
 /** 신고 탭 한 줄. 묘비·방명록은 원래 저장소의 신고 수를 쓰고, 유저·확성기는 신고함 사건을 그대로 쓴다 */
 export type AdminReport = ReportCase & {
+  /** 신고한 사람들 (최근 먼저) */
+  who: ReportWho[];
   /** 대상이 지금 숨김 상태인지 (묘비·방명록·확성기) */
   hidden: boolean;
   /** 묘비·방명록은 신고 사유(묘비만)만 남아 있다 → notes 대신 사유 요약 */
@@ -117,7 +131,7 @@ const summarize = (counts: Map<string, number>, labels: Record<string, string>) 
     .map(([k, n]) => `${labels[k] ?? k} ${n}`)
     .join(" · ");
 
-type Live = { meta: CaseMeta; count: number; firstAt: number; lastAt: number; hidden: boolean; reasonSummary: string; notes: ReportNote[] };
+type Live = { meta: CaseMeta; count: number; firstAt: number; lastAt: number; hidden: boolean; reasonSummary: string; notes: ReportNote[]; who: ReportWho[] };
 
 /** 묘비·방명록: 지금 신고가 남아 있는 것 (사건 키 → 상태) */
 async function liveContent(): Promise<Map<string, Live>> {
@@ -125,7 +139,8 @@ async function liveContent(): Promise<Map<string, Live>> {
   const [graves, records] = await Promise.all([listAdminGraves(), getStore().listAll()]);
   const owner = new Map(records.map((r) => [r.id, r.ownerAccountId ?? null]));
   for (const g of graves) {
-    if (g.reports <= 0) continue;
+    // 갓 만든 계정의 신고만 있으면 수는 0이지만 기록이 있으니 신고함에 올린다 (11/18)
+    if (g.reports <= 0 && !g.reportLog.some((l) => l.weak)) continue;
     const counts = new Map<string, number>();
     for (const l of g.reportLog) counts.set(l.reason, (counts.get(l.reason) ?? 0) + 1);
     const ats = g.reportLog.map((l) => l.at);
@@ -144,6 +159,7 @@ async function liveContent(): Promise<Map<string, Live>> {
       hidden: g.hidden,
       reasonSummary: summarize(counts, REPORT_REASON_LABELS),
       notes: [],
+      who: g.reportLog.flatMap((l) => (l.by ? [{ accountId: l.by, name: l.name ?? null, at: l.at, ...(l.weak ? { weak: true as const } : {}) }] : [])),
     });
   }
   const houses = getHouseStore();
@@ -151,8 +167,11 @@ async function liveContent(): Promise<Map<string, Live>> {
     const reports = await houses.guestReports(h.id);
     if (!reports.size) continue;
     for (const e of await houses.guestbook(h.id, true)) {
+      // 갓 만든 계정의 신고만 있으면 수는 0이지만 신고함에는 올린다 (11/18)
+      if (!reports.has(e.id)) continue;
       const n = reports.get(e.id) ?? 0;
-      if (n <= 0) continue;
+      const who = await houses.guestReporters(h.id, e.id);
+      if (n <= 0 && !who.length) continue;
       out.set(caseKey("guestbook", `${h.id}/${e.id}`), {
         meta: { type: "guestbook", targetId: `${h.id}/${e.id}`, accountId: e.author ?? null, name: e.name, preview: `${h.name}의 방명록: ${e.text}`, reporters: n },
         count: n,
@@ -161,6 +180,7 @@ async function liveContent(): Promise<Map<string, Live>> {
         hidden: e.hidden,
         reasonSummary: "",
         notes: [],
+        who,
       });
     }
   }
@@ -184,6 +204,7 @@ export async function listReports(status: "open" | "done"): Promise<{ reports: A
     for (const n of c.notes) counts.set(n.reason, (counts.get(n.reason) ?? 0) + 1);
     return {
       ...c,
+      who: c.notes.map((n) => ({ accountId: n.by, name: n.byName ?? null, at: n.at })),
       hidden: c.type === "megaphone" ? (megaHidden.get(c.targetId) ?? false) : false,
       reasonSummary: summarize(counts, USER_REPORT_REASON_LABELS),
       actions: ACTIONS[c.type],
@@ -204,6 +225,7 @@ export async function listReports(status: "open" | "done"): Promise<{ reports: A
       status: "open",
       resolution: null,
       notes: l.notes,
+      who: l.who,
       hidden: l.hidden,
       reasonSummary: l.reasonSummary,
       actions: ACTIONS[l.meta.type],

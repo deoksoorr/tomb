@@ -1,7 +1,7 @@
 import type { Redis } from "@upstash/redis";
 import { redisClient } from "../redisUsage";
 import { GRAVE_CHANNELS } from "./channels";
-import { REPORT_LOG_MAX, type ReportLogEntry, type ReportReason } from "../reports";
+import { REPORT_LOG_MAX, reportEntry, type ReportBy, type ReportLogEntry, type ReportReason } from "../reports";
 import { DEFAULT_PASS_DAYS, type Grave, type GraveDecor, type PassReason } from "../types";
 import { chKeys, DECOR, HIDDEN, K } from "./keys";
 import {
@@ -27,15 +27,14 @@ if not redis.call('SET', KEYS[2], '1', 'NX', 'EX', ARGV[2]) then return {0} end
 return {1, redis.call('ZINCRBY', KEYS[3], 1, ARGV[1])}
 `;
 
-// KEYS: meta, reports(IP), reporters(방문자), reportlog, graves:reported
-// ARGV: id, ipHash, visitorId, 숨김 기준, 기록 JSON, 기록 최대 개수, 약한 신고(1 = 갓 만든 계정 — IP 집합·숨김에 안 넣는다)
+// 11/18 계정 단위로 센다 (예전엔 IP 해시 — 같은 회사·집 여럿의 신고가 1건이 됐다).
+// reports 집합 = 숨김 수에 들어가는 계정(옛 IP 해시 값도 그대로 한 명으로 남는다), reporters 집합 = 신고한 계정 전부(중복 막기)
+// KEYS: meta, reports, reporters, reportlog, graves:reported
+// ARGV: id, (안 씀), visitorId, 숨김 기준, 기록 JSON, 기록 최대 개수, 약한 신고(1 = 갓 만든 계정 — 숨김 수에 안 넣는다)
 const REPORT_LUA = `
 if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 0 then return nil end
-if redis.call('SISMEMBER', KEYS[3], ARGV[3]) == 1 then return 0 end
-if ARGV[7] == '1' then
-  if redis.call('SISMEMBER', KEYS[2], ARGV[2]) == 1 or redis.call('SADD', KEYS[3], 'w:' .. ARGV[2]) == 0 then return 0 end
-elseif redis.call('SADD', KEYS[2], ARGV[2]) == 0 then return 0 end
-redis.call('SADD', KEYS[3], ARGV[3])
+if redis.call('SADD', KEYS[3], ARGV[3]) == 0 then return 0 end
+if ARGV[7] ~= '1' then redis.call('SADD', KEYS[2], ARGV[3]) end
 redis.call('LPUSH', KEYS[4], ARGV[5])
 redis.call('LTRIM', KEYS[4], 0, tonumber(ARGV[6]) - 1)
 local n = redis.call('SCARD', KEYS[2])
@@ -533,17 +532,17 @@ export class RedisStore implements GraveStore {
   async report(
     id: string,
     visitorId: string,
-    ipHash: string,
     reason: ReportReason,
     at = Date.now(),
     weak = false,
+    by: ReportBy | null = null,
   ): Promise<"added" | "duplicate" | null> {
     const k = await this.keysOf(id);
-    const entry: ReportLogEntry = weak ? { at, reason, weak: true } : { at, reason };
+    const entry = reportEntry(at, reason, weak, by);
     const r = await this.redis.eval<string[], number | null>(
       REPORT_LUA,
       [k.meta, K.reports(id), K.reporters(id), K.reportLog(id), K.reported],
-      [id, ipHash, visitorId, String(REPORT_HIDE_THRESHOLD), JSON.stringify(entry), String(REPORT_LOG_MAX), weak ? "1" : "0"],
+      [id, "", visitorId, String(REPORT_HIDE_THRESHOLD), JSON.stringify(entry), String(REPORT_LOG_MAX), weak ? "1" : "0"],
     );
     if (r === null) return null;
     return Number(r) === 1 ? "added" : "duplicate";

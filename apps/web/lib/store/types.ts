@@ -3,7 +3,7 @@ import type { AttendClaim, CalendarMonthRecord } from "../calendar";
 import type { EarnSource } from "../economy";
 import type { EarnBoost } from "../pointEvent";
 import { msUntilDayReset } from "../gameDay";
-import type { ReportLogEntry, ReportReason } from "../reports";
+import type { ReportBy, ReportLogEntry, ReportReason } from "../reports";
 import { PRESENCE_HIDDEN_INTERVAL_MS, SHRINE_KEEP_DAYS, type ActivityItem, type Grave, type GraveDecor, type PassReason } from "../types";
 
 /**
@@ -28,7 +28,7 @@ export type ReportSummary = { count: number; log: ReportLogEntry[] };
 
 /** 헌화 하루 1회 판정 기간: 다음 새벽 5시(한국 시간, lib/gameDay)까지 — 그때 다시 놓을 수 있다 (예전: 놓은 때부터 24시간) */
 export const flowerTtlSec = (now: number) => Math.max(1, Math.ceil(msUntilDayReset(now) / 1000));
-/** 서로 다른 IP의 신고가 이만큼 모이면 숨긴다 */
+/** 서로 다른 계정의 신고가 이만큼 모이면 숨긴다 (11/18 IP가 아니라 계정 단위 — 만든 지 3일 지난 계정만 센다) */
 export const REPORT_HIDE_THRESHOLD = 5;
 
 /**
@@ -95,18 +95,18 @@ export interface GraveStore {
   /** 성불 정리 잠금: ttlMs 동안 한 번만 true (여러 요청이 같은 정리를 겹쳐 하지 않게). Redis는 서버 시계로 잰다 */
   lockSweep(ttlMs: number, now: number): Promise<boolean>;
   /**
-   * 신고는 IP 해시 단위로 센다 (쿠키를 새로 받아도 같은 IP는 1건). 같은 방문자나 같은 IP의 재신고는 "duplicate".
-   * 서로 다른 IP가 REPORT_HIDE_THRESHOLD개 모이면 숨긴다. 받아들인 신고는 사유와 시각을 기록에 남긴다
+   * 신고는 계정 단위로 센다 (11/18 — 예전엔 IP 단위라 같은 회사·집에서 여럿이 신고하면 1건이었다). 같은 계정의 재신고는 "duplicate".
+   * 서로 다른 계정이 REPORT_HIDE_THRESHOLD명 모이면 숨긴다. 받아들인 신고는 사유·시각·신고한 사람(by)을 기록에 남긴다
    * (최근 REPORT_LOG_MAX개). 묘비가 없으면 null.
-   * 11/18 weak(갓 만든 계정)면 기록·관리자 신고함에만 남기고 숨김 수(IP 집합)에는 넣지 않는다 (계정을 새로 만들어 남의 묘비를 숨기지 못하게)
+   * weak(갓 만든 계정)면 기록·관리자 신고함에만 남기고 숨김 수에는 넣지 않는다 (계정을 새로 만들어 남의 묘비를 숨기지 못하게)
    */
   report(
     id: string,
     visitorId: string,
-    ipHash: string,
     reason: ReportReason,
     at?: number,
     weak?: boolean,
+    by?: ReportBy | null,
   ): Promise<"added" | "duplicate" | null>;
 }
 

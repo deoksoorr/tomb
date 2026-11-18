@@ -346,27 +346,40 @@ describe("반응", () => {
 });
 
 describe("신고 남용 (QA)", () => {
-  it("한 IP에서 쿠키를 바꿔 5번 신고해도 1건만 센다", async () => {
+  it("11/18 같은 회사 IP라도 서로 다른 계정 5명이면 각자 세서 숨긴다, 같은 계정 재신고는 409", async () => {
     const owner = await newVisitor();
     const { grave } = await createGrave(owner);
     const statuses: number[] = [];
-    for (let i = 0; i < 5; i++) {
-      const v = await newVisitor("10.7.7.7");
-      statuses.push((await report.POST(call(`/api/graves/${grave.id}/report`, { method: "POST", visitor: v }), ctx(grave.id))).status);
-    }
-    expect(statuses).toEqual([200, 409, 409, 409, 409]);
-    expect((await graveById.GET(call(`/api/graves/${grave.id}`), ctx(grave.id))).status).toBe(200);
+    const team = await Promise.all(Array.from({ length: 5 }, () => trustedVisitor("10.7.7.7")));
+    const post = (v: Visitor) => report.POST(call(`/api/graves/${grave.id}/report`, { method: "POST", visitor: v }), ctx(grave.id));
+    for (const v of team.slice(0, 4)) statuses.push((await post(v)).status);
+    statuses.push((await post(team[0])).status); // 같은 계정 재신고
+    statuses.push((await post(team[4])).status);
+    expect(statuses).toEqual([200, 200, 200, 200, 409, 200]);
+    expect((await graveById.GET(call(`/api/graves/${grave.id}`), ctx(grave.id))).status).toBe(404);
+  });
+
+  it("11/18 신고 기록에 신고한 계정 코드·캐릭터 이름이 남는다", async () => {
+    const owner = await newVisitor();
+    const { grave } = await createGrave(owner);
+    const v = await trustedVisitor();
+    expect((await report.POST(call(`/api/graves/${grave.id}/report`, { method: "POST", visitor: v, body: { reason: "spam" } }), ctx(grave.id))).status).toBe(200);
+    const row = ((await (await adminGraves.GET(call("/api/admin/graves", { headers: { "x-admin-key": "dev-admin" } }))).json()) as { graves: AdminGrave[] }).graves.find(
+      (g) => g.id === grave.id,
+    );
+    expect(row?.reportLog[0]).toMatchObject({ reason: "spam", by: v.visitorId, name: expect.stringMatching(/^신고/) });
   });
 });
 
 describe("11/18 갓 만든 계정의 신고", () => {
-  it("숨김 수에 안 들어가고 관리자 신고함에만 남는다, 같은 IP의 약한 신고도 한 번만", async () => {
+  it("숨김 수에 안 들어가고 관리자 신고함에만 남는다, 같은 계정의 약한 신고도 한 번만", async () => {
     const owner = await newVisitor();
     const { grave } = await createGrave(owner);
     const post = (v: Visitor) => report.POST(call(`/api/graves/${grave.id}/report`, { method: "POST", visitor: v }), ctx(grave.id));
     for (let i = 0; i < 6; i++) expect((await post(await newVisitor())).status).toBe(200);
-    expect((await post(await newVisitor("10.66.6.6"))).status).toBe(200);
-    expect((await post(await newVisitor("10.66.6.6"))).status).toBe(409);
+    const fresh = await newVisitor("10.66.6.6");
+    expect((await post(fresh)).status).toBe(200);
+    expect((await post(fresh)).status).toBe(409);
     expect((await graveById.GET(call(`/api/graves/${grave.id}`), ctx(grave.id))).status).toBe(200);
     const key = { "x-admin-key": "dev-admin" };
     const row = ((await (await adminGraves.GET(call("/api/admin/graves", { headers: key }))).json()) as { graves: AdminGrave[] }).graves.find(

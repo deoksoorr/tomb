@@ -345,6 +345,10 @@ export default function AdminApp() {
                 setBanPreset(t);
                 go("members");
               }}
+              onFindMember={(id) => {
+                setMemberQuery(id);
+                go("members");
+              }}
             />
           )}
           {panel === "bans" && <BansPanel {...p} version={version} onChanged={reload} />}

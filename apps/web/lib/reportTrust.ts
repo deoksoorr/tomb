@@ -1,3 +1,4 @@
+import type { ReportBy } from "./reports";
 import { getAccounts } from "./store";
 import { kstDay } from "./store/accounts";
 
@@ -12,6 +13,12 @@ export const REPORT_TRUST_AGE_MS = 3 * 86_400_000;
  * (쿠키만 받고 한 번도 안 들어온 계정도 만든 시각이 0이다)
  */
 export async function trustedReporter(accountId: string, now = Date.now()): Promise<boolean> {
+  return (await reporterOf(accountId, now)).trusted;
+}
+
+/** 11/18 신고한 사람: 숨김 수에 넣을지(trusted)와 기록에 남길 계정 id·캐릭터 이름 (계정 한 번 읽기) */
+export async function reporterOf(accountId: string, now = Date.now()): Promise<{ trusted: boolean; by: ReportBy }> {
   const a = await getAccounts().get(accountId, kstDay(now), now);
-  return a.createdAt > 0 ? now - a.createdAt >= REPORT_TRUST_AGE_MS : !!a.name;
+  const trusted = a.createdAt > 0 ? now - a.createdAt >= REPORT_TRUST_AGE_MS : !!a.name;
+  return { trusted, by: { accountId, name: a.name ?? null } };
 }

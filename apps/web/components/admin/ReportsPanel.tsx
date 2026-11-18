@@ -24,6 +24,8 @@ type Props = {
   onOpenCount: (n: number) => void;
   /** 정지로 이동 → 회원 목록 탭의 정지 창 */
   onBan: (target: BanTarget) => void;
+  /** 11/18 신고한 사람 이름을 누르면 회원 목록에서 그 계정 찾기 */
+  onFindMember: (accountId: string) => void;
 };
 
 const TYPE_LABEL: Record<CaseType, string> = { grave: "묘비", guestbook: "방명록", user: "유저", megaphone: "확성기" };
@@ -33,7 +35,7 @@ const KST = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "n
 /** 신고 탭을 마지막으로 본 시각 (그 뒤에 들어온 신고에 "새" 표시) */
 const SEEN_KEY = "tomb.admin.reportsSeen";
 
-export default function ReportsPanel({ toast, onAuthLost, onOpenCount, onBan }: Props) {
+export default function ReportsPanel({ toast, onAuthLost, onOpenCount, onBan, onFindMember }: Props) {
   const [status, setStatus] = useState<"open" | "done">("open");
   const [type, setType] = useState<CaseType | "all">("all");
   const [reports, setReports] = useState<AdminReport[] | null>(null);
@@ -129,6 +131,7 @@ export default function ReportsPanel({ toast, onAuthLost, onOpenCount, onBan }: 
                 {r.type !== "user" && <p className={m.preview}>{r.preview}</p>}
                 {r.type === "user" && r.preview !== r.name && <p className={m.preview}>게임 속 이름: {r.preview}</p>}
                 {r.reasonSummary && <p className={styles.meta}>사유: {r.reasonSummary}</p>}
+                {r.who.length > 0 && <Reporters who={r.who} onFind={onFindMember} />}
                 {r.notes.length > 0 && (
                   <ol className={m.notes} aria-label="신고 메모">
                     {r.notes.slice(0, 5).map((n, i) => (
@@ -195,5 +198,26 @@ export default function ReportsPanel({ toast, onAuthLost, onOpenCount, onBan }: 
         </Dialog>
       )}
     </section>
+  );
+}
+
+/** 11/18 신고한 사람: 캐릭터 이름(계정 코드). 누르면 회원 목록에서 그 계정을 찾는다. 갓 만든 계정(숨김 수에 안 들어간 신고)은 「새 계정」 */
+function Reporters({ who, onFind }: { who: AdminReport["who"]; onFind: (accountId: string) => void }) {
+  const shown = who.slice(0, 12);
+  return (
+    <p className={m.who}>
+      <span className={m.whoLabel}>신고한 사람</span>
+      {shown.map((w, i) => (
+        <span key={`${w.accountId}-${w.at}`} className={m.whoItem}>
+          <button type="button" className={m.whoName} onClick={() => onFind(w.accountId)} title={`회원 목록에서 찾기 · ${KST.format(w.at)}`}>
+            {w.name ?? "이름 없음"}
+          </button>
+          <span className={m.whoCode}>({w.accountId})</span>
+          {w.weak && <span className={m.whoWeak}>새 계정</span>}
+          {i < shown.length - 1 && ","}
+        </span>
+      ))}
+      {who.length > shown.length && <span className={m.whoCode}>외 {who.length - shown.length}명</span>}
+    </p>
   );
 }

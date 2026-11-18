@@ -150,3 +150,54 @@
   color: var(--muted);
   font-size: 13px;
 }
+
+/* 11/18 신고한 사람 줄: 이름(누르면 회원 찾기) + 계정 코드 */
+.who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
+.whoLabel {
+  color: var(--muted, #9aa0aa);
+}
+
+.whoItem {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.whoName {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.whoName:hover,
+.whoName:focus-visible {
+  color: #8ab4ff;
+}
+
+.whoCode {
+  color: var(--muted, #9aa0aa);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.whoWeak {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(255, 200, 80, 0.16);
+  color: #f2c86a;
+  font-size: 10px;
+}

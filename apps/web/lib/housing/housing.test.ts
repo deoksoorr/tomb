@@ -262,13 +262,14 @@ describe.each(kits)("HouseStore (%s)", (_name, make) => {
     expect(list[0].id).toBe(`e${GUEST_PER_DAY - 1}`);
     expect(list).toHaveLength(GUEST_PER_DAY);
     for (let i = 0; i < GUEST_REPORT_HIDE; i++) {
-      expect(await s.reportGuest(id, "e0", `ip${i}`)).toBe("added");
-      expect(await s.reportGuest(id, "e0", `ip${i}`)).toBe("duplicate");
+      expect(await s.reportGuest(id, "e0", { accountId: `acct${i}`, name: `손${i}` })).toBe("added");
+      expect(await s.reportGuest(id, "e0", { accountId: `acct${i}`, name: `손${i}` })).toBe("duplicate");
     }
     expect((await s.guestbook(id, false)).some((g) => g.id === "e0")).toBe(false);
     expect((await s.guestbook(id, true)).find((g) => g.id === "e0")?.hidden).toBe(true);
     expect((await s.guestReports(id)).get("e0")).toBe(GUEST_REPORT_HIDE);
-    expect(await s.reportGuest(id, "nope", "ip")).toBeNull();
+    expect((await s.guestReporters(id, "e0")).map((w) => w.name)).toEqual(expect.arrayContaining(["손0", "손1", "손2"]));
+    expect(await s.reportGuest(id, "nope", { accountId: "acct9", name: null })).toBeNull();
     expect((await s.removeGuest(id, "e1"))?.text).toBe("글1");
     expect(await s.removeGuest(id, "e1")).toBeNull();
     expect(await s.setGuestHidden(id, "e0", false)).toBe(true);

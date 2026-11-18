@@ -57,11 +57,11 @@ function contract(make: () => GraveStore) {
   it("없는(삭제된) 묘비에 반응 → null, 고아 카운트·집합을 만들지 않는다", async () => {
     const id = `test-${nanoid(8)}`;
     expect(await store.flower(id, "v")).toBeNull();
-    expect(await store.report(id, "v", "ip", "other")).toBeNull();
+    expect(await store.report(id, "v", "other")).toBeNull();
     expect(await store.viewer(id, "v")).toEqual({ myFlowerToday: false });
     await add({ id });
     expect(await store.get(id)).toMatchObject({ flowers: 0, revives: 0 });
-    expect(await store.report(id, "v", "ip", "other")).toBe("added");
+    expect(await store.report(id, "v", "other")).toBe("added");
   });
 
   it("20명이 동시에 헌화 → 20", async () => {
@@ -80,37 +80,50 @@ function contract(make: () => GraveStore) {
     expect((await store.viewer(g.id, "other")).myFlowerToday).toBe(false);
   });
 
-  it("서로 다른 IP 5곳이 신고하면 숨김. 같은 방문자·같은 IP의 재신고는 duplicate", async () => {
+  it("11/18 서로 다른 계정 5명이 신고하면 숨김(같은 회사 IP여도 각자 센다). 같은 계정의 재신고는 duplicate", async () => {
     const g = await add();
-    const vs = visitors(7);
-    for (let i = 0; i < 4; i++) expect(await store.report(g.id, vs[i], `ip-${i}`, "other")).toBe("added");
-    expect(await store.report(g.id, vs[0], "ip-new", "other")).toBe("duplicate"); // 같은 방문자, 다른 IP
-    expect(await store.report(g.id, vs[5], "ip-0", "other")).toBe("duplicate"); // 새 쿠키, 같은 IP
+    const vs = visitors(5);
+    for (let i = 0; i < 4; i++) expect(await store.report(g.id, vs[i], "other")).toBe("added");
+    expect(await store.report(g.id, vs[0], "other")).toBe("duplicate"); // 같은 계정
     expect((await store.get(g.id))?.hidden).toBeFalsy();
-    expect(await store.report(g.id, vs[6], "ip-4", "other")).toBe("added");
+    expect(await store.report(g.id, vs[4], "other")).toBe("added");
     expect((await store.get(g.id))?.hidden).toBe(true);
   });
 
-  it("동시에 신고가 몰려도 IP 수가 정확히 집계된다", async () => {
+  it("11/18 갓 만든 계정(weak)의 신고는 기록에만 남고 숨김 수에는 안 들어간다. 신고한 사람(계정·이름)을 기록에 남긴다", async () => {
     const g = await add();
-    const results = await Promise.all(visitors(10).map((v, i) => store.report(g.id, v, `ip-${i % 3}`, "other")));
+    const vs = visitors(6);
+    for (let i = 0; i < 5; i++) expect(await store.report(g.id, vs[i], "spam", 2000 + i, true, { accountId: vs[i], name: `새내기${i}` })).toBe("added");
+    expect(await store.report(g.id, vs[0], "spam", 3000, true)).toBe("duplicate");
+    expect((await store.get(g.id))?.hidden).toBeFalsy();
+    expect(await store.report(g.id, vs[5], "abuse", 4000, false, { accountId: vs[5], name: "오래된이" })).toBe("added");
+    const summary = (await store.reportSummary()).get(g.id)!;
+    expect(summary.count).toBe(1);
+    expect(summary.log[0]).toEqual({ at: 4000, reason: "abuse", by: vs[5], name: "오래된이" });
+    expect(summary.log[1]).toEqual({ at: 2004, reason: "spam", weak: true, by: vs[4], name: "새내기4" });
+  });
+
+  it("동시에 신고가 몰려도 계정 수가 정확히 집계된다 (같은 계정이 겹쳐 보내도 한 번)", async () => {
+    const g = await add();
+    const vs = visitors(3);
+    const results = await Promise.all(Array.from({ length: 10 }, (_, i) => store.report(g.id, vs[i % 3], "other")));
     expect(results.filter((r) => r === "added")).toHaveLength(3);
     expect((await store.get(g.id))?.hidden).toBeFalsy();
   });
 
   it("숨김 해제는 신고 기록도 비운다 → 다음 신고 한 번으로 다시 숨지 않는다", async () => {
     const g = await add();
-    for (const [i, v] of visitors(5).entries()) await store.report(g.id, v, `ip-${i}`, "other");
+    for (const v of visitors(5)) await store.report(g.id, v, "other");
     expect(await store.setHidden(g.id, false)).toBe(true);
-    expect(await store.report(g.id, "late", "ip-late", "other")).toBe("added");
+    expect(await store.report(g.id, "late", "other")).toBe("added");
     expect((await store.get(g.id))?.hidden).toBeFalsy();
     expect(await store.setHidden("test-nope", true)).toBe(false);
   });
 
   it("받은 신고의 사유·시각을 최신 먼저 기록하고 최근 50개만 남긴다", async () => {
     const g = await add();
-    for (let i = 0; i < 55; i++) await store.report(g.id, `v${i}`, `ip-${i}`, i % 2 ? "spam" : "abuse", 1000 + i);
-    await store.report(g.id, "v0", "ip-new", "privacy"); // 중복 신고는 기록하지 않는다
+    for (let i = 0; i < 55; i++) await store.report(g.id, `v${i}`, i % 2 ? "spam" : "abuse", 1000 + i);
+    await store.report(g.id, "v0", "privacy"); // 중복 신고는 기록하지 않는다
     const summary = (await store.reportSummary()).get(g.id)!;
     expect(summary.count).toBe(55);
     expect(summary.log).toHaveLength(50);
@@ -120,7 +133,7 @@ function contract(make: () => GraveStore) {
 
   it("숨김 해제는 신고 수만 0으로(기록은 남김), 신고 초기화는 기록까지 비운다(숨김은 그대로)", async () => {
     const g = await add();
-    for (let i = 0; i < 5; i++) await store.report(g.id, `v${i}`, `ip-${i}`, "privacy");
+    for (let i = 0; i < 5; i++) await store.report(g.id, `v${i}`, "privacy");
     expect((await store.get(g.id))?.hidden).toBe(true);
     await store.setHidden(g.id, false);
     const afterUnhide = (await store.reportSummary()).get(g.id)!;
@@ -131,7 +144,7 @@ function contract(make: () => GraveStore) {
     expect(await store.resetReports(g.id)).toBe(true);
     expect((await store.reportSummary()).has(g.id)).toBe(false);
     expect((await store.get(g.id))?.hidden).toBe(true);
-    expect(await store.report(g.id, "v0", "ip-0", "spam")).toBe("added");
+    expect(await store.report(g.id, "v0", "spam")).toBe("added");
     expect(await store.resetReports(`test-${nanoid(8)}`)).toBe(false);
   });
 
@@ -145,7 +158,7 @@ function contract(make: () => GraveStore) {
   it("remove는 메타·카운트·집합을 모두 지운다", async () => {
     const g = await add();
     await store.flower(g.id, "a");
-    await store.report(g.id, "a", "ip-a", "other");
+    await store.report(g.id, "a", "other");
     await store.setHidden(g.id, true);
     expect((await store.remove(g.id))?.id).toBe(g.id);
     expect(await store.get(g.id)).toBeNull();
@@ -157,7 +170,7 @@ function contract(make: () => GraveStore) {
     await add({ id: g.id });
     expect(await store.get(g.id)).toMatchObject({ flowers: 0, revives: 0 });
     expect((await store.get(g.id))?.hidden).toBeFalsy();
-    expect(await store.report(g.id, "a", "ip-a", "other")).toBe("added");
+    expect(await store.report(g.id, "a", "other")).toBe("added");
   });
 
   it("채널마다 묘지가 따로: 목록·랭킹이 섞이지 않고, id로 부르면 채널을 스스로 찾는다", async () => {
@@ -177,7 +190,7 @@ function contract(make: () => GraveStore) {
     // 숨김·신고·삭제도 그 채널에서
     expect(await store.setHidden(two.id, true)).toBe(true);
     expect((await store.get(two.id))?.hidden).toBe(true);
-    expect(await store.report(two.id, "v2", "ip2", "spam")).toBe("added");
+    expect(await store.report(two.id, "v2", "spam")).toBe("added");
     expect((await store.remove(two.id))?.channel).toBe(2);
     expect(await ids(2)).not.toContain(two.id);
   });

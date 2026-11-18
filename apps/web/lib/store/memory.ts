@@ -1,4 +1,4 @@
-import { REPORT_LOG_MAX, type ReportLogEntry, type ReportReason } from "../reports";
+import { REPORT_LOG_MAX, reportEntry, type ReportBy, type ReportLogEntry, type ReportReason } from "../reports";
 import { MAX_DECOR_PER_GRAVE } from "@tomb/protocol";
 import { DEFAULT_PASS_DAYS, type Grave, type GraveDecor, type PassReason } from "../types";
 import {
@@ -274,24 +274,21 @@ export class MemoryStore implements GraveStore {
   async report(
     id: string,
     visitorId: string,
-    ipHash: string,
     reason: ReportReason,
     at = Date.now(),
     weak = false,
+    by: ReportBy | null = null,
   ): Promise<"added" | "duplicate" | null> {
     if (!this.graves.has(id)) return null;
-    const ips = this.setOf(this.reportIps, id);
+    // 11/18 계정 단위: 신고 수 집합(reportIps — 이름은 옛것)에는 숨김 수에 들어가는 계정만, 신고한 사람 집합에는 모두
+    const counted = this.setOf(this.reportIps, id);
     const visitors = this.setOf(this.reporters, id);
-    if (visitors.has(visitorId) || ips.has(ipHash)) return "duplicate";
-    // 약한 신고도 IP당 한 번 (방문자 집합에 "w:IP"로 — 숨김 수인 IP 집합에는 넣지 않는다)
-    if (weak) {
-      if (visitors.has(`w:${ipHash}`)) return "duplicate";
-      visitors.add(`w:${ipHash}`);
-    } else ips.add(ipHash);
+    if (visitors.has(visitorId)) return "duplicate";
     visitors.add(visitorId);
-    const entry: ReportLogEntry = weak ? { at, reason, weak: true } : { at, reason };
+    if (!weak) counted.add(visitorId);
+    const entry = reportEntry(at, reason, weak, by);
     this.reportLogs.set(id, [entry, ...(this.reportLogs.get(id) ?? [])].slice(0, REPORT_LOG_MAX));
-    if (ips.size >= REPORT_HIDE_THRESHOLD) this.hidden.add(id);
+    if (counted.size >= REPORT_HIDE_THRESHOLD) this.hidden.add(id);
     return "added";
   }
 }
