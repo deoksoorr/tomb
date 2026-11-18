@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 import { afterAll, expect, it } from "vitest";
-import { DEX_REWARD, dexIdsOf, dexRewardOf, speciesOf } from "./catalog";
+import { BAG_MAX, DEX_REWARD, dexIdsOf, dexRewardOf, speciesOf } from "./catalog";
 import type { ForageStore } from "./store";
 
 // 저장소 계약: MemoryForageStore·RedisForageStore가 똑같이 지켜야 하는 동작 (store.test.ts가 두 구현에 돌린다).
@@ -149,6 +149,30 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
     await store.autoSwap(a, null, "base");
     const r = await Promise.all(Array.from({ length: 5 }, (_, i) => store.autoSwap(a, "base", `n${i}`)));
     expect(r.filter(Boolean)).toHaveLength(1);
+  });
+
+  it("11/19 가방 전체 한도: 물고기·채집물 합이 BAG_MAX면 직접 잡은 것은 놓아주고(도감은 남김) 자동 낚시는 쉰다", async () => {
+    const a = acct();
+    const ids = ["f_carp", "f_crucian", "f_catfish", "f_trout"];
+    // 종마다 99까지 → 넷이면 396이라 BAG_MAX(300)에서 막힌다
+    for (const id of ids) await store.grant(a, DAY, "fish", Array.from({ length: 99 }, () => ({ id, size: 100 })), 99);
+    let s = await store.snapshot(a, DAY, 1);
+    expect(Object.values(s.bag).reduce((n, v) => n + v, 0)).toBe(BAG_MAX);
+    expect(s.dex.f_trout.n).toBe(99);
+    // 직접: 넣지 못해도 도감·오늘 수는 센다
+    const g = await store.grant(a, DAY, "gather", [{ id: "h_mugwort", size: 0 }], 99);
+    expect(g?.[0]).toMatchObject({ kept: false, isNew: true });
+    // 자동: 쉰다 (오늘 수·도감 그대로)
+    const before = (await store.snapshot(a, DAY, 1)).day;
+    const r = await store.grantAuto(a, DAY, [{ id: "f_carp", size: 900 }, { id: "@x", size: 0 }], 99);
+    expect(r.every((x) => x.rest && !x.kept)).toBe(true);
+    s = await store.snapshot(a, DAY, 1);
+    expect(s.day).toEqual(before);
+    expect(s.dex.f_carp.max).toBe(100);
+    // 팔아서 비우면 다시 넣는다
+    expect(await store.remove(a, { f_carp: 2 })).toBe(true);
+    const r2 = await store.grantAuto(a, DAY, [{ id: "f_carp", size: 100 }, { id: "f_carp", size: 100 }, { id: "f_carp", size: 100 }], 99);
+    expect(r2.map((x) => [x.kept, !!x.rest])).toEqual([[true, false], [true, false], [false, true]]);
   });
 
   it("자동 낚시 넣기: 한도 없이 전부 (11/19), 오늘 수를 올리고 도감 최대 크기도 기록한다", async () => {

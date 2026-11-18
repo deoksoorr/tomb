@@ -37,7 +37,7 @@ import { ATTEND_TIER_GUIDE } from "@/lib/attendTiers";
 import { EARN_RULES } from "@/lib/economy";
 import { DYE_TIME_MS } from "@/lib/dye/palette";
 import { AUTO_FISH_MAX_MS, AUTO_PACE_NOTE, AUTO_RANK_NOTE } from "@/lib/forage/auto";
-import { DEX_NEW_REWARD } from "@/lib/forage/catalog";
+import { BAG_MAX, DEX_NEW_REWARD } from "@/lib/forage/catalog";
 import { PHASE_LABELS, TIME_PHASES, WEATHER_BLOCK_MS, WEATHER_LABELS, WEATHERS } from "@/lib/ambience";
 import { PLOT_TIERS, plotCost } from "@/lib/housing/catalog";
 import { DYE_SPECIAL_BONUS, LOOK_SCORE_DIVISOR } from "@/lib/lookScore";
@@ -213,7 +213,7 @@ const forage = (touch: boolean): ReactNode[][] => [
   [
     "자동 낚시",
     "낚시 중 [자동 낚시 켜기]",
-    `다른 탭을 봐도 낚아요. ${AUTO_PACE_NOTE} 하루 한도는 없어요. 한 번에 ${AUTO_FISH_MAX_MS / 3_600_000}시간까지 돌고, 움직이면 꺼져요. ${AUTO_RANK_NOTE}`,
+    `다른 탭을 봐도 낚아요. ${AUTO_PACE_NOTE} 하루 한도는 없어요. 한 번에 ${AUTO_FISH_MAX_MS / 3_600_000}시간까지 돌고, 움직이면 꺼져요. 가방이 ${BAG_MAX}개로 가득 차면 팔 때까지 쉬어요. ${AUTO_RANK_NOTE}`,
   ],
   ["팔기", "물고기는 어부 영감, 채집물은 수집가에게", "희귀할수록 비싸요"],
   ["도감", "왼쪽 아래 [도감]", `새 종을 처음 올리면 ${DEX_NEW_REWARD[1]}~${DEX_NEW_REWARD[5]}P를 받아요. 희귀할수록 많이 받아요. 절반이나 전부 모으면 칭호도 받아요.`],

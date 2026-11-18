@@ -6,7 +6,7 @@ import { bridge, type ForageRodPhase } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import { onBackgroundChange } from "@/lib/background";
 import { AUTO_PACE_NOTE, AUTO_RANK_NOTE, AUTO_SYNC_MS, autoNextLabel } from "@/lib/forage/auto";
-import { speciesById } from "@/lib/forage/catalog";
+import { BAG_MAX, bagCount, speciesById } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
 import { sunkenText } from "@/lib/forage/sunken";
 import type { AutoFishResponse, AutoFishStatus, CastResponse, CatchResult, SunkenCatch } from "@/lib/forage/types";
@@ -390,6 +390,8 @@ export default function FishingPanel({
   const busy = phase === "casting" || phase === "sending" || autoBusy || auto !== null;
   const label = auto ? "자동 낚시 중" : phase === "bite" ? "지금 당기기!" : phase === "reel" ? "누르고 있으면 감기" : phase === "wait" ? "기다리는 중…" : busy ? "…" : "찌 던지기";
   const caught = state?.today.fish ?? 0;
+  // 11/19 가방(물고기·채집물 합)이 가득 차면 자동 낚시는 쉰다 (서버도 넣지 않는다)
+  const bagFull = bagCount(state?.bag) >= BAG_MAX;
   // 터치 기기(화면 버튼)는 키 대신 위의 큰 버튼으로 던지고 당긴다
   const coarse = useMediaQuery("(pointer: coarse)");
 
@@ -404,7 +406,9 @@ export default function FishingPanel({
       </p>
       {auto && (
         <p className={s.keys} role="status">
-          {`자동 낚시 중 · 오늘 ${auto.today}마리 · 다음 찌 올리기까지 ${auto.nextInMs == null ? "—" : autoNextLabel(Math.max(0, nextAt - clock))}`}
+          {bagFull
+            ? `자동 낚시 중 · 가방이 가득 차서 쉬는 중이에요`
+            : `자동 낚시 중 · 오늘 ${auto.today}마리 · 다음 찌 올리기까지 ${auto.nextInMs == null ? "—" : autoNextLabel(Math.max(0, nextAt - clock))}`}
         </p>
       )}
       {phase === "reel" && (

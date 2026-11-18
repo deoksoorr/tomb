@@ -80,6 +80,8 @@ export type AutoFishResponse = {
   missed: number;
   /** 이번에 건진 물에 빠진 꾸미기 (items와 따로, 낚은 수에는 같이 센다) */
   gear: SunkenCatch[];
+  /** 11/19 가방(물고기·채집물 합 BAG_MAX)이 가득 차서 이번에 쉰 시도가 있었으면 true */
+  full?: boolean;
   /** 세션이 끝난 까닭 (끄기·시간 다 됨·11/16 물이 빠짐). 켜져 있으면 없음 */
   ended?: "stop" | "time" | "tide";
   /** 이번 정산으로 도감에 처음 등록한 보상 */

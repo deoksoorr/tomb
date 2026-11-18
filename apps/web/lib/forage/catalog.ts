@@ -462,6 +462,10 @@ export const buyerOf = (cat: LifeCat): Npc => NPCS.find((n) => !n.map && n.buys.
 // ── 숫자 ──
 /** 한 칸(종류)에 쌓을 수 있는 수 */
 export const STACK_MAX = 99;
+/** 11/19 가방 전체(물고기·채집물 합) 한도. 차면 직접 잡은 것은 놓아주고(도감에는 남는다) 자동 낚시는 쉰다 */
+export const BAG_MAX = 300;
+/** 가방에 든 수 (모든 칸 합) */
+export const bagCount = (bag: Record<string, number> | undefined): number => Object.values(bag ?? {}).reduce((n, v) => n + Math.max(0, v), 0);
 // 11/19 하루에 잡을·캘 수 있는 수 한도(물고기 150·채집 200)는 없앴다. 자동화 막이는 시간당 시작 수(service FORAGE_STARTS_PER_HOUR)·
 // 티켓 검사·감기 최소 시간·채집 지점 창(한 지점 10분에 한 번)이 한다
 

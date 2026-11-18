@@ -407,7 +407,7 @@ function CatchCard({ card }: { card: Card }) {
         </span>
         {item.isNew && <span className={s.badgeNew}>도감에 새로 등록!</span>}
         {item.record && <span className={s.badgeNew}>가장 큰 기록을 새로 세웠어요!</span>}
-        {!item.kept && <span>가방 칸이 가득 차서 놓아줬어요 (도감에는 남아요)</span>}
+        {!item.kept && <span>가방이 가득 차서 놓아줬어요 (도감에는 남아요)</span>}
         {more > 0 && <span>외 {more}개</span>}
       </div>
     </div>

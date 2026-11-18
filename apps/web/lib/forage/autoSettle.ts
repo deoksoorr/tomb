@@ -29,6 +29,8 @@ export type AutoSettled = {
   /** 찌를 올렸지만 놓친 수 (11/19 자동 낚시는 시도마다 AUTO_CATCH_CHANCE로 걸린다) */
   missed: number;
   gear: SunkenCatch[];
+  /** 11/19 가방이 가득 차서 쉰 시도가 있었는지 */
+  full?: boolean;
   ended?: "stop" | "time" | "tide";
 };
 
@@ -49,8 +51,8 @@ export async function settleAuto(store: ForageStore, acct: string, now: number, 
     const finish = stop || timeUp;
     const next: AutoSession = { ...beaten, done: Math.max(cur.done, total) };
     if (!(await store.autoSwap(acct, raw, finish ? null : JSON.stringify(next)))) continue;
-    const { items, missed, gear } = await grantRange(store, acct, beaten, cur.done + 1, total, now);
-    return { session: finish ? null : next, items, missed, gear, ...(finish ? { ended: stop ? ("stop" as const) : cur.tide ? ("tide" as const) : ("time" as const) } : {}) };
+    const { items, missed, gear, full } = await grantRange(store, acct, beaten, cur.done + 1, total, now);
+    return { session: finish ? null : next, items, missed, gear, ...(full ? { full } : {}), ...(finish ? { ended: stop ? ("stop" as const) : cur.tide ? ("tide" as const) : ("time" as const) } : {}) };
   }
   throw new Error("[forage] 자동 낚시 정산이 계속 겹쳤어요");
 }
@@ -63,7 +65,7 @@ type Rolled = { day: string; id: string; size: number; gear?: { pick: number; al
  * 이미 가진 것은 빼고 고르고(한 정산 안에서 겹치지 않게), 다 가졌으면 희귀 물고기(alt)로 대신
  */
 async function grantRange(store: ForageStore, acct: string, s: AutoSession, from: number, to: number, now: number) {
-  if (to < from) return { items: [] as CatchResult[], missed: 0, gear: [] as SunkenCatch[] };
+  if (to < from) return { items: [] as CatchResult[], missed: 0, gear: [] as SunkenCatch[], full: false };
   const rolled: Rolled[] = [];
   let missed = 0;
   autoCatchTimes(s, from, to).forEach((t, i) => {
@@ -97,10 +99,16 @@ async function grantRange(store: ForageStore, acct: string, s: AutoSession, from
   }
   const items: CatchResult[] = [];
   const gear: SunkenCatch[] = [];
+  let full = false;
   for (const [day, list] of byDay) {
     // 넣은 순서 그대로 (got[i] ↔ list[i])
     const got = await store.grantAuto(acct, day, list.map((e) => e.item), STACK_MAX);
     for (let i = 0; i < got.length; i++) {
+      // 11/19 가방이 가득 차서 쉰 자리 (아무것도 받지 않는다)
+      if (got[i].rest) {
+        full = true;
+        continue;
+      }
       const g = list[i].gear;
       if (!g || !got[i].id.startsWith("@")) {
         items.push(got[i]);
@@ -116,7 +124,7 @@ async function grantRange(store: ForageStore, acct: string, s: AutoSession, from
       }
     }
   }
-  return { items, missed, gear };
+  return { items, missed, gear, full };
 }
 
 /** 신호만 (머무르기 기록 등): 세션이 있으면 접속 구간을 늘린다. 지급은 하지 않는다. 겹치면 그냥 넘어간다 (다음 신호·정산이 이어 준다) */

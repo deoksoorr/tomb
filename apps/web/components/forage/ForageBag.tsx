@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { bridge } from "@/game/bridge";
-import { buyerOf, LIFE_CATS, speciesById } from "@/lib/forage/catalog";
+import { BAG_MAX, bagCount, buyerOf, LIFE_CATS, speciesById } from "@/lib/forage/catalog";
 import { sizeText } from "@/lib/forage/rules";
 import ItemIcon from "../ui/ItemIcon";
 import ui from "../ui/ui.module.css";
@@ -27,8 +27,20 @@ export default function ForageBag() {
     .sort((a, b) => LIFE_CATS.indexOf(a.sp.cat) - LIFE_CATS.indexOf(b.sp.cat) || b.sp.rarity - a.sp.rarity);
   // 가방은 종류별 개수만 둔다 → 크기는 도감의 가장 큰 기록(직접·자동 모두)으로 보여 준다
   const maxOf = (id: string) => state?.dex[id]?.max ?? 0;
+  // 11/19 가방 전체 한도 (물고기·채집물 합)
+  const count = bagCount(state?.bag);
+  const full = count >= BAG_MAX;
   return (
     <section aria-label="물고기·채집물" style={{ display: "grid", gap: 8 }}>
+      {state && (
+        <p className={s.bagCount} data-full={full || undefined}>
+          <span>가방</span>
+          <strong>
+            {count} / {BAG_MAX}
+          </strong>
+          {full && <em>가득 찼어요. 팔면 다시 담을 수 있어요</em>}
+        </p>
+      )}
       {!state ? (
         <p className={error ? ui.error : ui.hint}>{error ?? "불러오는 중…"}</p>
       ) : items.length === 0 ? (

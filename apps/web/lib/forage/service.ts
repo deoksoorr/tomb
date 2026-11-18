@@ -234,6 +234,7 @@ async function autoResponse(store: ForageStore, acct: string, r: AutoSettled, no
     items: r.items,
     missed: r.missed,
     gear: r.gear,
+    ...(r.full ? { full: true } : {}),
     ...(r.ended ? { ended: r.ended } : {}),
     ...withDex(dex),
     state: toState(acct, snap, now),
@@ -262,6 +263,7 @@ export async function startAutoFish(acct: string, spotId: string, ch: number | n
     prev.items.push(...more.items);
     prev.gear.push(...more.gear);
     prev.missed += more.missed;
+    if (more.full) prev.full = true;
   }
   return autoResponse(store, acct, { ...prev, session, ended: undefined }, now, ip);
 }

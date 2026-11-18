@@ -1,7 +1,7 @@
 import type { Redis } from "@upstash/redis";
 import { redisClient } from "../redisUsage";
 import { env } from "../env";
-import { DEX_CATS, DEX_REWARD, DEX_REWARD_TABLE, DEX_TIERS, dexCatOf, dexClaimKey, dexRewardOf, type DexCat } from "./catalog";
+import { BAG_MAX, DEX_CATS, DEX_REWARD, DEX_REWARD_TABLE, DEX_TIERS, dexCatOf, dexClaimKey, dexRewardOf, type DexCat } from "./catalog";
 import type { DexEntry, LifeDay } from "./types";
 
 // 낚시·채집 저장소. 가방·도감·진행 중 기록은 모두 계정마다 따로이고, 바뀌는 연산은 하나씩 원자적이다
@@ -31,7 +31,7 @@ export type GrantItem = { id: string; size: number };
 export type StarDexItem = { id: string; perfect: boolean };
 /** 11/16 몬스터 도감에 더할 처치 한 건 (id = 몬스터, n = 이번 판 처치 수) */
 export type MobKillItem = { id: string; n: number };
-export type Granted = { id: string; size: number; kept: boolean; isNew: boolean; record: boolean };
+export type Granted = { id: string; size: number; kept: boolean; isNew: boolean; record: boolean; rest?: boolean };
 /** 도감 보상 장부 (forage:{a}:dexpay). marks = 붙은 칭호 표시 (`${cat}:${50|100}`) */
 export type DexPay = {
   settled: string | null;
@@ -82,7 +82,7 @@ export interface ForageStore {
   claim(acct: string, nonce: string): Promise<ClaimResult>;
   /**
    * 잡은 것 넣기 (원자적): take가 있으면 먼저 그 창의 지점을 캔 것으로 표시하고(이미 캤으면 아무것도 하지 않고 null),
-   * 오늘 잡은 수(count 칸)를 items 수만큼 올리고, 가방(한 칸 stackMax까지)과 도감(수·최대 크기·처음 날)을 바꾼다.
+   * 오늘 잡은 수(count 칸)를 items 수만큼 올리고, 가방(한 칸 stackMax까지, 11/19 전체 BAG_MAX까지)과 도감(수·최대 크기·처음 날)을 바꾼다.
    * 처음 등록이면 정산을 마친 계정에 한해 그 종의 보상(dexRewardOf)을 받을 도감 보상(p:{cat})에 쌓는다 (grantAuto·addStars도 같다)
    */
   grant(
@@ -131,7 +131,8 @@ export interface ForageStore {
   /**
    * 자동 낚시로 낚은 것 넣기 (원자적): 전부 넣고 오늘 fish·auto를 그만큼 올린다 (11/19 하루 한도 없음).
    * 도감은 수·처음 날·최대 크기까지 (최대어 순위는 여기서 다루지 않는다 — 직접 낚은 것만 service가 올린다).
-   * id가 "@"로 시작하면(물에 빠진 꾸미기 자리) 낚은 수만 세고 가방·도감은 건드리지 않는다
+   * id가 "@"로 시작하면(물에 빠진 꾸미기 자리) 낚은 수만 세고 가방·도감은 건드리지 않는다.
+   * 11/19 가방이 BAG_MAX만큼 차 있으면 그 뒤로는 쉰다 (rest: 아무것도 세지 않고 가방·도감도 그대로)
    */
   grantAuto(acct: string, day: string, items: GrantItem[], stackMax: number): Promise<Granted[]>;
 }
@@ -299,10 +300,14 @@ export class MemoryForageStore implements ForageStore {
     d[count] += items.length;
     this.days.set(dk, d);
     const a = this.acct(acct);
+    let total = [...a.bag.values()].reduce((n, v) => n + v, 0);
     return items.map(({ id, size }) => {
       const have = a.bag.get(id) ?? 0;
-      const kept = have < stackMax;
-      if (kept) a.bag.set(id, have + 1);
+      const kept = have < stackMax && total < BAG_MAX;
+      if (kept) {
+        a.bag.set(id, have + 1);
+        total++;
+      }
       const n = Number(a.dex.get(`n:${id}`) ?? 0) + 1;
       a.dex.set(`n:${id}`, String(n));
       const isNew = n === 1;
@@ -465,16 +470,20 @@ export class MemoryForageStore implements ForageStore {
   async grantAuto(acct: string, day: string, items: GrantItem[], stackMax: number) {
     const dk = lk.day(acct, day);
     const d = this.days.get(dk) ?? emptyDay();
-    const take = items;
-    d.fish += take.length;
-    d.auto += take.length;
-    this.days.set(dk, d);
     const a = this.acct(acct);
-    return take.map(({ id, size }) => {
+    let total = [...a.bag.values()].reduce((n, v) => n + v, 0);
+    const out = items.map(({ id, size }) => {
+      // 11/19 가방이 차 있으면 쉰다 (세지도 넣지도 않는다)
+      if (total >= BAG_MAX) return { id, size, kept: false, isNew: false, record: false, rest: true };
+      d.fish++;
+      d.auto++;
       if (id.startsWith("@")) return { id, size, kept: false, isNew: false, record: false };
       const have = a.bag.get(id) ?? 0;
       const kept = have < stackMax;
-      if (kept) a.bag.set(id, have + 1);
+      if (kept) {
+        a.bag.set(id, have + 1);
+        total++;
+      }
       const n = Number(a.dex.get(`n:${id}`) ?? 0) + 1;
       a.dex.set(`n:${id}`, String(n));
       if (n === 1) {
@@ -492,6 +501,8 @@ export class MemoryForageStore implements ForageStore {
       }
       return { id, size, kept, isNew: n === 1, record };
     });
+    this.days.set(dk, d);
+    return out;
   }
 }
 
@@ -534,6 +545,7 @@ return v
 
 // KEYS: bag, dex, day, took, dexpay  ARGV: day, countField, take('1'/'0'), `${창}:${지점}`, tookTtl, dayTtl, stackMax, 개수, (id, size, cat, 보상)...
 // 돌려주는 값: 'taken' 또는 아이템마다 "id:{kept}{isNew}{record}" (각 0/1). 처음 등록이면 정산한 계정만 p:{cat}에 보상을 쌓는다
+// 11/19 가방 전체가 BAG_MAX만큼 차 있으면 넣지 않는다 (kept 0, 도감에는 남는다). 가방 칸은 많아야 수십 개라 HVALS 한 번이 가볍다
 export const GRANT_LUA = `
 local settled = redis.call('HEXISTS', KEYS[5], 'settled') == 1
 if ARGV[3] == '1' then
@@ -543,13 +555,16 @@ end
 redis.call('HINCRBY', KEYS[3], ARGV[2], tonumber(ARGV[8]))
 redis.call('EXPIRE', KEYS[3], tonumber(ARGV[6]))
 local stackMax = tonumber(ARGV[7])
+local total = 0
+for _, v in ipairs(redis.call('HVALS', KEYS[1])) do total = total + tonumber(v) end
 local out = {}
 for i = 9, #ARGV, 4 do
   local id = ARGV[i]
   local size = tonumber(ARGV[i + 1])
   local kept = '0'
-  if tonumber(redis.call('HGET', KEYS[1], id) or '0') < stackMax then
+  if total < ${BAG_MAX} and tonumber(redis.call('HGET', KEYS[1], id) or '0') < stackMax then
     redis.call('HINCRBY', KEYS[1], id, 1)
+    total = total + 1
     kept = '1'
   end
   local isNew = '0'
@@ -608,25 +623,33 @@ return 1
 
 // KEYS: bag, dex, day, dexpay  ARGV: day, stackMax, dayTtl, (id, size, cat, 보상)...
 // 전부 넣는다 (11/19 하루 한도를 없애며 오늘 수를 읽던 HGET 2번을 뺐다). 돌려주는 값: 넣은 아이템마다 "id:{kept}{isNew}{record}"
-// (도감 최대 크기도 GRANT_LUA처럼 기록한다. 최대어 순위에는 넣지 않는다 — 그건 직접 낚은 것만). "@"로 시작하는 id(물에 빠진 꾸미기 자리)는 수만 센다 → "id:000"
+// (도감 최대 크기도 GRANT_LUA처럼 기록한다. 최대어 순위에는 넣지 않는다 — 그건 직접 낚은 것만). "@"로 시작하는 id(물에 빠진 꾸미기 자리)는 수만 센다 → "id:0000"
+// 11/19 가방 전체가 BAG_MAX만큼 차 있으면 그 뒤로는 쉰다 → "id:0001" (오늘 수·가방·도감 모두 그대로)
 // 처음 등록 보상은 GRANT_LUA와 같다 (정산한 계정만 p:{cat}에)
 export const GRANT_AUTO_LUA = `
 local settled = redis.call('HEXISTS', KEYS[4], 'settled') == 1
 local room = (#ARGV - 3) / 4
 local out = {}
 if room <= 0 then return out end
-redis.call('HINCRBY', KEYS[3], 'fish', room)
-redis.call('HINCRBY', KEYS[3], 'auto', room)
-redis.call('EXPIRE', KEYS[3], tonumber(ARGV[3]))
+local total = 0
+for _, v in ipairs(redis.call('HVALS', KEYS[1])) do total = total + tonumber(v) end
 local stackMax = tonumber(ARGV[2])
+local counted = 0
 for j = 0, room - 1 do
   local id = ARGV[4 + j * 4]
   local kept = '0'
   local isNew = '0'
   local rec = '0'
-  if string.sub(id, 1, 1) ~= '@' then
+  local rest = '0'
+  if total >= ${BAG_MAX} then
+    rest = '1'
+  else
+    counted = counted + 1
+  end
+  if rest == '0' and string.sub(id, 1, 1) ~= '@' then
     if tonumber(redis.call('HGET', KEYS[1], id) or '0') < stackMax then
       redis.call('HINCRBY', KEYS[1], id, 1)
+      total = total + 1
       kept = '1'
     end
     if redis.call('HINCRBY', KEYS[2], 'n:' .. id, 1) == 1 then
@@ -644,7 +667,12 @@ for j = 0, room - 1 do
       end
     end
   end
-  out[#out + 1] = id .. ':' .. kept .. isNew .. rec
+  out[#out + 1] = id .. ':' .. kept .. isNew .. rec .. rest
+end
+if counted > 0 then
+  redis.call('HINCRBY', KEYS[3], 'fish', counted)
+  redis.call('HINCRBY', KEYS[3], 'auto', counted)
+  redis.call('EXPIRE', KEYS[3], tonumber(ARGV[3]))
 end
 return out
 `;
@@ -756,7 +784,7 @@ export function parseGranted(lines: unknown, items: GrantItem[]): Granted[] | nu
   return items.map((it, i) => {
     const s = String(lines[i] ?? "");
     const f = s.slice(s.lastIndexOf(":") + 1);
-    return { id: it.id, size: it.size, kept: f[0] === "1", isNew: f[1] === "1", record: f[2] === "1" };
+    return { id: it.id, size: it.size, kept: f[0] === "1", isNew: f[1] === "1", record: f[2] === "1", ...(f[3] === "1" ? { rest: true } : {}) };
   });
 }
 
