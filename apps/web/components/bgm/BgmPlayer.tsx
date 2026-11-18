@@ -217,6 +217,15 @@ function BgmCredits({ playlists, now, nowFile, onClose }: { playlists: Playlist[
   // 「전곡」은 다른 목록을 모은 것이라 음원 정보에서는 뺀다
   const withTracks = playlists.filter((p) => p.tracks.length > 0 && p.id !== ALL_PLAYLIST_ID);
   const total = withTracks.reduce((n, p) => n + p.tracks.length, 0);
+  // 11/18 갈래마다 접기: 처음엔 지금 나오는 곡이 있는 갈래만 펼친다 (없으면 모두 접힘)
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(withTracks.filter((p) => p.tracks.some((t) => t.file === nowFile)).map((p) => p.id)));
+  const toggle = (id: string) =>
+    setOpen((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   return (
     <Dialog title="음원 정보" onClose={onClose}>
       {withTracks.length === 0 ? (
@@ -235,8 +244,11 @@ function BgmCredits({ playlists, now, nowFile, onClose }: { playlists: Playlist[
           {withTracks.map((p) => (
             <section key={p.id}>
               <h3 className={styles.creditsHeading}>
-                {p.title} <span className={styles.creditsMeta}>{p.tracks.length}곡</span>
+                <button type="button" className={styles.creditsFold} onClick={() => toggle(p.id)} aria-expanded={open.has(p.id)}>
+                  <span aria-hidden="true">{open.has(p.id) ? "▾" : "▸"}</span> {p.title} <span className={styles.creditsMeta}>{p.tracks.length}곡</span>
+                </button>
               </h3>
+              {open.has(p.id) && (
               <ul className={styles.creditsList}>
                 {p.tracks.map((t, i) => (
                   <li key={t.file} data-now={t.file === nowFile || undefined}>
@@ -263,6 +275,7 @@ function BgmCredits({ playlists, now, nowFile, onClose }: { playlists: Playlist[
                   </li>
                 ))}
               </ul>
+              )}
             </section>
           ))}
         </div>

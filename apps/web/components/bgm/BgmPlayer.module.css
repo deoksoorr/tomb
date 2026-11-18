@@ -252,3 +252,22 @@
   line-height: 11px;
   pointer-events: none;
 }
+
+/* 11/18 음원 정보 갈래 접기 단추 (제목 줄 전체) */
+.creditsFold {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.creditsFold:hover {
+  color: var(--candle);
+}
