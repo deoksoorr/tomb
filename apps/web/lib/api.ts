@@ -131,6 +131,8 @@ export const api = {
   attend: (name: string, color: string, body?: string) =>
     request<AttendResponse>("/api/me/attend", jsonInit("POST", body ? { name, color, body } : { name, color })),
   issueCode: () => request<CodeResponse>("/api/me/code", { method: "POST" }),
+  /** 11/18 다른 기기에서 모두 로그아웃 (지금 기기는 남는다) */
+  logoutOthers: () => request<{ ok: true }>("/api/me/sessions", { method: "POST" }),
   loginWithCode: (code: string) => request<CodeLoginResponse>("/api/me/login", jsonInit("POST", { code })),
   /** 구글 연결 상태 (구글 설정이 없으면 404) · 연결 끊기 · 구글로 새로 만든 계정에 연결 */
   googleStatus: () => request<GoogleStatusResponse>("/api/me/google", { cache: "no-store" }),

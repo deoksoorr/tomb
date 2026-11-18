@@ -91,6 +91,17 @@ export class MemoryStore implements GraveStore {
     this.putSync(grave);
   }
 
+  async update(grave: Grave): Promise<boolean> {
+    if (!this.graves.has(grave.id)) return false;
+    this.putSync(grave);
+    return true;
+  }
+
+  /** MemoryAccounts.putGraveUsing(mustExist)용 */
+  hasSync(id: string): boolean {
+    return this.graves.has(id);
+  }
+
   /** MemoryAccounts가 가방 차감과 함께 동기적으로 부른다 (원자적) */
   putSync(grave: Grave): void {
     this.graves.set(grave.id, { ...grave, channel: grave.channel ?? 1, hidden: undefined, decor: undefined });
@@ -140,7 +151,8 @@ export class MemoryStore implements GraveStore {
     const e = mine?.get(id);
     if (!e || e.removedAt + SHRINE_KEEP_MS <= now) return null;
     mine!.delete(id);
-    const grave = { ...e.grave, createdAt: now };
+    // 11/18 자리는 맨 뒤로(createdAt), 성불 기간은 처음 세운 때부터 그대로 (ageFrom)
+    const grave = { ...e.grave, createdAt: now, ageFrom: e.grave.ageFrom ?? e.grave.createdAt };
     this.graves.set(id, grave);
     return this.record(grave);
   }
@@ -265,14 +277,20 @@ export class MemoryStore implements GraveStore {
     ipHash: string,
     reason: ReportReason,
     at = Date.now(),
+    weak = false,
   ): Promise<"added" | "duplicate" | null> {
     if (!this.graves.has(id)) return null;
     const ips = this.setOf(this.reportIps, id);
     const visitors = this.setOf(this.reporters, id);
     if (visitors.has(visitorId) || ips.has(ipHash)) return "duplicate";
-    ips.add(ipHash);
+    // 약한 신고도 IP당 한 번 (방문자 집합에 "w:IP"로 — 숨김 수인 IP 집합에는 넣지 않는다)
+    if (weak) {
+      if (visitors.has(`w:${ipHash}`)) return "duplicate";
+      visitors.add(`w:${ipHash}`);
+    } else ips.add(ipHash);
     visitors.add(visitorId);
-    this.reportLogs.set(id, [{ at, reason }, ...(this.reportLogs.get(id) ?? [])].slice(0, REPORT_LOG_MAX));
+    const entry: ReportLogEntry = weak ? { at, reason, weak: true } : { at, reason };
+    this.reportLogs.set(id, [entry, ...(this.reportLogs.get(id) ?? [])].slice(0, REPORT_LOG_MAX));
     if (ips.size >= REPORT_HIDE_THRESHOLD) this.hidden.add(id);
     return "added";
   }

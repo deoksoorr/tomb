@@ -1,6 +1,7 @@
 import { b64urlDecode, b64urlEncode, hmacSign, hmacVerify } from "@tomb/protocol";
 import { DIFFICULTIES, GAME_KINDS, HUNT_ZONES, isTowerZoneId, isZoneId, type Difficulty, type GameKind, type ZoneId } from "./catalog";
 import { RUN_TIERS, type RunTier } from "./endgame";
+import { isDeal } from "./dealCap";
 import { isCheckpoint } from "./tower";
 import type { Drop } from "./types";
 
@@ -32,7 +33,19 @@ export type TicketClaims = {
   tt?: RunTier;
   /** 11/15 장비 힘 배율 (세트 장비·강화·옵션 — 서버가 저장된 장착 칸으로 쟀다, 1..40). 처치 속도 상한에 곱한다 */
   gp?: number;
+  /** 11/18 한 마리에게 넣을 수 있는 초당 최대 피해 (사냥만 — 서버가 저장된 캐릭터로 쟀다, lib/rpg/dealCap). 이보다 빨리 깼다고 하면 의심 판 */
+  dm?: number;
+  /** 11/18 판 시작 때 가진 물약 수 (사냥만). 판 끝에 쓴 물약 수가 이보다 많으면 거절 */
+  pt?: Record<string, number>;
 };
+
+/** 물약 수 형식 (종류 20개까지, 개수 0..9999 정수) */
+const okPotions = (v: unknown): v is Record<string, number> =>
+  !!v &&
+  typeof v === "object" &&
+  !Array.isArray(v) &&
+  Object.keys(v).length <= 20 &&
+  Object.entries(v).every(([k, n]) => k.length <= 32 && Number.isInteger(n) && n >= 0 && n <= 9999);
 
 /** 시험 드롭 형식 (한 판 최대 6개, 하나씩) */
 const okDrops = (v: unknown): v is Drop[] =>
@@ -75,7 +88,9 @@ export async function verifyTicket(secret: string, token: string): Promise<Ticke
       (c.td === undefined || okDrops(c.td)) &&
       (c.tw === undefined || (isCheckpoint(c.tw) && c.tw <= 10_000 && c.g === "hunt" && c.d === "hell" && c.tt === undefined)) &&
       (c.tt === undefined || Object.hasOwn(RUN_TIERS, c.tt)) &&
-      (c.gp === undefined || (typeof c.gp === "number" && c.gp >= 1 && c.gp <= 40));
+      (c.gp === undefined || (typeof c.gp === "number" && c.gp >= 1 && c.gp <= 40)) &&
+      (c.dm === undefined || isDeal(c.dm)) &&
+      (c.pt === undefined || okPotions(c.pt));
     return ok ? c : null;
   } catch {
     return null;

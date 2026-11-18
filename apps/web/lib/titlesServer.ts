@@ -270,7 +270,8 @@ export async function titleStatus(accountId: string, now = Date.now()): Promise<
   const reached = new Set<string>(earnedTitleIds({ ...facts, manager }));
   // 한 번 알린 칭호는 기록이 내려가도 남는다 (연속 출석이 끊기거나 집·꾸미기 점수가 내려가도).
   // 11/15 꼭대기 층 주인·이번 주 최고층은 지금 주인일 때만 — 뺏기면 끼고 있던 것도 뺀다 (이 확인은 입장·칭호 창을 열 때)
-  const earned = TITLE_IDS.filter((id) => reached.has(id) || (marks.announced.includes(id) && !titleDef(id)?.transient));
+  // 11/18 보안: 신화(서버에 한 사람 — holder)는 알림 기록으로 남기지 않는다 (지금 주인 기록으로만). 알림 기록은 marks 경로가 닿은 칭호만 적는다
+  const earned = TITLE_IDS.filter((id) => reached.has(id) || (marks.announced.includes(id) && !titleDef(id)?.transient && !titleDef(id)?.holder));
   if (equipped && titleDef(equipped)?.transient && !earned.includes(equipped)) {
     await getAccounts()
       .setTitle(accountId, null)
@@ -286,6 +287,17 @@ export async function titleStatus(accountId: string, now = Date.now()): Promise<
     equipped,
     progress: facts.metrics,
   };
+}
+
+/**
+ * 11/18 보안: 지금 기록으로 닿은 칭호 id (알림 기록은 빼고 — 운영자는 전부). 알림 기록(marks)에는 이것만 적는다
+ * (예전에는 아무 칭호 id나 「알렸음」으로 적고 그걸로 착용할 수 있었다)
+ */
+export async function reachedTitles(accountId: string, now = Date.now()): Promise<string[]> {
+  const [staff, manager] = await Promise.all([isStaff(accountId).catch(() => false), isManager(accountId, now)]);
+  if (staff) return TITLE_IDS.filter((id) => manager || id !== MANAGER_TITLE_ID);
+  const { facts } = await cached(accountId, now);
+  return earnedTitleIds({ ...facts, manager });
 }
 
 /** 얻은 칭호 id (운영자는 전부) */

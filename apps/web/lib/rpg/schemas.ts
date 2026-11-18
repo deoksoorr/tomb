@@ -44,6 +44,16 @@ export const RunResultSchema = z.discriminatedUnion("game", [
       .array(z.object({ k: z.enum(["l", "s", "b"]), i: z.number().int().min(0).max(100_000), r: z.number().int().min(0).max(1_000), c: z.enum(CARD_IDS), f: z.number().int().min(0).max(100_000).optional() }))
       .max(MAX_PICKS)
       .optional(),
+    // 11/18 판 기록 (관리자 「확인 필요」의 근거 — 판정에는 쓰지 않는다. 옛 화면은 보내지 않는다):
+    // ft = 층마다 깬 시각(판 시작부터 ms), dmg = 넣은 피해 합, sk = 스킬마다 쓴 횟수
+    log: z
+      .object({
+        ft: z.array(duration).max(400).optional(),
+        dmg: z.number().min(0).max(1e15).optional(),
+        sk: z.record(z.string().max(32), z.number().int().min(0).max(100_000)).optional(),
+      })
+      .optional()
+      .transform((v) => (v?.sk && Object.keys(v.sk).length > 40 ? { ...v, sk: undefined } : v)),
   }),
   z.object({ game: z.literal("bugs"), durationMs: duration, caught: count, golden: count, wrong: count, decoy: count, maxCombo: count, score: z.number().int().min(0).max(1_000_000) }),
   z.object({

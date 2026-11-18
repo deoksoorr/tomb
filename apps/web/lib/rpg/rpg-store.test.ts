@@ -8,7 +8,10 @@ import { kstDay } from "../store/accounts";
 import { gearById } from "./catalog";
 import { huntPlan } from "./plan";
 import { finishRun, shopAction, startRun } from "./service";
-import { getRpgStore, MemoryRpgStore, RedisRpgStore, RUNS_PER_HOUR, type RpgStore } from "./store";
+import { getRpgStore, MemoryRpgStore, RedisRpgStore, RUN_WINDOW_MS, RUNS_PER_HOUR, type RpgStore } from "./store";
+
+/** 판 시작 시각 (이동 창 시험) */
+const T0 = Date.UTC(2026, 10, 18, 2, 50);
 
 // 사냥터 저장소·서비스 계약. RedisRpgStore는 Redis 환경변수가 있을 때 같은 시나리오를 돌린다
 // (서비스는 getRpgStore/getAccounts를 쓰므로 환경에 따라 메모리 또는 Redis에서 돈다).
@@ -50,23 +53,26 @@ describe.each(kits)("RpgStore (%s)", (_name, make) => {
 
   it("티켓은 한 번만: 동시에 내도 하나만 ok, 새 판을 시작하면 옛 판은 stale", async () => {
     const a = acct();
-    expect(await store.startRun(a, "n1", 60, "h")).toBe(true);
+    expect(await store.startRun(a, "n1", 60, T0)).toBe(true);
     const claims = await Promise.all([store.claimRun(a, "n1"), store.claimRun(a, "n1"), store.claimRun(a, "n1")]);
     expect(claims.filter((c) => c === "ok")).toHaveLength(1);
     expect(claims.filter((c) => c === "reused")).toHaveLength(2);
-    await store.startRun(a, "n2", 60, "h");
-    await store.startRun(a, "n3", 60, "h");
+    await store.startRun(a, "n2", 60, T0);
+    await store.startRun(a, "n3", 60, T0);
     expect(await store.claimRun(a, "n2")).toBe("stale");
     expect(await store.claimRun(a, "n2")).toBe("reused");
     expect(await store.claimRun(a, "n3")).toBe("ok");
   });
 
-  it(`시간당 ${RUNS_PER_HOUR}판: 동시에 시작해도 한도까지만`, async () => {
+  it(`최근 60분 ${RUNS_PER_HOUR}판: 동시에 시작해도 한도까지만, 정시가 지나도 60분이 지나야 다시`, async () => {
     const a = acct();
-    const started = await Promise.all(Array.from({ length: RUNS_PER_HOUR + 5 }, (_, i) => store.startRun(a, `n${i}`, 60, "h1")));
+    const started = await Promise.all(Array.from({ length: RUNS_PER_HOUR + 5 }, (_, i) => store.startRun(a, `n${i}`, 60, T0)));
     expect(started.filter(Boolean)).toHaveLength(RUNS_PER_HOUR);
-    expect(await store.runsThisHour(a, "h1")).toBe(RUNS_PER_HOUR);
-    expect(await store.startRun(a, "next-hour", 60, "h2")).toBe(true);
+    expect(await store.runsThisHour(a, T0)).toBe(RUNS_PER_HOUR);
+    // 11/18 이동 창: 30분 뒤(정시를 넘겨도)에는 아직 안 되고, 60분이 지나면 된다
+    expect(await store.startRun(a, "half", 60, T0 + 30 * 60_000)).toBe(false);
+    expect(await store.startRun(a, "next-hour", 60, T0 + RUN_WINDOW_MS + 1)).toBe(true);
+    expect(await store.runsThisHour(a, T0 + RUN_WINDOW_MS + 1)).toBe(1);
   });
 
   it("오늘 기록은 더해지고 날짜별로 따로", async () => {

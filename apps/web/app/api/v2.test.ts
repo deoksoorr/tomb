@@ -138,13 +138,14 @@ describe("개인 코드", () => {
     expect((await login.POST(call("/api/me/login", { body: { code: "nope" } }))).status).toBe(400);
   });
 
-  it("틀린 코드는 IP당 시간당 10번까지 — 운영자 IP여도 예외 없고, 넘으면 맞는 코드도 429", async () => {
+  // 11/18 한 회사 IP에서 여럿이 틀려도 서로 막히지 않게 10 → 300 (코드는 약 59비트라 300번으로는 못 맞힌다)
+  it("틀린 코드는 IP당 시간당 300번까지 — 운영자 IP여도 예외 없고, 넘으면 맞는 코드도 429", async () => {
     vi.stubEnv("ADMIN_ALLOWED_IPS", "10.4.9.9");
     try {
       const v = await newVisitor();
       const { code: right } = await bodyOf<CodeResponse>(code.POST(call("/api/me/code", { method: "POST", visitor: v })));
       const attempt = (c: string) => login.POST(call("/api/me/login", { body: { code: c }, headers: { "x-forwarded-for": "10.4.9.9" } }));
-      for (let i = 0; i < 10; i++) expect((await attempt("2222-2222-2222")).status).toBe(404);
+      for (let i = 0; i < 300; i++) expect((await attempt("2222-2222-2222")).status).toBe(404);
       const locked = await attempt(right);
       expect(locked.status).toBe(429);
       expect((await errorOf(locked)).code).toBe("RATE_LIMITED");

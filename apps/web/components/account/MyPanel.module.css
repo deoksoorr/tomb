@@ -129,6 +129,15 @@
   color: var(--candle);
 }
 
+/* 11/18 다른 기기에서 모두 로그아웃: 개인 코드 아래 점선으로 나눈 칸 */
+.othersBox {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+
 .confirm {
   display: grid;
   gap: 10px;

@@ -15,6 +15,8 @@ import { hh } from "../analytics";
 // 도메인·utm·랜딩처럼 값이 열려 있는 필드는 하루 해시 필드가 FIELD_CAP개를 넘으면 새 이름을 더 만들지 않는다 (도배 방지).
 
 export const ANALYTICS_TTL_SEC = 90 * 86_400;
+/** 11/18 방문 쿠키 하나가 하루에 더할 수 있는 체류 초 (하루 24시간). 넘는 몫은 버린다 — 체류 통계 부풀리기 방지 */
+export const STAY_PER_VISITOR_DAY_SEC = 86_400;
 /** 하루 해시 필드 상한 (값이 열려 있는 필드만 이 상한을 본다) */
 export const FIELD_CAP = 1500;
 
@@ -50,7 +52,8 @@ export interface AnalyticsStore {
   hit(h: HitRecord): Promise<void>;
   bump(day: string, hour: number, ev: DailyEvent): Promise<void>;
   /** 머문 시간(초)을 그날·그 시간대에 더한다 */
-  stay(day: string, hour: number, sec: number): Promise<void>;
+  /** visitor = 방문 쿠키 HMAC. 그 쿠키의 그날 합이 STAY_PER_VISITOR_DAY_SEC를 넘는 몫은 버린다. 실제로 더한 초 */
+  stay(day: string, hour: number, sec: number, visitor: string): Promise<number>;
   /** 동시 접속 표본: 그 시간대 최고값보다 크면 바꾼다 */
   concurrent(day: string, hour: number, n: number): Promise<void>;
   /** 표본 찍기 잠금: ttlMs 동안 한 번만 true */
@@ -112,9 +115,16 @@ export class MemoryAnalytics implements AnalyticsStore {
     this.incr(day, ev, 1);
     this.incr(day, `h:${hh(hour)}:${ev}`, 1);
   }
-  async stay(day: string, hour: number, sec: number): Promise<void> {
-    this.incr(day, "stay", sec);
-    this.incr(day, `h:${hh(hour)}:stay`, sec);
+  private stayBy = new Map<string, number>();
+  async stay(day: string, hour: number, sec: number, visitor: string): Promise<number> {
+    const k = `${day}:${visitor}`;
+    const used = this.stayBy.get(k) ?? 0;
+    const add = Math.max(0, Math.min(sec, STAY_PER_VISITOR_DAY_SEC - used));
+    if (add <= 0) return 0;
+    this.stayBy.set(k, used + add);
+    this.incr(day, "stay", add);
+    this.incr(day, `h:${hh(hour)}:stay`, add);
+    return add;
   }
   async concurrent(day: string, hour: number, n: number): Promise<void> {
     let m = this.conc.get(day);
@@ -168,6 +178,17 @@ return 1
 `;
 
 // 시간대 최고 동시 접속: 지금 값이 더 크면 바꾼다. KEYS: an:c:{day}  ARGV: HH, n, ttl
+// KEYS 하루 해시, 쿠키별 그날 합 · ARGV 초, 시간대 필드, 쿠키 하루 상한, TTL. 실제로 더한 초
+const STAY_LUA = `
+local used = tonumber(redis.call('GET', KEYS[2]) or '0')
+local add = math.min(tonumber(ARGV[1]), tonumber(ARGV[3]) - used)
+if add <= 0 then return 0 end
+redis.call('SET', KEYS[2], used + add, 'EX', 172800)
+redis.call('HINCRBY', KEYS[1], 'stay', add)
+redis.call('HINCRBY', KEYS[1], ARGV[2], add)
+redis.call('EXPIRE', KEYS[1], tonumber(ARGV[4]))
+return add`;
+
 const CONC_LUA = `
 local cur = tonumber(redis.call('ZSCORE', KEYS[1], ARGV[1]) or '-1')
 local n = tonumber(ARGV[2])
@@ -201,9 +222,15 @@ export class RedisAnalytics implements AnalyticsStore {
     const k = AK.day(day);
     await this.redis.pipeline().hincrby(k, ev, 1).hincrby(k, `h:${hh(hour)}:${ev}`, 1).expire(k, ANALYTICS_TTL_SEC).exec();
   }
-  async stay(day: string, hour: number, sec: number): Promise<void> {
-    const k = AK.day(day);
-    await this.redis.pipeline().hincrby(k, "stay", sec).hincrby(k, `h:${hh(hour)}:stay`, sec).expire(k, ANALYTICS_TTL_SEC).exec();
+  async stay(day: string, hour: number, sec: number, visitor: string): Promise<number> {
+    // 쿠키별 그날 합과 하루 카운터를 한 번에 (명령 1개 — 예전 파이프라인 3개보다 적다)
+    const add = await this.redis.eval(STAY_LUA, [AK.day(day), `an:sv:${day}:${visitor}`], [
+      String(sec),
+      `h:${hh(hour)}:stay`,
+      String(STAY_PER_VISITOR_DAY_SEC),
+      String(ANALYTICS_TTL_SEC),
+    ]);
+    return Number(add);
   }
   async concurrent(day: string, hour: number, n: number): Promise<void> {
     await this.redis.eval(CONC_LUA, [AK.conc(day)], [hh(hour), String(n), String(ANALYTICS_TTL_SEC)]);

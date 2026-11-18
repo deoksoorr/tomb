@@ -11,8 +11,10 @@ import { redisClient } from "../redisUsage";
 // 켠 사람은 수집 의뢰 도장 +1 (도장 상한 STAMP_CAP). 하루 = 게임 날 (새벽 5시에 바뀐다).
 // Redis: 켜기 = Lua 1번 (SET NX EX 다음 새벽 5시까지 + 도장), 보기 = GET 1번 (인스턴스 메모리에 기억).
 //  sea:lamp:{ch}:{yyyymmdd}  STRING 켠 사람 이름 (EX 다음 새벽 5시까지)
+//  sea:lamp:acct:{accountId}:{yyyymmdd}  STRING 켠 채널 (11/18 보안 — 한 사람은 하루에 한 채널만 등대지기. 예전에는 10채널을 돌며 도장 +10)
 
 export const lampKey = (ch: number, day: string) => `sea:lamp:${ch}:${day}`;
+export const lampAcctKey = (accountId: string, day: string) => `sea:lamp:acct:${accountId}:${day}`;
 
 /** 해가 진 뒤인가 (ambience timePhase의 해질녘 17:30부터 게임 날이 바뀌는 새벽 5시 전까지) */
 export function lampHour(now = Date.now()): boolean {
@@ -21,11 +23,14 @@ export function lampHour(now = Date.now()): boolean {
 }
 
 export type LampState = { ch: number; day: string; name: string | null };
-export type LightResult = { lit: true; name: string; stamps: number } | { lit: false; name: string };
+/** done = 이 사람은 오늘 이미 다른 채널 등대지기 (켜지 않는다) */
+export type LightResult = { lit: true; name: string; stamps: number } | { lit: false; name: string; done?: true };
 
-// KEYS: lamp, quest  ARGV: name, ttlSec, cap  → {1, name, 새 도장 수} | {0, 켠 사람 이름}
+// KEYS: lamp, quest, acct  ARGV: name, ttlSec, cap, ch  → {1, name, 새 도장 수} | {0, 켠 사람 이름} | {2, 켠 사람 이름(없으면 '')}
 const LIGHT_LUA = `
+if redis.call('EXISTS', KEYS[3]) == 1 then return {2, redis.call('GET', KEYS[1]) or ''} end
 if not redis.call('SET', KEYS[1], ARGV[1], 'NX', 'EX', ARGV[2]) then return {0, redis.call('GET', KEYS[1]) or ''} end
+redis.call('SET', KEYS[3], ARGV[4], 'EX', ARGV[2])
 local st = tonumber(redis.call('HGET', KEYS[2], 'st') or '0') or 0
 local n = math.min(tonumber(ARGV[3]), st + 1)
 if n > st then redis.call('HSET', KEYS[2], 'st', n) end
@@ -47,8 +52,11 @@ export class MemoryLampStore implements LampStore {
   async light(ch: number, day: string, accountId: string, name: string, ttlSec: number): Promise<LightResult> {
     const k = lampKey(ch, day);
     const cur = this.lit.get(k);
+    const mine = this.lit.get(lampAcctKey(accountId, day));
+    if (mine && mine.until > Date.now()) return { lit: false, name: cur && cur.until > Date.now() ? cur.name : "", done: true };
     if (cur && cur.until > Date.now()) return { lit: false, name: cur.name };
     this.lit.set(k, { name, until: Date.now() + ttlSec * 1000 });
+    this.lit.set(lampAcctKey(accountId, day), { name: String(ch), until: Date.now() + ttlSec * 1000 });
     const stamps = (questStore() as MemoryQuestStore).addStampsNow(accountId, 1, STAMP_CAP);
     return { lit: true, name, stamps };
   }
@@ -64,8 +72,9 @@ export class RedisLampStore implements LampStore {
     return v ? String(v) : null;
   }
   async light(ch: number, day: string, accountId: string, name: string, ttlSec: number): Promise<LightResult> {
-    const r = await this.redis.eval<string[], (string | number)[]>(LIGHT_LUA, [lampKey(ch, day), questKey(accountId)], [name, String(ttlSec), String(STAMP_CAP)]);
+    const r = await this.redis.eval<string[], (string | number)[]>(LIGHT_LUA, [lampKey(ch, day), questKey(accountId), lampAcctKey(accountId, day)], [name, String(ttlSec), String(STAMP_CAP), String(ch)]);
     if (Number(r[0]) === 1) return { lit: true, name: String(r[1]), stamps: Number(r[2]) || 0 };
+    if (Number(r[0]) === 2) return { lit: false, name: String(r[1] ?? ""), done: true };
     return { lit: false, name: String(r[1] ?? "") };
   }
 }
@@ -103,7 +112,8 @@ export async function lightLamp(ch: number, accountId: string, name: string, now
   const day = gameDay(now);
   const ttl = Math.max(60, Math.ceil((nextDayStartMs(now) - now) / 1000));
   const r = await getLampStore().light(ch, day, accountId, name, ttl);
-  memo().set(lampKey(ch, day), { name: r.name || null, at: now });
+  // 이미 다른 채널 등대지기면 이 채널 상태는 모른다 (기억하지 않는다)
+  if (!(!r.lit && r.done)) memo().set(lampKey(ch, day), { name: r.name || null, at: now });
   return r;
 }
 

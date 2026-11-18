@@ -119,7 +119,19 @@ export async function myHouse(store: HouseStore, accountId: string, me?: Me, zon
   const [h0, bag, m] = await Promise.all([store.get(id), store.inventory(housePair(accountId), zone), me ?? myBrief(accountId)]);
   // 마을이 생기기 전에 분양받은 집은 처음 열 때 번지를 받는다
   const h = h0 && !h0.lot && (await store.assignLot(id)) ? await store.get(id) : h0;
-  return { house: h ? toPublicHouse(h) : null, inventory: bag.have, away: bag.away, points: m.points };
+  // 11/18 마을 집을 아직 안 샀으면 분양가에 더해질 별장 값 차이 (오두막이 먼저 있을 때만)
+  const fee = !h && zone === "village" ? await villaFeeFor(store, accountId) : 0;
+  return { house: h ? toPublicHouse(h) : null, inventory: bag.have, away: bag.away, points: m.points, ...(fee > 0 ? { villaFee: fee } : {}) };
+}
+
+/**
+ * 11/18 보안: 포구 오두막을 먼저 사고 마을 집을 사면 오두막이 별장 값(2배)을 피한다. 그래서 마을 집을 살 때 그 차이를 더한다
+ * (오두막 터 크기의 별장 값 − 오두막에 낸 값. 낸 값 기록이 없으면 오두막 값으로 본다)
+ */
+async function villaFeeFor(store: HouseStore, accountId: string): Promise<number> {
+  const cottage = await store.get(houseIdFor(accountId, "sea"));
+  if (!cottage) return 0;
+  return Math.max(0, seaPlotCost(cottage.tier, true) - (cottage.paid ?? seaPlotCost(cottage.tier, false)));
 }
 
 const mustHave = async (store: HouseStore, accountId: string, zone: HouseZone = "village"): Promise<HouseRecord> => {
@@ -156,9 +168,9 @@ export async function buyPlot(
   if (!isHousingChannel(ch)) throw badChannel();
   const tier = tierById(tierId);
   if (!tier) throw new HttpError(400, "INVALID_INPUT", "알 수 없는 터 크기예요.");
-  // 바로 사기 값 = 작은 터 + 넓히기 값 누적 (업그레이드로 올린 것과 같은 값)
-  const cost = plotCost(tier.id);
-  const had = await store.get(id);
+  // 바로 사기 값 = 작은 터 + 넓히기 값 누적 (업그레이드로 올린 것과 같은 값) + 11/18 오두막이 먼저 있으면 별장 값 차이
+  const [had, fee] = await Promise.all([store.get(id), villaFeeFor(store, accountId)]);
+  const cost = plotCost(tier.id) + fee;
   if (had) throw new HttpError(409, "ALREADY_OWNED", `이미 ${lotLabel(had.ch, had.lot)}에 내 집이 있어요. 마을 집은 한 채만 가질 수 있어요.`);
   if (lot !== null && (!Number.isInteger(lot) || lot < 1 || lot > VILLAGE_MAX_LOTS))
     throw new HttpError(400, "INVALID_INPUT", `번지는 1~${VILLAGE_MAX_LOTS} 중에서 골라 주세요.`);
@@ -378,6 +390,9 @@ function awayHint(v: { code: string; message: string }, layout: HouseLayout, bag
   return short && (bag.away[short[0]] ?? 0) > 0 ? `${furnitureById(short[0])?.name ?? short[0]}, ${AWAY_MSG}` : v.message;
 }
 
+/** 11/18 배치·외관을 거의 동시에 저장했을 때 (두 번째 저장은 다시 열어서) */
+const DESIGN_CONFLICT_MSG = "방금 다른 곳에서 집이 바뀌었어요. 다시 열어 저장해 주세요.";
+
 export async function saveLayout(store: HouseStore, accountId: string, tier: PlotTierId, layout: HouseLayout, ch?: number, zone: HouseZone = "village"): Promise<MyHouseResponse> {
   const h = await mustHave(store, accountId, zone);
   assertChannel(h, ch);
@@ -387,9 +402,11 @@ export async function saveLayout(store: HouseStore, accountId: string, tier: Plo
   const v = validateLayout(layout, tier, bag.have);
   if (!v.ok) throw new HttpError(400, v.code, awayHint(v, layout, bag));
   // 놓은 개수·점수는 안(배치) + 밖(지금 외관)을 함께 센다 (외관에 쓴 아이템을 되팔지 못하게)
-  const r = await store.saveDesign(pair, zone, tier, layout, null, designCounts(layout, h.exterior), designScore(layout, h.exterior), Date.now());
+  // 11/18 읽은 뒤 외관 저장이 먼저 됐으면 놓은 개수가 틀리므로 저장하지 않는다 (h.updatedAt — 다시 열면 된다)
+  const r = await store.saveDesign(pair, zone, tier, layout, null, designCounts(layout, h.exterior), designScore(layout, h.exterior), Date.now(), h.updatedAt);
   if (r === "no_house") throw noHouse(zone);
   if (r === "tier") throw new HttpError(409, "CONFLICT", "터 크기가 바뀌었어요. 다시 열어 주세요.");
+  if (r === "conflict") throw new HttpError(409, "CONFLICT", DESIGN_CONFLICT_MSG);
   // 다른 집 저장과 겹쳐 공용 가구가 모자라게 된 경우도 여기로 (두 집 합쳐 가진 것보다 많이 놓이지 않는다)
   if (r === "not_owned") throw new HttpError(409, "NOT_OWNED", "가진 것보다 많이 놓았어요. 다른 집에 놓인 건 거기서 치워야 여기 놓을 수 있어요.");
   return myHouse(store, accountId, undefined, zone);
@@ -402,9 +419,10 @@ export async function saveExterior(store: HouseStore, accountId: string, exterio
   const v = validateExterior(exterior, (await store.inventory(pair, "village")).have);
   if (!v.ok) throw new HttpError(400, v.code, v.message);
   const ext: HouseExterior = v.exterior;
-  const r = await store.saveDesign(pair, "village", h.tier, null, ext, designCounts(h.layout, ext), designScore(h.layout, ext), Date.now());
+  const r = await store.saveDesign(pair, "village", h.tier, null, ext, designCounts(h.layout, ext), designScore(h.layout, ext), Date.now(), h.updatedAt);
   if (r === "no_house") throw noHouse();
   if (r === "tier") throw new HttpError(409, "CONFLICT", "터 크기가 바뀌었어요. 다시 열어 주세요.");
+  if (r === "conflict") throw new HttpError(409, "CONFLICT", DESIGN_CONFLICT_MSG);
   if (r === "not_owned") throw new HttpError(409, "NOT_OWNED", "가진 것보다 많이 썼어요. 가방을 다시 확인해 주세요.");
   return myHouse(store, accountId);
 }

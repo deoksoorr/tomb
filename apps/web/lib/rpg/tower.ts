@@ -36,6 +36,7 @@ import { chestCosmetic, chestMats, chestSetGear, SG_CHEST_CHANCE, SG_PITY } from
 import { CARDS, cardPower, cardXpMul, isBossDealFloor, isCardId, replayPicks, rerollsAllowed, runLevel, runXp, runXpNeed, runXpOf, startPicks, type CardCounts, type CardId } from "./cards";
 // 11/15 층 순서표 (테마마다 층별 몬스터 구성·정예 자리)
 import { floorElite, floorRoster } from "./towerSchedule";
+import { minDealSec, planHp } from "./dealCap";
 // 11/15 끝없는 회의실 층 계획 손질 (참조 메일 상한·무리·중간 우두머리·안건 추가가 불러들이는 몫)
 import { meetingPlan } from "./towerThemes/meetingRoomPlan";
 // 11/15 옥상 정원 폭풍·임원층 층 계획 손질
@@ -529,7 +530,14 @@ export const FIRST_STAR_ID = "t_firstStar100";
 // ── 결과 검증 (서버) ──
 
 /** gp = 11/15 장비 힘 배율 (세트 장비·강화 — 서버가 판 시작 때 쟀다). 처치 속도 상한에 곱한다 */
-export type TowerTicket = { seed: number; level: number; start: number; gp?: number };
+export type TowerTicket = {
+  seed: number;
+  level: number;
+  start: number;
+  gp?: number;
+  /** 11/18 한 마리에게 넣을 수 있는 초당 최대 피해 (판 시작 때 서버가 잰 값 — lib/rpg/dealCap). 없으면(옛 티켓) 이 검사는 건너뛴다 */
+  dm?: number;
+};
 export type TowerVerdict =
   | {
       ok: true;
@@ -673,6 +681,13 @@ export function evalTower(
   if (k > 0 && effSec + 1 < minSec / 2)
     return tReject("RESULT_REJECTED", "층을 깬 속도가 너무 빨라요. 이번 판은 보상 없이 끝나요.", `floorTime:${minSec}s/${Math.round(effSec)}s`);
   if (k > 0 && minSec > effSec + 1) suspect.push(`floorTime:${minSec}s/${Math.round(effSec)}s`);
+  // 11/18 「그 속도로 때릴 수 있나」: 깬 층 몬스터 체력 합을 넣을 수 있는 최대 피해로 나눈 시간보다 빨랐으면 의심 판 (피하기·버티기는 보지 않는다)
+  if (t.dm && k > 0) {
+    let hp = 0;
+    for (let i = 0; i < k; i++) hp += planHp(towerPlan(t.seed, t.start + i, t.start), (id) => towerMonsterStats(id, t.start + i).maxHp);
+    const need = minDealSec(hp, t.dm, cardPower(owned));
+    if (effSec + 1 < need) suspect.push(`deal:${Math.round(need)}s/${Math.round(effSec)}s`);
+  }
   let short = 0;
   const shortIds: string[] = [];
   for (const [id, n] of Object.entries(need) as [MonsterId, number][]) {

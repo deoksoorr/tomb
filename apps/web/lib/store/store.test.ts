@@ -189,6 +189,15 @@ function contract(make: () => GraveStore) {
     expect((await store.get(legacy.id))?.channel).toBe(1);
   });
 
+  it("11/18 수정(update)은 묘비가 묘역에 있을 때만 쓴다 (이장·삭제 뒤에 늦게 온 수정이 되살리지 못한다)", async () => {
+    const g = await add({ channel: 2 });
+    expect(await store.update({ ...g, epitaph: "고침" })).toBe(true);
+    expect((await store.get(g.id))?.epitaph).toBe("고침");
+    await store.toShrine(g.id, `acct-${nanoid(6)}`, Date.now());
+    expect(await store.update({ ...g, epitaph: "되살리기" })).toBe(false);
+    expect(await store.get(g.id)).toBeNull();
+  });
+
   it("성황당: 이장하면 목록·랭킹에서 빠지고, 반응 수·숨김·꾸미기를 보관했다가 채널 맨 뒤로 되돌린다", async () => {
     const acct = `acct-${nanoid(6)}`;
     const g = await add({ channel: 2, createdAt: 1000 });
@@ -207,7 +216,8 @@ function contract(make: () => GraveStore) {
 
     expect(await store.restore(`acct-${nanoid(6)}`, g.id, now + 1)).toBeNull(); // 남의 성황당
     const back = await store.restore(acct, g.id, now + 5);
-    expect(back).toMatchObject({ id: g.id, channel: 2, flowers: 1, hidden: true, createdAt: now + 5 });
+    // 11/18 자리는 맨 뒤(createdAt 새로), 성불 기간은 처음 세운 때부터 (ageFrom = 원래 createdAt)
+    expect(back).toMatchObject({ id: g.id, channel: 2, flowers: 1, hidden: true, createdAt: now + 5, ageFrom: 1000 });
     expect(await store.get(g.id)).toMatchObject({ channel: 2, flowers: 1, createdAt: now + 5 });
     expect((await store.viewer(g.id, "v1")).myFlowerToday).toBe(true); // 헌화한 사람 기록도 그대로
     expect(await store.shrine(acct, now)).toEqual([]);

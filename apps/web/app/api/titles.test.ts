@@ -176,6 +176,38 @@ describe("새 칭호 알림 (fresh·unseen·first)", () => {
     expect((await mark({ seen: ["hat_cat"] })).status).toBe(400);
   });
 
+  it("11/18 보안: 얻지 않은 칭호를 알렸음·봤음으로 보내도 적히지 않고 달 수도 없다 (신화 칭호 포함)", async () => {
+    const v = await newVisitor();
+    const mark = (body: object) => marks.POST(call("/api/me/titles/marks", v, body));
+    const wear = (id: string) => titles.POST(call("/api/me/titles", v, { id }));
+    // 요청은 받아 주지만 (옛 화면 호환) 아무것도 적지 않는다
+    expect((await mark({ announced: ["t_first100", "t_att30", "t_bug50"], seen: ["t_first100"] })).status).toBe(200);
+    const marked = await getTitleMarks().get(v.visitorId);
+    expect(marked.announced).toEqual([]);
+    expect(marked.seen).toEqual([]);
+    forgetTitles();
+    const r = (await (await titles.GET(call("/api/me/titles", v))).json()) as TitlesResponse;
+    expect(r.earned).not.toContain("t_first100");
+    expect(r.earned).not.toContain("t_att30");
+    expect((await wear("t_first100")).status).toBe(403);
+    expect((await wear("t_att30")).status).toBe(403);
+    // 진짜 얻은 칭호는 섞여 와도 그것만 적힌다
+    await getForageStore().markDexTitles(v.visitorId, ["bug:50"], kstDay());
+    forgetTitles();
+    await mark({ announced: ["t_first100", "t_bug50"] });
+    expect((await getTitleMarks().get(v.visitorId)).announced).toEqual(["t_bug50"]);
+    expect((await wear("t_bug50")).status).toBe(200);
+  });
+
+  it("11/18 보안: 예전에 알림 기록에 들어간 신화 칭호는 지금 주인이 아니면 얻은 칭호가 아니다", async () => {
+    const v = await newVisitor();
+    await getTitleMarks().add(v.visitorId, "announced", ["t_first100"]);
+    forgetTitles();
+    const r = (await (await titles.GET(call("/api/me/titles", v))).json()) as TitlesResponse;
+    expect(r.earned).not.toContain("t_first100");
+    expect((await titles.POST(call("/api/me/titles", v, { id: "t_first100" }))).status).toBe(403);
+  });
+
   it("얻은 칭호가 없어도 처음 확인 뒤 얻은 칭호는 하나씩 (first 아님)", async () => {
     const v = await newVisitor();
     const get = async () => (await (await titles.GET(call("/api/me/titles", v))).json()) as TitlesResponse;

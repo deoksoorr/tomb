@@ -33,6 +33,7 @@ import { Arena, type ArenaHooks } from "./arena/Arena";
 import { monsterFrame, monsterOrigin, playMonsterDeath } from "./monsterArt";
 // 바닥 드롭 연출: 판이 끝나는 순간 서버와 같은 식으로 굴린 드롭을 몬스터 자리에 떨군다 (보상은 서버가)
 import { huntBossDrop, huntDropsFor, MIN_RUN_MS, type DropTicket } from "@/lib/rpg/rewards";
+import { dropRevealMs } from "@/lib/rpg/reveal";
 import { LootLayer } from "./loot";
 import { autoBlock, cleanAuto, SKILL_SLOTS, ULT_SLOT, type HotAuto } from "@/lib/rpg/hotbar";
 import { AUTO_GAP_MS, autoSpOk, ultReserve, wantsCast, type AutoCtx } from "@/lib/rpg/autoSkill";
@@ -226,6 +227,10 @@ export class HuntScene extends RpgScene {
   private kills: Partial<Record<MonsterId, number>> = {};
   private killCount = 0;
   private potionsUsed: Record<string, number> = {};
+  /** 11/18 판 기록 (서버 관리자 확인 근거 — 판정에는 쓰지 않는다): 층마다 깬 시각 · 넣은 피해 합 · 스킬마다 쓴 횟수 */
+  private logFt: number[] = [];
+  private logDmg = 0;
+  private logSk: Record<string, number> = {};
   private potionReadyAt = 0;
   private skillReady: Partial<Record<SkillId, number>> = {};
   private buffs = new Map<string, { until: number; v: number }>();
@@ -254,6 +259,13 @@ export class HuntScene extends RpgScene {
   /** 11/15 세트 장비: 싸움 효과 · 상자 천장(세트 장비 없이 연 상자 수 — 서버와 같은 값에서 센다) · 손에 든 무기 */
   private sg = new SetGearRun({});
   private sgPity = 0;
+  /**
+   * 11/18 드롭 시드 (서버 비밀값 — 판 시작 응답에 없다). 첫 우두머리가 나올 수 있는 시각(dropRevealMs) 뒤에 한 번 받는다.
+   * 없으면 바닥 드롭·상자 안 연출만 빠진다 (보상은 결과 화면에 그대로)
+   */
+  private dropSeed: number | null = null;
+  private revealAt = Infinity;
+  private revealAsked = false;
   private held: HeldWeapon | null = null;
   private selfLight: SelfLight | null = null;
   /** 11/15 우두머리 상자 (그 층에서만) */
@@ -399,6 +411,9 @@ export class HuntScene extends RpgScene {
     this.kills = {};
     this.killCount = 0;
     this.potionsUsed = {};
+    this.logFt = [];
+    this.logDmg = 0;
+    this.logSk = {};
     this.potionReadyAt = 0;
     this.skillReady = {};
     this.buffs.clear();
@@ -422,6 +437,11 @@ export class HuntScene extends RpgScene {
     this.mods = skillMods(play.skills);
     this.sg = new SetGearRun(play.equip);
     this.sgPity = play.tower?.pity ?? 0;
+    // 드롭 시드를 따로 받지 않는 판(시험·옛 흐름)은 서버도 판 시드로 굴린다 (lib/rpg/rewards dropTicketOf — 티켓에 드롭 시드가 없을 때)
+    this.dropSeed = play.reveal ? null : play.seed;
+    this.revealAsked = false;
+    // 서버 시간은 게임 시간보다 늘 길다 (멈춘 시간) → 게임 시간으로 이만큼 지난 뒤면 서버도 알려 준다 (여유 1.5초)
+    this.revealAt = play.reveal && !play.testDrops?.length && !play.noDrops ? dropRevealMs(play.seed, play.difficulty, play.zone, play.tower?.start) + 1500 : Infinity;
     this.dv = withPassives(play.derived, this.mods);
     this.dvBase = this.dv;
     this.fields = [];
@@ -1169,6 +1189,7 @@ export class HuntScene extends RpgScene {
     if (this.play.tower?.boost) dmg *= 20;
     // 11/15 세트 장비: 치명타 피해·우두머리 피해·결재 완료·출장 4세트
     if (this.sg.active) dmg = Math.max(1, Math.round(dmg * this.sg.hitMul(this.now, { crit, boss: !!m.boss || MONSTERS[m.id].behavior === "boss", hpRatio: m.hp / m.st.maxHp, basic: !!opts.basic, who: m })));
+    this.logDmg += Math.max(0, Math.min(dmg, m.hp));
     m.hp -= dmg;
     const def = MONSTERS[m.id];
     const sk = opts.skill ? PALETTES[opts.skill] : null;
@@ -1526,6 +1547,7 @@ export class HuntScene extends RpgScene {
 
   /** 스킬 효과 (게임 판정 + 연출). 수치는 lib/rpg/skillTree.ts의 SKILL_FX, 연출은 skillMoves.ts (스킬마다 고유) */
   private castSkill(id: SkillId, lv: number): void {
+    if (Object.keys(this.logSk).length < 40 || this.logSk[id]) this.logSk[id] = Math.min(100_000, (this.logSk[id] ?? 0) + 1);
     const pow = this.dv.skillPower;
     const now = this.now;
     const ang = () => Math.atan2(this.face.y, this.face.x);
@@ -2724,6 +2746,13 @@ export class HuntScene extends RpgScene {
   // ── 매 프레임 ──
 
   update(_time: number, delta: number): void {
+    // 11/18 드롭 시드: 첫 우두머리가 나올 때쯤 한 번 받는다 (우두머리 드롭·상자 연출용)
+    if (!this.revealAsked && this.now >= this.revealAt) {
+      this.revealAsked = true;
+      void this.play.reveal?.().then((s) => {
+        if (s !== null) this.dropSeed = s;
+      });
+    }
     // 11/15 능력 카드: 차례가 된 카드 고르기를 열고, 고르는 동안은 판이 멈춘다
     this.cards?.tick();
     if (this.cards?.picking) return;
@@ -3068,7 +3097,7 @@ export class HuntScene extends RpgScene {
       if (this.play.testDrops?.length) drops = this.bossDropped ? [] : this.play.testDrops;
       // 11/15 연습 판(그날 초월 구간을 다 썼다): 서버가 드롭을 주지 않는다 → 떨구지 않는다
       // 11/15 야근 빌딩은 우두머리 층을 깰 때 상자를 떨궜다 (clearFloor)
-      else if (!this.play.noDrops && !this.play.tower) {
+      else if (!this.play.noDrops && !this.play.tower && this.dropSeed !== null) {
         drops = huntDropsFor(this.dropTicket(), r);
         // 우두머리 몫은 잡는 순간 이미 떨궜다 → 맨 앞(우두머리 몫)을 뺀 나머지만
         const b = this.bossDropped ? huntBossDrop(this.dropTicket()) : null;
@@ -3087,7 +3116,8 @@ export class HuntScene extends RpgScene {
 
   private dropTicket(): DropTicket {
     // 11/15 테스트 서버 슈퍼 계정 시험 드롭 (서버가 판 시작 응답으로 알려 준다 — 서버도 같은 값으로 굴린다)
-    return { game: "hunt", difficulty: this.play.difficulty, seed: this.play.seed, zone: this.play.zone, ...(this.play.superDrops ? { sup: true } : {}) };
+    // 11/18 드롭은 받은 드롭 시드로, 몬스터 계획은 판 시드로 (서버 evalHunt와 같은 값)
+    return { game: "hunt", difficulty: this.play.difficulty, seed: this.dropSeed ?? 0, planSeed: this.play.seed, zone: this.play.zone, ...(this.play.superDrops ? { sup: true } : {}) };
   }
 
   /** 드롭이 튀어 오를 자리: 멀면 내 둘레, 화면(세로로 긴 휴대폰은 좁다) 안쪽으로 당겨 떨어지는 걸 놓치지 않게 */
@@ -3112,6 +3142,7 @@ export class HuntScene extends RpgScene {
     let drops: ReturnType<typeof huntDropsFor> = [];
     try {
       if (test?.length) drops = test;
+      else if (this.dropSeed === null) return;
       else {
         const b = huntBossDrop(this.dropTicket());
         drops = b ? [b] : [];
@@ -3243,6 +3274,7 @@ export class HuntScene extends RpgScene {
     const f = this.floor;
     this.lift = true;
     this.floorsCleared++;
+    if (this.logFt.length < 400) this.logFt.push(Math.round(this.now));
     this.floorMs = this.now;
     // 11/15 10층마다 우두머리 뒤 상사의 제안
     if (this.cards && isBossDealFloor(f)) this.cards.bossDeal(f);
@@ -3252,7 +3284,7 @@ export class HuntScene extends RpgScene {
       this.hp = Math.min(this.dv.maxHp, this.hp + heal);
       this.dmg.heal(this.px, this.py - 20, heal);
       // 11/15 우두머리 상자: 우두머리가 쓰러진 자리의 상자가 층을 깨는 순간 열리고, 안의 것은 사냥터 드롭처럼 튀어나온다 (빔·소리·줍기 그대로).
-      // 오늘 남은 상자만큼 — 서버(towerSettle)와 같은 순서·같은 굴림(towerChestDrops: 판 시드 + 층)
+      // 오늘 남은 상자만큼 — 서버(towerSettle)와 같은 순서·같은 굴림(towerChestDrops: 11/18 드롭 시드 + 층)
       let opened = false;
       if (this.chestsLeft > 0) {
         this.chestsLeft--;
@@ -3263,8 +3295,11 @@ export class HuntScene extends RpgScene {
         // 11/15 세트 장비 천장은 상자를 여는 순서대로 센다 (서버 finishTower와 같은 순서·같은 값)
         let drops: ReturnType<typeof towerChestDrops> = [];
         try {
-          drops = towerChestDrops(this.play.seed, f, this.play.tower?.start ?? 1, this.sgPity, !!this.play.superDrops);
-          this.sgPity = nextPity(drops, this.sgPity);
+          // 11/18 드롭 시드를 못 받았으면 상자 안 연출만 빠진다 (결과 화면에 그대로)
+          if (this.dropSeed !== null) {
+            drops = towerChestDrops(this.dropSeed, f, this.play.tower?.start ?? 1, this.sgPity, !!this.play.superDrops);
+            this.sgPity = nextPity(drops, this.sgPity);
+          }
         } catch {
           // 연출만 빠진다 (보상은 서버가)
         }
@@ -3273,6 +3308,7 @@ export class HuntScene extends RpgScene {
           this.fx.shake(140, 0.004);
           try {
             if (drops.length) this.loot.drop(drops, c.x, c.y - 8, false, 60);
+            else if (this.dropSeed === null) this.floatText(c.x, c.y - 26, "상자 안은 결과 화면에서 보여요", "#c8c0a8", 10);
             else this.floatText(c.x, c.y - 26, "이번 상자는 비어 있어요", "#c8c0a8", 10);
           } catch {
             // 연출만 빠진다 (보상은 서버가)
@@ -3373,6 +3409,8 @@ export class HuntScene extends RpgScene {
       potionsUsed: { ...this.potionsUsed },
       ...(this.play.tower ? { floors: this.floorsCleared, floorMs: Math.round(this.floorMs), ...(this.quit ? { quit: true } : {}) } : {}),
       ...(this.cards ? { cards: this.cards.picks() } : {}),
+      // 11/18 판 기록 (관리자 확인 근거)
+      ...(this.play.tower ? { log: { ft: [...this.logFt], dmg: Math.round(this.logDmg), sk: { ...this.logSk } } } : {}),
     };
   }
 }

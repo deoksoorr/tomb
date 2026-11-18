@@ -4,7 +4,10 @@ import { ImageResponse } from "next/og";
 import type { NextRequest } from "next/server";
 import type { ReactNode } from "react";
 import { lifespanLabel } from "@/lib/epitaph";
+import { HttpError } from "@/lib/http";
+import { rateLimit } from "@/lib/ratelimit";
 import { findVisible, getStore, type GraveRecord } from "@/lib/store";
+import { isGraveId } from "@/lib/validate";
 
 // 공유 카드 1200×630. /api/og?grave={id} → 묘비 카드, 그 밖에는 사이트 카드.
 // satori는 woff2를 못 읽으므로 TTF를 쓴다. 폰트는 요청과 무관하니 한 번만 읽는다.
@@ -35,8 +38,29 @@ async function findGrave(id: string | null): Promise<GraveRecord | null> {
   }
 }
 
+/**
+ * 11/18 캐시 우회 막기: 주소에 grave 말고 다른 값이 붙었거나, 묘비가 없거나 숨겨졌으면 쿼리 없는 사이트 카드 주소(CDN에 캐시된 것)로 보낸다.
+ * 주소만 바꿔 매번 카드를 새로 그리게 하는 도배는 메모리 한도(publicGet, Redis 명령 0)로도 막는다
+ */
+const siteCard = (req: NextRequest) =>
+  new Response(null, {
+    status: 308,
+    headers: { Location: new URL("/api/og", req.nextUrl.origin).toString(), "Cache-Control": "public, s-maxage=600" },
+  });
+
 export async function GET(req: NextRequest) {
-  const grave = await findGrave(req.nextUrl.searchParams.get("grave"));
+  const q = req.nextUrl.searchParams;
+  const id = q.get("grave");
+  const clean = [...q.keys()].every((k) => k === "grave") && q.getAll("grave").length <= 1;
+  if (!clean || (id !== null && !isGraveId(id))) return siteCard(req);
+  try {
+    await rateLimit("publicGet", req);
+  } catch (e) {
+    if (e instanceof HttpError) return new Response(null, { status: e.status, headers: e.headers });
+    throw e;
+  }
+  const grave = await findGrave(id);
+  if (id !== null && !grave) return siteCard(req);
   return new ImageResponse(grave ? <GraveCard grave={grave} /> : <SiteCard bg={await loadVillage()} />, {
     width: 1200,
     height: 630,

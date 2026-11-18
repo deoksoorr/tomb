@@ -22,6 +22,7 @@ import EconomyPanel from "./EconomyPanel";
 import ErrorsPanel from "./ErrorsPanel";
 import GiftsPanel from "./GiftsPanel";
 import TowerGrantPanel from "./TowerGrantPanel";
+import ReviewPanel from "./ReviewPanel";
 import GravesPanel from "./GravesPanel";
 import HousingPanel from "./HousingPanel";
 import MegaphonePanel from "./MegaphonePanel";
@@ -367,6 +368,7 @@ export default function AdminApp() {
           {panel === "graves" && <GravesPanel graves={graves} toast={toast} onError={handleError} onChanged={reload} />}
           {panel === "passed" && <PassedPanel key={version} {...p} part="list" onChanged={reload} />}
           {panel === "housing" && <HousingPanel key={version} {...p} />}
+          {panel === "review" && <ReviewPanel key={version} {...p} />}
           {panel === "towerGrant" && <TowerGrantPanel {...p} />}
 
           {panel === "residents" && <ResidentsPanel key={version} {...p} />}

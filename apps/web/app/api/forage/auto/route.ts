@@ -4,6 +4,7 @@ import { AutoFishSchema } from "@/lib/forage/schemas";
 import { startAutoFish, stopAutoFish, syncAutoFish } from "@/lib/forage/service";
 import type { AutoFishResponse } from "@/lib/forage/types";
 import { ipHash, requireVisitor } from "@/lib/session";
+import { rateLimit } from "@/lib/ratelimit";
 import { readBody } from "@/lib/validate";
 
 /**
@@ -12,6 +13,7 @@ import { readBody } from "@/lib/validate";
  */
 export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
+  await rateLimit("forage", req, visitorId);
   const body = await readBody(req, AutoFishSchema);
   const now = serverNow(visitorId); // 운영은 Date.now() (개발 QA만 시계를 앞당길 수 있다)
   const ip = ipHash(req);

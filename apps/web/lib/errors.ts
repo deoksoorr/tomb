@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { getErrors } from "./store";
 import { kstDay } from "./store/accounts";
-import type { ErrorSample } from "./store/errors";
+import { ERROR_GROUPS_PER_DAY, type ErrorSample } from "./store/errors";
 
 /** 같은 종류·메시지·스택 첫 두 줄이면 같은 오류로 묶는다 */
 export function errorHash(s: Pick<ErrorSample, "kind" | "message" | "stack">): string {
@@ -11,7 +11,10 @@ export function errorHash(s: Pick<ErrorSample, "kind" | "message" | "stack">): s
 }
 
 export async function recordError(sample: ErrorSample, now = Date.now()): Promise<void> {
-  await getErrors().record(kstDay(now), errorHash(sample), sample, now);
+  // 11/18 브라우저가 보낸 것은 하루 종류 상한과 짧은 스택으로 (서버 500은 그대로)
+  const client = sample.source === "client";
+  const s = client && sample.stack ? { ...sample, stack: sample.stack.slice(0, 2000) } : sample;
+  await getErrors().record(kstDay(now), errorHash(s), s, now, client ? ERROR_GROUPS_PER_DAY : undefined);
 }
 
 /** API handler의 500을 같은 저장소에 남긴다 (기록 실패는 조용히 무시) */

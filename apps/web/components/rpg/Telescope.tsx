@@ -20,6 +20,7 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import LevelUpSound from "./LevelUpSound";
+import { OddsLink } from "../odds/OddsLayer";
 import RpgIcon from "./RpgIcon";
 import StarsHud from "./StarsHud";
 import s from "./rpg.module.css";
@@ -344,7 +345,8 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
           </div>
           <p className={s.meta}>
             {stat ? `내 DEX ${stat.dex} 기준으로 ` : ""}고리와 별의 차이가 ±{win[0]}ms 안이면 &apos;완벽&apos;, ±{win[1]}ms 안이면 &apos;좋아&apos;예요. DEX가 높을수록 이 범위가
-            넓어져요. DEX {STAR_DEX_MAX}이면 가장 넓어요. 레벨은 판정과 상관없어요.
+            넓어져요. DEX {STAR_DEX_MAX}이면 가장 넓어요. 레벨은 판정과 상관없어요. 성적이 좋으면 가끔 물약도 받아요.{" "}
+            <OddsLink section="stars" label="물약 확률 보기" />
           </p>
         </section>
         <div className={s.buttons}>

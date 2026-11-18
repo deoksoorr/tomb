@@ -17,7 +17,7 @@ export const DAY_MS = 86_400_000;
 /** 정리 잠금 (함수 여러 개가 같은 정리를 겹쳐 하지 않게) */
 export const PASS_SWEEP_LOCK_MS = 30 * 60_000;
 
-export const passAtOf = (g: Pick<Grave, "createdAt">, s: GraveSettings) => Math.max(g.createdAt, s.passEpoch) + s.passDays * DAY_MS;
+export const passAtOf = (g: Pick<Grave, "createdAt" | "ageFrom">, s: GraveSettings) => Math.max(g.ageFrom ?? g.createdAt, s.passEpoch) + s.passDays * DAY_MS;
 
 const newestFirst = (a: GraveRecord, b: GraveRecord) => b.createdAt - a.createdAt || b.id.localeCompare(a.id);
 const oldestFirst = (a: GraveRecord, b: GraveRecord) => a.createdAt - b.createdAt || a.id.localeCompare(b.id);

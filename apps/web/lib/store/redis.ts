@@ -28,16 +28,19 @@ return {1, redis.call('ZINCRBY', KEYS[3], 1, ARGV[1])}
 `;
 
 // KEYS: meta, reports(IP), reporters(방문자), reportlog, graves:reported
-// ARGV: id, ipHash, visitorId, 숨김 기준, 기록 JSON, 기록 최대 개수
+// ARGV: id, ipHash, visitorId, 숨김 기준, 기록 JSON, 기록 최대 개수, 약한 신고(1 = 갓 만든 계정 — IP 집합·숨김에 안 넣는다)
 const REPORT_LUA = `
 if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 0 then return nil end
-if redis.call('SISMEMBER', KEYS[3], ARGV[3]) == 1 or redis.call('SADD', KEYS[2], ARGV[2]) == 0 then return 0 end
+if redis.call('SISMEMBER', KEYS[3], ARGV[3]) == 1 then return 0 end
+if ARGV[7] == '1' then
+  if redis.call('SISMEMBER', KEYS[2], ARGV[2]) == 1 or redis.call('SADD', KEYS[3], 'w:' .. ARGV[2]) == 0 then return 0 end
+elseif redis.call('SADD', KEYS[2], ARGV[2]) == 0 then return 0 end
 redis.call('SADD', KEYS[3], ARGV[3])
 redis.call('LPUSH', KEYS[4], ARGV[5])
 redis.call('LTRIM', KEYS[4], 0, tonumber(ARGV[6]) - 1)
 local n = redis.call('SCARD', KEYS[2])
 redis.call('ZADD', KEYS[5], n, ARGV[1])
-if n >= tonumber(ARGV[4]) then redis.call('HSET', KEYS[1], '${HIDDEN}' .. ARGV[1], '1') end
+if ARGV[7] ~= '1' and n >= tonumber(ARGV[4]) then redis.call('HSET', KEYS[1], '${HIDDEN}' .. ARGV[1], '1') end
 return 1
 `;
 
@@ -98,6 +101,16 @@ if tonumber(ARGV[6]) ~= 0 then redis.call('ZADD', KEYS[5], ARGV[6], ARGV[1]) end
 if ARGV[7] == '1' then redis.call('HSET', KEYS[3], '${HIDDEN}' .. ARGV[1], '1') end
 if ARGV[8] ~= '' then redis.call('HSET', KEYS[3], '${DECOR}' .. ARGV[1], ARGV[8]) end
 redis.call('HSET', KEYS[7], ARGV[1], ARGV[9])
+return 1
+`;
+
+// 11/18 묘비 수정: 아직 묘역에 있을 때만 덮어쓴다 (이장·삭제와 동시에 온 수정이 되살리지 못하게)
+// KEYS: meta, created, graveChannel  ARGV: id, encoded, createdAt, channel
+const UPDATE_LUA = `
+if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 0 then return 0 end
+redis.call('HSET', KEYS[1], ARGV[1], ARGV[2])
+redis.call('ZADD', KEYS[2], ARGV[3], ARGV[1])
+redis.call('HSET', KEYS[3], ARGV[1], ARGV[4])
 return 1
 `;
 
@@ -300,6 +313,15 @@ export class RedisStore implements GraveStore {
       .exec();
   }
 
+  async update(grave: Grave): Promise<boolean> {
+    const channel = grave.channel ?? 1;
+    const k = chKeys(channel);
+    const r = await this.redis.eval<string[], number>(UPDATE_LUA, [k.meta, k.created, K.graveChannel], [grave.id, encode({ ...grave, channel }), String(grave.createdAt), String(channel)]);
+    if (Number(r) !== 1) return false;
+    this.channels.set(grave.id, channel);
+    return true;
+  }
+
   async remove(id: string): Promise<Grave | null> {
     const k = await this.keysOf(id);
     const raw = await this.redis.hget<string>(k.meta, id);
@@ -357,7 +379,8 @@ export class RedisStore implements GraveStore {
     if (!raw) return null;
     const e = JSON.parse(raw) as ShrineEnvelope;
     if (e.removedAt + SHRINE_KEEP_MS <= now) return null;
-    const grave: Grave = { ...e.grave, channel: e.channel, createdAt: now };
+    // 11/18 자리는 맨 뒤로(createdAt), 성불 기간은 처음 세운 때부터 그대로 (ageFrom)
+    const grave: Grave = { ...e.grave, channel: e.channel, createdAt: now, ageFrom: e.grave.ageFrom ?? e.grave.createdAt };
     const k = chKeys(e.channel);
     const ok = await this.redis.eval<string[], number>(
       RESTORE_LUA,
@@ -513,13 +536,14 @@ export class RedisStore implements GraveStore {
     ipHash: string,
     reason: ReportReason,
     at = Date.now(),
+    weak = false,
   ): Promise<"added" | "duplicate" | null> {
     const k = await this.keysOf(id);
-    const entry: ReportLogEntry = { at, reason };
+    const entry: ReportLogEntry = weak ? { at, reason, weak: true } : { at, reason };
     const r = await this.redis.eval<string[], number | null>(
       REPORT_LUA,
       [k.meta, K.reports(id), K.reporters(id), K.reportLog(id), K.reported],
-      [id, ipHash, visitorId, String(REPORT_HIDE_THRESHOLD), JSON.stringify(entry), String(REPORT_LOG_MAX)],
+      [id, ipHash, visitorId, String(REPORT_HIDE_THRESHOLD), JSON.stringify(entry), String(REPORT_LOG_MAX), weak ? "1" : "0"],
     );
     if (r === null) return null;
     return Number(r) === 1 ? "added" : "duplicate";

@@ -12,6 +12,7 @@ import type { RunReward } from "@/lib/rpg/types";
 import type { ReclaimReport } from "@/lib/housing/reclaim";
 import type { AdminHouse } from "@/lib/housing/types";
 import type { AdminAccountRow } from "@/app/api/admin/accounts/search/route";
+import type { AdminReviewResponse } from "@/app/api/admin/rpg/review/route";
 import type { EconomyResponse, Notice, NoticeInput, NoticeListResponse } from "@/lib/types";
 import type { AdminAction } from "@/lib/validate";
 
@@ -50,6 +51,13 @@ export const adminApi = {
   /** 11/15 야근 빌딩 대신 정산 (서버가 잘못 거절한 판) */
   towerGrant: (b: { accountId: string; start: number; floors: number; floorMs: number }) =>
     request<{ ok: true; reward: RunReward }>("/api/admin/rpg/tower-grant", post(b)),
+  /** 11/18 기록 확인 (의심 판·서버 최초 칭호 대기) */
+  reviews: () => request<AdminReviewResponse>("/api/admin/rpg/review", { cache: "no-store" }),
+  review: (id: string, action: "approve" | "reject") =>
+    request<{ ok: true; result?: { kind: "tower"; reward: RunReward } | { kind: "first"; granted: boolean } | { kind: "top"; took: boolean } }>(
+      "/api/admin/rpg/review",
+      post({ id, action }),
+    ),
   searchAccounts: (name: string) =>
     request<{ accounts: AdminAccountRow[] }>(`/api/admin/accounts/search?${new URLSearchParams({ name })}`, { cache: "no-store" }),
   /** 회원 전체 목록 (최근 접속 순 또는 총 접속 시간 순 50명씩, next를 cursor로) */

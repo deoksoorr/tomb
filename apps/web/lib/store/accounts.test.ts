@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { nameKey, PERMANENT_UNTIL } from "@tomb/protocol";
 import { attendTierPlan } from "../attendTiers";
 import { calendarOf, grantAttendTiers } from "../calendarView";
-import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES, earnRule, type EarnSource } from "../economy";
+import { BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES, earnRule, type EarnSource } from "../economy";
 import { env } from "../env";
 import type { Grave } from "../types";
 import { prevWeek } from "../gameDay";
@@ -302,18 +302,18 @@ function contract(make: () => Kit) {
     expect(await accounts.earn(id, "hunt", DAY, { amount: earnRule("hunt").dailyMax })).toBe(earnRule("hunt").dailyMax);
   });
 
-  it(`같은 IP에서는 하루 ${ATTEND_ACCOUNTS_PER_IP}개 계정까지만 출석 포인트 (도장은 남는다)`, async () => {
+  // 11/18 회사·집에서 여럿이 한 IP로 한다 → 같은 IP 계정 수로 출석 포인트를 막지 않는다
+  it("같은 IP의 계정 여럿도 모두 출석 포인트를 받는다", async () => {
     const ip = `ip-${nanoid(6)}`;
-    const ids = Array.from({ length: ATTEND_ACCOUNTS_PER_IP + 1 }, newId);
+    const ids = Array.from({ length: 8 }, newId);
     const earned = [];
     for (const id of ids) {
       await stay(id, DAY, 6);
       const r = await claim(id, ip, DAY, "20261107");
       earned.push(r.ok ? r.earned.daily : -1);
     }
-    expect(earned).toEqual([...Array<number>(ATTEND_ACCOUNTS_PER_IP).fill(10), 0]);
-    expect((await accounts.get(ids.at(-1)!, DAY, 0)).lastAttend).toBe(DAY);
-    expect((await accounts.attendCalendar(ids.at(-1)!, "202611")).days).toEqual({ "08": 0 });
+    expect(earned).toEqual(Array<number>(8).fill(10));
+    expect((await accounts.attendCalendar(ids.at(-1)!, "202611")).days).toEqual({ "08": 10 });
   });
 
   it("한 달 개근: 그달 모든 날을 찍은 날 한 번 +200 (달력 개편 전 출석도 이어서 센다)", async () => {
@@ -534,12 +534,11 @@ function contract(make: () => Kit) {
     expect((await accounts.get(id, DAY, 0)).points).toBe(10);
   });
 
-  it("같은 IP 합계는 항목 한도 × 3 (계정 여러 개로 농사 방지), IP를 안 주면 계정 한도만", async () => {
+  it("같은 IP라도 계정마다 항목 한도를 다 받는다 (11/18 IP 합계 한도 없앰)", async () => {
     const ip = `ip-${nanoid(6)}`;
     const got = [];
-    for (let i = 0; i < 4; i++) got.push(await accounts.earn(newId(), "hunt", DAY, { amount: HUNT_MAX, ipHash: ip }));
-    expect(got).toEqual([HUNT_MAX, HUNT_MAX, HUNT_MAX, 0]);
-    expect(await accounts.earn(newId(), "hunt", DAY, { amount: HUNT_MAX })).toBe(HUNT_MAX);
+    for (let i = 0; i < 6; i++) got.push(await accounts.earn(newId(), "hunt", DAY, { amount: HUNT_MAX, ipHash: ip }));
+    expect(got).toEqual(Array<number>(6).fill(HUNT_MAX));
   });
 
   it("머무르기: 9.5분 간격, 하루 60점까지", async () => {

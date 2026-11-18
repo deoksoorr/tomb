@@ -369,15 +369,17 @@ return 1
 const SAVE_LUA = `${POOL_FN}
 if redis.call('EXISTS', KEYS[6]) == 0 then return -1 end
 if redis.call('HGET', KEYS[6], 'tier') ~= ARGV[3] then return -2 end
+local was = tonumber(redis.call('HGET', KEYS[6], 'updatedAt') or '0') or 0
+if ARGV[12] ~= '' and was ~= tonumber(ARGV[12]) then return -4 end
 ${POOL_MERGE}
-for i = 12, #ARGV, 2 do
+for i = 13, #ARGV, 2 do
   local it = ARGV[i]
   local need = tonumber(ARGV[i + 1]) - num(KEYS[2], it)
   if need < 0 then need = 0 end
   if need + over(KEYS[5], KEYS[3], it) > num(KEYS[1], it) then return -3 end
 end
 redis.call('DEL', KEYS[4])
-for i = 12, #ARGV, 2 do redis.call('HSET', KEYS[4], ARGV[i], ARGV[i + 1]) end
+for i = 13, #ARGV, 2 do redis.call('HSET', KEYS[4], ARGV[i], ARGV[i + 1]) end
 if ARGV[4] ~= '' then
   redis.call('SET', KEYS[7], ARGV[4])
   redis.call('HSET', KEYS[6], 'items', ARGV[6])
@@ -399,7 +401,7 @@ if ARGV[4] ~= '' then
   end
 end
 if ARGV[9] ~= '' then redis.call('HSET', KEYS[6], 'exterior', ARGV[9]) end
-redis.call('HSET', KEYS[6], 'placedScore', ARGV[5], 'updatedAt', ARGV[7])
+redis.call('HSET', KEYS[6], 'placedScore', ARGV[5], 'updatedAt', math.max(tonumber(ARGV[7]), was + 1))
 if redis.call('HGET', KEYS[6], 'hidden') ~= '1' then
   local likes = tonumber(redis.call('HGET', KEYS[6], 'likes') or '0')
   redis.call('ZADD', KEYS[8], tonumber(ARGV[5]) + likes * tonumber(ARGV[8]), ARGV[2])
@@ -476,6 +478,10 @@ end
 if not found then return -1 end
 if redis.call('SADD', KEYS[2], ARGV[2]) == 0 then return 0 end
 redis.call('EXPIRE', KEYS[2], ARGV[3])
+if ARGV[5] == '1' then
+  redis.call('HINCRBY', KEYS[3], ARGV[1], 0)
+  return 1
+end
 local n = redis.call('HINCRBY', KEYS[3], ARGV[1], 1)
 if n >= tonumber(ARGV[4]) then redis.call('SADD', KEYS[4], ARGV[1]) end
 return 1
@@ -771,6 +777,7 @@ export class RedisHouseStore implements HouseStore {
     counts: Record<string, number>,
     placedScore: number,
     now: number,
+    base?: number,
   ): Promise<SaveResult> {
     const id = pairIds(pair, zone).self;
     const { keys, sea } = this.poolKeys(pair, zone);
@@ -790,11 +797,12 @@ export class RedisHouseStore implements HouseStore {
           exterior ? JSON.stringify(exterior) : "",
           layout ? JSON.stringify(stateSigs(layout)) : "",
           layout ? JSON.stringify(Object.fromEntries(layout.items.filter((p) => p.i === "pot").map((p) => [p.u, true]))) : "",
+          base === undefined ? "" : String(base),
           ...Object.entries(counts).flatMap(([k, v]) => [k, String(v)]),
         ],
       ),
     );
-    return r === 1 ? "ok" : r === -1 ? "no_house" : r === -2 ? "tier" : "not_owned";
+    return r === 1 ? "ok" : r === -1 ? "no_house" : r === -2 ? "tier" : r === -4 ? "conflict" : "not_owned";
   }
 
   async like(id: string, visitorId: string, day: string) {
@@ -919,12 +927,13 @@ export class RedisHouseStore implements HouseStore {
     return raw ? parseGuest(raw) : null;
   }
 
-  async reportGuest(id: string, entryId: string, ipHash: string) {
+  async reportGuest(id: string, entryId: string, ipHash: string, weak = false) {
+    // 11/18 약한 신고(갓 만든 계정)는 IP 집합에 "w:" 붙여 따로 막고(같은 IP 정식 신고는 막지 않게) 신고 수는 올리지 않는다
     const r = Number(
       await this.redis.eval<string[], number>(
         REPORT_GUEST_LUA,
         [HK.guest(id), HK.guestRepIps(id, entryId), HK.guestRep(id), HK.guestHide(id)],
-        [entryId, ipHash, String(GUEST_REPORT_TTL_SEC), String(GUEST_REPORT_HIDE)],
+        [entryId, weak ? `w:${ipHash}` : ipHash, String(GUEST_REPORT_TTL_SEC), String(GUEST_REPORT_HIDE), weak ? "1" : "0"],
       ),
     );
     return r < 0 ? null : r === 0 ? ("duplicate" as const) : ("added" as const);

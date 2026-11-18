@@ -9,7 +9,7 @@ import { getAccounts } from "../store";
 import { kstDay, lookGrant, lookOf, loadMe } from "../store/accounts";
 import { getStyleStore, type DyeSession, type FixedDyeDef, type StyleStore } from "../store/style";
 import type { Me } from "../types";
-import { buildBoard, colorAt, DYE_GRACE_MS, DYE_TIME_MS } from "./palette";
+import { buildBoard, colorAt, DYE_CENTER, DYE_GRACE_MS, DYE_TIME_MS, dyeReach } from "./palette";
 import { BASE_RESHAPE_PRICE, catalogDye, directDyeMode, DYE_DECIDE_MS, DYE_RESET_PRICE, dyeTicketCounts, fixedAllows, randomTier, specialDyeColor } from "./rules";
 import type { DyeSessionView, DyeStateResponse, DyeTimeoutResponse, StyleChangeResponse } from "./types";
 import { champShopDiscount, pickDiscount } from "../champPerks";
@@ -85,10 +85,17 @@ async function keep(accountId: string, s: DyeSession, now: number, late = false)
  * 무작위 염색 끝내기 ([이 색으로 염색]): 클라이언트는 판 위 좌표만 보내고, 색은 서버가 그 판(시드)으로 계산한다.
  * 시간(+여유)이 지난 뒤에 온 좌표는 받지 않고 색을 그대로 둔다 (late·kept). 시간이 끝나 후보가 생긴 판은 chooseDye로만
  */
+/** 11/18 보안: 시작(판 가운데)에서 지난 시간 동안 갈 수 없는 먼 좌표인가 */
+function tooFar(s: DyeSession, x: number, y: number, now: number): boolean {
+  return Math.hypot(x - DYE_CENTER.x, y - DYE_CENTER.y) > dyeReach(now - s.startedAt);
+}
+
 export async function finishDye(accountId: string, seed: string, x: number, y: number, now = Date.now()): Promise<StyleChangeResponse> {
   const session = await current(accountId, seed);
   if (session.candidate) throw new HttpError(409, "DYE_DECIDING", "시간이 끝났어요. 새 색으로 바꿀지 지금 색을 유지할지 골라 주세요.");
   if (now > session.endsAt + DYE_GRACE_MS) return keep(accountId, session, now, true);
+  // 갈 수 없는 먼 좌표면 색을 바꾸지 않고 끝낸다 (염색권은 쓴 것으로)
+  if (tooFar(session, x, y, now)) return keep(accountId, session, now);
   const color = judgeColor(session, x, y);
   if (!(await style().finish(accountId, seed, color))) throw new HttpError(409, "NO_SESSION", "이미 끝난 염색이에요.");
   return changed(accountId, now, { color, part: session.part });
@@ -103,6 +110,10 @@ export async function timeoutDye(accountId: string, seed: string, x: number, y: 
   if (session.candidate) return { part: session.part, candidate: session.candidate, serverNow: now };
   if (now < session.endsAt - DYE_GRACE_MS) throw new HttpError(409, "TOO_EARLY", "아직 시간이 남았어요.");
   if (now > session.endsAt + DYE_GRACE_MS) {
+    await style().cancel(accountId, seed);
+    return { part: session.part, candidate: null, serverNow: now };
+  }
+  if (tooFar(session, x, y, now)) {
     await style().cancel(accountId, seed);
     return { part: session.part, candidate: null, serverNow: now };
   }

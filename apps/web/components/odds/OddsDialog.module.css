@@ -1,0 +1,220 @@
+/* 11/18 확률 안내 창: 위에 차례 칩, 아래로 칸마다 표. 숫자는 고정 폭 숫자로, 합이 100%인 표는 촛불빛 막대를 같이 */
+.odds {
+  display: grid;
+  gap: 18px;
+  line-height: 1.65;
+}
+
+.intro {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.nav {
+  position: sticky;
+  top: -1px;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 -2px;
+  padding: 6px 2px 8px;
+  background: var(--panel-solid);
+  box-shadow: 0 1px 0 var(--line);
+}
+
+.chip {
+  padding: 3px 9px;
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.chip:hover,
+.chip:focus-visible {
+  border-color: var(--candle);
+  color: var(--bone);
+}
+
+.chipOn {
+  border-color: var(--candle);
+  background: rgba(224, 195, 106, 0.14);
+  color: var(--bone);
+}
+
+.section {
+  display: grid;
+  gap: 8px;
+  scroll-margin-top: 96px;
+}
+
+.section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 15px;
+  font-weight: 400;
+}
+
+/* 칸 제목 앞 작은 촛불빛 네모 */
+.section h3::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: var(--candle);
+  box-shadow: 0 0 6px rgba(224, 195, 106, 0.6);
+}
+
+.sub {
+  margin: 6px 0 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.lead {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.facts {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 14px;
+  color: var(--text);
+  font-size: 12px;
+  list-style: "· ";
+}
+
+/* 칸이 많은 표(난이도 넷)는 좁은 폰에서 옆으로 밀어 본다 */
+.scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+/* 숫자 칸은 줄을 바꾸지 않는다 (12.5%가 두 줄로 갈라지지 않게) */
+.wide td {
+  white-space: nowrap;
+}
+
+.table th,
+.table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.table tbody tr:last-child th,
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table thead th {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.table tbody th {
+  color: var(--text);
+  font-weight: 400;
+}
+
+/* 첫 칸(이름)은 줄바꿈 없이 (폰에서 「결재 서류」가 두 줄로 쪼개지지 않게) */
+.table th:first-child {
+  white-space: nowrap;
+}
+
+.table td {
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 비율 막대 */
+.bar {
+  display: block;
+  height: 3px;
+  margin-top: 3px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.bar > span {
+  display: block;
+  height: 100%;
+  background: var(--candle);
+}
+
+/* 다른 창에 붙는 작은 [확률 보기] 연결 */
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--candle);
+  font: inherit;
+  font-size: 11px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.link:hover,
+.link:focus-visible {
+  color: var(--bone);
+}
+
+/* 폰: 차례 칩은 따라오지 않고(화면을 많이 가려서) 표 글자를 조금 줄인다 */
+@media (max-width: 560px) {
+  .nav {
+    position: static;
+    box-shadow: none;
+    padding-bottom: 0;
+  }
+
+  .section {
+    scroll-margin-top: 8px;
+  }
+
+  .table {
+    font-size: 11px;
+  }
+
+  .table th,
+  .table td {
+    padding: 5px 6px;
+  }
+
+  .wide td {
+    padding-inline: 4px;
+  }
+}

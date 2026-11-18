@@ -42,6 +42,16 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
     expect(await store.begin(a, "n5", "{}", 60, "h2", 3)).toBe(true);
   });
 
+  it("11/18 끝내지 않은 낚시를 덮어쓰면 replacedFish (끝낸 낚시·채집을 덮으면 true)", async () => {
+    const a = acct();
+    const fish = '{"k":"fish","sp":"f_carp","sz":420}';
+    expect(await store.begin(a, "f1", fish, 60, "h", 10)).toBe(true);
+    expect(await store.begin(a, "f2", fish, 60, "h", 10)).toBe("replacedFish");
+    expect((await store.claim(a, "f2")).status).toBe("ok");
+    expect(await store.begin(a, "g1", '{"k":"gather"}', 60, "h", 10)).toBe(true);
+    expect(await store.begin(a, "f3", fish, 60, "h", 10)).toBe(true);
+  });
+
   it("잡은 것 넣기: 가방·도감(처음·최대 크기·처음 날)·오늘 잡은 수", async () => {
     const a = acct();
     const g1 = await store.grant(a, DAY, "fish", [{ id: "f_carp", size: 420 }], 99);

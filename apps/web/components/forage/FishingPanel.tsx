@@ -398,7 +398,7 @@ export default function FishingPanel({
       <div className={s.dockHead}>
         <strong>낚시 · {water === "sea" ? "바다" : water === "lake" ? "호수" : "강"}</strong>
         <span>
-          오늘 {caught}/{DAILY_CATCH_MAX.fish}마리
+          오늘 {caught}/{DAILY_CATCH_MAX.fish}번
         </span>
       </div>
       <p className={s.status} data-tone={msg.tone} role="status" aria-live="polite">

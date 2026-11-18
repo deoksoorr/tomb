@@ -19,6 +19,7 @@ import {
   type StarSky,
 } from "./plan";
 import { constellationById } from "./constellations";
+import { minDealSec, planHp } from "./dealCap";
 import { starsPlanV1, V1_SIZE } from "./starsPlanV1";
 import type { BugsResult, Drop, HuntResult, RunResult, StarsResult } from "./types";
 
@@ -33,6 +34,8 @@ export const HUNT_DROP_ROLLS = 2;
 export const MIN_RUN_MS = 8000;
 /** 서버가 잰 시간보다 이만큼 넘게 길다고 하면 거짓으로 본다 (요청 왕복 여유) */
 export const CLOCK_SLACK_MS = 3000;
+/** 11/18 사냥터 최단 클리어 랭킹: 서버가 잰 시간보다 이만큼 넘게 짧은 판(오래 멈췄다)은 랭킹에 넣지 않는다 (판 보상은 그대로) */
+export const PAUSE_ALLOW_MS = 90_000;
 /** 시간 제한이 지나고도 이만큼은 결과를 받는다 (결과 화면·느린 네트워크) */
 export const FINISH_GRACE_SEC = 120;
 
@@ -62,6 +65,13 @@ export type TicketInfo = {
   gp?: number;
   /** 11/15 테스트 서버 슈퍼 계정 시험 드롭 (서버가 계정으로 정한다 — 운영 서버는 늘 false): 우두머리를 잡으면 장비가 늘 하나 */
   sup?: boolean;
+  /** 11/18 한 마리에게 넣을 수 있는 초당 최대 피해 (티켓 dm — lib/rpg/dealCap). 없으면(옛 티켓) 최단 클리어 검사를 건너뛴다 */
+  dm?: number;
+  /**
+   * 11/18 드롭 굴림 시드 (서버 비밀값으로 판 nonce에서 만든다 — 판 시작 응답에 없다). 없으면 판 시드.
+   * 판을 시작하자마자 드롭을 미리 계산해 나쁘면 다시 시작하는 것을 막는다 (화면은 우두머리가 나온 뒤 /api/rpg/run/reveal로 받아 연출한다)
+   */
+  dropSeed?: number;
 };
 
 /** 별자리 잇기에서 검증을 통과한 완성 별자리 (무리 번호·별자리 id·완벽으로만 이었는지) */
@@ -97,7 +107,7 @@ export function evaluate(t: TicketInfo, result: RunResult, serverElapsedMs: numb
   if (eff < MIN_RUN_MS) return { ok: true, score: 0, exp: 0, points: 0, drops: [] };
   switch (result.game) {
     case "hunt":
-      return evalHunt(t, result, eff);
+      return evalHunt(t, result, eff, serverElapsedMs);
     case "bugs":
       return evalBugs(t, result, eff);
     case "stars":
@@ -105,7 +115,7 @@ export function evaluate(t: TicketInfo, result: RunResult, serverElapsedMs: numb
   }
 }
 
-function evalHunt(t: TicketInfo, r: HuntResult, eff: number): Verdict {
+function evalHunt(t: TicketInfo, r: HuntResult, eff: number, serverElapsedMs: number): Verdict {
   const zone = zoneFor(t.difficulty, t.zone);
   const plan = huntPlan(t.seed, t.difficulty, zone.id);
   const effSec = eff / 1000;
@@ -143,14 +153,20 @@ function evalHunt(t: TicketInfo, r: HuntResult, eff: number): Verdict {
   // 11/14: 우두머리 드롭은 우두머리를 잡는 순간 정해진다 (뒤에 쓰러지거나 남은 몬스터를 못 잡아도 유지 — 확률은 그대로).
   // 우두머리는 마지막 웨이브에 한 번만 나오고 졸개·분열로는 나오지 않는다 → 처치 기록에 있으면 잡은 것 (위에서 출현 수로 검증됨)
   const bossKilled = (r.kills[zone.boss] ?? 0) > 0;
-  const drops = huntDrops(t, total, bossKilled, cleared && !r.died);
+  const drops = huntDrops(dropTicketOf(t), total, bossKilled, cleared && !r.died);
+  // 11/18 최단 클리어 랭킹에서 빼는 판: 넣을 수 있는 최대 피해로도 그 시간에 다 못 쓰러뜨리는 판(dealCap), 멈춘 시간이 너무 긴 판
+  // (서버가 잰 시간보다 PAUSE_ALLOW_MS 넘게 짧다 — 판 시간을 줄여 보낸 기록과 구별할 수 없다). 판 보상은 그대로
+  const dealHp = cleared && t.dm ? planHp(plan, (id) => monsterStats(id, t.difficulty, zone.power).maxHp) : 0;
+  const tooQuick = !!t.dm && cleared && effSec + 1 < minDealSec(dealHp, t.dm);
+  const paused = serverElapsedMs - r.durationMs > PAUSE_ALLOW_MS;
+  const ranked = cleared && !r.died && !tooQuick && !paused;
   return {
     ok: true,
     score: Math.round(exp),
     exp: Math.round(xp),
     points: Math.round(points),
     drops,
-    hunt: { kills: total, clearMs: cleared && !r.died ? Math.round(eff) : null },
+    hunt: { kills: total, clearMs: ranked ? Math.round(eff) : null },
     ...(total > 0 ? { mobs: { ...r.kills } } : {}),
   };
 }
@@ -248,12 +264,17 @@ function miniReward(t: TicketInfo, score: number, perf: number, base = DIFFS[t.d
   // 미니게임은 사냥터가 없으니 난이도 권장 레벨 기준
   const exp = Math.round(D.miniExp * perf * levelPenalty(t.level, t.difficulty, null));
   // 미니게임은 잘하면 포션 하나를 굴린다
-  const drops = perf >= 0.5 ? rollDrops(t, 1, false, true) : [];
+  const drops = perf >= 0.5 ? rollDrops(dropTicketOf(t), 1, false, true) : [];
   return { ok: true, score, exp, points, drops };
 }
 
-/** 드롭 굴림에 쓰는 티켓 값 (화면의 바닥 드롭 연출도 같은 값으로 굴린다) */
-export type DropTicket = Pick<TicketInfo, "game" | "difficulty" | "seed" | "zone" | "sup">;
+/**
+ * 드롭 굴림에 쓰는 티켓 값 (화면의 바닥 드롭 연출도 같은 값으로 굴린다). seed = 드롭 시드 (11/18 서버 비밀값으로 만든 dropSeed),
+ * planSeed = 몬스터 계획 시드 (없으면 seed — 옛 화면·시험)
+ */
+export type DropTicket = Pick<TicketInfo, "game" | "difficulty" | "seed" | "zone" | "sup"> & { planSeed?: number };
+/** 11/18 판정용 티켓 → 드롭 굴림 티켓 (드롭 시드가 있으면 그것으로, 계획은 판 시드로) */
+const dropTicketOf = (t: TicketInfo): DropTicket => ({ ...t, seed: t.dropSeed ?? t.seed, planSeed: t.seed });
 
 /**
  * 사냥터 한 판의 드롭: 우두머리 몫(맨 앞) + 처치 수만큼 굴림 + 깔끔한 클리어 코디. 서버 판정(evalHunt)과 화면 연출(huntDropsFor)이 같은 식을 쓴다.
@@ -270,7 +291,7 @@ export function huntDrops(t: DropTicket, total: number, bossKilled: boolean, cle
 export function huntDropsFor(t: DropTicket, r: HuntResult): Drop[] {
   if (r.durationMs < MIN_RUN_MS) return [];
   const zone = zoneFor(t.difficulty, t.zone);
-  const waves = huntPlan(t.seed, t.difficulty, zone.id).length;
+  const waves = huntPlan(t.planSeed ?? t.seed, t.difficulty, zone.id).length;
   const total = Object.values(r.kills).reduce((a, n) => a + (n ?? 0), 0);
   const cleared = r.wavesCleared === waves;
   return huntDrops(t, total, (r.kills[zone.boss] ?? 0) > 0, cleared && !r.died);

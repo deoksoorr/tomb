@@ -235,8 +235,8 @@ describe("런 티켓", () => {
 
   it("메모리 저장소: 한 번만 끝낼 수 있고, 새 판을 시작하면 옛 판은 끝난다", async () => {
     const s = new MemoryRpgStore();
-    await s.startRun("a", "n1", 60, "h");
-    await s.startRun("a", "n2", 60, "h");
+    await s.startRun("a", "n1", 60, Date.now());
+    await s.startRun("a", "n2", 60, Date.now());
     expect(await s.claimRun("a", "n1")).toBe("stale");
     expect(await s.claimRun("a", "n2")).toBe("ok");
     expect(await s.claimRun("a", "n2")).toBe("reused");

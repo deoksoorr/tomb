@@ -6,7 +6,7 @@ import { CHAT_LOG_TTL_MS, chatChannelOf, visibleChatLines, type ChatLine } from 
 import { cx } from "../ui/cx";
 import ChatInput from "./ChatInput";
 import { chatStore, setChatShown, useChatLines } from "./chatLines";
-import { readChatSize, saveChatSize, stepChatSize, type ChatSize } from "./chatSize";
+import { readChatBg, readChatSize, saveChatBg, saveChatSize, stepChatSize, type ChatSize } from "./chatSize";
 import ChatScroll from "./ChatScroll";
 import styles from "./ChatLog.module.css";
 
@@ -89,9 +89,11 @@ export default function ChatLog({ mobile, room, hidden = false, hunt = false }: 
  * 손가락으로 위로 올려 지난 줄을 읽는다. 입력은 행동 버튼 [채팅] 하나로 (채팅 입력 줄 ChatSheet)
  */
 function MobileChat({ all, now }: { all: ChatLine[]; now: number }) {
+  // 게임이 뜬 뒤에만 그려지므로 처음 값을 바로 저장소에서 읽어도 된다 (데스크톱 [배경]과 같은 값)
+  const [bg] = useState(readChatBg);
   if (all.length === 0) return null;
   return (
-    <section className={styles.mobileBox} aria-label="채팅">
+    <section className={styles.mobileBox} data-bg={bg ? "on" : "off"} aria-label="채팅">
       <ChatScroll lines={all} now={now} className={styles.mobileLog} />
     </section>
   );
@@ -101,14 +103,30 @@ function MobileChat({ all, now }: { all: ChatLine[]; now: number }) {
 function DesktopBox({ lines: shown, now, hunt }: { lines: ChatLine[]; now: number; hunt: boolean }) {
   // 게임이 뜬 뒤에만 그려지므로(ready) 처음 값을 바로 저장소에서 읽어도 서버 렌더와 어긋나지 않는다
   const [size, setSize] = useState<ChatSize>(readChatSize);
+  const [bg, setBg] = useState(readChatBg);
+  const toggleBg = () => {
+    setBg(!bg);
+    saveChatBg(!bg);
+  };
   const step = (dir: 1 | -1) => {
     const next = stepChatSize(size, dir);
     setSize(next);
     saveChatSize(next);
   };
   return (
-    <section className={cx(styles.box, hunt && styles.huntBox)} data-size={size} aria-label="채팅">
+    <section className={cx(styles.box, hunt && styles.huntBox)} data-size={size} data-bg={bg ? "on" : "off"} aria-label="채팅">
       <div className={styles.sizeTab}>
+        {/* 11/18 채팅 기록 바탕 켜고 끄기 */}
+        <button
+          type="button"
+          className={cx(styles.sizeBtn, styles.bgBtn)}
+          onClick={toggleBg}
+          aria-pressed={bg}
+          aria-label={bg ? "채팅 배경 끄기" : "채팅 배경 켜기"}
+          title={bg ? "채팅 배경 끄기" : "채팅 배경 켜기"}
+        >
+          배경
+        </button>
         <button type="button" className={styles.sizeBtn} onClick={() => step(-1)} disabled={size === "input"} aria-label="채팅창 줄이기" title="채팅창 줄이기">
           −
         </button>

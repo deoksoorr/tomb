@@ -228,7 +228,8 @@ describe("오류 수집", () => {
   const report = (ip: string, body: object) => errorsRoute.POST(call("/api/errors", { ip, body }));
   const adminList = () => bodyOf<AdminErrorsResponse>(adminErrors.GET(call("/api/admin/errors?days=7", { headers: ADMIN })));
 
-  it("같은 메시지는 묶어서 횟수·마지막 시각, 긴 메시지는 자르고, IP당 분당 10회", async () => {
+  // 11/18 IP 분당 한도는 서버 보호선만 (한 회사 수백 명이 한 IP) — 10 → 300
+  it("같은 메시지는 묶어서 횟수·마지막 시각, 긴 메시지는 자르고, IP당 분당 300회", async () => {
     const msg = `TypeError: x is undefined ${Math.random()}`;
     for (let i = 0; i < 3; i++)
       expect((await report("10.66.0.1", { kind: "error", message: msg, stack: "at a\nat b\nat c", url: "/?ch=1" })).status).toBe(204);
@@ -240,7 +241,7 @@ describe("오류 수집", () => {
     expect(list.errors.find((e) => e.kind === "react")!.message.length).toBeLessThanOrEqual(500);
 
     expect((await report("10.66.0.2", { kind: "nope", message: "a", url: "/" })).status).toBe(400);
-    for (let i = 0; i < 10; i++) await report("10.66.0.3", { kind: "error", message: `m${i}`, url: "/" });
+    for (let i = 0; i < 300; i++) await report("10.66.0.3", { kind: "error", message: `m${i % 5}`, url: "/" });
     expect((await report("10.66.0.3", { kind: "error", message: "m", url: "/" })).status).toBe(429);
     expect((await adminErrors.GET(call("/api/admin/errors"))).status).toBe(401);
   });

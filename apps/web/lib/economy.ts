@@ -86,8 +86,7 @@ export const DAILY_EARN_CAP = EARN_RULES.filter((r) => !OUTSIDE_TOTAL.has(r.sour
  *  - 대저택(누적 2,000 + 3,000 + 5,000 = 10,000P): 약 50일 — 가구·외관(4배)까지 더하면 그 이상
  */
 export const BALANCE_CAP = 99_999;
-/** 같은 IP에서 하루에 출석 포인트를 받을 수 있는 계정 수 (계정 여러 개로 출석 농사 방지) */
-export const ATTEND_ACCOUNTS_PER_IP = 3;
+// 11/18 같은 IP 계정 수 한도(ATTEND_ACCOUNTS_PER_IP 3)는 없앴다 — 회사 팀·가족이 한 IP로 한다 (NC소프트에서만 150명)
 
 /**
  * 관리자 경제 통계에서 운영자 계정 활동을 빼기 시작한 날 (KST YYYYMMDD). 이전 날짜 통계는 계정별로 나눌 수 없어 그대로라

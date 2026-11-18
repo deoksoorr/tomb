@@ -70,9 +70,19 @@ export function EndgameResult({ reward }: { reward: RunReward }) {
       )}
       {w?.suspect && (
         <p className={s.meta} role="status">
-          기록은 저장했어요. 확인이 필요한 판이라 랭킹에는 오르지 않아요.
+          기록 확인 중이에요. 포인트는 받았고, 확인되면 최고 층과 랭킹, 상자, 초월 EXP가 들어가요.
         </p>
       )}
+      {w?.topPending && (
+        <p className={cx(s.levelUp, s.mythicLine)} role="status">
+          서버 최고 기록이에요! 운영자가 확인하면 꼭대기 층 주인으로 올라가요.
+        </p>
+      )}
+      {reward.firstPending?.map((id) => (
+        <p key={id} className={cx(s.levelUp, s.mythicLine)} role="status">
+          서버 최초 기록이에요! 운영자가 확인하면 「{titleDef(id)?.name ?? id}」 칭호를 드려요.
+        </p>
+      ))}
       {w && (w.newBest || w.newWeek) && (
         <p className={s.levelUp} role="status">
           {w.newBest ? `최고 기록 ${w.best}층!` : `이번 주 기록 ${w.best}층!`}

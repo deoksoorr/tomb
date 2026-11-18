@@ -72,6 +72,24 @@ describe.skipIf(!!conn)("포구 오두막", () => {
     expect(before - (await points(a))).toBe(seaPlotCost("small", true));
   });
 
+  it("11/18 보안: 오두막을 먼저 사도 마을 집을 살 때 별장 값 차이를 더 낸다 (순서를 바꿔 별장 값을 피하지 못하게)", async () => {
+    const store = new MemoryHouseStore();
+    const a = await account(30_000);
+    await buyCottage(store, a, "먼저 오두막", "", "주인", null, 4, "small", "wood");
+    const fee = seaPlotCost("small", true) - seaPlotCost("small", false);
+    expect(fee).toBeGreaterThan(0);
+    // 마을 집 창이 그 차이를 미리 보여 준다
+    expect((await myHouse(store, a)).villaFee).toBe(fee);
+    const before = await points(a);
+    await buyPlot(store, a, "마을 집", "", "주인", null, 4);
+    expect(before - (await points(a))).toBe(plotCost("small") + fee);
+    // 두 집 합쳐 낸 값 = 마을 집 + 별장 (마을 집 먼저 산 경우와 같다)
+    expect(30_000 - (await points(a))).toBe(plotCost("small") + seaPlotCost("small", true));
+    // 오두막이 없으면 차이도 없다
+    const b = await account(30_000);
+    expect((await myHouse(store, b)).villaFee).toBeUndefined();
+  });
+
   it("터는 채널마다 6곳: 이미 있는 터는 막고, 다 차면 VILLAGE_FULL, 다른 채널은 따로", async () => {
     const store = new MemoryHouseStore();
     const owners = await Promise.all(Array.from({ length: SEA_LOT_COUNT + 1 }, () => account(10_000)));
@@ -211,7 +229,15 @@ describe.skipIf(!!conn)("등대 등불", () => {
     expect(await lampState(11, night + 120_000)).toMatchObject({ ch: 11, name: "가" });
     // 다른 채널은 따로
     expect(await lightLamp(12, b, "나", night)).toMatchObject({ lit: true, name: "나" });
+    // 11/18 보안: 한 사람은 하루에 한 채널만 (다른 채널을 돌며 도장을 모으지 못한다 — 그 채널은 켜지지 않은 채 남는다)
+    const stampsB = (await questStore().get(b)).stamps;
+    expect(await lightLamp(13, b, "나", night + 1000)).toMatchObject({ lit: false, done: true });
+    expect((await questStore().get(b)).stamps).toBe(stampsB);
+    expect(await lampState(13, night + 2000, true)).toMatchObject({ name: null });
+    // 다른 사람은 그 채널을 켤 수 있다
+    const c = nanoid();
+    expect(await lightLamp(13, c, "다", night + 3000)).toMatchObject({ lit: true, name: "다" });
     // 개발 서버 시험: 낮에도 force로
-    expect(await lightLamp(13, b, "나", day, true)).toMatchObject({ lit: true });
+    expect(await lightLamp(14, nanoid(), "라", day, true)).toMatchObject({ lit: true });
   });
 });

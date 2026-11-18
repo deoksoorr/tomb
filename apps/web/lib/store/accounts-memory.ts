@@ -3,7 +3,7 @@ import { CHAMP_ITEM_IDS, itemById, nameKey, PERMANENT_UNTIL, type CosmeticSlot }
 import { tierUntil } from "../attendTiers";
 import { legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { earnedBySource } from "../earnGauge";
-import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, earnRule, type EarnSource } from "../economy";
+import { BALANCE_CAP, earnRule, type EarnSource } from "../economy";
 import { askOf, earnTerms, raceField, raceShare, stayBonusAsk } from "../champPerks";
 import { NO_BOOST } from "../pointEvent";
 import { staffAccountIdNow } from "../staff";
@@ -95,10 +95,6 @@ type Acct = {
 export class MemoryAccounts implements AccountStore {
   private accts = new Map<string, Acct>();
   private codes = new Map<string, string>();
-  /** `${ipHash}:${day}` → 그날 출석 포인트를 받은 계정 */
-  private attendIps = new Map<string, Set<string>>();
-  /** `${ipHash}:${day}:${source}` → 그 IP가 그날 그 항목으로 받은 합계 */
-  private ipEarned = new Map<string, number>();
   /** 주간 랭킹 동점 정리용 순번 (값이 오를 때마다 1씩) */
   private tieSeq = 0;
   /** 경제 통계: 날짜 → 필드(`earn:{source}`, `spend:{분류}`, `refund`) → 합계 */
@@ -161,7 +157,7 @@ export class MemoryAccounts implements AccountStore {
   }
 
   /**
-   * 항목별·하루 전체·지갑 한도(+ ipHash가 있으면 같은 IP의 그 항목 합계) 안에서 적립.
+   * 항목별·하루 전체·지갑 한도 안에서 적립 (11/18 같은 IP 합계 한도는 없앴다 — ipHash는 받아도 쓰지 않는다).
    * lib/store/accounts-redis.ts의 Lua credit과 같은 규칙.
    * pre = 배수까지 이미 곱한 값 (머무르기 몰아서 정산·접속 시간 보너스 — Lua와 같은 순서로 계산한 값): ask = 줄 값, race = 레이스에 드는 값
    */
@@ -175,15 +171,12 @@ export class MemoryAccounts implements AccountStore {
     const t = earnTerms(opts.boost ?? NO_BOOST, source, opts.champ ?? []);
     const base = opts.amount ?? rule.points;
     const ask = opts.pre ? opts.pre.ask : askOf(base, t.m100);
-    const ipKey = opts.ipHash ? `${opts.ipHash}:${day}:${source}` : null;
-    const ipLeft = ipKey ? t.dailyMax * ATTEND_ACCOUNTS_PER_IP - (this.ipEarned.get(ipKey) ?? 0) : Infinity;
     // capless: 출석 달력 보상은 하루 전체 한도에 막히지 않는다 (accounts-redis.ts CLAIM_LUA와 같은 규칙)
-    const amount = Math.min(ask, t.dailyMax - got, capless ? Infinity : t.total - total, BALANCE_CAP - a.points, ipLeft);
+    const amount = Math.min(ask, t.dailyMax - got, capless ? Infinity : t.total - total, BALANCE_CAP - a.points);
     if (!(amount > 0)) return 0;
     a.earned.set(source, got + amount);
     // 접속 보너스는 하루 전체 한도와 별개라 _total에 더하지 않는다 (accounts-redis.ts credit의 outsideTotal)
     if (!outsideTotal) a.earned.set("_total", total + amount);
-    if (ipKey) this.ipEarned.set(ipKey, (this.ipEarned.get(ipKey) ?? 0) + amount);
     a.points += amount;
     this.addLifetime(a, amount);
     // 11/17 1위 혜택이 붙은 항목: 1위가 아니었으면 받았을 몫만 주간 포인트 레이스에 (칸이 없으면 오늘 그 항목 적립이 모두 레이스 몫이었다)
@@ -647,13 +640,10 @@ export class MemoryAccounts implements AccountStore {
     a.streak = a.lastAttend === yesterday ? a.streak + 1 : 1;
     a.lastAttend = day;
 
-    const key = `${ipHash}:${day}`;
-    const ids = this.attendIps.get(key) ?? new Set<string>();
-    const paid = ids.has(id) || ids.size < ATTEND_ACCOUNTS_PER_IP;
+    // 11/18 같은 IP에서 포인트 받는 계정 수 한도는 없앴다 (accounts-redis.ts CLAIM_LUA와 같다)
+    const paid = true;
     const earned = { daily: 0, streak: 0, monthly: 0 };
     if (paid) {
-      ids.add(id);
-      this.attendIps.set(key, ids);
       earned.daily = this.credit(a, "attend", day, {}, true);
       if (a.streak % 7 === 0) earned.streak = this.credit(a, "streak", day, {}, true);
     }
@@ -800,7 +790,8 @@ export class MemoryAccounts implements AccountStore {
     return graves.applyDecor(graveId, itemId, until, now);
   }
 
-  async putGraveUsing(id: string, itemId: string, grave: Grave): Promise<boolean> {
+  async putGraveUsing(id: string, itemId: string, grave: Grave, mustExist = false): Promise<boolean | "gone"> {
+    if (mustExist && !this.graves().hasSync(grave.id)) return "gone";
     if (!this.take(this.acct(id), itemId)) return false;
     this.graves().putSync(grave);
     return true;

@@ -3,7 +3,7 @@ import type { Redis } from "@upstash/redis";
 import { redisClient } from "../redisUsage";
 import { CHAMP_ITEM_IDS, itemById, MAX_DECOR_PER_GRAVE, nameKey, PERMANENT_UNTIL, type CosmeticSlot } from "@tomb/protocol";
 import { CALENDAR_TTL_SEC, legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
-import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, earnRule, type EarnSource } from "../economy";
+import { BALANCE_CAP, earnRule, type EarnSource } from "../economy";
 import { earnedBySource } from "../earnGauge";
 import { stayBonusAmounts, STAY_BONUS_EVERY_TICKS } from "../stayBonus";
 import { STAY_TICK_MINUTES, stayFillDays } from "../stayTime";
@@ -60,7 +60,7 @@ end
 `;
 
 /**
- * 항목별 하루 한도·하루 전체 한도·지갑 한도(+ ipKey가 있으면 같은 IP의 그 항목 합계) 안에서 적립하고
+ * 항목별 하루 한도·하루 전체 한도·지갑 한도(+ ipKey가 있으면 같은 IP의 그 항목 합계 — 11/18부터 넘기지 않는다) 안에서 적립하고
  * 모은 포인트(lifetime)와 포인트 랭킹을 같이 올린다. 개편 전 계정의 모은 포인트는 지금 잔액에서 시작한다.
  * 경제 통계(econ:{날짜})의 earn:{source}도 함께 올린다.
  * 그 주에 모은 포인트(주간 랭킹, c.week)도 같이 올린다.
@@ -148,7 +148,7 @@ local function puton(look, stash, slot, item, untilMs)
 end
 `;
 
-// KEYS: acct, earn, rank, econ, week, [earnIp]  ARGV: id, source, points, dailyMax, dailyCap, balanceCap, ttl, ipMax, now, raceAsk, raceMax('' = 1위 혜택 없음)
+// KEYS: acct, earn, rank, econ, week  ARGV: id, source, points, dailyMax, dailyCap, balanceCap, ttl, ipMax(11/18 안 씀), now, raceAsk, raceMax('' = 1위 혜택 없음)
 const EARN_LUA = `${CREDIT_FN}
 local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], week = KEYS[5], id = ARGV[1], dailyCap = tonumber(ARGV[5]), balanceCap = tonumber(ARGV[6]), ttl = ARGV[7], now = tonumber(ARGV[9]), raceAsk = tonumber(ARGV[10] or ''), raceMax = tonumber(ARGV[11] or '') }
 return credit(c, ARGV[2], tonumber(ARGV[3]), tonumber(ARGV[4]), KEYS[6], tonumber(ARGV[8]))
@@ -261,12 +261,11 @@ if ticks < tonumber(ARGV[13]) then return {-2, ticks, 0, 0, 0} end
 local streak = 1
 if last == ARGV[3] then streak = tonumber(redis.call('HGET', KEYS[1], 'streak') or '0') + 1 end
 redis.call('HSET', KEYS[1], 'lastAttend', ARGV[2], 'streak', streak)
-local paid = redis.call('SISMEMBER', KEYS[3], ARGV[1]) == 1 or redis.call('SCARD', KEYS[3]) < tonumber(ARGV[4])
+-- 11/18 같은 IP에서 포인트 받는 계정 수 한도는 없앴다 (KEYS[3]·ARGV[4]는 자리만 남는다)
+local paid = true
 local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[4], econ = KEYS[5], week = KEYS[6], id = ARGV[1], dailyCap = 1000000000, balanceCap = tonumber(ARGV[12]), ttl = ARGV[5], now = tonumber(ARGV[17]) }
 local a, s, m = 0, 0, 0
 if paid then
-  redis.call('SADD', KEYS[3], ARGV[1])
-  redis.call('EXPIRE', KEYS[3], ARGV[5])
   a = credit(c, 'attend', tonumber(ARGV[6]), tonumber(ARGV[7]))
   if streak % 7 == 0 then s = credit(c, 'streak', tonumber(ARGV[8]), tonumber(ARGV[9])) end
 end
@@ -516,6 +515,7 @@ return json
 // 유료 디자인 묘비 저장: 디자인권 차감과 묘비 저장(RedisStore.put과 같은 세 명령)을 한 번에
 // KEYS: inv, meta, created, graveChannel  ARGV: itemId, graveId, json, createdAt, channel
 const PUT_WITH_ITEM_LUA = `${TAKE_FN}
+if ARGV[6] == '1' and redis.call('HEXISTS', KEYS[2], ARGV[2]) == 0 then return -1 end
 if not take(KEYS[1], ARGV[1]) then return 0 end
 redis.call('HSET', KEYS[2], ARGV[2], ARGV[3])
 redis.call('ZADD', KEYS[3], ARGV[4], ARGV[2])
@@ -792,7 +792,7 @@ export class RedisAccounts implements AccountStore {
     const t = earnTerms(boost, source, champ);
     const base = opts.amount ?? rule.points;
     const keys = [K.acct(id), K.earn(id, day), K.rankPoints, await econKeyFor(id, day), K.rankPointsWeek(weekOfDay(day))];
-    if (opts.ipHash) keys.push(K.earnIp(opts.ipHash, day));
+    // 11/18 같은 IP 합계 한도는 없앴다 (회사·집에서 여럿이 한 IP로 한다 — 사용자). credit의 ipKey(KEYS[6])는 비워 둔다
     const r = await this.redis.eval<string[], number>(EARN_LUA, keys, [
       id,
       source,
@@ -801,7 +801,7 @@ export class RedisAccounts implements AccountStore {
       String(t.total),
       String(BALANCE_CAP),
       String(EARN_TTL_SEC),
-      String(t.dailyMax * ATTEND_ACCOUNTS_PER_IP),
+      "0",
       String(Date.now()),
       String((base * t.race100) / 100),
       t.champ ? String(t.raceMax) : "",
@@ -1112,7 +1112,7 @@ export class RedisAccounts implements AccountStore {
           id,
           day,
           yesterday,
-          String(ATTEND_ACCOUNTS_PER_IP),
+          "0",
           String(EARN_TTL_SEC),
           String(attend.points),
           String(attend.dailyMax),
@@ -1230,14 +1230,15 @@ export class RedisAccounts implements AccountStore {
     return r === "" ? "no_item" : (JSON.parse(r) as GraveDecor[]);
   }
 
-  async putGraveUsing(id: string, itemId: string, grave: Grave): Promise<boolean> {
+  async putGraveUsing(id: string, itemId: string, grave: Grave, mustExist = false): Promise<boolean | "gone"> {
     const channel = grave.channel ?? 1;
     const k = chKeys(channel);
     const r = await this.redis.eval<string[], number>(
       PUT_WITH_ITEM_LUA,
       [K.inv(id), k.meta, k.created, K.graveChannel],
-      [itemId, grave.id, encode({ ...grave, channel }), String(grave.createdAt), String(channel)],
+      [itemId, grave.id, encode({ ...grave, channel }), String(grave.createdAt), String(channel), mustExist ? "1" : "0"],
     );
+    if (Number(r) === -1) return "gone";
     return Number(r) === 1;
   }
 

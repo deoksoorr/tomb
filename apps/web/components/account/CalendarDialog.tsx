@@ -80,7 +80,7 @@ export default function CalendarDialog({ onClose }: { onClose: () => void }) {
       setCal(res.calendar);
       setStampedNow(true);
       const { daily, streak, monthly } = res.earned;
-      const parts = [daily ? `출석 +${daily}P` : "도장만 찍었어요 (같은 와이파이에서 받은 계정이 많아요)"];
+      const parts = [daily ? `출석 +${daily}P` : "도장만 찍었어요 (지갑이 가득 찼어요)"];
       if (streak) parts.push(`${res.calendar.rewards.streakEvery}일 연속 +${streak}P`);
       if (monthly) parts.push(`한 달 개근 +${monthly}P`);
       const msg = parts.join(" · ");

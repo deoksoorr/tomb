@@ -141,8 +141,15 @@ describe("낚시", () => {
     vi.restoreAllMocks();
     // 놓침 (ok=false): 결과 없이 끝
     const c3 = await body<CastResponse>(await cast.POST(call("/x", v, { spot: "f_420_675" })));
+    const before = (await state(v)).today.fish;
     const miss = await body<ReelResponse>(await reel.POST(call("/x", v, { ticket: c3.ticket, ok: false })));
     expect(miss.result).toBeNull();
+    // 11/18 보안: 놓쳐도 오늘 낚시 1번
+    expect(miss.state.today.fish).toBe(before + 1);
+    // 11/18 보안: 끝내지 않은 찌를 버리고 다시 던져도 1번 (그림자만 보고 고르기 막기)
+    await cast.POST(call("/x", v, { spot: PIER }));
+    await cast.POST(call("/x", v, { spot: PIER }));
+    expect((await state(v)).today.fish).toBe(before + 2);
     // 너무 오래
     const c4 = await body<CastResponse>(await cast.POST(call("/x", v, { spot: PIER })));
     later(c4.biteInMs + 120_000);

@@ -3,7 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { MonsterId } from "@/lib/rpg/catalog";
 import { encodeSg, type SgItem } from "@/lib/rpg/setGear";
 import { nextPity } from "@/lib/rpg/setGearRoll";
-import { forgetEndgameLaunch } from "@/lib/rpg/service";
+import { approveReview, dropSeedOf, forgetEndgameLaunch, listReviews } from "@/lib/rpg/service";
 import { getRpgStore } from "@/lib/rpg/store";
 import { towerChestDrops, towerPlan } from "@/lib/rpg/tower";
 import { getTowerStore } from "@/lib/rpg/towerStore";
@@ -109,10 +109,16 @@ const mk = (p: Partial<SgItem> = {}): SgItem => ({
 });
 
 /** 판 안 미리보기: 게임이 상자를 여는 순서대로 천장을 센다 */
-function preview(s: RunStartResponse, chests: number[], pity: number, sup = false): Drop[] {
+/** 11/18 상자는 서버 비밀값으로 만든 드롭 시드로 굴린다 (판 시작 응답의 시드가 아니다 — 화면은 /api/rpg/run/reveal로 받는다) */
+async function dropSeed(s: RunStartResponse): Promise<number> {
+  return dropSeedOf((JSON.parse(Buffer.from(s.ticket.split(".")[0], "base64url").toString()) as { n: string }).n);
+}
+
+async function preview(s: RunStartResponse, chests: number[], pity: number, sup = false): Promise<Drop[]> {
   let p = pity;
+  const seed = await dropSeed(s);
   return chests.flatMap((f) => {
-    const d = towerChestDrops(s.seed, f, s.tower!, p, sup);
+    const d = towerChestDrops(seed, f, s.tower!, p, sup);
     p = nextPity(d, p);
     return d;
   });
@@ -125,7 +131,7 @@ describe("우두머리 상자: 세트 장비·재료·꾸미기", () => {
     expect(s.superDrops).toBeUndefined();
     const r = await end(v, s, 10);
     expect(r.reward.tower!.chests).toEqual([15, 20]);
-    const want = preview(s, [15, 20], 5);
+    const want = await preview(s, [15, 20], 5);
     const sets = (d: Drop[]) => d.filter((x) => x.kind === "set").map((x) => x.id);
     expect(sets(r.reward.drops)).toEqual(sets(want));
     const c = await getRpgStore().get(v.id);
@@ -133,7 +139,8 @@ describe("우두머리 상자: 세트 장비·재료·꾸미기", () => {
     expect(c.mats!.doc).toBe(want.filter((x) => x.id === "m_doc").reduce((a, x) => a + x.qty, 0));
     // 천장 5에서 상자 둘: 세트 장비가 안 나왔으면 7, 나왔으면 0부터 다시
     let p = 5;
-    for (const f of [15, 20]) p = nextPity(towerChestDrops(s.seed, f, 11, p), p);
+    const ds = await dropSeed(s);
+    for (const f of [15, 20]) p = nextPity(towerChestDrops(ds, f, 11, p), p);
     expect(c.sgPity).toBe(p);
     // 10층 단위를 처음 넘은 주간 기록 (11~20층) → 보호 문서 1장
     expect(c.mats!.prot).toBe(1);
@@ -149,7 +156,7 @@ describe("우두머리 상자: 세트 장비·재료·꾸미기", () => {
       const r = await end(op, s, 10);
       expect(r.reward.drops.filter((x) => x.kind === "set")).toHaveLength(2);
       expect(r.reward.drops.filter((x) => x.kind === "set").map((x) => x.id)).toEqual(
-        preview(s, [15, 20], 0, true)
+        (await preview(s, [15, 20], 0, true))
           .filter((x) => x.kind === "set")
           .map((x) => x.id),
       );
@@ -253,6 +260,10 @@ describe("강화·분해·끼기 (app/api/rpg/gear)", () => {
       to: 15,
       reached15: true,
     });
+    // 11/18 서버 최초는 관리자 확인 뒤에 (줄을 선다)
+    expect((await getTowerStore().firsts()).t_firstEnh15).toBeUndefined();
+    const q = (await listReviews()).find((i) => i.kind === "first" && i.titleId === "t_firstEnh15" && i.acct === v.id)!;
+    expect(await approveReview(q.id)).toEqual({ kind: "first", granted: true });
     expect((await getTowerStore().firsts()).t_firstEnh15).toBe(v.id);
     expect(r.body.character.enhMax).toBe(15);
     const lines = await getMegaphone()

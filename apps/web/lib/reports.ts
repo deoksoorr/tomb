@@ -11,7 +11,8 @@ export const REPORT_REASON_LABELS: Record<ReportReason, string> = {
 };
 
 /** 묘비별 신고 기록 한 줄 (최근 REPORT_LOG_MAX개만 남긴다) */
-export type ReportLogEntry = { at: number; reason: ReportReason };
+/** weak = 갓 만든 계정의 신고 (11/18 — 숨김 수에는 안 들어가고 관리자 신고함에만 보인다) */
+export type ReportLogEntry = { at: number; reason: ReportReason; weak?: true };
 export const REPORT_LOG_MAX = 50;
 
 // ── 47번 유저·확성기 신고 (게임 안 캐릭터 메뉴·확성기 창) ──

@@ -134,7 +134,8 @@ export const zoneMaxLots = (zone: HouseZone | undefined) => (zone === "sea" ? SE
 
 export type CreateResult = { lot: number } | "exists" | "lot_taken" | "full";
 
-export type SaveResult = "ok" | "no_house" | "tier" | "not_owned";
+/** conflict = 11/18 읽은 뒤 다른 저장이 먼저 됐다 (base가 지금 updatedAt과 다르다 — 배치·외관을 동시에 저장해 놓은 개수가 옛 값으로 덮이지 않게) */
+export type SaveResult = "ok" | "no_house" | "tier" | "not_owned" | "conflict";
 
 /**
  * 오래 비운 집 정리 (reclaim.ts). owner·tier·ch는 정리할 때 읽은 값이고, 그대로일 때만 비운다.
@@ -211,7 +212,8 @@ export interface HouseStore {
   takeItem(pair: HousePair, zone: HouseZone, itemId: string): Promise<"ok" | "placed" | "away" | "none">;
   /**
    * 배치·외관 저장 (null인 쪽은 그대로). tier가 그대로이고 counts(안+밖 전체)가 공용 가방 규칙(fitsPool, 다른 집에 놓인 것까지)에 맞을 때만 — 한 번에.
-   * 검증·점수 계산은 호출자가 먼저 한다. 배치가 바뀌면 같은 단계에서 치우거나 옮긴 가구의 상태·없어진 화분 기록을 지운다
+   * 검증·점수 계산은 호출자가 먼저 한다. 배치가 바뀌면 같은 단계에서 치우거나 옮긴 가구의 상태·없어진 화분 기록을 지운다.
+   * 11/18 base = 호출자가 읽은 집의 updatedAt (주면 그대로일 때만 저장, 아니면 "conflict"). 저장하면 updatedAt은 반드시 커진다
    */
   saveDesign(
     pair: HousePair,
@@ -222,6 +224,7 @@ export interface HouseStore {
     counts: Record<string, number>,
     placedScore: number,
     now: number,
+    base?: number,
   ): Promise<SaveResult>;
   /** 좋아요. 오늘 이미 눌렀으면 "already", 집이 없거나 숨김이면 null */
   like(id: string, visitorId: string, day: string): Promise<{ likes: number; score: number } | "already" | null>;
@@ -236,8 +239,11 @@ export interface HouseStore {
   /** 최신 먼저. withHidden=false면 가린 글은 뺀다 */
   guestbook(id: string, withHidden: boolean): Promise<(StoredGuest & { hidden: boolean })[]>;
   removeGuest(id: string, entryId: string): Promise<StoredGuest | null>;
-  /** 신고 (IP 해시 단위). GUEST_REPORT_HIDE개 모이면 가린다. 글이 없으면 null */
-  reportGuest(id: string, entryId: string, ipHash: string): Promise<"added" | "duplicate" | null>;
+  /**
+   * 신고 (IP 해시 단위). GUEST_REPORT_HIDE개 모이면 가린다. 글이 없으면 null.
+   * 11/18 weak(갓 만든 계정)면 관리자 신고함에만 보이고(신고 수 0으로라도 목록에 올린다) 가림 수에는 넣지 않는다
+   */
+  reportGuest(id: string, entryId: string, ipHash: string, weak?: boolean): Promise<"added" | "duplicate" | null>;
   setGuestHidden(id: string, entryId: string, hidden: boolean): Promise<boolean>;
   /** 관리자: 신고가 있는 글 → 신고 수 */
   guestReports(id: string): Promise<Map<string, number>>;
@@ -526,11 +532,13 @@ export class MemoryHouseStore implements HouseStore {
     counts: Record<string, number>,
     placedScore: number,
     now: number,
+    base?: number,
   ) {
     const { self: id, other } = pairIds(pair, zone);
     const h = this.houses.get(id);
     if (!h) return "no_house" as const;
     if (h.rec.tier !== tier) return "tier" as const;
+    if (base !== undefined && h.rec.updatedAt !== base) return "conflict" as const;
     if (!fitsPool(counts, Object.fromEntries(this.pool(pair)), this.own(id), this.own(other), this.placedOf(other))) return "not_owned" as const;
     h.placed = new Map(Object.entries(counts));
     if (layout) {
@@ -538,7 +546,7 @@ export class MemoryHouseStore implements HouseStore {
       this.pruneFor(id, layout);
     }
     if (exterior) h.rec.exterior = { ...exterior };
-    Object.assign(h.rec, { placedScore, updatedAt: now });
+    Object.assign(h.rec, { placedScore, updatedAt: Math.max(now, h.rec.updatedAt + 1) });
     return "ok" as const;
   }
 
@@ -607,11 +615,12 @@ export class MemoryHouseStore implements HouseStore {
     return g;
   }
 
-  async reportGuest(id: string, entryId: string, ipHash: string) {
+  async reportGuest(id: string, entryId: string, ipHash: string, weak = false) {
     const h = this.houses.get(id);
     if (!h || !h.guests.some((g) => g.id === entryId)) return null;
     let set = h.guestReports.get(entryId);
     if (!set) h.guestReports.set(entryId, (set = new Set()));
+    if (weak) return "added" as const;
     if (set.has(ipHash)) return "duplicate" as const;
     set.add(ipHash);
     if (set.size >= GUEST_REPORT_HIDE) h.guestHidden.add(entryId);

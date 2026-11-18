@@ -21,3 +21,8 @@ export function stepChatSize(size: ChatSize, dir: 1 | -1): ChatSize {
 
 export const readChatSize = (): ChatSize => parseChatSize(readItem(KEY));
 export const saveChatSize = (size: ChatSize): void => writeItem(KEY, size);
+
+// 11/18 채팅 기록 바탕 (은은한 반투명). 켜 두는 게 기본이고 [−][+] 왼쪽 [배경]으로 끈다. 폰 채팅 기록도 같은 값을 따른다
+const BG_KEY = "tomb.ui.chatBg";
+export const readChatBg = (): boolean => readItem(BG_KEY) !== "off";
+export const saveChatBg = (on: boolean): void => writeItem(BG_KEY, on ? "on" : "off");

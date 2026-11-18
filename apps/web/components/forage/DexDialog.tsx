@@ -34,6 +34,7 @@ import ItemIcon from "../ui/ItemIcon";
 import ui from "../ui/ui.module.css";
 import ConstellationDex from "./ConstellationDex";
 import MonsterDex from "./MonsterDex";
+import { OddsLink } from "../odds/OddsLayer";
 import { forageStore, useForage } from "./forageStore";
 import s from "./forage.module.css";
 
@@ -184,7 +185,9 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
                     {nextTitle ? `다음 칭호 「${nextTitle.name}」까지 ${Math.max(0, nextTitle.need - got)}종` : "이 분류 칭호를 모두 받았어요"}.{" "}
                     {cat === "mob"
                       ? `새 몬스터를 처음 쓰러뜨리면 ${MOB_REWARD_RANGE}를 받아요. 우두머리일수록 많이 받아요.`
-                      : `새 종을 처음 올리면 ${REWARD_RANGE}를 받아요. 희귀할수록 많이 받아요.`}
+                      : `새 종을 처음 올리면 ${REWARD_RANGE}를 받아요. 희귀할수록 많이 받아요.`}{" "}
+                    {cat !== "star" && cat !== "mob" && <OddsLink section="forage" label="희귀도별 확률 보기" />}
+                    {cat === "mob" && <OddsLink section="hunt" label="드롭 확률 보기" />}
                   </p>
                 </div>
               )}

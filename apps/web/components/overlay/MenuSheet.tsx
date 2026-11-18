@@ -120,7 +120,7 @@ export default function MenuSheet({
     {
       target: "gifts",
       icon: "gift",
-      label: "선물함 (M)",
+      label: "선물함",
       desc: giftCount > 0 ? `안 받은 선물 ${giftCount}개` : "마을 관리인이 보낸 선물",
       badge: giftCount ? String(giftCount) : undefined,
       redDot: giftCount > 0,
