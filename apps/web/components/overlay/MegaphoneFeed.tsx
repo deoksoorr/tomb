@@ -30,7 +30,6 @@ export default function MegaphoneFeed({ channel, floating = false }: { channel: 
   const logRef = useRef<HTMLOListElement>(null);
   const iAmStaff = useBridgeValue("me:staff")?.on === true;
   // 고정 공지 전체 펼침 · 운영자 쓰기 창 · 지울 공지
-  const [pinOpen, setPinOpen] = useState(false);
   const [writing, setWriting] = useState(false);
   const [removing, setRemoving] = useState<MegaPin | null>(null);
 
@@ -50,8 +49,8 @@ export default function MegaphoneFeed({ channel, floating = false }: { channel: 
   }, [entries, collapsed]);
 
   // 기록을 접어 두면 첫 공지 한 줄만 (펼쳐 보면 모두)
-  const shownPins = collapsed && !pinOpen ? pins.slice(0, 1) : pins;
-  const hiddenPins = pins.length - shownPins.length;
+  // 11/18 데스크톱 고정 공지는 늘 모두 펼쳐 둔다 (사용자 — 접기 없음). 터치는 칩(아래 floating)
+  const shownPins = pins;
 
   // 터치: 확성기 줄 없이 공지 칩 + 가운데 연출만
   if (floating) {
@@ -91,15 +90,14 @@ export default function MegaphoneFeed({ channel, floating = false }: { channel: 
         )}
       </div>
       {shownPins.length > 0 && (
-        <ul className={cx(styles.pins, pinOpen && styles.pinsOpen)} aria-label="고정 공지">
+        <ul className={cx(styles.pins, styles.pinsOpen)} aria-label="고정 공지">
           {shownPins.map((p) => (
             <li key={p.scope} className={styles.pin}>
-              <button type="button" className={styles.pinBody} onClick={() => setPinOpen(!pinOpen)} aria-expanded={pinOpen} title={pinOpen ? undefined : p.text}>
+              <div className={styles.pinBody}>
                 {/* 모든 채널 공지는 딱지를 붉게 (전체 확성기와 같은 색) */}
                 <span className={cx(styles.pinTag, p.scope === "all" && styles.pinTagAll)}>공지</span>
                 <span className={styles.pinText}>{p.text}</span>
-                {hiddenPins > 0 && <span className={styles.pinMore}>+{hiddenPins}</span>}
-              </button>
+              </div>
               {iAmStaff && (
                 <button
                   type="button"

@@ -2,7 +2,8 @@
 .feed {
   display: grid;
   gap: 6px;
-  width: min(520px, calc(100vw - 2 * var(--gutter)));
+  /* 11/18 채팅창과 같이 아래 바로 가기 줄의 [공지] 단추 오른쪽 끝까지 (--dock-w, GameShell) */
+  width: min(var(--dock-w, 520px), calc(100vw - 2 * var(--gutter)));
   justify-items: start;
 }
 
@@ -115,6 +116,11 @@
   line-height: 1.5;
   text-align: left;
   cursor: pointer;
+}
+
+/* 11/18 데스크톱 고정 공지는 늘 펼쳐져 있어 누를 것이 없다 */
+div.pinBody {
+  cursor: default;
 }
 
 .pinTag {

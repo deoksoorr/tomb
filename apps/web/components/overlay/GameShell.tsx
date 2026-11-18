@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import dynamic from "next/dynamic";
 import { bridge, type GameStartOptions } from "@/game/bridge";
@@ -233,7 +233,8 @@ type Panel =
   | "staffEarn";
 
 /**
- * 11/16 창 단축키 (데스크톱): 마을·사냥·미니게임·집 어디에서도 쓰지 않는 글자만 골랐다 (B·G·L·M·N·O·P·U).
+ * 11/16 창 단축키 (데스크톱): 마을·사냥·미니게임·집 어디에서도 쓰지 않는 글자만 골랐다 (B·G·L·N·O·P·U).
+ * 11/18 M은 선물함 → 지도 펴기·접기로 (Minimap이 직접 듣는다, 사용자). 선물함은 단축키 없음
  * 같은 키로 다시 누르면 닫는다. L(랭킹)은 창이 아니라 오른쪽 접이식이라 따로 (rankOpen)
  */
 const PANEL_KEYS: Readonly<Record<string, Panel>> = {
@@ -243,7 +244,6 @@ const PANEL_KEYS: Readonly<Record<string, Panel>> = {
   KeyU: "race",
   KeyB: "calendar",
   KeyN: "notices",
-  KeyM: "gifts",
 };
 const RANK_KEY = "KeyL";
 
@@ -293,6 +293,28 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const coarse = useMediaQuery("(pointer: coarse)");
   // 데스크톱인데 창이 좁으면 윗줄에 채널 표시 자리가 없다 → 아래 안내 줄로
   const narrow = useMediaQuery("(max-width: 700px)");
+  // 11/18 데스크톱: 확성기·고정 공지 창과 채팅창 폭을 아래 바로 가기 줄의 [공지] 단추 오른쪽 끝에 맞춘다 (--dock-w, 문서 루트)
+  const dockRef = useRef<HTMLElement>(null);
+  const noticeBtnRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const nav = dockRef.current;
+    const btn = noticeBtnRef.current;
+    const root = document.documentElement;
+    if (!nav || !btn) return;
+    const fit = () => {
+      const w = Math.round(btn.getBoundingClientRect().right - nav.getBoundingClientRect().left);
+      if (w > 200) root.style.setProperty("--dock-w", `${w}px`);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(nav);
+    window.addEventListener("resize", fit);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", fit);
+      root.style.removeProperty("--dock-w");
+    };
+  }, [ready, coarse]);
   const scene = useBridgeValue("scene:changed")?.scene;
   const inShop = scene === "shop";
   // 집·사냥터·미니게임 안에서는 그 화면이 자기 HUD를 그린다. 월드 HUD는 숨기기만 한다(BGM 플레이어는 계속 살아 있게)
@@ -719,7 +741,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                   className={cx(ui.button, ui.icon, ui.top, styles.topButton)}
                   onClick={() => setPanel("gifts")}
                   aria-label={giftCount ? `선물함 (안 받은 선물 ${giftCount}개)` : "선물함"}
-                  title="선물함 (M)"
+                  title="선물함"
                 >
                   <PixelIcon name="gift" />
                   {giftCount > 0 && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
@@ -781,7 +803,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           {coarse && <MegaphoneFeed channel={channel} floating />}
           {/* 바로 가기 줄: 데스크톱만 왼쪽 아래 모서리. 터치는 위쪽 [메뉴] 시트에 모두 있고 [표현]만 행동 버튼 옆(MobileControls) */}
           {!coarse && (
-            <nav className={styles.dock} aria-label="바로 가기">
+            <nav ref={dockRef} className={styles.dock} aria-label="바로 가기">
               <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("menu")}>
                 <PixelIcon name="menu" />
                 메뉴
@@ -825,7 +847,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 소식
                 {(me?.activityUnread ?? 0) > 0 && <span className={styles.badge}>{me?.activityUnread}</span>}
               </button>
-              <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("notices")}>
+              <button ref={noticeBtnRef} type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("notices")}>
                 <PixelIcon name="bell" />
                 공지
                 <span className={styles.dockKey} aria-hidden="true">N</span>
