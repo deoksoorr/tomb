@@ -219,10 +219,10 @@ describe("별자리 잇기 계획 (2판)", () => {
 
 describe("11/18 별자리 쉽게", () => {
   it("판정 범위를 넓혔다 (DEX 0 기준 [완벽, 좋아] ms)", () => {
-    expect(starWindows("easy", 0)).toEqual([90, 225]);
-    expect(starWindows("normal", 0)).toEqual([80, 195]);
-    expect(starWindows("hard", 0)).toEqual([69, 170]);
-    expect(starWindows("hell", 0)).toEqual([56, 140]);
+    expect(starWindows("easy", 0)).toEqual([75, 190]);
+    expect(starWindows("normal", 0)).toEqual([65, 170]);
+    expect(starWindows("hard", 0)).toEqual([55, 145]);
+    expect(starWindows("hell", 0)).toEqual([45, 120]);
   });
 
   it("별자리 포인트는 따로 1.5배쯤 (곤충 채집은 그대로), 하루 한도 450", () => {
