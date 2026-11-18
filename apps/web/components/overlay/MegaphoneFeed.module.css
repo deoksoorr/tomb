@@ -2,7 +2,7 @@
 .feed {
   display: grid;
   gap: 6px;
-  /* 11/18 채팅창과 같이 아래 바로 가기 줄의 [공지] 단추 오른쪽 끝까지 (--dock-w, GameShell) */
+  /* 11/18 채팅창과 같이 아래 바로 가기 줄의 [집] 단추 오른쪽 끝까지 (--dock-w, GameShell) */
   width: min(var(--dock-w, 520px), calc(100vw - 2 * var(--gutter)));
   justify-items: start;
 }
