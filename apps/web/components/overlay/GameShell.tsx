@@ -76,7 +76,7 @@ import WishDialog from "@/components/plaza/WishDialog";
 import LotteryDialog from "@/components/plaza/LotteryDialog";
 import SkyHud from "@/components/sky/SkyHud";
 import SeaViewHud from "@/components/sea/SeaViewHud";
-import GhostLayer from "@/components/sea/GhostLayer";
+import GhostLayer, { GhostStaffButton } from "@/components/sea/GhostLayer";
 import { SnackVendLayer } from "@/components/sea/GullSnacks";
 import UrgentHud from "@/components/forage/UrgentHud";
 import FoodGauge from "@/components/camp/FoodGauge";
@@ -701,6 +701,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 <BgmPlayer compact />
                 {/* 불멍·놀이기구 중: 폭죽이 있으면 위쪽 줄에서 바로 쏘기 (메뉴 시트를 안 거쳐도) */}
                 {campfire && <FireworkButton variant="top" onOpen={() => setPanel("fireworks")} />}
+                <GhostStaffButton variant="top" className={cx(ui.button, ui.icon, ui.top)} />
               </div>
               <Hud compact onOpenChannels={() => setPanel("channels")} />
               {/* 11/15 먹거리 효과 게이지: 위 줄 아래 왼쪽에 작게 */}
@@ -859,6 +860,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 )}
               </button>
               <FireworkButton onOpen={() => setPanel("fireworks")} />
+              {/* 11/18 바닷가 운영자 유령선 (운영자에게만) */}
+              <GhostStaffButton />
             </nav>
           )}
           <div className={styles.bottomCenter}>
