@@ -79,8 +79,10 @@ describe("사냥터 API", () => {
     const body = (await res.json()) as RunFinishResponse;
     expect(res.status).toBe(200);
     expect(body.reward.points).toBe(20);
-    expect(body.reward.exp).toBeGreaterThan(50);
-    expect(body.view.character.level).toBeGreaterThan(1);
+    // 11/19 레벨에 맞는 사냥터를 다 깨면 다음 레벨 필요 EXP(1→2: 50)의 절반
+    expect(body.reward.exp).toBe(25);
+    expect(body.view.character.level).toBe(1);
+    expect(body.view.character.exp).toBe(25);
     // 마신 1개를 빼고, 드롭(시드가 무작위라 가끔)으로 들어온 만큼 더한다
     const coffeeDrops = body.reward.drops.filter((d) => d.id === "p_coffee").reduce((n, d) => n + d.qty, 0);
     expect(body.view.character.potions.p_coffee).toBe(2 + coffeeDrops);
@@ -137,11 +139,11 @@ describe("사냥터 API", () => {
     vi.restoreAllMocks();
   });
 
-  it("사냥 포인트는 하루 한도까지만 (earnPoints 한도)", async () => {
+  it("11/19 사냥 포인트는 하루 한도 없이 다 받는다", async () => {
     const v = await newVisitor();
-    const cap = earnRule("hunt").dailyMax;
-    // 한 시간에 30판 제한이 있어 한도 바로 아래까지는 미리 채워 둔다
-    await getAccounts().earn(v.id, "hunt", kstDay(), { amount: cap - 30 });
+    expect(earnRule("hunt").dailyMax).toBeNull();
+    // 예전 한도(1200)를 넘게 받은 날도 판 포인트를 그대로 받는다
+    await getAccounts().earn(v.id, "hunt", kstDay(), { amount: 1500 });
     let total = 0;
     for (let i = 0; i < 3; i++) {
       const s = await startRun(v);
@@ -150,9 +152,9 @@ describe("사냥터 API", () => {
       vi.restoreAllMocks();
       const body = (await res.json()) as RunFinishResponse;
       total += body.reward.points;
-      if (i === 2) expect(body.reward.capped).toBe(true);
+      expect(body.reward.capped).toBe(false);
     }
-    expect(total).toBe(30);
+    expect(total).toBe(60);
   });
 
   it("최근 60분 동안 30판까지", async () => {

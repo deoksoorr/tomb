@@ -6,6 +6,7 @@ import { signTicket, verifyTicket } from "./ticket";
 import {
   climbTime,
   checkTowerStart,
+  CURSES,
   cursesAt,
   evalTower, towerClean,
   floorMinSec,
@@ -14,7 +15,10 @@ import {
   TOWER_CHESTS_PER_DAY,
   TOWER_FLOOR_POINTS,
   TOWER_POWER,
+  TOWER_STEEP_FROM,
   TOWER_TAUNTS,
+  TOWER_WAVE_GAP_SEC,
+  towerHpMul,
   towerChestDrops,
   towerCheckpoints,
   towerCurseFx,
@@ -76,13 +80,25 @@ function climb(
 }
 
 describe("층 배율·테마·저주", () => {
-  it("체력·공격력 ×1.06^층, 방어 ×1.023^층 (기본 세기 하나 — 테마가 바뀌어도 약해지지 않는다)", () => {
-    expect(towerScale(10).hp).toBeCloseTo(1.06 ** 10);
-    expect(towerScale(10).def).toBeCloseTo(1.023 ** 10);
-    expect(towerScale(50).hp).toBeCloseTo(18.42, 1);
+  it("11/19 레이스형 곡선: 1층 ×0.7, 100층까지 체력 ×1.018·공격 ×1.008·방어 ×1.01, 그 위로 체력 ×1.075·공격 ×1.12·방어 ×1.023 (기본 세기 하나)", () => {
+    expect(towerScale(1)).toMatchObject({ hp: 0.7, atk: 0.7, def: 1 });
+    expect(towerScale(10).hp).toBeCloseTo(0.7 * 1.018 ** 9);
+    expect(towerScale(10).atk).toBeCloseTo(0.7 * 1.008 ** 9);
+    expect(towerScale(10).def).toBeCloseTo(1.01 ** 9);
+    expect(towerScale(100).hp).toBeCloseTo(0.7 * 1.018 ** 99);
+    expect(towerScale(110).hp).toBeCloseTo(0.7 * 1.018 ** 99 * 1.075 ** 10);
+    expect(towerScale(110).atk).toBeCloseTo(0.7 * 1.008 ** 99 * 1.12 ** 10);
+    expect(towerScale(110).def).toBeCloseTo(1.01 ** 99 * 1.023 ** 10);
+    // 예전(×1.06^층) 1층·10층보다 약하고, 100층도 예전 25층 남짓
+    expect(towerHpMul(1)).toBeLessThan(1.06);
+    expect(towerHpMul(10)).toBeLessThan(1.06 ** 10);
+    expect(towerHpMul(100)).toBeLessThan(1.06 ** 25);
     const at = (f: number) =>
       monsterStats("hr_chair", "hell", TOWER_POWER, towerScale(f)).maxHp;
-    for (let f = 1; f < 40; f++) expect(at(f + 1)).toBeGreaterThan(at(f));
+    for (let f = 1; f < 140; f++) expect(at(f + 1)).toBeGreaterThan(at(f));
+    // 100층 위 열 층은 100층 아래 열 층보다 훨씬 가파르다
+    expect(towerHpMul(120) / towerHpMul(110)).toBeGreaterThan(1.5 * (towerHpMul(100) / towerHpMul(90)));
+    expect(towerScale(120).atk / towerScale(110).atk).toBeGreaterThan(2.5 * (towerScale(100).atk / towerScale(90).atk));
     expect(
       monsterStats("hr_chair", "hell", TOWER_POWER, towerScale(20)).exp,
     ).toBe(monsterStats("hr_chair", "hell", TOWER_POWER).exp);
@@ -141,11 +157,12 @@ describe("층 배율·테마·저주", () => {
       }
   });
 
-  it("저주는 층대마다 쌓인다: 10 물약 절반 · 20 금지 · 30 회복 절반 · 40 이동 · 50 공격 속도 · 70 시간 −20% · 100 정예 섞임", () => {
-    expect(cursesAt(9)).toEqual([]);
-    expect(cursesAt(10)).toEqual(["potion_half"]);
-    expect(cursesAt(35)).toEqual(["potion_half", "no_potion", "heal_half"]);
-    expect(cursesAt(100)).toEqual([
+  it("11/19 저주는 층대마다 쌓인다: 30 물약 절반 · 60 금지 · 80 이동 · 100 회복 절반 · 120 공격 속도 · 140 시간 −20% · 160 정예 섞임", () => {
+    expect(cursesAt(29)).toEqual([]);
+    expect(cursesAt(30)).toEqual(["potion_half"]);
+    expect(cursesAt(99)).toEqual(["potion_half", "no_potion", "mon_move"]);
+    expect(cursesAt(100)).toEqual(["potion_half", "no_potion", "heal_half", "mon_move"]);
+    expect(cursesAt(160)).toEqual([
       "potion_half",
       "no_potion",
       "heal_half",
@@ -154,6 +171,9 @@ describe("층 배율·테마·저주", () => {
       "time_20",
       "elite_mix",
     ]);
+    // 안내 창(components/overlay/GuideDialog)에 「30층부터 저주」「100층부터 빠르게」가 숫자로 적혀 있다 — 바꾸면 거기도
+    expect(CURSES[0].from).toBe(30);
+    expect(TOWER_STEEP_FROM).toBe(100);
     expect(towerCurseFx(1)).toEqual({
       potionMul: 1,
       potions: true,
@@ -164,19 +184,23 @@ describe("층 배율·테마·저주", () => {
       monAtk: 1,
       eliteMix: false,
     });
-    expect(towerCurseFx(45)).toMatchObject({
+    expect(towerCurseFx(85)).toMatchObject({
       potionMul: 0.5,
       potions: false,
-      healMul: 0.5,
+      healMul: 1,
       monMove: 1.2,
       monAtk: 1,
     });
-    expect(towerCurseFx(55).monAtk).toBe(1.2);
-    expect(towerScale(45).speed).toBe(1.2);
-    expect(towerFloorSec(69)).toBe(90);
-    expect(towerFloorSec(71)).toBe(72);
-    expect(towerFloorSec(70)).toBe(96);
-    expect(towerCurseFx(100).eliteMix).toBe(true);
+    expect(towerCurseFx(100).healMul).toBe(0.5);
+    expect(towerCurseFx(125).monAtk).toBe(1.2);
+    expect(towerScale(85).speed).toBe(1.2);
+    expect(towerScale(45).speed).toBe(1);
+    // 층 시간 60초 · 우두머리 층 90초, 140층부터 −20%
+    expect(towerFloorSec(139)).toBe(60);
+    expect(towerFloorSec(140)).toBe(72);
+    expect(towerFloorSec(141)).toBe(48);
+    expect(towerCurseFx(159).eliteMix).toBe(false);
+    expect(towerCurseFx(160).eliteMix).toBe(true);
   });
 });
 
@@ -189,13 +213,15 @@ describe("층 계획", () => {
     expect(boss.at(-1)!.boss).toBe(true);
     expect(boss.at(-1)!.monsters[0]).toBe(towerZone(77, 1, 15).boss);
     expect(towerPlan(77, 14, 1).some((w) => w.boss)).toBe(false);
-    expect(floorMinSec(towerPlan(77, 2, 1))).toBe(10);
+    // 11/19 둘째 웨이브 3초 + 엘리베이터 2초
+    expect(floorMinSec(towerPlan(77, 2, 1))).toBe(TOWER_WAVE_GAP_SEC + 2);
+    expect(towerPlan(77, 2, 1)[1].earliestSec).toBe(3);
   });
 
-  it("100층부터 우두머리 웨이브 빼고 웨이브마다 정예", () => {
-    for (const f of [101, 102, 103, 104])
-      for (const w of towerPlan(9, f, 101)) expect(w.elite).toBeDefined();
-    expect(towerPlan(9, 105, 101).at(-1)!.elite).toBeUndefined();
+  it("「임원 순시」(160층)부터 우두머리 웨이브 빼고 웨이브마다 정예", () => {
+    for (const f of [161, 162, 163, 164])
+      for (const w of towerPlan(9, f, 161)) expect(w.elite).toBeDefined();
+    expect(towerPlan(9, 165, 161).at(-1)!.elite).toBeUndefined();
   });
 });
 
@@ -263,9 +289,9 @@ describe("결과 검증 (층마다)", () => {
         r.durationMs + 1_000,
       )),
     ).toBe(false);
-    // 6층을 30초에 (층마다 최소 10초)
-    const fast = { ...r, durationMs: 30_000, floorMs: 30_000 };
-    expect(towerClean(evalTower(t, fast, 31_000))).toBe(false);
+    // 6층을 20초에 (11/19 층마다 최소 5초 = 둘째 웨이브 3초 + 엘리베이터 2초)
+    const fast = { ...r, durationMs: 20_000, floorMs: 20_000 };
+    expect(towerClean(evalTower(t, fast, 21_000))).toBe(false);
     // 기록 시간이 서버가 잰 시간보다 길다
     expect(towerClean(evalTower(t, r, r.durationMs - 10_000))).toBe(false);
     // 있을 수 없는 몬스터
@@ -304,7 +330,8 @@ describe("결과 검증 (층마다)", () => {
       ),
     ).toMatchObject({ ok: true, floors: 0, points: 0 });
     expect(
-      towerClean(evalTower(t, { ...climb(1234, 1, 1), durationMs: 5_000 }, 6_000)),
+      // 11/19 층 최소 시간 5초보다 빠르게 한 층
+      towerClean(evalTower(t, { ...climb(1234, 1, 1), durationMs: 3_000 }, 4_000)),
     ).toBe(false);
   });
 

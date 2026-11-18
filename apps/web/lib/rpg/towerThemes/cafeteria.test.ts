@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { HUNT_ZONES, MONSTERS, type MonsterId } from "../catalog";
 import { huntSpawnable } from "../plan";
-import { killRateCeiling } from "../rewards";
-import { evalTower, MINION_FLOOR_ALLOW, towerClean, floorMinSec, isBossFloor, towerBlock, towerPlan } from "../tower";
+import { evalTower, MINION_FLOOR_ALLOW, towerClean, floorMinSec, isBossFloor, towerBlock, towerPlan, towerKillRate } from "../tower";
 import type { HuntResult } from "../types";
 import { CF_BOSS, CF_BOSS_ROOM, CF_ELITE, CF_LOOPS, CF_PACKABLE, CF_POOL, CF_ROOMS, CF_ZONE, cfDish, cfRoom } from "./cafeteria";
 import { CF_BIN_CAP, CF_JELLY_CAP, CF_SPECIAL_SERVERS, cfRiceAdds } from "./cafeteriaPlan";
@@ -97,7 +96,7 @@ describe("구내식당 층 계획", () => {
     for (const { seed, f } of FLOORS) {
       const p = towerPlan(seed, f, 1);
       const total = Object.values(huntSpawnable(p, Infinity)).reduce((a, b) => a + (b ?? 0), 0);
-      expect(total).toBeLessThanOrEqual(3 + floorMinSec(p) * killRateCeiling("hell", 50));
+      expect(total).toBeLessThanOrEqual(3 + floorMinSec(p) * towerKillRate(50));
     }
   });
 });

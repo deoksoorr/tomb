@@ -59,7 +59,7 @@ import { showProc } from "./procToast";
 import { cardProc, cookieProc, sgProc } from "@/lib/rpg/procs";
 import { hpLost, hpShown } from "./hurtTally";
 import { CARD_SND } from "./cards/cardFx";
-import { stealHeal, type StealBook } from "@/lib/rpg/lifesteal";
+import { stealHeal } from "@/lib/rpg/lifesteal";
 import { enhOfId } from "@/lib/rpg/setGear";
 import { nextPity } from "@/lib/rpg/setGearRoll";
 import { towerSound } from "../tower/towerSound";
@@ -176,8 +176,6 @@ type HitOpts = {
   skill?: BranchId;
   /** 광역 스킬 (재의 심장 패시브) */
   aoe?: boolean;
-  /** 11/17 소환(길동무 넋·망자의 초롱)이 친 것 — 흡혈은 광역처럼 절반 (lib/rpg/lifesteal) */
-  summon?: boolean;
   /** 맞은 적 둔화 ms */
   slowMs?: number;
   /** 연출 무게 0~4 (skillMoves.SKILL_LOOK): 히트스톱·찌그러짐 */
@@ -345,8 +343,6 @@ export class HuntScene extends RpgScene {
   private rollDone = 1;
   private rollSaid = false;
   private dodgeFx!: DodgeFx;
-  /** 11/17 넋 거두기: 지난 1초 동안 흡혈로 찬 양 (1초 상한) */
-  private stealBook: StealBook = [];
   /** 11/15 자동 스킬: 설정(칸·전체 스위치·궁극기 SP 남김) · 마지막 자동 시전 · 마지막으로 싸운(치거나 맞은) 시각 */
   private auto: HotAuto = cleanAuto(null, []);
   private autoAt = 0;
@@ -554,7 +550,6 @@ export class HuntScene extends RpgScene {
     this.holdAim = null;
     this.faceLockUntil = 0;
     this.dodge = NO_DODGE;
-    this.stealBook = [];
     this.rollDone = 1;
     this.rollSaid = false;
     this.auto = cleanAuto(play.hotAuto, play.hotbar);
@@ -1144,11 +1139,8 @@ export class HuntScene extends RpgScene {
     this.hurtMonster(m, dmg, crit, nth, opts);
     if (this.cards && opts.basic) this.cards.onBasicHit(m);
     else if (this.cards && opts.skill) this.cards.onSkillHit(m);
-    // 넋 거두기 패시브: 준 피해의 일부를 HP로 (한 번에 최대 HP의 3%, 광역기·소환은 절반, 1초에 모두 합쳐 8%까지 — lib/rpg/lifesteal)
-    const stolen =
-      this.mods.steal > 0 && !this.died && this.hp < d.maxHp
-        ? stealHeal(this.stealBook, this.now, { dmg, steal: this.mods.steal, maxHp: d.maxHp, missing: d.maxHp - this.hp, kind: opts.summon ? "summon" : opts.aoe ? "aoe" : "single" })
-        : 0;
+    // 넋 거두기 패시브: 준 피해의 일부를 HP로 (한 번에 최대 HP의 3%까지 — lib/rpg/lifesteal, 11/19 v70 규칙으로 되돌림)
+    const stolen = this.mods.steal > 0 && !this.died && this.hp < d.maxHp ? stealHeal({ dmg, steal: this.mods.steal, maxHp: d.maxHp, missing: d.maxHp - this.hp }) : 0;
     if (stolen > 0) {
       this.hp = Math.min(d.maxHp, this.hp + stolen * this.curse.healMul);
       this.mv.drainWisp({ x: m.x, y: m.y - MONSTERS[m.id].size / 2 }, { x: this.px, y: this.py });
@@ -2062,7 +2054,7 @@ export class HuntScene extends RpgScene {
     this.passiveSnd("so_lantern", 120, "tick");
     this.passiveSnd("so_kinship", 1500);
     if (!t.group || t.group.closed) t.group = this.dmg.group(t.sprite.x, t.sprite.y - 36, "soul", t.everyMs + 500, 3);
-    this.strike(best, t.atkPct * this.dv.skillPower * (1 + this.mods.summonPct), true, 0, { skill: "soul", kb: 0.5, weight: 1, group: t.group, summon: true });
+    this.strike(best, t.atkPct * this.dv.skillPower * (1 + this.mods.summonPct), true, 0, { skill: "soul", kb: 0.5, weight: 1, group: t.group });
   }
 
   private potionLeft(id: string): number {
@@ -2439,7 +2431,7 @@ export class HuntScene extends RpgScene {
   // ── 몬스터 ──
 
   private spawn(id: MonsterId, x: number, y: number, wave: number, elite = false): void {
-    // 11/15 야근 빌딩: 기본 세기 하나(TOWER_POWER) × 층 배율 (체력·공격력 × 1.06^층, 방어 × 1.023^층 — lib/rpg/tower)
+    // 11/15 야근 빌딩: 기본 세기 하나(TOWER_POWER) × 층 배율 (11/19 100층까지 완만·그 위로 가파르게 — lib/rpg/tower towerScale)
     const base = this.play.tower ? monsterStats(id, "hell", TOWER_POWER, towerScale(this.floor)) : monsterStats(id, this.play.difficulty, this.zone.power);
     // 11/12 정예: 더 크고 질기다. EXP는 서버가 그 웨이브를 깼을 때 보너스로 더한다 (plan.eliteBonusExp)
     const st = elite
@@ -2965,7 +2957,7 @@ export class HuntScene extends RpgScene {
             this.passiveSnd("so_friend", 120, "tick");
             this.passiveSnd("so_kinship", 1500);
             if (!h.group || h.group.closed) h.group = this.dmg.group(h.sprite.x, h.sprite.y - 30, "soul", 1300, 3);
-            this.strike(t, this.buff("so_friend") * this.dv.skillPower * (1 + this.mods.summonPct), true, 0, { skill: "soul", weight: 1, group: h.group, summon: true });
+            this.strike(t, this.buff("so_friend") * this.dv.skillPower * (1 + this.mods.summonPct), true, 0, { skill: "soul", weight: 1, group: h.group });
           }
         }
       }

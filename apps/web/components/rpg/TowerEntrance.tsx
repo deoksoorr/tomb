@@ -9,6 +9,7 @@ import {
   TOWER_CHEST_GEAR_CHANCE,
   towerFloorSec,
   towerHpMul,
+  TOWER_STEEP_FROM,
   TOWER_THEMES,
 } from "@/lib/rpg/tower";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
@@ -118,13 +119,14 @@ export default function TowerEntrance({
             {start}층부터
           </b>{" "}
           테마는 다섯 층마다 바뀌어요. {TOWER_THEMES.length}곳 중 어디가 나올지는 타 봐야 알아요.
-          몬스터는 층이 오를수록 조금씩 세져요. 이 층은 1층보다 ×{towerHpMul(start).toFixed(2)}예요. 한 층은 {towerFloorSec(start) + towerSec}초예요{towerSec > 0 ? ` (칭호 덕분에 ${towerSec}초 더)` : ""}.
+          몬스터는 {TOWER_STEEP_FROM}층까지 조금씩, 그 위로는 빠르게 세져요. 이 층 몬스터 체력은 1층의 ×{(towerHpMul(start) / towerHpMul(1)).toFixed(2)}예요. 한 층은 {towerFloorSec(start) + towerSec}초예요
+          {towerSec > 0 ? ` (칭호 덕분에 ${towerSec}초 더)` : ""}.
           5층마다 우두머리가 나와요. 잡으면 체력이 30% 차고 상자가 열려요.
         </p>
         <p className={s.meta}>
           {curses.length
             ? `붙는 저주 ${curses.map((c) => `「${c.name}」 ${c.desc}.`).join(" ")}`
-            : "저주는 아직 없어요. 10층부터 하나씩 붙어요."}
+            : `저주는 아직 없어요. ${CURSES[0].from}층부터 하나씩 붙어요.`}
         </p>
         <div className={s.zoneGo}>
           <span className={s.meta}>
@@ -180,7 +182,10 @@ export default function TowerEntrance({
             10층, 20층, 30층, 50층, 100층에 오르면 칭호를 받아요. 서버에서 가장 먼저 오른 사람만 받는 칭호도 있어요.
             지금 가장 높이 오른 사람이 다는 칭호도 있어요.
           </li>
-          <li>이번 주에 가장 높이 오른 사람은 다음 한 주 동안 신화 칭호 「지난주 최고층」을 달아요.</li>
+          <li>
+            이번 주 최고 층으로 겨루는 레이스예요. 랭킹 [야근 빌딩] 이번 주 순위는 높은 층 순서이고, 같은 층이면 먼저 오른 사람이 앞이에요. 1위는 다음 한 주 동안
+            신화 칭호 「지난주 최고층」을 달아요.
+          </li>
           {/* 11/15 능력 카드 */}
           <li>
             몬스터를 잡으면 판 레벨이 올라요. 오를 때마다 능력 카드를 한 장 골라요. 카드는 그 판에서만 써요.

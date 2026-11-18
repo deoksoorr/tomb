@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { MONSTERS, type MonsterId } from "../catalog";
 import { huntSpawnable } from "../plan";
-import { killRateCeiling } from "../rewards";
 import { MONSTER_STATUS } from "../status";
-import { evalTower, towerClean, floorMinSec, towerBlock, towerPlan } from "../tower";
+import { evalTower, towerClean, floorMinSec, towerBlock, towerPlan, towerKillRate } from "../tower";
 import type { HuntResult } from "../types";
 import { rfRoom } from "@/game/tower/themes/rooftopMap";
 import { RF_BOSS, RF_BOSS_ROOM, RF_ELITE, RF_MONSTER_IDS, RF_PACKABLE, RF_POOL, RF_ROOMS, RF_VISITS, RF_ZONE, rfWeather } from "./rooftop";
@@ -72,7 +71,7 @@ describe("옥상 정원 폭풍: 층 계획", () => {
     for (const x of xs) {
       const p = plan(x);
       const total = Object.values(huntSpawnable(p, Infinity)).reduce((a, b) => a + (b ?? 0), 0);
-      expect(total, `${x.seed}/${x.f}`).toBeLessThanOrEqual(3 + floorMinSec(p) * killRateCeiling("hell", 50));
+      expect(total, `${x.seed}/${x.f}`).toBeLessThanOrEqual(3 + floorMinSec(p) * towerKillRate(50));
     }
   });
 });

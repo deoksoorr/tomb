@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { MONSTERS, type MonsterId } from "./catalog";
 import { cardOffer, CARD_IDS } from "./cards";
 import { huntSpawnable } from "./plan";
-import { killRateCeiling } from "./rewards";
 import { RunFinishSchema } from "./schemas";
 import {
   endgameView,
@@ -20,6 +19,7 @@ import {
   towerOfScore,
   towerSettle,
   towerHpMul,
+  towerKillRate,
   type TowerState,
   type TowerVerdict,
 } from "./tower";
@@ -97,10 +97,10 @@ describe("부드러운 거절 (한도 없음 — 의심 판: 보상은 주고 �
   });
 
   it("처치 속도: 얼마나 넘든 의심 판", () => {
-    // 레벨 1 티켓(상한이 가장 낮다)으로 같은 판을 100초에: 상한 3 + 100 × 1.9 × 1.4 ≈ 269 < 처치 수
+    // 레벨 1 티켓(상한이 가장 낮다)으로 같은 판을 50초에: 상한 3 + 50 × 3.8(야근 빌딩 ×2) × 1.4 ≈ 269 < 처치 수
     const total = Object.values(r.kills).reduce((a, b) => a + (b ?? 0), 0);
-    const dur = 100_000;
-    expect(total).toBeGreaterThan(3 + (dur / 1000) * killRateCeiling("hell", 1) * 1.4);
+    const dur = 50_000;
+    expect(total).toBeGreaterThan(3 + (dur / 1000) * towerKillRate(1) * 1.4);
     for (const mul of [1, 20]) {
       const kills = Object.fromEntries(Object.entries(r.kills).map(([k, n]) => [k, (n ?? 0) * mul]));
       const v = evalTower(T(seed, 1, 1), { ...r, kills, durationMs: dur, floorMs: dur - 1000 } as HuntResult, dur + 1000);
@@ -195,7 +195,7 @@ describe("높은 층 (100층 위·400층 상한): 숫자가 깨지지 않는다"
       expect(p.length).toBe(2);
       expect(p.every((w) => w.monsters.length > 0 && w.monsters.every((m) => MONSTERS[m]))).toBe(true);
       if (isBossFloor(f)) expect(p[1].boss).toBe(true);
-      expect(floorMinSec(p)).toBe(10);
+      expect(floorMinSec(p)).toBe(5);
     }
     // 11/16 점수 = 층 × 1e9 + 먼저 도달한 시각 (초)
     const at = Date.UTC(2027, 0, 1);

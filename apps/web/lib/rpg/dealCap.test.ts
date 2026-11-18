@@ -60,9 +60,10 @@ describe("최대 피해 (lib/rpg/dealCap)", () => {
 describe("야근 빌딩: 그 속도로 때릴 수 있나", () => {
   const seed = 9753;
 
-  it("장비 없는 캐릭터가 130층을 층 최소 시간에 깼다고 하면 의심 판 (deal)", () => {
-    const r = climb(seed, 1, 130, 0);
-    const sec = minFloorsSec(seed, 1, 130);
+  // 11/19 레이스형 곡선(100층까지 완만)으로 130층까지는 맨몸 최대 피해로도 닿는다 → 가팔라진 위층(200층)까지로 본다
+  it("장비 없는 캐릭터가 200층을 층 최소 시간에 깼다고 하면 의심 판 (deal)", () => {
+    const r = climb(seed, 1, 200, 0);
+    const sec = minFloorsSec(seed, 1, 200);
     const fake = { ...r, durationMs: sec * 1000 + 2000, floorMs: sec * 1000 };
     const v = evalTower({ seed, level: 50, start: 1, dm: NAKED }, fake, fake.durationMs + 1000);
     expect(v.ok).toBe(true);
@@ -70,8 +71,8 @@ describe("야근 빌딩: 그 속도로 때릴 수 있나", () => {
   });
 
   it("같은 판도 최대 피해를 모르는 옛 티켓이면 이 검사는 건너뛴다", () => {
-    const r = climb(seed, 1, 130, 0);
-    const sec = minFloorsSec(seed, 1, 130);
+    const r = climb(seed, 1, 200, 0);
+    const sec = minFloorsSec(seed, 1, 200);
     const fake = { ...r, durationMs: sec * 1000 + 2000, floorMs: sec * 1000 };
     expect(deal(evalTower({ seed, level: 50, start: 1 }, fake, fake.durationMs + 1000))).toEqual([]);
   });

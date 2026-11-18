@@ -19,7 +19,6 @@ import {
 } from "./endgame";
 import {
   huntSpawnable,
-  WAVE_MIN_GAP_SEC,
   type HuntWave,
   type WaveFormation,
 } from "./plan";
@@ -46,7 +45,7 @@ import { execPlan } from "./towerThemes/execPlan";
 import { parkingPlan } from "./towerThemes/parkingPlan";
 import { cafeteriaPlan } from "./towerThemes/cafeteriaPlan";
 
-// 11/15 야근 빌딩 (레벨 50 끝판): 1층부터 쓰러질 때까지 이어서 오른다. 한 층 = 방 하나(약 40~60초).
+// 11/15 야근 빌딩 (레벨 50 끝판): 1층부터 쓰러질 때까지 이어서 오른다. 한 층 = 방 하나 (11/19 레이스형: 낮은 층은 10초 안팎).
 // 순수 함수만 — 서버(판 시작 검사·결과 검증·보상·기록)와 게임(층 계획·배율·저주)·화면(엘리베이터·안내서)이 같은 표를 쓴다.
 // 설계: docs/superpowers/specs/2026-11-15-endgame-design.md (야근 빌딩). 숫자는 테스트 서버에서 올라가 보고 다시 맞춘다.
 
@@ -140,10 +139,31 @@ export const towerVisitName = (zone: ZoneDef, visit: number) =>
 
 /** 몬스터 기본 세기: 테마마다 다른 사냥터 power 대신 하나로 (층이 오를 때 테마가 바뀌어도 약해지지 않게) */
 export const TOWER_POWER = 1.2;
-/** 층마다 체력·공격력 ×1.06 (5층마다 약 ×1.34), 방어 ×1.023 */
-export const TOWER_HP_ATK = 1.06;
-export const TOWER_DEF = 1.023;
-export const towerHpMul = (f: number) => TOWER_HP_ATK ** fl(f);
+/*
+ * 11/19 레이스형 개편 (사용자 「편하게 노는 게임으로, 100층 단위로 쭉쭉」): 예전엔 1층부터 층마다 ×1.06(체력·공격)·×1.023(방어)라
+ * 갓 50은 30층대, 상위권도 110~130층에서 막혔다. 이제 100층까지는 완만하게 오르고, 100층부터 가팔라진다 (높은 층은 장비·카드 연구).
+ *  - 1층: 체력·공격 ×TOWER_BASE (예전 1층 ×1.06보다 약하게 — 갓 50도 층당 10초 안팎)
+ *  - 2~100층: 층마다 체력 ×TOWER_HP, 공격 ×TOWER_ATK, 방어 ×TOWER_DEF (공격은 더 천천히 — 체력이 낮은 갓 50도 쓰러지지 않고 오르게)
+ *  - 101층부터: 층마다 체력 ×TOWER_HP_HIGH, 공격 ×TOWER_ATK_HIGH, 방어 ×TOWER_DEF_HIGH (공격이 더 가파르다 — 버티는 힘·장비 연구)
+ */
+export const TOWER_BASE = 0.7;
+/** 가팔라지기 시작하는 층 */
+export const TOWER_STEEP_FROM = 100;
+export const TOWER_HP = 1.018;
+export const TOWER_ATK = 1.008;
+export const TOWER_DEF = 1.01;
+export const TOWER_HP_HIGH = 1.075;
+export const TOWER_ATK_HIGH = 1.12;
+export const TOWER_DEF_HIGH = 1.023;
+/** 1층부터 f층까지 층마다 lo배(TOWER_STEEP_FROM층까지)·hi배(그 위) 곱한 값 (1층 = 1) */
+const climbMul = (f: number, lo: number, hi: number) =>
+  lo ** (Math.min(fl(f), TOWER_STEEP_FROM) - 1) * hi ** Math.max(0, fl(f) - TOWER_STEEP_FROM);
+/** f층 몬스터 체력 배율 (안내 화면의 「1층보다 ×…」도 이 값) */
+export const towerHpMul = (f: number) => TOWER_BASE * climbMul(f, TOWER_HP, TOWER_HP_HIGH);
+/** f층 몬스터 공격력 배율 */
+export const towerAtkMul = (f: number) => TOWER_BASE * climbMul(f, TOWER_ATK, TOWER_ATK_HIGH);
+/** f층 몬스터 방어 배율 */
+export const towerDefMul = (f: number) => climbMul(f, TOWER_DEF, TOWER_DEF_HIGH);
 
 /** 5층마다 우두머리 층 */
 export const TOWER_BOSS_EVERY = 5;
@@ -159,7 +179,10 @@ export type CurseId =
   | "mon_atk"
   | "time_20"
   | "elite_mix";
-/** 층 저주 (누적 — 그 층부터 위로 계속). 엔진에 있는 값만 바꾼다 */
+/**
+ * 층 저주 (누적 — 그 층부터 위로 계속). 엔진에 있는 값만 바꾼다.
+ * 11/19 레이스형 개편: 예전 10·20·30·40·50·70·100층 → 30·60·100·80·120·140·160층 (회복 절반은 30층 → 100층, 100층 아래는 가볍게)
+ */
 export const CURSES: readonly {
   id: CurseId;
   from: number;
@@ -168,38 +191,38 @@ export const CURSES: readonly {
 }[] = [
   {
     id: "potion_half",
-    from: 10,
+    from: 30,
     name: "탕비실 절약",
     desc: "물약 회복량이 절반이 돼요",
   },
   {
     id: "no_potion",
-    from: 20,
+    from: 60,
     name: "탕비실 폐쇄",
     desc: "물약을 마실 수 없어요",
   },
   {
     id: "heal_half",
-    from: 30,
+    from: 100,
     name: "연차 반려",
     desc: "스킬, 재생, 지형, 우두머리 층 회복까지 모두 절반이 돼요",
   },
   {
     id: "mon_move",
-    from: 40,
+    from: 80,
     name: "독촉 메일",
     desc: "몬스터 이동 속도가 20% 빨라져요",
   },
   {
     id: "mon_atk",
-    from: 50,
+    from: 120,
     name: "연달아 회의",
     desc: "몬스터 공격 속도가 20% 빨라져요",
   },
-  { id: "time_20", from: 70, name: "마감 당김", desc: "층마다 제한 시간이 20% 줄어요" },
+  { id: "time_20", from: 140, name: "마감 당김", desc: "층마다 제한 시간이 20% 줄어요" },
   {
     id: "elite_mix",
-    from: 100,
+    from: 160,
     name: "임원 순시",
     desc: "정예가 일반 몬스터 사이에 섞여 나와요",
   },
@@ -247,11 +270,10 @@ export function towerCurseFx(f: number): CurseFx {
 
 /** monsterStats에 넘기는 f층 몬스터 배율 (기본 세기 TOWER_POWER와 같이 쓴다) */
 export function towerScale(f: number): MonsterScale {
-  const k = towerHpMul(f);
   return {
-    hp: k,
-    atk: k,
-    def: TOWER_DEF ** fl(f),
+    hp: towerHpMul(f),
+    atk: towerAtkMul(f),
+    def: towerDefMul(f),
     speed: towerCurseFx(f).monMove,
   };
 }
@@ -259,9 +281,9 @@ export function towerScale(f: number): MonsterScale {
 export const towerMonsterStats = (id: MonsterId, f: number) =>
   monsterStats(id, "hell", TOWER_POWER, towerScale(f));
 
-/** 층 제한 시간 (초): 보통 층 90초, 우두머리 층 120초. 70층부터 −20% */
-export const TOWER_FLOOR_SEC = 90;
-export const TOWER_BOSS_FLOOR_SEC = 120;
+/** 층 제한 시간 (초): 보통 층 60초, 우두머리 층 90초 (11/19 레이스형: 예전 90·120초). 「마감 당김」 저주부터 −20% */
+export const TOWER_FLOOR_SEC = 60;
+export const TOWER_BOSS_FLOOR_SEC = 90;
 export const towerFloorSec = (f: number) =>
   Math.round(
     (isBossFloor(f) ? TOWER_BOSS_FLOOR_SEC : TOWER_FLOOR_SEC) *
@@ -275,6 +297,12 @@ export const TOWER_GAP_SEC = 2;
 /** f층의 시드 (판 시드에서 층마다 다르게) */
 export const floorSeed = (seed: number, f: number) =>
   ((seed ^ Math.imul(fl(f), 0x9e3779b1)) >>> 0) & 0x7fffffff;
+
+/**
+ * 11/19 레이스형: 층 안 둘째 웨이브는 첫 웨이브를 다 잡으면 층이 열리고 이만큼 뒤부터 나온다 (보통 사냥터 WAVE_MIN_GAP_SEC 8초 → 3초).
+ * 서버의 층 최소 시간(floorMinSec)도 이 값으로 정해진다
+ */
+export const TOWER_WAVE_GAP_SEC = 3;
 
 /** 보통 층 = 웨이브 2개(9·12마리), 우두머리 층 = 웨이브 2개(10마리, 우두머리 + 5마리) */
 const FLOOR_WAVES = [9, 12] as const;
@@ -321,7 +349,7 @@ export function towerPlan(seed: number, f: number, start: number): HuntWave[] {
     for (let k = 0; k < pack; k++) monsters.push(packId);
     const formation: WaveFormation =
       i === 0 ? "scatter" : FORMATIONS[Math.floor(r() * FORMATIONS.length)];
-    // 정예: 둘째 웨이브부터 가끔, 100층부터(임원 순시)는 우두머리 웨이브 빼고 늘
+    // 정예: 둘째 웨이브부터 가끔, 「임원 순시」 저주 층부터는 우두머리 웨이브 빼고 늘
     let elite: number | undefined;
     const solo = monsters.length - pack;
     const roll = r();
@@ -335,7 +363,7 @@ export function towerPlan(seed: number, f: number, start: number): HuntWave[] {
     return {
       index: i,
       monsters,
-      earliestSec: i * WAVE_MIN_GAP_SEC,
+      earliestSec: i * TOWER_WAVE_GAP_SEC,
       boss: last,
       pack,
       formation,
@@ -357,6 +385,13 @@ const PLAN_HOOKS: Partial<Record<ZoneId, PlanHook>> = {
   pk_parking: parkingPlan,
   cf_cafeteria: cafeteriaPlan,
 };
+
+/**
+ * 11/19 야근 빌딩 처치 속도 상한 (초당): 지옥 사냥 상한 × TOWER_KILL_RATE_MUL.
+ * 둘째 웨이브 간격을 8초 → 3초로 줄여 층 최소 시간이 10초 → 5초가 됐다 → 같은 층에서 잡을 수 있는 수의 여유(예전 3 + 10초 × 상한)를 지키려고 ×2
+ */
+export const TOWER_KILL_RATE_MUL = 2;
+export const towerKillRate = (level: number) => killRateCeiling("hell", level) * TOWER_KILL_RATE_MUL;
 
 /** 층을 깨는 데 걸리는 가장 짧은 시간 (마지막 웨이브가 나오는 시각 + 엘리베이터) */
 export const floorMinSec = (plan: HuntWave[]) =>
@@ -675,7 +710,7 @@ export function evalTower(
   // 11/15 카드 기록이 맞지 않아도 판은 버리지 않는다 (예전 판 끝 형식이 레벨 업 층 f를 지워 정직한 판이 통째로 날아갔다)
   if (!cv.ok) suspect.push(`cards:${cv.why}`);
   const owned = cv.ok ? cv.owned : claimedCards(r.cards ?? []);
-  const rate = 3 + effSec * killRateCeiling("hell", t.level) * cardPower(owned) * Math.max(1, t.gp ?? 1);
+  const rate = 3 + effSec * towerKillRate(t.level) * cardPower(owned) * Math.max(1, t.gp ?? 1);
   if (!o.lax && total > rate) suspect.push(`rate:${total}/${Math.floor(rate)}`);
   // 11/15 깬 층 최소 시간의 절반도 안 걸린 판은 사람이 할 수 없는 속도라 거절 (절반~최소 사이는 의심 판)
   if (k > 0 && effSec + 1 < minSec / 2)

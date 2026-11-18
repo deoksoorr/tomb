@@ -82,7 +82,7 @@ export interface CardHost<M extends CardMon> {
   enemyShots(): { x: number; y: number; until: number }[];
   hp(): number;
   maxHp(): number;
-  /** 받는 회복 배율 (30층 저주) */
+  /** 받는 회복 배율 (회복 절반 저주 「연차 반려」) */
   healMul(): number;
   heal(n: number, show: boolean): void;
   /** 판 시간으로 미루기 */

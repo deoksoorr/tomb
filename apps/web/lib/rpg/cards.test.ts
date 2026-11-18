@@ -28,9 +28,8 @@ import {
   type OfferKind,
 } from "./cards";
 import { huntSpawnable } from "./plan";
-import { killRateCeiling } from "./rewards";
 import { RunResultSchema } from "./schemas";
-import { evalTower, towerClean, towerPlan } from "./tower";
+import { evalTower, towerClean, towerKillRate, towerPlan } from "./tower";
 import type { HuntResult } from "./types";
 
 // 11/15 야근 빌딩 능력 카드 (lib/rpg/cards): 제안 굴림이 시드로 정해지는지, 서버가 고른 기록을 다시 굴려 확인하는지,
@@ -243,9 +242,10 @@ describe("야근 빌딩 결과 검증에 카드", () => {
     const kills = { ...r0.kills };
     for (const [id, n] of Object.entries(huntSpawnable(towerPlan(seed, 2, 1), Infinity)) as [MonsterId, number][]) kills[id] = (kills[id] ?? 0) + n;
     const total = Object.values(kills).reduce((a, b) => a + (b ?? 0), 0);
-    const dur = 11_000;
-    const fast = { ...r0, kills, durationMs: dur, floorMs: 10_000 };
-    const cap = (p: number) => 3 + (dur / 1000) * killRateCeiling("hell", 1) * p;
+    // 11/19 층 최소 시간 10초 → 5초, 야근 빌딩 처치 속도 상한 ×2 (towerKillRate) — 같은 상한이 되게 시간도 절반
+    const dur = 5_500;
+    const fast = { ...r0, kills, durationMs: dur, floorMs: 5_000 };
+    const cap = (p: number) => 3 + (dur / 1000) * towerKillRate(1) * p;
     expect(total).toBeGreaterThan(cap(cardPower({})));
     expect(towerClean(evalTower(t1, fast, dur + 500))).toBe(false);
     const lv = runLevel(runXp(kills)).level;
