@@ -323,7 +323,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
           <Table head={["하는 일", "컴퓨터", "휴대폰"]} rows={HUNT_KEYS} />
           <ul className={styles.points}>
             <li>
-              {`사냥 포인트는 하루 ${won(earnRule("hunt").dailyMax)}P까지예요. 주운 장비나 물약을 판 값도 여기에 들어가요. 한도를 넘으면 EXP와 아이템만 받아요. 상점에서 산 장비를 되파는 건 한도와 상관없어요. 마을 곤충 채집과 별자리 잇기는 따로 하루 ${won(earnRule("bugs").dailyMax)}P까지예요.`}
+              {`사냥 포인트는 하루 ${won(earnRule("hunt").dailyMax)}P까지예요. 주운 장비나 물약을 판 값도 여기에 들어가요. 한도를 넘으면 EXP와 아이템만 받아요. 상점에서 산 장비를 되파는 건 한도와 상관없어요. 마을 곤충 채집은 따로 하루 ${won(earnRule("bugs").dailyMax)}P, 별자리 잇기는 하루 ${won(earnRule("stars").dailyMax)}P까지예요.`}
             </li>
             <li>
               {`레벨 ${MAX_LEVEL}부터는 지옥 사냥터와 야근 빌딩에서 초월 레벨(★51~★100)을 올려요. 초월 레벨이 5 오를 때마다 능력치 포인트를 1개 받아요. 하루에 할 수 있는 판 수는 정해져 있지 않아요.`}

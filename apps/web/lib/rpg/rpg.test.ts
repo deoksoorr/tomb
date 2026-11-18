@@ -379,7 +379,7 @@ describe("결과 검증", () => {
     const plan = starsPlan(S.seed, "easy", 75);
     const n = plan.length;
     const full = evaluate(S, { game: "stars", durationMs: 75_000, perfect: n, good: 0, miss: 0, maxCombo: n, score: n * 300 * 2 }, 76_000);
-    expect(full).toMatchObject({ ok: true, points: 12 });
+    expect(full).toMatchObject({ ok: true, points: 18 });
     const early = starsCount(plan, 20_000);
     expect(evaluate(S, { game: "stars", durationMs: 20_000, perfect: early + 3, good: 0, miss: 0, maxCombo: 1, score: 300 }, 20_500)).toMatchObject({ ok: false });
     expect(evaluate(S, { game: "stars", durationMs: 75_000, perfect: 2, good: 0, miss: 0, maxCombo: 9, score: 600 }, 76_000)).toMatchObject({ ok: false });

@@ -10,7 +10,7 @@ import ConstellationIcon from "./ConstellationIcon";
 import fs from "./forage.module.css";
 import s from "./ConstellationDex.module.css";
 
-// 도감의 "별자리" 칸: 망원경 별자리 잇기에서 한 별자리를 놓쳐도 되는 별 수(11/18 starMissOk) 안에서 끝까지 이으면 등록된다.
+// 도감의 "별자리" 칸: 망원경 별자리 잇기에서 한 별자리를 하나도 놓치지 않고 끝까지 이으면 등록된다.
 // 등록 전은 별 자리만 점으로 (실루엣), 등록하면 그림·이름·처음 완성한 날·완성 횟수(완벽으로만 이은 횟수).
 // 내 도감·이웃 도감 구경이 같은 칸을 쓴다 (dex만 다르다).
 
@@ -102,7 +102,7 @@ function StarGuide({ dex }: { dex: Record<string, DexEntry> }) {
           return { label: t.label, value: `${got}/${all.length}`, tone: got === all.length ? ("good" as const) : undefined };
         })}
       />
-      <p className={s.hint}>별 보기 언덕의 망원경에서 별자리 잇기를 하면 모을 수 있어요. 흔한 별자리는 별 1개, 희귀·전설은 2개까지 놓쳐도 끝까지 이으면 등록돼요. 한 판에 새로 등록되는 별자리는 3개까지예요.</p>
+      <p className={s.hint}>별 보기 언덕의 망원경에서 별자리 잇기를 하면 모을 수 있어요. 한 별자리를 하나도 놓치지 않고 이으면 등록돼요. &apos;좋아&apos; 이상이면 놓친 게 아니에요. 한 판에 새로 등록되는 별자리는 3개까지예요.</p>
     </InfoCard>
   );
 }

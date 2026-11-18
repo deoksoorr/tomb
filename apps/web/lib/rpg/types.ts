@@ -142,7 +142,7 @@ export type HuntResult = {
 /** wrong: '기능'을 누른 수, decoy: 주석 처리된 가짜 버그를 누른 수, score: 콤보 배수까지 넣은 점수(서버가 상한으로 자른다) */
 export type BugsResult = { game: "bugs"; durationMs: number; caught: number; golden: number; wrong: number; decoy: number; maxCombo: number; score: number };
 /**
- * groups: 놓쳐도 되는 별 수(11/18 starMissOk) 안에서 끝까지 이은 별 무리 번호, perfectGroups: 그중 놓침 없이 완벽으로만 이은 무리.
+ * groups: 별을 하나도 놓치지 않고(좋아 이상) 끝까지 이은 별 무리 번호, perfectGroups: 그중 완벽으로만 이은 무리.
  * 서버가 계획·시간·판정 수로 검사한 뒤 별자리 도감에 등록한다. 옛 화면은 보내지 않는다 (없으면 도감 등록 없이)
  */
 export type StarsResult = {
