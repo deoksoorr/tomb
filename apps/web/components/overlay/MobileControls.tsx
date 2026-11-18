@@ -18,7 +18,7 @@ import styles from "./MobileControls.module.css";
  * + 점프 왼쪽에 작은 [표현] (누르면 표현 창, 길게 누르면 즐겨찾기 원형 — 아래 바로 가기 줄이 없어져 여기로)
  * + 그 위 같은 크기 [채팅] (누르면 키보드 위 한 줄 입력칸, ChatSheet). 채팅 중에는 조이스틱·버튼을 숨긴다.
  * 11/18 캠핑장 눈덩이를 들고 있으면 [점프] 자리가 [굴리기]가 된다 (RollButton — 누르고 있는 동안 굴리기, 떼면 다시 안기).
- * 11/18 겨울판 마을·캠핑장 바깥에서 던질 수 있으면 [앉기] 위에 [눈 던지기] (SnowButton — 게임이 snow:can으로 알려 준다).
+ * 11/18 겨울판 마을·캠핑장 바깥에서 던질 수 있으면 [달리기] 위에 [눈 던지기](11/19 [앉기] 위는 채팅에 가려 옮김) (SnowButton — 게임이 snow:can으로 알려 준다).
  */
 export default function MobileControls({
   onSay,

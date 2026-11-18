@@ -136,10 +136,10 @@
   }
 }
 
-/* 11/18 겨울판 눈싸움 [눈 던지기]: [앉기] 바로 위 (달리기·타기 왼쪽 줄 — 어느 단추와도 겹치지 않는다). 눈빛 테두리 */
+/* 11/18 겨울판 눈싸움 [눈 던지기]. 11/19 [앉기] 위는 왼쪽 채팅 기록에 가려 안 눌렸다 → 오른쪽 끝 [달리기] 바로 위로 (사용자). 눈빛 테두리 */
 .action[data-slot="snow"] {
-  right: 76px;
-  bottom: 132px;
+  right: 10px;
+  bottom: 144px;
   width: 52px;
   height: 52px;
 }
@@ -194,6 +194,11 @@
   height: 52px;
   font-size: 12px;
   font-family: var(--font-body);
+}
+
+/* 11/19 [눈 던지기]가 달리기 위 자리를 쓰면 [타기]는 그 위로 한 칸 */
+.action[data-slot="snow"] ~ .action[data-slot="ride"] {
+  bottom: 206px;
 }
 
 /* [표현]: 점프 왼쪽 아래에 작게 (행동 버튼 칸 148px 밖 — 폰 세로 폭에서도 조이스틱 120px과 떨어져 있다) */
