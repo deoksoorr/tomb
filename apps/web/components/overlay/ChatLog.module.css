@@ -111,9 +111,10 @@
   margin-top: auto;
 }
 
-/* 11/18 눈 내린 밝은 바닥에서 글이 안 보인다는 말에 은은한 반투명 바탕 + 살짝 흐리기 (데스크톱 상자·폰 기록 둘 다, 글이 있을 때만 그려진다) */
-.box .log,
-.mobileLog {
+/* 11/18 눈 내린 밝은 바닥에서 글이 안 보인다는 말에 은은한 반투명 바탕 + 살짝 흐리기 (데스크톱 상자·폰 기록 둘 다, 글이 있을 때만 그려진다).
+   바탕·여백은 스크롤 상자 바깥(.logWrap)에 둔다 — 스크롤 상자에 여백을 주면 그 여백으로 윗줄 아랫부분이 비쳐 맨 윗줄이 잘려 보였다 */
+.box .logWrap,
+.mobileBox .logWrap {
   padding: 3px 6px;
   background: rgba(14, 12, 20, 0.36);
   -webkit-backdrop-filter: blur(3px);
@@ -122,8 +123,9 @@
 }
 
 /* [배경] 끔: 예전처럼 글자 테두리만 */
-.box[data-bg="off"] .log,
-.mobileBox[data-bg="off"] .mobileLog {
+.box[data-bg="off"] .logWrap,
+.mobileBox[data-bg="off"] .logWrap {
+  padding: 0;
   background: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
