@@ -3,6 +3,7 @@ import {
   DIR,
   STATE,
   SNOW_HOLD_SEND_MS,
+  SNOWMAN_PER_PERSON,
   SNOW_STACKS_PER_PERSON,
   parseSnowHold,
   snowGapWhy,
@@ -116,6 +117,8 @@ export type CampSnowmenDeps = {
   concept: MapConcept;
 };
 
+/** 11/18 한 사람 몫(SNOWMAN_PER_PERSON)이 다 찼을 때 */
+const MANY_TOAST = `눈사람은 한 사람이 ${SNOWMAN_PER_PERSON}개까지 만들 수 있어요. 하나가 녹으면 다시 만들어요.`;
 const holdKey = (h: SnowHold | null): string => (h ? `${h.s}${h.r ? "r" : ""}` : "");
 const dirName = (d: number): "down" | "left" | "right" | "up" => (d === DIR.left ? "left" : d === DIR.right ? "right" : d === DIR.up ? "up" : "down");
 
@@ -164,6 +167,19 @@ export class CampSnowmen {
 
   private mine(st: { sid: Sid }): boolean {
     return st.sid === this.mySid;
+  }
+
+  /** 11/18 서 있는 내 눈사람 수 (다 녹아 웅덩이가 된 것은 빼요). 서버 목록엔 방문자 id가 없어 이름으로 본다 (닉네임은 겹치지 않는다) */
+  private myMenCount(): number {
+    const me = this.d.myName();
+    let n = 0;
+    for (const v of this.men.values()) if (v.puddleUntil === 0 && v.s.by === me) n++;
+    return n;
+  }
+
+  /** 11/18 서 있는 내 눈사람 + 쌓는 중인 내 덩이 (SNOWMAN_PER_PERSON까지 — 서버와 같은 규칙) */
+  private myProjects(): number {
+    return this.myMenCount() + this.stacks.filter((v) => this.mine(v)).length;
   }
 
   setConcept(c: MapConcept): void {
@@ -278,6 +294,7 @@ export class CampSnowmen {
     else if (why === "near") this.d.toast(NEAR_TOAST);
     else if (why === "full") this.d.toast("캠핑장에 덩이가 너무 많아요. 조금 있다가 해 주세요.");
     else if (why === "lost") this.d.toast("덩이가 녹아 없어졌어요.");
+    else if (why === "many") this.d.toast(MANY_TOAST);
     else this.d.toast(a === "add" ? "여기에는 눈사람을 세울 수 없어요. 다른 눈밭에서 쌓아요." : "여기에는 내려놓을 수 없어요.");
   }
 
@@ -362,6 +379,11 @@ export class CampSnowmen {
       return true;
     }
     if (pile) {
+      // 11/18 내 눈사람 2개가 서 있으면 녹을 때까지 새로 못 만든다 (쌓는 중인 내 덩이가 있으면 거기 올릴 덩이는 집을 수 있어요)
+      if (this.myMenCount() >= SNOWMAN_PER_PERSON) {
+        this.d.toast(MANY_TOAST);
+        return true;
+      }
       pl.faceTo(pile.x, pile.y, this.d.scene.time.now);
       this.pickUp(0, 0);
       this.rollTip();
@@ -425,7 +447,7 @@ export class CampSnowmen {
     const pile = this.nearPile(pl.x, pl.y);
     const st = this.nearStack(pl.x, pl.y);
     if (st && (!pile || Math.hypot(st.x - pl.x, st.y - pl.y) < Math.hypot(pile.x - pl.x, pile.y - pl.y))) return { x: st.x, y: st.y + 4, text: `${prefix}다시 들기` };
-    if (pile) return { x: pile.x, y: pile.y + 4, text: `${prefix}눈 뭉치기` };
+    if (pile) return { x: pile.x, y: pile.y + 4, text: this.myMenCount() >= SNOWMAN_PER_PERSON ? "내 눈사람이 녹으면 다시 만들어요" : `${prefix}눈 뭉치기` };
     return null;
   }
 
@@ -545,14 +567,16 @@ export class CampSnowmen {
       this.d.toast(`여기에는 내려놓을 수 없어요. 눈밭 빈자리에서 ${keyJosa("E", "를")} 눌러요.`);
       return;
     }
+    // 11/18 서 있는 내 눈사람 + 쌓는 중인 내 덩이가 이미 2개면 새로 못 놓는다 (서버도 many로 막는다)
+    if (this.myProjects() >= SNOWMAN_PER_PERSON || this.stacks.filter((v) => this.mine(v)).length >= SNOW_STACKS_PER_PERSON) {
+      this.d.toast(MANY_TOAST);
+      return;
+    }
     const me = this.mySid;
     if (me === null || !net.snowPut(x, y, h.size as SnowBall)) {
       this.d.toast("연결된 뒤에 내려놓을 수 있어요.");
       return;
     }
-    // 서버와 같이: 내 덩이가 넘치면 가장 오래된 것이 사라진다 (서버도 snowStackGone으로 알린다)
-    const mineNow = this.stacks.filter((v) => this.mine(v) && v.id !== null);
-    if (mineNow.length >= SNOW_STACKS_PER_PERSON) this.removeStack(mineNow[0]);
     const ns: StackView = { id: null, sid: me, x, y, sizes: [h.size], at: net.serverNow(), wait: 0, sentAt: 0, img: this.d.scene.add.image(0, 0, "__DEFAULT"), wall: null };
     this.sent(ns);
     this.stacks.push(ns);
