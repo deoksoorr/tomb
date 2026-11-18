@@ -270,7 +270,8 @@
   bottom: var(--chat-bottom);
   display: flex;
   flex-direction: column;
-  width: calc(100vw - 24px);
+  /* 11/18 화면 폭 가득이면 바탕(은은한 반투명)이 오른쪽 행동 단추를 가렸다 → 예전 폭으로 (사용자 긴급) */
+  width: min(300px, 72vw);
   padding: 0;
   font-family: var(--font-chat);
   font-size: 13px;
