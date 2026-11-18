@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { snowballAt, SNOWBALL_RANGE, type SnowballPos } from "@tomb/protocol";
 import { BODY_METRICS } from "../sprites/avatar";
-import { SNOW_BODY_HALF, SNOW_DEPTH, snowBodyHit, snowBodyTop, type SnowBody } from "./snowHit";
+import { SNOW_BODY_HALF, SNOW_DEPTH, SNOW_DEPTH_BACK, snowBodyHit, snowBodyTop, type SnowBody } from "./snowHit";
 
 // 11/18 눈싸움 맞음 판정 상자: 머리·몸에만 맞고 이름표 높이로 지나가는 눈뭉치는 안 맞는다
 
@@ -28,8 +28,13 @@ describe("snowBodyHit", () => {
 
   it("몸 폭 밖·발 줄에서 멀리 지나가는 그림자는 안 맞는다", () => {
     expect(snowBodyHit(200 + SNOW_BODY_HALF + 1, 300, 10, body())).toBeNull();
-    expect(snowBodyHit(200, 300 - SNOW_DEPTH - 1, 10, body())).toBeNull();
+    expect(snowBodyHit(200, 300 - SNOW_DEPTH_BACK * 2, 10, body())).toBeNull();
     expect(snowBodyHit(200, 300 + SNOW_DEPTH + 1, 10, body())).toBeNull();
+  });
+
+  it("뒤에서 오는 공은 몸 뒤로 지나가기 전에 등에 맞는다", () => {
+    // 발 줄보다 10px 뒤(위)인데 보이는 공이 몸 가운데 높이 → 맞음
+    expect(snowBodyHit(200, 290, 2, body())).not.toBeNull();
   });
 
   it("점프로 띄운 만큼 상자도 올라간다", () => {
