@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { flushSync } from "react-dom";
+import { SNOWBALL_INTERVAL_MS } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
@@ -17,6 +18,7 @@ import styles from "./MobileControls.module.css";
  * + 점프 왼쪽에 작은 [표현] (누르면 표현 창, 길게 누르면 즐겨찾기 원형 — 아래 바로 가기 줄이 없어져 여기로)
  * + 그 위 같은 크기 [채팅] (누르면 키보드 위 한 줄 입력칸, ChatSheet). 채팅 중에는 조이스틱·버튼을 숨긴다.
  * 11/18 캠핑장 눈덩이를 들고 있으면 [점프] 자리가 [굴리기]가 된다 (RollButton — 누르고 있는 동안 굴리기, 떼면 다시 안기).
+ * 11/18 겨울판 마을·캠핑장 바깥에서 던질 수 있으면 [앉기] 위에 [눈 던지기] (SnowButton — 게임이 snow:can으로 알려 준다).
  */
 export default function MobileControls({
   onSay,
@@ -44,6 +46,10 @@ export default function MobileControls({
   const car = useBridgeValue("bumper:riding")?.riding === true;
   // 11/18 캠핑장 눈덩이를 들고 있으면 점프 대신 굴리기 (들고 있는 동안 점프는 막혀 있다)
   const snowball = useBridgeValue("camp:snowball")?.held === true;
+  // 11/18 눈싸움: 바닷가·실내에서는 숨긴다 (장면이 바뀌는 사이 남은 값이 있어도)
+  const map = useBridgeValue("map:changed")?.map;
+  const scene = useBridgeValue("scene:changed")?.scene;
+  const snowCan = useBridgeValue("snow:can")?.on === true && map !== "sea" && (scene === undefined || scene === "world");
   useTouchGuards();
 
   function toggleRun() {
@@ -113,6 +119,7 @@ export default function MobileControls({
             채팅
           </button>
         )}
+        {snowCan && <SnowButton />}
         {/* 탈 수 있는 펫을 데리고 있을 때만 (달리기 위) */}
         <RideButton variant="touch" className={styles.action} />
       </div>
@@ -182,6 +189,40 @@ function RollButton({ off }: { off: boolean }) {
         <PixelIcon name="snowball" size={18} />
       </span>
       {held ? "굴리는 중" : "굴리기"}
+    </button>
+  );
+}
+
+/**
+ * 11/18 [눈 던지기]: 누르면 보는 쪽으로 던진다. 사용자 「쿨타임을 잡아서 막 못 던지게」 — 3초에 한 번,
+ * 던진 뒤에는 게임이 알려 준 다시 던질 시각(snow:cool)까지 남은 시간을 시계처럼 어둡게 덮고 초를 보여 준다
+ */
+function SnowButton() {
+  const until = useBridgeValue("snow:cool")?.until ?? 0;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => {
+      const t = Date.now();
+      setNow(t);
+      if (t >= until) clearInterval(id);
+    }, 100);
+    return () => clearInterval(id);
+  }, [until]);
+  const left = Math.min(SNOWBALL_INTERVAL_MS, Math.max(0, until - now));
+  const cooling = left > 0;
+  const turn = (left / SNOWBALL_INTERVAL_MS) * 360;
+  return (
+    <button
+      type="button"
+      className={cx(styles.action, styles.snow)}
+      data-slot="snow"
+      data-cool={cooling || undefined}
+      aria-label={cooling ? `눈 던지기, ${Math.ceil(left / 1000)}초 뒤에 다시 던질 수 있어요` : "눈 던지기, 보는 쪽으로 눈뭉치를 던져요"}
+      {...pressProps(() => bridge.emit("input:snowball"))}
+    >
+      {cooling && <span className={styles.snowClock} style={{ background: `conic-gradient(rgba(8, 14, 22, 0.62) ${turn}deg, transparent 0)` }} aria-hidden="true" />}
+      <span className={styles.snowIcon}>{cooling ? <b className={styles.snowLeft}>{Math.ceil(left / 1000)}</b> : <PixelIcon name="snowball" size={16} />}</span>
+      눈 던지기
     </button>
   );
 }

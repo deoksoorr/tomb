@@ -10,6 +10,7 @@ import {
   snowmanAlive,
   snowmanMelt,
   snowStackAlive,
+  snowSegDist,
   type DirId,
   type Sid,
   type SnowAct,
@@ -70,7 +71,7 @@ const TEX = {
   carry: (s: BallSize) => `${P}carry${s}`,
   track: (s: BallSize) => `${P}track${s}`,
   stack: (sizes: readonly BallSize[]) => `${P}stack${sizes.join("")}`,
-  man: (seed: number, xm: boolean, m: number) => `${P}man${seed}-${xm ? 1 : 0}-${m}`,
+  man: (seed: number, xm: boolean, m: number, oh = false) => `${P}man${seed}-${xm ? 1 : 0}-${m}${oh ? "o" : ""}`,
   puddle: (seed: number, xm: boolean) => `${P}puddle${seed}-${xm ? 1 : 0}`,
 };
 /** 그림 바닥 줄 아래 그림자 몫 (원점 0.5,1 — 발 위치보다 이만큼 아래가 그림 바닥) */
@@ -88,12 +89,16 @@ const BLOCK_TOAST_MS = 2_500;
 const ROLL_TIP_KEY = "tomb.camp.snowRollTip";
 /** 다른 사람 자리라 못 놓을 때 안내 */
 const NEAR_TOAST = "다른 사람이 만들고 있는 자리예요.";
+/** 11/18 눈싸움: 눈뭉치에 맞은 눈사람이 놀란 얼굴로 있는 시간 · 맞는 밑동 둘레 (발 위치, 세로는 1.6배로 잰다) */
+const OH_MS = 1_200;
+const HIT_R = 10;
 
 /** rolling = 지금 굴리는 중 (아니면 품에 안고 있다), walked = 안고 걸은 거리 (걸음마다 덩이가 살짝 들썩인다) */
 type Held = { size: BallSize; dist: number; roll: number; lastX: number; lastY: number; trackAt: number; rolling: boolean; walked: number; img: Phaser.GameObjects.Sprite };
 /** 밑동 충돌 상자. solid = 막는다 (생길 때 내 발과 겹쳤으면 빠져나갈 때까지 false) */
 type Wall = { zone: Phaser.GameObjects.Zone; rect: Rect; solid: boolean };
-type ManView = { s: SnowmanInfo; img: Phaser.GameObjects.Image; label: Phaser.GameObjects.BitmapText; stage: number; puddleUntil: number; wall: Wall | null };
+/** oh = 11/18 눈뭉치에 맞아 놀란 얼굴이 끝나는 시각 (0 = 원래 얼굴) */
+type ManView = { s: SnowmanInfo; img: Phaser.GameObjects.Image; label: Phaser.GameObjects.BitmapText; stage: number; puddleUntil: number; wall: Wall | null; oh: number };
 /**
  * 내려놓은 덩이 (내 것·다른 사람 것). id = null이면 내가 막 내려놓아 서버 확인을 기다린다.
  * wait = 확인을 기다리는 내 동작 수 (0이 되면 서버 모양으로 맞춘다), sentAt = 마지막으로 보낸 시각
@@ -649,7 +654,7 @@ export class CampSnowmen {
     const img = scene.add.image(s.x, s.y + FOOT, "__DEFAULT").setOrigin(0.5, 1).setDepth(s.y);
     this.d.atlas.ensure(s.by);
     const label = scene.add.bitmapText(s.x, s.y, FONT_KEY, s.by, FONT_PX).setOrigin(0.5, 1).setDepth(DEPTH.labels - 2).setTint(LABEL_TINT);
-    const v: ManView = { s, img, label, stage: -1, puddleUntil: 0, wall: null };
+    const v: ManView = { s, img, label, stage: -1, puddleUntil: 0, wall: null, oh: 0 };
     this.men.set(s.id, v);
     this.restage(v, this.d.net().serverNow());
     if (fresh && !this.d.reduced && this.on) {
@@ -668,6 +673,32 @@ export class CampSnowmen {
     this.men.delete(id);
   }
 
+  // ── 11/18 눈싸움: 눈뭉치에 맞은 눈사람 (모두의 화면이 같은 길로 각자 본다) ──
+
+  /** 바닥 길 (ax,ay)→(bx,by)가 서 있는 눈사람 밑동에 닿았나 (다 녹아 내려앉은 단계·웅덩이는 빼고) */
+  snowballHit(ax: number, ay: number, bx: number, by: number): { id: string; x: number; y: number } | null {
+    if (!this.on) return null;
+    for (const v of this.men.values()) {
+      if (v.puddleUntil || v.stage >= MELT_PASS_STAGE) continue;
+      if (snowSegDist(v.s.x, v.s.y, ax, ay, bx, by, 1.6) < HIT_R) return { id: v.s.id, x: v.s.x, y: v.s.y };
+    }
+    return null;
+  }
+
+  /** 잠깐 놀란 얼굴로 바꾸고 몸을 움찔 (OH_MS 뒤 원래 얼굴) */
+  surprise(id: string): void {
+    const v = this.men.get(id);
+    if (!v || v.puddleUntil || !this.on) return;
+    const scene = this.d.scene;
+    v.oh = scene.time.now + OH_MS;
+    v.stage = -1;
+    this.restage(v, this.d.net().serverNow());
+    if (this.d.reduced) return;
+    scene.tweens.killTweensOf(v.img);
+    v.img.setScale(1.08, 0.9);
+    scene.tweens.add({ targets: v.img, scaleX: 1, scaleY: 1, duration: 260, ease: "Back.easeOut" });
+  }
+
   /** 녹는 단계를 맞춘다 (다 녹았으면 물웅덩이로). 마지막 단계부터는 지나갈 수 있다 */
   private restage(v: ManView, now: number): void {
     if (v.puddleUntil) return;
@@ -676,8 +707,11 @@ export class CampSnowmen {
     if (m === v.stage) return;
     v.stage = m;
     const xm = this.concept === "christmas";
-    const key = TEX.man(v.s.seed, xm, m);
-    addCanvasTexture(this.d.scene, key, { canvas: Art.snowmanArt(Art.snowmanLook(v.s.seed, xm), m).toCanvas() });
+    // 11/18 눈뭉치에 맞은 동안은 놀란 얼굴 (많이 녹아 졸린 얼굴이 된 뒤에는 그대로)
+    const oh = v.oh > 0 && m < 2;
+    const key = TEX.man(v.s.seed, xm, m, oh);
+    const look = Art.snowmanLook(v.s.seed, xm);
+    addCanvasTexture(this.d.scene, key, { canvas: Art.snowmanArt(oh ? { ...look, face: "surprise" } : look, m).toCanvas() });
     v.img.setTexture(key);
     if (m < MELT_PASS_STAGE) v.wall ??= this.addWall(snowmanBlockRect(v.s.x, v.s.y));
     else {
@@ -727,6 +761,11 @@ export class CampSnowmen {
     let foot: Rect | null = null;
     for (const w of this.walls.values()) if (!w.solid && !rectsOverlap((foot ??= this.foot()), w.rect)) w.solid = true;
     for (const v of this.men.values()) {
+      if (v.oh && now >= v.oh) {
+        v.oh = 0;
+        v.stage = -1;
+        this.restage(v, this.d.net().serverNow());
+      }
       if (v.puddleUntil || !this.on) continue;
       // 11/18 사용자 「이름이 작아서 안 보여요」: 0.84배 → 사람 이름표보다 조금 크게(1.25배), 흐리게 하지 않고 밝게
       if (v.label.scaleX !== labelScale * 1.25) v.label.setScale(labelScale * 1.25);

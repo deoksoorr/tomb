@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { CAMPFIRES, campfireOfSeat, dexBadgeCats, DIR, MAP_NAME, type AwayMapId, FURNITURE, LAKE_PIER, houseLot, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, sanitizeDye, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, squirrelWaitText, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
+import { CAMPFIRES, campfireOfSeat, dexBadgeCats, DIR, MAP_NAME, type AwayMapId, FURNITURE, LAKE_PIER, houseLot, MAP_HEIGHT, MAP_WIDTH, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, sanitizeDye, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, squirrelWaitText, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
 import { avatarColorSpec, type AppearanceChange } from "../sprites/avatar";
 import { saveResume, type ResumePose, type ResumeState } from "@/lib/resume";
 import { nameStyleIds } from "@/lib/nameStyle";
@@ -8,6 +8,8 @@ import type { PublicGrave } from "@/lib/types";
 import { TEX } from "../assets/manifest";
 import { bridge, type NetStatus, type UiEvents } from "../bridge";
 import { isSnowy, parseConceptOverride, type MapConcept } from "@/lib/mapConcept";
+import { SnowFight } from "../world/SnowFight";
+import { SnowGrid, type SnowNpc } from "../world/snowNpc";
 import { startMapConceptSync } from "@/lib/mapConceptClient";
 import { DEPTH, GRAVE_NEAR_RADIUS, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { GraveTooltip } from "../entities/Grave";
@@ -144,6 +146,15 @@ export class WorldScene extends Phaser.Scene {
   private zoo!: ZooView;
   /** 동물원 타는 펫 올라타기·내리기 (world/zoo/Riding) */
   private riding!: Riding;
+  /** 11/18 눈싸움 (겨울·크리스마스 판 바깥 — world/SnowFight) */
+  private fight: SnowFight | null = null;
+  /** 11/17 지금 마을 맵 컨셉 (눈싸움은 눈 덮인 판에서만) */
+  private concept: MapConcept = "default";
+  /** 11/18 눈뭉치가 박히는 칸 (맵 충돌 — 처음 쓸 때·집이 바뀌면 다시 굽는다) */
+  private snowGrid: SnowGrid | null = null;
+  private snowGridDirty = true;
+  /** 11/18 눈뭉치에 맞는 NPC (주민·강아지·고양이·사육사 — 무리 목록이 바뀔 때만 다시 묶는다) */
+  private snowNpcs: { life: readonly SnowNpc[]; all: SnowNpc[] } | null = null;
   private readonly remotes = new Map<Sid, RemoteAvatar>();
   private readonly seats = new Map<string, Sid>();
   private readonly move: MoveInput = { ax: 0, ay: 0, run: false };
@@ -340,7 +351,14 @@ export class WorldScene extends Phaser.Scene {
     this.atmos.setStaticLights(this.map.staticLights);
     this.atmos.setGridLights(this.map.gridLights);
     // 주거 구역의 집 (지금 채널의 마을 정보를 받으면 세운다 → 창문 빛도 다시. 채널마다 주거 구역이 따로)
-    this.houses = new WorldHouses(this.map, () => this.atmos.setGridLights(this.map.gridLights), opts.channel);
+    this.houses = new WorldHouses(
+      this.map,
+      () => {
+        this.atmos.setGridLights(this.map.gridLights);
+        this.snowGridDirty = true;
+      },
+      opts.channel,
+    );
     this.field.setMine(bridge.last("graves:mine")?.ids ?? []);
 
     this.hub = new InputHub();
@@ -408,6 +426,22 @@ export class WorldScene extends Phaser.Scene {
       seed: () => this.net.channel ?? (typeof opts.channel === "number" ? opts.channel : 1),
     });
     this.riding = new Riding({ player: () => this.player, net: () => this.net, remotes: () => this.remotes, toast: (m) => this.toast(m) });
+    this.fight = new SnowFight({
+      scene: this,
+      atlas: this.atlas,
+      sfx: this.sfx,
+      reduced: this.reduced,
+      player: () => this.player,
+      net: () => this.net,
+      remotes: () => this.remotes,
+      move: () => this.move,
+      // 실내(상점·집·사냥터 등)·버스 여행 중이면 쉰다
+      live: () => isSnowy(this.concept) && !this.inShop && !this.awayScene && !this.trip.away && !this.tripLock,
+      water: (x, y) => inWater(x, y),
+      solid: (x, y) => this.snowSolid().blocked(x, y),
+      npcs: () => this.npcsForSnow(),
+      toast: (m) => this.toast(m),
+    });
     const look = bridge.last("look:set");
     if (look) this.applyLook(look.look, look.lookGrant, look);
     this.bindBridge();
@@ -431,6 +465,23 @@ export class WorldScene extends Phaser.Scene {
       this.time.delayedCall(250, () => bridge.emit("grave:open", { graveId: id }));
     }
     this.debugMark("worldCreateMs", performance.now() - t0);
+  }
+
+  /** 11/18 눈뭉치가 박히는 칸: 맵 충돌(건물·벽·울타리·나무·바위·매대·가로등·벤치·놀이기구 받침 …)과 집 몸체 */
+  private snowSolid(): SnowGrid {
+    const g = (this.snowGrid ??= new SnowGrid(MAP_WIDTH, MAP_HEIGHT));
+    if (this.snowGridDirty) {
+      this.snowGridDirty = false;
+      g.fillGroups([this.map.colliders, this.map.gridColliders, this.map.furnitureColliders]);
+    }
+    return g;
+  }
+
+  private npcsForSnow(): readonly SnowNpc[] {
+    const life = this.life.snowNpcs();
+    if (this.snowNpcs?.life === life) return this.snowNpcs.all;
+    this.snowNpcs = { life, all: [...life, ...this.zoo.snowNpcs()] };
+    return this.snowNpcs.all;
   }
 
   /** 입장 화면에서 고른 몸 (GameStartOptions.body가 오면). 없으면 입장 토큰의 값이 오기 전까지 hood */
@@ -544,6 +595,7 @@ export class WorldScene extends Phaser.Scene {
         },
         onReset: () => {
           this.life.onReset();
+          this.fight?.clear();
           this.clearRemotes();
           this.seats.clear();
           this.spotsJudged = false;
@@ -559,6 +611,9 @@ export class WorldScene extends Phaser.Scene {
           this.sky?.firework();
         },
         onAct: (sid, kind, x, y) => this.playAct(sid, kind, x, y),
+        // 11/18 눈싸움 (마을 사람끼리)
+        onSnowball: (sid, n, x, y, tx, ty) => this.fight?.onThrow(sid, n, x, y, tx, ty),
+        onSnowHit: (sid, by, n, h) => this.fight?.onHit(sid, by, n, h),
         onEmo: (sid, id) => this.expr.onRemoteEmo(sid, id),
         onChat: (sid, text, id, meta) => this.expr.onRemoteChat(sid, text, id, meta),
         // 이 채널의 최근 1분 채팅 → 채팅창에 합친다 (채널 번호로 다른 채널 줄과 섞이지 않게)
@@ -871,6 +926,14 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("input:interact", () => this.hub.dispatch("interact")));
     on.push(bridge.on("input:jump", () => this.hub.dispatch("jump")));
     on.push(bridge.on("input:roll", ({ on: v }) => this.hub.setRollHold(v)));
+    // 11/18 눈싸움: F(키보드)·[눈 던지기](터치). 캠핑장에 있으면 캠핑장 장면이 받는다
+    on.push(
+      bridge.on("input:snowball", () => {
+        if (this.cleaned || this.hub.isBlocked || this.inShop || this.awayScene || this.trip.away || this.tripLock) return;
+        this.walker.cancel();
+        this.fight?.throwSnow();
+      }),
+    );
     // 마을·집 안이면 그 방(RoomPresence)이 받는다
     // 11/15 캠핑장에 있거나 버스를 타는 동안(trip.away)은 캠핑장 장면이 받는다
     on.push(bridge.on("input:say", ({ id }) => !this.awayScene && !this.trip.away && this.doSay(id)));
@@ -912,6 +975,7 @@ export class WorldScene extends Phaser.Scene {
     // 11/17 마을 맵 컨셉 (lib/mapConcept): 주소 시험 값(?concept=, 실서버는 막힘)이 있으면 그것만, 없으면 관리자가 고른 값을 따른다
     const conceptQa = parseConceptOverride(window.location.search);
     const applyConcept = (c: MapConcept) => {
+      this.concept = c;
       this.map.setConcept(c);
       this.atmos.setSnowy(isSnowy(c));
     };
@@ -1818,6 +1882,8 @@ export class WorldScene extends Phaser.Scene {
     this.hub.read(this.move);
     if (this.hub.isBlocked || this.tripLock) this.move.ax = this.move.ay = 0;
     this.walker.steer(this.move, Math.hypot(this.move.ax, this.move.ay) >= DEADZONE_ENTER, now);
+    // 11/18 눈을 뭉치는 잠깐은 그 자리에 선다
+    if (this.fight?.gathering) this.move.ax = this.move.ay = 0;
     const started = pl.update(this.benchInput(now), now, this.seatReq);
     this.boats.steer(this.move, dt);
     this.bumper.steer(this.move, dt);
@@ -1917,6 +1983,7 @@ export class WorldScene extends Phaser.Scene {
         this.fx.dust(r.x, r.y);
       }
     }
+    this.fight?.update(s);
     this.boats.update(dt);
     this.bumper.update(dt, view);
     this.rides.update();
@@ -2280,6 +2347,8 @@ export class WorldScene extends Phaser.Scene {
     this.life?.destroy();
     this.forage?.destroy();
     this.riding?.destroy();
+    this.fight?.destroy();
+    this.fight = null;
     this.zoo?.destroy();
     this.trip?.destroy();
     for (const u of this.unsubs) u();

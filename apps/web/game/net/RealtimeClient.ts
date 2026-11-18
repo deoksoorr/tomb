@@ -39,6 +39,8 @@ import {
   parseSnowmanInfo,
   parseSnowHold,
   parseSnowStackInfo,
+  parseSnowballMsg,
+  SNOWBALL_HIT_H_MAX,
   isSnowBall,
   isSnowmanDenyWhy,
   type SnowAct,
@@ -170,6 +172,11 @@ export type NetCallbacks = {
   onSnowStack?(st: SnowStackInfo, h?: SnowBall): void;
   /** 11/18 덩이가 사라졌다. took = 주인이 마지막 덩이를 다시 들었다 */
   onSnowStackGone?(id: string, sid: Sid, took?: SnowBall): void;
+  // ── 11/18 마을·캠핑장 눈싸움 (같은 맵) ──
+  /** sid가 n번 눈을 (x,y)에서 (tx,ty)로 던졌다 (내 것은 오지 않는다) */
+  onSnowball?(sid: Sid, n: number, x: number, y: number, tx: number, ty: number): void;
+  /** sid가 by의 n번 눈에 맞았다 (내가 맞았거나 맞힌 것도 온다). h = 맞은 높이 (없으면 얼굴) */
+  onSnowHit?(sid: Sid, by: Sid, n: number, h?: number): void;
 };
 
 /** 11/16 채팅에 실려 오는 보낸 사람 정보 (맵이 달라 화면에 없는 사람도 채팅창에 쓰게) */
@@ -182,7 +189,7 @@ const MAP_REPLY_MS = 4000;
 /** 맵 옮기기 답이 없을 때 다시 보내는 횟수 (서버는 맵 요청을 1초에 한 번만 받는다 — MAP_REPLY_MS 간격이면 넉넉하다) */
 const MAP_RETRIES = 2;
 /** 맵을 옮기는 중에 버리는 옛 맵 소식 (사람·자리·몸짓·말풍선) */
-const OLD_MAP_EVENTS = new Set(["join", "leave", "seat", "emote", "graveEvent", "look", "act", "say", "emo", "chat", "mood", "ride", "rod", "away", "firework", "peers", "goblin", "goblinGone", "goblinCaught", "chatLog", "bbq", "snowman", "snowmanGone", "snowHold", "snowStack", "snowStackGone"]);
+const OLD_MAP_EVENTS = new Set(["join", "leave", "seat", "emote", "graveEvent", "look", "act", "say", "emo", "chat", "mood", "ride", "rod", "away", "firework", "peers", "goblin", "goblinGone", "goblinCaught", "chatLog", "bbq", "snowman", "snowmanGone", "snowHold", "snowStack", "snowStackGone", "snowball", "snowHit"]);
 
 export type NetOptions = { name: string; color: string; channel: number | "auto"; debug?: boolean; body?: string };
 
@@ -575,6 +582,22 @@ export class RealtimeClient {
     return true;
   }
 
+  // ── 11/18 눈싸움 (접속 중이 아니면 false — 보내지 않는다) ──
+
+  /** 눈을 던진다: (x,y) = 내 발, (tx,ty) = 떨어질 곳. 서버는 위치를 넉넉히 비교하니 위치를 따로 먼저 보내지 않는다 (요청 수를 늘리지 않게) */
+  snowball(x: number, y: number, tx: number, ty: number): boolean {
+    if (!this.online) return false;
+    this.send({ t: "snowball", x: Math.round(x), y: Math.round(y), tx: Math.round(tx), ty: Math.round(ty) });
+    return true;
+  }
+
+  /** 내 화면에서 by의 n번 눈에 맞았다 (h = 맞은 높이, 발에서 px) */
+  snowHit(by: Sid, n: number, h: number): boolean {
+    if (!this.online) return false;
+    this.send({ t: "snowHit", by, n, h });
+    return true;
+  }
+
   /** 22번: 황금 고블린에 닿았다 (판정은 서버) */
   claimGoblin(id: string): void {
     this.flushPose();
@@ -902,6 +925,15 @@ export class RealtimeClient {
           break;
         case "look":
           if (m.sid !== this.mySid) this.h.onLook(m.sid, m.look, { dye: m.dye, body: m.body, ...(typeof m.champ === "number" ? { champ: m.champ } : {}), ...(m.mgr === 0 || m.mgr === 1 ? { mgr: m.mgr } : {}) });
+          break;
+        case "snowball": {
+          const b = parseSnowballMsg(m as unknown as Record<string, unknown>);
+          if (b && b.sid !== this.mySid) this.h.onSnowball?.(b.sid, b.n, b.x, b.y, b.tx, b.ty);
+          break;
+        }
+        case "snowHit":
+          if (typeof m.sid === "number" && typeof m.by === "number" && typeof m.n === "number")
+            this.h.onSnowHit?.(m.sid, m.by, m.n, typeof m.h === "number" && Number.isFinite(m.h) ? Math.max(0, Math.min(SNOWBALL_HIT_H_MAX, m.h)) : undefined);
           break;
         case "act":
           if (m.sid !== this.mySid && (ACT_KINDS as readonly string[]).includes(m.kind) && Number.isFinite(m.x) && Number.isFinite(m.y))

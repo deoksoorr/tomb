@@ -30,6 +30,7 @@ import { stargazeColliders } from "./stargazeLayout";
 import { CRITTERS, CritterSim, PERCH_HOP_MS, type CritterPose } from "./critterSim";
 import { Crows } from "./Crows";
 import { Dogs } from "./Dogs";
+import { imageBox, type SnowNpc } from "../snowNpc";
 import type { LineContext } from "./residentData";
 import { Residents } from "./Residents";
 import { playLife } from "./sounds";
@@ -633,6 +634,35 @@ export class VillageLife {
     }
     return this.dogs.warm(t, budgetMs);
   }
+
+  /**
+   * 11/18 눈싸움: 맞을 수 있는 마을 NPC (주민·강아지·고양이·꼬마 유령). 각 무리 목록이 바뀔 때만 다시 묶는다.
+   * 고양이·꼬마 유령은 맞으면 깜짝 놀라 폴짝 비킨다 (뛰어오는 사람에 놀랄 때와 같은 반응)
+   */
+  snowNpcs(): readonly SnowNpc[] {
+    const res = this.residents.snowNpcs();
+    const dogs = this.dogs.snowNpcs();
+    if (this.snowAll && this.snowParts[0] === res && this.snowParts[1] === dogs && this.snowParts[2] === this.seed) return this.snowAll;
+    this.snowParts = [res, dogs, this.seed];
+    const critters = this.critters.map(
+      (c): SnowNpc => ({
+        voice: c.sim.def.kind === "cat" ? "cat" : "person",
+        box: (out) => c.visible && imageBox(c.img, out),
+        img: () => c.img,
+        hold: () => {
+          const pnow = performance.now();
+          if (pnow < c.startledUntil) return;
+          c.startledUntil = pnow + 1600;
+          c.tx = (Math.random() < 0.5 ? -1 : 1) * 16;
+          c.ty = (Math.random() - 0.5) * 8;
+          c.hop = 1;
+        },
+      }),
+    );
+    return (this.snowAll = [...res, ...dogs, ...critters]);
+  }
+  private snowAll: SnowNpc[] | null = null;
+  private snowParts: [readonly SnowNpc[] | null, readonly SnowNpc[] | null, number] = [null, null, -1];
 
   destroy(): void {
     if (this.destroyed) return;

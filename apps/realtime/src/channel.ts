@@ -62,6 +62,17 @@ import {
   SNOW_ACT_INTERVAL_MS,
   SNOW_HOLD_INTERVAL_MS,
   parseSnowHold,
+  SNOWBALL_HIT_INTERVAL_MS,
+  SNOWBALL_HIT_SLACK,
+  SNOWBALL_HIT_WINDOW_MS,
+  SNOWBALL_KEEP,
+  SNOWBALL_PER_MINUTE,
+  SNOWBALL_RANGE_MAX,
+  SNOWBALL_SERVER_INTERVAL_MS,
+  SNOWBALL_START_SLACK,
+  snowFightMap,
+  snowFightState,
+  snowSegDist,
   type SnowBall,
   type SnowHold,
   type SnowAct,
@@ -365,6 +376,13 @@ type Peer<C> = PeerRecord & {
   /** 11/18 눈덩이 내려놓기·올리기·다시 들기 / 들고 있는 상태 알림 (없으면 아직 안 씀) */
   lastSnowActAt?: number;
   lastSnowHoldAt?: number;
+  /** 11/18 눈싸움: 마지막 던지기·맞음 신고 (없으면 아직 안 씀), 마지막 던지기 번호, 최근 던지기 (맞음 확인용 — 연결 단위, 저장하지 않는다) */
+  lastSnowballAt?: number;
+  lastSnowHitAt?: number;
+  snowN?: number;
+  throws?: SnowThrow[];
+  /** 최근 1분 동안 받은 던지기 메시지 시각 (버린 것 포함 — SNOWBALL_PER_MINUTE 상한) */
+  snowRecv?: number[];
   /** 말풍선 채팅 도배 제한 (토큰 버킷). 재접속해도 피어에 남겨 다시 채워지지 않게 한다 */
   chatBucket?: ChatBucket;
   /** 최근 다시 붙은 시각들 (재접속 반복으로 메시지 한도·쿨다운을 초기화하거나 welcome을 거듭 받는 것을 막는다) */
@@ -374,6 +392,9 @@ type Peer<C> = PeerRecord & {
   /** attachment가 최신인지 */
   saved: boolean;
 };
+
+/** 11/18 눈싸움 던지기 하나 (서버가 받은 시각 at, 던진 맵, 이미 누가 맞았는지) */
+type SnowThrow = { n: number; at: number; map: MapId; x: number; y: number; tx: number; ty: number; hit: boolean };
 
 export class ChannelCore<C extends object> {
   private readonly peers = new Map<number, Peer<C>>();
@@ -1055,7 +1076,54 @@ export class ChannelCore<C extends object> {
       case "snowAdd":
       case "snowTake":
         return this.onSnowAct(p, m, now);
+      case "snowball":
+        return this.onSnowball(p, m, now);
+      case "snowHit":
+        return this.onSnowHit(p, m.by, m.n, m.h, now);
     }
+  }
+
+  /**
+   * 11/18 눈싸움 던지기: 마을·캠핑장 바깥에서 서 있거나 걷는 사람만 (자리·탈것·물속·실내는 아니다), 1분 상한·3초 간격·출발점·거리를 보고
+   * 번호를 붙여 같은 맵 다른 사람에게 중계한다 (던진 사람은 이미 그렸다). 겨울판인지는 웹이 본다. 맞음 확인용으로 최근 몇 개만 기억한다
+   */
+  private onSnowball(p: Peer<C>, m: Extract<C2S, { t: "snowball" }>, now: number): void {
+    // 11/18 1분 상한: 받은 메시지는 다 센다 (넘으면 아무것도 하지 않는다)
+    const recv = (p.snowRecv ??= []);
+    while (recv.length && now - recv[0] >= 60_000) recv.shift();
+    if (recv.length >= SNOWBALL_PER_MINUTE) return;
+    recv.push(now);
+    const map = mapOfPeer(p);
+    if (this.cfg.room || p.away || !snowFightMap(map)) return;
+    if (p.seatId || p.ride || !snowFightState(p.state)) return;
+    if (now - (p.lastSnowballAt ?? -Infinity) < SNOWBALL_SERVER_INTERVAL_MS) return;
+    if (Math.hypot(m.x - p.x, m.y - p.y) > SNOWBALL_START_SLACK) return;
+    const d = Math.hypot(m.tx - m.x, m.ty - m.y);
+    if (d < 1 || d > SNOWBALL_RANGE_MAX) return;
+    p.lastSnowballAt = now;
+    const n = (p.snowN = (p.snowN ?? 0) + 1);
+    const list = (p.throws ??= []);
+    list.push({ n, at: now, map, x: m.x, y: m.y, tx: m.tx, ty: m.ty, hit: false });
+    if (list.length > SNOWBALL_KEEP) list.shift();
+    this.broadcastMap(map, encodeEvent({ t: "snowball", sid: p.sid, n, x: m.x, y: m.y, tx: m.tx, ty: m.ty }), p.sid);
+  }
+
+  /**
+   * 11/18 눈싸움 맞음 신고 (판정은 맞은 사람 화면 — 사용자 「모든 사람이 다 맞아야 함」: 앉은 사람·탄 사람도, 실내만 아니면): 던진 사람이 같은 맵에 있고 그 번호가 최근 던지기이며 아직 아무도 안 맞았고,
+   * 맞은 사람 서버 위치가 날아간 길 근처면 같은 맵 모두(맞은 사람·던진 사람 포함)에게 알린다. 한 번 던진 눈은 한 사람만 맞는다
+   */
+  private onSnowHit(p: Peer<C>, by: number, n: number, h: number | undefined, now: number): void {
+    const map = mapOfPeer(p);
+    if (this.cfg.room || p.away || by === p.sid || !snowFightMap(map)) return;
+    if (now - (p.lastSnowHitAt ?? -Infinity) < SNOWBALL_HIT_INTERVAL_MS) return;
+    const q = this.peers.get(by);
+    if (!q || mapOfPeer(q) !== map) return;
+    const th = q.throws?.find((x) => x.n === n);
+    if (!th || th.hit || th.map !== map || now - th.at > SNOWBALL_HIT_WINDOW_MS) return;
+    if (snowSegDist(p.x, p.y, th.x, th.y, th.tx, th.ty) > SNOWBALL_HIT_SLACK) return;
+    p.lastSnowHitAt = now;
+    th.hit = true;
+    this.broadcastMap(map, encodeEvent({ t: "snowHit", sid: p.sid, by, n, ...(h !== undefined ? { h } : {}) }));
   }
 
   /** 11/17 캠핑장에 들어왔다: 지금 서 있는 눈사람과 11/18 쌓는 중인 덩이 */

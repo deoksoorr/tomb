@@ -15,6 +15,7 @@ import {
   TELEPORT_DIST,
   campSeatById,
   dexBadgeCats,
+  inCampStream,
   type BbqItemId,
   type BbqStand,
   isAvatarBody,
@@ -59,6 +60,8 @@ import { campfireLevel, nearestCampfire } from "../world/campfireMath";
 import { LookoutScope } from "./LookoutScope";
 import { StarScopes } from "../scopes/StarScopes";
 import { WeatherSound } from "../world/WeatherSound";
+import { SnowFight } from "../world/SnowFight";
+import { SnowGrid, type SnowNpc } from "../world/snowNpc";
 import { createBusArrival } from "../bus/BusArrival";
 import type { BusArrivalApi } from "../bus/busTypes";
 import { CampMap } from "./CampMap";
@@ -117,6 +120,11 @@ export class CampScene extends Phaser.Scene {
   private life: CampLife | null = null;
   /** 11/17 눈사람 만들기 (겨울·크리스마스 판 — game/camp/CampSnowmen) */
   private snow: CampSnowmen | null = null;
+  /** 11/18 눈싸움 (겨울·크리스마스 판 — game/world/SnowFight) */
+  private fight: SnowFight | null = null;
+  /** 11/18 눈뭉치가 박히는 칸 (맵 충돌 — 계곡 물은 빼고 처음 쓸 때 굽는다) · 맞는 NPC 묶음 */
+  private snowGrid: SnowGrid | null = null;
+  private snowNpcs: { life: readonly SnowNpc[]; all: SnowNpc[] } | null = null;
   /** 전망대 망원경 (망원 뷰) */
   private scope!: LookoutScope;
   /** 11/16 별 망원경 (전망대 계단 아래·계곡 둑 — 별자리 잇기, game/scopes) */
@@ -268,6 +276,27 @@ export class CampScene extends Phaser.Scene {
     this.forage = new CampForage({ scene: this, atlas: h.atlas, reduced: h.reduced, colliders: this.map.colliders, player: () => this.player, net: () => h.net, seats: () => this.seats, remotes: () => this.remotes, toast: (m) => this.toast(m) });
     this.life = new CampLife({ scene: this, atlas: h.atlas, sfx: h.sfx, reduced: h.reduced, player: () => this.player, net: () => h.net, override: this.hourOverride });
     this.snow = new CampSnowmen({ scene: this, atlas: h.atlas, sfx: h.sfx, reduced: h.reduced, player: () => this.player, net: () => h.net, remotes: () => this.remotes, myName: () => h.name, toast: (m) => this.toast(m), concept });
+    this.fight = new SnowFight({
+      scene: this,
+      atlas: h.atlas,
+      sfx: h.sfx,
+      reduced: h.reduced,
+      player: () => this.player,
+      net: () => h.net,
+      remotes: () => this.remotes,
+      move: () => this.move,
+      live: () => !!this.snow?.on && !this.covered && !this.locked && !this.parked && !this.scope.isOpen,
+      blocked: () => (this.snow?.holding ? "눈덩이를 내려놓고 던져요." : null),
+      water: (x, y) => inCampStream(x, y, 0),
+      solid: (x, y) => (this.snowGrid ??= new SnowGrid(CAMP_WIDTH, CAMP_HEIGHT).fillGroups([this.map.colliders, this.map.furnitureColliders], (cx, cy) => inCampStream(cx, cy, 0))).blocked(x, y),
+      npcs: () => {
+        const life = this.life?.snowNpcs() ?? [];
+        if (this.snowNpcs?.life !== life) this.snowNpcs = { life, all: [...life, ...this.map.snowNpcs()] };
+        return this.snowNpcs.all;
+      },
+      targets: { hit: (ax, ay, bx, by) => this.snow?.snowballHit(ax, ay, bx, by) ?? null, surprise: (id) => this.snow?.surprise(id) },
+      toast: (m) => this.toast(m),
+    });
     this.stars = new StarScopes(this, { spots: CAMP_SCOPES, style: "camp", player: () => this.player, net: () => h.net, seats: () => this.seats, judged: () => this.spotsJudged, toast: (m) => this.toast(m), sfx: h.sfx });
 
     yield;
@@ -468,6 +497,8 @@ export class CampScene extends Phaser.Scene {
       onSnowHold: (sid, h) => this.snow?.setPeerHold(sid, h),
       onSnowStack: (st, h) => this.snow?.onStack(st, h),
       onSnowStackGone: (id, sid, took) => this.snow?.onStackGone(id, sid, took),
+      onSnowball: (sid, n, x, y, tx, ty) => this.fight?.onThrow(sid, n, x, y, tx, ty),
+      onSnowHit: (sid, by, n, h) => this.fight?.onHit(sid, by, n, h),
       onMapped: (map, peers, seats) => {
         if (map !== "camp") return this.host.bail();
         this.clearRemotes();
@@ -605,6 +636,7 @@ export class CampScene extends Phaser.Scene {
     for (const r of this.remotes.values()) r.destroy();
     this.remotes.clear();
     this.snow?.clearPeers();
+    this.fight?.clear();
   }
 
   private isFriend(r: RemoteAvatar): boolean {
@@ -647,6 +679,8 @@ export class CampScene extends Phaser.Scene {
     on.push(bridge.on("input:chat", ({ text }) => !this.covered && this.expr.chat(text, this.time.now)));
     on.push(bridge.on("input:mood", ({ mood }) => this.expr.setMood(mood)));
     on.push(bridge.on("input:ride", () => !this.locked && !this.snow?.blocks() && this.riding.toggle()));
+    // 11/18 눈싸움: F(키보드)·[눈 던지기](터치)
+    on.push(bridge.on("input:snowball", () => !this.host.hub.isBlocked && !this.covered && !this.locked && !this.parked && this.fight?.throwSnow()));
     // 11/16 사냥터·미니게임·집으로 가기 직전: 자리에서 일어난다 (lib/rideGate)
     on.push(bridge.on("player:stand", () => standForGate(this.player, this.time.now, this.seatReq)));
     on.push(
@@ -1070,6 +1104,8 @@ export class CampScene extends Phaser.Scene {
     // 11/17 눈덩이를 굴리는 동안은 걷기만 (달리면 덩이가 앞질러 가 버린다). 11/18 품에 안고는 달려도 된다
     const rollHeld = this.host.hub.rollHeld && !this.locked && !this.scope.isOpen;
     if (this.snow?.holding && rollHeld) this.move.run = false;
+    // 11/18 눈을 뭉치는 잠깐은 그 자리에 선다
+    if (this.fight?.gathering) this.move.ax = this.move.ay = 0;
     const started = pl.update(this.benchInput(now), now, this.seatReq);
     this.stars?.update();
     if (this.furnitureCollider) this.furnitureCollider.active = !pl.airborne;
@@ -1105,6 +1141,7 @@ export class CampScene extends Phaser.Scene {
     this.life?.update(dt, view, s);
     this.snow?.update(s, rollHeld);
     for (const r of this.remotes.values()) r.update(pnow, view, s);
+    this.fight?.update(s);
     this.declutterLabels(now, pnow);
     this.updateSeatHint(now, s);
     this.updateTalk();
@@ -1273,6 +1310,8 @@ export class CampScene extends Phaser.Scene {
     this.life = null;
     this.snow?.destroy();
     this.snow = null;
+    this.fight?.destroy();
+    this.fight = null;
     this.meScreen?.destroy();
     this.rig?.destroy();
     this.atmos?.destroy();

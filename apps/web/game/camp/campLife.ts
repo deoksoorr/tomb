@@ -6,6 +6,7 @@ import type { GlyphAtlas } from "../text/GlyphAtlas";
 import type { Lighting } from "../world/Lighting";
 import type { Sfx } from "../world/Sfx";
 import { Folk } from "../world/life/Folk";
+import type { SnowNpc } from "../world/snowNpc";
 import { CAMP_FOLK, campFolkWorld } from "./campLifeData";
 
 // 11/16 언젠가 캠핑장 주민 (장작 아재·캠핑카 아빠·콩이·산악회 대장·강태공 할배·별바라기·고양이 도토리).
@@ -60,6 +61,11 @@ export class CampLife {
     const pl = this.d.player();
     const h = this.folk.hint(prefix, pl.x, pl.y);
     return h ? { x: pl.x, y: pl.y + 2, text: h.text } : null;
+  }
+
+  /** 11/18 눈싸움: 맞을 수 있는 캠핑장 주민·동물 */
+  snowNpcs(): readonly SnowNpc[] {
+    return this.destroyed ? [] : this.folk.snowNpcs();
   }
 
   addLights(lit: Lighting): void {
