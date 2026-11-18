@@ -101,10 +101,12 @@ export function drawHouseLot(scene: Phaser.Scene, atlas: GlyphAtlas, lot: LotSpo
   const bottom = lot.y + info.roofTop - 2;
   const depth = opts.labelDepth ?? DEPTH.labels - 1;
   const zoom = scene.cameras.main.zoom;
+  // 11/18 줄 간격은 캐릭터 칭호 ↔ 이름처럼 화면에서 늘 같게 (보이는 글자 사이 LINE_GAP px, 줌이 바뀌면 scaleLotLabel이 다시 놓는다)
+  const pitch = FONT_PX - atlas.inkPad.top - atlas.inkPad.bottom + LINE_GAP;
   const labels = [
-    plate(scene, cx, bottom - 16, size.w, zoom, line1).setTint(mine ? 0xffe39a : 0xf2ead3).setAlpha(0.92).setDepth(depth),
-    plate(scene, cx, bottom - 7, size.w, zoom, line2).setTint(0xb9b4a4).setAlpha(0.85).setDepth(depth),
-    plate(scene, cx, bottom, size.w, zoom, () => (atlas.measure(`「${t.name}」`), `「${t.name}」`), TITLE_PX).setTint(0x9fb6a0).setAlpha(0.7).setDepth(depth),
+    plate(scene, cx, bottom, 2, pitch, size.w, zoom, line1).setTint(mine ? 0xffe39a : 0xf2ead3).setAlpha(0.92).setDepth(depth),
+    plate(scene, cx, bottom, 1, pitch, size.w, zoom, line2).setTint(0xb9b4a4).setAlpha(0.85).setDepth(depth),
+    plate(scene, cx, bottom, 0, pitch, size.w, zoom, () => (atlas.measure(`「${t.name}」`), `「${t.name}」`), TITLE_PX).setTint(0x9fb6a0).setAlpha(0.7).setDepth(depth),
   ];
   return {
     objs,
@@ -121,15 +123,20 @@ export function drawHouseLot(scene: Phaser.Scene, atlas: GlyphAtlas, lot: LotSpo
 
 /** 필지 폭에서 문패 양옆으로 비워 둘 여백 (월드 px, 합) */
 const PLATE_PAD = 6;
+/** 문패 줄 사이 보이는 간격 (화면 px) — 캐릭터 칭호 ↔ 이름 간격(AvatarView TITLE_GAP)과 같게 */
+const LINE_GAP = 6;
 const plateFits = new WeakMap<Phaser.GameObjects.BitmapText, (zoom: number) => string>();
+/** 문패 줄 자리: 맨 아랫줄 바닥(월드 y)·몇째 줄(아래부터 0)·줄 간격(화면 px) */
+const plateRows = new WeakMap<Phaser.GameObjects.BitmapText, { bottom: number; row: number; pitch: number }>();
 
 /** 문패 셋째 줄(호칭) 글씨 크기. 픽셀 글꼴이라 12보다 작게 줄이면 뭉개져서 크기는 같게, 옅은 색·「」로 작아 보이게 */
 const TITLE_PX = FONT_PX;
 
-function plate(scene: Phaser.Scene, x: number, y: number, lotW: number, zoom: number, fit: (max: number) => string, px = FONT_PX): Phaser.GameObjects.BitmapText {
+function plate(scene: Phaser.Scene, x: number, bottom: number, row: number, pitch: number, lotW: number, zoom: number, fit: (max: number) => string, px = FONT_PX): Phaser.GameObjects.BitmapText {
   const f = (z: number) => fit(Math.floor((lotW - PLATE_PAD) * z));
-  const l = scene.add.bitmapText(x, y, FONT_KEY, f(zoom), px).setOrigin(0.5, 1);
+  const l = scene.add.bitmapText(x, bottom - (row * pitch) / zoom, FONT_KEY, f(zoom), px).setOrigin(0.5, 1);
   plateFits.set(l, f);
+  plateRows.set(l, { bottom, row, pitch });
   return l;
 }
 
@@ -137,6 +144,8 @@ function plate(scene: Phaser.Scene, x: number, y: number, lotW: number, zoom: nu
 export function scaleLotLabel(l: Phaser.GameObjects.BitmapText, s: number): void {
   if (l.scaleX === s) return;
   l.setScale(s);
+  const r = plateRows.get(l);
+  if (r) l.setY(r.bottom - r.row * r.pitch * s);
   const f = plateFits.get(l);
   if (!f) return;
   const text = f(1 / s);
