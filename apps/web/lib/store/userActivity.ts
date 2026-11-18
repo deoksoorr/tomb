@@ -21,6 +21,14 @@ export interface ActivityStore {
   since(): Promise<string | null>;
   /** 계정마다 활동한 날 수 (ids 순서) */
   activeDays(ids: readonly string[]): Promise<number[]>;
+  /** 11/18 [계정, 날짜]: 그날 머문 시간이 1시간을 넘겼다 (날마다 한 번만 센다). 새로 남긴 수 */
+  recordHour(pairs: readonly (readonly [string, string])[]): Promise<number>;
+  /** 계정마다 1시간 넘게 머문 날 수 (ids 순서) */
+  hourDays(ids: readonly string[]): Promise<number[]>;
+  /** 1시간 넘게 머문 날 기록이 시작된 날 (없으면 null) */
+  hourSince(): Promise<string | null>;
+  /** 그 계정이 days 각각에 활동했는지 / 1시간 넘게 머물렀는지 (days 순서) */
+  dayFlags(id: string, days: readonly string[]): Promise<{ active: boolean; hour: boolean }[]>;
 }
 
 export class MemoryActivity implements ActivityStore {
@@ -49,6 +57,32 @@ export class MemoryActivity implements ActivityStore {
   }
   async activeDays(ids: readonly string[]): Promise<number[]> {
     return ids.map((id) => this.counts.get(id) ?? 0);
+  }
+
+  private hours = new Map<string, Set<string>>();
+  private hourCounts = new Map<string, number>();
+  private hourFirst: string | null = null;
+  async recordHour(pairs: readonly (readonly [string, string])[]): Promise<number> {
+    let n = 0;
+    for (const [id, day] of pairs) {
+      let set = this.hours.get(day);
+      if (!set) this.hours.set(day, (set = new Set()));
+      if (set.has(id)) continue;
+      set.add(id);
+      this.hourCounts.set(id, (this.hourCounts.get(id) ?? 0) + 1);
+      if (!this.hourFirst || day < this.hourFirst) this.hourFirst = day;
+      n++;
+    }
+    return n;
+  }
+  async hourDays(ids: readonly string[]): Promise<number[]> {
+    return ids.map((id) => this.hourCounts.get(id) ?? 0);
+  }
+  async hourSince(): Promise<string | null> {
+    return this.hourFirst;
+  }
+  async dayFlags(id: string, days: readonly string[]): Promise<{ active: boolean; hour: boolean }[]> {
+    return days.map((d) => ({ active: !!this.days.get(d)?.has(id), hour: !!this.hours.get(d)?.has(id) }));
   }
 }
 
@@ -110,10 +144,43 @@ export class RedisActivity implements ActivityStore {
   }
 
   async activeDays(ids: readonly string[]): Promise<number[]> {
+    return this.hcounts(K.actDays, ids);
+  }
+
+  private async hcounts(key: string, ids: readonly string[]): Promise<number[]> {
     if (!ids.length) return [];
-    const v = (await this.redis.hmget(K.actDays, ...ids)) as unknown;
+    const v = (await this.redis.hmget(key, ...ids)) as unknown;
     const list = Array.isArray(v) ? (v as (string | null)[]) : ids.map((id) => ((v ?? {}) as Record<string, string | null>)[id] ?? null);
     return ids.map((_, i) => Number(list[i] ?? 0) || 0);
+  }
+
+  /** 1시간 넘긴 날: 활동 기록과 같은 스크립트를 다른 키로 (그날 SET에 처음일 때만 날 수 +1, 가장 이른 날 = 기록 시작일) */
+  async recordHour(pairs: readonly (readonly [string, string])[]): Promise<number> {
+    if (!pairs.length) return 0;
+    const n = await this.redis.eval<string[], number>(
+      RECORD_LUA,
+      [K.actHourDays, K.actHourSince, ...pairs.map(([, day]) => K.actHourDay(day))],
+      [String(ACT_DAY_TTL_SEC), ...pairs.flatMap(([id, day]) => [id, day])],
+    );
+    return Number(n) || 0;
+  }
+
+  async hourDays(ids: readonly string[]): Promise<number[]> {
+    return this.hcounts(K.actHourDays, ids);
+  }
+
+  async hourSince(): Promise<string | null> {
+    const v = await this.redis.get<string>(K.actHourSince);
+    return v ? String(v) : null;
+  }
+
+  /** SISMEMBER 날짜 × 2를 파이프라인 한 번으로 */
+  async dayFlags(id: string, days: readonly string[]): Promise<{ active: boolean; hour: boolean }[]> {
+    if (!days.length) return [];
+    const p = this.redis.pipeline();
+    for (const d of days) p.sismember(K.actDay(d), id).sismember(K.actHourDay(d), id);
+    const r = await p.exec<number[]>();
+    return days.map((_, i) => ({ active: Number(r[i * 2]) === 1, hour: Number(r[i * 2 + 1]) === 1 }));
   }
 }
 
@@ -133,4 +200,11 @@ export async function recordActive(accountId: string, day: string): Promise<void
   await getActivity()
     .record([[accountId, day]])
     .catch((e: unknown) => console.error("[activity] 활동 기록 실패", e));
+}
+
+/** 11/18 머무르기 기록이 오늘 머문 시간을 1시간 넘게 올린 순간에 부른다 (하루 한 번). 실패해도 게임은 그대로 */
+export async function recordHourDay(accountId: string, day: string): Promise<void> {
+  await getActivity()
+    .recordHour([[accountId, day]])
+    .catch((e: unknown) => console.error("[activity] 1시간 머문 날 기록 실패", e));
 }

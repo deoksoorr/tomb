@@ -33,6 +33,12 @@ export const K = {
   actDays: "act:days",
   /** STRING 활동 기록이 있는 가장 이른 날 (이 날 전 칸은 「기록 없음」) */
   actSince: "act:since",
+  /** 11/18 SET 그 게임 날짜에 머문 시간이 1시간을 넘긴 계정 (추천 「자리 잡기」 — 하루 1시간 넘게 머문 날). 120일 TTL */
+  actHourDay: (day: string) => `act:h:${day}`,
+  /** HASH 계정 id → 1시간 넘게 머문 날 수 (기록을 시작한 뒤, 날마다 한 번) */
+  actHourDays: "act:hdays",
+  /** STRING 1시간 넘게 머문 날 기록이 시작된 날 (이 날 전은 옛 기준 — 추천 진행 이전에 쓴다) */
+  actHourSince: "act:hsince",
   /** ZSET 계정 id → 사냥터 처치 수 합계 (전체 / 그 주) */
   rankHuntKills: "rank:hunt:kills",
   rankHuntKillsWeek: (week: string) => `rank:hunt:kills:w:${week}`,

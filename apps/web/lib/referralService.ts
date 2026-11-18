@@ -13,8 +13,8 @@ import {
   REF_GRAND_POINTS,
   refGiftNoteGrand,
   REF_MONTH_CAP,
+  REF_DAY_MIN,
   REF_NEED_DAYS,
-  REF_NEED_MIN,
   REF_REWARD_POINTS,
   refGiftNoteReferrer,
   type RefCheckResponse,
@@ -28,6 +28,9 @@ import { isStaff } from "./staff";
 import { getAccounts, NO_NAME } from "./store";
 import { getReferrals, type GrandOpts, type ReferralRecord } from "./store/referrals";
 import { getActivity } from "./store/userActivity";
+import { STAY_TICK_MINUTES } from "./attendStay";
+import { addDays } from "./gameDay";
+import { kstDay } from "./store/accounts";
 import { TITLES } from "./titles";
 import { forgetTitles } from "./titlesServer";
 
@@ -126,14 +129,67 @@ export async function enterReferral(
   presenceMemo().delete(refereeId);
 }
 
-/** 새 이웃의 진행 (총 머문 분·활동한 날 수) */
-async function progressOf(ids: readonly string[]): Promise<{ stayMinutes: number; days: number; name: string | null }[]> {
-  if (!ids.length) return [];
-  const [sums, days] = await Promise.all([getAccounts().summaries(ids), getActivity().activeDays(ids)]);
-  return ids.map((_, i) => ({ stayMinutes: sums[i]?.stayMinutes ?? 0, days: days[i] ?? 0, name: sums[i]?.name ?? null }));
+/**
+ * 11/18 새 이웃의 진행. days = 하루 1시간(REF_DAY_MIN) 넘게 머문 날 수 = 기록(act:hdays) + 옛 기준 날.
+ *  - 옛 기준 날: 1시간 기록이 시작된 날(hourSince, 배포한 날) 전까지 들어온 날은 너그럽게 1시간 머문 날로 친다 (운영자가 확인하니까).
+ *    다만 하루 기록(_stay — 2일 남는다)이 남은 오늘·어제는 실제 머문 분으로 본다
+ *  - recent = 어제·오늘 머문 분 (관리자 점검용, 하루 기록이 남은 날만)
+ */
+export type RefProgress = {
+  stayMinutes: number;
+  days: number;
+  hourDays: number;
+  legacyDays: number;
+  todayMin: number;
+  recent: { day: string; min: number }[];
+  name: string | null;
+};
+/** 옛 기준 날을 볼 때 거슬러 보는 최대 날 수 */
+const LEGACY_LOOK_DAYS = 60;
+
+async function progressOf(recs: readonly Pick<ReferralRecord, "refereeId" | "at">[], now = Date.now()): Promise<RefProgress[]> {
+  if (!recs.length) return [];
+  const ids = recs.map((r) => r.refereeId);
+  const act = getActivity();
+  const today = kstDay(now);
+  const yesterday = addDays(today, -1);
+  const [sums, hours, since, ticks] = await Promise.all([
+    getAccounts().summaries(ids),
+    act.hourDays(ids),
+    act.hourSince(),
+    getAccounts().stayTicksOn(ids, [yesterday, today]),
+  ]);
+  const start = since ?? today;
+  return Promise.all(
+    recs.map(async (r, i): Promise<RefProgress> => {
+      const recent = [yesterday, today].map((day, j) => ({ day, min: (ticks[i]?.[j] ?? 0) * STAY_TICK_MINUTES }));
+      let legacyDays = 0;
+      const join = kstDay(r.at);
+      if (join <= start) {
+        const days: string[] = [];
+        for (let d = join; d <= start && days.length < LEGACY_LOOK_DAYS; d = addDays(d, 1)) days.push(d);
+        const flags = await act.dayFlags(r.refereeId, days);
+        for (let k = 0; k < days.length; k++) {
+          if (flags[k].hour) continue; // 이미 기록(hourDays)에 들어 있다
+          const known = recent.find((x) => x.day === days[k]);
+          if (known ? known.min >= REF_DAY_MIN : flags[k].active) legacyDays++;
+        }
+      }
+      const hourDays = hours[i] ?? 0;
+      return {
+        stayMinutes: sums[i]?.stayMinutes ?? 0,
+        days: hourDays + legacyDays,
+        hourDays,
+        legacyDays,
+        todayMin: recent[1].min,
+        recent,
+        name: sums[i]?.name ?? null,
+      };
+    }),
+  );
 }
 
-export const isQualified = (p: { stayMinutes: number; days: number }) => p.stayMinutes >= REF_NEED_MIN && p.days >= REF_NEED_DAYS;
+export const isQualified = (p: { days: number }) => p.days >= REF_NEED_DAYS;
 
 /** 보상 선물 보내기 (달성 표시는 이미 남았다 → 실패하면 기록만, 관리자 추천 탭에서 보고 직접 보낼 수 있다) */
 async function sendRewards(
@@ -179,9 +235,9 @@ async function sendRewards(
  * 조건을 넘었으면 같은 사람 판정을 다시 하고 달성으로 남긴 뒤(한 번만) 단계에 맞게 보상한다. 이번에 달성시켰으면 true.
  * progress를 주면 다시 읽지 않는다 (관리자 목록·내 정보가 이미 읽은 값)
  */
-export async function maybeQualify(rec: ReferralRecord, now = Date.now(), progress?: { stayMinutes: number; days: number }): Promise<boolean> {
+export async function maybeQualify(rec: ReferralRecord, now = Date.now(), progress?: { days: number }): Promise<boolean> {
   if (rec.qualifiedAt > 0) return false;
-  const p = progress ?? (await progressOf([rec.refereeId]))[0];
+  const p = progress ?? (await progressOf([rec], now))[0];
   if (!p || !isQualified(p)) return false;
   const store = getReferrals();
   const siblings = await store.refereesOf(rec.referrerId, CLUSTER_LOOK);
@@ -269,7 +325,7 @@ export async function referralView(accountId: string, now = Date.now()): Promise
 
   let mine: ReferralView["mine"] = null;
   if (mineRec) {
-    const [p] = await progressOf([accountId]);
+    const [p] = await progressOf([mineRec], now);
     if (await maybeQualify(mineRec, now, p)) Object.assign(mineRec, (await store.get(accountId)) ?? {});
     const [ref] = await getAccounts().summaries([mineRec.referrerId]);
     mine = {
@@ -277,6 +333,7 @@ export async function referralView(accountId: string, now = Date.now()): Promise
       at: mineRec.at,
       stayMinutes: p.stayMinutes,
       days: p.days,
+      todayMin: p.todayMin,
       qualified: mineRec.qualifiedAt > 0,
       rewarded: mineRec.refereePaid,
       held: mineRec.hold === 1,
@@ -284,7 +341,7 @@ export async function referralView(accountId: string, now = Date.now()): Promise
   }
   if (pending.length) {
     const recs = (await store.getMany(pending)).filter((r): r is ReferralRecord => !!r && r.qualifiedAt === 0);
-    const ps = await progressOf(recs.map((r) => r.refereeId));
+    const ps = await progressOf(recs, now);
     for (let i = 0; i < recs.length; i++) await maybeQualify(recs[i], now, ps[i]);
   }
 
@@ -321,7 +378,12 @@ export type AdminReferralRow = {
   via: "signup" | "later";
   qualifiedAt: number;
   stayMinutes: number;
+  /** 11/18 하루 1시간 넘게 머문 날 수 (= hourDays + legacyDays), 기록된 날, 옛 기준으로 쳐 준 날, 어제·오늘 머문 분, 새 기준 달성 여부 */
   days: number;
+  hourDays: number;
+  legacyDays: number;
+  recent: { day: string; min: number }[];
+  meetsRule: boolean;
   /** 같은 사람 판정 (점수 0~100·단계·이유 코드 — 화면은 lib/sameUserRules로 글자로 바꾼다) */
   score: number;
   level: SameLevel;
@@ -350,7 +412,8 @@ export type AdminReferralResponse = {
   recent: AdminReferralRow[];
   /** 이유에 나오는 계정(무리)의 이름 */
   names: Record<string, string | null>;
-  rules: { points: number; monthCap: number; needMin: number; needDays: number; enterDays: number; grandPoints: number; grandMonthCap: number };
+  /** dayMin = 하루에 넘겨야 하는 분, needDays = 그런 날 수 */
+  rules: { points: number; monthCap: number; dayMin: number; needDays: number; enterDays: number; grandPoints: number; grandMonthCap: number };
   /** 방금 승인·거절한 결과 (알림 문구용) */
   decision?: RefDecision;
 };
@@ -364,7 +427,7 @@ export async function adminReferrals(now = Date.now(), limit = 100): Promise<Adm
   const month = kstMonth(now);
   const recentIds = await store.recent(limit);
   let recs = (await store.getMany(recentIds)).filter((r): r is ReferralRecord => !!r);
-  let ps = await progressOf(recs.map((r) => r.refereeId));
+  let ps = await progressOf(recs, now);
   for (let i = 0; i < recs.length; i++) {
     if (recs[i].qualifiedAt > 0 || !isQualified(ps[i])) continue;
     await maybeQualify(recs[i], now, ps[i]);
@@ -373,7 +436,7 @@ export async function adminReferrals(now = Date.now(), limit = 100): Promise<Adm
   const heldIds = await store.heldList(HELD_LIST);
   const ids = [...new Set([...recentIds, ...heldIds])];
   recs = (await store.getMany(ids)).filter((r): r is ReferralRecord => !!r);
-  ps = await progressOf(recs.map((r) => r.refereeId));
+  ps = await progressOf(recs, now);
   const topIds = await store.topReferrers(30);
   const clusterIds = recs.flatMap((r) => r.reasons.flatMap((x) => parseReason(x)?.accounts ?? []));
   const grandIds = recs.flatMap((r) => (r.grandId ? [r.grandId] : []));
@@ -407,6 +470,10 @@ export async function adminReferrals(now = Date.now(), limit = 100): Promise<Adm
         qualifiedAt: r.qualifiedAt,
         stayMinutes: ps[i]?.stayMinutes ?? 0,
         days: ps[i]?.days ?? 0,
+        hourDays: ps[i]?.hourDays ?? 0,
+        legacyDays: ps[i]?.legacyDays ?? 0,
+        recent: ps[i]?.recent ?? [],
+        meetsRule: !!ps[i] && isQualified(ps[i]),
         score: sameScore(r.reasons),
         level: r.same ? "same" : levelOfReasons(r.reasons),
         reasons: r.reasons,
@@ -437,7 +504,7 @@ export async function adminReferrals(now = Date.now(), limit = 100): Promise<Adm
     rules: {
       points: REF_REWARD_POINTS,
       monthCap: REF_MONTH_CAP,
-      needMin: REF_NEED_MIN,
+      dayMin: REF_DAY_MIN,
       needDays: REF_NEED_DAYS,
       enterDays: REF_ENTER_MS / 86_400_000,
       grandPoints: REF_GRAND_POINTS,

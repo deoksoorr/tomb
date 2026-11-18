@@ -9,7 +9,8 @@ import { getAccounts, getGifts } from "@/lib/store";
 import { addDays, gameDay } from "@/lib/gameDay";
 import { getBanStore } from "@/lib/store/bans";
 import { getReferrals, MemoryReferrals } from "@/lib/store/referrals";
-import { getActivity } from "@/lib/store/userActivity";
+import { getActivity, MemoryActivity } from "@/lib/store/userActivity";
+import * as presence from "./me/presence/route";
 import { forgetTitles, titleStatus } from "@/lib/titlesServer";
 import { earnedTitleIds } from "@/lib/titles";
 import type { ApiError } from "@/lib/types";
@@ -67,11 +68,13 @@ async function newVisitor(name: string, ip?: string): Promise<Visitor> {
 const view = (v: Visitor) => bodyOf<ReferralView>(referral.GET(call("/api/referral", { visitor: v })));
 const codeOf = async (v: Visitor) => (await view(v)).code!;
 const enter = (v: Visitor, code: string) => referral.POST(call("/api/referral", { visitor: v, body: { code, via: "signup" } }));
-/** 조건(3시간·3일)을 채운다 */
+/** 조건(11/18 하루 1시간 넘게 머문 날 3일)을 채운다. minutes = 총 머문 분(표시용) */
 async function fill(v: Visitor, minutes = 180, days = 3) {
   (getAccounts() as unknown as { accts: Map<string, { stayMin?: number }> }).accts.get(v.id)!.stayMin = minutes;
   const today = gameDay(Date.now());
-  await getActivity().record(Array.from({ length: days }, (_, i) => [v.id, addDays(today, -i)] as const));
+  const list = Array.from({ length: days }, (_, i) => [v.id, addDays(today, -i)] as const);
+  await getActivity().record(list);
+  await getActivity().recordHour(list);
 }
 const refGifts = async (v: Visitor) =>
   (await getGifts().inbox(v.id, 0, Date.now())).filter((g) => g.from === REF_GIFT_FROM);
@@ -541,5 +544,96 @@ describe("2단계 추천 (추천인의 추천인)", () => {
     expect(await refGifts(same.g)).toHaveLength(0);
     const admin = await bodyOf<{ recent: { refereeId: string; grandName: string; grand: string }[] }>(adminRefs.GET(call("/api/admin/referrals", { admin: true })));
     expect(admin.recent.find((x) => x.refereeId === same.es[0].id)).toMatchObject({ grandName: "기기2단할머니", grand: "skip:sameReferee" });
+  });
+});
+
+describe("11/18 자리 잡기 = 하루 1시간 넘게 머문 날 3일", () => {
+  const g = globalThis as typeof globalThis & { __tombActivity?: unknown };
+  let saved: unknown;
+  const today = () => gameDay(Date.now());
+  beforeEach(async () => {
+    // 이 묶음은 활동 기록을 새로 (1시간 기록 시작일을 오래전으로 두어 옛 기준 날이 끼지 않게)
+    saved = g.__tombActivity;
+    g.__tombActivity = new MemoryActivity();
+    await getActivity().recordHour([["__seed", addDays(today(), -30)]]);
+  });
+  afterEach(() => {
+    g.__tombActivity = saved;
+  });
+
+  it("머무르기 기록이 오늘 1시간을 넘기는 순간에만 그날을 센다 (59분은 아니다)", async () => {
+    const v = await newVisitor("한시간이웃");
+    // 머무르기 요청 한도를 넘지 않게 기록마다 10분씩 시계를 옮긴다
+    let t0 = NOON;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const step = () => vi.setSystemTime((t0 += 10 * 60_000));
+    const tick = (stayTicks: number) =>
+      vi.spyOn(getAccounts(), "presenceTick").mockResolvedValueOnce({ earned: 0, ticks: 1, points: 0, lifetimePoints: 0, todayEarned: 0, stayTicks });
+    for (const t of [4, 5]) {
+      step();
+      tick(t);
+      await presence.POST(call("/api/me/presence", { method: "POST", visitor: v }));
+    }
+    expect((await getActivity().hourDays([v.id]))[0]).toBe(0);
+    for (const t of [6, 7, 8]) {
+      step();
+      tick(t);
+      const r = await presence.POST(call("/api/me/presence", { method: "POST", visitor: v }));
+      expect(r.status).toBe(200);
+    }
+    expect((await getActivity().hourDays([v.id]))[0]).toBe(1);
+    vi.useRealTimers();
+  });
+
+  it("59분씩 5일은 미달, 1시간 넘긴 날이 띄엄띄엄 3일이면 달성", async () => {
+    const a = await newVisitor("띄엄추천인");
+    const b = await newVisitor("띄엄새이웃");
+    await enter(b, await codeOf(a));
+    // 59분씩 5일: 들어온 날만 있고 1시간 넘긴 날은 없다
+    await getActivity().record(Array.from({ length: 5 }, (_, i) => [b.id, addDays(today(), -i)] as const));
+    await referralOnPresence(b.id);
+    expect((await view(b)).mine).toMatchObject({ days: 0, qualified: false });
+    // 1시간 넘긴 날 오늘·사흘 전·엿새 전
+    await getActivity().recordHour([0, 3, 6].map((n) => [b.id, addDays(today(), -n)] as const));
+    await referralOnPresence(b.id, Date.now() + 3_600_000);
+    expect((await view(b)).mine).toMatchObject({ days: 3, qualified: true });
+    expect(await refGifts(b)).toHaveLength(1);
+  });
+
+  it("하루 3시간을 한 번 머문 건 1일로만 센다", async () => {
+    const a = await newVisitor("하루추천인");
+    const b = await newVisitor("하루새이웃");
+    await enter(b, await codeOf(a));
+    // 같은 날 여러 번 넘겨도 한 번
+    await getActivity().recordHour([[b.id, today()], [b.id, today()]]);
+    await getActivity().recordHour([[b.id, today()]]);
+    await referralOnPresence(b.id);
+    expect((await view(b)).mine).toMatchObject({ days: 1, qualified: false });
+  });
+
+  it("옛 기록: 1시간 기록이 시작되기 전에 들어온 날은 너그럽게 세고, 하루 기록이 남은 어제는 실제 머문 시간으로 본다", async () => {
+    const a = await newVisitor("옛추천인");
+    const b = await newVisitor("옛새이웃");
+    await enter(b, await codeOf(a));
+    // 닷새 전에 추천인을 정했고, 1시간 기록은 어제부터 시작했다
+    const rec = (getReferrals() as unknown as { recs: Map<string, { at: number }> }).recs.get(b.id)!;
+    rec.at = Date.now() - 5 * DAY;
+    g.__tombActivity = new MemoryActivity();
+    await getActivity().recordHour([["__seed", addDays(today(), -1)]]);
+    // 옛 기준으로 들어온 날: 나흘 전·이틀 전 (하루 기록이 없다 → 너그럽게), 어제 (하루 기록 0분 → 안 센다)
+    await getActivity().record([-4, -2, -1].map((n) => [b.id, addDays(today(), n)] as const));
+    await referralOnPresence(b.id);
+    expect((await view(b)).mine).toMatchObject({ days: 2, qualified: false });
+    // 오늘 1시간 넘김 → 2 + 1 = 3일
+    await getActivity().recordHour([[b.id, today()]]);
+    await referralOnPresence(b.id, Date.now() + 3_600_000);
+    expect((await view(b)).mine).toMatchObject({ days: 3, qualified: true });
+    // 관리자 목록에 옛 기준 날과 어제·오늘 머문 분이 보인다
+    const list = await bodyOf<{ recent: { refereeId: string; days: number; legacyDays: number; hourDays: number; recent: { day: string; min: number }[]; meetsRule: boolean }[] }>(
+      adminRefs.GET(call("/api/admin/referrals", { admin: true })),
+    );
+    const row = list.recent.find((r) => r.refereeId === b.id)!;
+    expect(row).toMatchObject({ days: 3, legacyDays: 2, hourDays: 1, meetsRule: true });
+    expect(row.recent.map((x) => x.day)).toEqual([addDays(today(), -1), today()]);
   });
 });

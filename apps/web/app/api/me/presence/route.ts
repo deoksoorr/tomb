@@ -8,7 +8,8 @@ import { staffAccountId } from "@/lib/staff";
 import { getAccounts } from "@/lib/store";
 import { kstDay, loadMe } from "@/lib/store/accounts";
 import { getTitleStats } from "@/lib/store/titleStats";
-import { recordActive } from "@/lib/store/userActivity";
+import { recordActive, recordHourDay } from "@/lib/store/userActivity";
+import { REF_DAY_MIN } from "@/lib/referralRules";
 import { referralOnPresence } from "@/lib/referralService";
 import { ensureLotterySettled } from "@/lib/lotteryService";
 import { ensureGhostNotice } from "@/lib/sea/ghostService";
@@ -46,7 +47,12 @@ export const POST = handler(async (req) => {
   if (tick && tick.ticks > 0) await getTitleStats().addStay(visitorId, tick.ticks, tick.stayTicks).catch((e) => console.error("[titles] 접속 시간 기록 실패", e));
   // 유저 활동: 그날 첫 머무르기 기록일 때만 (새벽 5시를 넘겨 머무는 화면도 새 날 활동으로. 입장에서도 남긴다)
   if (tick && tick.stayTicks === tick.ticks) await recordActive(visitorId, kstDay(now));
-  // 추천 코드: 추천인을 정한 새 이웃이 조건(총 3시간·3일)을 넘겼는지 응답 뒤에 본다 (해당 없는 계정은 인스턴스가 30분 기억해 건너뛴다)
+  // 11/18 오늘 머문 시간이 이번 기록으로 1시간(REF_DAY_MIN)을 넘겼으면 「1시간 넘게 머문 날」 (하루 한 번 — 하루 기록 _stay가 2일 뒤 지워져서 따로 남긴다)
+  if (tick && tick.ticks > 0) {
+    const need = Math.ceil(REF_DAY_MIN / STAY_TICK_MINUTES);
+    if (tick.stayTicks - tick.ticks < need && tick.stayTicks >= need) await recordHourDay(visitorId, kstDay(now));
+  }
+  // 추천 코드: 추천인을 정한 새 이웃이 조건(하루 1시간 넘게 머문 날 3일)을 넘겼는지 응답 뒤에 본다 (해당 없는 계정은 인스턴스가 30분 기억해 건너뛴다)
   if (tick && tick.ticks > 0) runAfter(() => referralOnPresence(visitorId, now));
   const lite = req.nextUrl.searchParams.get("lite") === "1" && (await staffAccountId()) !== visitorId;
   if (lite) {

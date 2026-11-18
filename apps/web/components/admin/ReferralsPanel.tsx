@@ -39,10 +39,18 @@ const api = {
 
 const num = (n: number) => n.toLocaleString("ko-KR");
 
-/** 진행 칸: 달성했으면 달성 시각, 아니면 머문 시간·활동한 날 */
+/** 진행 칸 (11/18 하루 1시간 넘게 머문 날 기준): 달성했으면 달성 시각, 아니면 그런 날 수 (옛 기준으로 쳐 준 날은 따로) */
 function progressText(r: AdminReferralRow, rules: AdminReferralResponse["rules"]): string {
-  if (r.qualifiedAt) return `${joinDate(r.qualifiedAt)} 달성`;
-  return `${stayText(Math.min(r.stayMinutes, rules.needMin))} / ${stayText(rules.needMin)}, ${Math.min(r.days, rules.needDays)}일 / ${rules.needDays}일`;
+  const days = `${stayText(rules.dayMin)} 넘긴 날 ${Math.min(r.days, rules.needDays)}일 / ${rules.needDays}일${r.legacyDays ? ` (옛 기준 ${r.legacyDays}일 포함)` : ""}`;
+  if (r.qualifiedAt) return `${joinDate(r.qualifiedAt)} 달성 · ${days}`;
+  return days;
+}
+
+/** 11/18 점검용: 어제·오늘 머문 분(하루 기록이 남은 날만)과 새 기준 달성 여부 */
+function recentText(r: AdminReferralRow): string {
+  const md = (d: string) => `${Number(d.slice(4, 6))}/${Number(d.slice(6, 8))}`;
+  const days = r.recent.map((x) => `${md(x.day)} ${stayText(x.min)}`).join(", ");
+  return `${days}${r.meetsRule ? ", 새 기준 달성" : ""}`;
 }
 
 /** 보상 칸: 보낸 쪽 (승인해서 보낸 것 포함) */
@@ -341,8 +349,9 @@ export default function ReferralsPanel({ toast, onAuthLost, onFindMember, onGift
           <li>「{REF_MODE_LABEL.auto}」은 같은 사람 판정으로 정해요. 의심 없음은 바로 보내고, 확인 필요는 기다리고, 같은 사람 같음은 보내지 않아요.</li>
           <li>「{REF_MODE_LABEL.off}」은 조건 달성만 기록해요. 바꾼 뒤 조건을 넘기는 추천부터 적용돼요.</li>
           <li>
-            새 이웃이 모두 합쳐 {stayText(view.rules.needMin)} 머물고 서로 다른 {view.rules.needDays}일 들어오면 조건 달성이에요. 그때 둘 다 {num(view.rules.points)}P를 선물함으로 받아요.
+            새 이웃이 하루 {stayText(view.rules.dayMin)} 넘게 머문 날이 {view.rules.needDays}일이 되면 조건 달성이에요. 이어진 날이 아니어도 돼요. 그때 둘 다 {num(view.rules.points)}P를 선물함으로 받아요.
           </li>
+          <li>11/18 기준을 바꾸기 전에 들어온 날은 너그럽게 1시간 넘긴 날로 쳐요(진행 칸 「옛 기준」). 어제·오늘은 실제 머문 시간으로 봐요.</li>
           <li>추천인 보상은 한국 시간 달력으로 한 달에 {view.rules.monthCap}명까지예요. 넘으면 세기만 해요.</li>
           <li>
             추천인의 추천인도 {num(view.rules.grandPoints)}P를 받아요. 한 달에 {view.rules.grandMonthCap}번까지이고 칭호에는 세지 않아요. 운영자이거나 같은 사람 같으면 건너뛰어요.
@@ -461,7 +470,11 @@ export default function ReferralsPanel({ toast, onAuthLost, onFindMember, onGift
                     <td className={styles.nowrap} title={fullTime(r.at)}>
                       {joinDate(r.at)} {r.via === "signup" ? "가입 때" : "내 정보에서"}
                     </td>
-                    <td className={styles.nowrap}>{progressText(r, view.rules)}</td>
+                    <td className={styles.nowrap}>
+                      {progressText(r, view.rules)}
+                      <br />
+                      <small>{recentText(r)}</small>
+                    </td>
                     <td>
                       {paidText(r)}
                       {capBadge(r)}

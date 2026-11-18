@@ -3,7 +3,7 @@
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { errorMessage } from "@/lib/api";
 import { captureRefParam, clearStoredRef, readStoredRef, referralApi, useRefCheck } from "@/lib/referralClient";
-import { REF_GRAND_MONTH_CAP, REF_GRAND_POINTS, REF_MONTH_CAP, REF_NEED_DAYS, REF_NEED_MIN, REF_REWARD_POINTS, refLink, type ReferralView } from "@/lib/referralRules";
+import { REF_DAY_MIN, REF_GRAND_MONTH_CAP, REF_GRAND_POINTS, REF_MONTH_CAP, REF_NEED_DAYS, REF_REWARD_POINTS, refLink, type ReferralView } from "@/lib/referralRules";
 import { stayText } from "@/lib/stayTime";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
@@ -97,7 +97,7 @@ export default function ReferralSection() {
       </p>
       <ul className={ui.hint}>
         <li>
-          친구가 내 코드로 가입해 모두 합쳐 {stayText(REF_NEED_MIN)} 머물고 서로 다른 {REF_NEED_DAYS}일 들어오면 둘 다 {REF_REWARD_POINTS}P를 선물함으로 받아요.
+          친구가 내 코드로 가입해 하루 {stayText(REF_DAY_MIN)} 넘게 머문 날이 {REF_NEED_DAYS}일이 되면 둘 다 {REF_REWARD_POINTS}P를 선물함으로 받아요. 이어진 날이 아니어도 돼요.
         </li>
         <li>추천 보상 포인트는 한 달에 {REF_MONTH_CAP}명까지예요. 그 뒤로는 칭호에만 세요.</li>
         <li>내 친구가 데려온 이웃이 자리 잡으면 나도 {REF_GRAND_POINTS}P를 받아요. 한 달에 {REF_GRAND_MONTH_CAP}번까지예요.</li>
@@ -136,8 +136,8 @@ function MyProgress({ mine }: { mine: NonNullable<ReferralView["mine"]> }) {
     );
   return (
     <p className={styles.sub}>
-      {who}님의 추천으로 왔어요. {stayText(REF_NEED_MIN)} 중 {stayText(Math.min(mine.stayMinutes, REF_NEED_MIN))}, {REF_NEED_DAYS}일 중{" "}
-      {Math.min(mine.days, REF_NEED_DAYS)}일 채웠어요. 다 채우면 환영 선물 {REF_REWARD_POINTS}P를 받아요.
+      {who}님의 추천으로 왔어요. 하루 {stayText(REF_DAY_MIN)} 넘게 머문 날 {Math.min(mine.days, REF_NEED_DAYS)}일 / {REF_NEED_DAYS}일, 오늘{" "}
+      {stayText(Math.min(mine.todayMin, REF_DAY_MIN))} / {stayText(REF_DAY_MIN)}이에요. 다 채우면 환영 선물 {REF_REWARD_POINTS}P를 받아요.
     </p>
   );
 }
