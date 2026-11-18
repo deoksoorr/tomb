@@ -119,23 +119,19 @@ describe(`사냥터 서비스 (${redisEnv ? "redis" : "memory"})`, () => {
     expect((await getRpgStore().get(a)).inv[kb.id]).toBeUndefined();
   });
 
-  it("포션 여러 개 되팔기는 사냥 포인트 하루 한도 안에서만, 못 받은 것은 가방에 남는다", async () => {
+  it("11/19 포션 여러 개 되팔기는 하루 한도 없이 다 팔린다", async () => {
     const a = acct();
-    const cap = earnRule("hunt").dailyMax;
+    expect(earnRule("hunt").dailyMax).toBeNull();
     await getRpgStore().update(a, (s) => ({ state: { ...s, potions: { ...s.potions, p_coffee: 10 } }, result: null }));
-    await earnPoints(a, "hunt", cap - 4, "ip"); // 남은 한도 4P = 커피 1개 값
+    await earnPoints(a, "hunt", 5_000, "ip"); // 예전 한도(1200)를 넘게 받은 날
     const sold = await shopAction(a, { type: "sell", itemId: "p_coffee", count: 10 }, "ip");
-    expect(sold.sold).toEqual({ value: 4, capped: true, count: 1 });
-    expect((await getRpgStore().get(a)).potions.p_coffee).toBe(9);
-    // 한도가 다 찼으면 하나도 팔리지 않고 그대로
-    const none = await shopAction(a, { type: "sell", itemId: "p_coffee", count: 9 }, "ip");
-    expect(none.sold).toEqual({ value: 0, capped: true, count: 0 });
-    expect((await getRpgStore().get(a)).potions.p_coffee).toBe(9);
+    expect(sold.sold).toEqual({ value: 40, capped: false, count: 10 });
+    expect((await getRpgStore().get(a)).potions.p_coffee).toBeUndefined();
   });
 
-  it("판 끝내기: 티켓 재사용 409, 하루 사냥 포인트 한도에서 멈춘다", async () => {
+  it("판 끝내기: 티켓 재사용 409, 11/19 예전 하루 한도(1200)를 넘어도 계속 받는다", async () => {
     const a = acct();
-    const cap = earnRule("hunt").dailyMax;
+    const cap = 1200;
     // 판을 30번 넘게 2분 간격으로 돌리므로 자정 직전에 돌리면 하루가 바뀐다 → 한낮(한국 시간 12시)에 고정
     let now = Date.parse("2026-03-10T03:00:00Z");
     let total = 0;
@@ -152,8 +148,8 @@ describe(`사냥터 서비스 (${redisEnv ? "redis" : "memory"})`, () => {
       if (i === 0) await expect(finishRun(a, run.ticket, result, `ip-${a}`, now + 122_000)).rejects.toMatchObject({ code: "TICKET_USED" });
       now += 130_000;
     }
-    expect(total).toBe(cap);
-    expect(last).toEqual({ points: 0, capped: true });
-    expect((await getRpgStore().daily(a, kstDay(now))).points).toBe(cap);
+    expect(total).toBe(cap + 20);
+    expect(last).toEqual({ points: 20, capped: false });
+    expect((await getRpgStore().daily(a, kstDay(now))).points).toBe(cap + 20);
   });
 });

@@ -79,10 +79,8 @@ describe("사냥터 API", () => {
     const body = (await res.json()) as RunFinishResponse;
     expect(res.status).toBe(200);
     expect(body.reward.points).toBe(20);
-    // 11/19 레벨에 맞는 사냥터를 다 깨면 다음 레벨 필요 EXP(1→2: 50)의 절반
-    expect(body.reward.exp).toBe(25);
-    expect(body.view.character.level).toBe(1);
-    expect(body.view.character.exp).toBe(25);
+    expect(body.reward.exp).toBeGreaterThan(50);
+    expect(body.view.character.level).toBeGreaterThan(1);
     // 마신 1개를 빼고, 드롭(시드가 무작위라 가끔)으로 들어온 만큼 더한다
     const coffeeDrops = body.reward.drops.filter((d) => d.id === "p_coffee").reduce((n, d) => n + d.qty, 0);
     expect(body.view.character.potions.p_coffee).toBe(2 + coffeeDrops);

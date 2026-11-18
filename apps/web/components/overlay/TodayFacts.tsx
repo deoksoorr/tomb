@@ -2,26 +2,20 @@
 
 import { PHASE_LABELS, WEATHER_LABELS } from "@/lib/ambience";
 import { ATTEND_STAY_MINUTES, attendLeftText } from "@/lib/attendStay";
-import { champBoards } from "@tomb/protocol";
-import { champTotalCap } from "@/lib/champPerks";
-import { NO_BOOST } from "@/lib/pointEvent";
 import { useAmbience } from "@/lib/hooks/useAmbience";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { useMe } from "@/lib/hooks/useMe";
 import { FactGrid } from "../ui/InfoBlocks";
 
-export type TodayFact = "attend" | "cap" | "channel" | "sky";
-const ALL: readonly TodayFact[] = ["attend", "cap", "channel", "sky"];
+export type TodayFact = "attend" | "earned" | "channel" | "sky";
+const ALL: readonly TodayFact[] = ["attend", "earned", "channel", "sky"];
 
-/** 오늘의 정보 칸: 출석 · 남은 포인트 한도 · 지금 채널 · 날씨/시간대 (메뉴·선물함이 같이 쓴다). 운영자 계정은 출석 칸을 뺀다 (출석 도장을 받지 않는다) */
+/** 오늘의 정보 칸: 출석 · 오늘 모은 포인트 · 지금 채널 · 날씨/시간대 (메뉴·선물함이 같이 쓴다). 운영자 계정은 출석 칸을 뺀다 (출석 도장을 받지 않는다) */
 export default function TodayFacts({ show = ALL }: { show?: readonly TodayFact[] }) {
   const { me } = useMe();
   const ambience = useAmbience();
   const status = useBridgeValue("net:status");
   const att = me?.attendance;
-  // 포인트 배수 이벤트 날은 늘어난 항목 몫만큼 하루 한도도 늘어난다 (lib/pointEvent). 11/17 지난주 1위면 1위 몫도 (lib/champPerks)
-  const cap = champTotalCap(me?.earnBoost ?? NO_BOOST, champBoards(me?.champ));
-  const left = me ? Math.max(0, cap - me.todayEarned) : null;
   const facts = {
     attend: {
       label: "오늘 출석",
@@ -33,11 +27,11 @@ export default function TodayFacts({ show = ALL }: { show?: readonly TodayFact[]
           : attendLeftText(att.stayMinutes),
       tone: att?.today ? ("good" as const) : att && att.stayMinutes >= ATTEND_STAY_MINUTES ? ("warn" as const) : undefined,
     },
-    cap: {
-      label: "오늘 남은 포인트 한도",
-      value: left === null ? "…" : `${left.toLocaleString("ko-KR")}P`,
-      note: me ? `오늘 ${me.todayEarned.toLocaleString("ko-KR")}/${cap.toLocaleString("ko-KR")}P 모았어요. 새벽 5시에 다시 차요.` : undefined,
-      tone: left === 0 ? ("warn" as const) : undefined,
+    // 11/19 하루 한도가 없어져 남은 한도 대신 오늘 모은 포인트만
+    earned: {
+      label: "오늘 모은 포인트",
+      value: me ? `${me.todayEarned.toLocaleString("ko-KR")}P` : "…",
+      note: me ? "한도 없이 모여요. 새벽 5시부터 다시 세요." : undefined,
     },
     channel: {
       label: "지금 채널",

@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { bridge } from "@/game/bridge";
-import { BALANCE_CAP, type EarnSource } from "@/lib/economy";
+import { WALLET_MAX } from "@/lib/economy";
 import { api, errorMessage } from "@/lib/api";
 import type { Me, PresenceTickInfo } from "@/lib/types";
 
@@ -49,20 +49,18 @@ class MeStore {
     }
   }
 
-  /** source를 주면 내 정보의 항목별 게이지(me.earnedBy)도 같이 올린다 */
-  addEarned(earned: number | undefined, source?: EarnSource): void {
+  addEarned(earned: number | undefined): void {
     const me = this.state.me;
     if (!me || !earned || earned <= 0) return;
-    this.set({ ...me, ...bumpEarnedBy(me, source, earned), points: Math.min(BALANCE_CAP, me.points + earned), todayEarned: me.todayEarned + earned });
+    this.set({ ...me, points: Math.min(WALLET_MAX, me.points + earned), todayEarned: me.todayEarned + earned });
   }
 
   /** 머무르기 응답의 바뀐 값(잔액·모은 포인트·오늘 쌓은 포인트·오늘 머문 시간)만 바꾼다 */
-  applyPresence(tick: PresenceTickInfo, earned = 0): void {
+  applyPresence(tick: PresenceTickInfo): void {
     const me = this.state.me;
     if (!me) return;
     this.set({
       ...me,
-      ...bumpEarnedBy(me, "presence", earned),
       points: tick.points,
       lifetimePoints: tick.lifetimePoints,
       todayEarned: tick.todayEarned,
@@ -80,12 +78,6 @@ class MeStore {
     this.state = next;
     this.listeners.forEach((fn) => fn());
   }
-}
-
-/** 항목별 오늘 적립에 더한 값 (source가 없거나 0이면 그대로) */
-function bumpEarnedBy(me: Me, source: EarnSource | undefined, earned: number): Pick<Me, "earnedBy"> {
-  if (!source || !(earned > 0)) return {};
-  return { earnedBy: { ...me.earnedBy, [source]: (me.earnedBy?.[source] ?? 0) + earned } };
 }
 
 export const meStore = new MeStore();

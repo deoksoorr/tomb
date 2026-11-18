@@ -33,7 +33,7 @@ function tutorialSteps(touch: boolean): Step[] {
     { title: "모닥불", text: "모닥불 곁에 앉으면 잠시 불멍을 할 수 있어요. 다른 사람과 같이 앉아도 좋아요.", point: "campfire" },
     {
       title: "사냥터",
-      text: `사냥과 미니게임으로 포인트를 모으는 곳이에요. 하루 ${earnRule("hunt").dailyMax}포인트까지 모아요. ${touch ? "아래 줄 [사냥]" : "왼쪽 아래 [사냥]"}으로도 열 수 있어요.`,
+      text: `사냥과 미니게임으로 포인트를 모으는 곳이에요. ${touch ? "아래 줄 [사냥]" : "왼쪽 아래 [사냥]"}으로도 열 수 있어요.`,
       point: "hunt",
     },
     {

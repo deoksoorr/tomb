@@ -5,12 +5,9 @@ import { useMemo, useState } from "react";
 import { bridge } from "@/game/bridge";
 import { npcPortraitUrl } from "@/game/world/forage/art";
 import { errorMessage } from "@/lib/api";
-import { champBoards } from "@tomb/protocol";
-import { CHAMP_FISH_NOTE, champTotalCap } from "@/lib/champPerks";
-import { NO_BOOST } from "@/lib/pointEvent";
 import { CAT_LABEL, LIFE_CATS, npcBuys, npcById, RARITY_LABEL, speciesById, type NpcId } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
-import { meStore, useMe } from "@/lib/hooks/useMe";
+import { meStore } from "@/lib/hooks/useMe";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ItemIcon from "../ui/ItemIcon";
@@ -19,7 +16,7 @@ import { forageStore, useForage } from "./forageStore";
 import s from "./forage.module.css";
 
 // NPC 판매 창 (어부 영감 = 물고기, 수집가 유령 = 약초·광석·발굴품·곤충). NPC 앞에서 E를 눌렀을 때만 열린다.
-// 비싼 것부터 오늘 남은 한도 안에서 판다 (서버가 정한다). 못 판 것은 가방에 그대로 남아 내일 팔 수 있다.
+// 11/19 하루 판매 한도가 없어 고른 것을 다 판다 (서버가 정한다. 지갑이 꽉 찰 때만 남은 것을 가방에 둔다).
 // 11/15: NPC는 사기만 한다. 수집 의뢰·도장 교환소는 버스 정류장 마당 의뢰 게시판 한 곳 (WharfBoard)
 // 11/16 r11: 포구 시장을 빼서 바다 고기는 어부 영감, 갯벌에서 캔 것은 수집가 유령에게 팔아요
 
@@ -31,7 +28,6 @@ const EMPTY: Record<NpcId, string> = {
 export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () => void }) {
   const npc = npcById(npcId)!;
   const { state } = useForage();
-  const { me } = useMe();
   const [pick, setPick] = useState<Record<string, number> | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -48,9 +44,6 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
   // F16: 처음엔 아무것도 고르지 않은 상태(0개) → [고른 것 팔기]는 −/+로 고른 만큼, [전부 팔기]는 가진 것 전부
   const qty = (id: string, owned: number) => Math.min(owned, pick?.[id] ?? 0);
   const total = rows.reduce((n, r) => n + qty(r.sp.id, r.n) * r.sp.price, 0);
-  const source = npc.buys.includes("fish") ? "fish" : "gather";
-  const soldToday = state ? (source === "fish" ? state.today.fishP : state.today.gatherP) : 0;
-  const cap = state ? (source === "fish" ? state.today.fishCap : state.today.gatherCap) : 0;
 
   function setQty(id: string, owned: number, v: number) {
     setPick((p) => ({ ...(p ?? {}), [id]: Math.max(0, Math.min(owned, v)) }));
@@ -74,8 +67,8 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
       if (count > 0) bridge.emit("forage:coin");
       setNotice(
         count === 0
-          ? "오늘 한도가 다 차서 더 못 사요. 가방에 두었다가 내일 와요."
-          : `${count}개를 팔아 +${res.earned}P 받았어요.${res.capped ? " 오늘 한도에 닿아서 나머지는 가방에 남겨 뒀어요." : ""}`,
+          ? "지갑이 꽉 차서 더 못 사요. 포인트를 쓰고 다시 와요."
+          : `${count}개를 팔아 +${res.earned}P 받았어요.${res.capped ? " 지갑이 꽉 차서 나머지는 가방에 남겨 뒀어요." : ""}`,
       );
     } catch (e) {
       setNotice(errorMessage(e));
@@ -94,15 +87,7 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
         {(
           <>
           <div className={s.limits}>
-            <span>
-              오늘 판 값 <strong>{soldToday}</strong> / {cap}P
-            </span>
-            <span>
-              오늘 모은 포인트 <strong>{me?.todayEarned ?? 0}</strong> / {champTotalCap(me?.earnBoost ?? NO_BOOST, champBoards(me?.champ))}P
-            </span>
             <span>사는 것: {npc.where === "flat" ? "갯벌에서 캔 것" : npc.buys.map((c) => CAT_LABEL[c]).join("·")}</span>
-            {/* 11/17 낚시왕(지난주 1위) 혜택: 판 값 +%, 한도 + (서버가 같은 계산으로 준다 — lib/champPerks) */}
-            {source === "fish" && champBoards(me?.champ).includes("fish") && <span>{CHAMP_FISH_NOTE}</span>}
           </div>
           {rows.length === 0 ? (
             <p className={s.empty}>{EMPTY[npc.id]}</p>
@@ -159,7 +144,7 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
             </span>
           </div>
           <p className={ui.hint} role="status">
-            {notice ?? "비싼 것부터 오늘 남은 한도 안에서만 팔려요. 못 판 것은 가방에 남아요."}
+            {notice ?? "고른 것을 한 번에 팔아요. 희귀할수록 비싸요."}
           </p>
           </>
         )}

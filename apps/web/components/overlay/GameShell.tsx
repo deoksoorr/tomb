@@ -92,7 +92,6 @@ import CalendarDialog from "../account/CalendarDialog";
 import GiftsDialog from "../account/GiftsDialog";
 // 친구 (목록·신청·위치·접속 알림)
 import FriendsDialog from "../account/FriendsDialog";
-import StaffEarnDialog from "./StaffEarnDialog";
 import { useFriendPresence } from "./useFriendPresence";
 import FriendNotice from "./FriendNotice";
 import CampTalk from "../camp/CampTalk";
@@ -181,7 +180,7 @@ function usePresencePoints(active: boolean) {
         .presence(PRESENCE_SID)
         .then(({ earned, me, tick }) => {
           if (me) meStore.set(me);
-          else if (tick) meStore.applyPresence(tick, earned);
+          else if (tick) meStore.applyPresence(tick);
           if (earned > 0) showToast(`머무른 덕분에 +${earned} 포인트`);
         })
         .catch(() => {
@@ -229,9 +228,7 @@ type Panel =
   | "friends"
   | "haunt"
   | "tower"
-  | "lottery"
-  /** 운영자 전용 포인트 현황 */
-  | "staffEarn";
+  | "lottery";
 
 /**
  * 11/16 창 단축키 (데스크톱): 마을·사냥·미니게임·집 어디에서도 쓰지 않는 글자만 골랐다 (B·G·L·N·O·P·U).
@@ -788,13 +785,6 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                     {friendIncoming > 0 && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
                   </button>
                 )}
-                {/* 운영자 계정은 친구 버튼 자리에 「포인트 현황」 (사람들이 오늘 포인트 한도를 얼마나 채웠는지) */}
-                {iAmStaff && (
-                  <button type="button" className={cx(ui.button, ui.top, styles.topButton)} onClick={() => setPanel("staffEarn")}>
-                    <PixelIcon name="list" />
-                    포인트 현황
-                  </button>
-                )}
                 {/* 11/17 운영자만: 「다람쥐를 뿌려라」 채널 쿨타임 바로 풀기 */}
                 {iAmStaff && (
                   <button type="button" className={cx(ui.button, ui.top, styles.topButton)} onClick={() => bridge.emit("fx:squirrelsReset")}>
@@ -1083,7 +1073,6 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {panel === "calendar" && <CalendarDialog onClose={closePanel} />}
       {panel === "gifts" && <GiftsDialog onClose={closePanel} onOpenCalendar={() => setPanel("calendar")} />}
       {panel === "friends" && <FriendsDialog onClose={closePanel} />}
-      {panel === "staffEarn" && iAmStaff && <StaffEarnDialog onClose={closePanel} />}
       <MegaphoneLayer channel={channel} onOpenShop={() => setPanel("shop")} />
       {panel === "shop" && <ShopDialog onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
     </div>

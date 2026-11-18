@@ -499,7 +499,7 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
                   );
                 })}
               </ul>
-              <p className={g.note}>되팔면 산 값의 50%를 받아요. 주운 장비는 오늘 사냥 포인트 한도까지만 받아요.</p>
+              <p className={g.note}>되팔면 산 값의 50%를 받아요.</p>
             </>
           )}
         </div>
@@ -800,7 +800,7 @@ function PotionList({
           </li>
         );
       })}
-      <li className={g.note}>되팔면 값의 50%를 받아요. 오늘 사냥 포인트 한도가 차면 못 팔고 가방에 남아요.</li>
+      <li className={g.note}>되팔면 값의 50%를 받아요.</li>
     </ul>
   );
 }

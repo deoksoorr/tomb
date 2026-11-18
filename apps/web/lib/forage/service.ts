@@ -2,20 +2,17 @@ import { nanoid } from "nanoid";
 import { campOpen } from "../camp";
 import { seaOpen } from "../sea";
 import { anyFishingWaterOf, SEA_DIG_CLOSED_MSG, seaDigOpen, seaFishDryAt, seaFishingSpotById, seaFishWet, SEA_TIDE_OUT_MSG, tideLevel } from "@tomb/protocol";
-import { BALANCE_CAP, earnRule, type EarnSource } from "../economy";
+import { WALLET_MAX, type EarnSource } from "../economy";
 import { env } from "../env";
 import { peerOf } from "../ban";
 import { HttpError } from "../http";
 import { isStaff } from "../staff";
 import { earnPoints, earnPointsOnly, getAccounts } from "../store";
 import { kstDay, kstWeek, loadMe } from "../store/accounts";
-import type { ChampBoard } from "@tomb/protocol";
-import { earnTerms } from "../champPerks";
-import { capsMult, NO_BOOST, type EarnBoost } from "../pointEvent";
-import { champBoardsSafe } from "../store/champ";
+import { earnTerms } from "../pointEvent";
 import { earnBoost } from "../store/pointEvent";
 import type { BugsResult } from "../rpg/types";
-import { DAILY_CATCH_MAX, dexBadgeBits, dexIdsOf, gatherNodeById, NODE_CAT, npcBuys, npcById, speciesById, STACK_MAX, type DexCat, type NpcId } from "./catalog";
+import { dexBadgeBits, dexIdsOf, gatherNodeById, NODE_CAT, npcBuys, npcById, speciesById, STACK_MAX, type DexCat, type NpcId } from "./catalog";
 import { claimPendingDex, ensureDexSettled, payNewDex, reachedTitleKeys, rewardState, titlesOf } from "./dexReward";
 import {
   activeNodes,
@@ -46,7 +43,7 @@ import {
   windowEndsAt,
   withHighTide,
 } from "./rules";
-import { AUTO_FISH_DAILY_MAX, newAutoSession } from "./auto";
+import { newAutoSession } from "./auto";
 import { autoStatus, settleAuto, type AutoSettled } from "./autoSettle";
 import { getFishRank } from "./fishRank";
 import { festWeight } from "./quests/urgent";
@@ -75,9 +72,10 @@ import type {
 //  - 무엇이 걸렸는지(종류·크기)는 시작할 때 서버가 굴려 진행 기록(저장소)에만 둔다. 티켓에는 시각·자리·손맛만.
 //  - 끝낼 때 티켓 서명·계정·한 번만 쓰기·시간(입질 전/너무 빠른 감기/게이지보다 빠름/너무 늦음)을 확인한다.
 //  - 곤충은 미니게임 시드로 다시 만든 출현 계획으로 결과의 상한을 검사한다 (사냥터와 같은 방식).
-//  - 도감 등록·가방 추가는 이 결과 API(grant)에서만. 포인트는 NPC에게 팔 때와 도감에 처음 등록할 때(lib/forage/dexReward) earnPoints(항목·하루·지갑·IP 한도)로만.
+//  - 도감 등록·가방 추가는 이 결과 API(grant)에서만. 포인트는 NPC에게 팔 때와 도감에 처음 등록할 때(lib/forage/dexReward) earnPoints로만.
+//  - 11/19 하루 잡는 수·판 포인트 한도는 없앴다. 봇 막이는 아래 시간당 시작 수 + 위 티켓·시간 검사가 한다.
 
-/** 한 시간에 시작할 수 있는 낚시·채집 수 (둘을 합쳐서. 평범하게 하면 시간당 100번도 어렵다) */
+/** 한 시간에 시작할 수 있는 낚시·채집 수 (둘을 합쳐서. 평범하게 하면 시간당 100번도 어렵다 — 11/19부터 하루 한도 대신 이것이 자동화를 막는다) */
 export const FORAGE_STARTS_PER_HOUR = 300;
 const hourBucket = (now: number) => String(Math.floor(now / 3_600_000));
 
@@ -88,12 +86,10 @@ function rand(): number {
 }
 const newSeed = () => Math.floor(rand() * 0x7fffffff);
 
-// 11/16 포구 시장 좌판도 같은 항목 한도 (생선 = 낚시 판매, 갯벌 = 채집 판매) — 새 포인트 항목이 없다
+// 11/16 포구 시장 좌판도 같은 포인트 항목 (생선 = 낚시 판매, 갯벌 = 채집 판매) — 새 포인트 항목이 없다
 const SOURCE_OF_NPC: Record<NpcId, Extract<EarnSource, "fish" | "gather">> = { fishmonger: "fish", collector: "gather" };
-const DAY_FIELD = { fish: "fishP", gather: "gatherP", dex: "dexP" } as const;
 
-/** boost = 포인트 배수 이벤트 (lib/pointEvent) — 고른 항목이면 팔기·도감 한도 표시가 늘어난 값. champ = 11/17 지금 1위인 랭킹 (낚시왕이면 물고기 팔기 한도 + — lib/champPerks) */
-function toState(acct: string, snap: Snapshot, now: number, boost: EarnBoost = NO_BOOST, champ: readonly ChampBoard[] = []): ForageState {
+function toState(acct: string, snap: Snapshot, now: number): ForageState {
   const w = nodeWindow(now);
   return {
     bag: snap.bag,
@@ -101,7 +97,7 @@ function toState(acct: string, snap: Snapshot, now: number, boost: EarnBoost = N
     claims: snap.claims,
     titles: titlesOf(snap.dex, snap.claims, snap.pay.marks),
     reward: rewardState(snap.claims, snap.pay),
-    today: { ...snap.day, fishCap: earnTerms(boost, "fish", champ).dailyMax, gatherCap: earnRule("gather").dailyMax * capsMult(boost, "gather"), dexCap: earnRule("dex").dailyMax * capsMult(boost, "dex"), autoCap: AUTO_FISH_DAILY_MAX },
+    today: snap.day,
     nodes: { ids: activeNodes(acct, now, new Set(snap.taken)).map((n) => n.id), refreshAt: windowEndsAt(w), seed: nodeSeed(acct) },
   };
 }
@@ -122,8 +118,7 @@ async function readSnap(store: ForageStore, acct: string, now: number): Promise<
 }
 
 export async function forageState(acct: string, now = Date.now(), store: ForageStore = getForageStore()): Promise<ForageState> {
-  const [snap, boost, champ] = await Promise.all([readSnap(store, acct, now), earnBoost(now), champBoardsSafe(acct, now)]);
-  return toState(acct, snap, now, boost, champ);
+  return toState(acct, await readSnap(store, acct, now), now);
 }
 
 /** 처음 등록 보상 지급 (lib/forage/dexReward). 지급이 실패해도 잡은 결과는 그대로 — 쌓인 보상은 도감 창에서 받는다 */
@@ -179,9 +174,7 @@ export async function castLine(acct: string, spotId: string, now = Date.now(), i
   tideGate(spotId, now);
   // 직접 던지면 자동 낚시는 끝난다 (둘을 한꺼번에 할 수 없다). 그때까지 낚은 것은 정산해 넣는다 (처음 등록 보상도 조용히 지급)
   if (await store.autoGet(acct)) await dexGainOf(store, acct, (await settleAuto(store, acct, now, true)).items, ip, now);
-  // 오늘 잡은 수만 본다 (가방·도감까지 읽는 snapshot은 명령 6개 → 2개)
-  const snap = await store.today(acct, kstDay(now), nodeWindow(now));
-  if (snap.day.fish >= DAILY_CATCH_MAX.fish) throw new HttpError(429, "DAILY_LIMIT", "오늘은 물고기를 충분히 잡았어요. 내일 또 와요.");
+  // 11/19 하루 낚시 수 한도가 없어져 오늘 기록을 읽지 않는다 (명령 2개 줄임)
   const cond = conditionsAt(now);
   // 11/15 긴급 의뢰 마을 축제: 희귀 이상 조금 더 (축제가 있을 수 있는 때에만 저장소를 본다)
   // 11/16 낚시 갈래 칭호: 큰 물고기 확률 (단 칭호는 기억에서 — lib/titlesServer wornPerk)
@@ -200,10 +193,9 @@ export async function castLine(acct: string, spotId: string, now = Date.now(), i
     payload.alt = sunkenFallbackFish(water, cond, rand(), s).id;
   }
   const ttl = Math.ceil((bite - now + HOOK_WINDOW_MS + REEL_MAX_MS) / 1000) + 30;
-  const began = await store.begin(acct, nonce, JSON.stringify(payload), ttl, hourBucket(now), FORAGE_STARTS_PER_HOUR);
-  if (!began) throw new HttpError(429, "RATE_LIMITED", "조금 쉬었다 해요. 한 시간에 낚시·채집을 너무 많이 했어요.");
-  // 11/18 보안: 끝내지 않은 찌를 버리고 다시 던지면 그 찌도 오늘 낚시 1번 (그림자만 보고 큰 것을 고르지 못하게)
-  if (began === "replacedFish") await store.addDay(acct, kstDay(now), "fish", 1);
+  // 버리고 다시 던진 찌(그림자만 보고 큰 것 고르기)도 시간당 시작 수 1번으로 센다 (11/19 하루 낚시 수 한도는 없앴다)
+  if (!(await store.begin(acct, nonce, JSON.stringify(payload), ttl, hourBucket(now), FORAGE_STARTS_PER_HOUR)))
+    throw new HttpError(429, "RATE_LIMITED", "조금 쉬었다 해요. 한 시간에 낚시·채집을 너무 많이 했어요.");
   const ticket = await signForageTicket(env.sessionSecret(), { n: nonce, a: acct, k: "fish", x: spotId, t: now, b: bite, p: power });
   return { ticket, biteInMs: bite - now, power, reelMs: reelMinMs(power), hookMs: HOOK_WINDOW_MS };
 }
@@ -214,21 +206,12 @@ export async function reelIn(acct: string, token: string, ok: boolean, now = Dat
   const t = await ticketOf(acct, token, "fish");
   const payload = JSON.parse(await claimOrThrow(store, acct, t.n)) as FishPayload;
   const day = kstDay(now);
-  // 11/18 보안: 놓치거나(너무 빨리·너무 늦게 감은 것 포함) 일부러 놓아 줘도 오늘 낚시 1번 (그림자를 보고 큰 것만 고르지 못하게)
-  const missed = () => store.addDay(acct, day, "fish", 1);
-  if (!ok) {
-    await missed();
-    return { result: null, state: await forageState(acct, now, store) };
-  }
+  // 놓치면(너무 빨리·너무 늦게 감은 것 포함) 기록만 끝낸다. 11/19 하루 낚시 수 한도가 없어져 놓친 것을 세지 않는다
+  // (그림자를 보고 큰 것만 고르기는 시간당 시작 수가 막는다)
+  if (!ok) return { result: null, state: await forageState(acct, now, store) };
   const since = now - (t.b ?? t.t);
-  if (since < reelMinMs(t.p ?? 1) - REEL_SLACK_MS) {
-    await missed();
-    throw new HttpError(422, "TOO_FAST", "너무 빨리 감았어요. 이번 물고기는 놓쳤어요.");
-  }
-  if (since > HOOK_WINDOW_MS + REEL_MAX_MS) {
-    await missed();
-    throw new HttpError(410, "TICKET_EXPIRED", "너무 오래 걸려서 물고기가 도망갔어요.");
-  }
+  if (since < reelMinMs(t.p ?? 1) - REEL_SLACK_MS) throw new HttpError(422, "TOO_FAST", "너무 빨리 감았어요. 이번 물고기는 놓쳤어요.");
+  if (since > HOOK_WINDOW_MS + REEL_MAX_MS) throw new HttpError(410, "TICKET_EXPIRED", "너무 오래 걸려서 물고기가 도망갔어요.");
   if (payload.g !== undefined) return reelSunken(store, acct, payload, now, ip);
   const got = await store.grant(acct, day, "fish", [{ id: payload.sp, size: payload.sz }], STACK_MAX);
   // 최대어 랭킹: 크기는 시작할 때 서버가 굴린 값 (가방이 가득 차 못 넣었어도 잡은 기록은 남는다). 랭킹 저장 실패가 낚시를 막지는 않는다
@@ -249,11 +232,11 @@ async function autoResponse(store: ForageStore, acct: string, r: AutoSettled, no
   return {
     auto: r.session ? autoStatus(r.session, snap.day, now) : null,
     items: r.items,
-    dropped: r.dropped,
+    missed: r.missed,
     gear: r.gear,
     ...(r.ended ? { ended: r.ended } : {}),
     ...withDex(dex),
-    state: toState(acct, snap, now, await earnBoost(now), await champBoardsSafe(acct, now)),
+    state: toState(acct, snap, now),
   };
 }
 
@@ -263,10 +246,8 @@ export async function startAutoFish(acct: string, spotId: string, ch: number | n
   const water = anyFishingWaterOf(spotId);
   if (!water) throw new HttpError(400, "INVALID_INPUT", "여기서는 낚시를 할 수 없어요.");
   tideGate(spotId, now);
+  // 11/19 하루 자동 낚시·낚시 수 한도가 없어져 오늘 기록을 읽지 않는다 (명령 2개 줄임)
   const prev = await settleAuto(store, acct, now, true);
-  const day = (await store.today(acct, kstDay(now), nodeWindow(now))).day;
-  if (day.fish >= DAILY_CATCH_MAX.fish) throw new HttpError(429, "DAILY_LIMIT", "오늘은 물고기를 충분히 잡았어요. 내일 또 와요.");
-  if (day.auto >= AUTO_FISH_DAILY_MAX) throw new HttpError(429, "AUTO_LIMIT", `자동 낚시는 하루 ${AUTO_FISH_DAILY_MAX}마리까지예요. 직접 낚거나 내일 또 와요.`);
   const session = newAutoSession(newSeed(), spotId, water, ch, now);
   // 11/16 갯바위 자리는 물이 빠져 찌 자리가 마르는 때에 자동 낚시도 끝나요
   const sea = seaFishingSpotById(spotId);
@@ -280,7 +261,7 @@ export async function startAutoFish(acct: string, spotId: string, ch: number | n
     const more = await settleAuto(store, acct, now, true);
     prev.items.push(...more.items);
     prev.gear.push(...more.gear);
-    prev.dropped += more.dropped;
+    prev.missed += more.missed;
   }
   return autoResponse(store, acct, { ...prev, session, ended: undefined }, now, ip);
 }
@@ -297,7 +278,7 @@ export async function stopAutoFish(acct: string, now = Date.now(), ip?: string):
   return autoResponse(store, acct, await settleAuto(store, acct, now, true), now, ip);
 }
 
-/** 물에 빠진 꾸미기를 건졌다: 영구 소장으로 지급(낚시 1회로 셈, 도감·최대어 기록 없음). 다 가졌으면 대신 희귀 물고기 */
+/** 물에 빠진 꾸미기를 건졌다: 영구 소장으로 지급(오늘 낚은 수 1로 셈, 도감·최대어 기록 없음). 다 가졌으면 대신 희귀 물고기 */
 async function reelSunken(store: ForageStore, acct: string, p: FishPayload, now: number, ip: string | undefined): Promise<ReelResponse> {
   const day = kstDay(now);
   const c = pickSunkenCosmetic(p.g!, await ownedPermanent(acct, now));
@@ -332,8 +313,6 @@ export async function startGather(acct: string, nodeId: string, now = Date.now()
   // 오늘 기록·이번 창에 캔 지점만 (명령 2개)
   const snap = await store.today(acct, kstDay(now), w);
   if (!nodeActive(acct, n, w) || snap.taken.includes(n.id)) throw new HttpError(409, "NODE_EMPTY", "지금은 비어 있어요. 조금 뒤에 다시 피어나요.");
-  // 11/15 곤충 채집은 채집물 개수 한도를 채워도 할 수 있다 (곤충은 못 챙기고 포인트만 — 「곤충 채집」 포인트 한도는 따로)
-  if (n.kind !== "bug" && snap.day.gather >= DAILY_CATCH_MAX.gather) throw new HttpError(429, "DAILY_LIMIT", "오늘은 충분히 모았어요. 내일 또 와요.");
   const nonce = nanoid(16);
   const begin = async (payload: GatherPayload, ttl: number) => {
     if (!(await store.begin(acct, nonce, JSON.stringify(payload), ttl, hourBucket(now), FORAGE_STARTS_PER_HOUR)))
@@ -389,11 +368,6 @@ export async function finishGather(acct: string, token: string, result: BugsResu
       if (s) items.push({ id: s.id, size: rollSize10(s, rand()) });
     }
     if (!items.length) message = "곤충이 모두 날아갔어요. 다섯 마리는 잡아야 하나라도 챙겨요.";
-    // 11/15 채집물 개수 한도를 채웠으면 곤충은 못 챙기고 포인트만
-    if ((await store.today(acct, kstDay(now), t.w)).day.gather >= DAILY_CATCH_MAX.gather) {
-      items = [];
-      message = "오늘은 곤충을 더 챙길 수 없어요. 포인트만 받아요.";
-    }
   } else {
     if (elapsed < (t.m ?? 0) - GATHER_SLACK_MS) throw new HttpError(422, "TOO_FAST", "다 캐기 전에 끝냈어요. 이번엔 빈손이에요.");
     items = payload.items ?? [];
@@ -401,7 +375,7 @@ export async function finishGather(acct: string, token: string, result: BugsResu
   const got = await store.grant(acct, kstDay(now), "gather", items, STACK_MAX, { window: t.w, node: n.id });
   if (!got) throw new HttpError(409, "NODE_EMPTY", "이미 캔 자리예요.");
   const dex = await dexGainOf(store, acct, got, ip, now);
-  // 11/15 곤충 채집은 잡은 만큼 포인트도 (「곤충 채집」 하루 한도 — 옛 사냥터 벌레 잡기 한도 자리)
+  // 11/15 곤충 채집은 잡은 만큼 포인트도 (「곤충 채집」 항목, 11/19 하루 한도 없음)
   const points = bugPoints > 0 ? (await earnPointsOnly(acct, "bugs", bugPoints, ip)).earned : 0;
   return { items: got satisfies CatchResult[], ...withDex(dex), state: await forageState(acct, now, store), ...(message ? { message } : {}), ...(n.kind === "bug" ? { points } : {}) };
 }
@@ -409,8 +383,8 @@ export async function finishGather(acct: string, token: string, result: BugsResu
 // ── NPC 판매 ──
 
 /**
- * NPC에게 팔기. 비싼 것부터 오늘 남은 한도(항목 한도·하루 전체·지갑) 안에서 개수 단위로만 판다 →
- * 한도를 넘는 만큼은 가방에 그대로 남아 내일 팔 수 있다. NPC 앞에서만 여는 창은 UI 몫(서버는 위치를 모른다 — 어디서 불러도 같은 한도라 이득이 없다)
+ * NPC에게 팔기. 11/19 하루 한도가 없어져 고른 것을 다 판다 (비싼 것부터 지갑 여유 WALLET_MAX 안에서만 개수 단위로 — 넘치는 만큼은 가방에 그대로).
+ * NPC 앞에서만 여는 창은 UI 몫(서버는 위치를 모른다 — 어디서 불러도 값이 같아 이득이 없다)
  */
 export async function sellTo(acct: string, npcId: NpcId, want: Record<string, number>, ipHash: string, now = Date.now()): Promise<SellResponse> {
   const store = getForageStore();
@@ -418,7 +392,7 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
   if (!npc) throw new HttpError(400, "INVALID_INPUT", "그런 상인은 없어요.");
   const source = SOURCE_OF_NPC[npc.id];
   const day = kstDay(now);
-  const [snap, acc, boost, champ] = await Promise.all([store.snapshot(acct, day, nodeWindow(now)), getAccounts().get(acct, day, now), earnBoost(now), champBoardsSafe(acct, now)]);
+  const [snap, acc, boost] = await Promise.all([store.snapshot(acct, day, nodeWindow(now)), getAccounts().get(acct, day, now), earnBoost(now)]);
   const units: { id: string; price: number }[] = [];
   for (const [id, raw] of Object.entries(want)) {
     const s = speciesById(id);
@@ -427,10 +401,9 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
     for (let i = 0; i < n; i++) units.push({ id, price: s.price });
   }
   if (!units.length) throw new HttpError(409, "NOTHING_TO_SELL", "팔 게 없어요.");
-  // 남은 한도(포인트)를 값 단위로: 포인트 배수 이벤트로 이 항목을 골랐으면 한도는 caps배, 판 값은 points배로 들어온다 (lib/pointEvent).
-  // 11/17 낚시왕: 판 값은 (이벤트 배수 + 20%)배, 한도는 + 150P (lib/champPerks — 저장소 적립과 같은 계산)
-  const t = earnTerms(boost, source, champ);
-  let left = Math.floor((Math.min(t.dailyMax - snap.day[DAY_FIELD[source]], t.total - acc.todayEarned, BALANCE_CAP - acc.points) * 100) / t.m100);
+  // 지갑 여유(포인트)를 값 단위로: 포인트 배수 이벤트로 이 항목을 골랐으면 판 값은 배수로 들어온다 (lib/pointEvent — 저장소 적립과 같은 계산)
+  const t = earnTerms(boost, source);
+  let left = Math.floor((Math.min(t.dailyMax, WALLET_MAX - acc.points) * 100) / t.m100);
   units.sort((a, b) => b.price - a.price);
   const plan: Record<string, number> = {};
   let value = 0;
@@ -441,11 +414,11 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
     plan[u.id] = (plan[u.id] ?? 0) + 1;
   }
   const capped = value < units.reduce((n, u) => n + u.price, 0);
-  if (!value) return { sold: {}, earned: 0, capped: true, state: toState(acct, snap, now, boost, champ), me: await loadMe(getAccounts(), acct, now) };
+  if (!value) return { sold: {}, earned: 0, capped: true, state: toState(acct, snap, now), me: await loadMe(getAccounts(), acct, now) };
   if (!(await store.remove(acct, plan))) throw new HttpError(409, "BAG_CHANGED", "가방이 바뀌었어요. 다시 골라 주세요.");
-  const { earned, paid, me } = await earnPoints(acct, source, value, ipHash, boost, champ);
+  const { earned, paid, me } = await earnPoints(acct, source, value, ipHash, boost);
   if (paid < value) {
-    // 그 사이 다른 적립으로 한도가 줄었다 → 값을 못 받은 만큼(싼 것부터) 가방에 되돌린다
+    // 그 사이 다른 적립으로 지갑이 찼다 → 값을 못 받은 만큼(싼 것부터) 가방에 되돌린다
     const soldUnits = Object.entries(plan)
       .flatMap(([id, k]) => Array.from({ length: k }, () => ({ id, price: speciesById(id)!.price })))
       .sort((a, b) => b.price - a.price);
@@ -461,7 +434,6 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
     }
     if (Object.keys(back).length) await store.restore(acct, back, STACK_MAX);
   }
-  if (earned > 0) await store.addDay(acct, day, DAY_FIELD[source], earned);
   return { sold: plan, earned, capped: capped || paid < value, state: await forageState(acct, now, store), me };
 }
 
@@ -475,13 +447,13 @@ export function legacyDexClaim(): never {
   throw new HttpError(409, "DEX_CHANGED", "도감 보상이 바뀌었어요. 새로고침해 주세요.");
 }
 
-/** 도감 창의 [도감 보상 받기]: 그 칸에 쌓인 받을 보상을 오늘 한도 안에서 (동시에 눌러도 한 번만, 넘친 만큼은 그대로 남는다) */
+/** 도감 창의 [도감 보상 받기]: 그 칸에 쌓인 받을 보상(예전 한도로 쌓인 것)을 한 번에 (동시에 눌러도 한 번만, 지갑이 꽉 차 넘친 만큼은 그대로 남는다) */
 export async function claimDexPending(acct: string, cat: DexCat, ipHash: string, now = Date.now()): Promise<DexPayResponse> {
   const store = getForageStore();
   await ensureDexSettled(store, acct, null, now);
-  const r = await claimPendingDex(store, acct, cat, ipHash, now);
+  const r = await claimPendingDex(store, acct, cat, ipHash);
   if (r.earned === 0 && r.left === 0) throw new HttpError(409, "NOTHING_TO_CLAIM", "받을 도감 보상이 없어요.");
-  if (r.earned === 0) throw new HttpError(409, "DAILY_CAP", "오늘 받을 수 있는 포인트가 다 찼어요. 내일 받으면 돼요.");
+  if (r.earned === 0) throw new HttpError(409, "WALLET_FULL", "지갑이 꽉 찼어요. 포인트를 쓰고 다시 받아요.");
   return { earned: r.earned, left: r.left, state: await forageState(acct, now, store), me: r.me ?? (await loadMe(getAccounts(), acct, now)) };
 }
 

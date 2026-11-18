@@ -165,18 +165,20 @@ export default function ChampNotice({ onOpenPerks }: { onOpenPerks?: () => void 
               <span className={styles.note}>지갑에 들어왔어요</span>
             </span>
           </li>
-          {/* 11/17 1주일 혜택 (자격이 붙어 있는 동안 서버가 준다 — lib/champPerks). 목록은 [혜택 보기]로 */}
-          <li>
-            <span className={styles.sparkle} aria-hidden="true">
-              ★
-            </span>
-            <span>
-              <b>1주일 혜택</b>
-              <span className={styles.note}>
-                {champNamesText(notice.boards)} 혜택 {champPerkLines(notice.boards).length}가지가 다음 발표까지 붙어요.
+          {/* 11/17 1주일 혜택 (자격이 붙어 있는 동안 서버가 준다 — lib/champPerks). 목록은 [혜택 보기]로. 11/19 낚시왕만이면 혜택 줄이 없어 뺀다 */}
+          {champPerkLines(notice.boards).length > 0 && (
+            <li>
+              <span className={styles.sparkle} aria-hidden="true">
+                ★
               </span>
-            </span>
-          </li>
+              <span>
+                <b>1주일 혜택</b>
+                <span className={styles.note}>
+                  {champNamesText(notice.boards)} 혜택 {champPerkLines(notice.boards).length}가지가 다음 발표까지 붙어요.
+                </span>
+              </span>
+            </li>
+          )}
         </ul>
         <div className={styles.buttons}>
           <button type="button" className={cx(ui.button, ui.primary)} onClick={() => void tryOn()} disabled={pending}>

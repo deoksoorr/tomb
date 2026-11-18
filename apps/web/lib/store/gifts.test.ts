@@ -71,7 +71,7 @@ function giftContract(make: () => { gifts: GiftStore; accounts: AccountStore; cl
     }
   });
 
-  it("특정 계정 선물은 그 계정만, 지갑 상한에서 잘린다", async () => {
+  it("특정 계정 선물은 그 계정만, 예전 지갑 상한(99,999)을 넘어도 다 들어온다 (11/19 지갑 상한 WALLET_MAX)", async () => {
     const { gifts, accounts, cleanup } = make();
     const [me, other] = [`t-${nanoid(10)}`, `t-${nanoid(10)}`];
     const g = gift({ target: me, targetName: "받는이", points: BALANCE_CAP, items: [{ itemId: "mega_ch", count: 1 }] });
@@ -80,8 +80,8 @@ function giftContract(make: () => { gifts: GiftStore; accounts: AccountStore; cl
     expect((await gifts.inbox(other, T0 - 1, T0 + 1)).map((x) => x.id)).not.toContain(g.id);
     expect(await gifts.claim(other, g.id, T0 - 1, T0 + 1)).toEqual({ ok: false, reason: "gone" });
     const r = await gifts.claim(me, g.id, T0 + 100, T0 + 1); // 특정 계정 선물은 처음 들어온 시각과 상관없다
-    expect(r).toMatchObject({ ok: true, points: BALANCE_CAP - 2 });
-    expect((await accounts.get(me, "20261112", T0)).points).toBe(BALANCE_CAP);
+    expect(r).toMatchObject({ ok: true, points: BALANCE_CAP });
+    expect((await accounts.get(me, "20261112", T0)).points).toBe(BALANCE_CAP + 2);
     // 모은 포인트·랭킹은 꽃 적립 2만 (선물 몫은 빠진다)
     expect((await accounts.get(me, "20261112", T0)).lifetimePoints).toBe(2);
     expect((await accounts.pointRank(10_000, me)).mine?.points).toBe(2);

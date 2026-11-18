@@ -176,7 +176,10 @@ export default function OddsDialog({ section, onClose }: { section: OddsSection;
           <OddsTable head={["등급", "무게", "비율"]} rows={rarityRows()} bar={2} />
           <ul className={styles.facts}>
             <li>
-              직접 낚시하면 {f.sunken}, 자동 낚시는 {f.sunkenAuto} 확률로 물고기 대신 물에 빠진 꾸미기가 걸려요.
+              자동 낚시는 {f.autoEvery}마다 찌를 올려 {f.autoCatch} 확률로 한 마리가 걸려요. 하루 한도는 없어요.
+            </li>
+            <li>
+              직접 낚시하면 {f.sunken}, 자동 낚시는 걸린 한 마리마다 {f.sunkenAuto} 확률로 물고기 대신 물에 빠진 꾸미기가 걸려요.
             </li>
             <li>바닷가 만조 앞뒤 30분쯤은 {f.highTide} 확률로 크기를 한 번 더 굴려 큰 쪽을 가져요.</li>
             <li>채집은 {f.gatherDouble} 확률로 같은 것이 2개 나와요. 갯벌 파기는 늘 1개예요.</li>

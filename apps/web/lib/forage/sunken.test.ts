@@ -4,7 +4,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { getStaffStore } from "../staff";
 import { getAccounts } from "../store";
 import { kstDay } from "../store/accounts";
-import { AUTO_FISH_EVERY_MS, parseAutoSession } from "./auto";
+import { AUTO_FISH_EVERY_MS, autoHit, parseAutoSession } from "./auto";
 import { speciesById } from "./catalog";
 import { castLine, reelIn, startAutoFish, syncAutoFish } from "./service";
 import { getForageStore } from "./store";
@@ -41,10 +41,13 @@ async function ownAll(a: string) {
 }
 
 /** 이 시드로 앞 n번 안에 꾸미기가 걸리는 번호 */
+/** n번 시도 안에 꾸미기가 걸리는 시드 (11/19 꾸미기는 걸린 시도에서만 — autoHit) */
 function seedWithSunken(n: number): { seed: number; k: number } {
   for (let seed = 1; ; seed++)
-    for (let k = 1; k <= n; k++) if (rollAutoSunken(seed, k) !== null) return { seed, k };
+    for (let k = 1; k <= n; k++) if (autoHit(seed, k) && rollAutoSunken(seed, k) !== null) return { seed, k };
 }
+/** 1..n번 시도 중 걸린 수 */
+const hitsIn = (seed: number, n: number) => Array.from({ length: n }, (_, i) => i + 1).filter((k) => autoHit(seed, k)).length;
 
 describe("꾸미기 고르기", () => {
   it("상점에서 파는 부위 있는 꾸미기만 (펫·운영자 전용 제외)", () => {
@@ -131,11 +134,11 @@ describe("자동 낚시 (시드 + 번호)", () => {
     await store.autoSwap(a, raw, JSON.stringify({ ...parseAutoSession(raw)!, seed }));
   }
 
-  it("정산 때 꾸미기가 걸린 번호는 영구 소장으로, 한도는 같이 센다", async () => {
+  it("정산 때 꾸미기가 걸린 번호는 영구 소장으로, 낚은 수에 같이 센다", async () => {
     const a = await newAcct();
     await startWithSunken(a);
     const r = await syncAutoFish(a, T0 + 10 * MIN); // 20번까지
-    const n = Math.floor((10 * MIN) / AUTO_FISH_EVERY_MS);
+    const n = hitsIn(seedWithSunken(20).seed, Math.floor((10 * MIN) / AUTO_FISH_EVERY_MS));
     expect(r.gear.length).toBeGreaterThanOrEqual(1);
     expect(r.gear.every((g) => g.kept)).toBe(true);
     expect(new Set(r.gear.map((g) => g.id)).size).toBe(r.gear.length); // 한 정산 안에서 겹치지 않는다
@@ -157,21 +160,17 @@ describe("자동 낚시 (시드 + 번호)", () => {
       expect(r.state.bag[g.instead!]).toBeGreaterThanOrEqual(1);
       expect(r.state.dex[g.instead!]).toBeTruthy();
     }
-    // 대신 받은 물고기는 items에도 들어 있다 (낚시 1회)
-    expect(r.items.length).toBe(Math.floor((10 * MIN) / AUTO_FISH_EVERY_MS));
+    // 대신 받은 물고기는 items에도 들어 있다 (낚은 수 1)
+    expect(r.items.length).toBe(hitsIn(seedWithSunken(20).seed, Math.floor((10 * MIN) / AUTO_FISH_EVERY_MS)));
   });
 
-  it("오늘 한도가 다 찼으면 꾸미기도 나오지 않는다", async () => {
+  it("11/19 하루 한도 없음: 예전 자동 75마리를 채운 날에도 꾸미기가 걸린다", async () => {
     const a = await newAcct();
-    await getForageStore().grantAuto(a, kstDay(T0), Array.from({ length: 75 }, () => ({ id: "f_crucian", size: 0 })), 99, 75, 150);
-    // 자동 한도가 찼으면 켤 수 없다 → 세션을 직접 넣는다
-    const { seed } = seedWithSunken(20);
-    const before = await ownedPermanent(a, T0);
-    await getForageStore().autoSwap(a, null, JSON.stringify({ v: 1, seed, spot: PIER, water: "lake", ch: 1, start: T0, end: T0 + 6 * 3_600_000, beat: T0, segs: [], done: 0 }));
+    await getForageStore().grantAuto(a, kstDay(T0), Array.from({ length: 75 }, () => ({ id: "f_crucian", size: 0 })), 99);
+    await startWithSunken(a);
     const r = await syncAutoFish(a, T0 + 10 * MIN);
-    expect(r.items).toEqual([]);
-    expect(r.gear).toEqual([]);
-    expect(r.dropped).toBe(Math.floor((10 * MIN) / AUTO_FISH_EVERY_MS));
-    expect(await ownedPermanent(a, T0)).toEqual(before);
+    expect(r.gear.length).toBeGreaterThanOrEqual(1);
+    expect(r.gear.every((g) => g.kept)).toBe(true);
+    expect(r.state.today.auto).toBe(75 + hitsIn(seedWithSunken(20).seed, Math.floor((10 * MIN) / AUTO_FISH_EVERY_MS)));
   });
 });

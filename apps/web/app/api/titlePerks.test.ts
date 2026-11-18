@@ -14,7 +14,7 @@ import { FURNITURE } from "@/lib/housing/catalog";
 import { buyFurniture, buyPlot, getHouseStore } from "@/lib/housing/service";
 import type { RunFinishResponse, RunStartResponse } from "@/lib/rpg/types";
 import { huntPlan } from "@/lib/rpg/plan";
-import { STAY_BONUS_AMOUNTS, STAY_BONUS_DAILY_MAX, stayBonusAmounts, stayBonusState, stayBonusSum } from "@/lib/stayBonus";
+import { STAY_BONUS_AMOUNTS, stayBonusAmounts, stayBonusState, stayBonusSum } from "@/lib/stayBonus";
 import { getAccounts } from "@/lib/store";
 import { kstDay } from "@/lib/store/accounts";
 import { PRESENCE_MIN_GAP_MS } from "@/lib/store/types";
@@ -259,23 +259,23 @@ describe("11/16 서버가 정하는 칭호 효과", () => {
     expect(await gather(null)).toBe(0);
   });
 
-  it("머무르기 보상: 구간 값만 커지고 하루 상한(145P)은 그대로", async () => {
+  it("머무르기 보상: 구간 값이 커진다 (11/19 하루 상한이 없어 칭호만큼 더 받는다)", async () => {
     expect(stayBonusAmounts(0)).toEqual([...STAY_BONUS_AMOUNTS]);
-    expect(stayBonusAmounts(0.1)).toEqual([11, 17, 22, 28, 28, 28, 28]);
-    for (const b of [0, 0.05, 0.1, 0.15, 0.22]) {
-      expect(stayBonusSum(0, STAY_BONUS_AMOUNTS.length, b)).toBe(STAY_BONUS_DAILY_MAX);
-      let sum = 0;
-      for (let k = 0; k < STAY_BONUS_AMOUNTS.length; k++) sum += stayBonusSum(k, k + 1, b);
-      expect(sum).toBe(STAY_BONUS_DAILY_MAX);
-    }
-    // 칭호로 상한에 먼저 닿으면 남은 구간은 받을 게 없다 (창도 닫힌다)
-    expect(stayBonusState(21, 6, 0.22)).toMatchObject({ count: 0, points: 0, done: true });
-    // 저장소: 한꺼번에 받아도 145P에서 자른다
+    expect(stayBonusAmounts(0.1)).toEqual([11, 17, 22, 28]);
+    // 7구간: 칭호 없으면 145P, 22%면 구간마다 반올림한 합
+    expect(stayBonusSum(0, 7)).toBe(145);
+    const plus = [12, 18, 24, 31, 31, 31, 31].reduce((n, x) => n + x, 0);
+    expect(stayBonusSum(0, 7, 0.22)).toBe(plus);
+    let sum = 0;
+    for (let k = 0; k < 7; k++) sum += stayBonusSum(k, k + 1, 0.22);
+    expect(sum).toBe(plus);
+    expect(stayBonusState(21, 6, 0.22)).toMatchObject({ count: 1, points: 31 });
+    // 저장소: 한꺼번에 받아도 자르지 않는다
     const accounts = getAccounts();
     const day = "20261116";
     const id = `perk-stay-${nanoid(8)}`;
     for (let i = 0; i < 21; i++) await accounts.presence(id, day, 1_000_000_000 + i * PRESENCE_MIN_GAP_MS);
-    expect(await accounts.claimStayBonus(id, day, 0.22)).toEqual({ earned: STAY_BONUS_DAILY_MAX, count: 7 });
+    expect(await accounts.claimStayBonus(id, day, 0.22)).toEqual({ earned: plus, count: 7 });
     // 라우트: 출석·접속 갈래 금 칭호(10%)면 첫 구간 10P → 11P
     const v = await newVisitor();
     await wear(v.id, "t_att100");
@@ -347,7 +347,7 @@ describe("11/16 서버가 정하는 칭호 효과", () => {
     expect((await deliver(null, 0)).res.bonus).toBeUndefined();
   });
 
-  it("도감 새 칸 보상: 도감 갈래 칭호면 같은 적립에 얹고, 도감 하루 한도는 그대로 (원래 보상부터 채운다)", async () => {
+  it("도감 새 칸 보상: 도감 갈래 칭호면 같은 적립에 얹는다 (11/19 도감 하루 한도 없음 — 많이 받은 날도 다 받는다)", async () => {
     const store = getForageStore();
     const fish = SPECIES.filter((s) => s.cat === "fish" && !s.junk).sort((x, y) => dexRewardOf(y.id) - dexRewardOf(x.id))[0];
     const n = dexRewardOf(fish.id);
@@ -365,12 +365,12 @@ describe("11/16 서버가 정하는 칭호 효과", () => {
     expect(gain).toMatchObject({ points: n, earned: n + dexBonusOf(n, 0.15), pending: 0 });
     const b = `perk-dex-${nanoid(8)}`;
     expect(await payNewDex(store, b, await register(b), undefined, now)).toMatchObject({ points: n, earned: n, pending: 0 });
-    // 도감 한도가 원래 보상만큼만 남았으면 덧붙임은 못 받고 (쌓이지도 않는다) 원래 보상은 다 받는다
+    // 예전 도감 한도(300)를 넘게 받은 날도 덧붙임까지 다 받고 쌓이지 않는다
     const c = `perk-dex-${nanoid(8)}`;
     const accounts = getAccounts();
     await accounts.earn(c, "dex", day, { amount: 300 - n });
-    const capped = await payNewDex(store, c, await register(c), undefined, now, async () => 0.15);
-    expect(capped).toMatchObject({ points: n, earned: n, pending: 0 });
+    const more = await payNewDex(store, c, await register(c), undefined, now, async () => 0.15);
+    expect(more).toMatchObject({ points: n, earned: n + dexBonusOf(n, 0.15), pending: 0 });
     expect((await store.dexPay(c)).pending.fish ?? 0).toBe(0);
   });
 });

@@ -5,7 +5,7 @@ import { cachedPointEvent, POINT_EVENT_FRESH_MS } from "@/lib/store/pointEvent";
 /**
  * 포인트 배수 이벤트 (게임 화면 위 안내 띠). 게임이 1분마다 가볍게 확인한다 — 모두 같은 값이라 CDN에 30초 캐시.
  * 이벤트 공지를 들은 화면은 ?fresh=시각을 붙여 캐시를 건너뛴다 (components/overlay/PointEventBadge).
- * 오늘 한도에 아무 영향이 없는(끝난) 이벤트는 null로 준다
+ * 지금 적립에 아무 영향이 없는(끝난) 이벤트는 null로 준다
  */
 export const GET = handler(async (req) => {
   const now = Date.now();

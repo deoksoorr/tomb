@@ -1,8 +1,6 @@
 // web 안에서 공유하는 데이터 타입과 API 응답 형태 (계약). 바꿀 때는 모든 사용처를 같이 고친다.
 
 import { itemById, type AvatarDye, type ChampBoard, type MegaPin } from "@tomb/protocol";
-import type { EarnSource } from "./economy";
-import type { EarnBoost } from "./pointEvent";
 
 export const CAUSE_TAGS = [
   "time",
@@ -212,10 +210,8 @@ export type Me = {
   /** 첫 방문 안내를 끝냈는지 (계정 기준 — 기기를 바꿔도 다시 안 뜬다) */
   tutorialDone: boolean;
   points: number;
-  /** 오늘 쌓은 포인트 (DAILY_EARN_CAP 대비) */
+  /** 오늘(새벽 5시 기준) 모은 포인트 (출석 달력 보상·접속 시간 보너스 빼고 — 한도는 없다) */
   todayEarned: number;
-  /** 오늘 항목별로 쌓은 포인트 (lib/economy.ts EARN_RULES의 source → 점수, 0인 항목은 없음). 하나도 없으면 빠진다. 내 정보의 항목별 게이지 */
-  earnedBy?: Partial<Record<EarnSource, number>>;
   /**
    * today = 오늘 출석 도장을 받았는지, stayMinutes = 오늘 머문 시간(분, 10분 단위 — 60분이면 오늘 칸을 받을 수 있다),
    * bonusClaimed = 오늘 받은 접속 시간 보너스 구간 수 (lib/stayBonus.ts)
@@ -243,8 +239,6 @@ export type Me = {
   champ?: number;
   /** 11/16 매니저 (관리자가 임명 — 전용 칭호·채팅 딱지뿐). 아니면 없음 */
   manager?: true;
-  /** 포인트 배수 이벤트 (lib/pointEvent — on = 지금 적립이 mult배인 항목, caps = 오늘 한도가 mult배인 항목). 이벤트와 상관없는 날이면 없음 */
-  earnBoost?: EarnBoost;
 };
 
 /** 휴면 계정이 돌아왔을 때 (입장 화면 안내·입장 거절 문구) */

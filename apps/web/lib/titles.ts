@@ -22,7 +22,7 @@ export const TITLE_GRADE_NAMES: Record<TitleGrade, string> = { bronze: "동", si
  *  - 속도 상한: 신화 1.06 (+ 1위·명예 갈래 0.02 = 1.08) × 가장 빠른 타는 펫 1.35 = 1.458 → 실시간 서버 속도 검증(달리기 × 1.5) 안,
  *    화면도 땅 위 배율을 MAX_GROUND_MUL(1.48)로 한 번 더 자른다 (game/entities/Player).
  *    11/17 지난주 다관왕은 같은 자리에 +0.01 (lib/champPerks CHAMP_MULTI_SPEED) → (1.08 + 0.01) × 1.35 = 1.4715 < 1.48 < 1.5
- *  - 포인트 하루 한도는 그대로: 머무르기 보상·도감 새 칸 보상은 원래 항목 한도 안에서만 늘고, 나머지는 확률·편의·할인
+ *  - 머무르기 보상·도감 새 칸 보상은 그 값이 늘고(11/19부터 하루 한도 없음), 나머지는 확률·편의·할인
  */
 export const GRADE_SPEED: Readonly<Record<TitleGrade, number>> = {
   bronze: 1,
@@ -188,7 +188,7 @@ export type TitlePerk = {
   stayBonus: number;
   /** 의뢰 도장을 하나 더 받을 확률 — 수집 의뢰 */
   questStamp: number;
-  /** 도감 새 칸 보상 비율 + (도감 하루 한도 안) — 도감 */
+  /** 도감 새 칸 보상 비율 + — 도감 */
   dexBonus: number;
   /** 반짝이는 발자국 (화면 연출만) — 1위·명예 */
   sparkle: boolean;
@@ -508,7 +508,7 @@ function groupText(p: TitlePerk): [string, string] | null {
     case "forage":
       return [`채집할 때 희귀한 게 ${pct(p.rareGather)}% 더 잘 나와요.`, `희귀 채집 확률 +${pct(p.rareGather)}%`];
     case "stay":
-      return [`접속 시간 보너스를 ${pct(p.stayBonus)}% 더 받아요. 하루 최대치는 같아요.`, `접속 보너스 +${pct(p.stayBonus)}%`];
+      return [`접속 시간 보너스를 ${pct(p.stayBonus)}% 더 받아요.`, `접속 보너스 +${pct(p.stayBonus)}%`];
     case "look":
       return [`상점 물건과 염색권을 ${pct(p.discount)}% 싸게 사요.`, `상점 ${pct(p.discount)}% 할인`];
     case "quest":

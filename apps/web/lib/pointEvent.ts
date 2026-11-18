@@ -1,11 +1,10 @@
 // 포인트 배수 이벤트 (관리자가 켜고 끈다 — 주말 이벤트 등). 저장소는 lib/store/pointEvent.ts, 관리자 화면은 components/admin/PointEventPanel.tsx.
 //  - 관리자가 고른 항목(sources)만: 켜져 있는 동안 그 항목 적립이 mult배 (AccountStore.earn·머무르기·접속 시간 보너스)
-//  - 이벤트가 걸친 게임 날(새벽 5시 기준)은 고른 항목의 하루 한도도 mult배, 하루 전체 한도는 그만큼만 늘어난다 (= 항목 한도의 합).
-//    도중에 끝나도 그날은 늘어난 한도 그대로 (끝나자마자 0P가 되지 않게)
-//  - 지갑 상한·출석 달력 보상(출석·7일 연속·한 달 개근)·선물·관리자 지급·환불·사용은 그대로
-// 클라이언트·서버 공용 (화면의 안내 띠·오늘 포인트 게이지가 같은 계산을 쓴다)
+//  - 횟수 규칙이 남은 항목(헌화 등)은 켜져 있는 동안 하루 최대도 mult배. 11/19부터 다른 항목은 한도가 없다 (lib/economy)
+//  - 출석 달력 보상(출석·7일 연속·한 달 개근)·선물·관리자 지급·환불·사용은 그대로
+// 클라이언트·서버 공용 (화면의 안내 띠가 같은 계산을 쓴다)
 
-import { DAILY_EARN_CAP, EARN_RULES, earnRule, inDailyTotal, type EarnSource } from "./economy";
+import { EARN_RULES, earnRule, NO_LIMIT, type EarnSource } from "./economy";
 
 /** 고를 수 있는 배수 (기본 2배). 정수만 — Redis Lua가 정수로 더한다 */
 export const POINT_EVENT_MULTS = [2, 3] as const;
@@ -31,14 +30,24 @@ export const NO_BOOST: EarnBoost = { mult: 1, on: [], caps: [] };
 export const isBoosted = (b: EarnBoost) => b.caps.length > 0;
 /** 그 항목 적립에 곱하는 수 */
 export const pointsMult = (b: EarnBoost, s: EarnSource) => (b.on.includes(s) ? b.mult : 1);
-/** 그 항목 하루 한도에 곱하는 수 */
+/** 그 항목 하루 최대에 곱하는 수 (횟수 규칙이 남은 항목만 뜻이 있다) */
 export const capsMult = (b: EarnBoost, s: EarnSource) => (b.caps.includes(s) ? b.mult : 1);
-/** 오늘 하루 전체 한도: 늘어난 항목의 늘어난 몫만 더한다 (= 하루 전체에 드는 항목 한도의 합) */
-export const boostedTotalCap = (b: EarnBoost) =>
-  b.caps.reduce((n, s) => (inDailyTotal(s) ? n + earnRule(s).dailyMax * (b.mult - 1) : n), DAILY_EARN_CAP);
 
-/** 저장소가 한 번 적립할 때 쓰는 값: points·caps = 그 항목 적립·한도 배수, total = 오늘 하루 전체 한도 */
-export const earnLimits = (b: EarnBoost, s: EarnSource) => ({ points: pointsMult(b, s), caps: capsMult(b, s), total: boostedTotalCap(b) });
+/**
+ * 한 번 적립할 때의 조건 (저장소 둘·팔기 계획·사냥터 화면이 같이 쓴다).
+ *  - m100 = 적립 배수 (100 = 1배, 이벤트 배수 × 100 — 정수로 세서 소수 오차가 없다)
+ *  - dailyMax = 그 항목 하루 최대 (한도 없는 항목이면 NO_LIMIT)
+ * 11/19 1위 혜택의 %·한도 몫과 하루 전체 한도는 없앴다
+ */
+export type EarnTerms = { m100: number; dailyMax: number };
+
+export function earnTerms(boost: EarnBoost, source: EarnSource): EarnTerms {
+  const max = earnRule(source).dailyMax;
+  return { m100: pointsMult(boost, source) * 100, dailyMax: max === null ? NO_LIMIT : max * capsMult(boost, source) };
+}
+
+/** 기본 점수 × 배수(100 = 1배)를 1P 단위로 반올림 (정수 계산 — Redis Lua도 같은 식: floor((x × m100 + 50) / 100)) */
+export const askOf = (base: number, m100: number) => Math.floor((base * m100 + 50) / 100);
 
 /** 지금 적립이 늘어나는 중인지 */
 export const pointEventOn = (ev: PointEvent | null, now: number): boolean => !!ev && ev.startAt <= now && (ev.endAt === null || now < ev.endAt);
@@ -54,7 +63,7 @@ export function earnBoostAt(ev: PointEvent | null, now: number): EarnBoost {
 
 /**
  * 늘어난 적립(earned)이 원래 값으로 얼마어치인지 (asked 이하). 값 단위로 계산하는 쪽(낚시·채집 팔기, 도감 보상, 사냥터 되팔기)이
- * 한도에 막혀 못 받은 만큼을 되돌릴 때 쓴다. mult = 그 항목 적립 배수 (pointsMult), 1이면 earned 그대로
+ * 못 받은 만큼을 되돌릴 때 쓴다 (11/19부터는 지갑이 꽉 찼을 때뿐). mult = 그 항목 적립 배수 (pointsMult), 1이면 earned 그대로
  */
 export const paidOf = (earned: number, asked: number, mult: number) => Math.min(asked, Math.ceil(earned / mult));
 

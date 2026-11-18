@@ -16,7 +16,6 @@ import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import type { MyGraveEntry } from "./items";
 import { InquiryButton } from "../notice/InquiryDialog";
-import EarnGauge from "./EarnGauge";
 import GoogleSection, { GoogleBadge, useGoogleStatus } from "./GoogleSection";
 import MyGraves from "./MyGraves";
 import PerksTab from "./PerksTab";
@@ -162,8 +161,6 @@ export default function MyPanel({
                 )}
                 <p className={styles.sub}>내 꾸미기 점수 {lookScore(me, openedAt)}점 (지금 입은 코디 기준)</p>
               </section>
-
-              <EarnGauge me={me} />
 
               {/* 11/16 추천 보상 공식 (운영자 계정은 추천에 참여하지 않는다) */}
               {!me.staff && <ReferralRewardTable />}

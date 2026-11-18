@@ -7,12 +7,12 @@ import { showToast } from "@/lib/hooks/useToasts";
 
 // 자동 낚시 정산 결과 토스트 (낚시 창·ForageLayer가 같이 쓴다) · 도감 처음 등록 보상 글귀
 
-/** 도감 처음 등록 보상 한 줄 ("도감 +12P", 한도에 걸린 만큼은 "받을 도감 보상 +N P", 새 칭호). 없으면 빈 문자열 */
+/** 도감 처음 등록 보상 한 줄 ("도감 +12P", 지갑이 꽉 차 못 받은 만큼은 "받을 도감 보상 +N P", 새 칭호). 없으면 빈 문자열 */
 export function dexGainText(g: DexGain | undefined): string {
   if (!g || g.points <= 0) return "";
   const parts: string[] = [];
   if (g.earned > 0) parts.push(`도감 +${g.earned}P`);
-  if (g.pending > 0) parts.push(`받을 도감 보상 +${g.pending}P (오늘 한도라 도감 창에서 받아요)`);
+  if (g.pending > 0) parts.push(`받을 도감 보상 +${g.pending}P (지갑이 꽉 차 도감 창에서 받아요)`);
   for (const t of g.titles) parts.push(`칭호 「${t}」`);
   return parts.join(" · ");
 }
@@ -32,7 +32,8 @@ export function toastAutoCatch(r: AutoFishResponse, away: boolean): void {
   const name = (id: string) => speciesById(id)?.name ?? id;
   const n = r.items.length;
   const head = n ? `${away ? "자리 비운 동안" : "자동 낚시로"} ${n}마리 낚았어요 · ${autoSummary(r.items, name)}` : away ? "자리 비운 동안" : "자동 낚시 중";
-  const cut = r.dropped > 0 ? ` (오늘 한도로 ${r.dropped}마리는 놓아줬어요)` : "";
+  // 11/19 시도마다 걸릴 확률이 있어 놓친 수도 알려 준다
+  const cut = n && r.missed > 0 ? ` (${r.missed}번은 놓쳤어요)` : "";
   // 물에 빠진 꾸미기는 따로 덧붙인다
   const extra = gear.map((g) => ` · 반짝! ${sunkenText(g, name)}`).join("");
   // 크기는 도감 최대 기록에만 들어간다는 안내 (물고기를 받았을 때)

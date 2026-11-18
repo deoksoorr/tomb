@@ -21,7 +21,7 @@ import {
 } from "@/lib/rpg/catalog";
 import { SKILL_SLOTS } from "@/lib/rpg/hotbar";
 import { DEFAULT_BOSS_PHASES, MIN_WINDUP_MS, PATTERNS, type TelegraphShape } from "@/lib/rpg/patterns";
-import { HUNT_DROP_ROLLS, HUNT_LEVEL_SHARE, KILLS_PER_DROP_ROLL, MIN_RUN_MS } from "@/lib/rpg/rewards";
+import { HUNT_DROP_ROLLS, KILLS_PER_DROP_ROLL, MIN_RUN_MS } from "@/lib/rpg/rewards";
 import { PIONEER_DAYS, PIONEER_FLOOR, tExpToNext,
   TRANSCEND_MAX,
 } from "@/lib/rpg/endgame";
@@ -31,17 +31,16 @@ import {
   TOWER_BOSS_EVERY,
   TOWER_BOSS_FLOOR_SEC,
   TOWER_CHECKPOINT_EVERY,
+  TOWER_DEF,
   TOWER_FLOOR_SEC,
-  TOWER_STEEP_FROM,
+  TOWER_HP_ATK,
   TOWER_THEMES,
-  TOWER_WAVE_GAP_SEC,
   FLOORS_PER_THEME,
 } from "@/lib/rpg/tower";
 import { monsterIdleCanvas } from "@/game/rpg/monsterArt";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
 import { MAX_SLOW, MONSTER_STATUS, POTION_CURES, STATUS_DIFF, STATUS_IDS, STATUSES, statusFor, type StatusId } from "@/lib/rpg/status";
 import { CHAIN_GRACE_MS, FINISHER_EVERY, WEAPON_STYLES, weaponStyleOf } from "@/lib/rpg/weapons";
-import { earnRule } from "@/lib/economy";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -60,8 +59,6 @@ import s from "./rpg.module.css";
 // 숫자·이름은 catalog·patterns·weapons·rewards에서 읽는다 → 스킬·무기·패턴이 늘어도 안내가 따라간다.
 // 쪽마다 위에 게임 그림으로 움직이는 짧은 반복 시연이 돈다 (huntDemo). 지금 보는 쪽 것만 돌고, 움직임 줄이기면 정지 그림.
 
-/** 하루 사냥 포인트 한도 (economy.ts) */
-const HUNT_DAILY_MAX = earnRule("hunt").dailyMax;
 
 /** 이 쪽의 반복 시연 캔버스 */
 function HuntDemo({ page, title }: { page: number; title: string }) {
@@ -458,7 +455,7 @@ function pages(): Page[] {
     },
     {
       title: "드롭과 보상",
-      lead: `판이 끝나면 잡은 만큼 EXP를, 나아간 만큼 포인트를 받아요. 레벨에 맞는 사냥터를 다 깨면 다음 레벨까지 필요한 EXP의 ${Math.round(HUNT_LEVEL_SHARE * 100)}%를 받아요.`,
+      lead: "판이 끝나면 잡은 만큼 EXP를, 나아간 만큼 포인트를 받아요. 모든 웨이브를 깨면 포인트를 가장 많이 받아요.",
       body: (
         <>
           <ul className={s.guideList}>
@@ -474,9 +471,8 @@ function pages(): Page[] {
             <Item art={skillArt("so_lamp")} title="쓰러지면">
               포인트는 절반만 받고 EXP도 조금 깎여요. 권장 레벨보다 낮으면 조심해요.
             </Item>
-            <Item art={skillArt("em_spark")} title="하루 한도">
-              사냥 포인트는 하루 {HUNT_DAILY_MAX}P까지 받아요. 오늘 받은 양은 출발 창, 가방, 결과 화면 막대에 나와요. 다 채우면 EXP와 드롭만 받아요. 주운 장비와 물약을 파는 것도
-              이 한도에 들어가요. 다 채웠으면 내일 팔아요. 상점에서 산 장비는 언제든 50%를 돌려받아요. {sec(MIN_RUN_MS)}도 안 된 판은 보상이 없어요.
+            <Item art={skillArt("em_spark")} title="포인트">
+              사냥 포인트는 하루 한도 없이 받아요. 주운 장비와 물약을 판 값도 사냥 포인트예요. 상점에서 산 장비는 언제든 50%를 돌려받아요. {sec(MIN_RUN_MS)}도 안 된 판은 보상이 없어요.
             </Item>
           </ul>
           <table className={s.guideTable}>
@@ -528,11 +524,10 @@ function pages(): Page[] {
               분기 마감이나 구조조정에서 사냥하는 게 좋아요. 레벨 랭킹은 레벨 순서예요. 레벨이 같으면 초월 레벨, 그다음엔 초월 EXP로 정해요.
             </Item>
             <Item art={skillArt("so_lamp")} title="야근 빌딩">
-              마을 북쪽 분양 사무소 옆에 있는 높은 건물이에요. 사냥 레벨 50부터 들어가요. 1층부터 쓰러질 때까지 쭉쭉 올라가는 레이스예요. 한 층은 방 하나이고{" "}
-              {TOWER_FLOOR_SEC}초 안에 깨야 해요. 첫 무리를 다 잡으면 {TOWER_WAVE_GAP_SEC}초 뒤 다음 무리가 와요. {TOWER_BOSS_EVERY}층마다 우두머리 층이 있어요. 우두머리 층은{" "}
-              {TOWER_BOSS_FLOOR_SEC}초이고, 깨면 체력이 30% 차요. 체력, SP, 버프는 다음 층까지 이어져요. 몬스터는 {TOWER_STEEP_FROM}층까지 조금씩 세지고, {TOWER_STEEP_FROM}층부터는
-              빠르게 세져요. 높은 층은 장비와 카드를 연구해야 해요. 층을 깨면 엘리베이터를 타고 다음 층으로 가요. 층 표시가 붉게 깜빡이면 우두머리 층이에요. 쓰러지면 끝이고 부활
-              쿠키는 못 써요. Esc로 그만두면 그 층까지 기록돼요. 몇 번이든 다시 도전할 수 있어요.
+              마을 북쪽 분양 사무소 옆에 있는 높은 건물이에요. 사냥 레벨 50부터 들어가요. 1층부터 쓰러질 때까지 계속 올라가요. 한 층은 방 하나이고 {TOWER_FLOOR_SEC}초 안에 깨야 해요.{" "}
+              {TOWER_BOSS_EVERY}층마다 우두머리 층이 있어요. 우두머리 층은 {TOWER_BOSS_FLOOR_SEC}초이고, 깨면 체력이 30% 차요. 체력, SP, 버프는 다음 층까지 이어져요. 한 층 오를 때마다 몬스터 체력과 공격력은
+              ×{TOWER_HP_ATK}, 방어는 ×{TOWER_DEF}씩 세져요. 층을 깨면 엘리베이터를 타고 다음 층으로 가요. 층 표시가 붉게 깜빡이면 우두머리 층이에요. 쓰러지면 끝이고 부활 쿠키는 못 써요.
+              Esc로 그만두면 그 층까지 기록돼요. 몇 번이든 다시 도전할 수 있어요.
             </Item>
             {/* 11/15 테마는 판마다 무작위 (lib/rpg/tower towerBlock) */}
             <Item art={skillArt("em_spark")} title="층마다 바뀌는 테마">
@@ -563,7 +558,7 @@ function pages(): Page[] {
               깬 층마다 초월 경험치를 받아요. 1층은 {floorTExp(1)}, 30층은 {floorTExp(30)}, 100층은 {floorTExp(100)}만큼 받아요. 쓰러져도 깬 층만큼은 받아요.
               우두머리 층을 깨면 우두머리 상자가 열려요. 물약과 강화 재료는 늘 들어 있어요. 세트 장비는 15% 확률로 나와요. 7번 내리 못 받으면 다음엔 꼭 나와요.
               꾸미기 이용권도 가끔 나와요.
-              깬 층마다 포인트도 조금 받아요. 이 포인트도 사냥 하루 한도에 들어가요. 잡은 몬스터 수는 주간 사냥 레이스에 들어가요. {TOWER_CHECKPOINT_EVERY}층 우두머리를 잡으면 다음부터 {1 + TOWER_CHECKPOINT_EVERY}층에서 바로 시작할 수 있어요. {TOWER_CHECKPOINT_EVERY * 2}층을 깨면{" "}
+              깬 층마다 포인트도 조금 받아요. 잡은 몬스터 수는 주간 사냥 레이스에 들어가요. {TOWER_CHECKPOINT_EVERY}층 우두머리를 잡으면 다음부터 {1 + TOWER_CHECKPOINT_EVERY}층에서 바로 시작할 수 있어요. {TOWER_CHECKPOINT_EVERY * 2}층을 깨면{" "}
               {1 + TOWER_CHECKPOINT_EVERY * 2}층에서 시작할 수 있어요.
             </Item>
             <Item art={GEAR.find((g) => g.kind === "acc")?.art} title="칭호와 랭킹">

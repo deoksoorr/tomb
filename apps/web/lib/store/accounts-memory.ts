@@ -2,16 +2,13 @@ import { assertPointAmount } from "./pointAmount";
 import { CHAMP_ITEM_IDS, itemById, nameKey, PERMANENT_UNTIL, type CosmeticSlot } from "@tomb/protocol";
 import { tierUntil } from "../attendTiers";
 import { legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
-import { earnedBySource } from "../earnGauge";
-import { BALANCE_CAP, earnRule, type EarnSource } from "../economy";
-import { askOf, earnTerms, raceField, raceShare, stayBonusAsk } from "../champPerks";
-import { NO_BOOST } from "../pointEvent";
+import { earnRule, hasDailyMax, WALLET_MAX, type EarnSource } from "../economy";
+import { askOf, earnTerms, NO_BOOST } from "../pointEvent";
 import { staffAccountIdNow } from "../staff";
-import { stayBonusAmounts, stayBonusTiers } from "../stayBonus";
+import { stayBonusAmounts, stayBonusAt, stayBonusTiers } from "../stayBonus";
 import { STAY_TICK_MINUTES, stayFillDays } from "../stayTime";
 import type { ActivityItem, GiftItem, Grave, GraveDecor } from "../types";
 import { kstDay, weekOfDay } from "./accounts";
-import { champBoardsSafe } from "./champ";
 import { giftTermUntil } from "./gifts";
 import { DEFAULT_HUNT_ZONE, huntDiffOf, legacyHuntBoard } from "./huntBoards";
 import type { MemoryStore } from "./memory";
@@ -157,41 +154,27 @@ export class MemoryAccounts implements AccountStore {
   }
 
   /**
-   * 항목별·하루 전체·지갑 한도 안에서 적립 (11/18 같은 IP 합계 한도는 없앴다 — ipHash는 받아도 쓰지 않는다).
-   * lib/store/accounts-redis.ts의 Lua credit과 같은 규칙.
-   * pre = 배수까지 이미 곱한 값 (머무르기 몰아서 정산·접속 시간 보너스 — Lua와 같은 순서로 계산한 값): ask = 줄 값, race = 레이스에 드는 값
+   * 지갑 상한(사실상 없음)과, 횟수 규칙이 남은 항목(헌화 등)이면 그 하루 최대 안에서 적립 (11/18 같은 IP 합계 한도는 없앴다 — ipHash는 받아도 쓰지 않는다).
+   * lib/store/accounts-redis.ts의 Lua credit과 같은 규칙: 한도 없는 항목은 오늘 적립 기록에 항목 칸을 두지 않고 `_total`만 센다.
+   * ask = 배수까지 이미 곱한 값 (머무르기 몰아서 정산·접속 시간 보너스 — Lua와 같은 순서로 계산한 값). outsideTotal = `_total`에 더하지 않는다
    */
-  private credit(a: Acct, source: EarnSource, day: string, opts: EarnOptions & { pre?: { ask: number; race: number } } = {}, capless = false, outsideTotal = false): number {
+  private credit(a: Acct, source: EarnSource, day: string, opts: EarnOptions & { ask?: number } = {}, outsideTotal = false): number {
     this.today(a, day);
-    const rule = earnRule(source);
+    const capped = hasDailyMax(source);
     const got = a.earned.get(source) ?? 0;
-    const total = a.earned.get("_total") ?? 0;
-    // 포인트 배수 이벤트: 고른 항목이면 적립·항목 한도·같은 IP 한도가 배수, 하루 전체 한도는 늘어난 몫만큼 (지갑 상한은 그대로, lib/pointEvent)
-    // 11/17 1위 혜택: %는 이벤트 배수에 더하고, 한도는 고정 몫을 더한다 (lib/champPerks earnTerms)
-    const t = earnTerms(opts.boost ?? NO_BOOST, source, opts.champ ?? []);
-    const base = opts.amount ?? rule.points;
-    const ask = opts.pre ? opts.pre.ask : askOf(base, t.m100);
-    // capless: 출석 달력 보상은 하루 전체 한도에 막히지 않는다 (accounts-redis.ts CLAIM_LUA와 같은 규칙)
-    const amount = Math.min(ask, t.dailyMax - got, capless ? Infinity : t.total - total, BALANCE_CAP - a.points);
+    // 포인트 배수 이벤트: 고른 항목이면 적립이 배수, 횟수 규칙이 남은 항목은 하루 최대도 배수 (lib/pointEvent)
+    const t = earnTerms(opts.boost ?? NO_BOOST, source);
+    const ask = opts.ask ?? askOf(opts.amount ?? earnRule(source).points, t.m100);
+    const amount = Math.min(ask, capped ? t.dailyMax - got : Infinity, WALLET_MAX - a.points);
     if (!(amount > 0)) return 0;
-    a.earned.set(source, got + amount);
-    // 접속 보너스는 하루 전체 한도와 별개라 _total에 더하지 않는다 (accounts-redis.ts credit의 outsideTotal)
-    if (!outsideTotal) a.earned.set("_total", total + amount);
+    if (capped) a.earned.set(source, got + amount);
+    // 접속 보너스는 오늘 모은 포인트에 더하지 않는다 (accounts-redis.ts credit의 outsideTotal)
+    if (!outsideTotal) a.earned.set("_total", (a.earned.get("_total") ?? 0) + amount);
     a.points += amount;
     this.addLifetime(a, amount);
-    // 11/17 1위 혜택이 붙은 항목: 1위가 아니었으면 받았을 몫만 주간 포인트 레이스에 (칸이 없으면 오늘 그 항목 적립이 모두 레이스 몫이었다)
-    let race = amount;
-    if (t.champ) {
-      const rf = raceField(source);
-      const rGot = a.earned.get(rf) ?? got;
-      race = raceShare(amount, opts.pre ? opts.pre.race : (base * t.race100) / 100, t.raceMax - rGot);
-      a.earned.set(rf, rGot + race);
-    }
-    if (race > 0) {
-      const weeks = (a.weeks ??= new Map());
-      weeks.set(weekOfDay(day), (weeks.get(weekOfDay(day)) ?? 0) + race);
-      (a.weeksAt ??= new Map()).set(weekOfDay(day), ++this.tieSeq);
-    }
+    const weeks = (a.weeks ??= new Map());
+    weeks.set(weekOfDay(day), (weeks.get(weekOfDay(day)) ?? 0) + amount);
+    (a.weeksAt ??= new Map()).set(weekOfDay(day), ++this.tieSeq);
     this.stat(a, day, `earn:${source}`, amount);
     return amount;
   }
@@ -258,7 +241,6 @@ export class MemoryAccounts implements AccountStore {
         .sort((x, y) => x.until - y.until || x.itemId.localeCompare(y.itemId)),
       graves: [...a.graves],
       todayEarned: a.earnDay === day ? (a.earned.get("_total") ?? 0) : 0,
-      earnedBy: a.earnDay === day ? earnedBySource(a.earned) : {},
       activityUnread: (a.activity ?? []).filter((x) => x.kind !== "revive" && x.at > (a.activitySeen ?? 0)).length,
       nameChangedAt: a.nameChangedAt ?? 0,
       nameChanges: a.nameChanges ?? 0,
@@ -273,8 +255,7 @@ export class MemoryAccounts implements AccountStore {
   }
 
   async earn(id: string, source: EarnSource, day: string, opts: EarnOptions = {}): Promise<number> {
-    const [boost, champ] = await Promise.all([opts.boost ?? earnBoost(), opts.champ ?? champBoardsSafe(id)]);
-    return this.credit(this.acct(id), source, day, { ...opts, boost, champ });
+    return this.credit(this.acct(id), source, day, { ...opts, boost: opts.boost ?? (await earnBoost()) });
   }
 
   async spend(id: string, amount: number, reason: string, now: number): Promise<number | null> {
@@ -292,7 +273,7 @@ export class MemoryAccounts implements AccountStore {
     const a = this.acct(id);
     a.lifetime ??= a.points; // 모은 포인트는 그대로 (개편 전 계정은 지금 잔액에서 시작)
     const before = a.points;
-    a.points = Math.min(BALANCE_CAP, a.points + amount);
+    a.points = Math.min(WALLET_MAX, a.points + amount);
     this.stat(a, kstDay(now), "refund", a.points - before);
     a.ledger = [{ at: now, amount, reason }, ...(a.ledger ?? [])].slice(0, 100);
     return a.points;
@@ -303,7 +284,7 @@ export class MemoryAccounts implements AccountStore {
   }
 
   async presenceTick(id: string, day: string, now: number, sid = ""): Promise<PresenceTick | null> {
-    const [boost, champ] = await Promise.all([earnBoost(now), champBoardsSafe(id, now)]);
+    const boost = await earnBoost(now);
     const a = this.acct(id);
     // 몰아서 정산 규칙은 accounts-redis.ts PRESENCE_LUA와 같다 (presenceCatchup)
     const c = presenceCatchup(a.presenceAt ?? 0, now, !!sid && a.presenceSid === sid);
@@ -315,10 +296,8 @@ export class MemoryAccounts implements AccountStore {
     a.earned.set("_stay", (a.earned.get("_stay") ?? 0) + c.ticks);
     // 총 접속 시간 (accounts-redis.ts PRESENCE_LUA의 stayMin과 같다)
     a.stayMin = (a.stayMin ?? 0) + c.ticks * STAY_TICK_MINUTES;
-    // 11/17 포인트왕 머무르기 +%: 기록 1번 값 × 배수를 센 기록 수만큼 곱한 뒤 반올림 (accounts-redis.ts PRESENCE_LUA와 같은 순서)
-    const per = earnRule("presence").points;
-    const t = earnTerms(boost, "presence", champ);
-    const earned = this.credit(a, "presence", day, { boost, champ, pre: { ask: askOf(per * c.ticks, t.m100), race: (per * t.race100 * c.ticks) / 100 } });
+    // 기록 1번 값 × 이벤트 배수 × 센 기록 수 (accounts-redis.ts PRESENCE_LUA와 같은 순서)
+    const earned = this.credit(a, "presence", day, { boost, ask: askOf(earnRule("presence").points, earnTerms(boost, "presence").m100) * c.ticks });
     return {
       earned,
       ticks: c.ticks,
@@ -330,18 +309,19 @@ export class MemoryAccounts implements AccountStore {
   }
 
   async claimStayBonus(id: string, day: string, bonus = 0): Promise<{ earned: number; count: number } | null> {
-    const [boost, champ] = await Promise.all([earnBoost(), champBoardsSafe(id)]);
+    const boost = await earnBoost();
     const a = this.acct(id);
     this.today(a, day);
     const tiers = stayBonusTiers(a.earned.get("_stay") ?? 0);
     const claimed = a.earned.get("_bonus") ?? 0;
     if (tiers <= claimed) return null;
     a.earned.set("_bonus", tiers);
-    // 하루 전체 한도(800)와 별개: 자기 하루 상한(145P, 이벤트·1위면 그만큼 더)·지갑 상한만 본다.
-    // 구간 값 × 배수를 구간마다 반올림해 더한다 (accounts-redis.ts STAY_BONUS_LUA와 같은 규칙 — 11/17 포인트왕은 배수에 50%를 더한다)
-    const v = stayBonusAsk(stayBonusAmounts(bonus), earnTerms(boost, "stayBonus", champ));
-    const sum = (xs: number[]) => xs.slice(claimed, tiers).reduce((n, x) => n + x, 0);
-    return { earned: this.credit(a, "stayBonus", day, { boost, champ, pre: { ask: sum(v.pay), race: sum(v.race) } }, true, true), count: tiers - claimed };
+    // 구간 값 × 이벤트 배수를 구간마다 반올림해 더한다. 11/19 구간 상한 없음 — 끝을 넘으면 마지막 값 (accounts-redis.ts STAY_BONUS_LUA와 같은 규칙)
+    const m100 = earnTerms(boost, "stayBonus").m100;
+    const pay = stayBonusAmounts(bonus).map((n) => askOf(n, m100));
+    let sum = 0;
+    for (let i = claimed + 1; i <= tiers; i++) sum += stayBonusAt(pay, i);
+    return { earned: this.credit(a, "stayBonus", day, { boost, ask: sum }, true), count: tiers - claimed };
   }
 
   /** value가 null인 계정은 순위에서 뺀다. asc면 작을수록 위. tie = 같은 값일 때 먼저 달성한 순번 (작을수록 위, 주간 랭킹) */
@@ -557,7 +537,7 @@ export class MemoryAccounts implements AccountStore {
     let got = 0;
     if (points > 0) {
       const before = a.points;
-      a.points = Math.min(BALANCE_CAP, before + points);
+      a.points = Math.min(WALLET_MAX, before + points);
       got = a.points - before;
       if (got > 0) {
         a.lifetime ??= before;
@@ -644,13 +624,13 @@ export class MemoryAccounts implements AccountStore {
     const paid = true;
     const earned = { daily: 0, streak: 0, monthly: 0 };
     if (paid) {
-      earned.daily = this.credit(a, "attend", day, {}, true);
-      if (a.streak % 7 === 0) earned.streak = this.credit(a, "streak", day, {}, true);
+      earned.daily = this.credit(a, "attend", day);
+      if (a.streak % 7 === 0) earned.streak = this.credit(a, "streak", day);
     }
     m.set(dd, earned.daily + earned.streak);
     const stamped = [...m.keys()].filter((k) => !k.startsWith("_")).length;
     if (paid && !m.has("_month") && stamped >= monthDays) {
-      earned.monthly = this.credit(a, "monthly", day, {}, true);
+      earned.monthly = this.credit(a, "monthly", day);
       m.set("_month", earned.monthly);
     }
     return { ok: true, earned, streak: a.streak };
@@ -663,7 +643,7 @@ export class MemoryAccounts implements AccountStore {
   deposit(id: string, points: number, items: readonly GiftItem[], now: number): number {
     const a = this.acct(id);
     const before = a.points;
-    a.points = Math.min(BALANCE_CAP, a.points + Math.max(0, points));
+    a.points = Math.min(WALLET_MAX, a.points + Math.max(0, points));
     const got = a.points - before;
     if (got > 0) {
       a.lifetime ??= before; // 개편 전 계정은 받기 전 잔액에서 시작 (선물 몫은 빼고)
@@ -801,7 +781,7 @@ export class MemoryAccounts implements AccountStore {
     const a = this.accts.get(id);
     if (!a) return null;
     const before = a.points;
-    a.points = Math.min(BALANCE_CAP, Math.max(0, a.points + delta));
+    a.points = Math.min(WALLET_MAX, Math.max(0, a.points + delta));
     // 지갑만 (모은 포인트·포인트 랭킹엔 넣지 않는다, accounts-redis.ts ADJUST_LUA와 같은 규칙)
     if (a.points > before) a.lifetime ??= before;
     if (a.points > before) this.stat(a, kstDay(), "earn:admin", a.points - before);

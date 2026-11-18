@@ -1,8 +1,11 @@
 // 포인트 정책 (서버가 강제하고, UI의 ⓘ 가이드가 그대로 보여 준다). 바꾸면 가이드도 자동으로 바뀐다.
-// 날짜 기준은 한국 시간 새벽 5시 (lib/gameDay — 하루 한도가 그때 다시 찬다). 모든 아이템은 1회성(items.ts).
+// 날짜 기준은 한국 시간 새벽 5시 (lib/gameDay — 횟수 규칙이 그때 다시 찬다). 모든 아이템은 1회성(items.ts).
+// 11/19 「편하게 노는 게임」 개편: 놀아서 버는 포인트(사냥·별자리·곤충·낚시·채집·도감·고블린·머무르기·접속 보너스·소원)의 하루 한도,
+// 하루 전체 한도, 지갑 상한(99,999)을 없앴다. 남은 건 행동 한 번에 붙은 횟수 규칙(출석·헌화·묘비·받은 헌화·좋아요 — 다른 계정으로
+// 몰아주기·묘비 도배를 막는다)뿐이다. 봇 막이는 한도가 아니라 요청 속도 제한·판 결과 상한·티켓 검사가 한다 (각 API).
 
 import { ATTEND_STAY_TEXT } from "./attendStay";
-import { STAY_BONUS_DAILY_MAX, STAY_BONUS_EVERY_MINUTES } from "./stayBonus";
+import { STAY_BONUS_EVERY_MINUTES } from "./stayBonus";
 
 export type EarnSource =
   | "attend"
@@ -26,55 +29,61 @@ export type EarnSource =
   | "wish"
   // ── 10번 출석 달력: 한 달 개근 보상 (lib/calendar.ts) ──
   | "monthly"
-  // ── 접속 시간 보너스: 30분 구간마다 구석 창에서 받기 (lib/stayBonus.ts, /api/me/stay-bonus). 하루 전체 한도(DAILY_EARN_CAP)와 별개 ──
+  // ── 접속 시간 보너스: 30분 구간마다 구석 창에서 받기 (lib/stayBonus.ts, /api/me/stay-bonus) ──
   | "stayBonus";
 
-export type EarnRule = { source: EarnSource; label: string; points: number; dailyMax: number; note: string };
+/** dailyMax = 하루에 받을 수 있는 최대 (null = 한도 없음). 11/19부터 한도는 횟수 규칙이 있는 항목에만 남았다 */
+export type EarnRule = { source: EarnSource; label: string; points: number; dailyMax: number | null; note: string };
 
 export const EARN_RULES: readonly EarnRule[] = [
   // 10번: 입장 때 자동으로 주지 않고, 그날 정해진 시간(lib/attendStay.ts) 머문 뒤 출석 달력의 오늘 칸을 눌러 받는다 (lib/calendar.ts)
   { source: "attend", label: "출석 도장", points: 10, dailyMax: 10, note: `마을에 ${ATTEND_STAY_TEXT} 머문 뒤 출석 달력의 오늘 칸을 눌러요` },
   { source: "streak", label: "7일 연속 출석", points: 30, dailyMax: 30, note: "7일 연속 도장을 찍을 때마다 받아요" },
   { source: "monthly", label: "한 달 개근", points: 200, dailyMax: 200, note: "그달 하루도 빠짐없이 도장을 찍으면 받아요" },
+  // 11/19 남긴 횟수 규칙: 헌화·묘비·받은 헌화·좋아요는 다른 계정으로 주고받거나 묘비를 도배해 벌 수 있어 그대로 둔다
   { source: "flower", label: "헌화하기", points: 2, dailyMax: 20, note: "묘비마다 하루 1번, 하루 10번까지" },
   { source: "bury", label: "묘비 세우기", points: 20, dailyMax: 20, note: "하루 1개만 받아요" },
-  { source: "gotFlower", label: "내 묘비가 헌화 받음", points: 1, dailyMax: 20, note: "다른 사람이 헌화할 때" },
-  { source: "presence", label: "마을에 머무르기", points: 5, dailyMax: 60, note: "접속해 있으면 10분마다 받아요. 다른 일을 해도 괜찮아요." },
-  // 출석 도장과 같은 머문 시간(서버의 머무르기 기록)으로 판정. 10→15→20→25P(이후 고정), 하루 7구간 145P. 하루 전체 한도와 별개 (lib/stayBonus.ts)
-  { source: "stayBonus", label: "접속 시간 보너스", points: 0, dailyMax: STAY_BONUS_DAILY_MAX, note: `${STAY_BONUS_EVERY_MINUTES}분 머물 때마다 10, 15, 20, 25P로 늘어요. 구석 창의 [받기]로 받아요.` },
-  // 11/15: 사냥 한도 600 → 1200 (사람이 적을 때 레이스가 붙게 — 야근 빌딩 층 포인트도 이 한도 안)
-  { source: "hunt", label: "사냥터", points: 0, dailyMax: 1200, note: "난이도와 성적에 따라 달라요. 주운 장비나 물약을 판 값도 여기에 들어가요." },
-  // 11/15: 미니게임 한도를 게임마다 따로 300 (합쳐서 150이던 것)
-  { source: "bugs", label: "곤충 채집", points: 0, dailyMax: 300, note: "마을 곤충 자리에서 잡은 만큼 받아요. 잡은 곤충은 따로 팔 수도 있어요." },
-  // 11/18 별자리만 300 → 450 (판당 포인트도 1.5배 — lib/rpg/catalog STARS_POINTS)
-  { source: "stars", label: "별자리 잇기", points: 0, dailyMax: 450, note: "성적에 따라 달라요. 사냥·곤충 채집 한도와 따로 세요." },
-  { source: "houseLike", label: "내 집이 좋아요 받음", points: 2, dailyMax: 20, note: "다른 사람이 내 집에 좋아요를 누를 때" },
-  // 11/15: 파는 한도 올림 (물고기 200 → 300, 채집 150 → 300)
-  // 낚시·채집은 잡을 때가 아니라 NPC에게 팔 때 들어온다 (값은 lib/forage/catalog.ts). 한도를 넘는 만큼은 가방에 남아 내일 팔 수 있다
-  { source: "fish", label: "물고기 팔기", points: 0, dailyMax: 300, note: "호수 낚시 잔교의 어부 영감에게 팔아요. 희귀할수록 비싸요." },
-  { source: "gather", label: "채집물 팔기", points: 0, dailyMax: 300, note: "오리 연못 둑의 수집가에게 팔아요" },
-  // 11/14: 단계(25·50·75·100%) 보상 → 종마다 처음 등록 보상 (lib/forage/dexReward, 값은 catalog DEX_NEW_REWARD). 한도를 넘는 만큼은 도감 창에 쌓여 나중에 받는다
-  { source: "dex", label: "도감 등록 보상", points: 0, dailyMax: 300, note: "새 종을 처음 올릴 때마다 3~50P, 희귀할수록 많이 받아요" },
+  { source: "gotFlower", label: "내 묘비가 헌화 받음", points: 1, dailyMax: 20, note: "다른 사람이 헌화할 때, 하루 20번까지" },
+  { source: "presence", label: "마을에 머무르기", points: 5, dailyMax: null, note: "접속해 있으면 10분마다 받아요. 다른 일을 해도 괜찮아요." },
+  // 출석 도장과 같은 머문 시간(서버의 머무르기 기록)으로 판정. 10→15→20→25P, 그다음부터는 구간마다 25P (lib/stayBonus.ts)
+  { source: "stayBonus", label: "접속 시간 보너스", points: 0, dailyMax: null, note: `${STAY_BONUS_EVERY_MINUTES}분 머물 때마다 10, 15, 20, 25P로 늘어요. 구석 창의 [받기]로 받아요.` },
+  // 야근 빌딩 층 포인트·주운 장비와 물약 판 값도 이 항목
+  { source: "hunt", label: "사냥터", points: 0, dailyMax: null, note: "난이도와 성적에 따라 달라요. 주운 장비나 물약을 판 값도 여기에 들어가요." },
+  { source: "bugs", label: "곤충 채집", points: 0, dailyMax: null, note: "마을 곤충 자리에서 잡은 만큼 받아요. 잡은 곤충은 따로 팔 수도 있어요." },
+  { source: "stars", label: "별자리 잇기", points: 0, dailyMax: null, note: "성적에 따라 달라요." },
+  { source: "houseLike", label: "내 집이 좋아요 받음", points: 2, dailyMax: 20, note: "다른 사람이 내 집에 좋아요를 누를 때, 하루 10번까지" },
+  // 낚시·채집은 잡을 때가 아니라 NPC에게 팔 때 들어온다 (값은 lib/forage/catalog.ts)
+  { source: "fish", label: "물고기 팔기", points: 0, dailyMax: null, note: "호수 낚시 잔교의 어부 영감에게 팔아요. 희귀할수록 비싸요." },
+  { source: "gather", label: "채집물 팔기", points: 0, dailyMax: null, note: "오리 연못 둑의 수집가에게 팔아요" },
+  // 종마다 처음 등록 보상 (lib/forage/dexReward, 값은 catalog DEX_NEW_REWARD)
+  { source: "dex", label: "도감 등록 보상", points: 0, dailyMax: null, note: "새 종을 처음 올릴 때마다 3~50P, 희귀할수록 많이 받아요" },
   // 실시간 서버가 "가장 먼저 잡은 한 명"에게 서명한 증서로만 받는다 (고블린 한 마리당 한 번, lib/goblin.ts)
-  { source: "goblin", label: "황금 고블린 잡기", points: 0, dailyMax: 150, note: "가끔 나타나는 황금 고블린을 가장 먼저 잡으면 20~100P" },
-  // 광장 소원 분수에 동전(1~5P)을 던지면 가끔 튀어 돌아온다 (하루 한 번)
-  // 11/15 소원은 하루 한 번(lib/wish WISH_DAILY) — 한 번에 돌아올 수 있는 최대(5P를 던져 대박 = 15P)에 맞춰 30 → 15
-  { source: "wish", label: "소원 분수", points: 0, dailyMax: 15, note: "광장 분수에 하루 한 번 동전을 던질 수 있어요. 가끔 포인트가 튀어 돌아와요." },
+  { source: "goblin", label: "황금 고블린 잡기", points: 0, dailyMax: null, note: "가끔 나타나는 황금 고블린을 가장 먼저 잡으면 20~100P" },
+  // 광장 소원 분수에 동전(1~5P)을 던지면 가끔 튀어 돌아온다 (하루 한 번은 lib/wish WISH_DAILY가 센다)
+  { source: "wish", label: "소원 분수", points: 0, dailyMax: null, note: "광장 분수에 하루 한 번 동전을 던질 수 있어요. 가끔 포인트가 튀어 돌아와요." },
 ];
 
-/** 하루 전체 합계에 들어가지 않는 항목 (출석 달력 보상·접속 시간 보너스 — 각자 따로 정산) */
+/** 오늘 모은 포인트(`_total`)에 들어가지 않는 항목 (출석 달력 보상·접속 시간 보너스 — 각자 따로 센다) */
 const OUTSIDE_TOTAL: ReadonlySet<EarnSource> = new Set<EarnSource>(["attend", "streak", "monthly", "stayBonus"]);
-/** 하루 전체 합계(DAILY_EARN_CAP)에 드는 항목인지 */
+/** 오늘 모은 포인트(`_total`)에 드는 항목인지 */
 export const inDailyTotal = (s: EarnSource) => !OUTSIDE_TOTAL.has(s);
 
 /**
- * 하루에 쌓을 수 있는 전체 포인트 = 위 항목 한도의 합 (출석 달력·접속 시간 보너스 빼고).
- * 11/14: 예전엔 800으로 따로 묶어서, 낚시·채집을 판 사람은 사냥 한도(600)가 남아도 사냥 포인트가 380쯤에서 멈췄다.
- * 이제 항목마다 자기 한도만 보면 되도록 합계 한도는 항목 한도의 합으로 둔다 (먼저 닿는 일이 없다). 지갑 상한은 그대로
+ * 저장소·사냥터 화면에 넘기는 "한도 없음" 값 (Lua·JSON이 숫자로만 다루는 자리 — Infinity는 JSON에서 null이 된다).
+ * 11/19 놀아서 버는 항목은 한도가 없어 늘 이 값이다
  */
-export const DAILY_EARN_CAP = EARN_RULES.filter((r) => !OUTSIDE_TOTAL.has(r.source)).reduce((n, r) => n + r.dailyMax, 0);
+export const NO_LIMIT = 1_000_000_000;
+/** 그 항목에 하루 한도(횟수 규칙)가 남아 있는지 */
+export const hasDailyMax = (s: EarnSource) => earnRule(s).dailyMax !== null;
+
 /**
- * 지갑 상한 (I0b: 9,999 → 99,999). 관리자 지급·선물·운영자 채우기·검증 스키마·Redis Lua 인자가 모두 이 값을 쓴다.
+ * 지갑 상한 = 사실상 없음 (11/19 99,999에서 올렸다). 적립·환불·선물 받기·1위 보상·관리자 조정이 모두 이 값에서 자른다
+ * (숫자가 넘치지 않게만 둔 값이다 — Redis Lua는 소수점 수라 2^53 안이면 정확하다).
+ */
+export const WALLET_MAX = 999_999_999;
+/**
+ * 한 번에 주고받는 양의 상한: 관리자 지급·회수 한 번, 선물 포인트, 운영자 지갑 채우기 (예전 지갑 상한 값 그대로).
+ * 11/19 지갑 상한은 WALLET_MAX로 따로 뺐다.
  *
  * I0d 경제 기준 (가격을 바꿀 때 이 표를 함께 본다): 보통 유저 = 하루 한 번 20~30분 → 약 200P
  * (머무르기 10~15 · 접속 보너스 10 (30분 머물면 첫 구간) · 헌화 10~20 · 쉬움 사냥 3~4판 60~80 · 낚시 10분 80~120 · 채집 몇 곳 20~40 · 초반 도감 보상).

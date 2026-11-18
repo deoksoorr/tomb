@@ -1,7 +1,7 @@
 import { isPermanentUntil, isShopListed, ITEMS, STAFF_ITEM_IDS, verifyJoinToken } from "@tomb/protocol";
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { BALANCE_CAP } from "@/lib/economy";
+import { WALLET_MAX } from "@/lib/economy";
 import { getAnalytics } from "@/lib/analyticsService";
 import type { AnalyticsReport } from "@/lib/analyticsReport";
 import { adminActor } from "@/lib/ban";
@@ -136,7 +136,7 @@ describe("31번 운영자 계정", () => {
     expect(set.staff?.accountId).toBe(v.visitorId);
     const mine = await bodyOf<Me>(me.GET(call("/api/me", { visitor: v })));
     expect(mine.staff).toBe(true);
-    expect(mine.points).toBe(BALANCE_CAP);
+    expect(mine.points).toBe(WALLET_MAX);
     // 지정하자마자 운영자 전용 꾸미기가 전부 영구로 벗어 둔 꾸미기에 들어온다
     for (const id of STAFF_ITEM_IDS) expect(mine.stash.some((e) => e.itemId === id && isPermanentUntil(e.until))).toBe(true);
     // 해제
@@ -183,7 +183,7 @@ describe("31번 운영자 계정", () => {
     await getAccounts().adjustPoints(user.visitorId, 500);
     await bodyOf<Me>(me.GET(call("/api/me", { visitor: op })));
     const a = await bodyOf<{ me: Me }>(buy.POST(call("/api/shop/buy", { visitor: op, body: { itemId: "hat_crown" } })));
-    expect(a.me.points).toBe(BALANCE_CAP);
+    expect(a.me.points).toBe(WALLET_MAX);
     const b = await bodyOf<{ me: Me }>(buy.POST(call("/api/shop/buy", { visitor: user, body: { itemId: "hat_crown" } })));
     expect(b.me.points).toBeLessThan(500);
     expect(b.me.staff).toBeUndefined();

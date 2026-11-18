@@ -8,7 +8,7 @@ import type { Me } from "./types";
 
 // 22번 황금 고블린(보너스 요정) 보상 받기.
 // 실시간 서버(Channel DO)가 "가장 먼저 잡은 한 명"을 정하고 그 사람 앞으로 goblin 증서(JOIN_SECRET 서명)를 준다.
-// 여기서는 ① 서명·만료 ② 증서 주인 = 지금 세션 ③ nonce(= 고블린 id) 한 번만 — 을 확인하고 EARN_RULES "goblin" 한도 안에서 지급한다.
+// 여기서는 ① 서명·만료 ② 증서 주인 = 지금 세션 ③ nonce(= 고블린 id) 한 번만 — 을 확인하고 지급한다 (11/19부터 하루 한도 없음 — 증서가 한 마리당 한 번만 막는다).
 
 export type GoblinClaimResponse = { earned: number; points: number; capped: boolean; me: Me };
 

@@ -5,8 +5,8 @@ import { SEA_TIDE_OUT_MSG, type FishWater } from "@tomb/protocol";
 import { bridge, type ForageRodPhase } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import { onBackgroundChange } from "@/lib/background";
-import { AUTO_RANK_NOTE, AUTO_SYNC_MS, autoNextLabel } from "@/lib/forage/auto";
-import { DAILY_CATCH_MAX, speciesById } from "@/lib/forage/catalog";
+import { AUTO_PACE_NOTE, AUTO_RANK_NOTE, AUTO_SYNC_MS, autoNextLabel } from "@/lib/forage/auto";
+import { speciesById } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
 import { sunkenText } from "@/lib/forage/sunken";
 import type { AutoFishResponse, AutoFishStatus, CastResponse, CatchResult, SunkenCatch } from "@/lib/forage/types";
@@ -61,7 +61,7 @@ export default function FishingPanel({
   const reel = useRef({ progress: 0, tension: 0, last: 0, slackSince: 0, surgeUntil: 0, nextSurge: 0, sentAt: 0 });
   const raf = useRef(0);
   const doneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // 자동 낚시: 상태(서버가 준 값)와 다음 한 마리 예상 시각(performance.now 기준, 보이는 동안 표시용)
+  // 자동 낚시: 상태(서버가 준 값)와 다음 찌 올리기 예상 시각(performance.now 기준, 보이는 동안 표시용)
   const [auto, setAuto] = useState<AutoFishStatus | null>(null);
   const [autoBusy, setAutoBusy] = useState(false);
   const autoRef = useRef<AutoFishStatus | null>(null);
@@ -397,18 +397,14 @@ export default function FishingPanel({
     <div className={s.dock} role="region" aria-label="낚시">
       <div className={s.dockHead}>
         <strong>낚시 · {water === "sea" ? "바다" : water === "lake" ? "호수" : "강"}</strong>
-        <span>
-          오늘 {caught}/{DAILY_CATCH_MAX.fish}번
-        </span>
+        <span>오늘 {caught}마리</span>
       </div>
       <p className={s.status} data-tone={msg.tone} role="status" aria-live="polite">
         {msg.text}
       </p>
       {auto && (
         <p className={s.keys} role="status">
-          {auto.limited
-            ? `자동 낚시 중 · 오늘 ${auto.today}/${auto.cap} · 오늘 한도를 다 채웠어요`
-            : `자동 낚시 중 · 오늘 ${auto.today}/${auto.cap} · 다음 한 마리까지 ${auto.nextInMs == null ? "—" : autoNextLabel(Math.max(0, nextAt - clock))}`}
+          {`자동 낚시 중 · 오늘 ${auto.today}마리 · 다음 찌 올리기까지 ${auto.nextInMs == null ? "—" : autoNextLabel(Math.max(0, nextAt - clock))}`}
         </p>
       )}
       {phase === "reel" && (
@@ -450,7 +446,7 @@ export default function FishingPanel({
           onClick={toggleAuto}
           disabled={autoBusy || (!auto && phase !== "ready" && phase !== "done")}
           aria-pressed={auto !== null}
-          title={`자리를 비워도 접속해 있는 동안 천천히 낚아요. ${AUTO_RANK_NOTE}`}
+          title={`자리를 비워도 접속해 있는 동안 천천히 낚아요. ${AUTO_PACE_NOTE} ${AUTO_RANK_NOTE}`}
         >
           {auto ? "자동 낚시 끄기" : "자동 낚시 켜기"}
         </button>
@@ -459,7 +455,11 @@ export default function FishingPanel({
         </button>
       </div>
       {/* 자동 낚시 켜기 버튼 바로 아래 안내 (감는 중엔 숨긴다) */}
-      {phase !== "reel" && <p className={s.keys}>{AUTO_RANK_NOTE}</p>}
+      {phase !== "reel" && (
+        <p className={s.keys}>
+          자동 낚시는 {AUTO_PACE_NOTE} {AUTO_RANK_NOTE}
+        </p>
+      )}
       <p className={s.keys}>{coarse ? "큰 버튼으로 던지고 당겨요. 감을 땐 누르고 있어요." : "Space나 E로 던지고 당겨요. 감을 땐 누르고 있어요. Esc나 방향키로 일어나요."}</p>
     </div>
   );

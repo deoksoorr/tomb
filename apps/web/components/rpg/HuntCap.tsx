@@ -16,6 +16,7 @@ const FULL_TEXT: Record<Where, string> = {
 };
 
 export default function HuntCapMeter({ today, where }: { today: RpgView["today"]; where: Where }) {
+  if (today.cap >= 1_000_000_000) return null; // 11/19 사냥 포인트 하루 한도를 없앴다 (서버가 lib/economy NO_LIMIT를 준다) — 막대를 그리지 않는다
   const got = Math.min(today.huntPoints, today.cap);
   const left = Math.max(0, today.cap - got);
   const ratio = today.cap ? got / today.cap : 1;

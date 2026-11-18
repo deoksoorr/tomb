@@ -1,7 +1,6 @@
 import { isShopListed, ITEMS, type ChampBoard } from "@tomb/protocol";
 import { NextRequest } from "next/server";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { askOf } from "@/lib/champPerks";
 import { npcBuys, npcById, SPECIES, STACK_MAX } from "@/lib/forage/catalog";
 import { sellTo } from "@/lib/forage/service";
 import { getForageStore } from "@/lib/forage/store";
@@ -119,7 +118,7 @@ describe("11/17 1위 혜택 — 서버 흐름", () => {
     expect(champ.exp).toBe(Math.round((champ.exp - champ.champExp!) * 1.15));
   });
 
-  it("낚시왕: 물고기 판매 값 +20% (판 값으로는 그대로 다 판다)", async () => {
+  it("낚시왕: 11/19부터 판매 값 그대로 (포인트 혜택 없음)", async () => {
     const v = await newVisitor();
     const npc = npcById("fishmonger")!;
     const sp = SPECIES.find((s) => s.cat === "fish" && npcBuys(npc, s) && s.price >= 5)!;
@@ -128,7 +127,6 @@ describe("11/17 1위 혜택 — 서버 흐름", () => {
     crown(v.id, ["fish"]);
     const r = await sellTo(v.id, "fishmonger", { [sp.id]: 2 }, v.ip);
     expect(r.sold).toEqual({ [sp.id]: 2 });
-    expect(r.earned).toBe(askOf(sp.price * 2, 120));
-    expect(r.state.today.fishCap).toBe(450);
+    expect(r.earned).toBe(sp.price * 2);
   });
 });

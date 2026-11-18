@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { CHAMP_BOARDS, CHAMP_TITLE, champBadgeText, champBoards, isChampBits, titleOfLook } from "@tomb/protocol";
 import { api } from "@/lib/api";
-import { champBoardPerkLines, champNamesText, champPerkLines, champUntilText } from "@/lib/champPerks";
+import { CHAMP_BADGE_ONLY, champBoardPerkLines, champNamesText, champPerkLines, champUntilText } from "@/lib/champPerks";
 import { earnRule } from "@/lib/economy";
 import { nextWeekStartMs } from "@/lib/gameDay";
 import { allSources, pointEventEndText, pointEventOn, pointEventWhat } from "@/lib/pointEvent";
@@ -81,7 +81,7 @@ export default function PerksTab({ me }: { me: Me }) {
                 {CHAMP_TITLE[b]}
               </span>
               <ul className={styles.lines}>
-                {champBoardPerkLines(b).map((line) => (
+                {(champBoardPerkLines(b).length ? champBoardPerkLines(b) : [CHAMP_BADGE_ONLY]).map((line) => (
                   <li key={line}>{line}</li>
                 ))}
               </ul>
@@ -137,7 +137,6 @@ export default function PerksTab({ me }: { me: Me }) {
             <li>
               {pointEventWhat(ev.sources)}를 {ev.mult}배로 받아요.
             </li>
-            <li>그 항목의 오늘 하루 한도도 {ev.mult}배로 늘어요.</li>
           </ul>
           {/* 고른 항목이 일부면 무엇이 늘어나는지 꼬리표로 */}
           {!allSources(ev.sources) && ev.sources.length > 1 && (

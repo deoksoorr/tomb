@@ -1,7 +1,7 @@
 import type { Redis } from "@upstash/redis";
 import { redisClient } from "../redisUsage";
 import { itemById, PERMANENT_UNTIL } from "@tomb/protocol";
-import { BALANCE_CAP } from "../economy";
+import { WALLET_MAX } from "../economy";
 import { GIFT_TERMS, type GiftEntry, type GiftItem, type GiftTerm } from "../types";
 import { econKeyFor, kstDay } from "./accounts";
 import type { MemoryAccounts } from "./accounts-memory";
@@ -367,7 +367,7 @@ export class RedisGifts implements GiftStore {
           g.id,
           String(now),
           String(g.points),
-          String(BALANCE_CAP),
+          String(WALLET_MAX),
           accountId,
           String(STATE_TTL_SEC),
           String(g.items.length),

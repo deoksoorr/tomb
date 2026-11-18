@@ -3,17 +3,15 @@ import type { Redis } from "@upstash/redis";
 import { redisClient } from "../redisUsage";
 import { CHAMP_ITEM_IDS, itemById, MAX_DECOR_PER_GRAVE, nameKey, PERMANENT_UNTIL, type CosmeticSlot } from "@tomb/protocol";
 import { CALENDAR_TTL_SEC, legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
-import { BALANCE_CAP, earnRule, type EarnSource } from "../economy";
-import { earnedBySource } from "../earnGauge";
+import { earnRule, hasDailyMax, WALLET_MAX, type EarnSource } from "../economy";
 import { stayBonusAmounts, STAY_BONUS_EVERY_TICKS } from "../stayBonus";
 import { STAY_TICK_MINUTES, stayFillDays } from "../stayTime";
 import type { ActivityItem, Grave, GraveDecor } from "../types";
 import { econKeyFor, kstDay, rankValue, WEEK_RANK_TTL_SEC, WEEK_TIE_SCALE, weekOfDay } from "./accounts";
-import { champBoardsSafe } from "./champ";
 import { huntDiffOf, DEFAULT_HUNT_ZONE, legacyHuntBoard } from "./huntBoards";
 import { chKeys, DECOR, K } from "./keys";
 import { earnBoost } from "./pointEvent";
-import { askOf, earnTerms, stayBonusAsk } from "../champPerks";
+import { askOf, earnTerms } from "../pointEvent";
 import { encode } from "./redis";
 import {
   ACTIVITY_KEEP,
@@ -60,51 +58,42 @@ end
 `;
 
 /**
- * 항목별 하루 한도·하루 전체 한도·지갑 한도(+ ipKey가 있으면 같은 IP의 그 항목 합계 — 11/18부터 넘기지 않는다) 안에서 적립하고
+ * 적립: 지갑 상한(사실상 없음) 안에서, 횟수 규칙이 남은 항목(헌화 등 — dailyMax가 숫자)이면 그 하루 최대 안에서 더하고
  * 모은 포인트(lifetime)와 포인트 랭킹을 같이 올린다. 개편 전 계정의 모은 포인트는 지금 잔액에서 시작한다.
- * 경제 통계(econ:{날짜})의 earn:{source}도 함께 올린다.
- * 그 주에 모은 포인트(주간 랭킹, c.week)도 같이 올린다.
- * 11/17 1위 혜택(lib/champPerks): c.raceMax가 있으면 이번 적립 가운데 1위가 아니었으면 받았을 몫(c.raceAsk·c.raceMax 안)만 주간 랭킹에 더하고,
- * 그 몫을 오늘 적립 해시 `_r:{항목}`에 센다 (칸이 없으면 오늘 그 항목 적립이 모두 레이스 몫이었다 = got). 지갑·모은 포인트·오늘 합계는 전부.
- * MemoryAccounts.credit과 같은 규칙. c = { acct, earn, rank, econ, week, id, dailyCap, balanceCap, ttl, raceAsk?, raceMax? }
+ * 경제 통계(econ:{날짜})의 earn:{source}와 그 주에 모은 포인트(주간 랭킹, c.week)도 함께 올린다.
+ * 11/19 놀아서 버는 항목은 한도가 없어(dailyMax = nil) 오늘 적립 해시의 항목 칸을 읽지도 쓰지도 않는다 (적립마다 명령 2개 줄었다).
+ * 하루 전체 한도와 1위 혜택 레이스 몫(`_r:{항목}`)도 없앴다. 오늘 모은 포인트(`_total`)만 센다.
+ * MemoryAccounts.credit과 같은 규칙. c = { acct, earn, rank, econ, week, id, balanceCap, ttl, now, outsideTotal?, earnTtlSet? }
  */
 const CREDIT_FN = `${WEEK_FN}
 -- Upstash는 스크립트 안 redis.call도 하나씩 과금한다 → 같은 해시는 HMGET 한 번으로 읽고, 이미 아는 값은 다시 읽지 않는다.
--- 부른 쪽이 쓰라고 c.points(잔액)·c.lifetime(모은 포인트, 기록 없으면 nil)·c.total(오늘 _total)을 적립 뒤 값으로 남긴다.
+-- 부른 쪽이 쓰라고 c.points(잔액)·c.lifetime(모은 포인트, 기록 없으면 nil)·c.total(오늘 _total, 더했을 때만)을 적립 뒤 값으로 남긴다.
 -- c.earnTtlSet: 부른 쪽이 이미 c.earn 만료를 걸었으면 다시 걸지 않는다
-local function credit(c, source, points, dailyMax, ipKey, ipMax)
-  local e = redis.call('HMGET', c.earn, source, '_total', '_r:' .. source)
-  local got = tonumber(e[1] or '0')
-  local total = tonumber(e[2] or '0')
+local function credit(c, source, points, dailyMax)
+  local got = 0
+  if dailyMax then got = tonumber(redis.call('HGET', c.earn, source) or '0') end
   local a = redis.call('HMGET', c.acct, 'points', 'lifetime')
   local bal = tonumber(a[1] or '0')
   c.points = bal
   c.lifetime = tonumber(a[2] or '')
-  c.total = total
-  -- c.outsideTotal: 하루 전체 한도(_total)에 막히지도, 더하지도 않는다 (접속 보너스)
-  local amount = math.min(points, dailyMax - got, c.outsideTotal and points or c.dailyCap - total, c.balanceCap - bal)
-  if ipKey then amount = math.min(amount, ipMax - tonumber(redis.call('HGET', ipKey, source) or '0')) end
+  local amount = math.min(points, c.balanceCap - bal)
+  if dailyMax then amount = math.min(amount, dailyMax - got) end
   if amount <= 0 then return 0 end
-  -- 만료는 그 칸이 처음 생길 때만 건다 (더한 뒤 값 == 더한 값). 키가 처음 생길 때는 늘 칸도 처음이라 만료가 빠지지 않고,
-  -- 날짜·주마다 따로인 키라 지워지는 때도 거의 같다 (예전엔 적립마다 EXPIRE 4개)
-  local got2 = redis.call('HINCRBY', c.earn, source, amount)
-  if not c.outsideTotal then c.total = redis.call('HINCRBY', c.earn, '_total', amount) end
-  if not c.earnTtlSet and got2 == amount then redis.call('EXPIRE', c.earn, c.ttl) end
-  if ipKey then
-    if redis.call('HINCRBY', ipKey, source, amount) == amount then redis.call('EXPIRE', ipKey, c.ttl) end
+  -- 만료는 그 칸이 처음 생길 때만 건다 (더한 뒤 값 == 더한 값). 키가 처음 생길 때는 늘 칸도 처음이라 만료가 빠지지 않는다
+  local first = false
+  if dailyMax then first = redis.call('HINCRBY', c.earn, source, amount) == amount end
+  -- c.outsideTotal: 오늘 모은 포인트(_total)에 더하지 않는다 (접속 보너스)
+  if not c.outsideTotal then
+    c.total = redis.call('HINCRBY', c.earn, '_total', amount)
+    first = first or c.total == amount
   end
+  if first and not c.earnTtlSet then redis.call('EXPIRE', c.earn, c.ttl) end
   c.points = redis.call('HINCRBY', c.acct, 'points', amount)
   -- 개편 전 계정: 모은 포인트가 없으면 지금 잔액에서 시작 (예전 HSETNX와 같다 — 위에서 없음을 확인했다)
   if not a[2] then redis.call('HSET', c.acct, 'lifetime', bal) end
   c.lifetime = redis.call('HINCRBY', c.acct, 'lifetime', amount)
   redis.call('ZADD', c.rank, c.lifetime, c.id)
-  local race = amount
-  if c.raceMax then
-    local rGot = tonumber(e[3] or '') or got
-    race = math.max(0, math.min(amount, c.raceAsk, c.raceMax - rGot))
-    redis.call('HSET', c.earn, '_r:' .. source, rGot + race)
-  end
-  if race > 0 and (weekAdd(c.week, c.id, race, c.now) == 1 or not c.now) then redis.call('EXPIRE', c.week, ${WEEK_RANK_TTL_SEC}) end
+  if weekAdd(c.week, c.id, amount, c.now) == 1 or not c.now then redis.call('EXPIRE', c.week, ${WEEK_RANK_TTL_SEC}) end
   if redis.call('HINCRBY', c.econ, 'earn:' .. source, amount) == amount then redis.call('EXPIRE', c.econ, ${ECON_TTL_SEC}) end
   return amount
 end
@@ -148,28 +137,27 @@ local function puton(look, stash, slot, item, untilMs)
 end
 `;
 
-// KEYS: acct, earn, rank, econ, week  ARGV: id, source, points, dailyMax, dailyCap, balanceCap, ttl, ipMax(11/18 안 씀), now, raceAsk, raceMax('' = 1위 혜택 없음)
+// KEYS: acct, earn, rank, econ, week  ARGV: id, source, points, dailyMax('' = 한도 없음), balanceCap, ttl, now
 const EARN_LUA = `${CREDIT_FN}
-local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], week = KEYS[5], id = ARGV[1], dailyCap = tonumber(ARGV[5]), balanceCap = tonumber(ARGV[6]), ttl = ARGV[7], now = tonumber(ARGV[9]), raceAsk = tonumber(ARGV[10] or ''), raceMax = tonumber(ARGV[11] or '') }
-return credit(c, ARGV[2], tonumber(ARGV[3]), tonumber(ARGV[4]), KEYS[6], tonumber(ARGV[8]))
+local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], week = KEYS[5], id = ARGV[1], balanceCap = tonumber(ARGV[5]), ttl = ARGV[6], now = tonumber(ARGV[7]) }
+return credit(c, ARGV[2], tonumber(ARGV[3]), tonumber(ARGV[4]))
 `;
 
 // 머무르기: 직전 지급 후 gap이 지났을 때만 (아니면 -1). 같은 화면(sid)의 연달은 기록이면 흐른 시간만큼 몰아서
 // (lib/store/types.ts presenceCatchup과 같은 규칙: 창 window 안·10분(tick) 단위·slack 여유·최대 maxTicks, 다음 기준 = 센 만큼만 앞으로)
-// KEYS: acct, earn, rank, econ, week, rankStay  ARGV: id, now, gap, points, dailyMax, dailyCap, balanceCap, ttl, sid, tick, slack, maxTicks, window, per100, raceMax
-// points = 기록 1번 값 × 이벤트 배수 (레이스에 드는 값). 11/17 1위 혜택이면 per100 = 기록 1번 값 × 적립 배수(100 = 1배) → 센 기록 수를 곱해 반올림, raceMax = 1위 몫을 뺀 한도
+// KEYS: acct, earn, rank, econ, week, rankStay  ARGV: id, now, gap, points(기록 1번 값, 이벤트 배수까지), balanceCap, ttl, sid, tick, slack, maxTicks, window
 const PRESENCE_LUA = `${CREDIT_FN}
 local now = tonumber(ARGV[2])
 local pv = redis.call('HMGET', KEYS[1], 'presenceAt', 'presenceSid')
 local last = tonumber(pv[1] or '0') or 0
 local elapsed = now - last
 if elapsed < tonumber(ARGV[3]) then return -1 end
-local sid = ARGV[9]
+local sid = ARGV[7]
 local ticks = 1
 local nextAt = now
-if sid ~= '' and pv[2] == sid and last > 0 and elapsed <= tonumber(ARGV[13]) then
-  local tick = tonumber(ARGV[10])
-  ticks = math.max(1, math.min(tonumber(ARGV[12]), math.floor((elapsed + tonumber(ARGV[11])) / tick)))
+if sid ~= '' and pv[2] == sid and last > 0 and elapsed <= tonumber(ARGV[11]) then
+  local tick = tonumber(ARGV[8])
+  ticks = math.max(1, math.min(tonumber(ARGV[10]), math.floor((elapsed + tonumber(ARGV[9])) / tick)))
   nextAt = math.min(now, last + ticks * tick)
 end
 if sid ~= '' then
@@ -181,45 +169,33 @@ end
 -- 10번: 머문 기록은 포인트 한도와 상관없이 센다 (출석 도장 조건)
 local stay = redis.call('HINCRBY', KEYS[2], '_stay', ticks)
 -- 총 접속 시간: 센 기록 수 × 기록 길이(분)를 계정 해시 stayMin과 접속 시간 랭킹에 (lib/stayTime.ts)
-redis.call('ZADD', KEYS[6], redis.call('HINCRBY', KEYS[1], 'stayMin', ticks * math.floor(tonumber(ARGV[10]) / 60000)), ARGV[1])
-redis.call('EXPIRE', KEYS[2], ARGV[8])
-local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], week = KEYS[5], id = ARGV[1], dailyCap = tonumber(ARGV[6]), balanceCap = tonumber(ARGV[7]), ttl = ARGV[8], now = now, earnTtlSet = true }
-local raceAsk = tonumber(ARGV[4]) * ticks
-local per100 = tonumber(ARGV[14] or '')
-local ask = per100 and math.floor((per100 * ticks + 50) / 100) or raceAsk
-c.raceAsk = raceAsk
-c.raceMax = tonumber(ARGV[15] or '')
-local amount = credit(c, 'presence', ask, tonumber(ARGV[5]))
+redis.call('ZADD', KEYS[6], redis.call('HINCRBY', KEYS[1], 'stayMin', ticks * math.floor(tonumber(ARGV[8]) / 60000)), ARGV[1])
+redis.call('EXPIRE', KEYS[2], ARGV[6])
+local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], week = KEYS[5], id = ARGV[1], balanceCap = tonumber(ARGV[5]), ttl = ARGV[6], now = now, earnTtlSet = true }
+local amount = credit(c, 'presence', tonumber(ARGV[4]) * ticks)
 -- 화면이 바로 쓸 값도 같이 (머무르기 응답이 계정 전체를 다시 읽지 않게): 적립, 센 기록 수, 잔액, 모은 포인트, 오늘 쌓은 포인트, 오늘 머문 기록 수.
 -- 적립(credit)이 읽고 쓴 값을 그대로 쓴다 (다시 읽지 않는다)
 local points = tonumber(c.points) or 0
-return { amount, ticks, points, tonumber(c.lifetime) or points, tonumber(c.total) or 0, tonumber(stay) or 0 }
+-- 지갑이 가득 차 0P면 _total을 더하지 않았으니 그때만 읽는다
+local total = c.total or tonumber(redis.call('HGET', KEYS[2], '_total') or '0')
+return { amount, ticks, points, tonumber(c.lifetime) or points, tonumber(total) or 0, tonumber(stay) or 0 }
 `;
 
 // 접속 시간 보너스: 오늘 머문 기록(_stay)으로 열린 구간 중 안 받은 구간(_bonus 다음부터)을 한 번에. 없으면 -1.
-// 받은 구간 수를 먼저 올리므로 동시에 눌러도 한 번만 나간다. lib/stayBonus.ts·MemoryAccounts.claimStayBonus와 같은 규칙
-// KEYS: acct, earn, rank, econ, week  ARGV: id, every(기록 수/구간), dailyMax, dailyCap, balanceCap, ttl, now, raceMax('' = 1위 혜택 없음), 구간 수 n,
-//   구간별 보너스 n개(레이스에 드는 값 = × 이벤트 배수), [11/17 1위 혜택이면 구간별 실제로 주는 값 n개]
+// 받은 구간 수를 먼저 올리므로 동시에 눌러도 한 번만 나간다. lib/stayBonus.ts·MemoryAccounts.claimStayBonus와 같은 규칙.
+// 11/19 하루 구간 상한을 없앴다: n번째를 넘는 구간은 마지막 값으로 (stayBonusAt)
+// KEYS: acct, earn, rank, econ, week  ARGV: id, every(기록 수/구간), balanceCap, ttl, now, 구간 수 n, 구간별 보너스 n개(이벤트 배수까지)
 const STAY_BONUS_LUA = `${CREDIT_FN}
-local n = tonumber(ARGV[9])
-local race, pay = {}, {}
-for i = 1, n do
-  race[i] = tonumber(ARGV[9 + i])
-  pay[i] = tonumber(ARGV[9 + n + i] or '') or race[i]
-end
-local tiers = math.min(math.floor(tonumber(redis.call('HGET', KEYS[2], '_stay') or '0') / tonumber(ARGV[2])), n)
+local n = tonumber(ARGV[6])
+local tiers = math.floor(tonumber(redis.call('HGET', KEYS[2], '_stay') or '0') / tonumber(ARGV[2]))
 local claimed = tonumber(redis.call('HGET', KEYS[2], '_bonus') or '0')
 if tiers <= claimed then return {-1, 0} end
-local sum, raceSum = 0, 0
-for i = claimed + 1, tiers do
-  sum = sum + pay[i]
-  raceSum = raceSum + race[i]
-end
+local sum = 0
+for i = claimed + 1, tiers do sum = sum + tonumber(ARGV[6 + math.min(i, n)]) end
 redis.call('HSET', KEYS[2], '_bonus', tiers)
-redis.call('EXPIRE', KEYS[2], ARGV[6])
--- 하루 전체 한도(800)와 별개: 자기 하루 상한(dailyMax)·지갑 상한만 본다
-local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], week = KEYS[5], id = ARGV[1], dailyCap = tonumber(ARGV[4]), balanceCap = tonumber(ARGV[5]), ttl = ARGV[6], outsideTotal = true, now = tonumber(ARGV[7]), raceAsk = raceSum, raceMax = tonumber(ARGV[8]) }
-return { credit(c, 'stayBonus', sum, tonumber(ARGV[3])), tiers - claimed }
+redis.call('EXPIRE', KEYS[2], ARGV[4])
+local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], week = KEYS[5], id = ARGV[1], balanceCap = tonumber(ARGV[3]), ttl = ARGV[4], outsideTotal = true, earnTtlSet = true, now = tonumber(ARGV[5]) }
+return { credit(c, 'stayBonus', sum), tiers - claimed }
 `;
 
 // 입장 기록: 이름·색·몸 모양·처음 입장 시각은 계정에 값이 없을 때만 저장한다
@@ -246,7 +222,7 @@ return 1
 `;
 
 // 10번 출석 달력 오늘 칸 받기. {-1}(오늘 이미 받음) | {-2, 머문 기록 수} | {1, 출석, 7일 연속, 한 달 개근, 연속 일수}
-// 달력 보상은 하루 전체 한도에 막히지 않는다(dailyCap을 크게) — MemoryAccounts.claimAttend와 같은 규칙
+// 달력 보상은 항목 하루 최대·지갑 상한만 본다 — MemoryAccounts.claimAttend와 같은 규칙
 // KEYS: acct, earn, attendIp, rank, econ, week, cal
 // ARGV: id, day, yesterday, perIp, ttl, attendPts, attendMax, streakPts, streakMax, monthlyPts, monthlyMax, balanceCap, needTicks, dd, monthDays, calTtl, now
 const CLAIM_LUA = `${CREDIT_FN}
@@ -263,7 +239,7 @@ if last == ARGV[3] then streak = tonumber(redis.call('HGET', KEYS[1], 'streak') 
 redis.call('HSET', KEYS[1], 'lastAttend', ARGV[2], 'streak', streak)
 -- 11/18 같은 IP에서 포인트 받는 계정 수 한도는 없앴다 (KEYS[3]·ARGV[4]는 자리만 남는다)
 local paid = true
-local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[4], econ = KEYS[5], week = KEYS[6], id = ARGV[1], dailyCap = 1000000000, balanceCap = tonumber(ARGV[12]), ttl = ARGV[5], now = tonumber(ARGV[17]) }
+local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[4], econ = KEYS[5], week = KEYS[6], id = ARGV[1], balanceCap = tonumber(ARGV[12]), ttl = ARGV[5], now = tonumber(ARGV[17]) }
 local a, s, m = 0, 0, 0
 if paid then
   a = credit(c, 'attend', tonumber(ARGV[6]), tonumber(ARGV[7]))
@@ -733,7 +709,7 @@ export class RedisAccounts implements AccountStore {
   }
 
   async get(id: string, day: string, now: number): Promise<AccountRecord> {
-    // 오늘 적립 기록은 HGETALL 하나로 (합계·머문 기록·보너스 구간 + 항목별 적립 — 내 정보 게이지. 예전 HMGET 자리라 명령 수는 그대로)
+    // 오늘 적립 기록은 HGETALL 하나로 (합계·머문 기록·보너스 구간)
     const [acct, inv, look, graves, earnToday, activity, stashRaw] = await this.redis
       .pipeline()
       .hgetall(K.acct(id))
@@ -772,7 +748,6 @@ export class RedisAccounts implements AccountStore {
       stash,
       graves,
       todayEarned: Number(today ?? 0),
-      earnedBy: earnedBySource(earnMap),
       activityUnread: activity.filter((raw) => {
         const item = JSON.parse(raw) as ActivityItem;
         return item.kind !== "revive" && item.at > Number(a.get("activitySeen") ?? 0);
@@ -786,25 +761,20 @@ export class RedisAccounts implements AccountStore {
 
   async earn(id: string, source: EarnSource, day: string, opts: EarnOptions = {}): Promise<number> {
     const rule = earnRule(source);
-    // 포인트 배수 이벤트: 고른 항목이면 적립·항목 한도·같은 IP 한도가 배수, 하루 전체 한도는 늘어난 몫만큼 (Lua는 그대로, 넘기는 값만 — lib/pointEvent)
-    // 11/17 1위 혜택: %는 이벤트 배수에 더하고 한도는 고정 몫을 더한다. 붙은 항목이면 레이스에 드는 몫을 따로 넘긴다 (lib/champPerks)
-    const [boost, champ] = await Promise.all([opts.boost ?? earnBoost(), opts.champ ?? champBoardsSafe(id)]);
-    const t = earnTerms(boost, source, champ);
+    // 포인트 배수 이벤트: 고른 항목이면 적립이 배수, 횟수 규칙이 남은 항목은 하루 최대도 배수 (Lua는 그대로, 넘기는 값만 — lib/pointEvent)
+    const boost = opts.boost ?? (await earnBoost());
+    const t = earnTerms(boost, source);
     const base = opts.amount ?? rule.points;
     const keys = [K.acct(id), K.earn(id, day), K.rankPoints, await econKeyFor(id, day), K.rankPointsWeek(weekOfDay(day))];
-    // 11/18 같은 IP 합계 한도는 없앴다 (회사·집에서 여럿이 한 IP로 한다 — 사용자). credit의 ipKey(KEYS[6])는 비워 둔다
+    // 11/18 같은 IP 합계 한도는 없앴다 (회사·집에서 여럿이 한 IP로 한다 — 사용자)
     const r = await this.redis.eval<string[], number>(EARN_LUA, keys, [
       id,
       source,
       String(askOf(base, t.m100)),
-      String(t.dailyMax),
-      String(t.total),
-      String(BALANCE_CAP),
+      hasDailyMax(source) ? String(t.dailyMax) : "",
+      String(WALLET_MAX),
       String(EARN_TTL_SEC),
-      "0",
       String(Date.now()),
-      String((base * t.race100) / 100),
-      t.champ ? String(t.raceMax) : "",
     ]);
     return Number(r);
   }
@@ -828,7 +798,7 @@ export class RedisAccounts implements AccountStore {
     return Number(
       await this.redis.eval<string[], number>(REFUND_LUA, [K.acct(id), K.ledger(id), await econKeyFor(id, kstDay(now))], [
         String(amount),
-        String(BALANCE_CAP),
+        String(WALLET_MAX),
         entry,
       ]),
     );
@@ -854,8 +824,7 @@ export class RedisAccounts implements AccountStore {
 
   async presenceTick(id: string, day: string, now: number, sid = ""): Promise<PresenceTick | null> {
     const rule = earnRule("presence");
-    const [boost, champ] = await Promise.all([earnBoost(now), champBoardsSafe(id, now)]);
-    const t = earnTerms(boost, "presence", champ);
+    const t = earnTerms(await earnBoost(now), "presence");
     const r = await this.redis.eval<string[], number | number[]>(
       PRESENCE_LUA,
       [K.acct(id), K.earn(id, day), K.rankPoints, await econKeyFor(id, day), K.rankPointsWeek(weekOfDay(day)), K.rankStay],
@@ -863,19 +832,14 @@ export class RedisAccounts implements AccountStore {
         id,
         String(now),
         String(PRESENCE_MIN_GAP_MS),
-        String((rule.points * t.race100) / 100),
-        String(t.dailyMax),
-        String(t.total),
-        String(BALANCE_CAP),
+        String(askOf(rule.points, t.m100)),
+        String(WALLET_MAX),
         String(EARN_TTL_SEC),
         sid,
         String(PRESENCE_TICK_MS),
         String(PRESENCE_TICK_SLACK_MS),
         String(PRESENCE_CATCHUP_MAX_TICKS),
         String(PRESENCE_CATCHUP_WINDOW_MS),
-        // 11/17 포인트왕 머무르기 +% (붙지 않으면 비워서 예전처럼 points × 기록 수)
-        t.champ ? String(rule.points * t.m100) : "",
-        t.champ ? String(t.raceMax) : "",
       ],
     );
     // 너무 이르면 -1 (배열이 아니다)
@@ -885,27 +849,13 @@ export class RedisAccounts implements AccountStore {
   }
 
   async claimStayBonus(id: string, day: string, bonus = 0): Promise<{ earned: number; count: number } | null> {
-    const [boost, champ] = await Promise.all([earnBoost(), champBoardsSafe(id)]);
-    const t = earnTerms(boost, "stayBonus", champ);
-    // 11/16 단 칭호의 머무르기 보상 + (구간 값만 커지고 하루 상한 dailyMax는 그대로 — credit이 자른다).
-    // 11/17 포인트왕: 구간 값 × (이벤트 배수 + 50%)를 구간마다 반올림 (pay), 레이스에는 × 이벤트 배수만 (race)
-    const v = stayBonusAsk(stayBonusAmounts(bonus), t);
+    const t = earnTerms(await earnBoost(), "stayBonus");
+    // 11/16 단 칭호의 머무르기 보상 + (구간 값이 커진다). 구간 값 × 이벤트 배수를 구간마다 반올림
+    const pay = stayBonusAmounts(bonus).map((n) => askOf(n, t.m100));
     const [earned, count] = await this.redis.eval<string[], [number, number]>(
       STAY_BONUS_LUA,
       [K.acct(id), K.earn(id, day), K.rankPoints, await econKeyFor(id, day), K.rankPointsWeek(weekOfDay(day))],
-      [
-        id,
-        String(STAY_BONUS_EVERY_TICKS),
-        String(t.dailyMax),
-        String(t.total),
-        String(BALANCE_CAP),
-        String(EARN_TTL_SEC),
-        String(Date.now()),
-        t.champ ? String(t.raceMax) : "",
-        String(v.race.length),
-        ...v.race.map(String),
-        ...(t.champ ? v.pay.map(String) : []),
-      ],
+      [id, String(STAY_BONUS_EVERY_TICKS), String(WALLET_MAX), String(EARN_TTL_SEC), String(Date.now()), String(pay.length), ...pay.map(String)],
     );
     return Number(earned) < 0 ? null : { earned: Number(earned), count: Number(count) };
   }
@@ -1060,7 +1010,7 @@ export class RedisAccounts implements AccountStore {
     const r = await this.redis.eval<string[], number>(
       CHAMP_LUA,
       [K.champPaid, K.acct(id), K.look(id), K.stash(id), K.champWallet, await econKeyFor(id, kstDay(now)), K.inv(id)],
-      [mark, id, itemId, slot, String(until), String(points), String(BALANCE_CAP), String(now), ...CHAMP_ITEM_IDS],
+      [mark, id, itemId, slot, String(until), String(points), String(WALLET_MAX), String(now), ...CHAMP_ITEM_IDS],
     );
     return Number(r) === 1;
   }
@@ -1120,7 +1070,7 @@ export class RedisAccounts implements AccountStore {
           String(streak.dailyMax),
           String(monthly.points),
           String(monthly.dailyMax),
-          String(BALANCE_CAP),
+          String(WALLET_MAX),
           String(needTicks),
           day.slice(6),
           String(monthDays),
@@ -1244,7 +1194,7 @@ export class RedisAccounts implements AccountStore {
 
   async adjustPoints(id: string, delta: number): Promise<number | null> {
     const r = Number(
-      await this.redis.eval<string[], number>(ADJUST_LUA, [K.acct(id), await econKeyFor(id, kstDay())], [String(delta), String(BALANCE_CAP)]),
+      await this.redis.eval<string[], number>(ADJUST_LUA, [K.acct(id), await econKeyFor(id, kstDay())], [String(delta), String(WALLET_MAX)]),
     );
     return r < 0 ? null : r;
   }

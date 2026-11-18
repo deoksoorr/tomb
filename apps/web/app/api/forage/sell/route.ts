@@ -6,7 +6,7 @@ import { ipHash, requireVisitor } from "@/lib/session";
 import { rateLimit } from "@/lib/ratelimit";
 import { readBody } from "@/lib/validate";
 
-/** NPC에게 팔기 `{ npc, items: { id: 개수 } }` → 오늘 한도 안에서 판 만큼 포인트 (못 판 것은 가방에) */
+/** NPC에게 팔기 `{ npc, items: { id: 개수 } }` → 판 만큼 포인트 (지갑이 꽉 차 못 판 것은 가방에) */
 export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
   await rateLimit("forage", req, visitorId);

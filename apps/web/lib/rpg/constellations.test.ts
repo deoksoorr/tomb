@@ -225,11 +225,11 @@ describe("11/18 별자리 쉽게", () => {
     expect(starWindows("hell", 0)).toEqual([45, 120]);
   });
 
-  it("별자리 포인트는 따로 1.5배쯤 (곤충 채집은 그대로), 하루 한도 450", () => {
+  it("별자리 포인트는 따로 1.5배쯤 (곤충 채집은 그대로), 11/19부터 하루 한도 없음", () => {
     expect(STARS_POINTS).toEqual({ easy: 18, normal: 30, hard: 45, hell: 65 });
     expect(DIFFS.easy.miniPoints).toBe(12);
-    expect(earnRule("stars").dailyMax).toBe(450);
-    expect(earnRule("bugs").dailyMax).toBe(300);
+    expect(earnRule("stars").dailyMax).toBeNull();
+    expect(earnRule("bugs").dailyMax).toBeNull();
     const T: TicketInfo = { game: "stars", difficulty: "easy", seed: 7, level: 10, st: { agi: 1, dex: 1, luk: 1 }, planVer: STARS_PLAN_VER };
     const p = starsPlan(T.seed, T.difficulty, 75);
     const v = evaluate(T, { game: "stars", durationMs: 75_000, perfect: p.length, good: 0, miss: 0, maxCombo: p.length, score: p.length * 300 }, 76_000);

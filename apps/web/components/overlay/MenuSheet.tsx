@@ -32,9 +32,7 @@ export type MenuTarget =
   // 10·11번
   | "calendar"
   | "gifts"
-  | "friends"
-  /** 운영자 전용 포인트 현황 */
-  | "staffEarn";
+  | "friends";
 
 type Props = {
   canBury: boolean;
@@ -53,7 +51,7 @@ type Props = {
   friendIncoming?: number;
   /** 가방 [칭호]에서 아직 안 본 새 칭호가 있다 (가방 타일에 점) */
   titleNew?: boolean;
-  /** 운영자 계정: 친구 기능을 쓸 수 없어 친구 타일 대신 포인트 현황 타일 */
+  /** 운영자 계정: 친구 기능을 쓸 수 없어 친구 타일을 뺀다 */
   noFriends?: boolean;
   /** 11/16 탈것에 타 있어 사냥터에 못 가는 이유 (타일을 흐리게, 설명 대신) — lib/rideGate */
   huntBlocked?: string | null;
@@ -78,7 +76,7 @@ type Entry = {
 /**
  * 메뉴: 터치 화면은 아래쪽에 조이스틱·행동 버튼만 두고 나머지는 모두 여기에. 데스크톱도 [메뉴]로 연다.
  * 48번: 즐길 거리(가방·사냥·집)를 앞에, 묘비(내 묘비 가기·묘비 쓰기·성불한 이야기들)는 뒤쪽 묶음으로.
- * 큰 아이콘 타일 + 한 줄 설명 + 빨간 점, 아래에 오늘의 정보(출석·남은 포인트 한도·채널·날씨/시간대)
+ * 큰 아이콘 타일 + 한 줄 설명 + 빨간 점, 아래에 오늘의 정보(출석·오늘 모은 포인트·채널·날씨/시간대)
  */
 export default function MenuSheet({
   canBury,
@@ -126,7 +124,7 @@ export default function MenuSheet({
       redDot: giftCount > 0,
     },
     ...(noFriends
-      ? [{ target: "staffEarn" as const, icon: "list" as const, label: "포인트 현황", desc: "사람들이 오늘 한도를 얼마나 채웠는지 보기" }]
+      ? []
       : [
           {
             target: "friends" as const,

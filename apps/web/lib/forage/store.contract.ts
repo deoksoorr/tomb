@@ -21,7 +21,7 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
     const a = acct();
     const s = await store.snapshot(a, DAY, 1);
     const pay = { settled: null, pending: {}, paid: {}, marks: [] };
-    expect(s).toEqual({ bag: {}, dex: {}, claims: {}, pay, day: { fishP: 0, gatherP: 0, dexP: 0, fish: 0, gather: 0, auto: 0 }, taken: [] });
+    expect(s).toEqual({ bag: {}, dex: {}, claims: {}, pay, day: { fish: 0, gather: 0, auto: 0 }, taken: [] });
     expect(await store.dex(a)).toEqual({ dex: {}, claims: {}, pay });
   });
 
@@ -75,7 +75,7 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
 
   it("today: 오늘 기록·이번 창에 캔 지점은 snapshot과 같다", async () => {
     const a = acct();
-    expect(await store.today(a, DAY, 3)).toEqual({ day: { fishP: 0, gatherP: 0, dexP: 0, fish: 0, gather: 0, auto: 0 }, taken: [] });
+    expect(await store.today(a, DAY, 3)).toEqual({ day: { fish: 0, gather: 0, auto: 0 }, taken: [] });
     await store.grant(a, DAY, "gather", [{ id: "h_mugwort", size: 0 }], 99, { window: 3, node: "n_a" });
     await store.grant(a, DAY, "fish", [{ id: "f_carp", size: 400 }], 99);
     const t = await store.today(a, DAY, 3);
@@ -124,12 +124,11 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
     expect((await store.snapshot(a, DAY, 1)).bag).toEqual({ f_carp: 3, f_koi: 1 });
   });
 
-  it("오늘 판 포인트·도감 보상은 한 번만", async () => {
+  it("오늘 낚은 수 더하기·예전 단계 보상 표시는 한 번만", async () => {
     const a = acct();
-    await store.addDay(a, DAY, "fishP", 12);
-    await store.addDay(a, DAY, "fishP", 5);
-    await store.addDay(a, DAY, "dexP", 20);
-    expect((await store.snapshot(a, DAY, 1)).day).toMatchObject({ fishP: 17, dexP: 20, gatherP: 0 });
+    await store.addDay(a, DAY, "fish", 2);
+    await store.addDay(a, DAY, "fish", 1);
+    expect((await store.snapshot(a, DAY, 1)).day).toEqual({ fish: 3, gather: 0, auto: 0 });
     expect(await store.claimDex(a, "fish:25", DAY)).toBe(true);
     expect(await store.claimDex(a, "fish:25", DAY)).toBe(false);
     expect((await store.dex(a)).claims).toEqual({ "fish:25": DAY });
@@ -152,36 +151,37 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
     expect(r.filter(Boolean)).toHaveLength(1);
   });
 
-  it("자동 낚시 넣기: 자동 한도·하루 전체 한도 안에서 앞에서부터, 도감 최대 크기도 기록한다", async () => {
+  it("자동 낚시 넣기: 한도 없이 전부 (11/19), 오늘 수를 올리고 도감 최대 크기도 기록한다", async () => {
     const a = acct();
     const fish = (n: number, size = 500) => Array.from({ length: n }, () => ({ id: "f_carp", size }));
-    const g1 = await store.grantAuto(a, DAY, fish(3), 99, 5, 150);
+    const g1 = await store.grantAuto(a, DAY, fish(3), 99);
     expect(g1).toEqual([
       { id: "f_carp", size: 500, kept: true, isNew: true, record: false },
       { id: "f_carp", size: 500, kept: true, isNew: false, record: false },
       { id: "f_carp", size: 500, kept: true, isNew: false, record: false },
     ]);
-    expect(await store.grantAuto(a, DAY, fish(4), 99, 5, 150)).toHaveLength(2); // 자동 한도 5
-    expect(await store.grantAuto(a, DAY, fish(1), 99, 5, 150)).toEqual([]);
+    // 예전 하루 75마리 한도를 넘겨도 다 들어간다
+    expect(await store.grantAuto(a, DAY, fish(80), 99)).toHaveLength(80);
+    expect(await store.grantAuto(a, DAY, fish(1), 99)).toHaveLength(1);
     let s = await store.snapshot(a, DAY, 1);
-    expect(s.day).toMatchObject({ fish: 5, auto: 5 });
-    expect(s.dex.f_carp).toEqual({ n: 5, max: 500, first: DAY });
-    expect(s.bag.f_carp).toBe(5);
-    // 하루 전체 한도: 직접 낚은 것과 합쳐서
+    expect(s.day).toMatchObject({ fish: 84, auto: 84 });
+    expect(s.dex.f_carp).toEqual({ n: 84, max: 500, first: DAY });
+    expect(s.bag.f_carp).toBe(84);
+    // 직접 낚은 것과 합쳐서 센다 (보여 주기만)
     await store.grant(a, "20261113", "fish", fish(8, 300), 99);
-    expect(await store.grantAuto(a, "20261113", fish(5), 99, 75, 10)).toHaveLength(2);
+    expect(await store.grantAuto(a, "20261113", fish(5), 99)).toHaveLength(5);
     s = await store.snapshot(a, "20261113", 1);
-    expect(s.day).toMatchObject({ fish: 10, auto: 2 });
+    expect(s.day).toMatchObject({ fish: 13, auto: 5 });
     expect(s.dex.f_carp.max).toBe(500); // 더 작은 크기는 최대 기록을 바꾸지 않는다
     // 더 큰 크기면 최대 기록을 바꾸고 record (처음 기록일 땐 record 아님 — 직접 낚을 때와 같다)
-    expect(await store.grantAuto(a, "20261114", [{ id: "f_carp", size: 640 }, { id: "f_koi", size: 300 }], 99, 75, 150)).toEqual([
+    expect(await store.grantAuto(a, "20261114", [{ id: "f_carp", size: 640 }, { id: "f_koi", size: 300 }], 99)).toEqual([
       { id: "f_carp", size: 640, kept: true, isNew: false, record: true },
       { id: "f_koi", size: 300, kept: true, isNew: true, record: false },
     ]);
     expect((await store.snapshot(a, "20261114", 1)).dex.f_carp.max).toBe(640);
-    // "@"(물에 빠진 꾸미기 자리)는 한도만 세고 가방·도감은 그대로
+    // "@"(물에 빠진 꾸미기 자리)는 낚은 수만 세고 가방·도감은 그대로
     const b = acct();
-    expect(await store.grantAuto(b, DAY, [{ id: "@hat_cat", size: 0 }, { id: "f_carp", size: 1 }], 99, 75, 150)).toEqual([
+    expect(await store.grantAuto(b, DAY, [{ id: "@hat_cat", size: 0 }, { id: "f_carp", size: 1 }], 99)).toEqual([
       { id: "@hat_cat", size: 0, kept: false, isNew: false, record: false },
       { id: "f_carp", size: 1, kept: true, isNew: true, record: false },
     ]);
@@ -229,7 +229,7 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
     const herb = speciesOf("herb")[0];
     await store.grant(a, DAY, "fish", [{ id: f1.id, size: 10 }, { id: f1.id, size: 20 }], 99);
     await store.grant(a, DAY, "gather", [{ id: herb.id, size: 0 }], 99, { window: 3, node: "n1" });
-    await store.grantAuto(a, DAY, [{ id: "@hat_x", size: 0 }, { id: f2.id, size: 5 }, { id: f1.id, size: 5 }], 99, 10, 100);
+    await store.grantAuto(a, DAY, [{ id: "@hat_x", size: 0 }, { id: f2.id, size: 5 }, { id: f1.id, size: 5 }], 99);
     await store.addStars(a, DAY, [{ id: "c_gym", perfect: false }, { id: "c_gym", perfect: true }]);
     expect((await store.dexPay(a)).pending).toEqual({
       fish: dexRewardOf(f1.id) + dexRewardOf(f2.id),

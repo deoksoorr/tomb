@@ -3,19 +3,18 @@ import guide from "../guide/guide.module.css";
 import { pageMetadata } from "../seo";
 import { ATTEND_RULE_TEXT } from "@/lib/attendStay";
 import { ATTEND_TIER_GUIDE } from "@/lib/attendTiers";
-import { DAILY_EARN_CAP, earnRule } from "@/lib/economy";
+import { earnRule } from "@/lib/economy";
 import { CHAT_HISTORY_MS, CHAT_MAX, CHAT_STORE_MAX, DEFAULT_CHANNEL_CAPACITY, DEFAULT_MAX_CHANNELS, FRIEND_MAX, NAME_MAX, NAME_MIN, PERMANENT_MULTIPLIER } from "@tomb/protocol";
-import { AUTO_FISH_DAILY_MAX, AUTO_FISH_EVERY_MS, AUTO_FISH_MAX_MS } from "@/lib/forage/auto";
-import { DAILY_CATCH_MAX } from "@/lib/forage/catalog";
+import { AUTO_FISH_MAX_MS, AUTO_PACE_NOTE } from "@/lib/forage/auto";
 import { DORMANT_DAYS } from "@/lib/store/types";
 import { RESIDENTS } from "@/game/world/life/residentData";
 import { DYE_SPECIAL_BONUS, LOOK_SCORE_DIVISOR } from "@/lib/lookScore";
-import { STAY_BONUS_DAILY_MAX } from "@/lib/stayBonus";
+import { STAY_BONUS_EVERY_MINUTES } from "@/lib/stayBonus";
 import { DEFAULT_PASS_DAYS, PRESENCE_INTERVAL_MS } from "@/lib/types";
 import { env } from "@/lib/env";
 import { PIONEER_DAYS, PIONEER_FLOOR } from "@/lib/rpg/endgame";
-import { CURSES, TOWER_STEEP_FROM } from "@/lib/rpg/tower";
 import { MAX_LEVEL } from "@/lib/rpg/formulas";
+import { CURSES, TOWER_STEEP_FROM } from "@/lib/rpg/tower";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
 import { QUEST_DAILY, QUEST_STAMPS } from "@/lib/forage/quests/catalog";
 
@@ -67,7 +66,7 @@ const FAQ = [
   {
     q: "포인트는 어떻게 모으나요?",
     // 숫자는 lib/economy.ts·stayBonus.ts에서 읽는다 (값을 바꾸면 답도 같이 바뀐다)
-    a: `접속해 있으면 ${PRESENCE_INTERVAL_MS / 60_000}분마다 ${earnRule("presence").points}포인트가 쌓여요. 다른 창을 보고 있어도 괜찮아요. 출석 도장, 헌화, 사냥터, 미니게임, 물고기와 채집물 팔기로도 모여요. 사냥터는 하루 ${earnRule("hunt").dailyMax}포인트까지예요. 주운 장비와 물약을 되판 포인트도 여기에 들어가요. 마을 곤충 채집은 따로 하루 ${earnRule("bugs").dailyMax}포인트, 별자리 잇기는 하루 ${earnRule("stars").dailyMax}포인트까지예요. 하루 한도는 활동마다 따로라서, 하나를 다 채워도 다른 활동 포인트는 계속 쌓여요. 전부 합치면 하루 ${DAILY_EARN_CAP.toLocaleString("ko-KR")}포인트까지예요. 오래 머물면 받는 접속 시간 보너스(하루 최대 ${STAY_BONUS_DAILY_MAX}포인트)는 이 한도와 상관없어요. 하루 한도와 출석 도장은 한국 시간 새벽 5시에 새로 시작해요.`,
+    a: `접속해 있으면 ${PRESENCE_INTERVAL_MS / 60_000}분마다 ${earnRule("presence").points}포인트가 쌓여요. 다른 창을 보고 있어도 괜찮아요. 출석 도장, 헌화, 사냥터, 미니게임, 물고기와 채집물 팔기로도 모여요. 주운 장비와 물약을 되판 포인트는 사냥터 포인트에 들어가요. 하루 한도는 없어요. 놀수록 계속 쌓여요. 오래 머물면 ${STAY_BONUS_EVERY_MINUTES}분마다 접속 시간 보너스도 받아요. 헌화, 묘비 세우기, 받은 헌화와 좋아요만 하루 횟수가 정해져 있어요. 출석 도장은 한국 시간 새벽 5시에 새로 시작해요.`,
   },
   {
     q: "출석 도장은 어떻게 찍나요?",
@@ -80,7 +79,7 @@ const FAQ = [
   },
   {
     q: "자리를 비워도 낚시가 되나요?",
-    a: `네. 낚시 자리에 앉아 [자동 낚시 켜기]를 누르면 ${Math.round(AUTO_FISH_EVERY_MS / 1000)}초에 1마리씩 물고기가 쌓여요. 다른 탭을 보고 있어도 접속만 되어 있으면 돼요. 자동 낚시는 하루 ${AUTO_FISH_DAILY_MAX}마리까지고, 직접 낚시까지 합치면 하루 ${DAILY_CATCH_MAX.fish}번까지예요. 직접 낚시는 놓치거나 찌를 거둬도 1번으로 세요. 한 번 켜면 최대 ${AUTO_FISH_MAX_MS / 3_600_000}시간 돌아요. 접속이 끊긴 동안은 쌓이지 않아요. 움직이거나 일어나면 꺼져요. 희귀한 물고기는 덜 나와요. 자동으로 낚은 물고기도 내 도감의 가장 큰 기록에는 들어가요. 최대어 순위에는 직접 낚은 물고기만 올라요. 아주 드물게 물에 빠진 꾸미기가 걸리기도 해요(영구 소장).`,
+    a: `네. 낚시 자리에 앉아 [자동 낚시 켜기]를 누르면 ${AUTO_PACE_NOTE} 직접 낚시보다 느리지만 하루 한도는 없어요. 다른 탭을 보고 있어도 접속만 되어 있으면 돼요. 한 번 켜면 최대 ${AUTO_FISH_MAX_MS / 3_600_000}시간 돌아요. 접속이 끊긴 동안은 쌓이지 않아요. 움직이거나 일어나면 꺼져요. 희귀한 물고기는 덜 나와요. 자동으로 낚은 물고기도 내 도감의 가장 큰 기록에는 들어가요. 최대어 순위에는 직접 낚은 물고기만 올라요. 아주 드물게 물에 빠진 꾸미기가 걸리기도 해요(영구 소장).`,
   },
   {
     // 11/15 수집 의뢰 (숫자는 lib/forage/quests/catalog.ts)

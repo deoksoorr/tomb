@@ -34,10 +34,10 @@ import {
 } from "@tomb/protocol";
 import { ATTEND_STAY_TEXT } from "@/lib/attendStay";
 import { ATTEND_TIER_GUIDE } from "@/lib/attendTiers";
-import { BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES, earnRule } from "@/lib/economy";
+import { EARN_RULES } from "@/lib/economy";
 import { DYE_TIME_MS } from "@/lib/dye/palette";
-import { AUTO_FISH_DAILY_MAX, AUTO_FISH_EVERY_MS, AUTO_FISH_MAX_MS, AUTO_RANK_NOTE } from "@/lib/forage/auto";
-import { DAILY_CATCH_MAX, DEX_NEW_REWARD } from "@/lib/forage/catalog";
+import { AUTO_FISH_MAX_MS, AUTO_PACE_NOTE, AUTO_RANK_NOTE } from "@/lib/forage/auto";
+import { DEX_NEW_REWARD } from "@/lib/forage/catalog";
 import { PHASE_LABELS, TIME_PHASES, WEATHER_BLOCK_MS, WEATHER_LABELS, WEATHERS } from "@/lib/ambience";
 import { PLOT_TIERS, plotCost } from "@/lib/housing/catalog";
 import { DYE_SPECIAL_BONUS, LOOK_SCORE_DIVISOR } from "@/lib/lookScore";
@@ -46,7 +46,7 @@ import { SKILL_SLOTS } from "@/lib/rpg/hotbar";
 import { PIONEER_DAYS, PIONEER_FLOOR } from "@/lib/rpg/endgame";
 import { MAX_LEVEL } from "@/lib/rpg/formulas";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
-import { STAY_BONUS_DAILY_MAX } from "@/lib/stayBonus";
+import { STAY_BONUS_EVERY_MINUTES } from "@/lib/stayBonus";
 import { DORMANT_DAYS } from "@/lib/store/types";
 import { DEFAULT_PASS_DAYS, NAME_CHANGE_COOLDOWN_DAYS, NAME_CHANGE_PRICE, PRESENCE_INTERVAL_MS, SHRINE_KEEP_DAYS } from "@/lib/types";
 import { RESIDENTS } from "@/game/world/life/residentData";
@@ -213,10 +213,10 @@ const forage = (touch: boolean): ReactNode[][] => [
   [
     "자동 낚시",
     "낚시 중 [자동 낚시 켜기]",
-    `다른 탭을 봐도 ${sec(AUTO_FISH_EVERY_MS)}초에 1마리씩 낚아요. 하루 ${AUTO_FISH_DAILY_MAX}마리까지고, 직접 낚시까지 합치면 하루 ${DAILY_CATCH_MAX.fish}번까지예요. 직접 낚시는 놓치거나 찌를 거둬도 1번으로 세요. 한 번에 ${AUTO_FISH_MAX_MS / 3_600_000}시간까지 돌고, 움직이면 꺼져요. ${AUTO_RANK_NOTE}`,
+    `다른 탭을 봐도 낚아요. ${AUTO_PACE_NOTE} 하루 한도는 없어요. 한 번에 ${AUTO_FISH_MAX_MS / 3_600_000}시간까지 돌고, 움직이면 꺼져요. ${AUTO_RANK_NOTE}`,
   ],
   ["팔기", "물고기는 어부 영감, 채집물은 수집가에게", "희귀할수록 비싸요"],
-  ["도감", "왼쪽 아래 [도감]", `새 종을 처음 올리면 ${DEX_NEW_REWARD[1]}~${DEX_NEW_REWARD[5]}P를 받아요. 희귀할수록 많이 받아요. 오늘 한도를 넘으면 도감 창에서 나중에 받아요. 절반이나 전부 모으면 칭호도 받아요.`],
+  ["도감", "왼쪽 아래 [도감]", `새 종을 처음 올리면 ${DEX_NEW_REWARD[1]}~${DEX_NEW_REWARD[5]}P를 받아요. 희귀할수록 많이 받아요. 절반이나 전부 모으면 칭호도 받아요.`],
   // 11/15 수집 의뢰 (lib/forage/quests)
   [
     "수집 의뢰",
@@ -305,19 +305,17 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
                 <span className={styles.note}>{r.note}</span>
               </>,
               r.points ? `+${r.points}` : "설명대로",
-              r.dailyMax,
+              r.dailyMax === null ? "없음" : r.dailyMax,
             ])}
           />
           <Table
             head={["규칙", "내용"]}
             rows={[
-              ["하루 한도", `항목마다 위 표의 하루 최대까지 모여요. 모두 합쳐서는 ${won(DAILY_EARN_CAP)}P까지예요. 한국 시간 새벽 5시에 다시 차요.`],
-              ["접속 시간 보너스", `하루 한도와 따로 세요. 하루 ${STAY_BONUS_DAILY_MAX}P까지예요.`],
+              ["하루 한도", "놀아서 버는 포인트는 한도가 없어요. 헌화, 묘비, 받은 헌화와 좋아요만 위 표의 하루 최대가 있어요. 한국 시간 새벽 5시에 다시 세요."],
+              ["접속 시간 보너스", `${STAY_BONUS_EVERY_MINUTES}분 머물 때마다 생겨요. 오래 있을수록 계속 받아요.`],
               ["머무르기", `${PRESENCE_INTERVAL_MS / 60_000}분마다 받아요. 다른 창을 봐도 괜찮아요.`],
-              ["지갑", `${won(BALANCE_CAP)}P까지 담겨요`],
               ["출석", `마을에 ${ATTEND_STAY_TEXT} 머물면 그날 도장을 찍어요.`],
               ["이번 달 출석 보상", ATTEND_TIER_GUIDE],
-              ["한도에 걸리면", "알림 없이 더 쌓이지 않아요"],
               ["랭킹", "포인트, 사냥, 낚시, 꾸미기, 집 꾸미기, 헌화 순위가 있어요. 포인트 순위는 써도 줄지 않아요. 주간 순위는 월요일 새벽 5시에 새로 시작해요. 운영자는 순위에 안 들어가요."],
             ]}
           />
@@ -328,7 +326,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
           <Table head={["하는 일", "컴퓨터", "휴대폰"]} rows={HUNT_KEYS} />
           <ul className={styles.points}>
             <li>
-              {`사냥 포인트는 하루 ${won(earnRule("hunt").dailyMax)}P까지예요. 주운 장비나 물약을 판 값도 여기에 들어가요. 한도를 넘으면 EXP와 아이템만 받아요. 상점에서 산 장비를 되파는 건 한도와 상관없어요. 마을 곤충 채집은 따로 하루 ${won(earnRule("bugs").dailyMax)}P, 별자리 잇기는 하루 ${won(earnRule("stars").dailyMax)}P까지예요.`}
+              사냥, 곤충 채집, 별자리 잇기 포인트는 하루 한도 없이 받아요. 주운 장비나 물약을 판 값도 사냥 포인트에 들어가요.
             </li>
             <li>
               {`레벨 ${MAX_LEVEL}부터는 지옥 사냥터와 야근 빌딩에서 초월 레벨(★51~★100)을 올려요. 초월 레벨이 5 오를 때마다 능력치 포인트를 1개 받아요. 하루에 할 수 있는 판 수는 정해져 있지 않아요.`}

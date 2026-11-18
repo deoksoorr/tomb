@@ -1,6 +1,7 @@
 import { GOBLIN_GAP_MAX_MS, GOBLIN_GAP_MIN_MS, GOBLIN_LIFE_MS, GOBLIN_POINTS_MAX, GOBLIN_POINTS_MIN, ITEMS, itemById, itemName, type DyeSpecial, DYE_SPECIAL_NAMES } from "@tomb/protocol";
 import { DYE_TIERS, type DyeTier } from "@/lib/dye/palette";
 import { RARITY_LABEL, RARITY_WEIGHT, type Rarity } from "@/lib/forage/catalog";
+import { AUTO_CATCH_CHANCE, AUTO_FISH_EVERY_MS } from "@/lib/forage/auto";
 import { SEA_HIGH_TIDE_BIG } from "@/lib/forage/rules";
 import { SUNKEN_CHANCE, SUNKEN_CHANCE_AUTO } from "@/lib/forage/sunken";
 import { FEST_RARE_BOOST } from "@/lib/forage/quests/urgent";
@@ -163,6 +164,9 @@ export const perkRows = (group: "fish" | "forage"): string[][] => PERK_GRADES.ma
 export const forageFacts = () => ({
   sunken: pct(SUNKEN_CHANCE),
   sunkenAuto: pct(SUNKEN_CHANCE_AUTO),
+  /** 11/19 자동 낚시: 찌를 올리는 간격과 한 번에 걸릴 확률 (lib/forage/auto) */
+  autoEvery: `${Math.round(AUTO_FISH_EVERY_MS / 1000)}초`,
+  autoCatch: pct(AUTO_CATCH_CHANCE),
   highTide: pct(SEA_HIGH_TIDE_BIG),
   gatherDouble: pct(GATHER_DOUBLE),
   festBoost: `${FEST_RARE_BOOST}배`,

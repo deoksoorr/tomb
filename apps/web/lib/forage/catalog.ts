@@ -290,7 +290,7 @@ const node = (kind: NodeKind, where: Where, x: number, y: number): GatherNode =>
 const campNode = (kind: NodeKind, where: Where, x: number, y: number): GatherNode => ({ id: `q${kind[0]}${x}_${y}`, kind, where, x, y, map: "camp" });
 
 /**
- * 11/15 언젠가 캠핑장 채집 지점 (새 종은 없다 — 기존 종의 출현 장소만). 하루 한도·도감·피어나는 창은 마을과 같이 센다.
+ * 11/15 언젠가 캠핑장 채집 지점 (새 종은 없다 — 기존 종의 출현 장소만). 도감·피어나는 창은 마을과 같이 센다.
  * 숲 산책로·데크 둘레 숲 = 숲(forest), 데크 고리 안 풀밭 = 풀밭(meadow), 산꼭대기·큰 바위 둘레 = 언덕(hill).
  * game/camp/campLayout.test가 서 있을 수 있는 곳·물 밖·자리와 떨어짐을 본다 (나무는 이 자리를 비켜 선다)
  */
@@ -427,7 +427,7 @@ const NODE_BY_ID = new Map(GATHER_NODES.map((n) => [n.id, n]));
 export const gatherNodeById = (id: string): GatherNode | undefined => NODE_BY_ID.get(id);
 
 // ── NPC ── 물고기는 어부, 나머지는 수집가에게 판다 (NPC 앞에서만 — UI가 NPC 창에서만 판매를 연다)
-// 11/16 r11 사용자: 포구 시장을 뺐어요 → 바다 고기는 어부 영감, 갯벌에서 캔 것은 수집가 유령이 사요 (같은 판매 API·같은 하루 한도)
+// 11/16 r11 사용자: 포구 시장을 뺐어요 → 바다 고기는 어부 영감, 갯벌에서 캔 것은 수집가 유령이 사요 (같은 판매 API)
 export type NpcId = "fishmonger" | "collector";
 export type Npc = { id: NpcId; name: string; title: string; x: number; y: number; buys: readonly LifeCat[]; hello: string; map?: "sea"; where?: Where };
 export const NPCS: readonly Npc[] = [
@@ -462,8 +462,8 @@ export const buyerOf = (cat: LifeCat): Npc => NPCS.find((n) => !n.map && n.buys.
 // ── 숫자 ──
 /** 한 칸(종류)에 쌓을 수 있는 수 */
 export const STACK_MAX = 99;
-/** 하루에 잡을·캘 수 있는 수 (자동화 방지. 포인트는 따로 EARN_RULES 한도) */
-export const DAILY_CATCH_MAX = { fish: 150, gather: 200 } as const;
+// 11/19 하루에 잡을·캘 수 있는 수 한도(물고기 150·채집 200)는 없앴다. 자동화 막이는 시간당 시작 수(service FORAGE_STARTS_PER_HOUR)·
+// 티켓 검사·감기 최소 시간·채집 지점 창(한 지점 10분에 한 번)이 한다
 
 // ── 도감 칸 ── 잡는 것(LifeCat) + 별자리 + 11/16 몬스터. 별자리·몬스터는 별자리 잇기·사냥으로 모으는 도감 표시용 칸이라
 // 가방·NPC 판매·상점 값과는 상관없다 (LifeCat을 넓히지 않는다 — 판매·가방 코드는 LifeCat·SPECIES만 본다).

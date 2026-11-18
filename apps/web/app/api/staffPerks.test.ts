@@ -113,8 +113,6 @@ describe("운영자 출석·접속 보너스 없음", () => {
     expect(await errOf(stayBonus.POST(call("/api/me/stay-bonus", { method: "POST", visitor: op })))).toEqual({ status: 403, code: "STAFF_NO_REWARD" });
     const { me } = await bodyOf<{ me: Me; earned: number }>(attend.POST(call("/api/me/attend", { visitor: op, body: {} })));
     expect(me.attendance).toMatchObject({ today: false, streak: 0, bonusClaimed: 0 });
-    expect(me.earnedBy?.attend).toBeUndefined();
-    expect(me.earnedBy?.stayBonus).toBeUndefined();
   });
 
   it("입장 때 출석 처리는 운영자·일반 모두 0P", async () => {

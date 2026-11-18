@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { earnRule } from "@/lib/economy";
+import { WALLET_MAX } from "@/lib/economy";
 import { DEX_REWARD, dexRewardOf, dexTitleNeed, GATHER_NODES, gatherNodeById, speciesById, speciesOf } from "@/lib/forage/catalog";
 import { BUG_DIFFICULTY, BUG_ROUND_SEC, BUG_STATS, reelMinMs } from "@/lib/forage/rules";
 import { payNewDex } from "@/lib/forage/dexReward";
@@ -144,12 +144,11 @@ describe("낚시", () => {
     const before = (await state(v)).today.fish;
     const miss = await body<ReelResponse>(await reel.POST(call("/x", v, { ticket: c3.ticket, ok: false })));
     expect(miss.result).toBeNull();
-    // 11/18 보안: 놓쳐도 오늘 낚시 1번
-    expect(miss.state.today.fish).toBe(before + 1);
-    // 11/18 보안: 끝내지 않은 찌를 버리고 다시 던져도 1번 (그림자만 보고 고르기 막기)
+    // 11/19 하루 낚시 수 한도가 없어져 놓친 것·버린 찌는 오늘 낚은 수에 세지 않는다 (그림자만 보고 고르기는 시간당 시작 수가 막는다)
+    expect(miss.state.today.fish).toBe(before);
     await cast.POST(call("/x", v, { spot: PIER }));
     await cast.POST(call("/x", v, { spot: PIER }));
-    expect((await state(v)).today.fish).toBe(before + 2);
+    expect((await state(v)).today.fish).toBe(before);
     // 너무 오래
     const c4 = await body<CastResponse>(await cast.POST(call("/x", v, { spot: PIER })));
     later(c4.biteInMs + 120_000);
@@ -226,32 +225,31 @@ describe("NPC 판매", () => {
     const value = speciesById("f_carp")!.price * 2 + speciesById("f_koi")!.price;
     expect(s).toMatchObject({ sold: { f_carp: 2, f_koi: 1 }, earned: value, capped: false });
     expect(s.state.bag).toEqual({ h_mugwort: 1 });
-    expect(s.state.today.fishP).toBe(value);
     expect(s.me.points).toBe(value);
     expect(await errCode(await sell.POST(call("/x", v, { npc: "fishmonger", items: { f_carp: 1 } })))).toBe("NOTHING_TO_SELL");
   });
 
-  it("오늘 한도까지만 팔고(비싼 것부터), 나머지는 가방에 남는다. 그 사이 한도가 줄면 못 받은 만큼 되돌린다", async () => {
+  it("11/19 하루 판매 한도 없음: 예전 한도(300P)를 넘는 값도 한 번에 다 판다", async () => {
     const v = await newVisitor();
     const day = kstDay(realNow());
-    const cap = earnRule("fish").dailyMax;
+    await getForageStore().grant(v.id, day, "fish", Array.from({ length: 20 }, () => ({ id: "f_koi", size: 500 })), 99);
+    const s = await body<SellResponse>(await sell.POST(call("/x", v, { npc: "fishmonger", items: { f_koi: 20 } })));
+    const value = speciesById("f_koi")!.price * 20;
+    expect(value).toBeGreaterThan(300);
+    expect(s).toMatchObject({ sold: { f_koi: 20 }, earned: value, capped: false });
+    expect(s.me.points).toBe(value);
+  });
+
+  it("지갑이 꽉 찰 때만 덜 판다 (비싼 것부터 지갑 여유 안에서, 나머지는 가방에)", async () => {
+    const v = await newVisitor();
+    const day = kstDay(realNow());
     const store = getForageStore();
     await store.grant(v.id, day, "fish", [{ id: "f_koi", size: 500 }, { id: "f_carp", size: 1 }, { id: "f_carp", size: 1 }], 99);
-    // 낚시 판매 기록상 한도까지 10P 남음 → 금잉어(32)는 못 팔고 잉어(6) 1마리만
-    await store.addDay(v.id, day, "fishP", cap - 10);
+    // 지갑 여유 10P → 금잉어(32)는 못 팔고 잉어(6) 1마리만
+    await getAccounts().earn(v.id, "fish", day, { amount: WALLET_MAX - 10 });
     const s1 = await body<SellResponse>(await sell.POST(call("/x", v, { npc: "fishmonger", items: { f_koi: 1, f_carp: 2 } })));
     expect(s1).toMatchObject({ sold: { f_carp: 1 }, earned: 6, capped: true });
     expect(s1.state.bag).toEqual({ f_koi: 1, f_carp: 1 });
-
-    // 계정 쪽 적립 한도가 먼저 찼다 (다른 탭에서 판 경우 등): 판매 기록은 비어 있지만 earnPoints가 덜 준다 → 못 받은 만큼 되돌림
-    const w = await newVisitor();
-    await store.grant(w.id, day, "fish", [{ id: "f_carp", size: 1 }, { id: "f_carp", size: 1 }, { id: "f_carp", size: 1 }], 99);
-    await getAccounts().earn(w.id, "fish", day, { amount: cap - 7 });
-    const s2 = await body<SellResponse>(await sell.POST(call("/x", w, { npc: "fishmonger", items: { f_carp: 3 } })));
-    expect(s2.earned).toBe(7);
-    expect(s2.sold).toEqual({ f_carp: 1 });
-    expect(s2.capped).toBe(true);
-    expect(s2.state.bag).toEqual({ f_carp: 2 });
   });
 });
 
@@ -278,7 +276,6 @@ describe("도감", () => {
     expect(r.dex!.me!.points).toBe(pts);
     expect(await pointsOf(v.id)).toBe(pts);
     expect(r.state.reward).toEqual({ pending: {}, got: { fish: pts } });
-    expect(r.state.today.dexP).toBe(pts);
     // 같은 종을 또 잡으면 보상 없음 (같은 종이 나올 때까지 몇 번)
     for (let i = 0; i < 40; i++) {
       const again = await catchOne(v);
@@ -289,11 +286,10 @@ describe("도감", () => {
     }
   });
 
-  it("오늘 도감 한도에 걸린 만큼은 받을 보상으로 쌓이고, 다음 날 [도감 보상 받기]로 한도 안에서 — 동시에 눌러도 한 번만", async () => {
+  it("11/19 지갑이 꽉 차 못 받은 만큼만 받을 보상으로 쌓이고, 여유가 생기면 [도감 보상 받기]로 — 동시에 눌러도 한 번만", async () => {
     const v = await newVisitor();
-    const cap = earnRule("dex").dailyMax;
     await state(v);
-    await getAccounts().earn(v.id, "dex", kstDay(realNow()), { amount: cap });
+    await getAccounts().earn(v.id, "dex", kstDay(realNow()), { amount: WALLET_MAX });
     const before = await pointsOf(v.id);
     const r = await catchOne(v);
     const pts = dexRewardOf(r.result!.id);
@@ -301,16 +297,14 @@ describe("도감", () => {
     expect(r.dex!.me).toBeUndefined();
     expect(await pointsOf(v.id)).toBe(before);
     expect(r.state.reward.pending).toEqual({ fish: pts });
-    // 오늘은 받아도 한도라 그대로 남는다
-    expect(await errCode(await dexPay.POST(call("/x", v, { cat: "fish" })))).toBe("DAILY_CAP");
+    // 지갑이 꽉 차 있으면 받아도 그대로 남는다
+    expect(await errCode(await dexPay.POST(call("/x", v, { cat: "fish" })))).toBe("WALLET_FULL");
     expect((await state(v)).reward.pending).toEqual({ fish: pts });
     expect(await errCode(await dexPay.POST(call("/x", v, { cat: "bug" })))).toBe("NOTHING_TO_CLAIM");
     expect((await dexPay.POST(call("/x", v, { cat: "nope" }))).status).toBe(400);
 
-    // 다음 날: 1P만 남은 상태에서 동시에 다섯 번 → 한 번만 1P, 나머지는 남는다
-    later(86_400_000);
-    const day2 = kstDay(Date.now());
-    await getAccounts().earn(v.id, "dex", day2, { amount: cap - 1 });
+    // 1P만 쓴 상태(여유 1P)에서 동시에 다섯 번 → 한 번만 1P, 나머지는 남는다
+    expect(await getAccounts().spend(v.id, 1, "test", Date.now())).not.toBeNull();
     const mid = await pointsOf(v.id);
     const res = await Promise.all(Array.from({ length: 5 }, () => dexPay.POST(call("/x", v, { cat: "fish" }))));
     const ok = res.filter((x) => x.status === 200);
@@ -321,8 +315,8 @@ describe("도감", () => {
     expect((await state(v)).reward).toEqual({ pending: { fish: pts - 1 }, got: { fish: 1 } });
     vi.restoreAllMocks();
 
-    // 그다음 날: 남은 것을 모두 (동시에 눌러도 합은 한 번)
-    later(2 * 86_400_000);
+    // 여유가 넉넉해지면 남은 것을 모두 (동시에 눌러도 합은 한 번)
+    expect(await getAccounts().spend(v.id, 1000, "test", Date.now())).not.toBeNull();
     const end = await pointsOf(v.id);
     const res3 = await Promise.all(Array.from({ length: 4 }, () => dexPay.POST(call("/x", v, { cat: "fish" }))));
     const ok3 = res3.filter((x) => x.status === 200);
@@ -363,12 +357,11 @@ describe("도감", () => {
     expect(g![0].isNew).toBe(true);
     expect((await state(v)).reward.pending).toEqual({ fish: owed + dexRewardOf(extra.id) });
 
-    // 받기: 오늘 한도(300) 안에서
-    const cap = earnRule("dex").dailyMax;
+    // 받기: 11/19 하루 한도 없이 한 번에 다
     const p = await body<DexPayResponse>(await dexPay.POST(call("/x", v, { cat: "fish" })));
     const all = owed + dexRewardOf(extra.id);
-    expect(p.earned).toBe(Math.min(all, cap));
-    expect(p.left).toBe(all - Math.min(all, cap));
+    expect(p.earned).toBe(all);
+    expect(p.left).toBe(0);
     expect(p.me.points).toBe(before + p.earned);
     expect(p.state.reward.got.fish).toBe(60 + p.earned);
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { CHAMP_BOARDS, CHAMP_HAT, CHAMP_TITLE, champBitsOf, champHatOf, DIR, itemName, type ChampBoard } from "@tomb/protocol";
-import { champBoardPerkLines } from "@/lib/champPerks";
+import { CHAMP_BADGE_ONLY, champBoardPerkLines } from "@/lib/champPerks";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { OutfitStage, STAGE_H, STAGE_W } from "../shop/outfitStage";
 import ItemIcon from "../ui/ItemIcon";
@@ -77,13 +77,13 @@ export function ChampReward({ board, points }: { board: ChampBoard; points: numb
 
 /**
  * 11/17 1위 1주일 혜택 상자 (레이스 칸들 아래, 명예의 전당 위): 랭킹마다 한 칸, 순위 칸과 같은 3열.
- * 개인 혜택이고 혜택으로 더 번 포인트는 레이스 점수에 들지 않는다는 안내를 맨 위에 (lib/champPerks 계산 규칙 3)
+ * 1위 한 사람만 받는 개인 혜택이라는 안내를 맨 위에 (11/19 포인트 혜택은 없앴다 — lib/champPerks)
  */
 export function ChampPerksBox() {
   return (
     <section className={styles.hallBox} aria-label="1위 1주일 혜택">
       <h3 className={styles.title}>1위가 받는 1주일 혜택</h3>
-      <p className={styles.perkNote}>1위 한 사람만 다음 주 월요일 새벽 5시부터 1주일 동안 받는 개인 혜택이에요. 혜택으로 더 받은 포인트는 레이스 점수에 들어가지 않아요.</p>
+      <p className={styles.perkNote}>1위 한 사람만 다음 주 월요일 새벽 5시부터 1주일 동안 받는 개인 혜택이에요.</p>
       <div className={`${styles.boards} ${styles.perkGrid}`}>
         {CHAMP_BOARDS.map((board) => (
           <div key={board} className={styles.perkCol}>
@@ -91,7 +91,7 @@ export function ChampPerksBox() {
               {CHAMP_TITLE[board]}
             </span>
             <ul>
-              {champBoardPerkLines(board).map((line) => (
+              {(champBoardPerkLines(board).length ? champBoardPerkLines(board) : [CHAMP_BADGE_ONLY]).map((line) => (
                 <li key={line}>{line}</li>
               ))}
             </ul>

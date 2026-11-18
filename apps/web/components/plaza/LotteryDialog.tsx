@@ -189,7 +189,7 @@ export default function LotteryDialog({ onClose }: { onClose: () => void }) {
                 `판매액의 ${LOTTERY_SALES_PCT}%가 상금이 되고, 매주 기본 상금 ${fmt(LOTTERY_BASE_PRIZE)}P가 더해져요.`,
                 `1등은 상금의 ${LOTTERY_SPLIT[0]}%, 2등은 ${LOTTERY_SPLIT[1]}%, 3등은 ${LOTTERY_SPLIT[2]}%를 받아요.`,
                 `산 사람이 셋보다 적으면 남은 상금은 다음 주로 넘어가요. 넘어가는 상금과 판매 몫은 합쳐서 ${fmt(LOTTERY_CAP)}P까지예요.`,
-                "당첨금은 선물함으로 와요. 하루 포인트 한도나 랭킹에는 들어가지 않아요.",
+                "당첨금은 선물함으로 와요. 랭킹에는 들어가지 않아요.",
               ]}
             />
           </InfoCard>

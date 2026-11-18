@@ -192,7 +192,6 @@ export default function WishDialog({ onClose }: { onClose: () => void }) {
             tips={[
               `${pct(WISH_BONUS_SPARKLE + WISH_BONUS_JACKPOT)} 확률로 동전이 튀어 돌아와요. 그중 ${pct(WISH_BONUS_JACKPOT)}는 대박이라 던진 것의 두 배에 5P를 더 받아요.`,
               "운세는 동전 크기와 상관없이 같은 확률로 나와요. 1P로도 충분해요.",
-              "돌아온 포인트는 하루 포인트 한도에 들어가요. 한도가 차면 줄거나 0이 될 수 있어요.",
               `던진 횟수는 한국 시간 ${DAY_RESET_TEXT}에 다시 채워져요.`,
             ]}
           />

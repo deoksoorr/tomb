@@ -1,12 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { earnGaugeRows } from "./earnGauge";
-import { DAILY_EARN_CAP, earnRule, type EarnSource } from "./economy";
-import { dayStartMs, gameDay } from "./gameDay";
+import { earnRule, NO_LIMIT, WALLET_MAX, type EarnSource } from "./economy";
 import {
   BOOSTABLE_SOURCES,
-  boostedTotalCap,
   earnBoostAt,
-  earnLimits,
+  earnTerms,
   NO_BOOST,
   normalizePointEvent,
   paidOf,
@@ -35,7 +32,8 @@ const SAT_NOON = Date.UTC(2026, 10, 14, 3);
 const MON_5 = Date.UTC(2026, 10, 15, 20);
 const ALL = [...BOOSTABLE_SOURCES];
 const ev = (o: Partial<PointEvent> = {}): PointEvent => ({ startAt: SAT_NOON - H, endAt: MON_5, sources: ALL, mult: M, ...o });
-const max = (s: EarnSource) => earnRule(s).dailyMax;
+/** 횟수 규칙이 남은 항목의 하루 최대 */
+const max = (s: EarnSource) => earnRule(s).dailyMax ?? NO_LIMIT;
 
 describe("포인트 배수 이벤트 규칙 (lib/pointEvent)", () => {
   it("꺼져 있거나 아직 시작 전이면 그대로", () => {
@@ -62,24 +60,19 @@ describe("포인트 배수 이벤트 규칙 (lib/pointEvent)", () => {
     expect(normalizePointEvent({ startAt: 1, mult: 7 })?.mult).toBe(2);
   });
 
-  it("켜져 있는 동안은 고른 항목만 적립과 한도가 배수", () => {
-    const e = ev({ sources: ["hunt", "stars"] });
+  it("켜져 있는 동안은 고른 항목만 적립이 배수, 횟수 규칙이 남은 항목은 하루 최대도 배수 (11/19 나머지는 한도 없음)", () => {
+    const e = ev({ sources: ["hunt", "flower"] });
     expect(pointEventOn(e, SAT_NOON)).toBe(true);
     const b = earnBoostAt(e, SAT_NOON);
-    expect(earnLimits(b, "hunt")).toMatchObject({ points: M, caps: M });
-    expect(earnLimits(b, "fish")).toMatchObject({ points: 1, caps: 1 });
-    // 하루 전체 한도는 늘어난 항목 몫만큼만
-    expect(boostedTotalCap(b)).toBe(DAILY_EARN_CAP + (max("hunt") + max("stars")) * (M - 1));
-  });
-
-  it("전부 고르면 하루 전체 한도도 배수 (접속 시간 보너스는 전체 한도와 따로라 더하지 않는다)", () => {
-    expect(boostedTotalCap(earnBoostAt(ev(), SAT_NOON))).toBe(DAILY_EARN_CAP * M);
-    expect(boostedTotalCap(earnBoostAt(ev({ sources: ["stayBonus"] }), SAT_NOON))).toBe(DAILY_EARN_CAP);
+    expect(earnTerms(b, "hunt")).toEqual({ m100: M * 100, dailyMax: NO_LIMIT });
+    expect(earnTerms(b, "fish")).toEqual({ m100: 100, dailyMax: NO_LIMIT });
+    expect(earnTerms(b, "flower")).toEqual({ m100: M * 100, dailyMax: max("flower") * M });
+    expect(earnTerms(b, "gotFlower")).toEqual({ m100: 100, dailyMax: max("gotFlower") });
   });
 
   it("도중에 끝나면 적립과 한도 모두 그 자리에서 원래대로", () => {
     const e = ev({ sources: ["hunt"], endAt: SAT_NOON + H });
-    expect(earnLimits(earnBoostAt(e, SAT_NOON + H - 1), "hunt")).toMatchObject({ points: M, caps: M });
+    expect(earnTerms(earnBoostAt(e, SAT_NOON + H - 1), "hunt").m100).toBe(M * 100);
     expect(earnBoostAt(e, SAT_NOON + H)).toEqual(NO_BOOST);
     expect(earnBoostAt(e, SAT_NOON + 2 * H)).toEqual(NO_BOOST);
   });
@@ -91,7 +84,7 @@ describe("포인트 배수 이벤트 규칙 (lib/pointEvent)", () => {
   it("늘어난 적립이 원래 값으로 얼마어치인지 (paidOf)", () => {
     expect(paidOf(10, 10, 1)).toBe(10);
     expect(paidOf(20, 10, 2)).toBe(10);
-    // 한도에 걸려 일부만: 15P 들어옴 = 8어치 (올림, 받은 쪽이 손해 보지 않게)
+    // 지갑이 차서 일부만: 15P 들어옴 = 8어치 (올림, 받은 쪽이 손해 보지 않게)
     expect(paidOf(15, 10, 2)).toBe(8);
     expect(paidOf(30, 10, 3)).toBe(10);
     expect(paidOf(0, 10, 2)).toBe(0);
@@ -119,18 +112,6 @@ describe("포인트 배수 이벤트 규칙 (lib/pointEvent)", () => {
     expect(pointEventListText(["hunt", "bugs"])).toBe("사냥터, 곤충 채집이");
     expect(pointEventListText(["bugs", "hunt"])).toBe("곤충 채집, 사냥터가");
   });
-
-  it("오늘 포인트 게이지는 고른 항목만 한도가 배수이고 표시가 붙는다", () => {
-    const b = earnBoostAt(ev({ sources: ["hunt", "stayBonus"] }), SAT_NOON);
-    const v = earnGaugeRows(0, { attend: 10, hunt: 5 }, b);
-    expect(v.total.max).toBe(DAILY_EARN_CAP + max("hunt") * (M - 1));
-    const hunt = v.main.find((r) => r.source === "hunt")!;
-    expect(hunt).toMatchObject({ max: max("hunt") * M, boosted: M });
-    expect(v.main.find((r) => r.source === "fish")!).toMatchObject({ max: max("fish") });
-    expect(v.main.find((r) => r.source === "fish")!.boosted).toBeUndefined();
-    expect(v.separate.find((r) => r.source === "attend")!.max).toBe(max("attend"));
-    expect(v.separate.find((r) => r.source === "stayBonus")!.max).toBe(max("stayBonus") * M);
-  });
 });
 
 describe("포인트 배수 이벤트 적립 (메모리 저장소)", () => {
@@ -148,36 +129,22 @@ describe("포인트 배수 이벤트 적립 (메모리 저장소)", () => {
     expect(await earnBoost()).toEqual(NO_BOOST);
   });
 
-  it("고른 항목은 적립과 항목 한도가 배수, 고르지 않은 항목은 그대로", async () => {
+  it("고른 항목은 적립이 배수, 고르지 않은 항목은 그대로 (한도 없는 항목은 얼마든 들어온다)", async () => {
     const accounts = fresh();
     const day = kstDay();
-    await on(["hunt"]);
-    expect(await accounts.earn("a", "hunt", day, { amount: max("hunt") })).toBe(max("hunt") * M);
-    expect(await accounts.earn("a", "hunt", day, { amount: 10 })).toBe(0);
+    await on(["hunt", "gotFlower"]);
+    expect(await accounts.earn("a", "hunt", day, { amount: 5_000 })).toBe(5_000 * M);
+    expect(await accounts.earn("a", "hunt", day, { amount: 10 })).toBe(10 * M);
     expect(await accounts.earn("a", "flower", day)).toBe(earnRule("flower").points);
-    expect(await accounts.earn("a", "fish", day, { amount: 100_000 })).toBe(max("fish"));
-    expect((await accounts.get("a", day, Date.now())).earnedBy.hunt).toBe(max("hunt") * M);
+    expect(await accounts.earn("a", "fish", day, { amount: 100_000 })).toBe(100_000);
+    // 횟수 규칙이 남은 항목은 하루 최대가 배수
+    expect(await accounts.earn("a", "gotFlower", day, { amount: 100 })).toBe(max("gotFlower") * M);
+    expect((await accounts.get("a", day, Date.now())).todayEarned).toBe(5_000 * M + 10 * M + earnRule("flower").points + 100_000 + max("gotFlower") * M);
   });
 
   it("3배도 된다", async () => {
     await on(["flower"], 3);
     expect(await fresh().earn("a3", "flower", kstDay())).toBe(earnRule("flower").points * 3);
-  });
-
-  it("하루 전체 한도는 늘어난 항목 몫만큼만 늘어난다", async () => {
-    const day = kstDay();
-    const all = ["hunt", "bugs", "stars", "fish", "gather", "dex", "goblin", "wish", "presence", "flower", "bury", "gotFlower", "houseLike"] as const;
-    const fill = async (accounts: MemoryAccounts, id: string) => {
-      let total = 0;
-      for (const r of all) total += await accounts.earn(id, r, day, { amount: 100_000 });
-      return total;
-    };
-    await on(["hunt", "stars"]);
-    expect(await fill(fresh(), "b")).toBe(DAILY_EARN_CAP + (max("hunt") + max("stars")) * (M - 1));
-    await on();
-    const accounts = fresh();
-    expect(await fill(accounts, "b2")).toBe(DAILY_EARN_CAP * M);
-    expect((await accounts.get("b2", day, Date.now())).todayEarned).toBe(DAILY_EARN_CAP * M);
   });
 
   it("이벤트가 끝나면 한도와 적립 모두 원래대로", async () => {
@@ -213,18 +180,16 @@ describe("포인트 배수 이벤트 적립 (메모리 저장소)", () => {
     await on(["fish"]);
     const r = await earnPoints("pe-acct-1", "fish", 30);
     expect(r).toMatchObject({ earned: 30 * M, paid: 30 });
-    expect(r.me.earnBoost).toEqual({ mult: M, on: ["fish"], caps: ["fish"] });
     // 고르지 않은 항목은 그대로
     expect(await earnPoints("pe-acct-1", "gather", 30)).toMatchObject({ earned: 30, paid: 30 });
     await setPointEvent(null);
     const r2 = await earnPoints("pe-acct-1", "fish", 30);
     expect(r2).toMatchObject({ earned: 30, paid: 30 });
-    expect(r2.me.earnBoost).toBeUndefined();
   });
 
-  it("지갑 상한은 그대로", async () => {
+  it("지갑 상한(사실상 없음)은 그대로", async () => {
     const accounts = fresh();
-    (accounts as unknown as { acct(id: string): { points: number } }).acct("f").points = 99_990;
+    (accounts as unknown as { acct(id: string): { points: number } }).acct("f").points = WALLET_MAX - 9;
     await on();
     expect(await accounts.earn("f", "hunt", kstDay(), { amount: 100 })).toBe(9);
   });

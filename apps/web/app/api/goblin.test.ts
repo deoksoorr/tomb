@@ -58,14 +58,14 @@ describe("/api/goblin", () => {
     expect((await claim(a, forA)).status).toBe(200);
   });
 
-  it("caps at the daily goblin limit (150P)", async () => {
+  it("11/19 no daily goblin limit: every signed goblin pays in full", async () => {
     const v = await newVisitor();
     let total = 0;
     for (let i = 0; i < 3; i++) {
       const g = await signGrant(SECRET, { kind: "goblin", visitorId: v.visitorId, points: 100, nonce: `gCap${i}xx`, exp: exp() });
       total += ((await (await claim(v, g)).json()) as GoblinClaimResponse).earned;
     }
-    expect(total).toBe(150);
+    expect(total).toBe(300);
   });
 });
 

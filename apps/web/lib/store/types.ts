@@ -1,4 +1,4 @@
-import type { ChampBoard, CosmeticSlot } from "@tomb/protocol";
+import type { CosmeticSlot } from "@tomb/protocol";
 import type { AttendClaim, CalendarMonthRecord } from "../calendar";
 import type { EarnSource } from "../economy";
 import type { EarnBoost } from "../pointEvent";
@@ -123,7 +123,7 @@ export const PRESENCE_TICK_MS = 10 * 60_000;
  * 같은 화면(sid)에서 온 연달은 기록이고 직전 기록 뒤 PRESENCE_CATCHUP_WINDOW_MS 안이면, 흐른 시간만큼(10분 단위, 30초 여유)
  * 최대 PRESENCE_CATCHUP_MAX_TICKS번을 한 번에 센다. 그 밖(새 화면·오래 끊김·sid 없는 옛 화면)은 지금처럼 1번만.
  *  - 시각은 서버 시각만 쓴다. 다음 기준 시각은 센 만큼만 앞으로 (남은 몇 분은 다음 기록으로 넘어간다, 지금보다 앞서지 않는다)
- *  - 하루 포인트 한도·지갑 상한은 그대로 (몰아서 받아도 한도 안에서만). 머문 기록(출석 도장·접속 보너스)도 같은 수만큼
+ *  - 지갑 상한은 그대로. 머문 기록(출석 도장·접속 보너스)도 같은 수만큼
  *  - 창을 닫았다 다시 열면 sid가 바뀌어 그 사이는 세지 않는다. sid를 꾸며 보내도 10분마다 부르는 것과 같은 몫 이상은 못 받는다
  */
 export const PRESENCE_CATCHUP_MAX_TICKS = 3;
@@ -146,10 +146,9 @@ export function presenceCatchup(last: number, now: number, sameSid: boolean): { 
 
 /**
  * 적립 선택값: amount(없으면 항목 기본 점수), ipHash(11/18부터 쓰지 않는다 — 같은 IP 합계 한도 없음),
- * boost(포인트 배수 이벤트 — 고른 항목이면 적립·항목 한도·항목 한도가 배수, 하루 전체 한도는 늘어난 몫만큼. 없으면 저장소가 지금 설정을 읽는다, lib/pointEvent earnLimits),
- * champ(11/17 지금 1위인 랭킹 — 1위 1주일 혜택의 %·한도, 레이스에서 빼는 몫. 없으면 저장소가 지난주 1위 기록을 읽는다, lib/champPerks earnTerms)
+ * boost(포인트 배수 이벤트 — 고른 항목이면 적립이 배수, 횟수 규칙이 남은 항목은 하루 최대도 배수. 없으면 저장소가 지금 설정을 읽는다, lib/pointEvent earnTerms)
  */
-export type EarnOptions = { amount?: number; ipHash?: string; boost?: EarnBoost; champ?: readonly ChampBoard[] };
+export type EarnOptions = { amount?: number; ipHash?: string; boost?: EarnBoost };
 export type Profile = { name?: string | null; color?: string | null; body?: string | null };
 export type RankEntry = { accountId: string; name: string | null; points: number; rank: number };
 
@@ -178,8 +177,6 @@ export type AccountRecord = {
   graves: string[];
   /** 오늘 쌓은 포인트 */
   todayEarned: number;
-  /** 오늘 항목별로 쌓은 포인트 (0인 항목은 없음). 오늘 적립 해시를 그대로 읽는다 — 내 정보의 항목별 게이지 */
-  earnedBy: Partial<Record<EarnSource, number>>;
   /** 안 읽은 내 소식 수 (보관 중인 최근 50개 안에서) */
   activityUnread: number;
   /** 마지막 닉네임 변경 시각 (0 = 바꾼 적 없음)과 지금까지 바꾼 횟수 */
@@ -226,16 +223,16 @@ export type PresenceTick = {
 
 export interface AccountStore {
   get(id: string, day: string, now: number): Promise<AccountRecord>;
-  /** 항목별 하루 한도·하루 전체 한도·지갑 한도 안에서 적립하고 실제 쌓인 점수를 돌려준다 (0 = 한도). 포인트 배수 이벤트로 고른 항목이면 늘어난 점수·한도로 */
+  /** 횟수 규칙이 남은 항목의 하루 최대·지갑 상한 안에서 적립하고 실제 쌓인 점수를 돌려준다 (0 = 막힘). 포인트 배수 이벤트로 고른 항목이면 늘어난 점수로 */
   earn(id: string, source: EarnSource, day: string, opts?: EarnOptions): Promise<number>;
   /** 원자적 차감. 잔액이 모자라면 null, 아니면 남은 잔액. reason은 계정의 최근 사용 기록(최대 100개)에 남는다 */
   spend(id: string, amount: number, reason: string, now: number): Promise<number | null>;
   /**
    * 돌려주기 (되팔기·결제 뒤 실패 보상): 잔액만 늘린다 (지갑 상한에서 잘림). 적립이 아니므로
-   * 하루 적립 한도·모은 포인트·랭킹과 무관하다. reason은 사용 기록에 남는다. 새 잔액을 돌려준다
+   * 횟수 규칙·모은 포인트·랭킹과 무관하다. reason은 사용 기록에 남는다. 새 잔액을 돌려준다
    */
   refund(id: string, amount: number, reason: string, now: number): Promise<number>;
-  /** 머무르기: 직전 지급 후 PRESENCE_MIN_GAP_MS가 지났으면 적립(한도 안에서). 너무 이르면 null */
+  /** 머무르기: 직전 지급 후 PRESENCE_MIN_GAP_MS가 지났으면 적립. 너무 이르면 null */
   presence(id: string, day: string, now: number): Promise<number | null>;
   /**
    * presence와 같은 적립 + 화면이 바로 쓸 값(적립 뒤 잔액·오늘 쌓은 포인트·오늘 머문 기록 수)을 같은 명령 하나로.
@@ -246,9 +243,9 @@ export interface AccountStore {
   appearance(id: string, now: number): Promise<Pick<AccountRecord, "name" | "color" | "body" | "equipped">>;
   /**
    * 접속 시간 보너스 받기 (원자적): 오늘 머문 기록으로 열린 구간 중 아직 안 받은 구간을 한꺼번에 받는다.
-   * 받을 구간이 없으면 null. 받은 구간은 하루 상한(DAILY_EARN_CAP)에 막혀 덜 들어와도 받은 것으로 친다
+   * 받을 구간이 없으면 null. 받은 구간은 지갑이 가득 차 덜 들어와도 받은 것으로 친다
    */
-  /** bonus = 11/16 단 칭호의 머무르기 보상 비율 (구간 보너스 × (1 + bonus), 하루 상한은 그대로 — lib/stayBonus stayBonusAmounts) */
+  /** bonus = 11/16 단 칭호의 머무르기 보상 비율 (구간 보너스 × (1 + bonus) — lib/stayBonus stayBonusAmounts) */
   claimStayBonus(id: string, day: string, bonus?: number): Promise<{ earned: number; count: number } | null>;
   /**
    * 모은 포인트 상위 limit명 + me의 순위(없으면 null). week(그 주 월요일 YYYYMMDD)를 주면 그 주에 모은 포인트 순위.
@@ -299,7 +296,7 @@ export interface AccountStore {
   /**
    * 오늘 칸 받기 (원자적): 오늘 이미 받았으면 "already"(달력 개편 전 자동 출석 포함), 머문 기록이 needTicks보다
    * 적으면 "stay". 받으면 연속 일수를 갱신하고 도장을 찍은 뒤 출석·7일 연속·한 달 개근(그달 monthDays일을 모두
-   * 찍었을 때 한 번) 포인트를 준다. 달력 보상은 하루 전체 한도(DAILY_EARN_CAP)에 막히지 않는다 (항목 한도·지갑 한도는 지킨다).
+   * 찍었을 때 한 번) 포인트를 준다. 달력 보상은 항목 하루 최대·지갑 상한을 지킨다.
    */
   claimAttend(id: string, ipHash: string, day: string, yesterday: string, monthDays: number, needTicks: number): Promise<AttendClaim>;
   /**
@@ -388,7 +385,7 @@ export interface AccountStore {
    * 11/18 mustExist(수정): 묘비가 묘역에 없으면 디자인권을 쓰지 않고 "gone"
    */
   putGraveUsing(id: string, itemId: string, grave: Grave, mustExist?: boolean): Promise<boolean | "gone">;
-  /** 관리자 포인트 조정. 0~BALANCE_CAP으로 자르고 하루 적립 한도와는 무관. 지갑만 바뀐다 (모은 포인트·포인트 랭킹엔 넣지 않는다). 없는 계정이면 null */
+  /** 관리자 포인트 조정. 0~WALLET_MAX로 자르고 횟수 규칙과는 무관. 지갑만 바뀐다 (모은 포인트·포인트 랭킹엔 넣지 않는다). 없는 계정이면 null */
   adjustPoints(id: string, delta: number): Promise<number | null>;
   addGrave(id: string, graveId: string): Promise<void>;
   removeGrave(id: string, graveId: string): Promise<void>;

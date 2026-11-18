@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { DIFFICULTIES, DIFFS } from "@/lib/rpg/catalog";
 import { SG_CHEST_CHANCE } from "@/lib/rpg/setGearRoll";
-import { chestRows, cosDaysRows, cosTierRows, dyeRows, enhanceRows, gearAtLeastOne, gradeBands, huntRows, lotteryAny, pct, pieceRows, potionRows, rarityRows, setGearLongRun, wishRows, xmasRows } from "./oddsData";
+import { AUTO_CATCH_CHANCE, AUTO_FISH_EVERY_MS } from "@/lib/forage/auto";
+import { chestRows, cosDaysRows, cosTierRows, dyeRows, enhanceRows, forageFacts, gearAtLeastOne, gradeBands, huntRows, lotteryAny, pct, pieceRows, potionRows, rarityRows, setGearLongRun, wishRows, xmasRows } from "./oddsData";
 
 const sum = (rows: string[][], col: number) => rows.reduce((n, r) => n + Number(r[col].replace("%", "")), 0);
 
@@ -21,6 +22,11 @@ describe("확률 안내 숫자", () => {
       expect(gearAtLeastOne(d)).toBeGreaterThanOrEqual(DIFFS[d].bossDropChance);
       expect(gearAtLeastOne(d)).toBeLessThan(1);
     }
+  });
+
+  it("자동 낚시 숫자는 규칙 상수에서 읽는다 (11/19 30초마다 40%)", () => {
+    expect(forageFacts()).toMatchObject({ autoEvery: `${AUTO_FISH_EVERY_MS / 1000}초`, autoCatch: pct(AUTO_CATCH_CHANCE) });
+    expect(forageFacts().autoCatch).toBe("40%");
   });
 
   it("합이 100%인 표는 100%에 가깝다", () => {

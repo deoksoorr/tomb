@@ -18,7 +18,7 @@ export default function GoblinClaim() {
     request<GoblinClaimResponse>("/api/goblin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ grant }) })
       .then((r) => {
         meStore.set(r.me);
-        showToast(r.earned > 0 ? `보너스 +${r.earned}P를 받았어요!${r.capped ? " (오늘 고블린 한도까지만)" : ""}` : "오늘 받을 수 있는 고블린 보너스를 다 받았어요");
+        showToast(r.earned > 0 ? `보너스 +${r.earned}P를 받았어요!` : "지갑이 가득 차서 보너스를 못 받았어요");
       })
       .catch((e) => {
         if ((e as { code?: string }).code === "ALREADY_CLAIMED") return;

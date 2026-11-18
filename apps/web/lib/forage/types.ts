@@ -11,8 +11,8 @@ import type { DexCat, DexTier, LifeCat, NodeKind, NpcId } from "./catalog";
  */
 export type DexEntry = { n: number; max: number; first: string; pf?: number };
 
-/** 오늘(게임 날짜, 새벽 5시 경계) 기록: 판 포인트(항목별)와 잡은·캔 수. auto = 그중 자동 낚시로 낚은 수 (fish에도 들어 있다) */
-export type LifeDay = { fishP: number; gatherP: number; dexP: number; fish: number; gather: number; auto: number };
+/** 오늘(게임 날짜, 새벽 5시 경계) 잡은·캔 수. auto = 그중 자동 낚시로 낚은 수 (fish에도 들어 있다). 11/19부터 한도 없이 보여 주기만 */
+export type LifeDay = { fish: number; gather: number; auto: number };
 
 export type ForageState = {
   /** 가방의 물고기·채집물 (id → 개수) */
@@ -22,9 +22,9 @@ export type ForageState = {
   claims: Record<string, string>;
   /** 받은 칭호 */
   titles: string[];
-  /** 종마다 처음 등록 보상: 칸별 받을 보상(한도에 걸려 쌓인 것)과 받은 보상 */
+  /** 종마다 처음 등록 보상: 칸별 받을 보상(예전 한도·꽉 찬 지갑으로 쌓인 것)과 받은 보상 */
   reward: DexRewardState;
-  today: LifeDay & { fishCap: number; gatherCap: number; dexCap: number; autoCap: number };
+  today: LifeDay;
   /**
    * 지금 나에게 피어 있는 채집 지점 id와 다음에 다시 피는 시각.
    * seed = 11/16 내 채집 지점 씨앗 (lib/forage/rules nodeIdsAt — 화면이 다음 창 지점을 서버에 묻지 않고 계산한다). 옛 서버 응답엔 없다
@@ -37,7 +37,7 @@ export type DexRewardState = { pending: Partial<Record<DexCat, number>>; got: Pa
 
 /**
  * 이번에 도감에 처음 등록해서 받은 보상 (등록 응답에 실린다). points = 이번 등록 보상 합, earned = 그중 바로 지갑에 들어간 것,
- * pending = 한도에 걸려 받을 도감 보상으로 쌓인 것, titles = 새로 붙은 칭호. me = 지갑이 바뀌었을 때 내 정보
+ * pending = 지갑이 꽉 차 받을 도감 보상으로 쌓인 것 (11/19 하루 한도 없음 — 거의 늘 0), titles = 새로 붙은 칭호. me = 지갑이 바뀌었을 때 내 정보
  */
 export type DexGain = { points: number; earned: number; pending: number; titles: string[]; me?: Me };
 
@@ -66,22 +66,19 @@ export type AutoFishStatus = {
   startedAt: number;
   /** 이 시각이 지나면 더 낚지 않는다 (한 세션 최대 길이) */
   endsAt: number;
-  /** 다음 한 마리까지 남은 접속 시간 (ms). 세션이 끝났으면 null */
+  /** 다음 찌 올리기까지 남은 접속 시간 (ms). 세션이 끝났으면 null */
   nextInMs: number | null;
-  /** 오늘 자동으로 낚은 수 / 자동 낚시 하루 한도 */
+  /** 오늘 자동으로 낚은 수 (11/19 하루 한도 없음) */
   today: number;
-  cap: number;
-  /** 오늘 자동 한도나 하루 전체 낚시 한도에 닿음 */
-  limited: boolean;
 };
 
 /** 자동 낚시 켜기·정산·끄기 응답. items = 이번에 새로 받은 것 (크기는 내 도감 최대 기록에 반영해 record가 설 수 있다. 최대어 순위에는 넣지 않는다) */
 export type AutoFishResponse = {
   auto: AutoFishStatus | null;
   items: CatchResult[];
-  /** 한도에 막혀 못 받은 수 */
-  dropped: number;
-  /** 이번에 건진 물에 빠진 꾸미기 (items와 따로, 한도에는 같이 센다) */
+  /** 찌를 올렸지만 놓친 수 (11/19 시도마다 AUTO_CATCH_CHANCE로 걸린다) */
+  missed: number;
+  /** 이번에 건진 물에 빠진 꾸미기 (items와 따로, 낚은 수에는 같이 센다) */
   gear: SunkenCatch[];
   /** 세션이 끝난 까닭 (끄기·시간 다 됨·11/16 물이 빠짐). 켜져 있으면 없음 */
   ended?: "stop" | "time" | "tide";
@@ -108,14 +105,14 @@ export type GatherStartResponse =
   | { ticket: string; mode: "gauge"; kind: Exclude<NodeKind, "bug">; durationMs: number }
   | { ticket: string; mode: "bugs"; kind: "bug"; seed: number; timeLimitSec: number; night: boolean; phase?: TimePhase };
 
-/** points = 곤충 채집으로 받은 포인트 (곤충 채집 판만, 한도에 닿으면 0) */
+/** points = 곤충 채집으로 받은 포인트 (곤충 채집 판만) */
 export type GatherFinishResponse = { items: CatchResult[]; state: ForageState; message?: string; dex?: DexGain; points?: number };
 
 export type SellResponse = {
   /** 실제로 판 것 (id → 개수) */
   sold: Record<string, number>;
   earned: number;
-  /** 오늘 한도(항목·하루 전체·지갑)에 닿아 덜 팔았으면 true. 못 판 것은 가방에 그대로 */
+  /** 지갑이 꽉 차 덜 팔았으면 true (11/19 하루 한도 없음). 못 판 것은 가방에 그대로 */
   capped: boolean;
   state: ForageState;
   me: Me;
@@ -124,7 +121,7 @@ export type SellResponse = {
 /** 예전 단계 보상 받기 응답 (지금은 409로 거절해 쓰이지 않는다) */
 export type DexClaimResponse = { earned: number; title: string | null; state: ForageState; me: Me };
 
-/** [도감 보상 받기]: earned = 이번에 받은 것, left = 한도에 걸려 그 칸에 남은 받을 보상 */
+/** [도감 보상 받기]: earned = 이번에 받은 것, left = 지갑이 꽉 차 그 칸에 남은 받을 보상 */
 export type DexPayResponse = { earned: number; left: number; state: ForageState; me: Me };
 
 export type PublicDex = {
