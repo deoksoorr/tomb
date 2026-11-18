@@ -248,6 +248,11 @@ const PANEL_KEYS: Readonly<Record<string, Panel>> = {
 };
 const RANK_KEY = "KeyL";
 
+/** 키보드(Tab)로 옮겨 온 단추·링크인지. 마우스로 눌러 포커스만 남은 단추는 아니다 (그때는 Enter·Space를 게임에 돌려준다) */
+function keyboardFocused(el: Element | null): boolean {
+  return el instanceof HTMLElement && el.matches("button, a[href], [role=button]") && el.matches(":focus-visible");
+}
+
 /** 다른 담당이 만드는 장소 창 (사냥터·분양 사무소). 컴포넌트가 들어오기 전까지 자리만 */
 type Props = {
   options: GameStartOptions;
@@ -428,7 +433,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       // Enter: 말풍선 채팅 입력칸 (버튼에 포커스가 있으면 그 버튼 몫, 낚시처럼 게임 키를 막은 창이 있으면 그 창 몫)
       if (enter) {
         // 11/16 버스 안(창밖 연출)에서는 채팅창을 숨긴다 — 이때 Enter가 터치용 한 줄 입력칸(화면 폭 전체)을 열었다
-        if (!canRadial || chatOpen || bridge.last("bus:state")?.riding || bridge.last("ui:blockKeys")?.blocked || (el instanceof HTMLElement && el.matches("button, a[href], [role=button]"))) return;
+        // 11/18 마우스로 눌러 포커스만 남은 단추(:focus-visible 아님)는 Enter를 가져가지 않는다 — 방금 누른 기능이 또 동작했다
+        if (!canRadial || chatOpen || bridge.last("bus:state")?.riding || bridge.last("ui:blockKeys")?.blocked || keyboardFocused(el)) return;
         e.preventDefault();
         setRadial(false);
         // 데스크톱은 왼쪽 아래 채팅창 입력칸으로, 터치(키보드 달린 태블릿 등)는 한 줄 입력칸
@@ -455,13 +461,30 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     return () => window.removeEventListener("keydown", onKey);
   }, [ready, quiet, roomQuiet, canRadial, chatOpen, coarse, iAmStaff]);
 
+  // 11/18 PC: 화면 위 단추(채팅 [배경]·[−][+]·위쪽 줄·바로 가기 등)를 마우스로 누르면 누른 뒤 포커스를 놓는다.
+  // 남아 있으면 Enter(채팅)·Space(점프)가 그 단추를 또 눌렀다. 창(dialog) 안 단추는 그대로 (창 안 키보드 이동)
+  useEffect(() => {
+    if (!ready) return;
+    const onClick = (e: MouseEvent) => {
+      if (e.detail === 0) return; // 키보드로 누른 클릭
+      const b = (e.target as Element | null)?.closest?.("button, a[href], [role=button]");
+      if (!(b instanceof HTMLElement) || b.closest("dialog, [role=dialog]")) return;
+      requestAnimationFrame(() => {
+        if (document.activeElement === b) b.blur();
+      });
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [ready]);
+
   // 11/17 사냥 중 Enter: 채팅창 입력칸 (사냥 창이 게임 키를 막아 두므로 위 처리와 따로). 입력칸에 쓰는 동안 사냥 키는 RpgScene이 거른다
   useEffect(() => {
     if (!huntChat) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.code !== "Enter" && e.code !== "NumpadEnter") || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
       const el = document.activeElement;
-      if (el instanceof HTMLElement && el.matches("input, textarea, select, [contenteditable], button, a[href], [role=button]")) return;
+      if (el instanceof HTMLElement && el.matches("input, textarea, select, [contenteditable]")) return;
+      if (keyboardFocused(el)) return;
       // 멈춤 창·안내서 같은 창이 떠 있으면 그 창 몫
       if (chatOpen || document.querySelector("dialog[open]")) return;
       e.preventDefault();
