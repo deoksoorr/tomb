@@ -14,6 +14,14 @@ export const TIME_PHASES: readonly TimePhase[] = ["dawn", "day", "dusk", "night"
 export const WEATHERS: readonly Weather[] = ["clear", "cloudy", "fog", "rain", "snow"];
 
 export const PHASE_LABELS: Record<TimePhase, string> = { dawn: "새벽", day: "낮", dusk: "해질녘", night: "밤" };
+/** 11/19 낮 앞부분(7~10시)은 화면 글자만 「아침」 (하늘 색·phase는 낮 그대로) */
+export const MORNING_END_HOUR = 10;
+/** 사람에게 보여 주는 시간대 이름 (아침 포함) */
+export function skyLabel(a: { phase: TimePhase; kstHour: number }): string {
+  return a.phase === "day" && a.kstHour < MORNING_END_HOUR ? "아침" : PHASE_LABELS[a.phase];
+}
+/** 안내용 시간대 이름 차례 (새벽·아침·낮·해질녘·밤) */
+export const SKY_LABEL_ORDER = ["새벽", "아침", "낮", "해질녘", "밤"] as const;
 export const WEATHER_LABELS: Record<Weather, string> = { clear: "맑음", cloudy: "흐림", fog: "안개", rain: "비", snow: "눈" };
 
 export type Season = "spring" | "summer" | "autumn" | "winter";

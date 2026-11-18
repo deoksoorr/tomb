@@ -1,6 +1,6 @@
 "use client";
 
-import { PHASE_LABELS, WEATHER_LABELS } from "@/lib/ambience";
+import { skyLabel, WEATHER_LABELS } from "@/lib/ambience";
 import { useAmbience } from "@/lib/hooks/useAmbience";
 import type { DexEntry } from "@/lib/forage/types";
 import { DIFFS, type Difficulty } from "@/lib/rpg/catalog";
@@ -60,7 +60,7 @@ export function StarsPreview({ starry }: { starry: boolean }) {
       ))}
       {LINKED[3] && <span className={styles.ring} style={{ left: `${LINKED[3][0]}%`, top: `${LINKED[3][1]}%` }} aria-hidden="true" />}
       <p className={styles.caption}>
-        지금 하늘은 {ambience ? `${PHASE_LABELS[ambience.phase]}, ${WEATHER_LABELS[ambience.weather]}` : "…"}
+        지금 하늘은 {ambience ? `${skyLabel(ambience)}, ${WEATHER_LABELS[ambience.weather]}` : "…"}
         {starry ? ". 진짜 별이 잘 보이는 밤이에요!" : ""}
       </p>
     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { PHASE_LABELS, WEATHER_LABELS } from "@/lib/ambience";
+import { skyLabel, WEATHER_LABELS } from "@/lib/ambience";
 import { ATTEND_STAY_MINUTES, attendLeftText } from "@/lib/attendStay";
 import { useAmbience } from "@/lib/hooks/useAmbience";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
@@ -40,7 +40,7 @@ export default function TodayFacts({ show = ALL }: { show?: readonly TodayFact[]
     },
     sky: {
       label: "날씨·시간대",
-      value: ambience ? `${PHASE_LABELS[ambience.phase]} · ${WEATHER_LABELS[ambience.weather]}` : "…",
+      value: ambience ? `${skyLabel(ambience)} · ${WEATHER_LABELS[ambience.weather]}` : "…",
       note: ambience?.phase === "night" ? "맑은 밤이면 망원경 포인트가 늘어요" : "한국 시간 기준으로 바뀌어요",
     },
   } as const;

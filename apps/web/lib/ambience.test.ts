@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ambienceAt, kstHour, leavesFor, parseAmbienceOverride, seasonOf, timePhase, weatherAt, WEATHER_BLOCK_MS } from "./ambience";
+import { ambienceAt, kstHour, leavesFor, parseAmbienceOverride, seasonOf, skyLabel, timePhase, weatherAt, WEATHER_BLOCK_MS } from "./ambience";
 
 // 2026-11-08 00:00 KST = 2026-11-07 15:00 UTC
 const KST_MIDNIGHT = Date.UTC(2026, 10, 7, 15);
@@ -69,5 +69,13 @@ describe("ambience", () => {
     expect(parseAmbienceOverride("?time=99&weather=meteor")).toEqual({});
     expect(parseAmbienceOverride("?season=winter")).toEqual({ season: "winter" });
     expect(parseAmbienceOverride("?season=monsoon")).toEqual({});
+  });
+});
+
+describe("11/19 화면에 보이는 시간대 이름", () => {
+  it("7~10시는 아침 (하늘은 낮 그대로), 10시부터 낮", () => {
+    const at = (h: number) => skyLabel({ phase: timePhase(h), kstHour: h });
+    expect([5, 6.9, 7, 7.4, 9.9, 10, 17, 18, 23].map(at)).toEqual(["새벽", "새벽", "아침", "아침", "아침", "낮", "낮", "해질녘", "밤"]);
+    expect(timePhase(8)).toBe("day");
   });
 });

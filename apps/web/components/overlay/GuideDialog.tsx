@@ -38,7 +38,7 @@ import { EARN_RULES } from "@/lib/economy";
 import { DYE_TIME_MS } from "@/lib/dye/palette";
 import { AUTO_FISH_MAX_MS, AUTO_PACE_NOTE, AUTO_RANK_NOTE } from "@/lib/forage/auto";
 import { BAG_MAX, DEX_NEW_REWARD } from "@/lib/forage/catalog";
-import { PHASE_LABELS, TIME_PHASES, WEATHER_BLOCK_MS, WEATHER_LABELS, WEATHERS } from "@/lib/ambience";
+import { SKY_LABEL_ORDER, WEATHER_BLOCK_MS, WEATHER_LABELS, WEATHERS } from "@/lib/ambience";
 import { PLOT_TIERS, plotCost } from "@/lib/housing/catalog";
 import { DYE_SPECIAL_BONUS, LOOK_SCORE_DIVISOR } from "@/lib/lookScore";
 import { BRANCH_INFO, BRANCHES, POTIONS, TIER_GATES } from "@/lib/rpg/catalog";
@@ -280,7 +280,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
             <li>귀신의집에는 깜짝 놀라는 장면과 큰 소리가 있어요. 포인트는 주지 않아요.</li>
             <li>지도에 장소마다 표시가 있어요. 자세한 건 각 장소에서 안내해요.</li>
             <li>
-              {`하늘은 한국 시간에 맞춰 ${TIME_PHASES.map((p) => PHASE_LABELS[p]).join("·")}, 날씨(${WEATHERS.map((w) => WEATHER_LABELS[w]).join("·")})는 ${min(WEATHER_BLOCK_MS)}분마다 바뀌어요.`}
+              {`하늘은 한국 시간에 맞춰 ${SKY_LABEL_ORDER.join("·")}, 날씨(${WEATHERS.map((w) => WEATHER_LABELS[w]).join("·")})는 ${min(WEATHER_BLOCK_MS)}분마다 바뀌어요.`}
             </li>
             <li>연한 초록 이름표를 단 마을 주민은 실제 사람이 아니에요. 그날그날 나오는 수가 달라요.</li>
           </ul>
