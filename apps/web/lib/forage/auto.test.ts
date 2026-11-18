@@ -48,14 +48,14 @@ describe("속도", () => {
 });
 
 describe("11/19 시도마다 걸릴 확률", () => {
-  it("직접 낚시보다 확실히 느리다: 30초마다 40% → 평균 75초에 한 마리 (직접 평균의 5배 넘게)", () => {
-    expect(AUTO_CATCH_CHANCE).toBe(0.4);
+  it("직접 낚시보다 확실히 느리다: 30초마다 25% → 평균 2분에 한 마리 (직접 평균의 10배)", () => {
+    expect(AUTO_CATCH_CHANCE).toBe(0.25);
     const avgPerFish = AUTO_FISH_EVERY_MS / AUTO_CATCH_CHANCE;
-    expect(avgPerFish).toBe(75_000);
-    expect(avgPerFish / DIRECT_FISH_AVG_MS).toBeGreaterThan(5);
+    expect(avgPerFish).toBe(120_000);
+    expect(avgPerFish / DIRECT_FISH_AVG_MS).toBeGreaterThanOrEqual(10);
   });
 
-  it("걸렸는지는 시드 + 번호로 결정적이고, 많이 굴리면 40%에 가깝다", () => {
+  it("걸렸는지는 시드 + 번호로 결정적이고, 많이 굴리면 25%에 가깝다", () => {
     expect(autoHit(7, 3)).toBe(autoHit(7, 3));
     let hit = 0;
     const N = 20_000;

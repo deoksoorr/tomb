@@ -24,9 +24,9 @@ describe("확률 안내 숫자", () => {
     }
   });
 
-  it("자동 낚시 숫자는 규칙 상수에서 읽는다 (11/19 30초마다 40%)", () => {
+  it("자동 낚시 숫자는 규칙 상수에서 읽는다 (11/19 30초마다 25%)", () => {
     expect(forageFacts()).toMatchObject({ autoEvery: `${AUTO_FISH_EVERY_MS / 1000}초`, autoCatch: pct(AUTO_CATCH_CHANCE) });
-    expect(forageFacts().autoCatch).toBe("40%");
+    expect(forageFacts().autoCatch).toBe("25%");
   });
 
   it("합이 100%인 표는 100%에 가깝다", () => {

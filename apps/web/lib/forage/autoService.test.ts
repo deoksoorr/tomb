@@ -53,7 +53,7 @@ describe("자동 낚시 정산", () => {
     const seed = await seedOf(a);
     const rs = await syncEvery(a, T0, T0 + 30 * MIN, 1.5 * MIN);
     const n = hitsIn(seed, 1, tries(30 * MIN));
-    // 11/19 시도마다 40% — 60번 올려 걸린 것만, 나머지는 놓침
+    // 11/19 시도마다 25% — 60번 올려 걸린 것만, 나머지는 놓침
     expect(got(rs)).toBe(n);
     expect(rs.reduce((x, r) => x + r.missed, 0)).toBe(tries(30 * MIN) - n);
     expect(n).toBeLessThan(tries(30 * MIN));
@@ -90,18 +90,18 @@ describe("자동 낚시 정산", () => {
     expect(r.auto).not.toBeNull();
   });
 
-  it("11/19 하루 한도 없음: 3시간 켜 두면 예전 하루 75마리보다 많이 낚고, 다시 켤 수 있다", async () => {
+  it("11/19 하루 한도 없음: 5시간 켜 두면 예전 하루 75마리보다 많이 낚고, 다시 켤 수 있다", async () => {
     const a = acct();
     await startAutoFish(a, PIER, 1, T0);
     const seed = await seedOf(a);
-    for (let t = T0 + 10 * MIN; t <= T0 + 180 * MIN; t += 10 * MIN) await beatAutoFish(a, t);
-    const r = await stopAutoFish(a, T0 + 180 * MIN);
-    expect(caught(r)).toBe(hitsIn(seed, 1, tries(180 * MIN)));
+    for (let t = T0 + 10 * MIN; t <= T0 + 300 * MIN; t += 10 * MIN) await beatAutoFish(a, t);
+    const r = await stopAutoFish(a, T0 + 300 * MIN);
+    expect(caught(r)).toBe(hitsIn(seed, 1, tries(300 * MIN)));
     expect(caught(r)).toBeGreaterThan(75);
-    expect(r.missed).toBe(tries(180 * MIN) - caught(r));
+    expect(r.missed).toBe(tries(300 * MIN) - caught(r));
     expect(r.ended).toBe("stop");
     expect(r.auto).toBeNull();
-    await expect(startAutoFish(a, PIER, 1, T0 + 181 * MIN)).resolves.toMatchObject({ auto: { spot: PIER } });
+    await expect(startAutoFish(a, PIER, 1, T0 + 301 * MIN)).resolves.toMatchObject({ auto: { spot: PIER } });
   });
 
   it("11/19 직접 낚은 게 150마리를 넘어도 자동 낚시는 그대로 (하루 낚시 수 한도 없음)", async () => {

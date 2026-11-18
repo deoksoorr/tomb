@@ -10,7 +10,7 @@ import { BITE_MAX_MS, BITE_MIN_MS, candidates, conditionsAt, hash01, reelMinMs, 
 // 접속 구간을 이어 붙인 시간 AUTO_FISH_EVERY_MS마다 찌를 한 번 올리고, 그때 AUTO_CATCH_CHANCE 확률로 한 마리가 걸린다.
 // k번째 시도는 그 시간이 채워진 "그 시각"의 시간대·날씨·계절로 세션 시드 + 번호로 결정적으로 굴린다
 // (걸렸는지도 시드 + 번호로) → 같은 정산을 다시 계산해도 결과가 같다.
-// 11/19 「편하게 노는 게임」 개편: 하루 75마리 한도를 없앴다. 대신 시도마다 40%만 걸려 직접 낚시보다 확실히 느리다.
+// 11/19 「편하게 노는 게임」 개편: 하루 75마리 한도를 없앴다. 대신 시도마다 25%만 걸려 직접 낚시보다 확실히 느리다.
 
 /** 직접 낚을 때 한 마리 평균 (입질 평균 + 보통 손맛(2)의 최소 감기 시간) */
 export const DIRECT_FISH_AVG_MS = (BITE_MIN_MS + BITE_MAX_MS) / 2 + reelMinMs(2);
@@ -18,9 +18,9 @@ export const DIRECT_FISH_AVG_MS = (BITE_MIN_MS + BITE_MAX_MS) / 2 + reelMinMs(2)
 export const AUTO_FISH_EVERY_MS = Math.round(DIRECT_FISH_AVG_MS * 2.5);
 /**
  * 11/19 자동 낚시 한 번에 걸릴 확률. 직접 낚시는 입질이 늘 오고 손으로 감으면 거의 다 낚는다.
- * 자동은 30초마다 40% → 평균 75초에 한 마리 (한 시간 약 48마리, 직접 낚시 평균 12초의 약 1/6)
+ * 자동은 30초마다 25% → 평균 2분에 한 마리 (한 시간 약 30마리, 직접 낚시 평균 12초의 약 1/10)
  */
-export const AUTO_CATCH_CHANCE = 0.4;
+export const AUTO_CATCH_CHANCE = 0.25;
 /** 한 세션 최대 길이 (켠 시각부터). 탭을 켜 두고 잊어도 끝없이 돌지 않게 — 다시 켜면 또 돈다 */
 export const AUTO_FISH_MAX_MS = 6 * 3_600_000;
 /**
@@ -161,7 +161,7 @@ export function autoNextLabel(ms: number): string {
 
 /** 자동 낚시 안내 (낚시 창·결과 알림이 같이 쓴다) */
 export const AUTO_RANK_NOTE = "자동 낚시로 낚은 물고기는 최대어 순위에 안 올라가요. 크기는 도감에 남아요.";
-/** 11/19 자동 낚시 빠르기 안내: "30초마다 찌를 올려 40% 확률로 걸려요." (숫자는 상수에서) */
+/** 11/19 자동 낚시 빠르기 안내: "30초마다 찌를 올려 25% 확률로 걸려요." (숫자는 상수에서) */
 export const AUTO_PACE_NOTE = `${Math.round(AUTO_FISH_EVERY_MS / 1000)}초마다 찌를 올려 ${Math.round(AUTO_CATCH_CHANCE * 100)}% 확률로 걸려요.`;
 
 /**
