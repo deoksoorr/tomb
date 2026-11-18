@@ -201,7 +201,7 @@ export default function BgmPlayer({ compact = false }: { compact?: boolean }) {
         </div>
       )}
 
-      {creditsOpen && <BgmCredits playlists={state.playlists} now={track?.title ?? null} onClose={() => setCreditsOpen(false)} />}
+      {creditsOpen && <BgmCredits playlists={state.playlists} now={track?.title ?? null} nowFile={state.playing ? (track?.file ?? null) : null} onClose={() => setCreditsOpen(false)} />}
     </section>
   );
 }
@@ -213,7 +213,7 @@ const BUSES: readonly [SoundBus, string, string][] = [
 ];
 
 /** CC BY 계열만 저작자·출처를 밝힌다. 그 밖의 곡은 제목과 라이선스만 */
-function BgmCredits({ playlists, now, onClose }: { playlists: Playlist[]; now: string | null; onClose: () => void }) {
+function BgmCredits({ playlists, now, nowFile, onClose }: { playlists: Playlist[]; now: string | null; nowFile: string | null; onClose: () => void }) {
   // 「전곡」은 다른 목록을 모은 것이라 음원 정보에서는 뺀다
   const withTracks = playlists.filter((p) => p.tracks.length > 0 && p.id !== ALL_PLAYLIST_ID);
   const total = withTracks.reduce((n, p) => n + p.tracks.length, 0);
@@ -228,8 +228,8 @@ function BgmCredits({ playlists, now, onClose }: { playlists: Playlist[]; now: s
               <PixelIcon name="note" /> {now ? `지금 재생 중 · ${now}` : "지금은 음악이 멈춰 있어요"}
             </p>
             <p className={styles.creditsMeta}>
-              {withTracks.length}개 갈래에 모두 {total}곡이 있어요. 왼쪽 위 음악 창에서 갈래를 골라 들어요. 저작자 표시가 필요한 곡은 저작자와
-              출처를 함께 적었어요.
+              {withTracks.length}개 갈래에 모두 {total}곡이 있어요. 곡을 누르면 그 곡부터 나오고, 같은 갈래 곡이 섞여서 이어져요. 저작자 표시가 필요한 곡은
+              저작자와 출처를 함께 적었어요.
             </p>
           </div>
           {withTracks.map((p) => (
@@ -238,9 +238,13 @@ function BgmCredits({ playlists, now, onClose }: { playlists: Playlist[]; now: s
                 {p.title} <span className={styles.creditsMeta}>{p.tracks.length}곡</span>
               </h3>
               <ul className={styles.creditsList}>
-                {p.tracks.map((t) => (
-                  <li key={t.file}>
-                    <span className={styles.creditsTitle}>{t.title}</span>
+                {p.tracks.map((t, i) => (
+                  <li key={t.file} data-now={t.file === nowFile || undefined}>
+                    {/* 11/18 곡을 누르면 그 곡부터 틀고 같은 갈래를 섞어서 이어 튼다 */}
+                    <button type="button" className={styles.creditsPick} onClick={() => bgm.playTrack(p.id, i)} aria-label={`${t.title} 틀기`}>
+                      <PixelIcon name={t.file === nowFile ? "note" : "play"} />
+                      <span className={styles.creditsTitle}>{t.title}</span>
+                    </button>
                     {needsAttribution(t.license) ? (
                       <span className={styles.creditsMeta}>
                         {t.artist} · {t.license}

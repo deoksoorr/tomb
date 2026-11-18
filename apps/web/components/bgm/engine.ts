@@ -192,6 +192,17 @@ class BgmEngine {
     if (this.state.playing) this.startTrack();
   }
 
+  /** 11/18 음원 정보에서 곡을 골랐다: 그 곡부터 틀고, 그 목록의 나머지는 섞은 순서로 이어서 (멈춰 있었으면 튼다 — 누른 손길 안이라 iOS도 된다) */
+  playTrack(id: string, index: number): void {
+    const length = this.state.playlists.find((p) => p.id === id)?.tracks.length ?? 0;
+    if (index < 0 || index >= length) return;
+    if (id !== this.state.playlistId || index !== this.state.index) this.remember();
+    this.order = shuffledOrder(length, index);
+    this.set({ playlistId: id, index, hasPrev: this.history.length > 0 });
+    if (this.state.playing) this.startTrack();
+    else this.play();
+  }
+
   setVolume(volume: number): void {
     const v = clamp01(volume);
     writeItem(LS.volume, String(v));
