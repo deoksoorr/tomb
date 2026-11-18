@@ -13,9 +13,11 @@ describe("parseManifest", () => {
       ["retrowinter", "레트로", 50],
       ["carol", "눈꽃 캐럴", 50],
       ["citypop", "노을 시티팝", 50],
+      // 11/18 직접 만든 판타지 마을 50곡을 네 번째에 (장르가 섞여 있어 다른 목록처럼 늘 섞어 튼다)
+      ["fantasy", "판타지 마을", 50],
       ["lofi", "로파이", 15],
     ]);
-    expect(lists.filter((p) => p.isNew).map((p) => p.id)).toEqual(["retrowinter", "carol", "citypop"]);
+    expect(lists.filter((p) => p.isNew).map((p) => p.id)).toEqual(["retrowinter", "carol", "citypop", "fantasy"]);
     // 처음엔 레트로부터
     expect(FIRST_PLAYLIST_ID).toBe("retrowinter");
     expect(lists.some((p) => p.id === FIRST_PLAYLIST_ID)).toBe(true);
