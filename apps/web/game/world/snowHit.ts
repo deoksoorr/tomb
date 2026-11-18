@@ -7,8 +7,13 @@
 /** 몸 상자: x = 몸 가운데, y = 발 (땅 위 자리), lift = 그림을 띄운 높이 (점프), top = 발에서 그림 꼭대기까지, half = 몸 반폭 (모두 배율 포함, px) */
 export type SnowBody = { x: number; y: number; lift: number; top: number; half: number };
 
-/** 공 바닥 자리가 발 줄에서 앞뒤로 이만큼 안이어야 몸에 닿는다 (그림자가 몸 뒤·앞 멀리 지나가면 아니다) */
+/** 공 바닥 자리가 발 줄에서 앞(아래)으로 이만큼 안이어야 몸에 닿는다 (그림자가 몸 앞 멀리 지나가면 아니다) */
 export const SNOW_DEPTH = 5;
+/**
+ * 11/18 뒤(위쪽)에서 오는 공은 더 일찍 맞는다: 몸 뒤로 그려지는 공(깊이 < 발)이 몸 그림을 다 가로질러 지나간 뒤에야
+ * 발 줄 5px 안에 들어와서 「눈이 사람 뒤로 지나간 다음 퍽」으로 보였다 (사용자). 몸 두께만큼 뒤에서 닿으면 등에 맞는다
+ */
+export const SNOW_DEPTH_BACK = 14;
 /** 머리 꾸미기(모자 위로 높이 솟은 장식)는 몸 꼭대기에서 이만큼만 더 친다 */
 export const SNOW_HAT_SLACK = 3;
 /** 몸 반폭 (배율 1 — 공 반지름을 조금 넣었다) */
@@ -26,7 +31,8 @@ export function snowBodyTop(artTop: number, bodyTop: number, big = 1): number {
  * 보이는 공 y = gy − z, 보이는 발 y = y − lift
  */
 export function snowBodyHit(gx: number, gy: number, z: number, b: SnowBody): number | null {
-  if (Math.abs(gy - b.y) > SNOW_DEPTH) return null;
+  const dy = gy - b.y;
+  if (dy > SNOW_DEPTH || dy < -SNOW_DEPTH_BACK * Math.max(1, b.top / 24)) return null;
   if (Math.abs(gx - b.x) > b.half) return null;
   const h = b.y - b.lift - (gy - z);
   if (h < -BALL_R || h > b.top + BALL_R) return null;
