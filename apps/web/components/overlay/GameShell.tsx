@@ -299,12 +299,12 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const coarse = useMediaQuery("(pointer: coarse)");
   // 데스크톱인데 창이 좁으면 윗줄에 채널 표시 자리가 없다 → 아래 안내 줄로
   const narrow = useMediaQuery("(max-width: 700px)");
-  // 11/18 데스크톱: 확성기·고정 공지 창과 채팅창 폭을 아래 바로 가기 줄의 [공지] 단추 오른쪽 끝에 맞춘다 (--dock-w, 문서 루트)
+  // 11/18 데스크톱: 확성기·고정 공지 창과 채팅창 폭을 아래 바로 가기 줄의 [집] 단추 오른쪽 끝에 맞춘다 (--dock-w, 문서 루트. [공지] 끝은 너무 넓었다)
   const dockRef = useRef<HTMLElement>(null);
-  const noticeBtnRef = useRef<HTMLButtonElement>(null);
+  const houseBtnRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const nav = dockRef.current;
-    const btn = noticeBtnRef.current;
+    const btn = houseBtnRef.current;
     const root = document.documentElement;
     if (!nav || !btn) return;
     const fit = () => {
@@ -866,7 +866,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 <PixelIcon name="book" />
                 도감
               </button>
-              <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("housing")}>
+              <button ref={houseBtnRef} type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("housing")}>
                 <PixelIcon name="house" />집
               </button>
               <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("activity")}>
@@ -874,7 +874,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 소식
                 {(me?.activityUnread ?? 0) > 0 && <span className={styles.badge}>{me?.activityUnread}</span>}
               </button>
-              <button ref={noticeBtnRef} type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("notices")}>
+              <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("notices")}>
                 <PixelIcon name="bell" />
                 공지
                 <span className={styles.dockKey} aria-hidden="true">N</span>
