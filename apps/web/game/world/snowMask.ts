@@ -65,6 +65,7 @@ function bakeMask(frame: Phaser.Textures.Frame): FrameMask | null {
   return { w, h, a, top, bottom, left, right };
 }
 
+export type SnowImg = Phaser.GameObjects.Image | Phaser.GameObjects.Sprite;
 type Img = Phaser.GameObjects.Image | Phaser.GameObjects.Sprite;
 
 /** 그림의 화면 상자 (회전 없는 그림만) */
@@ -119,6 +120,45 @@ export function opaqueFoot(img: Img, x: number, y: number): number {
     } else gap++;
   }
   return r.top + (last + 1) * r.sy;
+}
+
+/** 눈 자국 그림의 불투명 픽셀이 이만큼 이상 막는 그림의 불투명 픽셀 위여야 붙인다 */
+const MARK_COVER = 0.95;
+/** 맞은 자리에서 자국 붙일 곳을 찾는 반경 (px — 가장자리에 맞으면 안쪽으로 옮긴다) */
+const MARK_SNAP = 8;
+
+/** 자국 그림을 (x, y)에 원점 (ox, oy)로 놓았을 때 그 불투명 픽셀 중 막는 그림의 불투명 픽셀 위에 놓이는 몫 (0~1) */
+function cover(img: Img, x: number, y: number, mark: FrameMask, ox: number, oy: number): number {
+  const left = x - Math.round(mark.w * ox);
+  const top = y - Math.round(mark.h * oy);
+  let n = 0;
+  let k = 0;
+  for (let v = mark.top; v <= mark.bottom; v++)
+    for (let u = mark.left; u <= mark.right; u++) {
+      if (!mark.a[v * mark.w + u]) continue;
+      k++;
+      if (opaqueAt(img, left + u + 0.5, top + v + 0.5)) n++;
+    }
+  return k ? n / k : 0;
+}
+
+/**
+ * 맞은 자리 (x, y) 가까이에서 눈 자국(mark — 그 그림의 불투명 픽셀, 원점 ox,oy)을 붙일 곳: 자국 픽셀이 거의 모두(MARK_COVER)
+ * 막는 그림의 불투명 픽셀 위에 놓이는 가장 가까운 자리. 막는 그림 모두 같은 규칙
+ * (11/18 「나무 꼭대기 위 허공에 눈덩이」·「우물 지붕 모서리 바깥 허공에」: 가는 가지 끝·지붕 가장자리 바깥으로 삐져나오지 않게).
+ * MARK_SNAP 안에 없으면 null (자국 없이 퍽만 — 앙상한 가지·가는 기둥). 자국 마스크를 못 읽으면 그 자리 그대로
+ */
+export function markSpot(img: Img, x: number, y: number, mark: FrameMask | null, ox = 0.5, oy = 0.45): { x: number; y: number } | null {
+  const cx = Math.round(x);
+  const cy = Math.round(y);
+  if (!mark) return opaqueAt(img, cx, cy) ? { x: cx, y: cy } : null;
+  for (let r = 0; r <= MARK_SNAP; r++)
+    for (let dy = -r; dy <= r; dy++)
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        if (cover(img, cx + dx, cy + dy, mark, ox, oy) >= MARK_COVER) return { x: cx + dx, y: cy + dy };
+      }
+  return null;
 }
 
 /** 칸 하나에 묶인 물체 */
@@ -217,7 +257,7 @@ export class SnowOccluders {
    * 공(바닥 x,y · 높이 z)이 지금 어느 그림 뒤로 들어가며 그 불투명 픽셀 위에 보이나 → 그 그림 (앞면에 박힌다). 없으면 null.
    * 공이 그림 깊이보다 그 그림 높이 넘게 뒤면 (멀리 뒤로 지나감) 아니다
    */
-  hit(x: number, y: number, z: number): { depth: number; vy: number } | null {
+  hit(x: number, y: number, z: number): { depth: number; vy: number; img: Img } | null {
     const vy = y - z;
     const list = this.cells.get(Math.floor((vy + BALL_R) / CELL) * this.cols + Math.floor(x / CELL));
     if (!list) return null;
@@ -227,16 +267,15 @@ export class SnowOccluders {
       if (!(o.depth > y + 0.5)) continue;
       if (o.depth - y > (o.grave ? GRAVE_THICK : o.bottom - o.top + 4)) continue;
       if (!this.live(o)) continue;
-      if (!o.low) {
-        const py = opaqueAt(o.img, x, vy) ? vy : opaqueAt(o.img, x, vy + BALL_R) ? vy + BALL_R : null;
-        // 그 픽셀이 땅에 닿는 자리보다 공이 앞(남쪽)이면 그 위를 날아가는 것 (마당 디딤돌·길)
-        if (py === null || y >= opaqueFoot(o.img, x, py)) continue;
-      }
+      // 공 가운데가 불투명 픽셀 위일 때만 (앙상한 나무 가지 사이 빈 곳은 지나간다 — 11/18 「나무 꼭대기 위 허공에 눈덩이」)
+      // 그 픽셀이 땅에 닿는 자리보다 공이 앞(남쪽)이면 그 위를 날아가는 것 (마당 디딤돌·길)
+      if (!o.low && (!opaqueAt(o.img, x, vy) || y >= opaqueFoot(o.img, x, vy))) continue;
       if (!best || o.depth > best.depth) best = o;
     }
     if (!best) return null;
-    // 낮은 물체는 자국을 그 줄 그림 꼭대기 아래로 (의자 좌판 위 허공에 뜨지 않게)
-    return { depth: best.depth, vy: best.low ? Math.max(vy, Math.min(best.bottom - 2, this.colTop(best, x) + 2)) : vy };
+    // 낮은 물체는 퍽을 그 줄 그림 꼭대기 아래로 (의자 좌판 위 허공에 뜨지 않게)
+    const py = best.low ? Math.max(vy, Math.min(best.bottom - 2, this.colTop(best, x) + 2)) : vy;
+    return { depth: best.depth, vy: py, img: best.img };
   }
 
   /** 막힌 자리(x,y)의 물체가 공(높이 z)보다 낮아 공이 위로 지나가나 (벤치·울타리 위로). 그 자리에 물체 그림이 없으면 false */
@@ -255,17 +294,19 @@ export class SnowOccluders {
     return seen;
   }
 
-  /** 막힌 자리(x,y)에 선 물체 그림의 깊이 (자국을 그 앞에 그린다). 없으면 null */
-  depthAt(x: number, y: number): number | null {
+  /**
+   * 막힌 자리(바닥 x,y)에 선 물체 그림과 그 깊이 (자국을 그 앞에 그린다). 그 자리에 물체 그림이 없으면 null (보이지 않는 벽 — 자국 없이 퍽만)
+   */
+  spotAt(x: number, y: number): { depth: number; img: Img } | null {
     const list = this.cells.get(Math.floor(y / CELL) * this.cols + Math.floor(x / CELL));
     if (!list) return null;
-    let d: number | null = null;
+    let best: Occ | null = null;
     for (const o of list) {
-      if (x < o.left || x >= o.right || y < o.top || y > o.bottom + 2 || o.depth < y - 2) continue;
+      if (x < o.left - 2 || x >= o.right + 2 || y < o.top || y > o.bottom + 2 || o.depth < y - 2) continue;
       if (!this.live(o)) continue;
-      if (d === null || o.depth > d) d = o.depth;
+      if (!best || o.depth > best.depth) best = o;
     }
-    return d;
+    return best && { depth: best.depth, img: best.img };
   }
 
   /** 그림의 x 줄 불투명 꼭대기 (화면 y) */

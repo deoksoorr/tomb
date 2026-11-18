@@ -24,7 +24,7 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { markCharTint } from "./charTint";
 import type { Sfx } from "./Sfx";
 import { snowBodyHit, type SnowBody } from "./snowHit";
-import { opaqueRect, type SnowOccluders } from "./snowMask";
+import { frameMask, markSpot, opaqueRect, type SnowImg, type SnowOccluders } from "./snowMask";
 import { SNOW_NPC_LINES, type SnowNpc } from "./snowNpc";
 import { BALL_FRAME, ensureSnowFightTextures, MARK_VARIANTS, PUFF_FRAMES, SNOWFIGHT_TEX } from "./snowFightArt";
 
@@ -418,7 +418,7 @@ export class SnowFight {
       const occ = this.d.occluders?.hit(p.x, p.y, p.z) ?? null;
       if (occ) {
         this.dropBall(i);
-        this.splatFront(p.x, occ.vy, occ.depth);
+        this.splatFront(p.x, occ.vy, occ.depth, occ.img);
         return true;
       }
       // 낮은 물체(벤치·울타리)는 공이 더 높이 날면 위로 넘어간다
@@ -444,23 +444,40 @@ export class SnowFight {
     const back = y - py > 0.5;
     let base = Math.floor(y);
     if (!back) for (let k = 0; k < 24 && this.d.solid?.(x, base + 1); k++) base++;
-    // 앞에서 맞았으면 그 자리 물체 그림 앞에 (그림 깊이가 충돌 밑동보다 아래일 수 있다 — 집·가게)
-    const od = back ? null : (this.d.occluders?.depthAt(x, y) ?? null);
-    const depth = back ? Math.floor(py) - 1 : Math.max(base + 1, od === null ? -Infinity : od + 1);
+    // 앞에서 맞았으면 그 자리 물체 그림 앞에 (그림 깊이가 충돌 밑동보다 아래일 수 있다 — 집·가게).
+    // 마을(occluders)은 자국을 그 그림의 불투명 픽셀 위에만 — 그림이 없는 막힘(보이지 않는 벽)·붙일 곳이 없는 가는 그림이면 퍽만
+    const spot = this.d.occluders ? this.d.occluders.spotAt(x, y) : undefined;
+    const depth = back ? Math.floor(py) - 1 : Math.max(base + 1, spot ? spot.depth + 1 : -Infinity);
     this.puffAt(px, vy, depth - 0.6, false);
     if (this.onScreen(x, y)) this.d.sfx.snow("hit", 0.45);
+    if (spot) {
+      this.wallMark(spot.img, px, vy, depth);
+      return;
+    }
+    if (spot === null) return;
     const v = (Math.abs(Math.round(x * 5 + y * 11)) % MARK_VARIANTS) | 0;
     const img = markCharTint(s.add.image(Math.round(px), vy, SNOWFIGHT_TEX.wall(v)).setOrigin(0.5, 0.45).setDepth(depth));
     this.pushMark(img, s.time.now + WALL_MS);
   }
 
-  /** 그림 앞면에 박혔다 (보이는 자리 x,vy · 그 그림 깊이): 퍽 + 납작한 자국을 그림 앞에. 조각은 그림 밑동 앞으로 떨어진다 */
-  private splatFront(x: number, vy: number, depth: number): void {
-    const s = this.d.scene;
+  /**
+   * 그림 앞면에 박혔다 (보이는 자리 x,vy · 그 그림 깊이): 퍽 + 납작한 자국을 그림 앞에. 조각은 그림 밑동 앞으로 떨어진다.
+   * 자국은 그림의 불투명 픽셀 위(mark — snowMask.markSpot)에만 붙인다. 붙일 곳이 없으면(가는 가지 끝) 퍽만
+   */
+  private splatFront(x: number, vy: number, depth: number, on: SnowImg): void {
     this.puffAt(x, vy, depth + 1.4, false);
     if (this.onScreen(x, vy)) this.d.sfx.snow("hit", 0.45);
-    const v = (Math.abs(Math.round(x * 5 + vy * 11)) % MARK_VARIANTS) | 0;
-    const img = markCharTint(s.add.image(Math.round(x), Math.round(vy), SNOWFIGHT_TEX.wall(v)).setOrigin(0.5, 0.45).setDepth(depth + 1));
+    this.wallMark(on, x, vy, depth + 1);
+  }
+
+  /** 막는 그림(on) 위 (x, y) 가까이에 벽 자국 — 자국 픽셀이 그 그림의 불투명 픽셀 위에 놓이는 자리에만 (snowMask.markSpot). 없으면 안 붙인다 */
+  private wallMark(on: SnowImg, x: number, y: number, depth: number): void {
+    const s = this.d.scene;
+    const v = (Math.abs(Math.round(x * 5 + y * 11)) % MARK_VARIANTS) | 0;
+    const key = SNOWFIGHT_TEX.wall(v);
+    const at = markSpot(on, x, y, frameMask(s.textures.getFrame(key)), 0.5, 0.45);
+    if (!at) return;
+    const img = markCharTint(s.add.image(at.x, at.y, key).setOrigin(0.5, 0.45).setDepth(depth));
     this.pushMark(img, s.time.now + WALL_MS);
   }
 

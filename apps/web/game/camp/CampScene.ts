@@ -63,6 +63,7 @@ import { StarScopes } from "../scopes/StarScopes";
 import { WeatherSound } from "../world/WeatherSound";
 import { SnowFight } from "../world/SnowFight";
 import { SnowGrid, type SnowNpc } from "../world/snowNpc";
+import { SnowOccluders } from "../world/snowMask";
 import { createBusArrival } from "../bus/BusArrival";
 import type { BusArrivalApi } from "../bus/busTypes";
 import { CampMap } from "./CampMap";
@@ -125,6 +126,10 @@ export class CampScene extends Phaser.Scene {
   private fight: SnowFight | null = null;
   /** 11/18 눈뭉치가 박히는 칸 (맵 충돌 — 계곡 물은 빼고 처음 쓸 때 굽는다) · 맞는 NPC 묶음 */
   private snowGrid: SnowGrid | null = null;
+  /** 눈싸움 막힌 칸 (맵 충돌 — 계곡 물은 뺀다) */
+  private campSolid(x: number, y: number): boolean {
+    return (this.snowGrid ??= new SnowGrid(CAMP_WIDTH, CAMP_HEIGHT).fillGroups([this.map.colliders, this.map.furnitureColliders], (cx, cy) => inCampStream(cx, cy, 0))).blocked(x, y);
+  }
   private snowNpcs: { life: readonly SnowNpc[]; all: SnowNpc[] } | null = null;
   /** 전망대 망원경 (망원 뷰) */
   private scope!: LookoutScope;
@@ -289,7 +294,13 @@ export class CampScene extends Phaser.Scene {
       live: () => !!this.snow?.on && !this.covered && !this.locked && !this.parked && !this.scope.isOpen,
       blocked: () => (this.snow?.holding ? "눈덩이를 내려놓고 던져요." : null),
       water: (x, y) => inCampStream(x, y, 0),
-      solid: (x, y) => (this.snowGrid ??= new SnowGrid(CAMP_WIDTH, CAMP_HEIGHT).fillGroups([this.map.colliders, this.map.furnitureColliders], (cx, cy) => inCampStream(cx, cy, 0))).blocked(x, y),
+      solid: (x, y) => this.campSolid(x, y),
+      // 11/18 마을과 같은 규칙: 나무·소품 그림 앞면에 박히고, 자국은 그림의 불투명 픽셀 위에만
+      occluders: new SnowOccluders({
+        scene: this,
+        solid: (x, y) => this.campSolid(x, y),
+        skip: () => new Set<unknown>([...(this.snowNpcs?.all ?? [])].map((n) => n.img?.()).filter(Boolean)),
+      }),
       npcs: () => {
         const life = this.life?.snowNpcs() ?? [];
         if (this.snowNpcs?.life !== life) this.snowNpcs = { life, all: [...life, ...this.map.snowNpcs()] };

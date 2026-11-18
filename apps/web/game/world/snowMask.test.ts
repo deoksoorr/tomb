@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SnowOccluders } from "./snowMask";
+import { markSpot, SnowOccluders, type FrameMask } from "./snowMask";
 
 // 그림 흉내 (마스크를 못 읽으니 그림 상자 전체가 불투명으로 잡힌다)
 function img(key: string, x: number, y: number, w: number, h: number, depth = y) {
@@ -61,5 +61,18 @@ describe("눈싸움 공을 막는 그림", () => {
     const o = occluders([g]);
     g.x = 140;
     expect(o.hit(100, 196, 8)).toBeNull();
+  });
+
+  it("눈 자국은 그림의 불투명 픽셀 안쪽에만 붙는다: 위 가장자리에 맞으면 안쪽으로 옮기고, 붙일 곳이 없으면 안 붙인다", () => {
+    // 5×4 자국 (모두 불투명), 원점 가운데
+    const mark: FrameMask = { w: 5, h: 4, a: new Uint8Array(20).fill(1), top: 0, bottom: 3, left: 0, right: 4 };
+    // 지붕 그림 상자 x 80~120, y 160~200
+    const roof = img("xmas~shop-hut", 100, 200, 40, 40);
+    const at = markSpot(roof as never, 100, 158, mark, 0.5, 0.5);
+    expect(at).not.toBeNull();
+    expect(at!.y - 2).toBeGreaterThanOrEqual(160);
+    // 가는 기둥 (폭 2px) — 자국이 들어갈 자리가 없다
+    const pole = img("snow~prop-lantern", 100, 200, 2, 40);
+    expect(markSpot(pole as never, 100, 180, mark, 0.5, 0.5)).toBeNull();
   });
 });
