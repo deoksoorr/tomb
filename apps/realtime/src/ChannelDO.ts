@@ -42,6 +42,8 @@ const SNOW_STACK_KEY = "snowStack";
 const CHAT_PREFIX = "chat:";
 /** 채팅이 바뀐 뒤 저장하기까지 모으는 시간 (그 사이 줄은 한 번에 쓴다 — 맵마다 이 간격에 최대 한 번) */
 const CHAT_SAVE_MS = 5_000;
+/** 11/18 캠핑장 눈덩이 목록을 모아 쓰는 간격 */
+const SNOW_STACK_SAVE_MS = 3_000;
 /** 좌석·입퇴장 변화를 저장하기까지 모으는 시간 */
 const LIVE_DEBOUNCE_MS = 500;
 /** 위치만 바뀐 경우 저장 최소 간격 (틱 루프가 멈출 때 이만큼 지났으면 쓴다) */
@@ -76,6 +78,9 @@ export class ChannelDO extends DurableObject<Env> {
   private liveSavedAt = 0;
   /** 맵별 최근 채팅 저장 대기 타이머 */
   private readonly chatTimers = new Map<MapId, ReturnType<typeof setTimeout>>();
+  /** 11/18 모아 쓸 눈덩이 목록 (null = 쓸 것 없음) */
+  private snowStackPending: unknown = null;
+  private snowStackTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -224,13 +229,15 @@ export class ChannelDO extends DurableObject<Env> {
             console.error("snowman save failed", e);
           }
         },
+        // 11/18 보안: 덩이 목록은 바뀔 때마다 쓰지 않고 SNOW_STACK_SAVE_MS로 모아 마지막 목록만 쓴다 (채팅 저장과 같다 — 대기 중인 타이머가 있으면 DO는 잠들지 않는다)
         snowStacksChanged: (list) => {
           if (room) return;
-          try {
-            ctx.storage.kv.put(SNOW_STACK_KEY, list);
-          } catch (e) {
-            console.error("snow stack save failed", e);
-          }
+          this.snowStackPending = list;
+          if (this.snowStackTimer !== null) return;
+          this.snowStackTimer = setTimeout(() => {
+            this.snowStackTimer = null;
+            this.saveSnowStacks();
+          }, SNOW_STACK_SAVE_MS);
         },
         goblinChanged: (s) => {
           if (room) return;
@@ -265,6 +272,8 @@ export class ChannelDO extends DurableObject<Env> {
     // 만석이면 hibernation 소켓으로 받지 않고 바로 닫는다. hibernation 소켓으로 받은 직후 닫으면
     // 클로징 핸드셰이크가 DO가 다음에 깨어날 때까지(로컬에서 약 10초) 끝나지 않아 클라이언트의 재시도가 늦어진다.
     if (!this.core.admits(ticket.visitorId)) return rejectSocket(CLOSE.CHANNEL_FULL, "channel full");
+    // 11/18 보안: 정상 종료로 나갔다 들어오기를 거듭하면 로비에 묻거나 입장 방송을 하기 전에 4008로 거절 (웹은 잠깐 기다렸다 다시 붙는다)
+    if (this.core.rejoinBlocked(ticket.visitorId, Date.now())) return rejectSocket(CLOSE.RATE_LIMITED, "rejoin too fast");
     // 새 방문자는 로비의 대기열 순서를 따른다(줄이 있으면 새치기 불가, 잡아 둔 자리는 그 사람만). 기다리는 사이
     // 다른 요청이 끼어들 수 있으므로 돌아와서 상한을 다시 본다.
     if (this.room === null && !this.core.has(ticket.visitorId)) {
@@ -447,6 +456,19 @@ export class ChannelDO extends DurableObject<Env> {
       else this.ctx.storage.kv.delete(LIVE_KEY);
     } catch (e) {
       console.error("live snapshot save failed", e);
+    }
+  }
+
+  // ── 11/18 캠핑장 눈덩이 목록 저장 (모아 쓰기) ──
+
+  private saveSnowStacks(): void {
+    const list = this.snowStackPending;
+    this.snowStackPending = null;
+    if (list === null) return;
+    try {
+      this.ctx.storage.kv.put(SNOW_STACK_KEY, list);
+    } catch (e) {
+      console.error("snow stack save failed", e);
     }
   }
 

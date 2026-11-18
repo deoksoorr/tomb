@@ -325,6 +325,17 @@ export const SERVER_WARP_COOLDOWN_MS = 800;
 /** 재접속 반복 제한: 이 시간 안에 REJOIN_MAX번까지만 다시 붙는다 (새로고침·끊김 재시도는 넉넉히 통과) */
 export const REJOIN_WINDOW_MS = 10_000;
 export const REJOIN_MAX = 6;
+/**
+ * 11/18 보안: 정상 종료(1000)로 나갔다 새로 들어와도 채팅 버킷·쿨다운·재접속 기록이 처음으로 돌아가지 않게, 나간 사람의
+ * 연결 단위 기록을 이 시간 동안 DO 메모리에 남겨 새 입장에 이어 붙인다 (계정 = visitorId 기준. 저장소에는 쓰지 않는다)
+ */
+export const DEPART_MEMO_MS = 60_000;
+/** 11/18 보안: 캠핑장 눈덩이 놓기·올리기·다시 들기를 한 사람이 1분에 이만큼까지 (넘치면 "wait" — 반복 저장·방송 남용 방지) */
+export const SNOW_ACTS_PER_MINUTE = 30;
+/** 11/18 보안: 앉기 거리를 잴 때 클라이언트가 보고한 목표 지점(tx,ty)을 인정하는 서버 위치와의 거리 (고블린 잡기와 같다) */
+export const SEAT_TARGET_SLACK = 64;
+/** 11/18 보안: 앉으면서 서버 위치가 이만큼 넘게 옮겨지면 순간이동으로 친다 (고블린 2초 제한) */
+export const SEAT_JUMP_PX = 24;
 /** 고블린 잡기: 순간이동 뒤 이만큼은 잡지 못한다 */
 export const GOBLIN_AFTER_TELEPORT_MS = 2000;
 /** 고블린 잡기: 클라이언트 목표 지점(tx,ty)을 인정하는 서버 위치와의 거리 (달리기 0.5초 남짓) */
@@ -345,6 +356,11 @@ type Peer<C> = PeerRecord & {
   rate: RateLimiter;
   budget: MoveBudget;
   lastWarpAt: number;
+  /**
+   * 11/18 보안: 고블린 잡기만 보는 「순간이동한 시각」 — warp 말고도 입장 스폰·재접속 위치 옮기기·좌석으로 옮겨 앉기를 센다
+   * (lastWarpAt은 클라이언트 warp 쿨다운에도 쓰여서, 입장 직후 정상 warp를 막지 않게 따로 둔다)
+   */
+  lastTeleportAt?: number;
   lastEmoteAt: number;
   lastGraveEventAt: number;
   lastLookAt: number;
@@ -383,6 +399,8 @@ type Peer<C> = PeerRecord & {
   throws?: SnowThrow[];
   /** 최근 1분 동안 받은 던지기 메시지 시각 (버린 것 포함 — SNOWBALL_PER_MINUTE 상한) */
   snowRecv?: number[];
+  /** 11/18 최근 1분 동안 받아들인 눈덩이 놓기·올리기·다시 들기 시각 (SNOW_ACTS_PER_MINUTE 상한) */
+  snowActs?: number[];
   /** 말풍선 채팅 도배 제한 (토큰 버킷). 재접속해도 피어에 남겨 다시 채워지지 않게 한다 */
   chatBucket?: ChatBucket;
   /** 최근 다시 붙은 시각들 (재접속 반복으로 메시지 한도·쿨다운을 초기화하거나 welcome을 거듭 받는 것을 막는다) */
@@ -393,6 +411,32 @@ type Peer<C> = PeerRecord & {
   saved: boolean;
 };
 
+/** 11/18 보안: 나간 사람에게서 다음 입장으로 이어 붙이는 연결 단위 기록 (DEPART_MEMO_MS 동안 메모리에만) */
+const DEPART_KEEP = [
+  "chatBucket",
+  "rejoins",
+  "lastEmoteAt",
+  "lastGraveEventAt",
+  "lastLookAt",
+  "lastFireworkAt",
+  "lastActAt",
+  "lastSayAt",
+  "lastMegaphoneAt",
+  "lastEmoAt",
+  "lastMoodAt",
+  "lastRideAt",
+  "lastRodAt",
+  "lastAwayAt",
+  "lastBbqAt",
+  "lastWhoOnAt",
+  "lastSnowmanAt",
+  "lastSnowActAt",
+  "snowActs",
+  "lastSnowballAt",
+  "snowRecv",
+] as const;
+type Departed = { at: number; rejoins?: number[] } & Record<string, unknown>;
+
 /** 11/18 눈싸움 던지기 하나 (서버가 받은 시각 at, 던진 맵, 이미 누가 맞았는지) */
 type SnowThrow = { n: number; at: number; map: MapId; x: number; y: number; tx: number; ty: number; hit: boolean };
 
@@ -400,6 +444,8 @@ export class ChannelCore<C extends object> {
   private readonly peers = new Map<number, Peer<C>>();
   private readonly bySocket = new Map<C, number>();
   private readonly byVisitor = new Map<string, number>();
+  /** 11/18 보안: 방금 나간 방문자의 연결 단위 기록 (visitorId → DEPART_MEMO_MS 동안) */
+  private readonly departed = new Map<string, Departed>();
   /** 좌석표 키(seatKey: 마을은 seatId 그대로, 캠핑장은 접두어) → sid */
   private readonly seats = new Map<string, number>();
   /** 다음 틱 SNAPSHOT에 실을 sid ("바뀐 사람" 집합) */
@@ -561,6 +607,8 @@ export class ChannelCore<C extends object> {
     // (DO는 admits()로 먼저 거르지만, 여기서도 한 번 더 지킨다)
     const newSid = this.admits(t.visitorId) ? allocSid(this.peers) : null;
     if (newSid === null) return this.host.close(conn, CLOSE.CHANNEL_FULL, "channel full");
+    // 11/18 보안: 방금 나간 사람이면 재접속 반복 제한을 이어서 센다 (DO가 로비에 묻기 전에 rejoinBlocked로 먼저 거른다)
+    if (this.rejoinBlocked(t.visitorId, now)) return this.host.close(conn, CLOSE.RATE_LIMITED, "rejoin too fast");
 
     const map: MapId = t.map && mapAllowed(t.map, t) ? t.map : "village";
     // 방은 크기를 모른다 (Worker가 u16 범위만 본다). 월드 채널은 그 맵 범위 안일 때만
@@ -589,6 +637,9 @@ export class ChannelCore<C extends object> {
       ...(t.sea ? { sea: true as const } : {}),
     };
     const p = this.adoptNew(rec, conn, now);
+    this.carryDeparted(p, now);
+    // 입장 스폰도 순간이동으로 친다 (고블린 위치로 바로 들어와 잡기 방지)
+    p.lastTeleportAt = now;
     this.save(p);
     this.welcome(p, t.channel, false, now);
     this.broadcastMap(map, encodeEvent({ t: "join", ...this.info(p) }), p.sid);
@@ -596,6 +647,40 @@ export class ChannelCore<C extends object> {
     this.broadcastCount(p.sid);
     this.host.visitorJoined(p.visitorId, p.joinedAt);
     this.host.liveChanged?.(true);
+  }
+
+  /**
+   * 11/18 보안: 이 방문자가 지금 다시 붙으면 재접속 반복 제한(REJOIN_WINDOW_MS 안 REJOIN_MAX번)에 걸리는지.
+   * 접속·유예 중인 사람은 그 기록으로, 방금 정상 종료(1000)로 나간 사람은 남겨 둔 기록으로 센다.
+   * DO는 로비(admit)에 묻기 전에 이걸 먼저 봐서, 들락날락 반복이 로비·입장 방송을 부르지 않게 한다
+   */
+  rejoinBlocked(visitorId: string, now: number): boolean {
+    const sid = this.byVisitor.get(visitorId);
+    const live = sid === undefined ? undefined : this.peers.get(sid);
+    const memo = live ? undefined : this.departed.get(visitorId);
+    const list = live ? live.rejoins : memo && now - memo.at < DEPART_MEMO_MS ? memo.rejoins : undefined;
+    return (list ?? []).filter((at) => now - at < REJOIN_WINDOW_MS).length >= REJOIN_MAX;
+  }
+
+  /** 11/18 보안: 나가는 사람의 연결 단위 기록을 남긴다 (오래된 것은 같이 정리) */
+  private keepDeparted(p: Peer<C>, now: number): void {
+    for (const [v, d] of this.departed) if (now - d.at >= DEPART_MEMO_MS) this.departed.delete(v);
+    const d: Departed = { at: now };
+    const src = p as unknown as Record<string, unknown>;
+    const dst = d as Record<string, unknown>;
+    for (const k of DEPART_KEEP) if (src[k] !== undefined && src[k] !== -Infinity) dst[k] = src[k];
+    this.departed.set(p.visitorId, d);
+  }
+
+  /** 11/18 보안: 새 입장에 방금 나간 기록을 이어 붙이고, 이번 입장도 재접속으로 센다 */
+  private carryDeparted(p: Peer<C>, now: number): void {
+    const d = this.departed.get(p.visitorId);
+    if (!d) return;
+    this.departed.delete(p.visitorId);
+    if (now - d.at >= DEPART_MEMO_MS) return;
+    const dst = p as unknown as Record<string, unknown>;
+    for (const k of DEPART_KEEP) if (d[k] !== undefined) dst[k] = d[k];
+    p.rejoins = [...(d.rejoins ?? []).filter((at) => now - at < REJOIN_WINDOW_MS), now];
   }
 
   /**
@@ -776,7 +861,10 @@ export class ChannelCore<C extends object> {
     const p = this.peers.get(sid);
     if (!p || p.conn !== conn) return;
     p.conn = null;
-    if (code === CLOSE_NORMAL || this.cfg.graceMs <= 0) return this.remove(p);
+    if (code === CLOSE_NORMAL || this.cfg.graceMs <= 0) {
+      this.keepDeparted(p, now);
+      return this.remove(p);
+    }
 
     p.until = now + this.cfg.graceMs;
     p.tx = p.x;
@@ -798,6 +886,7 @@ export class ChannelCore<C extends object> {
       this.host.dropReservation(p.sid);
       this.remove(p);
     }
+    for (const [v, d] of this.departed) if (now - d.at >= DEPART_MEMO_MS) this.departed.delete(v);
   }
 
   /**
@@ -1173,6 +1262,11 @@ export class ChannelCore<C extends object> {
       else if (!this.stacks.has(id)) this.sendTo(p, { t: "snowStackGone", id, sid: p.sid });
     };
     if (now - (p.lastSnowActAt ?? -Infinity) < SNOW_ACT_INTERVAL_MS) return deny("wait");
+    // 11/18 보안: 1분에 SNOW_ACTS_PER_MINUTE번까지 (놓고 들기 반복으로 저장·방송을 늘리는 것 방지)
+    const acts = (p.snowActs ?? []).filter((at) => now - at < 60_000);
+    p.snowActs = acts;
+    if (acts.length >= SNOW_ACTS_PER_MINUTE) return deny("wait");
+    acts.push(now);
     this.stacks.prune(now, this.inCamp);
     if (m.t === "snowTake") {
       const r = this.stacks.take(p.visitorId, m.id, now);
@@ -1473,8 +1567,10 @@ export class ChannelCore<C extends object> {
     // 긴 벤치에서 앉은 채 옆자리로: 같은 가구의 다른 좌석이면 거리와 상관없이 옮겨 앉는다
     const old = p.seatId ? seatSlotIn(map, p.seatId) : undefined;
     const slide = !!seat && !!old && old.furnitureId !== null && old.furnitureId === seat.furnitureId;
-    // 위치는 클라이언트가 마지막으로 보고한 지점으로 잰다 (서버 위치가 속도 예산 때문에 잠깐 뒤처져 있어도 거절하지 않게)
-    const at = { x: p.tx, y: p.ty };
+    // 위치는 클라이언트가 마지막으로 보고한 지점으로 잰다 (서버 위치가 속도 예산 때문에 잠깐 뒤처져 있어도 거절하지 않게).
+    // 11/18 보안: 다만 그 지점이 서버 위치에서 SEAT_TARGET_SLACK 안일 때만 — 먼 좌석 좌표를 MOVE로 찍고 앉아 순간이동하는 것을 막는다
+    this.chase(p, now);
+    const at = Math.hypot(p.tx - p.x, p.ty - p.y) <= SEAT_TARGET_SLACK ? { x: p.tx, y: p.ty } : { x: p.x, y: p.y };
     // 2인승 조각배(F13): 같은 배의 다른 자리에 앉은 사람 곁이면 나루터(앵커)에서 멀어도 같이 탄다 — 배가 물가에 와 있다
     const beside = !!seat && !slide && holder === undefined && this.besideCompanion(seat, at, p.sid, map);
     if (!seat || holder !== undefined || (!slide && !beside && dist(seat, at) > (seat.radius ?? SEAT_SERVER_RADIUS))) {
@@ -1531,6 +1627,8 @@ export class ChannelCore<C extends object> {
     p.seatId = seatId;
     // 11/16 r13 떠다니는 자리(바닷가 튜브)는 바다 어디서든 올라타요 → 탄 곳 그대로 (앵커로 끌어가지 않아요)
     if (!(seat.mobile && (slide || seat.drift))) {
+      // 11/18 보안: 앉으면서 서버 위치가 크게 옮겨지면 순간이동으로 친다 (고블린 2초 제한)
+      if (Math.hypot(seat.x - p.x, seat.y - p.y) > SEAT_JUMP_PX) p.lastTeleportAt = Date.now();
       p.x = p.tx = seat.x;
       p.y = p.ty = seat.y;
     }
@@ -1746,9 +1844,10 @@ export class ChannelCore<C extends object> {
 
   /** 잡기 요청: 가장 먼저 닿은 한 명만. 위치는 서버가 아는 값(마지막 보고·서버 추적 위치 중 가까운 쪽)으로 잰다 */
   private onGoblinClaim(p: Peer<C>, id: string, now: number): void {
-    if (!this.goblinOn || !p.conn || mapOfPeer(p) !== "village") return;
-    // 순간이동(warp·같은 맵 옮기기) 바로 뒤에는 잡지 못한다 — 고블린 위로 순간이동해 먼저 잡는 봇을 막는다
-    if (now - Math.max(p.lastWarpAt, p.lastMapAt ?? -Infinity) < GOBLIN_AFTER_TELEPORT_MS) return;
+    // 11/18 보안: 실내(away — 다른 사람 화면에 안 보이는 상태)에서는 잡지 못한다
+    if (!this.goblinOn || !p.conn || mapOfPeer(p) !== "village" || p.away) return;
+    // 순간이동(warp·같은 맵 옮기기, 11/18 입장 스폰·재접속 위치·좌석으로 옮겨 앉기) 바로 뒤에는 잡지 못한다 — 고블린 위로 순간이동해 먼저 잡는 봇을 막는다
+    if (now - Math.max(p.lastWarpAt, p.lastMapAt ?? -Infinity, p.lastTeleportAt ?? -Infinity) < GOBLIN_AFTER_TELEPORT_MS) return;
     this.goblinCheck(now);
     this.chase(p, now); // 그동안 쌓인 속도 예산만큼 서버 위치를 먼저 따라잡는다
     // 클라이언트가 보고한 목표 지점은 서버 위치 가까이일 때만 인정한다 (목표만 고블린 위에 찍는 속임 방지)
@@ -1901,6 +2000,8 @@ export class ChannelCore<C extends object> {
     p.rate = new RateLimiter();
     p.budget = new MoveBudget(now);
     p.lastWarpAt = -Infinity;
+    // 11/18 보안: 다시 붙으면(?x=&y= 위치 옮기기 포함) 순간이동으로 친다 — 고블린 2초 제한
+    p.lastTeleportAt = now;
     p.lastEmoteAt = -Infinity;
     p.lastGraveEventAt = -Infinity;
     p.lastLookAt = -Infinity;

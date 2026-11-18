@@ -23,7 +23,7 @@ import {
 } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import { admit } from "./auth";
-import { ChannelCore, MAP_INTERVAL_MS, type ChannelHost, type JoinTicket, type PeerRecord } from "./channel";
+import { ChannelCore, GOBLIN_AFTER_TELEPORT_MS, MAP_INTERVAL_MS, type ChannelHost, type JoinTicket, type PeerRecord } from "./channel";
 import { parseMap, parseSpawn } from "./logic";
 
 // 11/15 언젠가 캠핑장: 같은 채널(Channel DO) 안에서 사람마다 맵. 위치·말풍선·채팅·몸짓은 같은 맵끼리만, 정원·확성기는 채널 전체.
@@ -334,8 +334,8 @@ describe("golden goblin is village only", () => {
     core.message(c, send({ t: "goblin", id: g.id }), T);
     expect(events(v).some((e) => e.t === "goblinCaught")).toBe(false);
     expect(events(c).some((e) => e.t === "goblin" || e.t === "goblinCaught")).toBe(false);
-    // 같은 자리의 마을 사람은 잡는다 (대조군)
-    const w = join("w", { spawn: { x, y } });
+    // 같은 자리의 마을 사람은 잡는다 (대조군). 11/18 입장 스폰도 순간이동이라 그 2초 뒤에 잡는다
+    const w = join("w", { spawn: { x, y }, now: T - GOBLIN_AFTER_TELEPORT_MS });
     core.message(w, send({ t: "goblin", id: g.id }), T);
     expect(events(v).some((e) => e.t === "goblinCaught")).toBe(true);
     expect(events(c).some((e) => e.t === "goblinCaught")).toBe(false);
