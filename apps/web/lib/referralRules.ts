@@ -1,7 +1,8 @@
 // 추천 코드 규칙 (화면·서버 공용 순수 정의). 저장은 lib/store/referrals.ts, 판정·보상은 lib/referralService.ts.
 //  - 계정마다 공개 추천 코드 하나 (처음 볼 때 만든다). 비밀 개인 코드(로그인용)와는 전혀 다른 값이다
 //  - 추천인은 가입할 때나 가입 뒤 REF_ENTER_DAYS일 안에 한 번만 정한다. 바꿀 수 없고, 나·운영자·내가 데려온 이웃은 안 된다
-//  - 데려온 이웃이 모두 합쳐 REF_NEED_MIN분 이상 머물고 서로 다른 REF_NEED_DAYS일 이상 들어오면 "조건 달성" (한 번만)
+//  - 데려온 이웃이 하루 REF_DAY_MIN분 넘게 머문 날이 REF_NEED_DAYS일이 되면 "조건 달성" (한 번만, 이어진 날일 필요 없다).
+//    11/18 예전엔 「합쳐서 3시간 + 들어온 날 3일」. 그 전에 들어온 날은 너그럽게 1시간 머문 날로 친다 (referralService progressOf)
 //  - 조건 달성 때 둘 다 REF_REWARD_POINTS를 선물함으로 받는다. 추천한 쪽은 한 달(한국 시간 달력)에 REF_MONTH_CAP명까지만 포인트
 //  - 보상 방식(RefMode): 기본은 「모두 확인」(관리자가 승인해야 보상). 「자동」이면 같은 사람 판정(lib/sameUserRules.ts)으로 정한다
 
@@ -10,7 +11,9 @@ export const REF_CODE_LEN = 6;
 export const REF_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 export const REF_REWARD_POINTS = 300;
 export const REF_MONTH_CAP = 5;
-export const REF_NEED_MIN = 180;
+/** 하루에 이만큼(분) 넘게 머문 날을 센다 */
+export const REF_DAY_MIN = 60;
+/** 그런 날이 이만큼이면 자리 잡기 */
 export const REF_NEED_DAYS = 3;
 export const REF_ENTER_DAYS = 3;
 /** 2단계 (추천인의 추천인, 그 위로는 없다): 데려온 친구가 또 데려온 이웃이 자리를 잡으면 받는 포인트와 한 달 상한 */
@@ -95,7 +98,10 @@ export type RefMyProgress = {
   referrerName: string | null;
   at: number;
   stayMinutes: number;
+  /** 11/18 하루 1시간(REF_DAY_MIN) 넘게 머문 날 수 (옛 기준 날 포함) */
   days: number;
+  /** 오늘 머문 분 */
+  todayMin: number;
   qualified: boolean;
   /** 환영 선물을 받았는지 (같은 사람 같음·자동 보상 꺼짐·확인 중이면 false) */
   rewarded: boolean;

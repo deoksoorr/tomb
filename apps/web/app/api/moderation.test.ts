@@ -271,10 +271,12 @@ describe("47번 신고", () => {
     fakeRealtime();
     const store = getStore();
     const [grave] = (await store.listAll()).filter((g) => !g.hidden);
-    await store.report(grave.id, "v-r1", "ip-r1", "abuse");
+    await store.report(grave.id, "v-r1", "abuse", Date.now(), false, { accountId: "v-r1", name: "신고자일" });
     let list = (await bodyOf<adminReports.AdminReportsResponse>(adminReports.GET(call("/x", { admin: true })))).reports;
     const g = list.find((r) => r.key === `grave:${grave.id}`)!;
     expect(g).toMatchObject({ type: "grave", name: grave.name, count: 1, reasonSummary: "욕설·혐오 1", actions: ["hide", "delete", "kick", "dismiss"] });
+    // 11/18 신고한 사람이 이름·계정 코드로 보인다
+    expect(g.who).toEqual([expect.objectContaining({ accountId: "v-r1", name: "신고자일" })]);
     expect(g.preview).toContain(grave.epitaph);
     await adminReports.POST(call("/x", { admin: true, body: { key: g.key, action: "hide" } }));
     expect((await store.get(grave.id))?.hidden).toBe(true);
@@ -282,7 +284,7 @@ describe("47번 신고", () => {
     expect(list.some((r) => r.key === g.key)).toBe(false);
     const done = (await bodyOf<adminReports.AdminReportsResponse>(adminReports.GET(call("/x?status=done", { admin: true })))).reports;
     expect(done.find((r) => r.key === g.key)).toMatchObject({ resolution: { action: "숨김" }, count: 1 });
-    await store.report(grave.id, "v-r2", "ip-r2", "spam");
+    await store.report(grave.id, "v-r2", "spam", Date.now(), false, { accountId: "v-r2", name: null });
     list = (await bodyOf<adminReports.AdminReportsResponse>(adminReports.GET(call("/x", { admin: true })))).reports;
     expect(list.find((r) => r.key === g.key)?.count).toBe(2);
 
@@ -295,10 +297,11 @@ describe("47번 신고", () => {
     if (house) {
       const entryId = `gtest${Date.now()}`.slice(0, 16);
       await houses.addGuest(house.id, { id: entryId, name: "손님", text: "나쁜 말", at: Date.now(), author: "author-x" } as never, "20991231");
-      await houses.reportGuest(house.id, entryId, "ip-g1");
+      await houses.reportGuest(house.id, entryId, { accountId: "v-g1", name: "방명록신고자" });
       list = (await bodyOf<adminReports.AdminReportsResponse>(adminReports.GET(call("/x", { admin: true })))).reports;
       const gb = list.find((r) => r.key === `guestbook:${house.id}/${entryId}`);
       expect(gb).toMatchObject({ type: "guestbook", accountId: "author-x", count: 1 });
+      expect(gb?.who).toEqual([expect.objectContaining({ accountId: "v-g1", name: "방명록신고자" })]);
       await adminReports.POST(call("/x", { admin: true, body: { key: gb!.key, action: "delete" } }));
       expect((await houses.guestbook(house.id, true)).some((e) => e.id === entryId)).toBe(false);
     }

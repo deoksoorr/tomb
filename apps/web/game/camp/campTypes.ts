@@ -1,5 +1,6 @@
 import type * as Phaser from "phaser";
 import type { CampNpcId } from "@tomb/protocol";
+import type { ReachZone } from "../logic/reach";
 
 // 11/15 캠핑장 (game/camp) 모듈 사이 약속. 맵 그림·충돌(CampMap) ↔ 장면(CampScene) ↔ 버스(game/bus).
 // 캠핑장 그림(텍스처)은 정류장 근처·버스 여행 동안 조금씩 굽고, 장면을 닫아도 남겨 둬요 (다시 갈 때 멈추지 않게).
@@ -18,6 +19,8 @@ export type CampInteractable = {
   y: number;
   /** 판정 반지름 */
   r: number;
+  /** 11/18 바닥 영역 (있으면 반지름 대신 이 상자 안이 닿는 곳 — 버스 정차 칸, game/logic/reach) */
+  zone?: ReachZone;
   /** 화면 안내 ("E 버스 타기") */
   label: string;
   npc?: CampNpcId;

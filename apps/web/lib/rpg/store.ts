@@ -15,13 +15,15 @@ import type { CharacterState, DailyStats } from "./types";
 //  - rpg:{a}:char        HASH  rev → 버전, data → CharacterState JSON
 //  - rpg:{a}:active      STRING 지금 진행 중인 판의 nonce (시간 제한 + 여유 뒤 만료). 새 판을 시작하면 바뀐다
 //  - rpg:{a}:used:{n}    STRING 끝낸 판 표시 (SET NX, 2일) → 같은 티켓을 두 번 낼 수 없다
-//  - rpg:{a}:runs:{시}   STRING 이번 한 시간 동안 시작한 판 수 (INCR, 1시간)
+//  - rpg:{a}:starts      ZSET  판 시작 시각들 (nonce → 시각 ms). 11/18 최근 60분 안에 시작한 판 수 (정시 버킷이던 rpg:{a}:runs:{시}는 정시 앞뒤로 몰아 할 수 있었다)
 //  - rpg:{a}:day:{게임 날짜}   HASH  points/runs/exp 오늘 사냥 기록 (2일)
 //  - rpg:endgame:launch  STRING 11/15 끝판이 이 서버(운영·테스트 따로)에서 처음 열린 시각 ms (SET NX, 한 번만). 개척자 모집 14일의 시작
 //  - rpg:pioneer         HASH  계정 id → "번호|받은 시각 ms" (개척자, 한 번 받으면 그대로)
 //  - rpg:pioneer:n       STRING 개척자 번호 (INCR)
 
 export const RUNS_PER_HOUR = 30;
+/** 11/18 판 수를 세는 창 (최근 60분) */
+export const RUN_WINDOW_MS = 3_600_000;
 const USED_TTL_SEC = 2 * 86_400;
 const DAY_TTL_SEC = 2 * 86_400;
 const CAS_RETRIES = 6;
@@ -42,13 +44,16 @@ export interface RpgStore {
     reason: string,
     now?: number,
   ): Promise<{ state: CharacterState; result: T }>;
-  /** 시간당 한도를 세고 진행 중인 판으로 기록한다. 한도면 false */
-  startRun(acct: string, nonce: string, ttlSec: number, hourBucket: string): Promise<boolean>;
+  /** 최근 60분 판 수 한도를 세고 진행 중인 판으로 기록한다 (11/18 이동 창). 한도면 false */
+  startRun(acct: string, nonce: string, ttlSec: number, now: number): Promise<boolean>;
   /** 끝내기: 처음 내는 티켓이고 지금 진행 중인 판이어야 ok */
   claimRun(acct: string, nonce: string): Promise<ClaimResult>;
+  /** 11/18 지금 진행 중인 판의 nonce (없으면 null) — 드롭 시드 알려 주기(reveal)가 진행 중인 판에만 */
+  activeRun(acct: string): Promise<string | null>;
   addDaily(acct: string, day: string, d: Partial<DailyStats>): Promise<DailyStats>;
   daily(acct: string, day: string): Promise<DailyStats>;
-  runsThisHour(acct: string, hourBucket: string): Promise<number>;
+  /** 최근 60분 안에 시작한 판 수 */
+  runsThisHour(acct: string, now: number): Promise<number>;
   /** 저장된 캐릭터를 커서로 훑는다 (next "0" = 끝). 랭킹 기존 기록 채우기용 (lib/huntLevelRank) */
   scanChars(cursor: string, count: number): Promise<{ next: string; chars: [string, CharacterState][] }>;
   /** 11/15 끝판이 처음 열린 시각: 없으면 now로 적고(SET NX) 저장된 값을 돌려준다 */
@@ -61,7 +66,7 @@ export const rk = {
   char: (a: string) => `rpg:${a}:char`,
   active: (a: string) => `rpg:${a}:active`,
   used: (a: string, n: string) => `rpg:${a}:used:${n}`,
-  runs: (a: string, hour: string) => `rpg:${a}:runs:${hour}`,
+  starts: (a: string) => `rpg:${a}:starts`,
   day: (a: string, day: string) => `rpg:${a}:day:${day}`,
   launch: "rpg:endgame:launch",
   pioneer: "rpg:pioneer",
@@ -77,7 +82,7 @@ export class MemoryRpgStore implements RpgStore {
   private chars = new Map<string, CharacterState>();
   private active = new Map<string, { nonce: string; until: number }>();
   private used = new Set<string>();
-  private runs = new Map<string, number>();
+  private starts = new Map<string, number[]>();
   private days = new Map<string, DailyStats>();
   private launch: number | null = null;
   private pioneers = new Map<string, { n: number; at: number }>();
@@ -99,11 +104,13 @@ export class MemoryRpgStore implements RpgStore {
     this.chars.set(acct, structuredClone(out.state));
     return { state: out.state, result: out.result };
   }
-  async startRun(acct: string, nonce: string, ttlSec: number, hour: string): Promise<boolean> {
-    const k = rk.runs(acct, hour);
-    const n = (this.runs.get(k) ?? 0) + 1;
-    this.runs.set(k, n);
-    if (n > RUNS_PER_HOUR) return false;
+  async startRun(acct: string, nonce: string, ttlSec: number, now: number): Promise<boolean> {
+    const live = (this.starts.get(acct) ?? []).filter((t) => t > now - RUN_WINDOW_MS);
+    if (live.length >= RUNS_PER_HOUR) {
+      this.starts.set(acct, live);
+      return false;
+    }
+    this.starts.set(acct, [...live, now]);
     this.active.set(acct, { nonce, until: Date.now() + ttlSec * 1000 });
     return true;
   }
@@ -118,6 +125,11 @@ export class MemoryRpgStore implements RpgStore {
     return "ok";
   }
 
+  async activeRun(acct: string): Promise<string | null> {
+    const a = this.active.get(acct);
+    return a && a.until >= Date.now() ? a.nonce : null;
+  }
+
   async addDaily(acct: string, day: string, d: Partial<DailyStats>): Promise<DailyStats> {
     const k = rk.day(acct, day);
     const cur = this.days.get(k) ?? { points: 0, runs: 0, exp: 0 };
@@ -130,8 +142,8 @@ export class MemoryRpgStore implements RpgStore {
     return { ...(this.days.get(rk.day(acct, day)) ?? { points: 0, runs: 0, exp: 0 }) };
   }
 
-  async runsThisHour(acct: string, hour: string): Promise<number> {
-    return Math.min(this.runs.get(rk.runs(acct, hour)) ?? 0, RUNS_PER_HOUR);
+  async runsThisHour(acct: string, now: number): Promise<number> {
+    return Math.min((this.starts.get(acct) ?? []).filter((t) => t > now - RUN_WINDOW_MS).length, RUNS_PER_HOUR);
   }
 
   async scanChars(cursor: string, count: number) {
@@ -187,11 +199,13 @@ end
 redis.call('HSET', KEYS[1], 'rev', ARGV[2], 'data', ARGV[3])
 return 1
 `;
-// KEYS: runs, active  ARGV: nonce, ttl, max
+// KEYS: starts(ZSET), active  ARGV: nonce, ttl, max, now — 최근 60분 밖은 지우고 세어 한도 안이면 이 판을 더한다 (11/18 이동 창)
 const START_LUA = `
-local n = redis.call('INCR', KEYS[1])
-if n == 1 then redis.call('EXPIRE', KEYS[1], 3600) end
-if n > tonumber(ARGV[3]) then return 0 end
+local now = tonumber(ARGV[4])
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now - ${RUN_WINDOW_MS})
+if redis.call('ZCARD', KEYS[1]) >= tonumber(ARGV[3]) then return 0 end
+redis.call('ZADD', KEYS[1], now, ARGV[1])
+redis.call('EXPIRE', KEYS[1], ${RUN_WINDOW_MS / 1000})
 redis.call('SET', KEYS[2], ARGV[1], 'EX', ARGV[2])
 return 1
 `;
@@ -263,13 +277,17 @@ export class RedisRpgStore implements RpgStore {
     }
     throw conflict();
   }
-  async startRun(acct: string, nonce: string, ttlSec: number, hour: string): Promise<boolean> {
-    const r = await this.redis.eval<string[], number>(START_LUA, [rk.runs(acct, hour), rk.active(acct)], [nonce, String(ttlSec), String(RUNS_PER_HOUR)]);
+  async startRun(acct: string, nonce: string, ttlSec: number, now: number): Promise<boolean> {
+    const r = await this.redis.eval<string[], number>(START_LUA, [rk.starts(acct), rk.active(acct)], [nonce, String(ttlSec), String(RUNS_PER_HOUR), String(Math.round(now))]);
     return Number(r) === 1;
   }
 
   async claimRun(acct: string, nonce: string): Promise<ClaimResult> {
     return (await this.redis.eval<string[], string>(CLAIM_LUA, [rk.used(acct, nonce), rk.active(acct)], [nonce, String(USED_TTL_SEC)])) as ClaimResult;
+  }
+
+  async activeRun(acct: string): Promise<string | null> {
+    return (await this.redis.get<string>(rk.active(acct))) ?? null;
   }
 
   async addDaily(acct: string, day: string, d: Partial<DailyStats>): Promise<DailyStats> {
@@ -286,8 +304,8 @@ export class RedisRpgStore implements RpgStore {
     return { points: Number(h.points ?? 0), runs: Number(h.runs ?? 0), exp: Number(h.exp ?? 0) };
   }
 
-  async runsThisHour(acct: string, hour: string): Promise<number> {
-    return Math.min(Number((await this.redis.get<string>(rk.runs(acct, hour))) ?? 0), RUNS_PER_HOUR);
+  async runsThisHour(acct: string, now: number): Promise<number> {
+    return Math.min(Number(await this.redis.zcount(rk.starts(acct), `(${Math.round(now - RUN_WINDOW_MS)}`, "+inf")), RUNS_PER_HOUR);
   }
 
   /** SCAN rpg:*:char (해시만) → 캐릭터 JSON을 파이프라인 한 번으로. 깨진 JSON은 건너뛴다 */

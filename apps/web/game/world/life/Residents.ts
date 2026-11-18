@@ -4,6 +4,7 @@ import { activeResidentCount, normalizeResidentSettings, RESIDENTS_DEFAULT, type
 import { isBackground } from "@/lib/background";
 import type { MapConcept } from "@/lib/mapConcept";
 import { currentMapConcept } from "@/lib/mapConceptClient";
+import type { SnowNpc } from "../snowNpc";
 import { AvatarView } from "../../entities/AvatarView";
 import type { Player } from "../../entities/Player";
 import { SAY_MS } from "../../entities/SpeechBubble";
@@ -298,6 +299,31 @@ export class Residents {
     }
     return true;
   }
+
+  /** 11/18 눈싸움: 맞을 수 있는 주민 (보이는 사람만 상자를 낸다). 맞으면 그 자리에 멈칫 — 말할 때처럼 붙들었다가 공유 자리로 슬며시 */
+  snowNpcs(): readonly SnowNpc[] {
+    if (this.snowList && this.snowFor === this.list) return this.snowList;
+    this.snowFor = this.list;
+    return (this.snowList = this.list.map(
+      (r): SnowNpc => ({
+        voice: "person",
+        box: (out) => !!r.view && r.visible && r.alpha > 0.5 && r.view.visible && !!r.view.snowBody(out),
+        av: () => r.view,
+        hold: (ms) => {
+          const pnow = performance.now();
+          if (pnow < r.talkUntil) return;
+          const st = r.pose.state;
+          r.holdX = r.x;
+          r.holdY = r.y;
+          r.holdState = st === "walk" || st === "run" ? "idle" : st;
+          r.holdDir = r.pose.dir;
+          r.talkUntil = pnow + ms;
+        },
+      }),
+    ));
+  }
+  private snowList: SnowNpc[] | null = null;
+  private snowFor: ResidentView[] | null = null;
 
   destroy(): void {
     if (this.destroyed) return;

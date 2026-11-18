@@ -8,6 +8,7 @@ import { isSnowy, type MapConcept } from "@/lib/mapConcept";
 import { currentMapConcept } from "@/lib/mapConceptClient";
 import { cx } from "../ui/cx";
 import s from "./rpg.module.css";
+import { OddsLink } from "../odds/OddsLayer";
 
 // 40번 사냥터 고르기: 난이도마다 두세 곳, 카드마다 지도 미리보기(게임과 같은 그림)·이름·입장 레벨·지형 기믹.
 // 난이도 줄은 창 너비를 다 쓰고, 그 난이도의 사냥터 카드가 한 줄에 모두 보인다 (카드 수만큼 균등 분할).
@@ -187,7 +188,8 @@ export function ZoneInfo({ z }: { z: ZoneDef }) {
         <br />
         웨이브 {z.waves}개, 제한 시간 {z.timeLimitSec}초, 장비 드롭 Lv.
         {Math.max(1, D.dropMaxLevel - 20)}~{D.dropMaxLevel}
-        {favor.length > 0 && <><br />잘 나오는 장비 {favor.join(", ")}</>}
+        {favor.length > 0 && <><br />잘 나오는 장비 {favor.join(", ")}</>}{" "}
+        <OddsLink section="hunt" />
       </p>
     </div>
   );

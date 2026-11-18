@@ -3,7 +3,7 @@ import type { AttendClaim, CalendarMonthRecord } from "../calendar";
 import type { EarnSource } from "../economy";
 import type { EarnBoost } from "../pointEvent";
 import { msUntilDayReset } from "../gameDay";
-import type { ReportLogEntry, ReportReason } from "../reports";
+import type { ReportBy, ReportLogEntry, ReportReason } from "../reports";
 import { PRESENCE_HIDDEN_INTERVAL_MS, SHRINE_KEEP_DAYS, type ActivityItem, type Grave, type GraveDecor, type PassReason } from "../types";
 
 /**
@@ -28,7 +28,7 @@ export type ReportSummary = { count: number; log: ReportLogEntry[] };
 
 /** 헌화 하루 1회 판정 기간: 다음 새벽 5시(한국 시간, lib/gameDay)까지 — 그때 다시 놓을 수 있다 (예전: 놓은 때부터 24시간) */
 export const flowerTtlSec = (now: number) => Math.max(1, Math.ceil(msUntilDayReset(now) / 1000));
-/** 서로 다른 IP의 신고가 이만큼 모이면 숨긴다 */
+/** 서로 다른 계정의 신고가 이만큼 모이면 숨긴다 (11/18 IP가 아니라 계정 단위 — 만든 지 3일 지난 계정만 센다) */
 export const REPORT_HIDE_THRESHOLD = 5;
 
 /**
@@ -47,6 +47,10 @@ export interface GraveStore {
    * grave.hidden·decor는 무시하고 기존 숨김·꾸미기를 유지한다
    */
   put(grave: Grave): Promise<void>;
+  /**
+   * 11/18 수정 전용: 묘비가 아직 묘역에 있을 때만 덮어쓴다 (없으면 false — 이장·삭제와 동시에 온 수정이 묘비를 되살리지 못하게)
+   */
+  update(grave: Grave): Promise<boolean>;
   /** 메타·카운트·집합을 모두 지우고 지운 묘비를 돌려준다 (이미지는 호출자가 정리). 관리자 삭제용 */
   remove(id: string): Promise<Grave | null>;
   /**
@@ -91,16 +95,18 @@ export interface GraveStore {
   /** 성불 정리 잠금: ttlMs 동안 한 번만 true (여러 요청이 같은 정리를 겹쳐 하지 않게). Redis는 서버 시계로 잰다 */
   lockSweep(ttlMs: number, now: number): Promise<boolean>;
   /**
-   * 신고는 IP 해시 단위로 센다 (쿠키를 새로 받아도 같은 IP는 1건). 같은 방문자나 같은 IP의 재신고는 "duplicate".
-   * 서로 다른 IP가 REPORT_HIDE_THRESHOLD개 모이면 숨긴다. 받아들인 신고는 사유와 시각을 기록에 남긴다
-   * (최근 REPORT_LOG_MAX개). 묘비가 없으면 null
+   * 신고는 계정 단위로 센다 (11/18 — 예전엔 IP 단위라 같은 회사·집에서 여럿이 신고하면 1건이었다). 같은 계정의 재신고는 "duplicate".
+   * 서로 다른 계정이 REPORT_HIDE_THRESHOLD명 모이면 숨긴다. 받아들인 신고는 사유·시각·신고한 사람(by)을 기록에 남긴다
+   * (최근 REPORT_LOG_MAX개). 묘비가 없으면 null.
+   * weak(갓 만든 계정)면 기록·관리자 신고함에만 남기고 숨김 수에는 넣지 않는다 (계정을 새로 만들어 남의 묘비를 숨기지 못하게)
    */
   report(
     id: string,
     visitorId: string,
-    ipHash: string,
     reason: ReportReason,
     at?: number,
+    weak?: boolean,
+    by?: ReportBy | null,
   ): Promise<"added" | "duplicate" | null>;
 }
 
@@ -139,8 +145,8 @@ export function presenceCatchup(last: number, now: number, sameSid: boolean): { 
 }
 
 /**
- * 적립 선택값: amount(없으면 항목 기본 점수), ipHash(주면 같은 IP 합계도 항목 한도 × ATTEND_ACCOUNTS_PER_IP로 막는다),
- * boost(포인트 배수 이벤트 — 고른 항목이면 적립·항목 한도·같은 IP 한도가 배수, 하루 전체 한도는 늘어난 몫만큼. 없으면 저장소가 지금 설정을 읽는다, lib/pointEvent earnLimits),
+ * 적립 선택값: amount(없으면 항목 기본 점수), ipHash(11/18부터 쓰지 않는다 — 같은 IP 합계 한도 없음),
+ * boost(포인트 배수 이벤트 — 고른 항목이면 적립·항목 한도·항목 한도가 배수, 하루 전체 한도는 늘어난 몫만큼. 없으면 저장소가 지금 설정을 읽는다, lib/pointEvent earnLimits),
  * champ(11/17 지금 1위인 랭킹 — 1위 1주일 혜택의 %·한도, 레이스에서 빼는 몫. 없으면 저장소가 지난주 1위 기록을 읽는다, lib/champPerks earnTerms)
  */
 export type EarnOptions = { amount?: number; ipHash?: string; boost?: EarnBoost; champ?: readonly ChampBoard[] };
@@ -294,7 +300,6 @@ export interface AccountStore {
    * 오늘 칸 받기 (원자적): 오늘 이미 받았으면 "already"(달력 개편 전 자동 출석 포함), 머문 기록이 needTicks보다
    * 적으면 "stay". 받으면 연속 일수를 갱신하고 도장을 찍은 뒤 출석·7일 연속·한 달 개근(그달 monthDays일을 모두
    * 찍었을 때 한 번) 포인트를 준다. 달력 보상은 하루 전체 한도(DAILY_EARN_CAP)에 막히지 않는다 (항목 한도·지갑 한도는 지킨다).
-   * 같은 IP에서 오늘 이미 ATTEND_ACCOUNTS_PER_IP개 계정이 받았으면 도장만 찍고 포인트는 주지 않는다
    */
   claimAttend(id: string, ipHash: string, day: string, yesterday: string, monthDays: number, needTicks: number): Promise<AttendClaim>;
   /**
@@ -379,9 +384,10 @@ export interface AccountStore {
   ): Promise<GraveDecor[] | "no_item" | null>;
   /**
    * 가방에서 itemId 1개를 쓰면서 묘비를 저장한다 (유료 묘비 디자인). 둘이 한 번에 일어나므로
-   * 디자인권 1개로 묘비 2개를 동시에 세울 수 없다. 가방에 없으면 저장하지 않고 false
+   * 디자인권 1개로 묘비 2개를 동시에 세울 수 없다. 가방에 없으면 저장하지 않고 false.
+   * 11/18 mustExist(수정): 묘비가 묘역에 없으면 디자인권을 쓰지 않고 "gone"
    */
-  putGraveUsing(id: string, itemId: string, grave: Grave): Promise<boolean>;
+  putGraveUsing(id: string, itemId: string, grave: Grave, mustExist?: boolean): Promise<boolean | "gone">;
   /** 관리자 포인트 조정. 0~BALANCE_CAP으로 자르고 하루 적립 한도와는 무관. 지갑만 바뀐다 (모은 포인트·포인트 랭킹엔 넣지 않는다). 없는 계정이면 null */
   adjustPoints(id: string, delta: number): Promise<number | null>;
   addGrave(id: string, graveId: string): Promise<void>;

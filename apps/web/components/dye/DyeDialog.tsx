@@ -18,6 +18,7 @@ import ui from "../ui/ui.module.css";
 import { aimAt, BoardPointers, clampView, dyeCloseGuard, keyPan, PAN_KEYS, startScale, toBoard, wheelFactor, zoomAt, type BoardView } from "./board";
 import { drawSpots } from "./spots";
 import styles from "./DyeDialog.module.css";
+import { OddsLink } from "../odds/OddsLayer";
 
 // 46번 염색 창. 무작위 염색권: 부위 고르기 → 60초 동안 무작위 팔레트(일부만 보이는 연속 색 공간)를 드래그·휠(핀치)로 뒤진다.
 // 조준점은 마우스를 따라가고(폰은 화면 가운데) 흔들린다 — 그 아래 색이 바로 "지금 고른 색"(미리보기에 입혀짐).
@@ -216,6 +217,12 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
                 {ticket?.mode === "fixed"
                   ? "정해진 색으로 바로 염색해요."
                   : `60초 안에 무작위 판에서 색을 찾아요. 흔들림 ${ticket ? wobbleLabel(ticket.tier) : ""}, 특수 색은 ${ticket ? specialLabel(ticket.tier) : ""}.`}
+                {ticket?.mode !== "fixed" && (
+                  <>
+                    {" "}
+                    <OddsLink section="dye" label="특수 색 확률 보기" />
+                  </>
+                )}
               </p>
               <div className={styles.parts} role="group" aria-label="염색할 부위">
                 {DYE_PARTS.map((p) => {

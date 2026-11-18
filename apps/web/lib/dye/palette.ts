@@ -25,6 +25,13 @@ const SEAM = 8;
 export const DYE_TIME_MS = 60_000;
 /** 시간이 끝난 뒤 마지막 좌표가 서버에 닿기까지 봐주는 여유 */
 export const DYE_GRACE_MS = 6_000;
+/**
+ * 11/18 보안: 조준점이 1초에 갈 수 있는 가장 먼 거리 (칸). 가장 작게 줄인 판(한 화면에 판 4장)을 폰에서 손가락으로 아주 세게
+ * 밀어도(초당 3,000px 남짓) 1만 칸쯤이라 넉넉히. 시작(판 가운데)에서 이보다 빨리 간 좌표는 받지 않는다 (시드로 미리 찾은 먼 특수 색 막기)
+ */
+export const DYE_MAX_CELLS_PER_SEC = 12_000;
+/** 시작부터 얼마나 멀리 갈 수 있나 (칸, 처음 몇 초 여유 포함) */
+export const dyeReach = (elapsedMs: number) => DYE_MAX_CELLS_PER_SEC * (Math.max(0, elapsedMs) / 1000 + 1);
 
 export type DyeTier = DyeTierId;
 

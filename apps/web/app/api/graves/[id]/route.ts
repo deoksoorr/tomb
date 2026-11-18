@@ -41,6 +41,8 @@ export const GET = handler<Params>(async (req, { id }) => {
  */
 async function requireOwned(req: NextRequest, store: GraveStore, id: string) {
   const visitorId = await requireVisitor(req);
+  // 11/18 보안: 고치기·이장 연타 막기 (사진을 넣었다 뺐다 하면 요청마다 묘역 전체를 읽는다 — 계정 기준)
+  await rateLimit("graveEdit", req, visitorId);
   const grave = isGraveId(id) ? await store.get(id) : null;
   if (!grave) throw notFound();
   const byAccount = !!grave.ownerAccountId && grave.ownerAccountId === visitorId;
@@ -63,12 +65,13 @@ export const PATCH = handler<Params>(async (req, { id }) => {
     ...input,
     id,
     createdAt: current.createdAt,
+    ...(current.ageFrom !== undefined ? { ageFrom: current.ageFrom } : {}),
     ownerTokenHash: current.ownerTokenHash,
     ownerAccountId: current.ownerAccountId,
     style: input.style ?? current.style,
     channel: current.channel,
   };
-  await saveGrave(store, getAccounts(), visitorId, next, !!input.style && input.style !== current.style);
+  await saveGrave(store, getAccounts(), visitorId, next, !!input.style && input.style !== current.style, true);
   if (current.imageUrl !== next.imageUrl) await releaseImage(store, current.imageUrl);
   return json<UpdateGraveResponse>({
     grave: toPublicGrave({ ...next, flowers: current.flowers, revives: current.revives }),

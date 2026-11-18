@@ -49,8 +49,15 @@ describe("소원 분수 규칙", () => {
   it("보너스는 가끔·조금: 75%는 0, 기댓값은 던진 것의 절반 남짓 (+1P 이하)", () => {
     expect(rollBonus(3, 0.5, 0.5)).toBe(0);
     expect(rollBonus(3, 0.1, 0)).toBe(4);
-    expect(rollBonus(3, 0.1, 0.99)).toBe(8);
+    expect(rollBonus(3, 0.1, 0.99)).toBe(6);
     expect(rollBonus(5, 0.01, 0)).toBe(15);
+    // 11/18 보안: 어떤 동전이든 기댓값이 던진 것보다 작다 (1P를 던져 이득 보는 농사가 없게)
+    for (const a of [1, 3, 5]) {
+      let ev = 0;
+      const N = 2000;
+      for (let i = 0; i < N; i++) for (let j = 0; j < 10; j++) ev += rollBonus(a, (i + 0.5) / N, (j + 0.5) / 10) / (N * 10);
+      expect(ev).toBeLessThan(a);
+    }
     for (const a of [1, 3, 5]) {
       let sum = 0;
       const N = 1000;

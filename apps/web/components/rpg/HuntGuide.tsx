@@ -48,6 +48,7 @@ import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import { DEMO_H, DEMO_SCALE, DEMO_SCENES, DEMO_W, drawDemo } from "./huntDemo";
 import RpgIcon from "./RpgIcon";
+import { OddsLink } from "../odds/OddsLayer";
 // 11/15 야근 빌딩 능력 카드
 import { cardIconUrl } from "@/game/rpg/cards/cardArt";
 import { BOSS_DEAL_HP_COST, CARD_IDS, FOCUS_ASPD, START_PICKS_PER_10 } from "@/lib/rpg/cards";
@@ -103,13 +104,6 @@ function HuntDemo({ page, title }: { page: number; title: string }) {
 
 /** 비율 → 퍼센트 (13.5%처럼 소수 한 자리까지) */
 const pct = (n: number) => `${Number((n * 100).toFixed(1))}%`;
-/** 난이도끼리 견준 드롭 빈도 → 말 (확률 숫자는 안내에 안 보인다). 가장 낮은 쪽 "드물게", 가장 높은 쪽 "자주", 사이는 "가끔" */
-function oftenWord(v: number, all: readonly number[]): string {
-  const lo = Math.min(...all);
-  const hi = Math.max(...all);
-  if (hi === lo) return "가끔";
-  return v === lo ? "드물게" : v === hi ? "자주" : "가끔";
-}
 const sec = (ms: number) => `${Number((ms / 1000).toFixed(2))}초`;
 const skillArt = (id: SkillId): IconArt | undefined => skillById(id)?.art;
 /** 기본보다 단계가 많은 우두머리 (11/15 지옥 40~50대: 분기 실적 보고서·인사위원장) */
@@ -496,15 +490,15 @@ function pages(): Page[] {
             </thead>
             <tbody>
               <tr>
-                <th>장비·물약 드롭</th>
+                <th>{KILLS_PER_DROP_ROLL}마리마다 장비나 물약</th>
                 {DIFFICULTIES.map((d) => (
-                  <td key={d}>{oftenWord(DIFFS[d].dropChance, DIFFICULTIES.map((x) => DIFFS[x].dropChance))}</td>
+                  <td key={d}>{pct(DIFFS[d].dropChance)}</td>
                 ))}
               </tr>
               <tr>
                 <th>우두머리 장비</th>
                 {DIFFICULTIES.map((d) => (
-                  <td key={d}>{oftenWord(DIFFS[d].bossDropChance, DIFFICULTIES.map((x) => DIFFS[x].bossDropChance))}</td>
+                  <td key={d}>{pct(DIFFS[d].bossDropChance)}</td>
                 ))}
               </tr>
               <tr>
@@ -515,6 +509,9 @@ function pages(): Page[] {
               </tr>
             </tbody>
           </table>
+          <p className={s.meta}>
+            꾸미기와 물약 종류까지 자세한 확률은 <OddsLink section="hunt" />에서 볼 수 있어요.
+          </p>
         </>
       ),
     },
@@ -570,7 +567,7 @@ function pages(): Page[] {
             </Item>
             <Item art={GEAR.find((g) => g.kind === "acc")?.art} title="칭호와 랭킹">
               층 칭호는 10층 「야근 입문」, 20층 「번아웃 생존자」, 30층 「야근이 일상」, 50층 「퇴근을 잊은 자」, 100층 「사무실이 집」이에요. 서버에서 한 사람만 받는 신화 칭호도 있어요.
-              30층에 처음 오르면 「최초 결재자」, 50층은 「최초 임원」, 100층은 「빌딩의 전설」, ★100에 처음 닿으면 「첫 번째 상무」예요. 지금 가장 높은 층 기록을 가진 사람은 「최고층 기록 보유자」를 달아요.
+              30층에 처음 오르면 「최초 결재자」, 50층은 「최초 임원」, 100층은 「빌딩의 전설」, ★100에 처음 닿으면 「첫 번째 상무」예요. 이런 서버 최초 칭호는 운영자가 확인한 뒤에 드려요. 지금 가장 높은 층 기록을 가진 사람은 「최고층 기록 보유자」를 달아요.
               기록을 뺏기면 칭호도 넘어가요. 지난주 가장 높이 오른 사람은 한 주 동안 신화 칭호 「지난주 최고층」을 달아요. 랭킹 창 [야근 빌딩]은 높은 층 순서예요. 층이 같으면 먼저 오른 사람이 앞이에요.
               끝판이 열리고 {PIONEER_DAYS}일 안에 ★51에 닿거나 {PIONEER_FLOOR}층을 넘으면 「개척자 #번호」를 받아요. 운영자는 랭킹, 최초 칭호, 개척자 번호에서 빠져요.
             </Item>

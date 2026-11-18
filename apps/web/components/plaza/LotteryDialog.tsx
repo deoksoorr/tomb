@@ -10,6 +10,8 @@ import { InfoCard, InfoGrid, TipList } from "../ui/InfoBlocks";
 import PixelArt, { type PixelRect } from "../ui/PixelArt";
 import ui from "../ui/ui.module.css";
 import styles from "./LotteryDialog.module.css";
+import { OddsLink } from "../odds/OddsLayer";
+import { lotteryAny, pct } from "../odds/oddsData";
 
 /** 행운권 쪽지 그림 (24×14 격자: 네잎클로버 + 빨간 띠) */
 const TICKET: readonly PixelRect[] = [
@@ -134,7 +136,10 @@ export default function LotteryDialog({ onClose }: { onClose: () => void }) {
           </ul>
         )}
 
-        <p className={styles.sold}>{s ? `이번 주 ${fmt(s.tickets)}명이 샀어요` : ""}</p>
+        <p className={styles.sold}>
+          {s ? `이번 주 ${fmt(s.tickets)}명이 샀어요` : ""}
+          {s && s.tickets > 0 && (s.mine ? ` 지금 내 당첨 확률은 ${pct(lotteryAny(s.tickets))}예요.` : ` 지금 사면 당첨 확률은 ${pct(lotteryAny(s.tickets + 1))}예요.`)} <OddsLink section="lottery" label="확률 보기" />
+        </p>
 
         {s?.staff ? (
           <p className={styles.note}>운영자 계정은 행운권을 살 수 없어요.</p>

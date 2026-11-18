@@ -76,6 +76,8 @@ export class SnowmanYard {
     this.prune(now);
     if (!campSnowSpotOk(x, y)) return { ok: false, why: "spot" };
     if (this.list.some((s) => Math.hypot(s.x - x, (s.y - y) * 1.4) < SNOWMAN_GAP)) return { ok: false, why: "spot" };
+    // 11/18 이미 내 눈사람이 다 서 있으면 녹을 때까지 못 세운다 (덩이를 놓을 때 막지만, 되살린 덩이 등 혹시 모를 때를 위해)
+    if (this.list.filter((o) => o.visitorId === visitorId).length >= SNOWMAN_PER_PERSON) return { ok: false, why: "many" };
     const s: Rec = { id: `${now.toString(36).slice(-6)}${(++this.seq).toString(36)}`, x, y, seed: seed >>> 0, by, at: now, visitorId };
     this.list.push(s);
     const gone: string[] = [];
@@ -83,8 +85,7 @@ export class SnowmanYard {
       this.list = this.list.filter((o) => o !== r);
       gone.push(r.id);
     };
-    // 목록은 세운 순서 그대로 → 앞쪽이 오래된 것
-    for (let mine = this.list.filter((o) => o.visitorId === visitorId); mine.length > SNOWMAN_PER_PERSON; mine = mine.slice(1)) drop(mine[0]);
+    // 목록은 세운 순서 그대로 → 앞쪽이 오래된 것. 한 사람 몫(SNOWMAN_PER_PERSON)은 덩이를 놓을 때 막으니 여기선 채널 몫만
     while (this.list.length > SNOWMAN_PER_CHANNEL) drop(this.list[0]);
     return { ok: true, s: pub(s), gone };
   }
@@ -146,12 +147,12 @@ export class SnowStackYard {
       all.filter((o) => o.visitorId !== visitorId),
     );
     if (why) return { ok: false, why };
-    // 목록은 놓은 순서 그대로 → 앞쪽이 오래된 것. 채널이 가득이면 내 것을 지우기 전에 거절한다
+    // 11/18 한 사람 몫: 서 있는 내 눈사람 + 쌓는 중인 내 덩이가 SNOWMAN_PER_PERSON개면 못 놓는다 (예전엔 가장 오래된 내 덩이를 지웠다)
     const mine = this.list.filter((o) => o.visitorId === visitorId);
-    const drop = mine.slice(0, Math.max(0, mine.length - SNOW_STACKS_PER_PERSON + 1));
-    if (this.list.length - drop.length >= SNOW_STACKS_PER_CHANNEL) return { ok: false, why: "full" };
-    if (drop.length) this.list = this.list.filter((o) => !drop.includes(o));
-    const gone = drop.map((o) => o.id);
+    const myMen = men.filter((o) => o.visitorId === visitorId).length;
+    if (mine.length >= SNOW_STACKS_PER_PERSON || mine.length + myMen >= SNOWMAN_PER_PERSON) return { ok: false, why: "many" };
+    if (this.list.length >= SNOW_STACKS_PER_CHANNEL) return { ok: false, why: "full" };
+    const gone: string[] = [];
     const r: StackRec = { id: `k${now.toString(36).slice(-6)}${(++this.seq).toString(36)}`, sid, x, y, sizes: [s], at: now, visitorId };
     this.list.push(r);
     return { ok: true, st: pubStack(r), gone };

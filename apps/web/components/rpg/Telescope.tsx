@@ -7,7 +7,7 @@ import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { meStore } from "@/lib/hooks/useMe";
-import { DIFFICULTIES, DIFFS, GAMES, potionById, type Difficulty } from "@/lib/rpg/catalog";
+import { DIFFICULTIES, DIFFS, GAMES, potionById, STARS_POINTS, type Difficulty } from "@/lib/rpg/catalog";
 import { rpgApi } from "@/lib/rpg/client";
 import { constellationById } from "@/lib/rpg/constellations";
 import { STAR_DEX_MAX, STAR_REC_DEX, STARS_NEW_PER_RUN, STARS_PLAN_VER, starWindows } from "@/lib/rpg/plan";
@@ -20,6 +20,7 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import LevelUpSound from "./LevelUpSound";
+import { OddsLink } from "../odds/OddsLayer";
 import RpgIcon from "./RpgIcon";
 import StarsHud from "./StarsHud";
 import s from "./rpg.module.css";
@@ -337,14 +338,15 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
                 <span className={s.meta}>
                   {STAR_REC_DEX[d] ? `권장 DEX ${STAR_REC_DEX[d]}+` : "누구나"}
                   <br />
-                  최대 {starry ? Math.round(DIFFS[d].miniPoints * STARRY_NIGHT_BONUS) : DIFFS[d].miniPoints}P
+                  최대 {starry ? Math.round(STARS_POINTS[d] * STARRY_NIGHT_BONUS) : STARS_POINTS[d]}P
                 </span>
               </button>
             ))}
           </div>
           <p className={s.meta}>
             {stat ? `내 DEX ${stat.dex} 기준으로 ` : ""}고리와 별의 차이가 ±{win[0]}ms 안이면 &apos;완벽&apos;, ±{win[1]}ms 안이면 &apos;좋아&apos;예요. DEX가 높을수록 이 범위가
-            넓어져요. DEX {STAR_DEX_MAX}이면 가장 넓어요. 레벨은 판정과 상관없어요.
+            넓어져요. DEX {STAR_DEX_MAX}이면 가장 넓어요. 레벨은 판정과 상관없어요. 성적이 좋으면 가끔 물약도 받아요.{" "}
+            <OddsLink section="stars" label="물약 확률 보기" />
           </p>
         </section>
         <div className={s.buttons}>

@@ -10,7 +10,7 @@ import { hash01 } from "../rules";
 //    (11/15 150%(최고 단계)에 닿으면 그 순간 일찍 끝난다 — 더 낼 수 없고 바로 보상을 받는다. urgentEndAt)
 //  - 보상 (1개 이상 낸 사람): 50% 도장 2 · 100% 도장 3 더 + 「수집가의 뒷주머니」 · 150% 마을 축제 1시간 (모두에게)
 //    가장 많이 낸 사람: 칭호 「긴급 배달왕」 하루 + 사이렌 모자 24시간 · 마지막 1분에 100%를 채운 사람: 칭호 「아슬아슬 마감」 하루
-//    (11/16 한 사람 상한(urgentCap)까지 다 낸 사람은 모두 공동 배달왕 — 아무도 상한까지 못 냈으면 예전처럼 가장 많이 낸 한 사람)
+//    (11/18 사용자: 공동 배달왕은 없애고 가장 많이 낸 한 사람만, 그것도 150%를 채운 판에서만 — 나머지는 도장·상자만)
 //    (마지막 1분에 100%를 넘긴 사람이 없고 150%로 일찍 끝났으면 「아슬아슬 마감」은 150%를 채워 끝낸 사람 — urgentLastAcct)
 
 const MIN = 60_000;
@@ -154,8 +154,8 @@ export function urgentCapLine(kind: UrgentKind, cap: number, left: number): stri
   return `한 사람이 ${cap}${unit}까지 낼 수 있어요. 지금 ${left}${unit} 더 낼 수 있어요.`;
 }
 
-/** 11/16 공동 배달왕 한 줄 (게시판 순위 위). kings = 상한까지 다 낸 사람 수. 한 명 이하면 빈 문자열 (예전처럼 1등이 배달왕) */
-export const urgentKingsLine = (kings: number) => (kings >= 2 ? `한 사람 몫을 다 채운 ${kings}명이 모두 배달왕이에요.` : "");
+/** 11/18 배달왕 안내 한 줄 (게시판 순위 위): 공동 배달왕은 없앴다 — 150%를 채운 판의 1등 한 명만 */
+export const URGENT_KING_LINE = "150%를 채우면 가장 많이 낸 1등 한 명이 사이렌 모자와 「긴급 배달왕」을 받아요.";
 
 /** 11/16 상한에 걸린 납품 거절 문구 */
 export function urgentCapError(kind: UrgentKind, cap: number, left: number): string {
@@ -280,7 +280,7 @@ export type UrgentReward = {
   /** 단계 도장 (상자 도장은 box에) */
   stamps: number;
   box: BoxPrize | null;
-  /** 가장 많이 낸 사람(11/16 또는 한 사람 상한까지 다 낸 사람 모두) → 칭호 「긴급 배달왕」 + 사이렌 모자 */
+  /** 가장 많이 낸 한 사람 (11/18 150%를 채운 판에서만, 공동 배달왕 없음) → 칭호 「긴급 배달왕」 + 사이렌 모자 */
   king: boolean;
   /** 마지막 1분에 100%를 채운 사람 → 칭호 「아슬아슬 마감」 */
   last: boolean;
@@ -288,8 +288,8 @@ export type UrgentReward = {
 
 /**
  * 보상 판정 (끝난 뒤, 막대가 멈춘 값으로). mine = 내가 낸 수 (0이면 보상 없음 → null).
- * 가장 많이 낸 사람은 50% 이상 닿았을 때만 (아무도 못 채운 판의 1등은 칭호 없음).
- * 11/16 배달왕: 한 사람 상한(cap, 0 = 없음)까지 다 낸 사람은 모두 (공동 배달왕). 아무도 상한까지 못 냈으면 가장 많이 낸 한 사람(top — 먼저 닿은 사람이 위)
+ * 11/18 배달왕: 150%를 채운 판에서 가장 많이 낸 한 사람(top — 같은 수면 먼저 닿은 사람이 위)만. 공동 배달왕(상한까지 낸 사람 모두)은 없앴다.
+ * cap은 예전 호출과 맞추려고 그대로 받는다 (배달왕 판정엔 쓰지 않는다)
  */
 export function urgentReward(o: { id: string; acct: string; n: number; goal: number; cap: number; mine: number; top: string | null; last: string | null }): UrgentReward | null {
   if (o.mine <= 0) return null;
@@ -299,7 +299,7 @@ export function urgentReward(o: { id: string; acct: string; n: number; goal: num
     stage,
     stamps,
     box: stage >= 100 ? openBox(`${o.id}|${o.acct}`) : null,
-    king: stage >= 50 && (o.top === o.acct || (o.cap > 0 && o.mine >= o.cap)),
+    king: stage >= 150 && o.top === o.acct,
     last: stage >= 100 && o.last === o.acct,
   };
 }

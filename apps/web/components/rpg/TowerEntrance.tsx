@@ -20,6 +20,7 @@ import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import { PioneerLine } from "./Endgame";
 import ShakeToggle from "./ShakeToggle";
+import { OddsLink } from "../odds/OddsLayer";
 import s from "./rpg.module.css";
 
 // 11/15 야근 빌딩 입구 (마을의 야근 빌딩 → portal:open {kind:"tower"} → HuntLobby mode="tower"의 첫 탭).
@@ -167,7 +168,9 @@ export default function TowerEntrance({
               30층부터는 전설도 나와요.
             </li>
           </ul>
-          <p className={s.meta}>떨어진 물건은 다음 층으로 가기 전에 저절로 주워져요.</p>
+          <p className={s.meta}>
+            떨어진 물건은 다음 층으로 가기 전에 저절로 주워져요. <OddsLink section="tower" label="자세한 확률 보기" />
+          </p>
         </section>
         <ul className={s.towerWhy}>
           <li>

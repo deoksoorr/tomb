@@ -195,6 +195,21 @@ describe.each(kits)("HouseStore (%s)", (_name, make) => {
     expect(await kit.store.create({ id, owner: "x", name: "b", intro: "", ownerName: "", tier: "small", lot: null, now: 1 })).toBe("exists");
   });
 
+  it("11/18 보안: 읽은 뒤 다른 저장이 먼저 됐으면(base가 다르면) 저장하지 않는다 — 배치·외관 동시 저장으로 놓은 개수가 덮이지 않게", async () => {
+    const id = await fresh();
+    const s = kit.store;
+    expect(await s.addItem(solo(id), "village", "pot", 2)).toBe("ok");
+    const base = (await s.get(id))!.updatedAt;
+    const l = lay([p("a", "pot", 0, 0)]);
+    // 같은 집 상태를 읽은 두 저장: 먼저 온 것만
+    expect(await s.saveDesign(solo(id), "village", "small", l, null, { pot: 1 }, 2, base, base)).toBe("ok");
+    expect(await s.saveDesign(solo(id), "village", "small", null, (await s.get(id))!.exterior, {}, 0, base, base)).toBe("conflict");
+    // 놓은 개수는 먼저 저장된 배치 그대로 → 되팔 수 없다
+    expect(await s.takeItem(solo(id), "village", "pot")).toBe("placed");
+    // 같은 시각이어도 저장하면 updatedAt이 커진다 (다음 base 비교가 늘 맞게)
+    expect((await s.get(id))!.updatedAt).toBeGreaterThan(base);
+  });
+
   it("가방 상한, 놓인 물건은 되팔 수 없다, 배치 저장은 가진 개수를 원자적으로 확인한다", async () => {
     const id = await fresh();
     const s = kit.store;
@@ -247,13 +262,14 @@ describe.each(kits)("HouseStore (%s)", (_name, make) => {
     expect(list[0].id).toBe(`e${GUEST_PER_DAY - 1}`);
     expect(list).toHaveLength(GUEST_PER_DAY);
     for (let i = 0; i < GUEST_REPORT_HIDE; i++) {
-      expect(await s.reportGuest(id, "e0", `ip${i}`)).toBe("added");
-      expect(await s.reportGuest(id, "e0", `ip${i}`)).toBe("duplicate");
+      expect(await s.reportGuest(id, "e0", { accountId: `acct${i}`, name: `손${i}` })).toBe("added");
+      expect(await s.reportGuest(id, "e0", { accountId: `acct${i}`, name: `손${i}` })).toBe("duplicate");
     }
     expect((await s.guestbook(id, false)).some((g) => g.id === "e0")).toBe(false);
     expect((await s.guestbook(id, true)).find((g) => g.id === "e0")?.hidden).toBe(true);
     expect((await s.guestReports(id)).get("e0")).toBe(GUEST_REPORT_HIDE);
-    expect(await s.reportGuest(id, "nope", "ip")).toBeNull();
+    expect((await s.guestReporters(id, "e0")).map((w) => w.name)).toEqual(expect.arrayContaining(["손0", "손1", "손2"]));
+    expect(await s.reportGuest(id, "nope", { accountId: "acct9", name: null })).toBeNull();
     expect((await s.removeGuest(id, "e1"))?.text).toBe("글1");
     expect(await s.removeGuest(id, "e1")).toBeNull();
     expect(await s.setGuestHidden(id, "e0", false)).toBe(true);

@@ -235,6 +235,10 @@ export type GameEvents = {
   "camp:talk": { npc: string; name: string; lines: string[] } | null;
   /** 11/18 캠핑장 눈덩이를 들고 있음 (sticky) → 터치 [점프] 버튼이 [굴리기]가 된다 (누르고 있는 동안 굴리기, 떼면 안기) */
   "camp:snowball": { held: boolean };
+  /** 11/18 마을·캠핑장 눈싸움: 지금 눈을 던질 수 있는 곳·자세인지 (sticky, 겨울판 바깥에서 서 있거나 걸을 때) → 터치 [눈 던지기] 단추를 보인다 */
+  "snow:can": { on: boolean };
+  /** 11/18 눈 던지기 쿨타임: 다시 던질 수 있는 시각 (Date.now 기준 ms, sticky) → 터치 [눈 던지기] 단추가 남은 시간을 시계처럼 */
+  "snow:cool": { until: number };
   /** 11/15 캠핑장 바베큐 그릴 앞에서 E → 메뉴 창 */
   "camp:bbq:open": { stand: BbqStand };
   /** 채널 이동 창: 지금 같은 채널에 보이는 사람들 닉네임 (peers:ask에 답한다, 나는 빼고). map = 지금 맵 (11/17 그 맵에 보이는 사람만이라서) */
@@ -318,6 +322,8 @@ export type UiEvents = {
   "input:jump": undefined;
   /** 11/18 캠핑장 눈덩이 [굴리기] 버튼을 누르고 있음(on)·뗌. 데스크톱은 Space를 누르고 있는 동안 */
   "input:roll": { on: boolean };
+  /** 11/18 눈싸움 [눈 던지기] (터치 단추). 데스크톱은 F (바닷가에서는 갈매기 과자) */
+  "input:snowball": undefined;
   /** 감정표현 (모바일 버튼). 데스크톱은 1=wave, 2=cheer */
   "input:act": { kind: "wave" | "cheer" };
   /** 정해진 문장 말풍선 (PHRASES id). 지금 있는 공간(채널·방)에 보낸다 */
@@ -512,6 +518,8 @@ const STICKY = new Set<keyof AllEvents>([
   "bus:state",
   "camp:talk",
   "camp:snowball",
+  "snow:can",
+  "snow:cool",
   "portal:walk",
 ]);
 
@@ -547,6 +555,7 @@ class Bridge {
     this.lastValues.delete("ready");
     this.lastValues.delete("camera:state");
     this.lastValues.delete("player:ride");
+    this.lastValues.delete("snow:can");
   }
 }
 

@@ -45,6 +45,11 @@ export type Grave = {
   imageUrl?: string;
   mourner: string;
   createdAt: number;
+  /**
+   * 11/18 성불 기간을 세기 시작한 시각 (없으면 createdAt). 성황당에서 되살리면 자리를 맨 뒤로 하려고 createdAt만 새로 정하고
+   * 이 값은 처음 세운 때로 남긴다 — 이장했다 되살리기를 반복해 성불을 피하지 못하게
+   */
+  ageFrom?: number;
   hidden?: boolean;
   ownerTokenHash: string; // sha256(ownerToken). 원문은 저장하지 않음
   /** 세운 계정 (계정 개편 이후 묘비). 이 계정으로 들어오면 어느 기기에서든 수정·삭제할 수 있다 */

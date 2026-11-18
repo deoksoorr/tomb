@@ -55,19 +55,19 @@ function buildAt(core: ChannelCore<Conn>, c: Conn, x: number, y: number, t: numb
 }
 
 describe("snowman yard", () => {
-  it("한 사람 2개·채널 15개, 넘치면 가장 오래된 것부터", () => {
+  it("11/18 한 사람 2개 — 다 차면 녹을 때까지 못 세운다(many), 채널 15개는 넘치면 가장 오래된 것부터", () => {
     const y = new SnowmanYard();
     const ids: string[] = [];
-    for (let i = 0; i < SNOWMAN_PER_PERSON + 1; i++) {
+    for (let i = 0; i < SNOWMAN_PER_PERSON; i++) {
       const r = y.build("a", "a", 200 + i * 30, 520, i, 1);
       expect(r.ok).toBe(true);
       if (r.ok) ids.push(r.s.id);
-      if (r.ok && i === SNOWMAN_PER_PERSON) expect(r.gone).toEqual([ids[0]]);
     }
+    expect(y.build("a", "a", 200 + SNOWMAN_PER_PERSON * 30, 520, 9, 1)).toEqual({ ok: false, why: "many" });
     expect(y.size).toBe(SNOWMAN_PER_PERSON);
     for (let i = 0; i < SNOWMAN_PER_CHANNEL; i++) y.build(`p${i}`, "p", 200 + (i % 10) * 30, 760 - Math.floor(i / 10) * 30, 100 + i, 1);
     expect(y.size).toBe(SNOWMAN_PER_CHANNEL);
-    expect(y.all(1000).some((s) => s.id === ids[1])).toBe(false);
+    expect(y.all(1000).some((s) => s.id === ids[0])).toBe(false);
   });
   it("가까이 붙여 세우거나 눈밭이 아니면 거절, 1시간 지나면 목록에서 빠진다", () => {
     const y = new SnowmanYard();
@@ -120,18 +120,22 @@ describe("snowman in channel", () => {
     expect(denied[0]).toMatchObject({ why: "wait", a: "add" });
     // 거절 뒤에는 그 덩이의 지금 모양(두 단)을 다시 받는다
     expect(of(a, "snowStack").pop()!.st.sizes).toEqual([2, 1]);
-    expect(buildAt(core, a, SPOT.x + 200, SPOT.y, 10 + SNOWMAN_BUILD_INTERVAL_MS * 2)).toBeDefined();
-    expect(of(a, "snowman")).toHaveLength(2);
+    // 11/18 눈사람 1개 + 쌓다 만 덩이 1개 = 2개라, 멀리라도 새 덩이는 many (멀리 세우기 자체는 위 첫 눈사람처럼 된다)
+    expect(buildAt(core, a, SPOT.x + 200, SPOT.y, 10 + SNOWMAN_BUILD_INTERVAL_MS * 2)).toBeUndefined();
+    expect(of(a, "snowmanDenied").pop()).toMatchObject({ why: "many", a: "put" });
+    expect(of(a, "snowman")).toHaveLength(1);
     core.message(v, send({ t: "snowPut", x: 600, y: 700, s: 2 }), 10);
     expect(of(v, "snowmanDenied")).toEqual([]);
     expect(of(v, "snowStack")).toEqual([]);
   });
-  it("세 번째를 세우면 첫 번째가 snowmanGone", () => {
+  it("11/18 두 개를 세우면 세 번째는 녹을 때까지 many (첫 번째를 녹이지 않는다)", () => {
     const { core, join } = setup();
     const a = join("a", { camp: true, spawn: SPOT });
     const made = [SPOT.x - 30, SPOT.x, SPOT.x + 30].map((x, i) => buildAt(core, a, x, SPOT.y + 12, i * STEP * 2));
-    expect(made.every(Boolean)).toBe(true);
-    expect(of(a, "snowmanGone")).toEqual([{ t: "snowmanGone", id: made[0] }]);
+    expect(made.slice(0, 2).every(Boolean)).toBe(true);
+    expect(made[2]).toBeUndefined();
+    expect(of(a, "snowmanDenied").pop()).toMatchObject({ why: "many", a: "put" });
+    expect(of(a, "snowmanGone")).toEqual([]);
   });
 });
 
@@ -177,20 +181,24 @@ describe("snow stacks (11/18 만드는 과정)", () => {
     expect(id).toBeDefined();
     core.message(b, send({ t: "snowPut", x: SPOT.x + 130, y: SPOT.y + 4, s: 1 }), 2000);
     expect(of(b, "snowmanDenied").pop()).toMatchObject({ why: "near", a: "put" });
-    // 내 것끼리는 SNOWMAN_GAP까지 붙여도 된다
-    core.message(a, send({ t: "snowPut", x: SPOT.x + 16, y: SPOT.y, s: 1 }), 3000);
+    // 내 것끼리는 SNOWMAN_GAP까지 붙여도 된다 (11/18 2개 몫: 처음 덩이를 거둬 1개 자리를 비우고 내 눈사람 곁에)
+    core.message(a, send({ t: "snowTake", id: st.id }), 2500);
+    core.message(a, send({ t: "snowPut", x: SPOT.x + 136, y: SPOT.y, s: 1 }), 3000);
     expect(of(a, "snowmanDenied")).toEqual([]);
   });
-  it("한 사람 덩이가 넘치면 가장 오래된 것이 사라지고, 너무 잦으면 wait", () => {
+  it("11/18 한 사람 덩이는 2개까지 — 넘으면 many로 거절(지우지 않는다), 너무 잦으면 wait", () => {
     const { core, join } = setup();
     const a = join("a", { camp: true, spawn: SPOT });
     const b = join("b", { camp: true, spawn: { x: SPOT.x + 60, y: SPOT.y } });
     for (let i = 0; i <= SNOW_STACKS_PER_PERSON; i++) core.message(a, send({ t: "snowPut", x: 200 + i * 30, y: 520, s: 1 }), 10 + i * SNOW_ACT_INTERVAL_MS);
-    expect(of(a, "snowmanDenied")).toEqual([]);
+    expect(of(a, "snowmanDenied")).toEqual([expect.objectContaining({ why: "many", a: "put" })]);
     const ids = of(b, "snowStack").map((e) => e.st.id);
-    expect(ids).toHaveLength(SNOW_STACKS_PER_PERSON + 1);
-    expect(of(b, "snowStackGone").map((e) => e.id)).toEqual([ids[0]]);
+    expect(ids).toHaveLength(SNOW_STACKS_PER_PERSON);
+    expect(of(b, "snowStackGone")).toEqual([]);
+    // 거절된 놓기는 간격을 세지 않아 바로 다시 들 수 있고, 그 직후 또 들면 wait
     core.message(a, send({ t: "snowTake", id: ids[1] }), 10 + SNOW_STACKS_PER_PERSON * SNOW_ACT_INTERVAL_MS + 1);
+    expect(of(a, "snowmanDenied")).toHaveLength(1);
+    core.message(a, send({ t: "snowTake", id: ids[0] }), 10 + SNOW_STACKS_PER_PERSON * SNOW_ACT_INTERVAL_MS + 2);
     expect(of(a, "snowmanDenied").pop()).toMatchObject({ why: "wait", a: "take" });
   });
   it("들고 있는 눈덩이: 바뀔 때만 다른 사람에게, 늦게 온 사람은 PeerInfo.snow, 너무 잦으면 버린다", () => {

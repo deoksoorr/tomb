@@ -154,7 +154,8 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 // 71 = 겨울·크리스마스 맵 컨셉(마을·캠핑장·바닷가·사냥터·야근 빌딩·NPC 옷), 유령선 특가 장터, 갈매기 과자, 낙법, 넋 흡혈 조정, 새 폭죽·코디·펫·루돌프 썰매, 접속자 전체 선물, 배경음악 목록 교체 — 모두 한 번 새로고침 (11/17)
 // 72 = 캠핑장 눈사람 만들기(겨울·크리스마스 판 — 눈더미·굴리기·쌓기, 세운 눈사람은 같은 채널 모두에게·1시간 뒤 녹음, snowman 이벤트) — 모두 한 번 새로고침 (11/17)
 // 73 = 캠핑장 눈사람 만드는 과정도 같은 캠핑장에(안고 다니기·굴리기·쌓는 중인 덩이), 다른 사람 자리엔 못 놓음, 눈사람은 못 지나감 (snowHold·snowPut·snowAdd·snowTake) — 모두 한 번 새로고침 (11/18)
-export const CLIENT_VERSION = 73;
+// 74 = 눈사람은 한 사람이 서 있는 것과 쌓는 중인 것을 합쳐 2개까지 (다 차면 녹을 때까지 새로 못 만든다), 마을·캠핑장 눈싸움 (snowball·snowHit) — 모두 한 번 새로고침 (11/18)
+export const CLIENT_VERSION = 74;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */

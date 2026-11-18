@@ -1,4 +1,4 @@
-import { REPORT_LOG_MAX, type ReportLogEntry, type ReportReason } from "../reports";
+import { REPORT_LOG_MAX, reportEntry, type ReportBy, type ReportLogEntry, type ReportReason } from "../reports";
 import { MAX_DECOR_PER_GRAVE } from "@tomb/protocol";
 import { DEFAULT_PASS_DAYS, type Grave, type GraveDecor, type PassReason } from "../types";
 import {
@@ -91,6 +91,17 @@ export class MemoryStore implements GraveStore {
     this.putSync(grave);
   }
 
+  async update(grave: Grave): Promise<boolean> {
+    if (!this.graves.has(grave.id)) return false;
+    this.putSync(grave);
+    return true;
+  }
+
+  /** MemoryAccounts.putGraveUsing(mustExist)용 */
+  hasSync(id: string): boolean {
+    return this.graves.has(id);
+  }
+
   /** MemoryAccounts가 가방 차감과 함께 동기적으로 부른다 (원자적) */
   putSync(grave: Grave): void {
     this.graves.set(grave.id, { ...grave, channel: grave.channel ?? 1, hidden: undefined, decor: undefined });
@@ -140,7 +151,8 @@ export class MemoryStore implements GraveStore {
     const e = mine?.get(id);
     if (!e || e.removedAt + SHRINE_KEEP_MS <= now) return null;
     mine!.delete(id);
-    const grave = { ...e.grave, createdAt: now };
+    // 11/18 자리는 맨 뒤로(createdAt), 성불 기간은 처음 세운 때부터 그대로 (ageFrom)
+    const grave = { ...e.grave, createdAt: now, ageFrom: e.grave.ageFrom ?? e.grave.createdAt };
     this.graves.set(id, grave);
     return this.record(grave);
   }
@@ -262,18 +274,21 @@ export class MemoryStore implements GraveStore {
   async report(
     id: string,
     visitorId: string,
-    ipHash: string,
     reason: ReportReason,
     at = Date.now(),
+    weak = false,
+    by: ReportBy | null = null,
   ): Promise<"added" | "duplicate" | null> {
     if (!this.graves.has(id)) return null;
-    const ips = this.setOf(this.reportIps, id);
+    // 11/18 계정 단위: 신고 수 집합(reportIps — 이름은 옛것)에는 숨김 수에 들어가는 계정만, 신고한 사람 집합에는 모두
+    const counted = this.setOf(this.reportIps, id);
     const visitors = this.setOf(this.reporters, id);
-    if (visitors.has(visitorId) || ips.has(ipHash)) return "duplicate";
-    ips.add(ipHash);
+    if (visitors.has(visitorId)) return "duplicate";
     visitors.add(visitorId);
-    this.reportLogs.set(id, [{ at, reason }, ...(this.reportLogs.get(id) ?? [])].slice(0, REPORT_LOG_MAX));
-    if (ips.size >= REPORT_HIDE_THRESHOLD) this.hidden.add(id);
+    if (!weak) counted.add(visitorId);
+    const entry = reportEntry(at, reason, weak, by);
+    this.reportLogs.set(id, [entry, ...(this.reportLogs.get(id) ?? [])].slice(0, REPORT_LOG_MAX));
+    if (counted.size >= REPORT_HIDE_THRESHOLD) this.hidden.add(id);
     return "added";
   }
 }

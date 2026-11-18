@@ -246,6 +246,9 @@ export const DIFFS: Record<Difficulty, DifficultyDef> = {
   hard: { id: "hard", name: "어려움", recLevel: 18, monsterLevel: 24, hpMul: 6, atkMul: 4.6, defMul: 5, expMul: 5.5, huntPoints: 55, miniPoints: 30, miniExp: 180, dropChance: 0.06, bossDropChance: 0.12, cosmeticChance: 0.012, dropMaxLevel: 30 },
   hell: { id: "hell", name: "지옥", recLevel: 30, monsterLevel: 38, hpMul: 13, atkMul: 8.5, defMul: 9, expMul: 4, huntPoints: 80, miniPoints: 45, miniExp: 320, dropChance: 0.07, bossDropChance: 0.1, cosmeticChance: 0.015, dropMaxLevel: 50 },
 };
+/** 11/18 별자리 잇기 판당 포인트 (곤충 채집은 DIFFS.miniPoints 그대로, 별자리만 약 1.5배) */
+export const STARS_POINTS: Record<Difficulty, number> = { easy: 18, normal: 30, hard: 45, hell: 65 };
+
 
 // ── 몬스터 ──
 
@@ -782,8 +785,8 @@ export const GAMES: Record<GameKind, { name: string; desc: string; how: string; 
   stars: {
     name: "별자리 잇기",
     desc: "밤하늘에 별이 하나씩 떠올라요. 빛의 고리가 별에 닿을 때 누르면 별이 이어져요. 한 별자리를 하나도 놓치지 않고 이으면 도감에 올라가요.",
-    how: "고리가 별에 겹칠 때 Space나 J를 눌러요. 클릭하거나 탭해도 돼요. 너무 일찍 누르면 놓쳐요.",
-    howTouch: "고리가 별에 겹칠 때 화면을 탭해요. 너무 일찍 누르면 놓쳐요.",
+    how: "고리가 별에 겹칠 때 Space나 J를 눌러요. 클릭하거나 탭해도 돼요. 마구 누르면 놓쳐요.",
+    howTouch: "고리가 별에 겹칠 때 화면을 탭해요. 마구 누르면 놓쳐요.",
     statNote: "DEX가 높을수록 판정이 넉넉해져요",
   },
 };

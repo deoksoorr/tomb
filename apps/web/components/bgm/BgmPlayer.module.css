@@ -197,6 +197,36 @@
   color: var(--text);
 }
 
+/* 11/18 곡 이름을 누르면 그 곡부터 (지금 나오는 곡은 촛불 색) */
+.creditsPick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.creditsPick:hover .creditsTitle,
+.creditsPick:focus-visible .creditsTitle {
+  color: var(--candle);
+  text-decoration: underline;
+}
+
+.creditsList li[data-now] {
+  box-shadow: inset 0 0 0 2px var(--candle);
+}
+
+.creditsList li[data-now] .creditsTitle,
+.creditsList li[data-now] .creditsPick {
+  color: var(--candle);
+}
+
 .creditsMeta {
   color: var(--muted);
   font-family: var(--font-small);
@@ -221,4 +251,23 @@
   font-size: 8px;
   line-height: 11px;
   pointer-events: none;
+}
+
+/* 11/18 음원 정보 갈래 접기 단추 (제목 줄 전체) */
+.creditsFold {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.creditsFold:hover {
+  color: var(--candle);
 }

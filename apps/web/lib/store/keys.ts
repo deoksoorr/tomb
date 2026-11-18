@@ -33,6 +33,12 @@ export const K = {
   actDays: "act:days",
   /** STRING 활동 기록이 있는 가장 이른 날 (이 날 전 칸은 「기록 없음」) */
   actSince: "act:since",
+  /** 11/18 SET 그 게임 날짜에 머문 시간이 1시간을 넘긴 계정 (추천 「자리 잡기」 — 하루 1시간 넘게 머문 날). 120일 TTL */
+  actHourDay: (day: string) => `act:h:${day}`,
+  /** HASH 계정 id → 1시간 넘게 머문 날 수 (기록을 시작한 뒤, 날마다 한 번) */
+  actHourDays: "act:hdays",
+  /** STRING 1시간 넘게 머문 날 기록이 시작된 날 (이 날 전은 옛 기준 — 추천 진행 이전에 쓴다) */
+  actHourSince: "act:hsince",
   /** ZSET 계정 id → 사냥터 처치 수 합계 (전체 / 그 주) */
   rankHuntKills: "rank:hunt:kills",
   rankHuntKillsWeek: (week: string) => `rank:hunt:kills:w:${week}`,
@@ -61,9 +67,9 @@ export const K = {
   earnIp: (ipHash: string, day: string) => `earnip:${ipHash}:${day}`, // HASH source → 그 IP 합계. 2일 TTL // ZSET 신고 기록이 있는 묘비 → 지금 세는 신고 수 (관리자 목록용)
   revivers: (id: string) => `grave:${id}:revivers`, // SET visitorId (지금 살려주세요 중)
   reviveEarned: (id: string) => `grave:${id}:reviveEarned`, // SET visitorId (포인트를 한 번 받은 사람, 취소해도 남김)
-  reports: (id: string) => `grave:${id}:reports`, // SET 신고한 IP 해시 (숨김 판정에 센다)
+  reports: (id: string) => `grave:${id}:reports`, // SET 숨김 판정에 세는 신고 계정 (11/18 전에는 IP 해시였다 — 남은 값도 한 명으로 센다)
   reporters: (id: string) => `grave:${id}:reporters`, // SET 신고한 visitorId (재신고 판정)
-  reportLog: (id: string) => `grave:${id}:reportlog`, // LIST {at, reason} JSON, 최신 먼저 최대 50개
+  reportLog: (id: string) => `grave:${id}:reportlog`, // LIST {at, reason, weak?, by?, name?} JSON, 최신 먼저 최대 50개 (by·name = 신고한 계정·캐릭터 이름, 11/18부터)
   decor: (id: string) => `grave:${id}:decor`, // ZSET `${itemId}|${nonce}` → 만료 시각(ms)
   flowerMark: (id: string, visitorId: string) => `flower:${id}:${visitorId}`, // STRING NX EX 86400
 

@@ -8,7 +8,7 @@ import { cardOffer, CARD_IDS } from "@/lib/rpg/cards";
 import type { MonsterId } from "@/lib/rpg/catalog";
 import * as rank from "../rank/route";
 import { huntPlan } from "@/lib/rpg/plan";
-import { forgetEndgameLaunch } from "@/lib/rpg/service";
+import { approveReview, forgetEndgameLaunch, listReviews, rejectReview } from "@/lib/rpg/service";
 import { getRpgStore } from "@/lib/rpg/store";
 import type { CharacterState, RpgView, RunFinishResponse, RunStartResponse } from "@/lib/rpg/types";
 import { setStaff } from "@/lib/staff";
@@ -142,6 +142,10 @@ function climbed(s: RunStartResponse, floors: number, extra: object = {}) {
   return { game: "hunt" as const, durationMs: floors * 45_000 + 3_000, kills, wavesCleared: 0, died: true, potionsUsed: {}, floors, floorMs: floors * 45_000, ...extra };
 }
 const climbMs = (floors: number) => floors * 45_000 + 4_000;
+/** 11/18 서버 최고 층을 새로 깬 기록(꼭대기 층 주인·전체 랭킹)은 관리자 확인 뒤에 → 시험에서는 바로 인정 */
+async function approveTops(): Promise<void> {
+  for (const i of await listReviews()) if (i.kind === "top") await approveReview(i.id);
+}
 
 describe("야근 빌딩 시작 검사 (서버)", () => {
   it("레벨 50이 아니면 거절, 지옥 사냥이 아니면 거절, 불 꺼진 층은 거절", async () => {
@@ -188,6 +192,7 @@ describe("야근 빌딩 판 끝 정산", () => {
     expect([c.tRuns, c.tFl, c.tChest, c.fBest]).toEqual([1, 2, 1, 6]);
     expect(r.view.endgame?.tower).toMatchObject({ best: 6, week: { floor: 6 }, chests: 1, checkpoints: [1] });
     expect(r.view.endgame?.day.floors).toBe(2);
+    await approveTops();
     // 랭킹 (이번 주·전체)
     const board = async (period: string) => (await (await rank.GET(call(`/api/rank?board=tower&period=${period}&me=1`, v))).json()) as { rows: { value: number; me: boolean }[]; mine: unknown };
     for (const p of ["week", "all"]) expect((await board(p)).rows.find((x) => x.me)?.value).toBe(6);
@@ -226,6 +231,7 @@ describe("야근 빌딩 판 끝 정산", () => {
     const sa = await begin(a, 1);
     const t1 = Date.now();
     await end(a, sa, climbed(sa, 12), climbMs(12));
+    await approveTops();
     const scoreA = (await getTowerStore().scoreOf(a.id))!;
     const ta = towerOfScore(scoreA);
     expect(ta.floor).toBe(12);
@@ -237,6 +243,7 @@ describe("야근 빌딩 판 끝 정산", () => {
     vi.spyOn(Date, "now").mockReturnValue(t1 + 3_600_000);
     const sb = await begin(b, 11);
     await end(b, sb, climbed(sb, 2), climbMs(2));
+    await approveTops();
     const scoreB = (await getTowerStore().scoreOf(b.id))!;
     expect(towerOfScore(scoreB).floor).toBe(12);
     expect(scoreA).toBeGreaterThan(scoreB);
@@ -272,23 +279,45 @@ describe("야근 빌딩 판 끝 정산", () => {
 });
 
 describe("11/15 부드러운 거절 (의심 판) · 긴 판", () => {
-  it("카드 기록이 맞지 않는 판: 거절하지 않고 층·초월 EXP·상자·포인트는 주고, 최고·주간 기록·랭킹에서만 뺀다 (체크포인트는 열림, 관리자 오류 모음에 기록)", async () => {
+  it("카드 기록이 맞지 않는 판: 거절하지 않고 판·포인트만 주고, 나머지는 관리자 「기록 확인」에서 인정하면 판 끝과 같은 정산 (11/18)", async () => {
     const v = await newVisitor();
     const s = await begin(v, 1);
     const off = cardOffer(s.seed, "l", 0, 0, {}, 1);
     const c = CARD_IDS.find((id) => !off.includes(id))!;
     const r = await end(v, s, climbed(s, 10, { cards: [{ k: "l", i: 0, r: 0, c, f: 1 }] }), climbMs(10));
-    expect(r.reward.tower).toMatchObject({ floors: 10, best: 10, newBest: false, newWeek: false, chests: [5, 10], suspect: true });
-    expect(r.reward.transcend!.exp).toBe(Array.from({ length: 10 }, (_, i) => floorTExp(i + 1)).reduce((a, b) => a + b, 0));
+    expect(r.reward.tower).toMatchObject({ floors: 10, newBest: false, newWeek: false, chests: [], suspect: true });
+    expect(r.reward.transcend).toBeUndefined();
     expect(r.reward.pointsRaw).toBe(10 * TOWER_FLOOR_POINTS);
     const c1 = await getRpgStore().get(v.id);
-    expect([c1.fBest, c1.fWkBest, c1.fSus, c1.tChest]).toEqual([0, 0, 10, 2]);
-    expect(r.view.endgame?.tower).toMatchObject({ best: 0, week: null, checkpoints: [1, 11] });
+    expect([c1.fBest, c1.fWkBest, c1.fSus ?? 0, c1.tChest ?? 0]).toEqual([0, 0, 0, 0]);
     expect(await getTowerStore().scoreOf(v.id)).toBeNull();
-    // 11층 시작도 열렸다
-    expect((await begin(v, 11)).tower).toBe(11);
     const logs = await getErrors().day(kstDay());
     expect(logs.some((g) => g.kind === "tower" && g.message.includes("의심 판") && g.message.includes("cards:offer"))).toBe(true);
+    // 관리자 「기록 확인」에 올라와 있다 → 인정하면 상자·초월 EXP·최고 기록이 들어간다 (포인트는 다시 주지 않는다)
+    const item = (await listReviews()).find((i) => i.kind === "tower" && i.acct === v.id)!;
+    expect(item).toMatchObject({ start: 1, floors: 10 });
+    expect(item.kind === "tower" && item.why.some((w) => w.startsWith("cards:"))).toBe(true);
+    const ok = await approveReview(item.id);
+    expect(ok.kind === "tower" && ok.reward.tower).toMatchObject({ floors: 10, best: 10, newBest: true, chests: [5, 10] });
+    expect(ok.kind === "tower" && ok.reward.transcend!.exp).toBe(Array.from({ length: 10 }, (_, i) => floorTExp(i + 1)).reduce((a, b) => a + b, 0));
+    expect(ok.kind === "tower" && ok.reward.points).toBe(0);
+    expect((await getRpgStore().get(v.id)).fBest).toBe(10);
+    await approveTops();
+    expect(await getTowerStore().scoreOf(v.id)).not.toBeNull();
+    // 두 번 인정할 수 없다
+    await expect(approveReview(item.id)).rejects.toThrow();
+  });
+
+  it("관리자가 거절한 의심 판은 붙잡아 둔 것을 주지 않는다 (11/18)", async () => {
+    const v = await newVisitor();
+    const s = await begin(v, 1);
+    const off = cardOffer(s.seed, "l", 0, 0, {}, 1);
+    const c = CARD_IDS.find((id) => !off.includes(id))!;
+    await end(v, s, climbed(s, 5, { cards: [{ k: "l", i: 0, r: 0, c, f: 1 }] }), climbMs(5));
+    const item = (await listReviews()).find((i) => i.kind === "tower" && i.acct === v.id)!;
+    await rejectReview(item.id);
+    expect((await listReviews()).some((i) => i.id === item.id)).toBe(false);
+    expect((await getRpgStore().get(v.id)).fBest).toBe(0);
   });
 
   it("벽시계로 다섯 시간 걸린 판(멈춤·탭 숨김)도 받는다 (예전 두 시간 + 2분이면 「너무 오래된 판」)", async () => {
@@ -318,24 +347,60 @@ describe("서버 최초 · 꼭대기 층 주인 · 개척자 (운영자 제외)"
     const a = await newVisitor({ level: 50, fBest: 25 });
     const sa = await begin(a, 21);
     const ra = await end(a, sa, climbed(sa, 10), climbMs(10));
-    expect(ra.reward.tower!.titles).toContain("t_first30");
-    expect(ra.reward.tower!.titles).toContain("t_topFloor");
-    expect((await getTowerStore().firsts()).t_first30).toBe(a.id);
-    const notices = (await getMegaphone().recent(20)).map((m) => m.text);
-    expect(notices.some((t) => t.includes("서버 최초로 30층"))).toBe(true);
-    expect(notices.some((t) => t.includes("야근 빌딩 최고층 기록을 세웠어요 (30층)"))).toBe(true);
-
+    // 11/18 서버 최초는 관리자 확인 뒤에 (줄을 선다). 서버 최고 층을 새로 깼으니 꼭대기 층 주인·전체 랭킹도 확인 뒤에 — 내 기록·보상은 바로
+    expect(ra.reward.tower!.titles).toEqual([]);
+    expect(ra.reward.firstPending).toEqual(["t_first30"]);
+    expect(ra.reward.tower).toMatchObject({ best: 30, newBest: true, topPending: true });
+    expect((await getRpgStore().get(a.id)).fBest).toBe(30);
+    expect((await getTowerStore().firsts()).t_first30).toBeUndefined();
+    expect((await getTowerStore().topHolder())?.accountId).not.toBe(a.id);
+    expect(await getTowerStore().scoreOf(a.id)).toBeNull();
+    expect(await getTowerStore().scoreOf(a.id, kstWeek())).not.toBeNull();
+    const qt = (await listReviews()).find((i) => i.kind === "top" && i.acct === a.id)!;
+    expect(await approveReview(qt.id)).toEqual({ kind: "top", took: true });
+    expect(await getTowerStore().topHolder()).toMatchObject({ accountId: a.id, floor: 30 });
+    expect(await getTowerStore().scoreOf(a.id)).not.toBeNull();
+    const notices0 = (await getMegaphone().recent(20)).map((m) => m.text);
+    expect(notices0.some((t) => t.includes("야근 빌딩 최고층 기록을 세웠어요 (30층)"))).toBe(true);
     // 둘째로 30층: 서버 최초는 없고, 같은 층이라 꼭대기도 그대로 (먼저 오른 사람)
     const b = await newVisitor({ level: 50, fBest: 25 });
     const sb = await begin(b, 21);
     const rb = await end(b, sb, climbed(sb, 10), climbMs(10));
     expect(rb.reward.tower!.titles).toEqual([]);
+    expect(rb.reward.firstPending).toEqual(["t_first30"]);
     expect((await getTowerStore().topHolder())?.accountId).toBe(a.id);
-    // 더 높이 오르면 꼭대기 층이 넘어간다
+    // 같은 칭호 줄: 먼저 조건을 채운 a부터. b를 먼저 인정하려 하면 막힌다
+    const qa = (await listReviews()).find((i) => i.kind === "first" && i.titleId === "t_first30" && i.acct === a.id)!;
+    const qb = (await listReviews()).find((i) => i.kind === "first" && i.titleId === "t_first30" && i.acct === b.id)!;
+    await expect(approveReview(qb.id)).rejects.toThrow();
+    expect(await approveReview(qa.id)).toEqual({ kind: "first", granted: true });
+    expect((await getTowerStore().firsts()).t_first30).toBe(a.id);
+    const notices = (await getMegaphone().recent(20)).map((m) => m.text);
+    expect(notices.some((t) => t.includes("서버 최초로 30층"))).toBe(true);
+    // 이미 주인이 생겼으니 b는 인정해도 받지 못한다
+    expect(await approveReview(qb.id)).toEqual({ kind: "first", granted: false });
+    // 더 높이 오르면 확인 대기 → 인정하면 꼭대기 층이 넘어간다, 거절하면 전체 랭킹·꼭대기에서 빠진다 (받은 보상·내 기록은 그대로)
     const sb2 = await begin(b, 21);
     const rb2 = await end(b, sb2, climbed(sb2, 12), climbMs(12));
-    expect(rb2.reward.tower!.titles).toEqual(["t_topFloor"]);
+    expect(rb2.reward.tower).toMatchObject({ best: 32, topPending: true, titles: [] });
+    expect(await getTowerStore().topHolder()).toMatchObject({ accountId: a.id, floor: 30 });
+    const qb2 = (await listReviews()).find((i) => i.kind === "top" && i.acct === b.id)!;
+    expect(await approveReview(qb2.id)).toEqual({ kind: "top", took: true });
     expect(await getTowerStore().topHolder()).toMatchObject({ accountId: b.id, floor: 32 });
+    // 꼭대기 주인이 자기 기록을 넘을 때는 남의 자리를 빼앗는 게 아니라 바로
+    const sb3 = await begin(b, 31);
+    const rb3 = await end(b, sb3, climbed(sb3, 3), climbMs(3));
+    expect(rb3.reward.tower?.topPending).toBeUndefined();
+    expect(await getTowerStore().topHolder()).toMatchObject({ accountId: b.id, floor: 33 });
+    // 다른 사람이 더 높이 → 거절하면 전체 랭킹·꼭대기에 없다
+    const c = await newVisitor({ level: 50, fBest: 30 });
+    const sc = await begin(c, 31);
+    const rc = await end(c, sc, climbed(sc, 5), climbMs(5));
+    expect(rc.reward.tower).toMatchObject({ best: 35, topPending: true });
+    await rejectReview((await listReviews()).find((i) => i.kind === "top" && i.acct === c.id)!.id);
+    expect(await getTowerStore().topHolder()).toMatchObject({ accountId: b.id });
+    expect(await getTowerStore().scoreOf(c.id)).toBeNull();
+    expect((await getRpgStore().get(c.id)).fBest).toBe(35);
   });
 
   it("개척자: 야근 빌딩 5층·★51에 차례대로 번호 (한 번만)", async () => {

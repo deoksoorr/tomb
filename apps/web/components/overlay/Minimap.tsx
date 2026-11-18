@@ -324,9 +324,23 @@ export default function Minimap() {
     // draw는 ref만 읽는다
   }, [open]);
 
+  // 11/18 데스크톱 M: 지도 펴기·접기 (입력칸에 쓰는 중이거나 창이 떠 있으면 그 몫 — 다른 창 단축키와 같은 조건)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "KeyM" || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
+      const el = document.activeElement;
+      if (el instanceof HTMLElement && el.matches("input, textarea, select, [contenteditable]")) return;
+      if (document.querySelector("dialog[open]")) return;
+      e.preventDefault();
+      setOpen((v) => !v);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <div className={styles.wrap}>
-      <button type="button" className={cx(ui.top, styles.toggle)} onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label={open ? "지도 접기" : "지도 펴기"}>
+      <button type="button" className={cx(ui.top, styles.toggle)} onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label={open ? "지도 접기" : "지도 펴기"} title="지도 펴기·접기 (M)">
         지도 {open ? "▴" : "▾"}
       </button>
       {open && (

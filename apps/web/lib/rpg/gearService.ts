@@ -8,7 +8,7 @@ import { forgetTitles } from "../titlesServer";
 import { RpgError } from "./character";
 import { disassemble, enhance, enhanceNeed, enhanceState, equipSg, exchange, reroll, rerollCost, type EnhanceResult, type EnhTarget } from "./enhance";
 import type { GearActionSchema } from "./schemas";
-import { claimFirstTitles, effectiveLevel, rpgView } from "./service";
+import { effectiveLevel, queueFirstTitles, rpgView } from "./service";
 import { decodeSg, sgUid } from "./setGear";
 import { getRpgStore } from "./store";
 import { isSuperHunter } from "./superHunter";
@@ -75,7 +75,8 @@ export async function gearAction(acct: string, a: z.output<typeof GearActionSche
       gear = { enhance: r.result };
       // 서버 최초 +15 (운영자 계정은 빠진다)
       const staff = await isStaff(acct);
-      if (r.result.reached15 && !staff) await claimFirstTitles(acct, [FIRST_ENH15_ID], now, () => "서버 최초로 장비를 +15까지 강화했어요!");
+      // 11/18 관리자 확인 뒤에 칭호 주인이 된다 (확인 대기 줄)
+      if (r.result.reached15 && !staff) await queueFirstTitles(acct, [FIRST_ENH15_ID], now, () => "서버 최초로 장비를 +15까지 강화했어요!");
       // +15 확성기 (장비마다 한 번, 운영자 계정은 조용히)
       if (r.result.announce && !staff) {
         const name = await displayName(acct, now).catch(() => "누군가");

@@ -1,4 +1,6 @@
 import { nanoid } from "nanoid";
+import { campOpen } from "../camp";
+import { seaOpen } from "../sea";
 import { anyFishingWaterOf, SEA_DIG_CLOSED_MSG, seaDigOpen, seaFishDryAt, seaFishingSpotById, seaFishWet, SEA_TIDE_OUT_MSG, tideLevel } from "@tomb/protocol";
 import { BALANCE_CAP, earnRule, type EarnSource } from "../economy";
 import { env } from "../env";
@@ -198,8 +200,10 @@ export async function castLine(acct: string, spotId: string, now = Date.now(), i
     payload.alt = sunkenFallbackFish(water, cond, rand(), s).id;
   }
   const ttl = Math.ceil((bite - now + HOOK_WINDOW_MS + REEL_MAX_MS) / 1000) + 30;
-  if (!(await store.begin(acct, nonce, JSON.stringify(payload), ttl, hourBucket(now), FORAGE_STARTS_PER_HOUR)))
-    throw new HttpError(429, "RATE_LIMITED", "조금 쉬었다 해요. 한 시간에 낚시·채집을 너무 많이 했어요.");
+  const began = await store.begin(acct, nonce, JSON.stringify(payload), ttl, hourBucket(now), FORAGE_STARTS_PER_HOUR);
+  if (!began) throw new HttpError(429, "RATE_LIMITED", "조금 쉬었다 해요. 한 시간에 낚시·채집을 너무 많이 했어요.");
+  // 11/18 보안: 끝내지 않은 찌를 버리고 다시 던지면 그 찌도 오늘 낚시 1번 (그림자만 보고 큰 것을 고르지 못하게)
+  if (began === "replacedFish") await store.addDay(acct, kstDay(now), "fish", 1);
   const ticket = await signForageTicket(env.sessionSecret(), { n: nonce, a: acct, k: "fish", x: spotId, t: now, b: bite, p: power });
   return { ticket, biteInMs: bite - now, power, reelMs: reelMinMs(power), hookMs: HOOK_WINDOW_MS };
 }
@@ -209,11 +213,22 @@ export async function reelIn(acct: string, token: string, ok: boolean, now = Dat
   const store = getForageStore();
   const t = await ticketOf(acct, token, "fish");
   const payload = JSON.parse(await claimOrThrow(store, acct, t.n)) as FishPayload;
-  if (!ok) return { result: null, state: await forageState(acct, now, store) };
-  const since = now - (t.b ?? t.t);
-  if (since < reelMinMs(t.p ?? 1) - REEL_SLACK_MS) throw new HttpError(422, "TOO_FAST", "너무 빨리 감았어요. 이번 물고기는 놓쳤어요.");
-  if (since > HOOK_WINDOW_MS + REEL_MAX_MS) throw new HttpError(410, "TICKET_EXPIRED", "너무 오래 걸려서 물고기가 도망갔어요.");
   const day = kstDay(now);
+  // 11/18 보안: 놓치거나(너무 빨리·너무 늦게 감은 것 포함) 일부러 놓아 줘도 오늘 낚시 1번 (그림자를 보고 큰 것만 고르지 못하게)
+  const missed = () => store.addDay(acct, day, "fish", 1);
+  if (!ok) {
+    await missed();
+    return { result: null, state: await forageState(acct, now, store) };
+  }
+  const since = now - (t.b ?? t.t);
+  if (since < reelMinMs(t.p ?? 1) - REEL_SLACK_MS) {
+    await missed();
+    throw new HttpError(422, "TOO_FAST", "너무 빨리 감았어요. 이번 물고기는 놓쳤어요.");
+  }
+  if (since > HOOK_WINDOW_MS + REEL_MAX_MS) {
+    await missed();
+    throw new HttpError(410, "TICKET_EXPIRED", "너무 오래 걸려서 물고기가 도망갔어요.");
+  }
   if (payload.g !== undefined) return reelSunken(store, acct, payload, now, ip);
   const got = await store.grant(acct, day, "fish", [{ id: payload.sp, size: payload.sz }], STACK_MAX);
   // 최대어 랭킹: 크기는 시작할 때 서버가 굴린 값 (가방이 가득 차 못 넣었어도 잡은 기록은 남는다). 랭킹 저장 실패가 낚시를 막지는 않는다
@@ -306,9 +321,11 @@ async function reelSunken(store: ForageStore, acct: string, p: FishPayload, now:
 type GatherPayload = { k: "gather"; items?: GrantItem[] };
 
 export async function startGather(acct: string, nodeId: string, now = Date.now()): Promise<GatherStartResponse> {
-  const store = getForageStore();
   const n = gatherNodeById(nodeId);
   if (!n) throw new HttpError(400, "INVALID_INPUT", "여기서는 캘 게 없어요.");
+  // 11/18 보안: 닫힌 캠핑장·바닷가 지점은 API로도 못 캔다 (버스가 안 와 갈 수 없는 곳)
+  if ((n.map === "camp" && !campOpen()) || (n.map === "sea" && !seaOpen())) throw new HttpError(409, "MAP_CLOSED", "아직 갈 수 없는 곳이에요.");
+  const store = getForageStore();
   // 11/16 갯벌 구멍: 물이 빠져 구멍이 드러났을 때만 (protocol seaDigOpen — 화면과 같은 계산, 저장소를 읽기 전에 막는다)
   if (n.kind === "clam" && !seaDigOpen(n, now)) throw new HttpError(409, "TIDE_IN", SEA_DIG_CLOSED_MSG);
   const w = nodeWindow(now);

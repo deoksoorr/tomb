@@ -356,7 +356,7 @@ function CodeSection({ me, buttonId }: { me: Me; buttonId: string }) {
       )}
       {confirming ? (
         <div className={styles.confirm}>
-          <p>새로 발급하면 예전 코드는 바로 쓸 수 없게 돼요. 다른 기기에서도 새 코드로 들어와야 해요.</p>
+          <p>새로 발급하면 예전 코드는 바로 쓸 수 없게 돼요. 예전 코드로 들어와 있던 다른 기기도 모두 로그아웃돼요.</p>
           <div className={styles.confirmButtons}>
             <button type="button" className={cx(ui.button, ui.danger)} onClick={issue} disabled={pending} autoFocus>
               {pending ? "만드는 중…" : "새 코드 발급"}
@@ -382,7 +382,60 @@ function CodeSection({ me, buttonId }: { me: Me; buttonId: string }) {
           {message}
         </p>
       )}
+      <LogoutOthers />
     </section>
+  );
+}
+
+/**
+ * 11/18 다른 기기에서 모두 로그아웃: 이 계정으로 들어와 있는 다른 기기(코드·구글)를 모두 끊는다. 지금 기기는 그대로.
+ * 코드가 새어 나갔을 때 새 코드 발급과 함께 쓴다
+ */
+function LogoutOthers() {
+  const [confirming, setConfirming] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function run() {
+    setPending(true);
+    setMessage(null);
+    try {
+      await api.logoutOthers();
+      setConfirming(false);
+      setMessage("다른 기기를 모두 로그아웃했어요. 1분 안에 끊겨요.");
+    } catch (e) {
+      setMessage(errorMessage(e));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className={styles.othersBox}>
+      {confirming ? (
+        <div className={styles.confirm}>
+          <p>이 기기만 남기고 다른 기기는 모두 로그아웃할까요? 다른 기기에서는 개인 코드나 구글로 다시 들어와야 해요.</p>
+          <div className={styles.confirmButtons}>
+            <button type="button" className={cx(ui.button, ui.danger)} onClick={run} disabled={pending} autoFocus>
+              {pending ? "로그아웃하는 중…" : "다른 기기 로그아웃"}
+            </button>
+            <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setConfirming(false)}>
+              그만두기
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setConfirming(true)}>
+          다른 기기에서 모두 로그아웃
+        </button>
+      )}
+      <p className={ui.hint}>내가 모르는 기기에서 내 계정을 쓰는 것 같으면 눌러 주세요.</p>
+      {message && (
+        <p className={styles.sub} role="status">
+          {message}
+        </p>
+      )}
+    </div>
   );
 }
 

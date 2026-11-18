@@ -75,7 +75,8 @@ export interface ForageStore {
   /** 도감 기록만 (입장 배지용 — 보상·지급 기록은 읽지 않는다, 명령 1개) */
   dexEntries(acct: string): Promise<Record<string, DexEntry>>;
   /** 시간당 시작 수를 세고(한도면 false) 진행 기록을 남긴다 (이전 진행은 버려진다) */
-  begin(acct: string, nonce: string, payload: string, ttlSec: number, hour: string, perHour: number): Promise<boolean>;
+  /** 시작 기록. 시간 한도에 걸리면 false, 끝내지 않은 낚시를 덮어썼으면 "replacedFish" (11/18) */
+  begin(acct: string, nonce: string, payload: string, ttlSec: number, hour: string, perHour: number): Promise<boolean | "replacedFish">;
   /** 끝내기: 처음 내는 티켓이고 지금 진행 중인 기록이어야 ok (기록을 지우고 돌려준다) */
   claim(acct: string, nonce: string): Promise<ClaimResult>;
   /**
@@ -265,7 +266,9 @@ export class MemoryForageStore implements ForageStore {
     const n = (this.hours.get(k) ?? 0) + 1;
     this.hours.set(k, n);
     if (n > perHour) return false;
+    const prev = this.acct(acct).active;
     this.acct(acct).active = { value: `${nonce}|${payload}`, until: Date.now() + ttlSec * 1000 };
+    if (prev && prev.until > Date.now() && prev.value.includes(FISH_MARK)) return "replacedFish" as const;
     return true;
   }
 
@@ -502,11 +505,17 @@ function hashOf(flat: unknown): Record<string, string> {
 }
 
 // KEYS: hour, active  ARGV: nonce|payload, ttl, perHour
+// 11/18 보안: 끝내지 않은 낚시(찌)를 덮어쓰면 2 (서비스가 오늘 낚시 1번으로 센다 — 그림자만 보고 다시 던지며 큰 것 고르기 막기)
+/** 진행 기록 값에 낚시 판이 실려 있는지 (payload JSON 앞부분 — castLine의 FishPayload) */
+export const FISH_MARK = '"k":"fish"';
+
 export const BEGIN_LUA = `
 local n = redis.call('INCR', KEYS[1])
 if n == 1 then redis.call('EXPIRE', KEYS[1], 3600) end
 if n > tonumber(ARGV[3]) then return 0 end
+local prev = redis.call('GET', KEYS[2])
 redis.call('SET', KEYS[2], ARGV[1], 'EX', tonumber(ARGV[2]))
+if prev and string.find(prev, '${FISH_MARK}', 1, true) then return 2 end
 return 1
 `;
 
@@ -797,8 +806,8 @@ export class RedisForageStore implements ForageStore {
   }
 
   async begin(acct: string, nonce: string, payload: string, ttlSec: number, hour: string, perHour: number) {
-    const r = await this.redis.eval<string[], number>(BEGIN_LUA, [lk.hour(acct, hour), lk.active(acct)], [`${nonce}|${payload}`, String(ttlSec), String(perHour)]);
-    return Number(r) === 1;
+    const r = Number(await this.redis.eval<string[], number>(BEGIN_LUA, [lk.hour(acct, hour), lk.active(acct)], [`${nonce}|${payload}`, String(ttlSec), String(perHour)]));
+    return r === 2 ? ("replacedFish" as const) : r === 1;
   }
 
   async claim(acct: string, nonce: string): Promise<ClaimResult> {

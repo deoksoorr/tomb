@@ -52,6 +52,14 @@ describe("11/17 포구 갈매기 과자 — 서버 흐름", () => {
     expect(await (await gull.GET(req(v))).json()).toMatchObject({ spicy: 0, bought: 0 });
   });
 
+  it("11/18 보안: 돈이 모자란 사기와 던지기를 동시에 보내도 공짜로 던지거나 개수가 −1이 되지 않아요", async () => {
+    const v = await newVisitor(0);
+    const [buy, thr] = await Promise.all([gull.POST(req(v, { op: "buy", kind: "plain" })), gull.POST(req(v, { op: "throw", kind: "plain" }))]);
+    expect(buy.status).toBe(409);
+    expect(thr.status).toBe(409);
+    expect(await (await gull.GET(req(v))).json()).toMatchObject({ plain: 0, bought: 0 });
+  });
+
   it("던지면 과자가 하나 줄고, 깃털은 서버가 굴려 가방에 (없으면 NO_SNACK)", async () => {
     const v = await newVisitor();
     const none = await gull.POST(req(v, { op: "throw", kind: "plain" }));

@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import { constellationById, type Constellation } from "@/lib/rpg/constellations";
 import {
   comboMult,
+  earlySpam,
   STAR_APPROACH,
   STAR_SCORE,
   starGroups,
@@ -22,11 +23,12 @@ import { ensureRpgTextures, RTEX } from "./sprites";
 // 앞 별과 빛이 흐르는 선으로 이어진다. 한 무리(별자리)를 하나도 놓치지 않고 다 이으면 그 별자리 그림이 떠올랐다 사라지며
 // 이름과 (처음이면) "도감 등록!" — 등록은 서버가 결과의 완성 목록을 계획·시간·판정 수로 검사한 뒤에 한다.
 // 박자는 시드 계획(starsPlan)대로 — 서버는 같은 계획으로 판정 수의 상한을 검사한다. 별자리 모양은 화면 비율을 지키며 펼친다.
-// 어디를 눌러도 "다음 별"을 판정한다 (모바일에서 작은 별을 정확히 누를 필요가 없게). 너무 일찍 누르면 놓침.
+// 어디를 눌러도 "다음 별"을 판정한다 (모바일에서 작은 별을 정확히 누를 필요가 없게).
+// 11/18 쉬워졌다: 일찍 누른 것은 무시한다 (마구 누르기만 STAR_EARLY_SPAM — 1초에 3번 넘게 일찍 누르면 다음 별 놓침).
 
 const KEYS = new Set(["Space", "KeyJ", "KeyK", "KeyF", "Enter", "NumpadEnter"]);
-/** 이만큼 일찍 누르면 그 별은 놓침 (마구 누르기 방지) */
-const EARLY_MISS_MS = 260;
+/** 이만큼 일찍 누르면 「조금 일찍」을 살짝 띄운다 (놓침은 아니다) */
+const EARLY_HINT_MS = 260;
 const RING_START = 26;
 const RING_END = 5;
 /** 무리가 끝난 뒤 별·선·그림이 남아 있는 시간 (완성했으면 조금 더) */
@@ -65,6 +67,9 @@ export class StarsScene extends RpgScene {
   private nextSpawn = 0;
   private live: Live[] = [];
   private lastHit = new Map<number, { x: number; y: number }>();
+  /** 11/18 「좋아」 범위 밖에서 일찍 누른 시각들 (마구 누르기 판정), 「조금 일찍」 글자를 마지막으로 띄운 시각 */
+  private earlyAt: number[] = [];
+  private earlyHintAt = -1e9;
   private aw = 320;
   private ah = 200;
   private approach = 1200;
@@ -114,6 +119,8 @@ export class StarsScene extends RpgScene {
     this.live = [];
     this.views.clear();
     this.lastHit.clear();
+    this.earlyAt = [];
+    this.earlyHintAt = -1e9;
     this.perfect = this.good = this.miss = this.combo = this.maxCombo = this.points = 0;
     this.judge = undefined;
     this.doneGroups = [];
@@ -262,7 +269,20 @@ export class StarsScene extends RpgScene {
     if (!next) return;
     const dt = now - next.n.t;
     if (Math.abs(dt) <= this.win[1]) this.hit(next, Math.abs(dt) <= this.win[0] ? "perfect" : "good");
-    else if (dt < 0 && dt > -EARLY_MISS_MS) this.fail(next, "너무 일찍");
+    else if (dt < 0) this.early(next, now, dt);
+  }
+
+  /** 11/18 범위 밖에서 일찍 눌렀다: 무시한다. 다만 1초 안에 3번 넘게 그러면(마구 누르기) 다음 별을 놓침 */
+  private early(next: Live, now: number, dt: number): void {
+    if (earlySpam(this.earlyAt, now)) {
+      this.earlyAt.length = 0;
+      this.fail(next, "너무 일찍");
+      return;
+    }
+    if (dt > -EARLY_HINT_MS && now - this.earlyHintAt > 400) {
+      this.earlyHintAt = now;
+      this.floatText(next.x, next.y - 8, "조금 일찍", "#8a90a8", 9);
+    }
   }
 
   // ── 판정 ──

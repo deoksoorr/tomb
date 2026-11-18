@@ -16,6 +16,7 @@ import {
   type HouseZone,
   type PlotTierId,
 } from "./catalog";
+import type { ReportBy } from "../reports";
 import { K } from "../store/keys";
 import { emptyLayout, normalizeExterior } from "./layout";
 import {
@@ -30,6 +31,7 @@ import {
   type InvView,
   type HouseRecord,
   type CreateResult,
+  type GuestReporter,
   type HouseStore,
   type NewHouse,
   type PendingReclaim,
@@ -79,6 +81,8 @@ export const HK = {
   guestHide: (id: string) => `house:${id}:guesthide`,
   guestRep: (id: string) => `house:${id}:guestrep`,
   guestRepIps: (id: string, eid: string) => `house:${id}:guestrep:${eid}`,
+  /** 11/18 글을 신고한 계정 → {이름, 시각, weak} JSON (계정 단위 중복 막기 겸 관리자 신고함 「누가」). 옛 guestRepIps(IP 집합)는 저절로 사라진다 */
+  guestRepBy: (id: string, eid: string) => `house:${id}:guestrepby:${eid}`,
   plants: (id: string) => `house:${id}:plants`,
   states: (id: string) => `house:${id}:states`,
   reclaimed: (id: string) => `house:${id}:reclaimed`,
@@ -369,15 +373,17 @@ return 1
 const SAVE_LUA = `${POOL_FN}
 if redis.call('EXISTS', KEYS[6]) == 0 then return -1 end
 if redis.call('HGET', KEYS[6], 'tier') ~= ARGV[3] then return -2 end
+local was = tonumber(redis.call('HGET', KEYS[6], 'updatedAt') or '0') or 0
+if ARGV[12] ~= '' and was ~= tonumber(ARGV[12]) then return -4 end
 ${POOL_MERGE}
-for i = 12, #ARGV, 2 do
+for i = 13, #ARGV, 2 do
   local it = ARGV[i]
   local need = tonumber(ARGV[i + 1]) - num(KEYS[2], it)
   if need < 0 then need = 0 end
   if need + over(KEYS[5], KEYS[3], it) > num(KEYS[1], it) then return -3 end
 end
 redis.call('DEL', KEYS[4])
-for i = 12, #ARGV, 2 do redis.call('HSET', KEYS[4], ARGV[i], ARGV[i + 1]) end
+for i = 13, #ARGV, 2 do redis.call('HSET', KEYS[4], ARGV[i], ARGV[i + 1]) end
 if ARGV[4] ~= '' then
   redis.call('SET', KEYS[7], ARGV[4])
   redis.call('HSET', KEYS[6], 'items', ARGV[6])
@@ -399,7 +405,7 @@ if ARGV[4] ~= '' then
   end
 end
 if ARGV[9] ~= '' then redis.call('HSET', KEYS[6], 'exterior', ARGV[9]) end
-redis.call('HSET', KEYS[6], 'placedScore', ARGV[5], 'updatedAt', ARGV[7])
+redis.call('HSET', KEYS[6], 'placedScore', ARGV[5], 'updatedAt', math.max(tonumber(ARGV[7]), was + 1))
 if redis.call('HGET', KEYS[6], 'hidden') ~= '1' then
   local likes = tonumber(redis.call('HGET', KEYS[6], 'likes') or '0')
   redis.call('ZADD', KEYS[8], tonumber(ARGV[5]) + likes * tonumber(ARGV[8]), ARGV[2])
@@ -449,7 +455,7 @@ return 1
 `;
 
 // 글 id로 찾아 지운다 (id는 [A-Za-z0-9_-]라 패턴에 그대로 넣어도 안전하다)
-// KEYS: guest, guestHide, guestRep, guestRepIps  ARGV: entryId
+// KEYS: guest, guestHide, guestRep, guestRepIps, guestRepBy  ARGV: entryId
 const REMOVE_GUEST_LUA = `
 local all = redis.call('LRANGE', KEYS[1], 0, -1)
 local needle = '"id":"' .. ARGV[1] .. '"'
@@ -458,14 +464,15 @@ for i = 1, #all do
     redis.call('LREM', KEYS[1], 1, all[i])
     redis.call('SREM', KEYS[2], ARGV[1])
     redis.call('HDEL', KEYS[3], ARGV[1])
-    redis.call('DEL', KEYS[4])
+    redis.call('DEL', KEYS[4], KEYS[5])
     return all[i]
   end
 end
 return nil
 `;
 
-// KEYS: guest, guestRepIps, guestRep, guestHide  ARGV: entryId, ipHash, ttl, hideAt
+// 11/18 계정 단위: 신고한 계정 해시에 HSETNX (같은 계정이면 중복). 약한 신고(갓 만든 계정)는 신고 수를 올리지 않는다
+// KEYS: guest, guestRepBy, guestRep, guestHide  ARGV: entryId, accountId, ttl, hideAt, weak, 기록 JSON
 const REPORT_GUEST_LUA = `
 local all = redis.call('LRANGE', KEYS[1], 0, -1)
 local needle = '"id":"' .. ARGV[1] .. '"'
@@ -474,8 +481,12 @@ for i = 1, #all do
   if string.find(all[i], needle, 1, true) then found = true break end
 end
 if not found then return -1 end
-if redis.call('SADD', KEYS[2], ARGV[2]) == 0 then return 0 end
+if redis.call('HSETNX', KEYS[2], ARGV[2], ARGV[6]) == 0 then return 0 end
 redis.call('EXPIRE', KEYS[2], ARGV[3])
+if ARGV[5] == '1' then
+  redis.call('HINCRBY', KEYS[3], ARGV[1], 0)
+  return 1
+end
 local n = redis.call('HINCRBY', KEYS[3], ARGV[1], 1)
 if n >= tonumber(ARGV[4]) then redis.call('SADD', KEYS[4], ARGV[1]) end
 return 1
@@ -674,7 +685,7 @@ export class RedisHouseStore implements HouseStore {
     if (meta?.lot) await this.redis.eval<string[], number>(UNLOT_LUA, [lotsKey(housingChannelOf(meta.ch), meta.zone), HK.legacyLots], [String(meta.lot), id]);
     const p = this.redis.pipeline();
     p.del(HK.meta(id), HK.layout(id), HK.inv(id), HK.placed(id), HK.guest(id), HK.guestHide(id), HK.guestRep(id), HK.plants(id), HK.states(id));
-    for (const e of eids) p.del(HK.guestRepIps(id, e));
+    for (const e of eids) p.del(HK.guestRepIps(id, e), HK.guestRepBy(id, e));
     for (const z of [HK.all, HK.new, HK.score, HK.likes]) p.zrem(z, id);
     await p.exec();
   }
@@ -723,7 +734,7 @@ export class RedisHouseStore implements HouseStore {
     if (code === -1) return "gone";
     if (code === -2) return "changed";
     if (code === -3) return "active";
-    if (eids.length) await this.redis.del(...eids.map((e) => HK.guestRepIps(id, e)));
+    if (eids.length) await this.redis.del(...eids.flatMap((e) => [HK.guestRepIps(id, e), HK.guestRepBy(id, e)]));
     return { points: r.points };
   }
 
@@ -771,6 +782,7 @@ export class RedisHouseStore implements HouseStore {
     counts: Record<string, number>,
     placedScore: number,
     now: number,
+    base?: number,
   ): Promise<SaveResult> {
     const id = pairIds(pair, zone).self;
     const { keys, sea } = this.poolKeys(pair, zone);
@@ -790,11 +802,12 @@ export class RedisHouseStore implements HouseStore {
           exterior ? JSON.stringify(exterior) : "",
           layout ? JSON.stringify(stateSigs(layout)) : "",
           layout ? JSON.stringify(Object.fromEntries(layout.items.filter((p) => p.i === "pot").map((p) => [p.u, true]))) : "",
+          base === undefined ? "" : String(base),
           ...Object.entries(counts).flatMap(([k, v]) => [k, String(v)]),
         ],
       ),
     );
-    return r === 1 ? "ok" : r === -1 ? "no_house" : r === -2 ? "tier" : "not_owned";
+    return r === 1 ? "ok" : r === -1 ? "no_house" : r === -2 ? "tier" : r === -4 ? "conflict" : "not_owned";
   }
 
   async like(id: string, visitorId: string, day: string) {
@@ -913,28 +926,41 @@ export class RedisHouseStore implements HouseStore {
   async removeGuest(id: string, entryId: string) {
     const raw = await this.redis.eval<string[], string | null>(
       REMOVE_GUEST_LUA,
-      [HK.guest(id), HK.guestHide(id), HK.guestRep(id), HK.guestRepIps(id, entryId)],
+      [HK.guest(id), HK.guestHide(id), HK.guestRep(id), HK.guestRepIps(id, entryId), HK.guestRepBy(id, entryId)],
       [entryId],
     );
     return raw ? parseGuest(raw) : null;
   }
 
-  async reportGuest(id: string, entryId: string, ipHash: string) {
+  async reportGuest(id: string, entryId: string, by: ReportBy, weak = false, at = Date.now()) {
+    const rec = JSON.stringify({ name: by.name, at, ...(weak ? { weak: true } : {}) });
     const r = Number(
       await this.redis.eval<string[], number>(
         REPORT_GUEST_LUA,
-        [HK.guest(id), HK.guestRepIps(id, entryId), HK.guestRep(id), HK.guestHide(id)],
-        [entryId, ipHash, String(GUEST_REPORT_TTL_SEC), String(GUEST_REPORT_HIDE)],
+        [HK.guest(id), HK.guestRepBy(id, entryId), HK.guestRep(id), HK.guestHide(id)],
+        [entryId, by.accountId, String(GUEST_REPORT_TTL_SEC), String(GUEST_REPORT_HIDE), weak ? "1" : "0", rec],
       ),
     );
     return r < 0 ? null : r === 0 ? ("duplicate" as const) : ("added" as const);
+  }
+
+  async guestReporters(id: string, entryId: string) {
+    const flat = (await this.redis.hgetall(HK.guestRepBy(id, entryId))) as unknown;
+    // Upstash는 해시를 객체로 돌려주고 JSON 값은 풀어서 줄 수 있다
+    const obj: Record<string, unknown> = Array.isArray(flat) ? Object.fromEntries(pairs(flat as string[])) : ((flat as Record<string, unknown> | null) ?? {});
+    const out: GuestReporter[] = [];
+    for (const [accountId, raw] of Object.entries(obj)) {
+      const v = (typeof raw === "string" ? JSON.parse(raw) : raw) as { name?: string | null; at?: number; weak?: boolean };
+      out.push({ accountId, name: v.name ?? null, at: Number(v.at) || 0, ...(v.weak ? { weak: true as const } : {}) });
+    }
+    return out.sort((a, b) => b.at - a.at);
   }
 
   async setGuestHidden(id: string, entryId: string, hidden: boolean) {
     const exists = (await this.guestbook(id, true)).some((g) => g.id === entryId);
     if (!exists) return false;
     if (hidden) await this.redis.sadd(HK.guestHide(id), entryId);
-    else await this.redis.pipeline().srem(HK.guestHide(id), entryId).hdel(HK.guestRep(id), entryId).del(HK.guestRepIps(id, entryId)).exec();
+    else await this.redis.pipeline().srem(HK.guestHide(id), entryId).hdel(HK.guestRep(id), entryId).del(HK.guestRepIps(id, entryId), HK.guestRepBy(id, entryId)).exec();
     return true;
   }
 

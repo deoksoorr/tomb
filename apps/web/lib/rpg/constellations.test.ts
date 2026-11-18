@@ -3,10 +3,11 @@ import { dexIdsOf, DEX_CATS, DEX_TITLES } from "../forage/catalog";
 import { dexPercent } from "../forage/service";
 import { dexFromHash, MemoryForageStore } from "../forage/store";
 import { SEASONS } from "../ambience";
-import { DIFFICULTIES, type Difficulty } from "./catalog";
+import { DIFFICULTIES, DIFFS, STARS_POINTS, type Difficulty } from "./catalog";
+import { earnRule } from "../economy";
 import { CONSTELLATIONS, constellationById, STAR_COUNT } from "./constellations";
 import { clamp, seeded } from "./formulas";
-import { STAR_APPROACH, STAR_DEX_MAX, STAR_REC_DEX, starGroups, starsCount, starsPlan, STARS_PLAN_VER, starWindows, type StarSky } from "./plan";
+import { earlySpam, STAR_APPROACH, STAR_DEX_MAX, STAR_EARLY_SPAM, STAR_REC_DEX, starGroups, starsCount, starsPlan, STARS_PLAN_VER, starWindows, type StarSky } from "./plan";
 import { checkStarGroups, evaluate, type TicketInfo } from "./rewards";
 import { starsPlanV1, V1_SIZE, V1_TABLE } from "./starsPlanV1";
 import type { StarsResult } from "./types";
@@ -216,6 +217,36 @@ describe("별자리 잇기 계획 (2판)", () => {
   });
 });
 
+describe("11/18 별자리 쉽게", () => {
+  it("판정 범위를 넓혔다 (DEX 0 기준 [완벽, 좋아] ms)", () => {
+    expect(starWindows("easy", 0)).toEqual([75, 190]);
+    expect(starWindows("normal", 0)).toEqual([65, 170]);
+    expect(starWindows("hard", 0)).toEqual([55, 145]);
+    expect(starWindows("hell", 0)).toEqual([45, 120]);
+  });
+
+  it("별자리 포인트는 따로 1.5배쯤 (곤충 채집은 그대로), 하루 한도 450", () => {
+    expect(STARS_POINTS).toEqual({ easy: 18, normal: 30, hard: 45, hell: 65 });
+    expect(DIFFS.easy.miniPoints).toBe(12);
+    expect(earnRule("stars").dailyMax).toBe(450);
+    expect(earnRule("bugs").dailyMax).toBe(300);
+    const T: TicketInfo = { game: "stars", difficulty: "easy", seed: 7, level: 10, st: { agi: 1, dex: 1, luk: 1 }, planVer: STARS_PLAN_VER };
+    const p = starsPlan(T.seed, T.difficulty, 75);
+    const v = evaluate(T, { game: "stars", durationMs: 75_000, perfect: p.length, good: 0, miss: 0, maxCombo: p.length, score: p.length * 300 }, 76_000);
+    expect(v).toMatchObject({ ok: true, points: STARS_POINTS.easy });
+  });
+
+  it("일찍 누르기는 1초에 3번까지는 무시, 넘으면 마구 누르기", () => {
+    expect(STAR_EARLY_SPAM).toEqual({ windowMs: 1000, max: 3 });
+    const at: number[] = [];
+    expect([0, 200, 400].map((t) => earlySpam(at, t))).toEqual([false, false, false]);
+    expect(earlySpam(at, 600)).toBe(true);
+    // 띄엄띄엄 누르면 괜찮다
+    const slow: number[] = [];
+    expect([0, 600, 1200, 1800, 2400, 3000].some((t) => earlySpam(slow, t))).toBe(false);
+  });
+});
+
 describe("완성 목록 서버 검증", () => {
   const T: TicketInfo = { game: "stars", difficulty: "normal", seed: 2024, level: 10, st: { agi: 1, dex: 1, luk: 1 }, planVer: STARS_PLAN_VER };
   const plan = starsPlan(T.seed, T.difficulty, 75);
@@ -264,6 +295,14 @@ describe("완성 목록 서버 검증", () => {
     expect(evaluate(T, base({ durationMs: 10_000, perfect: early, maxCombo: early, score: early * 300, groups: [last.group] }), 10_500)).toMatchObject({
       ok: false,
     });
+  });
+
+  // 11/18 놓친 별이 있으면 그 무리는 완성이 아니다 (놓쳐도 되는 별은 없다)
+  it("한 별이라도 덜 이은 무리를 완성이라 하면 거절", () => {
+    const g = gs[0];
+    const only = (hit: number, miss: number) => base({ groups: [g.group], perfect: hit, good: 0, miss, maxCombo: hit, score: hit * 300 });
+    expect(evaluate(T, only(g.size, 0), 76_000)).toMatchObject({ ok: true, stars: [{ group: g.group, id: g.con }] });
+    expect(evaluate(T, only(g.size - 1, 1), 76_000)).toMatchObject({ ok: false, code: "RESULT_REJECTED" });
   });
 
   it("1판 티켓(sv=1)은 1판 계획으로 검사한다", () => {

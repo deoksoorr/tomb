@@ -20,3 +20,4 @@ export * from "./chat";
 export * from "./friends";
 export * from "./squirrels";
 export * from "./snowman";
+export * from "./snowfight";

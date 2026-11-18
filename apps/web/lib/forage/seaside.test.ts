@@ -148,6 +148,19 @@ describe("바다 낚시", () => {
 });
 
 describe("갯벌 캐기", () => {
+  it("11/18 보안: 바닷가가 닫힌 서버(운영, SEA_ENABLED 없음)에서는 바닷가 지점을 API로도 못 캐요", async () => {
+    const prev = { v: process.env.VERCEL_ENV, s: process.env.SEA_ENABLED };
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("SEA_ENABLED", "");
+    try {
+      await expect(startGather(`t-seaside-${nanoid(8)}`, SEA_GATHER_NODES[0].id, LOW)).rejects.toMatchObject({ status: 409, code: "MAP_CLOSED" });
+    } finally {
+      // 이 파일의 다른 환경 값(Redis 비움 등)은 그대로 두고 둘만 되돌린다
+      vi.stubEnv("VERCEL_ENV", prev.v);
+      vi.stubEnv("SEA_ENABLED", prev.s);
+    }
+  });
+
   it("물이 덮은 때엔 서버가 막아요 (TIDE_IN), 간조엔 게이지로 캐서 갯벌 것이 나와요", async () => {
     const hole = SEA_GATHER_NODES[0];
     await expect(startGather(`t-seaside-${nanoid(8)}`, hole.id, HIGH + 10 * MIN)).rejects.toMatchObject({ status: 409, code: "TIDE_IN", message: SEA_DIG_CLOSED_MSG });

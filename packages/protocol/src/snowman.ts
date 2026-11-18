@@ -12,7 +12,10 @@ import type { Sid } from "./types";
 export const SNOWMAN_LIFE_MS = 60 * 60_000;
 /** 마지막 이만큼 동안 조금씩 작아진다 */
 export const SNOWMAN_SHRINK_MS = 10 * 60_000;
-/** 한 사람이 세워 둘 수 있는 수 (넘치면 그 사람 것 중 가장 오래된 것부터 녹는다) */
+/**
+ * 한 사람이 동시에 가질 수 있는 수 — 서 있는 눈사람과 쌓는 중인 덩이를 합쳐서 (11/18 사용자: 2개 만들면 녹을 때까지 못 만든다).
+ * 다 차면 새 덩이를 못 놓는다 (예전엔 가장 오래된 것부터 녹였다)
+ */
 export const SNOWMAN_PER_PERSON = 2;
 /** 채널(캠핑장)에 서 있을 수 있는 수 (넘치면 가장 오래된 것부터 녹는다) */
 export const SNOWMAN_PER_CHANNEL = 15;
@@ -29,10 +32,11 @@ export type SnowmanInfo = { id: string; x: number; y: number; seed: number; by: 
  * 거절 까닭: spot = 그 자리에 못 놓음·못 세움, wait = 너무 잦음, near = 다른 사람 덩이·눈사람과 겹침,
  * full = 캠핑장에 덩이가 너무 많음, lost = 그 덩이가 없음(사라졌거나 내 것이 아님)
  */
-export type SnowmanDenyWhy = "spot" | "wait" | "near" | "full" | "lost";
+/** many = 11/18 서 있는 내 눈사람과 쌓는 중인 내 덩이가 이미 SNOWMAN_PER_PERSON개 */
+export type SnowmanDenyWhy = "spot" | "wait" | "near" | "full" | "lost" | "many";
 /** 거절된 동작: put = 내려놓기, add = 올리기(세 단째면 세우기까지), take = 다시 들기 */
 export type SnowAct = "put" | "add" | "take";
-const DENY_WHYS: readonly SnowmanDenyWhy[] = ["spot", "wait", "near", "full", "lost"];
+const DENY_WHYS: readonly SnowmanDenyWhy[] = ["spot", "wait", "near", "full", "lost", "many"];
 export const isSnowmanDenyWhy = (v: unknown): v is SnowmanDenyWhy => (DENY_WHYS as readonly unknown[]).includes(v);
 
 export const SNOWMAN_ID_RE = /^[a-z0-9]{1,16}$/;
@@ -98,8 +102,8 @@ export type SnowStackInfo = { id: string; sid: Sid; x: number; y: number; sizes:
 
 /** 이만큼 손대지 않은 덩이는 사라진다 */
 export const SNOW_STACK_IDLE_MS = 10 * 60_000;
-/** 한 사람이 동시에 둘 수 있는 덩이 (넘치면 그 사람 것 중 가장 오래된 것이 사라진다) */
-export const SNOW_STACKS_PER_PERSON = 4;
+/** 한 사람이 동시에 둘 수 있는 덩이 (11/18 4 → 2, 서 있는 눈사람과 합쳐 SNOWMAN_PER_PERSON까지 — 넘치면 못 놓는다) */
+export const SNOW_STACKS_PER_PERSON = 2;
 /** 채널(캠핑장)에 놓일 수 있는 덩이 (넘치면 새로 못 놓는다) */
 export const SNOW_STACKS_PER_CHANNEL = 40;
 /** 다른 사람 덩이·눈사람과 이만큼은 떨어져야 내려놓는다 (발 위치, 세로는 1.4배로 잰다) */

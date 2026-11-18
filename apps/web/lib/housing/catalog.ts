@@ -274,7 +274,7 @@ export const GUEST_MAX_LEN = 80;
 export const GUEST_KEEP = 50;
 /** 한 사람이 하루에 남길 수 있는 방명록 수 (모든 집 합계) */
 export const GUEST_PER_DAY = 10;
-/** 서로 다른 IP의 신고가 이만큼 모이면 그 글을 가린다 */
+/** 서로 다른 계정의 신고가 이만큼 모이면 그 글을 가린다 (11/18 IP가 아니라 계정 단위 — 만든 지 3일 지난 계정만 센다) */
 export const GUEST_REPORT_HIDE = 3;
 
 export const HOUSE_NAME_MAX = 20;

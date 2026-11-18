@@ -66,6 +66,11 @@ export type MyHouseResponse = {
   /** 11/16 공용 가방 가구 중 다른 집에 놓여 있어 여기서 못 쓰는 개수 (치우면 여기 놓을 수 있다). 가진 수 = inventory + away */
   away?: Record<string, number>;
   points: number;
+  /**
+   * 11/18 마을 집이 없고 포구 오두막이 먼저 있으면: 마을 집 분양가에 더해지는 별장 값 차이 (오두막을 별장 값으로 친다 — 순서를 바꿔 별장 값을 피하지 못하게).
+   * 없거나 0이면 빠진다
+   */
+  villaFee?: number;
 };
 
 export type HouseDetailResponse = { house: PublicHouse };

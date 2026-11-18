@@ -163,6 +163,61 @@ export class Sfx extends AudioHost {
   }
 
   /**
+   * 11/18 눈싸움 소리 (파일 없이 걸러낸 잡음): toss = 손을 떠나는 짧은 바람 소리, hit = 퍽 (낮고 둔한 터짐 + 사각 부서짐),
+   * land = 바닥에 떨어지는 작은 사각 소리
+   */
+  snow(kind: "toss" | "hit" | "land", gain = 1): void {
+    const ac = this.audio();
+    if (!ac) return;
+    const t = ac.currentTime + 0.01;
+    if (!this.noise) {
+      const n = Math.floor(ac.sampleRate * 0.5);
+      this.noise = ac.createBuffer(1, n, ac.sampleRate);
+      const d = this.noise.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    }
+    const v = Math.min(1, this.busGain() * gain) * (kind === "hit" ? 0.7 : kind === "land" ? 0.3 : 0.22);
+    const len = kind === "hit" ? 0.22 : kind === "land" ? 0.12 : 0.16;
+    const src = ac.createBufferSource();
+    src.buffer = this.noise;
+    const f = ac.createBiquadFilter();
+    if (kind === "toss") {
+      f.type = "bandpass";
+      f.frequency.setValueAtTime(900, t);
+      f.frequency.exponentialRampToValueAtTime(2600, t + len);
+      f.Q.value = 1.4;
+    } else {
+      f.type = "lowpass";
+      f.frequency.setValueAtTime(kind === "hit" ? 1400 : 2400, t);
+      f.frequency.exponentialRampToValueAtTime(kind === "hit" ? 260 : 700, t + len);
+    }
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(v, t + (kind === "toss" ? 0.05 : 0.004));
+    g.gain.exponentialRampToValueAtTime(0.001, t + len);
+    src.connect(f).connect(g).connect(this.output);
+    src.start(t, Math.random() * 0.2);
+    src.stop(t + len + 0.02);
+    releaseOnEnd(src, f, g);
+    if (kind !== "hit") return;
+    // 퍽 다음에 눈 부서지는 사각 소리 (높은 잡음 짧게)
+    const crunch = ac.createBufferSource();
+    crunch.buffer = this.noise;
+    const hp = ac.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 3200;
+    const cg = ac.createGain();
+    const at = t + 0.03;
+    cg.gain.setValueAtTime(0, at);
+    cg.gain.linearRampToValueAtTime(v * 0.35, at + 0.004);
+    cg.gain.exponentialRampToValueAtTime(0.001, at + 0.1);
+    crunch.connect(hp).connect(cg).connect(this.output);
+    crunch.start(at, Math.random() * 0.3);
+    crunch.stop(at + 0.12);
+    releaseOnEnd(crunch, hp, cg);
+  }
+
+  /**
    * 모닥불 소리 크기 0..1 (거리·앉음은 campfireLevel()로). 매 프레임 불러도 된다 — 바뀔 때만 램프를 건다.
    * 13번 환경음 갈래(audio:mix amb)를 따르고, 탭이 숨으면 멈춘다.
    */

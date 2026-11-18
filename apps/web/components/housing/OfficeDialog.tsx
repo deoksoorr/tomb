@@ -220,7 +220,10 @@ function MyPlot({
 
   const plot = tierById(pick)!;
   const seaCost = (t: PlotTierId) => seaPlotCost(t, !!villa);
-  const cost = sea ? seaCost(pick) : plotCost(pick);
+  // 11/18 마을 집: 포구 오두막이 먼저 있으면 별장 값 차이를 더한다 (서버가 알려 준다 — my.villaFee)
+  const villaFee = sea ? 0 : (my.villaFee ?? 0);
+  const villageCost = (t: PlotTierId) => plotCost(t) + villaFee;
+  const cost = sea ? seaCost(pick) : villageCost(pick);
   const labelOf = (ch: number, l: number) => (sea ? seaLotLabel(ch, l) : lotLabel(ch, l));
   async function run(fn: () => Promise<MyHouseResponse>, done: string) {
     setPending(true);
@@ -305,13 +308,14 @@ function MyPlot({
               {villa === null ? "값을 확인하는 중…" : villa ? `마을 집이 있어서 별장 값이에요 (마을 집 값의 ${SEA_VILLA_RATE}배).` : `마을 집 값의 ${SEA_COTTAGE_RATE}배예요. 마을 집이 있으면 별장이라 ${SEA_VILLA_RATE}배예요.`}
             </p>
           )}
+          {villaFee > 0 && <p className={styles.tag}>포구 오두막이 있어서 오두막이 별장이 돼요. 별장 값 차이 {fmt(villaFee)}P가 분양가에 더해져요.</p>}
           {kept > 0 && <p className={styles.tag}>가방에 가구 {kept}개가 있어요. 분양받으면 바로 놓을 수 있어요.</p>}
           <TierPicker
             value={pick}
             onChange={setPick}
             points={my.points}
             disabled={pending || busy}
-            {...(sea ? { cottage: style, costOf: seaCost, hintOf: (i: number) => seaHint(i, !!villa) } : {})}
+            {...(sea ? { cottage: style, costOf: seaCost, hintOf: (i: number) => seaHint(i, !!villa) } : villaFee > 0 ? { costOf: villageCost } : {})}
           />
           {sea && <CottageStylePicker value={style} onChange={setStyle} tier={pick} disabled={pending || busy} />}
           <p className={styles.points}>
@@ -321,7 +325,7 @@ function MyPlot({
           {short && (
             <p className={styles.error}>
               {plot.name} 분양까지 {fmt(cost - my.points)}P 부족해요. 출석이나 헌화로 더 모아 주세요.
-              {pick !== "small" && my.points >= (sea ? seaCost("small") : plotCost("small")) ? " 작은 터는 지금 바로 살 수 있어요." : ""}
+              {pick !== "small" && my.points >= (sea ? seaCost("small") : villageCost("small")) ? " 작은 터는 지금 바로 살 수 있어요." : ""}
             </p>
           )}
           {sea && free?.length === 0 && <p className={styles.error}>{channel}채널 포구에는 빈 오두막 터가 없어요. 다른 채널에서 찾아봐요.</p>}

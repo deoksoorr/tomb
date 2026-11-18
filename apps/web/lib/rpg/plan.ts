@@ -235,7 +235,16 @@ export const STAR_SCORE = { perfect: 300, good: 100 } as const;
 export const STAR_APPROACH: Record<Difficulty, number> = { easy: 1500, normal: 1200, hard: 950, hell: 780 };
 const STAR_BEAT: Record<Difficulty, number> = { easy: 820, normal: 640, hard: 500, hell: 400 };
 const STAR_HALF_P: Record<Difficulty, number> = { easy: 0, normal: 0.12, hard: 0.25, hell: 0.35 };
-const STAR_WIN: Record<Difficulty, [number, number]> = { easy: [75, 160], normal: [65, 140], hard: [55, 120], hell: [45, 100] };
+// 11/18 너무 어렵다는 말에 「좋아」만 예전보다 약 20% 넓혔다 (예전 easy 160 normal 140 hard 120 hell 100, 40%는 너무 쉬웠다). 완벽은 예전 그대로
+const STAR_WIN: Record<Difficulty, [number, number]> = { easy: [75, 190], normal: [65, 170], hard: [55, 145], hell: [45, 120] };
+/** 11/18 「좋아」 범위 밖에서 일찍 누르면 무시한다. 이 시간 안에 이보다 많이 일찍 누르면(마구 누르기) 다음 별을 놓침 */
+export const STAR_EARLY_SPAM = { windowMs: 1000, max: 3 } as const;
+/** 일찍 누른 시각을 적고, STAR_EARLY_SPAM 시간 안에 max번을 넘었으면 true (마구 누르기) */
+export function earlySpam(at: number[], now: number): boolean {
+  at.push(now);
+  while (at.length && now - at[0] > STAR_EARLY_SPAM.windowMs) at.shift();
+  return at.length > STAR_EARLY_SPAM.max;
+}
 
 /** 판정 범위 [완벽, 좋아] ms. DEX가 높으면 조금 너그럽다 (레벨은 판정에 쓰지 않는다) */
 export function starWindows(d: Difficulty, dex: number): [number, number] {

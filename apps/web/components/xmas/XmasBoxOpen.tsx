@@ -12,6 +12,7 @@ import Dialog from "../ui/Dialog";
 import ItemIcon from "../ui/ItemIcon";
 import ui from "../ui/ui.module.css";
 import s from "./XmasBoxOpen.module.css";
+import { OddsLink } from "../odds/OddsLayer";
 
 // 12월 크리스마스 선물상자 열기 (가방 소모품 [열기]).
 // [열기] → 상자가 들썩 → 금 리본 고리가 양옆으로 풀려 날아가고 띠가 흘러내림 → 뚜껑이 튀어 오르며 빛살·반짝이 → 나온 꾸미기가 떠오른다.
@@ -124,7 +125,12 @@ export default function XmasBoxOpen({ count, onClose }: { count: number; onClose
           )}
         </div>
         <div className={s.text} role="status" aria-live="polite">
-          {phase === "ready" && <b>{count > 1 ? `선물상자가 ${count}개 있어요. 하나씩 열어요` : "무엇이 들어 있을까요?"}</b>}
+          {phase === "ready" && (
+            <>
+              <b>{count > 1 ? `선물상자가 ${count}개 있어요. 하나씩 열어요` : "무엇이 들어 있을까요?"}</b>
+              <OddsLink section="xmas" label="나오는 확률 보기" />
+            </>
+          )}
           {phase === "untie" && <b>리본이 스르르 풀려요…</b>}
           {phase === "open" && <b>짠!</b>}
           {phase === "done" && prize && item && (

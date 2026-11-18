@@ -138,7 +138,11 @@ export type HuntResult = {
   quit?: boolean;
   /** 11/15 야근 빌딩 능력 카드: 고른 순서대로 (서버가 시드로 제안을 다시 굴려 확인한다 — lib/rpg/cards) */
   cards?: CardPick[];
+  /** 11/18 판 기록 (관리자 확인 근거 — 판정에는 쓰지 않는다) */
+  log?: RunLog;
 };
+/** 11/18 판 기록: ft = 층마다 깬 시각(판 시작부터 ms), dmg = 넣은 피해 합, sk = 스킬마다 쓴 횟수 */
+export type RunLog = { ft?: number[]; dmg?: number; sk?: Record<string, number> };
 /** wrong: '기능'을 누른 수, decoy: 주석 처리된 가짜 버그를 누른 수, score: 콤보 배수까지 넣은 점수(서버가 상한으로 자른다) */
 export type BugsResult = { game: "bugs"; durationMs: number; caught: number; golden: number; wrong: number; decoy: number; maxCombo: number; score: number };
 /**
@@ -236,11 +240,18 @@ export type RunReward = {
     chests: number[];
     emptyChests: number;
     titles: string[];
-    /** 11/15 확인이 필요한 판 (부드러운 거절): 층·초월 EXP·상자는 받았고 랭킹·주간 기록·서버 최초·최고층 기록에서만 빠진다 */
+    /**
+     * 확인이 필요한 판. 11/18부터는 판·포인트만 받고, 최고 층·랭킹·서버 최초·상자·초월 EXP·체크포인트는
+     * 관리자가 확인(「확인 필요」에서 인정)하면 들어간다
+     */
     suspect?: boolean;
+    /** 11/18 서버 전체 최고 층을 새로 깼다: 꼭대기 층 주인·전체 랭킹 기록은 관리자 확인 뒤에 (나머지는 다 받았다) */
+    topPending?: boolean;
   };
   /** 11/15 이번 판으로 개척자 번호를 받았다 */
   pioneer?: number;
+  /** 11/18 서버 최초 칭호(한 명뿐)는 관리자 확인 뒤에 들어간다: 이번 판으로 확인을 기다리게 된 칭호 id */
+  firstPending?: string[];
 };
 
 export type RunFinishResponse = { reward: RunReward; view: RpgView };
@@ -289,6 +300,11 @@ export type RpgPlay = {
   };
   /** 11/15 연습 판 (초월 구간을 다 써서 드롭이 없다) — 바닥 드롭 연출을 하지 않는다 */
   noDrops?: boolean;
+  /**
+   * 11/18 드롭 시드 받기 (사냥·야근 빌딩): 첫 우두머리가 나올 수 있는 시각 뒤에 한 번 부른다 (lib/rpg/reveal).
+   * 판 시작 응답에는 드롭 시드가 없다. 못 받으면 null — 바닥 드롭 연출만 빠진다 (보상은 결과 화면에 그대로)
+   */
+  reveal?: () => Promise<number | null>;
   /** 11/15 테스트 서버 슈퍼 계정 시험 드롭 (판 시작 응답의 superDrops 그대로 — 운영 서버에서는 늘 없다): 우두머리 장비·상자 세트 장비·꾸미기가 늘 나온다 */
   superDrops?: boolean;
 };

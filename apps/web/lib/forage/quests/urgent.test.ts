@@ -32,7 +32,7 @@ import {
   urgentCapLine,
   urgentEndAt,
   urgentEndNotice,
-  urgentKingsLine,
+  URGENT_KING_LINE,
   urgentFilled,
   urgentLastAcct,
   urgentGoal,
@@ -177,8 +177,7 @@ describe("목표 (접속자 수에 맞춰)", () => {
     expect(urgentCapLine("ore", 25, 0)).toBe("이번 의뢰엔 낼 만큼 다 냈어요.");
     expect(urgentCapError("herb", 30, 5)).toBe("이번 의뢰는 한 사람이 30개까지 낼 수 있어요. 앞으로 5개 더 낼 수 있어요.");
     expect(urgentCapError("fish", 40, 0)).toBe("이번 의뢰는 한 사람이 40마리까지 낼 수 있어요. 낼 만큼 다 냈어요.");
-    expect(urgentKingsLine(1)).toBe("");
-    expect(urgentKingsLine(3)).toBe("한 사람 몫을 다 채운 3명이 모두 배달왕이에요.");
+    expect(URGENT_KING_LINE).toContain("150%");
   });
 });
 
@@ -207,20 +206,18 @@ describe("단계 · 보상 판정", () => {
     expect(full.box).not.toBeNull();
     expect(urgentReward({ ...base, n: 170, mine: 5 })).toMatchObject({ stage: 150, stamps: 5 });
   });
-  it("가장 많이 낸 사람은 50% 이상일 때만 배달왕, 마감 칭호는 100%를 채운 사람만", () => {
+  it("11/18 가장 많이 낸 사람은 150%를 채웠을 때만 배달왕, 마감 칭호는 100%를 채운 사람만", () => {
     expect(urgentReward({ ...base, n: 30, mine: 30, top: "me" })!.king).toBe(false);
-    expect(urgentReward({ ...base, n: 60, mine: 30, top: "me" })!.king).toBe(true);
+    expect(urgentReward({ ...base, n: 60, mine: 30, top: "me" })!.king).toBe(false);
+    expect(urgentReward({ ...base, n: 100, mine: 30, top: "me" })!.king).toBe(false);
+    expect(urgentReward({ ...base, n: 150, mine: 30, top: "me" })!.king).toBe(true);
     expect(urgentReward({ ...base, n: 60, mine: 30, last: "me" })!.last).toBe(false);
     expect(urgentReward({ ...base, n: 100, mine: 30, last: "me" })!.last).toBe(true);
   });
-  it("11/16 상한까지 다 낸 사람은 모두 공동 배달왕, 아무도 상한까지 못 냈으면 1등 한 사람만, 상한 없는 예전 의뢰는 1등만", () => {
-    // 상한 25: 25개 낸 사람은 1등이 아니어도 배달왕 (50% 이상일 때만)
-    expect(urgentReward({ ...base, cap: 25, n: 120, mine: 25, top: "other" })!.king).toBe(true);
-    expect(urgentReward({ ...base, cap: 25, n: 40, mine: 25, top: "other" })!.king).toBe(false);
-    expect(urgentReward({ ...base, cap: 25, n: 120, mine: 24, top: "other" })!.king).toBe(false);
-    // 아무도 상한까지 못 냈으면 1등(먼저 닿은 사람)만
-    expect(urgentReward({ ...base, cap: 25, n: 60, mine: 20, top: "me" })!.king).toBe(true);
-    expect(urgentReward({ ...base, cap: 25, n: 60, mine: 20, top: "other" })!.king).toBe(false);
+  it("11/18 공동 배달왕은 없다: 상한까지 다 내도 1등이 아니면 아니고, 1등 한 사람만 (150%일 때)", () => {
+    expect(urgentReward({ ...base, cap: 25, n: 150, mine: 25, top: "other" })!.king).toBe(false);
+    expect(urgentReward({ ...base, cap: 25, n: 150, mine: 25, top: "me" })!.king).toBe(true);
+    expect(urgentReward({ ...base, cap: 25, n: 150, mine: 20, top: "other" })!.king).toBe(false);
     // 상한 없음(cap 0 — 그 전 코드가 정한 의뢰): 많이 내도 1등이 아니면 아니다
     expect(urgentReward({ ...base, cap: 0, n: 120, mine: 50, top: "other" })!.king).toBe(false);
   });
@@ -554,7 +551,7 @@ describe("서버 흐름", () => {
     expect(urgentEnabled()).toBe(true);
   });
 
-  it("11/15 150%에 닿으면 그 순간 끝난다: 끝 시각·끝 공지, 그 뒤 납품은 막고(가방 그대로) 보상은 바로, 마감 칭호는 150%를 채운 사람 (11/16 상한까지 낸 사람은 모두 배달왕)", async () => {
+  it("11/15 150%에 닿으면 그 순간 끝난다: 끝 시각·끝 공지, 그 뒤 납품은 막고(가방 그대로) 보상은 바로, 마감 칭호는 150%를 채운 사람 (11/18 배달왕은 1등 한 사람만)", async () => {
     const ev = urgentSchedule(addDays(DAY, 2), env.sessionSecret())[0];
     const goal = urgentGoal(ev.kind, URGENT_REF_ONLINE);
     const cap = urgentCap(goal, URGENT_REF_ONLINE);
@@ -593,12 +590,17 @@ describe("서버 흐름", () => {
     expect(row).toMatchObject({ done: true, end: t150, cap, left: cap - 1, reward: { stage: 150, last: true, king: false } });
     const c = await claimUrgent(closer, ev.id, t150 + 3_000);
     expect(c.claimed).toMatchObject({ stage: 150, last: true, king: false, pocket: true });
-    // 상한까지 낸 사람은 1등이 아니어도 모두 배달왕 (사이렌 모자·칭호)
+    // 11/18 공동 배달왕은 없다: 상한까지 낸 거든손들 중 먼저 닿은 1등 한 사람만 배달왕 (사이렌 모자·칭호)
+    const kings: string[] = [];
     for (const h of helpers.slice(0, fullHelpers)) {
       const got = await claimUrgent(h, ev.id, t150 + 3_000);
-      expect(got.claimed).toMatchObject({ stage: 150, king: true, last: false });
-      expect((await getTitleStats().get(h)).urgKing).toBe(t150 + 3_000 + 24 * HOUR);
+      expect(got.claimed).toMatchObject({ stage: 150, last: false });
+      if (got.claimed.king) {
+        kings.push(h);
+        expect((await getTitleStats().get(h)).urgKing).toBe(t150 + 3_000 + 24 * HOUR);
+      }
     }
+    expect(kings.length).toBeLessThanOrEqual(1);
     // 상한에 못 미친 마지막 거든손은 (1등이 아니면) 배달왕이 아니다
     if (helpers.length > fullHelpers) expect((await claimUrgent(helpers[fullHelpers], ev.id, t150 + 3_000)).claimed.king).toBe(false);
     expect((await getTitleStats().get(closer)).urgLast).toBe(t150 + 3_000 + 24 * HOUR);

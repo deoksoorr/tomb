@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import dynamic from "next/dynamic";
 import { bridge, type GameStartOptions } from "@/game/bridge";
@@ -76,7 +76,8 @@ import WishDialog from "@/components/plaza/WishDialog";
 import LotteryDialog from "@/components/plaza/LotteryDialog";
 import SkyHud from "@/components/sky/SkyHud";
 import SeaViewHud from "@/components/sea/SeaViewHud";
-import GhostLayer from "@/components/sea/GhostLayer";
+import GhostLayer, { GhostStaffButton } from "@/components/sea/GhostLayer";
+import OddsLayer from "@/components/odds/OddsLayer";
 import { SnackVendLayer } from "@/components/sea/GullSnacks";
 import UrgentHud from "@/components/forage/UrgentHud";
 import FoodGauge from "@/components/camp/FoodGauge";
@@ -233,7 +234,8 @@ type Panel =
   | "staffEarn";
 
 /**
- * 11/16 창 단축키 (데스크톱): 마을·사냥·미니게임·집 어디에서도 쓰지 않는 글자만 골랐다 (B·G·L·M·N·O·P·U).
+ * 11/16 창 단축키 (데스크톱): 마을·사냥·미니게임·집 어디에서도 쓰지 않는 글자만 골랐다 (B·G·L·N·O·P·U).
+ * 11/18 M은 선물함 → 지도 펴기·접기로 (Minimap이 직접 듣는다, 사용자). 선물함은 단축키 없음
  * 같은 키로 다시 누르면 닫는다. L(랭킹)은 창이 아니라 오른쪽 접이식이라 따로 (rankOpen)
  */
 const PANEL_KEYS: Readonly<Record<string, Panel>> = {
@@ -243,9 +245,13 @@ const PANEL_KEYS: Readonly<Record<string, Panel>> = {
   KeyU: "race",
   KeyB: "calendar",
   KeyN: "notices",
-  KeyM: "gifts",
 };
 const RANK_KEY = "KeyL";
+
+/** 키보드(Tab)로 옮겨 온 단추·링크인지. 마우스로 눌러 포커스만 남은 단추는 아니다 (그때는 Enter·Space를 게임에 돌려준다) */
+function keyboardFocused(el: Element | null): boolean {
+  return el instanceof HTMLElement && el.matches("button, a[href], [role=button]") && el.matches(":focus-visible");
+}
 
 /** 다른 담당이 만드는 장소 창 (사냥터·분양 사무소). 컴포넌트가 들어오기 전까지 자리만 */
 type Props = {
@@ -293,6 +299,28 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const coarse = useMediaQuery("(pointer: coarse)");
   // 데스크톱인데 창이 좁으면 윗줄에 채널 표시 자리가 없다 → 아래 안내 줄로
   const narrow = useMediaQuery("(max-width: 700px)");
+  // 11/18 데스크톱: 확성기·고정 공지 창과 채팅창 폭을 아래 바로 가기 줄의 [공지] 단추 오른쪽 끝에 맞춘다 (--dock-w, 문서 루트)
+  const dockRef = useRef<HTMLElement>(null);
+  const noticeBtnRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const nav = dockRef.current;
+    const btn = noticeBtnRef.current;
+    const root = document.documentElement;
+    if (!nav || !btn) return;
+    const fit = () => {
+      const w = Math.round(btn.getBoundingClientRect().right - nav.getBoundingClientRect().left);
+      if (w > 200) root.style.setProperty("--dock-w", `${w}px`);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(nav);
+    window.addEventListener("resize", fit);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", fit);
+      root.style.removeProperty("--dock-w");
+    };
+  }, [ready, coarse]);
   const scene = useBridgeValue("scene:changed")?.scene;
   const inShop = scene === "shop";
   // 집·사냥터·미니게임 안에서는 그 화면이 자기 HUD를 그린다. 월드 HUD는 숨기기만 한다(BGM 플레이어는 계속 살아 있게)
@@ -405,7 +433,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       // Enter: 말풍선 채팅 입력칸 (버튼에 포커스가 있으면 그 버튼 몫, 낚시처럼 게임 키를 막은 창이 있으면 그 창 몫)
       if (enter) {
         // 11/16 버스 안(창밖 연출)에서는 채팅창을 숨긴다 — 이때 Enter가 터치용 한 줄 입력칸(화면 폭 전체)을 열었다
-        if (!canRadial || chatOpen || bridge.last("bus:state")?.riding || bridge.last("ui:blockKeys")?.blocked || (el instanceof HTMLElement && el.matches("button, a[href], [role=button]"))) return;
+        // 11/18 마우스로 눌러 포커스만 남은 단추(:focus-visible 아님)는 Enter를 가져가지 않는다 — 방금 누른 기능이 또 동작했다
+        if (!canRadial || chatOpen || bridge.last("bus:state")?.riding || bridge.last("ui:blockKeys")?.blocked || keyboardFocused(el)) return;
         e.preventDefault();
         setRadial(false);
         // 데스크톱은 왼쪽 아래 채팅창 입력칸으로, 터치(키보드 달린 태블릿 등)는 한 줄 입력칸
@@ -432,13 +461,30 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     return () => window.removeEventListener("keydown", onKey);
   }, [ready, quiet, roomQuiet, canRadial, chatOpen, coarse, iAmStaff]);
 
+  // 11/18 PC: 화면 위 단추(채팅 [배경]·[−][+]·위쪽 줄·바로 가기 등)를 마우스로 누르면 누른 뒤 포커스를 놓는다.
+  // 남아 있으면 Enter(채팅)·Space(점프)가 그 단추를 또 눌렀다. 창(dialog) 안 단추는 그대로 (창 안 키보드 이동)
+  useEffect(() => {
+    if (!ready) return;
+    const onClick = (e: MouseEvent) => {
+      if (e.detail === 0) return; // 키보드로 누른 클릭
+      const b = (e.target as Element | null)?.closest?.("button, a[href], [role=button]");
+      if (!(b instanceof HTMLElement) || b.closest("dialog, [role=dialog]")) return;
+      requestAnimationFrame(() => {
+        if (document.activeElement === b) b.blur();
+      });
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [ready]);
+
   // 11/17 사냥 중 Enter: 채팅창 입력칸 (사냥 창이 게임 키를 막아 두므로 위 처리와 따로). 입력칸에 쓰는 동안 사냥 키는 RpgScene이 거른다
   useEffect(() => {
     if (!huntChat) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.code !== "Enter" && e.code !== "NumpadEnter") || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
       const el = document.activeElement;
-      if (el instanceof HTMLElement && el.matches("input, textarea, select, [contenteditable], button, a[href], [role=button]")) return;
+      if (el instanceof HTMLElement && el.matches("input, textarea, select, [contenteditable]")) return;
+      if (keyboardFocused(el)) return;
       // 멈춤 창·안내서 같은 창이 떠 있으면 그 창 몫
       if (chatOpen || document.querySelector("dialog[open]")) return;
       e.preventDefault();
@@ -648,6 +694,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {/* 11/16 바닷가: 앉아 있을 때 「바다 보기」 (V) */}
       {ready && <SeaViewHud />}
       {ready && <GhostLayer avatar={{ color: options.color, body: options.body }} />}
+      {/* 11/18 확률 안내 (어느 창의 [확률 보기]에서든 그 위에 겹쳐 뜬다) */}
+      {ready && <OddsLayer />}
       {/* 11/17 r2 선착장 길목 과자 자판기 창 */}
       {ready && <SnackVendLayer />}
       {/* 11/15 긴급 의뢰: 시작 알림 · 위쪽 남은 시간·서버 전체 막대 (마을 어디서든) */}
@@ -679,6 +727,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 <BgmPlayer compact />
                 {/* 불멍·놀이기구 중: 폭죽이 있으면 위쪽 줄에서 바로 쏘기 (메뉴 시트를 안 거쳐도) */}
                 {campfire && <FireworkButton variant="top" onOpen={() => setPanel("fireworks")} />}
+                <GhostStaffButton variant="top" className={cx(ui.button, ui.icon, ui.top)} />
               </div>
               <Hud compact onOpenChannels={() => setPanel("channels")} />
               {/* 11/15 먹거리 효과 게이지: 위 줄 아래 왼쪽에 작게 */}
@@ -719,7 +768,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                   className={cx(ui.button, ui.icon, ui.top, styles.topButton)}
                   onClick={() => setPanel("gifts")}
                   aria-label={giftCount ? `선물함 (안 받은 선물 ${giftCount}개)` : "선물함"}
-                  title="선물함 (M)"
+                  title="선물함"
                 >
                   <PixelIcon name="gift" />
                   {giftCount > 0 && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
@@ -781,7 +830,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           {coarse && <MegaphoneFeed channel={channel} floating />}
           {/* 바로 가기 줄: 데스크톱만 왼쪽 아래 모서리. 터치는 위쪽 [메뉴] 시트에 모두 있고 [표현]만 행동 버튼 옆(MobileControls) */}
           {!coarse && (
-            <nav className={styles.dock} aria-label="바로 가기">
+            <nav ref={dockRef} className={styles.dock} aria-label="바로 가기">
               <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("menu")}>
                 <PixelIcon name="menu" />
                 메뉴
@@ -825,7 +874,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 소식
                 {(me?.activityUnread ?? 0) > 0 && <span className={styles.badge}>{me?.activityUnread}</span>}
               </button>
-              <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("notices")}>
+              <button ref={noticeBtnRef} type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("notices")}>
                 <PixelIcon name="bell" />
                 공지
                 <span className={styles.dockKey} aria-hidden="true">N</span>
@@ -837,6 +886,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 )}
               </button>
               <FireworkButton onOpen={() => setPanel("fireworks")} />
+              {/* 11/18 바닷가 운영자 유령선 (운영자에게만) */}
+              <GhostStaffButton />
             </nav>
           )}
           <div className={styles.bottomCenter}>

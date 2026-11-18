@@ -10,10 +10,10 @@ const DESCRIPTION =
 
 export const metadata = pageMetadata(PATH, TITLE, DESCRIPTION);
 
-// 출처: GuideDialog(모닥불 불멍), game/world/Sfx.ts(모닥불 소리)·WeatherSound.ts(비 소리), lib/ambience.ts(30분 날씨·KST 하늘), public/bgm/tracks.json(11/17 4개 목록 165곡)
+// 출처: GuideDialog(모닥불 불멍), game/world/Sfx.ts(모닥불 소리)·WeatherSound.ts(비 소리), lib/ambience.ts(30분 날씨·KST 하늘), public/bgm/tracks.json(11/18 5개 목록 215곡)
 const FACTS = [
   ["모닥불", "곁에 앉으면 불멍, 가까울수록 모닥불 소리가 커져요"],
-  ["배경음악", "레트로, 눈꽃 캐럴, 노을 시티팝, 로파이 165곡"],
+  ["배경음악", "레트로, 눈꽃 캐럴, 노을 시티팝, 판타지 마을, 로파이 215곡"],
   ["날씨", "맑음·흐림·안개·비·눈, 한국 시간 30분마다 바뀌고 비가 오면 빗소리가 들려요"],
   ["하늘", "한국 시간에 맞춰 새벽·낮·해질녘·밤"],
   ["함께 쉬는 사람", `채널마다 최대 ${DEFAULT_CHANNEL_CAPACITY}명`],

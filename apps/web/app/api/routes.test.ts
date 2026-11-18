@@ -24,7 +24,7 @@ import * as graveById from "./graves/[id]/route";
 import * as graves from "./graves/route";
 import * as join from "./join/route";
 import { fetchLobbyServer, issueJoin, resetLobbyMemo } from "@/lib/joinToken";
-import { getStore, sweepShrine } from "@/lib/store";
+import { getAccounts, getStore, sweepShrine } from "@/lib/store";
 import * as og from "./og/route";
 import * as session from "./session/route";
 import * as localFile from "./upload/local/[...path]/route";
@@ -63,9 +63,17 @@ const errorOf = async (res: Response) => ((await res.json()) as ApiError).error;
 
 /** 새 쿠키를 받은 방문자. IP를 주지 않으면 방문자마다 다른 IP를 쓴다 */
 async function newVisitor(ip = `10.0.${Math.floor(++ipSeq / 250)}.${ipSeq % 250}`): Promise<Visitor> {
-  const res = await session.POST(call("/api/session", { method: "POST" }));
+  // 쿠키 발급도 그 방문자의 IP로 (모두 한 IP로 부르면 발급 한도 60/분에 걸린다)
+  const res = await session.POST(call("/api/session", { method: "POST", headers: { "x-forwarded-for": ip } }));
   const cookie = res.headers.get("set-cookie")!.split(";")[0];
   return { cookie, ip, visitorId: ((await res.json()) as { visitorId: string }).visitorId };
+}
+
+/** 11/18 신고가 숨김 수에 들어가는 계정 (마을에 들어온 지 4일 — lib/reportTrust) */
+async function trustedVisitor(ip?: string): Promise<Visitor> {
+  const v = await newVisitor(ip);
+  await getAccounts().enter(v.visitorId, { name: `신고${ipSeq}`, color: "#9fc5a8", body: "hood" }, Date.now() - 4 * 86_400_000);
+  return v;
 }
 
 const input = {
@@ -172,14 +180,15 @@ describe("묘비 CRUD", () => {
     expect((await errorOf(gone)).code).toBe("NOT_FOUND");
   });
 
-  it("상세: 공유 캐시 금지, IP당 분당 120회 (쿠키를 바꿔도 같은 IP면 같이 센다)", async () => {
+  // 11/18 IP 한도는 서버 보호선만 (한 회사 수백 명이 한 IP) — 120 → 2400
+  it("상세: 공유 캐시 금지, IP당 분당 2400회 (쿠키를 바꿔도 같은 IP면 같이 센다)", async () => {
     const ip = "10.5.5.5";
     const detail = async (cookie?: string) =>
       graveById.GET(call("/api/graves/mock-001", { headers: { "x-forwarded-for": ip, ...(cookie && { cookie }) } }), ctx("mock-001"));
     const first = await detail();
     expect(first.status).toBe(200);
     expect(first.headers.get("cache-control")).toBe("private, no-store");
-    for (let i = 1; i < 119; i++) await detail();
+    for (let i = 1; i < 2399; i++) await detail();
     expect((await detail((await newVisitor()).cookie)).status).toBe(200);
     const limited = await detail((await newVisitor()).cookie);
     expect(limited.status).toBe(429);
@@ -239,13 +248,14 @@ describe("묘비 CRUD", () => {
     expect(Number(res.headers.get("retry-after"))).toBeGreaterThan(0);
   });
 
-  it("같은 IP에서 쿠키를 새로 받아도, 같은 쿠키로 IP를 바꿔도 하루 3개까지 (QA)", async () => {
+  // 11/18 한 IP에 여럿(회사 팀)이 있다 → 같은 IP라도 계정마다 따로 세고, 한 계정은 IP를 바꿔도 하루 3개까지
+  it("같은 IP의 다른 계정은 막지 않고, 같은 쿠키로 IP를 바꿔도 하루 3개까지 (QA)", async () => {
     const statuses: number[] = [];
     for (let i = 0; i < 6; i++) {
       const v = await newVisitor("10.9.9.9");
       statuses.push((await graves.POST(call("/api/graves", { method: "POST", visitor: v, body: input }))).status);
     }
-    expect(statuses).toEqual([201, 201, 201, 429, 429, 429]);
+    expect(statuses).toEqual([201, 201, 201, 201, 201, 201]);
 
     // 같은 쿠키로 IP를 바꿔 가며 (이장하고 다시 세우기)
     const roaming = await newVisitor();
@@ -301,7 +311,7 @@ describe("반응", () => {
   it("서로 다른 5명이 신고하면 목록·상세에서 사라지고, 관리자는 볼 수 있고 복구할 수 있다", async () => {
     const owner = await newVisitor();
     const { grave } = await createGrave(owner);
-    const reporters = await Promise.all(Array.from({ length: 5 }, newVisitor));
+    const reporters = await Promise.all(Array.from({ length: 5 }, () => trustedVisitor()));
 
     const post = (v: Visitor) => report.POST(call(`/api/graves/${grave.id}/report`, { method: "POST", visitor: v }), ctx(grave.id));
     expect(await (await post(reporters[0])).json()).toEqual({ ok: true });
@@ -336,16 +346,47 @@ describe("반응", () => {
 });
 
 describe("신고 남용 (QA)", () => {
-  it("한 IP에서 쿠키를 바꿔 5번 신고해도 1건만 센다", async () => {
+  it("11/18 같은 회사 IP라도 서로 다른 계정 5명이면 각자 세서 숨긴다, 같은 계정 재신고는 409", async () => {
     const owner = await newVisitor();
     const { grave } = await createGrave(owner);
     const statuses: number[] = [];
-    for (let i = 0; i < 5; i++) {
-      const v = await newVisitor("10.7.7.7");
-      statuses.push((await report.POST(call(`/api/graves/${grave.id}/report`, { method: "POST", visitor: v }), ctx(grave.id))).status);
-    }
-    expect(statuses).toEqual([200, 409, 409, 409, 409]);
+    const team = await Promise.all(Array.from({ length: 5 }, () => trustedVisitor("10.7.7.7")));
+    const post = (v: Visitor) => report.POST(call(`/api/graves/${grave.id}/report`, { method: "POST", visitor: v }), ctx(grave.id));
+    for (const v of team.slice(0, 4)) statuses.push((await post(v)).status);
+    statuses.push((await post(team[0])).status); // 같은 계정 재신고
+    statuses.push((await post(team[4])).status);
+    expect(statuses).toEqual([200, 200, 200, 200, 409, 200]);
+    expect((await graveById.GET(call(`/api/graves/${grave.id}`), ctx(grave.id))).status).toBe(404);
+  });
+
+  it("11/18 신고 기록에 신고한 계정 코드·캐릭터 이름이 남는다", async () => {
+    const owner = await newVisitor();
+    const { grave } = await createGrave(owner);
+    const v = await trustedVisitor();
+    expect((await report.POST(call(`/api/graves/${grave.id}/report`, { method: "POST", visitor: v, body: { reason: "spam" } }), ctx(grave.id))).status).toBe(200);
+    const row = ((await (await adminGraves.GET(call("/api/admin/graves", { headers: { "x-admin-key": "dev-admin" } }))).json()) as { graves: AdminGrave[] }).graves.find(
+      (g) => g.id === grave.id,
+    );
+    expect(row?.reportLog[0]).toMatchObject({ reason: "spam", by: v.visitorId, name: expect.stringMatching(/^신고/) });
+  });
+});
+
+describe("11/18 갓 만든 계정의 신고", () => {
+  it("숨김 수에 안 들어가고 관리자 신고함에만 남는다, 같은 계정의 약한 신고도 한 번만", async () => {
+    const owner = await newVisitor();
+    const { grave } = await createGrave(owner);
+    const post = (v: Visitor) => report.POST(call(`/api/graves/${grave.id}/report`, { method: "POST", visitor: v }), ctx(grave.id));
+    for (let i = 0; i < 6; i++) expect((await post(await newVisitor())).status).toBe(200);
+    const fresh = await newVisitor("10.66.6.6");
+    expect((await post(fresh)).status).toBe(200);
+    expect((await post(fresh)).status).toBe(409);
     expect((await graveById.GET(call(`/api/graves/${grave.id}`), ctx(grave.id))).status).toBe(200);
+    const key = { "x-admin-key": "dev-admin" };
+    const row = ((await (await adminGraves.GET(call("/api/admin/graves", { headers: key }))).json()) as { graves: AdminGrave[] }).graves.find(
+      (g) => g.id === grave.id,
+    );
+    expect(row).toMatchObject({ hidden: false, reports: 0 });
+    expect(row?.reportLog?.length).toBe(7);
   });
 });
 
@@ -357,8 +398,8 @@ describe("신고 사유", () => {
       report.POST(call(`/api/graves/${grave.id}/report`, { method: "POST", visitor: v, body }), ctx(grave.id));
     const bad = await post(await newVisitor(), { reason: "boring" });
     expect(await errorOf(bad)).toEqual({ code: "INVALID_INPUT", message: "알 수 없는 신고 사유예요." });
-    expect((await post(await newVisitor(), { reason: "privacy" })).status).toBe(200);
-    expect((await post(await newVisitor())).status).toBe(200);
+    expect((await post(await trustedVisitor(), { reason: "privacy" })).status).toBe(200);
+    expect((await post(await trustedVisitor())).status).toBe(200);
 
     const list = (await (await adminGraves.GET(call("/api/admin/graves", { headers: { "x-admin-key": "dev-admin" } }))).json()) as {
       graves: AdminGrave[];
@@ -448,7 +489,7 @@ describe("관리자", () => {
         (g) => g.id === id,
       );
 
-    await report.POST(call(`/api/graves/${a}/report`, { method: "POST", visitor: await newVisitor(), body: { reason: "spam" } }), ctx(a));
+    await report.POST(call(`/api/graves/${a}/report`, { method: "POST", visitor: await trustedVisitor(), body: { reason: "spam" } }), ctx(a));
     expect(await (await bulk({ ids: [a, b, "nope", a], action: "hide" })).json()).toEqual({ done: [a, b], notFound: ["nope"] });
     expect(await status(a)).toMatchObject({ hidden: true, reports: 1 });
 
@@ -472,7 +513,8 @@ describe("관리자", () => {
     const ok = await adminChannels.GET(call("/api/admin/channels", { headers: { "x-admin-key": "dev-admin" } }));
     expect(await ok.json()).toEqual(lobby);
 
-    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("down"));
+    // 11/18 한 번 더 물어본다 (배포 순간의 일시 실패) → 두 번 다 실패해야 502
+    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("down")).mockRejectedValueOnce(new Error("down"));
     const down = await adminChannels.GET(call("/api/admin/channels", { headers: { "x-admin-key": "dev-admin" } }));
     expect(down.status).toBe(502);
   });

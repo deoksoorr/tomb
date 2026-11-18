@@ -1,5 +1,6 @@
 import type { Seat } from "@tomb/protocol";
 import type { Interactable } from "../world/layout";
+import { inReach, reachDist } from "./reach";
 
 // E/탭 상호작용 대상 고르기 (순수 함수라 테스트한다).
 //  - 물속이면 E = 잠수/떠오르기
@@ -26,17 +27,16 @@ export type InteractInput = {
   nearWater: boolean;
 };
 
-/** 반경 안에서 가장 가까운 오브젝트 (없으면 null) */
+/** 반경 안에서 가장 가까운 오브젝트 (없으면 null). 11/18 바닥 영역(zone — 버스 정차 칸)이 있으면 그 상자 안이 닿는 곳 (거리는 상자까지, 안이면 0) */
 export function nearestObject(objects: readonly Interactable[], px: number, py: number): { obj: Interactable; dist: number } | null {
   let best: Interactable | null = null;
   let bestD = Infinity;
   for (let i = 0; i < objects.length; i++) {
     const o = objects[i];
-    const dx = o.x - px;
-    const dy = o.y - py;
-    if (Math.abs(dx) > o.r || Math.abs(dy) > o.r) continue;
-    const d = Math.hypot(dx, dy);
-    if (d <= o.r && d < bestD) {
+    if (!o.zone && (Math.abs(o.x - px) > o.r || Math.abs(o.y - py) > o.r)) continue;
+    if (!inReach(o, px, py)) continue;
+    const d = reachDist(o, px, py);
+    if (d < bestD) {
       best = o;
       bestD = d;
     }

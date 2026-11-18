@@ -1604,6 +1604,25 @@ function drawGear(g: Grid, view: View, gear: Gear, m: M, pal: Pal, body: BaseBod
 }
 
 const handCache = new Map<string, { dx: number; up: number }>();
+const faceCache = new Map<string, { dx: number; up: number; top: number }>();
+
+/**
+ * 11/18 눈싸움: 얼굴 가운데(눈 줄) 자리와 머리 윗면 높이 — 발바닥 원점에서 옆으로 dx, 위로 up·top (px). 눈 묻은 얼굴을 여기에 붙인다.
+ * 옆모습은 얼굴이 앞쪽(보는 방향)으로 치우쳐 있다
+ */
+export function faceAnchor(body: string, dir: "down" | "left" | "right" | "up"): { dx: number; up: number; top: number } {
+  const b = bodyOf(body);
+  const key = `${b}|${dir}`;
+  const hit = faceCache.get(key);
+  if (hit) return hit;
+  const view: View = dir === "left" || dir === "right" ? "side" : dir === "up" ? "up" : "down";
+  const m = metrics(b, view, framesFor(view)[0]);
+  const side = view === "side" ? 2.5 : 0;
+  const dx = Math.round(m.cx - AV_W / 2 + side);
+  const out = { dx: dir === "left" ? -dx : dx, up: AV_H - 1 - (m.hy + 1), top: AV_H - 1 - m.top };
+  faceCache.set(key, out);
+  return out;
+}
 
 /**
  * 손 자리: 발바닥 원점에서 옆으로 dx, 위로 up (px). 손에 드는 따로 그리는 꾸미기(우산·풍선, cosmeticFx)가 쓴다.

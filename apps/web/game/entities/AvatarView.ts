@@ -1,10 +1,10 @@
 import * as Phaser from "phaser";
-import { champAuraOn, CHAT_SHOW_MS, dexBadgeCats, DIR, isChampBits, isChampValue, isNameSlot, itemById, ridePetOfLook, sanitizeDye, titleOfLook, type ActKind, type DirId, type StateName } from "@tomb/protocol";
+import { champAuraOn, CHAT_SHOW_MS, dexBadgeCats, DIR, isChampBits, isChampValue, isNameSlot, itemById, ridePetOfLook, sanitizeDye, SNOW_FACE_MS, SNOW_WOBBLE_MS, titleOfLook, type ActKind, type DirId, type StateName } from "@tomb/protocol";
 import { hasNameStyle, nameStyleRef } from "@/lib/nameStyle";
 import { headTitle, titlePerk } from "@/lib/titles";
 import { addCanvasTexture, avatarActAnimKey, avatarAnimKey, avatarFrame, ensureAvatarTexture, TEX } from "../assets/manifest";
 import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from "../config";
-import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, handAnchor, waterSink, type AppearanceChange } from "../sprites/avatar";
+import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, faceAnchor, handAnchor, waterSink, type AppearanceChange } from "../sprites/avatar";
 import { CosmeticFxView } from "./CosmeticFxView";
 import { DyeFxView } from "./DyeFxView";
 import { bodyFx, riderLift } from "../sprites/cosmeticFx";
@@ -23,6 +23,8 @@ import type { LabelUnit } from "../world/labels";
 import { NameStyleView } from "./NameStyleView";
 import { TitleView } from "./TitleView";
 import { markCharTint } from "../world/charTint";
+import { ensureSnowFightTextures, SNOWFIGHT_TEX } from "../world/snowFightArt";
+import { SNOW_BODY_HALF, snowBodyTop, type SnowBody } from "../world/snowHit";
 
 /** 도감 100% 배지: 종류마다 별 하나 (금빛) */
 const DEX_BADGE_STAR = "★";
@@ -147,6 +149,13 @@ export class AvatarView {
   /** 11/15 캠핑장 술: 취기 단계 (0 = 맨정신). 1↑ 볼 홍조, 2↑ 걸을 때 휘청 — 재미용 */
   private drunk = 0;
   private blush: Phaser.GameObjects.Image | null = null;
+  /** 11/18 눈싸움: 얼굴에 묻은 눈·머리에 얹힌 눈 (처음 맞을 때 만든다), 맞은 시각, 휘청이는 쪽 (이 그림의 시계) */
+  private snowFace: Phaser.GameObjects.Image | null = null;
+  private snowCap: Phaser.GameObjects.Image | null = null;
+  private snowAt = -Infinity;
+  private wobbleSide = 1;
+  /** 11/18 맞은 높이 (배율 1 기준, 발에서 px). null = 머리 (얼굴·머리 위에 묻는다), 숫자 = 몸 그 높이에 묻는다 */
+  private snowLow: number | null = null;
   /** 11/15 번개 닭꼬치: 걸을 때 몸 뒤로 잔상 */
   private trail: SpeedTrail | null = null;
   /** 11/16 1위·명예 갈래 칭호의 반짝이는 발자국 (화면 연출만 — 움직임 줄이기면 없음) */
@@ -418,6 +427,103 @@ export class AvatarView {
 
   get drunkLevel(): number {
     return this.drunk;
+  }
+
+  /**
+   * 11/18 눈싸움: 눈에 맞았다 (now = 이 그림의 시계 — 내 캐릭터는 장면 시각, 다른 사람은 performance.now).
+   * 맞은 자리에 눈이 SNOW_FACE_MS 묻고 SNOW_WOBBLE_MS 동안 휘청인다. side = 기우는 쪽 (눈이 날아온 반대쪽, -1 왼쪽).
+   * h = 맞은 높이 (보이는 발에서, 배율 포함 px — 없으면 얼굴). 머리 높이면 얼굴·머리 위에, 그 아래면 몸 그 자리에 묻는다
+   */
+  snowHit(now: number, side: number, h?: number): void {
+    ensureSnowFightTextures(this.scene);
+    this.snowAt = now;
+    this.wobbleSide = side < 0 ? -1 : 1;
+    const f = faceAnchor(this.body, this.dirName());
+    const u = h === undefined ? null : h / this.big;
+    this.snowLow = u === null || u >= f.up - 4 ? null : Math.max(3, Math.round(u));
+    this.snowFace ??= markCharTint(this.scene.add.image(0, 0, SNOWFIGHT_TEX.face("down")).setOrigin(0.5, 0.5).setVisible(false));
+    this.snowCap ??= markCharTint(this.scene.add.image(0, 0, SNOWFIGHT_TEX.cap).setOrigin(0.5, 1).setVisible(false));
+  }
+
+  private dirName(): "down" | "left" | "right" | "up" {
+    return this.dir === DIR.left ? "left" : this.dir === DIR.right ? "right" : this.dir === DIR.up ? "up" : "down";
+  }
+
+  /**
+   * 11/18 눈싸움 맞음 상자 (game/world/snowHit): 발에서 그림 꼭대기까지, 몸 폭. 이름표·칭호·말풍선·배지는 넣지 않는다.
+   * 머리 위로 높이 솟은 꾸미기는 조금만(SNOW_HAT_SLACK), 바베큐로 커지면 배율대로.
+   * 사용자 「모든 사람이 다 맞아야 함」: 보이는 그림 자리를 따른다 — 의자에 올라앉은 높이, 관람차·열기구·회전목마·그네·매달리기·타는 펫으로 띄운 높이(poseDy),
+   * 앉으면 낮아진 머리, 해먹에 누우면 낮고 넓은 몸, 헤엄치면 물 위로 나온 만큼
+   */
+  snowBody(out: SnowBody): SnowBody {
+    const s = this.sprite;
+    const st = this.state;
+    const chair = st === "sitChair" ? SIT_CHAIR_LIFT : 0;
+    out.x = s.x - this.poseDx;
+    // 땅 위 자리 = 그림을 놓은 논리 위치 (의자는 그림만 올려 그린다)
+    out.y = s.y + chair;
+    out.lift = this.hop + this.poseDy + chair;
+    let top = snowBodyTop(this.artTop, BODY_METRICS[bodyOf(this.body)].top, 1);
+    let half = SNOW_BODY_HALF;
+    if (this.lying) {
+      top = 10;
+      half = 11;
+    } else if (st === "sitGround") top -= 3;
+    else if (st === "sitChair") top -= 2;
+    else if (st === "swim" || st === "dive") top = Math.max(4, top - waterSink(this.body, st));
+    out.top = top * this.big;
+    out.half = half * this.big;
+    return out;
+  }
+
+  /** 11/18 얼굴 가운데 자리 (월드 좌표 — 퍽 효과를 여기서 터뜨린다) */
+  faceAt(out: { x: number; y: number }): { x: number; y: number } {
+    const s = this.sprite;
+    const f = faceAnchor(this.body, this.dirName());
+    out.x = s.x - this.poseDx + f.dx * this.big;
+    out.y = s.y - this.hop - this.poseDy - f.up * this.big;
+    return out;
+  }
+
+  /**
+   * 11/18 눈 묻은 얼굴·머리: 보는 방향 그림(앞·옆·뒤)을 얼굴 자리(몸에 맞았으면 그 높이)에, 머리 위 눈은 머리 윗면에. 휘청이는 몸을 따라 발을 축으로 돌린다.
+   * 마지막 0.5초는 흐려지며 1px 흘러내린다. 누운 자세·잠수·실내 자세에는 없다
+   */
+  private syncSnowFace(now: number, st: StateName, vis: boolean): void {
+    const face = this.snowFace!;
+    const cap = this.snowCap!;
+    const t = now - this.snowAt;
+    const on = t >= 0 && t < SNOW_FACE_MS && vis && !this.lying && !this.pose && st !== "hammock" && st !== "lie" && st !== "bath" && st !== "dive";
+    if (on) {
+      const s = this.sprite;
+      const d = this.dir === DIR.left ? "left" : this.dir === DIR.right ? "right" : this.dir === DIR.up ? "up" : "down";
+      const f = faceAnchor(this.body, d);
+      const key = SNOWFIGHT_TEX.face(d === "left" || d === "right" ? "side" : d);
+      if (face.texture.key !== key) face.setTexture(key);
+      const tail = Math.max(0, t - (SNOW_FACE_MS - 500)) / 500;
+      const drop = st === "sitGround" ? 3 : st === "sitChair" ? 2 : 0;
+      const a = (s.angle * Math.PI) / 180;
+      const cos = Math.cos(a);
+      const sin = Math.sin(a);
+      const bx = s.x - this.poseDx;
+      const by = s.y - this.hop - this.poseDy;
+      const at = (ox: number, oy: number, img: Phaser.GameObjects.Image, slide: number) =>
+        img.setPosition(Math.round(bx + (ox * cos - oy * sin) * this.big), Math.round(by + (ox * sin + oy * cos) * this.big) + slide);
+      const depth = (this.depthOverride ?? s.y) + 0.3;
+      const alpha = this.fade * (1 - tail);
+      // 몸에 맞았으면 그 높이 몸 가운데에 (머리 위 눈은 없다)
+      const low = this.snowLow;
+      at(low === null ? f.dx : Math.round(f.dx * 0.5), -((low ?? f.up) - drop), face, tail > 0.4 ? 1 : 0)
+        .setFlipX(d === "left")
+        .setScale(this.big)
+        .setAngle(s.angle)
+        .setDepth(depth)
+        .setAlpha(alpha);
+      at(Math.round(f.dx * 0.4), -(f.top - drop) + 1, cap, 0).setScale(this.big).setAngle(s.angle).setDepth(depth).setAlpha(alpha);
+    }
+    if (face.visible !== on) face.setVisible(on);
+    const capOn = on && this.snowLow === null;
+    if (cap.visible !== capOn) cap.setVisible(capOn);
   }
 
   /** 11/15 바베큐로 커질(커진) 배율 */
@@ -947,7 +1053,13 @@ export class AvatarView {
     if (this.altFrame >= 0 && st !== "boat" && st !== "seesaw" && st !== "trampoline" && st !== "carousel" && st !== "ferris" && st !== "balloon" && st !== "bumper") this.altFrame = -1;
     // 11/15 취기 2↑: 걸을 때 몸이 좌우로 휘청 (발 위치·이동은 그대로, 움직임 줄이기면 작게)
     const sway = this.drunk >= 2 && (st === "walk" || st === "run") ? (this.reduced ? 2 : this.drunk >= 3 ? 7 : 4.5) * Math.sin(now / (st === "run" ? 120 : 170)) : 0;
-    if (s.angle !== sway) s.setAngle(sway);
+    // 11/18 눈싸움: 맞으면 발을 축으로 한쪽으로 휘청했다가 되돌아온다 (줄어드는 흔들림, 움직임 줄이기면 작게)
+    const wt = now - this.snowAt;
+    // 앉거나 탄 사람은 휘청 없이 (자리에서 떨어뜨리지 않는다 — 퍽·눈만)
+    const steady = st === "idle" || st === "walk" || st === "run" || st === "jump";
+    const wob = steady && !this.mountedIn(st) && wt >= 0 && wt < SNOW_WOBBLE_MS ? this.wobbleSide * (this.reduced ? 3 : 11) * Math.sin((wt / SNOW_WOBBLE_MS) * Math.PI * 2.5) * (1 - wt / SNOW_WOBBLE_MS) : 0;
+    const angle = sway + wob;
+    if (s.angle !== angle) s.setAngle(angle);
     // 11/15 바베큐로 커진 배율 (부드럽게 커지고 줄어든다)
     if (this.big !== this.bigGoal) {
       this.big += (this.bigGoal - this.big) * Math.min(1, dt / (this.reduced ? 60 : 260));
@@ -1005,6 +1117,7 @@ export class AvatarView {
       }
       if (this.blush.visible !== on) this.blush.setVisible(on);
     }
+    if (this.snowFace && this.snowCap) this.syncSnowFace(now, st, vis);
     this.trail?.sync(now, s, (st === "walk" || st === "run") && !this.mountedIn(st), vis, this.fade, this.big);
     this.titleSparkle?.sync(now, s.x, s.y, s.depth, (st === "walk" || st === "run") && !this.mountedIn(st), vis, this.fade);
     const bx = s.x - this.poseDx;
@@ -1374,6 +1487,9 @@ export class AvatarView {
     this.shadow?.setVisible(v);
     this.haloGlow?.setVisible(v);
     if (!v) this.sparkle?.setVisible(false);
+    // 11/18 눈 묻은 얼굴은 다시 보일 때 sync가 켠다
+    if (!v) this.snowFace?.setVisible(false);
+    if (!v) this.snowCap?.setVisible(false);
     this.wings?.setVisible(v);
     this.pet?.setVisible(v);
     this.cfx?.setVisible(v);
@@ -1423,6 +1539,10 @@ export class AvatarView {
     this.titleSparkle = null;
     this.blush?.destroy();
     this.blush = null;
+    this.snowFace?.destroy();
+    this.snowFace = null;
+    this.snowCap?.destroy();
+    this.snowCap = null;
     this.sprite.destroy();
     this.label.destroy();
     this.dexBadge?.destroy();

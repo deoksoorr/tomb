@@ -4,72 +4,85 @@ import { env } from "./env";
 import { clientIp, HttpError } from "./http";
 import { isAdminIp } from "./ipAllow";
 import { redisClient } from "./redisUsage";
-import { ipHash, ipNetHash } from "./session";
+import { ipNetHash } from "./session";
 
 const MIN = 60;
 const DAY = 24 * 60 * MIN;
 
 /**
  * 방문자(쿠키)와 IP 해시에 한도를 따로 두고, 둘 중 하나라도 넘으면 429.
+ * 11/18 IP는 ipNetHash — IPv4는 주소 그대로, IPv6는 앞 64비트(한 집·한 회사 회선) 단위 (주소 뒷부분을 바꿔 한도를 피하지 못하게).
  * → 쿠키를 새로 받거나 IP를 바꾸는 것만으로는 한도를 우회할 수 없다.
- * 입장·반응은 같은 와이파이(NAT) 뒤 여러 사람이 동시에 쓰는 경우가 흔하므로 IP 한도를 넉넉히 둔다.
+ * 11/18 한 IP 뒤에 수백 명이 정상으로 있을 수 있다 (회사 팀 — NC소프트에서만 150명 가입, 집·PC방). 그래서 정상 이용은 방문자(계정) 한도로만
+ * 막고, IP 한도는 계정 한도의 수백 배쯤인 서버 보호선(쿠키를 계속 새로 받는 도배만 걸리게)으로만 둔다. 같은 IP 여럿을 막지 않는다.
  * visitor가 null인 항목은 쿠키 없이도 부르는 공개 조회라 IP 한도만 둔다.
  */
 const LIMITS = {
-  grave: { visitor: 3, ip: 3, windowSec: DAY, message: "묘비는 하루에 3개까지 세울 수 있어요." },
-  upload: { visitor: 5, ip: 5, windowSec: DAY, message: "사진은 하루에 5장까지 올릴 수 있어요." },
-  reaction: { visitor: 30, ip: 120, windowSec: MIN, message: "조금만 천천히 눌러 주세요." },
-  join: { visitor: 10, ip: 60, windowSec: MIN, message: "입장 요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
-  report: { visitor: 10, ip: 10, windowSec: DAY, message: "오늘은 더 신고할 수 없어요." },
-  detail: { visitor: null, ip: 120, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  grave: { visitor: 3, ip: 600, windowSec: DAY, message: "묘비는 하루에 3개까지 세울 수 있어요." },
+  upload: { visitor: 5, ip: 1000, windowSec: DAY, message: "사진은 하루에 5장까지 올릴 수 있어요." },
+  reaction: { visitor: 30, ip: 2400, windowSec: MIN, message: "조금만 천천히 눌러 주세요." },
+  join: { visitor: 10, ip: 1200, windowSec: MIN, message: "입장 요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  report: { visitor: 10, ip: 1000, windowSec: DAY, message: "오늘은 더 신고할 수 없어요." },
+  detail: { visitor: null, ip: 2400, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   // 11/16 공개 조회(공지·묘역·주민·분양 마을·긴급 의뢰)는 CDN을 건너뛴 요청만 여기 닿는다. 같은 와이파이(PC방·학교) 여럿이
   // 화면마다 주기적으로 부르므로 detail보다 넉넉히 — 주소만 바꿔 캐시를 피하는 도배만 막는다 (메모리 한도, Redis 명령 0)
-  publicGet: { visitor: null, ip: 600, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
-  shop: { visitor: 20, ip: 60, windowSec: MIN, message: "상점 요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  publicGet: { visitor: null, ip: 6000, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  shop: { visitor: 20, ip: 1200, windowSec: MIN, message: "상점 요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   // 11/17 갈매기 과자 던지기: 2초에 한 번(1분 30번)까지 던질 수 있어 상점 한도(20)로는 계속 던지다 막혔다 — 따로 넉넉히 (메모리 한도)
-  gullThrow: { visitor: 40, ip: 120, windowSec: MIN, message: "조금만 천천히 던져 주세요." },
+  gullThrow: { visitor: 40, ip: 2400, windowSec: MIN, message: "조금만 천천히 던져 주세요." },
   // 사냥 스킬 트리: 한 랭크에 한 번씩 누르므로 (초기화 뒤 다시 찍기 등) 상점보다 넉넉히
-  rpgSkill: { visitor: 90, ip: 240, windowSec: MIN, message: "스킬을 너무 빨리 찍고 있어요. 잠시 뒤에 다시 시도해 주세요." },
-  inquiry: { visitor: 3, ip: 3, windowSec: DAY, message: "문의는 하루에 3번까지 보낼 수 있어요." },
+  rpgSkill: { visitor: 90, ip: 2400, windowSec: MIN, message: "스킬을 너무 빨리 찍고 있어요. 잠시 뒤에 다시 시도해 주세요." },
+  inquiry: { visitor: 3, ip: 300, windowSec: DAY, message: "문의는 하루에 3번까지 보낼 수 있어요." },
   // 주기 호출(머무르기·친구 목록/접속·1위 확인·랭킹·체류 신호)은 메모리 한도(memory: true) — 화면마다 몇 분에 한 번씩
   // 부르는 읽기·기록이라 Redis 명령을 쓰지 않는다. 함수 인스턴스마다 따로 세지만 도배는 그대로 막는다 (창이 1분 이하인 한도도 모두 메모리, memoryOnly)
-  presence: { visitor: 2, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요.", memory: true },
+  presence: { visitor: 2, ip: 1200, windowSec: MIN, message: "요청이 너무 잦아요.", memory: true },
   // 접속 시간 보너스 받기 (구간은 30분마다라 넉넉해도 된다)
-  stayBonus: { visitor: 10, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
-  room: { visitor: 20, ip: 120, windowSec: MIN, message: "방 입장 요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
-  errors: { visitor: null, ip: 10, windowSec: MIN, message: "오류 보고가 너무 많아요." },
-  rank: { visitor: null, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요.", memory: true },
+  stayBonus: { visitor: 10, ip: 1200, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  room: { visitor: 20, ip: 2400, windowSec: MIN, message: "방 입장 요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  errors: { visitor: null, ip: 300, windowSec: MIN, message: "오류 보고가 너무 많아요." },
+  // 11/18 오류 보고 하루 한도 (Redis). 로그인 없이 부르는 경로라 하루로도 묶는다 — 집·회사처럼 한 IP에 여럿이 있어도
+  // 정상 오류는 이만큼 나지 않으니 IP는 넉넉히, 쿠키가 있으면 계정마다 따로 더 센다
+  errorsDay: { visitor: 100, ip: 3000, windowSec: DAY, message: "오늘은 오류 보고를 더 받을 수 없어요." },
+  rank: { visitor: null, ip: 1200, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요.", memory: true },
   // 50번 소원 분수: 계정당 하루 1번은 게임 날짜(새벽 5시 경계)로 lib/store/wishDay가 막는다 (운영자도 예외 없이).
-  // 여기는 같은 IP에서 계정 여러 개로 던지는 것만 막는다 — 같은 와이파이 여러 명을 생각해 넉넉히
-  wish: { visitor: null, ip: 10, windowSec: DAY, message: "이 네트워크에서는 오늘 소원을 더 빌 수 없어요. 내일 다시 와 주세요." },
+  // 11/18 여기는 서버 보호선만 (한 회사·한 집 여럿이 다 빌 수 있게)
+  wish: { visitor: null, ip: 1000, windowSec: DAY, message: "오늘은 소원을 더 빌 수 없어요. 내일 다시 와 주세요." },
   // 행운권 판매대 사기·보기 (회차마다 한 장은 lib/store/lottery가 막고, 여기는 연타만 — 1분 창 → 메모리 한도)
-  lottery: { visitor: 20, ip: 120, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  lottery: { visitor: 20, ip: 2400, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   // 10번 출석 달력 받기 · 11번 선물함 받기·지우기
-  calendar: { visitor: 10, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
-  gift: { visitor: 30, ip: 120, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  calendar: { visitor: 10, ip: 1200, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  gift: { visitor: 30, ip: 2400, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   // 추천 코드 보기·미리 확인·정하기 (정하기는 한 번뿐이라 연타·코드 맞히기만 막는다)
-  referral: { visitor: 30, ip: 120, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  referral: { visitor: 30, ip: 1200, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   // 11/15 수집 의뢰판 보기·납품·바꾸기·도장 교환 (1분 창 → 메모리 한도)
-  quest: { visitor: 40, ip: 160, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  quest: { visitor: 40, ip: 3200, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   // 친구: 신청·수락·삭제 / 목록·위치 (접속 알림은 30초 남짓마다 묻는다)
-  friend: { visitor: 30, ip: 120, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
-  friendRead: { visitor: 30, ip: 240, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요.", memory: true },
+  friend: { visitor: 30, ip: 2400, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  friendRead: { visitor: 30, ip: 4800, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요.", memory: true },
   // 운영자 「포인트 현황」 (운영자 계정만, 창을 연 동안 30초마다 + 새로고침)
   staffEarn: { visitor: 12, ip: 30, windowSec: MIN, message: "포인트 현황을 너무 자주 불렀어요. 잠시 뒤에 다시 봐 주세요.", memory: true },
   // 23번 확성기: 계정마다 간격(MEGAPHONE_COOLDOWN_MS)과 별개로 하루 상한 (도배 방지)
-  megaphone: { visitor: 20, ip: 60, windowSec: DAY, message: "확성기는 하루에 20번까지 쓸 수 있어요." },
+  megaphone: { visitor: 20, ip: 3000, windowSec: DAY, message: "확성기는 하루에 20번까지 쓸 수 있어요." },
   // 11/17 확성기 창 고정 공지 쓰기·지우기 (운영자 계정만 — 연타로 실시간 서버를 깨우지 않게)
   megaPin: { visitor: 10, ip: 30, windowSec: MIN, message: "공지를 너무 자주 바꿨어요. 잠시 뒤에 다시 해 주세요.", memory: true },
+  // 11/18 보안: 낚시·채집·팔기·자동 낚시·도감 보상·채집 상태 (한도가 없던 경로 — 연타로 Redis 비용을 늘리지 못하게).
+  // 계정 기준으로 막고, IP는 서버 보호선만 (한 회사 수백 명이 한 IP로 같이 해도 걸리지 않게) (1분 창 → 메모리 한도, Redis 명령 0)
+  forage: { visitor: 90, ip: 9000, windowSec: MIN, message: "조금만 천천히 해 주세요." },
+  // 11/18 보안: 묘비 고치기·이장, 성황당 되살리기 (계정 기준, IP는 서버 보호선만)
+  graveEdit: { visitor: 20, ip: 3000, windowSec: MIN, message: "묘비를 너무 자주 고쳤어요. 잠시 뒤에 다시 해 주세요." },
   // 47번 방문 분석 기록 (방문·체류 신호). 넘치면 조용히 버린다
-  visit: { visitor: null, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요.", memory: true },
+  visit: { visitor: null, ip: 1200, windowSec: MIN, message: "요청이 너무 잦아요.", memory: true },
   // 방문자 쿠키 발급 (쿠키 없이 부르는 공개 경로라 IP 한도만 — 반복 호출로 가입 통계·기기 기록이 부풀지 않게)
-  session: { visitor: null, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요.", memory: true },
+  session: { visitor: null, ip: 1200, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요.", memory: true },
 } as const satisfies Record<string, { visitor: number | null; ip: number; windowSec: number; message: string; memory?: true }>;
 
 /** 관리자 키 대입 방지: IP당 분당 실패 10회 (IPv6는 /64 대역 단위 — 주소를 바꿔 가며 우회하지 못하게) */
 const ADMIN_FAILURES = { tokens: 10, windowSec: MIN };
-/** 개인 코드 대입 방지: IP당 시간당 실패 10회 (IPv6는 /64 대역 단위) */
-const CODE_FAILURES = { tokens: 10, windowSec: 60 * MIN };
+/**
+ * 개인 코드 대입 방지: IP당 시간당 실패 300회 (IPv6는 /64 대역 단위).
+ * 11/18 10 → 300: 한 회사 IP에서 수십 명이 코드를 잘못 넣어도 서로 막히지 않게. 코드는 약 59비트라 시간당 300번으로는 맞힐 수 없다
+ */
+const CODE_FAILURES = { tokens: 300, windowSec: 60 * MIN };
 
 export type LimitAction = keyof typeof LIMITS;
 type Verdict = { success: boolean; reset: number };
@@ -158,7 +171,7 @@ export async function rateLimit(action: LimitAction, req: NextRequest, visitorId
   if (isOperator(req)) return;
   const { visitor, ip, windowSec, message } = LIMITS[action];
   const mem = memoryOnly(action);
-  const checks = [limiter(`${action}:ip`, { tokens: ip, windowSec }, mem).take(ipHash(req))];
+  const checks = [limiter(`${action}:ip`, { tokens: ip, windowSec }, mem).take(ipNetHash(req))];
   if (visitor !== null && visitorId) checks.push(limiter(`${action}:v`, { tokens: visitor, windowSec }, mem).take(visitorId));
   const verdicts = await Promise.all(checks);
   const blocked = verdicts.filter((v) => !v.success);
@@ -170,7 +183,7 @@ export async function assertRateLimitOpen(action: LimitAction, req: NextRequest,
   if (isOperator(req)) return;
   const { visitor, ip, windowSec, message } = LIMITS[action];
   const mem = memoryOnly(action);
-  const checks = [limiter(`${action}:ip`, { tokens: ip, windowSec }, mem).peek(ipHash(req))];
+  const checks = [limiter(`${action}:ip`, { tokens: ip, windowSec }, mem).peek(ipNetHash(req))];
   if (visitor !== null) checks.push(limiter(`${action}:v`, { tokens: visitor, windowSec }, mem).peek(visitorId));
   const blocked = (await Promise.all(checks)).filter((v) => !v.success);
   if (blocked.length) throw tooMany(message, Math.max(...blocked.map((v) => v.reset)));

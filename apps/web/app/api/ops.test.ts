@@ -85,10 +85,25 @@ describe("47번 방문 기록", () => {
     expect(r.browsers.find((d) => d.key === "사파리")).toBeTruthy();
   });
 
+  it("11/18 체류 시간은 방문 쿠키가 있어야 받고, 쿠키마다 하루 24시간까지만 더한다", async () => {
+    const day = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10).replaceAll("-", "");
+    const stayNow = async () => (await getAnalytics().days([day]))[0].fields.stay ?? 0;
+    const a = await stayNow();
+    expect((await stay.POST(call("/api/analytics/stay", { body: { sec: 500 }, headers: { "x-forwarded-for": "10.50.0.4" } }))).status).toBe(204);
+    expect(await stayNow()).toBe(a);
+    const tav = { "x-forwarded-for": "10.50.0.4", cookie: "tav=stayCapCookie00001" };
+    for (let i = 0; i < 5; i++) await stay.POST(call("/api/analytics/stay", { body: { sec: 6 * 3600 }, headers: tav }));
+    expect((await stayNow()) - a).toBe(86_400);
+    // 같은 IP의 다른 쿠키(같은 집·회사의 다른 사람)는 따로 센다
+    await stay.POST(call("/api/analytics/stay", { body: { sec: 60 }, headers: { "x-forwarded-for": "10.50.0.4", cookie: "tav=stayCapCookie00002" } }));
+    expect((await stayNow()) - a).toBe(86_460);
+  });
+
   it("체류 시간·신규 가입·묘비 작성이 오늘 요약에 쌓인다", async () => {
     const before = (await report()).today;
-    expect((await stay.POST(call("/api/analytics/stay", { body: { sec: 90 }, headers: { "x-forwarded-for": "10.50.0.3" } }))).status).toBe(204);
-    expect((await stay.POST(call("/api/analytics/stay", { body: { sec: 999_999 }, headers: { "x-forwarded-for": "10.50.0.3" } }))).status).toBe(400);
+    const tav = { "x-forwarded-for": "10.50.0.3", cookie: "tav=stayTestCookie0001" };
+    expect((await stay.POST(call("/api/analytics/stay", { body: { sec: 90 }, headers: tav }))).status).toBe(204);
+    expect((await stay.POST(call("/api/analytics/stay", { body: { sec: 999_999 }, headers: tav }))).status).toBe(400);
     const v = await newVisitor();
     await graves.POST(call("/api/graves", { visitor: v, body: { name: "할 일 앱", lived: "week", mourner: "새벽코더", channel: 1 } }));
     const t = (await report()).today;

@@ -78,8 +78,8 @@ function contract(name: string, make: () => AnalyticsStore) {
       await s.bump(day, 9, "signup");
       await s.bump(day, 10, "grave");
       await s.bump(day, 10, "hunt");
-      await s.stay(day, 9, 120);
-      await s.stay(day, 9, 30);
+      await s.stay(day, 9, 120, "v1");
+      await s.stay(day, 9, 30, "v1");
       await s.concurrent(day, 9, 4);
       await s.concurrent(day, 9, 2);
       await s.concurrent(day, 9, 7);
@@ -132,7 +132,7 @@ describe("47번 보고서", () => {
     await s.hit(hit({ day, hour: 12, visitor: "b", isNew: false, ref: "direct", domain: null, device: "desktop" }));
     await s.hit(hit({ day, hour: 11, visitor: "a", isNew: false, ref: "sns", domain: "t.co" }));
     await s.hit(hit({ day: "20261111", hour: 20, visitor: "c" }));
-    await s.stay(day, 12, 300);
+    await s.stay(day, 12, 300, "v1");
     await s.concurrent(day, 12, 5);
     await s.concurrent("20261111", 20, 9);
     await s.bump(day, 12, "signup");

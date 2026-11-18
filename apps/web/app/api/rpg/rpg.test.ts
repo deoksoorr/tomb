@@ -14,6 +14,8 @@ import * as rank from "../rank/route";
 import * as session from "../session/route";
 import * as finish from "./run/finish/route";
 import * as start from "./run/start/route";
+import * as reveal from "./run/reveal/route";
+import { dropRevealMs } from "@/lib/rpg/reveal";
 import * as rpg from "./route";
 import * as shop from "./shop/route";
 import * as character from "./character/route";
@@ -153,11 +155,33 @@ describe("사냥터 API", () => {
     expect(total).toBe(30);
   });
 
-  it("한 시간에 30판까지", async () => {
+  it("최근 60분 동안 30판까지", async () => {
     const v = await newVisitor();
-    for (let i = 0; i < 30; i++) await startRun(v, "bugs");
-    const res = await start.POST(call("/x", v, { game: "bugs", difficulty: "easy" }));
+    for (let i = 0; i < 30; i++) await startRun(v, "stars");
+    const res = await start.POST(call("/x", v, { game: "stars", difficulty: "easy" }));
     expect(res.status).toBe(429);
+  });
+
+  it("11/18 벌레 잡기(화면에서 내린 놀이)는 서버도 판을 열지 않는다", async () => {
+    const v = await newVisitor();
+    const res = await start.POST(call("/x", v, { game: "bugs", difficulty: "hell" }));
+    expect(res.status).toBe(400);
+  });
+
+  it("11/18 드롭 시드는 판 시작 응답에 없고, 첫 우두머리가 나올 수 있는 때가 지나야 알려 준다", async () => {
+    const v = await newVisitor();
+    const s = await startRun(v, "hunt", "easy");
+    expect(JSON.stringify(s)).not.toContain("dropSeed");
+    const early = await reveal.POST(call("/x", v, { ticket: s.ticket }));
+    expect(early.status).toBe(425);
+    const real = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(real + dropRevealMs(s.seed, "easy", s.zone) + 1_000);
+    const late = await reveal.POST(call("/x", v, { ticket: s.ticket }));
+    vi.restoreAllMocks();
+    expect(late.status).toBe(200);
+    const seed = ((await late.json()) as { dropSeed: number }).dropSeed;
+    expect(Number.isInteger(seed)).toBe(true);
+    expect(seed).not.toBe(s.seed);
   });
 
   it("상점: 포인트로 사고, 장착하고, 되팔면 50% 환불", async () => {

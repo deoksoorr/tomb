@@ -2,7 +2,6 @@ import {
   SEA_BOARDWALK,
   SEA_BREAKWATER,
   SEA_BREAKWATER_TIP,
-  SEA_BUS_STOP,
   SEA_DEEP_Y,
   SEA_DIG_HOLES,
   SEA_FLAT_Y0,
@@ -29,6 +28,7 @@ import { darken, Grid, lighten, mix, rng, type Color } from "../sprites/pixel";
 import type { SeaLot } from "@tomb/protocol";
 import { hashU, pathEdgeDist, poolDepth, seaGroundKind, SEA_PLATFORM, type SeaGround } from "./seaLayout";
 import { SEA_TEX_PREFIX } from "./seaTypes";
+import { SEA_BUS_BAY } from "../bus/busBays";
 import { seaWinterColor } from "./seaWinterGround";
 
 // 11/16 달물결 포구 픽셀 아트 (코드로 그려요, 마을·캠핑장 그림을 다시 쓰지 않고 새로).
@@ -1779,7 +1779,8 @@ function put(d: Uint8ClampedArray, i: number, c: Color, a = 255): void {
 }
 
 /** 버스 정차 칸 (정류장 앞 길, 오른쪽에서 들어온 버스 몸이 서는 자리) */
-const BAY = { x0: SEA_BUS_STOP.x - 30, x1: SEA_BUS_STOP.x + 98, y0: SEA_ROAD.y + 6, y1: SEA_ROAD.y + SEA_ROAD.h - 5 };
+// 11/18 상자는 「버스 타기」 E 범위와 같아요 (game/bus/busBays)
+const BAY = { x0: SEA_BUS_BAY.x, x1: SEA_BUS_BAY.x + SEA_BUS_BAY.w, y0: SEA_BUS_BAY.y, y1: SEA_BUS_BAY.y + SEA_BUS_BAY.h };
 
 /**
  * 11/16 r14 사용자 "캠핑장처럼 촘촘한 바닥 결" — 캠핑장 바닥(campArt groundColor)과 같은 방법: 점마다 세 톤(조금 진하게·바탕·조금 밝게),

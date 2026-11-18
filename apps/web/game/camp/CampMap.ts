@@ -24,6 +24,7 @@ import {
   type CampNpcId,
 } from "@tomb/protocol";
 import { kstHour } from "@/lib/ambience";
+import { imageBox, type SnowNpc } from "../world/snowNpc";
 import { isSnowy, type MapConcept } from "@/lib/mapConcept";
 import { addCanvasTexture } from "../assets/manifest";
 import { DEPTH } from "../config";
@@ -494,6 +495,12 @@ export class CampMap implements CampMapApi {
     if (sk) sk.base = base;
     v.img.setTexture(this.skin(base));
   }
+
+  /** 11/18 눈싸움: 관리소·매점 사람들도 맞는다 (나와 있는 사람만 — 그림 한 장: 머리에 눈, 움찔, 가끔 한마디) */
+  snowNpcs(): readonly SnowNpc[] {
+    return (this.snowList ??= [...this.npcs.values()].map((n): SnowNpc => ({ voice: "person", box: (out) => n.on && imageBox(n.img, out), img: () => n.img })));
+  }
+  private snowList: SnowNpc[] | null = null;
 
   npcVisible(id: CampNpcId): boolean {
     return this.npcs.get(id)?.on ?? false;

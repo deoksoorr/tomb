@@ -39,6 +39,7 @@ import { pts } from "./format";
 import { gearGrade, sgGrade } from "./gear";
 import { playEnhance } from "./enhanceSound";
 import RpgIcon from "./RpgIcon";
+import { OddsLink } from "../odds/OddsLayer";
 import e from "./enhance.module.css";
 import g from "./gearPanel.module.css";
 
@@ -367,7 +368,8 @@ export default function EnhanceDialog({
                         {" "}
                         (연속 {f}번 실패해서 +{Math.round(f * ENH_FAIL_BONUS * 100)}%p)
                       </span>
-                    )}
+                    )}{" "}
+                    <OddsLink section="enhance" label="확률표" />
                   </p>
                 </div>
                 <div className={g.costs}>

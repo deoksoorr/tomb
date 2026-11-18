@@ -17,6 +17,7 @@ import {
   type HouseZone,
   type PlotTierId,
 } from "./catalog";
+import type { ReportBy } from "../reports";
 import { emptyLayout, normalizeExterior } from "./layout";
 import type { PlantState } from "./plants";
 import { keepState, stateSigs, type HouseState } from "./states";
@@ -134,7 +135,8 @@ export const zoneMaxLots = (zone: HouseZone | undefined) => (zone === "sea" ? SE
 
 export type CreateResult = { lot: number } | "exists" | "lot_taken" | "full";
 
-export type SaveResult = "ok" | "no_house" | "tier" | "not_owned";
+/** conflict = 11/18 읽은 뒤 다른 저장이 먼저 됐다 (base가 지금 updatedAt과 다르다 — 배치·외관을 동시에 저장해 놓은 개수가 옛 값으로 덮이지 않게) */
+export type SaveResult = "ok" | "no_house" | "tier" | "not_owned" | "conflict";
 
 /**
  * 오래 비운 집 정리 (reclaim.ts). owner·tier·ch는 정리할 때 읽은 값이고, 그대로일 때만 비운다.
@@ -166,6 +168,8 @@ export type PendingReclaim = { at: number; points: number; label: string };
 export const LIKE_TTL_SEC = 2 * 86_400;
 export const GUEST_DAY_TTL_SEC = 2 * 86_400;
 export const GUEST_REPORT_TTL_SEC = 30 * 86_400;
+/** 11/18 방명록 글을 신고한 사람 (관리자 신고함에 보인다). weak = 갓 만든 계정이라 가림 수에는 안 들어간 신고 */
+export type GuestReporter = { accountId: string; name: string | null; at: number; weak?: true };
 
 export interface HouseStore {
   get(id: string): Promise<HouseRecord | null>;
@@ -211,7 +215,8 @@ export interface HouseStore {
   takeItem(pair: HousePair, zone: HouseZone, itemId: string): Promise<"ok" | "placed" | "away" | "none">;
   /**
    * 배치·외관 저장 (null인 쪽은 그대로). tier가 그대로이고 counts(안+밖 전체)가 공용 가방 규칙(fitsPool, 다른 집에 놓인 것까지)에 맞을 때만 — 한 번에.
-   * 검증·점수 계산은 호출자가 먼저 한다. 배치가 바뀌면 같은 단계에서 치우거나 옮긴 가구의 상태·없어진 화분 기록을 지운다
+   * 검증·점수 계산은 호출자가 먼저 한다. 배치가 바뀌면 같은 단계에서 치우거나 옮긴 가구의 상태·없어진 화분 기록을 지운다.
+   * 11/18 base = 호출자가 읽은 집의 updatedAt (주면 그대로일 때만 저장, 아니면 "conflict"). 저장하면 updatedAt은 반드시 커진다
    */
   saveDesign(
     pair: HousePair,
@@ -222,6 +227,7 @@ export interface HouseStore {
     counts: Record<string, number>,
     placedScore: number,
     now: number,
+    base?: number,
   ): Promise<SaveResult>;
   /** 좋아요. 오늘 이미 눌렀으면 "already", 집이 없거나 숨김이면 null */
   like(id: string, visitorId: string, day: string): Promise<{ likes: number; score: number } | "already" | null>;
@@ -236,8 +242,14 @@ export interface HouseStore {
   /** 최신 먼저. withHidden=false면 가린 글은 뺀다 */
   guestbook(id: string, withHidden: boolean): Promise<(StoredGuest & { hidden: boolean })[]>;
   removeGuest(id: string, entryId: string): Promise<StoredGuest | null>;
-  /** 신고 (IP 해시 단위). GUEST_REPORT_HIDE개 모이면 가린다. 글이 없으면 null */
-  reportGuest(id: string, entryId: string, ipHash: string): Promise<"added" | "duplicate" | null>;
+  /**
+   * 신고 (11/18 계정 단위 — 예전엔 IP 해시라 같은 회사·집 여럿의 신고가 1건이었다). 서로 다른 계정 GUEST_REPORT_HIDE명이면 가린다.
+   * 같은 계정의 재신고는 "duplicate". 신고한 사람(계정 id·이름·시각)을 남긴다(guestReporters). 글이 없으면 null.
+   * weak(갓 만든 계정)면 관리자 신고함에만 보이고(신고 수 0으로라도 목록에 올린다) 가림 수에는 넣지 않는다
+   */
+  reportGuest(id: string, entryId: string, by: ReportBy, weak?: boolean, at?: number): Promise<"added" | "duplicate" | null>;
+  /** 관리자: 그 글을 신고한 사람들 (최근 먼저). 11/18 전 신고는 이름이 없어 빠진다 */
+  guestReporters(id: string, entryId: string): Promise<GuestReporter[]>;
   setGuestHidden(id: string, entryId: string, hidden: boolean): Promise<boolean>;
   /** 관리자: 신고가 있는 글 → 신고 수 */
   guestReports(id: string): Promise<Map<string, number>>;
@@ -262,6 +274,8 @@ type MemHouse = {
   guests: StoredGuest[];
   guestHidden: Set<string>;
   guestReports: Map<string, Set<string>>;
+  /** 11/18 글 → 신고한 계정 → 누가·언제 (같은 계정 중복 막기도 여기서) */
+  guestRepBy: Map<string, Map<string, GuestReporter>>;
 };
 
 export class MemoryHouseStore implements HouseStore {
@@ -403,6 +417,7 @@ export class MemoryHouseStore implements HouseStore {
       guests: [],
       guestHidden: new Set(),
       guestReports: new Map(),
+      guestRepBy: new Map(),
     });
     return { lot };
   }
@@ -526,11 +541,13 @@ export class MemoryHouseStore implements HouseStore {
     counts: Record<string, number>,
     placedScore: number,
     now: number,
+    base?: number,
   ) {
     const { self: id, other } = pairIds(pair, zone);
     const h = this.houses.get(id);
     if (!h) return "no_house" as const;
     if (h.rec.tier !== tier) return "tier" as const;
+    if (base !== undefined && h.rec.updatedAt !== base) return "conflict" as const;
     if (!fitsPool(counts, Object.fromEntries(this.pool(pair)), this.own(id), this.own(other), this.placedOf(other))) return "not_owned" as const;
     h.placed = new Map(Object.entries(counts));
     if (layout) {
@@ -538,7 +555,7 @@ export class MemoryHouseStore implements HouseStore {
       this.pruneFor(id, layout);
     }
     if (exterior) h.rec.exterior = { ...exterior };
-    Object.assign(h.rec, { placedScore, updatedAt: now });
+    Object.assign(h.rec, { placedScore, updatedAt: Math.max(now, h.rec.updatedAt + 1) });
     return "ok" as const;
   }
 
@@ -604,18 +621,27 @@ export class MemoryHouseStore implements HouseStore {
     const [g] = h.guests.splice(i, 1);
     h.guestHidden.delete(entryId);
     h.guestReports.delete(entryId);
+    h.guestRepBy.delete(entryId);
     return g;
   }
 
-  async reportGuest(id: string, entryId: string, ipHash: string) {
+  async reportGuest(id: string, entryId: string, by: ReportBy, weak = false, at = Date.now()) {
     const h = this.houses.get(id);
     if (!h || !h.guests.some((g) => g.id === entryId)) return null;
+    let who = h.guestRepBy.get(entryId);
+    if (!who) h.guestRepBy.set(entryId, (who = new Map()));
+    if (who.has(by.accountId)) return "duplicate" as const;
+    who.set(by.accountId, { accountId: by.accountId, name: by.name, at, ...(weak ? { weak: true as const } : {}) });
     let set = h.guestReports.get(entryId);
     if (!set) h.guestReports.set(entryId, (set = new Set()));
-    if (set.has(ipHash)) return "duplicate" as const;
-    set.add(ipHash);
+    if (weak) return "added" as const;
+    set.add(by.accountId);
     if (set.size >= GUEST_REPORT_HIDE) h.guestHidden.add(entryId);
     return "added" as const;
+  }
+
+  async guestReporters(id: string, entryId: string) {
+    return [...(this.houses.get(id)?.guestRepBy.get(entryId)?.values() ?? [])].sort((a, b) => b.at - a.at);
   }
 
   async setGuestHidden(id: string, entryId: string, hidden: boolean) {
@@ -625,6 +651,7 @@ export class MemoryHouseStore implements HouseStore {
     else {
       h.guestHidden.delete(entryId);
       h.guestReports.delete(entryId);
+      h.guestRepBy.delete(entryId);
     }
     return true;
   }

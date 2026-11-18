@@ -11,6 +11,7 @@ import {
   MONSTERS,
   POTIONS,
   SLOT_LABELS,
+  STARS_POINTS,
   STAT_KEYS,
   STAT_LABELS,
   ZONES,
@@ -175,7 +176,7 @@ export function StartPanel({
               <span className={s.meta}>
                 {game === "hunt" ? ZONES[d].name : `권장 Lv.${DIFFS[d].recLevel}+`}
                 <br />
-                최대 {game === "hunt" ? DIFFS[d].huntPoints : DIFFS[d].miniPoints}P
+                최대 {game === "hunt" ? DIFFS[d].huntPoints : game === "stars" ? STARS_POINTS[d] : DIFFS[d].miniPoints}P
               </span>
             </button>
           ))}

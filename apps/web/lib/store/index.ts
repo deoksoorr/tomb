@@ -76,8 +76,7 @@ export function getAccounts(): AccountStore {
 
 /**
  * 포인트 적립. 항목별 하루 한도(EARN_RULES)·하루 전체 한도·지갑 한도 안에서만 쌓이고, 한 번에 원자적으로 반영된다.
- * amount를 주지 않으면 항목 기본 점수. ip(= session.ts ipHash(req))를 주면 같은 IP의 그 항목 하루 합계도
- * 항목 한도 × ATTEND_ACCOUNTS_PER_IP로 막는다 (계정 여러 개로 농사 방지).
+ * amount를 주지 않으면 항목 기본 점수. 11/18 같은 IP 합계 한도는 없앴다 (회사·집에서 여럿이 한 IP로 한다).
  * 모은 포인트(lifetimePoints)·포인트 랭킹도 같이 오른다. earned = 실제로 쌓인 점수 (한도면 0).
  * 포인트 배수 이벤트 중(그 항목을 골랐을 때)이면 earned는 늘어난 점수다. paid = 그게 amount로 얼마어치인지 (이벤트가 아니면 earned와 같다) —
  * 값 단위로 한도를 계산해 못 받은 만큼을 되돌리는 쪽(낚시·채집 팔기 등)은 paid를 쓴다. 그런 쪽은 미리 읽은 boost를 넘겨 같은 배수로 맞춘다.
@@ -292,7 +291,8 @@ export async function listPublic(store: GraveStore, channel: number, now = Date.
 
 /**
  * 묘비 저장. 유료 디자인으로 바꾸는 경우(spendStyle)에는 accountId의 가방에서 디자인권 1개를
- * 저장과 같은 원자적 연산으로 쓴다. 가방에 없으면 저장하지 않고 409 NO_ITEM
+ * 저장과 같은 원자적 연산으로 쓴다. 가방에 없으면 저장하지 않고 409 NO_ITEM.
+ * 11/18 existing(수정): 그새 이장·삭제됐으면 저장하지 않고 404 (수정이 묘비를 되살려 1인 1묘비를 피하지 못하게)
  */
 export async function saveGrave(
   store: GraveStore,
@@ -300,11 +300,17 @@ export async function saveGrave(
   accountId: string,
   grave: Grave,
   spendStyle: boolean,
+  existing = false,
 ): Promise<void> {
   const itemId = spendStyle && grave.style ? styleItemId(grave.style) : null;
-  if (!itemId) return store.put(grave);
-  if (!(await accounts.putGraveUsing(accountId, itemId, grave)))
-    throw new HttpError(409, "NO_ITEM", "가방에 그 묘비 디자인권이 없어요. 상점에서 먼저 사 주세요.");
+  if (!itemId) {
+    if (!existing) return store.put(grave);
+    if (!(await store.update(grave))) throw notFound();
+    return;
+  }
+  const r = await accounts.putGraveUsing(accountId, itemId, grave, existing);
+  if (r === "gone") throw notFound();
+  if (!r) throw new HttpError(409, "NO_ITEM", "가방에 그 묘비 디자인권이 없어요. 상점에서 먼저 사 주세요.");
 }
 
 /** 공개 조회·반응용. 없거나 숨겨진 묘비는 404 */

@@ -180,6 +180,28 @@ describe("성황당", () => {
   });
 });
 
+describe("11/18 보안: 이장 뒤 되살려도 성불 기간은 이어진다", () => {
+  it("되살린 묘비의 성불 시각은 처음 세운 때 기준 그대로이고, 이미 지났으면 되살릴 수 없다", async () => {
+    const owner = await newVisitor();
+    const { grave } = await bodyOf<CreateGraveResponse>(quickBury(owner, { channel: 3 }));
+    const first = (await bodyOf<{ grave: { passAt?: number } }>(graveById.GET(call(`/api/graves/${grave.id}`), ctx(grave.id)))).grave.passAt;
+    expect(first).toBeGreaterThan(Date.now());
+    expect((await graveById.DELETE(call(`/api/graves/${grave.id}`, { method: "DELETE", visitor: owner }), ctx(grave.id))).status).toBe(200);
+    // 하루 뒤 되살림 → 성불 시각은 그대로 (예전에는 하루 뒤로 밀렸다)
+    const t0 = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(t0 + 86_400_000);
+    const back = await bodyOf<UpdateGraveResponse>(restore.POST(call(`/api/shrine/${grave.id}/restore`, { method: "POST", visitor: owner }), ctx(grave.id)));
+    expect(back.grave.passAt).toBe(first);
+    // 다시 이장 → 성불 시각이 지난 뒤에는 되살릴 수 없다
+    expect((await graveById.DELETE(call(`/api/graves/${grave.id}`, { method: "DELETE", visitor: owner }), ctx(grave.id))).status).toBe(200);
+    vi.spyOn(Date, "now").mockReturnValue(first! + 1000);
+    const late = await restore.POST(call(`/api/shrine/${grave.id}/restore`, { method: "POST", visitor: owner }), ctx(grave.id));
+    expect(late.status).toBe(409);
+    expect(((await late.json()) as { error: { code: string } }).error.code).toBe("PASS_DUE");
+    vi.restoreAllMocks();
+  });
+});
+
 describe("묘비 코멘트", () => {
   it("한 줄 100자로 저장되어 상세에 나오고, 수정에서 빼면 지워진다", async () => {
     const v = await newVisitor();

@@ -337,6 +337,26 @@ describe.skipIf(!!env.redis())("46·25·30번 서버 흐름 (메모리)", () => 
     await expect(startDye(id, "dye_fine", "head", t0 + 22_000)).rejects.toMatchObject({ code: "NO_ITEM" });
   });
 
+  it("11/18 보안: 시작부터 그 시간에 갈 수 없는 먼 좌표는 색을 바꾸지 않고 끝낸다 (시드로 미리 찾은 먼 칸 막기)", async () => {
+    const id = await account(0, { dye_fine: 2 });
+    const t0 = Date.now();
+    const s = await startDye(id, "dye_fine", "body", t0);
+    // 2초 만에 90만 칸 → 색 그대로 (염색권은 쓴 것으로)
+    const far = await finishDye(id, s.session.seed, 900_000, 100, t0 + 2000);
+    expect(far.kept).toBe(true);
+    expect(far.me.dye?.body).toBeUndefined();
+    // 시간 끝 좌표도 같다 (후보 없이 끝)
+    const s2 = await startDye(id, "dye_fine", "head", t0 + 3000);
+    const late = await timeoutDye(id, s2.session.seed, -999_000, 0, s2.session.endsAt);
+    expect(late.candidate).toBeNull();
+    // 갈 수 있는 거리면 그대로 (10초에 5만 칸)
+    const ok = await account(0, { dye_fine: 1 });
+    const s3 = await startDye(ok, "dye_fine", "body", t0);
+    const done = await finishDye(ok, s3.session.seed, 50_000, 100, t0 + 10_000);
+    expect(done.kept).toBeUndefined();
+    expect(done.color).toBe(judgeColor(s3.session, 50_000, 100));
+  });
+
   it("특수 색: 무리 칸을 골라 확정하면 그 부위가 \"#rrggbb~종류\"로 저장되고 착용 증서에도 실린다 (새 염색권 종류)", async () => {
     const id = await account(0, { dye_sparkle: 1 });
     const t0 = Date.now();

@@ -90,9 +90,11 @@ export const WISH_LUCK_TABLE: readonly { luck: WishLuck; title: string; chance: 
   chance,
 }));
 
-/** 동전이 튀어 돌아올 확률: 대박(두 배 + 5) / 반짝(던진 것 + 1~5) */
+/** 동전이 튀어 돌아올 확률: 대박(두 배 + 5) / 반짝(던진 것 + 1~3) */
 export const WISH_BONUS_JACKPOT = 0.05;
 export const WISH_BONUS_SPARKLE = 0.2;
+/** 반짝일 때 던진 것에 더 얹는 최대 포인트 (1~이 값) */
+export const WISH_SPARKLE_EXTRA = 3;
 
 /** 0..1 난수 → 운세 하나 */
 export function pickFortune(r1: number, r2: number): WishFortune {
@@ -110,14 +112,14 @@ export function pickFortune(r1: number, r2: number): WishFortune {
 }
 
 /**
- * 동전이 튀어 돌아오는 포인트 (가끔, 아주 조금). 기댓값은 던진 것보다 작다 (1P를 던지면 거의 본전).
+ * 동전이 튀어 돌아오는 포인트 (가끔, 아주 조금). 기댓값은 언제나 던진 것보다 작다 (1P를 던지면 0.95P — 거의 본전).
  *  - 5%: 대박 — 던진 것의 두 배 + 5
- *  - 20%: 반짝 — 던진 것 + 1~5
+ *  - 20%: 반짝 — 던진 것 + 1~3 (11/18 보안: 1~5였을 때 1P 기댓값이 1.15P라 던질수록 이득이었다)
  *  - 나머지: 0
  */
 export function rollBonus(amount: number, r1: number, r2: number): number {
   if (r1 < WISH_BONUS_JACKPOT) return amount * 2 + 5;
-  if (r1 < WISH_BONUS_JACKPOT + WISH_BONUS_SPARKLE) return amount + 1 + Math.floor(Math.max(0, Math.min(0.999999, r2)) * 5);
+  if (r1 < WISH_BONUS_JACKPOT + WISH_BONUS_SPARKLE) return amount + 1 + Math.floor(Math.max(0, Math.min(0.999999, r2)) * WISH_SPARKLE_EXTRA);
   return 0;
 }
 

@@ -12,6 +12,7 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../../text/GlyphAtlas";
 import { markCharTint } from "../charTint";
 import type { Lighting } from "../Lighting";
 import type { Sfx } from "../Sfx";
+import { imageBox, type SnowNpc } from "../snowNpc";
 import { ensureFolkTextures, FTEX } from "./folkArt";
 import { blankFolkPose, FolkSim, pickFolkLine, type FolkAct, type FolkDef, type FolkLineCtx, type FolkPose, type FolkState, type FolkWorld } from "./folkSim";
 import { conceptLook, pickConceptLine } from "./npcOutfits";
@@ -496,6 +497,39 @@ export class Folk {
     }
     this.list = [];
   }
+
+  /**
+   * 11/18 눈싸움: 맞을 수 있는 주민·동물 (보이는 것만 상자를 낸다). 유령 주민은 AvatarView 그대로(눈 묻은 얼굴·말풍선),
+   * 강아지·고양이는 그림 한 장. 맞으면 말할 때처럼 그 자리에 붙들었다가(멈칫) 공유 자리로 슬며시
+   */
+  snowNpcs(): readonly SnowNpc[] {
+    if (this.snowList && this.snowFor === this.list) return this.snowList;
+    this.snowFor = this.list;
+    return (this.snowList = this.list.map(
+      (r): SnowNpc => ({
+        voice: r.sim.def.kind === "ghost" ? "person" : r.sim.def.kind,
+        box: (out) => {
+          if (!r.visible || r.alpha < 0.5) return false;
+          if (r.av) return r.av.visible && !!r.av.snowBody(out);
+          return imageBox(r.img, out);
+        },
+        av: () => r.av,
+        img: () => r.img,
+        say: (text) => this.say(r, text),
+        hold: (ms) => {
+          const pnow = performance.now();
+          if (pnow < r.talkUntil) return;
+          r.holdX = r.x;
+          r.holdY = r.y;
+          r.holdState = r.state === "walk" || r.state === "run" ? "idle" : r.state;
+          r.holdDir = r.dir;
+          r.talkUntil = pnow + ms;
+        },
+      }),
+    ));
+  }
+  private snowList: SnowNpc[] | null = null;
+  private snowFor: FolkView[] | null = null;
 
   destroy(): void {
     if (this.destroyed) return;

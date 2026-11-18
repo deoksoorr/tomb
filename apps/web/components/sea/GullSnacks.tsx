@@ -13,6 +13,7 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import s from "./GullSnacks.module.css";
+import { OddsLink } from "../odds/OddsLayer";
 
 // 11/17 r2 포구 갈매기 과자 UI (사용자 피드백):
 //  - 과자 자판기 창: 선착장 길목 「과자 자판기」 앞 E (게임 sea:snack:vend). 매점 창에서 옮겼어요 — 값·하루 10개는 그대로 (서버 lib/sea/gullService)
@@ -152,8 +153,9 @@ function SnackVend({ onClose }: { onClose: () => void }) {
           ))}
         </ul>
         <p className={s.foot} role="status">
-          {msg ?? "하루에 두 가지를 합쳐 10개까지 살 수 있어요."}
-          {me && ` 내 포인트는 ${me.points.toLocaleString("ko-KR")}P예요.`}
+          {msg ?? "던질 때마다 하나씩 줄어요."}
+          {me && ` 내 포인트는 ${me.points.toLocaleString("ko-KR")}P예요.`}{" "}
+          <OddsLink section="gull" label="깃털 확률 보기" />
         </p>
       </div>
     </Dialog>

@@ -326,6 +326,16 @@ export default function HuntLobby({
         ...(res.tier === "practice" ? { noDrops: true } : {}),
         // 11/15 테스트 서버 슈퍼 계정 시험 드롭 (서버가 계정으로 정한 값 — 운영 빌드에서는 켜지 않는다)
         ...(res.superDrops && towerBoostAllowed() ? { superDrops: true } : {}),
+        // 11/18 드롭 시드는 첫 우두머리가 나올 때쯤 따로 받는다 (판 시작 응답에 없다 — 미리 계산해 다시 시작하지 못하게)
+        ...(game === "hunt"
+          ? {
+              reveal: () =>
+                rpgApi
+                  .reveal(res.ticket)
+                  .then((r) => r.dropSeed)
+                  .catch(() => null),
+            }
+          : {}),
       });
     } catch (e) {
       setNotice(errorMessage(e));

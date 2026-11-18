@@ -34,7 +34,7 @@ import {
 } from "@tomb/protocol";
 import { ATTEND_STAY_TEXT } from "@/lib/attendStay";
 import { ATTEND_TIER_GUIDE } from "@/lib/attendTiers";
-import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES, earnRule } from "@/lib/economy";
+import { BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES, earnRule } from "@/lib/economy";
 import { DYE_TIME_MS } from "@/lib/dye/palette";
 import { AUTO_FISH_DAILY_MAX, AUTO_FISH_EVERY_MS, AUTO_FISH_MAX_MS, AUTO_RANK_NOTE } from "@/lib/forage/auto";
 import { DAILY_CATCH_MAX, DEX_NEW_REWARD } from "@/lib/forage/catalog";
@@ -58,6 +58,7 @@ import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import ItemIcon from "../ui/ItemIcon";
 import { InquiryButton } from "../notice/InquiryDialog";
+import { OddsLink } from "../odds/OddsLayer";
 import { QUEST_DAILY, QUEST_STAMPS } from "@/lib/forage/quests/catalog";
 import styles from "./GuideDialog.module.css";
 
@@ -113,7 +114,7 @@ const CONTROLS: ReactNode[][] = [
   ["내 정보", "P", "메뉴의 내 정보"],
   ["랭킹", "L", "메뉴의 랭킹"],
   ["이번 주 레이스", "U", "메뉴의 이번 주 레이스"],
-  ["선물함", "M", "메뉴의 선물함"],
+  ["지도 펴고 접기", "M", "오른쪽 위 [지도]"],
   ["출석 달력", "B", "메뉴의 출석 달력"],
   ["친구", "O", "메뉴의 친구"],
   ["공지", "N", "메뉴의 공지"],
@@ -212,7 +213,7 @@ const forage = (touch: boolean): ReactNode[][] => [
   [
     "자동 낚시",
     "낚시 중 [자동 낚시 켜기]",
-    `다른 탭을 봐도 ${sec(AUTO_FISH_EVERY_MS)}초에 1마리씩 낚아요. 하루 ${AUTO_FISH_DAILY_MAX}마리까지고, 직접 낚은 것까지 합치면 ${DAILY_CATCH_MAX.fish}마리까지예요. 한 번에 ${AUTO_FISH_MAX_MS / 3_600_000}시간까지 돌고, 움직이면 꺼져요. ${AUTO_RANK_NOTE}`,
+    `다른 탭을 봐도 ${sec(AUTO_FISH_EVERY_MS)}초에 1마리씩 낚아요. 하루 ${AUTO_FISH_DAILY_MAX}마리까지고, 직접 낚시까지 합치면 하루 ${DAILY_CATCH_MAX.fish}번까지예요. 직접 낚시는 놓치거나 찌를 거둬도 1번으로 세요. 한 번에 ${AUTO_FISH_MAX_MS / 3_600_000}시간까지 돌고, 움직이면 꺼져요. ${AUTO_RANK_NOTE}`,
   ],
   ["팔기", "물고기는 어부 영감, 채집물은 수집가에게", "희귀할수록 비싸요"],
   ["도감", "왼쪽 아래 [도감]", `새 종을 처음 올리면 ${DEX_NEW_REWARD[1]}~${DEX_NEW_REWARD[5]}P를 받아요. 희귀할수록 많이 받아요. 오늘 한도를 넘으면 도감 창에서 나중에 받아요. 절반이나 전부 모으면 칭호도 받아요.`],
@@ -243,6 +244,10 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
   return (
     <Dialog title="At one time... 안내" onClose={onClose}>
       <div className={styles.guide}>
+        {/* 11/18 무작위 보상 확률은 따로 한 창에 (사냥 드롭·상자·강화·낚시·소원 분수 등) */}
+        <p className={styles.lead}>
+          드롭, 상자, 강화처럼 무작위로 정해지는 것들의 확률은 <OddsLink section="top" label="확률 안내" before={onClose} />에서 볼 수 있어요.
+        </p>
         <section>
           <h3>조작</h3>
           <Table head={["하는 일", "컴퓨터", "휴대폰"]} rows={CONTROLS} />
@@ -310,7 +315,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
               ["접속 시간 보너스", `하루 한도와 따로 세요. 하루 ${STAY_BONUS_DAILY_MAX}P까지예요.`],
               ["머무르기", `${PRESENCE_INTERVAL_MS / 60_000}분마다 받아요. 다른 창을 봐도 괜찮아요.`],
               ["지갑", `${won(BALANCE_CAP)}P까지 담겨요`],
-              ["출석", `마을에 ${ATTEND_STAY_TEXT} 머물면 그날 도장을 찍어요. 같은 인터넷 연결에서는 하루 ${ATTEND_ACCOUNTS_PER_IP}계정까지만 포인트를 받아요.`],
+              ["출석", `마을에 ${ATTEND_STAY_TEXT} 머물면 그날 도장을 찍어요.`],
               ["이번 달 출석 보상", ATTEND_TIER_GUIDE],
               ["한도에 걸리면", "알림 없이 더 쌓이지 않아요"],
               ["랭킹", "포인트, 사냥, 낚시, 꾸미기, 집 꾸미기, 헌화 순위가 있어요. 포인트 순위는 써도 줄지 않아요. 주간 순위는 월요일 새벽 5시에 새로 시작해요. 운영자는 순위에 안 들어가요."],
@@ -323,7 +328,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
           <Table head={["하는 일", "컴퓨터", "휴대폰"]} rows={HUNT_KEYS} />
           <ul className={styles.points}>
             <li>
-              {`사냥 포인트는 하루 ${won(earnRule("hunt").dailyMax)}P까지예요. 주운 장비나 물약을 판 값도 여기에 들어가요. 한도를 넘으면 EXP와 아이템만 받아요. 상점에서 산 장비를 되파는 건 한도와 상관없어요. 마을 곤충 채집과 별자리 잇기는 따로 하루 ${won(earnRule("bugs").dailyMax)}P까지예요.`}
+              {`사냥 포인트는 하루 ${won(earnRule("hunt").dailyMax)}P까지예요. 주운 장비나 물약을 판 값도 여기에 들어가요. 한도를 넘으면 EXP와 아이템만 받아요. 상점에서 산 장비를 되파는 건 한도와 상관없어요. 마을 곤충 채집은 따로 하루 ${won(earnRule("bugs").dailyMax)}P, 별자리 잇기는 하루 ${won(earnRule("stars").dailyMax)}P까지예요.`}
             </li>
             <li>
               {`레벨 ${MAX_LEVEL}부터는 지옥 사냥터와 야근 빌딩에서 초월 레벨(★51~★100)을 올려요. 초월 레벨이 5 오를 때마다 능력치 포인트를 1개 받아요. 하루에 할 수 있는 판 수는 정해져 있지 않아요.`}

@@ -9,6 +9,7 @@ import { AWAY_HOUSE_RE, isAwayPlace, type AwayPlace } from "./friends";
 import type { PeerInfo, Sid } from "./types";
 import { isMapId, type AwayMapId, type ChatPlace, type MapId } from "./camp";
 import type { BbqItemId } from "./bbq";
+import { SNOWBALL_HIT_H_MAX } from "./snowfight";
 import { SNOWMAN_ID_RE, isSnowBall, type SnowAct, type SnowBall, type SnowHold, type SnowmanDenyWhy, type SnowmanInfo, type SnowStackInfo } from "./snowman";
 
 // 드문 이벤트는 짧은 JSON text 프레임. 이름과 색은 입장 때(welcome/join) 한 번만 보낸다.
@@ -92,6 +93,11 @@ export type C2S =
   | { t: "snowAdd"; id: string; s: SnowBall }
   /** 내 덩이 id의 맨 위를 다시 든다 */
   | { t: "snowTake"; id: string }
+  // ── 11/18 마을·캠핑장 눈싸움 (v74, snowfight.ts). 옛 서버는 모르는 t라 버린다 ──
+  /** 눈을 뭉쳐 던진다: (x,y) = 출발점(내 발), (tx,ty) = 떨어질 곳. 서버가 번호를 붙여 같은 맵 다른 사람에게 snowball */
+  | { t: "snowball"; x: number; y: number; tx: number; ty: number }
+  /** 내 화면에서 by가 던진 n번 눈에 맞았다 (판정은 맞은 사람 화면). h = 맞은 높이(발에서, 머리·몸). 서버가 확인해 같은 맵 모두에게 snowHit */
+  | { t: "snowHit"; by: Sid; n: number; h?: number }
   /**
    * 11/13 함께 사냥: 내 공격·스킬 동작 (사냥터 방 전용, 보여 주기만 — 판정·몬스터는 각자). 서버는 HUNT_ACT_INTERVAL_MS 간격으로
    * 같은 사냥터 방의 다른 사람에게만 중계하고 저장하지 않는다. 옛 서버는 모르는 t라 버린다
@@ -220,7 +226,12 @@ export type S2C =
    */
   | { t: "snowStack"; st: SnowStackInfo; h?: SnowBall }
   /** 덩이가 사라졌다 (같은 캠핑장). took = 주인이 마지막 덩이를 다시 들어서 (주인은 이제 그 크기를 들고 있다). 없으면 주인 손은 그대로 */
-  | { t: "snowStackGone"; id: string; sid: Sid; took?: SnowBall };
+  | { t: "snowStackGone"; id: string; sid: Sid; took?: SnowBall }
+  // ── 11/18 마을·캠핑장 눈싸움 (같은 맵. 옛 클라이언트는 모르는 t라 버린다) ──
+  /** sid가 n번 눈을 던졌다 (던진 사람 빼고). 받은 때부터 뭉치기 → 날기를 각자 같은 식으로 그린다 */
+  | { t: "snowball"; sid: Sid; n: number; x: number; y: number; tx: number; ty: number }
+  /** sid가 by의 n번 눈에 맞았다 (맞은 사람·던진 사람 포함 모두). h = 맞은 높이 (그 자리에 퍽, 없으면 얼굴) */
+  | { t: "snowHit"; sid: Sid; by: Sid; n: number; h?: number };
 
 /** 23번 확성기 방송 (보낸 사람에게도 간다) */
 /** staff = 운영자 계정이 외친 것 (Vercel이 증서에 넣은 것만 → 이름 금색) */
@@ -407,6 +418,11 @@ export function parseC2S(text: string): C2S | null {
       return typeof m.id === "string" && SNOWMAN_ID_RE.test(m.id) && isSnowBall(m.s) ? { t: "snowAdd", id: m.id, s: m.s } : null;
     case "snowTake":
       return typeof m.id === "string" && SNOWMAN_ID_RE.test(m.id) ? { t: "snowTake", id: m.id } : null;
+    case "snowball":
+      return isNum(m.x) && isNum(m.y) && isNum(m.tx) && isNum(m.ty) ? { t: "snowball", x: Math.round(m.x), y: Math.round(m.y), tx: Math.round(m.tx), ty: Math.round(m.ty) } : null;
+    case "snowHit":
+      if (!(Number.isInteger(m.by) && (m.by as number) >= 0 && Number.isInteger(m.n) && (m.n as number) > 0 && (m.n as number) < 2 ** 31)) return null;
+      return { t: "snowHit", by: m.by as Sid, n: m.n as number, ...(isNum(m.h) ? { h: Math.max(0, Math.min(SNOWBALL_HIT_H_MAX, Math.round(m.h))) } : {}) };
     case "map":
       return isMapId(m.m) && isNum(m.x) && isNum(m.y) ? { t: "map", m: m.m, x: Math.round(m.x), y: Math.round(m.y) } : null;
     case "use":

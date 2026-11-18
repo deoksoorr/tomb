@@ -1,18 +1,49 @@
-/* 11/17 운영자에게만 보이는 유령선 시험 버튼 (바닷가 왼쪽 위, 녹빛 테) */
-.hud {
-  position: fixed;
-  top: calc(var(--safe-top, 0px) + 112px);
-  left: 12px;
+/* 11/17 운영자에게만 보이는 유령선 시험 버튼 (녹빛 테).
+   11/18 [폭죽] 단추 옆에 같은 크기 단추로, 누르면 단추 위로 펼친다 (데스크톱 아래 줄은 위로, 터치 위쪽 줄은 아래로) */
+.wrap {
+  position: relative;
+  flex: none;
+  pointer-events: auto;
+}
+
+/* 데스크톱 아래 바로 가기 줄: 폭죽 단추(FireworkButton .button)와 같은 36px 동그라미 */
+.button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(10, 22, 20, 0.8);
+  box-shadow:
+    inset 0 0 0 2px #7dffb0,
+    0 0 14px rgba(125, 255, 176, 0.25);
+  cursor: pointer;
+}
+
+.pop {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
   z-index: 11;
   display: grid;
   gap: 4px;
   padding: 6px 8px;
   border: 1px solid rgba(125, 255, 176, 0.55);
   border-radius: 8px;
-  background: rgba(10, 22, 20, 0.8);
+  background: rgba(10, 22, 20, 0.9);
   color: #c8ffe0;
   font-size: 12px;
-  pointer-events: auto;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+/* 터치 위쪽 줄: 단추가 왼쪽에 있어 아래로, 왼쪽 끝을 맞춰 펼친다 */
+.wrapTop .pop {
+  top: calc(100% + 8px);
+  bottom: auto;
+  left: 0;
+  transform: none;
 }
 
 .title {

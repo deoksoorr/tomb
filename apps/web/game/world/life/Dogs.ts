@@ -2,6 +2,7 @@ import type * as Phaser from "phaser";
 import { DEPTH } from "../../config";
 import type { Player } from "../../entities/Player";
 import { SpeechBubble } from "../../entities/SpeechBubble";
+import { imageBox, type SnowNpc } from "../snowNpc";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../../text/GlyphAtlas";
 import type { Sfx } from "../Sfx";
 import { critterGrid } from "./critterSim";
@@ -232,6 +233,26 @@ export class Dogs {
     }
     return true;
   }
+
+  /** 11/18 눈싸움: 맞을 수 있는 강아지 (보이는 것만). 맞으면 SnowFight가 머리에 눈을 얹고 움찔, 한마디는 이 말풍선으로 */
+  snowNpcs(): readonly SnowNpc[] {
+    if (this.snowList && this.snowFor === this.list) return this.snowList;
+    this.snowFor = this.list;
+    return (this.snowList = this.list.map(
+      (d): SnowNpc => ({
+        voice: "dog",
+        box: (out) => d.visible && imageBox(d.img, out),
+        img: () => d.img,
+        say: (text) => {
+          d.bubble ??= new SpeechBubble(this.scene, this.atlas);
+          d.bubble.show(text, this.scene.time.now);
+          d.wagUntil = 0;
+        },
+      }),
+    ));
+  }
+  private snowList: SnowNpc[] | null = null;
+  private snowFor: DogView[] | null = null;
 
   destroy(): void {
     if (this.destroyed) return;

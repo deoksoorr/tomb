@@ -3,6 +3,7 @@ import { ZOO, ZOO_GATE, ZOOKEEPER } from "@tomb/protocol";
 import { currentMapConcept } from "@/lib/mapConceptClient";
 import { addCanvasTexture, TEX } from "../../assets/manifest";
 import { DEPTH } from "../../config";
+import { imageBox, type SnowNpc } from "../snowNpc";
 import { FX_ART } from "../../sprites/cosmeticFx";
 import { GY } from "../../sprites/graveyardProps";
 import { WP } from "../../sprites/worldProps";
@@ -213,6 +214,12 @@ export class ZooView {
       v.ripple.setVisible(p.swimming).setPosition(Math.round(p.x), Math.round(p.y - 1)).setDepth(p.y + 0.1);
     }
   }
+
+  /** 11/18 눈싸움: 사육사도 맞는다 (그림 한 장 — 머리에 눈, 움찔, 가끔 한마디) */
+  snowNpcs(): readonly SnowNpc[] {
+    return (this.snowList ??= [{ voice: "person", box: (out) => imageBox(this.keeper, out), img: () => this.keeper }]);
+  }
+  private snowList: SnowNpc[] | null = null;
 
   destroy(): void {
     for (const a of this.animals) {

@@ -54,6 +54,11 @@ export type SeatRequester = {
   stand(): void;
 };
 
+/** 11/18 눈뭉치에 맞아 밀리는 거리·시간 · 다시 밀리기까지 */
+const SNOW_PUSH_PX = 7;
+const SNOW_PUSH_MS = 150;
+const SNOW_PUSH_GAP_MS = 1_000;
+
 export class Player {
   readonly view: AvatarView;
   readonly body: Phaser.Physics.Arcade.Body;
@@ -326,6 +331,10 @@ export class Player {
     const kvx = dt > 0 ? (kick.dx * 1000) / dt : 0;
     const kvy = dt > 0 ? (kick.dy * 1000) / dt : 0;
     const ctrl = wet ? this.bounce.control(now) : 1;
+    // 11/18 눈뭉치에 맞아 살짝 밀리는 중 (물에 들어가면 그만)
+    const pushing = !wet && now - this.pushAt < SNOW_PUSH_MS;
+    const pvx = pushing ? this.pushVx : 0;
+    const pvy = pushing ? this.pushVy : 0;
     if (this.move.moving) {
       let vx = this.move.vx * ctrl;
       let vy = this.move.vy * ctrl;
@@ -336,11 +345,11 @@ export class Player {
         const sn = Math.sin(a);
         [vx, vy] = [vx * c - vy * sn, vx * sn + vy * c];
       }
-      this.body.setVelocity(vx * mul + cvx + kvx, vy * mul + cvy + kvy);
+      this.body.setVelocity(vx * mul + cvx + kvx + pvx, vy * mul + cvy + kvy + pvy);
       this.dir = this.move.dir;
       this.state = wet ? (this.diving ? "dive" : "swim") : this.move.running ? "run" : "walk";
     } else {
-      this.body.setVelocity(cvx + kvx, cvy + kvy);
+      this.body.setVelocity(cvx + kvx + pvx, cvy + kvy + pvy);
       this.state = wet ? (this.diving ? "dive" : "swim") : "idle";
     }
     this.lastVx = this.body.velocity.x;
@@ -358,6 +367,26 @@ export class Player {
     // rvx·rvy = 부딪힌 것의 속도 (움직이는 배) — 서로 다가간 만큼 세게
     return this.bounce.hit(now, c, kind, this.lastVx - (opts.rvx ?? 0), this.lastVy - (opts.rvy ?? 0), opts);
   }
+
+  /**
+   * 11/18 눈싸움 「맞으면 살짝 밀리는 것만」: 서 있거나 걷는 중이면 (ux,uy) 쪽으로 SNOW_PUSH_PX를 SNOW_PUSH_MS에 걸쳐 밀린다.
+   * 경직 없이 방향키는 그대로 먹고, 물리 충돌(벽 등)은 평소처럼 막는다. 밀려날 자리가 물이면 밀지 않는다.
+   * 1초 안에 또 맞으면 겹치지 않는다. 앉음·탄 것·자리·놀이기구·물속은 밀지 않는다. 밀린 위치는 평소 이동처럼 서버에 간다
+   */
+  snowPush(ux: number, uy: number, now: number): void {
+    if (now - this.pushAt < SNOW_PUSH_GAP_MS) return;
+    if (!(this.state === "idle" || this.state === "walk" || this.state === "run") || this.view.ridingOn || this.anchor || this.boatSeatId || this.carSeatId) return;
+    const m = Math.hypot(ux, uy);
+    if (!(m > 0)) return;
+    if (this.water?.(this.x + (ux / m) * SNOW_PUSH_PX, this.y + (uy / m) * SNOW_PUSH_PX)) return;
+    const v = (SNOW_PUSH_PX * 1000) / SNOW_PUSH_MS;
+    this.pushAt = now;
+    this.pushVx = (ux / m) * v;
+    this.pushVy = (uy / m) * v;
+  }
+  private pushAt = -Infinity;
+  private pushVx = 0;
+  private pushVy = 0;
 
   /** 좌석에 앉기 (요청과 동시에 스냅 시작) — seat가 null이면 바닥 앉기 */
   sit(seat: Seat | null, now: number, seats: SeatRequester | null): void {

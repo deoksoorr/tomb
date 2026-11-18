@@ -233,7 +233,7 @@ export class Foraging {
     for (const id of this.nodeIds) {
       if (this.nodes.has(id)) continue;
       const node = gatherNodeById(id)!;
-      const img = this.scene.add.image(node.x, node.y + 2, FTEX.node(node.kind, 0)).setOrigin(0.5, 1).setDepth(node.y);
+      const img = this.scene.add.image(node.x, node.y + 2, FTEX.node(node.kind, 0, this.night)).setOrigin(0.5, 1).setDepth(node.y);
       if (!this.d.reduced) {
         img.setScale(0.2);
         this.scene.tweens.add({ targets: img, scale: 1, duration: 260, delay: this.nodesLoaded ? 120 : 0, ease: "Back.easeOut" });
@@ -759,7 +759,7 @@ export class Foraging {
       const concept = currentMapConcept();
       for (const n of this.npcImgs) n.img.setTexture(FTEX.npc(n.npc.id, this.d.reduced ? 0 : this.frame, concept));
       if (!this.d.reduced) {
-        for (const v of this.nodes.values()) v.img.setTexture(FTEX.node(v.node.kind, this.frame));
+        for (const v of this.nodes.values()) v.img.setTexture(FTEX.node(v.node.kind, this.frame, this.night));
       }
     }
     // 가끔: 밤낮이 바뀌면 곤충 수풀 그림, 점유표가 바뀌면 낚싯대·안내
@@ -769,7 +769,7 @@ export class Foraging {
       if (night !== this.night) {
         this.night = night;
         ensureForageTextures(this.scene, night);
-        for (const v of this.nodes.values()) v.img.setTexture(FTEX.node(v.node.kind, this.frame));
+        for (const v of this.nodes.values()) v.img.setTexture(FTEX.node(v.node.kind, this.frame, this.night));
       }
       this.syncRods();
       this.rebuildItems();

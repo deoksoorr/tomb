@@ -16,10 +16,13 @@ export class InputHub {
 
   constructor() {
     // 11/17 r2 F = 갈매기 과자 던지기: 장면 상호작용(E)과 따로, 바닷가 장면만 듣는 bridge로 보내요 (다른 장면에선 아무 일 없어요)
+    // 11/18 마을·캠핑장에서는 같은 F가 눈 던지기예요 (겨울판 바깥에 떠 있는 장면만 input:snowball을 들어요 — 바닷가에선 아무 일 없어요)
     this.keys = new KeyboardInput(
       (a) => this.dispatch(a),
       () => {
-        if (!this.blocked) bridge.emit("sea:snack:throw");
+        if (this.blocked) return;
+        bridge.emit("sea:snack:throw");
+        bridge.emit("input:snowball");
       },
     );
   }

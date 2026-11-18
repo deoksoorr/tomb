@@ -27,7 +27,10 @@ export const GET = handler(async (req) => {
   });
 });
 
-/** 등불 켜기 `{ ch }`: 해가 진 뒤 그 채널에서 오늘 처음 켠 사람이면 「오늘의 등대지기」 + 도장 1개 (force는 개발 서버에서만) */
+/**
+ * 등불 켜기 `{ ch }`: 해가 진 뒤 그 채널에서 오늘 처음 켠 사람이면 「오늘의 등대지기」 + 도장 1개 (force는 개발 서버에서만).
+ * 11/18 등대지기는 한 사람이 하루에 한 채널만 (이미 했으면 409)
+ */
 export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
   const { ch, force } = await readBody(req, LightSchema);
@@ -35,6 +38,7 @@ export const POST = handler(async (req) => {
   const me = await myBrief(visitorId);
   const r = await lightLamp(ch, visitorId, me.name ?? "이름 없는 유령", Date.now(), !!force && !env.isProd());
   if (!r) throw new HttpError(409, "NOT_NIGHT", "등불은 해가 진 뒤에 켤 수 있어요.");
+  if (!r.lit && r.done) throw new HttpError(409, "LAMP_DONE", "오늘은 이미 등대를 밝혔어요. 등대지기는 하루에 한 번이에요.");
   const state = await lampState(ch);
   return json<LampLightResponse>({ ...state, name: r.name, lit: r.lit, ...(r.lit ? { stamps: r.stamps } : {}) });
 });

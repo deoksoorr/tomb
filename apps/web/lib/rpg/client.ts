@@ -44,6 +44,8 @@ export const rpgApi = {
       post({ game, difficulty, ...(game === "hunt" && zone ? { zone } : {}), ...(planVer ? { planVer } : {}), ...(tower ? { tower } : {}) }),
     ),
   finish: (ticket: string, result: RunResult) => request<RunFinishResponse>("/api/rpg/run/finish", post({ ticket, result })),
+  /** 11/18 드롭 시드 (우두머리가 나온 뒤 — 드롭 연출용, 보상은 판 끝에 서버가) */
+  reveal: (ticket: string) => request<{ dropSeed: number }>("/api/rpg/run/reveal", post({ ticket })),
   gear: (a: GearAction) => request<GearActionResponse>("/api/rpg/gear", post(a)),
 };
 
