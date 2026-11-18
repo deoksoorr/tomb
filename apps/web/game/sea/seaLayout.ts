@@ -43,6 +43,7 @@ import {
   seaColliders,
   type Furniture,
 } from "@tomb/protocol";
+import { SEA_BUS_BAY } from "../bus/busBays";
 import type { SeaInteractable, SeaLight } from "./seaTypes";
 
 // 11/16 달물결 포구 배치 (순수 데이터 — Phaser 없음, seaLayout.test가 충돌·길을 검사해요).
@@ -423,7 +424,8 @@ export const SEA_KEEPER: Pt = { x: SEA_BREAKWATER_TIP.x + 80, y: SEA_BREAKWATER_
 
 // ── 상호작용 ──
 export const SEA_INTERACTABLES: readonly SeaInteractable[] = [
-  { id: "bus:village", kind: "bus", x: SEA_BOARD.x, y: SEA_BOARD.y, r: 22, label: "마을행 버스 타기" },
+  // 11/18 타는 곳은 바닥 정차 칸 전체 (zone — game/bus/busBays)
+  { id: "bus:village", kind: "bus", x: SEA_BOARD.x, y: SEA_BOARD.y, r: 22, zone: SEA_BUS_BAY, label: "마을행 버스 타기" },
   { id: "sign", kind: "sign", x: SEA_BUS_SIGN.x, y: SEA_BUS_SIGN.y + 12, r: 18, label: "표지판 보기" },
   ...SEA_LOTS.map((l): SeaInteractable => {
     const f = seaLotFront(l);

@@ -1,5 +1,4 @@
 import {
-  CAMP_BUS_STOP,
   CAMP_CROSSINGS,
   CAMP_HEIGHT,
   CAMP_WIDTH,
@@ -19,6 +18,7 @@ import type { NpcWear } from "../sprites/npcWear";
 import { darken, Grid, lighten, mix, rng, type Color } from "../sprites/pixel";
 import { CAMP_SUMMIT, campGroundKind, hashU, pathEdgeDist, type CampGround } from "./campLayout";
 import { CAMP_TEX_PREFIX } from "./campTypes";
+import { CAMP_BUS_BAY } from "../bus/busBays";
 import { campWinterGroundColor, campWinterStoneColor } from "./campWinter";
 
 // 11/15 언젠가 캠핑장 픽셀 아트 (코드로 그린다, 마을 그림 재탕 없이 새로).
@@ -1389,10 +1389,11 @@ function groundColor(x: number, y: number, k: CampGround, nearPath: boolean): Co
       if (y < CAMP_ROAD.y + 5) c = n < 0.5 ? 0x9a968c : 0xb4b0a4;
       // 정류장 앞 노란 정차 칸 (테두리 점선)
       // 버스는 문이 정류장 앞에 오게 서고(문은 차 앞쪽), 왼쪽에서 들어온다 → 칸은 정류장 왼쪽으로 치우친다
-      const bx0 = CAMP_BUS_STOP.x - 98;
-      const bx1 = CAMP_BUS_STOP.x + 30;
-      const by0 = CAMP_ROAD.y + 9;
-      const by1 = CAMP_ROAD.y + 38;
+      // 11/18 상자는 「버스 타기」 E 범위와 같다 (game/bus/busBays)
+      const bx0 = CAMP_BUS_BAY.x;
+      const bx1 = CAMP_BUS_BAY.x + CAMP_BUS_BAY.w;
+      const by0 = CAMP_BUS_BAY.y;
+      const by1 = CAMP_BUS_BAY.y + CAMP_BUS_BAY.h;
       if (x >= bx0 && x <= bx1 && y >= by0 && y <= by1) {
         const onEdge = y === by0 || y === by0 + 1 || y === by1 || y === by1 - 1 ? (x >> 2) % 2 === 0 : x === bx0 || x === bx0 + 1 || x === bx1 || x === bx1 - 1;
         if (onEdge) c = 0xe8c040;

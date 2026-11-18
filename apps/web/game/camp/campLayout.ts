@@ -35,6 +35,7 @@ import {
   type CampNpcId,
   type Furniture,
 } from "@tomb/protocol";
+import { CAMP_BUS_BAY } from "../bus/busBays";
 import type { CampInteractable, CampLight } from "./campTypes";
 import { CAMP_FISHING_SPOTS, CAMP_SCOPES } from "@tomb/protocol";
 import { CAMP_GATHER_NODES } from "@/lib/forage/catalog";
@@ -534,7 +535,8 @@ export function campWalkGrid(cell = 8): CampWalkGrid {
 
 // ── 상호작용 ──
 export const CAMP_INTERACTABLES: readonly CampInteractable[] = [
-  { id: "bus:village", kind: "bus", x: CAMP_BOARD.x, y: CAMP_BOARD.y, r: 22, label: "마을행 버스 타기" },
+  // 11/18 타는 곳은 바닥 정차 칸 전체 (zone — game/bus/busBays)
+  { id: "bus:village", kind: "bus", x: CAMP_BOARD.x, y: CAMP_BOARD.y, r: 22, zone: CAMP_BUS_BAY, label: "마을행 버스 타기" },
   ...CAMP_NPCS.map((n): CampInteractable => ({ id: `npc:${n.id}`, kind: "npc", npc: n.id, x: n.x, y: n.y + 10, r: 26, label: `${n.name}에게 말 걸기` })),
   ...CAMP_VANS.map((v): CampInteractable => ({ id: `van:${v.id}`, kind: "van", van: v.id, seatId: `qV${v.id.slice(1)}`, x: v.x + CAMP_VAN_DOOR_DX, y: v.y + 13, r: 20, label: "캠핑카에 들어가 앉기" })),
   ...CAMP_DECKS.map((d): CampInteractable => ({ id: `deck:${d.n}`, kind: "deck", deck: d.n, x: d.x, y: d.y + 2, r: 18, label: `${d.n}번 데크` })),

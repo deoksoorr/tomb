@@ -60,6 +60,8 @@ import { facadeInfo } from "../housing/art";
 import { clampChars, DOOR_NAME_MAX } from "../text/fitLabel";
 import { BUS_E_RADIUS, BUS_STOP, fishZoneColliders, inFishZone } from "./fishZone";
 import { inSeaStop, SEA_STOP, SEA_STOP_E_RADIUS, seaStopColliders } from "./seaStop";
+import { VILLAGE_CAMP_BAY, VILLAGE_SEA_BAY } from "../bus/busBays";
+import type { ReachZone } from "../logic/reach";
 import { stargazeColliders, stargazeInteractables } from "./life/stargazeLayout";
 import { RIDE_KEEPOUT, rideColliders, rideInteractables, WISH_FOUNTAIN } from "./rides";
 import { SKY_KEEPOUT, skyColliders, skyInteractables } from "./skyMath";
@@ -1029,6 +1031,8 @@ export type Interactable = {
   y: number;
   /** 판정 반경 */
   r: number;
+  /** 11/18 바닥 영역 (있으면 반경 대신 이 상자 안이 닿는 곳 — 버스 정차 칸, game/logic/reach) */
+  zone?: ReachZone;
   /** 상호작용 자리: tree = 매달릴 때 발 위치(줄기 앞), swing = 그네 좌석, hammock = 눕는 자리(천 가운데), 나머지 = (x,y) */
   ax: number;
   ay: number;
@@ -1049,11 +1053,11 @@ const PORTALS: readonly Interactable[] = [
   { id: "dock:ferry", kind: "dock", x: FERRY_DOCK.x, y: FERRY_DOCK.y, r: 14, ax: FERRY_DOCK.x, ay: FERRY_DOCK.y, label: "나루터 · 조각배 타기" },
   { id: "dock:duck", kind: "dock", x: DUCK_DOCK.x, y: DUCK_DOCK.y, r: 14, ax: DUCK_DOCK.x, ay: DUCK_DOCK.y, label: "오리배 타기" },
   // 11/15 주말 버스 정류장 (버스 정류장 마당). E → 캠핑장 버스 (운영에서 닫혀 있으면 안내만).
-  // 승강장·정차 칸 앞 어디서든 되게 넓게 (예전 r 20은 지붕 바로 앞 한 점이라 잘 안 잡혔다). 지붕 아래 벤치 바로 앞은 앉기가 더 가깝다
   // 11/16 정류장이 둘이 되며 안내 글에 가는 곳을 붙였다
-  { id: "bus:camp", kind: "bus", x: BUS_STOP.x - 6, y: BUS_STOP.y + 22, r: BUS_E_RADIUS, ax: BUS_STOP.x - 6, ay: BUS_STOP.y + 22, label: "캠핑장행 버스 타기" },
+  // 11/18 타는 곳은 바닥 정차 칸(노란 칠·BUS) 전체 (zone — game/bus/busBays). r은 바닥 장식 비우기 같은 데만 쓴다
+  { id: "bus:camp", kind: "bus", x: BUS_STOP.x - 6, y: BUS_STOP.y + 22, r: BUS_E_RADIUS, zone: VILLAGE_CAMP_BAY, ax: BUS_STOP.x - 6, ay: BUS_STOP.y + 22, label: "캠핑장행 버스 타기" },
   // 11/16 바닷가행 정류장 (옛 묘역 아래 강가, seaStop.ts). E → 바닷가 버스 (운영에서 닫혀 있으면 안내만)
-  { id: "bus:sea", kind: "bus", x: SEA_STOP.x + 6, y: SEA_STOP.y + 22, r: SEA_STOP_E_RADIUS, ax: SEA_STOP.x + 6, ay: SEA_STOP.y + 22, label: "바닷가행 버스 타기" },
+  { id: "bus:sea", kind: "bus", x: SEA_STOP.x + 6, y: SEA_STOP.y + 22, r: SEA_STOP_E_RADIUS, zone: VILLAGE_SEA_BAY, ax: SEA_STOP.x + 6, ay: SEA_STOP.y + 22, label: "바닷가행 버스 타기" },
   // 동물원 사육사 (노점 앞) → 펫 분양 창
   { id: "zoo:keeper", kind: "zoo", x: ZOOKEEPER_SPOT.x, y: ZOOKEEPER_SPOT.y, r: 20, ax: ZOOKEEPER_SPOT.x, ay: ZOOKEEPER_SPOT.y, label: "사육사에게 펫 분양 받기" },
 ];

@@ -55,6 +55,7 @@ import { keyJosa } from "../input/keyHint";
 import { besideFriend, FRIEND_ARRIVED } from "../logic/friendSpot";
 import { DEADZONE_ENTER, type MoveInput } from "../logic/movement";
 import { sideIntent, standPoint } from "../logic/sit";
+import { inReach, reachDist } from "../logic/reach";
 import type { NetCallbacks } from "../net/RealtimeClient";
 import type { NetPose } from "../net/sendThrottle";
 import { avatarColorSpec } from "../sprites/avatar";
@@ -995,14 +996,14 @@ export class SeaScene extends Phaser.Scene {
     const rest = moving ? null : this.pickRest(pl.x, pl.y);
     if (rest && (!seat || Math.hypot(rest.x - pl.x, rest.y - pl.y) < Math.hypot(seat.x - pl.x, seat.y - pl.y))) {
       const ob = this.nearestObject(pl.x, pl.y);
-      if (!ob || Math.hypot(ob.x - pl.x, ob.y - pl.y) > Math.hypot(rest.x - pl.x, rest.y - pl.y)) {
+      if (!ob || reachDist(ob, pl.x, pl.y) > Math.hypot(rest.x - pl.x, rest.y - pl.y)) {
         this.useRest(rest, now);
         return;
       }
     }
     const obj = this.nearestObject(pl.x, pl.y);
     const sd = seat ? Math.hypot(seat.x - pl.x, seat.y - pl.y) : Infinity;
-    const od = obj ? Math.hypot(obj.x - pl.x, obj.y - pl.y) : Infinity;
+    const od = obj ? reachDist(obj, pl.x, pl.y) : Infinity;
     // 11/16 갯바위 낚시 자리가 더 가까우면 그것부터 (캠핑장과 같아요)
     const fo = this.forage.nearest(pl.x, pl.y);
     if (fo && Math.hypot(fo.x - pl.x, fo.y - pl.y) <= Math.min(sd, od)) {
@@ -1209,8 +1210,10 @@ export class SeaScene extends Phaser.Scene {
     let best: SeaInteractable | null = null;
     let bd = Infinity;
     for (const o of this.map.interactables) {
-      const d = Math.hypot(o.x - x, o.y - y);
-      if (d <= o.r && d < bd) {
+      // 11/18 버스 정차 칸처럼 바닥 영역이 있으면 그 상자 안이 닿는 곳 (game/logic/reach)
+      if (!inReach(o, x, y)) continue;
+      const d = reachDist(o, x, y);
+      if (d < bd) {
         best = o;
         bd = d;
       }
@@ -1291,13 +1294,13 @@ export class SeaScene extends Phaser.Scene {
     let best: SeaInteractable | null = null;
     let bd = 18;
     for (const o of this.map.interactables) {
-      const d = Math.hypot(o.x - wx, o.y - (wy + 6));
+      const d = reachDist(o, wx, wy + 6);
       if (d < bd) {
         best = o;
         bd = d;
       }
     }
-    if (best && Math.hypot(best.x - pl.x, best.y - pl.y) <= best.r * 1.5 && !pl.airborne) this.useObject(best);
+    if (best && inReach(best, pl.x, pl.y, 1.5) && !pl.airborne) this.useObject(best);
   }
 
   private doSay(id: string): void {
@@ -1561,8 +1564,9 @@ export class SeaScene extends Phaser.Scene {
     const sittingFor = pl.sitting && pl.view.sitSince > 0 ? now - pl.view.sitSince : -1;
     const obj = !pl.sitting && !this.locked ? this.nearestObject(pl.x, pl.y) : null;
     const objSd = seat ? Math.hypot(seat.x - pl.x, seat.y - pl.y) : restNear ? Math.hypot(rest!.x - pl.x, rest!.y - pl.y) : Infinity;
-    const objOd = obj ? Math.hypot(obj.x - pl.x, obj.y - pl.y) : Infinity;
-    let other = obj && objOd <= objSd ? { x: obj.x, y: obj.y + 2, text: `${this.seatHint.prefix}${obj.label}` } : null;
+    const objOd = obj ? reachDist(obj, pl.x, pl.y) : Infinity;
+    // 바닥 영역(버스 정차 칸)은 넓어서 안내를 내 발밑에
+    let other = obj && objOd <= objSd ? { x: obj.zone ? pl.x : obj.x, y: (obj.zone ? pl.y : obj.y) + 2, text: `${this.seatHint.prefix}${obj.label}` } : null;
     // 쉴거리 자리 안내는 자리 위에 (라벨 depth라 파라솔 갓보다 위에 그려져요)
     if (!other && restNear) other = { x: rest!.x, y: rest!.y - 4, text: `${this.seatHint.prefix}${rest!.kind === "lounger" ? "눕기" : "앉기"}` };
     // 11/16 갯바위 낚시 자리·갯벌 구멍 안내 ("E 낚시하기" · "E 갯벌 캐기", 물때로 못 쓰면 그 까닭 — seaForage tideHint)
