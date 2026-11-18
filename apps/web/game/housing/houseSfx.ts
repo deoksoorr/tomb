@@ -15,6 +15,7 @@ export type HouseSound =
   | "pop"
   | "fridge"
   | "meow"
+  | "dogSigh"
   | "coffee"
   | "vend"
   | "chime"
@@ -144,6 +145,11 @@ export class HouseSfx extends AudioHost {
         this.tone(ac, t, 0.42, 620, 480, v * 0.16, "triangle", 0.05);
         this.tone(ac, t + 0.05, 0.3, 900, 760, v * 0.05, "sine", 0.05);
         for (let i = 0; i < 5; i++) this.tone(ac, t + 0.5 + i * 0.09, 0.08, 48, 44, v * 0.12, "sawtooth"); // 골골
+        break;
+      case "dogSigh": // 잠든 강아지: 콧바람 「흐응」 + 꼬리가 바닥을 툭툭
+        this.hiss(ac, t, 0.5, 700, 260, v * 0.1, "lowpass");
+        this.tone(ac, t + 0.04, 0.32, 300, 210, v * 0.05, "triangle", 0.04);
+        for (let i = 0; i < 2; i++) this.tone(ac, t + 0.55 + i * 0.16, 0.06, 90, 60, v * 0.14, "sine", 0.003);
         break;
       case "coffee":
         for (let i = 0; i < 8; i++) this.hiss(ac, t + i * 0.12 + Math.random() * 0.05, 0.08, 500 + Math.random() * 400, 300, v * 0.16, "bandpass", 3);

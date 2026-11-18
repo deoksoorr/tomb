@@ -95,6 +95,7 @@ export const FURNITURE: readonly FurnitureDef[] = [
   { id: "fridge", name: "냉장고", desc: "열 때마다 뭔가 하나씩 나온다. 누가 채워 두는 걸까.", category: "living", price: 260, score: 12, w: 1, h: 1, use: "간식 꺼내기", spin: true },
   { id: "bathtub", name: "욕조", desc: "거품이 뽀글뽀글. 들어가면 나오기 싫다.", category: "living", price: 380, score: 18, w: 2, h: 1, use: "들어가기" },
   { id: "cat_cushion", name: "고양이 쿠션", desc: "쿠션 위의 고양이. 쓰다듬으면 골골 소리를 낸다.", category: "living", price: 180, score: 10, w: 1, h: 1, use: "쓰다듬기", spin: true },
+  { id: "sleepy_dog", name: "잠자는 강아지", desc: "담요 위에서 꿈속 산책 중이에요.", category: "living", price: 200, score: 10, w: 1, h: 1, use: "살살 쓰다듬기" },
   { id: "grand_clock", name: "괘종시계", desc: "지금 몇 시인지 댕— 하고 알려 준다.", category: "living", price: 240, score: 11, w: 1, h: 1, use: "시간 보기", spin: true },
   // ── 사무실 ──
   { id: "monitor_desk", name: "모니터 책상", desc: "듀얼 모니터. 한쪽엔 아직 엑셀이 열려 있다.", category: "dev", price: 340, score: 18, w: 2, h: 1, light: { color: 0x8ac8ff, r: 26 }, spin: true, use: "앉아서 일하기" },

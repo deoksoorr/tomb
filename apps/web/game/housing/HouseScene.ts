@@ -27,7 +27,7 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { Atmosphere } from "../world/Atmosphere";
 import { Lighting, playerLightRadius } from "../world/Lighting";
 import type { LightSpot } from "../world/WorldMap";
-import { animFrames, artUp, drawsTurned, floorGrid, furnitureGrid, hasNightArt, itemVariant, noFootShadow, sconceGrid, wallCapColor, wallFaceColor, WALL_H, wallGrid, windowGrid, WINDOW_W, yardGrid } from "./art";
+import { animFrames, artUp, DOG_BREATH_FRAMES, drawsTurned, floorGrid, furnitureGrid, hasNightArt, itemVariant, noFootShadow, sconceGrid, wallCapColor, wallFaceColor, WALL_H, wallGrid, windowGrid, WINDOW_W, yardGrid, zzzGrid } from "./art";
 import type { HouseEditState, HouseTool } from "./events";
 import { wornRingGrid } from "./seaFurnitureArt";
 import { HouseSfx, hearGain, type HouseSound } from "./houseSfx";
@@ -195,6 +195,10 @@ export class HouseScene extends Phaser.Scene {
   /** 연못 잔물결 장면 (동작 줄이기면 0에 멈춘다) */
   private pondAt = 0;
   private pondFrame = 0;
+  /** 잠자는 강아지 숨 장면·가끔 떠오르는 z (동작 줄이기면 멈춘다) */
+  private dogAt = 0;
+  private dogFrame = 0;
+  private dogZAt = 0;
   /** 밤에 달빛이 비치는 연못 자리 */
   private pondSpots: { x: number; y: number; r: number }[] = [];
   /** 잠깐 바뀌는 그림 (끄적인 화이트보드·눌린 오리·흔들리는 덤불…): u → 변형·끝나는 시각 */
@@ -653,6 +657,12 @@ export class HouseScene extends Phaser.Scene {
         return itemVariant(p.i, "", { r: p.r, night: this.night, frame: this.data0.reduced ? 0 : this.pondFrame });
       case "sea_hammock":
         return this.hammockBusy().has(p.u) ? "lie" : "";
+      case "sleepy_dog": {
+        // 쓰다듬으면 잠깐 꼬리 끝이 들리고(wag), 평소엔 숨 장면 (동작 줄이기면 0에 멈춘다)
+        const f = this.flash.get(p.u);
+        if (f && f.until > this.time.now) return f.v;
+        return this.dogFrame ? `b${this.dogFrame}` : "";
+      }
       case "stone_lantern":
       case "candles":
       case "sea_lantern":
@@ -938,6 +948,11 @@ export class HouseScene extends Phaser.Scene {
         this.emote("heart");
         this.emitUse(t.u, 0);
         return;
+      case "dog":
+        this.petDog(t.u, 1);
+        this.emote("heart");
+        this.emitUse(t.u, 0);
+        return;
       case "coffee":
         this.sfx.play("coffee");
         this.time.delayedCall(1100, () => this.emote("coffee"));
@@ -1173,6 +1188,25 @@ export class HouseScene extends Phaser.Scene {
         this.tweens.add({ targets: ring, scale: 3.2, alpha: 0, duration: 900, ease: "Sine.easeOut", onComplete: () => ring.destroy() });
         if (i > 0) this.sfx.play("bubble", gain * 0.6);
       });
+  }
+
+  /** 잠자는 강아지를 쓰다듬었다: 콧바람 + 꼬리 끝 톡 (깨지는 않는다) */
+  private petDog(u: string, gain: number): void {
+    this.sfx.play("dogSigh", gain);
+    if (!this.data0.reduced) this.flashVariant(u, "wag", 520);
+  }
+
+  /** 잠자는 강아지 머리 위로 작은 z가 하나 떠올라 사라진다 */
+  private floatZ(u: string): void {
+    const v = this.views.get(u);
+    if (!v) return;
+    const flip = v.img.flipX;
+    // 그림 원점 = 왼쪽 아래. 얼굴은 왼쪽(뒤집으면 오른쪽) 6px 언저리, 정수리는 바닥에서 9px 위
+    const x = Math.round(v.img.x + (flip ? 10 : 6));
+    const y = Math.round(v.img.y - 12);
+    const key = this.canvasTex("house-zzz", () => zzzGrid().toCanvas());
+    const z = this.add.image(x, y, key).setDepth(v.img.depth + 1).setAlpha(0.95);
+    this.tweens.add({ targets: z, x: x + (flip ? -5 : 5), y: y - 12, alpha: 0, duration: 1900, ease: "Sine.easeOut", onComplete: () => z.destroy() });
   }
 
   /** 덤불 흔들기 (두 번) + 부스럭 */
@@ -1537,6 +1571,10 @@ export class HouseScene extends Phaser.Scene {
         this.sfx.play("meow", gain);
         r?.view.emote("heart", now);
         return;
+      case "dog":
+        this.petDog(u, gain);
+        r?.view.emote("heart", now);
+        return;
       case "coffee":
         this.sfx.play("coffee", gain);
         r?.view.emote("coffee", now);
@@ -1709,6 +1747,22 @@ export class HouseScene extends Phaser.Scene {
       this.pondAt = time + 420;
       this.pondFrame = (this.pondFrame + 1) % animFrames("pond");
       for (const it of this.work.items) if (it.i === "pond" && this.drag?.u !== it.u) this.refreshVariant(it.u);
+    }
+    // 잠자는 강아지: 들숨(짧게)·날숨(길게)으로 등이 1px 오르내리고, 날숨 때 가끔 z 하나 (동작 줄이기면 멈춤)
+    if (!this.data0.reduced && time >= this.dogAt) {
+      this.dogFrame = (this.dogFrame + 1) % DOG_BREATH_FRAMES;
+      this.dogAt = time + (this.dogFrame ? 1100 : 1500);
+      let picked: string | null = null;
+      let n = 0;
+      for (const v of this.views.values()) {
+        if (v.p.i !== "sleepy_dog" || this.drag?.u === v.p.u) continue;
+        this.refreshVariant(v.p.u);
+        if (Math.random() * ++n < 1) picked = v.p.u; // 강아지가 여럿이면 하나를 고르게 뽑는다
+      }
+      if (picked && !this.dogFrame && time >= this.dogZAt) {
+        this.dogZAt = time + 2600 + Math.random() * 2400;
+        this.floatZ(picked);
+      }
     }
     // 열린 창: 바깥 소리 (낮 새소리·밤 귀뚜라미·가끔 바람)
     if (time >= this.nextAmbient) {
