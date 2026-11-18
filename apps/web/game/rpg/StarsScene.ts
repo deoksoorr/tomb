@@ -2,9 +2,11 @@ import * as Phaser from "phaser";
 import { constellationById, type Constellation } from "@/lib/rpg/constellations";
 import {
   comboMult,
+  earlySpam,
   STAR_APPROACH,
   STAR_SCORE,
   starGroups,
+  starMissOk,
   STARS_NEW_PER_RUN,
   starWindows,
   starsPlan,
@@ -19,14 +21,16 @@ import { StarSfx } from "./starSound";
 import { ensureRpgTextures, RTEX } from "./sprites";
 
 // 별자리 잇기: 끝내지 못한 다짐들이 망원경 속 밤하늘에 별로 떠오른다. 빛의 고리가 별에 닿는 순간 누르면 별이 번쩍 켜지고,
-// 앞 별과 빛이 흐르는 선으로 이어진다. 한 무리(별자리)를 하나도 놓치지 않고 다 이으면 그 별자리 그림이 떠올랐다 사라지며
+// 앞 별과 빛이 흐르는 선으로 이어진다. 한 무리(별자리)를 놓쳐도 되는 별 수 안에서 다 이으면 그 별자리 그림이 떠올랐다 사라지며
 // 이름과 (처음이면) "도감 등록!" — 등록은 서버가 결과의 완성 목록을 계획·시간·판정 수로 검사한 뒤에 한다.
 // 박자는 시드 계획(starsPlan)대로 — 서버는 같은 계획으로 판정 수의 상한을 검사한다. 별자리 모양은 화면 비율을 지키며 펼친다.
-// 어디를 눌러도 "다음 별"을 판정한다 (모바일에서 작은 별을 정확히 누를 필요가 없게). 너무 일찍 누르면 놓침.
+// 어디를 눌러도 "다음 별"을 판정한다 (모바일에서 작은 별을 정확히 누를 필요가 없게).
+// 11/18 쉬워졌다: 별자리마다 놓쳐도 되는 별(starMissOk)까지는 놓쳐도 이어지고(놓친 별은 흐린 점선), 일찍 누른 것은 무시한다
+// (마구 누르기만 STAR_EARLY_SPAM — 1초에 3번 넘게 일찍 누르면 다음 별 놓침).
 
 const KEYS = new Set(["Space", "KeyJ", "KeyK", "KeyF", "Enter", "NumpadEnter"]);
-/** 이만큼 일찍 누르면 그 별은 놓침 (마구 누르기 방지) */
-const EARLY_MISS_MS = 260;
+/** 이만큼 일찍 누르면 「조금 일찍」을 살짝 띄운다 (놓침은 아니다) */
+const EARLY_HINT_MS = 260;
 const RING_START = 26;
 const RING_END = 5;
 /** 무리가 끝난 뒤 별·선·그림이 남아 있는 시간 (완성했으면 조금 더) */
@@ -53,6 +57,9 @@ type GroupView = {
   cy: number;
   size: number;
   hits: number;
+  /** 11/18 놓친 별 수, 놓쳐도 되는 별 수 (넘으면 broken) */
+  misses: number;
+  missOk: number;
   broken: boolean;
   flawless: boolean;
   objs: Phaser.GameObjects.GameObject[];
@@ -65,6 +72,9 @@ export class StarsScene extends RpgScene {
   private nextSpawn = 0;
   private live: Live[] = [];
   private lastHit = new Map<number, { x: number; y: number }>();
+  /** 11/18 「좋아」 범위 밖에서 일찍 누른 시각들 (마구 누르기 판정), 「조금 일찍」 글자를 마지막으로 띄운 시각 */
+  private earlyAt: number[] = [];
+  private earlyHintAt = -1e9;
   private aw = 320;
   private ah = 200;
   private approach = 1200;
@@ -114,6 +124,8 @@ export class StarsScene extends RpgScene {
     this.live = [];
     this.views.clear();
     this.lastHit.clear();
+    this.earlyAt = [];
+    this.earlyHintAt = -1e9;
     this.perfect = this.good = this.miss = this.combo = this.maxCombo = this.points = 0;
     this.judge = undefined;
     this.doneGroups = [];
@@ -226,7 +238,7 @@ export class StarsScene extends RpgScene {
     const size = portrait ? 140 : 150;
     const cx = portrait ? aw / 2 + jx : (g % 2 ? aw * 0.72 : aw * 0.28) + jx;
     const cy = portrait ? (g % 2 ? ah * 0.7 : ah * 0.27) + jy : ah * 0.46 + jy;
-    const v: GroupView = { info, con, cx, cy, size, hits: 0, broken: false, flawless: true, objs: [] };
+    const v: GroupView = { info, con, cx, cy, size, hits: 0, misses: 0, missOk: starMissOk(info.con, info.size), broken: false, flawless: true, objs: [] };
     this.views.set(g, v);
     // 무리가 처음 보일 때: 앞으로 이을 별 자리를 아주 옅은 점으로 (모양을 미리 짐작할 수 있게)
     for (const n of this.plan)
@@ -262,7 +274,20 @@ export class StarsScene extends RpgScene {
     if (!next) return;
     const dt = now - next.n.t;
     if (Math.abs(dt) <= this.win[1]) this.hit(next, Math.abs(dt) <= this.win[0] ? "perfect" : "good");
-    else if (dt < 0 && dt > -EARLY_MISS_MS) this.fail(next, "너무 일찍");
+    else if (dt < 0) this.early(next, now, dt);
+  }
+
+  /** 11/18 범위 밖에서 일찍 눌렀다: 무시한다. 다만 1초 안에 3번 넘게 그러면(마구 누르기) 다음 별을 놓침 */
+  private early(next: Live, now: number, dt: number): void {
+    if (earlySpam(this.earlyAt, now)) {
+      this.earlyAt.length = 0;
+      this.fail(next, "너무 일찍");
+      return;
+    }
+    if (dt > -EARLY_HINT_MS && now - this.earlyHintAt > 400) {
+      this.earlyHintAt = now;
+      this.floatText(next.x, next.y - 8, "조금 일찍", "#8a90a8", 9);
+    }
   }
 
   // ── 판정 ──
@@ -323,8 +348,9 @@ export class StarsScene extends RpgScene {
     this.combo = 0;
     this.setJudge("miss");
     const v = this.view(l.n.group);
-    v.broken = true;
+    v.misses++;
     v.flawless = false;
+    if (v.misses > v.missOk) v.broken = true;
     // 너무 일찍 = 짧고 탁한 틱, 놓침(별자리가 끊김) = 낮게 떨어지며 흐려지는 종
     if (why === "너무 일찍") this.snd.early();
     else this.snd.miss();
@@ -332,8 +358,20 @@ export class StarsScene extends RpgScene {
     l.star.setTint(0x50546a).setAlpha(0.45);
     l.glow.setAlpha(0);
     this.floatText(l.x, l.y - 8, why, "#7a7f90", 10);
-    // 끊긴 자리부터 다시 잇는다 (도감 등록은 놓친 별이 없을 때만)
-    this.lastHit.delete(l.n.group);
+    if (v.broken) {
+      // 놓쳐도 되는 수를 넘었다: 끊긴 자리부터 다시 잇는다 (이 별자리는 도감에 못 올라간다)
+      this.lastHit.delete(l.n.group);
+    } else {
+      // 11/18 놓쳐도 되는 별: 앞 별과 흐린 점선으로 이어 두고 이 자리에서 계속 잇는다
+      const prev = this.lastHit.get(l.n.group);
+      if (prev) {
+        const line = this.add.graphics().setDepth(5).setAlpha(0);
+        dashed(line, prev.x, prev.y, l.x, l.y, 0x8a90b8, 0.55);
+        this.tweens.add({ targets: line, alpha: 1, duration: 200 });
+        v.objs.push(line);
+      }
+      this.lastHit.set(l.n.group, { x: l.x, y: l.y });
+    }
     this.afterJudge(l);
   }
 
@@ -348,7 +386,7 @@ export class StarsScene extends RpgScene {
     const v = this.view(g);
     if (l.n.idx !== v.info.size - 1) return;
     const lives = this.live.filter((x) => x.n.group === g);
-    const complete = v.info.full && !v.broken && v.hits === v.info.size;
+    const complete = v.info.full && !v.broken && v.hits + v.misses === v.info.size;
     if (complete) this.complete(v);
     else if (v.hits >= Math.ceil(v.info.size * 0.6)) {
       const top = this.place(v, 0.5, Math.min(...v.con.stars.map((s) => s[1])));
@@ -509,5 +547,17 @@ export class StarsScene extends RpgScene {
       groups: [...this.doneGroups],
       perfectGroups: [...this.perfectGroups],
     };
+  }
+}
+
+/** 흐린 점선 (놓쳐도 되는 별을 이을 때) */
+function dashed(g: Phaser.GameObjects.Graphics, x0: number, y0: number, x1: number, y1: number, color: number, alpha: number): void {
+  const len = Math.hypot(x1 - x0, y1 - y0);
+  const n = Math.max(1, Math.floor(len / 6));
+  g.lineStyle(1, color, alpha);
+  for (let i = 0; i < n; i += 2) {
+    const a = i / n;
+    const b = Math.min(1, (i + 1) / n);
+    g.lineBetween(x0 + (x1 - x0) * a, y0 + (y1 - y0) * a, x0 + (x1 - x0) * b, y0 + (y1 - y0) * b);
   }
 }

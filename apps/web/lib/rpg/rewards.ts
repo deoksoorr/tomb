@@ -11,6 +11,7 @@ import {
   huntTotal,
   STAR_SCORE,
   starGroups,
+  starMissOk,
   STARS_PLAN_VER,
   starsCount,
   starsPlan,
@@ -213,7 +214,8 @@ function evalStarsAt(t: TicketInfo, r: StarsResult, eff: number, ver: number, le
 
 /**
  * 완성했다는 별자리 목록 검사 (결과 상한 방식): 계획에 있는 온전한 무리이고, 마지막 별이 그 시간 안에 나왔고,
- * 완성 무리 별 수의 합 ≤ 이은 별(완벽+좋아), 완벽으로만 이은 무리의 합 ≤ 완벽. 하나라도 어긋나면 null (판 전체 거절).
+ * 완성 무리 별 수의 합 − 무리마다 놓쳐도 되는 별 수(11/18 starMissOk)의 합 ≤ 이은 별(완벽+좋아),
+ * 완벽으로만 이은 무리(놓침 0)의 합 ≤ 완벽. 하나라도 어긋나면 null (판 전체 거절). 옛 화면(놓침 없이만 완성)은 더 좁은 조건이라 그대로 통과
  * 목록이 없으면(옛 화면이 보낸 결과) 빈 목록 — 도감 등록 없이 예전처럼 끝난다
  */
 export function checkStarGroups(plan: StarNote[], r: StarsResult, eff: number, sizeOf?: (id: string) => number | undefined): StarsDone[] | null {
@@ -227,7 +229,7 @@ export function checkStarGroups(plan: StarNote[], r: StarsResult, eff: number, s
     const info = all[g];
     if (!Number.isInteger(g) || !info || seen.has(g) || !info.full || info.lastT > eff + 300) return null;
     seen.add(g);
-    linked += info.size;
+    linked += info.size - starMissOk(info.con, info.size);
   }
   if (linked > r.perfect + r.good) return null;
   const pset = new Set<number>();

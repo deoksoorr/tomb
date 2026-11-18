@@ -31,7 +31,7 @@ import { rideGate } from "@/lib/rideGate";
 // 사냥터 로비에 있던 "별자리 잇기"를 여기서 한다. 판 시작·결과 검증은 사냥터와 같은 /api/rpg/run (game "stars") —
 // 시드로 다시 만든 별 계획으로 결과 상한을 검사하고, 판 시작 시각이 진짜 맑은 밤(KST)이면 포인트 ×1.5 (lib/stargaze).
 // 망원경 속은 언제나 밤하늘이라 낮에도 할 수 있다.
-// 한 별자리를 하나도 놓치지 않고 이으면 결과의 완성 목록을 서버가 검사해 도감 "별자리" 칸에 등록한다 (희귀 = 어려움 이상, 전설 = 맑은 밤 판).
+// 한 별자리를 놓쳐도 되는 별 수(11/18 starMissOk) 안에서 끝까지 이으면 결과의 완성 목록을 서버가 검사해 도감 "별자리" 칸에 등록한다 (희귀 = 어려움 이상, 전설 = 맑은 밤 판).
 
 type Phase = "intro" | "starting" | "playing" | "paused" | "submitting" | "result";
 type Run = { ticket: string; difficulty: Difficulty; starry: boolean; totalMs: number };
@@ -369,7 +369,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
 /** 결과: 이번 판에 완성한 별자리 (처음이면 "도감 등록!", 완벽으로만 이었으면 표시) */
 function ResultConstellations({ reward }: { reward: RunReward }) {
   const list = reward.constellations ?? [];
-  if (!list.length) return <p className={ui.hint}>이번 판에는 끝까지 이은 별자리가 없어요. 한 별자리의 별을 하나도 놓치지 않으면 도감에 등록돼요.</p>;
+  if (!list.length) return <p className={ui.hint}>이번 판에는 끝까지 이은 별자리가 없어요. 흔한 별자리는 별 1개, 희귀·전설은 2개까지 놓쳐도 끝까지 이으면 도감에 등록돼요.</p>;
   const fresh = list.filter((c) => c.isNew).length;
   const later = list.filter((c) => c.later).length;
   return (
