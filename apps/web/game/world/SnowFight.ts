@@ -24,6 +24,7 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { markCharTint } from "./charTint";
 import type { Sfx } from "./Sfx";
 import { snowBodyHit, type SnowBody } from "./snowHit";
+import { opaqueRect, type SnowOccluders } from "./snowMask";
 import { SNOW_NPC_LINES, type SnowNpc } from "./snowNpc";
 import { BALL_FRAME, ensureSnowFightTextures, MARK_VARIANTS, PUFF_FRAMES, SNOWFIGHT_TEX } from "./snowFightArt";
 
@@ -70,6 +71,8 @@ export type SnowFightDeps = {
   targets?: SnowTargets;
   /** 길을 막는 자리인지 (맵 충돌 칸 — snowNpc SnowGrid). 없으면 아무것도 안 막는다 */
   solid?: (x: number, y: number) => boolean;
+  /** 공을 막는 그림 (마을의 건물·나무·벤치·묘비 — 그 그림 앞면에 박힌다, 낮은 것은 위로 넘어간다). 없으면 맵 충돌 칸만 */
+  occluders?: SnowOccluders;
   /** 맞을 수 있는 NPC (각 무리가 들고 있는 목록 — 매 프레임 새로 만들지 않는다) */
   npcs?: () => Iterable<SnowNpc>;
   toast: (m: string) => void;
@@ -342,6 +345,7 @@ export class SnowFight {
     if (me) pl.view.snowBody(this.body);
     this.collectNpcs(live);
     const p = this.pos;
+    if (this.balls.length) this.d.occluders?.refresh(now);
     for (let i = this.balls.length - 1; i >= 0; i--) {
       const b = this.balls[i];
       const t = now - b.at - SNOWBALL_GATHER_MS;
@@ -410,7 +414,15 @@ export class SnowFight {
         this.d.targets?.surprise(hit.id);
         return true;
       }
-      if (this.d.solid?.(p.x, p.y)) {
+      // 그림 뒤로 들어가려는 순간 그 그림 앞면에 박힌다 (마을 건물·나무·묘비 — 예전엔 그림 뒤로 숨어 안 보였다)
+      const occ = this.d.occluders?.hit(p.x, p.y, p.z) ?? null;
+      if (occ) {
+        this.dropBall(i);
+        this.splatFront(p.x, occ.vy, occ.depth);
+        return true;
+      }
+      // 낮은 물체(벤치·울타리)는 공이 더 높이 날면 위로 넘어간다
+      if (this.d.solid?.(p.x, p.y) && !this.d.occluders?.over(p.x, p.y, p.z)) {
         this.dropBall(i);
         this.splatWall(b.px, b.py, p.x, p.y, p.z);
         return true;
@@ -432,11 +444,23 @@ export class SnowFight {
     const back = y - py > 0.5;
     let base = Math.floor(y);
     if (!back) for (let k = 0; k < 24 && this.d.solid?.(x, base + 1); k++) base++;
-    const depth = back ? Math.floor(py) - 1 : base + 1;
+    // 앞에서 맞았으면 그 자리 물체 그림 앞에 (그림 깊이가 충돌 밑동보다 아래일 수 있다 — 집·가게)
+    const od = back ? null : (this.d.occluders?.depthAt(x, y) ?? null);
+    const depth = back ? Math.floor(py) - 1 : Math.max(base + 1, od === null ? -Infinity : od + 1);
     this.puffAt(px, vy, depth - 0.6, false);
     if (this.onScreen(x, y)) this.d.sfx.snow("hit", 0.45);
     const v = (Math.abs(Math.round(x * 5 + y * 11)) % MARK_VARIANTS) | 0;
     const img = markCharTint(s.add.image(Math.round(px), vy, SNOWFIGHT_TEX.wall(v)).setOrigin(0.5, 0.45).setDepth(depth));
+    this.pushMark(img, s.time.now + WALL_MS);
+  }
+
+  /** 그림 앞면에 박혔다 (보이는 자리 x,vy · 그 그림 깊이): 퍽 + 납작한 자국을 그림 앞에. 조각은 그림 밑동 앞으로 떨어진다 */
+  private splatFront(x: number, vy: number, depth: number): void {
+    const s = this.d.scene;
+    this.puffAt(x, vy, depth + 1.4, false);
+    if (this.onScreen(x, vy)) this.d.sfx.snow("hit", 0.45);
+    const v = (Math.abs(Math.round(x * 5 + vy * 11)) % MARK_VARIANTS) | 0;
+    const img = markCharTint(s.add.image(Math.round(x), Math.round(vy), SNOWFIGHT_TEX.wall(v)).setOrigin(0.5, 0.45).setDepth(depth + 1));
     this.pushMark(img, s.time.now + WALL_MS);
   }
 
@@ -498,8 +522,10 @@ export class SnowFight {
         img.setScale(o.sx * (1 + 0.18 * k), o.sy * (1 - 0.16 * k));
       } else if (img.scaleX !== o.sx || img.scaleY !== o.sy) img.setScale(o.sx, o.sy);
       const tail = Math.max(0, t - (NPC_SNOW_MS - 500)) / 500;
+      // 그림의 불투명 꼭대기(실제 머리)에 얹는다 — 그림 위쪽 빈칸에 뜨지 않게
+      const top = opaqueRect(img);
       o.cap
-        .setPosition(Math.round(img.x + (0.5 - img.originX) * img.displayWidth), Math.round(img.y - img.originY * img.displayHeight + 2))
+        .setPosition(Math.round((top.left + top.right) / 2), Math.round(top.top + 2))
         .setDepth(img.depth + 0.3)
         .setVisible(img.visible)
         .setAlpha(img.alpha * (1 - tail));

@@ -10,6 +10,7 @@ import { bridge, type NetStatus, type UiEvents } from "../bridge";
 import { isSnowy, parseConceptOverride, type MapConcept } from "@/lib/mapConcept";
 import { SnowFight } from "../world/SnowFight";
 import { SnowGrid, type SnowNpc } from "../world/snowNpc";
+import { SnowOccluders } from "../world/snowMask";
 import { startMapConceptSync } from "@/lib/mapConceptClient";
 import { DEPTH, GRAVE_NEAR_RADIUS, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { GraveTooltip } from "../entities/Grave";
@@ -24,6 +25,7 @@ import { keyJosa } from "../input/keyHint";
 import { escape, overlaps, type Box } from "../logic/jump";
 import { DEADZONE_ENTER, type MoveInput } from "../logic/movement";
 import { nearestObject, pickInteraction } from "../logic/interact";
+import { inReach } from "../logic/reach";
 import { anchorAt, nudgeSpot, restoreAfterDenied, resumeSpot, spotVerdict, standBesideSpot } from "../logic/restore";
 import { besideFriend, FRIEND_ARRIVED } from "../logic/friendSpot";
 import { doorFront } from "../logic/doorSpot";
@@ -439,6 +441,8 @@ export class WorldScene extends Phaser.Scene {
       live: () => isSnowy(this.concept) && !this.inShop && !this.awayScene && !this.trip.away && !this.tripLock,
       water: (x, y) => inWater(x, y),
       solid: (x, y) => this.snowSolid().blocked(x, y),
+      // 11/18 건물·나무·벤치·묘비 그림 앞면에 박히게 (집 그림 뒤로 숨지 않게, 낮은 벤치는 위로 넘어가게)
+      occluders: new SnowOccluders({ scene: this, solid: (x, y) => this.snowSolid().blocked(x, y), skip: () => this.snowNpcImgs() }),
       npcs: () => this.npcsForSnow(),
       toast: (m) => this.toast(m),
     });
@@ -475,6 +479,16 @@ export class WorldScene extends Phaser.Scene {
       g.fillGroups([this.map.colliders, this.map.gridColliders, this.map.furnitureColliders]);
     }
     return g;
+  }
+
+  /** 공을 막는 그림에서 뺄 NPC 그림 (움직이는 것) */
+  private snowNpcImgs(): ReadonlySet<unknown> {
+    const set = new Set<unknown>();
+    for (const n of this.npcsForSnow()) {
+      const img = n.img?.();
+      if (img) set.add(img);
+    }
+    return set;
   }
 
   private npcsForSnow(): readonly SnowNpc[] {
@@ -1802,7 +1816,7 @@ export class WorldScene extends Phaser.Scene {
     // 오브젝트를 탭: 가까이 서 있으면 E와 같다
     const pl = this.player;
     const o = nearestObject(this.map.interactables, wx, wy + 6);
-    if (o && o.dist < 16 && Math.hypot(o.obj.x - pl.x, o.obj.y - pl.y) <= o.obj.r * 1.5 && !pl.airborne) this.useObject(o.obj);
+    if (o && o.dist < 16 && inReach(o.obj, pl.x, pl.y, 1.5) && !pl.airborne) this.useObject(o.obj);
   }
 
   /**

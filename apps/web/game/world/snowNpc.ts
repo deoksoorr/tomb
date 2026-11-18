@@ -1,6 +1,7 @@
 import type * as Phaser from "phaser";
 import type { AvatarView } from "../entities/AvatarView";
 import type { SnowBody } from "./snowHit";
+import { opaqueRect } from "./snowMask";
 
 // 11/18 눈싸움 (사용자 「모든 사람이 다 맞아야 함, NPC도 ㅋㅋ」 · 「건물에도 박게」):
 //  - NPC(마을·캠핑장 주민·강아지·고양이·사육사·관리소 사람들)도 맞는다. NPC 위치는 각 화면이 계산하니 맞음도 각 화면이 판정한다 (서버에 보내지 않는다)
@@ -30,15 +31,18 @@ export const SNOW_NPC_LINES: Readonly<Record<SnowVoice, readonly string[]>> = {
   dog: ["왈왈!", "깨갱!", "멍?!"],
 };
 
-/** 그림 한 장 NPC의 몸 상자 (원점 0.5,1 — 그림 아래 가운데가 발). 안 보이거나 흐리면 false */
-export function imageBox(img: Phaser.GameObjects.Image | null | undefined, out: SnowBody, topK = 0.9, halfK = 0.34): boolean {
+/**
+ * 그림 한 장 NPC의 몸 상자: 그림의 불투명 픽셀 상자로 잰다 (snowMask — 11/18 사용자 「고양이한테 맞춰도 아예 위에 올라가 있네」:
+ * 고양이·강아지 그림은 위가 비어 있어 그림 상자로 재면 머리 눈·퍽이 몸 위 허공에 떴다). 안 보이거나 흐리면 false
+ */
+export function imageBox(img: Phaser.GameObjects.Image | null | undefined, out: SnowBody, halfK = 0.4): boolean {
   if (!img || !img.visible || img.alpha < 0.3 || !img.active) return false;
-  const h = img.displayHeight;
-  out.x = img.x + (0.5 - img.originX) * img.displayWidth;
-  out.y = img.y + (1 - img.originY) * h - 1;
+  const r = opaqueRect(img);
+  out.x = (r.left + r.right) / 2;
+  out.y = r.bottom - 1;
   out.lift = 0;
-  out.top = h * topK;
-  out.half = Math.max(4, img.displayWidth * halfK);
+  out.top = Math.max(4, r.bottom - r.top);
+  out.half = Math.max(4, (r.right - r.left) * halfK);
   return true;
 }
 
