@@ -85,16 +85,15 @@ export function drawHouseLot(scene: Phaser.Scene, atlas: GlyphAtlas, lot: LotSpo
         .setDepth(base + 0.02);
       objs.push(smoke);
     }
-  // 문패: 지붕 위 두 줄 (1줄 번지 · 집 이름, 2줄 주인 · 호칭 · 점수). 11/16 닉네임 12자·집 이름 20자면 이웃 필지 문패와 겹쳐서
-  //  한 줄이 필지 폭을 넘으면 집 이름·주인 이름만 "…"로 줄인다 (번지·점수는 그대로, 모자라면 호칭부터 뺀다). 줌이 바뀌면 다시 맞춘다
+  // 문패: 지붕 위 세 줄 (1줄 번지 · 집 이름, 2줄 주인 · 점수, 3줄 호칭 작게). 11/16 닉네임 12자·집 이름 20자면 이웃 필지 문패와 겹쳐서
+  //  한 줄이 필지 폭을 넘으면 집 이름·주인 이름만 "…"로 줄인다 (번지·점수는 그대로). 줌이 바뀌면 다시 맞춘다
+  //  (글자는 GlyphAtlas가 measure 때 그려 넣으므로 호칭도 한 번 잰다)
+  //  11/18 호칭이 폭 때문에 어떤 집은 빠지고 어떤 집은 붙어 들쭉날쭉했다 → 셋째 줄에 늘 작게 (사용자)
   const t = houseTitle(h.score);
   const line1 = (max: number) => fitFirst([{ head: `${lot.lot}번지 · `, body: h.name, tail: mine ? " (내 집)" : "" }], max, (s) => atlas.measure(s));
   const line2 = (max: number) =>
     fitFirst(
-      [
-        { body: h.ownerName, tail: ` · ${t.name} · ${h.score}점`, minBody: [...h.ownerName].length },
-        { body: h.ownerName, tail: ` · ${h.score}점` },
-      ],
+      [{ body: h.ownerName, tail: ` · ${h.score}점` }],
       max,
       (s) => atlas.measure(s),
     );
@@ -103,8 +102,9 @@ export function drawHouseLot(scene: Phaser.Scene, atlas: GlyphAtlas, lot: LotSpo
   const depth = opts.labelDepth ?? DEPTH.labels - 1;
   const zoom = scene.cameras.main.zoom;
   const labels = [
-    plate(scene, cx, bottom - 9, size.w, zoom, line1).setTint(mine ? 0xffe39a : 0xf2ead3).setAlpha(0.92).setDepth(depth),
-    plate(scene, cx, bottom, size.w, zoom, line2).setTint(0xb9b4a4).setAlpha(0.85).setDepth(depth),
+    plate(scene, cx, bottom - 16, size.w, zoom, line1).setTint(mine ? 0xffe39a : 0xf2ead3).setAlpha(0.92).setDepth(depth),
+    plate(scene, cx, bottom - 7, size.w, zoom, line2).setTint(0xb9b4a4).setAlpha(0.85).setDepth(depth),
+    plate(scene, cx, bottom, size.w, zoom, () => (atlas.measure(`「${t.name}」`), `「${t.name}」`), TITLE_PX).setTint(0x9fb6a0).setAlpha(0.7).setDepth(depth),
   ];
   return {
     objs,
@@ -123,9 +123,12 @@ export function drawHouseLot(scene: Phaser.Scene, atlas: GlyphAtlas, lot: LotSpo
 const PLATE_PAD = 6;
 const plateFits = new WeakMap<Phaser.GameObjects.BitmapText, (zoom: number) => string>();
 
-function plate(scene: Phaser.Scene, x: number, y: number, lotW: number, zoom: number, fit: (max: number) => string): Phaser.GameObjects.BitmapText {
+/** 문패 셋째 줄(호칭) 글씨 크기. 픽셀 글꼴이라 12보다 작게 줄이면 뭉개져서 크기는 같게, 옅은 색·「」로 작아 보이게 */
+const TITLE_PX = FONT_PX;
+
+function plate(scene: Phaser.Scene, x: number, y: number, lotW: number, zoom: number, fit: (max: number) => string, px = FONT_PX): Phaser.GameObjects.BitmapText {
   const f = (z: number) => fit(Math.floor((lotW - PLATE_PAD) * z));
-  const l = scene.add.bitmapText(x, y, FONT_KEY, f(zoom), FONT_PX).setOrigin(0.5, 1);
+  const l = scene.add.bitmapText(x, y, FONT_KEY, f(zoom), px).setOrigin(0.5, 1);
   plateFits.set(l, f);
   return l;
 }
