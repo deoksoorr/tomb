@@ -237,7 +237,9 @@ export class CampSnowmen {
   private removeWall(w: Wall | null): void {
     if (!w) return;
     this.walls.delete(w.zone);
-    this.wallGroup.remove(w.zone, true, true);
+    // 11/18 장면이 내려갈 때 물리 세계가 그룹을 먼저 지웠으면(children 없음) 그룹에서 빼지 않는다 (운영 오류 'contains' — 그 뒤 정리가 끊겨 카메라 입력이 남았다)
+    if (this.wallGroup.children) this.wallGroup.remove(w.zone, true, true);
+    else w.zone.destroy();
   }
 
   // ── 실시간 ──
@@ -939,6 +941,7 @@ export class CampSnowmen {
     for (const id of [...this.men.keys()]) this.removeMan(id);
     for (const t of this.tracks.splice(0)) t.destroy();
     this.clearPeers();
-    this.wallGroup.destroy(true);
+    if (this.wallGroup.children) this.wallGroup.destroy(true);
+    this.walls.clear();
   }
 }

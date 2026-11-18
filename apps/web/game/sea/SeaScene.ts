@@ -1665,11 +1665,14 @@ export class SeaScene extends Phaser.Scene {
           { x: pl.x, y: this.deckLast.y },
           { x: this.deckLast.x, y: pl.y },
           { x: this.deckLast.x, y: this.deckLast.y },
-        ].find((q) => sideOf(q.x, q.y))!;
-        (pl.sprite.body as Phaser.Physics.Arcade.Body).reset(fix.x, fix.y);
-        this.deckLast.x = fix.x;
-        this.deckLast.y = fix.y;
-        return;
+        ].find((q) => sideOf(q.x, q.y));
+        // 11/18 지난 자리도 이미 반대편이면(물때·밀려남으로 데크 모양 밖에서 시작) 되돌릴 곳이 없다 → 지금 편을 받아들인다 (운영 오류 deckGuard 'x')
+        if (fix) {
+          (pl.sprite.body as Phaser.Physics.Arcade.Body).reset(fix.x, fix.y);
+          this.deckLast.x = fix.x;
+          this.deckLast.y = fix.y;
+          return;
+        }
       }
       this.deckSide = on;
     }

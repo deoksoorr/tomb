@@ -300,9 +300,21 @@ export class CameraRig {
     this.cam.scrollY = this.cam.clampY(this.cam.scrollY - (dyScreen * k) / this.cam.zoom);
   }
 
+  /** 11/18 장면이 내려가 카메라가 지워졌는데 정리(destroy)가 못 불렸으면 (운영 오류 getWorldPoint·clampX null) 캔버스 입력을 스스로 뗀다 */
+  private camGone(): boolean {
+    return !(this.cam as unknown as { matrix?: { matrix?: unknown } | null }).matrix?.matrix;
+  }
+
   private listen<K extends keyof HTMLElementEventMap>(type: K, fn: (e: HTMLElementEventMap[K]) => void, opts?: AddEventListenerOptions) {
-    this.canvas.addEventListener(type, fn as EventListener, opts);
-    this.off.push(() => this.canvas.removeEventListener(type, fn as EventListener, opts));
+    const run = (e: Event) => {
+      if (this.camGone()) {
+        this.destroy();
+        return;
+      }
+      fn(e as HTMLElementEventMap[K]);
+    };
+    this.canvas.addEventListener(type, run, opts);
+    this.off.push(() => this.canvas.removeEventListener(type, run, opts));
   }
 
   private attach(): void {

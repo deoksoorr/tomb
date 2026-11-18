@@ -11,7 +11,8 @@ export const FTEX = {
   /** 11/17 판마다 따로 (기본판은 예전 키 그대로) */
   npc: (id: string, f: number, concept: MapConcept = "default") => seasonKey(`forage-npc-${id}-${f}`, concept),
   stall: (id: string) => `forage-stall-${id}`,
-  node: (kind: string, f: number) => `forage-node-${kind}-${f}`,
+  /** 11/18 곤충 수풀은 밤 그림을 따로 키로 (예전엔 밤낮이 바뀔 때 같은 키를 지우고 다시 올려서, 다른 장면에 남은 그림이 지워진 텍스처를 가리켰다) */
+  node: (kind: string, f: number, night = false) => (kind === "bug" && night ? `forage-node-${kind}-n-${f}` : `forage-node-${kind}-${f}`),
   bobber: "forage-bobber",
   bang: "forage-bang",
   icon: (id: string) => `forage-icon-${id}`,
@@ -288,11 +289,10 @@ export function ensureForageTextures(scene: Phaser.Scene, night: boolean): void 
     tx.addCanvas(FTEX.bobber, bobber());
     tx.addCanvas(FTEX.bang, bang());
   }
-  // 곤충 수풀은 낮/밤 그림이 다르다 → 밤낮이 바뀌면 다시 올린다
+  // 곤충 수풀은 낮/밤 그림이 다르다 → 밤 그림은 다른 키 (지우지 않는다: 텍스처는 장면끼리 같이 쓰여 마을·캠핑장·바닷가 그림이 서로 가리킨다)
   for (const k of NODE_KINDS)
     for (let f = 0; f < 2; f++) {
-      const key = FTEX.node(k, f);
-      if (k === "bug" && tx.exists(key)) tx.remove(key);
+      const key = FTEX.node(k, f, night);
       if (!tx.exists(key)) tx.addCanvas(key, nodeArt(k, f, night));
     }
 }
