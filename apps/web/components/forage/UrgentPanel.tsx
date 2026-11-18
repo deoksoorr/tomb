@@ -15,7 +15,7 @@ import {
   urgentAnnounce,
   urgentCapLine,
   urgentFilled,
-  urgentKingsLine,
+  URGENT_KING_LINE,
   urgentRewardLine,
   urgentStage,
   type UrgentKind,
@@ -204,7 +204,7 @@ function Top3({ ev, ended = false }: { ev: UrgentLive; ended?: boolean }) {
   return (
     <>
       <p className={u.subhead}>가장 많이 낸 사람</p>
-      {(ev.kings ?? 0) >= 2 && <p className={ui.hint}>{urgentKingsLine(ev.kings ?? 0)}</p>}
+      <p className={ui.hint}>{URGENT_KING_LINE}</p>
       <ol className={u.top3}>
         {ev.top.map((t, i) => (
           <li key={`${t.name}-${i}`}>
