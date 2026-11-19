@@ -737,7 +737,7 @@ export function inkShadowCanvas(): HTMLCanvasElement {
 /** 의견 없음: 몸은 비치고 테두리만 아른거린다 → 시트에서 외곽선만 남긴 그림 */
 export function outlineOnly(src: HTMLCanvasElement, col: Color): HTMLCanvasElement {
   const { canvas, ctx } = makeCanvas(src.width, src.height);
-  const sc = src.getContext("2d")!;
+  const sc = src.getContext("2d", { willReadFrequently: true })!;
   const img = sc.getImageData(0, 0, src.width, src.height);
   const d = img.data;
   const out = ctx.createImageData(src.width, src.height);

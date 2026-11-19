@@ -55,7 +55,7 @@ function canvas(w: number, h: number, draw: (c: CanvasRenderingContext2D) => voi
   const cv = document.createElement("canvas");
   cv.width = w;
   cv.height = h;
-  const c = cv.getContext("2d");
+  const c = cv.getContext("2d", { willReadFrequently: true });
   if (!c) return null;
   draw(c);
   return cv;

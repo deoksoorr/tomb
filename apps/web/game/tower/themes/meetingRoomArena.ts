@@ -109,7 +109,7 @@ export class MeetingArena {
     if (!sc.textures.exists(key)) {
       const bg = mtBackgroundCanvas(this.plan, floor, this.view, seed & 0xffff);
       // 11/17 겨울: 창마다 서리·창턱 눈·종이 눈송이
-      if (this.view.snow) for (const [i, w] of mtWindows(this.plan.wall).entries()) windowWinter(bg.getContext("2d")!, w, { night: this.view.time === "night", salt: 500 + i * 7 + (seed & 31), paper: true });
+      if (this.view.snow) for (const [i, w] of mtWindows(this.plan.wall).entries()) windowWinter(bg.getContext("2d", { willReadFrequently: true })!, w, { night: this.view.time === "night", salt: 500 + i * 7 + (seed & 31), paper: true });
       sc.textures.addCanvas(key, bg);
     }
     this.keep(sc.add.image(0, 0, key).setOrigin(0, 0).setDepth(D_BG));

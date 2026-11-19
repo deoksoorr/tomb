@@ -84,7 +84,7 @@ function ensureFont(scene: Phaser.Scene, style: NumStyle): void {
   const cv = document.createElement("canvas");
   cv.width = total;
   cv.height = GH;
-  const c = cv.getContext("2d");
+  const c = cv.getContext("2d", { willReadFrequently: true });
   if (!c) return;
   let x0 = 0;
   const frames: [string, number, number][] = [];
@@ -171,6 +171,8 @@ export class DamageNumbers {
     mobile: boolean,
   ) {
     this.cap = mobile ? 40 : 90;
+    // 11/19 글꼴 텍스처는 판 시작 때 모두 미리 만든다 (첫 타격 때 만들면 캔버스 읽기로 100ms 넘게 멈췄다 — 전투 프레임 측정)
+    for (const st of Object.keys(STYLES) as NumStyle[]) ensureFont(scene, st);
   }
 
   private get zoom(): number {

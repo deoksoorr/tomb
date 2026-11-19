@@ -138,7 +138,7 @@ export function snowGround(ctx: Ctx, mask: readonly Rect[], salt: number): void 
 
 /** 바닥 무늬(모래 언덕·광장 무늬)에 눈: 거의 눈으로 덮되 밝기 차이로 모양은 남는다 */
 export function dustSnow(src: HTMLCanvasElement): void {
-  const ctx = src.getContext("2d");
+  const ctx = src.getContext("2d", { willReadFrequently: true });
   if (!ctx) return;
   const img = ctx.getImageData(0, 0, src.width, src.height);
   const d = img.data;
@@ -303,7 +303,7 @@ function skyString(c: Ctx, w: number, y0: number, gap: number, sag: number): Bul
 
 /** 벽의 밋밋한 자리 (리스를 걸 곳): 13×13 칸의 밝기 흩어짐이 작은 곳, 창과 겹치지 않게, 서로 멀리 */
 function plainSpots(floor: HTMLCanvasElement, wallH: number, avoid: readonly Rect[], want: number): { x: number; y: number }[] {
-  const ctx = floor.getContext("2d");
+  const ctx = floor.getContext("2d", { willReadFrequently: true });
   if (!ctx || wallH < 18) return [];
   const y = Math.max(2, Math.round((wallH - 14) / 2));
   const d = ctx.getImageData(0, y, AW, 13).data;
@@ -510,7 +510,7 @@ function topAt(m: Img, x: number, maxY = m.h): number {
 }
 function drawGrid(m: Img, g: Grid, ox: number, oy: number): void {
   const c = g.toCanvas();
-  const d = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+  const d = c.getContext("2d", { willReadFrequently: true })!.getImageData(0, 0, c.width, c.height).data;
   for (let y = 0; y < c.height; y++)
     for (let x = 0; x < c.width; x++) {
       const i = (y * c.width + x) * 4;
@@ -633,7 +633,7 @@ export function dressProp(src: HTMLCanvasElement, kind: string, v: number, flip:
   let cur = canvas;
   // 윗면 눈 (바깥 소품 · 밖에서 들어온 차)
   if (out || role.snow) cur = snowCap(cur, { depth: 2, maxY: H - 2, seed: 70 + salt });
-  const c2 = cur.getContext("2d")!;
+  const c2 = cur.getContext("2d", { willReadFrequently: true })!;
   const img = c2.getImageData(0, 0, W, H);
   const m: Img = { w: W, h: H, d: img.data };
   const mx = (x: number, w: number) => (flip ? W - x - w : x);
@@ -762,7 +762,7 @@ export function dressProp(src: HTMLCanvasElement, kind: string, v: number, flip:
     }
     if (role.wreath) {
       const wr = doorWreath();
-      const wd = wr.getContext("2d")!.getImageData(0, 0, wr.width, wr.height).data;
+      const wd = wr.getContext("2d", { willReadFrequently: true })!.getImageData(0, 0, wr.width, wr.height).data;
       const ox = Math.round((W - wr.width) / 2);
       const oy = PROP_PAD + 8;
       for (let y = 0; y < wr.height; y++)

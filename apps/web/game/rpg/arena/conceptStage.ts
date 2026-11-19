@@ -77,7 +77,7 @@ export function bulbGlow(
     const sheet = bulbGlowSheet(w, h, bulbs);
     // 별(트리 꼭대기)은 두 장 다 밝게 — 크기만 숨 쉬듯
     if (stars.length) {
-      const c = sheet.getContext("2d")!;
+      const c = sheet.getContext("2d", { willReadFrequently: true })!;
       for (let f = 0; f < 2; f++)
         for (const s of stars) {
           const R = f ? 9 : 7;
@@ -227,7 +227,7 @@ export class ArenaConcept {
       if (!sc.textures.exists(TEX.flake)) {
         const c = document.createElement("canvas");
         c.width = c.height = 3;
-        const x = c.getContext("2d")!;
+        const x = c.getContext("2d", { willReadFrequently: true })!;
         x.fillStyle = "rgba(255,255,255,0.55)";
         x.fillRect(0, 1, 3, 1);
         x.fillRect(1, 0, 1, 3);

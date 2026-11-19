@@ -610,7 +610,7 @@ function toUrl(key: string, g: Grid, scale: number): string {
   const cv = document.createElement("canvas");
   cv.width = g.w * scale;
   cv.height = g.h * scale;
-  const ctx = cv.getContext("2d");
+  const ctx = cv.getContext("2d", { willReadFrequently: true });
   if (!ctx) return "";
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(src, 0, 0, cv.width, cv.height);

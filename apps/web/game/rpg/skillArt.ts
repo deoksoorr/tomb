@@ -1530,7 +1530,7 @@ export function art(scene: Phaser.Scene, name: string): string {
   const cv = document.createElement("canvas");
   cv.width = a.w;
   cv.height = a.h;
-  const c = cv.getContext("2d");
+  const c = cv.getContext("2d", { willReadFrequently: true });
   if (!c) return "__WHITE";
   a.draw(c, a.w, a.h);
   const tex = scene.textures.addCanvas(key, cv);

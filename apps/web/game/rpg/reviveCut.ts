@@ -57,7 +57,7 @@ function ensureBeam(scene: Phaser.Scene): void {
   const cv = document.createElement("canvas");
   cv.width = 16;
   cv.height = 96;
-  const c = cv.getContext("2d");
+  const c = cv.getContext("2d", { willReadFrequently: true });
   if (!c) return;
   for (let x = 0; x < 16; x++) {
     const a = Math.max(0, 1 - Math.abs(x - 7.5) / 8) ** 1.6;

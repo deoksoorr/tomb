@@ -292,7 +292,7 @@ export class Arena {
     addCanvas(sc, TEX.px, () => {
       const c = document.createElement("canvas");
       c.width = c.height = 2;
-      const x = c.getContext("2d")!;
+      const x = c.getContext("2d", { willReadFrequently: true })!;
       x.fillStyle = "#fff";
       x.fillRect(0, 0, 2, 2);
       return c;
@@ -710,7 +710,7 @@ export class Arena {
       const c = document.createElement("canvas");
       c.width = Math.round(img.width * k);
       c.height = Math.round(img.height * k);
-      const x = c.getContext("2d")!;
+      const x = c.getContext("2d", { willReadFrequently: true })!;
       x.imageSmoothingEnabled = false;
       x.drawImage(img, 0, 0, c.width, c.height);
       const t = this.scene.textures.addCanvas(key, c);
