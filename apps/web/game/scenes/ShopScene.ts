@@ -131,7 +131,7 @@ export class ShopScene extends Phaser.Scene {
     const browse = interactLabel("둘러보기");
     const out = interactLabel("나가기");
     atlas.ensure(browse + out);
-    this.exitPrompt = this.add.bitmapText(0, 0, FONT_KEY, out, FONT_PX).setOrigin(0.5, 1).setTint(0xffe39a).setDepth(DEPTH.labels).setVisible(false);
+    this.exitPrompt = this.add.bitmapText(0, 0, FONT_KEY, out, FONT_PX).setOrigin(0, 0.5).setTint(0xffe39a).setDepth(DEPTH.labels).setVisible(false);
     this.prompt = this.add
       .bitmapText(KEEPER.x, KEEPER.y - 24, FONT_KEY, browse, FONT_PX)
       .setOrigin(0.5, 1)
@@ -213,10 +213,10 @@ export class ShopScene extends Phaser.Scene {
     this.prompt.setScale(1 / this.cameras.main.zoom).setVisible(this.nearKeeper());
     for (let i = 0; i < this.lamps.length; i++) this.lamps[i].setAlpha(this.ctx.reduced ? 0.45 : 0.4 + 0.06 * Math.sin(time / 130 + i));
 
-    // 문 앞이면 「E 나가기」 (이름표 위 — 문 칸은 화면 아래 끝이라 발밑에 두면 잘린다)
+    // 문 앞이면 「E 나가기」 — 11/19 캐릭터 오른쪽 옆에 (머리 위는 이름표·칭호와 겹치고, 문 칸은 화면 아래 끝이라 발밑은 잘린다)
     const z = 1 / this.cameras.main.zoom;
     const out = this.atDoor() && !this.nearKeeper();
-    this.exitPrompt.setPosition(this.player.x, this.player.y - 30).setScale(z).setVisible(out);
+    this.exitPrompt.setPosition(this.player.x + 12, this.player.y - 10).setScale(z).setVisible(out);
     setDoorHint(out ? "나가기" : null);
   }
 
