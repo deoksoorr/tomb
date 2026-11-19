@@ -22,7 +22,7 @@ import s from "./forage.module.css";
 
 const EMPTY: Record<NpcId, string> = {
   fishmonger: "팔 물고기가 없어요. 호수 잔교나 강둑, 바닷가 갯바위에서 낚아 와요.",
-  collector: "팔 게 없어요. 숲·풀밭·언덕·갯벌에서 캐거나 수풀에서 곤충을 잡아 와요.",
+  collector: "팔 게 없어요. 숲, 풀밭, 북서쪽 언덕, 갯벌에서 캐거나 수풀에서 곤충을 잡아 와요.",
 };
 
 export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () => void }) {

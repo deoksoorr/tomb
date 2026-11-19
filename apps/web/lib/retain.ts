@@ -122,7 +122,7 @@ export const FIRST_STEPS: readonly FirstStep[] = [
   { id: "bag", bit: 64, label: "가방 열어 보기", pc: "I를 눌러 꾸미기를 구경해요.", touch: "아래 [가방]을 눌러요.", reward: ENERGY },
   { id: "fish", bit: 128, label: "물고기 한 마리 낚기", pc: "호수 잔교나 강둑의 낚시 자리에서 E를 눌러 직접 낚아요. 자동 낚시는 세지 않아요.", touch: "낚시 자리에서 [상호작용]을 눌러 직접 낚아요. 자동 낚시는 세지 않아요.", reward: DOC2 },
   { id: "gather", bit: 256, label: "채집 한 번 하기", pc: "숲이나 풀밭에서 반짝이는 풀이나 돌 앞에서 E를 눌러요.", touch: "반짝이는 풀이나 돌 앞에서 [상호작용]을 눌러요.", reward: DOC2 },
-  { id: "stars", bit: 512, label: "별자리 한 판 잇기", pc: "언덕이나 광장의 망원경 앞에서 E를 눌러요.", touch: "망원경 앞에서 [상호작용]을 눌러요.", reward: DOC2 },
+  { id: "stars", bit: 512, label: "별자리 한 판 잇기", pc: "마을 곳곳의 망원경 앞에서 E를 눌러요. 지도에 망원경으로 표시돼요.", touch: "망원경 앞에서 [상호작용]을 눌러요.", reward: DOC2 },
   { id: "hunt", bit: 1024, label: "사냥터 한 판", pc: "아래 [사냥]을 누르면 사냥터 입구까지 걸어가요.", touch: "아래 [사냥]을 누르면 사냥터 입구까지 걸어가요.", reward: { points: 300 } },
   { id: "visit", bit: 2048, label: "이웃 집 구경하기", pc: "아래 [집]에서 「주거 구역 보기」를 누르면 집들이 모인 곳이 보여요. 이웃 집 문 앞에서 E를 눌러 들어가요.", touch: "아래 [집]에서 「주거 구역 보기」를 눌러요. 이웃 집 문 앞에서 [상호작용]을 눌러 들어가요.", reward: DOC2 },
   // 11/19 버스 나들이 (도착 = 게임 map:changed camp·sea)
@@ -252,7 +252,7 @@ export const TODO_POOL: readonly TodoDef[] = [
   // ── 놀이 ──
   { kind: "fish", cat: "play", label: "물고기 3마리 낚기", need: 3, unit: "마리", hint: "호수, 강, 바닷가 어디서든 직접 낚으면 세요. 자동 낚시는 세지 않아요.", group: "fish", guide: "fish" },
   { kind: "gather", cat: "play", label: "채집 2번 하기", need: 2, unit: "번", hint: "반짝이는 풀·돌·수풀에서 채집해요.", group: "gather", guide: "gather" },
-  { kind: "stars", cat: "play", label: "별자리 잇기 한 판", need: 1, unit: "판", hint: "언덕이나 광장의 망원경에서 해요.", guide: "stars" },
+  { kind: "stars", cat: "play", label: "별자리 잇기 한 판", need: 1, unit: "판", hint: "마을 곳곳의 망원경에서 해요. 지도에 망원경으로 표시돼요.", guide: "stars" },
   {
     kind: "haunt",
     cat: "play",

@@ -190,20 +190,21 @@ export function questText(q: QuestSpec): string {
   return star ? `${star}${CAT_LABEL[q.cat]} ${q.count}${unit(q.cat)}` : `${CAT_LABEL[q.cat]} 아무거나 ${q.count}${unit(q.cat)}`;
 }
 
+// 11/19 지도에 보이는 이름으로 (「언덕」·「동굴 앞」은 어딘지 몰랐다 — 사용자). 채집 지점은 지도에 작은 점으로 보인다
 const HOW: Record<LifeCat, string> = {
-  fish: "호수 잔교·강둑·연못·배 위에서 낚시",
-  bug: "수풀에서 곤충 잡기",
-  herb: "숲·풀밭·언덕·호숫가의 약초",
-  ore: "언덕·동굴 앞 광석",
-  dig: "풀밭·숲·언덕의 땅 파기",
+  fish: "호수 잔교, 강둑, 연못, 배 위에서 낚시해요.",
+  bug: "반짝이는 수풀에서 곤충을 잡아요. 지도에 작은 점으로 보여요.",
+  herb: "숲, 풀밭, 호숫가, 망원경 있는 북서쪽 언덕에서 반짝이는 풀을 캐요. 지도에 작은 점으로 보여요.",
+  ore: "망원경 있는 북서쪽 언덕과 사냥터 입구 둘레에서 반짝이는 돌을 캐요. 캠핑장 바위와 바닷가 갯바위에도 있어요.",
+  dig: "풀밭, 숲, 망원경 있는 북서쪽 언덕에서 반짝이는 땅을 파요. 지도에 작은 점으로 보여요.",
 };
 
 /** 어디서·언제 한 줄 (특정 종이면 그 종의 시간·날씨) */
 export function questHint(q: QuestSpec): string {
   const s = q.sp ? speciesById(q.sp) : undefined;
   if (!s) return HOW[q.cat];
-  const when = [s.time?.map((t) => PHASE_LABEL[t]).join("·"), s.weather?.map((w) => WEATHER_LABEL[w]).join("·")].filter(Boolean).join(" · ");
-  return `${HOW[q.cat]}${when ? ` · ${when}` : ""}`;
+  const when = [s.time?.map((t) => PHASE_LABEL[t]).join("이나 "), s.weather?.map((w) => WEATHER_LABEL[w]).join("이나 ")].filter(Boolean).join(", ");
+  return `${HOW[q.cat]}${when ? ` ${when}에만 나와요.` : ""}`;
 }
 
 /**

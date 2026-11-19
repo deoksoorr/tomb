@@ -102,7 +102,7 @@ function StarGuide({ dex }: { dex: Record<string, DexEntry> }) {
           return { label: t.label, value: `${got}/${all.length}`, tone: got === all.length ? ("good" as const) : undefined };
         })}
       />
-      <p className={s.hint}>별 보기 언덕의 망원경에서 별자리 잇기를 하면 모을 수 있어요. 한 별자리를 하나도 놓치지 않고 이으면 등록돼요. &apos;좋아&apos; 이상이면 놓친 게 아니에요. 한 판에 새로 등록되는 별자리는 3개까지예요.</p>
+      <p className={s.hint}>마을 곳곳의 망원경에서 별자리 잇기를 하면 모을 수 있어요. 한 별자리를 하나도 놓치지 않고 이으면 등록돼요. &apos;좋아&apos; 이상이면 놓친 게 아니에요. 한 판에 새로 등록되는 별자리는 3개까지예요.</p>
     </InfoCard>
   );
 }

@@ -44,7 +44,7 @@ export default function ForageBag() {
       {!state ? (
         <p className={error ? ui.error : ui.hint}>{error ?? "불러오는 중…"}</p>
       ) : items.length === 0 ? (
-        <p className={ui.hint}>아직 없어요. 호수 잔교·강둑·연못가에서 낚시하고, 숲·풀밭·언덕에서 캐 보세요.</p>
+        <p className={ui.hint}>아직 없어요. 호수 잔교·강둑·연못가에서 낚시하고, 숲, 풀밭, 북서쪽 언덕의 반짝이는 곳에서 캐 보세요.</p>
       ) : (
         <div className={s.bagGrid}>
           {items.map(({ sp, n }) => (
