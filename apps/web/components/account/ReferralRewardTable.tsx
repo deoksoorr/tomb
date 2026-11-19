@@ -1,4 +1,4 @@
-import { REF_DAY_MIN, REF_GRAND_MONTH_CAP, REF_MONTH_CAP, REF_NEED_DAYS, refGrandText, refRewardText } from "@/lib/referralRules";
+import { REF_DAY_MIN, REF_GRAND_MONTH_CAP, REF_MONTH_CAP, REF_NEED_DAYS, REF_LANTERN_ONCE, refGrandText, refRewardText } from "@/lib/referralRules";
 import { stayText } from "@/lib/stayTime";
 import ui from "../ui/ui.module.css";
 import styles from "./MyPanel.module.css";
@@ -33,7 +33,7 @@ export default function ReferralRewardTable() {
         </tbody>
       </table>
       <p className={ui.hint}>
-        「자리 잡기」는 새로 온 사람이 하루 {stayText(REF_DAY_MIN)} 넘게 머문 날이 {REF_NEED_DAYS}일이 된 거예요. 이어진 날이 아니어도 돼요. 확인을 마치면 꾸미기와 폭죽은 선물함으로, 물약과 서류는 사냥 가방으로 보내 드려요. 그 아래 단계는 받지 않아요.
+        「자리 잡기」는 새로 온 사람이 하루 {stayText(REF_DAY_MIN)} 넘게 머문 날이 {REF_NEED_DAYS}일이 된 거예요. 이어진 날이 아니어도 돼요. 확인을 마치면 꾸미기와 폭죽은 선물함으로, 물약과 서류는 사냥 가방으로 보내 드려요. {REF_LANTERN_ONCE} 그 아래 단계는 받지 않아요.
       </p>
     </section>
   );

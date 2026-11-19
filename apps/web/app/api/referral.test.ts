@@ -207,6 +207,29 @@ describe("조건 달성과 보상", () => {
     expect((await view(b)).giftsGot).toBe(1);
   });
 
+  it("11/19 마중 등불은 한 사람에게 한 번만: 두 번째 추천부터는 등불 없이 사냥 가방 몫만 (새 이웃으로 받은 사람이 추천해도 그렇다)", async () => {
+    const lanterns = async (v: Visitor) => (await refGifts(v)).filter((g) => g.items.some((i) => i.itemId === REF_REWARD_ITEM)).length;
+    const a = await newVisitor("등불추천인");
+    const [b, c] = [await newVisitor("등불이웃1"), await newVisitor("등불이웃2")];
+    for (const k of [b, c]) {
+      await enter(k, await codeOf(a));
+      await fill(k);
+      await referralOnPresence(k.id);
+    }
+    expect(await refGifts(a)).toHaveLength(2);
+    expect(await lanterns(a)).toBe(1);
+    // 등불 없는 선물도 사냥 가방에 넣었다는 글은 간다
+    expect((await refGifts(a)).find((g) => g.items.length === 0)?.note).toContain("사냥 가방에 넣었어요");
+    expect((await getRpgStore().get(a.id)).mats?.doc).toBe(REF_REWARD_BUNDLE.mats!.m_doc! * 2);
+    // 새 이웃으로 등불을 받은 b가 또 데려오면 b는 등불을 또 받지 않는다
+    const d = await newVisitor("등불이웃3");
+    await enter(d, await codeOf(b));
+    await fill(d);
+    await referralOnPresence(d.id);
+    expect(await lanterns(b)).toBe(1);
+    expect(await lanterns(d)).toBe(1);
+  });
+
   it("추천인 포인트는 한 달에 5명까지, 다음 달에는 다시 받는다", async () => {
     const now = vi.spyOn(Date, "now").mockReturnValue(NOON);
     const a = await newVisitor("상한추천인");

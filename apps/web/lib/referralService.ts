@@ -29,7 +29,7 @@ import {
 import { assessPair, memberLinks, type RequestSignals } from "./sameUser";
 import { levelOfReasons, mergeReasons, parseReason, sameScore, type MemberLinks, type SameLevel } from "./sameUserRules";
 import { isStaff } from "./staff";
-import { getAccounts, NO_NAME } from "./store";
+import { getAccounts, getGifts, NO_NAME } from "./store";
 import { getReferrals, type GrandOpts, type ReferralRecord } from "./store/referrals";
 import { getActivity } from "./store/userActivity";
 import { STAY_TICK_MINUTES } from "./attendStay";
@@ -200,6 +200,14 @@ async function progressOf(recs: readonly Pick<ReferralRecord, "refereeId" | "at"
   );
 }
 
+/** 마중 등불을 이미 가졌나: 입었거나 벗어 둔 것, 또는 선물함에 온 등불 (받았든 안 받았든) */
+async function hasRefLantern(id: string, now: number): Promise<boolean> {
+  const acct = await getAccounts().get(id, kstDay(now), now);
+  if ([...acct.equipped, ...acct.stash].some((e) => e.itemId === REF_REWARD_ITEM)) return true;
+  const box = await getGifts().inbox(id, await giftAccountCreatedAt(id, now), now);
+  return box.some((g) => g.items.some((i) => i.itemId === REF_REWARD_ITEM));
+}
+
 export const isQualified = (p: { days: number }) => p.days >= REF_NEED_DAYS;
 
 /** 보상 선물 보내기 (달성 표시는 이미 남았다 → 실패하면 기록만, 관리자 추천 탭에서 보고 직접 보낼 수 있다) */
@@ -210,13 +218,18 @@ async function sendRewards(
 ): Promise<void> {
   const ids = [rec.refereeId, rec.referrerId, ...(paid.grandPaid && rec.grandId ? [rec.grandId] : [])];
   const [referee, referrer, grand] = await getAccounts().summaries(ids);
-  // 11/19 포인트 대신 아이템: 친구 초대 한정 꾸미기(영구)·작은 폭죽은 선물함, 물약·결재 서류는 사냥 가방에 바로
-  const lantern: GiftItem[] = [{ itemId: REF_REWARD_ITEM, count: 1, term: "perm" }];
+  // 11/19 포인트 대신 아이템: 친구 초대 한정 꾸미기(영구)·작은 폭죽은 선물함, 물약·결재 서류는 사냥 가방에 바로.
+  // 등불은 한 사람에게 한 번만 → 이미 있으면 등불 없이 글만 보낸다 (사냥 가방에 넣었다는 알림)
+  const [refereeHas, referrerHas] = await Promise.all([
+    paid.refereePaid ? hasRefLantern(rec.refereeId, now) : true,
+    paid.referrerPaid ? hasRefLantern(rec.referrerId, now) : true,
+  ]);
+  const lantern = (has: boolean): GiftItem[] => (has ? [] : [{ itemId: REF_REWARD_ITEM, count: 1, term: "perm" }]);
   const bagNote = (b: typeof REF_REWARD_BUNDLE) => ` ${bundleText(b)}은 사냥 가방에 넣었어요.`;
   const gifts: Promise<unknown>[] = [];
   if (paid.refereePaid)
     gifts.push(
-      sendGift({ target: rec.refereeId, targetName: referee?.name ?? null, from: REF_GIFT_FROM, note: REF_GIFT_NOTE_REFEREE + bagNote(REF_REWARD_BUNDLE), points: 0, items: lantern }, now),
+      sendGift({ target: rec.refereeId, targetName: referee?.name ?? null, from: REF_GIFT_FROM, note: REF_GIFT_NOTE_REFEREE + bagNote(REF_REWARD_BUNDLE), points: 0, items: lantern(refereeHas) }, now),
       grantRpgBundle(rec.refereeId, REF_REWARD_BUNDLE),
     );
   if (paid.referrerPaid)
@@ -228,7 +241,7 @@ async function sendRewards(
           from: REF_GIFT_FROM,
           note: refGiftNoteReferrer(referee?.name ?? NO_NAME) + bagNote(REF_REWARD_BUNDLE),
           points: 0,
-          items: lantern,
+          items: lantern(referrerHas),
         },
         now,
       ),
