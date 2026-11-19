@@ -562,13 +562,17 @@ local stackMax = tonumber(ARGV[7])
 local total = 0
 for _, v in ipairs(redis.call('HVALS', KEYS[1])) do total = total + tonumber(v) end
 local out = {}
--- 11/18 오늘의 할 일 (KEYS[6] = 오늘 적립 해시가 있을 때만): 하나라도 들어가면 _q:fish·_q:gather +1, 값은 맨 뒤 '#q:{값}'
+-- 11/18 오늘 미션 (KEYS[6] = 오늘 적립 해시가 있을 때만): 하나라도 들어가면 그 미션 칸 +1, 값은 맨 뒤 '#q:{값}'.
+-- 11/19 칸 이름은 아이템 뒤 ARGV[9 + 4n] (바닷가·캠핑장 미션 _q:seaFish 등 — 예전엔 _q:fish·_q:gather로 고정돼 그 미션이 안 채워졌다)
+local n = tonumber(ARGV[8])
 local q = nil
-if KEYS[6] and tonumber(ARGV[8]) > 0 then
-  q = redis.call('HINCRBY', KEYS[6], '_q:' .. ARGV[2], 1)
+if KEYS[6] and n > 0 then
+  local field = ARGV[9 + 4 * n]
+  if not field or field == '' then field = '_q:' .. ARGV[2] end
+  q = redis.call('HINCRBY', KEYS[6], field, 1)
   if q == 1 then redis.call('EXPIRE', KEYS[6], tonumber(ARGV[6])) end
 end
-for i = 9, #ARGV, 4 do
+for i = 9, 8 + 4 * n, 4 do
   local id = ARGV[i]
   local size = tonumber(ARGV[i + 1])
   local kept = '0'
@@ -855,7 +859,7 @@ export class RedisForageStore implements ForageStore {
   }
 
   async grant(acct: string, day: string, count: "fish" | "gather", items: GrantItem[], stackMax: number, take?: { window: number; node: string }, quest?: QuestHook | null) {
-    const argv = [day, count, take ? "1" : "0", take ? tookMember(take.window, take.node) : "", String(TOOK_TTL_SEC), String(DAY_TTL_SEC), String(stackMax), String(items.length), ...grantArgs(items)];
+    const argv = [day, count, take ? "1" : "0", take ? tookMember(take.window, take.node) : "", String(TOOK_TTL_SEC), String(DAY_TTL_SEC), String(stackMax), String(items.length), ...grantArgs(items), ...(quest ? [quest.field] : [])];
     const r = await this.redis.eval<string[], unknown>(
       GRANT_LUA,
       [lk.bag(acct), lk.dex(acct), lk.day(acct, day), lk.took(acct, take?.window ?? 0), lk.pay(acct), ...(quest ? [quest.key] : [])],

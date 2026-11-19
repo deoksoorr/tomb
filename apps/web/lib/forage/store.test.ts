@@ -37,3 +37,24 @@ describe("저장 형식 도우미", () => {
     expect(Object.values(lk).map((f) => (f as (a: string, b: never) => string)("A", 1 as never))).toSatisfy((ks: string[]) => ks.every((k) => k.startsWith("forage:A:")));
   });
 });
+
+describe("11/19 낚시·채집 적립이 미션 칸 이름을 스크립트에 넘긴다 (바닷가·캠핑장 미션이 _q:fish로 올라가 안 채워졌던 일)", () => {
+  it("GRANT_LUA 인자 맨 뒤에 quest.field, 스크립트는 그 칸을 올리고 아이템은 ARGV[8]개만 읽는다", async () => {
+    const s = new RedisForageStore({ url: "https://example.invalid", token: "x" });
+    const calls: { lua: string; argv: string[] }[] = [];
+    (s as unknown as { redis: { eval: (lua: string, keys: string[], argv: string[]) => Promise<unknown> } }).redis = {
+      eval: async (lua, _keys, argv) => {
+        calls.push({ lua, argv });
+        return ["f_carp:110", "#q:1"];
+      },
+    };
+    const quest = { key: "earn:me:20261119", field: "_q:seaFish", ttlSec: 1, local: () => 1 } as { key: string; field: string; ttlSec: number; local: (n: number) => number; have?: number };
+    await s.grant("me", DAY, "fish", [{ id: "f_carp", size: 30 }], 99, undefined, quest);
+    const { lua, argv } = calls[0];
+    expect(argv[argv.length - 1]).toBe("_q:seaFish");
+    expect(argv.length).toBe(8 + 4 + 1);
+    expect(lua).toContain("ARGV[9 + 4 * n]");
+    expect(lua).toContain("for i = 9, 8 + 4 * n, 4 do");
+    expect(quest.have).toBe(1);
+  });
+});
