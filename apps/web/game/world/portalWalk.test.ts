@@ -3,7 +3,7 @@ import { HOUSE_LOTS, HUNT_GATE, PORTAL_RADIUS, SHOP_DOOR, SPAWN } from "@tomb/pr
 import { AutoWalk } from "../logic/autoWalk";
 import type { MoveInput } from "../logic/movement";
 import { findPath, lineOfSight, type Pt, type Rect, type WalkGrid } from "../logic/pathfind";
-import { allFurnitureColliders, houseCollider, inWater, PLAZA_FIRE, PLAZA_WELL, staticColliders, standable } from "./layout";
+import { allFurnitureColliders, houseCollider, inWater, nearShopDoor, PLAZA_FIRE, PLAZA_WELL, staticColliders, standable } from "./layout";
 import { PORTAL_WALK, villageBounds, WALK_CELL, WalkGridCache, walkGridOf } from "./portalWalk";
 import { nearestSafeGround } from "./walkReach";
 import { HUNT_AWAY_TOAST, huntPress, huntWalkHint, walkingAfter } from "@/lib/huntWalk";
@@ -117,6 +117,48 @@ describe("사냥터 입구까지 걷기 — 길찾기", () => {
     }
     expect(step).toBe("arrived");
     expect(Math.hypot(pos.x - goal.x, pos.y - goal.y)).toBeLessThan(PORTAL_RADIUS);
+  });
+});
+
+describe("11/19 잡화점 문까지 걷기 ([상점에서 사기]) — 길찾기", () => {
+  const { goal, face } = PORTAL_WALK.shop;
+
+  it("설 자리는 문 앞 들어가는 반경 안이고 서 있을 수 있는 땅, 문(위)을 바라본다", () => {
+    expect(nearShopDoor(goal.x, goal.y)).toBe(true);
+    expect(standable(goal.x, goal.y)).toBe(true);
+    expect(inWater(goal.x, goal.y)).toBe(false);
+    expect(face.y).toBeLessThan(goal.y);
+  });
+
+  for (const [name, from] of Object.entries(STARTS)) {
+    if (name === "shop") continue;
+    it(`${name}에서 잡화점 문까지 길이 있고 충돌체를 지나지 않는다`, () => {
+      const path = findPath(dry, from, goal) ?? findPath(wet, from, goal);
+      expect(path, name).not.toBeNull();
+      const p = path!;
+      expect(p[p.length - 1]).toEqual(goal);
+      expect(bumps(from, p)).toBeNull();
+    });
+  }
+
+  it("광장에서 자동 걷기로 따라가면 문 앞에 도착한다", () => {
+    const w = new AutoWalk();
+    const from = { ...STARTS.plaza };
+    expect(w.start("portal:shop", from, goal, face, dry, 0)).toBe("started");
+    const out: MoveInput = { ax: 0, ay: 0, run: false };
+    const pos = { ...from };
+    const SPEED = 60 / 1000;
+    let t = 0;
+    let step = "walking";
+    while (t < 120_000 && step === "walking") {
+      t += 16;
+      step = w.steer(pos, t, out);
+      pos.x += out.ax * SPEED * 16;
+      pos.y += out.ay * SPEED * 16;
+      expect(hits(pos)).toBe(false);
+    }
+    expect(step).toBe("arrived");
+    expect(nearShopDoor(pos.x, pos.y)).toBe(true);
   });
 });
 

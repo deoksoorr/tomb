@@ -290,7 +290,7 @@ const node = (kind: NodeKind, where: Where, x: number, y: number): GatherNode =>
 const campNode = (kind: NodeKind, where: Where, x: number, y: number): GatherNode => ({ id: `q${kind[0]}${x}_${y}`, kind, where, x, y, map: "camp" });
 
 /**
- * 11/15 언젠가 캠핑장 채집 지점 (새 종은 없다 — 기존 종의 출현 장소만). 하루 한도·도감·피어나는 창은 마을과 같이 센다.
+ * 11/15 언젠가 캠핑장 채집 지점 (새 종은 없다 — 기존 종의 출현 장소만). 도감·피어나는 창은 마을과 같이 센다.
  * 숲 산책로·데크 둘레 숲 = 숲(forest), 데크 고리 안 풀밭 = 풀밭(meadow), 산꼭대기·큰 바위 둘레 = 언덕(hill).
  * game/camp/campLayout.test가 서 있을 수 있는 곳·물 밖·자리와 떨어짐을 본다 (나무는 이 자리를 비켜 선다)
  */
@@ -346,6 +346,7 @@ export const CAMP_GATHER_NODES: readonly GatherNode[] = [
 export const SEA_GATHER_NODES: readonly GatherNode[] = SEA_DIG_HOLES.map((h) => ({ id: `sc${h.x}_${h.y}`, kind: "clam", where: "flat", x: h.x, y: h.y, map: "sea" }));
 
 /** lib/forage/forage.test.ts가 서 있을 수 있는 자리·물 밖·소품/좌석과 떨어짐을 검사한다 */
+// 11/19 언덕 서쪽이 옛 묘역(무덤 16기)이 되어 그 안·철책 둘레의 언덕 지점 여섯을 별 보기 마당으로 옮겼다 (지점 id도 바뀐다)
 export const GATHER_NODES: readonly GatherNode[] = [
   // 약초 (14 + 11/16 6)
   node("herb", "forest", 396, 794), // 11/15 오리 연못이 넓어져 둑 위로 옮김 (아래 숲 지점들도). 11/16 연못·범퍼카장이 또 넓어져 물·마당에 든 지점을 둑으로
@@ -359,7 +360,7 @@ export const GATHER_NODES: readonly GatherNode[] = [
   node("herb", "meadow", 1050, 906),
   node("herb", "meadow", 1110, 962),
   node("herb", "meadow", 990, 998),
-  node("herb", "hill", 160, 96),
+  node("herb", "hill", 352, 100),
   node("herb", "hill", 300, 200),
   node("herb", "lakeside", 1150, 1000),
   // 11/16 더 (6): 언덕 · 강가 서쪽 · 오리 연못 둘레 둘 · 호박밭 · 호수 북쪽 물가
@@ -370,17 +371,17 @@ export const GATHER_NODES: readonly GatherNode[] = [
   node("herb", "meadow", 1037, 874),
   node("herb", "lakeside", 1200, 806),
   // 광석 (8 + 11/16 4)
-  node("ore", "hill", 48, 200),
-  node("ore", "hill", 144, 160),
+  node("ore", "hill", 270, 56),
+  node("ore", "hill", 356, 158),
   node("ore", "hill", 330, 160),
-  node("ore", "hill", 80, 80),
+  node("ore", "hill", 232, 142),
   node("ore", "cave", 790, 140),
   node("ore", "cave", 840, 150),
   node("ore", "cave", 880, 92),
   node("ore", "cave", 950, 90),
   // 11/16 더 (4): 언덕 둘 · 동굴 앞 둘
   node("ore", "hill", 220, 60),
-  node("ore", "hill", 40, 132),
+  node("ore", "hill", 340, 60),
   node("ore", "cave", 914, 150),
   node("ore", "cave", 812, 78),
   // 발굴 (8 + 11/16 4)
@@ -393,7 +394,7 @@ export const GATHER_NODES: readonly GatherNode[] = [
   node("dig", "hill", 250, 120),
   node("dig", "lakeside", 1390, 1000),
   // 11/16 더 (4): 언덕 아래 · 오리 연못 서쪽 · 호박밭 · 호수 북쪽 물가
-  node("dig", "hill", 190, 234),
+  node("dig", "hill", 240, 230),
   node("dig", "forest", 348, 872),
   node("dig", "meadow", 911, 970),
   node("dig", "lakeside", 1284, 800),
@@ -427,7 +428,7 @@ const NODE_BY_ID = new Map(GATHER_NODES.map((n) => [n.id, n]));
 export const gatherNodeById = (id: string): GatherNode | undefined => NODE_BY_ID.get(id);
 
 // ── NPC ── 물고기는 어부, 나머지는 수집가에게 판다 (NPC 앞에서만 — UI가 NPC 창에서만 판매를 연다)
-// 11/16 r11 사용자: 포구 시장을 뺐어요 → 바다 고기는 어부 영감, 갯벌에서 캔 것은 수집가 유령이 사요 (같은 판매 API·같은 하루 한도)
+// 11/16 r11 사용자: 포구 시장을 뺐어요 → 바다 고기는 어부 영감, 갯벌에서 캔 것은 수집가 유령이 사요 (같은 판매 API)
 export type NpcId = "fishmonger" | "collector";
 export type Npc = { id: NpcId; name: string; title: string; x: number; y: number; buys: readonly LifeCat[]; hello: string; map?: "sea"; where?: Where };
 export const NPCS: readonly Npc[] = [
@@ -462,8 +463,12 @@ export const buyerOf = (cat: LifeCat): Npc => NPCS.find((n) => !n.map && n.buys.
 // ── 숫자 ──
 /** 한 칸(종류)에 쌓을 수 있는 수 */
 export const STACK_MAX = 99;
-/** 하루에 잡을·캘 수 있는 수 (자동화 방지. 포인트는 따로 EARN_RULES 한도) */
-export const DAILY_CATCH_MAX = { fish: 150, gather: 200 } as const;
+/** 11/19 가방 전체(물고기·채집물 합) 한도. 차면 직접 잡은 것은 놓아주고(도감에는 남는다) 자동 낚시는 쉰다 */
+export const BAG_MAX = 300;
+/** 가방에 든 수 (모든 칸 합) */
+export const bagCount = (bag: Record<string, number> | undefined): number => Object.values(bag ?? {}).reduce((n, v) => n + Math.max(0, v), 0);
+// 11/19 하루에 잡을·캘 수 있는 수 한도(물고기 150·채집 200)는 없앴다. 자동화 막이는 시간당 시작 수(service FORAGE_STARTS_PER_HOUR)·
+// 티켓 검사·감기 최소 시간·채집 지점 창(한 지점 10분에 한 번)이 한다
 
 // ── 도감 칸 ── 잡는 것(LifeCat) + 별자리 + 11/16 몬스터. 별자리·몬스터는 별자리 잇기·사냥으로 모으는 도감 표시용 칸이라
 // 가방·NPC 판매·상점 값과는 상관없다 (LifeCat을 넓히지 않는다 — 판매·가방 코드는 LifeCat·SPECIES만 본다).

@@ -1,4 +1,5 @@
-import type { ChampBoard, CosmeticSlot } from "@tomb/protocol";
+import type { RetainRecord } from "../retain";
+import type { CosmeticSlot } from "@tomb/protocol";
 import type { AttendClaim, CalendarMonthRecord } from "../calendar";
 import type { EarnSource } from "../economy";
 import type { EarnBoost } from "../pointEvent";
@@ -123,7 +124,7 @@ export const PRESENCE_TICK_MS = 10 * 60_000;
  * 같은 화면(sid)에서 온 연달은 기록이고 직전 기록 뒤 PRESENCE_CATCHUP_WINDOW_MS 안이면, 흐른 시간만큼(10분 단위, 30초 여유)
  * 최대 PRESENCE_CATCHUP_MAX_TICKS번을 한 번에 센다. 그 밖(새 화면·오래 끊김·sid 없는 옛 화면)은 지금처럼 1번만.
  *  - 시각은 서버 시각만 쓴다. 다음 기준 시각은 센 만큼만 앞으로 (남은 몇 분은 다음 기록으로 넘어간다, 지금보다 앞서지 않는다)
- *  - 하루 포인트 한도·지갑 상한은 그대로 (몰아서 받아도 한도 안에서만). 머문 기록(출석 도장·접속 보너스)도 같은 수만큼
+ *  - 지갑 상한은 그대로. 머문 기록(출석 도장·접속 보너스)도 같은 수만큼
  *  - 창을 닫았다 다시 열면 sid가 바뀌어 그 사이는 세지 않는다. sid를 꾸며 보내도 10분마다 부르는 것과 같은 몫 이상은 못 받는다
  */
 export const PRESENCE_CATCHUP_MAX_TICKS = 3;
@@ -146,10 +147,16 @@ export function presenceCatchup(last: number, now: number, sameSid: boolean): { 
 
 /**
  * 적립 선택값: amount(없으면 항목 기본 점수), ipHash(11/18부터 쓰지 않는다 — 같은 IP 합계 한도 없음),
- * boost(포인트 배수 이벤트 — 고른 항목이면 적립·항목 한도·항목 한도가 배수, 하루 전체 한도는 늘어난 몫만큼. 없으면 저장소가 지금 설정을 읽는다, lib/pointEvent earnLimits),
- * champ(11/17 지금 1위인 랭킹 — 1위 1주일 혜택의 %·한도, 레이스에서 빼는 몫. 없으면 저장소가 지난주 1위 기록을 읽는다, lib/champPerks earnTerms)
+ * boost(포인트 배수 이벤트 — 고른 항목이면 적립이 배수, 횟수 규칙이 남은 항목은 하루 최대도 배수. 없으면 저장소가 지금 설정을 읽는다, lib/pointEvent earnTerms)
  */
-export type EarnOptions = { amount?: number; ipHash?: string; boost?: EarnBoost; champ?: readonly ChampBoard[] };
+export type EarnOptions = { amount?: number; ipHash?: string; boost?: EarnBoost; quest?: QuestHook | null };
+
+/**
+ * 11/18 오늘의 할 일 진행 한 칸 올리기 (lib/retainQuest questHook). 행동을 처리하는 저장소 명령(Lua·파이프라인)이 같은 왕복에서
+ * 오늘 적립 해시 key의 field를 1 올린다 (추가 왕복 없음, 명령 +1 — 그날 할 일에 든 행동만). 올린 뒤 값은 have에 적는다.
+ * 메모리 저장소는 local로 계정 메모리의 같은 칸을 올린다
+ */
+export type QuestHook = { key: string; field: string; ttlSec: number; local: (n: number) => number; have?: number };
 export type Profile = { name?: string | null; color?: string | null; body?: string | null };
 export type RankEntry = { accountId: string; name: string | null; points: number; rank: number };
 
@@ -178,8 +185,6 @@ export type AccountRecord = {
   graves: string[];
   /** 오늘 쌓은 포인트 */
   todayEarned: number;
-  /** 오늘 항목별로 쌓은 포인트 (0인 항목은 없음). 오늘 적립 해시를 그대로 읽는다 — 내 정보의 항목별 게이지 */
-  earnedBy: Partial<Record<EarnSource, number>>;
   /** 안 읽은 내 소식 수 (보관 중인 최근 50개 안에서) */
   activityUnread: number;
   /** 마지막 닉네임 변경 시각 (0 = 바꾼 적 없음)과 지금까지 바꾼 횟수 */
@@ -188,7 +193,23 @@ export type AccountRecord = {
   tutorialDone: boolean;
   /** 휴면(DORMANT_DAYS일 넘게 안 들어옴)에서 돌아왔다 → 닉네임을 다시 정해야 마을에 들어갈 수 있다 */
   renameRequired: boolean;
+  /** 11/18 리텐션 (새 이웃 꾸러미·첫 걸음·오늘의 할 일 — lib/retain.ts). 계정·오늘 적립 해시에서 같이 읽는다 */
+  retain: RetainRecord;
 };
+
+/** 11/18 새 이웃 꾸러미 받기에 넣는 것 (lib/retain PATH 여러 칸을 합친 계정 저장소 몫 — 물약·강화 재료는 사냥 저장소가 따로) */
+export type PathGrant = {
+  /** 한꺼번에 받는 꾸러미 수 (밀린 것까지) */
+  count: number;
+  items: readonly { itemId: string; count: number }[];
+  /** 11/19 기간제 꾸미기 [아이템 id, 부위] — until까지 (입고 있으면 그 자리, 아니면 벗어 둔 꾸미기) */
+  wear: readonly (readonly [string, CosmeticSlot])[];
+  until: number;
+  /** 사냥 가방 몫이 있는 꾸러미 번호들 (계정 해시 gpPot에 쉼표로 — 넣고 나면 지운다) */
+  pend: readonly number[];
+};
+/** ok = 받음 · today = 오늘 이미 받음 · stale = 받은 수가 달라졌다(다른 탭이 먼저) */
+export type PathClaim = { ok: true } | { ok: false; reason: "today" | "stale" };
 
 /** 내 소식 보관 개수 */
 export const ACTIVITY_KEEP = 50;
@@ -226,16 +247,16 @@ export type PresenceTick = {
 
 export interface AccountStore {
   get(id: string, day: string, now: number): Promise<AccountRecord>;
-  /** 항목별 하루 한도·하루 전체 한도·지갑 한도 안에서 적립하고 실제 쌓인 점수를 돌려준다 (0 = 한도). 포인트 배수 이벤트로 고른 항목이면 늘어난 점수·한도로 */
+  /** 횟수 규칙이 남은 항목의 하루 최대·지갑 상한 안에서 적립하고 실제 쌓인 점수를 돌려준다 (0 = 막힘). 포인트 배수 이벤트로 고른 항목이면 늘어난 점수로 */
   earn(id: string, source: EarnSource, day: string, opts?: EarnOptions): Promise<number>;
   /** 원자적 차감. 잔액이 모자라면 null, 아니면 남은 잔액. reason은 계정의 최근 사용 기록(최대 100개)에 남는다 */
   spend(id: string, amount: number, reason: string, now: number): Promise<number | null>;
   /**
    * 돌려주기 (되팔기·결제 뒤 실패 보상): 잔액만 늘린다 (지갑 상한에서 잘림). 적립이 아니므로
-   * 하루 적립 한도·모은 포인트·랭킹과 무관하다. reason은 사용 기록에 남는다. 새 잔액을 돌려준다
+   * 횟수 규칙·모은 포인트·랭킹과 무관하다. reason은 사용 기록에 남는다. 새 잔액을 돌려준다
    */
   refund(id: string, amount: number, reason: string, now: number): Promise<number>;
-  /** 머무르기: 직전 지급 후 PRESENCE_MIN_GAP_MS가 지났으면 적립(한도 안에서). 너무 이르면 null */
+  /** 머무르기: 직전 지급 후 PRESENCE_MIN_GAP_MS가 지났으면 적립. 너무 이르면 null */
   presence(id: string, day: string, now: number): Promise<number | null>;
   /**
    * presence와 같은 적립 + 화면이 바로 쓸 값(적립 뒤 잔액·오늘 쌓은 포인트·오늘 머문 기록 수)을 같은 명령 하나로.
@@ -246,9 +267,9 @@ export interface AccountStore {
   appearance(id: string, now: number): Promise<Pick<AccountRecord, "name" | "color" | "body" | "equipped">>;
   /**
    * 접속 시간 보너스 받기 (원자적): 오늘 머문 기록으로 열린 구간 중 아직 안 받은 구간을 한꺼번에 받는다.
-   * 받을 구간이 없으면 null. 받은 구간은 하루 상한(DAILY_EARN_CAP)에 막혀 덜 들어와도 받은 것으로 친다
+   * 받을 구간이 없으면 null. 받은 구간은 지갑이 가득 차 덜 들어와도 받은 것으로 친다
    */
-  /** bonus = 11/16 단 칭호의 머무르기 보상 비율 (구간 보너스 × (1 + bonus), 하루 상한은 그대로 — lib/stayBonus stayBonusAmounts) */
+  /** bonus = 11/16 단 칭호의 머무르기 보상 비율 (구간 보너스 × (1 + bonus) — lib/stayBonus stayBonusAmounts) */
   claimStayBonus(id: string, day: string, bonus?: number): Promise<{ earned: number; count: number } | null>;
   /**
    * 모은 포인트 상위 limit명 + me의 순위(없으면 null). week(그 주 월요일 YYYYMMDD)를 주면 그 주에 모은 포인트 순위.
@@ -299,7 +320,7 @@ export interface AccountStore {
   /**
    * 오늘 칸 받기 (원자적): 오늘 이미 받았으면 "already"(달력 개편 전 자동 출석 포함), 머문 기록이 needTicks보다
    * 적으면 "stay". 받으면 연속 일수를 갱신하고 도장을 찍은 뒤 출석·7일 연속·한 달 개근(그달 monthDays일을 모두
-   * 찍었을 때 한 번) 포인트를 준다. 달력 보상은 하루 전체 한도(DAILY_EARN_CAP)에 막히지 않는다 (항목 한도·지갑 한도는 지킨다).
+   * 찍었을 때 한 번) 포인트를 준다. 달력 보상은 항목 하루 최대·지갑 상한을 지킨다.
    */
   claimAttend(id: string, ipHash: string, day: string, yesterday: string, monthDays: number, needTicks: number): Promise<AttendClaim>;
   /**
@@ -388,7 +409,7 @@ export interface AccountStore {
    * 11/18 mustExist(수정): 묘비가 묘역에 없으면 디자인권을 쓰지 않고 "gone"
    */
   putGraveUsing(id: string, itemId: string, grave: Grave, mustExist?: boolean): Promise<boolean | "gone">;
-  /** 관리자 포인트 조정. 0~BALANCE_CAP으로 자르고 하루 적립 한도와는 무관. 지갑만 바뀐다 (모은 포인트·포인트 랭킹엔 넣지 않는다). 없는 계정이면 null */
+  /** 관리자 포인트 조정. 0~WALLET_MAX로 자르고 횟수 규칙과는 무관. 지갑만 바뀐다 (모은 포인트·포인트 랭킹엔 넣지 않는다). 없는 계정이면 null */
   adjustPoints(id: string, delta: number): Promise<number | null>;
   addGrave(id: string, graveId: string): Promise<void>;
   removeGrave(id: string, graveId: string): Promise<void>;
@@ -422,6 +443,24 @@ export interface AccountStore {
   /** 관리자 일괄 색인: cursor부터 계정 몇 개를 훑어 색인에 채운다. next = "0"이면 끝 */
   reindexNames(cursor: string, count: number, now: number): Promise<{ next: string; indexed: number; dup: number }>;
   setTutorialDone(id: string): Promise<void>;
+  /**
+   * 11/18 새 이웃 꾸러미 받기 (원자적으로 한 번): 받은 수가 expect일 때만 받은 수 + grant.count·오늘 날짜를 적고 가방·기간제 꾸미기를 넣는다.
+   * 11/19 밀린 꾸러미를 한꺼번에 (하루 한 번 제한 없음 — 받을 수는 서버가 가입한 날부터 센다). 사냥 가방 몫은 gpPot에 적어 두고 서버가 따로
+   */
+  claimGiftPath(id: string, day: string, expect: number, grant: PathGrant, now: number): Promise<PathClaim>;
+  /** 꾸러미 창이 오늘 저절로 열렸다 (하루 한 번) */
+  markPathSeen(id: string, day: string): Promise<void>;
+  /** 사냥 가방 몫을 넣었으면 표시를 지운다 */
+  clearPathPotions(id: string): Promise<void>;
+  /** 첫 걸음 미션 한 칸 표시 (비트). mask = 새 비트 마스크, fresh = 이번에 처음 켰다 (그 칸 작은 선물을 줄 때). 큰 선물까지 받았으면 null */
+  markFirstStep(id: string, bit: number): Promise<{ mask: number; fresh: boolean } | null>;
+  /** 첫 걸음 큰 선물 (미션을 다 했을 때 한 번): 가방 아이템. 받으면 1, 이미 받았으면 -1, 덜 했으면 -2 (사냥 가방 몫은 서버가 따로) */
+  claimFirstSteps(id: string, day: string, all: number, item: { itemId: string; count: number }, now: number): Promise<number>;
+  /**
+   * 오늘의 할 일 받기 (원자적으로 한 번): which 0..2 = 그 칸(진행 칸 field가 need 이상일 때), 3 = 셋 다(0..2를 다 받았을 때 — 도장 +1).
+   * 받으면 1 (셋 다는 올린 뒤 도장 수), 이미 받았으면 -1, 아직이면 -2 (포인트·사냥 가방 몫은 서버가 따로)
+   */
+  claimTodo(id: string, day: string, which: number, field: string, need: number, now: number): Promise<number>;
   /** 날짜(YYYYMMDD)별 경제 통계 필드: `earn:{source}`, `spend:{분류}`, `refund` (운영자 계정 활동은 ECON_STAFF_EXCLUDED_FROM부터 빠져 있다) */
   economy(days: string[]): Promise<{ date: string; fields: Record<string, number> }[]>;
   /** 포인트를 가진 적 있는 계정 수와 지갑 잔액 합계. exclude(운영자 계정)는 빼고 센다 */

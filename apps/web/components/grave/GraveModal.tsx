@@ -109,7 +109,7 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
         const { count, earned } = await api.flower(graveId);
         cache.patch(graveId, { flowers: count });
         setMine((m) => m && { ...m, floweredToday: true });
-        meStore.addEarned(earned, "flower");
+        meStore.addEarned(earned);
         bridge.emit("grave:flowered", { graveId });
         setNotice(withPoints("꽃을 놓았어요.", earned));
       } catch (e) {

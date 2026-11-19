@@ -227,9 +227,9 @@ function render(ls: Layer[]): Render {
   return { len: end, tail: last / SR, dryPeak, peak, rms: Math.sqrt(sq / (2 * n)) };
 }
 
-describe("스킬 소리 33종", () => {
-  it("33종 모두 소리 설계가 있다", () => {
-    expect(SKILL_IDS.length).toBe(33);
+describe("스킬 소리 44종 (11/19 일꾼 11종 포함)", () => {
+  it("44종 모두 소리 설계가 있다", () => {
+    expect(SKILL_IDS.length).toBe(44);
     for (const id of SKILL_IDS) {
       const sounds = allSounds(id, 1);
       expect(sounds.length, id).toBeGreaterThan(0);
@@ -245,11 +245,11 @@ describe("스킬 소리 33종", () => {
         expect(sig.get(s), `${id}와 ${sig.get(s)}가 같다`).toBeUndefined();
         sig.set(s, id);
       }
-      expect(sig.size).toBe(33);
+      expect(sig.size).toBe(44);
     }
     // 첫 사건(주된 소리)끼리도 서로 다르다
     const first = new Set(SKILL_IDS.map((id) => soundSignature(allSounds(id, 1)[0])));
-    expect(first.size).toBe(33);
+    expect(first.size).toBe(44);
   });
 
   it("등급(단·랭크)이 오를수록 겹수·저음 무게·잔향·음량·길이가 는다", () => {

@@ -2,7 +2,6 @@ import { NextRequest } from "next/server";
 import { nanoid } from "nanoid";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { anyFishingWaterOf, FISHING_SPOTS, SEA_DIG_CLOSED_MSG, seaDigOpen, SEA_FISHING_SPOTS } from "@tomb/protocol";
-import { earnRule } from "../economy";
 import { kstDay } from "../store/accounts";
 import * as session from "@/app/api/session/route";
 import {
@@ -197,7 +196,7 @@ describe("바닷가 것 판매 (마을 NPC)", () => {
     expect(SellSchema.safeParse({ npc: "harborFlat", items: { d_clam: 1 } }).success).toBe(false);
   });
 
-  it("같은 판매 API·같은 하루 한도 안에서만 (넘치는 만큼은 가방에 남는다)", async () => {
+  it("같은 판매 API로 한 번에 다 판다 (11/19 하루 한도 없음)", async () => {
     const a = await newAccount();
     const now = Date.now();
     const store = getForageStore();
@@ -206,15 +205,14 @@ describe("바닷가 것 판매 (마을 NPC)", () => {
     await store.grant(a, day, "fish", [{ id: "f_mackerel", size: 300 }], 99);
     await expect(sellTo(a, "collector", { f_mackerel: 1 }, "ip-sea", now)).rejects.toMatchObject({ status: 400 });
     const r = await sellTo(a, "collector", { d_goldclam: 60 }, "ip-sea", now);
-    const cap = earnRule("gather").dailyMax;
-    expect(r.earned).toBeGreaterThan(0);
-    expect(r.earned).toBeLessThanOrEqual(cap);
-    expect(r.capped).toBe(true);
-    expect(r.state.today.gatherP).toBe(r.earned);
-    expect(r.state.bag.d_goldclam).toBe(60 - (r.sold.d_goldclam ?? 0));
-    // 어부 영감은 낚시 판매 한도 (채집 판매 한도와 따로)
+    // 예전 채집 판매 한도(300P)를 넘는 값도 다 받는다
+    expect(r.sold).toEqual({ d_goldclam: 60 });
+    expect(r.earned).toBe(60 * speciesById("d_goldclam")!.price);
+    expect(r.earned).toBeGreaterThan(300);
+    expect(r.capped).toBe(false);
+    expect(r.state.bag.d_goldclam ?? 0).toBe(0);
     const f = await sellTo(a, "fishmonger", { f_mackerel: 1 }, "ip-sea", now);
     expect(f.sold).toEqual({ f_mackerel: 1 });
-    expect(f.state.today.fishP).toBe(3);
+    expect(f.earned).toBe(speciesById("f_mackerel")!.price);
   });
 });

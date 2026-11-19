@@ -729,6 +729,90 @@ const P: Record<string, Painter> = {
     }
   },
   /** 넋의 인연: 이어진 두 고리 */
+  // ── 11/19 삽자루 일꾼 ──
+  /** 삽자루 돌진: 비스듬한 삽 + 뒤로 흩어지는 바람 줄 */
+  sk_wk_charge(g, m, a) {
+    for (let i = 0; i < 8; i++) g.set(5 + i, 10 - Math.floor(i * 0.6), 0x8a6440);
+    g.rect(11, 3, 4, 4, a);
+    g.rect(12, 4, 2, 2, lighten(a, 0.3));
+    for (let i = 0; i < 3; i++) g.hline(1, 3 + i, 8 + i * 2, m);
+  },
+  /** 굳은살: 손바닥 */
+  sk_wk_callus(g, m, a) {
+    g.rect(4, 6, 8, 8, m);
+    for (let i = 0; i < 4; i++) g.rect(4 + i * 2, 2 + (i % 2), 2, 4, m);
+    g.rect(12, 8, 2, 3, m);
+    g.rect(6, 9, 4, 3, a);
+  },
+  /** 찌르고 퍼 올리기: 세 번 찌르는 화살표 */
+  sk_wk_combo(g, m, a) {
+    for (let k = 0; k < 3; k++) {
+      g.hline(2, 10, 4 + k * 4, k === 2 ? a : m);
+      g.set(11, 4 + k * 4, k === 2 ? a : m);
+      g.set(12, 4 + k * 4, k === 2 ? lighten(a, 0.3) : m);
+    }
+    g.rect(11, 1, 3, 2, a);
+  },
+  /** 손에 익은 삽: 세로 손잡이 + 감은 끈 */
+  sk_wk_grip(g, m, a) {
+    g.vline(8, 1, 14, 0x8a6440);
+    g.vline(7, 1, 14, darken(0x8a6440, 0.2));
+    for (let i = 0; i < 4; i++) g.hline(6, 9, 5 + i * 2, i % 2 ? a : m);
+    g.rect(5, 1, 6, 2, m);
+  },
+  /** 단단한 허리: 넓은 허리띠 + 버클 */
+  sk_wk_back(g, m, a) {
+    g.rect(2, 6, 12, 5, m);
+    g.rect(6, 5, 4, 7, a);
+    g.rect(7, 7, 2, 3, darken(a, 0.3));
+  },
+  /** 봉분 뛰어넘기: 포물선 + 아래 봉분 */
+  sk_wk_leap(g, m, a) {
+    for (let x = 1; x <= 14; x++) g.set(x, Math.round(10 - Math.sin(((x - 1) / 13) * Math.PI) * 8), a);
+    g.ellipse(8, 13, 5, 2.2, m);
+    g.hline(3, 13, 14, darken(m, 0.3));
+  },
+  /** 쉬지 않는 손: 땀방울 + 빠른 줄 */
+  sk_wk_tireless(g, m, a) {
+    g.ellipse(7, 9, 3, 3.5, a);
+    g.rect(7, 3, 1, 3, a);
+    g.set(6, 5, a);
+    for (let i = 0; i < 3; i++) g.hline(11, 14, 4 + i * 3, m);
+  },
+  /** 삽날 회오리: 소용돌이 */
+  sk_wk_whirl(g, m, a) {
+    for (let i = 0; i < 26; i++) {
+      const t = i * 0.42;
+      const r = 1 + i * 0.24;
+      g.set(Math.round(8 + Math.cos(t) * r), Math.round(8 + Math.sin(t) * r), i > 18 ? a : m);
+    }
+    g.rect(7, 7, 2, 2, a);
+  },
+  /** 깊게 파기: 땅에 깊이 박힌 삽 */
+  sk_wk_deep(g, m, a) {
+    g.vline(8, 1, 8, 0x8a6440);
+    g.rect(6, 8, 5, 4, a);
+    g.rect(1, 11, 14, 4, m);
+    g.rect(6, 11, 5, 2, darken(a, 0.3));
+  },
+  /** 밤샘 삽질: 초승달 + 엇갈린 삽 */
+  sk_wk_allnight(g, m, a) {
+    g.ellipse(11, 4, 3, 3, a);
+    g.ellipse(12.5, 3.2, 2.4, 2.4, 0x16151a);
+    for (let i = 0; i < 9; i++) {
+      g.set(2 + i, 14 - i, m);
+      g.set(13 - i, 14 - i, darken(m, 0.2));
+    }
+  },
+  /** 일꾼의 뚝심: 쥔 주먹 + 반짝 */
+  sk_wk_grit(g, m, a) {
+    g.rect(4, 6, 8, 7, m);
+    for (let i = 0; i < 4; i++) g.rect(4 + i * 2, 5, 2, 2, lighten(m, 0.15));
+    g.rect(3, 8, 2, 3, m);
+    g.set(13, 2, a);
+    g.rect(12, 3, 3, 1, a);
+    g.rect(13, 1, 1, 3, a);
+  },
   sk_bond(g, m, a) {
     for (let t = 0; t < 30; t++) {
       const ang = (t / 30) * Math.PI * 2;

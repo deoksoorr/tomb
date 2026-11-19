@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import {
   DIFFICULTIES,
   DIFFS,
@@ -41,6 +41,7 @@ import RpgIcon from "./RpgIcon";
 import ZonePicker, { ZoneInfo, zoneOpen, zoneUnlockAll } from "./ZonePicker";
 import s from "./rpg.module.css";
 import ShakeToggle from "./ShakeToggle";
+import { useHoldRepeat } from "./useHoldRepeat";
 
 // 사냥터 로비의 탭들: 출발 · 캐릭터 · 장비 · 스킬 · 상점
 
@@ -205,6 +206,16 @@ export function StartPanel({
 
 // ── 캐릭터 ──
 
+/** 11/19 꾹 누르면 계속 올라가는 +/− (능력치) */
+function HoldButton({ className, step, enabled, label, children }: { className: string; step: () => void; enabled: boolean; label: string; children: ReactNode }) {
+  const hold = useHoldRepeat(step, enabled);
+  return (
+    <button type="button" className={className} disabled={!enabled} aria-label={label} title={label} {...hold}>
+      {children}
+    </button>
+  );
+}
+
 const DERIVED_ROWS: [keyof Derived, string, (v: number) => string][] = [
   ["maxHp", "HP", String],
   ["maxSp", "SP", String],
@@ -224,7 +235,16 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
   const used = STAT_KEYS.reduce((n, k) => n + (plan[k] ?? 0), 0);
   const left = c.statPoints - used;
   const preview = used ? derive(c.level, Object.fromEntries(STAT_KEYS.map((k) => [k, c.stats[k] + (plan[k] ?? 0)])) as Stats, c.equip) : view.derived;
-  const bump = (k: keyof Stats, d: number) => setPlan((p) => ({ ...p, [k]: Math.max(0, (p[k] ?? 0) + d) }));
+  // 11/19 꾹 누르면 되풀이돼서(useHoldRepeat) 남은 포인트·상한은 바뀐 계획(p)에서 다시 센다
+  const bump = (k: keyof Stats, d: number) =>
+    setPlan((p) => {
+      const cur = p[k] ?? 0;
+      if (d > 0) {
+        const usedNow = STAT_KEYS.reduce((n, x) => n + (p[x] ?? 0), 0);
+        if (c.statPoints - usedNow <= 0 || c.stats[k] + cur >= STAT_MAX) return p;
+      } else if (cur <= 0) return p;
+      return { ...p, [k]: cur + d };
+    });
   // 능력치 초기화: 스킬 초기화와 같은 규칙 (레벨에 따라 지갑 포인트). 서버가 비용을 다시 확인한다
   const [confirmReset, setConfirmReset] = useState(false);
   const spent = spentStats(c);
@@ -257,24 +277,17 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
                   )}
                 </span>
                 <span className={s.stepper}>
-                  <button
-                    type="button"
-                    className={cx(ui.button, ui.quiet)}
-                    onClick={() => bump(k, -1)}
-                    disabled={!add}
-                    aria-label={`${STAT_LABELS[k].name} 1 내리기`}
-                  >
+                  <HoldButton className={cx(ui.button, ui.quiet)} step={() => bump(k, -1)} enabled={add > 0} label={`${STAT_LABELS[k].name} 1 내리기 (꾹 누르면 계속)`}>
                     −
-                  </button>
-                  <button
-                    type="button"
+                  </HoldButton>
+                  <HoldButton
                     className={ui.button}
-                    onClick={() => bump(k, 1)}
-                    disabled={left <= 0 || c.stats[k] + add >= STAT_MAX}
-                    aria-label={`${STAT_LABELS[k].name} 1 올리기`}
+                    step={() => bump(k, 1)}
+                    enabled={left > 0 && c.stats[k] + add < STAT_MAX}
+                    label={`${STAT_LABELS[k].name} 1 올리기 (꾹 누르면 계속)`}
                   >
                     +
-                  </button>
+                  </HoldButton>
                 </span>
               </div>
             );
@@ -284,7 +297,7 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
         <div className={s.startRow}>
           <span className={s.meta}>
             레벨이 오를 때마다 능력치 포인트를 3개 받아요. 5의 배수 레벨엔 5개예요.
-            {view.endgame ? ` 초월 레벨은 5레벨마다 1개씩 받아요. 초월로 지금까지 ${transcendStatPoints(c.tLevel)}개 받았어요.` : ""}
+            {view.endgame ? ` 초월 레벨마다 1개씩 받아요. 초월로 지금까지 ${transcendStatPoints(c.tLevel)}개 받았어요.` : ""}
           </span>
           <button
             type="button"
@@ -362,7 +375,7 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
 // ── 장비 ── 11/15 세트 장비·강화와 함께 정리판으로 옮겼다 (components/rpg/GearPanel.tsx)
 export { GearPanel } from "./GearPanel";
 
-// ── 스킬: 갈래 3개 × 단 5개 트리 창 (SkillTreePanel.tsx) ──
+// ── 스킬: 갈래 4개 × 단 5개 트리 창 + 초월 수련 (SkillTreePanel.tsx · TranscendPanel.tsx) ──
 export { SkillPanel } from "./SkillTreePanel";
 
 // ── 상점 ──

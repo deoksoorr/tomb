@@ -8,12 +8,14 @@ import {
   enhanceNeed,
   enhanceRate,
   ENH_FAIL_BONUS,
+  inheritPlan,
   REROLL_DOCS,
   REROLL_LOCK_SEALS,
   REROLL_MAX,
   rerollCost,
   type EnhanceResult,
   type EnhTarget,
+  type InheritFrom,
 } from "@/lib/rpg/enhance";
 import {
   decodeSg,
@@ -23,6 +25,7 @@ import {
   optText,
   SG_LEGENDS,
   sgDef,
+  sgName,
   sgUid,
   SHOP_ENH_MAX,
   shopPieceOf,
@@ -35,7 +38,7 @@ import { josa } from "@/lib/rpg/skillText";
 import Dialog from "../ui/Dialog";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
-import { pts } from "./format";
+import { pts, statPair } from "./format";
 import { gearGrade, sgGrade } from "./gear";
 import { playEnhance } from "./enhanceSound";
 import RpgIcon from "./RpgIcon";
@@ -46,7 +49,7 @@ import g from "./gearPanel.module.css";
 // 11/15 강화 창: 책상 위 장비에 큰 결재 도장이 기다렸다가 쾅 — 「승인」(성공)·「반려」(실패). 높은 강화일수록 오래 숨죽인다.
 // 기다리는 중에 한 번 더 누르면 바로 결과로. 옵션 굴리기(세트 장비만)도 같은 창의 다른 칸.
 
-export type EnhanceTab = "enhance" | "reroll";
+export type EnhanceTab = "enhance" | "reroll" | "inherit";
 
 type Phase = "idle" | "charge" | "show";
 type Shown = { r: EnhanceResult; kind: "ok" | "fail" | "drop" | "saved" };
@@ -141,7 +144,10 @@ export default function EnhanceDialog({
 }) {
   // 11/15 묶음 상점 장비는 처음 강화하면 한 개가 떼어진다 → 그 뒤로는 그 한 개(번호)를 이어서 강화
   const [target, setTarget] = useState<EnhTarget>(target0);
-  const [tab, setTab] = useState<EnhanceTab>("sg" in target0 ? tab0 : "enhance");
+  const [tab, setTab] = useState<EnhanceTab>("sg" in target0 || tab0 !== "reroll" ? tab0 : "enhance");
+  /** 11/19 강화 승계: 고른 재료 · 방금 받은 결과 줄 */
+  const [src, setSrc] = useState<InheritFrom | null>(null);
+  const [inherited, setInherited] = useState<string | null>(null);
   /** 결과 직전 능력치 (숫자가 오르내리는 연출용) */
   const [before, setBefore] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -241,6 +247,54 @@ export default function EnhanceDialog({
     }
   }
 
+  async function doInherit() {
+    if (!src || busy) return;
+    const plan = inheritPlan(view.character, src, target);
+    if (!plan.ok) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await rpgApi.gear({
+        type: "inherit",
+        ...("sg" in src ? { fromSg: src.sg } : { fromPiece: src.piece }),
+        ...("sg" in target ? { sg: target.sg } : "piece" in target ? { piece: target.piece } : { shop: target.shop }),
+        cost: plan.cost,
+      });
+      if (!alive.current) return;
+      onView(res);
+      const r = res.gear?.inherit;
+      if (r?.piece !== undefined && !("piece" in target)) setTarget({ piece: r.piece });
+      setSrc(null);
+      if (r) setInherited(`${r.srcName} +${r.src}의 강화를 옮겨서 +${r.from} → +${r.to}가 됐어요.`);
+      playEnhance("slam", r?.to ?? 3);
+      setTimeout(() => playEnhance("success", r?.to ?? 3), 200);
+    } catch (x) {
+      if (alive.current) setErr(errorMessage(x));
+    } finally {
+      if (alive.current) setBusy(false);
+    }
+  }
+
+  // 승계 재료 후보: 같은 부위에서 옮길 게 있는 강화 장비 (세트 장비·강화한 상점 장비)
+  const worn = new Set(Object.values(view.character.equip).filter(Boolean));
+  const sources: { from: InheritFrom; name: string; e: number; m: number; worn: boolean }[] = [
+    ...(view.character.sg ?? []).flatMap((c) => {
+      const x = decodeSg(c);
+      return x ? [{ from: { sg: x.u } as InheritFrom, name: sgName(x), e: x.e, code: c }] : [];
+    }),
+    ...(view.character.si ?? []).flatMap((c) => {
+      const p = shopPieceOf(c);
+      const d = p ? gearById(p.id) : undefined;
+      return p && d ? [{ from: { piece: p.u } as InheritFrom, name: d.name, e: p.e, code: c }] : [];
+    }),
+  ].flatMap((x) => {
+    const plan = inheritPlan(view.character, x.from, target);
+    return plan.ok ? [{ from: x.from, name: x.name, e: x.e, m: plan.m, worn: worn.has(x.code) }] : [];
+  });
+  const sameSrc = (a: InheritFrom | null, b: InheritFrom) => !!a && (("sg" in a && "sg" in b && a.sg === b.sg) || ("piece" in a && "piece" in b && a.piece === b.piece));
+  const pick = src ? inheritPlan(view.character, src, target) : null;
+  const ihShort = pick?.ok ? [view.points < pick.cost && "포인트", m.doc < pick.doc && "결재 서류"].filter(Boolean) : [];
+
   const resultLine = (s: Shown) => {
     const r = s.r;
     if (s.kind === "ok") return `성공! +${r.from} → +${r.to}`;
@@ -258,16 +312,19 @@ export default function EnhanceDialog({
   return (
     <Dialog title={`${def.name}${lv ? ` +${lv}` : ""}`} onClose={onClose} fitHeight closable={phase !== "charge"}>
       <div className={g.enhance}>
-        {it && (
-          <div className={g.picker} role="group" aria-label="강화와 옵션">
-            <button type="button" aria-pressed={tab === "enhance"} className={ui.button} onClick={() => setTab("enhance")}>
-              강화
-            </button>
+        <div className={g.picker} role="group" aria-label="강화와 옵션">
+          <button type="button" aria-pressed={tab === "enhance"} className={ui.button} onClick={() => setTab("enhance")}>
+            강화
+          </button>
+          {it && (
             <button type="button" aria-pressed={tab === "reroll"} className={ui.button} disabled={phase === "charge"} onClick={() => setTab("reroll")}>
               옵션 굴리기
             </button>
-          </div>
-        )}
+          )}
+          <button type="button" aria-pressed={tab === "inherit"} className={ui.button} disabled={phase === "charge"} onClick={() => setTab("inherit")}>
+            강화 승계
+          </button>
+        </div>
 
         {tab === "enhance" ? (
           <>
@@ -427,7 +484,80 @@ export default function EnhanceDialog({
                 </button>
               </>
             ) : (
-              <p className={g.note}>{"sg" in target ? "+15까지 다 올렸어요." : "상점 장비는 +5까지만 올릴 수 있어요."}</p>
+              <p className={g.note}>{"sg" in target ? "+15까지 다 올렸어요." : `상점 장비는 +${SHOP_ENH_MAX}까지만 올릴 수 있어요.`}</p>
+            )}
+          </>
+        ) : tab === "inherit" ? (
+          <>
+            <p className={g.note}>
+              같은 부위의 강화한 장비를 재료로 써서 더 높은 직급의 이 장비에 강화를 옮겨요. 기본 능력치가 재료보다 떨어지지 않는 단계로 옮겨지고, 재료 장비는 사라져요.{" "}
+              <OddsLink section="enhance" label="승계표" />
+            </p>
+            {inherited && (
+              <p className={g.result} data-ok role="status">
+                {inherited}
+              </p>
+            )}
+            {sources.length === 0 ? (
+              <p className={g.note}>옮길 수 있는 재료가 없어요. 같은 부위에서 이 장비보다 낮은 직급의 강화 장비가 있어야 해요.</p>
+            ) : (
+              <div className={g.lockList} role="radiogroup" aria-label="재료 장비">
+                {sources.map((x) => (
+                  <label key={"sg" in x.from ? `s${x.from.sg}` : `p${x.from.piece}`}>
+                    <input type="radio" name="inheritFrom" checked={sameSrc(src, x.from)} onChange={() => setSrc(x.from)} /> {x.name} +{x.e}
+                    <span className={g.note}>
+                      {" "}
+                      → 승계 뒤 +{x.m}{x.worn ? " (장착 중)" : ""}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+            {pick?.ok && (
+              <>
+                <div className={g.enhTop}>
+                  <p className={g.levels}>
+                    +{pick.cur} <span>→</span> +{pick.m}
+                  </p>
+                </div>
+                {/* 11/19 기본 능력치가 떨어지지 않는 걸 눈으로 (재료 → 승계 뒤, 랜덤 옵션은 이 장비 것 그대로) */}
+                <table className={g.inheritCmp}>
+                  <thead>
+                    <tr>
+                      <th>기본 능력치</th>
+                      <th>{pick.srcName} +{pick.src}</th>
+                      <th>승계 뒤 +{pick.m}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pick.lines.map(([k, a, b]) => {
+                      const [name, av] = statPair(k, a);
+                      return (
+                        <tr key={k}>
+                          <th>{name}</th>
+                          <td>{a > 0 ? av : "—"}</td>
+                          <td data-up={b > a || undefined}>{b > 0 ? statPair(k, b)[1] : "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                <div className={g.costs}>
+                  <span data-short={view.points < pick.cost || undefined}>
+                    {pts(pick.cost)} <small className={g.note}>/ {pts(view.points)}</small>
+                  </span>
+                  <span data-short={m.doc < pick.doc || undefined}>
+                    결재 서류 {pick.doc} <small className={g.note}>/ {m.doc}</small>
+                  </span>
+                </div>
+                <p className={g.note}>
+                  재료로 쓴 {pick.srcName} +{pick.src} 장비는 사라져요. 끼고 있었다면 그 칸에 이 장비를 대신 껴요.
+                </p>
+                {ihShort.length > 0 && <p className={g.note}>{josa(ihShort.join(", "), "이", "가")} 모자라요.</p>}
+                <button type="button" className={cx(ui.button, ui.primary)} style={{ minHeight: 48 }} disabled={busy || ihShort.length > 0} onClick={doInherit}>
+                  승계하기 · {pts(pick.cost)}
+                </button>
+              </>
             )}
           </>
         ) : it ? (

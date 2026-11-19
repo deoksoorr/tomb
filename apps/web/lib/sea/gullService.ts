@@ -1,6 +1,8 @@
 import { grantGullFeather } from "../forage/service";
 import type { DexGain } from "../forage/types";
 import { HttpError } from "../http";
+import type { TodoTick } from "../retain";
+import { questHook, todoTickOf } from "../retainQuest";
 import { refundPoints, spendPoints } from "../store";
 import { kstDay } from "../store/accounts";
 import type { Me } from "../types";
@@ -40,11 +42,13 @@ export async function buySnack(acct: string, kind: SnackKind, now = Date.now()):
   return { ...snacks(r), me };
 }
 
-export type SnackThrowResult = GullSnacks & { kind: SnackKind; feather: string | null; dex?: DexGain };
+export type SnackThrowResult = GullSnacks & { kind: SnackKind; feather: string | null; dex?: DexGain; todo?: TodoTick };
 /** 갈매기에게 하나 던지기 → 깃털 (없으면 null). rand는 시험용 */
 export async function throwSnack(acct: string, kind: SnackKind, now = Date.now(), ip?: string, rand: () => number = Math.random): Promise<SnackThrowResult> {
-  // 쓰고 남은 개수까지 한 번에 받아요 (Redis 1명령)
-  const left = await getGullStore().take(acct, kstDay(now), kind);
+  // 쓰고 남은 개수까지 한 번에 받아요 (Redis 1명령). 11/19 오늘 미션 「갈매기에게 과자 던지기」면 같은 스크립트에서 진행도 (lib/retainQuest)
+  const day = kstDay(now);
+  const quest = questHook(acct, day, "gull");
+  const left = await getGullStore().take(acct, day, kind, quest);
   if (!left) throw new HttpError(409, "NO_SNACK", SNACK_NONE_MSG);
   const id = rollFeather(kind, rand(), rand());
   let dex: DexGain | undefined;
@@ -58,5 +62,5 @@ export async function throwSnack(acct: string, kind: SnackKind, now = Date.now()
     feather = g?.item ? id : null;
     dex = g?.dex;
   }
-  return { ...snacks(left), kind, feather, ...(dex ? { dex } : {}) };
+  return { ...snacks(left), kind, feather, ...(dex ? { dex } : {}), ...todoTickOf(quest, day) };
 }

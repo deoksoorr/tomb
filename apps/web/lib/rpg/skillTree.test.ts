@@ -1,16 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { BRANCHES, SKILL_FX, SKILLS, skillById, TIER_GATES, type SkillId } from "./catalog";
+import { BUFF_SKILLS } from "./skillTree";
 import { allocStats, equip, fitSkillBudget, fitToLevel, learnSkill, newCharacter, normalize, resetSkills, resetStats, RpgError, setHotbar, statPointsEarned } from "./character";
 import { MAX_LEVEL } from "./formulas";
-import { ALL_SKILLS_POINTS, checkAllocation, checkLearn, RESPEC_MAX_COST, respecCost, SKILL_TREE_VERSION, skillPointsEarned, spentIn, spentPoints, tierOpen, type Alloc } from "./skillRules";
+import { ALL_SKILLS_POINTS, checkAllocation, checkLearn, costTo, rankCost, RESPEC_MAX_COST, respecCost, SKILL_TREE_VERSION, skillPointsEarned, spentIn, spentPoints, tierOpen, type Alloc } from "./skillRules";
 import { testServerEnv } from "./superHunter";
 
-// 스킬 트리 (저장 형식 2): 트리 모양 · 단·선행·포인트 규칙 · 초기화 비용 · 옛 데이터 이전 · 슈퍼 계정 환경 · 밸런스
+// 스킬 트리 (저장 형식 3 — 11/19 갈래 넷·랭크 비용 1·1·2·2·3): 트리 모양 · 단·선행·포인트 규칙 · 초기화 비용 · 옛 데이터 이전 · 슈퍼 계정 환경 · 밸런스
 
 describe("트리 모양", () => {
-  it("갈래 3개 × 단 5개, 갈래당 9~11개, 선행은 같은 갈래의 아래 단", () => {
-    expect(SKILLS.length).toBeGreaterThanOrEqual(28);
-    expect(SKILLS.length).toBeLessThanOrEqual(34);
+  it("갈래 4개 × 단 5개, 갈래당 9~11개, 선행은 같은 갈래의 아래 단", () => {
+    expect(BRANCHES).toEqual(["ember", "frost", "soul", "worker"]);
+    expect(SKILLS.length).toBeGreaterThanOrEqual(36);
+    expect(SKILLS.length).toBeLessThanOrEqual(44);
     for (const b of BRANCHES) {
       const n = SKILLS.filter((s) => s.branch === b);
       expect(n.length).toBeGreaterThanOrEqual(9);
@@ -20,7 +22,8 @@ describe("트리 모양", () => {
     const spots = new Set<string>();
     for (const s of SKILLS) {
       expect(s.maxLevel).toBeGreaterThanOrEqual(1);
-      expect(s.maxLevel).toBeLessThanOrEqual(5);
+      // 11/19 v4 공격·소환·제어는 12(궁극기 5), 버프·패시브는 그대로
+      expect(s.maxLevel).toBeLessThanOrEqual(BUFF_SKILLS.includes(s.id) || s.kind === "passive" ? 5 : 12);
       const spot = `${s.branch}:${s.tier}:${s.col}`;
       expect(spots.has(spot), spot).toBe(false);
       spots.add(spot);
@@ -79,21 +82,21 @@ describe("규칙: 선행·단·포인트 합", () => {
   it("단은 그 갈래의 아래 단에 쓴 포인트로 열린다", () => {
     expect(TIER_GATES[0]).toBe(0);
     let c = normalize({ level: 30, treeVer: SKILL_TREE_VERSION });
-    // 2단(불꽃 부채): 1단에 3포인트 전에는 잠김
+    // 2단(불꽃 부채): 1단에 5포인트 전에는 잠김 (11/19 v4)
     c = learnSkill(c, "em_kindle");
-    expect(() => learnSkill(c, "em_fan")).toThrow(/2단은 이 갈래에 3포인트/);
-    c = learnSkill(learnSkill(c, "em_kindle"), "em_kindle");
+    expect(() => learnSkill(c, "em_fan")).toThrow(/2단은 이 갈래에 5포인트/);
+    for (let i = 0; i < 4; i++) c = learnSkill(c, "em_kindle");
     c = learnSkill(c, "em_fan");
     expect(c.skills.em_fan).toBe(1);
     // 다른 갈래에 쓴 포인트는 세지 않는다
     expect(() => learnSkill(c, "fr_icicle")).toThrow(RpgError);
-    expect(spentIn(c.skills, "ember")).toBe(4);
-    expect(spentIn(c.skills, "ember", 2)).toBe(3);
+    expect(spentIn(c.skills, "ember")).toBe(6);
+    expect(spentIn(c.skills, "ember", 2)).toBe(5);
   });
 
   it("선행 스킬은 필요 랭크까지 찍어야 한다", () => {
-    const a: Alloc = { em_kindle: 3, em_fan: 1, em_hearth: 3 };
-    // 3단(불의 고리)은 아래 단 7포인트 + 불꽃 부채 2랭크
+    const a: Alloc = { em_kindle: 6, em_fan: 1, em_hearth: 5 };
+    // 3단(불의 고리)은 아래 단 12포인트 + 불꽃 부채 2랭크
     expect(checkLearn(a, "em_ring", 99)?.code).toBe("SKILL_REQUIRED");
     expect(checkLearn({ ...a, em_fan: 2 }, "em_ring", 99)).toBeNull();
     expect(checkLearn({ em_kindle: 1 }, "em_ring", 99)?.code).toBe("TIER_LOCKED");
@@ -105,20 +108,26 @@ describe("규칙: 선행·단·포인트 합", () => {
     expect(skillPointsEarned(MAX_LEVEL)).toBe(55);
     // 저장된 skillPoints가 거짓이어도 다시 센다
     const c = normalize({ level: 10, treeVer: SKILL_TREE_VERSION, skills: { em_kindle: 3 }, skillPoints: 999 });
+    // 11/19 v4 랭크마다 1포인트
     expect(c.skillPoints).toBe(8);
     expect(spentPoints(c.skills) + c.skillPoints).toBe(skillPointsEarned(10));
     let d = c;
-    for (let i = 0; i < 8; i++) d = learnSkill(d, i < 2 ? "em_kindle" : i < 7 ? "em_hearth" : "em_fan");
+    for (let i = 0; i < 8; i++) d = learnSkill(d, i < 5 ? "em_kindle" : "em_hearth");
     expect(d.skillPoints).toBe(0);
     expect(() => learnSkill(d, "em_stoke")).toThrow(/스킬 포인트/);
+    expect(rankCost(7)).toBe(1);
+    expect([1, 5, 12].map(costTo)).toEqual([1, 5, 12]);
+    // 11/19 초월 레벨마다 +1
+    expect(skillPointsEarned(MAX_LEVEL, 50)).toBe(105);
   });
 
   it("서버가 잘못된 배분을 거절한다", () => {
-    expect(checkAllocation({ em_kindle: 6 }, 99)?.code).toBe("INVALID_INPUT");
+    expect(checkAllocation({ em_kindle: 13 }, 99)?.code).toBe("INVALID_INPUT");
     expect(checkAllocation({ nope: 1 }, 99)?.code).toBe("INVALID_INPUT");
     expect(checkAllocation({ em_kindle: 1.5 }, 99)?.code).toBe("INVALID_INPUT");
     expect(checkAllocation({ em_bonfire: 1 }, 99)?.code).toBe("TIER_LOCKED");
-    expect(checkAllocation({ em_kindle: 5, em_hearth: 2, em_ring: 1 }, 99)?.code).toBe("SKILL_REQUIRED");
+    expect(checkAllocation({ em_kindle: 10, em_hearth: 2, em_ring: 1 }, 99)?.code).toBe("SKILL_REQUIRED");
+    // 11/19 v4 랭크마다 1포인트
     expect(checkAllocation({ em_kindle: 5, em_hearth: 5 }, 9)?.code).toBe("NO_SKILL_POINTS");
     expect(checkAllocation({ em_kindle: 5, em_hearth: 5 }, 10)).toBeNull();
     // 저장된 배분이 규칙에 어긋나면 (조작·트리 변경) 비우고 포인트를 돌려준다 + 안내
@@ -271,7 +280,7 @@ describe("테스트 서버 슈퍼 계정 환경 검사", () => {
   });
 
   it("슈퍼 계정 예산은 모든 스킬 최대 랭크", () => {
-    expect(ALL_SKILLS_POINTS).toBe(SKILLS.reduce((a, s) => a + s.maxLevel, 0));
+    expect(ALL_SKILLS_POINTS).toBe(SKILLS.reduce((a, s) => a + costTo(s.maxLevel), 0));
     expect(ALL_SKILLS_POINTS).toBeGreaterThan(skillPointsEarned(MAX_LEVEL));
   });
 });
@@ -421,12 +430,14 @@ describe("밸런스", () => {
   };
 
   for (const [name, a] of Object.entries(builds)) {
-    // 11/15 스킬 손질(평타보다 확실히 세게 — 스킬 피해 ↑·SP 회복 ↑)로 옛 최상위보다 조금 세다
-    it(`${name} 만렙 빌드 화력이 옛 최상위 빌드의 0.9~1.7배`, () => {
+    // 11/15 스킬 손질(평타보다 확실히 세게 — 스킬 피해 ↑·SP 회복 ↑)로 옛 최상위보다 조금 세다.
+    // 11/19 랭크 비용(1·1·2·2·3)으로 같은 55포인트에 찍히는 랭크가 줄어 아래 끝을 0.5로 (일부러 포인트가 모자라게)
+    // 11/19 v4 공격 스킬 12랭크(감쇠)로 갈래마다 폭이 커져 0.4~3배 (갈래 간 역할 균형은 scratchpad/skillsim 시뮬로 본다)
+    it(`${name} 만렙 빌드 화력이 옛 최상위 빌드의 0.4~3배`, () => {
       expect(spentPoints(a)).toBeLessThanOrEqual(skillPointsEarned(MAX_LEVEL));
       const ratio = newScore(a) / old;
-      expect(ratio, `${name}: ${ratio.toFixed(2)}`).toBeGreaterThan(0.9);
-      expect(ratio, `${name}: ${ratio.toFixed(2)}`).toBeLessThan(1.7);
+      expect(ratio, `${name}: ${ratio.toFixed(2)}`).toBeGreaterThan(0.4);
+      expect(ratio, `${name}: ${ratio.toFixed(2)}`).toBeLessThan(3);
     });
   }
 });

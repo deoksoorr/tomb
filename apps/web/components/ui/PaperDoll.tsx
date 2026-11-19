@@ -2,7 +2,7 @@
 
 import { createContext, use, useId, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import { cx } from "./cx";
-import { tipAlignOf } from "./paperDollLayout";
+import { tipAlignOf, tipPlaceOf } from "./paperDollLayout";
 import styles from "./PaperDoll.module.css";
 
 const AreasContext = createContext("");
@@ -118,7 +118,7 @@ export function DollSlot({ area, label, name, icon, silhouette, meter, sub, tone
           </span>
         )}
       </button>
-      <span id={tipId} role="tooltip" className={styles.tip} data-align={tipAlign ?? tipAlignOf(areas, area)}>
+      <span id={tipId} role="tooltip" className={styles.tip} data-align={tipAlign ?? tipAlignOf(areas, area)} data-place={tipPlaceOf(areas, area)}>
         <b>{tip.title}</b>
         {tip.body && <span>{tip.body}</span>}
       </span>

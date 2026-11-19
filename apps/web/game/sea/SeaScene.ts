@@ -80,7 +80,8 @@ import { SeaMap } from "./SeaMap";
 import { duskWeight, SeaToneTint } from "./seaTone";
 import { SEA_SCENE, type SeaFriend, type SeaHost, type SeaSceneData } from "./seaHost";
 import { seaNeighborSeat, seaPickSeat, SEA_MULTI_SEAT } from "./seaSit";
-import { BIG_SEAT_MAX, BIG_SEAT_TOAST, foodOfPeer, myBig, myFood, RIDING_EAT_TOAST } from "../camp/foodState";
+import { BIG_RIDE_TOAST, BIG_SEAT_MAX, BIG_SEAT_TOAST, foodOfPeer, myBig, myFood, RIDING_EAT_TOAST } from "../camp/foodState";
+import { friendRoute, nextAfterVillage } from "@/lib/friendRoute";
 import { SEA_DRUNK_MSG, seaDrunkBlocked, seaDrunkStep } from "./seaDrunk";
 import { FoodFx } from "../camp/foodFx";
 import { SeaForage } from "./seaForage";
@@ -863,10 +864,14 @@ export class SeaScene extends Phaser.Scene {
     })();
     on.push(
       bridge.on("friend:goto", ({ sid, name, x, y, map }) => {
-        if (map === "sea") this.goToFriend(sid, name, x, y);
-        // 캠핑장 친구는 마을을 거쳐 가요 (버스가 마을에만 서요)
-        else if (map === "camp") bridge.emit("friend:notice", { message: "캠핑장은 마을에서 버스를 타고 가요. 먼저 마을행 버스를 타요." });
-        else this.host.goVillage({ sid, name, x, y });
+        // 11/19 마을·캠핑장 친구 모두 버스로 (캠핑장은 마을 정류장을 거쳐 이어 타요 — lib/friendRoute). 몸이 커져 있으면 버스를 못 타요
+        const route = friendRoute("sea", map ?? "village", myBig());
+        if (route.do === "warp") this.goToFriend(sid, name, x, y);
+        else if (route.do === "block") bridge.emit("friend:notice", { message: route.message });
+        else {
+          const next = nextAfterVillage(route);
+          this.host.goVillage({ sid, name, x, y, ...(next ? { next } : {}) });
+        }
       }),
     );
     // 바닷가에서 채널을 옮기면 새 채널 바닷가 정류장에서 (캠핑장과 같은 규칙)
@@ -1228,6 +1233,11 @@ export class SeaScene extends Phaser.Scene {
     switch (o.kind) {
       case "bus":
         pl.faceTo(o.x, o.y - 10, now);
+        // 11/19 바베큐로 커진 동안에는 버스에도 못 타요 (마을·캠핑장 정류장과 같은 규칙)
+        if (myBig() > 1) {
+          this.toast(BIG_RIDE_TOAST);
+          break;
+        }
         this.boardBus();
         break;
       case "sign":

@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MONSTERS, type MonsterId } from "../catalog";
 import { huntSpawnable } from "../plan";
-import { killRateCeiling } from "../rewards";
-import { evalTower, MINION_FLOOR_ALLOW, towerClean, floorMinSec, towerBlock, towerPlan, towerZone } from "../tower";
+import { evalTower, MINION_FLOOR_ALLOW, towerClean, floorMinSec, towerBlock, towerPlan, towerZone, towerKillRate } from "../tower";
 import type { HuntResult } from "../types";
 import { clockText, meetingClock, meetingTime, MT_ELITE, MT_MID, MT_POOL, MT_ROOM_MIN, MT_ZONE, mtNextSide, mtShrink, mtSlack, type MtRoom } from "./meetingRoom";
 import { MT_MAIL_CAP, mtAgendaAdds } from "./meetingRoomPlan";
@@ -154,7 +153,7 @@ describe("끝없는 회의실: 서버 검증", () => {
       {
         const p = plan(x);
         const total = Object.values(huntSpawnable(p, Infinity)).reduce((a, b) => a + (b ?? 0), 0);
-        expect(total).toBeLessThanOrEqual(3 + floorMinSec(p) * killRateCeiling("hell", 50));
+        expect(total).toBeLessThanOrEqual(3 + floorMinSec(p) * towerKillRate(50));
       }
   });
 

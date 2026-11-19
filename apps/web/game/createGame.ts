@@ -16,6 +16,7 @@ import { SeaScene } from "./sea/SeaScene";
 import { applyTideQuery, setTideMinute } from "./sea/tideClock";
 import { installWorldTint } from "./world/worldTint";
 import { installSquirrelRain } from "./fx/SquirrelRain";
+import { installPhoto } from "./photo/install";
 import { qaUrlAllowed } from "@/lib/qaUrl";
 
 // Phaser 게임 생성. GameCanvas가 브라우저에서만 동적 import 한다 (Phaser는 이 경로로만 로드된다).
@@ -61,6 +62,8 @@ export function createGame(parent: HTMLElement, opts: GameStartOptions): GameHan
   ctx.disposers.push(installBackgroundLoop(game));
   // 11/16 이스터에그 「다람쥐를 뿌려라」: 실시간 서버가 보낸 squirrels → 지금 보이는 장면에 다람쥐 (game/fx/SquirrelRain)
   ctx.disposers.push(installSquirrelRain(game));
+  // 11/19 촬영 모드: 들어갈 때만 game/photo/PhotoController를 불러온다 (평소엔 듣기만)
+  ctx.disposers.push(installPhoto(game));
   // ?debug=1: 콘솔에서 상태를 들여다볼 수 있게 (게임 화면에는 아무것도 그리지 않는다. 수치는 UI의 NetHud가 net:stats로 표시)
   if (opts.debug) (window as unknown as { __tombGame?: Phaser.Game }).__tombGame = game;
   // 11/16 바닷가 물때 시험: 주소 ?tide=분 (한 바퀴 안의 분, 0 = 만조 · 90 = 간조), ?debug=1이면 콘솔에서 __tombTide.set(분)·__tombTide.set(null)

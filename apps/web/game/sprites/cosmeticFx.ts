@@ -1,5 +1,5 @@
 import { bodyTier, champAuraOn, CHAMP_AURA_OFF, champBoards, CHAMP_BOARDS, DIR, itemById, type DirId } from "@tomb/protocol";
-import { foxSheet, MOUNT_FRAMES, MOUNT_H, MOUNT_SIDE_SHIFT, MOUNT_W, mountLift, mountSheet, mountSideOver, type MountKind } from "./mountArt";
+import { foxSheet, MOUNT_FRAMES, MOUNT_GLIDE, MOUNT_H, MOUNT_SIDE_SHIFT, MOUNT_W, mountLift, mountSheet, mountSideOver, type MountKind } from "./mountArt";
 import { kstHour, parseAmbienceOverride, timePhase } from "@/lib/ambience";
 import { CUTE_FX, CUTE_FX_ART, cuteIconGrid } from "./cuteFx";
 import { THEME_FX, THEME_FX_ART, themeIconGrid } from "./themeFx";
@@ -1226,6 +1226,11 @@ export function riderLift(petId: string | null | undefined): number {
   const m = mountOf(petId);
   return m ? mountLift(m) : 0;
 }
+/** 11/19 걸을 때 탄 사람을 발걸음에 맞춰 1px 출렁일지 (미끄러지는 잉어는 몸이 그대로라 출렁이지 않는다 — MOUNT_GLIDE) */
+export function riderBobs(petId: string | null | undefined): boolean {
+  const m = mountOf(petId);
+  return !!m && !MOUNT_GLIDE[m];
+}
 
 /** 따로 그리는 F8 꾸미기 id 전부 (SPRITE_COSMETICS에 들어간다) */
 export const COSMETIC_FX_IDS: readonly string[] = Object.keys(COSMETIC_FX);
@@ -1236,6 +1241,8 @@ export const GEAR_EXTRA_FX: Readonly<Record<string, FxSpec>> = {
   q_hat_miner: { kind: "aura", motion: "qLamp", light: true },
   q_hat_snow: { kind: "aura", motion: "qSnowPuff" },
   q_hand_wishlamp: { kind: "aura", motion: "qWishGlow", light: true },
+  // 11/19 친구 초대 한정 마중 등불: 소원 등불과 같은 따뜻한 빛
+  inv_hand_lantern: { kind: "aura", motion: "qWishGlow", light: true },
   // 11/15 긴급 의뢰: 사이렌 모자 경광등이 빙글빙글 (빨강·파랑 빛줄기)
   u_hat_siren: { kind: "aura", motion: "uSiren", light: true },
   // 12월 크리스마스: 눈꽃 왕관 결정 반짝 · 지팡이 사탕 별빛 (xmasFx.ts)

@@ -1,0 +1,768 @@
+/*
+ * 11/18 새 이웃 꾸러미·첫 걸음·오늘의 할 일 (RetainHud.tsx). 패널·단추는 ui.module.css 그대로, 여기는 배치와 작은 그림만.
+ *  데스크톱: 왼쪽 위 묶음(음악·확성기·공지) 맨 아래에 칩 줄 → 그 아래 첫 걸음 카드
+ *  터치: 위 가장자리 [메뉴] 줄에 칩 (그림·짧은 글자), 첫 걸음은 [메뉴] 줄 아래 칩 (긴급 의뢰·고정 공지 칩이 있으면 그 밑)
+ */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.chip {
+  position: relative;
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 10px;
+  background: var(--panel);
+  font-size: 12px;
+}
+
+/* 받을 것이 있을 때: 촛불 색 테두리가 천천히 숨 쉰다 */
+.chipReady {
+  color: var(--candle);
+  box-shadow:
+    0 -2px 0 0 var(--candle),
+    0 2px 0 0 var(--candle),
+    -2px 0 0 0 var(--candle),
+    2px 0 0 0 var(--candle);
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+.count {
+  color: var(--moss);
+  font-weight: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.dot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  background: #e05a4a;
+  box-shadow: 0 0 0 2px var(--bg-deep);
+}
+
+/* ── 첫 걸음 카드 (데스크톱) ── */
+
+.first {
+  display: grid;
+  gap: 8px;
+  /* 11/19 넓게 (안내 문구가 한 줄로 더 들어가게) — 좁은 화면은 화면폭 − 32px까지 */
+  width: min(440px, calc(100vw - 32px));
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+/* 11/19 데스크톱 묶음: 아래 바로 가기 줄과 같은 줄(같은 bottom·같은 단추 모양), 오른쪽 끝 확대·축소 단추(36px) 왼쪽.
+   타는 펫 단추는 바로 가기 줄 안으로 옮겨졌다 */
+.dock {
+  position: absolute;
+  right: calc(var(--safe-right) + 44px);
+  bottom: var(--safe-bottom);
+  z-index: 3;
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.dock > * {
+  pointer-events: auto;
+}
+
+.dock .chips {
+  flex-wrap: nowrap;
+}
+
+/* 바로 가기 줄 단추(GameShell .dockButton)와 같은 모양 */
+.dockChip {
+  position: relative;
+  flex: none;
+  gap: 6px;
+  background: var(--panel);
+  white-space: nowrap;
+}
+
+/* 창이 좁으면 글자를 숨기고 그림·숫자만 (바로 가기 줄 오른쪽 끝과 겹치지 않게 — 1280px에서 바로 가기 줄은 폭죽·타기·유령선까지 다 있어도 오른쪽 끝 약 840px, 묶음은 약 880px부터) */
+@media (max-width: 1240px) {
+  .dockText {
+    display: none;
+  }
+}
+
+/* 첫 걸음 칩 + 위로 펼치는 목록 (칩 오른쪽 끝에 맞춘다) */
+.firstDock {
+  position: relative;
+  display: flex;
+}
+
+.firstDock .first {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+}
+
+.firstHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.firstHead b {
+  color: var(--bone);
+  font-weight: normal;
+}
+
+.fold {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.fold:hover,
+.fold:focus-visible {
+  color: var(--text);
+}
+
+.firstList {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 11/19 미션이 12칸이라 데스크톱 카드에서는 목록만 스크롤 (아래 단추 줄을 가리지 않게) */
+/* 오른쪽 위 미니맵(아래 끝 약 300px)에 닿지 않게: 화면 높이에서 미니맵·아래 줄·머리말 몫을 뺀 만큼 */
+.first .firstList {
+  max-height: clamp(160px, calc(100vh - 530px), 420px);
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+}
+
+/* 11/19 항목마다 칸: 체크 · 제목과 조작 안내 · 오른쪽 보상 칩 (다른 창의 칸과 같은 바탕·테두리) */
+.firstRow {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+  line-height: 1.4;
+}
+
+.firstRow[data-done] {
+  opacity: 0.55;
+}
+
+/* 11/19 미션을 누르면 길 안내 (칸 전체가 단추 — 보상 칩·글자 위에 투명하게 덮는다) */
+.firstPick {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.firstPick:focus-visible {
+  outline: 2px solid var(--candle);
+  outline-offset: -2px;
+}
+
+.firstRow:has(.firstPick:hover) {
+  background: var(--surface-hover, var(--bg-deep));
+}
+
+/* 안내 중인 칸: 촛불빛 테두리 */
+.firstRow[data-guide] {
+  box-shadow:
+    0 -2px 0 0 var(--candle),
+    0 2px 0 0 var(--candle),
+    -2px 0 0 0 var(--candle),
+    2px 0 0 0 var(--candle);
+}
+
+.guiding {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 4px;
+  background: var(--candle);
+  color: var(--bg-deep);
+  font-family: var(--font-small);
+  font-size: 10px;
+  vertical-align: 1px;
+}
+
+/* 갈 곳이 있는 미션 표시 (누르면 길 안내) */
+.routeMark {
+  display: inline-flex;
+  margin-left: 5px;
+  color: var(--candle);
+  opacity: 0.75;
+  vertical-align: -1px;
+}
+
+.firstRow[data-done] .firstText {
+  color: var(--muted);
+}
+
+.firstText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  color: var(--text);
+}
+
+.firstLabel {
+  color: var(--bone);
+  font-size: 12px;
+}
+
+/* 보상 칩 묶음: 포인트(촛불빛 동전 + 금액) · 아이템(그림 + 개수) — 첫 걸음·할 일·꾸러미 공용 */
+.rewards {
+  display: inline-flex;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.rewardPoints {
+  color: #ffe08a;
+}
+
+.reward {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px 1px 3px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.firstHint {
+  color: var(--faint);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+/* 체크 칸: 빈 칸은 테두리만, 한 칸은 이끼색으로 채운다 */
+.box {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border-strong);
+  color: var(--bg-deep);
+}
+
+.firstRow[data-done] .box,
+.todoRow .box:has(svg) {
+  background: var(--moss);
+}
+
+/* 방금 한 칸: 작은 별 반짝임 */
+.sparkle {
+  position: absolute;
+  left: -4px;
+  top: -6px;
+  width: 24px;
+  height: 24px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--candle), var(--candle)) center / 2px 100% no-repeat,
+    linear-gradient(var(--candle), var(--candle)) center / 100% 2px no-repeat;
+  animation: sparkle 0.9s steps(6) forwards;
+}
+
+.claim {
+  justify-self: start;
+  min-height: 30px;
+  padding: 4px 14px;
+  font-size: 12px;
+}
+
+.note {
+  color: var(--faint);
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+/* ── 첫 걸음 칩 (터치): [메뉴] 줄 아래 왼쪽, 긴급 의뢰·고정 공지 칩 밑 ── */
+
+.firstChip {
+  position: absolute;
+  z-index: 2;
+  top: calc(var(--safe-top) + var(--top-h) + var(--top-gap) + var(--urgent-h, 0px) + var(--pin-h, 0px));
+  left: var(--safe-left);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  /* 11/19 [지도] 등 위쪽 단추(ui.top)와 같은 높이·여백·글자 크기 */
+  height: var(--top-h);
+  min-height: var(--top-h);
+  padding: 0 var(--top-pad);
+  border: 0;
+  background: var(--panel);
+  box-shadow: var(--px-border);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--top-font);
+  line-height: 1;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* ── 창 공통 ── */
+
+.lead {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.small {
+  min-height: 28px;
+  padding: 3px 10px;
+  font-size: 11px;
+}
+
+.claimed {
+  flex: none;
+  color: var(--moss);
+  font-size: 11px;
+}
+
+.coin {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fbe7a2, var(--candle) 55%, #a8862f);
+  box-shadow: inset 0 0 0 2px #7d6224;
+  color: #5a4314;
+  line-height: 1;
+}
+
+.titleArt {
+  display: inline-grid;
+  place-items: center;
+  background: #2f2a1c;
+  box-shadow: 0 0 0 2px #a0743d;
+  color: #e7b46a;
+}
+
+.card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+}
+
+.card > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.cardArt {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.cardArt .sparkle {
+  left: auto;
+  right: -8px;
+  top: -8px;
+}
+
+.cardTag {
+  display: block;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.cardName {
+  display: block;
+  color: var(--bone);
+  font-weight: normal;
+  font-size: 14px;
+}
+
+.cardDesc {
+  margin: 3px 0 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.cardWhen {
+  margin: 6px 0 0;
+  color: var(--candle);
+  font-size: 12px;
+}
+
+.cardWhen b {
+  font-weight: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.cardButton {
+  flex: none;
+  min-height: 34px;
+  padding: 5px 16px;
+}
+
+/* 11/19 받기 단추는 크게 (폰 첫 입장에 저절로 열리는 창에서 이것만 눈에 들어오게) */
+.bigClaim {
+  min-height: 44px;
+  padding-inline: 28px;
+  font-size: 15px;
+}
+
+/* 11/19 폰 새 이웃 창의 칸 (첫 걸음 · 꾸러미 · 할 일) */
+.hubTabs {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.hubTab {
+  position: relative;
+  justify-content: center;
+  min-height: 36px;
+  font-size: 13px;
+}
+
+.hubTabOn {
+  color: var(--candle);
+  box-shadow:
+    0 -2px 0 0 var(--candle),
+    0 2px 0 0 var(--candle),
+    -2px 0 0 0 var(--candle),
+    2px 0 0 0 var(--candle);
+}
+
+.cardToday {
+  box-shadow: var(--px-border-strong), 0 0 0 4px rgba(224, 195, 106, 0.18);
+}
+
+.cardGot {
+  background: var(--moss-deep);
+}
+
+.cardGot .small {
+  margin-top: 8px;
+}
+
+/* ── 새 이웃 꾸러미 ── */
+
+.pathBody,
+.todoBody {
+  display: grid;
+  gap: 14px;
+}
+
+.track {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.slot {
+  display: grid;
+  grid-template-rows: auto 34px auto;
+  align-content: start;
+  justify-items: center;
+  gap: 4px;
+  min-height: 92px;
+  padding: 8px 2px 6px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+  text-align: center;
+}
+
+.slot[data-state="today"] {
+  background: #2c2a1c;
+  box-shadow: var(--px-border-strong), 0 0 0 3px rgba(224, 195, 106, 0.35);
+}
+
+.slot[data-state="next"] {
+  box-shadow: var(--px-border-strong);
+}
+
+.slot[data-state="later"] .slotArt {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+}
+
+.slot[data-state="got"] .slotArt {
+  opacity: 0.7;
+}
+
+.slotDay {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.slot[data-state="today"] .slotDay {
+  color: var(--candle);
+}
+
+.slotArt {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+}
+
+.slotCheck {
+  position: absolute;
+  right: -6px;
+  bottom: -4px;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  background: var(--moss);
+  box-shadow: 0 0 0 2px var(--bg-deep);
+  color: var(--bg-deep);
+}
+
+.slotName {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--text);
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 1.3;
+  word-break: keep-all;
+}
+
+/* ── 오늘 미션 ── */
+
+.todoList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.todoRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+}
+
+.todoLabel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.todoText {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 5px 10px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.todoRow[data-done] .todoText {
+  color: var(--bone);
+}
+
+.bar {
+  position: relative;
+  height: 6px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.bar > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--moss);
+}
+
+.todoCount {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+/* 11/19 미션 한 줄 안내 + [안내] 단추 (누르면 그곳까지 금빛 화살표 — 첫 걸음 길 안내와 같다) */
+.todoHintRow {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.todoGuide {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px 1px 5px;
+  border: 0;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.todoGuide:hover,
+.todoGuide:focus-visible {
+  box-shadow: var(--px-border-strong);
+}
+
+.todoGuide[aria-pressed="true"] {
+  background: var(--candle);
+  color: var(--bg-deep);
+}
+
+.todoRow[data-guide] {
+  box-shadow:
+    var(--px-border),
+    0 0 0 2px var(--candle);
+}
+
+.stampCard {
+  background: #24221a;
+}
+
+.stamp {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 3px #6b4a3a;
+  color: #6b4a3a;
+  transform: rotate(-8deg);
+}
+
+.stamp[data-on] {
+  box-shadow: inset 0 0 0 3px #d0654f;
+  color: #d0654f;
+}
+
+@media (max-width: 560px) {
+  /* 폰: 7칸을 한 줄로 두고 옆으로 밀어 본다 (4+3으로 접히면 빈칸이 생긴다) */
+  .track {
+    grid-auto-columns: 74px;
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scroll-snap-type: x proximity;
+  }
+
+  .slot {
+    scroll-snap-align: start;
+  }
+
+  .card {
+    flex-wrap: wrap;
+  }
+
+  .cardButton {
+    width: 100%;
+  }
+}
+
+@keyframes breathe {
+  50% {
+    box-shadow:
+      0 -2px 0 0 var(--candle),
+      0 2px 0 0 var(--candle),
+      -2px 0 0 0 var(--candle),
+      2px 0 0 0 var(--candle),
+      0 0 0 4px rgba(224, 195, 106, 0.22);
+  }
+}
+
+@keyframes sparkle {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) rotate(0deg);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1) rotate(20deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.4) rotate(45deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chipReady,
+  .sparkle {
+    animation: none;
+  }
+}

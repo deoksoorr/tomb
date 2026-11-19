@@ -18,6 +18,8 @@ export type MenuTarget =
   | "bag"
   | "hunt"
   | "dex"
+  /** 11/19 어디서든 보는 의뢰판 */
+  | "quests"
   | "housing"
   | "fireworks"
   | "ranking"
@@ -33,8 +35,8 @@ export type MenuTarget =
   | "calendar"
   | "gifts"
   | "friends"
-  /** 운영자 전용 포인트 현황 */
-  | "staffEarn";
+  /** 11/19 촬영 모드 */
+  | "photo";
 
 type Props = {
   canBury: boolean;
@@ -53,10 +55,12 @@ type Props = {
   friendIncoming?: number;
   /** 가방 [칭호]에서 아직 안 본 새 칭호가 있다 (가방 타일에 점) */
   titleNew?: boolean;
-  /** 운영자 계정: 친구 기능을 쓸 수 없어 친구 타일 대신 포인트 현황 타일 */
+  /** 운영자 계정: 친구 기능을 쓸 수 없어 친구 타일을 뺀다 */
   noFriends?: boolean;
   /** 11/16 탈것에 타 있어 사냥터에 못 가는 이유 (타일을 흐리게, 설명 대신) — lib/rideGate */
   huntBlocked?: string | null;
+  /** 11/19 촬영 모드를 열 수 있는 곳 (사냥·미니게임·버스 연출·집 꾸미기 중이 아님) */
+  canPhoto?: boolean;
   onPick: (target: MenuTarget) => void;
   onClose: () => void;
 };
@@ -78,7 +82,7 @@ type Entry = {
 /**
  * 메뉴: 터치 화면은 아래쪽에 조이스틱·행동 버튼만 두고 나머지는 모두 여기에. 데스크톱도 [메뉴]로 연다.
  * 48번: 즐길 거리(가방·사냥·집)를 앞에, 묘비(내 묘비 가기·묘비 쓰기·성불한 이야기들)는 뒤쪽 묶음으로.
- * 큰 아이콘 타일 + 한 줄 설명 + 빨간 점, 아래에 오늘의 정보(출석·남은 포인트 한도·채널·날씨/시간대)
+ * 큰 아이콘 타일 + 한 줄 설명 + 빨간 점, 아래에 오늘의 정보(출석·오늘 모은 포인트·채널·날씨/시간대)
  */
 export default function MenuSheet({
   canBury,
@@ -94,6 +98,7 @@ export default function MenuSheet({
   titleNew = false,
   noFriends = false,
   huntBlocked = null,
+  canPhoto = false,
   onPick,
   onClose,
 }: Props) {
@@ -110,7 +115,9 @@ export default function MenuSheet({
     { target: "bag", icon: "bag", label: "가방 (I)", desc: titleNew ? "새 칭호를 얻었어요!" : bagNew ? "새로 생긴 물건이 있어요" : "꾸미기·폭죽·잡은 것 꺼내기", dot: titleNew || bagNew },
     { target: "hunt", icon: "sword", label: "사냥터", desc: huntBlocked ?? "몬스터를 잡고 포인트 모으기", off: !!huntBlocked },
     { target: "dex", icon: "book", label: "도감", desc: "물고기·곤충·약초 모으기" },
-    { target: "housing", icon: "house", label: "집·분양 마을", desc: "내 집 분양받고 꾸미기" },
+    { target: "quests", icon: "board", label: "의뢰 보기", desc: "오늘의 의뢰 구경하기" },
+    { target: "housing", icon: "house", label: "집", desc: "내 집 분양받고 꾸미기" },
+    ...(canPhoto ? [{ target: "photo" as const, icon: "camera" as const, label: "촬영 모드 (K)", desc: "단추를 숨기고 사진 찍기" }] : []),
     ...(fireworkCount > 0
       ? [{ target: "fireworks" as const, icon: "spark" as const, label: "폭죽 쏘기 (G)", desc: "채널 하늘에 불꽃 한 발", badge: countLabel(fireworkCount) }]
       : []),
@@ -126,7 +133,7 @@ export default function MenuSheet({
       redDot: giftCount > 0,
     },
     ...(noFriends
-      ? [{ target: "staffEarn" as const, icon: "list" as const, label: "포인트 현황", desc: "사람들이 오늘 한도를 얼마나 채웠는지 보기" }]
+      ? []
       : [
           {
             target: "friends" as const,

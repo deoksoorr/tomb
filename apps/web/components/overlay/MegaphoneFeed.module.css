@@ -72,6 +72,32 @@
   font-size: 12px;
 }
 
+/* 11/19 음악 줄과 한 줄 (데스크톱 왼쪽 위): 확성기 단추를 음악 줄과 같은 높이·글자로, 사이를 살짝 띄운다 */
+.joined .bar {
+  align-items: center;
+  gap: 4px;
+}
+
+.joined .toggle,
+.joined .shout {
+  flex: none;
+  height: var(--top-h);
+  min-height: var(--top-h);
+  padding: 0 var(--top-pad, 8px);
+  font-size: var(--top-font, 12px);
+  white-space: nowrap;
+}
+
+/* 곡 이름이 길면 음악 줄(맨 앞)이 줄어든다 — 확성기 단추가 두 줄로 깨지지 않게 */
+.joined .bar > :first-child {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.joined .toggle {
+  margin-left: 4px;
+}
+
 .caret {
   color: var(--muted);
 }

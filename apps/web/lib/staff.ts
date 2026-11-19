@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { itemById, PERMANENT_UNTIL, STAFF_ITEM_IDS } from "@tomb/protocol";
-import { BALANCE_CAP } from "./economy";
+import { WALLET_MAX } from "./economy";
 import { env } from "./env";
 import { clientIp, HttpError } from "./http";
 import { isAdminIp } from "./ipAllow";
@@ -10,7 +10,8 @@ import type { AccountStore } from "./store/types";
 
 // 31번 운영자(슈퍼) 계정. 판정은 언제나 서버가 한다:
 //  - 입장 토큰의 staff 표시는 이 모듈이 확인한 뒤에만 넣는다 (실시간 서버가 다른 사람 화면에 저승사자 차림·금빛 이름표·「운영자」 칭호로 그린다. 이름은 닉네임 그대로)
-//  - 포인트: 내 정보를 불러올 때마다 잔액을 지갑 상한까지 채운다 (써도 줄지 않는 것처럼 보인다. 랭킹·경제 통계와 무관)
+//  - 포인트: 내 정보를 불러올 때마다 잔액을 지갑 상한(WALLET_MAX)까지 채운다 (써도 줄지 않는 것처럼 보인다. 랭킹·경제 통계와 무관 —
+//    지갑이 가득이라 적립이 0P라서다. 11/19 지갑 상한을 올리면서 채우는 값도 같이 올렸다)
 //  - 확성기: 가방에서 꺼내지 않는다
 //  - 운영자 전용 꾸미기(staff_*): 지정할 때와 내 정보를 불러올 때(입장) 빠진 것을 영구로 채운다 (상점에는 나오지 않는다 — isShopListed)
 //  - 묘비 삭제: 운영자 계정 + 관리자 IP(ADMIN_ALLOWED_IPS) 둘 다 맞아야 한다
@@ -65,7 +66,7 @@ export async function setStaff(accountId: string | null, now = Date.now(), name:
  */
 export async function topUpIfStaff(accounts: AccountStore, accountId: string): Promise<boolean> {
   if (!(await isStaff(accountId))) return false;
-  await Promise.all([getStaffStore().fill(accounts, accountId, BALANCE_CAP), grantStaffItems(accounts, accountId)]);
+  await Promise.all([getStaffStore().fill(accounts, accountId, WALLET_MAX), grantStaffItems(accounts, accountId)]);
   return true;
 }
 

@@ -28,6 +28,13 @@ export const chatStore = {
     notify();
     return true;
   },
+  /** 11/19 마을 소식 줄 (황금 고블린 등 — 이 화면에만). 같은 key는 한 번만, 알림음 없이. 새 줄이면 true */
+  notice(text: string, sys: NonNullable<ChatLine["sys"]>, key: string): boolean {
+    if (lines.some((l) => l.key === key)) return false;
+    lines = addChatLine(lines, { id: ++seq, name: "", text, mine: false, at: Date.now(), key, sys });
+    notify();
+    return true;
+  },
   /** 서버 최근 5분 합치기 */
   merge(incoming: Parameters<typeof mergeChatLines>[1]) {
     if (!incoming.length) return;

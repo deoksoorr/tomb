@@ -1,5 +1,5 @@
 import { Redis } from "@upstash/redis";
-import { isWorldLot } from "@tomb/protocol";
+import { isWorldLot, WORLD_LOTS } from "@tomb/protocol";
 import { nanoid } from "nanoid";
 import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
@@ -71,15 +71,15 @@ describe("HouseStore (memory): 채널마다 필지가 따로", () => {
     expect((await s.village(2)).map((h) => h.id)).toEqual(["e", "b"]);
   });
 
-  it("11/15 메인 맵은 1~9번지: 자동 배정은 1번지부터 차례로, 다 차면 10번지부터 2단지", async () => {
+  it("11/19 메인 맵은 1~15번지(10~15 등불 골목), 2단지는 닫았다: 자동 배정은 1번지부터 차례로, 다 차면 「빈 번지 없음」", async () => {
     const s = new MemoryHouseStore();
-    const got: number[] = [];
-    for (let i = 0; i < 12; i++) {
+    const got: (number | string)[] = [];
+    for (let i = 0; i < WORLD_LOTS + 2; i++) {
       const r = await mk(s, `x${i}`, 3, null);
-      if (typeof r === "object") got.push(r.lot);
+      got.push(typeof r === "object" ? r.lot : r);
     }
-    expect(got).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-    expect(got.filter((l) => isWorldLot(l))).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(got).toEqual([...Array.from({ length: WORLD_LOTS }, (_, i) => i + 1), "full", "full"]);
+    expect(got.filter((l) => typeof l === "number" && isWorldLot(l))).toHaveLength(WORLD_LOTS);
   });
 
   it("채널 필드가 없는 예전 기록(HMR로 옮겨 온 메모리 등)도 1채널로 읽는다", async () => {

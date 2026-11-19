@@ -46,7 +46,7 @@ const HALL_TTL_MS = 10 * 60_000;
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
-type Light = { streak: number; body: string | null; equipped: EquippedItem[]; dye: AvatarDye; kills: number; hard: number; hell: number };
+type Light = { streak: number; body: string | null; equipped: EquippedItem[]; dye: AvatarDye; kills: number; hard: number; hell: number; grad: number };
 
 const g = globalThis as typeof globalThis & {
   __tombTitleFacts?: Map<string, { at: number; facts: TitleFacts; marks: TitleMarks; equipped: string | null }>;
@@ -105,13 +105,14 @@ async function light(accountId: string, now: number): Promise<Light> {
       accounts.huntCleared(accountId, "hard").then((x) => (x ? 1 : 0)),
       accounts.huntCleared(accountId, "hell").then((x) => (x ? 1 : 0)),
     ]);
-    return { streak: a.streak, body: a.body, equipped: a.equipped, dye: style.dye, kills, hard, hell };
+    return { streak: a.streak, body: a.body, equipped: a.equipped, dye: style.dye, kills, hard, hell, grad: a.retain.gp };
   }
   const redis = (g.__tombTitleRedis ??= redisClient(conn, "titlesServer"));
   // 11/16 어려움·지옥 완주: 옛 난이도 판 + 사냥터별로 바뀐 뒤의 난이도 판 (lib/store/huntBoards)
   const [acct, look, style, kills, hardOld, hardNew, hellOld, hellNew] = (await redis
     .pipeline()
-    .hmget(K.acct(accountId), "streak", "body")
+    // 11/18 gp = 새 이웃 꾸러미 받은 수 (같은 HMGET에 칸만 하나 — 명령 그대로)
+    .hmget(K.acct(accountId), "streak", "body", "gp")
     .hgetall(K.look(accountId))
     .hgetall(styleKey(accountId))
     .zscore(K.rankHuntKills, accountId)
@@ -145,6 +146,7 @@ async function light(accountId: string, now: number): Promise<Light> {
     kills: Math.floor(Number(kills) || 0),
     hard: has(hardOld, hardNew),
     hell: has(hellOld, hellNew),
+    grad: Number(a[2]) || 0,
   };
 }
 
@@ -206,6 +208,7 @@ async function readFacts(accountId: string, now: number): Promise<{ facts: Title
     champ: champ.count,
     house: house ? house.score : 0,
     refs,
+    grad: l?.grad ?? 0,
   };
   for (const cat of DEX_CATS) metrics[`dex_${cat}`] = dexIdsOf(cat).filter(has).length;
   return {

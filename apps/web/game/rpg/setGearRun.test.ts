@@ -37,11 +37,12 @@ describe("세트 장비 싸움 효과", () => {
     expect(r.killHeal(1000)).toBe(0);
   });
 
-  it("야근 4세트: 체력 30% 아래 공격력 +25%·받는 피해 −10%", () => {
+  it("야근 4세트 (11/19 근접 생존): 늘 받는 피해 −8%, 체력 30% 아래 공격력 +25%·받는 피해 −15% 더", () => {
     const r = new SetGearRun(four(0));
     expect(r.atkMul(29, 100)).toBe(1.25);
     expect(r.atkMul(31, 100)).toBe(1);
-    expect(r.takenMul(0, 20, 100)).toBeCloseTo(0.9);
+    expect(r.takenMul(0, 50, 100)).toBeCloseTo(0.92);
+    expect(r.takenMul(0, 20, 100)).toBeCloseTo(0.92 * 0.85);
   });
 
   it("결재 4세트: 치명타 뒤 3초 공속 +20% · 치명타 피해 옵션", () => {

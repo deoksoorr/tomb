@@ -11,12 +11,35 @@
 }
 
 /* "지도 ▴" 버튼: 높이·패널·여백은 ui.top (위쪽 줄과 같은 규칙) */
+/* 11/19 위쪽 줄 다른 단추(ui.button + ui.top — [랭킹] 등)와 같은 크기·모양, 단축키 칸 M */
 .toggle {
   pointer-events: auto;
-  border: 0;
-  color: var(--text);
-  font-family: inherit;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel);
+  color: var(--muted);
   cursor: pointer;
+}
+
+/* 단축키 칸 (GameShell .dockKey·.topKey와 같은 모양) */
+.key {
+  display: inline-block;
+  margin-left: 2px;
+  /* M이 L보다 넓어 [랭킹] 단추보다 커지던 것: 칸 너비를 [랭킹]의 L 칸(약 12px)에 맞춘다 */
+  width: 12px;
+  padding: 0;
+  text-align: center;
+  background: var(--line);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+/* 11/19 켜져 있으면 촛불빛 글자·핀 */
+.toggle[data-on] {
+  color: var(--candle);
 }
 
 /* 너비는 --minimap-w (globals.css, 터치에서 작게). 11/16 r19 높이는 그 맵 비율대로 (style aspect-ratio — 마을·캠핑장·바닷가 모두
@@ -30,4 +53,11 @@
   /* 캔버스는 3배 해상도라 부드럽게 줄여 그린다 */
   image-rendering: auto;
   opacity: 0.92;
+}
+
+/* 터치 화면은 단축키가 없어 칸을 숨긴다 */
+@media (pointer: coarse) {
+  .key {
+    display: none;
+  }
 }

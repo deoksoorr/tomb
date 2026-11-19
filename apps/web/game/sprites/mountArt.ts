@@ -19,11 +19,18 @@ export type MountKind = "hound" | "goose" | "deer" | "carp" | "alpaca" | "polar"
  * 루돌프 썰매는 앞에 루돌프가 있어 가운데에 앉으면 너무 앞으로 쏠려 보였다 (사용자 피드백)
  */
 export const MOUNT_SIDE_SHIFT: Partial<Record<MountKind, number>> = { sleigh: 13 };
-export const MOUNT_SEAT: Record<MountKind, number> = { hound: 10, goose: 11, deer: 9, carp: 9, alpaca: 10, polar: 9, sleigh: 15 };
+// 11/19 월척 잉어 9 → 11: 몸이 얇고 낮아(등 맨 윗줄 8~9) 등 꼭대기에 앉히면 엉덩이가 등에 1~2줄만 걸쳐(걸으며 출렁이면 1줄) 둥둥 떠 보였다 (사용자 제보).
+// 몸통 안으로 옆모습 4줄·앞뒤 6줄 앉힌다 (더 내리면 얇은 몸이 탄 사람에 거의 가려진다. 앞·뒷모습 엉덩이는 머리·꼬리 덧그림 뒤로 들어간다)
+export const MOUNT_SEAT: Record<MountKind, number> = { hound: 10, goose: 11, deer: 9, carp: 11, alpaca: 10, polar: 9, sleigh: 15 };
 /** 탄 사람을 들어 올리는 높이 (px) */
 export function mountLift(kind: MountKind): number {
   return MOUNT_H - 1 - MOUNT_SEAT[kind];
 }
+/**
+ * 11/19 발걸음이 없는 탈것 (물결 위를 미끄러지는 잉어) — 몸이 프레임마다 그대로라 탄 사람만 1px 출렁이면
+ * 엉덩이가 등에서 떴다 붙었다 해 보인다 → 걸어도 탄 사람을 출렁이지 않는다
+ */
+export const MOUNT_GLIDE: Partial<Record<MountKind, true>> = { carp: true };
 
 type Draw = (g: Grid, f: number) => void;
 /** under = 외곽선을 두르지 않고 몸 밑에 까는 것 (월척 잉어의 물결 — 옆·앞·뒷모습에만) */

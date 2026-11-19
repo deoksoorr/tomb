@@ -28,6 +28,7 @@ const UP: Record<string, number> = {
   fridge: 16,
   bathtub: 4,
   cat_cushion: 2,
+  sleepy_dog: 2,
   grand_clock: 20,
   chair: 6,
   bookshelf: 14,
@@ -860,6 +861,7 @@ const DRAW: Record<string, Draw> = {
     g.ellipse(8, H - 9, 1.6, 1.6, 0xe0c060);
     g.rect(3, H - 3, W - 6, 2, WOOD);
   },
+  sleepy_dog: (g, _W, H, v) => sleepyDogArt(g, H, v),
   ghost_cat: (g, _W, H) => {
     g.ellipse(8, H - 5, 7, 4, 0x8a3e4a);
     g.ellipse(8, H - 8, 5, 4, 0xd8e0f0, 200);
@@ -872,6 +874,112 @@ const DRAW: Record<string, Draw> = {
   // 11/16 바닷가 세트 (seaFurnitureArt)
   ...SEA_DRAW,
 };
+
+// ── 잠자는 강아지 (1×1): 체크 담요 방석 위에 동그랗게 말려 자는 누렁이 (마을 강아지 game/world/life/sprites.ts의 누렁이 색) ──
+// 머리는 왼쪽 앞발 위에 얹고, 꼬리는 몸 앞으로 감는다. 빛은 위에서: 등은 밝게, 배 쪽은 디더 그림자.
+// 변형: "b1" = 숨을 들이쉰 장면 (등이 1px 솟는다) · "wag" = 쓰다듬을 때 꼬리 끝이 살짝 들린다.
+
+const DOG_FUR = 0xd09a52;
+const DOG_FUR_L = 0xe4b878;
+const DOG_FUR_D = 0xa8743a;
+const DOG_EAR = 0x94592c;
+const DOG_CREAM = 0xf0d6a8;
+const DOG_LINE = 0x4a3020;
+/** 머리·몸이 겹친 경계선 (짙은 털색: 검은 테보다 부드럽게) */
+const DOG_SEAM = 0x5e3a1e;
+const DOG_BED = 0x3e5a78;
+const DOG_BED_L = 0x58789a;
+const DOG_BED_D = 0x2c425a;
+const DOG_CHECK = 0xb8a47e;
+
+/** 방석 세로 반지름 (뒤 테가 강아지 정수리 위로 삐져나오지 않게 낮게) */
+const BED_RY = 4.2;
+
+/** 잠자는 강아지 숨 장면 수 (0 = 내쉼, 1 = 들이쉼) */
+export const DOG_BREATH_FRAMES = 2;
+
+function sleepyDogArt(g: Grid, H: number, v: string): void {
+  const tok = v.split("-");
+  const breath = tok.includes("b1") ? 1 : 0;
+  const wag = tok.includes("wag");
+  const oy = H - 18;
+  // 1) 방석 뒤쪽: 둥근 테(위가 밝다) + 오목하게 들어간 자리
+  const bx = 8;
+  const by = oy + 13;
+  g.ellipse(bx, by, 7.4, BED_RY, DOG_BED);
+  g.recolor((_x, y) => y <= by - 2.5, DOG_BED_L);
+  g.ellipse(bx, by + 0.2, 5.4, 2.6, DOG_BED_D);
+
+  // 2) 강아지: 둥글게 만 몸(뒤) 위에 앞을 보고 엎드린 얼굴. 겹친 경계마다 짙은 털색 테를 둘러 또렷하게
+  const layer = (paint: (d: Grid) => void) => {
+    const d = new Grid(16, H);
+    paint(d);
+    d.outline(DOG_SEAM);
+    g.draw(d, 0, 0);
+  };
+  layer((d) => {
+    // 몸: 숨을 들이쉬면 등이 1px 솟는다
+    const cx = 9.4;
+    const cy = oy + 10.6 - breath * 0.5;
+    const ry = 3.3 + breath * 0.5;
+    d.ellipse(cx, cy, 4.9, ry, DOG_FUR);
+    d.recolor((_x, y) => (y + 0.5 - cy) / ry < -0.5, DOG_FUR_L);
+    d.recolor((x, y) => (y + 0.5 - cy) / ry > 0.2 && (x + y) % 2 === 0, DOG_FUR_D);
+    // 꼬리: 오른쪽 엉덩이에서 앞으로 감는다 (wag면 끝이 한 칸 들린다)
+    const ty = oy + 14;
+    d.hline(10, 13, ty, DOG_FUR);
+    d.set(13, ty - 1, DOG_FUR);
+    d.set(10, wag ? ty - 1 : ty, DOG_CREAM);
+  });
+  layer((d) => {
+    // 얼굴: 앞을 보고 앞발 위에 턱을 괴었다
+    const hx = 6;
+    const hy = oy + 11.7;
+    d.ellipse(hx, hy, 3.1, 2.5, DOG_FUR);
+    d.recolor((_x, y) => y < oy + 10, DOG_FUR_L);
+    d.hline(3, 4, oy + 14, DOG_CREAM); // 앞발
+    d.hline(7, 8, oy + 14, DOG_CREAM);
+    d.rect(4, oy + 12, 4, 2, DOG_CREAM); // 주둥이
+    d.hline(5, 6, oy + 12, DOG_LINE); // 코
+    d.hline(3, 4, oy + 11, DOG_LINE); // 감은 눈 (가로 선)
+    d.hline(7, 8, oy + 11, DOG_LINE);
+    // 축 늘어진 양쪽 귀: 정수리 옆에서 볼까지 내려오고 끝이 둥글다
+    for (const [ex, out] of [
+      [2, 1],
+      [9, 10],
+    ] as const) {
+      d.vline(ex, oy + 9, oy + 12, DOG_EAR);
+      d.vline(out, oy + 10, oy + 12, DOG_EAR);
+      d.set(out, oy + 12, DOG_FUR_D);
+    }
+  });
+
+  // 3) 방석 앞 테: 강아지 배를 덮어 방석 속에 폭 들어간 것처럼. 체크 담요 무늬 + 아래는 디더 그늘
+  const front = oy + 15;
+  for (let y = front; y < H; y++)
+    for (let x = 0; x < 16; x++) {
+      const dx = (x + 0.5 - bx) / 7.4;
+      const dy = (y + 0.5 - by) / BED_RY;
+      if (dx * dx + dy * dy > 1) continue;
+      let c = y === front ? DOG_BED_L : DOG_BED;
+      if (y > front && (x === 4 || x === 8 || x === 12 || y === front + 2)) c = DOG_CHECK;
+      if (y >= front + 3 && (x + y) % 2 === 0) c = DOG_BED_D;
+      g.set(x, y, c);
+    }
+}
+
+/** 강아지 머리 위로 떠오르는 작은 「z」: 마을 낮잠 고양이의 z(5×5, game/world/life/sprites.ts)와 같은 글자 + 밝은 바닥에서도 보이게 옅은 테 (7×7) */
+export function zzzGrid(): Grid {
+  const g = new Grid(7, 7);
+  const c = 0xdce6f4;
+  g.hline(1, 5, 1, c);
+  g.set(4, 2, c);
+  g.set(3, 3, c);
+  g.set(2, 4, c);
+  g.hline(1, 5, 5, c);
+  g.outline(0x2a3044, false, 150);
+  return g;
+}
 
 // ── 4방향 가구 (catalog spin): 옆모습(왼쪽을 봄)·뒷모습. 오른쪽을 보는 모습은 옆모습을 좌우로 뒤집는다 ──
 // 빛은 늘 위에서 (윗면 밝게 · 밑변 어둡게) 내려와 좌우로 뒤집어도 어색하지 않게 그린다.

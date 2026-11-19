@@ -6,6 +6,7 @@ import { signTicket, verifyTicket } from "./ticket";
 import {
   climbTime,
   checkTowerStart,
+  CURSES,
   cursesAt,
   evalTower, towerClean,
   floorMinSec,
@@ -14,7 +15,10 @@ import {
   TOWER_CHESTS_PER_DAY,
   TOWER_FLOOR_POINTS,
   TOWER_POWER,
+  TOWER_STEEP_FROM,
   TOWER_TAUNTS,
+  TOWER_WAVE_GAP_SEC,
+  towerHpMul,
   towerChestDrops,
   towerCheckpoints,
   towerCurseFx,
@@ -32,7 +36,25 @@ import {
   towerBlock,
   towerZone,
   type TowerState,
+  isCheckpoint,
+  isChestFloor,
+  TOWER_CHECKPOINT_EVERY,
+  TOWER_CHEST_FROM,
+  TOWER_LOW_CHECKPOINTS,
+  TOWER_SUPER_START,
+  checkpointsUpTo,
+  nextCheckpoint,
+  TOWER_EASY_ATK,
+  TOWER_EASY_HP,
 } from "./tower";
+// 11/19 상자 층 경계는 상수에서 (경계가 바뀌어도 그대로 통과하게)
+const floorsOf = (start: number, n: number) => Array.from({ length: n }, (_, i) => start + i);
+const chestsIn = (start: number, n: number) => floorsOf(start, n).filter(isChestFloor);
+/** f층 이상에서 처음 고를 수 있는 시작 층 (체크포인트) */
+const cpFrom = (f: number) => (isCheckpoint(f) ? f : nextCheckpoint(f));
+// 11/19 엘리베이터: 1층 다음은 51층(CP_MID)·101층(CP_HIGH), 그 위로 TOWER_CHECKPOINT_EVERY층마다
+const [, CP_MID, CP_HIGH] = TOWER_LOW_CHECKPOINTS;
+
 import { MemoryTowerStore } from "./towerStore";
 import type { HuntResult } from "./types";
 
@@ -76,13 +98,28 @@ function climb(
 }
 
 describe("층 배율·테마·저주", () => {
-  it("체력·공격력 ×1.06^층, 방어 ×1.023^층 (기본 세기 하나 — 테마가 바뀌어도 약해지지 않는다)", () => {
-    expect(towerScale(10).hp).toBeCloseTo(1.06 ** 10);
-    expect(towerScale(10).def).toBeCloseTo(1.023 ** 10);
-    expect(towerScale(50).hp).toBeCloseTo(18.42, 1);
+  it("11/19 레이스형 곡선: 1층 ×0.7, 100층까지 체력 ×1.018·공격 ×1.008·방어 ×1.01, 그 위로 체력 ×1.075·공격 ×1.12·방어 ×1.023 (기본 세기 하나)", () => {
+    // 11/19 1~100층 체력은 TOWER_EASY_HP배 (실제 게임 재현으로 낮춤), 100→130층에서 1배로
+    const e = TOWER_EASY_HP;
+    expect(towerScale(1)).toMatchObject({ hp: 0.7 * e, atk: 0.7 * TOWER_EASY_ATK, def: 1 });
+    expect(towerScale(10).hp).toBeCloseTo(0.7 * 1.018 ** 9 * e);
+    expect(towerScale(10).atk).toBeCloseTo(0.7 * 1.008 ** 9 * TOWER_EASY_ATK);
+    expect(towerScale(10).def).toBeCloseTo(1.01 ** 9);
+    expect(towerScale(100).hp).toBeCloseTo(0.7 * 1.018 ** 99 * e);
+    expect(towerScale(110).hp).toBeCloseTo(0.7 * 1.018 ** 99 * 1.075 ** 10 * (e + ((1 - e) * 10) / 30));
+    expect(towerScale(130).hp).toBeCloseTo(0.7 * 1.018 ** 99 * 1.075 ** 30);
+    expect(towerScale(110).atk).toBeCloseTo(0.7 * 1.008 ** 99 * 1.12 ** 10 * (TOWER_EASY_ATK + ((1 - TOWER_EASY_ATK) * 10) / 30));
+    expect(towerScale(110).def).toBeCloseTo(1.01 ** 99 * 1.023 ** 10);
+    // 예전(×1.06^층) 1층·10층보다 약하고, 100층도 예전 25층 남짓
+    expect(towerHpMul(1)).toBeLessThan(1.06);
+    expect(towerHpMul(10)).toBeLessThan(1.06 ** 10);
+    expect(towerHpMul(100)).toBeLessThan(1.06 ** 25);
     const at = (f: number) =>
       monsterStats("hr_chair", "hell", TOWER_POWER, towerScale(f)).maxHp;
-    for (let f = 1; f < 40; f++) expect(at(f + 1)).toBeGreaterThan(at(f));
+    for (let f = 1; f < 140; f++) expect(at(f + 1)).toBeGreaterThan(at(f));
+    // 100층 위 열 층은 100층 아래 열 층보다 훨씬 가파르다
+    expect(towerHpMul(120) / towerHpMul(110)).toBeGreaterThan(1.5 * (towerHpMul(100) / towerHpMul(90)));
+    expect(towerScale(120).atk / towerScale(110).atk).toBeGreaterThan(2.5 * (towerScale(100).atk / towerScale(90).atk));
     expect(
       monsterStats("hr_chair", "hell", TOWER_POWER, towerScale(20)).exp,
     ).toBe(monsterStats("hr_chair", "hell", TOWER_POWER).exp);
@@ -92,7 +129,7 @@ describe("층 배율·테마·저주", () => {
     const n = TOWER_THEMES.length;
     const orders = new Set<string>();
     for (let seed = 1; seed <= 200; seed++)
-      for (const start of [1, 11, 51]) {
+      for (const start of [1, CP_MID, CP_HIGH]) {
         const zones: string[] = [];
         for (let b = 0; b < n * 3; b++) {
           const f = start + b * 5;
@@ -111,12 +148,12 @@ describe("층 배율·테마·저주", () => {
     expect(orders.size).toBeGreaterThan(20);
     // 같은 판이면 같은 순서 (몇 층까지 물었는지와 상관없이)
     expect(towerZone(77, 1, 26).id).toBe(towerZone(77, 1, 26).id);
-    expect(towerBlock(5, 11, 40)).toEqual(towerBlock(5, 11, 40));
+    expect(towerBlock(5, CP_MID, CP_MID + 29)).toEqual(towerBlock(5, CP_MID, CP_MID + 29));
   });
 
   it("11/15 서버·게임이 같은 계획: 층 계획의 몬스터는 그 판 그 층 테마 것만, 우두머리 층은 그 테마 우두머리 — 다 잡은 판은 시작 층과 상관없이 통과", () => {
     for (let seed = 1; seed <= 25; seed++)
-      for (const start of [1, 11, 21]) {
+      for (const start of [1, CP_MID, CP_HIGH]) {
         const kills: Partial<Record<MonsterId, number>> = {};
         for (let f = start; f < start + TOWER_THEMES.length * 5; f++) {
           const z = towerZone(seed, start, f);
@@ -141,11 +178,12 @@ describe("층 배율·테마·저주", () => {
       }
   });
 
-  it("저주는 층대마다 쌓인다: 10 물약 절반 · 20 금지 · 30 회복 절반 · 40 이동 · 50 공격 속도 · 70 시간 −20% · 100 정예 섞임", () => {
-    expect(cursesAt(9)).toEqual([]);
-    expect(cursesAt(10)).toEqual(["potion_half"]);
-    expect(cursesAt(35)).toEqual(["potion_half", "no_potion", "heal_half"]);
-    expect(cursesAt(100)).toEqual([
+  it("11/19 저주는 층대마다 쌓인다: 30 물약 절반 · 60 금지 · 80 이동 · 100 회복 절반 · 120 공격 속도 · 140 시간 −20% · 160 정예 섞임", () => {
+    expect(cursesAt(29)).toEqual([]);
+    expect(cursesAt(30)).toEqual(["potion_half"]);
+    expect(cursesAt(99)).toEqual(["potion_half", "no_potion", "mon_move"]);
+    expect(cursesAt(100)).toEqual(["potion_half", "no_potion", "heal_half", "mon_move"]);
+    expect(cursesAt(160)).toEqual([
       "potion_half",
       "no_potion",
       "heal_half",
@@ -154,6 +192,9 @@ describe("층 배율·테마·저주", () => {
       "time_20",
       "elite_mix",
     ]);
+    // 안내 창(components/overlay/GuideDialog)에 「30층부터 저주」「100층부터 빠르게」가 숫자로 적혀 있다 — 바꾸면 거기도
+    expect(CURSES[0].from).toBe(30);
+    expect(TOWER_STEEP_FROM).toBe(100);
     expect(towerCurseFx(1)).toEqual({
       potionMul: 1,
       potions: true,
@@ -164,19 +205,23 @@ describe("층 배율·테마·저주", () => {
       monAtk: 1,
       eliteMix: false,
     });
-    expect(towerCurseFx(45)).toMatchObject({
+    expect(towerCurseFx(85)).toMatchObject({
       potionMul: 0.5,
       potions: false,
-      healMul: 0.5,
+      healMul: 1,
       monMove: 1.2,
       monAtk: 1,
     });
-    expect(towerCurseFx(55).monAtk).toBe(1.2);
-    expect(towerScale(45).speed).toBe(1.2);
-    expect(towerFloorSec(69)).toBe(90);
-    expect(towerFloorSec(71)).toBe(72);
-    expect(towerFloorSec(70)).toBe(96);
-    expect(towerCurseFx(100).eliteMix).toBe(true);
+    expect(towerCurseFx(100).healMul).toBe(0.5);
+    expect(towerCurseFx(125).monAtk).toBe(1.2);
+    expect(towerScale(85).speed).toBe(1.2);
+    expect(towerScale(45).speed).toBe(1);
+    // 층 시간 60초 · 우두머리 층 90초, 140층부터 −20%
+    expect(towerFloorSec(139)).toBe(60);
+    expect(towerFloorSec(140)).toBe(72);
+    expect(towerFloorSec(141)).toBe(48);
+    expect(towerCurseFx(159).eliteMix).toBe(false);
+    expect(towerCurseFx(160).eliteMix).toBe(true);
   });
 });
 
@@ -189,25 +234,37 @@ describe("층 계획", () => {
     expect(boss.at(-1)!.boss).toBe(true);
     expect(boss.at(-1)!.monsters[0]).toBe(towerZone(77, 1, 15).boss);
     expect(towerPlan(77, 14, 1).some((w) => w.boss)).toBe(false);
-    expect(floorMinSec(towerPlan(77, 2, 1))).toBe(10);
+    // 11/19 둘째 웨이브 3초 + 엘리베이터 2초
+    expect(floorMinSec(towerPlan(77, 2, 1))).toBe(TOWER_WAVE_GAP_SEC + 2);
+    expect(towerPlan(77, 2, 1)[1].earliestSec).toBe(3);
   });
 
-  it("100층부터 우두머리 웨이브 빼고 웨이브마다 정예", () => {
-    for (const f of [101, 102, 103, 104])
-      for (const w of towerPlan(9, f, 101)) expect(w.elite).toBeDefined();
-    expect(towerPlan(9, 105, 101).at(-1)!.elite).toBeUndefined();
+  it("「임원 순시」(160층)부터 우두머리 웨이브 빼고 웨이브마다 정예", () => {
+    for (const f of [161, 162, 163, 164])
+      for (const w of towerPlan(9, f, 161)) expect(w.elite).toBeDefined();
+    expect(towerPlan(9, 165, 161).at(-1)!.elite).toBeUndefined();
   });
 });
 
 describe("체크포인트·시작 검사", () => {
-  it("1층 + 바로 아래층까지 깬 1·11·21 …층 (10층을 깨면 11층이 열린다, 슈퍼 계정은 101층까지)", () => {
+  it("11/19 1층 · 51층 · 101층, 그 위로 20층마다 — 바로 아래층까지 깨야 열린다 (50층을 깨면 51층, 슈퍼 계정은 101층까지)", () => {
+    const E = TOWER_CHECKPOINT_EVERY;
+    expect([CP_MID, CP_HIGH]).toEqual([51, 101]);
     expect(towerCheckpoints(0)).toEqual([1]);
-    expect(towerCheckpoints(9)).toEqual([1]);
-    expect(towerCheckpoints(10)).toEqual([1, 11]);
-    expect(towerCheckpoints(19)).toEqual([1, 11]);
-    expect(towerCheckpoints(20)).toEqual([1, 11, 21]);
-    expect(towerCheckpoints(23)).toEqual([1, 11, 21]);
-    expect(towerCheckpoints(3, true).at(-1)).toBe(101);
+    expect(towerCheckpoints(CP_MID - 2)).toEqual([1]);
+    expect(towerCheckpoints(CP_MID - 1)).toEqual([1, CP_MID]);
+    expect(towerCheckpoints(CP_HIGH - 2)).toEqual([1, CP_MID]);
+    expect(towerCheckpoints(CP_HIGH - 1)).toEqual([1, CP_MID, CP_HIGH]);
+    expect(towerCheckpoints(CP_HIGH + E - 2)).toEqual([1, CP_MID, CP_HIGH]);
+    expect(towerCheckpoints(CP_HIGH + E - 1)).toEqual([1, CP_MID, CP_HIGH, CP_HIGH + E]);
+    expect(towerCheckpoints(CP_HIGH + 2 * E + 3)).toEqual([1, CP_MID, CP_HIGH, CP_HIGH + E, CP_HIGH + 2 * E]);
+    expect(towerCheckpoints(3, true).at(-1)).toBe(TOWER_SUPER_START);
+    expect(towerCheckpoints(CP_HIGH + E, true)).toEqual(towerCheckpoints(CP_HIGH + E));
+    // 예전 10층마다(11·21·31 …)는 이제 엘리베이터가 아니다
+    for (const f of [11, 21, 31, 41, 61, 111, 131]) expect(isCheckpoint(f), `${f}층`).toBe(false);
+    for (const f of [1, CP_MID, CP_HIGH, CP_HIGH + E, CP_HIGH + 5 * E]) expect(isCheckpoint(f), `${f}층`).toBe(true);
+    expect([nextCheckpoint(1), nextCheckpoint(CP_MID - 1), nextCheckpoint(CP_MID), nextCheckpoint(CP_HIGH), nextCheckpoint(CP_HIGH + E - 1)]).toEqual([CP_MID, CP_MID, CP_HIGH, CP_HIGH + E, CP_HIGH + E]);
+    expect(checkpointsUpTo(CP_HIGH + 2 * E)).toEqual([1, CP_MID, CP_HIGH, CP_HIGH + E, CP_HIGH + 2 * E]);
   });
 
   it("레벨 50 · 체크포인트 층만 · 최고 기록 위로는 못 간다", () => {
@@ -215,13 +272,21 @@ describe("체크포인트·시작 검사", () => {
     expect(checkTowerStart(ok)).toBeNull();
     expect(checkTowerStart({ ...ok, level: 49 })?.code).toBe("LEVEL_LOW");
     expect(checkTowerStart({ ...ok, start: 5 })?.code).toBe("INVALID_INPUT");
-    expect(checkTowerStart({ ...ok, start: 11, best: 9 })?.code).toBe(
+    // 예전 엘리베이터 층(11층)은 이제 체크포인트가 아니다
+    expect(checkTowerStart({ ...ok, start: 11, best: 30 })?.code).toBe("INVALID_INPUT");
+    expect(checkTowerStart({ ...ok, start: CP_MID, best: CP_MID - 2 })?.code).toBe(
       "TOWER_LOCKED",
     );
-    expect(checkTowerStart({ ...ok, start: 11, best: 10 })).toBeNull();
-    expect(checkTowerStart({ ...ok, start: 21, best: 19 })?.code).toBe("TOWER_LOCKED");
-    expect(checkTowerStart({ ...ok, start: 21, best: 23 })).toBeNull();
-    expect(checkTowerStart({ ...ok, start: 51, sup: true })).toBeNull();
+    expect(checkTowerStart({ ...ok, start: CP_MID, best: CP_MID - 1 })).toBeNull();
+    expect(checkTowerStart({ ...ok, start: CP_HIGH, best: CP_HIGH - 2 })?.code).toBe("TOWER_LOCKED");
+    expect(checkTowerStart({ ...ok, start: CP_HIGH, best: CP_HIGH + 3 })).toBeNull();
+    const E = TOWER_CHECKPOINT_EVERY;
+    expect(checkTowerStart({ ...ok, start: CP_HIGH + E, best: CP_HIGH + E - 2 })?.code).toBe("TOWER_LOCKED");
+    expect(checkTowerStart({ ...ok, start: CP_HIGH + E, best: CP_HIGH + E - 1 })).toBeNull();
+    // 슈퍼 계정은 기록 없이도 101층까지, 그 위는 기록대로
+    expect(checkTowerStart({ ...ok, start: CP_MID, sup: true })).toBeNull();
+    expect(checkTowerStart({ ...ok, start: TOWER_SUPER_START, sup: true })).toBeNull();
+    expect(checkTowerStart({ ...ok, start: CP_HIGH + E, sup: true })?.code).toBe("TOWER_LOCKED");
   });
 });
 
@@ -263,9 +328,9 @@ describe("결과 검증 (층마다)", () => {
         r.durationMs + 1_000,
       )),
     ).toBe(false);
-    // 6층을 30초에 (층마다 최소 10초)
-    const fast = { ...r, durationMs: 30_000, floorMs: 30_000 };
-    expect(towerClean(evalTower(t, fast, 31_000))).toBe(false);
+    // 6층을 20초에 (11/19 층마다 최소 5초 = 둘째 웨이브 3초 + 엘리베이터 2초)
+    const fast = { ...r, durationMs: 20_000, floorMs: 20_000 };
+    expect(towerClean(evalTower(t, fast, 21_000))).toBe(false);
     // 기록 시간이 서버가 잰 시간보다 길다
     expect(towerClean(evalTower(t, r, r.durationMs - 10_000))).toBe(false);
     // 있을 수 없는 몬스터
@@ -304,15 +369,16 @@ describe("결과 검증 (층마다)", () => {
       ),
     ).toMatchObject({ ok: true, floors: 0, points: 0 });
     expect(
-      towerClean(evalTower(t, { ...climb(1234, 1, 1), durationMs: 5_000 }, 6_000)),
+      // 11/19 층 최소 시간 5초보다 빠르게 한 층
+      towerClean(evalTower(t, { ...climb(1234, 1, 1), durationMs: 3_000 }, 4_000)),
     ).toBe(false);
   });
 
   it("체크포인트에서 시작한 판은 그 층부터 센다", () => {
-    const r = climb(55, 21, 3);
+    const r = climb(55, CP_MID, 3);
     expect(
-      evalTower({ seed: 55, level: 50, start: 21 }, r, r.durationMs + 1_000),
-    ).toMatchObject({ ok: true, floors: 3, best: 23 });
+      evalTower({ seed: 55, level: 50, start: CP_MID }, r, r.durationMs + 1_000),
+    ).toMatchObject({ ok: true, floors: 3, best: CP_MID + 2 });
     // 다른 시작 층의 계획으로는 맞지 않는다
     expect(
       towerClean(evalTower({ seed: 55, level: 50, start: 1 }, r, r.durationMs + 1_000)),
@@ -321,17 +387,12 @@ describe("결과 검증 (층마다)", () => {
 });
 
 describe("보상 정산 (층 EXP · 4층 = 1판 · 상자 하루 15개 · 기록)", () => {
-  it("층 EXP ≈ 320 × (1 + 0.02 × 층): 1층 326 · 30층 512 · 100층 960", () => {
-    expect([
-      floorTExp(1),
-      floorTExp(30),
-      floorTExp(50),
-      floorTExp(100),
-    ]).toEqual([326, 512, 640, 960]);
-    // 낮은 층 4층 ≈ 지옥 한 판(100% 구간 약 1,270)
+  it("층 EXP ≈ 320 × (1 + 0.02 × 층), 11/19 1~100층은 1/4 · 101층부터 1/2", () => {
+    expect([floorTExp(1), floorTExp(30), floorTExp(50), floorTExp(100), floorTExp(101), floorTExp(150)]).toEqual([82, 128, 160, 240, 483, 640]);
+    // 낮은 층 4층 ≈ 지옥 한 판(100% 구간, 같이 1/4로 약 320)
     const four = floorTExp(1) + floorTExp(2) + floorTExp(3) + floorTExp(4);
-    expect(four).toBeGreaterThan(1_250);
-    expect(four).toBeLessThan(1_400);
+    expect(four).toBeGreaterThan(310);
+    expect(four).toBeLessThan(350);
   });
 
   it("깬 4층마다 초월 판 1판, 남은 층은 다음 판으로 이어진다 (쓰러져도 깬 만큼)", () => {
@@ -363,55 +424,66 @@ describe("보상 정산 (층 EXP · 4층 = 1판 · 상자 하루 15개 · 기록
     expect(late.tExp).toBe(floorTExp(1) + floorTExp(2) + floorTExp(3) + floorTExp(4));
   });
 
-  it("11/15 우두머리 상자는 하루 개수 제한 없음 — 많이 연 날에도 우두머리 층마다 열린다", () => {
+  it("11/15 우두머리 상자는 하루 개수 제한 없음 — 많이 연 날에도 우두머리 층마다 열린다 (11/19 상자는 50층부터)", () => {
+    // 상자가 열리기 전 엘리베이터에서 시작해 상자 층을 몇 개 넘긴다
+    const s0 = checkpointsUpTo(TOWER_CHEST_FROM - 1).at(-1)!;
+    const n0 = TOWER_CHEST_FROM - s0 + 2 * TOWER_CHECKPOINT_EVERY;
+    const want = chestsIn(s0, n0);
+    expect(want.length).toBeGreaterThanOrEqual(2);
     const r = towerSettle(
       { ...base, tDay: DAY, tChest: 13 },
-      { day: DAY, week: WEEK, start: 1, floors: 20, floorMs: 900_000 },
+      { day: DAY, week: WEEK, start: s0, floors: n0, floorMs: 900_000 },
     );
-    expect(r.chests).toEqual([5, 10, 15, 20]);
+    expect(r.chests).toEqual(want);
     expect(r.emptyChests).toBe(0);
-    expect(r.patch.tChest).toBe(17);
+    expect(r.patch.tChest).toBe(13 + want.length);
     expect(TOWER_CHESTS_PER_DAY).toBe(Infinity);
+    const s1 = cpFrom(TOWER_CHEST_FROM);
     const next = towerSettle(
       { ...base, ...r.patch },
-      { day: "20261117", week: WEEK, start: 1, floors: 5, floorMs: 200_000 },
+      { day: "20261117", week: WEEK, start: s1, floors: 5, floorMs: 200_000 },
     );
-    expect(next.chests).toEqual([5]);
+    expect(next.chests).toEqual(chestsIn(s1, 5));
+    expect(next.chests.length).toBeGreaterThan(0);
+    // TOWER_CHEST_FROM층 아래 우두머리 층은 상자가 없다
+    expect(towerSettle({ ...base, tDay: DAY }, { day: DAY, week: WEEK, start: 1, floors: TOWER_CHEST_FROM - 1, floorMs: 900_000 }).chests).toEqual([]);
     // 상자 굴림은 층 시드로 정해진다 (게임 연출과 서버가 같다)
-    expect(towerChestDrops(42, 5, 1)).toEqual(towerChestDrops(42, 5, 1));
+    expect(towerChestDrops(42, want[0], s0)).toEqual(towerChestDrops(42, want[0], s0));
   });
 
   it("최고 기록·이번 주 기록: 11/16 층이 오를 때만 (같은 층은 더 빨라도 그대로). 주가 바뀌면 이번 주는 0부터", () => {
+    // 11/19 51층 엘리베이터에서 시작해 기록을 넘는다
+    const B = CP_MID + 1;
     const s = {
       ...base,
-      fBest: 12,
+      fBest: B,
       fBestMs: 500_000,
       fWk: WEEK,
-      fWkBest: 12,
+      fWkBest: B,
       fWkMs: 500_000,
     };
     const same = towerSettle(s, {
       day: DAY,
       week: WEEK,
       start: 1,
-      floors: 12,
+      floors: B,
       floorMs: 400_000,
     });
     // 11/16 같은 층을 더 빨리 올라도 기록·랭킹은 그대로 (먼저 도달한 기록을 지킨다)
     expect([same.newBest, same.newWeek]).toEqual([false, false]);
-    expect(same.patch).toMatchObject({ fBest: 12, fBestMs: 500_000, fWkBest: 12, fWkMs: 500_000 });
-    const higher = towerSettle(s, { day: DAY, week: WEEK, start: 11, floors: 3, floorMs: 200_000 });
-    expect([higher.best, higher.newBest, higher.newWeek]).toEqual([13, true, true]);
-    expect(higher.patch).toMatchObject({ fBest: 13, fBestMs: 200_000, fWkBest: 13, fWkMs: 200_000 });
+    expect(same.patch).toMatchObject({ fBest: B, fBestMs: 500_000, fWkBest: B, fWkMs: 500_000 });
+    const higher = towerSettle(s, { day: DAY, week: WEEK, start: CP_MID, floors: 3, floorMs: 200_000 });
+    expect([higher.best, higher.newBest, higher.newWeek]).toEqual([B + 1, true, true]);
+    expect(higher.patch).toMatchObject({ fBest: B + 1, fBestMs: 200_000, fWkBest: B + 1, fWkMs: 200_000 });
     const slower = towerSettle(s, {
       day: DAY,
       week: WEEK,
       start: 1,
-      floors: 12,
+      floors: B,
       floorMs: 600_000,
     });
     expect([slower.newBest, slower.newWeek]).toEqual([false, false]);
-    expect(slower.patch).toMatchObject({ fBest: 12, fBestMs: 500_000 });
+    expect(slower.patch).toMatchObject({ fBest: B, fBestMs: 500_000 });
     const nextWeek = towerSettle(s, {
       day: "20261123",
       week: "20261123",
@@ -423,7 +495,7 @@ describe("보상 정산 (층 EXP · 4층 = 1판 · 상자 하루 15개 · 기록
     expect(nextWeek.patch).toMatchObject({
       fWk: "20261123",
       fWkBest: 3,
-      fBest: 12,
+      fBest: B,
     });
     const none = towerSettle(s, {
       day: DAY,
@@ -548,14 +620,18 @@ describe("티켓", () => {
       s: 5,
       lv: 50,
       st: { agi: 1, dex: 1, luk: 1 },
-      z: towerZone(5, 11, 11).id,
-      tw: 11,
+      z: towerZone(5, CP_MID, CP_MID).id,
+      tw: CP_MID,
     };
     expect((await verifyTicket("s", await signTicket("s", claims)))?.tw).toBe(
-      11,
+      CP_MID,
     );
     expect(
-      await verifyTicket("s", await signTicket("s", { ...claims, tw: 12 })),
+      await verifyTicket("s", await signTicket("s", { ...claims, tw: CP_MID + 1 })),
+    ).toBeNull();
+    // 예전 엘리베이터 층(11층)도 이제 거절
+    expect(
+      await verifyTicket("s", await signTicket("s", { ...claims, tw: 11 })),
     ).toBeNull();
     expect(
       await verifyTicket(
@@ -584,9 +660,9 @@ describe("11/15 테마 졸개 (옥상 정전기 불꽃)", () => {
   it("층마다 계획 밖 졸개를 MINION_FLOOR_ALLOW만큼 더 잡아도 깨끗이 통과 (그 판에 온 테마 졸개만)", async () => {
     const { evalTower, MINION_FLOOR_ALLOW, towerClean, towerPlan, towerZone } = await import("./tower");
     const { huntSpawnable } = await import("./plan");
-    const start = 21;
+    const start = TOWER_LOW_CHECKPOINTS[1];
     const floors = 3;
-    // 21층 블록이 옥상인 판
+    // 51층 블록이 옥상인 판
     let seed = 77;
     while (towerZone(seed, start, start).id !== "rf_rooftop") seed++;
     const kills: Record<string, number> = {};

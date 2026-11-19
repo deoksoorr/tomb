@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ambienceAt, kstHour, leavesFor, parseAmbienceOverride, seasonOf, timePhase, weatherAt, WEATHER_BLOCK_MS } from "./ambience";
+import { ambienceAt, kstHour, leavesFor, parseAmbienceOverride, seasonOf, skyLabel, timePhase, weatherAt, WEATHER_BLOCK_MS } from "./ambience";
 
 // 2026-11-08 00:00 KST = 2026-11-07 15:00 UTC
 const KST_MIDNIGHT = Date.UTC(2026, 10, 7, 15);
@@ -69,5 +69,24 @@ describe("ambience", () => {
     expect(parseAmbienceOverride("?time=99&weather=meteor")).toEqual({});
     expect(parseAmbienceOverride("?season=winter")).toEqual({ season: "winter" });
     expect(parseAmbienceOverride("?season=monsoon")).toEqual({});
+  });
+});
+
+describe("11/19 화면에 보이는 시간대 이름", () => {
+  it("새벽·아침(7~11)·점심(11~14)·오후(14~17.5)·해질녘·밤 — 게임 규칙의 phase는 낮 그대로", () => {
+    const at = (h: number) => skyLabel({ phase: timePhase(h), kstHour: h });
+    expect([5, 6.9, 7, 10.9, 11, 13.9, 14, 17.4, 18, 23].map(at)).toEqual(["새벽", "새벽", "아침", "아침", "점심", "점심", "오후", "오후", "해질녘", "밤"]);
+    expect([8, 12, 15].map(timePhase)).toEqual(["day", "day", "day"]);
+  });
+
+  it("맵 빛: 아침은 푸른 빛, 점심이 가장 밝고, 오후는 노릇하다", () => {
+    const tint = (h: number) => ambienceAt(Date.UTC(2026, 5, 1, 0), { hour: h, weather: "clear" }).palette.worldTint;
+    const rgb = (c: number) => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
+    const [mr, , mb] = rgb(tint(8.5));
+    const noon = rgb(tint(12.5));
+    const [ar, , ab] = rgb(tint(16));
+    expect(mb).toBeGreaterThan(mr);
+    expect(ar).toBeGreaterThan(ab + 20);
+    expect(noon.reduce((a, b) => a + b)).toBeGreaterThan(rgb(tint(8.5)).reduce((a, b) => a + b));
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DIFFICULTIES, DIFFS, GEAR, HUNT_ZONES, MONSTER_IDS, MONSTERS, timeLimitSec, TOWER_ZONE_IDS, ZONE_IDS, ZONES, zoneFor, zonesOf, type ZoneId } from "./catalog";
-import { monsterStats } from "./formulas";
+import { expToNext, monsterStats } from "./formulas";
 import { BOSS_RAGES, huntPlan, huntSpawnable, huntTotal } from "./plan";
 import { evaluate, huntBossDrop, killRateCeiling, type TicketInfo } from "./rewards";
 import { signTicket, verifyTicket } from "./ticket";
@@ -170,7 +170,8 @@ describe("40번 출현 계획·서버 검증 (사냥터마다)", () => {
       expect(can.drowsiness ?? 0).toBe(planned.filter((m) => m === "drowsiness").length + 3 * BOSS_RAGES);
       expect(planned).not.toContain("pending_sheet");
     }
-    // 같은 판을 50레벨로: 새 사냥터는 EXP 그대로, 회식 3차는 10% (예전 지옥 예외 50%는 없앴다)
+    // 같은 판을 50레벨로: 새 사냥터는 잡은 몬스터 EXP 그대로(초월 EXP 재료), 회식 3차는 10% (예전 지옥 예외 50%는 없앴다)
+    // 11/19 50 아래는 다 깬 판 = 다음 레벨 필요 EXP의 절반 (rewards.huntRunExp)
     const run = (id: (typeof ZONE_IDS)[number], level: number) => {
       const z = HUNT_ZONES[id];
       const p = huntPlan(5, z.difficulty, id);
@@ -180,8 +181,11 @@ describe("40번 출현 계획·서버 검증 (사냥터마다)", () => {
       if (!v.ok) throw new Error(`${id} ${level}`);
       return v;
     };
-    for (const id of ["quarter-close", "layoff-day"] as const) expect(run(id, 50).exp).toBe(run(id, HUNT_ZONES[id].unlockLevel).exp);
-    expect(run("burnout-abyss", 50).exp).toBe(Math.round(run("burnout-abyss", 30).exp * 0.1));
+    for (const id of ["quarter-close", "layoff-day"] as const) {
+      expect(run(id, 50).exp).toBe(run(id, 50).score);
+      expect(run(id, HUNT_ZONES[id].unlockLevel).exp).toBe(Math.round(expToNext(HUNT_ZONES[id].unlockLevel) / 2));
+    }
+    expect(Math.abs(run("burnout-abyss", 50).exp - run("burnout-abyss", 50).score * 0.1)).toBeLessThanOrEqual(1);
     // 우두머리를 잡으면 우두머리 드롭 몫을 굴린다 (시드 몇 개 중엔 장비가 나온다)
     expect(Array.from({ length: 60 }, (_, i) => huntBossDrop({ game: "hunt", difficulty: "hell", seed: i + 1, zone: "layoff-day" })).some((d) => d?.kind === "gear")).toBe(true);
   });

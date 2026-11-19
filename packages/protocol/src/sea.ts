@@ -158,7 +158,7 @@ export type SeaZone = { id: SeaZoneId; name: string } & Rect;
 export const SEA_ZONES: readonly SeaZone[] = [
   { id: "busStop", name: "버스 정류장", x: 1470, y: 30, w: 200, h: 110 }, // SEA_BUS_STOP.x − 90 (아래에서 정해요)
   { id: "realty", name: "포구 부동산", x: 786, y: 196, w: 132, h: 112 },
-  { id: "cottages", name: "별장", x: 264, y: 64, w: 900, h: 236 },
+  { id: "cottages", name: "별장", x: 36, y: 60, w: 1704, h: 240 }, // 11/19 터 11 (서쪽 끝 ~ 정류장 길 오른편)
   { id: "beach", name: "백사장", x: 0, y: SEA_SAND_Y0, w: SEA_WIDTH, h: SEA_FLAT_Y0 - SEA_SAND_Y0 },
   { id: "flat", name: "갯벌", x: 480, y: SEA_FLAT_Y0, w: 900, h: TIDE_LOW_Y - SEA_FLAT_Y0 },
   { id: "pier", name: "선착장", x: 760, y: 468, w: 200, h: 296 },
@@ -190,7 +190,7 @@ export const SEA_REALTY_W = 60;
 export const SEA_REALTY_H = 54;
 export const SEA_REALTY_DOOR = { x: SEA_REALTY.x, y: SEA_REALTY.y + 8 } as const;
 
-// ── 별장 터 6 ── 11/16 r11 사용자 "한 단지가 아니라 따로 떨어진 별장처럼": 뭍 곳곳에 흩어 놓았어요 (왼쪽 언덕·위쪽 풀밭·시장 자리·방파제 쪽).
+// ── 별장 터 11 (11/19 6 → 11) ── 11/16 r11 사용자 "한 단지가 아니라 따로 떨어진 별장처럼": 뭍 곳곳에 흩어 놓았어요 (왼쪽 언덕·위쪽 풀밭·시장 자리·방파제 쪽).
 // 터마다 크기·출입구 쪽·울타리(나무 울타리·밧줄·생울타리)가 다르고, 저마다 산책로로 내려가는 작은 길이 있어요. 바다 쪽 터는 작은 데크.
 // 하우징 계산이 쉽게 모두 축에 맞춘 사각형이에요. 지금은 빈 터와 「분양 준비 중」 팻말만 (별장은 다음 차수)
 /** 보통 터 크기 (터마다 조금씩 달라요 — SEA_LOTS 각 w·h) */
@@ -206,6 +206,14 @@ export const SEA_LOTS: readonly SeaLot[] = [
   { n: 4, x: 952, y: 72, w: 140, h: 84, gate: "s", fence: "picket", deck: false },
   { n: 5, x: 1016, y: 204, w: 128, h: 86, gate: "s", fence: "hedge", deck: true },
   { n: 6, x: 1372, y: 188, w: 120, h: 84, gate: "w", fence: "rope", deck: false },
+  // 11/19 사용자 「1번 터 옆에 2개, 2번과 4번 사이 1, 4번과 6번 사이 1, 6번 오른쪽(사잇길 오른쪽) 1」 → 7~11번 (1~6번은 그대로 — 분양 기록이 번호로 남아요)
+  //  7 = 1번 왼쪽 아래(산책로 쪽, 작은 데크) · 8 = 1번 왼쪽 위(동쪽 출입구 → 서쪽 사잇길) · 9 = 2·4번 사이 위쪽 풀밭(동쪽 출입구 → 정원 벤치)
+  //  10 = 4·6번 사이 위쪽(동쪽 출입구) · 11 = 정류장 길 건너 오른편(서쪽 출입구 → 정류장 길)
+  { n: 7, x: 96, y: 162, w: 128, h: 82, gate: "s", fence: "rope", deck: true },
+  { n: 8, x: 40, y: 66, w: 128, h: 80, gate: "e", fence: "picket", deck: false },
+  { n: 9, x: 664, y: 64, w: 140, h: 82, gate: "e", fence: "hedge", deck: false },
+  { n: 10, x: 1214, y: 66, w: 124, h: 80, gate: "e", fence: "picket", deck: false },
+  { n: 11, x: 1616, y: 172, w: 120, h: 84, gate: "w", fence: "hedge", deck: false },
 ];
 /** 터 출입구 폭 */
 export const SEA_LOT_GATE_W = 32;
@@ -234,11 +242,22 @@ export const SEA_LOT_BRANCH: readonly Pt[] = [
   { x: 460, y: 270 },
   { x: 570, y: 290 },
 ];
+/** 11/19 서쪽 사잇길: 8번 터 동쪽 출입구에서 7번·1번 터 사이로 산책로까지 */
+export const SEA_LOT_LANE_WEST: readonly Pt[] = [
+  { x: 196, y: 138 },
+  { x: 247, y: 178 },
+  { x: 247, y: 318 },
+];
 /** 별장 우편함 (위쪽 별장 오솔길 어귀) · 등불 기둥 둘 (위쪽 별장 2·4 앞) */
 export const SEA_LOT_MAILBOX = { x: 476, y: 300 } as const;
 export const SEA_LOT_LANTERNS: readonly Pt[] = [
   { x: 570, y: 166 },
   { x: 1040, y: 176 },
+  // 11/19 새 터(8·9·10·11) 출입구 옆 등불
+  { x: 180, y: 90 },
+  { x: 816, y: 88 },
+  { x: 1350, y: 90 },
+  { x: 1604, y: 196 },
 ];
 
 // ── 선착장 (가운데, 백사장 끝에서 먼바다까지) ── 나무 데크. 양옆은 난간이라 갯벌에서 오르내리지 못해요 (머리에서 올라요)

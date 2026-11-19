@@ -4,10 +4,9 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import * as autoRoute from "@/app/api/forage/auto/route";
 import * as session from "@/app/api/session/route";
 import { kstDay, kstWeek } from "../store/accounts";
-import { AUTO_FISH_DAILY_MAX, AUTO_FISH_EVERY_MS, autoCatchTimes, beatAuto, newAutoSession, rollAutoCatch } from "./auto";
+import { AUTO_FISH_EVERY_MS, autoCatchTimes, autoHit, beatAuto, newAutoSession, rollAutoCatch } from "./auto";
 import { beatAutoFish } from "./autoSettle";
 import { rollAutoSunken } from "./sunken";
-import { DAILY_CATCH_MAX } from "./catalog";
 import { getFishRank } from "./fishRank";
 import { castLine, startAutoFish, stopAutoFish, syncAutoFish } from "./service";
 import { getForageStore } from "./store";
@@ -32,21 +31,35 @@ async function syncEvery(a: string, from: number, until: number, every: number) 
   for (let t = from + every; t <= until; t += every) out.push(await syncAutoFish(a, t));
   return out;
 }
-/** 받은 수 (물고기 + 아주 드물게 걸린 물에 빠진 꾸미기 — 둘 다 낚시 1회) */
+/** 받은 수 (물고기 + 아주 드물게 걸린 물에 빠진 꾸미기 — 둘 다 낚은 수 1) */
 const caught = (r: AutoFishResponse) => r.items.length + r.gear.length;
 const got = (rs: AutoFishResponse[]) => rs.reduce((n, r) => n + caught(r), 0);
+/** 지금 켜져 있는 세션의 시드 */
+const seedOf = async (a: string) => (JSON.parse((await getForageStore().autoGet(a))!) as { seed: number }).seed;
+/** 11/19 from..to번 시도 중 걸린 수 (시드 + 번호로 결정적 — 서버와 같은 autoHit) */
+const hitsIn = (seed: number, from: number, to: number) => {
+  let n = 0;
+  for (let k = from; k <= to; k++) if (autoHit(seed, k)) n++;
+  return n;
+};
+const tries = (ms: number) => Math.floor(ms / AUTO_FISH_EVERY_MS);
 
 describe("자동 낚시 정산", () => {
   it("켜고 30분 보이는 채 정산하면 30분어치, 다시 정산해도 더 안 나온다", async () => {
     const a = acct();
     const r0 = await startAutoFish(a, PIER, 3, T0);
-    expect(r0.auto).toMatchObject({ spot: PIER, water: "lake", today: 0, cap: AUTO_FISH_DAILY_MAX, limited: false });
+    expect(r0.auto).toEqual(expect.objectContaining({ spot: PIER, water: "lake", today: 0 }));
+    expect(r0.auto).not.toHaveProperty("cap");
+    const seed = await seedOf(a);
     const rs = await syncEvery(a, T0, T0 + 30 * MIN, 1.5 * MIN);
-    const n = Math.floor((30 * MIN) / AUTO_FISH_EVERY_MS);
+    const n = hitsIn(seed, 1, tries(30 * MIN));
+    // 11/19 시도마다 25% — 60번 올려 걸린 것만, 나머지는 놓침
     expect(got(rs)).toBe(n);
+    expect(rs.reduce((x, r) => x + r.missed, 0)).toBe(tries(30 * MIN) - n);
+    expect(n).toBeLessThan(tries(30 * MIN));
     expect(caught(await syncAutoFish(a, T0 + 30 * MIN))).toBe(0);
     const st = rs[rs.length - 1];
-    expect(st.state.today).toMatchObject({ fish: n, auto: n, autoCap: AUTO_FISH_DAILY_MAX });
+    expect(st.state.today).toEqual({ fish: n, gather: 0, auto: n });
     expect(st.auto?.today).toBe(n);
   });
 
@@ -57,69 +70,79 @@ describe("자동 낚시 정산", () => {
     const s0 = JSON.parse(raw!) as ReturnType<typeof newAutoSession>;
     const r = await syncAutoFish(a, T0 + 10 * MIN);
     const s = beatAuto(s0, T0 + 10 * MIN);
-    const want = autoCatchTimes(s, 1, caught(r)).map((t, i) => rollAutoCatch(s0.seed, i + 1, "lake", t)!);
-    // 물에 빠진 꾸미기가 걸린 번호는 빼고 비교 (그 번호는 꾸미기로 나간다)
-    const fish = want.filter((_, i) => rollAutoSunken(s0.seed, i + 1) === null);
+    // 걸린 번호만, 물에 빠진 꾸미기가 걸린 번호는 빼고 비교 (그 번호는 꾸미기로 나간다)
+    const ks = autoCatchTimes(s, 1, tries(10 * MIN)).map((t, i) => ({ t, k: i + 1 }));
+    const hit = ks.filter(({ k }) => autoHit(s0.seed, k));
+    expect(caught(r)).toBe(hit.length);
+    const fish = hit.filter(({ k }) => rollAutoSunken(s0.seed, k) === null).map(({ t, k }) => rollAutoCatch(s0.seed, k, "lake", t)!);
     expect(r.items.map((x) => [x.id, x.size])).toEqual(fish.map((x) => [x.id, x.size]));
   });
 
   it("숨은 탭: 머무르기 기록으로 접속을 이어 가고, 끊긴 시간은 빼고 돌아와서 받는다", async () => {
     const a = acct();
     await startAutoFish(a, PIER, 1, T0);
+    const seed = await seedOf(a);
     for (let t = T0 + 10 * MIN; t <= T0 + 20 * MIN; t += 10 * MIN) await beatAutoFish(a, t); // 20분 접속
     // 2시간 끊겼다가(머무르기 기록 없음) 돌아와 정산
     const back = T0 + 20 * MIN + 2 * 3_600_000;
     const r = await syncAutoFish(a, back);
-    expect(caught(r)).toBe(Math.floor((20 * MIN) / AUTO_FISH_EVERY_MS));
+    expect(caught(r)).toBe(hitsIn(seed, 1, tries(20 * MIN)));
     expect(r.auto).not.toBeNull();
   });
 
-  it("자동은 하루 75마리까지 (넘는 것은 놓아준다), 그 뒤엔 켤 수 없다", async () => {
+  it("11/19 하루 한도 없음: 5시간 켜 두면 예전 하루 75마리보다 많이 낚고, 다시 켤 수 있다", async () => {
     const a = acct();
     await startAutoFish(a, PIER, 1, T0);
-    for (let t = T0 + 10 * MIN; t <= T0 + 60 * MIN; t += 10 * MIN) await beatAutoFish(a, t);
-    const r = await stopAutoFish(a, T0 + 60 * MIN);
-    expect(caught(r)).toBe(AUTO_FISH_DAILY_MAX);
-    expect(r.dropped).toBe(Math.floor((60 * MIN) / AUTO_FISH_EVERY_MS) - AUTO_FISH_DAILY_MAX);
+    const seed = await seedOf(a);
+    for (let t = T0 + 10 * MIN; t <= T0 + 300 * MIN; t += 10 * MIN) await beatAutoFish(a, t);
+    const r = await stopAutoFish(a, T0 + 300 * MIN);
+    expect(caught(r)).toBe(hitsIn(seed, 1, tries(300 * MIN)));
+    expect(caught(r)).toBeGreaterThan(75);
+    expect(r.missed).toBe(tries(300 * MIN) - caught(r));
     expect(r.ended).toBe("stop");
     expect(r.auto).toBeNull();
-    await expect(startAutoFish(a, PIER, 1, T0 + 61 * MIN)).rejects.toMatchObject({ status: 429, code: "AUTO_LIMIT" });
+    await expect(startAutoFish(a, PIER, 1, T0 + 301 * MIN)).resolves.toMatchObject({ auto: { spot: PIER } });
   });
 
-  it("직접 낚은 것과 합쳐 하루 150마리를 넘지 않는다", async () => {
+  it("11/19 직접 낚은 게 150마리를 넘어도 자동 낚시는 그대로 (하루 낚시 수 한도 없음)", async () => {
     const a = acct();
     const day = kstDay(T0);
-    await getForageStore().grant(a, day, "fish", Array.from({ length: DAILY_CATCH_MAX.fish - 10 }, () => ({ id: "f_crucian", size: 100 })), 99);
+    await getForageStore().grant(a, day, "fish", Array.from({ length: 160 }, () => ({ id: "f_crucian", size: 100 })), 99);
     await startAutoFish(a, PIER, 1, T0);
+    const seed = await seedOf(a);
     const r = await syncAutoFish(a, T0 + 10 * MIN);
-    expect(caught(r)).toBe(10);
-    expect(r.state.today).toMatchObject({ fish: DAILY_CATCH_MAX.fish, auto: 10 });
-    expect(r.auto?.limited).toBe(true);
+    const n = hitsIn(seed, 1, tries(10 * MIN));
+    expect(caught(r)).toBe(n);
+    expect(r.state.today).toMatchObject({ fish: 160 + n, auto: n });
   });
 
-  it("한국 시간 새벽 5시가 지나면 그날 한도로 새로 센다 (마리마다 낚인 날 기준)", async () => {
+  it("한국 시간 새벽 5시가 지나면 그날 수로 새로 센다 (마리마다 낚인 날 기준)", async () => {
     const a = acct();
     const start = Date.UTC(2026, 10, 12, 19, 30); // KST 11/13 새벽 4:30 (게임 날짜는 아직 11/12)
     const midnight = Date.UTC(2026, 10, 12, 20, 0); // KST 새벽 5시 = 하루가 바뀌는 때
     await startAutoFish(a, PIER, 1, start);
+    const seed = await seedOf(a);
     for (let t = start + 5 * MIN; t <= start + 70 * MIN; t += 5 * MIN) await beatAutoFish(a, t);
     const r = await syncAutoFish(a, start + 70 * MIN);
-    const before = Math.ceil((midnight - start) / AUTO_FISH_EVERY_MS) - 1; // 새벽 5시 정각에 낚인 것은 다음 날
+    const cut = Math.ceil((midnight - start) / AUTO_FISH_EVERY_MS) - 1; // 새벽 5시 정각에 올린 찌는 다음 날
+    const before = hitsIn(seed, 1, cut);
+    const after = hitsIn(seed, cut + 1, tries(70 * MIN));
     const store = getForageStore();
     expect((await store.snapshot(a, kstDay(start), 0)).day.auto).toBe(before);
-    expect((await store.snapshot(a, kstDay(midnight), 0)).day.auto).toBe(AUTO_FISH_DAILY_MAX);
-    expect(caught(r)).toBe(before + AUTO_FISH_DAILY_MAX);
+    expect((await store.snapshot(a, kstDay(midnight), 0)).day.auto).toBe(after);
+    expect(caught(r)).toBe(before + after);
     expect([kstDay(start), kstDay(midnight)]).toEqual(["20261112", "20261113"]);
   });
 
   it("동시에 여러 번 정산해도 한 번만 지급된다", async () => {
     const a = acct();
     await startAutoFish(a, PIER, 1, T0);
+    const seed = await seedOf(a);
     const rs = await Promise.all(Array.from({ length: 6 }, () => syncAutoFish(a, T0 + 10 * MIN)));
-    expect(got(rs)).toBe(Math.floor((10 * MIN) / AUTO_FISH_EVERY_MS));
+    expect(got(rs)).toBe(hitsIn(seed, 1, tries(10 * MIN)));
     expect((await getForageStore().snapshot(a, kstDay(T0), 0)).day.auto).toBe(got(rs));
     const stops = await Promise.all([stopAutoFish(a, T0 + 11 * MIN), stopAutoFish(a, T0 + 11 * MIN), syncAutoFish(a, T0 + 11 * MIN)]);
-    expect(got(stops)).toBe(Math.floor((11 * MIN) / AUTO_FISH_EVERY_MS) - got(rs));
+    expect(got(stops)).toBe(hitsIn(seed, 1, tries(11 * MIN)) - got(rs));
   });
 
   it("크기는 내 도감의 종류별 최대 기록에 반영한다", async () => {
@@ -174,27 +197,31 @@ describe("자동 낚시 정산", () => {
   it("6시간이 지나면 정산하고 끝난다", async () => {
     const a = acct();
     await startAutoFish(a, PIER, 1, T0);
+    const seed = await seedOf(a);
     for (let t = T0 + 10 * MIN; t <= T0 + 7 * 3_600_000; t += 10 * MIN) await beatAutoFish(a, t);
     const r = await syncAutoFish(a, T0 + 7 * 3_600_000);
     expect(r.ended).toBe("time");
     expect(r.auto).toBeNull();
-    expect(caught(r)).toBe(AUTO_FISH_DAILY_MAX);
+    // 6시간 = 720번 올려 걸린 것 모두 (예전엔 하루 75마리에서 잘렸다)
+    expect(caught(r)).toBe(hitsIn(seed, 1, tries(6 * 3_600_000)));
   });
 
   it("직접 찌를 던지면 자동 낚시는 정산하고 끝난다", async () => {
     const a = acct();
     await startAutoFish(a, PIER, 1, T0);
+    const seed = await seedOf(a);
     await syncAutoFish(a, T0 + 2 * MIN);
     await castLine(a, PIER, T0 + 3 * MIN);
     expect(await getForageStore().autoGet(a)).toBeNull();
-    expect((await getForageStore().snapshot(a, kstDay(T0), 0)).day.auto).toBe(Math.floor((3 * MIN) / AUTO_FISH_EVERY_MS));
+    expect((await getForageStore().snapshot(a, kstDay(T0), 0)).day.auto).toBe(hitsIn(seed, 1, tries(3 * MIN)));
   });
 
   it("다시 켜면 이전 세션을 정산하고 새로 시작한다, 모르는 자리는 400", async () => {
     const a = acct();
     await startAutoFish(a, PIER, 1, T0);
+    const seed = await seedOf(a);
     const r = await startAutoFish(a, "boat:river", 2, T0 + 5 * MIN);
-    expect(caught(r)).toBe(Math.floor((5 * MIN) / AUTO_FISH_EVERY_MS));
+    expect(caught(r)).toBe(hitsIn(seed, 1, tries(5 * MIN)));
     expect(r.auto).toMatchObject({ spot: "boat:river", water: "river", startedAt: T0 + 5 * MIN });
     await expect(startAutoFish(a, "f_1_1", 1, T0)).rejects.toMatchObject({ status: 400 });
   });

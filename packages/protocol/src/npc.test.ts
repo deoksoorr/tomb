@@ -1,7 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { parseC2S } from "./events";
 import { signGrant, verifyGrant } from "./grants";
-import { GOBLIN_LIFE_MS, GOBLIN_ROUTES, GOBLIN_SPEED, goblinPos, goblinRoute, hashUnit, mulberry32 } from "./npc";
+import {
+  GOBLIN_JACKPOT_CHANCE,
+  GOBLIN_JACKPOT_POINTS,
+  GOBLIN_LIFE_MS,
+  GOBLIN_POINTS_AVG,
+  GOBLIN_POINTS_CAP,
+  GOBLIN_POINTS_MAX,
+  GOBLIN_POINTS_MIN,
+  GOBLIN_ROUTES,
+  GOBLIN_SPEED,
+  goblinPoints,
+  goblinPos,
+  goblinRoute,
+  hashUnit,
+  mulberry32,
+} from "./npc";
 import { STATE } from "./types";
 import { seatSlot, spotKindOfState, spotSeatId, TELESCOPE_SPOT } from "./world";
 
@@ -48,6 +63,35 @@ describe("goblin", () => {
     expect(await verifyGrant("s", tok, 3000)).toBeNull(); // 만료
     const bad = await signGrant("s", { kind: "goblin", visitorId: "v1", points: -5, nonce: "x", exp: 2000 });
     expect(await verifyGrant("s", bad, 1000)).toBeNull();
+  });
+
+  it("11/19 reward: 300~1,000P in 10P steps, rarely a 2,000P jackpot (the grant accepts up to the jackpot)", async () => {
+    expect(goblinPoints(() => 0)).toBe(GOBLIN_JACKPOT_POINTS);
+    expect(goblinPoints(() => GOBLIN_JACKPOT_CHANCE)).toBe(GOBLIN_POINTS_MIN + Math.floor(GOBLIN_JACKPOT_CHANCE * 71) * 10);
+    expect(goblinPoints(() => 0.9999999)).toBe(GOBLIN_POINTS_MAX);
+    const r = mulberry32(42);
+    let jackpots = 0;
+    let sum = 0;
+    const N = 20_000;
+    for (let i = 0; i < N; i++) {
+      const p = goblinPoints(r);
+      sum += p;
+      if (p === GOBLIN_JACKPOT_POINTS) jackpots++;
+      else {
+        expect(p).toBeGreaterThanOrEqual(GOBLIN_POINTS_MIN);
+        expect(p).toBeLessThanOrEqual(GOBLIN_POINTS_MAX);
+        expect(p % 10).toBe(0);
+      }
+    }
+    expect(jackpots / N).toBeGreaterThan(GOBLIN_JACKPOT_CHANCE * 0.8);
+    expect(jackpots / N).toBeLessThan(GOBLIN_JACKPOT_CHANCE * 1.2);
+    expect(Math.abs(sum / N - GOBLIN_POINTS_AVG)).toBeLessThan(25);
+    expect(GOBLIN_POINTS_AVG).toBeGreaterThan(700); // 사냥 20분쯤 — 보이면 달려갈 만한 값
+    // 증서: 대박까지는 받고, 그보다 크면 버린다
+    const jackpot = await signGrant("s", { kind: "goblin", visitorId: "v1", points: GOBLIN_POINTS_CAP, nonce: "gBig1", exp: 2000 });
+    expect(await verifyGrant("s", jackpot, 1000)).toMatchObject({ points: GOBLIN_JACKPOT_POINTS });
+    const over = await signGrant("s", { kind: "goblin", visitorId: "v1", points: GOBLIN_POINTS_CAP + 1, nonce: "gBig2", exp: 2000 });
+    expect(await verifyGrant("s", over, 1000)).toBeNull();
   });
 });
 

@@ -1,9 +1,10 @@
 import type * as Phaser from "phaser";
+import { GRAVE_SCALE } from "@tomb/protocol";
 import { bridge } from "../bridge";
 import type { Player, SeatRequester } from "../entities/Player";
 import { AutoWalk } from "../logic/autoWalk";
 import type { MoveInput } from "../logic/movement";
-import type { Rect, WalkGrid } from "../logic/pathfind";
+import { findPath, type Pt, type Rect, type WalkGrid } from "../logic/pathfind";
 import { standSpot, TIER_SIZE, type GravePlacement, type GraveLayout } from "./graveLayout";
 import { PORTAL_WALK, WalkGridCache, walkGridOf, type WalkPortal } from "./portalWalk";
 
@@ -29,6 +30,8 @@ export type WalkDeps = {
   water?: (x: number, y: number) => boolean;
   /** 걷기 시작 전에: 앉아 있으면 일어나기·불멍 화면 풀기·카메라 따라가기 */
   beforeWalk: () => void;
+  /** 11/19 잡화점 문 앞에 닿았다 → 들어가서 상점 창 열기 (다른 입구는 portal:open) */
+  enterShop: () => void;
 };
 
 /** 정적 바디 → 사각형 */
@@ -42,12 +45,12 @@ export function bodyRects(groups: readonly Phaser.Physics.Arcade.StaticGroup[], 
   return out;
 }
 
-/** 모든 묘비의 충돌 상자 (GraveField.makeZone과 같은 크기: 받침 위 5px, 폭 = 모양의 collider) */
+/** 모든 묘비의 충돌 상자 (GraveField.makeZone과 같은 크기: 받침 위 4px, 폭 = 모양의 collider × GRAVE_SCALE) */
 export function placementRects(layout: GraveLayout, out: Rect[] = []): Rect[] {
   for (const p of layout.placements) {
     if (!p) continue;
-    const w = TIER_SIZE[p.shape]?.collider ?? 12;
-    out.push({ x: p.x - w / 2, y: p.y - 5, w, h: 5 });
+    const w = Math.round((TIER_SIZE[p.shape]?.collider ?? 12) * GRAVE_SCALE);
+    out.push({ x: p.x - w / 2, y: p.y - 4, w, h: 4 });
   }
   return out;
 }
@@ -97,7 +100,9 @@ export class GraveWalker {
     this.report("arrived");
     const g = this.goal;
     this.goal = null;
-    if (g?.kind === "portal") bridge.emit("portal:open", { kind: g.portal });
+    if (g?.kind !== "portal") return;
+    if (g.portal === "shop") this.d.enterShop();
+    else bridge.emit("portal:open", { kind: g.portal });
   }
 
   /** 길을 찾아 걷기 시작 (물을 피해서 길이 없으면 헤엄쳐서라도) */
@@ -134,6 +139,24 @@ export class GraveWalker {
   goPortal(portal: WalkPortal, now: number): void {
     const w = PORTAL_WALK[portal];
     this.begin({ kind: "portal", portal }, w.goal, w.face, now);
+  }
+
+  /**
+   * 11/19 길만 찾기 (첫 걸음 길 안내 RouteGuide — 걷지 않는다). 걷기와 같은 격자·캐시: 물을 피해서, 없으면 헤엄쳐서라도.
+   * 격자는 캐시(5초)를 같이 쓴다 (마을 격자 180×128칸 — 안내는 0.5초마다·칸이 바뀔 때만 다시 찾는다). 시작점은 빼고 끝은 목적지
+   */
+  route(from: Pt, to: Pt): Pt[] | null {
+    const dry = findPath(this.grid(true), from, to);
+    if (dry?.length || !this.d.water) return dry;
+    return findPath(this.grid(false), from, to);
+  }
+
+  /** 11/19 입구로 걷다가 장면이 먼저 들어갔다 (잡화점 문에 위로 걸어 들어감): 도착으로 알리고 멈춘다 (입구 창은 장면이 연다) */
+  reachPortal(): void {
+    if (!this.walk.active || this.goal?.kind !== "portal") return;
+    this.walk.cancel();
+    this.report("arrived");
+    this.goal = null;
   }
 
   /** 사용자 입력·상점·채널 이동 등으로 그만둔다 */

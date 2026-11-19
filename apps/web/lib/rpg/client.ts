@@ -3,6 +3,7 @@ import { request } from "../api";
 import { REALTIME_HTTP_URL } from "../realtime";
 import { HUNT_ZONES, isZoneId, type Difficulty, type GameKind, type GearSlot, type SkillId, type Stats, type ZoneId } from "./catalog";
 import type { HotAuto } from "./hotbar";
+import type { TNodeId } from "./transcendTree";
 import type { RpgView, RunFinishResponse, RunResult, RunStartResponse, SoldInfo } from "./types";
 import type { GearActionResponse } from "./gearService";
 
@@ -17,7 +18,9 @@ export type CharacterAction =
   | { type: "equip"; slot: GearSlot; itemId: string | null }
   | { type: "respec"; cost: number }
   | { type: "ackTree" }
-  | { type: "resetStats"; cost: number };
+  | { type: "resetStats"; cost: number }
+  | { type: "tlearn"; node: TNodeId }
+  | { type: "treset" };
 
 export type ShopResponse = RpgView & { sold?: SoldInfo };
 
@@ -27,7 +30,9 @@ export type GearAction =
   | { type: "reroll"; uid: number; lock: string | null; cost: number }
   | { type: "exchange"; uids: number[]; set: number; piece: number }
   | { type: "disassemble"; uids: number[] }
-  | { type: "equip"; slot: GearSlot; uid: number | null };
+  | { type: "inherit"; fromSg?: number; fromPiece?: number; sg?: number; shop?: string; piece?: number; cost: number }
+  | { type: "equip"; slot: GearSlot; uid: number | null }
+  | { type: "egg"; set: number };
 
 export const rpgApi = {
   view: () => request<RpgView>("/api/rpg", { cache: "no-store" }),

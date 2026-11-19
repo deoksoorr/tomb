@@ -128,7 +128,8 @@
 /* ── 갈래 탭: 갈래 색 톤 + 쓴 포인트 크게 + 열린 단 점 ── */
 .tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* 11/19 갈래 넷 + 초월 수련 */
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -247,6 +248,8 @@
   width: 100%;
   max-width: 440px;
   margin: 0 auto;
+  /* 가로:세로 = 300 : 단 수 × 96 (SkillTreePanel·TranscendPanel이 --tree-ratio로 준다). 넓은 데스크톱은 아래에서 남는 높이를 채운다 */
+  aspect-ratio: var(--tree-ratio, 300 / 480);
   background:
     radial-gradient(ellipse at 50% 100%, color-mix(in srgb, var(--br) 22%, transparent), transparent 70%),
     radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--br-dark) 26%, transparent), transparent 60%),
@@ -570,6 +573,11 @@
   color: var(--muted);
   font-family: var(--font-small);
   font-size: 10px;
+}
+
+/* 범례 뒷부분·갈래 설명: 넓은 데스크톱은 트리 아래 대신 빈 설명 칸에 (.emptyDesc) */
+.emptyDesc {
+  display: none;
 }
 
 .legend i {
@@ -1341,5 +1349,218 @@
   .slot,
   .icon {
     transition: none;
+  }
+}
+
+/* ── 11/19 초월 수련 (다섯째 탭): 갈래 트리와 같은 .body·.tree·.node·.detail을 쓰고, 여기는 초월 수련만의 것 ── */
+.trans {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.transEmpty {
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* 트리 위 세 열 이름 (손끝 단련 · 공통 · 주문 다듬기) — 트리와 같은 너비 */
+.tCols {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+}
+
+.transHead {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  padding: 2px 4px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--bone);
+}
+
+.transHead small {
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.transHead b {
+  font-weight: 400;
+}
+
+.transHead[data-side="phys"] b {
+  color: #e8d2a8;
+}
+
+.transHead[data-side="magic"] b {
+  color: #d6b0ff;
+}
+
+.transHead[data-side="common"] b {
+  color: #fff3c8;
+}
+
+/* 열마다 옅은 색 띠: 왼쪽 물공(구릿빛) · 오른쪽 마공(보랏빛) */
+.tree[data-trans] {
+  background:
+    linear-gradient(90deg, rgba(200, 154, 98, 0.1) 0 33.3%, transparent 33.3% 66.7%, rgba(185, 138, 255, 0.1) 66.7%),
+    radial-gradient(ellipse at 50% 100%, color-mix(in srgb, var(--br) 18%, transparent), transparent 70%),
+    color-mix(in srgb, var(--br-dark) 12%, var(--bg-deep));
+}
+
+.tLeft {
+  color: var(--candle);
+  font-weight: 400;
+}
+
+/* 랭크별 수치: 찍은 랭크는 금빛, 다음 랭크는 테 */
+.tRanks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tRanks li {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 2px 5px;
+  background: var(--surface);
+  color: var(--muted);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.tRanks li span {
+  color: var(--faint);
+  font-family: var(--font-small);
+  font-size: 9px;
+}
+
+.tRanks li[data-on] {
+  background: color-mix(in srgb, var(--br) 24%, var(--surface));
+  color: var(--bone);
+  box-shadow: 0 0 0 1px var(--br);
+}
+
+.tRanks li[data-next] {
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--candle);
+}
+
+@media (max-width: 560px) {
+  .tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ── 11/19 넓은 데스크톱: 사냥터 창(세로로 길어진 창, rpg.module.css .huntDialog)의 남는 높이를 꽉 채운다.
+   위(포인트·갈래 탭)와 아래(단축 줄)는 제 높이, 가운데 트리·설명이 나머지를 쓴다. 트리 칸 크기는 트리 높이(cqh)에 맞춰 줄고 는다 ── */
+@media (min-width: 721px) {
+  .wrap {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .wrap > * {
+    flex-shrink: 0;
+  }
+
+  .wrap > .body {
+    flex: 1 1 0;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .treeCol {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 0;
+  }
+
+  .treeCol > * {
+    flex-shrink: 0;
+  }
+
+  .treeCol > .tree {
+    flex: 1 1 0;
+    min-height: 0;
+    aspect-ratio: auto;
+    container-type: size;
+  }
+
+  .detail {
+    position: static;
+    max-height: none;
+    min-height: 0;
+  }
+
+  .legendMore,
+  .treeCol > .branchDesc {
+    display: none;
+  }
+
+  .emptyDesc {
+    display: block;
+  }
+
+  /* 초월 수련 열 이름은 한 줄로 (하는 일은 설명 칸에) */
+  .transHead small {
+    display: none;
+  }
+
+  /* 자동 스킬 설명은 체크 칸 옆에 (단축 줄을 낮게) */
+  .autoRow > .dockSub {
+    flex: 1 1 320px;
+  }
+
+  /* 한 단 높이 = 20cqh (5단). 단이 낮으면 아이콘·이름 간격을 줄인다 (단 88px 이상이면 원래 크기) */
+  .icon {
+    width: clamp(34px, calc(20cqh - 30px), 58px);
+    height: clamp(34px, calc(20cqh - 30px), 58px);
+  }
+
+  .icon img {
+    width: 83%;
+    height: 83%;
+  }
+
+  .node[data-ult] .icon {
+    width: clamp(38px, calc(20cqh - 24px), 64px);
+    height: clamp(38px, calc(20cqh - 24px), 64px);
+  }
+
+  .nodeName {
+    margin-top: clamp(4px, calc(20cqh - 78px), 10px);
+  }
+
+  .node[data-ult] .nodeName {
+    margin-top: clamp(8px, calc(20cqh - 74px), 14px);
+  }
+}
+
+/* 낮은 데스크톱 화면(1280×800 등): 갈래 탭을 조금 낮게 해서 트리 높이를 번다 */
+@media (min-width: 721px) and (max-height: 860px) {
+  .tab {
+    padding: 5px 8px 4px;
+  }
+
+  .tabSpent b {
+    font-size: 18px;
   }
 }

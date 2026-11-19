@@ -63,7 +63,7 @@
 @media (pointer: coarse) {
   .box {
     /* 왼쪽 위 [메뉴] 줄 아래, 긴급 의뢰 칩·고정 공지 칩이 떠 있으면 그 밑 (11/17 터치 화면 확성기 줄은 없앴다) */
-    top: calc(var(--safe-top) + var(--top-h) + var(--top-gap) + var(--urgent-h, 0px) + var(--pin-h, 0px));
+    top: calc(var(--safe-top) + var(--top-h) + var(--top-gap) + var(--urgent-h, 0px) + var(--pin-h, 0px) + var(--retain-h, 0px));
     right: auto;
     left: var(--safe-left);
     bottom: auto;

@@ -22,7 +22,7 @@ const SELF_TICK_MS = 15_000;
  */
 export const ChatLineItem = memo(function ChatLineItem({ line, opacity, ago, here }: { line: ChatLine; opacity?: number; ago?: string | null; here: ChatHere | null }) {
   // 11/16 다른 맵에서 쓴 줄 앞에 [캠핑장]·[바닷가]·[마을] (집 안·사냥터처럼 맵이 아닌 곳에서는 붙이지 않는다)
-  const place = line.w ? null : chatPlaceTag(line, here);
+  const place = line.w || line.sys ? null : chatPlaceTag(line, here);
   const name = (
     <b className={cx(styles.name, line.staff && styles.staff)}>
       {/* 운영자 이름은 금색 그대로 (닉네임 꾸미기를 입혀 헷갈리지 않게) + 11/15 "운영자" 딱지 (이름은 닉네임 그대로라) */}
@@ -35,6 +35,15 @@ export const ChatLineItem = memo(function ChatLineItem({ line, opacity, ago, her
   // 11/16 귓속말: "[귓속말] 나 → 진순: …" / "[귓속말] 진순 → 나: …" (name = 상대). 못 보냄·쓰는 법 안내는 글만
   const me = <b className={styles.name}>나</b>;
   const arrow = <span className={styles.sep}> → </span>;
+  // 11/19 마을 소식 줄 (황금 고블린을 누가 잡았다): "[소식] 진순님이 황금 고블린을 잡았어요! +800P"
+  if (line.sys)
+    return (
+      <li className={cx(styles.line, styles.notice)} style={opacity === undefined ? undefined : { opacity }}>
+        <span className={styles.noticeTag}>[소식] </span>
+        <span className={styles.text}>{line.text}</span>
+        {ago && <span className={styles.ago}> · {ago}</span>}
+      </li>
+    );
   return (
     <li className={cx(styles.line, styles[chatLineTone(line)])} style={opacity === undefined ? undefined : { opacity }}>
       {place && <span className={styles.place}>{place} </span>}

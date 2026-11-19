@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { champBoards } from "@tomb/protocol";
-import { champStayBonus } from "@/lib/champPerks";
 import { api, errorMessage } from "@/lib/api";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { showToast } from "@/lib/hooks/useToasts";
@@ -23,13 +21,12 @@ export default function StayBonus() {
   const { me } = useMe();
   const ticks = me ? Math.floor(me.attendance.stayMinutes / 10) : 0;
   const claimed = me?.attendance.bonusClaimed ?? 0;
-  // 11/16 출석·접속 갈래 칭호면 받을 보너스도 그만큼 (서버가 같은 규칙으로 준다 — 하루 상한은 그대로)
-  // 11/17 지난주 포인트왕이면 구간마다 1.5배, 상한도 그만큼 (lib/champPerks)
-  const state = stayBonusState(ticks, claimed, equippedPerk(me?.equipped).stayBonus, champStayBonus(champBoards(me?.champ)));
+  // 11/16 출석·접속 갈래 칭호면 받을 보너스도 그만큼 (서버가 같은 규칙으로 준다). 11/19 하루 상한이 없어 구간이 계속 생긴다
+  const state = stayBonusState(ticks, claimed, equippedPerk(me?.equipped).stayBonus);
   const [pending, setPending] = useState(false);
   const [pop, setPop] = useState<string | null>(null);
-  // 받은 뒤 잠깐 보여 줄 안내 (done: 오늘 하루치를 다 받음). 시간이 지나면 지우고 창을 숨긴다
-  const [notice, setNotice] = useState<{ text: string; done: boolean } | null>(null);
+  // 받은 뒤 잠깐 보여 줄 안내. 시간이 지나면 지우고 창을 숨긴다
+  const [notice, setNotice] = useState<string | null>(null);
   // 머문 기록이 바뀐 시각부터 흐른 시간 (남은 시간 어림용)
   const [clock, setClock] = useState<{ ticks: number; at: number; now: number } | null>(null);
 
@@ -48,7 +45,7 @@ export default function StayBonus() {
   if (!me || me.staff || (state.count === 0 && !notice && !pop)) return null;
 
   const elapsed = clock && clock.ticks === ticks ? clock.now - clock.at : 0;
-  const nextMin = state.ticksToNext === null ? null : Math.max(1, Math.ceil((state.ticksToNext * TICK_MS - elapsed) / 60_000));
+  const nextMin = Math.max(1, Math.ceil((state.ticksToNext * TICK_MS - elapsed) / 60_000));
 
   async function claim() {
     setPending(true);
@@ -59,16 +56,15 @@ export default function StayBonus() {
         setPop(`+${res.earned}P`);
         setTimeout(() => setPop(null), 1_400);
       }
-      // 보너스는 하루 전체 한도와 별개라 0P는 지갑이 가득 찼을 때뿐 (운영자 계정은 지갑이 늘 가득 차 있다)
+      // 0P는 지갑이 가득 찼을 때뿐 (운영자 계정은 따로 막힌다)
       const text =
         res.earned > 0
           ? `+${res.earned}P 받았어요 (보너스 ${res.count}개)`
           : res.me.staff
             ? `운영자 계정은 포인트가 늘 가득이라 0P (보너스 ${res.count}개)`
             : `지갑이 가득 차서 0P (보너스 ${res.count}개)`;
-      const done = stayBonusState(Math.floor(res.me.attendance.stayMinutes / 10), res.me.attendance.bonusClaimed, equippedPerk(res.me.equipped).stayBonus, champStayBonus(champBoards(res.me.champ))).done;
-      setNotice({ text, done });
-      setTimeout(() => setNotice(null), done ? 4_000 : 2_500);
+      setNotice(text);
+      setTimeout(() => setNotice(null), 2_500);
     } catch (e) {
       showToast(errorMessage(e));
     } finally {
@@ -93,12 +89,12 @@ export default function StayBonus() {
               받기
             </button>
           </div>
-          <small className={styles.hint}>{nextMin === null ? "오늘 마지막 보너스예요" : `다음 보너스까지 약 ${nextMin}분`}</small>
+          <small className={styles.hint}>다음 보너스까지 약 {nextMin}분</small>
         </>
       ) : (
         <>
-          <span className={styles.label}>{notice?.text ?? "보너스 받았어요"}</span>
-          {notice?.done && <small className={styles.hint}>오늘 보너스 끝! 내일 또 만나요</small>}
+          <span className={styles.label}>{notice ?? "보너스 받았어요"}</span>
+          <small className={styles.hint}>다음 보너스까지 약 {nextMin}분</small>
         </>
       )}
     </aside>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { tipAlignOf } from "./paperDollLayout";
+import { tipAlignOf, tipPlaceOf } from "./paperDollLayout";
 
 describe("tipAlignOf", () => {
   const areas = `"back head neck" "aura fig hand" "pet feet info"`;
@@ -17,5 +17,15 @@ describe("tipAlignOf", () => {
     expect(tipAlignOf(gear, "head")).toBe("center");
     expect(tipAlignOf(gear, "acc2")).toBe("end");
     expect(tipAlignOf(gear, "weapon")).toBe("start");
+  });
+});
+
+describe("11/19 말풍선 위·아래", () => {
+  it("맨 윗줄 칸은 아래로, 나머지는 위로 (한 줄짜리 배치는 위로)", () => {
+    const areas = `"head neck face" "hand body back" "feet aura pet"`;
+    expect(tipPlaceOf(areas, "head")).toBe("below");
+    expect(tipPlaceOf(areas, "neck")).toBe("below");
+    expect(tipPlaceOf(areas, "body")).toBe("above");
+    expect(tipPlaceOf(`"a b c"`, "a")).toBe("above");
   });
 });

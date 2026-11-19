@@ -1,4 +1,4 @@
-import { BODY_TIER_INFO, bodyLabel, bodyTier, bodyUnlockPrice, DYE_PARTS, dyeSpecialOf, itemById, PERMANENT_MULTIPLIER, petPrice, type AvatarDye, type CosmeticSlot } from "@tomb/protocol";
+import { BODY_TIER_INFO, bodyLabel, bodyTier, bodyUnlockPrice, DYE_PARTS, dyeSpecialOf, isRideablePet, itemById, PERMANENT_MULTIPLIER, PET_PRICE_UP, PET_RIDE_PRICE_UP, petPrice, type AvatarDye, type CosmeticSlot } from "@tomb/protocol";
 
 // 외형 꾸미기 점수 (서버 랭킹·내 정보·가방이 함께 쓰는 순수 계산. 서버 전용 모듈을 들이지 않는다).
 // 지금 "착용 중이고 만료 전"인 꾸미기만 센다 → 기간제가 끝나면 그 파츠 점수도 바로 사라진다.
@@ -27,7 +27,10 @@ export function valueScore(value: number): number {
 export function itemLookValue(itemId: string): number {
   const it = itemById(itemId);
   if (!it || it.kind !== "cosmetic" || it.staff || it.champ || it.urgent) return 0;
-  return petPrice(itemId) ?? it.price * PERMANENT_MULTIPLIER;
+  const pet = petPrice(itemId);
+  // 11/19 펫 값을 올렸지만(작은 펫 2배·타는 펫 3배) 꾸미기 점수·랭킹은 예전 값 그대로 (이미 산 사람 점수가 갑자기 뛰지 않게)
+  if (pet != null) return Math.round(pet / (isRideablePet(itemId) ? PET_RIDE_PRICE_UP : PET_PRICE_UP));
+  return it.price * PERMANENT_MULTIPLIER;
 }
 
 /** 꾸미기 한 점의 점수 (꾸미기가 아니거나 운영자 전용이면 0) */

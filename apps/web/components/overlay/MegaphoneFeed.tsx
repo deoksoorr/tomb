@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { MegaPin } from "@tomb/protocol";
 import { useBridgeEvent, useBridgeValue } from "@/lib/hooks/useBridge";
 import { tabHidden } from "@/lib/hooks/visibleAgain";
@@ -24,14 +24,17 @@ const RELOAD_MS = 10 * 60_000;
  * 기록을 접어 두면 첫 공지 한 줄만 (둘이면 +1). 운영자에게만 [공지 쓰기]·[지우기]
  * 11/17 터치 화면(floating)은 확성기 줄([확성기]·[외치기]·기록)을 아예 빼고, 공지가 있을 때만 [📌 공지] 칩 하나 (PinChip).
  * 새 외침을 화면 가운데 크게 띄우는 연출(MegaphoneSpotlight)은 그대로
+ * 11/19 데스크톱 왼쪽 위 한 줄: lead(배경 음악 줄)를 [확성기]·[외치기] 앞에 붙여 한 줄로 (옛 묘역이 언덕 위로 올라가 묘비를 덜 가리게).
+ * 외침이 하나도 없으면 「아직 아무도 외치지 않았어요」 줄도 빼고, 외침이 오면 그 아래에 기록이 뜬다
  */
-export default function MegaphoneFeed({ channel, floating = false }: { channel: number; floating?: boolean }) {
+export default function MegaphoneFeed({ channel, floating = false, lead }: { channel: number; floating?: boolean; lead?: ReactNode }) {
   const { entries, flash, flashUntil, collapsed, pins } = useMegaphone();
   const logRef = useRef<HTMLOListElement>(null);
   const iAmStaff = useBridgeValue("me:staff")?.on === true;
-  // 고정 공지 전체 펼침 · 운영자 쓰기 창 · 지울 공지
-  const [writing, setWriting] = useState(false);
+  // 지울 공지 (11/19 운영자 쓰기 창은 위쪽 줄의 MegaPinButton이 연다)
   const [removing, setRemoving] = useState<MegaPin | null>(null);
+  // 11/19 한 줄로 합친 뒤 외침이 없으면 기록 줄을 숨기는데, [확성기]를 눌렀을 땐 「아직 아무도…」를 보여 준다 (안 그러면 눌러도 아무 일이 없어 고장처럼 보였다)
+  const [askedEmpty, setAskedEmpty] = useState(false);
 
   useBridgeEvent("megaphone:heard", (m) => megaphoneStore.push(m));
   useBridgeEvent("megaphone:pin", (m) => megaphoneStore.applyPin(m, channel));
@@ -56,38 +59,43 @@ export default function MegaphoneFeed({ channel, floating = false }: { channel: 
   if (floating) {
     return (
       <>
-        <PinChip channel={channel} pins={pins} staff={iAmStaff} onWrite={() => setWriting(true)} onRemove={setRemoving} />
+        <PinChip channel={channel} pins={pins} staff={iAmStaff} onRemove={setRemoving} />
         <MegaphoneSpotlight entry={flash} until={flashUntil} />
-        {writing && iAmStaff && <MegaPinDialog channel={channel} pins={pins} onClose={() => setWriting(false)} />}
         {removing && iAmStaff && <MegaPinRemove channel={channel} pin={removing} onClose={() => setRemoving(null)} />}
       </>
     );
   }
 
+  const hideEmpty = lead != null && entries.length === 0;
+  const open = !collapsed && (!hideEmpty || askedEmpty);
   const toggle = () => {
+    if (hideEmpty) {
+      // 외침이 없을 땐 빈 기록 줄을 보였다 숨겼다 (접기 상태는 펼침으로 맞춘다)
+      if (collapsed) megaphoneStore.setCollapsed(false);
+      setAskedEmpty(!open);
+      if (!open) void megaphoneStore.load(channel);
+      return;
+    }
     megaphoneStore.setCollapsed(!collapsed);
     if (collapsed) void megaphoneStore.load(channel);
   };
 
   return (
-    <section className={styles.feed} aria-label="확성기">
+    <section className={cx(styles.feed, lead != null && styles.joined)} aria-label="확성기">
       <div className={styles.bar}>
-        <button type="button" className={cx(ui.button, styles.toggle)} onClick={toggle} aria-expanded={!collapsed}>
+        {lead}
+        <button type="button" className={cx(ui.button, styles.toggle)} onClick={toggle} aria-expanded={open}>
           <PixelIcon name="megaphone" />
           확성기
           <span className={styles.caret} aria-hidden="true">
-            {collapsed ? "▸" : "▾"}
+            {open ? "▾" : "▸"}
           </span>
-          <span className="visually-hidden">{collapsed ? " 기록 펼치기" : " 기록 접기"}</span>
+          <span className="visually-hidden">{open ? " 기록 접기" : " 기록 펼치기"}</span>
         </button>
         <button type="button" className={cx(ui.button, styles.shout)} onClick={openMegaphone}>
           외치기
         </button>
-        {iAmStaff && (
-          <button type="button" className={cx(ui.button, styles.shout)} onClick={() => setWriting(true)}>
-            공지 쓰기
-          </button>
-        )}
+        {/* 11/19 운영자 [공지 쓰기]는 오른쪽 위 선물 옆(MegaPinButton)으로 — 이 줄은 음악·확성기만 (좁은 줄이 깨지지 않게) */}
       </div>
       {shownPins.length > 0 && (
         <ul className={cx(styles.pins, styles.pinsOpen)} aria-label="고정 공지">
@@ -112,7 +120,7 @@ export default function MegaphoneFeed({ channel, floating = false }: { channel: 
           ))}
         </ul>
       )}
-      {!collapsed && (
+      {open && (
         <ol ref={logRef} className={styles.log} aria-label="최근 확성기 20개">
           {entries.length === 0 && <li className={styles.empty}>아직 아무도 외치지 않았어요.</li>}
           {entries.map((e) => (
@@ -142,7 +150,6 @@ export default function MegaphoneFeed({ channel, floating = false }: { channel: 
         </ol>
       )}
       <MegaphoneSpotlight entry={flash} until={flashUntil} />
-      {writing && iAmStaff && <MegaPinDialog channel={channel} pins={pins} onClose={() => setWriting(false)} />}
       {removing && iAmStaff && <MegaPinRemove channel={channel} pin={removing} onClose={() => setRemoving(null)} />}
     </section>
   );
@@ -151,12 +158,13 @@ export default function MegaphoneFeed({ channel, floating = false }: { channel: 
 /**
  * 11/17 터치 화면 고정 공지 칩: 긴급 의뢰 칩 아래(없으면 그 자리)에 [📌 공지] 한 줄. 누르면 공지 전문이 펼쳐지고 다시 누르면 접힌다.
  * 차지한 높이를 --pin-h(문서 루트)로 알려 그 아래 칸(접속 보너스·물때·포인트 이벤트 줄)이 내려간다.
- * 운영자는 공지가 없어도 칩이 보이고(누르면 바로 쓰기 창), 펼친 안에 [공지 쓰기]·[지우기]
+ * 운영자에게는 펼친 안에 [지우기] (11/19 [공지 쓰기]는 위쪽 줄 운영자 단추 MegaPinButton으로 옮겼다)
  */
-function PinChip({ channel, pins, staff, onWrite, onRemove }: { channel: number; pins: MegaPin[]; staff: boolean; onWrite: () => void; onRemove: (p: MegaPin) => void }) {
+function PinChip({ channel, pins, staff, onRemove }: { channel: number; pins: MegaPin[]; staff: boolean; onRemove: (p: MegaPin) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const shown = pins.length > 0 || staff;
+  // 11/19 운영자 쓰기 단추는 위쪽 줄(MegaPinButton)로 옮겼다 — 칩은 공지가 있을 때만
+  const shown = pins.length > 0;
   useEffect(() => {
     const el = ref.current;
     const root = document.documentElement;
@@ -171,21 +179,19 @@ function PinChip({ channel, pins, staff, onWrite, onRemove }: { channel: number;
     };
   }, [shown]);
   if (!shown) return null;
-  // 운영자이고 공지가 없으면 칩이 곧 쓰기 단추
-  const empty = pins.length === 0;
   return (
     <div ref={ref} className={styles.pinChipBox}>
       <button
         type="button"
         className={cx(styles.pinChip, open && styles.pinChipOpen)}
-        onClick={empty ? onWrite : () => setOpen(!open)}
-        aria-expanded={empty ? undefined : open}
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
       >
         <span aria-hidden="true">📌</span>
-        {empty ? "공지 쓰기" : "공지"}
+        공지
         {pins.length > 1 && <span className={styles.pinMore}>{pins.length}</span>}
       </button>
-      {open && !empty && (
+      {open && (
         <ul className={cx(styles.pins, styles.pinsOpen, styles.pinSheet)} aria-label="고정 공지">
           {pins.map((p) => (
             <li key={p.scope} className={styles.pin}>
@@ -205,15 +211,27 @@ function PinChip({ channel, pins, staff, onWrite, onRemove }: { channel: number;
               )}
             </li>
           ))}
-          {staff && (
-            <li className={styles.pinWrite}>
-              <button type="button" className={cx(ui.button, styles.shout)} onClick={onWrite}>
-                공지 쓰기
-              </button>
-            </li>
-          )}
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * 11/19 운영자 전용 [📌 공지 쓰기] — 오른쪽 위 단추 줄의 선물 단추 바로 옆(데스크톱), 폰은 위쪽 줄의 운영자 단추 옆.
+ * 누르면 예전과 같은 공지 쓰기 창. 일반 사용자에게는 아무것도 그리지 않는다. 공지 [지우기]는 공지 줄마다 그대로
+ */
+export function MegaPinButton({ channel, className }: { channel: number; className?: string }) {
+  const iAmStaff = useBridgeValue("me:staff")?.on === true;
+  const { pins } = useMegaphone();
+  const [writing, setWriting] = useState(false);
+  if (!iAmStaff) return null;
+  return (
+    <>
+      <button type="button" className={className} onClick={() => setWriting(true)} aria-label="공지 쓰기 (운영자)" title="공지 쓰기 (운영자)">
+        <span aria-hidden="true">📌</span>
+      </button>
+      {writing && <MegaPinDialog channel={channel} pins={pins} onClose={() => setWriting(false)} />}
+    </>
   );
 }

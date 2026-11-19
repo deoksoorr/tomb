@@ -52,6 +52,8 @@ const LIMITS = {
   // 10번 출석 달력 받기 · 11번 선물함 받기·지우기
   calendar: { visitor: 10, ip: 1200, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   gift: { visitor: 30, ip: 2400, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  // 11/18 새 이웃 꾸러미·첫 걸음·오늘의 할 일 받기 (계정 기준. 받기는 저장소가 원자적으로 한 번만 — 인스턴스 메모리로 세서 Redis 명령을 쓰지 않는다)
+  retain: { visitor: 30, ip: 2400, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요.", memory: true },
   // 추천 코드 보기·미리 확인·정하기 (정하기는 한 번뿐이라 연타·코드 맞히기만 막는다)
   referral: { visitor: 30, ip: 1200, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   // 11/15 수집 의뢰판 보기·납품·바꾸기·도장 교환 (1분 창 → 메모리 한도)
@@ -59,8 +61,6 @@ const LIMITS = {
   // 친구: 신청·수락·삭제 / 목록·위치 (접속 알림은 30초 남짓마다 묻는다)
   friend: { visitor: 30, ip: 2400, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   friendRead: { visitor: 30, ip: 4800, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요.", memory: true },
-  // 운영자 「포인트 현황」 (운영자 계정만, 창을 연 동안 30초마다 + 새로고침)
-  staffEarn: { visitor: 12, ip: 30, windowSec: MIN, message: "포인트 현황을 너무 자주 불렀어요. 잠시 뒤에 다시 봐 주세요.", memory: true },
   // 23번 확성기: 계정마다 간격(MEGAPHONE_COOLDOWN_MS)과 별개로 하루 상한 (도배 방지)
   megaphone: { visitor: 20, ip: 3000, windowSec: DAY, message: "확성기는 하루에 20번까지 쓸 수 있어요." },
   // 11/17 확성기 창 고정 공지 쓰기·지우기 (운영자 계정만 — 연타로 실시간 서버를 깨우지 않게)

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { env } from "../env";
 import { getAccounts, getGifts } from "../store";
 import { kstDay } from "../store/accounts";
-import { DEFAULT_FLOOR, DEFAULT_WALL, furnitureById, PLOT_TIERS, plotCost, reclaimLastSeen, sellPrice } from "./catalog";
+import { DEFAULT_FLOOR, DEFAULT_WALL, furnitureById, PLOT_TIERS, plotCost, reclaimLastSeen, sellPrice, legacyPlotCost } from "./catalog";
 import { DAY_MS, deliverReclaim, RECLAIM_FROM, RECLAIM_MS, RECLAIM_SINCE, refundOf, sweepReclaim } from "./reclaim";
 import { buyFurniture, buyPlot, getHouseStore, houseIdFor, housePair, saveLayout, sellFurniture, upgradePlot, village } from "./service";
 import { MemoryHouseStore } from "./store";
@@ -165,15 +165,17 @@ describe.skipIf(!!conn)("오래 비운 집 정리", () => {
     expect(r).toBe("changed");
   });
 
-  it("낸 포인트 기록이 없는 옛 집은 지금 가격표로 센다", async () => {
-    expect(refundOf({ tier: "wide" })).toBe(plotCost("wide"));
+  it("낸 포인트 기록이 없는 옛 집은 값을 올리기 전 가격표로 센다 (11/19)", async () => {
+    expect(refundOf({ tier: "wide" })).toBe(legacyPlotCost("wide"));
+    expect(legacyPlotCost("wide")).toBe(5_000);
+    expect(legacyPlotCost("wide")).toBeLessThan(plotCost("wide"));
     expect(refundOf({ tier: "manor", paid: 1234 })).toBe(1234);
     const owner = await account(0);
     const id = houseIdFor(owner);
     await store.create({ id, owner, name: "옛 집", intro: "", ownerName: "주인", tier: "wide", lot: null, now: T });
     expect((await store.get(id))?.paid).toBeUndefined();
     const r = await sweep(T + RECLAIM_MS + 1);
-    expect(r.reclaimed.find((d) => d.id === id)?.points).toBe(plotCost("wide"));
+    expect(r.reclaimed.find((d) => d.id === id)?.points).toBe(legacyPlotCost("wide"));
   });
 
   it("접속 기록이 없는 계정의 집은 비우지 않는다", async () => {

@@ -1,7 +1,8 @@
 import * as Phaser from "phaser";
 import { flowersKey, TEX } from "../assets/manifest";
 import { DEPTH, TOOLTIP_EPITAPH, TOOLTIP_NAME } from "../config";
-import { SHAPE_SIZE } from "../graveShape";
+import { GRAVE_SCALE } from "@tomb/protocol";
+import { SHAPE_SIZE, type GraveShape } from "../graveShape";
 import { GRAVE_STONE_H, graveOriginY, graveTexKey, MONITOR_CURSOR, ROCKET_TIP, SERVER_LEDS } from "../sprites/graves";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import type { GravePlacement } from "../world/graveLayout";
@@ -14,6 +15,10 @@ import type { GravePlacement } from "../world/graveLayout";
 // 내 묘비(graves:mine)에는 금빛 작은 깃발을 꽂아 맵에서 바로 찾게 한다.
 
 const RISE_MS = 1100;
+/** 11/19 묘비 그림 배율 (언덕 위 옛 묘역에 맞게 작게). 비석·꽃·꾸미기·빛·깃발이 받침(p.x, p.y) 기준으로 같이 줄어든다 */
+const K = GRAVE_SCALE;
+/** 화면에 그려지는 비석 높이 (받침 위, 배율 적용) */
+const stoneH = (shape: GraveShape) => GRAVE_STONE_H[shape] * K;
 
 /** 살려주세요 수 → 0..1 (로그 스케일) */
 export function reviveLevel(revives: number): number {
@@ -64,7 +69,7 @@ export class GraveView {
   }
 
   get height(): number {
-    return this.p ? GRAVE_STONE_H[this.p.shape] : 0;
+    return this.p ? stoneH(this.p.shape) : 0;
   }
 
   bind(p: GravePlacement, reduced: boolean, riseAt: number, mine = false): void {
@@ -79,12 +84,12 @@ export class GraveView {
       .setPosition(p.x, p.y)
       .setDepth(p.y)
       .setRotation(0)
-      .setScale(1)
+      .setScale(K)
       .setVisible(true);
 
     if (p.flowers > 0) {
       if (!this.flowers) this.flowers = this.scene.add.image(0, 0, flowersKey(1)).setOrigin(0.5, 0);
-      this.flowers.setTexture(flowersKey(p.flowers)).setPosition(p.x, p.y - 2).setDepth(p.y + 1).setVisible(true);
+      this.flowers.setTexture(flowersKey(p.flowers)).setPosition(p.x, p.y - 2 * K).setScale(K).setDepth(p.y + 1).setVisible(true);
     } else this.flowers?.setVisible(false);
 
     const level = reviveLevel(p.revives);
@@ -92,8 +97,8 @@ export class GraveView {
     if (this.glowBase > 0) {
       if (!this.glow)
         this.glow = this.scene.add.image(0, 0, TEX.glow).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights).setTint(0xffdf9e);
-      const h = GRAVE_STONE_H[p.shape];
-      this.glow.setPosition(p.x, p.y - h / 2).setScale((h + 18) / 64).setVisible(true);
+      const h = stoneH(p.shape);
+      this.glow.setPosition(p.x, p.y - h / 2).setScale((h + 18 * K) / 64).setVisible(true);
     } else this.glow?.setVisible(false);
     this.sway = !reduced && level >= 0.6 ? 0.012 + 0.03 * level : 0;
 
@@ -101,22 +106,22 @@ export class GraveView {
     if (p.rank >= 0 && p.rank < 3) {
       this.addCandles(p, -10, 10);
       if (p.rank === 0) {
-        this.wisp = this.scene.add.sprite(p.x - 12, p.y - 26, TEX.wisp, 0).setDepth(DEPTH.lights + 1);
+        this.wisp = this.scene.add.sprite(p.x - 12 * K, p.y - 26 * K, TEX.wisp, 0).setScale(K).setDepth(DEPTH.lights + 1);
         this.wisp.play("fx-wisp-float");
-        this.lights.push({ img: this.makeLight(p.x - 12, p.y - 26, 0.6, 0x9fdcf0), base: 0.7, phase: 3 });
+        this.lights.push({ img: this.makeLight(p.x - 12 * K, p.y - 26 * K, 0.6, 0x9fdcf0), base: 0.7, phase: 3 });
       }
     }
     this.bindDecor(p);
     const bright = this.bindStyle(p);
     this.mine = mine;
     if (mine) {
-      const w = SHAPE_SIZE[p.shape].w;
-      const h = GRAVE_STONE_H[p.shape];
+      const w = SHAPE_SIZE[p.shape].w * K;
+      const h = stoneH(p.shape);
       this.flag = this.scene.add
-        .image(p.x + w / 2, p.y - h + 4, TEX.mineFlag)
+        .image(p.x + w / 2, p.y - h + 4 * K, TEX.mineFlag)
         .setOrigin(0.15, 1)
         .setDepth(p.y + 0.7)
-        .setScale(p.copy ? 0.7 : 1);
+        .setScale((p.copy ? 0.7 : 1) * Math.max(0.85, K));
       if (!p.copy) {
         // 내 묘비의 상시 빛: 은은한 후광 + 위로 뻗는 부드러운 빛기둥 (묘비 오브젝트에 붙어 같이 움직이고 같이 사라진다)
         this.mineHalo = this.scene.add
@@ -124,9 +129,9 @@ export class GraveView {
           .setBlendMode(Phaser.BlendModes.ADD)
           .setDepth(DEPTH.lights)
           .setTint(0xffd98a)
-          .setScale((h + 26) / 64);
+          .setScale((h + 26 * K) / 64);
         this.minePillar = this.scene.add
-          .image(p.x, p.y - h - 26, TEX.glow)
+          .image(p.x, p.y - h - 26 * K, TEX.glow)
           .setBlendMode(Phaser.BlendModes.ADD)
           .setDepth(DEPTH.lights)
           .setTint(0xffe6a8)
@@ -153,7 +158,7 @@ export class GraveView {
 
   /** 텍스처 좌표(tx,ty) → 월드 좌표 */
   private tw(p: GravePlacement, tx: number, ty: number): { x: number; y: number } {
-    return { x: p.x - SHAPE_SIZE[p.shape].tex / 2 + tx, y: p.y - GRAVE_STONE_H[p.shape] + ty };
+    return { x: p.x + (tx - SHAPE_SIZE[p.shape].tex / 2) * K, y: p.y - stoneH(p.shape) + ty * K };
   }
 
   private dot(x: number, y: number, tint: number, w: number, h: number, depth: number, add = false): Phaser.GameObjects.Image {
@@ -164,19 +169,19 @@ export class GraveView {
 
   /** 유료 디자인의 작은 연출. 빛나는 디자인이면 true (조명을 더 밝게) */
   private bindStyle(p: GravePlacement): boolean {
-    const h = GRAVE_STONE_H[p.shape];
+    const h = stoneH(p.shape);
     const glow = (dx: number, dy: number, scale: number, tint: number) => {
       this.fxGlow = this.scene.add
         .image(p.x + dx, p.y + dy, TEX.glow)
         .setBlendMode(Phaser.BlendModes.ADD)
         .setDepth(DEPTH.lights)
-        .setScale(scale)
+        .setScale(scale * K)
         .setTint(tint);
     };
     switch (p.shape) {
       case "coffee":
         for (let i = 0; i < 3; i++) {
-          const img = this.scene.add.image(p.x, p.y - h, TEX.dot).setDepth(p.y + 0.4).setTint(0xeeeeee).setScale(0.6);
+          const img = this.scene.add.image(p.x, p.y - h, TEX.dot).setDepth(p.y + 0.4).setTint(0xeeeeee).setScale(0.6 * K);
           this.fx.push({ img, a: i * 0.33, b: i - 1 });
         }
         return false;
@@ -194,7 +199,7 @@ export class GraveView {
         return true;
       case "sakura":
         for (let i = 0; i < 3; i++) {
-          const img = this.scene.add.image(p.x, p.y - h, TEX.petalPink).setDepth(p.y + 0.5);
+          const img = this.scene.add.image(p.x, p.y - h, TEX.petalPink).setScale(K).setDepth(p.y + 0.5);
           this.fx.push({ img, a: i * 0.33, b: i });
         }
         return false;
@@ -209,7 +214,7 @@ export class GraveView {
       case "gold":
         glow(0, -h * 0.5, 0.6, 0xffd870);
         for (let i = 0; i < 2; i++) {
-          const img = this.scene.add.image(p.x, p.y - h, TEX.spark).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights + 1);
+          const img = this.scene.add.image(p.x, p.y - h, TEX.spark).setBlendMode(Phaser.BlendModes.ADD).setScale(K).setDepth(DEPTH.lights + 1);
           this.fx.push({ img, a: i * 1300, b: i });
         }
         return true;
@@ -223,16 +228,16 @@ export class GraveView {
 
   private addCandles(p: GravePlacement, dl: number, dr: number): void {
     for (const dx of [dl, dr]) {
-      const c = this.scene.add.sprite(p.x + dx, p.y + 2, TEX.candle, 0).setOrigin(0.5, 1).setDepth(p.y + 2);
+      const c = this.scene.add.sprite(p.x + dx * K, p.y + 2 * K, TEX.candle, 0).setOrigin(0.5, 1).setScale(K).setDepth(p.y + 2);
       c.play({ key: "fx-candle-flicker", startFrame: dx > 0 ? 1 : 0 });
       this.candles.push(c);
-      this.lights.push({ img: this.makeLight(p.x + dx, p.y - 4, 0.45, 0xffc870), base: 0.55, phase: dx });
+      this.lights.push({ img: this.makeLight(p.x + dx * K, p.y - 4 * K, 0.45, 0xffc870), base: 0.55, phase: dx });
     }
   }
 
   private bindDecor(p: GravePlacement): void {
     this.decorLit = false;
-    const h = GRAVE_STONE_H[p.shape];
+    const h = stoneH(p.shape);
     for (const id of p.decor) {
       switch (id) {
         case "decor_candles":
@@ -241,15 +246,15 @@ export class GraveView {
           this.decorLit = true;
           break;
         case "decor_wreath":
-          this.decorObjs.push(this.scene.add.image(p.x, p.y + 3, TEX.wreath).setDepth(p.y + 3));
+          this.decorObjs.push(this.scene.add.image(p.x, p.y + 3 * K, TEX.wreath).setScale(K).setDepth(p.y + 3));
           break;
         case "decor_ribbon":
-          this.decorObjs.push(this.scene.add.image(p.x + 4, p.y - h + 3, TEX.ribbon).setOrigin(0.5, 0).setDepth(p.y + 0.5));
+          this.decorObjs.push(this.scene.add.image(p.x + 4 * K, p.y - h + 3 * K, TEX.ribbon).setOrigin(0.5, 0).setScale(K).setDepth(p.y + 0.5));
           break;
         case "decor_lantern": {
-          const lx = p.x + 13;
-          this.decorObjs.push(this.scene.add.image(lx, p.y + 2, TEX.miniLantern).setOrigin(0.5, 1).setDepth(p.y + 2));
-          this.lights.push({ img: this.makeLight(lx, p.y - 6, 0.5, 0xffc070), base: 0.6, phase: 7 });
+          const lx = p.x + 13 * K;
+          this.decorObjs.push(this.scene.add.image(lx, p.y + 2 * K, TEX.miniLantern).setOrigin(0.5, 1).setScale(K).setDepth(p.y + 2));
+          this.lights.push({ img: this.makeLight(lx, p.y - 6 * K, 0.5, 0xffc070), base: 0.6, phase: 7 });
           this.decorLit = true;
           break;
         }
@@ -257,45 +262,46 @@ export class GraveView {
           this.cat = this.scene.add
             .sprite(p.x, p.y - h + 1, TEX.ghostCat, 0)
             .setOrigin(0.5, 1)
+            .setScale(K)
             .setAlpha(0.8)
             .setDepth(p.y + 0.6);
           if (!this.reduced) this.cat.play("fx-ghostcat-tail");
           break;
         case "decor_stars":
           for (let i = 0; i < (this.reduced ? 2 : 5); i++) {
-            const img = this.scene.add.image(p.x, p.y - h, TEX.spark).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights + 1);
+            const img = this.scene.add.image(p.x, p.y - h, TEX.spark).setBlendMode(Phaser.BlendModes.ADD).setScale(K).setDepth(DEPTH.lights + 1);
             this.stars.push({ img, t0: i * 700 + this.phase * 300 });
           }
           break;
         case "decor_rainbow": {
           // 묘비 뒤로 걸린 작은 무지개 (양 끝 구름이 묘비 옆에 보인다)
-          const y = p.y - h + 7;
-          const img = this.scene.add.image(p.x, y, TEX.rainbow).setOrigin(0.5, 1).setDepth(p.y - 0.5).setAlpha(0.85);
+          const y = p.y - h + 7 * K;
+          const img = this.scene.add.image(p.x, y, TEX.rainbow).setOrigin(0.5, 1).setScale(K).setDepth(p.y - 0.5).setAlpha(0.85);
           this.addDeco(img, "rainbow", 0, 0, p.x, y);
           break;
         }
         case "decor_butterfly": {
           const tints = [0xffa8d4, 0x9ad4ff, 0xffe07a];
           for (let i = 0; i < (this.reduced ? 2 : 3); i++) {
-            const img = this.scene.add.image(p.x, p.y - h, TEX.butterfly, 0).setTint(tints[i]).setDepth(p.y + 0.8);
-            this.addDeco(img, "butterfly", (i * Math.PI * 2) / 3 + this.phase, 0.8 + i * 0.23, p.x, p.y - h * 0.6 - 4);
+            const img = this.scene.add.image(p.x, p.y - h, TEX.butterfly, 0).setTint(tints[i]).setScale(K).setDepth(p.y + 0.8);
+            this.addDeco(img, "butterfly", (i * Math.PI * 2) / 3 + this.phase, 0.8 + i * 0.23, p.x, p.y - h * 0.6 - 4 * K);
           }
           break;
         }
         case "decor_snowman": {
-          const sx = p.x - 14;
-          this.decorObjs.push(this.scene.add.image(sx, p.y + 3, TEX.snowman).setOrigin(0.5, 1).setDepth(p.y + 2));
+          const sx = p.x - 14 * K;
+          this.decorObjs.push(this.scene.add.image(sx, p.y + 3 * K, TEX.snowman).setOrigin(0.5, 1).setScale(K).setDepth(p.y + 2));
           // 가끔 눈 결정이 반짝인다
           for (let i = 0; i < (this.reduced ? 1 : 3); i++) {
-            const img = this.scene.add.image(sx, p.y - 10, TEX.spark).setBlendMode(Phaser.BlendModes.ADD).setTint(0xdcecff).setDepth(DEPTH.lights + 1);
-            this.addDeco(img, "snow", i * 1100 + this.phase * 400, i, sx, p.y - 6);
+            const img = this.scene.add.image(sx, p.y - 10 * K, TEX.spark).setBlendMode(Phaser.BlendModes.ADD).setTint(0xdcecff).setDepth(DEPTH.lights + 1);
+            this.addDeco(img, "snow", i * 1100 + this.phase * 400, i, sx, p.y - 6 * K);
           }
           break;
         }
         case "decor_flowerpot": {
-          const fx = p.x + (p.decor.includes("decor_snowman") ? 9 : -9);
-          const img = this.scene.add.image(fx, p.y + 6, TEX.flowerpot).setOrigin(0.5, 1).setDepth(p.y + 3);
-          this.addDeco(img, "pot", this.phase, 0, fx, p.y + 6);
+          const fx = p.x + (p.decor.includes("decor_snowman") ? 9 : -9) * K;
+          const img = this.scene.add.image(fx, p.y + 6 * K, TEX.flowerpot).setOrigin(0.5, 1).setScale(K).setDepth(p.y + 3);
+          this.addDeco(img, "pot", this.phase, 0, fx, p.y + 6 * K);
           break;
         }
       }
@@ -318,12 +324,12 @@ export class GraveView {
         case "butterfly": {
           // 묘비 둘레를 8자로 날며 앞뒤로 오간다
           if (still) {
-            d.img.setPosition(d.x - 6 + i * 6, d.y + 3).setFrame(0);
+            d.img.setPosition(d.x + (-6 + i * 6) * K, d.y + 3 * K).setFrame(0);
             break;
           }
           const t = (now / 1000) * d.b + d.a;
-          const fx = Math.sin(t) * 11;
-          const fy = Math.sin(t * 2) * 4 + Math.sin(t * 0.7) * 2;
+          const fx = Math.sin(t) * 11 * K;
+          const fy = (Math.sin(t * 2) * 4 + Math.sin(t * 0.7) * 2) * K;
           d.img
             .setPosition(d.x + fx, d.y + fy)
             .setFrame(Math.floor(now / 110 + i) % 2)
@@ -337,9 +343,9 @@ export class GraveView {
           const k = Math.floor((now + d.a) / cycle) + d.b * 5;
           const on = still ? 0.5 : Math.max(0, Math.sin(t * Math.PI * 2));
           d.img
-            .setPosition(d.x - 5 + ((k * 7) % 11), d.y - ((k * 13) % 9) + (still ? 0 : t * 3))
+            .setPosition(d.x + (-5 + ((k * 7) % 11)) * K, d.y + (-((k * 13) % 9) + (still ? 0 : t * 3)) * K)
             .setAlpha(on * (0.5 + 0.5 * lightLevel))
-            .setScale(0.4 + 0.4 * on);
+            .setScale((0.4 + 0.4 * on) * K);
           break;
         }
         case "pot":
@@ -354,7 +360,7 @@ export class GraveView {
       .image(x, y, TEX.glow)
       .setBlendMode(Phaser.BlendModes.ADD)
       .setDepth(DEPTH.lights)
-      .setScale(scale)
+      .setScale(scale * K)
       .setTint(tint);
   }
 
@@ -429,13 +435,13 @@ export class GraveView {
       l.img.setAlpha(l.base * f * (0.3 + 0.7 * lightLevel));
     }
     if (this.wisp) {
-      const wy = p.y - 26 + Math.sin(now / 700) * 3;
-      const wx = p.x - 12 + Math.sin(now / 1100) * 2;
+      const wy = p.y + (-26 + Math.sin(now / 700) * 3) * K;
+      const wx = p.x + (-12 + Math.sin(now / 1100) * 2) * K;
       this.wisp.setPosition(wx, wy);
       // 유령불 빛은 촛불 둘 다음 (lights[2])
       if (this.lights.length > 2) this.lights[2].img.setPosition(wx, wy);
     }
-    if (this.cat && !this.reduced) this.cat.setY(p.y - GRAVE_STONE_H[p.shape] + 1 - (Math.sin(now / 900 + this.phase) > 0.6 ? 1 : 0));
+    if (this.cat && !this.reduced) this.cat.setY(p.y - stoneH(p.shape) + 1 - (Math.sin(now / 900 + this.phase) > 0.6 ? K : 0));
     this.updateStyle(p, now, lightLevel);
     if (this.deco.length) this.updateDeco(p, now, lightLevel);
     if (this.flag && !this.reduced) this.flag.setRotation(Math.sin(now / 700 + this.phase) * 0.06);
@@ -449,30 +455,30 @@ export class GraveView {
     }
     if (this.stars.length) {
       // 별가루: 묘비 위에서 천천히 내려오며 깜빡인다
-      const h = GRAVE_STONE_H[p.shape];
+      const h = stoneH(p.shape);
       for (let i = 0; i < this.stars.length; i++) {
         const st = this.stars[i];
         const period = this.reduced ? 6000 : 3200;
         const t = ((now + st.t0) % period) / period;
-        const dx = Math.sin(i * 2.3 + this.phase) * 7;
-        st.img.setPosition(p.x + dx, p.y - h - 14 + t * (h + 10)).setAlpha(Math.sin(t * Math.PI) * 0.9).setScale(0.6 + 0.4 * Math.sin(t * Math.PI));
+        const dx = Math.sin(i * 2.3 + this.phase) * 7 * K;
+        st.img.setPosition(p.x + dx, p.y - h - 14 * K + t * (h + 10 * K)).setAlpha(Math.sin(t * Math.PI) * 0.9).setScale((0.6 + 0.4 * Math.sin(t * Math.PI)) * K);
       }
     }
     if (this.riseAt) {
       const t = Math.min(1, (now - this.riseAt) / RISE_MS);
       const e = t < 0.35 ? 0 : 1 - Math.pow(1 - (t - 0.35) / 0.65, 3);
-      this.stone.setScale(1, Math.max(0.001, e));
+      this.stone.setScale(K, Math.max(0.001, e) * K);
       this.flowers?.setAlpha(e);
       if (t >= 1) {
         this.riseAt = 0;
-        this.stone.setScale(1);
+        this.stone.setScale(K);
         this.flowers?.setAlpha(1);
       }
     }
   }
 
   private updateStyle(p: GravePlacement, now: number, lightLevel: number): void {
-    const h = GRAVE_STONE_H[p.shape];
+    const h = stoneH(p.shape);
     const still = this.reduced;
     if (this.fxGlow) {
       const pulse = still ? 1 : 0.75 + 0.25 * Math.sin(now / 900 + this.phase);
@@ -483,7 +489,7 @@ export class GraveView {
         // 식은 커피에서도 김이 살짝 (위로 피어오르며 흐려진다)
         for (const f of this.fx) {
           const t = still ? 0.4 : ((now / 2400 + f.a) % 1);
-          f.img.setPosition(p.x - 1 + f.b * 2 + Math.sin(t * 6 + f.b) * 1.2, p.y - h - 1 - t * 9).setAlpha(still ? 0.35 : 0.55 * Math.sin(t * Math.PI));
+          f.img.setPosition(p.x + (-1 + f.b * 2 + Math.sin(t * 6 + f.b) * 1.2) * K, p.y - h - (1 + t * 9) * K).setAlpha(still ? 0.35 : 0.55 * Math.sin(t * Math.PI));
         }
         break;
       case "monitor":
@@ -496,7 +502,7 @@ export class GraveView {
         for (const f of this.fx) {
           const t = still ? 0.5 : ((now / 3800 + f.a) % 1);
           f.img
-            .setPosition(p.x - 6 + f.b * 6 + Math.sin(t * 5 + f.b) * 3, p.y - h - 2 + t * (h + 4))
+            .setPosition(p.x + (-6 + f.b * 6 + Math.sin(t * 5 + f.b) * 3) * K, p.y - h - 2 * K + t * (h + 4 * K))
             .setRotation(still ? 0 : t * 4)
             .setAlpha(Math.sin(t * Math.PI));
         }
@@ -511,9 +517,9 @@ export class GraveView {
           const t = ((now + f.a) % cycle) / cycle;
           const k = Math.floor((now + f.a) / cycle) + f.b * 7;
           f.img
-            .setPosition(p.x - 4 + ((k * 37) % 9), p.y - h + 3 + ((k * 53) % Math.max(4, h - 8)))
+            .setPosition(p.x + (-4 + ((k * 37) % 9)) * K, p.y - h + (3 + ((k * 53) % Math.max(4, h / K - 8))) * K)
             .setAlpha(still ? 0.6 : Math.max(0, Math.sin(t * Math.PI * 2)))
-            .setScale(still ? 0.8 : 0.5 + 0.5 * Math.max(0, Math.sin(t * Math.PI * 2)));
+            .setScale((still ? 0.8 : 0.5 + 0.5 * Math.max(0, Math.sin(t * Math.PI * 2))) * K);
         }
         break;
       case "duck":
@@ -526,7 +532,7 @@ export class GraveView {
         if (!still) {
           const t = (now + this.phase * 1000) % 3700;
           const glitch = t < 120;
-          this.stone.setX(p.x + (glitch ? (t < 60 ? 1 : -1) : 0));
+          this.stone.setX(p.x + (glitch ? (t < 60 ? K : -K) : 0));
           if (glitch) this.stone.setTint(0xb8d0ff);
           else this.stone.clearTint();
         }
@@ -574,7 +580,7 @@ export class GraveTooltip {
       this.epitaph.setText(epitaph);
       this.shownId = p.id;
     }
-    this.graveTop = p.y - GRAVE_STONE_H[p.shape] - 3;
+    this.graveTop = p.y - stoneH(p.shape) - 3;
     this.anchor = { x: p.x, y: this.graveTop };
     for (const o of [this.border, this.bg, this.name, this.epitaph]) o.setVisible(true);
   }

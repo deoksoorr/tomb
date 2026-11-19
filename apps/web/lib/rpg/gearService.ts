@@ -6,10 +6,10 @@ import { displayName } from "../store";
 import { pushVillageNotice } from "../weeklyChamp";
 import { forgetTitles } from "../titlesServer";
 import { RpgError } from "./character";
-import { disassemble, enhance, enhanceNeed, enhanceState, equipSg, exchange, reroll, rerollCost, type EnhanceResult, type EnhTarget } from "./enhance";
+import { disassemble, enhance, enhanceNeed, enhanceState, equipSg, exchange, inherit, inheritPlan, reroll, rerollCost, type EnhanceResult, type EnhTarget, type InheritFrom, type InheritResult } from "./enhance";
 import type { GearActionSchema } from "./schemas";
 import { effectiveLevel, queueFirstTitles, rpgView } from "./service";
-import { decodeSg, sgUid } from "./setGear";
+import { decodeSg, discoverEgg, SG_SETS, sgUid } from "./setGear";
 import { getRpgStore } from "./store";
 import { isSuperHunter } from "./superHunter";
 import type { CharacterState, RpgView } from "./types";
@@ -21,6 +21,8 @@ import type { CharacterState, RpgView } from "./types";
 export type GearActionResponse = RpgView & {
   gear?: {
     enhance?: EnhanceResult;
+    /** 11/19 강화 승계 결과 */
+    inherit?: InheritResult;
     /** 굴리기·바꾸기로 새로 생긴 코드 */
     code?: string;
     /** 분해로 받은 재료 */
@@ -113,6 +115,39 @@ export async function gearAction(acct: string, a: z.output<typeof GearActionSche
       const r = await http(store.update(acct, (s) => disassemble(s, a.uids)));
       state = r.state;
       gear = { got: r.result };
+      break;
+    }
+    case "inherit": {
+      const from: InheritFrom | null = a.fromSg !== undefined ? { sg: a.fromSg } : a.fromPiece !== undefined ? { piece: a.fromPiece } : null;
+      const to: EnhTarget | null = a.sg !== undefined ? { sg: a.sg } : a.piece !== undefined ? { piece: a.piece } : a.shop ? { shop: a.shop } : null;
+      if (!from || !to) throw new HttpError(400, "INVALID_INPUT", "재료 장비와 받을 장비를 골라 주세요.");
+      const r = await http(
+        store.updatePaid(
+          acct,
+          (s) => {
+            const plan = inheritPlan(s, from, to);
+            // 화면에 보인 비용과 다르면 돈을 받지 않고 다시 보여 준다
+            if (plan.ok && plan.cost !== a.cost)
+              throw new RpgError(409, "COST_CHANGED", `승계 비용이 ${plan.cost.toLocaleString("ko-KR")}P로 바뀌었어요. 다시 확인해 주세요.`);
+            return inherit(s, from, to);
+          },
+          "사냥터 강화 승계",
+          now,
+        ),
+      );
+      state = r.state;
+      gear = { inherit: r.result };
+      break;
+    }
+    case "egg": {
+      // 11/19 숨겨진 5세트 효과 발견: 지금 그 세트 다섯 부위를 다 끼고 있을 때만 비트를 켠다 (이미 켜졌거나 아니면 저장하지 않는다)
+      const set = SG_SETS[a.set];
+      if (discoverEgg(before.sgEgg, set, before.equip) === (before.sgEgg ?? 0)) {
+        state = before;
+        break;
+      }
+      const r = await http(store.update(acct, (s) => ({ state: { ...s, sgEgg: discoverEgg(s.sgEgg, set, s.equip) }, result: null })));
+      state = r.state;
       break;
     }
     case "equip": {

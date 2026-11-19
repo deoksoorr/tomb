@@ -45,6 +45,8 @@ export type ChatLine = {
    * fail = 못 보냄 안내, note = 쓰는 법 안내 (둘 다 text만). 채팅창에 "[귓속말] 나 → 진순: …"처럼 분홍색으로
    */
   w?: "out" | "in" | "fail" | "note";
+  /** 11/19 마을 소식 줄 (이 화면에만, 서버 기록에는 없다): goblin = 「○○님이 황금 고블린을 잡았어요!」. text만, 금빛으로 */
+  sys?: "goblin";
 };
 
 /** 서버 chatLog 한 줄을 이 기기 시계로 옮긴 것 */
@@ -98,7 +100,8 @@ export function chatLineAgo(line: ChatLine, now: number): string | null {
 }
 
 /** 글자색 구분: 내 줄은 촛불색, 다른 사람은 연한 이름 + 밝은 내용, 11/16 귓속말은 분홍색 */
-export function chatLineTone(line: ChatLine): "mine" | "other" | "whisper" {
+export function chatLineTone(line: ChatLine): "mine" | "other" | "whisper" | "notice" {
+  if (line.sys) return "notice";
   if (line.w) return "whisper";
   return line.mine ? "mine" : "other";
 }

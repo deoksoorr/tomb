@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- 캔버스로 만든 dataURL 픽셀아트라 next/image 최적화가 필요 없다 */
 import { useEffect, useRef, useState } from "react";
 import { cardIconUrl } from "@/game/rpg/cards/cardArt";
-import { CARDS, cardPromoLine, cardText, RARITY_NAME, type CardId } from "@/lib/rpg/cards";
+import { CARD_TYPE_NAME, CARDS, cardPromoLine, cardText, RARITY_NAME, type CardId } from "@/lib/rpg/cards";
 import type { RpgHud } from "@/lib/rpg/types";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
@@ -56,9 +56,15 @@ export default function RunCards({ run }: { run: NonNullable<RpgHud["run"]> }) {
                   byTouch.current = true;
                   setTip((t) => (t === id ? null : id));
                 }}
-                aria-label={`${def.name}${n > 1 ? ` ${n}장` : ""}. ${cardText(id, run.kind)}`}
+                aria-label={`${def.name}${n > 1 ? ` ${n}장` : ""}, ${CARD_TYPE_NAME[def.type]}. ${cardText(id, run.kind)}`}
               >
                 <img src={cardIconUrl(id, 2)} alt="" />
+                {/* 11/19 물공·마공 카드는 아이콘 왼쪽 위에 한 글자 (공통은 표시 없음) */}
+                {def.type !== "all" && (
+                  <span className={c.iconType} data-type={def.type} aria-hidden="true">
+                    {def.type === "phys" ? "물" : "마"}
+                  </span>
+                )}
                 {n > 1 && <span className={c.count}>{n}</span>}
               </button>
             );
@@ -73,6 +79,9 @@ export default function RunCards({ run }: { run: NonNullable<RpgHud["run"]> }) {
           </strong>
           <em className={c.tipTier} data-tier={CARDS[shown].rarity}>
             {RARITY_NAME[CARDS[shown].rarity]}
+            <span className={c.dmgType} data-type={CARDS[shown].type}>
+              {CARD_TYPE_NAME[CARDS[shown].type]}
+            </span>
           </em>
           <span>{cardText(shown, run.kind)}</span>
           {/* 11/17 팀장 승진이 있으면 실제로 받는 숫자 */}

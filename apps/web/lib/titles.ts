@@ -22,7 +22,7 @@ export const TITLE_GRADE_NAMES: Record<TitleGrade, string> = { bronze: "동", si
  *  - 속도 상한: 신화 1.06 (+ 1위·명예 갈래 0.02 = 1.08) × 가장 빠른 타는 펫 1.35 = 1.458 → 실시간 서버 속도 검증(달리기 × 1.5) 안,
  *    화면도 땅 위 배율을 MAX_GROUND_MUL(1.48)로 한 번 더 자른다 (game/entities/Player).
  *    11/17 지난주 다관왕은 같은 자리에 +0.01 (lib/champPerks CHAMP_MULTI_SPEED) → (1.08 + 0.01) × 1.35 = 1.4715 < 1.48 < 1.5
- *  - 포인트 하루 한도는 그대로: 머무르기 보상·도감 새 칸 보상은 원래 항목 한도 안에서만 늘고, 나머지는 확률·편의·할인
+ *  - 머무르기 보상·도감 새 칸 보상은 그 값이 늘고(11/19부터 하루 한도 없음), 나머지는 확률·편의·할인
  */
 export const GRADE_SPEED: Readonly<Record<TitleGrade, number>> = {
   bronze: 1,
@@ -87,6 +87,8 @@ export const TITLE_PERK_GROUP: Readonly<Record<TitleId, PerkGroup>> = {
   t_pioneer: "champ",
   t_ref3: "champ",
   t_ref10: "champ",
+  // 11/18 새 이웃 꾸러미 졸업 칭호 (동 — 능력은 공통 속도뿐)
+  t_grad: "none",
   // 집 꾸밈 점수 → 가구 할인
   t_house50: "house",
   t_house150: "house",
@@ -188,7 +190,7 @@ export type TitlePerk = {
   stayBonus: number;
   /** 의뢰 도장을 하나 더 받을 확률 — 수집 의뢰 */
   questStamp: number;
-  /** 도감 새 칸 보상 비율 + (도감 하루 한도 안) — 도감 */
+  /** 도감 새 칸 보상 비율 + — 도감 */
   dexBonus: number;
   /** 반짝이는 발자국 (화면 연출만) — 1위·명예 */
   sparkle: boolean;
@@ -283,6 +285,8 @@ export type TitleMetric =
   | "qking"
   // 추천 코드로 데려온 이웃 중 조건을 넘긴 수 (같은 곳 가입은 세지 않는다 — lib/referralService)
   | "refs"
+  // 11/18 새 이웃 꾸러미(가입 첫 7일) 받은 선물 수 (7 = 졸업)
+  | "grad"
   | `dex_${DexCat}`;
 
 export type TitleDef = {
@@ -397,6 +401,8 @@ const STEP_ROWS: readonly StepRow[] = [
     // 추천 코드: 데려온 이웃이 조건(3시간·3일)을 넘기면 한 명으로 센다 (lib/referralRules)
     ["t_ref3", "마을 안내인", "silver", "추천 코드로 데려온 이웃 3명이 마을에 자리 잡으면", "refs", 3, "town"],
     ["t_ref10", "마을의 마당발", "gold", "추천 코드로 데려온 이웃 10명이 마을에 자리 잡으면", "refs", 10, "town"],
+    // 11/18 한정: 가입하고 14일 안에 새 이웃 꾸러미 7개를 모두 받으면 (lib/retain)
+    ["t_grad", "마을 새내기 졸업", "bronze", "새 이웃 꾸러미 7개를 모두 받으면", "grad", 7, "town"],
 ];
 const STEP_OF = new Map(STEP_ROWS.map((r) => [r[0], r]));
 
@@ -508,7 +514,7 @@ function groupText(p: TitlePerk): [string, string] | null {
     case "forage":
       return [`채집할 때 희귀한 게 ${pct(p.rareGather)}% 더 잘 나와요.`, `희귀 채집 확률 +${pct(p.rareGather)}%`];
     case "stay":
-      return [`접속 시간 보너스를 ${pct(p.stayBonus)}% 더 받아요. 하루 최대치는 같아요.`, `접속 보너스 +${pct(p.stayBonus)}%`];
+      return [`접속 시간 보너스를 ${pct(p.stayBonus)}% 더 받아요.`, `접속 보너스 +${pct(p.stayBonus)}%`];
     case "look":
       return [`상점 물건과 염색권을 ${pct(p.discount)}% 싸게 사요.`, `상점 ${pct(p.discount)}% 할인`];
     case "quest":

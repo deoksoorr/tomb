@@ -62,8 +62,8 @@ export function soundPow(k: number): Pow {
   return { k, t, ly: 1 + Math.round(t * 3) };
 }
 
-type Branch = "ember" | "frost" | "soul";
-const branchOf = (id: SkillId): Branch => (id.startsWith("em_") ? "ember" : id.startsWith("fr_") ? "frost" : "soul");
+type Branch = "ember" | "frost" | "soul" | "worker";
+const branchOf = (id: SkillId): Branch => (id.startsWith("em_") ? "ember" : id.startsWith("fr_") ? "frost" : id.startsWith("wk_") ? "worker" : "soul");
 
 export const ULTIMATES = ["em_bonfire", "fr_blizzard", "so_procession"] as const;
 export type UltId = (typeof ULTIMATES)[number];
@@ -341,13 +341,57 @@ const R: Record<SkillId, Recipes> = {
   so_kinship: {
     hit: () => ({ ls: [osc("sine", 0, 0.3, 392, 392, 0.1, { atk: 0.02 }), osc("sine", 0.03, 0.3, 587, 587, 0.08, { atk: 0.02 })], hit: 0, base: 196 }),
   },
+  // ── 삽자루 일꾼 (11/19): 흙·쇳날·발구름. 묵직하고 짧게 ──
+  // 삽자루 돌진: 발구름 + 바람 휙 → 부딪는 쿵
+  wk_charge: {
+    cast: () => ({ ls: [...thump(0, 90, 0.12, 0.35), fwoosh(0.02, 0.22, 0.35, 400, 1800)], hit: 0, base: 90 }),
+    hit: () => ({ ls: [...thump(0, 120, 0.16, 0.45), nz(0, 0.12, 0.3, "bandpass", 900, 400, 1.4)], hit: 0, base: 110 }),
+  },
+  // 굳은살 (패시브): 손바닥 툭
+  wk_callus: { hit: () => ({ ls: [nz(0, 0.05, 0.18, "lowpass", 900)], hit: 0, base: 160 }) },
+  // 찌르고 퍼 올리기: 쇳날 찌르기 칭 두 번 + 흙 퍼 올리는 파삭
+  wk_combo: {
+    cast: () => ({ ls: [osc("triangle", 0, 0.08, 1480, 1300, 0.18, { atk: 0.001 }), osc("triangle", 0.15, 0.08, 1660, 1460, 0.18, { atk: 0.001 }), nz(0.3, 0.25, 0.35, "bandpass", 1200, 300, 1.2), ...thump(0.3, 100, 0.14, 0.3)], hit: 0.3, base: 100 }),
+    hit: () => ({ ls: [...thump(0, 140, 0.1, 0.3), nz(0, 0.06, 0.2, "highpass", 2400)], hit: 0, base: 140 }),
+  },
+  wk_grip: { hit: () => ({ ls: [nz(0, 0.04, 0.12, "highpass", 3000)], hit: 0, base: 200 }) },
+  wk_back: { hit: () => ({ ls: [...thump(0, 80, 0.08, 0.18)], hit: 0, base: 80 }) },
+  // 봉분 뛰어넘기: 도움닫기 휘익 (올라감) → 착지 쾅 + 흙 비
+  wk_leap: {
+    cast: (_p, o) => {
+      const d = (o.ms ?? 450) / 1000;
+      return { ls: [fwoosh(0, d, 0.35, 300, 2400), osc("sine", 0, d, 220, 660, 0.12, { env: "swell" })], hit: d, base: 60 };
+    },
+    hit: (_p, _o, rnd) => ({
+      ls: [osc("sine", 0, 0.7, 110, 30, 0.6, { glide: 0.4, atk: 0.002 }), nz(0, 0.6, 0.45, "lowpass", 2600, 120, 1), ...Array.from({ length: 5 }, (_, i) => nz(0.06 + i * 0.05 + rnd() * 0.03, 0.06, 0.12, "bandpass", 900 + rnd() * 600, 500, 1.5, { pan: rnd() - 0.5 }))],
+      hit: 0,
+      base: 40,
+    }),
+  },
+  // 쉬지 않는 손: 숨 고르고 쇳날 두 번 탁탁
+  wk_tireless: { cast: () => ({ ls: [nz(0, 0.25, 0.18, "bandpass", 500, 900, 1, { env: "swell" }), osc("triangle", 0.22, 0.06, 1760, 1600, 0.14, { atk: 0.001 }), osc("triangle", 0.3, 0.06, 1980, 1800, 0.14, { atk: 0.001 })], hit: 0.22, base: 180 }) },
+  // 삽날 회오리: 켤 때 휘익 감김, 도는 동안 한 바퀴마다 쉭
+  wk_whirl: {
+    cast: () => ({ ls: [wind(0, 0.4, 0.35, 500, 2600, { pan: -0.4 }), wind(0.1, 0.35, 0.25, 700, 3000, { pan: 0.4 })], hit: 0, base: 120 }),
+    hit: () => ({ ls: [fwoosh(0, 0.16, 0.25, 600, 2200), nz(0.02, 0.05, 0.12, "highpass", 3200)], hit: 0, base: 140 }),
+  },
+  // 깊게 파기 (패시브, 치명타): 삽이 땅에 박히는 퍽
+  wk_deep: { hit: () => ({ ls: [...thump(0, 70, 0.14, 0.3), nz(0, 0.1, 0.2, "lowpass", 1400)], hit: 0, base: 70 }) },
+  // 밤샘 삽질 (궁극): 숨을 들이켜고 → 돌진마다 쿵·휙
+  wk_allnight: {
+    cast: () => ({ ls: [...inhale(0, 0.4, 0.3, 400, 4000), ...thump(0.4, 60, 0.3, 0.5)], hit: 0.4, base: 50 }),
+    hit: () => ({ ls: [...thump(0, 100, 0.14, 0.4), fwoosh(0, 0.2, 0.3, 500, 2600)], hit: 0, base: 90 }),
+  },
+  // 일꾼의 뚝심 (패시브, 10번째 치명타): 쇳소리 쨍
+  wk_grit: { hit: () => ({ ls: [osc("triangle", 0, 0.18, 2093, 2000, 0.2, { atk: 0.001 }), ...thump(0, 120, 0.1, 0.25)], hit: 0, base: 120 }) },
 };
 
 // ════ 궁극기: 기 모으기 → 폭발 → 박자 → 여파 ════
 const ULT = {
   ember: { sub: 30, riser: "sawtooth" as Wave, r0: 55, r1: 220, chord: [0, 7, 12, 19], root: 73, hi: 2600 },
   frost: { sub: 36, riser: "sine" as Wave, r0: 220, r1: 880, chord: [0, 5, 10, 15], root: 110, hi: 4186 },
-  soul: { sub: 33, riser: "triangle" as Wave, r0: 110, r1: 440, chord: [0, 4, 7, 11, 14], root: 98, hi: 3136 },
+  soul: { sub: 33, riser: "triangle" as Wave, r0: 110, r1: 440, chord: [0, 4, 7, 11, 14], root: 98, hi: 3136 },  // 11/19 일꾼 궁극(밤샘 삽질)은 일반 스킬 소리로 낸다 — 표만 채운다
+  worker: { sub: 30, riser: "triangle" as Wave, r0: 70, r1: 280, chord: [0, 5, 12], root: 65, hi: 2200 },
 };
 
 /** 기 모으기 (lead초 뒤 첫 폭발): 올라가는 상승음 + 빨라지는 심장 박동 + 갈래 잡음이 차오르고, 폭발 직전 빨려 듦 */
@@ -408,13 +452,15 @@ function ultBeat(b: Branch, i: number, last: boolean, rnd: () => number): Design
 }
 
 // ════ 등급 강도 ════
-const SUB: Record<Branch, number> = { ember: 42, frost: 55, soul: 48 };
+const SUB: Record<Branch, number> = { ember: 42, frost: 55, soul: 48, worker: 40 };
 
 /** 갈래 재료 한 겹 더 (겹수 2단계부터) */
 function texture(b: Branch, at: number, p: Pow): Layer[] {
   const g = 0.08 + 0.1 * p.t;
   if (b === "ember") return [crk(at, 0.25 + 0.4 * p.t, g, 1600)];
   if (b === "frost") return [osc("sine", at + 0.01, 0.25 + 0.3 * p.t, 3520, 3500, g * 0.7, { atk: 0.001, pan: 0.4 }), nz(at, 0.12, g * 0.6, "highpass", 6000)];
+  // 11/19 일꾼: 흙이 후드득 + 쇳날 짧은 울림
+  if (b === "worker") return [nz(at, 0.18 + 0.2 * p.t, g, "bandpass", 700, 300, 1.2), osc("triangle", at, 0.12, 1320, 1180, g * 0.5, { atk: 0.001 })];
   return [whisper(at, 0.3 + 0.4 * p.t, g * 0.8, 900, 1400)];
 }
 

@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import { SEASONS, TIME_PHASES, WEATHERS } from "../ambience";
 import {
   AUTO_BEAT_GAP_MS,
+  AUTO_CATCH_CHANCE,
   AUTO_FISH_EVERY_MS,
   AUTO_FISH_MAX_MS,
   autoAliveMs,
   autoCatchTimes,
-  autoCaughtTotal,
+  autoHit,
   autoNextInMs,
   autoRareFactor,
   autoSummary,
@@ -16,6 +17,7 @@ import {
   parseAutoSession,
   pickAuto,
   rollAutoCatch,
+  autoTriesTotal,
   type AutoSession,
 } from "./auto";
 import { speciesById, type Species } from "./catalog";
@@ -39,17 +41,35 @@ const rareShare = (list: readonly Species[], w: (s: Species) => number) => {
 };
 
 describe("속도", () => {
-  it("직접 낚을 때 평균의 2.5배마다 한 마리", () => {
+  it("직접 낚을 때 평균의 2.5배마다 찌를 한 번 올린다", () => {
     expect(AUTO_FISH_EVERY_MS).toBe(Math.round(DIRECT_FISH_AVG_MS * 2.5));
     expect(AUTO_FISH_EVERY_MS).toBeGreaterThan(DIRECT_FISH_AVG_MS * 2);
   });
 });
 
-describe("경과 시간 → 마릿수", () => {
+describe("11/19 시도마다 걸릴 확률", () => {
+  it("직접 낚시보다 확실히 느리다: 30초마다 25% → 평균 2분에 한 마리 (직접 평균의 10배)", () => {
+    expect(AUTO_CATCH_CHANCE).toBe(0.25);
+    const avgPerFish = AUTO_FISH_EVERY_MS / AUTO_CATCH_CHANCE;
+    expect(avgPerFish).toBe(120_000);
+    expect(avgPerFish / DIRECT_FISH_AVG_MS).toBeGreaterThanOrEqual(10);
+  });
+
+  it("걸렸는지는 시드 + 번호로 결정적이고, 많이 굴리면 25%에 가깝다", () => {
+    expect(autoHit(7, 3)).toBe(autoHit(7, 3));
+    let hit = 0;
+    const N = 20_000;
+    for (let k = 1; k <= N; k++) if (autoHit(12345, k)) hit++;
+    expect(hit / N).toBeGreaterThan(AUTO_CATCH_CHANCE - 0.02);
+    expect(hit / N).toBeLessThan(AUTO_CATCH_CHANCE + 0.02);
+  });
+});
+
+describe("경과 시간 → 시도 수", () => {
   it("보이는 동안 1.5분마다 정산하면 30분 = 30분어치", () => {
     const s = beats(newAutoSession(1, "f", "lake", 1, T0), T0, T0 + 30 * MIN, 1.5 * MIN);
     expect(autoAliveMs(s)).toBe(30 * MIN);
-    expect(autoCaughtTotal(s)).toBe(Math.floor((30 * MIN) / AUTO_FISH_EVERY_MS));
+    expect(autoTriesTotal(s)).toBe(Math.floor((30 * MIN) / AUTO_FISH_EVERY_MS));
     expect(autoNextInMs(s)).toBe(AUTO_FISH_EVERY_MS - ((30 * MIN) % AUTO_FISH_EVERY_MS));
   });
 
@@ -89,7 +109,7 @@ describe("경과 시간 → 마릿수", () => {
     s = { ...s, end: s.beat + 10 * MIN };
     const back = s.beat;
     s = beatAuto(s, back + AUTO_FISH_EVERY_MS); // 둘째 구간
-    const ts = autoCatchTimes(s, 1, autoCaughtTotal(s));
+    const ts = autoCatchTimes(s, 1, autoTriesTotal(s));
     expect(ts).toEqual([T0 + AUTO_FISH_EVERY_MS, back + AUTO_FISH_EVERY_MS / 2]);
     expect(autoCatchTimes(s, 2, 2)).toEqual([back + AUTO_FISH_EVERY_MS / 2]);
   });

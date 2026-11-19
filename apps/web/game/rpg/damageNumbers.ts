@@ -9,7 +9,7 @@ import { addHurt, type HurtCell, type HurtKind } from "./hurtTally";
 //  - 11/17 내가 받은 피해(taken): 실제로 깎인 체력 하나만 빨강으로, 지속 피해는 같은 빨강 조금 작게, 방패가 막은 몫은 파랑. 0.3초 안에 또 맞으면 합친다 (hurtTally)
 // 동시에 떠 있는 숫자 상한 (휴대폰 40) — 넘으면 가장 오래된 숫자부터 거둔다. 글자 이미지는 풀에서 재사용.
 
-export type NumStyle = "basic" | "ember" | "frost" | "soul" | "crit" | "heal" | "hurt" | "dot" | "total" | "shield";
+export type NumStyle = "basic" | "ember" | "frost" | "soul" | "worker" | "crit" | "heal" | "hurt" | "dot" | "total" | "shield";
 
 /** 위 → 가운데 → 아래 색, 외곽선 */
 const STYLES: Record<NumStyle, { top: string; mid: string; bot: string; edge: string; glint?: string }> = {
@@ -17,6 +17,8 @@ const STYLES: Record<NumStyle, { top: string; mid: string; bot: string; edge: st
   ember: { top: "#fff7c8", mid: "#ffc04a", bot: "#ff6a1e", edge: "#3a0e04" },
   frost: { top: "#ffffff", mid: "#c8eeff", bot: "#5ab4f0", edge: "#08223a" },
   soul: { top: "#fbf2ff", mid: "#d6b0ff", bot: "#8a5ae8", edge: "#1c0838" },
+  // 11/19 삽자루 일꾼: 흙빛 쇠 (묵직한 갈색)
+  worker: { top: "#fff4dc", mid: "#e8b878", bot: "#9a5a2a", edge: "#2a1608" },
   crit: { top: "#fffbd0", mid: "#ffd23a", bot: "#ff2a1a", edge: "#300400", glint: "#ffffff" },
   heal: { top: "#f0ffe0", mid: "#8af08a", bot: "#22a85a", edge: "#04240e" },
   hurt: { top: "#ffe0e0", mid: "#ff7a7a", bot: "#d01a2a", edge: "#280206" },

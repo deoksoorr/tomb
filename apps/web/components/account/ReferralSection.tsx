@@ -1,20 +1,19 @@
 "use client";
 
-import { useEffect, useId, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { errorMessage } from "@/lib/api";
-import { captureRefParam, clearStoredRef, readStoredRef, referralApi, useRefCheck } from "@/lib/referralClient";
-import { REF_DAY_MIN, REF_GRAND_MONTH_CAP, REF_GRAND_POINTS, REF_MONTH_CAP, REF_NEED_DAYS, REF_REWARD_POINTS, refLink, type ReferralView } from "@/lib/referralRules";
+import { referralApi } from "@/lib/referralClient";
+import { REF_DAY_MIN, REF_GRAND_MONTH_CAP, REF_MONTH_CAP, REF_NEED_DAYS, refGrandText, refLink, refRewardText, type ReferralView } from "@/lib/referralRules";
 import { stayText } from "@/lib/stayTime";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import styles from "./MyPanel.module.css";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
-const dayText = (ms: number) => new Date(ms).toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" });
 
 /**
- * 내 정보 추천 코드 칸: 내 공개 추천 코드·공유 링크(복사), 데려온 이웃 수·받은 보상·다음 칭호, 짧은 규칙.
- * 나를 데려온 이웃이 있으면 조건까지 남은 진행, 아직 추천인을 안 정했고 가입 3일 안이면 「추천인 코드 입력」.
+ * 내 정보 추천 코드 칸: 내 공개 추천 코드·공유 링크(복사), 데려온 이웃 수·받은 선물·다음 칭호, 짧은 규칙.
+ * 나를 데려온 이웃이 있으면 조건까지 남은 진행. 11/19 추천인은 가입할 때만 넣는다 (여기서 뒤늦게 넣기는 없앴다).
  * 비밀 개인 코드(위 「개인 코드」 칸)와는 다른 값이다
  */
 export default function ReferralSection() {
@@ -81,12 +80,12 @@ export default function ReferralSection() {
       <p className={ui.hint}>친구에게 마음껏 알려 줘도 되는 코드예요. 로그인용 개인 코드와는 달라요.</p>
       <p className={styles.sub}>
         데려온 이웃 {fmt(view.joined)}명 중 {fmt(view.qualified)}명이 마을에 자리 잡았어요.
-        {view.pointsEarned > 0 && ` 추천으로 ${fmt(view.pointsEarned)}P를 받았어요.`}
+        {view.giftsGot > 0 && ` 추천 선물을 ${fmt(view.giftsGot)}번 받았어요.`}
       </p>
       {view.second.joined > 0 && (
         <p className={styles.sub}>
           친구가 데려온 이웃 {fmt(view.second.joined)}명
-          {view.second.points > 0 ? `, 그 덕분에 ${fmt(view.second.points)}P를 받았어요.` : "이 있어요."}
+          {view.second.rewarded > 0 ? `, 그 덕분에 선물을 ${fmt(view.second.rewarded)}번 받았어요.` : "이 있어요."}
         </p>
       )}
       <p className={styles.sub}>
@@ -97,23 +96,17 @@ export default function ReferralSection() {
       </p>
       <ul className={ui.hint}>
         <li>
-          친구가 내 코드로 가입해 하루 {stayText(REF_DAY_MIN)} 넘게 머문 날이 {REF_NEED_DAYS}일이 되면 둘 다 {REF_REWARD_POINTS}P를 선물함으로 받아요. 이어진 날이 아니어도 돼요.
+          친구가 가입할 때 내 코드를 넣고 하루 {stayText(REF_DAY_MIN)} 넘게 머문 날이 {REF_NEED_DAYS}일이 되면 둘 다 {refRewardText()}을 받아요. 이어진 날이 아니어도 돼요.
         </li>
-        <li>추천 보상 포인트는 한 달에 {REF_MONTH_CAP}명까지예요. 그 뒤로는 칭호에만 세요.</li>
-        <li>내 친구가 데려온 이웃이 자리 잡으면 나도 {REF_GRAND_POINTS}P를 받아요. 한 달에 {REF_GRAND_MONTH_CAP}번까지예요.</li>
+        <li>추천 선물은 한 달에 {REF_MONTH_CAP}명까지예요. 그 뒤로는 칭호에만 세요.</li>
+        <li>
+          내 친구가 데려온 이웃이 자리 잡으면 나도 {refGrandText()}을 받아요. 한 달에 {REF_GRAND_MONTH_CAP}번까지예요.
+        </li>
+        <li>추천 코드는 가입할 때만 넣을 수 있어요.</li>
         <li>한 사람이 여러 계정으로 받는 걸 막으려고 운영자가 확인한 뒤 보내 드려요.</li>
       </ul>
 
       {view.mine && <MyProgress mine={view.mine} />}
-      {!view.mine && view.enterUntil !== null && (
-        <EnterLater
-          until={view.enterUntil}
-          onDone={(v) => {
-            setView(v);
-            setMessage("추천인을 정했어요.");
-          }}
-        />
-      )}
 
       {message && (
         <p className={styles.sub} role="status">
@@ -137,76 +130,7 @@ function MyProgress({ mine }: { mine: NonNullable<ReferralView["mine"]> }) {
   return (
     <p className={styles.sub}>
       {who}님의 추천으로 왔어요. 하루 {stayText(REF_DAY_MIN)} 넘게 머문 날 {Math.min(mine.days, REF_NEED_DAYS)}일 / {REF_NEED_DAYS}일, 오늘{" "}
-      {stayText(Math.min(mine.todayMin, REF_DAY_MIN))} / {stayText(REF_DAY_MIN)}이에요. 다 채우면 환영 선물 {REF_REWARD_POINTS}P를 받아요.
+      {stayText(Math.min(mine.todayMin, REF_DAY_MIN))} / {stayText(REF_DAY_MIN)}이에요. 다 채우면 환영 선물로 {refRewardText()}을 받아요.
     </p>
-  );
-}
-
-/** 가입 뒤 3일 안, 한 번만: 추천인 코드 입력 */
-function EnterLater({ until, onDone }: { until: number; onDone: (v: ReferralView) => void }) {
-  const [open, setOpen] = useState(false);
-  const [text, setText] = useState(() => {
-    captureRefParam();
-    return readStoredRef();
-  });
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const id = useId();
-  const check = useRefCheck(open ? text : "");
-  const hint = error ?? (check === null ? `${dayText(until)}까지 한 번만 넣을 수 있어요. 넣은 뒤에는 바꿀 수 없어요.` : check.ok ? `${check.name ?? "이웃"}님의 코드예요.` : check.reason);
-
-  async function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (pending || check?.ok === false) return;
-    setPending(true);
-    setError(null);
-    try {
-      const v = await referralApi.enter(text, "later");
-      clearStoredRef();
-      onDone(v);
-    } catch (err) {
-      setError(errorMessage(err));
-      setPending(false);
-    }
-  }
-
-  if (!open)
-    return (
-      <button type="button" className={ui.button} onClick={() => setOpen(true)}>
-        추천인 코드 입력
-      </button>
-    );
-  return (
-    <form className={styles.nameForm} onSubmit={submit} noValidate>
-      <input
-        id={id}
-        className={ui.input}
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value);
-          setError(null);
-        }}
-        placeholder="친구에게 받은 코드"
-        aria-label="추천인 코드"
-        autoComplete="off"
-        autoCapitalize="characters"
-        spellCheck={false}
-        maxLength={20}
-        aria-invalid={!!error || check?.ok === false}
-        aria-describedby={`${id}-hint`}
-        autoFocus
-      />
-      <p id={`${id}-hint`} className={error || check?.ok === false ? ui.error : ui.hint}>
-        {hint}
-      </p>
-      <div className={styles.confirmButtons}>
-        <button type="submit" className={cx(ui.button, ui.primary)} disabled={pending || !text.trim() || check?.ok === false}>
-          {pending ? "정하는 중…" : "추천인으로 정하기"}
-        </button>
-        <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setOpen(false)}>
-          그만두기
-        </button>
-      </div>
-    </form>
   );
 }

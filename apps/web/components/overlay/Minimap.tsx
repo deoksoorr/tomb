@@ -12,6 +12,7 @@ import { SEA_WINTER_PALETTE, winterizeMinimap } from "@/game/world/minimapWinter
 import { isSnowy } from "@/lib/mapConcept";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
+import PixelIcon from "../ui/PixelIcon";
 import ui from "../ui/ui.module.css";
 import styles from "./Minimap.module.css";
 
@@ -340,8 +341,22 @@ export default function Minimap() {
 
   return (
     <div className={styles.wrap}>
-      <button type="button" className={cx(ui.top, styles.toggle)} onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label={open ? "지도 접기" : "지도 펴기"} title="지도 펴기·접기 (M)">
-        지도 {open ? "▴" : "▾"}
+      {/* 11/19 화살표 대신 핀 그림, 누르면 켜고 끄기 (켜져 있으면 밝게) — 단축키 M은 그대로 */}
+      <button
+        type="button"
+        className={cx(ui.button, ui.top, styles.toggle)}
+        data-on={open || undefined}
+        onClick={() => setOpen((v) => !v)}
+        aria-pressed={open}
+        aria-label={open ? "지도 끄기 (M)" : "지도 켜기 (M)"}
+        title={open ? "지도 끄기 (M)" : "지도 켜기 (M)"}
+      >
+        <PixelIcon name="map" />
+        지도
+        {/* 위쪽 줄 다른 단추([내 정보] P·[랭킹] L)와 같은 단축키 칸 */}
+        <span className={styles.key} aria-hidden="true">
+          M
+        </span>
       </button>
       {open && (
         <canvas

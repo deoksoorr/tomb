@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  HILL,
   BALLOON_BOARD_GRACE_MS,
   BALLOON_BOARD_MS,
   BALLOON_CYCLE_MS,
@@ -176,8 +177,8 @@ describe("token", () => {
 });
 
 describe("world", () => {
-  it("묘역은 옛 묘역 하나(11/16 다리 건너 묘역은 범퍼카장): 칸 수 = 정원 32, 가운데 통로 기준 좌우 대칭, 결정적", () => {
-    expect(GRAVE_AREAS.map((a) => a.cols * a.rows)).toEqual([32]);
+  it("묘역은 옛 묘역 하나(11/19 별 보기 언덕 서쪽): 칸 수 = 정원 16, 가운데 통로 기준 좌우 대칭, 결정적", () => {
+    expect(GRAVE_AREAS.map((a) => a.cols * a.rows)).toEqual([16]);
     expect(GRAVE_AREAS.map((a) => a.id)).toEqual(["A"]);
     expect(GRAVE_AREAS.reduce((n, a) => n + a.cols * a.rows, 0)).toBe(GRAVEYARD_CAPACITY);
     expect(GRID_COLS * GRID_ROWS).toBe(GRAVEYARD_CAPACITY); // 옛 이름 호환
@@ -188,20 +189,23 @@ describe("world", () => {
       expect(xs.length).toBe(a.cols);
       for (let c = 0; c < a.cols / 2; c++) expect(xs[c] + xs[a.cols - 1 - c]).toBe(2 * a.aisleX);
     }
-    // 묘역이 넘치면 자리를 돌려 쓴다 (index % 32)
+    // 묘역이 넘치면 자리를 돌려 쓴다 (index % 16)
     expect(graveSlot(GRAVEYARD_CAPACITY + 5)).toEqual(graveSlot(5));
     expect(graveVisible(0, GRAVEYARD_CAPACITY + 1)).toBe(false);
     expect(graveVisible(GRAVEYARD_CAPACITY, GRAVEYARD_CAPACITY + 1)).toBe(true);
     for (let i = 0; i < GRAVEYARD_CAPACITY; i++) {
       expect(graveSlot(i).x).toBeGreaterThan(WALL_THICKNESS + 16);
+      // 11/19 언덕 위 (남쪽 절벽 위, 동쪽 별 보기 마당 앞)
+      expect(graveSlot(i).y).toBeLessThan(HILL.y + HILL.h - 16);
+      expect(graveSlot(i).x).toBeLessThanOrEqual(GRAVE_AREAS[0].rect.x + GRAVE_AREAS[0].rect.w - 16);
       expect(graveSlot(i).y).toBeLessThan(MAP_HEIGHT);
     }
   });
   it("plot labels: 묘역 이름 + 1부터 세는 줄·자리", () => {
     expect(plotLabel(0)).toBe("옛 묘역 1번째 줄 · 1번 자리");
     expect(plotLabel(1)).toBe("옛 묘역 1번째 줄 · 2번 자리");
-    expect(plotLabel(8)).toBe("옛 묘역 2번째 줄 · 1번 자리");
-    expect(plotLabel(31)).toBe("옛 묘역 4번째 줄 · 8번 자리");
+    expect(plotLabel(4)).toBe("옛 묘역 2번째 줄 · 1번 자리");
+    expect(plotLabel(15)).toBe("옛 묘역 4번째 줄 · 4번 자리");
     expect(Array.from({ length: GRAVEYARD_CAPACITY }, (_, i) => plotLabel(i)).some((l) => l.includes("버드나무") || l.includes("다리 건너"))).toBe(false);
   });
   it("맵 크기는 고정 (묘비 수와 상관없다), 서버 범위도 맵 안", () => {

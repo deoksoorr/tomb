@@ -1,8 +1,7 @@
 // web 안에서 공유하는 데이터 타입과 API 응답 형태 (계약). 바꿀 때는 모든 사용처를 같이 고친다.
 
+import type { PathGift, RetainView, TodoTick } from "./retain";
 import { itemById, type AvatarDye, type ChampBoard, type MegaPin } from "@tomb/protocol";
-import type { EarnSource } from "./economy";
-import type { EarnBoost } from "./pointEvent";
 
 export const CAUSE_TAGS = [
   "time",
@@ -160,7 +159,7 @@ export type QuickGraveInput = {
 };
 export type UpdateGraveResponse = { grave: PublicGrave };
 /** 반응 응답의 earned = 이번에 쌓인 포인트 (한도에 걸리면 0) */
-export type FlowerResponse = { count: number; earned: number };
+export type FlowerResponse = { count: number; earned: number; todo?: TodoTick };
 export type ReportResponse = { ok: true };
 
 /**
@@ -212,10 +211,8 @@ export type Me = {
   /** 첫 방문 안내를 끝냈는지 (계정 기준 — 기기를 바꿔도 다시 안 뜬다) */
   tutorialDone: boolean;
   points: number;
-  /** 오늘 쌓은 포인트 (DAILY_EARN_CAP 대비) */
+  /** 오늘(새벽 5시 기준) 모은 포인트 (출석 달력 보상·접속 시간 보너스 빼고 — 한도는 없다) */
   todayEarned: number;
-  /** 오늘 항목별로 쌓은 포인트 (lib/economy.ts EARN_RULES의 source → 점수, 0인 항목은 없음). 하나도 없으면 빠진다. 내 정보의 항목별 게이지 */
-  earnedBy?: Partial<Record<EarnSource, number>>;
   /**
    * today = 오늘 출석 도장을 받았는지, stayMinutes = 오늘 머문 시간(분, 10분 단위 — 60분이면 오늘 칸을 받을 수 있다),
    * bonusClaimed = 오늘 받은 접속 시간 보너스 구간 수 (lib/stayBonus.ts)
@@ -243,9 +240,15 @@ export type Me = {
   champ?: number;
   /** 11/16 매니저 (관리자가 임명 — 전용 칭호·채팅 딱지뿐). 아니면 없음 */
   manager?: true;
-  /** 포인트 배수 이벤트 (lib/pointEvent — on = 지금 적립이 mult배인 항목, caps = 오늘 한도가 mult배인 항목). 이벤트와 상관없는 날이면 없음 */
-  earnBoost?: EarnBoost;
+  /** 11/18 새 이웃 꾸러미·첫 걸음 미션·오늘의 할 일 (lib/retain). 예전 서버 응답에는 없을 수 있다 */
+  retain?: RetainView;
 };
+
+/**
+ * POST /api/me/retain (lib/retain.ts): 새 이웃 꾸러미 받기 → { me, gift } · 첫 걸음 미션 한 칸 → { mask, step } ·
+ * 첫 걸음 큰 선물·오늘의 할 일 받기 → { me, text }. text = 받은 것 글귀 (토스트)
+ */
+export type RetainResponse = { me?: Me; gift?: PathGift; gifts?: PathGift[]; mask?: number; text?: string; points?: number; ok?: true };
 
 /** 휴면 계정이 돌아왔을 때 (입장 화면 안내·입장 거절 문구) */
 export const DORMANT_RENAME_MESSAGE = "오래 접속하지 않아 휴면 계정이 되었어요. 닉네임을 다시 정해 주세요";
@@ -544,7 +547,8 @@ export type CalendarResponse = {
   streak: number;
   /** 한 달 개근 보상을 받았으면 그 포인트 */
   monthBonus: number | null;
-  rewards: { daily: number; streak: number; streakEvery: number; monthly: number };
+  /** 11/19 보상 글귀 (사냥 아이템 — lib/calendar ATTEND_GIFT 등) */
+  rewards: { daily: string; streak: string; streakEvery: number; monthly: string };
   /** 이번 달 보상 길: 출석 구간(3·7·14·21·28일)마다 코디 1개 (lib/attendTiers.ts) */
   tiers: AttendTierView[];
 };
@@ -557,6 +561,8 @@ export type CalendarClaimResponse = {
   calendar: CalendarResponse;
   me: Me;
   earned: { daily: number; streak: number; monthly: number };
+  /** 11/19 이번 도장으로 받은 사냥 아이템 (매일·7일 연속·한 달 개근 — 사냥 가방에 들어간다) */
+  gifts: { daily: string; streak: string | null; monthly: string | null };
   /** 이번 도장으로 닿은 구간 코디 보상 (없으면 빈 배열) */
   tierRewards: AttendTierGrant[];
 };

@@ -59,6 +59,18 @@ export const SKILL_LOOK: Record<SkillId, SkillLook> = {
   so_lantern: { key: "lantern-hands", kind: "summon", weight: 1 },
   so_procession: { key: "procession-ult", kind: "ultimate", weight: 4 },
   so_kinship: { key: "kinship", kind: "passive", weight: 0 },
+  // 삽자루 일꾼 (11/19)
+  wk_charge: { key: "shovel-dash", kind: "dash", weight: 2 },
+  wk_callus: { key: "callus", kind: "passive", weight: 0 },
+  wk_combo: { key: "shovel-combo", kind: "cone", weight: 2 },
+  wk_grip: { key: "grip", kind: "passive", weight: 0 },
+  wk_back: { key: "back", kind: "passive", weight: 0 },
+  wk_leap: { key: "mound-leap", kind: "fall", weight: 3 },
+  wk_tireless: { key: "tireless", kind: "buff", weight: 0 },
+  wk_whirl: { key: "shovel-whirl", kind: "ground", weight: 1 },
+  wk_deep: { key: "deep", kind: "passive", weight: 0 },
+  wk_allnight: { key: "allnight-ult", kind: "ultimate", weight: 4 },
+  wk_grit: { key: "grit", kind: "passive", weight: 0 },
 };
 
 const TAU = Math.PI * 2;
@@ -68,6 +80,10 @@ const S = PALETTES.soul;
 const FIRE = [0xfff0b0, 0xffc04a, 0xff7a2e, 0xff4a1a] as const;
 const ICE = [0xffffff, 0xe8f8ff, 0xbfe8ff, 0x8fd8ff] as const;
 const SOUL = [0xf2ecff, 0xd8c0ff, 0xb98aff, 0x9ff0dc] as const;
+/** 11/19 삽자루 일꾼: 흙(밝은 모래 → 젖은 흙) · 쇳빛 · 등불빛 */
+const DIRT = [0xf2e2c0, 0xc89a62, 0x8a6440, 0x5a4636] as const;
+const STEEL = 0xd8d8d0;
+const LAMP = 0xffd27a;
 type Pt = { x: number; y: number };
 
 /**
@@ -787,5 +803,126 @@ export class SkillMoves {
       f.light(v.x, v.y, 18, 0xfff3c8, 400, 0.7);
     }
     void i;
+  }
+
+  // ════════ 삽자루 일꾼 (11/19) — 흙·쇳날·등불빛. 1단 흙먼지 → 5단 등불 아래 여섯 번 흙 폭발 ════════
+
+  /** 흙먼지 한 덩이 (바닥에서 퍼지며 사라짐) */
+  private dust(x: number, y: number, n: number, spread: number, rise = 20, delay = 0): void {
+    const f = this.fx;
+    for (let i = 0; i < f.n(n); i++)
+      f.emit({ x: x + rnd(-spread, spread), y: y - rnd(0, 6), tex: SKT.cloud, tint: pick(DIRT.slice(0, 3)), add: false, vx: rnd(-spread, spread) * 0.8, vy: rnd(-rise, -rise * 0.2), drag: 1.2, life: rnd(500, 850), delay: delay + rnd(0, 60), s0: 0.45, s1: 1.25 * this.P, alpha: 0.6, fadeIn: 0.1 });
+  }
+
+  /** 흙덩이 (중력으로 떨어지는 파편) */
+  private clods(x: number, y: number, n: number, speed: number): void {
+    this.debris(x, y, n, SKT.shard, DIRT.slice(1), speed, false, 0.9);
+  }
+
+  /** 1단 삽자루 돌진: 바닥을 긁은 자국 + 흙먼지 꼬리 + 끝에서 쇳날 번쩍 */
+  shovelDash(from: Pt, to: Pt): void {
+    const f = this.fx;
+    const ang = Math.atan2(to.y - from.y, to.x - from.x);
+    const len = Math.max(8, Math.hypot(to.x - from.x, to.y - from.y));
+    f.emit({ x: (from.x + to.x) / 2, y: (from.y + to.y) / 2, tex: SKT.streak, tint: DIRT[1], add: false, life: 520, s0: len / 64, s1: (len / 64) * 1.05, sy: 0.35, rot: ang, alpha: 0.7, fade: 1.5, depth: DEPTH_GROUND + 2 });
+    for (let i = 0; i < 6; i++) {
+      const t = i / 5;
+      this.dust(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t, 2, 4, 14, t * 70);
+    }
+    f.sparks(to.x + Math.cos(ang) * 6, to.y - 6 + Math.sin(ang) * 6, 8, [0xffffff, STEEL, LAMP], 120, { ang, spread: 0.8, life: 260 });
+    f.glow(to.x, to.y - 6, 14 * this.P, LAMP, 220, 0.4, 0.8);
+  }
+
+  /** 2단 찌르고 퍼 올리기: 찌를 때마다 쇳날 빛줄기 + 흙 튐, 마지막은 흙덩이가 솟구친다 */
+  shovelThrust(x: number, y: number, ang: number, range: number, last: boolean): void {
+    const f = this.fx;
+    const tx = x + Math.cos(ang) * range * 0.7;
+    const ty = y + Math.sin(ang) * range * 0.7;
+    f.emit({ x: x + Math.cos(ang) * range * 0.45, y: y - 6 + Math.sin(ang) * range * 0.45, tex: SKT.streak, tint: last ? LAMP : STEEL, life: 160, s0: range / 70, s1: range / 55, sy: last ? 0.8 : 0.45, rot: ang, fade: 2 });
+    f.sparks(tx, ty - 6, last ? 10 : 5, [0xffffff, STEEL, DIRT[0]], 110, { ang, spread: 0.6, life: 220 });
+    if (!last) {
+      this.dust(tx, ty, 2, 3, 10);
+      return;
+    }
+    this.clods(tx, ty - 4, 12, 230);
+    this.dust(tx, ty, 6, 10, 40);
+    f.ring(tx, ty, 14 * this.P, DIRT[1], 260, 2, 0, DEPTH_GROUND + 3);
+    f.scar(tx, ty, 10 * this.P, DIRT[3], 900, 0.5, 60);
+  }
+
+  /** 3단 봉분 뛰어넘기 (뜰 때): 발밑 흙먼지 + 내려앉을 자리에 커지는 그림자 */
+  leapStart(from: Pt, to: Pt, r: number, ms: number): void {
+    this.dust(from.x, from.y, 6, 8, 18);
+    const shadow = this.add.image(to.x, to.y, SKT.glow).setDepth(DEPTH_GROUND + 1).setTint(0x000000).setAlpha(0).setScale(0.1, 0.06);
+    this.scene.tweens.add({ targets: shadow, alpha: 0.55, scaleX: r / 34, scaleY: (r / 34) * 0.55, duration: ms, ease: "Quad.easeIn", onComplete: () => shadow.destroy() });
+  }
+
+  /** 3단 봉분 뛰어넘기 (착지): 충격파 고리 셋 + 갈라진 땅 + 흙기둥 + 흙덩이 */
+  leapLand(x: number, y: number, r: number): void {
+    const f = this.fx;
+    const P = this.P;
+    for (let i = 0; i < 3; i++) f.ring(x, y, r * (0.8 + i * 0.35), i === 0 ? 0xffffff : DIRT[i], 320 + i * 110, 4 - i, i * 50, DEPTH_GROUND + 4);
+    f.emit({ x, y, tex: SKT.crack, tint: DIRT[3], add: false, life: 1600, s0: (r / 40) * 0.6, s1: (r / 40) * P, sy: 0.62, alpha: 0.85, fade: 3, depth: DEPTH_GROUND + 2 });
+    // 흙기둥: 둘레에서 솟았다 무너진다
+    const n = P > 1.1 ? 6 : 4;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU + rnd(-0.2, 0.2);
+      const px = x + Math.cos(a) * r * 0.6;
+      const py = y + Math.sin(a) * r * 0.35;
+      f.emit({ x: px, y: py, tex: SKT.pillar, tint: pick(DIRT.slice(1, 3)), add: false, life: 520, delay: i * 25, s0: 0.2, s1: 0.75 * P, sy: 1.5, originY: 1, alpha: 0.9, fade: 2, depth: py });
+    }
+    this.clods(x, y - 6, 16, 260);
+    this.dust(x, y, 10, r * 0.5, 30);
+    f.light(x, y, r * 1.6, LAMP, 600, 0.6);
+  }
+
+  /** 4단 삽날 회오리 (베기마다): 삽날 원 궤적 + 흙 소용돌이 */
+  whirlTick(x: number, y: number, r: number, spin: number): void {
+    const f = this.fx;
+    f.emit({ x, y: y - 4, tex: SKT.ringThin, tint: STEEL, life: 220, s0: (r / 32) * 0.9, s1: (r / 32) * 1.05, sy: 0.62, rot: (spin * Math.PI) / 180, alpha: 0.9, fade: 2 });
+    for (let i = 0; i < f.n(5); i++) {
+      const a = (spin * Math.PI) / 180 + (i / 5) * TAU;
+      f.emit({ x: x + Math.cos(a) * r * 0.85, y: y + Math.sin(a) * r * 0.5, tex: SKT.cloud, tint: pick(DIRT.slice(0, 3)), add: false, vx: -Math.sin(a) * 90, vy: Math.cos(a) * 50 - 10, life: 380, s0: 0.35, s1: 0.8, alpha: 0.55, fade: 1.4 });
+    }
+    f.sparks(x + Math.cos((spin * Math.PI) / 180) * r, y - 6 + Math.sin((spin * Math.PI) / 180) * r * 0.5, 3, [0xffffff, STEEL], 80, { life: 180 });
+  }
+
+  /** 5단 밤샘 삽질 (시전): 등불이 켜지고 흙바람이 몸을 감는다 */
+  allnightCast(x: number, y: number): void {
+    const f = this.fx;
+    f.light(x, y - 10, 90 * this.P, LAMP, 2200, 0.9);
+    f.glow(x, y - 14, 30, LAMP, 600, 0.3, 1);
+    f.implode(x, y - 6, 60, DIRT[1], 360);
+    this.dust(x, y, 10, 18, 30);
+    f.twinkle(x, y - 10, 10, 40, LAMP, 700, 0.5);
+  }
+
+  /** 5단 밤샘 삽질 (돌진마다): 도착 자리 흙 폭발, 마지막은 크게 */
+  allnightBurst(x: number, y: number, last: boolean): void {
+    const f = this.fx;
+    const r = last ? 46 : 26;
+    f.ring(x, y, r, last ? 0xffffff : DIRT[1], last ? 420 : 260, last ? 4 : 3, 0, DEPTH_GROUND + 4);
+    this.clods(x, y - 4, last ? 20 : 8, last ? 300 : 200);
+    this.dust(x, y, last ? 14 : 5, r * 0.5, last ? 40 : 20);
+    f.glow(x, y - 8, r, LAMP, last ? 500 : 240, 0.3, 0.8);
+    if (last) {
+      f.emit({ x, y, tex: SKT.crack, tint: DIRT[3], add: false, life: 1800, s0: 0.6, s1: 1.4, sy: 0.62, alpha: 0.85, fade: 3, depth: DEPTH_GROUND + 2 });
+      f.light(x, y, 120, LAMP, 900, 1);
+    }
+  }
+
+  /** 쉬지 않는 손: 손에 감기는 등불빛 고리 + 땀방울 반짝 */
+  tireless(x: number, y: number): void {
+    const f = this.fx;
+    f.ring(x, y - 6, 16, LAMP, 360, 2);
+    f.ring(x, y - 6, 10, 0xffffff, 260, 1, 80);
+    f.twinkle(x, y - 12, 5, 12, 0xffffff, 420, 0.4);
+  }
+
+  /** 일꾼의 뚝심: 10번째 반드시 치명타 — 금빛 섬광 별 */
+  gritFlash(x: number, y: number): void {
+    const f = this.fx;
+    f.emit({ x, y, tex: SKT.star, tint: LAMP, life: 260, s0: 0.4, s1: 1.3, fade: 2 });
+    f.sparks(x, y, 6, [0xffffff, LAMP], 120, { life: 220 });
   }
 }

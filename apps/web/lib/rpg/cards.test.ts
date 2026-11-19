@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { MonsterId } from "./catalog";
 import {
+  MAGIC_PACK,
   CARD_IDS,
   CARD_POWER_MAX,
   CARDS,
   cardOffer,
+  RETIRED_CARDS,
   cardPower,
   cardStats,
   cardStyleKind,
@@ -28,9 +30,8 @@ import {
   type OfferKind,
 } from "./cards";
 import { huntSpawnable } from "./plan";
-import { killRateCeiling } from "./rewards";
 import { RunResultSchema } from "./schemas";
-import { evalTower, towerClean, towerPlan } from "./tower";
+import { evalTower, towerClean, towerKillRate, towerPlan } from "./tower";
 import type { HuntResult } from "./types";
 
 // 11/15 야근 빌딩 능력 카드 (lib/rpg/cards): 제안 굴림이 시드로 정해지는지, 서버가 고른 기록을 다시 굴려 확인하는지,
@@ -55,10 +56,16 @@ function climb(seed: number, start: number, floors: number): HuntResult {
 }
 
 describe("카드 표", () => {
-  it("40장, 일반 10 · 매직 10 · 레어 9 · 유니크 6 · 전설 5, 겹침 한도", () => {
-    expect(CARD_IDS.length).toBe(40);
-    const by = (r: string) => CARD_IDS.filter((id) => CARDS[id].rarity === r).length;
-    expect(RARITIES.map(by)).toEqual([10, 10, 9, 6, 5]);
+  it("49장(11/19 갈래 카드 5장 + 마공 카드 4장), 제안되는 카드는 일반 11 · 매직 11 · 레어 10 · 유니크 7 · 전설 5, 겹침 한도", () => {
+    expect(CARD_IDS.length).toBe(49);
+    const by = (r: string) => CARD_IDS.filter((id) => CARDS[id].rarity === r && !RETIRED_CARDS.has(id)).length;
+    expect(RARITIES.map(by)).toEqual([11, 11, 10, 7, 5]);
+    // 옛 제안 묶음(마공 카드 전)은 10 · 10 · 9 · 6 · 5 그대로
+    const old = (r: string) => CARD_IDS.filter((id) => CARDS[id].rarity === r && !RETIRED_CARDS.has(id) && !MAGIC_PACK.has(id)).length;
+    expect(RARITIES.map(old)).toEqual([10, 10, 9, 6, 5]);
+    // 방향·복제 카드는 더 제안하지 않는다
+    expect([...RETIRED_CARDS].sort()).toEqual(["backbite", "cc", "circular", "parallel", "side"]);
+    for (let seed = 1; seed < 300; seed++) for (const id of cardOffer(seed, "l", 0, 0, {}, 50)) expect(RETIRED_CARDS.has(id), id).toBe(false);
     expect(CARD_IDS.filter((id) => CARDS[id].rarity === "legend").sort()).toEqual(["corpcard", "leave", "oneshot", "overtime", "promote"]);
     expect(CARDS.cc.max).toBe(3);
     expect(CARDS.raise.max).toBe(5);
@@ -79,11 +86,12 @@ describe("카드 표", () => {
     expect(s.extra).toBe(3);
     expect(s.hitMul).toBeCloseTo(0.7);
     expect(s.dirs.length).toBe(4 + 2 + 1);
-    expect(s.atkMul).toBeCloseTo(1.3);
-    expect(s.hpMul).toBeCloseTo(1.15);
+    // 11/19 능력치 카드 약 1/3 낮춤 (공격력 15 → 10%, 체력 15 → 10%)
+    expect(s.atkMul).toBeCloseTo(1.2);
+    expect(s.hpMul).toBeCloseTo(1.1);
     expect(s.boards).toBe(2);
     // 한도를 넘는 수는 한도까지만
-    expect(cardStats({ raise: 9 }).atkMul).toBeCloseTo(1.75);
+    expect(cardStats({ raise: 9 }).atkMul).toBeCloseTo(1.5);
   });
 });
 
@@ -221,6 +229,23 @@ describe("야근 빌딩 결과 검증에 카드", () => {
     expect(towerClean(evalTower(t, { ...r9, cards: honest(4321, [{ k: "b", i: 10 }]) }, r9.durationMs + 1_000))).toBe(false);
   });
 
+  it("11/19 마공 카드가 들어오기 전 화면(옛 제안 묶음)으로 정직하게 고른 판도 통과 (진행 중인 판 호환)", () => {
+    let seen = 0;
+    for (const seed of [4321, 77, 901, 1234, 5555]) {
+      const r = climb(seed, 1, 10);
+      const lv = runLevel(runXp(r.kills)).level;
+      const owned: CardCounts = {};
+      const old = Array.from({ length: lv }, (_, i) => {
+        const c = cardOffer(seed, "l", i, 0, owned, 1, 1)[0];
+        owned[c] = (owned[c] ?? 0) + 1;
+        return { k: "l" as const, i, r: 0, c, f: 1 };
+      });
+      if (replayPicks(seed, old, { levels: lv, starts: 0, bossFloors: [], rerolls: 0 }).ok === false) seen++;
+      expect(towerClean(evalTower({ ...t, seed }, { ...r, cards: old }, r.durationMs + 1_000)), String(seed)).toBe(true);
+    }
+    void seen;
+  });
+
   it("체크포인트 시작 카드는 건너뛴 층만큼만", () => {
     const t21 = { seed: 77, level: 50, start: 21 };
     const r = climb(77, 21, 2);
@@ -243,9 +268,10 @@ describe("야근 빌딩 결과 검증에 카드", () => {
     const kills = { ...r0.kills };
     for (const [id, n] of Object.entries(huntSpawnable(towerPlan(seed, 2, 1), Infinity)) as [MonsterId, number][]) kills[id] = (kills[id] ?? 0) + n;
     const total = Object.values(kills).reduce((a, b) => a + (b ?? 0), 0);
-    const dur = 11_000;
-    const fast = { ...r0, kills, durationMs: dur, floorMs: 10_000 };
-    const cap = (p: number) => 3 + (dur / 1000) * killRateCeiling("hell", 1) * p;
+    // 11/19 층 최소 시간 10초 → 5초, 야근 빌딩 처치 속도 상한 ×2 (towerKillRate) — 같은 상한이 되게 시간도 절반
+    const dur = 5_500;
+    const fast = { ...r0, kills, durationMs: dur, floorMs: 5_000 };
+    const cap = (p: number) => 3 + (dur / 1000) * towerKillRate(1) * p;
     expect(total).toBeGreaterThan(cap(cardPower({})));
     expect(towerClean(evalTower(t1, fast, dur + 500))).toBe(false);
     const lv = runLevel(runXp(kills)).level;
@@ -266,8 +292,8 @@ describe("야근 빌딩 결과 검증에 카드", () => {
 
 describe("11/15 겹치는 카드 수치 표시", () => {
   it("지금 수치 → 더해진 수치 (+늘어나는 만큼), 효과 계산과 같은 숫자", () => {
-    expect(cardStackLine("raise", 1)).toBe("공격력 +15% → +30% (+15%)");
-    expect(cardStackLine("quick", 2)).toBe("공격 속도 +24% → +36% (+12%)");
+    expect(cardStackLine("raise", 1)).toBe("공격력 +10% → +20% (+10%)");
+    expect(cardStackLine("quick", 2)).toBe("공격 속도 +16% → +24% (+8%)");
     expect(cardStackLine("boards", 1)).toBe("결재판 2장 → 3장 (+1장)");
     expect(cardStackLine("coffee", 3)).toBeNull();
     for (const id of CARD_IDS) expect(cardStackLine(id, 1) ?? "").not.toMatch(/[:：]/);
@@ -308,10 +334,10 @@ describe("11/15 등급 개편: 레벨 업 층·팀장 승진·능력치 판", ()
   });
 
   it("팀장 승진은 다른 카드 수치를 1.5배로, 겹침 줄에도 반영", () => {
-    expect(cardStats({ raise: 2, promote: 1 }).atkMul).toBeCloseTo(1 + 0.15 * 2 * 1.5);
+    expect(cardStats({ raise: 2, promote: 1 }).atkMul).toBeCloseTo(1 + 0.1 * 2 * 1.5);
     expect(cardStats({ badge: 3 }).taken).toBeCloseTo(0.18);
     expect(cardStats({ badge: 3, promote: 1 }).taken).toBeCloseTo(0.27);
-    expect(cardStackLine("raise", 1, { raise: 1, promote: 1 })).toBe("공격력 +22.5% → +45% (+22.5%)");
+    expect(cardStackLine("raise", 1, { raise: 1, promote: 1 })).toBe("공격력 +15% → +30% (+15%)");
     expect(cardPower({ promote: 1, raise: 5 })).toBeGreaterThan(cardPower({ raise: 5 }));
     // 수치 카드는 모두 겹침 줄이 있다 (한 장만 가질 수 있는 카드·커피 수혈 빼고)
     for (const id of CARD_IDS) if (CARDS[id].max > 1 && Number.isFinite(CARDS[id].max)) expect(cardStackLine(id, 1)).not.toBeNull();
@@ -324,11 +350,12 @@ describe("11/15 등급 개편: 레벨 업 층·팀장 승진·능력치 판", ()
     const cur = { atk: base.atk * s.atkMul, aspd: base.aspd * s.aspdMul, crit: base.crit + s.crit, maxHp: Math.round(base.maxHp * s.hpMul), move: base.move * s.moveMul };
     const p = statPanel(base, cur, 1.1, s);
     const row = (l: string) => p.rows.find((x) => x.label === l)!;
-    expect(row("공격력")).toEqual({ label: "공격력", v: "260", plus: "+60" });
-    expect(row("공격 속도").v).toBe(`${((2 * 1.12) / 1.1).toFixed(1)}/초`);
-    expect(row("치명타")).toMatchObject({ v: "18%", plus: "+8%" });
-    expect(row("치명 피해")).toMatchObject({ v: "195%", plus: "+45%" });
-    expect(row("최대 체력")).toMatchObject({ v: "1,150", plus: "+150" });
+    // 11/19 능력치 카드 하향 (공격력 10% · 공속 8% · 치명 6%/15% · 메모 18% · 체력 10%)
+    expect(row("공격력")).toEqual({ label: "공격력", v: "240", plus: "+40" });
+    expect(row("공격 속도").v).toBe(`${((2 * 1.08) / 1.1).toFixed(1)}/초`);
+    expect(row("치명타")).toMatchObject({ v: "16%", plus: "+6%" });
+    expect(row("치명 피해")).toMatchObject({ v: "183%", plus: "+33%" });
+    expect(row("최대 체력")).toMatchObject({ v: "1,100", plus: "+100" });
     expect(row("받는 피해").v).toBe("−12%");
     expect(p.chips).toEqual(expect.arrayContaining(["결재판 2장", "인턴 1명"]));
     // 보통 사냥: 카드 몫 없이
@@ -349,5 +376,26 @@ describe("11/15 스킬 손질: 카드가 스킬에도 붙는다", () => {
     const row = p.rows.find((r) => r.label === "스킬 위력")!;
     expect(row.v).toBe(`×${(1.4 * 1.09).toFixed(2)}`);
     expect(row.plus).toBe("+13%");
+  });
+});
+
+describe("11/19 제안 묶음 판 (마공 카드 전후)", () => {
+  it("옛 묶음(1)에는 마공 카드가 안 나오고, 옛 묶음으로 고른 기록은 ver 1로 다시 굴리면 통과", () => {
+    let bad = 0;
+    for (let seed = 1; seed < 200; seed++) {
+      for (const id of cardOffer(seed, "s", 0, 0, {}, 101, 1)) expect(MAGIC_PACK.has(id), id).toBe(false);
+      // 옛 화면이 고른 시작 카드 30장
+      const owned: Record<string, number> = {};
+      const picks = Array.from({ length: 30 }, (_, i) => {
+        const c = cardOffer(seed, "s", i, 0, owned, 101, 1)[0];
+        owned[c] = (owned[c] ?? 0) + 1;
+        return { k: "s" as const, i, r: 0, c };
+      });
+      const lim = { levels: 0, starts: 30, bossFloors: [], rerolls: 0, start: 101, top: 101 };
+      expect(replayPicks(seed, picks, { ...lim, ver: 1 }).ok).toBe(true);
+      if (!replayPicks(seed, picks, lim).ok) bad++;
+    }
+    // 지금 묶음으로는 안 맞는 판이 생긴다 → evalTower가 옛 묶음으로 한 번 더 본다
+    expect(bad).toBeGreaterThan(0);
   });
 });

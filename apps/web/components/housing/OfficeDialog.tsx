@@ -28,7 +28,7 @@ import {
 } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
 import { styleTag } from "@/lib/housing/layout";
-import { isOpenLot, WORLD_LOTS } from "@tomb/protocol";
+import { isOpenLot, MAIN_LOTS, WORLD_LOTS } from "@tomb/protocol";
 import type { HouseSummary, MyHouseResponse } from "@/lib/housing/types";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -197,10 +197,8 @@ function MyPlot({
         const used = new Set([...v.houses.map((h) => h.lot), ...v.taken]);
         // 11/16 포구: 그 채널의 오두막 터 중 빈 터
         if (sea) return setFree(SEA_LOTS.map((l) => l.n).filter((l) => !used.has(l)));
-        // 메인 맵 주거 구역(1..WORLD_LOTS)의 빈 필지 먼저. 다 찼으면 예전처럼 분양 마을(2단지) 번지
-        const all = Array.from({ length: Math.max(v.lots + 4, WORLD_LOTS) }, (_, i) => i + 1).filter((l) => isOpenLot(l) && !used.has(l)); // 11/15 없앤 번지 빼고
-        const near = all.filter((l) => l <= WORLD_LOTS);
-        setFree(near.length ? near : all);
+        // 메인 맵 주거 구역(1..WORLD_LOTS, 11/19 등불 골목 10~15번지 포함)의 빈 필지만. 2단지는 닫았다 — 다 차면 빈 목록 (자동 분양도 「다 찼어요」)
+        setFree(Array.from({ length: WORLD_LOTS }, (_, i) => i + 1).filter((l) => isOpenLot(l) && !used.has(l)));
       })
       .catch(() => alive && setFree([]));
     return () => {
@@ -271,7 +269,7 @@ function MyPlot({
             <option value="">{sea ? "가장 앞의 빈 터 (자동)" : "가장 앞의 빈 번지 (자동)"}</option>
             {(free ?? []).map((l) => (
               <option key={l} value={l}>
-                {sea ? `${l}번 터${SEA_LOTS.find((x) => x.n === l)?.deck ? " (바다 쪽 데크)" : ""}` : `${l}번지${l > WORLD_LOTS ? " (2단지)" : ""}`}
+                {sea ? `${l}번 터${SEA_LOTS.find((x) => x.n === l)?.deck ? " (바다 쪽 데크)" : ""}` : `${l}번지${l > MAIN_LOTS ? " (등불 골목)" : ""}`}
               </option>
             ))}
             {lot !== null && !free?.includes(lot) && <option value={lot}>{sea ? `${lot}번 터` : `${lot}번지`}</option>}
@@ -366,6 +364,8 @@ function MyPlot({
           {houseLabel(h)} · {tier.name} {tier.w}×{tier.h}칸 · 물건 {h.layout.items.length}/{tier.maxItems}개{tag ? ` · ${tag}` : ""}
           {sea ? ` · ${COTTAGE_STYLES.find((c) => c.id === h.style)?.name ?? COTTAGE_STYLES[0].name}` : ""}
         </p>
+        {/* 11/19 2단지를 닫으며 메인 맵 빈 번지가 없어 「필지 대기」인 집 (번지 0) · 아직 옮기기 전인 2단지 번지 */}
+        {!sea && (h.lot === 0 || h.lot > WORLD_LOTS) && <p className={styles.tag}>주거 구역에 빈 집터가 나면 바로 옮겨 드려요. 그동안 집 안에는 들어갈 수 있어요.</p>}
         {away && (
           <p className={styles.tag}>
             {sea
@@ -396,7 +396,7 @@ function MyPlot({
               외관 꾸미기
             </button>
           )}
-          {!(sea && away) && (
+          {!(sea && away) && (sea || (h.lot >= 1 && h.lot <= WORLD_LOTS)) && (
             <button type="button" className={ui.button} onClick={() => onVillage(h.lot, true)} disabled={busy}>
               {sea ? "내 오두막 보러 가기" : away ? `${h.ch}채널 내 집 보러 가기` : "내 집 보러 가기"}
             </button>

@@ -51,7 +51,7 @@ const RIDE_TAIL_MS = 800;
 //  새로고침(캠핑장 기록): 버스 없이 바로 캠핑장 장면. 서버가 캠핑장을 받지 않으면(허락 없음·옛 서버) 마을로 돌아온다(bail)
 // 11/16 달물결 포구(바닷가)도 이 여행이 맡아요. 가는 곳(dest)마다 마을 정류장·장면·도착 자리·미리 굽기·창밖 노선이 달라요 (DEST).
 //  바닷가행은 옛 묘역 아래 정류장(seaStop.ts — 버스가 왼쪽 끝에서 와요), 캠핑장행은 버스 정류장 마당 그대로예요.
-//  한 번에 한 곳만 가 있어요 (캠핑장 ↔ 바닷가는 마을을 거쳐요). 아래 이름(camp·toCamp…)은 "마을 밖 맵"이라는 뜻으로 그대로 둬요.
+//  한 번에 한 곳만 가 있어요 (캠핑장 ↔ 바닷가는 마을을 거쳐요 — 11/19 친구한테 가기는 마을 정류장에서 곧바로 이어 타요: CampFriend.next). 아래 이름(camp·toCamp…)은 "마을 밖 맵"이라는 뜻으로 그대로 둬요.
 
 /** 월드 장면이 여행에 내주는 것 */
 export type WorldSide = {
@@ -408,8 +408,15 @@ export class CampTrip {
     pl.warp(d.door.x, d.door.y, w.scene.time.now, null);
     pl.view.fade = 0;
     // 맵 옮기기: 마을 사람들 화면에는 정류장에 나타난다 (mapped → 월드가 마을 사람 목록을 맞춘다). 11/16 바닷가에서 오면 바닷가행 정류장에
-    const land = friend ? { x: friend.x, y: friend.y } : d.land;
+    // 11/19 캠핑장 ↔ 바닷가 친구(friend.next)는 마을 정류장에 내려 버스 안에 숨은 채로 이어 탄다 (friend.x·y는 다음 맵 좌표)
+    const land = friend && !friend.next ? { x: friend.x, y: friend.y } : d.land;
     w.net.switchMap("village", land.x, land.y);
+    if (friend?.next) {
+      pl.warp(land.x, land.y, w.scene.time.now, null);
+      w.net.setAway(true, "bus");
+      this.finishVillage(friend);
+      return;
+    }
     w.net.setAway(false);
     if (friend) {
       pl.view.fade = 1;
@@ -430,6 +437,14 @@ export class CampTrip {
   private finishVillage(friend: CampFriend | null): void {
     this.phase = "village";
     this.w.lock(false);
+    // 11/19 이어 탈 버스가 있으면 화면 UI를 숨긴 채로 두고(월드가 이어 타지 못하면 arrived 쪽에서 되돌린다) 두 프레임 뒤에 넘긴다:
+    // 막 끝난 창밖 연출 장면의 멈추기는 다음 프레임 처음에 처리돼서, 같은 프레임에 연출을 다시 띄우면 그 멈추기가 새 연출을 꺼 버렸다
+    if (friend?.next) {
+      this.afterFrames(2, () => {
+        if (this.phase === "village") this.w.arrived(friend);
+      });
+      return;
+    }
     bridge.emit("bus:state", { riding: false });
     this.w.arrived(friend);
   }

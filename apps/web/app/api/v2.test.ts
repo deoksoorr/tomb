@@ -102,6 +102,8 @@ describe("계정·출석", () => {
       nameChange: { nextAllowedAt: 0, cost: 0 },
       tutorialDone: false,
       dye: {},
+      // 11/19 리텐션: 처음 만든 세션은 오늘 꾸러미 하나(밀린 것 없음), 첫 걸음 미션 0칸, 오늘의 할 일
+      retain: { path: { got: 0, owed: 1, canClaim: true, seen: false }, first: { mask: 0 }, todo: expect.objectContaining({ bonus: false, stamps: 0 }) },
     });
   });
 
@@ -207,18 +209,15 @@ describe("반응 포인트", () => {
     expect((await getMe(owner)).points).toBe(23);
   });
 
-  it("/api/me의 오늘 항목별 적립(earnedBy): 묘비 세우기·헌화·헌화 받음이 항목마다 따로, 합 = 오늘 합계", async () => {
+  it("/api/me의 오늘 모은 포인트: 묘비 세우기·헌화·헌화 받음을 합친다 (11/19 항목별 게이지는 없앴다)", async () => {
     const owner = await newVisitor();
     const { grave } = await bodyOf<CreateGraveResponse>(quickBury(owner));
     const fan = await newVisitor();
     await flower.POST(call(`/api/graves/${grave.id}/flower`, { method: "POST", visitor: fan }), ctx(grave.id));
     await flower.POST(call(`/api/graves/${grave.id}/flower`, { method: "POST", visitor: owner }), ctx(grave.id));
-    const mine = await getMe(owner);
-    expect(mine.earnedBy).toEqual({ bury: 20, gotFlower: 1, flower: 2 });
-    expect(Object.values(mine.earnedBy!).reduce((n, v) => n + v, 0)).toBe(mine.todayEarned);
-    expect((await getMe(fan)).earnedBy).toEqual({ flower: 2 });
-    // 아직 아무것도 안 받았으면 싣지 않는다
-    expect((await getMe(await newVisitor())).earnedBy).toBeUndefined();
+    expect((await getMe(owner)).todayEarned).toBe(20 + 1 + 2);
+    expect((await getMe(fan)).todayEarned).toBe(2);
+    expect("earnedBy" in (await getMe(owner))).toBe(false);
   });
 });
 
@@ -381,7 +380,7 @@ describe("관리자 포인트 지급", () => {
   const admin = (body: object, key = "dev-admin") =>
     adminPoints.POST(call("/api/admin/accounts/points", { body, headers: { "x-admin-key": key } }));
 
-  it("개인 코드(해시로 조회) 또는 계정 id로 지급·회수, 0~지갑 상한(BALANCE_CAP)으로 자른다", async () => {
+  it("개인 코드(해시로 조회) 또는 계정 id로 지급·회수, 한 번에 ±BALANCE_CAP, 잔액은 0~WALLET_MAX", async () => {
     const v = await newVisitor();
     await attend.POST(call("/api/me/attend", { visitor: v, body: {} }));
     const { code: personal } = await bodyOf<CodeResponse>(code.POST(call("/api/me/code", { method: "POST", visitor: v })));
@@ -393,7 +392,8 @@ describe("관리자 포인트 지급", () => {
     expect(BALANCE_CAP).toBe(99_999);
     expect(await bodyOf(admin({ accountId: v.visitorId, delta: -BALANCE_CAP }))).toEqual({ accountId: v.visitorId, points: 0 });
     await admin({ accountId: v.visitorId, delta: BALANCE_CAP });
-    expect(await bodyOf(admin({ accountId: v.visitorId, delta: BALANCE_CAP }))).toEqual({ accountId: v.visitorId, points: BALANCE_CAP });
+    // 11/19 지갑 상한이 WALLET_MAX라 예전 상한(99,999)을 넘는다
+    expect(await bodyOf(admin({ accountId: v.visitorId, delta: BALANCE_CAP }))).toEqual({ accountId: v.visitorId, points: 2 * BALANCE_CAP });
     expect((await getMe(v)).todayEarned).toBe(0); // 관리자 지급은 하루 적립에 들지 않는다
   });
 

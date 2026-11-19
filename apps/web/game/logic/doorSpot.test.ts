@@ -30,9 +30,9 @@ describe("집 문 앞 설 자리", () => {
     expect(doorFront(1, [], () => true)).toEqual(first);
   });
 
-  it("메인 맵에 없는 번지(2단지)는 null", () => {
+  it("메인 맵에 없는 번지(닫은 2단지)는 null", () => {
     expect(doorFront(WORLD_LOTS + 1, [], () => false)).toBeNull();
-    expect(doorFront(10, [], () => false)).toBeNull(); // 11/15 넷째 줄(10~12번지)은 없앴다
+    expect(doorFront(10, [], () => false)).not.toBeNull(); // 11/19 10~15번지는 등불 골목
     expect(doorFront(0, [], () => false)).toBeNull();
   });
 });

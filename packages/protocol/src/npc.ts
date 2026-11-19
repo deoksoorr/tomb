@@ -19,9 +19,30 @@ export const GOBLIN_FIRST_MAX_MS = 2 * 3_600_000;
 /** 예정 시각에 아무도 없었으면, 사람이 다시 생긴 뒤 이만큼 지나서 (들어오자마자 나오지 않게) */
 export const GOBLIN_LATE_MIN_MS = 2 * 60_000;
 export const GOBLIN_LATE_MAX_MS = 15 * 60_000;
-/** 보상 (서버가 등장 때 정한다) */
-export const GOBLIN_POINTS_MIN = 20;
-export const GOBLIN_POINTS_MAX = 100;
+/**
+ * 보상 (서버가 등장 때 정한다). 11/19 한도가 없어지고 집·펫 값이 2~3배 올라 20~100P는 달려갈 이유가 없었다 →
+ * 보통 300~1,000P(10P 단위, 고르게) + 드물게 대박 2,000P. 평균 약 760P = 사냥 20분쯤.
+ * 등장 빈도(채널마다 3~6시간에 한 번)는 그대로라 한 채널에서 하루 나오는 양은 많아야 6천P 남짓이다.
+ */
+export const GOBLIN_POINTS_MIN = 300;
+export const GOBLIN_POINTS_MAX = 1000;
+/** 보통 보상의 단위 (300, 310, … 1000) */
+export const GOBLIN_POINTS_STEP = 10;
+/** 대박 보상과 확률 */
+export const GOBLIN_JACKPOT_POINTS = 2000;
+export const GOBLIN_JACKPOT_CHANCE = 0.08;
+/** 증서가 받을 수 있는 가장 큰 보상 (grants.ts가 이보다 크면 버린다) */
+export const GOBLIN_POINTS_CAP = GOBLIN_JACKPOT_POINTS;
+
+/** 이번 고블린 보상 (서버가 등장 때 한 번 뽑는다). r = [0,1) 난수 */
+export function goblinPoints(r: () => number): number {
+  if (r() < GOBLIN_JACKPOT_CHANCE) return GOBLIN_JACKPOT_POINTS;
+  const steps = (GOBLIN_POINTS_MAX - GOBLIN_POINTS_MIN) / GOBLIN_POINTS_STEP;
+  return GOBLIN_POINTS_MIN + Math.min(steps, Math.floor(r() * (steps + 1))) * GOBLIN_POINTS_STEP;
+}
+
+/** 평균 보상 (확률 안내) */
+export const GOBLIN_POINTS_AVG = (1 - GOBLIN_JACKPOT_CHANCE) * ((GOBLIN_POINTS_MIN + GOBLIN_POINTS_MAX) / 2) + GOBLIN_JACKPOT_CHANCE * GOBLIN_JACKPOT_POINTS;
 /** 서버 판정: 서버가 아는 플레이어 위치(마지막 MOVE)와 그 순간 고블린 위치의 거리 상한 (지연·보간 여유 포함) */
 export const GOBLIN_CLAIM_RADIUS = 40;
 /** 클라이언트: 내 발이 화면 속 고블린에 이만큼 닿으면 잡기 요청 */
@@ -65,8 +86,9 @@ export function hashUnit(...xs: number[]): number {
 export const GOBLIN_ROUTES: readonly { zone: string; pts: readonly (readonly [number, number])[] }[] = [
   { zone: "모닥불 광장", pts: [[648, 320], [690, 380], [860, 430], [880, 520], [720, 580], [560, 500], [580, 410]] },
   { zone: "정문 앞마당", pts: [[688, 136], [752, 136], [800, 150], [744, 72], [690, 76], [620, 130], [640, 160]] },
-  { zone: "옛 묘역", pts: [[100, 396], [180, 392], [240, 430], [330, 394], [410, 470], [240, 500], [90, 474]] },
-  { zone: "별 보기 언덕", pts: [[100, 150], [180, 120], [250, 140], [330, 180], [280, 210], [200, 190], [80, 190]] },
+  // 11/19 예전 옛 묘역 자리는 등불 골목(집터 사이 골목), 언덕 서쪽은 무덤 존이라 고블린은 별 보기 마당만 돈다
+  { zone: "등불 골목", pts: [[60, 416], [200, 412], [360, 418], [448, 440], [448, 520], [300, 540], [120, 540]] },
+  { zone: "별 보기 마당", pts: [[236, 120], [300, 128], [350, 160], [352, 200], [300, 196], [240, 200], [228, 150]] },
   { zone: "강변 산책로", pts: [[220, 636], [300, 624], [420, 630], [560, 650], [640, 660], [520, 676], [380, 676]] },
   { zone: "주거 구역", pts: [[992, 300], [1100, 336], [1240, 336], [1380, 480], [1200, 480], [1060, 620], [992, 520]] },
   // 11/15 오리 연못이 넓어져 둑을 한 바퀴 (물을 건너지 않게). 11/16 연못이 또 넓어져 동쪽 둑은 범퍼카장 마당 가장자리로

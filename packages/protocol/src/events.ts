@@ -151,7 +151,7 @@ export type S2C =
   | { t: "goblin"; g: GoblinInfo }
   /** 아무도 못 잡고 사라졌다 */
   | { t: "goblinGone"; id: string }
-  /** sid가 잡았다 (모두에게). name = 잡은 사람 이름 */
+  /** sid가 잡았다. name = 잡은 사람 이름 (서버가 아는 입장 토큰 이름 — 클라이언트가 보낸 값이 아니다). 11/19부터 마을뿐 아니라 채널 모두(캠핑장·바닷가)에게 */
   | { t: "goblinCaught"; id: string; sid: Sid; name: string; points: number }
   /** 잡은 사람에게만: 보상 증서 (웹 /api/goblin이 검증해 포인트를 준다) */
   | { t: "goblinGrant"; id: string; grant: string; points: number }

@@ -576,6 +576,32 @@
   gap: 6px;
 }
 
+/* 11/19 가방 전체 한도 줄 (물고기·채집물 합) */
+.bagCount {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.bagCount strong {
+  color: var(--bone);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.bagCount em {
+  font-style: normal;
+}
+
+.bagCount[data-full] strong,
+.bagCount[data-full] em {
+  color: #ffb070;
+}
+
 .bagItem {
   position: relative;
   display: grid;

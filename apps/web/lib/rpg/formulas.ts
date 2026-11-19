@@ -5,7 +5,8 @@ import { sgStatic } from "./setGear";
 // 성장·전투 공식 (서버 검증과 게임이 같은 함수를 쓴다). 숫자는 라그나로크 느낌을 살리되 단순하게.
 
 export const MAX_LEVEL = 50;
-export const STAT_MAX = 99;
+/** 능력치 한 칸 상한. 11/19 사용자 「제한 풀어버리고」: 99 → 사실상 없음 (서버 검증용 안전값만) */
+export const STAT_MAX = 9999;
 export const START_STAT_POINTS = 5;
 export const START_SKILL_POINTS = 1;
 
@@ -94,7 +95,7 @@ export function derive(level: number, stats: Stats, equip: Partial<Record<GearSl
     // 재미 위주: 기본 공격을 초당 3회로(후딜레이 약 0.33초). 어려움은 몬스터 패턴으로 준다
     aspd: round2(clamp((3 + s.agi * 0.03 + s.dex * 0.01 + b.aspd) * (1 + g.aspdPct), 1, 6)),
     crit: round2(clamp(1 + s.luk * 0.3 + b.crit + g.crit, 0, 60)),
-    hit: level + s.dex + b.hit,
+    hit: level + s.dex + b.hit + g.hit,
     flee: level + s.agi + Math.floor(s.luk / 5) + b.flee,
     move: Math.round((80 + s.agi * 0.5 + b.move) * (1 + g.movePct)),
     skillPower: round2((1 + s.int * 0.015) * (1 + g.skillPct)),
@@ -150,7 +151,8 @@ export const MONSTER_TIER = { hp: 1.2, atk: 1.15, exp: 0.6 } as const;
 export type MonsterStats = { maxHp: number; atk: number; def: number; hit: number; flee: number; speed: number; exp: number };
 
 /** 11/15 야근 빌딩 층 몬스터 배율 (lib/rpg/tower towerScale). EXP는 그대로 — 층 EXP는 서버가 층마다 정한다 */
-export type MonsterScale = { hp: number; atk: number; def: number; speed?: number };
+/** flee: 더하는 회피 (11/19 야근 빌딩 높은 층 — 물공은 덱스가 필요해진다) */
+export type MonsterScale = { hp: number; atk: number; def: number; speed?: number; flee?: number };
 
 /**
  * 난이도를 반영한 몬스터 능력치. power: 사냥터 배율 (40번, 같은 난이도에서 뒤에 열리는 곳일수록 조금 세다 — ZoneDef.power).
@@ -166,7 +168,7 @@ export function monsterStats(id: MonsterId, d: Difficulty, power = 1, scale?: Mo
     atk: Math.round(m.atk * D.atkMul * MONSTER_TIER.atk * power * k.atk),
     def: Math.round(m.def * D.defMul * k.def),
     hit: 10 + lv * 2,
-    flee: 6 + lv * 2,
+    flee: 6 + lv * 2 + Math.round(k.flee ?? 0),
     speed: m.speed * (d === "hell" ? 1.2 : d === "hard" ? 1.1 : 1) * (k.speed ?? 1),
     exp: Math.max(1, Math.round(m.exp * D.expMul * MONSTER_TIER.exp * power)),
   };

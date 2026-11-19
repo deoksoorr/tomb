@@ -21,7 +21,7 @@ import {
 } from "@/lib/rpg/catalog";
 import { SKILL_SLOTS } from "@/lib/rpg/hotbar";
 import { DEFAULT_BOSS_PHASES, MIN_WINDUP_MS, PATTERNS, type TelegraphShape } from "@/lib/rpg/patterns";
-import { HUNT_DROP_ROLLS, KILLS_PER_DROP_ROLL, MIN_RUN_MS } from "@/lib/rpg/rewards";
+import { HUNT_DROP_ROLLS, HUNT_LEVEL_SHARE, KILLS_PER_DROP_ROLL, MIN_RUN_MS } from "@/lib/rpg/rewards";
 import { PIONEER_DAYS, PIONEER_FLOOR, tExpToNext,
   TRANSCEND_MAX,
 } from "@/lib/rpg/endgame";
@@ -30,18 +30,25 @@ import {
   floorTExp,
   TOWER_BOSS_EVERY,
   TOWER_BOSS_FLOOR_SEC,
+  TOWER_BOSS_HEAL,
   TOWER_CHECKPOINT_EVERY,
-  TOWER_DEF,
+  TOWER_CHEST_FROM,
+  TOWER_CHEST_GEAR_CHANCE,
   TOWER_FLOOR_SEC,
-  TOWER_HP_ATK,
+  TOWER_STEEP_FROM,
   TOWER_THEMES,
+  TOWER_WAVE_GAP_SEC,
   FLOORS_PER_THEME,
 } from "@/lib/rpg/tower";
 import { monsterIdleCanvas } from "@/game/rpg/monsterArt";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
+import { BUILDS, buildSteps } from "@/lib/rpg/builds";
+import { SYNERGY, SYNERGY_GUARD } from "@/lib/rpg/skillTree";
+import { ENH_DROP_FROM, exchangeNeed } from "@/lib/rpg/enhance";
+import { enhMul, SG_ENH_MAX, SG_GRADE_MULT, SG_GRADE_NAMES, SHOP_ENH_MAX } from "@/lib/rpg/setGear";
+import { SG_GRADE_FLOORS } from "@/lib/rpg/setGearRoll";
 import { MAX_SLOW, MONSTER_STATUS, POTION_CURES, STATUS_DIFF, STATUS_IDS, STATUSES, statusFor, type StatusId } from "@/lib/rpg/status";
 import { CHAIN_GRACE_MS, FINISHER_EVERY, WEAPON_STYLES, weaponStyleOf } from "@/lib/rpg/weapons";
-import { earnRule } from "@/lib/economy";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -51,7 +58,7 @@ import RpgIcon from "./RpgIcon";
 import { OddsLink } from "../odds/OddsLayer";
 // 11/15 야근 빌딩 능력 카드
 import { cardIconUrl } from "@/game/rpg/cards/cardArt";
-import { BOSS_DEAL_HP_COST, CARD_IDS, FOCUS_ASPD, START_PICKS_PER_10 } from "@/lib/rpg/cards";
+import { BOSS_DEAL_EVERY, BOSS_DEAL_HP_COST, CARD_IDS, FOCUS_ASPD, RETIRED_CARDS, START_PICKS_PER_10 } from "@/lib/rpg/cards";
 import s from "./rpg.module.css";
 
 /** 11/15 끝없는 회의실 층 (테마 표 두 번째 칸 — 10층마다) */
@@ -60,8 +67,6 @@ import s from "./rpg.module.css";
 // 숫자·이름은 catalog·patterns·weapons·rewards에서 읽는다 → 스킬·무기·패턴이 늘어도 안내가 따라간다.
 // 쪽마다 위에 게임 그림으로 움직이는 짧은 반복 시연이 돈다 (huntDemo). 지금 보는 쪽 것만 돌고, 움직임 줄이기면 정지 그림.
 
-/** 하루 사냥 포인트 한도 (economy.ts) */
-const HUNT_DAILY_MAX = earnRule("hunt").dailyMax;
 
 /** 이 쪽의 반복 시연 캔버스 */
 function HuntDemo({ page, title }: { page: number; title: string }) {
@@ -100,6 +105,13 @@ function HuntDemo({ page, title }: { page: number; title: string }) {
       aria-label={`${title} 시연 그림${reduced ? "" : " (반복 재생)"}`}
     />
   );
+}
+
+/** 11/19 상자 층 구간마다 세트 장비 직급 (「51~100층은 사원급, …」 — lib/rpg/setGearRoll SG_GRADE_FLOORS) */
+function gradeBandText(): string {
+  const starts = [TOWER_CHEST_FROM, ...SG_GRADE_FLOORS];
+  const bands = starts.map((f, i) => (i < starts.length - 1 ? `${f}~${starts[i + 1] - 1}층은 ${SG_GRADE_NAMES[i]}` : `${f}층부터는 ${SG_GRADE_NAMES[i]}`));
+  return `세트 장비 직급은 ${bands.join(", ")}이에요.`;
 }
 
 /** 비율 → 퍼센트 (13.5%처럼 소수 한 자리까지) */
@@ -281,7 +293,13 @@ function pages(): Page[] {
               갈래마다 1단부터 5단까지 있어요. 그 갈래에 포인트를 {TIER_GATES.slice(1).join(", ")}개 쓰면 2단부터 5단까지 차례로 열려요. 선으로 이어진 스킬은 앞 스킬을 정해진 랭크까지 찍어야 배울 수 있어요.
             </Item>
             <Item pic={<span className={s.guideSp}>+1</span>} title="스킬 포인트">
-              레벨이 오를 때마다 1포인트를 받아요. 10, 20, 30처럼 10의 배수 레벨에선 2포인트예요. 랭크 하나를 올리는 데 1포인트가 들어요. 둥근 칸은 패시브예요. 찍어 두면 늘 켜져 있어요.
+              레벨이 오를 때마다 1포인트를 받아요. 10, 20, 30처럼 10의 배수 레벨에선 2포인트예요. 초월 레벨이 오를 때마다 1포인트를 더 받아요. 랭크 하나에 1포인트예요. 공격·소환·제어 스킬은 12랭크(궁극기 5랭크)까지 올라가지만 예전 최대 랭크를 넘으면 랭크당 효과가 절반이라, 여러 스킬에 나눠 찍는 게 좋아요. 버프와 패시브는 최대 랭크가 그대로예요. 둥근 칸은 패시브예요. 찍어 두면 늘 켜져 있어요.
+            </Item>
+            <Item pic={<Keys k={["마공", "물공"]} />} title="마공과 물공">
+              모닥불, 서리, 넋 스킬은 마공이에요. 지능을 받아 세지고, 모닥불의 공격력·치명타 패시브도 마공에만 붙어요. 삽자루 일꾼 스킬과 기본 공격은 물공이에요. 지능을 받지 않고, 기본 공격처럼 빗나갈 수 있어서 덱스가 중요해요.
+            </Item>
+            <Item pic={<Keys k={["★"]} />} title="초월 수련">
+              초월 레벨이 오를 때마다 수련 포인트를 1개 받아요. 스킬 탭의 [초월 수련]에서 물공 쪽 「손끝 단련」, 마공 쪽 「주문 다듬기」, 공통 칸에 나눠 찍어요. 줄은 ★55, ★60, ★70, ★80, ★90에 열리고, 되돌리기는 무료예요.
             </Item>
             <Item pic={<Keys k={["↺"]} />} title="초기화">
               스킬 탭에서 [초기화]를 누르면 찍은 포인트를 모두 돌려받아요. 비용은 레벨에 따라 {respecCost(1)}~{RESPEC_MAX_COST}P예요.
@@ -458,7 +476,7 @@ function pages(): Page[] {
     },
     {
       title: "드롭과 보상",
-      lead: "판이 끝나면 잡은 만큼 EXP를, 나아간 만큼 포인트를 받아요. 모든 웨이브를 깨면 포인트를 가장 많이 받아요.",
+      lead: `판이 끝나면 잡은 만큼 EXP를, 나아간 만큼 포인트를 받아요. 레벨에 맞는 사냥터를 다 깨면 다음 레벨까지 필요한 EXP의 ${Math.round(HUNT_LEVEL_SHARE * 100)}%를 받아요.`,
       body: (
         <>
           <ul className={s.guideList}>
@@ -474,9 +492,8 @@ function pages(): Page[] {
             <Item art={skillArt("so_lamp")} title="쓰러지면">
               포인트는 절반만 받고 EXP도 조금 깎여요. 권장 레벨보다 낮으면 조심해요.
             </Item>
-            <Item art={skillArt("em_spark")} title="하루 한도">
-              사냥 포인트는 하루 {HUNT_DAILY_MAX}P까지 받아요. 오늘 받은 양은 출발 창, 가방, 결과 화면 막대에 나와요. 다 채우면 EXP와 드롭만 받아요. 주운 장비와 물약을 파는 것도
-              이 한도에 들어가요. 다 채웠으면 내일 팔아요. 상점에서 산 장비는 언제든 50%를 돌려받아요. {sec(MIN_RUN_MS)}도 안 된 판은 보상이 없어요.
+            <Item art={skillArt("em_spark")} title="포인트">
+              사냥 포인트는 하루 한도 없이 받아요. 주운 장비와 물약을 판 값도 사냥 포인트예요. 상점에서 산 장비는 언제든 50%를 돌려받아요. {sec(MIN_RUN_MS)}도 안 된 판은 보상이 없어요.
             </Item>
           </ul>
           <table className={s.guideTable}>
@@ -524,14 +541,15 @@ function pages(): Page[] {
           <ul className={s.guideList}>
             <Item art={skillArt("em_spark")} title="초월 레벨 ★51~★100">
               레벨 50부터는 지옥 사냥터와 야근 빌딩에서 얻은 EXP가 초월 EXP로 쌓여요. 다른 난이도와 미니게임 EXP는 쌓이지 않아요. 필요한 초월 EXP는 ★51까지 {tExpToNext(0).toLocaleString("ko-KR")}, ★100 바로 앞은 약{" "}
-              {Math.round(tExpToNext(TRANSCEND_MAX - 1) / 10_000)}만이에요. 초월 레벨이 5 오를 때마다 능력치 포인트를 1개 받아요. 회식 3차와 축제장은 레벨 50부터 EXP가 10%만 나와요.
+              {Math.round(tExpToNext(TRANSCEND_MAX - 1) / 10_000)}만이에요. 초월 레벨이 오를 때마다 능력치 포인트, 스킬 포인트, 초월 수련 포인트를 1개씩 받아요. 회식 3차와 축제장은 레벨 50부터 EXP가 10%만 나와요.
               분기 마감이나 구조조정에서 사냥하는 게 좋아요. 레벨 랭킹은 레벨 순서예요. 레벨이 같으면 초월 레벨, 그다음엔 초월 EXP로 정해요.
             </Item>
             <Item art={skillArt("so_lamp")} title="야근 빌딩">
-              마을 북쪽 분양 사무소 옆에 있는 높은 건물이에요. 사냥 레벨 50부터 들어가요. 1층부터 쓰러질 때까지 계속 올라가요. 한 층은 방 하나이고 {TOWER_FLOOR_SEC}초 안에 깨야 해요.{" "}
-              {TOWER_BOSS_EVERY}층마다 우두머리 층이 있어요. 우두머리 층은 {TOWER_BOSS_FLOOR_SEC}초이고, 깨면 체력이 30% 차요. 체력, SP, 버프는 다음 층까지 이어져요. 한 층 오를 때마다 몬스터 체력과 공격력은
-              ×{TOWER_HP_ATK}, 방어는 ×{TOWER_DEF}씩 세져요. 층을 깨면 엘리베이터를 타고 다음 층으로 가요. 층 표시가 붉게 깜빡이면 우두머리 층이에요. 쓰러지면 끝이고 부활 쿠키는 못 써요.
-              Esc로 그만두면 그 층까지 기록돼요. 몇 번이든 다시 도전할 수 있어요.
+              마을 북쪽 분양 사무소 옆에 있는 높은 건물이에요. 사냥 레벨 50부터 들어가요. 1층부터 쓰러질 때까지 쭉쭉 올라가는 레이스예요. 한 층은 방 하나이고{" "}
+              {TOWER_FLOOR_SEC}초 안에 깨야 해요. 첫 무리를 다 잡으면 {TOWER_WAVE_GAP_SEC}초 뒤 다음 무리가 와요. {TOWER_BOSS_EVERY}층마다 우두머리 층이 있어요. 우두머리 층은{" "}
+              {TOWER_BOSS_FLOOR_SEC}초이고, 깨면 체력이 {Math.round(TOWER_BOSS_HEAL * 100)}% 차요. 체력, SP, 버프는 다음 층까지 이어져요. {TOWER_STEEP_FROM}층까지는 몬스터가 약한 편이라 금방 올라가고, {TOWER_STEEP_FROM}층부터는
+              빠르게 세져요. 높은 층은 장비와 카드를 연구해야 해요. 층을 깨면 엘리베이터를 타고 다음 층으로 가요. 층 표시가 붉게 깜빡이면 우두머리 층이에요. 쓰러지면 끝이고 부활
+              쿠키는 못 써요. Esc로 그만두면 그 층까지 기록돼요. 몇 번이든 다시 도전할 수 있어요.
             </Item>
             {/* 11/15 테마는 판마다 무작위 (lib/rpg/tower towerBlock) */}
             <Item art={skillArt("em_spark")} title="층마다 바뀌는 테마">
@@ -541,29 +559,30 @@ function pages(): Page[] {
             </Item>
             {/* 11/15 능력 카드 · 상사의 제안 · 멈추면 집중 (lib/rpg/cards) */}
             <Item pic={<CardPic id="boards" />} title="능력 카드">
-              몬스터를 잡으면 판 레벨 막대가 차요. 판 레벨이 오를 때마다 게임이 잠깐 멈추고, 카드 세 장 중 하나를 골라요. 카드는 모두 {CARD_IDS.length}장이에요. 고른 카드는
+              몬스터를 잡으면 판 레벨 막대가 차요. 판 레벨이 오를 때마다 게임이 잠깐 멈추고, 카드 세 장 중 하나를 골라요. 카드는 모두 {CARD_IDS.length - RETIRED_CARDS.size}장이에요. 카드 이름 옆 꼬리표가 공통, 물공(기본 공격·일꾼 스킬), 마공(모닥불·서리·넋 스킬)이에요. 불·얼음·독·번개처럼 때린 적에게 붙는 카드는 기본 공격에도 스킬에도 붙고, 광역 스킬은 맞은 적마다 3번에 1번꼴로 붙어요. 고른 카드는
               그 판에서만 쓰고, 판이 끝나면 사라져요. 같은 카드를 또 고르면 더 세져요. 쏘는 무기는 한 발 더 날아가고, 휘두르는 무기는 다른 방향으로도 같이 휘둘러요.
               마음에 드는 카드가 없으면 다시 뽑아요. 다시 뽑기는 판마다 한 번 있고, 10층을 깰 때마다 한 번씩 늘어요. 카드 등급은 일반, 매직, 레어, 유니크, 전설 다섯 가지예요.
               1층에선 전설이 백 장에 한 장꼴이에요. 높이 오르거나 다시 뽑을수록 좋은 등급이 잘 나와요. 지금 능력치는 왼쪽 위 능력치 판에서 봐요. C를 누르면 열고 닫혀요.{" "}
-              {1 + TOWER_CHECKPOINT_EVERY}층처럼 위에서 시작하면 건너뛴 10층마다 카드를 {START_PICKS_PER_10}장씩 먼저 골라요.
+              51층이나 101층처럼 위에서 시작하면 건너뛴 10층마다 카드를 {START_PICKS_PER_10}장씩 먼저 골라요.
             </Item>
             <Item pic={<CardPic id="oneshot" />} title="상사의 제안과 멈추면 집중">
-              10층마다 우두머리를 잡으면 상사가 제안을 해요. 최대 체력을 {Math.round(BOSS_DEAL_HP_COST * 100)}% 내주면 레어 이상 카드를 한 장 받아요. 거절하면 체력을 가득
+              {BOSS_DEAL_EVERY}층마다 우두머리를 잡으면 상사가 제안을 해요. 최대 체력을 {Math.round(BOSS_DEAL_HP_COST * 100)}% 내주면 레어 이상 카드를 한 장 받아요. 거절하면 체력을 가득
               채워 줘요. 가만히 서서 때리면 공격 속도가 {Math.round(FOCUS_ASPD * 100)}% 빨라져요. 피할 땐 움직이고, 때릴 땐 멈춰 서요.
             </Item>
             {/* 11/15 세트 장비·강화 */}
             <Item art={{ shape: "sg:003", main: 0, accent: 0 }} title="세트 장비와 강화">
-              세트 장비는 야근 빌딩 상자에서만 나와요. 세트는 야근, 결재, 회의, 출장 네 가지이고, 세트마다 부위가 다섯 개예요. 높은 층일수록 사원급에서 임원급까지 좋은 직급이 나와요.
-              같은 세트를 두 개나 네 개 끼면 세트 효과가 붙어요. 장비 탭에서 강화하면 기본 능력치가 올라요. +5면 1.4배, +10이면 2배, +15면 3배예요. 세트 장비는 +15, 상점 장비는 +5까지 올릴 수 있어요.
-              +11부터는 실패하면 한 단계 내려가요. 보호 문서가 있으면 막을 수 있어요. 안 쓰는 세트 장비는 분해해서 재료로 바꿔요. 같은 직급 세 개를 원하는 부위 하나로
-              바꿀 수도 있어요.
+              세트 장비는 야근 빌딩 상자에서만 나와요. 세트는 야근, 결재, 회의, 출장 네 가지이고, 세트마다 부위가 다섯 개예요. 높은 층일수록 사원급에서 임원급까지 좋은 직급이 나와요. 기본 능력치는 {SG_GRADE_NAMES[0]}을 1로 치면 {SG_GRADE_NAMES.slice(1).map((n, i) => `${n} ${SG_GRADE_MULT[i + 1]}배`).join(", ")}예요.
+              같은 세트를 두 개나 네 개 끼면 세트 효과가 붙어요. 장비 탭에서 강화하면 기본 능력치가 올라요. +5면 {enhMul(5)}배, +10이면 {enhMul(10)}배, +{SG_ENH_MAX}면 {enhMul(SG_ENH_MAX)}배예요. 세트 장비는 +{SG_ENH_MAX}, 상점 장비는 +{SHOP_ENH_MAX}까지 올릴 수 있어요.
+              +{ENH_DROP_FROM}에서 더 올리다 실패하면 한 단계 내려가요. 보호 문서가 있으면 막을 수 있어요. 안 쓰는 세트 장비는 분해해서 재료로 바꿔요. 같은 직급 {exchangeNeed(1)}개(무기는 {exchangeNeed(0)}개)를 원하는 부위 하나로
+              바꿀 수도 있어요. 강화한 장비는 같은 부위의 더 높은 직급 세트 장비에 강화를 물려줄 수 있어요(승계). 직급 차이가 클수록 받는 단계는 줄고, 물려준 장비는 사라져요.
             </Item>
             <Item art={POTIONS[0]?.art} title="야근 빌딩 보상">
-              깬 층마다 초월 경험치를 받아요. 1층은 {floorTExp(1)}, 30층은 {floorTExp(30)}, 100층은 {floorTExp(100)}만큼 받아요. 쓰러져도 깬 층만큼은 받아요.
-              우두머리 층을 깨면 우두머리 상자가 열려요. 물약과 강화 재료는 늘 들어 있어요. 세트 장비는 15% 확률로 나와요. 7번 내리 못 받으면 다음엔 꼭 나와요.
-              꾸미기 이용권도 가끔 나와요.
-              깬 층마다 포인트도 조금 받아요. 이 포인트도 사냥 하루 한도에 들어가요. 잡은 몬스터 수는 주간 사냥 레이스에 들어가요. {TOWER_CHECKPOINT_EVERY}층 우두머리를 잡으면 다음부터 {1 + TOWER_CHECKPOINT_EVERY}층에서 바로 시작할 수 있어요. {TOWER_CHECKPOINT_EVERY * 2}층을 깨면{" "}
-              {1 + TOWER_CHECKPOINT_EVERY * 2}층에서 시작할 수 있어요.
+              깬 층마다 초월 경험치를 받아요. 1층은 {floorTExp(1)}, 30층은 {floorTExp(30)}, 100층은 {floorTExp(100)}만큼 받아요. {TOWER_STEEP_FROM + 1}층부터는 확 늘어서 {TOWER_STEEP_FROM + 1}층은{" "}
+              {floorTExp(TOWER_STEEP_FROM + 1)}이에요. 쓰러져도 깬 층만큼은 받아요.
+              {TOWER_CHEST_FROM}층부터는 우두머리 층을 깨면 우두머리 상자가 열려요. 물약과 강화 재료는 늘 들어 있어요. 세트 장비는 {Math.round(TOWER_CHEST_GEAR_CHANCE * 100)}% 확률로 아주 드물게 나와요.
+              {gradeBandText()} 꾸미기 이용권도 가끔 나와요.
+              깬 층마다 포인트도 조금 받아요. 잡은 몬스터 수는 주간 사냥 레이스에 들어가요. 50층 우두머리를 잡으면 다음부터 51층에서, 100층을 깨면 101층에서 바로 시작할 수 있어요. 그 위로는{" "}
+              {TOWER_CHECKPOINT_EVERY}층마다(121층, 141층 …) 엘리베이터가 켜져요.
             </Item>
             <Item art={GEAR.find((g) => g.kind === "acc")?.art} title="칭호와 랭킹">
               층 칭호는 10층 「야근 입문」, 20층 「번아웃 생존자」, 30층 「야근이 일상」, 50층 「퇴근을 잊은 자」, 100층 「사무실이 집」이에요. 서버에서 한 사람만 받는 신화 칭호도 있어요.
@@ -597,6 +616,54 @@ function pages(): Page[] {
             </tbody>
           </table>
         </>
+      ),
+    },
+    {
+      // 11/19 대표 빌드 8종 (lib/rpg/builds): 핵심 1 + 받침 2 — 받침 랭크마다 핵심 피해가 오른다 (연계 보너스, skillTree SYNERGY)
+      title: "대표 빌드",
+      lead: "갈래마다 대표 빌드가 둘씩 있어요. 핵심 스킬은 받쳐 주는 스킬 랭크마다 피해가 올라요(연계). 핵심 하나와 받침 둘에 몰아 찍을수록 핵심 스킬이 크게 세지고 야근 빌딩에서 받는 피해도 줄어요. 흩어 찍으면 연계가 조금밖에 안 붙어요. 야근 빌딩에서는 카드도 빌드에 맞는 것(마공·물공 꼬리표)을 먼저 고르면 더 높이 올라가요.",
+      body: (
+        <ul className={s.guideList}>
+          {BUILDS.map((b) => {
+            const core = b.core.map((id) => skillById(id)!.name).join("·");
+            const links = SYNERGY[b.core[0]] ?? [];
+            const full = Math.round(links.reduce((a, l) => a + l.pct * (skillById(l.id)?.maxLevel ?? 0), 0) * 100);
+            const guard = Math.round((SYNERGY_GUARD[b.core[0]] ?? 0) * 100);
+            return (
+              <li key={b.id} className={s.guideItem}>
+                <span className={s.guidePic}>
+                  <RpgIcon art={skillById(b.core[0])!.art} size={32} />
+                </span>
+                <div>
+                  <p className={s.rowName}>
+                    {b.name} <small>· {BRANCH_INFO[b.branch].name} · 강점 {b.strong} · 약점 {b.weak}</small>
+                  </p>
+                  <p className={s.meta}>{b.role}</p>
+                  <p className={s.meta}>
+                    핵심 <b>{core}</b> ← 받침 {links.map((l) => `${skillById(l.id)!.name}(랭크마다 +${Math.round(l.pct * 100)}%)`).join(", ")}. 받침을 다 찍으면 핵심 피해 +{full}%.
+                    {guard > 0 && ` 핵심까지 다 찍으면 야근 빌딩에서 받는 피해가 ${guard}% 줄어요.`}
+                  </p>
+                  <table className={s.guideTable}>
+                    <tbody>
+                      {buildSteps(b).map((st) => (
+                        <tr key={st.level}>
+                          <th scope="row">
+                            Lv.{st.level} ({st.points}P)
+                          </th>
+                          <td>{st.adds.map((x) => `${skillById(x.id)!.name} ${x.from ? `${x.from}→` : ""}${x.to}`).join(", ")}</td>
+                        </tr>
+                      ))}
+                      <tr>
+                        <th scope="row">능력치</th>
+                        <td>{b.statNote}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       ),
     },
   ];

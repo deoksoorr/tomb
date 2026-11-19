@@ -64,8 +64,7 @@ export function EndgameResult({ reward }: { reward: RunReward }) {
       )}
       {t && t.levelsGained > 0 && (
         <p className={s.levelUp} role="status">
-          초월 레벨 업! {starLabel(t.tLevel)}
-          {Math.floor(t.tLevel / 5) > Math.floor((t.tLevel - t.levelsGained) / 5) ? " 능력치 포인트를 받았어요." : ""}
+          초월 레벨 업! {starLabel(t.tLevel)} 능력치 +{t.levelsGained} · 스킬 포인트 +{t.levelsGained} · 초월 수련 +{t.levelsGained}
         </p>
       )}
       {w?.suspect && (

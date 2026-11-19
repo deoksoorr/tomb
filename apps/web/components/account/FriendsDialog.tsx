@@ -11,6 +11,8 @@ import { friendChannelFullMsg, lobbyChannelFull } from "@/game/net/switchPolicy"
 import type { LobbyInfo } from "@tomb/protocol";
 import { tabHidden } from "@/lib/hooks/visibleAgain";
 import { friendJoinToastOn, friendsApi, friendsStore, isOnline, lastSeenText, setFriendJoinToast } from "@/lib/hooks/useFriends";
+import { friendRoute } from "@/lib/friendRoute";
+import { myBig } from "@/game/camp/foodState";
 import { showFriendNotice } from "../overlay/FriendNotice";
 import AvatarThumb from "./AvatarThumb";
 import { hopChannel } from "../housing/channelHop";
@@ -168,7 +170,9 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
         else hopTo(w.ch, myCh, enter, (full) => !full && showFriendNotice(`${w.ch}채널로 옮기지 못했어요. 잠시 뒤 다시 해 주세요.`), { fullMsg: friendChannelFullMsg(now.name) });
         return;
       }
-      const no = cannotGo(f.name, w);
+      // 11/19 다른 맵이면 버스를 타야 하는데 바베큐로 몸이 커져 있으면 못 탄다 (채널을 옮기기 전에 막는다 — lib/friendRoute)
+      const route = w.at === "world" ? friendRoute(myMap, mapOf(w.map), myBig()) : null;
+      const no = cannotGo(f.name, w) ?? (route?.do === "block" ? route.message : null);
       if (no || w.at !== "world") {
         setNotice(no);
         if (no) showFriendNotice(no);
@@ -408,6 +412,7 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
               `친구는 ${FRIEND_MAX}명까지예요. 서로 받아 줘야 친구가 되고, 한쪽이 끊으면 둘 다 목록에서 사라져요.`,
               "같은 채널 마을에 있는 친구는 지도에 분홍 하트로, 이름표 옆에 작은 하트로 보여요.",
               "[친구한테 가기]를 누르면 친구 옆으로 가요. 다른 채널이면 채널도 같이 옮겨요.",
+              "친구가 다른 맵(마을·캠핑장·바닷가)에 있으면 버스를 타고 가요. 바베큐로 몸이 커져 있으면 버스를 못 타요.",
               "친구가 집 안에 있으면 그 집으로 따라 들어가요. 사냥터나 잡화점에는 따라갈 수 없어요. 친구 집은 [집 놀러 가기]로 구경해요.",
               "친구를 맺어도 포인트나 아이템은 주지 않아요. 답하지 않은 신청은 14일 뒤 사라져요.",
             ]}

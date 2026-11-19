@@ -33,7 +33,7 @@ export type GearM = {
 // 주간 랭킹 1위 전용 머리 3종 (금화 왕관·붉은 깃털 투구·황금 물고기 모자 — protocol CHAMP_HAT)
 export const GEAR_HEAD = ["hat_beanie", "hat_headphones", "hat_crown", "hat_ribbon", "hat_party", "hat_glasses", "hat_wizard", "hat_cap", "hat_sprout", "hat_beret", "hat_hardhat", "hat_chef", "hat_horns", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat", "champ_duo_ph", "champ_duo_pf", "champ_duo_hf", "champ_triple", "q_hat_angler", "q_hat_miner", "q_hat_snow", "u_hat_siren", ...CUTE_HEAD, ...GHOST_HEAD, ...XMAS_HEAD] as const;
 export const GEAR_NECK = ["neck_tie", "neck_badge", "neck_bowtie", "neck_bell", "neck_lei", "neck_collar", "neck_whistle", "neck_camera", "neck_pearl", "neck_medal", "staff_armband", ...CUTE_NECK, ...XMAS_NECK, ...THEME_NECK] as const;
-export const GEAR_HAND = ["hand_coffee", "hand_briefcase", "hand_phone", "hand_lantern_blue", "hand_donut", "hand_clipboard", "hand_mic", "hand_bouquet", "hand_wand", "staff_ledger", "staff_lamp", "q_hand_net", "q_hand_brush", "q_hand_wishlamp", ...CUTE_HAND, ...XMAS_HAND, ...THEME_HAND] as const;
+export const GEAR_HAND = ["hand_coffee", "hand_briefcase", "hand_phone", "hand_lantern_blue", "hand_donut", "hand_clipboard", "hand_mic", "hand_bouquet", "hand_wand", "staff_ledger", "staff_lamp", "q_hand_net", "q_hand_brush", "q_hand_wishlamp", "inv_hand_lantern", ...CUTE_HAND, ...XMAS_HAND, ...THEME_HAND] as const;
 export const GEAR_BACK = ["back_backpack", "back_cape", "back_shell", "back_guitar", "back_jetpack", "staff_robe", "q_back_cape", ...CUTE_BACK, ...XMAS_BACK, ...THEME_BACK] as const;
 /** 시트에 그려지는 추가 꾸미기 전부 (시트 키에 들어간다) */
 export const GEAR_SHEET_IDS: readonly string[] = [...GEAR_HEAD, ...GEAR_NECK, ...GEAR_HAND, ...GEAR_BACK];
@@ -942,6 +942,30 @@ export function drawHandGear(g: Grid, view: GearView, id: string, m: GearM): voi
       g.set(x - 1, hy + 3, 0xffb84a);
       break;
     }
+    case "inv_hand_lantern":
+      // 11/19 친구 초대 한정 마중 등불: 손에 쥔 짧은 대나무 손잡이 + 둥근 연분홍 초롱 (가운데 하트 두 개가 겹쳐 빛난다, 빛은 drawHandGlow)
+      g.set(x, y, 0xb08a52);
+      g.set(x, y - 1, 0xb08a52);
+      g.hline(x - 1, x + 1, y - 2, 0x8a5a2e);
+      g.hline(x - 2, x + 2, y - 3, 0xf4b8c0);
+      g.hline(x - 3, x + 3, y - 4, 0xf8cad0);
+      g.hline(x - 3, x + 3, y - 5, 0xf8cad0);
+      g.hline(x - 3, x + 3, y - 6, 0xf4b8c0);
+      g.hline(x - 2, x + 2, y - 7, 0xe89aa8);
+      g.hline(x - 1, x + 1, y - 8, 0x8a5a2e);
+      // 겹친 하트 (따뜻한 빨강·금빛)
+      g.set(x - 2, y - 6, 0xe0485a);
+      g.set(x - 1, y - 6, 0xe0485a);
+      g.set(x - 2, y - 5, 0xe0485a);
+      g.set(x - 1, y - 5, 0xff7a6a);
+      g.set(x, y - 6, 0xffd27a);
+      g.set(x + 1, y - 6, 0xffd27a);
+      g.set(x, y - 5, 0xffe6a0);
+      g.set(x + 1, y - 5, 0xffd27a);
+      g.set(x - 1, y - 4, 0xff7a6a);
+      g.set(x, y - 4, 0xffd27a);
+      g.set(x + 3, y - 5, 0xd8909c);
+      break;
     case "q_hand_wishlamp":
       // 11/15 수집 의뢰 새해 소원 등불: 손에서 끈으로 띄운 귤빛 한지 풍등 (안쪽은 따뜻한 불빛, 불꽃은 drawHandGlow)
       g.set(x, y - 1, 0xe8d8b0);
@@ -996,6 +1020,9 @@ export function drawHandGlow(g: Grid, view: GearView, id: string, m: GearM): voi
   } else if (id === "q_hand_wishlamp") {
     g.set(m.hx, m.hY - 5, 0xfff6d0);
     g.set(m.hx, m.hY - 3, 0xffe08a);
+  } else if (id === "inv_hand_lantern") {
+    g.set(m.hx, m.hY - 5, 0xfff2c8);
+    g.set(m.hx - 1, m.hY - 5, 0xffb0a0);
   }
 }
 

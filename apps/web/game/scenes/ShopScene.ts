@@ -10,12 +10,14 @@ import { Player, type SeatRequester } from "../entities/Player";
 import type { InputHub } from "../input/InputHub";
 import { interactLabel } from "../input/keyHint";
 import type { KeyAction } from "../input/Keyboard";
+import { atExitDoor } from "../logic/doorExit";
+import { setDoorHint } from "../logic/doorHint";
 import type { MoveInput } from "../logic/movement";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 
 // 유령 잡화점 실내. 혼자 들어오는 작은 방이다 (원격 아바타는 그리지 않는다).
 //  - 주인장 앞에서 E/Space/탭 → shop:open (UI가 상점 창을 연다)
-//  - 아래 문으로 걸어 나가면 월드의 잡화점 문 앞으로 돌아간다
+//  - 아래 문 앞에서 E(폰 [상호작용])를 누르면 월드의 잡화점 문 앞으로 돌아간다 (11/19 걸어서 저절로 나가기 없앰 — logic/doorExit)
 // 실시간 연결은 월드 씬이 그대로 유지하고, 월드에서의 내 위치는 문 앞에 멈춰 있는 것으로 둔다.
 
 export type ShopContext = {
@@ -37,6 +39,8 @@ const H = ROWS * 16; // 160
 const DOOR_X = W / 2;
 const KEEPER = { x: W / 2, y: 50 };
 const NEAR_KEEPER = 40;
+/** 문 칸 (아래 벽의 빈 곳, 문턱 = 아래 벽 윗면) */
+const DOOR_GAP = { x0: DOOR_X - 12, x1: DOOR_X + 12, y: H - 18 };
 const NO_SEATS: SeatRequester = { sit: () => undefined, stand: () => undefined };
 
 export class ShopScene extends Phaser.Scene {
@@ -44,9 +48,9 @@ export class ShopScene extends Phaser.Scene {
   private player!: Player;
   private keeper!: Phaser.GameObjects.Sprite;
   private prompt!: Phaser.GameObjects.BitmapText;
+  /** 문 앞 「E 나가기」 */
+  private exitPrompt!: Phaser.GameObjects.BitmapText;
   private readonly move: MoveInput = { ax: 0, ay: 0, run: false };
-  /** 문에서 한 번 떨어져야 나갈 수 있다 (들어오자마자 다시 나가지 않게) */
-  private armed = false;
   private exiting = false;
   private lamps: Phaser.GameObjects.Image[] = [];
   private onTap = (e: PointerEvent) => this.handleTap(e);
@@ -57,7 +61,6 @@ export class ShopScene extends Phaser.Scene {
 
   init(data: ShopContext): void {
     this.ctx = data;
-    this.armed = false;
     this.exiting = false;
   }
 
@@ -126,7 +129,9 @@ export class ShopScene extends Phaser.Scene {
     this.physics.add.collider(this.player.sprite, walls);
 
     const browse = interactLabel("둘러보기");
-    atlas.ensure(browse);
+    const out = interactLabel("나가기");
+    atlas.ensure(browse + out);
+    this.exitPrompt = this.add.bitmapText(0, 0, FONT_KEY, out, FONT_PX).setOrigin(0.5, 1).setTint(0xffe39a).setDepth(DEPTH.labels).setVisible(false);
     this.prompt = this.add
       .bitmapText(KEEPER.x, KEEPER.y - 24, FONT_KEY, browse, FONT_PX)
       .setOrigin(0.5, 1)
@@ -170,6 +175,10 @@ export class ShopScene extends Phaser.Scene {
       bridge.emit("shop:open");
       return;
     }
+    if (a === "interact" && this.atDoor()) {
+      this.leave();
+      return;
+    }
     if (a === "jump") {
       this.player.jump(this.time.now, NO_SEATS);
       return;
@@ -189,6 +198,8 @@ export class ShopScene extends Phaser.Scene {
     );
     // 주인장(또는 계산대)을 탭하면 상점 창
     if (Math.abs(p.x - KEEPER.x) < 26 && p.y > KEEPER.y - 26 && p.y < 70) bridge.emit("shop:open");
+    // 문 앞에 서서 문을 탭하면 나가기 (폰)
+    else if (this.atDoor() && Math.abs(p.x - DOOR_X) < 24 && p.y > H - 34) this.leave();
   }
 
   update(time: number): void {
@@ -202,14 +213,23 @@ export class ShopScene extends Phaser.Scene {
     this.prompt.setScale(1 / this.cameras.main.zoom).setVisible(this.nearKeeper());
     for (let i = 0; i < this.lamps.length; i++) this.lamps[i].setAlpha(this.ctx.reduced ? 0.45 : 0.4 + 0.06 * Math.sin(time / 130 + i));
 
-    // 문 앞까지 내려가면 나간다 (들어온 직후엔 한 번 문에서 떨어져야 무장된다)
-    const atDoor = Math.abs(this.player.x - DOOR_X) < 12 && this.player.y > H - 18;
-    if (!atDoor && this.player.y < H - 30) this.armed = true;
-    if (this.armed && atDoor && this.move.ay > 0) {
-      this.exiting = true;
-      this.ctx.input.setHandler(null);
-      this.ctx.onExit();
-    }
+    // 문 앞이면 「E 나가기」 (이름표 위 — 문 칸은 화면 아래 끝이라 발밑에 두면 잘린다)
+    const z = 1 / this.cameras.main.zoom;
+    const out = this.atDoor() && !this.nearKeeper();
+    this.exitPrompt.setPosition(this.player.x, this.player.y - 30).setScale(z).setVisible(out);
+    setDoorHint(out ? "나가기" : null);
+  }
+
+  private atDoor(): boolean {
+    return atExitDoor(this.player.x, this.player.y, DOOR_GAP);
+  }
+
+  /** 문으로 나간다 (월드의 잡화점 문 앞으로) */
+  leave(): void {
+    if (this.exiting) return;
+    this.exiting = true;
+    this.ctx.input.setHandler(null);
+    this.ctx.onExit();
   }
 
   /** 테스트·디버그용 */

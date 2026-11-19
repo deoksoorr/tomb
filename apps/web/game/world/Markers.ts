@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { GRAVE_SCALE } from "@tomb/protocol";
 import { TEX } from "../assets/manifest";
 import { DEPTH, LABEL_ME } from "../config";
 import { GRAVE_STONE_H } from "../sprites/graves";
@@ -41,7 +42,7 @@ export class GraveMarkers {
   ) {}
 
   add(p: GravePlacement, ms: number, label: string | null, now: number): void {
-    const top = p.y - GRAVE_STONE_H[p.shape];
+    const top = p.y - GRAVE_STONE_H[p.shape] * GRAVE_SCALE;
     const s = this.scene;
     const beam = s.add
       .image(p.x, p.y - BEAM_H, TEX.pixel)
@@ -79,7 +80,7 @@ export class GraveMarkers {
         // 묘비가 다른 자리로 밀렸다 → 같이 옮긴다
         m.x = p.x;
         m.y = p.y;
-        m.top = p.y - GRAVE_STONE_H[p.shape];
+        m.top = p.y - GRAVE_STONE_H[p.shape] * GRAVE_SCALE;
         m.beam.setPosition(p.x, p.y - BEAM_H);
         m.halo.setPosition(p.x, p.y - BEAM_H / 2);
         m.arrow.setX(p.x);

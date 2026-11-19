@@ -1,3 +1,4 @@
+import type { TodoTick } from "../../retain";
 import type { Me } from "../../types";
 import type { Quest } from "./gen";
 
@@ -30,6 +31,6 @@ export type QuestBoard = {
 
 /** 납품: used = 가방에서 빠진 것 (화면이 가방 사본에서 뺀다 — 낚시 상태를 다시 읽지 않게), earned = 받은 도장, title = 새로 닿은 칭호 단계 */
 /** 11/16 bonus = 수집 의뢰 갈래 칭호로 더 받은 도장 (earned에 들어 있다, 없으면 빠진다) */
-export type QuestDeliverResponse = { board: QuestBoard; used: Record<string, number>; earned: number; bonus?: number };
+export type QuestDeliverResponse = { board: QuestBoard; used: Record<string, number>; earned: number; bonus?: number; todo?: TodoTick };
 export type QuestRerollResponse = { board: QuestBoard };
 export type QuestExchangeResponse = { board: QuestBoard; me: Me; name: string };

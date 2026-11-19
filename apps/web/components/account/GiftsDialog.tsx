@@ -137,7 +137,7 @@ export default function GiftsDialog({ onClose, onOpenCalendar }: { onClose: () =
           {notice}
         </p>
         <InfoCard title="다른 보상도 챙겨요" icon="calendar">
-          <TodayFacts show={["attend", "cap"]} />
+          <TodayFacts show={["attend", "earned"]} />
           {onOpenCalendar && !staff && <Shortcuts items={[{ label: "출석 달력 열기", icon: "calendar", onClick: onOpenCalendar }]} />}
         </InfoCard>
         <InfoCard title="선물은 이럴 때 와요" icon="info">

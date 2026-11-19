@@ -1,6 +1,7 @@
 import { ATTEND_STAY_MINUTES, STAY_TICK_MINUTES } from "./attendStay";
 import { attendTierPlan, permOwnedOf } from "./attendTiers";
-import { earnRule } from "./economy";
+import { bundleText } from "./rewardText";
+import type { RpgBundle } from "./rpgGift";
 import type { CalendarResponse } from "./types";
 
 // 10번 출석 달력 (게임 날짜 = 한국 시간 새벽 5시에 바뀐다, lib/gameDay — 1일 새벽 0~5시는 지난달 마지막 날). 입장 때 자동으로 주던 출석을 "그날 1시간 머문 뒤 달력의 오늘 칸을 눌러 받기"로 바꿨다.
@@ -15,12 +16,21 @@ export const CALENDAR_TTL_SEC = 100 * 86_400;
 /** 볼 수 있는 지난달 수 (이번 달 포함 3개월) */
 export const CALENDAR_BACK_MONTHS = 2;
 
-/** 보상 숫자 (lib/economy.ts EARN_RULES에서 그대로 가져온다) */
+// 11/19 포인트 개념이 흐려져 출석 보상을 사냥 아이템으로 바꿨다 (사냥 가방에 바로 — lib/rpgGift)
+/** 매일 도장 */
+export const ATTEND_GIFT: RpgBundle = { potions: { p_coffee: 1 } };
+/** 7일 연속마다 */
+export const STREAK_GIFT: RpgBundle = { mats: { m_prot: 1 } };
+export const STREAK_EVERY = 7;
+/** 그달 모든 날을 찍으면 */
+export const MONTHLY_GIFT: RpgBundle = { mats: { m_doc: 20 } };
+
+/** 보상 글귀 (화면) */
 export const calendarRewards = () => ({
-  daily: earnRule("attend").points,
-  streak: earnRule("streak").points,
-  streakEvery: 7,
-  monthly: earnRule("monthly").points,
+  daily: bundleText(ATTEND_GIFT),
+  streak: bundleText(STREAK_GIFT),
+  streakEvery: STREAK_EVERY,
+  monthly: bundleText(MONTHLY_GIFT),
 });
 
 const DAY_MS = 86_400_000;

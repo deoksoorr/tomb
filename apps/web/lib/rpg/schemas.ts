@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { T_NODE_IDS } from "./transcendTree";
 import { CARD_IDS, MAX_PICKS } from "./cards";
+import { STAT_MAX } from "./formulas";
 import { DIFFICULTIES, GAME_KINDS, GEAR_SLOTS, HOTBAR_SIZE, MONSTER_IDS, POTION_MAX_STACK, SKILLS, STAT_KEYS, ZONE_IDS, type SkillId } from "./catalog";
 
 // 사냥터 API 입력 검증 (zod). 메시지는 lib/validate.ts가 켜 둔 한국어 로케일을 따른다.
@@ -76,7 +78,7 @@ export const RunFinishSchema = z.object({
 });
 
 export const CharacterActionSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("alloc"), stats: z.partialRecord(z.enum(STAT_KEYS), z.number().int().min(0).max(99)) }),
+  z.object({ type: z.literal("alloc"), stats: z.partialRecord(z.enum(STAT_KEYS), z.number().int().min(0).max(STAT_MAX)) }),
   z.object({ type: z.literal("learn"), skill: skillId }),
   // 11/15 auto: 자동 스킬 설정 (예전 화면은 안 보낸다 → 그대로). slots 없이 auto만 보내면 칸은 그대로 (사냥 중 자동 바꾸기)
   z.object({
@@ -89,6 +91,9 @@ export const CharacterActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("respec"), cost: z.number().int().min(0).max(10_000) }),
   // 스킬 트리 바뀜 안내를 봤다
   z.object({ type: z.literal("ackTree") }),
+  // 11/19 초월 수련: 한 칸 1랭크 올리기 · 모두 되돌리기(무료)
+  z.object({ type: z.literal("tlearn"), node: z.enum(T_NODE_IDS) }),
+  z.object({ type: z.literal("treset") }),
   // 능력치 초기화: cost = 화면에 보인 비용 (스킬 초기화와 같은 방식. 예전 화면은 cost 없이 보냈다 → 0으로 읽는다)
   z.object({ type: z.literal("resetStats"), cost: z.number().int().min(0).max(10_000).default(0) }),
 ]);
@@ -108,5 +113,17 @@ export const GearActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("reroll"), uid: sgUidIn, lock: z.enum(["a", "c", "d", "s", "b", "h", "r", "p", "m", "k", "L"]).nullable().default(null), cost: z.number().int().min(0).max(100_000) }),
   z.object({ type: z.literal("exchange"), uids: z.array(sgUidIn).min(3).max(5), set: z.number().int().min(0).max(3), piece: z.number().int().min(0).max(4) }),
   z.object({ type: z.literal("disassemble"), uids: z.array(sgUidIn).min(1).max(60) }),
+  // 11/19 강화 승계: 재료(세트 장비 번호 fromSg 또는 강화한 상점 장비 번호 fromPiece) → 받는 장비(sg·piece·shop 하나). cost = 화면에 보인 포인트
+  z.object({
+    type: z.literal("inherit"),
+    fromSg: sgUidIn.optional(),
+    fromPiece: sgUidIn.optional(),
+    sg: sgUidIn.optional(),
+    piece: sgUidIn.optional(),
+    shop: itemId.optional(),
+    cost: z.number().int().min(0).max(100_000),
+  }),
   z.object({ type: z.literal("equip"), slot: z.enum(GEAR_SLOTS), uid: sgUidIn.nullable() }),
+  // 11/19 숨겨진 5세트 효과 발견 (판에서 처음 켜졌을 때 화면이 알린다 — 서버는 지금 낀 장비로 확인한다). set = SG_SETS 순번
+  z.object({ type: z.literal("egg"), set: z.number().int().min(0).max(3) }),
 ]);

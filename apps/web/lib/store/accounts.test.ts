@@ -4,15 +4,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import { nameKey, PERMANENT_UNTIL } from "@tomb/protocol";
 import { attendTierPlan } from "../attendTiers";
 import { calendarOf, grantAttendTiers } from "../calendarView";
-import { BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES, earnRule, type EarnSource } from "../economy";
+import { BALANCE_CAP, WALLET_MAX } from "../economy";
 import { env } from "../env";
 import type { Grave } from "../types";
-import { prevWeek } from "../gameDay";
 import { kstDay, kstWeek, kstYesterday, weekOfDay } from "./accounts";
-import { primeChampCache } from "./champ";
 
 /** 사냥 하루 한도 (11/15: 600 → 1200 — 숫자를 시험에 박지 않는다) */
-const HUNT_MAX = earnRule("hunt").dailyMax;
 import { MemoryAccounts } from "./accounts-memory";
 import { RedisAccounts } from "./accounts-redis";
 import { K } from "./keys";
@@ -63,9 +60,10 @@ function contract(make: () => Kit) {
   afterEach(async () => {
     await kit.cleanup(used.splice(0));
   });
-  /** 하루 전체 합계에 드는 항목을 모두 한도까지 채운다 (= DAILY_EARN_CAP) */
+  /** 놀아서 버는 항목을 크게 채운다 (11/19 하루 한도가 없어 다 들어온다) */
+  const BIG = 50_000;
   const fillDay = async (id: string) => {
-    for (const r of EARN_RULES) if (!["attend", "streak", "monthly", "stayBonus"].includes(r.source)) await accounts.earn(id, r.source, DAY, { amount: r.dailyMax });
+    for (const s of ["hunt", "bugs", "stars", "fish", "gather", "dex", "goblin", "wish"] as const) expect(await accounts.earn(id, s, DAY, { amount: BIG })).toBe(BIG);
   };
 
   it("항목별 하루 한도: 헌화는 2점씩 하루 20점까지, 다음 날 다시", async () => {
@@ -78,50 +76,27 @@ function contract(make: () => Kit) {
     expect((await accounts.get(id, "20261109", 0)).todayEarned).toBe(2);
   });
 
-  it("오늘 항목별 적립(earnedBy): 받은 항목만, 한도에 잘린 값 그대로, 다음 날엔 비어 있다", async () => {
+  it("11/19 놀아서 버는 항목은 하루 한도·하루 전체 한도가 없다 (오늘 합계만 센다)", async () => {
     const id = newId();
-    expect((await accounts.get(id, DAY, 0)).earnedBy).toEqual({});
-    await accounts.earn(id, "hunt", DAY, { amount: 120 });
-    await accounts.earn(id, "bugs", DAY, { amount: earnRule("bugs").dailyMax + 50 });
-    await accounts.earn(id, "flower", DAY);
-    await accounts.presenceTick(id, DAY, 1_000_000);
-    const a = await accounts.get(id, DAY, 0);
-    expect(a.earnedBy).toEqual({ hunt: 120, bugs: earnRule("bugs").dailyMax, flower: 2, presence: earnRule("presence").points });
-    // 내부 필드(_total·_stay)는 섞이지 않고, 항목 합 = 하루 합계
-    expect(Object.values(a.earnedBy).reduce((n, v) => n + v, 0)).toBe(a.todayEarned);
-    expect((await accounts.get(id, "20261109", 0)).earnedBy).toEqual({});
-  });
-
-  it("하루 전체 한도: 모든 항목을 한도까지 받아도 하루 상한을 넘지 않는다 (사냥은 점수를 직접 준다)", async () => {
-    const id = newId();
-    const plan = [
-      ["hunt", 1, HUNT_MAX],
-      ["attend", 1],
-      ["streak", 1],
-      ["flower", 10],
-      ["bury", 1],
-      ["presence", 12],
-      ["gotFlower", 20],
-      ["houseLike", 10],
-    ] as const;
-    let total = 0;
-    for (const [source, times, amount] of plan as readonly (readonly [EarnSource, number, number?])[])
-      for (let i = 0; i < times; i++) total += await accounts.earn(id, source, DAY, { amount });
-    // 49번에서 살려주세요 항목(10+20)이 빠져 항목 한도 합(780)이 하루 상한(800)보다 작아졌다
-    // 낚시·채집·도감·고블린·소원 분수(4·22·32·50·51번)처럼 항목이 늘어도 이 계획이 받는 항목들의 한도 합으로 잰다
-    const planned = new Set<string>(plan.map(([source]) => source));
-    const cap = Math.min(DAILY_EARN_CAP, EARN_RULES.filter((r) => planned.has(r.source)).reduce((n, r) => n + r.dailyMax, 0));
-    expect(total).toBe(cap);
-    expect(await accounts.get(id, DAY, 0)).toMatchObject({ points: cap, todayEarned: cap, lifetimePoints: cap });
+    await fillDay(id);
+    for (let i = 0; i < 3; i++) expect(await accounts.earn(id, "hunt", DAY, { amount: 1200 })).toBe(1200);
+    const total = 8 * BIG + 3 * 1200;
+    expect(await accounts.get(id, DAY, 0)).toMatchObject({ points: total, todayEarned: total, lifetimePoints: total });
+    // 횟수 규칙이 남은 항목은 그대로 (헌화 하루 10번)
+    for (let i = 0; i < 10; i++) expect(await accounts.earn(id, "flower", DAY)).toBe(2);
     expect(await accounts.earn(id, "flower", DAY)).toBe(0);
   });
 
-  it("지갑 한도: 넘치는 만큼은 쌓이지 않는다", async () => {
+  it("지갑 상한(WALLET_MAX, 11/19 99,999에서 올림): 넘치는 만큼은 쌓이지 않는다", async () => {
     const id = newId();
-    await kit.setPoints(id, BALANCE_CAP - 1);
+    await kit.setPoints(id, WALLET_MAX - 1);
     expect(await accounts.earn(id, "bury", DAY)).toBe(1);
     expect(await accounts.earn(id, "flower", DAY)).toBe(0);
-    expect((await accounts.get(id, DAY, 0)).points).toBe(BALANCE_CAP);
+    expect((await accounts.get(id, DAY, 0)).points).toBe(WALLET_MAX);
+    // 예전 상한(99,999)은 넘는다
+    const rich = newId();
+    await kit.setPoints(rich, BALANCE_CAP);
+    expect(await accounts.earn(rich, "hunt", DAY, { amount: 500 })).toBe(500);
   });
 
   it("20개를 동시에 사도 잔액만큼만 사지고 음수가 되지 않는다", async () => {
@@ -260,7 +235,8 @@ function contract(make: () => Kit) {
   const claim = (id: string, ip: string, day: string, yesterday: string, monthDays = 30) =>
     accounts.claimAttend(id, ip, day, yesterday, monthDays, 6);
 
-  it("출석 달력: 1시간(머무르기 6번) 전엔 못 받고, 하루 1번, 연속 7일째 +30, 끊기면 1부터", async () => {
+  // 11/19 출석 보상은 포인트 대신 사냥 아이템 (라우트가 lib/rpgGift로 넣는다) → 저장소는 도장·연속·개근 표시만, 포인트는 0
+  it("출석 달력: 1시간(머무르기 6번) 전엔 못 받고, 하루 1번, 연속 7일째까지 세고, 끊기면 1부터 (포인트 0)", async () => {
     const id = newId();
     const d = days(9);
     await accounts.enter(id, { name: "새벽코더" }, 1);
@@ -268,55 +244,49 @@ function contract(make: () => Kit) {
     expect(await claim(id, "ip-a", d[0], "")).toEqual({ ok: false, reason: "stay", stayTicks: 5 });
     expect((await accounts.get(id, d[0], 0)).stayTicks).toBe(5);
     const earned: number[] = [];
+    const streaks: number[] = [];
     for (let i = 0; i < 7; i++) {
       await stay(id, d[i], i === 0 ? 1 : 6);
       const r = await claim(id, `ip-${nanoid(6)}`, d[i], d[i - 1] ?? "");
       if (!r.ok) throw new Error(r.reason);
       earned.push(r.earned.daily + r.earned.streak);
+      streaks.push(r.streak);
     }
-    expect(earned).toEqual([10, 10, 10, 10, 10, 10, 40]);
+    expect(earned).toEqual([0, 0, 0, 0, 0, 0, 0]);
+    expect(streaks).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(await claim(id, "ip-a", d[6], d[5])).toEqual({ ok: false, reason: "already" });
     expect(await accounts.get(id, d[6], 0)).toMatchObject({ streak: 7, name: "새벽코더", lastAttend: d[6] });
     const cal = await accounts.attendCalendar(id, "202611");
-    expect(cal).toEqual({ days: { "01": 10, "02": 10, "03": 10, "04": 10, "05": 10, "06": 10, "07": 40 }, monthBonus: null, tiers: {} });
+    expect(cal).toEqual({ days: { "01": 0, "02": 0, "03": 0, "04": 0, "05": 0, "06": 0, "07": 0 }, monthBonus: null, tiers: {} });
     // 하루 건너뛰면 다시 1일째
     await stay(id, d[8], 6);
     const again = await claim(id, "ip-b", d[8], d[7]);
-    expect(again).toMatchObject({ ok: true, streak: 1, earned: { daily: 10, streak: 0, monthly: 0 } });
+    expect(again).toMatchObject({ ok: true, streak: 1, earned: { daily: 0, streak: 0, monthly: 0 } });
   });
 
-  it("출석 달력 보상은 하루 전체 한도에 막히지 않는다 (항목 한도만)", async () => {
+  it("출석 달력 보상은 많이 번 날에도 받는다 (항목 하루 최대만)", async () => {
     const id = newId();
     await fillDay(id);
-    expect((await accounts.get(id, DAY, 0)).todayEarned).toBe(DAILY_EARN_CAP);
-    await stay(id, DAY, 6); // 머무르기 포인트는 하루 한도에 막히지만 머문 기록은 쌓인다
+    await stay(id, DAY, 6);
     expect((await accounts.get(id, DAY, 0)).stayTicks).toBe(6);
-    expect(await claim(id, "ip-c", DAY, "20261107")).toMatchObject({ ok: true, earned: { daily: 10 } });
-  });
-
-  it("하루 한도는 항목마다 따로: 낚시·채집을 다 팔아도 사냥 한도는 끝까지 (11/14 사냥 380P 멈춤)", async () => {
-    const id = newId();
-    await accounts.earn(id, "presence", DAY, { amount: earnRule("presence").dailyMax });
-    await accounts.earn(id, "fish", DAY, { amount: earnRule("fish").dailyMax });
-    await accounts.earn(id, "gather", DAY, { amount: earnRule("gather").dailyMax });
-    expect(await accounts.earn(id, "hunt", DAY, { amount: earnRule("hunt").dailyMax })).toBe(earnRule("hunt").dailyMax);
+    expect(await claim(id, "ip-c", DAY, "20261107")).toMatchObject({ ok: true, earned: { daily: 0 } });
   });
 
   // 11/18 회사·집에서 여럿이 한 IP로 한다 → 같은 IP 계정 수로 출석 포인트를 막지 않는다
-  it("같은 IP의 계정 여럿도 모두 출석 포인트를 받는다", async () => {
+  it("같은 IP의 계정 여럿도 모두 출석 도장을 받는다", async () => {
     const ip = `ip-${nanoid(6)}`;
     const ids = Array.from({ length: 8 }, newId);
-    const earned = [];
+    const ok = [];
     for (const id of ids) {
       await stay(id, DAY, 6);
       const r = await claim(id, ip, DAY, "20261107");
-      earned.push(r.ok ? r.earned.daily : -1);
+      ok.push(r.ok);
     }
-    expect(earned).toEqual(Array<number>(8).fill(10));
-    expect((await accounts.attendCalendar(ids.at(-1)!, "202611")).days).toEqual({ "08": 10 });
+    expect(ok).toEqual(Array<boolean>(8).fill(true));
+    expect((await accounts.attendCalendar(ids.at(-1)!, "202611")).days).toEqual({ "08": 0 });
   });
 
-  it("한 달 개근: 그달 모든 날을 찍은 날 한 번 +200 (달력 개편 전 출석도 이어서 센다)", async () => {
+  it("한 달 개근: 그달 모든 날을 찍은 날 한 번 표시 (11/19 포인트 0 — 결재 서류는 라우트가) (달력 개편 전 출석도 이어서 센다)", async () => {
     const id = newId();
     // 11/1~11/5는 개편 전 자동 출석으로 받았다 (마지막 출석 11/5, 5일 연속)
     await kit.setLegacyAttend(id, "20261105", 5);
@@ -334,11 +304,11 @@ function contract(make: () => Kit) {
       if (i < 29) expect(r.earned.monthly).toBe(0);
       streak = r.streak;
     }
-    expect(monthly).toBe(200);
+    expect(monthly).toBe(0);
     expect(streak).toBe(30);
     const cal = await accounts.attendCalendar(id, "202611");
     expect(Object.keys(cal.days)).toHaveLength(30);
-    expect(cal.monthBonus).toBe(200);
+    expect(cal.monthBonus).toBe(0);
   });
 
   // ── 출석 구간 코디 보상 (lib/attendTiers.ts) ──
@@ -483,15 +453,16 @@ function contract(make: () => Kit) {
     }
   });
 
-  it("관리자 포인트 조정: 0~지갑 상한(BALANCE_CAP)으로 자르고 하루 적립 한도와 무관, 없는 계정은 null", async () => {
+  it("관리자 포인트 조정: 0~지갑 상한(WALLET_MAX)으로 자르고 횟수 규칙과 무관, 없는 계정은 null", async () => {
     const id = newId();
     expect(await accounts.adjustPoints(id, 100)).toBeNull();
     await accounts.earn(id, "flower", DAY);
     expect(await accounts.adjustPoints(id, 500)).toBe(502);
     expect(await accounts.adjustPoints(id, -BALANCE_CAP)).toBe(0);
     expect(await accounts.adjustPoints(id, BALANCE_CAP - 1)).toBe(BALANCE_CAP - 1);
-    expect(await accounts.adjustPoints(id, BALANCE_CAP)).toBe(BALANCE_CAP);
-    expect(await accounts.adjustPoints(id, 50)).toBe(BALANCE_CAP);
+    expect(await accounts.adjustPoints(id, BALANCE_CAP)).toBe(2 * BALANCE_CAP - 1);
+    await kit.setPoints(id, WALLET_MAX - 10);
+    expect(await accounts.adjustPoints(id, 50)).toBe(WALLET_MAX);
     expect((await accounts.get(id, DAY, 0)).todayEarned).toBe(2);
   });
 
@@ -522,8 +493,8 @@ function contract(make: () => Kit) {
     expect(await accounts.refund(id, 30, "housing:refund", 0)).toBe(70);
     expect(await accounts.get(id, DAY, 0)).toMatchObject({ points: 70, lifetimePoints: 100, todayEarned: 100 });
     expect((await accounts.pointRank(1000, id)).mine?.points).toBe(100);
-    await kit.setPoints(id, BALANCE_CAP - 5);
-    expect(await accounts.refund(id, 50, "housing:refund", 0)).toBe(BALANCE_CAP);
+    await kit.setPoints(id, WALLET_MAX - 5);
+    expect(await accounts.refund(id, 50, "housing:refund", 0)).toBe(WALLET_MAX);
   });
 
   it("포인트 쓰기: 20번 동시에 써도 잔액만큼만, 음수가 되지 않는다", async () => {
@@ -534,21 +505,21 @@ function contract(make: () => Kit) {
     expect((await accounts.get(id, DAY, 0)).points).toBe(10);
   });
 
-  it("같은 IP라도 계정마다 항목 한도를 다 받는다 (11/18 IP 합계 한도 없앰)", async () => {
+  it("같은 IP라도 계정마다 다 받는다 (11/18 IP 합계 한도 없앰)", async () => {
     const ip = `ip-${nanoid(6)}`;
     const got = [];
-    for (let i = 0; i < 6; i++) got.push(await accounts.earn(newId(), "hunt", DAY, { amount: HUNT_MAX, ipHash: ip }));
-    expect(got).toEqual(Array<number>(6).fill(HUNT_MAX));
+    for (let i = 0; i < 6; i++) got.push(await accounts.earn(newId(), "hunt", DAY, { amount: 1200, ipHash: ip }));
+    expect(got).toEqual(Array<number>(6).fill(1200));
   });
 
-  it("머무르기: 9.5분 간격, 하루 60점까지", async () => {
+  it("머무르기: 9.5분 간격, 11/19부터 하루 한도 없음 (예전 60점을 넘는다)", async () => {
     const id = newId();
     const t0 = 1_000_000_000;
     expect(await accounts.presence(id, DAY, t0)).toBe(5);
     expect(await accounts.presence(id, DAY, t0 + PRESENCE_MIN_GAP_MS - 1)).toBeNull();
     let total = 5;
-    for (let i = 1; i <= 13; i++) total += (await accounts.presence(id, DAY, t0 + i * PRESENCE_MIN_GAP_MS)) ?? 0;
-    expect(total).toBe(60);
+    for (let i = 1; i <= 19; i++) total += (await accounts.presence(id, DAY, t0 + i * PRESENCE_MIN_GAP_MS)) ?? 0;
+    expect(total).toBe(100);
   });
 
   it("머무르기 몰아서 정산: 같은 화면(sid)이면 흐른 시간만큼(최대 3번), 새 화면·sid 없음·오래 끊김은 1번", async () => {
@@ -567,14 +538,14 @@ function contract(make: () => Kit) {
     expect(await accounts.presenceTick(id, DAY, t0 + 190 * MIN, "sidBBBBB2")).toMatchObject({ ticks: 1, stayTicks: 7 });
     // sid 없음(옛 화면)도 1번
     expect(await accounts.presenceTick(id, DAY, t0 + 220 * MIN)).toMatchObject({ ticks: 1, stayTicks: 8 });
-    // 하루 한도(60점)는 몰아서 받아도 넘지 않는다
+    // 몰아서 받아도 센 기록만큼 다 받는다 (11/19 하루 한도 없음), 응답의 오늘 합계도 같이
     const id2 = newId();
     let t = t0;
     expect(await accounts.presenceTick(id2, DAY, t, "sidCCCCC3")).not.toBeNull();
     let points = 5;
-    for (let i = 0; i < 6; i++) points += (await accounts.presenceTick(id2, DAY, (t += 30 * MIN), "sidCCCCC3"))?.earned ?? 0;
-    expect(points).toBe(60);
-    expect((await accounts.presenceTick(id2, DAY, (t += 30 * MIN), "sidCCCCC3"))?.stayTicks).toBe(22); // 머문 기록은 한도와 별개로 센다
+    for (let i = 0; i < 7; i++) points += (await accounts.presenceTick(id2, DAY, (t += 30 * MIN), "sidCCCCC3"))?.earned ?? 0;
+    expect(points).toBe(110);
+    expect(await accounts.presenceTick(id2, DAY, (t += 30 * MIN), "sidCCCCC3")).toMatchObject({ earned: 15, stayTicks: 25, todayEarned: 125 });
   });
 
   it("presenceCatchup 규칙 (Lua와 같은 계산)", () => {
@@ -609,13 +580,13 @@ function contract(make: () => Kit) {
     expect(await accounts.get(id, DAY, 0)).toMatchObject({ bonusClaimed: 3, stayTicks: 9 });
   });
 
-  it("접속 보너스: 하루 145P(7구간)까지, 동시에 눌러도 한 번만, 한국 시간 자정에 처음부터", async () => {
+  it("접속 보너스: 7구간(145P)을 넘어 계속 25P씩, 동시에 눌러도 한 번만, 새 날에 처음부터", async () => {
     const id = newId();
-    let t = await stayTicks(id, DAY, 1_000_000_000, 30); // 5시간
+    let t = await stayTicks(id, DAY, 1_000_000_000, 30); // 5시간 = 10구간
     const many = await Promise.all(Array.from({ length: 5 }, () => accounts.claimStayBonus(id, DAY)));
-    expect(many.filter(Boolean)).toEqual([{ earned: 145, count: 7 }]);
+    expect(many.filter(Boolean)).toEqual([{ earned: 145 + 3 * 25, count: 10 }]);
     t = await stayTicks(id, DAY, t, 3);
-    expect(await accounts.claimStayBonus(id, DAY)).toBeNull();
+    expect(await accounts.claimStayBonus(id, DAY)).toEqual({ earned: 25, count: 1 });
     // 다음 날: 머문 기록·받은 구간이 0부터
     const next = "20261109";
     expect(await accounts.get(id, next, 0)).toMatchObject({ bonusClaimed: 0, stayTicks: 0 });
@@ -624,21 +595,19 @@ function contract(make: () => Kit) {
     expect(await accounts.claimStayBonus(id, next)).toEqual({ earned: 10, count: 1 });
   });
 
-  it("접속 보너스: 하루 전체 한도와 별개 — 다 찬 뒤에도 받고, _total에도 더하지 않는다", async () => {
+  it("접속 보너스: 오늘 합계(_total)에 더하지 않는다, 지갑 상한은 그대로", async () => {
     const id = newId();
-    await fillDay(id);
-    const t = await stayTicks(id, DAY, 1_000_000_000, 3); // 머무르기는 이미 한도라 더 안 쌓인다
+    const t = await stayTicks(id, DAY, 1_000_000_000, 3);
+    const before = (await accounts.get(id, DAY, 0)).todayEarned;
     expect(await accounts.claimStayBonus(id, DAY)).toEqual({ earned: 10, count: 1 });
     expect(await accounts.claimStayBonus(id, DAY)).toBeNull();
-    expect((await accounts.get(id, DAY, 0)).todayEarned).toBe(DAILY_EARN_CAP);
-    // 나머지 6구간도 그대로 → 보너스 하루 145P
     await stayTicks(id, DAY, t, 18);
     expect(await accounts.claimStayBonus(id, DAY)).toEqual({ earned: 135, count: 6 });
-    expect((await accounts.get(id, DAY, 0)).todayEarned).toBe(DAILY_EARN_CAP);
+    expect((await accounts.get(id, DAY, 0)).todayEarned).toBe(before + 18 * 5);
     // 지갑 상한은 그대로 적용
     const rich = newId();
     await stayTicks(rich, DAY, 1_000_000_000, 3);
-    await kit.setPoints(rich, BALANCE_CAP - 3);
+    await kit.setPoints(rich, WALLET_MAX - 3);
     expect(await accounts.claimStayBonus(rich, DAY)).toEqual({ earned: 3, count: 1 });
   });
 
@@ -874,7 +843,8 @@ function contract(make: () => Kit) {
     await accounts.earn(a, "flower", "20261116");
     const mine = (await accounts.pointRank(10_000, a, week)).mine;
     expect(mine?.points).toBe(2 + 2 + 5);
-    expect((await accounts.pointRank(10_000, b, week)).mine?.points).toBe(20 + 10);
+    // 11/19 출석은 포인트 0 (사냥 아이템으로)
+    expect((await accounts.pointRank(10_000, b, week)).mine?.points).toBe(20);
     expect((await accounts.pointRank(10_000, a, weekOfDay("20261116"))).mine?.points).toBe(2);
     expect((await accounts.pointRank(10_000, a)).mine?.points).toBe(11); // 전체 = 모은 포인트
     const { rows } = await accounts.pointRank(10_000, null, week);
@@ -883,67 +853,14 @@ function contract(make: () => Kit) {
     expect(rb.rank).toBeLessThan(ra.rank);
   });
 
-  // 11/17 주간 레이스 1위 1주일 혜택 (lib/champPerks): %는 이벤트 배수에 더하고, 한도는 고정 몫을 더하고, 1위 몫은 주간 레이스에서 뺀다
-  it("1위 혜택: 낚시왕이 이벤트 날 팔면 지갑·오늘 합계는 2.2배, 레이스는 2배만 (한도 750에서 끝 경계까지)", async () => {
+  it("11/19 1위여도 적립은 이벤트 배수만, 받은 만큼 모두 주간 레이스에 든다 (1위 포인트 혜택 없음)", async () => {
     const id = newId();
-    const plain = newId();
     const week = weekOfDay(DAY);
     const boost = { mult: 2, on: ["fish" as const], caps: ["fish" as const] };
-    const sell = (who: string, value: number, champ: ("fish" | "points")[] = ["fish"]) => accounts.earn(who, "fish", DAY, { amount: value, boost, champ });
-    // 판 값 100 → 100 × (2 + 0.2) = 220. 레이스에는 이벤트 몫까지 200
-    expect(await sell(id, 100)).toBe(220);
-    expect(await accounts.get(id, DAY, 0)).toMatchObject({ points: 220, todayEarned: 220, earnedBy: { fish: 220 } });
-    expect((await accounts.pointRank(10_000, id, week)).mine?.points).toBe(200);
-    // 한도 = 300 × 2 + 150 = 750. 220씩 두 번 더 → 660, 레이스 600 (1위가 아닌 사람의 한도와 같다)
-    expect(await sell(id, 100)).toBe(220);
-    expect(await sell(id, 100)).toBe(220);
-    expect((await accounts.pointRank(10_000, id, week)).mine?.points).toBe(600);
-    // 끝 경계: 남은 한도 90만 받고, 늘어난 한도 덕에 받은 몫이라 레이스에는 0
-    expect(await sell(id, 100)).toBe(90);
-    expect(await sell(id, 100)).toBe(0);
-    const a = await accounts.get(id, DAY, 0);
-    expect(a).toMatchObject({ points: 750, todayEarned: 750, lifetimePoints: 750, earnedBy: { fish: 750 } });
-    expect((await accounts.pointRank(10_000, id, week)).mine?.points).toBe(600);
-    // 1위가 아닌 사람: 이벤트 2배, 한도 600, 받은 만큼 모두 레이스
-    for (let i = 0; i < 4; i++) await sell(plain, 100, []);
-    expect(await accounts.get(plain, DAY, 0)).toMatchObject({ points: 600, todayEarned: 600 });
-    expect((await accounts.pointRank(10_000, plain, week)).mine?.points).toBe(600);
-  });
-
-  it("1위 혜택: 이벤트가 없는 날 낚시왕은 1.2배·한도 450, 다른 랭킹 1위는 물고기 혜택 없음", async () => {
-    const id = newId();
-    const other = newId();
-    const week = weekOfDay(DAY);
-    const none = { mult: 1, on: [], caps: [] };
-    expect(await accounts.earn(id, "fish", DAY, { amount: 25, boost: none, champ: ["fish"] })).toBe(30);
-    expect((await accounts.pointRank(10_000, id, week)).mine?.points).toBe(25);
-    // 한도 450: 300을 넘어 받은 몫은 레이스에 들지 않는다 (300 − 25 = 275까지만 더 레이스)
-    expect(await accounts.earn(id, "fish", DAY, { amount: 500, boost: none, champ: ["fish"] })).toBe(420);
-    expect(await accounts.get(id, DAY, 0)).toMatchObject({ points: 450, todayEarned: 450 });
-    expect((await accounts.pointRank(10_000, id, week)).mine?.points).toBe(300);
-    expect(await accounts.earn(other, "fish", DAY, { amount: 25, boost: none, champ: ["points", "huntKills"] })).toBe(25);
-    // 사냥왕: 사냥터 한도 1200 + 300, 1200을 넘은 몫은 레이스 밖
-    expect(await accounts.earn(other, "hunt", DAY, { amount: 1500, boost: none, champ: ["points", "huntKills"] })).toBe(HUNT_MAX + 300);
-    expect((await accounts.pointRank(10_000, other, week)).mine?.points).toBe(25 + HUNT_MAX);
-  });
-
-  it("1위 혜택: 포인트왕 머무르기 +15%(5 → 6P)와 접속 시간 보너스 1.5배, 레이스에는 원래 몫만 (지난주 1위 기록에서 바로)", async () => {
-    const id = newId();
-    const now = Date.now();
-    // 지금 1위 = 지난주 기록 (저장소가 지난주 1위 기록을 읽는다 — 프로세스 캐시에 넣어 둔다. 머무르기 시각이 앞으로 가도 캐시가 남게 마지막 기록 시각으로)
-    primeChampCache({ week: prevWeek(kstWeek(now)), winners: [{ board: "points", accountId: id, name: "포인트왕", value: 1 }], settledAt: now }, now + 3 * PRESENCE_MIN_GAP_MS);
-    const day = kstDay(now);
-    const week = weekOfDay(day);
-    let t = now;
-    for (let i = 0; i < 3; i++) {
-      expect((await accounts.presenceTick(id, day, t))?.earned).toBe(6);
-      t += PRESENCE_MIN_GAP_MS;
-    }
-    expect((await accounts.pointRank(10_000, id, week)).mine?.points).toBe(15);
-    // 첫 구간 10P × 1.5 = 15P, 레이스에는 10P
-    expect(await accounts.claimStayBonus(id, day)).toEqual({ earned: 15, count: 1 });
-    expect(await accounts.get(id, day, 0)).toMatchObject({ points: 18 + 15, todayEarned: 18 });
-    expect((await accounts.pointRank(10_000, id, week)).mine?.points).toBe(15 + 10);
+    expect(await accounts.earn(id, "fish", DAY, { amount: 100, boost })).toBe(200);
+    expect(await accounts.earn(id, "fish", DAY, { amount: 1000, boost })).toBe(2000);
+    expect(await accounts.get(id, DAY, 0)).toMatchObject({ points: 2200, todayEarned: 2200, lifetimePoints: 2200 });
+    expect((await accounts.pointRank(10_000, id, week)).mine?.points).toBe(2200);
   });
 
   it("사냥 기록: 처치 수는 더하고, 최단 클리어는 더 짧을 때만 바뀐다 (전체·주간, 사냥터별)", async () => {

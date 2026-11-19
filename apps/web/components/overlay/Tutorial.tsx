@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { earnRule } from "@/lib/economy";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { meStore } from "@/lib/hooks/useMe";
+import { FIRST_STEPS } from "@/lib/retain";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import styles from "./Tutorial.module.css";
@@ -17,7 +18,7 @@ type Step = { title: string; text: string; point?: Target; waitFor?: "near" | "f
 /**
  * 48번 순서: 이동·앉기·모닥불 → 사냥 → 집 → 상점 → 낚시터 → (묘비는 뒤쪽, 해 보라고 붙잡지 않는다)
  */
-function tutorialSteps(touch: boolean): Step[] {
+function tutorialSteps(touch: boolean, firstSteps: boolean): Step[] {
   return [
     {
       title: "걸어 보기",
@@ -33,7 +34,7 @@ function tutorialSteps(touch: boolean): Step[] {
     { title: "모닥불", text: "모닥불 곁에 앉으면 잠시 불멍을 할 수 있어요. 다른 사람과 같이 앉아도 좋아요.", point: "campfire" },
     {
       title: "사냥터",
-      text: `사냥과 미니게임으로 포인트를 모으는 곳이에요. 하루 ${earnRule("hunt").dailyMax}포인트까지 모아요. ${touch ? "아래 줄 [사냥]" : "왼쪽 아래 [사냥]"}으로도 열 수 있어요.`,
+      text: `사냥과 미니게임으로 포인트를 모으는 곳이에요. ${touch ? "아래 줄 [사냥]" : "왼쪽 아래 [사냥]"}으로도 열 수 있어요.`,
       point: "hunt",
     },
     {
@@ -57,13 +58,19 @@ function tutorialSteps(touch: boolean): Step[] {
       text: `한때 하다 만 것들이 쉬는 곳이에요. 묘비 앞에서 ${touch ? "[살펴보기] 버튼을" : "E를"} 누르면 꽃을 놓을 수 있어요. 꽃 하나에 ${earnRule("flower").points}P예요. 내 묘비도 메뉴에서 하나 세울 수 있어요.`,
       point: "nearestGrave",
     },
-    { title: "이제 자유롭게", text: "이 안내는 ⓘ 안내에서 언제든 다시 볼 수 있어요." },
+    // 11/18 새 계정은 이어서 첫 걸음 체크리스트(components/overlay/RetainHud)로 — 안내 둘이 따로 뜨지 않게 여기서 넘겨 준다
+    firstSteps
+      ? {
+          title: "이제 첫 걸음",
+          text: `${touch ? "위쪽 [첫 걸음]" : "왼쪽 위 첫 걸음"} ${FIRST_STEPS.length}가지를 하나씩 해 보면 할 때마다 포인트를 줘요. 이 안내는 ⓘ 안내에서 다시 볼 수 있어요.`,
+        }
+      : { title: "이제 자유롭게", text: "이 안내는 ⓘ 안내에서 언제든 다시 볼 수 있어요." },
   ];
 }
 
 /** 첫 방문 안내 (1분). 단계마다 월드의 장소를 가리킨다 (waitFor 단계는 실제로 해 보면 넘어간다) */
 export default function Tutorial({ touch, onDone }: { touch: boolean; onDone: () => void }) {
-  const [steps] = useState(() => tutorialSteps(touch));
+  const [steps] = useState(() => tutorialSteps(touch, !!meStore.getSnapshot().me?.retain?.first));
   const [index, setIndex] = useState(0);
   const step = steps[index];
   const last = index === steps.length - 1;

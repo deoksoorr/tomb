@@ -28,10 +28,11 @@ export function tExpToNext(t: number): number {
  * 분기 마감 전날 밤 23,837 · 구조조정 발표 날 27,937 → 평균 25,887 × 0.049 ≈ 1,268 (목표 1,275)
  * 11/17 지옥 EXP 배율을 11 → 4로 낮춰(catalog DIFFS.hell) 판 EXP가 4/11이 됐다 → 배율을 11/4배(0.049 → 0.13475) 올려 초월 EXP는 그대로
  */
-export const TRANSCEND_EXP_MUL = 0.13475;
+// 11/19 초월이 너무 빨라 크게 줄였다: 야근 빌딩 1~100층(층당 1/4)과 같은 비율로 지옥 사냥 초월 EXP도 1/4
+export const TRANSCEND_EXP_MUL = 0.13475 / 4;
 
-/** 초월 5레벨마다 능력치 1포인트 */
-export const transcendStatPoints = (t: number) => Math.floor(Math.max(0, Math.min(TRANSCEND_MAX, Math.floor(t))) / 5);
+/** 11/19 초월 레벨마다 능력치 1포인트 (예전 5레벨마다 1 — 모자란 만큼은 character.normalize가 한 번 채운다) */
+export const transcendStatPoints = (t: number) => Math.max(0, Math.min(TRANSCEND_MAX, Math.floor(t)));
 
 /** 초월 EXP를 더하고 초월 레벨업을 처리한다 (최대면 EXP는 0). statPoints = 이번에 새로 받는 능력치 포인트 */
 export function applyTranscend(t: number, tExp: number, gained: number): { tLevel: number; tExp: number; levelsGained: number; statPoints: number } {

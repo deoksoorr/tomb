@@ -12,6 +12,7 @@ import { approach, cameraBounds, clampZoom, defaultZoom, fitMinZoom, parseStored
 //  - cinematic({x,y,zoom}): 모닥불 불멍 같은 연출 구도. 추적·드래그·휠·핀치를 잠시 멈추고 천천히 그 자리로 미끄러진다.
 //    cinematic(null)이면 원래 줌으로 돌아가며 캐릭터를 다시 따라간다 (연출 줌은 저장하지 않는다)
 //  - setAccent(k): 14번 물속·그네 연출 — 고른 줌에 k배를 살짝 곱한다 (천천히, 저장하지 않음, 연출 구도 중엔 1)
+//  - 11/19 촬영 모드(bridge photo:mode): 왼클릭·한 손가락으로 끌어도 둘러보기, 탭은 받지 않는다. 줌은 저장하지 않고 끝나면 원래 줌·추적으로
 // 입력은 Phaser 입력 시스템이 아닌 캔버스 DOM 포인터 이벤트로 직접 받는다 (오버레이 클릭과 섞이지 않게).
 
 const ZOOM_TAU_MS = 70;
@@ -61,6 +62,8 @@ export class CameraRig {
   /** 14번 연출 확대 배율 (지금 값·목표) */
   private accent = 1;
   private accentGoal = 1;
+  /** 11/19 촬영 모드 중이면 들어갈 때의 줌 (끝나면 돌아간다), 아니면 null */
+  private photo: { zoom: number } | null = null;
 
   constructor(
     scene: Phaser.Scene,
@@ -194,6 +197,22 @@ export class CameraRig {
     this.accentGoal = Number.isFinite(k) ? Math.max(1, Math.min(1.3, k)) : 1;
   }
 
+  /** 11/19 촬영 모드 켜기·끄기: 끄면 들어갈 때의 줌으로 돌아가며 내 캐릭터를 다시 따라간다 */
+  setPhoto(on: boolean): void {
+    if (on === (this.photo !== null)) return;
+    this.tap = null;
+    if (on) {
+      this.photo = { zoom: this.target };
+      return;
+    }
+    const zoom = this.photo!.zoom;
+    this.photo = null;
+    this.rightDrag = null;
+    if (!this.cine) this.target = zoom;
+    this.recenter();
+    this.emitState();
+  }
+
   /** 연출 구도 중인지 */
   get inCinematic(): boolean {
     return this.cine !== null;
@@ -267,6 +286,7 @@ export class CameraRig {
   }
 
   private persist(): void {
+    if (this.photo) return; // 촬영 모드 줌은 저장하지 않는다
     try {
       window.localStorage.setItem(LS_ZOOM, String(this.target));
     } catch {
@@ -337,6 +357,7 @@ export class CameraRig {
       document.removeEventListener("visibilitychange", onVis);
     });
     this.listen("wheel", (e) => this.onWheel(e), { passive: false });
+    this.off.push(bridge.on("photo:mode", ({ on }) => this.setPhoto(on)));
   }
 
   private onDown(e: PointerEvent): void {
@@ -344,7 +365,8 @@ export class CameraRig {
     // 불멍 구도 중엔 우클릭 드래그를 받지 않는다 (탭은 그대로)
     if (this.cine && e.pointerType === "mouse" && e.button !== 0) return;
     if (e.pointerType === "mouse") {
-      if (e.button === 2) {
+      // 촬영 모드: 왼클릭으로 끌어도 둘러보기 (탭으로 걷기·묘비 열기는 없다)
+      if (e.button === 2 || (e.button === 0 && this.photo && !this.cine)) {
         e.preventDefault();
         this.rightDrag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
         this.capture(e.pointerId);
@@ -355,7 +377,7 @@ export class CameraRig {
     }
     this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     this.capture(e.pointerId);
-    if (this.touches.size === 1) this.tap = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() };
+    if (this.touches.size === 1 && !this.photo) this.tap = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() };
     if (this.touches.size === 2) {
       this.tap = null;
       const [a, b] = [...this.touches.values()];
@@ -383,8 +405,14 @@ export class CameraRig {
       return;
     }
 
-    if (!this.touches.has(e.pointerId)) return;
+    const prev = this.touches.get(e.pointerId);
+    if (!prev) return;
     this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    // 촬영 모드: 한 손가락으로 끌어도 둘러보기
+    if (this.photo && !this.cine && this.touches.size === 1) {
+      this.panBy(e.clientX - prev.x, e.clientY - prev.y);
+      return;
+    }
     const p = this.pinch;
     if (p && this.touches.size >= 2 && !this.cine) {
       const [a, b] = [...this.touches.values()];

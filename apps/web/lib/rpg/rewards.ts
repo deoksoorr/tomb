@@ -1,5 +1,5 @@
-import { COSMETIC_DROPS, DIFFS, GEAR, MONSTER_IDS, MONSTERS, STARS_POINTS, timeLimitSec, zoneFor, type Difficulty, type GameKind, type MonsterId } from "./catalog";
-import { clamp, levelPenalty, monsterStats, seeded } from "./formulas";
+import { COSMETIC_DROPS, DIFFS, GEAR, HUNT_ZONES, MONSTER_IDS, MONSTERS, STARS_POINTS, timeLimitSec, ZONE_IDS, zoneFor, type Difficulty, type GameKind, type MonsterId, type ZoneDef } from "./catalog";
+import { clamp, expToNext, levelPenalty, MAX_LEVEL, monsterStats, seeded } from "./formulas";
 import {
   BUG_SCORE,
   bugsCount,
@@ -15,6 +15,7 @@ import {
   starsCount,
   starsPlan,
   WAVE_MIN_GAP_SEC,
+  type HuntWave,
   type StarNote,
   type StarSky,
 } from "./plan";
@@ -73,6 +74,40 @@ export type TicketInfo = {
    */
   dropSeed?: number;
 };
+
+/**
+ * 11/19 레벨업 개편 (사용자 「편하게 노는 게임으로」): 자기 레벨에 맞는 사냥터를 잘 깨면 한 판에 다음 레벨까지 필요한 EXP의 이만큼 (한 판 ≈ 0.5레벨).
+ * 예전엔 잡은 몬스터 EXP를 그대로 줘서 다 깬 판 하나가 1~2.7레벨이었다
+ */
+export const HUNT_LEVEL_SHARE = 0.5;
+
+/** 사냥터 다음(열리는 레벨 순)으로 열리는 사냥터의 레벨. 마지막 사냥터면 최대 레벨 바로 앞 */
+export function zoneTopLevel(zone: Pick<ZoneDef, "unlockLevel">): number {
+  let top = MAX_LEVEL - 1;
+  for (const id of ZONE_IDS) {
+    const u = HUNT_ZONES[id].unlockLevel;
+    if (u > zone.unlockLevel && u < top) top = u;
+  }
+  return top;
+}
+
+/**
+ * 11/19 사냥 판 EXP (레벨 감소·쓰러짐 전): 성적(잡은 몬스터 EXP ÷ 다 잡았을 때 EXP, 0~1) × HUNT_LEVEL_SHARE × 다음 레벨 필요 EXP.
+ * 필요 EXP는 내 레벨 기준이지만 그 사냥터 다음 사냥터가 열리는 레벨(zoneTopLevel)까지만 — 레벨이 오르면 새 사냥터로 가야 계속 절반씩 오른다.
+ * 레벨 50(초월)은 예전 그대로 잡은 몬스터 EXP (초월 EXP는 이 값 × TRANSCEND_EXP_MUL — lib/rpg/endgame)
+ */
+export function huntRunExp(level: number, zone: Pick<ZoneDef, "unlockLevel">, exp: number, fullExp: number): number {
+  if (level >= MAX_LEVEL) return exp;
+  const perf = clamp(exp / Math.max(1, fullExp), 0, 1);
+  return HUNT_LEVEL_SHARE * perf * expToNext(Math.max(1, Math.min(level, zoneTopLevel(zone))));
+}
+
+/** 계획 몬스터를 다 잡았을 때 EXP (정예 보너스 포함, 졸개·분열은 빼고) */
+export function huntFullExp(plan: HuntWave[], d: Difficulty, power: number): number {
+  let exp = 0;
+  for (const w of plan) for (const m of w.monsters) exp += monsterStats(m, d, power).exp;
+  return exp + eliteBonusExp(plan, plan.length, d, power);
+}
 
 /** 별자리 잇기에서 검증을 통과한 완성 별자리 (무리 번호·별자리 id·완벽으로만 이었는지) */
 export type StarsDone = { group: number; id: string; perfect: boolean };
@@ -145,7 +180,8 @@ function evalHunt(t: TicketInfo, r: HuntResult, eff: number, serverElapsedMs: nu
   // 같은 난이도에서 뒤에 열리는 사냥터는 포인트도 조금 더 (power 1.3 → ×1.15)
   let points = total > 0 ? D.huntPoints * (1 + (zone.power - 1) / 2) * (0.15 + 0.85 * (cleared ? 1 : progress)) : 0;
   // 11/15: EXP 감소 기준은 그 사냥터가 열리는 레벨 (야근 빌딩은 층마다 정해진 초월 EXP — lib/rpg/tower)
-  let xp = exp * levelPenalty(t.level, t.difficulty, zone);
+  // 11/19: 판 EXP는 성적 × 다음 레벨 필요 EXP의 절반 (huntRunExp — 레벨 50은 예전 그대로)
+  let xp = huntRunExp(t.level, zone, exp, huntFullExp(plan, t.difficulty, zone.power)) * levelPenalty(t.level, t.difficulty, zone);
   if (r.died) {
     points *= 0.5;
     xp *= 0.7;

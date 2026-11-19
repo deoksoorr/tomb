@@ -36,7 +36,7 @@ function fromInput(v: string): number | null {
 
 /**
  * 포인트 배수 이벤트 탭: 늘릴 항목(전부 또는 골라서)·배수·끝나는 시각(한국 시간)을 정해 켜고 끈다.
- * 고른 항목은 적립과 그 항목 하루 한도가 배수가 되고, 하루 전체 한도는 늘어난 몫만큼 늘어난다. 규칙은 lib/pointEvent.ts
+ * 고른 항목은 적립이 배수가 된다 (횟수 규칙이 남은 항목은 하루 최대도). 규칙은 lib/pointEvent.ts
  */
 export default function PointEventPanel({ toast, onAuthLost }: Props) {
   const loaded = usePanelData(() => opsAdminApi.pointEvent(), [], toast, onAuthLost);
@@ -103,9 +103,7 @@ export default function PointEventPanel({ toast, onAuthLost }: Props) {
                 ? `지금 켜져 있어요. ${pointEventListText(ev.sources)} ${ev.mult}배예요. ${
                     ev.endAt === null ? "끌 때까지 이어져요." : `${pointEventEndText(ev.endAt, now)}에 저절로 꺼져요.`
                   }`
-                : capsToday
-                  ? "꺼져 있어요. 오늘 늘어난 한도는 새벽 5시까지 그대로예요."
-                  : "꺼져 있어요."}
+                : "꺼져 있어요."}
             </p>
             {ev && (on || capsToday) && (
               <p className={ui.hint}>
@@ -171,9 +169,9 @@ export default function PointEventPanel({ toast, onAuthLost }: Props) {
           </>
         )}
         <p className={ui.hint}>
-          고른 항목은 켜져 있는 동안 적립이 배수로 들어오고, 이벤트가 걸친 날은 그 항목 하루 한도도 배수가 돼요. 하루 전체 한도는 늘어난 만큼만 커져요.
-          끄거나 끝나는 시각이 되면 적립과 한도 모두 바로 원래대로예요. 켜 둔 채 항목에서 빼도 그 항목은 바로 원래대로예요.
-          출석 달력 보상, 선물, 지갑 상한은 그대로예요. 시각은 한국 시간이에요. 켜고 끄고 바꿀 때마다 마을 전체 공지가 나가고, 게임 화면 위 안내 띠도 바로 바뀌어요. 정해 둔 시각에 끝나면 끝 공지도 한 번 나가요.
+          고른 항목은 켜져 있는 동안 적립이 배수로 들어와요. 헌화처럼 하루 횟수가 정해진 항목은 하루 최대도 배수가 돼요.
+          끄거나 끝나는 시각이 되면 바로 원래대로예요. 켜 둔 채 항목에서 빼도 그 항목은 바로 원래대로예요.
+          출석 달력 보상과 선물은 그대로예요. 시각은 한국 시간이에요. 켜고 끄고 바꿀 때마다 마을 전체 공지가 나가고, 게임 화면 위 안내 띠도 바로 바뀌어요. 정해 둔 시각에 끝나면 끝 공지도 한 번 나가요.
         </p>
       </div>
     </section>

@@ -17,6 +17,10 @@ export const LTEX = {
   heart: "life-heart",
   streak: "life-streak",
   zzz: "life-zzz",
+  /** 11/19 황금 고블린 강조: 둘레 금빛 후광 · 잡았을 때 튀는 금화 · 화면 밖일 때 가장자리 화살표 */
+  goblinHalo: "life-goblin-halo",
+  coin: "life-coin",
+  goblinEdge: "life-goblin-edge",
 } as const;
 
 export type CatFrame = "walk0" | "walk1" | "sit" | "loaf" | "groom" | "sleep";
@@ -479,8 +483,52 @@ function streak(): HTMLCanvasElement {
   return canvas;
 }
 
+/** 11/19 고블린 둘레 금빛 후광 (40×40, 가운데가 밝은 둥근 빛 — ADD로 겹친다) */
+function goblinHalo(): HTMLCanvasElement {
+  const { canvas, ctx } = makeCanvas(40, 40);
+  const grad = ctx.createRadialGradient(20, 20, 0, 20, 20, 20);
+  grad.addColorStop(0, "rgba(255,236,150,0.85)");
+  grad.addColorStop(0.35, "rgba(255,206,84,0.45)");
+  grad.addColorStop(1, "rgba(255,180,40,0)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 40, 40);
+  return canvas;
+}
+
+/** 11/19 금화 (8×8): 금빛 동전 + 반짝 + 가운데 홈 */
+function coin(): HTMLCanvasElement {
+  const g = new Grid(8, 8);
+  g.ellipse(4, 4, 3.2, 3.2, 0xf2c14e);
+  g.recolor((x, y) => x + y >= 9, 0xd09a2c);
+  g.vline(4, 2, 5, 0xb07a1c);
+  g.set(2, 2, 0xfff4c0);
+  g.set(3, 2, 0xffe48a);
+  g.set(2, 3, 0xffe48a);
+  g.outline(0x6a4512);
+  return g.toCanvas();
+}
+
+/** 11/19 화면 밖 고블린 쪽을 가리키는 가장자리 화살표 (오른쪽을 가리킨다, 15×15, 금빛 + 진한 테) */
+function goblinEdge(): HTMLCanvasElement {
+  const g = new Grid(15, 15);
+  const gold = 0xffd24a;
+  const hi = 0xfff4b8;
+  g.rect(1, 5, 7, 5, gold);
+  for (let i = 0; i < 7; i++) g.vline(7 + i, 1 + i, 13 - i, gold);
+  g.hline(1, 7, 6, hi);
+  for (let i = 0; i < 5; i++) g.set(8 + i, 2 + i, hi);
+  g.outline(0x4a2c08);
+  return g.toCanvas();
+}
+
 export function ensureLifeTextures(scene: Phaser.Scene): void {
   const tx = scene.textures;
+  // 11/19 고블린 강조 그림 (예전에 올린 텍스처가 있어도 이것만 따로 올린다)
+  if (!tx.exists(LTEX.coin)) {
+    tx.addCanvas(LTEX.goblinHalo, goblinHalo());
+    tx.addCanvas(LTEX.coin, coin());
+    tx.addCanvas(LTEX.goblinEdge, goblinEdge());
+  }
   if (tx.exists(LTEX.telescope)) return;
   for (let v = 0; v < CAT_VARIANTS; v++) for (const f of CAT_FRAMES) tx.addCanvas(LTEX.cat(v, f), cat(v, f));
   for (let v = 0; v < DOG_VARIANTS; v++) for (const f of DOG_FRAMES) tx.addCanvas(LTEX.dog(v, f), dog(v, f));

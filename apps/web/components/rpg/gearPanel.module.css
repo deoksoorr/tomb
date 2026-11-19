@@ -322,6 +322,16 @@
   color: var(--bone);
 }
 
+/* 11/19 숨겨진 5세트 효과: 발견 전에는 「???」만, 발견하면 이름이 금빛 */
+.setFx [data-egg="hidden"] {
+  letter-spacing: 1px;
+}
+
+.setFx [data-egg="known"] b {
+  color: #ffd76a;
+  font-weight: 400;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -607,4 +617,33 @@ dd .enhPart {
     transform: none;
     opacity: 1;
   }
+}
+
+/* 11/19 강화 승계: 재료 → 승계 뒤 기본 능력치 비교 */
+.inheritCmp {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.inheritCmp th,
+.inheritCmp td {
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  font-weight: 400;
+}
+
+.inheritCmp th:first-child {
+  text-align: left;
+  color: var(--muted);
+}
+
+.inheritCmp thead th {
+  color: var(--muted);
+}
+
+.inheritCmp td[data-up] {
+  color: var(--good, #8fd39a);
 }

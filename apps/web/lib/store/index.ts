@@ -7,9 +7,7 @@ import { HttpError, notFound } from "../http";
 import { PASSED_RECENT_MS, type ActivityItem, type Grave, type GraveListResponse, type Me, type PublicGrave } from "../types";
 import { kstDay, loadMe } from "./accounts";
 import { isGraveId } from "../validate";
-import type { ChampBoard } from "@tomb/protocol";
-import { earnTerms, paidOfTerms } from "../champPerks";
-import type { EarnBoost } from "../pointEvent";
+import { paidOf, pointsMult, type EarnBoost } from "../pointEvent";
 import { MemoryAccounts } from "./accounts-memory";
 import { RedisAccounts } from "./accounts-redis";
 import { MemoryStore } from "./memory";
@@ -19,14 +17,13 @@ import { MemoryGifts, RedisGifts, type GiftStore } from "./gifts";
 import { MemoryFriends, RedisFriends, type FriendStore } from "./friends";
 import { MemoryMegaphone, RedisMegaphone, type MegaphoneStore } from "./megaphone";
 import { MemoryNotices, RedisNotices, type NoticeStore } from "./notices";
-import { champBoardsSafe } from "./champ";
 import { earnBoost } from "./pointEvent";
 import { MemoryWishDay, RedisWishDay, type WishDayStore } from "./wishDay";
 import { MemoryBbqDay, RedisBbqDay, type BbqDayStore } from "./bbqDay";
 import { MemoryLottery, RedisLottery, type LotteryStore } from "./lottery";
 import { RedisStore } from "./redis";
 import { passAtOf } from "./passing";
-import type { AccountStore, GraveRecord, GraveSettings, GraveStore } from "./types";
+import type { AccountStore, GraveRecord, GraveSettings, GraveStore, QuestHook } from "./types";
 
 export type { AccountStore, GraveRecord, GraveStore } from "./types";
 
@@ -60,27 +57,36 @@ export function getStore(): GraveStore {
   return g.__tombStore;
 }
 
+/** 11/19 로컬 개발: .env.local DEV_STAFF_CODE면 같은 코드·같은 id의 운영자 계정을 늘 맞춘다 (lib/devStaffSeed — 저장소마다 한 번, 운영·테스트에서는 아무것도 안 한다) */
+function seedDevStaff(accounts: AccountStore): void {
+  if (process.env.DEV_STAFF_CODE && !process.env.VITEST) void import("../devStaffSeed").then((m) => m.ensureDevStaff(accounts)).catch(() => undefined);
+}
+
 /** 계정 저장소 (묘비 저장소와 같은 백엔드). 로컬 계정은 꾸미기를 놓을 때 MemoryStore를 같이 바꾼다 */
 export function getAccounts(): AccountStore {
   const cur = g.__tombAccounts;
   const conn = env.redis();
   if (conn) return cur instanceof RedisAccounts ? cur : (g.__tombAccounts = new RedisAccounts(conn));
   getStore(); // 운영에서 Redis가 없으면 여기서 실패한다
-  if (cur instanceof MemoryAccounts) return cur;
+  if (cur instanceof MemoryAccounts) {
+    seedDevStaff(cur);
+    return cur;
+  }
   const fresh = new MemoryAccounts(() => getStore() as MemoryStore);
   g.__tombAccounts = cur ? Object.assign(fresh, cur, { graves: () => getStore() as MemoryStore }) : fresh;
+  seedDevStaff(g.__tombAccounts);
   return g.__tombAccounts;
 }
 
 // ── 계정 포인트 공용 함수 (사냥터·하우징 등 다른 기능이 쓴다) ──
 
 /**
- * 포인트 적립. 항목별 하루 한도(EARN_RULES)·하루 전체 한도·지갑 한도 안에서만 쌓이고, 한 번에 원자적으로 반영된다.
- * amount를 주지 않으면 항목 기본 점수. 11/18 같은 IP 합계 한도는 없앴다 (회사·집에서 여럿이 한 IP로 한다).
- * 모은 포인트(lifetimePoints)·포인트 랭킹도 같이 오른다. earned = 실제로 쌓인 점수 (한도면 0).
+ * 포인트 적립. 한 번에 원자적으로 반영된다. 11/19부터 놀아서 버는 항목은 하루 한도가 없고, 횟수 규칙이 남은 항목(헌화 등 — EARN_RULES)과
+ * 지갑 상한(WALLET_MAX, 사실상 없음)만 본다. amount를 주지 않으면 항목 기본 점수. 11/18 같은 IP 합계 한도는 없앴다.
+ * 모은 포인트(lifetimePoints)·포인트 랭킹도 같이 오른다. earned = 실제로 쌓인 점수 (횟수 규칙에 막히면 0).
  * 포인트 배수 이벤트 중(그 항목을 골랐을 때)이면 earned는 늘어난 점수다. paid = 그게 amount로 얼마어치인지 (이벤트가 아니면 earned와 같다) —
- * 값 단위로 한도를 계산해 못 받은 만큼을 되돌리는 쪽(낚시·채집 팔기 등)은 paid를 쓴다. 그런 쪽은 미리 읽은 boost를 넘겨 같은 배수로 맞춘다.
- * 11/17 1위 혜택(낚시왕 판매 +20% 등)도 같은 배수에 더해진다 — champ를 주면 그 자격으로, 없으면 지난주 1위 기록을 읽는다 (lib/champPerks)
+ * 값 단위로 못 받은 만큼을 되돌리는 쪽(낚시·채집 팔기 등)은 paid를 쓴다. 그런 쪽은 미리 읽은 boost를 넘겨 같은 배수로 맞춘다.
+ * 11/19 1위 혜택의 포인트 몫(낚시왕 판매 +20% 등)은 없앴다 — 적립마다 1위 기록을 읽지 않는다
  */
 export async function earnPoints(
   accountId: string,
@@ -88,9 +94,9 @@ export async function earnPoints(
   amount?: number,
   ip?: string,
   boost?: EarnBoost,
-  champ?: readonly ChampBoard[],
+  quest?: QuestHook | null,
 ): Promise<{ earned: number; paid: number; me: Me }> {
-  const r = await earnPointsOnly(accountId, source, amount, ip, boost, champ);
+  const r = await earnPointsOnly(accountId, source, amount, ip, boost, quest);
   return { ...r, me: await loadMe(getAccounts(), accountId) };
 }
 
@@ -104,12 +110,13 @@ export async function earnPointsOnly(
   amount?: number,
   ip?: string,
   boost?: EarnBoost,
-  champ?: readonly ChampBoard[],
+  /** 11/18 오늘의 할 일 진행 (lib/retainQuest — 같은 적립 스크립트에서 +1) */
+  quest?: QuestHook | null,
 ): Promise<{ earned: number; paid: number }> {
   const now = Date.now();
-  const [b, c] = await Promise.all([boost ?? earnBoost(now), champ ?? champBoardsSafe(accountId, now)]);
-  const earned = await getAccounts().earn(accountId, source, kstDay(now), { amount, ipHash: ip, boost: b, champ: c });
-  return { earned, paid: paidOfTerms(earned, amount ?? earnRule(source).points, earnTerms(b, source, c)) };
+  const b = boost ?? (await earnBoost(now));
+  const earned = await getAccounts().earn(accountId, source, kstDay(now), { amount, ipHash: ip, boost: b, quest });
+  return { earned, paid: paidOf(earned, amount ?? earnRule(source).points, pointsMult(b, source)) };
 }
 
 /**
@@ -126,8 +133,8 @@ export async function spendPoints(accountId: string, amount: number, reason: str
 }
 
 /**
- * 포인트 돌려주기 (되팔기·결제 뒤 실패 보상). 적립이 아니라서 하루 적립 한도·모은 포인트·랭킹과 무관하고,
- * 지갑 상한에서 잘린다. reason은 계정의 최근 사용 기록에 남는다.
+ * 포인트 돌려주기 (되팔기·결제 뒤 실패 보상). 적립이 아니라서 횟수 규칙·모은 포인트·랭킹과 무관하고,
+ * 지갑 상한(WALLET_MAX)에서 잘린다. reason은 계정의 최근 사용 기록에 남는다.
  */
 export async function refundPoints(accountId: string, amount: number, reason: string): Promise<Me> {
   if (!Number.isInteger(amount) || amount <= 0) throw new Error(`[points] 잘못된 환불량 ${amount}`);

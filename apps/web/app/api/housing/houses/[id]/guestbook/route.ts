@@ -23,8 +23,8 @@ export const POST = handler<{ id: string }>(async (req, { id }) => {
   await rateLimit("reaction", req, visitorId);
   const store = getHouseStore();
   const me = await myBrief(visitorId);
-  await postGuest(store, id, visitorId, me.name ?? "지나가던 유령", text);
+  const tick = await postGuest(store, id, visitorId, me.name ?? "지나가던 유령", text);
   const h = await store.get(id);
   if (h) await pushActivity(h.owner, { kind: "guestbook", actorId: visitorId, targetId: id, targetName: h.name });
-  return json<GuestbookResponse>({ entries: await guestView(store, id, visitorId) }, { status: 201 });
+  return json<GuestbookResponse>({ entries: await guestView(store, id, visitorId), ...tick }, { status: 201 });
 });

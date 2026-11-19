@@ -12,3 +12,9 @@ export function tipAlignOf(areas: string, area: string): "start" | "center" | "e
   }
   return "center";
 }
+
+/** 11/19 칸 이름 → 말풍선 위·아래: 맨 윗줄 칸(머리·목 등)은 위로 띄우면 창 위쪽에 잘려서 아래로 */
+export function tipPlaceOf(areas: string, area: string): "above" | "below" {
+  const rows = [...areas.matchAll(/"([^"]+)"/g)].map((m) => m[1].trim().split(/\s+/));
+  return rows.length > 1 && rows[0].includes(area) ? "below" : "above";
+}

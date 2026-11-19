@@ -188,8 +188,8 @@ const GLOBAL_CALLBACKS = ["onMegaphone", "onMegaPin", "onMeStale", "onFriend", "
 const MAP_REPLY_MS = 4000;
 /** 맵 옮기기 답이 없을 때 다시 보내는 횟수 (서버는 맵 요청을 1초에 한 번만 받는다 — MAP_REPLY_MS 간격이면 넉넉하다) */
 const MAP_RETRIES = 2;
-/** 맵을 옮기는 중에 버리는 옛 맵 소식 (사람·자리·몸짓·말풍선) */
-const OLD_MAP_EVENTS = new Set(["join", "leave", "seat", "emote", "graveEvent", "look", "act", "say", "emo", "chat", "mood", "ride", "rod", "away", "firework", "peers", "goblin", "goblinGone", "goblinCaught", "chatLog", "bbq", "snowman", "snowmanGone", "snowHold", "snowStack", "snowStackGone", "snowball", "snowHit"]);
+/** 맵을 옮기는 중에 버리는 옛 맵 소식 (사람·자리·몸짓·말풍선). 11/19 goblinCaught는 채널 모두에게 오는 소식이라 버리지 않는다 */
+const OLD_MAP_EVENTS = new Set(["join", "leave", "seat", "emote", "graveEvent", "look", "act", "say", "emo", "chat", "mood", "ride", "rod", "away", "firework", "peers", "goblin", "goblinGone", "chatLog", "bbq", "snowman", "snowmanGone", "snowHold", "snowStack", "snowStackGone", "snowball", "snowHit"]);
 
 export type NetOptions = { name: string; color: string; channel: number | "auto"; debug?: boolean; body?: string };
 
@@ -995,9 +995,14 @@ export class RealtimeClient {
         case "goblinGone":
           this.h.onGoblinGone?.(m.id);
           break;
-        case "goblinCaught":
-          this.h.onGoblinCaught?.(m.id, m.sid, String(m.name ?? ""), Number(m.points) || 0);
+        case "goblinCaught": {
+          const points = Number(m.points) || 0;
+          const name = String(m.name ?? "");
+          this.h.onGoblinCaught?.(m.id, m.sid, name, points);
+          // 11/19 누가 잡았는지는 어느 장면(마을·캠핑장·바닷가)이든 띠·채팅 소식으로 (GoblinClaim이 고블린 id로 한 번만 보인다)
+          if (typeof m.id === "string") bridge.emit("goblin:caught", { id: m.id, name, points, mine: m.sid === this.mySid });
           break;
+        }
         case "goblinGrant":
           if (typeof m.grant === "string") this.cb.onGoblinGrant?.(m.id, m.grant, Number(m.points) || 0);
           break;

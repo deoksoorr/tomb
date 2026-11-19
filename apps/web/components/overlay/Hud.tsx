@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { QueueStatus } from "@tomb/protocol";
 import { onTideShift, tideText } from "@/game/sea/tideClock";
 import { bridge, type NetMode } from "@/game/bridge";
-import { PHASE_LABELS, WEATHER_LABELS } from "@/lib/ambience";
+import { skyLabel, WEATHER_LABELS } from "@/lib/ambience";
 import { useAmbience } from "@/lib/hooks/useAmbience";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { hudPlace } from "@/lib/placeName";
@@ -50,7 +50,7 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
       mode === "online" && channel !== null
         ? `${channel}채널 ${status?.count}/${status?.cap}`
         : MODE_TEXT[mode === "online" ? "connecting" : mode];
-    const sky = ambience ? ` · ${PHASE_LABELS[ambience.phase]}·${WEATHER_LABELS[ambience.weather]}` : "";
+    const sky = ambience ? ` · ${skyLabel(ambience)}·${WEATHER_LABELS[ambience.weather]}` : "";
     const tideLine = tide ? <span className={cx(ui.top, styles.tide, styles.tideCompact)} role="status">{tide}</span> : null;
     // 이벤트 띠는 바 아래에 띄운다 (바의 배치에 끼지 않는다)
     const line = mode === "online" && channel !== null ? (
@@ -98,7 +98,7 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
             {/* 11/17 r2 긴급: 시간·날씨를 다시 채널 줄 안으로 한 줄 (아래 줄로 내렸더니 긴급 의뢰 띠를 가렸다) */}
             {ambience && (
               <span className={styles.ambience} title="한국 시간 기준">
-                {` · ${PHASE_LABELS[ambience.phase]} · ${WEATHER_LABELS[ambience.weather]}`}
+                {` · ${skyLabel(ambience)} · ${WEATHER_LABELS[ambience.weather]}`}
               </span>
             )}
             <span className="visually-hidden">, 채널 이동</span>
@@ -111,7 +111,7 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
         )}
         {mode !== "online" && ambience && (
           <span className={cx(ui.top, styles.ambience)} title="한국 시간 기준">
-            {PHASE_LABELS[ambience.phase]} · {WEATHER_LABELS[ambience.weather]}
+            {skyLabel(ambience)} · {WEATHER_LABELS[ambience.weather]}
           </span>
         )}
       </div>

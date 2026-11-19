@@ -1,20 +1,26 @@
 import GuidePage from "../guide/GuidePage";
+import { FIRST_REWARD, FIRST_STEPS, PATH as GIFT_PATH, PATH_NAME, PATH_WEAR_DAYS, TODO_BONUS_GIFT, TODO_COUNT, TODO_GIFT, TODO_PROT_EVERY } from "@/lib/retain";
+import { calendarRewards } from "@/lib/calendar";
+import { DAY_RESET_TEXT } from "@/lib/gameDay";
+import { SG_ENH_MAX } from "@/lib/rpg/setGear";
+import { rewardText } from "@/lib/rewardText";
 import guide from "../guide/guide.module.css";
 import { pageMetadata } from "../seo";
+import { SG_CHEST_CHANCE } from "@/lib/rpg/setGearRoll";
 import { ATTEND_RULE_TEXT } from "@/lib/attendStay";
 import { ATTEND_TIER_GUIDE } from "@/lib/attendTiers";
-import { DAILY_EARN_CAP, earnRule } from "@/lib/economy";
-import { CHAT_HISTORY_MS, CHAT_MAX, CHAT_STORE_MAX, DEFAULT_CHANNEL_CAPACITY, DEFAULT_MAX_CHANNELS, FRIEND_MAX, NAME_MAX, NAME_MIN, PERMANENT_MULTIPLIER } from "@tomb/protocol";
-import { AUTO_FISH_DAILY_MAX, AUTO_FISH_EVERY_MS, AUTO_FISH_MAX_MS } from "@/lib/forage/auto";
-import { DAILY_CATCH_MAX } from "@/lib/forage/catalog";
+import { earnRule } from "@/lib/economy";
+import { CHAT_HISTORY_MS, CHAT_MAX, CHAT_STORE_MAX, DEFAULT_CHANNEL_CAPACITY, DEFAULT_MAX_CHANNELS, FRIEND_MAX, NAME_MAX, NAME_MIN, PERMANENT_MULTIPLIER, PET_PRICE_UP, PET_RIDE_PRICE_UP } from "@tomb/protocol";
+import { AUTO_FISH_MAX_MS, AUTO_PACE_NOTE } from "@/lib/forage/auto";
 import { DORMANT_DAYS } from "@/lib/store/types";
 import { RESIDENTS } from "@/game/world/life/residentData";
 import { DYE_SPECIAL_BONUS, LOOK_SCORE_DIVISOR } from "@/lib/lookScore";
-import { STAY_BONUS_DAILY_MAX } from "@/lib/stayBonus";
+import { STAY_BONUS_EVERY_MINUTES } from "@/lib/stayBonus";
 import { DEFAULT_PASS_DAYS, PRESENCE_INTERVAL_MS } from "@/lib/types";
 import { env } from "@/lib/env";
 import { PIONEER_DAYS, PIONEER_FLOOR } from "@/lib/rpg/endgame";
 import { MAX_LEVEL } from "@/lib/rpg/formulas";
+import { CURSES, TOWER_CHECKPOINT_EVERY, TOWER_CHEST_FROM, TOWER_LOW_CHECKPOINTS, TOWER_STEEP_FROM } from "@/lib/rpg/tower";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
 import { QUEST_DAILY, QUEST_STAMPS } from "@/lib/forage/quests/catalog";
 
@@ -29,6 +35,8 @@ export const metadata = pageMetadata(PATH, TITLE, DESCRIPTION);
 // 숫자 출처: packages/protocol constants, public/bgm/tracks.json, lib/economy.ts, lib/types.ts, lib/audioLife.ts
 /** 구글 연결은 그 서버에 구글 설정(GOOGLE_CLIENT_ID·SECRET)이 있을 때만 안내한다 (없으면 아직 없는 기능을 말하게 된다) */
 const GOOGLE_ON = !!env.google();
+/** 출석 달력 보상 글귀 (lib/calendar) */
+const CAL = calendarRewards();
 
 const FAQ = [
   {
@@ -66,20 +74,26 @@ const FAQ = [
   {
     q: "포인트는 어떻게 모으나요?",
     // 숫자는 lib/economy.ts·stayBonus.ts에서 읽는다 (값을 바꾸면 답도 같이 바뀐다)
-    a: `접속해 있으면 ${PRESENCE_INTERVAL_MS / 60_000}분마다 ${earnRule("presence").points}포인트가 쌓여요. 다른 창을 보고 있어도 괜찮아요. 출석 도장, 헌화, 사냥터, 미니게임, 물고기와 채집물 팔기로도 모여요. 사냥터는 하루 ${earnRule("hunt").dailyMax}포인트까지예요. 주운 장비와 물약을 되판 포인트도 여기에 들어가요. 마을 곤충 채집은 따로 하루 ${earnRule("bugs").dailyMax}포인트, 별자리 잇기는 하루 ${earnRule("stars").dailyMax}포인트까지예요. 하루 한도는 활동마다 따로라서, 하나를 다 채워도 다른 활동 포인트는 계속 쌓여요. 전부 합치면 하루 ${DAILY_EARN_CAP.toLocaleString("ko-KR")}포인트까지예요. 오래 머물면 받는 접속 시간 보너스(하루 최대 ${STAY_BONUS_DAILY_MAX}포인트)는 이 한도와 상관없어요. 하루 한도와 출석 도장은 한국 시간 새벽 5시에 새로 시작해요.`,
+    a: `접속해 있으면 ${PRESENCE_INTERVAL_MS / 60_000}분마다 ${earnRule("presence").points}포인트가 쌓여요. 다른 창을 보고 있어도 괜찮아요. 헌화, 사냥터, 미니게임, 물고기와 채집물 팔기, 황금 고블린, 첫 걸음 미션과 오늘 미션으로도 모여요. 주운 장비와 물약을 되판 포인트는 사냥터 포인트에 들어가요. 하루 한도는 없어요. 놀수록 계속 쌓여요. 오래 머물면 ${STAY_BONUS_EVERY_MINUTES}분마다 접속 시간 보너스도 받아요. 헌화, 묘비 세우기, 받은 헌화와 좋아요만 하루 횟수가 정해져 있어요. 출석 도장은 한국 시간 새벽 5시에 새로 시작해요.`,
   },
   {
     q: "출석 도장은 어떻게 찍나요?",
     // 숫자는 lib/attendStay.ts·attendTiers.ts·economy.ts에서 읽는다
-    a: `${ATTEND_RULE_TEXT}(다른 창을 봐도 괜찮아요). 출석 달력의 오늘 칸을 누르면 ${earnRule("attend").points}포인트, 7일 연속마다 ${earnRule("streak").points}포인트, 한 달 개근이면 ${earnRule("monthly").points}포인트를 더 받아요. 이번 달 출석 보상: ${ATTEND_TIER_GUIDE}. 받은 코디는 가방의 꾸미기에서 입을 수 있어요.`,
+    // 11/19 출석 보상은 포인트 대신 사냥 아이템 (lib/calendar)
+    a: `${ATTEND_RULE_TEXT}(다른 창을 봐도 괜찮아요). 출석 달력의 오늘 칸을 누르면 ${CAL.daily}, ${CAL.streakEvery}일 연속마다 ${CAL.streak}, 한 달 개근이면 ${CAL.monthly}이 사냥 가방에 들어와요. 이달에 도장을 모은 날 수에 따라 꾸미기도 받아요. ${ATTEND_TIER_GUIDE}. 받은 코디는 가방의 꾸미기에서 입을 수 있어요.`,
+  },
+  {
+    q: "처음 온 사람에게 주는 선물이 있나요?",
+    // 11/18 lib/retain.ts (숫자·선물은 거기서 읽는다)
+    a: `「${PATH_NAME}」 ${GIFT_PATH.length}개가 가입한 날부터 하루 하나씩 열려요. 못 받은 날 것은 쌓여 있다가 한꺼번에 받고, 마지막 꾸러미에는 한정 칭호 「마을 새내기 졸업」이 들어 있어요. 꾸미기는 ${PATH_WEAR_DAYS}일 동안 입어요. 첫 걸음 미션 ${FIRST_STEPS.length}가지는 마을에서 할 수 있는 것을 하나씩 알려 주고, 처음 할 때마다 포인트를 주고, 다 하면 ${rewardText({ points: FIRST_REWARD.points, bundle: FIRST_REWARD.bundle })}을 더 줘요. 날마다 ${DAY_RESET_TEXT}에 무작위로 나오는 오늘 미션 ${TODO_COUNT}개(귀신의 집 돌파나 범퍼카, 바닷가 낚시 같은 것)는 하나에 ${rewardText(TODO_GIFT)}, ${TODO_COUNT}개를 다 하면 ${rewardText(TODO_BONUS_GIFT)}과 도장 하나를 더 줘요. 도장 ${TODO_PROT_EVERY}개마다 보호 문서도 줘요.`,
   },
   {
     q: "무엇을 할 수 있나요?",
-    a: "모닥불 곁에서 쉬기, 채팅과 친구 맺기, 사냥터(스킬 트리)·미니게임, 낚시(자동 낚시 포함), 채집과 도감, 동물원 펫 분양, 캐릭터 꾸미기, 내 집 꾸미기, 묘비 세우기와 헌화, 관람차·열기구·조각배·오리배 타기, 귀신의집 탈출, 폭죽·확성기, 마을 주민과 강아지·고양이와 놀기를 할 수 있어요.",
+    a: "모닥불 곁에서 쉬기, 채팅과 친구 맺기, 사냥터와 미니게임, 낚시와 자동 낚시, 채집과 도감, 의뢰 게시판과 오늘 미션, 버스 타고 캠핑장과 바닷가 나들이, 동물원 펫 분양, 캐릭터 꾸미기, 내 집 꾸미기, 묘비 세우기와 헌화, 관람차와 열기구, 조각배와 오리배 타기, 귀신의집 탈출, 폭죽과 확성기, 촬영 모드로 사진 찍기, 마을 주민과 강아지, 고양이와 놀기를 할 수 있어요.",
   },
   {
     q: "자리를 비워도 낚시가 되나요?",
-    a: `네. 낚시 자리에 앉아 [자동 낚시 켜기]를 누르면 ${Math.round(AUTO_FISH_EVERY_MS / 1000)}초에 1마리씩 물고기가 쌓여요. 다른 탭을 보고 있어도 접속만 되어 있으면 돼요. 자동 낚시는 하루 ${AUTO_FISH_DAILY_MAX}마리까지고, 직접 낚시까지 합치면 하루 ${DAILY_CATCH_MAX.fish}번까지예요. 직접 낚시는 놓치거나 찌를 거둬도 1번으로 세요. 한 번 켜면 최대 ${AUTO_FISH_MAX_MS / 3_600_000}시간 돌아요. 접속이 끊긴 동안은 쌓이지 않아요. 움직이거나 일어나면 꺼져요. 희귀한 물고기는 덜 나와요. 자동으로 낚은 물고기도 내 도감의 가장 큰 기록에는 들어가요. 최대어 순위에는 직접 낚은 물고기만 올라요. 아주 드물게 물에 빠진 꾸미기가 걸리기도 해요(영구 소장).`,
+    a: `네. 낚시 자리에 앉아 [자동 낚시 켜기]를 누르면 ${AUTO_PACE_NOTE} 직접 낚시보다 느리지만 하루 한도는 없어요. 다른 탭을 보고 있어도 접속만 되어 있으면 돼요. 한 번 켜면 최대 ${AUTO_FISH_MAX_MS / 3_600_000}시간 돌아요. 접속이 끊긴 동안은 쌓이지 않아요. 움직이거나 일어나면 꺼져요. 희귀한 물고기는 덜 나와요. 자동으로 낚은 물고기도 내 도감의 가장 큰 기록에는 들어가요. 최대어 순위에는 직접 낚은 물고기만 올라요. 아주 드물게 물에 빠진 꾸미기가 걸리기도 해요(영구 소장).`,
   },
   {
     // 11/15 수집 의뢰 (숫자는 lib/forage/quests/catalog.ts)
@@ -102,11 +116,11 @@ const FAQ = [
   },
   {
     q: "친구는 어떻게 맺나요?",
-    a: `마을에서 다른 사람 캐릭터를 누르고 [친구 신청]을 보내요. 상대가 받아 주면 친구가 돼요(최대 ${FRIEND_MAX}명). 친구 창에서 친구가 어디 있는지 볼 수 있어요. [친구한테 가기]를 누르면 친구 옆으로 가요. 다른 채널이면 채널을 옮기고, 친구가 집 안이면 그 집으로 들어가요. 친구 집에 놀러 갈 수도 있어요. 친구가 들어오고 나가면 작은 알림이 떠요(친구 창에서 끌 수 있어요). 운영자와는 친구를 맺을 수 없어요. 친구를 맺어도 포인트나 아이템 보상은 없어요.`,
+    a: `마을에서 다른 사람 캐릭터를 누르고 [친구 신청]을 보내요. 상대가 받아 주면 친구가 돼요(최대 ${FRIEND_MAX}명). 친구 창에서 친구가 어디 있는지 볼 수 있어요. [친구한테 가기]를 누르면 친구 옆으로 가요. 다른 채널이면 채널을 옮기고, 친구가 집 안이면 그 집으로 들어가요. 친구가 캠핑장이나 바닷가에 있으면 버스를 타고 가요(바베큐로 몸이 커진 동안은 못 가요). 친구 집에 놀러 갈 수도 있어요. 친구가 들어오고 나가면 작은 알림이 떠요(친구 창에서 끌 수 있어요). 운영자와는 친구를 맺을 수 없어요. 친구를 맺어도 포인트나 아이템 보상은 없어요.`,
   },
   {
     q: "랭킹은 어떤 게 있나요?",
-    a: "포인트, 사냥, 사냥 레벨, 낚시(최대어), 꾸미기, 집 꾸미기, 헌화 랭킹이 있어요. 운영자는 순위에 들지 않아요.",
+    a: "포인트, 사냥, 사냥 레벨, 야근 빌딩, 낚시(최대어), 꾸미기, 집 꾸미기, 접속 시간, 헌화 랭킹이 있어요. 운영자는 순위에 들지 않아요.",
   },
   {
     q: "사냥터 능력치나 스킬을 다시 찍을 수 있나요?",
@@ -116,7 +130,7 @@ const FAQ = [
   {
     q: "사냥 레벨 50 다음엔 뭐가 있나요?",
     // 11/15 사냥 끝판 1단계 — 숫자는 lib/rpg/endgame.ts
-    a: `레벨 ${MAX_LEVEL}부터는 지옥 사냥터와 야근 빌딩에서 얻은 EXP가 초월 EXP로 쌓여요. 그러면 초월 레벨(★51~★100)이 올라요. 초월 5레벨마다 능력치 포인트를 1개 받아요. 사냥 레벨 랭킹은 레벨, 초월 레벨, 초월 EXP 순서로 매겨요. 하루에 할 수 있는 판 수 제한은 없어요. 야근 빌딩은 마을 북쪽 분양 사무소 옆에 있어요. 1층부터 쓰러질 때까지 계속 올라가고, 도전 횟수 제한도 없어요. 높이 오를수록 몬스터가 세지고, 10층부터는 저주가 쌓여요. 깬 층마다 초월 EXP를 받아요. 5층마다 우두머리 상자가 열려요. 하루 개수 제한은 없어요. 상자에서는 세트 장비와 강화 재료가 나오고, 가끔 꾸미기 이용권도 나와요. 세트 장비는 15% 확률로 나오고, 7번 연속 못 받으면 다음엔 꼭 나와요. 세트 장비는 장비 탭에서 +15까지 강화할 수 있어요. 끝판이 열린 뒤 ${PIONEER_DAYS}일 안에 ★51에 닿거나 야근 빌딩 ${PIONEER_FLOOR}층을 처음 넘으면 칭호 「개척자 #번호」를 받아요. 번호는 닿은 차례예요.`,
+    a: `레벨 ${MAX_LEVEL}부터는 지옥 사냥터와 야근 빌딩에서 얻은 EXP가 초월 EXP로 쌓여요. 그러면 초월 레벨(★51~★100)이 올라요. 초월 레벨이 오를 때마다 능력치 포인트와 스킬 포인트를 1개씩, 초월 수련 포인트도 1개 받아요. 사냥 레벨 랭킹은 레벨, 초월 레벨, 초월 EXP 순서로 매겨요. 하루에 할 수 있는 판 수 제한은 없어요. 야근 빌딩은 마을 북쪽 분양 사무소 옆에 있어요. 1층부터 쓰러질 때까지 쭉쭉 올라가는 레이스이고, 도전 횟수 제한도 없어요. ${TOWER_STEEP_FROM}층까지는 몬스터가 약한 편이라 금방 오르고, 그 위로는 빠르게 세져요. 깨 둔 층까지는 엘리베이터로 ${TOWER_LOW_CHECKPOINTS.join("층, ")}층, 그 위로는 ${TOWER_CHECKPOINT_EVERY}층마다 골라서 시작해요. ${CURSES[0].from}층부터는 저주가 쌓여요. 랭킹은 이번 주 최고 층으로 겨뤄요. 깬 층마다 초월 EXP를 받아요. ${TOWER_CHEST_FROM}층부터 우두머리 층마다 상자가 열려요. 하루 개수 제한은 없어요. 상자에서는 세트 장비와 강화 재료가 나오고, 가끔 꾸미기 이용권도 나와요. 세트 장비는 ${Math.round(SG_CHEST_CHANCE * 100)}% 확률로 아주 드물게 나와요. 세트 장비는 장비 탭에서 +${SG_ENH_MAX}까지 강화할 수 있고, 같은 부위의 더 높은 직급 장비에 강화를 물려줄 수도 있어요. 끝판이 열린 뒤 ${PIONEER_DAYS}일 안에 ★51에 닿거나 야근 빌딩 ${PIONEER_FLOOR}층을 처음 넘으면 칭호 「개척자 #번호」를 받아요. 번호는 닿은 차례예요.`,
   },
   {
     q: "야근 빌딩 결과에 「기록 확인 중」이라고 나와요.",
@@ -153,7 +167,7 @@ const FAQ = [
     : []),
   {
     q: "꾸미기 점수는 어떻게 매겨지나요?",
-    a: `지금 입은 코디 파츠마다 영구 소장 값 ${LOOK_SCORE_DIVISOR}P당 1점이에요. 코디는 이용권 값 × ${PERMANENT_MULTIPLIER}, 펫은 분양가, 프리미엄 외형은 선택권 값으로 쳐요. 특수 염색은 부위마다 +${DYE_SPECIAL_BONUS}점이에요. 코디마다 점수가 상점, 가방, 동물원에 나와요. 기간제 코디가 끝나면 그 점수도 바로 빠져요. 랭킹 창 [꾸미기] 탭에서 1~50위와 내 순위를 볼 수 있어요. 내 점수는 가방 꾸미기 칸과 내 정보에서 봐요.`,
+    a: `지금 입은 코디 파츠마다 영구 소장 값 ${LOOK_SCORE_DIVISOR}P당 1점이에요. 코디는 이용권 값 × ${PERMANENT_MULTIPLIER}, 펫은 값을 올리기 전 분양가(작은 펫은 지금 값의 1/${PET_PRICE_UP}, 타는 펫은 1/${PET_RIDE_PRICE_UP}), 프리미엄 외형은 선택권 값으로 쳐요. 특수 염색은 부위마다 +${DYE_SPECIAL_BONUS}점이에요. 코디마다 점수가 상점, 가방, 동물원에 나와요. 기간제 코디가 끝나면 그 점수도 바로 빠져요. 랭킹 창 [꾸미기] 탭에서 1~50위와 내 순위를 볼 수 있어요. 내 점수는 가방 꾸미기 칸과 내 정보에서 봐요.`,
   },
 ] as const;
 

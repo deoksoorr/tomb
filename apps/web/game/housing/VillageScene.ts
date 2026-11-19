@@ -12,6 +12,8 @@ import type { KeyAction } from "../input/Keyboard";
 import { interactLabel } from "../input/keyHint";
 import { conceptSuffix, guessTone, snowField, winterizeCanvas, XMAS_BULBS } from "../sprites/winterScenery";
 import { emoSlotOfKey } from "../logic/emoBoard";
+import { atExitDoor } from "../logic/doorExit";
+import { setDoorHint } from "../logic/doorHint";
 import type { MoveInput } from "../logic/movement";
 import { RoomPresence } from "../net/RoomPresence";
 import type { NetPose } from "../net/sendThrottle";
@@ -27,7 +29,7 @@ import { drawEmptyLot, drawHouseLot, scaleLotLabel } from "./worldLots";
 //  - 번지(필지)마다 그 집의 외관이 서 있고, 지붕 위에 문패(집 이름 · 주인 · 호칭 · 꾸밈 점수)가 뜬다.
 //  - 빈 필지에는 "분양 중" 팻말. 다가가 E → 그 번지로 분양 문의(village:lot).
 //  - 집 문 앞에서 E(또는 집을 탭) → village:door → UI가 집 정보를 받아 house:enter로 들어간다.
-//  - 아래 마을 입구로 걸어 나가면 월드(분양 사무소 앞)로 돌아간다.
+//  - 아래 마을 입구 앞에서 E(폰 [상호작용])를 누르면 월드(분양 사무소 앞)로 돌아간다 (11/19 걸어서 저절로 나가기 없앰).
 // 필지는 한 줄에 VILLAGE_COLS개, 집이 늘면 아래로 한 줄씩 늘어난다 (서버가 lots로 알려 준다).
 
 export type VillageSceneData = {
@@ -93,7 +95,8 @@ export class VillageScene extends Phaser.Scene {
   private presenceKey = "";
   private readonly view = new Phaser.Geom.Rectangle();
   private exiting = false;
-  private armed = false;
+  /** 가까운 집 문·팻말 안내 문구 (마을 나가기 안내와 번갈아 쓴다) */
+  private nearText = "";
   private onTap = (e: PointerEvent) => this.handleTap(e);
   /** 11/17 맵 컨셉 (마을 장면이 알린 판 — 들어올 때 읽어요): 겨울·크리스마스면 눈 덮인 마당·나무·집 */
   private concept: MapConcept = "default";
@@ -105,7 +108,6 @@ export class VillageScene extends Phaser.Scene {
   init(data: VillageSceneData): void {
     this.d = data;
     this.exiting = false;
-    this.armed = false;
     this.glow = [];
     this.spots = [];
     this.labels = [];
@@ -136,7 +138,7 @@ export class VillageScene extends Phaser.Scene {
     atlas.ensure(title);
     this.labels.push(this.add.bitmapText(this.W / 2, TOP - 30, FONT_KEY, title, FONT_PX).setOrigin(0.5, 1).setTint(0xe0c36a).setDepth(DEPTH.labels));
 
-    atlas.ensure("E · 들어가기 분양 문의");
+    atlas.ensure("E · 들어가기 분양 문의 마을 나가기");
     this.prompt = this.add.bitmapText(0, 0, FONT_KEY, "", FONT_PX).setOrigin(0.5, 1).setTint(0xffe39a).setDepth(DEPTH.labels + 2).setVisible(false);
 
     // 시작 위치: 지정 번지 문 앞 또는 마을 입구
@@ -346,6 +348,7 @@ export class VillageScene extends Phaser.Scene {
     if (a === "interact") {
       const s = this.nearest();
       if (s) this.use(s);
+      else if (this.atExit()) this.leave();
       return;
     }
     // 1·2 손 흔들기·환호, 3~9 이모티콘 판 (월드와 같은 키)
@@ -408,10 +411,19 @@ export class VillageScene extends Phaser.Scene {
       if (n) {
         const text = interactLabel(n.kind === "door" ? `${clampChars(n.house.name, DOOR_NAME_MAX)} 들어가기` : `${n.lot}번지 분양 문의`);
         this.d.atlas.ensure(text);
+        this.nearText = text;
         this.prompt.setText(text).setPosition(n.x, n.y - 30);
       }
     }
-    this.prompt.setScale(s).setVisible(!!n);
+    // 집 문·팻말이 가까우면 그 안내, 아니면 마을 입구 앞에서 「E 마을 나가기」 (11/19 걸어서 저절로 나가기 없앰 — logic/doorExit)
+    const out = !n && this.atExit();
+    if (out) {
+      const text = interactLabel("마을 나가기");
+      if (this.prompt.text !== text) this.prompt.setText(text);
+      this.prompt.setPosition(this.player.x, this.player.y - 30);
+    } else if (n && this.prompt.text !== this.nearText) this.prompt.setText(this.nearText).setPosition(n.x, n.y - 30);
+    this.prompt.setScale(s).setVisible(!!n || out);
+    setDoorHint(out ? "나가기" : n?.kind === "door" ? "들어가기" : null);
 
     const view = cam.worldView;
     this.view.setTo(view.x, view.y, view.width, view.height);
@@ -429,9 +441,11 @@ export class VillageScene extends Phaser.Scene {
     }
     this.lighting.end();
 
-    // 마을 입구 아래 끝으로 걸어 나가면 월드로
-    if (this.player.y < this.H - 22) this.armed = true;
-    if (this.armed && this.player.y > this.H - 12 && Math.abs(this.player.x - this.W / 2) < 24 && this.move.ay > 0) this.leave();
+  }
+
+  /** 마을 입구(아래 가운데 길) 앞에 서 있다 → E로 월드에 나간다 */
+  private atExit(): boolean {
+    return atExitDoor(this.player.x, this.player.y, { x0: this.W / 2 - 24, x1: this.W / 2 + 24, y: this.H - 12 });
   }
 
   leave(): void {

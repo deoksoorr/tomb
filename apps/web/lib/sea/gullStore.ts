@@ -1,6 +1,7 @@
 import type { Redis } from "@upstash/redis";
 import { env } from "../env";
 import { redisClient } from "../redisUsage";
+import type { QuestHook } from "../store/types";
 import { SNACK_DAY_LIMIT, SNACK_HOLD_MAX, type SnackKind } from "./gull";
 
 // 11/17 갈매기 과자 저장소: 가진 과자 (가지마다) · 그날 산 개수 (둘 합쳐 하루 10개).
@@ -22,8 +23,11 @@ export interface GullStore {
   buy(acct: string, day: string, kind: SnackKind): Promise<BuyResult>;
   /** 산 것을 물러요 (포인트 차감 실패) */
   unbuy(acct: string, day: string, kind: SnackKind): Promise<void>;
-  /** 있으면 하나 쓰고 쓴 뒤의 상태 (11/17 던지기 응답에 쓰는 보기까지 한 번에 — Redis 명령 3 → 1), 없으면 null */
-  take(acct: string, day: string, kind: SnackKind): Promise<SnackState | null>;
+  /**
+   * 있으면 하나 쓰고 쓴 뒤의 상태 (11/17 던지기 응답에 쓰는 보기까지 한 번에 — Redis 명령 3 → 1), 없으면 null.
+   * 11/19 quest = 오늘 미션 「갈매기에게 과자 던지기」 진행 (같은 스크립트에서 +1 — 올린 값은 quest.have, lib/retainQuest)
+   */
+  take(acct: string, day: string, kind: SnackKind, quest?: QuestHook | null): Promise<SnackState | null>;
 }
 
 export class MemoryGullStore implements GullStore {
@@ -54,10 +58,11 @@ export class MemoryGullStore implements GullStore {
     const k = snackDayKey(acct, day);
     this.days.set(k, Math.max(0, (this.days.get(k) ?? 0) - 1));
   }
-  async take(acct: string, day: string, kind: SnackKind) {
+  async take(acct: string, day: string, kind: SnackKind, quest?: QuestHook | null) {
     const v = this.h(acct);
     if (v[kind] <= 0) return null;
     v[kind] -= 1;
+    if (quest) quest.have = quest.local(1);
     return this.get(acct, day);
   }
 }
@@ -75,12 +80,17 @@ if bought >= tonumber(ARGV[2]) then st = 1 elseif have >= tonumber(ARGV[3]) then
 end
 return {st, tonumber(redis.call('HGET', KEYS[1], 'plain') or '0') or 0, tonumber(redis.call('HGET', KEYS[1], 'spicy') or '0') or 0, bought}
 `;
-// KEYS: hold, day  ARGV: kind → {1, plain, spicy, bought} 쓰고 남은 것 / {0} 없음
+// KEYS: hold, day, (오늘 적립 해시)  ARGV: kind, (미션 칸, 만료) → {1, plain, spicy, bought, (미션 진행)} 쓰고 남은 것 / {0} 없음
 const TAKE_LUA = `
 local n = tonumber(redis.call('HGET', KEYS[1], ARGV[1]) or '0') or 0
 if n <= 0 then return {0} end
 redis.call('HINCRBY', KEYS[1], ARGV[1], -1)
-return {1, tonumber(redis.call('HGET', KEYS[1], 'plain') or '0') or 0, tonumber(redis.call('HGET', KEYS[1], 'spicy') or '0') or 0, tonumber(redis.call('GET', KEYS[2]) or '0') or 0}
+local q = 0
+if KEYS[3] then
+  q = redis.call('HINCRBY', KEYS[3], ARGV[2], 1)
+  if q == 1 then redis.call('EXPIRE', KEYS[3], ARGV[3]) end
+end
+return {1, tonumber(redis.call('HGET', KEYS[1], 'plain') or '0') or 0, tonumber(redis.call('HGET', KEYS[1], 'spicy') or '0') or 0, tonumber(redis.call('GET', KEYS[2]) or '0') or 0, q}
 `;
 
 export class RedisGullStore implements GullStore {
@@ -100,9 +110,14 @@ export class RedisGullStore implements GullStore {
   async unbuy(acct: string, day: string, kind: SnackKind) {
     await Promise.all([this.redis.hincrby(snackKey(acct), kind, -1), this.redis.decr(snackDayKey(acct, day))]);
   }
-  async take(acct: string, day: string, kind: SnackKind) {
-    const r = await this.redis.eval<string[], number[]>(TAKE_LUA, [snackKey(acct), snackDayKey(acct, day)], [kind]);
+  async take(acct: string, day: string, kind: SnackKind, quest?: QuestHook | null) {
+    const r = await this.redis.eval<string[], number[]>(
+      TAKE_LUA,
+      [snackKey(acct), snackDayKey(acct, day), ...(quest ? [quest.key] : [])],
+      [kind, ...(quest ? [quest.field, String(quest.ttlSec)] : [])],
+    );
     if (Number(r[0]) !== 1) return null;
+    if (quest) quest.have = Number(r[4]) || 0;
     return { plain: Number(r[1]) || 0, spicy: Number(r[2]) || 0, bought: Number(r[3]) || 0 };
   }
 }

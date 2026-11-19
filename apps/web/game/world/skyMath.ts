@@ -101,11 +101,12 @@ const RISE = 0.1;
 /** 속도 올리고 줄이는 비율 (항로 진행) */
 const ACCEL = 0.12;
 
-/** 항로 (땅 위 점, 월드 좌표): 출발장 → 옛 묘역 → 광장 큰 모닥불 → 강 → 호수 → 호박밭·범퍼카장 → 동물원 → 강가 → 언덕(출발장) */
+/** 항로 (땅 위 점, 월드 좌표): 출발장 → 옛 묘역(언덕 서쪽) → 등불 골목 → 광장 큰 모닥불 → 강 → 호수 → 호박밭·범퍼카장 → 동물원 → 강가 → 별 보기 마당(출발장) */
 export const BALLOON_ROUTE: readonly { x: number; y: number }[] = [
   { x: BALLOON_PAD.x, y: BALLOON_PAD.y },
-  { x: 236, y: 250 },
-  { x: 240, y: 420 },
+  { x: 140, y: 140 },
+  { x: 200, y: 330 },
+  { x: 240, y: 430 },
   { x: 470, y: 470 },
   { x: 720, y: 456 },
   { x: 730, y: 620 },
@@ -118,7 +119,7 @@ export const BALLOON_ROUTE: readonly { x: number; y: number }[] = [
   { x: 230, y: 880 },
   { x: 120, y: 620 },
   { x: 110, y: 340 },
-  { x: BALLOON_PAD.x - 30, y: BALLOON_PAD.y + 70 },
+  { x: BALLOON_PAD.x - 50, y: BALLOON_PAD.y + 80 },
   { x: BALLOON_PAD.x, y: BALLOON_PAD.y },
 ];
 

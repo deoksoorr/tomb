@@ -1,4 +1,5 @@
-import { isOpenLot } from "@tomb/protocol";
+import type { QuestHook } from "../store/types";
+import { isOpenLot, WORLD_LOTS } from "@tomb/protocol";
 import {
   defaultExterior,
   furnitureById,
@@ -11,7 +12,6 @@ import {
   reclaimLastSeen,
   SEA_LOT_COUNT,
   SEA_STARTER,
-  VILLAGE_MAX_LOTS,
   type CottageStyleId,
   type HouseSort,
   type HouseZone,
@@ -130,8 +130,8 @@ export function takeFrom(
   return out > 0 && (placed[it] ?? 0) === 0 ? "away" : "placed";
 }
 
-/** 번지 수 상한 (마을·포구) */
-export const zoneMaxLots = (zone: HouseZone | undefined) => (zone === "sea" ? SEA_LOT_COUNT : VILLAGE_MAX_LOTS);
+/** 번지 수 상한 (마을·포구). 11/19 2단지를 닫아 마을은 메인 맵 번지(1..WORLD_LOTS)까지만 — 다 차면 분양·번지 배정이 「빈 번지 없음」 */
+export const zoneMaxLots = (zone: HouseZone | undefined) => (zone === "sea" ? SEA_LOT_COUNT : WORLD_LOTS);
 
 export type CreateResult = { lot: number } | "exists" | "lot_taken" | "full";
 
@@ -206,6 +206,8 @@ export interface HouseStore {
   lockReclaim(ttlMs: number): Promise<boolean>;
   /** 관리자: 같은 채널 안에서 번지를 옮긴다 (그 번지에 다른 집이 있으면 taken) */
   moveLot(id: string, lot: number): Promise<"ok" | "no_house" | "taken">;
+  /** 11/19 「필지 대기」: 번지 칸을 비우고 집의 번지를 0으로 (집·가구·방명록은 그대로 — 빈 번지가 나면 assignLot이 다시 준다). 집이 없으면 false */
+  unlot(id: string): Promise<boolean>;
   setProfile(id: string, name: string, intro: string, now: number): Promise<boolean>;
   /** tier가 from일 때만 to로 바꾼다. price = 넓히기 값 (낸 포인트 기록 paid가 있으면 더한다) */
   upgrade(id: string, from: PlotTierId, to: PlotTierId, now: number, price?: number): Promise<boolean>;
@@ -230,7 +232,7 @@ export interface HouseStore {
     base?: number,
   ): Promise<SaveResult>;
   /** 좋아요. 오늘 이미 눌렀으면 "already", 집이 없거나 숨김이면 null */
-  like(id: string, visitorId: string, day: string): Promise<{ likes: number; score: number } | "already" | null>;
+  like(id: string, visitorId: string, day: string, quest?: QuestHook | null): Promise<{ likes: number; score: number } | "already" | null>;
   likedToday(id: string, visitorId: string, day: string): Promise<boolean>;
   /** 숨기지 않은 집 목록 (정렬, 최대 limit) */
   list(sort: HouseSort, limit: number): Promise<HouseRecord[]>;
@@ -440,6 +442,13 @@ export class MemoryHouseStore implements HouseStore {
       .sort((a, b) => a.lot - b.lot);
   }
 
+  async unlot(id: string) {
+    const h = this.houses.get(id);
+    if (!h) return false;
+    h.rec.lot = 0;
+    return true;
+  }
+
   async moveLot(id: string, lot: number) {
     const h = this.houses.get(id);
     if (!h) return "no_house" as const;
@@ -559,12 +568,13 @@ export class MemoryHouseStore implements HouseStore {
     return "ok" as const;
   }
 
-  async like(id: string, visitorId: string, day: string) {
+  async like(id: string, visitorId: string, day: string, quest?: QuestHook | null) {
     const h = this.houses.get(id);
     if (!h || h.rec.hidden) return null;
     const key = `${id}:${visitorId}:${day}`;
     if (this.likes.has(key)) return "already" as const;
     this.likes.add(key);
+    if (quest) quest.have = quest.local(1);
     h.rec.likes += 1;
     return { likes: h.rec.likes, score: scoreOf(h.rec.placedScore, h.rec.likes) };
   }

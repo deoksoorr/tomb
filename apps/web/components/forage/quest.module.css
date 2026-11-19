@@ -516,3 +516,40 @@
 .card[data-tier] .span {
   border-color: currentColor;
 }
+
+/* 11/19 어디서든 보는 의뢰판 (QuestPeek): 맨 아래 「납품은 게시판에서」 + [게시판까지 안내] */
+.peekFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+  font-size: 12px;
+}
+
+.peekFoot p {
+  flex: 1 1 180px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* 11/19 어디서든 보는 의뢰 창: [오늘 의뢰]·[도장 교환소] 칸 */
+.peekTabs {
+  display: flex;
+  gap: 6px;
+}
+
+.peekTab {
+  flex: 1;
+  min-height: 32px;
+  color: var(--muted);
+}
+
+.peekTabOn {
+  color: var(--bone);
+  box-shadow: var(--px-border-strong, var(--px-border));
+}

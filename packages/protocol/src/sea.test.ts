@@ -149,7 +149,7 @@ describe("sea map (protocol)", () => {
     expect(SEA_ROAD.x).toBeLessThan(SEA_BUS_STOP.x - 60);
   });
   it("다음 차수 자리: 오두막 터 6, 모래성 자리 3, 바다 보기 벤치 5", () => {
-    expect(SEA_LOTS).toHaveLength(6);
+    expect(SEA_LOTS).toHaveLength(11);
     expect(SEA_SPOTS.sandcastles).toHaveLength(3);
     expect(SEA_SPOTS.benches).toHaveLength(5);
     expect(SEA_SPOTS.loungers).toHaveLength(29); // 11/16 r14 선베드 한 벌 여덟 (16) + 앞줄 13

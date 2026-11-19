@@ -1,6 +1,7 @@
 import { derive } from "./formulas";
 import { sgCombatPower } from "./setGear";
-import { SKILL_FX, skillMods, type SkillId } from "./skillTree";
+import { SKILL_FX, skillMods, synergyPeak, type SkillId } from "./skillTree";
+import { tMods, type TAlloc } from "./transcendTree";
 import type { GearSlot, MonsterId, Stats } from "./catalog";
 import type { HuntWave } from "./plan";
 
@@ -29,14 +30,29 @@ export const DEAL_MAX = 1e12;
 
 /**
  * 한 마리에게 넣을 수 있는 초당 최대 피해 (카드·여러 마리 타격 빼고). 저장된 캐릭터로만 잰다 (화면 말은 안 믿는다).
- * 공격력 × 공격 속도 × 치명타 × 스킬 힘 × 세트 장비 전투 배율(옵션·세트 효과가 가장 잘 터질 때) × 스킬 트리 공격력 × 스킬·약화 여유
+ * 11/19 마공·물공을 따로 재서 더한다 (둘 다 늘 최대로 터진다고 넉넉하게):
+ *  - 마공: 공격력 × 마공 패시브(화롯가 온기·장작 더 넣기) × 지능(skillPower) × 깊어진 주문 × 스킬 여유 SKILL_K
+ *  - 물공: 공격력 × 물공 패시브(굳은살·뚝심) × 무뎌지지 않는 날 × 치명타 피해(깊게 파기) × 천 번째 삽질 × 스킬 여유 SKILL_K
+ *    — 힘 일꾼은 skillPower가 약 1이라, 예전처럼 지능만 곱하면 정상 판이 「기록 확인」에 걸린다
+ * 둘 다 공격 속도(손에 익은 삽·쉬지 않는 손·빠른 손목 포함) × 세트 장비 전투 배율 × 약화 여유
+ * 11/19 연계 보너스: 배운 핵심 스킬 가운데 가장 큰 연계 배율을 스킬 여유에 곱한다 (대표 빌드가 「기록 확인」에 걸리지 않게)
  */
-export function maxDealPerSec(level: number, stats: Stats, equip: Partial<Record<GearSlot, string | null>>, skills: Partial<Record<SkillId, number>>): number {
+export function maxDealPerSec(
+  level: number,
+  stats: Stats,
+  equip: Partial<Record<GearSlot, string | null>>,
+  skills: Partial<Record<SkillId, number>>,
+  tSkills?: TAlloc,
+): number {
   const d = derive(level, stats, equip);
   const m = skillMods(skills);
+  const t = tMods(tSkills);
   const stoke = skills.em_stoke ? SKILL_FX.em_stoke(skills.em_stoke).atk : 0;
-  const atk = d.atk * (1 + Math.max(0, m.atkPct)) * (1 + stoke);
-  const v = atk * d.aspd * CRIT * d.skillPower * sgCombatPower(equip) * SKILL_K * VULN_K;
+  const tireless = skills.wk_tireless ? SKILL_FX.wk_tireless(skills.wk_tireless).aspd : 0;
+  const aspd = d.aspd * (1 + m.aspdPct + tireless + t.aspd);
+  const magic = (1 + Math.max(0, m.atkPct)) * (1 + stoke) * d.skillPower * (1 + t.magicPct) * CRIT;
+  const phys = (1 + m.basicPct + t.physPct) * (CRIT + m.physCritDmg) * (1 + t.dbl);
+  const v = d.atk * aspd * sgCombatPower(equip) * (1 + t.bossPct) * SKILL_K * synergyPeak(skills) * VULN_K * (magic + phys);
   return Math.min(DEAL_MAX, Math.max(1, Math.ceil(v)));
 }
 

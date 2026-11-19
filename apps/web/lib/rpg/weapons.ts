@@ -5,6 +5,9 @@ import type { GearDef } from "./catalog";
 // — 다만 무기 사이 초당 피해가 크게 벌어지지 않게 dpsFactor로 묶어 두고 테스트로 지킨다.
 
 export type WeaponStyleId = "swing" | "smash" | "thrust" | "combo" | "shot" | "magic" | "card";
+/** 11/19 무기 갈래: 범위 마법(지팡이·마법서)은 마공 무기, 나머지는 물공 무기 */
+export const weaponDmgKind = (id: WeaponStyleId): "phys" | "magic" => (id === "magic" ? "magic" : "phys");
+export const WEAPON_DMG_LABEL = { phys: "물공 무기", magic: "마공 무기" } as const;
 
 export type WeaponStyle = {
   id: WeaponStyleId;

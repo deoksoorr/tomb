@@ -39,8 +39,8 @@ export default function ProcToasts() {
       const live = old.filter((x) => x.until > t);
       const same = live.find((x) => x.key === p.key);
       // 같은 것이 떠 있으면 그 자리에서 다시 2초 (n이 바뀌면 살짝 튄다)
-      if (same) return live.map((x) => (x === same ? { ...p, until: t + PROC_SHOW_MS, n: x.n + 1 } : x));
-      return [...live, { ...p, until: t + PROC_SHOW_MS, n: 0 }].slice(-MAX);
+      if (same) return live.map((x) => (x === same ? { ...p, until: t + (p.ms ?? PROC_SHOW_MS), n: x.n + 1 } : x));
+      return [...live, { ...p, until: t + (p.ms ?? PROC_SHOW_MS), n: 0 }].slice(-MAX);
     });
   });
 
@@ -74,7 +74,7 @@ export default function ProcToasts() {
       <Art p={p} />
       <div className={c.procText}>
         <span className={c.procName}>{p.name}</span>
-        <strong className={c.procFire}>발동!</strong>
+        <strong className={c.procFire}>{p.tag ?? "발동!"}</strong>
         <span className={c.procLine}>{p.line}</span>
         {p.left && <span className={c.procLeft}>{p.left}</span>}
       </div>

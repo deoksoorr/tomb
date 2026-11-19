@@ -470,7 +470,7 @@ export class SeaMap implements SeaMapApi {
     this.plate(SEA_REALTY.x, SEA_REALTY.y - Art.REALTY_ART_H + 6, "포구 부동산");
     this.prop(T.kiosk, SEA_KIOSK.x, SEA_KIOSK.y, SEA_KIOSK.y, 3);
     this.plate(SEA_KIOSK.x, SEA_KIOSK.y - 58, "매점");
-    // 오두막 터 6: 뒤·옆 울타리는 터 뒤 depth, 앞 울타리는 터 앞 depth로 (터 안에 선 사람이 울타리 사이에 보이게)
+    // 오두막 터 11: 뒤·옆 울타리는 터 뒤 depth, 앞 울타리는 터 앞 depth로 (터 안에 선 사람이 울타리 사이에 보이게)
     for (const l of SEA_LOTS) {
       const x = l.x - 2;
       const y = l.y - Art.LOT_RISE;

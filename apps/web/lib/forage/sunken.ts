@@ -4,13 +4,13 @@ import type { Species } from "./catalog";
 
 // 물에 빠진 꾸미기: 낚시 한 번에 아주 드물게 물고기 대신 캐릭터 꾸미기가 걸린다 (서버가 판정, 영구 소장으로 지급).
 //  - 직접 낚시: 찌를 던질 때(cast) 서버 난수로 걸렸는지·고를 난수를 정해 진행 기록에만 둔다 (손맛·그림자는 물고기 그대로)
-//  - 자동 낚시: 세션 시드 + 번호로 결정적으로, 확률은 직접의 절반
-//  - 낚시 1회로 센다 (하루 낚시 한도·자동 한도 그대로). 도감·최대어 기록에는 넣지 않는다
+//  - 자동 낚시: 세션 시드 + 번호로 결정적으로, 걸린 물고기 한 마리당 직접의 절반 (11/19 시도마다 25%만 걸려도 잡힌 한 마리 기준은 그대로)
+//  - 낚은 수 1로 센다. 도감·최대어 기록에는 넣지 않는다
 //  - 이미 영구로 가진 것이 뽑히면 아직 없는 것 중에서 다시 고르고, 다 가졌으면 희귀 물고기로 대신
 
 /** 직접 낚시 한 번에 꾸미기가 걸릴 확률 (약 300번에 1번) */
 export const SUNKEN_CHANCE = 0.003;
-/** 자동 낚시는 절반 */
+/** 자동 낚시는 걸린 한 마리당 절반 (시도 기준이면 × AUTO_CATCH_CHANCE) */
 export const SUNKEN_CHANCE_AUTO = SUNKEN_CHANCE / 2;
 
 /** 낚일 수 있는 꾸미기: 상점에서 파는 부위 있는 꾸미기 (펫·운영자 전용은 빠진다 — isShopListed) */
@@ -43,7 +43,7 @@ export function sunkenFallbackFish(water: FishWater, c: Cond, rand: number, orig
   return pickWeighted(candidates("fish", water, c, (s) => s.rarity >= 3 && !s.junk), rand) ?? orig;
 }
 
-/** 자동 낚시 k번째가 꾸미기인지 (시드 + 번호로 결정적). 꾸미기면 고를 때 쓸 난수 */
+/** 자동 낚시 k번째(걸린 시도)가 꾸미기인지 (시드 + 번호로 결정적). 꾸미기면 고를 때 쓸 난수 */
 export function rollAutoSunken(seed: number, k: number): number | null {
   if (hash01(`auto|${seed}|${k}|gear`) >= SUNKEN_CHANCE_AUTO) return null;
   return hash01(`auto|${seed}|${k}|gp`);

@@ -29,6 +29,10 @@ import { BUS_STOP, FISH_DECOR } from "../world/fishZone";
 // 고친 기록: 11/16 사용자 "망원경 갯수를 여기저기 좀 늘렸으면" — 마을 곳곳 망원경 넷(protocol VILLAGE_SCOPES: 광장 북쪽 (860,226)·징검다리 남쪽 둑 (622,742)·
 //   호수 북동쪽 둑 (1352,818)·쉼터 광장 (1072,740)), MAP_VERSION 14 → 15
 //   — 바뀐 것은 망원경마다 받침 충돌(10×5) 하나와 앞자리 상호작용(telescope3~6) 하나뿐이다 (소품·흩뿌린 나무·좌석·미니맵 바탕은 그대로)
+// 고친 기록: 11/19 옛 묘역 개편 — 묘비를 별 보기 언덕 서쪽(4열 × 4줄 = 16기, 0.7배)으로, 남쪽 계단·북문 아치·남문 없앰(남쪽 절벽을 잇고 동쪽 비탈에 입구),
+//   별 보기 마당 흙길·열기구 출발장 (200,100) → (264,158)·해먹·돗자리·석등·긴 벤치 lB·언덕 채집 지점 여섯 옮김, 묘역 안 벤치 bI·bJ 없앰, 성황당(나무·돌무더기) 없애고 「옛 묘역 입구」 팻말,
+//   언덕 아래 예전 묘역 자리는 등불 골목 10~15번지(필지 6곳·골목·소나무 줄, 벤치 bA 동쪽으로), 언덕 흩뿌림 나무 6 → 3 (별 보기 마당만), MAP_VERSION 15 → 16
+//   — 바뀐 것은 맵 북서쪽(x 32~512, y 32~660)뿐이다. 지문·걷기 격자·미니맵 모두 새로 찍었다
 
 function fnv(s: string): string {
   let h = 0x811c9dc5;
@@ -69,15 +73,15 @@ describe("마을 지문 (캠핑장이 생겨도 그대로)", () => {
     // 11/16 MAP_VERSION 13 → 14 바닷가행 정류장으로 다시 찍음 (예전 값 68d19e6c)
     // 11/16 MAP_VERSION 14 → 15 마을 곳곳 망원경 넷으로 다시 찍음 (예전 값 346977fa)
     // 11/18 버스 타는 곳을 바닥 정차 칸 전체로 (상호작용에 zone — 배치는 그대로)으로 다시 찍음 (예전 값 3b633e15)
-    expect(layoutPrint()).toBe("785d5133");
+    expect(layoutPrint()).toBe("6e9d1e63");
   });
   it("걷기 격자", () => {
     const g = walkableGrid(8);
     // 11/16 바닷가행 정류장 (예전 값 bb5ee238)
     // 11/16 마을 곳곳 망원경 받침 넷 (예전 값 b7139c7c)
-    expect(fnv(Array.from(g.cells as ArrayLike<number>).join(""))).toBe("592aed61");
+    expect(fnv(Array.from(g.cells as ArrayLike<number>).join(""))).toBe("874d6515");
   });
   it("미니맵 바탕", () => {
-    expect(fnv(Array.from(minimapPixels()).join(","))).toBe("092dccbd");
+    expect(fnv(Array.from(minimapPixels()).join(","))).toBe("7b4c67cd");
   });
 });

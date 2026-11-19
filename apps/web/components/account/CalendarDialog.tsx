@@ -79,11 +79,12 @@ export default function CalendarDialog({ onClose }: { onClose: () => void }) {
       meStore.set(res.me);
       setCal(res.calendar);
       setStampedNow(true);
-      const { daily, streak, monthly } = res.earned;
-      const parts = [daily ? `출석 +${daily}P` : "도장만 찍었어요 (지갑이 가득 찼어요)"];
-      if (streak) parts.push(`${res.calendar.rewards.streakEvery}일 연속 +${streak}P`);
-      if (monthly) parts.push(`한 달 개근 +${monthly}P`);
-      const msg = parts.join(" · ");
+      // 11/19 포인트 대신 사냥 아이템 (사냥 가방에 들어가요)
+      const g = res.gifts;
+      const parts = [`${g.daily}를 받았어요`];
+      if (g.streak) parts.push(`${res.calendar.rewards.streakEvery}일 연속이라 ${g.streak}도 받았어요`);
+      if (g.monthly) parts.push(`한 달 개근으로 ${g.monthly}도 받았어요`);
+      const msg = `${parts.join(". ")}. 사냥 가방에 넣었어요.`;
       const tiers = res.tierRewards ?? [];
       setFreshTiers(new Set(tiers.map((g) => g.days)));
       setNotice([msg, ...tiers.map(tierRewardText)].join(" · "));
@@ -209,17 +210,17 @@ export default function CalendarDialog({ onClose }: { onClose: () => void }) {
             <ul className={styles.rewards} aria-label="보상">
               <li>
                 <span>매일 도장</span>
-                <b>+{cal.rewards.daily}P</b>
+                <b>{cal.rewards.daily}</b>
               </li>
               <li>
                 <span>{cal.rewards.streakEvery}일 연속마다</span>
-                <b>+{cal.rewards.streak}P</b>
+                <b>{cal.rewards.streak}</b>
               </li>
               <li className={cx(cal.monthBonus !== null && styles.done)}>
                 <span>
                   한 달 개근 ({stamped}/{cal.days.length}일)
                 </span>
-                <b>{cal.monthBonus !== null ? "받았어요" : `+${cal.rewards.monthly}P`}</b>
+                <b>{cal.monthBonus !== null ? "받았어요" : cal.rewards.monthly}</b>
               </li>
             </ul>
 

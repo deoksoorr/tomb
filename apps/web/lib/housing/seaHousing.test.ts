@@ -37,9 +37,9 @@ describe.skipIf(!!conn)("포구 오두막", () => {
 
   it("처음 집이면 1.5배를 내고, 시작 가구·바닷가 바닥·벽이 깔린 채로 생긴다", async () => {
     const store = new MemoryHouseStore();
-    const a = await account(10_000);
+    const a = await account(100_000);
     const r = await buyCottage(store, a, "파도 오두막", "", "주인", 2, 3, "small", "blue");
-    expect(await points(a)).toBe(10_000 - seaPlotCost("small", false));
+    expect(await points(a)).toBe(100_000 - seaPlotCost("small", false));
     expect(r.house).toMatchObject({ ch: 3, lot: 2, zone: "sea", style: "blue", tier: "small" });
     expect(r.house!.id).toBe(houseIdFor(a, "sea"));
     expect(r.house!.id).not.toBe(houseIdFor(a));
@@ -61,7 +61,7 @@ describe.skipIf(!!conn)("포구 오두막", () => {
 
   it("마을 집이 있으면 별장 값(2배). 마을 집 하나 + 오두막 하나까지만", async () => {
     const store = new MemoryHouseStore();
-    const a = await account(20_000);
+    const a = await account(200_000);
     await buyPlot(store, a, "마을 집", "", "주인", null, 4);
     const before = await points(a);
     await buyCottage(store, a, "별장", "", "주인", null, 4, "small", "wood");
@@ -90,12 +90,12 @@ describe.skipIf(!!conn)("포구 오두막", () => {
     expect((await myHouse(store, b)).villaFee).toBeUndefined();
   });
 
-  it("터는 채널마다 6곳: 이미 있는 터는 막고, 다 차면 VILLAGE_FULL, 다른 채널은 따로", async () => {
+  it("터는 채널마다 11곳(11/19): 이미 있는 터는 막고, 다 차면 VILLAGE_FULL, 다른 채널은 따로", async () => {
     const store = new MemoryHouseStore();
-    const owners = await Promise.all(Array.from({ length: SEA_LOT_COUNT + 1 }, () => account(10_000)));
+    const owners = await Promise.all(Array.from({ length: SEA_LOT_COUNT + 1 }, () => account(100_000)));
     await buyCottage(store, owners[0], "1", "", "a", 1, 5);
     await expect(buyCottage(store, owners[1], "2", "", "b", 1, 5)).rejects.toMatchObject({ code: "LOT_TAKEN" });
-    await expect(buyCottage(store, owners[1], "2", "", "b", 7, 5)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    await expect(buyCottage(store, owners[1], "2", "", "b", SEA_LOT_COUNT + 1, 5)).rejects.toMatchObject({ code: "INVALID_INPUT" });
     for (let i = 1; i < SEA_LOT_COUNT; i++) await buyCottage(store, owners[i], `${i}`, "", "b", null, 5);
     const before = await points(owners[SEA_LOT_COUNT]);
     await expect(buyCottage(store, owners[SEA_LOT_COUNT], "x", "", "c", null, 5)).rejects.toMatchObject({ code: "VILLAGE_FULL" });
@@ -103,14 +103,14 @@ describe.skipIf(!!conn)("포구 오두막", () => {
     await buyCottage(store, owners[SEA_LOT_COUNT], "x", "", "c", 1, 6);
     const v5 = await village(store, 5, T, "sea");
     expect(v5).toMatchObject({ zone: "sea", lots: SEA_LOT_COUNT });
-    expect(v5.houses.map((h) => h.lot)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(v5.houses.map((h) => h.lot)).toEqual(Array.from({ length: SEA_LOT_COUNT }, (_, i) => i + 1));
     // 마을 주거 구역에는 오두막이 섞이지 않는다
     expect((await village(store, 5, T)).houses).toEqual([]);
   });
 
   it("넓히기·가구·겉모습은 오두막 쪽으로 (가방도 따로)", async () => {
     const store = new MemoryHouseStore();
-    const a = await account(20_000);
+    const a = await account(200_000);
     await buyCottage(store, a, "오두막", "", "주인", null, 2);
     const p0 = await points(a);
     const r = await upgradePlot(store, a, "wide", 2, "sea");
@@ -124,7 +124,7 @@ describe.skipIf(!!conn)("포구 오두막", () => {
 
   it("7일 철거: 오두막 값 100%를 선물로 돌려주고 가구는 남는다. 다시 사도 시작 가구를 또 주지 않는다", async () => {
     const store = new MemoryHouseStore();
-    const a = await account(10_000, T);
+    const a = await account(100_000, T);
     await buyCottage(store, a, "떠난 오두막", "", "주인", 3, 2);
     const paid = seaPlotCost("small", false);
     const rep = await sweepReclaim(store, T + RECLAIM_MS + 1, { force: true, since: 0 });
@@ -145,7 +145,7 @@ describe.skipIf(!!conn)("포구 오두막", () => {
 
   it("시작 가구는 보통 가구: 옮기고 돌리고 가방에 넣고 되팔 수 있다. 바닥·벽은 바꾸면 그대로 남는다", async () => {
     const store = new MemoryHouseStore();
-    const a = await account(10_000);
+    const a = await account(100_000);
     const first = await buyCottage(store, a, "꾸밀 오두막", "", "주인", 2, 10);
     const lay = first.house!.layout;
     // 처음 들어가면 가진 가구로 놓여 있다 (가방 개수 = 놓인 개수)
@@ -182,7 +182,7 @@ describe.skipIf(!!conn)("포구 오두막", () => {
 
   it("시작 가구를 팔고 철거된 뒤 다시 사면, 가진 것만 놓인다 (시작 가구를 또 주지 않는다)", async () => {
     const store = new MemoryHouseStore();
-    const a = await account(10_000, T);
+    const a = await account(100_000, T);
     await buyCottage(store, a, "판 오두막", "", "주인", 1, 8);
     // 배치를 비우고 해먹을 판다
     await saveLayout(store, a, "small", { items: [], floor: "floor_deck", wall: "wall_sea" }, 8, "sea");
@@ -197,7 +197,7 @@ describe.skipIf(!!conn)("포구 오두막", () => {
 
   it("꾸밈 점수 순위에 오두막도 들어가고 번지 자리에 「포구 N번 오두막」", async () => {
     const store = new MemoryHouseStore();
-    const a = await account(10_000);
+    const a = await account(100_000);
     await buyCottage(store, a, "순위 오두막", "", "주인", 4, 9);
     const r = await houseRank(store, "all", a, 10);
     expect(r.rows.find((x) => x.name === "순위 오두막")).toMatchObject({ sub: "9채널 포구 4번 오두막 · 주인", me: true });

@@ -19,7 +19,8 @@ export const SG_GRADE_NAMES = ["사원급", "대리급", "과장급", "임원급
 /** 직급 테 색 (가방 칸·이름표) */
 export const SG_GRADE_COLORS = ["#b4ae9c", "#6cb4f0", "#d2dcec", "#f2c444"] as const;
 /** 기본 능력치 = 상점 최고 장비 × 직급 배율 */
-export const SG_GRADE_MULT = [1.15, 1.3, 1.5, 1.75] as const;
+// 11/19 사용자 「하나 먹을 때마다 확실한 능력 상승이 보이게」: 직급마다 기본 능력치 +0.5배씩 (예전 1.15·1.3·1.5·1.75)
+export const SG_GRADE_MULT = [1.0, 1.5, 2.0, 2.5] as const;
 export const SG_REQ_LEVEL = 50;
 /** 세트 장비 가방 (장착 중 포함) */
 export const SG_INV_MAX = 60;
@@ -74,7 +75,7 @@ export const SG_SET_INFO: Record<SgSet, SgSetInfo> = {
       acc2: "목걸이 끝에 뚜껑 덮인 빈 종이컵.",
     },
     two: "최대 체력 +10%",
-    four: "체력이 30% 아래일 때 공격력 +25%, 받는 피해 −10%",
+    four: "늘 받는 피해 −8%, 체력이 30% 아래일 때 공격력 +25%·받는 피해 −15% 더",
   },
   approval: {
     name: "결재 세트",
@@ -119,7 +120,7 @@ export const SG_SET_INFO: Record<SgSet, SgSetInfo> = {
       acc1: "빨간 점이 반짝이는 귀걸이.",
       acc2: "스프링 수첩. 회의록은 아무도 안 읽는다.",
     },
-    two: "SP +20%, 스킬 피해 +8%",
+    two: "SP +20%, 마법 피해 +8%",
     four: "스킬을 쓸 때마다 다음 스킬 재사용 시간 −15%",
   },
   trip: {
@@ -184,7 +185,8 @@ export function scaleBonus(b: Bonus, k: number): Bonus {
  */
 export const ENH_STEPS = [0.08, 0.12, 0.2] as const;
 export const SG_ENH_MAX = 15;
-export const SHOP_ENH_MAX = 5;
+/** 상점 장비 강화 상한. 11/19 강화 개편: +5 → +10 (세트 장비가 귀해져 포인트로 꾸준히 오를 길) */
+export const SHOP_ENH_MAX = 10;
 export function enhMul(e: number): number {
   const n = Math.max(0, Math.min(SG_ENH_MAX, Math.floor(e)));
   const k = Math.min(n, 5) * ENH_STEPS[0] + Math.max(0, Math.min(n, 10) - 5) * ENH_STEPS[1] + Math.max(0, n - 10) * ENH_STEPS[2];
@@ -208,7 +210,8 @@ export function enhBonus(b: Bonus, e: number): Bonus {
 
 // ── 랜덤 옵션 ──
 
-export type SgOpt = "a" | "c" | "d" | "s" | "b" | "h" | "r" | "p" | "m" | "k";
+/** 11/19 t 명중 · f 물리 피해(기본 공격·일꾼 스킬) · g 마법 피해(모닥불·서리·넋 스킬)를 더했다 (옛 코드는 그대로 읽힌다) */
+export type SgOpt = "a" | "c" | "d" | "s" | "b" | "h" | "r" | "p" | "m" | "k" | "t" | "f" | "g";
 export type SgOptDef = {
   name: string;
   /** 깎는 옵션(받는 피해·재사용 시간)이면 − */
@@ -240,6 +243,10 @@ export const SG_OPTS: Record<SgOpt, SgOptDef> = {
     hi: [7, 8],
     on: ["head", "acc"],
   },
+  // 11/19 물공·마공 옵션
+  t: { name: "명중", lo: [4, 6], hi: [10, 14], on: ["weapon", "head", "acc"] },
+  f: { name: "물리 피해", lo: [3, 5], hi: [7, 10], on: ["weapon", "acc"] },
+  g: { name: "마법 피해", lo: [3, 5], hi: [7, 10], on: ["weapon", "acc"] },
 };
 export const SG_OPT_IDS = Object.keys(SG_OPTS) as SgOpt[];
 /** 직급별 랜덤 옵션 수 */
@@ -284,7 +291,7 @@ export type SgItem = {
   L: number;
   /** 옵션 다시 굴린 횟수 (비용이 두 배씩) */
   rr: number;
-  /** 강화 연속 실패 (실패할 때마다 다음 성공 확률 +5%p, 성공하면 0) */
+  /** 강화 연속 실패 (실패할 때마다 다음 성공 확률 +ENH_FAIL_BONUS, 성공하면 0) */
   f: number;
 };
 
@@ -400,7 +407,7 @@ export function sgDef(it: SgItem, id = encodeSg(it)): GearDef {
 // 11/15 상점·주운 장비 강화는 한 개씩 따로 (같은 장신구 두 개 중 하나만 강화할 수 있게): 강화한 것은 묶음에서 떼어
 // 캐릭터 si 목록에 "w_stamp+3@5k.1" (장비 id + 강화 @ 번호(36진) . 연속 실패) 로 둔다. 번호는 세트 장비와 같은 줄(sgN)에서 받는다.
 // 예전 저장값의 "w_stamp+3"(번호 없음 — 같은 이름 장비 모두에 붙던 강화)는 normalize가 한 개에만 옮긴다
-const SHOP_ENH_RE = /^([a-z]_[a-z_]{1,30})\+([1-5])(?:@([0-9a-z]{1,7})\.(\d{1,2}))?$/;
+const SHOP_ENH_RE = /^([a-z]_[a-z_]{1,30})\+(10|[1-9])(?:@([0-9a-z]{1,7})\.(\d{1,2}))?$/;
 /** 장착 칸 id → [상점 장비 id, 강화] (강화 없으면 0) */
 export function shopEnhOf(id: string): [string, number] {
   const m = SHOP_ENH_RE.exec(id);
@@ -496,18 +503,82 @@ export function setCounts(items: readonly SgItem[]): Record<SgSet, number> {
   return out;
 }
 
-/** 2세트·4세트가 붙은 세트 */
+/** 2세트·4세트가 붙은 세트 · 11/19 다섯 부위를 다 낀 세트 (숨겨진 5세트 효과 — SG_EGG) */
 export function activeSets(equip: Equip): {
   two: SgSet[];
   four: SgSet[];
+  five: SgSet[];
   counts: Record<SgSet, number>;
 } {
   const counts = setCounts(equippedSg(equip));
   return {
     two: SG_SETS.filter((s) => counts[s] >= 2),
     four: SG_SETS.filter((s) => counts[s] >= 4),
+    five: SG_SETS.filter((s) => counts[s] >= SG_PIECES.length),
     counts,
   };
+}
+
+// ── 11/19 5세트 이스터에그: 같은 세트 다섯 부위(무기·갑옷·머리·장신구 둘)를 다 끼면 숨겨진 재미 패시브 ──
+// 대부분 연출이고 성능은 아주 작다 (밸런스에 거의 영향 없게). 장비 창에는 「???」로 숨겨 두고, 판에서 처음 켜지는 순간 알림과 함께
+// 발견(캐릭터 sgEgg 비트 — 서버가 지금 낀 장비로 확인해 저장)하면 그 뒤로 이름·설명이 보인다. 게임 쪽은 game/rpg/setEggRun
+
+/** 발견 비트 (야근 1 · 결재 2 · 회의 4 · 출장 8 — sgDone과 같은 순서) */
+export const SG_EGG_BIT: Record<SgSet, number> = { overtime: 1, approval: 2, meeting: 4, trip: 8 };
+export const SG_EGG_ALL = 15;
+export type SgEggInfo = {
+  name: string;
+  /** 장비 창 설명 (발견한 뒤) */
+  desc: string;
+  /** 발견 알림 한 줄 */
+  line: string;
+};
+export const SG_EGG: Record<SgSet, SgEggInfo> = {
+  overtime: {
+    name: "칼퇴 본능",
+    desc: "남은 시간이 10초가 되면 이동 속도 +20%, 머리 위에 「퇴근!」",
+    line: "남은 시간 10초, 몸이 먼저 문으로 가요",
+  },
+  approval: {
+    name: "도장 쾅",
+    desc: "치명타가 터질 때 가끔 적에게 빨간 「승인」 도장이 쾅 — 그 적은 0.3초 멈춰요",
+    line: "치명타에 「승인」 도장이 찍혀요",
+  },
+  meeting: {
+    name: "회의가 길어진다",
+    desc: "스킬을 쓰면 가끔 「…그래서 말인데요」 — 둘레 적이 1초 꾸벅꾸벅 졸며 느려져요",
+    line: "둘레 적이 꾸벅꾸벅 졸아요",
+  },
+  trip: {
+    name: "마일리지 적립",
+    desc: "걸은 거리가 발밑 마일리지로 쌓이고, 가득 차면 다음 기본 공격 피해 +30% 한 번",
+    line: "마일리지가 가득 찼어요, 다음 공격 +30%",
+  },
+};
+/** 5세트 숫자 (게임 setEggRun · 서버 sgCombatPower가 같은 값을 쓴다) */
+export const SG_EGG_FX = {
+  /** 칼퇴 본능: 남은 시간이 이만큼 아래면 이동 속도 + */
+  leaveMs: 10_000,
+  leaveMove: 0.2,
+  /** 도장 쾅: 치명타마다 이 확률, 한 번 찍으면 이만큼 쉰다, 적이 멈추는 시간 (우두머리는 1/3) */
+  stampChance: 0.15,
+  stampCdMs: 2_500,
+  stampFreezeMs: 300,
+  /** 회의가 길어진다: 스킬마다 이 확률, 쉬는 시간, 둘레 반지름(px)·조는 시간 (우두머리는 1/3) */
+  talkChance: 0.25,
+  talkCdMs: 6_000,
+  talkR: 120,
+  talkMs: 1_000,
+  /** 마일리지 적립: 이만큼(px) 걸으면 가득, 다음 기본 공격 피해 + (한 번) */
+  mileFull: 1_800,
+  tripHit: 0.3,
+} as const;
+/** 발견했나 */
+export const eggKnown = (bits: number | undefined, set: SgSet): boolean => ((bits ?? 0) & SG_EGG_BIT[set]) !== 0;
+/** 발견 저장 (서버): 지금 그 세트 다섯 부위를 다 끼고 있을 때만 비트를 켠다. 아니면 그대로 */
+export function discoverEgg(bits: number | undefined, set: SgSet, equip: Equip): number {
+  const b = (bits ?? 0) & SG_EGG_ALL;
+  return activeSets(equip).five.includes(set) ? b | SG_EGG_BIT[set] : b;
 }
 
 /** 능력치에 바로 붙는 것 (derive가 쓴다): 비율은 0.1 = 10% */
@@ -519,6 +590,8 @@ export type SgStatic = {
   spPct: number;
   movePct: number;
   skillPct: number;
+  /** 11/19 명중 (더하는 값) */
+  hit: number;
 };
 export const SG_STATIC_NONE: SgStatic = {
   atkPct: 0,
@@ -528,6 +601,7 @@ export const SG_STATIC_NONE: SgStatic = {
   spPct: 0,
   movePct: 0,
   skillPct: 0,
+  hit: 0,
 };
 
 export function sgStatic(equip: Equip): SgStatic {
@@ -543,6 +617,7 @@ export function sgStatic(equip: Equip): SgStatic {
     spPct: two.includes("meeting") ? 0.2 : 0,
     movePct: o.m / 100 + (two.includes("trip") ? 0.08 : 0),
     skillPct: two.includes("meeting") ? 0.08 : 0,
+    hit: o.t ?? 0,
   };
 }
 
@@ -561,21 +636,30 @@ export type SgCombat = {
   potion: number;
   /** 스킬 재사용 시간 감소 (최대 40%) */
   cdCut: number;
+  /** 11/19 물리 피해 + (기본 공격·일꾼 스킬) · 마법 피해 + (모닥불·서리·넋 스킬) */
+  physDmg: number;
+  magicDmg: number;
   legends: number[];
   four: SgSet[];
+  /** 11/19 5세트 (숨겨진 효과) */
+  five: SgSet[];
 };
 
 export function sgCombat(equip: Equip): SgCombat {
   const items = equippedSg(equip);
   const o = optSum(items);
+  const sets = activeSets(equip);
   return {
     critDmg: o.d / 100,
     bossDmg: o.b / 100,
     guard: Math.min(0.4, o.r / 100),
     potion: o.p / 100,
     cdCut: Math.min(0.4, o.k / 100),
+    physDmg: (o.f ?? 0) / 100,
+    magicDmg: (o.g ?? 0) / 100,
     legends: [...new Set(items.map((it) => it.L).filter((L) => L > 0))],
-    four: activeSets(equip).four,
+    four: sets.four,
+    five: sets.five,
   };
 }
 
@@ -585,13 +669,16 @@ export function sgCombat(equip: Equip): SgCombat {
  */
 export function sgCombatPower(equip: Equip): number {
   const c = sgCombat(equip);
-  let k = ((1 + c.critDmg) * (1 + c.bossDmg)) / (1 - c.cdCut);
+  let k = ((1 + c.critDmg) * (1 + c.bossDmg) * (1 + Math.max(c.physDmg, c.magicDmg))) / (1 - c.cdCut);
   if (c.four.includes("overtime")) k *= 1.25;
   if (c.four.includes("approval")) k *= 1.2;
   if (c.four.includes("meeting")) k *= 1.15;
   if (c.four.includes("trip")) k *= 1.4;
   if (c.legends.includes(1)) k *= 1.25;
   if (c.legends.includes(2)) k *= 1.3;
+  // 11/19 5세트 이스터에그: 피해에 닿는 것은 출장 「마일리지 적립」(가득 차면 기본 공격 한 번 +30%)뿐 — 늘 켜졌다고 넉넉하게.
+  // 도장 쾅(0.3초 멈춤)·회의(1초 느려짐)·칼퇴 본능(이동 속도)은 피해를 늘리지 않는다
+  if (c.five.includes("trip")) k *= 1 + SG_EGG_FX.tripHit;
   return k;
 }
 

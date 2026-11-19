@@ -109,6 +109,9 @@ function GhostPreview({ row, avatar, wearing, name }: { row: GhostRow; avatar: {
   );
 }
 
+/** 11/19 지금 채널 (운영자가 그 채널에 유령선을 부른 동안은 모두 살 수 있어요) */
+const chNow = (): number | null => bridge.last("net:status")?.channel ?? null;
+
 export default function GhostShop({ onClose, avatar }: { onClose: () => void; avatar?: { color: string; body?: string } }) {
   const { me } = useMe();
   const [savedColor] = useState(() => readItem(LS.color));
@@ -125,7 +128,7 @@ export default function GhostShop({ onClose, avatar }: { onClose: () => void; av
   useEffect(() => {
     let live = true;
     ghostApi
-      .status()
+      .status(chNow())
       .then((r) => live && setSt(r))
       .catch((e) => live && setError(errorMessage(e)));
     return () => {
@@ -137,7 +140,7 @@ export default function GhostShop({ onClose, avatar }: { onClose: () => void; av
     setPending(true);
     setNotice(null);
     try {
-      const r = await ghostApi.buy(row.key);
+      const r = await ghostApi.buy(row.key, chNow());
       setSt(r);
       if (r.lookGrant) applyStyle({ me: r.me, lookGrant: r.lookGrant });
       else meStore.set(r.me);
@@ -146,7 +149,7 @@ export default function GhostShop({ onClose, avatar }: { onClose: () => void; av
     } catch (e) {
       setNotice(errorMessage(e));
       // 값·열림이 바뀌었을 수 있어요 → 다시 받아요
-      ghostApi.status().then(setSt).catch(() => undefined);
+      ghostApi.status(chNow()).then(setSt).catch(() => undefined);
     } finally {
       setPending(false);
       setConfirm(null);

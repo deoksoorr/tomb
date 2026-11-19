@@ -79,15 +79,15 @@ describe("한도·출석이 새벽 5시에 다시 찬다 (메모리 계정 저�
     return new MemoryAccounts(() => graves);
   };
 
-  it("하루 한도: 새벽 4:59까지는 어제 한도 그대로, 5시에 다시 찬다", async () => {
+  it("하루 횟수 규칙: 새벽 4:59까지는 어제 횟수 그대로, 5시에 다시 찬다 (11/19부터 한도는 헌화 같은 항목에만)", async () => {
     const acc = newAccounts();
     const id = "a".repeat(21);
     await acc.enter(id, { name: "밤샘" }, kst(2026, 11, 14, 22));
-    const max = earnRule("hunt").dailyMax;
-    expect(await acc.earn(id, "hunt", kstDay(kst(2026, 11, 14, 22)), { amount: max })).toBe(max);
+    const max = earnRule("gotFlower").dailyMax!;
+    expect(await acc.earn(id, "gotFlower", kstDay(kst(2026, 11, 14, 22)), { amount: max })).toBe(max);
     // 자정이 지나도(예전엔 여기서 다시 찼다) 아직 같은 날
-    expect(await acc.earn(id, "hunt", kstDay(kst(2026, 11, 15, 0, 30)), { amount: 10 })).toBe(0);
-    expect(await acc.earn(id, "hunt", kstDay(kst(2026, 11, 15, 4, 59, 59)), { amount: 10 })).toBe(0);
+    expect(await acc.earn(id, "gotFlower", kstDay(kst(2026, 11, 15, 0, 30)), { amount: 10 })).toBe(0);
+    expect(await acc.earn(id, "gotFlower", kstDay(kst(2026, 11, 15, 4, 59, 59)), { amount: 10 })).toBe(0);
     expect(await acc.earn(id, "hunt", kstDay(kst(2026, 11, 15, 5)), { amount: 10 })).toBe(10);
     expect((await acc.get(id, kstDay(kst(2026, 11, 15, 5)), kst(2026, 11, 15, 5))).todayEarned).toBe(10);
   });

@@ -87,6 +87,8 @@ describe("채팅 기록창", () => {
       { ...line(3, 20, true), w: "fail" },
     ];
     expect(whispers.map(chatLineTone)).toEqual(["whisper", "whisper", "whisper"]);
+    // 11/19 마을 소식 줄 (황금 고블린을 누가 잡았다)은 금빛 notice
+    expect(chatLineTone({ ...line(4, 30), name: "", sys: "goblin", key: "goblin:g1" })).toBe("notice");
     const merged = mergeChatLines(whispers, [{ key: "s.0", name: "나", text: "글3", mine: true, at: 25 }], 100, () => 9);
     expect(merged.find((l) => l.id === 3)?.key).toBeUndefined();
     expect(merged.map((l) => l.id)).toEqual([1, 2, 3, 9]);

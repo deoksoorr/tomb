@@ -6,8 +6,11 @@ import { attackCooldownMs, CHAIN_GRACE_MS, FINISHER_EVERY, WEAPON_STYLES, weapon
 import { gearById } from "@/lib/rpg/catalog";
 import { ELITE, huntPlan, STREAM_GAP_MS, WAVE_FORMATION_LABEL, WAVE_MAX_GAP_SEC, type HuntWave } from "@/lib/rpg/plan";
 import { POTION_CURES, rollStatus, STATUS_IDS, StatusBook, STATUSES, type StatusId } from "@/lib/rpg/status";
-import { CURSES, floorSeed, isBossFloor, NO_CURSE, TOWER_BOSS_HEAL, TOWER_POWER, towerChestDrops, towerCurseFx, towerFloorSec, towerPlan, towerScale, towerBlock, towerZone, type CurseFx } from "@/lib/rpg/tower";
+import { CURSES, floorSeed, isBossFloor, isChestFloor, NO_CURSE, TOWER_BOSS_HEAL, TOWER_POWER, towerChestDrops, towerCurseFx, towerFloorSec, towerPlan, towerScale, towerBlock, towerZone, type CurseFx } from "@/lib/rpg/tower";
 import type { HuntResult, RpgAction, RpgHud } from "@/lib/rpg/types";
+import { isMagicBranch, SYNERGY, synergyGuard, synergyMul } from "@/lib/rpg/skillTree";
+import { soulFocus } from "@/lib/rpg/skillRules";
+import { NO_TMODS, tMods, type TMods } from "@/lib/rpg/transcendTree";
 import { DIR, STATE, type DirId, type HuntAct } from "@tomb/protocol";
 import { FONT_KEY, FONT_PX } from "../text/GlyphAtlas";
 import { isTouchUi } from "../input/keyHint";
@@ -47,6 +50,8 @@ import { MonsterIntro } from "../tower/introCard";
 import { BossChest } from "../tower/bossChest";
 // 11/15 세트 장비 싸움 효과·손에 든 무기 (강화 빛)
 import { SetGearRun } from "./setGearRun";
+import { SetEggRun } from "./setEggRun";
+import { SetEggFx } from "./setEggFx";
 import { HeldWeapon } from "./heldWeapon";
 import { huntLook } from "../sprites/setGearWear";
 import { SelfLight } from "./selfLight";
@@ -59,8 +64,9 @@ import { showProc } from "./procToast";
 import { cardProc, cookieProc, sgProc } from "@/lib/rpg/procs";
 import { hpLost, hpShown } from "./hurtTally";
 import { CARD_SND } from "./cards/cardFx";
-import { stealHeal, type StealBook } from "@/lib/rpg/lifesteal";
-import { enhOfId } from "@/lib/rpg/setGear";
+import { stealHeal } from "@/lib/rpg/lifesteal";
+import { enhOfId, SG_EGG_FX, SG_SETS } from "@/lib/rpg/setGear";
+import { eggProc } from "@/lib/rpg/procs";
 import { nextPity } from "@/lib/rpg/setGearRoll";
 import { towerSound } from "../tower/towerSound";
 import { TOWER_THEME_RUNTIMES } from "../tower/themes";
@@ -176,14 +182,16 @@ type HitOpts = {
   skill?: BranchId;
   /** 광역 스킬 (재의 심장 패시브) */
   aoe?: boolean;
-  /** 11/17 소환(길동무 넋·망자의 초롱)이 친 것 — 흡혈은 광역처럼 절반 (lib/rpg/lifesteal) */
-  summon?: boolean;
   /** 맞은 적 둔화 ms */
   slowMs?: number;
   /** 연출 무게 0~4 (skillMoves.SKILL_LOOK): 히트스톱·찌그러짐 */
   weight?: number;
   /** 연타 묶음 (끝나면 "N HIT 합계") */
   group?: DmgGroup | null;
+  /** 11/19 천 번째 삽질로 한 번 더 맞은 타격 (또 겹치지 않게) */
+  again?: boolean;
+  /** 11/19 어느 스킬의 타격인가 (연계 보너스 — lib/rpg/skillTree SYNERGY) */
+  sid?: SkillId;
 };
 
 /** 바닥에 남는 스킬 (화톳불·서리밭·눈보라): 일정 간격으로 둘레를 친다. follow면 나를 따라온다 */
@@ -259,6 +267,10 @@ export class HuntScene extends RpgScene {
   /** 11/15 세트 장비: 싸움 효과 · 상자 천장(세트 장비 없이 연 상자 수 — 서버와 같은 값에서 센다) · 손에 든 무기 */
   private sg = new SetGearRun({});
   private sgPity = 0;
+  /** 11/19 숨겨진 5세트 효과 (판 하나) · 그 그림 · 칼퇴 본능 이동 배율 */
+  private egg = new SetEggRun({});
+  private eggFx: SetEggFx | null = null;
+  private eggMove = 1;
   /**
    * 11/18 드롭 시드 (서버 비밀값 — 판 시작 응답에 없다). 첫 우두머리가 나올 수 있는 시각(dropRevealMs) 뒤에 한 번 받는다.
    * 없으면 바닥 드롭·상자 안 연출만 빠진다 (보상은 결과 화면에 그대로)
@@ -310,6 +322,22 @@ export class HuntScene extends RpgScene {
   /** 스킬 트리 패시브를 더한 능력치 (판마다 create()에서) */
   private dv!: Derived;
   private mods: SkillMods = skillMods({});
+  /** 11/19 핵심 스킬의 연계 배율 (판 시작 때 계산) */
+  private syn: Partial<Record<SkillId, number>> = {};
+  /** 11/19 연계 생존: 대표 빌드를 몰아 찍으면 받는 피해 − (판 시작 때 계산) */
+  private synGuard = 0;
+  /** 11/19 초월 수련 보정 (물공·마공 따로) */
+  private tm: TMods = NO_TMODS;
+  /** 11/19 일꾼의 뚝심: 기본 공격 순번 (N번째마다 반드시 치명타) */
+  private basicN = 0;
+  /** 11/19 자동 막기: 적마다 마지막으로 막은 시각 */
+  private parryAt = new WeakMap<object, number>();
+  /** 11/19 업무 인수인계 카드: 남은 강화 기본 공격 수 */
+  private handoverLeft = 0;
+  /** 11/19 삽날 회오리: 켜 있으면 다음 베기 시각·SP를 마지막으로 뺀 시각 */
+  private whirl: { lv: number; nextAt: number; spAt: number; spin: number } | null = null;
+  /** 11/19 봉분 뛰어넘기: 공중 (출발·도착·시작 시각·길이) */
+  private leap: { x0: number; y0: number; x1: number; y1: number; at: number; dur: number; lv: number } | null = null;
   /** 스킬 연출 (skillFx.ts) */
   private skfx!: SkillFx;
   /** 스킬별 고유 연출 */
@@ -345,8 +373,6 @@ export class HuntScene extends RpgScene {
   private rollDone = 1;
   private rollSaid = false;
   private dodgeFx!: DodgeFx;
-  /** 11/17 넋 거두기: 지난 1초 동안 흡혈로 찬 양 (1초 상한) */
-  private stealBook: StealBook = [];
   /** 11/15 자동 스킬: 설정(칸·전체 스위치·궁극기 SP 남김) · 마지막 자동 시전 · 마지막으로 싸운(치거나 맞은) 시각 */
   private auto: HotAuto = cleanAuto(null, []);
   private autoAt = 0;
@@ -435,14 +461,26 @@ export class HuntScene extends RpgScene {
     this.ghosted = new WeakMap();
     // 스킬 트리 패시브 (공격력·치명타·방어·최대 HP …)는 판 시작 때 한 번 더해 둔다
     this.mods = skillMods(play.skills);
+    // 11/19 연계 보너스: 핵심 스킬마다 받침 랭크만큼 (판 시작 때 한 번)
+    this.syn = {};
+    for (const id of Object.keys(SYNERGY) as SkillId[]) this.syn[id] = synergyMul(id, play.skills);
+    // 야근 빌딩에서만 (일반 사냥터·지옥 사냥은 난이도 그대로 — 사용자 결정 11/19. 나중에 레이스 던전이 생기면 거기에도)
+    this.synGuard = play.tower ? synergyGuard(play.skills) : 0;
+    this.tm = tMods(play.tSkills);
+    this.basicN = 0;
+    this.handoverLeft = 0;
+    this.whirl = null;
+    this.leap = null;
     this.sg = new SetGearRun(play.equip);
+    this.egg = new SetEggRun(play.equip, play.sgEgg ?? 0);
+    this.eggMove = 1;
     this.sgPity = play.tower?.pity ?? 0;
     // 드롭 시드를 따로 받지 않는 판(시험·옛 흐름)은 서버도 판 시드로 굴린다 (lib/rpg/rewards dropTicketOf — 티켓에 드롭 시드가 없을 때)
     this.dropSeed = play.reveal ? null : play.seed;
     this.revealAsked = false;
     // 서버 시간은 게임 시간보다 늘 길다 (멈춘 시간) → 게임 시간으로 이만큼 지난 뒤면 서버도 알려 준다 (여유 1.5초)
     this.revealAt = play.reveal && !play.testDrops?.length && !play.noDrops ? dropRevealMs(play.seed, play.difficulty, play.zone, play.tower?.start) + 1500 : Infinity;
-    this.dv = withPassives(play.derived, this.mods);
+    this.dv = withPassives(play.derived, this.mods, this.tm);
     this.dvBase = this.dv;
     this.fields = [];
     this.slowMoUntil = 0;
@@ -554,7 +592,6 @@ export class HuntScene extends RpgScene {
     this.holdAim = null;
     this.faceLockUntil = 0;
     this.dodge = NO_DODGE;
-    this.stealBook = [];
     this.rollDone = 1;
     this.rollSaid = false;
     this.auto = cleanAuto(play.hotAuto, play.hotbar);
@@ -572,6 +609,7 @@ export class HuntScene extends RpgScene {
     this.dmg = new DamageNumbers(this, this.data0.reduced, this.skfx.mobile);
     this.tele = new TelegraphLayer(this);
     this.dodgeFx = new DodgeFx(this, this.data0.reduced);
+    this.eggFx = new SetEggFx(this, this.data0.reduced);
     this.patHost = this.makePatternHost();
     this.wstyle = weaponStyleOf(play.equip.weapon ? gearById(play.equip.weapon) : undefined);
     this.chain = 0;
@@ -606,6 +644,8 @@ export class HuntScene extends RpgScene {
       this.fx.destroy();
       this.skfx.clear();
       this.tele.destroy();
+      this.eggFx?.destroy();
+      this.eggFx = null;
     });
 
     // 11/15 능력 카드 (야근 빌딩): 체크포인트에서 시작하면 첫 층 전에 카드부터 고른다
@@ -882,8 +922,9 @@ export class HuntScene extends RpgScene {
     return b && b.until > this.now ? b.v : 0;
   }
 
+  /** 공격력 (세트 장비 저체력 배율 포함). 11/19 장작 더 넣기·화롯가 온기는 마공 피해에만 — strike가 곱한다 */
   private atk(): number {
-    return this.dv.atk * (1 + this.buff("em_stoke")) * this.sg.atkMul(this.hp, this.dv.maxHp);
+    return this.dv.atk * this.sg.atkMul(this.hp, this.dv.maxHp);
   }
 
   private setFace(dx: number, dy: number): void {
@@ -926,7 +967,7 @@ export class HuntScene extends RpgScene {
     this.atkBuffered = false;
     const st = this.wstyle;
     // 11/15 끝없는 회의실 시계 보는 사람 곁: 공격 간격이 길어진다
-    this.atkCdMs = attackCooldownMs(this.dv.aspd * (1 + this.buff("so_swift_aspd")) * this.sg.aspdMul(this.now) * (this.cards?.focusMul(this.movingNow) ?? 1), st) * (this.theme?.atkCdMul?.() ?? 1);
+    this.atkCdMs = attackCooldownMs(this.dv.aspd * (1 + this.buff("so_swift_aspd") + this.buff("wk_tireless")) * this.sg.aspdMul(this.now) * (this.cards?.focusMul(this.movingNow) ?? 1), st) * (this.theme?.atkCdMul?.() ?? 1);
     this.atkReadyAt = this.now + this.atkCdMs;
     this.wasReady = false;
     this.chain = this.now - this.lastAtkAt <= this.atkCdMs + CHAIN_GRACE_MS ? (this.chain % FINISHER_EVERY) + 1 : 1;
@@ -969,7 +1010,9 @@ export class HuntScene extends RpgScene {
   /** 근접: (휘두르는 동작 뒤) 부채꼴 안을 모두. 연타는 여러 번, 내려찍기 마무리는 사방 충격파 */
   private melee(fin: boolean): void {
     const st = this.wstyle;
-    const area = fin && (st.finisher.range || st.finisher.arcDeg) ? { range: st.finisher.range ?? this.area.range, arcDeg: st.finisher.arcDeg ?? this.area.arcDeg } : this.area;
+    const area0 = fin && (st.finisher.range || st.finisher.arcDeg) ? { range: st.finisher.range ?? this.area.range, arcDeg: st.finisher.arcDeg ?? this.area.arcDeg } : this.area;
+    // 11/19 쉬지 않는 손: 닿는 거리 +
+    const area = this.buff("wk_tireless") ? { ...area0, range: area0.range * SKILL_FX.wk_tireless(1).rangeMul } : area0;
     const n = fin ? (st.finisher.hits ?? st.hits) : st.hits;
     const mult = st.mult * (fin ? st.finisher.mult : 1);
     const opts: HitOpts = { kb: st.kb, stun: st.stunMs, heavy: st.id === "smash", basic: true };
@@ -993,8 +1036,32 @@ export class HuntScene extends RpgScene {
           }
           this.fx.crack(fx, fy);
         }
-        this.inArea(area).forEach((m, i) => this.strike(m, mult, false, i, opts));
+        const front = this.inArea(area);
+        front.forEach((m, i) => this.strike(m, mult, false, i, opts));
+        // 11/19 사방 삽질 (일꾼 1단 패시브): 옆·뒤로도 같이 휘두른다 (앞에서 맞은 적은 빼고)
+        if (this.mods.sidePct > 0) this.allRound(area, mult, opts, new Set(front));
       });
+    }
+  }
+
+  /** 11/19 사방 삽질: 바라보는 쪽에서 ±90°(옆)·180°(뒤) 부채꼴을 약하게 친다. 흙빛 삽날 잔상 */
+  private allRound(area: AttackArea, mult: number, opts: HitOpts, skip: Set<Mon>): void {
+    const a0 = Math.atan2(this.face.y, this.face.x);
+    const sub = { range: area.range * 0.85, arcDeg: Math.min(100, area.arcDeg) };
+    let k = skip.size;
+    for (const [da, mul] of [
+      [Math.PI / 2, this.mods.sidePct],
+      [-Math.PI / 2, this.mods.sidePct],
+      [Math.PI, this.mods.backPct],
+    ] as const) {
+      const a = a0 + da;
+      const f = { x: Math.cos(a), y: Math.sin(a) };
+      if (!this.data0.reduced) this.fx.motion(this.wstyle.id, this.px + f.x * 4, this.py - 6 + f.y * 3, a, sub.range, false)?.setAlpha(0.45).setTint(0xc89a62);
+      for (const m of this.mons) {
+        if (!m.alive || m.hidden || skip.has(m) || !inAttackArea(sub, f, m.x - this.px, m.y - this.py, MONSTERS[m.id].size / 2)) continue;
+        skip.add(m);
+        this.strike(m, mult * mul, false, k++, opts);
+      }
     }
   }
 
@@ -1124,31 +1191,62 @@ export class HuntScene extends RpgScene {
   /** 명중·치명타 판정 후 피해. nth: 한 번에 여러 마리를 때릴 때 순번 (소리는 첫 마리만, 숫자는 조금씩 엇갈리게) */
   private strike(m: Mon, mult: number, sureHit = false, nth = 0, opts: HitOpts = {}): void {
     const d = this.dv;
+    // 11/19 마공(모닥불·서리·넋)·물공(기본 공격·일꾼 스킬). 일꾼 스킬은 기본 공격처럼 명중 판정을 받는다
+    const magic = isMagicBranch(opts.skill);
+    if (opts.skill === "worker") sureHit = false;
     if (!sureHit && Math.random() > hitChance(d.hit, m.st.flee)) {
       this.fx.miss(m.x, m.y - MONSTERS[m.id].size - 2);
       if (nth === 0) this.sfx.play("miss", 0.45);
       return;
     }
-    const crit = Math.random() * 100 < d.crit;
+    // 11/19 치명타 확률: 마공은 튀는 불티, 물공은 급소 찌르기(초월). 일꾼의 뚝심: 기본 공격 N번째는 반드시
+    // 11/19 일꾼 패시브는 모든 대상에 (첫 대상만 규칙은 실제 게임에서 일꾼 무리 정리를 너무 느리게 만들어 뺐다 — 1~10층 재현)
+    const primary = true;
+    const sure = !!opts.basic && primary && this.mods.sureCritEvery > 0 && ++this.basicN % this.mods.sureCritEvery === 0;
+    const crit = sure || Math.random() * 100 < Math.min(60, d.crit + (magic ? this.mods.crit : this.tm.physCrit));
+    if (sure) {
+      this.passiveSnd("wk_grit", 200);
+      this.mv.gritFlash(m.x, m.y - MONSTERS[m.id].size * 0.6);
+    }
     // 약화(넋 사슬·얼음 무덤·서리밭) + 살얼음 패시브(느려지거나 묶인 적)
     const held = m.slowUntil > this.now || m.stunUntil > this.now;
-    const vuln = (m.vulnUntil > this.now ? m.vuln : 0) + (held ? this.mods.vsSlowed : 0);
+    // 11/19 v2 살얼음은 마공에만 (갈래 패시브는 자기 피해 종류에만)
+    const vuln = (m.vulnUntil > this.now ? m.vuln : 0) + (held && magic ? this.mods.vsSlowed : 0);
     // 11/15 능력 카드: 참조 추가만큼 한 번 피해 ↓ · 치명타 피해 ↑ · 원샷 결재
     // 11/15 스킬은 가진 카드 등급만큼 더 세다 (야근 빌딩)
-    const cm = this.cards ? (opts.basic ? this.cards.hitMul : opts.skill ? this.cards.skillMul : 1) : 1;
-    let dmg = damage(this.atk(), mult * cm * (opts.aoe ? 1 + this.mods.aoePct : 1), m.st.def, Math.random(), crit, vuln);
+    // 11/19 마공 카드(기획서 다듬기): 마공 스킬·부른 넋 피해 +
+    let cm = this.cards ? (opts.basic ? this.cards.hitMul : opts.skill ? this.cards.skillMul * this.cards.branchMul(opts.skill) * (magic ? this.cards.magicMul : 1) : 1) : 1;
+    // 11/19 업무 인수인계: 스킬을 쓴 뒤 기본 공격 세 번 (회오리 베기도 기본 공격)
+    if (opts.basic && this.handoverLeft > 0 && this.cards) {
+      cm *= 1 + this.cards.handover;
+      if (nth === 0) this.handoverLeft--;
+    }
+    // 11/19 마공: 화롯가 온기·장작 더 넣기·깊어진 주문 / 물공: 굳은살·뚝심(기본 공격)·무뎌지지 않는 날 / 모두: 큰 놈 사냥(우두머리)
+    const side = magic
+      ? (1 + this.mods.atkPct) * (1 + this.buff("em_stoke")) * (1 + this.tm.magicPct)
+      : (1 + (opts.basic && primary ? this.mods.basicPct : 0) + this.tm.physPct);
+    const isBoss = m.boss || MONSTERS[m.id].behavior === "boss";
+    // 11/19 v2 모닥불 광역기는 우두머리에게 덜 아프다 (넓게 태우는 불)
+    // 11/19 화톳불은 한자리에서 오래 타는 불이라 우두머리에게도 그대로 (화톳불 진지 = 모닥불의 보스 딜 빌드)
+    const bossK = isBoss ? (1 + this.tm.bossPct) * (opts.aoe && opts.skill === "ember" && opts.sid !== "em_brazier" ? EMBER_AOE_BOSS : 1) : 1;
+    // 11/19 연계 보너스 (핵심 스킬 ← 받침 랭크)
+    const syn = opts.sid ? (this.syn[opts.sid] ?? 1) : 1;
+    let dmg = damage(this.atk(), mult * cm * side * bossK * syn * (opts.aoe ? 1 + this.mods.aoePct : 1), m.st.def, Math.random(), crit, vuln);
+    // 11/19 깊게 파기: 물공 치명타 피해 +
+    if (crit && !magic && primary && this.mods.physCritDmg > 0) dmg = Math.round((dmg * (1.5 + this.mods.physCritDmg)) / 1.5);
     if (crit && this.cards) dmg = Math.round(dmg * this.cards.critMul);
     // 11/15 퇴사 각·성과급
     if (this.cards) dmg = Math.round(dmg * this.cards.dmgMul(m));
-    if (this.cards?.oneshot(m)) dmg = Math.max(dmg, Math.ceil(m.hp));
+    if (this.cards?.oneshot(m, !!opts.aoe)) dmg = Math.max(dmg, Math.ceil(m.hp));
     this.hurtMonster(m, dmg, crit, nth, opts);
-    if (this.cards && opts.basic) this.cards.onBasicHit(m);
-    else if (this.cards && opts.skill) this.cards.onSkillHit(m);
-    // 넋 거두기 패시브: 준 피해의 일부를 HP로 (한 번에 최대 HP의 3%, 광역기·소환은 절반, 1초에 모두 합쳐 8%까지 — lib/rpg/lifesteal)
-    const stolen =
-      this.mods.steal > 0 && !this.died && this.hp < d.maxHp
-        ? stealHeal(this.stealBook, this.now, { dmg, steal: this.mods.steal, maxHp: d.maxHp, missing: d.maxHp - this.hp, kind: opts.summon ? "summon" : opts.aoe ? "aoe" : "single" })
-        : 0;
+    // 11/19 천 번째 삽질 (초월): 기본 공격이 가끔 한 번 더 맞는다
+    if (opts.basic && !opts.again && this.tm.dbl > 0 && Math.random() < this.tm.dbl) this.later(70, () => m.alive && this.strike(m, mult, true, nth + 1, { ...opts, again: true }));
+    // 11/19 「때린 적」 카드(불·얼음·독·번개·토스·사내 정치)는 기본 공격에도 스킬에도 붙는다 (광역 스킬·회오리는 맞은 적마다 1/3 — CardRun AOE_PROC)
+    if (this.cards && opts.basic) this.cards.onBasicHit(m, !!opts.aoe);
+    else if (this.cards && opts.skill) this.cards.onSkillHit(m, !!opts.aoe);
+    // 넋 거두기 패시브: 준 피해의 일부를 HP로 (한 번에 최대 HP의 3%까지 — lib/rpg/lifesteal, 11/19 v70 규칙으로 되돌림)
+    // 11/19 v2 넋 거두기는 마공(스킬·부른 넋)에만
+    const stolen = this.mods.steal > 0 && magic && !this.died && this.hp < d.maxHp ? stealHeal({ dmg, steal: this.mods.steal, maxHp: d.maxHp, missing: d.maxHp - this.hp }) : 0;
     if (stolen > 0) {
       this.hp = Math.min(d.maxHp, this.hp + stolen * this.curse.healMul);
       this.mv.drainWisp({ x: m.x, y: m.y - MONSTERS[m.id].size / 2 }, { x: this.px, y: this.py });
@@ -1160,7 +1258,8 @@ export class HuntScene extends RpgScene {
       this.passiveSnd("fr_brittle", 140);
     }
     if (opts.slowMs && m.alive) {
-      m.slowUntil = Math.max(m.slowUntil, this.now + opts.slowMs);
+      // 11/19 v2 우두머리 둔화는 1/3 (묶기 hold와 같다)
+      m.slowUntil = Math.max(m.slowUntil, this.now + (isBoss ? opts.slowMs / 3 : opts.slowMs));
       m.sprite.setTint(0x9fdcff);
     }
     // 불씨 옮기기 패시브: 기본 공격이 맞으면 가끔 작은 폭발
@@ -1188,7 +1287,9 @@ export class HuntScene extends RpgScene {
     // 11/15 테스트 서버 슈퍼 계정 구경: 공격력 ×20
     if (this.play.tower?.boost) dmg *= 20;
     // 11/15 세트 장비: 치명타 피해·우두머리 피해·결재 완료·출장 4세트
-    if (this.sg.active) dmg = Math.max(1, Math.round(dmg * this.sg.hitMul(this.now, { crit, boss: !!m.boss || MONSTERS[m.id].behavior === "boss", hpRatio: m.hp / m.st.maxHp, basic: !!opts.basic, who: m })));
+    if (this.sg.active) dmg = Math.max(1, Math.round(dmg * this.sg.hitMul(this.now, { crit, boss: !!m.boss || MONSTERS[m.id].behavior === "boss", hpRatio: m.hp / m.st.maxHp, basic: !!opts.basic, magic: isMagicBranch(opts.skill), who: m })));
+    // 11/19 숨겨진 5세트 「마일리지 적립」: 가득 차면 기본 공격 한 번 +30%
+    if (this.egg.any) dmg = Math.max(1, Math.round(dmg * this.egg.hitMul(this.now, !!opts.basic)));
     this.logDmg += Math.max(0, Math.min(dmg, m.hp));
     m.hp -= dmg;
     const def = MONSTERS[m.id];
@@ -1227,6 +1328,11 @@ export class HuntScene extends RpgScene {
     // 타격감은 맞은 몬스터만의 흰 번쩍임·밀려남·경직(stunUntil)과 치명타 흔들림으로 낸다
     if (crit) this.fx.shake(80, 0.003);
     else if (opts.heavy && nth === 0) this.fx.shake(60, 0.002);
+    // 11/19 숨겨진 5세트 「도장 쾅」: 치명타에 가끔 빨간 「승인」 도장 + 그 적 0.3초 멈춤 (우두머리는 1/3)
+    if (crit && this.egg.any && this.egg.stamp(this.now)) {
+      this.eggFx?.stamp(m.x, m.y - def.size * 0.6);
+      m.stunUntil = Math.max(m.stunUntil, this.now + (boss ? SG_EGG_FX.stampFreezeMs / 3 : SG_EGG_FX.stampFreezeMs));
+    }
     this.combo++;
     this.comboAt = this.now;
     this.maxCombo = Math.max(this.maxCombo, this.combo);
@@ -1276,7 +1382,7 @@ export class HuntScene extends RpgScene {
     this.theme?.killed?.(m);
     // 11/15 야근 빌딩 우두머리: 쓰러진 자리에 상자 (층을 다 깨면 열린다 — 오늘 상자가 없으면 알림만)
     if (this.play.tower && m.boss && m.id === this.zone.boss && isBossFloor(this.floor) && !this.bossChest) {
-      if (this.chestsLeft > 0) this.bossChest = new BossChest(this, m.x, m.y, this.now, RTEX.glow, this.data0.reduced);
+      if (this.chestsLeft > 0 && isChestFloor(this.floor)) this.bossChest = new BossChest(this, m.x, m.y, this.now, RTEX.glow, this.data0.reduced);
       else this.floatText(m.x, m.y - 24, "오늘 상자는 다 받았어요", "#c8c0a8", 10);
     }
   }
@@ -1378,7 +1484,11 @@ export class HuntScene extends RpgScene {
   private cdOf(id: SkillId): number {
     const def = skillById(id);
     const lv = this.play.skills[id] ?? 1;
-    return def ? Math.round(def.cooldownMs(lv) * (1 - this.mods.cdCut)) : 1;
+    // 11/19 짧아진 숨(초월)은 마공 스킬만
+    // 11/19 v2 동지의 맹세 쿨감·짧아진 숨은 마공 스킬만
+    const magic = !!def && isMagicBranch(def.branch);
+    // 11/19 회의 줄이기(마공 카드): 마공 쿨타임 −
+    return def ? Math.round(def.cooldownMs(lv) * (magic ? (1 - this.mods.cdCut) * (1 - this.tm.cdCut) * (this.cards?.magicCdMul ?? 1) : (this.cards?.wkCdMul ?? 1))) : 1;
   }
 
   /** 칸의 스킬 쓰기. quiet: 자동 시전 (못 쓸 때 알림·소리 없이). 썼으면 true */
@@ -1397,6 +1507,13 @@ export class HuntScene extends RpgScene {
       this.sfx.play("miss", 0.4);
       return false;
     }
+    // 11/19 삽날 회오리: 켜 있으면 다시 눌러 끈다 (SP·쿨 없이 — 쿨은 끌 때 걸린다)
+    if (id === "wk_whirl" && this.whirl) {
+      this.stopWhirl();
+      return true;
+    }
+    // 공중(봉분 뛰어넘기)에서는 다른 스킬을 쓰지 않는다
+    if (this.leap) return false;
     const cost = def.sp(lv);
     if (this.sp < cost) {
       if (quiet) return false;
@@ -1405,10 +1522,27 @@ export class HuntScene extends RpgScene {
       return false;
     }
     this.sp -= cost;
+    // 11/19 경비 환급(마공 카드): 마공 스킬에 쓴 SP 일부를 돌려받는다
+    if (this.cards && this.cards.refund > 0 && isMagicBranch(def.branch)) this.sp = Math.min(this.dv.maxSp, this.sp + cost * this.cards.refund);
     // 11/15 세트 장비: 재사용 시간 옵션·회의 4세트
     this.skillReady[id] = this.now + Math.round(this.cdOf(id) * this.sg.cdMul());
     this.passiveSnd("fr_solstice", 2000);
     this.castSkill(id, lv);
+    // 11/19 숨겨진 5세트 「회의가 길어진다」
+    if (this.egg.any && this.egg.talk(this.now)) this.eggTalk();
+    if (this.cards?.handover) this.handoverLeft = 3;
+    // 11/19 메아리 주문 (초월): 마공 스킬이 가끔 한 번 더 (절반 세기 — 몸 옮기기·강화·부르기·궁극기는 빼고)
+    const look = SKILL_LOOK[id].kind;
+    if (this.tm.echo > 0 && isMagicBranch(def.branch) && def.tier < 5 && !["dash", "buff", "summon"].includes(look) && Math.random() < this.tm.echo) {
+      this.later(280, () => {
+        if (this.died) return;
+        const save = this.dv;
+        this.dv = { ...save, skillPower: save.skillPower * this.tm.echoMult };
+        this.floatText(this.px, this.py - 26, "메아리", "#d6b0ff", 9);
+        this.castSkill(id, lv);
+        this.dv = save;
+      });
+    }
     // 11/15 부채꼴 판정(80~90ms 뒤)까지 걷는 방향이 바라보는 쪽을 덮어쓰지 않게
     this.faceLockUntil = Math.max(this.faceLockUntil, this.now + 160);
     // 11/13 같은 사냥터 사람에게 스킬 동작 (이름은 받는 쪽 카탈로그에서)
@@ -1440,7 +1574,7 @@ export class HuntScene extends RpgScene {
 
   /** 스킬 타격 옵션 (갈래·무게·묶음) */
   private sk(id: SkillId, group: DmgGroup | null, more: HitOpts = {}): HitOpts {
-    return { skill: skillById(id)?.branch, weight: SKILL_LOOK[id].weight, group, ...more };
+    return { skill: skillById(id)?.branch, weight: SKILL_LOOK[id].weight, group, sid: id, ...more };
   }
 
   /** 큰 광역기의 짧은 슬로 (움직임 줄이기면 안 한다) */
@@ -1561,6 +1695,144 @@ export class HuntScene extends RpgScene {
     const snd = (ev: SoundEv, o?: SoundOpt, gapMs = 0) => this.sfx.skill(id, ev, k, o, gapMs);
     const me = { x: this.px, y: this.py };
     switch (id) {
+      // ════ 삽자루 일꾼 (11/19 물공: pow 없이 공격력만, 명중 판정을 받는다) ════
+      case "wk_charge": {
+        // 돌진: 가까운 적(없으면 바라보는 쪽)으로 미끄러지며 길 위의 적을 밀친다. 그동안 잠깐 무적
+        const fx = SKILL_FX.wk_charge(lv);
+        const t = this.nearest(fx.reach);
+        if (t) this.setFace(t.x - this.px, t.y - this.py);
+        this.cutIn("worker", false);
+        snd("cast");
+        if (fx.invulnMs > 0) this.buffs.set("invuln", { until: now + fx.invulnMs, v: 1 });
+        const from = { x: this.px, y: this.py };
+        const steps = 6;
+        for (let i = 0; i < steps; i++) {
+          this.slide((this.face.x * fx.dist) / steps, (this.face.y * fx.dist) / steps);
+          this.player.setPosition(Math.round(this.px), Math.round(this.py));
+          fxs.ghost(this.player, "worker", 0.55 - i * 0.07, 240 + i * 30);
+        }
+        const to = { x: this.px, y: this.py };
+        fxs.zone({ kind: "band", x0: from.x, y0: from.y, x1: to.x, y1: to.y, w: fx.width }, "worker", 120);
+        mv.shovelDash(from, to);
+        this.leanBody(this.face.x, 220);
+        const g = this.hitGroup(id, (from.x + to.x) / 2, (from.y + to.y) / 2 - 34);
+        let k = 0;
+        for (const m of [...this.mons]) {
+          if (!m.alive || m.hidden) continue;
+          if (segDist(m.x, m.y, from.x, from.y, to.x, to.y) < fx.width + MONSTERS[m.id].size / 2) this.strike(m, fx.mult, false, k++, this.sk(id, g, { kb: fx.kb, heavy: true }));
+        }
+        if (k) {
+          snd("hit");
+          fxs.punch(2, "worker");
+        }
+        break;
+      }
+      case "wk_combo": {
+        // 찌르고 퍼 올리기: 앞을 두 번 찌르고(가는 부채꼴) 크게 퍼 올린다 — 마지막에 흙이 튀고 기절
+        const fx = SKILL_FX.wk_combo(lv);
+        this.aimNearest(fx.range + 10);
+        this.cutIn("worker", false);
+        snd("cast");
+        const g = this.hitGroup(id, this.px + this.face.x * fx.range * 0.6, this.py - 34);
+        fx.split.forEach((part, i) => {
+          this.later(i * fx.gapMs, () => {
+            if (this.died) return;
+            const last = i === fx.split.length - 1;
+            const a = ang();
+            fxs.zone({ kind: "cone", x: this.px, y: this.py, ang: a, range: fx.range, arcDeg: last ? fx.arcDeg : 30 }, "worker", 70);
+            this.fx.motion(last ? "smash" : "thrust", this.px + this.face.x * 4, this.py - 6 + this.face.y * 3, a, fx.range, last);
+            mv.shovelThrust(this.px, this.py, a, fx.range, last);
+            this.leanBody(this.face.x * (last ? 1.4 : 0.6), last ? 200 : 110);
+            const hit = this.inArea({ range: fx.range, arcDeg: last ? fx.arcDeg : 40 });
+            hit.forEach((m, j) => {
+              this.strike(m, fx.mult * part, false, j, this.sk(id, g, { kb: last ? 1.6 : 0.4, heavy: last }));
+              if (last && m.alive) this.hold(m, fx.stunMs, 0xe8d2a8);
+            });
+            if (last && hit.length) fxs.punch(2, "worker");
+          });
+        });
+        break;
+      }
+      case "wk_leap": {
+        // 봉분 뛰어넘기: 가장 몰린 곳으로 높이 뛰어 날아가(공중 무적) 착지하며 둘레를 내려찍는다. 착지 뒤 잠깐 못 움직인다
+        const fx = SKILL_FX.wk_leap(lv);
+        const to = this.crowdPoint(fx.reach, fx.radius);
+        this.setFace(to.x - this.px, to.y - this.py);
+        this.cutIn("worker", true);
+        snd("cast", { ms: fx.airMs });
+        fxs.aimAt(me, to, fx.radius, "worker", fx.airMs);
+        mv.leapStart(me, to, fx.radius, fx.airMs);
+        // 공중에서는 무적, 착지 뒤 landMs 동안 못 움직인다 (뛰어드는 위험)
+        this.buffs.set("invuln", { until: now + fx.airMs, v: 1 });
+        this.rootUntil = Math.max(this.rootUntil, now + fx.airMs + fx.landMs);
+        this.leap = { x0: this.px, y0: this.py, x1: to.x, y1: to.y, at: now, dur: fx.airMs, lv };
+        break;
+      }
+      case "wk_tireless": {
+        const fx = SKILL_FX.wk_tireless(lv);
+        this.cutIn("worker", false);
+        snd("cast");
+        this.buffs.set("wk_tireless", { until: now + fx.durMs, v: fx.aspd });
+        mv.tireless(this.px, this.py);
+        this.floatText(this.px, this.py - 24, `공격 속도 +${Math.round(fx.aspd * 100)}%`, "#e8d2a8", 10);
+        break;
+      }
+      case "wk_whirl": {
+        // 삽날 회오리: 켠다 (끄는 건 useSkill이 다시 누를 때). 공격 속도만큼 둘레를 기본 공격으로 벤다
+        this.cutIn("worker", false);
+        snd("cast");
+        this.whirl = { lv, nextAt: now, spAt: now, spin: 0 };
+        // 위쪽 버프 줄에 「회오리 켜짐」 (끌 때 지운다)
+        this.buffs.set("wk_whirl", { until: Number.MAX_SAFE_INTEGER, v: 1 });
+        // 쿨은 끌 때 건다 (켜 있는 동안은 다시 눌러 끌 수 있게)
+        this.skillReady[id] = 0;
+        break;
+      }
+      case "wk_allnight": {
+        // 밤샘 삽질 (궁극): 적 사이를 여섯 번 연달아 돌진 — 도는 동안 무적, 카메라는 나를 따라간다
+        const fx = SKILL_FX.wk_allnight(lv);
+        this.cutIn("worker", true);
+        snd("cast");
+        fxs.screenTint(PALETTES.worker.dark, 0.25, 120, fx.dashes * fx.gapMs, 300);
+        mv.allnightCast(this.px, this.py);
+        this.slowMo(220);
+        const total = 360 + fx.dashes * fx.gapMs + 200;
+        // 11/19 무적은 돌진하는 순간만 (뛰어드는 위험을 지게 — 도는 내내 무적이 아니다)
+        this.rootUntil = Math.max(this.rootUntil, now + total);
+        const g = this.hitGroup(id, this.px, this.py - 40, 900, 2);
+        for (let i = 0; i < fx.dashes; i++) {
+          this.later(360 + i * fx.gapMs, () => {
+            if (this.died) return;
+            const t = this.nearest(220);
+            this.buffs.set("invuln", { until: this.now + 140, v: 1 });
+            const a = t ? Math.atan2(t.y - this.py, t.x - this.px) : ang() + (i % 2 ? 2.4 : -2.4);
+            this.setFace(Math.cos(a), Math.sin(a));
+            const from = { x: this.px, y: this.py };
+            const len = t ? Math.min(fx.len, Math.hypot(t.x - this.px, t.y - this.py) + 30) : fx.len;
+            const steps = 6;
+            for (let j = 0; j < steps; j++) {
+              this.slide((Math.cos(a) * len) / steps, (Math.sin(a) * len) / steps);
+              this.player.setPosition(Math.round(this.px), Math.round(this.py));
+              fxs.ghost(this.player, "worker", 0.6 - j * 0.08, 260);
+            }
+            const to = { x: this.px, y: this.py };
+            fxs.zone({ kind: "band", x0: from.x, y0: from.y, x1: to.x, y1: to.y, w: fx.width }, "worker", 140);
+            snd("hit");
+            let k = 0;
+            for (const m of [...this.mons]) {
+              if (!m.alive || m.hidden) continue;
+              if (segDist(m.x, m.y, from.x, from.y, to.x, to.y) < fx.width + MONSTERS[m.id].size / 2) this.strike(m, fx.mult, false, k++, this.sk(id, g, { kb: 1.8, heavy: true, aoe: true }));
+            }
+            const lastDash = i === fx.dashes - 1;
+            mv.shovelDash(from, to);
+            mv.allnightBurst(to.x, to.y, lastDash);
+            this.leanBody(Math.cos(a), 200);
+            this.fx.shake(lastDash ? 260 : 90, lastDash ? 0.009 : 0.004);
+            if (lastDash) fxs.punch(4, "worker");
+          });
+        }
+        break;
+      }
       // ════ 모닥불지기 ════
       case "em_kindle": {
         // 투사체형: 금빛 다트가 포물선으로 날아가 금빛 불꽃 꽃으로 터진다
@@ -1802,7 +2074,7 @@ export class HuntScene extends RpgScene {
       }
       case "so_lamp": {
         const fx = SKILL_FX.so_lamp(lv);
-        const heal = Math.round((this.dv.maxHp * fx.healPct * pow + this.dv.stats.int * 3) * this.curse.healMul);
+        const heal = Math.round((this.dv.maxHp * fx.healPct * pow + this.dv.stats.int * 3) * soulFocus(this.play.skills) * this.curse.healMul);
         this.hp = Math.min(this.dv.maxHp, this.hp + heal);
         this.rootUntil = now + fx.rootMs;
         this.cutIn("soul", false);
@@ -1816,8 +2088,10 @@ export class HuntScene extends RpgScene {
         this.cutIn("soul", false);
         snd("cast");
         mv.swift(this.px, this.py);
-        this.buffs.set("so_swift", { until: now + fx.durMs, v: fx.move });
-        this.buffs.set("so_swift_aspd", { until: now + fx.durMs, v: fx.aspd });
+        // 11/19 v3 넋에 쓴 포인트만큼 (섞어 찍기는 약하게)
+        const k = soulFocus(this.play.skills);
+        this.buffs.set("so_swift", { until: now + fx.durMs, v: fx.move * k });
+        this.buffs.set("so_swift_aspd", { until: now + fx.durMs, v: fx.aspd * k });
         this.floatText(this.px, this.py - 24, "바람 넋", "#9ff0dc", 10);
         break;
       }
@@ -2016,7 +2290,7 @@ export class HuntScene extends RpgScene {
         f.group.x = f.x;
         f.group.y = f.y - 40;
         const look = f.skill ? SKILL_LOOK[f.skill] : null;
-        this.aoeAt(f.x, f.y, f.r, f.mult, { skill: f.branch, aoe: true, kb: 0.5, slowMs: f.kind === "brazier" ? 0 : 1100, weight: look ? Math.min(1, look.weight) : 1, group: f.group }, (m) => this.weaken(m, f.vuln, f.every + 200));
+        this.aoeAt(f.x, f.y, f.r, f.mult, { skill: f.branch, aoe: true, kb: 0.5, slowMs: f.kind === "brazier" ? 0 : 1100, weight: look ? Math.min(1, look.weight) : 1, group: f.group, sid: f.skill }, (m) => this.weaken(m, f.vuln, f.every + 200));
       }
     }
     for (const f of this.fields) {
@@ -2043,6 +2317,105 @@ export class HuntScene extends RpgScene {
     return { x: this.px, y: this.py };
   }
 
+  /** 11/19 봉분 뛰어넘기: reach 안 적 자리 중 둘레 radius 안에 가장 많이 몰린 곳 (없으면 바라보는 쪽 reach의 절반) */
+  private crowdPoint(reach: number, radius: number): { x: number; y: number } {
+    let best: { x: number; y: number } | null = null;
+    let bn = 0;
+    for (const m of this.mons) {
+      if (!m.alive || m.hidden || Math.hypot(m.x - this.px, m.y - this.py) - MONSTERS[m.id].size / 2 > reach) continue;
+      let n = 0;
+      for (const o of this.mons) if (o.alive && !o.hidden && Math.hypot(o.x - m.x, o.y - m.y) < radius + MONSTERS[o.id].size / 2) n += o.boss ? 2 : 1;
+      if (n > bn) {
+        bn = n;
+        best = { x: m.x, y: m.y };
+      }
+    }
+    return this.patHost.clampPoint(best ? best.x : this.px + this.face.x * reach * 0.5, best ? best.y : this.py + this.face.y * reach * 0.5);
+  }
+
+  /** 11/19 삽날 회오리 끄기 (쿨은 끌 때부터) */
+  private stopWhirl(): void {
+    if (!this.whirl) return;
+    this.whirl = null;
+    this.buffs.delete("wk_whirl");
+    this.skillReady.wk_whirl = this.now + this.cdOf("wk_whirl");
+    this.player.setAngle(0);
+  }
+
+  /** 11/19 일꾼 몸짓: 나아가는 쪽으로 잠깐 기울였다 돌아온다 (돌진·찌르기) */
+  private leanBody(dir: number, ms: number): void {
+    if (this.data0.reduced || this.whirl) return;
+    const deg = Math.max(-18, Math.min(18, dir * 14));
+    this.tweens.killTweensOf(this.player);
+    this.player.setAngle(deg);
+    this.tweens.add({ targets: this.player, angle: 0, duration: ms, ease: "Quad.easeOut" });
+  }
+
+  /** 11/19 일꾼: 봉분 뛰어넘기(공중 → 착지)·삽날 회오리(켜 있는 동안 베기·SP) */
+  private updateWorker(now: number, delta: number): void {
+    const L = this.leap;
+    if (L) {
+      const t = Math.min(1, (now - L.at) / L.dur);
+      const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      this.px = L.x0 + (L.x1 - L.x0) * e;
+      this.py = L.y0 + (L.y1 - L.y0) * e;
+      const lift = Math.sin(Math.PI * t) * 34;
+      this.player.setPosition(Math.round(this.px), Math.round(this.py - lift)).setScale(1 + Math.sin(Math.PI * t) * 0.25);
+      if (t >= 1) {
+        this.leap = null;
+        this.player.setScale(1);
+        const p = { x: this.px, y: this.py };
+        for (const o of this.obstacles) this.pushOut(p, o, PLAYER_R);
+        this.arena.collide(p, PLAYER_R);
+        this.px = p.x;
+        this.py = p.y;
+        const fx = SKILL_FX.wk_leap(L.lv);
+        this.sfx.skill("wk_leap", "hit", this.skPow("wk_leap"));
+        this.skfx.pw = skillPower(3, L.lv, 5);
+        this.mv.leapLand(this.px, this.py, fx.radius);
+        this.fx.shake(160, 0.006);
+        // 착지 웅크림 (찌그러졌다 펴진다)
+        if (!this.data0.reduced) {
+          this.player.setScale(1.18, 0.78);
+          this.tweens.add({ targets: this.player, scaleX: 1, scaleY: 1, duration: fx.landMs, ease: "Back.easeOut" });
+        }
+        const g = this.hitGroup("wk_leap", this.px, this.py - 40);
+        this.aoeAt(this.px, this.py, fx.radius, fx.mult, this.sk("wk_leap", g, { aoe: true, kb: 1.2, heavy: true }), (m) => this.hold(m, fx.stunMs, 0xe8d2a8));
+        this.skfx.punch(3, "worker");
+      }
+    }
+    const W0 = this.whirl;
+    if (!W0) return;
+    if (this.died || this.status.has("freeze", now) || this.status.has("silence", now) || this.endSnap) {
+      this.stopWhirl();
+      return;
+    }
+    const fx = SKILL_FX.wk_whirl(W0.lv);
+    // SP: 초당 spPerSec (모자라면 멈춘다)
+    const need = (fx.spPerSec * Math.max(0, now - W0.spAt)) / 1000;
+    if (need >= 1) {
+      const whole = Math.floor(need);
+      if (this.sp < whole) {
+        this.stopWhirl();
+        this.flash("SP가 바닥나 회오리를 멈췄어요", 900);
+        return;
+      }
+      this.sp -= whole;
+      W0.spAt += (whole * 1000) / fx.spPerSec;
+    }
+    // 빙글빙글 (그림만 — 아바타는 매 프레임 sync가 기울기를 되돌리므로 그 뒤에 돌린다)
+    W0.spin = (W0.spin + delta * 1.2) % 360;
+    this.player.setAngle(W0.spin);
+    if (now >= W0.nextAt) {
+      const aspd = this.dv.aspd * (1 + this.buff("so_swift_aspd") + this.buff("wk_tireless")) * this.sg.aspdMul(now);
+      W0.nextAt = now + 1000 / Math.max(0.5, aspd);
+      this.mv.whirlTick(this.px, this.py, fx.radius, W0.spin);
+      this.sfx.skill("wk_whirl", "hit", this.skPow("wk_whirl"), {}, 120);
+      // 기본 공격으로 벤다 (굳은살·뚝심·천 번째 삽질·카드 기본 공격 효과가 붙는다)
+      this.aoeAt(this.px, this.py, fx.radius, fx.mult, { basic: true, aoe: true, kb: 0.5, skill: "worker", weight: 1, sid: "wk_whirl" });
+    }
+  }
+
   /** 망자의 초롱: 사거리 안 가장 가까운 적에게 넋불을 쏜다 */
   private updateTurret(now: number): void {
     const t = this.turret;
@@ -2062,7 +2435,7 @@ export class HuntScene extends RpgScene {
     this.passiveSnd("so_lantern", 120, "tick");
     this.passiveSnd("so_kinship", 1500);
     if (!t.group || t.group.closed) t.group = this.dmg.group(t.sprite.x, t.sprite.y - 36, "soul", t.everyMs + 500, 3);
-    this.strike(best, t.atkPct * this.dv.skillPower * (1 + this.mods.summonPct), true, 0, { skill: "soul", kb: 0.5, weight: 1, group: t.group, summon: true });
+    this.strike(best, t.atkPct * this.dv.skillPower * (1 + this.mods.summonPct), true, 0, { skill: "soul", kb: 0.5, weight: 1, group: t.group, sid: "so_lantern" });
   }
 
   private potionLeft(id: string): number {
@@ -2155,7 +2528,7 @@ export class HuntScene extends RpgScene {
     this.fightAt = this.now;
     // 11/12 부재중 자동응답: 보호막이 먼저 받는다
     // 동지의 맹세: 받는 피해 감소
-    dmg = Math.max(1, Math.round(dmg * (1 - this.mods.guard)));
+    dmg = Math.max(1, Math.round(dmg * (1 - this.mods.guard) * (1 - this.mods.wkGuard) * (1 - this.synGuard)));
     // 11/15 세트 장비: 받는 피해 옵션·야근 4세트 (맞은 시각도 적는다 — 출장 4세트)
     dmg = Math.max(1, Math.round(dmg * this.sg.takenMul(this.now, this.hp, this.dv.maxHp)));
     // 11/15 능력 카드: 반차(층마다 첫 공격) · 사원증 목걸이 · 재택근무(서 있으면)
@@ -2336,6 +2709,34 @@ export class HuntScene extends RpgScene {
     bridge.emit("rpg:hud", this.hud());
   }
 
+  /** 11/19 숨겨진 5세트 효과 (매 프레임): 칼퇴 본능(남은 시간) · 말풍선 따라가기 · 발밑 마일리지 · 처음 켜진 세트 「발견!」(알림 + 저장 요청) */
+  private eggTick(now: number): void {
+    if (!this.egg.any) return;
+    const lv = this.egg.leave(this.runLimitMs - Math.max(now, this.floorAt), !!this.lift || !!this.endSnap || this.died);
+    this.eggMove = lv.mul;
+    if (lv.start) this.eggFx?.bubble(this.px, this.py - 34, "퇴근!", 1800, "#2f7a14");
+    this.eggFx?.follow(this.px, this.py - 26);
+    this.eggFx?.mile(this.px, this.py, this.egg.mileRatio(), this.egg.has("trip") && !this.died);
+    for (const set of this.egg.takeFound()) {
+      const a = this.egg.icon(set);
+      if (a) showProc(eggProc(set, a.icon));
+      bridge.emit("rpg:egg", { set: SG_SETS.indexOf(set) });
+    }
+  }
+
+  /** 11/19 「회의가 길어진다」: 「…그래서 말인데요」 + 둘레 적이 1초 꾸벅꾸벅 (느려짐 — 우두머리는 1/3) */
+  private eggTalk(): void {
+    this.eggFx?.bubble(this.px, this.py - 34, "…그래서 말인데요", 1800);
+    let i = 0;
+    for (const m of this.mons) {
+      if (!m.alive || Math.hypot(m.x - this.px, m.y - this.py) > SG_EGG_FX.talkR) continue;
+      const boss = m.boss || MONSTERS[m.id].behavior === "boss";
+      m.slowUntil = Math.max(m.slowUntil, this.now + (boss ? SG_EGG_FX.talkMs / 3 : SG_EGG_FX.talkMs));
+      m.sprite.setTint(0xb8b0e8);
+      if (i++ < 6) this.eggFx?.doze(m.x, m.y - MONSTERS[m.id].size - 4, i);
+    }
+  }
+
   /** 11/17 세트 장비 발동 효과 (연차·야근 4세트·결재 완료) → 발동 표시 */
   private flushSgProcs(): void {
     for (const k of this.sg.takeProcs()) {
@@ -2439,7 +2840,7 @@ export class HuntScene extends RpgScene {
   // ── 몬스터 ──
 
   private spawn(id: MonsterId, x: number, y: number, wave: number, elite = false): void {
-    // 11/15 야근 빌딩: 기본 세기 하나(TOWER_POWER) × 층 배율 (체력·공격력 × 1.06^층, 방어 × 1.023^층 — lib/rpg/tower)
+    // 11/15 야근 빌딩: 기본 세기 하나(TOWER_POWER) × 층 배율 (11/19 100층까지 완만·그 위로 가파르게 — lib/rpg/tower towerScale)
     const base = this.play.tower ? monsterStats(id, "hell", TOWER_POWER, towerScale(this.floor)) : monsterStats(id, this.play.difficulty, this.zone.power);
     // 11/12 정예: 더 크고 질기다. EXP는 서버가 그 웨이브를 깼을 때 보너스로 더한다 (plan.eliteBonusExp)
     const st = elite
@@ -2665,7 +3066,18 @@ export class HuntScene extends RpgScene {
       this.floatText(this.px, this.py - 18, "회피", "#9aa3ad", 10);
       return;
     }
-    this.hurtPlayer(damage(m.st.atk, mult, this.dv.def, Math.random(), false), { id: m.id, pat: m.cast?.id ?? "bite" });
+    let dmg = damage(m.st.atk, mult, this.dv.def, Math.random(), false);
+    // 11/19 단단한 허리 자동 막기: 근접 공격만, 같은 적은 2초에 한 번
+    if (this.mods.parry > 0 && !this.died && (this.parryAt.get(m) ?? -1e9) + SKILL_FX.wk_back(1).parryGapMs <= this.now && Math.random() < this.mods.parry) {
+      this.parryAt.set(m, this.now);
+      dmg = Math.max(1, Math.round(dmg * (1 - SKILL_FX.wk_back(1).parryCut)));
+      this.floatText(this.px, this.py - 22, "막음!", "#e8d2a8", 10);
+      this.sfx.play("crit", 0.25);
+      this.skfx.sparks(this.px + (m.x - this.px) * 0.4, this.py - 8 + (m.y - this.py) * 0.4, 6, [0xffffff, 0xd8d8d0, 0xffd27a], 110, { life: 220 });
+      const d = Math.hypot(m.x - this.px, m.y - this.py) || 1;
+      if (!m.boss) this.moveMon(m, ((m.x - this.px) / d) * 14, ((m.y - this.py) / d) * 14);
+    }
+    this.hurtPlayer(dmg, { id: m.id, pat: m.cast?.id ?? "bite" });
   }
 
   /**
@@ -2868,7 +3280,7 @@ export class HuntScene extends RpgScene {
     // 재생·버프
     if (now >= this.regenAt) {
       this.regenAt = now + 1000;
-      this.sp = Math.min(d.maxSp, this.sp + huntSpRegen(d.maxSp));
+      this.sp = Math.min(d.maxSp, this.sp + huntSpRegen(d.maxSp) * (1 + this.tm.spRegen));
       this.hp = Math.min(d.maxHp, this.hp + d.maxHp * 0.004 * this.curse.healMul);
     }
     // 상태 이상: 끝난 것 정리 + 지속 피해 (무적이면 안 받고, 이걸로는 쓰러지지 않는다 — HP 1에서 멈춤).
@@ -2884,6 +3296,7 @@ export class HuntScene extends RpgScene {
     // 11/17 세트 장비 발동 효과 (야근 4세트는 체력 30% 아래로 떨어지는 순간) → 발동 표시
     this.sg.watch(this.hp, d.maxHp);
     this.flushSgProcs();
+    this.eggTick(now);
 
     // 이동
     if (!this.died) {
@@ -2895,10 +3308,11 @@ export class HuntScene extends RpgScene {
       const rolled = this.rollStep(now);
       const moving = !rolled && Math.hypot(a.x, a.y) > 0.15 && now >= this.rootUntil && !frozen;
       // 40번 지형: 늪·덩굴은 느리게, 웅덩이는 미끄럽게, 컨베이어·문·바람은 밀어낸다
-      const spd = moving ? d.move * (1 + this.buff("so_swift")) * this.status.moveMul(now) * this.arena.speedMul(this.px, this.py) : 0;
+      const spd = moving ? d.move * (1 + this.buff("so_swift")) * this.status.moveMul(now) * this.arena.speedMul(this.px, this.py) * (this.whirl ? SKILL_FX.wk_whirl(this.whirl.lv).moveMul : 1) * this.eggMove : 0;
       const v0 = rolled ? { x: 0, y: 0 } : this.arena.playerVelocity(a.x * spd, a.y * spd, this.px, this.py, dt, now);
       // 11/15 냉각수 웅덩이: 미끄러진다
       const v = !rolled && this.theme?.playerVelocity ? this.theme.playerVelocity(v0, dt) : v0;
+      const [ex, ey] = [this.px, this.py];
       if (v.x || v.y) {
         this.px = Phaser.Math.Clamp(this.px + v.x * dt, WALL + PLAYER_R, W - WALL - PLAYER_R);
         this.py = Phaser.Math.Clamp(this.py + v.y * dt, WALL + PLAYER_R + 8, H - WALL - 2);
@@ -2908,6 +3322,8 @@ export class HuntScene extends RpgScene {
         this.px = p.x;
         this.py = p.y;
       }
+      // 11/19 숨겨진 5세트 「마일리지 적립」: 걸은 거리
+      if (this.egg.any && this.egg.walk(Math.hypot(this.px - ex, this.py - ey))) this.floatText(this.px, this.py - 30, "마일리지 가득!", "#ffd27a", 10);
       if (moving) {
         // 11/15 공격·스킬 판정 중에는 겨냥한 쪽을 그대로 본다 (뒷걸음질로 걷는다)
         if (now >= this.faceLockUntil) this.setFace(a.x, a.y);
@@ -2965,7 +3381,7 @@ export class HuntScene extends RpgScene {
             this.passiveSnd("so_friend", 120, "tick");
             this.passiveSnd("so_kinship", 1500);
             if (!h.group || h.group.closed) h.group = this.dmg.group(h.sprite.x, h.sprite.y - 30, "soul", 1300, 3);
-            this.strike(t, this.buff("so_friend") * this.dv.skillPower * (1 + this.mods.summonPct), true, 0, { skill: "soul", weight: 1, group: h.group, summon: true });
+            this.strike(t, this.buff("so_friend") * this.dv.skillPower * (1 + this.mods.summonPct), true, 0, { skill: "soul", weight: 1, group: h.group, sid: "so_friend" });
           }
         }
       }
@@ -2973,6 +3389,7 @@ export class HuntScene extends RpgScene {
 
     this.updateTurret(now);
     this.updateFields(now);
+    this.updateWorker(now, delta);
     // 서리 방패: 방패가 남아 있는 동안 육각 껍질이 일렁인다
     this.mv.wardIdle(this.px, this.py, now, this.shield > 0 && this.buff("fr_ward") > 0);
     // 바람 넋: 움직이는 동안 잔상
@@ -3023,7 +3440,18 @@ export class HuntScene extends RpgScene {
       // 11/17 낙법으로 구르는 중이면 투사체가 몸을 지나간다
       if (!rolling(this.dodge, now) && Math.hypot(s.x - this.px, s.y - (this.py - 8)) < 8) {
         s.until = 0;
-        this.hurtPlayer(damage(s.dmg, 1, d.def, Math.random(), false), s.src);
+        // 11/19 삽으로 막기: 투사체도 같은 확률로 쳐낸다 (쏜 몬스터마다 2초에 한 번, 피해 −70%)
+        let pd = damage(s.dmg, 1, d.def, Math.random(), false);
+        const shooter = s.src ? this.mons.find((m) => m.id === s.src!.id && m.alive) : undefined;
+        const key = shooter ?? this;
+        if (this.mods.parry > 0 && !this.died && (this.parryAt.get(key) ?? -1e9) + SKILL_FX.wk_back(1).parryGapMs <= now && Math.random() < this.mods.parry) {
+          this.parryAt.set(key, now);
+          pd = Math.max(1, Math.round(pd * (1 - SKILL_FX.wk_back(1).parryCut)));
+          this.floatText(this.px, this.py - 22, "쳐냄!", "#e8d2a8", 10);
+          this.sfx.play("crit", 0.25);
+          this.skfx.sparks(s.x, s.y, 6, [0xffffff, 0xd8d8d0, 0xffd27a], 120, { life: 220 });
+        }
+        this.hurtPlayer(pd, s.src);
       }
       if (s.x < 0 || s.x > W || s.y < 0 || s.y > H) s.until = 0;
     }
@@ -3286,7 +3714,8 @@ export class HuntScene extends RpgScene {
       // 11/15 우두머리 상자: 우두머리가 쓰러진 자리의 상자가 층을 깨는 순간 열리고, 안의 것은 사냥터 드롭처럼 튀어나온다 (빔·소리·줍기 그대로).
       // 오늘 남은 상자만큼 — 서버(towerSettle)와 같은 순서·같은 굴림(towerChestDrops: 11/18 드롭 시드 + 층)
       let opened = false;
-      if (this.chestsLeft > 0) {
+      // 11/19 상자는 TOWER_CHEST_FROM층부터 (서버 towerChestFloors와 같다)
+      if (this.chestsLeft > 0 && isChestFloor(f)) {
         this.chestsLeft--;
         const c = this.bossChest ?? new BossChest(this, this.lootSrc(this.lastKill).x, this.lootSrc(this.lastKill).y, this.now, RTEX.glow, this.data0.reduced);
         this.bossChest = c;
@@ -3430,6 +3859,13 @@ function segDist(px: number, py: number, ax: number, ay: number, bx: number, by:
 }
 
 /** 스킬 트리 패시브를 판 능력치에 더한다 (서리 옷깃: 방어·최대 HP, 튀는 불티: 치명타, 화롯가 온기: 공격력) */
-function withPassives(d: Derived, m: SkillMods): Derived {
-  return { ...d, maxHp: Math.round(d.maxHp * (1 + m.hpPct)), def: d.def + m.def, crit: Math.min(60, d.crit + m.crit), atk: Math.round(d.atk * (1 + m.atkPct)) };
+/**
+ * 판 시작 때 한 번 더하는 패시브. 11/19 마공 패시브(화롯가 온기 공격력·튀는 불티 치명타)는 여기서 더하지 않고 마공 피해에만 붙인다 (strike).
+ * 공격 속도(손에 익은 삽·빠른 손목)·최대 HP(서리 옷깃·초월의 숨)·방어는 모두에게
+ */
+/** 11/19 v2 모닥불 광역기의 우두머리 피해 배율 */
+const EMBER_AOE_BOSS = 0.6;
+
+function withPassives(d: Derived, m: SkillMods, t: TMods): Derived {
+  return { ...d, maxHp: Math.round(d.maxHp * (1 + m.hpPct + t.hpPct)), def: d.def + m.def, aspd: Math.round(d.aspd * (1 + m.aspdPct + t.aspd) * 100) / 100 };
 }

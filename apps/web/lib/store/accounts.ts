@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { campOpen } from "../camp";
+import { pathSince, retainView } from "../retain";
+import { seaOpen } from "../sea";
 import { customAlphabet } from "nanoid";
 import { GRANT_TTL_SEC, isAvatarBody, signGrant, staffGateBody, type AvatarDye, type Look } from "@tomb/protocol";
 import { STAY_TICK_MINUTES } from "../calendar";
@@ -6,14 +9,12 @@ import { CODE_ALPHABET, type EarnSource } from "../economy";
 import { gameDay, gameWeek, gameYesterday, weekOfDay } from "../gameDay";
 import { NAME_CHANGE_COOLDOWN_DAYS, NAME_CHANGE_PRICE, type Me } from "../types";
 import { isManager } from "../managers";
-import { isBoosted } from "../pointEvent";
 import { staffAccountId, topUpIfStaff } from "../staff";
 import { champWireFor } from "./champ";
 import { K } from "./keys";
-import { earnBoost } from "./pointEvent";
 import { getStyleStore } from "./style";
 import { rememberWornTitle } from "../wornTitle";
-import type { AccountRecord, AccountStore } from "./types";
+import type { AccountRecord, AccountStore, QuestHook } from "./types";
 
 // 계정·포인트 공용 도우미 (라우트가 쓴다). 날짜 키는 게임 날짜 YYYYMMDD — 한국 시간 새벽 5시에 바뀐다 (lib/gameDay).
 
@@ -48,7 +49,8 @@ export const rankValue = (score: unknown) => Math.floor(Number(score));
 
 export const NAME_CHANGE_COOLDOWN_MS = NAME_CHANGE_COOLDOWN_DAYS * 86_400_000;
 
-export function toMe(accountId: string, a: AccountRecord, day: string, now: number): Me {
+/** noRetain = 11/19 운영자: 꾸러미·첫 걸음·할 일을 계산하지도 싣지도 않는다 (화면도 retainOf로 한 번 더 막는다) */
+export function toMe(accountId: string, a: AccountRecord, day: string, now: number, opts: { noRetain?: boolean } = {}): Me {
   const nextAllowedAt = a.nameChangedAt ? a.nameChangedAt + NAME_CHANGE_COOLDOWN_MS : 0;
   return {
     accountId,
@@ -58,8 +60,6 @@ export function toMe(accountId: string, a: AccountRecord, day: string, now: numb
     points: a.points,
     lifetimePoints: a.lifetimePoints,
     todayEarned: a.todayEarned,
-    // 오늘 항목별 적립 (내 정보 게이지). 하나도 없으면 싣지 않는다
-    ...(Object.keys(a.earnedBy).length ? { earnedBy: a.earnedBy } : {}),
     attendance: { today: a.lastAttend === day, streak: a.streak, stayMinutes: a.stayTicks * STAY_TICK_MINUTES, bonusClaimed: a.bonusClaimed },
     hasCode: a.hasCode,
     inventory: a.inventory,
@@ -71,6 +71,8 @@ export function toMe(accountId: string, a: AccountRecord, day: string, now: numb
     nameChange: { nextAllowedAt: nextAllowedAt > now ? nextAllowedAt : 0, cost: a.nameChanges ? NAME_CHANGE_PRICE : 0 },
     tutorialDone: a.tutorialDone,
     ...(a.renameRequired ? { renameRequired: true as const } : {}),
+    // 11/18 새 이웃 꾸러미·첫 걸음·오늘의 할 일 (lib/retain — 이미 읽은 계정·오늘 적립 해시에서 계산)
+    ...(opts.noRetain ? {} : { retain: retainView(accountId, pathSince(a.createdAt, a.lifetimePoints, now), a.retain, a.stayTicks, day, { camp: campOpen(), sea: seaOpen() }) }),
   };
 }
 
@@ -88,19 +90,17 @@ export async function loadMe(accounts: AccountStore, accountId: string, now = Da
   // 주간 1위 값 (지난주 1위면 비트, 오라를 껐으면 끔 표시까지) → 착용 증서에 실려 다른 사람 화면의 배지·오라도 맞춘다
   // 31번 운영자는 운영자 오라를 끈 것도 같은 값으로 (CHAMP_AURA_OFF)
   // 11/16 매니저 (관리자가 임명 — 전용 칭호. 착용 증서에 실려 다른 사람 화면에도)
-  // 포인트 배수 이벤트 (오늘 포인트 게이지의 항목·전체 한도, 인스턴스 캐시라 저장소를 거의 묻지 않는다)
-  const [a, style, champ, manager, boost] = await Promise.all([accounts.get(accountId, day, now), getStyleStore(accounts).get(accountId), champWireFor(accountId, staff, now).catch(() => 0), isManager(accountId, now), earnBoost(now)]);
+  const [a, style, champ, manager] = await Promise.all([accounts.get(accountId, day, now), getStyleStore(accounts).get(accountId), champWireFor(accountId, staff, now).catch(() => 0), isManager(accountId, now)]);
   // 11/16 단 칭호를 기억해 둔다 (칭호 능력 — 계정을 읽지 않는 낚시·채집·사냥 흐름이 Redis를 다시 묻지 않게, lib/wornTitle)
   rememberWornTitle(accountId, lookOf(a), now);
   return {
-    ...toMe(accountId, a, day, now),
+    ...toMe(accountId, a, day, now, { noRetain: staff }),
     body: shownBody(a.body, staff),
     dye: style.dye,
     ...(staff ? { staff: true } : {}),
     ...(style.bodies?.length ? { bodies: style.bodies } : {}),
     ...(champ ? { champ } : {}),
     ...(manager ? { manager: true as const } : {}),
-    ...(isBoosted(boost) ? { earnBoost: boost } : {}),
   };
 }
 
@@ -115,10 +115,11 @@ export async function rewardReaction(
   mine: EarnSource,
   got: EarnSource,
   now = Date.now(),
+  quest?: QuestHook | null,
 ): Promise<number> {
   const day = kstDay(now);
   const [earned] = await Promise.all([
-    accounts.earn(actorId, mine, day),
+    accounts.earn(actorId, mine, day, quest ? { quest } : {}),
     ownerId && ownerId !== actorId ? accounts.earn(ownerId, got, day) : 0,
   ]);
   return earned;

@@ -7,12 +7,12 @@ import { showToast } from "@/lib/hooks/useToasts";
 
 // 자동 낚시 정산 결과 토스트 (낚시 창·ForageLayer가 같이 쓴다) · 도감 처음 등록 보상 글귀
 
-/** 도감 처음 등록 보상 한 줄 ("도감 +12P", 한도에 걸린 만큼은 "받을 도감 보상 +N P", 새 칭호). 없으면 빈 문자열 */
+/** 도감 처음 등록 보상 한 줄 ("도감 +12P", 지갑이 꽉 차 못 받은 만큼은 "받을 도감 보상 +N P", 새 칭호). 없으면 빈 문자열 */
 export function dexGainText(g: DexGain | undefined): string {
   if (!g || g.points <= 0) return "";
   const parts: string[] = [];
   if (g.earned > 0) parts.push(`도감 +${g.earned}P`);
-  if (g.pending > 0) parts.push(`받을 도감 보상 +${g.pending}P (오늘 한도라 도감 창에서 받아요)`);
+  if (g.pending > 0) parts.push(`받을 도감 보상 +${g.pending}P (지갑이 꽉 차 도감 창에서 받아요)`);
   for (const t of g.titles) parts.push(`칭호 「${t}」`);
   return parts.join(" · ");
 }
@@ -28,16 +28,22 @@ export function noteDexGain(g: DexGain | undefined, alone = true): void {
 /** 자동 낚시 정산 결과 → 토스트 (새로 받은 게 있을 때만, 종류별 가장 큰 크기 포함). away = 숨어 있다 돌아옴 */
 export function toastAutoCatch(r: AutoFishResponse, away: boolean): void {
   const gear = r.gear ?? [];
-  if (!r.items.length && !gear.length) return;
+  // 11/19 가방이 가득 차서 쉬었으면 (새로 받은 게 없어도) 알려 준다
+  const rest = r.full ? "가방이 가득 차서 쉬는 중이에요" : "";
+  if (!r.items.length && !gear.length) {
+    if (rest && away) showToast(`자동 낚시 · ${rest}`, 6_000);
+    return;
+  }
   const name = (id: string) => speciesById(id)?.name ?? id;
   const n = r.items.length;
   const head = n ? `${away ? "자리 비운 동안" : "자동 낚시로"} ${n}마리 낚았어요 · ${autoSummary(r.items, name)}` : away ? "자리 비운 동안" : "자동 낚시 중";
-  const cut = r.dropped > 0 ? ` (오늘 한도로 ${r.dropped}마리는 놓아줬어요)` : "";
+  // 11/19 시도마다 걸릴 확률이 있어 놓친 수도 알려 준다
+  const cut = n && r.missed > 0 ? ` (${r.missed}번은 놓쳤어요)` : "";
   // 물에 빠진 꾸미기는 따로 덧붙인다
   const extra = gear.map((g) => ` · 반짝! ${sunkenText(g, name)}`).join("");
   // 크기는 도감 최대 기록에만 들어간다는 안내 (물고기를 받았을 때)
   const note = n ? ` · ${AUTO_RANK_NOTE}` : "";
   noteDexGain(r.dex, false);
   const dex = dexGainText(r.dex);
-  showToast(`${head}${cut}${extra}${dex ? ` · ${dex}` : ""}${note}`, gear.length ? 10_000 : 8_000);
+  showToast(`${head}${cut}${extra}${dex ? ` · ${dex}` : ""}${rest ? ` · ${rest}` : ""}${note}`, gear.length ? 10_000 : 8_000);
 }

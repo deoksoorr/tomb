@@ -10,7 +10,8 @@ import {
   GRAVE_AREAS,
   HILL,
   HILL_CLIFF,
-  HILL_STAIRS,
+  HILL_GATE,
+  LANES,
   HOUSE_LOT_H,
   HOUSE_LOT_W,
   HOUSE_LOTS,
@@ -271,9 +272,8 @@ export type FenceRun = { x0: number; y0: number; x1: number; y1: number };
 export type GraveGate = { area: GraveArea["id"]; side: "top" | "bottom" | "left" | "right"; a: number; b: number };
 /** 묘역 문 (변, 비우는 구간 [a, b]) */
 export const GRAVE_GATES: readonly GraveGate[] = [
-  { area: "A", side: "top", a: 224, b: 256 },
-  { area: "A", side: "bottom", a: 224, b: 256 },
-  { area: "A", side: "right", a: 376, b: 408 },
+  // 11/19 옛 묘역은 언덕 위 — 문은 별 보기 마당 쪽(동쪽) 하나, 묘비 둘째 줄 오솔길과 줄을 맞춘다 (북문 아치·계단·남문은 없앴다)
+  { area: "A", side: "right", a: 120, b: 152 },
   // 예전 버드나무 묘역(C)의 문 자리는 동물원 정문·동문, 다리 건너 묘역(B)은 범퍼카장이 됐다 (11/16, bumper/bumperLayout.ts)
 ];
 function sideRuns(r: GraveArea["rect"], gates: readonly GraveGate[], side: GraveGate["side"]): FenceRun[] {
@@ -357,9 +357,8 @@ function h01(a: number, b: number, salt: number): number {
 
 const P = (kind: PropKind, x: number, y: number, variant = 0): PropDef => ({ kind, x, y, variant });
 
-/** 성황당: 오색 천을 묶은 나무와 돌무더기 (SHRINE 앞자리 뒤쪽) */
-export const SHRINE_TREE = { x: SHRINE.x + 18, y: SHRINE.y - 20 } as const;
-export const SHRINE_CAIRN = { x: SHRINE.x - 14, y: SHRINE.y - 14 } as const;
+/** 11/19 「옛 묘역 입구」 팻말 (성황당을 없애고 그 일을 맡는다 — SHRINE은 팻말 앞자리, 팻말은 북쪽 길 바로 아래 풀밭) */
+export const GRAVE_SIGN = { x: SHRINE.x, y: SHRINE.y + 14 } as const;
 
 /** 광장 한가운데 큰 모닥불 (CAMPFIRES의 big) */
 export const PLAZA_FIRE: Campfire = CAMPFIRES.find((c) => c.big) ?? CAMPFIRES[0];
@@ -368,7 +367,7 @@ export const PLAZA_FIRE: Campfire = CAMPFIRES.find((c) => c.big) ?? CAMPFIRES[0]
 export const HAMMOCKS: readonly { x: number; y: number }[] = [
   { x: 548, y: 456 },
   { x: 892, y: 456 },
-  { x: 90, y: 172 },
+  { x: 244, y: 84 }, // 11/19 언덕 서쪽이 옛 묘역이 되어 별 보기 마당 북쪽으로
   { x: 560, y: 992 },
 ];
 /** 그네 (받침 가운데) */
@@ -384,7 +383,7 @@ export const PLAZA_TREES: readonly { x: number; y: number }[] = [
 ];
 /** 소원 우물 (정문 앞마당 서쪽). 광장 한가운데는 큰 모닥불이 차지했다 */
 export const PLAZA_WELL = { x: 616, y: 140 } as const;
-/** 종루: 옛 묘역 동쪽, 성황당 위 */
+/** 종루: 등불 골목 동쪽 어귀 (예전 옛 묘역 동쪽) */
 export const BELL = { x: 464, y: 300 } as const;
 /** @deprecated 납골당은 버드나무 묘역과 함께 없어졌다 (그 자리는 동물원). 소품 종류 "crypt"는 그대로 그릴 수 있다 */
 export const CRYPT = { x: 336, y: 872 } as const;
@@ -421,62 +420,34 @@ const HAND_PROPS: readonly PropDef[] = [
   P("deadTree", 1300, 164, 0),
   P("oldGrave", 1370, 150, 0),
   P("oldGrave", 1086, 152, 1),
-  // ── 별 보기 언덕 (F3) ── 소나무·마른 나무, 돗자리, 계단 석등, 언덕 위 오래된 비석
-  P("pine", 52, 62, 0),
-  P("snowPine", 112, 54, 1),
-  P("deadTree", 172, 60, 0),
+  // ── 별 보기 마당 (F3, 11/19 언덕 동쪽 반) ── 소나무·마른 나무, 돗자리, 해먹, 입구 석등 (서쪽 반은 옛 묘역)
+  P("snowPine", 232, 56, 1),
   P("pine", 352, 60, 1),
-  P("deadTree", 348, 214, 1),
-  P("mat", 196, 152, 0),
-  P("mat", 256, 176, 1),
-  P("lantern", 208, 230),
-  P("lantern", 272, 230),
-  P("oldGrave", 60, 132, 4),
-  P("cairn", 330, 200, 0),
+  P("deadTree", 226, 224, 1),
+  P("mat", 236, 112, 0),
+  P("mat", 318, 146, 1),
+  P("lantern", 356, 172),
+  P("lantern", 356, 216),
   P("hammock", HAMMOCKS[2].x, HAMMOCKS[2].y),
+  // 「옛 묘역 입구」 팻말 (입구 바로 밖 북쪽 길 아래 — E로 성불 안내·성불한 이야기들)
+  P("sign", GRAVE_SIGN.x, GRAVE_SIGN.y),
+  // ── 옛 묘역 (11/19 언덕 서쪽) ── 가운데 통로 끝 촛불, 땅안개 (사람의 묘비는 GraveField)
+  P("candle", 118, 58, 0),
+  P("candle", 138, 58, 1),
+  P("candle", 216, 114, 1),
+  P("candle", 216, 158, 0),
+  P("mist", 80, 150, 0),
+  P("mist", 176, 196, 1),
   // 달빛 연못
   P("reeds", 500, 150, 1),
   P("reeds", 414, 80, 0),
   P("mist", 456, 118, 0),
-  // ── 종루 · 성황당 (옛 묘역 동문 밖) ──
+  // ── 종루 (등불 골목 동쪽 어귀, 11/19 성황당은 없앴다) ──
   P("bell", BELL.x, BELL.y),
-  P("shrineTree", SHRINE_TREE.x, SHRINE_TREE.y),
-  P("cairn", SHRINE_CAIRN.x, SHRINE_CAIRN.y, 0),
-  P("cairn", SHRINE.x - 26, SHRINE.y - 22, 1),
-  P("candle", SHRINE.x + 12, SHRINE.y - 2, 0),
-  P("lantern", 444, 420),
-  // ── 옛 묘역 (A) ── 오래된 묘비·십자가, 마른 나무, 촛불, 땅안개 (사람의 묘비는 GraveField)
-  // 11/16 묘비가 8열 × 4줄로 빽빽해져 오래된 묘비는 왼쪽·오른쪽 가장자리와 아래 띠로 옮겼다
-  P("oldGrave", 62, 330, 1),
-  P("oldGrave", 62, 356, 0),
-  P("oldGrave", 60, 382, 4),
-  P("oldGrave", 60, 448, 3),
-  P("oldGrave", 58, 474, 1),
-  P("oldGrave", 64, 500, 2),
-  P("oldGrave", 418, 360, 2),
-  P("oldGrave", 418, 420, 0),
-  P("oldGrave", 418, 446, 4),
-  P("oldGrave", 420, 474, 3),
-  P("oldGrave", 416, 508, 1),
-  P("oldGrave", 100, 520, 0),
-  P("oldGrave", 184, 522, 2),
-  P("oldGrave", 300, 530, 3),
-  P("oldGrave", 380, 520, 4),
-  P("deadTree", 62, 304, 0),
-  P("deadTree", 424, 530, 1),
-  P("candle", 56, 404, 1),
-  P("candle", 424, 338, 0),
-  P("candle", 226, 512, 0),
-  P("candle", 254, 512, 1),
-  P("candle", 226, 300, 1),
-  P("candle", 254, 300, 0),
-  P("candle", 424, 414, 1),
-  P("mist", 150, 430, 0),
-  P("mist", 330, 420, 1),
-  P("mist", 240, 522, 0),
-  P("mist", 104, 400, 1),
-  P("mist", 336, 450, 0),
-  P("mist", 180, 296, 1),
+  P("lantern", 480, 404),
+  // ── 등불 골목 (11/19 예전 옛 묘역 자리 — 집터 10~15번지) ── 언덕 절벽 아래 소나무 줄(언덕과 떼어 놓는다), 골목 가로등
+  ...Array.from({ length: 17 }, (_, i) => P(i % 3 === 1 ? "pine" : "snowPine", 48 + i * 24, 290, i % 2)),
+  P("flowers", 452, 552, 1),
   // ── 모닥불 광장 ── 그네·해먹·나무·석등 (큰 모닥불·분수·놀거리는 따로)
   ...SWINGS.slice(0, 2).map((s) => P("swing", s.x, s.y)),
   P("hammock", HAMMOCKS[0].x, HAMMOCKS[0].y),
@@ -626,8 +597,8 @@ function buildProps(): PropDef[] {
   const out: PropDef[] = [];
   // 안개 숲 (오리 연못 둘레): 빽빽하고 으스스하게 (11/16 연못이 넓어져 둑 둘레만 남는다)
   scatter(out, { x: 308, y: 790, w: 296, h: 214 }, 18, 21, forestKind, 22);
-  // 언덕 위 (서리 내린 대지)
-  scatter(out, { x: 48, y: 48, w: 300, h: 176 }, 6, 41, (u) => (u < 0.45 ? "pine" : u < 0.75 ? "deadTree" : "bush"), 30);
+  // 별 보기 마당 (11/19 언덕 동쪽 반만 — 서쪽은 옛 묘역)
+  scatter(out, { x: 224, y: 48, w: 128, h: 176 }, 3, 41, (u) => (u < 0.45 ? "pine" : u < 0.75 ? "deadTree" : "bush"), 30);
   // 까마귀 연못 둘레 ~ 동쪽 담
   scatter(out, { x: 1000, y: 40, w: 400, h: 130 }, 10, 43, treeKind, 30);
   // 강변 (북쪽 둑)·남쪽 둑
@@ -724,14 +695,17 @@ export function officeCollider(): Rect {
   return { x: HOUSING_OFFICE.x - 28, y: HOUSING_OFFICE.y - 18, w: 56, h: 18 };
 }
 
-/** 언덕 절벽 (남쪽 면은 계단만 비우고, 동쪽 비탈은 통째로 막는다). 남쪽 절벽은 두 칸(HILL_CLIFF) 높이 */
+/**
+ * 언덕 절벽: 남쪽 면은 통째로 막고(11/19 계단을 없앴다 — 등불 골목에서 바로 못 올라온다),
+ * 동쪽 비탈은 입구(HILL_GATE, 북쪽 길과 같은 줄)만 비운다. 남쪽 절벽은 두 칸(HILL_CLIFF) 높이
+ */
 export function cliffColliders(): Rect[] {
   const y = HILL.y + HILL.h;
   const right = HILL.x + HILL.w;
   return [
-    { x: HILL.x, y: y - 2, w: HILL_STAIRS.x - HILL.x, h: HILL_CLIFF + 2 },
-    { x: HILL_STAIRS.x + HILL_STAIRS.w, y: y - 2, w: right + TILE - (HILL_STAIRS.x + HILL_STAIRS.w), h: HILL_CLIFF + 2 },
-    { x: right, y: HILL.y, w: TILE, h: HILL.h + HILL_CLIFF },
+    { x: HILL.x, y: y - 2, w: right + TILE - HILL.x, h: HILL_CLIFF + 2 },
+    { x: right, y: HILL.y, w: TILE, h: HILL_GATE.y - HILL.y },
+    { x: right, y: HILL_GATE.y + HILL_GATE.h, w: TILE, h: y + HILL_CLIFF - (HILL_GATE.y + HILL_GATE.h) },
   ];
 }
 
@@ -892,8 +866,9 @@ const HILL_TY1 = T(HILL.y + HILL.h) - 1;
 const CLIFF_TY0 = HILL_TY1 + 1;
 const CLIFF_TY1 = HILL_TY1 + HILL_CLIFF / TILE;
 const CLIFF_TX = HILL_TX1 + 1;
-const STAIRS_TX0 = T(HILL_STAIRS.x);
-const STAIRS_TX1 = T(HILL_STAIRS.x + HILL_STAIRS.w) - 1;
+/** 11/19 언덕 입구 (동쪽 비탈의 틈 — 북쪽 길 두 줄과 같은 줄) */
+const HILL_GATE_TY0 = T(HILL_GATE.y);
+const HILL_GATE_TY1 = T(HILL_GATE.y + HILL_GATE.h) - 1;
 /** 옛 묘역(A) 땅 — 예전 이름 (묘역이 하나이던 때). 묘역 전부는 GRAVE_AREAS */
 export const GRAVEYARD_RECT: Rect = GRAVE_AREAS[0].rect;
 /** 광장 포석 (모서리 한 칸씩 둥글게) */
@@ -933,17 +908,39 @@ export function isRowPathTile(ty: number): boolean {
 }
 
 const between = (v: number, a: number, b: number) => v >= a && v <= b;
-/** 옛 묘역 동문(오른쪽 문) 가운데 타일 줄 — 성황당·광장으로 가는 흙길 */
+/** 옛 묘역 동문(오른쪽 문) 가운데 타일 줄 — 별 보기 마당으로 나가는 흙길 */
 const EAST_GATE_TY = (() => {
   const g = GRAVE_GATES.find((q) => q.area === "A" && q.side === "right")!;
   return T((g.a + g.b) / 2);
 })();
+/** 11/19 별 보기 마당 흙길: 옛 묘역 동문 → (열기구 출발장 왼쪽으로 꺾어) → 입구 (북쪽 길과 같은 두 줄) */
+const TRAIL_TX = T(GRAVE_AREAS[0].rect.x + GRAVE_AREAS[0].rect.w) + 1;
+function hillTrail(tx: number, ty: number): boolean {
+  if (ty === EAST_GATE_TY && between(tx, T(GRAVE_AREAS[0].rect.x + GRAVE_AREAS[0].rect.w), TRAIL_TX)) return true;
+  if (tx === TRAIL_TX && between(ty, EAST_GATE_TY, HILL_GATE_TY1)) return true;
+  return between(ty, HILL_GATE_TY0, HILL_GATE_TY1) && between(tx, TRAIL_TX, HILL_TX1);
+}
+// ── 11/19 등불 골목 (예전 옛 묘역 자리) ── 두 줄 사이 골목·아랫줄 문 앞 골목(가로), 동쪽 골목(세로, 예전 성황당 자리), 강변 산책로로 내려가는 길
+const LANE_TX0 = T(LANES.x);
+const LANE_MID_TYS: readonly number[] = [T(400), T(400) + 1];
+const LANE_LOW_TY = T(528);
+const LANE_EAST_TXS: readonly number[] = [T(432), T(432) + 1];
+const LANE_EAST_TY0 = T(320);
+const LANE_SOUTH_TXS: readonly number[] = [T(224), T(224) + 1];
+function laneGround(tx: number, ty: number): GroundKind | null {
+  if (LANE_MID_TYS.includes(ty) && between(tx, LANE_TX0, T(512) - 1)) return "cobble";
+  if (ty === LANE_LOW_TY && between(tx, LANE_TX0, LANE_EAST_TXS[1])) return "cobble";
+  if (LANE_EAST_TXS.includes(tx) && between(ty, LANE_EAST_TY0, LANE_LOW_TY)) return "cobble";
+  if (LANE_SOUTH_TXS.includes(tx) && between(ty, LANE_LOW_TY + 1, PROMENADE_TY - 1)) return "dirt";
+  return null;
+}
 /** 범퍼카장 동쪽 → 호박밭 모닥불 흙길 (11/16 마당이 넓어져 마당 오른쪽 끝부터 세 칸) */
 const YARD_EAST_TRAIL = { ty: 54, tx0: 57, tx1: 59 } as const;
 
 function graveGround(t: AreaTiles, tx: number, ty: number): GroundKind {
   if (between(tx, t.aisle0, t.aisle1)) return "gravel";
-  if (t.rowTys.includes(ty) && between(tx, t.tx0 + 1, t.tx1 - 1)) return "gravel";
+  // 11/19 언덕 위 좁은 묘역: 줄 오솔길은 철책 안쪽 끝에서 끝까지 (가장자리 열 묘비 앞도 오솔길)
+  if (t.rowTys.includes(ty) && between(tx, t.tx0, t.tx1)) return "gravel";
   // 옆문으로 이어지는 줄 (그 줄 끝까지)
   for (const g of GRAVE_GATES) {
     if (g.area !== t.a.id || (g.side !== "left" && g.side !== "right")) continue;
@@ -960,22 +957,20 @@ export function groundKind(tx: number, ty: number): GroundKind {
   }
   if (ty >= MAP_ROWS - 1) return "wallFace";
   if (tx <= 1 || tx >= lastCol - 1) return "wallSide";
-  // ── 별 보기 언덕 (F3): 대지 · 남쪽 두 칸 절벽 · 계단 · 동쪽 비탈 ──
-  if (between(tx, HILL_TX0, HILL_TX1) && ty <= HILL_TY1) return "hill";
-  if (between(ty, CLIFF_TY0, CLIFF_TY1) && between(tx, HILL_TX0, CLIFF_TX)) return between(tx, STAIRS_TX0, STAIRS_TX1) ? "stairs" : "cliff";
-  if (tx === CLIFF_TX && ty <= CLIFF_TY1) return "cliff";
-  // 계단 아래 → 옛 묘역 북문
-  if (between(tx, STAIRS_TX0, STAIRS_TX1) && ty === CLIFF_TY1 + 1) return "gravel";
-  // ── 옛 묘역 ──
+  // ── 옛 묘역 (11/19 언덕 서쪽 — 언덕보다 먼저 본다) ──
   for (const t of AREA_TILES) if (between(tx, t.tx0, t.tx1) && between(ty, t.ty0, t.ty1)) return graveGround(t, tx, ty);
+  // ── 별 보기 언덕 (F3): 대지 · 남쪽 두 칸 절벽 · 동쪽 비탈 (11/19 계단은 없애고 동쪽 비탈에 입구) ──
+  if (between(tx, HILL_TX0, HILL_TX1) && ty <= HILL_TY1) return hillTrail(tx, ty) ? "dirt" : "hill";
+  if (between(ty, CLIFF_TY0, CLIFF_TY1) && between(tx, HILL_TX0, CLIFF_TX)) return "cliff";
+  if (tx === CLIFF_TX && ty <= CLIFF_TY1) return between(ty, HILL_GATE_TY0, HILL_GATE_TY1) ? "dirt" : "cliff";
+  // ── 등불 골목 (11/19) ──
+  const lane = laneGround(tx, ty);
+  if (lane) return lane;
   // ── 11/16 범퍼카장 마당 (예전 다리 건너 묘역과 같은 타일) ──
   if (inBumperYardTiles(tx, ty)) return bumperGround();
   // ── 동물원: 자갈길·우리 안 흙바닥·동문 밖 흙길 (나머지는 풀밭) ──
   const zoo = zooGround(tx, ty);
   if (zoo) return zoo;
-  // 옛 묘역 남문 → 강변 산책로
-  const A = AREA_TILES[0];
-  if (between(tx, A.aisle0, A.aisle1) && between(ty, A.ty1 + 1, PROMENADE_TY - 1)) return "gravel";
   // ── 정문 앞마당 + 가운데 길 (정문 → 광장 → 가운데 다리 → 범퍼카장) ──
   if (between(ty, 2, 5) && between(tx, MID_TX - 5, MID_TX + 4)) return "dirt";
   if (between(tx, MID_TX - 1, MID_TX) && (ty < PZ_TY0 || between(ty, PZ_TY1 + 1, SOUTH_PATH_TY))) return "dirt";
@@ -998,8 +993,6 @@ export function groundKind(tx: number, ty: number): GroundKind {
   if (between(tx, T(WHARF_YARD.x), T(WHARF_YARD.x + WHARF_YARD.w) - 1) && between(ty, T(WHARF_YARD.y), T(WHARF_YARD.y + WHARF_YARD.h) - 1)) return "gravel";
   // 광장 ↔ 주거 구역 골목 (첫째·셋째 골목 줄)
   if (between(tx, PZ_TX1 + 1, HOUSE_TX0 - 1) && (STREET_TYS.slice(0, 2).includes(ty) || STREET_TYS.slice(4, 6).includes(ty))) return "dirt";
-  // 옛 묘역 동문 ↔ 성황당 ↔ 광장 (동문 가운데 줄 — 묘비 둘째 줄 오솔길과 이어진다)
-  if (ty === EAST_GATE_TY && between(tx, A.tx1 + 1, PZ_TX0 - 1)) return "dirt";
   // ── 강변 산책로 + 다리·징검다리로 내려가는 길 ──
   if (ty === PROMENADE_TY && tx >= 2 && tx <= T(880)) return "dirt";
   for (const b of BRIDGES) {
@@ -1049,7 +1042,8 @@ export type Interactable = {
 const PORTALS: readonly Interactable[] = [
   { id: "portal:hunt", kind: "portal", portal: "hunt", x: HUNT_GATE.x, y: HUNT_GATE.y, r: PORTAL_RADIUS, ax: HUNT_GATE.x, ay: HUNT_GATE.y, label: "사냥터 들어가기" },
   { id: "portal:housing", kind: "portal", portal: "housing", x: HOUSING_DOOR.x, y: HOUSING_DOOR.y, r: PORTAL_RADIUS, ax: HOUSING_DOOR.x, ay: HOUSING_DOOR.y, label: "분양 사무소 들어가기" },
-  { id: "portal:shrine", kind: "portal", portal: "shrine", x: SHRINE.x, y: SHRINE.y, r: PORTAL_RADIUS, ax: SHRINE.x, ay: SHRINE.y, label: "성황당 · 이장한 묘비 보기" },
+  // 11/19 「옛 묘역 입구」 팻말 (성황당을 없애고 성불 안내·성불한 이야기들을 맡는다)
+  { id: "portal:shrine", kind: "portal", portal: "shrine", x: SHRINE.x, y: SHRINE.y, r: PORTAL_RADIUS, ax: SHRINE.x, ay: SHRINE.y, label: "옛 묘역 입구 팻말 · 성불한 이야기들" },
   { id: "dock:ferry", kind: "dock", x: FERRY_DOCK.x, y: FERRY_DOCK.y, r: 14, ax: FERRY_DOCK.x, ay: FERRY_DOCK.y, label: "나루터 · 조각배 타기" },
   { id: "dock:duck", kind: "dock", x: DUCK_DOCK.x, y: DUCK_DOCK.y, r: 14, ax: DUCK_DOCK.x, ay: DUCK_DOCK.y, label: "오리배 타기" },
   // 11/15 주말 버스 정류장 (버스 정류장 마당). E → 캠핑장 버스 (운영에서 닫혀 있으면 안내만).
@@ -1135,7 +1129,7 @@ export const LANDMARKS: readonly Landmark[] = [
   { id: "shop", label: "유령 잡화점", x: SHOP.x, y: SHOP.y, kind: "shop" },
   { id: "hunt", label: "사냥터", x: HUNT_GATE.x, y: HUNT_GATE.y + 8, kind: "hunt" },
   { id: "housing", label: "분양 사무소", x: HOUSING_OFFICE.x, y: HOUSING_OFFICE.y, kind: "housing" },
-  { id: "shrine", label: "성황당", x: SHRINE.x, y: SHRINE.y, kind: "shrine" },
+  { id: "shrine", label: "옛 묘역 입구", x: SHRINE.x, y: SHRINE.y, kind: "shrine" },
   { id: "dock", label: "나루터", x: FERRY_DOCK.x, y: FERRY_DOCK.y, kind: "dock" },
   // 11/15 낚시: 납품 부두를 없애고 어부 영감 노점이 있는 호수 낚시 잔교로
   { id: "fish", label: "낚시 잔교", x: LAKE_PIER.x + 24, y: LAKE_PIER.y + 8, kind: "fish" },

@@ -16,11 +16,11 @@ export const GET = handler(async (req) => {
 
 const EnterSchema = z.object({
   code: z.string().max(20),
-  /** signup = 새로 시작 화면에서, 없으면 내 정보에서 */
+  /** signup = 새로 시작 화면에서. 11/19 내 정보에서 뒤늦게 넣기(later)는 없앴다 — 받아도 거절한다 */
   via: z.enum(["signup", "later"]).optional(),
 });
 
-/** 추천인 정하기 `{ code, via? }` (한 번만, 가입 뒤 3일 안). 규칙은 lib/referralRules.ts */
+/** 추천인 정하기 `{ code, via }` (한 번만, 가입할 때만 — 가입 직후 짧은 창 안). 규칙은 lib/referralRules.ts */
 export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
   await rateLimit("referral", req, visitorId);

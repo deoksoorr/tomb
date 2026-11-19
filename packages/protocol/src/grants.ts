@@ -3,6 +3,7 @@ import { sanitizeLook, isFireworkId, MEGAPHONE_MAX, type Look, type MegaphoneSco
 import { CHAMP_ALL, CHAMP_AURA_OFF, isAvatarBody } from "./constants";
 import { packDye, unpackDye, type AvatarDye } from "./dye";
 import { bbqItem, DRUNK_MAX, DRUNK_STEP_MS, isBbqId, type BbqItemId } from "./bbq";
+import { GOBLIN_POINTS_CAP } from "./npc";
 
 // Vercel(포인트·가방의 원천)이 서명하고 실시간 서버가 검증하는 짧은 증서. 비밀키는 JOIN_SECRET.
 //  - look: 지금 착용 중인 꾸미기. 실시간 서버는 검증 후 채널에 브로드캐스트한다.
@@ -75,7 +76,7 @@ export async function verifyGrant(
   // (받는 옛 클라이언트는 모르는 폭죽을 기본 금빛 폭죽으로 터뜨린다)
   if (g.kind === "firework" && (isFireworkId(g.item) || isNewFireworkId(g.item)) && typeof g.nonce === "string" && g.nonce.length <= 32)
     return { kind: "firework", visitorId: g.visitorId, item: g.item, nonce: g.nonce, exp: g.exp };
-  if (g.kind === "goblin" && typeof g.points === "number" && Number.isInteger(g.points) && g.points > 0 && g.points <= 1000 && typeof g.nonce === "string" && g.nonce.length <= 32)
+  if (g.kind === "goblin" && typeof g.points === "number" && Number.isInteger(g.points) && g.points > 0 && g.points <= GOBLIN_POINTS_CAP && typeof g.nonce === "string" && g.nonce.length <= 32)
     return { kind: "goblin", visitorId: g.visitorId, points: g.points, nonce: g.nonce, exp: g.exp };
   if (
     g.kind === "megaphone" &&

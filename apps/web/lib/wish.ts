@@ -1,8 +1,9 @@
 import { DAY_RESET_TEXT, msUntilDayReset } from "./gameDay";
+import type { TodoTick } from "./retain";
 import type { Me } from "./types";
 
 // 50번 소원 분수 (광장 북쪽): 동전(1~5P)을 던지면 오늘의 운세가 나오고, 가끔 몇 포인트가 튀어 돌아온다.
-// 서버가 판정한다(/api/plaza/wish): 포인트 차감 → 운세·보너스 굴리기 → 보너스는 적립(하루 한도 "wish").
+// 서버가 판정한다(/api/plaza/wish): 포인트 차감 → 운세·보너스 굴리기 → 보너스는 적립("wish" — 하루 한 번은 WISH_DAILY가 센다).
 // 계정당 하루(한국 시간 새벽 5시 기준, lib/gameDay) WISH_DAILY번 — 운영자 IP도 예외 없다 (lib/store/wishDay, 서버에서 원자적으로 잡는다).
 // IP 한도(lib/ratelimit "wish")는 계정 여러 개로 농사하는 것만 막는다. 순수 규칙은 여기, 라우트는 app/api/plaza/wish.
 
@@ -24,10 +25,12 @@ export type WishFortune = { luck: WishLuck; title: string; text: string };
 export type WishResponse = {
   me: Me;
   fortune: WishFortune;
-  /** 동전이 튀어 돌아온 포인트 (실제로 쌓인 값, 하루 한도에 걸리면 줄거나 0) */
+  /** 동전이 튀어 돌아온 포인트 (실제로 쌓인 값) */
   bonus: number;
   /** 던진 포인트 */
   spent: number;
+  /** 11/19 오늘 미션 진행 (lib/retainQuest) */
+  todo?: TodoTick;
 };
 
 const LUCK_TITLE: Readonly<Record<WishLuck, string>> = {

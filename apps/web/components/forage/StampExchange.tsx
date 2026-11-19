@@ -22,7 +22,8 @@ const monthLabel = (m: string) => `${Number(m.slice(4, 6))}월`;
 /** "12일" · 하루 안 남았으면 "5시간" */
 const leftText = (ms: number) => (ms >= DAY_MS ? `${Math.ceil(ms / DAY_MS)}일` : `${Math.max(1, Math.ceil(ms / 3_600_000))}시간`);
 
-export default function StampExchange() {
+/** viewOnly = 어디서든 보는 의뢰 창(QuestPeek)의 [도장 교환소] 칸: 값과 가진 것만 보이고 받기 단추는 없다 (교환은 게시판 앞에서) */
+export default function StampExchange({ viewOnly = false }: { viewOnly?: boolean } = {}) {
   const { board, error } = useQuests();
   const { me } = useMe();
   const [busy, setBusy] = useState<string | null>(null);
@@ -125,13 +126,13 @@ export default function StampExchange() {
           <small>남은 기간 {leftText(shop.endsAt - now)}</small>
         </h4>
         <ul className={q.shopList} aria-label="이달의 교환소">
-          {list(shop.items).map((r) => card(r))}
+          {list(shop.items).map((r) => card(r, viewOnly ? "preview" : "buy"))}
         </ul>
         <h4 className={q.secHead}>
           <span>언제나</span>
         </h4>
         <ul className={q.shopList} aria-label="언제나 있는 것">
-          {list(shop.always).map((r) => card(r))}
+          {list(shop.always).map((r) => card(r, viewOnly ? "preview" : "buy"))}
         </ul>
         {preview.length > 0 && shop.preview && (
           <>
@@ -145,7 +146,7 @@ export default function StampExchange() {
         )}
       </div>
       <p className={ui.hint} role="status">
-        {notice ?? "도장은 사라지지 않아요. 남에게 줄 수 없어요."}
+        {notice ?? (viewOnly ? "교환은 마을 의뢰 게시판의 [도장 교환소]에서 해요. 도장은 사라지지 않아요." : "도장은 사라지지 않아요. 남에게 줄 수 없어요.")}
       </p>
     </div>
   );

@@ -7,7 +7,7 @@ import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from 
 import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, faceAnchor, handAnchor, waterSink, type AppearanceChange } from "../sprites/avatar";
 import { CosmeticFxView } from "./CosmeticFxView";
 import { DyeFxView } from "./DyeFxView";
-import { bodyFx, riderLift } from "../sprites/cosmeticFx";
+import { bodyFx, riderBobs, riderLift } from "../sprites/cosmeticFx";
 import type { EmoteIcon } from "../sprites/emotes";
 import { HAMMOCK_H, HAMMOCK_W, hammockLieKey, hammockLieSheet, lieFrameOf, LIE_ORIGIN_X, LIE_ORIGIN_Y, type HammockSkin } from "../sprites/hammockArt";
 import { INDOOR_POSE_PERIOD, indoorPoseKey, indoorPoseSheet, isIndoorPose, POSE_H, POSE_W, type IndoorPose, type LieCover } from "../sprites/indoorPose";
@@ -1046,8 +1046,8 @@ export class AvatarView {
         s.setFrame(f);
       }
     } else if (this.mountedIn(st)) {
-      // 타는 펫 등 위로 들어 올린다 (걸으면 발걸음에 맞춰 1px 출렁)
-      const bob = (st === "walk" || st === "run") && !this.reduced ? Math.floor(now / (st === "run" ? 90 : 140)) % 2 : 0;
+      // 타는 펫 등 위로 들어 올린다 (걸으면 발걸음에 맞춰 1px 출렁 — 미끄러지는 잉어는 몸이 그대로라 출렁이지 않는다)
+      const bob = (st === "walk" || st === "run") && !this.reduced && riderBobs(this.mountPet) ? Math.floor(now / (st === "run" ? 90 : 140)) % 2 : 0;
       this.setPose(0, riderLift(this.mountPet) + bob);
     } else this.setPose(0, 0);
     if (this.altFrame >= 0 && st !== "boat" && st !== "seesaw" && st !== "trampoline" && st !== "carousel" && st !== "ferris" && st !== "balloon" && st !== "bumper") this.altFrame = -1;

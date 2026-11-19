@@ -207,7 +207,7 @@ export function insectRolls(caught: number, golden: number, mistakes: number): {
   return { common: Math.min(3, Math.floor(Math.max(0, caught - mistakes) / 5)), rare: Math.min(2, golden) };
 }
 
-/** 11/15 곤충 채집 한 판 포인트 최대 (곤충은 따로 가방에 — 포인트는 「곤충 채집」 하루 한도 안) */
+/** 11/15 곤충 채집 한 판 포인트 최대 (곤충은 따로 가방에 — 포인트는 「곤충 채집」 항목. 한 판 결과 상한 검사) */
 export const INSECT_POINTS_MAX = 15;
 /** 곤충 채집 한 판 포인트: 그 판에 나온 곤충을 모두 잡으면 최대 (금빛은 셋 몫, 실수는 하나씩 뺀다) */
 export function insectPoints(seed: number, caught: number, golden: number, mistakes: number): number {

@@ -1,5 +1,7 @@
 import { createHmac } from "node:crypto";
-import { isOpenLot } from "@tomb/protocol";
+import { bumpQuest, questHook, todoTickOf } from "../retainQuest";
+import type { TodoTick } from "../retain";
+import { isOpenLot, WORLD_LOTS } from "@tomb/protocol";
 import { nanoid } from "nanoid";
 import { env } from "../env";
 import { weekStartMs } from "../gameDay";
@@ -30,7 +32,6 @@ import {
   sellPrice,
   tierById,
   villageLots,
-  VILLAGE_MAX_LOTS,
   type CottageStyleId,
   type HouseZone,
   type PlotTierId,
@@ -42,7 +43,7 @@ import { myBrief, refundAndThrow, rewardLike, spend, refund } from "./points";
 import { discountedPrice } from "../titles";
 import { isHouseOwnItem, MemoryHouseStore, type HousePair, type HouseRecord, type HouseStore } from "./store";
 import { RedisHouseStore } from "./store-redis";
-import type { GuestEntryView, HouseExterior, HouseLayout, HouseSummary, MyHouseResponse, PublicHouse, VillageResponse } from "./types";
+import type { GuestEntryView, HouseExterior, HouseLikeResponse, HouseLayout, HouseSummary, MyHouseResponse, PublicHouse, VillageResponse } from "./types";
 
 // 라우트가 쓰는 하우징 동작. 돈이 오가는 동작은 "검사 → spendPoints → 집 쪽 Lua" 순서이고,
 // 집 쪽 단계가 경합으로 실패하면(동시에 두 번 누름 등) 쓴 포인트를 그대로 돌려준다.
@@ -172,8 +173,9 @@ export async function buyPlot(
   const [had, fee] = await Promise.all([store.get(id), villaFeeFor(store, accountId)]);
   const cost = plotCost(tier.id) + fee;
   if (had) throw new HttpError(409, "ALREADY_OWNED", `이미 ${lotLabel(had.ch, had.lot)}에 내 집이 있어요. 마을 집은 한 채만 가질 수 있어요.`);
-  if (lot !== null && (!Number.isInteger(lot) || lot < 1 || lot > VILLAGE_MAX_LOTS))
-    throw new HttpError(400, "INVALID_INPUT", `번지는 1~${VILLAGE_MAX_LOTS} 중에서 골라 주세요.`);
+  // 11/19 2단지를 닫아 새 분양은 메인 맵 번지(1..WORLD_LOTS)만
+  if (lot !== null && (!Number.isInteger(lot) || lot < 1 || lot > WORLD_LOTS))
+    throw new HttpError(400, "INVALID_INPUT", `번지는 1~${WORLD_LOTS} 중에서 골라 주세요.`);
   // 11/15 비운 번지 (CLOSED_LOTS — 지금은 없다)
   if (lot !== null && !isOpenLot(lot)) throw new HttpError(400, "INVALID_INPUT", "그 번지는 이제 분양하지 않아요. 다른 번지를 골라 주세요.");
   if (lot !== null && (await store.village(ch)).some((h) => h.lot === lot)) throw lotTaken();
@@ -182,7 +184,7 @@ export async function buyPlot(
   const r = await store.create({ id, owner: accountId, name, intro, ownerName, tier: tier.id, ch, lot, now: Date.now(), paid: cost });
   if (r === "exists") await refundAndThrow(accountId, cost, new HttpError(409, "ALREADY_OWNED", "이미 내 집이 있어요."));
   if (r === "lot_taken") await refundAndThrow(accountId, cost, lotTaken());
-  if (r === "full") await refundAndThrow(accountId, cost, new HttpError(409, "VILLAGE_FULL", "마을에 빈 번지가 없어요."));
+  if (r === "full") await refundAndThrow(accountId, cost, new HttpError(409, "VILLAGE_FULL", "주거 구역이 다 찼어요. 빈 집터가 나면 다시 와 주세요."));
   return myHouse(store, accountId);
 }
 
@@ -202,7 +204,7 @@ export function seaStarterLayout(): HouseLayout {
 }
 
 /**
- * 11/16 포구 오두막 분양: 채널마다 6터 (마을 번지와 따로). 값 = 같은 크기 마을 집 값 × 1.5, 마을 집이 이미 있으면 별장이라 × 2.
+ * 11/16 포구 오두막 분양: 채널마다 11터 (11/19 6 → 11) (마을 번지와 따로). 값 = 같은 크기 마을 집 값 × 1.5, 마을 집이 이미 있으면 별장이라 × 2.
  * 한 계정에 마을 집 하나 + 오두막 하나까지 (오두막 집 id가 따로라 둘째 오두막은 "exists"로 막힌다)
  */
 export async function buyCottage(
@@ -433,14 +435,17 @@ export async function likeHouse(
   visitorId: string,
   ip: string,
   now = Date.now(),
-): Promise<{ likes: number; score: number; earnedOwner: number }> {
+): Promise<HouseLikeResponse> {
   const h = await findVisibleHouse(store, houseId);
   if (h.owner === visitorId) throw new HttpError(409, "OWN_HOUSE", "내 집에는 좋아요를 누를 수 없어요.");
-  const r = await store.like(h.id, visitorId, kstDay(now));
+  // 11/18 오늘의 할 일 「이웃 집에 좋아요」면 같은 스크립트에서 누른 사람의 진행도 (lib/retainQuest)
+  const day = kstDay(now);
+  const quest = questHook(visitorId, day, "like");
+  const r = await store.like(h.id, visitorId, day, quest);
   if (r === null) throw houseNotFound();
   if (r === "already") throw new HttpError(409, "ALREADY_LIKED", "오늘은 이미 좋아요를 눌렀어요. 내일 또 들러 주세요.");
   const earnedOwner = await rewardLike(h.owner, ip).catch(() => 0);
-  return { ...r, earnedOwner };
+  return { ...r, earnedOwner, ...todoTickOf(quest, day) };
 }
 
 // ── 3번 화분 물 주기 ──
@@ -492,11 +497,16 @@ export async function postGuest(
   name: string,
   text: string,
   now = Date.now(),
-): Promise<void> {
+): Promise<{ todo?: TodoTick }> {
   const h = await findVisibleHouse(store, houseId);
-  const r = await store.addGuest(h.id, { id: nanoid(10), name, text, at: now, author: visitorId }, kstDay(now));
+  const day = kstDay(now);
+  const r = await store.addGuest(h.id, { id: nanoid(10), name, text, at: now, author: visitorId }, day);
   if (r === "no_house") throw houseNotFound();
   if (r === "limit") throw new HttpError(429, "RATE_LIMITED", "방명록은 하루에 10번까지 남길 수 있어요.");
+  // 11/19 오늘 미션 「이웃 집 방명록 남기기」 (내 집은 세지 않는다 — 그날 미션일 때만 진행 칸 +1, lib/retainQuest)
+  const quest = h.owner !== visitorId ? questHook(visitorId, day, "guestbook") : null;
+  await bumpQuest(quest).catch((e) => console.error("[housing] 미션 진행 실패", e));
+  return todoTickOf(quest, day);
 }
 
 export async function guestView(store: HouseStore, houseId: string, visitorId: string | null): Promise<GuestEntryView[]> {

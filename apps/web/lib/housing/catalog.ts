@@ -1,4 +1,4 @@
-import { DEFAULT_MAX_CHANNELS } from "@tomb/protocol";
+import { DEFAULT_MAX_CHANNELS, SEA_LOTS } from "@tomb/protocol";
 
 // 하우징(개인 집) 카탈로그와 밸런스 값. 서버(검증·가격)와 클라이언트(상점·게임 그림)가 같이 쓴다.
 // 가격·점수를 바꾸면 상점 화면과 서버 검증이 함께 바뀐다. 이미 놓인 물건의 점수는 다음 저장 때 다시 계산된다.
@@ -19,11 +19,18 @@ export type PlotTier = {
 
 /** 폭은 짝수로 둔다 (아래 가운데 문 2칸) */
 export const PLOT_TIERS: readonly PlotTier[] = [
-  { id: "small", name: "작은 터", w: 10, h: 8, price: 2_000, maxItems: 30 },
-  { id: "wide", name: "넓은 터", w: 14, h: 10, price: 3_000, maxItems: 50 },
-  { id: "manor", name: "대저택", w: 18, h: 12, price: 5_000, maxItems: 80 },
+  // 11/19 포인트 한도가 없어지고 채널마다 15채뿐이라 값을 3배로 (예전 값은 LEGACY_PLOT_PRICE — 값을 기록하지 않은 옛 집의 환불용)
+  { id: "small", name: "작은 터", w: 10, h: 8, price: 6_000, maxItems: 30 },
+  { id: "wide", name: "넓은 터", w: 14, h: 10, price: 9_000, maxItems: 50 },
+  { id: "manor", name: "대저택", w: 18, h: 12, price: 15_000, maxItems: 80 },
 ];
 
+/** 11/19 값을 올리기 전 필지 값 (낸 값 paid를 기록하지 않은 옛 집이 비워질 때 돌려줄 값) */
+export const LEGACY_PLOT_PRICE: Record<PlotTierId, number> = { small: 2_000, wide: 3_000, manor: 5_000 };
+export const legacyPlotCost = (id: PlotTierId): number => {
+  const i = PLOT_TIERS.findIndex((t) => t.id === id);
+  return PLOT_TIERS.slice(0, Math.max(0, i) + 1).reduce((sum, t) => sum + LEGACY_PLOT_PRICE[t.id], 0);
+};
 export const tierById = (id: string): PlotTier | undefined => PLOT_TIERS.find((t) => t.id === id);
 export const nextTier = (id: PlotTierId): PlotTier | undefined => PLOT_TIERS[PLOT_TIERS.findIndex((t) => t.id === id) + 1];
 /** 처음 분양 때 이 크기를 바로 살 때의 값: 작은 터 분양가 + 그 위 단계 넓히기 값의 누적 (업그레이드로 올린 것과 같은 합) */
@@ -95,6 +102,7 @@ export const FURNITURE: readonly FurnitureDef[] = [
   { id: "fridge", name: "냉장고", desc: "열 때마다 뭔가 하나씩 나온다. 누가 채워 두는 걸까.", category: "living", price: 260, score: 12, w: 1, h: 1, use: "간식 꺼내기", spin: true },
   { id: "bathtub", name: "욕조", desc: "거품이 뽀글뽀글. 들어가면 나오기 싫다.", category: "living", price: 380, score: 18, w: 2, h: 1, use: "들어가기" },
   { id: "cat_cushion", name: "고양이 쿠션", desc: "쿠션 위의 고양이. 쓰다듬으면 골골 소리를 낸다.", category: "living", price: 180, score: 10, w: 1, h: 1, use: "쓰다듬기", spin: true },
+  { id: "sleepy_dog", name: "잠자는 강아지", desc: "담요 위에서 꿈속 산책 중이에요.", category: "living", price: 200, score: 10, w: 1, h: 1, use: "살살 쓰다듬기" },
   { id: "grand_clock", name: "괘종시계", desc: "지금 몇 시인지 댕— 하고 알려 준다.", category: "living", price: 240, score: 11, w: 1, h: 1, use: "시간 보기", spin: true },
   // ── 사무실 ──
   { id: "monitor_desk", name: "모니터 책상", desc: "듀얼 모니터. 한쪽엔 아직 엑셀이 열려 있다.", category: "dev", price: 340, score: 18, w: 2, h: 1, light: { color: 0x8ac8ff, r: 26 }, spin: true, use: "앉아서 일하기" },
@@ -326,8 +334,8 @@ export const reclaimLastSeen = (lastSeenAt: number, since: number = RECLAIM_SINC
 /** 집이 있는 곳: 마을 주거 구역 또는 달물결 포구 오두막 터 */
 export type HouseZone = "village" | "sea";
 export const isHouseZone = (z: unknown): z is HouseZone => z === "village" || z === "sea";
-/** 포구 오두막 터 수 (채널마다, protocol SEA_LOTS와 같다) */
-export const SEA_LOT_COUNT = 6;
+/** 포구 오두막 터 수 (채널마다, protocol SEA_LOTS와 같다 — 11/19 6 → 11) */
+export const SEA_LOT_COUNT = SEA_LOTS.length;
 /** 오두막 값 = 같은 크기 마을 집 값 × 이 배수. 마을 집이 이미 있으면 별장이라 SEA_VILLA_RATE */
 export const SEA_COTTAGE_RATE = 1.5;
 export const SEA_VILLA_RATE = 2;

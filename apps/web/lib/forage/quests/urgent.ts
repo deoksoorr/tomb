@@ -136,15 +136,17 @@ export function urgentGoal(kind: UrgentKind, online: number): number {
   return Math.max(d.min, Math.min(d.max, Math.round((d.per * o) / step) * step));
 }
 
-/** 11/16 한 사람이 한 의뢰에 낼 수 있는 몫 (목표에 대한 비율). 접속자가 적을 때(URGENT_FEW_ONLINE 미만)는 세 사람이면 채울 수 있게 크게 */
+/** 11/16 한 사람이 한 의뢰에 낼 수 있던 몫 (목표에 대한 비율) — 11/19부터 새 의뢰엔 쓰지 않는다 (urgentCap) */
 export const URGENT_CAP_SHARE = 0.25;
 export const URGENT_CAP_SHARE_FEW = 0.4;
 export const URGENT_FEW_ONLINE = 10;
 
-/** 11/16 한 사람 상한: 모아 둔 것을 한 사람이 한 번에 내서 혼자 끝내지 못하게. 목표와 함께 시작할 때 정해 두고 바꾸지 않는다 */
-export function urgentCap(goal: number, online: number): number {
-  const o = Number.isFinite(online) ? Math.max(0, online) : URGENT_REF_ONLINE;
-  return Math.ceil(goal * (o >= URGENT_FEW_ONLINE ? URGENT_CAP_SHARE : URGENT_CAP_SHARE_FEW));
+/**
+ * 한 사람 상한 (0 = 상한 없음). 11/19 사용자 「긴급 의뢰 납품도 혼자 다 할 수 있게」 — 새 의뢰는 상한 없이 연다.
+ * 11/16~11/18에 상한을 정해 연 의뢰(저장 값 cap > 0)는 끝날 때까지 그 값을 그대로 쓴다 (urgentService goalOf)
+ */
+export function urgentCap(_goal: number, _online: number): number {
+  return 0;
 }
 
 /** 11/16 한 사람 상한 안내 한 줄 (게시판). left = 앞으로 더 낼 수 있는 수 */

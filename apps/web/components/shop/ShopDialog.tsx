@@ -50,7 +50,9 @@ type Props = {
 /** 상점 주인장 창. 산 물건은 가방으로 간다 (쓰는 곳: 폭죽 버튼·내 정보·내 묘비 상세) */
 export default function ShopDialog({ onClose, avatar }: Props) {
   const { me, error } = useMe();
-  const [tab, setTab] = useState<ItemKind>(() => takeShopTab() ?? "firework");
+  // 다른 창에서 고른 탭·물건으로 연다 (가방 염색권 → 염색 탭, 11/19 외치기 창 → 확성기 탭의 그 확성기)
+  const [start] = useState(takeShopTab);
+  const [tab, setTab] = useState<ItemKind>(start?.kind ?? "firework");
   const [slotFilter, setSlotFilter] = useState<SlotFilter>("all");
   const [pending, setPending] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -58,7 +60,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
   // 착용 남은 시간 판단 기준 (렌더 중에 시계를 읽지 않는다)
   const [openedAt] = useState(() => Date.now());
   // 탭마다 고른 것 + 마우스를 올린 것 (올린 것이 잠깐 먼저 보인다)
-  const [picked, setPicked] = useState(FIRST);
+  const [picked, setPicked] = useState(() => (start?.item && listed(start.kind, false).some((i) => i.id === start.item) ? { ...FIRST, [start.kind]: start.item } : FIRST));
   const [hoverId, setHoverId] = useState<string | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const [savedColor] = useState(() => readItem(LS.color));

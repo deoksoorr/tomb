@@ -146,7 +146,7 @@ function skinOf(name: string): Skin | null {
       };
     }
   }
-  const lot = /^lot(\d)$/.exec(name);
+  const lot = /^lot(\d+)$/.exec(name);
   if (lot) {
     const l = SEA_LOTS.find((x) => x.n === +lot[1]);
     if (!l) return null;

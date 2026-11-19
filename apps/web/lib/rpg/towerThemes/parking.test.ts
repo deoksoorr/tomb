@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { HUNT_ZONES, MONSTERS, type MonsterId } from "../catalog";
 import { huntSpawnable } from "../plan";
-import { killRateCeiling } from "../rewards";
-import { evalTower, towerClean, floorMinSec, isBossFloor, TOWER_THEMES, towerBlock, towerPlan, towerZone } from "../tower";
+import { evalTower, towerClean, floorMinSec, isBossFloor, TOWER_THEMES, towerBlock, towerPlan, towerZone, towerKillRate } from "../tower";
 import type { HuntResult } from "../types";
 import { PK_ALARM, PK_BOSS, PK_ELITE, PK_LOOPS, PK_POOL, PK_ROOMS, PK_BOSS_ROOM, PK_RUSH, PK_TICKET, PK_ZONE, pkLoop, pkPillarCode, pkRoom, pkTicketSlow } from "./parking";
 import { PK_BARRIER_CAP, pkTowAdds } from "./parkingPlan";
@@ -109,7 +108,7 @@ describe("지하 주차장: 서버 검증", () => {
       for (const f of parkingFloors(seed)) {
         const p = towerPlan(seed, f, 1);
         const total = Object.values(huntSpawnable(p, Infinity)).reduce((a, b) => a + (b ?? 0), 0);
-        expect(total).toBeLessThanOrEqual(3 + floorMinSec(p) * killRateCeiling("hell", 50));
+        expect(total).toBeLessThanOrEqual(3 + floorMinSec(p) * towerKillRate(50));
       }
   });
 

@@ -1,4 +1,6 @@
+import { T_ALL_POINTS } from "./transcendTree";
 import { nanoid } from "nanoid";
+import { questHook, todoTickOf } from "../retainQuest";
 import { b64urlDecode, hmacSign, itemById } from "@tomb/protocol";
 import { recordEvent } from "../analyticsService";
 import { earnPointsOnly, getAccounts, refundPoints, spendPoints } from "../store";
@@ -14,6 +16,8 @@ import { isStaff } from "../staff";
 import { COSMETIC_DROPS, gearById, potionById, timeLimitSec, zoneFor, type Difficulty, type GameKind, type ZoneId } from "./catalog";
 import {
   ackTreeNotice,
+  learnTranscend,
+  resetTranscend,
   addDrops,
   addGear,
   addPotions,
@@ -93,9 +97,10 @@ async function http<T>(p: Promise<T>): Promise<T> {
 }
 
 /** 스킬 포인트 예산: 보통은 레벨로 받은 만큼, 테스트 서버 슈퍼 계정은 모든 스킬 최대치 */
-const skillBudget = (level: number, sup: boolean) => (sup ? Math.max(ALL_SKILLS_POINTS, skillPointsEarned(level)) : skillPointsEarned(level));
+const skillBudget = (level: number, sup: boolean, tLevel = 0) => (sup ? Math.max(ALL_SKILLS_POINTS, skillPointsEarned(level, tLevel)) : skillPointsEarned(level, tLevel));
 /** 슈퍼 계정의 능력치 포인트: 최대 레벨까지 받는 포인트 전부 (+ 초월 몫) */
-const superStatPoints = (tLevel: number) => statPointsEarned(MAX_LEVEL, tLevel);
+// 11/19 슈퍼 계정(로컬·테스트 서버 운영자) 능력치는 레벨 50 기준만 (초월 ★로 늘어나는 몫은 빼고 — 갓 50과 같은 능력치로 빌드를 시험한다)
+const superStatPoints = () => statPointsEarned(MAX_LEVEL, 0);
 /**
  * 레벨을 보는 모든 검사(장비 요구 레벨·사냥터 잠금·판 기록·능력치 계산)에 쓰는 레벨.
  * 테스트 서버 슈퍼 계정은 최대 레벨 취급, 저장된 레벨은 그대로
@@ -106,7 +111,7 @@ export const effectiveLevel = (level: number, sup: boolean) => (sup ? MAX_LEVEL 
  * 보통 계정이면 실제 레벨 기준으로 맞춘다: 스킬 예산·능력치 포인트를 넘은 배분은 돌려주고, 요구 레벨이 넘는 장착 장비는 뺀다
  * (슈퍼 계정으로 바꾼 상태를 운영자 지정이 풀린 뒤·운영 서버에서 읽을 때). 슈퍼 계정이면 그대로
  */
-const fitAll = (s: CharacterState, sup: boolean): CharacterState => (sup ? s : fitToLevel(fitSkillBudget(s, skillPointsEarned(s.level))));
+const fitAll = (s: CharacterState, sup: boolean): CharacterState => (sup ? s : fitToLevel(fitSkillBudget(s, skillPointsEarned(s.level, s.tLevel))));
 
 /** 캐릭터 읽기 + 맞추기 (바뀌면 저장한다) */
 async function loadChar(acct: string, store: RpgStore, sup: boolean): Promise<CharacterState> {
@@ -143,8 +148,8 @@ export async function rpgView(acct: string, store: RpgStore = getRpgStore(), now
     ? {
         ...stored,
         level: effectiveLevel(stored.level, true),
-        skillPoints: Math.max(0, skillBudget(stored.level, true) - spentPoints(stored.skills)),
-        statPoints: Math.max(0, superStatPoints(stored.tLevel) - spentStats(stored)),
+        skillPoints: Math.max(0, skillBudget(stored.level, true, stored.tLevel) - spentPoints(stored.skills)),
+        statPoints: Math.max(0, superStatPoints() - spentStats(stored)),
       }
     : stored;
   // 11/15 끝판 (레벨 50): 오늘 초월 판·야근 빌딩·개척자 모집. 끝판이 열린 시각은 레벨 50이 처음 볼 때 적는다
@@ -174,11 +179,15 @@ export async function characterAction(acct: string, a: z.output<typeof Character
       const s = fitAll(s0, sup);
       switch (a.type) {
         case "alloc":
-          return { state: allocStats(s, a.stats, sup ? superStatPoints(s.tLevel) : undefined), result: null };
+          return { state: allocStats(s, a.stats, sup ? superStatPoints() : undefined), result: null };
         case "learn":
-          return { state: learnSkill(s, a.skill, skillBudget(s.level, sup)), result: null };
+          return { state: learnSkill(s, a.skill, skillBudget(s.level, sup, s.tLevel)), result: null };
         case "ackTree":
           return { state: ackTreeNotice(s), result: null };
+        case "tlearn":
+          return { state: learnTranscend(s, a.node, sup ? T_ALL_POINTS : undefined), result: null };
+        case "treset":
+          return { state: resetTranscend(s), result: null };
         case "hotbar":
           return { state: setHotbar(s, a.slots, a.auto), result: null };
         case "equip":
@@ -347,7 +356,7 @@ export async function startRun(
   // 11/15 장비 힘 배율 (세트 장비·강화·옵션): 저장된 장착 칸으로 재서 티켓에 싣는다 → 센 장비로 빨리 잡은 정직한 판이 거절되지 않게
   const gp = game === "hunt" ? gearPower(lv, c.stats, c.equip) : 1;
   // 11/18 한 마리에게 넣을 수 있는 초당 최대 피해 (lib/rpg/dealCap) · 판 시작 때 가진 물약 — 판 끝 검사에 쓴다 (화면 말은 안 믿는다)
-  const dm = game === "hunt" ? maxDealPerSec(lv, c.stats, c.equip, c.skills) : undefined;
+  const dm = game === "hunt" ? maxDealPerSec(lv, c.stats, c.equip, c.skills, c.tSkills) : undefined;
   const pt = game === "hunt" ? heldPotions(c.potions) : undefined;
   const day = kstDay(now);
   // 11/15 야근 빌딩: 지옥 사냥만, 시작 층은 최고 기록으로 연 체크포인트 (층마다 사냥터는 정해져 있다 — 화면이 보낸 사냥터는 보지 않는다)
@@ -631,7 +640,9 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   const pointsRaw = nightBonus ? Math.round(v.points * STARRY_NIGHT_BONUS) : v.points;
   // 사냥은 사냥 한도, 곤충·별자리는 미니게임 한도 (사냥 화면의 오늘 사냥 포인트(daily.points)에는 사냥 몫만)
   const earned = pointsRaw > 0 ? (await earnPointsOnly(acct, t.g, pointsRaw, ipHash)).earned : 0;
-  const daily = await store.addDaily(acct, kstDay(now), { points: t.g === "hunt" ? earned : 0, runs: 1, exp });
+  // 11/18 오늘의 할 일 「사냥 한 판」·「별자리 잇기 한 판」이면 같은 파이프라인에서 진행도 (lib/retainQuest)
+  const quest = t.g === "hunt" || t.g === "stars" ? questHook(acct, kstDay(now), t.g) : null;
+  const daily = await store.addDaily(acct, kstDay(now), { points: t.g === "hunt" ? earned : 0, runs: 1, exp }, quest);
   if (t.g === "hunt") await recordEvent("hunt", now); // 47번 방문 분석: 사냥 판 수
   // 49번 랭킹: 사냥터별 최단 클리어·처치 수 (난이도 = 사냥터). 운영자 계정은 순위에 남기지 않는다.
   // 11/15: 자기 레벨이 그 사냥터가 열리는 레벨(티켓의 사냥터 t.z)보다 10 넘게 높으면 랭킹에 아예 넣지 않는다 —
@@ -663,6 +674,7 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
       ...(firstPending.length ? { firstPending } : {}),
     },
     view: await rpgView(acct, store, now, state, daily),
+    ...todoTickOf(quest, kstDay(now)),
   };
 }
 
@@ -1032,7 +1044,8 @@ async function settleTowerRun(
   const earned = v.points > 0 ? (await earnPointsOnly(acct, "hunt", v.points, ipHash)).earned : 0;
   // 11/16 몬스터 도감: 의심 판이 아닐 때만 evalTower가 mobs를 싣는다 (관리자 대신 정산 grantTowerRun은 처치 기록이 없다)
   const mobs = v.mobs && !suspect ? await recordMobKills(acct, v.mobs, now, ipHash) : undefined;
-  const daily = await store.addDaily(acct, day, { points: earned, runs: 1 });
+  const quest = questHook(acct, day, "hunt");
+  const daily = await store.addDaily(acct, day, { points: earned, runs: 1 }, quest);
   await recordEvent("hunt", now);
   // 처치 수는 주간 사냥 레이스에 그대로 (지옥, 레벨 50 콘텐츠라 늘 레이스에 든다)
   if (v.kills > 0 && !staff && !suspect) await getAccounts().recordHunt(acct, "hell", { kills: v.kills, clearMs: null }, week, true);
@@ -1057,6 +1070,7 @@ async function settleTowerRun(
       ...(firstPending.length ? { firstPending } : {}),
     },
     view: await rpgView(acct, store, now, state, day === kstDay(now) ? daily : undefined),
+    ...todoTickOf(quest, day),
   };
 }
 

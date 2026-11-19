@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TOWER_CHESTS_PER_DAY, towerChestDrops, towerChestFloors, towerSettle, type TowerState } from "./tower";
+import { isChestFloor, TOWER_CHEST_FROM, TOWER_CHESTS_PER_DAY, towerChestDrops, towerChestFloors, towerSettle, type TowerState } from "./tower";
 
 // 11/15 우두머리 상자: 게임이 판 안에서 여는 상자(층·순서·드롭)와 서버가 판 끝에 주는 상자가 같다
 
@@ -15,8 +15,11 @@ describe("우두머리 상자 (게임 ↔ 서버)", () => {
           const st = towerSettle({ ...base, tDay: DAY, tChest: used }, { day: DAY, week: WEEK, start, floors, floorMs: floors * 50_000 });
           expect(towerChestFloors(start, floors, used), `${start}층부터 ${floors}층, 오늘 ${used}개`).toEqual(st.chests);
         }
-    // 11/15 하루 한도 없음: 아무리 많이 열었어도 우두머리 층마다
-    expect(towerChestFloors(1, 10, 500)).toEqual([5, 10]);
+    // 11/15 하루 한도 없음: 아무리 많이 열었어도 우두머리 층마다 · 11/19 상자는 50층부터
+    const range = (a: number, n: number) => Array.from({ length: n }, (_, i) => a + i);
+    expect(towerChestFloors(1, TOWER_CHEST_FROM - 1, 500)).toEqual([]);
+    expect(towerChestFloors(Math.max(1, TOWER_CHEST_FROM - 9), 20, 500)).toEqual(range(Math.max(1, TOWER_CHEST_FROM - 9), 20).filter(isChestFloor));
+    expect(towerChestFloors(Math.max(1, TOWER_CHEST_FROM - 9), 20, 500).length).toBeGreaterThanOrEqual(2);
     expect(TOWER_CHESTS_PER_DAY).toBe(Infinity);
   });
 

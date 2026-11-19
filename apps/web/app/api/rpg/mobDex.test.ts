@@ -181,22 +181,23 @@ describe("야근 빌딩", () => {
 });
 
 describe("보상 · 칭호 · 남의 도감", () => {
-  it("처음 등록 보상은 몬스터마다 한 번, 하루 도감 한도를 넘는 만큼은 받을 도감 보상으로 남는다", async () => {
+  it("처음 등록 보상은 몬스터마다 한 번, 11/19부터 하루 도감 한도 없이 바로 다 받는다", async () => {
     const v = await newVisitor();
     const all = Object.fromEntries(dexIdsOf("mob").map((id) => [id, 1]));
     const first = await recordMobKills(v.id, all, Date.now(), "test");
     expect(first.fresh).toHaveLength(dexIdsOf("mob").length);
     const sum = dexIdsOf("mob").reduce((n, id) => n + dexRewardOf(id), 0);
     expect(first.dex!.points).toBe(sum);
-    expect(first.dex!.earned).toBeLessThanOrEqual(earnRule("dex").dailyMax);
-    expect(first.dex!.pending).toBeGreaterThan(0);
+    expect(earnRule("dex").dailyMax).toBeNull();
+    expect(first.dex!.earned).toBe(sum);
+    expect(first.dex!.pending).toBe(0);
     expect(first.dex!.titles).toEqual([DEX_TITLES.mob[50], DEX_TITLES.mob[100]]);
-    expect((await getForageStore().dexPay(v.id)).pending.mob).toBe(first.dex!.pending);
+    expect((await getForageStore().dexPay(v.id)).pending.mob ?? 0).toBe(0);
     // 다시 잡아도 등록·보상 없음
     const again = await recordMobKills(v.id, all, Date.now(), "test");
     expect(again.fresh).toEqual([]);
     expect(again.dex).toBeUndefined();
-    expect((await getForageStore().dexPay(v.id)).pending.mob).toBe(first.dex!.pending);
+    expect((await getForageStore().dexPay(v.id)).pending.mob ?? 0).toBe(0);
   });
 
   it("남의 도감(프로필·게임 안 구경)에도 몬스터 칸 기록과 칭호가 보인다", async () => {

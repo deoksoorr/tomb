@@ -4,10 +4,12 @@ import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as R
 import { BRANCH_INFO, BRANCHES, HOTBAR_SIZE, SKILLS, skillById, TIERS, type BranchId, type SkillDef, type SkillId } from "@/lib/rpg/catalog";
 import type { CharacterAction } from "@/lib/rpg/client";
 import { cleanAuto, fitsSlot, isUltimate, SKILL_SLOTS, ULT_SLOT } from "@/lib/rpg/hotbar";
-import { checkLearn, spentIn, spentPoints, tierGate, tierOpen } from "@/lib/rpg/skillRules";
+import { checkLearn, rankCost, spentIn, spentPoints, tierGate, tierOpen } from "@/lib/rpg/skillRules";
+import TranscendPanel, { TRANSCEND_TONE, TranscendTop, tPointsLeft, type TResetAsk } from "./TranscendPanel";
 import {
   compareStats,
   josa,
+  linkLines,
   requirements,
   SKILL_TEXT,
   skillTypes,
@@ -49,6 +51,8 @@ const DRAG_START_PX = 6;
 /** 칸 이름: 1~5번 / 궁극기 칸(F) */
 const slotName = (i: number) => (i === ULT_SLOT ? "궁극기(F) 칸" : `${i + 1}번 칸`);
 const slotKey = (i: number) => (i === ULT_SLOT ? "F" : String(i + 1));
+/** 범례 뒷부분 (넓은 데스크톱은 트리 아래 대신 설명 칸에) */
+const LEGEND_MORE = "둥근 칸은 패시브예요. 선 위 숫자만큼 앞 스킬을 찍어야 열려요(숫자가 없으면 1랭크).";
 const ULT_ONLY = "궁극기는 F 칸에만 들어가요.";
 const NOT_ULT = "F 칸에는 5단 궁극기만 들어가요. 다른 스킬은 1~5번 칸에 놓아요.";
 
@@ -75,6 +79,9 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
   const [sel, setSel] = useState(() => initialPick(firstBranch));
   const { branch, picked } = sel;
   const [confirmReset, setConfirmReset] = useState(false);
+  // 11/19 다섯째 탭: 초월 수련 (켜면 트리 대신 초월 수련 한 페이지)
+  const [trans, setTrans] = useState(false);
+  const [tAsk, setTAsk] = useState<TResetAsk>(null);
   const [sheet, setSheet] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -275,6 +282,8 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
             : `${dSlot >= 0 ? `${josa(d.name, "은", "는")} 지금 ${dSlot + 1}번 칸에 있어요. ` : ""}${josa(d.name, "을", "를")} 넣을 칸이나 숫자 키(1~${SKILL_SLOTS})를 누르세요.`));
 
   const resetLabel = `${view.respecCost}P`;
+  // 창 바탕 톤: 보는 갈래 색 / 초월 수련은 금빛
+  const tone = trans ? TRANSCEND_TONE : info;
 
   return (
     <div
@@ -287,12 +296,12 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
         if ((e.target as HTMLElement).closest("button, a, input, select, textarea, label, aside")) return;
         clearPick();
       }}
-      style={{ "--br": hex(info.color), "--br-light": hex(info.light), "--br-dark": hex(info.dark) } as CSSProperties}
+      style={{ "--br": hex(tone.color), "--br-light": hex(tone.light), "--br-dark": hex(tone.dark) } as CSSProperties}
     >
       {c.treeNotice && (
         <div className={t.notice} role="status">
           <p>
-            <b>스킬 트리가 새로 바뀌었어요.</b> 예전에 배운 스킬은 없어지고 스킬 포인트 <b>{c.skillPoints}</b>개를 모두 돌려드렸어요. 세 갈래 중 마음에 드는 길로 다시 찍어 보세요.
+            <b>스킬 트리가 새로 바뀌었어요.</b> 예전에 배운 스킬은 없어지고 스킬 포인트 <b>{c.skillPoints}</b>개를 모두 돌려드렸어요. 네 갈래 중 마음에 드는 길로 다시 찍어 보세요. 공격 스킬은 12랭크(궁극기 5랭크)까지 올라가요.
           </p>
           <button type="button" className={cx(ui.button, ui.quiet)} disabled={busy} onClick={() => onCharacter({ type: "ackTree" })}>
             알겠어요
@@ -300,53 +309,57 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
         </div>
       )}
 
-      <header className={t.top}>
-        <div className={t.pointBig} aria-label={`남은 스킬 포인트 ${c.skillPoints}`}>
-          <span className={t.pointLabel}>남은 스킬 포인트</span>
-          <b data-zero={c.skillPoints === 0 || undefined}>{c.skillPoints}</b>
-          <span className={t.pointSub}>
-            쓴 포인트 {spentPoints(c.skills)} / 받은 포인트 {budget}
-          </span>
-        </div>
-        {view.superHunter && (
-          <span className={t.super} title="테스트 서버의 운영자 계정이에요. 포인트가 넉넉하고 레벨은 최대로 쳐요. 사냥터가 모두 열리고 초기화 횟수도 세지 않아요.">
-            테스트 서버 슈퍼 계정
-          </span>
-        )}
-        <div className={t.resetBox}>
-          {!confirmReset ? (
-            <>
-              <span className={t.resetCost}>
-                초기화 비용 <b>{resetLabel}</b>
-                <small>지갑 {view.points.toLocaleString("ko-KR")}P에서 빠져요</small>
-              </span>
-              <button type="button" className={ui.button} disabled={busy || spentPoints(c.skills) === 0} onClick={() => setConfirmReset(true)}>
-                초기화
-              </button>
-            </>
-          ) : (
-            <span className={t.confirm} role="alert">
-              {view.respecCost}P를 내고 스킬 포인트 {spentPoints(c.skills)}개를 모두 돌려받을까요? 단축 칸도 비워져요.
-              <span className={t.confirmBtns}>
-                <button
-                  type="button"
-                  className={cx(ui.button, ui.primary)}
-                  disabled={busy || view.points < view.respecCost}
-                  onClick={() => {
-                    setConfirmReset(false);
-                    onCharacter({ type: "respec", cost: view.respecCost }, `스킬을 초기화했어요. 포인트 ${spentPoints(c.skills)}개를 돌려받았어요.`);
-                  }}
-                >
-                  {view.points < view.respecCost ? "포인트가 모자라요" : "초기화"}
-                </button>
-                <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setConfirmReset(false)}>
-                  취소
-                </button>
-              </span>
+      {trans ? (
+        <TranscendTop view={view} busy={busy} onCharacter={onCharacter} ask={tAsk} setAsk={setTAsk} />
+      ) : (
+        <header className={t.top}>
+          <div className={t.pointBig} aria-label={`남은 스킬 포인트 ${c.skillPoints}`}>
+            <span className={t.pointLabel}>남은 스킬 포인트</span>
+            <b data-zero={c.skillPoints === 0 || undefined}>{c.skillPoints}</b>
+            <span className={t.pointSub}>
+              쓴 포인트 {spentPoints(c.skills)} / 받은 포인트 {budget}
+            </span>
+          </div>
+          {view.superHunter && (
+            <span className={t.super} title="테스트 서버의 운영자 계정이에요. 포인트가 넉넉하고 레벨은 최대로 쳐요. 사냥터가 모두 열리고 초기화 횟수도 세지 않아요.">
+              테스트 서버 슈퍼 계정
             </span>
           )}
-        </div>
-      </header>
+          <div className={t.resetBox}>
+            {!confirmReset ? (
+              <>
+                <span className={t.resetCost}>
+                  초기화 비용 <b>{resetLabel}</b>
+                  <small>지갑 {view.points.toLocaleString("ko-KR")}P에서 빠져요</small>
+                </span>
+                <button type="button" className={ui.button} disabled={busy || spentPoints(c.skills) === 0} onClick={() => setConfirmReset(true)}>
+                  초기화
+                </button>
+              </>
+            ) : (
+              <span className={t.confirm} role="alert">
+                {view.respecCost}P를 내고 스킬 포인트 {spentPoints(c.skills)}개를 모두 돌려받을까요? 단축 칸도 비워져요.
+                <span className={t.confirmBtns}>
+                  <button
+                    type="button"
+                    className={cx(ui.button, ui.primary)}
+                    disabled={busy || view.points < view.respecCost}
+                    onClick={() => {
+                      setConfirmReset(false);
+                      onCharacter({ type: "respec", cost: view.respecCost }, `스킬을 초기화했어요. 포인트 ${spentPoints(c.skills)}개를 돌려받았어요.`);
+                    }}
+                  >
+                    {view.points < view.respecCost ? "포인트가 모자라요" : "초기화"}
+                  </button>
+                  <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setConfirmReset(false)}>
+                    취소
+                  </button>
+                </span>
+              </span>
+            )}
+          </div>
+        </header>
+      )}
 
       <div className={t.tabs} role="tablist" aria-label="스킬 갈래">
         {BRANCHES.map((b) => {
@@ -357,10 +370,13 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
               key={b}
               type="button"
               role="tab"
-              aria-selected={b === branch}
+              aria-selected={!trans && b === branch}
               className={t.tab}
               style={{ "--tab": hex(bi.color), "--tab-light": hex(bi.light) } as CSSProperties}
-              onClick={() => pick(b)}
+              onClick={() => {
+                setTrans(false);
+                pick(b);
+              }}
             >
               <span className={t.tabName}>{bi.name}</span>
               <span className={t.tabRole}>{bi.role}</span>
@@ -375,11 +391,31 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
             </button>
           );
         })}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={trans}
+          className={t.tab}
+          style={{ "--tab": hex(0xe0c36a), "--tab-light": hex(0xfff3c8) } as CSSProperties}
+          onClick={() => {
+            setTrans(true);
+            clearPick();
+          }}
+        >
+          <span className={t.tabName}>초월 수련</span>
+          <span className={t.tabRole}>물공 · 마공</span>
+          <span className={t.tabSpent}>
+            <b>{tPointsLeft(view)}</b>P 남음
+          </span>
+        </button>
       </div>
 
+      {trans ? (
+        <TranscendPanel view={view} busy={busy} onCharacter={onCharacter} ask={tAsk} setAsk={setTAsk} />
+      ) : (
       <div className={t.body}>
         <section className={t.treeCol} aria-label={`${info.name} 스킬 트리`}>
-          <div className={t.tree} style={{ aspectRatio: `300 / ${TIERS * ROW}` }}>
+          <div className={t.tree} style={{ "--tree-ratio": `300 / ${TIERS * ROW}` } as CSSProperties}>
             {Array.from({ length: TIERS }, (_, i) => {
               const tier = i + 1;
               const open = tierOpen(c.skills, branch, tier);
@@ -461,7 +497,8 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
             })}
           </div>
           <p className={t.legend}>
-            <i data-k="locked" /> 잠김 <i data-k="open" /> 찍을 수 있음 <i data-k="learned" /> 찍음 <i data-k="max" /> 최대. 둥근 칸은 패시브예요. 선 위 숫자만큼 앞 스킬을 찍어야 열려요(숫자가 없으면 1랭크).
+            <i data-k="locked" /> 잠김 <i data-k="open" /> 찍을 수 있음 <i data-k="learned" /> 찍음 <i data-k="max" /> 최대.
+            <span className={t.legendMore}>{LEGEND_MORE}</span>
           </p>
           <p className={t.branchDesc}>{info.desc}</p>
         </section>
@@ -471,8 +508,10 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
             <p className={t.emptyTitle}>
               {info.name} · {info.role}
             </p>
+            <p className={cx(t.emptyText, t.emptyDesc)}>{info.desc}</p>
             <p className={t.emptyText}>트리에서 스킬을 누르면 설명과 배우기 버튼이 여기 나와요.</p>
             <p className={t.emptyText}>스킬을 고른 채로 아래 단축 칸이나 숫자 키(1~{SKILL_SLOTS})를 누르면 그 칸에 들어가요. 궁극기는 F예요. 빈 곳이나 Esc를 누르면 선택이 풀려요.</p>
+            <p className={cx(t.emptyText, t.emptyDesc)}>{LEGEND_MORE}</p>
           </aside>
         ) : (
           <aside className={t.detail} data-sheet={sheet || undefined} aria-live="polite" aria-label={`${d.name} 설명`}>
@@ -514,7 +553,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
                 disabled={busy || !!why}
                 onClick={() => onCharacter({ type: "learn", skill: d.id }, `${d.name} ${dRank + 1}랭크를 찍었어요.`)}
               >
-                {dRank >= d.maxLevel ? "최대 랭크예요" : why && why.code !== "NO_SKILL_POINTS" ? `잠김 · ${requirements(d, c.skills).find((r) => !r.ok)?.text ?? why.message}` : dRank ? `${dRank + 1}랭크로 올리기 · 1포인트` : "배우기 · 1포인트"}
+                {dRank >= d.maxLevel ? "최대 랭크예요" : why && why.code !== "NO_SKILL_POINTS" ? `잠김 · ${requirements(d, c.skills).find((r) => !r.ok)?.text ?? why.message}` : dRank ? `${dRank + 1}랭크로 올리기 · ${rankCost(dRank + 1)}포인트` : `배우기 · ${rankCost(1)}포인트`}
               </button>
               {d.kind === "active" && dRank > 0 && (
                 <div className={t.quickSlots} role="group" aria-label={`${d.name} 단축 칸 고르기`}>
@@ -544,6 +583,12 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
               {d.kind === "passive" && <p className={t.note}>패시브는 배우면 사냥 내내 늘 켜져 있어요. 단축 칸이 필요 없어요.</p>}
             </div>
             <p className={t.summary}>{text.summary}</p>
+            {/* 11/19 연계 보너스 (대표 빌드): 핵심 ← 받침 랭크마다 +n%, 지금 오른 만큼 */}
+            {linkLines(d.id, c.skills).map((l) => (
+              <p key={l.text} className={t.tableNote} data-link={l.kind}>
+                <b>{l.text}</b> · 지금 +{l.now}%{l.guard > 0 ? `, 받는 피해 −${l.guard}%` : ""}
+              </p>
+            ))}
 
             <table className={t.stats}>
               <thead>
@@ -620,6 +665,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
           </aside>
         )}
       </div>
+      )}
 
       <section className={t.dock} aria-labelledby="rpg-hotbar" data-over={over !== null || undefined}>
         <div className={t.dockHead}>

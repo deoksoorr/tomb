@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { banIpHash } from "@/lib/ban";
-import { decisionText, kstMonth, normalizeRefCode, REF_GRAND_MONTH_CAP, type RefDecision, randomRefCode, REF_GIFT_FROM, REF_MONTH_CAP, type RefCheckResponse, type ReferralView } from "@/lib/referralRules";
+import { decisionText, kstMonth, normalizeRefCode, REF_ENTER_MS, REF_GRAND_MONTH_CAP, REF_REWARD_BUNDLE, REF_REWARD_ITEM, refGrandText, refRewardText, type RefDecision, randomRefCode, REF_GIFT_FROM, REF_MONTH_CAP, type RefCheckResponse, type ReferralView } from "@/lib/referralRules";
+import { getRpgStore } from "@/lib/rpg/store";
 import { ensureReferralCode, referralOnPresence } from "@/lib/referralService";
 import { recordSignals } from "@/lib/sameUser";
 import { setStaff } from "@/lib/staff";
@@ -134,7 +135,6 @@ describe("추천인 정하기 규칙", () => {
     expect(await errOf(enter(a, await codeOf(a)))).toEqual({ status: 409, code: "SELF" });
     const ok = await bodyOf<ReferralView>(enter(b, await codeOf(a)));
     expect(ok.mine).toMatchObject({ referrerName: "한번추천인", qualified: false });
-    expect(ok.enterUntil).toBeNull();
     expect(await errOf(enter(b, await codeOf(a2)))).toEqual({ status: 409, code: "ALREADY" });
     expect((await view(a)).joined).toBe(1);
   });
@@ -157,24 +157,26 @@ describe("추천인 정하기 규칙", () => {
     expect(await errOf(enter(b, code))).toEqual({ status: 404, code: "NO_CODE" });
   });
 
-  it("가입하고 3일 안에만 정할 수 있다", async () => {
+  it("11/19 가입할 때만 정할 수 있다 (내 정보에서 뒤늦게 넣기 없음, 가입 직후 짧은 창 밖이면 거절)", async () => {
     const t0 = NOON + 10 * DAY;
     const now = vi.spyOn(Date, "now").mockReturnValue(t0);
     const a = await newVisitor("기한추천인");
     const late = await newVisitor("늦은새이웃");
     const early = await newVisitor("이른새이웃");
+    const later = await newVisitor("나중새이웃");
     const code = await codeOf(a);
-    now.mockReturnValue(t0 + 2 * DAY);
-    expect((await view(early)).enterUntil).toBe(t0 + 3 * DAY);
+    expect(await errOf(referral.POST(call("/api/referral", { visitor: later, body: { code, via: "later" } })))).toEqual({ status: 409, code: "SIGNUP_ONLY" });
+    expect(await errOf(referral.POST(call("/api/referral", { visitor: later, body: { code } })))).toEqual({ status: 409, code: "SIGNUP_ONLY" });
+    now.mockReturnValue(t0 + REF_ENTER_MS - 1000);
     expect((await enter(early, code)).status).toBe(200);
-    now.mockReturnValue(t0 + 3 * DAY + 1);
-    expect((await view(late)).enterUntil).toBeNull();
-    expect(await errOf(enter(late, code))).toEqual({ status: 409, code: "TOO_LATE" });
+    now.mockReturnValue(t0 + REF_ENTER_MS + 1);
+    expect(await errOf(enter(late, code))).toEqual({ status: 409, code: "SIGNUP_ONLY" });
+    expect(await view(late)).not.toHaveProperty("enterUntil");
   });
 });
 
 describe("조건 달성과 보상", () => {
-  it("조건을 넘기면 한 번만 달성하고 둘 다 300P 선물을 받는다", async () => {
+  it("조건을 넘기면 한 번만 달성하고 둘 다 추천 선물(마중 등불 영구 + 사냥 가방 꾸러미)을 받는다", async () => {
     const a = await newVisitor("달성추천인");
     const b = await newVisitor("달성새이웃");
     await enter(b, await codeOf(a));
@@ -190,11 +192,19 @@ describe("조건 달성과 보상", () => {
     await referralOnPresence(b.id);
     expect(await refGifts(b)).toHaveLength(1);
     expect(await refGifts(a)).toHaveLength(1);
-    expect((await refGifts(b))[0]).toMatchObject({ points: 300, note: "추천으로 온 이웃 환영 선물이에요." });
+    const g = (await refGifts(b))[0];
+    expect(g).toMatchObject({ points: 0, items: [{ itemId: REF_REWARD_ITEM, count: 1, term: "perm" }] });
+    expect(g.note.startsWith("추천으로 온 이웃 환영 선물이에요.")).toBe(true);
+    // 물약·결재 서류는 사냥 가방에 바로
+    for (const v of [a, b]) {
+      const st = await getRpgStore().get(v.id);
+      expect(st.potions.p_coffee).toBeGreaterThanOrEqual(REF_REWARD_BUNDLE.potions!.p_coffee);
+      expect(st.mats?.doc).toBe(REF_REWARD_BUNDLE.mats!.m_doc);
+    }
     const va = await view(a);
-    expect(va).toMatchObject({ joined: 1, qualified: 1, rewarded: 1, pointsEarned: 300 });
+    expect(va).toMatchObject({ joined: 1, qualified: 1, rewarded: 1, giftsGot: 1 });
     expect((await view(b)).mine).toMatchObject({ qualified: true, rewarded: true });
-    expect((await view(b)).pointsEarned).toBe(300);
+    expect((await view(b)).giftsGot).toBe(1);
   });
 
   it("추천인 포인트는 한 달에 5명까지, 다음 달에는 다시 받는다", async () => {
@@ -365,7 +375,7 @@ describe("조건 달성과 보상", () => {
       adminRefs.POST(call("/api/admin/referrals", { admin: true, body: { refereeIds: [kids[2].id, kids[0].id, "nobody-here"], approve: true } })),
     );
     expect(done.decision).toMatchObject({ decided: 2, both: 2, refereeOnly: 0, denied: 0 });
-    expect(decisionText(done.decision)).toBe("2건을 승인했어요. 2건은 두 사람에게 300P씩 보냈어요.");
+    expect(decisionText(done.decision)).toBe(`2건을 승인했어요. 2건은 두 사람에게 ${refRewardText()}을 보냈어요.`);
     expect(done.held.some((r) => r.refereeId === kids[0].id)).toBe(false);
     expect(await refGifts(kids[0])).toHaveLength(1);
     expect(await refGifts(kids[2])).toHaveLength(1);
@@ -407,12 +417,12 @@ describe("조건 달성과 보상", () => {
     expect(v.held.find((r) => r.refereeId === other.id)?.referrerCapped).toBe(false);
     const one = await bodyOf<{ decision: RefDecision }>(adminRefs.POST(call("/api/admin/referrals", { admin: true, body: { refereeId: late.id, approve: true } })));
     expect(one.decision).toMatchObject({ decided: 1, both: 0, refereeOnly: 1 });
-    expect(decisionText(one.decision)).toBe("새 이웃에게만 300P를 보냈어요. 추천인은 이번 달 보상을 다 받았어요.");
+    expect(decisionText(one.decision)).toBe(`새 이웃에게만 ${refRewardText()}을 보냈어요. 추천인은 이번 달 보상을 다 받았어요.`);
     expect(await refGifts(late)).toHaveLength(1);
     expect(await refGifts(a)).toHaveLength(REF_MONTH_CAP);
     const two = await bodyOf<{ decision: RefDecision }>(adminRefs.POST(call("/api/admin/referrals", { admin: true, body: { refereeIds: [other.id], approve: true } })));
-    expect(decisionText(two.decision)).toBe("두 사람에게 300P씩 보냈어요.");
-    expect(decisionText({ decided: 3, both: 2, refereeOnly: 1, denied: 0, points: 300, grand: 0, grandPoints: 100 })).toBe("3건을 승인했어요. 2건은 두 사람에게 300P씩, 1건은 새 이웃에게만 300P를 보냈어요.");
+    expect(decisionText(two.decision)).toBe(`두 사람에게 ${refRewardText()}을 보냈어요.`);
+    expect(decisionText({ decided: 3, both: 2, refereeOnly: 1, denied: 0, reward: "선물", grand: 0, grandReward: "작은 선물" })).toBe("3건을 승인했어요. 2건은 두 사람에게, 1건은 새 이웃에게만 선물을 보냈어요.");
     now.mockRestore();
   });
 
@@ -465,7 +475,7 @@ describe("2단계 추천 (추천인의 추천인)", () => {
   const approve = (ids: string[]) =>
     bodyOf<{ decision: RefDecision }>(adminRefs.POST(call("/api/admin/referrals", { admin: true, body: { refereeIds: ids, approve: true } })));
 
-  it("「모두 확인」이면 승인할 때 추천인의 추천인도 100P를 받고, 칭호에는 세지 않는다", async () => {
+  it("「모두 확인」이면 승인할 때 추천인의 추천인도 작은 선물을 받고, 칭호에는 세지 않는다", async () => {
     await getReferrals().setMode("review");
     const { g, r, es } = await chain("승인2단");
     const [e] = es;
@@ -473,14 +483,15 @@ describe("2단계 추천 (추천인의 추천인)", () => {
     await qualify(e);
     expect(await refGifts(g)).toHaveLength(0);
     const d = await approve([e.id]);
-    expect(d.decision).toMatchObject({ decided: 1, both: 1, grand: 1, grandPoints: 100 });
-    expect(decisionText(d.decision)).toBe("두 사람에게 300P씩 보냈어요. 추천인의 추천인에게도 100P를 보냈어요.");
+    expect(d.decision).toMatchObject({ decided: 1, both: 1, grand: 1, grandReward: refGrandText() });
+    expect(decisionText(d.decision)).toBe(`두 사람에게 ${refRewardText()}을 보냈어요. 추천인의 추천인에게도 ${refGrandText()}을 보냈어요.`);
     const [gift] = await refGifts(g);
-    expect(gift).toMatchObject({ points: 100, note: "승인2단엄마님이 데려온 이웃 승인2단아이0님이 마을에 자리를 잡았어요." });
+    expect(gift).toMatchObject({ points: 0, items: [{ itemId: "fw_small", count: 1 }] });
+    expect(gift.note.startsWith("승인2단엄마님이 데려온 이웃 승인2단아이0님이 마을에 자리를 잡았어요.")).toBe(true);
     expect(await getReferrals().get(e.id)).toMatchObject({ grand: "paid" });
     expect(await getReferrals().credited(g.id)).toBe(0);
     expect(await getReferrals().credited(r.id)).toBe(1);
-    expect(await view(g)).toMatchObject({ second: { joined: 1, points: 100 }, pointsEarned: 100, qualified: 0 });
+    expect(await view(g)).toMatchObject({ second: { joined: 1, rewarded: 1 }, giftsGot: 0, qualified: 0 });
   });
 
   it("「자동」은 점수 관문을 따르고, 「끔」은 기록만 한다", async () => {
@@ -512,7 +523,7 @@ describe("2단계 추천 (추천인의 추천인)", () => {
     for (const e of es) await qualify(e);
     expect(await refGifts(g)).toHaveLength(REF_GRAND_MONTH_CAP);
     expect(await getReferrals().get(es[REF_GRAND_MONTH_CAP].id)).toMatchObject({ grand: "cap" });
-    expect(await view(g)).toMatchObject({ second: { joined: REF_GRAND_MONTH_CAP + 1, points: REF_GRAND_MONTH_CAP * 100 } });
+    expect(await view(g)).toMatchObject({ second: { joined: REF_GRAND_MONTH_CAP + 1, rewarded: REF_GRAND_MONTH_CAP } });
   });
 
   it("3단계는 없다: 새 이웃의 추천인의 추천인까지만 받는다", async () => {
@@ -525,7 +536,7 @@ describe("2단계 추천 (추천인의 추천인)", () => {
     const before = (await refGifts(g)).length;
     await qualify(f);
     expect(await refGifts(g)).toHaveLength(before);
-    expect((await refGifts(r)).filter((x) => x.points === 100)).toHaveLength(1);
+    expect((await refGifts(r)).filter((x) => x.items.some((it) => it.itemId === "fw_small"))).toHaveLength(1);
     expect(await view(g)).toMatchObject({ second: { joined: 1 } });
   });
 

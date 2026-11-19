@@ -8,7 +8,7 @@ import { ONCE_PENDING, onceClaim, onceDone, onceRelease } from "@/lib/store/once
 import { AdminPointsSchema, readBody } from "@/lib/validate";
 
 /**
- * 포인트 지급·회수 `{ code? | accountId?, delta }`. 잔액은 0~BALANCE_CAP으로 자르고 하루 적립 한도와는 무관하다.
+ * 포인트 지급·회수 `{ code? | accountId?, delta }`. 한 번에 ±BALANCE_CAP까지, 잔액은 0~WALLET_MAX로 자르고 횟수 규칙과는 무관하다.
  * 개인 코드는 해시로만 찾고 응답·로그에 남기지 않는다.
  */
 export const POST = handler(async (req) => {

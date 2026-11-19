@@ -1,9 +1,11 @@
 import { nanoid } from "nanoid";
-import { isWorldLot } from "@tomb/protocol";
+import { isWorldLot, WORLD_LOTS } from "@tomb/protocol";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "../env";
 import { getAccounts } from "../store";
 import { kstDay } from "../store/accounts";
+import { todoPicks } from "../retain";
+import { todoOpenNow } from "../retainQuest";
 import {
   defaultExterior,
   DEFAULT_FLOOR,
@@ -346,14 +348,15 @@ describe.skipIf(!!conn)("하우징 서비스 (포인트 연동)", () => {
     expect(await points(rich)).toBe(700);
   });
 
-  it("11/15 메인 맵은 1~9번지, 10번지부터는 2단지 번지로 그대로 살 수 있다 · 0번지는 안 된다", async () => {
+  it("11/19 메인 맵은 1~15번지(10~15 등불 골목), 2단지 번지(16~)·0번지는 안 된다", async () => {
     const id = await account(PLOT + 50);
     await expect(buyPlot(store, id, "없는 번지", "", "a", 0)).rejects.toMatchObject({ status: 400, code: "INVALID_INPUT" });
+    await expect(buyPlot(store, id, "2단지 집", "", "a", WORLD_LOTS + 1, 7)).rejects.toMatchObject({ status: 400, code: "INVALID_INPUT" });
     expect(await points(id)).toBe(PLOT + 50);
-    const r = await buyPlot(store, id, "2단지 집", "", "a", 10, 7);
+    const r = await buyPlot(store, id, "등불 골목 집", "", "a", 10, 7);
     expect(r.house?.lot).toBe(10);
-    expect(isWorldLot(10)).toBe(false);
-    expect(isWorldLot(9)).toBe(true);
+    expect(isWorldLot(10)).toBe(true);
+    expect(isWorldLot(WORLD_LOTS + 1)).toBe(false);
   });
 
   it("분양 때 크기를 골라 바로 산다: 크기별 누적 값을 쓰고 그 크기로 생긴다", async () => {
@@ -445,6 +448,24 @@ describe.skipIf(!!conn)("하우징 서비스 (포인트 연동)", () => {
     await expect(postGuest(store, hid, visitor, "손님", "또")).rejects.toMatchObject({ status: 429 });
   });
 
+  it("11/19 오늘 미션 「이웃 집 방명록 남기기」: 이웃 집에 남기면 +1, 내 집은 세지 않는다", async () => {
+    const day = kstDay();
+    const withGuest = () => {
+      for (;;) {
+        const id = nanoid();
+        if (todoPicks(day, id, todoOpenNow()).includes("guestbook")) return id;
+      }
+    };
+    const owner = withGuest();
+    await accounts.earn(owner, "flower", day);
+    await accounts.adjustPoints(owner, PLOT);
+    await buyPlot(store, owner, "집", "", "a");
+    const hid = houseIdFor(owner);
+    expect(await postGuest(store, hid, owner, "주인", "내 집")).toEqual({});
+    const visitor = withGuest();
+    expect((await postGuest(store, hid, visitor, "손님", "안녕")).todo).toMatchObject({ kind: "guestbook", have: 1 });
+  });
+
   it("외관: 산 것만 입히고, 꾸밈 점수에 더해지며, 입힌 외관 아이템은 되팔 수 없다", async () => {
     const id = await account(PLOT + ["roof_red", "sign_neon", "pot"].reduce((n, f) => n + furnitureById(f)!.price, 0));
     await buyPlot(store, id, "집", "", "a");
@@ -468,12 +489,15 @@ describe.skipIf(!!conn)("하우징 서비스 (포인트 연동)", () => {
   it("분양 때 번지를 고를 수 있고, 찬 번지는 포인트를 쓰지 않고 거절한다. 마을 목록에 외관과 함께 나온다", async () => {
     const a = await account(PLOT);
     const b = await account(PLOT);
-    const free = (await village(store)).lots + 1;
-    const ra = await buyPlot(store, a, "가", "", "a", free);
+    // 11/19 번지는 1~WORLD_LOTS뿐이라 다른 시험과 겹치지 않게 9채널에서 빈 번지를 찾는다
+    const v0 = await village(store, 9);
+    const used = new Set([...v0.houses.map((h) => h.lot), ...v0.taken]);
+    const free = Array.from({ length: WORLD_LOTS }, (_, i) => i + 1).find((l) => !used.has(l))!;
+    const ra = await buyPlot(store, a, "가", "", "a", free, 9);
     expect(ra.house?.lot).toBe(free);
-    await expect(buyPlot(store, b, "나", "", "b", free)).rejects.toMatchObject({ code: "LOT_TAKEN" });
+    await expect(buyPlot(store, b, "나", "", "b", free, 9)).rejects.toMatchObject({ code: "LOT_TAKEN" });
     expect(await points(b)).toBe(PLOT);
-    const v = await village(store);
+    const v = await village(store, 9);
     expect(v.houses.find((h) => h.lot === free)?.exterior.roof).toBe("roof_slate");
     expect(v.lots % 4).toBe(0);
     expect(v.lots).toBeGreaterThanOrEqual(free);

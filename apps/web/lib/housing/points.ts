@@ -6,8 +6,8 @@ import { LIKE_REWARD } from "./catalog";
 
 // 하우징의 포인트 출입구. 장부는 공용 계정 저장소 하나뿐이다 (여기서 따로 세지 않는다).
 //  - 쓰기: spendPoints (모자라면 409 NOT_ENOUGH_POINTS)
-//  - 되팔기·결제 뒤 실패 보상: refundPoints — 적립이 아니라 돌려받는 돈이라 하루 적립 한도·모은 포인트 랭킹과 무관하다
-//  - 좋아요 보상: earnPoints(houseLike) — 하루 한도·같은 IP 한도는 공용 규칙이 건다
+//  - 되팔기·결제 뒤 실패 보상: refundPoints — 적립이 아니라 돌려받는 돈이라 횟수 규칙·모은 포인트 랭킹과 무관하다
+//  - 좋아요 보상: earnPoints(houseLike) — 하루 횟수 규칙(lib/economy)은 공용 적립이 건다
 
 export async function spend(accountId: string, amount: number, reason: string): Promise<Me> {
   return spendPoints(accountId, amount, `housing:${reason}`);

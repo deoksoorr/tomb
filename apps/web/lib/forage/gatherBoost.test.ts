@@ -13,7 +13,7 @@ import {
 import { walkReachable } from "@/game/world/walkReach";
 import { SEA_FUTURE_SPOTS, SEA_INTERACTABLES, seaStandable, seaWalkGrid } from "@/game/sea/seaLayout";
 import { earnRule } from "../economy";
-import { DAILY_CATCH_MAX, GATHER_NODES, NODE_CAT, nodeOnMap, SEA_GATHER_NODES, type GatherNode, type NodeKind } from "./catalog";
+import { GATHER_NODES, NODE_CAT, nodeOnMap, SEA_GATHER_NODES, type GatherNode, type NodeKind } from "./catalog";
 import { activeNodes, INSECT_POINTS_MAX, NODE_DENSITY, NODE_SYNC_WINDOWS, NODE_WINDOW_MS, nodeIdsAt, nodeSeed, nodeWindow, candidates } from "./rules";
 import { GatherStartSchema } from "./schemas";
 import { SEA_LAND_NODES } from "./seaNodes";
@@ -110,12 +110,11 @@ describe("얼마나 자주 피나 (기대값)", () => {
   });
 });
 
-describe("한도는 그대로 (포인트 수도꼭지 없음)", () => {
-  it("하루 채집 개수·판매·곤충 포인트·시간당 시작 한도", () => {
-    expect(DAILY_CATCH_MAX).toEqual({ fish: 150, gather: 200 });
-    expect(earnRule("gather").dailyMax).toBe(300);
-    expect(earnRule("fish").dailyMax).toBe(300);
-    expect(earnRule("bugs").dailyMax).toBe(300);
+describe("11/19 하루 한도는 없고 보호 장치만 남는다", () => {
+  it("판매·곤충 포인트 하루 한도 없음, 곤충 한 판 상한·시간당 시작 한도는 그대로", () => {
+    expect(earnRule("gather").dailyMax).toBeNull();
+    expect(earnRule("fish").dailyMax).toBeNull();
+    expect(earnRule("bugs").dailyMax).toBeNull();
     expect(INSECT_POINTS_MAX).toBe(15);
     expect(FORAGE_STARTS_PER_HOUR).toBe(300);
   });

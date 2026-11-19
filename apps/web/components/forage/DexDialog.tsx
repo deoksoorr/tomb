@@ -40,7 +40,7 @@ import s from "./forage.module.css";
 
 // 도감 (51번): 물고기·곤충·약초/버섯·광석·발굴품 + 별자리(망원경 별자리 잇기, ConstellationDex) + 11/16 몬스터(사냥터·야근 빌딩, MonsterDex). 처음 잡으면 등록 (실루엣 → 그림, 가장 큰 크기·처음 잡은 날).
 // 모르는 칸도 희귀도·잡히는 곳·시간대·날씨·계절 힌트는 보인다. 보상은 종(칸) 하나를 처음 등록할 때마다 희귀도별 포인트 (등록하는 순간 서버가 지급,
-// 오늘 한도에 걸려 못 받은 것은 칸마다 [도감 보상 받기]로). 칭호는 그 칸의 절반·전부를 등록하면 자동으로 (lib/forage/dexReward).
+// 예전 하루 한도·꽉 찬 지갑으로 못 받은 것은 칸마다 [도감 보상 받기]로). 칭호는 그 칸의 절반·전부를 등록하면 자동으로 (lib/forage/dexReward).
 // accountId를 주면 그 사람의 도감 구경 (보상 버튼 없이).
 
 const stars = (n: number) => "★".repeat(n) + "☆".repeat(5 - n);
@@ -107,7 +107,7 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
       const r = await forageApi.payDex(cat);
       forageStore.set(r.state);
       meStore.set(r.me);
-      showToast(`${DEX_CAT_LABEL[cat]} 도감 보상 +${r.earned}P${r.left > 0 ? ` (오늘 한도라 ${r.left}P는 남겨 뒀어요. 내일 또 받아요)` : ""}`, 5_000);
+      showToast(`${DEX_CAT_LABEL[cat]} 도감 보상 +${r.earned}P${r.left > 0 ? ` (지갑이 꽉 차 ${r.left}P는 남겨 뒀어요)` : ""}`, 5_000);
     } catch (e) {
       showToast(errorMessage(e));
       void forageStore.refresh();

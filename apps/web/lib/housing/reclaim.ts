@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { staffAccountId } from "../staff";
 import { getAccounts, getGifts } from "../store";
 import { GIFT_KEEP_MS, type GiftRecord } from "../store/gifts";
-import { houseLabel, plotCost, RECLAIM_DAYS, RECLAIM_SINCE, reclaimLastSeen } from "./catalog";
+import { houseLabel, legacyPlotCost, RECLAIM_DAYS, RECLAIM_SINCE, reclaimLastSeen } from "./catalog";
 import { houseIdFor } from "./service";
 import type { HouseRecord, HouseStore } from "./store";
 
@@ -27,7 +27,8 @@ export const RECLAIM_SWEEP_MS = 3 * 3_600_000;
 export const RECLAIM_FROM = "분양 사무소";
 
 /** 돌려줄 포인트: 집에 남긴 낸 포인트. 기록이 없는 옛 집은 지금 가격표의 그 터 크기 값 (분양가 + 넓히기 누적) */
-export const refundOf = (h: Pick<HouseRecord, "paid" | "tier">): number => h.paid ?? plotCost(h.tier);
+// 11/19 필지 값을 올렸다: 낸 값을 기록하지 않은 옛 집은 예전 값으로 돌려준다 (새 값만큼 더 돌려받지 않게)
+export const refundOf = (h: Pick<HouseRecord, "paid" | "tier">): number => h.paid ?? legacyPlotCost(h.tier);
 
 /** 정리 기준 마지막 접속(reclaimLastSeen)이 cutoff 이전인가 (0 = 기록 없음 → 비우지 않는다) */
 export const awaySince = (lastSeenAt: number, cutoff: number, since: number = RECLAIM_SINCE): boolean => {

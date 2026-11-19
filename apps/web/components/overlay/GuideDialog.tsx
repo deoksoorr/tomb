@@ -20,25 +20,41 @@ import {
   FRIEND_LEAVE_GRACE_MS,
   FRIEND_MAX,
   FRIEND_REQUEST_KEEP_DAYS,
+  GOBLIN_JACKPOT_POINTS,
   GRAVE_STYLES,
   GRAVEYARD_CAPACITY,
   isShopListed,
+  itemById,
   ITEMS,
+  LANE_LOTS,
+  MAIN_LOTS,
   MAX_DECOR_PER_GRAVE,
   MEGAPHONE_TTL_MS,
   NAME_MAX,
   NAME_MIN,
   PERMANENT_MULTIPLIER,
   permanentPrice,
+  SEA_TITLE,
+  TIDE_PERIOD_MIN,
   ZOO_PETS,
 } from "@tomb/protocol";
 import { ATTEND_STAY_TEXT } from "@/lib/attendStay";
+import { calendarRewards } from "@/lib/calendar";
+import { DAY_RESET_TEXT } from "@/lib/gameDay";
+import { FIRST_REWARD, FIRST_STEPS, PATH, PATH_NAME, PATH_WEAR_DAYS, TODO_BONUS_GIFT, TODO_COUNT, TODO_GIFT, TODO_PROT_EVERY } from "@/lib/retain";
+import { bundleText, rewardText } from "@/lib/rewardText";
+import { REF_DAY_MIN, REF_NEED_DAYS, refRewardText } from "@/lib/referralRules";
+import { stayText } from "@/lib/stayTime";
+import { SEA_COTTAGE_RATE, SEA_LOT_COUNT, SEA_VILLA_RATE } from "@/lib/housing/catalog";
+import { BUILDS } from "@/lib/rpg/builds";
+import { CURSES, TOWER_CHECKPOINT_EVERY, TOWER_CHEST_FROM, TOWER_FIRSTS, TOWER_LOW_CHECKPOINTS, TOWER_STEEP_FROM } from "@/lib/rpg/tower";
+import { goblinPointsText, goblinRangeText } from "./goblinText";
 import { ATTEND_TIER_GUIDE } from "@/lib/attendTiers";
-import { BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES, earnRule } from "@/lib/economy";
+import { EARN_RULES } from "@/lib/economy";
 import { DYE_TIME_MS } from "@/lib/dye/palette";
-import { AUTO_FISH_DAILY_MAX, AUTO_FISH_EVERY_MS, AUTO_FISH_MAX_MS, AUTO_RANK_NOTE } from "@/lib/forage/auto";
-import { DAILY_CATCH_MAX, DEX_NEW_REWARD } from "@/lib/forage/catalog";
-import { PHASE_LABELS, TIME_PHASES, WEATHER_BLOCK_MS, WEATHER_LABELS, WEATHERS } from "@/lib/ambience";
+import { AUTO_FISH_MAX_MS, AUTO_PACE_NOTE, AUTO_RANK_NOTE } from "@/lib/forage/auto";
+import { BAG_MAX, DEX_NEW_REWARD } from "@/lib/forage/catalog";
+import { SKY_LABEL_ORDER, WEATHER_BLOCK_MS, WEATHER_LABELS, WEATHERS } from "@/lib/ambience";
 import { PLOT_TIERS, plotCost } from "@/lib/housing/catalog";
 import { DYE_SPECIAL_BONUS, LOOK_SCORE_DIVISOR } from "@/lib/lookScore";
 import { BRANCH_INFO, BRANCHES, POTIONS, TIER_GATES } from "@/lib/rpg/catalog";
@@ -46,7 +62,7 @@ import { SKILL_SLOTS } from "@/lib/rpg/hotbar";
 import { PIONEER_DAYS, PIONEER_FLOOR } from "@/lib/rpg/endgame";
 import { MAX_LEVEL } from "@/lib/rpg/formulas";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
-import { STAY_BONUS_DAILY_MAX } from "@/lib/stayBonus";
+import { STAY_BONUS_EVERY_MINUTES } from "@/lib/stayBonus";
 import { DORMANT_DAYS } from "@/lib/store/types";
 import { DEFAULT_PASS_DAYS, NAME_CHANGE_COOLDOWN_DAYS, NAME_CHANGE_PRICE, PRESENCE_INTERVAL_MS, SHRINE_KEEP_DAYS } from "@/lib/types";
 import { RESIDENTS } from "@/game/world/life/residentData";
@@ -64,6 +80,10 @@ import styles from "./GuideDialog.module.css";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
 const petPrices = ZOO_PETS.map((p) => p.price);
+/** 첫 걸음 미션 한 칸 포인트 범위 (lib/retain FIRST_STEPS) */
+const firstPoints = FIRST_STEPS.map((st) => st.reward.points ?? 0);
+const firstLo = Math.min(...firstPoints);
+const firstHi = Math.max(...firstPoints);
 
 /** 표 한 장: 첫 칸은 행 제목. 좁은 화면에서는 줄마다 카드처럼 쌓인다 (data-label이 칸 이름) */
 function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
@@ -100,6 +120,7 @@ const CONTROLS: ReactNode[][] = [
   ["점프", "Space", "점프 버튼"],
   ["앉기·일어서기", "X 또는 C", "앉기 버튼"],
   ["말 걸기·타기·살펴보기", "E", "상호작용 버튼"],
+  ["문으로 들어가기·나가기", "문 앞에서 E", "문 앞에서 [들어가기]나 [나가기]"],
   ["메뉴", "왼쪽 아래 [메뉴]", "왼쪽 위 [메뉴]"],
   ["가방·사냥·도감·집·소식", "왼쪽 아래 바로 가기 줄", "[메뉴] 안에"],
   ["표현 창 (말풍선·이모티콘)", "T", "점프 왼쪽 [표현]"],
@@ -123,6 +144,7 @@ const CONTROLS: ReactNode[][] = [
   ["확대·축소", "마우스 휠 또는 ＋/－", "두 손가락 또는 ＋/－"],
   ["둘러보기", "오른쪽 버튼으로 끌기", "두 손가락으로 끌기"],
   ["시점 되돌리기", "[내 캐릭터로]", "[내 캐릭터로]"],
+  ["촬영 모드 (사진 찍기)", "K 또는 오른쪽 위 카메라 단추 (Esc로 끝내기)", "메뉴의 촬영 모드"],
   ["확성기 기록", "왼쪽 위 (음악 아래)", "조이스틱 위"],
   ["친구", "캐릭터를 누르고 [친구 신청]", "캐릭터를 누르고 [친구 신청]"],
 ];
@@ -143,7 +165,7 @@ const CHAT: ReactNode[][] = [
 const FRIENDS: ReactNode[][] = [
   ["맺기", `캐릭터를 누르고 [친구 신청]을 보내요. 상대가 받으면 친구가 돼요. 친구는 ${FRIEND_MAX}명까지예요.`],
   ["친구 창", "친구가 지금 어디 있는지, 언제 들어왔는지 보여요. 꾸미기 점수, 사냥 레벨, 도감도 볼 수 있어요."],
-  ["친구한테 가기", "친구 옆으로 바로 가요. 다른 채널이나 집 안에 있어도 따라가요."],
+  ["친구한테 가기", "친구 옆으로 바로 가요. 다른 채널이나 집 안에 있어도 따라가요. 친구가 캠핑장이나 바닷가에 있으면 버스를 타고 가요."],
   ["알림", "친구가 들어오거나 나가면 작은 알림이 떠요. 친구 창에서 끌 수 있어요."],
 ];
 
@@ -156,14 +178,20 @@ const places = (touch: boolean): ReactNode[][] => [
   ["범퍼카장", "가운데 다리 건너 바로", `입구에서 ${keyJosa("E", "로", touch)} 타요. 무료예요`],
   ["동물원", "서쪽 다리 건너 바로", `사육사에게 펫 분양 (${won(Math.min(...petPrices))}~${won(Math.max(...petPrices))}P)`],
   ["버스 정류장 마당", "주거 구역 오른쪽 아래, 마지막 골목 위", "의뢰 게시판, 긴급 의뢰 현판, 버스 정류장이 있어요"],
+  ["언젠가 캠핑장", `캠핑장행 정류장에서 ${keyJosa("E", "로", touch)} 버스 타기`, "계곡 낚시를 하고 바베큐를 사 먹어요. 먹으면 몸이 커지거나 빨라져요."],
+  [
+    SEA_TITLE,
+    `바닷가행 정류장에서 ${keyJosa("E", "로", touch)} 버스 타기`,
+    `물때가 ${TIDE_PERIOD_MIN / 60}시간마다 돌아요. 물이 빠지면 갯벌을 파고, 갈매기에게 과자도 던져요. 포구 오두막 터 ${SEA_LOT_COUNT}곳에 집을 지을 수 있어요.`,
+  ],
   ["낚시 잔교", "호수 서쪽, 호박밭 옆", "어부 영감 노점과 낚시 의자가 있어요"],
   ["낚시", "호수 잔교, 호수 둑, 강둑, 연못, 조각배 위", `낚시 의자 앞에서 ${keyName("E", touch)}`],
   ["수집가", "오리 연못 북서쪽 둑", "약초, 광석, 발굴품, 곤충을 사 가요"],
-  ["별 보기 언덕", "마을 북서쪽 언덕 꼭대기", "망원경 두 대로 별자리 잇기를 해요. 한 대에 한 사람씩 볼 수 있어요."],
+  ["별 보기 언덕", "마을 북서쪽 언덕의 동쪽 마당", "망원경 두 대로 별자리 잇기를 해요. 한 대에 한 사람씩 볼 수 있어요."],
   ["사냥터", "메뉴의 사냥터", "혼자나 같이 사냥하고 미니게임도 해요"],
-  ["분양 사무소", "메뉴의 집·분양 마을", "내 집을 받아 꾸며요"],
-  ["성황당", "옛 묘역 동문 옆", "묘역을 떠난 묘비 모시기"],
-  ["황금 고블린", "가끔 마을 어딘가", "가장 먼저 잡으면 보너스"],
+  ["분양 사무소", "메뉴의 집", "내 집을 받아 꾸며요"],
+  ["옛 묘역 입구 팻말", "언덕 입구 바로 밖, 달빛 연못 옆", `${keyJosa("E", "로", touch)} 성황당을 열어요. 이장한 묘비를 다시 모시고 성불한 이야기들도 봐요.`],
+  ["황금 고블린", "가끔 마을 어딘가", `가장 먼저 잡으면 ${goblinRangeText()}, 가끔 대박 ${goblinPointsText(GOBLIN_JACKPOT_POINTS)}P예요. 누가 잡았는지 채널 모두에게 알려요.`],
   [
     "마을 주민",
     `${RESIDENTS.slice(0, 2)
@@ -201,9 +229,12 @@ const HUNT_KEYS: ReactNode[][] = [
 
 /** 스킬 트리: 갈래·단 조건·초기화 비용은 lib/rpg에서 */
 const SKILL_TREE: ReactNode[][] = [
-  ["갈래", BRANCHES.map((b) => `${BRANCH_INFO[b].name}(${BRANCH_INFO[b].role.replaceAll(" · ", "·")})`).join(" · ")],
+  ["갈래", `${BRANCHES.map((b) => `${BRANCH_INFO[b].name}(${BRANCH_INFO[b].role.replaceAll(" · ", "·")})`).join(", ")}`],
   ["단", `갈래마다 ${TIER_GATES.length}단이 있어요. 아래 단에 포인트를 ${TIER_GATES.slice(1).join(", ")}만큼 쓰면 위 단이 하나씩 열려요.`],
+  ["포인트", "랭크 하나에 1포인트예요. 레벨이 오를 때와 초월 레벨이 오를 때 받아요."],
   ["선행", "선으로 이어진 스킬은 앞 스킬을 정해진 랭크까지 찍어야 배워요"],
+  ["대표 빌드", `갈래마다 둘씩 ${BUILDS.length}가지예요. 핵심 스킬은 받쳐 주는 스킬 랭크만큼 세지고, 몰아 찍으면 야근 빌딩에서 받는 피해도 줄어요. 찍는 순서는 [사냥 안내서]에 있어요.`],
+  ["초월 수련", "초월 레벨마다 1포인트씩 받아 물공, 마공, 공통 칸에 나눠 찍어요. 되돌리기는 무료예요."],
   ["단축 칸", `배운 스킬을 스킬 탭 아래 칸에 끌어다 놓아요. 칸은 ${SKILL_SLOTS}개고, 궁극기는 F 칸에만 들어가요. 패시브는 칸 없이 늘 켜져요.`],
   ["초기화", `레벨에 따라 ${respecCost(1)}~${RESPEC_MAX_COST}P가 들어요`],
 ];
@@ -213,17 +244,18 @@ const forage = (touch: boolean): ReactNode[][] => [
   [
     "자동 낚시",
     "낚시 중 [자동 낚시 켜기]",
-    `다른 탭을 봐도 ${sec(AUTO_FISH_EVERY_MS)}초에 1마리씩 낚아요. 하루 ${AUTO_FISH_DAILY_MAX}마리까지고, 직접 낚시까지 합치면 하루 ${DAILY_CATCH_MAX.fish}번까지예요. 직접 낚시는 놓치거나 찌를 거둬도 1번으로 세요. 한 번에 ${AUTO_FISH_MAX_MS / 3_600_000}시간까지 돌고, 움직이면 꺼져요. ${AUTO_RANK_NOTE}`,
+    `다른 탭을 봐도 낚아요. ${AUTO_PACE_NOTE} 하루 한도는 없어요. 한 번에 ${AUTO_FISH_MAX_MS / 3_600_000}시간까지 돌고, 움직이면 꺼져요. 가방은 물고기와 채집물을 합쳐 ${BAG_MAX}개까지라, 가득 차면 팔 때까지 쉬어요. ${AUTO_RANK_NOTE}`,
   ],
   ["팔기", "물고기는 어부 영감, 채집물은 수집가에게", "희귀할수록 비싸요"],
-  ["도감", "왼쪽 아래 [도감]", `새 종을 처음 올리면 ${DEX_NEW_REWARD[1]}~${DEX_NEW_REWARD[5]}P를 받아요. 희귀할수록 많이 받아요. 오늘 한도를 넘으면 도감 창에서 나중에 받아요. 절반이나 전부 모으면 칭호도 받아요.`],
+  ["도감", "왼쪽 아래 [도감]", `새 종을 처음 올리면 ${DEX_NEW_REWARD[1]}~${DEX_NEW_REWARD[5]}P를 받아요. 희귀할수록 많이 받아요. 절반이나 전부 모으면 칭호도 받아요.`],
   // 11/15 수집 의뢰 (lib/forage/quests)
   [
     "수집 의뢰",
     `버스 정류장 마당 의뢰 게시판에서 ${keyName("E", touch)}`,
-    `오늘의 의뢰 ${QUEST_DAILY}개(새벽 5시에 새로, 하루 1번 무료로 바꾸기) · 이번 주 큰 의뢰 1개(월요일) · 모은 것을 납품하면 의뢰 도장 ${QUEST_STAMPS.easy}~${QUEST_STAMPS.hard}개, 큰 의뢰는 ${QUEST_STAMPS.weekly}개 · 끝낸 수로 칭호`,
+    `오늘의 의뢰는 ${QUEST_DAILY}개예요. ${DAY_RESET_TEXT}에 새로 나오고, 하루 1번 무료로 바꿀 수 있어요. 월요일마다 이번 주 큰 의뢰도 1개 나와요. 모은 것을 납품하면 의뢰 도장을 ${QUEST_STAMPS.easy}~${QUEST_STAMPS.hard}개, 큰 의뢰는 ${QUEST_STAMPS.weekly}개 받아요. 끝낸 수로 칭호도 받아요. 어디서든 ${touch ? "메뉴의 [의뢰 보기]" : "바로 가기 줄의 [의뢰]"}로 의뢰를 볼 수 있어요.`,
   ],
-  ["도장 교환소", "의뢰 게시판 → [도장 교환소]", "이달의 물건은 매달 1일 새벽 5시에 바뀌어요 · 염색권은 늘 · 도장은 사라지지 않고, 포인트로 못 바꾸고 남에게 못 줘요"],
+  ["긴급 의뢰", "버스 정류장 마당 긴급 의뢰 현판", "가끔 갑자기 열려요. 서버 모두가 같이 막대를 채우고, 혼자서도 끝까지 낼 수 있어요. 1개만 내도 보상을 받아요."],
+  ["도장 교환소", "의뢰 게시판의 [도장 교환소] 칸", "이달의 물건은 매달 1일 새벽 5시에 바뀌고, 염색권은 늘 있어요. 도장은 사라지지 않지만 포인트로 바꾸거나 남에게 줄 수는 없어요."],
 ];
 
 const DYE: ReactNode[][] = [
@@ -238,6 +270,7 @@ type Props = { onClose: () => void; onReplayTutorial: () => void };
 
 export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
   const touch = useMediaQuery("(pointer: coarse)");
+  const cal = calendarRewards();
   const freeStyles = GRAVE_STYLES.filter((s) => s.free)
     .map((s) => s.name)
     .join(", ");
@@ -262,10 +295,12 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
             <ul className={styles.points}>
               <li>같은 채널 마을에 있는 친구는 지도에 분홍 하트로 보여요. 친구 집이 있으면 [집 놀러 가기]로 구경해요.</li>
               <li>
-                {`친구가 ${AWAY_PLACES.filter((p) => p !== "house")
+                {/* 11/19 2단지(분양 마을)는 닫혀서 목록에서 뺀다 */}
+                {`친구가 ${AWAY_PLACES.filter((p) => p !== "house" && p !== "village")
                   .map((p) => AWAY_PLACE_LABEL[p])
-                  .join("·")}에 있으면 따라갈 수 없어요. 못 가면 이유를 알려 줘요.`}
+                  .join(", ")}에 있으면 따라갈 수 없어요. 못 가면 이유를 알려 줘요.`}
               </li>
+              <li>바베큐를 먹고 몸이 커진 동안은 버스를 탈 수 없어서, 다른 곳에 있는 친구한테도 못 가요.</li>
               <li>새로고침이나 채널 이동으로 잠깐 끊겨도 {sec(FRIEND_LEAVE_GRACE_MS)}초 안에 돌아오면 나감 알림이 뜨지 않아요.</li>
               <li>답하지 않은 신청은 {FRIEND_REQUEST_KEEP_DAYS}일 뒤 사라져요. 운영자와는 친구를 맺을 수 없어요.</li>
               <li>친구를 맺어도 포인트나 아이템은 주지 않아요.</li>
@@ -278,10 +313,14 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
           <Table head={["곳", "어디", "하는 일"]} rows={places(touch)} />
           <ul className={styles.points}>
             <li>귀신의집에는 깜짝 놀라는 장면과 큰 소리가 있어요. 포인트는 주지 않아요.</li>
-            <li>지도에 장소마다 표시가 있어요. 자세한 건 각 장소에서 안내해요.</li>
+            <li>{touch ? "오른쪽 위 [지도]" : "M이나 오른쪽 위 [지도]"}로 지도를 펴면 장소마다 표시가 있어요. 자세한 건 각 장소에서 안내해요.</li>
             <li>
-              {`하늘은 한국 시간에 맞춰 ${TIME_PHASES.map((p) => PHASE_LABELS[p]).join("·")}, 날씨(${WEATHERS.map((w) => WEATHER_LABELS[w]).join("·")})는 ${min(WEATHER_BLOCK_MS)}분마다 바뀌어요.`}
+              {`하늘은 한국 시간에 맞춰 ${SKY_LABEL_ORDER.join(", ")}으로 바뀌어요. 날씨는 ${min(WEATHER_BLOCK_MS)}분마다 ${WEATHERS.map((w) => WEATHER_LABELS[w]).join(", ")} 가운데 하나로 바뀌어요.`}
             </li>
+            <li>
+              {`주거 구역은 광장 동쪽 1~${MAIN_LOTS}번지와 언덕 아래 등불 골목 ${MAIN_LOTS + 1}~${MAIN_LOTS + LANE_LOTS.length}번지예요.`}
+            </li>
+            <li>{touch ? "메뉴의 [촬영 모드]" : "K나 오른쪽 위 카메라 단추"}로 단추를 숨기고 사진을 찍을 수 있어요. 필터는 내 화면에만 보여요.</li>
             <li>연한 초록 이름표를 단 마을 주민은 실제 사람이 아니에요. 그날그날 나오는 수가 달라요.</li>
           </ul>
         </section>
@@ -299,26 +338,54 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
           <h3>포인트</h3>
           <Table
             head={["이렇게 하면", "포인트", "하루 최대"]}
-            rows={EARN_RULES.map((r) => [
+            // 11/19 출석 보상은 사냥 아이템이라 포인트 표에서 뺀다 (출석 달력에 따로 보인다)
+            rows={EARN_RULES.filter((r) => r.dailyMax !== 0).map((r) => [
               <>
                 {r.label}
                 <span className={styles.note}>{r.note}</span>
               </>,
               r.points ? `+${r.points}` : "설명대로",
-              r.dailyMax,
+              r.dailyMax === null ? "없음" : r.dailyMax,
             ])}
           />
           <Table
             head={["규칙", "내용"]}
             rows={[
-              ["하루 한도", `항목마다 위 표의 하루 최대까지 모여요. 모두 합쳐서는 ${won(DAILY_EARN_CAP)}P까지예요. 한국 시간 새벽 5시에 다시 차요.`],
-              ["접속 시간 보너스", `하루 한도와 따로 세요. 하루 ${STAY_BONUS_DAILY_MAX}P까지예요.`],
+              ["하루 한도", "놀아서 버는 포인트는 한도가 없어요. 헌화, 묘비, 받은 헌화와 좋아요만 위 표의 하루 최대가 있어요. 한국 시간 새벽 5시에 다시 세요."],
+              ["접속 시간 보너스", `${STAY_BONUS_EVERY_MINUTES}분 머물 때마다 생겨요. 오래 있을수록 계속 받아요.`],
               ["머무르기", `${PRESENCE_INTERVAL_MS / 60_000}분마다 받아요. 다른 창을 봐도 괜찮아요.`],
-              ["지갑", `${won(BALANCE_CAP)}P까지 담겨요`],
-              ["출석", `마을에 ${ATTEND_STAY_TEXT} 머물면 그날 도장을 찍어요.`],
+              [
+                "출석",
+                `마을에 ${ATTEND_STAY_TEXT} 머물면 그날 도장을 찍어요. 포인트 대신 사냥 가방에 아이템이 들어와요. 도장마다 ${cal.daily}, ${cal.streakEvery}일 연속마다 ${cal.streak}, 한 달 개근이면 ${cal.monthly}이에요.`,
+              ],
               ["이번 달 출석 보상", ATTEND_TIER_GUIDE],
-              ["한도에 걸리면", "알림 없이 더 쌓이지 않아요"],
-              ["랭킹", "포인트, 사냥, 낚시, 꾸미기, 집 꾸미기, 헌화 순위가 있어요. 포인트 순위는 써도 줄지 않아요. 주간 순위는 월요일 새벽 5시에 새로 시작해요. 운영자는 순위에 안 들어가요."],
+              [
+                "친구 초대",
+                `가입할 때만 친구의 추천 코드를 넣을 수 있어요. 하루 ${stayText(REF_DAY_MIN)} 넘게 머문 날이 ${REF_NEED_DAYS}일이 되면 둘 다 ${refRewardText()}을 받아요. 내 추천 코드는 내 정보에서 봐요.`,
+              ],
+              ["랭킹", "포인트, 사냥, 사냥 레벨, 야근 빌딩, 낚시, 꾸미기, 집 꾸미기, 접속 시간, 헌화 순위가 있어요. 포인트 순위는 써도 줄지 않아요. 주간 순위는 월요일 새벽 5시에 새로 시작해요. 운영자는 순위에 안 들어가요."],
+            ]}
+          />
+        </section>
+
+        <section>
+          <h3>새로 온 이웃에게</h3>
+          <p>
+            「{PATH_NAME}」 {PATH.length}개가 가입한 날부터 하루 하나씩 열려요. 못 받은 날 것은 쌓여 있다가 한꺼번에 받고, {PATH.length}개를 다 받으면 끝나요.
+            꾸러미는 {DAY_RESET_TEXT}에 열리고, 꾸미기는 {PATH_WEAR_DAYS}일 동안 입어요.
+          </p>
+          <Table head={["날", "꾸러미"]} rows={PATH.map((g) => [`${g.n}일째`, g.title ? `칭호 「${g.name}」와 꽃 머리핀(${PATH_WEAR_DAYS}일), 보호 문서 1장` : g.wear ? `${g.name}(${PATH_WEAR_DAYS}일)` : g.name])} />
+          <Table
+            head={["이것도 있어요", "내용"]}
+            rows={[
+              [
+                "첫 걸음 미션",
+                `마을에서 할 수 있는 것 ${FIRST_STEPS.length}가지를 하나씩 알려 줘요. 처음 할 때마다 ${won(firstLo)}~${won(firstHi)}P를 주고, 다 하면 ${won(FIRST_REWARD.points)}P와 ${itemById(FIRST_REWARD.itemId)?.name ?? "꾸미기"} 하루권, ${bundleText(FIRST_REWARD.bundle)}을 더 줘요. 다 받으면 사라져요.`,
+              ],
+              [
+                "오늘 미션",
+                `날마다 ${DAY_RESET_TEXT}에 미션 ${TODO_COUNT}개가 무작위로 나와요. 마을 일, 놀이, 나들이에서 하나씩 골라 줘요. [안내]를 누르면 그곳까지 화살표가 이어져요. 하나에 ${rewardText(TODO_GIFT)}, ${TODO_COUNT}개를 다 하면 ${rewardText(TODO_BONUS_GIFT)}과 도장 하나를 더 받아요. 도장 ${TODO_PROT_EVERY}개마다 보호 문서를 더 줘요.`,
+              ],
             ]}
           />
         </section>
@@ -328,13 +395,19 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
           <Table head={["하는 일", "컴퓨터", "휴대폰"]} rows={HUNT_KEYS} />
           <ul className={styles.points}>
             <li>
-              {`사냥 포인트는 하루 ${won(earnRule("hunt").dailyMax)}P까지예요. 주운 장비나 물약을 판 값도 여기에 들어가요. 한도를 넘으면 EXP와 아이템만 받아요. 상점에서 산 장비를 되파는 건 한도와 상관없어요. 마을 곤충 채집은 따로 하루 ${won(earnRule("bugs").dailyMax)}P, 별자리 잇기는 하루 ${won(earnRule("stars").dailyMax)}P까지예요.`}
+              사냥, 곤충 채집, 별자리 잇기 포인트는 하루 한도 없이 받아요. 주운 장비나 물약을 판 값도 사냥 포인트에 들어가요.
             </li>
             <li>
-              {`레벨 ${MAX_LEVEL}부터는 지옥 사냥터와 야근 빌딩에서 초월 레벨(★51~★100)을 올려요. 초월 레벨이 5 오를 때마다 능력치 포인트를 1개 받아요. 하루에 할 수 있는 판 수는 정해져 있지 않아요.`}
+              {`레벨 ${MAX_LEVEL}부터는 지옥 사냥터와 야근 빌딩에서 초월 레벨(★51~★100)을 올려요. 초월 레벨이 오를 때마다 능력치 포인트, 스킬 포인트, 초월 수련 포인트를 1개씩 받아요. 하루에 할 수 있는 판 수는 정해져 있지 않아요.`}
             </li>
             <li>
-              {`야근 빌딩은 마을 북쪽 분양 사무소 옆에 있어요. 사냥 레벨 ${MAX_LEVEL}부터 들어갈 수 있어요. 1층부터 쓰러질 때까지 계속 올라가요. 높이 오를수록 몬스터가 세지고, 10층부터는 저주가 하나씩 붙어요. 층을 깰 때마다 초월 EXP를 받고, 쓰러져도 깬 만큼은 받아요. 몇 번이든 도전할 수 있고, 최고 기록보다 낮은 1, 11, 21…층에서 시작할 수도 있어요. 끝판이 열리고 ${PIONEER_DAYS}일 안에 ★51이 되거나 ${PIONEER_FLOOR}층을 넘으면 「개척자 #번호」 칭호를 받아요. 서버에서 처음 30, 50, 100층을 깬 사람과 지금 최고 층 주인은 신화 칭호를 받아요.`}
+              {`야근 빌딩은 마을 북쪽 분양 사무소 옆에 있어요. 사냥 레벨 ${MAX_LEVEL}부터 들어갈 수 있어요. 1층부터 쓰러질 때까지 쭉쭉 올라가요. ${TOWER_STEEP_FROM}층까지는 몬스터가 약한 편이라 금방 오르고, 그 위로는 빠르게 세져요. ${CURSES[0].from}층부터는 저주가 하나씩 붙어요. 이번 주 최고 층으로 순위를 겨뤄요.`}
+            </li>
+            <li>
+              {`층을 깰 때마다 초월 EXP를 받고, 쓰러져도 깬 만큼은 받아요. ${TOWER_CHEST_FROM}층부터는 우두머리 층을 깨면 상자가 열려요. 몇 번이든 도전할 수 있어요. 깨 둔 층까지는 엘리베이터로 ${TOWER_LOW_CHECKPOINTS.join("층, ")}층, 그 위로는 ${TOWER_CHECKPOINT_EVERY}층마다 골라서 시작해요.`}
+            </li>
+            <li>
+              {`끝판이 열리고 ${PIONEER_DAYS}일 안에 ★51이 되거나 ${PIONEER_FLOOR}층을 넘으면 「개척자 #번호」 칭호를 받아요. 서버에서 처음 ${TOWER_FIRSTS.map((f) => f.floor).join(", ")}층을 깬 사람과 지금 최고 층 주인은 신화 칭호를 받아요.`}
             </li>
             <li>공격, 스킬, 몬스터 패턴은 사냥터의 [사냥 안내서]에 자세히 있어요.</li>
           </ul>
@@ -433,12 +506,16 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
           <Table
             head={["하는 일", "방법"]}
             rows={[
-              ["분양", "분양 사무소에서 터 크기와 번지를 골라요"],
+              ["분양", `분양 사무소에서 터 크기와 번지를 골라요. 채널마다 광장 동쪽 1~${MAIN_LOTS}번지와 등불 골목 ${MAIN_LOTS + 1}~${MAIN_LOTS + LANE_LOTS.length}번지가 있어요.`],
+              [
+                "포구 오두막",
+                `바닷가 포구 부동산에서 오두막 터 ${SEA_LOT_COUNT}곳 중에 골라요. 값은 같은 크기 마을 집의 ${SEA_COTTAGE_RATE}배예요. 마을에 집이 있으면 별장이 되어 ${SEA_VILLA_RATE}배예요.`,
+              ],
               ["넓히기", "작은 터에서 넓은 터, 대저택으로 넓혀요"],
               ["꾸미기", "가구와 외관을 사서 놓아요"],
               ["놀러 가기", "다른 집을 구경하고 좋아요나 방명록을 남겨요"],
               ["확대·축소", "집 안에서도 마우스 휠이나 두 손가락으로 해요"],
-              ["나오기", "문으로 나오면 주거 구역의 그 집 문 앞에 서요"],
+              ["드나들기", touch ? "문 앞에서 [들어가기]나 [나가기]를 눌러요. 나오면 그 집 문 앞에 서요." : "문 앞에서 E를 눌러요. 나오면 그 집 문 앞에 서요."],
             ]}
           />
         </section>
@@ -454,13 +531,13 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
               ["성불", `세운 지 ${DEFAULT_PASS_DAYS}일 뒤예요. 바뀔 수도 있어요.`],
               ["성불한 이야기들", "메뉴에서 보고 검색도 해요"],
               ["디자인", `${freeStyles} 중에서는 무료로 골라요. 나머지는 디자인권이 있어야 해요.`],
-              ["성황당", `옮긴 묘비를 ${SHRINE_KEEP_DAYS}일 맡아 줘요. 그 안에 다시 세울 수 있어요.`],
+              ["성황당", `옮긴 묘비를 ${SHRINE_KEEP_DAYS}일 맡아 줘요. 그 안에 다시 세울 수 있어요. 옛 묘역 입구 팻말이나 내 정보에서 열어요.`],
             ]}
           />
           <ul className={styles.points}>
             <li>
-              묘역은 언덕 아래 옛 묘역 한 곳이에요. 채널마다 {GRAVEYARD_CAPACITY}개까지 세울 수 있어요. 자리가 모자라면 오래된 묘비부터 조금
-              일찍 성불해요.
+              묘역은 별 보기 언덕 서쪽 옛 묘역 한 곳이에요. 언덕은 달빛 연못 쪽 입구로 올라가요. 채널마다 {GRAVEYARD_CAPACITY}개까지 세울 수
+              있어요. 자리가 모자라면 오래된 묘비부터 조금 일찍 성불해요.
             </li>
             <li>다시 모신 묘비는 성불 기간을 그때부터 다시 세요. 디자인은 내 묘비 상세에서도 바꿀 수 있어요.</li>
           </ul>

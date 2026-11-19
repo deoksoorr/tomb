@@ -1,4 +1,4 @@
-import { gearById, type GearSlot } from "./catalog";
+import { gearById, type Bonus, type GearSlot } from "./catalog";
 import { isShopGear, RpgError } from "./character";
 import {
   activeSets,
@@ -9,7 +9,13 @@ import {
   itemOfSpec,
   MAT_KEY,
   MAT_MAX,
+  enhBonus,
+  enhMul,
+  scaleBonus,
+  sgBaseBonus,
+  sgDef,
   SG_ENH_MAX,
+  SG_GRADE_MULT,
   SG_INV_MAX,
   SG_PIECE_KIND,
   SG_PIECES,
@@ -20,6 +26,7 @@ import {
   sgUid,
   SHOP_ENH_MAX,
   encodeShopPiece,
+  pieceUid,
   shopPieceOf,
   syncEquip,
   type ShopPiece,
@@ -35,7 +42,12 @@ import type { CharacterState, Drop } from "./types";
 // 포인트는 서버가 같은 저장 명령(lib/rpg/store updatePaid) 안에서 지갑에서만 뺀다 (모은 포인트·랭킹은 그대로).
 // 규칙을 어기면 RpgError (한국어 메시지).
 
-/** 목표 강화 → 성공 확률·포인트·결재 서류·인감 도장 (index 0은 비움). 11/15 포인트는 기획 표의 약 40% (집 꾸미기 등에도 포인트를 써야 해서), 재료도 줄였다 (서류 +6부터 2~10장, 도장 +11부터 1·1·1·2·2개) — 확률은 그대로 */
+/**
+ * 목표 강화 → 성공 확률·포인트·결재 서류·인감 도장 (index 0은 비움).
+ * 11/19 사용자 「포인트 무제한이니까 강화 확률 다 낮춰버려 일반 mmorpg처럼, 가격도 올리고」: +1~+3은 쉽게, +4부터 확 떨어지고 +13부터 한 자릿수.
+ * 같은 날 「강화 비용 너무 비싸긴 하다 확률이 낮아져서 더 체감됨」: 확률은 그대로 두고 값을 약 1/3로.
+ * 모의 실험: +5 평균 약 1,700P, +7 약 4,300P, +10 약 11만P (하루 1시간 약 5천P → 상점 장비 +7은 하루, 세트 +10은 3주 남짓)
+ */
 export const ENHANCE_TABLE: readonly {
   rate: number;
   cost: number;
@@ -43,26 +55,26 @@ export const ENHANCE_TABLE: readonly {
   seal: number;
 }[] = [
   { rate: 1, cost: 0, doc: 0, seal: 0 },
-  { rate: 1, cost: 40, doc: 0, seal: 0 },
-  { rate: 0.95, cost: 60, doc: 0, seal: 0 },
-  { rate: 0.9, cost: 80, doc: 0, seal: 0 },
-  { rate: 0.85, cost: 120, doc: 0, seal: 0 },
-  { rate: 0.8, cost: 160, doc: 0, seal: 0 },
-  { rate: 0.75, cost: 200, doc: 2, seal: 0 },
-  { rate: 0.7, cost: 260, doc: 3, seal: 0 },
-  { rate: 0.65, cost: 320, doc: 3, seal: 0 },
-  { rate: 0.6, cost: 400, doc: 4, seal: 0 },
-  { rate: 0.55, cost: 480, doc: 5, seal: 0 },
-  { rate: 0.5, cost: 560, doc: 6, seal: 1 },
-  { rate: 0.45, cost: 640, doc: 7, seal: 1 },
-  { rate: 0.4, cost: 720, doc: 8, seal: 1 },
-  { rate: 0.33, cost: 800, doc: 9, seal: 2 },
-  { rate: 0.28, cost: 880, doc: 10, seal: 2 },
+  { rate: 1, cost: 100, doc: 0, seal: 0 },
+  { rate: 0.9, cost: 150, doc: 0, seal: 0 },
+  { rate: 0.8, cost: 200, doc: 0, seal: 0 },
+  { rate: 0.65, cost: 300, doc: 0, seal: 0 },
+  { rate: 0.55, cost: 400, doc: 0, seal: 0 },
+  { rate: 0.45, cost: 500, doc: 2, seal: 0 },
+  { rate: 0.38, cost: 650, doc: 3, seal: 0 },
+  { rate: 0.32, cost: 800, doc: 3, seal: 0 },
+  { rate: 0.26, cost: 1000, doc: 4, seal: 0 },
+  { rate: 0.2, cost: 1300, doc: 5, seal: 0 },
+  { rate: 0.15, cost: 1700, doc: 6, seal: 1 },
+  { rate: 0.12, cost: 2100, doc: 7, seal: 1 },
+  { rate: 0.09, cost: 2600, doc: 8, seal: 1 },
+  { rate: 0.06, cost: 3200, doc: 9, seal: 2 },
+  { rate: 0.04, cost: 4000, doc: 10, seal: 2 },
 ];
-/** 실패할 때마다 다음 성공 확률 +5%p (성공하면 처음부터) */
-export const ENH_FAIL_BONUS = 0.05;
-/** 이 강화부터 실패하면 한 단계 내려간다 (+11에서 +12를 노리다 실패하면 +10) — 모의 실험 표(+15 평균 93번)와 같은 규칙 */
-export const ENH_DROP_FROM = 11;
+/** 실패할 때마다 다음 성공 확률 +3%p (성공하면 처음부터). 11/19: 5%p → 3%p */
+export const ENH_FAIL_BONUS = 0.03;
+/** 이 강화부터 실패하면 한 단계 내려간다 (+7에서 +8을 노리다 실패하면 +6). 11/19: +11 → +7. 깨지는 일은 없다 (세트 장비가 귀해서) */
+export const ENH_DROP_FROM = 7;
 
 export const enhanceRate = (target: number, fails: number) => Math.min(1, (ENHANCE_TABLE[target]?.rate ?? 0) + ENH_FAIL_BONUS * Math.max(0, fails));
 /** 지금 강화 e에서 실패하면 내려가나 */
@@ -116,7 +128,7 @@ function settle(next: CharacterState): CharacterState {
   return next;
 }
 
-/** 다음 강화 비용 (상점 장비는 +5까지, 세트 장비는 +15까지 — 끝이면 null) */
+/** 다음 강화 비용 (상점 장비는 +SHOP_ENH_MAX까지, 세트 장비는 +15까지 — 끝이면 null) */
 export function enhanceNeed(t: EnhTarget, e: number): { target: number; cost: number; doc: number; seal: number } | null {
   const max = "sg" in t ? SG_ENH_MAX : SHOP_ENH_MAX;
   if (e >= max) return null;
@@ -153,7 +165,7 @@ function findPiece(s: CharacterState, uid: number): { i: number; p: ShopPiece } 
 export function enhance(s: CharacterState, t: EnhTarget, protect: boolean, rnd: () => number): { state: CharacterState; cost: number; result: EnhanceResult } {
   const cur = enhanceState(s, t);
   const need = enhanceNeed(t, cur.e);
-  if (!need) throw new RpgError(409, "ENH_MAX", "sg" in t ? "이미 +15예요. 더는 못 올려요." : "상점 장비는 +5까지만 올릴 수 있어요.");
+  if (!need) throw new RpgError(409, "ENH_MAX", "sg" in t ? "이미 +15예요. 더는 못 올려요." : `상점 장비는 +${SHOP_ENH_MAX}까지만 올릴 수 있어요.`);
   const m = mats(s);
   if (m.doc < need.doc) throw new RpgError(409, "NO_MATS", `결재 서류가 ${need.doc - m.doc}장 모자라요.`);
   if (m.seal < need.seal) throw new RpgError(409, "NO_MATS", `인감 도장이 ${need.seal - m.seal}개 모자라요.`);
@@ -211,6 +223,172 @@ export function enhance(s: CharacterState, t: EnhTarget, protect: boolean, rnd: 
       announce,
       ...(piece !== undefined ? { piece } : {}),
     },
+  };
+}
+
+// ── 강화 승계 ──
+// 11/19 사용자 「강화 승계도 넣자, 대신 위로 갈수록 수치가 존나 줄어들게」 → 「같은 부위 아이템만, 높은 직급으로만」:
+// 강화한 장비(재료)를 없애고 같은 부위의 더 높은 직급 세트 장비에 강화를 옮긴다. 상점 장비는 사원급보다 아래 직급으로 친다.
+// 받는 단계 = 받은 뒤 기본 능력치(직급 배율 × 강화 배율)가 재료의 기본 능력치 이상이 되는 가장 낮은 단계 → 승계 결과는 늘 재료보다 세고,
+// 직급 차이가 클수록 단계는 크게 준다 (사원 +15 = 3.0 → 대리 +10 · 과장 +6 · 임원 +3). 연속 실패 수는 0부터.
+
+/** 상점 장비를 승계에서 볼 때의 직급 배율 (사원급 1.0보다 아래 — 직급 비교에서 -1) */
+export const SHOP_INHERIT_MULT = 0.8;
+/** 승계 직급 (-1 = 상점 장비, 0~3 = 사원~임원) */
+export type InheritGrade = -1 | SgGrade;
+
+/** 세트 장비 기본 능력치 (직급 배율 × 강화, 랜덤 옵션 빼고) */
+const sgBaseAt = (it: Pick<SgItem, "s" | "p" | "g">, e: number): Bonus => enhBonus(scaleBonus(sgBaseBonus(SG_SETS[it.s], SG_PIECES[it.p]), SG_GRADE_MULT[it.g]), e);
+/** 승계에서 비교하는 기본 능력치 (늘리는 값만 — 깎는 값·없는 값은 빼고) */
+const ups = (b: Bonus): [keyof Bonus, number][] => (Object.entries(b) as [keyof Bonus, number][]).filter(([, v]) => v > 0);
+
+/**
+ * 11/19 사용자 「직급 차이의 아이템 능력치는 최소한 유지는 시켜줘야 함」: 받는 장비(tgt)를 몇 강까지 올려야 재료의 기본 능력치(src)를
+ * 하나도 빠짐없이 넘는지 — 둘 다 가진 능력치마다 받은 뒤 값 ≥ 재료 값인 가장 낮은 단계 (반올림으로 한 칸이라도 떨어지면 한 단계 더).
+ * 겹치는 능력치가 없으면 직급 배율 × 강화 배율로 비교한다. +15로도 못 넘으면 null
+ */
+export function inheritStep(src: Bonus, srcMul: number, tgt: Pick<SgItem, "s" | "p" | "g">): number | null {
+  const base = sgBaseAt(tgt, 0);
+  const keys = ups(src).filter(([k]) => (base[k] ?? 0) > 0);
+  for (let m = 0; m <= SG_ENH_MAX; m++) {
+    const b = sgBaseAt(tgt, m);
+    if (keys.length ? keys.every(([k, v]) => (b[k] ?? 0) >= v) : SG_GRADE_MULT[tgt.g] * enhMul(m) >= srcMul - 1e-9) return m;
+  }
+  return null;
+}
+/** 표·안내용: 같은 부위(갑옷 기준) 세트 장비 직급 from +e → 직급 to에서 받는 단계 (못 옮기면 0) */
+export function inheritTo(from: SgGrade, e: number, to: SgGrade, piece = 1): number {
+  if (to <= from) return 0;
+  const src = { s: 0, p: piece, g: from };
+  return inheritStep(sgBaseAt(src, e), SG_GRADE_MULT[from] * enhMul(e), { s: 0, p: piece, g: to }) ?? 0;
+}
+/** 승계 비용: 받는 강화 m까지 한 번에 성공했을 때의 포인트 합 · 결재 서류 m장 */
+export function inheritNeed(m: number): { cost: number; doc: number } {
+  let cost = 0;
+  for (let i = 1; i <= m; i++) cost += ENHANCE_TABLE[i].cost;
+  return { cost, doc: m };
+}
+/** 재료로 쓸 수 있는 장비 (상점 묶음 장비는 강화가 없어 안 된다) */
+export type InheritFrom = { sg: number } | { piece: number };
+
+export type InheritResult = {
+  /** 받은 장비 이름 · 재료 이름 */
+  name: string;
+  srcName: string;
+  /** 재료 강화 · 받는 장비의 원래 강화 · 받은 뒤 강화 */
+  src: number;
+  from: number;
+  to: number;
+  /** 상점 장비: 받은 한 개의 번호 (묶음에서 떼어 냈으면 새 번호) */
+  piece?: number;
+};
+
+/** 장비의 부위 (무기·갑옷·머리·장신구) */
+function kindOf(s: CharacterState, t: EnhTarget): string {
+  if ("sg" in t) return SG_PIECE_KIND[sgPieceOf(findSg(s, t.sg).it)];
+  if ("piece" in t) return gearById(findPiece(s, t.piece).p.id)!.kind;
+  return gearById(t.shop)?.kind ?? "";
+}
+const sameItem = (a: EnhTarget, b: EnhTarget) => ("sg" in a && "sg" in b && a.sg === b.sg) || ("piece" in a && "piece" in b && a.piece === b.piece);
+const gradeOf = (s: CharacterState, t: EnhTarget): InheritGrade => ("sg" in t ? findSg(s, t.sg).it.g : -1);
+/** 재료의 기본 능력치와 비교 배율 */
+function srcBase(s: CharacterState, t: InheritFrom): { bonus: Bonus; mul: number } {
+  if ("sg" in t) {
+    const it = findSg(s, t.sg).it;
+    return { bonus: sgDef(it).bonus, mul: SG_GRADE_MULT[it.g] * enhMul(it.e) };
+  }
+  const p = findPiece(s, t.piece).p;
+  return { bonus: enhBonus(gearById(p.id)?.bonus ?? {}, p.e), mul: SHOP_INHERIT_MULT * enhMul(p.e) };
+}
+/** 미리보기 비교 줄: [능력치, 재료 값, 승계 뒤 값] (늘리는 기본 능력치만, 둘 중 하나라도 가진 것) */
+export type InheritLine = [keyof Bonus, number, number];
+
+/** 승계 미리보기 (못 하면 이유) — 화면과 서버가 같이 쓴다. 받는 장비는 같은 부위의 더 높은 직급 세트 장비만 */
+export function inheritPlan(
+  s: CharacterState,
+  from: InheritFrom,
+  to: EnhTarget,
+): { ok: true; src: number; cur: number; m: number; cost: number; doc: number; srcName: string; name: string; lines: InheritLine[] } | { ok: false; why: string } {
+  if (sameItem(from, to)) return { ok: false, why: "같은 장비끼리는 옮길 수 없어요." };
+  const a = enhanceState(s, from);
+  const b = enhanceState(s, to);
+  if (kindOf(s, from) !== kindOf(s, to)) return { ok: false, why: "같은 부위끼리만 옮길 수 있어요." };
+  if (!("sg" in to)) return { ok: false, why: "더 높은 직급의 세트 장비로만 옮길 수 있어요." };
+  const tgt = findSg(s, to.sg).it;
+  if (tgt.g <= gradeOf(s, from)) return { ok: false, why: "더 높은 직급의 장비로만 옮길 수 있어요." };
+  const sb = srcBase(s, from);
+  const m = inheritStep(sb.bonus, sb.mul, tgt);
+  if (m === null) return { ok: false, why: "옮기면 능력치가 떨어져서 옮길 수 없어요." };
+  if (m < 1) return { ok: false, why: "옮길 강화가 없어요." };
+  if (b.e >= m) return { ok: false, why: `받을 장비가 이미 +${b.e}라 옮길 게 없어요.` };
+  const after = sgBaseAt(tgt, m);
+  const keys = [...new Set([...ups(sb.bonus), ...ups(after)].map(([k]) => k))];
+  const lines: InheritLine[] = keys.map((k) => [k, Math.max(0, sb.bonus[k] ?? 0), Math.max(0, after[k] ?? 0)]);
+  return { ok: true, src: a.e, cur: b.e, m, ...inheritNeed(m), srcName: a.name, name: b.name, lines };
+}
+
+/**
+ * 승계 한 번: 재료 장비를 없애고 받는 장비를 +m으로. 재료를 끼고 있었으면 그 칸에 받은 장비를 대신 낀다 (못 끼면 칸을 비운다).
+ * 포인트(cost)는 돌려주는 값으로 서비스가 같은 저장 명령에서 뺀다
+ */
+export function inherit(s: CharacterState, from: InheritFrom, to: EnhTarget): { state: CharacterState; cost: number; result: InheritResult } {
+  const plan = inheritPlan(s, from, to);
+  if (!plan.ok) throw new RpgError(409, "CANT_INHERIT", plan.why);
+  const m = mats(s);
+  if (m.doc < plan.doc) throw new RpgError(409, "NO_MATS", `결재 서류가 ${plan.doc - m.doc}장 모자라요.`);
+  const next = clone(s);
+  next.mats = { ...m, doc: m.doc - plan.doc };
+  // 재료 빼기 (끼고 있던 칸은 기억해 둔다)
+  const srcCode = "sg" in from ? (s.sg ?? [])[findSg(s, from.sg).i] : (s.si ?? [])[findPiece(s, from.piece).i];
+  const srcSlots = (Object.keys(next.equip) as GearSlot[]).filter((k) => next.equip[k] === srcCode);
+  for (const k of srcSlots) next.equip[k] = null;
+  if ("sg" in from) next.sg = (next.sg ?? []).filter((c) => sgUid(c) !== from.sg);
+  else next.si = (next.si ?? []).filter((c) => shopPieceOf(c)?.u !== from.piece);
+  // 받는 장비 올리기
+  let uid: number;
+  let piece: number | undefined;
+  if ("sg" in to) {
+    const i = (next.sg ?? []).findIndex((c) => sgUid(c) === to.sg);
+    const it = decodeSg(next.sg![i])!;
+    const old = next.sg![i];
+    const code = encodeSg({ ...it, e: plan.m, f: 0 });
+    next.sg![i] = code;
+    for (const k of Object.keys(next.equip) as GearSlot[]) if (next.equip[k] === old) next.equip[k] = code;
+    uid = to.sg;
+  } else if ("piece" in to) {
+    const i = (next.si ?? []).findIndex((c) => shopPieceOf(c)?.u === to.piece);
+    const p = shopPieceOf(next.si![i])!;
+    const old = next.si![i];
+    const code = encodeShopPiece({ ...p, e: plan.m, f: 0 });
+    next.si![i] = code;
+    for (const k of Object.keys(next.equip) as GearSlot[]) if (next.equip[k] === old) next.equip[k] = code;
+    uid = piece = to.piece;
+  } else {
+    // 묶음에서 한 개를 떼어 낸다 (강화와 같다)
+    uid = piece = next.sgN ?? 1;
+    next.sgN = piece + 1;
+    const code = encodeShopPiece({ id: to.shop, e: plan.m, u: piece, f: 0 });
+    next.si = [...(next.si ?? []), code];
+    if (next.inv[to.shop] <= 1) delete next.inv[to.shop];
+    else next.inv[to.shop] -= 1;
+    const slot = (Object.keys(next.equip) as GearSlot[]).find((k) => next.equip[k] === to.shop);
+    if (slot) next.equip[slot] = code;
+  }
+  next.enhMax = Math.max(s.enhMax ?? 0, plan.m);
+  let out = settle(next);
+  // 재료를 끼고 있던 칸에 받은 장비를 대신 낀다 (이미 다른 칸에 끼고 있거나 레벨이 모자라면 비워 둔다)
+  const worn = Object.values(out.equip).some((id) => pieceUid(id) === uid);
+  if (srcSlots[0] && !worn) {
+    try {
+      out = equipSg(out, srcSlots[0], uid);
+    } catch {
+      // 칸은 비운 채로
+    }
+  }
+  return {
+    state: out,
+    cost: plan.cost,
+    result: { name: plan.name, srcName: plan.srcName, src: plan.src, from: plan.cur, to: plan.m, ...(piece !== undefined ? { piece } : {}) },
   };
 }
 

@@ -7,16 +7,21 @@ import { BITE_MAX_MS, BITE_MIN_MS, candidates, conditionsAt, hash01, reelMinMs, 
 // "살아 있다"는 신호(정산 요청·머무르기 기록 /api/me/presence)가 올 때마다 직전 신호와의 간격을 접속 구간으로 쌓는다.
 //  - 간격이 AUTO_BEAT_GAP_MS 이하면 그동안 접속해 있던 것으로 본다 (숨은 탭은 머무르기 기록이 30분마다 온다)
 //  - 그보다 길면 끊겼던 것으로 보고 그 구간은 세지 않는다
-// 접속 구간을 이어 붙인 시간 AUTO_FISH_EVERY_MS마다 한 마리. k번째 물고기는 그 시간이 채워진 "그 시각"의 시간대·날씨·계절로
-// 세션 시드 + 번호로 결정적으로 굴린다 → 같은 정산을 다시 계산해도 결과가 같다.
+// 접속 구간을 이어 붙인 시간 AUTO_FISH_EVERY_MS마다 찌를 한 번 올리고, 그때 AUTO_CATCH_CHANCE 확률로 한 마리가 걸린다.
+// k번째 시도는 그 시간이 채워진 "그 시각"의 시간대·날씨·계절로 세션 시드 + 번호로 결정적으로 굴린다
+// (걸렸는지도 시드 + 번호로) → 같은 정산을 다시 계산해도 결과가 같다.
+// 11/19 「편하게 노는 게임」 개편: 하루 75마리 한도를 없앴다. 대신 시도마다 25%만 걸려 직접 낚시보다 확실히 느리다.
 
 /** 직접 낚을 때 한 마리 평균 (입질 평균 + 보통 손맛(2)의 최소 감기 시간) */
 export const DIRECT_FISH_AVG_MS = (BITE_MIN_MS + BITE_MAX_MS) / 2 + reelMinMs(2);
-/** 자동 낚시는 직접 낚을 때 평균의 2.5배마다 한 마리 */
+/** 자동 낚시는 직접 낚을 때 평균의 2.5배마다 찌를 한 번 올린다 (30초) */
 export const AUTO_FISH_EVERY_MS = Math.round(DIRECT_FISH_AVG_MS * 2.5);
-/** 자동 낚시 하루 한도 (한국 시간 새벽 5시 초기화, 하루 전체 낚시 한도 DAILY_CATCH_MAX.fish 안에서) */
-export const AUTO_FISH_DAILY_MAX = 75;
-/** 한 세션 최대 길이 (켠 시각부터) */
+/**
+ * 11/19 자동 낚시 한 번에 걸릴 확률. 직접 낚시는 입질이 늘 오고 손으로 감으면 거의 다 낚는다.
+ * 자동은 30초마다 25% → 평균 2분에 한 마리 (한 시간 약 30마리, 직접 낚시 평균 12초의 약 1/10)
+ */
+export const AUTO_CATCH_CHANCE = 0.25;
+/** 한 세션 최대 길이 (켠 시각부터). 탭을 켜 두고 잊어도 끝없이 돌지 않게 — 다시 켜면 또 돈다 */
 export const AUTO_FISH_MAX_MS = 6 * 3_600_000;
 /**
  * 신호 사이가 이보다 길면 끊긴 것으로 본다 (숨은 탭의 머무르기 기록 30분 간격 + 타이머 지연 여유.
@@ -43,7 +48,7 @@ export type AutoSession = {
   beat: number;
   /** 접속해 있던 구간 [시작, 끝] (시각 오름차순) */
   segs: [number, number][];
-  /** 정산까지 마친 물고기 번호 (1부터, 한도로 못 받은 것 포함) */
+  /** 정산까지 마친 시도 번호 (1부터, 놓친 것 포함) */
   done: number;
   /** 11/16 바닷가 갯바위: end가 물이 빠지는 때 (끝나면 ended "tide") */
   tide?: true;
@@ -87,13 +92,16 @@ export function beatAuto(s: AutoSession, now: number): AutoSession {
 /** 접속해 있던 시간 합 (ms) */
 export const autoAliveMs = (s: AutoSession) => s.segs.reduce((n, [a, b]) => n + (b - a), 0);
 
-/** 지금까지 낚은 수 (정산 여부와 상관없이, 접속 시간 기준) */
-export const autoCaughtTotal = (s: AutoSession) => Math.floor(autoAliveMs(s) / AUTO_FISH_EVERY_MS);
+/** 지금까지 찌를 올린 수 (정산 여부와 상관없이, 접속 시간 기준 — 놓친 것 포함) */
+export const autoTriesTotal = (s: AutoSession) => Math.floor(autoAliveMs(s) / AUTO_FISH_EVERY_MS);
 
-/** 다음 한 마리까지 남은 접속 시간 (ms) */
+/** 다음 찌 올리기까지 남은 접속 시간 (ms) */
 export const autoNextInMs = (s: AutoSession) => AUTO_FISH_EVERY_MS - (autoAliveMs(s) % AUTO_FISH_EVERY_MS);
 
-/** k번째(1부터) 물고기가 낚인 시각: 접속 구간을 이어 붙여 k × AUTO_FISH_EVERY_MS가 채워지는 순간 */
+/** k번째(1부터) 시도에 걸렸는지 (시드 + 번호로 결정적 — 다시 정산해도 같다) */
+export const autoHit = (seed: number, k: number) => hash01(`auto|${seed}|${k}|hit`) < AUTO_CATCH_CHANCE;
+
+/** k번째(1부터) 시도 시각: 접속 구간을 이어 붙여 k × AUTO_FISH_EVERY_MS가 채워지는 순간 */
 export function autoCatchTimes(s: AutoSession, from: number, to: number): number[] {
   const out: number[] = [];
   let cum = 0;
@@ -136,7 +144,7 @@ export function pickAuto(list: readonly Species[], rand: number): Species | null
 }
 
 /**
- * k번째 물고기: 그 시각의 조건으로, 시드 + 번호로 결정적으로 (같은 입력 → 같은 결과).
+ * k번째 시도에 걸린 물고기: 그 시각의 조건으로, 시드 + 번호로 결정적으로 (같은 입력 → 같은 결과). 걸렸는지는 autoHit.
  * 크기는 직접 낚을 때와 같은 분포(rollSize10). 내 도감 최대 기록에는 들어가고, 최대어 순위에는 넣지 않는다
  */
 export function rollAutoCatch(seed: number, k: number, water: FishWater, at: number, cond: Cond = conditionsAt(at)) {
@@ -153,6 +161,8 @@ export function autoNextLabel(ms: number): string {
 
 /** 자동 낚시 안내 (낚시 창·결과 알림이 같이 쓴다) */
 export const AUTO_RANK_NOTE = "자동 낚시로 낚은 물고기는 최대어 순위에 안 올라가요. 크기는 도감에 남아요.";
+/** 11/19 자동 낚시 빠르기 안내: "30초마다 찌를 올려 25% 확률로 걸려요." (숫자는 상수에서) */
+export const AUTO_PACE_NOTE = `${Math.round(AUTO_FISH_EVERY_MS / 1000)}초마다 찌를 올려 ${Math.round(AUTO_CATCH_CHANCE * 100)}% 확률로 걸려요.`;
 
 /**
  * 종류별 마릿수 요약: "월요병 붕어 5(최대 42.3cm), 야근 메기 1(새 도감·61.0cm) 외 2종".

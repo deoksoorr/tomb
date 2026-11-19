@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { DIFFICULTIES, DIFFS } from "@/lib/rpg/catalog";
 import { SG_CHEST_CHANCE } from "@/lib/rpg/setGearRoll";
-import { chestRows, cosDaysRows, cosTierRows, dyeRows, enhanceRows, gearAtLeastOne, gradeBands, huntRows, lotteryAny, pct, pieceRows, potionRows, rarityRows, setGearLongRun, wishRows, xmasRows } from "./oddsData";
+import { TOWER_CHEST_FROM } from "@/lib/rpg/tower";
+import { AUTO_CATCH_CHANCE, AUTO_FISH_EVERY_MS } from "@/lib/forage/auto";
+import { chestRows, cosDaysRows, cosTierRows, dyeRows, enhanceRows, forageFacts, gearAtLeastOne, gradeBands, huntRows, lotteryAny, pct, pieceRows, potionRows, rarityRows, wishRows, xmasRows } from "./oddsData";
 
 const sum = (rows: string[][], col: number) => rows.reduce((n, r) => n + Number(r[col].replace("%", "")), 0);
 
@@ -23,21 +25,27 @@ describe("확률 안내 숫자", () => {
     }
   });
 
+  it("자동 낚시 숫자는 규칙 상수에서 읽는다 (11/19 30초마다 25%)", () => {
+    expect(forageFacts()).toMatchObject({ autoEvery: `${AUTO_FISH_EVERY_MS / 1000}초`, autoCatch: pct(AUTO_CATCH_CHANCE) });
+    expect(forageFacts().autoCatch).toBe("25%");
+  });
+
   it("합이 100%인 표는 100%에 가깝다", () => {
     for (const rows of [potionRows(), pieceRows(), cosDaysRows(), wishRows(), xmasRows()]) expect(sum(rows, 1)).toBeCloseTo(100, 0);
     expect(sum(rarityRows(), 2)).toBeCloseTo(100, 0);
     for (const r of cosTierRows().rows) expect(r.slice(1).reduce((n, c) => n + (c.endsWith("%") ? Number(c.replace("%", "")) : 0), 0)).toBeCloseTo(100, 0);
   });
 
-  it("세트 장비 평균 확률은 천장 때문에 기본 확률보다 높다", () => {
-    expect(setGearLongRun()).toBeGreaterThan(SG_CHEST_CHANCE);
-    expect(setGearLongRun()).toBeLessThan(0.5);
+  it("11/19 세트 장비는 천장 없이 기본 확률 그대로", () => {
+    const row = chestRows().find((r) => r[0] === "세트 장비")!;
+    expect(row[1]).toContain(pct(SG_CHEST_CHANCE));
+    expect(row[1]).not.toMatch(/반드시|평균/);
     expect(chestRows().length).toBeGreaterThanOrEqual(4);
   });
 
   it("직급 구간은 우두머리 층부터 끊김 없이 이어지고 마지막은 끝이 없다", () => {
     const b = gradeBands();
-    expect(b[0].from).toBe(5);
+    expect(b[0].from).toBe(TOWER_CHEST_FROM);
     expect(b[b.length - 1].to).toBeNull();
     expect(new Set(b.map((x) => x.name)).size).toBe(b.length);
   });

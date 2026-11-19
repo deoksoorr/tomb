@@ -25,6 +25,7 @@ export type UseKind =
   | "lamp"
   | "fridge"
   | "pet"
+  | "dog"
   | "coffee"
   | "vend"
   | "chime"
@@ -95,6 +96,7 @@ const USE_OF: Readonly<Record<string, UseKind>> = {
   fridge: "fridge",
   cat_cushion: "pet",
   ghost_cat: "pet",
+  sleepy_dog: "dog",
   coffee_machine: "coffee",
   server_rack: "vend",
   wind_chime: "chime",
@@ -143,6 +145,7 @@ export const USE_LABEL: Readonly<Record<UseKind, string>> = {
   lamp: "스탠드 켜기",
   fridge: "냉장고 열기",
   pet: "쓰다듬기",
+  dog: "살살 쓰다듬기",
   coffee: "커피 내리기",
   vend: "음료 뽑기",
   chime: "풍경 흔들기",

@@ -2,6 +2,7 @@ import { randomInt } from "node:crypto";
 import { z } from "zod";
 import { handler, HttpError, json } from "@/lib/http";
 import { assertRateLimitOpen, rateLimit } from "@/lib/ratelimit";
+import { bumpQuest, questHook, todoTickOf } from "@/lib/retainQuest";
 import { requireVisitor } from "@/lib/session";
 import { getAccounts, getWishDay } from "@/lib/store";
 import { kstDay, loadMe } from "@/lib/store/accounts";
@@ -16,7 +17,7 @@ const WishSchema = z.object({
 const rand = () => randomInt(0, 1_000_000) / 1_000_000;
 
 /**
- * 50번 소원 분수 `{ amount }` (1~5P): 동전 값만큼 차감 → 오늘의 운세 → 가끔 몇 포인트가 튀어 돌아온다(적립 "wish", 하루 한도).
+ * 50번 소원 분수 `{ amount }` (1~5P): 동전 값만큼 차감 → 오늘의 운세 → 가끔 몇 포인트가 튀어 돌아온다(적립 "wish").
  * 계정당 하루(게임 날짜, 한국 시간 새벽 5시에 바뀐다) 한 번 — 운영자 IP도 예외 없다: 차감 전에 그날 자리를 원자적으로 잡고(lib/store/wishDay SET NX),
  * 포인트가 모자라거나 IP 한도에 걸리면 풀어 준다 → 실패한 시도는 횟수에서 빠진다. 새벽 5시가 지나면 새 날짜 키라 다시 던질 수 있다.
  * IP 한도(lib/ratelimit "wish")는 계정 여러 개로 농사하는 것만 막는다 (운영자 IP는 여기서만 빠진다).
@@ -54,6 +55,9 @@ export const POST = handler(async (req) => {
   }
   const fortune = pickFortune(rand(), rand());
   const roll = rollBonus(amount, rand(), rand());
-  const bonus = roll > 0 ? await accounts.earn(visitorId, "wish", day, { amount: roll }) : 0;
-  return json<WishResponse>({ me: await loadMe(accounts, visitorId, now), fortune, bonus, spent: amount });
+  // 11/19 오늘 미션 「소원 분수에 동전 던지기」: 돌아온 포인트가 있으면 그 적립 스크립트에서, 없으면 따로 진행 칸 +1 (그날 미션일 때만 — lib/retainQuest)
+  const quest = questHook(visitorId, day, "wish");
+  const bonus = roll > 0 ? await accounts.earn(visitorId, "wish", day, { amount: roll, quest }) : 0;
+  if (roll <= 0) await bumpQuest(quest).catch((e) => console.error("[plaza/wish] 미션 진행 실패", e));
+  return json<WishResponse>({ me: await loadMe(accounts, visitorId, now), fortune, bonus, spent: amount, ...todoTickOf(quest, day) });
 });
