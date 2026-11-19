@@ -16,8 +16,6 @@ import ui from "../ui/ui.module.css";
 import styles from "./ChannelMenu.module.css";
 
 const STATUS_TEXT: Record<ChannelStatus, string> = { ok: "여유", busy: "혼잡", full: "만석" };
-/** 같이 있는 사람 닉네임을 몇 명까지 보여 줄지 */
-const NAME_PREVIEW = 6;
 /** 같이 있는 사람 목록을 다시 묻는 간격 */
 const PEERS_POLL_MS = 5_000;
 
@@ -163,25 +161,23 @@ export default function ChannelMenu({ onClose, graveChannels = [] }: Props) {
   );
 }
 
-/** 지금 채널 카드 안: 같이 있는 사람 닉네임 몇 명 */
+/** 지금 채널 카드 안: 같이 있는 사람 닉네임 전부와 총 인원 */
 function PeerPreview({ peers, channelCount }: { peers: Peers | null; channelCount: number }) {
   if (peers === null) return <span className={styles.peers}>같이 있는 사람을 살펴보는 중…</span>;
   const { names, map } = peers;
   // 11/17 게임은 지금 맵에 보이는 사람만 안다 → 채널 인원과 견줘 다른 곳에 있는 사람도 알려 준다
   const elsewhere = elsewhereCount(channelCount, names.length);
   if (names.length === 0) return <span className={styles.peers}>{aloneLine(map, elsewhere)}</span>;
-  const shown = names.slice(0, NAME_PREVIEW);
   const more = elsewhereLine(elsewhere);
   return (
     <span className={styles.peers}>
-      <span className={styles.peersLabel}>{hereLabel(map)}</span>
+      <span className={styles.peersLabel}>{hereLabel(map, names.length)}</span>
       <span className={styles.names}>
-        {shown.map((n, i) => (
+        {names.map((n, i) => (
           <span key={`${n}-${i}`} className={styles.peerName}>
             {n}
           </span>
         ))}
-        {names.length > shown.length && <span className={styles.more}>외 {names.length - shown.length}명</span>}
       </span>
       {more && <span className={styles.more}>{more}</span>}
     </span>

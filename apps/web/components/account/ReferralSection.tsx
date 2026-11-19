@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { errorMessage } from "@/lib/api";
 import { referralApi } from "@/lib/referralClient";
-import { REF_DAY_MIN, REF_GRAND_MONTH_CAP, REF_MONTH_CAP, REF_NEED_DAYS, refGrandText, refLink, refRewardText, type ReferralView } from "@/lib/referralRules";
+import { REF_DAY_MIN, REF_GRAND_MONTH_CAP, REF_LANTERN_ONCE, REF_MONTH_CAP, REF_NEED_DAYS, refGrandText, refLink, refRewardText, type ReferralView } from "@/lib/referralRules";
 import { stayText } from "@/lib/stayTime";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
@@ -99,6 +99,7 @@ export default function ReferralSection() {
           친구가 가입할 때 내 코드를 넣고 하루 {stayText(REF_DAY_MIN)} 넘게 머문 날이 {REF_NEED_DAYS}일이 되면 둘 다 {refRewardText()}을 받아요. 이어진 날이 아니어도 돼요.
         </li>
         <li>추천 선물은 한 달에 {REF_MONTH_CAP}명까지예요. 그 뒤로는 칭호에만 세요.</li>
+        <li>{REF_LANTERN_ONCE}</li>
         <li>
           내 친구가 데려온 이웃이 자리 잡으면 나도 {refGrandText()}을 받아요. 한 달에 {REF_GRAND_MONTH_CAP}번까지예요.
         </li>

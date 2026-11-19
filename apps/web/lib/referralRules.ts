@@ -29,6 +29,8 @@ export const REF_GRAND_BUNDLE: RpgBundle = { mats: { m_doc: 5 } };
 export const REF_GRAND_MONTH_CAP = 10;
 /** 추천 선물 글귀 「마중 등불(영구), 커피 5개, 에너지드링크 5개, 결재 서류 10장」 */
 export const refRewardText = () => `마중 등불(영구), ${bundleText(REF_REWARD_BUNDLE)}`;
+/** 11/19 등불은 꾸미기라 한 사람에게 처음 한 번만 (두 번째 추천부터는 사냥 가방 몫만) */
+export const REF_LANTERN_ONCE = "마중 등불은 처음 한 번만 받고, 그다음 추천부터는 사냥 가방 선물만 받아요.";
 export const refGrandText = () => `작은 폭죽 1개, ${bundleText(REF_GRAND_BUNDLE)}`;
 /** 2단계 보상을 건너뛴 이유 (기록의 gr = "skip:이유") */
 export const GRAND_SKIP_TEXT: Record<string, string> = {

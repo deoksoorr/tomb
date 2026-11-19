@@ -43,7 +43,7 @@ import { calendarRewards } from "@/lib/calendar";
 import { DAY_RESET_TEXT } from "@/lib/gameDay";
 import { FIRST_REWARD, FIRST_STEPS, PATH, PATH_NAME, PATH_WEAR_DAYS, TODO_BONUS_GIFT, TODO_COUNT, TODO_GIFT, TODO_PROT_EVERY } from "@/lib/retain";
 import { bundleText, rewardText } from "@/lib/rewardText";
-import { REF_DAY_MIN, REF_NEED_DAYS, refRewardText } from "@/lib/referralRules";
+import { REF_DAY_MIN, REF_LANTERN_ONCE, REF_NEED_DAYS, refRewardText } from "@/lib/referralRules";
 import { stayText } from "@/lib/stayTime";
 import { SEA_COTTAGE_RATE, SEA_LOT_COUNT, SEA_VILLA_RATE } from "@/lib/housing/catalog";
 import { BUILDS } from "@/lib/rpg/builds";
@@ -361,7 +361,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
               ["이번 달 출석 보상", ATTEND_TIER_GUIDE],
               [
                 "친구 초대",
-                `가입할 때만 친구의 추천 코드를 넣을 수 있어요. 하루 ${stayText(REF_DAY_MIN)} 넘게 머문 날이 ${REF_NEED_DAYS}일이 되면 둘 다 ${refRewardText()}을 받아요. 내 추천 코드는 내 정보에서 봐요.`,
+                `가입할 때만 친구의 추천 코드를 넣을 수 있어요. 하루 ${stayText(REF_DAY_MIN)} 넘게 머문 날이 ${REF_NEED_DAYS}일이 되면 둘 다 ${refRewardText()}을 받아요. ${REF_LANTERN_ONCE} 내 추천 코드는 내 정보에서 봐요.`,
               ],
               ["랭킹", "포인트, 사냥, 사냥 레벨, 야근 빌딩, 낚시, 꾸미기, 집 꾸미기, 접속 시간, 헌화 순위가 있어요. 포인트 순위는 써도 줄지 않아요. 주간 순위는 월요일 새벽 5시에 새로 시작해요. 운영자는 순위에 안 들어가요."],
             ]}
