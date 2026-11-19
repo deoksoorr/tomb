@@ -1966,11 +1966,11 @@ export class HouseScene extends Phaser.Scene {
       p.setOrigin(0.5, 0);
     } else if (!nearSign && this.atExit()) {
       door = true;
-      // 이름표 위 (현관·마당은 화면 아래 끝이라 발밑에 두면 잘린다)
+      // 11/19 캐릭터 오른쪽 옆 (머리 위는 이름표·칭호와 겹치고, 현관·마당은 화면 아래 끝이라 발밑은 잘린다)
       text = interactLabel("나가기");
-      x = this.player.x;
-      y = this.player.y - 30;
-      p.setOrigin(0.5, 1);
+      x = this.player.x + 12;
+      y = this.player.y - 10;
+      p.setOrigin(0, 0.5);
     } else if (this.target && !nearSign) {
       const t = this.target;
       grey = !!t.spot && this.takenByOther(t.spot.id);
