@@ -47,7 +47,7 @@ export default function QuestPeek({ onClose, onGuide }: { onClose: () => void; o
         </div>
         {tab === "quests" ? <QuestBoard viewOnly /> : <StampExchange viewOnly />}
         <div className={qs.peekFoot}>
-          <p>납품은 마을 의뢰 게시판에서 해요. 버스 정류장 마당에 있어요.</p>
+          <p>납품은 마을 의뢰 게시판에서 해요. 캠핑장행 정류장 바로 옆에 있어요.</p>
           <button type="button" className={cx(ui.button, ui.primary)} onClick={onGuide}>
             <PixelIcon name="target" />
             게시판까지 안내

@@ -98,7 +98,7 @@ export default function UrgentHud() {
     for (const r of mine?.rows ?? []) {
       if (!r.done || !r.reward || r.claimed || toasted.current.has(r.id)) continue;
       toasted.current.add(r.id);
-      showToast("긴급 의뢰 보상이 기다려요. 버스 정류장 마당 의뢰 게시판에서 받아 가세요.", 6_000);
+      showToast("긴급 의뢰 보상이 기다려요. 캠핑장행 정류장 옆 의뢰 게시판에서 받아 가세요.", 6_000);
     }
   }, [mine]);
 
@@ -266,7 +266,7 @@ export default function UrgentHud() {
               {d.unit}
             </span>
             {live ? <span className={u.pct}>{pct}%</span> : <span className={u.result}>{urgentFilled(ev.kind, ev.n, ev.goal, !!ev.early)}</span>}
-            {live && <span className={u.hudHint}>정류장 마당 게시판</span>}
+            {live && <span className={u.hudHint}>캠핑장행 정류장 옆 게시판</span>}
           </div>
           {!live && (rewardLine || canClaim) && (
             <div className={u.hudReward}>

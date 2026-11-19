@@ -122,7 +122,7 @@ export const FIRST_STEPS: readonly FirstStep[] = [
   { id: "bag", bit: 64, label: "가방 열어 보기", pc: "I를 눌러 꾸미기를 구경해요.", touch: "아래 [가방]을 눌러요.", reward: ENERGY },
   { id: "fish", bit: 128, label: "물고기 한 마리 낚기", pc: "호수 잔교나 강둑의 낚시 자리에서 E를 눌러 직접 낚아요. 자동 낚시는 세지 않아요.", touch: "낚시 자리에서 [상호작용]을 눌러 직접 낚아요. 자동 낚시는 세지 않아요.", reward: DOC2 },
   { id: "gather", bit: 256, label: "채집 한 번 하기", pc: "숲이나 풀밭에서 반짝이는 풀이나 돌 앞에서 E를 눌러요.", touch: "반짝이는 풀이나 돌 앞에서 [상호작용]을 눌러요.", reward: DOC2 },
-  { id: "stars", bit: 512, label: "별자리 한 판 잇기", pc: "언덕이나 광장의 망원경 앞에서 E를 눌러요.", touch: "망원경 앞에서 [상호작용]을 눌러요.", reward: DOC2 },
+  { id: "stars", bit: 512, label: "별자리 한 판 잇기", pc: "마을 곳곳의 망원경 앞에서 E를 눌러요. 지도에 망원경으로 표시돼요.", touch: "망원경 앞에서 [상호작용]을 눌러요.", reward: DOC2 },
   { id: "hunt", bit: 1024, label: "사냥터 한 판", pc: "아래 [사냥]을 누르면 사냥터 입구까지 걸어가요.", touch: "아래 [사냥]을 누르면 사냥터 입구까지 걸어가요.", reward: { points: 300 } },
   { id: "visit", bit: 2048, label: "이웃 집 구경하기", pc: "아래 [집]에서 「주거 구역 보기」를 누르면 집들이 모인 곳이 보여요. 이웃 집 문 앞에서 E를 눌러 들어가요.", touch: "아래 [집]에서 「주거 구역 보기」를 눌러요. 이웃 집 문 앞에서 [상호작용]을 눌러 들어가요.", reward: DOC2 },
   // 11/19 버스 나들이 (도착 = 게임 map:changed camp·sea)
@@ -133,8 +133,8 @@ export const FIRST_STEPS: readonly FirstStep[] = [
     id: "quest",
     bit: 16384,
     label: "의뢰 하나 해결하기",
-    pc: "버스 정류장 마당의 의뢰 게시판에서 E를 눌러 의뢰를 하나 해결해요.",
-    touch: "버스 정류장 마당의 의뢰 게시판에서 [상호작용]을 눌러 의뢰를 하나 해결해요.",
+    pc: "캠핑장행 정류장 옆 의뢰 게시판에서 E를 눌러 의뢰를 하나 해결해요.",
+    touch: "캠핑장행 정류장 옆 의뢰 게시판에서 [상호작용]을 눌러 의뢰를 하나 해결해요.",
     reward: PLAY,
   },
 ];
@@ -248,11 +248,11 @@ export const TODO_POOL: readonly TodoDef[] = [
   { kind: "sell", cat: "life", label: "물고기나 채집물 팔기", need: 1, unit: "번", hint: "어부 영감이나 수집가에게 가방 속 것을 팔아요.", guide: "seller" },
   { kind: "wish", cat: "life", label: "소원 분수에 동전 던지기", need: 1, unit: "번", hint: "광장 소원 분수에서 동전을 던져요. 하루 한 번이에요.", guide: "wish" },
   { kind: "guestbook", cat: "life", label: "이웃 집 방명록 남기기", need: 1, unit: "번", hint: "이웃 집에 들어가 방명록에 한 줄 남겨요.", guide: "visit" },
-  { kind: "quest", cat: "life", label: "마을 의뢰 하나 납품하기", need: 1, unit: "번", hint: "버스 정류장 마당 의뢰 게시판에서 납품해요.", guide: "questBoard" },
+  { kind: "quest", cat: "life", label: "마을 의뢰 하나 납품하기", need: 1, unit: "번", hint: "캠핑장행 정류장 옆 의뢰 게시판에서 납품해요.", guide: "questBoard" },
   // ── 놀이 ──
   { kind: "fish", cat: "play", label: "물고기 3마리 낚기", need: 3, unit: "마리", hint: "호수, 강, 바닷가 어디서든 직접 낚으면 세요. 자동 낚시는 세지 않아요.", group: "fish", guide: "fish" },
   { kind: "gather", cat: "play", label: "채집 2번 하기", need: 2, unit: "번", hint: "반짝이는 풀·돌·수풀에서 채집해요.", group: "gather", guide: "gather" },
-  { kind: "stars", cat: "play", label: "별자리 잇기 한 판", need: 1, unit: "판", hint: "언덕이나 광장의 망원경에서 해요.", guide: "stars" },
+  { kind: "stars", cat: "play", label: "별자리 잇기 한 판", need: 1, unit: "판", hint: "마을 곳곳의 망원경에서 해요. 지도에 망원경으로 표시돼요.", guide: "stars" },
   {
     kind: "haunt",
     cat: "play",
@@ -267,11 +267,11 @@ export const TODO_POOL: readonly TodoDef[] = [
   { kind: "fire", cat: "play", label: "모닥불 앞에서 불멍 2분", need: 1, unit: "번", hint: "모닥불 둘레 자리에 앉아 2분 동안 불을 바라봐요.", guide: "campfire" },
   // ── 나들이 (사냥·바닷가·캠핑장) ──
   { kind: "hunt", cat: "trip", label: "사냥 한 판", need: 1, unit: "판", hint: "사냥터나 야근 빌딩에서 한 판 끝내요.", guide: "hunt" },
-  { kind: "seaFish", cat: "trip", label: "바닷가에서 물고기 2마리 낚기", need: 2, unit: "마리", hint: "포구 잔교는 물때와 상관없이 낚여요. 직접 낚은 것만 세고 자동 낚시는 세지 않아요.", group: "fish", open: "sea", guide: "busSea" },
+  { kind: "seaFish", cat: "trip", label: "바닷가에서 물고기 2마리 낚기", need: 2, unit: "마리", hint: "선착장 끝 낚시 자리는 물때와 상관없이 낚여요. 직접 낚은 것만 세고 자동 낚시는 세지 않아요.", group: "fish", open: "sea", guide: "busSea" },
   { kind: "seaGather", cat: "trip", label: "바닷가 갯벌·모래 채집 2번", need: 2, unit: "번", hint: "물이 빠지면 갯벌 구멍, 늘 백사장 모래를 파요.", group: "gather", open: "sea", guide: "busSea" },
   { kind: "campGather", cat: "trip", label: "캠핑장 숲에서 채집 2번", need: 2, unit: "번", hint: "캠핑장 숲·물가의 반짝이는 곳에서 채집해요.", group: "gather", open: "camp", guide: "busCamp" },
   { kind: "gull", cat: "trip", label: "갈매기에게 과자 3번 던지기", need: 3, unit: "번", hint: "포구 매점에서 과자를 사서 갈매기에게 던져요.", open: "sea", guide: "busSea" },
-  { kind: "bbq", cat: "trip", label: "캠핑장·바닷가에서 한 끼 사 먹기", need: 1, unit: "번", hint: "캠핑장 그릴·자판기나 포구 매점에서 하나 사 먹어요.", open: "trip", guide: "busCamp" },
+  { kind: "bbq", cat: "trip", label: "캠핑장·바닷가에서 한 끼 사 먹기", need: 1, unit: "번", hint: "캠핑장 큰 타프 옆 바베큐장이나 포구 매점에서 하나 사 먹어요.", open: "trip", guide: "busCamp" },
 ];
 export const TODO_COUNT = 3;
 /** 하나에 (11/19 300P + 결재 서류 2장) */

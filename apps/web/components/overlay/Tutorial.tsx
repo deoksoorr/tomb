@@ -45,7 +45,7 @@ function tutorialSteps(touch: boolean, firstSteps: boolean): Step[] {
     { title: "상점", text: "유령 잡화점이에요. 주인장에게 말을 걸면 포인트로 꾸미기·폭죽을 살 수 있어요.", point: "shop" },
     {
       title: "낚시 잔교",
-      text: `낚시 의자 앞에서 ${keyJosa("E", "를", touch)} 누르면 낚시를 해요. 잡은 물고기는 잔교 옆 어부 영감에게 팔아요. 수집 의뢰는 버스 정류장 마당 게시판에 있어요.`,
+      text: `낚시 의자 앞에서 ${keyJosa("E", "를", touch)} 누르면 낚시를 해요. 잡은 물고기는 잔교 옆 어부 영감에게 팔아요. 수집 의뢰는 캠핑장행 정류장 옆 의뢰 게시판에 있어요.`,
       point: "fishing",
     },
     {
@@ -54,7 +54,7 @@ function tutorialSteps(touch: boolean, firstSteps: boolean): Step[] {
       point: "bumper",
     },
     {
-      title: "작은 묘역",
+      title: "옛 묘역",
       text: `한때 하다 만 것들이 쉬는 곳이에요. 묘비 앞에서 ${touch ? "[살펴보기] 버튼을" : "E를"} 누르면 꽃을 놓을 수 있어요. 꽃 하나에 ${earnRule("flower").points}P예요. 내 묘비도 메뉴에서 하나 세울 수 있어요.`,
       point: "nearestGrave",
     },
