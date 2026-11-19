@@ -17,8 +17,9 @@ import { applyTranscend, TBANK_MAX, TRANSCEND_MAX, transcendStatPoints } from ".
 import { TOWER_FLOORS_PER_RUN } from "./tower";
 import { checkAllocation, checkLearn, cleanAlloc, SKILL_TREE_VERSION, skillPointsEarned, spentPoints, type Alloc } from "./skillRules";
 import { arrangeHotbar, cleanAuto, emptySlotFor, type HotAuto } from "./hotbar";
+import { checkTAllocation, checkTLearn, cleanTAlloc, type TAlloc, type TNodeId } from "./transcendTree";
 import type { CharacterState } from "./types";
-import { encodeShopPiece, MAT_MAX, normalizeSg, SG_INV_MAX, sgUid, shopEnhOf, SHOP_ENH_MAX, shopPieceOf, syncEquip } from "./setGear";
+import { encodeShopPiece, MAT_MAX, normalizeSg, SG_EGG_ALL, SG_INV_MAX, sgUid, shopEnhOf, SHOP_ENH_MAX, shopPieceOf, syncEquip } from "./setGear";
 
 // 캐릭터 상태를 바꾸는 순수 함수들. 저장소(메모리·Redis)는 이 함수를 원자적 갱신(CAS) 안에서 부른다.
 // 규칙을 어기면 RpgError를 던지고, 라우트가 그대로 한국어 에러로 돌려준다.
@@ -72,11 +73,17 @@ export function newCharacter(): CharacterState {
 const nat = (v: unknown, max = Number.MAX_SAFE_INTEGER) => (typeof v === "number" && Number.isInteger(v) && v > 0 ? Math.min(v, max) : 0);
 
 /** 남은 스킬 포인트 = 레벨로 받은 포인트 - 쓴 포인트 (저장된 값은 믿지 않고 늘 다시 센다 → 포인트 합이 어긋날 수 없다) */
-const freePoints = (level: number, skills: Alloc) => Math.max(0, skillPointsEarned(level) - spentPoints(skills));
+const freePoints = (level: number, skills: Alloc, tLevel = 0) => Math.max(0, skillPointsEarned(level, tLevel) - spentPoints(skills));
 
 /** 단축키: 배운 액티브만, 겹치지 않게. 11/15 궁극기는 궁극기 칸(F)으로, 나머지는 1~5 (옛 6칸 저장값도 여기서 옮긴다) */
 function cleanHotbar(hotbar: unknown, skills: Alloc): (SkillId | null)[] {
   return arrangeHotbar(Array.isArray(hotbar) ? hotbar : [], (id) => !!(skills[id] ?? 0));
+}
+
+/** 11/19 초월 수련 배분 읽기 (없거나 규칙에 안 맞으면 빈 배분) */
+function normTSkills(raw: unknown, t: number): TAlloc {
+  if (!raw || typeof raw !== "object") return {};
+  return checkTAllocation(raw as Record<string, unknown>, t) ? {} : cleanTAlloc(raw as TAlloc);
 }
 
 /** 저장된 JSON을 지금 형태로 맞춘다 (필드가 늘어도 예전 기록이 깨지지 않게) */
@@ -105,7 +112,12 @@ export function normalize(raw: unknown): CharacterState {
     level,
     stats: { ...base.stats, ...r.stats },
     skills,
-    skillPoints: freePoints(level, skills),
+    skillPoints: freePoints(level, skills, nat(r.tLevel, TRANSCEND_MAX)),
+    // 11/19 초월 능력치가 5레벨마다 1 → 레벨마다 1: 이미 초월한 사람은 모자란 만큼 한 번 채운다 (줄이지는 않는다)
+    statPoints: Math.max(
+      Number.isInteger(r.statPoints) && r.statPoints! > 0 ? r.statPoints! : 0,
+      statPointsEarned(level, nat(r.tLevel, TRANSCEND_MAX)) - STAT_KEYS.reduce((a, k) => a + Math.max(0, ({ ...base.stats, ...r.stats })[k] - base.stats[k]), 0),
+    ),
     hotbar: old ? base.hotbar : cleanHotbar(r.hotbar, skills),
     // 11/15 자동 스킬 설정 (옛 저장값에는 없다 → 없음 = 모두 끔·궁극기 SP 남김)
     hotAuto: r.hotAuto ? cleanAuto(r.hotAuto, old ? base.hotbar : cleanHotbar(r.hotbar, skills)) : undefined,
@@ -118,6 +130,8 @@ export function normalize(raw: unknown): CharacterState {
     potions: { ...(r.potions ?? base.potions) },
     // 11/15 끝판: 옛 저장값에는 없다 → 0 (초월 능력치 포인트는 초월 레벨이 오를 때 한 번만 더한다 — gainTranscend)
     tLevel: nat(r.tLevel, TRANSCEND_MAX),
+    // 11/19 초월 수련: 규칙에 안 맞는 배분(모르는 칸·줄·포인트 초과)은 비운다
+    tSkills: normTSkills(r.tSkills, nat(r.tLevel, TRANSCEND_MAX)),
     tExp: nat(r.tExp),
     tRuns: nat(r.tRuns),
     tBank: nat(r.tBank, TBANK_MAX),
@@ -177,6 +191,8 @@ function normSg(r: Partial<CharacterState>, equip0: CharacterState["equip"], inv
     enh: undefined,
     enhF: undefined,
     sgDone: nat(r.sgDone, 15),
+    // 11/19 숨겨진 5세트 효과 발견 비트 (옛 저장값에는 없다 → 0, 모르는 비트는 버린다)
+    sgEgg: nat(r.sgEgg) & SG_EGG_ALL,
     sg15: Array.isArray(r.sg15) ? r.sg15.filter((u) => nat(u) > 0).slice(-SG_INV_MAX) : [],
     enhMax: nat(r.enhMax, 15),
     equip: syncEquip(equip, sg, si),
@@ -188,7 +204,7 @@ export const isShopGear = (id: string) => GEAR.some((g) => g.id === id);
 
 const clone = (s: CharacterState): CharacterState => structuredClone(s);
 
-/** 그 레벨까지 받은 능력치 포인트 합 (시작 5 + 레벨업마다 3, 5의 배수 레벨엔 5) + 11/15 초월 5레벨마다 1 */
+/** 그 레벨까지 받은 능력치 포인트 합 (시작 5 + 레벨업마다 3, 5의 배수 레벨엔 5) + 11/19 초월 레벨마다 1 */
 export function statPointsEarned(level: number, tLevel = 0): number {
   let n = START_STAT_POINTS;
   for (let lv = 2; lv <= Math.min(MAX_LEVEL, Math.floor(level)); lv++) n += statPointsAt(lv);
@@ -256,20 +272,37 @@ export function fitToLevel(s: CharacterState): CharacterState {
  * 스킬 1랭크 올리기. 단(아래 단에 쓴 포인트)·선행 스킬·남은 포인트를 서버가 검사한다 (skillRules.checkLearn).
  * budget: 쓸 수 있는 포인트 합 (없으면 레벨로 받은 만큼. 테스트 서버 슈퍼 계정은 서비스가 크게 넘긴다)
  */
-export function learnSkill(s: CharacterState, id: SkillId, budget = skillPointsEarned(s.level)): CharacterState {
+export function learnSkill(s: CharacterState, id: SkillId, budget = skillPointsEarned(s.level, s.tLevel)): CharacterState {
   const e = checkLearn(s.skills, id, budget);
   if (e) throw new RpgError(e.status, e.code, e.message);
   const def = skillById(id)!;
   const cur = s.skills[id] ?? 0;
   const next = clone(s);
   next.skills[id] = cur + 1;
-  next.skillPoints = freePoints(next.level, next.skills);
+  next.skillPoints = freePoints(next.level, next.skills, next.tLevel);
   delete next.treeNotice;
   // 처음 배운 액티브는 빈 단축키 칸에 자동으로 놓는다
   if (cur === 0 && def.kind === "active" && !next.hotbar.includes(id)) {
     const empty = emptySlotFor(next.hotbar, id);
     if (empty >= 0) next.hotbar[empty] = id;
   }
+  return next;
+}
+
+/** 11/19 초월 수련 1랭크 올리기 (줄·남은 포인트를 서버가 검사한다 — transcendTree.checkTLearn). budget: 슈퍼 계정은 모두 채울 만큼 */
+export function learnTranscend(s: CharacterState, id: TNodeId, budget?: number): CharacterState {
+  const cur = s.tSkills ?? {};
+  const e = checkTLearn(cur, id, s.tLevel, budget);
+  if (e) throw new RpgError(e.status, e.code, e.message);
+  const next = clone(s);
+  next.tSkills = { ...cur, [id]: (cur[id] ?? 0) + 1 };
+  return next;
+}
+
+/** 11/19 초월 수련 되돌리기 (무료 — 초월 포인트는 레벨로만 받는다) */
+export function resetTranscend(s: CharacterState): CharacterState {
+  const next = clone(s);
+  next.tSkills = {};
   return next;
 }
 
@@ -304,7 +337,7 @@ export function setHotbar(s: CharacterState, slots?: (SkillId | null)[], auto?: 
 export function resetSkills(s: CharacterState, count = true): CharacterState {
   const next = clone(s);
   next.skills = {};
-  next.skillPoints = freePoints(next.level, next.skills);
+  next.skillPoints = freePoints(next.level, next.skills, next.tLevel);
   next.hotbar = new Array(HOTBAR_SIZE).fill(null);
   if (next.hotAuto) next.hotAuto = cleanAuto(next.hotAuto, next.hotbar);
   if (count) next.respecs = (next.respecs ?? 0) + 1;
@@ -479,7 +512,7 @@ export function gainExp(s: CharacterState, exp: number): { state: CharacterState
 }
 
 /**
- * 11/15 초월 EXP를 더한다 (레벨 50 지옥 판·야근 빌딩 층). 초월 5레벨마다 능력치 포인트 1 — 레벨이 오른 이 갱신 안에서만 더하므로
+ * 11/15 초월 EXP를 더한다 (레벨 50 지옥 판·야근 빌딩 층). 11/19 초월 레벨마다 능력치 포인트 1·스킬 포인트 1 — 레벨이 오른 이 갱신 안에서만 더하므로
  * 같은 판으로 두 번 받을 수 없다 (판 기록은 claim으로 한 번만, 저장은 CAS)
  */
 export function gainTranscend(s: CharacterState, exp: number): { state: CharacterState; levelsGained: number } {
@@ -488,6 +521,8 @@ export function gainTranscend(s: CharacterState, exp: number): { state: Characte
   next.tLevel = r.tLevel;
   next.tExp = r.tExp;
   next.statPoints += r.statPoints;
+  // 11/19 초월 레벨마다 스킬 포인트 +1
+  next.skillPoints = freePoints(next.level, next.skills, next.tLevel);
   return { state: next, levelsGained: r.levelsGained };
 }
 

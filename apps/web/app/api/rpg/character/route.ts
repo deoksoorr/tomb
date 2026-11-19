@@ -11,6 +11,6 @@ export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
   const action = await readBody(req, CharacterActionSchema);
   // 스킬 찍기·단축키·안내 확인은 자주 누르니 따로 넉넉한 한도, 나머지(능력치·장착·초기화)는 상점과 같은 한도
-  await rateLimit(action.type === "learn" || action.type === "hotbar" || action.type === "ackTree" ? "rpgSkill" : "shop", req, visitorId);
+  await rateLimit(action.type === "learn" || action.type === "tlearn" || action.type === "treset" || action.type === "hotbar" || action.type === "ackTree" ? "rpgSkill" : "shop", req, visitorId);
   return json<RpgView>(await characterAction(visitorId, action));
 });

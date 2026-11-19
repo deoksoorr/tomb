@@ -14,7 +14,7 @@ import {
   transcendStatPoints,
   tExpToNext,
 } from "./endgame";
-import { endgameView } from "./tower";
+import { endgameView, towerCheckpoints, TOWER_LOW_CHECKPOINTS, TOWER_SUPER_START } from "./tower";
 import { evaluate } from "./rewards";
 import { huntPlan } from "./plan";
 import type { HuntResult } from "./types";
@@ -32,24 +32,35 @@ describe("초월 레벨 곡선 (★51~★100)", () => {
     expect(sum).toBe(24000181);
   });
 
-  it("초월 EXP를 더하면 여러 레벨이 한 번에 오르고, 5레벨마다 능력치 1포인트 (최대면 EXP 0)", () => {
+  it("초월 EXP를 더하면 여러 레벨이 한 번에 오르고, 11/19 레벨마다 능력치 1포인트 (최대면 EXP 0)", () => {
     expect(applyTranscend(0, 0, 9_999)).toEqual({ tLevel: 0, tExp: 9_999, levelsGained: 0, statPoints: 0 });
     const r = applyTranscend(4, 0, tExpToNext(4) + tExpToNext(5) + 10);
-    expect(r).toEqual({ tLevel: 6, tExp: 10, levelsGained: 2, statPoints: 1 });
+    expect(r).toEqual({ tLevel: 6, tExp: 10, levelsGained: 2, statPoints: 2 });
     expect(applyTranscend(49, 0, 10_000_000)).toEqual({ tLevel: 50, tExp: 0, levelsGained: 1, statPoints: 1 });
-    expect(transcendStatPoints(50)).toBe(10);
+    expect(transcendStatPoints(50)).toBe(50);
   });
 
-  it("능력치 포인트는 오른 그 갱신에서만 한 번 — 같은 상태를 다시 읽어도(normalize) 더 주지 않는다", () => {
-    const c = { ...newCharacter(), level: 50, statPoints: 0 };
+  it("능력치 포인트는 오른 그 갱신에서만 한 번 — 같은 상태를 다시 읽어도(normalize) 더 주지 않는다 (11/19 레벨마다 1)", () => {
+    const c = { ...newCharacter(), level: 50, statPoints: statPointsEarned(50) };
     const g = gainTranscend(c, tExpToNext(0) + tExpToNext(1) + tExpToNext(2) + tExpToNext(3) + tExpToNext(4));
     expect(g.state.tLevel).toBe(5);
-    expect(g.state.statPoints).toBe(1);
+    expect(g.state.statPoints).toBe(statPointsEarned(50) + 5);
+    // 스킬 포인트도 초월 레벨마다 +1
+    expect(g.state.skillPoints).toBe(55 + 5);
     const again = normalize(JSON.parse(JSON.stringify(g.state)));
-    expect(again.statPoints).toBe(1);
+    expect(again.statPoints).toBe(statPointsEarned(50) + 5);
     expect(again.tLevel).toBe(5);
-    // 초월 몫까지 받은 포인트 합 (능력치 초기화·레벨 맞추기가 쓰는 값)
-    expect(statPointsEarned(50, 5)).toBe(statPointsEarned(50) + 1);
+    expect(statPointsEarned(50, 5)).toBe(statPointsEarned(50) + 5);
+  });
+
+  it("11/19 이미 초월한 사람은 모자란 능력치를 한 번 채운다 (예전 5레벨마다 1 → 레벨마다 1, 줄이지는 않는다)", () => {
+    const old = { ...newCharacter(), level: 50, tLevel: 10, statPoints: statPointsEarned(50) + 2 };
+    const n = normalize(JSON.parse(JSON.stringify(old)));
+    expect(n.statPoints).toBe(statPointsEarned(50) + 10);
+    expect(normalize(JSON.parse(JSON.stringify(n))).statPoints).toBe(n.statPoints);
+    // 이미 더 많이 가진 값(관리자 지급 등)은 그대로
+    const rich = normalize({ ...old, statPoints: 999 });
+    expect(rich.statPoints).toBe(999);
   });
 
   it("옛 저장값은 끝판 칸이 0으로 읽힌다 (깨진 값도)", () => {
@@ -75,7 +86,7 @@ describe("초월 레벨 곡선 (★51~★100)", () => {
     expect(isTranscendRun(50, "stars", "hell")).toBe(false);
   });
 
-  it("배율: 구조조정 발표 날·분기 마감 전날 밤을 다 잡은 판 평균이 100% 구간에서 약 1,275 초월 EXP", () => {
+  it("배율: 구조조정 발표 날·분기 마감 전날 밤을 다 잡은 판 평균이 100% 구간에서 약 320 초월 EXP (11/19 1/4로)", () => {
     const avg = (zone: "quarter-close" | "layoff-day") => {
       let sum = 0;
       for (let seed = 1; seed <= 60; seed++) {
@@ -89,10 +100,10 @@ describe("초월 레벨 곡선 (★51~★100)", () => {
       }
       return (sum / 60) * TRANSCEND_EXP_MUL;
     };
-    // 웨이브 몬스터만 잡아도 (졸개·조각 빼고) 1,100~1,450 안
+    // 웨이브 몬스터만 잡아도 (졸개·조각 빼고) 275~363 안 (예전 1,100~1,450의 1/4)
     const both = (avg("quarter-close") + avg("layoff-day")) / 2;
-    expect(both).toBeGreaterThan(1_100);
-    expect(both).toBeLessThan(1_450);
+    expect(both).toBeGreaterThan(275);
+    expect(both).toBeLessThan(363);
   });
 });
 
@@ -133,14 +144,17 @@ describe("하루 초월 판 구간 (새벽 5시 기준)", () => {
     const c = { ...newCharacter(), level: 50, tDay: "20261116", tRuns: 25, tBank: 0, tFl: 2, tChest: 4, fBest: 23, fBestMs: 600_000, fWk: "20261116", fWkBest: 12, fWkMs: 300_000 };
     const v = endgameView(c, "20261116", "20261116", 1_000, false);
     expect(v.day).toEqual({ runs: 25, full: 20, bank: 0, tier: "full", floors: 2 });
-    expect(v.tower).toEqual({ best: 23, week: { floor: 12, ms: 300_000 }, checkpoints: [1, 11, 21], chests: 4, chestsMax: 0 });
+    expect(v.tower).toEqual({ best: 23, week: { floor: 12, ms: 300_000 }, checkpoints: towerCheckpoints(23), chests: 4, chestsMax: 0 });
+    // 11/19 23층이면 1층만 (다음 엘리베이터는 51층), 50층을 깨면 51층이 열린다
+    expect(v.tower.checkpoints).toEqual([1]);
+    expect(endgameView({ ...c, fBest: TOWER_LOW_CHECKPOINTS[1] - 1 }, "20261116", "20261116", 1_000, false).tower.checkpoints).toEqual([1, TOWER_LOW_CHECKPOINTS[1]]);
     expect(v.pioneer.until).toBe(pioneerUntil(1_000));
     // 다음 날·다음 주: 하루 칸은 넘기고, 지난주 기록은 보이지 않는다. 슈퍼 계정은 101층까지
     const next = endgameView(c, "20261124", "20261123", null, true);
     expect(next.day).toEqual({ runs: 0, full: 60, bank: 40, tier: "full", floors: 0 });
     expect(next.tower.week).toBeNull();
     expect(next.tower.chests).toBe(0);
-    expect(next.tower.checkpoints.at(-1)).toBe(101);
+    expect(next.tower.checkpoints.at(-1)).toBe(TOWER_SUPER_START);
     expect(next.pioneer.until).toBeNull();
   });
 });

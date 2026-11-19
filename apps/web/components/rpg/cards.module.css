@@ -1092,3 +1092,46 @@
     animation-duration: 1ms;
   }
 }
+
+/* ── 11/19 공통·물공·마공 꼬리표 (카드 이름 옆 · 가진 카드 아이콘 왼쪽 위) ── */
+.dmgType {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 3px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  font-family: var(--font-small);
+  font-size: 9px;
+  line-height: 12px;
+  vertical-align: 2px;
+  letter-spacing: 0;
+  text-shadow: none;
+}
+.dmgType[data-type="all"] {
+  color: #d8d2c0;
+}
+.dmgType[data-type="phys"] {
+  color: #f0b878;
+}
+.dmgType[data-type="magic"] {
+  color: #c8a8ff;
+}
+.iconType {
+  position: absolute;
+  left: -2px;
+  top: -3px;
+  font-family: var(--font-small);
+  font-size: 8px;
+  line-height: 1;
+  text-shadow:
+    1px 0 0 #000,
+    -1px 0 0 #000,
+    0 1px 0 #000,
+    0 -1px 0 #000;
+}
+.iconType[data-type="phys"] {
+  color: #f0b878;
+}
+.iconType[data-type="magic"] {
+  color: #c8a8ff;
+}

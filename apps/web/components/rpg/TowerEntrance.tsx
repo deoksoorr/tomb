@@ -5,7 +5,8 @@ import {
   climbTime,
   CURSES,
   cursesAt,
-  TOWER_CHECKPOINT_EVERY,
+  nextCheckpoint,
+  TOWER_CHEST_FROM,
   TOWER_CHEST_GEAR_CHANCE,
   towerFloorSec,
   towerHpMul,
@@ -16,7 +17,7 @@ import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { useMe } from "@/lib/hooks/useMe";
 import { equippedPerk } from "@/lib/titles";
 import type { RpgView } from "@/lib/rpg/types";
-import { CHEST_COSMETIC_CHANCE, SG_PITY } from "@/lib/rpg/setGearRoll";
+import { CHEST_COSMETIC_CHANCE, PROT_FROM_FLOOR, SG_GRADE_FLOORS } from "@/lib/rpg/setGearRoll";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import { PioneerLine } from "./Endgame";
@@ -59,9 +60,9 @@ export default function TowerEntrance({
     () => lit.filter((f) => f <= t.best + 1).at(-1) ?? 1,
   );
   const start = lit.includes(pick) ? pick : top;
-  const last = Math.max(PANEL_TOP, top + DARK_AHEAD * TOWER_CHECKPOINT_EVERY);
+  // 11/19 엘리베이터 층이 고르지 않다 (1·51·101 뒤로 20층마다) — 켜진 층 다음으로 꺼진 층을 DARK_AHEAD개
   const buttons = [...lit];
-  for (let f = top + TOWER_CHECKPOINT_EVERY; f <= last; f += TOWER_CHECKPOINT_EVERY) buttons.push(f);
+  for (let f = nextCheckpoint(top), i = 0; i < DARK_AHEAD || f <= PANEL_TOP; f = nextCheckpoint(f), i++) buttons.push(f);
   const on = new Set(cursesAt(start));
   const curses = CURSES.filter((c) => on.has(c.id));
   const canStart = !busy && view.today.runsPerHour > 0;
@@ -151,23 +152,22 @@ export default function TowerEntrance({
         {/* 11/15 오르기 전에 무엇이 떨어지는지 */}
         <section className={s.towerDrops} aria-labelledby="tower-drops">
           <h4 id="tower-drops">우두머리 상자에서 나오는 것</h4>
-          <p>5층마다 우두머리가 있어요. 우두머리 층을 다 깨면 상자가 열려요. 상자는 하루에 몇 개든 열 수 있어요.</p>
+          <p>5층마다 우두머리가 있어요. {TOWER_CHEST_FROM}층부터는 우두머리 층을 다 깨면 상자가 열려요. 상자는 하루에 몇 개든 열 수 있어요.</p>
           <ul>
             <li>
               <b>물약 1~2개</b> 커피, 에너지드링크, 야근 도시락 중에서 늘 들어 있어요.
             </li>
             <li>
-              <b>세트 장비</b> {Math.round(TOWER_CHEST_GEAR_CHANCE * 100)}% 확률이에요. {SG_PITY}번 내리 못 받으면 다음 상자엔 꼭 들어 있어요.
-              높이 오를수록 직급이 올라요. 15층부터 대리급, 30층부터 과장급, 50층부터 임원급이에요.
-              {(view.character.sgPity ?? 0) > 0 && <span className={s.meta}> 지금 {view.character.sgPity}번째 못 받았어요.</span>}
+              <b>세트 장비</b> {Math.round(TOWER_CHEST_GEAR_CHANCE * 100)}% 확률이에요. 아주 드물게 나와요.
+              높이 오를수록 직급이 올라요. {SG_GRADE_FLOORS[0]}층부터 대리급, {SG_GRADE_FLOORS[1]}층부터 과장급, {SG_GRADE_FLOORS[2]}층부터 임원급이에요.
             </li>
             <li>
-              <b>강화 재료</b> 결재 서류가 2장 들어 있고, 10층 오를 때마다 1장씩 늘어요. 25층부터는 인감 도장도 나와요.
-              이번 주 기록이 10층, 20층처럼 새 10층을 넘으면 보호 문서를 받아요. 한 주에 2장까지예요.
+              <b>강화 재료</b> 결재 서류가 들어 있고, 10층 오를 때마다 1장씩 늘어요. {SG_GRADE_FLOORS[0]}층부터는 인감 도장도 나와요.
+              이번 주 기록이 {PROT_FROM_FLOOR}층부터 새 10층을 넘으면 보호 문서를 받아요. 한 주에 2장까지예요.
             </li>
             <li>
-              <b>꾸미기 이용권</b> {Math.round(CHEST_COSMETIC_CHANCE * 100)}% 확률이에요. 기간은 1일, 3일, 7일, 30일 중 하나예요. 15층부터는 희귀,
-              30층부터는 전설도 나와요.
+              <b>꾸미기 이용권</b> {Math.round(CHEST_COSMETIC_CHANCE * 100)}% 확률이에요. 기간은 1일, 3일, 7일, 30일 중 하나예요. {SG_GRADE_FLOORS[0]}층부터는 희귀,
+              {SG_GRADE_FLOORS[1]}층부터는 전설도 나와요.
             </li>
           </ul>
           <p className={s.meta}>

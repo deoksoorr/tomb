@@ -1,6 +1,6 @@
 import { CARDS, RARITY_COLOR, type CardId } from "./cards";
 import { POTIONS, type IconArt } from "./catalog";
-import { SG_GRADE_COLORS, SG_LEGENDS, SG_SET_INFO } from "./setGear";
+import { SG_EGG, SG_GRADE_COLORS, SG_LEGENDS, SG_SET_INFO, type SgSet } from "./setGear";
 
 // 11/17 「발동」 표시: 언제 터졌는지가 중요한 카드·세트 장비 효과가 터지는 순간, 그 그림이 화면 오른쪽에 미끄러져 들어와 2초 떠 있다
 // (components/rpg/ProcToasts). 게임은 game/rpg/procToast의 showProc 하나로만 부른다 — 여기는 무엇을 적을지 정하는 순수 함수.
@@ -34,10 +34,15 @@ export type ProcInfo = {
   art: ProcArt;
   /** 부활처럼 크게 (화면 가운데) */
   big?: boolean;
+  /** 11/19 「발동!」 대신 쓸 말 (숨겨진 세트 효과는 「발견!」) · 떠 있는 시간 (없으면 PROC_SHOW_MS) */
+  tag?: string;
+  ms?: number;
 };
 export type ProcView = ProcInfo & { seq: number };
 
 export const PROC_SHOW_MS = 2000;
+/** 11/19 숨겨진 세트 효과 발견은 한 번뿐이라 조금 더 오래 */
+export const EGG_SHOW_MS = 3500;
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 
@@ -69,6 +74,20 @@ export function sgProc(kind: SgProcKind, icon: IconArt, grade = 3): ProcInfo {
     case "bossLow":
       return { key: "sg:bossLow", name: SG_LEGENDS[1].name, line: "우두머리에게 주는 피해 +25%", color, art };
   }
+}
+
+/** 11/19 숨겨진 5세트 효과를 처음 발견한 순간 (한 번만 — 그 뒤로는 장비 창에 이름·설명이 보인다) */
+export function eggProc(set: SgSet, icon: IconArt): ProcInfo {
+  return {
+    key: `sg:egg:${set}`,
+    name: "숨겨진 세트 효과",
+    tag: "발견!",
+    line: `${SG_EGG[set].name} · ${SG_EGG[set].line}`,
+    left: `${SG_SET_INFO[set].name} 다섯 부위`,
+    color: hexOf(SG_SET_INFO[set].color),
+    art: { icon },
+    ms: EGG_SHOW_MS,
+  };
 }
 
 /** 부활 쿠키 (카드가 아니지만 같은 표시로 — 다시 일어나는 순간) */

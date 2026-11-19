@@ -42,6 +42,8 @@ export const PALETTES: Record<BranchId, Pal> = {
   ember: { main: BRANCH_INFO.ember.color, light: BRANCH_INFO.ember.light, dark: BRANCH_INFO.ember.dark, parts: [0xffe8a0, 0xffb040, 0xff6a1e, 0xe8401a], tex: SKT.ember, blend: true },
   frost: { main: BRANCH_INFO.frost.color, light: BRANCH_INFO.frost.light, dark: BRANCH_INFO.frost.dark, parts: [0xffffff, 0xd8f4ff, 0x9fdcff, 0x6ab8f0], tex: SKT.shard, blend: false },
   soul: { main: BRANCH_INFO.soul.color, light: BRANCH_INFO.soul.light, dark: BRANCH_INFO.soul.dark, parts: [0xd8c0ff, 0xb98aff, 0x9ff0dc, 0xf2ecff], tex: SKT.wisp, blend: true },
+  // 11/19 삽자루 일꾼: 흙먼지·쇳빛 (더하기 섞기 없이 묵직하게)
+  worker: { main: BRANCH_INFO.worker.color, light: BRANCH_INFO.worker.light, dark: BRANCH_INFO.worker.dark, parts: [0xf2e2c0, 0xc89a62, 0x8a6440, 0xd8d8d0], tex: SKT.shard, blend: false },
 };
 
 export const pick = <T,>(a: readonly T[]) => a[Math.floor(Math.random() * a.length)];

@@ -11,6 +11,8 @@ export const AUTO_RULE: Partial<Record<SkillId, AutoRule>> = {
   // 한 명·부채꼴: 사거리 안에 적
   em_kindle: "target",
   em_fan: "target",
+  // 11/19 일꾼: 찌르고 퍼 올리기는 앞에 적이 있을 때 (돌진·도약은 몸 옮기기, 회오리는 켜고 끄기라 직접)
+  wk_combo: "target",
   fr_breath: "target",
   fr_icicle: "target",
   so_wisp: "target",
@@ -23,6 +25,7 @@ export const AUTO_RULE: Partial<Record<SkillId, AutoRule>> = {
   // 강화
   em_stoke: "buff",
   so_swift: "buff",
+  wk_tireless: "buff",
   // 지키기·회복
   fr_ward: "shield",
   so_lamp: "heal",

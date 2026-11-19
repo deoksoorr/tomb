@@ -4,31 +4,48 @@
 //  - 선행 스킬은 필요한 랭크 이상
 //  - 쓴 포인트 합 ≤ 예산 (보통은 레벨로 받은 포인트 합, 테스트 서버 슈퍼 계정은 모든 스킬 최대치)
 // 저장 형식 2(SKILL_TREE_VERSION): 옛 스킬(1)은 모두 지우고 레벨만큼의 포인트를 돌려준다 (character.normalize).
+// 11/19 저장 형식 3: 넷째 갈래(삽자루 일꾼)·랭크 비용 1·1·2·2·3 — 형식이 바뀌면 같은 방식으로 한 번 무료로 돌려준다.
+//  11/19 v4: 랭크 비용은 다시 1포인트, 대신 최대 랭크가 5 → 10 · 4 → 8 · 3 → 5 (같은 포인트로 갈래 하나의 60% 안팎).
 import { MAX_LEVEL, skillPointsAt, START_SKILL_POINTS } from "./formulas";
 import { BRANCHES, skillById, SKILLS, TIER_GATES, TIERS, type BranchId, type SkillId } from "./skillTree";
 
-export const SKILL_TREE_VERSION = 2;
+export const SKILL_TREE_VERSION = 3;
+
+/** 11/19 v4: 랭크마다 1포인트 (대신 최대 랭크를 올렸다 — skillTree RANK_SCALE) */
+export const rankCost = (_r: number): number => 1;
+/** 0랭크에서 lv랭크까지 드는 포인트 */
+export const costTo = (lv: number): number => Math.max(0, Math.floor(lv));
 
 export type Alloc = Partial<Record<SkillId, number>>;
 
 /** 그 레벨까지 받은 스킬 포인트 합 (시작 1 + 레벨업마다 1, 10의 배수 레벨엔 2) */
-export function skillPointsEarned(level: number): number {
+export function skillPointsEarned(level: number, tLevel = 0): number {
   let n = START_SKILL_POINTS;
   for (let lv = 2; lv <= Math.min(MAX_LEVEL, Math.floor(level)); lv++) n += skillPointsAt(lv);
-  return n;
+  // 11/19 초월 레벨마다 스킬 포인트 +1 (초월 수련 포인트와 따로) — ★100이면 55 + 50
+  return n + Math.max(0, Math.floor(tLevel));
 }
 
 /** 모든 스킬을 최대 랭크까지 찍는 데 드는 포인트 (테스트 서버 슈퍼 계정 예산) */
-export const ALL_SKILLS_POINTS = SKILLS.reduce((a, s) => a + s.maxLevel, 0);
+export const ALL_SKILLS_POINTS = SKILLS.reduce((a, s) => a + costTo(s.maxLevel), 0);
 
-export const spentPoints = (a: Alloc) => Object.values(a).reduce<number>((x, n) => x + (n ?? 0), 0);
+/** 쓴 포인트 (랭크 비용 합) */
+export const spentPoints = (a: Alloc) => Object.values(a).reduce<number>((x, n) => x + costTo(n ?? 0), 0);
 
 /** 그 갈래에 쓴 포인트 (belowTier가 있으면 그 단보다 아래 단만) */
 export function spentIn(a: Alloc, branch: BranchId, belowTier = TIERS + 1): number {
   let n = 0;
-  for (const s of SKILLS) if (s.branch === branch && s.tier < belowTier) n += a[s.id] ?? 0;
+  for (const s of SKILLS) if (s.branch === branch && s.tier < belowTier) n += costTo(a[s.id] ?? 0);
   return n;
 }
+
+/**
+ * 11/19 v3 넋 버프(바람 넋·등불 기도)의 세기: 넋 갈래에 쓴 포인트 / SOUL_FULL (최소 SOUL_MIN).
+ * 낮은 단 버프만 빌려 쓰는 섞어 찍기는 약하고, 넋에 몰빵해야 제 세기가 나온다
+ */
+export const SOUL_FULL = 30;
+export const SOUL_MIN = 0.25;
+export const soulFocus = (a: Alloc) => Math.max(SOUL_MIN, Math.min(1, spentIn(a, "soul") / SOUL_FULL));
 
 export const tierGate = (tier: number) => TIER_GATES[Math.max(0, Math.min(TIERS, tier) - 1)];
 export const tierOpen = (a: Alloc, branch: BranchId, tier: number) => spentIn(a, branch, tier) >= tierGate(tier);
@@ -46,7 +63,7 @@ export function checkLearn(a: Alloc, id: string, budget: number): RuleError | nu
     return err(409, "TIER_LOCKED", `${def.tier}단은 이 갈래에 ${tierGate(def.tier)}포인트를 쓰면 열려요.`);
   for (const r of def.requires ?? [])
     if ((a[r.id] ?? 0) < r.level) return err(409, "SKILL_REQUIRED", `${skillById(r.id)!.name} ${r.level}랭크가 먼저 필요해요.`);
-  if (spentPoints(a) + 1 > budget) return err(409, "NO_SKILL_POINTS", "스킬 포인트가 모자라요.");
+  if (spentPoints(a) + rankCost(cur + 1) > budget) return err(409, "NO_SKILL_POINTS", "스킬 포인트가 모자라요.");
   return null;
 }
 

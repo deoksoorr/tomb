@@ -1,7 +1,7 @@
 // 스킬 트리 창·안내서가 보여 주는 스킬 설명 (한 줄 요약·유형 태그·랭크별 수치 표·시너지·선행 조건·분위기 문장).
 // 수치는 모두 skillTree.ts의 SKILL_FX·sp·cooldownMs에서 읽는다 → 밸런스가 바뀌면 설명도 같이 바뀐다.
 // 시너지는 실제 규칙(패시브 보정·약화·둔화·끌어오기·공격력 버프)에 있는 것만 적는다. 판정은 게임·서버가 한다.
-import { BRANCH_INFO, SKILL_FX, skillById, SKILLS, TIERS, type SkillDef, type SkillId } from "./skillTree";
+import { BRANCH_INFO, SKILL_FX, skillById, SKILLS, SYNERGY, SYNERGY_GUARD, synergyGuardOf, synergyGuardPerRank, synergyMul, synergyTargets, TIERS, type SkillDef, type SkillId } from "./skillTree";
 import { spentIn, tierGate, type Alloc } from "./skillRules";
 
 /** 스킬 유형 태그 (아이콘 + 글자) */
@@ -86,7 +86,7 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     synergy: [{ with: ["so_chain"], text: "사슬로 한데 모인 적들이 작은 폭발에 같이 휘말려요" }],
   },
   em_hearth: {
-    summary: "배워 두면 공격력이 늘 올라요.",
+    summary: "배워 두면 마공 스킬(모닥불·서리·넋)의 공격력이 늘 올라요. 기본 공격과 일꾼 스킬에는 붙지 않아요.",
     flavor: "화롯가에 손을 녹이면, 무거운 삽도 가볍다.",
     types: ["buff"],
     synergy: [{ with: ["so_friend", "so_lantern"], text: "길동무 넋과 초롱도 내 공격력을 따라 같이 세져요" }],
@@ -98,7 +98,7 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     synergy: [{ with: ["em_ashheart"], text: "광역 스킬이라 피해가 더 올라요" }],
   },
   em_stoke: {
-    summary: "잠깐 동안 공격력을 크게 올려요. 큰 스킬을 쓰기 전에 켜 두세요.",
+    summary: "잠깐 동안 마공 스킬의 공격력을 크게 올려요. 큰 스킬을 쓰기 전에 켜 두세요.",
     flavor: "장작 하나 더. 밤은 아직 길다.",
     types: ["buff"],
     synergy: [
@@ -107,7 +107,7 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     ],
   },
   em_spark: {
-    summary: "배워 두면 치명타 확률이 늘 올라요. 기본 공격과 스킬 모두에 붙어요.",
+    summary: "배워 두면 마공 스킬의 치명타 확률이 늘 올라요. 기본 공격과 일꾼 스킬에는 붙지 않아요.",
     flavor: "탁, 탁. 불티는 늘 엉뚱한 데로 튄다.",
     types: ["buff"],
     synergy: [{ with: ["fr_icicle", "so_wisp"], text: "여러 번 때리는 스킬일수록 치명타가 자주 터져요" }],
@@ -324,6 +324,76 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     types: ["summon"],
     synergy: [{ with: ["so_friend", "so_lantern"], text: "부르는 스킬의 피해와 머무는 시간이 늘어요" }],
   },
+  // ── 삽자루 일꾼 (11/19 물공: 지능을 받지 않고, 기본 공격처럼 명중 판정을 받아요) ──
+  wk_charge: {
+    summary: "바라보는 쪽으로 돌진해 길 위의 적을 치고 밀쳐요. 무적이 아니라서 들어간 자리가 위험할 수 있어요.",
+    flavor: "삽자루를 앞세우면 길이 난다.",
+    types: ["melee", "move"],
+    synergy: [{ with: ["wk_combo"], text: "돌진으로 붙자마자 찌르고 퍼 올리면 딱 맞아요" }],
+  },
+  wk_callus: {
+    summary: "배워 두면 기본 공격 피해가 오르고, 근접 기본 공격이 옆과 뒤로도 같이 나가요.",
+    flavor: "앞만 보고 파는 일꾼은 없다.",
+    types: ["basic", "buff"],
+    synergy: [{ with: ["wk_whirl"], text: "회오리는 기본 공격으로 베어서 같이 세져요" }],
+  },
+  wk_combo: {
+    summary: "앞을 두 번 찌르고 크게 퍼 올려요. 마지막 한 번에 적이 기절해요.",
+    flavor: "푹, 푹, 그리고 한 삽 가득.",
+    types: ["melee", "control"],
+    synergy: [{ with: ["fr_brittle"], text: "기절한 적은 살얼음 추가 피해를 받아요" }],
+  },
+  wk_grip: {
+    summary: "배워 두면 공격 속도가 늘 빨라져요.",
+    flavor: "손에 익은 삽은 저절로 움직인다.",
+    types: ["basic", "buff"],
+    synergy: [{ with: ["wk_whirl"], text: "공격 속도가 빠를수록 회오리가 더 자주 베어요" }],
+  },
+  wk_back: {
+    summary: "배워 두면 받는 피해가 줄고, 근접 공격과 투사체를 가끔 삽으로 막거나 쳐내요. 광역·바닥 장판은 못 막아요.",
+    flavor: "허리가 버텨야 밤새 판다.",
+    types: ["defense"],
+    synergy: [{ with: ["wk_leap"], text: "착지한 뒤 못 움직이는 동안 덜 아파요" }],
+  },
+  wk_leap: {
+    summary: "적이 가장 몰린 곳으로 뛰어올라 내려찍어요. 둘레 적이 기절하지만, 착지한 뒤 잠깐 못 움직여요.",
+    flavor: "봉분 하나쯤은 단숨에 넘는다.",
+    types: ["melee", "move", "control"],
+    synergy: [
+      { with: ["wk_whirl"], text: "뛰어든 자리에서 바로 회오리를 켜면 무리를 쓸어요" },
+      { with: ["em_ring", "em_fan"], text: "뛰어든 자리에서 불을 지르면 무리가 한꺼번에 타요" },
+    ],
+  },
+  wk_tireless: {
+    summary: "잠깐 동안 공격 속도가 빨라지고 기본 공격이 더 멀리 닿아요.",
+    flavor: "쉬면 굳는다. 그러니 계속 판다.",
+    types: ["basic", "buff"],
+    synergy: [{ with: ["wk_whirl"], text: "켜 두면 회오리가 더 자주 베어요" }],
+  },
+  wk_whirl: {
+    summary: "한 번 누르면 빙글빙글 돌며 둘레를 계속 베어요. 다시 누르거나 SP가 바닥나면 멈춰요.",
+    flavor: "삽날이 바람을 가르는 소리.",
+    types: ["melee", "basic"],
+    synergy: [{ with: ["wk_grip", "wk_tireless"], text: "공격 속도가 빠를수록 더 자주 베어요" }],
+  },
+  wk_deep: {
+    summary: "배워 두면 기본 공격과 일꾼 스킬의 치명타 피해가 늘 올라요.",
+    flavor: "얕게 백 번보다 깊게 한 번.",
+    types: ["basic", "buff"],
+    synergy: [{ with: ["wk_grit"], text: "10번째 반드시 치명타가 더 아프게 들어가요" }],
+  },
+  wk_allnight: {
+    summary: "적 사이를 여섯 번 연달아 돌진해요. 돌진하는 순간만 무적이라 사이사이에는 맞을 수 있어요.",
+    flavor: "새벽이 올 때까지, 한 삽도 쉬지 않는다.",
+    types: ["melee", "move"],
+    synergy: [{ with: ["wk_deep"], text: "돌진 한 번 한 번이 치명타 피해를 받아요" }],
+  },
+  wk_grit: {
+    summary: "배워 두면 기본 공격 10번째마다 반드시 치명타가 나고, 기본 공격 피해가 올라요.",
+    flavor: "열 번째 삽질은 늘 제일 깊다.",
+    types: ["basic", "buff"],
+    synergy: [{ with: ["wk_deep"], text: "반드시 치명타가 치명타 피해를 그대로 받아요" }],
+  },
 };
 
 /** 유형 태그 전체 (액티브/패시브/궁극기 + 형태) */
@@ -350,7 +420,7 @@ function effectRows(id: SkillId, lv: number): [string, string][] {
       return [["폭발 피해", dmg(f.mult)], ["폭발 반지름", `${f.blast}`], ["사거리", `${f.reach}`]];
     }
     case "em_hearth":
-      return [["공격력", `+${pct(SKILL_FX.em_hearth(lv).atkPct)}`]];
+      return [["마공 공격력", `+${pct(SKILL_FX.em_hearth(lv).atkPct)}`]];
     case "em_fan": {
       const f = SKILL_FX.em_fan(lv);
       return [["피해", dmg(f.mult)], ["범위", `부채꼴 ${f.arcDeg}° · 거리 ${f.range}`]];
@@ -477,6 +547,47 @@ function effectRows(id: SkillId, lv: number): [string, string][] {
       const f = SKILL_FX.so_kinship(lv);
       return [["소환 피해", `+${pct(f.summonPct)}`], ["머무는 시간", `+${pct(f.durPct)}`]];
     }
+    // ── 삽자루 일꾼 (물공) ──
+    case "wk_charge": {
+      const f = SKILL_FX.wk_charge(lv);
+      return [["피해", dmg(f.mult)], ["돌진 거리", `${f.dist}`], ["무적", sec(f.invulnMs)]];
+    }
+    case "wk_callus": {
+      const f = SKILL_FX.wk_callus(lv);
+      return [["기본 공격 피해", `+${pct(f.basicPct)}`], ["옆으로", pct(f.side)], ["뒤로", pct(f.back)]];
+    }
+    case "wk_combo": {
+      const f = SKILL_FX.wk_combo(lv);
+      return [["피해 (세 번 합)", dmg(f.mult)], ["기절", sec(f.stunMs)], ["거리", `${f.range}`]];
+    }
+    case "wk_grip":
+      return [["공격 속도", `+${pct(SKILL_FX.wk_grip(lv).aspd)}`]];
+    case "wk_back": {
+      const f = SKILL_FX.wk_back(lv);
+      return [["받는 피해", `−${pct(f.guard)}`], ["자동 막기 확률", pct(f.parry)], ["막으면 피해", `−${pct(f.parryCut)}`]];
+    }
+    case "wk_leap": {
+      const f = SKILL_FX.wk_leap(lv);
+      return [["착지 피해", dmg(f.mult)], ["착지 반지름", `${f.radius}`], ["기절", sec(f.stunMs)], ["착지 뒤 못 움직임", sec(f.landMs)]];
+    }
+    case "wk_tireless": {
+      const f = SKILL_FX.wk_tireless(lv);
+      return [["공격 속도", `+${pct(f.aspd)}`], ["닿는 거리", `+${pct(f.rangeMul - 1)}`], ["지속", sec(f.durMs)]];
+    }
+    case "wk_whirl": {
+      const f = SKILL_FX.wk_whirl(lv);
+      return [["한 번 피해", dmg(f.mult)], ["반지름", `${f.radius}`], ["초당 SP", `${f.spPerSec}`], ["걷는 빠르기", pct(f.moveMul)]];
+    }
+    case "wk_deep":
+      return [["치명타 피해", `+${pct(SKILL_FX.wk_deep(lv).critDmg)}`]];
+    case "wk_allnight": {
+      const f = SKILL_FX.wk_allnight(lv);
+      return [["돌진 한 번 피해", dmg(f.mult)], ["돌진 수", `${f.dashes}번`]];
+    }
+    case "wk_grit": {
+      const f = SKILL_FX.wk_grit(lv);
+      return [["반드시 치명타", `기본 공격 ${f.every}번째마다`], ["기본 공격 피해", `+${pct(f.basicPct)}`]];
+    }
   }
 }
 
@@ -525,3 +636,43 @@ export function requirements(def: SkillDef, a: Alloc): Requirement[] {
 
 /** 이 스킬을 선행으로 삼는 다음 스킬들 */
 export const unlocks = (id: SkillId) => SKILLS.filter((s) => s.requires?.some((r) => r.id === id)).map((s) => ({ def: s, level: s.requires!.find((r) => r.id === id)!.level }));
+
+// ── 11/19 연계 보너스 (대표 빌드 — skillTree SYNERGY) ──
+
+export type LinkLine = {
+  /** core: 이 스킬이 핵심 (받침 랭크마다 오른다) · support: 이 스킬이 다른 핵심을 받친다 */
+  kind: "core" | "support";
+  /** 「연계: 불씨 튕기기 랭크마다 +3% · 불의 고리 랭크마다 +3%」 */
+  text: string;
+  /** 지금 배분으로 오른 만큼 (%) — 받침이면 그 핵심이 받는 몫 */
+  now: number;
+  /** 11/19 지금 배분의 연계 생존 (받는 피해 −%) */
+  guard: number;
+  /** 관련 스킬 (아이콘) */
+  ids: SkillId[];
+};
+
+const pctN = (k: number) => Math.round(k * 100);
+
+/** 스킬 창·안내서의 연계 줄. 핵심이면 받침 랭크마다 얼마나 오르는지, 받침이면 어느 핵심을 얼마나 올리는지 (지금 배분 a 기준) */
+export function linkLines(id: SkillId, a: Alloc): LinkLine[] {
+  const out: LinkLine[] = [];
+  const links = SYNERGY[id];
+  if (links)
+    out.push({
+      kind: "core",
+      text: `연계: ${links.map((l) => `${skillById(l.id)!.name} 랭크마다 +${pctN(l.pct)}%`).join(" · ")} · 몰아 찍으면 야근 빌딩에서 받는 피해 최대 −${pctN((SYNERGY_GUARD[id] ?? 0))}%`,
+      now: pctN(synergyMul(id, a) - 1),
+      guard: pctN(synergyGuardOf(id, a)),
+      ids: links.map((l) => l.id),
+    });
+  for (const t of synergyTargets(id))
+    out.push({
+      kind: "support",
+      text: `연계: 이 스킬 랭크마다 ${skillById(t.core)!.name} 피해 +${pctN(t.pct)}% · 야근 빌딩에서 받는 피해 −${Math.round(synergyGuardPerRank(t.core, id) * 1000) / 10}%(핵심 랭크만큼)`,
+      now: pctN(t.pct * (a[id] ?? 0)),
+      guard: pctN(synergyGuardOf(t.core, a)),
+      ids: [t.core],
+    });
+  return out;
+}

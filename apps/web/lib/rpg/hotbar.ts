@@ -22,12 +22,15 @@ export const isUltimate = (id: string | null | undefined): boolean => {
 };
 
 /** 몸 옮기기 스킬 (어디로 갈지는 사람이 정한다) */
-export const MOVE_SKILLS: readonly SkillId[] = ["fr_mist", "so_veil"];
+export const MOVE_SKILLS: readonly SkillId[] = ["fr_mist", "so_veil", "wk_charge", "wk_leap"];
+/** 11/19 켜고 끄는 스킬 (삽날 회오리): 자동으로 두지 않는다 */
+export const TOGGLE_SKILLS: readonly SkillId[] = ["wk_whirl"];
 
 /** 자동으로 둘 수 없는 이유 (없으면 null) */
 export function autoBlock(id: SkillId): string | null {
   if (isUltimate(id)) return "궁극기는 직접 써요";
   if (MOVE_SKILLS.includes(id)) return "몸 옮기기 스킬은 직접 써요";
+  if (TOGGLE_SKILLS.includes(id)) return "켜고 끄는 스킬은 직접 써요";
   if (skillById(id)?.kind !== "active") return "액티브 스킬만 자동으로 둘 수 있어요";
   return null;
 }

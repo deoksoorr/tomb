@@ -4,7 +4,7 @@
 import { useEffect, useEffectEvent, useState } from "react";
 import { bridge } from "@/game/bridge";
 import { cardWindowUrl } from "@/game/rpg/cards/cardArt";
-import { BOSS_DEAL_HP_COST, CARDS, cardPromoLine, cardStackLine, cardText, RARITY_NAME, type CardChoice, type CardOfferView } from "@/lib/rpg/cards";
+import { BOSS_DEAL_HP_COST, CARD_TYPE_NAME, CARDS, cardPromoLine, cardStackLine, cardText, RARITY_NAME, type CardChoice, type CardOfferView } from "@/lib/rpg/cards";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
@@ -104,7 +104,7 @@ function PickView({ view }: { view: CardOfferView }) {
                 style={{ "--i": i } as React.CSSProperties}
                 disabled={deal || chosen !== null}
                 onClick={() => !deal && pick(i)}
-                aria-label={`${def.name}, ${RARITY_NAME[def.rarity]}${have > 0 && Number.isFinite(def.max) ? `, 지금 ${have}단계에서 ${have + 1}단계로` : ""}. ${cardText(id, view.style)}`}
+                aria-label={`${def.name}, ${RARITY_NAME[def.rarity]}, ${CARD_TYPE_NAME[def.type]}${have > 0 && Number.isFinite(def.max) ? `, 지금 ${have}단계에서 ${have + 1}단계로` : ""}. ${cardText(id, view.style)}`}
               >
                 {(def.rarity === "legend" || def.rarity === "unique") && <span className={c.burst} aria-hidden="true" />}
                 <span className={c.back} aria-hidden="true" />
@@ -112,7 +112,13 @@ function PickView({ view }: { view: CardOfferView }) {
                   {!deal && <span className={c.key}>{i + 1}</span>}
                   <img className={c.art} src={cardWindowUrl(id, 3)} alt="" />
                   <span className={c.tag}>{RARITY_NAME[def.rarity]}</span>
-                  <span className={c.name}>{def.name}</span>
+                  <span className={c.name}>
+                    {def.name}
+                    {/* 11/19 공통·물공·마공 (내 빌드에 맞는지) */}
+                    <span className={c.dmgType} data-type={def.type}>
+                      {CARD_TYPE_NAME[def.type]}
+                    </span>
+                  </span>
                   {/* 11/15 이미 가진 카드면 지금 몇 단계인지 크게 (겹칠 수 있는 카드만) */}
                   {have > 0 && Number.isFinite(def.max) && (
                     <span className={c.level}>

@@ -66,13 +66,33 @@ export const CARD_IDS = [
   "promote",
   "corpcard",
   "leave",
+  // 11/19 갈래 카드 (방향·복제 카드 다섯 장 자리 — 제안에는 이쪽만 나온다)
+  "brEmber",
+  "brFrost",
+  "brSoul",
+  "brWorker",
+  "handover",
+  // 11/19 마공 전용 카드 (일반·매직·레어·유니크 한 장씩 — 등급 비율 11·11·10·7·5)
+  "chant",
+  "brief",
+  "refill",
+  "refund",
 ] as const;
 export type CardId = (typeof CARD_IDS)[number];
+
+/**
+ * 11/19 카드가 누구에게 좋은가: 공통(모두) · 물공(기본 공격·일꾼 스킬 — 공격 속도·치명타·무기 공격 모양) · 마공(모닥불·서리·넋 스킬).
+ * 카드 그림·이름 옆 작은 꼬리표로 보여 준다 (고를 때 내 빌드에 맞는지 바로 보이게)
+ */
+export type CardType = "all" | "phys" | "magic";
+export const CARD_TYPE_NAME: Record<CardType, string> = { all: "공통", phys: "물공", magic: "마공" };
 
 export type CardDef = {
   id: CardId;
   name: string;
   rarity: CardRarity;
+  /** 11/19 공통·물공·마공 */
+  type: CardType;
   /** 겹쳐 가질 수 있는 수 (Infinity = 제한 없음) */
   max: number;
   /** 카드에 적는 말 (무기와 상관없이 같을 때) */
@@ -83,10 +103,14 @@ export type CardDef = {
   art: { main: number; accent: number };
 };
 
+/** 11/19 물공·마공 카드 (나머지는 공통) */
+const PHYS_CARDS: readonly string[] = ["quick", "sharp", "memo", "circular", "side", "backbite", "resubmit", "toss", "cc", "parallel", "direct", "brWorker", "handover"];
+const MAGIC_CARDS: readonly string[] = ["mix", "brEmber", "brFrost", "brSoul", "chant", "brief", "refill", "refund"];
 const c = (id: CardId, name: string, rarity: CardRarity, max: number, desc: string, main: number, accent: number, by?: CardDef["by"]): CardDef => ({
   id,
   name,
   rarity,
+  type: PHYS_CARDS.includes(id) ? "phys" : MAGIC_CARDS.includes(id) ? "magic" : "all",
   max,
   desc,
   ...(by ? { by } : {}),
@@ -95,16 +119,16 @@ const c = (id: CardId, name: string, rarity: CardRarity, max: number, desc: stri
 
 export const CARDS: Record<CardId, CardDef> = {
   // ── 일반 ──
-  raise: c("raise", "연봉 협상", "common", 5, "공격력이 15% 올라요.", 0xffc84a, 0x5a3a1a),
-  quick: c("quick", "손이 빨라짐", "common", 5, "공격 속도가 12% 빨라져요.", 0x6ae0d0, 0x1e3a3a),
-  health: c("health", "체력 관리", "common", 5, "최대 체력이 15% 늘어요.", 0xe86a8a, 0xffe0e8),
+  raise: c("raise", "연봉 협상", "common", 5, "공격력이 10% 올라요. 기본 공격과 모든 스킬(물공·마공)이 같이 세져요.", 0xffc84a, 0x5a3a1a),
+  quick: c("quick", "손이 빨라짐", "common", 5, "공격 속도가 8% 빨라져요.", 0x6ae0d0, 0x1e3a3a),
+  health: c("health", "체력 관리", "common", 5, "최대 체력이 10% 늘어요.", 0xe86a8a, 0xffe0e8),
   commute: c("commute", "빠른 퇴근길", "common", 3, "이동 속도가 10% 빨라져요.", 0x7ac8f0, 0x2a3a5a),
   coffee: c("coffee", "커피 수혈", "common", Infinity, "지금 바로 내 체력이 40% 차요.", 0x8a5a3a, 0xf2ead3),
   offwork: c("offwork", "칼퇴 의지", "common", 2, "내가 적을 잡을 때마다 내 체력이 1% 차요.", 0x5ad08a, 0xf2ead3),
-  sharp: c("sharp", "예리한 지적", "common", 4, "치명타 확률이 8%, 치명타 피해가 20% 올라요.", 0xe84a6a, 0xf2ead3),
+  sharp: c("sharp", "예리한 지적", "common", 4, "치명타 확률이 6%, 치명타 피해가 15% 올라요.", 0xe84a6a, 0xf2ead3),
   mix: c("mix", "믹스커피", "common", 3, "SP가 1초에 2씩 더 차요.", 0xe8b84a, 0xc83a3a),
-  memo: c("memo", "메모 습관", "common", 3, "치명타 피해가 25% 올라요.", 0xf0e08a, 0x3a6ac8),
-  walk: c("walk", "점심 산책", "common", 3, "최대 체력이 8%, 이동 속도가 5% 올라요.", 0x7ad07a, 0x8a6a40),
+  memo: c("memo", "메모 습관", "common", 3, "치명타 피해가 18% 올라요.", 0xf0e08a, 0x3a6ac8),
+  walk: c("walk", "점심 산책", "common", 3, "최대 체력이 6%, 이동 속도가 4% 올라요.", 0x7ad07a, 0x8a6a40),
   // ── 매직 ──
   circular: c("circular", "회람", "magic", 2, "내 공격이 양쪽 대각선으로도 나가요.", 0xe8c86a, 0x5a4a2a, {
     melee: "양쪽 대각선으로도 같이 휘둘러요.",
@@ -171,6 +195,17 @@ export const CARDS: Record<CardId, CardDef> = {
   promote: c("promote", "팀장 승진", "legend", 1, "다른 카드의 수치가 모두 50% 더 세져요.", 0x3a3a5a, 0xffd84a),
   corpcard: c("corpcard", "법인카드", "legend", 1, "내가 적을 잡으면 가끔 5초 동안 공격력, 공격 속도, 이동 속도 중 하나가 올라요.", 0x2a2a3a, 0xd8b84a),
   leave: c("leave", "연차 몰아 쓰기", "legend", 1, "내 체력이 30% 아래로 떨어지면 3초 동안 무적이 되고, 5초 동안 공격 속도가 50% 올라요. 층마다 한 번이에요.", 0x7ad0f0, 0xf2ead3),
+  // ── 11/19 갈래 카드 (스킬 트리 갈래를 키운다) ──
+  brEmber: c("brEmber", "불씨 단속", "magic", 2, "모닥불 스킬 피해가 15% 올라요.", 0xff7a2e, 0xffd27a),
+  brFrost: c("brFrost", "서리 낀 창문", "magic", 2, "서리 스킬 피해가 15% 올라요.", 0x8fd8ff, 0xf2fbff),
+  brSoul: c("brSoul", "등불 하나 더", "magic", 2, "넋 스킬과 부른 넋의 피해가 15% 올라요.", 0xb98aff, 0x9ff0dc),
+  brWorker: c("brWorker", "손에 익은 연장", "rare", 2, "일꾼 스킬 피해가 15% 오르고, 쿨타임이 10% 줄어요.", 0xb07a46, 0xe8d2a8),
+  handover: c("handover", "업무 인수인계", "rare", 1, "스킬을 쓰면 다음 기본 공격 세 번의 피해가 40% 올라요.", 0x7ab8e8, 0xffe08a),
+  // ── 11/19 마공 전용 ──
+  chant: c("chant", "기획서 다듬기", "common", 4, "마공 스킬(모닥불·서리·넋)과 부른 넋의 피해가 8% 올라요.", 0xb98aff, 0xf2ecff),
+  brief: c("brief", "회의 줄이기", "magic", 3, "마공 스킬 쿨타임이 6% 줄어요.", 0x8fd8ff, 0x2a3a6a),
+  refill: c("refill", "텀블러 리필", "rare", 2, "최대 SP가 25% 늘고, SP가 1초에 1씩 더 차요.", 0x9ff0dc, 0x2a5a5a),
+  refund: c("refund", "경비 환급", "unique", 1, "마공 스킬을 쓰면 쓴 SP의 30%를 돌려받아요.", 0xffd84a, 0x4a2a8a),
 };
 
 export const CARD_LIST: readonly CardDef[] = CARD_IDS.map((id) => CARDS[id]);
@@ -209,13 +244,13 @@ export function cardStackLine(id: CardId, have: number, owned?: CardCounts): str
   const count = (label: string, from: number, to: number, unit: string) => `${label} ${from}${unit} → ${to}${unit} (+${to - from}${unit})`;
   switch (id) {
     case "raise":
-      return step("공격력", 15);
+      return step("공격력", 10);
     case "quick":
-      return step("공격 속도", 12);
+      return step("공격 속도", 8);
     case "sharp":
-      return `${step("치명타", 8)}, ${step("치명타 피해", 20)}`;
+      return `${step("치명타", 6)}, ${step("치명타 피해", 15)}`;
     case "health":
-      return step("최대 체력", 15);
+      return step("최대 체력", 10);
     case "commute":
       return step("이동 속도", 10);
     case "offwork":
@@ -223,9 +258,23 @@ export function cardStackLine(id: CardId, have: number, owned?: CardCounts): str
     case "mix":
       return step("SP 회복", 2, "/초");
     case "memo":
-      return step("치명타 피해", 25);
+      return step("치명타 피해", 18);
     case "walk":
-      return `${step("최대 체력", 8)}, ${step("이동 속도", 5)}`;
+      return `${step("최대 체력", 6)}, ${step("이동 속도", 4)}`;
+    case "brEmber":
+      return step("모닥불 스킬 피해", 15);
+    case "brFrost":
+      return step("서리 스킬 피해", 15);
+    case "brSoul":
+      return step("넋 스킬 피해", 15);
+    case "brWorker":
+      return `${step("일꾼 스킬 피해", 15)}, ${down("일꾼 스킬 쿨타임", 10)}`;
+    case "chant":
+      return step("마공 스킬 피해", 8);
+    case "brief":
+      return down("마공 스킬 쿨타임", 6);
+    case "refill":
+      return `${step("최대 SP", 25)}, ${step("SP 회복", 1, "/초")}`;
     case "snack":
       return step("층을 깰 때 체력", 8);
     case "badge":
@@ -268,11 +317,11 @@ export function cardPromoLine(id: CardId, n: number, owned: CardCounts | undefin
   const line = (() => {
     switch (id) {
       case "raise":
-        return up("공격력", 15);
+        return up("공격력", 10);
       case "quick":
-        return up("공격 속도", 12);
+        return up("공격 속도", 8);
       case "health":
-        return up("최대 체력", 15);
+        return up("최대 체력", 10);
       case "commute":
         return up("이동 속도", 10);
       case "coffee":
@@ -280,13 +329,31 @@ export function cardPromoLine(id: CardId, n: number, owned: CardCounts | undefin
       case "offwork":
         return up("처치할 때 체력", 1);
       case "sharp":
-        return `${up("치명타", 8)}, ${up("치명타 피해", 20)}`;
+        return `${up("치명타", 6)}, ${up("치명타 피해", 15)}`;
       case "mix":
         return up("SP 회복", 2, "/초");
       case "memo":
-        return up("치명타 피해", 25);
+        return up("치명타 피해", 18);
       case "walk":
-        return `${up("최대 체력", 8)}, ${up("이동 속도", 5)}`;
+        return `${up("최대 체력", 6)}, ${up("이동 속도", 4)}`;
+      case "brEmber":
+        return up("모닥불 스킬 피해", 15);
+      case "brFrost":
+        return up("서리 스킬 피해", 15);
+      case "brSoul":
+        return up("넋 스킬 피해", 15);
+      case "brWorker":
+        return `${up("일꾼 스킬 피해", 15)}, ${down("일꾼 스킬 쿨타임", 10)}`;
+      case "handover":
+        return up("스킬 뒤 기본 공격 피해", 40);
+      case "chant":
+        return up("마공 스킬 피해", 8);
+      case "brief":
+        return down("마공 스킬 쿨타임", 6);
+      case "refill":
+        return `${up("최대 SP", 25)}, ${up("SP 회복", 1, "/초")}`;
+      case "refund":
+        return `쓴 SP ${fmt(Math.min(REFUND_MAX, 0.3 * k) * 100)}% 환급`;
       case "snack":
         return up("층을 깰 때 체력", 8);
       case "badge":
@@ -411,14 +478,32 @@ function offerSeed(seed: number, k: OfferKind, i: number, r: number): number {
 }
 
 const canTake = (owned: CardCounts, id: CardId) => (owned[id] ?? 0) < CARDS[id].max;
-const BY_TIER: Record<CardRarity, CardId[]> = { common: [], magic: [], rare: [], unique: [], legend: [] };
-for (const id of CARD_IDS) BY_TIER[CARDS[id].rarity].push(id);
+/**
+ * 11/19 더는 제안하지 않는 카드: 방향·복제 카드(회람·옆자리 협업·뒷담화·병렬 처리·참조 추가)는 새 물공 갈래(회오리·돌진·도약)와 겹쳐서
+ * 갈래 카드로 바꿨다. id는 지난 기록 검사(replayPicks 이전 판)·효과 계산을 위해 남긴다
+ */
+export const RETIRED_CARDS: ReadonlySet<CardId> = new Set<CardId>(["circular", "side", "backbite", "parallel", "cc"]);
+/** 11/19 마공 전용 카드가 들어오기 전 제안 묶음 (그 전에 시작한 판의 고른 기록을 서버가 다시 굴릴 때 — evalTower가 둘 다 본다) */
+export const MAGIC_PACK: ReadonlySet<CardId> = new Set<CardId>(["chant", "brief", "refill", "refund"]);
+/** 제안 묶음 판: 2 = 마공 카드 포함 (지금), 1 = 그 전 */
+export const CARD_POOL_VER = 2;
+export type CardPoolVer = 1 | 2;
+const POOLS: Record<CardPoolVer, Record<CardRarity, CardId[]>> = {
+  1: { common: [], magic: [], rare: [], unique: [], legend: [] },
+  2: { common: [], magic: [], rare: [], unique: [], legend: [] },
+};
+for (const id of CARD_IDS) {
+  if (RETIRED_CARDS.has(id)) continue;
+  POOLS[2][CARDS[id].rarity].push(id);
+  if (!MAGIC_PACK.has(id)) POOLS[1][CARDS[id].rarity].push(id);
+}
 
 /**
  * 제안 카드. 레벨 업·시작은 세 장, 상사의 제안은 레어 이상 한 장. 장마다 등급을 굴리고 그 등급에서 아직 덜 쌓인 카드를 고른다
  * (그 등급에 고를 게 없으면 한 단계 아래부터, 그래도 없으면 위로). owned = 지금 가진 카드, f = 층 (등급 확률이 오른다)
  */
-export function cardOffer(seed: number, k: OfferKind, i: number, r: number, owned: CardCounts, f = 1): CardId[] {
+export function cardOffer(seed: number, k: OfferKind, i: number, r: number, owned: CardCounts, f = 1, ver: CardPoolVer = CARD_POOL_VER): CardId[] {
+  const BY_TIER = POOLS[ver];
   const rnd = seeded(offerSeed(seed, k, i, r));
   const odds = tierOdds(k, k === "b" ? i : f, r);
   const n = k === "b" ? 1 : OFFER_SIZE;
@@ -458,6 +543,8 @@ export type PickLimits = {
   start?: number;
   top?: number;
   levelFloorMax?: (i: number) => number;
+  /** 11/19 제안 묶음 판 (없으면 지금 것) */
+  ver?: CardPoolVer;
 };
 export type PickVerdict = { ok: true; owned: CardCounts } | { ok: false; why: string };
 
@@ -499,7 +586,7 @@ export function replayPicks(seed: number, picks: readonly CardPick[], lim: PickL
     } else return { ok: false, why: "format" };
     rr += p.r;
     if (rr > lim.rerolls) return { ok: false, why: "reroll" };
-    if (!cardOffer(seed, p.k, p.i, p.r, owned, f).includes(p.c)) return { ok: false, why: "offer" };
+    if (!cardOffer(seed, p.k, p.i, p.r, owned, f, lim.ver ?? CARD_POOL_VER).includes(p.c)) return { ok: false, why: "offer" };
     owned[p.c] = (owned[p.c] ?? 0) + 1;
   }
   const levels = typeof lim.levels === "function" ? lim.levels(owned) : lim.levels;
@@ -580,9 +667,20 @@ export type CardStats = {
   promote: boolean;
   /** 11/15 스킬 피해 + (가진 카드마다 등급만큼 — 카드가 평타만 키워 스킬이 묻히지 않게) */
   skillDmg: number;
+  /** 11/19 갈래 카드: 갈래 스킬 피해 + · 일꾼 스킬 쿨타임 − · 업무 인수인계(스킬 뒤 기본 공격 세 번 피해 +) */
+  br: Record<"ember" | "frost" | "soul" | "worker", number>;
+  wkCd: number;
+  handover: number;
+  /** 11/19 마공 카드: 마공 스킬 피해 + · 마공 쿨타임 − · 최대 SP 배율 · 쓴 SP 환급 비율 */
+  magicDmg: number;
+  magicCd: number;
+  spMul: number;
+  refund: number;
 };
 
 /** 카드 한 장이 스킬 피해에 더하는 몫 (등급이 높을수록 크게, 커피 수혈은 빼고) */
+/** 11/19 경비 환급 상한 (팀장 승진이 있어도 쓴 SP의 절반까지) */
+export const REFUND_MAX = 0.5;
 export const SKILL_DMG_PER_CARD: Record<CardRarity, number> = { common: 0.03, magic: 0.04, rare: 0.06, unique: 0.09, legend: 0.12 };
 
 const D = Math.PI / 180;
@@ -606,12 +704,13 @@ export function cardStats(o: CardCounts): CardStats {
   for (const id of ["circular", "side", "backbite"] as const) for (let j = 0; j < n(id); j++) dirs.push(...DIR_STEPS[id][j].map((d) => d * D));
   const chainline = n("chainline") > 0;
   return {
-    atkMul: 1 + 0.15 * k * n("raise"),
-    aspdMul: 1 + 0.12 * k * n("quick"),
-    crit: 8 * k * n("sharp"),
-    critDmg: k * (0.2 * n("sharp") + 0.25 * n("memo")),
-    hpMul: 1 + k * (0.15 * n("health") + 0.08 * n("walk")),
-    moveMul: 1 + k * (0.1 * n("commute") + 0.05 * n("walk")),
+    // 11/19 몬스터가 약해진 만큼 능력치 카드를 약 1/3 낮췄다
+    atkMul: 1 + 0.1 * k * n("raise"),
+    aspdMul: 1 + 0.08 * k * n("quick"),
+    crit: 6 * k * n("sharp"),
+    critDmg: k * (0.15 * n("sharp") + 0.18 * n("memo")),
+    hpMul: 1 + k * (0.1 * n("health") + 0.06 * n("walk")),
+    moveMul: 1 + k * (0.1 * n("commute") + 0.04 * n("walk")),
     extra: n("cc"),
     hitMul: 1 - 0.1 * n("cc"),
     front: n("parallel"),
@@ -635,7 +734,7 @@ export function cardStats(o: CardCounts): CardStats {
     oneshotP: 0.05 * k,
     revive: n("overtime") > 0,
     reviveHp: 0.3 * k,
-    spRegen: 2 * k * n("mix"),
+    spRegen: k * (2 * n("mix") + n("refill")),
     floorHeal: 0.08 * k * n("snack"),
     taken: Math.min(0.6, 0.06 * k * n("badge")),
     stillTaken: Math.min(0.6, 0.15 * k * n("wfh")),
@@ -653,6 +752,13 @@ export function cardStats(o: CardCounts): CardStats {
     leaveAspd: 0.5 * k,
     promote: k > 1,
     skillDmg: CARD_IDS.reduce((a, id) => a + (id === "coffee" ? 0 : n(id) * SKILL_DMG_PER_CARD[CARDS[id].rarity]), 0),
+    br: { ember: 0.15 * k * n("brEmber"), frost: 0.15 * k * n("brFrost"), soul: 0.15 * k * n("brSoul"), worker: 0.15 * k * n("brWorker") },
+    wkCd: 0.1 * k * n("brWorker"),
+    handover: n("handover") > 0 ? 0.4 * k : 0,
+    magicDmg: 0.08 * k * n("chant"),
+    magicCd: Math.min(0.4, 0.06 * k * n("brief")),
+    spMul: 1 + 0.25 * k * n("refill"),
+    refund: n("refund") > 0 ? Math.min(REFUND_MAX, 0.3 * k) : 0,
   };
 }
 
@@ -689,6 +795,11 @@ export function cardPower(o: CardCounts): number {
   p *= 1 + 0.05 * s.spRegen;
   // 11/15 스킬 피해 + (스킬 몫이 전체의 절반쯤이라 넉넉히 절반을 곱한다)
   p *= 1 + 0.5 * s.skillDmg;
+  // 11/19 갈래 카드 (가장 큰 갈래 몫을 통째로 — 넉넉하게) · 업무 인수인계
+  p *= 1 + Math.max(s.br.ember, s.br.frost, s.br.soul, s.br.worker);
+  p *= 1 + 0.5 * s.handover;
+  // 11/19 마공 카드 (마공 몫을 통째로 — 넉넉하게): 피해 + · 쿨타임 − (그만큼 더 자주) · 환급(SP가 덜 막힘)
+  p *= (1 + s.magicDmg) / (1 - s.magicCd) * (1 + 0.5 * s.refund);
   return Math.min(CARD_POWER_MAX, p);
 }
 
@@ -780,6 +891,9 @@ export function statPanel(
   if (s.bossDmg) chips.push(`우두머리 +${pct(s.bossDmg)}%`);
   if (s.oneshot) chips.push(`원샷 ${Math.round(s.oneshotP * 1000) / 10}%`);
   if (s.corpcard) chips.push("법인카드");
+  if (s.magicDmg) chips.push(`마공 +${pct(s.magicDmg)}%`);
+  if (s.magicCd) chips.push(`마공 쿨 −${pct(s.magicCd)}%`);
+  if (s.refund) chips.push(`SP 환급 ${pct(s.refund)}%`);
   if (spare?.halfday) chips.push("반차 남음");
   if (spare?.revive) chips.push("부활 1번");
   if (spare?.leave) chips.push("연차 남음");

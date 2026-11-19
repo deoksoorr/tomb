@@ -26,6 +26,12 @@ export function bonusText(b: Bonus): string {
     .join(" · ");
 }
 
+/** 능력치 하나의 이름과 값 글자 (승계 비교 줄) */
+export function statPair(k: keyof Bonus, v: number): [string, string] {
+  const l = LABELS.find(([key]) => key === k);
+  return l ? [l[1], l[2](v)] : [String(k), String(v)];
+}
+
 export const pts = (n: number) => `${n.toLocaleString("ko-KR")}P`;
 
 export function mmss(ms: number): string {

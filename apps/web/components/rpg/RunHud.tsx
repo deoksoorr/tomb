@@ -34,6 +34,8 @@ const BUFF_NAMES: Record<string, string> = {
   so_swift: "바람 넋",
   so_friend: "길동무",
   fr_ward: "얼음 방패",
+  wk_tireless: "쉬지 않는 손",
+  wk_whirl: "회오리",
 };
 
 /** 11/17 낙법 칸 그림 (game/rpg/icons dodge) */
@@ -329,7 +331,7 @@ export default function RunHud({
                         .filter((b) => BUFF_NAMES[b.id])
                         .map((b) => (
                           <span key={b.id}>
-                            {BUFF_NAMES[b.id]} {Math.ceil(b.leftMs / 1000)}초
+                            {BUFF_NAMES[b.id]} {b.id === "wk_whirl" ? "켜짐" : `${Math.ceil(b.leftMs / 1000)}초`}
                           </span>
                         ))}
                     </div>

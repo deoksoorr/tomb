@@ -1,3 +1,4 @@
+import type { TodoTick } from "../retain";
 import type { CardId, CardKindStyle, CardPick, StatPanel } from "./cards";
 import type { Difficulty, DropKind, GameKind, GearSlot, MonsterId, SkillId, Stats, ZoneId } from "./catalog";
 import type { DexGain } from "../forage/types";
@@ -6,6 +7,7 @@ import type { StarSky } from "./plan";
 import type { RunTier } from "./endgame";
 import type { StatusId } from "./status";
 import type { HotAuto } from "./hotbar";
+import type { TNodeId } from "./transcendTree";
 
 // 사냥터(RPG) 데이터 형태: 저장 원본, API 응답, 게임 ↔ UI 브리지 페이로드.
 
@@ -23,7 +25,9 @@ export type CharacterState = {
   hotbar: (SkillId | null)[];
   /** 11/15 자동 스킬 (칸마다·전체 스위치·궁극기 SP 남김). 옛 저장값에는 없다 = 모두 끔 */
   hotAuto?: HotAuto;
-  /** 스킬 저장 형식 버전 (2 = 갈래 3개 트리). 다르면 normalize가 스킬을 비우고 포인트를 돌려준다 */
+  /** 11/19 초월 수련 배분 (lib/rpg/transcendTree — 초월 레벨마다 1포인트). 옛 저장값에는 없다 = 아무것도 안 찍음 */
+  tSkills?: Partial<Record<TNodeId, number>>;
+  /** 스킬 저장 형식 버전 (3 = 갈래 4개·랭크 비용 1·1·2·2·3). 다르면 normalize가 스킬을 비우고 포인트를 돌려준다 */
   treeVer: number;
   /** 스킬 초기화한 횟수 (비용에는 영향 없음, 기록용) */
   respecs: number;
@@ -85,6 +89,8 @@ export type CharacterState = {
   enhMax?: number;
   /** +15 확성기 알림을 이미 한 세트 장비 번호 (장비마다 한 번) */
   sg15?: number[];
+  /** 11/19 숨겨진 5세트 효과를 발견한 세트 (비트: 야근 1·결재 2·회의 4·출장 8 — lib/rpg/setGear SG_EGG). 옛 저장값에 없으면 0 */
+  sgEgg?: number;
 };
 
 export type DailyStats = { points: number; runs: number; exp: number };
@@ -254,7 +260,7 @@ export type RunReward = {
   firstPending?: string[];
 };
 
-export type RunFinishResponse = { reward: RunReward; view: RpgView };
+export type RunFinishResponse = { reward: RunReward; view: RpgView; todo?: TodoTick };
 
 // ── 게임 ↔ UI ──
 
@@ -269,6 +275,8 @@ export type RpgPlay = {
   level: number;
   derived: Derived;
   skills: Partial<Record<SkillId, number>>;
+  /** 11/19 초월 수련 (판 시작 때 캐릭터 것 그대로) */
+  tSkills?: Partial<Record<TNodeId, number>>;
   hotbar: (SkillId | null)[];
   /** 11/15 자동 스킬 설정 (판 시작 때 캐릭터 것 그대로) */
   hotAuto?: HotAuto;
@@ -307,6 +315,8 @@ export type RpgPlay = {
   reveal?: () => Promise<number | null>;
   /** 11/15 테스트 서버 슈퍼 계정 시험 드롭 (판 시작 응답의 superDrops 그대로 — 운영 서버에서는 늘 없다): 우두머리 장비·상자 세트 장비·꾸미기가 늘 나온다 */
   superDrops?: boolean;
+  /** 11/19 이미 발견한 숨겨진 5세트 효과 (캐릭터 sgEgg) — 처음 켜질 때만 「발견!」을 띄운다 */
+  sgEgg?: number;
 };
 
 /** 곤충 채집 들판 시간대: 낮(나비) · 노을(잠자리) · 밤(반딧불이) */

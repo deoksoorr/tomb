@@ -30,9 +30,9 @@ import {
 } from "./rewards";
 import type { Drop, EndgameView, HuntResult } from "./types";
 // 11/15 우두머리 상자: 세트 장비·재료·꾸미기 굴림
-import { chestCosmetic, chestMats, chestSetGear, SG_CHEST_CHANCE, SG_PITY } from "./setGearRoll";
+import { chestCosmetic, chestMats, chestSetGear, SG_CHEST_CHANCE } from "./setGearRoll";
 // 11/15 능력 카드: 고른 카드 검사·처치 속도 상한 배율
-import { CARDS, cardPower, cardXpMul, isBossDealFloor, isCardId, replayPicks, rerollsAllowed, runLevel, runXp, runXpNeed, runXpOf, startPicks, type CardCounts, type CardId } from "./cards";
+import { CARDS, cardPower, cardXpMul, isBossDealFloor, isCardId, replayPicks, type PickLimits, rerollsAllowed, runLevel, runXp, runXpNeed, runXpOf, startPicks, type CardCounts, type CardId } from "./cards";
 // 11/15 층 순서표 (테마마다 층별 몬스터 구성·정예 자리)
 import { floorElite, floorRoster } from "./towerSchedule";
 import { minDealSec, planHp } from "./dealCap";
@@ -159,15 +159,31 @@ export const TOWER_DEF_HIGH = 1.023;
 const climbMul = (f: number, lo: number, hi: number) =>
   lo ** (Math.min(fl(f), TOWER_STEEP_FROM) - 1) * hi ** Math.max(0, fl(f) - TOWER_STEEP_FROM);
 /** f층 몬스터 체력 배율 (안내 화면의 「1층보다 ×…」도 이 값) */
-export const towerHpMul = (f: number) => TOWER_BASE * climbMul(f, TOWER_HP, TOWER_HP_HIGH);
+/**
+ * 11/19 1~100층 체력을 더 낮춘다 (실제 게임 재현: 갓 Lv50이 3~4층에서 쓰러졌다 — 시뮬은 플레이어 피해를 3배로 잡아 1~100층을 너무 쉽게 봤다).
+ * 100층까지 TOWER_EASY_HP배, 100→130층에서 1배로 차츰 돌아간다 (101층 위 막힘 층 설계는 그대로)
+ */
+export const TOWER_EASY_HP = 0.4;
+export const towerEasyHp = (f: number) => (fl(f) <= 100 ? TOWER_EASY_HP : fl(f) >= 130 ? 1 : TOWER_EASY_HP + ((1 - TOWER_EASY_HP) * (fl(f) - 100)) / 30);
+export const towerHpMul = (f: number) => TOWER_BASE * climbMul(f, TOWER_HP, TOWER_HP_HIGH) * towerEasyHp(f);
 /** f층 몬스터 공격력 배율 */
-export const towerAtkMul = (f: number) => TOWER_BASE * climbMul(f, TOWER_ATK, TOWER_ATK_HIGH);
+/** 11/19 1~100층 공격력도 낮춘다 (실제 게임 재현: 피하지 않는 조작으로 모닥불·일꾼 모두 4~5층에서 쓰러졌다). 100→130층에서 1배로 */
+export const TOWER_EASY_ATK = 0.6;
+export const towerEasyAtk = (f: number) => (fl(f) <= 100 ? TOWER_EASY_ATK : fl(f) >= 130 ? 1 : TOWER_EASY_ATK + ((1 - TOWER_EASY_ATK) * (fl(f) - 100)) / 30);
+export const towerAtkMul = (f: number) => TOWER_BASE * climbMul(f, TOWER_ATK, TOWER_ATK_HIGH) * towerEasyAtk(f);
 /** f층 몬스터 방어 배율 */
 export const towerDefMul = (f: number) => climbMul(f, TOWER_DEF, TOWER_DEF_HIGH);
 
 /** 5층마다 우두머리 층 */
 export const TOWER_BOSS_EVERY = 5;
 export const isBossFloor = (f: number) => fl(f) % TOWER_BOSS_EVERY === 0;
+/**
+ * 11/19 야근 빌딩 개편: 우두머리 상자는 이 층부터. 사용자 「아이템 후딱후딱 끼는 게 나을 것 같아서」 — 50층 단위로 두고 상황을 지켜본다
+ * (1~50층 상자 없음 · 51~100 사원 · 101~150 대리 · 151~200 과장 · 201~ 임원 — 직급 경계는 setGearRoll SG_GRADE_FLOORS)
+ */
+export const TOWER_CHEST_FROM = 51;
+/** 우두머리 상자가 열리는 층 */
+export const isChestFloor = (f: number) => isBossFloor(f) && fl(f) >= TOWER_CHEST_FROM;
 /** 우두머리 층을 깨면 최대 체력의 이만큼 회복 (받는 회복 저주는 그대로 걸린다) */
 export const TOWER_BOSS_HEAL = 0.3;
 
@@ -268,6 +284,14 @@ export function towerCurseFx(f: number): CurseFx {
   };
 }
 
+/**
+ * 11/19 높은 층 몬스터 회피: TOWER_FLEE_FROM층 위로 층마다 TOWER_FLEE_PER (150층 +40 · 190층 +72).
+ * 힘만 찍은 물공은 빗나가기 시작해서 덱스를 나눠 찍어야 한다 (시뮬: 힘 몰빵 139층 → 힘+덱 149층, 마공은 거의 그대로 — 스킬은 늘 맞는다)
+ */
+export const TOWER_FLEE_FROM = 100;
+export const TOWER_FLEE_PER = 0.8;
+export const towerFleeAdd = (f: number) => Math.max(0, fl(f) - TOWER_FLEE_FROM) * TOWER_FLEE_PER;
+
 /** monsterStats에 넘기는 f층 몬스터 배율 (기본 세기 TOWER_POWER와 같이 쓴다) */
 export function towerScale(f: number): MonsterScale {
   return {
@@ -275,6 +299,7 @@ export function towerScale(f: number): MonsterScale {
     atk: towerAtkMul(f),
     def: towerDefMul(f),
     speed: towerCurseFx(f).monMove,
+    flee: towerFleeAdd(f),
   };
 }
 /** f층 몬스터 능력치 (지옥 기준) */
@@ -399,25 +424,32 @@ export const floorMinSec = (plan: HuntWave[]) =>
 
 // ── 체크포인트 ──
 
-/** 10층마다 체크포인트 (1·11·21 …층에서 시작할 수 있다) */
-export const TOWER_CHECKPOINT_EVERY = 10;
+/**
+ * 엘리베이터(체크포인트) 층. 11/19 개편: 1~100층은 누구나 금방 오르는 레이스 구간이라 10층마다 서지 않는다 →
+ * 1층 · 51층(50층 우두머리를 잡았으면) · 101층 · 그 위로 20층마다(121·141·161 …). 예전에 50층 넘게 오른 사람도 같은 규칙이라 51층이 바로 켜진다
+ */
+export const TOWER_CHECKPOINT_EVERY = 20;
+/** 레이스 구간 엘리베이터 (1층 다음은 51·101, 그 뒤로 TOWER_CHECKPOINT_EVERY층마다) */
+export const TOWER_LOW_CHECKPOINTS = [1, 51, 101] as const;
+const HIGH_FROM = 101;
 /** 슈퍼 계정(테스트 서버 운영자)이 고를 수 있는 가장 높은 시작 층 (저주를 미리 보려고) */
 export const TOWER_SUPER_START = 101;
 export const isCheckpoint = (f: number) =>
-  Number.isInteger(f) && f >= 1 && (f - 1) % TOWER_CHECKPOINT_EVERY === 0;
+  Number.isInteger(f) && ((TOWER_LOW_CHECKPOINTS as readonly number[]).includes(f) || (f > HIGH_FROM && (f - HIGH_FROM) % TOWER_CHECKPOINT_EVERY === 0));
+/** top층까지의 엘리베이터 층 (오름차순) */
+export function checkpointsUpTo(top: number): number[] {
+  const out = TOWER_LOW_CHECKPOINTS.filter((f) => f <= top) as number[];
+  for (let f = HIGH_FROM + TOWER_CHECKPOINT_EVERY; f <= top; f += TOWER_CHECKPOINT_EVERY) out.push(f);
+  return out;
+}
+/** f층 다음 엘리베이터 층 */
+export const nextCheckpoint = (f: number): number => (f < 51 ? 51 : f < HIGH_FROM ? HIGH_FROM : HIGH_FROM + (Math.floor((f - HIGH_FROM) / TOWER_CHECKPOINT_EVERY) + 1) * TOWER_CHECKPOINT_EVERY);
 /**
- * 고를 수 있는 시작 층: 1층 + 그 바로 아래층까지 깬 체크포인트 (11/15: 10층을 깨면 11층이 열린다 — 최고 20층 → 1·11·21, 최고 19층 → 1·11)
+ * 고를 수 있는 시작 층: 1층 + 그 바로 아래층까지 깬 엘리베이터 층 (50층을 깨면 51층, 100층을 깨면 101층, 120층을 깨면 121층이 열린다)
  */
 export function towerCheckpoints(best: number, sup = false): number[] {
   const top = sup ? Math.max(best + 1, TOWER_SUPER_START) : best + 1;
-  const out = [1];
-  for (
-    let f = 1 + TOWER_CHECKPOINT_EVERY;
-    f <= top;
-    f += TOWER_CHECKPOINT_EVERY
-  )
-    out.push(f);
-  return out;
+  return checkpointsUpTo(top);
 }
 
 /** 판 시작 검사 (서버). 문제가 없으면 null */
@@ -435,7 +467,7 @@ export function checkTowerStart(a: {
   if (!isCheckpoint(a.start))
     return {
       code: "INVALID_INPUT",
-      message: "시작 층은 1층, 11층, 21층처럼 10층 간격으로 골라요.",
+      message: "시작 층은 1층, 51층, 101층, 그 위로 20층마다 골라요.",
     };
   if (!towerCheckpoints(a.best, a.sup).includes(a.start))
     return {
@@ -453,8 +485,15 @@ export function checkTowerStart(a: {
  */
 export const TOWER_T_BASE = 320;
 export const TOWER_T_GROWTH = 0.02;
+/**
+ * 11/19 초월이 너무 빨라 크게 줄였다 (하루 4~5시간 하는 사람 기준): 누구나 금방 오르는 1~100층은 1/4, 101층부터는 1/2.
+ * 1층 ≈ 81 · 100층 240 · 101층 482 · 150층 640
+ */
+export const TOWER_T_LOW_MUL = 0.25;
+export const TOWER_T_HIGH_MUL = 0.5;
+export const TOWER_T_HIGH_FROM = 101;
 export const floorTExp = (f: number) =>
-  Math.round(TOWER_T_BASE * (1 + TOWER_T_GROWTH * fl(f)));
+  Math.round(TOWER_T_BASE * (1 + TOWER_T_GROWTH * fl(f)) * (fl(f) >= TOWER_T_HIGH_FROM ? TOWER_T_HIGH_MUL : TOWER_T_LOW_MUL));
 /** 깬 4층 = 초월 판 1판 (하루 초월 판 구간 100%·30%·10%·연습에 들어간다) */
 export const TOWER_FLOORS_PER_RUN = 4;
 /** 하루 우두머리 상자 한도. 11/15: 없앴다 (사냥터에도 판 수 제한이 없으니) — 화면에는 한도 0 = 무제한으로 보낸다 */
@@ -471,7 +510,7 @@ export function towerChestFloors(start: number, floors: number, used: number): n
   let n = used;
   for (let i = 0; i < floors; i++) {
     const f = start + i;
-    if (!isBossFloor(f)) continue;
+    if (!isChestFloor(f)) continue;
     if (n >= TOWER_CHESTS_PER_DAY) break;
     n++;
     out.push(f);
@@ -480,11 +519,12 @@ export function towerChestFloors(start: number, floors: number, used: number): n
 }
 
 /** f층 우두머리 상자: 지옥 사냥터를 다 깬 판의 드롭 굴림 그대로 (우두머리 몫 + 처치 굴림 + 기간제 코디) — 층 시드로 정해진다 */
-export function towerChestDrops(seed: number, f: number, _start: number, pity = 0, sup = false): Drop[] {
+export function towerChestDrops(seed: number, f: number, _start: number, _pity = 0, sup = false): Drop[] {
+  // 11/19 천장을 없앴다 (_pity는 부르는 쪽 모양을 그대로 두려고 받기만 한다)
   void _start;
+  void _pity;
   // 11/15: 지옥 드롭표를 그대로 굴리면 상자 넷 중 셋이 비어 있었다 → 상자 전용 굴림.
-  // 물약 1~2개는 늘 · 강화 재료 · 세트 장비 15% (7번 연속 못 받으면 다음엔 반드시 — pity = 판 시작 때 못 받은 상자 수, 상자마다 nextPity) ·
-  // 꾸미기 10% (층별 등급·랜덤 일수, 깔끔한 클리어와 상관없이) — lib/rpg/setGearRoll.
+  // 물약 1~2개는 늘 · 강화 재료 · 세트 장비 2% (11/19 천장 없음) · 꾸미기 3% (층별 등급·랜덤 일수, 깔끔한 클리어와 상관없이) — lib/rpg/setGearRoll.
   // sup = 테스트 서버 슈퍼 계정 시험 드롭 (서버가 계정으로 정한다): 세트 장비·꾸미기가 늘 하나씩
   const fs = floorSeed(seed, f);
   const r = seeded(fs ^ 0x43485354);
@@ -492,7 +532,7 @@ export function towerChestDrops(seed: number, f: number, _start: number, pity = 
   const potions = r() < 0.5 ? 1 : 2;
   for (let i = 0; i < potions; i++) drops.push(pickDropPotion(r));
   drops.push(...chestMats(f));
-  const sg = chestSetGear(r, f, sup ? SG_PITY : pity);
+  const sg = chestSetGear(r, f, sup);
   if (sg) drops.push(sg);
   const cos = chestCosmetic(fs, f, sup);
   if (cos) drops.push(cos);
@@ -692,7 +732,7 @@ export function evalTower(
     for (const w of towerPlan(t.seed, t.start + i, t.start)) for (const m of w.monsters) xpAcc += runXpOf(m);
     floorXp.push(xpAcc);
   }
-  const cv = replayPicks(t.seed, r.cards ?? [], {
+  const lim: PickLimits = {
     // 게임은 처치마다 경험치 × 배율을 소수로 더해 간다 → 문턱에 딱 닿는 판에서 곱셈 한 번과 끝자리가 갈릴 수 있어 아주 조금 여유
     levels: (owned) => runLevel(runXp(r.kills) * cardXpMul(owned) + 1e-6).level,
     starts: startPicks(t.start),
@@ -706,7 +746,10 @@ export function evalTower(
       const j = floorXp.findIndex((x) => x >= need);
       return t.start + (j < 0 ? k : j);
     },
-  });
+  };
+  // 11/19 마공 카드 묶음(제안 묶음 2)이 들어오기 전에 시작한 판·옛 화면은 옛 묶음(1)으로 고른다 → 지금 묶음으로 안 맞으면 옛 묶음으로 한 번 더
+  const cv0 = replayPicks(t.seed, r.cards ?? [], lim);
+  const cv = cv0.ok || cv0.why !== "offer" ? cv0 : replayPicks(t.seed, r.cards ?? [], { ...lim, ver: 1 });
   // 11/15 카드 기록이 맞지 않아도 판은 버리지 않는다 (예전 판 끝 형식이 레벨 업 층 f를 지워 정직한 판이 통째로 날아갔다)
   if (!cv.ok) suspect.push(`cards:${cv.why}`);
   const owned = cv.ok ? cv.owned : claimedCards(r.cards ?? []);
@@ -828,7 +871,7 @@ export function towerSettle(
       tRuns++;
       runs++;
     }
-    if (isBossFloor(f)) {
+    if (isChestFloor(f)) {
       if (tChest < TOWER_CHESTS_PER_DAY) {
         tChest++;
         chests.push(f);

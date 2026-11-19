@@ -302,10 +302,13 @@ export default function HuntLobby({
         level: c.level,
         derived: res.view.derived,
         skills: c.skills,
+        ...(c.tSkills && Object.keys(c.tSkills).length ? { tSkills: c.tSkills } : {}),
         hotbar: c.hotbar,
         ...(c.hotAuto ? { hotAuto: c.hotAuto } : {}),
         potions: c.potions,
         equip: c.equip,
+        // 11/19 이미 발견한 숨겨진 5세트 효과 (처음 켜질 때만 「발견!」)
+        ...(c.sgEgg ? { sgEgg: c.sgEgg } : {}),
         // 테스트 서버 운영자 시험 드롭 (판 끝에 우두머리 자리에서 떨어진다)
         ...(res.testDrops?.length ? { testDrops: res.testDrops } : {}),
         // 11/15 야근 빌딩 (층마다 배율·저주 — 오늘 남은 우두머리 상자만큼 상자를 떨군다), 연습 판(드롭 없음)
@@ -314,7 +317,7 @@ export default function HuntLobby({
               tower: {
                 start: res.tower,
                 chestsLeft: !tw ? 0 : tw.chestsMax > 0 ? Math.max(0, tw.chestsMax - tw.chests) : Infinity,
-                // 11/15 세트 장비 천장 (서버가 판 끝에 같은 값에서 센다)
+                // 11/15 세트 장비 못 받은 수 (11/19 천장은 없앴다 — 굴림에는 쓰지 않는다)
                 pity: res.view.character.sgPity ?? 0,
                 // 11/15 테스트 서버 슈퍼 계정만 (서버가 준 superHunter — 운영 서버에서는 늘 없다)
                 ...(boost && res.view.superHunter && towerBoostAllowed() ? { boost: true } : {}),
@@ -356,6 +359,14 @@ export default function HuntLobby({
     setView((v) => (v ? { ...v, character: { ...v.character, hotAuto: auto } } : v));
     if (autoSave.current) clearTimeout(autoSave.current.t);
     autoSave.current = { t: setTimeout(flushAuto, 1500), auto };
+  });
+
+  // 11/19 숨겨진 5세트 효과 발견: 서버에 저장 (낀 장비로 서버가 확인). 장비 창은 비트만 바로 고친다 — 못 해도 판에는 영향 없다
+  useBridgeEvent("rpg:egg", ({ set }) => {
+    rpgApi
+      .gear({ type: "egg", set })
+      .then((res) => setView((v) => (v ? { ...v, character: { ...v.character, sgEgg: res.character.sgEgg } } : v)))
+      .catch(() => {});
   });
 
   useBridgeEvent("rpg:ended", ({ result, aborted }) => {
@@ -440,7 +451,7 @@ export default function HuntLobby({
 
   if (phase === "result" && outcome) {
     return (
-      <Dialog title={outcome.tower ? "야근 빌딩 결과" : `${GAMES[outcome.result.game].name} 결과`} onClose={() => setPhase("lobby")}>
+      <Dialog className={s.huntDialog} title={outcome.tower ? "야근 빌딩 결과" : `${GAMES[outcome.result.game].name} 결과`} onClose={() => setPhase("lobby")}>
         <div className={s.resultFill}>
           <ResultView outcome={outcome} view={view} />
           {notice && <p className={s.notice}>{notice}</p>}
@@ -470,7 +481,7 @@ export default function HuntLobby({
   // 야근 빌딩: 캐릭터를 읽기 전엔 창을 띄우지 않는다 (레벨이 모자라면 경비원 한마디만 — 아래 효과)
   if (tower && !loadError && !view?.endgame) return null;
   return (
-    <Dialog title={tower ? "야근 빌딩" : "사냥터"} onClose={onClose}>
+    <Dialog className={s.huntDialog} title={tower ? "야근 빌딩" : "사냥터"} onClose={onClose}>
       <div className={cx(s.lobby, s.lobbyFill)}>
         {view && c ? (
           <>
@@ -493,9 +504,12 @@ export default function HuntLobby({
               <span>
                 포인트 <strong className={s.points}>{pts(view.points)}</strong>
               </span>
-              <span>
-                오늘 사냥 <strong>{view.today.huntPoints}</strong> / {view.today.cap}P
-              </span>
+              {/* 11/19 사냥 포인트 하루 한도가 없어져(cap = NO_LIMIT) 한도가 있을 때만 보인다 */}
+              {view.today.cap < 1_000_000_000 && (
+                <span>
+                  오늘 사냥 <strong>{view.today.huntPoints}</strong> / {view.today.cap}P
+                </span>
+              )}
               <button type="button" className={cx(ui.button, s.small, s.guideOpen)} onClick={() => setGuide(true)}>
                 사냥 안내서
               </button>
@@ -542,7 +556,7 @@ export default function HuntLobby({
                 </button>
               ))}
             </div>
-            <div id={`${baseId}-panel`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`} className={s.tabPanel}>
+            <div id={`${baseId}-panel`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`} className={s.tabPanel} data-tab={tab}>
               {tab === "start" && tower && view.endgame && <TowerEntrance view={view} busy={phase === "starting"} onStart={(f, boost) => void start("hunt", "hell", f, boost)} />}
               {tab === "start" && !tower && (
                 <StartPanel

@@ -142,27 +142,27 @@ const pct =
   (s: CardStats) =>
     (s[k] as number) - base;
 const TABLE: Record<CardId, Row> = {
-  raise: { text: ["15%"], per: [[pct("atkMul", 1), 0.15]], stacks: true },
-  quick: { text: ["12%"], per: [[pct("aspdMul", 1), 0.12]], stacks: true },
-  health: { text: ["15%"], per: [[pct("hpMul", 1), 0.15]], stacks: true },
+  raise: { text: ["10%"], per: [[pct("atkMul", 1), 0.1]], stacks: true },
+  quick: { text: ["8%"], per: [[pct("aspdMul", 1), 0.08]], stacks: true },
+  health: { text: ["10%"], per: [[pct("hpMul", 1), 0.1]], stacks: true },
   commute: { text: ["10%"], per: [[pct("moveMul", 1), 0.1]], stacks: true },
   coffee: { text: ["40%"], per: [[pct("coffeeHeal"), 0.4]], stacks: false },
   offwork: { text: ["1%"], per: [[pct("killHeal"), 0.01]], stacks: true },
   sharp: {
-    text: ["8%", "20%"],
+    text: ["6%", "15%"],
     per: [
-      [pct("crit"), 8],
-      [pct("critDmg"), 0.2],
+      [pct("crit"), 6],
+      [pct("critDmg"), 0.15],
     ],
     stacks: true,
   },
   mix: { text: ["2씩"], per: [[pct("spRegen"), 2]], stacks: true },
-  memo: { text: ["25%"], per: [[pct("critDmg"), 0.25]], stacks: true },
+  memo: { text: ["18%"], per: [[pct("critDmg"), 0.18]], stacks: true },
   walk: {
-    text: ["8%", "5%"],
+    text: ["6%", "4%"],
     per: [
-      [pct("hpMul", 1), 0.08],
-      [pct("moveMul", 1), 0.05],
+      [pct("hpMul", 1), 0.06],
+      [pct("moveMul", 1), 0.04],
     ],
     stacks: true,
   },
@@ -238,6 +238,31 @@ const TABLE: Record<CardId, Row> = {
     stacks: false,
     flag: (s) => s.leave,
   },
+  // 11/19 갈래 카드
+  brEmber: { text: ["15%"], per: [[(s) => s.br.ember, 0.15]], stacks: true },
+  brFrost: { text: ["15%"], per: [[(s) => s.br.frost, 0.15]], stacks: true },
+  brSoul: { text: ["15%"], per: [[(s) => s.br.soul, 0.15]], stacks: true },
+  brWorker: {
+    text: ["15%", "10%"],
+    per: [
+      [(s) => s.br.worker, 0.15],
+      [(s) => s.wkCd, 0.1],
+    ],
+    stacks: true,
+  },
+  handover: { text: ["40%"], per: [[pct("handover"), 0.4]], stacks: false },
+  // 11/19 마공 전용
+  chant: { text: ["8%"], per: [[pct("magicDmg"), 0.08]], stacks: true },
+  brief: { text: ["6%"], per: [[pct("magicCd"), 0.06]], stacks: true },
+  refill: {
+    text: ["25%", "1씩"],
+    per: [
+      [pct("spMul", 1), 0.25],
+      [pct("spRegen"), 1],
+    ],
+    stacks: true,
+  },
+  refund: { text: ["30%"], per: [[pct("refund"), 0.3]], stacks: false },
 };
 TABLE.bonus.per = [[pct("bossDmg"), 0.3]];
 
@@ -311,17 +336,17 @@ describe("11/17 카드 전수: 적힌 숫자 = 붙는 숫자 (1장·최대 겹�
       }
     }
     expect(harness().run.derive(BASE).atk).toBe(100);
-    // 공격력 +15% × 2장 = +30%, 팀장 승진이면 +45% — 승진을 먼저 골라도 나중에 골라도 같다
+    // 공격력 +10% × 2장 = +20%, 팀장 승진이면 +30% — 승진을 먼저 골라도 나중에 골라도 같다 (11/19 하향)
     const a = harness();
     a.give("promote");
     a.give("raise", 2);
     const b = harness();
     b.give("raise", 2);
     b.give("promote");
-    expect(a.run.derive(BASE).atk).toBeCloseTo(145);
-    expect(b.run.derive(BASE).atk).toBeCloseTo(145);
+    expect(a.run.derive(BASE).atk).toBeCloseTo(130);
+    expect(b.run.derive(BASE).atk).toBeCloseTo(130);
     // 팀장 승진은 한 장만 (두 장으로 실어도 ×1.5 한 번 — ×2.25로 겹치지 않는다)
-    expect(cardStats({ raise: 1, promote: 2 }).atkMul).toBeCloseTo(1.225);
+    expect(cardStats({ raise: 1, promote: 2 }).atkMul).toBeCloseTo(1.15);
   });
 
   it("받는 피해·주는 피해·치명타·범위가 적힌 숫자대로", () => {
@@ -349,11 +374,11 @@ describe("11/17 카드 전수: 적힌 숫자 = 붙는 숫자 (1장·최대 겹�
     expect(r.run.dmgMul(mon("scope_creep" as MonsterId))).toBeCloseTo(1.6);
     r.give("promote");
     expect(r.run.dmgMul(mon("scope_creep" as MonsterId))).toBeCloseTo(1.9);
-    // 예리한 지적 + 메모 습관: 치명타 피해 150% → 150 + 20 + 25 = 195%
+    // 예리한 지적 + 메모 습관: 치명타 피해 150% → 150 + 15 + 18 = 183% (11/19 하향)
     const c = harness();
     c.give("sharp");
     c.give("memo");
-    expect(c.run.critMul * 1.5).toBeCloseTo(1.95);
+    expect(c.run.critMul * 1.5).toBeCloseTo(1.83);
     // 참조 추가 3장: 한 번 피해 −30%
     const cc = harness();
     cc.give("cc", 3);
@@ -530,10 +555,10 @@ describe("11/17 팀장 승진 (다른 카드 수치 ×1.5)", () => {
   it("화면: 처음 고르는 카드·가진 카드 설명에 승진이 붙은 숫자를 보여 준다", () => {
     expect(cardPromoLine("raise", 1, {})).toBeNull();
     expect(cardPromoLine("raise", 1, { promote: 1 })).toBe(
-      "팀장 승진으로 공격력 +22.5%",
+      "팀장 승진으로 공격력 +15%",
     );
     expect(cardPromoLine("raise", 3, { promote: 1 })).toBe(
-      "팀장 승진으로 공격력 +67.5%",
+      "팀장 승진으로 공격력 +45%",
     );
     expect(cardPromoLine("badge", 1, { promote: 1 })).toBe(
       "팀장 승진으로 받는 피해 −9%",
@@ -723,5 +748,82 @@ describe("11/17 발동 표시 (rpg:proc)", () => {
     give("overtime");
     expect(run.revive()).toBe(true);
     expect(seen).toEqual([]);
+  });
+});
+
+describe("11/19 물공·마공 카드 정리", () => {
+  it("「때린 적」 카드는 스킬로 맞혀도 붙고, 광역 스킬은 맞은 적마다 1/3 확률", () => {
+    const hit = mon("scope_creep" as MonsterId);
+    const near = mon("scope_creep" as MonsterId, { x: 20 });
+    // 사내 정치 (15%): 한 마리 스킬은 그대로, 광역 스킬은 1/3을 먼저 넘어야 한다
+    const h = harness("magic", [hit, near]);
+    h.give("politics");
+    vi.spyOn(Math, "random").mockReturnValue(0.1);
+    h.run.onSkillHit(hit);
+    expect(h.hits).toHaveLength(1);
+    const a = harness("magic", [hit, near]);
+    a.give("politics");
+    vi.spyOn(Math, "random").mockReturnValue(0.34);
+    a.run.onSkillHit(hit, true);
+    expect(a.hits).toHaveLength(0);
+    vi.spyOn(Math, "random").mockReturnValue(0.1);
+    a.run.onSkillHit(hit, true);
+    expect(a.hits).toHaveLength(1);
+    // 기본 공격도 (회오리처럼 광역 기본 공격이면 1/3)
+    const b = harness("swing", [hit, near]);
+    b.give("politics");
+    vi.spyOn(Math, "random").mockReturnValue(0.34);
+    b.run.onBasicHit(hit, true);
+    expect(b.hits).toHaveLength(0);
+    b.run.onBasicHit(hit);
+    expect(b.hits).toHaveLength(0); // 0.34 > 15%
+  });
+
+  it("번개는 스킬로 0.5초에 한 번, 업무 토스는 스킬로 1초에 한 번 (광역이어도 쿨만 본다)", () => {
+    const hit = mon("scope_creep" as MonsterId);
+    const near = mon("scope_creep" as MonsterId, { x: 20 });
+    const h = harness("magic", [hit, near]);
+    h.give("urgent");
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
+    h.run.onSkillHit(hit, true);
+    expect(h.hits).toHaveLength(1);
+    h.run.onSkillHit(hit, true);
+    expect(h.hits).toHaveLength(1);
+    h.w.now = 600;
+    h.run.onSkillHit(hit);
+    expect(h.hits).toHaveLength(2);
+  });
+
+  it("원샷 결재: 광역이면 확률 1/3", () => {
+    const m = mon("scope_creep" as MonsterId);
+    const h = harness("magic", [m]);
+    h.give("oneshot");
+    vi.spyOn(Math, "random").mockReturnValue(0.03);
+    expect(h.run.oneshot(m)).toBe(true);
+    expect(h.run.oneshot(m, true)).toBe(false);
+    vi.spyOn(Math, "random").mockReturnValue(0.01);
+    expect(h.run.oneshot(m, true)).toBe(true);
+  });
+
+  it("마공 카드: 마공 피해 · 쿨타임 · 최대 SP · SP 환급 (팀장 승진 ×1.5, 환급은 절반까지)", () => {
+    const h = harness("magic");
+    h.give("chant", 2);
+    h.give("brief", 2);
+    h.give("refill");
+    h.give("refund");
+    expect(h.run.magicMul).toBeCloseTo(1.16);
+    expect(h.run.magicCdMul).toBeCloseTo(0.88);
+    expect(h.run.refund).toBeCloseTo(0.3);
+    expect(h.run.derive({ ...BASE, maxSp: 400 } as Derived).maxSp).toBe(500);
+    h.give("promote");
+    expect(h.run.magicMul).toBeCloseTo(1.24);
+    expect(h.run.refund).toBeCloseTo(0.45);
+    expect(cardStats({ refund: 1, promote: 1 }).refund).toBeLessThanOrEqual(0.5);
+    // 공통·물공·마공 꼬리표
+    expect(CARDS.chant.type).toBe("magic");
+    expect(CARDS.quick.type).toBe("phys");
+    expect(CARDS.sharp.type).toBe("phys");
+    expect(CARDS.passion.type).toBe("all");
+    expect(CARDS.raise.type).toBe("all");
   });
 });

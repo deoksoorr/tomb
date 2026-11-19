@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SKILL_FX } from "./skillTree";
 import { SKILLS, skillById, type SkillId } from "./catalog";
 import { learnSkill, newCharacter, normalize, resetSkills, setHotbar } from "./character";
 import { checkLearn, SKILL_TREE_VERSION, tierOpen, type Alloc } from "./skillRules";
@@ -30,8 +31,8 @@ function allocFor(...ids: SkillId[]): Alloc {
 const all = () => true;
 
 describe("궁극기 칸", () => {
-  it("궁극기 = 5단 액티브 3개, F 칸에만 · 나머지는 1~5에만", () => {
-    expect(SKILLS.filter((s) => isUltimate(s.id)).map((s) => s.id)).toEqual(["em_bonfire", "fr_blizzard", "so_procession"]);
+  it("궁극기 = 5단 액티브 4개 (11/19 밤샘 삽질), F 칸에만 · 나머지는 1~5에만", () => {
+    expect(SKILLS.filter((s) => isUltimate(s.id)).map((s) => s.id)).toEqual(["em_bonfire", "fr_blizzard", "so_procession", "wk_allnight"]);
     expect(fitsSlot("em_bonfire", ULT_SLOT)).toBe(true);
     for (let i = 0; i < SKILL_SLOTS; i++) {
       expect(fitsSlot("em_bonfire", i)).toBe(false);
@@ -87,7 +88,10 @@ describe("자동 스킬 설정", () => {
   it("궁극기·몸 옮기기는 자동 불가 (안내 문구), 나머지 액티브는 모두 규칙이 있다", () => {
     expect(autoBlock("em_bonfire")).toBe("궁극기는 직접 써요");
     for (const id of MOVE_SKILLS) expect(autoBlock(id)).toBe("몸 옮기기 스킬은 직접 써요");
-    for (const s of SKILLS.filter((x) => x.kind === "active" && !isUltimate(x.id) && !MOVE_SKILLS.includes(x.id))) {
+    // 11/19 삽날 회오리는 켜고 끄는 스킬이라 직접
+    expect(autoBlock("wk_whirl")).toBe("켜고 끄는 스킬은 직접 써요");
+    expect(AUTO_RULE.wk_whirl).toBeUndefined();
+    for (const s of SKILLS.filter((x) => x.kind === "active" && !isUltimate(x.id) && !MOVE_SKILLS.includes(x.id) && x.id !== "wk_whirl")) {
       expect(autoBlock(s.id), s.id).toBeNull();
       expect(AUTO_RULE[s.id], s.id).toBeDefined();
     }
@@ -118,8 +122,8 @@ describe("자동 스킬: 쓸 만한 때", () => {
   it("사거리는 스킬 수치(SKILL_FX)에서", () => {
     expect(autoShape("em_kindle", 1).reach).toBe(110);
     expect(autoShape("fr_breath", 1).reach).toBe(46);
-    expect(autoShape("em_ring", 1).radius).toBe(60);
-    expect(autoShape("em_meteor", 1)).toEqual({ reach: 130, radius: 50 });
+    expect(autoShape("em_ring", 1).radius).toBe(SKILL_FX.em_ring(1).radius);
+    expect(autoShape("em_meteor", 1)).toEqual({ reach: 130, radius: SKILL_FX.em_meteor(1).radius });
     expect(autoShape("so_lantern", 1).radius).toBe(110);
   });
 

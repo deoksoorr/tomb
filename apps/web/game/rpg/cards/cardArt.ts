@@ -474,6 +474,84 @@ const P: Record<CardId, Painter> = {
     g.rect(1, 14, 14, 2, 0xf0d890);
     g.ellipse(13, 12, 1.5, 1.5, 0xff7a7a);
   },
+  // 11/19 불씨 단속: 서류 위 작은 불꽃
+  brEmber(g, m, a) {
+    paper(g, 2, 6, 12, 9);
+    g.ellipse(8, 5, 3, 3.5, m);
+    g.ellipse(8, 6, 1.5, 2, a);
+    g.set(8, 1, a);
+  },
+  // 서리 낀 창문: 네모 창 + 눈꽃
+  brFrost(g, m, a) {
+    g.rect(2, 2, 12, 12, darken(m, 0.35));
+    g.rect(3, 3, 10, 10, m);
+    g.vline(8, 3, 12, a);
+    g.hline(3, 12, 8, a);
+    for (const [x, y] of [[5, 5], [11, 5], [5, 11], [11, 11]]) g.set(x, y, 0xffffff);
+  },
+  // 등불 하나 더: 등불 두 개
+  brSoul(g, m, a) {
+    for (const x of [4, 11]) {
+      g.vline(x, 1, 3, 0x8a6a40);
+      g.rect(x - 2, 4, 5, 6, m);
+      g.rect(x - 1, 5, 3, 4, a);
+    }
+    g.hline(1, 14, 13, darken(m, 0.3));
+  },
+  // 손에 익은 연장: 삽 + 렌치
+  brWorker(g, m, a) {
+    for (let i = 0; i < 9; i++) g.set(3 + i, 12 - i, 0x8a6440);
+    g.rect(11, 2, 4, 4, a);
+    g.rect(2, 10, 4, 4, m);
+    g.rect(3, 11, 2, 2, darken(m, 0.3));
+  },
+  // 업무 인수인계: 서류를 건네는 화살
+  handover(g, m, a) {
+    paper(g, 1, 3, 7, 9);
+    paper(g, 8, 5, 7, 9);
+    g.hline(4, 11, 14, a);
+    g.set(12, 13, a);
+    g.set(12, 15, a);
+    g.set(13, 14, a);
+    void m;
+  },
+  // 11/19 기획서 다듬기 (마공): 서류 위 반짝이는 별빛 펜
+  chant(g, m, a) {
+    paper(g, 2, 3, 10, 12);
+    for (const y of [6, 8, 10]) g.hline(4, 9, y, darken(a, 0.45));
+    for (let i = 0; i < 6; i++) g.set(8 + i, 12 - i, m);
+    g.set(14, 5, a);
+    g.set(13, 2, a);
+    g.hline(12, 14, 3, a);
+  },
+  // 회의 줄이기 (마공 쿨타임): 반쯤 줄어든 모래시계
+  brief(g, m, a) {
+    g.hline(3, 12, 2, darken(m, 0.4));
+    g.hline(3, 12, 13, darken(m, 0.4));
+    for (let y = 3; y < 8; y++) g.hline(4 + (y - 3), 11 - (y - 3), y, m);
+    for (let y = 8; y < 13; y++) g.hline(4 + (12 - y), 11 - (12 - y), y, m);
+    g.rect(7, 9, 2, 3, a);
+    g.set(7, 6, a);
+  },
+  // 텀블러 리필 (최대 SP): 김이 나는 텀블러
+  refill(g, m, a) {
+    g.rect(5, 5, 6, 9, m);
+    g.rect(5, 4, 6, 1, darken(m, 0.35));
+    g.rect(6, 8, 4, 3, a);
+    g.set(6, 1, 0xffffff);
+    g.set(8, 2, 0xffffff);
+    g.set(10, 1, 0xffffff);
+  },
+  // 경비 환급 (SP 환급): 금화가 돌아오는 봉투
+  refund(g, m, a) {
+    g.rect(1, 6, 10, 7, 0xf2ead3);
+    g.hline(1, 10, 6, darken(0xf2ead3, 0.3));
+    g.ellipse(12, 5, 2.5, 2.5, m);
+    g.ellipse(12, 5, 1.2, 1.2, darken(m, 0.3));
+    g.set(4, 9, a);
+    g.set(6, 9, a);
+    g.hline(3, 7, 10, a);
+  },
 };
 
 /** 카드 그림 (16×16) */

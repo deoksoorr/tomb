@@ -10,7 +10,9 @@ import { equippedSg, SG_SETS, sgCombat, type SgCombat, type SgItem } from "@/lib
 export const SG_FX = {
   overtimeLowHp: 0.3,
   overtimeAtk: 0.25,
-  overtimeGuard: 0.1,
+  overtimeGuard: 0.15,
+  /** 11/19 야근 4세트: 늘 받는 피해 − (근접 생존) */
+  overtimeAlways: 0.08,
   approvalAspd: 0.2,
   approvalMs: 3000,
   meetingCd: 0.15,
@@ -70,8 +72,9 @@ export class SetGearRun {
    * 주는 피해 배율 (몬스터가 맞을 때마다): 치명타 피해·우두머리 피해·결재 완료(우두머리 30% 아래)·출장 4세트(3초 안 맞으면 다음 기본 공격 +40%).
    * crit이면 결재 4세트 공속 버프를 켠다
    */
-  hitMul(now: number, o: { crit: boolean; boss: boolean; hpRatio: number; basic: boolean; who?: object }): number {
-    let k = 1;
+  hitMul(now: number, o: { crit: boolean; boss: boolean; hpRatio: number; basic: boolean; magic?: boolean; who?: object }): number {
+    // 11/19 물리 피해·마법 피해 옵션
+    let k = 1 + (o.magic ? this.c.magicDmg : this.c.physDmg);
     if (o.crit) {
       // 치명타는 1.5배 → 옵션만큼 더 (1.5 + 0.15 = 1.65배)
       k *= (1.5 + this.c.critDmg) / 1.5;
@@ -104,6 +107,7 @@ export class SetGearRun {
   takenMul(now: number, hp: number, maxHp: number): number {
     this.lastHurt = now;
     let k = 1 - this.c.guard;
+    if (this.four.has("overtime")) k *= 1 - SG_FX.overtimeAlways;
     if (this.four.has("overtime") && hp < maxHp * SG_FX.overtimeLowHp) k *= 1 - SG_FX.overtimeGuard;
     return k;
   }

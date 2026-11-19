@@ -21,6 +21,8 @@ import {
   SG_PIECE_KIND,
   SG_SET_INFO,
   SG_SETS,
+  SG_EGG,
+  eggKnown,
   SHOP_ENH_MAX,
   sgPieceOf,
   sgSetOf,
@@ -31,7 +33,7 @@ import {
   type SgSet,
 } from "@/lib/rpg/setGear";
 import type { RpgView } from "@/lib/rpg/types";
-import { weaponStyleOf, weaponStyleText } from "@/lib/rpg/weapons";
+import { weaponStyleOf, weaponStyleText, WEAPON_DMG_LABEL, weaponDmgKind } from "@/lib/rpg/weapons";
 import { errorMessage } from "@/lib/api";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { josa } from "@/lib/rpg/skillText";
@@ -267,9 +269,10 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
                 className={g.setChip}
                 data-on={counts[set] >= 2 || undefined}
                 style={{ "--set": SG_SET_INFO[set].color } as CSSProperties}
-                title={`2개 끼면 ${SG_SET_INFO[set].two}, 4개 끼면 ${SG_SET_INFO[set].four}`}
+                title={`2개 끼면 ${SG_SET_INFO[set].two}, 4개 끼면 ${SG_SET_INFO[set].four}, 5개 끼면 ${eggKnown(c.sgEgg, set) ? SG_EGG[set].name : "???"}`}
               >
-                <b>{SG_SET_INFO[set].short}</b> {counts[set]}/4
+                {/* 11/19 4개를 넘으면 /5 — 숨겨진 5세트 효과가 있다는 귀띔 */}
+                <b>{SG_SET_INFO[set].short}</b> {counts[set]}/{counts[set] >= 4 ? 5 : 4}
               </span>
             ))}
           </div>
@@ -376,7 +379,7 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
                     <span style={{ color: SG_SET_INFO[set].color }}>
                       {SG_SET_INFO[set].name}{" "}
                       <small>
-                        {counts[set]}/4 · {SG_SET_INFO[set].styles}
+                        {counts[set]}/{counts[set] >= 4 ? 5 : 4} · {SG_SET_INFO[set].styles}
                       </small>
                     </span>
                   </div>
@@ -387,6 +390,7 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
                           x={x}
                           set={set}
                           count={counts[set]}
+                          egg={eggKnown(c.sgEgg, set)}
                           diff={diffOf(x)}
                           target={targetOf(x.gear)}
                           cur={c.equip[targetOf(x.gear)]}
@@ -468,7 +472,7 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
                                   setDlg(x.piece ? { kind: "enhance", piece: x.piece.u, tab: "enhance" } : { kind: "enhance", shop: x.gear.id, tab: "enhance" })
                                 }
                               >
-                                {x.enh >= SHOP_ENH_MAX ? "강화 끝 +5" : "강화"}
+                                {x.enh >= SHOP_ENH_MAX ? `강화 끝 +${SHOP_ENH_MAX}` : "강화"}
                               </button>
                             )}
                             {free > 1 ? (
@@ -564,7 +568,7 @@ function Row({ x, open, onToggle, children }: { x: BagEntry; open: boolean; onTo
   const worn = isSg ? !!x.slot : x.equipped > 0;
   const sub = isSg
     ? `${grade.label} · ${KIND_LABELS[SG_PIECE_KIND[sgPieceOf(x.it)]]}`
-    : `${grade.label} · ${KIND_LABELS[x.gear.kind]} · Lv.${x.gear.reqLevel}${x.gear.kind === "weapon" ? ` · ${weaponStyleOf(x.gear).name}` : ""}`;
+    : `${grade.label} · ${KIND_LABELS[x.gear.kind]} · Lv.${x.gear.reqLevel}${x.gear.kind === "weapon" ? ` · ${weaponStyleOf(x.gear).name} · ${WEAPON_DMG_LABEL[weaponDmgKind(weaponStyleOf(x.gear).id)]}` : ""}`;
   return (
     <li className={g.row} data-open={open || undefined} data-low={x.low || undefined} style={{ "--grade": grade.color } as CSSProperties}>
       <button
@@ -632,6 +636,7 @@ function SgDetail({
   x,
   set,
   count,
+  egg,
   diff,
   target,
   cur,
@@ -647,6 +652,8 @@ function SgDetail({
   x: Extract<BagEntry, { type: "sg" }>;
   set: SgSet;
   count: number;
+  /** 11/19 숨겨진 5세트 효과를 발견했나 (아니면 「???」) */
+  egg: boolean;
   diff: StatDiff[];
   target: GearSlot;
   cur: string | null;
@@ -682,10 +689,22 @@ function SgDetail({
       </ul>
       <div className={g.setFx}>
         <span>
-          {info.name} {x.slot ? `${count}/4` : `${count}/4, 끼면 ${Math.min(5, after)}/4`}
+          {/* 11/19 4개를 넘으면 /5 (숨겨진 5세트 효과) */}
+          {info.name} {x.slot ? `${count}/${count >= 4 ? 5 : 4}` : `${count}/${count >= 4 ? 5 : 4}, 끼면 ${Math.min(5, after)}/${after >= 4 ? 5 : 4}`}
         </span>
         <span data-on={count >= 2 || undefined}>2개 끼면 {info.two}</span>
         <span data-on={count >= 4 || undefined}>4개 끼면 {info.four}</span>
+        {/* 11/19 숨겨진 5세트 효과: 판에서 처음 켜지기 전까지는 「???」 */}
+        <span data-on={count >= 5 || undefined} data-egg={egg ? "known" : "hidden"}>
+          5개 끼면{" "}
+          {egg ? (
+            <>
+              <b>{SG_EGG[set].name}</b> · {SG_EGG[set].desc}
+            </>
+          ) : (
+            "???"
+          )}
+        </span>
       </div>
       <p className={g.note}>
         {x.gear.desc}
@@ -724,6 +743,9 @@ function SgDetail({
               </button>
               <button type="button" className={ui.button} disabled={busy} onClick={() => onEnhance("reroll")}>
                 옵션 굴리기
+              </button>
+              <button type="button" className={ui.button} disabled={busy} onClick={() => onEnhance("inherit")}>
+                강화 승계
               </button>
               <button type="button" className={ui.button} disabled={busy || !!x.slot} onClick={onDisassemble}>
                 분해

@@ -1756,6 +1756,28 @@ button.hotSlot:disabled {
   align-content: start;
 }
 
+/* ── 11/19 사냥터·야근 빌딩 창(결과 창 포함)은 데스크톱에서 세로로 길게: 화면 높이 − 64px (큰 화면은 980px까지).
+   폰(560px 이하)은 공용 창 규칙 그대로 화면 전체. dialog.를 붙여 공용 .dialog 높이보다 앞서게 */
+@media (min-width: 561px) {
+  dialog.huntDialog {
+    height: min(980px, calc(100dvh - 64px), var(--dialog-max-h));
+  }
+}
+
+/* 스킬 탭은 남는 높이를 그대로 쓴다 (트리가 늘고 줄며, 단축 줄은 맨 아래). 넓은 데스크톱만 — 좁으면 예전처럼 본문 스크롤 */
+@media (min-width: 721px) {
+  /* 창이 아주 낮으면 이 높이 아래로는 줄지 않고 본문이 스크롤된다 */
+  .huntDialog .tabPanel[data-tab="skills"] {
+    flex: 1 1 0;
+    min-height: 590px;
+  }
+
+  .huntDialog .tabPanel[data-tab="skills"] > .lobby {
+    flex: 1 1 0;
+    min-height: 0;
+  }
+}
+
 .guideOpen {
   margin-left: auto;
   min-height: 30px;

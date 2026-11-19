@@ -34,7 +34,9 @@ describe("equipTarget · slotAccepts", () => {
 describe("gearDiff", () => {
   it("빈 칸에 끼면 오르는 것만", () => {
     const d = gearDiff(char(), "weapon", "w_ruler");
-    expect(d).toEqual([{ key: "atk", label: "ATK", before: expect.any(Number), after: expect.any(Number), delta: 6 }]);
+    // 11/19 물공 무기는 명중도 조금 (나무 자 명중 +2)
+    expect(d.find((x) => x.key === "atk")).toEqual({ key: "atk", label: "ATK", before: expect.any(Number), after: expect.any(Number), delta: 6 });
+    expect(d.every((x) => x.delta > 0)).toBe(true);
   });
 
   it("바꿔 끼면 오르고 내리는 것", () => {

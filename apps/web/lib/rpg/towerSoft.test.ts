@@ -22,7 +22,17 @@ import {
   towerKillRate,
   type TowerState,
   type TowerVerdict,
+  isCheckpoint,
+  isChestFloor,
+  nextCheckpoint,
+  TOWER_CHEST_FROM,
 } from "./tower";
+// 11/19 상자 층 경계는 상수에서 (경계가 바뀌어도 그대로 통과하게)
+const floorsOf = (start: number, n: number) => Array.from({ length: n }, (_, i) => start + i);
+const chestsIn = (start: number, n: number) => floorsOf(start, n).filter(isChestFloor);
+/** f층 이상에서 처음 고를 수 있는 시작 층 (체크포인트) */
+const cpFrom = (f: number) => (isCheckpoint(f) ? f : nextCheckpoint(f));
+
 import { RF_SPARK_CAP } from "./towerThemes/rooftopPlan";
 import type { HuntResult } from "./types";
 
@@ -168,18 +178,21 @@ describe("부드러운 거절 (한도 없음 — 의심 판: 보상은 주고 �
 describe("의심 판 정산: 층·초월 EXP·상자는 그대로, 최고·주간 기록은 그대로 두고 체크포인트만 연다", () => {
   const base: TowerState = { tRuns: 0, tBank: 0, tFl: 0, tChest: 0, fBest: 18, fBestMs: 900_000, fWk: "20261116", fWkBest: 18, fWkMs: 900_000 };
   it("towerSettle suspect", () => {
-    const a = { day: "20261116", week: "20261116", start: 21, floors: 12, floorMs: 600_000 };
+    const st = cpFrom(TOWER_CHEST_FROM);
+    const top = st + 11;
+    const a = { day: "20261116", week: "20261116", start: st, floors: 12, floorMs: 600_000 };
     const ok = towerSettle(base, a);
     const sus = towerSettle(base, { ...a, suspect: true });
     expect([sus.tExp, sus.runs, sus.chests]).toEqual([ok.tExp, ok.runs, ok.chests]);
-    expect(sus.chests).toEqual([25, 30]);
+    expect(sus.chests).toEqual(chestsIn(st, 12));
+    expect(sus.chests.length).toBeGreaterThan(0);
     expect(ok).toMatchObject({ newBest: true, newWeek: true });
-    expect(sus).toMatchObject({ newBest: false, newWeek: false, best: 32 });
-    expect(sus.patch).toMatchObject({ fBest: 18, fBestMs: 900_000, fWkBest: 18, fWkMs: 900_000, fSus: 32 });
+    expect(sus).toMatchObject({ newBest: false, newWeek: false, best: top });
+    expect(sus.patch).toMatchObject({ fBest: 18, fBestMs: 900_000, fWkBest: 18, fWkMs: 900_000, fSus: top });
     // 체크포인트는 의심 판 층까지 열린다
     const c = { ...base, ...sus.patch };
-    expect(towerReach(c)).toBe(32);
-    expect(endgameView({ ...c, tLevel: 0 }, "20261116", "20261116", null).tower.checkpoints).toEqual(towerCheckpoints(32));
+    expect(towerReach(c)).toBe(top);
+    expect(endgameView({ ...c, tLevel: 0 }, "20261116", "20261116", null).tower.checkpoints).toEqual(towerCheckpoints(top));
     expect(endgameView({ ...c, tLevel: 0 }, "20261116", "20261116", null).tower.best).toBe(18);
     // 더 낮은 의심 판은 fSus를 줄이지 않는다
     expect(towerSettle(c, { ...a, floors: 2, suspect: true }).patch.fSus).toBeUndefined();

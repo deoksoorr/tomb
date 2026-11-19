@@ -148,6 +148,8 @@ const PERKS = [
   { key: "move", label: "이동 속도", v: 0.3 },
 ] as const;
 
+/** 11/19 광역 스킬·회오리처럼 한 번에 여러 마리를 치는 타격: 맞은 적마다 카드 효과(불·얼음·독·사내 정치·원샷)가 붙는 확률 */
+export const AOE_PROC = 1 / 3;
 const SHOT_CAP = 220;
 const FX_CAP = 90;
 const DEPTH = 1e5;
@@ -195,6 +197,8 @@ export class CardRun<M extends CardMon> {
   /** 11/17 능력치에 얹혀 있는 잠깐 혜택 (1 = 법인카드, 2 = 연차 몰아 쓰기) — 하나라도 켜지거나 꺼지면 능력치를 다시 (예전엔 둘 다 끝나야 다시 계산해서 먼저 끝난 쪽이 최대 5초 더 남았다) */
   private buffMask = 0;
   private skillChainAt = 0;
+  /** 11/19 스킬로 맞힌 업무 토스 (1초에 한 번) */
+  private skillTossAt = 0;
   /** 이번 공격에서 연쇄 번개·토스를 아직 안 썼다 */
   private chainReady = false;
   private tossReady = false;
@@ -376,6 +380,8 @@ export class CardRun<M extends CardMon> {
       crit: base.crit + s.crit,
       maxHp: Math.max(1, Math.round(base.maxHp * s.hpMul * (1 - BOSS_DEAL_HP_COST) ** this.dealsTaken)),
       move: base.move * s.moveMul * (1 + t("move")),
+      // 11/19 텀블러 리필: 최대 SP +
+      maxSp: Math.round(base.maxSp * s.spMul),
     };
   }
   /** 근접 닿는 거리 (직보) */
@@ -415,10 +421,46 @@ export class CardRun<M extends CardMon> {
     return 1 + this.s.skillDmg;
   }
 
-  /** 11/15 스킬이 맞았다: 불·얼음·독·사내 정치도 붙고, 번개는 0.5초에 한 번 */
-  onSkillHit(m: M): void {
+  /** 11/19 갈래 카드: 그 갈래 스킬 피해 배율 */
+  branchMul(b: "ember" | "frost" | "soul" | "worker"): number {
+    return 1 + this.s.br[b];
+  }
+  /** 11/19 손에 익은 연장: 일꾼 스킬 쿨타임 배율 */
+  get wkCdMul(): number {
+    return 1 - this.s.wkCd;
+  }
+  /** 11/19 업무 인수인계: 스킬 뒤 기본 공격 피해 + (0이면 없음) */
+  get handover(): number {
+    return this.s.handover;
+  }
+
+  /** 11/19 마공 카드: 마공 스킬 피해 배율 · 쿨타임 배율 · 쓴 SP 환급 비율 */
+  get magicMul(): number {
+    return 1 + this.s.magicDmg;
+  }
+  get magicCdMul(): number {
+    return 1 - this.s.magicCd;
+  }
+  get refund(): number {
+    return this.s.refund;
+  }
+
+  /**
+   * 11/15 스킬이 맞았다: 불·얼음·독·사내 정치도 붙고, 번개는 0.5초에 한 번, 업무 토스는 1초에 한 번 (11/19).
+   * 11/19 광역 스킬(aoe)은 맞은 적마다 1/3 확률로만 붙는다 (한 번에 여러 마리를 치니까 과하지 않게)
+   */
+  onSkillHit(m: M, aoe = false): void {
     const s = this.s;
     const now = this.h.now();
+    if (aoe && Math.random() >= AOE_PROC) {
+      // 광역 스킬: 상태 이상·사내 정치는 건너뛰고 번개·토스만 쿨을 따라 본다
+      this.skillChainOnly(m, now);
+      return;
+    }
+    if (s.toss && now >= this.skillTossAt) {
+      this.skillTossAt = now + 1000;
+      this.toss(m, s.toss);
+    }
     if (s.burn || s.chill || s.poison) {
       const x = this.mst(m);
       if (s.burn) {
@@ -443,6 +485,17 @@ export class CardRun<M extends CardMon> {
       this.chain(m);
     }
     if (s.politics > 0 && m.alive && Math.random() < s.politics) this.quarrel(m);
+  }
+
+  private skillChainOnly(m: M, now: number): void {
+    if (this.s.chain && now >= this.skillChainAt) {
+      this.skillChainAt = now + 500;
+      this.chain(m);
+    }
+    if (this.s.toss && now >= this.skillTossAt) {
+      this.skillTossAt = now + 1000;
+      this.toss(m, this.s.toss);
+    }
   }
 
   /** 참조 추가만큼 한 번 피해 */
@@ -607,9 +660,9 @@ export class CardRun<M extends CardMon> {
     return best;
   }
 
-  /** 원샷 결재: 일반 몬스터(우두머리·정예 빼고) 5% */
-  oneshot(m: M): boolean {
-    if (!this.s.oneshot || m.boss || m.elite || Math.random() >= this.s.oneshotP) return false;
+  /** 원샷 결재: 일반 몬스터(우두머리·정예 빼고) 5%. 11/19 광역 스킬·회오리처럼 여러 마리를 한 번에 치면 1/3 */
+  oneshot(m: M, aoe = false): boolean {
+    if (!this.s.oneshot || m.boss || m.elite || Math.random() >= this.s.oneshotP * (aoe ? AOE_PROC : 1)) return false;
     const sz = this.h.size(m);
     this.h.float(m.x, m.y - sz - 6, "원샷 결재!", "#ffd84a", 11);
     this.burst(m.x, m.y - sz / 2, 0xffd84a, 8);
@@ -617,11 +670,12 @@ export class CardRun<M extends CardMon> {
     return true;
   }
 
-  /** 무기 공격이 맞았다: 불·얼음·독, 공격마다 한 번 연쇄 번개·업무 토스 */
-  onBasicHit(m: M): void {
+  /** 무기 공격이 맞았다: 불·얼음·독, 공격마다 한 번 연쇄 번개·업무 토스. 11/19 회오리(광역 기본 공격)는 상태 이상·사내 정치가 1/3 */
+  onBasicHit(m: M, aoe = false): void {
     const s = this.s;
     const now = this.h.now();
-    if (s.burn || s.chill || s.poison) {
+    const proc = !aoe || Math.random() < AOE_PROC;
+    if (proc && (s.burn || s.chill || s.poison)) {
       const x = this.mst(m);
       if (s.burn) {
         if (x.burnUntil < now) x.burnNext = now + 450;
@@ -646,7 +700,7 @@ export class CardRun<M extends CardMon> {
       this.chain(m);
     }
     // 11/15 사내 정치: 맞은 적이 옆 적을 친다
-    if (s.politics > 0 && m.alive && Math.random() < s.politics) this.quarrel(m);
+    if (proc && s.politics > 0 && m.alive && Math.random() < s.politics) this.quarrel(m);
     if (s.toss && this.tossReady && this.kind !== "ranged") {
       this.tossReady = false;
       this.toss(m, s.toss);

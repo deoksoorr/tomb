@@ -7,6 +7,7 @@ import { econKeyFor, kstDay } from "../store/accounts";
 import { K } from "../store/keys";
 import { ECON_TTL_SEC, spendCategory } from "../store/types";
 import type { CharacterState, DailyStats } from "./types";
+import type { QuestHook } from "../store/types";
 
 // 사냥터 저장소. 캐릭터는 계정마다 JSON 한 덩어리이고, 모든 변경은 "읽기 → 순수 함수 → 버전 비교 후 쓰기(Lua)"로
 // 원자적이다 (두 탭에서 동시에 사고팔아도 한쪽이 다시 계산된다). 로컬은 같은 규칙의 메모리 구현을 쓴다.
@@ -50,7 +51,8 @@ export interface RpgStore {
   claimRun(acct: string, nonce: string): Promise<ClaimResult>;
   /** 11/18 지금 진행 중인 판의 nonce (없으면 null) — 드롭 시드 알려 주기(reveal)가 진행 중인 판에만 */
   activeRun(acct: string): Promise<string | null>;
-  addDaily(acct: string, day: string, d: Partial<DailyStats>): Promise<DailyStats>;
+  /** 11/18 quest = 오늘의 할 일 진행 (lib/retainQuest — 같은 파이프라인에서 +1, 올린 값은 quest.have) */
+  addDaily(acct: string, day: string, d: Partial<DailyStats>, quest?: QuestHook | null): Promise<DailyStats>;
   daily(acct: string, day: string): Promise<DailyStats>;
   /** 최근 60분 안에 시작한 판 수 */
   runsThisHour(acct: string, now: number): Promise<number>;
@@ -130,8 +132,9 @@ export class MemoryRpgStore implements RpgStore {
     return a && a.until >= Date.now() ? a.nonce : null;
   }
 
-  async addDaily(acct: string, day: string, d: Partial<DailyStats>): Promise<DailyStats> {
+  async addDaily(acct: string, day: string, d: Partial<DailyStats>, quest?: QuestHook | null): Promise<DailyStats> {
     const k = rk.day(acct, day);
+    if (quest) quest.have = quest.local(1);
     const cur = this.days.get(k) ?? { points: 0, runs: 0, exp: 0 };
     const next = { points: cur.points + (d.points ?? 0), runs: cur.runs + (d.runs ?? 0), exp: cur.exp + (d.exp ?? 0) };
     this.days.set(k, next);
@@ -290,12 +293,18 @@ export class RedisRpgStore implements RpgStore {
     return (await this.redis.get<string>(rk.active(acct))) ?? null;
   }
 
-  async addDaily(acct: string, day: string, d: Partial<DailyStats>): Promise<DailyStats> {
+  async addDaily(acct: string, day: string, d: Partial<DailyStats>, quest?: QuestHook | null): Promise<DailyStats> {
     const k = rk.day(acct, day);
     const p = this.redis.pipeline();
     for (const f of ["points", "runs", "exp"] as const) if (d[f]) p.hincrby(k, f, d[f]);
     p.expire(k, DAY_TTL_SEC);
-    await p.exec();
+    // 11/18 오늘의 할 일 (사냥·별자리 한 판): 같은 파이프라인 맨 뒤에서 +1 (칸이 처음 생겼을 때만 만료를 따로 — 하루 한 번)
+    if (quest) p.hincrby(quest.key, quest.field, 1);
+    const out = await p.exec<unknown[]>();
+    if (quest) {
+      quest.have = Number(out[out.length - 1]) || 0;
+      if (quest.have === 1) await this.redis.expire(quest.key, quest.ttlSec);
+    }
     return this.daily(acct, day);
   }
 
