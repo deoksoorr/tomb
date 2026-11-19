@@ -28,7 +28,8 @@ import s from "./forage.module.css";
 type Phase = "ready" | "casting" | "wait" | "bite" | "reel" | "sending" | "done";
 type Tone = "hot" | "good" | "bad" | undefined;
 
-const KEYS = new Set(["Space", "KeyE", "KeyJ", "Enter"]);
+// 11/19 Enter는 낚시 키에서 뺐다 — 낚시 중에도 늘 채팅 (입질이 오면 채팅창을 닫고 Space·E로)
+const KEYS = new Set(["Space", "KeyE", "KeyJ"]);
 /** 장력이 이 위로 올라가면 줄이 끊어진다 */
 const SNAP_AT = 1;
 /** 손을 놓고 이만큼 지나면 물고기가 도망간다 */
@@ -291,8 +292,8 @@ export default function FishingPanel({
     };
     const down = (e: KeyboardEvent) => {
       if (document.querySelector("dialog[open]") || typing()) return;
-      // 11/16 자동 낚시 중 Enter는 채팅 입력칸을 연다. 11/19 손으로 낚을 때도 입질·줄다리기 중이 아니면 채팅 (Enter가 낚시 키라 낚시 중 채팅을 못 했다)
-      if (e.code === "Enter" && (autoRef.current || (phaseRef.current !== "bite" && phaseRef.current !== "reel"))) {
+      // 11/19 Enter는 자동이든 손 낚시든, 어느 단계든 늘 채팅 입력칸을 연다 (예전엔 손 낚시에서 Enter가 낚시 키라 채팅을 못 했다)
+      if (e.code === "Enter" || e.code === "NumpadEnter") {
         e.preventDefault();
         bridge.emit("chat:prefill", { text: "" });
         return;
@@ -464,7 +465,7 @@ export default function FishingPanel({
           자동 낚시는 {AUTO_PACE_NOTE} {AUTO_RANK_NOTE}
         </p>
       )}
-      <p className={s.keys}>{coarse ? "큰 버튼으로 던지고 당겨요. 감을 땐 누르고 있어요." : "Space나 E로 던지고 당겨요. 감을 땐 누르고 있어요. Esc나 방향키로 일어나요."}</p>
+      <p className={s.keys}>{coarse ? "큰 버튼으로 던지고 당겨요. 감을 땐 누르고 있어요. 낚시 중에도 [채팅]으로 이야기할 수 있어요." : "Space나 E로 던지고 당겨요. 감을 땐 누르고 있어요. 낚시 중에도 Enter로 채팅해요. Esc나 방향키로 일어나요."}</p>
     </div>
   );
 }
