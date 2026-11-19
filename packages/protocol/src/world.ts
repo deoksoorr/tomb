@@ -34,32 +34,36 @@ export const WALL_THICKNESS = 2 * TILE;
  * 13 = 행운권 판매대 충돌 · 범퍼카장 링크/오리 연못 넓힘
  * 14 = 11/16 서쪽 모닥불을 치우고 바닷가행 정류장 — 새 충돌 자리에 옛 기록이 끼지 않게
  * 15 = 11/16 마을 곳곳 망원경 넷 (광장 북쪽·징검다리 남쪽 둑·호숫가·쉼터 광장 받침 충돌, VILLAGE_SCOPES) — 새 충돌 자리에 옛 기록이 끼지 않게
+ * 16 = 11/19 옛 묘역 개편: 묘비를 별 보기 언덕 서쪽(옛 묘역, 16기)으로 올리고 계단·아치를 없앴다(입구는 동쪽 달빛 연못 쪽),
+ *      아래 묘역 자리는 등불 골목(10~15번지 집터 6곳)·성황당 없앰·열기구 출발장 옮김 — 새 충돌 자리에 옛 기록이 끼지 않게
  */
-export const MAP_VERSION = 15; // 15 = 마을 곳곳 망원경 넷 (받침 충돌 VILLAGE_SCOPES) (11/16)
+export const MAP_VERSION = 16; // 16 = 옛 묘역을 언덕으로, 아래는 등불 골목 집터 (11/19)
 
 const CX = MAP_WIDTH / 2; // 720
 
 // ── 구역 ── (달빛 묘지 마을. 한가운데 큰 모닥불 광장을 묘역 세 곳·언덕·연못·주거 구역이 바짝 둘러싼다)
 //
 //  y=0    ┌──돌담──────────────────[정문]──[사냥터 동굴]──────────────────────────┐
-//         │ ▲별 보기 언덕▲ (달빛 연못) 유령잡화점 SPAWN  ⚑팻말   분양사무소 (까마귀 연못)│
-//  y≈176  │ ▲망원경·벤치▲ ═══════════════ 북쪽 길 ═════════════════════════════════│
-//  y≈272  │ ▲절벽·계단▲    종루 ┌──────── 모닥불 광장 ────────┐ ║ 집 집 집      │
-//  y≈288  │ ┌─옛 묘역 32─┐ 성황당│ 분수  그네   트램펄린     │ ║ 집 집 집      │
-//         │ │ 철책·묘비  │═════│      ( 큰 모닥불 )        │ ║ 집 집 집      │
-//  y≈544  │ └────────────┘     │ 회전목마  해먹   시소      │ ║ 집 집 집      │
+//         │ ┌옛 묘역┐▲별 보기▲ (달빛 연못) 유령잡화점 SPAWN  ⚑팻말   분양사무소 (까마귀 연못)│
+//  y≈176  │ │묘비16 │ 망원경·열기구 ═입구═ 북쪽 길 ═════════════════════════════════│
+//  y≈272  │ ▲──────── 절벽 ────────▲ 종루 ┌──────── 모닥불 광장 ────────┐ ║ 집 집 집      │
+//  y≈296  │ 등불 골목 10 11 12      │ 분수  그네   트램펄린     │ ║ 집 집 집      │
+//         │ ═════════════════════════│      ( 큰 모닥불 )        │ ║ 집 집 집      │
+//  y≈432  │           13 14 15      │ 회전목마  해먹   시소      │ ║ 집 집 집      │
 //  y≈600  │ 묘지기 모닥불       └───────────────────────────┘ ╚═══════════════│
 //  y≈700  │ ~~~ 강 ~~[서쪽 다리]~~~~[징검다리]~~[가운데 다리]~~~╲  나루터·정류장  │
 //  y≈784  │ ┌─ 동물원 (우리 5곳·사육사) ─┐ (오리 연못) ┌─ 범퍼카장 ─┐ 호박밭 ╲( 호수 ·배 )│
 //  y≈1008 └──────────────────────────────────────────────────────────────────────┘
 
-export type ZoneId = "hill" | "graveyard" | "plaza" | "housing" | "river" | "lake" | "pond" | "forest" | "meadow" | "gate" | "busyard" | "zoo" | "bumper";
+export type ZoneId = "hill" | "graveyard" | "plaza" | "housing" | "lanes" | "river" | "lake" | "pond" | "forest" | "meadow" | "gate" | "busyard" | "zoo" | "bumper";
 export type Zone = { id: ZoneId; name: string; x: number; y: number; w: number; h: number };
 /** 구역 사각형 (이름표·안내·앞으로의 콘텐츠 배치 기준. 충돌과는 상관없다) */
 export const ZONES: readonly Zone[] = [
-  { id: "hill", name: "별 보기 언덕", x: 32, y: 32, w: 336, h: 208 },
+  // 11/19 언덕 서쪽 반이 옛 묘역(무덤 16기), 동쪽 반이 별 보기 마당. 아래 예전 묘역 자리는 등불 골목(10~15번지)
+  { id: "graveyard", name: "옛 묘역", x: 48, y: 48, w: 160, h: 184 },
+  { id: "hill", name: "별 보기 마당", x: 208, y: 32, w: 160, h: 208 },
   { id: "gate", name: "정문 앞마당", x: 624, y: 32, w: 192, h: 128 },
-  { id: "graveyard", name: "옛 묘역", x: 48, y: 288, w: 384, h: 256 },
+  { id: "lanes", name: "등불 골목", x: 32, y: 272, w: 448, h: 288 },
   { id: "plaza", name: "모닥불 광장", x: 512, y: 240, w: 416, h: 400 },
   { id: "housing", name: "주거 구역", x: 976, y: 208, w: 432, h: 576 },
   { id: "river", name: "강", x: 32, y: 664, w: 1120, h: 136 },
@@ -82,11 +86,14 @@ export const SPAWN = { x: CX, y: 60 } as const;
 
 // ── 묘역 (F1·F4 → 11/16 옛 묘역 하나, 49번 성불과 같은 정원) ──
 /**
- * 한 채널 묘역에 동시에 놓일 수 있는 묘비 수 (GRAVE_AREAS 칸 수 = 8열 × 4줄).
- * 버드나무 묘역이 동물원이 되고(7), 다리 건너 묘역이 범퍼카장이 되면서(11/16) 묘비 자리는 모두 옛 묘역으로 모였다 — 정원은 그대로 32.
+ * 한 채널 묘역에 동시에 놓일 수 있는 묘비 수 (GRAVE_AREAS 칸 수 = 4열 × 4줄).
+ * 버드나무 묘역이 동물원이 되고(7), 다리 건너 묘역이 범퍼카장이 되면서(11/16) 묘비 자리는 모두 옛 묘역으로 모였다.
+ * 11/19 옛 묘역을 별 보기 언덕 서쪽으로 올리며 정원을 절반(32 → 16)으로 — 넘치는 묘비는 다음 정리 때 가장 오래된 것부터 성불한다.
  * 넘치면 가장 오래된 묘비부터 앞당겨 성불한다(서버 lib/store/passing.ts). 서버·클라이언트가 같은 값을 쓴다.
  */
-export const GRAVEYARD_CAPACITY = 32;
+export const GRAVEYARD_CAPACITY = 16;
+/** 11/19 묘비 그림 크기 (언덕 무덤 존에 맞게 작게). 그림·히트·충돌·서는 자리가 같이 줄어든다 */
+export const GRAVE_SCALE = 0.7;
 
 // ── 다시 피어날 자리 (제거됨, 49번) ── 옛 이름만 남긴다 (다른 모듈이 import하던 이름이 컴파일되게).
 /** @deprecated 다시 피어날 자리는 맵에서 없어졌다. 쓰지 않는다 */
@@ -119,11 +126,12 @@ function area(id: GraveArea["id"], name: string, rect: GraveArea["rect"], cols: 
   return { id, name, rect, cols, rows, block: cols / 2, aisleX, aisle, dx, dy, x0: aisleX - ((cols - 1) * dx + aisle) / 2, y0 };
 }
 /**
- * 옛 묘역(언덕 아래, 32기 = 8열 × 4줄, 가운데 자갈 통로는 언덕 계단과 줄을 맞춘다).
- * 둘째 줄 오솔길(타일 y 24)이 동문(성황당 쪽 길)과 이어지게 줄을 놓았다.
- * 예전 버드나무 묘역(C)은 동물원, 다리 건너 묘역(B)은 범퍼카장이 됐다 — 묘비 데이터(등록 순서)는 그대로이고 자리(graveSlot)만 옛 묘역으로 모인다.
+ * 옛 묘역 (11/19 별 보기 언덕 서쪽, 16기 = 4열 × 4줄 — 두 열씩 짝, 가운데 자갈 통로 x 112~144).
+ * 줄마다 묘비 받침 바로 아래가 오솔길이고(묘비 앞 서는 자리), 둘째 줄 오솔길이 동문(별 보기 마당 쪽)과 이어진다.
+ * 예전 버드나무 묘역(C)은 동물원, 다리 건너 묘역(B)은 범퍼카장, 언덕 아래 예전 옛 묘역은 등불 골목이 됐다 —
+ * 묘비 데이터(등록 순서)는 그대로이고 자리(graveSlot)만 이 묘역으로 모인다.
  */
-export const GRAVE_AREAS: readonly GraveArea[] = [area("A", "옛 묘역", { x: 48, y: 288, w: 384, h: 256 }, 8, 4, 240, 40, 320, 52)];
+export const GRAVE_AREAS: readonly GraveArea[] = [area("A", "옛 묘역", { x: 48, y: 48, w: 160, h: 184 }, 4, 4, 128, 32, 72, 42)];
 
 /** @deprecated 예전 한 묘역 격자 이름 (호환용). 이제 옛 묘역 하나의 격자와 같다 (8 × 4 = 32) */
 export const GRID_COLS = GRAVE_AREAS[0].cols;
@@ -148,7 +156,7 @@ export const GRID_X0 = GRAVE_AREAS[0].x0;
 
 /**
  * 묘비 자리 (index는 등록 순서. 묘역 정원을 넘으면 자리를 돌려 쓴다).
- * 등록 순서 index % 32 = k → 옛 묘역 k번 칸 (줄 = k ÷ 8, 열 = k % 8, 왼쪽 위부터 줄마다 채운다)
+ * 등록 순서 index % 16 = k → 옛 묘역 k번 칸 (줄 = k ÷ 4, 열 = k % 4, 왼쪽 위부터 줄마다 채운다)
  */
 export function graveSlot(index: number): { x: number; y: number; col: number; row: number; area: GraveArea["id"] } {
   const k = ((index % GRAVEYARD_CAPACITY) + GRAVEYARD_CAPACITY) % GRAVEYARD_CAPACITY;
@@ -211,26 +219,29 @@ export const HUNT_SIGN = { x: 824, y: 112 } as const;
 export const HOUSING_OFFICE = { x: 960, y: 156 } as const;
 /** 분양 사무소 문 앞 */
 export const HOUSING_DOOR = { x: 960, y: 168 } as const;
-/** 성황당: 돌무더기 + 천을 묶은 나무. 옛 묘역 동문 바로 밖 (F10: 묘역 옆). 돌무더기 앞자리 */
-export const SHRINE = { x: 472, y: 372 } as const;
+/**
+ * 「옛 묘역 입구」 팻말 앞자리 (11/19 성황당을 없애고 그 일 — 성불 안내·성불한 이야기들 — 을 언덕 입구 팻말이 맡는다).
+ * 이름은 예전 그대로 SHRINE (portal kind "shrine"). 입구(HILL_GATE) 바로 밖, 북쪽 길 남쪽 가장자리 (팻말은 길 아래 풀밭에)
+ */
+export const SHRINE = { x: 400, y: 206 } as const;
 /** 특별한 장소 상호작용 반경 */
 export const PORTAL_RADIUS = 18;
 
 // ── 주거 구역 ── 분양 마을을 메인 맵에 합쳤다. 번지(1..WORLD_LOTS)마다 필지 하나, 그 집의 외관이 서 있다.
 // 필지 = 외관 캔버스(가로 128 × 세로 104, game/housing/art.ts FACADE_*) 크기. 문 앞은 필지 (x+64, y+92).
 // 광장 동쪽에 3열 × 3줄 = 1~9번지 (격자는 4줄 — 넷째 줄은 쉼터 광장·버스 정류장 마당). 서쪽 골목(세로)과 줄마다 집 앞 골목(가로)이 있다.
-// 번지가 WORLD_LOTS보다 큰 집은 분양 사무소의 "분양 마을(2단지)"에서 본다.
+// 11/19 예전 옛 묘역 자리(언덕 아래)에 등불 골목 10~15번지 (3열 × 2줄, LANE_LOTS). 2단지(분양 마을)는 닫았다 — 새 분양은 1~WORLD_LOTS번지만.
 export const HOUSE_LOT_W = 128;
 export const HOUSE_LOT_H = 104;
 export const HOUSE_COLS = 3;
 /** 필지 격자 줄 수 (골목 계산용). 필지는 위 세 줄에만 선다 */
 export const HOUSE_ROWS = 4;
 /**
- * 메인 맵 번지 1..WORLD_LOTS (11/15: 1~9번지만 — 넷째 줄 10·11·12번지 자리는 없앴다. 어느 채널에도 집이 없던 줄).
- * 10번지 자리 → 쉼터 광장 (REST_PLAZA), 11·12번지 자리 → 버스 정류장 마당 (WHARF_YARD — 의뢰 게시판·주말 버스 정류장).
- * 그보다 큰 번지는 예전처럼 분양 마을(2단지) 번지다. 남은 집의 번지·자리는 그대로
+ * 메인 맵 번지 1..WORLD_LOTS. 1~9번지는 광장 동쪽 주거 구역(11/15 넷째 줄 자리는 쉼터 광장·버스 정류장 마당),
+ * 11/19 10~15번지는 언덕 아래 등불 골목(예전 옛 묘역 자리, LANE_LOTS). 그보다 큰 번지는 예전 2단지 번지 — 닫았다 (새 분양 없음).
  */
-export const WORLD_LOTS = HOUSE_COLS * 3;
+export const MAIN_LOTS = HOUSE_COLS * 3;
+export const WORLD_LOTS = MAIN_LOTS + 6;
 /** 중간에 비운 번지 (지금은 없다 — 번호를 다시 매기지 않고 한 번지만 빼야 할 때 쓴다) */
 export const CLOSED_LOTS: readonly number[] = [];
 /** 분양할 수 있는 번지인지 (1 이상 정수, 없앤 번지가 아님. WORLD_LOTS보다 크면 2단지) */
@@ -246,9 +257,24 @@ const HOUSE_Y0 = 216;
 const HOUSE_PITCH_X = HOUSE_LOT_W + 4;
 const HOUSE_PITCH_Y = HOUSE_LOT_H + 40;
 export type HouseLot = { lot: number; x: number; y: number; door: { x: number; y: number } };
+/** 11/19 등불 골목 필지 (10~15번지, 왼쪽 위 x,y). 예전 옛 묘역 자리 + 성황당 자리, 두 줄 사이 골목 y 400~432 */
+export const LANE_LOTS: readonly { x: number; y: number }[] = [
+  { x: 40, y: 296 },
+  { x: 172, y: 296 },
+  { x: 304, y: 296 },
+  { x: 40, y: 432 },
+  { x: 172, y: 432 },
+  { x: 304, y: 432 },
+];
+/** 등불 골목 (집터 6곳과 골목 — 바닥·장식 계산용) */
+export const LANES = { x: 32, y: 272, w: 448, h: 288 } as const;
 /** 번지 → 필지 (좌상단 x,y와 문 앞). 메인 맵에 없는 번지면 null */
 export function houseLot(lot: number): HouseLot | null {
   if (!isWorldLot(lot)) return null;
+  if (lot > MAIN_LOTS) {
+    const p = LANE_LOTS[lot - MAIN_LOTS - 1];
+    return { lot, x: p.x, y: p.y, door: { x: p.x + HOUSE_LOT_W / 2, y: p.y + 92 } };
+  }
   const i = lot - 1;
   const x = HOUSE_X0 + (i % HOUSE_COLS) * HOUSE_PITCH_X;
   const y = HOUSE_Y0 + Math.floor(i / HOUSE_COLS) * HOUSE_PITCH_Y;
@@ -469,7 +495,8 @@ export const FERRIS_SEATS: readonly FerrisSeat[] = Array.from({ length: FERRIS_C
  * 기구 b는 주기 BALLOON_CYCLE_MS마다 BALLOON_BOARD_MS 동안 출발장에서 태우고, BALLOON_FLIGHT_MS 동안 정해진 항로를 날아 돌아온다.
  * 두 대는 반 주기 어긋나 있어 출발장에서 오래 기다리지 않는다. 자리 = 기구마다 BALLOON_SEATS_EACH개, 앵커는 바구니 앞 (내리면 선다)
  */
-export const BALLOON_PAD = { x: 200, y: 100 } as const;
+// 11/19 서쪽 반이 옛 묘역이 되며 별 보기 마당 가운데(입구 길 바로 위)로 옮겼다
+export const BALLOON_PAD = { x: 264, y: 158 } as const;
 export const BALLOON_COUNT = 2;
 export const BALLOON_SEATS_EACH = 4;
 export const BALLOON_BOARD_MS = 30_000;
@@ -543,10 +570,13 @@ export function bumperSeatById(id: string): BumperSeat | undefined {
   return BUMPER_SEATS.find((s) => s.id === id);
 }
 
-// ── 별 보기 언덕 ── 북서쪽 구석의 높은 대지 (F3). 남쪽은 두 칸 높이 절벽, 동쪽은 바위 비탈이고 계단(HILL_STAIRS)으로만 오른다.
-// 계단은 옛 묘역 북문과 줄을 맞춘다 (언덕 위에서 묘역을 내려다본다)
+// ── 별 보기 언덕 ── 북서쪽 구석의 높은 대지 (F3). 남쪽은 두 칸 높이 절벽, 동쪽은 바위 비탈.
+// 11/19 서쪽 반은 옛 묘역(무덤 16기, GRAVE_AREAS), 동쪽 반은 별 보기 마당(망원경·열기구). 남쪽 계단은 없앴다 —
+// 아래 등불 골목에서 바로 못 올라오고, 동쪽 비탈의 입구(HILL_GATE, 북쪽 길과 같은 줄)로만 오른다.
 export const HILL = { x: 32, y: 32, w: 336, h: 208 } as const;
-/** 계단 (절벽 사이의 틈, 이 x 범위로만 오르내린다) */
+/** 11/19 언덕 입구: 동쪽 비탈에 낸 틈 (북쪽 길 두 줄 y 176~208과 같은 높이). 「옛 묘역 입구」 팻말은 SHRINE */
+export const HILL_GATE = { x: 368, y: 176, w: 16, h: 32 } as const;
+/** @deprecated 11/19 남쪽 계단은 없앴다 (예전 값 — 다른 모듈 호환용으로만 남긴다. 그리기·충돌에는 쓰지 않는다) */
 export const HILL_STAIRS = { x: 224, w: 32 } as const;
 /** 남쪽 절벽 높이 (언덕 아랫변 HILL.y + HILL.h 부터). 동쪽 비탈 폭은 TILE */
 export const HILL_CLIFF = 32;
@@ -660,14 +690,12 @@ export const FURNITURE: readonly Furniture[] = [
   // ── 정문 앞마당 ──
   { id: "bG", kind: "bench", x: 656, y: 100, facing: DIR.down, seatOffsets: two },
   { id: "bH", kind: "bench", x: 784, y: 100, facing: DIR.down, seatOffsets: two },
-  // ── 별 보기 언덕 ── 묘역을 내려다보는 긴 벤치, 망원경 옆 벤치
-  { id: "lB", kind: "bench", x: 128, y: 216, facing: DIR.down, seatOffsets: four },
+  // ── 별 보기 마당 (언덕 동쪽 반) ── 절벽 끝에서 등불 골목을 내려다보는 긴 벤치, 망원경 옆 벤치
+  { id: "lB", kind: "bench", x: 300, y: 222, facing: DIR.down, seatOffsets: four },
   { id: "bL", kind: "bench", x: 340, y: 132, facing: DIR.down, seatOffsets: two },
-  // ── 성황당 아래 (옛 묘역 동문 밖, 광장 쪽을 바라본다) ──
-  { id: "bA", kind: "bench", x: 466, y: 446, facing: DIR.down, seatOffsets: two },
-  // ── 옛 묘역 안 ── 묘비를 바라보는 추모 벤치
-  { id: "bI", kind: "bench", x: 132, y: 522, facing: DIR.up, seatOffsets: two },
-  { id: "bJ", kind: "bench", x: 348, y: 522, facing: DIR.up, seatOffsets: two },
+  // ── 등불 골목 동쪽 어귀 (광장 쪽을 바라본다 — 11/19 성황당 자리가 골목이 되어 동쪽으로) ──
+  { id: "bA", kind: "bench", x: 492, y: 446, facing: DIR.down, seatOffsets: two },
+  // (11/19 옛 묘역 안 추모 벤치 bI·bJ는 묘역이 언덕 위로 좁아지며 없앴다 — 묘비 앞 오솔길을 막지 않게)
   // ── 강변 산책로 (북쪽 둑, 강을 바라본다) ──
   { id: "lC", kind: "bench", x: 352, y: 652, facing: DIR.down, seatOffsets: four },
   { id: "bK", kind: "bench", x: 488, y: 652, facing: DIR.down, seatOffsets: two },

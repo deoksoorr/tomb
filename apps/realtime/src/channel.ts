@@ -1856,7 +1856,9 @@ export class ChannelCore<C extends object> {
     const points = this.goblin.claim(id, p.visitorId, positions, now);
     if (points === null) return;
     this.host.goblinChanged?.(this.goblin.state);
-    this.broadcastMap("village", encodeEvent({ t: "goblinCaught", id, sid: p.sid, name: p.name, points }));
+    // 11/19 "누가 잡았다"는 채널 모두에게 (캠핑장·바닷가 사람도 띠·채팅 알림으로 본다). 한 마리당 한 번, 이름은 입장 토큰 이름(p.name)
+    // 옛 클라이언트: 마을은 예전처럼 토스트, 캠핑장·바닷가 장면은 이 소식을 받아도 아무것도 하지 않는다
+    this.broadcast(encodeEvent({ t: "goblinCaught", id, sid: p.sid, name: p.name, points }));
     const conn = p.conn;
     const exp = Math.floor(now / 1000) + GOBLIN_GRANT_TTL_SEC;
     this.host.signGrant!({ kind: "goblin", visitorId: p.visitorId, points, nonce: id, exp }).then(

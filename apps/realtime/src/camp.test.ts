@@ -308,7 +308,7 @@ describe("reconnect and records", () => {
 });
 
 describe("golden goblin is village only", () => {
-  it("camp people neither hear about it nor can catch it (even standing on the same coordinates)", () => {
+  it("camp people neither see it nor can catch it (even standing on the same coordinates), but hear who caught it", () => {
     // 고블린이 캠핑장 범위 안의 좌표에 있는 판을 고른다 (같은 좌표에 선 캠핑장 사람이 거리로는 닿게)
     const T = 20 + MAP_INTERVAL_MS;
     let found: { r: number; x: number; y: number } | null = null;
@@ -338,7 +338,11 @@ describe("golden goblin is village only", () => {
     const w = join("w", { spawn: { x, y }, now: T - GOBLIN_AFTER_TELEPORT_MS });
     core.message(w, send({ t: "goblin", id: g.id }), T);
     expect(events(v).some((e) => e.t === "goblinCaught")).toBe(true);
-    expect(events(c).some((e) => e.t === "goblinCaught")).toBe(false);
+    // 11/19 "누가 잡았다"는 채널 모두에게 (캠핑장 사람도 띠·채팅 알림으로 본다) — 한 번만, 서버가 아는 이름으로
+    const heard = events(c).filter((e) => e.t === "goblinCaught");
+    expect(heard).toHaveLength(1);
+    expect(heard[0]).toMatchObject({ id: g.id, name: "w" });
+    expect(events(c).some((e) => e.t === "goblin")).toBe(false);
   });
 });
 

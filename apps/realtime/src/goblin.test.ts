@@ -4,6 +4,7 @@ import {
   GOBLIN_CLAIM_RADIUS,
   GOBLIN_FIRST_MAX_MS,
   GOBLIN_GAP_MIN_MS,
+  GOBLIN_JACKPOT_POINTS,
   GOBLIN_LIFE_MS,
   GOBLIN_POINTS_MAX,
   GOBLIN_POINTS_MIN,
@@ -73,8 +74,9 @@ describe("GoblinCore schedule", () => {
     expect(g.check(first - 1, 1).spawned).toBeUndefined();
     const r = g.check(first, 1);
     expect(r.spawned).toBeDefined();
-    expect(g.state.cur!.points).toBeGreaterThanOrEqual(GOBLIN_POINTS_MIN);
-    expect(g.state.cur!.points).toBeLessThanOrEqual(GOBLIN_POINTS_MAX);
+    // 11/19 보통 300~1,000P (10P 단위) 또는 대박 2,000P
+    const pts = g.state.cur!.points;
+    expect(pts === GOBLIN_JACKPOT_POINTS || (pts >= GOBLIN_POINTS_MIN && pts <= GOBLIN_POINTS_MAX && pts % 10 === 0)).toBe(true);
     expect(g.state.next! - first).toBeGreaterThanOrEqual(GOBLIN_GAP_MIN_MS);
     expect(g.due(1)).toBe(first + GOBLIN_LIFE_MS); // 사라질 때 깨운다
     const gone = g.check(first + GOBLIN_LIFE_MS, 1);

@@ -7,8 +7,7 @@ import {
   GOBLIN_LATE_MAX_MS,
   GOBLIN_LATE_MIN_MS,
   GOBLIN_LIFE_MS,
-  GOBLIN_POINTS_MAX,
-  GOBLIN_POINTS_MIN,
+  goblinPoints,
   goblinPos,
   type GoblinInfo,
 } from "@tomb/protocol";
@@ -102,7 +101,7 @@ export class GoblinCore {
       seed: Math.floor(r() * 0x7fffffff),
       at: now,
       until: now + GOBLIN_LIFE_MS,
-      points: between(r, GOBLIN_POINTS_MIN, GOBLIN_POINTS_MAX),
+      points: goblinPoints(r), // 11/19 보통 300~1,000P, 드물게 대박 2,000P (protocol npc.ts)
     };
     this.state.cur = cur;
     this.state.next = now + between(r, GOBLIN_GAP_MIN_MS, GOBLIN_GAP_MAX_MS);

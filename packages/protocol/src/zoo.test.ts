@@ -25,7 +25,7 @@ import {
 // 동물원(버드나무 묘역 자리)·사육사 펫·타는 펫 공용 규칙
 
 describe("동물원 펫 카탈로그", () => {
-  it("펫 8종 이상, 모두 꾸미기 펫 부위이고 영구 가격은 입문 펫 300P 이상, 작은 집터(2,000P)보다 싸게 (I0d)", () => {
+  it("펫 8종 이상, 모두 꾸미기 펫 부위이고 영구 가격은 입문 펫 300P 이상, 11/19 값 올림 뒤 작은 펫은 작은 집터(6,000P)보다 한참 싸게 (I0d)", () => {
     expect(ZOO_PETS.length).toBeGreaterThanOrEqual(8);
     expect(new Set(ZOO_PETS.map((p) => p.id)).size).toBe(ZOO_PETS.length);
     for (const p of ZOO_PETS) {
@@ -33,8 +33,8 @@ describe("동물원 펫 카탈로그", () => {
       expect(it?.kind, p.id).toBe("cosmetic");
       expect(it?.slot, p.id).toBe("pet");
       expect(p.price).toBeGreaterThanOrEqual(300);
-      // 타는 펫은 집과 함께 엔드 콘텐츠(4,000~6,000P), 나머지 펫은 2,000P 미만
-      expect(p.price).toBeLessThan(p.ride ? 10_000 : 2_000);
+      // 11/19 타는 펫은 집과 함께 엔드 콘텐츠(6,000~9,000P), 나머지 펫은 2,500P 미만
+      expect(p.price).toBeLessThan(p.ride ? 10_000 : 2_500);
       expect(petPrice(p.id)).toBe(p.price);
     }
     // 카탈로그의 모든 펫은 동물원에서 판다 (11/15 수집 의뢰 보상 펫은 도장 교환소에서만 — 동물원에 없다)
@@ -107,12 +107,12 @@ describe("11/17 동물원 새 펫 묶음", () => {
       const p = ZOO_PETS.find((z) => z.id === id)!;
       expect(itemById(id)!.price, id).toBe(p.price);
       if (p.ride) {
-        expect(p.price).toBeGreaterThanOrEqual(2000);
-        expect(p.price).toBeLessThanOrEqual(3000);
+        expect(p.price).toBeGreaterThanOrEqual(6000);
+        expect(p.price).toBeLessThanOrEqual(9000);
         expect(rideSpeed(id)).toBeLessThanOrEqual(rideSpeed("pet_deer"));
       } else {
-        expect(p.price).toBeGreaterThanOrEqual(450);
-        expect(p.price).toBeLessThanOrEqual(1200);
+        expect(p.price).toBeGreaterThanOrEqual(900);
+        expect(p.price).toBeLessThanOrEqual(2400);
       }
       // 착용 증서 길이 (옛 실시간 서버 한도) 때문에 기존 펫 id보다 길지 않게
       expect(id.length, id).toBeLessThanOrEqual(9);

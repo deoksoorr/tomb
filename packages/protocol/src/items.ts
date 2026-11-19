@@ -44,6 +44,8 @@ export type ItemDef = {
   ghost?: true;
   /** 12월 크리스마스 이벤트 한정: 상점 목록에 없고 살 수 없다. 관리자가 선물함으로 뿌리는 「크리스마스 선물상자」(xm_box)를 열면 영구로 나온다 (web lib/xmas/box) */
   event?: true;
+  /** 11/19 친구 초대 한정: 상점 목록에 없고 살 수 없다. 추천으로 데려온 이웃이 자리 잡으면 두 사람에게 선물함으로 영구로 간다 (web lib/referralService) */
+  invite?: true;
   /** 11/15 수집 의뢰 보상 등급 (프리미엄 외형 등급과 같은 색·연출: 일반·고급·희귀·전설) */
   grade?: "common" | "fine" | "rare" | "legend";
   /** kind = "unlock": 여는 것 (emo = 의뢰 이모티콘 묶음 QUEST_EMO_IDS, body = 외형 body) */
@@ -108,7 +110,7 @@ export const ITEMS: readonly ItemDef[] = [
   { id: "neck_scarf", kind: "cosmetic", slot: "neck", name: "빨간 목도리", desc: "밤바람이 차요.", price: 60, durationMs: COSMETIC_DURATION_MS },
   { id: "hat_halo", kind: "cosmetic", slot: "head", name: "후광", desc: "머리 위에 은은한 빛의 고리.", price: 160, durationMs: COSMETIC_DURATION_MS },
   { id: "back_wings", kind: "cosmetic", slot: "back", name: "작은 날개", desc: "등에서 파닥이는 유령 날개.", price: 180, durationMs: COSMETIC_DURATION_MS },
-  { id: "pet_ghost", kind: "cosmetic", slot: "pet", name: "그림자 유령 친구", desc: "작은 그림자 유령이 졸졸 따라와요.", price: 650, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_ghost", kind: "cosmetic", slot: "pet", name: "그림자 유령 친구", desc: "작은 그림자 유령이 졸졸 따라와요.", price: 1300, durationMs: COSMETIC_DURATION_MS },
   { id: "feet_flowers", kind: "cosmetic", slot: "feet", name: "발자국 꽃", desc: "걷는 자리마다 작은 꽃이 피어요.", price: 140, durationMs: COSMETIC_DURATION_MS },
   { id: "aura_fog", kind: "cosmetic", slot: "aura", name: "안개 망토", desc: "발밑에 푸른 안개가 일렁여요.", price: 120, durationMs: COSMETIC_DURATION_MS },
 
@@ -157,12 +159,12 @@ export const ITEMS: readonly ItemDef[] = [
     ["aura_notes", "aura", "흥얼흥얼 음표", "이어폰 없이도 흥얼흥얼.", 120],
     ["aura_zzz", "aura", "회의 시간 졸음", "회의만 시작하면 머리 위로 Zzz.", 80],
     // 펫
-    ["pet_cat", "pet", "사무실 고양이", "키보드 위가 제일 따뜻하대요.", 900],
-    ["pet_duck", "pet", "고무 오리", "디버깅 상담 전문 오리. 말없이 들어 줘요.", 450],
-    ["pet_slime", "pet", "말랑 슬라임", "말랑말랑. 스트레스 볼 대용.", 450],
-    ["pet_bird", "pet", "참새", "어깨에 앉고 싶어서 졸졸 날아와요.", 550],
-    ["pet_wisp", "pet", "도깨비불 친구", "푸른 불꽃이 둥실둥실 따라와요.", 700],
-    ["pet_dog", "pet", "퇴근 강아지", "퇴근하면 제일 먼저 반겨 주는 친구.", 900],
+    ["pet_cat", "pet", "사무실 고양이", "키보드 위가 제일 따뜻하대요.", 1800],
+    ["pet_duck", "pet", "고무 오리", "디버깅 상담 전문 오리. 말없이 들어 줘요.", 900],
+    ["pet_slime", "pet", "말랑 슬라임", "말랑말랑. 스트레스 볼 대용.", 900],
+    ["pet_bird", "pet", "참새", "어깨에 앉고 싶어서 졸졸 날아와요.", 1100],
+    ["pet_wisp", "pet", "도깨비불 친구", "푸른 불꽃이 둥실둥실 따라와요.", 1400],
+    ["pet_dog", "pet", "퇴근 강아지", "퇴근하면 제일 먼저 반겨 주는 친구.", 1800],
   ]),
   // ── 캐릭터 꾸미기 추가분 2 (11/12): 부위마다 5~6종. 그림은 avatarGear.ts(머리·목·손·등 시트) · cosmeticFx.ts(날개·발자국·오라) ──
   ...cosmetics([
@@ -265,8 +267,8 @@ export const ITEMS: readonly ItemDef[] = [
     ["aura_sweets", "aura", "디저트 비", "머리 위로 마카롱·사탕·딸기가 톡톡. 다이어트는 내일부터.", 200],
     // 펫 (동물원 사육사에게서 영구로만 — ZOO_PETS)
     // id가 짧은 까닭: 착용 증서 길이 (옛 실시간 서버 400자 — 부위마다 가장 긴 id보다 길지 않게)
-    ["pet_ham", "pet", "꼬마 햄찌", "볼 빵빵한 꼬마 햄스터가 종종걸음으로 따라와요.", 500],
-    ["pet_mochi", "pet", "찹쌀 토끼", "말랑말랑 하얀 토끼가 통통 튀며 따라와요.", 600],
+    ["pet_ham", "pet", "꼬마 햄찌", "볼 빵빵한 꼬마 햄스터가 종종걸음으로 따라와요.", 1000],
+    ["pet_mochi", "pet", "찹쌀 토끼", "말랑말랑 하얀 토끼가 통통 튀며 따라와요.", 1200],
   ]),
   // ── 11/17 유령선 한정 꾸미기 (토요일 밤 유령선 장터에서만 영구로 — 값 = price × 영구 배율). 그림 web game/sprites/ghostGear.ts ──
   ...cosmetics([
@@ -338,21 +340,22 @@ export const ITEMS: readonly ItemDef[] = [
     ["champ_triple", "head", "삼관왕 대관", "무지개 보석이 박힌 커다란 대관. 주간 포인트·사냥·낚시 3관왕 전용.", 0],
   ]).map((it) => ({ ...it, champ: true as const })),
   // ── 동물원 펫 (사육사에게서 영구로만 산다 — 가격은 아래 ZOO_PETS. price는 같은 값을 적어 둔다) ──
-  { id: "pet_fox", kind: "cosmetic", slot: "pet", name: "달빛 여우", desc: "야근하는 밤에만 슬그머니 따라오는 여우. 꼬리가 은은하게 빛나요.", price: 1200, durationMs: COSMETIC_DURATION_MS },
-  { id: "pet_hound", kind: "cosmetic", slot: "pet", name: "듬직한 큰 개", desc: "등에 태워 주는 커다란 개. 출근길이 두 배로 즐거워요. (타고 다닐 수 있어요)", price: 2000, durationMs: COSMETIC_DURATION_MS },
-  { id: "pet_goose", kind: "cosmetic", slot: "pet", name: "왕거위", desc: "아무도 못 말리는 거위. 등에 타면 뒤뚱뒤뚱 신나게 달려요. (타고 다닐 수 있어요)", price: 2400, durationMs: COSMETIC_DURATION_MS },
-  { id: "pet_deer", kind: "cosmetic", slot: "pet", name: "달빛 사슴", desc: "별빛 뿔을 단 사슴. 등에 타면 바람처럼 가볍게 달려요. (타고 다닐 수 있어요)", price: 3000, durationMs: COSMETIC_DURATION_MS },
+  // 11/19 포인트 한도가 없어져 값을 올렸다: 작은 펫 2배, 타는 펫 3배 (이미 산 펫은 그대로) — 배수는 PET_PRICE_UP·PET_RIDE_PRICE_UP (꾸미기 점수는 예전 값으로 센다)
+  { id: "pet_fox", kind: "cosmetic", slot: "pet", name: "달빛 여우", desc: "야근하는 밤에만 슬그머니 따라오는 여우. 꼬리가 은은하게 빛나요.", price: 2400, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_hound", kind: "cosmetic", slot: "pet", name: "듬직한 큰 개", desc: "등에 태워 주는 커다란 개. 출근길이 두 배로 즐거워요. (타고 다닐 수 있어요)", price: 6000, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_goose", kind: "cosmetic", slot: "pet", name: "왕거위", desc: "아무도 못 말리는 거위. 등에 타면 뒤뚱뒤뚱 신나게 달려요. (타고 다닐 수 있어요)", price: 7200, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_deer", kind: "cosmetic", slot: "pet", name: "달빛 사슴", desc: "별빛 뿔을 단 사슴. 등에 타면 바람처럼 가볍게 달려요. (타고 다닐 수 있어요)", price: 9000, durationMs: COSMETIC_DURATION_MS },
   // 11/17 동물원 새 펫 묶음 (그림 web game/sprites/petPack.ts · 타는 펫 mountArt.ts). 옛 화면에는 PET_FALLBACK의 비슷한 펫으로 보인다
-  { id: "pet_hog", kind: "cosmetic", slot: "pet", name: "밤송이 고슴도치", desc: "등에 단풍잎을 얹은 고슴도치. 오래 쉬면 동그랗게 말아 데굴데굴 굴러요.", price: 500, durationMs: COSMETIC_DURATION_MS },
-  { id: "pet_ducks", kind: "cosmetic", slot: "pet", name: "아기 오리 삼총사", desc: "노란 솜털 아기 오리 셋이 줄지어 종종 따라와요. 가끔 차례로 폴짝 뛰어요.", price: 550, durationMs: COSMETIC_DURATION_MS },
-  { id: "pet_gull", kind: "cosmetic", slot: "pet", name: "솜털 아기 갈매기", desc: "바닷바람을 좋아하는 아기 갈매기. 날아 보려고 파닥파닥 폴짝 뛰어요.", price: 550, durationMs: COSMETIC_DURATION_MS },
-  { id: "pet_jelly", kind: "cosmetic", slot: "pet", name: "몽글 해파리", desc: "분홍빛 해파리가 둥둥 떠서 따라와요. 물 위에서도 둥실둥실해요.", price: 650, durationMs: COSMETIC_DURATION_MS },
-  { id: "pet_snowy", kind: "cosmetic", slot: "pet", name: "꼬마 눈사람", desc: "목도리를 두른 꼬마 눈사람이 통통 튀어요. 가끔 만세 하면 눈송이가 반짝여요.", price: 700, durationMs: COSMETIC_DURATION_MS },
-  { id: "pet_fly", kind: "cosmetic", slot: "pet", name: "반딧불이 무리", desc: "작은 반딧불이 다섯이 반짝반짝 따라와요. 가끔 모여서 하트를 그려요.", price: 750, durationMs: COSMETIC_DURATION_MS },
-  { id: "pet_otter", kind: "cosmetic", slot: "pet", name: "조약돌 수달", desc: "조약돌을 꼭 안고 다니는 수달. 쉴 때는 벌러덩 누워 배 위에서 콩콩 두드려요.", price: 950, durationMs: COSMETIC_DURATION_MS },
-  { id: "pet_panda", kind: "cosmetic", slot: "pet", name: "꼬마 레서판다", desc: "줄무늬 꼬리가 폭신한 레서판다. 가끔 뒷발로 벌떡 서서 두 팔을 번쩍 들어요.", price: 1100, durationMs: COSMETIC_DURATION_MS },
-  { id: "pet_paca", kind: "cosmetic", slot: "pet", name: "뭉게 알파카", desc: "구름처럼 폭신한 알파카. 등에 타면 담요 위에서 사뿐사뿐 달려요. (타고 다닐 수 있어요)", price: 2200, durationMs: COSMETIC_DURATION_MS },
-  { id: "pet_polar", kind: "cosmetic", slot: "pet", name: "포근 북극곰", desc: "목도리를 두른 북극곰. 등에 타면 묵직하고 든든하게 달려요. (타고 다닐 수 있어요)", price: 2700, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_hog", kind: "cosmetic", slot: "pet", name: "밤송이 고슴도치", desc: "등에 단풍잎을 얹은 고슴도치. 오래 쉬면 동그랗게 말아 데굴데굴 굴러요.", price: 1000, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_ducks", kind: "cosmetic", slot: "pet", name: "아기 오리 삼총사", desc: "노란 솜털 아기 오리 셋이 줄지어 종종 따라와요. 가끔 차례로 폴짝 뛰어요.", price: 1100, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_gull", kind: "cosmetic", slot: "pet", name: "솜털 아기 갈매기", desc: "바닷바람을 좋아하는 아기 갈매기. 날아 보려고 파닥파닥 폴짝 뛰어요.", price: 1100, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_jelly", kind: "cosmetic", slot: "pet", name: "몽글 해파리", desc: "분홍빛 해파리가 둥둥 떠서 따라와요. 물 위에서도 둥실둥실해요.", price: 1300, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_snowy", kind: "cosmetic", slot: "pet", name: "꼬마 눈사람", desc: "목도리를 두른 꼬마 눈사람이 통통 튀어요. 가끔 만세 하면 눈송이가 반짝여요.", price: 1400, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_fly", kind: "cosmetic", slot: "pet", name: "반딧불이 무리", desc: "작은 반딧불이 다섯이 반짝반짝 따라와요. 가끔 모여서 하트를 그려요.", price: 1500, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_otter", kind: "cosmetic", slot: "pet", name: "조약돌 수달", desc: "조약돌을 꼭 안고 다니는 수달. 쉴 때는 벌러덩 누워 배 위에서 콩콩 두드려요.", price: 1900, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_panda", kind: "cosmetic", slot: "pet", name: "꼬마 레서판다", desc: "줄무늬 꼬리가 폭신한 레서판다. 가끔 뒷발로 벌떡 서서 두 팔을 번쩍 들어요.", price: 2200, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_paca", kind: "cosmetic", slot: "pet", name: "뭉게 알파카", desc: "구름처럼 폭신한 알파카. 등에 타면 담요 위에서 사뿐사뿐 달려요. (타고 다닐 수 있어요)", price: 6600, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_polar", kind: "cosmetic", slot: "pet", name: "포근 북극곰", desc: "목도리를 두른 북극곰. 등에 타면 묵직하고 든든하게 달려요. (타고 다닐 수 있어요)", price: 8100, durationMs: COSMETIC_DURATION_MS },
   // ── 11/15 수집 의뢰 보상 (도장 교환소 전용 — quest: 상점·포인트로는 못 산다. price = 꾸미기 점수용 가치(영구 가치 = ×4, 펫도 같은 식이라
   //    동물원 펫 값에 맞춰 희귀 펫 240 → 960, 타는 잉어 600 → 2,400), 꾸미기는 영구로 받는다) ──
   //    그림: 머리·손·등 avatarGear.ts · 오라·펫·타는 펫 cosmeticFx.ts · 이름 lib/nameStyle.ts · 외형 avatar.ts · 이모티콘 emoArt.ts
@@ -383,6 +386,8 @@ export const ITEMS: readonly ItemDef[] = [
 
   // ── 11/15 긴급 의뢰 가장 많이 낸 사람 (24시간 대여 — 상점·교환소에 없다). 그림: 머리 avatarGear.ts · 도는 불빛 cosmeticFx.ts ──
   { id: "u_hat_siren", kind: "cosmetic", slot: "head", grade: "rare", name: "사이렌 모자", desc: "긴급 배달왕의 모자. 머리 위 경광등이 빙글빙글 돌아요.", price: 0, durationMs: COSMETIC_DURATION_MS, urgent: true },
+  // 11/19 친구 초대 한정 (상점·교환소에 없다 — 추천 보상 선물함으로 영구). 그림: 손 avatarGear.ts · 아이콘 itemIcons.ts · 불빛 cosmeticFx.ts
+  { id: "inv_hand_lantern", kind: "cosmetic", slot: "hand", grade: "rare", name: "마중 등불", desc: "친구를 마을로 데려온 이웃이 드는 초롱. 두 사람의 하트가 따뜻하게 빛나요.", price: 300, durationMs: COSMETIC_DURATION_MS, invite: true },
   // 긴급 의뢰 100% 보상 상자: 받으면 가방(소모품)에 들어가고 [열기]로 연다. 내용물은 (의뢰, 계정)으로 미리 정해진다 (web lib/forage/quests/urgent openBox)
   { id: "u_box_pocket", kind: "box", grade: "rare", name: "수집가의 뒷주머니", desc: "수집가 유령이 슬쩍 건넨 주머니. 열면 도장이나 염색권, 희귀 물고기가 나와요.", price: 0, urgent: true },
 
@@ -467,8 +472,8 @@ export function styleItemId(id: string): string | null {
  */
 export const SHOP_KINDS: readonly ItemKind[] = ["firework", "cosmetic", "graveStyle", "megaphone", "dye"];
 /** 상점 목록에 나오는지. 펫은 상점에서 팔지 않는다 (동물원 사육사에게서 영구로만 — ZOO_PETS) */
-export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot; staff?: true; champ?: true; quest?: true; urgent?: true; ghost?: true; event?: true }): boolean {
-  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet" && !item.staff && !item.champ && !item.quest && !item.urgent && !item.ghost && !item.event;
+export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot; staff?: true; champ?: true; quest?: true; urgent?: true; ghost?: true; event?: true; invite?: true }): boolean {
+  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet" && !item.staff && !item.champ && !item.quest && !item.urgent && !item.ghost && !item.event && !item.invite;
 }
 /** 12월 크리스마스 이벤트 한정인지 (상점·포인트로 살 수 없다 — 선물상자에서만) */
 export function isEventItem(id: unknown): boolean {
@@ -606,30 +611,33 @@ export function permanentPrice(id: string): number | null {
 /** 타는 펫 (ride = 타고 걷는 속도 배율 — 달리기 × 배율이 서버 속도 검증(MAX_VALID_SPEED) 안에 들도록 1.35 이하) */
 export type PetDef = { id: string; price: number; ride?: { speed: number } };
 /** 사육사 창 순서 (싼 것부터). 하우징이 최종 목표라 펫은 작은 집터(2,000P)보다 싸게 (11/12 사용자 요청) */
+/** 11/19 펫 값 올림 배수 (작은 펫·타는 펫). 꾸미기 점수(web lib/lookScore)는 값을 이 배수로 나눠 예전 값으로 센다 */
+export const PET_PRICE_UP = 2;
+export const PET_RIDE_PRICE_UP = 3;
 export const ZOO_PETS: readonly PetDef[] = [
-  { id: "pet_slime", price: 450 },
-  { id: "pet_duck", price: 450 },
-  { id: "pet_ham", price: 500 }, // 11/15 말랑 꾸미기 묶음
-  { id: "pet_hog", price: 500 }, // 11/17 새 펫 묶음 (이하 같은 표시)
-  { id: "pet_bird", price: 550 },
-  { id: "pet_ducks", price: 550 }, // 11/17
-  { id: "pet_gull", price: 550 }, // 11/17
-  { id: "pet_mochi", price: 600 }, // 11/15 말랑 꾸미기 묶음
-  { id: "pet_ghost", price: 650 },
-  { id: "pet_jelly", price: 650 }, // 11/17
-  { id: "pet_wisp", price: 700 },
-  { id: "pet_snowy", price: 700 }, // 11/17
-  { id: "pet_fly", price: 750 }, // 11/17
-  { id: "pet_cat", price: 900 },
-  { id: "pet_dog", price: 900 },
-  { id: "pet_otter", price: 950 }, // 11/17
-  { id: "pet_panda", price: 1100 }, // 11/17
-  { id: "pet_fox", price: 1200 },
-  { id: "pet_hound", price: 2000, ride: { speed: 1.25 } },
-  { id: "pet_paca", price: 2200, ride: { speed: 1.2 } }, // 11/17
-  { id: "pet_goose", price: 2400, ride: { speed: 1.2 } },
-  { id: "pet_polar", price: 2700, ride: { speed: 1.3 } }, // 11/17
-  { id: "pet_deer", price: 3000, ride: { speed: 1.35 } },
+  { id: "pet_slime", price: 900 },
+  { id: "pet_duck", price: 900 },
+  { id: "pet_ham", price: 1000 }, // 11/15 말랑 꾸미기 묶음
+  { id: "pet_hog", price: 1000 }, // 11/17 새 펫 묶음 (이하 같은 표시)
+  { id: "pet_bird", price: 1100 },
+  { id: "pet_ducks", price: 1100 }, // 11/17
+  { id: "pet_gull", price: 1100 }, // 11/17
+  { id: "pet_mochi", price: 1200 }, // 11/15 말랑 꾸미기 묶음
+  { id: "pet_ghost", price: 1300 },
+  { id: "pet_jelly", price: 1300 }, // 11/17
+  { id: "pet_wisp", price: 1400 },
+  { id: "pet_snowy", price: 1400 }, // 11/17
+  { id: "pet_fly", price: 1500 }, // 11/17
+  { id: "pet_cat", price: 1800 },
+  { id: "pet_dog", price: 1800 },
+  { id: "pet_otter", price: 1900 }, // 11/17
+  { id: "pet_panda", price: 2200 }, // 11/17
+  { id: "pet_fox", price: 2400 },
+  { id: "pet_hound", price: 6000, ride: { speed: 1.25 } },
+  { id: "pet_paca", price: 6600, ride: { speed: 1.2 } }, // 11/17
+  { id: "pet_goose", price: 7200, ride: { speed: 1.2 } },
+  { id: "pet_polar", price: 8100, ride: { speed: 1.3 } }, // 11/17
+  { id: "pet_deer", price: 9000, ride: { speed: 1.35 } },
 ];
 const petMap = new Map(ZOO_PETS.map((p) => [p.id, p]));
 /** 11/15 수집 의뢰 보상 타는 펫 (사육사에게서 팔지 않는다 — petDef·petPrice엔 없고, 타기 규칙만 같다). 속도는 같은 1.35 이하 규칙 */
@@ -823,6 +831,8 @@ export const TITLE_IDS = [
   // 추천 코드로 데려온 이웃이 조건을 넘긴 수 3·10 (web lib/referralRules)
   "t_ref3",
   "t_ref10",
+  // 11/18 내일의 약속(신입 7일 선물길) 7번째 선물 — 한정 칭호 (web lib/retain PATH_TITLE_ID)
+  "t_grad",
   // 11/15 긴급 의뢰 (받은 뒤 하루만): 가장 많이 낸 사람 · 마지막 1분에 100%를 채운 사람
   "t_urgKing",
   "t_urgLast",
