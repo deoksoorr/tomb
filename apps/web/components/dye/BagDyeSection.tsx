@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { DYE_PART_NAMES, DYE_PARTS, isFixedDyeId, ITEMS } from "@tomb/protocol";
-import { bridge } from "@/game/bridge";
 import { specDye } from "@/game/sprites/avatar";
 import { dyeApi } from "@/lib/dye/client";
 import { colorLabel, swatchStyle } from "@/lib/dye/look";
@@ -13,7 +12,6 @@ import { meStore } from "@/lib/hooks/useMe";
 import type { Me } from "@/lib/types";
 import bag from "../account/BagDialog.module.css";
 import { currentLook } from "../account/items";
-import { openShopTab } from "../shop/shopTab";
 import { cx } from "../ui/cx";
 import ItemIcon from "../ui/ItemIcon";
 import ui from "../ui/ui.module.css";
@@ -23,7 +21,7 @@ import { fixedTicket, ticketOf } from "./StylePanel";
 import styles from "./StylePanel.module.css";
 
 // 가방 "염색권" 칸 (11/12: 예전엔 "폭죽·묘비" 칸 맨 위에 섞여 있었다).
-// 가진 염색권(무작위 3종·고정 색) 쓰기 · 진행 중인 염색 이어서 하기 · 지금 부위 색 · 원래 색 되돌리기·외형 바꾸기 바로가기(상점 염색·외형 탭)
+// 가진 염색권(무작위 3종·고정 색) 쓰기 · 진행 중인 염색 이어서 하기 · 지금 부위 색 · 원래 색 되돌리기·외형 바꾸기 안내(잡화점에 직접 가야 해요)
 
 const RANDOM = ITEMS.filter((i) => i.kind === "dye");
 
@@ -93,10 +91,6 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
 
   const look = currentLook(me.equipped, openedAt);
   const dye = specDye(avatar.color);
-  const toShop = () => {
-    openShopTab("dye");
-    bridge.emit("shop:open");
-  };
 
   return (
     <div className={bag.others}>
@@ -152,10 +146,8 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
           ))}
         </ul>
         <div className={styles.banner}>
-          <span>원래 색으로 되돌리거나 외형을 바꾸려면 상점에 가요.</span>
-          <button type="button" className={ui.button} onClick={toShop}>
-            상점 염색·외형
-          </button>
+          {/* 11/19 가방에서 바로 상점 창을 여는 단추는 뺐어요 (어디서든 상점을 여는 통로가 됐다). 잡화점에 직접 가야 해요 */}
+          <span>원래 색으로 되돌리거나 외형을 바꾸려면 잡화점에 들러요.</span>
         </div>
       </section>
       {direct && (

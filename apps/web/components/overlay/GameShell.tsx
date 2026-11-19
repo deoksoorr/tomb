@@ -69,7 +69,7 @@ import { hopChannel } from "@/components/housing/channelHop";
 import { houseChannelFullMsg } from "@/game/net/switchPolicy";
 import { graveChannelFor } from "@/game/world/graveChannel";
 import type { PublicHouse } from "@/lib/housing/types";
-import { isRideablePet, isWorldLot } from "@tomb/protocol";
+import { isRideablePet, isWorldLot, type ItemKind } from "@tomb/protocol";
 import HuntLobby from "@/components/rpg/HuntLobby";
 import { towerTaunt } from "@/lib/rpg/tower";
 import ForageLayer from "@/components/forage/ForageLayer";
@@ -711,10 +711,11 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
    * 11/19 외치기 창 [상점에서 사기]: 그 자리에서 상점 창을 띄우지 않고 내 캐릭터가 마을 유령 잡화점까지 걸어가 들어간 뒤
    * 상점 창을 확성기 탭(고른 확성기)으로 연다 (lib/shopWalk). 잡화점 안이면 바로, 마을 밖·실내면 안내만
    */
-  function goShopFor(itemId: string) {
+  // 11/19 kind = 열 탭 (외치기 창은 확성기, 폭죽 창은 폭죽). 어디서든 상점 창을 바로 열지 않고 잡화점까지 걸어간다
+  function goShopFor(itemId: string, kind: ItemKind = "megaphone") {
     const act = shopPress({ map: mapNow, scene, riding });
     if (act.do === "toast") return showToast(act.message);
-    openShopTab("megaphone", itemId);
+    openShopTab(kind, itemId || undefined);
     if (act.do === "open") return setPanel("shop");
     if (rideGate("잡화점에 갈")) return void takeShopTab();
     setPanel(null);
@@ -1143,7 +1144,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           <WeeklyRace />
         </Dialog>
       )}
-      {panel === "fireworks" && <FireworkDialog onClose={closePanel} onOpenShop={() => setPanel("shop")} />}
+      {panel === "fireworks" && <FireworkDialog onClose={closePanel} onOpenShop={() => goShopFor("", "firework")} />}
       {panel === "passed" && <PassedDialog onClose={closePanel} footer={<GraveyardNow graves={graves.graves} channel={graves.channel} onPick={lookAtGrave} />} />}
       {panel === "shrine" && (
         <ShrineDialog
