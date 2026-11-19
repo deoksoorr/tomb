@@ -28,8 +28,7 @@ import { clearStoredRef, readStoredRef, referralApi } from "@/lib/referralClient
 import { readItem, saveMyCode, writeItem } from "@/lib/storage";
 import { DORMANT_RENAME_MESSAGE, LS, type Me } from "@/lib/types";
 import { bgm } from "../bgm/engine";
-import { latestNotice } from "../notice/notices";
-import NoticesDialog from "../notice/NoticesDialog";
+import { latestDevNote } from "@/lib/devNotes/titles";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import { avatarColorSpec } from "@/game/sprites/avatar";
@@ -187,8 +186,8 @@ function EntryFlow({ start, google, focusGraveId, onEnter }: Omit<Props, "enteri
   }, [focusGraveId]);
 
   const { notices } = useNotices();
-  const latest = notices ? latestNotice(notices) : null;
-  const [noticesOpen, setNoticesOpen] = useState(false);
+  // 11/20 개발자 노트 한 줄: 다시 쓴 지난 글 + 게임에서 새로 쓴 공지 중 가장 최근 것
+  const latestNote = latestDevNote(notices);
 
   const back = () => setStep({ kind: "choose" });
 
@@ -196,13 +195,6 @@ function EntryFlow({ start, google, focusGraveId, onEnter }: Omit<Props, "enteri
     case "choose":
       return (
         <div className={styles.choose}>
-          {latest && (
-            <button type="button" className={styles.notice} onClick={() => setNoticesOpen(true)}>
-              <span className={styles.noticeTag}>공지</span>
-              <span className={styles.noticeTitle}>{latest.title}</span>
-            </button>
-          )}
-          {noticesOpen && <NoticesDialog onClose={() => setNoticesOpen(false)} />}
           <button
             type="button"
             className={cx(ui.button, ui.primary, styles.big)}
@@ -225,6 +217,17 @@ function EntryFlow({ start, google, focusGraveId, onEnter }: Omit<Props, "enteri
               {previous}(으)로 이어서 들어가기
             </button>
           )}
+          {/* 11/20 개발자 노트: 가장 최근 글 한 줄 (새 탭). 못 불러오면 목록으로 */}
+          <a
+            className={styles.devNote}
+            href={latestNote ? `/news/${encodeURIComponent(latestNote.id)}` : "/news"}
+            target="_blank"
+            rel="noopener"
+          >
+            <span className={styles.devNoteTag}>개발자 노트</span>
+            {latestNote && <span className={styles.devNoteTitle}>{latestNote.title}</span>}
+            <span aria-hidden="true">→</span>
+          </a>
         </div>
       );
     case "code":

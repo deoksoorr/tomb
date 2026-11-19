@@ -39,7 +39,7 @@ import PassedDialog from "../grave/PassedDialog";
 import Minimap from "./Minimap";
 import StayBonus from "./StayBonus";
 import { guideToQuestBoard, RetainDock, RetainLayer, RetainPhoneChip, useLookStep, useNewbie } from "./RetainHud";
-import NoticesDialog from "../notice/NoticesDialog";
+import { openDevNotes } from "@/lib/devNotes/open";
 import RankingList from "../grave/RankingList";
 import RankingPanel from "../grave/RankingPanel";
 import WeeklyRace from "../grave/WeeklyRace";
@@ -470,6 +470,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       e.preventDefault();
       setRadial(false);
       if (e.code === RANK_KEY) setRankOpen((v) => !v);
+      // 11/20 N: 개발자 노트 사이트를 새 탭으로 (게임 안 공지 창은 더 열지 않는다)
+      else if (target === "notices") openDevNotes();
       else if (target) setPanel(target);
       else if (e.code === "KeyI") setPanel("bag");
       else setSayOpen(true);
@@ -741,6 +743,10 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     } else if (target === "photo") {
       setPanel(null);
       openPhoto();
+    } else if (target === "notices") {
+      // 11/20 개발자 노트 사이트를 새 탭으로
+      setPanel(null);
+      openDevNotes();
     } else setPanel(target);
   }
 
@@ -967,14 +973,14 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 소식
                 {(me?.activityUnread ?? 0) > 0 && <span className={styles.badge}>{me?.activityUnread}</span>}
               </button>
-              <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("notices")}>
+              <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => openDevNotes()} title="개발자 노트 (새 탭)">
                 <PixelIcon name="bell" />
-                공지
+                개발자 노트
                 <span className={styles.dockKey} aria-hidden="true">N</span>
                 {unreadNotice && (
                   <>
                     <span className={styles.dot} aria-hidden="true" />
-                    <span className="visually-hidden"> (새 공지 있음)</span>
+                    <span className="visually-hidden"> (새 글 있음)</span>
                   </>
                 )}
               </button>
@@ -1077,7 +1083,6 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {panel === "bag" && (
         <BagDialog cache={graves.cache} myGraves={myGraves.entries} onClose={closePanel} avatar={{ color: options.color, body: options.body }} onOpenRace={() => setPanel("race")} onOpenPerks={openPerks} />
       )}
-      {panel === "notices" && <NoticesDialog onClose={closePanel} />}
       {panel === "activity" && (
         <ActivityDialog
           onGoToGrave={goToGraveById}

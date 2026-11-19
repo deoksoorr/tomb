@@ -1,0 +1,75 @@
+// 진입 화면 등 게임 화면에서 쓰는 개발자 노트 [제목, 쓴 시각] (posts.ts의 id·title·createdAt만 — 큰 본문을 게임 번들에 싣지 않으려고). posts.ts를 고치면 같이 고친다 (devNotes.test.ts가 확인)
+export const STATIC_NOTE_TITLES: Readonly<Record<string, readonly [string, number]>> = {
+  "Fdnq9-pR0k": [
+    "처음 오신 분께",
+    1794743573688
+  ],
+  "qALW3m3LA_": [
+    "11월 19일 업데이트",
+    1795069008786
+  ],
+  "tynKf9JlFH": [
+    "11월 18일 겨울 마을 업데이트",
+    1794974415662
+  ],
+  "QHTXLpxKlt": [
+    "11월 17일 업데이트",
+    1794907996388
+  ],
+  "PVygvvXo0k": [
+    "11월 17일 오전 접속 장애",
+    1794870639292
+  ],
+  "Fibfr4Ex_f": [
+    "11월 16일 업데이트 #3",
+    1794837776379
+  ],
+  "_vy5isPKro": [
+    "11월 16일 업데이트 #2",
+    1794791670422
+  ],
+  "x9GNs0wTqK": [
+    "11월 16일 업데이트 #1",
+    1794791654949
+  ],
+  "Q8CqFwNRvT": [
+    "11월 15일 업데이트",
+    1794731248880
+  ],
+  "P98nTHNMFv": [
+    "11월 14일 업데이트",
+    1794636992372
+  ],
+  "8ApLG11nhJ": [
+    "11월 14일 긴급 수정",
+    1794636904323
+  ],
+  "nZwaKF12Tf": [
+    "11월 13일 업데이트 #3",
+    1794577975280
+  ],
+  "j2sqYOAnMr": [
+    "11월 13일 업데이트 #2",
+    1794556316451
+  ],
+  "Nwnld2LPkc": [
+    "11월 13일 업데이트 #1",
+    1794532540243
+  ],
+  "LXu_9H38K5": [
+    "11월 12일 업데이트",
+    1794487226844
+  ],
+  "1I7txJCDm2": [
+    "앞으로의 업데이트 계획",
+    1794384155809
+  ]
+};
+
+/** 정적 글 + 공지 저장소 공지 중 가장 최근 글 (제목은 다시 쓴 제목 우선) */
+export function latestDevNote(notices: readonly { id: string; title: string; createdAt: number }[] | null): { id: string; title: string } | null {
+  let best: { id: string; title: string; at: number } | null = null;
+  for (const [id, [title, at]] of Object.entries(STATIC_NOTE_TITLES)) if (!best || at > best.at) best = { id, title, at };
+  for (const n of notices ?? []) if (!best || n.createdAt > best.at) best = { id: n.id, title: STATIC_NOTE_TITLES[n.id]?.[0] ?? n.title, at: n.createdAt };
+  return best && { id: best.id, title: best.title };
+}

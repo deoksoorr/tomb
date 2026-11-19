@@ -1,21 +1,16 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { SHRINE_KEEP_DAYS } from "@/lib/types";
-import styles from "../legal.module.css";
+import LegalLayout from "@/components/site/LegalLayout";
+import { SITE_VIEWPORT } from "@/lib/devNotes/meta";
 
+export const viewport = SITE_VIEWPORT;
 export const metadata: Metadata = { title: "개인정보처리방침 · At one time...", alternates: { canonical: "/privacy" } };
 
 const EFFECTIVE = "2026년 11월 14일";
 
 export default function PrivacyPage() {
   return (
-    <main className={styles.page}>
-      <div className={styles.inner}>
-        <Link href="/" className={styles.home}>
-          ← 마을로 돌아가기
-        </Link>
-        <h1 className={styles.title}>개인정보처리방침</h1>
-        <p className={styles.date}>시행일 {EFFECTIVE}</p>
+    <LegalLayout kind="privacy" title="개인정보처리방침" effective={<>시행일 {EFFECTIVE}</>}>
 
         <h2>1. 이렇게 운영해요</h2>
         <p>
@@ -28,7 +23,7 @@ export default function PrivacyPage() {
         <p>모은 정보를 팔거나 광고·마케팅에 쓰지 않아요.</p>
 
         <h2>2. 처리하는 정보</h2>
-        <table className={styles.table}>
+        <table>
           <thead>
             <tr>
               <th scope="col">정보</th>
@@ -126,7 +121,6 @@ export default function PrivacyPage() {
 
         <h2>7. 바뀌면</h2>
         <p>이 방침이 바뀌면 공지와 이 페이지에 알려요.</p>
-      </div>
-    </main>
+    </LegalLayout>
   );
 }

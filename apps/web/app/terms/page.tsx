@@ -1,20 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import styles from "../legal.module.css";
+import LegalLayout from "@/components/site/LegalLayout";
+import { SITE_VIEWPORT } from "@/lib/devNotes/meta";
 
+export const viewport = SITE_VIEWPORT;
 export const metadata: Metadata = { title: "이용약관 · At one time...", alternates: { canonical: "/terms" } };
 
 const EFFECTIVE = "2026년 11월 13일";
 
 export default function TermsPage() {
   return (
-    <main className={styles.page}>
-      <div className={styles.inner}>
-        <Link href="/" className={styles.home}>
-          ← 마을로 돌아가기
-        </Link>
-        <h1 className={styles.title}>이용약관</h1>
-        <p className={styles.date}>시행일 {EFFECTIVE}</p>
+    <LegalLayout kind="terms" title="이용약관" effective={<>시행일 {EFFECTIVE}</>}>
 
         <h2>1. 서비스</h2>
         <p>
@@ -59,7 +55,6 @@ export default function TermsPage() {
           게임 안 ⓘ 안내나 내 정보의 [문의하기]로 알려 주세요. 개인정보는{" "}
           <Link href="/privacy">개인정보처리방침</Link>을 봐 주세요.
         </p>
-      </div>
-    </main>
+    </LegalLayout>
   );
 }
