@@ -32,6 +32,9 @@
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  /* 11/19 글자 모양으로 자른 배경은 물려받은 글자 그림자(채팅창 검은 테두리)가 위를 덮어 까맣게 보였다 (사용자 제보) →
+     그림자를 끈다. 그림자를 물려주는 부모가 없는 랭킹·레이스와 같은 그림이 된다 */
+  text-shadow: none;
 }
 
 /* 은은한 빛 테두리: 달빛 글자 + 숨 쉬는 빛 그림자 */
