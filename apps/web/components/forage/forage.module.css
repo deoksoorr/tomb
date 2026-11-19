@@ -426,17 +426,17 @@
 }
 
 /* ── 도감 ── */
+/* 11/19 가로 스크롤(스크롤바 숨김)이라 마지막 탭(몬스터 23/132)이 잘려 보였다 → 넘치면 다음 줄로 */
 .dexTabs {
   display: flex;
+  flex-wrap: wrap;
   border-bottom: 2px solid var(--line);
-  overflow-x: auto;
-  scrollbar-width: none;
 }
 
 .dexTab {
   flex: 1 0 auto;
   min-height: 44px;
-  padding: 4px 10px;
+  padding: 4px 6px;
   border: 0;
   background: transparent;
   color: var(--muted);
