@@ -542,6 +542,79 @@ const P: Record<CardId, Painter> = {
     g.set(8, 2, 0xffffff);
     g.set(10, 1, 0xffffff);
   },
+  // 11/19 손 빠른 동기 (넋): 앞으로 내달리는 넋 하나 + 뒤에 옅어지는 잔상 둘
+  soulQuick(g, m, a) {
+    for (const [x, al] of [[1, 0.65], [4, 0.4]] as const) {
+      const c = mixPx(m, 0x1e2e5a, al);
+      g.ellipse(x + 1.5, 7, 1.6, 2.2, c);
+      g.rect(x, 8, 4, 3, c);
+    }
+    g.ellipse(11, 6.5, 3, 3.2, m);
+    g.rect(8, 7, 7, 4, m);
+    for (const x of [8, 10, 12, 14]) g.set(x, 11, m);
+    g.set(10, 6, 0x16151a);
+    g.set(12, 6, 0x16151a);
+    g.set(11, 8, a);
+    g.set(9, 4, lighten(m, 0.4));
+    g.hline(0, 3, 13, a);
+    g.hline(5, 7, 13, a);
+  },
+  // 11/19 넋 수당 (넋): 넋불이 흘러 들어가는 하트 봉투
+  soulDrain(g, m, a) {
+    g.rect(2, 7, 12, 7, PAPER);
+    g.hline(2, 13, 7, darken(PAPER, 0.3));
+    for (let i = 0; i < 6; i++) {
+      g.set(2 + i, 7 + Math.floor(i / 2), darken(PAPER, 0.3));
+      g.set(13 - i, 7 + Math.floor(i / 2), darken(PAPER, 0.3));
+    }
+    g.ellipse(6.5, 11, 1.4, 1.2, 0xe85a6a);
+    g.ellipse(9.5, 11, 1.4, 1.2, 0xe85a6a);
+    g.set(8, 12, 0xe85a6a);
+    g.set(7, 12, 0xe85a6a);
+    g.set(8, 13, 0xe85a6a);
+    g.ellipse(8, 3.5, 2, 2.2, m);
+    g.set(8, 3, a);
+    g.set(8, 1, a);
+    g.vline(8, 5, 6, a);
+  },
+  // 11/19 끌려가는 결재 (넋): 보랏빛 사슬이 서류를 감아 끌어당긴다
+  soulChain(g, m, a) {
+    paper(g, 7, 6, 7, 9);
+    for (let i = 0; i < 6; i++) {
+      const x = 1 + i * 2;
+      const y = 3 + i;
+      g.rect(x, y, 2, 2, i % 2 ? m : a);
+      g.set(x, y, i % 2 ? lighten(m, 0.3) : 0xffffff);
+    }
+    g.rect(12, 9, 2, 2, m);
+  },
+  // 11/19 퇴근길 등불 (넋): 등불에서 넋불 셋이 튀어 나간다
+  soulLamp(g, m, a) {
+    g.vline(8, 1, 3, 0x8a6a40);
+    g.rect(5, 4, 7, 8, darken(a, 0.35));
+    g.rect(6, 5, 5, 6, m);
+    g.rect(7, 6, 3, 4, 0xffffff);
+    g.hline(5, 11, 12, darken(a, 0.35));
+    for (const [x, y] of [[1, 3], [14, 4], [2, 13], [14, 13]] as const) {
+      g.set(x, y, a);
+      g.set(x, y + 1, lighten(a, 0.3));
+    }
+  },
+  // 11/19 백귀야행 (넋, 전설): 달 아래 등불을 든 넋 셋이 줄지어 간다
+  soulParade(g, m, a) {
+    g.ellipse(12.5, 3, 2.4, 2.4, 0xf2ecff);
+    g.ellipse(13.5, 2.5, 1.6, 1.6, m);
+    for (const [x, y] of [[2, 10], [7, 9], [12, 10]] as const) {
+      g.rect(x - 1, y - 2, 3, 4, a);
+      g.set(x, y - 3, a);
+      g.set(x - 1, y + 2, a);
+      g.set(x + 1, y + 2, a);
+      g.set(x - 1, y - 1, 0x16151a);
+      g.set(x + 1, y - 1, 0x16151a);
+      g.set(x + 2, y, 0xffd27a);
+    }
+    for (let x = 0; x < 16; x++) g.set(x, 14, darken(a, 0.55));
+  },
   // 경비 환급 (SP 환급): 금화가 돌아오는 봉투
   refund(g, m, a) {
     g.rect(1, 6, 10, 7, 0xf2ead3);
@@ -553,6 +626,12 @@ const P: Record<CardId, Painter> = {
     g.hline(3, 7, 10, a);
   },
 };
+
+/** 두 색 섞기 (잔상) */
+function mixPx(a: Color, b: Color, t: number): Color {
+  const ch = (sh: number) => Math.round(((a >> sh) & 255) * (1 - t) + ((b >> sh) & 255) * t) << sh;
+  return ch(16) | ch(8) | ch(0);
+}
 
 /** 카드 그림 (16×16) */
 export function cardArtGrid(id: CardId): Grid {
@@ -610,7 +689,7 @@ function toUrl(key: string, g: Grid, scale: number): string {
   const cv = document.createElement("canvas");
   cv.width = g.w * scale;
   cv.height = g.h * scale;
-  const ctx = cv.getContext("2d");
+  const ctx = cv.getContext("2d", { willReadFrequently: true });
   if (!ctx) return "";
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(src, 0, 0, cv.width, cv.height);

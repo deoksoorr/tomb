@@ -939,7 +939,7 @@ export function iconUrl(art: IconArt, scale = 2): string {
   const src = iconCanvas(art);
   const c = document.createElement("canvas");
   c.width = c.height = 16 * scale;
-  const ctx = c.getContext("2d");
+  const ctx = c.getContext("2d", { willReadFrequently: true });
   if (!ctx) return "";
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(src, 0, 0, c.width, c.height);

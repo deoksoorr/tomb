@@ -335,7 +335,8 @@ describe("11/15 부드러운 거절 (의심 판) · 긴 판", () => {
   it("카드 기록이 맞지 않는 판: 거절하지 않고 판·포인트만 주고, 나머지는 관리자 「기록 확인」에서 인정하면 판 끝과 같은 정산 (11/18)", async () => {
     const v = await newVisitor();
     const s = await begin(v, 1);
-    const off = cardOffer(s.seed, "l", 0, 0, {}, 1);
+    // 11/19 서버는 묶음 3(갈래 가중치 후보 모두)·2·1로 다시 굴려 본다 → 어느 묶음에도 없는 카드
+    const off = [...([null, "ember", "frost", "soul", "worker"] as const).flatMap((m) => cardOffer(s.seed, "l", 0, 0, {}, 1, 3, m)), ...cardOffer(s.seed, "l", 0, 0, {}, 1, 2), ...cardOffer(s.seed, "l", 0, 0, {}, 1, 1)];
     const c = CARD_IDS.find((id) => !off.includes(id))!;
     const r = await end(v, s, climbed(s, 10, { cards: [{ k: "l", i: 0, r: 0, c, f: 1 }] }), climbMs(10));
     expect(r.reward.tower).toMatchObject({ floors: 10, newBest: false, newWeek: false, chests: [], suspect: true });

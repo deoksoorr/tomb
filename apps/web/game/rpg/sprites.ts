@@ -229,7 +229,7 @@ function starTex(): HTMLCanvasElement {
 function glowTex(): HTMLCanvasElement {
   const c = document.createElement("canvas");
   c.width = c.height = 64;
-  const ctx = c.getContext("2d")!;
+  const ctx = c.getContext("2d", { willReadFrequently: true })!;
   const gr = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
   gr.addColorStop(0, "rgba(255,240,200,0.9)");
   gr.addColorStop(0.35, "rgba(255,220,150,0.35)");

@@ -31,7 +31,7 @@ function blank(): Grid {
 function centered(src: HTMLCanvasElement, sx = 0, sy = 0, sw = src.width, sh = src.height): HTMLCanvasElement {
   const c = document.createElement("canvas");
   c.width = c.height = 16;
-  const ctx = c.getContext("2d")!;
+  const ctx = c.getContext("2d", { willReadFrequently: true })!;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(src, sx, sy, sw, sh, Math.floor((16 - sw) / 2), Math.floor((16 - sh) / 2) + 1, sw, sh);
   return c;
@@ -328,7 +328,7 @@ function styleTicket(shape: GraveShape): HTMLCanvasElement {
   t.outline(0x6a5428);
   const c = document.createElement("canvas");
   c.width = c.height = 32;
-  const ctx = c.getContext("2d")!;
+  const ctx = c.getContext("2d", { willReadFrequently: true })!;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(t.toCanvas(), 0, 0);
   // 흙무덤 줄은 빼고 묘비만, 티켓 안 아래쪽에 맞춘다
@@ -1218,7 +1218,7 @@ export function itemIcon(itemId: string, scale = 2): string {
   const out = document.createElement("canvas");
   out.width = src.width * k;
   out.height = src.height * k;
-  const ctx = out.getContext("2d");
+  const ctx = out.getContext("2d", { willReadFrequently: true });
   if (!ctx) return "";
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(src, 0, 0, out.width, out.height);

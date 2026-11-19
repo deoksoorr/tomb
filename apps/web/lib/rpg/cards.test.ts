@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { MonsterId } from "./catalog";
 import {
   MAGIC_PACK,
+  SOUL_PACK,
+  CARD_BRANCH,
+  mainBranchOf,
+  type MainBranch,
   CARD_IDS,
   CARD_POWER_MAX,
   CARDS,
@@ -55,18 +59,48 @@ function climb(seed: number, start: number, floors: number): HuntResult {
   return { game: "hunt", durationMs: floors * 45_000 + 5_000, kills, wavesCleared: 0, died: true, potionsUsed: {}, floors, floorMs: floors * 45_000 };
 }
 
+describe("11/19 넋 카드 · 주력 갈래 가중치", () => {
+  it("묶음 3에만 넋 카드가 나오고, 옛 묶음 2·1에는 없다", () => {
+    const seen = (ver: 1 | 2 | 3) => {
+      const s = new Set<string>();
+      for (let seed = 1; seed < 3000; seed++) for (const id of cardOffer(seed, "l", 0, 0, {}, 50, ver)) s.add(id);
+      return s;
+    };
+    expect([...SOUL_PACK].every((id) => seen(3).has(id))).toBe(true);
+    for (const v of [1, 2] as const) expect([...SOUL_PACK].some((id) => seen(v).has(id))).toBe(false);
+  });
+  it("주력 갈래가 넋이면 넋 카드를 훨씬 자주 본다 (레벨 업 한 번에 넋 카드가 하나라도 나올 확률)", () => {
+    const rate = (main: MainBranch | null) => {
+      let hit = 0;
+      for (let seed = 1; seed <= 4000; seed++) if (cardOffer(seed, "l", 0, 0, {}, 30, 3, main).some((id) => CARD_BRANCH[id] === "soul")) hit++;
+      return hit / 4000;
+    };
+    const none = rate(null);
+    const soul = rate("soul");
+    // 가중치 없이 약 25% → 넋 주력이면 약 45%
+    expect(soul).toBeGreaterThan(none * 1.6);
+    expect(soul).toBeGreaterThan(0.4);
+  });
+  it("주력 갈래: 스킬 포인트가 가장 많은 갈래 (같으면 앞 갈래, 없으면 null)", () => {
+    const br = (id: string) => (id.startsWith("so") ? "soul" : id.startsWith("em") ? "ember" : undefined) as MainBranch | undefined;
+    expect(mainBranchOf({ so_wisp: 5, em_kindle: 3 }, br)).toBe("soul");
+    expect(mainBranchOf({ so_wisp: 3, em_kindle: 3 }, br)).toBe("ember");
+    expect(mainBranchOf({}, br)).toBeNull();
+  });
+});
+
 describe("카드 표", () => {
-  it("49장(11/19 갈래 카드 5장 + 마공 카드 4장), 제안되는 카드는 일반 11 · 매직 11 · 레어 10 · 유니크 7 · 전설 5, 겹침 한도", () => {
-    expect(CARD_IDS.length).toBe(49);
+  it("54장(11/19 갈래 카드 5장 + 마공 카드 4장 + 넋 카드 5장), 제안되는 카드는 일반 11 · 매직 13 · 레어 11 · 유니크 8 · 전설 6, 겹침 한도", () => {
+    expect(CARD_IDS.length).toBe(54);
     const by = (r: string) => CARD_IDS.filter((id) => CARDS[id].rarity === r && !RETIRED_CARDS.has(id)).length;
-    expect(RARITIES.map(by)).toEqual([11, 11, 10, 7, 5]);
+    expect(RARITIES.map(by)).toEqual([11, 13, 11, 8, 6]);
     // 옛 제안 묶음(마공 카드 전)은 10 · 10 · 9 · 6 · 5 그대로
-    const old = (r: string) => CARD_IDS.filter((id) => CARDS[id].rarity === r && !RETIRED_CARDS.has(id) && !MAGIC_PACK.has(id)).length;
+    const old = (r: string) => CARD_IDS.filter((id) => CARDS[id].rarity === r && !RETIRED_CARDS.has(id) && !MAGIC_PACK.has(id) && !SOUL_PACK.has(id)).length;
     expect(RARITIES.map(old)).toEqual([10, 10, 9, 6, 5]);
     // 방향·복제 카드는 더 제안하지 않는다
     expect([...RETIRED_CARDS].sort()).toEqual(["backbite", "cc", "circular", "parallel", "side"]);
     for (let seed = 1; seed < 300; seed++) for (const id of cardOffer(seed, "l", 0, 0, {}, 50)) expect(RETIRED_CARDS.has(id), id).toBe(false);
-    expect(CARD_IDS.filter((id) => CARDS[id].rarity === "legend").sort()).toEqual(["corpcard", "leave", "oneshot", "overtime", "promote"]);
+    expect(CARD_IDS.filter((id) => CARDS[id].rarity === "legend").sort()).toEqual(["corpcard", "leave", "oneshot", "overtime", "promote", "soulParade"]);
     expect(CARDS.cc.max).toBe(3);
     expect(CARDS.raise.max).toBe(5);
     expect(CARDS.coffee.max).toBe(Infinity);
@@ -137,7 +171,7 @@ describe("제안 굴림", () => {
     expect((b.common ?? 0) + (b.magic ?? 0)).toBe(0);
     expect(Math.abs((b.legend ?? 0) / N - BOSS_ODDS.legend)).toBeLessThan(0.02);
     // 전설은 한 장씩만 → 다 가지면 상사의 제안은 유니크·레어
-    const allLegend = { oneshot: 1, overtime: 1, promote: 1, corpcard: 1, leave: 1 };
+    const allLegend = { oneshot: 1, overtime: 1, promote: 1, corpcard: 1, leave: 1, soulParade: 1 };
     for (let i = 0; i < 300; i++) expect(cardOffer(i, "b", 10, 0, allLegend).some((c) => CARDS[c].rarity === "legend")).toBe(false);
   });
 });

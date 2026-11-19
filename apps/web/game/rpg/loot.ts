@@ -108,7 +108,7 @@ function beamCanvas(): HTMLCanvasElement | null {
   const cv = document.createElement("canvas");
   cv.width = w;
   cv.height = h;
-  const c = cv.getContext("2d");
+  const c = cv.getContext("2d", { willReadFrequently: true });
   if (!c) return null;
   const col = [0.12, 0.3, 0.5, 0.72, 0.9, 1, 1, 0.9, 0.72, 0.5, 0.3, 0.12];
   for (let y = 0; y < h; y++) {
@@ -132,7 +132,7 @@ function skyCanvas(): HTMLCanvasElement | null {
   const cv = document.createElement("canvas");
   cv.width = col.length;
   cv.height = 4;
-  const c = cv.getContext("2d");
+  const c = cv.getContext("2d", { willReadFrequently: true });
   if (!c) return null;
   col.forEach((a, x) => {
     c.fillStyle = `rgba(255,255,255,${a})`;
@@ -151,7 +151,7 @@ function edgeCanvas(): HTMLCanvasElement | null {
   if (typeof document === "undefined") return null;
   const cv = document.createElement("canvas");
   cv.width = cv.height = 128;
-  const c = cv.getContext("2d");
+  const c = cv.getContext("2d", { willReadFrequently: true });
   if (!c) return null;
   const g = c.createRadialGradient(64, 64, 0, 64, 64, 64);
   g.addColorStop(0, "rgba(255,255,255,0)");

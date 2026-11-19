@@ -43,7 +43,7 @@ import { AUTO_GAP_MS, autoSpOk, ultReserve, wantsCast, type AutoCtx } from "@/li
 import { bridge } from "../bridge";
 // 11/15 야근 빌딩 능력 카드 (판 안에서 쌓는 힘)
 import { CardRun, type CardHost } from "./cards/CardRun";
-import { isBossDealFloor, statPanel } from "@/lib/rpg/cards";
+import { isBossDealFloor, mainBranchOf, statPanel } from "@/lib/rpg/cards";
 // 11/15 야근 빌딩: 엘리베이터 연출 · 테마 실행부 (지하 서버실 몬스터 행동·과열·움직이는 배경)
 import { ElevatorCut } from "../tower/elevator";
 import { MonsterIntro } from "../tower/introCard";
@@ -124,6 +124,8 @@ type Mon = {
   windUntil: number;
   dashUntil: number;
   vulnUntil: number;
+  /** 11/19 마지막으로 맞은 게 넋 스킬·부른 넋인가 (퇴근길 등불 카드) */
+  soulHit?: boolean;
   vuln: number;
   slowUntil: number;
   hidden: boolean;
@@ -173,6 +175,8 @@ type PShot = {
 const SWING_SFX: Record<WeaponStyleId, RpgSound> = { swing: "swish", smash: "thud", thrust: "stab", combo: "clack", shot: "twang", magic: "ink", card: "flick" };
 /** 타격 옵션: 넉백 배율, 추가 경직, 묵직한 타격(내려찍기) */
 type HitOpts = {
+  /** 11/19 퇴근길 등불의 넋불 (이 타격으로 쓰러져도 넋불이 또 튀지 않는다) */
+  noBurst?: boolean;
   kb?: number;
   stun?: number;
   heavy?: boolean;
@@ -650,7 +654,8 @@ export class HuntScene extends RpgScene {
 
     // 11/15 능력 카드 (야근 빌딩): 체크포인트에서 시작하면 첫 층 전에 카드부터 고른다
     this.areaBase = this.area;
-    this.cards = play.tower ? new CardRun<Mon>(this.cardHost(), play.seed, play.tower.start) : null;
+    // 11/19 주력 갈래 카드는 제안에 더 자주 (서버가 같은 규칙으로 다시 굴린다 — lib/rpg/cards cardOffer)
+    this.cards = play.tower ? new CardRun<Mon>(this.cardHost(), play.seed, play.tower.start, mainBranchOf(play.skills, (id) => skillById(id)?.branch)) : null;
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.cards?.destroy();
       this.cards = null;
@@ -915,6 +920,16 @@ export class HuntScene extends RpgScene {
 
   private get now(): number {
     return this.elapsed;
+  }
+
+  /** 11/19 손 빠른 동기 카드: 부른 넋 공격 간격 배율 */
+  private soulEvery(): number {
+    return this.cards?.stats.soulEvery ?? 1;
+  }
+
+  /** 11/19 백귀야행 카드가 켜진 동안 부른 넋 피해 배율 */
+  private paradeMul(): number {
+    return this.buff("soulParade") ? 1 + PARADE_DMG : 1;
   }
 
   private buff(id: string): number {
@@ -1238,7 +1253,15 @@ export class HuntScene extends RpgScene {
     // 11/15 퇴사 각·성과급
     if (this.cards) dmg = Math.round(dmg * this.cards.dmgMul(m));
     if (this.cards?.oneshot(m, !!opts.aoe)) dmg = Math.max(dmg, Math.ceil(m.hp));
+    // 11/19 퇴근길 등불: 넋으로 쓰러뜨렸나 (넋불 자체로 쓰러진 것은 아니다)
+    m.soulHit = opts.skill === "soul" && !opts.noBurst;
     this.hurtMonster(m, dmg, crit, nth, opts);
+    // 11/19 넋 수당 카드: 넋 스킬·부른 넋 피해의 일부를 HP로 (한 번 최대 HP의 1%)
+    const ss = opts.skill === "soul" ? (this.cards?.stats.soulSteal ?? 0) : 0;
+    if (ss > 0 && !this.died && this.hp < this.dv.maxHp) {
+      const heal = Math.min(this.dv.maxHp * (this.cards?.stats.soulStealCap ?? 0.01), dmg * ss) * this.curse.healMul;
+      this.hp = Math.min(this.dv.maxHp, this.hp + heal);
+    }
     // 11/19 천 번째 삽질 (초월): 기본 공격이 가끔 한 번 더 맞는다
     if (opts.basic && !opts.again && this.tm.dbl > 0 && Math.random() < this.tm.dbl) this.later(70, () => m.alive && this.strike(m, mult, true, nth + 1, { ...opts, again: true }));
     // 11/19 「때린 적」 카드(불·얼음·독·번개·토스·사내 정치)는 기본 공격에도 스킬에도 붙는다 (광역 스킬·회오리는 맞은 적마다 1/3 — CardRun AOE_PROC)
@@ -1368,6 +1391,19 @@ export class HuntScene extends RpgScene {
     this.kills[m.id] = (this.kills[m.id] ?? 0) + 1;
     this.killCount++;
     this.cards?.onKill(m);
+    // 11/19 퇴근길 등불 카드: 넋으로 쓰러뜨리면 넋불이 튀어 근처 적 둘을 친다
+    const sb = m.soulHit ? (this.cards?.stats.soulBurst ?? 0) : 0;
+    if (sb > 0) {
+      const near = this.mons
+        .filter((o) => o.alive && !o.hidden && o !== m && Math.hypot(o.x - m.x, o.y - m.y) < SOUL_BURST_R)
+        .sort((p, q) => Math.hypot(p.x - m.x, p.y - m.y) - Math.hypot(q.x - m.x, q.y - m.y))
+        .slice(0, 2);
+      const [x, y] = [m.x, m.y - MONSTERS[m.id].size / 2];
+      near.forEach((o, k) => {
+        this.fx2Bolt(x, y, o, true);
+        this.later(80, () => o.alive && this.strike(o, sb * this.dv.skillPower, true, k, { skill: "soul", noBurst: true, kb: 0.6, weight: 1 }));
+      });
+    }
     // 11/15 전설 옵션 「야근 수당」: 잡을 때마다 체력 1%
     const kh = this.sg.killHeal(this.dv.maxHp);
     if (kh && !this.died && this.hp < this.dv.maxHp) this.hp = Math.min(this.dv.maxHp, this.hp + Math.max(1, Math.round(kh * this.curse.healMul)));
@@ -1488,7 +1524,8 @@ export class HuntScene extends RpgScene {
     // 11/19 v2 동지의 맹세 쿨감·짧아진 숨은 마공 스킬만
     const magic = !!def && isMagicBranch(def.branch);
     // 11/19 회의 줄이기(마공 카드): 마공 쿨타임 −
-    return def ? Math.round(def.cooldownMs(lv) * (magic ? (1 - this.mods.cdCut) * (1 - this.tm.cdCut) * (this.cards?.magicCdMul ?? 1) : (this.cards?.wkCdMul ?? 1))) : 1;
+    const parade = def?.branch === "soul" && this.buff("soulParade") ? 1 - PARADE_CD : 1;
+    return def ? Math.round(def.cooldownMs(lv) * parade * (magic ? (1 - this.mods.cdCut) * (1 - this.tm.cdCut) * (this.cards?.magicCdMul ?? 1) : (this.cards?.wkCdMul ?? 1))) : 1;
   }
 
   /** 칸의 스킬 쓰기. quiet: 자동 시전 (못 쓸 때 알림·소리 없이). 썼으면 true */
@@ -2110,7 +2147,9 @@ export class HuntScene extends RpgScene {
       }
       case "so_chain": {
         // 연쇄형: 보랏빛 쇠사슬이 적에서 적으로 이어지고, 끌어모은 자리에 봉인 고리가 찍힌다 (판정 원 표시)
-        const fx = SKILL_FX.so_chain(lv);
+        const fx0 = SKILL_FX.so_chain(lv);
+        // 11/19 끌려가는 결재 카드: 범위·약화 +
+        const fx = { ...fx0, radius: fx0.radius * (this.cards?.stats.soulRange ?? 1), vuln: fx0.vuln + (this.cards?.stats.soulVuln ?? 0) };
         const cx = this.px + this.face.x * 16;
         const cy = this.py + this.face.y * 16;
         this.cutIn("soul", true);
@@ -2159,7 +2198,8 @@ export class HuntScene extends RpgScene {
       }
       case "so_harvest": {
         // 회오리형: 자홍·보라 은하 소용돌이가 세 번 휘감기며 적의 넋을 빨아들인다 (맞힌 적마다 HP 조금)
-        const fx = SKILL_FX.so_harvest(lv);
+        const fx0 = SKILL_FX.so_harvest(lv);
+        const fx = { ...fx0, radius: fx0.radius * (this.cards?.stats.soulRange ?? 1) };
         const pt = this.targetPoint(fx.reach);
         this.cutIn("soul", true);
         snd("cast");
@@ -2209,6 +2249,11 @@ export class HuntScene extends RpgScene {
         // 별빛 행렬 (궁극): 화면 전체 — 별이 돋고 오로라가 드리운 뒤, 박자마다 순례자 행렬이 가로지르며 화면 안 적 모두에게 별빛이 꽂힌다 + 회복
         const fx = SKILL_FX.so_procession(lv);
         this.castUltimate(id, "soul", fx, {}, (i, last, victims) => mv.processionHit(victims.map((m) => ({ x: m.x, y: m.y })), i, last));
+        // 11/19 백귀야행 카드: 8초 동안 부른 넋 피해 + · 넋 스킬 쿨타임 −
+        if (this.cards?.stats.soulParade) {
+          this.buffs.set("soulParade", { until: now + PARADE_MS, v: 1 });
+          this.floatText(this.px, this.py - 30, "백귀야행", "#d8c0ff", 11);
+        }
         const heal = Math.round(this.dv.maxHp * fx.healPct * this.curse.healMul);
         this.hp = Math.min(this.dv.maxHp, this.hp + heal);
         this.dmg.heal(this.px, this.py - 26, heal, true);
@@ -2430,12 +2475,12 @@ export class HuntScene extends RpgScene {
     if (now < t.nextAtk) return;
     const best = this.nearestTo(t.sprite.x, t.sprite.y, t.range);
     if (!best) return;
-    t.nextAtk = now + t.everyMs;
+    t.nextAtk = now + t.everyMs * this.soulEvery();
     this.fx2Bolt(t.sprite.x, t.sprite.y - 10, best);
     this.passiveSnd("so_lantern", 120, "tick");
     this.passiveSnd("so_kinship", 1500);
     if (!t.group || t.group.closed) t.group = this.dmg.group(t.sprite.x, t.sprite.y - 36, "soul", t.everyMs + 500, 3);
-    this.strike(best, t.atkPct * this.dv.skillPower * (1 + this.mods.summonPct), true, 0, { skill: "soul", kb: 0.5, weight: 1, group: t.group, sid: "so_lantern" });
+    this.strike(best, t.atkPct * this.dv.skillPower * (1 + this.mods.summonPct) * this.paradeMul(), true, 0, { skill: "soul", kb: 0.5, weight: 1, group: t.group, sid: "so_lantern" });
   }
 
   private potionLeft(id: string): number {
@@ -3374,14 +3419,14 @@ export class HuntScene extends RpgScene {
         h.sprite.setPosition(h.sprite.x + (this.px - 14 - h.sprite.x) * 0.1, h.sprite.y + (this.py - 10 - h.sprite.y) * 0.1);
         h.sprite.setFrame(Math.floor(now / 300) % 2).setDepth(this.py);
         if (now > h.nextAtk) {
-          h.nextAtk = now + 800;
+          h.nextAtk = now + 800 * this.soulEvery();
           const t = this.nearest(60);
           if (t) {
             this.fx2Bolt(h.sprite.x, h.sprite.y, t, true);
             this.passiveSnd("so_friend", 120, "tick");
             this.passiveSnd("so_kinship", 1500);
             if (!h.group || h.group.closed) h.group = this.dmg.group(h.sprite.x, h.sprite.y - 30, "soul", 1300, 3);
-            this.strike(t, this.buff("so_friend") * this.dv.skillPower * (1 + this.mods.summonPct), true, 0, { skill: "soul", weight: 1, group: h.group, sid: "so_friend" });
+            this.strike(t, this.buff("so_friend") * this.dv.skillPower * (1 + this.mods.summonPct) * this.paradeMul(), true, 0, { skill: "soul", weight: 1, group: h.group, sid: "so_friend" });
           }
         }
       }
@@ -3865,6 +3910,12 @@ function segDist(px: number, py: number, ax: number, ay: number, bx: number, by:
  */
 /** 11/19 v2 모닥불 광역기의 우두머리 피해 배율 */
 const EMBER_AOE_BOSS = 0.6;
+/** 11/19 백귀야행 카드: 별빛 행렬 뒤 이만큼 부른 넋 피해 + · 넋 스킬 쿨타임 − */
+const PARADE_MS = 8_000;
+const PARADE_DMG = 0.5;
+const PARADE_CD = 0.3;
+/** 11/19 퇴근길 등불 카드: 넋불이 닿는 거리 */
+const SOUL_BURST_R = 70;
 
 function withPassives(d: Derived, m: SkillMods, t: TMods): Derived {
   return { ...d, maxHp: Math.round(d.maxHp * (1 + m.hpPct + t.hpPct)), def: d.def + m.def, aspd: Math.round(d.aspd * (1 + m.aspdPct + t.aspd) * 100) / 100 };

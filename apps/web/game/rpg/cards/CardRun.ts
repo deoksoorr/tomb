@@ -18,7 +18,9 @@ import {
   type CardId,
   type CardKindStyle,
   type CardPick,
+  CARD_POOL_VER,
   type CardStats,
+  type MainBranch,
   type OfferKind,
 } from "@/lib/rpg/cards";
 import type { AttackArea, Derived } from "@/lib/rpg/formulas";
@@ -210,6 +212,8 @@ export class CardRun<M extends CardMon> {
     private readonly h: CardHost<M>,
     private readonly seed: number,
     private readonly start: number,
+    /** 11/19 주력 갈래 (그 갈래 카드가 제안에 더 자주) */
+    private readonly main: MainBranch | null = null,
   ) {
     ensureCardTextures(h.scene);
     this.kind = cardStyleKind(h.style().id);
@@ -265,7 +269,7 @@ export class CardRun<M extends CardMon> {
     const q = this.queue[0];
     if (this.h.now() < q.at || !this.h.canPick()) return;
     this.queue.shift();
-    this.cur = { k: q.k, i: q.i, r: 0, f: q.f, cards: cardOffer(this.seed, q.k, q.i, 0, this.owned, q.f) };
+    this.cur = { k: q.k, i: q.i, r: 0, f: q.f, cards: cardOffer(this.seed, q.k, q.i, 0, this.owned, q.f, CARD_POOL_VER, this.main) };
     this.h.hold(true);
     this.emit();
   }
@@ -304,7 +308,7 @@ export class CardRun<M extends CardMon> {
       if (c.k === "b" || this.rerollsLeft <= 0) return;
       this.rerollsUsed++;
       c.r++;
-      c.cards = cardOffer(this.seed, c.k, c.i, c.r, this.owned, c.f);
+      c.cards = cardOffer(this.seed, c.k, c.i, c.r, this.owned, c.f, CARD_POOL_VER, this.main);
       this.emit();
       return;
     }
@@ -338,7 +342,7 @@ export class CardRun<M extends CardMon> {
     const next = this.queue[0];
     if (next && this.h.canPick()) {
       this.queue.shift();
-      this.cur = { k: next.k, i: next.i, r: 0, f: next.f, cards: cardOffer(this.seed, next.k, next.i, 0, this.owned, next.f) };
+      this.cur = { k: next.k, i: next.i, r: 0, f: next.f, cards: cardOffer(this.seed, next.k, next.i, 0, this.owned, next.f, CARD_POOL_VER, this.main) };
       this.emit();
       return;
     }

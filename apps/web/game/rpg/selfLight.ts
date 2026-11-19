@@ -16,7 +16,7 @@ const TEX = "rpg-selflight-mask";
 function maskCanvas(): HTMLCanvasElement {
   const c = document.createElement("canvas");
   c.width = c.height = 128;
-  const ctx = c.getContext("2d")!;
+  const ctx = c.getContext("2d", { willReadFrequently: true })!;
   const gr = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
   gr.addColorStop(0, "rgba(255,255,255,1)");
   gr.addColorStop(0.45, "rgba(255,255,255,0.75)");

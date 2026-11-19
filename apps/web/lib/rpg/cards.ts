@@ -77,6 +77,12 @@ export const CARD_IDS = [
   "brief",
   "refill",
   "refund",
+  // 11/19 넋 갈래 카드 (부른 넋·흡수 — 넋 트리만 쓸모 있다. 사용자 「넋 카드가 하나도 없다」)
+  "soulQuick",
+  "soulDrain",
+  "soulChain",
+  "soulLamp",
+  "soulParade",
 ] as const;
 export type CardId = (typeof CARD_IDS)[number];
 
@@ -105,7 +111,7 @@ export type CardDef = {
 
 /** 11/19 물공·마공 카드 (나머지는 공통) */
 const PHYS_CARDS: readonly string[] = ["quick", "sharp", "memo", "circular", "side", "backbite", "resubmit", "toss", "cc", "parallel", "direct", "brWorker", "handover"];
-const MAGIC_CARDS: readonly string[] = ["mix", "brEmber", "brFrost", "brSoul", "chant", "brief", "refill", "refund"];
+const MAGIC_CARDS: readonly string[] = ["mix", "brEmber", "brFrost", "brSoul", "chant", "brief", "refill", "refund", "soulQuick", "soulDrain", "soulChain", "soulLamp", "soulParade"];
 const c = (id: CardId, name: string, rarity: CardRarity, max: number, desc: string, main: number, accent: number, by?: CardDef["by"]): CardDef => ({
   id,
   name,
@@ -206,7 +212,33 @@ export const CARDS: Record<CardId, CardDef> = {
   brief: c("brief", "회의 줄이기", "magic", 3, "마공 스킬 쿨타임이 6% 줄어요.", 0x8fd8ff, 0x2a3a6a),
   refill: c("refill", "텀블러 리필", "rare", 2, "최대 SP가 25% 늘고, SP가 1초에 1씩 더 차요.", 0x9ff0dc, 0x2a5a5a),
   refund: c("refund", "경비 환급", "unique", 1, "마공 스킬을 쓰면 쓴 SP의 30%를 돌려받아요.", 0xffd84a, 0x4a2a8a),
+  // ── 11/19 넋 갈래 카드 ──
+  soulQuick: c("soulQuick", "손 빠른 동기", "magic", 2, "부른 넋(길동무 넋·망자의 초롱)의 공격 간격이 15% 짧아져요.", 0xb98aff, 0x9ff0dc),
+  soulDrain: c("soulDrain", "넋 수당", "magic", 2, "넋 스킬과 부른 넋이 준 피해의 2%만큼 HP가 차요. 한 번에 최대 HP의 1%까지예요.", 0x9ff0dc, 0x4a2a8a),
+  soulChain: c("soulChain", "끌려가는 결재", "rare", 1, "넋 사슬과 넋 소용돌이 범위가 25% 넓어지고, 넋 사슬 약화가 5%p 더 붙어요.", 0x8a5ad8, 0xe8d8ff),
+  soulLamp: c("soulLamp", "퇴근길 등불", "unique", 1, "넋 스킬이나 부른 넋으로 적을 쓰러뜨리면 넋불이 튀어 근처 적 둘을 쳐요.", 0x9ff0dc, 0xb98aff),
+  soulParade: c("soulParade", "백귀야행", "legend", 1, "별빛 행렬을 쓰면 8초 동안 부른 넋 피해가 50% 오르고, 넋 스킬 쿨타임이 30% 줄어요.", 0x2a1448, 0x9ff0dc),
 };
+
+/** 11/19 카드마다 키우는 갈래 (주력 갈래 카드는 제안에 더 자주 — cardOffer) */
+export type MainBranch = "ember" | "frost" | "soul" | "worker";
+export const CARD_BRANCH: Partial<Record<CardId, MainBranch>> = {
+  brEmber: "ember",
+  passion: "ember",
+  afterparty: "ember",
+  brFrost: "frost",
+  chill: "frost",
+  brSoul: "soul",
+  soulQuick: "soul",
+  soulDrain: "soul",
+  soulChain: "soul",
+  soulLamp: "soul",
+  soulParade: "soul",
+  brWorker: "worker",
+  handover: "worker",
+};
+/** 넋 갈래 카드 (제안 묶음 3부터) */
+export const SOUL_PACK: ReadonlySet<CardId> = new Set<CardId>(["soulQuick", "soulDrain", "soulChain", "soulLamp", "soulParade"]);
 
 export const CARD_LIST: readonly CardDef[] = CARD_IDS.map((id) => CARDS[id]);
 export const isCardId = (v: unknown): v is CardId => typeof v === "string" && Object.hasOwn(CARDS, v);
@@ -267,6 +299,10 @@ export function cardStackLine(id: CardId, have: number, owned?: CardCounts): str
       return step("서리 스킬 피해", 15);
     case "brSoul":
       return step("넋 스킬 피해", 15);
+    case "soulQuick":
+      return down("부른 넋 공격 간격", 15);
+    case "soulDrain":
+      return step("넋 피해 흡수", 2);
     case "brWorker":
       return `${step("일꾼 스킬 피해", 15)}, ${down("일꾼 스킬 쿨타임", 10)}`;
     case "chant":
@@ -342,6 +378,16 @@ export function cardPromoLine(id: CardId, n: number, owned: CardCounts | undefin
         return up("서리 스킬 피해", 15);
       case "brSoul":
         return up("넋 스킬 피해", 15);
+      case "soulQuick":
+        return down("부른 넋 공격 간격", 15);
+      case "soulDrain":
+        return up("넋 피해 흡수", 2);
+      case "soulChain":
+        return up("넋 사슬·소용돌이 범위", 25);
+      case "soulLamp":
+        return up("넋불 피해", 60);
+      case "soulParade":
+        return up("행렬 뒤 부른 넋 피해", 50);
       case "brWorker":
         return `${up("일꾼 스킬 피해", 15)}, ${down("일꾼 스킬 쿨타임", 10)}`;
       case "handover":
@@ -486,14 +532,18 @@ export const RETIRED_CARDS: ReadonlySet<CardId> = new Set<CardId>(["circular", "
 /** 11/19 마공 전용 카드가 들어오기 전 제안 묶음 (그 전에 시작한 판의 고른 기록을 서버가 다시 굴릴 때 — evalTower가 둘 다 본다) */
 export const MAGIC_PACK: ReadonlySet<CardId> = new Set<CardId>(["chant", "brief", "refill", "refund"]);
 /** 제안 묶음 판: 2 = 마공 카드 포함 (지금), 1 = 그 전 */
-export const CARD_POOL_VER = 2;
-export type CardPoolVer = 1 | 2;
+/** 11/19 3 = 넋 갈래 카드 + 주력 갈래 카드 더 자주 (지금), 2 = 마공 카드까지, 1 = 그 전 */
+export const CARD_POOL_VER = 3;
+export type CardPoolVer = 1 | 2 | 3;
 const POOLS: Record<CardPoolVer, Record<CardRarity, CardId[]>> = {
   1: { common: [], magic: [], rare: [], unique: [], legend: [] },
   2: { common: [], magic: [], rare: [], unique: [], legend: [] },
+  3: { common: [], magic: [], rare: [], unique: [], legend: [] },
 };
 for (const id of CARD_IDS) {
   if (RETIRED_CARDS.has(id)) continue;
+  POOLS[3][CARDS[id].rarity].push(id);
+  if (SOUL_PACK.has(id)) continue;
   POOLS[2][CARDS[id].rarity].push(id);
   if (!MAGIC_PACK.has(id)) POOLS[1][CARDS[id].rarity].push(id);
 }
@@ -502,7 +552,28 @@ for (const id of CARD_IDS) {
  * 제안 카드. 레벨 업·시작은 세 장, 상사의 제안은 레어 이상 한 장. 장마다 등급을 굴리고 그 등급에서 아직 덜 쌓인 카드를 고른다
  * (그 등급에 고를 게 없으면 한 단계 아래부터, 그래도 없으면 위로). owned = 지금 가진 카드, f = 층 (등급 확률이 오른다)
  */
-export function cardOffer(seed: number, k: OfferKind, i: number, r: number, owned: CardCounts, f = 1, ver: CardPoolVer = CARD_POOL_VER): CardId[] {
+/**
+ * 11/19 주력 갈래(스킬 포인트를 가장 많이 쓴 갈래) 카드는 제안에 더 자주: 같은 피해 갈래(마공·물공) 카드 ×2, 그 갈래 카드 ×3.
+ * 넋 트리가 넋 카드를 거의 못 보던 것 (사용자 「넋 트리 타는 애들이 소외당할 듯」). 묶음 3부터
+ */
+export function cardWeight(id: CardId, main: MainBranch | null | undefined): number {
+  if (!main) return 1;
+  const sideOk = main === "worker" ? CARDS[id].type === "phys" : CARDS[id].type === "magic";
+  return 1 + (sideOk ? 1 : 0) + (CARD_BRANCH[id] === main ? 1 : 0);
+}
+/** 스킬 배분의 주력 갈래 (포인트가 가장 많은 갈래 — 같으면 앞 갈래, 하나도 없으면 null). 게임과 서버가 같은 값을 쓴다 */
+export function mainBranchOf(skills: Partial<Record<string, number>> | undefined, branchOf: (id: string) => MainBranch | undefined): MainBranch | null {
+  const sum: Record<MainBranch, number> = { ember: 0, frost: 0, soul: 0, worker: 0 };
+  for (const [id, lv] of Object.entries(skills ?? {})) {
+    const b = branchOf(id);
+    if (b && lv && lv > 0) sum[b] += lv;
+  }
+  let best: MainBranch | null = null;
+  for (const b of ["ember", "frost", "soul", "worker"] as const) if (sum[b] > 0 && (!best || sum[b] > sum[best])) best = b;
+  return best;
+}
+
+export function cardOffer(seed: number, k: OfferKind, i: number, r: number, owned: CardCounts, f = 1, ver: CardPoolVer = CARD_POOL_VER, main: MainBranch | null = null): CardId[] {
   const BY_TIER = POOLS[ver];
   const rnd = seeded(offerSeed(seed, k, i, r));
   const odds = tierOdds(k, k === "b" ? i : f, r);
@@ -522,7 +593,14 @@ export function cardOffer(seed: number, k: OfferKind, i: number, r: number, owne
     for (const t of order) {
       const pool = BY_TIER[t].filter((id) => canTake(owned, id) && !out.includes(id));
       if (!pool.length) continue;
-      out.push(pool[Math.floor(pick * pool.length)]);
+      if (ver >= 3 && main) {
+        // 주력 갈래 가중치 (같은 난수 하나로 무게 비례)
+        const w = pool.map((id) => cardWeight(id, main));
+        let x2 = pick * w.reduce((a, b) => a + b, 0);
+        let j = 0;
+        while (j < pool.length - 1 && (x2 -= w[j]) >= 0) j++;
+        out.push(pool[j]);
+      } else out.push(pool[Math.floor(pick * pool.length)]);
       break;
     }
   }
@@ -545,6 +623,8 @@ export type PickLimits = {
   levelFloorMax?: (i: number) => number;
   /** 11/19 제안 묶음 판 (없으면 지금 것) */
   ver?: CardPoolVer;
+  /** 11/19 주력 갈래 (묶음 3 가중치) */
+  main?: MainBranch | null;
 };
 export type PickVerdict = { ok: true; owned: CardCounts } | { ok: false; why: string };
 
@@ -586,7 +666,7 @@ export function replayPicks(seed: number, picks: readonly CardPick[], lim: PickL
     } else return { ok: false, why: "format" };
     rr += p.r;
     if (rr > lim.rerolls) return { ok: false, why: "reroll" };
-    if (!cardOffer(seed, p.k, p.i, p.r, owned, f, lim.ver ?? CARD_POOL_VER).includes(p.c)) return { ok: false, why: "offer" };
+    if (!cardOffer(seed, p.k, p.i, p.r, owned, f, lim.ver ?? CARD_POOL_VER, lim.main ?? null).includes(p.c)) return { ok: false, why: "offer" };
     owned[p.c] = (owned[p.c] ?? 0) + 1;
   }
   const levels = typeof lim.levels === "function" ? lim.levels(owned) : lim.levels;
@@ -676,6 +756,14 @@ export type CardStats = {
   magicCd: number;
   spMul: number;
   refund: number;
+  /** 11/19 넋 갈래 카드: 부른 넋 공격 간격 배율 · 넋 피해 흡수(비율·한 번 상한) · 사슬·소용돌이 범위 배율·사슬 약화 + · 넋불 세기 · 백귀야행 */
+  soulEvery: number;
+  soulSteal: number;
+  soulStealCap: number;
+  soulRange: number;
+  soulVuln: number;
+  soulBurst: number;
+  soulParade: boolean;
 };
 
 /** 카드 한 장이 스킬 피해에 더하는 몫 (등급이 높을수록 크게, 커피 수혈은 빼고) */
@@ -759,6 +847,13 @@ export function cardStats(o: CardCounts): CardStats {
     magicCd: Math.min(0.4, 0.06 * k * n("brief")),
     spMul: 1 + 0.25 * k * n("refill"),
     refund: n("refund") > 0 ? Math.min(REFUND_MAX, 0.3 * k) : 0,
+    soulEvery: Math.max(0.5, 1 - 0.15 * k * n("soulQuick")),
+    soulSteal: 0.02 * k * n("soulDrain"),
+    soulStealCap: 0.01,
+    soulRange: 1 + (n("soulChain") > 0 ? 0.25 * k : 0),
+    soulVuln: n("soulChain") > 0 ? 0.05 * k : 0,
+    soulBurst: n("soulLamp") > 0 ? 0.6 * k : 0,
+    soulParade: n("soulParade") > 0,
   };
 }
 
@@ -800,6 +895,9 @@ export function cardPower(o: CardCounts): number {
   p *= 1 + 0.5 * s.handover;
   // 11/19 마공 카드 (마공 몫을 통째로 — 넉넉하게): 피해 + · 쿨타임 − (그만큼 더 자주) · 환급(SP가 덜 막힘)
   p *= (1 + s.magicDmg) / (1 - s.magicCd) * (1 + 0.5 * s.refund);
+  // 11/19 넋 갈래 카드 (넉넉하게): 부른 넋이 더 자주 · 범위·약화 · 넋불 · 백귀야행(늘 켜졌다고)
+  p *= (1 / s.soulEvery) * s.soulRange * (1 + s.soulVuln) * (1 + s.soulBurst);
+  if (s.soulParade) p *= 1.5 / 0.7;
   return Math.min(CARD_POWER_MAX, p);
 }
 

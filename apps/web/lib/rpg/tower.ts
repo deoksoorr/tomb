@@ -764,9 +764,15 @@ export function evalTower(
       return t.start + (j < 0 ? k : j);
     },
   };
-  // 11/19 마공 카드 묶음(제안 묶음 2)이 들어오기 전에 시작한 판·옛 화면은 옛 묶음(1)으로 고른다 → 지금 묶음으로 안 맞으면 옛 묶음으로 한 번 더
-  const cv0 = replayPicks(t.seed, r.cards ?? [], lim);
-  const cv = cv0.ok || cv0.why !== "offer" ? cv0 : replayPicks(t.seed, r.cards ?? [], { ...lim, ver: 1 });
+  // 11/19 제안 묶음: 3(넋 카드 + 주력 갈래 가중치 — 갈래는 화면이 스킬 배분으로 정한다, 갈래마다 다시 굴려 본다) → 2(마공 카드) → 1(그 전).
+  //  옛 화면·배포 전에 시작한 판은 옛 묶음으로 맞는다. 제안이 안 맞을 때만 다음 후보로
+  const tries: PickLimits[] = [
+    ...([null, "ember", "frost", "soul", "worker"] as const).map((main) => ({ ...lim, ver: 3 as const, main })),
+    { ...lim, ver: 2 },
+    { ...lim, ver: 1 },
+  ];
+  let cv = replayPicks(t.seed, r.cards ?? [], tries[0]);
+  for (let j = 1; j < tries.length && !cv.ok && cv.why === "offer"; j++) cv = replayPicks(t.seed, r.cards ?? [], tries[j]);
   // 11/15 카드 기록이 맞지 않아도 판은 버리지 않는다 (예전 판 끝 형식이 레벨 업 층 f를 지워 정직한 판이 통째로 날아갔다)
   if (!cv.ok) suspect.push(`cards:${cv.why}`);
   const owned = cv.ok ? cv.owned : claimedCards(r.cards ?? []);
