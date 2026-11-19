@@ -17,8 +17,8 @@ export function aloneLine(map: MapId, elsewhere: number): string {
   return "지금은 이 채널에 나 혼자 있어요. 확성기로 사람을 불러 보세요.";
 }
 
-/** 지금 맵에 같이 있는 사람이 있을 때 목록 제목 */
-export const hereLabel = (map: MapId): string => `${PLACE_TITLE[map]}에 같이 있는 사람`;
+/** 지금 맵에 같이 있는 사람이 있을 때 목록 제목 (나는 빼고 센다) */
+export const hereLabel = (map: MapId, count: number): string => `${PLACE_TITLE[map]}에 같이 있는 사람 총 ${count}명`;
 
 /** 목록 아래 덧붙임 (다른 곳에 아무도 없으면 null) */
 export const elsewhereLine = (elsewhere: number): string | null => (elsewhere > 0 ? `이 맵이 아닌 곳에 ${elsewhere}명 더 있어요.` : null);

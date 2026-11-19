@@ -200,6 +200,9 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+  /* 11/19 전부 보여 준다. 40명 가까이면 카드가 너무 길어지지 않게 안에서 굴린다 */
+  max-height: 132px;
+  overflow-y: auto;
 }
 
 .peerName {

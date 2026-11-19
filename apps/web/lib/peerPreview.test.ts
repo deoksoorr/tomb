@@ -13,7 +13,7 @@ describe("채널 이동 창: 지금 맵 기준 같이 있는 사람", () => {
   });
 
   it("같이 있는 사람이 있으면 맵 이름을 붙이고, 다른 곳 인원은 덧붙인다", () => {
-    expect(hereLabel("village")).toBe("기억숲 마을에 같이 있는 사람");
+    expect(hereLabel("village", 12)).toBe("기억숲 마을에 같이 있는 사람 총 12명");
     expect(elsewhereLine(elsewhereCount(5, 2))).toBe("이 맵이 아닌 곳에 2명 더 있어요.");
     expect(elsewhereLine(elsewhereCount(3, 2))).toBeNull();
   });
