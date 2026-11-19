@@ -140,7 +140,7 @@ export function StartPanel({
                 {!zoneLocked && low && <p className={s.warn}>권장 레벨보다 낮아요. 쓰러지면 보상이 절반이에요.</p>}
                 {!zoneLocked && starBlock && (
                   <p className={s.warn}>
-                    <b>사냥터에서는 포인트를 받을 수 없어요.</b> {starLabel(HUNT_POINT_T_STOP)}부터는 일반 사냥터에서 포인트를 받지 않아요. 초월 경험치와 드롭은 그대로이고, 포인트는 야근 빌딩에서 받아요.
+                    <b>사냥터에서는 포인트를 받을 수 없어요.</b> {starLabel(HUNT_POINT_T_STOP)}부터는 일반 사냥터에서 포인트를 받지 않아요. 잡은 몬스터는 사냥 랭킹과 주간 레이스에도 들어가지 않아요. 초월 경험치와 드롭은 그대로이고, 포인트와 레이스는 야근 빌딩에서 이어 가요.
                   </p>
                 )}
                 {!zoneLocked && noRace && !starBlock && (

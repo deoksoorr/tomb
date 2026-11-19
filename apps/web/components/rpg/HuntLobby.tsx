@@ -310,7 +310,7 @@ export default function HuntLobby({
           : game !== "hunt"
             ? null
             : huntPointBlock(c.level, c.tLevel, difficulty, runZone) === "star"
-              ? { until, title: "사냥터에서는 포인트를 받을 수 없어요", text: `${starLabel(HUNT_POINT_T_STOP)}부터는 일반 사냥터에서 포인트를 받지 않아요. 포인트는 야근 빌딩에서 받아요.` }
+              ? { until, title: "사냥터에서는 포인트를 받을 수 없어요", text: `${starLabel(HUNT_POINT_T_STOP)}부터는 일반 사냥터에서 포인트를 받지 않고 랭킹과 레이스에도 들어가지 않아요. 야근 빌딩에서 이어 가요.` }
               : huntPointBlock(c.level, c.tLevel, difficulty, runZone) === "level"
                 ? { until, title: "이 사냥터에서는 포인트를 받을 수 없어요", text: `내 레벨이 이 사냥터(Lv.${runZone.unlockLevel})보다 10 넘게 높아요. EXP도 조금만 받고 랭킹에도 들어가지 않아요.` }
                 : null,

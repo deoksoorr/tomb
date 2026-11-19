@@ -657,7 +657,8 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   // 11/15: 자기 레벨이 그 사냥터가 열리는 레벨(티켓의 사냥터 t.z)보다 10 넘게 높으면 랭킹에 아예 넣지 않는다 —
   // 주간 레이스뿐 아니라 전체 처치 수·최단 기록도 (사용자 요청 "다 적정 레벨만 세게"). 지나간 기록은 그대로
   // 11/16 최단 클리어는 사냥터(t.z — 없던 옛 티켓은 그 난이도 첫 사냥터)별로 남긴다
-  if (v.hunt && (v.hunt.kills > 0 || v.hunt.clearMs !== null) && !staff && countsForRace(t.lv, t.d, runZone))
+  // 11/19 ★58(초월 8)부터는 일반 사냥터 처치·최단도 레이스·랭킹에 넣지 않는다 (포인트와 같은 기준 — 그 전 기록은 그대로, 사용자)
+  if (v.hunt && (v.hunt.kills > 0 || v.hunt.clearMs !== null) && !staff && overLevel === null)
     await getAccounts().recordHunt(acct, runZone.id, v.hunt, kstWeek(now), true);
   return {
     reward: {
