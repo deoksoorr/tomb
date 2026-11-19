@@ -271,7 +271,9 @@ export async function maybeQualify(rec: ReferralRecord, now = Date.now(), progre
       return mergeReasons(rec.reasons, ["ip"]);
     },
   );
-  const r = await store.qualify(rec.refereeId, now, kstMonth(now), levelOfReasons(reasons), reasons, REF_MONTH_CAP, await grandOpts(rec, now));
+  // 11/19 「자동」이면 같은 사람 판정과 관계없이 조건만 채우면 보낸다 (같은 IP 회사·가족이 많다 — 사용자). 이유 코드는 그대로 남겨 관리자 화면에서 본다
+  const level = (await store.mode()) === "auto" ? "clear" : levelOfReasons(reasons);
+  const r = await store.qualify(rec.refereeId, now, kstMonth(now), level, reasons, REF_MONTH_CAP, await grandOpts(rec, now));
   if (!r) return false;
   await spreadCluster(rec.refereeId, reasons);
   await sendRewards(rec, r, now);
@@ -295,6 +297,16 @@ async function grandOpts(rec: Pick<ReferralRecord, "refereeId" | "referrerId" | 
   if (levelOfReasons(withReferee) === "same") return opts("sameReferee");
   if (levelOfReasons(withReferrer) === "same") return opts("sameReferrer");
   return opts("");
+}
+
+/** 11/19 관리자: 추천 사냥 가방 몫(물약·결재 서류)만 이 계정들에 넣는다 (자동 판정에서 빠졌던 추천을 손으로 채울 때 — 등불은 선물로 따로). 넣은 수 */
+export async function grantRefBag(ids: readonly string[]): Promise<number> {
+  let n = 0;
+  for (const id of new Set(ids)) {
+    await grantRpgBundle(id, REF_REWARD_BUNDLE);
+    n++;
+  }
+  return n;
 }
 
 /** 관리자: 확인 기다리는 추천을 승인(보상을 보낸다)·거절. 여러 개면 기다림이 아닌 것은 건너뛴다 (하나만 줬는데 기다림이 아니면 409) */

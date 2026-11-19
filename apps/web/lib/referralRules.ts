@@ -8,7 +8,7 @@ import type { RpgBundle } from "./rpgGift";
 //    11/18 예전엔 「합쳐서 3시간 + 들어온 날 3일」. 그 전에 들어온 날은 너그럽게 1시간 머문 날로 친다 (referralService progressOf)
 //  - 조건 달성 때 둘 다 추천 선물을 받는다 (11/19 포인트 대신 아이템: 마중 등불(영구)은 선물함, 물약·결재 서류는 사냥 가방).
 //    추천한 쪽은 한 달(한국 시간 달력)에 REF_MONTH_CAP명까지만
-//  - 보상 방식(RefMode): 기본은 「모두 확인」(관리자가 승인해야 보상). 「자동」이면 같은 사람 판정(lib/sameUserRules.ts)으로 정한다
+//  - 보상 방식(RefMode): 기본은 「모두 확인」(관리자가 승인해야 보상 — 승인하면 등불·사냥 가방 몫이 한 번에). 11/19 「자동」이면 판정과 관계없이 바로 보낸다 (판정 이유는 표시만)
 
 export const REF_CODE_LEN = 6;
 /** 헷갈리는 글자(0·O·1·I·L)를 뺀 글자 */
@@ -40,7 +40,7 @@ export const GRAND_SKIP_TEXT: Record<string, string> = {
 export const REF_ENTER_MS = REF_ENTER_MIN * 60_000;
 /**
  * 추천 보상 방식 (관리자 추천 탭, ref:cfg mode). review = 모두 확인(기본, 조건을 넘긴 추천은 점수와 상관없이 관리자 승인 뒤 보상),
- * auto = 같은 사람 점수로 자동(의심 없음은 바로, 확인 필요는 보류, 같은 사람 같음은 없음), off = 기록만
+ * auto = 조건을 채우면 바로 보낸다 (11/19 같은 사람 판정은 표시만), off = 기록만
  */
 export type RefMode = "review" | "auto" | "off";
 export const REF_MODES: readonly RefMode[] = ["review", "auto", "off"];

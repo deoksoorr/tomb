@@ -342,7 +342,7 @@ export default function ReferralsPanel({ toast, onAuthLost, onFindMember, onGift
         </div>
         <ul className={ui.hint}>
           <li>「{REF_MODE_LABEL.review}」은 조건을 넘긴 추천을 점수와 상관없이 모두 확인 기다림에 올려요. 승인하면 양쪽에 보상을 보내고 칭호에도 세요.</li>
-          <li>「{REF_MODE_LABEL.auto}」은 같은 사람 판정으로 정해요. 의심 없음은 바로 보내고, 확인 필요는 기다리고, 같은 사람 같음은 보내지 않아요.</li>
+          <li>「{REF_MODE_LABEL.auto}」은 조건만 채우면 등불과 사냥 가방 몫을 바로 다 보내요. 같은 사람 판정은 목록에 표시만 해요.</li>
           <li>「{REF_MODE_LABEL.off}」은 조건 달성만 기록해요. 바꾼 뒤 조건을 넘기는 추천부터 적용돼요.</li>
           <li>
             새 이웃이 하루 {stayText(view.rules.dayMin)} 넘게 머문 날이 {view.rules.needDays}일이 되면 조건 달성이에요. 이어진 날이 아니어도 돼요. 그때 둘 다 {view.rules.reward}을 받아요. 꾸미기는 선물함, 물약과 서류는 사냥 가방으로 가요.

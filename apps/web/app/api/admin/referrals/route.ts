@@ -2,7 +2,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/admin";
 import { handler, json } from "@/lib/http";
 import { REF_MODES, type RefMode } from "@/lib/referralRules";
-import { adminReferrals, decideReferral, decideReferrals, HELD_LIST, type AdminReferralResponse } from "@/lib/referralService";
+import { adminReferrals, decideReferral, decideReferrals, grantRefBag, HELD_LIST, type AdminReferralResponse } from "@/lib/referralService";
 import { getReferrals } from "@/lib/store/referrals";
 import { readBody } from "@/lib/validate";
 
@@ -17,16 +17,19 @@ const ActionSchema = z.union([
   z.object({ mode: z.enum(REF_MODES as [RefMode, ...RefMode[]]) }),
   z.object({ refereeId: id, approve: z.boolean() }),
   z.object({ refereeIds: z.array(id).min(1).max(HELD_LIST), approve: z.boolean() }),
+  // 11/19 추천 사냥 가방 몫(물약·결재 서류)만 손으로 넣기
+  z.object({ bagIds: z.array(id).min(1).max(10) }),
 ]);
 
 /**
- * `{ mode }` 보상 방식: review(모두 확인) · auto(점수로 자동) · off(기록만). 바꾼 뒤 조건을 넘기는 추천부터 적용된다
+ * `{ mode }` 보상 방식: review(모두 확인) · auto(조건만 채우면 바로) · off(기록만). 바꾼 뒤 조건을 넘기는 추천부터 적용된다
  * `{ refereeId, approve }` 확인 기다리는 추천 하나 승인(양쪽에 선물·칭호 수, 추천인은 그달 상한 안에서)·거절
  * `{ refereeIds, approve }` 고른 것 한꺼번에 (확인 기다림이 아닌 것은 건너뛴다). 둘 다 무엇을 보냈는지 decision으로
  */
 export const POST = handler(async (req) => {
   await requireAdmin(req);
   const body = await readBody(req, ActionSchema);
+  if ("bagIds" in body) return json({ ok: true, granted: await grantRefBag(body.bagIds) });
   if ("mode" in body) {
     await getReferrals().setMode(body.mode);
     return json<AdminReferralResponse>(await adminReferrals());
