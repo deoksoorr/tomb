@@ -203,7 +203,7 @@ describe("반응 포인트", () => {
     const res = await bodyOf<{ count: number; earned: number }>(
       flower.POST(call(`/api/graves/${grave.id}/flower`, { method: "POST", visitor: fan }), ctx(grave.id)),
     );
-    expect(res).toEqual({ count: 1, earned: 2 });
+    expect(res).toMatchObject({ count: 1, earned: 2 }); // 11/19 그날 미션에 헌화가 들면 todo도 실린다
     expect((await getMe(owner)).points).toBe(21);
     await flower.POST(call(`/api/graves/${grave.id}/flower`, { method: "POST", visitor: owner }), ctx(grave.id));
     expect((await getMe(owner)).points).toBe(23);
