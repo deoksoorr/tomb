@@ -1,5 +1,5 @@
 import type { Me } from "../../types";
-import type { BoxPrize, UrgentKind, UrgentReward, UrgentStage } from "./urgent";
+import type { BoxPrize, UrgentCos, UrgentKind, UrgentReward, UrgentStage } from "./urgent";
 
 // 11/15: 긴급 의뢰 API 계약 (서버 ↔ UI)
 
@@ -38,7 +38,8 @@ export type UrgentPublic = {
 
 /** 받은 보상 (저장된 기록 그대로) */
 /** 받은 보상 (저장된 기록 그대로). pocket = 「수집가의 뒷주머니」를 가방에 넣었다 (box는 예전 기록 — 받을 때 바로 열던 때의 내용물) */
-export type UrgentClaimed = { stage: UrgentStage; stamps: number; box: BoxPrize | null; pocket?: boolean; king: boolean; last: boolean; at: number; fishKept?: boolean };
+/** cos = 11/19 받은 무작위 꾸미기 (배달왕·행운의 배달부) · lucky = 행운의 배달부로 뽑혔다 */
+export type UrgentClaimed = { stage: UrgentStage; stamps: number; box: BoxPrize | null; pocket?: boolean; king: boolean; lucky?: boolean; cos?: UrgentCos | null; last: boolean; at: number; fishKept?: boolean };
 
 /** 나와 관련된 긴급 의뢰 한 줄 */
 export type UrgentMineRow = {

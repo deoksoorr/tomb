@@ -13,6 +13,8 @@ import { pushVillageNotice } from "../../weeklyChamp";
 import { dexCatOf, dexRewardOf, speciesById, STACK_MAX } from "../catalog";
 import { getForageStore, type MemoryForageStore } from "../store";
 import { STAMP_CAP } from "./catalog";
+import { cosmeticsOfTier } from "../../rpg/setGearRoll";
+import { kstDay } from "../../store/accounts";
 import { questStore } from "./service";
 import type { MemoryQuestStore } from "./store";
 import {
@@ -25,8 +27,6 @@ import {
   rankScore,
   URGENT_CLAIM_MS,
   URGENT_DEF,
-  URGENT_HAT,
-  URGENT_HAT_MS,
   URGENT_KINDS,
   URGENT_LAST_MS,
   URGENT_MS,
@@ -41,8 +41,11 @@ import {
   urgentEndNotice,
   urgentGoal,
   urgentLastAcct,
+  urgentCosRoll,
+  urgentLucky,
   urgentReward,
   urgentSchedule,
+  urgentStage,
   type UrgentKind,
   type UrgentSlot,
 } from "./urgent";
@@ -266,6 +269,29 @@ const parseClaimed = (raw: string | null): UrgentClaimed | null => {
   }
 };
 
+/** 11/19 행운의 배달부 (끝난 의뢰는 낸 사람이 바뀌지 않으니 인스턴스 메모리에 기억) */
+const LUCKY_LOOK = 2000;
+const gl = globalThis as typeof globalThis & { __tombUrgLucky?: Map<string, string | null> };
+async function luckyOf(id: string, store: UrgentStore, kingAcct: string | null, stage: number): Promise<string | null> {
+  if (stage < 100) return null;
+  const memo = (gl.__tombUrgLucky ??= new Map());
+  if (memo.has(id)) return memo.get(id) ?? null;
+  const all = await store.top(id, LUCKY_LOOK);
+  const lucky = urgentLucky(id, all.filter((r) => r.n > 0).map((r) => r.acct), stage >= 150 ? kingAcct : null);
+  if (memo.size > 200) memo.clear();
+  memo.set(id, lucky);
+  return lucky;
+}
+
+/** 11/19 무작위 꾸미기 등급별 후보 (상점 캐릭터 꾸미기 — 야근 빌딩 상자와 같은 목록) */
+const COS_TIERS = [0, 1, 2, 3].map((t) => cosmeticsOfTier(t as 0 | 1 | 2 | 3).map((i) => i.id));
+/** 영구로 이미 가진 꾸미기 (입었거나 벗어 둔 것 중 1년 넘게 남은 것) — 무작위 꾸미기에서 뺀다 */
+async function permOwned(acct: string, now: number): Promise<Set<string>> {
+  const a = await getAccounts().get(acct, kstDay(now), now);
+  const far = now + 365 * 86_400_000;
+  return new Set([...a.equipped, ...a.stash].filter((e) => e.until > far).map((e) => e.itemId));
+}
+
 /** 나와 관련된 긴급 의뢰: 지금 것 + 끝난 지 URGENT_CLAIM_MS 안의 것 중 내가 낸 것 */
 export async function urgentMine(acct: string, now = Date.now()): Promise<UrgentMeResponse> {
   const evs = (await eventsAround(now)).filter((e) => e.start <= now && now < e.end + URGENT_CLAIM_MS);
@@ -284,7 +310,8 @@ export async function urgentMine(acct: string, now = Date.now()): Promise<Urgent
     const top = done && !m.got ? await store.top(ev.id, 1) : [];
     const { goal, cap } = await goalOf(ev, st);
     const claimed = parseClaimed(m.got);
-    const r = done && !claimed ? urgentReward({ id: ev.id, acct, n: st.n, goal, cap, mine: m.n, top: top[0]?.acct ?? null, last: urgentLastAcct(st) }) : null;
+    const lucky = done && !claimed ? await luckyOf(ev.id, store, top[0]?.acct ?? null, urgentStage(st.n, goal)) : null;
+    const r = done && !claimed ? urgentReward({ id: ev.id, acct, n: st.n, goal, cap, mine: m.n, top: top[0]?.acct ?? null, last: urgentLastAcct(st), lucky }) : null;
     rows.push({
       id: ev.id,
       kind: ev.kind,
@@ -313,16 +340,19 @@ export async function claimUrgent(acct: string, id: string, now = Date.now()): P
   if (now < urgentEndAt(ev.end, st.fest)) throw new HttpError(409, "URGENT_LIVE", "아직 진행 중이에요. 끝나면 받을 수 있어요.");
   if (m.got) throw new HttpError(409, "URGENT_CLAIMED", "이미 받았어요.");
   const { goal, cap } = await goalOf(ev, st);
-  const r = urgentReward({ id: ev.id, acct, n: st.n, goal, cap, mine: m.n, top: top[0]?.acct ?? null, last: urgentLastAcct(st) });
+  const lucky = await luckyOf(ev.id, store, top[0]?.acct ?? null, urgentStage(st.n, goal));
+  const r = urgentReward({ id: ev.id, acct, n: st.n, goal, cap, mine: m.n, top: top[0]?.acct ?? null, last: urgentLastAcct(st), lucky });
   if (!hasReward(r)) throw new HttpError(409, "NO_REWARD", m.n > 0 ? "목표의 절반을 못 채워서 이번엔 받을 보상이 없어요." : "이번 의뢰에 낸 것이 없어요.");
   // 「수집가의 뒷주머니」는 바로 열지 않고 가방에 넣는다 (가방에서 [열기] — openUrgentPocket). 내용물은 (의뢰, 계정) 시드로 이미 정해져 있다
-  const claimed: UrgentClaimed = { stage: r.stage, stamps: r.stamps, box: null, pocket: !!r.box, king: r.king, last: r.last, at: now };
+  // 11/19 배달왕·행운의 배달부: 상점 꾸미기 하나를 무작위 기간제로 (영구로 가진 것은 빼고, (의뢰, 계정) 시드라 다시 받아도 같다)
+  const cos = r.king || r.lucky ? urgentCosRoll(`${ev.id}|${acct}`, COS_TIERS, await permOwned(acct, now)) : null;
+  const claimed: UrgentClaimed = { stage: r.stage, stamps: r.stamps, box: null, pocket: !!r.box, king: r.king, lucky: r.lucky, cos, last: r.last, at: now };
   const plan: ClaimPlan = {
     record: JSON.stringify(claimed),
     stamps: r.stamps,
     stampCap: STAMP_CAP,
     pocket: r.box ? URGENT_POCKET : "",
-    hat: r.king ? { id: URGENT_HAT, slot: itemById(URGENT_HAT)?.slot ?? "head", until: now + URGENT_HAT_MS } : null,
+    hat: cos ? { id: cos.id, slot: itemById(cos.id)?.slot ?? "head", until: now + cos.days * 86_400_000 } : null,
     now,
     kingUntil: r.king ? now + URGENT_TITLE_MS : 0,
     lastUntil: r.last ? now + URGENT_TITLE_MS : 0,

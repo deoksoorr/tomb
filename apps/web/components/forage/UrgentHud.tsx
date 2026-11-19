@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { clockText, FEST_FIREWORK_MS, FEST_MS, URGENT_DEF, URGENT_LAST_MS, URGENT_NOBODY_LINE, urgentFilled, urgentRewardLine, urgentStage } from "@/lib/forage/quests/urgent";
+import { clockText, FEST_FIREWORK_MS, FEST_MS, URGENT_CLAIM_MS, URGENT_DEF, URGENT_LAST_MS, URGENT_NOBODY_LINE, urgentClaimLeft, urgentFilled, urgentRewardLine, urgentStage } from "@/lib/forage/quests/urgent";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { showToast } from "@/lib/hooks/useToasts";
-import { useUrgent } from "./urgentStore";
+import { urgentStore, useUrgent } from "./urgentStore";
 import u from "./urgent.module.css";
 
 /**
@@ -42,6 +42,9 @@ const mmss = (ms: number) => {
   const sec = Math.max(0, Math.ceil(ms / 1000));
   return `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`;
 };
+
+/** 11/19 안 받은 보상 다시 알리는 간격 */
+const REMIND_MS = 10 * 60_000;
 
 /** 아무도 내지 않고 끝났을 때 한 줄을 보여 주는 시간 */
 const NOBODY_SHOW_MS = 8_000;
@@ -93,14 +96,24 @@ export default function UrgentHud() {
     return () => clearInterval(t);
   }, [ev]);
 
-  // 끝났고 받을 보상이 있으면 한 번 알린다
+  // 11/19 끝났고 안 받은 보상이 있으면 받을 때까지 REMIND_MS마다 다시 알린다 (내 화면에만 — 사용자). 받기 기한도 같이
+  const pending = (mine?.rows ?? []).filter((r) => r.done && r.reward && !r.claimed);
+  const pendingKey = pending.map((r) => r.id).join(",");
   useEffect(() => {
-    for (const r of mine?.rows ?? []) {
-      if (!r.done || !r.reward || r.claimed || toasted.current.has(r.id)) continue;
-      toasted.current.add(r.id);
-      showToast("긴급 의뢰 보상이 기다려요. 캠핑장행 정류장 옆 의뢰 게시판에서 받아 가세요.", 6_000);
+    if (!pendingKey) return;
+    const remind = () => {
+      const rows = (urgentStore.getSnapshot().mine?.rows ?? []).filter((r) => r.done && r.reward && !r.claimed);
+      if (!rows.length) return;
+      const soonest = Math.min(...rows.map((r) => r.end + URGENT_CLAIM_MS)) - Date.now();
+      showToast(`받지 않은 긴급 의뢰 보상이 ${rows.length > 1 ? `${rows.length}개 ` : ""}있어요. ${urgentClaimLeft(soonest)} 안에 캠핑장행 정류장 옆 의뢰 게시판에서 받아 가세요.`, 7_000);
+    };
+    if (!toasted.current.has(pendingKey)) {
+      toasted.current.add(pendingKey);
+      remind();
     }
-  }, [mine]);
+    const t = setInterval(remind, REMIND_MS);
+    return () => clearInterval(t);
+  }, [pendingKey]);
 
   if (!ev || scene === "hunt" || scene === "minigame") return null;
   const live = now < ev.end;

@@ -18,8 +18,13 @@ import {
   URGENT_KING_LINE,
   urgentRewardLine,
   urgentStage,
+  URGENT_CLAIM_MS,
+  URGENT_COS_DAYS,
+  urgentClaimLeft,
+  URGENT_SHOW_MS,
   type UrgentKind,
 } from "@/lib/forage/quests/urgent";
+import { itemById } from "@tomb/protocol";
 import { urgentApi } from "@/lib/forage/quests/urgentClient";
 import type { UrgentClaimed, UrgentLive, UrgentMineRow } from "@/lib/forage/quests/urgentTypes";
 import { meStore } from "@/lib/hooks/useMe";
@@ -66,7 +71,9 @@ export default function UrgentPanel() {
   }, [liveId]);
 
   const bag = useMemo(() => state?.bag ?? {}, [state]);
-  const done = (mine?.rows ?? []).filter((r) => r.done && r.mine > 0);
+  // 11/19 끝난 의뢰: 받은 것은 목록에서 뺀다 (방금 받은 것은 무엇을 받았는지 보이게 창을 닫을 때까지만), 받을 것이 없는 것은 끝나고 1시간까지만.
+  // 안 받은 것은 받기 기한(끝나고 3일) 안에 남는다 (사용자)
+  const done = (mine?.rows ?? []).filter((r) => r.done && r.mine > 0 && (r.claimed ? !!fresh[r.id] : r.reward ? true : now < r.end + URGENT_SHOW_MS));
   const liveRow = live ? mine?.rows.find((r) => r.id === ev.id) : undefined;
   const myLive = liveRow?.mine ?? 0;
   // 11/16 한 사람 상한 (0 = 없음 — 그 전 의뢰). 내 줄에 있으면 그 값, 아직 못 받았으면 서버 전체 상태 값
@@ -80,8 +87,8 @@ export default function UrgentPanel() {
       setFresh((f) => ({ ...f, [row.id]: r.claimed }));
       void urgentStore.refreshMine();
       void questStore.refresh(true);
-      // 사이렌 모자·가방에 넣은 상자가 바로 보이게
-      if (r.claimed.king || r.claimed.pocket) void meStore.refresh();
+      // 무작위 꾸미기·칭호·가방에 넣은 상자가 바로 보이게
+      if (r.claimed.cos || r.claimed.king || r.claimed.pocket) void meStore.refresh();
       bridge.emit("forage:coin");
     } catch (e) {
       setNotice(errorMessage(e));
@@ -405,7 +412,14 @@ function Prizes({ c, isNew, boxPending }: { c: UrgentClaimed; isNew: boolean; bo
     items.push({ key: "box", icon, title: `수집가의 뒷주머니에서 ${prizeText(b)}`, sub });
   } else if (c.pocket) items.push({ key: "box", icon: <ItemIcon itemId="u_box_pocket" size={24} />, title: "수집가의 뒷주머니를 가방에 넣었어요", sub: "가방의 소모품 칸에서 열어 보세요" });
   else if (boxPending) items.push({ key: "box", icon: <ItemIcon itemId="u_box_pocket" size={24} />, title: "수집가의 뒷주머니", sub: "가방에 들어가요. 열면 도장이나 염색권, 희귀 물고기가 나와요" });
-  if (c.king) items.push({ key: "king", icon: <ItemIcon itemId="u_hat_siren" size={24} />, title: "칭호 「긴급 배달왕」과 사이렌 모자", sub: "하루 동안. 모자는 가방의 꾸미기에서 입어요" });
+  if (c.king) items.push({ key: "king", icon: "👑", title: "칭호 「긴급 배달왕」", sub: "가장 많이 낸 1등. 하루 동안 가방의 칭호 칸에서 달아요" });
+  if (c.lucky) items.push({ key: "lucky", icon: "🍀", title: "행운의 배달부로 뽑혔어요!", sub: "낸 사람 중 한 명을 뽑아 무작위 꾸미기를 드려요" });
+  // 11/19 무작위 꾸미기 (배달왕·행운의 배달부): 받으면 무엇인지, 받기 전엔 무작위
+  if (c.cos) {
+    const it = itemById(c.cos.id);
+    items.push({ key: "cos", icon: <ItemIcon itemId={c.cos.id} size={24} />, title: `${it?.name ?? "꾸미기"} ${c.cos.days}일`, sub: "가방의 꾸미기에서 입어요" });
+  } else if (!c.at && (c.king || c.lucky))
+    items.push({ key: "cos", icon: "🎁", title: "무작위 꾸미기 하나", sub: `상점 꾸미기 중 하나가 ${URGENT_COS_DAYS.map(([d]) => d).join("·")}일 기간제로 들어가요. 아주 드물게 사이렌 모자가 나와요` });
   if (c.last) items.push({ key: "last", icon: "⏱", title: "칭호 「아슬아슬 마감」", sub: "하루 동안. 가방의 칭호 칸에서 달아요" });
   return (
     <ul className={u.prizes}>
@@ -461,7 +475,9 @@ function ResultCard({ row, pub, now, fresh, busy, onClaim }: { row: UrgentMineRo
             </>
           ) : row.reward ? (
             <>
-              <p className={u.subhead}>받을 보상</p>
+              <p className={u.subhead}>
+                받을 보상 <span className={ui.hint}>· {urgentClaimLeft(row.end + URGENT_CLAIM_MS - now)} 안에 받아 가세요</span>
+              </p>
               <Prizes c={{ ...row.reward, box: null, at: 0 }} isNew={false} boxPending={row.reward.box} />
               <button type="button" className={cx(ui.button, ui.primary)} disabled={busy} onClick={onClaim}>
                 {busy ? "받는 중…" : "보상 받기"}
