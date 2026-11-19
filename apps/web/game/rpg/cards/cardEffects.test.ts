@@ -263,6 +263,11 @@ const TABLE: Record<CardId, Row> = {
     stacks: true,
   },
   refund: { text: ["30%"], per: [[pct("refund"), 0.3]], stacks: false },
+  soulQuick: { text: ["15%"], per: [[(s) => 1 - s.soulEvery, 0.15]], stacks: true },
+  soulDrain: { text: ["2%", "1%"], per: [[pct("soulSteal"), 0.02]], stacks: true },
+  soulChain: { text: ["25%", "5%p"], per: [[pct("soulRange", 1), 0.25]], stacks: false },
+  soulLamp: { flag: (s, n) => (s.soulBurst > 0) === n > 0 },
+  soulParade: { text: ["8초", "50%", "30%"], flag: (s, n) => s.soulParade === n > 0 },
 };
 TABLE.bonus.per = [[pct("bossDmg"), 0.3]];
 
