@@ -26,6 +26,19 @@ const GLOW = 0xffd27a;
 const GLOW_L = 0xfff0bc;
 const FLOWERS = [0xf0a0c0, 0xf0e080, 0xb0a0f0, 0xf6f2e8];
 
+/**
+ * 11/19 계절 (lib/mapConcept와 같은 값): 겨울·크리스마스면 파츠를 계절 모양으로 그린다 (눈 덮기는 winterLots가 한다).
+ * 바닥에 놓는 파츠(앞마당 꽃밭)는 groundTop에 따로 그려서 눈밭 위에 올린다 — 예전엔 잔디와 같이 눈으로 덮여 사라졌다 (사용자)
+ */
+export type Season = "default" | "winter" | "christmas";
+/** 크리스마스 색 (사탕 지팡이·호랑가시·포인세티아·금 리본) */
+export const XMAS = { red: 0xd23a3a, redD: 0x9a2228, white: 0xf6f2ea, gold: 0xf0c040, goldD: 0xb8902a, holly: 0x2e6a3a, hollyL: 0x4a8a4e, berry: 0xd8302e, poins: 0xc8282e, poinsL: 0xe85048 } as const;
+/** 눈 위 그림자 (울타리 밑동처럼 눈밭에 묻히는 물건 아래 한 줄) */
+const SNOW_SHADOW = 0x8ea3b9;
+/** 겨울 상록 (남천·회양목) */
+const EVER = 0x2f5a40;
+const EVER_D = 0x24483a;
+
 /** 기본 필지 크기 (프로토콜 HOUSE_LOT_W/H) */
 export const FACADE_W = HOUSE_LOT_W;
 export const FACADE_H = HOUSE_LOT_H;
@@ -169,6 +182,9 @@ export function facadeInfo(ext: Partial<HouseExteriorMap>, tier: string, size: L
 }
 
 /** 앞마당 물건 자리 */
+/** 11/19 앞마당 물건 자리 (겨울 장식 winterLots도 같은 자리에 얹는다) */
+export const lotFront = (p: HousePlan) => front(p);
+
 function front(p: HousePlan) {
   const gap = p.tier === "manor" ? 11 : 9;
   return {
@@ -340,7 +356,7 @@ function drawWall(g: Grid, kind: string, b: Block, baseY: number, seed: number):
   g.hline(b.x, b.x + b.w - 1, baseY - 3, STONE);
 }
 
-function drawWindow(g: Grid, lit: Grid, w: Rect, opt: { shutters: boolean; box: boolean; arch: boolean }): void {
+function drawWindow(g: Grid, lit: Grid, w: Rect, opt: { shutters: boolean; box: boolean; arch: boolean; season?: Season }): void {
   const frame = 0x3a281a;
   g.rect(w.x - 1, w.y - 1, w.w + 2, w.h + 2, frame);
   if (opt.arch) g.hline(w.x, w.x + w.w - 1, w.y - 2, frame);
@@ -369,12 +385,16 @@ function drawWindow(g: Grid, lit: Grid, w: Rect, opt: { shutters: boolean; box: 
     g.rect(w.x - 1, w.y + w.h + 2, w.w + 2, 2, WOOD);
     for (let i = 0; i < w.w + 2; i += 2) {
       g.set(w.x - 1 + i, w.y + w.h + 1, LEAF);
-      if (i % 4 === 0) g.set(w.x - 1 + i, w.y + w.h, FLOWERS[(i / 2) % FLOWERS.length]);
+      if (opt.season === "christmas" || opt.season === "winter") {
+        // 겨울 창가 화분: 상록 잎에 빨간 열매 (크리스마스는 금빛 방울도)
+        g.set(w.x - 1 + i, w.y + w.h + 1, EVER);
+        if (i % 4 === 0) g.set(w.x - 1 + i, w.y + w.h, opt.season === "christmas" && i % 8 === 4 ? XMAS.gold : XMAS.berry);
+      } else if (i % 4 === 0) g.set(w.x - 1 + i, w.y + w.h, FLOWERS[(i / 2) % FLOWERS.length]);
     }
   }
 }
 
-function drawDoor(g: Grid, lit: Grid, p: HousePlan, kind: string): void {
+function drawDoor(g: Grid, lit: Grid, p: HousePlan, kind: string, season: Season = "default"): void {
   const d = p.door;
   const color = kind === "door_red" ? 0xa83a30 : kind === "door_arch" ? 0x4a3020 : 0x5a3a26;
   const frame = p.tier === "manor" ? STONE_L : WOOD_D;
@@ -404,6 +424,22 @@ function drawDoor(g: Grid, lit: Grid, p: HousePlan, kind: string): void {
     g.rect(d.x, d.y - 4, d.w, 3, GLASS);
     lit.rect(d.x, d.y - 4, d.w, 3, GLOW);
     g.hline(d.x - 1, d.x + d.w, d.y - 5, frame);
+  }
+  if (season === "christmas") {
+    if (kind === "door_red") {
+      // 선물 상자처럼 금빛 리본 (리스는 winterLots가 문 위에 건다)
+      const rx = d.x + Math.floor(d.w / 2) - (d.double ? 0 : 0);
+      g.vline(rx, d.y, d.y + d.h - 1, XMAS.gold);
+      g.hline(d.x, d.x + d.w - 1, d.y + Math.floor(d.h * 0.6), XMAS.gold);
+    } else if (kind === "door_arch") {
+      // 아치 위 호랑가시 줄과 금빛 종 둘
+      g.hline(d.x - 2, d.x + d.w + 1, d.y - 4, XMAS.holly);
+      for (let x = d.x - 2; x <= d.x + d.w + 1; x += 3) g.set(x, d.y - 4, XMAS.berry);
+      for (const bx of [d.x - 3, d.x + d.w + 2]) {
+        g.rect(bx, d.y - 3, 2, 3, XMAS.gold);
+        g.set(bx, d.y, XMAS.goldD);
+      }
+    }
   }
   // 문턱 계단
   g.rect(d.x - 3, p.baseY, d.w + 6, 2, STONE);
@@ -500,31 +536,64 @@ function drawGround(g: Grid, p: HousePlan, ext: HouseExteriorMap): void {
     }
     g.set(fx, baseY - 14, LEAF_L);
   }
-  // 앞마당 꽃밭 (정원)
-  if (ext.garden === "garden_flowers") {
-    for (let x = x0 + 1; x < x1 - 1; x++) {
-      if (Math.abs(x - cx) < p.door.w / 2 + 4) continue;
+}
+
+/** 바닥에 놓는 파츠 (앞마당 꽃밭). 바닥 위 겹이라 겨울엔 눈밭 위에 그대로 보인다 */
+function drawGroundParts(g: Grid, p: HousePlan, ext: HouseExteriorMap, season: Season): void {
+  if (ext.garden !== "garden_flowers") return;
+  const { H, cx, baseY } = p;
+  const f = front(p);
+  const x0 = Math.min(...p.blocks.map((b) => b.x));
+  const x1 = Math.max(...p.blocks.map((b) => b.x + b.w));
+  for (let x = x0 + 1; x < x1 - 1; x++) {
+    if (Math.abs(x - cx) < p.door.w / 2 + 4) continue;
+    g.set(x, baseY + 3, 0x3a2c22);
+    if (season === "christmas") {
+      // 포인세티아 화단: 초록 잎 위 붉은 별잎, 가운데 금빛
+      g.set(x, baseY + 2, x % 2 ? XMAS.holly : XMAS.hollyL);
+      if (x % 3 === 0) {
+        g.set(x, baseY + 1, XMAS.poins);
+        g.set(x - 1, baseY + 2, XMAS.poinsL);
+        g.set(x + 1, baseY + 2, XMAS.poinsL);
+        g.set(x, baseY, XMAS.poinsL);
+        g.set(x, baseY + 2, XMAS.gold);
+      }
+    } else if (season === "winter") {
+      // 남천 화단: 짙은 상록 잎에 빨간 열매
+      g.set(x, baseY + 2, x % 2 ? EVER : EVER_D);
+      g.set(x, baseY + 1, x % 2 ? EVER_D : EVER);
+      if (x % 3 === 0) g.set(x, baseY + 1, XMAS.berry);
+    } else {
       g.set(x, baseY + 2, x % 2 ? LEAF : LEAF_D);
       if (x % 3 === 0) g.set(x, baseY + 1, FLOWERS[x % FLOWERS.length]);
-      g.set(x, baseY + 3, 0x3a2c22);
     }
-    for (let y = baseY + 5; y < H - 4; y += 3) {
-      g.set(cx - f.gap + 1, y, FLOWERS[y % 4]);
-      g.set(cx + f.gap - 2, y + 1, FLOWERS[(y + 1) % 4]);
+  }
+  for (let y = baseY + 5; y < H - 4; y += 3) {
+    for (const [px, k] of [
+      [cx - f.gap + 1, y],
+      [cx + f.gap - 2, y + 1],
+    ] as const) {
+      if (season === "christmas") {
+        // 길 따라 금빛·붉은 작은 전구
+        g.set(px, k, k % 2 ? XMAS.gold : XMAS.poinsL);
+      } else if (season === "winter") {
+        g.set(px, k, EVER_D);
+        g.set(px, k - 1, k % 2 ? XMAS.berry : EVER);
+      } else g.set(px, k, FLOWERS[k % 4]);
     }
   }
 }
 
 // ── 집 몸체층 ──
 
-function drawHouse(g: Grid, lit: Grid, p: HousePlan, ext: HouseExteriorMap): void {
+function drawHouse(g: Grid, lit: Grid, p: HousePlan, ext: HouseExteriorMap, season: Season = "default"): void {
   const roof = ext.roof;
   // 굴뚝은 지붕보다 먼저 (지붕이 밑동을 덮는다)
   for (const c of p.chimneys) drawChimney(g, c);
   for (const [i, b] of p.blocks.entries()) {
     drawWall(g, ext.facade, b, p.baseY, i * 7 + 3);
     drawRoof(g, roof, b, p.baseY);
-    for (const w of b.wins) drawWindow(g, lit, w, { shutters: p.tier === "small", box: ext.garden === "garden_flowers", arch: p.tier === "manor" && !b.main });
+    for (const w of b.wins) drawWindow(g, lit, w, { shutters: p.tier === "small", box: ext.garden === "garden_flowers", arch: p.tier === "manor" && !b.main, season });
   }
   const main = p.blocks.find((b) => b.main)!;
   if (p.tier === "wide") atticWindow(g, lit, p.cx, p.baseY - main.wallH - Math.round(main.roofH * 0.45) + 2);
@@ -543,16 +612,26 @@ function drawHouse(g: Grid, lit: Grid, p: HousePlan, ext: HouseExteriorMap): voi
     // 박공 둥근 창
     atticWindow(g, lit, p.cx, p.baseY - main.wallH - Math.round(main.roofH * 0.42) + 2);
   }
-  drawDoor(g, lit, p, ext.door);
+  drawDoor(g, lit, p, ext.door, season);
   // 집에 붙은 정원 물건
   const x0 = Math.min(...p.blocks.map((b) => b.x));
   const x1 = Math.max(...p.blocks.map((b) => b.x + b.w));
   if (ext.garden === "garden_pots") {
     for (const px of [x0 + 2, p.door.x - 9, p.door.x + p.door.w + 4, x1 - 8]) {
-      g.rect(px, p.baseY - 4, 5, 4, 0xa85a3a);
-      g.hline(px - 1, px + 5, p.baseY - 4, 0xc8704a);
-      g.ellipse(px + 2.5, p.baseY - 6, 3, 2.5, LEAF);
-      g.set(px + 2, p.baseY - 8, FLOWERS[px % FLOWERS.length]);
+      g.rect(px, p.baseY - 4, 5, 4, season === "christmas" ? XMAS.redD : 0xa85a3a);
+      g.hline(px - 1, px + 5, p.baseY - 4, season === "christmas" ? XMAS.gold : 0xc8704a);
+      if (season === "christmas") {
+        // 포인세티아 화분: 초록 잎 위 붉은 별잎 다섯, 가운데 금빛
+        g.ellipse(px + 2.5, p.baseY - 6, 3, 2, XMAS.holly);
+        for (const [dx, dy] of [[0, -3], [-2, -2], [2, -2], [-1, -1], [1, -1]] as const) g.set(px + 2 + dx, p.baseY - 5 + dy, dy === -3 ? XMAS.poinsL : XMAS.poins);
+        g.set(px + 2, p.baseY - 7, XMAS.gold);
+      } else if (season === "winter") {
+        // 작은 상록수 화분 (위는 winterLots가 눈을 얹는다)
+        for (let i = 0; i < 6; i++) g.hline(px + 2 - Math.floor(i / 2), px + 2 + Math.floor(i / 2), p.baseY - 10 + i, i % 2 ? EVER : EVER_D);
+      } else {
+        g.ellipse(px + 2.5, p.baseY - 6, 3, 2.5, LEAF);
+        g.set(px + 2, p.baseY - 8, FLOWERS[px % FLOWERS.length]);
+      }
     }
   }
   if (p.tier === "small") {
@@ -612,17 +691,23 @@ function drawBack(g: Grid, p: HousePlan): void {
 
 // ── 앞층 (울타리·우편함·간판·가로등) ──
 
-function drawFront(g: Grid, p: HousePlan, ext: HouseExteriorMap): void {
+function drawFront(g: Grid, p: HousePlan, ext: HouseExteriorMap, season: Season = "default"): void {
   const { W, H, cx, baseY } = p;
   const f = front(p);
   const fy = H - 3; // 울타리 밑동
+  const snowy = season !== "default";
+  const xmas = season === "christmas";
+  // 11/19 흰 울타리가 눈밭에 묻혀 안 보였다 (사용자) → 겨울엔 미색, 크리스마스엔 사탕 지팡이 줄무늬
+  const picketPost = xmas ? XMAS.white : snowy ? 0xd2c4a4 : 0xe8e2d0;
+  const picketRail = snowy ? 0xb8a888 : 0xd8d2c0;
   // 울타리: 앞줄 + 양옆 (가운데 길은 비운다). 그리드가 필지 크기라 바깥으로 나가지 않는다
   if (ext.fence !== "fence_none") {
     const sideTop = Math.max(2, baseY - 30);
     const post = (x: number, y: number) => {
       if (ext.fence === "fence_picket") {
-        g.vline(x, y - 6, y, 0xe8e2d0);
-        g.set(x, y - 7, 0xf6f2e8);
+        g.vline(x, y - 6, y, picketPost);
+        if (xmas) for (let yy = y - 6; yy <= y; yy += 2) g.set(x, yy, XMAS.red);
+        g.set(x, y - 7, xmas ? XMAS.red : 0xf6f2e8);
       } else if (ext.fence === "fence_stone") {
         g.rect(x - 1, y - 4, 3, 5, (x >> 2) % 2 ? STONE : 0x7c7a72);
         g.set(x - 1, y - 4, STONE_L);
@@ -635,16 +720,19 @@ function drawFront(g: Grid, p: HousePlan, ext: HouseExteriorMap): void {
       if (Math.abs(x + 0.5 - cx) < f.gap) continue;
       if (ext.fence === "fence_picket") {
         if (x % 3 === 0) post(x, fy);
-        g.set(x, fy - 2, 0xd8d2c0);
-        g.set(x, fy - 5, 0xd8d2c0);
+        g.set(x, fy - 2, xmas ? (x % 2 ? XMAS.red : XMAS.white) : picketRail);
+        g.set(x, fy - 5, xmas ? XMAS.holly : picketRail);
+        if (xmas && x % 5 === 2) g.set(x, fy - 5, XMAS.berry);
       } else if (ext.fence === "fence_stone") {
         g.vline(x, fy - 4, fy, (Math.floor(x / 4) + 1) % 2 ? STONE : STONE_D);
         g.set(x, fy - 4, (x >> 2) % 2 ? STONE_L : STONE);
         if (x % 4 === 0) g.vline(x, fy - 3, fy, 0x4a4843);
       } else {
-        g.vline(x, fy - 5 + ((x * 7) % 3 === 0 ? 0 : 1), fy, x % 5 ? LEAF_D : LEAF);
-        if (x % 4 === 1) g.set(x, fy - 4, LEAF_L);
+        g.vline(x, fy - 5 + ((x * 7) % 3 === 0 ? 0 : 1), fy, snowy ? (x % 5 ? EVER_D : EVER) : x % 5 ? LEAF_D : LEAF);
+        if (x % 4 === 1) g.set(x, fy - 4, snowy ? EVER : LEAF_L);
       }
+      // 눈밭 위 그림자 한 줄 (울타리 밑동이 눈에 묻히지 않게)
+      if (snowy) g.set(x, fy + 1, SNOW_SHADOW);
     }
     for (let y = sideTop; y <= fy; y += 3) {
       post(2, y);
@@ -652,8 +740,9 @@ function drawFront(g: Grid, p: HousePlan, ext: HouseExteriorMap): void {
     }
     // 문 기둥
     for (const gx of [cx - f.gap, cx + f.gap - 1]) {
-      g.rect(gx - 1, fy - 8, 3, 9, ext.fence === "fence_stone" ? STONE_D : ext.fence === "fence_hedge" ? LEAF_D : 0xe8e2d0);
-      g.set(gx, fy - 9, ext.fence === "fence_picket" ? 0xf6f2e8 : STONE_L);
+      g.rect(gx - 1, fy - 8, 3, 9, ext.fence === "fence_stone" ? STONE_D : ext.fence === "fence_hedge" ? (snowy ? EVER_D : LEAF_D) : picketPost);
+      if (xmas && ext.fence === "fence_picket") for (let yy = fy - 8; yy <= fy; yy += 2) g.hline(gx - 1, gx + 1, yy, XMAS.red);
+      g.set(gx, fy - 9, ext.fence === "fence_picket" ? (xmas ? XMAS.red : 0xf6f2e8) : STONE_L);
     }
   }
   // 대저택: 대문 기둥 + 기둥 등, 앞쪽 구석의 둥근 정원수
@@ -727,25 +816,44 @@ function drawFront(g: Grid, p: HousePlan, ext: HouseExteriorMap): void {
 
 // ── 조립 ──
 
-export type LotLayers = { ground: Grid; back: Grid; house: Grid; front: Grid; lit: Grid; info: FacadeInfo; /** 뒤뜰층 깊이 기준 (필지 좌표) */ backBase: number };
+export type LotLayers = {
+  /** 바닥 (groundBase + groundTop을 합친 것) */
+  ground: Grid;
+  /** 11/19 잔디·길만 (겨울엔 이것만 눈밭으로 바꾼다) */
+  groundBase: Grid;
+  /** 11/19 바닥에 놓는 파츠 (앞마당 꽃밭) — 눈밭 위에 그대로 올린다 */
+  groundTop: Grid;
+  back: Grid;
+  house: Grid;
+  front: Grid;
+  lit: Grid;
+  info: FacadeInfo;
+  /** 뒤뜰층 깊이 기준 (필지 좌표) */
+  backBase: number;
+};
 
 const layerCache = new Map<string, LotLayers>();
 
-export function lotLayers(ext: HouseExteriorMap, tier: string, size: LotSize = DEFAULT_SIZE): LotLayers {
-  const key = `${tier}:${size.w}x${size.h}:${Object.values(ext).join(",")}`;
+export function lotLayers(ext: HouseExteriorMap, tier: string, size: LotSize = DEFAULT_SIZE, season: Season = "default"): LotLayers {
+  const key = `${season}:${tier}:${size.w}x${size.h}:${Object.values(ext).join(",")}`;
   const hit = layerCache.get(key);
   if (hit) return hit;
   const p = housePlan(tier, size);
-  const ground = new Grid(p.W, p.H);
+  const groundBase = new Grid(p.W, p.H);
+  const groundTop = new Grid(p.W, p.H);
   const back = new Grid(p.W, p.H);
   const house = new Grid(p.W, p.H);
   const frontG = new Grid(p.W, p.H);
   const lit = new Grid(p.W, p.H);
-  drawGround(ground, p, ext);
+  drawGround(groundBase, p, ext);
+  drawGroundParts(groundTop, p, ext, season);
+  const ground = new Grid(p.W, p.H);
+  ground.draw(groundBase, 0, 0);
+  ground.draw(groundTop, 0, 0);
   drawBack(back, p);
-  drawHouse(house, lit, p, ext);
-  drawFront(frontG, p, ext);
-  const out = { ground, back, house, front: frontG, lit, info: facadeInfo(ext, tier, size), backBase: Math.max(...backTrees(p).map((t) => t.y)) };
+  drawHouse(house, lit, p, ext, season);
+  drawFront(frontG, p, ext, season);
+  const out = { ground, groundBase, groundTop, back, house, front: frontG, lit, info: facadeInfo(ext, tier, size), backBase: Math.max(...backTrees(p).map((t) => t.y)) };
   if (layerCache.size > 64) layerCache.clear();
   layerCache.set(key, out);
   return out;
@@ -788,7 +896,12 @@ function multiplied(src: Grid, tint: Color): Grid {
 
 /** 한 장으로 합친 필지 그림 (UI 미리보기·아이콘). night면 어둡게 + 창 불빛 */
 export function facadeGrid(ext: HouseExteriorMap, tier: string, opts: { size?: LotSize; night?: boolean } = {}): Grid {
-  const L = lotLayers(ext, tier, opts.size ?? DEFAULT_SIZE);
+  return composeFacade(lotLayers(ext, tier, opts.size ?? DEFAULT_SIZE), !!opts.night);
+}
+
+/** 층 넷(+ 밤이면 불빛)을 한 장으로. 11/19 겨울 미리보기(winterLots)도 같은 합치기를 쓴다 */
+export function composeFacade(L: Pick<LotLayers, "ground" | "back" | "house" | "front" | "lit" | "info">, night: boolean): Grid {
+  const opts = { night };
   let g = new Grid(L.ground.w, L.ground.h);
   g.draw(L.ground, 0, 0);
   g.draw(L.back, 0, 0);

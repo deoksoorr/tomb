@@ -1,7 +1,10 @@
 import { DEFAULT_FLOOR, DEFAULT_WALL, defaultExterior, furnitureById, type HouseExteriorMap } from "@/lib/housing/catalog";
 import { footprint, SPIN_R0, spinDir } from "@/lib/housing/layout";
 import { darken, Grid, hash2, lighten, type Color } from "../sprites/pixel";
-import { facadeGrid } from "./exterior";
+import { isSnowy } from "@/lib/mapConcept";
+import { currentMapConcept } from "@/lib/mapConceptClient";
+import { FACADE_H, FACADE_W, facadeGrid } from "./exterior";
+import { winterFacadeGrid } from "./winterLots";
 import { isSeaArt, SEA_DRAW, SEA_EDGE, SEA_EDGE_A, SEA_FLOORS, SEA_PAPERS, SEA_SPIN, SEA_UP, SEA_WALL_CAP } from "./seaFurnitureArt";
 
 // 하우징 물건·바닥·담장 픽셀아트 (캔버스만 쓴다: 게임 텍스처와 UI 아이콘이 같은 그림).
@@ -1525,7 +1528,7 @@ const icons = new Map<string, { url: string; w: number; h: number }>();
 
 /** 상점·가방 아이콘. 스킨은 타일 2×2(바닥)·담장 2칸으로 보여 준다 */
 export function furnitureIcon(id: string, scale: number): { url: string; w: number; h: number } {
-  const key = `${id}@${scale}`;
+  const key = `${id}@${scale}${furnitureById(id)?.ext ? `:${currentMapConcept()}` : ""}`;
   const hit = icons.get(key);
   if (hit) return hit;
   const def = furnitureById(id);
@@ -1537,7 +1540,7 @@ export function furnitureIcon(id: string, scale: number): { url: string; w: numb
     src = new Grid(32, WALL_H);
     src.draw(wallGrid(id, 0), 0, 0);
     src.draw(wallGrid(id, 1), 16, 0);
-  } else if (def?.ext) src = facadeGrid({ ...defaultExterior(), [def.ext]: id }, "small");
+  } else if (def?.ext) src = seasonFacade({ ...defaultExterior(), [def.ext]: id }, "small", false);
   else src = furnitureGrid(id);
   const g = src ?? new Grid(16, 16);
   const c = document.createElement("canvas");
@@ -1708,12 +1711,18 @@ export function furniturePreview(id: string, scale: number, opts: PreviewOpts = 
 
 export { FACADE_H, FACADE_W, facadeGrid, facadeInfo, type FacadeInfo } from "./exterior";
 
-/** 외관 미리보기 dataURL (UI). 같은 외관·크기·낮밤은 캐시 */
+/** 11/19 외관 그림은 지금 마을 계절(겨울·크리스마스)대로 — 꾸미기 화면이 마을과 다르게 보였다 */
+function seasonFacade(ext: HouseExteriorMap, tier: string, night: boolean): Grid {
+  const concept = currentMapConcept();
+  return isSnowy(concept) ? winterFacadeGrid(ext, tier, { w: FACADE_W, h: FACADE_H }, concept, night) : facadeGrid(ext, tier, { night });
+}
+
+/** 외관 미리보기 dataURL (UI). 같은 외관·크기·낮밤·계절은 캐시 */
 export function facadePreview(ext: HouseExteriorMap, tier: string, scale: number, night = false): { url: string; w: number; h: number } {
-  const key = `facade:${tier}:${Object.values(ext).join(",")}@${scale}${night ? ":night" : ""}`;
+  const key = `facade:${currentMapConcept()}:${tier}:${Object.values(ext).join(",")}@${scale}${night ? ":night" : ""}`;
   const hit = icons.get(key);
   if (hit) return hit;
-  const g = facadeGrid(ext, tier, { night });
+  const g = seasonFacade(ext, tier, night);
   const c = document.createElement("canvas");
   c.width = g.w * scale;
   c.height = g.h * scale;
