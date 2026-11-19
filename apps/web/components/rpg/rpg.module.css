@@ -1623,6 +1623,19 @@ button.hotSlot:disabled {
   font-size: 10px;
 }
 
+/* 11/19 적정 레벨을 넘은 사냥터 (포인트 없음) — 오른쪽 위 붉은 딱지 */
+.zoneNoPts {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 1px 6px;
+  background: rgb(120 28 28 / 88%);
+  color: #ffe2dc;
+  font-family: var(--font-small);
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .zoneLock {
   position: absolute;
   inset: 0;

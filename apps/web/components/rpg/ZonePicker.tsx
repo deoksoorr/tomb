@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { DIFFICULTIES, DIFFS, gearById, MONSTERS, zonesOf, type ZoneDef, type ZoneId } from "@/lib/rpg/catalog";
 import { fetchHuntCrowd, type HuntCrowd } from "@/lib/rpg/client";
+import { huntPointBlock } from "@/lib/rpg/formulas";
 import { isSnowy, type MapConcept } from "@/lib/mapConcept";
 import { currentMapConcept } from "@/lib/mapConceptClient";
 import { cx } from "../ui/cx";
@@ -67,7 +68,7 @@ const frost = (c: number, concept: MapConcept) => {
   return ch(16) | ch(8) | ch(0);
 };
 
-function ZoneCard({ z, level, selected, all, crowd, onPick }: { z: ZoneDef; level: number; selected: boolean; all: boolean; crowd: number; onPick: () => void }) {
+function ZoneCard({ z, level, tLevel, selected, all, crowd, onPick }: { z: ZoneDef; level: number; tLevel: number; selected: boolean; all: boolean; crowd: number; onPick: () => void }) {
   // 11/17 맵 컨셉 (로비를 여는 동안 한 번 — 사냥 입장 때도 같은 값을 읽는다)
   const [concept] = useState(currentMapConcept);
   const url = useZonePreview(z, concept);
@@ -78,7 +79,7 @@ function ZoneCard({ z, level, selected, all, crowd, onPick }: { z: ZoneDef; leve
       role="radio"
       aria-checked={selected}
       aria-disabled={!open}
-      aria-label={`${z.name}${open ? "" : ` (Lv.${z.unlockLevel}부터)`}`}
+      aria-label={`${z.name}${open ? (!huntPointBlock(level, tLevel, z.difficulty, z) ? "" : " (포인트 없음)") : ` (Lv.${z.unlockLevel}부터)`}`}
       className={cx(s.card, s.zoneCard, !open && s.zoneLocked)}
       onClick={() => open && onPick()}
     >
@@ -91,6 +92,8 @@ function ZoneCard({ z, level, selected, all, crowd, onPick }: { z: ZoneDef; leve
         {url && <img src={url} alt="" width={224} height={144} />}
         <span className={s.zoneTag}>{z.gimmick.name}</span>
         {!open && <span className={s.zoneLock}>Lv.{z.unlockLevel}부터</span>}
+        {/* 11/19 적정 레벨을 넘은 사냥터: 포인트 없음 */}
+        {open && huntPointBlock(level, tLevel, z.difficulty, z) && <span className={s.zoneNoPts}>포인트 없음</span>}
       </span>
       <span className={cx(s.cardName, s.zoneName)}>{z.name}</span>
       <span className={s.meta}>
@@ -100,7 +103,7 @@ function ZoneCard({ z, level, selected, all, crowd, onPick }: { z: ZoneDef; leve
   );
 }
 
-export default function ZonePicker({ level, zone, onZone, detail }: { level: number; zone: ZoneId; onZone: (z: ZoneDef) => void; detail?: ReactNode }) {
+export default function ZonePicker({ level, tLevel = 0, zone, onZone, detail }: { level: number; tLevel?: number; zone: ZoneId; onZone: (z: ZoneDef) => void; detail?: ReactNode }) {
   const [all] = useState(zoneUnlockAll);
   // 사냥터별 지금 사냥 중인 인원 (실시간 서버, 15초마다)
   const [crowd, setCrowd] = useState<HuntCrowd>({});
@@ -138,6 +141,7 @@ export default function ZonePicker({ level, zone, onZone, detail }: { level: num
                   key={z.id}
                   z={z}
                   level={level}
+                  tLevel={tLevel}
                   all={all}
                   crowd={crowd[z.id] ?? 0}
                   selected={zone === z.id}

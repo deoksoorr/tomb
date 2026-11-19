@@ -296,6 +296,41 @@ describe("야근 빌딩 판 끝 정산", () => {
   });
 });
 
+describe("11/19 적정 레벨·적정 층 포인트", () => {
+  it("야근 빌딩: ★80(초월 30)은 50층부터 포인트 — 1층에서 10층을 깨면 포인트 0, 초월 EXP는 그대로", async () => {
+    const v = await newVisitor({ level: 50, tLevel: 30 });
+    const s = await begin(v, 1);
+    const r = await end(v, s, climbed(s, 10), climbMs(10));
+    expect(r.reward.points).toBe(0);
+    expect(r.reward.lowFloors).toEqual({ floors: 10, from: 50 });
+    expect(r.reward.transcend!.exp).toBeGreaterThan(0);
+  });
+  it("사냥터: Lv.50이 지옥 「회식 3차」(Lv.30)에 가면 포인트 0, 「구조조정 발표 날」(Lv.48)은 그대로", async () => {
+    const v = await newVisitor({ level: 50 });
+    const low = await end(v, await begin(v, undefined, "burnout-abyss"));
+    expect(low.reward.points).toBe(0);
+    expect(low.reward.overLevel).toBe("level");
+    const fit = await end(v, await begin(v, undefined, "layoff-day"));
+    expect(fit.reward.points).toBeGreaterThan(0);
+    expect(fit.reward.overLevel).toBeUndefined();
+  });
+  it("★58(초월 8)부터는 일반 사냥터 전부 포인트 0 (★57까지는 적정 사냥터에서 받는다)", async () => {
+    const v7 = await newVisitor({ level: 50, tLevel: 7 });
+    expect((await end(v7, await begin(v7, undefined, "layoff-day"))).reward.points).toBeGreaterThan(0);
+    const v8 = await newVisitor({ level: 50, tLevel: 8 });
+    const r = await end(v8, await begin(v8, undefined, "layoff-day"));
+    expect(r.reward.points).toBe(0);
+    expect(r.reward.overLevel).toBe("star");
+  });
+  it("야근 빌딩: 아직 초월 전이면 깬 층마다 포인트", async () => {
+    const v = await newVisitor({ level: 50, tLevel: 0 });
+    const s = await begin(v, 1);
+    const r = await end(v, s, climbed(s, 4), climbMs(4));
+    expect(r.reward.pointsRaw).toBe(4 * TOWER_FLOOR_POINTS);
+    expect(r.reward.lowFloors).toBeUndefined();
+  });
+});
+
 describe("11/15 부드러운 거절 (의심 판) · 긴 판", () => {
   it("카드 기록이 맞지 않는 판: 거절하지 않고 판·포인트만 주고, 나머지는 관리자 「기록 확인」에서 인정하면 판 끝과 같은 정산 (11/18)", async () => {
     const v = await newVisitor();

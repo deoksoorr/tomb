@@ -39,7 +39,9 @@ import {
   TOWER_THEMES,
   TOWER_WAVE_GAP_SEC,
   FLOORS_PER_THEME,
+  towerFitFloor,
 } from "@/lib/rpg/tower";
+import { HUNT_POINT_T_STOP } from "@/lib/rpg/formulas";
 import { monsterIdleCanvas } from "@/game/rpg/monsterArt";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
 import { BUILDS, buildSteps } from "@/lib/rpg/builds";
@@ -493,7 +495,7 @@ function pages(): Page[] {
               포인트는 절반만 받고 EXP도 조금 깎여요. 권장 레벨보다 낮으면 조심해요.
             </Item>
             <Item art={skillArt("em_spark")} title="포인트">
-              사냥 포인트는 하루 한도 없이 받아요. 주운 장비와 물약을 판 값도 사냥 포인트예요. 상점에서 산 장비는 언제든 50%를 돌려받아요. {sec(MIN_RUN_MS)}도 안 된 판은 보상이 없어요.
+              사냥 포인트는 하루 한도 없이 받아요. 다만 내 레벨이 사냥터가 열리는 레벨보다 10 넘게 높으면 그 사냥터에서는 포인트를 받지 않아요. ★{50 + HUNT_POINT_T_STOP}부터는 일반 사냥터 전부 포인트가 없고, 포인트는 야근 빌딩에서 받아요. 주운 장비와 물약을 판 값도 사냥 포인트예요. 상점에서 산 장비는 언제든 50%를 돌려받아요. {sec(MIN_RUN_MS)}도 안 된 판은 보상이 없어요.
             </Item>
           </ul>
           <table className={s.guideTable}>
@@ -581,7 +583,7 @@ function pages(): Page[] {
               {floorTExp(TOWER_STEEP_FROM + 1)}이에요. 쓰러져도 깬 층만큼은 받아요.
               {TOWER_CHEST_FROM}층부터는 우두머리 층을 깨면 우두머리 상자가 열려요. 물약과 강화 재료는 늘 들어 있어요. 세트 장비는 {Math.round(TOWER_CHEST_GEAR_CHANCE * 100)}% 확률로 아주 드물게 나와요.
               {gradeBandText()} 꾸미기 이용권도 가끔 나와요.
-              깬 층마다 포인트도 조금 받아요. 잡은 몬스터 수는 주간 사냥 레이스에 들어가요. 50층 우두머리를 잡으면 다음부터 51층에서, 100층을 깨면 101층에서 바로 시작할 수 있어요. 그 위로는{" "}
+              깬 층마다 포인트도 조금 받아요. 초월 레벨마다 적정 층이 있어서(★{50 + 30}이면 {towerFitFloor(30)}층) 그보다 10층 넘게 낮은 층은 포인트 없이 초월 경험치와 상자만 받아요. 잡은 몬스터 수는 주간 사냥 레이스에 들어가요. 50층 우두머리를 잡으면 다음부터 51층에서, 100층을 깨면 101층에서 바로 시작할 수 있어요. 그 위로는{" "}
               {TOWER_CHECKPOINT_EVERY}층마다(121층, 141층 …) 엘리베이터가 켜져요.
             </Item>
             <Item art={GEAR.find((g) => g.kind === "acc")?.art} title="칭호와 랭킹">

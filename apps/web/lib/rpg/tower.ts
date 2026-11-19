@@ -500,6 +500,23 @@ export const TOWER_FLOORS_PER_RUN = 4;
 export const TOWER_CHESTS_PER_DAY = Infinity;
 /** 깬 층마다 포인트 (지옥 한 판 ≈ 80~98P를 4층에 나눈 만큼, 사냥 하루 한도 안) */
 export const TOWER_FLOOR_POINTS = 23;
+/**
+ * 11/19 초월 레벨마다 적정 층 (저층에서 포인트 쓸어 가기 막기 — 사용자): ★(50+t)의 적정 층은 t × TOWER_FIT_PER_T층.
+ * 사냥터와 같이 적정보다 TOWER_POINT_GRACE층 넘게 낮은 층은 포인트를 주지 않는다 (초월 EXP·상자·기록은 그대로).
+ * ★60 → 20층(10층부터 포인트) · ★80 → 60층(50층부터) · ★100 → 100층(90층부터)
+ */
+export const TOWER_FIT_PER_T = 2;
+export const TOWER_POINT_GRACE = 10;
+export const towerFitFloor = (tLevel: number) => Math.max(1, Math.floor(Math.max(0, tLevel)) * TOWER_FIT_PER_T);
+/** 이 층부터 포인트를 준다 */
+export const towerPointFrom = (tLevel: number) => Math.max(1, towerFitFloor(tLevel) - TOWER_POINT_GRACE);
+/** start층부터 깬 floors층의 포인트 (적정보다 낮은 층은 0). 초월 레벨은 판을 시작할 때 값 */
+export function towerRunPoints(start: number, floors: number, tLevel: number): { points: number; free: number } {
+  const from = towerPointFrom(tLevel);
+  const n = Math.max(0, Math.floor(floors));
+  const free = Math.max(0, Math.min(n, from - start));
+  return { points: (n - free) * TOWER_FLOOR_POINTS, free };
+}
 
 /**
  * 11/15 상자를 여는 우두머리 층 (게임이 판 안에서 여는 순서 = 서버 towerSettle이 주는 순서): start층부터 깬 floors층 중 우두머리 층을,

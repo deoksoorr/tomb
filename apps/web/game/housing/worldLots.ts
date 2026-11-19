@@ -49,7 +49,7 @@ export function drawHouseLot(scene: Phaser.Scene, atlas: GlyphAtlas, lot: LotSpo
   const base = lot.y + info.baseY;
   // 겨울·크리스마스: 같은 자리·크기의 눈 덮인 층 (텍스처 키 앞에 컨셉)
   const concept = opts.concept ?? "default";
-  const W = isSnowy(concept) ? winterLotLayers(L, h.exterior, h.tier, size, concept) : null;
+  const W = isSnowy(concept) ? winterLotLayers(h.exterior, h.tier, size, concept) : null;
   const pre = W ? `${concept}-` : "";
   const ground = scene.add.image(lot.x, lot.y, canvasTex(scene, pre + texKey("ground", h.tier, size, h.exterior), () => (W ?? L).ground.toCanvas())).setOrigin(0, 0).setDepth(DEPTH.decal + 1);
   const back = scene.add.image(lot.x, lot.y, canvasTex(scene, pre + texKey("back", h.tier, size, {}), () => (W ?? L).back.toCanvas())).setOrigin(0, 0).setDepth(lot.y + L.backBase);
