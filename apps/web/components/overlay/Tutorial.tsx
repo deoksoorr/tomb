@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { earnRule } from "@/lib/economy";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { meStore } from "@/lib/hooks/useMe";
+import { FIRST_STEPS } from "@/lib/retain";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import styles from "./Tutorial.module.css";
@@ -61,7 +62,7 @@ function tutorialSteps(touch: boolean, firstSteps: boolean): Step[] {
     firstSteps
       ? {
           title: "이제 첫 걸음",
-          text: `${touch ? "위쪽 [첫 걸음]" : "왼쪽 위 첫 걸음"} 네 가지를 해 보면 작은 선물을 줘요. 이 안내는 ⓘ 안내에서 다시 볼 수 있어요.`,
+          text: `${touch ? "위쪽 [첫 걸음]" : "왼쪽 위 첫 걸음"} ${FIRST_STEPS.length}가지를 하나씩 해 보면 할 때마다 포인트를 줘요. 이 안내는 ⓘ 안내에서 다시 볼 수 있어요.`,
         }
       : { title: "이제 자유롭게", text: "이 안내는 ⓘ 안내에서 언제든 다시 볼 수 있어요." },
   ];

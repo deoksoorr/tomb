@@ -28,6 +28,7 @@ import {
   URGENT_MS,
   URGENT_REF_ONLINE,
   urgentCap,
+  URGENT_CAP_SHARE,
   urgentCapError,
   urgentCapLine,
   urgentEndAt,
@@ -157,20 +158,8 @@ describe("목표 (접속자 수에 맞춰)", () => {
     }
     expect(urgentGoal("dig", 13)).toBe(26);
   });
-  it("한 사람 상한: 10명 이상이면 목표의 25%, 더 적으면 40% (올림) — 혼자서는 못 끝내고, 사람이 적어도 셋이면 100%", () => {
-    expect(URGENT_KINDS.map((k) => urgentCap(urgentGoal(k, 20), 20))).toEqual([40, 30, 25, 10]);
-    expect(urgentCap(urgentGoal("fish", 10), 10)).toBe(20);
-    expect(urgentCap(urgentGoal("fish", 9), 9)).toBe(28);
-    expect(urgentCap(urgentGoal("dig", 3), 3)).toBe(4);
-    expect(urgentCap(urgentGoal("herb", 7), 7)).toBe(16);
-    expect(urgentCap(101, 50)).toBe(26);
-    for (const k of URGENT_KINDS)
-      for (let online = 0; online <= 120; online++) {
-        const goal = urgentGoal(k, online);
-        const cap = urgentCap(goal, online);
-        expect(cap).toBeLessThan(goal);
-        if (online < 10) expect(cap * 3).toBeGreaterThanOrEqual(goal);
-      }
+  it("11/19 한 사람 상한 없음: 혼자서도 끝까지 낼 수 있다 (새 의뢰는 cap 0)", () => {
+    for (const k of URGENT_KINDS) for (const online of [0, 3, 9, 10, 20, 120]) expect(urgentCap(urgentGoal(k, online), online)).toBe(0);
   });
   it("상한 안내·거절 문구 (해요체, 단위)", () => {
     expect(urgentCapLine("fish", 40, 12)).toBe("한 사람이 40마리까지 낼 수 있어요. 지금 12마리 더 낼 수 있어요.");
@@ -554,7 +543,9 @@ describe("서버 흐름", () => {
   it("11/15 150%에 닿으면 그 순간 끝난다: 끝 시각·끝 공지, 그 뒤 납품은 막고(가방 그대로) 보상은 바로, 마감 칭호는 150%를 채운 사람 (11/18 배달왕은 1등 한 사람만)", async () => {
     const ev = urgentSchedule(addDays(DAY, 2), env.sessionSecret())[0];
     const goal = urgentGoal(ev.kind, URGENT_REF_ONLINE);
-    const cap = urgentCap(goal, URGENT_REF_ONLINE);
+    // 11/16~11/18에 상한을 정해 연 의뢰 흉내 (11/19부터 새 의뢰는 상한 없음 — 저장된 상한은 끝날 때까지 그대로)
+    const cap = Math.ceil(goal * URGENT_CAP_SHARE);
+    await urgentStore().setGoal(ev.id, goal, cap);
     const target = Math.ceil((goal * 3) / 2);
     // 상한까지씩 여러 사람이 채우고 (마지막 사람은 남은 만큼), 150%까지 1개 남았을 때 끝판왕이 1개
     const helpers: string[] = [];
@@ -608,10 +599,24 @@ describe("서버 흐름", () => {
     await expect(claimUrgent(lateComer, ev.id, t150 + 3_000)).rejects.toMatchObject({ code: "NO_REWARD" });
   });
 
+  it("11/19 새 의뢰는 한 사람 상한이 없다: 혼자 150%까지 내서 끝낼 수 있다", async () => {
+    const ev = urgentSchedule(addDays(DAY, 4), env.sessionSecret())[0];
+    const goal = urgentGoal(ev.kind, URGENT_REF_ONLINE);
+    const target = Math.ceil((goal * 3) / 2);
+    const solo = await newAcct("혼자손", ev.start);
+    const r = await deliverUrgent(solo, ev.id, await fill(solo, ev, target), ev.start + 1_000);
+    expect(r.mine).toBe(target);
+    expect(r.cap).toBeUndefined();
+    expect((await urgentPublic(ev.start + 2_000)).body.ev).toMatchObject({ n: target, early: true });
+    expect((await urgentPublic(ev.start + 2_000)).body.ev!.cap).toBeUndefined();
+  });
+
   it("11/16 한 사람 상한: 넘게 내면 URGENT_CAP(가방·막대 그대로, 남은 수 안내), 상한까지는 나눠 낼 수 있고, 내 줄에 상한·남은 수", async () => {
     const ev = urgentSchedule(addDays(DAY, 3), env.sessionSecret())[0];
     const goal = urgentGoal(ev.kind, URGENT_REF_ONLINE);
-    const cap = urgentCap(goal, URGENT_REF_ONLINE);
+    // 11/16~11/18에 상한을 정해 연 의뢰 흉내 (저장된 상한은 그대로 지킨다)
+    const cap = Math.ceil(goal * URGENT_CAP_SHARE);
+    await urgentStore().setGoal(ev.id, goal, cap);
     const unit = URGENT_DEF[ev.kind].unit;
     const a = await newAcct("욕심손", ev.start);
     const b = await newAcct("보통손", ev.start);

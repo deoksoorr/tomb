@@ -4,8 +4,15 @@
 // 하루 전체 한도, 지갑 상한(99,999)을 없앴다. 남은 건 행동 한 번에 붙은 횟수 규칙(출석·헌화·묘비·받은 헌화·좋아요 — 다른 계정으로
 // 몰아주기·묘비 도배를 막는다)뿐이다. 봇 막이는 한도가 아니라 요청 속도 제한·판 결과 상한·티켓 검사가 한다 (각 API).
 
+import { GOBLIN_JACKPOT_POINTS, GOBLIN_POINTS_MAX, GOBLIN_POINTS_MIN } from "@tomb/protocol";
 import { ATTEND_STAY_TEXT } from "./attendStay";
+import { FIRST_REWARD, FIRST_STEPS, TODO_BONUS_GIFT, TODO_COUNT, TODO_GIFT } from "./retain";
 import { STAY_BONUS_EVERY_MINUTES } from "./stayBonus";
+
+/** 설명 글귀용 1,000 단위 쉼표 (기기 언어와 상관없이 같게) */
+const n = (v: number) => v.toLocaleString("en-US");
+/** 첫 걸음 미션 한 칸 포인트 범위 */
+const FIRST_PTS = FIRST_STEPS.map((st) => st.reward.points ?? 0);
 
 export type EarnSource =
   | "attend"
@@ -62,12 +69,12 @@ export const EARN_RULES: readonly EarnRule[] = [
   // 종마다 처음 등록 보상 (lib/forage/dexReward, 값은 catalog DEX_NEW_REWARD)
   { source: "dex", label: "도감 등록 보상", points: 0, dailyMax: null, note: "새 종을 처음 올릴 때마다 3~50P, 희귀할수록 많이 받아요" },
   // 실시간 서버가 "가장 먼저 잡은 한 명"에게 서명한 증서로만 받는다 (고블린 한 마리당 한 번, lib/goblin.ts)
-  { source: "goblin", label: "황금 고블린 잡기", points: 0, dailyMax: null, note: "가끔 나타나는 황금 고블린을 가장 먼저 잡으면 300~1,000P, 가끔 대박 2,000P" },
+  { source: "goblin", label: "황금 고블린 잡기", points: 0, dailyMax: null, note: `가끔 나타나는 황금 고블린을 가장 먼저 잡으면 ${n(GOBLIN_POINTS_MIN)}~${n(GOBLIN_POINTS_MAX)}P, 가끔 대박 ${n(GOBLIN_JACKPOT_POINTS)}P` },
   // 광장 소원 분수에 동전(1~5P)을 던지면 가끔 튀어 돌아온다 (하루 한 번은 lib/wish WISH_DAILY가 센다)
   { source: "wish", label: "소원 분수", points: 0, dailyMax: null, note: "광장 분수에 하루 한 번 동전을 던질 수 있어요. 가끔 포인트가 튀어 돌아와요." },
   // 11/19 첫 걸음 미션·오늘의 할 일 (값은 lib/retain.ts — 미션은 계정마다 한 번, 할 일은 하루 셋 + 보너스)
-  { source: "firstSteps", label: "첫 걸음 미션", points: 0, dailyMax: null, note: "마을에서 할 수 있는 것을 처음 해 볼 때마다 100~300P, 다 하면 1,000P를 더 받아요" },
-  { source: "todo", label: "오늘 미션", points: 0, dailyMax: null, note: "날마다 미션 3개가 무작위로 나와요. 하나에 300P, 미션 셋을 다 하면 1,000P를 더 받아요" },
+  { source: "firstSteps", label: "첫 걸음 미션", points: 0, dailyMax: null, note: `마을에서 할 수 있는 것을 처음 해 볼 때마다 ${n(Math.min(...FIRST_PTS))}~${n(Math.max(...FIRST_PTS))}P, 다 하면 ${n(FIRST_REWARD.points)}P를 더 받아요` },
+  { source: "todo", label: "오늘 미션", points: 0, dailyMax: null, note: `날마다 미션 ${TODO_COUNT}개가 무작위로 나와요. 하나에 ${n(TODO_GIFT.points ?? 0)}P, ${TODO_COUNT}개를 다 하면 ${n(TODO_BONUS_GIFT.points ?? 0)}P를 더 받아요` },
 ];
 
 /** 오늘 모은 포인트(`_total`)에 들어가지 않는 항목 (출석 달력 보상·접속 시간 보너스 — 각자 따로 센다) */

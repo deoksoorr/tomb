@@ -30,6 +30,7 @@ import {
   floorTExp,
   TOWER_BOSS_EVERY,
   TOWER_BOSS_FLOOR_SEC,
+  TOWER_BOSS_HEAL,
   TOWER_CHECKPOINT_EVERY,
   TOWER_CHEST_FROM,
   TOWER_CHEST_GEAR_CHANCE,
@@ -42,9 +43,10 @@ import {
 import { monsterIdleCanvas } from "@/game/rpg/monsterArt";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
 import { BUILDS, buildSteps } from "@/lib/rpg/builds";
-import { SYNERGY } from "@/lib/rpg/skillTree";
-import { ENH_DROP_FROM } from "@/lib/rpg/enhance";
-import { SHOP_ENH_MAX } from "@/lib/rpg/setGear";
+import { SYNERGY, SYNERGY_GUARD } from "@/lib/rpg/skillTree";
+import { ENH_DROP_FROM, exchangeNeed } from "@/lib/rpg/enhance";
+import { enhMul, SG_ENH_MAX, SG_GRADE_MULT, SG_GRADE_NAMES, SHOP_ENH_MAX } from "@/lib/rpg/setGear";
+import { SG_GRADE_FLOORS } from "@/lib/rpg/setGearRoll";
 import { MAX_SLOW, MONSTER_STATUS, POTION_CURES, STATUS_DIFF, STATUS_IDS, STATUSES, statusFor, type StatusId } from "@/lib/rpg/status";
 import { CHAIN_GRACE_MS, FINISHER_EVERY, WEAPON_STYLES, weaponStyleOf } from "@/lib/rpg/weapons";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
@@ -56,7 +58,7 @@ import RpgIcon from "./RpgIcon";
 import { OddsLink } from "../odds/OddsLayer";
 // 11/15 야근 빌딩 능력 카드
 import { cardIconUrl } from "@/game/rpg/cards/cardArt";
-import { BOSS_DEAL_HP_COST, CARD_IDS, FOCUS_ASPD, RETIRED_CARDS, START_PICKS_PER_10 } from "@/lib/rpg/cards";
+import { BOSS_DEAL_EVERY, BOSS_DEAL_HP_COST, CARD_IDS, FOCUS_ASPD, RETIRED_CARDS, START_PICKS_PER_10 } from "@/lib/rpg/cards";
 import s from "./rpg.module.css";
 
 /** 11/15 끝없는 회의실 층 (테마 표 두 번째 칸 — 10층마다) */
@@ -103,6 +105,13 @@ function HuntDemo({ page, title }: { page: number; title: string }) {
       aria-label={`${title} 시연 그림${reduced ? "" : " (반복 재생)"}`}
     />
   );
+}
+
+/** 11/19 상자 층 구간마다 세트 장비 직급 (「51~100층은 사원급, …」 — lib/rpg/setGearRoll SG_GRADE_FLOORS) */
+function gradeBandText(): string {
+  const starts = [TOWER_CHEST_FROM, ...SG_GRADE_FLOORS];
+  const bands = starts.map((f, i) => (i < starts.length - 1 ? `${f}~${starts[i + 1] - 1}층은 ${SG_GRADE_NAMES[i]}` : `${f}층부터는 ${SG_GRADE_NAMES[i]}`));
+  return `세트 장비 직급은 ${bands.join(", ")}이에요.`;
 }
 
 /** 비율 → 퍼센트 (13.5%처럼 소수 한 자리까지) */
@@ -532,13 +541,13 @@ function pages(): Page[] {
           <ul className={s.guideList}>
             <Item art={skillArt("em_spark")} title="초월 레벨 ★51~★100">
               레벨 50부터는 지옥 사냥터와 야근 빌딩에서 얻은 EXP가 초월 EXP로 쌓여요. 다른 난이도와 미니게임 EXP는 쌓이지 않아요. 필요한 초월 EXP는 ★51까지 {tExpToNext(0).toLocaleString("ko-KR")}, ★100 바로 앞은 약{" "}
-              {Math.round(tExpToNext(TRANSCEND_MAX - 1) / 10_000)}만이에요. 초월 레벨이 5 오를 때마다 능력치 포인트를 1개 받아요. 회식 3차와 축제장은 레벨 50부터 EXP가 10%만 나와요.
+              {Math.round(tExpToNext(TRANSCEND_MAX - 1) / 10_000)}만이에요. 초월 레벨이 오를 때마다 능력치 포인트, 스킬 포인트, 초월 수련 포인트를 1개씩 받아요. 회식 3차와 축제장은 레벨 50부터 EXP가 10%만 나와요.
               분기 마감이나 구조조정에서 사냥하는 게 좋아요. 레벨 랭킹은 레벨 순서예요. 레벨이 같으면 초월 레벨, 그다음엔 초월 EXP로 정해요.
             </Item>
             <Item art={skillArt("so_lamp")} title="야근 빌딩">
               마을 북쪽 분양 사무소 옆에 있는 높은 건물이에요. 사냥 레벨 50부터 들어가요. 1층부터 쓰러질 때까지 쭉쭉 올라가는 레이스예요. 한 층은 방 하나이고{" "}
               {TOWER_FLOOR_SEC}초 안에 깨야 해요. 첫 무리를 다 잡으면 {TOWER_WAVE_GAP_SEC}초 뒤 다음 무리가 와요. {TOWER_BOSS_EVERY}층마다 우두머리 층이 있어요. 우두머리 층은{" "}
-              {TOWER_BOSS_FLOOR_SEC}초이고, 깨면 체력이 30% 차요. 체력, SP, 버프는 다음 층까지 이어져요. 몬스터는 {TOWER_STEEP_FROM}층까지 조금씩 세지고, {TOWER_STEEP_FROM}층부터는
+              {TOWER_BOSS_FLOOR_SEC}초이고, 깨면 체력이 {Math.round(TOWER_BOSS_HEAL * 100)}% 차요. 체력, SP, 버프는 다음 층까지 이어져요. {TOWER_STEEP_FROM}층까지는 몬스터가 약한 편이라 금방 올라가고, {TOWER_STEEP_FROM}층부터는
               빠르게 세져요. 높은 층은 장비와 카드를 연구해야 해요. 층을 깨면 엘리베이터를 타고 다음 층으로 가요. 층 표시가 붉게 깜빡이면 우두머리 층이에요. 쓰러지면 끝이고 부활
               쿠키는 못 써요. Esc로 그만두면 그 층까지 기록돼요. 몇 번이든 다시 도전할 수 있어요.
             </Item>
@@ -557,20 +566,21 @@ function pages(): Page[] {
               51층이나 101층처럼 위에서 시작하면 건너뛴 10층마다 카드를 {START_PICKS_PER_10}장씩 먼저 골라요.
             </Item>
             <Item pic={<CardPic id="oneshot" />} title="상사의 제안과 멈추면 집중">
-              10층마다 우두머리를 잡으면 상사가 제안을 해요. 최대 체력을 {Math.round(BOSS_DEAL_HP_COST * 100)}% 내주면 레어 이상 카드를 한 장 받아요. 거절하면 체력을 가득
+              {BOSS_DEAL_EVERY}층마다 우두머리를 잡으면 상사가 제안을 해요. 최대 체력을 {Math.round(BOSS_DEAL_HP_COST * 100)}% 내주면 레어 이상 카드를 한 장 받아요. 거절하면 체력을 가득
               채워 줘요. 가만히 서서 때리면 공격 속도가 {Math.round(FOCUS_ASPD * 100)}% 빨라져요. 피할 땐 움직이고, 때릴 땐 멈춰 서요.
             </Item>
             {/* 11/15 세트 장비·강화 */}
             <Item art={{ shape: "sg:003", main: 0, accent: 0 }} title="세트 장비와 강화">
-              세트 장비는 야근 빌딩 상자에서만 나와요. 세트는 야근, 결재, 회의, 출장 네 가지이고, 세트마다 부위가 다섯 개예요. 높은 층일수록 사원급에서 임원급까지 좋은 직급이 나와요.
-              같은 세트를 두 개나 네 개 끼면 세트 효과가 붙어요. 장비 탭에서 강화하면 기본 능력치가 올라요. +5면 1.4배, +10이면 2배, +15면 3배예요. 세트 장비는 +15, 상점 장비는 +{SHOP_ENH_MAX}까지 올릴 수 있어요.
-              +{ENH_DROP_FROM}에서 더 올리다 실패하면 한 단계 내려가요. 보호 문서가 있으면 막을 수 있어요. 안 쓰는 세트 장비는 분해해서 재료로 바꿔요. 같은 직급 세 개를 원하는 부위 하나로
-              바꿀 수도 있어요.
+              세트 장비는 야근 빌딩 상자에서만 나와요. 세트는 야근, 결재, 회의, 출장 네 가지이고, 세트마다 부위가 다섯 개예요. 높은 층일수록 사원급에서 임원급까지 좋은 직급이 나와요. 기본 능력치는 {SG_GRADE_NAMES[0]}을 1로 치면 {SG_GRADE_NAMES.slice(1).map((n, i) => `${n} ${SG_GRADE_MULT[i + 1]}배`).join(", ")}예요.
+              같은 세트를 두 개나 네 개 끼면 세트 효과가 붙어요. 장비 탭에서 강화하면 기본 능력치가 올라요. +5면 {enhMul(5)}배, +10이면 {enhMul(10)}배, +{SG_ENH_MAX}면 {enhMul(SG_ENH_MAX)}배예요. 세트 장비는 +{SG_ENH_MAX}, 상점 장비는 +{SHOP_ENH_MAX}까지 올릴 수 있어요.
+              +{ENH_DROP_FROM}에서 더 올리다 실패하면 한 단계 내려가요. 보호 문서가 있으면 막을 수 있어요. 안 쓰는 세트 장비는 분해해서 재료로 바꿔요. 같은 직급 {exchangeNeed(1)}개(무기는 {exchangeNeed(0)}개)를 원하는 부위 하나로
+              바꿀 수도 있어요. 강화한 장비는 같은 부위의 더 높은 직급 세트 장비에 강화를 물려줄 수 있어요(승계). 직급 차이가 클수록 받는 단계는 줄고, 물려준 장비는 사라져요.
             </Item>
             <Item art={POTIONS[0]?.art} title="야근 빌딩 보상">
-              깬 층마다 초월 경험치를 받아요. 1층은 {floorTExp(1)}, 30층은 {floorTExp(30)}, 100층은 {floorTExp(100)}만큼 받아요. 쓰러져도 깬 층만큼은 받아요.
+              깬 층마다 초월 경험치를 받아요. 1층은 {floorTExp(1)}, 30층은 {floorTExp(30)}, 100층은 {floorTExp(100)}만큼 받아요. {TOWER_STEEP_FROM + 1}층부터는 확 늘어서 {TOWER_STEEP_FROM + 1}층은{" "}
+              {floorTExp(TOWER_STEEP_FROM + 1)}이에요. 쓰러져도 깬 층만큼은 받아요.
               {TOWER_CHEST_FROM}층부터는 우두머리 층을 깨면 우두머리 상자가 열려요. 물약과 강화 재료는 늘 들어 있어요. 세트 장비는 {Math.round(TOWER_CHEST_GEAR_CHANCE * 100)}% 확률로 아주 드물게 나와요.
-              꾸미기 이용권도 가끔 나와요.
+              {gradeBandText()} 꾸미기 이용권도 가끔 나와요.
               깬 층마다 포인트도 조금 받아요. 잡은 몬스터 수는 주간 사냥 레이스에 들어가요. 50층 우두머리를 잡으면 다음부터 51층에서, 100층을 깨면 101층에서 바로 시작할 수 있어요. 그 위로는{" "}
               {TOWER_CHECKPOINT_EVERY}층마다(121층, 141층 …) 엘리베이터가 켜져요.
             </Item>
@@ -611,13 +621,14 @@ function pages(): Page[] {
     {
       // 11/19 대표 빌드 8종 (lib/rpg/builds): 핵심 1 + 받침 2 — 받침 랭크마다 핵심 피해가 오른다 (연계 보너스, skillTree SYNERGY)
       title: "대표 빌드",
-      lead: "갈래마다 대표 빌드가 둘씩 있어요. 핵심 스킬은 받쳐 주는 스킬 랭크마다 피해가 올라요(연계). 핵심 하나와 받침 둘에 몰아 찍을수록 핵심 스킬이 크게 세지고, 흩어 찍으면 연계가 조금밖에 안 붙어요. 야근 빌딩에서는 카드도 빌드에 맞는 것(마공·물공 꼬리표)을 먼저 고르면 더 높이 올라가요.",
+      lead: "갈래마다 대표 빌드가 둘씩 있어요. 핵심 스킬은 받쳐 주는 스킬 랭크마다 피해가 올라요(연계). 핵심 하나와 받침 둘에 몰아 찍을수록 핵심 스킬이 크게 세지고 야근 빌딩에서 받는 피해도 줄어요. 흩어 찍으면 연계가 조금밖에 안 붙어요. 야근 빌딩에서는 카드도 빌드에 맞는 것(마공·물공 꼬리표)을 먼저 고르면 더 높이 올라가요.",
       body: (
         <ul className={s.guideList}>
           {BUILDS.map((b) => {
             const core = b.core.map((id) => skillById(id)!.name).join("·");
             const links = SYNERGY[b.core[0]] ?? [];
             const full = Math.round(links.reduce((a, l) => a + l.pct * (skillById(l.id)?.maxLevel ?? 0), 0) * 100);
+            const guard = Math.round((SYNERGY_GUARD[b.core[0]] ?? 0) * 100);
             return (
               <li key={b.id} className={s.guideItem}>
                 <span className={s.guidePic}>
@@ -630,6 +641,7 @@ function pages(): Page[] {
                   <p className={s.meta}>{b.role}</p>
                   <p className={s.meta}>
                     핵심 <b>{core}</b> ← 받침 {links.map((l) => `${skillById(l.id)!.name}(랭크마다 +${Math.round(l.pct * 100)}%)`).join(", ")}. 받침을 다 찍으면 핵심 피해 +{full}%.
+                    {guard > 0 && ` 핵심까지 다 찍으면 야근 빌딩에서 받는 피해가 ${guard}% 줄어요.`}
                   </p>
                   <table className={s.guideTable}>
                     <tbody>
