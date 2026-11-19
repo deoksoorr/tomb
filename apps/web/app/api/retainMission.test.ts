@@ -1,8 +1,10 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { addDays, dayStartMs, gameDay } from "@/lib/gameDay";
 import { getForageStore } from "@/lib/forage/store";
-import { PLAY_MIN_MS, TODO_POOL, todoDef, todoPicks, todoView, type TodoKind } from "@/lib/retain";
+import { PLAY_KINDS, PLAY_MIN_MS, TODO_POOL, todoDef, todoPicks, todoView, type TodoKind } from "@/lib/retain";
 import { hauntMinMs } from "@/lib/retainPlay";
 import { bumpQuest, questHook, todoOpenNow, todoTickOf } from "@/lib/retainQuest";
 import { MemoryGullStore } from "@/lib/sea/gullStore";
@@ -243,5 +245,27 @@ describe("놀이 미션 판 기록 (귀신의 집·범퍼카·관람차/열기�
     } finally {
       await setStaff(null);
     }
+  });
+});
+
+describe("11/19 모든 미션이 실제 행동에 연결돼 있다 (헌화가 빠져 미션이 안 채워졌던 일)", () => {
+  it("머무르기·놀이 판 기록을 뺀 미션 종류마다 서버 코드 어딘가에 그 종류로 questHook을 부르는 줄이 있다", () => {
+    const root = join(__dirname, "..", "..");
+    const src: string[] = [];
+    const walk = (dir: string) => {
+      for (const f of readdirSync(dir)) {
+        if (f === "node_modules" || f.startsWith(".")) continue;
+        const p = join(dir, f);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (/\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f)) src.push(readFileSync(p, "utf8"));
+      }
+    };
+    walk(join(root, "app"));
+    walk(join(root, "lib"));
+    // questHook을 부르는 줄 전체 (인자 안에 괄호가 겹치거나, 사냥처럼 같은 줄에서 종류를 고르는 경우까지)
+    const calls = src.flatMap((t) => t.split("\n").filter((l) => l.includes("questHook(") && !l.includes("export function questHook"))).join("\n");
+    const generic = new Set<string>(["stay", ...PLAY_KINDS]);
+    const missing = TODO_POOL.map((d) => d.kind).filter((k) => !generic.has(k) && !calls.includes(`"${k}"`));
+    expect(missing).toEqual([]);
   });
 });

@@ -1,6 +1,8 @@
 import { DAY_RESET_TEXT } from "@/lib/gameDay";
+import { kstDay } from "@/lib/store/accounts";
 import { handler, HttpError, json, notFound } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
+import { questHook, todoTickOf } from "@/lib/retainQuest";
 import { requireVisitor } from "@/lib/session";
 import { findVisible, getAccounts, getStore, pushActivity } from "@/lib/store";
 import { rewardReaction } from "@/lib/store/accounts";
@@ -15,8 +17,12 @@ export const POST = handler<{ id: string }>(async (req, { id }) => {
   const count = await store.flower(id, visitorId);
   if (count === null) throw notFound();
   if (count === "already") throw new HttpError(409, "ALREADY_FLOWERED", `오늘은 이미 꽃을 놓았어요. ${DAY_RESET_TEXT}가 지나면 다시 찾아와 주세요.`);
-  const earned = await rewardReaction(getAccounts(), visitorId, grave.ownerAccountId, "flower", "gotFlower");
+  // 11/19 오늘 미션 「묘비에 꽃 한 송이 놓기」: 헌화 적립 스크립트에 같이 실어 올린다 (빠져 있어 미션이 안 채워졌다)
+  const now = Date.now();
+  const day = kstDay(now);
+  const quest = questHook(visitorId, day, "flower");
+  const earned = await rewardReaction(getAccounts(), visitorId, grave.ownerAccountId, "flower", "gotFlower", now, quest);
   if (grave.ownerAccountId)
     await pushActivity(grave.ownerAccountId, { kind: "flower", actorId: visitorId, targetId: id, targetName: grave.name });
-  return json<FlowerResponse>({ count, earned });
+  return json<FlowerResponse>({ count, earned, ...todoTickOf(quest, day) });
 });
