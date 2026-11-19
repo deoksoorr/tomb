@@ -320,7 +320,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
           <b>{G.name}</b> {G.desc}
         </p>
         <p className={s.meta}>
-          망원경 속은 늘 밤하늘이라 낮에도 볼 수 있어요. 별 보기 언덕 말고도 광장·다리·호숫가·쉼터, 캠핑장과 바닷가에도 망원경이 있어요. 한 대에 한 사람씩 볼 수 있어요. {coarse ? G.howTouch : G.how}
+          망원경 속은 늘 밤하늘이라 낮에도 볼 수 있어요. 북서쪽 언덕 말고도 마을 곳곳과 캠핑장, 바닷가에 망원경이 있어요. 지도에 망원경 그림으로 보여요. 한 대에 한 사람씩 볼 수 있어요. {coarse ? G.howTouch : G.how}
         </p>
         <p className={starry ? s.levelUp : ui.hint} role="status">
           {starry

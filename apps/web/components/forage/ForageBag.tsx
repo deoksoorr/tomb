@@ -62,7 +62,7 @@ export default function ForageBag() {
       )}
       {/* 11/15 의뢰 도장 (가방이 아니라 계정에 쌓인다): 하나라도 있으면 작은 칩으로만 */}
       {board && board.stamps > 0 && (
-        <div className={q.stampChip} title="의뢰 도장 (버스 정류장 마당 의뢰 게시판에서 바꿔요)">
+        <div className={q.stampChip} title="의뢰 도장 (캠핑장행 정류장 옆 의뢰 게시판에서 바꿔요)">
           <span className={q.seal} aria-hidden>
             印
           </span>

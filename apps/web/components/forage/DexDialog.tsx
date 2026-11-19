@@ -11,6 +11,8 @@ import {
   dexIdsOf,
   dexRewardLabel,
   dexTitleNeed,
+  GATHER_NODES,
+  NODE_CAT,
   PHASE_LABEL,
   RARITY_LABEL,
   SEASON_LABEL,
@@ -49,8 +51,16 @@ const REWARD_RANGE = `${DEX_NEW_REWARD[1]}~${DEX_NEW_REWARD[5]}P`;
 const MOB_REWARD_RANGE = `${DEX_NEW_REWARD[1]}~${DEX_NEW_REWARD[4]}P`;
 const ymd = (d: string) => (d.length === 8 ? `${d.slice(0, 4)}.${d.slice(4, 6)}.${d.slice(6)}` : d);
 
+/** 11/19 마을 밖에서도 나오는 곳 (같은 종류 채집 지점이 캠핑장·바닷가에 있으면) — 장소 이름이 마을 기준이라 헷갈렸다 */
+function awayOf(sp: Species): string {
+  if (sp.cat === "fish") return "";
+  const maps = new Set(GATHER_NODES.filter((n) => n.map && NODE_CAT[n.kind] === sp.cat && sp.where.includes(n.where)).map((n) => n.map));
+  const names = [maps.has("camp") ? "캠핑장" : "", maps.has("sea") ? "바닷가" : ""].filter(Boolean);
+  return names.length ? ` (${names.join(", ")}에도 있어요)` : "";
+}
+
 function hints(sp: Species): string[] {
-  const out = [`${sp.where.map((w) => WHERE_LABEL[w]).join("·")}`];
+  const out = [`${sp.where.map((w) => WHERE_LABEL[w]).join("·")}${awayOf(sp)}`];
   out.push(sp.time ? sp.time.map((t) => PHASE_LABEL[t]).join("·") : "아무 때나");
   if (sp.weather) out.push(`${sp.weather.map((w) => WEATHER_LABEL[w]).join("·")}인 날`);
   if (sp.season) out.push(`${sp.season.map((x) => SEASON_LABEL[x]).join("·")}에만`);

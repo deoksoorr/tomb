@@ -269,7 +269,7 @@ function MyPlot({
             <option value="">{sea ? "가장 앞의 빈 터 (자동)" : "가장 앞의 빈 번지 (자동)"}</option>
             {(free ?? []).map((l) => (
               <option key={l} value={l}>
-                {sea ? `${l}번 터${SEA_LOTS.find((x) => x.n === l)?.deck ? " (바다 쪽 데크)" : ""}` : `${l}번지${l > MAIN_LOTS ? " (등불 골목)" : ""}`}
+                {sea ? `${l}번 터${SEA_LOTS.find((x) => x.n === l)?.deck ? " (바다 쪽 데크)" : ""}` : `${l}번지${l > MAIN_LOTS ? " (바닷가행 정류장 위 등불 골목)" : ""}`}
               </option>
             ))}
             {lot !== null && !free?.includes(lot) && <option value={lot}>{sea ? `${lot}번 터` : `${lot}번지`}</option>}

@@ -101,7 +101,7 @@ const HARD_RAR2: Record<LifeCat, Range> = { fish: R(3, 4), bug: R(2), herb: R(3)
 const HARD_KINDS: Record<LifeCat, number> = { fish: 4, bug: 3, herb: 4, ore: 4, dig: 3 };
 const HARD_BULK: Record<LifeCat, number> = { fish: 8, bug: 5, herb: 8, ore: 8, dig: 6 };
 const WEEK_BULK: Record<LifeCat, number> = { fish: 15, bug: 10, herb: 15, ore: 15, dig: 10 };
-const WEEK_NAME: Record<LifeCat, string> = { fish: "강가", bug: "풀숲", herb: "약초", ore: "광맥", dig: "발굴" };
+const WEEK_NAME: Record<LifeCat, string> = { fish: "낚시", bug: "풀숲", herb: "약초", ore: "광맥", dig: "발굴" };
 
 type EasyFam = "any" | "sp" | "rar" | "kinds";
 type HardFam = "rar" | "kinds" | "bulk";

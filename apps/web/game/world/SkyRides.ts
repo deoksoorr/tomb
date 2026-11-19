@@ -287,7 +287,7 @@ export class SkyRides {
       return true;
     }
     r.armAt = now;
-    this.host.toast(r.kind === "ferris" ? "한 번 더 누르면 관람차에서 바로 내려요" : "한 번 더 누르면 내려서 출발장으로 돌아가요");
+    this.host.toast(r.kind === "ferris" ? "한 번 더 누르면 관람차에서 바로 내려요" : "한 번 더 누르면 내려서 열기구 타는 곳으로 돌아가요");
     return true;
   }
 

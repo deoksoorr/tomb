@@ -21,7 +21,7 @@ export const WHERE_LABEL: Record<Where, string> = {
   lake: "호수",
   river: "강",
   forest: "숲",
-  meadow: "강 건너 풀밭",
+  meadow: "풀밭",
   // 11/19 지도에 보이는 이름으로 (예전 「별 보기 언덕」·「사냥터 동굴 앞」은 어딘지 몰랐다 — 사용자)
   hill: "북서쪽 언덕",
   cave: "사냥터 입구",
@@ -200,7 +200,7 @@ const ORES: Species[] = [
   { id: "o_quartz", cat: "ore", name: "수정", rarity: 2, price: 7, where: ["hill", "lakeside", "cave"], desc: "빛을 비추면 무지개가 생긴다." },
   { id: "o_silver", cat: "ore", name: "은광석", rarity: 3, price: 14, where: ["cave", "hill"], desc: "달빛 같은 광택." },
   { id: "o_amethyst", cat: "ore", name: "자수정", rarity: 3, price: 15, where: ["hill"], time: ["dusk", "night"], desc: "해가 지면 보랏빛이 짙어진다." },
-  { id: "o_gold", cat: "ore", name: "금광석", rarity: 4, price: 32, where: ["cave"], desc: "번쩍. 동굴 깊은 곳의 반짝임." },
+  { id: "o_gold", cat: "ore", name: "금광석", rarity: 4, price: 32, where: ["cave"], desc: "번쩍. 사냥터 동굴 어귀의 반짝임." },
   { id: "o_meteor", cat: "ore", name: "별똥별 조각", rarity: 4, price: 36, where: ["hill"], time: ["night"], weather: ["clear"], desc: "맑은 밤, 망원경 있는 언덕에 떨어진다." },
   { id: "o_diamond", cat: "ore", name: "사직서 다이아몬드", rarity: 5, price: 80, where: ["cave", "hill"], weather: ["fog", "snow"], desc: "무엇보다 단단하다. 내밀 용기만큼." },
   // 2차 (10)
