@@ -277,7 +277,7 @@ describe("반응", () => {
     const v = await newVisitor();
     const { grave } = await createGrave(v);
     const first = await flower.POST(call(`/api/graves/${grave.id}/flower`, { method: "POST", visitor: v }), ctx(grave.id));
-    expect(await first.json()).toEqual({ count: 1, earned: 2 });
+    expect(await first.json()).toMatchObject({ count: 1, earned: 2 }); // 11/19 그날 미션에 헌화가 들면 todo도 실린다
     const second = await flower.POST(call(`/api/graves/${grave.id}/flower`, { method: "POST", visitor: v }), ctx(grave.id));
     expect(second.status).toBe(409);
     expect((await errorOf(second)).code).toBe("ALREADY_FLOWERED");
