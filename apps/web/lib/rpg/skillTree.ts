@@ -641,7 +641,7 @@ const SKILLS_V3: readonly SkillDef[] = [
     maxLevel: 5,
     requires: [{ id: "so_wisp", level: 1 }],
     ...passive,
-    describe: (lv) => `마공 스킬과 부른 넋이 준 피해의 ${pct(FX.so_drain(lv).steal)}만큼 HP가 차요.`,
+    describe: (lv) => `기본 공격, 스킬, 부른 넋이 준 피해의 ${pct(FX.so_drain(lv).steal)}만큼 HP가 차요. 한 번에 최대 HP의 3%까지예요.`,
     art: { shape: "sk_drain", main: S.color, accent: 0xe84a6a },
   },
   {
