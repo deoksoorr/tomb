@@ -120,7 +120,7 @@ export const FIRST_STEPS: readonly FirstStep[] = [
   { id: "emote", bit: 16, label: "표현 하나 쓰기", pc: "T를 눌러 골라요.", touch: "[표현]에서 골라요.", reward: ENERGY },
   { id: "chat", bit: 32, label: "채팅으로 인사하기", pc: "Enter로 채팅을 열고 인사해요.", touch: "[채팅]을 눌러 인사해요.", reward: COFFEE },
   { id: "bag", bit: 64, label: "가방 열어 보기", pc: "I를 눌러 꾸미기를 구경해요.", touch: "아래 [가방]을 눌러요.", reward: ENERGY },
-  { id: "fish", bit: 128, label: "물고기 한 마리 낚기", pc: "호수 잔교나 강둑의 낚시 자리에서 E를 눌러요.", touch: "낚시 자리에서 [상호작용]을 눌러요.", reward: DOC2 },
+  { id: "fish", bit: 128, label: "물고기 한 마리 낚기", pc: "호수 잔교나 강둑의 낚시 자리에서 E를 눌러 직접 낚아요. 자동 낚시는 세지 않아요.", touch: "낚시 자리에서 [상호작용]을 눌러 직접 낚아요. 자동 낚시는 세지 않아요.", reward: DOC2 },
   { id: "gather", bit: 256, label: "채집 한 번 하기", pc: "숲이나 풀밭에서 반짝이는 풀이나 돌 앞에서 E를 눌러요.", touch: "반짝이는 풀이나 돌 앞에서 [상호작용]을 눌러요.", reward: DOC2 },
   { id: "stars", bit: 512, label: "별자리 한 판 잇기", pc: "언덕이나 광장의 망원경 앞에서 E를 눌러요.", touch: "망원경 앞에서 [상호작용]을 눌러요.", reward: DOC2 },
   { id: "hunt", bit: 1024, label: "사냥터 한 판", pc: "아래 [사냥]을 누르면 사냥터 입구까지 걸어가요.", touch: "아래 [사냥]을 누르면 사냥터 입구까지 걸어가요.", reward: { points: 300 } },
@@ -250,7 +250,7 @@ export const TODO_POOL: readonly TodoDef[] = [
   { kind: "guestbook", cat: "life", label: "이웃 집 방명록 남기기", need: 1, unit: "번", hint: "이웃 집에 들어가 방명록에 한 줄 남겨요.", guide: "visit" },
   { kind: "quest", cat: "life", label: "마을 의뢰 하나 납품하기", need: 1, unit: "번", hint: "버스 정류장 마당 의뢰 게시판에서 납품해요.", guide: "questBoard" },
   // ── 놀이 ──
-  { kind: "fish", cat: "play", label: "물고기 3마리 낚기", need: 3, unit: "마리", hint: "호수·강·바닷가 어디서 낚아도 세요.", group: "fish", guide: "fish" },
+  { kind: "fish", cat: "play", label: "물고기 3마리 낚기", need: 3, unit: "마리", hint: "호수, 강, 바닷가 어디서든 직접 낚으면 세요. 자동 낚시는 세지 않아요.", group: "fish", guide: "fish" },
   { kind: "gather", cat: "play", label: "채집 2번 하기", need: 2, unit: "번", hint: "반짝이는 풀·돌·수풀에서 채집해요.", group: "gather", guide: "gather" },
   { kind: "stars", cat: "play", label: "별자리 잇기 한 판", need: 1, unit: "판", hint: "언덕이나 광장의 망원경에서 해요.", guide: "stars" },
   {
@@ -267,7 +267,7 @@ export const TODO_POOL: readonly TodoDef[] = [
   { kind: "fire", cat: "play", label: "모닥불 앞에서 불멍 2분", need: 1, unit: "번", hint: "모닥불 둘레 자리에 앉아 2분 동안 불을 바라봐요.", guide: "campfire" },
   // ── 나들이 (사냥·바닷가·캠핑장) ──
   { kind: "hunt", cat: "trip", label: "사냥 한 판", need: 1, unit: "판", hint: "사냥터나 야근 빌딩에서 한 판 끝내요.", guide: "hunt" },
-  { kind: "seaFish", cat: "trip", label: "바닷가에서 물고기 2마리 낚기", need: 2, unit: "마리", hint: "포구 잔교는 물때와 상관없이 낚여요.", group: "fish", open: "sea", guide: "busSea" },
+  { kind: "seaFish", cat: "trip", label: "바닷가에서 물고기 2마리 낚기", need: 2, unit: "마리", hint: "포구 잔교는 물때와 상관없이 낚여요. 직접 낚은 것만 세고 자동 낚시는 세지 않아요.", group: "fish", open: "sea", guide: "busSea" },
   { kind: "seaGather", cat: "trip", label: "바닷가 갯벌·모래 채집 2번", need: 2, unit: "번", hint: "물이 빠지면 갯벌 구멍, 늘 백사장 모래를 파요.", group: "gather", open: "sea", guide: "busSea" },
   { kind: "campGather", cat: "trip", label: "캠핑장 숲에서 채집 2번", need: 2, unit: "번", hint: "캠핑장 숲·물가의 반짝이는 곳에서 채집해요.", group: "gather", open: "camp", guide: "busCamp" },
   { kind: "gull", cat: "trip", label: "갈매기에게 과자 3번 던지기", need: 3, unit: "번", hint: "포구 매점에서 과자를 사서 갈매기에게 던져요.", open: "sea", guide: "busSea" },
