@@ -17,6 +17,7 @@ import { SpeechBubble } from "./SpeechBubble";
 import { SpeedTrail } from "./SpeedTrail";
 import { TitleSparkle } from "./TitleSparkle";
 import { MoodView } from "./MoodView";
+import { photoNamesHidden } from "../photo/photoFlags";
 import { StaffFxView } from "./StaffFxView";
 import { ChampBadgeView } from "./ChampBadgeView";
 import type { LabelUnit } from "../world/labels";
@@ -1247,6 +1248,8 @@ export class AvatarView {
       lift = cellTop - sc - (titleInkTop - gap);
       labelTop = this.champBadge ? this.champBadge.sync(this.label, sc, vis, fa, now, this.reduced, lift) : titleInkTop - gap + sc;
     } else labelTop = this.champBadge ? this.champBadge.sync(this.label, labelScale, vis, fa, now, this.reduced, lift) : this.label.y - this.label.height - lift;
+    // 11/19 촬영 모드에서 이름표를 껐으면 말풍선·상태 표시는 이름표·칭호 자리 대신 머리 바로 위에 (붕 떠 보였다)
+    if (photoNamesHidden()) labelTop = baseLabelY;
     if (this.doingTag) {
       const d = this.doingTag;
       if (d.scaleX !== labelScale) d.setScale(labelScale);
