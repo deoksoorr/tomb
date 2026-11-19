@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { DIR, FURNITURE, SPAWN, ZOO, ZOO_EAST_GATE, ZOO_GATE, ZOOKEEPER, ZOO_PETS, isRideablePet, type DirId } from "@tomb/protocol";
 import { SHOP_COSMETICS, entryStatus, wearAction } from "@/components/account/wardrobe";
-import { COSMETIC_FX, CosmeticFxSim, FX_ART, fxIconGrid, mountOf, petPoseFrame, riderLift, UNKNOWN_PET_STANDIN, type FxCmd, type FxInput } from "../../sprites/cosmeticFx";
-import { MOUNT_FRAMES, MOUNT_H, MOUNT_W, mountFrames } from "../../sprites/mountArt";
+import { COSMETIC_FX, CosmeticFxSim, FX_ART, fxIconGrid, mountOf, petPoseFrame, riderBobs, riderLift, UNKNOWN_PET_STANDIN, type FxCmd, type FxInput } from "../../sprites/cosmeticFx";
+import { AV_ANIM, AV_H, AV_W, avatarFrameGrid } from "../../sprites/avatar";
+import { MOUNT_FRAMES, MOUNT_H, MOUNT_SIDE_SHIFT, MOUNT_W, mountFrames, mountLift, mountSheet, mountW, type MountKind } from "../../sprites/mountArt";
 import { groundKind, interactables, LANDMARKS, staticColliders, walkableGrid, WALK } from "../layout";
 import { ZOO_DECOR, ZOO_FENCES, ZOO_PENS, zooColliders, ZOOKEEPER_SPOT } from "./zooLayout";
 import { roamRect, ZOO_ANIMALS, zooPose } from "./zooSim";
@@ -164,6 +165,44 @@ describe("펫 그림·타는 모습", () => {
       }
     }
     expect(riderLift("pet_cat")).toBe(0);
+  });
+
+  it("11/19 탄 사람 엉덩이가 탈것 등 안으로 4줄 넘게 들어가 앉는다 (월척 잉어가 등 꼭대기에 1~2줄만 걸쳐 떠 보였다)", () => {
+    // 그리는 규칙 그대로 겹친다: 펫 = 발밑 기준 아랫변(oy 1), 탄 사람 = 발바닥 줄(AV_H-1)이 발밑 → 들어 올린 만큼 위로
+    const SY = 40, SX = 40;
+    for (const kind of ["hound", "goose", "deer", "carp", "alpaca", "polar", "sleigh"] as const satisfies readonly MountKind[]) {
+      const sheet = mountSheet(kind);
+      const W = mountW(kind);
+      for (const [view, av, base] of [["side", "side", 0], ["front", "down", 2], ["back", "up", 4]] as const) {
+        const rider = avatarFrameGrid("hood", av, AV_ANIM.sitChair.col);
+        const pet = kind === "carp" ? "q_ride_carp" : kind === "sleigh" ? "xm_sleigh" : kind === "alpaca" ? "pet_paca" : `pet_${kind}`;
+        const lift = mountLift(kind) + (riderBobs(pet) ? 1 : 0); // 걸을 때 출렁여 가장 높이 뜬 때
+        const mx = SX + (view === "side" ? (MOUNT_SIDE_SHIFT[kind] ?? 0) : 0) - W / 2;
+        const solid = (x: number, y: number) => {
+          const sx = x - mx, sy = y - (SY - MOUNT_H);
+          return sx >= 0 && sx < W && sy >= 0 && sy < MOUNT_H && (sheet.get(base * W + sx, sy) & 255) >= 128;
+        };
+        const riderAt = (x: number, y: number) => {
+          const rx = x - (SX - AV_W / 2), ry = y - (SY - (AV_H - 1) - lift);
+          return rx >= 0 && rx < AV_W && ry >= 0 && ry < AV_H && (rider.get(rx, ry) & 255) >= 128;
+        };
+        let bottom = -1;
+        for (let y = 0; y < SY; y++) for (let x = 0; x < 80; x++) if (riderAt(x, y)) bottom = y;
+        let top = Infinity;
+        for (let x = 0; x < 80; x++) {
+          if (!riderAt(x, bottom)) continue;
+          for (let y = 0; y < SY; y++)
+            if (solid(x, y)) {
+              top = Math.min(top, y);
+              break;
+            }
+        }
+        expect(bottom - top, `${kind} ${view}`).toBeGreaterThanOrEqual(4);
+      }
+    }
+    expect(riderBobs("q_ride_carp")).toBe(false);
+    expect(riderBobs("pet_hound")).toBe(true);
+    expect(riderBobs("pet_cat")).toBe(false);
   });
 
   it("올라타면 펫을 발밑(점프하면 같이 뜬다)에 탄 사람 뒤로 그리고, 앞·뒷모습은 머리·엉덩이를 앞에 덧그린다", () => {

@@ -1,6 +1,7 @@
 import { isAvatarBody, itemById, PERMANENT_UNTIL } from "@tomb/protocol";
 import { dayStartMs, nextWeekStartMs, weekStartMs } from "../../gameDay";
 import { HttpError } from "../../http";
+import { bumpQuest, questHook, todoTickOf } from "../../retainQuest";
 import { getAccounts } from "../../store";
 import { kstDay, kstWeek, loadMe } from "../../store/accounts";
 import type { MemoryAccounts } from "../../store/accounts-memory";
@@ -123,7 +124,11 @@ export async function deliverQuest(acct: string, key: string, pick: Record<strin
     daily: board.daily.map((d) => (d.key === key ? { ...d, done: true } : d)),
     weekly: key === "w" ? { ...board.weekly, done: true } : board.weekly,
   };
-  return { board: next, used: items, earned: q.stamps + bonus, ...(bonus ? { bonus } : {}) };
+  // 11/19 오늘 미션 「마을 의뢰 하나 납품하기」 (그날 미션일 때만 진행 칸 +1 — lib/retainQuest)
+  const day = kstDay(now);
+  const quest = questHook(acct, day, "quest");
+  await bumpQuest(quest).catch((e) => console.error("[quests] 미션 진행 실패", e));
+  return { board: next, used: items, earned: q.stamps + bonus, ...(bonus ? { bonus } : {}), ...todoTickOf(quest, day) };
 }
 
 /** 오늘 의뢰 하나 바꾸기 (하루 한 번, 무료) */

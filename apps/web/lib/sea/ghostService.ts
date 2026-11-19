@@ -7,6 +7,7 @@ import type { HouseZone } from "../housing/catalog";
 import { recordLook } from "../lookRank";
 import { onceClaim } from "../store/once";
 import { isStaff } from "../staff";
+import { isGraveChannel } from "../store/channels";
 import { getAccounts } from "../store";
 import { lookGrant, lookOf, loadMe } from "../store/accounts";
 import { champBoardsSafe } from "../store/champ";
@@ -18,7 +19,7 @@ import { GHOST_BOUGHT_MSG, GHOST_CLOSED_MSG, GHOST_COSMETIC_KIND, GHOST_NOTICE, 
 import { getGhostStore } from "./ghostStore";
 
 // 11/17 유령선 특가 장터 (서버). 시간표·품목·할인 계산은 lib/sea/ghostShip (순수), 1인 1개·운영자 부르기는 lib/sea/ghostStore.
-// 사기: ① 열려 있는지 (시간표 정박 또는 그 운영자가 부른 동안) ② 그 주 품목인지 ③ 물건 자리 잡기(SADD) ④ 값 = 큰 할인 하나 ⑤ 차감
+// 사기: ① 열려 있는지 (시간표 정박 또는 운영자가 그 채널에 부른 동안 — 11/19 그 채널 모두에게) ② 그 주 품목인지 ③ 물건 자리 잡기(SADD) ④ 값 = 큰 할인 하나 ⑤ 차감
 //  (꾸미기 = 영구 꾸미기 저장소 한 번 · 가구 = 가구점과 같은 buyFurniture) — 실패하면 ③을 풀어요.
 // 서버는 배 위치를 몰라요 (장터 창을 어디서 열어도 같은 값이라 이득이 없어요 — 동물원·포구 매점과 같아요).
 
@@ -43,18 +44,20 @@ export type GhostStatus = {
   week: string;
   items: GhostRow[];
   points: number;
-  /** 운영자에게만: 지금 시험 부르기 상태 */
+  /** 운영자 계정이면 true (부르기 단추) */
   staff?: true;
-  call?: GhostCall;
+  /** 그 채널에 운영자가 부른 상태 (11/19 모두에게 — null = 시간표대로) */
+  call: GhostCall;
   /** 가구는 집(마을 집이나 포구 오두막)이 있어야 살 수 있어요 */
   house: boolean;
 };
 export type GhostBuyResult = GhostStatus & { me: Me; lookGrant?: string; got: string };
+/** 11/19 그 채널에 운영자가 부른 상태 (GET /api/sea/ghost/call?ch=N) */
+export type GhostCallState = { ch: number; call: GhostCall };
 
-/** 그 사람이 지금 부른 상태 (운영자만 — 아니면 시간표대로) */
-async function callOf(accountId: string): Promise<{ staff: boolean; call: GhostCall }> {
-  const staff = await isStaff(accountId);
-  return { staff, call: staff ? await getGhostStore().getCall(accountId) : null };
+/** 그 채널에 운영자가 부른 상태 (11/19 그 채널 모두에게 — 채널을 모르면 시간표대로) */
+export async function ghostCallOf(ch: number | null): Promise<GhostCall> {
+  return ch !== null && isGraveChannel(ch) ? getGhostStore().getCall(ch) : null;
 }
 
 /** 가구를 넣을 집 (마을 집 먼저, 없으면 포구 오두막). 둘 다 없으면 null */
@@ -73,10 +76,10 @@ async function discounts(accountId: string, now: number) {
   };
 }
 
-export async function ghostStatus(accountId: string, now = Date.now()): Promise<GhostStatus> {
+export async function ghostStatus(accountId: string, now = Date.now(), ch: number | null = null): Promise<GhostStatus> {
   const week = ghostWeek(now);
   const clock = ghostClock(now);
-  const [{ staff, call }, bought, d, zone, me] = await Promise.all([callOf(accountId), getGhostStore().bought(week, accountId), discounts(accountId, now), houseZone(accountId), loadMe(getAccounts(), accountId, now)]);
+  const [staff, call, bought, d, zone, me] = await Promise.all([isStaff(accountId), ghostCallOf(ch), getGhostStore().bought(week, accountId), discounts(accountId, now), houseZone(accountId), loadMe(getAccounts(), accountId, now)]);
   const got = new Set(bought);
   const items = ghostStock(week).map((s): GhostRow => {
     const dd = d[s.kind];
@@ -92,13 +95,15 @@ export async function ghostStatus(accountId: string, now = Date.now()): Promise<
     items,
     points: me.points,
     house: zone !== null,
-    ...(staff ? { staff: true as const, call } : {}),
+    call,
+    ...(staff ? { staff: true as const } : {}),
   };
 }
 
 /** 장터에서 사기 (key = 품목 이름표) */
-export async function buyGhost(accountId: string, key: string, now = Date.now()): Promise<GhostBuyResult> {
-  const { call } = await callOf(accountId);
+export async function buyGhost(accountId: string, key: string, now = Date.now(), ch: number | null = null): Promise<GhostBuyResult> {
+  // 11/19 운영자가 그 채널에 부른 동안은 그 채널 모두가 살 수 있어요 (운영자 이벤트)
+  const call = await ghostCallOf(ch);
   if (!ghostOpen(now, call)) throw new HttpError(409, "GHOST_CLOSED", GHOST_CLOSED_MSG);
   const week = ghostWeek(now);
   const s = ghostStock(week).find((x) => x.key === key);
@@ -129,16 +134,20 @@ export async function buyGhost(accountId: string, key: string, now = Date.now())
     await store.release(week, accountId, key).catch(() => undefined);
     throw e;
   }
-  const status = await ghostStatus(accountId, now);
+  const status = await ghostStatus(accountId, now, ch);
   const me = await loadMe(getAccounts(), accountId, now);
   return { ...status, me, ...(grant ? { lookGrant: grant } : {}), got: ghostItemName(s) };
 }
 
-/** 운영자 시험: 유령선 부르기 (on) · 보내기 (off) · 시간표대로 (null). 운영자 계정이 아니면 403 */
-export async function callGhost(accountId: string, call: GhostCall, now = Date.now()): Promise<GhostStatus> {
+/**
+ * 운영자: 그 채널에 유령선 부르기 (on) · 보내기 (off) · 시간표대로 (null). 운영자 계정이 아니면 403.
+ * 11/19 그 채널 모두에게 보이고 탈 수 있고 장터도 열려요 (3시간 뒤 저절로 시간표대로). 다른 채널은 그대로예요
+ */
+export async function callGhost(accountId: string, call: GhostCall, ch: number, now = Date.now()): Promise<GhostStatus> {
   if (!(await isStaff(accountId))) throw new HttpError(403, "FORBIDDEN", "운영자 계정만 할 수 있어요.");
-  await getGhostStore().setCall(accountId, call);
-  return ghostStatus(accountId, now);
+  if (!isGraveChannel(ch)) throw new HttpError(400, "INVALID_INPUT", "채널 번호가 올바르지 않아요.");
+  await getGhostStore().setCall(ch, call);
+  return ghostStatus(accountId, now, ch);
 }
 
 /** 이 프로세스가 공지를 마친 주 (다음 주까지 저장소를 다시 보지 않아요) */

@@ -106,14 +106,14 @@ describe("놀이기구 2: 열기구", () => {
     expect(routeLength() / (BALLOON_FLIGHT_MS / 1000)).toBeLessThan(45);
   });
 
-  it("지나가는 곳: 묘역 → 광장 → 강 → 호수 → 동물원 → 언덕", () => {
+  it("지나가는 곳: 옛 묘역 → (등불 골목) → 광장 → 강 → 호수 → 동물원 → 별 보기 마당 (11/19 묘역이 언덕 서쪽으로)", () => {
     const seen: string[] = [];
     for (let ms = 0; ms <= BALLOON_FLIGHT_MS; ms += 500) {
       const s = balloonState(0, BALLOON_BOARD_MS + ms);
       const n = placeName(s.x, s.y);
       if (n && seen[seen.length - 1] !== n) seen.push(n);
     }
-    const order = ["옛 묘역", "모닥불 광장", "강", "호수", "동물원", "별 보기 언덕"].map((n) => seen.indexOf(n));
+    const order = ["옛 묘역", "모닥불 광장", "강", "호수", "동물원", "별 보기 마당"].map((n) => seen.indexOf(n));
     for (const i of order) expect(i).toBeGreaterThanOrEqual(0);
     expect(order[0]).toBeLessThan(order[1]);
     expect(order[1]).toBeLessThan(order[3]);
@@ -157,7 +157,7 @@ describe("놀이기구 2: 열기구", () => {
     expect(segs[segs.length - 1].s1).toBeCloseTo(routeLength(), 0);
     for (let i = 1; i < segs.length; i++) expect(segs[i].s0).toBeCloseTo(segs[i - 1].s1, 5);
     const names = segs.map((g) => g.name);
-    for (const n of ["옛 묘역", "모닥불 광장", "강", "호수", "동물원", "별 보기 언덕"]) expect(names).toContain(n);
+    for (const n of ["옛 묘역", "모닥불 광장", "강", "호수", "동물원", "별 보기 마당"]) expect(names).toContain(n);
     for (const ms of [20_000, 50_000, 80_000]) {
       const st = balloonState(0, BALLOON_BOARD_MS + ms);
       const s = balloonRouteS(st);

@@ -166,7 +166,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "tall",
     color: MIST,
     look: ["hat_halo"],
-    home: { x: 240, y: 140, r: 150 }, // 별 보기 언덕 (망원경·열기구)
+    home: { x: 290, y: 150, r: 100 }, // 별 보기 마당 (망원경·열기구 — 11/19 언덕 서쪽은 옛 묘역)
     perches: ["lB", "bL"],
     grass: 4,
     legMs: 46_000,
@@ -286,17 +286,17 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "cat",
     color: LAVENDER,
     look: ["hat_cat"],
-    home: { x: 240, y: 440, r: 160 }, // 옛 묘역
-    perches: ["bI", "bJ"],
+    home: { x: 280, y: 460, r: 180 }, // 11/19 등불 골목 (예전 옛 묘역 자리) — 동쪽 어귀 벤치·바닷가행 정류장 벤치에서 쉰다
+    perches: ["bA", "bU"],
     grass: 5,
     legMs: 36_000,
     speed: 34,
     moods: ["study", "music"],
     taste: "walk",
     lines: [
-      { t: "성황당은 옛 묘역 동문 옆에 있단다" },
-      { t: "떠난 묘비들은 성황당에서 쉬고 있지" },
-      { t: "성황당에서 다시 모셔 올 수도 있단다" },
+      { t: "옛 묘역은 이제 언덕 위로 올라갔단다" },
+      { t: "떠난 묘비 이야기는 옛 묘역 입구 팻말에 있지" },
+      { t: "언덕은 달빛 연못 쪽 입구로 올라가렴" },
       { t: "고양이를 쓰다듬으면 골골거린단다" },
       { t: "옛날 옛적에 말이야… 어디까지 했더라?" },
       { t: "이 묘역엔 이야기가 참 많이 잠들어 있어" },

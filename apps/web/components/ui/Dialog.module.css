@@ -104,6 +104,12 @@
   .dialog[data-kind="window"][data-fit] {
     height: fit-content;
   }
+
+  /* 11/19 사파리: fit-content 높이의 창 안에서 .frame { height: 100% }가 0으로 풀려 바탕이 사라지고 본문이 한 줄만 남았다
+     (크롬은 auto로 본다). 내용만큼인 창은 frame도 auto로 */
+  .dialog[data-kind="window"][data-fit] .frame {
+    height: auto;
+  }
 }
 
 /* 폰: 표준 창은 화면 전체 (머리말은 위에 고정, 본문만 스크롤) */

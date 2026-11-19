@@ -126,12 +126,12 @@ describe("운영자 출석·접속 보너스 없음", () => {
     }
   });
 
-  it("일반 계정은 그대로: 출석 도장 +10P, 접속 보너스 받기", async () => {
+  it("일반 계정은 그대로: 출석 도장(11/19 커피 1개), 접속 보너스 받기", async () => {
     vi.spyOn(Date, "now").mockReturnValue(NOON);
     const v = await newVisitor("출석손님");
     await clock(v, 60);
     const stamped = await bodyOf<CalendarClaimResponse>(claim.POST(call("/api/me/calendar/claim", { method: "POST", visitor: v })));
-    expect(stamped.earned).toEqual({ daily: 10, streak: 0, monthly: 0 });
+    expect(stamped.gifts.daily).toBe("커피 1개");
     expect(stamped.me.attendance).toMatchObject({ today: true, streak: 1 });
     const bonus = await bodyOf<StayBonusResponse>(stayBonus.POST(call("/api/me/stay-bonus", { method: "POST", visitor: v })));
     expect(bonus.earned).toBeGreaterThan(0);

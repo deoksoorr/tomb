@@ -18,13 +18,14 @@ import q from "./quest.module.css";
 // 11/15: 수집 의뢰판 (수집가 유령 · 어부 영감 창의 [의뢰] 칸). 오늘의 의뢰 7개 + 이번 주 큰 의뢰.
 // 진행은 가방 사본으로 바로 계산한다. [납품]을 누르면 낼 것을 고르는 칸이 열린다 (기본: 값이 가장 싼 것부터 — 바꿀 수 있다).
 // only = 그 갈래 의뢰만 (어부 영감은 물고기 의뢰만 받는다)
+// 11/19 viewOnly = 어디서든 보는 의뢰판 (바로 가기 [의뢰]): 진행·도장만 보이고 바꾸기·납품 단추는 없다 (납품은 마을 의뢰 게시판에서)
 
 const left = (ms: number) => {
   const m = Math.max(1, Math.ceil(ms / 60_000));
   return m >= 60 ? `${Math.floor(m / 60)}시간${m % 60 ? ` ${m % 60}분` : ""}` : `${m}분`;
 };
 
-export default function QuestBoard({ only }: { only?: LifeCat }) {
+export default function QuestBoard({ only, viewOnly = false }: { only?: LifeCat; viewOnly?: boolean }) {
   const { board, error } = useQuests();
   const { state } = useForage();
   const [open, setOpen] = useState<string | null>(null);
@@ -100,7 +101,7 @@ export default function QuestBoard({ only }: { only?: LifeCat }) {
     const have = questProgress(card, bag);
     const ready = have >= card.count;
     const isOpen = open === card.key;
-    const canReroll = board.rerollLeft > 0 && !card.done && card.key !== "w";
+    const canReroll = !viewOnly && board.rerollLeft > 0 && !card.done && card.key !== "w";
     return (
       <li key={card.key} className={q.item} data-done={card.done || undefined} data-weekly={card.key === "w" || undefined}>
         <div className={q.row}>
@@ -134,9 +135,11 @@ export default function QuestBoard({ only }: { only?: LifeCat }) {
                   ↻
                 </button>
               )}
-              <button type="button" className={cx(ui.button, ready && ui.primary, q.goBtn)} disabled={busy || !ready} onClick={() => toggle(card)} aria-expanded={isOpen}>
-                {isOpen ? "닫기" : "납품"}
-              </button>
+              {!viewOnly && (
+                <button type="button" className={cx(ui.button, ready && ui.primary, q.goBtn)} disabled={busy || !ready} onClick={() => toggle(card)} aria-expanded={isOpen}>
+                  {isOpen ? "닫기" : "납품"}
+                </button>
+              )}
             </span>
           )}
         </div>
@@ -166,19 +169,21 @@ export default function QuestBoard({ only }: { only?: LifeCat }) {
           오늘 {doneCount}/{QUEST_DAILY} 끝냄 · 지금까지 {board.total}개
         </span>
         <span>새 의뢰까지 {left(board.dayResetAt - now)}</span>
-        <span>{board.rerollLeft > 0 ? "바꾸기 ↻ 1번 남음" : "오늘 바꾸기 끝"}</span>
+        {!viewOnly && <span>{board.rerollLeft > 0 ? "바꾸기 ↻ 1번 남음" : "오늘 바꾸기 끝"}</span>}
       </div>
       <ul className={q.list} aria-label="수집 의뢰">
         {weekly && row(weekly)}
         {only && !daily.length && !weekly && <li className={q.empty}>오늘은 {CAT_LABEL[only]} 의뢰가 없어요. 다른 의뢰는 버스 정류장 마당 의뢰 게시판에 있어요.</li>}
         {daily.map(row)}
       </ul>
+      {!viewOnly && (
       <p className={ui.hint} role="status">
         {notice ??
           (only
             ? `${CAT_LABEL[only]} 의뢰만 보여요. 모든 의뢰는 버스 정류장 마당 의뢰 게시판에 있어요.`
             : "납품한 것은 가방에서 사라져요. 도장은 포인트로 바꿀 수 없고, 도장 교환소에서만 써요.")}
       </p>
+      )}
     </div>
   );
 }

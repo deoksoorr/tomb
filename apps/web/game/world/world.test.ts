@@ -12,7 +12,9 @@ import {
   GRID_COLS,
   GRID_ROWS,
   HILL,
-  HILL_STAIRS,
+  HILL_GATE,
+  LANE_LOTS,
+  MAIN_LOTS,
   HOUSE_LOTS,
   HOUSE_LOT_H,
   HOUSE_LOT_W,
@@ -155,14 +157,21 @@ describe("컴팩트한 묘지 마을 맵 (F1)", () => {
     expect(miss).toEqual([]);
   });
 
-  it("언덕은 계단으로만 오른다 (남·동쪽 절벽)", () => {
-    const [w, e, east] = cliffColliders();
-    expect(w.x + w.w).toBe(HILL_STAIRS.x);
-    expect(e.x).toBe(HILL_STAIRS.x + HILL_STAIRS.w);
-    expect(east.x).toBe(HILL.x + HILL.w);
-    expect(groundKind(Math.floor((HILL_STAIRS.x + 4) / 16), (HILL.y + HILL.h) / 16)).toBe("stairs");
-    expect(groundKind(Math.floor((HILL.x + 40) / 16), (HILL.y + HILL.h) / 16)).toBe("cliff");
-    expect(groundKind(5, 5)).toBe("hill");
+  it("11/19 언덕은 동쪽 입구(달빛 연못 쪽, 북쪽 길과 같은 줄)로만 오른다 — 남쪽 계단은 없앴다", () => {
+    const [south, eastTop, eastBottom] = cliffColliders();
+    // 남쪽 절벽은 끊김 없이 (등불 골목에서 바로 못 올라온다)
+    expect(south.x).toBe(HILL.x);
+    expect(south.x + south.w).toBe(HILL.x + HILL.w + 16);
+    for (let x = HILL.x; x < HILL.x + HILL.w; x += 16) expect(groundKind(Math.floor(x / 16), (HILL.y + HILL.h) / 16), `${x}`).toBe("cliff");
+    // 동쪽 비탈은 입구만 비운다
+    expect(eastTop.x).toBe(HILL.x + HILL.w);
+    expect(eastTop.y + eastTop.h).toBe(HILL_GATE.y);
+    expect(eastBottom.y).toBe(HILL_GATE.y + HILL_GATE.h);
+    expect(groundKind(Math.floor(HILL_GATE.x / 16), Math.floor((HILL_GATE.y + 8) / 16))).toBe("dirt");
+    expect(groundKind(Math.floor((HILL_GATE.x + 20) / 16), Math.floor((HILL_GATE.y + 8) / 16))).toBe("dirt"); // 북쪽 길과 이어진다
+    expect(groundKind(20, 5)).toBe("hill");
+    const ok = reachable();
+    expect(ok(HILL.x + 260, HILL.y + 100)).toBe(true);
   });
 
   it("소품이 묘비·좌석·필지·길 한가운데를 막지 않는다", () => {
@@ -189,17 +198,17 @@ describe("컴팩트한 묘지 마을 맵 (F1)", () => {
     expect(trees).toBeLessThan(140);
   });
 
-  it("무덤 컨셉이 맵 곳곳에: 오래된 묘비·촛불·땅안개·철책·종루가 묘역에 있다 (버드나무 묘역 자리는 동물원, 다리 건너 묘역 자리는 범퍼카장)", () => {
+  it("무덤 컨셉이 맵 곳곳에: 오래된 묘비·촛불·땅안개·철책·종루 (11/19 옛 묘역은 언덕 위로 — 버드나무 묘역 자리는 동물원, 다리 건너 묘역 자리는 범퍼카장)", () => {
     const props = allProps();
     const count = (k: string) => props.filter((p) => p.kind === k).length;
-    expect(count("oldGrave")).toBeGreaterThanOrEqual(18);
-    expect(count("candle")).toBeGreaterThanOrEqual(8);
-    expect(count("mist")).toBeGreaterThanOrEqual(10);
+    expect(count("oldGrave")).toBeGreaterThanOrEqual(2); // 까마귀 연못 둘레 (언덕 아래 예전 묘역의 오래된 묘비는 집터가 되며 치웠다)
+    expect(count("candle")).toBeGreaterThanOrEqual(4);
+    expect(count("mist")).toBeGreaterThanOrEqual(6);
     expect(count("crypt")).toBe(0); // 납골당은 버드나무 묘역과 함께 없어졌다
     expect(count("bell")).toBe(1);
     for (const a of GRAVE_AREAS) {
       const inA = props.filter((p) => inside(a.rect, p.x, p.y, 24));
-      for (const k of ["oldGrave", "candle", "mist"]) expect(inA.some((p) => p.kind === k), `${a.name} ${k}`).toBe(true);
+      for (const k of ["candle", "mist"]) expect(inA.some((p) => p.kind === k), `${a.name} ${k}`).toBe(true);
       // 철책이 묘역을 두르고, 문이 있다
       expect(FENCE_RUNS.filter((f) => inside(a.rect, f.x0, f.y0, 1)).length, a.name).toBeGreaterThanOrEqual(3);
     }
@@ -246,8 +255,8 @@ describe("광장 놀거리 (50번: 가운데에도 상호작용)", () => {
       expect(i.label.length).toBeGreaterThan(0);
       expect(inWater(i.ax, i.ay), i.id).toBe(false);
     }
-    // 11/16 바닷가행 정류장 자리의 매달릴 나무가 한 그루 빠졌다 (25)
-    expect(items.filter((i) => i.kind === "tree").length).toBeGreaterThanOrEqual(25);
+    // 11/16 바닷가행 정류장 자리의 매달릴 나무가 한 그루 빠졌다 (25), 11/19 언덕 서쪽이 옛 묘역이 되며 마른 나무 한 그루 (24)
+    expect(items.filter((i) => i.kind === "tree").length).toBeGreaterThanOrEqual(24);
   });
 
   it("광장 한가운데 큰 모닥불, 둘레에 그네·해먹·분수·놀거리·매달릴 나무가 고루 있다", () => {
@@ -311,24 +320,35 @@ describe("강·호수 (50번)", () => {
 });
 
 describe("주거 구역 (분양 마을을 메인 맵에)", () => {
-  it("필지 9곳 (11/15: 1~9번지만, 10·11·12번지 자리는 광장·부두): 겹치지 않고 주거 구역 안, 문 앞은 골목", () => {
-    expect(WORLD_LOTS).toBe(9);
+  it("필지 15곳 (1~9번지 주거 구역 + 11/19 10~15번지 등불 골목): 겹치지 않고 구역 안, 문 앞은 골목", () => {
+    expect(MAIN_LOTS).toBe(9);
+    expect(WORLD_LOTS).toBe(15);
     expect(CLOSED_LOTS).toEqual([]);
-    expect(HOUSE_LOTS.map((l) => l.lot)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(HOUSE_LOTS.map((l) => l.lot)).toEqual(Array.from({ length: 15 }, (_, i) => i + 1));
     const zone = ZONES.find((z) => z.id === "housing")!;
+    const lanes = ZONES.find((z) => z.id === "lanes")!;
     for (const l of HOUSE_LOTS) {
-      expect(inside(zone, l.x, l.y, 32) && inside(zone, l.x + HOUSE_LOT_W, l.y + HOUSE_LOT_H, 32), `lot${l.lot}`).toBe(true);
+      const z = l.lot > MAIN_LOTS ? lanes : zone;
+      expect(inside(z, l.x, l.y, 32) && inside(z, l.x + HOUSE_LOT_W, l.y + HOUSE_LOT_H, 32), `lot${l.lot}`).toBe(true);
       for (const m of HOUSE_LOTS) if (m !== l) expect(Math.abs(m.x - l.x) >= HOUSE_LOT_W || Math.abs(m.y - l.y) >= HOUSE_LOT_H).toBe(true);
       expect(inWater(l.door.x, l.door.y)).toBe(false);
     }
     expect(houseLot(0)).toBeNull();
     expect(houseLot(WORLD_LOTS + 1)).toBeNull();
     expect(houseLot(1)?.door).toEqual(HOUSE_LOTS[0].door);
-    for (const c of [10, 11, 12]) {
-      expect(houseLot(c)).toBeNull();
-      expect(isOpenLot(c)).toBe(true); // 2단지 번지로는 그대로
-      expect(lotInteractable(c, null)).toBeNull();
+    // 등불 골목: 3열 × 2줄, 문 앞은 골목(자갈 포석)
+    expect(LANE_LOTS).toHaveLength(6);
+    for (let lot = 10; lot <= 15; lot++) {
+      const l = houseLot(lot)!;
+      expect(l).toMatchObject(LANE_LOTS[lot - 10]);
+      expect(groundKind(Math.floor(l.door.x / 16), Math.floor((l.door.y + 12) / 16)), `lot${lot}`).toBe("cobble");
+      expect(lotInteractable(lot, null)).toMatchObject({ kind: "lot", lot });
     }
+    // 2단지 번지(16~)는 메인 맵에 없다 (닫았다)
+    expect(houseLot(16)).toBeNull();
+    expect(lotInteractable(16, null)).toBeNull();
+    // 등불 골목은 언덕(무덤)과 절벽·소나무 줄로 떨어져 있다
+    for (const l of LANE_LOTS) expect(l.y).toBeGreaterThanOrEqual(HILL.y + HILL.h + 32);
   });
 
   it("1~9번지는 번호도 자리도 그대로 (집이 있는 2·3·4번지 포함, 11/15 필지 정리 전과 같은 좌표)", () => {
@@ -424,44 +444,46 @@ describe("길찾기 격자 / 옛 좌표", () => {
 });
 
 describe("묘역은 옛 묘역 하나 (11/16 다리 건너 묘역은 범퍼카장 — 정원 = 49번 성불의 GRAVEYARD_CAPACITY)", () => {
-  it("칸 수 = GRAVEYARD_CAPACITY (8열 × 4줄), 모든 자리가 옛 묘역 안, 겹치지 않는다", () => {
+  it("칸 수 = GRAVEYARD_CAPACITY (11/19 4열 × 4줄 = 16, 언덕 서쪽), 모든 자리가 옛 묘역 안, 겹치지 않는다", () => {
     expect(GRAVE_AREAS.length).toBe(1);
-    expect(GRAVE_AREAS[0]).toMatchObject({ id: "A", name: "옛 묘역", cols: 8, rows: 4 });
+    expect(GRAVE_AREAS[0]).toMatchObject({ id: "A", name: "옛 묘역", cols: 4, rows: 4 });
+    expect(GRAVEYARD_CAPACITY).toBe(16);
+    expect(inside(HILL, GRAVEYARD_RECT.x, GRAVEYARD_RECT.y) && inside(HILL, GRAVEYARD_RECT.x + GRAVEYARD_RECT.w, GRAVEYARD_RECT.y + GRAVEYARD_RECT.h)).toBe(true);
     expect(GRAVE_AREAS.reduce((n, a) => n + a.cols * a.rows, 0)).toBe(GRAVEYARD_CAPACITY);
     expect(GRID_COLS * GRID_ROWS).toBe(GRAVEYARD_CAPACITY); // 옛 이름 호환
     for (let i = 0; i < GRAVEYARD_CAPACITY; i++) {
       const s = graveSlot(i);
       expect(s.area).toBe("A");
       expect(inside(GRAVEYARD_RECT, s.x, s.y, -8), `${i}`).toBe(true);
-      expect(inside(GRAVEYARD_RECT, s.x, s.y - 30, -2), `${i} 비석 꼭대기`).toBe(true);
-      expect(inside(GRAVEYARD_RECT, s.x, s.y + 22, -2), `${i} 서는 자리`).toBe(true);
+      expect(inside(GRAVEYARD_RECT, s.x, s.y - 20, -2), `${i} 비석 꼭대기 (0.7배)`).toBe(true);
+      expect(inside(GRAVEYARD_RECT, s.x, standSpot(s).y, -2), `${i} 서는 자리`).toBe(true);
     }
     expect(new Set(Array.from({ length: GRAVEYARD_CAPACITY }, (_, i) => `${graveSlot(i).x},${graveSlot(i).y}`)).size).toBe(GRAVEYARD_CAPACITY);
     expect(GRAVEYARD_RECT).toEqual(GRAVE_AREAS[0].rect);
   });
 
-  it("등록 순서 index % 32 → 줄마다 왼쪽부터, 결정적으로 돌려 쓴다 (묘비 데이터는 등록 순서만이라 옮길 것이 없다)", () => {
-    expect([0, 1, 7, 8, 31].map((i) => [graveSlot(i).row, graveSlot(i).col])).toEqual([
+  it("등록 순서 index % 16 → 줄마다 왼쪽부터, 결정적으로 돌려 쓴다 (묘비 데이터는 등록 순서만이라 옮길 것이 없다)", () => {
+    expect([0, 1, 3, 4, 15].map((i) => [graveSlot(i).row, graveSlot(i).col])).toEqual([
       [0, 0],
       [0, 1],
-      [0, 7],
+      [0, 3],
       [1, 0],
-      [3, 7],
+      [3, 3],
     ]);
     expect(graveSlot(0)).toEqual(graveSlot(GRAVEYARD_CAPACITY)); // 돌려 쓴다
     expect(graveSlot(45)).toEqual(graveSlot(13));
     expect(plotLabel(0)).toBe("옛 묘역 1번째 줄 · 1번 자리");
     expect(plotLabel(1)).toBe("옛 묘역 1번째 줄 · 2번 자리");
-    expect(plotLabel(9)).toBe("옛 묘역 2번째 줄 · 2번 자리");
-    // 가운데 통로(언덕 계단과 같은 줄) 양쪽으로 4기씩, 줄 사이에 서서 헌화할 틈
+    expect(plotLabel(5)).toBe("옛 묘역 2번째 줄 · 2번 자리");
+    // 가운데 자갈 통로 양쪽으로 2기씩 (두 열씩 짝), 줄 사이에 서서 헌화할 틈 (작아진 묘비 0.7배 기준)
     const a = GRAVE_AREAS[0];
-    const xs = Array.from({ length: 8 }, (_, i) => graveSlot(i).x);
-    expect(xs.filter((x) => x < a.aisleX)).toHaveLength(4);
-    for (let i = 1; i < 8; i++) expect(xs[i] - xs[i - 1]).toBeGreaterThanOrEqual(20);
-    expect(graveSlot(8).y - graveSlot(0).y).toBeGreaterThanOrEqual(48);
+    const xs = Array.from({ length: 4 }, (_, i) => graveSlot(i).x);
+    expect(xs.filter((x) => x < a.aisleX)).toHaveLength(2);
+    for (let i = 1; i < 4; i++) expect(xs[i] - xs[i - 1]).toBeGreaterThanOrEqual(20);
+    expect(graveSlot(4).y - graveSlot(0).y).toBeGreaterThanOrEqual(40);
   });
 
-  it("32기 모두 동물원·범퍼카장 밖 옛 묘역 안", () => {
+  it("모든 묘비가 동물원·범퍼카장 밖 옛 묘역 안", () => {
     for (let i = 0; i < GRAVEYARD_CAPACITY; i++) {
       const s = graveSlot(i);
       expect(inZoo(s.x, s.y, 8), `${i}`).toBe(false);
@@ -469,29 +491,32 @@ describe("묘역은 옛 묘역 하나 (11/16 다리 건너 묘역은 범퍼카�
     }
   });
 
-  it("동문 오솔길(둘째 줄)이 성황당 쪽 흙길과 이어진다", () => {
-    const gateTy = Math.floor(392 / 16);
-    expect(groundKind(Math.floor(440 / 16), gateTy)).toBe("dirt");
-    expect(groundKind(Math.floor(424 / 16), gateTy)).toBe("gravel");
-    expect(groundKind(Math.floor(graveSlot(15).x / 16), gateTy)).toBe("gravel");
-    expect(Math.floor((graveSlot(8).y + 16) / 16)).toBe(gateTy);
+  it("11/19 동문 오솔길(둘째 줄)이 별 보기 마당 흙길과 이어지고, 그 길이 언덕 입구로 내려간다", () => {
+    const gateTy = Math.floor((graveSlot(4).y + 16) / 16);
+    const right = GRAVEYARD_RECT.x + GRAVEYARD_RECT.w;
+    expect(groundKind(Math.floor((right + 4) / 16), gateTy)).toBe("dirt");
+    expect(groundKind(Math.floor((right - 8) / 16), gateTy)).toBe("gravel");
+    expect(groundKind(Math.floor(graveSlot(7).x / 16), gateTy)).toBe("gravel");
+    expect(groundKind(Math.floor((HILL_GATE.x - 40) / 16), Math.floor((HILL_GATE.y + 8) / 16))).toBe("dirt");
+    const ok = reachable();
+    for (let i = 0; i < GRAVEYARD_CAPACITY; i++) expect(ok(standSpot(graveSlot(i)).x, standSpot(graveSlot(i)).y), `${i}`).toBe(true);
   });
 
-  it("등록 순서대로 결정적으로 놓이고, 넘치면 가장 최근 32기만 자리를 돌려 쓴다", () => {
-    const l = buildLayout(graves(25), ["g7"]);
+  it("등록 순서대로 결정적으로 놓이고, 넘치면 가장 최근 GRAVEYARD_CAPACITY기만 자리를 돌려 쓴다", () => {
+    const l = buildLayout(graves(12), ["g7"]);
     expect(l.placements[0]).toMatchObject({ id: "g0", x: graveSlot(0).x, y: graveSlot(0).y, rank: -1, copy: false });
     expect(l.revive).toEqual([]); // 다시 피어날 자리는 없다
-    expect(l.count).toBe(25);
+    expect(l.count).toBe(12);
     const big = buildLayout(graves(40), []);
     expect(big.count).toBe(GRAVEYARD_CAPACITY);
-    expect(big.byId.has("g7")).toBe(false); // 가장 오래된 8기는 안 보인다 (곧 성불)
-    expect(big.byId.get("g39")).toMatchObject({ x: graveSlot(39 % 32).x, y: graveSlot(39 % 32).y });
+    expect(big.byId.has("g7")).toBe(false); // 가장 오래된 묘비는 안 보인다 (곧 성불)
+    expect(big.byId.get("g39")).toMatchObject({ x: graveSlot(39 % GRAVEYARD_CAPACITY).x, y: graveSlot(39 % GRAVEYARD_CAPACITY).y });
     // 같은 자리에 두 묘비가 겹치지 않는다
     expect(new Set(big.placements.map((p) => `${p.x},${p.y}`)).size).toBe(GRAVEYARD_CAPACITY);
   });
 
   it("nearestGrave / graveAt", () => {
-    const l = buildLayout(graves(30), []);
+    const l = buildLayout(graves(14), []);
     const p = l.placements[12];
     const s = standSpot(p);
     expect(nearestGrave(l, s.x, s.y, 26)?.p.id).toBe("g12");

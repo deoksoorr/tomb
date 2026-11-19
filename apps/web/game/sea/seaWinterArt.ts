@@ -279,8 +279,9 @@ export function ribbonLamp(m: Img): void {
 
 // ── 크리스마스 눈사람·선물 자리 (구역마다 하나씩, 앵커 둘레에서 가장 가까운 빈 눈밭) ──
 /** 앵커: 정류장 옆 풀밭 · 백사장 서쪽·가운데·동쪽 (선베드 사이 빈 모래) */
+// 11/19 정류장 옆 풀밭에 11번 터가 생겨 눈사람은 터 아래로, 선물은 6번 터와 정류장 길 사이로
 const SNOWMAN_ANCHORS: readonly Pt[] = [
-  { x: 1650, y: 200 },
+  { x: 1626, y: 292 },
   { x: 250, y: 420 },
   { x: 712, y: 384 },
   { x: 1700, y: 372 },
@@ -288,7 +289,7 @@ const SNOWMAN_ANCHORS: readonly Pt[] = [
 const GIFT_ANCHORS: readonly Pt[] = [
   { x: 1456, y: 384 },
   { x: 742, y: 420 },
-  { x: 1610, y: 210 },
+  { x: 1520, y: 240 },
 ];
 
 let spots: { snowmen: Pt[]; gifts: Pt[] } | null = null;

@@ -235,7 +235,8 @@ function contract(make: () => Kit) {
   const claim = (id: string, ip: string, day: string, yesterday: string, monthDays = 30) =>
     accounts.claimAttend(id, ip, day, yesterday, monthDays, 6);
 
-  it("출석 달력: 1시간(머무르기 6번) 전엔 못 받고, 하루 1번, 연속 7일째 +30, 끊기면 1부터", async () => {
+  // 11/19 출석 보상은 포인트 대신 사냥 아이템 (라우트가 lib/rpgGift로 넣는다) → 저장소는 도장·연속·개근 표시만, 포인트는 0
+  it("출석 달력: 1시간(머무르기 6번) 전엔 못 받고, 하루 1번, 연속 7일째까지 세고, 끊기면 1부터 (포인트 0)", async () => {
     const id = newId();
     const d = days(9);
     await accounts.enter(id, { name: "새벽코더" }, 1);
@@ -243,21 +244,24 @@ function contract(make: () => Kit) {
     expect(await claim(id, "ip-a", d[0], "")).toEqual({ ok: false, reason: "stay", stayTicks: 5 });
     expect((await accounts.get(id, d[0], 0)).stayTicks).toBe(5);
     const earned: number[] = [];
+    const streaks: number[] = [];
     for (let i = 0; i < 7; i++) {
       await stay(id, d[i], i === 0 ? 1 : 6);
       const r = await claim(id, `ip-${nanoid(6)}`, d[i], d[i - 1] ?? "");
       if (!r.ok) throw new Error(r.reason);
       earned.push(r.earned.daily + r.earned.streak);
+      streaks.push(r.streak);
     }
-    expect(earned).toEqual([10, 10, 10, 10, 10, 10, 40]);
+    expect(earned).toEqual([0, 0, 0, 0, 0, 0, 0]);
+    expect(streaks).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(await claim(id, "ip-a", d[6], d[5])).toEqual({ ok: false, reason: "already" });
     expect(await accounts.get(id, d[6], 0)).toMatchObject({ streak: 7, name: "새벽코더", lastAttend: d[6] });
     const cal = await accounts.attendCalendar(id, "202611");
-    expect(cal).toEqual({ days: { "01": 10, "02": 10, "03": 10, "04": 10, "05": 10, "06": 10, "07": 40 }, monthBonus: null, tiers: {} });
+    expect(cal).toEqual({ days: { "01": 0, "02": 0, "03": 0, "04": 0, "05": 0, "06": 0, "07": 0 }, monthBonus: null, tiers: {} });
     // 하루 건너뛰면 다시 1일째
     await stay(id, d[8], 6);
     const again = await claim(id, "ip-b", d[8], d[7]);
-    expect(again).toMatchObject({ ok: true, streak: 1, earned: { daily: 10, streak: 0, monthly: 0 } });
+    expect(again).toMatchObject({ ok: true, streak: 1, earned: { daily: 0, streak: 0, monthly: 0 } });
   });
 
   it("출석 달력 보상은 많이 번 날에도 받는다 (항목 하루 최대만)", async () => {
@@ -265,24 +269,24 @@ function contract(make: () => Kit) {
     await fillDay(id);
     await stay(id, DAY, 6);
     expect((await accounts.get(id, DAY, 0)).stayTicks).toBe(6);
-    expect(await claim(id, "ip-c", DAY, "20261107")).toMatchObject({ ok: true, earned: { daily: 10 } });
+    expect(await claim(id, "ip-c", DAY, "20261107")).toMatchObject({ ok: true, earned: { daily: 0 } });
   });
 
   // 11/18 회사·집에서 여럿이 한 IP로 한다 → 같은 IP 계정 수로 출석 포인트를 막지 않는다
-  it("같은 IP의 계정 여럿도 모두 출석 포인트를 받는다", async () => {
+  it("같은 IP의 계정 여럿도 모두 출석 도장을 받는다", async () => {
     const ip = `ip-${nanoid(6)}`;
     const ids = Array.from({ length: 8 }, newId);
-    const earned = [];
+    const ok = [];
     for (const id of ids) {
       await stay(id, DAY, 6);
       const r = await claim(id, ip, DAY, "20261107");
-      earned.push(r.ok ? r.earned.daily : -1);
+      ok.push(r.ok);
     }
-    expect(earned).toEqual(Array<number>(8).fill(10));
-    expect((await accounts.attendCalendar(ids.at(-1)!, "202611")).days).toEqual({ "08": 10 });
+    expect(ok).toEqual(Array<boolean>(8).fill(true));
+    expect((await accounts.attendCalendar(ids.at(-1)!, "202611")).days).toEqual({ "08": 0 });
   });
 
-  it("한 달 개근: 그달 모든 날을 찍은 날 한 번 +200 (달력 개편 전 출석도 이어서 센다)", async () => {
+  it("한 달 개근: 그달 모든 날을 찍은 날 한 번 표시 (11/19 포인트 0 — 결재 서류는 라우트가) (달력 개편 전 출석도 이어서 센다)", async () => {
     const id = newId();
     // 11/1~11/5는 개편 전 자동 출석으로 받았다 (마지막 출석 11/5, 5일 연속)
     await kit.setLegacyAttend(id, "20261105", 5);
@@ -300,11 +304,11 @@ function contract(make: () => Kit) {
       if (i < 29) expect(r.earned.monthly).toBe(0);
       streak = r.streak;
     }
-    expect(monthly).toBe(200);
+    expect(monthly).toBe(0);
     expect(streak).toBe(30);
     const cal = await accounts.attendCalendar(id, "202611");
     expect(Object.keys(cal.days)).toHaveLength(30);
-    expect(cal.monthBonus).toBe(200);
+    expect(cal.monthBonus).toBe(0);
   });
 
   // ── 출석 구간 코디 보상 (lib/attendTiers.ts) ──
@@ -839,7 +843,8 @@ function contract(make: () => Kit) {
     await accounts.earn(a, "flower", "20261116");
     const mine = (await accounts.pointRank(10_000, a, week)).mine;
     expect(mine?.points).toBe(2 + 2 + 5);
-    expect((await accounts.pointRank(10_000, b, week)).mine?.points).toBe(20 + 10);
+    // 11/19 출석은 포인트 0 (사냥 아이템으로)
+    expect((await accounts.pointRank(10_000, b, week)).mine?.points).toBe(20);
     expect((await accounts.pointRank(10_000, a, weekOfDay("20261116"))).mine?.points).toBe(2);
     expect((await accounts.pointRank(10_000, a)).mine?.points).toBe(11); // 전체 = 모은 포인트
     const { rows } = await accounts.pointRank(10_000, null, week);

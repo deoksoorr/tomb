@@ -1,4 +1,4 @@
-import { GRAVE_AREAS, HILL, HILL_CLIFF, HILL_STAIRS, HOUSE_LOT_H, HOUSE_LOT_W, HOUSE_LOTS, MAP_HEIGHT, MAP_WIDTH, PONDS, RIVER_HALF_W, RIVER_PATH, STEP_STONE_R, STEP_STONES, TELESCOPE, TELESCOPE_2, TILE } from "@tomb/protocol";
+import { GRAVE_AREAS, GRAVE_SCALE, HILL, HILL_CLIFF, HILL_GATE, HOUSE_LOT_H, HOUSE_LOT_W, HOUSE_LOTS, MAP_HEIGHT, MAP_WIDTH, PONDS, RIVER_HALF_W, RIVER_PATH, STEP_STONE_R, STEP_STONES, TELESCOPE, TELESCOPE_2, TILE } from "@tomb/protocol";
 import { DECKS, deckRails, ELLIPSES, ellipseD, groundKind, PLAZA_FIRE, PLAZA_RECT, PLAZA_TREES, riverDist, type GroundKind, type Rect } from "../world/layout";
 import { isSnowy, type MapConcept } from "@/lib/mapConcept";
 import { css, darken, hash2, lighten, makeCanvas, mix, rng, vnoise, type Color } from "./pixel";
@@ -520,24 +520,30 @@ function drawGraveyards(ctx: CanvasRenderingContext2D, area: Rect, winter = fals
       ctx.fillRect(g.x + s - area.x, g.y + s - area.y, 1, g.h - 2 * s);
       ctx.fillRect(g.x + g.w - 1 - s - area.x, g.y + s - area.y, 1, g.h - 2 * s);
     }
-    // 봉분 (묘비 받침 뒤, 위쪽으로 길쭉한 흙더미)
+    // 봉분 (묘비 받침 뒤, 위쪽으로 길쭉한 흙더미). 11/19 묘비와 같이 GRAVE_SCALE배로 작게
+    const k = GRAVE_SCALE;
+    const rx = Math.round(9 * k);
+    const ry0 = Math.round(-16 * k);
+    const ry1 = Math.round(12 * k);
+    const ryc = 2 * k;
+    const ryr = 14 * k;
     for (let r = 0; r < a.rows; r++)
       for (let c = 0; c < a.cols; c++) {
         const x = a.x0 + c * a.dx + (c >= a.block ? a.aisle : 0);
         const y = a.y0 + r * a.dy;
-        for (let yy = -16; yy <= 12; yy++)
-          for (let xx = -9; xx <= 9; xx++) {
-            const e = (xx * xx) / 81 + ((yy + 2) * (yy + 2)) / 196;
+        for (let yy = ry0; yy <= ry1; yy++)
+          for (let xx = -rx; xx <= rx; xx++) {
+            const e = (xx * xx) / (rx * rx) + ((yy + ryc) * (yy + ryc)) / (ryr * ryr);
             if (e > 1) continue;
             const wx = x + xx;
             const wy = y + yy;
             if (wx < area.x || wy < area.y || wx >= area.x + area.w || wy >= area.y + area.h) continue;
             if (winter) {
               // 눈 덮인 봉분: 위는 하얗고 아래 가장자리는 푸른 그늘
-              px(ctx, wx - area.x, wy - area.y, e > 0.7 ? (yy > 0 ? 0x93a5ba : SNOW.lo) : yy < -6 ? SNOW.hi : SNOW.mid);
+              px(ctx, wx - area.x, wy - area.y, e > 0.7 ? (yy > 0 ? 0x93a5ba : SNOW.lo) : yy < -6 * k ? SNOW.hi : SNOW.mid);
               continue;
             }
-            const shade = e > 0.7 ? 0x2f332a : yy < -6 ? 0x4a4e3c : 0x40443a;
+            const shade = e > 0.7 ? 0x2f332a : yy < -6 * k ? 0x4a4e3c : 0x40443a;
             px(ctx, wx - area.x, wy - area.y, hash2(wx, wy, 87) < 0.08 ? C.moss : shade);
           }
       }
@@ -553,9 +559,8 @@ function drawHill(ctx: CanvasRenderingContext2D, area: Rect, winter = false): vo
   if (!overlaps({ x: H.x, y: H.y, w: H.w + TILE, h: H.h + HILL_CLIFF }, area)) return;
   const bottom = H.y + H.h;
   const right = H.x + H.w;
-  // 가장자리 턱 (남쪽·동쪽) — 계단 자리만 비운다
+  // 가장자리 턱 (남쪽·동쪽) — 11/19 계단은 없앴다 (남쪽 턱은 끊김 없이), 동쪽은 입구(HILL_GATE)만 비운다
   for (let x = H.x; x < right; x++) {
-    if (x >= HILL_STAIRS.x && x < HILL_STAIRS.x + HILL_STAIRS.w) continue;
     if (x < area.x || x >= area.x + area.w) continue;
     for (const [dy, c] of winter ? WINTER_LIP : SUMMER_LIP) {
       const y = bottom + dy;
@@ -564,6 +569,7 @@ function drawHill(ctx: CanvasRenderingContext2D, area: Rect, winter = false): vo
   }
   for (let y = H.y; y < bottom; y++) {
     if (y < area.y || y >= area.y + area.h) continue;
+    if (y >= HILL_GATE.y && y < HILL_GATE.y + HILL_GATE.h) continue;
     for (const [dx, c] of winter ? WINTER_LIP : SUMMER_LIP) {
       const x = right + dx;
       if (x >= area.x && x < area.x + area.w) px(ctx, x - area.x, y - area.y, c);

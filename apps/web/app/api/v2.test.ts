@@ -102,6 +102,8 @@ describe("계정·출석", () => {
       nameChange: { nextAllowedAt: 0, cost: 0 },
       tutorialDone: false,
       dye: {},
+      // 11/19 리텐션: 처음 만든 세션은 오늘 꾸러미 하나(밀린 것 없음), 첫 걸음 미션 0칸, 오늘의 할 일
+      retain: { path: { got: 0, owed: 1, canClaim: true, seen: false }, first: { mask: 0 }, todo: expect.objectContaining({ bonus: false, stamps: 0 }) },
     });
   });
 

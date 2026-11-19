@@ -3,13 +3,14 @@ import { env } from "../env";
 import { redisClient } from "../redisUsage";
 import type { GhostCall } from "./ghostShip";
 
-// 11/17 유령선 장터 저장소: 물건마다 한 사람 1개 (그 주 산 물건 표) · 운영자 시험 부르기.
+// 11/17 유령선 장터 저장소: 물건마다 한 사람 1개 (그 주 산 물건 표) · 운영자 부르기.
 // Redis: 사기 = SADD 1번 (처음이면 1 → 차감, 차감이 실패하면 SREM으로 풀어요), 보기 = SMEMBERS 1번 (장터 창을 열 때만).
 //  ghost:buy:{week}:{accountId}  SET 산 물건 이름표 (EX 9일 — 주가 키에 들어 있어요)
-//  ghost:call:{accountId}        STRING "on" | "off" (EX 3시간 — 운영자 시험이 저절로 끝나요)
+//  ghost:callch:{ch}             STRING "on" | "off" (EX 3시간 — 운영자 부르기가 저절로 끝나요).
+//    11/19 그 채널 모두에게 (예전엔 ghost:call:{accountId}로 그 운영자 화면에만 보여서 다른 사람은 못 봤어요)
 
 export const ghostBuyKey = (week: string, accountId: string) => `ghost:buy:${week}:${accountId}`;
-export const ghostCallKey = (accountId: string) => `ghost:call:${accountId}`;
+export const ghostCallKey = (ch: number) => `ghost:callch:${ch}`;
 const BUY_TTL_SEC = 9 * 24 * 3600;
 export const GHOST_CALL_TTL_SEC = 3 * 3600;
 
@@ -20,13 +21,14 @@ export interface GhostStore {
   release(week: string, accountId: string, key: string): Promise<void>;
   /** 그 주 산 물건 이름표 */
   bought(week: string, accountId: string): Promise<string[]>;
-  getCall(accountId: string): Promise<GhostCall>;
-  setCall(accountId: string, call: GhostCall): Promise<void>;
+  /** 그 채널에 운영자가 부른 상태 (없으면 null = 시간표대로) */
+  getCall(ch: number): Promise<GhostCall>;
+  setCall(ch: number, call: GhostCall): Promise<void>;
 }
 
 export class MemoryGhostStore implements GhostStore {
   private buys = new Map<string, Set<string>>();
-  private calls = new Map<string, { v: "on" | "off"; until: number }>();
+  private calls = new Map<number, { v: "on" | "off"; until: number }>();
   async claim(week: string, accountId: string, key: string) {
     const k = ghostBuyKey(week, accountId);
     const set = this.buys.get(k) ?? new Set<string>();
@@ -41,13 +43,13 @@ export class MemoryGhostStore implements GhostStore {
   async bought(week: string, accountId: string) {
     return [...(this.buys.get(ghostBuyKey(week, accountId)) ?? [])];
   }
-  async getCall(accountId: string): Promise<GhostCall> {
-    const c = this.calls.get(accountId);
+  async getCall(ch: number): Promise<GhostCall> {
+    const c = this.calls.get(ch);
     return c && c.until > Date.now() ? c.v : null;
   }
-  async setCall(accountId: string, call: GhostCall) {
-    if (call) this.calls.set(accountId, { v: call, until: Date.now() + GHOST_CALL_TTL_SEC * 1000 });
-    else this.calls.delete(accountId);
+  async setCall(ch: number, call: GhostCall) {
+    if (call) this.calls.set(ch, { v: call, until: Date.now() + GHOST_CALL_TTL_SEC * 1000 });
+    else this.calls.delete(ch);
   }
 }
 
@@ -68,13 +70,13 @@ export class RedisGhostStore implements GhostStore {
   async bought(week: string, accountId: string) {
     return ((await this.redis.smembers(ghostBuyKey(week, accountId))) ?? []).map(String);
   }
-  async getCall(accountId: string): Promise<GhostCall> {
-    const v = await this.redis.get<string>(ghostCallKey(accountId));
+  async getCall(ch: number): Promise<GhostCall> {
+    const v = await this.redis.get<string>(ghostCallKey(ch));
     return v === "on" || v === "off" ? v : null;
   }
-  async setCall(accountId: string, call: GhostCall) {
-    if (call) await this.redis.set(ghostCallKey(accountId), call, { ex: GHOST_CALL_TTL_SEC });
-    else await this.redis.del(ghostCallKey(accountId));
+  async setCall(ch: number, call: GhostCall) {
+    if (call) await this.redis.set(ghostCallKey(ch), call, { ex: GHOST_CALL_TTL_SEC });
+    else await this.redis.del(ghostCallKey(ch));
   }
 }
 

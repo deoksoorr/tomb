@@ -13,6 +13,7 @@ import {
   dyeRows,
   enhanceFailBonus,
   enhanceRows,
+  inheritRows,
   forageFacts,
   goblinFacts,
   gradeRows,
@@ -165,7 +166,14 @@ export default function OddsDialog({ section, onClose }: { section: OddsSection;
         </Section>
 
         <Section id="enhance" title="강화" lead={`실패할 때마다 다음 성공 확률이 ${enhanceFailBonus()}씩 올라요. 성공하면 처음 확률로 돌아가요.`}>
-          <OddsTable head={["목표", "성공", "실패하면"]} rows={enhanceRows()} />
+          <OddsTable head={["목표", "성공", "실패하면", "포인트"]} rows={enhanceRows()} />
+          <h4 className={styles.sub}>강화 승계</h4>
+          <p className={styles.lead}>
+            같은 부위의 더 높은 직급 세트 장비로만 옮겨요. 받은 뒤 기본 능력치가 재료보다 떨어지지 않는 가장 낮은 단계로 옮겨져서, 직급 차이가 클수록 단계는 많이 줄어요.
+            재료 장비는 사라져요. 상점 장비는 사원급보다 아래 직급으로 쳐요.
+          </p>
+          <OddsTable head={inheritRows().head} rows={inheritRows().rows} />
+          <p className={styles.note}>비용은 받는 단계까지 한 번에 성공했을 때의 포인트를 더한 값이고, 결재 서류는 받는 단계 수만큼 들어요.</p>
         </Section>
 
         <Section id="stars" title="별자리 잇기" lead={`성적이 ${pct(STARS_POTION_PERF)}를 넘으면 물약을 한 번 굴려요. 물약 종류는 사냥터와 같아요.`}>
@@ -205,7 +213,9 @@ export default function OddsDialog({ section, onClose }: { section: OddsSection;
         <Section id="goblin" title="황금 고블린">
           <ul className={styles.facts}>
             <li>사람이 있는 채널마다 {g.gap}에 한 번쯤 나타나서 {g.life} 머물러요.</li>
-            <li>보상은 {g.points} 사이에서 고르게 정해져요. 평균 {g.avg}예요.</li>
+            <li>
+              보상은 {g.normal} 확률로 {g.points} 사이에서 고르게(10P 단위), {g.jackpotChance} 확률로 대박 {g.jackpot}이에요. 평균 {g.avg}예요.
+            </li>
             <li>가장 먼저 잡은 한 사람만 받아요.</li>
           </ul>
         </Section>

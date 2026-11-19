@@ -18,7 +18,10 @@ import { interactLabel, isTouchUi, keyJosa } from "../input/keyHint";
 import type { KeyAction } from "../input/Keyboard";
 import { SPOT_TAKEN_HINT, SPOT_TAKEN_TOAST } from "../logic/spots";
 import { besideFriend, findFollowed, FRIEND_ARRIVED, followDeadline } from "../logic/friendSpot";
+import { standUpSpot } from "../logic/standUp";
 import { emoSlotOfKey } from "../logic/emoBoard";
+import { atExitDoor, type DoorGap } from "../logic/doorExit";
+import { setDoorHint } from "../logic/doorHint";
 import type { MoveInput } from "../logic/movement";
 import { RoomPresence } from "../net/RoomPresence";
 import type { NetPose } from "../net/sendThrottle";
@@ -121,7 +124,7 @@ const pianoPrompt = (touch: boolean) => (touch ? "연주하기 · 움직이면 �
 
 /** 화면에 뜰 수 있는 안내 문구 전부 (비트맵 글꼴에 미리 글자를 올린다). 데스크톱·터치 문구 둘 다 */
 const allPrompts = () =>
-  [...Object.values(USE_LABEL), ...Object.values(SPOT_TAKEN_HINT), "벽난로 불 끄기", "스탠드 끄기", "창문 닫기", pianoPrompt(false), pianoPrompt(true), "E · 일어나기"].join("");
+  [...Object.values(USE_LABEL), ...Object.values(SPOT_TAKEN_HINT), "벽난로 불 끄기", "스탠드 끄기", "창문 닫기", pianoPrompt(false), pianoPrompt(true), "E · 일어나기", "E · 나가기"].join("");
 
 type ItemView = { p: Placed; img: Phaser.GameObjects.Image; variant: string };
 type Using = { spot: HouseSpot; pre: { x: number; y: number }; at: number; next: number; note: number };
@@ -152,6 +155,8 @@ export class HouseScene extends Phaser.Scene {
   private sunPools!: Phaser.GameObjects.Graphics;
   private prompt!: Phaser.GameObjects.BitmapText;
   private usePrompt!: Phaser.GameObjects.BitmapText;
+  /** 현관 문 칸 (앞벽의 빈 두 칸, 문턱 = 앞벽 아래) — 문 앞에서 E로 나간다 (logic/doorExit) */
+  private exitGap: DoorGap = { x0: 0, x1: 0, y: 0 };
   private titleLabel!: Phaser.GameObjects.BitmapText;
   private sign = { x: 0, y: 0 };
   private readonly move: MoveInput = { ax: 0, ay: 0, run: false };
@@ -164,7 +169,6 @@ export class HouseScene extends Phaser.Scene {
   private follow: { name: string; until: number } | null = null;
   private readonly view = new Phaser.Geom.Rectangle();
   private exiting = false;
-  private armed = false;
 
   // ── 3번 가구 쓰기 ──
   private sfx!: HouseSfx;
@@ -238,7 +242,6 @@ export class HouseScene extends Phaser.Scene {
     this.tier = tierById(data.house.tier) ?? tierById("small")!;
     this.plan = roomPlan(this.tier);
     this.exiting = false;
-    this.armed = false;
     this.editing = false;
     this.selected = null;
     this.trialU = null;
@@ -301,8 +304,10 @@ export class HouseScene extends Phaser.Scene {
       .setOrigin(0.5, 1)
       .setTint(0xf2ead3)
       .setDepth(DEPTH.labels);
-    const [g0] = gateTiles(t);
+    const [g0, g1] = gateTiles(t);
     const outY = this.oy + t.h * T + FRONT_H;
+    // 문턱 = 앞벽 윗줄 → 판정은 현관 앞 칸(방 안 마지막 줄)부터 현관·마당까지 (DOOR_PAD 한 칸 둘레)
+    this.exitGap = { x0: this.ox + g0.x * T, x1: this.ox + (g1.x + 1) * T, y: this.oy + t.h * T };
     this.sign = { x: this.ox + g0.x * T - 14, y: outY + 18 };
     this.add.rectangle(this.sign.x, this.sign.y - 6, 2, 12, 0x553722).setDepth(this.sign.y);
     this.add.rectangle(this.sign.x, this.sign.y - 13, 14, 9, 0x9c6d45).setDepth(this.sign.y + 0.1).setStrokeStyle(1, 0x1a1612);
@@ -1484,6 +1489,16 @@ export class HouseScene extends Phaser.Scene {
     if (!friend) return;
     this.follow = null;
     if (this.using) this.exitSpot();
+    const others = [...pres.remotes.values()].map((r) => ({ x: r.x, y: r.y }));
+    const spot = besideFriend({ x: friend.x, y: friend.y }, others, this.footBlocked());
+    this.player.warp(spot.x, spot.y, time, NO_SEATS);
+    this.player.faceTo(friend.x, friend.y, time);
+    pres.client.warp(spot.x, spot.y);
+    bridge.emit("friend:notice", { message: FRIEND_ARRIVED });
+  }
+
+  /** 발 상자(8×5)가 방 밖이거나 벽·가구에 닿으면 막힌 칸 (친구 옆 서기·일어나 설 자리) */
+  private footBlocked(): (x: number, y: number) => boolean {
     const boxes: { x: number; y: number; w: number; h: number }[] = [];
     for (const g of [this.wallBodies, this.itemBodies])
       for (const z of g.getChildren()) {
@@ -1491,18 +1506,20 @@ export class HouseScene extends Phaser.Scene {
         if (b) boxes.push({ x: b.x, y: b.y, w: b.width, h: b.height });
       }
     const bounds = this.physics.world.bounds;
-    // 발 상자(8×5)가 방 밖이거나 벽·가구에 닿으면 막힌 칸
-    const blocked = (x: number, y: number) =>
+    return (x, y) =>
       x - 4 < bounds.x || x + 4 > bounds.right || y - 5 < bounds.y || y > bounds.bottom || boxes.some((b) => x - 4 < b.x + b.w && x + 4 > b.x && y - 5 < b.y + b.h && y > b.y);
-    const others = [...pres.remotes.values()].map((r) => ({ x: r.x, y: r.y }));
-    const spot = besideFriend({ x: friend.x, y: friend.y }, others, blocked);
-    this.player.warp(spot.x, spot.y, time, NO_SEATS);
-    this.player.faceTo(friend.x, friend.y, time);
-    pres.client.warp(spot.x, spot.y);
-    bridge.emit("friend:notice", { message: FRIEND_ARRIVED });
   }
 
-  /** 자리에서 일어나 원래 서 있던 곳으로 */
+  /**
+   * 일어나 설 자리 (game/logic/standUp): 앉기 전 자리가 비어 있으면 그대로, 다른 사람이 서 있거나 가구·벽에 막혔으면
+   * 그 둘레·가구 앞쪽의 빈 칸 (11/19 "앉기 전 자리에 누가 있으면 안 내려가져요")
+   */
+  private standSpot(u: Using): { x: number; y: number } {
+    const others = this.presence ? [...this.presence.remotes.values()].map((r) => ({ x: r.x, y: r.y })) : [];
+    return standUpSpot(u.pre, { x: u.spot.x, y: u.spot.y }, others, this.footBlocked());
+  }
+
+  /** 자리에서 일어나 원래 서 있던 곳(막혔으면 그 둘레 빈 칸)으로 */
   private exitSpot(): void {
     const u = this.using;
     if (!u) return;
@@ -1513,7 +1530,8 @@ export class HouseScene extends Phaser.Scene {
       this.player.leaveAnchor(now, true);
       this.seatReq.stand();
     }
-    this.player.warp(u.pre.x, u.pre.y, now, NO_SEATS);
+    const to = this.standSpot(u);
+    this.player.warp(to.x, to.y, now, NO_SEATS);
   }
 
   private onSeatDenied(id: string): void {
@@ -1808,6 +1826,10 @@ export class HouseScene extends Phaser.Scene {
       bridge.emit("house:guestbook");
       return;
     }
+    if (a === "interact" && this.atExit()) {
+      this.leave();
+      return;
+    }
     if (a === "interact" && this.target) {
       this.use(this.target);
       return;
@@ -1840,7 +1862,8 @@ export class HouseScene extends Phaser.Scene {
       const u = this.using;
       this.using = null;
       if (u.spot.kind !== "chair") this.seatReq.stand();
-      this.player.warp(u.pre.x, u.pre.y, time, NO_SEATS);
+      const to = this.standSpot(u);
+      this.player.warp(to.x, to.y, time, NO_SEATS);
     }
     const cam = this.cameras.main;
     // 휠·핀치 줌 (편집 중에는 경계 없이 그 자리에서)
@@ -1921,9 +1944,11 @@ export class HouseScene extends Phaser.Scene {
     this.lighting.end();
 
     if (this.editing) return;
-    // 문 밖 아래 끝까지 내려가면 나간다
-    if (this.player.y < this.H - 22) this.armed = true;
-    if (this.armed && this.player.y > this.H - 12 && this.move.ay > 0) this.leave();
+  }
+
+  /** 현관 문 앞에 서 있다 (E 나가기). 11/19 걸어서 저절로 나가기는 없앴다 */
+  private atExit(): boolean {
+    return !this.editing && !this.using && atExitDoor(this.player.x, this.player.y, this.exitGap);
   }
 
   private updateUsePrompt(s: number, nearSign: boolean): void {
@@ -1932,12 +1957,20 @@ export class HouseScene extends Phaser.Scene {
     let x = 0;
     let y = 0;
     let grey = false;
+    let door = false;
     if (this.using && !this.editing) {
       const u = this.using;
       text = u.spot.use === "piano" ? pianoPrompt(isTouchUi()) : interactLabel("일어나기");
       x = this.player.x;
       y = this.player.y + 14;
       p.setOrigin(0.5, 0);
+    } else if (!nearSign && this.atExit()) {
+      door = true;
+      // 이름표 위 (현관·마당은 화면 아래 끝이라 발밑에 두면 잘린다)
+      text = interactLabel("나가기");
+      x = this.player.x;
+      y = this.player.y - 30;
+      p.setOrigin(0.5, 1);
     } else if (this.target && !nearSign) {
       const t = this.target;
       grey = !!t.spot && this.takenByOther(t.spot.id);
@@ -1947,6 +1980,7 @@ export class HouseScene extends Phaser.Scene {
       if (t.use === "window") p.setOrigin(0.5, 0);
       else p.setOrigin(0.5, 1);
     }
+    setDoorHint(door ? "나가기" : null);
     if (!text) {
       p.setVisible(false);
       return;

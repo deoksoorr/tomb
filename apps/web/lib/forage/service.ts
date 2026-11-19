@@ -1,4 +1,5 @@
 import { nanoid } from "nanoid";
+import { questHook, todoTickOf } from "../retainQuest";
 import { campOpen } from "../camp";
 import { seaOpen } from "../sea";
 import { anyFishingWaterOf, SEA_DIG_CLOSED_MSG, seaDigOpen, seaFishDryAt, seaFishingSpotById, seaFishWet, SEA_TIDE_OUT_MSG, tideLevel } from "@tomb/protocol";
@@ -213,7 +214,9 @@ export async function reelIn(acct: string, token: string, ok: boolean, now = Dat
   if (since < reelMinMs(t.p ?? 1) - REEL_SLACK_MS) throw new HttpError(422, "TOO_FAST", "너무 빨리 감았어요. 이번 물고기는 놓쳤어요.");
   if (since > HOOK_WINDOW_MS + REEL_MAX_MS) throw new HttpError(410, "TICKET_EXPIRED", "너무 오래 걸려서 물고기가 도망갔어요.");
   if (payload.g !== undefined) return reelSunken(store, acct, payload, now, ip);
-  const got = await store.grant(acct, day, "fish", [{ id: payload.sp, size: payload.sz }], STACK_MAX);
+  // 11/18 오늘 미션 「물고기 3마리」면 같은 스크립트에서 진행도 (lib/retainQuest). 11/19 바닷가 자리면 「바닷가에서 물고기 2마리」도
+  const quest = questHook(acct, day, anyFishingWaterOf(t.x) === "sea" ? ["seaFish", "fish"] : "fish");
+  const got = await store.grant(acct, day, "fish", [{ id: payload.sp, size: payload.sz }], STACK_MAX, undefined, quest);
   // 최대어 랭킹: 크기는 시작할 때 서버가 굴린 값 (가방이 가득 차 못 넣었어도 잡은 기록은 남는다). 랭킹 저장 실패가 낚시를 막지는 않는다
   // 운영자 계정은 순위에 남기지 않는다
   if (got?.[0] && payload.sz > 0 && !(await isStaff(acct)))
@@ -221,7 +224,7 @@ export async function reelIn(acct: string, token: string, ok: boolean, now = Dat
       .record(acct, payload.sp, payload.sz, kstWeek(now))
       .catch((e) => console.error("[forage] 최대어 기록 실패", e));
   const dex = await dexGainOf(store, acct, got ?? [], ip, now);
-  return { result: got?.[0] ?? null, ...withDex(dex), state: await forageState(acct, now, store) };
+  return { result: got?.[0] ?? null, ...withDex(dex), state: await forageState(acct, now, store), ...todoTickOf(quest, day) };
 }
 
 // ── 자동 낚시 (lib/forage/auto.ts) ──
@@ -374,12 +377,21 @@ export async function finishGather(acct: string, token: string, result: BugsResu
     if (elapsed < (t.m ?? 0) - GATHER_SLACK_MS) throw new HttpError(422, "TOO_FAST", "다 캐기 전에 끝냈어요. 이번엔 빈손이에요.");
     items = payload.items ?? [];
   }
-  const got = await store.grant(acct, kstDay(now), "gather", items, STACK_MAX, { window: t.w, node: n.id });
+  // 11/18 오늘 미션 「채집 2번」 (하나라도 챙긴 채집만 센다 — lib/retainQuest). 11/19 바닷가·캠핑장 지점이면 그 장소 미션 먼저
+  const quest = questHook(acct, kstDay(now), n.map === "sea" ? ["seaGather", "gather"] : n.map === "camp" ? ["campGather", "gather"] : "gather");
+  const got = await store.grant(acct, kstDay(now), "gather", items, STACK_MAX, { window: t.w, node: n.id }, quest);
   if (!got) throw new HttpError(409, "NODE_EMPTY", "이미 캔 자리예요.");
   const dex = await dexGainOf(store, acct, got, ip, now);
   // 11/15 곤충 채집은 잡은 만큼 포인트도 (「곤충 채집」 항목, 11/19 하루 한도 없음)
   const points = bugPoints > 0 ? (await earnPointsOnly(acct, "bugs", bugPoints, ip)).earned : 0;
-  return { items: got satisfies CatchResult[], ...withDex(dex), state: await forageState(acct, now, store), ...(message ? { message } : {}), ...(n.kind === "bug" ? { points } : {}) };
+  return {
+    items: got satisfies CatchResult[],
+    ...withDex(dex),
+    state: await forageState(acct, now, store),
+    ...(message ? { message } : {}),
+    ...(n.kind === "bug" ? { points } : {}),
+    ...todoTickOf(quest, kstDay(now)),
+  };
 }
 
 // ── NPC 판매 ──
@@ -418,7 +430,8 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
   const capped = value < units.reduce((n, u) => n + u.price, 0);
   if (!value) return { sold: {}, earned: 0, capped: true, state: toState(acct, snap, now), me: await loadMe(getAccounts(), acct, now) };
   if (!(await store.remove(acct, plan))) throw new HttpError(409, "BAG_CHANGED", "가방이 바뀌었어요. 다시 골라 주세요.");
-  const { earned, paid, me } = await earnPoints(acct, source, value, ipHash, boost);
+  // 11/19 오늘의 할 일 「물고기나 채집물 팔기」면 같은 적립 스크립트에서 진행도 (내 정보를 다시 읽어 화면이 바로 맞춘다)
+  const { earned, paid, me } = await earnPoints(acct, source, value, ipHash, boost, questHook(acct, day, "sell"));
   if (paid < value) {
     // 그 사이 다른 적립으로 지갑이 찼다 → 값을 못 받은 만큼(싼 것부터) 가방에 되돌린다
     const soldUnits = Object.entries(plan)

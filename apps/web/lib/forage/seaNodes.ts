@@ -17,7 +17,7 @@ export const SEA_LAND_NODES: readonly GatherNode[] = [
   seaNode("bug", "meadow", 416, 150),
   seaNode("bug", "meadow", 560, 262),
   seaNode("bug", "meadow", 1196, 140),
-  seaNode("bug", "meadow", 120, 220),
+  seaNode("bug", "meadow", 60, 204), // 11/19 7번 터가 생겨 서쪽 끝으로
   seaNode("bug", "forest", 1300, 230),
   seaNode("bug", "forest", 1560, 250),
   seaNode("bug", "meadow", 90, 436),
@@ -27,7 +27,7 @@ export const SEA_LAND_NODES: readonly GatherNode[] = [
   seaNode("herb", "meadow", 1180, 236),
   seaNode("herb", "meadow", 796, 240),
   seaNode("herb", "meadow", 380, 352),
-  seaNode("herb", "forest", 1640, 200),
+  seaNode("herb", "forest", 1700, 290), // 11/19 11번 터가 생겨 아래로
   // 모래 파 보기 (4): 선베드 줄을 비킨 백사장
   seaNode("dig", "lakeside", 714, 392),
   seaNode("dig", "lakeside", 1044, 350),

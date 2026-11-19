@@ -33,6 +33,9 @@ import {
   ZOO_PETS,
 } from "@tomb/protocol";
 import { ATTEND_STAY_TEXT } from "@/lib/attendStay";
+import { DAY_RESET_TEXT } from "@/lib/gameDay";
+import { FIRST_STEPS, PATH, PATH_NAME, PATH_WEAR_DAYS, TODO_BONUS_GIFT, TODO_GIFT, TODO_PROT_EVERY } from "@/lib/retain";
+import { rewardText } from "@/lib/rewardText";
 import { ATTEND_TIER_GUIDE } from "@/lib/attendTiers";
 import { EARN_RULES } from "@/lib/economy";
 import { DYE_TIME_MS } from "@/lib/dye/palette";
@@ -123,6 +126,7 @@ const CONTROLS: ReactNode[][] = [
   ["확대·축소", "마우스 휠 또는 ＋/－", "두 손가락 또는 ＋/－"],
   ["둘러보기", "오른쪽 버튼으로 끌기", "두 손가락으로 끌기"],
   ["시점 되돌리기", "[내 캐릭터로]", "[내 캐릭터로]"],
+  ["촬영 모드 (사진 찍기)", "K 또는 오른쪽 위 카메라 단추 (Esc로 끝내기)", "메뉴의 촬영 모드"],
   ["확성기 기록", "왼쪽 위 (음악 아래)", "조이스틱 위"],
   ["친구", "캐릭터를 누르고 [친구 신청]", "캐릭터를 누르고 [친구 신청]"],
 ];
@@ -161,9 +165,9 @@ const places = (touch: boolean): ReactNode[][] => [
   ["수집가", "오리 연못 북서쪽 둑", "약초, 광석, 발굴품, 곤충을 사 가요"],
   ["별 보기 언덕", "마을 북서쪽 언덕 꼭대기", "망원경 두 대로 별자리 잇기를 해요. 한 대에 한 사람씩 볼 수 있어요."],
   ["사냥터", "메뉴의 사냥터", "혼자나 같이 사냥하고 미니게임도 해요"],
-  ["분양 사무소", "메뉴의 집·분양 마을", "내 집을 받아 꾸며요"],
-  ["성황당", "옛 묘역 동문 옆", "묘역을 떠난 묘비 모시기"],
-  ["황금 고블린", "가끔 마을 어딘가", "가장 먼저 잡으면 보너스"],
+  ["분양 사무소", "메뉴의 집", "내 집을 받아 꾸며요"],
+  ["성황당", "옛 묘역 입구 팻말 (달빛 연못 옆)", "묘역을 떠난 묘비 모시기"],
+  ["황금 고블린", "가끔 마을 어딘가", "가장 먼저 잡으면 300~1,000P, 가끔 대박 2,000P"],
   [
     "마을 주민",
     `${RESIDENTS.slice(0, 2)
@@ -299,7 +303,8 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
           <h3>포인트</h3>
           <Table
             head={["이렇게 하면", "포인트", "하루 최대"]}
-            rows={EARN_RULES.map((r) => [
+            // 11/19 출석 보상은 사냥 아이템이라 포인트 표에서 뺀다 (출석 달력에 따로 보인다)
+            rows={EARN_RULES.filter((r) => r.dailyMax !== 0).map((r) => [
               <>
                 {r.label}
                 <span className={styles.note}>{r.note}</span>
@@ -317,6 +322,22 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
               ["출석", `마을에 ${ATTEND_STAY_TEXT} 머물면 그날 도장을 찍어요.`],
               ["이번 달 출석 보상", ATTEND_TIER_GUIDE],
               ["랭킹", "포인트, 사냥, 낚시, 꾸미기, 집 꾸미기, 헌화 순위가 있어요. 포인트 순위는 써도 줄지 않아요. 주간 순위는 월요일 새벽 5시에 새로 시작해요. 운영자는 순위에 안 들어가요."],
+            ]}
+          />
+        </section>
+
+        <section>
+          <h3>새로 온 이웃에게</h3>
+          <p>
+            「{PATH_NAME}」 {PATH.length}개가 가입한 날부터 하루 하나씩 열려요. 못 받은 날 것은 쌓여 있다가 한꺼번에 받고, 7개를 다 받으면 끝나요.
+            꾸러미는 {DAY_RESET_TEXT}에 열리고, 꾸미기는 {PATH_WEAR_DAYS}일 동안 입어요.
+          </p>
+          <Table head={["날", "꾸러미"]} rows={PATH.map((g) => [`${g.n}일째`, g.title ? `칭호 「${g.name}」와 꽃 머리핀(${PATH_WEAR_DAYS}일), 보호 문서 1장` : g.wear ? `${g.name}(${PATH_WEAR_DAYS}일)` : g.name])} />
+          <Table
+            head={["이것도 있어요", "내용"]}
+            rows={[
+              ["첫 걸음 미션", `마을에서 할 수 있는 것 ${FIRST_STEPS.length}가지를 하나씩 알려 줘요. 처음 할 때마다 100~300P를 주고, 다 하면 1,000P와 고양이 귀 하루권, 결재 서류, 보호 문서를 더 줘요. 다 받으면 사라져요.`],
+              ["오늘 미션", `날마다 새벽 5시에 미션 3개가 무작위로 나와요 (마을 하나 · 놀이 하나 · 사냥·나들이 하나). [안내]를 누르면 그곳까지 화살표가 이어져요. 하나에 ${rewardText(TODO_GIFT)}, 미션 셋을 다 하면 ${rewardText(TODO_BONUS_GIFT)}과 도장을 더 받아요. 도장 ${TODO_PROT_EVERY}개마다 보호 문서를 더 줘요.`],
             ]}
           />
         </section>
@@ -457,8 +478,8 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
           />
           <ul className={styles.points}>
             <li>
-              묘역은 언덕 아래 옛 묘역 한 곳이에요. 채널마다 {GRAVEYARD_CAPACITY}개까지 세울 수 있어요. 자리가 모자라면 오래된 묘비부터 조금
-              일찍 성불해요.
+              묘역은 별 보기 언덕 서쪽 옛 묘역 한 곳이에요. 언덕은 달빛 연못 쪽 입구로 올라가요. 채널마다 {GRAVEYARD_CAPACITY}개까지 세울 수
+              있어요. 자리가 모자라면 오래된 묘비부터 조금 일찍 성불해요.
             </li>
             <li>다시 모신 묘비는 성불 기간을 그때부터 다시 세요. 디자인은 내 묘비 상세에서도 바꿀 수 있어요.</li>
           </ul>

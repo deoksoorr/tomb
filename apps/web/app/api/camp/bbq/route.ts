@@ -8,7 +8,9 @@ import { env } from "@/lib/env";
 import { handler, HttpError, json, notFound } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
+import { bumpQuest, questHook, todoTickOf } from "@/lib/retainQuest";
 import { getBbqDay, spendPoints } from "@/lib/store";
+import { kstDay } from "@/lib/store/accounts";
 import { readBody } from "@/lib/validate";
 
 // stand = 산 곳 (그릴·자판기). 옛 클라이언트는 보내지 않는다 → 그때는 따지지 않는다
@@ -55,15 +57,19 @@ export const POST = handler(async (req) => {
   }
   const me = await spendPoints(visitorId, item.price, `camp:bbq ${item.name}`);
   const now = Date.now();
+  // 11/19 오늘 미션 「캠핑장·바닷가에서 한 끼 사 먹기」 (그날 미션일 때만 진행 칸 +1 — lib/retainQuest)
+  const quest = questHook(visitorId, kstDay(now), "bbq");
+  await bumpQuest(quest).catch((e) => console.error("[camp/bbq] 미션 진행 실패", e));
+  const tick = todoTickOf(quest, kstDay(now));
   // 마실 거리(취기): 지금 취기 + 1 (10분에 1씩 깬다) → 증서에 단계·마신 시각, 끝나는 시각 = 다 깨는 시각
   if (item.kind === "drunk") {
     const drunk = drinkOne(await days.drunk(visitorId), now);
     await days.setDrunk(visitorId, drunk);
     const until = drunkUntil(drunk);
     const grant = await signGrant(env.joinSecret(), { kind: "bbq", visitorId, item: item.id, until, nonce: nanoid(12), exp: Math.floor(now / 1000) + GRANT_TTL_SEC, lv: drunk.lv, at: drunk.at });
-    return json<BbqResponse>({ me, grant, item: item.id, until, lv: drunk.lv, at: drunk.at });
+    return json<BbqResponse>({ me, grant, item: item.id, until, lv: drunk.lv, at: drunk.at, ...tick });
   }
   const until = now + item.ms;
   const grant = await signGrant(env.joinSecret(), { kind: "bbq", visitorId, item: item.id, until, nonce: nanoid(12), exp: Math.floor(now / 1000) + GRANT_TTL_SEC });
-  return json<BbqResponse>({ me, grant, item: item.id, until });
+  return json<BbqResponse>({ me, grant, item: item.id, until, ...tick });
 });

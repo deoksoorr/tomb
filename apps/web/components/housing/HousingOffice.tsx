@@ -129,6 +129,12 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
       const myHouseId = mine?.id ?? null;
       // 메인 맵 주거 구역의 번지면: 창을 닫고 월드가 그 번지를 비춘다 (분양 마을 씬으로 가지 않는다)
       const lot = spawnLot ?? (mine?.ch === ch ? mine.lot : null);
+      // 11/19 2단지는 닫았다: 메인 맵에 없는 내 집(필지 대기·옮기기 전 2단지 번지)은 마을 대신 집 안으로 바로
+      if (!inScene.current && mine && lot !== null && (lot === 0 || lot > WORLD_LOTS)) {
+        setOverlay(null);
+        setMode({ kind: "house", house: mine, mine: true, edit: false });
+        return;
+      }
       if (!inScene.current && (lot === null || lot <= WORLD_LOTS)) {
         emitVillage(village, myHouseId);
         if (lot !== null) bridge.emit("world:lot", { lot, label: mine?.ch === ch && mine.lot === lot ? "내 집" : `${lot}번지` });

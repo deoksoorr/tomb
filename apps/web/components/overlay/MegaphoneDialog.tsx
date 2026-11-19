@@ -23,13 +23,16 @@ const timeText = (at: number) => new Date(at).toLocaleTimeString("ko-KR", { hour
 
 const KINDS = ["mega_ch", "mega_all"] as const;
 
-/** 23번 외치기 창 (확성기 창의 [외치기]·가방에서 연다). 열려 있을 때만 그린다 */
-export default function MegaphoneLayer({ channel, onOpenShop }: { channel: number; onOpenShop: () => void }) {
+/**
+ * 23번 외치기 창 (확성기 창의 [외치기]·가방에서 연다). 열려 있을 때만 그린다.
+ * 11/19 [상점에서 사기] = onOpenShop(고른 확성기): 그 자리에서 상점 창을 띄우지 않고 잡화점까지 걸어가 확성기 탭으로 연다 (GameShell goShopFor)
+ */
+export default function MegaphoneLayer({ channel, onOpenShop }: { channel: number; onOpenShop: (itemId: string) => void }) {
   const { composing } = useMegaphone();
   return composing ? <MegaphoneDialog channel={channel} onOpenShop={onOpenShop} onClose={() => megaphoneStore.compose(false)} /> : null;
 }
 
-function MegaphoneDialog({ channel, onOpenShop, onClose }: { channel: number; onOpenShop: () => void; onClose: () => void }) {
+function MegaphoneDialog({ channel, onOpenShop, onClose }: { channel: number; onOpenShop: (itemId: string) => void; onClose: () => void }) {
   const { me } = useMe();
   const { entries } = useMegaphone();
   // 31번 운영자 계정은 확성기가 무료 (서버가 가방에서 꺼내지 않는다)
@@ -116,7 +119,7 @@ function MegaphoneDialog({ channel, onOpenShop, onClose }: { channel: number; on
                 className={cx(ui.button, ui.primary)}
                 onClick={() => {
                   onClose();
-                  onOpenShop();
+                  onOpenShop(itemId);
                 }}
               >
                 상점에서 사기

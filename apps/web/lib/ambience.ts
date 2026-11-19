@@ -14,14 +14,16 @@ export const TIME_PHASES: readonly TimePhase[] = ["dawn", "day", "dusk", "night"
 export const WEATHERS: readonly Weather[] = ["clear", "cloudy", "fog", "rain", "snow"];
 
 export const PHASE_LABELS: Record<TimePhase, string> = { dawn: "새벽", day: "낮", dusk: "해질녘", night: "밤" };
-/** 11/19 낮 앞부분(7~10시)은 화면 글자만 「아침」 (하늘 색·phase는 낮 그대로) */
-export const MORNING_END_HOUR = 10;
-/** 사람에게 보여 주는 시간대 이름 (아침 포함) */
+/** 11/19 낮(phase "day", 7~17.5시)을 화면에서는 아침·점심·오후로 나눈다 (마을 생활·게임 규칙은 phase 그대로) */
+export const MORNING_END_HOUR = 11;
+export const NOON_END_HOUR = 14;
+/** 사람에게 보여 주는 시간대 이름 */
 export function skyLabel(a: { phase: TimePhase; kstHour: number }): string {
-  return a.phase === "day" && a.kstHour < MORNING_END_HOUR ? "아침" : PHASE_LABELS[a.phase];
+  if (a.phase !== "day") return PHASE_LABELS[a.phase];
+  return a.kstHour < MORNING_END_HOUR ? "아침" : a.kstHour < NOON_END_HOUR ? "점심" : "오후";
 }
-/** 안내용 시간대 이름 차례 (새벽·아침·낮·해질녘·밤) */
-export const SKY_LABEL_ORDER = ["새벽", "아침", "낮", "해질녘", "밤"] as const;
+/** 안내용 시간대 이름 차례 */
+export const SKY_LABEL_ORDER = ["새벽", "아침", "점심", "오후", "해질녘", "밤"] as const;
 export const WEATHER_LABELS: Record<Weather, string> = { clear: "맑음", cloudy: "흐림", fog: "안개", rain: "비", snow: "눈" };
 
 export type Season = "spring" | "summer" | "autumn" | "winter";
@@ -67,15 +69,22 @@ type Key = Omit<Palette, "skyTop" | "skyBottom" | "worldTint" | "celestial"> & {
 // 밤도 지형·묘비·길이 또렷이 보일 만큼만 어둡게 (분위기는 푸른 틴트와 빛으로 낸다)
 const NIGHT: Key = { skyTop: 0x14161a, skyBottom: 0x1e1f1b, worldTint: 0xa4aecb, darkness: 0.2, lightGlow: 1, fireflies: 1 };
 const DAWN: Key = { skyTop: 0x2b2735, skyBottom: 0x4a3a3e, worldTint: 0xd9cad6, darkness: 0.08, lightGlow: 0.5, fireflies: 0.2 };
-const DAY: Key = { skyTop: 0x39403a, skyBottom: 0x4a5146, worldTint: 0xe8ece0, darkness: 0, lightGlow: 0.1, fireflies: 0 };
+// 11/19 아침·점심·오후: 아침은 맑고 살짝 푸른 빛, 점심은 가장 밝고 깨끗하게, 오후는 노릇한 햇빛
+const MORNING: Key = { skyTop: 0x34404a, skyBottom: 0x4a5a5c, worldTint: 0xe6eef0, darkness: 0, lightGlow: 0.15, fireflies: 0 };
+const NOON: Key = { skyTop: 0x3c463c, skyBottom: 0x525a4a, worldTint: 0xf2f2e8, darkness: 0, lightGlow: 0.05, fireflies: 0 };
+const AFTERNOON: Key = { skyTop: 0x403a30, skyBottom: 0x5a4e3a, worldTint: 0xf2e4c8, darkness: 0, lightGlow: 0.15, fireflies: 0 };
 const DUSK: Key = { skyTop: 0x2a1f24, skyBottom: 0x5a3a2c, worldTint: 0xeac0aa, darkness: 0.1, lightGlow: 0.7, fireflies: 0.5 };
 
 /** 하루를 도는 키프레임 (KST 시각). 사이 구간은 선형 보간 */
 const KEYFRAMES: readonly [number, Key][] = [
   [4.5, NIGHT],
   [6, DAWN],
-  [7.5, DAY],
-  [17, DAY],
+  [7.5, MORNING],
+  [10, MORNING],
+  [11.5, NOON],
+  [13.5, NOON],
+  [15, AFTERNOON],
+  [17, AFTERNOON],
   [18.5, DUSK],
   [20, NIGHT],
 ];
@@ -200,6 +209,7 @@ export const TOD_HOURS = {
   dawn: 5.7,
   morning: 8,
   day: 12,
+  afternoon: 15.5,
   sunset: 18.1,
   evening: 19.9,
   night: 22,
@@ -208,7 +218,7 @@ export const TOD_HOURS = {
 
 /**
  * QA용 덮어쓰기: `?time=dawn|day|dusk|night|0~23` , `?weather=clear|cloudy|fog|rain|snow` , `?season=spring|summer|autumn|winter`
- * `?tod=dawn|morning|day|sunset|evening|night|deepnight` 는 time 보다 먼저 본다 (바깥 7구간 색 확인용)
+ * `?tod=dawn|morning|day|afternoon|sunset|evening|night|deepnight` 는 time 보다 먼저 본다 (바깥 8구간 색 확인용)
  */
 export function parseAmbienceOverride(search: string, qaFlag?: string): AmbienceOverride {
   // 실서버에서는 시험 값을 무시해요 (lib/qaUrl)

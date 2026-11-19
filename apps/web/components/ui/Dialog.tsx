@@ -27,6 +27,8 @@ type Props = {
   backdropClose?: boolean;
   /** 주면 Esc가 바로 닫지 않고 이걸 부른다 (예: "그만둘까요?" 확인). ×는 그대로 onClose */
   onEscape?: () => void;
+  /** 창 하나만의 추가 클래스 (예: 사냥터 창은 데스크톱에서 세로로 더 길게 — HuntLobby). 크기 규칙은 되도록 kind로 */
+  className?: string;
   /** @deprecated 창 크기는 `kind`로만 정한다 (값은 무시된다 — 예전 코드 호환용) */
   size?: "sm" | "md" | "lg";
   /** @deprecated 모든 표준 창이 고정 크기다 (값은 무시된다 — 예전 코드 호환용) */
@@ -38,7 +40,7 @@ type Props = {
  * 열릴 때 포커스를 가졌던 요소로 닫힐 때 돌려준다. 열려 있는 동안 게임 키 입력을 막는다.
  * 마운트 = 열림. 닫으려면 부모가 언마운트한다 (onClose).
  */
-export default function Dialog({ title, onClose, children, kind = "window", fitHeight = false, closable = true, backdropClose = true, onEscape }: Props) {
+export default function Dialog({ title, onClose, children, kind = "window", fitHeight = false, className, closable = true, backdropClose = true, onEscape }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const pressedBackdrop = useRef(false);
   const titleId = useId();
@@ -73,7 +75,7 @@ export default function Dialog({ title, onClose, children, kind = "window", fitH
   return (
     <dialog
       ref={ref}
-      className={styles.dialog}
+      className={cx(styles.dialog, className)}
       data-kind={kind}
       data-fit={fitHeight || undefined}
       aria-labelledby={titleId}

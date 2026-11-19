@@ -1,3 +1,4 @@
+import type { TodoTick } from "../retain";
 import type { CottageStyleId, HouseExteriorMap, HouseSort, PlotTierId } from "./catalog";
 
 // 하우징 API 계약 (서버·클라이언트 공용). 계정 id는 절대 내보내지 않는다: 집 id는 계정 id의 HMAC이다.
@@ -15,7 +16,7 @@ export type PublicHouse = {
   ch: number;
   /** 그 채널 분양 마을의 번지 (1부터. 1..WORLD_LOTS는 메인 맵, 그보다 크면 2단지) */
   lot: number;
-  /** 11/16 "sea" = 달물결 포구 오두막 (lot = 포구 터 번호 1..6). 없으면 마을 집 */
+  /** 11/16 "sea" = 달물결 포구 오두막 (lot = 포구 터 번호 1..11). 없으면 마을 집 */
   zone?: "sea";
   /** 오두막 겉모습 (zone sea만) */
   style?: CottageStyleId;
@@ -76,8 +77,8 @@ export type MyHouseResponse = {
 export type HouseDetailResponse = { house: PublicHouse };
 export type HouseViewerResponse = { mine: boolean; likedToday: boolean };
 export type HouseListResponse = { sort: HouseSort; houses: HouseSummary[]; generatedAt: number };
-export type HouseLikeResponse = { likes: number; score: number; earnedOwner: number };
-export type GuestbookResponse = { entries: GuestEntryView[] };
+export type HouseLikeResponse = { likes: number; score: number; earnedOwner: number; todo?: TodoTick };
+export type GuestbookResponse = { entries: GuestEntryView[]; todo?: TodoTick };
 
 /**
  * 관리자 목록. lastSeenAt = 주인의 마지막 접속 (0 = 기록 없음), staff = 운영자 집 (비우지 않는다),

@@ -11,8 +11,9 @@ import type { ResumeState } from "@/lib/resume";
 import type { SoundMix } from "@/lib/soundMix";
 import type { IncomingChatLine } from "@/game/logic/chatLog";
 import type { RideStatus } from "@/lib/ridePolicy";
-import type { Ambience } from "@/lib/ambience";
+import type { Ambience, Weather } from "@/lib/ambience";
 import type { MapConcept } from "@/lib/mapConcept";
+import type { FirstGuideTarget } from "@/lib/retain";
 
 // React(UI 오버레이) ↔ Phaser(게임) 사이의 유일한 통로. 양쪽은 서로를 직접 import하지 않는다.
 // "sticky" 이벤트는 마지막 값을 기억해서, 늦게 구독한 쪽도 last()로 현재 값을 읽을 수 있다.
@@ -68,6 +69,8 @@ export type GameEvents = {
   "game:rest": { on: boolean };
   /** 근접 툴팁 대상 묘비 (없으면 null). 모바일 상호작용 버튼 표시용 */
   "grave:near": { graveId: string } | null;
+  /** 11/19 문 앞이면 폰 [상호작용] 단추 이름 (logic/doorHint, sticky) */
+  "door:near": "들어가기" | "나가기" | null;
   /** 앉을 수 있는 빈 좌석 근처(없으면 null). 게임은 좌석 옆에 "X 앉기" 안내를, UI는 모바일 앉기 버튼을 강조한다 (sticky) */
   "seat:near": { seatId: string; kind: "bench" | "chair" } | null;
   /** 24번 벤치 상태 (sticky): seated = 의자·벤치에 앉아 있어 고를 수 있음, mood = 지금 고른 상태 (SEAT_MOODS id, 없으면 "") */
@@ -83,7 +86,9 @@ export type GameEvents = {
    * 11/16 [사냥] 버튼 → 사냥터 입구까지 걷기 상태 (sticky, lib/huntWalk). started = 걷기 시작, arrived = 도착 (곧 portal:open),
    * cancelled = 방향키·조이스틱·다시 누르기 등으로 그만둠, unreachable = 길이 없음(또는 도중에 막힘)
    */
-  "portal:walk": { kind: "hunt"; status: "started" | "arrived" | "cancelled" | "unreachable" };
+  "portal:walk": { kind: "hunt" | "shop"; status: "started" | "arrived" | "cancelled" | "unreachable" };
+  /** 11/19 첫 걸음 길 안내 결과 (route:guide): arrived = 목적지에 닿아 지웠다, missing = 그런 곳이 지금 없다(채집 지점·이웃 집), unreachable = 걸어서 갈 길이 없다 */
+  "route:state": { target: FirstGuideTarget; status: "arrived" | "missing" | "unreachable" };
   "net:status": NetStatus;
   "net:stats": NetStats;
   /** 일부러 옮기는 채널 이동이 로비 확인을 통과해 지금 채널을 떠난다 → 장면이 지금 자리를 기억하고 새 채널 처음 자리로 */
@@ -127,7 +132,7 @@ export type GameEvents = {
   /** 상점 맵 안에서 주인장과 상호작용 → UI가 상점 창을 연다 */
   "shop:open": undefined;
   /**
-   * 월드의 특별한 장소와 상호작용: 사냥터 입구 / 분양 사무소(하우징) / 성황당 → UI가 해당 창을 연다.
+   * 월드의 특별한 장소와 상호작용: 사냥터 입구 / 분양 사무소(하우징) / 옛 묘역 입구 팻말(shrine, 11/19 성황당 대신) → UI가 해당 창을 연다.
    * 주거 구역(메인 맵의 분양 마을): 집 문이면 houseId(그 집으로 들어가기), 빈 필지 팻말이면 lot(그 번지로 분양 문의)
    */
   "portal:open": { kind: "hunt" | "housing" | "shrine" | "telescope" | "wish" | "haunt" | "tower" | "lottery"; houseId?: string; lot?: number; zone?: "sea" };
@@ -137,6 +142,10 @@ export type GameEvents = {
   "sea:lot": { lot: number };
   /** 22번 황금 고블린을 내가 가장 먼저 잡았다 → UI가 증서로 /api/goblin에 보상을 받는다 */
   "goblin:grant": { id: string; grant: string; points: number };
+  /** 11/19 황금 고블린이 나타났다(마을) → 화면 위 금빛 띠. zone = 지금 도는 구역, resumed = 들어와 보니 이미 있었다 */
+  "goblin:spawn": { id: string; zone: string; until: number; resumed: boolean };
+  /** 11/19 누가 황금 고블린을 잡았다 (채널 모두 — 캠핑장·바닷가 포함) → 화면 위 띠·채팅 소식 줄, 나면 큰 숫자. name = 서버가 아는 이름 */
+  "goblin:caught": { id: string; name: string; points: number; mine: boolean };
   /** 23번 확성기 한마디가 실시간 서버에서 왔다 (내 것 포함) → UI의 확성기 창에 띄운다 */
   "megaphone:heard": {
     id: string;
@@ -207,6 +216,8 @@ export type GameEvents = {
   "rpg:cards": CardOfferView | null;
   /** 11/17 발동형 카드·세트 장비 효과가 터짐 (game/rpg/procToast showProc) → 화면 오른쪽(폰은 위 가운데)에 그 그림을 2초 */
   "rpg:proc": ProcView;
+  /** 11/19 숨겨진 5세트 효과가 처음 켜짐 (set = SG_SETS 순번) → 화면이 서버에 발견을 저장한다 (지금 낀 장비로 서버가 확인) */
+  "rpg:egg": { set: number };
   /** 귀신의집 미로 진행 (초당 4번): 걸린 시간·놀란 횟수 (game/haunt → components/haunt) */
   "haunt:hud": { ms: number; scares: number };
   /** 귀신의집이 끝남 (출구로 빠져나옴 = escaped, 아니면 중간에 나감). 월드는 이미 다시 보인다 */
@@ -303,8 +314,13 @@ export type UiEvents = {
    * walk=false면 카메라만 그 묘비로 (랭킹 등)
    */
   "grave:focus": { graveId: string; walk: boolean };
-  /** 11/16 [사냥] 버튼: 내 캐릭터가 길을 찾아 그 입구까지 걸어가 도착하면 portal:open (순간이동 없음, 진행은 portal:walk). null = 그만 걷기 */
-  "portal:walkTo": { kind: "hunt" | null };
+  /**
+   * 11/16 [사냥] 버튼: 내 캐릭터가 길을 찾아 그 입구까지 걸어가 도착하면 portal:open (순간이동 없음, 진행은 portal:walk). null = 그만 걷기.
+   * 11/19 "shop" = 외치기 창 [상점에서 사기]: 유령 잡화점 문 앞까지 걸어가 들어간 뒤 shop:open
+   */
+  "portal:walkTo": { kind: "hunt" | "shop" | null };
+  /** 11/19 첫 걸음 미션 길 안내: 내 캐릭터에서 그 목적지까지 걷는 길에 촛불빛 화살표를 잇는다 (game/world/RouteGuide). null = 지우기 */
+  "route:guide": { target: FirstGuideTarget | null };
   /** 내가 방금 묘비를 세움: 카메라 이동 + 흙 덮이는 연출 + graveEvent(buried) 전송 */
   "grave:buried": { graveId: string };
   /** 내가 묘비를 수정/이장함: graveEvent 전송 */
@@ -355,6 +371,14 @@ export type UiEvents = {
   "camera:recenter": undefined;
   /** 줌 버튼(모바일 등). delta>0 확대, <0 축소. 휠과 같은 단계로 움직인다 */
   "camera:zoom": { delta: number };
+  /** 11/19 촬영 모드 켜짐·꺼짐 (sticky). 카메라(CameraRig)·game/photo가 듣는다. 서버에는 아무것도 안 보낸다 */
+  "photo:mode": { on: boolean };
+  /** 11/19 촬영 모드 필터 (내 화면에서만): 이름표·내 캐릭터 보이기, 시간대(KST 시각)·날씨 미리보기 (null = 지금 그대로) */
+  "photo:set": { names: boolean; me: boolean; hour: number | null; weather: Weather | null };
+  /** 11/19 [찍기]: 게임이 캔버스만 PNG로 굽는다 (최대 2배, nearest) → photo:shot */
+  "photo:shoot": undefined;
+  /** 11/19 찍은 사진 (blob = null이면 실패) */
+  "photo:shot": { blob: Blob | null; width: number; height: number };
   /** "여기서 다시 접속" (replaced/offline 상태에서) */
   "net:reconnect": undefined;
   /** 꾸미기 착용 변경: 내 아바타에 바로 반영하고 grant를 실시간 서버로 보낸다 (sticky) */
@@ -482,11 +506,13 @@ const STICKY = new Set<keyof AllEvents>([
   "game:rest",
   "camera:state",
   "grave:near",
+  "door:near",
   "look:set",
   "graves:mine",
   "seat:near",
   "view:mode",
   "view:busy",
+  "photo:mode",
   "sea:hud",
   "sea:snack:can",
   "sea:ghost:call",
@@ -521,6 +547,7 @@ const STICKY = new Set<keyof AllEvents>([
   "snow:can",
   "snow:cool",
   "portal:walk",
+  "route:guide",
 ]);
 
 class Bridge {
@@ -556,6 +583,7 @@ class Bridge {
     this.lastValues.delete("camera:state");
     this.lastValues.delete("player:ride");
     this.lastValues.delete("snow:can");
+    this.lastValues.delete("photo:mode");
   }
 }
 

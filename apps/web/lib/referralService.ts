@@ -9,13 +9,17 @@ import {
   REF_ENTER_MS,
   REF_GIFT_FROM,
   REF_GIFT_NOTE_REFEREE,
+  REF_GRAND_BUNDLE,
+  REF_GRAND_ITEM,
   REF_GRAND_MONTH_CAP,
-  REF_GRAND_POINTS,
   refGiftNoteGrand,
+  refGrandText,
   REF_MONTH_CAP,
   REF_DAY_MIN,
   REF_NEED_DAYS,
-  REF_REWARD_POINTS,
+  REF_REWARD_BUNDLE,
+  REF_REWARD_ITEM,
+  refRewardText,
   refGiftNoteReferrer,
   type RefCheckResponse,
   type ReferralView,
@@ -33,6 +37,9 @@ import { addDays } from "./gameDay";
 import { kstDay } from "./store/accounts";
 import { TITLES } from "./titles";
 import { forgetTitles } from "./titlesServer";
+import { grantRpgBundle } from "./rpgGift";
+import { bundleText } from "./rewardText";
+import type { GiftItem } from "./types";
 
 // 추천 코드 판정·보상 (규칙은 lib/referralRules.ts, 같은 사람 판정은 lib/sameUser.ts). 조건 달성은 따로 도는 작업 없이 그때그때 본다:
 // 새 이웃의 머무르기 기록(/api/me/presence)·내 정보 추천 칸(양쪽)·관리자 추천 탭에서. 달성 표시는 저장소가 한 번만 남긴다.
@@ -96,7 +103,8 @@ async function spreadCluster(refereeId: string, reasons: readonly string[]): Pro
 }
 
 /**
- * 추천인 정하기 (가입할 때 via = signup, 내 정보에서 later). 규칙에 안 맞으면 HttpError.
+ * 추천인 정하기 (가입할 때만 — 11/19 내 정보에서 뒤늦게 넣기(later)는 없앴다). 규칙에 안 맞으면 HttpError.
+ * via는 화면이 보내는 값이라 시간으로도 막는다: 가입 뒤 REF_ENTER_MS(가입 화면이 바로 보내는 짧은 창) 안에서만
  * signals = 지금 요청의 IP·대역 해시 (lib/sameUser.ts requestSignals) — 같은 사람 판정의 가입 신호
  */
 export async function enterReferral(
@@ -106,6 +114,7 @@ export async function enterReferral(
   via: "signup" | "later",
   now = Date.now(),
 ): Promise<void> {
+  if (via !== "signup") throw new HttpError(409, "SIGNUP_ONLY", "추천 코드는 가입할 때만 넣을 수 있어요.");
   const code = normalizeRefCode(raw);
   if (!code) throw new HttpError(400, "BAD_CODE", "코드는 영문과 숫자 6자예요.");
   const store = getReferrals();
@@ -115,7 +124,7 @@ export async function enterReferral(
   if (referrerId === refereeId) throw new HttpError(409, "SELF", "내 코드는 넣을 수 없어요.");
   if (await store.get(refereeId)) throw new HttpError(409, "ALREADY", "추천인은 한 번만 정할 수 있어요.");
   const since = await joinedAt(refereeId, now);
-  if (since === null || now - since > REF_ENTER_MS) throw new HttpError(409, "TOO_LATE", "가입하고 3일이 지나서 추천인을 정할 수 없어요.");
+  if (since === null || now - since > REF_ENTER_MS) throw new HttpError(409, "SIGNUP_ONLY", "추천 코드는 가입할 때만 넣을 수 있어요.");
   const siblings = await store.refereesOf(referrerId, CLUSTER_LOOK);
   // 판정에 실패해도 추천인은 정한다 (조건 달성 때 다시 본다)
   const reasons = await assessPair(refereeId, referrerId, now, { signup: signals, createdAt: since, siblings }).catch((e: unknown) => {
@@ -164,7 +173,9 @@ async function progressOf(recs: readonly Pick<ReferralRecord, "refereeId" | "at"
     recs.map(async (r, i): Promise<RefProgress> => {
       const recent = [yesterday, today].map((day, j) => ({ day, min: (ticks[i]?.[j] ?? 0) * STAY_TICK_MINUTES }));
       let legacyDays = 0;
-      const join = kstDay(r.at);
+      // 11/19 가입한 날부터 센다 (추천 코드를 가입 뒤에 넣어도 그 사이 머문 날을 놓치지 않게). 가입 시각을 모르는 옛 계정은 추천 기록 시각
+      const created = sums[i]?.createdAt ?? 0;
+      const join = kstDay(created > 0 && created < r.at ? created : r.at);
       if (join <= start) {
         const days: string[] = [];
         for (let d = join; d <= start && days.length < LEGACY_LOOK_DAYS; d = addDays(d, 1)) days.push(d);
@@ -199,17 +210,29 @@ async function sendRewards(
 ): Promise<void> {
   const ids = [rec.refereeId, rec.referrerId, ...(paid.grandPaid && rec.grandId ? [rec.grandId] : [])];
   const [referee, referrer, grand] = await getAccounts().summaries(ids);
+  // 11/19 포인트 대신 아이템: 친구 초대 한정 꾸미기(영구)·작은 폭죽은 선물함, 물약·결재 서류는 사냥 가방에 바로
+  const lantern: GiftItem[] = [{ itemId: REF_REWARD_ITEM, count: 1, term: "perm" }];
+  const bagNote = (b: typeof REF_REWARD_BUNDLE) => ` ${bundleText(b)}은 사냥 가방에 넣었어요.`;
   const gifts: Promise<unknown>[] = [];
   if (paid.refereePaid)
     gifts.push(
-      sendGift({ target: rec.refereeId, targetName: referee?.name ?? null, from: REF_GIFT_FROM, note: REF_GIFT_NOTE_REFEREE, points: REF_REWARD_POINTS, items: [] }, now),
+      sendGift({ target: rec.refereeId, targetName: referee?.name ?? null, from: REF_GIFT_FROM, note: REF_GIFT_NOTE_REFEREE + bagNote(REF_REWARD_BUNDLE), points: 0, items: lantern }, now),
+      grantRpgBundle(rec.refereeId, REF_REWARD_BUNDLE),
     );
   if (paid.referrerPaid)
     gifts.push(
       sendGift(
-        { target: rec.referrerId, targetName: referrer?.name ?? null, from: REF_GIFT_FROM, note: refGiftNoteReferrer(referee?.name ?? NO_NAME), points: REF_REWARD_POINTS, items: [] },
+        {
+          target: rec.referrerId,
+          targetName: referrer?.name ?? null,
+          from: REF_GIFT_FROM,
+          note: refGiftNoteReferrer(referee?.name ?? NO_NAME) + bagNote(REF_REWARD_BUNDLE),
+          points: 0,
+          items: lantern,
+        },
         now,
       ),
+      grantRpgBundle(rec.referrerId, REF_REWARD_BUNDLE),
     );
   if (paid.grandPaid && rec.grandId)
     gifts.push(
@@ -218,12 +241,13 @@ async function sendRewards(
           target: rec.grandId,
           targetName: grand?.name ?? null,
           from: REF_GIFT_FROM,
-          note: refGiftNoteGrand(referrer?.name ?? NO_NAME, referee?.name ?? NO_NAME),
-          points: REF_GRAND_POINTS,
-          items: [],
+          note: refGiftNoteGrand(referrer?.name ?? NO_NAME, referee?.name ?? NO_NAME) + bagNote(REF_GRAND_BUNDLE),
+          points: 0,
+          items: [{ itemId: REF_GRAND_ITEM, count: 1 }],
         },
         now,
       ),
+      grantRpgBundle(rec.grandId, REF_GRAND_BUNDLE),
     );
   await Promise.all(gifts).catch((e: unknown) => console.error("[referral] 추천 보상 선물 실패", rec.refereeId, e));
   // 칭호 수가 바뀌었을 수 있다 → 이 인스턴스 칭호 기억을 비우고, 접속 중인 화면에 선물함·칭호를 새로 받게 한다
@@ -275,7 +299,7 @@ async function grandOpts(rec: Pick<ReferralRecord, "refereeId" | "referrerId" | 
 
 /** 관리자: 확인 기다리는 추천을 승인(보상을 보낸다)·거절. 여러 개면 기다림이 아닌 것은 건너뛴다 (하나만 줬는데 기다림이 아니면 409) */
 export async function decideReferrals(refereeIds: readonly string[], approve: boolean, now = Date.now()): Promise<RefDecision> {
-  const out: RefDecision = { decided: 0, both: 0, refereeOnly: 0, denied: 0, points: REF_REWARD_POINTS, grand: 0, grandPoints: REF_GRAND_POINTS };
+  const out: RefDecision = { decided: 0, both: 0, refereeOnly: 0, denied: 0, reward: refRewardText(), grand: 0, grandReward: refGrandText() };
   const store = getReferrals();
   for (const id of new Set(refereeIds)) {
     const rec = await store.get(id);
@@ -347,23 +371,16 @@ export async function referralView(accountId: string, now = Date.now()): Promise
 
   const st = code ? await store.stats(accountId, month) : { joined: 0, qualified: 0, credited: 0, paid: 0, month: 0, gJoined: 0, gPaid: 0 };
   const nextTitle = REF_TITLES.find((t) => st.credited < t.need!);
-  let enterUntil: number | null = null;
-  if (!mineRec && code) {
-    const [s] = await getAccounts().summaries([accountId]);
-    const since = s && s.createdAt > 0 ? s.createdAt : s && (s.stayMinutes > 0 || s.lifetimePoints > 0) ? 0 : now;
-    if (since > 0 && now - since <= REF_ENTER_MS) enterUntil = since + REF_ENTER_MS;
-  }
   return {
     code,
     joined: st.joined,
     qualified: st.qualified,
     rewarded: st.paid,
     monthRewarded: st.month,
-    pointsEarned: (st.paid + (mine?.rewarded ? 1 : 0)) * REF_REWARD_POINTS + st.gPaid * REF_GRAND_POINTS,
-    second: { joined: st.gJoined, points: st.gPaid * REF_GRAND_POINTS },
+    giftsGot: st.paid + (mine?.rewarded ? 1 : 0),
+    second: { joined: st.gJoined, rewarded: st.gPaid },
     next: nextTitle ? { title: nextTitle.name, need: nextTitle.need!, count: st.credited } : null,
     mine,
-    enterUntil,
   };
 }
 
@@ -413,7 +430,7 @@ export type AdminReferralResponse = {
   /** 이유에 나오는 계정(무리)의 이름 */
   names: Record<string, string | null>;
   /** dayMin = 하루에 넘겨야 하는 분, needDays = 그런 날 수 */
-  rules: { points: number; monthCap: number; dayMin: number; needDays: number; enterDays: number; grandPoints: number; grandMonthCap: number };
+  rules: { reward: string; monthCap: number; dayMin: number; needDays: number; enterMin: number; grandReward: string; grandMonthCap: number };
   /** 방금 승인·거절한 결과 (알림 문구용) */
   decision?: RefDecision;
 };
@@ -502,12 +519,12 @@ export async function adminReferrals(now = Date.now(), limit = 100): Promise<Adm
     recent: pick(recentIds),
     names: Object.fromEntries([...names].filter(([id]) => clusterIds.includes(id))),
     rules: {
-      points: REF_REWARD_POINTS,
+      reward: refRewardText(),
       monthCap: REF_MONTH_CAP,
       dayMin: REF_DAY_MIN,
       needDays: REF_NEED_DAYS,
-      enterDays: REF_ENTER_MS / 86_400_000,
-      grandPoints: REF_GRAND_POINTS,
+      enterMin: REF_ENTER_MS / 60_000,
+      grandReward: refGrandText(),
       grandMonthCap: REF_GRAND_MONTH_CAP,
     },
   };

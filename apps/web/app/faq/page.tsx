@@ -1,6 +1,9 @@
 import GuidePage from "../guide/GuidePage";
+import { FIRST_STEPS, PATH as GIFT_PATH, PATH_NAME, PATH_WEAR_DAYS, TODO_BONUS_GIFT, TODO_GIFT } from "@/lib/retain";
+import { rewardText } from "@/lib/rewardText";
 import guide from "../guide/guide.module.css";
 import { pageMetadata } from "../seo";
+import { SG_CHEST_CHANCE } from "@/lib/rpg/setGearRoll";
 import { ATTEND_RULE_TEXT } from "@/lib/attendStay";
 import { ATTEND_TIER_GUIDE } from "@/lib/attendTiers";
 import { earnRule } from "@/lib/economy";
@@ -14,7 +17,7 @@ import { DEFAULT_PASS_DAYS, PRESENCE_INTERVAL_MS } from "@/lib/types";
 import { env } from "@/lib/env";
 import { PIONEER_DAYS, PIONEER_FLOOR } from "@/lib/rpg/endgame";
 import { MAX_LEVEL } from "@/lib/rpg/formulas";
-import { CURSES, TOWER_STEEP_FROM } from "@/lib/rpg/tower";
+import { CURSES, TOWER_CHEST_FROM, TOWER_STEEP_FROM } from "@/lib/rpg/tower";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
 import { QUEST_DAILY, QUEST_STAMPS } from "@/lib/forage/quests/catalog";
 
@@ -74,6 +77,11 @@ const FAQ = [
     a: `${ATTEND_RULE_TEXT}(다른 창을 봐도 괜찮아요). 출석 달력의 오늘 칸을 누르면 ${earnRule("attend").points}포인트, 7일 연속마다 ${earnRule("streak").points}포인트, 한 달 개근이면 ${earnRule("monthly").points}포인트를 더 받아요. 이번 달 출석 보상: ${ATTEND_TIER_GUIDE}. 받은 코디는 가방의 꾸미기에서 입을 수 있어요.`,
   },
   {
+    q: "처음 온 사람에게 주는 선물이 있나요?",
+    // 11/18 lib/retain.ts (숫자·선물은 거기서 읽는다)
+    a: `「${PATH_NAME}」 ${GIFT_PATH.length}개가 가입한 날부터 하루 하나씩 열려요. 못 받은 날 것은 쌓여 있다가 한꺼번에 받고, 마지막 꾸러미에는 한정 칭호 「마을 새내기 졸업」이 들어 있어요. 꾸미기는 ${PATH_WEAR_DAYS}일 동안 입어요. 첫 걸음 미션 ${FIRST_STEPS.length}가지는 마을에서 할 수 있는 것을 하나씩 알려 주고, 처음 할 때마다 포인트를 줘요. 날마다 새벽 5시에 무작위로 나오는 오늘 미션 3개(귀신의 집 돌파·범퍼카·바닷가 낚시 같은 것)는 하나에 ${rewardText(TODO_GIFT)}, 미션 셋을 다 하면 ${rewardText(TODO_BONUS_GIFT)}과 도장을 더 줘요.`,
+  },
+  {
     q: "무엇을 할 수 있나요?",
     a: "모닥불 곁에서 쉬기, 채팅과 친구 맺기, 사냥터(스킬 트리)·미니게임, 낚시(자동 낚시 포함), 채집과 도감, 동물원 펫 분양, 캐릭터 꾸미기, 내 집 꾸미기, 묘비 세우기와 헌화, 관람차·열기구·조각배·오리배 타기, 귀신의집 탈출, 폭죽·확성기, 마을 주민과 강아지·고양이와 놀기를 할 수 있어요.",
   },
@@ -116,7 +124,7 @@ const FAQ = [
   {
     q: "사냥 레벨 50 다음엔 뭐가 있나요?",
     // 11/15 사냥 끝판 1단계 — 숫자는 lib/rpg/endgame.ts
-    a: `레벨 ${MAX_LEVEL}부터는 지옥 사냥터와 야근 빌딩에서 얻은 EXP가 초월 EXP로 쌓여요. 그러면 초월 레벨(★51~★100)이 올라요. 초월 5레벨마다 능력치 포인트를 1개 받아요. 사냥 레벨 랭킹은 레벨, 초월 레벨, 초월 EXP 순서로 매겨요. 하루에 할 수 있는 판 수 제한은 없어요. 야근 빌딩은 마을 북쪽 분양 사무소 옆에 있어요. 1층부터 쓰러질 때까지 쭉쭉 올라가는 레이스이고, 도전 횟수 제한도 없어요. 몬스터는 ${TOWER_STEEP_FROM}층까지 조금씩, 그 위로는 빠르게 세져요. ${CURSES[0].from}층부터는 저주가 쌓여요. 랭킹은 이번 주 최고 층으로 겨뤄요. 깬 층마다 초월 EXP를 받아요. 5층마다 우두머리 상자가 열려요. 하루 개수 제한은 없어요. 상자에서는 세트 장비와 강화 재료가 나오고, 가끔 꾸미기 이용권도 나와요. 세트 장비는 15% 확률로 나오고, 7번 연속 못 받으면 다음엔 꼭 나와요. 세트 장비는 장비 탭에서 +15까지 강화할 수 있어요. 끝판이 열린 뒤 ${PIONEER_DAYS}일 안에 ★51에 닿거나 야근 빌딩 ${PIONEER_FLOOR}층을 처음 넘으면 칭호 「개척자 #번호」를 받아요. 번호는 닿은 차례예요.`,
+    a: `레벨 ${MAX_LEVEL}부터는 지옥 사냥터와 야근 빌딩에서 얻은 EXP가 초월 EXP로 쌓여요. 그러면 초월 레벨(★51~★100)이 올라요. 초월 레벨이 오를 때마다 능력치 포인트와 스킬 포인트를 1개씩, 초월 수련 포인트도 1개 받아요. 사냥 레벨 랭킹은 레벨, 초월 레벨, 초월 EXP 순서로 매겨요. 하루에 할 수 있는 판 수 제한은 없어요. 야근 빌딩은 마을 북쪽 분양 사무소 옆에 있어요. 1층부터 쓰러질 때까지 쭉쭉 올라가는 레이스이고, 도전 횟수 제한도 없어요. 몬스터는 ${TOWER_STEEP_FROM}층까지 조금씩, 그 위로는 빠르게 세져요. ${CURSES[0].from}층부터는 저주가 쌓여요. 랭킹은 이번 주 최고 층으로 겨뤄요. 깬 층마다 초월 EXP를 받아요. ${TOWER_CHEST_FROM}층부터 우두머리 층마다 상자가 열려요. 하루 개수 제한은 없어요. 상자에서는 세트 장비와 강화 재료가 나오고, 가끔 꾸미기 이용권도 나와요. 세트 장비는 ${Math.round(SG_CHEST_CHANCE * 100)}% 확률로 아주 드물게 나와요. 세트 장비는 장비 탭에서 +15까지 강화할 수 있어요. 끝판이 열린 뒤 ${PIONEER_DAYS}일 안에 ★51에 닿거나 야근 빌딩 ${PIONEER_FLOOR}층을 처음 넘으면 칭호 「개척자 #번호」를 받아요. 번호는 닿은 차례예요.`,
   },
   {
     q: "야근 빌딩 결과에 「기록 확인 중」이라고 나와요.",

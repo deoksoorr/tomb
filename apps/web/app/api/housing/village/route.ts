@@ -26,7 +26,7 @@ function cachedVillage(ch: number, fresh: boolean, zone: "village" | "sea"): Pro
 /**
  * 한 채널의 분양 마을 `?ch=N`: 번지별 집 외관·문패 (채널마다 주거 구역이 따로다. ch가 없으면 1채널).
  * 방문자와 무관해서 CDN에 15초 캐시한다 (주소에 ch가 들어가 채널마다 따로 캐시된다. 브라우저는 no-store).
- * 서버 메모리에도 1분 둔다 (`t`가 있는 저장 직후 요청은 빼고). 11/16 `&zone=sea` = 그 채널 포구 오두막 6터
+ * 서버 메모리에도 1분 둔다 (`t`가 있는 저장 직후 요청은 빼고). 11/16 `&zone=sea` = 그 채널 포구 오두막 11터
  */
 export const GET = handler(async (req) => {
   // 공개 조회 (`?t=`는 서버 캐시를 건너뛰므로 IP 한도로 반복 호출을 막는다 — 메모리 한도라 Redis 명령 0)

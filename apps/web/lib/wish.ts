@@ -1,4 +1,5 @@
 import { DAY_RESET_TEXT, msUntilDayReset } from "./gameDay";
+import type { TodoTick } from "./retain";
 import type { Me } from "./types";
 
 // 50번 소원 분수 (광장 북쪽): 동전(1~5P)을 던지면 오늘의 운세가 나오고, 가끔 몇 포인트가 튀어 돌아온다.
@@ -28,6 +29,8 @@ export type WishResponse = {
   bonus: number;
   /** 던진 포인트 */
   spent: number;
+  /** 11/19 오늘 미션 진행 (lib/retainQuest) */
+  todo?: TodoTick;
 };
 
 const LUCK_TITLE: Readonly<Record<WishLuck, string>> = {

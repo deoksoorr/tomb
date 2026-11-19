@@ -83,7 +83,7 @@ describe("10번 출석 달력", () => {
     expect(second.me.points).toBe(first.me.points + 6 * 5 + 35); // 그 사이 머무르기 +5 × 6번 + 보너스 2구간
   });
 
-  it("정해진 시간(1시간) 머물러야 오늘 칸을 받고(+10), 하루 한 번만. 입장만으로는 포인트가 없다", async () => {
+  it("정해진 시간(1시간) 머물러야 오늘 칸을 받고(11/19 포인트 대신 커피 1개), 하루 한 번만. 입장만으로는 포인트가 없다", async () => {
     vi.spyOn(Date, "now").mockReturnValue(NOON);
     const v = await newVisitor("달력지기");
     const cal = await bodyOf<CalendarResponse>(calendar.GET(call("/api/me/calendar", { visitor: v })));
@@ -92,7 +92,7 @@ describe("10번 출석 달력", () => {
     expect(cal.days[11]).toEqual({ day: 12, state: "today", points: 0 });
     expect(cal.days[10].state).toBe("missed");
     expect(cal.days[12].state).toBe("future");
-    expect(cal.rewards).toEqual({ daily: 10, streak: 30, streakEvery: 7, monthly: 200 });
+    expect(cal.rewards).toEqual({ daily: "커피 1개", streak: "보호 문서 1장", streakEvery: 7, monthly: "결재 서류 20장" });
     expect(await errOf(claim.POST(call("/api/me/calendar/claim", { method: "POST", visitor: v })))).toBe("NOT_YET");
 
     // 머무르기 (실제 화면은 10분마다 /api/me/presence) — 개발용 시계로 50분을 앞당긴다
@@ -106,10 +106,11 @@ describe("10번 출석 달력", () => {
     const before = after.points;
 
     const res = await bodyOf<CalendarClaimResponse>(claim.POST(call("/api/me/calendar/claim", { method: "POST", visitor: v })));
-    expect(res.earned).toEqual({ daily: 10, streak: 0, monthly: 0 });
-    expect(res.me.points).toBe(before + 10);
+    expect(res.earned).toEqual({ daily: 0, streak: 0, monthly: 0 });
+    expect(res.gifts).toEqual({ daily: "커피 1개", streak: null, monthly: null });
+    expect(res.me.points).toBe(before);
     expect(res.me.attendance).toMatchObject({ today: true, streak: 1 });
-    expect(res.calendar.days[11]).toEqual({ day: 12, state: "stamped", points: 10 });
+    expect(res.calendar.days[11]).toEqual({ day: 12, state: "stamped", points: 0 });
     expect(res.calendar.claimable).toBe(false);
     expect(res.tierRewards).toEqual([]); // 첫 도장은 아직 구간(3일) 전
     expect(res.calendar.tiers).toHaveLength(5);
@@ -117,7 +118,7 @@ describe("10번 출석 달력", () => {
     // 다시 입장해도(옛 화면의 자동 출석 호출) 포인트는 그대로
     const again = await bodyOf<{ me: Me; earned: number }>(attend.POST(call("/api/me/attend", { visitor: v, body: {} })));
     expect(again.earned).toBe(0);
-    expect(again.me.points).toBe(before + 10);
+    expect(again.me.points).toBe(before);
   });
 
   it("지난 두 달까지만 볼 수 있다", async () => {

@@ -1,3 +1,4 @@
+import type { AwayMapId } from "@tomb/protocol";
 import type { ResumeState } from "@/lib/resume";
 import type { InputHub } from "../input/InputHub";
 import type { RealtimeClient } from "../net/RealtimeClient";
@@ -8,8 +9,11 @@ import type { Sfx } from "../world/Sfx";
 
 export const CAMP_SCENE = "camp";
 
-/** 친구 옆으로 가기 (버스를 거쳐 다른 맵의 친구한테) */
-export type CampFriend = { sid: number; name: string; x: number; y: number };
+/**
+ * 친구 옆으로 가기 (버스를 거쳐 다른 맵의 친구한테).
+ * 11/19 next = 마을 정류장에 내린 뒤 이어서 탈 버스의 맵 (캠핑장 ↔ 바닷가 친구 — 버스는 마을에만 서요). x·y는 그 맵 좌표
+ */
+export type CampFriend = { sid: number; name: string; x: number; y: number; next?: AwayMapId };
 
 /** 월드가 캠핑장 장면에 빌려주는 것 (실시간 연결·글자·입력·소리는 게임에 하나) */
 export type CampHost = {

@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { campOpen } from "../camp";
+import { pathSince, retainView } from "../retain";
+import { seaOpen } from "../sea";
 import { customAlphabet } from "nanoid";
 import { GRANT_TTL_SEC, isAvatarBody, signGrant, staffGateBody, type AvatarDye, type Look } from "@tomb/protocol";
 import { STAY_TICK_MINUTES } from "../calendar";
@@ -11,7 +14,7 @@ import { champWireFor } from "./champ";
 import { K } from "./keys";
 import { getStyleStore } from "./style";
 import { rememberWornTitle } from "../wornTitle";
-import type { AccountRecord, AccountStore } from "./types";
+import type { AccountRecord, AccountStore, QuestHook } from "./types";
 
 // 계정·포인트 공용 도우미 (라우트가 쓴다). 날짜 키는 게임 날짜 YYYYMMDD — 한국 시간 새벽 5시에 바뀐다 (lib/gameDay).
 
@@ -46,7 +49,8 @@ export const rankValue = (score: unknown) => Math.floor(Number(score));
 
 export const NAME_CHANGE_COOLDOWN_MS = NAME_CHANGE_COOLDOWN_DAYS * 86_400_000;
 
-export function toMe(accountId: string, a: AccountRecord, day: string, now: number): Me {
+/** noRetain = 11/19 운영자: 꾸러미·첫 걸음·할 일을 계산하지도 싣지도 않는다 (화면도 retainOf로 한 번 더 막는다) */
+export function toMe(accountId: string, a: AccountRecord, day: string, now: number, opts: { noRetain?: boolean } = {}): Me {
   const nextAllowedAt = a.nameChangedAt ? a.nameChangedAt + NAME_CHANGE_COOLDOWN_MS : 0;
   return {
     accountId,
@@ -67,6 +71,8 @@ export function toMe(accountId: string, a: AccountRecord, day: string, now: numb
     nameChange: { nextAllowedAt: nextAllowedAt > now ? nextAllowedAt : 0, cost: a.nameChanges ? NAME_CHANGE_PRICE : 0 },
     tutorialDone: a.tutorialDone,
     ...(a.renameRequired ? { renameRequired: true as const } : {}),
+    // 11/18 새 이웃 꾸러미·첫 걸음·오늘의 할 일 (lib/retain — 이미 읽은 계정·오늘 적립 해시에서 계산)
+    ...(opts.noRetain ? {} : { retain: retainView(accountId, pathSince(a.createdAt, a.lifetimePoints, now), a.retain, a.stayTicks, day, { camp: campOpen(), sea: seaOpen() }) }),
   };
 }
 
@@ -88,7 +94,7 @@ export async function loadMe(accounts: AccountStore, accountId: string, now = Da
   // 11/16 단 칭호를 기억해 둔다 (칭호 능력 — 계정을 읽지 않는 낚시·채집·사냥 흐름이 Redis를 다시 묻지 않게, lib/wornTitle)
   rememberWornTitle(accountId, lookOf(a), now);
   return {
-    ...toMe(accountId, a, day, now),
+    ...toMe(accountId, a, day, now, { noRetain: staff }),
     body: shownBody(a.body, staff),
     dye: style.dye,
     ...(staff ? { staff: true } : {}),
@@ -109,10 +115,11 @@ export async function rewardReaction(
   mine: EarnSource,
   got: EarnSource,
   now = Date.now(),
+  quest?: QuestHook | null,
 ): Promise<number> {
   const day = kstDay(now);
   const [earned] = await Promise.all([
-    accounts.earn(actorId, mine, day),
+    accounts.earn(actorId, mine, day, quest ? { quest } : {}),
     ownerId && ownerId !== actorId ? accounts.earn(ownerId, got, day) : 0,
   ]);
   return earned;

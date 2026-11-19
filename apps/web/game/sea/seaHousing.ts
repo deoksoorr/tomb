@@ -20,7 +20,7 @@ import type { SeaMap } from "./SeaMap";
 import { SEA_TEX_PREFIX, type SeaInteractable } from "./seaTypes";
 
 // 11/16 달물결 포구 오두막(Task A)과 등대 등불(Task B)을 바닷가 장면에 붙여요. SeaScene은 만들기·매 프레임·E·act 소식만 넘겨요.
-//  - 오두막: 지금 채널의 포구 6터 (/api/housing/village?zone=sea — CDN 15초). 터에 오두막 그림·막는 상자·팻말(빈 터 「분양 중」, 오두막 이름)
+//  - 오두막: 지금 채널의 포구 11터 (/api/housing/village?zone=sea — CDN 15초). 터에 오두막 그림·막는 상자·팻말(빈 터 「분양 중」, 오두막 이름)
 //  - E: 빈 터·포구 부동산 → 포구 부동산 창, 오두막 터 → 그 오두막 안으로 (UI 하우징 창이 집 씬을 열어요 — game/housing/install이 바닷가 장면을 빌려요)
 //  - 등대: 등불 상태(seaLamp) · 밤에 등대에 오르면 그날 처음인지 서버에 물어 켜요
 

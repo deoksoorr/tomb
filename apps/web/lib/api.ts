@@ -38,12 +38,14 @@ import type {
   ShrineListResponse,
   QuickGraveInput,
   ReportResponse,
+  RetainResponse,
   SessionResponse,
   UpdateGraveResponse,
   UseItemResponse,
   VersionResponse,
 } from "./types";
 import type { ReportReason } from "./reports";
+import type { PlayEndResponse, PlayKind, PlayStartResponse } from "./retainPlay";
 import { reportClientError } from "./hooks/errorReporting";
 import { deviceHeaders } from "./deviceMark";
 
@@ -70,6 +72,16 @@ export function errorMessage(e: unknown): string {
   return e instanceof ApiRequestError ? e.message : FALLBACK_MESSAGE;
 }
 
+/** 11/18 성공한 JSON 응답 엿듣기 (오늘의 할 일 진행 `todo`·첫 걸음 판정 — components/overlay/RetainHud). 듣는 쪽이 던져도 응답은 그대로 */
+export type ApiJsonListener = (path: string, body: unknown, init?: RequestInit) => void;
+const jsonListeners = new Set<ApiJsonListener>();
+export function onApiJson(fn: ApiJsonListener): () => void {
+  jsonListeners.add(fn);
+  return () => {
+    jsonListeners.delete(fn);
+  };
+}
+
 /** JSON 응답을 받고, 실패하면 서버의 `{ error }`를 ApiRequestError로 바꾼다 (관리자 화면도 같이 쓴다) */
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
@@ -85,6 +97,13 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // 서버가 터진 경우만 운영자에게 알린다 (4xx는 사용자 입력 문제)
     if (res.status >= 500) reportClientError("api", new Error(`${init?.method ?? "GET"} ${path} → ${res.status} ${err?.code ?? ""}`));
     throw new ApiRequestError(res.status, err?.code ?? "UNKNOWN", err?.message ?? FALLBACK_MESSAGE);
+  }
+  for (const fn of jsonListeners) {
+    try {
+      fn(path, body, init);
+    } catch {
+      // 엿듣는 쪽 실수가 요청을 깨지 않게
+    }
   }
   return body as T;
 }
@@ -167,6 +186,15 @@ export const api = {
   /** 이름 등록: 계정에 이름이 없을 때·휴면에서 돌아와 다시 정할 때 (무료). 다른 계정이 쓰면 409 NAME_TAKEN */
   claimName: (name: string) => request<NameClaimResponse>("/api/names", jsonInit("POST", { name })),
   finishTutorial: () => request<unknown>("/api/me/tutorial", { method: "POST" }),
+  /** 11/18 새 이웃 꾸러미·첫 걸음·오늘의 할 일 (lib/retain) */
+  retainPath: () => request<RetainResponse>("/api/me/retain", jsonInit("POST", { do: "path" })),
+  retainStep: (step: string) => request<RetainResponse>("/api/me/retain", jsonInit("POST", { do: "step", step })),
+  retainSeen: () => request<RetainResponse>("/api/me/retain", jsonInit("POST", { do: "seen" })),
+  retainFirst: () => request<RetainResponse>("/api/me/retain", jsonInit("POST", { do: "first" })),
+  retainTodo: (which: number) => request<RetainResponse>("/api/me/retain", jsonInit("POST", { do: "todo", which })),
+  /** 11/19 오늘 미션 놀이 판 기록 (lib/retainPlay) — 끝 응답의 todo는 onApiJson이 받아 미션 진행을 맞춘다 */
+  retainPlayStart: (kind: PlayKind) => request<PlayStartResponse>("/api/me/retain", jsonInit("POST", { do: "playStart", kind })),
+  retainPlayEnd: (ticket: string, done: boolean, ms?: number) => request<PlayEndResponse>("/api/me/retain", jsonInit("POST", { do: "playEnd", ticket, done, ...(ms !== undefined ? { ms } : {}) })),
   /** me=1: 내 순위까지 (개인화 응답이라 CDN 캐시를 타지 않는다) */
   pointRank: () => request<PointRankResponse>("/api/rank/points?me=1", { cache: "no-store" }),
   /** 49번 랭킹 (포인트·사냥). zone은 huntBest의 사냥터(난이도 id) */

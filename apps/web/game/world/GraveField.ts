@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { GRAVE_SCALE } from "@tomb/protocol";
 import type { PublicGrave } from "@/lib/types";
 import { GraveView } from "../entities/Grave";
 import { buildLayout, layoutSignature, TIER_SIZE, type GraveLayout, type GravePlacement } from "./graveLayout";
@@ -81,15 +82,16 @@ export class GraveField {
   }
 
   private makeZone(p: GravePlacement): Phaser.GameObjects.Zone {
-    const w = TIER_SIZE[p.shape].collider;
+    // 11/19 묘비가 GRAVE_SCALE배로 작아져 충돌 폭도 같이 (높이 4px)
+    const w = Math.round(TIER_SIZE[p.shape].collider * GRAVE_SCALE);
     // 충돌 전용 존은 그릴 게 없으니 디스플레이 리스트에서 뺀다
-    const zone = this.scene.add.zone(p.x, p.y - 2.5, w, 5);
+    const zone = this.scene.add.zone(p.x, p.y - 2, w, 4);
     zone.removeFromDisplayList();
     this.colliders.add(zone);
     return zone;
   }
 
-  /** 배치가 바뀌면 충돌 박스를 모두 다시 만든다 (최대 32개) */
+  /** 배치가 바뀌면 충돌 박스를 모두 다시 만든다 (최대 16개) */
   private resetColliders(): void {
     this.colliders.clear(true, true);
     for (const p of this.layout.placements) this.makeZone(p);

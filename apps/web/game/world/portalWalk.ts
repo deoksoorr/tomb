@@ -1,15 +1,17 @@
-import { HUNT_GATE, playerBounds } from "@tomb/protocol";
+import { HUNT_GATE, playerBounds, SHOP_DOOR } from "@tomb/protocol";
 import { buildGrid, type Pt, type Rect, type WalkGrid } from "../logic/pathfind";
 
 // 11/16 [사냥] 버튼 → 사냥터 입구까지 걸어가기 (묘비 가기 GraveWalker·AutoWalk·pathfind A*를 그대로 쓴다).
 // 걷기 격자 규칙(칸 크기·발 상자 여유·물 피하기)을 여기 한 곳에 두고 GraveWalker와 테스트가 같이 쓴다. 순수 함수 (Phaser 없음).
 
-/** 걸어서 갈 수 있는 입구 (야근 빌딩은 따로 [버튼]이 없어 아직 없다) */
-export type WalkPortal = "hunt";
+/** 걸어서 갈 수 있는 입구 (야근 빌딩은 따로 [버튼]이 없어 아직 없다). 11/19 shop = 유령 잡화점 문 (외치기 창 [상점에서 사기]) */
+export type WalkPortal = "hunt" | "shop";
 
 /** 걸어가 설 자리 (입구 상호작용 반경 PORTAL_RADIUS 안, 동굴 문 바로 앞)와 도착하면 바라볼 곳 */
 export const PORTAL_WALK: Readonly<Record<WalkPortal, { goal: Pt; face: Pt }>> = {
   hunt: { goal: { x: HUNT_GATE.x, y: HUNT_GATE.y + 6 }, face: { x: HUNT_GATE.x, y: HUNT_GATE.y - 12 } },
+  // 잡화점은 문 앞(SHOP_DOOR — 들어가는 반경 SHOP_ENTER_RADIUS 안)에 서서 문(위)을 바라본다. 도착하면 장면이 들어간다
+  shop: { goal: { x: SHOP_DOOR.x, y: SHOP_DOOR.y }, face: { x: SHOP_DOOR.x, y: SHOP_DOOR.y - 12 } },
 };
 
 /** 격자 칸 (반 타일) */

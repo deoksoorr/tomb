@@ -18,6 +18,8 @@ import { showToast, useToasts } from "@/lib/hooks/useToasts";
 import { useRideBlocked } from "@/lib/hooks/useRideBlocked";
 import { rideGate } from "@/lib/rideGate";
 import { HUNT_NO_PATH_TOAST, huntPress, huntWalkHint, walkingAfter } from "@/lib/huntWalk";
+import { SHOP_NO_PATH_TOAST, shopPress, shopWalkHint } from "@/lib/shopWalk";
+import { openShopTab, takeShopTab } from "../shop/shopTab";
 import { readItem, UI_KEYS, writeItem } from "@/lib/storage";
 import { onBackgroundChange } from "@/lib/background";
 import { onVisibleAgain, tabHidden } from "@/lib/hooks/visibleAgain";
@@ -36,6 +38,7 @@ import GraveModal from "../grave/GraveModal";
 import PassedDialog from "../grave/PassedDialog";
 import Minimap from "./Minimap";
 import StayBonus from "./StayBonus";
+import { guideToQuestBoard, RetainDock, RetainLayer, RetainPhoneChip, useLookStep, useNewbie } from "./RetainHud";
 import NoticesDialog from "../notice/NoticesDialog";
 import RankingList from "../grave/RankingList";
 import RankingPanel from "../grave/RankingPanel";
@@ -80,6 +83,7 @@ import GhostLayer, { GhostStaffButton } from "@/components/sea/GhostLayer";
 import OddsLayer from "@/components/odds/OddsLayer";
 import { SnackVendLayer } from "@/components/sea/GullSnacks";
 import UrgentHud from "@/components/forage/UrgentHud";
+import QuestPeek from "@/components/forage/QuestPeek";
 import FoodGauge from "@/components/camp/FoodGauge";
 import Telescope from "@/components/rpg/Telescope";
 import HauntDialog from "@/components/haunt/HauntDialog";
@@ -98,7 +102,7 @@ import CampTalk from "../camp/CampTalk";
 import CampBgm from "../camp/CampBgm";
 import CampBbq from "../camp/CampBbq";
 import MegaphoneLayer from "./MegaphoneDialog";
-import MegaphoneFeed from "./MegaphoneFeed";
+import MegaphoneFeed, { MegaPinButton } from "./MegaphoneFeed";
 import { installViewKeyGuard } from "@/lib/viewKeyGuard";
 import { useSocial } from "./useSocial";
 // 창 빈자리 채우기: 묘비·랭킹 안내, 채널 기록
@@ -107,8 +111,11 @@ import RankingGuide from "../grave/RankingGuide";
 import GraveyardNow from "../grave/GraveyardNow";
 import MySummary from "../account/MySummary";
 import { rememberChannel } from "@/lib/channelHistory";
+import { photoAllowed, photoKeyAction, type PhotoGate } from "@/lib/photo/photoRules";
 
 const GameCanvas = dynamic(() => import("@/game/GameCanvas"), { ssr: false });
+// 11/19 촬영 모드 화면은 들어갈 때만 불러온다
+const PhotoMode = dynamic(() => import("../photo/PhotoMode"), { ssr: false });
 
 const KEY_HINTS = ["Space는 점프, E는 살펴보기", "T는 표현, Y는 즐겨찾기 표현", "휠로 확대·축소, 오른쪽 버튼으로 끌면 둘러보기"];
 
@@ -228,7 +235,9 @@ type Panel =
   | "friends"
   | "haunt"
   | "tower"
-  | "lottery";
+  | "lottery"
+  /** 11/19 어디서든 보는 의뢰판 (납품은 마을 의뢰 게시판에서) */
+  | "quests";
 
 /**
  * 11/16 창 단축키 (데스크톱): 마을·사냥·미니게임·집 어디에서도 쓰지 않는 글자만 골랐다 (B·G·L·N·O·P·U).
@@ -294,6 +303,10 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   /** 주거 구역의 집 문·빈 필지에서 하우징 창을 열었으면 그 집/번지 */
   const [housingIntent, setHousingIntent] = useState<{ houseId?: string; lot?: number; zone?: "sea" } | null>(null);
   const coarse = useMediaQuery("(pointer: coarse)");
+  // 11/19 폰 새 이웃(가입 이틀 안·첫 걸음 선물 전): 위쪽을 단순하게 — 긴급 의뢰·고정 공지 칩을 숨긴다 (RetainHud isNewbie).
+  // 접속 보너스 창은 받을 보너스가 있을 때만 뜨므로 그대로 둔다
+  const newbie = useNewbie();
+  const quietTop = coarse && newbie;
   // 데스크톱인데 창이 좁으면 윗줄에 채널 표시 자리가 없다 → 아래 안내 줄로
   const narrow = useMediaQuery("(max-width: 700px)");
   // 11/18 데스크톱: 확성기·고정 공지 창과 채팅창 폭을 아래 바로 가기 줄의 [집] 단추 오른쪽 끝에 맞춘다 (--dock-w, 문서 루트. [공지] 끝은 너무 넓었다)
@@ -329,10 +342,15 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   /** 메뉴 타일 설명 자리용 짧은 문구 (타일 이름이 이미 「사냥터」) */
   const rideOff = useRideBlocked();
   // 11/16 [사냥] → 사냥터 입구까지 걸어가는 중 (lib/huntWalk). 다시 누르거나 방향키·조이스틱으로 멈춘다
-  const huntWalking = walkingAfter(useBridgeValue("portal:walk")?.status);
+  // 11/19 외치기 창 [상점에서 사기] → 잡화점까지 걷기도 같은 알림 (kind "shop")
+  const portalWalk = useBridgeValue("portal:walk");
+  const huntWalking = portalWalk?.kind !== "shop" && walkingAfter(portalWalk?.status);
+  const shopWalking = portalWalk?.kind === "shop" && walkingAfter(portalWalk.status);
   const mapNow = useBridgeValue("map:changed")?.map ?? "village";
-  useBridgeEvent("portal:walk", ({ status }) => {
-    if (status === "unreachable") showToast(HUNT_NO_PATH_TOAST);
+  useBridgeEvent("portal:walk", ({ kind, status }) => {
+    if (status === "unreachable") showToast(kind === "shop" ? SHOP_NO_PATH_TOAST : HUNT_NO_PATH_TOAST);
+    // 잡화점에 못 가고 멈췄으면 골라 둔 상점 탭(확성기)을 지운다 (나중에 주인장에게 말을 걸 때 엉뚱한 탭으로 열리지 않게)
+    if (kind === "shop" && (status === "cancelled" || status === "unreachable")) takeShopTab();
   });
   // 11/16 버스에 오르면 열려 있던 한 줄 채팅 입력칸도 닫는다 (내린 뒤 저절로 다시 뜨지 않게)
   useBridgeEvent("bus:state", (st) => {
@@ -384,6 +402,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   // 11/16 바닷가 바다 보기 장면도 같이
   const campfire = viewMode === "campfire" || viewMode === "sky" || viewMode === "sea";
   // 첫 방문 안내: 계정이 아직 안 봤으면 저절로, 안내(ⓘ)에서 다시 보기
+  // 11/18 첫 걸음 ① 꾸미기 열어 보기: 가방·상점 창을 열면
+  useLookStep(panel === "bag" || panel === "shop");
   const [tutorialOn, setTutorialOn] = useState<boolean | null>(null);
   const showTutorial = ready && !away && (tutorialOn ?? (me ? !me.tutorialDone : false));
 
@@ -523,6 +543,47 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   useEffect(() => installViewKeyGuard(), []);
   const viewing = useBridgeValue("view:busy")?.on === true;
 
+  // 11/19 촬영 모드 (K · 오른쪽 위 카메라 단추 · 터치는 메뉴 · 윈도우 PrintScreen). 서버에는 아무것도 안 보낸다 (components/photo, game/photo)
+  const [photo, setPhoto] = useState(false);
+  const photoGate: PhotoGate = { ready, scene, riding, viewing, covered: false, houseEditing };
+  const canPhoto = photoAllowed(photoGate);
+  const photoQuiet = (quiet || roomQuiet) && !radial && !chatOpen;
+  const photoGateRef = useRef(photoGate);
+  const photoQuietRef = useRef(photoQuiet);
+  useEffect(() => {
+    photoGateRef.current = photoGate;
+    photoQuietRef.current = photoQuiet;
+  });
+  useEffect(() => {
+    if (!ready) return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = document.activeElement;
+      const editable = el instanceof HTMLElement && el.matches("input, textarea, select, [contenteditable]");
+      const covered = !photoQuietRef.current || !!document.querySelector("dialog[open]") || bridge.last("ui:blockKeys")?.blocked === true;
+      const act = photoKeyAction(e, editable, false, { ...photoGateRef.current, covered });
+      if (act !== "open") return;
+      e.preventDefault();
+      setPhoto(true);
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKey);
+    };
+  }, [ready]);
+  // 장면·맵이 바뀌거나 버스를 타면 촬영 모드를 끝낸다 (카메라·필터는 게임이 되돌린다)
+  useBridgeEvent("scene:changed", ({ scene: next }) => next !== scene && setPhoto(false));
+  useBridgeEvent("map:changed", () => setPhoto(false));
+  useBridgeEvent("bus:state", (st) => st.riding && setPhoto(false));
+  function openPhoto() {
+    if (!canPhoto) return;
+    setRadial(false);
+    setSayOpen(false);
+    setChatOpen(false);
+    setPhoto(true);
+  }
+
   // ?debug=1 QA용: 콘솔·자동화 스크립트에서 브리지 이벤트를 흉내 낼 수 있게
   useEffect(() => {
     if (!options.debug) return;
@@ -646,6 +707,20 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     else if (!rideGate("사냥터에 갈")) bridge.emit("portal:walkTo", { kind: "hunt" });
   }
 
+  /**
+   * 11/19 외치기 창 [상점에서 사기]: 그 자리에서 상점 창을 띄우지 않고 내 캐릭터가 마을 유령 잡화점까지 걸어가 들어간 뒤
+   * 상점 창을 확성기 탭(고른 확성기)으로 연다 (lib/shopWalk). 잡화점 안이면 바로, 마을 밖·실내면 안내만
+   */
+  function goShopFor(itemId: string) {
+    const act = shopPress({ map: mapNow, scene, riding });
+    if (act.do === "toast") return showToast(act.message);
+    openShopTab("megaphone", itemId);
+    if (act.do === "open") return setPanel("shop");
+    if (rideGate("잡화점에 갈")) return void takeShopTab();
+    setPanel(null);
+    bridge.emit("portal:walkTo", { kind: "shop" });
+  }
+
   /** 터치 메뉴 시트에서 고른 것 열기 */
   function pickFromMenu(target: MenuTarget) {
     if (target === "hunt") {
@@ -662,6 +737,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     } else if (target === "favs") {
       setPanel(null);
       openRadial();
+    } else if (target === "photo") {
+      setPanel(null);
+      openPhoto();
     } else setPanel(target);
   }
 
@@ -671,8 +749,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const fireworkCount = me ? fireworkEntries(me).reduce((n, e) => n + e.count, 0) : 0;
 
   return (
-    <div className={styles.shell}>
+    <div className={styles.shell} data-photo={photo ? "" : undefined}>
       <GameCanvas {...options} />
+      {photo && <PhotoMode touch={coarse} onExit={() => setPhoto(false)} />}
       {ready && disconnected && <div className={styles.dim} aria-hidden="true" />}
       {ready && <UpdateNotice />}
       {/* 47번 다른 사람 캐릭터 메뉴(신고하기)·신고 창 */}
@@ -696,7 +775,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {/* 11/17 r2 선착장 길목 과자 자판기 창 */}
       {ready && <SnackVendLayer />}
       {/* 11/15 긴급 의뢰: 시작 알림 · 위쪽 남은 시간·서버 전체 막대 (마을 어디서든) */}
-      {ready && <UrgentHud />}
+      {ready && !quietTop && <UrgentHud />}
 
       {ready && (
         <div className={cx(styles.overlay, (away || riding) && styles.away, campfire && styles.campfire, viewing && styles.viewing)}>
@@ -725,6 +804,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 {/* 불멍·놀이기구 중: 폭죽이 있으면 위쪽 줄에서 바로 쏘기 (메뉴 시트를 안 거쳐도) */}
                 {campfire && <FireworkButton variant="top" onOpen={() => setPanel("fireworks")} />}
                 <GhostStaffButton variant="top" className={cx(ui.button, ui.icon, ui.top)} />
+                {/* 11/19 운영자만: 확성기 고정 공지 쓰기 (공지 칩에서 옮겼다) */}
+                <MegaPinButton channel={channel} className={cx(ui.button, ui.icon, ui.top)} />
               </div>
               <Hud compact onOpenChannels={() => setPanel("channels")} />
               {/* 11/15 먹거리 효과 게이지: 위 줄 아래 왼쪽에 작게 */}
@@ -733,11 +814,11 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           ) : (
             <>
               <div className={styles.topLeft}>
-                <BgmPlayer />
+                {/* 11/19 배경 음악 줄과 확성기 줄을 한 줄로 (언덕 위 옛 묘역을 덜 가리게 — 외침 기록은 왔을 때만 아래에) */}
+                <MegaphoneFeed channel={channel} lead={<BgmPlayer />} />
                 {/* 11/15 먹거리 효과 게이지 (효과가 있을 때만) */}
                 <FoodGauge />
                 {options.debug && <NetHud />}
-                <MegaphoneFeed channel={channel} />
               </div>
               {!narrow && (
                 <div className={styles.topCenter}>
@@ -770,6 +851,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                   <PixelIcon name="gift" />
                   {giftCount > 0 && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
                 </button>
+                {/* 11/19 운영자만: 확성기 고정 공지 쓰기 (왼쪽 위 확성기 줄에서 옮겼다) */}
+                <MegaPinButton channel={channel} className={cx(ui.button, ui.icon, ui.top, styles.topButton)} />
                 {/* 친구: 위쪽 버튼 줄에 글자와 함께 바로 (받은 신청이 있으면 빨간 점). 운영자 계정은 친구 기능이 없다 */}
                 {!iAmStaff && (
                   <button
@@ -791,6 +874,18 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                     다람쥐 초기화
                   </button>
                 )}
+                {/* 11/19 촬영 모드 (K) */}
+                <button
+                  type="button"
+                  className={cx(ui.button, ui.top, styles.topButton)}
+                  onClick={openPhoto}
+                  aria-disabled={canPhoto ? undefined : true}
+                  aria-label="촬영 모드"
+                  title="촬영 모드 (K)"
+                >
+                  <PixelIcon name="camera" />
+                  <span className={cx(styles.dockKey, styles.topKey)} aria-hidden="true">K</span>
+                </button>
                 <button
                   type="button"
                   className={cx(ui.button, ui.icon, ui.top, styles.topButton)}
@@ -817,7 +912,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
             </>
           )}
           {/* 23번 확성기 창: 데스크톱은 왼쪽 위 음악 아래. 11/17 터치는 확성기 줄 없이 고정 공지 칩만 (긴급 의뢰 칩 아래) */}
-          {coarse && <MegaphoneFeed channel={channel} floating />}
+          {coarse && !quietTop && <MegaphoneFeed channel={channel} floating />}
+          {/* 11/19 터치: [메뉴] 줄 아래 칩 하나 — 첫 걸음이 남았으면 「첫 걸음」, 다 끝냈으면 「미션」 (위쪽 줄에는 꾸러미·미션 칩을 두지 않는다) */}
+          {coarse && !showTutorial && <RetainPhoneChip />}
           {/* 바로 가기 줄: 데스크톱만 왼쪽 아래 모서리. 터치는 위쪽 [메뉴] 시트에 모두 있고 [표현]만 행동 버튼 옆(MobileControls) */}
           {!coarse && (
             <nav ref={dockRef} className={styles.dock} aria-label="바로 가기">
@@ -856,6 +953,11 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 <PixelIcon name="book" />
                 도감
               </button>
+              {/* 11/19 어디서든 의뢰 보기 (납품은 마을 의뢰 게시판에서 — 창 아래 [게시판까지 안내]). 빈 단축키가 없어 키 표시는 없다 */}
+              <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("quests")} title="오늘의 의뢰 보기" aria-label="의뢰 보기">
+                <PixelIcon name="board" />
+                <span className={styles.dockWideLabel}>의뢰</span>
+              </button>
               <button ref={houseBtnRef} type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("housing")}>
                 <PixelIcon name="house" />집
               </button>
@@ -876,6 +978,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 )}
               </button>
               <FireworkButton onOpen={() => setPanel("fireworks")} />
+              {/* 11/19 타는 펫 타기·내리기: 데스크톱은 바로 가기 줄 폭죽 옆(폭죽이 없으면 공지 옆), 터치는 행동 버튼 묶음 안(MobileControls) */}
+              {!coarse && <RideButton variant="desktop" className={cx(ui.button, styles.dockButton)} />}
               {/* 11/18 바닷가 운영자 유령선 (운영자에게만) */}
               <GhostStaffButton />
             </nav>
@@ -883,9 +987,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           <div className={styles.bottomCenter}>
             {showTutorial && <Tutorial touch={coarse} onDone={() => setTutorialOn(false)} />}
             <ToastList toasts={toasts} />
-            {huntWalking && (
+            {(huntWalking || shopWalking) && (
               <button type="button" className={cx(ui.button, styles.walkHint)} onClick={() => bridge.emit("portal:walkTo", { kind: null })} aria-live="polite">
-                {huntWalkHint(coarse)}
+                {shopWalking ? shopWalkHint(coarse) : huntWalkHint(coarse)}
               </button>
             )}
             <StatusBanners />
@@ -893,8 +997,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           </div>
           <Minimap />
           <CameraControls showZoom={!coarse} />
-          {/* 타는 펫 타기·내리기: 데스크톱은 오른쪽 아래 확대·축소 버튼 왼쪽, 터치는 행동 버튼 묶음 안(MobileControls) */}
-          {!coarse && <RideButton variant="desktop" className={ui.button} />}
+          {/* 11/19 데스크톱: 새 이웃 꾸러미·오늘 미션·첫 걸음 칩을 오른쪽 아래 확대·축소 왼쪽에 (왼쪽 위를 비운다, 첫 방문 안내 동안 첫 걸음은 숨긴다) */}
+          {!coarse && <RetainDock showFirst={!showTutorial} />}
           {coarse && (
             // 11/16 r19 바라보는 장면 동안에도 남아요 (조이스틱 = 움직여 나가기, [채팅]만 — 다른 행동 버튼은 숨어요)
             <div className={styles.viewKeep} data-view-keep="">
@@ -1021,6 +1125,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           titleNew={titleNew}
           noFriends={iAmStaff}
           huntBlocked={rideOff}
+          canPhoto={canPhoto}
           points={me ? me.points : null}
           onPick={pickFromMenu}
           onClose={closePanel}
@@ -1070,10 +1175,21 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {/* 주간 랭킹 1위 알림 창 (본인에게 한 번) */}
       {ready && <ChampNotice onOpenPerks={openPerks} />}
       {ready && <TitleNotice />}
+      {/* 11/18 새 이웃 꾸러미·오늘 미션·첫 걸음 창 + 진행 듣기 */}
+      {ready && <RetainLayer onOpenBag={() => setPanel("bag")} />}
       {panel === "calendar" && <CalendarDialog onClose={closePanel} />}
       {panel === "gifts" && <GiftsDialog onClose={closePanel} onOpenCalendar={() => setPanel("calendar")} />}
       {panel === "friends" && <FriendsDialog onClose={closePanel} />}
-      <MegaphoneLayer channel={channel} onOpenShop={() => setPanel("shop")} />
+      {panel === "quests" && (
+        <QuestPeek
+          onClose={closePanel}
+          onGuide={() => {
+            closePanel();
+            guideToQuestBoard(coarse);
+          }}
+        />
+      )}
+      <MegaphoneLayer channel={channel} onOpenShop={goShopFor} />
       {panel === "shop" && <ShopDialog onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
     </div>
   );

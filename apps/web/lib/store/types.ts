@@ -1,3 +1,4 @@
+import type { RetainRecord } from "../retain";
 import type { CosmeticSlot } from "@tomb/protocol";
 import type { AttendClaim, CalendarMonthRecord } from "../calendar";
 import type { EarnSource } from "../economy";
@@ -148,7 +149,14 @@ export function presenceCatchup(last: number, now: number, sameSid: boolean): { 
  * 적립 선택값: amount(없으면 항목 기본 점수), ipHash(11/18부터 쓰지 않는다 — 같은 IP 합계 한도 없음),
  * boost(포인트 배수 이벤트 — 고른 항목이면 적립이 배수, 횟수 규칙이 남은 항목은 하루 최대도 배수. 없으면 저장소가 지금 설정을 읽는다, lib/pointEvent earnTerms)
  */
-export type EarnOptions = { amount?: number; ipHash?: string; boost?: EarnBoost };
+export type EarnOptions = { amount?: number; ipHash?: string; boost?: EarnBoost; quest?: QuestHook | null };
+
+/**
+ * 11/18 오늘의 할 일 진행 한 칸 올리기 (lib/retainQuest questHook). 행동을 처리하는 저장소 명령(Lua·파이프라인)이 같은 왕복에서
+ * 오늘 적립 해시 key의 field를 1 올린다 (추가 왕복 없음, 명령 +1 — 그날 할 일에 든 행동만). 올린 뒤 값은 have에 적는다.
+ * 메모리 저장소는 local로 계정 메모리의 같은 칸을 올린다
+ */
+export type QuestHook = { key: string; field: string; ttlSec: number; local: (n: number) => number; have?: number };
 export type Profile = { name?: string | null; color?: string | null; body?: string | null };
 export type RankEntry = { accountId: string; name: string | null; points: number; rank: number };
 
@@ -185,7 +193,23 @@ export type AccountRecord = {
   tutorialDone: boolean;
   /** 휴면(DORMANT_DAYS일 넘게 안 들어옴)에서 돌아왔다 → 닉네임을 다시 정해야 마을에 들어갈 수 있다 */
   renameRequired: boolean;
+  /** 11/18 리텐션 (새 이웃 꾸러미·첫 걸음·오늘의 할 일 — lib/retain.ts). 계정·오늘 적립 해시에서 같이 읽는다 */
+  retain: RetainRecord;
 };
+
+/** 11/18 새 이웃 꾸러미 받기에 넣는 것 (lib/retain PATH 여러 칸을 합친 계정 저장소 몫 — 물약·강화 재료는 사냥 저장소가 따로) */
+export type PathGrant = {
+  /** 한꺼번에 받는 꾸러미 수 (밀린 것까지) */
+  count: number;
+  items: readonly { itemId: string; count: number }[];
+  /** 11/19 기간제 꾸미기 [아이템 id, 부위] — until까지 (입고 있으면 그 자리, 아니면 벗어 둔 꾸미기) */
+  wear: readonly (readonly [string, CosmeticSlot])[];
+  until: number;
+  /** 사냥 가방 몫이 있는 꾸러미 번호들 (계정 해시 gpPot에 쉼표로 — 넣고 나면 지운다) */
+  pend: readonly number[];
+};
+/** ok = 받음 · today = 오늘 이미 받음 · stale = 받은 수가 달라졌다(다른 탭이 먼저) */
+export type PathClaim = { ok: true } | { ok: false; reason: "today" | "stale" };
 
 /** 내 소식 보관 개수 */
 export const ACTIVITY_KEEP = 50;
@@ -419,6 +443,24 @@ export interface AccountStore {
   /** 관리자 일괄 색인: cursor부터 계정 몇 개를 훑어 색인에 채운다. next = "0"이면 끝 */
   reindexNames(cursor: string, count: number, now: number): Promise<{ next: string; indexed: number; dup: number }>;
   setTutorialDone(id: string): Promise<void>;
+  /**
+   * 11/18 새 이웃 꾸러미 받기 (원자적으로 한 번): 받은 수가 expect일 때만 받은 수 + grant.count·오늘 날짜를 적고 가방·기간제 꾸미기를 넣는다.
+   * 11/19 밀린 꾸러미를 한꺼번에 (하루 한 번 제한 없음 — 받을 수는 서버가 가입한 날부터 센다). 사냥 가방 몫은 gpPot에 적어 두고 서버가 따로
+   */
+  claimGiftPath(id: string, day: string, expect: number, grant: PathGrant, now: number): Promise<PathClaim>;
+  /** 꾸러미 창이 오늘 저절로 열렸다 (하루 한 번) */
+  markPathSeen(id: string, day: string): Promise<void>;
+  /** 사냥 가방 몫을 넣었으면 표시를 지운다 */
+  clearPathPotions(id: string): Promise<void>;
+  /** 첫 걸음 미션 한 칸 표시 (비트). mask = 새 비트 마스크, fresh = 이번에 처음 켰다 (그 칸 작은 선물을 줄 때). 큰 선물까지 받았으면 null */
+  markFirstStep(id: string, bit: number): Promise<{ mask: number; fresh: boolean } | null>;
+  /** 첫 걸음 큰 선물 (미션을 다 했을 때 한 번): 가방 아이템. 받으면 1, 이미 받았으면 -1, 덜 했으면 -2 (사냥 가방 몫은 서버가 따로) */
+  claimFirstSteps(id: string, day: string, all: number, item: { itemId: string; count: number }, now: number): Promise<number>;
+  /**
+   * 오늘의 할 일 받기 (원자적으로 한 번): which 0..2 = 그 칸(진행 칸 field가 need 이상일 때), 3 = 셋 다(0..2를 다 받았을 때 — 도장 +1).
+   * 받으면 1 (셋 다는 올린 뒤 도장 수), 이미 받았으면 -1, 아직이면 -2 (포인트·사냥 가방 몫은 서버가 따로)
+   */
+  claimTodo(id: string, day: string, which: number, field: string, need: number, now: number): Promise<number>;
   /** 날짜(YYYYMMDD)별 경제 통계 필드: `earn:{source}`, `spend:{분류}`, `refund` (운영자 계정 활동은 ECON_STAFF_EXCLUDED_FROM부터 빠져 있다) */
   economy(days: string[]): Promise<{ date: string; fields: Record<string, number> }[]>;
   /** 포인트를 가진 적 있는 계정 수와 지갑 잔액 합계. exclude(운영자 계정)는 빼고 센다 */

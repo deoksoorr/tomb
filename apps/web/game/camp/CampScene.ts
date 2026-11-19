@@ -69,6 +69,7 @@ import type { BusArrivalApi } from "../bus/busTypes";
 import { CampMap } from "./CampMap";
 import { FoodFx } from "./foodFx";
 import { BIG_RIDE_TOAST, BIG_SEAT_TOAST, bigSeatBlocked, foodOfPeer, myBig, RIDING_EAT_TOAST } from "./foodState";
+import { friendRoute, nextAfterVillage } from "@/lib/friendRoute";
 import { CAMP_BBQ } from "./campLayout";
 import { CampForage } from "./campForage";
 import { CampLife } from "./campLife";
@@ -714,12 +715,14 @@ export class CampScene extends Phaser.Scene {
     })();
     on.push(
       bridge.on("friend:goto", ({ sid, name, x, y, map }) => {
-        if (map === "camp") this.goToFriend(sid, name, x, y);
-        // 11/16 바닷가 친구는 마을을 거쳐 가요 (버스가 마을에만 서요)
-        else if (map === "sea") bridge.emit("friend:notice", { message: "바닷가는 마을에서 버스를 타고 가요. 먼저 마을행 버스를 타요." });
+        // 11/19 마을·바닷가 친구 모두 버스로 (바닷가는 마을 정류장을 거쳐 이어 타요 — lib/friendRoute). 몸이 커져 있으면 버스를 못 타요
+        const route = friendRoute("camp", map ?? "village", myBig());
+        if (route.do === "warp") this.goToFriend(sid, name, x, y);
+        else if (route.do === "block") bridge.emit("friend:notice", { message: route.message });
         else {
           this.closeTalk();
-          this.host.goVillage({ sid, name, x, y });
+          const next = nextAfterVillage(route);
+          this.host.goVillage({ sid, name, x, y, ...(next ? { next } : {}) });
         }
       }),
     );

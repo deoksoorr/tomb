@@ -73,9 +73,20 @@ describe("ambience", () => {
 });
 
 describe("11/19 화면에 보이는 시간대 이름", () => {
-  it("7~10시는 아침 (하늘은 낮 그대로), 10시부터 낮", () => {
+  it("새벽·아침(7~11)·점심(11~14)·오후(14~17.5)·해질녘·밤 — 게임 규칙의 phase는 낮 그대로", () => {
     const at = (h: number) => skyLabel({ phase: timePhase(h), kstHour: h });
-    expect([5, 6.9, 7, 7.4, 9.9, 10, 17, 18, 23].map(at)).toEqual(["새벽", "새벽", "아침", "아침", "아침", "낮", "낮", "해질녘", "밤"]);
-    expect(timePhase(8)).toBe("day");
+    expect([5, 6.9, 7, 10.9, 11, 13.9, 14, 17.4, 18, 23].map(at)).toEqual(["새벽", "새벽", "아침", "아침", "점심", "점심", "오후", "오후", "해질녘", "밤"]);
+    expect([8, 12, 15].map(timePhase)).toEqual(["day", "day", "day"]);
+  });
+
+  it("맵 빛: 아침은 푸른 빛, 점심이 가장 밝고, 오후는 노릇하다", () => {
+    const tint = (h: number) => ambienceAt(Date.UTC(2026, 5, 1, 0), { hour: h, weather: "clear" }).palette.worldTint;
+    const rgb = (c: number) => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
+    const [mr, , mb] = rgb(tint(8.5));
+    const noon = rgb(tint(12.5));
+    const [ar, , ab] = rgb(tint(16));
+    expect(mb).toBeGreaterThan(mr);
+    expect(ar).toBeGreaterThan(ab + 20);
+    expect(noon.reduce((a, b) => a + b)).toBeGreaterThan(rgb(tint(8.5)).reduce((a, b) => a + b));
   });
 });

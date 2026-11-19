@@ -1,4 +1,4 @@
-import { GRID_COLS, GRID_DY, GRID_ROWS, GRID_Y0, flowerStack, graveSlot, graveVisible } from "@tomb/protocol";
+import { GRAVE_SCALE, GRID_COLS, GRID_DY, GRID_ROWS, GRID_Y0, flowerStack, graveSlot, graveVisible } from "@tomb/protocol";
 import { graveShape, SHAPE_SIZE, shapeVariants, type GraveShape } from "../graveShape";
 
 // 묘비 배치 계산 (순수). 작은 묘역 격자에 등록 순서(index) → graveSlot(index).
@@ -134,9 +134,9 @@ export function buildLayout(graves: readonly GraveInfo[], reviveTop: readonly st
   };
 }
 
-/** 격자 묘비가 그려지는 세로 범위: 받침 위로 32px, 아래로 10px (꽃·흙) */
-const ROW_TOP = 32;
-const ROW_BOTTOM = 10;
+/** 격자 묘비가 그려지는 세로 범위: 받침 위로 32px, 아래로 10px (꽃·흙) — 11/19 묘비가 GRAVE_SCALE배로 작아져 같이 줄인다 */
+const ROW_TOP = Math.round(32 * GRAVE_SCALE);
+const ROW_BOTTOM = Math.round(10 * GRAVE_SCALE);
 
 /** 화면에 걸치는 격자 행 범위 [r0, r1] (없으면 r0 > r1). out을 주면 거기에 채운다 */
 export function visibleRows(top: number, bottom: number, rows: number, out: [number, number] = [0, 0]): [number, number] {
@@ -145,14 +145,14 @@ export function visibleRows(top: number, bottom: number, rows: number, out: [num
   return out;
 }
 
-/** 묘비 앞, 캐릭터가 서는 자리 (아바타 머리가 비석을 가리지 않을 만큼 떨어져 선다) */
-export const FRONT_OFFSET = 22;
+/** 묘비 앞, 캐릭터가 서는 자리 (아바타 머리가 비석을 가리지 않을 만큼 떨어져 선다 — 11/19 작아진 묘비에 맞춰 22 × GRAVE_SCALE) */
+export const FRONT_OFFSET = Math.round(22 * GRAVE_SCALE);
 export function standSpot(p: Pick<GravePlacement, "x" | "y">): { x: number; y: number } {
   return { x: p.x, y: p.y + FRONT_OFFSET };
 }
 
-/** 근접 판정은 묘비 앞(받침 아래 6px) 기준 거리 */
-const FRONT_PROBE = 6;
+/** 근접 판정은 묘비 앞(받침 아래 6px × GRAVE_SCALE) 기준 거리 */
+const FRONT_PROBE = Math.round(6 * GRAVE_SCALE);
 
 export type NearResult = { p: GravePlacement; dist: number };
 
@@ -192,7 +192,9 @@ function hit(p: GravePlacement | null | undefined, wx: number, wy: number): bool
   if (!p) return false;
   const s = TIER_SIZE[p.shape];
   const pad = 3;
-  return wx >= p.x - s.w / 2 - pad && wx <= p.x + s.w / 2 + pad && wy >= p.y - s.h - pad && wy <= p.y + 6;
+  const w = s.w * GRAVE_SCALE;
+  const h = s.h * GRAVE_SCALE;
+  return wx >= p.x - w / 2 - pad && wx <= p.x + w / 2 + pad && wy >= p.y - h - pad && wy <= p.y + 5;
 }
 
 /** 탭/클릭 지점의 묘비 */

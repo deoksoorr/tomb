@@ -1,4 +1,4 @@
-import { GOBLIN_GAP_MAX_MS, GOBLIN_GAP_MIN_MS, GOBLIN_LIFE_MS, GOBLIN_POINTS_MAX, GOBLIN_POINTS_MIN, ITEMS, itemById, itemName, type DyeSpecial, DYE_SPECIAL_NAMES } from "@tomb/protocol";
+import { GOBLIN_GAP_MAX_MS, GOBLIN_GAP_MIN_MS, GOBLIN_JACKPOT_CHANCE, GOBLIN_JACKPOT_POINTS, GOBLIN_LIFE_MS, GOBLIN_POINTS_AVG, GOBLIN_POINTS_MAX, GOBLIN_POINTS_MIN, ITEMS, itemById, itemName, type DyeSpecial, DYE_SPECIAL_NAMES } from "@tomb/protocol";
 import { DYE_TIERS, type DyeTier } from "@/lib/dye/palette";
 import { RARITY_LABEL, RARITY_WEIGHT, type Rarity } from "@/lib/forage/catalog";
 import { AUTO_CATCH_CHANCE, AUTO_FISH_EVERY_MS } from "@/lib/forage/auto";
@@ -7,11 +7,11 @@ import { SUNKEN_CHANCE, SUNKEN_CHANCE_AUTO } from "@/lib/forage/sunken";
 import { FEST_RARE_BOOST } from "@/lib/forage/quests/urgent";
 import { LOTTERY_SPLIT } from "@/lib/lottery";
 import { DIFFICULTIES, DIFFS, POTIONS } from "@/lib/rpg/catalog";
-import { ENH_DROP_FROM, ENH_FAIL_BONUS, ENHANCE_TABLE } from "@/lib/rpg/enhance";
+import { ENH_DROP_FROM, ENH_FAIL_BONUS, ENHANCE_TABLE, inheritTo } from "@/lib/rpg/enhance";
 import { HUNT_DROP_ROLLS, KILLS_PER_DROP_ROLL } from "@/lib/rpg/rewards";
 import { SG_GRADE_NAMES, SG_LEGEND_CHANCE, SG_PIECE_LABEL, SG_PIECES, SG_SETS } from "@/lib/rpg/setGear";
-import { CHEST_COSMETIC_CHANCE, chestDocs, chestSeals, COS_DAYS, COS_TIER_NAMES, cosTierWeights, SG_CHEST_CHANCE, SG_PIECE_WEIGHTS, SG_PITY, sgGradeForFloor } from "@/lib/rpg/setGearRoll";
-import { TOWER_BOSS_EVERY } from "@/lib/rpg/tower";
+import { CHEST_COSMETIC_CHANCE, chestDocs, chestSeals, COS_DAYS, COS_TIER_NAMES, cosTierWeights, SG_CHEST_CHANCE, SG_PIECE_WEIGHTS, sgGradeForFloor } from "@/lib/rpg/setGearRoll";
+import { TOWER_BOSS_EVERY, TOWER_CHEST_FROM } from "@/lib/rpg/tower";
 import { FEATHER_CHANCE, RED_FEATHER_SHARE } from "@/lib/sea/gull";
 import { PERK_VALUES, TITLE_GRADE_NAMES } from "@/lib/titles";
 import { WISH_BONUS_JACKPOT, WISH_BONUS_SPARKLE, WISH_LUCK_TABLE } from "@/lib/wish";
@@ -70,17 +70,10 @@ export const starsPotionRow = (): string[] => ["물약 1개", ...DIFFICULTIES.ma
 
 // ── 야근 빌딩 우두머리 상자 ──
 
-/** 천장까지 셈한 세트 장비 평균 확률: 한 번 받을 때까지 연 상자 수의 기댓값의 역수 */
-export function setGearLongRun(): number {
-  let expect = 0;
-  for (let j = 0; j <= SG_PITY; j++) expect += (1 - SG_CHEST_CHANCE) ** j;
-  return 1 / expect;
-}
-
-/** 우두머리 층 구간마다 직급 ("5~14층 사원급" …). 우두머리 층만 본다 */
+/** 우두머리 층 구간마다 직급 ("50~99층 사원급" …). 상자가 열리는 우두머리 층만 본다 (11/19 TOWER_CHEST_FROM층부터) */
 export function gradeBands(maxFloor = 200): { from: number; to: number | null; name: string }[] {
   const out: { from: number; to: number | null; name: string }[] = [];
-  for (let f = TOWER_BOSS_EVERY; f <= maxFloor; f += TOWER_BOSS_EVERY) {
+  for (let f = TOWER_CHEST_FROM; f <= maxFloor; f += TOWER_BOSS_EVERY) {
     const name = SG_GRADE_NAMES[sgGradeForFloor(f)];
     const last = out[out.length - 1];
     if (last && last.name === name) continue;
@@ -98,10 +91,11 @@ export function chestRows(): string[][] {
     return null;
   });
   return [
+    ["상자", `${TOWER_CHEST_FROM}층부터 우두머리 층마다 열려요.`],
     ["물약", `1개 ${pct(1 - CHEST_TWO_POTIONS)}, 2개 ${pct(CHEST_TWO_POTIONS)}`],
-    ["결재 서류", `늘 나와요. ${TOWER_BOSS_EVERY}층 상자는 ${chestDocs(TOWER_BOSS_EVERY)}장, 10층마다 1장씩 늘어요.`],
+    ["결재 서류", `늘 나와요. ${TOWER_CHEST_FROM}층 상자는 ${chestDocs(TOWER_CHEST_FROM)}장, 10층마다 1장씩 늘어요.`],
     ["인감 도장", sealFrom[0] ? `${sealFrom[0]}층부터 ${chestSeals(sealFrom[0])}개${sealFrom[1] ? `, ${sealFrom[1]}층부터 ${chestSeals(sealFrom[1])}개` : ""}예요.` : "나오지 않아요."],
-    ["세트 장비", `${pct(SG_CHEST_CHANCE)}예요. ${SG_PITY}번 연속 못 받으면 다음 상자에서 반드시 나와서 평균 약 ${pct(Math.round(setGearLongRun() * 1000) / 1000)}예요.`],
+    ["세트 장비", `${pct(SG_CHEST_CHANCE)}예요. 못 받은 횟수가 쌓여도 확률은 그대로예요.`],
     ["꾸미기", `${pct(CHEST_COSMETIC_CHANCE)}예요.`],
   ];
 }
@@ -121,7 +115,7 @@ export const legendOption = () => ({ grade: SG_GRADE_NAMES[3], chance: pct(SG_LE
 /** 꾸미기 등급 비율 (층 구간마다 바뀌는 곳에서 끊는다) */
 export function cosTierRows(): { head: string[]; rows: string[][] } {
   const bands: { from: number; w: readonly number[] }[] = [];
-  for (let f = TOWER_BOSS_EVERY; f <= 200; f += TOWER_BOSS_EVERY) {
+  for (let f = TOWER_CHEST_FROM; f <= 200; f += TOWER_BOSS_EVERY) {
     const w = cosTierWeights(f);
     const last = bands[bands.length - 1];
     if (!last || last.w.join() !== w.join()) bands.push({ from: f, w });
@@ -144,10 +138,32 @@ export function cosDaysRows(): string[][] {
 
 export function enhanceRows(): string[][] {
   const out: string[][] = [];
-  for (let t = 1; t < ENHANCE_TABLE.length; t++) out.push([`+${t}`, pct(ENHANCE_TABLE[t].rate), t - 1 >= ENH_DROP_FROM ? "한 단계 내려가요" : "그대로예요"]);
+  // 11/19 강화 개편: 비용(포인트)도 같이 보여 준다
+  for (let t = 1; t < ENHANCE_TABLE.length; t++)
+    out.push([`+${t}`, pct(ENHANCE_TABLE[t].rate), t - 1 >= ENH_DROP_FROM ? "한 단계 내려가요" : "그대로예요", `${ENHANCE_TABLE[t].cost.toLocaleString("ko-KR")}P`]);
   return out;
 }
 export const enhanceFailBonus = () => `${Math.round(ENH_FAIL_BONUS * 100)}%p`;
+
+/**
+ * 11/19 강화 승계: 재료(직급·강화) → 받는 직급마다 받는 강화. 받은 뒤 기본 능력치가 재료보다 떨어지지 않는 가장 낮은 단계 (갑옷 기준).
+ * head = [재료, 대리급, 과장급, 임원급], 더 높은 직급만 받을 수 있어 아래·같은 직급 칸은 「—」
+ */
+export function inheritRows(): { head: string[]; rows: string[][] } {
+  const grades = [0, 1, 2, 3] as const;
+  const head = ["재료", ...grades.slice(1).map((g) => SG_GRADE_NAMES[g])];
+  const rows: string[][] = [];
+  for (const from of [0, 1, 2] as const)
+    for (const e of [5, 10, 15]) {
+      const cells = grades.slice(1).map((to) => {
+        if (to <= from) return "—";
+        const m = inheritTo(from, e, to);
+        return m > 0 ? `+${m}` : "옮길 게 없어요";
+      });
+      rows.push([`${SG_GRADE_NAMES[from]} +${e}`, ...cells]);
+    }
+  return { head, rows };
+}
 
 // ── 낚시·채집 ──
 
@@ -189,8 +205,12 @@ export const wishBonus = () => ({ jackpot: pct(WISH_BONUS_JACKPOT), sparkle: pct
 export const goblinFacts = () => ({
   gap: `${GOBLIN_GAP_MIN_MS / 3_600_000}~${GOBLIN_GAP_MAX_MS / 3_600_000}시간`,
   life: `${GOBLIN_LIFE_MS / 1000}초`,
-  points: `${GOBLIN_POINTS_MIN}~${GOBLIN_POINTS_MAX}P`,
-  avg: `${Math.round((GOBLIN_POINTS_MIN + GOBLIN_POINTS_MAX) / 2)}P`,
+  // 11/19 보통 300~1,000P(10P 단위로 고르게) + 드물게 대박 2,000P
+  points: `${GOBLIN_POINTS_MIN.toLocaleString("en-US")}~${GOBLIN_POINTS_MAX.toLocaleString("en-US")}P`,
+  normal: pct(1 - GOBLIN_JACKPOT_CHANCE),
+  jackpot: `${GOBLIN_JACKPOT_POINTS.toLocaleString("en-US")}P`,
+  jackpotChance: pct(GOBLIN_JACKPOT_CHANCE),
+  avg: `${Math.round(GOBLIN_POINTS_AVG).toLocaleString("en-US")}P`,
 });
 
 // ── 크리스마스 선물상자 ──

@@ -14,13 +14,18 @@ import ui from "../ui/ui.module.css";
 import h from "./haunt.module.css";
 import { isBetter, readBest, saveBest, type HauntBest } from "./record";
 import { rideGate } from "@/lib/rideGate";
+import { endPlayTodo, playWanted, startPlayTodo } from "../overlay/RetainHud";
 
 // 귀신의집 (월드의 귀신의집 문 앞 E → portal:open {kind:"haunt"}). 혼자 하는 공포 미로 — 포인트 보상 없음.
 // 들어가기 전 경고 → haunt:play(시드) → 미로 동안 위 작은 HUD·나가기·조이스틱 → haunt:ended → 결과(걸린 시간·놀란 횟수·내 최고 기록).
 // 미로 안에서는 BGM을 잠시 멈춘다(무서운 정적) — 켜 두었던 경우만 나온 뒤 다시 튼다.
+// 11/19 오늘 미션 「귀신의 집 끝까지 돌파하기」면 서버가 고른 미로 시드로 들어가고(시작 표), 출구까지 빠져나왔을 때만 표를 돌려줘 센다 (lib/retainPlay).
 
 type Phase = "intro" | "playing" | "result";
 type Outcome = { escaped: boolean; ms: number; scares: number; record: boolean };
+
+/** 미션 시작 표를 기다리는 최대 시간 (못 받으면 그냥 들어간다 — 그 판은 미션에 안 센다) */
+const MISSION_WAIT_MS = 3_000;
 
 function newSeed(): number {
   try {
@@ -115,6 +120,8 @@ export default function HauntDialog({ onClose }: { onClose: () => void }) {
   const [phase, setPhase] = useState<Phase>("intro");
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [best, setBest] = useState<HauntBest | null>(readBest);
+  const [entering, setEntering] = useState(false);
+  const mission = playWanted("haunt");
   const phaseRef = useRef<Phase>("intro");
   useEffect(() => {
     phaseRef.current = phase;
@@ -152,18 +159,34 @@ export default function HauntDialog({ onClose }: { onClose: () => void }) {
 
   function enter() {
     // 11/16 탈것에 탄 채로는 못 들어간다 (lib/rideGate — 안내 토스트). 의자·벤치면 일어나서
-    if (rideGate("귀신의 집에 들어갈")) return;
+    if (entering || rideGate("귀신의 집에 들어갈")) return;
+    // 11/19 오늘 미션이면 서버 시드로 (미션이 아니면 요청 없이 바로)
+    if (!playWanted("haunt")) {
+      begin(newSeed());
+      return;
+    }
+    setEntering(true);
+    const wait = new Promise<null>((ok) => setTimeout(() => ok(null), MISSION_WAIT_MS));
+    void Promise.race([startPlayTodo("haunt"), wait]).then((t) => {
+      setEntering(false);
+      begin(t?.seed ?? newSeed());
+    });
+  }
+
+  function begin(seed: number) {
     bgmWas.current = bgm.getSnapshot().playing;
     if (bgmWas.current) bgm.pause();
     setOutcome(null);
     phaseRef.current = "playing";
     setPhase("playing");
-    bridge.emit("haunt:play", { seed: newSeed() });
+    bridge.emit("haunt:play", { seed });
   }
 
   useBridgeEvent("haunt:ended", ({ escaped, ms, scares }) => {
     if (phaseRef.current !== "playing") return;
     phaseRef.current = "result";
+    // 오늘 미션: 출구까지 빠져나온 판만 (중간에 나오면 세지 않는다)
+    endPlayTodo("haunt", escaped, Math.round(ms));
     restoreBgm();
     const prev = readBest();
     const record = escaped && isBetter(prev, { ms, scares });
@@ -198,7 +221,7 @@ export default function HauntDialog({ onClose }: { onClose: () => void }) {
             </p>
           )}
           <div className={s.buttons}>
-            <button type="button" className={cx(ui.button, ui.primary)} onClick={enter}>
+            <button type="button" className={cx(ui.button, ui.primary)} onClick={enter} disabled={entering}>
               다시 들어가기
             </button>
             <button type="button" className={ui.button} onClick={onClose}>
@@ -223,12 +246,14 @@ export default function HauntDialog({ onClose }: { onClose: () => void }) {
           기기의 &lsquo;동작 줄이기&rsquo;를 켜 두면 화면이 흔들리거나 번쩍이지 않아요. 귀신은 그대로 나와요. 소리 크기는 설정의 효과음 음량을 따라요.
         </div>
         <ShakeToggle />
+        {mission && <p className={h.record}>오늘 미션이에요. 중간에 나오지 않고 출구까지 돌파하면 한 칸을 채워요.</p>}
         <p className={ui.hint}>
-          포인트 보상은 없어요. {best ? `내 최고 기록: ${formatHauntTime(best.ms)} (놀람 ${best.scares}번)` : "아직 빠져나온 기록이 없어요."}
+          {mission ? "" : "포인트 보상은 없어요. "}
+          {best ? `내 최고 기록: ${formatHauntTime(best.ms)} (놀람 ${best.scares}번)` : "아직 빠져나온 기록이 없어요."}
         </p>
         <div className={s.buttons}>
-          <button type="button" className={cx(ui.button, ui.primary)} onClick={enter}>
-            들어가기
+          <button type="button" className={cx(ui.button, ui.primary)} onClick={enter} disabled={entering}>
+            {entering ? "들어가는 중…" : "들어가기"}
           </button>
           <button type="button" className={ui.button} onClick={onClose}>
             그만두기

@@ -38,6 +38,8 @@ export default function MobileControls({
   const [running, setRunning] = useState(false);
   // sticky라 마운트 전에 다가간 묘비·좌석도 바로 반영된다
   const nearGrave = useBridgeValue("grave:near") != null;
+  // 11/19 문 앞이면 「들어가기」·「나가기」 (game/logic/doorHint)
+  const door = useBridgeValue("door:near") ?? null;
   const nearSeat = useBridgeValue("seat:near");
   const inShop = useBridgeValue("scene:changed")?.scene === "shop";
   // 11/15 오리배 위에서는 점프 대신 꽥 (게임이 Space·점프를 꽥으로 받는다)
@@ -66,10 +68,10 @@ export default function MobileControls({
           type="button"
           className={styles.action}
           data-slot="interact"
-          data-near={nearGrave}
+          data-near={nearGrave || door !== null}
           {...pressProps(() => bridge.emit("input:interact"))}
         >
-          {inShop ? "말 걸기" : nearGrave ? "살펴보기" : "상호작용"}
+          {door ?? (inShop ? "말 걸기" : nearGrave ? "살펴보기" : "상호작용")}
         </button>
         {snowball ? (
           <RollButton off={chatOpen || viewing} />

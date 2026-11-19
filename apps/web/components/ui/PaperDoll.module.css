@@ -220,6 +220,12 @@
   transform: none;
 }
 
+/* 11/19 맨 윗줄 칸은 말풍선을 아래로 (위로 띄우면 창 위쪽에 잘린다) */
+.tip[data-place="below"] {
+  top: calc(100% + 6px);
+  bottom: auto;
+}
+
 .tip b {
   color: var(--bone);
   font-weight: 400;

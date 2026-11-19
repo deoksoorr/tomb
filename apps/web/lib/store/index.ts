@@ -23,7 +23,7 @@ import { MemoryBbqDay, RedisBbqDay, type BbqDayStore } from "./bbqDay";
 import { MemoryLottery, RedisLottery, type LotteryStore } from "./lottery";
 import { RedisStore } from "./redis";
 import { passAtOf } from "./passing";
-import type { AccountStore, GraveRecord, GraveSettings, GraveStore } from "./types";
+import type { AccountStore, GraveRecord, GraveSettings, GraveStore, QuestHook } from "./types";
 
 export type { AccountStore, GraveRecord, GraveStore } from "./types";
 
@@ -57,15 +57,24 @@ export function getStore(): GraveStore {
   return g.__tombStore;
 }
 
+/** 11/19 로컬 개발: .env.local DEV_STAFF_CODE면 같은 코드·같은 id의 운영자 계정을 늘 맞춘다 (lib/devStaffSeed — 저장소마다 한 번, 운영·테스트에서는 아무것도 안 한다) */
+function seedDevStaff(accounts: AccountStore): void {
+  if (process.env.DEV_STAFF_CODE && !process.env.VITEST) void import("../devStaffSeed").then((m) => m.ensureDevStaff(accounts)).catch(() => undefined);
+}
+
 /** 계정 저장소 (묘비 저장소와 같은 백엔드). 로컬 계정은 꾸미기를 놓을 때 MemoryStore를 같이 바꾼다 */
 export function getAccounts(): AccountStore {
   const cur = g.__tombAccounts;
   const conn = env.redis();
   if (conn) return cur instanceof RedisAccounts ? cur : (g.__tombAccounts = new RedisAccounts(conn));
   getStore(); // 운영에서 Redis가 없으면 여기서 실패한다
-  if (cur instanceof MemoryAccounts) return cur;
+  if (cur instanceof MemoryAccounts) {
+    seedDevStaff(cur);
+    return cur;
+  }
   const fresh = new MemoryAccounts(() => getStore() as MemoryStore);
   g.__tombAccounts = cur ? Object.assign(fresh, cur, { graves: () => getStore() as MemoryStore }) : fresh;
+  seedDevStaff(g.__tombAccounts);
   return g.__tombAccounts;
 }
 
@@ -85,8 +94,9 @@ export async function earnPoints(
   amount?: number,
   ip?: string,
   boost?: EarnBoost,
+  quest?: QuestHook | null,
 ): Promise<{ earned: number; paid: number; me: Me }> {
-  const r = await earnPointsOnly(accountId, source, amount, ip, boost);
+  const r = await earnPointsOnly(accountId, source, amount, ip, boost, quest);
   return { ...r, me: await loadMe(getAccounts(), accountId) };
 }
 
@@ -100,10 +110,12 @@ export async function earnPointsOnly(
   amount?: number,
   ip?: string,
   boost?: EarnBoost,
+  /** 11/18 오늘의 할 일 진행 (lib/retainQuest — 같은 적립 스크립트에서 +1) */
+  quest?: QuestHook | null,
 ): Promise<{ earned: number; paid: number }> {
   const now = Date.now();
   const b = boost ?? (await earnBoost(now));
-  const earned = await getAccounts().earn(accountId, source, kstDay(now), { amount, ipHash: ip, boost: b });
+  const earned = await getAccounts().earn(accountId, source, kstDay(now), { amount, ipHash: ip, boost: b, quest });
   return { earned, paid: paidOf(earned, amount ?? earnRule(source).points, pointsMult(b, source)) };
 }
 

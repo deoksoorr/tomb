@@ -3,6 +3,7 @@ import { redisClient } from "../redisUsage";
 import { env } from "../env";
 import { BAG_MAX, DEX_CATS, DEX_REWARD, DEX_REWARD_TABLE, DEX_TIERS, dexCatOf, dexClaimKey, dexRewardOf, type DexCat } from "./catalog";
 import type { DexEntry, LifeDay } from "./types";
+import type { QuestHook } from "../store/types";
 
 // 낚시·채집 저장소. 가방·도감·진행 중 기록은 모두 계정마다 따로이고, 바뀌는 연산은 하나씩 원자적이다
 // (Redis는 Lua 한 번, 메모리는 await 없는 구간). 로컬은 같은 규칙의 메모리 구현을 쓴다. store.test.ts가 두 구현에 같은 계약을 돌린다.
@@ -92,6 +93,8 @@ export interface ForageStore {
     items: GrantItem[],
     stackMax: number,
     take?: { window: number; node: string },
+    /** 11/18 오늘의 할 일 진행 (lib/retainQuest — 하나라도 들어가면 같은 스크립트에서 +1, 올린 값은 quest.have) */
+    quest?: QuestHook | null,
   ): Promise<Granted[] | null>;
   /** 가방에서 꺼내기 (전부 있을 때만, 한 번에). 모자라면 false */
   remove(acct: string, items: Record<string, number>): Promise<boolean>;
@@ -286,7 +289,7 @@ export class MemoryForageStore implements ForageStore {
     return { status: "ok", payload: v.value.slice(nonce.length + 1) };
   }
 
-  async grant(acct: string, day: string, count: "fish" | "gather", items: GrantItem[], stackMax: number, take?: { window: number; node: string }) {
+  async grant(acct: string, day: string, count: "fish" | "gather", items: GrantItem[], stackMax: number, take?: { window: number; node: string }, quest?: QuestHook | null) {
     if (take) {
       const k = lk.took(acct, take.window);
       let s = this.took.get(k);
@@ -295,6 +298,7 @@ export class MemoryForageStore implements ForageStore {
       if (s.has(m)) return null;
       s.add(m);
     }
+    if (quest && items.length) quest.have = quest.local(1);
     const dk = lk.day(acct, day);
     const d = this.days.get(dk) ?? emptyDay();
     d[count] += items.length;
@@ -543,7 +547,7 @@ redis.call('DEL', KEYS[2])
 return v
 `;
 
-// KEYS: bag, dex, day, took, dexpay  ARGV: day, countField, take('1'/'0'), `${창}:${지점}`, tookTtl, dayTtl, stackMax, 개수, (id, size, cat, 보상)...
+// KEYS: bag, dex, day, took, dexpay, [11/18 오늘 적립 해시 — 오늘의 할 일]  ARGV: day, countField, take('1'/'0'), `${창}:${지점}`, tookTtl, dayTtl, stackMax, 개수, (id, size, cat, 보상)...
 // 돌려주는 값: 'taken' 또는 아이템마다 "id:{kept}{isNew}{record}" (각 0/1). 처음 등록이면 정산한 계정만 p:{cat}에 보상을 쌓는다
 // 11/19 가방 전체가 BAG_MAX만큼 차 있으면 넣지 않는다 (kept 0, 도감에는 남는다). 가방 칸은 많아야 수십 개라 HVALS 한 번이 가볍다
 export const GRANT_LUA = `
@@ -558,6 +562,12 @@ local stackMax = tonumber(ARGV[7])
 local total = 0
 for _, v in ipairs(redis.call('HVALS', KEYS[1])) do total = total + tonumber(v) end
 local out = {}
+-- 11/18 오늘의 할 일 (KEYS[6] = 오늘 적립 해시가 있을 때만): 하나라도 들어가면 _q:fish·_q:gather +1, 값은 맨 뒤 '#q:{값}'
+local q = nil
+if KEYS[6] and tonumber(ARGV[8]) > 0 then
+  q = redis.call('HINCRBY', KEYS[6], '_q:' .. ARGV[2], 1)
+  if q == 1 then redis.call('EXPIRE', KEYS[6], tonumber(ARGV[6])) end
+end
 for i = 9, #ARGV, 4 do
   local id = ARGV[i]
   local size = tonumber(ARGV[i + 1])
@@ -584,6 +594,7 @@ for i = 9, #ARGV, 4 do
   end
   out[#out + 1] = id .. ':' .. kept .. isNew .. rec
 end
+if q then out[#out + 1] = '#q:' .. q end
 return out
 `;
 
@@ -843,13 +854,18 @@ export class RedisForageStore implements ForageStore {
     return { status: "ok", payload: r.slice(nonce.length + 1) };
   }
 
-  async grant(acct: string, day: string, count: "fish" | "gather", items: GrantItem[], stackMax: number, take?: { window: number; node: string }) {
+  async grant(acct: string, day: string, count: "fish" | "gather", items: GrantItem[], stackMax: number, take?: { window: number; node: string }, quest?: QuestHook | null) {
     const argv = [day, count, take ? "1" : "0", take ? tookMember(take.window, take.node) : "", String(TOOK_TTL_SEC), String(DAY_TTL_SEC), String(stackMax), String(items.length), ...grantArgs(items)];
     const r = await this.redis.eval<string[], unknown>(
       GRANT_LUA,
-      [lk.bag(acct), lk.dex(acct), lk.day(acct, day), lk.took(acct, take?.window ?? 0), lk.pay(acct)],
+      [lk.bag(acct), lk.dex(acct), lk.day(acct, day), lk.took(acct, take?.window ?? 0), lk.pay(acct), ...(quest ? [quest.key] : [])],
       argv,
     );
+    // 11/18 맨 뒤 '#q:{값}' = 오늘의 할 일 진행 (아이템 줄과 섞이지 않게 떼어 낸다)
+    if (Array.isArray(r) && String(r[r.length - 1] ?? "").startsWith("#q:")) {
+      if (quest) quest.have = Number(String(r[r.length - 1]).slice(3)) || 0;
+      return parseGranted(r.slice(0, -1), items);
+    }
     return parseGranted(r, items);
   }
 

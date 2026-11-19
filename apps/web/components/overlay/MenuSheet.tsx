@@ -18,6 +18,8 @@ export type MenuTarget =
   | "bag"
   | "hunt"
   | "dex"
+  /** 11/19 어디서든 보는 의뢰판 */
+  | "quests"
   | "housing"
   | "fireworks"
   | "ranking"
@@ -32,7 +34,9 @@ export type MenuTarget =
   // 10·11번
   | "calendar"
   | "gifts"
-  | "friends";
+  | "friends"
+  /** 11/19 촬영 모드 */
+  | "photo";
 
 type Props = {
   canBury: boolean;
@@ -55,6 +59,8 @@ type Props = {
   noFriends?: boolean;
   /** 11/16 탈것에 타 있어 사냥터에 못 가는 이유 (타일을 흐리게, 설명 대신) — lib/rideGate */
   huntBlocked?: string | null;
+  /** 11/19 촬영 모드를 열 수 있는 곳 (사냥·미니게임·버스 연출·집 꾸미기 중이 아님) */
+  canPhoto?: boolean;
   onPick: (target: MenuTarget) => void;
   onClose: () => void;
 };
@@ -92,6 +98,7 @@ export default function MenuSheet({
   titleNew = false,
   noFriends = false,
   huntBlocked = null,
+  canPhoto = false,
   onPick,
   onClose,
 }: Props) {
@@ -108,7 +115,9 @@ export default function MenuSheet({
     { target: "bag", icon: "bag", label: "가방 (I)", desc: titleNew ? "새 칭호를 얻었어요!" : bagNew ? "새로 생긴 물건이 있어요" : "꾸미기·폭죽·잡은 것 꺼내기", dot: titleNew || bagNew },
     { target: "hunt", icon: "sword", label: "사냥터", desc: huntBlocked ?? "몬스터를 잡고 포인트 모으기", off: !!huntBlocked },
     { target: "dex", icon: "book", label: "도감", desc: "물고기·곤충·약초 모으기" },
+    { target: "quests", icon: "board", label: "의뢰 보기", desc: "오늘의 의뢰 구경하기" },
     { target: "housing", icon: "house", label: "집·분양 마을", desc: "내 집 분양받고 꾸미기" },
+    ...(canPhoto ? [{ target: "photo" as const, icon: "camera" as const, label: "촬영 모드 (K)", desc: "단추를 숨기고 사진 찍기" }] : []),
     ...(fireworkCount > 0
       ? [{ target: "fireworks" as const, icon: "spark" as const, label: "폭죽 쏘기 (G)", desc: "채널 하늘에 불꽃 한 발", badge: countLabel(fireworkCount) }]
       : []),

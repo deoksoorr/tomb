@@ -4,6 +4,7 @@ import { redisClient } from "../redisUsage";
 import { CHAMP_ITEM_IDS, itemById, MAX_DECOR_PER_GRAVE, nameKey, PERMANENT_UNTIL, type CosmeticSlot } from "@tomb/protocol";
 import { CALENDAR_TTL_SEC, legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { earnRule, hasDailyMax, WALLET_MAX, type EarnSource } from "../economy";
+import { questFromEarn, TODO_BONUS_BIT, TODO_CLAIM_FIELD } from "../retain";
 import { stayBonusAmounts, STAY_BONUS_EVERY_TICKS } from "../stayBonus";
 import { STAY_TICK_MINUTES, stayFillDays } from "../stayTime";
 import type { ActivityItem, Grave, GraveDecor } from "../types";
@@ -31,6 +32,8 @@ import {
   type AccountSummary,
   type EarnOptions,
   type EquippedItem,
+  type PathClaim,
+  type PathGrant,
   type PresenceTick,
   type Profile,
   type RankEntry,
@@ -137,10 +140,92 @@ local function puton(look, stash, slot, item, untilMs)
 end
 `;
 
-// KEYS: acct, earn, rank, econ, week  ARGV: id, source, points, dailyMax('' = 한도 없음), balanceCap, ttl, now
+// KEYS: acct, earn, rank, econ, week  ARGV: id, source, points, dailyMax('' = 한도 없음), balanceCap, ttl, now,
+//   [11/18 오늘의 할 일 진행 칸(lib/retain todoField) — 있으면 같은 스크립트에서 1 올리고 {적립, 진행}을 돌려준다. 칸이 처음 생기면 만료도]
 const EARN_LUA = `${CREDIT_FN}
+local q = nil
+if ARGV[8] and ARGV[8] ~= '' then
+  q = redis.call('HINCRBY', KEYS[2], ARGV[8], 1)
+  if q == 1 then redis.call('EXPIRE', KEYS[2], ARGV[6]) end
+end
 local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], week = KEYS[5], id = ARGV[1], balanceCap = tonumber(ARGV[5]), ttl = ARGV[6], now = tonumber(ARGV[7]) }
-return credit(c, ARGV[2], tonumber(ARGV[3]), tonumber(ARGV[4]))
+local got = credit(c, ARGV[2], tonumber(ARGV[3]), tonumber(ARGV[4]))
+if q then return {got, q} end
+return got
+`;
+
+// ── 11/18 둘째 날 다시 오게 (lib/retain.ts) — 받기는 모두 원자적으로 한 번. 11/19 포인트 없음 (가방·영구 꾸미기만, 사냥 가방 몫은 서버가 따로) ──
+
+// 새 이웃 꾸러미 받기 (11/19 밀린 것까지 한꺼번에): 받은 수가 expect와 다르면 {-2, 받은 수}, 받으면 {1}.
+// 기간제 꾸미기는 입고 있으면 그 자리를 until까지(더 길면 그대로), 아니면 벗어 둔 꾸미기(stash)에 until까지 (MemoryAccounts.claimGiftPath와 같은 규칙)
+// KEYS: acct, inv, look, stash
+// ARGV: day, expect, count, until, pend('' = 사냥 가방 몫 없음, 아니면 꾸러미 번호들 쉼표), 꾸미기 수 w, (item, slot) × w, (itemId, count)...
+const PATH_LUA = `
+local got = tonumber(redis.call('HGET', KEYS[1], 'gp') or '0') or 0
+if got ~= tonumber(ARGV[2]) then return {-2, got} end
+redis.call('HSET', KEYS[1], 'gp', got + tonumber(ARGV[3]), 'gpDay', ARGV[1])
+if ARGV[5] ~= '' then redis.call('HSET', KEYS[1], 'gpPot', ARGV[5]) end
+local untilMs = tonumber(ARGV[4])
+local w = tonumber(ARGV[6])
+for j = 0, w - 1 do
+  local item = ARGV[7 + j * 2]
+  local slot = ARGV[8 + j * 2]
+  local cur = redis.call('HGET', KEYS[3], slot)
+  local ci, cu = nil, nil
+  if cur then ci, cu = string.match(cur, '^([^|]+)|(.*)$') end
+  if ci == item then
+    if (tonumber(cu) or 0) < untilMs then redis.call('HSET', KEYS[3], slot, item .. '|' .. ARGV[4]) end
+  else
+    local had = tonumber(redis.call('HGET', KEYS[4], item) or '0') or 0
+    if had < untilMs then redis.call('HSET', KEYS[4], item, ARGV[4]) end
+  end
+end
+for i = 7 + w * 2, #ARGV, 2 do redis.call('HINCRBY', KEYS[2], ARGV[i], tonumber(ARGV[i + 1])) end
+return {1, 0}
+`;
+
+// 첫 걸음 미션 한 칸 (비트 ARGV[1]). 큰 선물까지 받았으면 {-1}, 아니면 {새 마스크, 이번에 처음 켰으면 1}
+// KEYS: acct
+const FIRST_STEP_LUA = `
+local a = redis.call('HMGET', KEYS[1], 'fs', 'fsDone')
+if a[2] then return {-1, 0} end
+local m = tonumber(a[1] or '0') or 0
+local b = tonumber(ARGV[1])
+if math.floor(m / b) % 2 == 1 then return {m, 0} end
+redis.call('HSET', KEYS[1], 'fs', m + b)
+return {m + b, 1}
+`;
+
+// 첫 걸음 큰 선물: 이미 받았으면 -1, 미션(ARGV[1] 마스크)을 다 안 했으면 -2, 받으면 1
+// KEYS: acct, inv  ARGV: all, itemId, count
+const FIRST_CLAIM_LUA = `
+local a = redis.call('HMGET', KEYS[1], 'fs', 'fsDone')
+if a[2] then return -1 end
+if (tonumber(a[1] or '0') or 0) ~= tonumber(ARGV[1]) then return -2 end
+redis.call('HSET', KEYS[1], 'fsDone', '1')
+redis.call('HINCRBY', KEYS[2], ARGV[2], tonumber(ARGV[3]))
+return 1
+`;
+
+// 오늘의 할 일 받기: ARGV[1] 0..2 = 그 칸(진행 칸 ARGV[2]가 ARGV[3] 이상), 3 = 셋 다(0..2 비트가 모두 있을 때 — 도장 +1).
+// 이미 받았으면 -1, 아직이면 -2, 받으면 1. 받은 비트는 오늘 적립 해시 _qc
+// KEYS: acct, earn  ARGV: which, field, need, ttl
+const TODO_LUA = `
+local bits = {1, 2, 4, ${TODO_BONUS_BIT}}
+local w = tonumber(ARGV[1])
+local b = bits[w + 1]
+local e = redis.call('HMGET', KEYS[2], '${TODO_CLAIM_FIELD}', ARGV[2])
+local mask = tonumber(e[1] or '0') or 0
+if math.floor(mask / b) % 2 == 1 then return -1 end
+if w == 3 then
+  if mask % 8 ~= 7 then return -2 end
+elseif (tonumber(e[2] or '0') or 0) < tonumber(ARGV[3]) then
+  return -2
+end
+redis.call('HSET', KEYS[2], '${TODO_CLAIM_FIELD}', mask + b)
+redis.call('EXPIRE', KEYS[2], ARGV[4])
+if w == 3 then return redis.call('HINCRBY', KEYS[1], 'todoStamps', 1) end
+return 1
 `;
 
 // 머무르기: 직전 지급 후 gap이 지났을 때만 (아니면 -1). 같은 화면(sid)의 연달은 기록이면 흐른 시간만큼 몰아서
@@ -756,6 +841,17 @@ export class RedisAccounts implements AccountStore {
       nameChanges: Number(a.get("nameChanges") ?? 0),
       tutorialDone: a.get("tutorialDone") === "1",
       renameRequired: a.get("renameRequired") === "1",
+      // 11/18 리텐션: 계정 해시·오늘 적립 해시에서 같이 (읽기 명령 그대로)
+      retain: {
+        gp: Number(a.get("gp") ?? 0),
+        gpDay: a.get("gpDay") ?? null,
+        gpPot: a.get("gpPot") ?? null,
+        gpSeen: a.get("gpSeen") ?? null,
+        fs: Number(a.get("fs") ?? 0),
+        fsDone: a.get("fsDone") === "1",
+        stamps: Number(a.get("todoStamps") ?? 0),
+        ...questFromEarn(earnMap),
+      },
     };
   }
 
@@ -767,7 +863,7 @@ export class RedisAccounts implements AccountStore {
     const base = opts.amount ?? rule.points;
     const keys = [K.acct(id), K.earn(id, day), K.rankPoints, await econKeyFor(id, day), K.rankPointsWeek(weekOfDay(day))];
     // 11/18 같은 IP 합계 한도는 없앴다 (회사·집에서 여럿이 한 IP로 한다 — 사용자)
-    const r = await this.redis.eval<string[], number>(EARN_LUA, keys, [
+    const r = await this.redis.eval<string[], number | number[]>(EARN_LUA, keys, [
       id,
       source,
       String(askOf(base, t.m100)),
@@ -775,7 +871,13 @@ export class RedisAccounts implements AccountStore {
       String(WALLET_MAX),
       String(EARN_TTL_SEC),
       String(Date.now()),
+      ...(opts.quest ? [opts.quest.field] : []),
     ]);
+    // 11/18 할 일 진행 칸을 같이 올렸으면 {적립, 진행}
+    if (Array.isArray(r)) {
+      if (opts.quest) opts.quest.have = Number(r[1]) || 0;
+      return Number(r[0]) || 0;
+    }
     return Number(r);
   }
 
@@ -1343,6 +1445,54 @@ export class RedisAccounts implements AccountStore {
 
   async setTutorialDone(id: string): Promise<void> {
     await this.redis.hset(K.acct(id), { tutorialDone: "1" });
+  }
+
+  // ── 11/18 리텐션 받기 (명령: 스크립트 1번 — 안에서 HMGET·HSET 몇 개. 11/19 포인트 없음) ──
+
+  async claimGiftPath(id: string, day: string, expect: number, grant: PathGrant, now: number): Promise<PathClaim> {
+    void now;
+    const r = await this.redis.eval<string[], [number, number]>(
+      PATH_LUA,
+      [K.acct(id), K.inv(id), K.look(id), K.stash(id)],
+      [
+        day,
+        String(expect),
+        String(grant.count),
+        String(grant.until),
+        grant.pend.join(","),
+        String(grant.wear.length),
+        ...grant.wear.flatMap(([item, slot]) => [item, slot]),
+        ...grant.items.flatMap((it) => [it.itemId, String(it.count)]),
+      ],
+    );
+    const code = Number(r[0]) || 0;
+    if (code === -2) return { ok: false, reason: "stale" };
+    return { ok: true };
+  }
+
+  async markPathSeen(id: string, day: string): Promise<void> {
+    await this.redis.hset(K.acct(id), { gpSeen: day });
+  }
+
+  async clearPathPotions(id: string): Promise<void> {
+    await this.redis.hdel(K.acct(id), "gpPot");
+  }
+
+  async markFirstStep(id: string, bit: number): Promise<{ mask: number; fresh: boolean } | null> {
+    const r = await this.redis.eval<string[], [number, number]>(FIRST_STEP_LUA, [K.acct(id)], [String(bit)]);
+    const mask = Number(r[0]);
+    return mask < 0 ? null : { mask, fresh: Number(r[1]) === 1 };
+  }
+
+  async claimFirstSteps(id: string, day: string, all: number, item: { itemId: string; count: number }, now: number): Promise<number> {
+    void day;
+    void now;
+    return Number(await this.redis.eval<string[], number>(FIRST_CLAIM_LUA, [K.acct(id), K.inv(id)], [String(all), item.itemId, String(item.count)]));
+  }
+
+  async claimTodo(id: string, day: string, which: number, field: string, need: number, now: number): Promise<number> {
+    void now;
+    return Number(await this.redis.eval<string[], number>(TODO_LUA, [K.acct(id), K.earn(id, day)], [String(which), field, String(need), String(EARN_TTL_SEC)]));
   }
 
   async economy(days: string[]): Promise<{ date: string; fields: Record<string, number> }[]> {

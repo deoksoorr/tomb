@@ -30,16 +30,20 @@ export type EarnSource =
   // ── 10번 출석 달력: 한 달 개근 보상 (lib/calendar.ts) ──
   | "monthly"
   // ── 접속 시간 보너스: 30분 구간마다 구석 창에서 받기 (lib/stayBonus.ts, /api/me/stay-bonus) ──
-  | "stayBonus";
+  | "stayBonus"
+  // ── 11/19 첫 걸음 미션·오늘의 할 일 포인트 (lib/retain.ts, /api/me/retain) ──
+  | "firstSteps"
+  | "todo";
 
 /** dailyMax = 하루에 받을 수 있는 최대 (null = 한도 없음). 11/19부터 한도는 횟수 규칙이 있는 항목에만 남았다 */
 export type EarnRule = { source: EarnSource; label: string; points: number; dailyMax: number | null; note: string };
 
 export const EARN_RULES: readonly EarnRule[] = [
   // 10번: 입장 때 자동으로 주지 않고, 그날 정해진 시간(lib/attendStay.ts) 머문 뒤 출석 달력의 오늘 칸을 눌러 받는다 (lib/calendar.ts)
-  { source: "attend", label: "출석 도장", points: 10, dailyMax: 10, note: `마을에 ${ATTEND_STAY_TEXT} 머문 뒤 출석 달력의 오늘 칸을 눌러요` },
-  { source: "streak", label: "7일 연속 출석", points: 30, dailyMax: 30, note: "7일 연속 도장을 찍을 때마다 받아요" },
-  { source: "monthly", label: "한 달 개근", points: 200, dailyMax: 200, note: "그달 하루도 빠짐없이 도장을 찍으면 받아요" },
+  // 11/19 출석 보상은 포인트 대신 사냥 아이템 (lib/calendar ATTEND_GIFT·STREAK_GIFT·MONTHLY_GIFT). 포인트는 0으로 자리만 남긴다
+  { source: "attend", label: "출석 도장", points: 0, dailyMax: 0, note: `마을에 ${ATTEND_STAY_TEXT} 머문 뒤 출석 달력의 오늘 칸을 눌러요. 포인트 대신 사냥 물약을 받아요.` },
+  { source: "streak", label: "7일 연속 출석", points: 0, dailyMax: 0, note: "7일 연속 도장을 찍을 때마다 보호 문서를 받아요" },
+  { source: "monthly", label: "한 달 개근", points: 0, dailyMax: 0, note: "그달 하루도 빠짐없이 도장을 찍으면 결재 서류를 받아요" },
   // 11/19 남긴 횟수 규칙: 헌화·묘비·받은 헌화·좋아요는 다른 계정으로 주고받거나 묘비를 도배해 벌 수 있어 그대로 둔다
   { source: "flower", label: "헌화하기", points: 2, dailyMax: 20, note: "묘비마다 하루 1번, 하루 10번까지" },
   { source: "bury", label: "묘비 세우기", points: 20, dailyMax: 20, note: "하루 1개만 받아요" },
@@ -58,9 +62,12 @@ export const EARN_RULES: readonly EarnRule[] = [
   // 종마다 처음 등록 보상 (lib/forage/dexReward, 값은 catalog DEX_NEW_REWARD)
   { source: "dex", label: "도감 등록 보상", points: 0, dailyMax: null, note: "새 종을 처음 올릴 때마다 3~50P, 희귀할수록 많이 받아요" },
   // 실시간 서버가 "가장 먼저 잡은 한 명"에게 서명한 증서로만 받는다 (고블린 한 마리당 한 번, lib/goblin.ts)
-  { source: "goblin", label: "황금 고블린 잡기", points: 0, dailyMax: null, note: "가끔 나타나는 황금 고블린을 가장 먼저 잡으면 20~100P" },
+  { source: "goblin", label: "황금 고블린 잡기", points: 0, dailyMax: null, note: "가끔 나타나는 황금 고블린을 가장 먼저 잡으면 300~1,000P, 가끔 대박 2,000P" },
   // 광장 소원 분수에 동전(1~5P)을 던지면 가끔 튀어 돌아온다 (하루 한 번은 lib/wish WISH_DAILY가 센다)
   { source: "wish", label: "소원 분수", points: 0, dailyMax: null, note: "광장 분수에 하루 한 번 동전을 던질 수 있어요. 가끔 포인트가 튀어 돌아와요." },
+  // 11/19 첫 걸음 미션·오늘의 할 일 (값은 lib/retain.ts — 미션은 계정마다 한 번, 할 일은 하루 셋 + 보너스)
+  { source: "firstSteps", label: "첫 걸음 미션", points: 0, dailyMax: null, note: "마을에서 할 수 있는 것을 처음 해 볼 때마다 100~300P, 다 하면 1,000P를 더 받아요" },
+  { source: "todo", label: "오늘 미션", points: 0, dailyMax: null, note: "날마다 미션 3개가 무작위로 나와요. 하나에 300P, 미션 셋을 다 하면 1,000P를 더 받아요" },
 ];
 
 /** 오늘 모은 포인트(`_total`)에 들어가지 않는 항목 (출석 달력 보상·접속 시간 보너스 — 각자 따로 센다) */

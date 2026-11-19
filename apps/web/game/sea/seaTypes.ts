@@ -21,7 +21,7 @@ export type SeaInteractable = {
   zone?: ReachZone;
   /** 화면 안내 ("E 버스 타기") */
   label: string;
-  /** 오두막 터 번호 (1~6) */
+  /** 오두막 터 번호 (1~11) */
   lot?: number;
 };
 

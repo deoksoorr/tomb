@@ -1,4 +1,5 @@
 import type { BbqItemId } from "@tomb/protocol";
+import type { TodoTick } from "./retain";
 import type { Me } from "./types";
 
 // 11/15 캠핑장 야외 바베큐 (/api/camp/bbq). 메뉴·값·효과는 protocol bbq.ts
@@ -10,7 +11,7 @@ export type BbqStatusResponse = { drunk: number };
  * POST { item }: 포인트를 쓰고 한 접시·한 잔 증서를 준다 → 게임이 실시간 서버로 보내 같은 맵 사람들에게 효과가 보인다.
  * 마실 거리면 lv·at = 마신 뒤 취기
  */
-export type BbqResponse = { me: Me; grant: string; item: BbqItemId; until: number; lv?: number; at?: number };
+export type BbqResponse = { me: Me; grant: string; item: BbqItemId; until: number; lv?: number; at?: number; todo?: TodoTick };
 
 /** 컨디숑: 취기가 없을 때 (포인트를 쓰지 않는다) */
 export const BBQ_NOT_TIPSY_MESSAGE = "지금은 말짱해요. 취했을 때 마셔요.";

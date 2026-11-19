@@ -107,23 +107,44 @@ describe("11/17 유령선 특가 장터 — 서버 흐름", () => {
     expect(st.items.find((x) => x.key === fur.key)!.bought).toBe(false);
   });
 
-  it("운영자만 아무 때나 부르고 보내요 (일반 계정은 403, 부른 동안 운영자는 살 수 있어요)", async () => {
-    at(kst(2026, 11, 18, 14, 0)); // 수요일 낮
+  it("11/19 운영자가 부르면 그 채널 모두에게 (보이기·장터) · 다른 채널은 그대로 · 일반 계정은 403 · 3시간 뒤 시간표대로", async () => {
+    const t0 = kst(2026, 11, 18, 14, 0); // 수요일 낮 (시간표로는 닫혀 있어요)
+    at(t0);
     const plain = await newVisitor();
-    expect((await ghostCall.POST(req("/api/sea/ghost/call", plain, { call: "on" }))).status).toBe(403);
+    expect((await ghostCall.POST(req("/api/sea/ghost/call", plain, { call: "on", ch: 3 }))).status).toBe(403);
     const op = await newVisitor();
     await setStaff(op.id);
     try {
-      const on = (await (await ghostCall.POST(req("/api/sea/ghost/call", op, { call: "on" }))).json()) as GhostStatus;
+      // 채널을 안 주거나 이상하면 400
+      expect((await ghostCall.POST(req("/api/sea/ghost/call", op, { call: "on" }))).status).toBe(400);
+      expect((await ghostCall.POST(req("/api/sea/ghost/call", op, { call: "on", ch: 999 }))).status).toBe(400);
+      const on = (await (await ghostCall.POST(req("/api/sea/ghost/call", op, { call: "on", ch: 3 }))).json()) as GhostStatus;
       expect(on).toMatchObject({ open: true, phase: "docked", staff: true, call: "on" });
-      // 일반 계정은 그대로 닫혀 있어요 (운영자 시험은 그 운영자에게만)
-      expect(((await (await ghost.GET(req("/api/sea/ghost", plain))).json()) as GhostStatus).open).toBe(false);
+      // 같은 채널의 일반 계정도 열려 있고 살 수 있어요
+      const mine = (await (await ghost.GET(req("/api/sea/ghost?ch=3", plain))).json()) as GhostStatus;
+      expect(mine).toMatchObject({ open: true, phase: "docked", call: "on" });
+      expect(mine.staff).toBeUndefined();
       const key = on.items.find((r) => r.kind === "cosmetic")!.key;
-      expect((await ghost.POST(req("/api/sea/ghost", op, { key }))).status).toBe(200);
-      const off = (await (await ghostCall.POST(req("/api/sea/ghost/call", op, { call: "off" }))).json()) as GhostStatus;
+      expect((await ghost.POST(req("/api/sea/ghost", plain, { key, ch: 3 }))).status).toBe(200);
+      // 가벼운 상태 GET (모두가 바닷가에서 본다)
+      expect(await (await ghostCall.GET(req("/api/sea/ghost/call?ch=3", plain))).json()).toEqual({ ch: 3, call: "on" });
+      expect((await ghostCall.GET(req("/api/sea/ghost/call?ch=0", plain))).status).toBe(400);
+      // 다른 채널·채널 모름은 시간표대로 (닫혀 있어요)
+      expect(await (await ghostCall.GET(req("/api/sea/ghost/call?ch=4", plain))).json()).toEqual({ ch: 4, call: null });
+      expect(((await (await ghost.GET(req("/api/sea/ghost?ch=4", plain))).json()) as GhostStatus).open).toBe(false);
+      expect(((await (await ghost.GET(req("/api/sea/ghost", plain))).json()) as GhostStatus).open).toBe(false);
+      const other = on.items.find((r) => r.kind === "cosmetic" && r.key !== key)!.key;
+      expect((await ghost.POST(req("/api/sea/ghost", plain, { key: other, ch: 4 }))).status).toBe(409);
+      // 보내기는 그 채널 모두에게서 숨겨요
+      const off = (await (await ghostCall.POST(req("/api/sea/ghost/call", op, { call: "off", ch: 3 }))).json()) as GhostStatus;
       expect(off).toMatchObject({ open: false, phase: "away", call: "off" });
-      const back = (await (await ghostCall.POST(req("/api/sea/ghost/call", op, { call: null }))).json()) as GhostStatus;
+      expect(((await (await ghost.GET(req("/api/sea/ghost?ch=3", plain))).json()) as GhostStatus).phase).toBe("away");
+      const back = (await (await ghostCall.POST(req("/api/sea/ghost/call", op, { call: null, ch: 3 }))).json()) as GhostStatus;
       expect(back.call).toBeNull();
+      // 다시 부르고 3시간이 지나면 저절로 시간표대로
+      await ghostCall.POST(req("/api/sea/ghost/call", op, { call: "on", ch: 3 }));
+      at(t0 + 3 * 3_600_000 + 60_000);
+      expect(await (await ghostCall.GET(req("/api/sea/ghost/call?ch=3", plain))).json()).toEqual({ ch: 3, call: null });
     } finally {
       await setStaff(null);
     }

@@ -1,3 +1,4 @@
+import type { QuestHook } from "../store/types";
 import type { Redis } from "@upstash/redis";
 import { redisClient } from "../redisUsage";
 import { CLOSED_LOTS } from "@tomb/protocol";
@@ -49,7 +50,7 @@ import type { HouseExterior, HouseLayout } from "./types";
 //  house:{id}                HASH owner, name, intro, ownerName, tier, ch, lot, exterior(JSON), createdAt, updatedAt, likes, placedScore, items, hidden, paid
 //                            (ch가 없으면 채널이 생기기 전에 분양된 집 → 1채널. paid = 낸 포인트, 이 기록이 생기기 전에 분양된 집은 없다)
 //  houses:lots:{ch}          HASH 번지 → 집 id (채널마다 분양 마을이 따로. 번지 배정은 HEXISTS 확인과 HSET을 Lua 하나로)
-//  houses:sealots:{ch}       HASH 11/16 포구 오두막 터 번호(1..6) → 집 id (마을 번지와 따로. 오두막 집 기록은 zone=sea, style)
+//  houses:sealots:{ch}       HASH 11/16 포구 오두막 터 번호(1..11) → 집 id (마을 번지와 따로. 오두막 집 기록은 zone=sea, style)
 //                            (오두막 집 id = 계정 id의 다른 HMAC — 한 계정이 마을 집 + 오두막을 따로 가진다)
 //  house:{id}:inv 의 "~starter" 칸 = 시작 가구를 이미 준 표시 (가방 읽기에서 뺀다)
 //  houses:lots               HASH 옛 번지 색인 (채널 없음). 1채널 색인을 쓰는 Lua가 먼저 houses:lots:1로 옮긴다 (MIGRATE_FN)
@@ -227,6 +228,17 @@ local old = redis.call('HGET', KEYS[1], 'lot')
 if old and redis.call('HGET', KEYS[2], old) == ARGV[1] then redis.call('HDEL', KEYS[2], old) end
 redis.call('HSET', KEYS[2], ARGV[2], ARGV[1])
 redis.call('HSET', KEYS[1], 'lot', ARGV[2])
+return 1
+`;
+
+// 11/19 「필지 대기」 (2단지를 닫으며 메인 맵에 빈 번지가 없을 때): 색인 칸이 이 집이면 비우고 집의 번지를 0으로
+// KEYS: meta, lots(ch), legacyLots  ARGV: id, legacy('1'|'0')  반환: 1 (집이 없으면 0)
+const UNASSIGN_LOT_LUA = `${MIGRATE_FN}
+if redis.call('EXISTS', KEYS[1]) == 0 then return 0 end
+if ARGV[2] == '1' then migrateLegacy(KEYS[3], KEYS[2]) end
+local old = redis.call('HGET', KEYS[1], 'lot')
+if old and redis.call('HGET', KEYS[2], old) == ARGV[1] then redis.call('HDEL', KEYS[2], old) end
+redis.call('HSET', KEYS[1], 'lot', 0)
 return 1
 `;
 
@@ -414,6 +426,7 @@ return 1
 `;
 
 // KEYS: meta, likeMark, score, likes  ARGV: id, ttl, likeWeight
+// 11/18 KEYS[5]·ARGV[4]·ARGV[5]가 있으면 누른 사람의 오늘의 할 일 진행 칸도 +1 (오늘 적립 해시, 칸이 처음 생기면 만료) → 맨 뒤에 진행 값
 const LIKE_LUA = `
 if redis.call('EXISTS', KEYS[1]) == 0 or redis.call('HGET', KEYS[1], 'hidden') == '1' then return nil end
 if not redis.call('SET', KEYS[2], '1', 'NX', 'EX', ARGV[2]) then return {0} end
@@ -421,6 +434,11 @@ local likes = redis.call('HINCRBY', KEYS[1], 'likes', 1)
 local score = tonumber(redis.call('HGET', KEYS[1], 'placedScore') or '0') + likes * tonumber(ARGV[3])
 redis.call('ZADD', KEYS[3], score, ARGV[1])
 redis.call('ZADD', KEYS[4], likes, ARGV[1])
+if KEYS[5] then
+  local q = redis.call('HINCRBY', KEYS[5], ARGV[4], 1)
+  if q == 1 then redis.call('EXPIRE', KEYS[5], ARGV[5]) end
+  return {1, likes, score, q}
+end
 return {1, likes, score}
 `;
 
@@ -668,6 +686,13 @@ export class RedisHouseStore implements HouseStore {
     if (holder) await this.redis.eval<string[], number>(CLEAR_STALE_LOT_LUA, [key, HK.meta(String(holder))], [String(lot), String(holder)]);
   }
 
+  async unlot(id: string) {
+    const meta = await this.redis.hmget<{ ch: string | null; zone: string | null }>(HK.meta(id), "ch", "zone");
+    const ch = housingChannelOf(meta?.ch ?? undefined);
+    const zone = meta?.zone === "sea" ? "sea" : undefined;
+    return Number(await this.redis.eval<string[], number>(UNASSIGN_LOT_LUA, [HK.meta(id), lotsKey(ch, zone), HK.legacyLots], [id, isLegacyCh(ch, zone)])) === 1;
+  }
+
   async moveLot(id: string, lot: number) {
     const meta = await this.redis.hmget<{ ch: string | null; zone: string | null }>(HK.meta(id), "ch", "zone");
     const ch = housingChannelOf(meta?.ch ?? undefined);
@@ -810,14 +835,15 @@ export class RedisHouseStore implements HouseStore {
     return r === 1 ? "ok" : r === -1 ? "no_house" : r === -2 ? "tier" : r === -4 ? "conflict" : "not_owned";
   }
 
-  async like(id: string, visitorId: string, day: string) {
+  async like(id: string, visitorId: string, day: string, quest?: QuestHook | null) {
     const r = await this.redis.eval<string[], number[] | null>(
       LIKE_LUA,
-      [HK.meta(id), HK.like(id, visitorId, day), HK.score, HK.likes],
-      [id, String(LIKE_TTL_SEC), String(LIKE_WEIGHT)],
+      [HK.meta(id), HK.like(id, visitorId, day), HK.score, HK.likes, ...(quest ? [quest.key] : [])],
+      [id, String(LIKE_TTL_SEC), String(LIKE_WEIGHT), ...(quest ? [quest.field, String(quest.ttlSec)] : [])],
     );
     if (!r) return null;
     if (Number(r[0]) === 0) return "already" as const;
+    if (quest && r[3] !== undefined) quest.have = Number(r[3]) || 0;
     return { likes: Number(r[1]), score: Number(r[2]) };
   }
 

@@ -346,6 +346,7 @@ export const CAMP_GATHER_NODES: readonly GatherNode[] = [
 export const SEA_GATHER_NODES: readonly GatherNode[] = SEA_DIG_HOLES.map((h) => ({ id: `sc${h.x}_${h.y}`, kind: "clam", where: "flat", x: h.x, y: h.y, map: "sea" }));
 
 /** lib/forage/forage.test.ts가 서 있을 수 있는 자리·물 밖·소품/좌석과 떨어짐을 검사한다 */
+// 11/19 언덕 서쪽이 옛 묘역(무덤 16기)이 되어 그 안·철책 둘레의 언덕 지점 여섯을 별 보기 마당으로 옮겼다 (지점 id도 바뀐다)
 export const GATHER_NODES: readonly GatherNode[] = [
   // 약초 (14 + 11/16 6)
   node("herb", "forest", 396, 794), // 11/15 오리 연못이 넓어져 둑 위로 옮김 (아래 숲 지점들도). 11/16 연못·범퍼카장이 또 넓어져 물·마당에 든 지점을 둑으로
@@ -359,7 +360,7 @@ export const GATHER_NODES: readonly GatherNode[] = [
   node("herb", "meadow", 1050, 906),
   node("herb", "meadow", 1110, 962),
   node("herb", "meadow", 990, 998),
-  node("herb", "hill", 160, 96),
+  node("herb", "hill", 352, 100),
   node("herb", "hill", 300, 200),
   node("herb", "lakeside", 1150, 1000),
   // 11/16 더 (6): 언덕 · 강가 서쪽 · 오리 연못 둘레 둘 · 호박밭 · 호수 북쪽 물가
@@ -370,17 +371,17 @@ export const GATHER_NODES: readonly GatherNode[] = [
   node("herb", "meadow", 1037, 874),
   node("herb", "lakeside", 1200, 806),
   // 광석 (8 + 11/16 4)
-  node("ore", "hill", 48, 200),
-  node("ore", "hill", 144, 160),
+  node("ore", "hill", 270, 56),
+  node("ore", "hill", 356, 158),
   node("ore", "hill", 330, 160),
-  node("ore", "hill", 80, 80),
+  node("ore", "hill", 232, 142),
   node("ore", "cave", 790, 140),
   node("ore", "cave", 840, 150),
   node("ore", "cave", 880, 92),
   node("ore", "cave", 950, 90),
   // 11/16 더 (4): 언덕 둘 · 동굴 앞 둘
   node("ore", "hill", 220, 60),
-  node("ore", "hill", 40, 132),
+  node("ore", "hill", 340, 60),
   node("ore", "cave", 914, 150),
   node("ore", "cave", 812, 78),
   // 발굴 (8 + 11/16 4)
@@ -393,7 +394,7 @@ export const GATHER_NODES: readonly GatherNode[] = [
   node("dig", "hill", 250, 120),
   node("dig", "lakeside", 1390, 1000),
   // 11/16 더 (4): 언덕 아래 · 오리 연못 서쪽 · 호박밭 · 호수 북쪽 물가
-  node("dig", "hill", 190, 234),
+  node("dig", "hill", 240, 230),
   node("dig", "forest", 348, 872),
   node("dig", "meadow", 911, 970),
   node("dig", "lakeside", 1284, 800),

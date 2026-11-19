@@ -42,6 +42,18 @@
   white-space: nowrap;
 }
 
+/* 11/19 마을 소식 줄 (황금 고블린을 누가 잡았다): 금빛 */
+.notice .text,
+.noticeTag {
+  color: #ffd76a;
+}
+
+.noticeTag {
+  font-family: var(--font-small);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 /* 지난 줄(5분 넘음) 옆 작은 시각 "N분 전" */
 /* 11/16 다른 맵에서 쓴 줄 표시 [캠핑장]·[마을] */
 .place {

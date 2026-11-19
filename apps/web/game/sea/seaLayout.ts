@@ -20,6 +20,7 @@ import {
   SEA_LOTS,
   SEA_LOT_BRANCH,
   SEA_LOT_LANE,
+  SEA_LOT_LANE_WEST,
   seaLotFront,
   seaLotGate,
   SEA_PIER,
@@ -75,6 +76,8 @@ export const SEA_PATHS: readonly SeaPath[] = [
   // 11/16 r11 위쪽 별장으로 가는 오솔길 · 아래쪽 별장 사이 디딤돌 골목
   { id: "lotLane", hw: 8, pts: SEA_LOT_LANE },
   { id: "lotBranch", hw: 6, pts: SEA_LOT_BRANCH },
+  // 11/19 서쪽 사잇길 (8번 터 → 7·1번 터 사이 → 산책로)
+  { id: "lotLaneWest", hw: 7, pts: SEA_LOT_LANE_WEST },
   // 남쪽 출입구 터 → 산책로 (짧은 발길)
   ...SEA_LOTS.filter((l) => l.gate === "s").map((l): SeaPath => ({ id: `lot${l.n}`, hw: 6, pts: [ seaLotFront(l, 2), { x: seaLotGate(l).x, y: SEA_BOARDWALK.y + 2 } ] })),
   // 동·서 출입구 터 → 골목
@@ -461,7 +464,7 @@ export const SEA_LIGHTS: readonly SeaLight[] = [
 
 /** 구역 이름표 자리 (사각형 위쪽 가운데가 어색한 곳만) */
 export const SEA_ZONE_LABEL_AT: Partial<Record<string, Pt>> = {
-  별장: { x: 720, y: 120 },
+  별장: { x: 880, y: 120 }, // 11/19 9번 터가 생겨 2·4번 사이 → 9·4번 사이로
   백사장: { x: 400, y: SEA_SAND_Y0 + 60 },
   갯벌: { x: 710, y: SEA_FLAT_Y0 + 36 },
   선착장: { x: SEA_PIER.x + SEA_PIER.w / 2, y: SEA_PIER.y - 6 },

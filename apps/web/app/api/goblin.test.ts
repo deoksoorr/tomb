@@ -1,4 +1,4 @@
-import { signGrant } from "@tomb/protocol";
+import { GOBLIN_JACKPOT_POINTS, GOBLIN_POINTS_CAP, signGrant } from "@tomb/protocol";
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { GoblinClaimResponse } from "@/lib/goblin";
@@ -66,6 +66,16 @@ describe("/api/goblin", () => {
       total += ((await (await claim(v, g)).json()) as GoblinClaimResponse).earned;
     }
     expect(total).toBe(300);
+  });
+
+  it("11/19 bigger rewards: a 2,000P jackpot grant pays in full, anything above the cap is refused", async () => {
+    const v = await newVisitor();
+    const big = await signGrant(SECRET, { kind: "goblin", visitorId: v.visitorId, points: GOBLIN_JACKPOT_POINTS, nonce: "gJack0001", exp: exp() });
+    const res = await claim(v, big);
+    expect(res.status).toBe(200);
+    expect((await res.json()) as GoblinClaimResponse).toMatchObject({ earned: GOBLIN_JACKPOT_POINTS, points: GOBLIN_JACKPOT_POINTS });
+    const over = await signGrant(SECRET, { kind: "goblin", visitorId: v.visitorId, points: GOBLIN_POINTS_CAP + 10, nonce: "gJack0002", exp: exp() });
+    expect((await claim(v, over)).status).toBe(400);
   });
 });
 

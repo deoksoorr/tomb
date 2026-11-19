@@ -3,6 +3,7 @@ import { CAMPFIRES, campfireOfSeat, dexBadgeCats, DIR, MAP_NAME, type AwayMapId,
 import { avatarColorSpec, type AppearanceChange } from "../sprites/avatar";
 import { saveResume, type ResumePose, type ResumeState } from "@/lib/resume";
 import { nameStyleIds } from "@/lib/nameStyle";
+import { setDoorHint } from "../logic/doorHint";
 import type { IncomingChatLine } from "../logic/chatLog";
 import type { PublicGrave } from "@/lib/types";
 import { TEX } from "../assets/manifest";
@@ -51,6 +52,10 @@ import { NearTracker } from "../world/nearTracker";
 import { Lighting, playerLightRadius } from "../world/Lighting";
 import { GraveMarkers } from "../world/Markers";
 import { GuideArrow } from "../world/GuideArrow";
+import { RouteGuide, type RouteTargetInfo } from "../world/RouteGuide";
+import { PORTAL_WALK } from "../world/portalWalk";
+import { WHARF_BOARD } from "../world/fishZone";
+import type { FirstGuideTarget } from "@/lib/retain";
 import { CampfireView } from "../world/Campfire";
 import { campfireLevel, LETTERBOX, nearestCampfire } from "../world/campfireMath";
 import { Sfx } from "../world/Sfx";
@@ -74,6 +79,7 @@ import { FEST_FIREWORK_MS, FEST_MS } from "@/lib/forage/quests/urgent";
 import type { ShopContext } from "./ShopScene";
 import { CampTrip, villageLandFor } from "../camp/CampTrip";
 import { BIG_RIDE_TOAST, myBig, RIDE_OBJECT_KINDS } from "../camp/foodState";
+import { friendRoute } from "@/lib/friendRoute";
 import type { CampFriend } from "../camp/campHost";
 import { publishRide, rideBlocked, standForGate } from "@/lib/rideGate";
 
@@ -210,6 +216,9 @@ export class WorldScene extends Phaser.Scene {
   private readonly hintBuf = { x: 0, y: 0, text: "", dim: false };
   private sayAt = -Infinity;
   private guide!: GuideArrow;
+  /** 11/19 첫 걸음 길 안내 (route:guide) */
+  private route!: RouteGuide;
+  private routeTarget: FirstGuideTarget | null = null;
   private readonly swingRiders: number[] = [];
   private campfire!: CampfireView;
   /** 새로고침 전 자리 기록 (첫 welcome에서 서버 기준으로 마무리한다) */
@@ -269,6 +278,11 @@ export class WorldScene extends Phaser.Scene {
       placement: (id) => this.field.placement(id),
       water: inWater,
       beforeWalk: () => this.beforeAutoWalk(),
+      // 11/19 외치기 창 [상점에서 사기]로 잡화점 문 앞에 닿으면 들어가서 상점 창까지 (주인장에게 말을 건 것과 같다)
+      enterShop: () => {
+        this.enterShop();
+        if (this.inShop) bridge.emit("shop:open");
+      },
     });
 
     // 묘비 목록이 이미 와 있으면(이 채널 것만) 먼저 깔고, 공유 링크 묘비가 있으면 그 앞에서 시작한다
@@ -339,6 +353,8 @@ export class WorldScene extends Phaser.Scene {
     this.markers = new GraveMarkers(this, this.atlas, this.reduced);
     this.seatHint = new SeatHint(this, this.atlas);
     this.guide = new GuideArrow(this, this.atlas, this.reduced);
+    this.route = new RouteGuide({ scene: this, atlas: this.atlas, reduced: this.reduced, player: () => this.player, route: (from, to) => this.walker.route(from, to) });
+    this.routeTarget = null;
     this.campfire = new CampfireView(this, this.rig, this.map, this.reduced);
     this.expr = new Expressions({
       player: () => this.player,
@@ -967,6 +983,10 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("input:ride", () => !this.cleaned && !this.inShop && !this.trip.away && !this.tripLock && this.riding.toggle()));
     // 11/16 사냥터·미니게임·집으로 가기 직전 (lib/rideGate): 의자·그네 같은 자리에서 일어난다 (캠핑장·바닷가에 있으면 그 장면이 받는다)
     on.push(bridge.on("player:stand", () => !this.cleaned && !this.inShop && !this.trip.away && standForGate(this.player, this.time.now, this.seatReq)));
+    on.push(bridge.on("route:guide", ({ target }) => this.setRoute(target)));
+    // 채널을 옮겨 장면을 다시 만들었으면 켜 둔 안내를 잇는다
+    const routeOn = bridge.last("route:guide")?.target;
+    if (routeOn) this.setRoute(routeOn);
     on.push(bridge.on("guide:point", ({ target, label }) => !this.trip.away && this.guide.set(target ? this.resolveGuide(target, label) : null)));
     on.push(bridge.on("world:lot", ({ lot, label }) => (this.trip.away ? this.toast("마을로 돌아간 뒤에 볼 수 있어요.") : this.showLot(lot, label))));
     on.push(
@@ -980,6 +1000,8 @@ export class WorldScene extends Phaser.Scene {
       }),
     );
     on.push(bridge.on("ui:blockKeys", ({ blocked }) => this.hub.setBlocked(blocked)));
+    // 11/19 촬영 모드에 들어가면 묘비·입구로 걸어가던 것도 멈춘다 (촬영 중엔 내 캐릭터가 서 있다)
+    on.push(bridge.on("photo:mode", ({ on: v }) => v && this.walker.cancel()));
     on.push(bridge.on("camera:recenter", () => !this.trip.away && this.rig.recenter()));
     on.push(bridge.on("camera:zoom", ({ delta }) => !this.trip.away && this.rig.zoomBy(delta)));
     on.push(bridge.on("net:reconnect", () => this.net.reconnect()));
@@ -1113,14 +1135,15 @@ export class WorldScene extends Phaser.Scene {
     this.startNet();
   }
 
-  /** 11/16 입구까지 걷기 (null = 그만). 마을 밖(캠핑장·바닷가·버스)·실내에서는 걷지 않는다 */
-  private walkToPortal(kind: "hunt" | null): void {
+  /** 11/16 입구까지 걷기 (null = 그만). 마을 밖(캠핑장·바닷가·버스)·실내에서는 걷지 않는다. 11/19 shop = 잡화점 문 (이미 안이면 상점 창만) */
+  private walkToPortal(kind: "hunt" | "shop" | null): void {
     if (this.cleaned) return;
     if (!kind) {
       if (this.walker.portal) this.walker.cancel();
       return;
     }
     if (this.trip.away || this.awayScene || this.tripLock) return;
+    if (kind === "shop" && this.inShop) return void bridge.emit("shop:open");
     if (this.inShop) this.exitShop();
     this.walker.goPortal(kind, this.time.now);
   }
@@ -1214,7 +1237,10 @@ export class WorldScene extends Phaser.Scene {
 
   private enterShop(): void {
     if (this.inShop || this.cleaned) return;
-    this.walker.cancel();
+    // 11/19 [상점에서 사기]로 걷다가 문에 먼저 닿았으면 도착으로 치고 상점 창까지 연다
+    const walkedHere = this.walker.portal === "shop";
+    if (walkedHere) this.walker.reachPortal();
+    else this.walker.cancel();
     this.inShop = true;
     const pl = this.player;
     if (pl.sitting) pl.stand(this.time.now, this.seatReq);
@@ -1241,6 +1267,7 @@ export class WorldScene extends Phaser.Scene {
     };
     this.scene.launch("shop", data);
     bridge.emit("scene:changed", { scene: "shop" });
+    if (walkedHere) bridge.emit("shop:open");
   }
 
   private exitShop(): void {
@@ -1604,23 +1631,40 @@ export class WorldScene extends Phaser.Scene {
     this.rig.recenter();
   }
 
-  /** 11/15 마을 정류장에 내렸다 (친구한테 가는 중이면 그 옆으로) */
+  /**
+   * 11/15 마을 정류장에 내렸다 (친구한테 가는 중이면 그 옆으로).
+   * 11/19 캠핑장 ↔ 바닷가 친구(friend.next): 버스 안에 숨은 채로 그 맵 버스를 이어 탄다 (CampTrip이 막 끝난 창밖 연출 장면이 멈춘 뒤에 부른다).
+   * 이어 타지 못하면 정류장에 나타나고 화면 UI를 되돌린다
+   */
   private arrivedByBus(friend: CampFriend | null): void {
-    if (friend) this.goToFriend(friend.sid, friend.name, friend.x, friend.y);
+    if (!friend || this.cleaned) return;
+    const next = friend.next;
+    if (!next) return this.goToFriend(friend.sid, friend.name, friend.x, friend.y);
+    if (this.goToCampFriend({ sid: friend.sid, name: friend.name, x: friend.x, y: friend.y }, next, true)) return;
+    this.player.view.fade = 1;
+    this.net.setAway(false);
+    bridge.emit("bus:state", { riding: false });
   }
 
-  /** 11/15 캠핑장에 있는 친구한테 가기: 같은 채널이면 버스 창밖 연출만 보고 친구 옆에 내린다. 11/16 바닷가 친구도 같다 */
-  private goToCampFriend(f: CampFriend, map: AwayMapId = "camp"): void {
-    const notice = (message: string) => bridge.emit("friend:notice", { message });
-    if (this.cleaned || !this.net.online) return;
+  /**
+   * 11/15 캠핑장에 있는 친구한테 가기: 같은 채널이면 버스 창밖 연출만 보고 친구 옆에 내린다. 11/16 바닷가 친구도 같다.
+   * 11/19 바베큐로 몸이 커져 있으면 버스를 못 타니 막는다 (lib/friendRoute). 버스를 탔으면 true.
+   * transfer = 캠핑장 ↔ 바닷가 친구한테 가다 마을 정류장에서 이어 타는 중 (방금 버스에서 내려 탈것 확인은 건너뛴다 — 화면은 아직 버스 탑승 중)
+   */
+  private goToCampFriend(f: CampFriend, map: AwayMapId = "camp", transfer = false): boolean {
+    const notice = (message: string) => (bridge.emit("friend:notice", { message }), false);
+    if (this.cleaned || !this.net.online) return false;
     if (!(map === "sea" ? this.net.seaOpen : this.net.campOpen)) return notice(`지금은 ${MAP_NAME[map]}에 갈 수 없어요.`);
     if (this.awayScene) return notice("마을로 나온 뒤에 친구한테 갈 수 있어요.");
+    const route = friendRoute("village", map, myBig());
+    if (route.do === "block") return notice(route.message);
     // 11/16 오리배·범퍼카 같은 탈것에 탄 채로는 버스를 타지 않는다 (lib/rideGate — 사냥터 입구와 같은 규칙)
-    const why = rideBlocked(`${MAP_NAME[map]}에 갈`);
+    const why = transfer ? null : rideBlocked(`${MAP_NAME[map]}에 갈`);
     if (why) return notice(why);
     if (this.inShop) this.exitShop();
     this.leaveCampfire();
-    this.trip.board(f, map);
+    this.trip.board({ sid: f.sid, name: f.name, x: f.x, y: f.y }, map);
+    return this.trip.away;
   }
 
   /**
@@ -1692,6 +1736,77 @@ export class WorldScene extends Phaser.Scene {
       case "bumper":
         // 11/16 범퍼카장 입구 간판 위
         return { x: BUMPER_DOOR.x, y: BUMPER_DOOR.y - 44, text: label ?? "범퍼카장" };
+      default:
+        return null;
+    }
+  }
+
+  /** 11/19 첫 걸음 길 안내 켜기·끄기 (목적지는 다시 찾을 때마다 지금 위치에서 가장 가까운 곳) */
+  private setRoute(target: FirstGuideTarget | null): void {
+    if (this.cleaned) return;
+    this.routeTarget = target;
+    this.route.set(target ? () => this.resolveRoute(target) : null);
+  }
+
+  /** 길 안내 한 프레임: 마을 밖(캠핑장·바닷가·버스)·실내에서는 숨기기만. 닿았거나 갈 곳이 없으면 끝내고 화면에 알린다 */
+  private updateRoute(now: number, view: Phaser.Geom.Rectangle, s: number): void {
+    const t = this.routeTarget;
+    if (!t) return;
+    const r = this.route.update(now, view, s, this.trip.away || this.awayScene || this.tripLock);
+    if (!r) return;
+    bridge.emit("route:state", { target: t, status: r });
+    // 기억값(sticky)도 지운다 (장면을 다시 만들 때 끝난 안내가 살아나지 않게 — 이 장면의 setRoute(null)도 같이)
+    bridge.emit("route:guide", { target: null });
+  }
+
+  /** 길 안내 목적지 후보 (마을). r = 이만큼 다가가면 닿은 것 (상호작용 반경에 맞춘다) */
+  private resolveRoute(t: FirstGuideTarget): RouteTargetInfo | null {
+    const items = this.map.interactables;
+    const at = (list: readonly Interactable[], label: string): RouteTargetInfo => ({ goals: list.map((o) => ({ x: o.x, y: o.y, r: Math.min(26, Math.max(16, o.r)) })), label });
+    switch (t) {
+      case "bench":
+        return { goals: FURNITURE.filter((f) => f.kind === "bench" && !f.campfire).map((f) => ({ x: f.x, y: f.y + (f.facing === DIR.up ? -10 : 10), r: 18 })), label: "벤치" };
+      case "look":
+        // E로 살펴볼 수 있는 것 (반짝이는 채집 지점·사람·종·우물·망원경 …). 입구·문·정류장은 뺀다
+        return at(
+          items.filter((o) => !["portal", "door", "lot", "bus", "dock", "water"].includes(o.kind) && !o.forage?.startsWith("fish:")),
+          "살펴보기",
+        );
+      case "fish":
+        return at(items.filter((o) => o.forage?.startsWith("fish:")), "낚시 자리");
+      case "gather":
+        return at(items.filter((o) => o.forage?.startsWith("node:")), "채집 지점");
+      case "stars":
+        return at(items.filter((o) => o.kind === "telescope"), "망원경");
+      case "hunt":
+        return { goals: [{ ...PORTAL_WALK.hunt.goal, r: 16 }], label: "사냥터 입구" };
+      case "visit": {
+        const mine = this.map.myHouseId;
+        return at(items.filter((o) => o.kind === "door" && !!o.houseId && o.houseId !== mine), "이웃 집");
+      }
+      case "busCamp":
+        return at(items.filter((o) => o.id === "bus:camp"), "캠핑장행 정류장");
+      case "busSea":
+        return at(items.filter((o) => o.id === "bus:sea"), "바닷가행 정류장");
+      case "questBoard":
+        // 버스 정류장 마당 의뢰 게시판 앞 (낚시·채집이 붙이는 forage:board 자리와 같다 — 그 목록이 아직 없어도 길이 나오게 고정 좌표)
+        return { goals: [{ x: WHARF_BOARD.x, y: WHARF_BOARD.y + 12, r: 22 }], label: "의뢰 게시판" };
+      // 11/19 오늘 미션 [안내] 목적지 (lib/retain TODO_POOL guide)
+      case "grave":
+        // 지금 마을에 놓인 묘비들 (묘비 앞 조금 아래 — 꽃을 놓는 자리)
+        return { goals: this.field.layout.placements.map((p) => ({ x: p.x, y: p.y + 14, r: 22 })), label: "묘비" };
+      case "seller":
+        return at(items.filter((o) => o.forage?.startsWith("npc:")), "상인");
+      case "wish":
+        return at(items.filter((o) => o.kind === "wish"), "소원 분수");
+      case "haunt":
+        return at(items.filter((o) => o.id === "portal:haunt"), "귀신의 집");
+      case "bumper":
+        return at(items.filter((o) => o.kind === "bumper"), "범퍼카장");
+      case "sky":
+        return at(items.filter((o) => o.kind === "ferris" || o.kind === "balloon"), "관람차·열기구");
+      case "campfire":
+        return { goals: FURNITURE.filter((f) => !!f.campfire).map((f) => ({ x: f.x, y: f.y + (f.facing === DIR.up ? -10 : 10), r: 18 })), label: "모닥불" };
       default:
         return null;
     }
@@ -1921,11 +2036,7 @@ export class WorldScene extends Phaser.Scene {
       this.dustAt = now;
       this.fx.dust(pl.x, pl.y);
     }
-    // 잡화점 문으로 걸어 들어가면 상점으로
-    if (this.move.ay < -0.5 && nearShopDoor(pl.x, pl.y, 9)) {
-      this.enterShop();
-      return;
-    }
+    // (11/19 잡화점 문으로 걸어 들어가기는 없앴다 — 모든 문은 문 앞에서 E·[상호작용]으로 들어가고 나온다, logic/doorExit)
 
     // 놀이기구 2: 탑승 상태 맞추기 · 맵 위 보기면 칸·기구를 따라가는 카메라 목표 (rig.update 전에)
     this.sky.preCamera(dt);
@@ -2010,6 +2121,7 @@ export class WorldScene extends Phaser.Scene {
     this.markers.update(now, s, this.tooltip, this.resolveGrave);
     this.updateLotGuide(now);
     this.guide.update(now, view, s);
+    this.updateRoute(now, view, s);
 
     const longSit = pl.sitting && pl.view.sitSince > 0 && now - pl.view.sitSince > SIT_IDLE_MS;
     this.atmos.gather(longSit ? { x: pl.x, y: pl.y } : null);
@@ -2187,7 +2299,10 @@ export class WorldScene extends Phaser.Scene {
     if (this.campfire.active) hidden = true;
     // 11/15 버스를 기다리거나 타고 내리는 동안은 정류장 안내("E 주말 버스 정류장")를 띄우지 않는다
     if (this.tripLock) hidden = true;
-    this.seatHint.update(seat, pl, sittingFor, hidden, labelScale, seat || pl.sitting ? null : this.objectHint(), standText);
+    const obj = seat || pl.sitting ? null : this.objectHint();
+    this.seatHint.update(seat, pl, sittingFor, hidden, labelScale, obj, standText);
+    // 11/19 폰 [상호작용] 단추: 잡화점 문 앞이면 「들어가기」 (logic/doorHint)
+    setDoorHint(!hidden && obj?.text.endsWith("유령 잡화점 들어가기") ? "들어가기" : null);
   }
 
   /** 좌석이 없을 때의 안내: 물속·매달리기·그네·근처 오브젝트·물가 */
@@ -2233,6 +2348,13 @@ export class WorldScene extends Phaser.Scene {
       h.x = critter.x;
       h.y = critter.y;
       h.text = critter.text;
+      return h;
+    }
+    // 11/19 잡화점 문 앞: 걸어 들어가기를 없애고 E·[상호작용]으로 들어간다 (onAction의 nearShopDoor와 같은 반경)
+    if (!pl.sitting && nearShopDoor(pl.x, pl.y)) {
+      h.x = pl.x;
+      h.y = pl.y + 2;
+      h.text = `${pre}유령 잡화점 들어가기`;
       return h;
     }
     if (o) {

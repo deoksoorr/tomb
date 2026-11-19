@@ -87,6 +87,8 @@ export const TITLE_PERK_GROUP: Readonly<Record<TitleId, PerkGroup>> = {
   t_pioneer: "champ",
   t_ref3: "champ",
   t_ref10: "champ",
+  // 11/18 새 이웃 꾸러미 졸업 칭호 (동 — 능력은 공통 속도뿐)
+  t_grad: "none",
   // 집 꾸밈 점수 → 가구 할인
   t_house50: "house",
   t_house150: "house",
@@ -283,6 +285,8 @@ export type TitleMetric =
   | "qking"
   // 추천 코드로 데려온 이웃 중 조건을 넘긴 수 (같은 곳 가입은 세지 않는다 — lib/referralService)
   | "refs"
+  // 11/18 새 이웃 꾸러미(가입 첫 7일) 받은 선물 수 (7 = 졸업)
+  | "grad"
   | `dex_${DexCat}`;
 
 export type TitleDef = {
@@ -397,6 +401,8 @@ const STEP_ROWS: readonly StepRow[] = [
     // 추천 코드: 데려온 이웃이 조건(3시간·3일)을 넘기면 한 명으로 센다 (lib/referralRules)
     ["t_ref3", "마을 안내인", "silver", "추천 코드로 데려온 이웃 3명이 마을에 자리 잡으면", "refs", 3, "town"],
     ["t_ref10", "마을의 마당발", "gold", "추천 코드로 데려온 이웃 10명이 마을에 자리 잡으면", "refs", 10, "town"],
+    // 11/18 한정: 가입하고 14일 안에 새 이웃 꾸러미 7개를 모두 받으면 (lib/retain)
+    ["t_grad", "마을 새내기 졸업", "bronze", "새 이웃 꾸러미 7개를 모두 받으면", "grad", 7, "town"],
 ];
 const STEP_OF = new Map(STEP_ROWS.map((r) => [r[0], r]));
 

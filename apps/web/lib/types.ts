@@ -1,5 +1,6 @@
 // web 안에서 공유하는 데이터 타입과 API 응답 형태 (계약). 바꿀 때는 모든 사용처를 같이 고친다.
 
+import type { PathGift, RetainView, TodoTick } from "./retain";
 import { itemById, type AvatarDye, type ChampBoard, type MegaPin } from "@tomb/protocol";
 
 export const CAUSE_TAGS = [
@@ -158,7 +159,7 @@ export type QuickGraveInput = {
 };
 export type UpdateGraveResponse = { grave: PublicGrave };
 /** 반응 응답의 earned = 이번에 쌓인 포인트 (한도에 걸리면 0) */
-export type FlowerResponse = { count: number; earned: number };
+export type FlowerResponse = { count: number; earned: number; todo?: TodoTick };
 export type ReportResponse = { ok: true };
 
 /**
@@ -239,7 +240,15 @@ export type Me = {
   champ?: number;
   /** 11/16 매니저 (관리자가 임명 — 전용 칭호·채팅 딱지뿐). 아니면 없음 */
   manager?: true;
+  /** 11/18 새 이웃 꾸러미·첫 걸음 미션·오늘의 할 일 (lib/retain). 예전 서버 응답에는 없을 수 있다 */
+  retain?: RetainView;
 };
+
+/**
+ * POST /api/me/retain (lib/retain.ts): 새 이웃 꾸러미 받기 → { me, gift } · 첫 걸음 미션 한 칸 → { mask, step } ·
+ * 첫 걸음 큰 선물·오늘의 할 일 받기 → { me, text }. text = 받은 것 글귀 (토스트)
+ */
+export type RetainResponse = { me?: Me; gift?: PathGift; gifts?: PathGift[]; mask?: number; text?: string; points?: number; ok?: true };
 
 /** 휴면 계정이 돌아왔을 때 (입장 화면 안내·입장 거절 문구) */
 export const DORMANT_RENAME_MESSAGE = "오래 접속하지 않아 휴면 계정이 되었어요. 닉네임을 다시 정해 주세요";
@@ -538,7 +547,8 @@ export type CalendarResponse = {
   streak: number;
   /** 한 달 개근 보상을 받았으면 그 포인트 */
   monthBonus: number | null;
-  rewards: { daily: number; streak: number; streakEvery: number; monthly: number };
+  /** 11/19 보상 글귀 (사냥 아이템 — lib/calendar ATTEND_GIFT 등) */
+  rewards: { daily: string; streak: string; streakEvery: number; monthly: string };
   /** 이번 달 보상 길: 출석 구간(3·7·14·21·28일)마다 코디 1개 (lib/attendTiers.ts) */
   tiers: AttendTierView[];
 };
@@ -551,6 +561,8 @@ export type CalendarClaimResponse = {
   calendar: CalendarResponse;
   me: Me;
   earned: { daily: number; streak: number; monthly: number };
+  /** 11/19 이번 도장으로 받은 사냥 아이템 (매일·7일 연속·한 달 개근 — 사냥 가방에 들어간다) */
+  gifts: { daily: string; streak: string | null; monthly: string | null };
   /** 이번 도장으로 닿은 구간 코디 보상 (없으면 빈 배열) */
   tierRewards: AttendTierGrant[];
 };

@@ -1,7 +1,6 @@
 import * as Phaser from "phaser";
 import {
   DIR,
-  GOBLIN_NAME,
   GOBLIN_TOUCH_RADIUS,
   TELESCOPES,
   goblinPos,
@@ -27,6 +26,7 @@ import type { Interactable } from "../layout";
 import type { Lighting } from "../Lighting";
 import type { Sfx } from "../Sfx";
 import { stargazeColliders } from "./stargazeLayout";
+import { edgePoint } from "../guideMath";
 import { CRITTERS, CritterSim, PERCH_HOP_MS, type CritterPose } from "./critterSim";
 import { Crows } from "./Crows";
 import { Dogs } from "./Dogs";
@@ -87,10 +87,23 @@ type GoblinView = {
   info: GoblinInfo;
   img: Phaser.GameObjects.Image;
   label: Phaser.GameObjects.BitmapText;
+  /** 11/19 둘레 금빛 후광 (숨 쉬듯 커졌다 작아진다) */
+  halo: Phaser.GameObjects.Image;
+  /** 11/19 화면 밖이면 가장자리 방향 화살표 + 이름 */
+  edge: Phaser.GameObjects.Image;
+  edgeLabel: Phaser.GameObjects.BitmapText;
   pose: GoblinPose;
   claimAt: number;
   sparkAt: number;
 };
+
+/**
+ * 11/19 고블린 가장자리 화살표가 머무는 안쪽 상자의 여백 (화면 px — 위쪽 바·아래 버튼 줄·폰 조이스틱에 가리지 않게).
+ * 아래쪽은 채팅 기록·버튼 줄·첫 방문 안내 말(데스크톱), 채팅 기록·조이스틱(폰)보다 위에 (HTML 칸 밑에 깔려 가리거나 흐려지지 않게)
+ */
+const GOBLIN_EDGE_BOX = { wide: { l: 56, r: 56, t: 84, b: 224 }, narrow: { l: 34, r: 34, t: 128, b: 272 } } as const;
+/** 가장자리 화살표 한 픽셀 = 화면 몇 px (줌과 상관없이 같은 크기, 정수라 또렷하게) */
+const GOBLIN_EDGE_PX = 3;
 
 const PET_RADIUS = 18;
 const LABEL_RADIUS = 46;
@@ -108,6 +121,8 @@ export class VillageLife {
   private goblin: GoblinView | null = null;
   private readonly telescopes: Phaser.GameObjects.Image[];
   private readonly sparks: Phaser.GameObjects.Particles.ParticleEmitter;
+  /** 11/19 내가 고블린을 잡으면 튀어 오르는 금화 */
+  private readonly coins: Phaser.GameObjects.Particles.ParticleEmitter;
   private readonly hearts: Phaser.GameObjects.Particles.ParticleEmitter;
   private readonly override: AmbienceOverride;
   private ambAt = -Infinity;
@@ -159,6 +174,17 @@ export class VillageLife {
       emitting: false,
     });
     this.sparks.setDepth(DEPTH.fireflies + 2);
+    this.coins = scene.add.particles(0, 0, LTEX.coin, {
+      lifespan: { min: 900, max: 1300 },
+      speedX: { min: -90, max: 90 },
+      speedY: { min: -190, max: -110 },
+      gravityY: 330,
+      rotate: { min: -360, max: 360 },
+      scale: { start: 1, end: 0.7 },
+      alpha: { start: 1, end: 0, ease: "Quart.easeIn" },
+      emitting: false,
+    });
+    this.coins.setDepth(DEPTH.bubble - 1);
     this.hearts = scene.add.particles(0, 0, LTEX.heart, {
       lifespan: 1100,
       speedY: { min: -26, max: -16 },
@@ -421,9 +447,13 @@ export class VillageLife {
     const img = this.scene.add.image(0, 0, LTEX.goblin(0)).setOrigin(0.5, 1);
     this.d.atlas.ensure("황금 고블린");
     const label = this.scene.add.bitmapText(0, 0, FONT_KEY, "황금 고블린", FONT_PX).setOrigin(0.5, 1).setDepth(DEPTH.labels - 1).setTint(0xffe27a);
-    this.goblin = { info, img, label, pose: { x: 0, y: 0, dash: false, face: 1 }, claimAt: -Infinity, sparkAt: 0 };
-    const zone = goblinRoute(info.seed).zone;
-    this.d.toast(fromWelcome ? `지금 ${zone} 쪽에 ${GOBLIN_NAME}이 있어요! 먼저 잡으면 보너스` : `${zone} 쪽에 ${GOBLIN_NAME}이 나타났어요! 가장 먼저 잡으면 보너스`);
+    // 11/19 강조: 둘레 금빛 후광(ADD) + 화면 밖이면 가장자리 화살표 (어둠·눈·안개 위, 화면 가장자리 그늘 아래)
+    const halo = this.scene.add.image(0, 0, LTEX.goblinHalo).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
+    const edge = this.scene.add.image(0, 0, LTEX.goblinEdge).setScrollFactor(0).setDepth(DEPTH.tooltip + 1).setVisible(false);
+    const edgeLabel = this.scene.add.bitmapText(0, 0, FONT_KEY, "황금 고블린", FONT_PX).setOrigin(0.5, 1).setScrollFactor(0).setDepth(DEPTH.tooltip + 1).setTint(0xffe27a).setVisible(false);
+    this.goblin = { info, img, label, halo, edge, edgeLabel, pose: { x: 0, y: 0, dash: false, face: 1 }, claimAt: -Infinity, sparkAt: 0 };
+    // 11/19 알림은 화면 위 금빛 띠로 (GoblinClaim — 토스트보다 눈에 띄게)
+    bridge.emit("goblin:spawn", { id: info.id, zone: goblinRoute(info.seed).zone, until: info.until, resumed: fromWelcome });
     playLife(this.d.sfx, "sparkle", 0.5);
   }
 
@@ -431,15 +461,29 @@ export class VillageLife {
     if (this.goblin?.info.id === id) this.clearGoblin(true);
   }
 
+  /** 누가 잡았다. 알림(띠·채팅 소식·큰 숫자)은 RealtimeClient → bridge goblin:caught → GoblinClaim이 보인다 (캠핑장·바닷가도) */
   onGoblinCaught(id: string, sid: Sid, name: string, points: number): void {
     const g = this.goblin;
     const mine = sid === this.d.net().mySid;
+    let x = g?.img.x;
+    let y = g?.img.y;
     if (g && g.info.id === id) {
       this.sparks.explode(this.d.reduced ? 10 : 28, g.img.x, g.img.y - 8);
       this.clearGoblin(false);
+      // 그 자리에 누가 얼마를 받았는지 잠깐 (화면 위 띠와 같은 소식을 마을 안에서도)
+      if (points > 0) this.floatText(g.img.x, g.img.y - 20, mine ? `+${points}P` : `${name || "누군가"} +${points}P`);
+    }
+    // 11/19 내가 잡았다: 그 자리에서 금화가 튀어 오른다 (고블린이 화면에 없었으면 내 발밑에서)
+    if (mine) {
+      if (x === undefined || y === undefined) {
+        const pl = this.d.player();
+        x = pl.x;
+        y = pl.y;
+      }
+      this.coins.explode(this.d.reduced ? 8 : 26, x, y - 10);
+      this.sparks.explode(this.d.reduced ? 6 : 16, x, y - 14);
     }
     playLife(this.d.sfx, "fanfare", mine ? 0.7 : 0.35);
-    this.d.toast(`${mine ? "내가" : `${name || "누군가"}님이`} ${GOBLIN_NAME}을 잡았어요! +${points}P`);
   }
 
   /** 내가 잡았다: 증서를 UI로 (GoblinClaim이 /api/goblin에 낸다) */
@@ -454,6 +498,9 @@ export class VillageLife {
     if (poof) this.sparks.explode(10, g.img.x, g.img.y - 8);
     g.img.destroy();
     g.label.destroy();
+    g.halo.destroy();
+    g.edge.destroy();
+    g.edgeLabel.destroy();
   }
 
   private updateGoblin(t: number, pnow: number, labelScale: number): void {
@@ -466,6 +513,9 @@ export class VillageLife {
     if (t < g.info.at) {
       g.img.setVisible(false);
       g.label.setVisible(false);
+      g.halo.setVisible(false);
+      g.edge.setVisible(false);
+      g.edgeLabel.setVisible(false);
       return;
     }
     const p = goblinPos(g.info, t, g.pose);
@@ -476,16 +526,64 @@ export class VillageLife {
     const bounce = p.dash ? Math.abs(Math.sin(pnow / 70)) * 2 : Math.abs(Math.sin(pnow / (dist < 60 ? 110 : 260))) * (dist < 60 ? 5 : 2);
     g.img.setVisible(true).setTexture(LTEX.goblin(frame, this.concept)).setFlipX(p.face < 0).setPosition(Math.round(p.x), Math.round(p.y - bounce)).setDepth(p.y);
     g.label.setVisible(true).setPosition(p.x, p.y - bounce - 18).setScale(labelScale);
-    if (pnow - g.sparkAt > (this.d.reduced ? 400 : 130)) {
+    // 11/19 금빛 후광 (숨 쉬듯) + 반짝이를 더 자주·넓게
+    const breathe = this.d.reduced ? 0.5 : 0.5 + 0.5 * Math.sin(pnow / 260);
+    g.halo
+      .setVisible(true)
+      .setPosition(Math.round(p.x), Math.round(p.y - bounce - 7))
+      .setScale(0.9 + 0.25 * breathe)
+      .setAlpha(0.55 + 0.35 * breathe)
+      .setDepth(p.y - 0.5);
+    if (pnow - g.sparkAt > (this.d.reduced ? 400 : 70)) {
       g.sparkAt = pnow;
-      this.sparks.emitParticleAt(p.x + (Math.random() - 0.5) * 10, p.y - 6 - Math.random() * 8, 1);
+      this.sparks.emitParticleAt(p.x + (Math.random() - 0.5) * 18, p.y - 4 - Math.random() * 16, this.d.reduced ? 1 : 2);
     }
+    this.goblinEdge(g, p.x, p.y - bounce, pnow, labelScale);
     // 내 발이 닿았다 → 서버에 잡기 요청 (판정은 서버: 먼저 온 한 명). 응답이 없으면 0.2초마다 다시
     const net = this.d.net();
     if (net.online && dist <= GOBLIN_TOUCH_RADIUS && pnow - g.claimAt > 200) {
       g.claimAt = pnow;
       net.claimGoblin(g.info.id);
     }
+  }
+
+  /** 11/19 고블린이 화면 밖이면 화면 가장자리에 그쪽을 가리키는 금빛 화살표 + 이름 (RouteGuide와 같은 계산) */
+  private goblinEdge(g: GoblinView, x: number, y: number, pnow: number, labelScale: number): void {
+    const cam = this.scene.cameras.main;
+    const view = cam.worldView;
+    const sx = ((x - view.x) / view.width) * cam.width;
+    const sy = ((y - 10 - view.y) / view.height) * cam.height;
+    const box = cam.width <= 560 ? GOBLIN_EDGE_BOX.narrow : GOBLIN_EDGE_BOX.wide;
+    const bw = cam.width - box.l - box.r;
+    const bh = cam.height - box.t - box.b;
+    // 화면 안에 보이면 화살표 없이 (가장자리 24px 안쪽까지), 밖이면 안쪽 상자 둘레에 그쪽을 가리키게
+    const off = view.width > 0 && view.height > 0 && edgePoint(sx, sy, cam.width, cam.height, 24) !== null;
+    const inner = off && bw > 0 && bh > 0 ? edgePoint(sx - box.l, sy - box.t, bw, bh, 0) : null;
+    const e = inner && { x: inner.x + box.l, y: inner.y + box.t, angle: inner.angle };
+    if (!e) {
+      g.edge.setVisible(false);
+      g.edgeLabel.setVisible(false);
+      return;
+    }
+    const ox = cam.width / 2;
+    const oy = cam.height / 2;
+    const z = cam.zoom;
+    const px = ox + (e.x - ox) / z;
+    const py = oy + (e.y - oy) / z;
+    const red = this.d.reduced;
+    const push = red ? 0 : (Math.sin(pnow / 160) * 3) / z;
+    const tw = red ? 1 : 0.8 + 0.2 * Math.abs(Math.sin(pnow / 200));
+    g.edge
+      .setPosition(px + Math.cos(e.angle) * push, py + Math.sin(e.angle) * push)
+      .setRotation(e.angle)
+      .setScale((GOBLIN_EDGE_PX / z) * (red ? 1 : 1 + 0.12 * Math.abs(Math.sin(pnow / 200))))
+      .setAlpha(tw)
+      .setVisible(true);
+    g.edgeLabel
+      .setScale(labelScale)
+      .setPosition(px - Math.cos(e.angle) * (56 / z), py - Math.sin(e.angle) * (36 / z) - 6 / z)
+      .setAlpha(0.95)
+      .setVisible(true);
   }
 
   // ── 망원경·돗자리 (1인 자리) ──
@@ -619,7 +717,8 @@ export class VillageLife {
   addLights(lit: Lighting): void {
     for (const c of this.critters) if (c.visible && c.sim.def.kind === "ghost") lit.add(c.x, c.y - 10, 18, 0.35);
     const g = this.goblin;
-    if (g && g.img.visible) lit.add(g.img.x, g.img.y - 8, 30, 0.7);
+    // 11/19 고블린은 밤에도 멀리서 보이게 더 넓고 밝게 (금빛 후광이 어둠에 묻히지 않게)
+    if (g && g.img.visible) lit.add(g.img.x, g.img.y - 8, 46, 0.95);
   }
 
   /** 11/15 aheadMs 뒤(마을에 내릴 때)의 주민·고양이·유령·강아지 길을 budgetMs 동안만 미리 찾아요. 다 됐으면 true */
@@ -679,6 +778,7 @@ export class VillageLife {
     this.critters.length = 0;
     for (const t of this.telescopes) t.destroy();
     this.sparks.destroy();
+    this.coins.destroy();
     this.hearts.destroy();
   }
 }

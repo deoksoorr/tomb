@@ -683,12 +683,10 @@ function ChannelStep({ path, look, custom, sharedChannel, onBack, onEnter, onNam
         if (err instanceof ApiRequestError && err.code === "NAME_ALREADY_SET") return;
         throw err;
       });
-      // 추천인 코드 (이름 단계에서 넣었으면): 실패해도 입장은 그대로. 서버가 거절한 코드는 지우고, 연결 실패면 남겨 내 정보에서 다시 넣게 한다
+      // 추천인 코드 (이름 단계에서 넣었으면): 실패해도 입장은 그대로. 11/19 추천은 가입할 때만이라 결과와 상관없이 지운다 (뒤늦게 넣는 칸이 없다)
       const ref = path.kind === "new" ? readStoredRef() : "";
       if (ref)
-        await referralApi.enter(ref, "signup").then(clearStoredRef, (err: unknown) => {
-          if (err instanceof ApiRequestError && err.status > 0) clearStoredRef();
-        });
+        await referralApi.enter(ref, "signup").then(clearStoredRef, () => clearStoredRef());
       if (path.kind === "new" && path.google) {
         // 새 계정에 방금 확인한 구글을 연결한다 (개인 코드가 없으면 서버가 만들어 한 번만 준다). 실패해도 계정은 그대로 쓴다
         let done: GoogleDone;

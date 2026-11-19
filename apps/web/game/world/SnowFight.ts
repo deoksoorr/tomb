@@ -178,6 +178,7 @@ export class SnowFight {
   }
 
   /** 던지고 맞을 수 있는 자세 (서기·걷기·뛰기·점프, 타는 펫·배·범퍼카·자리에 붙은 채는 아니다) */
+  // 11/19 탄 것에 따라 안내 (펫을 타고 있는데 「일어서서」라고 하던 것)
   private poseOk(pl: Player): boolean {
     return snowFightState(STATE[pl.state]) && !pl.view.ridingOn && !pl.inBoat && !pl.inCar && !pl.anchored;
   }
@@ -203,7 +204,7 @@ export class SnowFight {
     const pl = this.d.player();
     const why = this.d.blocked?.() ?? null;
     if (why) return this.tip(why);
-    if (!this.poseOk(pl)) return this.tip(pl.inWater ? "물속에서는 던질 수 없어요." : "일어서서 던질 수 있어요.");
+    if (!this.poseOk(pl)) return this.tip(poseTip(pl));
     const now = this.d.scene.time.now;
     if (now < this.gatherUntil) return;
     const left = SNOWBALL_INTERVAL_MS - (now - this.lastThrowAt);
@@ -759,4 +760,13 @@ export class SnowFight {
     this.tally = null;
     if (bridge.last("snow:can")?.on) bridge.emit("snow:can", { on: false });
   }
+}
+
+/** 눈을 못 던지는 자세일 때 안내 */
+function poseTip(pl: Player): string {
+  if (pl.inWater) return "물속에서는 던질 수 없어요.";
+  if (pl.view.ridingOn) return "펫에서 내려야 던질 수 있어요.";
+  if (pl.inBoat) return "배에서 내려야 던질 수 있어요.";
+  if (pl.inCar) return "범퍼카에서 내려야 던질 수 있어요.";
+  return "일어서서 던질 수 있어요.";
 }

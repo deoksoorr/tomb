@@ -1,3 +1,4 @@
+import type { TodoTick } from "../retain";
 import type { FishWater } from "@tomb/protocol";
 import type { TimePhase } from "../ambience";
 import type { Me } from "../types";
@@ -101,14 +102,14 @@ export type CastResponse = {
 };
 
 /** gear가 있으면 물고기 대신 꾸미기를 건졌다 (다 가졌으면 result에 대신 받은 물고기) */
-export type ReelResponse = { result: CatchResult | null; gear?: SunkenCatch; dex?: DexGain; state: ForageState };
+export type ReelResponse = { result: CatchResult | null; gear?: SunkenCatch; dex?: DexGain; state: ForageState; todo?: TodoTick };
 
 export type GatherStartResponse =
   | { ticket: string; mode: "gauge"; kind: Exclude<NodeKind, "bug">; durationMs: number }
   | { ticket: string; mode: "bugs"; kind: "bug"; seed: number; timeLimitSec: number; night: boolean; phase?: TimePhase };
 
 /** points = 곤충 채집으로 받은 포인트 (곤충 채집 판만) */
-export type GatherFinishResponse = { items: CatchResult[]; state: ForageState; message?: string; dex?: DexGain; points?: number };
+export type GatherFinishResponse = { items: CatchResult[]; state: ForageState; message?: string; dex?: DexGain; points?: number; todo?: TodoTick };
 
 export type SellResponse = {
   /** 실제로 판 것 (id → 개수) */

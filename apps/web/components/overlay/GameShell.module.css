@@ -16,6 +16,12 @@
   background: var(--bg);
 }
 
+/* 11/19 촬영 모드: 게임 캔버스와 촬영 단추(data-photo-keep)만 남기고 화면 위 UI를 모두 숨긴다 (사진에는 캔버스만 찍힌다) */
+.shell[data-photo] > :not(:has(> canvas)):not([data-photo-keep]),
+.shell[data-photo] > :not(:has(> canvas)):not([data-photo-keep]) * {
+  visibility: hidden !important;
+}
+
 /* 터치: 아래 가운데 안내 줄·새 버전 안내·낚시 창·관람차 안내가 놓이는 높이 (--hud-bottom).
    세로 폰은 조이스틱(120px) 위 채팅 줄(최근 몇 줄 ≈100px) 위 (11/16 확성기는 위쪽 [메뉴] 아래로 옮겼다) */
 @media (pointer: coarse) {
@@ -192,6 +198,13 @@
   flex: none;
   background: var(--panel);
   white-space: nowrap;
+}
+
+/* 11/19 [의뢰] 글자: 1320px 아래 데스크톱은 그림만 (폭죽·타기 단추까지 있으면 오른쪽 아래 첫 걸음·할 일 묶음과 닿는다) */
+@media (max-width: 1320px) {
+  .dockWideLabel {
+    display: none;
+  }
 }
 
 /* 좁은 데스크톱 창: 글자를 줄이고 여백을 좁혀 한 줄 유지 */

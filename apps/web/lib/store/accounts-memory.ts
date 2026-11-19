@@ -4,6 +4,7 @@ import { tierUntil } from "../attendTiers";
 import { legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { earnRule, hasDailyMax, WALLET_MAX, type EarnSource } from "../economy";
 import { askOf, earnTerms, NO_BOOST } from "../pointEvent";
+import { questFromEarn, TODO_BONUS_BIT, TODO_CLAIM_FIELD } from "../retain";
 import { staffAccountIdNow } from "../staff";
 import { stayBonusAmounts, stayBonusAt, stayBonusTiers } from "../stayBonus";
 import { STAY_TICK_MINUTES, stayFillDays } from "../stayTime";
@@ -27,6 +28,8 @@ import {
   type AccountSummary,
   type EarnOptions,
   type EquippedItem,
+  type PathClaim,
+  type PathGrant,
   type PresenceTick,
   type Profile,
   type RankEntry,
@@ -83,6 +86,14 @@ type Acct = {
   renameRequired?: boolean;
   /** 사냥 기록: 처치 수 합계(전체·주별), 사냥터별 최단 클리어 ms(전체·`${zone}|${week}`) */
   hunt?: { kills: number; killsWeek: Map<string, number>; best: Map<string, number>; bestWeek: Map<string, number>; killsWeekAt?: Map<string, number> };
+  /** 11/18 리텐션 (lib/retain.ts — accounts-redis.ts 계정 해시의 gp·gpDay·gpPot·fs·fsDone·todoStamps). 예전 계정에는 없을 수 있다 */
+  gp?: number;
+  gpDay?: string | null;
+  gpPot?: string | null;
+  gpSeen?: string | null;
+  fs?: number;
+  fsDone?: boolean;
+  todoStamps?: number;
 };
 
 /**
@@ -246,6 +257,16 @@ export class MemoryAccounts implements AccountStore {
       nameChanges: a.nameChanges ?? 0,
       tutorialDone: a.tutorialDone ?? false,
       renameRequired: a.renameRequired ?? false,
+      retain: {
+        gp: a.gp ?? 0,
+        gpDay: a.gpDay ?? null,
+        gpPot: a.gpPot ?? null,
+        gpSeen: a.gpSeen ?? null,
+        fs: a.fs ?? 0,
+        fsDone: a.fsDone ?? false,
+        stamps: a.todoStamps ?? 0,
+        ...(a.earnDay === day ? questFromEarn(a.earned) : { quest: {}, qc: 0 }),
+      },
     };
   }
 
@@ -255,7 +276,19 @@ export class MemoryAccounts implements AccountStore {
   }
 
   async earn(id: string, source: EarnSource, day: string, opts: EarnOptions = {}): Promise<number> {
-    return this.credit(this.acct(id), source, day, { ...opts, boost: opts.boost ?? (await earnBoost()) });
+    const boost = opts.boost ?? (await earnBoost());
+    // 11/18 할 일 진행 칸 (accounts-redis.ts EARN_LUA와 같이 적립 전에)
+    if (opts.quest) opts.quest.have = this.bumpQuest(id, day, opts.quest.field, 1);
+    return this.credit(this.acct(id), source, day, { ...opts, boost });
+  }
+
+  /** 11/18 오늘 적립 칸 하나를 n 올린다 (오늘의 할 일 진행 — 다른 메모리 저장소가 lib/retainQuest questHook으로 부른다) */
+  bumpQuest(id: string, day: string, field: string, n: number): number {
+    const a = this.acct(id);
+    this.today(a, day);
+    const v = (a.earned.get(field) ?? 0) + n;
+    a.earned.set(field, v);
+    return v;
   }
 
   async spend(id: string, amount: number, reason: string, now: number): Promise<number | null> {
@@ -923,6 +956,68 @@ export class MemoryAccounts implements AccountStore {
 
   async setTutorialDone(id: string): Promise<void> {
     this.acct(id).tutorialDone = true;
+  }
+
+  // ── 11/18 리텐션 받기 (accounts-redis.ts PATH_LUA·FIRST_STEP_LUA·FIRST_CLAIM_LUA·TODO_LUA와 같은 규칙) ──
+
+  async claimGiftPath(id: string, day: string, expect: number, grant: PathGrant, now: number): Promise<PathClaim> {
+    const a = this.acct(id);
+    if ((a.gp ?? 0) !== expect) return { ok: false, reason: "stale" };
+    a.gp = expect + grant.count;
+    a.gpDay = day;
+    if (grant.pend.length) a.gpPot = grant.pend.join(",");
+    for (const [itemId, slot] of grant.wear) {
+      const cur = a.look.get(slot);
+      if (cur?.itemId === itemId) {
+        if (cur.until < grant.until) a.look.set(slot, { itemId, until: grant.until });
+      } else {
+        const st = this.stashOf(a);
+        if ((st.get(itemId) ?? 0) < grant.until) st.set(itemId, grant.until);
+      }
+    }
+    for (const it of grant.items) a.inv.set(it.itemId, (a.inv.get(it.itemId) ?? 0) + it.count);
+    void now;
+    return { ok: true };
+  }
+
+  async clearPathPotions(id: string): Promise<void> {
+    this.acct(id).gpPot = null;
+  }
+
+  async markPathSeen(id: string, day: string): Promise<void> {
+    this.acct(id).gpSeen = day;
+  }
+
+  async markFirstStep(id: string, bit: number): Promise<{ mask: number; fresh: boolean } | null> {
+    const a = this.acct(id);
+    if (a.fsDone) return null;
+    const fresh = ((a.fs ?? 0) & bit) === 0;
+    a.fs = (a.fs ?? 0) | bit;
+    return { mask: a.fs, fresh };
+  }
+
+  async claimFirstSteps(id: string, day: string, all: number, item: { itemId: string; count: number }, now: number): Promise<number> {
+    const a = this.acct(id);
+    if (a.fsDone) return -1;
+    if ((a.fs ?? 0) !== all) return -2;
+    a.fsDone = true;
+    a.inv.set(item.itemId, (a.inv.get(item.itemId) ?? 0) + item.count);
+    void day;
+    void now;
+    return 1;
+  }
+
+  async claimTodo(id: string, day: string, which: number, field: string, need: number, now: number): Promise<number> {
+    const a = this.acct(id);
+    this.today(a, day);
+    const bit = which === 3 ? TODO_BONUS_BIT : 1 << which;
+    const mask = a.earned.get(TODO_CLAIM_FIELD) ?? 0;
+    if (mask & bit) return -1;
+    if (which === 3 ? (mask & 7) !== 7 : (a.earned.get(field) ?? 0) < need) return -2;
+    a.earned.set(TODO_CLAIM_FIELD, mask | bit);
+    void now;
+    if (which === 3) return (a.todoStamps = (a.todoStamps ?? 0) + 1);
+    return 1;
   }
 
   async economy(days: string[]): Promise<{ date: string; fields: Record<string, number> }[]> {

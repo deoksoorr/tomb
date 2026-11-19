@@ -71,10 +71,10 @@ export default function ShrineDialog({ cache, onGo, onClose, onOpenPassed, foote
   }
 
   return (
-    <Dialog title="성황당" onClose={onClose}>
+    <Dialog title="옛 묘역 입구 · 성황당" onClose={onClose}>
       <div className={styles.bag}>
         <p className={ui.hint}>
-          성황당은 자리를 옮긴 묘비가 잠시 머무는 곳이에요. 이장한 내 묘비는 {SHRINE_KEEP_DAYS}일 동안 여기 있어요. 그 안에 다시
+          성황당은 자리를 옮긴 묘비가 잠시 머무는 곳이에요. 옛 묘역 입구 팻말에서 열어요. 이장한 내 묘비는 {SHRINE_KEEP_DAYS}일 동안 여기 있어요. 그 안에 다시
           모시면 원래 채널 맨 뒤 자리로 돌아가요. 기간이 지나면 지워져요.
         </p>
         <p className={ui.hint}>

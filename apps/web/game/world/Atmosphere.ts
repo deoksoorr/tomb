@@ -11,6 +11,7 @@ import type { WorldTintControl } from "./worldTint";
 import type { LightSpot } from "./WorldMap";
 import { qaSearch } from "@/lib/qaUrl";
 import { bridge } from "../bridge";
+import { ambiencePreview, ambiencePreviewVersion } from "./ambiencePreview";
 
 // 분위기 레이어: [날씨 막(일반 섞기)] → KST 시간대 톤(곱하기 틴트 — 마을은 판 대신 셰이더가 그림마다 곱하고 캐릭터는 절반만, worldTint) → [어둠·빛 구멍은 Lighting] → 빛(가산) → 반딧불 → 날씨(비·눈·낙엽) → 안개 → 번개 → 비네트.
 // 톤·날씨는 lib/ambience(공용, 시계 기반)로 1분마다(날씨가 바뀌는 30분 경계엔 그 순간) 다시 계산하고 바뀌면 2.5초 동안 섞는다.
@@ -71,6 +72,8 @@ type Leaf = { img: Phaser.GameObjects.Image; x: number; y: number; fall: number;
 
 export class Atmosphere {
   private readonly override: AmbienceOverride;
+  /** 11/19 촬영 모드 시간대·날씨 미리보기 판 (바뀌면 바로 다시 잡는다 — world/ambiencePreview) */
+  private previewVer = ambiencePreviewVersion();
   private readonly blender: LevelBlender;
   private nextCheck = 0;
   private readonly tint: Phaser.GameObjects.Image;
@@ -258,7 +261,8 @@ export class Atmosphere {
     const a = this.ambience(now);
     this.nextCheck = time + recheckDelay(now, a.nextWeatherAt, RECHECK_MS);
     this.blender.setTarget(levelsFor(a, this.grade), time);
-    bridge.emit("ambience:now", a);
+    // 촬영 모드 미리보기 하늘은 화면 위 시간대·날씨 글에 알리지 않는다 (끝나면 진짜 값을 다시 알린다)
+    if (!ambiencePreview()) bridge.emit("ambience:now", a);
   }
 
   get levels(): Levels {
@@ -274,12 +278,16 @@ export class Atmosphere {
 
   /** 지금 하늘·날씨. 겨울·크리스마스 판에서는 비 대신 눈이 온다 (그림만 — 날씨 계산·다른 장면은 그대로) */
   private ambience(now: number): Ambience {
-    const a = ambienceAt(now, this.override);
+    const pv = ambiencePreview();
+    const a = ambienceAt(now, pv ? { ...this.override, ...pv } : this.override);
     return this.snowy && a.weather === "rain" ? { ...a, weather: "snow" } : a;
   }
 
   update(time: number, dt: number, view: Phaser.Geom.Rectangle): void {
-    if (time >= this.nextCheck) this.recheck(time);
+    if (time >= this.nextCheck || this.previewVer !== ambiencePreviewVersion()) {
+      this.previewVer = ambiencePreviewVersion();
+      this.recheck(time);
+    }
     const L = this.blender.update(time);
     const cam = this.scene.cameras.main;
     this.sound?.report(L.rain, this.indoor);

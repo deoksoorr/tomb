@@ -977,6 +977,11 @@ const GEAR_ICONS: Record<string, Ascii> = {
     rows: ["....rrrrrr", "...oohooooo", "..oohgggoooo", "..ohgwwwgooO", "..oogwwwgooO", "..ooogggoooO", "...ooooooOO", "....dddddd", ".....fyf", "......k", "......k", "......k", ".......k"],
     pal: { r: 0xb83a2a, o: 0xf0903a, O: 0xc85a1a, h: 0xffc070, g: 0xffd27a, w: 0xfff2c0, d: 0x6a3a1a, f: 0xffe08a, y: 0xfff6d0, k: 0xe8d8b0 },
   },
+  // 11/19 친구 초대 한정 마중 등불: 연분홍 둥근 초롱 + 겹친 하트(빨강·금빛) + 대나무 손잡이
+  inv_hand_lantern: {
+    rows: ["......dddd", "....ppppppp", "...pPPPPPPPp", "..pPrrPggPPPp", "..pPrRrgGgPPp", "..pPPrRgGPPPp", "..pPPPrgPPPPp", "...pPPPPPPPp", "....ppppppp", "......dddd", ".......b", ".......b", "........b"],
+    pal: { d: 0x8a5a2e, p: 0xe89aa8, P: 0xf8cad0, r: 0xe0485a, R: 0xff7a6a, g: 0xffd27a, G: 0xffe6a0, b: 0xb08a52 },
+  },
   // 11/15 긴급 의뢰 100% 상자: 금실로 묶은 갈색 가죽 주머니 + 붉은 의뢰 도장 꼬리표
   u_box_pocket: {
     rows: ["......yyyy", ".....yYyyYy", "......cccc", ".....cccccc", "....chhccccl", "...chccccccll", "...cccccccccl", "..chcccrrccccl", "..cccccrRccccl", "..ccccccccccll", "...cccccccccl", "....lllllll"],

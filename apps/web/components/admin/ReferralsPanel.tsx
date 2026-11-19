@@ -200,16 +200,16 @@ export default function ReferralsPanel({ toast, onAuthLost, onFindMember, onGift
   /** 2단계: 추천인의 추천인 이름과 그 보상 상태 */
   const grandLine = (r: AdminReferralRow) => {
     if (!r.grandId) return null;
-    const p = num(view.rules.grandPoints);
+    const p = view.rules.grandReward;
     const state =
       r.grand === "paid"
-        ? `${p}P 보냄`
+        ? `${p} 보냄`
         : r.grand === "cap"
           ? `이번 달 2단계 보상 ${view.rules.grandMonthCap}번을 다 받아서 못 보냄`
           : r.grand.startsWith("skip:")
             ? (GRAND_SKIP_TEXT[r.grand.slice(5)] ?? "건너뛰었어요")
             : r.hold === 1
-              ? `승인하면 ${p}P를 보내요`
+              ? `승인하면 ${p}을 보내요`
               : "아직이에요";
     return (
       <p className={ui.hint}>
@@ -227,11 +227,7 @@ export default function ReferralsPanel({ toast, onAuthLost, onFindMember, onGift
           <Kpi label="추천 코드 입력" value={num(t.entered)} />
           <Kpi label="조건 달성" value={num(t.qualified)} note={t.entered ? `${Math.round((t.qualified / t.entered) * 100)}%` : undefined} />
           <Kpi label="보상 지급" value={`${num(t.paidReferee + t.paidReferrer)}건`} note={`새 이웃 ${num(t.paidReferee)}, 추천인 ${num(t.paidReferrer)}`} />
-          <Kpi
-            label="지급한 포인트"
-            value={`${num((t.paidReferee + t.paidReferrer) * view.rules.points + t.paidGrand * view.rules.grandPoints)}P`}
-            note={t.paidGrand ? `2단계 ${num(t.paidGrand)}건 ${num(t.paidGrand * view.rules.grandPoints)}P 포함` : undefined}
-          />
+          <Kpi label="2단계 선물" value={`${num(t.paidGrand)}건`} />
           <Kpi label="확인 기다림" value={num(t.held)} note={t.denied ? `거절 ${num(t.denied)}` : undefined} />
           <Kpi label="같은 사람 같음" value={num(t.same)} />
         </div>
@@ -349,12 +345,12 @@ export default function ReferralsPanel({ toast, onAuthLost, onFindMember, onGift
           <li>「{REF_MODE_LABEL.auto}」은 같은 사람 판정으로 정해요. 의심 없음은 바로 보내고, 확인 필요는 기다리고, 같은 사람 같음은 보내지 않아요.</li>
           <li>「{REF_MODE_LABEL.off}」은 조건 달성만 기록해요. 바꾼 뒤 조건을 넘기는 추천부터 적용돼요.</li>
           <li>
-            새 이웃이 하루 {stayText(view.rules.dayMin)} 넘게 머문 날이 {view.rules.needDays}일이 되면 조건 달성이에요. 이어진 날이 아니어도 돼요. 그때 둘 다 {num(view.rules.points)}P를 선물함으로 받아요.
+            새 이웃이 하루 {stayText(view.rules.dayMin)} 넘게 머문 날이 {view.rules.needDays}일이 되면 조건 달성이에요. 이어진 날이 아니어도 돼요. 그때 둘 다 {view.rules.reward}을 받아요. 꾸미기는 선물함, 물약과 서류는 사냥 가방으로 가요.
           </li>
           <li>11/18 기준을 바꾸기 전에 들어온 날은 너그럽게 1시간 넘긴 날로 쳐요(진행 칸 「옛 기준」). 어제·오늘은 실제 머문 시간으로 봐요.</li>
           <li>추천인 보상은 한국 시간 달력으로 한 달에 {view.rules.monthCap}명까지예요. 넘으면 세기만 해요.</li>
           <li>
-            추천인의 추천인도 {num(view.rules.grandPoints)}P를 받아요. 한 달에 {view.rules.grandMonthCap}번까지이고 칭호에는 세지 않아요. 운영자이거나 같은 사람 같으면 건너뛰어요.
+            추천인의 추천인도 {view.rules.grandReward}을 받아요. 한 달에 {view.rules.grandMonthCap}번까지이고 칭호에는 세지 않아요. 운영자이거나 같은 사람 같으면 건너뛰어요.
           </li>
           <li>
             같은 사람 판정은 같은 기기, 같은 IP, 같은 대역, 브라우저 환경, 가입 시간, 접속한 날, 다른 이웃과 겹침을 점수로 더해요. {SAME_REVIEW_AT}점부터 「

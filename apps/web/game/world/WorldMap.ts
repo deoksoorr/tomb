@@ -66,7 +66,8 @@ import {
   propLight,
   RIVER_CURRENT,
   shopCollider,
-  SHRINE_TREE,
+  GRAVE_SIGN,
+  GRAVE_GATES,
   type Interactable,
   type PropDef,
   type Rect,
@@ -199,8 +200,8 @@ export class WorldMap {
     this.addLabel(HUNT_GATE.x, caveY - 13, "사냥터", 0xf0c8a0, 0.5, 0.95); // 동굴 입구(어두운 굴 안)에 — 위쪽 화면 막대에 가리지 않게
     this.addLabel(HUNT_SIGN.x, HUNT_SIGN.y - 34, "사냥터 입구 ↗", 0xffd6a8, 1, 0.95);
 
-    // 성황당 (나무·돌무더기는 소품)
-    this.addLabel(SHRINE_TREE.x - 4, SHRINE_TREE.y - 33, "성황당", 0xe8d0c0, 1); // 천을 묶은 나무 꼭대기 바로 위 (종루와 겹치지 않게)
+    // 11/19 「옛 묘역 입구」 팻말 (성황당을 없애고 그 일을 맡는다 — 팻말 그림은 소품)
+    this.addLabel(GRAVE_SIGN.x, GRAVE_SIGN.y - 22, "옛 묘역 입구", 0xe6dcc8, 1, 0.92);
 
     // 구역 이름 (은은하게). 묘역 이름은 문 아치 팻말에 (addFences)
     for (const z of ZONES) {
@@ -273,6 +274,12 @@ export class WorldMap {
       this.cull(c.x, c.y, this.skin(scene.add.image(c.x, c.y + 2, GY.gate).setOrigin(0.5, 1).setDepth(c.y + 2), GY.gate));
       const area = GRAVE_AREAS.find((a) => a.id === g.area)!;
       this.addLabel(c.x, c.y - GRAVE_GATE_H + 2, area.name, 0xe6dcc8, 1, 0.92);
+    }
+    // 11/19 옛 묘역(언덕 위)은 아치 없이 동문 하나 — 묘역 이름은 문 위 철책 기둥 사이에
+    for (const g of GRAVE_GATES.filter((q) => q.side === "right" || q.side === "left")) {
+      const c = gateCenter(g);
+      const area = GRAVE_AREAS.find((a) => a.id === g.area)!;
+      this.addLabel(c.x, g.a - 16, area.name, 0xe6dcc8, 1, 0.92);
     }
   }
 
@@ -461,6 +468,11 @@ export class WorldMap {
     if (p.kind === "hammock") for (const r of hammockPosts(p)) this.addCollider(group, r);
     const l = propLight(p);
     if (l) lights.push({ x: p.x, y: p.y + l.dy, scale: l.scale, tint: l.tint, base: l.base });
+  }
+
+  /** 11/19 내 집 id (주거 구역 — 첫 걸음 「이웃 집 구경하기」 길 안내가 남의 집 문만 고른다) */
+  get myHouseId(): string | null {
+    return this.lastVillage?.mine ?? null;
   }
 
   /** 상호작용 대상 (고정 맵 + 주거 구역의 집 문·빈 필지) */
@@ -898,7 +910,8 @@ function clampEdges(scene: Phaser.Scene, key: string): void {
 
 /** 구역 이름표 자리 (없으면 구역 위쪽 가운데) */
 const ZONE_LABEL_AT: Partial<Record<string, { x: number; y: number }>> = {
-  "별 보기 언덕": { x: 150, y: 92 },
+  "별 보기 마당": { x: 300, y: 60 },
+  "등불 골목": { x: 236, y: 424 },
   "모닥불 광장": { x: 720, y: 252 },
   "주거 구역": { x: 1200, y: 214 },
   "호수": { x: 1236, y: 962 },

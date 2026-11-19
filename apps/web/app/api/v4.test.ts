@@ -267,7 +267,7 @@ describe("경제 통계", () => {
     expect(before.days).toHaveLength(3);
     const v = await newVisitor();
     await attendAs(v, "경제학자"); // 입장만 (10번: 출석 포인트는 달력에서)
-    await earnPoints(v.visitorId, "attend"); // +10 attend
+    await earnPoints(v.visitorId, "flower"); // +2 flower (11/19 출석은 포인트 0 — 사냥 아이템으로)
     await adminPoints.POST(call("/api/admin/accounts/points", { headers: ADMIN, body: { accountId: v.visitorId, delta: 300 } }));
     await bodyOf(buy.POST(call("/api/shop/buy", { visitor: v, body: { itemId: "fw_small" } })));
     await spendPoints(v.visitorId, 30, "rpg:entry");
@@ -277,7 +277,7 @@ describe("경제 통계", () => {
 
     const after = await economy();
     const d = (k: "earned" | "spent", f: string) => (today(after)[k][f] ?? 0) - (today(before)[k][f] ?? 0);
-    expect(d("earned", "attend")).toBe(10);
+    expect(d("earned", "flower")).toBe(2);
     expect(d("earned", "admin")).toBe(300);
     expect(d("earned", "refund")).toBe(5);
     expect(d("spent", "rpg")).toBe(30);
@@ -285,7 +285,7 @@ describe("경제 통계", () => {
     expect(d("spent", "admin")).toBe(7);
     const shopSpent = d("spent", "shop");
     const balance = (await getMe(v)).points;
-    expect(balance).toBe(10 + 300 - shopSpent - 30 - 20 + 5 - 7);
+    expect(balance).toBe(2 + 300 - shopSpent - 30 - 20 + 5 - 7);
     expect(after.totals.accounts - before.totals.accounts).toBe(1);
     expect(after.totals.wallets - before.totals.wallets).toBe(balance);
     expect((await adminEconomy.GET(call("/api/admin/economy"))).status).toBe(401);
