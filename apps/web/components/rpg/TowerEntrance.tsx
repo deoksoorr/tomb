@@ -12,6 +12,8 @@ import {
   towerHpMul,
   TOWER_STEEP_FROM,
   TOWER_THEMES,
+  towerFitFloor,
+  towerPointFrom,
 } from "@/lib/rpg/tower";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { useMe } from "@/lib/hooks/useMe";
@@ -66,6 +68,8 @@ export default function TowerEntrance({
   const on = new Set(cursesAt(start));
   const curses = CURSES.filter((c) => on.has(c.id));
   const canStart = !busy && view.today.runsPerHour > 0;
+  const tLv = view.character.tLevel;
+  const pointFrom = towerPointFrom(tLv);
   return (
     <div className={s.lobby}>
       <section className={s.towerBox} aria-labelledby="tower-lift">
@@ -124,6 +128,13 @@ export default function TowerEntrance({
           {towerSec > 0 ? ` (칭호 덕분에 ${towerSec}초 더)` : ""}.
           5층마다 우두머리가 나와요. 잡으면 체력이 30% 차고 상자가 열려요.
         </p>
+        {/* 11/19 초월 레벨마다 적정 층: 그보다 낮은 층은 포인트 없음 (저층 쓸어 가기 막기) */}
+        {pointFrom > 1 && (
+          <p className={start < pointFrom ? s.warn : s.meta}>
+            <b>★{50 + tLv}의 적정 층은 {towerFitFloor(tLv)}층이에요.</b> {pointFrom}층부터 포인트를 받아요.
+            {start < pointFrom ? ` ${start}층부터 ${pointFrom - 1}층까지는 포인트 없이 초월 경험치와 상자만 받아요.` : ""}
+          </p>
+        )}
         <p className={s.meta}>
           {curses.length
             ? `붙는 저주 ${curses.map((c) => `「${c.name}」 ${c.desc}.`).join(" ")}`

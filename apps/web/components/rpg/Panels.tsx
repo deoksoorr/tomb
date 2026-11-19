@@ -26,7 +26,7 @@ import {
 import { spentStats } from "@/lib/rpg/character";
 import type { CharacterAction } from "@/lib/rpg/client";
 import { starLabel, transcendStatPoints } from "@/lib/rpg/endgame";
-import { countsForRace, derive, levelPenalty, STAT_MAX, type Derived } from "@/lib/rpg/formulas";
+import { countsForRace, derive, HUNT_POINT_T_STOP, huntPointBlock, levelPenalty, STAT_MAX, type Derived } from "@/lib/rpg/formulas";
 import { RESPEC_MAX_COST } from "@/lib/rpg/skillRules";
 import type { RpgView } from "@/lib/rpg/types";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
@@ -93,6 +93,8 @@ export function StartPanel({
   // 11/15: 사냥은 그 사냥터가 열리는 레벨, 미니게임은 난이도 권장 레벨보다 10 넘게 높으면 EXP가 깎이고(10%·20 넘으면 2%), 사냥은 주간 레이스(사냥 처치·주간 최단)에도 안 들어간다 (lib/rpg/service)
   const expCut = levelPenalty(c.level, diff, game === "hunt" ? zone : null);
   const noRace = game === "hunt" && !countsForRace(c.level, diff, zone);
+  // 11/19 ★58(초월 8)부터는 일반 사냥터 전부 포인트 없음
+  const starBlock = game === "hunt" && huntPointBlock(c.level, c.tLevel, diff, zone) === "star";
   const zoneLocked = game === "hunt" && !zoneOpen(zone, c.level, zoneUnlockAll());
   const monsters = [...new Set([...zone.pool])].map((id) => MONSTERS[id].name);
   const canStart = !busy && view.today.runsPerHour > 0 && !zoneLocked;
@@ -124,6 +126,7 @@ export function StartPanel({
         <section className={s.section} aria-label="사냥터 고르기">
           <ZonePicker
             level={c.level}
+            tLevel={c.tLevel}
             zone={zone.id}
             onZone={onZone}
             detail={
@@ -135,9 +138,14 @@ export function StartPanel({
                   </p>
                 )}
                 {!zoneLocked && low && <p className={s.warn}>권장 레벨보다 낮아요. 쓰러지면 보상이 절반이에요.</p>}
-                {!zoneLocked && noRace && (
+                {!zoneLocked && starBlock && (
                   <p className={s.warn}>
-                    내 레벨이 이 사냥터(Lv.{zone.unlockLevel})보다 10 넘게 높아요. EXP는 {Math.round(expCut * 100)}%만 받아요. 잡은 몬스터는 사냥 랭킹과 주간 레이스에 들어가지 않아요.
+                    <b>사냥터에서는 포인트를 받을 수 없어요.</b> {starLabel(HUNT_POINT_T_STOP)}부터는 일반 사냥터에서 포인트를 받지 않아요. 초월 경험치와 드롭은 그대로이고, 포인트는 야근 빌딩에서 받아요.
+                  </p>
+                )}
+                {!zoneLocked && noRace && !starBlock && (
+                  <p className={s.warn}>
+                    <b>포인트를 받을 수 없는 사냥터예요.</b> 내 레벨이 이 사냥터(Lv.{zone.unlockLevel})보다 10 넘게 높아요. EXP는 {Math.round(expCut * 100)}%만 받고, 잡은 몬스터는 사냥 랭킹과 주간 레이스에 들어가지 않아요. 포인트는 Lv.{c.level - 10} 이상 사냥터에서 받아요.
                   </p>
                 )}
                 <div className={s.zoneGo}>

@@ -196,6 +196,16 @@ export function countsForRace(level: number, d: Difficulty, zone?: { unlockLevel
   return level - refLevel(d, zone) <= 10;
 }
 
+/**
+ * 11/19 사냥터 포인트를 막는 이유 (사냥이 쉬워져서 — 사용자): 초월 레벨 HUNT_POINT_T_STOP(★58)부터는 일반 사냥터 전부 (포인트는 야근 빌딩에서),
+ * 그 전에는 적정 레벨(그 사냥터가 열리는 레벨 +10)을 넘은 사냥터. 받을 수 있으면 null
+ */
+export const HUNT_POINT_T_STOP = 8;
+export function huntPointBlock(level: number, tLevel: number, d: Difficulty, zone?: { unlockLevel: number } | null): "star" | "level" | null {
+  if (tLevel >= HUNT_POINT_T_STOP) return "star";
+  return countsForRace(level, d, zone) ? null : "level";
+}
+
 // ── 공용 ──
 
 export function clamp(v: number, lo: number, hi: number): number {

@@ -55,12 +55,14 @@ import {
   towerSettle,
   towerZone,
   TOWER_FLOOR_POINTS,
+  towerPointFrom,
+  towerRunPoints,
   type TowerSettle,
   type TowerVerdict,
 } from "./tower";
 import { getTowerStore } from "./towerStore";
 import { pushVillageNotice } from "../weeklyChamp";
-import { countsForRace, derive, expToNext, MAX_LEVEL } from "./formulas";
+import { countsForRace, derive, expToNext, huntPointBlock, MAX_LEVEL } from "./formulas";
 import { ALL_SKILLS_POINTS, respecCost, skillPointsEarned, spentPoints } from "./skillRules";
 import { isSuperHunter, testServerEnv } from "./superHunter";
 import { takeTestDrops } from "./testDrops";
@@ -608,9 +610,12 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   const tChamp = t.tt ? champTranscendExp(champ) : 0;
   const tGain = tChamp > 0 ? Math.round(titled * TRANSCEND_EXP_MUL * RUN_TIERS[t.tt!].rate * (1 + tChamp)) : tBase;
 
+  // 11/19 사냥터 포인트 막기는 판을 시작할 때(정산 전) 초월 레벨 기준
+  let tAtStart = 0;
   const done = await http(
     store.update(acct, (s) => {
       let cur = s;
+      tAtStart = s.tLevel;
       if (result.game === "hunt") cur = consumePotions(cur, potionsUsed).state;
       const g = t.tt ? gainTranscend(cur, tGain) : gainExp(cur, exp);
       const dr = addDrops(g.state, vDrops);
@@ -637,7 +642,11 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   // 11/16 몬스터 도감 (사냥 판만 mobs가 있다)
   const mobs = v.mobs ? await recordMobKills(acct, v.mobs, now, ipHash) : undefined;
   const dexReward = stars?.dex ?? mobs?.dex;
-  const pointsRaw = nightBonus ? Math.round(v.points * STARRY_NIGHT_BONUS) : v.points;
+  // 11/19 사냥이 쉬워져서 적정 레벨(그 사냥터가 열리는 레벨 +10)을 넘은 사냥터에서는 포인트를 주지 않는다 (사용자). EXP 감소·랭킹 제외와 같은 기준
+  const runZone = zoneFor(t.d, t.z);
+  // ★58(초월 8)부터는 일반 사냥터 전부 포인트 없음 (포인트는 야근 빌딩에서)
+  const overLevel = t.g === "hunt" ? huntPointBlock(t.lv, tAtStart, t.d, runZone) : null;
+  const pointsRaw = overLevel ? 0 : nightBonus ? Math.round(v.points * STARRY_NIGHT_BONUS) : v.points;
   // 사냥은 사냥 한도, 곤충·별자리는 미니게임 한도 (사냥 화면의 오늘 사냥 포인트(daily.points)에는 사냥 몫만)
   const earned = pointsRaw > 0 ? (await earnPointsOnly(acct, t.g, pointsRaw, ipHash)).earned : 0;
   // 11/18 오늘의 할 일 「사냥 한 판」·「별자리 잇기 한 판」이면 같은 파이프라인에서 진행도 (lib/retainQuest)
@@ -648,7 +657,6 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   // 11/15: 자기 레벨이 그 사냥터가 열리는 레벨(티켓의 사냥터 t.z)보다 10 넘게 높으면 랭킹에 아예 넣지 않는다 —
   // 주간 레이스뿐 아니라 전체 처치 수·최단 기록도 (사용자 요청 "다 적정 레벨만 세게"). 지나간 기록은 그대로
   // 11/16 최단 클리어는 사냥터(t.z — 없던 옛 티켓은 그 난이도 첫 사냥터)별로 남긴다
-  const runZone = zoneFor(t.d, t.z);
   if (v.hunt && (v.hunt.kills > 0 || v.hunt.clearMs !== null) && !staff && countsForRace(t.lv, t.d, runZone))
     await getAccounts().recordHunt(acct, runZone.id, v.hunt, kstWeek(now), true);
   return {
@@ -661,6 +669,7 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
       pointsRaw,
       points: earned,
       capped: earned < pointsRaw,
+      ...(overLevel ? { overLevel } : {}),
       ...(nightBonus ? { nightBonus: true } : {}),
       ...(constellations?.length ? { constellations } : {}),
       ...(dexReward ? { dexReward } : {}),
@@ -953,9 +962,12 @@ async function settleTowerRun(
   const week = kstWeek(now);
   // 11/17 사냥왕(지난주 1위): 층마다 받은 초월 EXP +10% (lib/champPerks)
   const tChamp = champTranscendExp(await champBoardsSafe(acct, now));
+  // 11/19 적정 층 포인트: 판을 시작할 때(정산 전) 초월 레벨 기준
+  let tAtStart = 0;
   const done = await http(
     store.update(acct, (s) => {
       const cur = consumePotions(s, potionsUsed).state;
+      tAtStart = cur.tLevel;
       // 11/15 의심 판(부드러운 거절): 층·초월 EXP·상자·포인트는 그대로, 최고·주간 기록은 그대로 두고 체크포인트만 연다 (fSus)
       const st: TowerSettle = towerSettle(cur, { day, week, start, floors: v.floors, floorMs: v.floorMs, suspect: !!v.suspect });
       const settled = { ...cur, ...st.patch };
@@ -1041,7 +1053,10 @@ async function settleTowerRun(
     if (done.result.star100 && !suspect) firstPending.push(...(await queueFirstTitles(acct, [FIRST_STAR_ID], now, () => "서버 최초로 ★100에 올랐어요!")));
   }
   const drops = await grantCosmetics(acct, done.result.drops, now);
-  const earned = v.points > 0 ? (await earnPointsOnly(acct, "hunt", v.points, ipHash)).earned : 0;
+  // 판이 정한 포인트(v.points — 관리자 「기록 확인」 인정은 0: 포인트를 두 번 주지 않는다) 안에서 적정 층 아래 몫을 뺀다
+  const fit = towerRunPoints(start, v.floors, tAtStart);
+  const tp = { points: Math.min(v.points, fit.points), free: v.points > 0 ? fit.free : 0 };
+  const earned = tp.points > 0 ? (await earnPointsOnly(acct, "hunt", tp.points, ipHash)).earned : 0;
   // 11/16 몬스터 도감: 의심 판이 아닐 때만 evalTower가 mobs를 싣는다 (관리자 대신 정산 grantTowerRun은 처치 기록이 없다)
   const mobs = v.mobs && !suspect ? await recordMobKills(acct, v.mobs, now, ipHash) : undefined;
   const quest = questHook(acct, day, "hunt");
@@ -1054,9 +1069,10 @@ async function settleTowerRun(
     reward: {
       score: v.kills,
       exp: 0,
-      pointsRaw: v.points,
+      pointsRaw: tp.points,
       points: earned,
-      capped: earned < v.points,
+      capped: earned < tp.points,
+      ...(tp.free > 0 ? { lowFloors: { floors: tp.free, from: towerPointFrom(tAtStart) } } : {}),
       drops,
       levelsGained: 0,
       newLevel: state.level,

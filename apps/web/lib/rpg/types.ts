@@ -214,6 +214,10 @@ export type RunReward = {
   /** 실제로 들어온 포인트 */
   points: number;
   capped: boolean;
+  /** 11/19 사냥터 포인트를 받지 않은 이유: star = ★58(초월 8)부터 일반 사냥터 전부, level = 적정 레벨(사냥터가 열리는 레벨 +10)을 넘었다 */
+  overLevel?: "star" | "level";
+  /** 11/19 야근 빌딩: 적정 층보다 낮아 포인트를 받지 않은 층 수와 포인트를 주는 첫 층 */
+  lowFloors?: { floors: number; from: number };
   drops: Drop[];
   levelsGained: number;
   newLevel: number;

@@ -50,6 +50,9 @@ import ItemIcon from "../ui/ItemIcon";
 import RunHud from "./RunHud";
 import TowerEntrance, { towerBoostAllowed } from "./TowerEntrance";
 import s from "./rpg.module.css";
+import OverLevelSpot, { OVER_LEVEL_SPOT_MS } from "./OverLevelSpot";
+import { HUNT_POINT_T_STOP, huntPointBlock } from "@/lib/rpg/formulas";
+import { towerFitFloor, towerPointFrom } from "@/lib/rpg/tower";
 import { rideGate } from "@/lib/rideGate";
 
 // 사냥터 입구 창 (월드의 사냥터 입구에서 portal:open {kind:"hunt"} → UI가 이 컴포넌트를 띄운다).
@@ -135,6 +138,7 @@ export default function HuntLobby({
   const [tab, setTab] = useState<Tab>("start");
   const [pick, setPick] = useState(readPick);
   const [phase, setPhase] = useState<Phase>("lobby");
+  const [overLevel, setOverLevel] = useState<{ until: number; title: string; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -293,6 +297,24 @@ export default function HuntLobby({
       };
       setOutcome(null);
       setPhase("playing");
+      // 11/19 적정 레벨을 넘은 사냥터: 판 처음에 확성기처럼 경고 (포인트 없음)
+      // 야근 빌딩은 초월 레벨마다 적정 층보다 낮은 곳에서 시작하면
+      const runZone = zoneFor(difficulty, res.zone ?? cur.zone);
+      const until = Date.now() + OVER_LEVEL_SPOT_MS;
+      const from = towerPointFrom(c.tLevel);
+      setOverLevel(
+        res.tower
+          ? res.tower < from
+            ? { until, title: `${from}층부터 포인트를 받아요`, text: `${starLabel(c.tLevel)}의 적정 층은 ${towerFitFloor(c.tLevel)}층이에요. ${from - 1}층까지는 초월 경험치와 상자만 받아요.` }
+            : null
+          : game !== "hunt"
+            ? null
+            : huntPointBlock(c.level, c.tLevel, difficulty, runZone) === "star"
+              ? { until, title: "사냥터에서는 포인트를 받을 수 없어요", text: `${starLabel(HUNT_POINT_T_STOP)}부터는 일반 사냥터에서 포인트를 받지 않아요. 포인트는 야근 빌딩에서 받아요.` }
+              : huntPointBlock(c.level, c.tLevel, difficulty, runZone) === "level"
+                ? { until, title: "이 사냥터에서는 포인트를 받을 수 없어요", text: `내 레벨이 이 사냥터(Lv.${runZone.unlockLevel})보다 10 넘게 높아요. EXP도 조금만 받고 랭킹에도 들어가지 않아요.` }
+                : null,
+      );
       bridge.emit("rpg:play", {
         game,
         difficulty,
@@ -409,6 +431,7 @@ export default function HuntLobby({
     return (
       <>
         {r && <RunHud game={r.game} hotbar={r.hotbar} onPause={pause} {...(r.tower ? { title: "야근 빌딩" } : {})} />}
+        {overLevel && phase === "playing" && <OverLevelSpot until={overLevel.until} title={overLevel.title} text={overLevel.text} />}
         {phase === "submitting" && (
           <div className={s.submitting} role="status">
             결과를 정리하는 중…
@@ -690,7 +713,19 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
               {res.game === "hunt" ? "처치 점수" : "점수"}
             </div>
           </div>
-          {r.capped && (
+          {r.overLevel && (
+            <p className={s.warn}>
+              {r.overLevel === "star"
+                ? `${starLabel(HUNT_POINT_T_STOP)}부터는 사냥터에서 포인트를 받지 않아요. 포인트는 야근 빌딩에서 받아요.`
+                : "적정 레벨보다 낮은 사냥터라 포인트는 받지 않았어요. 내 레벨에 맞는 사냥터에서 포인트를 받아요."}
+            </p>
+          )}
+          {r.lowFloors && (
+            <p className={s.warn}>
+              적정 층보다 낮은 {r.lowFloors.floors}층은 포인트 없이 초월 경험치와 상자만 받았어요. {r.lowFloors.from}층부터 포인트를 받아요.
+            </p>
+          )}
+          {r.capped && !r.overLevel && (
             <p className={ui.hint}>
               오늘 받을 포인트를 다 채워서 {r.pointsRaw}P 중 {r.points}P만 받았어요.
             </p>

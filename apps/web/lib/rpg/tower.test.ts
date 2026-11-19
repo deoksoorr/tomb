@@ -14,6 +14,9 @@ import {
   isBossFloor,
   TOWER_CHESTS_PER_DAY,
   TOWER_FLOOR_POINTS,
+  towerFitFloor,
+  towerPointFrom,
+  towerRunPoints,
   TOWER_POWER,
   TOWER_STEEP_FROM,
   TOWER_TAUNTS,
@@ -684,5 +687,25 @@ describe("11/16 오른 시간 글자", () => {
     expect(climbTime(3_785_000)).toBe("1시간 3분 5초");
     expect(climbTime(3_600_000)).toBe("1시간 0분 0초");
     expect(climbTime(13_400)).toBe("14초");
+  });
+});
+
+describe("11/19 초월 레벨마다 적정 층 포인트", () => {
+  it("★(50+t)의 적정 층은 2t층, 그보다 10층 넘게 낮은 층은 포인트가 없다", () => {
+    expect(towerFitFloor(0)).toBe(1);
+    expect(towerPointFrom(0)).toBe(1);
+    expect(towerFitFloor(30)).toBe(60);
+    expect(towerPointFrom(30)).toBe(50);
+    expect(towerPointFrom(50)).toBe(90);
+  });
+  it("시작 층부터 깬 층 중 적정 아래는 0, 나머지는 층마다 그대로", () => {
+    // ★80: 50층부터 포인트 — 1층부터 60층을 깨면 1~49층은 0, 50~60층 11층만
+    expect(towerRunPoints(1, 60, 30)).toEqual({ points: 11 * TOWER_FLOOR_POINTS, free: 49 });
+    // 51층에서 시작하면 전부 받는다
+    expect(towerRunPoints(51, 10, 30)).toEqual({ points: 10 * TOWER_FLOOR_POINTS, free: 0 });
+    // 적정 아래에서 끝나면 0
+    expect(towerRunPoints(1, 20, 30)).toEqual({ points: 0, free: 20 });
+    // 아직 초월 전이면 모두 받는다
+    expect(towerRunPoints(1, 8, 0)).toEqual({ points: 8 * TOWER_FLOOR_POINTS, free: 0 });
   });
 });
