@@ -3,7 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { tExpToNext, TRANSCEND_EXP_MUL } from "@/lib/rpg/endgame";
 import { floorTExp, isCheckpoint, isChestFloor, nextCheckpoint, TOWER_CHEST_FROM, TOWER_LOW_CHECKPOINTS, TOWER_FLOOR_POINTS, towerOfScore, towerPlan, towerReachedLabel, towerZone } from "@/lib/rpg/tower";
 import { getTowerStore } from "@/lib/rpg/towerStore";
-import { getErrors, getMegaphone } from "@/lib/store";
+import { getAccounts, getErrors, getMegaphone } from "@/lib/store";
 import { cardOffer, CARD_IDS } from "@/lib/rpg/cards";
 import type { MonsterId } from "@/lib/rpg/catalog";
 import * as rank from "../rank/route";
@@ -314,13 +314,17 @@ describe("11/19 적정 레벨·적정 층 포인트", () => {
     expect(fit.reward.points).toBeGreaterThan(0);
     expect(fit.reward.overLevel).toBeUndefined();
   });
-  it("★58(초월 8)부터는 일반 사냥터 전부 포인트 0 (★57까지는 적정 사냥터에서 받는다)", async () => {
+  it("★58(초월 8)부터는 일반 사냥터 전부 포인트 0·레이스·랭킹 제외 (★57까지는 적정 사냥터에서 받고 센다)", async () => {
+    const rec = vi.spyOn(getAccounts(), "recordHunt");
     const v7 = await newVisitor({ level: 50, tLevel: 7 });
     expect((await end(v7, await begin(v7, undefined, "layoff-day"))).reward.points).toBeGreaterThan(0);
     const v8 = await newVisitor({ level: 50, tLevel: 8 });
     const r = await end(v8, await begin(v8, undefined, "layoff-day"));
     expect(r.reward.points).toBe(0);
     expect(r.reward.overLevel).toBe("star");
+    const who = rec.mock.calls.map((c: unknown[]) => c[0]);
+    expect(who).not.toContain(v8.id);
+    rec.mockRestore();
   });
   it("야근 빌딩: 아직 초월 전이면 깬 층마다 포인트", async () => {
     const v = await newVisitor({ level: 50, tLevel: 0 });
