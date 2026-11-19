@@ -11,6 +11,9 @@ import { hash01 } from "../rules";
 //  - 보상 (1개 이상 낸 사람): 50% 도장 2 · 100% 도장 3 더 + 「수집가의 뒷주머니」 · 150% 마을 축제 1시간 (모두에게)
 //    가장 많이 낸 사람: 칭호 「긴급 배달왕」 하루 + 사이렌 모자 24시간 · 마지막 1분에 100%를 채운 사람: 칭호 「아슬아슬 마감」 하루
 //    (11/18 사용자: 공동 배달왕은 없애고 가장 많이 낸 한 사람만, 그것도 150%를 채운 판에서만 — 나머지는 도장·상자만)
+//    11/19 사용자 「배달왕·사이렌 모자가 같은 사람에게 너무 겹쳐 나간다」: 배달왕은 칭호만, 모자 대신 상점 꾸미기 하나를 무작위 기간제로.
+//    100%를 넘긴 판에선 낸 사람 중 한 명(배달왕 빼고, 낸 수와 상관없이 똑같은 확률)을 뽑아 「행운의 배달부」로 같은 무작위 꾸미기를 준다.
+//    사이렌 모자는 무작위 꾸미기 후보에 아주 드물게 (URGENT_COS_SIREN)
 //    (마지막 1분에 100%를 넘긴 사람이 없고 150%로 일찍 끝났으면 「아슬아슬 마감」은 150%를 채워 끝낸 사람 — urgentLastAcct)
 
 const MIN = 60_000;
@@ -39,6 +42,15 @@ export const URGENT_SHOW_MS = HOUR;
 /** 끝난 뒤 보상을 받을 수 있는 시간 (저장 키는 하루 더 둔다) */
 export const URGENT_CLAIM_MS = 3 * DAY;
 export const URGENT_TTL_SEC = Math.ceil((URGENT_MS + URGENT_CLAIM_MS + DAY) / 1000);
+/** 11/19 받기 기한 남은 시간 ("2일 5시간", "3시간", "40분") */
+export function urgentClaimLeft(ms: number): string {
+  const m = Math.max(1, Math.ceil(ms / MIN));
+  const d = Math.floor(m / 1440);
+  const h = Math.floor((m % 1440) / 60);
+  if (d > 0) return h > 0 ? `${d}일 ${h}시간` : `${d}일`;
+  if (h > 0) return `${h}시간`;
+  return `${m}분`;
+}
 /** 칭호·사이렌 모자 기간 (받은 때부터) */
 export const URGENT_TITLE_MS = DAY;
 export const URGENT_HAT_MS = DAY;
@@ -157,7 +169,7 @@ export function urgentCapLine(kind: UrgentKind, cap: number, left: number): stri
 }
 
 /** 11/18 배달왕 안내 한 줄 (게시판 순위 위): 공동 배달왕은 없앴다 — 150%를 채운 판의 1등 한 명만 */
-export const URGENT_KING_LINE = "150%를 채우면 가장 많이 낸 1등 한 명이 사이렌 모자와 「긴급 배달왕」을 받아요.";
+export const URGENT_KING_LINE = "150%를 채우면 가장 많이 낸 1등이 「긴급 배달왕」과 무작위 꾸미기를, 100%를 넘기면 낸 사람 중 한 명이 뽑혀 무작위 꾸미기를 받아요.";
 
 /** 11/16 상한에 걸린 납품 거절 문구 */
 export function urgentCapError(kind: UrgentKind, cap: number, left: number): string {
@@ -282,8 +294,10 @@ export type UrgentReward = {
   /** 단계 도장 (상자 도장은 box에) */
   stamps: number;
   box: BoxPrize | null;
-  /** 가장 많이 낸 한 사람 (11/18 150%를 채운 판에서만, 공동 배달왕 없음) → 칭호 「긴급 배달왕」 + 사이렌 모자 */
+  /** 가장 많이 낸 한 사람 (11/18 150%를 채운 판에서만, 공동 배달왕 없음) → 칭호 「긴급 배달왕」 + 무작위 꾸미기 (11/19) */
   king: boolean;
+  /** 11/19 행운의 배달부: 100%를 넘긴 판에서 낸 사람 중 뽑힌 한 명 (배달왕 빼고) → 무작위 꾸미기 */
+  lucky: boolean;
   /** 마지막 1분에 100%를 채운 사람 → 칭호 「아슬아슬 마감」 */
   last: boolean;
 };
@@ -293,7 +307,7 @@ export type UrgentReward = {
  * 11/18 배달왕: 150%를 채운 판에서 가장 많이 낸 한 사람(top — 같은 수면 먼저 닿은 사람이 위)만. 공동 배달왕(상한까지 낸 사람 모두)은 없앴다.
  * cap은 예전 호출과 맞추려고 그대로 받는다 (배달왕 판정엔 쓰지 않는다)
  */
-export function urgentReward(o: { id: string; acct: string; n: number; goal: number; cap: number; mine: number; top: string | null; last: string | null }): UrgentReward | null {
+export function urgentReward(o: { id: string; acct: string; n: number; goal: number; cap: number; mine: number; top: string | null; last: string | null; lucky?: string | null }): UrgentReward | null {
   if (o.mine <= 0) return null;
   const stage = urgentStage(o.n, o.goal);
   const stamps = (stage >= 50 ? URGENT_STAMPS[50] : 0) + (stage >= 100 ? URGENT_STAMPS[100] : 0);
@@ -302,12 +316,57 @@ export function urgentReward(o: { id: string; acct: string; n: number; goal: num
     stamps,
     box: stage >= 100 ? openBox(`${o.id}|${o.acct}`) : null,
     king: stage >= 150 && o.top === o.acct,
+    lucky: stage >= 100 && !!o.lucky && o.lucky === o.acct,
     last: stage >= 100 && o.last === o.acct,
   };
 }
 
+// ── 11/19 무작위 꾸미기 (배달왕·행운의 배달부) ──
+
+/** 사이렌 모자가 나올 확률 (긴급 의뢰 한정 희귀템) */
+export const URGENT_COS_SIREN = 0.05;
+/** 등급 비율 [일반, 고급, 희귀, 전설] (상점 값 기준 등급 — lib/rpg/setGearRoll cosTierOf) */
+export const URGENT_COS_TIERS = [50, 35, 13, 2] as const;
+/** 기간: 1일 50% · 3일 35% · 7일 15% */
+export const URGENT_COS_DAYS: readonly (readonly [number, number])[] = [
+  [1, 50],
+  [3, 35],
+  [7, 15],
+];
+export type UrgentCos = { id: string; days: number };
+
+function pickW<T>(r: () => number, rows: readonly (readonly [T, number])[]): T {
+  const total = rows.reduce((a, [, w]) => a + w, 0);
+  let x = r() * total;
+  for (const [v, w] of rows) if ((x -= w) < 0) return v;
+  return rows[rows.length - 1][0];
+}
+
+/**
+ * 무작위 꾸미기 하나 (결정적: 같은 시드·같은 제외 목록이면 늘 같다). tiers = 등급별 후보 id (상점 캐릭터 꾸미기),
+ * exclude = 이미 영구로 가진 것 (그 등급 후보가 다 빠지면 다른 등급에서). 사이렌 모자는 1일
+ */
+export function urgentCosRoll(seed: string, tiers: readonly (readonly string[])[], exclude: ReadonlySet<string>): UrgentCos | null {
+  const r = rng(`urgcos|${seed}`);
+  if (r() < URGENT_COS_SIREN && !exclude.has(URGENT_HAT)) return { id: URGENT_HAT, days: 1 };
+  const tier = pickW(r, URGENT_COS_TIERS.map((w, i) => [i, w] as const));
+  const order = [tier, ...[0, 1, 2, 3].filter((t) => t !== tier)];
+  for (const t of order) {
+    const pool = (tiers[t] ?? []).filter((id) => !exclude.has(id));
+    if (pool.length) return { id: pool[Math.min(pool.length - 1, Math.floor(r() * pool.length))], days: pickW(r, URGENT_COS_DAYS) };
+  }
+  return null;
+}
+
+/** 행운의 배달부: 낸 사람(accts) 중 한 명 (결정적 — 의뢰 id 시드, 계정 이름 순으로 줄 세워 뽑는다). 배달왕(king)은 뺀다 */
+export function urgentLucky(id: string, accts: readonly string[], king: string | null): string | null {
+  const pool = [...new Set(accts)].filter((a) => a !== king).sort();
+  if (!pool.length) return null;
+  return pool[Math.min(pool.length - 1, Math.floor(rng(`urglucky|${id}`)() * pool.length))];
+}
+
 /** 받을 것이 있는지 */
-export const hasReward = (r: UrgentReward | null): r is UrgentReward => !!r && (r.stamps > 0 || !!r.box || r.king || r.last);
+export const hasReward = (r: UrgentReward | null): r is UrgentReward => !!r && (r.stamps > 0 || !!r.box || r.king || r.lucky || r.last);
 
 // ── 축제 ──
 

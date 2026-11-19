@@ -23,6 +23,8 @@ import {
   URGENT_DEF,
   URGENT_GAP_MS,
   URGENT_HAT,
+  urgentCosRoll,
+  urgentLucky,
   URGENT_POCKET,
   URGENT_KINDS,
   URGENT_MS,
@@ -297,6 +299,39 @@ describe("수집가의 뒷주머니 (상자 확률)", () => {
   });
 });
 
+describe("11/19 무작위 꾸미기 · 행운의 배달부", () => {
+  const tiers = [["c_a", "c_b"], ["c_c"], ["c_d"], ["c_e"]];
+  it("같은 시드면 늘 같고, 기간은 1·3·7일, 영구로 가진 것은 뺀다", () => {
+    const a = urgentCosRoll("ev|acct", tiers, new Set());
+    expect(urgentCosRoll("ev|acct", tiers, new Set())).toEqual(a);
+    let siren = 0;
+    for (let i = 0; i < 2000; i++) {
+      const r = urgentCosRoll(`ev${i}|x`, tiers, new Set(["c_a", "c_b", "c_c"]))!;
+      expect([1, 3, 7]).toContain(r.days);
+      expect(["c_a", "c_b", "c_c"]).not.toContain(r.id);
+      if (r.id === URGENT_HAT) siren++;
+    }
+    // 사이렌 모자는 아주 드물게 (5% 안팎)
+    expect(siren / 2000).toBeGreaterThan(0.02);
+    expect(siren / 2000).toBeLessThan(0.09);
+  });
+  it("행운의 배달부: 낸 사람 중 한 명, 배달왕은 빼고, 같은 의뢰면 늘 같은 사람", () => {
+    const accts = ["a", "b", "c", "d"];
+    const w = urgentLucky("ev1", accts, "a");
+    expect(["b", "c", "d"]).toContain(w);
+    expect(urgentLucky("ev1", [...accts].reverse(), "a")).toBe(w);
+    expect(urgentLucky("ev1", ["a"], "a")).toBeNull();
+    const seen = new Set(Array.from({ length: 200 }, (_, i) => urgentLucky(`ev${i}`, accts, null)));
+    expect(seen.size).toBe(4);
+  });
+  it("100%를 넘긴 판의 뽑힌 사람만 lucky, 150% 1등만 king", () => {
+    const base = { id: "e", n: 100, goal: 100, cap: 0, mine: 3, top: "a", last: null };
+    expect(urgentReward({ ...base, acct: "b", lucky: "b" })).toMatchObject({ lucky: true, king: false });
+    expect(urgentReward({ ...base, n: 60, acct: "b", lucky: "b" })).toMatchObject({ lucky: false });
+    expect(urgentReward({ ...base, n: 150, acct: "a", lucky: "b" })).toMatchObject({ king: true, lucky: false });
+  });
+});
+
 describe("축제 효과 범위", () => {
   it("희귀(★3) 이상만 1.25배, 흔한 것·축제 아닐 때는 그대로", () => {
     expect(FEST_RARE_BOOST).toBeGreaterThan(1);
@@ -479,10 +514,13 @@ describe("서버 흐름", () => {
     if (prize.kind === "dye_pick") expect(o1.me.inventory.q_dye_pick).toBe(1);
     if (prize.kind === "fish") expect((await getForageStore().snapshot(big, DAY, 0)).bag[prize.id]).toBe(1);
     await expect(openUrgentPocket(big)).rejects.toMatchObject({ code: "NO_POCKET" });
-    // 사이렌 모자 24시간 + 칭호 하루
+    // 11/19 배달왕: 칭호 하루 + 무작위 꾸미기 기간제 ((의뢰, 계정) 시드 — 사이렌 모자 고정 아님)
+    const cos = r1.claimed.cos!;
+    expect(cos).toBeTruthy();
+    expect([1, 3, 7]).toContain(cos.days);
     const me = await getAccounts().get(big, DAY, t);
-    const hat = [...me.equipped, ...(me.stash ?? [])].find((e) => e.itemId === URGENT_HAT);
-    expect(hat?.until).toBe(t + 24 * HOUR);
+    const got = [...me.equipped, ...(me.stash ?? [])].find((e) => e.itemId === cos.id);
+    expect(got?.until).toBe(t + cos.days * 24 * HOUR);
     expect((await getTitleStats().get(big)).urgKing).toBe(t + 24 * HOUR);
     // 중복 수령 막기
     await expect(claimUrgent(big, ev.id, t + 1)).rejects.toMatchObject({ code: "URGENT_CLAIMED" });
