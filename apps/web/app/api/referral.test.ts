@@ -256,7 +256,8 @@ describe("조건 달성과 보상", () => {
     expect((await view(a)).next).toEqual({ title: "마을의 마당발", need: 10, count: 3 });
   });
 
-  it("확인 필요(같은 IP)면 보상을 보류하고, 관리자가 승인하면 양쪽에 보내고 칭호에 센다", async () => {
+  it("「모두 확인」: 확인 필요(같은 IP)면 보상을 보류하고, 관리자가 승인하면 양쪽에 보내고 칭호에 센다", async () => {
+    await getReferrals().setMode("review");
     const a = await newVisitor("같은곳추천인", "10.77.0.1");
     const b = await newVisitor("같은곳새이웃", "10.77.0.1");
     await enter(b, await codeOf(a));
@@ -284,9 +285,11 @@ describe("조건 달성과 보상", () => {
     // 두 번 승인할 수 없다
     expect(await errOf(adminRefs.POST(call("/api/admin/referrals", { admin: true, body: { refereeId: b.id, approve: true } })))).toEqual({ status: 409, code: "NOT_HELD" });
     expect((await getReferrals().totals()).held).toBe(held - 1);
+    await getReferrals().setMode("auto");
   });
 
-  it("가입 뒤에 같은 IP로 들어와도 달성 때 다시 보고, 거절하면 보상 없이 끝난다", async () => {
+  it("「모두 확인」: 가입 뒤에 같은 IP로 들어와도 달성 때 다시 보고, 거절하면 보상 없이 끝난다", async () => {
+    await getReferrals().setMode("review");
     const c = await newVisitor("나중같은곳추천인", "10.78.0.1");
     const d = await newVisitor("나중같은곳새이웃", "10.78.1.2");
     await enter(d, await codeOf(c));
@@ -302,9 +305,10 @@ describe("조건 달성과 보상", () => {
     expect(await refGifts(d)).toHaveLength(0);
     expect(await getReferrals().credited(c.id)).toBe(0);
     expect((await getReferrals().totals()).denied).toBe(denied + 1);
+    await getReferrals().setMode("auto");
   });
 
-  it("같은 사람 같음(같은 기기)이면 보상·칭호 수 없이 달성만 남는다", async () => {
+  it("11/19 「자동」은 같은 사람 같음(같은 기기)이어도 조건만 채우면 등불·사냥 가방 몫을 다 보낸다 (판정 이유는 남긴다)", async () => {
     const a = await newVisitor("같은기기추천인");
     const b = await newVisitor("같은기기새이웃");
     // 같은 기기 표시 쿠키로 두 계정이 세션을 받았다 (「새로 시작」)
@@ -313,10 +317,11 @@ describe("조건 달성과 보상", () => {
     expect(await getReferrals().get(b.id)).toMatchObject({ same: true, reasons: ["dev"] });
     await fill(b);
     await referralOnPresence(b.id);
-    expect(await getReferrals().get(b.id)).toMatchObject({ hold: 0, refereePaid: false });
+    expect(await getReferrals().get(b.id)).toMatchObject({ hold: 0, refereePaid: true, referrerPaid: true, reasons: ["dev"] });
     expect((await getReferrals().get(b.id))?.qualifiedAt).toBeGreaterThan(0);
-    expect(await refGifts(a)).toHaveLength(0);
-    expect(await getReferrals().credited(a.id)).toBe(0);
+    expect(await refGifts(a)).toHaveLength(1);
+    expect(await refGifts(b)).toHaveLength(1);
+    expect(await getReferrals().credited(a.id)).toBe(1);
   });
 
   it("「끔」이면 달성만 기록하고 선물은 보내지 않는다 (관리자 목록에 보인다)", async () => {
@@ -503,8 +508,8 @@ describe("2단계 추천 (추천인의 추천인)", () => {
     await qualify(off.es[0]);
     expect(await refGifts(off.g)).toHaveLength(0);
     expect(await getReferrals().get(off.es[0].id)).toMatchObject({ grand: "", hold: 0 });
-    // 「자동」에서 확인 필요(같은 IP)면 기다리고, 승인 때 함께 보낸다
-    await getReferrals().setMode("auto");
+    // 「모두 확인」에서 확인 필요(같은 IP)면 기다리고, 승인 때 함께 보낸다 (11/19 「자동」은 기다리지 않고 바로 보낸다)
+    await getReferrals().setMode("review");
     const g = await newVisitor("관문2단할머니");
     const r = await newVisitor("관문2단엄마", "10.90.0.1");
     await enter(r, await codeOf(g));
@@ -515,6 +520,7 @@ describe("2단계 추천 (추천인의 추천인)", () => {
     expect(await refGifts(g)).toHaveLength(0);
     expect((await approve([e.id])).decision).toMatchObject({ grand: 1 });
     expect(await refGifts(g)).toHaveLength(1);
+    await getReferrals().setMode("auto");
   });
 
   it("추천인의 추천인은 한 달에 10번까지 (2단계 상한은 추천인 상한과 따로)", async () => {

@@ -3,6 +3,7 @@ import { photoScale } from "@/lib/photo/photoRules";
 import { bridge, type UiEvents } from "../bridge";
 import { DEPTH, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "../config";
 import { setAmbiencePreview } from "../world/ambiencePreview";
+import { setPhotoNamesHidden } from "./photoFlags";
 import { cameraBounds } from "../world/cameraMath";
 
 // 11/19 촬영 모드 게임 쪽 (game/photo/install이 촬영 모드에 처음 들어갈 때만 불러와요 — 평소엔 이 코드가 돌지 않아요).
@@ -225,6 +226,7 @@ export class PhotoController {
     const f = this.filters;
     setAmbiencePreview(f.hour === null && f.weather === null ? null : { ...(f.hour !== null ? { hour: f.hour } : {}), ...(f.weather ? { weather: f.weather } : {}) });
     if (f.names) this.showNames();
+    setPhotoNamesHidden(!f.names);
     if (f.me) this.showMe();
     if (this.scene) this.frame();
   }
@@ -275,6 +277,7 @@ export class PhotoController {
   /** 장면에서 떨어져요 (끝내기·장면이 내려감) */
   private detach(): void {
     this.showNames();
+    setPhotoNamesHidden(false);
     this.showMe();
     this.free?.restore();
     this.free = null;

@@ -51,6 +51,7 @@ import {
   stackBlockRect,
   stackCheck,
   stackDone,
+  stackOpen,
   type Rect,
 } from "./snowmanLogic";
 
@@ -387,7 +388,8 @@ export class CampSnowmen {
     }
     if (pile) {
       // 11/18 내 눈사람 2개가 서 있으면 녹을 때까지 새로 못 만든다 (쌓는 중인 내 덩이가 있으면 거기 올릴 덩이는 집을 수 있어요)
-      if (this.myMenCount() >= SNOWMAN_PER_PERSON) {
+      // 11/19 내 몫이 다 찼는데 올릴 자리가 남은 내 덩이도 없으면 처음부터 못 집는다 (집어 봐야 놓을 데가 없었다)
+      if (this.myMenCount() >= SNOWMAN_PER_PERSON || (this.myProjects() >= SNOWMAN_PER_PERSON && !this.stacks.some((v) => this.mine(v) && stackOpen(v)))) {
         this.d.toast(MANY_TOAST);
         return true;
       }
@@ -441,7 +443,7 @@ export class CampSnowmen {
       if (st) {
         const c = stackCheck(st, h.size);
         if (c === "ok") return { x: at.x, y: at.y + 4, text: st.sizes.length === 2 && h.size === 0 ? `${prefix}머리 올려 눈사람 완성` : `${prefix}${name} 올리기` };
-        return { x: at.x, y: at.y + 4, text: c === "full" ? "다 쌓은 덩이예요" : "더 작은 덩이만 올릴 수 있어요" };
+        return { x: at.x, y: at.y + 4, text: c === "full" ? "다 쌓은 덩이예요" : c === "skip" ? "한 단씩 올려요 (더 굴려 키워요)" : "더 작은 덩이만 올릴 수 있어요" };
       }
       if (this.gapWhy(Math.round(at.x), Math.round(at.y)) === "near") return { x: at.x, y: at.y + 4, text: "다른 사람이 만들고 있어요" };
       if (h.rolling) {
@@ -547,7 +549,7 @@ export class CampSnowmen {
     if (st) {
       const c = stackCheck(st, h.size);
       if (c !== "ok") {
-        this.d.toast(c === "full" ? "이미 세 단을 다 쌓았어요." : "위에는 더 작은 덩이만 올릴 수 있어요. 몸통 → 배 → 머리 순서예요.");
+        this.d.toast(c === "full" ? "이미 세 단을 다 쌓았어요." : c === "skip" ? "한 단씩 올려요. 몸통 위엔 배, 배 위엔 머리예요. 이 덩이는 조금 더 굴려 키워요." : "위에는 더 작은 덩이만 올릴 수 있어요. 몸통 → 배 → 머리 순서예요.");
         return;
       }
       if (!net.snowAdd(st.id!, h.size)) {
@@ -572,6 +574,11 @@ export class CampSnowmen {
     }
     if (nearPile || gap || !snowPlaceOk(x, y)) {
       this.d.toast(`여기에는 내려놓을 수 없어요. 눈밭 빈자리에서 ${keyJosa("E", "를")} 눌러요.`);
+      return;
+    }
+    // 11/19 바닥에는 몸통(가장 큰 덩이)만 — 작은 덩이를 바닥에 두면 아래를 못 받쳐 영영 못 끝내고 내 몫 한 칸을 막았다
+    if (h.size !== 2) {
+      this.d.toast("바닥에는 가장 큰 몸통부터 놓아요. 조금 더 굴려 키워요.");
       return;
     }
     // 11/18 서 있는 내 눈사람 + 쌓는 중인 내 덩이가 이미 2개면 새로 못 놓는다 (서버도 many로 막는다)

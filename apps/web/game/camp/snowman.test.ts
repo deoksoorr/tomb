@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { campSnowSpotOk } from "@tomb/protocol";
 import { BALL_R, carriedBallSheet, carryFrameSize, snowmanArt, snowmanLook, SNOWMAN_H, SNOWMAN_W, stackArt, type BallSize } from "./snowmanArt";
-import { ballFront, campSnowPiles, carryAt, heldStep, meltStage, rectsOverlap, sizeForRoll, snowmanBlockRect, snowPlaceOk, stackBlockRect, stackCheck, stackDone, SNOWBALL_GROW_AT } from "./snowmanLogic";
+import { ballFront, campSnowPiles, carryAt, heldStep, meltStage, rectsOverlap, sizeForRoll, snowmanBlockRect, snowPlaceOk, stackBlockRect, stackCheck, stackDone, stackOpen, SNOWBALL_GROW_AT } from "./snowmanLogic";
 
 // 11/17 캠핑장 눈사람 만들기: 굴린 거리 → 크기, 쌓기 순서, 눈더미 자리, 같은 씨앗 → 같은 모습
 describe("snowman logic", () => {
@@ -54,6 +54,16 @@ describe("snowman logic", () => {
     st.sizes.push(0);
     expect(stackDone(st)).toBe(true);
     expect(stackCheck(st, 0)).toBe("full");
+  });
+  it("11/19 한 단씩만: 몸통 위에 머리를 바로 올리면 skip, 올릴 자리가 남은 덩이만 열림", () => {
+    const st = { id: 1, x: 0, y: 0, sizes: [2 as const] as (0 | 1 | 2)[] };
+    expect(stackCheck(st, 0)).toBe("skip");
+    expect(stackOpen(st)).toBe(true);
+    st.sizes.push(1);
+    expect(stackOpen(st)).toBe(true);
+    st.sizes.push(0);
+    expect(stackOpen(st)).toBe(false);
+    expect(stackOpen({ ...st, sizes: [2, 0] })).toBe(false);
   });
   it("눈더미는 여러 구역에 있고, 모두 서버도 받는 눈밭 자리", () => {
     const piles = campSnowPiles();

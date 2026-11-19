@@ -1245,8 +1245,8 @@ export class HuntScene extends RpgScene {
     if (this.cards && opts.basic) this.cards.onBasicHit(m, !!opts.aoe);
     else if (this.cards && opts.skill) this.cards.onSkillHit(m, !!opts.aoe);
     // 넋 거두기 패시브: 준 피해의 일부를 HP로 (한 번에 최대 HP의 3%까지 — lib/rpg/lifesteal, 11/19 v70 규칙으로 되돌림)
-    // 11/19 v2 넋 거두기는 마공(스킬·부른 넋)에만
-    const stolen = this.mods.steal > 0 && magic && !this.died && this.hp < d.maxHp ? stealHeal({ dmg, steal: this.mods.steal, maxHp: d.maxHp, missing: d.maxHp - this.hp }) : 0;
+    // 11/19 v2 넋 거두기를 마공에만 했더니 평타 딜러가 회복할 길이 없어 못 깼다 → 다시 모든 공격(기본 공격·일꾼 스킬 포함)에 (사용자)
+    const stolen = this.mods.steal > 0 && !this.died && this.hp < d.maxHp ? stealHeal({ dmg, steal: this.mods.steal, maxHp: d.maxHp, missing: d.maxHp - this.hp }) : 0;
     if (stolen > 0) {
       this.hp = Math.min(d.maxHp, this.hp + stolen * this.curse.healMul);
       this.mv.drainWisp({ x: m.x, y: m.y - MONSTERS[m.id].size / 2 }, { x: this.px, y: this.py });

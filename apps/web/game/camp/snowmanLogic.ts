@@ -116,10 +116,17 @@ export function campSnowPiles(): readonly Pt[] {
 export type LocalStack = { sizes: BallSize[] };
 
 /** 그 덩이 위에 이 크기를 올릴 수 있는지: ok · full(이미 세 단) · bigger(위가 더 작거나 같다) */
-export function stackCheck(st: LocalStack, size: BallSize): "ok" | "full" | "bigger" {
+export function stackCheck(st: LocalStack, size: BallSize): "ok" | "full" | "bigger" | "skip" {
   if (st.sizes.length >= 3) return "full";
   const top = st.sizes[st.sizes.length - 1];
-  return size < top ? "ok" : "bigger";
+  if (size >= top) return "bigger";
+  // 11/19 한 단씩만 (몸통 위에 머리를 바로 올리면 배를 못 끼워 영영 못 끝내고 내 몫 한 칸을 막았다)
+  return size === top - 1 ? "ok" : "skip";
+}
+
+/** 11/19 이 덩이에 아직 올릴 수 있는 단이 남았나 (세 단 전이고 맨 위가 머리가 아니다) */
+export function stackOpen(st: LocalStack): boolean {
+  return st.sizes.length > 0 && st.sizes.length < 3 && st.sizes[st.sizes.length - 1] > 0;
 }
 
 /** 세 단(몸통·배·머리)이 다 쌓였나 */
