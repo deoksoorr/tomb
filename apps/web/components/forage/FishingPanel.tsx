@@ -291,8 +291,8 @@ export default function FishingPanel({
     };
     const down = (e: KeyboardEvent) => {
       if (document.querySelector("dialog[open]") || typing()) return;
-      // 11/16 자동 낚시 중 Enter는 채팅 입력칸을 연다 (손으로 낚을 때는 그대로 낚시 키)
-      if (e.code === "Enter" && autoRef.current) {
+      // 11/16 자동 낚시 중 Enter는 채팅 입력칸을 연다. 11/19 손으로 낚을 때도 입질·줄다리기 중이 아니면 채팅 (Enter가 낚시 키라 낚시 중 채팅을 못 했다)
+      if (e.code === "Enter" && (autoRef.current || (phaseRef.current !== "bite" && phaseRef.current !== "reel"))) {
         e.preventDefault();
         bridge.emit("chat:prefill", { text: "" });
         return;
