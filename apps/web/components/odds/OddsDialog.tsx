@@ -3,6 +3,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { HUNT_DROP_ROLLS, KILLS_PER_DROP_ROLL } from "@/lib/rpg/rewards";
 import { TOWER_BOSS_EVERY } from "@/lib/rpg/tower";
+import { METEOR_ITEM_NAME } from "@/lib/rpg/meteorDrop";
 import Dialog from "../ui/Dialog";
 import { cx } from "../ui/cx";
 import {
@@ -11,7 +12,8 @@ import {
   cosTierRows,
   DIFF_NAMES,
   dyeRows,
-  enhanceFailBonus,
+  enhanceAmpMul,
+  ENHANCE_HEAD,
   enhanceRows,
   inheritRows,
   forageFacts,
@@ -23,6 +25,7 @@ import {
   legendOption,
   lotteryAny,
   lotteryRows,
+  meteorRows,
   pct,
   perkRows,
   pieceRows,
@@ -165,8 +168,13 @@ export default function OddsDialog({ section, onClose }: { section: OddsSection;
           <p className={styles.note}>전설 꾸미기는 30일 대신 7일이에요.</p>
         </Section>
 
-        <Section id="enhance" title="강화" lead={`실패할 때마다 다음 성공 확률이 ${enhanceFailBonus()}씩 올라요. 성공하면 처음 확률로 돌아가요.`}>
-          <OddsTable head={["목표", "성공", "실패하면", "포인트"]} rows={enhanceRows()} />
+        <Section
+          id="enhance"
+          title="강화"
+          lead={`실패해도 단계는 그대로예요. 강화 증폭권을 쓰면 성공 확률이 ${enhanceAmpMul()}가 돼요(100%까지). 같은 단계에서 천장 횟수만큼 연속으로 실패하면 다음 강화는 반드시 성공해요.`}
+        >
+          <OddsTable head={ENHANCE_HEAD} rows={enhanceRows()} />
+          <p className={styles.note}>천장 횟수는 장비마다 따로 쌓여요. 증폭권을 쓰고 실패해도 한 번으로 치고, 성공하면 처음부터 다시 쌓여요.</p>
           <h4 className={styles.sub}>강화 승계</h4>
           <p className={styles.lead}>
             같은 부위의 더 높은 직급 세트 장비로만 옮겨요. 받은 뒤 기본 능력치가 재료보다 떨어지지 않는 가장 낮은 단계로 옮겨져서, 직급 차이가 클수록 단계는 많이 줄어요.
@@ -178,6 +186,12 @@ export default function OddsDialog({ section, onClose }: { section: OddsSection;
 
         <Section id="stars" title="별자리 잇기" lead={`성적이 ${pct(STARS_POTION_PERF)}를 넘으면 물약을 한 번 굴려요. 물약 종류는 사냥터와 같아요.`}>
           <OddsTable head={["", ...DIFF_NAMES]} rows={[starsPotionRow()]} />
+          <h4 className={styles.sub}>전설 「{METEOR_ITEM_NAME}」</h4>
+          <p className={styles.lead}>
+            맑은 밤(판을 시작한 시각 기준)에 별자리를 하나 이상 끝까지 이은 판만 한 번 굴려요. 어느 망원경이든 같아요. 하나만 받을 수 있고, 받으면 더 굴리지 않아요.
+          </p>
+          <OddsTable head={["", "확률·횟수"]} rows={meteorRows()} />
+          <p className={styles.note}>천장은 굴린 판 수로 세고, 날이 바뀌어도 이어져요. 굴림은 판이 끝날 때 서버가 정해요.</p>
         </Section>
 
         <Section id="forage" title="낚시와 채집" lead="그 자리, 그 시간, 그 날씨에 나오는 것끼리 무게대로 나눠요. 다섯 등급이 한 종씩 있는 자리라면 아래 비율이에요.">

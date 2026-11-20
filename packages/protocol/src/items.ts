@@ -46,6 +46,18 @@ export type ItemDef = {
   event?: true;
   /** 11/19 친구 초대 한정: 상점 목록에 없고 살 수 없다. 추천으로 데려온 이웃이 자리 잡으면 두 사람에게 선물함으로 영구로 간다 (web lib/referralService) */
   invite?: true;
+  /** 11/20 별자리 잇기(망원경) 전용 「유성우 오라」: 상점 목록에 없고 사거나 팔거나 선물할 수 없다. 맑은 밤 판에서 아주 드물게 영구로 떨어진다 (web lib/rpg/meteorDrop) */
+  stargaze?: true;
+  /**
+   * 11/19 계절 한정 세트 id (예: "snow-commute"): 잡화점 목록에 없고, 기간 한정 노점 「계절 보따리상」에서만 판다 (web lib/seasonShop).
+   * 하루권·영구 값은 seasonPrice, 한 벌 덤(칭호·꾸미기 점수·연출)은 SEASON_SETS
+   */
+  seasonSet?: string;
+  /**
+   * 11/19 「멍냥 분양소」(동물원 옆) 전용 품종 펫: 잡화점 목록에 없고 동물원 사육사(ZOO_PETS)도 팔지 않는다.
+   * 동물원 펫처럼 영구로만 산다 (값 = price — MUNGNYANG_PETS · mungnyangPetPrice). 꾸미기 점수는 동물원 펫과 같이 price ÷ PET_PRICE_UP
+   */
+  petShop?: "mungnyang";
   /** 11/15 수집 의뢰 보상 등급 (프리미엄 외형 등급과 같은 색·연출: 일반·고급·희귀·전설) */
   grade?: "common" | "fine" | "rare" | "legend";
   /** kind = "unlock": 여는 것 (emo = 의뢰 이모티콘 묶음 QUEST_EMO_IDS, body = 외형 body) */
@@ -75,6 +87,76 @@ const XMAS_GRADES: Readonly<Record<string, NonNullable<ItemDef["grade"]>>> = {
   xm_cape: "rare",
   xm_deer: "legend",
   xm_sleigh: "legend",
+};
+
+/** 11/19 계절 한정 세트 꾸미기 등급 (코디 기획안 사다리: 입문 = 일반 · 보통 = 고급 · 고급 = 희귀 · 한정 대표 = 전설) */
+const SEASON_GRADES: Readonly<Record<string, NonNullable<ItemDef["grade"]>>> = {
+  sc_earflap: "fine",
+  sc_padding: "rare",
+  sc_goguma: "common",
+  sc_breath: "fine",
+  sc_snowduck: "rare",
+  si_elfhat: "fine",
+  si_sack: "legend",
+  si_cookie: "common",
+  si_bulbs: "fine",
+  si_wrap: "fine",
+  // 11/20 나머지 여섯 벌도 계절 보따리상에서 (운영자 결정)
+  of_antenna: "fine",
+  of_a4wings: "rare",
+  of_drink: "common",
+  of_postit: "fine",
+  of_blueglow: "common",
+  gk_moonwreath: "rare",
+  gk_firefly: "fine",
+  gk_stonepack: "rare",
+  gk_fadesteps: "fine",
+  gk_owl: "legend",
+  sm_jobawi: "rare",
+  sm_saekdong: "fine",
+  sm_pouch: "common",
+  sm_magpie: "legend",
+  sm_saekname: "fine",
+  vc_heartband: "fine",
+  vc_chocobox: "fine",
+  vc_letters: "rare",
+  vc_chocosteps: "common",
+  vc_envelope: "fine",
+  sp_buckethat: "fine",
+  sp_matpack: "fine",
+  sp_gimbap: "common",
+  sp_sprouts: "fine",
+  sp_bee: "rare",
+  sd_headband: "common",
+  sd_baton: "common",
+  sd_flag: "fine",
+  sd_dash: "fine",
+  // 11/20 새 다섯 벌 (12/26 ~ 1/23 출시, 코디 기획안 시안 값 그대로)
+  ye_tiehead: "fine",
+  ye_mic: "common",
+  ye_tambo: "fine",
+  ye_tipsy: "fine",
+  ye_raccoon: "rare",
+  su_beanie: "fine",
+  su_pack: "rare",
+  su_flask: "common",
+  su_sunrise: "fine",
+  su_goat: "legend",
+  rs_band: "common",
+  rs_shake: "common",
+  rs_gymbag: "rare",
+  rs_planner: "fine",
+  rs_day3: "fine",
+  ic_earmuff: "fine",
+  ic_rod: "common",
+  ic_icebox: "rare",
+  ic_hotpack: "fine",
+  ic_penguin: "rare",
+  fr_icicle: "rare",
+  fr_cloak: "legend",
+  fr_rime: "fine",
+  fr_icename: "fine",
+  fr_snowbun: "rare",
 };
 
 export const ITEMS: readonly ItemDef[] = [
@@ -318,6 +400,117 @@ export const ITEMS: readonly ItemDef[] = [
     // 선물상자: 받으면 가방(소모품)에 들어가고 [열기]로 연다 (web /api/xmas/open — 무엇이 나올지는 서버가 정한다)
     { id: "xm_box", kind: "box", grade: "rare", name: "크리스마스 선물상자", desc: "금빛 리본으로 묶은 빨간 상자. 열면 크리스마스 한정 꾸미기 하나가 나와요.", price: 0 },
   ] satisfies ItemDef[]).map((it): ItemDef => ({ ...it, event: true })),
+  // ── 11/19 계절 한정 세트 (seasonSet: 잡화점 목록에 없고, 기간 한정 노점 「계절 보따리상」에서만 판다 — SEASON_SETS).
+  //    price = 하루권 값 (영구 = ×4, 펫은 하루권 없이 price가 곧 영구 값 — seasonPrice). 꾸미기 점수는 다른 꾸미기와 같은 공식.
+  //    그림: 머리·목·손·등 web game/sprites/seasonSetGear.ts · 오라·발자국·펫·세트 덤 연출 seasonSetFx.ts · 이름표 lib/nameStyle.ts
+  ...cosmetics([
+    // 「첫눈 출근길」 (겨울)
+    ["sc_earflap", "head", "귀달이 털모자", "귀를 폭 덮는 털 귀달이에 방울까지. 부장님 잔소리도 반쯤 막아 줘요.", 400],
+    ["sc_padding", "back", "무릎까지 롱패딩", "출근길 정류장의 국룰. 지퍼를 끝까지 올리면 아무도 못 알아봐요.", 1200],
+    ["sc_goguma", "hand", "군고구마 봉투", "누런 종이봉투에서 김이 모락모락. 손난로 겸 간식이에요.", 150],
+    ["sc_breath", "aura", "하얀 입김 오라", "숨 쉴 때마다 하얀 입김이 폴폴. 추운 날 출근 인증이에요.", 300],
+    // 펫은 하루권 없이 영구로만 (price = 영구 값, 꾸미기 점수는 동물원 펫처럼 PET_PRICE_UP으로 나눠 센다)
+    ["sc_snowduck", "pet", "꼬마 눈오리", "눈오리 집게로 찍어 낸 꼬마 오리예요. 뒤뚱뒤뚱 따라오다 가끔 눈 위에 폭 앉아요.", 5000],
+  ]).map((it): ItemDef => ({ ...it, seasonSet: "snow-commute", grade: SEASON_GRADES[it.id] })),
+  ...cosmetics([
+    // 「산타 견습 요정」 (크리스마스)
+    ["si_elfhat", "head", "견습 요정 모자", "끝에 금방울 달린 초록과 빨강 줄무늬 모자. 수습 기간 석 달째예요.", 450],
+    ["si_sack", "back", "선물 배달 자루", "산타 사무소 물류팀 지급품. 오늘 배송 물량은 묻지 마세요.", 2600],
+    ["si_cookie", "hand", "진저브레드 쿠키", "포장하다 하나 슬쩍. 단추는 초코칩이에요.", 120],
+    ["si_bulbs", "feet", "꼬마전구 발자국", "걸음마다 알록달록 꼬마전구가 톡톡 켜졌다 꺼져요.", 500],
+    ["si_wrap", "namePlate", "선물 포장 이름표", "빨강과 초록 줄무늬 포장지에 금 리본을 묶은 이름표예요.", 350],
+  ]).map((it): ItemDef => ({ ...it, seasonSet: "santa-intern", grade: SEASON_GRADES[it.id] })),
+  // 11/20 나머지 여섯 벌 (기획안에서 상설·유령선·동물원·미션 보상이던 것도 모두 계절 보따리상 판매로 — 운영자 결정).
+  //  기획안에 하루권이 없던 펫 아닌 것(안개 묘지기 넷·체육대회 넷)은 하루권 = 영구 ÷ 4. 펫은 영구로만 (price = 영구 값)
+  ...cosmetics([
+    // 「야근 요정」 (회사원). 이름 글자 id는 착용 증서 길이 때문에 기획안 of_bluelight 대신 짧게
+    ["of_antenna", "head", "형광등 더듬이", "머리띠 끝에 달린 형광등이 깜빡깜빡. 밤 10시가 넘으면 더 밝아져요.", 350],
+    ["of_a4wings", "back", "A4 종이 날개", "이면지를 접어 만든 날개. 집게 두 개로 겨우 붙어 있어요.", 1200],
+    ["of_drink", "hand", "에너지 드링크", "번개 무늬 캔. 마시면 날개가 돋는다는 그 음료예요.", 100],
+    ["of_postit", "aura", "포스트잇 소용돌이", "할 일 메모가 머리 둘레를 빙글빙글. 다 떼면 퇴근이에요.", 400],
+    ["of_blueglow", "nameColor", "블루라이트 이름", "모니터 불빛처럼 푸르게 빛나는 이름이에요.", 200],
+  ]).map((it): ItemDef => ({ ...it, seasonSet: "overtime-fairy", grade: SEASON_GRADES[it.id] })),
+  ...cosmetics([
+    // 「안개 묘지기」 (기억숲 묘지 마을)
+    ["gk_moonwreath", "head", "달맞이꽃 화관", "밤에만 피는 하얀 달맞이꽃을 엮은 화관. 안개 속에서 은은하게 빛나요.", 1200],
+    ["gk_firefly", "hand", "반딧불 유리병", "기억숲 반딧불을 잠깐 빌려 담은 병. 아침이면 꼭 놓아줘요.", 600],
+    ["gk_stonepack", "back", "이끼 비석 배낭", "이끼 낀 작은 비석에 끈을 달아 멨어요. 위에 켠 촛불은 바람에도 안 꺼져요.", 1500],
+    ["gk_fadesteps", "feet", "흐려지는 발자국", "푸른 발자국이 안개처럼 천천히 사라져요.", 500],
+    ["gk_owl", "pet", "등불 부엉이", "눈이 등불처럼 빛나는 유령 부엉이. 밤엔 발밑을 밝혀 줘요.", 12000],
+  ]).map((it): ItemDef => ({ ...it, seasonSet: "fog-keeper", grade: SEASON_GRADES[it.id] })),
+  ...cosmetics([
+    // 「설날 까치」 (설날)
+    ["sm_jobawi", "head", "복 조바위", "검은 비단 조바위에 다홍 술과 금 매듭. 세배하면 덕담이 두 배예요.", 1100],
+    ["sm_saekdong", "neck", "색동 목도리", "다섯 빛깔 색동 줄무늬 목도리. 설빔은 목도리부터예요.", 400],
+    ["sm_pouch", "hand", "복주머니", "세뱃돈은 아직 0원. 그래도 주머니는 빵빵하게 채워 다녀요.", 180],
+    ["sm_magpie", "pet", "까치 친구", "반가운 소식을 물어 오는 까치. 가끔 깡충 뛰며 꼬리를 까딱여요.", 10000],
+    ["sm_saekname", "nameColor", "색동 이름", "글자마다 색동 빛깔이 차례로 이어지는 이름이에요.", 300],
+  ]).map((it): ItemDef => ({ ...it, seasonSet: "seollal-magpie", grade: SEASON_GRADES[it.id] })),
+  ...cosmetics([
+    // 「의리 초콜릿」 (발렌타인)
+    ["vc_heartband", "head", "하트 더듬이 머리띠", "통통 튀는 분홍 하트 더듬이. 회의 중에도 흔들려요.", 300],
+    ["vc_chocobox", "hand", "의리 초콜릿 상자", "부서 전원 몫을 담은 하트 상자. 받는 사람 이름은 다 적었어요.", 450],
+    ["vc_letters", "aura", "러브레터 오라", "분홍 편지봉투가 둥실 떠올라 하트로 열려요.", 1000],
+    ["vc_chocosteps", "feet", "녹은 초코 발자국", "걸음마다 초코가 살짝 녹아 하트 자국이 남아요.", 160],
+    ["vc_envelope", "namePlate", "편지봉투 이름표", "하트 봉인을 찍은 편지봉투 이름표예요.", 350],
+  ]).map((it): ItemDef => ({ ...it, seasonSet: "giri-choco", grade: SEASON_GRADES[it.id] })),
+  ...cosmetics([
+    // 「벚꽃 소풍」 (봄)
+    ["sp_buckethat", "head", "벚꽃 버킷햇", "벚꽃 무늬를 콕콕 박은 버킷햇. 햇빛도 꽃가루도 막아 줘요.", 350],
+    ["sp_matpack", "back", "돗자리 배낭", "돌돌 만 체크 돗자리를 얹은 배낭. 명당은 일찍 맡아야 해요.", 600],
+    ["sp_gimbap", "hand", "김밥 도시락", "꼬마 김밥이 줄줄이 든 도시락. 꼬다리는 내 몫이에요.", 150],
+    ["sp_sprouts", "feet", "새싹 걸음", "밟는 자리마다 연두 새싹이 퐁퐁 돋아요.", 400],
+    ["sp_bee", "pet", "꼬마 꿀벌", "김밥 냄새를 맡고 따라온 통통한 꿀벌. 붕붕 날다 가끔 머리 위에 앉아요.", 4400],
+  ]).map((it): ItemDef => ({ ...it, seasonSet: "spring-picnic", grade: SEASON_GRADES[it.id] })),
+  ...cosmetics([
+    // 「사내 체육대회」 (회사원, 네 점 — 펫 없음)
+    ["sd_headband", "head", "청팀 머리띠", "이마에 질끈 묶은 파란 머리띠. 끝자락이 바람에 휘날려요.", 200],
+    ["sd_baton", "hand", "계주 바통", "마지막 주자에게만 오는 빨간 바통. 떨어뜨리면 큰일 나요.", 150],
+    ["sd_flag", "back", "응원 깃발", "등에 꽂은 청팀 응원 깃발. 부장님이 직접 그린 호랑이예요.", 500],
+    ["sd_dash", "feet", "흙먼지 질주", "달릴 때마다 흙먼지가 뽀얗게 일어요.", 400],
+  ]).map((it): ItemDef => ({ ...it, seasonSet: "sports-day", grade: SEASON_GRADES[it.id] })),
+  // 11/20 새 다섯 벌 (코디 기획안 2차 시안 — 운영자 확정). 12/26부터 토요일마다 한 벌씩, 2주씩 판다 (web lib/seasonShop/schedule COS_RELEASES).
+  //  그림: 시트 web game/sprites/seasonSetGear3.ts · 오라·발자국·펫·세트 덤 seasonSetFx3.ts · 이름 글자·이름표 lib/nameStyle.ts
+  ...cosmetics([
+    // 「송년회 3차」 (회식 끝자락)
+    ["ye_tiehead", "head", "넥타이 머리띠", "풀었던 넥타이를 이마에 질끈. 3차부터는 이게 정장이에요.", 350],
+    ["ye_mic", "hand", "애창곡 마이크", "금빛 노래방 마이크. 번호만 누르면 손이 먼저 올라가요.", 150],
+    ["ye_tambo", "back", "흥부자 탬버린", "등에 메고 다니다 전주만 나오면 꺼내요. 리본이 박자보다 먼저 흔들려요.", 600],
+    ["ye_tipsy", "aura", "알딸딸 오라", "볼이 발그레해지고 분홍 거품이 보글보글 올라가요. 내일 아침 일은 내일 생각해요.", 450],
+    ["ye_raccoon", "pet", "꼬마 너구리", "3차까지 따라온 너구리예요. 머리에 넥타이를 맨 건 누가 봐도 부장님 따라 한 거예요.", 6000],
+  ]).map((it): ItemDef => ({ ...it, seasonSet: "year-end", grade: SEASON_GRADES[it.id] })),
+  ...cosmetics([
+    // 「해맞이 산행」 (새해 첫 해돋이)
+    ["su_beanie", "head", "해돋이 털모자", "빨강에서 노랑으로 물드는 털모자. 정수리에 해가 하나 떠 있어요.", 400],
+    ["su_pack", "back", "등산 배낭", "돗자리 말아 얹고 양은 컵까지 매단 배낭이에요. 정상 리본도 하나 묶었어요.", 1200],
+    ["su_flask", "hand", "믹스커피 보온병", "정상에서 따라 마시는 믹스커피 한 잔. 산 위에선 뭐든 맛있어요.", 150],
+    ["su_sunrise", "aura", "첫 햇살 오라", "등 뒤로 새해 첫 해가 둥실 떠올라요. 사진 찍으면 다들 실루엣만 나와요.", 700],
+    ["su_goat", "pet", "꼬마 산양", "바위 타기 선수 산양이에요. 새해라고 빨간 목도리를 둘렀고 정상엔 늘 먼저 가 있어요.", 10000],
+  ]).map((it): ItemDef => ({ ...it, seasonSet: "sunrise-hike", grade: SEASON_GRADES[it.id] })),
+  ...cosmetics([
+    // 「작심삼일」 (신년 계획, 펫 없음)
+    ["rs_band", "head", "헬스 머리띠", "형광 줄무늬 땀 머리띠. 아직 땀은 한 방울도 안 묻었어요.", 200],
+    ["rs_shake", "hand", "단백질 쉐이크", "초코 맛 단백질 쉐이크. 운동은 건너뛰어도 이건 꼭 마셔요.", 150],
+    ["rs_gymbag", "back", "새 운동 가방", "1년권 사은품 운동 가방이에요. 가격표가 아직 그대로 달려 있어요.", 1100],
+    ["rs_planner", "namePlate", "새해 계획표 이름표", "체크 칸이 세 개인 계획표 이름표예요. 셋째 칸은 늘 비어 있어요.", 350],
+    ["rs_day3", "feet", "사흘째 발자국", "운동화 자국 두 번 다음엔 꼭 삼선 슬리퍼 자국이 찍혀요.", 450],
+  ]).map((it): ItemDef => ({ ...it, seasonSet: "resolution", grade: SEASON_GRADES[it.id] })),
+  ...cosmetics([
+    // 「빙어 축제」 (겨울 얼음낚시)
+    ["ic_earmuff", "head", "털 귀마개", "복슬복슬 털 귀마개. 입질 소리만 빼고 다 막아 줘요.", 350],
+    ["ic_rod", "hand", "빙어 낚싯대", "손바닥만 한 얼음낚시 낚싯대. 줄 끝에 빙어가 파닥파닥 매달려 있어요.", 200],
+    ["ic_icebox", "back", "빙어 아이스박스", "어깨에 멘 하늘색 아이스박스. 오늘 잡은 건 세 마리, 펭귄이 가져간 건 열 마리예요.", 1100],
+    ["ic_hotpack", "aura", "핫팩 오라", "주머니마다 핫팩을 넣었더니 몸 둘레로 따뜻한 김이 아른아른 올라가요.", 300],
+    ["ic_penguin", "pet", "빙어 도둑 펭귄", "아이스박스 빙어를 하나씩 물고 가는 펭귄이에요. 들키면 모른 척 뒤뚱거려요.", 7000],
+  ]).map((it): ItemDef => ({ ...it, seasonSet: "smelt-fest", grade: SEASON_GRADES[it.id] })),
+  ...cosmetics([
+    // 「서리 내린 묘역」 (마을다운 겨울 유령)
+    ["fr_icicle", "head", "고드름 왕관", "처마 끝 고드름을 엮은 왕관이에요. 해가 뜨면 한 방울씩 녹으니 밤에만 써요.", 1000],
+    ["fr_cloak", "back", "서리꽃 망토", "새벽 비석에 핀 서리꽃을 수놓은 망토예요. 자락 끝엔 작은 고드름이 달랑거려요.", 2800],
+    ["fr_rime", "feet", "성에 발자국", "밟는 자리마다 유리창 성에 같은 얼음 꽃이 사르르 번져요.", 500],
+    ["fr_icename", "nameColor", "서리 앉은 이름", "글자 윗머리마다 하얀 서리가 소복이 앉은 얼음빛 이름이에요.", 350],
+    ["fr_snowbun", "pet", "꼬마 눈토끼", "눈을 뭉쳐 잎사귀 귀를 꽂았더니 깡충 따라왔어요. 밤엔 몸이 푸르스름하게 빛나요.", 6000],
+  ]).map((it): ItemDef => ({ ...it, seasonSet: "frost-yard", grade: SEASON_GRADES[it.id] })),
   // ── 31번 운영자 전용 꾸미기 (값 0: 운영자만 상점에서 영구로 받는다. 일반 계정은 사거나 입을 수 없다) ──
   ...cosmetics([
     ["staff_crown", "head", "운영자 왕관", "마을을 지키는 운영자의 검은 왕관. 운영자 전용.", 0],
@@ -355,6 +548,22 @@ export const ITEMS: readonly ItemDef[] = [
   { id: "pet_otter", kind: "cosmetic", slot: "pet", name: "조약돌 수달", desc: "조약돌을 꼭 안고 다니는 수달. 쉴 때는 벌러덩 누워 배 위에서 콩콩 두드려요.", price: 1900, durationMs: COSMETIC_DURATION_MS },
   { id: "pet_panda", kind: "cosmetic", slot: "pet", name: "꼬마 레서판다", desc: "줄무늬 꼬리가 폭신한 레서판다. 가끔 뒷발로 벌떡 서서 두 팔을 번쩍 들어요.", price: 2200, durationMs: COSMETIC_DURATION_MS },
   { id: "pet_paca", kind: "cosmetic", slot: "pet", name: "뭉게 알파카", desc: "구름처럼 폭신한 알파카. 등에 타면 담요 위에서 사뿐사뿐 달려요. (타고 다닐 수 있어요)", price: 6600, durationMs: COSMETIC_DURATION_MS },
+  // ── 11/19 멍냥 분양소 품종 펫 (petShop — 그림 web game/sprites/petBreeds.ts, 옆·앞·뒤 네 방향). 영구로만 (값 = price) ──
+  //    id 길이: 착용 증서 옛 한도(400자) 계산의 펫 부위 가장 긴 id(sc_snowduck, 11자)보다 길지 않게 (nameStyle.test)
+  ...([
+    ["pet_cheese", "월급루팡 치즈냥", "근무 시간에도 식빵 굽다 꾸벅꾸벅 졸아요. 그래도 미워할 수가 없어요.", 1700],
+    ["pet_godeung", "고등어 대리", "줄무늬 정장이 잘 어울리는 대리님. 틈만 나면 앞발로 세수해요.", 1700],
+    ["pet_tuxedo", "야근 턱시도", "언제나 흰 셔츠에 검은 정장. 밤늦게까지 버티다 쩍 하품해요.", 1900],
+    ["pet_calico", "행운 삼색이", "삼색이가 따라오면 결재가 한 번에 난대요. 심심하면 냥냥펀치!", 2200],
+    ["pet_russian", "연봉협상 러시안블루", "초록 눈으로 빤히 보면 아무도 못 당해요. 기분 좋으면 꾹꾹이.", 2200],
+    ["pet_siamese", "샷추가 샴", "얼굴과 발, 꼬리만 진하게 내린 수다쟁이. 말 걸면 꼭 야옹 대답해요.", 2200],
+    ["pet_shiba", "월요병 시바", "월요일 아침엔 산책 가자고 해도 납작 엎드려 버텨요.", 2000],
+    ["pet_jindo", "정시출근 백구", "출근 도장 한 번 안 빠지는 의리파. 손! 하면 앞발을 척 내밀어요.", 2000],
+    ["pet_corgi", "칼퇴 웰시코기", "짧은 다리로 6시 정각에 제일 먼저 나가요. 쉴 땐 뒷다리 쭉 펴고 납작.", 2200],
+    ["pet_pom", "쩌렁쩌렁 포메", "작은 솜뭉치인데 목소리는 팀장님급. 신나면 폴짝폴짝 왈!", 1900],
+    ["pet_bichon", "솜사탕 비숑", "하얀 솜사탕이 졸졸 따라와요. 가끔 부르르 털면 더 동그래져요.", 2000],
+    ["pet_dachs", "결재라인 닥스훈트", "몸이 결재 라인만큼 길어요. 간식 앞에선 뒷발로 서서 조르기.", 1900],
+  ] as const).map(([id, name, desc, price]): ItemDef => ({ id, kind: "cosmetic", slot: "pet", name, desc, price, durationMs: COSMETIC_DURATION_MS, petShop: "mungnyang" })),
   { id: "pet_polar", kind: "cosmetic", slot: "pet", name: "포근 북극곰", desc: "목도리를 두른 북극곰. 등에 타면 묵직하고 든든하게 달려요. (타고 다닐 수 있어요)", price: 8100, durationMs: COSMETIC_DURATION_MS },
   // ── 11/15 수집 의뢰 보상 (도장 교환소 전용 — quest: 상점·포인트로는 못 산다. price = 꾸미기 점수용 가치(영구 가치 = ×4, 펫도 같은 식이라
   //    동물원 펫 값에 맞춰 희귀 펫 240 → 960, 타는 잉어 600 → 2,400), 꾸미기는 영구로 받는다) ──
@@ -388,6 +597,8 @@ export const ITEMS: readonly ItemDef[] = [
   { id: "u_hat_siren", kind: "cosmetic", slot: "head", grade: "rare", name: "사이렌 모자", desc: "긴급 배달왕의 모자. 머리 위 경광등이 빙글빙글 돌아요.", price: 0, durationMs: COSMETIC_DURATION_MS, urgent: true },
   // 11/19 친구 초대 한정 (상점·교환소에 없다 — 추천 보상 선물함으로 영구). 그림: 손 avatarGear.ts · 아이콘 itemIcons.ts · 불빛 cosmeticFx.ts
   { id: "inv_hand_lantern", kind: "cosmetic", slot: "hand", grade: "rare", name: "마중 등불", desc: "친구를 마을로 데려온 이웃이 드는 초롱. 두 사람의 하트가 따뜻하게 빛나요.", price: 300, durationMs: COSMETIC_DURATION_MS, invite: true },
+  // 11/20 별자리 잇기 전용 전설 오라 (상점·교환소·유령선에 없다 — 맑은 밤 판에서 아주 드물게 영구로, web lib/rpg/meteorDrop). 그림 web game/sprites/meteorFx.ts
+  { id: "st_meteor", kind: "cosmetic", slot: "aura", grade: "legend", name: "유성우 오라", desc: "망원경으로 오래 들여다본 사람에게만 떨어지는 별똥별 부스러기예요. 머리 위로 작은 별똥별이 가끔 스쳐 가요.", price: 1500, durationMs: COSMETIC_DURATION_MS, stargaze: true },
   // 긴급 의뢰 100% 보상 상자: 받으면 가방(소모품)에 들어가고 [열기]로 연다. 내용물은 (의뢰, 계정)으로 미리 정해진다 (web lib/forage/quests/urgent openBox)
   { id: "u_box_pocket", kind: "box", grade: "rare", name: "수집가의 뒷주머니", desc: "수집가 유령이 슬쩍 건넨 주머니. 열면 도장이나 염색권, 희귀 물고기가 나와요.", price: 0, urgent: true },
 
@@ -472,8 +683,9 @@ export function styleItemId(id: string): string | null {
  */
 export const SHOP_KINDS: readonly ItemKind[] = ["firework", "cosmetic", "graveStyle", "megaphone", "dye"];
 /** 상점 목록에 나오는지. 펫은 상점에서 팔지 않는다 (동물원 사육사에게서 영구로만 — ZOO_PETS) */
-export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot; staff?: true; champ?: true; quest?: true; urgent?: true; ghost?: true; event?: true; invite?: true }): boolean {
-  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet" && !item.staff && !item.champ && !item.quest && !item.urgent && !item.ghost && !item.event && !item.invite;
+/** 11/19 계절 한정 세트(seasonSet)도 잡화점에 없다 (계절 보따리상에서만 — SEASON_SETS) */
+export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot; staff?: true; champ?: true; quest?: true; urgent?: true; ghost?: true; event?: true; invite?: true; stargaze?: true; seasonSet?: string }): boolean {
+  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet" && !item.staff && !item.champ && !item.quest && !item.urgent && !item.ghost && !item.event && !item.invite && !item.stargaze && !item.seasonSet;
 }
 /** 12월 크리스마스 이벤트 한정인지 (상점·포인트로 살 수 없다 — 선물상자에서만) */
 export function isEventItem(id: unknown): boolean {
@@ -487,6 +699,63 @@ export const XMAS_SET_IDS: readonly string[] = ITEMS.filter((i) => i.event && i.
 const byId = new Map(ITEMS.map((i) => [i.id, i]));
 export function itemById(id: string): ItemDef | undefined {
   return byId.get(id);
+}
+
+// ── 11/19 계절 한정 세트: 기간 한정 노점 「계절 보따리상」에서만 파는 한 벌 (판매 일정·노점은 web lib/seasonShop) ──
+
+/** 한 벌 덤: 한 벌(다섯 점, 사내 체육대회는 네 점)을 다 입으면 칭호(title — 처음 다 입은 날 얻고 남는다)와 꾸미기 점수 +look, 작은 겉모습 연출 (능력치·포인트는 주지 않는다) */
+export type SeasonSetDef = {
+  id: string;
+  name: string;
+  /** 한 벌 (부위마다 하나) */
+  items: readonly string[];
+  /** 다 입으면 얻는 칭호 (TITLE_IDS) */
+  title: TitleId;
+  /** 다 입은 동안 꾸미기 점수 + (web lib/lookScore) */
+  look: number;
+  /** 덤 연출 한 줄 (화면 안내) */
+  fx: string;
+};
+export const SEASON_SETS: readonly SeasonSetDef[] = [
+  { id: "snow-commute", name: "첫눈 출근길", items: ["sc_earflap", "sc_padding", "sc_goguma", "sc_breath", "sc_snowduck"], title: "t_ssSnow", look: 100, fx: "다 입으면 발밑에 눈송이가 가끔 반짝여요." },
+  { id: "santa-intern", name: "산타 견습 요정", items: ["si_elfhat", "si_sack", "si_cookie", "si_bulbs", "si_wrap"], title: "t_ssSanta", look: 120, fx: "다 입으면 이름표 옆에 작은 금종이 달려요." },
+  // 11/20 나머지 여섯 벌 (코디 기획안 값 그대로)
+  { id: "overtime-fairy", name: "야근 요정", items: ["of_antenna", "of_a4wings", "of_drink", "of_postit", "of_blueglow"], title: "t_ssOvertime", look: 80, fx: "다 입으면 밤에 머리 위 형광등이 한 번 더 깜빡여요." },
+  { id: "fog-keeper", name: "안개 묘지기", items: ["gk_moonwreath", "gk_firefly", "gk_stonepack", "gk_fadesteps", "gk_owl"], title: "t_ssFog", look: 150, fx: "다 입으면 밤에 발밑 안개가 푸르게 빛나요." },
+  { id: "seollal-magpie", name: "설날 까치", items: ["sm_jobawi", "sm_saekdong", "sm_pouch", "sm_magpie", "sm_saekname"], title: "t_ssMagpie", look: 120, fx: "다 입으면 걸을 때 금빛 복 글자가 가끔 떠올라요." },
+  { id: "giri-choco", name: "의리 초콜릿", items: ["vc_heartband", "vc_chocobox", "vc_letters", "vc_chocosteps", "vc_envelope"], title: "t_ssGiri", look: 80, fx: "다 입으면 손 흔들 때 작은 하트가 퐁 터져요." },
+  { id: "spring-picnic", name: "벚꽃 소풍", items: ["sp_buckethat", "sp_matpack", "sp_gimbap", "sp_sprouts", "sp_bee"], title: "t_ssPicnic", look: 80, fx: "다 입으면 서 있을 때 벚꽃잎이 한 장씩 내려앉아요." },
+  { id: "sports-day", name: "사내 체육대회", items: ["sd_headband", "sd_baton", "sd_flag", "sd_dash"], title: "t_ssSports", look: 60, fx: "다 입으면 달릴 때 흙먼지가 조금 더 크게 일어요." },
+  // 11/20 새 다섯 벌 (코디 기획안 2차 시안 값 그대로)
+  { id: "year-end", name: "송년회 3차", items: ["ye_tiehead", "ye_mic", "ye_tambo", "ye_tipsy", "ye_raccoon"], title: "t_ssYearEnd", look: 100, fx: "다 입으면 서 있을 때 머리 위로 작은 음표가 통통 떠올라요." },
+  { id: "sunrise-hike", name: "해맞이 산행", items: ["su_beanie", "su_pack", "su_flask", "su_sunrise", "su_goat"], title: "t_ssSunrise", look: 120, fx: "다 입으면 아침(6~9시)에 몸 둘레가 금빛으로 물들어요." },
+  { id: "resolution", name: "작심삼일", items: ["rs_band", "rs_shake", "rs_gymbag", "rs_planner", "rs_day3"], title: "t_ssResol", look: 60, fx: "다 입으면 멈춰 서 있을 때 이마에 땀방울이 반짝 맺혀요." },
+  { id: "smelt-fest", name: "빙어 축제", items: ["ic_earmuff", "ic_rod", "ic_icebox", "ic_hotpack", "ic_penguin"], title: "t_ssSmelt", look: 100, fx: "다 입으면 멈춰 서 있을 때 가끔 발밑에서 빙어가 퐁 튀어 올라요." },
+  { id: "frost-yard", name: "서리 내린 묘역", items: ["fr_icicle", "fr_cloak", "fr_rime", "fr_icename", "fr_snowbun"], title: "t_ssFrost", look: 150, fx: "다 입으면 밤에 몸 둘레로 작은 눈 결정이 천천히 돌아요." },
+];
+const seasonSetById = new Map(SEASON_SETS.map((s) => [s.id, s]));
+/** 계절 한정 세트 정의 (없으면 undefined) */
+export function seasonSetDef(id: string | null | undefined): SeasonSetDef | undefined {
+  return id ? seasonSetById.get(id) : undefined;
+}
+/** 계절 한정 세트 아이템인지 */
+export function isSeasonItem(id: unknown): boolean {
+  return typeof id === "string" && !!byId.get(id)?.seasonSet;
+}
+/** 착용 목록에서 다 입은 계절 한정 세트들 (한 벌 다섯 점이 모두 있어야) */
+export function seasonSetsOfLook(look: readonly string[] | null | undefined): SeasonSetDef[] {
+  if (!look?.length) return [];
+  return SEASON_SETS.filter((s) => s.items.every((id) => look.includes(id)));
+}
+/**
+ * 계절 한정 아이템 값: day = 하루권(24시간) 값 (펫은 하루권이 없어 null), perm = 영구 값 (하루권 × 영구 배율, 10P 단위 — 펫은 price 그대로).
+ * 계절 한정이 아니면 null
+ */
+export function seasonPrice(id: string): { day: number | null; perm: number } | null {
+  const it = byId.get(id);
+  if (!it?.seasonSet) return null;
+  if (it.slot === "pet") return { day: null, perm: it.price };
+  return { day: it.price, perm: Math.round((it.price * PERMANENT_MULTIPLIER) / 10) * 10 };
 }
 /** 23번 확성기 한마디 최대 글자 수 (코드포인트) */
 export const MEGAPHONE_MAX = 60;
@@ -640,6 +909,27 @@ export const ZOO_PETS: readonly PetDef[] = [
   { id: "pet_deer", price: 9000, ride: { speed: 1.35 } },
 ];
 const petMap = new Map(ZOO_PETS.map((p) => [p.id, p]));
+/** 11/19 「멍냥 분양소」 품종 펫 (영구로만 — 동물원 펫과 같은 규칙. 사육사 목록 ZOO_PETS·petPrice에는 없다). 싼 것부터 */
+export const MUNGNYANG_PETS: readonly PetDef[] = ITEMS.filter((i) => i.petShop === "mungnyang")
+  .map((i) => ({ id: i.id, price: i.price }))
+  .sort((a, b) => a.price - b.price);
+const mungnyangMap = new Map(MUNGNYANG_PETS.map((p) => [p.id, p]));
+/** 멍냥 분양소에서 사는 영구 가격 (분양소 펫이 아니면 null) */
+export function mungnyangPetPrice(id: string): number | null {
+  return mungnyangMap.get(id)?.price ?? null;
+}
+/**
+ * 11/20 분양사 보리만 파는 강아지·고양이 (사육사 창과 겹치지 않게 사육사 판매 목록에서 뺐다).
+ * 값·타기·꾸미기 점수·옛 화면 대체는 ZOO_PETS·petDef·petPrice 그대로 (이미 가진 사람·하루권은 그대로 쓴다). 보리 쪽 값은 web lib/mungnyang
+ */
+export const BORI_ONLY_PETS: readonly string[] = ["pet_dog", "pet_cat", "pet_hound"];
+const boriOnlySet = new Set(BORI_ONLY_PETS);
+/** 동물원 사육사 창에서 파는 펫 (ZOO_PETS에서 보리 전용 셋을 뺀 것, 싼 것부터) */
+export const ZOO_SHOP_PETS: readonly PetDef[] = ZOO_PETS.filter((p) => !boriOnlySet.has(p.id));
+/** 사육사에게서 살 수 있으면 그 값 (사육사가 팔지 않으면 null — 보리 전용·품종 펫·의뢰 보상) */
+export function zooShopPrice(id: string): number | null {
+  return boriOnlySet.has(id) ? null : petPrice(id);
+}
 /** 11/15 수집 의뢰 보상 타는 펫 (사육사에게서 팔지 않는다 — petDef·petPrice엔 없고, 타기 규칙만 같다). 속도는 같은 1.35 이하 규칙 */
 export const QUEST_RIDES: readonly PetDef[] = [{ id: "q_ride_carp", price: 0, ride: { speed: 1.3 } }];
 /** 12월 크리스마스 선물상자 전용 타는 펫 (사육사에게서 팔지 않는다 — event). 같은 1.35 이하 규칙 */
@@ -687,6 +977,30 @@ export const PET_FALLBACK: Readonly<Record<string, string>> = {
   pet_paca: "pet_deer",
   pet_polar: "pet_hound",
   xm_sleigh: "pet_deer",
+  // 11/19 계절 한정 꼬마 눈오리 → 꼬마 오리
+  sc_snowduck: "pet_duck",
+  // 11/20 계절 한정 펫: 등불 부엉이 → 도깨비불 (떠다니는 유령빛), 까치 친구·꼬마 꿀벌 → 꼬마 새
+  gk_owl: "pet_wisp",
+  sm_magpie: "pet_bird",
+  sp_bee: "pet_bird",
+  // 11/20 새 다섯 벌 펫: 꼬마 너구리 → 달빛 여우 · 꼬마 산양 → 퇴근 강아지 (네 발로 걷는 펫) · 빙어 도둑 펭귄 → 꼬마 오리 (뒤뚱 새) · 꼬마 눈토끼 → 꼬마 햄찌
+  ye_raccoon: "pet_fox",
+  su_goat: "pet_dog",
+  ic_penguin: "pet_duck",
+  fr_snowbun: "pet_ham",
+  // 11/19 멍냥 분양소 품종 펫 → 사무실 고양이·퇴근 강아지
+  pet_cheese: "pet_cat",
+  pet_godeung: "pet_cat",
+  pet_tuxedo: "pet_cat",
+  pet_calico: "pet_cat",
+  pet_russian: "pet_cat",
+  pet_siamese: "pet_cat",
+  pet_shiba: "pet_dog",
+  pet_jindo: "pet_dog",
+  pet_corgi: "pet_dog",
+  pet_pom: "pet_dog",
+  pet_bichon: "pet_dog",
+  pet_dachs: "pet_dog",
 };
 /** 다른 사람에게 보낼 착용 목록: 새 펫이면 옛 화면용 비슷한 펫을 칭호 앞(없으면 끝)에 덧붙인다. 해당 없으면 그대로 */
 export function lookWithPetFallback(look: readonly string[]): string[] {
@@ -838,6 +1152,22 @@ export const TITLE_IDS = [
   "t_urgLast",
   // 11/16 매니저 전용 (관리자가 임명한 계정만 — web lib/managers). 실시간 서버는 입장 토큰·착용 증서의 매니저 표시(mgr)가 있을 때만 받는다 (mgrGateLook)
   "t_mgr",
+  // 11/19 계절 한정 세트 한 벌을 다 입으면 (SEASON_SETS): 「첫눈 출근길」 · 「산타 견습 요정」
+  "t_ssSnow",
+  "t_ssSanta",
+  // 11/20 나머지 여섯 벌: 「야근 요정」 · 「안개 묘지기」 · 「설날 까치」 · 「의리 초콜릿」 · 「벚꽃 소풍」 · 「사내 체육대회」
+  "t_ssOvertime",
+  "t_ssFog",
+  "t_ssMagpie",
+  "t_ssGiri",
+  "t_ssPicnic",
+  "t_ssSports",
+  // 11/20 새 다섯 벌: 「송년회 3차」 · 「해맞이 산행」 · 「작심삼일」 · 「빙어 축제」 · 「서리 내린 묘역」
+  "t_ssYearEnd",
+  "t_ssSunrise",
+  "t_ssResol",
+  "t_ssSmelt",
+  "t_ssFrost",
 ] as const;
 export type TitleId = (typeof TITLE_IDS)[number];
 const titleSet = new Set<string>(TITLE_IDS);

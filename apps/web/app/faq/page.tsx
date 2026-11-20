@@ -7,7 +7,7 @@ import { siteMetadata, SITE_VIEWPORT } from "@/lib/devNotes/meta";
 
 const PATH = "/faq";
 const DESCRIPTION =
-  "At one time...에 대해 자주 묻는 질문을 모았어요. 무료인지, 설치나 가입이 필요한지, 휴대폰, 채널 인원, 배경음악, 포인트와 출석, 꾸미기와 상점, 낚시와 의뢰, 사냥, 집과 묘비에 대한 답이에요.";
+  "At one time...에 대해 자주 받는 질문과 답을 모았어요. 무료인지, 설치나 가입이 필요한지부터 휴대폰, 채널 인원, 배경음악, 포인트와 출석, 꾸미기와 상점, 낚시, 사냥, 집과 묘비까지 정리했어요.";
 
 export const viewport = SITE_VIEWPORT;
 export const metadata = siteMetadata({ title: "자주 묻는 질문", description: DESCRIPTION, path: PATH });
@@ -40,13 +40,13 @@ export default function FaqPage() {
       <div className={styles.wrap}>
         <header className={styles.head}>
           <h1 className={styles.display}>자주 묻는 질문</h1>
-          <p>자주 물어보시는 것들이에요.</p>
+          <p>자주 받는 질문과 답을 분류별로 모아 두었어요.</p>
           <div className={styles.rule} />
         </header>
       </div>
       <div className={styles.faq}>
         <FaqBrowser cats={FAQ.cats} items={FAQ.items} />
-        <p className={styles.faqMore}>찾는 답이 없으면 게임 안 [내 정보]의 [문의하기]로 알려 주세요.</p>
+        <p className={styles.faqMore}>찾으시는 답이 없으면 게임 안 [내 정보]의 [문의하기]로 물어봐 주세요.</p>
       </div>
     </SiteShell>
   );

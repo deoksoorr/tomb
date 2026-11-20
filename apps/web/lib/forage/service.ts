@@ -8,12 +8,12 @@ import { env } from "../env";
 import { peerOf } from "../ban";
 import { HttpError } from "../http";
 import { isStaff } from "../staff";
-import { earnPoints, earnPointsOnly, getAccounts } from "../store";
+import { earnPointsOnly, getAccounts } from "../store";
 import { kstDay, kstWeek, loadMe } from "../store/accounts";
 import { earnTerms } from "../pointEvent";
 import { earnBoost } from "../store/pointEvent";
 import type { BugsResult } from "../rpg/types";
-import { dexBadgeBits, dexIdsOf, gatherNodeById, NODE_CAT, npcBuys, npcById, speciesById, STACK_MAX, type DexCat, type NpcId } from "./catalog";
+import { dexBadgeBits, dexIdsOf, gatherNodeById, NODE_CAT, npcBuys, npcById, speciesById, STACK_MAX, type DexCat, type NpcId, type Species } from "./catalog";
 import { claimPendingDex, ensureDexSettled, payNewDex, reachedTitleKeys, rewardState, titlesOf } from "./dexReward";
 import {
   activeNodes,
@@ -88,7 +88,11 @@ function rand(): number {
 const newSeed = () => Math.floor(rand() * 0x7fffffff);
 
 // 11/16 포구 시장 좌판도 같은 포인트 항목 (생선 = 낚시 판매, 갯벌 = 채집 판매) — 새 포인트 항목이 없다
-const SOURCE_OF_NPC: Record<NpcId, Extract<EarnSource, "fish" | "gather">> = { fishmonger: "fish", collector: "gather" };
+// 11/20 해녀 할망(바닷가 좌판)은 둘 다 사요 → null = 품목마다 (물고기 = 낚시 판매, 나머지 = 채집 판매)
+type SellSource = Extract<EarnSource, "fish" | "gather">;
+const SOURCE_OF_NPC: Record<NpcId, SellSource | null> = { fishmonger: "fish", collector: "gather", haenyeo: null };
+/** 이 상인에게 이 품목을 판 값이 쌓이는 포인트 항목 (포인트 배수 이벤트·하루 한도가 이 항목을 본다) */
+export const sellSourceOf = (npcId: NpcId, s: Species): SellSource => SOURCE_OF_NPC[npcId] ?? (s.cat === "fish" ? "fish" : "gather");
 
 function toState(acct: string, snap: Snapshot, now: number): ForageState {
   const w = nodeWindow(now);
@@ -404,52 +408,68 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
   const store = getForageStore();
   const npc = npcById(npcId);
   if (!npc) throw new HttpError(400, "INVALID_INPUT", "그런 상인은 없어요.");
-  const source = SOURCE_OF_NPC[npc.id];
   const day = kstDay(now);
   const [snap, acc, boost] = await Promise.all([store.snapshot(acct, day, nodeWindow(now)), getAccounts().get(acct, day, now), earnBoost(now)]);
-  const units: { id: string; price: number }[] = [];
+  const units: { id: string; price: number; src: SellSource }[] = [];
   for (const [id, raw] of Object.entries(want)) {
     const s = speciesById(id);
     if (!s || !npcBuys(npc, s)) throw new HttpError(400, "INVALID_INPUT", `${npc.name}은(는) 그건 안 사요.`);
     const n = Math.min(Math.max(0, Math.floor(raw)), snap.bag[id] ?? 0);
-    for (let i = 0; i < n; i++) units.push({ id, price: s.price });
+    const src = sellSourceOf(npc.id, s);
+    for (let i = 0; i < n; i++) units.push({ id, price: s.price, src });
   }
   if (!units.length) throw new HttpError(409, "NOTHING_TO_SELL", "팔 게 없어요.");
-  // 지갑 여유(포인트)를 값 단위로: 포인트 배수 이벤트로 이 항목을 골랐으면 판 값은 배수로 들어온다 (lib/pointEvent — 저장소 적립과 같은 계산)
-  const t = earnTerms(boost, source);
-  let left = Math.floor((Math.min(t.dailyMax, WALLET_MAX - acc.points) * 100) / t.m100);
+  // 지갑 여유(포인트)를 값 단위로: 포인트 배수 이벤트로 이 항목을 골랐으면 판 값은 배수로 들어온다 (lib/pointEvent — 저장소 적립과 같은 계산).
+  // 11/20 물고기·채집물을 섞어 사는 상인(해녀 할망)은 항목마다 배수·하루 최대가 달라 1/100P 단위로 센다 (한 항목만이면 예전 계산과 같아요)
+  const terms = { fish: earnTerms(boost, "fish"), gather: earnTerms(boost, "gather") };
+  let wallet100 = Math.max(0, WALLET_MAX - acc.points) * 100;
+  const daily100 = { fish: terms.fish.dailyMax * 100, gather: terms.gather.dailyMax * 100 };
   units.sort((a, b) => b.price - a.price);
   const plan: Record<string, number> = {};
-  let value = 0;
+  const value = { fish: 0, gather: 0 };
   for (const u of units) {
-    if (u.price > left) continue;
-    left -= u.price;
-    value += u.price;
+    const cost = u.price * terms[u.src].m100;
+    if (cost > wallet100 || cost > daily100[u.src]) continue;
+    wallet100 -= cost;
+    daily100[u.src] -= cost;
+    value[u.src] += u.price;
     plan[u.id] = (plan[u.id] ?? 0) + 1;
   }
-  const capped = value < units.reduce((n, u) => n + u.price, 0);
-  if (!value) return { sold: {}, earned: 0, capped: true, state: toState(acct, snap, now), me: await loadMe(getAccounts(), acct, now) };
+  const asked = value.fish + value.gather;
+  const capped = asked < units.reduce((n, u) => n + u.price, 0);
+  if (!asked) return { sold: {}, earned: 0, capped: true, state: toState(acct, snap, now), me: await loadMe(getAccounts(), acct, now) };
   if (!(await store.remove(acct, plan))) throw new HttpError(409, "BAG_CHANGED", "가방이 바뀌었어요. 다시 골라 주세요.");
-  // 11/19 오늘의 할 일 「물고기나 채집물 팔기」면 같은 적립 스크립트에서 진행도 (내 정보를 다시 읽어 화면이 바로 맞춘다)
-  const { earned, paid, me } = await earnPoints(acct, source, value, ipHash, boost, questHook(acct, day, "sell"));
-  if (paid < value) {
-    // 그 사이 다른 적립으로 지갑이 찼다 → 값을 못 받은 만큼(싼 것부터) 가방에 되돌린다
+  // 11/19 오늘의 할 일 「물고기나 채집물 팔기」면 같은 적립 스크립트에서 진행도 (내 정보를 다시 읽어 화면이 바로 맞춘다).
+  // 11/20 항목이 둘이면 적립도 둘 — 할 일 진행은 한 번 판 것이니 첫 적립에만
+  // 11/20 항목마다 적립은 원자 연산만(earnPointsOnly — 배수·하루 최대는 항목별 그대로), 내 정보는 끝에 한 번만 읽는다
+  let earned = 0;
+  let quest = questHook(acct, day, "sell");
+  const back: Record<string, number> = {};
+  for (const src of ["fish", "gather"] as const) {
+    if (!value[src]) continue;
+    const r = await earnPointsOnly(acct, src, value[src], ipHash, boost, quest);
+    quest = null;
+    earned += r.earned;
+    if (r.paid >= value[src]) continue;
+    // 그 사이 다른 적립으로 지갑이 찼다 → 값을 못 받은 만큼(그 항목에서 싼 것부터) 가방에 되돌린다
     const soldUnits = Object.entries(plan)
-      .flatMap(([id, k]) => Array.from({ length: k }, () => ({ id, price: speciesById(id)!.price })))
+      .flatMap(([id, k]) => Array.from({ length: k }, () => speciesById(id)!))
+      .filter((s) => sellSourceOf(npc.id, s) === src)
       .sort((a, b) => b.price - a.price);
     let kept = 0;
-    const back: Record<string, number> = {};
-    for (const u of soldUnits) {
-      if (kept + u.price <= paid) kept += u.price;
-      else back[u.id] = (back[u.id] ?? 0) + 1;
+    for (const s of soldUnits) {
+      if (kept + s.price <= r.paid) kept += s.price;
+      else back[s.id] = (back[s.id] ?? 0) + 1;
     }
-    for (const [id, k] of Object.entries(back)) {
-      plan[id] -= k;
-      if (plan[id] <= 0) delete plan[id];
-    }
-    if (Object.keys(back).length) await store.restore(acct, back, STACK_MAX);
   }
-  return { sold: plan, earned, capped: capped || paid < value, state: await forageState(acct, now, store), me };
+  for (const [id, k] of Object.entries(back)) {
+    plan[id] -= k;
+    if (plan[id] <= 0) delete plan[id];
+  }
+  if (Object.keys(back).length) await store.restore(acct, back, STACK_MAX);
+  // 내 정보는 earnPoints와 같게 지금 시각으로 읽는다 (적립 뒤 한 번)
+  const [state, me] = await Promise.all([forageState(acct, now, store), loadMe(getAccounts(), acct)]);
+  return { sold: plan, earned, capped: capped || Object.keys(back).length > 0, state, me };
 }
 
 // ── 도감 ──

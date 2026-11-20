@@ -5,12 +5,13 @@ import { useMemo, useState } from "react";
 import { bridge } from "@/game/bridge";
 import { npcPortraitUrl } from "@/game/world/forage/art";
 import { errorMessage } from "@/lib/api";
-import { CAT_LABEL, LIFE_CATS, npcBuys, npcById, RARITY_LABEL, speciesById, type NpcId } from "@/lib/forage/catalog";
+import { CAT_LABEL, LIFE_CATS, npcBuys, npcBuysAll, npcById, RARITY_LABEL, speciesById, type NpcId } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
 import { meStore } from "@/lib/hooks/useMe";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ItemIcon from "../ui/ItemIcon";
+import { watchMoreBelow } from "../ui/moreBelow";
 import ui from "../ui/ui.module.css";
 import { forageStore, useForage } from "./forageStore";
 import s from "./forage.module.css";
@@ -19,11 +20,16 @@ import s from "./forage.module.css";
 // 11/19 하루 판매 한도가 없어 고른 것을 다 판다 (서버가 정한다. 지갑이 꽉 찰 때만 남은 것을 가방에 둔다).
 // 11/15: NPC는 사기만 한다. 수집 의뢰·도장 교환소는 버스 정류장 마당 의뢰 게시판 한 곳 (WharfBoard)
 // 11/16 r11: 포구 시장을 빼서 바다 고기는 어부 영감, 갯벌에서 캔 것은 수집가 유령에게 팔아요
+// 11/20 바닷가 해녀 할망은 물고기·채집물을 다 사요 (값은 마을과 같아요 — 한 목록에 다 나와요)
 
 const EMPTY: Record<NpcId, string> = {
   fishmonger: "팔 물고기가 없어요. 호수 잔교나 강둑, 바닷가 갯바위에서 낚아 와요.",
   collector: "팔 게 없어요. 숲, 풀밭, 북서쪽 언덕, 갯벌에서 캐거나 수풀에서 곤충을 잡아 와요.",
+  haenyeo: "팔 게 없어요. 갯바위나 선착장에서 낚고, 갯벌이나 풀밭에서 캐 와요.",
 };
+
+/** 11/20 큰 값은 쉼표로 (999개면 1만 P를 넘는다) */
+const fmtP = (n: number) => n.toLocaleString("ko-KR");
 
 export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () => void }) {
   const npc = npcById(npcId)!;
@@ -87,59 +93,70 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
         {(
           <>
           <div className={s.limits}>
-            <span>사는 것: {npc.where === "flat" ? "갯벌에서 캔 것" : npc.buys.map((c) => CAT_LABEL[c]).join("·")}</span>
+            <span>사는 것: {npcBuysAll(npc) ? "물고기와 채집물 전부" : npc.where === "flat" ? "갯벌에서 캔 것" : npc.buys.map((c) => CAT_LABEL[c]).join("·")}</span>
           </div>
           {rows.length === 0 ? (
             <p className={s.empty}>{EMPTY[npc.id]}</p>
           ) : (
-            <div className={s.sellList} role="list">
-              {rows.map(({ sp, n }) => {
-                const q = qty(sp.id, n);
-                return (
-                  <div key={sp.id} className={s.sellRow} role="listitem">
-                    <ItemIcon itemId={sp.id} size={32} />
-                    <span>
-                      {sp.name}
-                      <small>
-                        {RARITY_LABEL[sp.rarity]} · {sp.price}P · {n}개 있음
-                      </small>
-                    </span>
-                    <span className={s.qty}>
-                      <button type="button" className={ui.button} onClick={() => setQty(sp.id, n, q - 1)} disabled={busy || q <= 0} aria-label={`${sp.name} 하나 덜`}>
-                        −
-                      </button>
-                      <span className={s.qtyNum} aria-label={`${sp.name} 팔 개수`} aria-live="polite">
-                        {q}
+            // 11/20 운영자: 가로 한 줄 목록 → 세로 카드 격자 (위 아이콘 → 이름 → 등급·개수 → 값 → −/+·모두). 이 칸만 스크롤
+            <div ref={watchMoreBelow} className={s.sellScroll}>
+              <div className={s.sellList} role="list">
+                {rows.map(({ sp, n }) => {
+                  const q = qty(sp.id, n);
+                  return (
+                    <div
+                      key={sp.id}
+                      className={s.sellCard}
+                      role="listitem"
+                      data-picked={q > 0 || undefined}
+                      title={`${sp.name} (${RARITY_LABEL[sp.rarity]}, ${n}개 있음)`}
+                      aria-label={`${sp.name}, ${RARITY_LABEL[sp.rarity]}, ${n}개 있음, 한 개 ${sp.price}P`}
+                    >
+                      {/* 11/20 2차: 개수는 아이콘 귀퉁이, 값은 이름 아래 한 줄 (고르면 「3개 21P」) */}
+                      <span className={s.cardIcon}>
+                        <ItemIcon itemId={sp.id} size={32} />
+                        <span className={s.cardCount}>×{n}</span>
                       </span>
-                      <button type="button" className={ui.button} onClick={() => setQty(sp.id, n, q + 1)} disabled={busy || q >= n} aria-label={`${sp.name} 하나 더`}>
-                        +
-                      </button>
+                      <span className={s.cardName}>{sp.name}</span>
+                      <span className={s.cardPrice}>{q > 0 ? `${q}개 ${fmtP(q * sp.price)}P` : `${fmtP(sp.price)}P`}</span>
+                      <span className={s.qty}>
+                        <button type="button" className={ui.button} onClick={() => setQty(sp.id, n, q - 1)} disabled={busy || q <= 0} aria-label={`${sp.name} 하나 덜`}>
+                          −
+                        </button>
+                        <span className={s.qtyNum} aria-label={`${sp.name} 팔 개수`} aria-live="polite">
+                          {q}
+                          <small>/{n}</small>
+                        </span>
+                        <button type="button" className={ui.button} onClick={() => setQty(sp.id, n, q + 1)} disabled={busy || q >= n} aria-label={`${sp.name} 하나 더`}>
+                          +
+                        </button>
+                      </span>
+                      {/* 모두 고르기 ↔ 고른 것 비우기 (다 고르면 글자가 「비우기」, 수량 칸은 13/13 그대로) */}
                       <button
                         type="button"
-                        className={cx(ui.button, ui.quiet, s.qtyAll)}
+                        className={cx(ui.button, s.qtyAll)}
                         onClick={() => setQty(sp.id, n, q >= n ? 0 : n)}
                         disabled={busy}
                         aria-label={q >= n ? `${sp.name} 고른 것 비우기` : `${sp.name} ${n}개 모두 고르기`}
                       >
-                        {q >= n ? "0" : "모두"}
+                        {q >= n ? "비우기" : "모두"}
                       </button>
-                    </span>
-                    <span className={s.price}>{q * sp.price}P</span>
-                  </div>
-                );
-              })}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
           <div className={s.sellFoot}>
             <span className={s.total}>
-              합계 <strong>{total}P</strong>
+              합계 <strong>{fmtP(total)}P</strong>
             </span>
             <span style={{ display: "flex", gap: 8 }}>
               <button type="button" className={ui.button} disabled={busy || !rows.length} onClick={() => void sell(true)}>
                 전부 팔기
               </button>
               <button type="button" className={cx(ui.button, ui.primary)} disabled={busy || total <= 0} onClick={() => void sell(false)}>
-                {busy ? "파는 중…" : total > 0 ? `고른 것 팔기 (${total}P)` : "고른 것 팔기"}
+                {busy ? "파는 중…" : total > 0 ? `고른 것 팔기 (${fmtP(total)}P)` : "고른 것 팔기"}
               </button>
             </span>
           </div>

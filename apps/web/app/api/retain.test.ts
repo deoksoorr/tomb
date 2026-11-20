@@ -319,7 +319,7 @@ describe("오늘의 할 일 진행 글자 (단위)", () => {
     expect(todoProgressText({ kind: "hunt", need: 1, have: 0 })).toBe("0/1판");
   });
 
-  it("도장 7개마다 보호 문서", () => {
+  it("도장 7개마다 강화 증폭권(옛 보호 문서)", () => {
     expect(TODO_PROT_EVERY).toBe(7);
   });
 });

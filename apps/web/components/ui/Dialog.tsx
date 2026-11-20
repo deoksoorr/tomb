@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent, useId, useRef, type ReactNode } from "react"
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import { cx } from "./cx";
 import { backdropCloses, escapeAction } from "./dialogDismiss";
+import { watchMoreBelow } from "./moreBelow";
 import PixelIcon from "./PixelIcon";
 import styles from "./Dialog.module.css";
 import ui from "./ui.module.css";
@@ -43,6 +44,9 @@ type Props = {
 export default function Dialog({ title, onClose, children, kind = "window", fitHeight = false, className, closable = true, backdropClose = true, onEscape }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const pressedBackdrop = useRef(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  // 11/20 아래에 더 있으면 본문 맨 아래를 살짝 흐리게 (data-more, 맥·폰은 스크롤바가 숨어 있어 더 있는지 모른다)
+  useEffect(() => watchMoreBelow(bodyRef.current), []);
   const titleId = useId();
   useBlockingLayer();
 
@@ -107,7 +111,9 @@ export default function Dialog({ title, onClose, children, kind = "window", fitH
             <PixelIcon name="close" />
           </button>
         </header>
-        <div className={styles.body}>{children}</div>
+        <div ref={bodyRef} className={styles.body}>
+          {children}
+        </div>
       </div>
     </dialog>
   );

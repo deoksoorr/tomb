@@ -36,8 +36,10 @@ export class RpgError extends Error {
 
 /** 가방에 둘 수 있는 장비 수 (장착 중 포함) */
 export const GEAR_INV_MAX = 40;
-/** 되팔 때 받는 비율 */
+/** 되팔 때 받는 비율 (상점에서 산 장비 환불 · 물약) */
 export const SELL_RATE = 0.5;
+/** 11/20 사용자: 사냥 포인트가 너무 풀려서 사냥에서 주운 장비 되팔기는 상점 값의 25% (산 장비 환불·물약은 50% 그대로) */
+export const DROP_SELL_RATE = 0.25;
 
 export function newCharacter(): CharacterState {
   return {
@@ -395,12 +397,12 @@ export function addGear(s: CharacterState, id: string, bought: boolean): Charact
 
 /**
  * 되팔기: 장착하지 않은 1개를 뺀다. 산 것부터 판 것으로 친다(산 값의 50% 환불).
- * 드롭으로 얻은 것을 팔면 sellValue를 사냥 포인트(하루 한도 안)로 준다 → 드롭 되팔기로 한도를 넘지 못한다.
+ * 드롭으로 얻은 것을 팔면 dropSellValue(11/20 상점 값의 25%)를 사냥 포인트로 준다.
  */
 export function removeGearForSale(s: CharacterState, id: string): { state: CharacterState; bought: boolean; value: number } {
   if (!isShopGear(id)) throw new RpgError(400, "INVALID_INPUT", "없는 장비예요.");
   const r = removeForSale(s, id, 1);
-  return { state: r.state, bought: r.bought > 0, value: r.unit };
+  return { state: r.state, bought: r.bought > 0, value: r.bought > 0 ? r.unit : r.dropUnit };
 }
 
 /** 한 번에 팔 수 있는 최대 개수 (포션 한 칸 최대치. 장비 가방은 이보다 작다) */
@@ -410,12 +412,13 @@ export const SELL_MAX = POTION_MAX_STACK;
  * 여러 개 되팔기 (장비·포션): count개를 한 번에 뺀다. 모자라면 하나도 빼지 않고 409.
  * 장비는 장착하지 않은 것만, 산 것부터 판 것으로 친다(bought = 환불할 개수, drop = 사냥 수입으로 칠 개수).
  * 포션은 산 기록이 없으니 모두 drop(사냥 포인트 하루 한도 안)으로 친다 → 사서 되팔아도 남는 장사가 없다.
+ * unit = 산 것 하나 값(환불), dropUnit = 주운 것 하나 값 (11/20 사용자: 장비는 25%, 물약은 산 것과 구분이 없어 50% 그대로)
  */
 export function removeForSale(
   s: CharacterState,
   id: string,
   count: number,
-): { state: CharacterState; kind: "gear" | "potion"; bought: number; drop: number; unit: number } {
+): { state: CharacterState; kind: "gear" | "potion"; bought: number; drop: number; unit: number; dropUnit: number } {
   if (!Number.isInteger(count) || count < 1 || count > SELL_MAX) throw new RpgError(400, "INVALID_INPUT", "팔 개수가 맞지 않아요.");
   const g = isShopGear(id) ? gearById(id) : undefined;
   const p = g ? undefined : potionById(id);
@@ -426,7 +429,7 @@ export function removeForSale(
     if (owned < count) throw new RpgError(409, "NOT_OWNED", owned ? `포션이 ${owned}개뿐이에요.` : "가방에 그 포션이 없어요.");
     if (owned === count) delete next.potions[id];
     else next.potions[id] = owned - count;
-    return { state: next, kind: "potion", bought: 0, drop: count, unit: sellValue(p.price) };
+    return { state: next, kind: "potion", bought: 0, drop: count, unit: sellValue(p.price), dropUnit: sellValue(p.price) };
   }
   const owned = s.inv[id] ?? 0;
   const free = owned - equippedCount(s, id);
@@ -437,12 +440,12 @@ export function removeForSale(
   if (owned === count) delete next.inv[id];
   else next.inv[id] = owned - count;
   const had = s.bought[id] ?? 0;
-  const bought = Math.min(had, count);
+  const { bought, drop } = gearSaleSplit(s, id, count);
   if (bought) {
     if (had === bought) delete next.bought[id];
     else next.bought[id] = had - bought;
   }
-  return { state: next, kind: "gear", bought, drop: count - bought, unit: sellValue(g!.price) };
+  return { state: next, kind: "gear", bought, drop, unit: sellValue(g!.price), dropUnit: dropSellValue(g!.price) };
 }
 
 /** 한도에 막혀 값을 못 받은 (드롭) 물건을 가방에 되돌린다. 방금 뺀 것이라 칸 한도는 보지 않는다 (포션은 한 칸 최대치까지) */
@@ -457,12 +460,26 @@ export function returnUnsold(s: CharacterState, id: string, n: number): Characte
 }
 
 export const sellValue = (price: number) => Math.floor(price * SELL_RATE);
+/** 11/20 사용자: 주운 장비 하나 되팔기 값 (상점 값의 25%) */
+export const dropSellValue = (price: number) => Math.floor(price * DROP_SELL_RATE);
+
+/** 11/20 묶음에서 장비 count개를 팔 때 산 것(환불)·주운 것 나누기: 산 것부터 판 것으로 친다. 서버(removeForSale)와 장비창 미리보기가 같이 쓴다 */
+export function gearSaleSplit(s: Pick<CharacterState, "bought">, id: string, count: number): { bought: number; drop: number } {
+  const bought = Math.min(s.bought[id] ?? 0, count);
+  return { bought, drop: count - bought };
+}
+
+/** 11/20 강화한 한 개(코드)가 산 것인지: 산 기록이 묶음 개수보다 많으면 산 것 (removePieceForSale·장비창이 같이 쓴다) */
+export const pieceSaleBought = (s: Pick<CharacterState, "bought" | "inv">, id: string): 0 | 1 => ((s.bought[id] ?? 0) > (s.inv[id] ?? 0) ? 1 : 0);
+
+/** 11/20 장비 되팔기 값: 산 것은 50%(환불), 주운 것은 25% (서버가 실제로 주는 값과 같은 계산) */
+export const gearSaleValue = (price: number, split: { bought: number; drop: number }) => split.bought * sellValue(price) + split.drop * dropSellValue(price);
 
 /**
  * 11/15 강화한 상점 장비 한 개 되팔기 (번호로). 장착 중이면 못 판다. 산 기록이 묶음보다 많으면 산 것으로 쳐서 환불,
- * 아니면 주운 것 (사냥 포인트 한도 안). 강화 값은 쳐 주지 않는다 (값은 장비 값의 50%). code = 되돌릴 때 쓰는 코드
+ * 아니면 주운 것 (사냥 포인트 한도 안). 강화 값은 쳐 주지 않는다 (값은 장비 값의 50%, 11/20 주운 것은 25%). code = 되돌릴 때 쓰는 코드
  */
-export function removePieceForSale(s: CharacterState, uid: number): { state: CharacterState; kind: "gear"; bought: number; drop: number; unit: number; code: string; id: string } {
+export function removePieceForSale(s: CharacterState, uid: number): { state: CharacterState; kind: "gear"; bought: number; drop: number; unit: number; dropUnit: number; code: string; id: string } {
   const code = (s.si ?? []).find((c) => shopPieceOf(c)?.u === uid);
   const p = code ? shopPieceOf(code) : null;
   const g = p ? gearById(p.id) : undefined;
@@ -471,12 +488,12 @@ export function removePieceForSale(s: CharacterState, uid: number): { state: Cha
   const next = clone(s);
   next.si = (next.si ?? []).filter((c) => c !== code);
   const had = s.bought[p.id] ?? 0;
-  const bought = had > (s.inv[p.id] ?? 0) ? 1 : 0;
+  const bought = pieceSaleBought(s, p.id);
   if (bought) {
     if (had === 1) delete next.bought[p.id];
     else next.bought[p.id] = had - 1;
   }
-  return { state: next, kind: "gear", bought, drop: 1 - bought, unit: sellValue(g.price), code, id: p.id };
+  return { state: next, kind: "gear", bought, drop: 1 - bought, unit: sellValue(g.price), dropUnit: dropSellValue(g.price), code, id: p.id };
 }
 
 export function addPotions(s: CharacterState, id: string, qty: number): CharacterState {

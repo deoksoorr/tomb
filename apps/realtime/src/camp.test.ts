@@ -53,9 +53,9 @@ function setup(capacity = 10, opts: { goblin?: boolean; random?: () => number } 
     ...(opts.goblin ? { signGrant: (g: Grant) => signGrant("secret", g), random: opts.random ?? (() => 0.5) } : {}),
   };
   const core = new ChannelCore<Conn>({ capacity, graceMs: 20_000 }, host);
-  const join = (id: string, o: { camp?: boolean; map?: "camp"; spawn?: { x: number; y: number }; now?: number; c?: Conn } = {}) => {
+  const join = (id: string, o: { camp?: boolean; map?: "camp"; spawn?: { x: number; y: number }; now?: number; c?: Conn; look?: string[] } = {}) => {
     const c = o.c ?? { id, out: [] };
-    const t: JoinTicket = { visitorId: id, name: id, color: AVATAR_COLORS[0], channel: 1, spawn: o.spawn, look: [], body: "hood", ...(o.camp ? { camp: true as const } : {}), ...(o.map ? { map: o.map } : {}) };
+    const t: JoinTicket = { visitorId: id, name: id, color: AVATAR_COLORS[0], channel: 1, spawn: o.spawn, look: o.look ?? [], body: "hood", ...(o.camp ? { camp: true as const } : {}), ...(o.map ? { map: o.map } : {}) };
     core.join(c, t, o.now ?? 0);
     return c;
   };
@@ -157,6 +157,20 @@ describe("only the same map sees each other", () => {
     // 한 틱에 맵마다 한 번만
     expect(snaps(v)).toHaveLength(1);
     expect(snaps(c2)).toHaveLength(1);
+  });
+
+  it("11/20 채팅에 쓴 사람의 닉네임 꾸미기를 실어 다른 맵·늦게 온 사람도 꾸민 이름을 본다", () => {
+    const { core, join } = setup();
+    const v = join("v");
+    const c1 = join("c1", { camp: true, map: "camp", look: ["nc_sakura", "hat_beret"] });
+    clear(v, c1);
+    core.message(c1, send({ t: "chat", text: "캠핑장에서 안녕" }), 0);
+    core.message(v, send({ t: "chat", text: "꾸미기 없음" }), 0);
+    const got = events(v).filter((e) => e.t === "chat") as Extract<S2C, { t: "chat" }>[];
+    expect(got[0]).toMatchObject({ name: "c1", m: "camp", ns: ["nc_sakura"] });
+    const late = join("late", { now: 10 });
+    const log = events(late).find((e) => e.t === "chatLog") as Extract<S2C, { t: "chatLog" }>;
+    expect(log.lines.map((l) => l.ns)).toEqual([["nc_sakura"], undefined]);
   });
 
   it("say, act, emo stay in the map; 11/16 chat (and its history) reaches the whole channel with the speaker's map; megaphone reaches everyone", async () => {

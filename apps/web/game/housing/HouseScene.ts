@@ -13,6 +13,7 @@ import { bridge } from "../bridge";
 import { DEPTH } from "../config";
 import { Player, type SeatRequester } from "../entities/Player";
 import { INDOOR_FRONT } from "../entities/RemoteAvatar";
+import { SAY_MS } from "../entities/SpeechBubble";
 import type { InputHub } from "../input/InputHub";
 import { interactLabel, isTouchUi, keyJosa } from "../input/keyHint";
 import type { KeyAction } from "../input/Keyboard";
@@ -30,7 +31,7 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { Atmosphere } from "../world/Atmosphere";
 import { Lighting, playerLightRadius } from "../world/Lighting";
 import type { LightSpot } from "../world/WorldMap";
-import { animFrames, artUp, DOG_BREATH_FRAMES, drawsTurned, floorGrid, furnitureGrid, hasNightArt, itemVariant, noFootShadow, sconceGrid, wallCapColor, wallFaceColor, WALL_H, wallGrid, windowGrid, WINDOW_W, yardGrid, zzzGrid } from "./art";
+import { animFrames, artUp, DOG_BREATH_FRAMES, drawsTurned, floorGrid, furnitureGrid, hasNightArt, itemVariant, noFootShadow, sconceGrid, usesNightVariant, wallCapColor, wallFaceColor, WALL_H, wallGrid, windowGrid, WINDOW_W, yardGrid, zzzGrid } from "./art";
 import type { HouseEditState, HouseTool } from "./events";
 import { wornRingGrid } from "./seaFurnitureArt";
 import { HouseSfx, hearGain, type HouseSound } from "./houseSfx";
@@ -53,6 +54,7 @@ import {
   PIANO_NOTES,
   pickPondSeat,
   pondSeats,
+  rugSeat,
   type PondSeat,
   RADIO_CHANNELS,
   SNACK_NAMES,
@@ -62,8 +64,11 @@ import {
   type HouseSpot,
   type HouseTarget,
   type PondSide,
+  type StandSpot,
   type UseKind,
 } from "./interact";
+import { SEASON_FX, SEASON_LIGHTS, seasonLightLabel } from "./seasonUse";
+import { BREED_PET_P1_MS, BREED_PET_P2_MS, isBreedFurniture, isCatFurniture } from "./breedFurnitureArt";
 
 // 개인 집(하우징) 씬 — 3번 집 안 개편. 방문자끼리 같은 방(room "house:{id}")으로 서로 보이고 들린다.
 //  - 집 안: 안쪽 벽(벽지·몰딩·걸레받이·창문·벽등) + 옆벽 + 앞벽(현관문) + 바닥 스킨. 넓은 터·대저택은 칸막이 벽으로 방이 나뉜다(lib/housing/rooms.ts).
@@ -106,6 +111,8 @@ const PART_H = 26;
 /** 앞벽 높이 (윗면 + 바깥 면) */
 const FRONT_H = 14;
 const NO_SEATS: SeatRequester = { sit: () => undefined, stand: () => undefined };
+/** 11/19 시즌 가구를 쓸 때 이모티콘을 띄워 두는 시간 (그다음 한마디 말풍선) */
+const SEASON_EMOTE_MS = 800;
 /** 11/16 집 안 해먹에 누운 사람 depth: 해먹 가구 그림(아래 끝 = 칸 아래 끝)보다 앞 (interact seaHammockSpot 앵커 기준) */
 const hammockDepth = (s: HouseSpot) => s.y + (s.tilt ? 32 : 7);
 const ZOOM_MIN = 1.5;
@@ -155,6 +162,8 @@ export class HouseScene extends Phaser.Scene {
   private sunPools!: Phaser.GameObjects.Graphics;
   private prompt!: Phaser.GameObjects.BitmapText;
   private usePrompt!: Phaser.GameObjects.BitmapText;
+  /** 11/19 가구를 쓴 직후 그 가구의 E 안내를 잠깐 숨긴다 (머리 위 한마디 말풍선과 겹쳐 읽히지 않게) */
+  private promptQuiet: { u: string; until: number } | null = null;
   /** 현관 문 칸 (앞벽의 빈 두 칸, 문턱 = 앞벽 아래) — 문 앞에서 E로 나간다 (logic/doorExit) */
   private exitGap: DoorGap = { x0: 0, x1: 0, y: 0 };
   private titleLabel!: Phaser.GameObjects.BitmapText;
@@ -203,6 +212,8 @@ export class HouseScene extends Phaser.Scene {
   private dogAt = 0;
   private dogFrame = 0;
   private dogZAt = 0;
+  /** 11/19 품종 펫 가구가 가끔 하품하는 다음 시각 */
+  private napYawnAt = 0;
   /** 밤에 달빛이 비치는 연못 자리 */
   private pondSpots: { x: number; y: number; r: number }[] = [];
   /** 잠깐 바뀌는 그림 (끄적인 화이트보드·눌린 오리·흔들리는 덤불…): u → 변형·끝나는 시각 */
@@ -271,6 +282,7 @@ export class HouseScene extends Phaser.Scene {
     this.glows = [];
     this.remoteTick = new Map();
     this.follow = null;
+    this.promptQuiet = null;
     this.work = structuredClone(data.house.layout);
     this.baseline = JSON.stringify(this.work);
   }
@@ -662,6 +674,11 @@ export class HouseScene extends Phaser.Scene {
         return itemVariant(p.i, "", { r: p.r, night: this.night, frame: this.data0.reduced ? 0 : this.pondFrame });
       case "sea_hammock":
         return this.hammockBusy().has(p.u) ? "lie" : "";
+      case "leaf_shade": {
+        // 11/20 이파리 햇빛가리개: 낮에만 바닥에 잎 그림자 (밤 조각 n이면 안 그린다) + 써 보면 잎이 살랑 (sway)
+        const f = this.flash.get(p.u);
+        return [f && f.until > this.time.now ? f.v : "", this.night ? "n" : ""].filter(Boolean).join("-");
+      }
       case "sleepy_dog": {
         // 쓰다듬으면 잠깐 꼬리 끝이 들리고(wag), 평소엔 숨 장면 (동작 줄이기면 0에 멈춘다)
         const f = this.flash.get(p.u);
@@ -675,8 +692,12 @@ export class HouseScene extends Phaser.Scene {
         // 값 1 = 꺼짐 (처음부터 켜져 있던 가구)
         return this.toggles.get(p.u) ? "off" : "";
       default: {
+        // 11/19 시즌 불빛 가구도 같은 규칙 (값 1 = 꺼짐)
+        if (SEASON_LIGHTS.has(p.i)) return this.toggles.get(p.u) ? "off" : "";
         const f = this.flash.get(p.u);
-        return f && f.until > this.time.now ? f.v : "";
+        if (f && f.until > this.time.now) return f.v;
+        // 11/19 품종 펫 가구: 잠자는 강아지와 같은 박자로 숨 장면(눈 깜빡 + 꼬리 끝 살랑)
+        return isBreedFurniture(p.i) && this.dogFrame ? "b1" : "";
       }
     }
   }
@@ -696,7 +717,7 @@ export class HouseScene extends Phaser.Scene {
 
   /** 꺼 둔 석등·촛대 */
   private isDark(p: Placed): boolean {
-    return (p.i === "stone_lantern" || p.i === "candles" || p.i === "sea_lantern" || p.i === "ghost_lamp") && !!this.toggles.get(p.u);
+    return (p.i === "stone_lantern" || p.i === "candles" || p.i === "sea_lantern" || p.i === "ghost_lamp" || SEASON_LIGHTS.has(p.i)) && !!this.toggles.get(p.u);
   }
 
   /** 물건 그림의 불투명도: 놓아 보는 물건은 반투명, 끌어서 못 놓는 자리면 더 흐리게 */
@@ -886,7 +907,11 @@ export class HouseScene extends Phaser.Scene {
       case "window":
         return on ? "창문 닫기" : USE_LABEL.window;
       case "light":
-        return on ? "불 켜기" : USE_LABEL.light;
+        return seasonLightLabel(t.item, on) ?? (on ? "불 켜기" : USE_LABEL.light);
+      case "season":
+        return furnitureById(t.item)?.use ?? USE_LABEL.season;
+      case "breed":
+        return furnitureById(t.item)?.use ?? USE_LABEL.breed;
       default:
         return USE_LABEL[t.use];
     }
@@ -910,7 +935,11 @@ export class HouseScene extends Phaser.Scene {
       if (this.takenByOther(t.spot.id)) return this.notice(SPOT_TAKEN_TOAST[t.spot.kind]);
       return this.enterSpot(t.spot);
     }
-    this.player.faceTo((t.rect.x0 + t.rect.x1) / 2, (t.rect.y0 + t.rect.y1) / 2, now);
+    // 쓴 가구의 E 안내는 말풍선이 떠 있는 동안 숨긴다
+    this.promptQuiet = { u: t.u, until: now + SAY_MS };
+    // 11/19 시즌 가구: 돌린 앞쪽 빈 칸에 서서 가구를 바라본다 (설 자리가 없으면 선 자리에서 바라보기만)
+    if (t.stand) this.standAt(t.stand);
+    else this.player.faceTo((t.rect.x0 + t.rect.x1) / 2, (t.rect.y0 + t.rect.y1) / 2, now);
     switch (t.use) {
       case "radio": {
         const ch = ((this.toggles.get(t.u) ?? 0) + 1) % (RADIO_CHANNELS + 1);
@@ -989,6 +1018,31 @@ export class HouseScene extends Phaser.Scene {
 
   // ── 모든 가구 상호작용 (연출만: 포인트·아이템은 주지 않는다. 같은 방 사람에게는 use 이벤트로 같은 연출) ──
 
+  /** 11/19 가구 앞 설 자리로 옮겨 가구를 바라본다 (앉아 있었으면 일어난다). 다른 사람 화면에도 그 자리로 보인다 */
+  private standAt(s: StandSpot): void {
+    const now = this.time.now;
+    if (this.using) this.exitSpot();
+    this.player.warp(s.x, s.y, now, NO_SEATS);
+    this.presence?.client.warp(s.x, s.y);
+    const [dx, dy] = s.facing === DIR.up ? [0, -8] : s.facing === DIR.down ? [0, 8] : s.facing === DIR.left ? [-8, 0] : [8, 0];
+    this.player.faceTo(s.x + dx, s.y + dy, now);
+  }
+
+  /** 11/19 시즌 가구 써 보기 연출 (내가 쓴 것·다른 사람이 쓴 것 공용). a = 한마디 번호 */
+  private playSeason(u: string, item: string, a: number, gain: number, view: { emote(k: EmoteIcon, now: number, ms?: number): void; say(t: string, now: number): void } | undefined): void {
+    const fx = SEASON_FX[item];
+    if (!fx) return;
+    if (fx.v) this.flashVariant(u, fx.v, fx.ms ?? 1200);
+    if (fx.sfx) this.sfx.play(fx.sfx, gain);
+    // 말풍선은 한 자리 하나라 이모티콘을 먼저 짧게 띄우고 한마디로 바꾼다 (한마디가 없으면 이모티콘만)
+    const line = fx.lines?.length ? fx.lines[a % fx.lines.length] : null;
+    if (fx.emote) view?.emote(fx.emote, performance.now(), line ? SEASON_EMOTE_MS : undefined);
+    if (line) {
+      if (fx.emote) this.time.delayedCall(SEASON_EMOTE_MS, () => view?.say(line, performance.now()));
+      else view?.say(line, performance.now());
+    }
+  }
+
   /** 바닥에 앉는다 (러그·꽃밭·연못가·나무 밑). 자리 없이 여럿이 앉을 수 있고, 움직이면 일어난다 */
   private sitGroundAt(x: number, y: number, dir: DirId): void {
     const now = this.time.now;
@@ -1024,7 +1078,32 @@ export class HouseScene extends Phaser.Scene {
         this.time.delayedCall(1200, () => this.emote("zzz"));
         this.emitUse(t.u, 0);
         return;
+      case "breed":
+        // 11/19 품종 펫 가구: 앞에 서서(seasonStandSpot) 쓰다듬으면 하트 + 품종 동작 (p1 → p2)
+        this.petBreed(t.u, t.item, 1);
+        this.emote("heart");
+        this.emitUse(t.u, 0);
+        return;
+      case "season": {
+        const fx = SEASON_FX[t.item];
+        const i = fx?.lines?.length ? Math.floor(Math.random() * fx.lines.length) : 0;
+        if (fx?.jump) p.jump(this.time.now, null);
+        this.playSeason(t.u, t.item, i, 1, p.view);
+        this.emitUse(t.u, i);
+        return;
+      }
       case "rug":
+        // 11/19 니트 러그: 가구가 없는 러그 칸 중 가까운 곳에 앉고, 옆 칸에 가구(코코아 탁자…)가 있으면 그쪽을 본다
+        if (t.item === "knit_rug") {
+          const rug = this.work.items.find((x) => x.u === t.u);
+          const seat = rug && rugSeat(rug, this.work.items, this.tier, this.frame, p.x, p.y);
+          if (!seat) return this.notice("러그 위가 가구로 꽉 찼어요.");
+          this.sitGroundAt(seat.x, seat.y, seat.facing);
+          this.sfx.play("sheet", 0.6);
+          this.emitUse(t.u, 0);
+          return;
+        }
+      // falls through
       case "smell":
         // 지금 선 자리에서 가장 가까운 러그·꽃밭 위
         this.sitGroundAt(clamp(p.x, r.x0 + 4, r.x1 - 4), clamp(p.y, r.y0 + 8, r.y1 - 2), DIR.down);
@@ -1196,6 +1275,14 @@ export class HouseScene extends Phaser.Scene {
   }
 
   /** 잠자는 강아지를 쓰다듬었다: 콧바람 + 꼬리 끝 톡 (깨지는 않는다) */
+  /** 11/19 품종 펫 가구 쓰다듬기: 야옹(고양이)·한숨(강아지) + 품종 동작 두 장면 (움직임 줄이기면 소리만) */
+  private petBreed(u: string, item: string, gain: number): void {
+    this.sfx.play(isCatFurniture(item) ? "meow" : "dogSigh", gain);
+    if (this.data0.reduced) return;
+    this.flashVariant(u, "p1", BREED_PET_P1_MS);
+    this.time.delayedCall(BREED_PET_P1_MS, () => this.flashVariant(u, "p2", BREED_PET_P2_MS));
+  }
+
   private petDog(u: string, gain: number): void {
     this.sfx.play("dogSigh", gain);
     if (!this.data0.reduced) this.flashVariant(u, "wag", 520);
@@ -1698,6 +1785,17 @@ export class HouseScene extends Phaser.Scene {
         this.fxWheel(u, gain);
         r?.view.say(WHEEL_LINES[a % WHEEL_LINES.length], now);
         return;
+      case "season": {
+        const item = this.work.items.find((x) => x.u === u)?.i;
+        if (item) this.playSeason(u, item, a, gain, r?.view);
+        return;
+      }
+      case "breed": {
+        const item = this.work.items.find((x) => x.u === u)?.i;
+        if (item) this.petBreed(u, item, gain);
+        r?.view.emote("heart", now);
+        return;
+      }
     }
   }
 
@@ -1722,15 +1820,30 @@ export class HouseScene extends Phaser.Scene {
       } else if (u.spot.use === "lie") {
         if (time - u.at > 5000) this.sfx.play("snore", 0.6);
         u.next = time + 3500;
+      } else if (u.spot.use === "massage") {
+        // 11/20 안마의자: 앉아 있는 동안 덜덜덜 (등판이 엇갈린 그림을 짧게 번갈아)
+        this.flashVariant(u.spot.u, "buzz", 260);
+        u.next = time + 520;
+      } else if (u.spot.use === "approve") {
+        // 11/20 부장님 책상: 가끔 서류 넘기는 소리
+        this.sfx.play("page", 0.5);
+        u.next = time + 1800 + Math.random() * 1600;
       } else u.next = time + 1000;
     }
     // 다른 사람의 자리 소리 (자판·거품): 앉아 있는 자리로 안다
     if (this.presence) {
       for (const r of this.presence.remotes.values()) {
-        const use = r.seatId ? this.spots.find((s) => s.id === r.seatId)?.use : undefined;
-        if (use !== "type" && use !== "bath") continue;
+        const st = r.seatId ? this.spots.find((s) => s.id === r.seatId) : undefined;
+        const use = st?.use;
+        if (use !== "type" && use !== "bath" && use !== "massage") continue;
         const due = this.remoteTick.get(r.sid) ?? 0;
         if (time < due) continue;
+        // 11/20 다른 사람이 앉은 안마의자도 덜덜덜 (소리 없이 그림만)
+        if (use === "massage" && st) {
+          this.flashVariant(st.u, "buzz", 260);
+          this.remoteTick.set(r.sid, time + 520);
+          continue;
+        }
         const gain = hearGain(Math.hypot(r.x - p.x, r.y - p.y));
         if (use === "type") {
           this.sfx.play("key", 0.8 * gain);
@@ -1773,9 +1886,21 @@ export class HouseScene extends Phaser.Scene {
       let picked: string | null = null;
       let n = 0;
       for (const v of this.views.values()) {
-        if (v.p.i !== "sleepy_dog" || this.drag?.u === v.p.u) continue;
+        if (this.drag?.u === v.p.u) continue;
+        // 11/19 품종 펫 가구도 같은 박자로 숨 쉰다 (z는 잠자는 강아지만)
+        if (isBreedFurniture(v.p.i)) {
+          this.refreshVariant(v.p.u);
+          continue;
+        }
+        if (v.p.i !== "sleepy_dog") continue;
         this.refreshVariant(v.p.u);
         if (Math.random() * ++n < 1) picked = v.p.u; // 강아지가 여럿이면 하나를 고르게 뽑는다
+      }
+      // 11/19 품종 펫 가구 하나가 가끔 하품 (뒷모습은 귀 쫑긋)
+      if (!this.dogFrame && time >= this.napYawnAt) {
+        this.napYawnAt = time + 7000 + Math.random() * 6000;
+        const naps = [...this.views.values()].filter((v) => isBreedFurniture(v.p.i) && this.drag?.u !== v.p.u && !this.flash.has(v.p.u));
+        if (naps.length) this.flashVariant(naps[Math.floor(Math.random() * naps.length)].p.u, "y1", 1100);
       }
       if (picked && !this.dogFrame && time >= this.dogZAt) {
         this.dogZAt = time + 2600 + Math.random() * 2400;
@@ -1909,7 +2034,8 @@ export class HouseScene extends Phaser.Scene {
       this.night = night;
       this.updateWindows();
       // 밤 그림이 따로 있는 물건 (연못에 달이 비친다)
-      for (const it of this.work.items) if (hasNightArt(it.i)) this.refreshVariant(it.u);
+      // 11/20 이파리 햇빛가리개도 (낮에만 잎 그림자 — usesNightVariant)
+      for (const it of this.work.items) if (usesNightVariant(it.i)) this.refreshVariant(it.u);
     }
     const lantern = this.player.view.lantern;
     const r = playerLightRadius(L.glow, lantern);
@@ -1971,7 +2097,7 @@ export class HouseScene extends Phaser.Scene {
       x = this.player.x + 12;
       y = this.player.y - 10;
       p.setOrigin(0, 0.5);
-    } else if (this.target && !nearSign) {
+    } else if (this.target && !nearSign && !(this.promptQuiet && this.promptQuiet.u === this.target.u && this.time.now < this.promptQuiet.until)) {
       const t = this.target;
       grey = !!t.spot && this.takenByOther(t.spot.id);
       text = grey ? this.labelOf(t) : interactLabel(this.labelOf(t));

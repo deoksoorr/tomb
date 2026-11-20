@@ -21,7 +21,7 @@ import {
   SEA_SPOTS,
   SEA_BONFIRE,
 } from "@tomb/protocol";
-import { inRect, SEA_TREES, seaGroundKind, type SeaGround } from "./seaLayout";
+import { inRect, SEA_BUYER, SEA_BUYER_STALL, SEA_TREES, seaGroundKind, type SeaGround } from "./seaLayout";
 
 // 11/16 바닷가 미니맵 바탕 (순수 계산 — DOM 없이 테스트해요). 캠핑장 campMinimap과 같은 방식:
 // 월드 SEA_MINIMAP_CELL px = 미니맵 1px. 바닥·건물·선착장·방파제·바위·소나무를 색으로 칠한 RGBA 배열.
@@ -105,7 +105,7 @@ export function toSeaMinimap(x: number, y: number): { x: number; y: number } {
   return { x: x / SEA_MINIMAP_CELL, y: y / SEA_MINIMAP_CELL };
 }
 
-export type SeaLandmark = { id: string; label: string; x: number; y: number; kind: "bus" | "realty" | "kiosk" | "cottages" | "pier" | "lighthouse" | "rocks" | "seat" | "bonfire" };
+export type SeaLandmark = { id: string; label: string; x: number; y: number; kind: "bus" | "realty" | "kiosk" | "cottages" | "pier" | "lighthouse" | "rocks" | "seat" | "bonfire" | "seaBuyer" };
 /** 미니맵 주요 장소 (UI가 작은 표시를 그려요) */
 export const SEA_LANDMARKS: readonly SeaLandmark[] = [
   { id: "bus", label: "버스 정류장", x: SEA_BUS_STOP.x, y: SEA_BUS_STOP.y, kind: "bus" },
@@ -120,6 +120,8 @@ export const SEA_LANDMARKS: readonly SeaLandmark[] = [
   { id: "pierSeats", label: "걸터앉기", x: SEA_SPOTS.pierEnd.x, y: SEA_SPOTS.pierEnd.y + 8, kind: "seat" },
   { id: "breakwaterSeats", label: "걸터앉기", x: SEA_SPOTS.breakwaterEnd.x, y: SEA_SPOTS.breakwaterEnd.y + 8, kind: "seat" },
   { id: "bonfire", label: "모닥불", x: SEA_BONFIRE.x, y: SEA_BONFIRE.y, kind: "bonfire" },
+  // 11/20 해녀 할망 좌판 (미니맵 파라솔 그림 — 마을 보따리상처럼)
+  { id: "seaBuyer", label: "해녀 할망", x: (SEA_BUYER_STALL.x + SEA_BUYER.x) / 2, y: SEA_BUYER.y - 12, kind: "seaBuyer" },
 ];
 /** 주요 장소 표시 색 */
 export const SEA_LANDMARK_COLOR: Record<SeaLandmark["kind"], string> = {
@@ -132,4 +134,5 @@ export const SEA_LANDMARK_COLOR: Record<SeaLandmark["kind"], string> = {
   rocks: "#b8b0a4",
   seat: "#f8c8a0",
   bonfire: "#ffb050",
+  seaBuyer: "#7fd8c0",
 };

@@ -1,7 +1,8 @@
+import { writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { GEAR, gearById, type GearKind, type GearSlot } from "./catalog";
 import { normalize, removePieceForSale, sellValue } from "./character";
-import { disassemble, DISASSEMBLE, dropsOnFail, enhance, enhanceRate, ENHANCE_TABLE, ENH_DROP_FROM, ENH_FAIL_BONUS, equipSg, exchange, grantSgDrops, reroll, rerollCost, type EnhTarget } from "./enhance";
+import { ampNeed, disassemble, DISASSEMBLE, enhance, enhanceRate, ENHANCE_TABLE, ENH_AMP_MUL, ENH_AMP_TABLE, ENH_FAIL_MAX, ENH_PITY, equipSg, pityLeft, pityOf, exchange, grantSgDrops, reroll, rerollCost, type EnhTarget } from "./enhance";
 import { baseStats, derive, seeded } from "./formulas";
 import {
   activeSets,
@@ -16,7 +17,9 @@ import {
   SG_INV_MAX,
   SG_OPT_COUNT,
   SG_PIECES,
+  SG_ENH_MAX,
   SHOP_ENH_MAX,
+  encodeShopPiece,
   sgCombat,
   sgDef,
   sgStatic,
@@ -417,7 +420,7 @@ describe("강화 (고정 난수)", () => {
     });
   const sgT = (u: number): EnhTarget => ({ sg: u });
 
-  it("표대로: 확률·포인트·재료, 성공하면 +1, 연속 실패마다 ENH_FAIL_BONUS (성공하면 처음부터) — 11/19 일반 MMORPG처럼", () => {
+  it("표대로: 확률·포인트·재료, 성공하면 +1, 실패하면 연속 실패 +1 (성공하면 0) — 11/19 일반 MMORPG처럼", () => {
     const rows = ENHANCE_TABLE.slice(1);
     // 11/19: 확률은 단계마다 같거나 내려가고(+1만 100%), 비용은 단계마다 오른다. 높은 단계는 한 자릿수 %
     expect(ENHANCE_TABLE[1].rate).toBe(1);
@@ -430,52 +433,159 @@ describe("강화 (고정 난수)", () => {
     // 재료(결재 서류·인감 도장)는 그대로
     expect(rows.map((r) => r.doc)).toEqual([0, 0, 0, 0, 0, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10]);
     expect(rows.map((r) => r.seal)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 2]);
-    expect(enhanceRate(15, 2)).toBeCloseTo(ENHANCE_TABLE[15].rate + 2 * ENH_FAIL_BONUS);
-    expect(enhanceRate(2, 99)).toBe(1);
+    // 11/20 실패마다 오르던 확률(+3%p)은 없다 — 표 그대로
+    expect(enhanceRate(15)).toBe(ENHANCE_TABLE[15].rate);
     const s = withSg(item({ e: 5 }));
     const r6 = ENHANCE_TABLE[6];
     const ok = enhance(s, sgT(1), false, fixed(r6.rate / 2));
     expect(ok.cost).toBe(r6.cost);
-    expect(ok.result).toMatchObject({ ok: true, from: 5, to: 6 });
+    expect(ok.result).toMatchObject({ ok: true, from: 5, to: 6, amp: 0, sure: false, fails: 0 });
     expect(decodeSg(ok.state.sg![0])!.e).toBe(6);
     expect(ok.state.mats!.doc).toBe(999 - r6.doc);
-    // 실패 → 그대로(+5는 내려가지 않는다), 연속 실패 1
+    expect(ok.state.mats!.prot).toBe(3);
     const no = enhance(s, sgT(1), false, fixed(0.99));
-    expect(no.result).toMatchObject({
-      ok: false,
-      from: 5,
-      to: 5,
-      dropped: false,
-    });
+    expect(no.result).toMatchObject({ ok: false, from: 5, to: 5, fails: 1 });
     expect(decodeSg(no.state.sg![0])!.f).toBe(1);
-    // 기본 확률이면 실패하는 값이 실패 1번 뒤(+ENH_FAIL_BONUS)면 성공
-    const mid = r6.rate + ENH_FAIL_BONUS / 2;
-    expect(enhance(s, sgT(1), false, fixed(mid)).result.ok).toBe(false);
-    expect(enhance(no.state, sgT(1), false, fixed(mid)).result.ok).toBe(true);
-    expect(decodeSg(enhance(no.state, sgT(1), false, fixed(mid)).state.sg![0])!.f).toBe(0);
+    // 성공하면 연속 실패 0
+    expect(decodeSg(enhance(no.state, sgT(1), false, fixed(0)).state.sg![0])!.f).toBe(0);
   });
 
-  it("+ENH_DROP_FROM부터 실패하면 한 단계 내려간다 (그 아래 실패는 그대로), 보호 문서는 막고 한 장 쓴다, 깨지지 않는다", () => {
-    expect(dropsOnFail(ENH_DROP_FROM - 1)).toBe(false);
-    expect(dropsOnFail(ENH_DROP_FROM)).toBe(true);
-    expect(enhance(withSg(item({ e: ENH_DROP_FROM - 1 })), sgT(1), false, fixed(0.99)).result.to).toBe(ENH_DROP_FROM - 1);
-    const d = enhance(withSg(item({ e: ENH_DROP_FROM })), sgT(1), false, fixed(0.99));
-    expect(d.result).toMatchObject({ ok: false, from: ENH_DROP_FROM, to: ENH_DROP_FROM - 1, dropped: true });
-    const r = enhance(withSg(item({ e: 12 })), sgT(1), false, fixed(0.99));
-    expect(r.result).toMatchObject({
-      ok: false,
-      from: 12,
-      to: 11,
-      dropped: true,
-    });
-    const p = enhance(withSg(item({ e: 12 })), sgT(1), true, fixed(0.99));
-    expect(p.result).toMatchObject({ ok: false, to: 12, saved: true });
-    expect(p.state.mats!.prot).toBe(2);
-    // 보호 문서가 없으면 쓸 수 없다
-    expect(() => enhance(withSg(item({ e: 12 }), { mats: { doc: 99, seal: 9, prot: 0 } }), sgT(1), true, fixed(0.5))).toThrow(/보호 문서/);
+  it("11/20 실패해도 단계는 그대로 (모든 단계, 세트 장비·상점 장비) — 깨지거나 내려가지 않는다", () => {
+    for (let e = 0; e < SG_ENH_MAX; e++) {
+      const r = enhance(withSg(item({ e })), sgT(1), false, fixed(0.999999));
+      if (ENHANCE_TABLE[e + 1].rate >= 1) continue;
+      expect(r.result).toMatchObject({ ok: false, from: e, to: e });
+      expect(decodeSg(r.state.sg![0])!.e).toBe(e);
+      expect(r.state.sg).toHaveLength(1);
+    }
+    const shop = char({ si: [encodeShopPiece({ id: "w_stamp", e: 4, u: 7, f: 0 })], sgN: 8, mats: { doc: 99, seal: 9, prot: 0 } });
+    const r = enhance(shop, { piece: 7 }, false, fixed(0.999999));
+    expect(r.result).toMatchObject({ ok: false, from: 4, to: 4 });
+    expect(shopPieceOf(r.state.si![0])).toMatchObject({ e: 4, f: 1 });
     // 재료가 모자라면 거절 (+11부터 인감 도장)
     expect(() => enhance(withSg(item({ e: 10 }), { mats: { doc: 99, seal: 0, prot: 0 } }), sgT(1), false, fixed(0.01))).toThrow(/인감 도장/);
     expect(() => enhance(withSg(item({ e: 15 })), sgT(1), false, fixed(0.01))).toThrow(/\+15/);
+  });
+
+  describe("11/20 강화 증폭권 (서버 판정)", () => {
+    const amped = (e: number, prot = 99, f = 0) => withSg(item({ e, f }), { mats: { doc: 999, seal: 99, prot } });
+
+    it("장수 정책: +1~+3 못 씀, +4~+6 1장, +7~+9 2장, +10~+12 3장, +13~+15 4장 · 배수 2 · 단계마다 안 줄어든다", () => {
+      expect(ENH_AMP_MUL).toBe(2);
+      expect(ENH_AMP_TABLE).toEqual([0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4]);
+      for (let t = 1; t <= SG_ENH_MAX; t++) expect(ampNeed(t)).toBe(ENH_AMP_TABLE[t]);
+      for (let t = 2; t <= SG_ENH_MAX; t++) expect(ampNeed(t)).toBeGreaterThanOrEqual(ampNeed(t - 1));
+    });
+
+    it("성공 확률 2배, 100%에서 멈춘다 (쓸 수 없는 단계는 그대로)", () => {
+      for (let t = 1; t <= SG_ENH_MAX; t++) {
+        const base = ENHANCE_TABLE[t].rate;
+        expect(enhanceRate(t)).toBe(base);
+        expect(enhanceRate(t, true)).toBeCloseTo(ampNeed(t) ? Math.min(1, base * 2) : base, 10);
+      }
+      expect(enhanceRate(4, true)).toBe(1); // 65% → 130% → 100%
+      expect(enhanceRate(5, true)).toBe(1); // 55% → 100%
+      expect(enhanceRate(6, true)).toBeCloseTo(0.9);
+      expect(enhanceRate(15, true)).toBeCloseTo(0.08);
+    });
+
+    it("경계: 같은 난수에서 증폭 없이는 실패, 증폭하면 성공 (단계마다) — 확률은 서버 표에서만", () => {
+      for (let t = 4; t <= SG_ENH_MAX; t++) {
+        const base = ENHANCE_TABLE[t].rate;
+        const amp = enhanceRate(t, true);
+        // 기본 확률과 증폭 확률 사이의 난수 (예: +8 32%면 0.48 → 기본 실패, 64%면 성공)
+        const r = (base + amp) / 2;
+        const plain = enhance(amped(t - 1), sgT(1), false, fixed(r));
+        const boosted = enhance(amped(t - 1), sgT(1), true, fixed(r));
+        expect(plain.result).toMatchObject({ ok: false, to: t - 1, amp: 0, rate: base });
+        expect(boosted.result).toMatchObject({ ok: true, to: t, amp: ampNeed(t) });
+        expect(boosted.result.rate).toBeCloseTo(amp, 10);
+        // 증폭권은 정해진 장수만큼만 빠지고, 안 쓰면 그대로
+        expect(boosted.state.mats!.prot).toBe(99 - ampNeed(t));
+        expect(plain.state.mats!.prot).toBe(99);
+        // 증폭 확률 바로 위 난수는 증폭해도 실패 (100%가 아닌 단계)
+        if (amp < 1) expect(enhance(amped(t - 1), sgT(1), true, fixed(amp + 1e-9)).result.ok).toBe(false);
+      }
+      // 예: +10(20%) 난수 0.3 → 그냥은 실패, 증폭 40%면 성공
+      expect(enhance(amped(9), sgT(1), false, fixed(0.3)).result.ok).toBe(false);
+      expect(enhance(amped(9), sgT(1), true, fixed(0.3)).result.ok).toBe(true);
+    });
+
+    it("상한: 100%가 되는 단계는 난수가 1에 가까워도 성공", () => {
+      for (const t of [4, 5]) expect(enhance(amped(t - 1), sgT(1), true, fixed(0.999999)).result).toMatchObject({ ok: true, rate: 1 });
+    });
+
+    it("모자라면 거절하고 아무것도 안 바뀐다, 못 쓰는 단계에 쓰면 거절", () => {
+      expect(() => enhance(amped(9, 2), sgT(1), true, fixed(0))).toThrow(/강화 증폭권이 1장 모자라요/);
+      expect(() => enhance(amped(14, 0), sgT(1), true, fixed(0))).toThrow(/4장 모자라요/);
+      expect(() => enhance(amped(2), sgT(1), true, fixed(0))).toThrow(/쓸 수 없어요/);
+      // 딱 맞게 있으면 0장이 된다
+      expect(enhance(amped(9, 3), sgT(1), true, fixed(0.99)).state.mats!.prot).toBe(0);
+    });
+
+    it("증폭권을 쓴 실패도 연속 실패 한 번으로 센다", () => {
+      const r = enhance(amped(12), sgT(1), true, fixed(0.99));
+      expect(r.result).toMatchObject({ ok: false, to: 12, fails: 1, amp: ampNeed(13) });
+      expect(decodeSg(r.state.sg![0])!.f).toBe(1);
+    });
+  });
+
+  describe("11/20 천장 (같은 단계 연속 실패 → 다음은 반드시 성공)", () => {
+    it("표 (같은 날 사용자 「약 2배로」): 단계가 높을수록 같거나 크고, 저장 상한(두 자리) 안", () => {
+      expect(ENH_PITY).toEqual([0, 0, 2, 2, 4, 4, 6, 8, 10, 12, 16, 20, 26, 36, 56, 84]);
+      for (let t = 2; t <= SG_ENH_MAX; t++) expect(pityOf(t)).toBeGreaterThanOrEqual(pityOf(t - 1));
+      for (let t = 1; t <= SG_ENH_MAX; t++) expect(pityOf(t)).toBeLessThan(ENH_FAIL_MAX);
+      expect(ENH_FAIL_MAX).toBeLessThanOrEqual(99);
+      // 천장까지 갈 확률(정말 운이 나쁜 쪽)은 단계마다 5% 안
+      for (let t = 2; t <= SG_ENH_MAX; t++) expect((1 - ENHANCE_TABLE[t].rate) ** pityOf(t)).toBeLessThan(0.05);
+      expect(pityLeft(15, 0)).toBe(84);
+      expect(pityLeft(15, 83)).toBe(1);
+      expect(pityLeft(15, 84)).toBe(0);
+      expect(pityLeft(15, 99)).toBe(0);
+    });
+
+    it("연속 실패는 50을 넘어 저장되고 코드로 다시 읽힌다 (+15 천장 84까지)", () => {
+      const r = enhance(withSg(item({ e: 14, f: 60 }), { mats: { doc: 99, seal: 9, prot: 0 } }), sgT(1), false, fixed(0.999999));
+      expect(r.result).toMatchObject({ ok: false, fails: 61, pityLeft: 23 });
+      expect(decodeSg(r.state.sg![0])!.f).toBe(61);
+      const cap = enhance(withSg(item({ e: 14, f: ENH_FAIL_MAX }), { mats: { doc: 99, seal: 9, prot: 0 } }), sgT(1), false, fixed(0.999999));
+      expect(cap.result).toMatchObject({ ok: true, sure: true });
+    });
+
+    it("천장만큼 실패하면 난수와 상관없이 성공하고 0으로, 그 전까지는 단계 그대로", () => {
+      for (const t of [6, 10, 15]) {
+        let s = withSg(item({ e: t - 1 }), { mats: { doc: 9999, seal: 999, prot: 0 } });
+        for (let i = 0; i < pityOf(t); i++) {
+          const r = enhance(s, sgT(1), false, fixed(0.999999));
+          expect(r.result).toMatchObject({ ok: false, to: t - 1, sure: false, fails: i + 1, pityLeft: pityOf(t) - i - 1 });
+          s = r.state;
+        }
+        const last = enhance(s, sgT(1), false, fixed(0.999999));
+        expect(last.result).toMatchObject({ ok: true, to: t, sure: true, rate: 1, fails: 0 });
+        expect(decodeSg(last.state.sg![0])!.f).toBe(0);
+        // 다음 단계 천장이 처음부터
+        if (t < SG_ENH_MAX) expect(last.result.pityLeft).toBe(pityOf(t + 1));
+      }
+    });
+
+    it("천장이면 증폭권을 체크해도 쓰지 않는다", () => {
+      const s = withSg(item({ e: 9, f: pityOf(10) }), { mats: { doc: 99, seal: 9, prot: 5 } });
+      const r = enhance(s, sgT(1), true, fixed(0.999999));
+      expect(r.result).toMatchObject({ ok: true, sure: true, amp: 0 });
+      expect(r.state.mats!.prot).toBe(5);
+    });
+
+    it("예전 저장값: 천장 카운터 없는 상점 장비 코드는 0, 옛 실패 수(최대 50)가 새 천장 이상이면 바로 성공", () => {
+      // 연속 실패 기록(enhF)이 없던 예전 상점 장비 강화 → 0
+      const mig = normalize({ level: 50, inv: { c_bonus: 1 }, enh: { c_bonus: 3 }, equip: { ...empty, acc1: "c_bonus+3" } });
+      expect(shopPieceOf(mig.si![0])).toMatchObject({ e: 3, f: 0 });
+      expect(pityLeft(4, shopPieceOf(mig.si![0])!.f)).toBe(pityOf(4));
+      // +13 천장 36 ≤ 50 → 바로 성공, +15 천장 84 > 50 → 34번 남음
+      const old = withSg(item({ e: 12, f: 50 }), { mats: { doc: 99, seal: 9, prot: 0 } });
+      expect(enhance(old, sgT(1), false, fixed(0.999999)).result).toMatchObject({ ok: true, to: 13, sure: true });
+      const old15 = withSg(item({ e: 14, f: 50 }), { mats: { doc: 99, seal: 9, prot: 0 } });
+      expect(enhance(old15, sgT(1), false, fixed(0.999999)).result).toMatchObject({ ok: false, to: 14, fails: 51, pityLeft: 33 });
+    });
   });
 
   it("처음 +15: 칭호 기록·장비마다 한 번 확성기", () => {
@@ -553,38 +663,56 @@ describe("강화 (고정 난수)", () => {
     expect(unenhanced({ weapon: encodeSg(item({ e: 9 })), armor: "a_hazmat+5@b.0" })).toEqual({ weapon: encodeSg(item({ e: 0 })), armor: "a_hazmat" });
   });
 
-  it("모의: +10까지 평균 시도 수가 표·규칙으로 계산한 기댓값과 같다 (11/19 약 140번)", () => {
-    // 기댓값: 상태 (강화 e, 연속 실패 f)에서 +10까지 남은 시도 수를 표(ENHANCE_TABLE)·실패 보너스·하락 규칙으로 되풀이 계산
-    const GOAL = 10;
-    const F = 50;
-    let E = Array.from({ length: GOAL + 1 }, () => new Array<number>(F + 1).fill(0));
-    for (let it = 0; it < 4000; it++) {
-      const next = E.map((row) => row.slice());
-      for (let e = 0; e < GOAL; e++)
-        for (let f = 0; f <= F; f++) {
-          const p = enhanceRate(e + 1, f);
-          const down = dropsOnFail(e) ? e - 1 : e;
-          next[e][f] = 1 + p * E[e + 1][0] + (1 - p) * E[down][Math.min(F, f + 1)];
-        }
-      E = next;
-    }
-    const expectTries = E[0][0];
-    expect(expectTries).toBeGreaterThan(100);
-    expect(expectTries).toBeLessThan(200);
-    const r = seeded(5);
-    let tries = 0;
-    const N = 1000;
-    for (let n = 0; n < N; n++) {
-      let s = withSg(item({ e: 0 }));
-      while (decodeSg(s.sg![0])!.e < GOAL) {
-        s = enhance(s, sgT(1), false, r).state;
-        s.mats = { doc: 9999, seal: 999, prot: 0 };
-        tries++;
+  it("모의(11/20): 단계마다 증폭 없음·있음 실측 성공률이 표(기본·2배·상한)와 ±1%p 안, 천장이 평균 시도 수를 줄인다", () => {
+    const r = seeded(20261120);
+    const N = 40_000;
+    const lines: string[] = [];
+    for (let t = 2; t <= SG_ENH_MAX; t++) {
+      // 천장이 끼지 않게 연속 실패 0에서 한 번씩만 굴린다 (서버 판정 함수 enhance 그대로)
+      const s0 = withSg(item({ e: t - 1 }), { mats: { doc: 99_999, seal: 9_999, prot: 99_999 } });
+      let a = 0;
+      let b = 0;
+      for (let i = 0; i < N; i++) {
+        if (enhance(s0, sgT(1), false, r).result.ok) a++;
+        if (ampNeed(t) && enhance(s0, sgT(1), true, r).result.ok) b++;
       }
+      expect(Math.abs(a / N - enhanceRate(t))).toBeLessThan(0.01);
+      if (ampNeed(t)) expect(Math.abs(b / N - enhanceRate(t, true))).toBeLessThan(0.01);
+      lines.push(`+${t} 기본 ${(enhanceRate(t) * 100).toFixed(0)}% 실측 ${((a / N) * 100).toFixed(2)}%` + (ampNeed(t) ? ` | 증폭 ${(enhanceRate(t, true) * 100).toFixed(0)}% 실측 ${((b / N) * 100).toFixed(2)}%` : ""));
     }
-    expect(tries / N).toBeGreaterThan(expectTries * 0.88);
-    expect(tries / N).toBeLessThan(expectTries * 1.12);
-  }, 30_000);
+    // 천장: 같은 단계에서 성공까지 시도 수 — 실제 판정 평균이 계산값 Σ(1-p)^k (k=0..천장)과 맞고, 천장 없는 1/p보다 작다
+    const tries: string[] = [];
+    for (const t of [6, 10, 13, 15]) {
+      const M = 10_000;
+      const p = enhanceRate(t);
+      const expectWith = (1 - (1 - p) ** (pityOf(t) + 1)) / p;
+      let withPity = 0;
+      let worst = 0;
+      let hit = 0;
+      for (let i = 0; i < M; i++) {
+        let s = withSg(item({ e: t - 1 }), { mats: { doc: 99_999, seal: 9_999, prot: 0 } });
+        let n = 0;
+        let sure = false;
+        while (decodeSg(s.sg![0])!.e < t) {
+          const o = enhance(s, sgT(1), false, r);
+          s = o.state;
+          sure = o.result.sure;
+          n++;
+        }
+        withPity += n;
+        worst = Math.max(worst, n);
+        if (sure) hit++;
+      }
+      expect(worst).toBeLessThanOrEqual(pityOf(t) + 1);
+      expect(Math.abs(withPity / M - expectWith) / expectWith).toBeLessThan(0.04);
+      expect(expectWith).toBeLessThan(1 / p);
+      tries.push(
+        `+${t} 천장 ${pityOf(t)}: 평균 ${(withPity / M).toFixed(2)}번 (계산 ${expectWith.toFixed(2)}, 천장 없으면 ${(1 / p).toFixed(2)}번), 천장에서 성공 ${((hit / M) * 100).toFixed(2)}% (계산 ${((1 - p) ** pityOf(t) * 100).toFixed(2)}%), 가장 많이 ${worst}번`,
+      );
+    }
+    // ENH_REPORT=파일 경로를 주면 실측 표를 남긴다 (보고용)
+    if (process.env.ENH_REPORT) writeFileSync(process.env.ENH_REPORT, [...lines, ...tries].join("\n"));
+  }, 120_000);
 });
 
 describe("옵션 굴리기·바꾸기·분해", () => {

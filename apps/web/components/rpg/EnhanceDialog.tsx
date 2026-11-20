@@ -4,11 +4,14 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { gearById, type GearDef } from "@/lib/rpg/catalog";
 import { rpgApi } from "@/lib/rpg/client";
 import {
-  dropsOnFail,
+  ampNeed,
+  enhanceChance,
   enhanceNeed,
   enhanceRate,
-  ENH_FAIL_BONUS,
+  ENH_AMP_MUL,
   inheritPlan,
+  pityLeft,
+  pityOf,
   REROLL_DOCS,
   REROLL_LOCK_SEALS,
   REROLL_MAX,
@@ -22,6 +25,7 @@ import {
   encodeSg,
   encodeShopPiece,
   enhSplit,
+  MAT_INFO,
   optText,
   SG_LEGENDS,
   sgDef,
@@ -47,12 +51,13 @@ import e from "./enhance.module.css";
 import g from "./gearPanel.module.css";
 
 // 11/15 강화 창: 책상 위 장비에 큰 결재 도장이 기다렸다가 쾅 — 「승인」(성공)·「반려」(실패). 높은 강화일수록 오래 숨죽인다.
+// 11/20 실패해도 단계는 그대로(하락 없음) · 강화 증폭권 체크(성공 확률 2배) · 천장(같은 단계 연속 실패 끝에 반드시 성공) 진행도.
 // 기다리는 중에 한 번 더 누르면 바로 결과로. 옵션 굴리기(세트 장비만)도 같은 창의 다른 칸.
 
 export type EnhanceTab = "enhance" | "reroll" | "inherit";
 
 type Phase = "idle" | "charge" | "show";
-type Shown = { r: EnhanceResult; kind: "ok" | "fail" | "drop" | "saved" };
+type Shown = { r: EnhanceResult; kind: "ok" | "fail" };
 
 /** 목표 강화별 기다림 (ms): +10까지 0.6초 · +11~12 1초 · +13~15 1.6초 */
 export const chargeMs = (target: number) => (target >= 13 ? 1600 : target >= 11 ? 1000 : 600);
@@ -153,7 +158,7 @@ export default function EnhanceDialog({
   const [phase, setPhase] = useState<Phase>("idle");
   const [shown, setShown] = useState<Shown | null>(null);
   const [fx, setFx] = useState(0);
-  const [protect, setProtect] = useState(false);
+  const [amp, setAmp] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [lock, setLock] = useState<SgOpt | "L" | null>(null);
   const [rolled, setRolled] = useState<{
@@ -175,9 +180,15 @@ export default function EnhanceDialog({
   const { def, e: lv, f, it, color, code, next } = info;
   const m = { doc: 0, seal: 0, prot: 0, ...view.character.mats };
   const need = enhanceNeed(target, lv);
-  const rate = need ? enhanceRate(need.target, f) : 0;
-  const risky = dropsOnFail(lv);
-  const useProt = risky && protect && m.prot > 0;
+  // 11/20 증폭권 장수·천장은 서버와 같은 표에서 (서버가 다시 계산하고, 요청에는 쓸지 말지만 보낸다)
+  const ampN = need ? ampNeed(need.target) : 0;
+  const left = need ? pityLeft(need.target, f) : 0;
+  const sure = !!need && left === 0;
+  const canAmp = ampN > 0 && !sure && m.prot >= ampN;
+  const useAmp = amp && canAmp;
+  const rate = need ? enhanceChance(need.target, f, useAmp).rate : 0;
+  const baseRate = need ? enhanceRate(need.target) : 0;
+  const pity = need ? pityOf(need.target) : 0;
   const short = need ? [view.points < need.cost && "포인트", m.doc < need.doc && "결재 서류", m.seal < need.seal && "인감 도장"].filter(Boolean) : [];
 
   async function enhance() {
@@ -197,7 +208,7 @@ export default function EnhanceDialog({
     const req = rpgApi.gear({
       type: "enhance",
       ...("sg" in target ? { sg: target.sg } : "piece" in target ? { piece: target.piece } : { shop: target.shop }),
-      protect: useProt,
+      amp: useAmp,
       cost: need.cost,
     });
     try {
@@ -208,12 +219,12 @@ export default function EnhanceDialog({
       onView(res);
       if (!r) throw new Error("강화 결과를 받지 못했어요.");
       if (r.piece !== undefined && !("piece" in target)) setTarget({ piece: r.piece });
-      const kind: Shown["kind"] = r.ok ? "ok" : r.saved ? "saved" : r.dropped ? "drop" : "fail";
+      const kind: Shown["kind"] = r.ok ? "ok" : "fail";
       setShown({ r, kind });
       setFx((x) => x + 1);
       setPhase("show");
       playEnhance("slam", r.to);
-      setTimeout(() => playEnhance(kind === "ok" ? "success" : kind === "saved" ? "shield" : kind === "drop" ? "drop" : "fail", r.ok ? r.to : r.from + 1), 230);
+      setTimeout(() => playEnhance(kind === "ok" ? "success" : "fail", r.ok ? r.to : r.from + 1), 230);
     } catch (x) {
       if (!alive.current) return;
       setErr(errorMessage(x));
@@ -297,10 +308,11 @@ export default function EnhanceDialog({
 
   const resultLine = (s: Shown) => {
     const r = s.r;
-    if (s.kind === "ok") return `성공! +${r.from} → +${r.to}`;
-    if (s.kind === "saved") return `보호 문서가 막아 줬어요. +${r.to} 그대로예요.`;
-    if (s.kind === "drop") return `실패해서 한 단계 내려갔어요. 다음엔 성공 확률이 ${Math.round(ENH_FAIL_BONUS * 100)}%p 올라요.`;
-    return `실패했어요. 다음엔 성공 확률이 ${Math.round(ENH_FAIL_BONUS * 100)}%p 올라요.`;
+    const used = r.amp ? ` 증폭권 ${r.amp}장을 썼어요.` : "";
+    if (s.kind === "ok") return `${r.sure ? "반드시 성공!" : "성공!"} +${r.from} → +${r.to}${used}`;
+    // 11/20 실패해도 단계는 그대로 (옛 서버 응답에는 pityLeft가 없다)
+    const rest = r.pityLeft === undefined ? "" : r.pityLeft === 0 ? " 다음 강화는 반드시 성공해요." : ` 반드시 성공까지 ${r.pityLeft}번 남았어요.`;
+    return `실패했어요. +${r.to} 그대로예요.${used}${rest}`;
   };
 
   const rrCost = it ? rerollCost(it.rr) : 0;
@@ -334,6 +346,7 @@ export default function EnhanceDialog({
               data-phase={phase}
               data-hi={need && need.target >= 11 ? "" : undefined}
               data-result={phase === "show" && shown ? shown.kind : undefined}
+              data-amp={(phase === "charge" && useAmp) || undefined}
               style={
                 {
                   "--grade": color,
@@ -370,7 +383,7 @@ export default function EnhanceDialog({
                     {shown.kind === "ok" ? "승인" : "반려"}
                   </span>
                   <span className={e.big} data-bad={shown.kind !== "ok" || undefined}>
-                    {shown.kind === "ok" ? `+${shown.r.to} 성공!` : shown.kind === "saved" ? "막았어요" : shown.kind === "drop" ? `+${shown.r.to}` : "실패"}
+                    {shown.kind === "ok" ? `+${shown.r.to} 성공!` : "실패"}
                   </span>
                 </>
               )}
@@ -383,14 +396,9 @@ export default function EnhanceDialog({
               <p
                 className={g.result}
                 data-ok={shown.kind === "ok" || undefined}
-                data-bad={shown.kind === "drop" || shown.kind === "fail" || undefined}
+                data-bad={shown.kind === "fail" || undefined}
                 role="status"
               >
-                {shown.kind === "drop" ? (
-                  <span className={e.tick}>
-                    <s>+{shown.r.from}</s> → +{shown.r.to}
-                  </span>
-                ) : null}{" "}
                 {resultLine(shown)}
               </p>
             )}
@@ -419,16 +427,19 @@ export default function EnhanceDialog({
                     +{lv} <span>→</span> +{need.target}
                   </p>
                   <p className={g.rate}>
-                    성공 확률 {Math.round(rate * 100)}%
-                    {f > 0 && (
-                      <span className={g.note}>
-                        {" "}
-                        (연속 {f}번 실패해서 +{Math.round(f * ENH_FAIL_BONUS * 100)}%p)
-                      </span>
-                    )}{" "}
+                    성공 확률 {rate !== baseRate && <s className={g.note}>{Math.round(baseRate * 100)}%</s>} {Math.round(rate * 100)}%{" "}
                     <OddsLink section="enhance" label="확률표" />
                   </p>
                 </div>
+                {/* 11/20 천장 진행도: 같은 단계에서 연속 실패가 차면 다음은 반드시 성공 */}
+                {pity > 0 && (
+                  <div className={e.pity} data-sure={sure || undefined}>
+                    <span className={e.pityBar} aria-hidden="true">
+                      <i style={{ width: `${Math.round((Math.min(f, pity) / pity) * 100)}%` }} />
+                    </span>
+                    <span>{sure ? "이번 강화는 반드시 성공해요." : f > 0 ? `반드시 성공까지 ${left}번 남았어요.` : `${pity}번 연속 실패하면 다음은 반드시 성공해요.`}</span>
+                  </div>
+                )}
                 <div className={g.costs}>
                   <span data-short={view.points < need.cost || undefined}>
                     {pts(need.cost)} <small className={g.note}>/ {pts(view.points)}</small>
@@ -460,18 +471,25 @@ export default function EnhanceDialog({
                     })}
                   </ul>
                 )}
-                {risky && <p className={g.note}>실패하면 한 단계 내려가요.</p>}
-                {risky && (
-                  <label className={g.toggle}>
-                    <input
-                      type="checkbox"
-                      checked={protect && m.prot > 0}
-                      disabled={m.prot < 1 || phase === "charge"}
-                      onChange={(x) => setProtect(x.target.checked)}
-                    />
-                    보호 문서 쓰기 <span className={g.note}>({m.prot}장 있어요)</span>
+                {/* 11/20 강화 증폭권: 목표 단계마다 정해진 장수, 성공 확률 2배 (최대 100%). 모자라거나 반드시 성공이면 못 고른다 */}
+                {ampN > 0 && (
+                  <label className={cx(g.toggle, e.amp)} data-on={useAmp || undefined}>
+                    <input type="checkbox" checked={useAmp} disabled={!canAmp || phase === "charge"} onChange={(x) => setAmp(x.target.checked)} />
+                    <RpgIcon art={MAT_INFO.m_prot.art} size={16} />
+                    <span>
+                      증폭권 {ampN}장 쓰기 <span className={g.note}>({m.prot}장 있어요)</span>
+                      <br />
+                      <small className={g.note}>
+                        {sure
+                          ? "반드시 성공이라 안 써도 돼요."
+                          : m.prot < ampN
+                            ? `${ampN - m.prot}장 모자라요.`
+                            : `성공 확률이 ${ENH_AMP_MUL}배, ${Math.round(enhanceRate(need.target, true) * 100)}%가 돼요.`}
+                      </small>
+                    </span>
                   </label>
                 )}
+                <p className={g.note}>실패해도 단계는 그대로예요.</p>
                 {short.length > 0 && <p className={g.note}>{josa(short.join(", "), "이", "가")} 모자라요.</p>}
                 <button
                   type="button"

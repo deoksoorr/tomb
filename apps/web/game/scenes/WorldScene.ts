@@ -72,6 +72,9 @@ import { TowerView } from "../tower/TowerView";
 import { Foraging } from "../world/forage/Foraging";
 import { Riding } from "../world/zoo/Riding";
 import { ZOO_ARCH_AT, ZooView } from "../world/zoo/ZooView";
+import { SeasonStallView } from "../world/SeasonStallView";
+import { MungnyangView } from "../world/MungnyangView";
+import { OfficeStallView } from "../world/OfficeStallView";
 import { Expressions } from "../world/Expressions";
 import { MeScreen } from "../world/MeScreen";
 import type { GameContext } from "./context";
@@ -152,6 +155,12 @@ export class WorldScene extends Phaser.Scene {
   private forage!: Foraging;
   /** 동물원: 울타리·우리·동물·사육사 (world/zoo) */
   private zoo!: ZooView;
+  /** 11/19 광장 계절 보따리상: 노점·보따리상·이름표·밤 불빛 (world/SeasonStallView) */
+  private season!: SeasonStallView;
+  /** 11/19 동물원 정문 왼쪽 「분양사 보리」: 분양사·발치 펫·방석·간식 상자·이름표·밤 등불 (world/MungnyangView) */
+  private mungnyang!: MungnyangView;
+  /** 11/20 야근 빌딩 오른쪽 「총무팀 문대리」: 사무실 가구 카트·문대리·이름표·밤 불빛 (world/OfficeStallView) */
+  private office!: OfficeStallView;
   /** 동물원 타는 펫 올라타기·내리기 (world/zoo/Riding) */
   private riding!: Riding;
   /** 11/18 눈싸움 (겨울·크리스마스 판 바깥 — world/SnowFight) */
@@ -443,6 +452,9 @@ export class WorldScene extends Phaser.Scene {
       serverNow: () => this.net.serverNow(),
       seed: () => this.net.channel ?? (typeof opts.channel === "number" ? opts.channel : 1),
     });
+    this.season = new SeasonStallView({ scene: this, atlas: this.atlas, reduced: this.reduced, colliders: this.map.colliders });
+    this.mungnyang = new MungnyangView({ scene: this, atlas: this.atlas, reduced: this.reduced, colliders: this.map.colliders });
+    this.office = new OfficeStallView({ scene: this, atlas: this.atlas, reduced: this.reduced, colliders: this.map.colliders });
     this.riding = new Riding({ player: () => this.player, net: () => this.net, remotes: () => this.remotes, toast: (m) => this.toast(m) });
     this.fight = new SnowFight({
       scene: this,
@@ -510,7 +522,7 @@ export class WorldScene extends Phaser.Scene {
   private npcsForSnow(): readonly SnowNpc[] {
     const life = this.life.snowNpcs();
     if (this.snowNpcs?.life === life) return this.snowNpcs.all;
-    this.snowNpcs = { life, all: [...life, ...this.zoo.snowNpcs()] };
+    this.snowNpcs = { life, all: [...life, ...this.zoo.snowNpcs(), ...this.season.snowNpcs(), ...this.mungnyang.snowNpcs(), ...this.office.snowNpcs()] };
     return this.snowNpcs.all;
   }
 
@@ -691,6 +703,8 @@ export class WorldScene extends Phaser.Scene {
     for (const r of this.remotes.values()) byName.set(r.name, r.view.wearing);
     if (this.player) byName.set(this.player.view.label.text, this.player.view.wearing);
     return lines.map((l) => {
+      // 11/20 서버가 실은 꾸미기(쓸 때 착용)가 있으면 그대로, 없으면(옛 줄) 지금 화면에 있는 사람의 착용에서
+      if (l.ns) return l;
       const ns = l.staff ? undefined : nameStyleIds(byName.get(l.name));
       return ns ? { ...l, ns } : l;
     });
@@ -1005,6 +1019,17 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("camera:recenter", () => !this.trip.away && this.rig.recenter()));
     on.push(bridge.on("camera:zoom", ({ delta }) => !this.trip.away && this.rig.zoomBy(delta)));
     on.push(bridge.on("net:reconnect", () => this.net.reconnect()));
+    // 11/20 닉네임을 바꾸면 바로: 내 이름표를 바꾸고, 새 이름이 실린 입장 토큰으로 다시 접속 (같은 채널 유예 안이라 자리는 그대로)
+    on.push(
+      bridge.on("me:renamed", ({ name }) => {
+        if (name === this.ctx.opts.name) return;
+        // 시작 옵션은 화면 쪽에서 얼린 객체라 새로 만들어 바꾼다 (같은 ctx를 쓰는 곳 모두 새 이름을 본다)
+        this.ctx.opts = { ...this.ctx.opts, name };
+        this.player.view.setName(name);
+        this.net.setName(name);
+        this.net.reconnect();
+      }),
+    );
     on.push(bridge.on("look:set", (e) => this.applyLook(e.look, e.lookGrant, e)));
     this.festUntil = bridge.last("urgent:fest")?.until ?? 0;
     on.push(bridge.on("urgent:fest", ({ until }) => (this.festUntil = until)));
@@ -1136,7 +1161,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** 11/16 입구까지 걷기 (null = 그만). 마을 밖(캠핑장·바닷가·버스)·실내에서는 걷지 않는다. 11/19 shop = 잡화점 문 (이미 안이면 상점 창만) */
-  private walkToPortal(kind: "hunt" | "shop" | null): void {
+  private walkToPortal(kind: "hunt" | "shop" | "housing" | null): void {
     if (this.cleaned) return;
     if (!kind) {
       if (this.walker.portal) this.walker.cancel();
@@ -2100,6 +2125,12 @@ export class WorldScene extends Phaser.Scene {
     publishRide(pl, this.riding.on);
     this.zoo.update(now, view);
     this.zoo.scaleLabels(s);
+    this.season.update(now);
+    this.season.scaleLabels(s);
+    this.mungnyang.update(now);
+    this.mungnyang.scaleLabels(s);
+    this.office.update(now);
+    this.office.scaleLabels(s);
 
     for (const r of this.remotes.values()) {
       r.update(pnow, view, s);
@@ -2173,6 +2204,9 @@ export class WorldScene extends Phaser.Scene {
       this.life.addLights(lit);
       this.forage.addLights(lit);
       this.sky.addLights(lit);
+      this.season.addLights(lit);
+      this.mungnyang.addLights(lit);
+      this.office.addLights(lit);
     }
     lit.end();
   }
@@ -2486,6 +2520,9 @@ export class WorldScene extends Phaser.Scene {
     this.fight?.destroy();
     this.fight = null;
     this.zoo?.destroy();
+    this.season?.destroy();
+    this.mungnyang?.destroy();
+    this.office?.destroy();
     this.trip?.destroy();
     for (const u of this.unsubs) u();
     this.unsubs.length = 0;

@@ -1,4 +1,4 @@
-import { PERMANENT_UNTIL, petDef } from "@tomb/protocol";
+import { PERMANENT_UNTIL, petDef, zooShopPrice } from "@tomb/protocol";
 import { env } from "../env";
 import { HttpError } from "../http";
 import { recordLook } from "../lookRank";
@@ -16,9 +16,19 @@ import type { WearResponse } from "../types";
 export async function buyPet(accountId: string, petId: string, now = Date.now()): Promise<WearResponse> {
   const def = petDef(petId);
   if (!def) throw new HttpError(400, "INVALID_INPUT", "동물원에 없는 펫이에요.");
+  // 11/20 퇴근 강아지·사무실 고양이·듬직한 큰 개는 분양사 보리만 판다 (protocol BORI_ONLY_PETS — 값 정보는 그대로)
+  if (zooShopPrice(petId) === null) throw new HttpError(400, "NOT_SOLD", "강아지·고양이는 동물원 정문 옆 분양사 보리가 분양해요.");
+  return adoptPet(accountId, petId, def.price, { tag: "동물원", where: "사육사 창" }, now);
+}
+
+/**
+ * 11/19 영구 분양 한 번 (동물원 사육사·분양사 보리가 같이 쓴다 — 값은 부르는 쪽이 정한다).
+ * tag = 포인트 기록 이름, where = 「이미 가족」 안내에 넣을 창 이름
+ */
+export async function adoptPet(accountId: string, petId: string, price: number, from: { tag: string; where: string }, now = Date.now()): Promise<WearResponse> {
   const accounts = getAccounts();
-  const r = await getStyleStore(accounts).buyPermanent(accountId, petId, "pet", def.price, PERMANENT_UNTIL, `shop:동물원 ${petId}`, now);
-  if (r === "owned") throw new HttpError(409, "ALREADY_OWNED", "이미 가족이 된 펫이에요. 가방이나 사육사 창에서 데리고 다닐 수 있어요.");
+  const r = await getStyleStore(accounts).buyPermanent(accountId, petId, "pet", price, PERMANENT_UNTIL, `shop:${from.tag} ${petId}`, now);
+  if (r === "owned") throw new HttpError(409, "ALREADY_OWNED", `이미 가족이 된 펫이에요. 가방이나 ${from.where}에서 데리고 다닐 수 있어요.`);
   if (r === "ticket") throw new HttpError(409, "HAS_TICKET", "가방에 같은 펫 이용권이 있어요. 가방에서 먼저 데리고 나온 다음 영구 분양을 받아 주세요.");
   if (r === "insufficient") throw new HttpError(409, "NOT_ENOUGH_POINTS", "포인트가 모자라요.");
   // 집(벗어 둔 꾸미기)에 들어간 새 펫을 바로 데리고 나온다. 입고 있던 기간제가 영구로 바뀐 경우엔 이미 데리고 있다 (false여도 괜찮다)

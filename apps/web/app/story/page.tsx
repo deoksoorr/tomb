@@ -9,7 +9,7 @@ import { ARCH_SVG, STORY, STORY_SECURITY, STORY_START } from "@/lib/devNotes/sto
 export const viewport = SITE_VIEWPORT;
 export const metadata = siteMetadata({
   title: "만든 이야기",
-  description: "게임을 처음 만들어 보는 한 사람이 At one time...을 어떻게 만들었는지 적었어요. 구조, 만든 방식, 겪은 문제와 고친 방법.",
+  description: "게임을 처음 만들어 보는 개인 개발자가 At one time...을 어떻게 만들었는지 적은 글이에요. 서버 구조와 만든 방식, 보안을 챙기는 방법, 그동안 겪은 문제와 고친 과정을 담았어요.",
   path: "/story",
 });
 

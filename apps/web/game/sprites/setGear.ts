@@ -1,4 +1,4 @@
-import { avatarFrameGrid, AV_H, AV_W } from "./avatar";
+import { avatarFrameGrid, AV_H, AV_W } from "./avatarCore";
 import { darken, Grid, lighten, mix, type Color } from "./pixel";
 
 // 초월(레벨 50+) 세트 장비 그림 — 디자인 미리보기 단계 (아직 카탈로그·상점·드롭에 연결하지 않았다).

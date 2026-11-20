@@ -108,7 +108,17 @@ export const ShopActionSchema = z.discriminatedUnion("type", [
 const sgUidIn = z.number().int().min(1).max(1e9);
 export const GearActionSchema = z.discriminatedUnion("type", [
   // 강화: sg(세트 장비 번호) 또는 shop(상점 장비 id) 하나. cost = 화면에 보인 포인트 (서버 비용과 다르면 거절, 돈을 받지 않는다)
-  z.object({ type: z.literal("enhance"), sg: sgUidIn.optional(), shop: itemId.optional(), piece: sgUidIn.optional(), protect: z.boolean().default(false), cost: z.number().int().min(0).max(100_000) }),
+  // 11/20 amp = 강화 증폭권 쓰기 (장수·확률은 서버 표에서만). 옛 화면이 보내는 protect(보호 문서)는 받기만 하고 쓰지 않는다 — 증폭권이 빠지지 않는다.
+  // 그 밖의 숫자(확률·장수 등)를 보내도 zod가 버린다
+  z.object({
+    type: z.literal("enhance"),
+    sg: sgUidIn.optional(),
+    shop: itemId.optional(),
+    piece: sgUidIn.optional(),
+    amp: z.boolean().default(false),
+    protect: z.boolean().optional(),
+    cost: z.number().int().min(0).max(100_000),
+  }),
   // 옵션 다시 굴리기: lock = 그대로 둘 옵션 하나 (전설 옵션은 "L")
   z.object({ type: z.literal("reroll"), uid: sgUidIn, lock: z.enum(["a", "c", "d", "s", "b", "h", "r", "p", "m", "k", "L"]).nullable().default(null), cost: z.number().int().min(0).max(100_000) }),
   z.object({ type: z.literal("exchange"), uids: z.array(sgUidIn).min(3).max(5), set: z.number().int().min(0).max(3), piece: z.number().int().min(0).max(4) }),

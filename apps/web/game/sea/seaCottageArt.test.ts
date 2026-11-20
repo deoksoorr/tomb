@@ -46,4 +46,17 @@ describe("포구 오두막 그림", () => {
     for (let y = gy - 3; y <= gy + 3; y++) for (let x = 0; x < 10; x++) near ||= b.grid.filled(x, y);
     expect(near).toBe(true);
   });
+
+  it("11/20 top = 가장 위에 칠한 줄 (굴뚝·망루 포함 — 문패가 그 위에 서요)", () => {
+    for (const s of COTTAGE_STYLES)
+      for (const t of PLOT_TIERS) {
+        const l = SEA_LOTS[0];
+        const b = cottageGrid({ style: s.id, tier: t.id, deck: false, night: false, lot: l });
+        let row = false;
+        for (let x = 0; x < b.grid.w; x++) row ||= b.grid.filled(x, b.top);
+        expect(row).toBe(true);
+        for (let y = 0; y < b.top; y++) for (let x = 0; x < b.grid.w; x++) expect(b.grid.filled(x, y)).toBe(false);
+        expect(b.top).toBeLessThanOrEqual(COTTAGE_RISE + cottageBox(t.id, l).y + 2); // 지붕 꼭대기보다 위 (또는 같음)
+      }
+  });
 });

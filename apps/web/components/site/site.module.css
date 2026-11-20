@@ -28,7 +28,10 @@
 
 .root{margin:0;background:var(--bg);color:var(--text);font-family:"PretendardSite","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;font-size:16px;line-height:1.75;word-break:keep-all;overflow-wrap:anywhere;-webkit-font-smoothing:antialiased;min-height:100dvh;overflow-x:clip;-webkit-text-size-adjust:100%}
 /* 사이트 화면에서는 게임용으로 막아 둔 문서 스크롤을 푼다 */
-:global(html):has(.root),:global(body):has(.root){height:auto;overflow:auto;overscroll-behavior:auto}
+/* 11/20 목차 고정: html·body 둘 다 overflow:auto면 body가 스크롤 상자가 되어(스크롤은 안 함) position:sticky가 body에 붙어 움직이지 않았다 → 스크롤은 html만 */
+:global(html):has(.root),:global(body):has(.root){height:auto;overscroll-behavior:auto}
+:global(html):has(.root){overflow:auto}
+:global(body):has(.root){overflow:visible}
 :global(html):has(.root){scroll-padding-top:88px}
 :where(.root) img{display:block;max-width:100%;height:auto}
 :where(.root) a{color:inherit;text-decoration:none}
@@ -71,8 +74,10 @@
 .nav a[aria-current="page"]{color:var(--ink)}
 .nav a[aria-current="page"]::after{content:"";position:absolute;left:0;right:0;bottom:-3px;height:3px;background:var(--candle)}
 .right{display:flex;align-items:center;gap:12px}
-.mode{font-size:13px;font-weight:600;color:var(--muted);padding:6px 2px;border-bottom:1px solid transparent}
-.mode:hover{color:var(--ink);border-bottom-color:var(--ink)}
+/* 11/20 어둡게 보기: 도트 달·해 그림 단추 */
+.mode{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid var(--line);color:var(--muted)}
+.mode:hover{color:var(--ink);border-color:var(--ink)}
+.mode:focus-visible{outline:2px solid var(--candle);outline-offset:2px}
 .menuBtn{display:none}
 .mnav{display:none}
 .main{padding-top:72px;min-height:70vh}
@@ -95,7 +100,7 @@
 .feature .ex{margin:14px 0 0;color:var(--text);display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
 .feature .read{margin-top:20px;align-self:flex-start}
 .ctl{margin-top:auto;padding-top:28px;display:flex;align-items:center;gap:10px}
-.ctl .count{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:52px;text-align:center}
+.ctl .count{margin:0;line-height:1;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:52px;text-align:center}
 .pips{display:flex;gap:6px;margin-left:8px}
 .pip{width:8px;height:8px;background:var(--line);border-radius:0}
 .pip[aria-selected="true"]{background:var(--ink)}
@@ -107,17 +112,20 @@
 .listHead h2{margin:0;font-size:22px}
 .listHead span{font-size:13px;color:var(--faint)}
 .rows{border-top:1px solid var(--line-strong)}
-.row{display:grid;grid-template-columns:132px minmax(0,1fr) 160px;gap:28px;align-items:center;padding:24px 0;border-bottom:1px solid var(--line)}
-.row .d{font-weight:300;font-size:34px;line-height:1;color:var(--ink);font-variant-numeric:tabular-nums}
-.row .d small{display:block;margin-top:8px;font-size:13px;font-weight:400;color:var(--faint);letter-spacing:.02em}
+.row{display:grid;grid-template-columns:112px minmax(0,1fr) 120px;gap:24px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line)}
+.row .d{font-weight:300;font-size:28px;line-height:1;color:var(--ink);font-variant-numeric:tabular-nums}
+.row .d small{display:block;margin-top:6px;font-size:13px;font-weight:400;color:var(--faint);letter-spacing:.02em}
 .row h3{margin:0;font-size:18px;font-weight:600;line-height:1.45;color:var(--ink)}
-.row p{margin:6px 0 0;font-size:15px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.row p{margin:4px 0 0;font-size:15px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
 .row .th{aspect-ratio:4/3;overflow:hidden;background:var(--paper)}
 .row .th img{width:100%;height:100%;object-fit:cover}
 .row:hover h3{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}
-.row.pin{background:var(--paper);padding-left:16px;padding-right:16px;margin:0}
-.pinTag{display:inline-block;margin-right:8px;padding:1px 6px;background:var(--mark);color:var(--candle-ink);font-size:12px;font-weight:700;vertical-align:2px}
-.n{margin-left:6px;font-size:11px;font-weight:700;color:var(--candle-ink);vertical-align:2px}
+/* 11/20 고정 글: 글자만 한 줄로 얇게 */
+.pinRow{display:flex;justify-content:center;align-items:baseline;gap:10px;min-width:0;padding:11px 14px;background:var(--paper);border-bottom:1px solid var(--line);text-align:center}
+.pinTitle{min-width:0;font-size:15px;font-weight:600;color:var(--ink)}
+.pinTag{flex:none;padding:1px 6px;background:var(--mark);color:var(--candle-ink);font-size:12px;font-weight:700}
+.pinRow:hover .pinTitle{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}
+.n{margin-left:6px;font-size:11px;font-weight:700;color:var(--candle-ink);vertical-align:2px;white-space:nowrap}
 .pager{display:flex;justify-content:center;gap:6px;margin:36px 0 0}
 .pager .sq[aria-current="page"]{background:var(--ink);color:var(--bg)}
 
@@ -144,6 +152,42 @@
 .sec p{margin:0 0 16px;line-height:1.85}
 .outro{margin:52px 0 0;padding-top:28px;border-top:1px solid var(--line);line-height:1.85}
 .postFoot{margin-top:44px}
+/* 11/20 패치노트형 글 보기 */
+.pnHead{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;margin-top:20px;padding-bottom:22px;border-bottom:1px solid var(--line-strong)}
+.pnHead .postTitle{margin:0}
+.pnMeta{display:flex;align-items:center;gap:16px}
+.pnMeta time{font-size:15px;color:var(--muted);font-variant-numeric:tabular-nums}
+.pnHero{margin:28px 0 0;background:var(--paper)}
+.pnHero img{width:100%;aspect-ratio:21/9;object-fit:cover}
+.pnBox{margin:28px 0 0;padding:20px 24px;background:var(--paper);border-left:3px solid var(--candle)}
+.pnBox b{display:block;margin-bottom:10px;font-size:15px;color:var(--ink)}
+.pnBox ol,.pnBox ul{margin:0;padding-left:20px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 28px}
+.pnBox ul{grid-template-columns:1fr}
+.pnBox li{font-size:15px;line-height:1.6;color:var(--text)}
+.pnBox a:hover{text-decoration:underline;text-underline-offset:3px}
+.pnGrid{display:grid;grid-template-columns:220px minmax(0,1fr);gap:48px;margin-top:44px;align-items:start}
+.pnSolo{grid-template-columns:minmax(0,1fr)}
+.pnToc{position:sticky;top:88px;border-top:1px solid var(--line-strong);padding-top:14px}
+.pnToc span{display:block;margin-bottom:10px;font-size:13px;font-weight:700;color:var(--ink)}
+.pnToc ol{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.pnToc a{display:flex;gap:10px;padding:6px 0;font-size:14px;line-height:1.45;color:var(--muted)}
+.pnToc a:hover{color:var(--ink)}
+.pnToc em,.pnSec h2 em{font-style:normal;font-variant-numeric:tabular-nums;color:var(--candle-ink);font-weight:700}
+.pnSec{padding-bottom:36px;margin-bottom:36px;border-bottom:1px solid var(--line);scroll-margin-top:96px}
+.pnSec:last-of-type{border-bottom:0}
+.pnSec h2{display:flex;align-items:baseline;gap:12px;margin:0 0 16px;font-size:21px;font-weight:700;line-height:1.4;color:var(--ink)}
+.pnSec figure{margin:0 0 18px;background:var(--paper)}
+.pnSec figure img{width:100%;aspect-ratio:16/9;object-fit:cover}
+.pnSec p{margin:0 0 14px;line-height:1.85}
+/* 고정 글: 편지처럼 */
+.letter{margin:32px 0 0}
+.letterFig{margin:0;background:var(--paper)}
+.letterFig img{width:100%;aspect-ratio:21/9;object-fit:cover}
+.letterBody{margin-top:32px;font-size:17px}
+.letterBody p{margin:0 0 18px;line-height:1.95}
+.letterHead{margin:40px 0 14px;font-size:21px;font-weight:700;line-height:1.4;color:var(--ink)}
+.letterBody .letterFig{margin:8px 0 24px}
+.letterSign{margin-top:28px;text-align:right;font-weight:600;color:var(--ink)}
 .near{border-top:1px solid var(--line-strong)}
 .near a,.near div{display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:16px;align-items:center;padding:18px 0;border-bottom:1px solid var(--line)}
 .near span{font-size:13px;color:var(--muted)}
@@ -280,6 +324,27 @@
 .doc thead th{font-size:13px;font-weight:600;color:var(--muted)}
 .doc td:first-child{width:36%;color:var(--ink);font-weight:500}
 
+/* 11/20 PC 좌우 여백의 도트 친구들 (SideFriends.tsx). 본문 폭 1180px 바깥 여백이 친구 무리(최대 76px)+좌우 20px 이상일 때만 (1440px+).
+   본문(main) 안에서 머리글 아래 ~ 본문 끝까지, 페이지와 함께 스크롤. 넘치는 친구는 옆 칸으로 밀려 잘려 안 보인다 */
+.main{position:relative}
+.sf{display:none}
+@media (min-width:1440px){
+  .sf{display:flex;position:absolute;top:72px;bottom:24px;width:calc((100% - 1180px) / 2);flex-direction:column;flex-wrap:wrap;align-content:flex-start;overflow:hidden;pointer-events:none;z-index:0}
+  .sfL{left:0}
+  .sfR{right:0}
+}
+/* 무리는 본문 쪽으로 붙인다: 본문 상자에서 최대 56px (여백이 좁으면 여백 가운데) */
+.sf{--sfs:2}
+@media (min-width:1760px){.sf{--sfs:3}}
+.sfGroup{--pad:min(56px,calc((100% - var(--gw) * var(--sfs)) / 2));flex:none;box-sizing:border-box;width:100%;display:flex;justify-content:flex-end;align-items:flex-end;gap:calc(2px * var(--sfs))}
+.sfL .sfGroup{padding-right:var(--pad)}
+.sfR .sfGroup{flex-direction:row-reverse;padding-left:var(--pad)}
+.sfSp{display:block;flex:none;background-repeat:no-repeat;background-position:0 0;image-rendering:pixelated;animation-name:sfPlay;animation-iteration-count:infinite}
+.sfFlip{transform:scaleX(-1)}
+/* 어둡게 보기: 먹색 윤곽이 바탕에 묻히지 않게 뼈색 테두리를 아주 옅게 */
+:global(html[data-site-theme="dark"]) .sfSp{filter:drop-shadow(0 0 1px rgba(236,224,189,.32))}
+@keyframes sfPlay{from{background-position-x:0%}to{background-position-x:100%}}
+
 /* 푸터 */
 .strip{position:relative;height:40px;margin-top:48px;border-bottom:1px solid var(--line-strong);overflow:hidden}
 .strip .g{position:absolute;bottom:0;image-rendering:pixelated}
@@ -299,7 +364,7 @@
 .ftLinks a{font-weight:600;color:var(--text);border-bottom:1px solid transparent}
 .ftLinks a:hover{border-bottom-color:var(--text)}
 
-@media (max-width:1024px){ .nav{gap:24px} .guide,.legal{grid-template-columns:190px minmax(0,1fr);gap:40px} .feature{gap:32px} .row{grid-template-columns:110px minmax(0,1fr) 132px} }
+@media (max-width:1024px){ .nav{gap:24px} .guide,.legal{grid-template-columns:190px minmax(0,1fr);gap:40px} .feature{gap:32px} .row{grid-template-columns:96px minmax(0,1fr) 108px} }
 @media (max-width:760px){
   .wrap{padding:0 16px}
   .hd .wrap{height:60px;gap:12px}
@@ -310,7 +375,7 @@
   .walker{display:none}
   .nav{display:none}
   .right{margin-left:auto;gap:8px}
-  .mode{display:none}
+  .mode{width:36px;height:36px}
   .btn{height:34px;padding:0 10px;font-size:13px}
   .menuBtn{display:inline-flex}
   .mnav{display:block;position:fixed;top:60px;left:0;right:0;z-index:19;background:var(--bg);border-bottom:1px solid var(--line-strong);transform:translateY(-6px);opacity:0;pointer-events:none;transition:opacity .15s,transform .15s}
@@ -327,12 +392,19 @@
   .feature h2{font-size:21px;margin-top:12px}
   .ctl{padding-top:20px}
   .listHead{padding-top:32px}
-  .row{grid-template-columns:64px minmax(0,1fr) 88px;gap:14px;padding:18px 0}
-  .row .d{font-size:22px}
+  .row{grid-template-columns:56px minmax(0,1fr) 72px;gap:12px;padding:12px 0}
+  .row .d{font-size:20px}
   .row .d small{font-size:11px;margin-top:6px}
   .row h3{font-size:16px}
-  .row p{font-size:14px;-webkit-line-clamp:2}
-  .row.pin{margin:0;padding-left:12px;padding-right:12px}
+  .row p{font-size:13px;-webkit-line-clamp:1}
+  .pinRow{padding:10px 12px}
+  .pnHead{align-items:flex-start}
+  .pnBox{padding:16px 18px}
+  .pnBox ol{grid-template-columns:1fr}
+  .pnGrid{grid-template-columns:minmax(0,1fr);gap:0;margin-top:32px}
+  .pnToc{display:none}
+  .pnSec h2{font-size:18px}
+  .letterBody{font-size:16px}
   .post{padding:28px 16px 72px}
   .post .bigdate{margin-top:20px}
   .postTitle{font-size:25px}
@@ -341,7 +413,8 @@
   .sec h2{font-size:18px}
   .near a,.near div{grid-template-columns:64px minmax(0,1fr)}
   .near em{display:none}
-  .guide{grid-template-columns:1fr;gap:0;padding:0 0 72px}
+  /* 11/20 1fr는 최소 폭이 표 내용 폭이라 폰에서 칸이 화면보다 넓어져 오른쪽이 잘렸다 → minmax(0,1fr) */
+  .guide{grid-template-columns:minmax(0,1fr);gap:0;padding:0 0 72px}
   .gnav{display:none}
   .gsel{display:flex;position:sticky;top:52px;z-index:5;margin:0 -16px 24px;padding:0 16px;background:var(--bg);border-bottom:1px solid var(--line-strong);overflow-x:auto;scrollbar-width:none;gap:18px}
   .gsel::-webkit-scrollbar{display:none}

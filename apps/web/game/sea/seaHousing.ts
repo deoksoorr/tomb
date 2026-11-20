@@ -12,15 +12,18 @@ import type { GlyphAtlas } from "../text/GlyphAtlas";
 import type { Atmosphere } from "../world/Atmosphere";
 import { clampChars, DOOR_NAME_MAX } from "../text/fitLabel";
 import { PLATE_LOT_FREE, PLATE_LOT_HOUSE, SignPlate } from "../world/SignPlate";
+import { houseLotLabels, scaleLotLabel } from "../housing/worldLots";
 import { COTTAGE_RISE, cottageBox, cottageCanvas } from "./seaCottageArt";
 import { seaHousingHost } from "./seaHousingHost";
 import { lampApi, lampHourOf, SeaLamp } from "./seaLamp";
+import { lowPlateSpot, ROOF_PLATE_MIN_Y } from "./seaLotPlate";
 import { SEA_LIGHTHOUSE_LAMP } from "./seaLayout";
 import type { SeaMap } from "./SeaMap";
 import { SEA_TEX_PREFIX, type SeaInteractable } from "./seaTypes";
 
 // 11/16 달물결 포구 오두막(Task A)과 등대 등불(Task B)을 바닷가 장면에 붙여요. SeaScene은 만들기·매 프레임·E·act 소식만 넘겨요.
-//  - 오두막: 지금 채널의 포구 11터 (/api/housing/village?zone=sea — CDN 15초). 터에 오두막 그림·막는 상자·팻말(빈 터 「분양 중」, 오두막 이름)
+//  - 오두막: 지금 채널의 포구 11터 (/api/housing/village?zone=sea — CDN 15초). 터에 오두막 그림·막는 상자·팻말(빈 터 「분양 중」)
+//    11/20 오두막 문패는 마을 집 문패와 같게: 지붕 위 세 줄 (N번 터 · 이름 (내 집) / 주인 · 점수 / 「호칭」 — game/housing/worldLots houseLotLabels)
 //  - E: 빈 터·포구 부동산 → 포구 부동산 창, 오두막 터 → 그 오두막 안으로 (UI 하우징 창이 집 씬을 열어요 — game/housing/install이 바닷가 장면을 빌려요)
 //  - 등대: 등불 상태(seaLamp) · 밤에 등대에 오르면 그날 처음인지 서버에 물어 켜요
 
@@ -32,6 +35,7 @@ const LAMP_POLL_MS = 3 * 60_000;
 const DOOR_STAND = 10;
 /** 밤 그림으로 바꾸는 어둠 */
 const NIGHT_AT = 0.5;
+
 
 export type SeaHousingDeps = {
   scene: Phaser.Scene;
@@ -66,7 +70,12 @@ type Built = {
   door: { x: number; y: number };
   body: Phaser.GameObjects.Zone;
   house: VillageHouse;
+  /** 그림 맨 위 (월드 y — 굴뚝·망루 포함). 문패가 그 위에 서요 */
+  top: number;
 };
+
+/** 터 팻말: 빈 터·숨긴 오두막이면 땅에 꽂은 팻말(sign), 오두막이면 지붕 위 문패 세 줄(labels). key가 같으면 다시 만들지 않아요 */
+type LotPlate = { key: string; sign: SignPlate | null; labels: Phaser.GameObjects.BitmapText[] };
 
 export class SeaHousing {
   private houses = new Map<number, VillageHouse>();
@@ -76,7 +85,9 @@ export class SeaHousing {
   private taken = new Set<number>();
   private readonly host: typeof seaHousingHost.current;
   private built = new Map<number, Built>();
-  private plates = new Map<number, SignPlate>();
+  private plates = new Map<number, LotPlate>();
+  /** 내 오두막 id (문패 「(내 집)」 — 로그인 전·없으면 null) */
+  private myId: string | null = null;
   private ch: number | null = null;
   private fetchedAt = 0;
   private loading = false;
@@ -106,9 +117,21 @@ export class SeaHousing {
       standAtLot: (lot) => this.standAtLot(lot),
     };
     this.offs.push(
-      bridge.on("sea:cottages", () => void this.refresh(true)),
+      bridge.on("sea:cottages", ({ myHouseId }) => {
+        this.myId = myHouseId;
+        void this.refresh(true);
+      }),
       bridge.on("sea:lot", ({ lot }) => this.standAtLot(lot)),
     );
+    // 내 오두막 문패에 「(내 집)」 (마을 WorldHouses처럼 처음 한 번 묻는다. 분양·바꾸기 뒤에는 sea:cottages가 알려 줘요)
+    housingApi
+      .mine("sea")
+      .then((r) => {
+        if (this.destroyed || (r.house?.id ?? null) === this.myId) return;
+        this.myId = r.house?.id ?? null;
+        for (const l of SEA_LOTS) this.draw(l);
+      })
+      .catch(() => undefined);
   }
 
   // ── 오두막 ──
@@ -138,9 +161,10 @@ export class SeaHousing {
     const h = this.houses.get(l.n) ?? null;
     const cur = this.built.get(l.n);
     const key = h ? `${SEA_TEX_PREFIX}cottage-${h.style ?? "wood"}-${h.tier}-${l.n}-${this.night ? "n" : "d"}` : "";
-    if (cur && cur.key === key && cur.house.name === h?.name) return;
-    if (!cur && !h) {
-      this.setPlate(l, null, hiddenTaken);
+    if (cur && h && cur.key === key) {
+      // 그림은 그대로 · 이름·주인·점수(문패)와 들어가기 이름만 새로
+      cur.house = h;
+      this.setPlate(l, h, hiddenTaken, cur.top);
       return;
     }
     if (cur) {
@@ -149,8 +173,10 @@ export class SeaHousing {
       this.d.map.colliders.remove(cur.body, true, true);
       this.built.delete(l.n);
     }
-    this.setPlate(l, h, hiddenTaken);
-    if (!h) return;
+    if (!h) {
+      this.setPlate(l, null, hiddenTaken);
+      return;
+    }
     const s = this.d.scene;
     const art = cottageCanvas({ style: h.style ?? "wood", tier: h.tier, deck: l.deck, night: this.night, lot: { w: l.w, h: l.h, gate: l.gate } });
     if (!s.textures.exists(key)) s.textures.addCanvas(key, art.canvas);
@@ -175,21 +201,35 @@ export class SeaHousing {
     this.d.map.colliders.add(body);
     // 문 앞 (마을 집 문과 같은 자리 규칙: 문 밑변에서 4px 아래, 반지름 16)
     const door = { x: l.x + art.door.x, y: l.y - COTTAGE_RISE + art.door.y };
-    this.built.set(l.n, { key, img, glows, body, house: h, door });
+    const inkTop = l.y - COTTAGE_RISE + art.top;
+    this.built.set(l.n, { key, img, glows, body, house: h, door, top: inkTop });
+    this.setPlate(l, h, hiddenTaken, inkTop);
   }
 
-  /** 터 팻말: 빈 터 「N번 터 분양 중」, 오두막이면 그 이름 */
-  private setPlate(l: SeaLot, h: VillageHouse | null, hiddenTaken = false): void {
-    const text = h ? h.name : hiddenTaken ? `${l.n}번 오두막` : `${l.n}번 터 분양 중`;
-    const old = this.plates.get(l.n) as (SignPlate & { __t?: string }) | undefined;
-    if (old?.__t === text) return;
-    old?.destroy();
+  /**
+   * 터 팻말: 빈 터 「N번 터 분양 중」(출입구 옆 땅 팻말). 오두막이면 마을 집 문패와 같은 지붕 위 세 줄
+   * (N번 터 · 이름 (내 집) / 주인 · 점수 / 「호칭」 — 모양·줄 간격·줌 대응·글자 줄이기 모두 houseLotLabels). top = 오두막 그림 맨 위 (월드 y)
+   */
+  private setPlate(l: SeaLot, h: VillageHouse | null, hiddenTaken = false, top = l.y): void {
+    const mine = !!h && h.id === this.myId;
+    const key = h ? `h|${top}|${h.name}|${h.ownerName}|${h.score}|${mine ? 1 : 0}` : hiddenTaken ? `${l.n}번 오두막` : `${l.n}번 터 분양 중`;
+    const old = this.plates.get(l.n);
+    if (old?.key === key) return;
+    if (old) destroyPlate(old);
+    const s = this.plateScale;
+    if (h) {
+      // 지붕 위 (마을 문패와 같은 자리). 맵 위 끝에 붙어 폰 HUD에 가리는 맨 윗줄 오두막만 집 아래 땅에
+      const at = top - 2 < ROOF_PLATE_MIN_Y ? lowPlateSpot(l, h.tier) : { cx: l.x + l.w / 2, bottom: top - 2, w: l.w };
+      const labels = houseLotLabels(this.d.scene, this.d.atlas, at, h, `${l.n}번 터 · `, mine, DEPTH.labels - 1);
+      for (const t of labels) scaleLotLabel(t, s);
+      this.plates.set(l.n, { key, sign: null, labels });
+      return;
+    }
     const sg = seaLotSign(l);
-    // 11/16 r16 마을 빈 집터·집 이름표와 같은 글씨만 (판 없이)
-    const p = new SignPlate(this.d.scene, this.d.atlas, sg.x, sg.y, text, h || hiddenTaken ? PLATE_LOT_HOUSE : PLATE_LOT_FREE) as SignPlate & { __t?: string };
-    p.__t = text;
-    p.setScale(this.plateScale);
-    this.plates.set(l.n, p);
+    // 11/16 r16 마을 빈 집터 이름표와 같은 글씨만 (판 없이)
+    const p = new SignPlate(this.d.scene, this.d.atlas, sg.x, sg.y, key, hiddenTaken ? PLATE_LOT_HOUSE : PLATE_LOT_FREE);
+    p.setScale(s);
+    this.plates.set(l.n, { key, sign: p, labels: [] });
   }
 
   /** 그 오두막 문 앞으로 (집에서 나올 때·내 집 가기 — 마을 집처럼 문 바로 앞). 오두막이 아직 안 그려졌으면 터 출입구 앞 */
@@ -315,7 +355,10 @@ export class SeaHousing {
     }
     if (Math.abs(s - this.plateScale) > 1e-4) {
       this.plateScale = s;
-      for (const p of this.plates.values()) p.setScale(s);
+      for (const p of this.plates.values()) {
+        p.sign?.setScale(s);
+        for (const t of p.labels) scaleLotLabel(t, s);
+      }
     }
     this.d.map.lampLit = this.lamp.lit;
     const on = Math.max(0, Math.min(1, (darkness - 0.18) / 0.4));
@@ -337,9 +380,14 @@ export class SeaHousing {
       for (const g of b.glows) g.destroy();
     }
     this.built.clear();
-    for (const p of this.plates.values()) p.destroy();
+    for (const p of this.plates.values()) destroyPlate(p);
     this.plates.clear();
     this.lamp.destroy();
     if (seaHousingHost.current === this.host) seaHousingHost.current = null;
   }
+}
+
+function destroyPlate(p: LotPlate): void {
+  p.sign?.destroy();
+  for (const t of p.labels) t.destroy();
 }

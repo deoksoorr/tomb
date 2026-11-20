@@ -1,7 +1,7 @@
-import { ITEMS, itemById, permanentPrice, PERMANENT_MULTIPLIER, type ItemKind } from "@tomb/protocol";
+import { isShopListed, ITEMS, itemById, permanentPrice, PERMANENT_MULTIPLIER, type ItemKind } from "@tomb/protocol";
 import { pickDiscount } from "../champPerks";
 import { gameWeek } from "../gameDay";
-import { FURNITURE, furnitureById } from "../housing/catalog";
+import { FURNITURE, furnitureById, isExclusiveFurniture } from "../housing/catalog";
 import { discountedPrice } from "../titles";
 
 // 11/17 「유령선 특가 장터」 순수 규칙 (서버·화면 공용 — 시험은 ghostShip.test).
@@ -148,18 +148,22 @@ function draw<T>(list: readonly T[], n: number, r: () => number): T[] {
   return a.slice(0, n);
 }
 
-/** 영구로 살 수 있는 상점 꾸미기 (운영자 전용 0P는 빼요). protocol ITEMS 순서 그대로 — 순서가 같아야 같은 주에 같은 품목이에요 */
+/**
+ * 영구로 살 수 있는 상점 꾸미기 (운영자 전용 0P는 빼요). protocol ITEMS 순서 그대로 — 순서가 같아야 같은 주에 같은 품목이에요.
+ * 11/20 판매처가 따로 있는 전용·기간 한정(계절 코디 seasonSet·품종 펫 petShop·펫·유령선·이벤트·의뢰 보상 …)은 빼요 — isShopListed로 한 번 더 거른다
+ */
 function cosmeticPool(): { id: string; base: number }[] {
   const out: { id: string; base: number }[] = [];
   for (const it of ITEMS) {
-    const p = it.kind === "cosmetic" ? permanentPrice(it.id) : null;
+    const p = it.kind === "cosmetic" && isShopListed(it) && !it.petShop ? permanentPrice(it.id) : null;
     if (p && p > 0) out.push({ id: it.id, base: p });
   }
   return out;
 }
 
+/** 가구점 일반 가구만 (11/20 시즌 가구·보리 품종 가구·보리 전용 강아지·고양이 가구·유령선 한정은 빼요 — catalog isExclusiveFurniture). 순서가 바뀌어 그 뒤 주 품목도 바뀌었다 */
 function furniturePool(): { id: string; base: number }[] {
-  return FURNITURE.filter((f) => FURNITURE_CATS.has(f.category) && !f.ghost && f.price > 0).map((f) => ({ id: f.id, base: f.price }));
+  return FURNITURE.filter((f) => FURNITURE_CATS.has(f.category) && !isExclusiveFurniture(f) && f.price > 0).map((f) => ({ id: f.id, base: f.price }));
 }
 
 /** 그 주 한정 물건 (주 번호 차례) */

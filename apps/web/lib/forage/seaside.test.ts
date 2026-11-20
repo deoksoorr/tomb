@@ -13,8 +13,10 @@ import {
   DEX_NEW_REWARD,
   gatherNodeById,
   isSeasideSpecies,
+  buyerOf,
   NPCS,
   npcBuys,
+  npcBuysAll,
   npcById,
   SEA_GATHER_NODES,
   SPECIES,
@@ -25,7 +27,9 @@ import { titlesOf } from "./dexReward";
 import { BOX_FISH } from "./quests/urgent";
 import { dailyQuests } from "./quests/gen";
 import { candidates, conditionsAt, nodeActive, nodeWindow, withHighTide } from "./rules";
-import { castLine, finishGather, reelIn, sellTo, startGather } from "./service";
+import { castLine, finishGather, reelIn, sellSourceOf, sellTo, startGather } from "./service";
+import { getAccounts } from "../store";
+import { setPointEvent } from "../store/pointEvent";
 import { getForageStore } from "./store";
 import { GatherStartSchema, SellSchema } from "./schemas";
 
@@ -186,9 +190,10 @@ describe("갯벌 캐기", () => {
 });
 
 // 11/16 r11 사용자: 포구 시장을 뺐어요 → 바닷가에서 잡은 것은 마을 어부 영감·수집가 유령이 사요 (같은 판매 API·같은 하루 한도)
+// 11/20 바닷가에 해녀 할망 좌판 하나 (물고기·채집물 전부, 값은 마을과 같아요)
 describe("바닷가 것 판매 (마을 NPC)", () => {
-  it("어부 영감은 바다 고기도, 수집가 유령은 갯벌에서 캔 것도 산다. 바닷가 좌판 NPC는 없어요", () => {
-    expect(NPCS.filter((n) => n.map === "sea")).toHaveLength(0);
+  it("어부 영감은 바다 고기도, 수집가 유령은 갯벌에서 캔 것도 산다. 바닷가 NPC는 해녀 할망 하나", () => {
+    expect(NPCS.filter((n) => n.map === "sea").map((n) => n.id)).toEqual(["haenyeo"]);
     expect(npcBuys(npcById("collector")!, speciesById("d_goldclam")!)).toBe(true);
     expect(npcBuys(npcById("collector")!, speciesById("d_clam")!)).toBe(true);
     expect(npcBuys(npcById("fishmonger")!, speciesById("f_yellowtail")!)).toBe(true);
@@ -214,5 +219,56 @@ describe("바닷가 것 판매 (마을 NPC)", () => {
     const f = await sellTo(a, "fishmonger", { f_mackerel: 1 }, "ip-sea", now);
     expect(f.sold).toEqual({ f_mackerel: 1 });
     expect(f.earned).toBe(speciesById("f_mackerel")!.price);
+  });
+});
+
+describe("11/20 해녀 할망 (바닷가 좌판 — 물고기·채집물 전부)", () => {
+  const H = () => npcById("haenyeo")!;
+  it("모든 물고기·채집물을 산다 (호수·강·바다 물고기, 곤충·약초·광석·발굴품, 갯벌 조개·게·모래 파기·갈매기 깃털) — 값은 그대로", () => {
+    expect(npcBuysAll(H())).toBe(true);
+    expect(npcBuysAll(npcById("fishmonger")!)).toBe(false);
+    expect(npcBuysAll(npcById("collector")!)).toBe(false);
+    expect(H().where).toBeUndefined();
+    for (const s of SPECIES) expect(npcBuys(H(), s), s.id).toBe(true);
+    for (const id of ["f_crucian", "f_minnow", "f_mackerel", "b_cabbage", "d_clam", "d_goldclam", "d_gullfeather"]) expect(npcBuys(H(), speciesById(id)!), id).toBe(true);
+    // 가방·도감에 적는 상인 이름은 마을 상인 그대로
+    expect(buyerOf("fish").id).toBe("fishmonger");
+    for (const c of ["bug", "herb", "ore", "dig"] as const) expect(buyerOf(c).id).toBe("collector");
+    expect(SellSchema.safeParse({ npc: "haenyeo", items: { d_clam: 1, f_mackerel: 2 } }).success).toBe(true);
+    // 포인트 항목: 물고기 = 낚시 판매, 나머지 = 채집 판매 (마을 상인은 상인마다 하나)
+    expect(sellSourceOf("haenyeo", speciesById("f_mackerel")!)).toBe("fish");
+    expect(sellSourceOf("haenyeo", speciesById("f_shoe")!)).toBe("fish");
+    for (const id of ["d_clam", "b_cabbage", "d_gullfeather"]) expect(sellSourceOf("haenyeo", speciesById(id)!), id).toBe("gather");
+    expect(sellSourceOf("collector", speciesById("d_clam")!)).toBe("gather");
+    expect(sellSourceOf("fishmonger", speciesById("f_mackerel")!)).toBe("fish");
+  });
+
+  it("물고기와 채집물을 한 번에 팔면 각각 낚시 판매·채집 판매로 쌓여요 (포인트 배수 이벤트는 고른 항목만)", async () => {
+    const a = await newAccount();
+    const now = Date.now();
+    const store = getForageStore();
+    const day = kstDay(now);
+    await store.grant(a, day, "gather", Array.from({ length: 6 }, () => ({ id: "d_clam", size: 0 })), 99);
+    await store.grant(a, day, "fish", [{ id: "f_redbream", size: 300 }, { id: "f_redbream", size: 310 }, { id: "f_mackerel", size: 200 }], 99);
+    const fish = 2 * speciesById("f_redbream")!.price + speciesById("f_mackerel")!.price;
+    const clam = 6 * speciesById("d_clam")!.price;
+    await setPointEvent({ startAt: now - 1000, endAt: null, sources: ["fish"], mult: 2 }, now);
+    try {
+      const before = (await getAccounts().get(a, day, now)).points;
+      const r = await sellTo(a, "haenyeo", { f_redbream: 2, f_mackerel: 1, d_clam: 6 }, "ip-sea", now);
+      expect(r.sold).toEqual({ f_redbream: 2, f_mackerel: 1, d_clam: 6 });
+      expect(r.earned).toBe(fish * 2 + clam);
+      expect(r.capped).toBe(false);
+      expect(r.me.points - before).toBe(fish * 2 + clam);
+      expect(r.state.bag.d_clam ?? 0).toBe(0);
+      expect(r.state.bag.f_redbream ?? 0).toBe(0);
+    } finally {
+      await setPointEvent(null, now);
+    }
+    // 이벤트가 꺼지면 마을 상인과 같은 값
+    await store.grant(a, day, "gather", [{ id: "d_clam", size: 0 }], 99);
+    await store.grant(a, day, "fish", [{ id: "f_mackerel", size: 200 }], 99);
+    const r2 = await sellTo(a, "haenyeo", { f_mackerel: 1, d_clam: 1 }, "ip-sea", now + 1);
+    expect(r2.earned).toBe(speciesById("f_mackerel")!.price + speciesById("d_clam")!.price);
   });
 });

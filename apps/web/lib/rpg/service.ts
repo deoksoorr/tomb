@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 import { questHook, todoTickOf } from "../retainQuest";
 import { b64urlDecode, hmacSign, itemById } from "@tomb/protocol";
 import { recordEvent } from "../analyticsService";
-import { earnPointsOnly, getAccounts, refundPoints, spendPoints } from "../store";
+import { displayName, earnPointsOnly, getAccounts, refundPoints, spendPoints } from "../store";
 import { kstDay, kstWeek } from "../store/accounts";
 import { champHuntExp, champTranscendExp, earnTerms } from "../champPerks";
 import { champBoardsSafe } from "../store/champ";
@@ -54,7 +54,7 @@ import {
   towerScore,
   towerSettle,
   towerZone,
-  TOWER_FLOOR_POINTS,
+  towerFloorsPoints,
   towerPointFrom,
   towerRunPoints,
   type TowerSettle,
@@ -62,6 +62,10 @@ import {
 } from "./tower";
 import { getTowerStore } from "./towerStore";
 import { pushVillageNotice } from "../weeklyChamp";
+import { grantSunkenCosmetic, ownedPermanent } from "../forage/sunkenGrant";
+import { constellationById } from "./constellations";
+import { METEOR_ITEM_ID, METEOR_ITEM_NAME, METEOR_PITY, meteorOf, rollMeteor } from "./meteorDrop";
+import { meteorForced } from "./meteorDev";
 import { countsForRace, derive, expToNext, huntPointBlock, MAX_LEVEL } from "./formulas";
 import { ALL_SKILLS_POINTS, respecCost, skillPointsEarned, spentPoints } from "./skillRules";
 import { isSuperHunter, testServerEnv } from "./superHunter";
@@ -279,7 +283,8 @@ export async function shopAction(acct: string, a: z.input<typeof ShopActionSchem
     value += refund;
   }
   // 3) 드롭 장비·포션 되팔기는 사냥 수입이다 → 사냥 포인트 하루 한도 안에서만 (원자적으로 한도까지만 적립)
-  const want = result.drop * result.unit;
+  // 11/20 사용자: 주운 장비는 상점 값의 25% (dropUnit — 산 장비 환불은 위에서 50% 그대로)
+  const want = result.drop * result.dropUnit;
   if (want > 0) {
     // paid = 받은 포인트가 판 값으로 얼마어치인지 (포인트 배수 이벤트면 earned보다 적다, lib/pointEvent)
     const { earned, paid } = await earnPointsOnly(acct, "hunt", want, ipHash);
@@ -287,7 +292,7 @@ export async function shopAction(acct: string, a: z.input<typeof ShopActionSchem
     value += earned;
     if (earned > 0) await store.addDaily(acct, kstDay(), { points: earned });
     // 한도에 막혀 값을 한 푼도 못 받은 만큼은 가방에 되돌린다 (일부만 받은 1개는 판 것으로 친다)
-    unsold = Math.min(result.drop, Math.floor((want - paid) / result.unit));
+    unsold = Math.min(result.drop, Math.floor((want - paid) / result.dropUnit));
     if (unsold > 0) state = (await http(store.update(acct, (s) => ({ state: returnUnsold(s, result.code, unsold), result: null })))).state;
   }
   return { ...(await rpgView(acct, store, Date.now(), state)), sold: { value, capped, count: count - unsold } };
@@ -610,6 +615,12 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   const tChamp = t.tt ? champTranscendExp(champ) : 0;
   const tGain = tChamp > 0 ? Math.round(titled * TRANSCEND_EXP_MUL * RUN_TIERS[t.tt!].rate * (1 + tChamp)) : tBase;
 
+  // 11/20 유성우 오라: 맑은 밤(판 시작 시각)에 완성 별자리가 있는 판만 굴린다 — 진행은 아래 같은 저장(mt 칸)에 싣는다 (lib/rpg/meteorDrop)
+  const meteorRun =
+    t.g === "stars" && v.stars?.length
+      ? { starry: nightBonus, done: v.stars.length, legend: v.stars.some((d) => constellationById(d.id)?.rarity === 5), day: kstDay(now), seed: dropSeed, force: meteorForced(acct) }
+      : null;
+
   // 11/19 사냥터 포인트 막기는 판을 시작할 때(정산 전) 초월 레벨 기준
   let tAtStart = 0;
   const done = await http(
@@ -619,9 +630,16 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
       if (result.game === "hunt") cur = consumePotions(cur, potionsUsed).state;
       const g = t.tt ? gainTranscend(cur, tGain) : gainExp(cur, exp);
       const dr = addDrops(g.state, vDrops);
+      const mr = meteorRun ? rollMeteor(s.mt, meteorRun, now) : null;
       return {
-        state: { ...dr.state, runs: dr.state.runs + 1 },
-        result: { levelsGained: t.tt ? 0 : g.levelsGained, tLevels: t.tt ? g.levelsGained : 0, lost: dr.lost, star100: cur.tLevel < TRANSCEND_MAX && g.state.tLevel >= TRANSCEND_MAX },
+        state: { ...dr.state, runs: dr.state.runs + 1, ...(mr?.rolled ? { mt: mr.mt } : {}) },
+        result: {
+          levelsGained: t.tt ? 0 : g.levelsGained,
+          tLevels: t.tt ? g.levelsGained : 0,
+          lost: dr.lost,
+          star100: cur.tLevel < TRANSCEND_MAX && g.state.tLevel >= TRANSCEND_MAX,
+          meteor: !!mr?.win,
+        },
       };
     }),
   );
@@ -637,6 +655,8 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   // ★100 서버 최초 (신화 「첫 번째 상무」) — 11/18 관리자 확인 뒤에
   const firstPending = applied.star100 && !staff ? await queueFirstTitles(acct, [FIRST_STAR_ID], now, () => `서버 최초로 ★100에 올랐어요!`) : [];
   const drops = await grantCosmetics(acct, vDrops, now);
+  let meteor = false;
+  if (applied.meteor) [state, meteor] = await grantMeteor(acct, state, store, staff, now);
   const stars = v.stars ? await registerStars(acct, v.stars, now, ipHash) : undefined;
   const constellations = stars?.list;
   // 11/16 몬스터 도감 (사냥 판만 mobs가 있다)
@@ -672,6 +692,7 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
       capped: earned < pointsRaw,
       ...(overLevel ? { overLevel } : {}),
       ...(nightBonus ? { nightBonus: true } : {}),
+      ...(meteor ? { meteor: true as const } : {}),
       ...(constellations?.length ? { constellations } : {}),
       ...(dexReward ? { dexReward } : {}),
       ...(mobs?.fresh.length ? { newMobs: mobs.fresh } : {}),
@@ -686,6 +707,35 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
     view: await rpgView(acct, store, now, state, daily),
     ...todoTickOf(quest, kstDay(now)),
   };
+}
+
+/**
+ * 11/20 유성우 오라가 떨어진 판: 영구 소장으로 원자 지급(물에 빠진 꾸미기와 같은 grant) → 처음 받았으면 마을 알림 (운영자 계정은 조용히).
+ * 이미 영구로 가졌으면 받은 것으로 두고(알림 없음), 지급이 실패하면(계정 없음·저장 오류) 받은 표시를 지우고 다음 굴림을 확정으로 돌려 둔다
+ */
+async function grantMeteor(acct: string, state: CharacterState, store: RpgStore, staff: boolean, now: number): Promise<[CharacterState, boolean]> {
+  try {
+    if (await grantSunkenCosmetic(acct, METEOR_ITEM_ID)) {
+      if (!staff) {
+        const name = await displayName(acct, now).catch(() => "누군가");
+        await pushVillageNotice(`${name}님이 별자리 잇기에서 「${METEOR_ITEM_NAME}」를 주웠어요!`, now).catch(() => undefined);
+      }
+      return [state, true];
+    }
+    if ((await ownedPermanent(acct, now)).has(METEOR_ITEM_ID)) return [state, false];
+  } catch (e) {
+    console.error("[rpg] 유성우 오라 지급 실패", e);
+  }
+  try {
+    const back = await store.update(acct, (s) => {
+      const m = meteorOf(s.mt);
+      return { state: { ...s, mt: { ...m, got: undefined, p: Math.max(m.p, METEOR_PITY - 1) } }, result: null };
+    });
+    return [back.state, false];
+  } catch (e) {
+    console.error("[rpg] 유성우 오라 되돌리기 실패", e);
+    return [state, false];
+  }
 }
 
 // ── 11/15 야근 빌딩 ──
@@ -1102,7 +1152,7 @@ export async function grantTowerRun(acct: string, o: { start: number; floors: nu
     best: o.floors > 0 ? o.start + o.floors - 1 : 0,
     floorMs: o.floorMs,
     kills: o.kills ?? 0,
-    points: o.floors * TOWER_FLOOR_POINTS,
+    points: towerFloorsPoints(o.start, o.floors),
   };
   const seed = Math.floor(Math.random() * 2 ** 31);
   // 11/16 도달 시각은 관리자가 대신 정산한 시각 (판 시작 시각을 모른다)

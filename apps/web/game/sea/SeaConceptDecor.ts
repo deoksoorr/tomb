@@ -337,11 +337,14 @@ export class SeaConceptDecor {
       this.addString({ x: a.x, y: a.y - 9 }, { x: b.x, y: b.y - 9 }, 0, west ? -3 : 3, Math.max(a.y, b.y) - 1, n++);
     }
     // 산책로 가로등 사이 전구 줄 (가로등 머리 아래, 가까운 이웃끼리)
+    // 11/20 해녀 할망 좌판 양옆 가로등 사이는 걸지 않아요 (줄이 좌판·할망 앞을 가로질러요 — 좌판 파라솔엔 제 꼬마전구가 있어요)
     const lamps = [...Lay.SEA_LAMPS].sort((a, b) => a.x - b.x);
+    const stallX0 = Lay.SEA_BUYER_STALL.x - 22;
     for (let i = 0; i + 1 < lamps.length; i++) {
       const a = lamps[i];
       const b = lamps[i + 1];
       if (b.x - a.x > 330) continue;
+      if (a.x < Lay.SEA_BUYER.x + 12 && b.x > stallX0) continue;
       this.addString({ x: a.x, y: a.y - 30 }, { x: b.x, y: b.y - 30 }, Math.max(6, Math.round((b.x - a.x) * 0.06)), 0, SEA_BOARDWALK.y + 1, n++);
     }
     // 해변·정류장 눈사람과 선물 더미 (빈 눈밭에만 — seaXmasSpots)

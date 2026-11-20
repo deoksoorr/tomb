@@ -522,6 +522,16 @@ describe.skipIf(!!env.redis())("46·25·30번 서버 흐름 (메모리)", () => 
     expect(await pts(id)).toBe(0);
   });
 
+  it("11/20 수집가 유령 외형: 교환소 기록이 없어도 해금 아이템을 가방에 가졌으면(선물로 받음) 소장으로 보고 무료로 바꾼다", async () => {
+    const none = await account(0);
+    await expect(reshape(none, "collector")).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const id = await account(0, { q_body_collector: 1 });
+    expect((await loadMe(accounts, id)).bodies).toContain("collector");
+    const r = await reshape(id, "collector");
+    expect(r.me.body).toBe("collector");
+    expect(await pts(id)).toBe(0);
+  });
+
   it("운영자 전용: 저승사자 몸·운영자 꾸미기는 운영자만 (일반 계정은 403)", async () => {
     const user = await account(100_000);
     await expect(reshape(user, "reaper")).rejects.toMatchObject({ status: 403 });

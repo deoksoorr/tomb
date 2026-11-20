@@ -66,7 +66,7 @@ export default function GuidePage({ path, h1, lead, description, facts, steps, c
 
         {facts && (
           <>
-            <h2>한눈에 보기</h2>
+            <h2>기본 정보</h2>
             <p className={styles.caption}>기준일 {FACTS_DATE}</p>
             <table className={legal.table}>
               <thead>

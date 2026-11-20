@@ -122,6 +122,8 @@ export class AvatarView {
   private pendDy = 0;
   private anim = "";
   private gestureUntil = 0;
+  /** 11/20 손 흔들기를 시작한 시각 (「의리 초콜릿」 한 벌 덤 하트 — 꾸미기 연출에 넘긴다) */
+  private waveAt = Number.NEGATIVE_INFINITY;
   private swingFrame = -1;
   /** 해먹 누운 그림을 쓰는 중 (텍스처가 아바타 시트가 아니다) */
   private lying = false;
@@ -735,7 +737,7 @@ export class AvatarView {
       return;
     }
     this.nameFx ??= new NameStyleView(this.scene, this.label, this.isMe, this.reduced);
-    this.nameFx.set(ref.color, ref.plate);
+    this.nameFx.set(ref.color, ref.plate, !!ref.bell);
   }
 
   setName(name: string): void {
@@ -871,6 +873,7 @@ export class AvatarView {
     if (isIndoorPose(s)) return;
     if (this.mountedIn(s)) return; // 타는 펫 위에서는 몸짓 없이 이모티콘만
     const act = kind === "cheer" || kind === "splash" ? "cheer" : "wave";
+    if (act === "wave") this.waveAt = now;
     this.gestureUntil = now + ACT_MS;
     this.anim = "";
     this.sprite.play(avatarActAnimKey(this.texKey, act, this.dir), true);
@@ -1208,6 +1211,10 @@ export class AvatarView {
           // 11/16 몸에 붙은 그림(날개·우산·풍선·연)도 그만큼 키운다 (artTop·shoulder는 이미 배율이 들어간 값)
           scale: this.big,
           hand: handAnchor(this.body, d === DIR.left ? "left" : d === DIR.right ? "right" : d === DIR.up ? "up" : "down"),
+          // 11/19 입김 오라가 입 자리에서 나오게
+          face: faceAnchor(this.body, d === DIR.left ? "left" : d === DIR.right ? "right" : d === DIR.up ? "up" : "down"),
+          // 11/20 손 흔드는 동안 (한 벌 덤 하트)
+          wave: now - this.waveAt < ACT_MS ? now - this.waveAt : undefined,
           reduced: this.reduced,
           riding: this.mountedIn(st),
           // 11/17 탈것(강 조각배·오리배, 바다 카약·제트스키, 놀이기구)에 타 있으면 펫은 숨긴다

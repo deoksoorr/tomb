@@ -2,6 +2,7 @@ import { verifyJoinToken } from "@tomb/protocol";
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AdminErrorsResponse } from "@/lib/admin";
+import type { AdminBalancesResponse } from "@/lib/adminBalances";
 import { handler } from "@/lib/http";
 import { getHouseStore, houseIdFor } from "@/lib/housing/service";
 import { earnPoints, getAccounts, refundPoints, spendPoints } from "@/lib/store";
@@ -17,6 +18,7 @@ import type {
 } from "@/lib/types";
 import { NAME_CHANGE_PRICE } from "@/lib/types";
 import * as adminPoints from "./admin/accounts/points/route";
+import * as adminBalances from "./admin/economy/balances/route";
 import * as adminEconomy from "./admin/economy/route";
 import { ECON_STAFF_EXCLUDED_FROM } from "@/lib/economy";
 import * as adminErrors from "./admin/errors/route";
@@ -259,7 +261,7 @@ describe("오류 수집", () => {
 });
 
 describe("경제 통계", () => {
-  const economy = () => bodyOf<EconomyResponse>(adminEconomy.GET(call("/api/admin/economy?days=3", { headers: ADMIN })));
+  const economy = () => bodyOf<EconomyResponse>(adminEconomy.GET(call("/api/admin/economy?days=3&totals=1", { headers: ADMIN })));
   const today = (e: EconomyResponse) => e.days[0];
 
   it("적립(항목별)·사용(분류별)·환불·관리자 지급을 날짜별로 더하고, 지갑 합계·계정 수", async () => {
@@ -286,9 +288,24 @@ describe("경제 통계", () => {
     const shopSpent = d("spent", "shop");
     const balance = (await getMe(v)).points;
     expect(balance).toBe(2 + 300 - shopSpent - 30 - 20 + 5 - 7);
-    expect(after.totals.accounts - before.totals.accounts).toBe(1);
-    expect(after.totals.wallets - before.totals.wallets).toBe(balance);
+    expect(after.totals!.accounts - before.totals!.accounts).toBe(1);
+    expect(after.totals!.wallets - before.totals!.wallets).toBe(balance);
     expect((await adminEconomy.GET(call("/api/admin/economy"))).status).toBe(401);
+  });
+
+  it("totals는 ?totals=1일 때만 (계정마다 Redis 명령이 든다)", async () => {
+    expect((await bodyOf<EconomyResponse>(adminEconomy.GET(call("/api/admin/economy?days=1", { headers: ADMIN })))).totals).toBeUndefined();
+  });
+
+  it("포인트 잔액 보기: 관리자만, 계정마다 닉네임·잔액·최근 접속·상태만", async () => {
+    expect((await adminBalances.GET(call("/api/admin/economy/balances"))).status).toBe(401);
+    const v = await newVisitor();
+    await attendAs(v, "잔액부자");
+    await adminPoints.POST(call("/api/admin/accounts/points", { headers: ADMIN, body: { accountId: v.visitorId, delta: 4_321 } }));
+    const r = await bodyOf<AdminBalancesResponse>(adminBalances.GET(call("/api/admin/economy/balances?fresh=1&q=잔액부자", { headers: ADMIN })));
+    expect(r.rows).toHaveLength(1);
+    expect(Object.keys(r.rows[0]).sort()).toEqual(["accountId", "lastSeenAt", "name", "points", "rank", "status"]);
+    expect(r.rows[0]).toMatchObject({ name: "잔액부자", points: 4_321, status: "normal" });
   });
 
   it("11/16 운영자 활동이 섞인 적용일 이전 날짜는 보내지 않는다", async () => {

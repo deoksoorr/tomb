@@ -58,7 +58,7 @@ export const PATH: readonly PathGift[] = [
   {
     n: 7,
     name: "마을 새내기 졸업",
-    desc: "한정 칭호와 7일 동안 꽂는 꽃 머리핀, 보호 문서 1장을 같이 줘요.",
+    desc: "한정 칭호와 7일 동안 꽂는 꽃 머리핀, 강화 증폭권 1장을 같이 줘요.",
     art: { title: true },
     title: true,
     wear: "hat_flower",
@@ -262,7 +262,7 @@ export const TODO_POOL: readonly TodoDef[] = [
     hint: "귀신의 집을 중간에 나오지 않고 출구까지 돌파해요. 도중에 나오면 세지 않아요.",
     guide: "haunt",
   },
-  { kind: "bumper", cat: "play", label: "범퍼카 한 판 타기", need: 1, unit: "판", hint: "범퍼카장에서 1분 넘게 달려요.", guide: "bumper" },
+  { kind: "bumper", cat: "play", label: "범퍼카 한 판 타기", need: 1, unit: "판", hint: "범퍼카를 타고 1분 넘게 몰고 다녀요. 멈춰 있던 시간은 세지 않아요.", guide: "bumper" },
   { kind: "sky", cat: "play", label: "관람차나 열기구 타기", need: 1, unit: "번", hint: "관람차나 열기구에 올라 40초 넘게 하늘 구경해요.", guide: "sky" },
   { kind: "fire", cat: "play", label: "모닥불 앞에서 불멍 2분", need: 1, unit: "번", hint: "모닥불 둘레 자리에 앉아 2분 동안 불을 바라봐요.", guide: "campfire" },
   // ── 나들이 (사냥·바닷가·캠핑장) ──

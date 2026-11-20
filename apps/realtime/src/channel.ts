@@ -91,6 +91,7 @@ import {
   type SeatSlot,
   type S2C,
   type StateId,
+  nameStyleOfLook,
 } from "@tomb/protocol";
 import { ChatRecent, type RecentChat } from "./chatRecent";
 import { MoveBudget, RateLimiter, allocSid, dist, stepToward, type Point } from "./logic";
@@ -1128,7 +1129,9 @@ export class ChannelCore<C extends object> {
         if ((p.away && !hunting) || !takeChatToken((p.chatBucket ??= newChatBucket()), now)) return;
         // 11/16 채팅은 채널 전체(마을·캠핑장)로 — 줄마다 쓴 사람의 맵을 붙이고, 다른 맵 사람도 채팅창에 이름을 쓰게 이름·딱지를 싣는다
         const camp: { m?: ChatPlace } = hunting ? { m: "hunt" } : awayTag(mapOfPeer(p));
-        const tags = { ...(p.staff ? { staff: true as const } : {}), ...(p.mgr ? { mgr: true as const } : {}) };
+        // 11/20 닉네임 꾸미기도 싣는다: 다른 맵 사람(착용을 모름)과 늦게 들어온 사람의 채팅창에도 꾸민 이름이 보이게
+        const ns = chatNameStyle(p.look);
+        const tags = { ...(p.staff ? { staff: true as const } : {}), ...(p.mgr ? { mgr: true as const } : {}), ...(ns ? { ns } : {}) };
         const c = this.chatLog(now).push({ sid: p.sid, visitorId: p.visitorId, name: p.name, text: maskChat(m.text), ...tags, ...camp }, now);
         this.host.chatsChanged?.("village");
         this.broadcast(encodeEvent({ t: "chat", sid: p.sid, text: c.text, id: c.id, at: c.at, name: p.name, ...tags, ...camp }), p.sid);
@@ -2088,4 +2091,11 @@ function snowOfRecord(r: PeerRecord): { snow?: SnowHold } {
 function sameHold(a: SnowHold | undefined, b: SnowHold | null): boolean {
   if (!a || !b) return !a && !b;
   return a.s === b.s && !!a.r === !!b.r;
+}
+
+/** 11/20 채팅 줄에 싣는 닉네임 꾸미기 id (이름 글자·이름표, 없으면 undefined) */
+function chatNameStyle(look: readonly string[]): string[] | undefined {
+  const { color, plate } = nameStyleOfLook(look);
+  const ids = [color, plate].filter((x): x is string => x !== null);
+  return ids.length ? ids : undefined;
 }

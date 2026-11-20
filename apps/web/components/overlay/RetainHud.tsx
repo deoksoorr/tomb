@@ -800,7 +800,7 @@ function TodoBody({ me, onRoute }: { me: Me; onRoute?: () => void }) {
   return (
     <div className={styles.todoBody}>
       <p className={styles.lead}>
-        날마다 {DAY_RESET_TEXT}에 새 미션 3개가 무작위로 나와요. 미션 셋을 다 하면 도장을 찍고, 도장 {TODO_PROT_EVERY}개마다 보호 문서를 더 받아요.
+        날마다 {DAY_RESET_TEXT}에 새 미션 3개가 무작위로 나와요. 미션 셋을 다 하면 도장을 찍고, 도장 {TODO_PROT_EVERY}개마다 강화 증폭권을 더 받아요.
       </p>
       <ul className={styles.todoList}>
         {items.map((it, i) => {
@@ -860,7 +860,7 @@ function TodoBody({ me, onRoute }: { me: Me; onRoute?: () => void }) {
           <b className={styles.cardName}>미션 셋을 다 하면 도장과 보너스</b>
           <RewardChips reward={TODO_BONUS_GIFT} />
           <p className={styles.cardDesc}>
-            모은 도장 {todo?.stamps ?? 0}개. 도장 {TODO_PROT_EVERY}개마다 보호 문서 1장을 더 줘요.
+            모은 도장 {todo?.stamps ?? 0}개. 도장 {TODO_PROT_EVERY}개마다 강화 증폭권 1장을 더 줘요.
           </p>
         </div>
         {todo?.bonus ? (
@@ -987,9 +987,24 @@ export function RetainLayer({ onOpenBag }: { onOpenBag: () => void }) {
     if (map === "sea") markFirstStep("sea");
   });
   // 11/19 오늘 미션 놀이: 범퍼카 타고 내리기 · 관람차·열기구 하늘 시점 · 모닥불 불멍 (귀신의 집은 HauntDialog)
+  // 11/20 범퍼카는 가만히 앉아 있던 시간은 빼고 실제로 몰고 다닌 시간이 1분을 넘으면, 내리지 않아도 그 자리에서 미션에 센다.
+  // 서버는 표를 낸 때부터 시계로 1분을 보니(lib/retainPlay), 몬 시간이 그보다 길 수 없게 1.5초 여유를 둔다
+  const bumperSent = useRef(false);
   useBridgeEvent("bumper:riding", ({ riding }) => {
-    if (riding) void startPlayTodo("bumper");
-    else endPlayTodo("bumper", true);
+    if (riding) {
+      bumperSent.current = false;
+      void startPlayTodo("bumper");
+      return;
+    }
+    if (bumperSent.current) return;
+    const wanted = playWanted("bumper");
+    endPlayTodo("bumper", false);
+    if (wanted) showToast("범퍼카 미션은 1분 넘게 몰고 다녀야 채워져요. 멈춰 있던 시간은 세지 않아요.", 4_500);
+  });
+  useBridgeEvent("bumper:drive", ({ ms }) => {
+    if (bumperSent.current || ms < PLAY_MIN_MS.bumper + 1_500) return;
+    bumperSent.current = true;
+    endPlayTodo("bumper", true);
   });
   const skyOn = useRef(false);
   useBridgeEvent("sky:hud", (hud) => {

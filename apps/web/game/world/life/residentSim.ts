@@ -8,6 +8,9 @@ import { critterGrid, reachable, restable, restSpots, seatFront, type CritterDef
 // 마을 큰 길로 이어지는지(reachable)는 critterSim으로 옮겼다 (11/16 고양이·개 쉼 자리도 같은 규칙 — 넓어진 범퍼카 링크 안에 갇히지 않게)
 export { reachable };
 import { RESIDENTS, type ResidentDef, type ResidentTaste } from "./residentData";
+import { nearStall } from "../seasonStallLayout";
+import { nearMungnyang } from "../mungnyangLayout";
+import { nearOffice } from "../officeStallLayout";
 
 // 돌아다니는 마을 주민 — 결정적 시뮬레이션 (순수, Phaser 없음 → residents.test.ts).
 // 고양이·유령(critterSim)과 같은 방식: 채널 번호 = 시드, 서버 시계 = 시각 → 같은 채널의 모두가 같은 자리에서 같은 주민을 본다.
@@ -102,11 +105,34 @@ export function residentCritterDef(r: ResidentDef): CritterDef {
 }
 
 
+let residentGridCache: WalkGrid | null = null;
+/**
+ * 11/19 주민 길 격자 = 고양이와 같은 걷기 격자 + 기간 한정 노점·주인 그림 둘레 (seasonStallLayout nearStall) + 분양사 보리 둘레 (mungnyangLayout nearMungnyang).
+ * 칼돌이가 가구 보따리상 수레 뒤를 지나거나 그 앞에 멈춰 그림에 붙어 보였다 → 그 둘레로는 다니지도 멈추지도 않는다 (결정적 — 모든 화면이 같다)
+ */
+export function residentGrid(): WalkGrid {
+  if (residentGridCache) return residentGridCache;
+  const g = critterGrid();
+  // 칸이 둘레에 조금이라도 걸치면 막는다 (칸 가운데만 보면 둘레 가장자리를 몇 px 밟았다). 한 번 구워 둔다
+  const extra = new Uint8Array(g.cols * g.rows);
+  for (let cy = 0; cy < g.rows; cy++)
+    for (let cx = 0; cx < g.cols; cx++) {
+      const x0 = g.ox + cx * g.cell;
+      const y0 = g.oy + cy * g.cell;
+      // 11/19 분양사 보리 둘레도 같이 (멍냥이가 들르던 점 (132,754)이 방석·치즈냥 위였다 — mungnyangLayout nearMungnyang)
+      // 11/20 총무팀 문대리 카트 둘레도 (officeStallLayout nearOffice)
+      const near = (x: number, y: number) => nearStall(x, y) || nearMungnyang(x, y) || nearOffice(x, y);
+      if (near(x0, y0) || near(x0 + g.cell, y0) || near(x0, y0 + g.cell) || near(x0 + g.cell, y0 + g.cell)) extra[cy * g.cols + cx] = 1;
+    }
+  const inside = (cx: number, cy: number) => cx >= 0 && cy >= 0 && cx < g.cols && cy < g.rows;
+  return (residentGridCache = { ...g, blocked: (cx, cy) => g.blocked(cx, cy) || (inside(cx, cy) && extra[cy * g.cols + cx] === 1) });
+}
+
 /**
  * 주민의 쉼 자리: 앉는 좌석마다 "그 앞에 서는 자리"를 바라보는 쪽(없으면 아래쪽)으로 10~24px 안에서 찾고,
  * 길가·풀밭 자리는 고양이와 같은 규칙(restSpots). 결정적이라 모든 클라이언트가 같은 목록을 얻는다
  */
-export function residentSpots(def: ResidentDef, g: WalkGrid = critterGrid()): RestSpot[] {
+export function residentSpots(def: ResidentDef, g: WalkGrid = residentGrid()): RestSpot[] {
   const out: RestSpot[] = [];
   for (const fid of def.perches) {
     for (const s of SEATS) {
@@ -130,7 +156,7 @@ function spotsOf(def: ResidentDef, g: WalkGrid): RestSpot[] {
 }
 
 /** 집 구역 안을 돌아다닐 때 들르는 점: 구역 원 안의 탁 트인 마른 땅 (WANDER_STEP 간격, 결정적) */
-export function wanderPoints(def: ResidentDef, g: WalkGrid = critterGrid()): Pt[] {
+export function wanderPoints(def: ResidentDef, g: WalkGrid = residentGrid()): Pt[] {
   const { x: hx, y: hy, r } = def.home;
   const out: Pt[] = [];
   for (let y = hy - r; y <= hy + r; y += WANDER_STEP)
@@ -267,7 +293,7 @@ export class ResidentSim {
     readonly def: ResidentDef,
     readonly index: number,
     readonly seed: number,
-    private readonly grid: WalkGrid = critterGrid(),
+    private readonly grid: WalkGrid = residentGrid(),
   ) {
     this.idx = RESIDENT_INDEX_BASE + index;
     this.spots = spotsOf(def, grid);

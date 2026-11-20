@@ -2,7 +2,8 @@
 
 /* eslint-disable @next/next/no-img-element -- 캔버스로 만든 dataURL 픽셀아트 */
 import { useEffect, useMemo, useState } from "react";
-import { isPermanentUntil, isRideablePet, itemById, ZOO_PETS, type PetDef } from "@tomb/protocol";
+import { isPermanentUntil, isRideablePet, itemById, ZOO_SHOP_PETS, type PetDef } from "@tomb/protocol";
+// 11/20 사육사 창은 ZOO_SHOP_PETS (퇴근 강아지·사무실 고양이·듬직한 큰 개는 분양사 보리만 판다)
 import { bridge } from "@/game/bridge";
 import { keeperPortraitUrl } from "@/game/world/zoo/zooArt";
 import { KEEPER_NAME, KEEPER_TITLE } from "@/game/world/zoo/ZooView";
@@ -40,7 +41,7 @@ export default function ZooDialog({ onClose }: { onClose: () => void }) {
   // 터치 기기는 R 키 대신 [타기] 버튼
   const coarse = useMediaQuery("(pointer: coarse)");
   const [openedAt] = useState(() => Date.now());
-  const [pickId, setPickId] = useState<string>(ZOO_PETS[0].id);
+  const [pickId, setPickId] = useState<string>(ZOO_SHOP_PETS[0].id);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -50,13 +51,13 @@ export default function ZooDialog({ onClose }: { onClose: () => void }) {
     void meStore.refresh();
   }, []);
 
-  const pick: PetDef = ZOO_PETS.find((p) => p.id === pickId) ?? ZOO_PETS[0];
+  const pick: PetDef = ZOO_SHOP_PETS.find((p) => p.id === pickId) ?? ZOO_SHOP_PETS[0];
   const item = itemById(pick.id)!;
   const owned = ownedOf(me, pick.id, openedAt);
   const forever = !!owned && isPermanentUntil(owned.until);
   const ticket = me?.inventory[pick.id] ?? 0;
   const short = !!me && me.points < pick.price;
-  const family = useMemo(() => ZOO_PETS.filter((p) => ownedOf(me, p.id, openedAt)).length, [me, openedAt]);
+  const family = useMemo(() => ZOO_SHOP_PETS.filter((p) => ownedOf(me, p.id, openedAt)).length, [me, openedAt]);
 
   async function run(job: () => Promise<string>) {
     setPending(true);
@@ -109,7 +110,7 @@ export default function ZooDialog({ onClose }: { onClose: () => void }) {
           내 포인트 <strong>{me ? me.points.toLocaleString("ko-KR") : "–"}</strong>
           <span className={s.muted}>
             {" "}
-            · 가족 {family}/{ZOO_PETS.length}
+            · 가족 {family}/{ZOO_SHOP_PETS.length}
           </span>
         </p>
         {!me && error && <p className={ui.error}>{error}</p>}
@@ -175,7 +176,7 @@ export default function ZooDialog({ onClose }: { onClose: () => void }) {
           </section>
 
           <ul className={s.list} aria-label="분양하는 펫">
-            {ZOO_PETS.map((p) => {
+            {ZOO_SHOP_PETS.map((p) => {
               const it = itemById(p.id)!;
               const o = ownedOf(me, p.id, openedAt);
               const fam = !!o && isPermanentUntil(o.until);

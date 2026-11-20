@@ -88,6 +88,14 @@ export const LANDMARK_COLOR: Record<Landmark["kind"], string> = {
   busCamp: "#9ae0a8",
   busSea: "#5ac8f0",
   duck: "#ffe060",
+  // 11/19 계절 보따리상: 보자기 남색
+  season: "#7f9be0",
+  // 11/19 가구 보따리상: 나무색
+  furnStall: "#e0a868",
+  // 11/19 분양사 보리: 발바닥 분홍
+  mungnyang: "#f6a8b8",
+  // 11/20 총무팀 문대리: 회사 청록
+  office: "#6cc4bc",
 };
 
 /** 관람차 아이콘 (미니맵 px, 가운데 기준 — 동그란 바퀴 + 다리) */

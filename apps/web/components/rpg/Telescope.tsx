@@ -11,7 +11,8 @@ import { DIFFICULTIES, DIFFS, GAMES, potionById, STARS_POINTS, type Difficulty }
 import { rpgApi } from "@/lib/rpg/client";
 import { constellationById } from "@/lib/rpg/constellations";
 import { STAR_DEX_MAX, STAR_REC_DEX, STARS_NEW_PER_RUN, STARS_PLAN_VER, starWindows } from "@/lib/rpg/plan";
-import type { RunReward, RunResult } from "@/lib/rpg/types";
+import type { CharacterState, RunReward, RunResult } from "@/lib/rpg/types";
+import { METEOR_ITEM_NAME } from "@/lib/rpg/meteorDrop";
 import { STARRY_NIGHT_BONUS, starryNight } from "@/lib/stargaze";
 import { dexGainText } from "../forage/autoToast";
 import ConstellationIcon from "../forage/ConstellationIcon";
@@ -24,7 +25,7 @@ import { OddsLink } from "../odds/OddsLayer";
 import RpgIcon from "./RpgIcon";
 import StarsHud from "./StarsHud";
 import s from "./rpg.module.css";
-import { readStarsRecords, saveStarsRecord, StarsDexCard, StarsInfo, StarsPreview } from "./TelescopeExtras";
+import { MeteorNote, readStarsRecords, saveStarsRecord, StarsDexCard, StarsInfo, StarsPreview } from "./TelescopeExtras";
 import x from "./TelescopeExtras.module.css";
 import { rideGate } from "@/lib/rideGate";
 
@@ -73,12 +74,17 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
   const dex = forage?.dex;
   // 판정을 넓혀 주는 DEX(장비 포함)와 EXP 감소를 보는 레벨 — 레벨은 판정과 상관없다
   const [stat, setStat] = useState<{ dex: number; level: number } | null>(null);
+  // 11/20 유성우 오라 천장 진행 (캐릭터 저장 mt — 서버 응답마다 새로. undefined = 아직 모름)
+  const [mt, setMt] = useState<CharacterState["mt"] | null | undefined>(undefined);
 
   useEffect(() => {
     void forageStore.refresh();
     rpgApi
       .view()
-      .then((v) => setStat({ dex: v.derived.stats.dex, level: v.character.level }))
+      .then((v) => {
+        setStat({ dex: v.derived.stats.dex, level: v.character.level });
+        setMt(v.character.mt ?? null);
+      })
       .catch(() => {
         /* 못 받으면 내 DEX 줄만 빠진다 */
       });
@@ -142,6 +148,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
       const res = await rpgApi.start("stars", diff, undefined, STARS_PLAN_VER);
       const c = res.view.character;
       setStat({ dex: res.view.derived.stats.dex, level: c.level });
+      setMt(c.mt ?? null);
       // 맑은 밤은 서버가 판 시작 시각으로 정한다 (옛 서버면 없으므로 시계로)
       const runStarry = res.starry ?? starryNight(Date.now());
       run.current = { ticket: res.ticket, difficulty: diff, starry: runStarry, totalMs: res.timeLimitSec * 1000 };
@@ -179,6 +186,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
       .finish(r.ticket, result)
       .then((res) => {
         setOutcome({ result, aborted, reward: res.reward });
+        setMt(res.view.character.mt ?? null);
         void meStore.refresh();
         if (res.reward.constellations?.length) void forageStore.refresh();
         // 이 기기의 최근 기록 (끝까지 본 판만)
@@ -264,7 +272,13 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
                   </div>
                 </div>
                 {r.nightBonus && <p className={s.levelUp}>맑은 밤이라 포인트를 {STARRY_NIGHT_BONUS}배 받았어요!</p>}
+                {r.meteor && (
+                  <p className={x.meteorWin} role="status">
+                    별똥별 부스러기가 떨어졌어요! 전설 <b>「{METEOR_ITEM_NAME}」</b>를 영구로 받았어요. 가방에서 꾸미기 칸을 눌러 입을 수 있어요.
+                  </p>
+                )}
                 <ResultConstellations reward={r} />
+                <MeteorNote mt={mt} />
                 {r.capped && (
                   <p className={ui.hint}>
                     오늘 받을 수 있는 포인트 한도에 닿아서 {r.pointsRaw}P 중 {r.points}P만 받았어요.
@@ -361,6 +375,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
           {notice}
         </p>
         <StarsPreview starry={starry} />
+        <MeteorNote mt={mt} />
         <StarsDexCard dex={dex} starry={starry} />
         <StarsInfo records={records} />
       </div>

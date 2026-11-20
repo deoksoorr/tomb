@@ -1,4 +1,5 @@
 import { requireAdmin } from "@/lib/admin";
+import { refreshDevNotePages, removeDevNote } from "@/lib/devNotes/admin";
 import { handler, HttpError, json } from "@/lib/http";
 import { getNotices } from "@/lib/store";
 import type { Notice } from "@/lib/types";
@@ -23,8 +24,10 @@ export const PATCH = handler<{ id: string }>(async (req, { id }) => {
   return json<{ notice: Notice }>({ notice });
 });
 
+/** 지우기 (개발자 노트 편집기로 쓴 글이면 본문·올린 이미지까지) */
 export const DELETE = handler<{ id: string }>(async (req, { id }) => {
   await requireAdmin(req);
-  if (!(await getNotices().remove(id))) throw noNotice();
+  if (!(await removeDevNote(getNotices(), id))) throw noNotice();
+  refreshDevNotePages(id);
   return json({ ok: true });
 });

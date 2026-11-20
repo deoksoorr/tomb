@@ -32,7 +32,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   preload("/fonts/Galmuri11.woff2", { as: "font", type: "font/woff2", crossOrigin: "anonymous" });
   preload("/fonts/Galmuri11-Bold.woff2", { as: "font", type: "font/woff2", crossOrigin: "anonymous" });
   return (
-    <html lang="ko">
+    <html lang="ko" suppressHydrationWarning>
       <body>
         {children}
         {/* 47번 방문 분석 (방문·체류 신호만, 화면에는 그리지 않는다) */}

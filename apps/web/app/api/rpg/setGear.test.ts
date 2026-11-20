@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { GEAR_SLOTS, type MonsterId } from "@/lib/rpg/catalog";
-import { ENHANCE_TABLE } from "@/lib/rpg/enhance";
+import { ENH_PITY, ENHANCE_TABLE } from "@/lib/rpg/enhance";
 import { encodeSg, SG_EGG_BIT, SG_PIECES, SG_SETS, type SgItem } from "@/lib/rpg/setGear";
 import { chestSeals, crossesTen, nextPity, PROT_FROM_FLOOR } from "@/lib/rpg/setGearRoll";
 import { approveReview, dropSeedOf, forgetEndgameLaunch, listReviews } from "@/lib/rpg/service";
@@ -230,6 +230,42 @@ describe("강화·분해·끼기 (app/api/rpg/gear)", () => {
     expect([5, 6]).toContain(ok.body.gear!.enhance!.to);
   });
 
+  it("11/20 증폭권: 서버가 장수만큼 빼고 2배 확률로 판정, 요청의 확률·장수 숫자는 무시, 옛 화면의 protect는 증폭권을 쓰지 않는다", async () => {
+    // +9 → +10 (기본 20%, 증폭 3장 40%). 난수 0.3 → 그냥은 실패, 증폭이면 성공
+    const cost = ENHANCE_TABLE[10].cost;
+    const v = await newVisitor({ level: 50, sg: [encodeSg(mk({ e: 9 }))], sgN: 2, mats: { doc: 99, seal: 9, prot: 7 } }, cost * 10);
+    // 서버 난수(crypto.getRandomValues)를 0.3으로 고정 (세션을 만든 뒤에)
+    vi.spyOn(crypto, "getRandomValues").mockImplementation(((a: Uint32Array) => {
+      a[0] = Math.floor(0.3 * 4294967296);
+      return a;
+    }) as typeof crypto.getRandomValues);
+    // 옛 화면: protect만 보낸다 → 증폭권 그대로, 기본 확률이라 실패, 단계 그대로
+    const old = await act(v, { type: "enhance", sg: 1, protect: true, cost });
+    expect(old.status).toBe(200);
+    expect(old.body.gear!.enhance).toMatchObject({ ok: false, from: 9, to: 9, amp: 0, rate: 0.2, fails: 1 });
+    expect(old.body.character.mats!.prot).toBe(7);
+    // 조작: 확률·장수 숫자를 넣어 보내도 서버 표대로 (증폭 없음 → 20%로 실패)
+    const forged = await act(v, { type: "enhance", sg: 1, cost, rate: 1, amp: false, ampN: 0, sure: true, f: 99 });
+    expect(forged.body.gear!.enhance).toMatchObject({ ok: false, to: 9, amp: 0, rate: 0.2, fails: 2 });
+    // amp에 숫자를 넣으면 거절 (불리언만)
+    expect((await act(v, { type: "enhance", sg: 1, cost, amp: 1 })).status).toBe(400);
+    // 증폭: 3장 빠지고 40%로 성공
+    const amped = await act(v, { type: "enhance", sg: 1, cost, amp: true, rate: 0.01 });
+    expect(amped.body.gear!.enhance).toMatchObject({ ok: true, from: 9, to: 10, amp: 3, rate: 0.4, fails: 0 });
+    expect(amped.body.character.mats!.prot).toBe(4);
+    expect((await getRpgStore().get(v.id)).mats!.prot).toBe(4);
+    // +10 → +11은 3장인데 4장 있다 → 한 번 더 되고, 그다음은 1장뿐이라 거절 (포인트·재료 그대로)
+    const again = await act(v, { type: "enhance", sg: 1, cost: ENHANCE_TABLE[11].cost, amp: true });
+    expect(again.body.gear!.enhance).toMatchObject({ amp: 3 });
+    expect(again.body.character.mats!.prot).toBe(1);
+    const e = again.body.gear!.enhance!.to;
+    const before = await getRpgStore().get(v.id);
+    const short = await act(v, { type: "enhance", sg: 1, cost: ENHANCE_TABLE[e + 1].cost, amp: true });
+    expect(short.status).toBe(409);
+    expect(short.body.error!.code).toBe("NO_MATS");
+    expect((await getRpgStore().get(v.id)).mats).toEqual(before.mats);
+  });
+
   it("세트 장비 끼기·빼기 → 능력치에 바로, 분해하면 재료", async () => {
     const v = await newVisitor({
       level: 50,
@@ -251,7 +287,7 @@ describe("강화·분해·끼기 (app/api/rpg/gear)", () => {
     const op = await newVisitor(
       {
         level: 50,
-        sg: [encodeSg(mk({ e: 14, f: 50 }))],
+        sg: [encodeSg(mk({ e: 14, f: ENH_PITY[15] }))],
         sgN: 2,
         mats: { doc: 99, seal: 9, prot: 0 },
       },
@@ -267,7 +303,7 @@ describe("강화·분해·끼기 (app/api/rpg/gear)", () => {
     const v = await newVisitor(
       {
         level: 50,
-        sg: [encodeSg(mk({ e: 14, f: 50 }))],
+        sg: [encodeSg(mk({ e: 14, f: ENH_PITY[15] }))],
         sgN: 2,
         mats: { doc: 99, seal: 9, prot: 0 },
       },

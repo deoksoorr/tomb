@@ -26,7 +26,7 @@ export type ShopResponse = RpgView & { sold?: SoldInfo };
 
 /** 11/15 세트 장비·강화 (app/api/rpg/gear) */
 export type GearAction =
-  | { type: "enhance"; sg?: number; shop?: string; piece?: number; protect: boolean; cost: number }
+  | { type: "enhance"; sg?: number; shop?: string; piece?: number; amp: boolean; cost: number }
   | { type: "reroll"; uid: number; lock: string | null; cost: number }
   | { type: "exchange"; uids: number[]; set: number; piece: number }
   | { type: "disassemble"; uids: number[] }
@@ -94,4 +94,37 @@ export function fetchHuntCrowd(): Promise<HuntCrowd> {
       crowdInflight = null;
     });
   return crowdInflight;
+}
+
+// ── 11/20 [내 정보] 사냥 칸: 마지막으로 받은 사냥 화면 정보 (계정별 한 벌) ──
+// 사냥 창(HuntLobby)이 받은 값을 여기 적어 두고, [내 정보]는 이 값이 있으면 다시 묻지 않는다 (Redis 아끼기).
+
+let viewMemo: { acct: string; view: RpgView } | null = null;
+
+/** 사냥 화면 정보를 기억한다 (사냥 창·[내 정보]가 받은 값) */
+export function rememberRpgView(acct: string, view: RpgView): void {
+  viewMemo = { acct, view };
+}
+
+/** 이 계정의 마지막 사냥 화면 정보 (없거나 다른 계정 것이면 null) */
+export const cachedRpgView = (acct: string): RpgView | null => (viewMemo?.acct === acct ? viewMemo.view : null);
+
+let viewInflight: { acct: string; p: Promise<RpgView> } | null = null;
+/** [내 정보] 사냥 칸: 기억한 값이 있으면 그대로, 없으면 GET /api/rpg 한 번 (동시에 여러 번 물어도 한 번만) */
+export function myRpgView(acct: string): Promise<RpgView> {
+  const hit = cachedRpgView(acct);
+  if (hit) return Promise.resolve(hit);
+  if (viewInflight?.acct !== acct) {
+    const p = rpgApi
+      .view()
+      .then((v) => {
+        rememberRpgView(acct, v);
+        return v;
+      })
+      .finally(() => {
+        if (viewInflight?.p === p) viewInflight = null;
+      });
+    viewInflight = { acct, p };
+  }
+  return viewInflight.p;
 }

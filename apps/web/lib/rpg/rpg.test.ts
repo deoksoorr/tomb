@@ -1,7 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { itemById } from "@tomb/protocol";
 import { COSMETIC_DROPS, DIFFICULTIES, DIFFS, GEAR, MONSTERS, SKILLS, ZONES } from "./catalog";
-import { addGear, allocStats, consumePotions, equip, gainExp, learnSkill, newCharacter, removeForSale, removeGearForSale, returnUnsold, RpgError, setHotbar } from "./character";
+import {
+  addGear,
+  allocStats,
+  consumePotions,
+  dropSellValue,
+  equip,
+  gainExp,
+  gearSaleSplit,
+  gearSaleValue,
+  learnSkill,
+  newCharacter,
+  pieceSaleBought,
+  removeForSale,
+  removeGearForSale,
+  removePieceForSale,
+  returnUnsold,
+  RpgError,
+  sellValue,
+  setHotbar,
+} from "./character";
+import { encodeShopPiece } from "./setGear";
 import { applyExp, ATK_PER_STR, attackArea, damage, DEFAULT_ATTACK_AREA, derive, expToNext, hitChance, inAttackArea, MAX_LEVEL, monsterStats } from "./formulas";
 import { bugsCount, bugsPlan, comboMult, eliteBonusExp, huntPlan, huntSpawnable, huntTotal, starsCount, starsPlan, starWindows } from "./plan";
 import { evaluate, MIN_RUN_MS, type TicketInfo } from "./rewards";
@@ -117,7 +137,7 @@ describe("캐릭터 조작", () => {
     const first = removeGearForSale(c, "w_keyboard");
     expect(first).toMatchObject({ bought: true, value: 60 });
     const second = removeGearForSale(first.state, "w_keyboard");
-    expect(second.bought).toBe(false);
+    expect(second).toMatchObject({ bought: false, value: 30 }); // 11/20 주운 것은 상점 값(120)의 25%
     expect(second.state.inv.w_keyboard).toBeUndefined();
   });
 
@@ -127,7 +147,7 @@ describe("캐릭터 조작", () => {
     c = addGear(c, "w_keyboard", true);
     c = addGear(c, "w_keyboard", false);
     const r = removeForSale(c, "w_keyboard", 2);
-    expect(r).toMatchObject({ kind: "gear", bought: 1, drop: 1, unit: 60 });
+    expect(r).toMatchObject({ kind: "gear", bought: 1, drop: 1, unit: 60, dropUnit: 30 });
     expect(r.state.inv.w_keyboard).toBe(1);
     expect(r.state.bought.w_keyboard).toBeUndefined();
     expect(() => removeForSale(c, "w_keyboard", 4)).toThrow(/3개뿐/);
@@ -135,13 +155,38 @@ describe("캐릭터 조작", () => {
     expect(() => removeForSale(c, "w_keyboard", 0)).toThrow(RpgError);
 
     const p = removeForSale(c, "p_coffee", 2); // 커피 3개
-    expect(p).toMatchObject({ kind: "potion", bought: 0, drop: 2, unit: 4 });
+    expect(p).toMatchObject({ kind: "potion", bought: 0, drop: 2, unit: 4, dropUnit: 4 }); // 물약은 50% 그대로
     expect(p.state.potions.p_coffee).toBe(1);
     expect(removeForSale(c, "p_coffee", 3).state.potions.p_coffee).toBeUndefined();
     expect(() => removeForSale(c, "p_coffee", 4)).toThrow(/3개뿐/);
 
     expect(returnUnsold(p.state, "p_coffee", 2).potions.p_coffee).toBe(3);
     expect(returnUnsold(r.state, "w_keyboard", 1).inv.w_keyboard).toBe(2);
+  });
+
+  it("11/20 주운 장비는 상점 값의 25%, 산 장비는 50% 환불, 섞인 묶음은 산 것부터 (화면 미리보기와 같은 계산)", () => {
+    expect([sellValue(120), dropSellValue(120), dropSellValue(1700)]).toEqual([60, 30, 425]);
+    let c = newCharacter();
+    for (const b of [false, true, false]) c = addGear(c, "w_keyboard", b);
+    // 주운 것만
+    expect(gearSaleValue(120, { bought: 0, drop: 3 })).toBe(90);
+    // 섞인 묶음: 산 1개(60) + 주운 2개(30씩)
+    expect(gearSaleSplit(c, "w_keyboard", 3)).toEqual({ bought: 1, drop: 2 });
+    expect(gearSaleSplit(c, "w_keyboard", 1)).toEqual({ bought: 1, drop: 0 });
+    const r = removeForSale(c, "w_keyboard", 3);
+    expect(r.bought * r.unit + r.drop * r.dropUnit).toBe(gearSaleValue(120, gearSaleSplit(c, "w_keyboard", 3)));
+    expect(gearSaleValue(120, gearSaleSplit(c, "w_keyboard", 3))).toBe(120);
+  });
+
+  it("11/20 강화한 한 개: 산 기록이 묶음보다 많으면 50%, 아니면 주운 것 25%", () => {
+    const code = encodeShopPiece({ id: "c_bonus", e: 1, u: 7, f: 0 });
+    const base = { ...newCharacter(), si: [code] };
+    const drop = removePieceForSale(base, 7);
+    expect(pieceSaleBought(base, "c_bonus")).toBe(0);
+    expect(drop).toMatchObject({ bought: 0, drop: 1, unit: 850, dropUnit: 425 });
+    const bought = { ...base, bought: { c_bonus: 1 } };
+    expect(pieceSaleBought(bought, "c_bonus")).toBe(1);
+    expect(removePieceForSale(bought, 7)).toMatchObject({ bought: 1, drop: 0, unit: 850 });
   });
 
   it("포션 사용은 가진 만큼만 뺀다", () => {

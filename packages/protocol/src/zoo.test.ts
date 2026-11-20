@@ -41,7 +41,9 @@ describe("동물원 펫 카탈로그", () => {
     for (const it of ITEMS)
       if (it.slot === "pet") {
         // 12월 크리스마스 꼬마 루돌프도 선물상자에서만
-        if (it.quest || it.event) expect(petPrice(it.id), it.id).toBeNull();
+        // 11/19 계절 한정 꼬마 눈오리는 계절 보따리상에서만 (값은 seasonPrice)
+        // 11/19 멍냥 분양소 품종 펫도 분양소에서만 (값은 mungnyangPetPrice — breedPets.test.ts)
+        if (it.quest || it.event || it.seasonSet || it.petShop) expect(petPrice(it.id), it.id).toBeNull();
         else expect(petPrice(it.id), it.id).not.toBeNull();
       }
     // 싼 것부터
@@ -122,7 +124,8 @@ describe("11/17 동물원 새 펫 묶음", () => {
   });
 
   it("옛 화면용 비슷한 펫: 새 펫마다 있고, 옛 펫(그림자 유령 제외)이며 타는 펫은 타는 펫으로", () => {
-    expect(Object.keys(PET_FALLBACK).sort()).toEqual([...NEW, "xm_sleigh"].sort());
+    const BREEDS = ITEMS.filter((i) => i.petShop).map((i) => i.id); // 11/19 멍냥 분양소 품종 펫 (breedPets.test.ts)
+    expect(Object.keys(PET_FALLBACK).sort()).toEqual([...NEW, "xm_sleigh", "sc_snowduck", "gk_owl", "sm_magpie", "sp_bee", "ye_raccoon", "su_goat", "ic_penguin", "fr_snowbun", ...BREEDS].sort());
     for (const [id, fb] of Object.entries(PET_FALLBACK)) {
       expect(NEW.includes(fb), fb).toBe(false);
       expect(fb).not.toBe("pet_ghost");

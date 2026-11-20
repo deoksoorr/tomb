@@ -5,6 +5,8 @@ import { gearById, type GearSlot } from "@/lib/rpg/catalog";
 import { decodeSg, enhOfId, isSgCode, SG_SETS, type SgGrade } from "@/lib/rpg/setGear";
 import { iconGrid } from "@/game/rpg/icons";
 import { weaponGlow } from "@/game/rpg/setGearRun";
+// huntDollGrid는 avatarCore로 그린다 — 계절 한정 세트 그림 등록(avatar.ts)을 먼저 불러 둔다
+import "@/game/sprites/avatar";
 import { huntDollGrid, type HuntDollOpts, type HuntDollPiece } from "@/game/sprites/setGear";
 import { huntLook, villageLook } from "@/game/sprites/setGearWear";
 import { Grid } from "@/game/sprites/pixel";

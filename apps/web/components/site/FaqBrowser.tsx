@@ -98,7 +98,7 @@ export default function FaqBrowser({ cats, items }: { cats: readonly string[]; i
         {!shown.length && (
           <div className={styles.empty}>
             <span className={styles.ghost} aria-hidden="true" />
-            찾는 질문이 없어요. 다른 말로 찾아봐 주세요.
+            맞는 질문을 찾지 못했어요. 다른 낱말로 찾아봐 주세요.
           </div>
         )}
       </div>

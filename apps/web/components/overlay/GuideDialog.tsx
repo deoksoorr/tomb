@@ -36,7 +36,7 @@ import {
   permanentPrice,
   SEA_TITLE,
   TIDE_PERIOD_MIN,
-  ZOO_PETS,
+  ZOO_SHOP_PETS,
 } from "@tomb/protocol";
 import { ATTEND_STAY_TEXT } from "@/lib/attendStay";
 import { calendarRewards } from "@/lib/calendar";
@@ -79,7 +79,12 @@ import { QUEST_DAILY, QUEST_STAMPS } from "@/lib/forage/quests/catalog";
 import styles from "./GuideDialog.module.css";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
-const petPrices = ZOO_PETS.map((p) => p.price);
+/** 칭호 이름 뒤 「과/와」 (마지막 글자 받침 — 한글이 아니면 「와」) */
+const titleAnd = (name: string) => {
+  const c = name.charCodeAt(name.length - 1) - 0xac00;
+  return c >= 0 && c < 11172 && c % 28 !== 0 ? "과" : "와";
+};
+const petPrices = ZOO_SHOP_PETS.map((p) => p.price);
 /** 첫 걸음 미션 한 칸 포인트 범위 (lib/retain FIRST_STEPS) */
 const firstPoints = FIRST_STEPS.map((st) => st.reward.points ?? 0);
 const firstLo = Math.min(...firstPoints);
@@ -177,6 +182,8 @@ const places = (touch: boolean): ReactNode[][] => [
   ["유령 잡화점", touch ? "상점 주인장에게 [말 걸기]" : "상점 주인장에게 E", "꾸미기, 폭죽, 확성기, 염색권을 팔아요"],
   ["범퍼카장", "가운데 다리 건너 바로", `입구에서 ${keyJosa("E", "로", touch)} 타요. 무료예요`],
   ["동물원", "서쪽 다리 건너 바로", `사육사에게 펫 분양 (${won(Math.min(...petPrices))}~${won(Math.max(...petPrices))}P)`],
+  // 11/20 강아지·고양이 펫과 집 가구는 정문 옆 분양사 보리만 판다
+  ["분양사 보리", "동물원 정문 왼쪽", "강아지와 고양이 펫, 집 가구를 팔아요"],
   ["의뢰 게시판", "캠핑장행 정류장 바로 옆", "의뢰 게시판과 긴급 의뢰 현판이 있어요"],
   ["언젠가 캠핑장", `캠핑장행 정류장에서 ${keyJosa("E", "로", touch)} 버스 타기`, "계곡 낚시를 하고 바베큐를 사 먹어요. 먹으면 몸이 커지거나 빨라져요."],
   [
@@ -187,7 +194,7 @@ const places = (touch: boolean): ReactNode[][] => [
   ["낚시 잔교", "호수 서쪽, 호박밭 옆", "어부 영감 노점과 낚시 의자가 있어요"],
   ["낚시", "호수 잔교, 호수 둑, 강둑, 연못, 조각배 위", `낚시 의자 앞에서 ${keyName("E", touch)}`],
   ["수집가", "동물원과 오리배 사이 둑", "약초, 광석, 발굴품, 곤충을 사 가요"],
-  ["망원경", "북서쪽 언덕 위, 옛 묘역 오른쪽", "별자리 잇기를 해요. 언덕 말고도 마을 곳곳에 있고, 한 대에 한 사람씩 봐요."],
+  ["망원경", "북서쪽 언덕 위, 옛 묘역 오른쪽", "별자리 잇기를 해요. 언덕 말고도 마을 곳곳에 있고, 한 대에 한 사람씩 봐요. 맑은 밤엔 아주 드물게 전설 「유성우 오라」가 떨어져요."],
   ["사냥터", "메뉴의 사냥터", "혼자나 같이 사냥하고 미니게임도 해요"],
   ["분양 사무소", "메뉴의 집", "내 집을 받아 꾸며요"],
   ["옛 묘역 입구 팻말", "북서쪽 언덕 오르는 길 앞, 유령 잡화점 서쪽", `${keyJosa("E", "로", touch)} 성황당을 열어요. 이장한 묘비를 다시 모시고 성불한 이야기들도 봐요.`],
@@ -374,7 +381,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
             「{PATH_NAME}」 {PATH.length}개가 가입한 날부터 하루 하나씩 열려요. 못 받은 날 것은 쌓여 있다가 한꺼번에 받고, {PATH.length}개를 다 받으면 끝나요.
             꾸러미는 {DAY_RESET_TEXT}에 열리고, 꾸미기는 {PATH_WEAR_DAYS}일 동안 입어요.
           </p>
-          <Table head={["날", "꾸러미"]} rows={PATH.map((g) => [`${g.n}일째`, g.title ? `칭호 「${g.name}」와 꽃 머리핀(${PATH_WEAR_DAYS}일), 보호 문서 1장` : g.wear ? `${g.name}(${PATH_WEAR_DAYS}일)` : g.name])} />
+          <Table head={["날", "꾸러미"]} rows={PATH.map((g) => [`${g.n}일째`, g.title ? `칭호 「${g.name}」${titleAnd(g.name)} 꽃 머리핀(${PATH_WEAR_DAYS}일), 강화 증폭권 1장` : g.wear ? `${g.name}(${PATH_WEAR_DAYS}일)` : g.name])} />
           <Table
             head={["이것도 있어요", "내용"]}
             rows={[
@@ -384,7 +391,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
               ],
               [
                 "오늘 미션",
-                `날마다 ${DAY_RESET_TEXT}에 미션 ${TODO_COUNT}개가 무작위로 나와요. 마을 일, 놀이, 나들이에서 하나씩 골라 줘요. [안내]를 누르면 그곳까지 화살표가 이어져요. 하나에 ${rewardText(TODO_GIFT)}, ${TODO_COUNT}개를 다 하면 ${rewardText(TODO_BONUS_GIFT)}과 도장 하나를 더 받아요. 도장 ${TODO_PROT_EVERY}개마다 보호 문서를 더 줘요.`,
+                `날마다 ${DAY_RESET_TEXT}에 미션 ${TODO_COUNT}개가 무작위로 나와요. 마을 일, 놀이, 나들이에서 하나씩 골라 줘요. [안내]를 누르면 그곳까지 화살표가 이어져요. 하나에 ${rewardText(TODO_GIFT)}, ${TODO_COUNT}개를 다 하면 ${rewardText(TODO_BONUS_GIFT)}과 도장 하나를 더 받아요. 도장 ${TODO_PROT_EVERY}개마다 강화 증폭권도 받아요.`,
               ],
             ]}
           />
@@ -433,7 +440,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
             head={["종류", "얻는 곳", "쓰면"]}
             rows={[
               [KIND_LABELS.cosmetic, "유령 잡화점", `입으면 ${durationLabel(COSMETIC_DURATION_MS)} 동안 써요. 이용권 값의 ${PERMANENT_MULTIPLIER}배로 영구 소장도 할 수 있어요.`],
-              ["펫", "동물원 사육사", "평생 함께해요. 한 번에 한 마리씩 데리고 다녀요."],
+              ["펫", "동물원 사육사, 분양사 보리", "평생 함께해요. 한 번에 한 마리씩 데리고 다녀요."],
               [KIND_LABELS.firework, "유령 잡화점", "쏘면 사라지고 같은 채널 모두가 봐요. 놀이기구를 타는 중에는 위쪽 폭죽 버튼으로 쏴요."],
               [KIND_LABELS.megaphone, "유령 잡화점", `외치면 사라져요. 외친 기록은 ${durationLabel(MEGAPHONE_TTL_MS)} 뒤 사라져요.`],
               [KIND_LABELS.dye, "잡화점 염색·외형 탭", "한 번 염색하면 사라져요"],

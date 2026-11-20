@@ -15,7 +15,8 @@ import { CampFishMarkers } from "../camp/campForage";
 // - 11/16 2차: 바닷물고기(물 종류 sea)가 잡혀요. 낚시 창 제목은 「낚시 · 바다」.
 // - 11/16 2차 갯벌 캐기: 갯벌 구멍(protocol SEA_DIG_HOLES = catalog SEA_GATHER_NODES, kind clam)이 마을 채집 지점처럼 피어나요.
 //   물이 덮은 구멍은 그림·빛을 숨기고, 다가가면 안내만 (protocol seaDigOpenAt — 서버 seaDigOpen과 같은 계산). 게이지·하루 한도는 마을과 같아요.
-//   NPC·의뢰 게시판은 바닷가에 없어요 (포구 시장 좌판은 game/sea/seaMarket).
+//   의뢰 게시판은 바닷가에 없어요. 11/20 NPC는 해녀 할망 좌판 하나 (물고기·채집물을 다 사요 — Foraging이 그 맵 NPC만 그리고 E → 판매 창,
+//   좌판·할망 발밑 충돌과 파라솔 등은 seaLayout SEA_BUYER·seaBuyerColliders·SEA_LIGHTS).
 // - 물때: 찌 자리(자리 앞 24px)가 물속일 때만 (간조엔 갯바위 자리를 못 써요, 선착장 끝은 늘 돼요). 낚는 중에 마르면 안내하고 일어나요.
 
 export type SeaForageDeps = {
@@ -32,7 +33,7 @@ export type SeaForageDeps = {
   tide: () => number;
 };
 
-/** 바닷가 낚시·갯벌 캐기 (Foraging을 바닷가 맵으로) + 지금 E로 쓸 수 있는 낚시 자리·갯벌 구멍 */
+/** 바닷가 낚시·갯벌 캐기·해녀 할망 좌판 (Foraging을 바닷가 맵으로) + 지금 E로 쓸 수 있는 낚시 자리·갯벌 구멍·할망 */
 export class SeaForage {
   readonly f: Foraging;
   private items: Interactable[] = [];
@@ -67,7 +68,7 @@ export class SeaForage {
     return n && n.kind === "clam" && !seaDigOpenAt(n, this.tide()) ? SEA_DIG_CLOSED_MSG : null;
   }
 
-  /** (x,y)에서 가장 가까운 낚시 자리·갯벌 구멍 (반지름 안) */
+  /** (x,y)에서 가장 가까운 낚시 자리·갯벌 구멍·해녀 할망 (반지름 안) */
   nearest(x: number, y: number): Interactable | null {
     let best: Interactable | null = null;
     let bd = Infinity;

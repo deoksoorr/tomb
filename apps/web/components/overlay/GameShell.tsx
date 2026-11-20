@@ -19,6 +19,7 @@ import { useRideBlocked } from "@/lib/hooks/useRideBlocked";
 import { rideGate } from "@/lib/rideGate";
 import { HUNT_NO_PATH_TOAST, huntPress, huntWalkHint, walkingAfter } from "@/lib/huntWalk";
 import { SHOP_NO_PATH_TOAST, shopPress, shopWalkHint } from "@/lib/shopWalk";
+import { HOUSING_NO_PATH_TOAST, housingWalkHint } from "../noHouse/noHouseText";
 import { openShopTab, takeShopTab } from "../shop/shopTab";
 import { readItem, UI_KEYS, writeItem } from "@/lib/storage";
 import { onBackgroundChange } from "@/lib/background";
@@ -40,6 +41,7 @@ import Minimap from "./Minimap";
 import StayBonus from "./StayBonus";
 import { guideToQuestBoard, RetainDock, RetainLayer, RetainPhoneChip, useLookStep, useNewbie } from "./RetainHud";
 import { openDevNotes } from "@/lib/devNotes/open";
+import DevNoteCard from "./DevNoteCard";
 import RankingList from "../grave/RankingList";
 import RankingPanel from "../grave/RankingPanel";
 import WeeklyRace from "../grave/WeeklyRace";
@@ -80,6 +82,9 @@ import LotteryDialog from "@/components/plaza/LotteryDialog";
 import SkyHud from "@/components/sky/SkyHud";
 import SeaViewHud from "@/components/sea/SeaViewHud";
 import GhostLayer, { GhostStaffButton } from "@/components/sea/GhostLayer";
+import SeasonShopDialog from "@/components/seasonShop/SeasonShopDialog";
+import MungnyangDialog from "@/components/mungnyang/MungnyangDialog";
+import OfficeShopDialog from "@/components/office/OfficeShopDialog";
 import OddsLayer from "@/components/odds/OddsLayer";
 import { SnackVendLayer } from "@/components/sea/GullSnacks";
 import UrgentHud from "@/components/forage/UrgentHud";
@@ -236,6 +241,13 @@ type Panel =
   | "haunt"
   | "tower"
   | "lottery"
+  /** 11/19 광장 기간 한정 노점 (계절 보따리상 = 코디 · 가구 보따리상 = 가구) */
+  | "seasonCos"
+  | "seasonFurn"
+  /** 11/19 동물원 정문 왼쪽 「분양사 보리」 (강아지·고양이 펫·집 가구) */
+  | "mungnyang"
+  /** 11/20 야근 빌딩 오른쪽 「총무팀 문대리」 (사무실 가구) */
+  | "office"
   /** 11/19 어디서든 보는 의뢰판 (납품은 마을 의뢰 게시판에서) */
   | "quests";
 
@@ -344,11 +356,13 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   // 11/16 [사냥] → 사냥터 입구까지 걸어가는 중 (lib/huntWalk). 다시 누르거나 방향키·조이스틱으로 멈춘다
   // 11/19 외치기 창 [상점에서 사기] → 잡화점까지 걷기도 같은 알림 (kind "shop")
   const portalWalk = useBridgeValue("portal:walk");
-  const huntWalking = portalWalk?.kind !== "shop" && walkingAfter(portalWalk?.status);
+  const huntWalking = portalWalk?.kind === "hunt" && walkingAfter(portalWalk.status);
   const shopWalking = portalWalk?.kind === "shop" && walkingAfter(portalWalk.status);
+  // 11/20 집 없는 손님 거절 창 [분양 사무소로 가기] (components/noHouse)
+  const housingWalking = portalWalk?.kind === "housing" && walkingAfter(portalWalk.status);
   const mapNow = useBridgeValue("map:changed")?.map ?? "village";
   useBridgeEvent("portal:walk", ({ kind, status }) => {
-    if (status === "unreachable") showToast(kind === "shop" ? SHOP_NO_PATH_TOAST : HUNT_NO_PATH_TOAST);
+    if (status === "unreachable") showToast(kind === "shop" ? SHOP_NO_PATH_TOAST : kind === "housing" ? HOUSING_NO_PATH_TOAST : HUNT_NO_PATH_TOAST);
     // 잡화점에 못 가고 멈췄으면 골라 둔 상점 탭(확성기)을 지운다 (나중에 주인장에게 말을 걸 때 엉뚱한 탭으로 열리지 않게)
     if (kind === "shop" && (status === "cancelled" || status === "unreachable")) takeShopTab();
   });
@@ -994,9 +1008,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           <div className={styles.bottomCenter}>
             {showTutorial && <Tutorial touch={coarse} onDone={() => setTutorialOn(false)} />}
             <ToastList toasts={toasts} />
-            {(huntWalking || shopWalking) && (
+            {(huntWalking || shopWalking || housingWalking) && (
               <button type="button" className={cx(ui.button, styles.walkHint)} onClick={() => bridge.emit("portal:walkTo", { kind: null })} aria-live="polite">
-                {shopWalking ? shopWalkHint(coarse) : huntWalkHint(coarse)}
+                {shopWalking ? shopWalkHint(coarse) : housingWalking ? housingWalkHint(coarse) : huntWalkHint(coarse)}
               </button>
             )}
             <StatusBanners />
@@ -1067,6 +1081,10 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           onOpenHousing={() => {
             setHousingIntent(null);
             setPanel("housing");
+          }}
+          onGoHunt={() => {
+            setPanel(null);
+            if (!huntWalking) pressHunt();
           }}
           tab={meTab}
           onTab={setMeTab}
@@ -1175,6 +1193,11 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       )}
       {panel === "wish" && <WishDialog onClose={closePanel} />}
       {panel === "lottery" && <LotteryDialog onClose={closePanel} />}
+      {(panel === "seasonCos" || panel === "seasonFurn") && (
+        <SeasonShopDialog kind={panel === "seasonCos" ? "cos" : "furn"} onClose={closePanel} avatar={{ color: options.color, body: options.body }} />
+      )}
+      {panel === "mungnyang" && <MungnyangDialog onClose={closePanel} />}
+      {panel === "office" && <OfficeShopDialog onClose={closePanel} />}
       {panel === "telescope" && <Telescope onClose={closePanel} />}
       {panel === "haunt" && <HauntDialog onClose={closePanel} />}
       <GoblinClaim />
@@ -1183,6 +1206,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {ready && <TitleNotice />}
       {/* 11/18 새 이웃 꾸러미·오늘 미션·첫 걸음 창 + 진행 듣기 */}
       {ready && <RetainLayer onOpenBag={() => setPanel("bag")} />}
+      <DevNoteCard ready={ready} />
       {panel === "calendar" && <CalendarDialog onClose={closePanel} />}
       {panel === "gifts" && <GiftsDialog onClose={closePanel} onOpenCalendar={() => setPanel("calendar")} />}
       {panel === "friends" && <FriendsDialog onClose={closePanel} />}

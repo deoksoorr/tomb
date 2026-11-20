@@ -3,8 +3,25 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { cx } from "../ui/cx";
+import GameStartLink from "./GameStartLink";
 import { Logo } from "./Logo";
 import styles from "./site.module.css";
+
+/* eslint-disable-next-line @next/next/no-img-element -- 게임 촛불 도트 */
+const CANDLE = <img className={cx(styles.candle, styles.px)} src="/devnotes/brand/candle.png" alt="" width={12} height={16} />;
+
+/** 도트 달 (8×8 칸, 2배) */
+const MOON = (
+  <svg viewBox="0 0 8 8" width="16" height="16" shapeRendering="crispEdges" aria-hidden="true">
+    <path fill="currentColor" d="M2 0h3v1H2zM1 1h2v1H1zM0 2h2v4H0zM7 5h1v1H7zM1 6h6v1H1zM2 7h4v1H2z" />
+  </svg>
+);
+/** 도트 해 */
+const SUN = (
+  <svg viewBox="0 0 9 9" width="18" height="18" shapeRendering="crispEdges" aria-hidden="true">
+    <path fill="currentColor" d="M4 0h1v1H4zM4 8h1v1H4zM0 4h1v1H0zM8 4h1v1H8zM1 1h1v1H1zM7 1h1v1H7zM1 7h1v1H1zM7 7h1v1H7zM3 2h3v1H3zM2 3h5v3H2zM3 6h3v1H3z" />
+  </svg>
+);
 
 export type SiteNav = "news" | "guide" | "faq" | "story" | null;
 
@@ -53,6 +70,8 @@ export default function SiteHeader({ current }: { current: SiteNav }) {
     window.dispatchEvent(new Event(THEME_EVENT));
   };
   const themeLabel = dark ? "밝게 보기" : "어둡게 보기";
+  // 11/20 글자 대신 도트 그림 (밝을 때 달 = 어둡게, 어두울 때 해 = 밝게)
+  const themeIcon = dark ? SUN : MOON;
 
   return (
     <>
@@ -70,14 +89,13 @@ export default function SiteHeader({ current }: { current: SiteNav }) {
             ))}
           </nav>
           <div className={styles.right}>
-            <button className={styles.mode} type="button" onClick={toggleTheme}>
-              {themeLabel}
+            <button className={styles.mode} type="button" onClick={toggleTheme} aria-label={themeLabel} title={themeLabel}>
+              {themeIcon}
             </button>
-            <Link className={cx(styles.btn, styles.btnPrimary)} href="/" prefetch={false}>
-              {/* eslint-disable-next-line @next/next/no-img-element -- 게임 촛불 도트 */}
-              <img className={cx(styles.candle, styles.px)} src="/devnotes/brand/candle.png" alt="" width={12} height={16} />
+            <GameStartLink className={cx(styles.btn, styles.btnPrimary)} backLabel={<>{CANDLE}게임으로 돌아가기</>}>
+              {CANDLE}
               게임 시작
-            </Link>
+            </GameStartLink>
             <button className={cx(styles.btn, styles.menuBtn)} type="button" aria-expanded={open} aria-controls="site-mnav" onClick={() => setOpen((o) => !o)}>
               {open ? "닫기" : "메뉴"}
             </button>
@@ -90,9 +108,6 @@ export default function SiteHeader({ current }: { current: SiteNav }) {
             {n.label}
           </Link>
         ))}
-        <button type="button" onClick={toggleTheme}>
-          {themeLabel}
-        </button>
       </nav>
     </>
   );

@@ -116,9 +116,11 @@ describe("집 안 가구 자리 (한 자리 한 명)", () => {
 });
 
 describe("새 가구 카탈로그", () => {
-  it("생활 가구 9종이 상점에 있고, 가격·점수가 기존 가구 범위와 어울린다", () => {
-    const living = FURNITURE.filter((f) => f.category === "living");
-    expect(living.map((f) => f.id).sort()).toEqual(["bathtub", "cat_cushion", "fireplace", "floor_lamp", "fridge", "grand_clock", "piano", "radio", "sleepy_dog"]);
+  it("생활 가구 7종이 상점에 있고, 가격·점수가 기존 가구 범위와 어울린다", () => {
+    // 11/19 멍냥 분양소 품종 펫 가구(petShop)는 생활 갈래지만 가구점에 없다 (breedFurniture.test.ts)
+    // 11/20 잠자는 강아지·고양이 쿠션(boriOnly)도 분양사 보리만 팔아 가구점에서 빠졌다
+    const living = FURNITURE.filter((f) => f.category === "living" && !f.petShop && !f.boriOnly);
+    expect(living.map((f) => f.id).sort()).toEqual(["bathtub", "fireplace", "floor_lamp", "fridge", "grand_clock", "piano", "radio"]);
     for (const f of living) {
       // I0c: 가구값은 4배로 올렸고 점수는 그대로라, 점수/가격 하한도 1/4
       expect(f.price).toBeGreaterThanOrEqual(120);

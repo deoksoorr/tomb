@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { HOUSE_LOTS, HUNT_GATE, PORTAL_RADIUS, SHOP_DOOR, SPAWN } from "@tomb/protocol";
+import { HOUSE_LOTS, HOUSING_DOOR, HUNT_GATE, PORTAL_RADIUS, SHOP_DOOR, SPAWN } from "@tomb/protocol";
 import { AutoWalk } from "../logic/autoWalk";
 import type { MoveInput } from "../logic/movement";
 import { findPath, lineOfSight, type Pt, type Rect, type WalkGrid } from "../logic/pathfind";
 import { allFurnitureColliders, houseCollider, inWater, nearShopDoor, PLAZA_FIRE, PLAZA_WELL, staticColliders, standable } from "./layout";
 import { PORTAL_WALK, villageBounds, WALK_CELL, WalkGridCache, walkGridOf } from "./portalWalk";
+import { MUNGNYANG_SELLER } from "./mungnyangLayout";
+import { OFFICE_STALL } from "./officeStallLayout";
+import { FURN_CRAFTER } from "./seasonStallLayout";
 import { nearestSafeGround } from "./walkReach";
 import { HUNT_AWAY_TOAST, huntPress, huntWalkHint, walkingAfter } from "@/lib/huntWalk";
 
@@ -160,6 +163,35 @@ describe("11/19 잡화점 문까지 걷기 ([상점에서 사기]) — 길찾기
     expect(step).toBe("arrived");
     expect(nearShopDoor(pos.x, pos.y)).toBe(true);
   });
+});
+
+describe("11/20 분양 사무소 문까지 걷기 (집 없는 손님 [분양 사무소로 가기]) — 길찾기", () => {
+  const { goal, face } = PORTAL_WALK.housing;
+
+  it("설 자리는 문 앞 입구 반경 안이고 서 있을 수 있는 땅, 문(위)을 바라본다", () => {
+    expect(Math.hypot(goal.x - HOUSING_DOOR.x, goal.y - HOUSING_DOOR.y)).toBeLessThan(PORTAL_RADIUS);
+    expect(standable(goal.x, goal.y)).toBe(true);
+    expect(inWater(goal.x, goal.y)).toBe(false);
+    expect(hits(goal)).toBe(false);
+    expect(face.y).toBeLessThan(goal.y);
+  });
+
+  // 거절 창이 뜨는 곳 (가구 보따리상 목수 유령 앞 · 분양사 보리 앞 · 11/20 총무팀 문대리 카트 앞)도 출발점에 넣는다
+  const starts = {
+    ...STARTS,
+    furnStall: ground(FURN_CRAFTER.x, FURN_CRAFTER.y + 14),
+    mungnyang: ground(MUNGNYANG_SELLER.x, MUNGNYANG_SELLER.y + 14),
+    office: ground(OFFICE_STALL.x, OFFICE_STALL.y + 12),
+  };
+  for (const [name, from] of Object.entries(starts)) {
+    it(`${name}에서 분양 사무소 문까지 길이 있고 충돌체를 지나지 않는다`, () => {
+      const path = findPath(dry, from, goal) ?? findPath(wet, from, goal);
+      expect(path, name).not.toBeNull();
+      const p = path!;
+      expect(p[p.length - 1]).toEqual(goal);
+      expect(bumps(from, p)).toBeNull();
+    });
+  }
 });
 
 describe("WalkGridCache", () => {

@@ -11,6 +11,7 @@ import { BODY_PART_PREFIX } from "@/lib/lookScore";
 import { DYE_ICON_IDS, dyeIcon } from "./dyeIcons";
 import { NAME_STYLE_ICON_IDS, nameStyleIcon } from "./nameStyleIcons";
 import { Grid, type Color } from "./pixel";
+import { SEASON_SHEET_IDS, seasonGearIcon } from "./seasonSetGear";
 
 // 상점·가방 아이템 픽셀아트 아이콘 (UI용). Phaser 없이 캔버스만 쓴다 (브라우저 전용: document 사용).
 //  - 폭죽·꾸미기·묘비 꾸미기: 16×16
@@ -1149,7 +1150,8 @@ function base(itemId: string): HTMLCanvasElement {
       return fwTower().toCanvas();
     default: {
       // F8 추가 꾸미기 (시트 그림 → 문자 아이콘, 따로 그리는 연출 → 그 그림으로 만든 아이콘)
-      const f8 = gearIcon(itemId) ?? questUnlockIcon(itemId) ?? fxIconGrid(itemId) ?? megaphoneIcon(itemId) ?? dyeIcon(itemId) ?? nameStyleIcon(itemId) ?? bodyIconGrid(itemId);
+      // 11/19 계절 한정 세트 (시트 그림·이름표는 seasonSetGear, 따로 그리는 연출은 fxIconGrid → seasonSetFx)
+      const f8 = seasonGearIcon(itemId) ?? gearIcon(itemId) ?? questUnlockIcon(itemId) ?? fxIconGrid(itemId) ?? megaphoneIcon(itemId) ?? dyeIcon(itemId) ?? nameStyleIcon(itemId) ?? bodyIconGrid(itemId);
       if (f8) return f8.toCanvas();
       // 낚시·채집물 (4·32번: f_/b_/h_/o_/d_)
       return forageIconCanvas(itemId) ?? unknown().toCanvas();
@@ -1182,6 +1184,8 @@ export const ICON_IDS: readonly string[] = [
   "u_box_pocket",
   // 12월 크리스마스 선물상자
   "xm_box",
+  // 11/19 계절 한정 세트 (시트 그림 — 이름표·따로 그리는 연출은 위 목록에 이미 있다)
+  ...SEASON_SHEET_IDS,
 ];
 
 /** 이 아이템에 전용 아이콘이 있는지 (없으면 물음표 아이콘). 꾸미기 랭킹의 프리미엄 외형("body:{id}")도 그림이 있다 */

@@ -56,6 +56,7 @@ import {
   type WelcomeMsg,
   type WhisperMsg,
   WHO_ON_MAX,
+  readChatNameStyle,
 } from "@tomb/protocol";
 import type { AppearanceChange } from "../sprites/avatar";
 import { readChatLog, type IncomingChatLine } from "../logic/chatLog";
@@ -180,7 +181,7 @@ export type NetCallbacks = {
 };
 
 /** 11/16 채팅에 실려 오는 보낸 사람 정보 (맵이 달라 화면에 없는 사람도 채팅창에 쓰게) */
-export type ChatMeta = { name?: string; staff?: true; mgr?: true; /** 11/17 사냥 중이면 "hunt" */ m?: ChatPlace };
+export type ChatMeta = { name?: string; staff?: true; mgr?: true; /** 11/17 사냥 중이면 "hunt" */ m?: ChatPlace; /** 11/20 서버가 실은 닉네임 꾸미기 id (다른 맵 사람) */ ns?: string[] };
 
 /** 맵이 바뀌어도 늘 처음 콜백(월드)이 받는 것: 계정·친구·확성기·내 몸 모양·고블린 보상 */
 const GLOBAL_CALLBACKS = ["onMegaphone", "onMegaPin", "onMeStale", "onFriend", "onSelfBody", "onGoblinGrant", "onSquirrels", "onSquirrelsWait"] as const;
@@ -455,6 +456,11 @@ export class RealtimeClient {
     this.channel = back;
     this.setMode(this.everOnline ? "reconnecting" : "connecting");
     void this.connect(back);
+  }
+
+  /** 11/20 닉네임 변경: 다음 /api/join부터 새 이름 (서버는 계정 이름을 쓰지만 첫 입장 요청과 맞춘다) */
+  setName(name: string): void {
+    this.opts.name = name;
   }
 
   /** "여기서 다시 접속": replaced/offline/대기 상태에서 처음부터 다시 */
@@ -952,6 +958,7 @@ export class RealtimeClient {
               ...(m.staff === true ? { staff: true as const } : {}),
               ...(m.mgr === true ? { mgr: true as const } : {}),
               ...chatTagOf(m.m),
+              ...(readChatNameStyle(m.ns) ? { ns: readChatNameStyle(m.ns) } : {}),
             });
           break;
         case "chatLog":

@@ -1,0 +1,92 @@
+/* 경제 탭 잔액 순 목록. 폰에서는 한 사람을 두 줄로 줄인다 (순위와 이름, 잔액 / 최근 접속과 상태) */
+
+.rank {
+  width: 1%;
+  color: var(--ad-muted);
+}
+
+.more {
+  justify-self: center;
+}
+
+@media (max-width: 640px) {
+  /* 요약 숫자 넷은 폰에서 두 칸씩 (관리자 공통 .summary는 한 칸) */
+  .stats.stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  table.list thead {
+    display: none;
+  }
+
+  table.list,
+  table.list tbody {
+    display: block;
+    width: 100%;
+  }
+
+  /* 관리자 공통 표의 폰 최소 폭(.tableWrap > .table:not(.stackTable) 600px)을 이긴다 (옆 스크롤 없이 두 줄로) */
+  table.list.list.list {
+    min-width: 0;
+  }
+
+  table.list tr {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "rank name pts"
+      "rank seen state";
+    align-items: center;
+    gap: 2px 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--ad-line);
+  }
+
+  table.list tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  table.list tbody tr:nth-child(even) td,
+  table.list tbody tr:hover td {
+    background: none;
+  }
+
+  table.list td {
+    padding: 0;
+    border: 0;
+  }
+
+  table.list .rank {
+    grid-area: rank;
+    width: auto;
+    min-width: 34px;
+    text-align: left;
+  }
+
+  table.list td:nth-child(2) {
+    grid-area: name;
+    min-width: 0;
+  }
+
+  table.list td:nth-child(2) > span {
+    display: none;
+  }
+
+  table.list td:nth-child(3) {
+    grid-area: pts;
+    color: var(--ad-strong);
+    font-weight: 650;
+  }
+
+  table.list td:nth-child(4) {
+    grid-area: seen;
+    color: var(--ad-muted);
+    font-size: 12px;
+  }
+
+  table.list td:nth-child(5) {
+    grid-area: state;
+    text-align: right;
+  }
+}

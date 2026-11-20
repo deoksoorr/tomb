@@ -25,7 +25,7 @@ import {
   type SkillId,
   type ZoneId,
 } from "@/lib/rpg/catalog";
-import { rpgApi, type CharacterAction } from "@/lib/rpg/client";
+import { rememberRpgView, rpgApi, type CharacterAction } from "@/lib/rpg/client";
 import { starLabel } from "@/lib/rpg/endgame";
 import type { RpgView, RunReward, RunResult } from "@/lib/rpg/types";
 import type { HotAuto } from "@/lib/rpg/hotbar";
@@ -163,6 +163,12 @@ export default function HuntLobby({
 
   // 판이 진행되는 동안(대화상자가 없을 때)도 월드 키 입력을 막아 둔다 → 월드의 내 아바타는 입구에 멈춰 있다
   useBlockingLayer(phase === "playing" || phase === "submitting");
+
+  // 11/20 [내 정보] 사냥 칸이 다시 묻지 않게 마지막 값을 적어 둔다
+  const acct = me?.accountId;
+  useEffect(() => {
+    if (view && acct) rememberRpgView(acct, view);
+  }, [view, acct]);
 
   useEffect(() => {
     let alive = true;

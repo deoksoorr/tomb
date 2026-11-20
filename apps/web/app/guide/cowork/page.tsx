@@ -6,9 +6,8 @@ import { PRESENCE_INTERVAL_MS } from "@/lib/types";
 
 const PATH = "/guide/cowork";
 const H1 = "재택근무할 때 같이 일하는 느낌 나는 사이트";
-const TITLE = "재택근무할 때 같이 일하는 느낌 나는 사이트 — 최대 40명 실시간 도트 마을 | At one time...";
-const DESCRIPTION =
-  "혼자 재택근무할 때 누군가 곁에 있는 느낌이 필요하다면 At one time...에 들어와 보세요. 채널마다 최대 40명이 한 마을에 모이고, 벤치에 앉아 '일하는 중' 상태를 띄워 두면 같은 채널 모두에게 보여요. 무료, 설치·가입 없이.";
+const TITLE = `재택근무할 때 같이 일하는 느낌 나는 사이트 — 최대 ${DEFAULT_CHANNEL_CAPACITY}명 실시간 도트 마을 | At one time...`;
+const DESCRIPTION = `재택근무를 혼자 하다 보면 누가 곁에 있었으면 싶을 때가 있어요. At one time...에서는 채널마다 최대 ${DEFAULT_CHANNEL_CAPACITY}명이 한 마을에 모이고, 벤치에 앉아 '일하는 중'을 띄우면 같은 채널 모두에게 보여요. 무료예요.`;
 
 export const metadata = pageMetadata(PATH, TITLE, DESCRIPTION);
 

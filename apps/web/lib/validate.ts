@@ -223,7 +223,9 @@ export const ShopBuySchema = z.object({
     .refine((id) => !itemById(id)?.urgent, "긴급 의뢰 보상은 살 수 없어요.")
     .refine((id) => !itemById(id)?.ghost, "유령선 한정은 토요일 밤 유령선 장터에서만 팔아요.")
     .refine((id) => !itemById(id)?.event, "크리스마스 한정은 선물상자에서만 나와요.")
-    .refine((id) => !itemById(id)?.invite, "친구 초대 한정은 친구를 데려오면 받아요."),
+    .refine((id) => !itemById(id)?.invite, "친구 초대 한정은 친구를 데려오면 받아요.")
+    .refine((id) => !itemById(id)?.stargaze, "유성우 오라는 망원경에서만 나와요.")
+    .refine((id) => !itemById(id)?.seasonSet, "계절 한정은 계절 보따리상에서만 팔아요."),
 });
 export const ShopUseSchema = z.object({
   itemId: shopItem,

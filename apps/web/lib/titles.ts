@@ -167,6 +167,20 @@ export const TITLE_PERK_GROUP: Readonly<Record<TitleId, PerkGroup>> = {
   t_urgLast: "quest",
   // 매니저 전용: 능력 없음
   t_mgr: "none",
+  // 11/19 계절 한정 세트 덤 칭호: 능력 없음 (세트 덤은 칭호·꾸미기 점수·연출만 — 코디 기획안 규칙)
+  t_ssSnow: "none",
+  t_ssSanta: "none",
+  t_ssOvertime: "none",
+  t_ssFog: "none",
+  t_ssMagpie: "none",
+  t_ssGiri: "none",
+  t_ssPicnic: "none",
+  t_ssSports: "none",
+  t_ssYearEnd: "none",
+  t_ssSunrise: "none",
+  t_ssResol: "none",
+  t_ssSmelt: "none",
+  t_ssFrost: "none",
 };
 
 /** 칭호 능력 한 벌 (갈래가 아닌 칸은 0). 서버(보상·확률)와 화면(속도·표시)이 같이 쓴다 */
@@ -287,6 +301,22 @@ export type TitleMetric =
   | "refs"
   // 11/18 새 이웃 꾸러미(가입 첫 7일) 받은 선물 수 (7 = 졸업)
   | "grad"
+  // 11/19 계절 한정 세트 한 벌을 다 입었음 (1/0 — 지금 입은 것으로 재고, 한 번 얻은 칭호는 남는다)
+  | "ssSnow"
+  | "ssSanta"
+  // 11/20 나머지 여섯 벌
+  | "ssOvertime"
+  | "ssFog"
+  | "ssMagpie"
+  | "ssGiri"
+  | "ssPicnic"
+  | "ssSports"
+  // 11/20 새 다섯 벌
+  | "ssYearEnd"
+  | "ssSunrise"
+  | "ssResol"
+  | "ssSmelt"
+  | "ssFrost"
   | `dex_${DexCat}`;
 
 export type TitleDef = {
@@ -403,6 +433,22 @@ const STEP_ROWS: readonly StepRow[] = [
     ["t_ref10", "마을의 마당발", "gold", "추천 코드로 데려온 이웃 10명이 마을에 자리 잡으면", "refs", 10, "town"],
     // 11/18 한정: 가입하고 14일 안에 새 이웃 꾸러미 7개를 모두 받으면 (lib/retain)
     ["t_grad", "마을 새내기 졸업", "bronze", "새 이웃 꾸러미 7개를 모두 받으면", "grad", 7, "town"],
+    // 11/19 계절 한정 세트 (protocol SEASON_SETS): 계절 보따리상에서 산 한 벌 다섯 점을 함께 입으면. 동 등급 = 능력 없음
+    ["t_ssSnow", "첫눈 출근러", "bronze", "「첫눈 출근길」 다섯 점을 함께 입으면", "ssSnow", 1, "look"],
+    ["t_ssSanta", "산타 사무소 수습", "bronze", "「산타 견습 요정」 다섯 점을 함께 입으면", "ssSanta", 1, "look"],
+    // 11/20 나머지 여섯 벌 (코디 기획안 칭호 이름 그대로)
+    ["t_ssOvertime", "불 끄고 가는 사람", "bronze", "「야근 요정」 다섯 점을 함께 입으면", "ssOvertime", 1, "look"],
+    ["t_ssFog", "안개 속 묘지기", "bronze", "「안개 묘지기」 다섯 점을 함께 입으면", "ssFog", 1, "look"],
+    ["t_ssMagpie", "복 많이 받는 이웃", "bronze", "「설날 까치」 다섯 점을 함께 입으면", "ssMagpie", 1, "look"],
+    ["t_ssGiri", "의리의 아이콘", "bronze", "「의리 초콜릿」 다섯 점을 함께 입으면", "ssGiri", 1, "look"],
+    ["t_ssPicnic", "반차 소풍러", "bronze", "「벚꽃 소풍」 다섯 점을 함께 입으면", "ssPicnic", 1, "look"],
+    ["t_ssSports", "청팀 에이스", "bronze", "「사내 체육대회」 네 점을 함께 입으면", "ssSports", 1, "look"],
+    // 11/20 새 다섯 벌 (코디 기획안 2차 시안 칭호 이름 그대로)
+    ["t_ssYearEnd", "막차 놓친 사람", "bronze", "「송년회 3차」 다섯 점을 함께 입으면", "ssYearEnd", 1, "look"],
+    ["t_ssSunrise", "새해 첫 해 목격자", "bronze", "「해맞이 산행」 다섯 점을 함께 입으면", "ssSunrise", 1, "look"],
+    ["t_ssResol", "사흘째 회원님", "bronze", "「작심삼일」 다섯 점을 함께 입으면", "ssResol", 1, "look"],
+    ["t_ssSmelt", "얼음 위 강태공", "bronze", "「빙어 축제」 다섯 점을 함께 입으면", "ssSmelt", 1, "look"],
+    ["t_ssFrost", "서리꽃 유령", "bronze", "「서리 내린 묘역」 다섯 점을 함께 입으면", "ssFrost", 1, "look"],
 ];
 const STEP_OF = new Map(STEP_ROWS.map((r) => [r[0], r]));
 
@@ -443,7 +489,7 @@ function def(id: TitleId): TitleDef {
   const house = HOUSE_OF[id];
   if (house) {
     const [min, grade] = house;
-    return { id, name: HOUSE_TITLES.find((t) => t.min === min)?.name ?? id, group: "house", grade, how: `내 집 꾸밈 점수가 ${min}점 이상이면`, metric: "house", need: min };
+    return { id, name: HOUSE_TITLES.find((t) => t.min === min)?.name ?? id, group: "house", grade, how: `내 집이나 포구 오두막 꾸밈 점수가 ${min}점 이상이면`, metric: "house", need: min };
   }
   const r = STEP_OF.get(id);
   if (r) return { id, name: r[1], group: r[6], grade: r[2], how: r[3], metric: r[4], need: r[5] };
@@ -579,7 +625,7 @@ export function progressText(t: TitleDef, value: number): string {
   if (t.metric === "floor") return `${Math.min(value, t.need)}층 / ${t.need}층`;
   if (t.metric === "pioneer") return value > 0 ? `#${value}` : "아직";
   if (t.metric === "qking") return value > 0 ? "받음" : "아직";
-  if (t.metric === "sgOvertime" || t.metric === "sgApproval" || t.metric === "sgMeeting" || t.metric === "sgTrip") return value > 0 ? "완성" : "아직";
+  if (t.metric === "sgOvertime" || t.metric === "sgApproval" || t.metric === "sgMeeting" || t.metric === "sgTrip" || t.metric.startsWith("ss")) return value > 0 ? "완성" : "아직";
   if (t.metric === "enh") return `+${Math.min(value, t.need)} / +${t.need}`;
   if (t.metric === "refs") return `${v}명 / ${t.need}명`;
   return `${v.toLocaleString("ko-KR")} / ${t.need.toLocaleString("ko-KR")}`;

@@ -206,3 +206,36 @@
   font-size: 11px;
   white-space: nowrap;
 }
+
+/* 11/20 유성우 오라 천장 진행 (작게) */
+.meteor {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.meteor b {
+  color: var(--candle);
+}
+
+.meteor small {
+  display: block;
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+/* 이번 판에 떨어졌을 때 */
+.meteorWin {
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #fff2c8;
+  background: linear-gradient(90deg, #1a1d4a, #3b2d6c);
+  box-shadow: 0 0 0 1px #8a76e0;
+}
+
+.meteorWin b {
+  color: #ffd860;
+}

@@ -1,0 +1,409 @@
+/* 관리자 「개발자 노트」 목록·쓰기 화면. 색은 Admin.module.css의 --ad-* 토큰만 쓴다 (미리보기 속은 사이트 CSS 그대로) */
+
+.panel {
+  display: grid;
+  gap: 14px;
+}
+
+.muted {
+  color: var(--ad-faint);
+  font-size: 12px;
+}
+
+.over {
+  color: var(--ad-danger) !important;
+}
+
+/* ── 목록 ── */
+
+.rows {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--ad-line);
+  border-radius: var(--ad-radius);
+  background: var(--ad-surface);
+}
+
+.rowMain {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rowTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rowTitle {
+  color: var(--ad-strong);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--ad-surface-3);
+  color: var(--ad-muted);
+  font-size: 11px;
+}
+
+.tagRich {
+  background: var(--ad-gold-soft);
+  color: var(--ad-gold);
+}
+
+/* ── 쓰기 화면 ── */
+
+.editor {
+  display: grid;
+  gap: 12px;
+}
+
+.bar {
+  position: sticky;
+  top: 72px;
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--ad-line);
+  border-radius: var(--ad-radius);
+  background: rgba(21, 27, 40, 0.94);
+  backdrop-filter: blur(8px);
+}
+
+.barTitle {
+  color: var(--ad-strong);
+  font-size: 15px;
+}
+
+.publish {
+  margin-left: auto;
+}
+
+.saved {
+  flex: 1;
+  min-width: 0;
+  color: var(--ad-faint);
+  font-size: 12px;
+}
+
+.tabs {
+  display: none;
+  border: 1px solid var(--ad-line-strong);
+  border-radius: var(--ad-radius-sm);
+  overflow: hidden;
+}
+
+.tabs button,
+.seg button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: var(--ad-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tabs button[aria-selected="true"],
+.seg button[aria-pressed="true"] {
+  background: var(--ad-surface-3);
+  color: var(--ad-strong);
+  font-weight: 600;
+}
+
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--ad-info);
+  border-radius: var(--ad-radius);
+  background: var(--ad-info-soft);
+  color: var(--ad-text);
+  font-size: 13px;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.form {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.titleInput {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.area {
+  min-height: 80px;
+  resize: vertical;
+  field-sizing: content;
+  max-height: 60vh;
+}
+
+.blocksHead {
+  display: grid;
+  gap: 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--ad-line);
+}
+
+.blocks {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.block {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--ad-line);
+  border-left: 3px solid var(--ad-line-strong);
+  border-radius: var(--ad-radius-sm);
+  background: var(--ad-surface);
+}
+
+.block:focus-within {
+  border-color: var(--ad-line-strong);
+  border-left-color: var(--ad-focus);
+}
+
+.blockH {
+  border-left-color: var(--ad-gold);
+}
+
+.blockBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.blockType {
+  color: var(--ad-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.blockTools {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.headingInput {
+  font-weight: 600;
+}
+
+.addRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.issues {
+  margin: 0;
+  padding: 10px 12px 10px 28px;
+  border: 1px solid var(--ad-warn);
+  border-radius: var(--ad-radius-sm);
+  background: var(--ad-warn-soft);
+  color: var(--ad-text);
+  font-size: 13px;
+}
+
+/* 이미지 칸 */
+
+.dropWrap {
+  display: grid;
+  gap: 6px;
+}
+
+.drop {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 120px;
+  border: 1px dashed var(--ad-line-strong);
+  border-radius: var(--ad-radius-sm);
+  background: var(--ad-inset);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.dropWide {
+  aspect-ratio: 21 / 9;
+  min-height: 0;
+}
+
+.drop:hover,
+.drop:focus-visible,
+.dropOver {
+  border-color: var(--ad-focus);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ad-focus-ring);
+}
+
+.dropError {
+  border-color: var(--ad-danger);
+}
+
+.dropImg {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+}
+
+.dropWide .dropImg {
+  height: 100%;
+  max-height: none;
+  object-fit: cover;
+}
+
+.dropBusy {
+  opacity: 0.45;
+}
+
+.dropEmpty {
+  padding: 16px;
+  color: var(--ad-faint);
+  font-size: 13px;
+  text-align: center;
+}
+
+.dropState {
+  position: absolute;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-size: 13px;
+}
+
+.dropMsg {
+  margin: 0;
+}
+
+.dropActions {
+  display: flex;
+  gap: 6px;
+}
+
+/* 미리보기 */
+
+.previewCol {
+  position: sticky;
+  top: 136px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: calc(100dvh - 156px);
+  min-width: 0;
+}
+
+.previewBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.seg {
+  display: flex;
+  border: 1px solid var(--ad-line-strong);
+  border-radius: var(--ad-radius-sm);
+  overflow: hidden;
+}
+
+.previewBox {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--ad-line-strong);
+  border-radius: var(--ad-radius-sm);
+  background: #fff;
+  overflow: hidden;
+}
+
+.previewFrame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 0;
+  background: #fff;
+  transform-origin: 0 0;
+}
+
+/* 좁은 화면: 쓰기 / 미리보기 탭 */
+@media (max-width: 1100px) {
+  .tabs {
+    display: flex;
+  }
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .split[data-tab="write"] .previewCol,
+  .split[data-tab="preview"] .form {
+    display: none;
+  }
+  .previewCol {
+    position: static;
+    height: calc(100dvh - 210px);
+    min-height: 420px;
+  }
+}
+
+@media (max-width: 560px) {
+  .bar {
+    top: 62px;
+    gap: 8px;
+  }
+  .barTitle {
+    display: none;
+  }
+  .saved {
+    order: 5;
+    flex-basis: 100%;
+  }
+}

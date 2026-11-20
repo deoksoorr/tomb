@@ -29,7 +29,14 @@ export const CHAT_STORE_MAX = 50;
 /** staff = 운영자가 쓴 줄 → 채팅창 이름 금색 + "운영자" 딱지 */
 /** mgr = 11/16 매니저가 쓴 줄 (실시간 서버가 서명된 연결 정보로 붙인다) → "매니저" 딱지. 옛 클라이언트는 무시한다 */
 /** m = 11/16 그 줄을 쓴 사람이 있던 맵 (캠핑장 "camp"·바닷가 "sea", 마을이면 없음), 11/17 사냥 중이면 "hunt" → 다른 곳에서 보면 [캠핑장]·[바닷가]·[마을]·[사냥터] 표시 */
-export type ChatLogLine = { id: string; at: number; name: string; text: string; mine?: true; staff?: true; mgr?: true; m?: ChatPlace };
+export type ChatLogLine = { id: string; at: number; name: string; text: string; mine?: true; staff?: true; mgr?: true; m?: ChatPlace; /** 11/20 쓴 사람의 닉네임 꾸미기 id (이름 글자·이름표) — 다른 맵 사람도 채팅창에 꾸민 이름이 보이게 */ ns?: string[] };
+
+/** 11/20 채팅 줄에 싣는 닉네임 꾸미기 id 검증 (글자 id 2개까지, 이상한 값은 버린다) */
+export function readChatNameStyle(v: unknown): string[] | undefined {
+  if (!Array.isArray(v) || v.length === 0 || v.length > 2) return undefined;
+  const ids = v.filter((x): x is string => typeof x === "string" && x.length > 0 && x.length <= 40);
+  return ids.length === v.length ? ids : undefined;
+}
 
 /** 가린 자리 */
 export const CHAT_MASK = "***";

@@ -1,8 +1,9 @@
-import { isStaffItem, itemById } from "@tomb/protocol";
+import { isStaffItem, itemById, seasonSetsOfLook } from "@tomb/protocol";
 import { env } from "@/lib/env";
 import { handler, HttpError, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { isStaff } from "@/lib/staff";
+import { forgetTitles } from "@/lib/titlesServer";
 import { requireVisitor } from "@/lib/session";
 import { recordLook } from "@/lib/lookRank";
 import { getAccounts } from "@/lib/store";
@@ -26,5 +27,7 @@ export const POST = handler(async (req) => {
     throw new HttpError(409, "NO_ITEM", "벗어 둔 꾸미기 중에 그 아이템이 없어요.");
   const me = await loadMe(accounts, visitorId, now);
   await recordLook(visitorId, me, { now }); // 꾸미기 랭킹 점수
+  // 11/19 계절 한정 세트 한 벌을 막 다 입었으면 칭호 기억을 비운다 (세트 칭호가 몇 분 기다리지 않고 바로 열리게)
+  if (itemById(itemId)?.seasonSet && seasonSetsOfLook(me.equipped.map((e) => e.itemId)).length) forgetTitles(visitorId);
   return json<WearResponse>({ me, lookGrant: await lookGrant(env.joinSecret(), visitorId, lookOf(me), now, me) });
 });

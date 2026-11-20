@@ -1,8 +1,9 @@
 import { DIR, spotSeatId, type DirId, type SpotKind } from "@tomb/protocol";
-import { furnitureById, type FurnitureDef } from "@/lib/housing/catalog";
+import { FURNITURE, furnitureById, type FurnitureDef } from "@/lib/housing/catalog";
 import { buildOccupancy, footprint, SPIN_R0, spinDir, type TierShape } from "@/lib/housing/layout";
 import { partitionViolation, roomPlan, type RoomPlan } from "@/lib/housing/rooms";
 import type { Placed } from "@/lib/housing/types";
+import { OFFICE_STAND_IDS } from "./officeUse";
 
 // 3번 집 안 가구 상호작용 규칙 (Phaser 없이 테스트한다).
 //  - 1인 자리(HouseSpot): 의자·소파·책상·피아노에 앉기, 침대에 눕기, 책장 앞에서 읽기, 욕조에 들어가기.
@@ -51,7 +52,14 @@ export type UseKind =
   | "surf"
   | "shell"
   | "ring"
-  | "wheel";
+  | "wheel"
+  // ── 11/19 시즌 가구 (서서 E: 잠깐 바뀌는 그림·소리·한마디 — game/housing/seasonUse.ts) ──
+  | "season"
+  // ── 11/19 멍냥 분양소 품종 펫 가구 (쓰다듬기: 하트 + 품종 동작 p1 → p2 — breedFurnitureArt) ──
+  | "breed"
+  // ── 11/20 총무팀 문대리 사무실 가구: 안마의자(앉으면 덜덜덜)·부장님 책상(뒤에서 손님 쪽 보고 앉아 결재) ──
+  | "massage"
+  | "approve";
 
 /** 집 씬에서 칸 (0,0)의 왼쪽 위 월드 좌표 */
 export type Frame = { ox: number; oy: number };
@@ -86,7 +94,12 @@ export type HouseTarget = {
   spot?: HouseSpot;
   /** 바닥 물건: 같은 거리면 다른 가구를 먼저 */
   low?: boolean;
+  /** 11/19 시즌 가구: 서서 쓸 때 설 자리 (돌린 앞쪽 칸에서 가구를 바라본다 — seasonStandSpot). 없으면 선 자리 그대로 */
+  stand?: StandSpot;
 };
+
+/** 서서 쓰는 가구 앞에 설 자리 (발 위치·바라보는 방향, side = 0 앞 · 1 왼쪽 · 2 뒤 · 3 오른쪽 — 가구 그림 기준이 아니라 놓인 방향 기준) */
+export type StandSpot = { x: number; y: number; facing: DirId; side: number };
 
 /** 서서 E로 쓰는 가구 */
 const USE_OF: Readonly<Record<string, UseKind>> = {
@@ -124,13 +137,46 @@ const USE_OF: Readonly<Record<string, UseKind>> = {
   ship_wheel: "wheel",
   sea_lantern: "light",
   ghost_lamp: "light",
+  // 11/19 시즌 가구 (벨벳 파티 소파는 자리 — houseSpots). 불빛 가구는 석등처럼 켜기·끄기(값 1 = 꺼짐)
+  winter_stove: "light",
+  xmas_tree: "light",
+  stocking_fireplace: "light",
+  cake_table: "light",
+  disco_ball: "light",
+  cheongsa_lantern: "light",
+  knit_rug: "rug",
+  frost_window: "season",
+  log_basket: "season",
+  cocoa_table: "season",
+  scarf_grave: "season",
+  paper_tree: "season",
+  gift_pile: "season",
+  nutcracker: "season",
+  wreath_stand: "season",
+  balloon_bunch: "season",
+  champagne_tower: "season",
+  karaoke: "season",
+  folding_screen: "season",
+  tteokguk_table: "season",
+  lucky_pouch: "season",
+  shield_kite: "season",
+  resolution_scroll: "season",
+  // 11/19 멍냥 분양소 품종 펫 가구
+  ...Object.fromEntries(FURNITURE.filter((f) => f.petShop).map((f) => [f.id, "breed" as const])),
+  // 11/20 총무팀 문대리 사무실 가구: 서서 쓰는 열한 가지는 시즌 가구와 같은 길(잠깐 바뀌는 그림 + 한마디 — officeUse), 야근 스탠드는 켜기·끄기.
+  // 앉는 셋(바퀴 달린 사무 의자·안마의자·부장님 책상)은 자리 (houseSpots)
+  ...Object.fromEntries(OFFICE_STAND_IDS.map((id) => [id, "season" as const])),
+  banker_lamp: "light",
 };
+
+/** 11/19 쓰다듬는 가구: 시즌 가구처럼 돌린 앞쪽 칸에 서서 바라본다 (seasonStandSpot — 몸이 펫 그림을 25% 넘게 덮지 않고, 위쪽은 마지막) */
+export const PET_STAND_USES: ReadonlySet<UseKind> = new Set<UseKind>(["pet", "dog", "breed"]);
 
 /** 바닥에 깔린 물건(러그·꽃밭)은 위에 다른 가구가 있으면 그 가구를 먼저 고르게 조금 멀게 친다 */
 const LOW_PRIORITY: ReadonlySet<UseKind> = new Set(["rug", "smell"]);
 
 /** 앞에 앉아서 쓰는 가구 (의자가 바로 앞에 있으면 그 의자가 이 일을 한다) */
-const SIT_AT: Readonly<Record<string, UseKind>> = { desk: "type", monitor_desk: "type", piano: "piano" };
+const SIT_AT: Readonly<Record<string, UseKind>> = { desk: "type", monitor_desk: "type", piano: "piano", boss_desk: "approve" };
 
 /** E 안내 문구 */
 export const USE_LABEL: Readonly<Record<UseKind, string>> = {
@@ -170,6 +216,12 @@ export const USE_LABEL: Readonly<Record<UseKind, string>> = {
   shell: "소라에 귀 대기",
   ring: "구명 튜브 끼기",
   wheel: "키 돌리기",
+  // 실제 안내는 가구마다 카탈로그 use 문구 (HouseScene.labelOf)
+  season: "써 보기",
+  // 실제 안내는 가구마다 카탈로그 use 문구 (쓰다듬기·손!·말 걸기 — HouseScene.labelOf)
+  breed: "쓰다듬기",
+  massage: "앉아서 안마받기",
+  approve: "앉아서 결재하기",
 };
 
 /** 가까이 있다고 보는 거리 (발 위치 ↔ 대상 사각형, px) */
@@ -236,7 +288,9 @@ export function houseSpots(items: readonly Placed[], tier: TierShape, f: Frame):
     const r = def.turn ? p.r % 4 : Math.max(0, sd);
     switch (p.i) {
       case "chair":
-      case "rattan_chair": {
+      case "rattan_chair":
+      // 11/20 바퀴 달린 사무 의자도 의자와 같은 규칙 (보는 쪽 앞 칸이 책상이면 그 일을 한다)
+      case "swivel_chair": {
         if (sd <= 0) {
           // 앞을 보는 의자: 바로 위 칸이 책상·피아노면 그쪽을 보고 앉아 그 일을 한다 (예전 규칙)
           const above = standAt(p.x, p.y - 1);
@@ -276,6 +330,24 @@ export function houseSpots(items: readonly Placed[], tier: TierShape, f: Frame):
         } else if ([...Array(b.fh).keys()].every((j) => free(p.x + b.fw, p.y + j))) out.push(spot("chair", use, p.u, b.R + 6, b.cy + 4, DIR.left, false));
         break;
       }
+      // 11/20 안마의자: 차지 칸 안에 앉아 보는 쪽을 본다 (뒤를 보면 등받이가 사람 앞)
+      case "massage_chair": {
+        const d = Math.max(0, sd);
+        out.push(spot("chair", "massage", p.u, b.cx, b.B - 5, FACE_BY_R[d], true, { behind: d === 2 }));
+        break;
+      }
+      // 11/20 부장님 책상: 손님 쪽(그림 앞)을 보고 책상 뒤에 앉는다 — 앞을 보면 위 칸, 왼쪽을 보면 오른쪽 칸, 뒤를 보면 아래 칸, 오른쪽을 보면 왼쪽 칸
+      case "boss_desk": {
+        const d = Math.max(0, sd);
+        if (d === 0) {
+          if ([...Array(b.fw).keys()].every((i) => free(p.x + i, p.y - 1))) out.push(spot("chair", "approve", p.u, b.cx, b.Tp - 2, DIR.down, false));
+        } else if (d === 1) {
+          if ([...Array(b.fh).keys()].every((j) => free(p.x + b.fw, p.y + j))) out.push(spot("chair", "approve", p.u, b.R + 6, b.cy + 4, DIR.left, false));
+        } else if (d === 2) {
+          if ([...Array(b.fw).keys()].every((i) => free(p.x + i, p.y + b.fh))) out.push(spot("chair", "approve", p.u, b.cx, b.B + 4, DIR.up, false));
+        } else if ([...Array(b.fh).keys()].every((j) => free(p.x - 1, p.y + j))) out.push(spot("chair", "approve", p.u, b.L - 6, b.cy + 4, DIR.right, false));
+        break;
+      }
       case "bed":
         // 머리가 베개 위에 오도록 (침대 그림의 베개 = 칸 위쪽 3~8px). 돌린 침대는 발을 발판 쪽에 두고 자세를 기울인다
         if (sd === 1) out.push(spot("bed", "lie", p.u, b.L + 8, b.Tp + 17, DIR.down, true, { tilt: 90 }));
@@ -290,7 +362,9 @@ export function houseSpots(items: readonly Placed[], tier: TierShape, f: Frame):
         out.push(spot("tub", "bath", p.u, b.cx, b.B - 5, DIR.down, true));
         break;
       // 11/16 라탄 벤치 (네 방향): 두 자리. 앞을 보면 아래쪽에, 뒤를 보면 등받이가 사람 앞에 온다 (behind)
-      case "rattan_bench": {
+      case "rattan_bench":
+      // 11/19 벨벳 파티 소파 (네 방향, 두 자리): 그림의 앉는 자리가 라탄 벤치와 같은 자리라 같은 규칙
+      case "party_sofa": {
         const d = Math.max(0, sd);
         const face = FACE_BY_R[d];
         if (d % 2 === 0) {
@@ -316,6 +390,104 @@ export function houseSpots(items: readonly Placed[], tier: TierShape, f: Frame):
   return out;
 }
 
+// ── 11/19 시즌 가구: 서서 쓰는 자리 ──
+// 서서 E를 누르면 가구의 「돌린 앞쪽」 빈 칸에 서서 가구를 바라본다 (가구 그림·벽·다른 가구와 겹치지 않게).
+// 순서는 SIDE_ORDER (위쪽은 가구에 가려지니 맨 마지막). 네 쪽이 다 막혔으면 null (선 자리에서 바라보기만 — 예전 규칙).
+// 발 위치: 앞은 비스듬한 앞자리(칸 경계 6px 아래, 가구 그림 옆 끝에서 4px 바깥 — 몸이 가구 그림을 25% 이하로만 덮는다),
+// 옆은 칸 경계에서 7px 밖·가구 칸 가운데보다 4px 아래, 위(마지막 수단)는 경계 3px 위 가운데.
+
+/** 이 방향(0 앞 · 1 왼쪽 · 2 뒤 · 3 오른쪽)으로 한 칸 나간 쪽의 칸들 (가구 한 변을 따라 모두) */
+function sideCells(p: Placed, fw: number, fh: number, side: number): [number, number][] {
+  if (side === 0) return [...Array(fw).keys()].map((i) => [p.x + i, p.y + fh]);
+  if (side === 2) return [...Array(fw).keys()].map((i) => [p.x + i, p.y - 1]);
+  if (side === 1) return [...Array(fh).keys()].map((j) => [p.x - 1, p.y + j]);
+  return [...Array(fh).keys()].map((j) => [p.x + fw, p.y + j]);
+}
+
+/**
+ * 놓인 방향 d(0 앞 …)마다 설 자리를 찾는 순서. 위쪽(2)은 키 큰 가구에 몸이 가려지므로 언제나 맨 마지막:
+ * 앞을 보면 앞 → 옆 → 옆, 옆을 보면 그 옆 → 앞 → 반대 옆, 뒤(위)를 보면 옆 → 반대 옆 → 앞(아래)
+ */
+const SIDE_ORDER: readonly (readonly number[])[] = [
+  [0, 1, 3, 2],
+  [1, 0, 3, 2],
+  [1, 3, 0, 2],
+  [3, 0, 1, 2],
+];
+
+/** 서 있는 캐릭터 몸 그림의 반폭 (px, 두건 끝까지) — 설 자리와 가구 그림이 겹치는 정도를 잴 때 */
+export const BODY_HALF_W = 7;
+/** 앞에 설 때 가구 그림 옆 끝에서 몸 가운데까지 (px): 몸이 가구 그림을 BODY_HALF_W − 이만큼만 덮는다 (16px 가구의 25% 이하) */
+const FRONT_EDGE_GAP = 4;
+
+export function seasonStandSpot(p: Placed, occ: ReturnType<typeof buildOccupancy>, tier: TierShape, f: Frame): StandSpot | null {
+  const def = furnitureById(p.i);
+  if (!def) return null;
+  const b = boxOf(p, def, f);
+  const plan = tier.id ? roomPlan({ id: tier.id, w: tier.w, h: tier.h }) : null;
+  const d = def.spin && p.r >= SPIN_R0 ? spinDir(p.r) : 0;
+  const open = (side: number) =>
+    sideCells(p, b.fw, b.fh, side).every(([x, y]) => {
+      if (x < 0 || y < 0 || x >= tier.w || y >= tier.h) return false;
+      const who = occ.stand.get(y * 1000 + x);
+      if (who !== undefined && who !== p.u) return false;
+      if (!plan) return true;
+      // 가구와 같은 방이어야 한다 (칸막이 벽 너머 칸이면 안 된다. 방 사이 문 앞에 서는 것은 괜찮다)
+      const x0 = Math.min(x, p.x);
+      const y0 = Math.min(y, p.y);
+      const x1 = Math.max(x + 1, p.x + b.fw);
+      const y1 = Math.max(y + 1, p.y + b.fh);
+      return !partitionViolation(plan, x0, y0, x1 - x0, y1 - y0, false);
+    });
+  /** 앞 줄 비스듬한 옆 칸이 비었는지 (앞에 설 때 몸을 그 칸 쪽으로 비켜 가구 그림을 가리지 않게) */
+  const freeCell = (x: number, y: number) => x >= 0 && y >= 0 && x < tier.w && y < tier.h && !occ.stand.has(y * 1000 + x);
+  for (const side of SIDE_ORDER[d]) {
+    if (!open(side)) continue;
+    if (side === 0) {
+      // 앞: 비스듬한 앞자리 — 앞 칸 경계 6px 아래, 가구 그림 옆 끝에서 FRONT_EDGE_GAP px 바깥에 몸 가운데 (가구가 거의 다 보인다).
+      // 비스듬한 옆 칸(앞 줄 왼쪽, 없으면 오른쪽)이 비어야 한다. 둘 다 막혔으면 앞은 건너뛰고 다음 순서
+      if (freeCell(p.x - 1, p.y + b.fh)) return { x: b.L - FRONT_EDGE_GAP, y: b.B + 6, facing: DIR.up, side };
+      if (freeCell(p.x + b.fw, p.y + b.fh)) return { x: b.R + FRONT_EDGE_GAP, y: b.B + 6, facing: DIR.up, side };
+      continue;
+    }
+    if (side === 2) return { x: Math.round(b.cx), y: b.Tp - 3, facing: DIR.down, side };
+    if (side === 1) return { x: b.L - 7, y: Math.round(b.cy + 4), facing: DIR.right, side };
+    return { x: b.R + 7, y: Math.round(b.cy + 4), facing: DIR.left, side };
+  }
+  return null;
+}
+
+/**
+ * 11/19 니트 러그에 앉을 자리: 러그 칸 중 서 있는 가구가 없는 칸, 발 위치 (px,py)에서 가장 가까운 곳.
+ * 바로 옆(또는 대각선 위) 러그 칸에 가구(코코아 탁자 등)가 있으면 그쪽을 보고, 없으면 앞(아래)을 본다. 다 덮였으면 null
+ */
+export function rugSeat(p: Placed, items: readonly Placed[], tier: TierShape, f: Frame, px: number, py: number): { x: number; y: number; facing: DirId } | null {
+  const def = furnitureById(p.i);
+  if (!def) return null;
+  const { w, h } = footprint(def, p.r);
+  const occ = buildOccupancy(items, tier);
+  const has = (x: number, y: number) => occ.stand.has(y * 1000 + x);
+  let best: { x: number; y: number; facing: DirId; d: number } | null = null;
+  for (let j = 0; j < h; j++)
+    for (let i = 0; i < w; i++) {
+      const cx = p.x + i;
+      const cy = p.y + j;
+      if (has(cx, cy)) continue;
+      const x = f.ox + cx * T + T / 2;
+      const y = f.oy + cy * T + T - 3;
+      let facing: DirId = DIR.down;
+      if (i + 1 < w && has(cx + 1, cy)) facing = DIR.right;
+      else if (i > 0 && has(cx - 1, cy)) facing = DIR.left;
+      else if (j > 0 && has(cx, cy - 1)) facing = DIR.up;
+      // 대각선 위에 가구가 있으면 그쪽 옆을 본다 (탁자 비스듬히 앞에 앉은 모습)
+      else if (j > 0 && i > 0 && has(cx - 1, cy - 1)) facing = DIR.left;
+      else if (j > 0 && i + 1 < w && has(cx + 1, cy - 1)) facing = DIR.right;
+      const dist = Math.hypot(x - px, y - py);
+      if (!best || dist < best.d) best = { x, y, facing, d: dist };
+    }
+  return best ? { x: best.x, y: best.y, facing: best.facing } : null;
+}
+
 /** E로 쓸 수 있는 것 전부 (1인 자리 + 서서 쓰는 가구 + 창문) */
 export function houseTargets(items: readonly Placed[], tier: TierShape, plan: RoomPlan, f: Frame): HouseTarget[] {
   const spots = houseSpots(items, tier, f);
@@ -329,12 +501,16 @@ export function houseTargets(items: readonly Placed[], tier: TierShape, plan: Ro
     const rect = s.inside ? { x0: b.L, y0: b.Tp, x1: b.R, y1: b.B } : { x0: s.x - 7, y0: s.y - 6, x1: s.x + 7, y1: s.y + 4 };
     out.push({ key: s.id, use: s.use, u: s.u, item: p.i, rect, spot: s });
   }
+  const occ = buildOccupancy(items, tier);
   for (const p of items) {
     const use = USE_OF[p.i];
     const def = furnitureById(p.i);
     if (!use || !def) continue;
     const b = boxOf(p, def, f);
-    out.push({ key: `u:${p.u}`, use, u: p.u, item: p.i, rect: { x0: b.L, y0: b.Tp, x1: b.R, y1: b.B }, ...(LOW_PRIORITY.has(use) ? { low: true } : {}) });
+    // 11/19 품종 펫 가구·고양이 쿠션·잠자는 강아지·유령 고양이도 쓰다듬을 때 같은 규칙으로 앞에 서서 바라본다 (PET_STAND_USES)
+    // 11/20 총무팀 문대리 사무실 가구도 시즌 가구와 같은 규칙으로 앞에 서서 쓴다
+    const stand = (def.seasonWeek || def.officeShop || PET_STAND_USES.has(use)) && !def.floor ? seasonStandSpot(p, occ, tier, f) : null;
+    out.push({ key: `u:${p.u}`, use, u: p.u, item: p.i, rect: { x0: b.L, y0: b.Tp, x1: b.R, y1: b.B }, ...(LOW_PRIORITY.has(use) ? { low: true } : {}), ...(stand ? { stand } : {}) });
   }
   plan.windows.forEach((w, i) => {
     const x0 = f.ox + w.x * T;

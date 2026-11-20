@@ -5,6 +5,20 @@ import { decodeSg, isSgCode, SG_GRADE_COLORS, SG_GRADE_NAMES, SG_PIECE_KIND, SG_
 
 // 사냥 장비창 순수 함수: 등급, 낄 칸, 능력치 비교, 되팔기 확인
 
+/** 전투 능력 판 (장비창 왼쪽·[내 정보] 사냥 칸이 같이 쓴다): 키 · 짧은 이름 · 표기 · 풀어 쓴 이름 */
+export const TOTAL_ROWS: readonly (readonly [keyof Omit<Derived, "stats">, string, (v: number) => string, string])[] = [
+  ["atk", "ATK", String, "공격력"],
+  ["def", "DEF", String, "방어"],
+  ["maxHp", "HP", String, "체력"],
+  ["maxSp", "SP", String, "SP"],
+  ["aspd", "공속", (v) => v.toFixed(2), "공격 속도"],
+  ["crit", "치명", (v) => `${v}%`, "치명타"],
+  ["hit", "명중", String, "명중"],
+  ["flee", "회피", String, "회피"],
+  ["move", "이속", String, "이동 속도"],
+  ["skillPower", "스킬", (v) => `×${v.toFixed(2)}`, "스킬 위력"],
+];
+
 /** 등급: 요구 레벨로 나눈다 (상점·드롭 모두 같은 표) */
 export type Grade = { id: "common" | "fine" | "rare" | "legend"; label: string; color: string };
 const GRADES: readonly (Grade & { from: number })[] = [

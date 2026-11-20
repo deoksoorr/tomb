@@ -32,6 +32,23 @@ function contract(make: () => NoticeStore) {
     expect(await store.remove(old.id)).toBe(false);
     expect(await store.get(old.id)).toBeNull();
   });
+
+  it("개발자 노트 본문은 목록에 실리지 않고 따로 읽는다. 공지를 지우면 본문도 지운다", async () => {
+    const n = notice({ rich: true, summary: "요약", hero: "/devnotes/hero-1119.webp" });
+    const doc = { blocks: [{ t: "h" as const, text: "소제목" }, { t: "p" as const, text: "긴 본문" }], outro: "끝" };
+    await store.putDoc(n.id, doc);
+    await store.put(n);
+    try {
+      expect(await store.getDoc(n.id)).toEqual(doc);
+      expect(JSON.stringify((await store.list()).find((x) => x.id === n.id))).not.toContain("긴 본문");
+      await store.putDoc(n.id, null);
+      expect(await store.getDoc(n.id)).toBeNull();
+      await store.putDoc(n.id, doc);
+    } finally {
+      expect(await store.remove(n.id)).toBe(true);
+    }
+    expect(await store.getDoc(n.id)).toBeNull();
+  });
 }
 
 describe("MemoryNotices", () => contract(() => new MemoryNotices()));

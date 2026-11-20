@@ -93,3 +93,81 @@ export async function deleteImage(url: string | undefined): Promise<void> {
     console.error("[blob] 이미지 삭제 실패", url, e);
   }
 }
+
+// ── 개발자 노트 이미지 (11/20, 운영자만 /api/admin/devnotes/upload로 올린다) ──
+// Blob 경로는 `devnotes/<이름>.<확장자>` (addRandomSuffix로 이름 뒤에 `-<무작위>`가 붙는다). 묘비 이미지(graves/)와 섞이지 않는다.
+
+/** 브라우저에서 1600px 폭 이하 WebP(안 되면 JPEG)로 줄여 올리지만, 원본 그대로 와도 받는 한도 */
+export const DEVNOTE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+export const DEVNOTE_IMAGE_TYPES = { "image/webp": "webp", "image/jpeg": "jpg", "image/png": "png" } as const;
+export type DevNoteImageType = keyof typeof DEVNOTE_IMAGE_TYPES;
+export const DEVNOTE_IMAGE_CONTENT_TYPES = Object.keys(DEVNOTE_IMAGE_TYPES) as DevNoteImageType[];
+
+/** 클라이언트가 고르는 Blob 경로 */
+export const isDevNoteUploadPath = (pathname: string): boolean => /^devnotes\/[A-Za-z0-9_-]{8,64}\.(webp|jpg|png)$/.test(pathname);
+
+const LOCAL_DEVNOTE_RE = /^devnotes\/[A-Za-z0-9_-]{12}\.(webp|jpg|png)$/;
+/** 사이트에 같이 배포된 그림 (지난 글에 쓴 것) */
+const STATIC_DEVNOTE_RE = /^\/devnotes\/[A-Za-z0-9_-]{1,64}\.webp$/;
+
+/** 개발자 노트 이미지 저장 위치: Blob·로컬(개발 중)이면 경로, 사이트 그림이면 "static", 그 밖은 null */
+export function devNoteImagePath(url: string): string | null {
+  if (STATIC_DEVNOTE_RE.test(url)) return "static";
+  if (url.startsWith(LOCAL_UPLOAD_PATH)) {
+    const path = url.slice(LOCAL_UPLOAD_PATH.length);
+    return !env.isProd() && LOCAL_DEVNOTE_RE.test(path) ? path : null;
+  }
+  try {
+    const u = new URL(url);
+    const ok =
+      u.protocol === "https:" &&
+      u.hostname === blobHost() &&
+      !u.search &&
+      !u.hash &&
+      /^\/devnotes\/[A-Za-z0-9_-]{1,100}\.(webp|jpg|png)$/.test(u.pathname);
+    return ok ? u.pathname.slice(1) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 개발자 노트에 붙일 수 있는 이미지: 우리 Blob 스토어의 devnotes/, 개발 중 로컬 업로드, 사이트의 /devnotes/*.webp만 */
+export const isDevNoteImageUrl = (url: string): boolean => url.length <= 300 && devNoteImagePath(url) !== null;
+
+/** 파일 앞 바이트로 형식 확인 (확장자·Content-Type은 믿지 않는다) */
+export function devNoteImageKind(bytes: Uint8Array): DevNoteImageType | null {
+  if (isWebp(bytes)) return "image/webp";
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  const png = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  if (bytes.length >= 8 && png.every((b, i) => bytes[i] === b)) return "image/png";
+  return null;
+}
+
+/** 로컬 대체 업로드 (개발 전용): 메모리에 두고 /api/upload/local/devnotes/<이름>.<확장자> 주소를 돌려준다 */
+export function saveLocalDevNoteImage(bytes: Uint8Array<ArrayBuffer>, type: DevNoteImageType): string {
+  const path = `devnotes/${nanoid(12)}.${DEVNOTE_IMAGE_TYPES[type]}`;
+  localFiles.set(path, bytes);
+  if (localFiles.size > LOCAL_MAX_FILES) localFiles.delete(localFiles.keys().next().value!);
+  return LOCAL_UPLOAD_PATH + path;
+}
+
+/** 로컬 업로드 이미지의 Content-Type (확장자 기준) */
+export const localUploadType = (path: string): string =>
+  path.endsWith(".png") ? "image/png" : path.endsWith(".jpg") ? "image/jpeg" : UPLOAD_CONTENT_TYPE;
+
+/** 글을 지우거나 고쳐서 더는 안 쓰는 개발자 노트 이미지 삭제 (사이트 그림은 그대로). 실패해도 로그만 */
+export async function deleteDevNoteImages(urls: readonly string[]): Promise<void> {
+  const blobs: string[] = [];
+  for (const url of new Set(urls)) {
+    const path = devNoteImagePath(url);
+    if (!path || path === "static") continue;
+    if (url.startsWith(LOCAL_UPLOAD_PATH)) localFiles.delete(path);
+    else blobs.push(url);
+  }
+  if (!blobs.length) return;
+  try {
+    await del(blobs, { token: env.blobToken() });
+  } catch (e) {
+    console.error("[blob] 개발자 노트 이미지 삭제 실패", blobs, e);
+  }
+}

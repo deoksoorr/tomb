@@ -1,4 +1,4 @@
-import { itemById, nameStyleOfLook } from "@tomb/protocol";
+import { itemById, nameStyleOfLook, seasonSetsOfLook } from "@tomb/protocol";
 
 // 닉네임 꾸미기 (상점에서 사는 이름 글자 색·이름표 바탕판)의 색·그림 정의와 순수 계산.
 // 게임 머리 위 이름표(game/entities/NameStyleView — 비트맵 글꼴 글자마다 색)와 화면 HTML 이름(components/ui/StyledName — CSS)이 같이 쓴다.
@@ -11,7 +11,8 @@ import { itemById, nameStyleOfLook } from "@tomb/protocol";
 export const NAME_OUTLINE = 0x0a0b10;
 
 // 11/15 leaves = 수집 의뢰 「나뭇잎 이름 글자」: 잎 초록 그라데이션 + 이름 둘레로 작은 잎이 가끔 팔랑 떨어진다
-export type NameFx = "glow" | "rainbow" | "stars" | "flame" | "leaves";
+// 11/20 frost = 계절 한정 「서리 앉은 이름」: 얼음빛 그라데이션 + 글자 윗머리마다 하얀 서리 + 옅은 푸른 빛 무리
+export type NameFx = "glow" | "rainbow" | "stars" | "flame" | "leaves" | "frost";
 /**
  * 이름 글자 꾸미기.
  *  - solid: 한 색
@@ -21,15 +22,19 @@ export type NameFx = "glow" | "rainbow" | "stars" | "flame" | "leaves";
 export type NameColorSpec =
   | { kind: "solid"; color: number }
   | { kind: "gradient"; stops: readonly number[] }
-  | { kind: "fx"; fx: NameFx; stops: readonly number[]; /** 빛 무리 색 (glow·flame) */ halo?: number };
+  | { kind: "fx"; fx: NameFx; /** glow는 11/20부터 색이 둘 이상이면 이름 첫 글자부터 끝 글자까지 그라데이션 */ stops: readonly number[]; /** 빛 무리 색 (glow·flame) */ halo?: number };
 
 // 11/15 wave = 수집 의뢰 「물결 이름표」: 깊은 물빛 판 위로 물결 윤슬이 흘러간다 (dots = 물거품·윤슬 색)
 // 11/15 newyear = 수집 의뢰 「새해 복 이름표」: 붉은 비단 판 + 금테 + 양옆 복 매듭(술 달린 금 매듭), 금가루가 둥실 떠오른다
 // 11/17 knit = 니트 이름표 (위아래 골지 단 + 꽈배기 무늬), card = 사원증 이름표 (파란 띠 + 위 집게), beach = 모래사장 이름표 (물거품 띠 + 불가사리·조개)
 // 12월 holly = 크리스마스 「호랑가시 이름표」: 눈 덮인 초록 판 + 금테 + 양끝 호랑가시 잎·빨간 열매
-export type NamePlateKind = "wood" | "ribbon" | "cloud" | "wreath" | "tomb" | "star" | "wave" | "newyear" | "knit" | "card" | "beach" | "holly";
+// 11/19 wrap = 계절 한정 「선물 포장 이름표」: 빨강·초록 사선 줄무늬 포장지 + 가운데 금 리본 띠 + 위에 금 리본 매듭
+// 11/20 envelope = 계절 한정 「편지봉투 이름표」: 분홍 편지지 판 + 위 덮개 V선 + 아래 가운데 하트 봉인
+// 11/20 planner = 계절 한정 「새해 계획표 이름표」: 크림 종이 판 + 옅은 줄 + 빨간 여백선 + 왼쪽 체크 칸 셋(✓ ✓ 빈칸) + 위 스프링 고리
+export type NamePlateKind = "wood" | "ribbon" | "cloud" | "wreath" | "tomb" | "star" | "wave" | "newyear" | "knit" | "card" | "beach" | "holly" | "wrap" | "envelope" | "planner";
 /** 이름표 바탕판: fill 바탕 · light 위쪽 밝은 띠 · edge 테두리 · dots 장식 점 색 (꽃·별·못·이끼) */
-export type NamePlateSpec = { kind: NamePlateKind; fill: number; light: number; edge: number; dots: readonly number[]; /** 바탕 투명도 */ alpha: number };
+/** bell = 11/19 「산타 견습 요정」 한 벌 덤: 이름표 옆에 작은 금종 (nameStyleRef가 한 벌을 다 입었을 때만 켠다) */
+export type NamePlateSpec = { kind: NamePlateKind; fill: number; light: number; edge: number; dots: readonly number[]; /** 바탕 투명도 */ alpha: number; bell?: boolean };
 
 export const NAME_COLORS: Readonly<Record<string, NameColorSpec>> = {
   nc_sakura: { kind: "solid", color: 0xffa8c8 },
@@ -58,6 +63,12 @@ export const NAME_COLORS: Readonly<Record<string, NameColorSpec>> = {
   q_name_leaf: { kind: "fx", fx: "leaves", stops: [0xeaffa0, 0xa8ec68, 0x5cc96a] },
   // 12월 크리스마스 이벤트 한정: 빨강 → 눈빛 하양 → 초록 + 별가루 (빨강·초록도 밤 외곽선과 7:1 이상으로 밝게)
   xm_name: { kind: "fx", fx: "stars", stops: [0xff8a98, 0xfff6f0, 0x8cf0a8] },
+  // 11/20 계절 한정 (코디 기획안 시안 색 그대로): 「블루라이트 이름」 모니터 불빛 하늘빛 그라데이션 + 푸른 빛 무리,
+  // 「색동 이름」 빨강·노랑·초록·파랑·보라 색동 빛깔이 글자마다 차례로 이어진다
+  of_blueglow: { kind: "fx", fx: "glow", stops: [0x9ae8ff, 0x6fb8ff, 0xc8f4ff], halo: 0x5fc8ff },
+  sm_saekname: { kind: "gradient", stops: [0xff8a8a, 0xffd26a, 0x9ae88a, 0x8ac8ff, 0xe09aff] },
+  // 11/20 계절 한정 「서리 앉은 이름」 (코디 기획안 2차 시안 색 그대로): 연청 → 푸른 은 → 옅은 보라 + 글자 윗머리 하얀 서리 + 옅은 푸른 빛 무리
+  fr_icename: { kind: "fx", fx: "frost", stops: [0xb8e4ff, 0x8cc4f4, 0xc4c8ff], halo: 0x9cd4ff },
 };
 
 export const NAME_PLATES: Readonly<Record<string, NamePlateSpec>> = {
@@ -78,6 +89,12 @@ export const NAME_PLATES: Readonly<Record<string, NamePlateSpec>> = {
   np_beach: { kind: "beach", fill: 0xc8a466, light: 0xe8cc92, edge: 0x7a5a2a, dots: [0xff8a4a, 0xffc0d0, 0x8ad8f0], alpha: 0.95 },
   // 12월 크리스마스 이벤트 한정: 짙은 상록 판 + 금테 + 위 눈 덮개 · dots = [열매 빨강, 잎 초록, 눈 하양]
   xm_plate: { kind: "holly", fill: 0x1e4a30, light: 0x2e6a44, edge: 0xe8c25a, dots: [0xe8323c, 0x4fae5a, 0xf8fbff], alpha: 0.95 },
+  // 11/19 계절 한정 「선물 포장 이름표」: 빨간 포장지 · dots = [초록 줄무늬, 금 리본, 리본 밝은 금]
+  si_wrap: { kind: "wrap", fill: 0xc82c3c, light: 0xe8505a, edge: 0x5a1018, dots: [0x2e8a4a, 0xf2c84a, 0xfff2b0], alpha: 0.96 },
+  // 11/20 계절 한정 「편지봉투 이름표」: 분홍 편지지 · edge = 덮개 선·테두리 · dots = [하트 봉인, 봉인 밝은 분홍]
+  vc_envelope: { kind: "envelope", fill: 0xffe4ec, light: 0xfff6f8, edge: 0xc85a7a, dots: [0xe83a6a, 0xff9ab8], alpha: 0.97 },
+  // 11/20 계절 한정 「새해 계획표 이름표」: 크림 종이 · edge = 테두리·체크 칸 · dots = [줄 하늘, 체크 초록, 여백선 빨강, 스프링 고리 회색]
+  rs_planner: { kind: "planner", fill: 0xfbf6e8, light: 0xffffff, edge: 0x5a6680, dots: [0xa8c4e8, 0x3aa86a, 0xe88a8a, 0x8a92a4], alpha: 0.97 },
 };
 
 export function nameColorSpec(id: string | null | undefined): NameColorSpec | null {
@@ -88,11 +105,13 @@ export function namePlateSpec(id: string | null | undefined): NamePlateSpec | nu
   return (id && Object.hasOwn(NAME_PLATES, id) && itemById(id)?.slot === "namePlate" && NAME_PLATES[id]) || null;
 }
 
-/** 화면이 그릴 닉네임 꾸미기 (착용 목록에서, 그릴 줄 모르는 id는 null) */
-export type NameStyleRef = { color: string | null; plate: string | null };
+/** 화면이 그릴 닉네임 꾸미기 (착용 목록에서, 그릴 줄 모르는 id는 null). bell = 11/19 「산타 견습 요정」 한 벌 덤 (게임 이름표 옆 금종) */
+export type NameStyleRef = { color: string | null; plate: string | null; bell?: boolean };
 export function nameStyleRef(look: readonly string[] | null | undefined): NameStyleRef {
   const { color, plate } = nameStyleOfLook(look);
-  return { color: nameColorSpec(color) ? color : null, plate: namePlateSpec(plate) ? plate : null };
+  const ref: NameStyleRef = { color: nameColorSpec(color) ? color : null, plate: namePlateSpec(plate) ? plate : null };
+  if (ref.plate && seasonSetsOfLook(look).some((s) => s.id === "santa-intern")) ref.bell = true;
+  return ref;
 }
 /** 착용 목록에서 닉네임 꾸미기 id만 (채팅 줄·랭킹 줄에 싣는다, 없으면 undefined) */
 export function nameStyleIds(look: readonly string[] | null | undefined): string[] | undefined {

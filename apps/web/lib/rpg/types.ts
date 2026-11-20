@@ -8,6 +8,7 @@ import type { RunTier } from "./endgame";
 import type { StatusId } from "./status";
 import type { HotAuto } from "./hotbar";
 import type { TNodeId } from "./transcendTree";
+import type { MeteorState } from "./meteorDrop";
 
 // 사냥터(RPG) 데이터 형태: 저장 원본, API 응답, 게임 ↔ UI 브리지 페이로드.
 
@@ -37,7 +38,7 @@ export type CharacterState = {
   treeNotice?: boolean;
   /** 가진 장비 (장착 중인 것 포함) itemId → 개수 */
   inv: Record<string, number>;
-  /** 그중 포인트로 산 개수 (되팔면 50% 환불, 나머지는 드롭이라 사냥 포인트 한도 안에서 지급) */
+  /** 그중 포인트로 산 개수 (되팔면 50% 환불, 나머지는 드롭이라 11/20부터 25%를 사냥 포인트로) */
   bought: Record<string, number>;
   equip: Record<GearSlot, string | null>;
   potions: Record<string, number>;
@@ -91,6 +92,8 @@ export type CharacterState = {
   sg15?: number[];
   /** 11/19 숨겨진 5세트 효과를 발견한 세트 (비트: 야근 1·결재 2·회의 4·출장 8 — lib/rpg/setGear SG_EGG). 옛 저장값에 없으면 0 */
   sgEgg?: number;
+  /** 11/20 유성우 오라 (별자리 잇기 전용 — lib/rpg/meteorDrop): 그날 굴린 판 수 · 천장 진행 · 받은 시각. 옛 저장값에 없으면 0부터 */
+  mt?: MeteorState;
 };
 
 export type DailyStats = { points: number; runs: number; exp: number };
@@ -225,6 +228,8 @@ export type RunReward = {
   lostDrops: number;
   /** 22번: 별자리 잇기를 맑은 밤에 해서 포인트 보너스를 받았다 */
   nightBonus?: boolean;
+  /** 11/20 이번 판에 「유성우 오라」가 떨어져 영구로 받았다 (lib/rpg/meteorDrop) */
+  meteor?: true;
   /**
    * 별자리 잇기: 이번 판에 완성한 별자리 (isNew = 도감에 처음 등록, perfect = 완벽으로만 이음,
    * later = 처음 완성했지만 한 판 새 등록 한도(STARS_NEW_PER_RUN)를 넘어 이번엔 등록하지 않음 — 다음 판에)

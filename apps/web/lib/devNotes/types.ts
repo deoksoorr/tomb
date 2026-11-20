@@ -17,6 +17,8 @@ export type DevNote = {
   callout?: string;
   sections: readonly DevNoteSection[];
   outro: string;
+  /** 공지 저장소에서 온 글 (게임에서 쓴 공지·관리자 편집기로 쓰거나 고친 글). 정적 글 원본이면 없다 */
+  fromStore?: boolean;
 };
 
 export type GuideBlock =

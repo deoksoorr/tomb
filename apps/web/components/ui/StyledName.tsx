@@ -1,4 +1,6 @@
-import type { CSSProperties } from "react";
+"use client";
+
+import { useLayoutEffect, useRef, type CSSProperties } from "react";
 import { cssGradient, hex, nameColorSpec, namePlateSpec, nameStyleRef, type NameStyleRef } from "@/lib/nameStyle";
 import { cx } from "./cx";
 import styles from "./StyledName.module.css";
@@ -26,6 +28,15 @@ export default function StyledName({ name, look, ns, noPlate, className }: Props
   const ref = ns ?? nameStyleRef(look);
   const color = nameColorSpec(ref.color);
   const plate = noPlate ? null : namePlateSpec(ref.plate);
+  const el = useRef<HTMLSpanElement>(null);
+  const styleKey = `${ref.color ?? ""}|${noPlate ? "" : (ref.plate ?? "")}`;
+  // 11/20 사용자 「같은 사람이 연달아 채팅하면 그라데이션 무늬가 줄마다 제각각」: CSS 애니메이션은 줄이 생긴 때부터 돌아서
+  // 위상이 줄마다 달랐다 → 모든 이름의 움직임을 문서 시계 0에 맞춰 같은 꾸미기면 어느 줄이든 같은 무늬로 (::after 별·바탕판 포함)
+  useLayoutEffect(() => {
+    const node = el.current;
+    if (!node || typeof node.getAnimations !== "function") return;
+    for (const a of node.getAnimations({ subtree: true })) a.startTime = 0;
+  }, [styleKey]);
   if (!color && !plate) return className ? <span className={className}>{name}</span> : <>{name}</>;
 
   const vars: Record<string, string> = {};
@@ -49,8 +60,8 @@ export default function StyledName({ name, look, ns, noPlate, className }: Props
     vars["--np-dot"] = hex(plate.dots[0] ?? plate.light);
   }
   return (
-    <span className={cx(styles.wrap, className)} data-plate={plate?.kind} data-fx={kind} style={vars as CSSProperties}>
-      <span className={styles.text} data-kind={kind}>
+    <span ref={el} className={cx(styles.wrap, className)} data-plate={plate?.kind} data-fx={kind} style={vars as CSSProperties}>
+      <span className={styles.text} data-kind={kind} data-grad={color?.kind === "fx" && color.fx === "glow" && color.stops.length > 1 ? "" : undefined}>
         {name}
       </span>
     </span>

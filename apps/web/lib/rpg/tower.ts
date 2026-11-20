@@ -498,8 +498,29 @@ export const floorTExp = (f: number) =>
 export const TOWER_FLOORS_PER_RUN = 4;
 /** 하루 우두머리 상자 한도. 11/15: 없앴다 (사냥터에도 판 수 제한이 없으니) — 화면에는 한도 0 = 무제한으로 보낸다 */
 export const TOWER_CHESTS_PER_DAY = Infinity;
-/** 깬 층마다 포인트 (지옥 한 판 ≈ 80~98P를 4층에 나눈 만큼, 사냥 하루 한도 안) */
-export const TOWER_FLOOR_POINTS = 23;
+/**
+ * 깬 층마다 포인트. 101층부터는 지옥 한 판 ≈ 80~98P를 4층에 나눈 만큼(23P).
+ * 11/20 사용자: 사냥 포인트가 너무 풀려서 낮은 층은 덜 준다 — 1~50층 8P · 51~100층 14P · 101층부터 23P.
+ * 서버 정산(evalTower·towerRunPoints)과 화면 안내(야근 빌딩 입구·사냥 안내서)가 같이 쓴다
+ */
+export const TOWER_FLOOR_POINT_BANDS: readonly { to: number; points: number }[] = [
+  { to: 50, points: 8 },
+  { to: 100, points: 14 },
+  { to: Infinity, points: 23 },
+];
+export const towerFloorPoints = (f: number) => TOWER_FLOOR_POINT_BANDS.find((b) => fl(f) <= b.to)!.points;
+/** start층부터 floors층을 깼을 때 층 포인트 합 (적정 층은 보지 않는다 — towerRunPoints가 뺀다) */
+export function towerFloorsPoints(start: number, floors: number): number {
+  let sum = 0;
+  for (let i = 0; i < Math.max(0, Math.floor(floors)); i++) sum += towerFloorPoints(fl(start) + i);
+  return sum;
+}
+/** 화면 안내: "1~50층 8P, 51~100층 14P, 101층부터 23P" */
+export const towerFloorPointsText = () =>
+  TOWER_FLOOR_POINT_BANDS.map((b, i) => {
+    const from = i ? TOWER_FLOOR_POINT_BANDS[i - 1].to + 1 : 1;
+    return `${b.to === Infinity ? `${from}층부터` : `${from}~${b.to}층`} ${b.points}P`;
+  }).join(", ");
 /**
  * 11/19 초월 레벨마다 적정 층 (저층에서 포인트 쓸어 가기 막기 — 사용자): ★(50+t)의 적정 층은 t × TOWER_FIT_PER_T층.
  * 사냥터와 같이 적정보다 TOWER_POINT_GRACE층 넘게 낮은 층은 포인트를 주지 않는다 (초월 EXP·상자·기록은 그대로).
@@ -515,7 +536,8 @@ export function towerRunPoints(start: number, floors: number, tLevel: number): {
   const from = towerPointFrom(tLevel);
   const n = Math.max(0, Math.floor(floors));
   const free = Math.max(0, Math.min(n, from - start));
-  return { points: (n - free) * TOWER_FLOOR_POINTS, free };
+  // 11/20 층 구간마다 포인트가 다르다 (towerFloorPoints)
+  return { points: towerFloorsPoints(start + free, n - free), free };
 }
 
 /**
@@ -813,7 +835,7 @@ export function evalTower(
     best: k > 0 ? t.start + k - 1 : 0,
     floorMs,
     kills: total,
-    points: k * TOWER_FLOOR_POINTS,
+    points: towerFloorsPoints(t.start, k),
     // 11/16 몬스터 도감: 의심 판이 아닐 때만 (몬스터마다 출현 상한 안이라는 게 확인된 처치 수)
     ...(suspect.length ? { suspect } : total > 0 ? { mobs: { ...r.kills } } : {}),
   };

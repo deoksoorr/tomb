@@ -25,6 +25,8 @@ describe("F8 catalog", () => {
       expect(hasItemIcon(it.id), it.id).toBe(true);
       if (it.slot === "pet") continue; // 펫은 동물원 사육사가 영구로만 판다 (값은 ZOO_PETS, zoo.test.ts)
       if (it.staff || it.champ || it.urgent) continue; // 31번 운영자 전용·주간 1위 전용은 값 0 (운영자만 영구로 받는다 / 1위만 빌려 입는다)
+      if (it.seasonSet) continue; // 11/19 계절 한정 세트는 코디 기획안 값 사다리(하루권 120~2,600)를 따른다 (seasonSet.test.ts)
+      if (it.stargaze) continue; // 11/20 별자리 잇기 전용 전설 유성우 오라 (팔지 않는다 — 값은 꾸미기 점수용, lib/rpg/meteorDrop)
       expect(it.price).toBeGreaterThanOrEqual(60);
       expect(it.price).toBeLessThanOrEqual(480);
     }

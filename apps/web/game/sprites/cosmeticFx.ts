@@ -5,6 +5,10 @@ import { CUTE_FX, CUTE_FX_ART, cuteIconGrid } from "./cuteFx";
 import { THEME_FX, THEME_FX_ART, themeIconGrid } from "./themeFx";
 import { XMAS_FX, XMAS_FX_ART, XMAS_GEAR_FX, xmasAura, xmasIconGrid, type XmasMotion } from "./xmasFx";
 import { PET_PACK_ART, PET_PACK_FX, petPackIconGrid } from "./petPack";
+import { BREED_ART, BREED_FX, breedIconGrid } from "./petBreeds";
+import { SEASON_FX, SEASON_FX_ART, SEASON_GEAR_FX, SEASON_SET_FX, seasonAura, seasonFxIconGrid, type SeasonMotion } from "./seasonSetFx";
+import { seasonSetsOfLook } from "@tomb/protocol";
+import { METEOR_FX, METEOR_FX_ART, meteorAura, meteorIcon } from "./meteorFx";
 import { Grid, type Color } from "./pixel";
 
 // F8 캐릭터 꾸미기 추가분 중 "아바타 시트 밖에 따로 그리는 연출" (날개 2종·우산·풍선·발자국 5종·오라 6종·펫 6종).
@@ -1116,6 +1120,12 @@ export const FX_ART = {
   ...THEME_FX_ART,
   // 11/17: 동물원 새 펫 묶음 (petPack.ts)
   ...PET_PACK_ART,
+  // 11/19 계절 한정 세트 (seasonSetFx.ts)
+  ...SEASON_FX_ART,
+  // 11/20 별자리 잇기 전용 유성우 오라 (meteorFx.ts)
+  ...METEOR_FX_ART,
+  // 11/19 멍냥 분양소 품종 펫 (petBreeds.ts — 옆 6장 + 앞·뒤 8장)
+  ...BREED_ART,
 } satisfies Record<string, ArtDef>;
 
 export type FxArtId = keyof typeof FX_ART;
@@ -1135,14 +1145,22 @@ function fill(w: number, h: number, c: Color, a: number): Grid {
  * lift = 동작 프레임마다 들어 올리는 높이 (폴짝). 없으면 걷기 두 장을 천천히 (예전 펫)
  */
 type PetPose = { idle: readonly number[]; act: readonly number[]; actMs: number; every: number; lift?: readonly number[] };
+/**
+ * 11/19 네 방향 펫 (멍냥 분양소 품종 펫): 마지막으로 걸은 방향이 아래면 앞모습, 위면 뒷모습 프레임 (walk = 걷기 두 장, rest = 멈춤 차례 — idleFps로 돈다).
+ * 없으면 예전처럼 옆모습만 (좌우는 주인 쪽으로 뒤집기)
+ */
+type PetDirs = { down: { walk: readonly number[]; rest: readonly number[] }; up: { walk: readonly number[]; rest: readonly number[] } };
 /** glowArt·glowFrame·glowAt = 번짐 그림을 바꿔 그 자리에 (펫 그림 아래 가운데 기준 [오른쪽을 볼 때 dx, 위로 up] — 꼬마 루돌프 코). 없으면 도깨비불 번짐을 몸 가운데에 */
-type PetSpec = { kind: "pet"; art: FxArtId; hover: number; fps: number; idleFps: number; alpha?: number; squash?: boolean; glow?: boolean; glowArt?: FxArtId; glowFrame?: number; glowAt?: readonly [number, number]; mount?: MountKind; far?: number; slide?: boolean; pose?: PetPose; /** 12월 루돌프 썰매: 타고 멈춰 있어도 옆모습이면 pose(멈춤·동작)를 쓴다 */ rideRest?: boolean };
-type TrailSpec = { kind: "trail"; art: FxArtId; step: number; life: number; motion: "prints" | "splash" | "rise" | "scatter" | "pop"; light?: boolean };
+type PetSpec = { kind: "pet"; art: FxArtId; hover: number; fps: number; idleFps: number; alpha?: number; squash?: boolean; glow?: boolean; glowArt?: FxArtId; glowFrame?: number; glowAt?: readonly [number, number]; mount?: MountKind; far?: number; slide?: boolean; pose?: PetPose; dirs?: PetDirs; /** 11/20 번짐(glow)은 밤에만 (미리보기는 늘 — 꼬마 눈토끼) */ glowNight?: boolean; /** 12월 루돌프 썰매: 타고 멈춰 있어도 옆모습이면 pose(멈춤·동작)를 쓴다 */ rideRest?: boolean };
+/** glowArt = 11/19 밤에 흔적마다 같은 프레임의 빛을 더해 그린다 (꼬마전구 발자국) */
+/** fade = 11/20 발자국처럼 좌우 번갈아 찍히고, 지날수록 그림 프레임이 차례로 바뀐다 (흐려지는 발자국 — 또렷 → 안개) */
+/** spread = 11/20 밟은 자리에 작게 찍혀 번진다 (성에 발자국), cycle = 11/20 걸음을 세어 이 차례로 그림 프레임을 고른다 (사흘째 발자국 운동화·운동화·슬리퍼 — 좌우 발은 뒤집기) */
+type TrailSpec = { kind: "trail"; art: FxArtId; step: number; life: number; motion: "prints" | "splash" | "rise" | "scatter" | "pop" | "fade" | "spread"; light?: boolean; glowArt?: FxArtId; cycle?: readonly number[] };
 /** 추가분 2: fall = 머리 위에서 떨어짐, float = 옆에서 떠오름, steam = 머리 위로 김, ring = 몸 둘레를 돈다 (art로 그림을 고른다) */
 type AuraSpec = {
   kind: "aura";
   /** tier* = 25번 프리미엄 외형 등급 연출 (꾸미기가 아니라 몸에 딸린다) */
-  motion: "orbit" | "snow" | "petals" | "cloud" | "notes" | "zzz" | "fall" | "float" | "steam" | "ring" | "tierFine" | "tierRare" | "tierLegend" | "champ" | "qFireflies" | "qNightfish" | "qCapeDust" | "qLamp" | "qSnowGlobe" | "qSnowPuff" | "qWishGlow" | "uSiren" | "gMist" | XmasMotion;
+  motion: "orbit" | "snow" | "petals" | "cloud" | "notes" | "zzz" | "fall" | "float" | "steam" | "ring" | "tierFine" | "tierRare" | "tierLegend" | "champ" | "qFireflies" | "qNightfish" | "qCapeDust" | "qLamp" | "qSnowGlobe" | "qSnowPuff" | "qWishGlow" | "uSiren" | "gMist" | "mtMeteor" | XmasMotion | SeasonMotion;
   art?: FxArtId;
   light?: boolean;
   /** champ = 주간 랭킹 1위 오라 테마 (champTheme) */
@@ -1214,6 +1232,12 @@ export const COSMETIC_FX: Readonly<Record<string, FxSpec>> = {
   ...THEME_FX,
   // 11/17: 동물원 새 펫 묶음 (petPack.ts)
   ...PET_PACK_FX,
+  // 11/19 계절 한정 세트 (seasonSetFx.ts)
+  ...SEASON_FX,
+  // 11/20 별자리 잇기 전용 유성우 오라 (meteorFx.ts)
+  ...METEOR_FX,
+  // 11/19 멍냥 분양소 품종 펫 (petBreeds.ts — 네 방향 dirs)
+  ...BREED_FX,
 };
 
 /** 이 펫이 타는 펫이면 그 그림 종류 (아니면 null) */
@@ -1247,6 +1271,8 @@ export const GEAR_EXTRA_FX: Readonly<Record<string, FxSpec>> = {
   u_hat_siren: { kind: "aura", motion: "uSiren", light: true },
   // 12월 크리스마스: 눈꽃 왕관 결정 반짝 · 지팡이 사탕 별빛 (xmasFx.ts)
   ...XMAS_GEAR_FX,
+  // 11/19 계절 한정: 군고구마 봉투 따뜻한 빛 (seasonSetFx.ts)
+  ...SEASON_GEAR_FX,
 };
 
 /**
@@ -1324,6 +1350,10 @@ export type FxInput = {
   shoulder: number;
   /** 손 자리 (avatar.handAnchor) */
   hand: { dx: number; up: number };
+  /** 11/19 얼굴 가운데(눈 줄) 자리 (avatar.faceAnchor — 입김 오라). 없으면 어깨 위로 어림한다 */
+  face?: { dx: number; up: number; /** 11/20 머리 윗면 높이 (faceAnchor top — 모자 빼고) */ top?: number };
+  /** 11/20 손 흔들기를 시작하고 지난 ms (흔드는 동안만 — 「의리 초콜릿」 한 벌 덤 하트). 없으면 흔들지 않는 중 */
+  wave?: number;
   /** 움직임 줄이기: 둥실·반짝임을 멈춘다 */
   reduced: boolean;
   /** 멈춘 그림 (입어 보기 미리보기의 움직임 줄이기): 시각 0의 모습 + 걷기면 발자국을 미리 깔아 둔다 */
@@ -1454,6 +1484,8 @@ export class CosmeticFxSim {
   private lastX = NaN;
   private lastY = NaN;
   private stepAlt = 0;
+  /** 11/20 찍은 발자국 수 (사흘째 발자국 운동화·운동화·슬리퍼 차례 — TrailSpec.cycle) */
+  private stepN = 0;
   private balX = 0;
   private balY = 0;
   private balOn = false;
@@ -1462,6 +1494,8 @@ export class CosmeticFxSim {
   private kiteOn = false;
   /** 11/17 펫이 멈춰 선 시각 (걷는 중이면 NaN) — 오래 서 있으면 귀여운 동작 */
   private petRestAt = NaN;
+  /** 11/19 펫이 마지막으로 걸은 방향 (네 방향 펫 dirs가 앞·뒷모습을 고른다. -1 = 아직 안 걸음 → 옆모습) */
+  private petFace = -1;
 
   /** body = 몸 id (프리미엄 외형 등급 연출을 함께 건다), champ = 주간 랭킹 1위 값 (1위 오라를 함께 건다 — 착용 오라와 자리를 나눠 둘 다 보인다) */
   setLook(look: readonly string[], body?: string | null, champ?: number, staff?: boolean): void {
@@ -1478,6 +1512,11 @@ export class CosmeticFxSim {
     // 31번 운영자 오라가 우선 (본인이 끄면 champ에 CHAMP_AURA_OFF) — 아니면 주간 1위 오라
     const theme = staff && !((champ ?? 0) & CHAMP_AURA_OFF) ? STAFF_THEME : champTheme(champ);
     if (theme >= 0) next.push(["@champ", { kind: "aura", motion: "champ", theme, light: true }]);
+    // 11/19 계절 한정 세트를 한 벌 다 입으면 덤 연출 (첫눈 출근길 = 발밑 눈송이 반짝)
+    for (const set of seasonSetsOfLook(look)) {
+      const fx = SEASON_SET_FX[set.id];
+      if (fx) next.push([`@set:${set.id}`, fx]);
+    }
     const had = new Set(this.specs.map(([id]) => id));
     if (!next.some(([, s]) => s.kind === "pet")) {
       this.petOn = false;
@@ -1698,6 +1737,19 @@ export class CosmeticFxSim {
       if (Number.isNaN(this.petRestAt)) this.petRestAt = t;
       [frame, poseLift] = petPoseFrame(s.pose, s.idleFps, f.still || f.reduced ? -1 : t - this.petRestAt);
     }
+    // 11/19 네 방향 펫(dirs): 마지막으로 걸은 방향이 위·아래면 뒷·앞모습 (걷기 두 장 · 멈춤 차례). 품종 동작(pose.act)은 옆을 볼 때만.
+    // 물에 잠기거나 미리보기(still)는 예전처럼 옆모습. dirs가 없는 펫은 그대로
+    if (f.moving && !f.still) this.petFace = f.dir;
+    const face = s.dirs && !wet && !sliding ? (this.petFace === DIR.down ? s.dirs.down : this.petFace === DIR.up ? s.dirs.up : null) : null;
+    if (face) {
+      if (walking) frame = face.walk[frame % 2];
+      else {
+        if (Number.isNaN(this.petRestAt)) this.petRestAt = t;
+        const rest = f.reduced ? 0 : t - this.petRestAt;
+        frame = face.rest[Math.floor((rest / 1000) * s.idleFps) % face.rest.length];
+        poseLift = 0;
+      }
+    }
     let lift = s.hover + poseLift;
     let sx = 1;
     let sy = 1;
@@ -1711,7 +1763,8 @@ export class CosmeticFxSim {
     }
     const px = Math.round(this.petX);
     const py = Math.round(this.petY - lift);
-    const flip = this.petX > f.x;
+    // 앞·뒷모습은 좌우가 없다 (뒤집지 않는다)
+    const flip = face ? false : this.petX > f.x;
     if (wet) {
       // 수면(발밑 1px 위) 물결 고리. 잠수면 물방울이 올라온다
       const k = f.reduced ? 0 : (Math.sin(t / 420) + 1) / 2;
@@ -1725,7 +1778,9 @@ export class CosmeticFxSim {
         return; // 수면 아래: 몸·빛은 그리지 않는다
       }
     }
-    if (s.glow && s.glowAt) {
+    if (s.glow && s.glowNight && !f.still && !isNight(f.now)) {
+      // 11/20 낮에는 번짐 없이
+    } else if (s.glow && s.glowAt) {
       // 그림 속 한 점(루돌프 코)에서 번진다 — 보는 쪽에 따라 좌우가 바뀌고, 천천히 깜빡인다
       const pulse = f.reduced ? 0.85 : 0.7 + 0.3 * Math.sin(t / 380);
       out.push(cmd(s.glowArt ?? "wispGlow", s.glowFrame ?? 0, px + (flip ? -1 : 1) * s.glowAt[0], py + sink - s.glowAt[1], { alpha: pulse * (sink ? 0.5 : 1), layer: "light", depth: 0 }));
@@ -1785,7 +1840,7 @@ export class CosmeticFxSim {
             x: f.x - hx * k * s.step + (k % 2 ? 2 : -2) * Math.abs(hy),
             y: f.y - hy * k * s.step - 1 + (k % 2 ? 1 : -1) * Math.abs(hx),
             born: f.now - (k * s.life) / 5,
-            frame: k % art.frames,
+            frame: s.cycle ? s.cycle[(3 - k) % s.cycle.length] : k % art.frames,
             flip: k % 2 === 0,
             vx: k % 2 ? 1 : -1,
           }))
@@ -1796,15 +1851,16 @@ export class CosmeticFxSim {
         if (this.walked >= s.step) {
           this.walked = 0;
           this.stepAlt ^= 1;
+          this.stepN++;
           const side = this.stepAlt ? 1 : -1;
-          const prints = s.motion === "prints";
+          const prints = s.motion === "prints" || s.motion === "fade";
           const p: Part = {
             // 발자국은 좌우 발을 번갈아, 나머지는 살짝 흩어서. 새 흔적은 발 앞이 아닌 지나온 자리(진행 방향 반대쪽)에 찍는다
             x: Math.round(f.x - hx * TRAIL_BEHIND + (prints ? side * 2 * Math.abs(hy) : (Math.random() - 0.5) * 6)),
             y: Math.round(f.y - 1 - hy * TRAIL_BEHIND + (prints ? side * Math.abs(hx) : (Math.random() - 0.5) * 2)),
             born: f.now,
-            frame: prints ? this.stepAlt : Math.floor(Math.random() * art.frames),
-            flip: Math.random() < 0.5,
+            frame: s.cycle ? s.cycle[this.stepN % s.cycle.length] : prints ? this.stepAlt : Math.floor(Math.random() * art.frames),
+            flip: s.cycle ? this.stepAlt === 1 : Math.random() < 0.5,
             vx: Math.random() - 0.5 + (s.motion === "scatter" ? -hx * 0.6 : 0),
           };
           if (this.parts.length < TRAIL_POOL) this.parts.push(p);
@@ -1823,7 +1879,16 @@ export class CosmeticFxSim {
       const n = out.length;
       switch (s.motion) {
         case "prints":
-          out.push(cmd(s.art, p.frame, p.x, p.y, { ...base, alpha: fade }));
+          out.push(cmd(s.art, p.frame, p.x, p.y, { ...base, alpha: fade, ...(s.cycle && p.flip ? { flip: true } : {}) }));
+          break;
+        case "spread": {
+          // 11/20 성에: 작게 찍혀 금방 번진다 (떠오르지 않고 바닥에 붙은 채)
+          const sc = u < 0.25 ? 0.35 + (u / 0.25) * 0.65 : 1;
+          out.push(cmd(s.art, p.frame, p.x, p.y, { ...base, sx: sc, sy: sc, flip: p.flip, alpha: fade }));
+          break;
+        }
+        case "fade":
+          out.push(cmd(s.art, Math.min(art.frames - 1, Math.floor(u * art.frames)), p.x, p.y, { ...base, flip: p.frame === 1, alpha: u < 0.8 ? 1 : (1 - u) / 0.2 }));
           break;
         case "splash": {
           const sc = 0.6 + u * 0.8;
@@ -1849,6 +1914,14 @@ export class CosmeticFxSim {
       // 빛 흔적(반짝·별·저승길 안개)은 맨 위 빛 층이라 아래로 걸으면 지나온 자리(몸 위쪽)의 입자가 몸을 덮는다 →
       // 몸 그림과 겹치는 동안만 몸 뒤(body 층, 더해 그리기)로 내려 몸에 가려지게 한다. 발밑·몸 바깥은 그대로 빛 층.
       if (s.light) for (let j = n; j < out.length; j++) if (overBody(out[j], art, f)) Object.assign(out[j], { layer: "body", add: true, depth: bodyDepth(f) - 0.3 });
+      // 11/19 꼬마전구: 밤(미리보기는 늘)이면 같은 색 빛을 더해 그린다
+      if (s.glowArt && n < out.length && (f.still || isNight(f.now))) {
+        const c = out[n];
+        const glow = cmd(s.glowArt, c.frame, c.x, c.y + 1, { sx: c.sx, sy: c.sy, alpha: c.alpha * 0.85, layer: "light", depth: 0 });
+        // 몸과 겹치는 동안은 몸 뒤에서 더해 그린다 (빛 흔적과 같은 규칙)
+        if (overBody(glow, FX_ART[s.glowArt], f)) Object.assign(glow, { layer: "body", add: true, depth: bodyDepth(f) - 0.3 });
+        out.push(glow);
+      }
     }
   }
 
@@ -1935,6 +2008,50 @@ export class CosmeticFxSim {
         break;
       case "uSiren":
         sirenFx(f, t, out);
+        break;
+      case "ssBreath":
+      case "ssSnowSet":
+      case "ssGoguma":
+      // 11/20 나머지 여섯 벌 (seasonSetFx2.ts — seasonAura가 넘긴다)
+      case "ssPostit":
+      case "ssLetters":
+      case "ssTube":
+      case "ssDrink":
+      case "ssWreath":
+      case "ssJar":
+      case "ssCandle":
+      case "ssOtSet":
+      case "ssFogSet":
+      case "ssBokSet":
+      case "ssHeartSet":
+      case "ssPetalSet":
+      case "ssDustSet":
+      // 11/20 새 다섯 벌 (seasonSetFx3.ts — seasonAura가 넘긴다)
+      case "ssTipsy":
+      case "ssSunrise":
+      case "ssHotpack":
+      case "ssMic":
+      case "ssIcicle":
+      case "ssNoteSet":
+      case "ssDawnSet":
+      case "ssSweatSet":
+      case "ssSmeltSet":
+      case "ssFlakeSet":
+        // 11/19 계절 한정 세트 (seasonSetFx.ts): 그리기 도우미를 넘겨 그 파일이 그린다
+        seasonAura(s.motion, f, t, {
+          push: (art, frame, x, y, o) => out.push(cmd(art, frame, x, y, o)),
+          around: (z, o, light) => around(f, z, o, light),
+          night: !!f.still || isNight(f.now),
+          depth: bodyDepth(f),
+        });
+        break;
+      case "mtMeteor":
+        // 11/20 유성우 오라 (meteorFx.ts): 그리기 도우미를 넘겨 그 파일이 그린다 (밤 = 해질녘·밤, 미리보기는 늘 밤처럼)
+        meteorAura(f, t, {
+          push: (art, frame, x, y, o) => out.push(cmd(art, frame, x, y, o)),
+          night: !!f.still || isNight(f.now),
+          depth: bodyDepth(f),
+        });
         break;
       case "xSnow":
       case "xCrown":
@@ -2459,6 +2576,8 @@ function blit(dst: Grid, art: FxArtId, frame: number, x: number, y: number, flip
 export function fxIconGrid(id: string): Grid | null {
   const g = new Grid(16, 16);
   switch (id) {
+    case "st_meteor":
+      return meteorIcon();
     case "hand_umbrella":
       blit(g, "umbrella", 0, 0, 2);
       g.vline(8, 8, 14, 0x3a3a48);
@@ -2680,6 +2799,6 @@ export function fxIconGrid(id: string): Grid | null {
     }
     default:
       // 11/15: 말랑 꾸미기 묶음 (시트 그림·따로 그리는 연출 둘 다) · 11/17 동물원 새 펫
-      return cuteIconGrid(id) ?? petPackIconGrid(id) ?? xmasIconGrid(id) ?? themeIconGrid(id);
+      return cuteIconGrid(id) ?? petPackIconGrid(id) ?? xmasIconGrid(id) ?? themeIconGrid(id) ?? seasonFxIconGrid(id) ?? breedIconGrid(id);
   }
 }

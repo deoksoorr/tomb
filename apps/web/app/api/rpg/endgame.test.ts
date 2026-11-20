@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { tExpToNext, TRANSCEND_EXP_MUL } from "@/lib/rpg/endgame";
-import { floorTExp, isCheckpoint, isChestFloor, nextCheckpoint, TOWER_CHEST_FROM, TOWER_LOW_CHECKPOINTS, TOWER_FLOOR_POINTS, towerOfScore, towerPlan, towerReachedLabel, towerZone } from "@/lib/rpg/tower";
+import { floorTExp, isCheckpoint, isChestFloor, nextCheckpoint, TOWER_CHEST_FROM, TOWER_LOW_CHECKPOINTS, towerFloorPoints, towerOfScore, towerPlan, towerReachedLabel, towerZone } from "@/lib/rpg/tower";
 import { getTowerStore } from "@/lib/rpg/towerStore";
 import { getAccounts, getErrors, getMegaphone } from "@/lib/store";
 import { cardOffer, CARD_IDS } from "@/lib/rpg/cards";
@@ -199,7 +199,7 @@ describe("야근 빌딩 판 끝 정산", () => {
     const w = r.reward.tower!;
     expect(w).toMatchObject({ start: 1, floors: 6, best: 6, newBest: true, newWeek: true, runs: 1, chests: chestsIn(1, 6), emptyChests: 0 });
     expect(r.reward.transcend!.exp).toBe([1, 2, 3, 4, 5, 6].reduce((n, f) => n + floorTExp(f), 0));
-    expect(r.reward.pointsRaw).toBe(6 * TOWER_FLOOR_POINTS);
+    expect(r.reward.pointsRaw).toBe(6 * towerFloorPoints(1)); // 11/20 1~50층은 층마다 8P
     const c = await getRpgStore().get(v.id);
     expect([c.tRuns, c.tFl, c.tChest ?? 0, c.fBest]).toEqual([1, 2, chestsIn(1, 6).length, 6]);
     expect(r.view.endgame?.tower).toMatchObject({ best: 6, week: { floor: 6 }, chests: chestsIn(1, 6).length, checkpoints: [1] });
@@ -330,7 +330,7 @@ describe("11/19 적정 레벨·적정 층 포인트", () => {
     const v = await newVisitor({ level: 50, tLevel: 0 });
     const s = await begin(v, 1);
     const r = await end(v, s, climbed(s, 4), climbMs(4));
-    expect(r.reward.pointsRaw).toBe(4 * TOWER_FLOOR_POINTS);
+    expect(r.reward.pointsRaw).toBe(4 * 8); // 11/20 1~50층은 층마다 8P
     expect(r.reward.lowFloors).toBeUndefined();
   });
 });
@@ -345,7 +345,7 @@ describe("11/15 부드러운 거절 (의심 판) · 긴 판", () => {
     const r = await end(v, s, climbed(s, 10, { cards: [{ k: "l", i: 0, r: 0, c, f: 1 }] }), climbMs(10));
     expect(r.reward.tower).toMatchObject({ floors: 10, newBest: false, newWeek: false, chests: [], suspect: true });
     expect(r.reward.transcend).toBeUndefined();
-    expect(r.reward.pointsRaw).toBe(10 * TOWER_FLOOR_POINTS);
+    expect(r.reward.pointsRaw).toBe(10 * towerFloorPoints(1));
     const c1 = await getRpgStore().get(v.id);
     expect([c1.fBest, c1.fWkBest, c1.fSus ?? 0, c1.tChest ?? 0]).toEqual([0, 0, 0, 0]);
     expect(await getTowerStore().scoreOf(v.id)).toBeNull();

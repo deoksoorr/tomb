@@ -893,14 +893,16 @@ const P: Record<string, Painter> = {
     g.vline(7, 6, 11, lighten(m, 0.3));
     g.set(8, 3, lighten(a, 0.5));
   },
-  /** 보호 문서: 파란 파일 + 흰 방패 */
+  /** 강화 증폭권 (11/20 옛 보호 문서): 주황 표 + 위로 두 겹 화살표 */
   mat_prot(g, m, a) {
     g.rect(3, 2, 10, 13, m);
     g.rect(3, 2, 10, 2, darken(m, 0.25));
-    g.rect(6, 6, 5, 4, a);
-    g.rect(7, 10, 3, 1, a);
-    g.set(8, 11, a);
-    g.vline(8, 6, 9, m);
+    for (const y of [5, 9]) {
+      g.set(8, y, a);
+      g.hline(7, 9, y + 1, a);
+      g.hline(6, 10, y + 2, a);
+    }
+    g.vline(8, 12, 13, a);
   },
   /** 침묵: 엑스 친 말풍선 */
   st_silence(g, m, a) {

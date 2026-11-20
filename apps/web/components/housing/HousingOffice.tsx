@@ -96,7 +96,7 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
     seaRef.current = r;
     setSeaMy(r);
     void meStore.refresh();
-    bridge.emit("sea:cottages");
+    bridge.emit("sea:cottages", { myHouseId: r.house?.id ?? null });
   }, []);
 
   /** 내 오두막 들어가기 (꾸미기는 오두막이 있는 채널에서만 — 창의 단추가 막는다) */

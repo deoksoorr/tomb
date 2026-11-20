@@ -40,7 +40,7 @@ export const plotCost = (id: PlotTierId): number => {
   return PLOT_TIERS.slice(0, i + 1).reduce((sum, t) => sum + t.price, 0);
 };
 
-export type FurnitureCategory = "furniture" | "living" | "dev" | "nature" | "mood" | "sea" | "skin" | "exterior";
+export type FurnitureCategory = "furniture" | "living" | "dev" | "nature" | "mood" | "sea" | "season" | "skin" | "exterior";
 
 export const CATEGORY_LABELS: Record<FurnitureCategory, string> = {
   furniture: "가구",
@@ -49,6 +49,7 @@ export const CATEGORY_LABELS: Record<FurnitureCategory, string> = {
   nature: "자연",
   mood: "분위기",
   sea: "바닷가 세트",
+  season: "시즌",
   skin: "바닥·벽지",
   exterior: "외관",
 };
@@ -83,7 +84,27 @@ export type FurnitureDef = {
   use?: string;
   /** 11/17 유령선 한정: 가구점에 없고 토요일 밤 유령선 장터에서만 팔아요 (lib/sea/ghostShip) */
   ghost?: true;
+  /**
+   * 11/19 시즌 가구: 가구점에 없고 「가구 보따리상」(기간 한정 노점, lib/seasonShop)에서만 팔아요.
+   * 값 = 묶음 이름 ("w1"…"w4": 겨울 첫눈 오는 거실 · 크리스마스 이브 · 연말 파티 · 새해 아침)
+   */
+  seasonWeek?: string;
+  /** 11/19 「멍냥 분양소」(동물원 옆) 전용 품종 펫 가구: 가구점에 없고 분양소에서만 (buyFurniture 한정 판매 인자). 그림 game/housing/breedFurnitureArt.ts */
+  petShop?: "mungnyang";
+  /**
+   * 11/20 분양사 보리만 파는 기존 강아지·고양이 가구 (잠자는 강아지·고양이 쿠션·잠든 유령 고양이): 가구점 목록·일반 구매에서 빠지고
+   * 분양사 창(buyFurniture 한정 판매 인자)으로만 산다. 그림·쓰다듬기는 예전 그대로 (petShop과 달리 품종 동작이 아니다). 이미 가진·놓은 것은 그대로
+   */
+  boriOnly?: true;
+  /**
+   * 11/20 야근 빌딩 옆 「총무팀 문대리」(사무실 가구 카트)만 파는 사무실 가구 15종: 가구점 목록·일반 구매에서 빠지고
+   * 문대리 창(buyFurniture 한정 판매 인자 — lib/office)으로만 산다. 그림 game/housing/officeFurnitureArt.ts, 모두 네 방향
+   */
+  officeShop?: true;
 };
+
+/** 11/20 사용자 「가구 값을 두 배 정도로 올려, 문대리도. 특별이니까」: 시즌 가구·문대리 사무실 가구 값만 표의 2배 (꾸미기 점수는 표 그대로) */
+export const SPECIAL_FURNITURE_PRICE_MUL = 2;
 
 export const FURNITURE: readonly FurnitureDef[] = [
   // ── 가구 ──
@@ -101,8 +122,23 @@ export const FURNITURE: readonly FurnitureDef[] = [
   { id: "floor_lamp", name: "스탠드 조명", desc: "딸깍 켜면 노란 빛이 동그랗게 번진다.", category: "living", price: 140, score: 7, w: 1, h: 1, use: "켜기·끄기" },
   { id: "fridge", name: "냉장고", desc: "열 때마다 뭔가 하나씩 나온다. 누가 채워 두는 걸까.", category: "living", price: 260, score: 12, w: 1, h: 1, use: "간식 꺼내기", spin: true },
   { id: "bathtub", name: "욕조", desc: "거품이 뽀글뽀글. 들어가면 나오기 싫다.", category: "living", price: 380, score: 18, w: 2, h: 1, use: "들어가기" },
-  { id: "cat_cushion", name: "고양이 쿠션", desc: "쿠션 위의 고양이. 쓰다듬으면 골골 소리를 낸다.", category: "living", price: 180, score: 10, w: 1, h: 1, use: "쓰다듬기", spin: true },
-  { id: "sleepy_dog", name: "잠자는 강아지", desc: "담요 위에서 꿈속 산책 중이에요.", category: "living", price: 200, score: 10, w: 1, h: 1, use: "살살 쓰다듬기" },
+  { id: "cat_cushion", name: "고양이 쿠션", desc: "쿠션 위의 고양이. 쓰다듬으면 골골 소리를 낸다.", category: "living", price: 180, score: 10, w: 1, h: 1, use: "쓰다듬기", spin: true, boriOnly: true },
+  { id: "sleepy_dog", name: "잠자는 강아지", desc: "담요 위에서 꿈속 산책 중이에요.", category: "living", price: 200, score: 10, w: 1, h: 1, use: "살살 쓰다듬기", spin: true, boriOnly: true },
+  // ── 11/19 멍냥 분양소 품종 펫 가구 (petShop — 가구점에 없다). 네 방향, 쓰다듬으면 품종 동작. 점수 = 값 ÷ 20 ──
+  ...([
+    ["nap_cheese", "택배 상자 치즈냥", "택배 상자만 오면 일단 들어가 앉아요. 쓰다듬으면 꾸벅꾸벅.", 200, "쓰다듬기"],
+    ["nap_godeung", "뜨개 방석 고등어 대리", "민트 뜨개 방석에서 결재 대기 중이에요. 쓰다듬으면 앞발로 세수해요.", 200, "쓰다듬기"],
+    ["nap_tuxedo", "키보드 위 야근 턱시도", "따뜻한 키보드 위가 제 자리래요. 쓰다듬으면 쩍 하품.", 220, "쓰다듬기"],
+    ["nap_calico", "라탄 바구니 행운 삼색이", "바구니 속 행운 한 덩이. 쓰다듬으면 냥냥펀치로 답해요.", 260, "쓰다듬기"],
+    ["nap_russian", "벨벳 쿠션 러시안블루", "보라 벨벳 위에서 협상 준비 중. 쓰다듬으면 눈 감고 꾹꾹이.", 260, "쓰다듬기"],
+    ["nap_siamese", "원두 자루 샷추가 샴", "고소한 원두 자루가 제일 좋대요. 말 걸면 야옹 대답해요.", 260, "말 걸기"],
+    ["nap_shiba", "방석 위 월요병 시바", "월요일엔 방석에서 안 내려와요. 쓰다듬으면 납작 엎드려 흘끔.", 240, "쓰다듬기"],
+    ["nap_jindo", "현관 매트 정시출근 백구", "현관 매트에서 주인 퇴근을 기다려요. 쓰다듬으면 손!", 240, "손!"],
+    ["nap_corgi", "퇴근 후 웰시코기", "6시 땡 하자마자 침대로 직행했어요. 쓰다듬으면 납작 엎드려요.", 260, "쓰다듬기"],
+    ["nap_pom", "구름 방석 쩌렁쩌렁 포메", "구름 방석 위 솜뭉치. 쓰다듬으면 폴짝 뛰며 왈!", 220, "쓰다듬기"],
+    ["nap_bichon", "솜 담요 솜사탕 비숑", "담요랑 구분이 안 될 만큼 폭신해요. 쓰다듬으면 부르르.", 240, "쓰다듬기"],
+    ["nap_dachs", "체크 담요 결재라인 닥스훈트", "긴 몸을 담요에 돌돌 말았어요. 쓰다듬으면 고개 들고 조르기.", 220, "쓰다듬기"],
+  ] as const).map(([id, name, desc, price, use]): FurnitureDef => ({ id, name, desc, category: "living", price, score: price / 20, w: 1, h: 1, use, spin: true, petShop: "mungnyang" })),
   { id: "grand_clock", name: "괘종시계", desc: "지금 몇 시인지 댕— 하고 알려 준다.", category: "living", price: 240, score: 11, w: 1, h: 1, use: "시간 보기", spin: true },
   // ── 사무실 ──
   { id: "monitor_desk", name: "모니터 책상", desc: "듀얼 모니터. 한쪽엔 아직 엑셀이 열려 있다.", category: "dev", price: 340, score: 18, w: 2, h: 1, light: { color: 0x8ac8ff, r: 26 }, spin: true, use: "앉아서 일하기" },
@@ -112,6 +148,40 @@ export const FURNITURE: readonly FurnitureDef[] = [
   { id: "duck_shelf", name: "오리 인형 선반", desc: "하소연을 들어 준 오리들이 줄지어 있다.", category: "dev", price: 160, score: 10, w: 1, h: 1, use: "오리 꾹 누르기 (삑)" },
   { id: "coffee_machine", name: "커피 머신", desc: "야근의 동반자. 아직 따뜻하다.", category: "dev", price: 200, score: 9, w: 1, h: 1, use: "커피 내리기", spin: true },
   { id: "frame_404", name: "사훈 액자", desc: "사훈은 \"404\". 무슨 뜻인지 아무도 모른다.", category: "dev", price: 120, score: 6, w: 1, h: 1, use: "액자 바로잡기" },
+  // 11/20 「총무팀 문대리」(야근 빌딩 옆 사무실 가구 카트) 전용 15종 (officeShop — 가구점에 없다). 네 방향, 점수 = 값 ÷ 20
+  ...([
+    ["partition", "파티션", "칸막이 하나면 나만의 섬이 생겨요. 포스트잇은 서비스예요.", 260, 1, "포스트잇 붙이기"],
+    ["leaf_shade", "이파리 햇빛가리개", "창가 자리 눈부심 차단! 광합성은 각자 알아서 해요.", 300, 1, "그늘에서 한숨 돌리기"],
+    ["swivel_chair", "바퀴 달린 사무 의자", "앉으면 괜히 한 바퀴 돌게 돼요. 바퀴 하나는 늘 삐걱.", 280, 1, "앉기 (빙그르르)"],
+    ["copier", "복합기", "급할 때만 용지가 걸려요. 오늘은 기분이 좋은가 봐요.", 380, 1, "복사하기 (위잉)"],
+    ["water_cooler", "정수기", "꼴깍꼴깍. 사내 소문은 다 여기서 시작돼요.", 320, 1, "물 받기"],
+    ["file_cabinet", "철제 캐비닛", "맨 아래 칸엔 3년 전 기획서가 잠들어 있어요.", 300, 1, "서랍 열기"],
+    ["meeting_table", "회의 테이블", "10분이면 끝난다던 회의가 시작되는 곳이에요.", 400, 2, "회의 시작하기"],
+    ["rubber_tree", "사무실 고무나무", "물을 깜빡해도 잘 버텨요. 우리처럼요.", 280, 1, "물 주기"],
+    ["quit_clock", "칼퇴 시계", "늘 5시 59분이에요. 누르면 6시 정각, 땡!", 260, 1, "시간 확인 (땡!)"],
+    ["approval_tray", "결재함", "올리면 반려, 다시 올리면… 쾅! 승인이에요.", 280, 1, "도장 쾅"],
+    ["paper_pile", "서류 산더미", "치워도 치워도 줄지 않는 마법의 더미예요.", 260, 1, "한 장 처리하기"],
+    ["boss_desk", "부장님 책상", "명패는 비워 뒀어요. 언젠가 내 이름을!", 420, 2, "앉아서 결재하기"],
+    ["banker_lamp", "야근 스탠드", "딸깍 켜면 야근 모드, 딸깍 끄면 퇴근 모드예요.", 300, 1, "켜기·끄기"],
+    ["massage_chair", "안마의자", "월요병도 거북목도 어깨 결림도 한 번에 덜덜덜.", 420, 1, "앉아서 안마받기"],
+    ["leave_button", "퇴근 버튼", "누르면 퇴근하는 기분이 들어요. 기분만요.", 340, 1, "누르기 (딸깍)"],
+  ] as const).map(
+    ([id, name, desc, price, w, use]): FurnitureDef => ({
+      id,
+      name,
+      desc,
+      category: "dev",
+      price: price * SPECIAL_FURNITURE_PRICE_MUL,
+      score: price / 20,
+      w,
+      h: 1,
+      use,
+      spin: true,
+      officeShop: true,
+      // 야근 스탠드는 처음부터 켜진 은행원 스탠드 (석등처럼 값 1 = 꺼짐)
+      ...(id === "banker_lamp" ? { light: { color: 0xffd890, r: 30 } } : {}),
+    }),
+  ),
   // ── 자연 ──
   { id: "pot", name: "화분", desc: "물만 주면 잘 자란다. 내 다짐과 달리. 물을 주면 며칠에 걸쳐 꽃이 핀다.", category: "nature", price: 40, score: 2, w: 1, h: 1, use: "물 주기" },
   { id: "tree", name: "나무", desc: "그늘이 넓은 늙은 나무.", category: "nature", price: 340, score: 16, w: 2, h: 2, use: "기대어 앉기" },
@@ -128,7 +198,7 @@ export const FURNITURE: readonly FurnitureDef[] = [
   { id: "memorial", name: "추억 비석", desc: "내 집 마당에 세우는 작은 비석.", category: "mood", price: 140, score: 8, w: 1, h: 1, use: "꽃 놓고 묵념" },
   // 11/17 유령선 한정 (가구점엔 없어요 — 토요일 밤 유령선 장터)
   { id: "ghost_lamp", name: "해골 등불", desc: "유령선 돛대에 걸려 있던 해골 등. 녹색 도깨비불이 눈구멍으로 새어 나와요.", category: "mood", price: 680, score: 30, w: 1, h: 1, light: { color: 0x7dffb0, r: 36 }, use: "불 켜기·끄기", ghost: true },
-  { id: "ghost_cat", name: "잠든 유령 고양이", desc: "방석 위에서 반투명하게 졸고 있다.", category: "mood", price: 300, score: 16, w: 1, h: 1, use: "쓰다듬기" },
+  { id: "ghost_cat", name: "잠든 유령 고양이", desc: "방석 위에서 반투명하게 졸고 있다.", category: "mood", price: 300, score: 16, w: 1, h: 1, use: "쓰다듬기", spin: true, boriOnly: true },
   // ── 11/16 바닷가 세트 (포구 오두막 기본 가구 + 가구점). 모두 네 방향으로 돌린다 (spin) ──
   { id: "sea_hammock", name: "해먹", desc: "기둥 둘 사이에 걸친 줄무늬 해먹. 누우면 살랑살랑 흔들린다.", category: "sea", price: 380, score: 19, w: 3, h: 1, spin: true, use: "해먹에 눕기" },
   { id: "rattan_chair", name: "라탄 의자", desc: "등나무로 엮은 둥근 의자. 바닷바람이 솔솔 통한다.", category: "sea", price: 140, score: 7, w: 1, h: 1, spin: true, use: "앉기" },
@@ -138,6 +208,39 @@ export const FURNITURE: readonly FurnitureDef[] = [
   { id: "life_ring", name: "구명 튜브", desc: "말뚝에 걸어 둔 빨강·하양 구명 튜브.", category: "sea", price: 120, score: 6, w: 1, h: 1, spin: true, use: "구명 튜브 끼기" },
   { id: "sea_lantern", name: "뱃등", desc: "고깃배에서 쓰던 놋쇠 등. 밤바다처럼 은은하다.", category: "sea", price: 200, score: 10, w: 1, h: 1, spin: true, light: { color: 0xffd08a, r: 28 }, use: "불 켜기·끄기" },
   { id: "ship_wheel", name: "조타륜", desc: "낡은 배에서 떼어 온 나무 키. 돌리면 어디든 갈 것 같다.", category: "sea", price: 260, score: 13, w: 1, h: 1, spin: true, use: "키 돌리기" },
+  // ── 11/19 시즌 가구 (가구 보따리상 한정 — seasonWeek). 그림 game/housing/seasonFurnitureArt.ts, 러그만 빼고 모두 네 방향 ──
+  ...season("w1", [
+    ["winter_stove", "무쇠 난로", "연통 달린 까만 난로예요. 위에서 주전자가 보글보글 끓어요.", 360, 18, 1, 1, "불 켜기·끄기", { color: 0xffa050, r: 30 }],
+    ["knit_rug", "니트 러그", "눈꽃을 떠 넣은 도톰한 뜨개 러그예요. 위에 다른 가구를 올려도 돼요.", 200, 10, 3, 2, "러그에 앉기"],
+    ["frost_window", "눈꽃 창가", "서리 낀 창에 종이 눈꽃을 붙였어요. 아래 라디에이터에선 양말이 말라 가요.", 220, 11, 2, 1, "창에 입김 불기"],
+    ["log_basket", "장작 바구니", "통나무를 가득 담은 바구니예요. 솔방울은 덤이에요.", 120, 6, 1, 1, "장작 한 아름 안기"],
+    ["cocoa_table", "코코아 탁자", "생크림 코코아 두 잔이 식기 전에 와요.", 160, 8, 1, 1, "코코아 마시기"],
+    ["scarf_grave", "털모자 쓴 비석", "추울까 봐 털모자랑 목도리를 씌워 줬어요. 묘지 마을의 겨울 인사예요.", 180, 9, 1, 1, "목도리 고쳐 매 주기"],
+  ]),
+  ...season("w2", [
+    ["xmas_tree", "작은 전나무 트리", "꼬마전구가 반짝이는 한 칸짜리 트리예요.", 300, 15, 1, 1, "전구 켜기·끄기", { color: 0xffd27a, r: 28 }],
+    ["paper_tree", "결재 서류 트리", "올해 못 끝낸 결재 서류로 쌓았어요. 꼭대기엔 빨간 승인 도장이 별 대신 있어요.", 260, 13, 1, 1, "결재 도장 쾅 (승인)"],
+    ["stocking_fireplace", "양말 걸린 벽난로", "산타가 들를 양말 셋을 걸어 뒀어요. 선반엔 스노볼이 있어요.", 420, 21, 2, 1, "불 켜기·끄기", { color: 0xff9a50, r: 34 }],
+    ["gift_pile", "선물 더미", "리본 맨 상자가 차곡차곡. 뭐가 들었는지는 아직 비밀이에요.", 140, 7, 1, 1, "선물 흔들어 보기"],
+    ["nutcracker", "호두까기 인형", "높은 모자를 쓴 늠름한 병정이에요. 입으로 호두를 딱 깨요.", 180, 9, 1, 1, "호두 까기 (딱!)"],
+    ["wreath_stand", "리스 걸이", "솔잎 리스에 금방울 두 개를 달았어요.", 120, 6, 1, 1, "방울 흔들기"],
+  ]),
+  ...season("w3", [
+    ["cake_table", "송년 케이크 테이블", "딸기 케이크에 초를 꽂았어요. 한 해 수고했어요.", 320, 16, 2, 1, "촛불 끄고 소원 빌기", { color: 0xffc878, r: 18 }],
+    ["balloon_bunch", "풍선 다발", "금빛, 분홍, 민트 풍선 다섯 개가 둥실 떠 있어요.", 120, 6, 1, 1, "풍선 톡 치기"],
+    ["disco_ball", "디스코볼 조명", "켜면 방 안에 색색 반짝이가 돌아요.", 380, 19, 1, 1, "조명 켜기·끄기", { color: 0xe0b0ff, r: 34 }],
+    ["party_sofa", "벨벳 파티 소파", "자줏빛 벨벳에 금빛 술을 단 소파예요. 고깔모자는 덤이에요.", 340, 17, 2, 1, "앉기 (2자리)"],
+    ["champagne_tower", "샴페인 타워", "잔을 쌓아 맨 위에 부으면 아래까지 넘쳐흘러요.", 200, 10, 1, 1, "잔 부딪히기 (짠)"],
+    ["karaoke", "회식 노래방 기계", "회식 2차의 그 기계예요. 부장님 18번이 아직 예약돼 있어요.", 280, 14, 1, 1, "18번 부르기", { color: 0x9ad0ff, r: 22 }],
+  ]),
+  ...season("w4", [
+    ["folding_screen", "매화 병풍", "해돋이 아래 매화가 핀 네 폭 병풍이에요.", 340, 17, 2, 1, "병풍 접기·펴기"],
+    ["tteokguk_table", "떡국 소반", "한 그릇 먹으면 한 살 더. 두 그릇은 안 돼요.", 140, 7, 1, 1, "떡국 먹기 (한 살 더)"],
+    ["lucky_pouch", "복주머니 걸이", "붉은 비단 복주머니에 새해 복을 담아 걸어요.", 120, 6, 1, 1, "복 담기"],
+    ["shield_kite", "방패연", "가운데 구멍이 뚫린 한지 방패연이에요. 얼레도 같이 와요.", 160, 8, 1, 1, "연 날리는 흉내"],
+    ["cheongsa_lantern", "청사초롱", "붉은 비단에 푸른 단을 두른 초롱이에요. 밤길을 은은히 밝혀요.", 240, 12, 1, 1, "불 켜기·끄기", { color: 0xffb070, r: 30 }],
+    ["resolution_scroll", "새해 다짐 족자", "올해 다짐을 붓으로 크게 썼어요. 「칼퇴」. 올해는 꼭이에요.", 200, 10, 1, 1, "다짐 소리 내어 읽기"],
+  ]),
   // ── 바닥·벽지 스킨 (기본 낡은 장판·나무 판자 벽은 무료). id는 예전 마당 시절 그대로 (가진 것·저장된 배치 유지) ──
   { id: "floor_moss", name: "초록 카펫", desc: "이끼처럼 폭신한 초록 카펫.", category: "skin", price: 220, score: 10, w: 1, h: 1, skin: "floor" },
   { id: "floor_wood", name: "나무 마루", desc: "길쭉한 널을 엇갈려 깐 반들반들한 마루.", category: "skin", price: 340, score: 14, w: 1, h: 1, skin: "floor" },
@@ -190,6 +293,24 @@ export const FURNITURE: readonly FurnitureDef[] = [
   ]),
 ];
 
+/** 11/19 시즌 가구 한 묶음: 니트 러그만 바닥에 까는 물건(돌리면 90°씩 돌아감), 나머지는 모두 네 방향 가구 */
+function season(week: string, rows: [string, string, string, number, number, number, number, string, FurnitureDef["light"]?][]): FurnitureDef[] {
+  return rows.map(([id, name, desc, price, score, w, h, use, light]) => ({
+    id,
+    name,
+    desc,
+    category: "season" as const,
+    price: price * SPECIAL_FURNITURE_PRICE_MUL,
+    score,
+    w,
+    h,
+    use,
+    ...(id === "knit_rug" ? { floor: true, turn: true } : { spin: true }),
+    ...(light ? { light } : {}),
+    seasonWeek: week,
+  }));
+}
+
 function ext(slot: ExtSlot, rows: [string, string, string, number, number][]): FurnitureDef[] {
   return rows.map(([id, name, desc, price, score]) => ({ id, name, desc, category: "exterior" as const, price, score, w: 1, h: 1, ext: slot }));
 }
@@ -220,6 +341,12 @@ export const DEFAULT_WALL_NAME = "나무 판자 벽";
 
 const BY_ID = new Map(FURNITURE.map((f) => [f.id, f]));
 export const furnitureById = (id: string): FurnitureDef | undefined => BY_ID.get(id);
+/**
+ * 11/20 판매처가 따로 있는 전용·기간 한정 가구인지: 유령선 한정(ghost)·가구 보따리상 시즌 가구(seasonWeek)·
+ * 분양사 보리 품종 가구(petShop)·보리만 파는 강아지·고양이 가구(boriOnly)·총무팀 문대리 사무실 가구(officeShop). 유령선 주간 할인 후보 등 「아무 가구나」 고르는 곳에서 뺀다
+ */
+export const isExclusiveFurniture = (f: Pick<FurnitureDef, "ghost" | "seasonWeek" | "petShop" | "boriOnly" | "officeShop">): boolean =>
+  !!(f.ghost || f.seasonWeek || f.petShop || f.boriOnly || f.officeShop);
 
 export const isFloorSkin = (id: string) => id === DEFAULT_FLOOR || furnitureById(id)?.skin === "floor";
 export const isWallSkin = (id: string) => id === DEFAULT_WALL || furnitureById(id)?.skin === "wall";
@@ -268,6 +395,7 @@ export const STYLE_TAGS: Record<Exclude<FurnitureCategory, "skin" | "exterior">,
   nature: "숲속 정원",
   mood: "달빛 정취",
   sea: "바닷바람 오두막",
+  season: "계절 손님맞이",
 };
 
 export const SORTS = ["score", "likes", "new"] as const;

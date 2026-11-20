@@ -337,7 +337,33 @@ export const LS = {
 // ── 공지사항·문의 ──
 
 /** GET /api/notices → 활성 공지(고정 먼저, 최신 순, 최대 20). 관리자: GET/POST /api/admin/notices, PATCH/DELETE /api/admin/notices/[id] */
-export type Notice = { id: string; title: string; body: string; createdAt: number; pinned: boolean };
+export type Notice = {
+  id: string;
+  title: string;
+  /** 본문. 개발자 노트 편집기로 쓴 글은 첫 문단만 (무거운 꼭지는 NoticeDoc으로 따로) */
+  body: string;
+  createdAt: number;
+  pinned: boolean;
+  /** 11/20 개발자 노트 편집기로 쓴 글: 한 줄 요약 */
+  summary?: string;
+  /** 11/20 개발자 노트 편집기로 쓴 글: 대표 이미지 주소 */
+  hero?: string;
+  /** 11/20 꼭지·맺음말(NoticeDoc)이 따로 저장돼 있다 (공지 목록 응답이 무거워지지 않게) */
+  rich?: true;
+  /** 마지막으로 고친 시각 */
+  updatedAt?: number;
+};
+/** 개발자 노트 본문 블록: 소제목 · 글(빈 줄로 문단, 줄바꿈 그대로) · 이미지 */
+export type NoticeBlock = { t: "h"; text: string } | { t: "p"; text: string } | { t: "img"; src: string };
+/** 개발자 노트 본문(무거운 쪽). 공지 목록에는 싣지 않고 글 보기에서만 읽는다 */
+export type NoticeDoc = {
+  blocks: NoticeBlock[];
+  outro: string;
+  /** 「먼저 알려 드릴 것」 상자 */
+  callout?: string;
+  /** 11/20 정적 글을 편집기로 덮어쓸 때, 같은 id로 있던 예전 공지(글만) 원문. 「원본으로 되돌리기」가 이걸로 되살린다 */
+  backup?: { title: string; body: string; pinned: boolean };
+};
 export type NoticeListResponse = { notices: Notice[] };
 export type NoticeInput = { title: string; body: string; pinned?: boolean };
 
@@ -419,7 +445,8 @@ export type ErrorReport = { message: string; stack?: string; url: string; kind: 
 
 /** 관리자: GET /api/admin/economy?days=14 → 날짜별 적립(항목별)·사용(사유별) 합계 */
 export type EconomyDay = { date: string; earned: Record<string, number>; spent: Record<string, number> };
-export type EconomyResponse = { days: EconomyDay[]; totals: { wallets: number; accounts: number } };
+/** totals는 `?totals=1`일 때만 (계정마다 Redis 명령이 들어 화면은 잔액 보기 API를 쓴다) */
+export type EconomyResponse = { days: EconomyDay[]; totals?: { wallets: number; accounts: number } };
 
 // ── 49번: 성불·1인 1묘비·랭킹 ──
 

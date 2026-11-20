@@ -80,6 +80,13 @@
   color: var(--ad-gold);
 }
 
+/* 경제 탭 잔액 목록: 상태 옆 매니저 표시 */
+.manager {
+  margin-left: 4px;
+  background: var(--ad-info-soft);
+  color: var(--ad-info);
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

@@ -1,5 +1,5 @@
 import { DIR, WALK_SPEED, type DirId } from "@tomb/protocol";
-import { AV_ANIM, AV_COLS, AV_H, AV_W, avatarArtTop, BODY_METRICS, bodyOf, buildAvatarSheet, handAnchor, lookKey } from "@/game/sprites/avatar";
+import { AV_ANIM, AV_COLS, AV_H, AV_W, avatarArtTop, BODY_METRICS, bodyOf, buildAvatarSheet, faceAnchor, handAnchor, lookKey } from "@/game/sprites/avatar";
 import { CosmeticFxSim, FX_ART, type FxArtId, type FxCmd } from "@/game/sprites/cosmeticFx";
 import { buildPartMask, drawDyeFx, glowTime, specSpecials } from "@/game/sprites/dyeFx";
 import * as fx from "@/game/sprites/fx";
@@ -345,6 +345,8 @@ export class OutfitStage {
           artTop: avatarArtTop(body, l.look),
           shoulder: m.shoulder,
           hand: handAnchor(body, dirName(dir)),
+          // 11/19 입김 오라 입 자리
+          face: faceAnchor(body, dirName(dir)),
           reduced: still,
           still,
         },

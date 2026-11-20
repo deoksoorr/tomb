@@ -7,6 +7,8 @@ export const UI_KEYS = {
   cameraHintSeen: "tomb.ui.cameraHintSeen",
   /** 마지막으로 본 공지 id (새 공지 점 표시) */
   noticeSeen: "tomb.ui.noticeSeen",
+  /** 11/20 새 개발자 노트 알림 카드를 이미 띄운 글 id (같은 글로는 한 번만) */
+  devNoteCard: "tomb.ui.devNoteCard",
 } as const;
 
 /** 채널별로 마지막에 받은 묘비 목록 (다음 입장 때 바로 그리기) */

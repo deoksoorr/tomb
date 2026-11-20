@@ -6,6 +6,7 @@ import type {
   AdminGraveSettings,
   AdminPassedResponse,
 } from "@/lib/admin";
+import type { AdminBalancesResponse, BalanceScope } from "@/lib/adminBalances";
 import type { AdminMembersResponse, CodeReissueLogResponse, CodeReissueResponse, MemberSort } from "@/lib/adminMembers";
 import { request } from "@/lib/api";
 import type { RunReward } from "@/lib/rpg/types";
@@ -47,6 +48,12 @@ export const adminApi = {
     request<{ ok: true }>(`/api/admin/housing/${encodeURIComponent(id)}/guestbook/${encodeURIComponent(entryId)}`, post({ action })),
   errors: (days: number) => request<AdminErrorsResponse>(`/api/admin/errors?days=${days}`, { cache: "no-store" }),
   economy: (days: number) => request<EconomyResponse>(`/api/admin/economy?days=${days}`, { cache: "no-store" }),
+  /** 유저 포인트 잔액 (운영자 제외, 서버가 몇 분 기억한다. fresh면 다시 훑는다) */
+  balances: (scope: BalanceScope, q: string, fresh = false) =>
+    request<AdminBalancesResponse>(
+      `/api/admin/economy/balances?${new URLSearchParams({ scope, ...(q ? { q } : {}), ...(fresh ? { fresh: "1" } : {}) })}`,
+      { cache: "no-store" },
+    ),
   /** 닉네임으로 계정 찾기 (포인트를 모은 적 있는 계정) */
   /** 11/15 야근 빌딩 대신 정산 (서버가 잘못 거절한 판) */
   towerGrant: (b: { accountId: string; start: number; floors: number; floorMs: number }) =>

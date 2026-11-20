@@ -4,6 +4,7 @@ import {
   CHAT_RECENT_MAX,
   CHAT_STORE_MAX,
   isChatPlace,
+  readChatNameStyle,
   type ChatLogLine,
   type ChatPlace,
 } from "@tomb/protocol";
@@ -26,6 +27,8 @@ export type RecentChat = {
   mgr?: true;
   /** 11/16 쓴 사람이 있던 맵 (캠핑장 "camp"·바닷가 "sea", 마을이면 없음). 11/17 사냥 중에 쓴 줄은 "hunt" */
   m?: ChatPlace;
+  /** 11/20 쓴 사람의 닉네임 꾸미기 id (쓸 때 착용 그대로) */
+  ns?: string[];
 };
 
 export class ChatRecent {
@@ -68,6 +71,7 @@ export class ChatRecent {
       ...(l.staff ? { staff: true as const } : {}),
       ...(l.mgr ? { mgr: true as const } : {}),
       ...(isChatPlace(l.m) ? { m: l.m } : {}),
+      ...(l.ns ? { ns: l.ns } : {}),
       ...(visitorId !== undefined && l.visitorId === visitorId
         ? { mine: true as const }
         : {}),
@@ -137,5 +141,6 @@ function readStored(v: unknown): RecentChat | null {
     ...(l.staff === true ? { staff: true as const } : {}),
     ...(l.mgr === true ? { mgr: true as const } : {}),
     ...(isChatPlace(l.m) ? { m: l.m } : {}),
+    ...(readChatNameStyle(l.ns) ? { ns: readChatNameStyle(l.ns) } : {}),
   };
 }

@@ -55,8 +55,48 @@
 
 .body {
   overflow-y: auto;
+  /* 11/20 스크롤바를 늘 보이게 하면서, 1~2px 넘치는 내용 때문에 가로 막대가 생기지 않게 */
+  overflow-x: hidden;
   overscroll-behavior: contain;
   padding: 16px;
+}
+
+/* 11/20 스크롤바를 늘 보이게 (맥·폰은 기본이 숨김): 게임 색의 얇은 막대.
+   크롬·사파리는 ::-webkit-scrollbar(이걸 쓰면 겹쳐 뜨는 숨김 막대 대신 늘 보인다), 파이어폭스는 scrollbar-* */
+.body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.body::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border: 2px solid var(--panel-solid);
+}
+
+.body::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+@supports (-moz-appearance: none) {
+  .body {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+}
+
+/* 11/20 아래에 더 있을 때만 맨 아래를 살짝 흐리게 (data-more는 Dialog.tsx가 스크롤·크기 변화 때 붙인다) */
+.body[data-more]::after {
+  content: "";
+  position: sticky;
+  bottom: -16px;
+  display: block;
+  height: 36px;
+  margin: -36px -16px -16px;
+  background: linear-gradient(to bottom, rgba(27, 28, 24, 0), var(--panel-solid) 85%);
+  pointer-events: none;
 }
 
 @keyframes rise {

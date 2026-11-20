@@ -1,5 +1,5 @@
 import { customAlphabet, nanoid } from "nanoid";
-import { bodyLabel, bodyUnlockPrice, QUEST_BODIES, DYE_SPECIALS, isFixedDyeId, isStaffBody, itemById, PERMANENT_UNTIL, permanentPrice, type CosmeticSlot, type DyePart, type DyeSpecial } from "@tomb/protocol";
+import { bodyLabel, bodyUnlockPrice, ownedQuestBodies, QUEST_BODIES, DYE_SPECIALS, isFixedDyeId, isStaffBody, itemById, PERMANENT_UNTIL, permanentPrice, type CosmeticSlot, type DyePart, type DyeSpecial } from "@tomb/protocol";
 import { env } from "../env";
 import { sendGift } from "../gifts";
 import { HttpError } from "../http";
@@ -197,8 +197,10 @@ export async function reshape(accountId: string, body: string, now = Date.now())
     return changed(accountId, now);
   }
   // 11/15 수집 의뢰 외형(수집가 유령): 도장 교환소에서 받은 사람만 (소장 기록 bodies), 받은 뒤로는 무료로 바꾼다
+  // 11/20 그 해금 아이템을 가방에 가졌어도 (선물·운영자 지급으로 받은 경우) 소장한 것으로 본다
   if (QUEST_BODIES.some((b) => b.id === body)) {
-    if (!(await style().get(accountId)).bodies.includes(body)) throw new HttpError(403, "FORBIDDEN", "수집 의뢰 도장 교환소에서 받는 외형이에요.");
+    const [st, acct] = await Promise.all([style().get(accountId), getAccounts().get(accountId, kstDay(now), now)]);
+    if (!ownedQuestBodies(st.bodies, acct.inventory).includes(body)) throw new HttpError(403, "FORBIDDEN", "수집 의뢰 도장 교환소에서 받는 외형이에요.");
     charged(await style().reshape(accountId, body, now), "지금 그 모습이에요.");
     return changed(accountId, now);
   }

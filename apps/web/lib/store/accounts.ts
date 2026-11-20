@@ -3,7 +3,7 @@ import { campOpen } from "../camp";
 import { pathSince, retainView } from "../retain";
 import { seaOpen } from "../sea";
 import { customAlphabet } from "nanoid";
-import { GRANT_TTL_SEC, isAvatarBody, signGrant, staffGateBody, type AvatarDye, type Look } from "@tomb/protocol";
+import { GRANT_TTL_SEC, isAvatarBody, ownedQuestBodies, signGrant, staffGateBody, type AvatarDye, type Look } from "@tomb/protocol";
 import { STAY_TICK_MINUTES } from "../calendar";
 import { CODE_ALPHABET, type EarnSource } from "../economy";
 import { gameDay, gameWeek, gameYesterday, weekOfDay } from "../gameDay";
@@ -98,7 +98,11 @@ export async function loadMe(accounts: AccountStore, accountId: string, now = Da
     body: shownBody(a.body, staff),
     dye: style.dye,
     ...(staff ? { staff: true } : {}),
-    ...(style.bodies?.length ? { bodies: style.bodies } : {}),
+    // 11/20 수집 의뢰 외형은 교환소 기록(bodies)뿐 아니라 그 해금 아이템을 가방에 가졌을 때도 (선물로 받은 경우)
+    ...(() => {
+      const bodies = ownedQuestBodies(style.bodies ?? [], a.inventory);
+      return bodies.length ? { bodies } : {};
+    })(),
     ...(champ ? { champ } : {}),
     ...(manager ? { manager: true as const } : {}),
   };

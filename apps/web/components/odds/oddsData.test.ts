@@ -54,6 +54,9 @@ describe("확률 안내 숫자", () => {
     const rows = enhanceRows();
     expect(rows[0][0]).toBe("+1");
     for (const r of rows) expect(Number(r[1].replace("%", ""))).toBeGreaterThan(0);
+    // 11/20 증폭권·천장 칸 (천장은 사용자 「약 2배로」 뒤 값)
+    expect(rows[3]).toEqual(["+4", "65%", "1장으로 100%", "4번", "300P"]);
+    expect(rows[14]).toEqual(["+15", "4%", "4장으로 8%", "84번", "4,000P"]);
   });
 
   it("염색권마다 특수 색 확률이 있다", () => {

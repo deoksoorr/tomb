@@ -67,7 +67,7 @@ export type AdminMembersResponse = {
 
 // ── 훑기 ──
 
-type Snapshot = {
+export type Snapshot = {
   at: number;
   rows: AccountSummary[];
   partial: boolean;
@@ -88,7 +88,8 @@ export async function scanAllAccounts(accounts: AccountStore): Promise<{ rows: A
   return { rows: [...seen.values()], partial: true };
 }
 
-async function snapshot(accounts: AccountStore, fresh: boolean, now: number): Promise<Snapshot> {
+/** 훑어 둔 회원 목록 (SNAPSHOT_MS 동안 같은 것, fresh면 다시 훑는다). 경제 탭 잔액 보기(lib/adminBalances)도 같이 쓴다 */
+export async function membersSnapshot(accounts: AccountStore, fresh: boolean, now: number): Promise<Snapshot> {
   const cur = g.__tombMembersSnap;
   if (!fresh && cur && cur.store === accounts && now - cur.at < SNAPSHOT_MS) return cur;
   const { rows, partial } = await scanAllAccounts(accounts);
@@ -165,7 +166,7 @@ export async function listMembers(
 ): Promise<AdminMembersResponse> {
   const now = opts.now ?? Date.now();
   const accounts = opts.accounts ?? getAccounts();
-  const snap = await snapshot(accounts, !!opts.fresh, now);
+  const snap = await membersSnapshot(accounts, !!opts.fresh, now);
   const page = pageMembers(snap.rows, { q: opts.q, cursor: opts.cursor, sort: opts.sort });
   const ids = page.rows.map((r) => r.accountId);
   const [staffId, bans, scores, links] = await Promise.all([

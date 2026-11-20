@@ -21,9 +21,12 @@ const nn = (i: number) => String(i + 1).padStart(2, "0");
 export async function generateMetadata({ searchParams }: Search): Promise<Metadata> {
   const part = partOf((await searchParams).part);
   const first = part === GUIDE_PARTS[0];
+  // 첫 파트(/guide)는 가이드 전체 소개, 나머지는 「OO 편」 + 파트 소개
+  const rest = GUIDE_PARTS.slice(1).map((g) => g.title).join(", ");
+  const description = first ? `At one time... 게임 가이드예요. 처음 들어오는 법과 조작부터 ${rest}까지 차례로 정리했어요.` : `At one time... 게임 가이드 중 ${part.title} 편이에요. ${part.desc}`;
   return siteMetadata({
     title: first ? "게임 가이드" : `${part.title} | 게임 가이드`,
-    description: `At one time... 게임 가이드. ${part.desc}`,
+    description,
     path: href(part),
     image: part.images[0]?.[0],
   });
@@ -76,7 +79,7 @@ export default async function GuideIndexPage({ searchParams }: Search) {
       <div className={styles.wrap}>
         <header className={styles.head}>
           <h1 className={styles.display}>게임 가이드</h1>
-          <p>마을에서 헷갈리기 쉬운 것들을 모아 뒀어요.</p>
+          <p>마을에서 할 수 있는 것들과 그 규칙을 정리해 두었어요.</p>
           <div className={styles.rule} />
         </header>
         <div className={styles.guide}>
@@ -148,7 +151,7 @@ export default async function GuideIndexPage({ searchParams }: Search) {
               )}
             </nav>
             <section className={styles.gsec}>
-              <h2>이런 글도 있어요</h2>
+              <h2>다른 안내 글</h2>
               <ul>
                 {landing.map((p) => (
                   <li key={p.path}>

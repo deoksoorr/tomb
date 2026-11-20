@@ -84,3 +84,16 @@ describe("ChatRecent", () => {
     expect(r.purge("bad")).toBe(false);
   });
 });
+
+describe("ChatRecent 닉네임 꾸미기 (11/20)", () => {
+  it("줄에 실은 꾸미기 id를 내보내고, 저장했다가 되살려도 남는다 (이상한 값은 버린다)", () => {
+    const r = new ChatRecent(() => 0.5);
+    r.push({ ...line("a"), ns: ["nc_rainbow", "np_wood"] }, 0);
+    r.push(line("b"), 1);
+    expect(r.recent(2).map((l) => l.ns)).toEqual([["nc_rainbow", "np_wood"], undefined]);
+    const snap = r.snapshot(2);
+    const back = new ChatRecent(() => 0.7);
+    back.restore([...snap, { ...snap[1], id: "x.1", ns: ["a", "b", "c"] }, { ...snap[1], id: "x.2", ns: [1] }], 3);
+    expect(back.recent(4).map((l) => l.ns)).toEqual([["nc_rainbow", "np_wood"], undefined, undefined, undefined]);
+  });
+});

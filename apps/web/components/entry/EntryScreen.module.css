@@ -19,6 +19,16 @@
   text-align: center;
 }
 
+/* 11/20 겨울(눈밭)처럼 밝은 배경에서도 글자가 읽히게: 가운데 글 뒤만 은은하게 어둡게 깐다 */
+.content::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse min(46rem, 90vw) min(34rem, 80vh) at 50% 50%, rgba(12, 13, 10, 0.68), rgba(12, 13, 10, 0.46) 55%, rgba(12, 13, 10, 0.12) 85%, transparent);
+}
+
 .title {
   color: var(--bone);
   /* 11/15 영문 이름(At one time...)은 폰에서도 한 줄로: 폭에 맞춰 줄인다 */
@@ -29,7 +39,9 @@
   letter-spacing: 0.02em;
   text-shadow:
     0 0 28px rgba(236, 224, 189, 0.18),
-    0 3px 0 rgba(0, 0, 0, 0.5);
+    0 3px 0 rgba(0, 0, 0, 0.55),
+    0 0 2px rgba(0, 0, 0, 0.9),
+    0 0 12px rgba(0, 0, 0, 0.55);
   animation: appear 2.2s ease both;
 }
 
@@ -40,6 +52,7 @@
   margin-top: 10px;
   color: var(--bone);
   font-size: 13px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.6);
   animation: appear 2.2s 0.8s ease both;
 }
 
@@ -459,12 +472,13 @@
   position: relative;
   z-index: 1;
   margin-top: 20px;
-  color: var(--faint);
+  color: var(--muted);
   font-size: 12px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.6);
 }
 
 .legal a {
-  color: var(--muted);
+  color: var(--bone);
 }
 
 /* 11/20 개발자 노트 한 줄: 시작 단추 바로 아래, 사각 테두리 (새 탭) */
@@ -476,8 +490,8 @@
   max-width: 100%;
   margin-top: 4px;
   padding: 8px 14px;
-  border: 1px solid rgba(236, 224, 189, 0.45);
-  background: rgba(20, 21, 17, 0.55);
+  border: 1px solid rgba(236, 224, 189, 0.55);
+  background: rgba(20, 21, 17, 0.82);
   color: var(--bone);
   font-size: 12px;
   text-decoration: none;
@@ -501,7 +515,9 @@
 /* 포트폴리오 안내: 약관 링크 바로 위, 작고 차분하게 */
 .nonprofit {
   margin-top: 14px;
-  color: var(--muted);
+  color: var(--bone);
+  opacity: 0.85;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.6);
   font-size: 11px;
   line-height: 1.6;
   word-break: keep-all;

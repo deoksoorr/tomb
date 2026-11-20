@@ -49,7 +49,7 @@ export const EARN_RULES: readonly EarnRule[] = [
   // 10번: 입장 때 자동으로 주지 않고, 그날 정해진 시간(lib/attendStay.ts) 머문 뒤 출석 달력의 오늘 칸을 눌러 받는다 (lib/calendar.ts)
   // 11/19 출석 보상은 포인트 대신 사냥 아이템 (lib/calendar ATTEND_GIFT·STREAK_GIFT·MONTHLY_GIFT). 포인트는 0으로 자리만 남긴다
   { source: "attend", label: "출석 도장", points: 0, dailyMax: 0, note: `마을에 ${ATTEND_STAY_TEXT} 머문 뒤 출석 달력의 오늘 칸을 눌러요. 포인트 대신 사냥 물약을 받아요.` },
-  { source: "streak", label: "7일 연속 출석", points: 0, dailyMax: 0, note: "7일 연속 도장을 찍을 때마다 보호 문서를 받아요" },
+  { source: "streak", label: "7일 연속 출석", points: 0, dailyMax: 0, note: "7일 연속 도장을 찍을 때마다 강화 증폭권을 받아요" },
   { source: "monthly", label: "한 달 개근", points: 0, dailyMax: 0, note: "그달 하루도 빠짐없이 도장을 찍으면 결재 서류를 받아요" },
   // 11/19 남긴 횟수 규칙: 헌화·묘비·받은 헌화·좋아요는 다른 계정으로 주고받거나 묘비를 도배해 벌 수 있어 그대로 둔다
   { source: "flower", label: "헌화하기", points: 2, dailyMax: 20, note: "묘비마다 하루 1번, 하루 10번까지" },

@@ -7,8 +7,9 @@ import { SUNKEN_CHANCE, SUNKEN_CHANCE_AUTO } from "@/lib/forage/sunken";
 import { FEST_RARE_BOOST } from "@/lib/forage/quests/urgent";
 import { LOTTERY_SPLIT } from "@/lib/lottery";
 import { DIFFICULTIES, DIFFS, POTIONS } from "@/lib/rpg/catalog";
-import { ENH_DROP_FROM, ENH_FAIL_BONUS, ENHANCE_TABLE, inheritTo } from "@/lib/rpg/enhance";
+import { ampNeed, ENH_AMP_MUL, ENHANCE_TABLE, enhanceRate, inheritTo, pityOf } from "@/lib/rpg/enhance";
 import { HUNT_DROP_ROLLS, KILLS_PER_DROP_ROLL } from "@/lib/rpg/rewards";
+import { METEOR_DAY_ROLLS, METEOR_LEGEND_P, METEOR_P, METEOR_PITY } from "@/lib/rpg/meteorDrop";
 import { SG_GRADE_NAMES, SG_LEGEND_CHANCE, SG_PIECE_LABEL, SG_PIECES, SG_SETS } from "@/lib/rpg/setGear";
 import { CHEST_COSMETIC_CHANCE, chestDocs, chestSeals, COS_DAYS, COS_TIER_NAMES, cosTierWeights, SG_CHEST_CHANCE, SG_PIECE_WEIGHTS, sgGradeForFloor } from "@/lib/rpg/setGearRoll";
 import { TOWER_BOSS_EVERY, TOWER_CHEST_FROM } from "@/lib/rpg/tower";
@@ -67,6 +68,14 @@ export const potionRows = (): string[][] => DROP_POTION_SHARES.map(([id, p]) => 
 
 /** 별자리 잇기: 성적이 기준을 넘으면 물약 한 번 굴림 (난이도별 처치 굴림 확률 그대로) */
 export const starsPotionRow = (): string[] => ["물약 1개", ...DIFFICULTIES.map((d) => pct(DIFFS[d].dropChance))];
+
+/** 11/20 유성우 오라 (lib/rpg/meteorDrop): 기본 · 전설 별자리 완성 판 · 하루 굴림 상한 · 천장 */
+export const meteorRows = (): string[][] => [
+  ["맑은 밤 판 (별자리 1개 이상 완성)", pct(METEOR_P)],
+  ["그 판에 전설 별자리도 완성", pct(METEOR_LEGEND_P)],
+  ["하루에 굴리는 판", `앞 ${METEOR_DAY_ROLLS}판까지`],
+  ["천장 (굴린 판 수)", `${METEOR_PITY}판째 확정`],
+];
 
 // ── 야근 빌딩 우두머리 상자 ──
 
@@ -136,14 +145,19 @@ export function cosDaysRows(): string[][] {
 
 // ── 강화 ──
 
+/** 강화 표 머리 (11/20 하락 없음 → 「실패하면」 칸 대신 증폭권·천장) */
+export const ENHANCE_HEAD = ["목표", "성공", "증폭권 쓰면", "천장", "포인트"];
 export function enhanceRows(): string[][] {
   const out: string[][] = [];
-  // 11/19 강화 개편: 비용(포인트)도 같이 보여 준다
-  for (let t = 1; t < ENHANCE_TABLE.length; t++)
-    out.push([`+${t}`, pct(ENHANCE_TABLE[t].rate), t - 1 >= ENH_DROP_FROM ? "한 단계 내려가요" : "그대로예요", `${ENHANCE_TABLE[t].cost.toLocaleString("ko-KR")}P`]);
+  // 11/19 강화 개편: 비용(포인트)도 같이 보여 준다. 11/20 증폭권(장수 → 확률)·천장(연속 실패 횟수)
+  for (let t = 1; t < ENHANCE_TABLE.length; t++) {
+    const n = ampNeed(t);
+    const pity = pityOf(t);
+    out.push([`+${t}`, pct(ENHANCE_TABLE[t].rate), n ? `${n}장으로 ${pct(enhanceRate(t, true))}` : "—", pity ? `${pity}번` : "—", `${ENHANCE_TABLE[t].cost.toLocaleString("ko-KR")}P`]);
+  }
   return out;
 }
-export const enhanceFailBonus = () => `${Math.round(ENH_FAIL_BONUS * 100)}%p`;
+export const enhanceAmpMul = () => `${ENH_AMP_MUL}배`;
 
 /**
  * 11/19 강화 승계: 재료(직급·강화) → 받는 직급마다 받는 강화. 받은 뒤 기본 능력치가 재료보다 떨어지지 않는 가장 낮은 단계 (갑옷 기준).

@@ -1,10 +1,13 @@
-import type { Metadata } from "next";
 import { SHRINE_KEEP_DAYS } from "@/lib/types";
 import LegalLayout from "@/components/site/LegalLayout";
-import { SITE_VIEWPORT } from "@/lib/devNotes/meta";
+import { siteMetadata, SITE_VIEWPORT } from "@/lib/devNotes/meta";
 
 export const viewport = SITE_VIEWPORT;
-export const metadata: Metadata = { title: "개인정보처리방침 · At one time...", alternates: { canonical: "/privacy" } };
+export const metadata = siteMetadata({
+  title: "개인정보처리방침",
+  description: "At one time... 개인정보처리방침이에요. 회원가입 없이 운영하면서 처리하는 정보와 그 이유, 보관 기간, 처리를 맡기는 곳, 이용자의 권리와 쿠키에 대해 적었어요.",
+  path: "/privacy",
+});
 
 const EFFECTIVE = "2026년 11월 14일";
 

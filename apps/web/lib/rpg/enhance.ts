@@ -71,14 +71,39 @@ export const ENHANCE_TABLE: readonly {
   { rate: 0.06, cost: 3200, doc: 9, seal: 2 },
   { rate: 0.04, cost: 4000, doc: 10, seal: 2 },
 ];
-/** 실패할 때마다 다음 성공 확률 +3%p (성공하면 처음부터). 11/19: 5%p → 3%p */
-export const ENH_FAIL_BONUS = 0.03;
-/** 이 강화부터 실패하면 한 단계 내려간다 (+7에서 +8을 노리다 실패하면 +6). 11/19: +11 → +7. 깨지는 일은 없다 (세트 장비가 귀해서) */
-export const ENH_DROP_FROM = 7;
+/**
+ * 11/20 사용자 「보호 문서를 성능 증폭권처럼 — 체크하면 성공률 2배」 「실패해도 단계는 그대로」 「같은 단계에서 정해진 횟수만큼 실패하면 다음은 반드시 성공」.
+ * 실패하면 재료·포인트만 쓰고 단계는 그대로. 실패마다 오르던 +3%p는 아래 천장으로 바꿨다 (성공 확률은 표 그대로 · 증폭하면 2배).
+ */
+/** 강화 증폭권(옛 보호 문서, 재료 id m_prot 그대로) 성공 확률 배수 (100% 넘으면 100%) */
+export const ENH_AMP_MUL = 2;
+/**
+ * 목표 강화별 증폭권 장수 (0 = 못 씀 — +1~+3은 이미 80% 넘게 붙는다).
+ * 한 장 값이 단계마다 비슷하게(포인트로 약 300~1,000P 아끼는 꼴) 높을수록 많이: +4~+6 1장 · +7~+9 2장 · +10~+12 3장 · +13~+15 4장
+ */
+export const ENH_AMP_TABLE: readonly number[] = [0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4];
+/**
+ * 천장: 목표 강화에서 이만큼 연속으로 실패하면 다음 강화는 반드시 성공 (증폭권을 쓴 실패도 한 번으로 센다).
+ * 처음엔 운이 나쁜 열에 두 명쯤(약 12~20%)만 닿게 맞췄다가, 같은 날 사용자 「천장 횟수를 지금의 약 2배로」 → 단계마다 2배
+ * (천장까지 갈 확률 약 1~4% — 정말 운이 나쁠 때만의 안전망). 장비마다 저장(세트 장비·강화한 상점 장비 코드의 f, 두 자리), 성공하면 0
+ */
+export const ENH_PITY: readonly number[] = [0, 0, 2, 2, 4, 4, 6, 8, 10, 12, 16, 20, 26, 36, 56, 84];
+/** 연속 실패 저장 상한 (세트 장비 코드 두 자리 — 가장 큰 천장 84보다 크게) */
+export const ENH_FAIL_MAX = 99;
 
-export const enhanceRate = (target: number, fails: number) => Math.min(1, (ENHANCE_TABLE[target]?.rate ?? 0) + ENH_FAIL_BONUS * Math.max(0, fails));
-/** 지금 강화 e에서 실패하면 내려가나 */
-export const dropsOnFail = (e: number) => e >= ENH_DROP_FROM;
+/** 목표 강화에 드는 증폭권 장수 (0 = 못 씀) */
+export const ampNeed = (target: number) => ENH_AMP_TABLE[target] ?? 0;
+/** 목표 강화의 천장 (연속 실패 횟수) */
+export const pityOf = (target: number) => ENH_PITY[target] ?? 0;
+/** 천장까지 남은 실패 횟수 (0이면 이번 강화는 반드시 성공) */
+export const pityLeft = (target: number, fails: number) => Math.max(0, pityOf(target) - Math.max(0, fails));
+/** 표 확률 (증폭하면 2배, 최대 100%). 천장은 따로 (enhanceChance) */
+export const enhanceRate = (target: number, amp = false) => Math.min(1, (ENHANCE_TABLE[target]?.rate ?? 0) * (amp && ampNeed(target) > 0 ? ENH_AMP_MUL : 1));
+/** 이번 시도의 실제 성공 확률: 천장이면 100%, 아니면 표 확률(증폭 반영) */
+export function enhanceChance(target: number, fails: number, amp = false): { rate: number; sure: boolean } {
+  const sure = pityLeft(target, fails) === 0;
+  return { rate: sure ? 1 : enhanceRate(target, amp), sure };
+}
 
 /** sg = 세트 장비 번호 · shop = 묶음 상점 장비 (한 개를 떼어 강화한다) · piece = 이미 강화한 상점 장비 한 개 */
 export type EnhTarget = { sg: number } | { shop: string } | { piece: number };
@@ -88,11 +113,15 @@ export type EnhanceResult = {
   name: string;
   from: number;
   to: number;
-  /** 이번 시도의 성공 확률 */
+  /** 이번 시도의 성공 확률 (천장이면 1) */
   rate: number;
-  dropped: boolean;
-  /** 보호 문서를 써서 내려가지 않았다 (쓰기만 하고 성공했으면 false) */
-  saved: boolean;
+  /** 11/20 쓴 강화 증폭권 장수 (안 썼으면 0) */
+  amp: number;
+  /** 11/20 천장이라 반드시 성공했다 */
+  sure: boolean;
+  /** 11/20 이 시도 뒤 연속 실패 수 (성공하면 0) · 다음 강화의 천장까지 남은 실패 (0 = 다음은 반드시 성공, 끝까지 올렸으면 0) */
+  fails: number;
+  pityLeft: number;
   /** 처음으로 +15에 닿았다 (칭호) */
   reached15: boolean;
   /** 이 장비가 처음 +15가 됐다 (확성기 알림 — 장비마다 한 번) */
@@ -159,28 +188,31 @@ function findPiece(s: CharacterState, uid: number): { i: number; p: ShopPiece } 
 }
 
 /**
- * 강화 한 번: 성공 확률(표 + 연속 실패 × 5%p)로 굴린다. +11부터 실패하면 한 단계 내려가고, protect면 보호 문서 한 장으로 막는다.
- * 깨지는 일은 없다. 포인트(cost)는 돌려주는 값으로 서비스가 같은 저장 명령에서 뺀다
+ * 강화 한 번 (11/20 개편). amp = 강화 증폭권 쓰기 (목표 단계 장수만큼, 성공 확률 2배·최대 100%).
+ * 천장(같은 단계 연속 실패 ENH_PITY번)이면 반드시 성공. 실패하면 단계는 그대로, 연속 실패 +1. 깨지거나 내려가는 일은 없다.
+ * 확률·장수는 모두 서버 표에서만 (요청에는 쓸지 말지만 온다). 포인트(cost)는 돌려주는 값으로 서비스가 같은 저장 명령에서 뺀다
  */
-export function enhance(s: CharacterState, t: EnhTarget, protect: boolean, rnd: () => number): { state: CharacterState; cost: number; result: EnhanceResult } {
+export function enhance(s: CharacterState, t: EnhTarget, amp: boolean, rnd: () => number): { state: CharacterState; cost: number; result: EnhanceResult } {
   const cur = enhanceState(s, t);
   const need = enhanceNeed(t, cur.e);
   if (!need) throw new RpgError(409, "ENH_MAX", "sg" in t ? "이미 +15예요. 더는 못 올려요." : `상점 장비는 +${SHOP_ENH_MAX}까지만 올릴 수 있어요.`);
   const m = mats(s);
   if (m.doc < need.doc) throw new RpgError(409, "NO_MATS", `결재 서류가 ${need.doc - m.doc}장 모자라요.`);
   if (m.seal < need.seal) throw new RpgError(409, "NO_MATS", `인감 도장이 ${need.seal - m.seal}개 모자라요.`);
-  const risky = dropsOnFail(cur.e);
-  const useProt = protect && risky;
-  if (useProt && m.prot < 1) throw new RpgError(409, "NO_MATS", "보호 문서가 없어요.");
-  const rate = enhanceRate(need.target, cur.f);
-  const ok = rnd() < rate;
-  const e = ok ? need.target : risky && !useProt ? cur.e - 1 : cur.e;
-  const f = ok ? 0 : Math.min(50, cur.f + 1);
+  if (amp && !ampNeed(need.target)) throw new RpgError(409, "NO_AMP", `+${need.target} 강화에는 증폭권을 쓸 수 없어요.`);
+  // 천장이라 반드시 성공이면 증폭권은 쓰지 않는다 (체크해도 그대로 남는다)
+  const sureNow = pityLeft(need.target, cur.f) === 0;
+  const ampN = amp && !sureNow ? ampNeed(need.target) : 0;
+  if (m.prot < ampN) throw new RpgError(409, "NO_MATS", `강화 증폭권이 ${ampN - m.prot}장 모자라요.`);
+  const { rate, sure } = enhanceChance(need.target, cur.f, ampN > 0);
+  const ok = sure || rnd() < rate;
+  const e = ok ? need.target : cur.e;
+  const f = ok ? 0 : Math.min(ENH_FAIL_MAX, cur.f + 1);
   const next = clone(s);
   next.mats = {
     doc: m.doc - need.doc,
     seal: m.seal - need.seal,
-    prot: m.prot - (useProt ? 1 : 0),
+    prot: m.prot - ampN,
   };
   let piece: number | undefined;
   if ("sg" in t) {
@@ -217,8 +249,10 @@ export function enhance(s: CharacterState, t: EnhTarget, protect: boolean, rnd: 
       from: cur.e,
       to: e,
       rate,
-      dropped: !ok && e < cur.e,
-      saved: !ok && useProt,
+      amp: ampN,
+      sure,
+      fails: f,
+      pityLeft: enhanceNeed(t, e) ? pityLeft(e + 1, f) : 0,
       reached15,
       announce,
       ...(piece !== undefined ? { piece } : {}),

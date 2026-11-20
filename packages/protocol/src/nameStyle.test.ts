@@ -30,8 +30,8 @@ import {
 // 닉네임 꾸미기: 이름 글자(nameColor)·이름표 바탕판(namePlate) 두 부위. 상점(24시간·영구), 착용 증서·입장 토큰으로 다른 사람에게 보인다.
 
 // 11/15 수집 의뢰 이름 꾸미기(q_name_*)는 상점 것이 아니라 따로 (도장 교환소 전용 — 아래 착용 증서 길이에는 들어간다)
-// 상점 닉네임 꾸미기만 (수집 의뢰 보상·12월 크리스마스 한정은 뺀다)
-const names = ITEMS.filter((i) => isNameSlot(i.slot) && !i.quest && !i.event);
+// 상점 닉네임 꾸미기만 (수집 의뢰 보상·12월 크리스마스 한정·11/19 계절 한정 세트는 뺀다)
+const names = ITEMS.filter((i) => isNameSlot(i.slot) && !i.quest && !i.event && !i.seasonSet);
 const byPrefix = (p: string) => names.filter((i) => i.id.startsWith(p));
 const prices = (list: readonly ItemDef[]) => list.map((i) => i.price);
 

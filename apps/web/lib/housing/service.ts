@@ -350,10 +350,34 @@ export async function upgradePlot(store: HouseStore, accountId: string, to: Plot
 
 /** 11/16 discount = 단 칭호의 가구 할인율 (집 갈래 — 라우트가 lib/titlesServer wornPerk로 넘긴다. 순환 import를 피해 여기서 읽지 않는다) */
 /** 11/17 ghostSale = 유령선 장터에서 사요 (유령선 한정 가구는 이때만 — lib/sea/ghostService) */
+/** 11/19 시즌 가구(seasonWeek)도 한정 판매라 가구점에서는 막고, 한정 장터(ghostSale = true — 유령선 장터·가구 보따리상 lib/seasonShop)에서만 산다 */
+/** 11/19 멍냥 분양소 품종 펫 가구(petShop)도 같은 한정 판매 인자로만 산다 */
 export async function buyFurniture(store: HouseStore, accountId: string, itemId: string, discount = 0, zone: HouseZone = "village", ghostSale = false): Promise<MyHouseResponse> {
+  return (await buyFurnitureMe(store, accountId, itemId, discount, zone, ghostSale)).house;
+}
+
+/**
+ * 11/20 buyFurniture와 같은데 결제하며 읽은 내 정보(me — spendPoints가 산 뒤 다시 읽은 것)도 돌려준다.
+ * NPC 가구 판매(보따리상·보리·문대리)가 응답에 me를 실으려 계정을 또 읽지 않게 (Redis 명령 줄이기)
+ */
+export async function buyFurnitureMe(
+  store: HouseStore,
+  accountId: string,
+  itemId: string,
+  discount = 0,
+  zone: HouseZone = "village",
+  ghostSale = false,
+): Promise<{ house: MyHouseResponse; me: Me }> {
   const def = furnitureById(itemId);
   if (!def) throw new HttpError(400, "INVALID_INPUT", "알 수 없는 물건이에요.");
   if (def.ghost && !ghostSale) throw new HttpError(400, "INVALID_INPUT", "유령선 한정은 토요일 밤 유령선 장터에서만 팔아요.");
+  if (def.seasonWeek && !ghostSale) throw new HttpError(400, "INVALID_INPUT", "시즌 가구는 가구 보따리상에서만 팔아요.");
+  // 11/19 멍냥 분양소 품종 펫 가구도 한정 판매 (분양소가 ghostSale = true로 부른다)
+  if (def.petShop && !ghostSale) throw new HttpError(400, "INVALID_INPUT", "품종 펫 가구는 동물원 정문 옆 분양사 보리에게서 사요.");
+  // 11/20 기존 강아지·고양이 가구 셋도 분양사 보리만 판다 (가구점과 겹치지 않게)
+  if (def.boriOnly && !ghostSale) throw new HttpError(400, "INVALID_INPUT", "강아지·고양이 가구는 동물원 정문 옆 분양사 보리에게서 사요.");
+  // 11/20 사무실 가구 15종은 야근 빌딩 옆 총무팀 문대리만 판다 (lib/office가 ghostSale = true로 부른다)
+  if (def.officeShop && !ghostSale) throw new HttpError(400, "INVALID_INPUT", "사무실 가구는 야근 빌딩 옆 총무팀 문대리에게서 사요.");
   await mustHave(store, accountId, zone);
   // 가구는 두 집 공용 가방 (다른 집에 놓인 것까지), 바닥·벽지·외관은 이 집 것만 센다
   const bag = await store.inventory(housePair(accountId), zone);
@@ -369,7 +393,7 @@ export async function buyFurniture(store: HouseStore, accountId: string, itemId:
       price,
       r === "max" ? new HttpError(409, "MAX_OWNED", `${def.name}, 이미 ${MAX_OWN_PER_ITEM}개를 다 가졌어요.`) : noHouse(zone),
     );
-  return myHouse(store, accountId, me, zone);
+  return { house: await myHouse(store, accountId, me, zone), me };
 }
 
 export async function sellFurniture(store: HouseStore, accountId: string, itemId: string, zone: HouseZone = "village"): Promise<MyHouseResponse & { refunded: number }> {

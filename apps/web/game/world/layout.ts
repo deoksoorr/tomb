@@ -57,7 +57,7 @@ import {
   type Furniture,
   type GraveArea,
 } from "@tomb/protocol";
-import { facadeInfo } from "../housing/art";
+import { facadeInfo } from "../housing/facadePlan";
 import { clampChars, DOOR_NAME_MAX } from "../text/fitLabel";
 import { BUS_E_RADIUS, BUS_STOP, fishZoneColliders, inFishZone } from "./fishZone";
 import { inSeaStop, SEA_STOP, SEA_STOP_E_RADIUS, seaStopColliders } from "./seaStop";
@@ -71,6 +71,9 @@ import { HAUNT_HOUSE, hauntColliders, hauntInteractables } from "../haunt/hauntL
 import { TOWER, towerColliders, towerInteractables } from "../tower/towerLayout";
 import { BUMPER_KEEPOUT, BUMPER_LANDMARK, bumperColliders, bumperGround, bumperInteractables, inBumperYardTiles } from "../bumper/bumperLayout";
 import { lotteryColliders, lotteryInteractables } from "./lotteryKiosk";
+import { FURN_STALL, SEASON_STALL, seasonStallColliders, seasonStallInteractables } from "./seasonStallLayout";
+import { MUNGNYANG_SELLER, mungnyangColliders, mungnyangInteractables } from "./mungnyangLayout";
+import { OFFICE_STALL, officeColliders, officeInteractables } from "./officeStallLayout";
 
 // 정적 맵 배치 (순수 데이터). 좌석·스폰·특별한 장소·강·연못·필지·묘역 좌표는 packages/protocol/src/world.ts가 원본이고,
 // 여기서는 그 사이를 채우는 나무·석등·오래된 묘비·철책·촛불·안개·종루·납골당 등 소품과 바닥 종류, 물(강·호수·연못), 물살, 충돌, 상호작용 대상을 정한다.
@@ -787,6 +790,9 @@ export function staticColliders(): Rect[] {
   out.push(...towerColliders()); // 11/15 야근 빌딩 로비·몸체 (tower/towerLayout.ts)
   out.push(...bumperColliders()); // 11/16 범퍼카장 고무 테두리·입구 막대·매표소 (bumper/bumperLayout.ts)
   out.push(...lotteryColliders()); // 행운권 판매대 (lotteryKiosk.ts)
+  out.push(...seasonStallColliders()); // 11/19 계절 보따리상(광장)·가구 보따리상(북쪽 길 위) 노점과 주인 (seasonStallLayout.ts)
+  out.push(...mungnyangColliders()); // 11/19 분양사 보리(동물원 정문 왼쪽 풀밭) 몸통·간식 상자·방석 (mungnyangLayout.ts)
+  out.push(...officeColliders()); // 11/20 총무팀 문대리(야근 빌딩 오른쪽 풀밭) 사무실 가구 카트·문대리 몸통 (officeStallLayout.ts)
   return out;
 }
 
@@ -1015,7 +1021,7 @@ export function groundKind(tx: number, ty: number): GroundKind {
 
 // ── 상호작용 오브젝트 (E/탭) ── WorldScene이 가장 가까운 것을 골라 안내 문구를 띄우고 상호작용한다.
 export type InteractKind = "tree" | "swing" | "hammock" | "bell" | "well" | "water" | "portal" | "door" | "lot" | "dock" | "wish" | "seesaw" | "trampoline" | "carousel" | "telescope" | "mat" | "forage" | "zoo" | "ferris" | "balloon" | "bus" | "bumper";
-export type PortalKind = "hunt" | "housing" | "shrine" | "haunt" | "tower" | "lottery";
+export type PortalKind = "hunt" | "housing" | "shrine" | "haunt" | "tower" | "lottery" | "seasonCos" | "seasonFurn" | "mungnyang" | "office";
 export type Interactable = {
   id: string;
   kind: InteractKind;
@@ -1096,6 +1102,9 @@ export function interactables(): Interactable[] {
     out.push(...towerInteractables()); // 11/15 야근 빌딩 회전문 (tower/towerLayout.ts)
     out.push(...bumperInteractables()); // 11/16 범퍼카장 입구 (bumper/bumperLayout.ts)
     out.push(...lotteryInteractables()); // 행운권 판매대 (lotteryKiosk.ts)
+    out.push(...seasonStallInteractables()); // 11/19 계절 보따리상·가구 보따리상 (seasonStallLayout.ts)
+    out.push(...mungnyangInteractables()); // 11/19 분양사 보리 (mungnyangLayout.ts)
+    out.push(...officeInteractables()); // 11/20 총무팀 문대리 사무실 가구 카트 (officeStallLayout.ts)
     fixedItems = out;
   }
   return fixedItems.slice();
@@ -1122,7 +1131,7 @@ export function bridgeAt(x: number, y: number): boolean {
 }
 
 /** 미니맵·안내용 주요 장소 (F17) */
-export type Landmark = { id: string; label: string; x: number; y: number; kind: "fire" | "grave" | "shop" | "hunt" | "housing" | "shrine" | "dock" | "telescope" | "wish" | "bell" | "fish" | "zoo" | "haunt" | "ferris" | "balloon" | "tower" | "bumper" | "busCamp" | "busSea" | "duck" };
+export type Landmark = { id: string; label: string; x: number; y: number; kind: "fire" | "grave" | "shop" | "hunt" | "housing" | "shrine" | "dock" | "telescope" | "wish" | "bell" | "fish" | "zoo" | "haunt" | "ferris" | "balloon" | "tower" | "bumper" | "busCamp" | "busSea" | "duck" | "season" | "furnStall" | "mungnyang" | "office" };
 export const LANDMARKS: readonly Landmark[] = [
   { id: "fire", label: "큰 모닥불", x: PLAZA_FIRE.x, y: PLAZA_FIRE.y, kind: "fire" },
   ...GRAVE_AREAS.map((a) => ({ id: `grave${a.id}`, label: a.name, x: a.aisleX, y: a.y0 + a.dy / 2, kind: "grave" as const })),
@@ -1148,4 +1157,12 @@ export const LANDMARKS: readonly Landmark[] = [
   { id: "busSea", label: "바닷가행 정류장", x: SEA_STOP.x, y: SEA_STOP.y + 8, kind: "busSea" },
   // 11/16 오리배 선착장 (미니맵 오리 그림)
   { id: "duck", label: "오리배", x: DUCK_DOCK.x, y: DUCK_DOCK.y, kind: "duck" },
+  // 11/19 광장 계절 보따리상 (미니맵 보따리 그림)
+  { id: "season", label: "계절 보따리상", x: SEASON_STALL.x - 16, y: SEASON_STALL.y - 10, kind: "season" },
+  // 11/19 가구 보따리상 (미니맵 의자 그림)
+  { id: "furnStall", label: "가구 보따리상", x: FURN_STALL.x - 20, y: FURN_STALL.y - 10, kind: "furnStall" },
+  // 11/19 분양사 보리 (동물원 정문 왼쪽, 미니맵 발바닥 그림)
+  { id: "mungnyang", label: "분양사 보리", x: MUNGNYANG_SELLER.x - 4, y: MUNGNYANG_SELLER.y - 8, kind: "mungnyang" },
+  // 11/20 총무팀 문대리 (야근 빌딩 오른쪽, 미니맵 사무 의자 그림)
+  { id: "office", label: "총무팀 문대리", x: OFFICE_STALL.x, y: OFFICE_STALL.y - 10, kind: "office" },
 ];

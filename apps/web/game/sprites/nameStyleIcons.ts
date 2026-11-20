@@ -86,6 +86,9 @@ function colorIcon(id: string): Grid | null {
       g.outline(spec.halo ?? 0x8fe8ff, true, 200);
       g.outline(spec.halo ?? 0x8fe8ff, false, 90);
       return g;
+    }    case "frost": {
+      // 11/20 서리 앉은 이름: 얼음빛 그라데이션 + 글자 윗머리 하얀 서리
+      return glyph((tx, ty) => (ty < 0.12 ? 0xffffff : gradientAt(spec.stops, tx)));
     }
   }
 }
@@ -162,6 +165,35 @@ function plateIcon(p: NamePlateSpec): Grid {
       g.rect(x0, y0, w, h, p.fill);
       g.hline(x0, x0 + w - 1, y0 + h - 2, p.light);
       break;
+    case "envelope": {
+      // 11/20 편지봉투: 분홍 편지지 + 덮개 V선 + 하트 봉인
+      g.rect(x0, y0, w, h, p.fill);
+      const mid = (w - 1) / 2;
+      for (let x = 0; x < w; x++) g.set(x0 + x, y0 + Math.round((1 - Math.abs(x - mid) / mid) * (h * 0.55)), p.edge);
+      const mx = x0 + Math.floor(w / 2);
+      g.hline(mx - 1, mx + 1, y0 + h - 3, p.dots[0]);
+      g.set(mx, y0 + h - 2, p.dots[0]);
+      break;
+    }
+    case "planner": {
+      // 11/20 새해 계획표: 크림 종이 + 옅은 줄 + 빨간 여백선 + 왼쪽 체크 칸 둘 (스프링 고리는 테두리 다음에)
+      g.rect(x0, y0, w, h, p.fill);
+      for (const y of [y0 + 2, y0 + 5]) g.hline(x0 + 5, x0 + w - 2, y, p.dots[0]);
+      g.vline(x0 + 4, y0, y0 + h - 1, p.dots[2]);
+      g.set(x0 + 1, y0 + 2, p.dots[1]);
+      g.set(x0 + 2, y0 + 3, p.dots[1]);
+      g.set(x0 + 3, y0 + 1, p.dots[1]);
+      g.set(x0 + 1, y0 + 5, p.edge);
+      g.set(x0 + 2, y0 + 5, p.edge);
+      break;
+    }
+    case "wrap":
+      // 11/19 선물 포장: 빨강·초록 사선 줄무늬 + 가운데 금 리본 띠
+      g.rect(x0, y0, w, h, p.fill);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (Math.floor((x + y) / 2) % 3 === 0) g.set(x0 + x, y0 + y, p.dots[0]);
+      g.vline(x0 + Math.floor(w / 2) - 1, y0, y0 + h - 1, p.dots[1]);
+      g.vline(x0 + Math.floor(w / 2), y0, y0 + h - 1, p.dots[1]);
+      break;
     default:
       g.rect(x0, y0, w, h, p.fill);
       g.hline(x0, x0 + w - 1, y0, p.light);
@@ -190,6 +222,9 @@ function plateIcon(p: NamePlateSpec): Grid {
     g.set(x0 + 2, y0 - 3, p.dots[0]);
     g.set(x0 + w - 3, y0 - 2, p.dots[0]);
     g.set(x0 + 6, y0 - 4, 0xfff2b0);
+  } else if (p.kind === "planner") {
+    // 위 스프링 고리
+    for (let x = x0 + 1; x < x0 + w; x += 3) g.set(x, y0 - 2, p.dots[3]);
   } else if (p.kind === "knit") {
     // 위아래 크림 골지 단
     for (let x = x0 - 1; x <= x0 + w; x++) {
@@ -225,6 +260,15 @@ function plateIcon(p: NamePlateSpec): Grid {
       g.set(cx, y0 - 2, p.dots[0]);
       g.set(cx, y0 - 3, p.dots[0]);
     }
+  } else if (p.kind === "wrap") {
+    // 위에 금 리본 매듭
+    const mx = x0 + Math.floor(w / 2);
+    g.set(mx - 3, y0 - 2, p.dots[1]);
+    g.set(mx - 2, y0 - 2, p.dots[2]);
+    g.set(mx + 1, y0 - 2, p.dots[1]);
+    g.set(mx + 2, y0 - 2, p.dots[1]);
+    g.set(mx - 1, y0 - 1, p.dots[1]);
+    g.set(mx, y0 - 1, p.dots[2]);
   } else if (p.kind === "star") {
     g.set(x0 + 1, y0 + 1, p.dots[0]);
     g.set(x0 + w - 2, y0 + h - 2, p.dots[0]);
@@ -271,3 +315,50 @@ export function nameStyleIcon(itemId: string): Grid | null {
   return colorIcon(itemId);
 }
 
+
+// ── 11/19 「산타 견습 요정」 한 벌 덤: 이름표 옆 금종 (NameStyleView가 이름표 옆에 매달아 가끔 딸랑 흔든다) ──
+
+/** 금종 한 칸 크기 (화면 px — 이름표 글자 12px와 비슷하게) · 기울기 칸 수 (-2 … 2) */
+export const NAME_BELL_W = 13;
+export const NAME_BELL_H = 16;
+export const NAME_BELL_TILTS = [-2, -1, 0, 1, 2] as const;
+/** 고리(매다는 점) 자리 — 칸 안 좌표. 이 줄 아래만 기울어진다 */
+export const NAME_BELL_HOOK: readonly [number, number] = [6, 5];
+const BELL_ART = [
+  "..rr...rr..",
+  ".rRrr.rrRr.",
+  "..rrrRrrr..",
+  "...r.h.r...",
+  ".....h.....",
+  "....yyy....",
+  "...yYyyy...",
+  "...yYyyL...",
+  "..yYYyyyL..",
+  "..yYyyyyL..",
+  ".yyyyyyyyL.",
+  "yyyyyyyyyyL",
+  ".LLLLLLLLL.",
+  ".....c.....",
+];
+const BELL_PAL: Readonly<Record<string, number>> = { r: 0xd63a3a, R: 0xf26a5e, h: 0xb88a22, y: 0xf2c84a, Y: 0xfff2b0, L: 0xb88a22, c: 0x8a5a14 };
+
+/** 금종 시트 (기울기 다섯 칸을 가로로): 고리 아래 줄은 아래로 갈수록 기울기만큼 옆으로 밀려 흔들린다 (픽셀 그대로 — 번지지 않게) */
+export function nameBellGrid(): Grid {
+  const n = NAME_BELL_TILTS.length;
+  const g = new Grid(NAME_BELL_W * n, NAME_BELL_H);
+  const [, hookY] = NAME_BELL_HOOK;
+  NAME_BELL_TILTS.forEach((k, f) => {
+    const one = new Grid(NAME_BELL_W, NAME_BELL_H);
+    BELL_ART.forEach((row, j) => {
+      const y = j + 1;
+      const shift = y > hookY ? Math.round((k * (y - hookY)) / (NAME_BELL_H - 2 - hookY)) : 0;
+      [...row].forEach((ch, i) => {
+        const c = BELL_PAL[ch];
+        if (c !== undefined) one.set(i + 1 + shift, y, c);
+      });
+    });
+    one.outline(0x3a1a08, false, 255);
+    g.draw(one, f * NAME_BELL_W, 0);
+  });
+  return g;
+}

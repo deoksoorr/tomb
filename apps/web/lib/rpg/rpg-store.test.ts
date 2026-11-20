@@ -119,6 +119,22 @@ describe(`사냥터 서비스 (${redisEnv ? "redis" : "memory"})`, () => {
     expect((await getRpgStore().get(a)).inv[kb.id]).toBeUndefined();
   });
 
+  it("11/20 주운 장비 되팔기는 상점 값의 25%, 산 것과 섞인 묶음은 산 것(50%)부터", async () => {
+    const a = acct();
+    const kb = gearById("w_keyboard")!;
+    await getRpgStore().update(a, (s) => ({ state: { ...s, inv: { ...s.inv, [kb.id]: 3 } }, result: null }));
+    const one = await shopAction(a, { type: "sell", itemId: kb.id }, "ip");
+    expect(one.sold).toEqual({ value: Math.floor(kb.price / 4), capped: false, count: 1 });
+    // 1개 산 뒤 묶음 3개 (산 1 + 주운 2)를 한 번에
+    await refundPoints(a, kb.price, "test");
+    await shopAction(a, { type: "buy", itemId: kb.id, qty: 1 }, "ip");
+    const before = await points(a);
+    const mix = await shopAction(a, { type: "sell", itemId: kb.id, count: 3 }, "ip");
+    expect(mix.sold).toEqual({ value: Math.floor(kb.price / 2) + 2 * Math.floor(kb.price / 4), capped: false, count: 3 });
+    expect((await points(a)) - before).toBe(mix.sold!.value);
+    expect((await getRpgStore().get(a)).inv[kb.id]).toBeUndefined();
+  });
+
   it("11/19 포션 여러 개 되팔기는 하루 한도 없이 다 팔린다", async () => {
     const a = acct();
     expect(earnRule("hunt").dailyMax).toBeNull();

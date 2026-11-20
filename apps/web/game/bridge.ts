@@ -86,7 +86,7 @@ export type GameEvents = {
    * 11/16 [사냥] 버튼 → 사냥터 입구까지 걷기 상태 (sticky, lib/huntWalk). started = 걷기 시작, arrived = 도착 (곧 portal:open),
    * cancelled = 방향키·조이스틱·다시 누르기 등으로 그만둠, unreachable = 길이 없음(또는 도중에 막힘)
    */
-  "portal:walk": { kind: "hunt" | "shop"; status: "started" | "arrived" | "cancelled" | "unreachable" };
+  "portal:walk": { kind: "hunt" | "shop" | "housing"; status: "started" | "arrived" | "cancelled" | "unreachable" };
   /** 11/19 첫 걸음 길 안내 결과 (route:guide): arrived = 목적지에 닿아 지웠다, missing = 그런 곳이 지금 없다(채집 지점·이웃 집), unreachable = 걸어서 갈 길이 없다 */
   "route:state": { target: FirstGuideTarget; status: "arrived" | "missing" | "unreachable" };
   "net:status": NetStatus;
@@ -135,9 +135,12 @@ export type GameEvents = {
    * 월드의 특별한 장소와 상호작용: 사냥터 입구 / 분양 사무소(하우징) / 옛 묘역 입구 팻말(shrine, 11/19 성황당 대신) → UI가 해당 창을 연다.
    * 주거 구역(메인 맵의 분양 마을): 집 문이면 houseId(그 집으로 들어가기), 빈 필지 팻말이면 lot(그 번지로 분양 문의)
    */
-  "portal:open": { kind: "hunt" | "housing" | "shrine" | "telescope" | "wish" | "haunt" | "tower" | "lottery"; houseId?: string; lot?: number; zone?: "sea" };
-  /** 11/16 포구 오두막이 바뀌었다 (분양·겉모습·넓히기·이름) → 바닷가 장면이 오두막을 다시 받아 그린다 */
-  "sea:cottages": undefined;
+  // 11/19 seasonCos = 광장 「계절 보따리상」(기간 한정 코디), seasonFurn = 「가구 보따리상」(기간 한정 가구 — 노점 그림이 나오면 월드에 세운다)
+  // 11/19 mungnyang = 동물원 정문 왼쪽 「분양사 보리」(강아지·고양이 분양 — components/mungnyang)
+  // 11/20 office = 야근 빌딩 오른쪽 「총무팀 문대리」(사무실 가구 — components/office)
+  "portal:open": { kind: "hunt" | "housing" | "shrine" | "telescope" | "wish" | "haunt" | "tower" | "lottery" | "seasonCos" | "seasonFurn" | "mungnyang" | "office"; houseId?: string; lot?: number; zone?: "sea" };
+  /** 11/16 포구 오두막이 바뀌었다 (분양·겉모습·넓히기·이름) → 바닷가 장면이 오두막을 다시 받아 그린다 (myHouseId = 내 오두막 — 문패 「(내 집)」) */
+  "sea:cottages": { myHouseId: string | null };
   /** 11/16 바닷가에서 그 오두막 터 앞으로 (내 집 가기) */
   "sea:lot": { lot: number };
   /** 22번 황금 고블린을 내가 가장 먼저 잡았다 → UI가 증서로 /api/goblin에 보상을 받는다 */
@@ -270,6 +273,8 @@ export type GameEvents = {
   "boat:duck": { riding: boolean };
   /** 11/16 범퍼카에 타 있음 (sticky) → 터치 [점프] 버튼이 [빵빵!]이 된다 (범퍼카 위 Space = 빵빵) */
   "bumper:riding": { riding: boolean };
+  /** 11/20 이번에 타고 나서 실제로 몰고 다닌 시간 (가만히 있던 시간은 빼고, 1초마다) → 오늘 미션 「범퍼카 한 판 타기」 */
+  "bumper:drive": { ms: number };
   /**
    * 11/16 내 캐릭터가 지금 탄 것·앉은 자리 (sticky, 마을·캠핑장·바닷가 장면이 바뀔 때만 알린다 — lib/rideGate publishRide).
    * 사냥터·미니게임·집으로 가는 입구가 이걸 보고 탈것이면 막고, 앉아 있으면 player:stand로 일으켜 세운다 (lib/ridePolicy)
@@ -317,8 +322,9 @@ export type UiEvents = {
   /**
    * 11/16 [사냥] 버튼: 내 캐릭터가 길을 찾아 그 입구까지 걸어가 도착하면 portal:open (순간이동 없음, 진행은 portal:walk). null = 그만 걷기.
    * 11/19 "shop" = 외치기 창 [상점에서 사기]: 유령 잡화점 문 앞까지 걸어가 들어간 뒤 shop:open
+   * 11/20 "housing" = 집 없는 손님 거절 창 [분양 사무소로 가기]: 분양 사무소 문 앞까지 걸어가 portal:open housing
    */
-  "portal:walkTo": { kind: "hunt" | "shop" | null };
+  "portal:walkTo": { kind: "hunt" | "shop" | "housing" | null };
   /** 11/19 첫 걸음 미션 길 안내: 내 캐릭터에서 그 목적지까지 걷는 길에 촛불빛 화살표를 잇는다 (game/world/RouteGuide). null = 지우기 */
   "route:guide": { target: FirstGuideTarget | null };
   /** 내가 방금 묘비를 세움: 카메라 이동 + 흙 덮이는 연출 + graveEvent(buried) 전송 */
@@ -381,6 +387,8 @@ export type UiEvents = {
   "photo:shot": { blob: Blob | null; width: number; height: number };
   /** "여기서 다시 접속" (replaced/offline 상태에서) */
   "net:reconnect": undefined;
+  /** 11/20 닉네임을 바꿨다: 내 머리 위 이름을 바로 바꾸고, 새 이름으로 다시 접속해 다른 사람에게도 보이게 */
+  "me:renamed": { name: string };
   /** 꾸미기 착용 변경: 내 아바타에 바로 반영하고 grant를 실시간 서버로 보낸다 (sticky) */
   /** 내 착용 상태 (+ 46·25번: 염색·몸 모양 — 있으면 내 아바타에도 바로 입힌다) */
   /** champ = 주간 랭킹 1위 값 (0 = 아님, 옛 응답엔 없음) — 내 아바타 배지·오라 */

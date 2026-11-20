@@ -3,14 +3,17 @@ import { MAP_CONCEPTS, type MapConcept } from "@/lib/mapConcept";
 import { seasonHat, seasonHolly, seasonKey, seasonMitt, seasonScarf, seasonSnow } from "../../sprites/npcSeasonArt";
 import { forageIconCanvas } from "../../sprites/forageIcons";
 import { darken, Grid, lighten, type Color } from "../../sprites/pixel";
+import { RAMP, toneOutline } from "../../sea/seaArt";
 
-// 4·32번 낚시·채집 월드 그림 (코드로 그리는 픽셀아트): NPC 둘(어부 영감·수집가 유령)과 노점, 채집 지점 4종, 찌, 느낌표.
+// 4·32번 낚시·채집 월드 그림 (코드로 그리는 픽셀아트): NPC 둘(어부 영감·수집가 유령)과 노점, 11/20 바닷가 해녀 할망과 파라솔 좌판, 채집 지점 4종, 찌, 느낌표.
 // 처음 쓸 때 장면 텍스처에 한 번 올린다 (ensureForageTextures). 발 위치가 그림 맨 아래 줄 가운데다.
 
 export const FTEX = {
   /** 11/17 판마다 따로 (기본판은 예전 키 그대로) */
   npc: (id: string, f: number, concept: MapConcept = "default") => seasonKey(`forage-npc-${id}-${f}`, concept),
   stall: (id: string) => `forage-stall-${id}`,
+  /** 11/20 해녀 할망 좌판: 판마다·밤(파라솔 등 켬) 따로 */
+  seaStall: (concept: MapConcept, lit: boolean) => seasonKey(`forage-stall-haenyeo${lit ? "-n" : ""}`, concept),
   /** 11/18 곤충 수풀은 밤 그림을 따로 키로 (예전엔 밤낮이 바뀔 때 같은 키를 지우고 다시 올려서, 다른 장면에 남은 그림이 지워진 텍스처를 가리켰다) */
   node: (kind: string, f: number, night = false) => (kind === "bug" && night ? `forage-node-${kind}-n-${f}` : `forage-node-${kind}-${f}`),
   bobber: "forage-bobber",
@@ -20,14 +23,15 @@ export const FTEX = {
 
 const OUT = 0x16121a;
 
-/** 유령 몸 (두건 없는 흰 천): 아래 물결 자락, 눈 두 개 */
-function ghostBody(g: Grid, ox: number, oy: number, body: Color, frame: number): void {
+/** 유령 몸 (두건 없는 흰 천): 아래 물결 자락, 눈 두 개 (eyes = false면 눈은 그리는 쪽이 따로 — 11/20 해녀 할망 웃는 눈) */
+function ghostBody(g: Grid, ox: number, oy: number, body: Color, frame: number, eyes = true): void {
   const shade = darken(body, 0.18);
   g.ellipse(ox + 8, oy + 8, 6, 6.2, body);
   g.rect(ox + 2, oy + 8, 13, 9, body);
   // 물결 자락 (프레임마다 살짝 다르게)
   for (let x = 2; x <= 14; x++) if ((x + frame) % 3 !== 0) g.set(ox + x, oy + 17, body);
   g.recolor((x, y) => x >= ox + 11 && y > oy + 6, shade);
+  if (!eyes) return;
   g.set(ox + 6, oy + 8, 0x1a1620);
   g.set(ox + 10, oy + 8, 0x1a1620);
   g.set(ox + 6, oy + 7, 0x1a1620);
@@ -274,6 +278,288 @@ function bang(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
+// ── 11/20 달물결 포구 해녀 할망 좌판 (물고기·채집물을 다 사요 — 마을 어부 영감·수집가 유령과 같은 NPC 규칙, 좌판은 바닷가 소품 규칙: 파스텔 RAMP·제 색 테두리) ──
+
+/**
+ * 해녀 할망: 푸른 흰 유령 몸에 짙은 남색 고무 물옷(목은 둥글게 파이고 주황 테), 이마에 올린 왕눈 물안경,
+ * 꽃분홍 땡땡이 머릿수건(오른쪽 위 매듭), 웃는 눈·발그레한 볼, 오른손에 주황 테왁과 그 아래 그물 망사리(소라·성게). 24×26
+ * 겨울 = 털모자(물안경은 모자 위)·두툼한 목도리·벙어리장갑, 크리스마스 = 산타 모자·빨강 초록 목도리·테왁에 호랑가시
+ */
+function haenyeo(frame: number, concept: MapConcept = "default"): HTMLCanvasElement {
+  const g = new Grid(24, 26);
+  const ox = 3;
+  const oy = 7;
+  const body = 0xe6eeee;
+  ghostBody(g, ox, oy, body, frame, false);
+  // 고무 물옷 (어깨부터 자락 위까지 — 목은 둥글게 넓게 파여 흰 몸이 보여요). 빛은 왼쪽 위
+  const suit = 0x34405a;
+  const suitHi = 0x4c5c7a;
+  const suitLo = 0x262e44;
+  for (let y = oy + 11; y <= oy + 16; y++)
+    for (let x = ox + 2; x <= ox + 14; x++) {
+      if (!g.filled(x, y)) continue;
+      if (y === oy + 11 && x >= ox + 4 && x <= ox + 12) continue; // 둥근 목
+      if (y === oy + 12 && x >= ox + 6 && x <= ox + 10) continue;
+      g.set(x, y, x <= ox + 3 ? suitHi : x >= ox + 12 ? suitLo : suit);
+    }
+  // 목둘레 주황 테
+  for (const [x, y] of [[ox + 3, oy + 11], [ox + 4, oy + 12], [ox + 5, oy + 12], [ox + 6, oy + 13], [ox + 7, oy + 13], [ox + 8, oy + 13], [ox + 9, oy + 13], [ox + 10, oy + 13], [ox + 11, oy + 12], [ox + 12, oy + 12], [ox + 13, oy + 11]] as const) g.set(x, y, 0xf08a3c);
+  // 허리 납벨트 (짙은 줄 + 은 고리)
+  g.hline(ox + 2, ox + 14, oy + 15, 0x1c2232);
+  g.set(ox + 8, oy + 15, 0xd8dce4);
+  // 웃는 눈 (^ ^) · 볼
+  for (const cx of [ox + 6, ox + 10]) {
+    g.set(cx - 1, oy + 8, 0x1a1620);
+    g.set(cx, oy + 7, 0x1a1620);
+    g.set(cx + 1, oy + 8, 0x1a1620);
+  }
+  g.set(ox + 4, oy + 9, 0xf2b0b0);
+  g.set(ox + 12, oy + 9, 0xe0a0a6);
+  // 왕눈 물안경 (이마 위로 올려 쓴, 모서리 둥근 테 + 유리 + 머리 둘레 끈) — 겨울엔 털모자에 가려요
+  const goggles = () => {
+    const gy = oy + 4;
+    g.hline(ox + 5, ox + 11, gy + 1, 0x2a2e3a);
+    g.set(ox + 4, gy, 0x2a2e3a);
+    g.set(ox + 12, gy, 0x2a2e3a);
+    g.hline(ox + 5, ox + 11, gy, 0x8ed6e6);
+    g.set(ox + 5, gy, 0xeafcff);
+    g.set(ox + 6, gy, 0xc4eef6);
+    g.set(ox + 11, gy, 0x68b4c8);
+    g.set(ox + 3, gy, 0x3a3e4a);
+    g.set(ox + 13, gy, 0x3a3e4a);
+  };
+  // 목도리
+  if (concept === "winter") seasonScarf(g, ox + 3, ox + 13, oy + 10, { c: 0xe0a83a, c2: 0xf6ead0, pat: "stripe", thick: true, tail: ox + 4 });
+  else if (concept === "christmas") seasonScarf(g, ox + 3, ox + 13, oy + 10, { c: 0xd23a44, c2: 0x2e8a4e, pat: "stripe", thick: true, tail: ox + 4 });
+  // 머리: 기본 = 머릿수건 + 물안경, 겨울 = 털모자, 크리스마스 = 산타 모자
+  if (concept === "christmas") {
+    seasonHat(g, ox + 8, oy + 7, 6, oy + 1, { kind: "santa" });
+  } else if (concept === "winter") {
+    seasonHat(g, ox + 8, oy + 7, 6, oy + 1, { kind: "beanie", c: 0x3a8a9a, c2: 0xf6ead0 });
+  } else {
+    // 꽃분홍 땡땡이 머릿수건 (정수리 세 줄, 오른쪽 위에 묶은 매듭 + 꼬리 둘) + 이마 선에 올린 물안경
+    const cloth = 0xf2a6a0;
+    g.recolor((x, y) => y >= oy + 1 && y <= oy + 3, cloth);
+    g.recolor((x, y) => y >= oy + 1 && y <= oy + 3 && x <= ox + 5, lighten(cloth, 0.18));
+    g.recolor((x, y) => y >= oy + 1 && y <= oy + 3 && x >= ox + 11, darken(cloth, 0.12));
+    for (let y = oy + 1; y <= oy + 3; y++) for (let x = ox; x <= ox + 16; x++) if (g.filled(x, y) && (x * 2 + y) % 4 === 0) g.set(x, y, 0xfde8e0);
+    g.set(ox + 12, oy + 1, darken(cloth, 0.08));
+    g.set(ox + 13, oy + 1, cloth);
+    g.set(ox + 13, oy, darken(cloth, 0.05));
+    g.set(ox + 14, oy + 2, darken(cloth, 0.15));
+    goggles();
+  }
+  // 테왁 (주황 공) + 손
+  const fy = oy + 10 + (frame ? 1 : 0);
+  const fx = ox + 17;
+  g.set(ox + 15, oy + 12, body);
+  g.set(ox + 15, oy + 13, darken(body, 0.18));
+  g.ellipse(fx, fy, 3, 2.8, 0xf08a3c);
+  g.recolor((x, y) => Math.hypot(x + 0.5 - fx, y + 0.5 - fy) <= 3.2 && (x >= fx + 1 || y >= fy + 1) && (x - fx) + (y - fy) >= 1, 0xcc6a2c);
+  g.set(fx - 1, fy - 1, 0xffc27a);
+  g.set(fx - 2, fy, 0xffa858);
+  g.hline(fx - 3, fx + 2, fy, darken(0xf08a3c, 0.08));
+  g.set(fx - 1, fy - 1, 0xffd8a0);
+  if (concept === "christmas") seasonHolly(g, fx, fy - 2);
+  // 망사리 (테왁 아래 늘어진 그물 — 소라·성게가 비쳐요)
+  const ny = fy + 3;
+  const rope = 0x3f7a64;
+  for (let y = 0; y < 5; y++)
+    for (let x = -2 + (y > 2 ? 1 : 0); x <= 2 - (y > 3 ? 1 : 0); x++) {
+      const px = fx + x;
+      const py = ny + y;
+      if ((x + y) % 2 === 0) g.set(px, py, rope);
+    }
+  g.set(fx - 1, ny + 2, 0xf2dcc0);
+  g.set(fx, ny + 2, 0xd8b890);
+  g.set(fx + 1, ny + 3, 0x7a4a8a);
+  g.set(fx, ny + 4, 0x5a3a6a);
+  if (concept !== "default") seasonMitt(g, ox + 14, oy + 11, concept === "winter" ? 0xe0a83a : 0x2e8a4e);
+  g.outline(OUT);
+  if (concept === "winter") seasonSnow(g, ox + 4, ox + 12, oy);
+  return g.toCanvas();
+}
+
+function stallShadow(g: Grid, cx: number, cy: number, rx: number, ry: number, a = 64): void {
+  for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++)
+    for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
+      const dx = (x + 0.5 - cx) / rx;
+      const dy = (y + 0.5 - cy) / ry;
+      if (dx * dx + dy * dy <= 1 && !g.filled(x, y)) g.set(x, y, 0x3e4060, Math.min(150, Math.round(a * (1 - (dx * dx + dy * dy) * 0.5))));
+    }
+}
+
+/** 좌판 그림 크기 (발 = 맨 아래 가운데). 파라솔 등은 그림 (36, 15) — 밤 불빛 자리는 game/sea/seaLayout SEA_BUYER_LAMP */
+const STALL_W = 44;
+const STALL_H = 46;
+const STALL_LAMP = { x: 36, y: 15 } as const;
+
+/**
+ * 포구 좌판: 민트·흰 줄무늬 비치 파라솔 아래 나무 궤짝 판, 위에 빨간 고무 다라이 둘(물 담은 생선 · 조개·소라), 약초 한 단·광석 한 알,
+ * 앞에 기대 놓은 손글씨 골판지(빨간 동그라미), 옆에 흰 스티로폼 생선 상자, 파라솔 살에 매단 작은 등. 44×46, 받침 = 맨 아래 가운데
+ */
+function haenyeoStall(concept: MapConcept = "default", lit = false): HTMLCanvasElement {
+  const W = STALL_W;
+  const H = STALL_H;
+  const g = new Grid(W, H);
+  const base = H - 3; // 땅에 닿는 줄
+  // ── 파라솔 기둥 (궤짝 뒤 가운데)
+  const poleX = 21;
+  for (let y = 9; y <= base - 12; y++) {
+    g.set(poleX, y, RAMP.wall[2]);
+    g.set(poleX + 1, y, RAMP.wall[3]);
+  }
+  // ── 궤짝 판 (나무 사과 궤짝 둘을 붙인 판 + 위에 널빤지)
+  const tx0 = 4;
+  const tx1 = 35;
+  const top = base - 13;
+  for (let y = top + 3; y <= base; y++)
+    for (let x = tx0; x <= tx1; x++) {
+      const crate = x <= 19 ? 0 : 1;
+      const lx = x - (crate ? 20 : tx0);
+      const slat = (y - (top + 3)) % 4 === 3;
+      let c = slat ? RAMP.wood[4] : (lx + crate) % 7 === 0 ? RAMP.wood[3] : RAMP.wood[2];
+      if (x === 19 || x === 20) c = RAMP.wood[4];
+      if (y === base) c = darken(RAMP.wood[4], 0.12);
+      g.set(x, y, c);
+    }
+  // 궤짝 옆구리 손잡이 구멍
+  g.hline(9, 13, top + 5, darken(RAMP.wood[4], 0.25));
+  g.hline(25, 29, top + 5, darken(RAMP.wood[4], 0.25));
+  // 널빤지 윗면
+  g.rect(tx0 - 1, top, tx1 - tx0 + 3, 3, RAMP.wood[1]);
+  g.hline(tx0 - 1, tx1 + 1, top, RAMP.wood[0]);
+  g.hline(tx0 - 1, tx1 + 1, top + 2, RAMP.wood[3]);
+  // ── 다라이 1 (생선 — 물빛)
+  // 빨간 고무 다라이 (판 위에 앉은 옆모습: 뒤 테 · 담긴 것 · 앞 테 · 몸통)
+  const basin = (cx: number, inner: (y0: number) => void) => {
+    const red = 0xe2665a;
+    g.hline(cx - 4, cx + 4, top - 6, 0xc04c44); // 뒤 테
+    g.hline(cx - 5, cx + 5, top - 5, red);
+    inner(top - 5);
+    g.hline(cx - 5, cx + 5, top - 4, 0xf4887a); // 앞 테 (밝게)
+    g.hline(cx - 4, cx + 4, top - 3, red);
+    g.hline(cx - 4, cx + 4, top - 2, red);
+    g.hline(cx - 3, cx + 3, top - 1, darken(red, 0.1));
+    g.set(cx + 4, top - 3, darken(red, 0.14));
+    g.set(cx + 4, top - 2, darken(red, 0.14));
+    g.set(cx - 4, top - 3, lighten(red, 0.12));
+  };
+  basin(11, (y0) => {
+    // 물 + 생선 둘 (꼬리가 위로 삐죽)
+    g.hline(8, 14, y0, 0x8fd2dc);
+    g.hline(8, 11, y0, 0x9ab4c8);
+    g.set(8, y0, 0x1a1e28);
+    g.set(12, y0 - 1, 0x7a94aa);
+    g.set(12, y0 - 2, 0x7a94aa);
+    g.set(13, y0 - 2, 0x9ab4c8);
+    g.set(14, y0 - 1, 0xd8a24a);
+    g.set(15, y0 - 2, 0xb07a30);
+  });
+  basin(29, (y0) => {
+    // 조개·소라 소복이 + 불가사리
+    for (const [x, c] of [[25, 0xf2e2c8], [26, 0xd8c0a0], [27, 0xf6eadb], [28, 0xe8cfa8], [29, 0xb59ad0], [30, 0xf2e2c8], [31, 0xdcc09a], [32, 0xf6eadb], [33, 0xe8cfa8]] as const) g.set(x, y0, c);
+    for (const [x, c] of [[26, 0xf6eadb], [28, 0xf2e2c8], [31, 0xe8d4b4]] as const) g.set(x, y0 - 1, c);
+    g.set(30, y0 - 2, 0xf09a62);
+    g.set(29, y0 - 1, 0xf09a62);
+    g.set(30, y0 - 1, 0xe08a52);
+    g.set(31, y0 - 1, 0xf09a62);
+  });
+  // 가운데: 약초 한 단 + 보랏빛 광석
+  g.vline(18, top - 5, top - 1, 0x5a9a48);
+  g.vline(19, top - 4, top - 1, 0x4a8a3e);
+  g.set(17, top - 5, 0x88c477);
+  g.set(19, top - 6, 0x88c477);
+  g.set(18, top - 6, 0xf0e070);
+  g.hline(17, 19, top - 2, 0xd8b070); // 묶은 끈
+  g.rect(22, top - 3, 2, 2, 0x9a7ad0);
+  g.set(22, top - 3, 0xd8c8f4);
+  g.set(23, top - 2, 0x7458ac);
+  // ── 앞에 기댄 골판지 팻말 (빨간 동그라미)
+  const sx = 14;
+  const sy = top + 3;
+  g.rect(sx, sy, 10, 7, 0xd8b88a);
+  g.hline(sx, sx + 9, sy, 0xe8cca0);
+  g.vline(sx + 9, sy, sy + 6, 0xbe9c70);
+  g.ellipse(sx + 3, sy + 3.5, 2, 2, 0xd84a3a);
+  g.set(sx + 3, sy + 3, 0xd8b88a);
+  g.set(sx + 3, sy + 4, 0xd8b88a);
+  g.hline(sx + 6, sx + 7, sy + 2, 0x6a4a3a);
+  g.hline(sx + 6, sx + 7, sy + 4, 0x6a4a3a);
+  // ── 스티로폼 생선 상자 (궤짝 오른쪽 옆, 파란 뚜껑)
+  const bx = 36;
+  g.rect(bx, base - 7, 7, 8, 0xf6f8f8);
+  g.vline(bx + 6, base - 7, base, 0xd8e0e4);
+  g.hline(bx, bx + 6, base, 0xc8d2d8);
+  g.rect(bx - 1, base - 9, 8, 2, 0x5aa6c8);
+  g.hline(bx - 1, bx + 6, base - 9, 0x86c4dc);
+  // ── 왼쪽 앞에 내려놓은 여벌 테왁 + 망사리
+  {
+    const fx = 4;
+    const fy = base - 3;
+    for (let y = 0; y < 4; y++) for (let x = -3 + (y > 1 ? 1 : 0); x <= 3 - (y > 2 ? 1 : 0); x++) if ((x + y) % 2 === 0) g.set(fx + 2 + x, fy + y, 0x3f7a64);
+    g.ellipse(fx, fy, 3.2, 3, 0xf08a3c);
+    g.recolor((x, y) => Math.hypot(x + 0.5 - fx, y + 0.5 - fy) <= 3.3 && x + y >= fx + fy + 1, 0xd2702e);
+    g.set(fx - 1, fy - 2, 0xffd4a0);
+    g.set(fx - 2, fy - 1, 0xffb070);
+    g.hline(fx - 3, fx + 3, fy, 0xe07a34);
+  }
+  // ── 파라솔 갓 (민트·흰 여덟 쪽, 가장자리 물결)
+  const cx = poleX + 0.5;
+  const cy = 12;
+  const rx = 20;
+  for (let y = 1; y <= cy + 2; y++)
+    for (let x = 0; x < W; x++) {
+      const dx = (x + 0.5 - cx) / rx;
+      const dy = (y + 0.5 - cy) / 11;
+      if (dy > 0.22) continue;
+      if (dx * dx + dy * dy > 1) continue;
+      const slice = Math.floor(((x + 0.5 - cx) / rx) * 4 + 4);
+      const mint = slice % 2 === 0;
+      const lightV = 0.15 + Math.max(0, (x - cx) / rx) * 0.35 + Math.max(0, (y - 4) / 10) * 0.25;
+      const ramp = mint ? RAMP.roofM : RAMP.wall;
+      g.set(x, y, ramp[Math.min(ramp.length - 1, Math.round(lightV * (ramp.length - 1)))]);
+    }
+  // 갓 아래 물결 자락
+  for (let x = Math.ceil(cx - rx + 1); x < cx + rx - 1; x++) {
+    const slice = Math.floor(((x + 0.5 - cx) / rx) * 4 + 4);
+    const c = slice % 2 === 0 ? RAMP.roofM[3] : RAMP.wall[3];
+    if ((x + 1) % 5 !== 0) g.set(x, cy + 3, c);
+  }
+  // 꼭지
+  g.set(poleX, 0, RAMP.wall[1]);
+  g.set(poleX + 1, 0, RAMP.wall[2]);
+  // ── 작은 등 (파라솔 오른쪽 살 끝에 매단)
+  const lx = STALL_LAMP.x;
+  const ly = STALL_LAMP.y;
+  g.set(lx, ly - 1, 0x5a5560);
+  g.rect(lx - 1, ly, 3, 4, lit ? 0xffe08a : 0xf6d27a);
+  g.set(lx, ly + 1, lit ? 0xfff8d8 : 0xfff0b8);
+  g.hline(lx - 1, lx + 1, ly + 4, 0x6a5a50);
+  if (concept === "winter") {
+    // 갓 위 소복한 눈 (위 두세 줄을 덮고 아래 끝은 푸른 그늘, 군데군데 흘러내림) · 상자 뚜껑·판 위 눈
+    for (let x = 2; x <= 41; x++) {
+      let y0 = -1;
+      for (let y = 0; y <= 12; y++) if (g.filled(x, y)) { y0 = y; break; }
+      if (y0 < 0 || y0 > 9) continue;
+      const depth = 2 + ((x * 7) % 5 === 0 ? 1 : 0) + (x > 8 && x < 34 && (x * 3) % 7 === 0 ? 1 : 0);
+      for (let k = 0; k < depth; k++) g.set(x, y0 + k, k === 0 && x > 26 ? 0xeef1f6 : 0xf8f6f0);
+      g.set(x, y0 + depth, 0xd6e0ee);
+    }
+    g.set(poleX, 0, 0xf8f6f0);
+    g.set(poleX + 1, 0, 0xeef1f6);
+    seasonSnow(g, bx - 1, bx + 6, base - 10);
+    seasonSnow(g, tx0, tx0 + 5, top - 1);
+  } else if (concept === "christmas") {
+    // 갓 가장자리 꼬마전구 줄 + 기둥에 리본
+    for (let x = Math.ceil(cx - rx + 2); x < cx + rx - 2; x += 3) g.set(x, cy + 4, [0xe0303c, 0xf2c444, 0x2e8a4e, 0x6ab8f0][(x >> 1) % 4]);
+    seasonHolly(g, 6, top - 3);
+  }
+  toneOutline(g);
+  stallShadow(g, W / 2 - 1, base + 1, W / 2 - 3, 2.2, 60);
+  return g.toCanvas();
+}
+
 export const NODE_KINDS = ["herb", "ore", "dig", "bug", "clam"] as const;
 
 export function ensureForageTextures(scene: Phaser.Scene, night: boolean): void {
@@ -283,7 +569,9 @@ export function ensureForageTextures(scene: Phaser.Scene, night: boolean): void 
       for (let f = 0; f < 2; f++) {
         tx.addCanvas(FTEX.npc("fishmonger", f, c), fishmonger(f, c));
         tx.addCanvas(FTEX.npc("collector", f, c), collector(f, c));
+        tx.addCanvas(FTEX.npc("haenyeo", f, c), haenyeo(f, c));
       }
+    for (const c of MAP_CONCEPTS) for (const lit of [false, true]) tx.addCanvas(FTEX.seaStall(c, lit), haenyeoStall(c, lit));
     tx.addCanvas(FTEX.stall("fishmonger"), fishStall());
     tx.addCanvas(FTEX.stall("collector"), collectorMat());
     tx.addCanvas(FTEX.bobber, bobber());
@@ -299,11 +587,11 @@ export function ensureForageTextures(scene: Phaser.Scene, night: boolean): void 
 
 const portraits = new Map<string, string>();
 /** NPC 얼굴 그림 dataURL (판매 창, 2배). 브라우저에서만 */
-export function npcPortraitUrl(id: "fishmonger" | "collector", scale = 2): string {
+export function npcPortraitUrl(id: "fishmonger" | "collector" | "haenyeo", scale = 2): string {
   const key = `${id}|${scale}`;
   const hit = portraits.get(key);
   if (hit) return hit;
-  const src = id === "fishmonger" ? fishmonger(0) : collector(0);
+  const src = id === "fishmonger" ? fishmonger(0) : id === "haenyeo" ? haenyeo(0) : collector(0);
   const out = document.createElement("canvas");
   out.width = src.width * scale;
   out.height = src.height * scale;

@@ -120,6 +120,8 @@ export class BumperRide {
   private built = false;
   private near = false;
   private ridingShown = false;
+  /** 11/20 이번 탑승에서 방향을 넣고 몰고 다닌 시간 (오늘 미션은 가만히 앉아 있는 시간을 세지 않는다) */
+  private driveMs = 0;
   private chaseAt = 0;
   private chaseStep = 0;
 
@@ -395,6 +397,7 @@ export class BumperRide {
         const ref = bumperSeatById(seat);
         Object.assign(this.motion, newMotion(pl.x, pl.y, Math.PI / 2));
         if (ref) this.cars[ref.car].bumps = 0;
+        this.driveMs = 0;
       }
     }
     if (!seat) return;
@@ -406,6 +409,12 @@ export class BumperRide {
       return;
     }
     const moving = Math.hypot(move.ax, move.ay) >= DEADZONE_ENTER;
+    if (moving) {
+      // 탭을 내렸다 올린 긴 프레임은 한 프레임 몫만 센다
+      const sec = Math.floor(this.driveMs / 1000);
+      this.driveMs += Math.min(dtMs, 250);
+      if (Math.floor(this.driveMs / 1000) !== sec) bridge.emit("bumper:drive", { ms: this.driveMs });
+    }
     stepCar(this.motion, moving ? move.ax : 0, moving ? move.ay : 0, dtMs);
     const others = this.others;
     others.length = 0;

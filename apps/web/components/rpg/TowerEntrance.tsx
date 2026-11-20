@@ -13,6 +13,8 @@ import {
   TOWER_STEEP_FROM,
   TOWER_THEMES,
   towerFitFloor,
+  towerFloorPoints,
+  towerFloorPointsText,
   towerPointFrom,
 } from "@/lib/rpg/tower";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
@@ -135,6 +137,10 @@ export default function TowerEntrance({
             {start < pointFrom ? ` ${start}층부터 ${pointFrom - 1}층까지는 포인트 없이 초월 경험치와 상자만 받아요.` : ""}
           </p>
         )}
+        {/* 11/20 사용자: 층 구간마다 포인트가 달라졌다 (서버 정산과 같은 towerFloorPoints) */}
+        <p className={s.meta}>
+          깬 층마다 받는 포인트는 {towerFloorPointsText()}예요. {start >= pointFrom ? `${start}층은 ${towerFloorPoints(start)}P예요.` : ""}
+        </p>
         <p className={s.meta}>
           {curses.length
             ? `붙는 저주 ${curses.map((c) => `「${c.name}」 ${c.desc}.`).join(" ")}`
@@ -174,7 +180,7 @@ export default function TowerEntrance({
             </li>
             <li>
               <b>강화 재료</b> 결재 서류가 들어 있고, 10층 오를 때마다 1장씩 늘어요. {SG_GRADE_FLOORS[0]}층부터는 인감 도장도 나와요.
-              이번 주 기록이 {PROT_FROM_FLOOR}층부터 새 10층을 넘으면 보호 문서를 받아요. 한 주에 2장까지예요.
+              이번 주 기록이 {PROT_FROM_FLOOR}층부터 새 10층을 넘으면 강화 증폭권을 받아요. 한 주에 2장까지예요.
             </li>
             <li>
               <b>꾸미기 이용권</b> {Math.round(CHEST_COSMETIC_CHANCE * 100)}% 확률이에요. 기간은 1일, 3일, 7일, 30일 중 하나예요. {SG_GRADE_FLOORS[0]}층부터는 희귀,

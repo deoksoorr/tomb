@@ -94,7 +94,7 @@ export class Expressions {
     const camp = chatTagOf(meta?.m);
     const r = this.h.remotes().get(sid);
     if (!r) {
-      if (meta?.name) bridge.emit("chat:line", { name: meta.name, text, mine: false, ...(key ? { key } : {}), ...(meta.staff ? { staff: true as const } : {}), ...(meta.mgr ? { mgr: true as const } : {}), ...camp });
+      if (meta?.name) bridge.emit("chat:line", { name: meta.name, text, mine: false, ...(key ? { key } : {}), ...(meta.staff ? { staff: true as const } : {}), ...(meta.mgr ? { mgr: true as const } : {}), ...(meta.ns ? { ns: meta.ns } : {}), ...camp });
       return;
     }
     const bubble = !r.away && meta?.m !== "hunt";

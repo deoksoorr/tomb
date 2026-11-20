@@ -210,3 +210,18 @@ describe("11/16 다른 맵 채팅 표시 [캠핑장]·[마을]", () => {
     expect(got[0].m).toBe("hunt");
   });
 });
+
+describe("readChatLog 닉네임 꾸미기 (11/20)", () => {
+  it("서버가 실은 꾸미기 id를 그대로 읽고, 이상한 값은 버린다", () => {
+    const got = readChatLog(
+      1000,
+      [
+        { id: "a", at: 1000, name: "가", text: "안녕", ns: ["nc_rainbow"] },
+        { id: "b", at: 1000, name: "나", text: "안녕", ns: "nc_rainbow" },
+        { id: "c", at: 1000, name: "다", text: "안녕", ns: ["x", "y", "z"] },
+      ],
+      5000,
+    );
+    expect(got.map((l) => l.ns)).toEqual([["nc_rainbow"], undefined, undefined]);
+  });
+});

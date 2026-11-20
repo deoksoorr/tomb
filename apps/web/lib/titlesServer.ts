@@ -6,7 +6,7 @@ import { DEX_CATS, dexIdsOf, speciesOf } from "./forage/catalog";
 import { titlesOf } from "./forage/dexReward";
 import { getForageStore } from "./forage/store";
 import { getHouseStore, houseIdFor } from "./housing/service";
-import { lookScore } from "./lookScore";
+import { lookScore, wornSeasonSets } from "./lookScore";
 import { MAX_LEVEL } from "./rpg/formulas";
 import { getRpgStore } from "./rpg/store";
 import { getTowerStore } from "./rpg/towerStore";
@@ -150,6 +150,31 @@ async function light(accountId: string, now: number): Promise<Light> {
   };
 }
 
+/** 계절 한정 세트 id → 칭호 진행 수치 이름 (titles.ts STEP_ROWS t_ss*) */
+const SEASON_SET_METRIC: Readonly<Record<string, TitleMetric>> = {
+  "snow-commute": "ssSnow",
+  "santa-intern": "ssSanta",
+  "overtime-fairy": "ssOvertime",
+  "fog-keeper": "ssFog",
+  "seollal-magpie": "ssMagpie",
+  "giri-choco": "ssGiri",
+  "spring-picnic": "ssPicnic",
+  "sports-day": "ssSports",
+  "year-end": "ssYearEnd",
+  "sunrise-hike": "ssSunrise",
+  resolution: "ssResol",
+  "smelt-fest": "ssSmelt",
+  "frost-yard": "ssFrost",
+};
+
+/** 11/19 계절 한정 세트 칭호 진행 수치 (지금 한 벌을 다 입었으면 1) */
+function seasonSetMetrics(equipped: readonly EquippedItem[], now: number): Partial<Record<TitleMetric, number>> {
+  const worn = new Set(wornSeasonSets({ equipped }, now).map((s) => s.id));
+  const out: Partial<Record<TitleMetric, number>> = {};
+  for (const [set, metric] of Object.entries(SEASON_SET_METRIC)) out[metric] = worn.has(set) ? 1 : 0;
+  return out;
+}
+
 /** 칭호 사실 새로 읽기 (기억 없이) */
 async function readFacts(accountId: string, now: number): Promise<{ facts: TitleFacts; equipped: string | null }> {
   const safe = <T,>(p: Promise<T>, fb: T) => p.catch(() => fb);
@@ -169,7 +194,11 @@ async function readFacts(accountId: string, now: number): Promise<{ facts: Title
       }),
       { boards: [] as ChampBoard[], count: 0 },
     ),
-    safe(getHouseStore().get(houseIdFor(accountId)), null),
+    // 11/20 「내 집」 꾸밈 점수 = 마을 집과 포구 오두막 중 높은 쪽 (두 채를 다 가져도 더하지 않는다)
+    safe(
+      Promise.all([getHouseStore().get(houseIdFor(accountId)), getHouseStore().get(houseIdFor(accountId, "sea"))]).then(([v, c]) => Math.max(v?.score ?? 0, c?.score ?? 0)),
+      0,
+    ),
     safe(getRpgStore().get(accountId), null),
     safe(isSuperHunter(accountId), false),
     safe(light(accountId, now), null),
@@ -206,9 +235,11 @@ async function readFacts(accountId: string, now: number): Promise<{ facts: Title
     qking: stats.qking,
     look: l ? lookScore({ equipped: l.equipped, body: l.body, dye: l.dye }, now) : 0,
     champ: champ.count,
-    house: house ? house.score : 0,
+    house,
     refs,
     grad: l?.grad ?? 0,
+    // 11/19 계절 한정 세트: 지금 만료 전 착용품으로 한 벌을 다 입었는지 (내 정보에서 같이 읽는다 — 명령 추가 없음)
+    ...seasonSetMetrics(l?.equipped ?? [], now),
   };
   for (const cat of DEX_CATS) metrics[`dex_${cat}`] = dexIdsOf(cat).filter(has).length;
   return {

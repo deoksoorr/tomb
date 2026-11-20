@@ -1,8 +1,9 @@
 import * as Phaser from "phaser";
-import { fillEdgeColors, flameColor, LEAF_COUNT, leafAt, nameColorSpec, namePlateSpec, NY_DUST_COUNT, nyDustAt, waveFlow, type NameColorSpec, type NamePlateSpec } from "@/lib/nameStyle";
+import { fillEdgeColors, flameColor, LEAF_COUNT, leafAt, mixColor, nameColorSpec, namePlateSpec, NY_DUST_COUNT, nyDustAt, waveFlow, type NameColorSpec, type NamePlateSpec } from "@/lib/nameStyle";
 import { addCanvasTexture, TEX } from "../assets/manifest";
 import { BakedShape, type BakeBounds } from "../sprites/bakedShape";
-import { NAME_LEAF_H, NAME_LEAF_W, nameLeafGrid } from "../sprites/nameStyleIcons";
+import { NAME_BELL_H, NAME_BELL_HOOK, NAME_BELL_TILTS, NAME_BELL_W, NAME_LEAF_H, NAME_LEAF_W, nameBellGrid, nameLeafGrid } from "../sprites/nameStyleIcons";
+import { kstHour, parseAmbienceOverride, timePhase } from "@/lib/ambience";
 import { LABEL_ME, LABEL_OTHER } from "../config";
 
 // 닉네임 꾸미기 (머리 위 이름표): 이름 글자 색(단색·그라데이션·움직이는 이름)과 이름표 바탕판.
@@ -38,10 +39,24 @@ const PAD_Y = 1;
 const WAVE_PAD = 2;
 /** 새해 복 이름표: 양옆 복 매듭 자리만큼 판 밖 여백 */
 const NY_PAD = 1;
+/** 11/20 새해 계획표 이름표: 왼쪽 체크 칸 셋 + 빨간 여백선 자리만큼 판을 왼쪽으로 넓힌다 (화면 px) */
+const PLANNER_PAD = 9;
+/** 11/20 서리 앉은 이름: 글자 윗머리를 서리 하양 쪽으로 섞는 정도 (위 두 귀퉁이 tint) */
+const FROST_TOP = 0.78;
+/** 11/19 이름표 옆 금종(세트 덤) 자리 (금종 폭 + 간격, 화면 px) */
+const BELL_PAD = NAME_BELL_W + 1;
+/** 금종이 딸랑 흔들리는 주기·길이 (ms) */
+const BELL_RING_EVERY = 3600;
+const BELL_RING_MS = 1000;
 
 export class NameStyleView {
   private colorId: string | null = null;
   private plateId: string | null = null;
+  /** 11/19 「산타 견습 요정」 한 벌 덤 금종 (이름표 옆에 매달린 그림 + 도는 반짝 한 점 + 밤 빛) */
+  private bell = false;
+  private bellImg: Phaser.GameObjects.Image | null = null;
+  private bellSpark: Phaser.GameObjects.Image | null = null;
+  private bellGlow: Phaser.GameObjects.Image | null = null;
   private color: NameColorSpec | null = null;
   private plateSpec: NamePlateSpec | null = null;
   private plate: BakedShape | null = null;
@@ -72,13 +87,26 @@ export class NameStyleView {
     private readonly reduced: boolean,
   ) {}
 
-  /** 착용한 닉네임 꾸미기 (모르는 id는 없는 것으로). 바뀐 것만 다시 만든다 */
-  set(colorId: string | null, plateId: string | null): void {
+  /** 착용한 닉네임 꾸미기 (모르는 id는 없는 것으로). 바뀐 것만 다시 만든다. bell = 11/19 이름표 옆 금종 (세트 덤) */
+  set(colorId: string | null, plateId: string | null, bell = false): void {
     const color = nameColorSpec(colorId);
-    const plate = namePlateSpec(plateId);
+    const base = namePlateSpec(plateId);
+    const ring = !!base && bell;
+    const plate = base && ring ? { ...base, bell: true } : base;
     const cid = color ? colorId : null;
     const pid = plate ? plateId : null;
-    if (cid === this.colorId && pid === this.plateId) return;
+    if (cid === this.colorId && pid === this.plateId && ring === this.bell) return;
+    if (ring !== this.bell) {
+      this.bell = ring;
+      this.plateId = null;
+      if (ring) {
+        addCanvasTexture(this.scene, BELL_TEX, { canvas: nameBellGrid().toCanvas(), frameW: NAME_BELL_W, frameH: NAME_BELL_H });
+        const d = this.label.depth;
+        this.bellGlow = this.scene.add.image(0, 0, TEX.glow).setBlendMode(Phaser.BlendModes.ADD).setTint(0xffcf5a).setDepth(d - 0.015).setVisible(false);
+        this.bellImg = this.scene.add.image(0, 0, BELL_TEX, 2).setOrigin(0, 0).setDepth(d + 0.005).setVisible(false);
+        this.bellSpark = this.scene.add.image(0, 0, TEX.spark).setBlendMode(Phaser.BlendModes.ADD).setTint(0xfff2b0).setDepth(d + 0.01).setVisible(false);
+      } else this.dropBell();
+    }
     if (cid !== this.colorId) {
       this.colorId = cid;
       this.color = color;
@@ -132,19 +160,19 @@ export class NameStyleView {
   /** 이름표 옆에 붙는 표시(친구 하트·도감 별)가 바탕판 밖으로 비켜설 거리 (월드 단위) */
   sidePad(sc: number): number {
     if (!this.plateOn) return 0;
-    return (PAD_X + 1 + (this.plateSpec?.kind === "ribbon" ? 4 : this.plateSpec?.kind === "wave" ? WAVE_PAD : this.plateSpec?.kind === "newyear" ? NY_PAD + 7 : this.plateSpec?.kind === "holly" ? 4 : 0)) * sc;
+    return (PAD_X + 1 + (this.plateSpec?.kind === "ribbon" ? 4 : this.plateSpec?.kind === "wave" ? WAVE_PAD : this.plateSpec?.kind === "newyear" ? NY_PAD + 7 : this.plateSpec?.kind === "holly" ? 4 : this.plateSpec?.kind === "planner" ? PLANNER_PAD : 0) + (this.bell ? BELL_PAD : 0)) * sc;
   }
 
   /** 이름표 위에 얹는 것(1위 배지·말풍선)을 올릴 높이 (월드 단위) */
   topLift(sc: number): number {
-    return this.plateOn ? (PAD_Y + 1 + (this.plateSpec?.kind === "cloud" || this.plateSpec?.kind === "tomb" || this.plateSpec?.kind === "wave" || this.plateSpec?.kind === "newyear" ? 1 : this.plateSpec?.kind === "card" || this.plateSpec?.kind === "holly" ? 2 : 0)) * sc : 0;
+    return this.plateOn ? (PAD_Y + 1 + (this.plateSpec?.kind === "cloud" || this.plateSpec?.kind === "tomb" || this.plateSpec?.kind === "wave" || this.plateSpec?.kind === "newyear" ? 1 : this.plateSpec?.kind === "card" || this.plateSpec?.kind === "holly" ? 2 : this.plateSpec?.kind === "wrap" ? (this.bell ? 4 : 3) : this.plateSpec?.kind === "planner" ? 2 : 0)) * sc : 0;
   }
 
   /** 빛 무리·반짝이·내 표시를 꾸미기에 맞춰 만들거나 치운다 */
   private rebuildColorFx(): void {
     const c = this.color;
     const fx = c?.kind === "fx" ? c.fx : null;
-    const wantHalo = fx === "glow" || fx === "flame";
+    const wantHalo = fx === "glow" || fx === "flame" || fx === "frost";
     if (wantHalo && !this.halo) this.halo = this.scene.add.image(0, 0, TEX.glow).setBlendMode(Phaser.BlendModes.ADD).setDepth(this.label.depth - 0.02).setVisible(false);
     if (!wantHalo && this.halo) {
       this.halo.destroy();
@@ -183,7 +211,8 @@ export class NameStyleView {
     const c = this.color;
     const n = l.text.length;
     // 글자마다 색 지우기 (단색·꾸미기 없음은 이름표 전체 tint만)
-    if (!c || c.kind === "solid" || (c.kind === "fx" && c.fx === "glow")) {
+    // 빛 테두리 글자: 한 색이면 이름표 전체 tint, 11/20 여러 색(블루라이트 이름)이면 아래 그라데이션처럼 글자마다
+    if (!c || c.kind === "solid" || (c.kind === "fx" && c.fx === "glow" && c.stops.length < 2)) {
       if (n) l.setCharacterTint(0, -1);
       l.setTint(!c ? (this.isMe ? LABEL_ME : LABEL_OTHER) : c.kind === "solid" ? c.color : c.stops[0]);
       return;
@@ -202,6 +231,11 @@ export class NameStyleView {
       c.kind === "fx" && c.fx === "rainbow"
         ? fillEdgeColors(this.edges, RAINBOW, n, this.reduced ? 0 : now / RAINBOW_MS, 0.6)
         : fillEdgeColors(this.edges, c.stops, n);
+    // 11/20 서리 앉은 이름: 글자 윗머리(위 두 귀퉁이)는 하얀 서리 쪽으로, 아래는 얼음빛 그라데이션 그대로
+    if (c.kind === "fx" && c.fx === "frost") {
+      for (let i = 0; i < n; i++) l.setCharacterTint(i, 1, false, mixColor(e[i], 0xffffff, FROST_TOP), mixColor(e[i + 1], 0xffffff, FROST_TOP), e[i], e[i + 1]);
+      return;
+    }
     for (let i = 0; i < n; i++) l.setCharacterTint(i, 1, false, e[i], e[i + 1], e[i], e[i + 1]);
   }
 
@@ -244,6 +278,8 @@ export class NameStyleView {
       }
       this.plate.setVisible(show);
     }
+
+    if (this.bellImg) this.syncBell(now, sc, on && this.plateOn, alpha, cx + w / 2, bottom - h);
 
     if (this.ripple) {
       const show = on && this.plateOn;
@@ -295,7 +331,8 @@ export class NameStyleView {
     }
 
     if (this.halo && c?.kind === "fx") {
-      const breathe = this.reduced ? 0.5 : c.fx === "flame" ? 0.5 + 0.5 * Math.sin(now / 130) * Math.sin(now / 370) : 0.5 + 0.5 * Math.sin(now / 900);
+      // 서리 앉은 이름은 옅은 빛 무리가 천천히 (시안: 옅은 푸른 번짐)
+      const breathe = this.reduced ? 0.5 : c.fx === "flame" ? 0.5 + 0.5 * Math.sin(now / 130) * Math.sin(now / 370) : c.fx === "frost" ? 0.3 + 0.2 * Math.sin(now / 1400) : 0.5 + 0.5 * Math.sin(now / 900);
       this.halo
         .setTint(c.halo ?? 0xffffff)
         .setPosition(cx, bottom - h / 2)
@@ -359,6 +396,63 @@ export class NameStyleView {
     for (const s of this.dust) s.setVisible(false);
     for (const s of this.sparks) s.setVisible(false);
     for (const s of this.leaves) s.setVisible(false);
+    this.bellImg?.setVisible(false);
+    this.bellSpark?.setVisible(false);
+    this.bellGlow?.setVisible(false);
+  }
+
+  /**
+   * 11/19 금종: 이름표 바탕판 오른쪽 위 귀퉁이 옆에 매단다 (rightX = 글자 칸 오른쪽, topY = 글자 칸 위, 월드 단위).
+   * 몇 초마다 고리를 축으로 좌우로 딸랑(픽셀 기울기 칸을 바꾼다 — 번지지 않게), 반짝 한 점이 금종 둘레를 돈다, 밤엔 은은한 빛
+   */
+  private syncBell(now: number, sc: number, show: boolean, alpha: number, rightX: number, topY: number): void {
+    const img = this.bellImg!;
+    const spark = this.bellSpark!;
+    const glow = this.bellGlow!;
+    if (!show) {
+      img.setVisible(false);
+      spark.setVisible(false);
+      glow.setVisible(false);
+      return;
+    }
+    // 바탕판 오른쪽 테두리 바깥 한 칸 띄워서, 고리가 바탕판 윗변 높이에 오게
+    const edge = rightX + (PAD_X + 1) * sc;
+    const x = Math.round(edge + sc);
+    const plateTop = topY - PAD_Y * sc;
+    const y = Math.round(plateTop - NAME_BELL_HOOK[1] * sc);
+    let tilt = 0;
+    if (!this.reduced) {
+      const u = (now % BELL_RING_EVERY) / BELL_RING_MS;
+      if (u < 1) tilt = Math.round(2.4 * Math.sin(u * Math.PI * 3) * (1 - u));
+    }
+    const frame = NAME_BELL_TILTS.indexOf(Math.max(-2, Math.min(2, tilt)) as (typeof NAME_BELL_TILTS)[number]);
+    if (img.frame.name !== String(frame)) img.setFrame(frame);
+    img.setPosition(x, y).setScale(sc).setAlpha(alpha).setVisible(true);
+    // 금종 몸 가운데 (월드)
+    const bx = x + (NAME_BELL_HOOK[0] + 0.5) * sc;
+    const by = y + 10 * sc;
+    // 반짝 한 점: 금종 둘레를 천천히 돈다 (앞쪽 반원에서 밝게)
+    const a = this.reduced ? -0.6 : now / 650;
+    const front = Math.sin(a);
+    const tw = this.reduced ? 0.9 : 0.55 + 0.45 * Math.max(0, Math.sin(now / 170));
+    spark
+      .setPosition(Math.round(bx + Math.cos(a) * 6 * sc), Math.round(by + front * 3 * sc - sc))
+      .setScale(sc * (0.55 + 0.25 * tw))
+      .setAlpha(alpha * tw * (front > -0.2 ? 1 : 0.35))
+      .setVisible(true);
+    // 밤: 은은한 금빛 번짐 (숨 쉬듯)
+    const night = isNight(now);
+    glow.setVisible(night);
+    if (night) glow.setPosition(bx, by).setDisplaySize(26 * sc, 26 * sc).setAlpha(alpha * (this.reduced ? 0.35 : 0.3 + 0.1 * Math.sin(now / 600)));
+  }
+
+  private dropBell(): void {
+    this.bellImg?.destroy();
+    this.bellImg = null;
+    this.bellSpark?.destroy();
+    this.bellSpark = null;
+    this.bellGlow?.destroy();
+    this.bellGlow = null;
   }
 
   /** 꾸미기를 모두 걷고 원래 이름표 색으로 */
@@ -381,11 +475,27 @@ export class NameStyleView {
     this.dust = [];
     for (const s of this.leaves) s.destroy();
     this.leaves = [];
+    this.dropBell();
+    this.bell = false;
   }
 }
 
 /** 나뭇잎 이름 글자의 잎 텍스처 (nameStyleIcons nameLeafGrid, 처음 쓸 때 한 번) */
 const LEAF_TEX = "ns-leaf";
+/** 11/19 금종 텍스처 (nameStyleIcons nameBellGrid, 기울기 다섯 칸) */
+const BELL_TEX = "ns-bell";
+
+/** 밤인지 (마을 시간대 — ?time= 덮어쓰기 포함). 1초마다만 다시 본다 */
+let nightAt = -Infinity;
+let nightNow = false;
+function isNight(now: number): boolean {
+  if (Math.abs(now - nightAt) < 1000) return nightNow;
+  nightAt = now;
+  const hour = typeof location !== "undefined" ? parseAmbienceOverride(location.search).hour : undefined;
+  const p = timePhase(hour ?? kstHour(Date.now()));
+  nightNow = p === "night" || p === "dusk";
+  return nightNow;
+}
 
 /** 결정적 [0,1) (반짝이 자리) */
 function hash01(a: number, b: number): number {
@@ -443,7 +553,7 @@ export function drawWaveRipple(g: Phaser.GameObjects.Graphics, p: NamePlateSpec,
 /** 바탕판을 구울 영역 (화면 px, drawPlate와 같은 원점). 꼬리·복 매듭·구름 봉우리까지 넉넉히 */
 export function plateBounds(p: NamePlateSpec, w: number, h: number): BakeBounds {
   const padX = PAD_X + (p.kind === "wave" ? WAVE_PAD : p.kind === "newyear" ? NY_PAD : 0);
-  const L = Math.round(-w / 2 - padX) - 8;
+  const L = Math.round(-w / 2 - padX - (p.kind === "planner" ? PLANNER_PAD : 0)) - 8;
   const R = Math.round(w / 2 + padX) + 8;
   const T = Math.round(-h - PAD_Y) - Math.ceil(h / 2) - 4;
   const B = Math.round(PAD_Y) + 4;
@@ -452,7 +562,8 @@ export function plateBounds(p: NamePlateSpec, w: number, h: number): BakeBounds 
 
 export function drawPlate(g: Phaser.GameObjects.Graphics, p: NamePlateSpec, w: number, h: number, sc: number): void {
   const padX = PAD_X + (p.kind === "wave" ? WAVE_PAD : p.kind === "newyear" ? NY_PAD : 0);
-  const L = Math.round(-w / 2 - padX * sc);
+  // 11/20 새해 계획표 이름표는 왼쪽만 체크 칸 자리만큼 넓다 (글자는 그대로 가운데)
+  const L = Math.round(-w / 2 - (padX + (p.kind === "planner" ? PLANNER_PAD : 0)) * sc);
   const R = Math.round(w / 2 + padX * sc);
   const T = Math.round(-h - PAD_Y * sc);
   const B = Math.round(PAD_Y * sc);
@@ -624,6 +735,70 @@ export function drawPlate(g: Phaser.GameObjects.Graphics, p: NamePlateSpec, w: n
         g.fillStyle(berry, 1).fillRect(cx0 - u, cy0 - u, 2 * u, 2 * u).fillRect(cx0 + u, cy0, u, u).fillRect(cx0, cy0 + u, u, u);
         g.fillStyle(0xffb0b0, 1).fillRect(cx0 - u, cy0 - u, u, u);
       }
+      break;
+    }
+    case "wrap": {
+      // 11/19 선물 포장 이름표: 빨강·초록 사선 줄무늬 포장지 + 가운데 금 리본 띠 + 위에 금 리본 매듭 (코디 기획안 시안)
+      const [green, gold, goldHi] = p.dots;
+      g.fillStyle(p.edge, 1).fillRect(L - u, T - u, W + 2 * u, H + 2 * u);
+      g.fillStyle(p.fill, p.alpha).fillRect(L, T, W, H);
+      g.fillStyle(green, p.alpha);
+      for (let j = 0; j * u < H; j++) for (let i = 0; i * u < W; i++) if (Math.floor((i + j) / 2) % 3 === 0) g.fillRect(L + i * u, T + j * u, u, u);
+      g.fillStyle(p.light, 0.55).fillRect(L, T, W, u);
+      const mx = Math.round((L + R) / 2 / u) * u;
+      g.fillStyle(gold, 1).fillRect(mx - u, T, 2 * u, H);
+      g.fillStyle(goldHi, 1).fillRect(mx - u, T, u, H);
+      // 리본 매듭: 양쪽 고리 + 가운데 매듭 (어두운 테 → 금 → 밝은 금)
+      g.fillStyle(p.edge, 1).fillRect(mx - 5 * u, T - 4 * u, 4 * u, 3 * u).fillRect(mx + u, T - 4 * u, 4 * u, 3 * u).fillRect(mx - 2 * u, T - 3 * u, 4 * u, 3 * u);
+      g.fillStyle(gold, 1).fillRect(mx - 4 * u, T - 3 * u, 2 * u, u).fillRect(mx + 2 * u, T - 3 * u, 2 * u, u).fillRect(mx - u, T - 2 * u, 2 * u, u);
+      g.fillStyle(goldHi, 1).fillRect(mx - 4 * u, T - 3 * u, u, u).fillRect(mx - u, T - 2 * u, u, u);
+      break;
+    }
+    case "envelope": {
+      // 11/20 편지봉투 이름표: 분홍 편지지 판 + 위 덮개 V선(옅게) + 아래 가운데 하트 봉인 (코디 기획안 시안)
+      const [seal, sealHi] = p.dots;
+      g.fillStyle(p.edge, 1).fillRect(L - u, T - u, W + 2 * u, H + 2 * u);
+      g.fillStyle(p.fill, p.alpha).fillRect(L, T, W, H);
+      g.fillStyle(p.light, p.alpha).fillRect(L, T, W, u);
+      const mx = Math.round((L + R) / 2 / u) * u;
+      const half = Math.max(u, mx - L);
+      const dip = Math.max(2, Math.round((H * 0.55) / u));
+      g.fillStyle(p.edge, 0.6);
+      for (let x = L; x < R; x += u) g.fillRect(x, T + Math.round((1 - Math.abs(x + u / 2 - mx) / half) * dip) * u, u, u);
+      // 하트 봉인 (판 아래 가운데)
+      g.fillStyle(seal, 1)
+        .fillRect(mx - 2 * u, B - 4 * u, 2 * u, u)
+        .fillRect(mx + u, B - 4 * u, 2 * u, u)
+        .fillRect(mx - 2 * u, B - 3 * u, 5 * u, u)
+        .fillRect(mx - u, B - 2 * u, 3 * u, u)
+        .fillRect(mx, B - u, u, u);
+      g.fillStyle(sealHi, 1).fillRect(mx - 2 * u, B - 4 * u, u, u);
+      break;
+    }
+    case "planner": {
+      // 11/20 새해 계획표 이름표 (코디 기획안 시안): 크림 종이 + 옅은 줄 + 빨간 여백선 + 왼쪽 체크 칸 셋(✓ ✓ 빈칸) + 위 스프링 고리
+      const [rule, check, margin, ring] = p.dots;
+      g.fillStyle(p.edge, 1).fillRect(L - u, T - u, W + 2 * u, H + 2 * u);
+      g.fillStyle(p.fill, p.alpha).fillRect(L, T, W, H);
+      g.fillStyle(p.light, 0.8).fillRect(L, T, W, u);
+      const mx = L + (PLANNER_PAD + 1) * u;
+      for (let y = T + 3 * u; y < B - u; y += 3 * u) g.fillStyle(rule, 0.9).fillRect(mx + 2 * u, y, R - mx - 3 * u, u);
+      g.fillStyle(margin, 1).fillRect(mx, T, u, H);
+      // 체크 칸 셋 (칸 높이에 들어가는 만큼) — 앞의 둘은 초록 체크, 셋째 칸은 늘 비어 있다
+      for (let i = 0, by = T + u; i < 3 && by + 3 * u <= B; i++, by += 4 * u) {
+        const bx = L + 2 * u;
+        g.fillStyle(p.edge, 1).fillRect(bx, by, 3 * u, 3 * u);
+        g.fillStyle(0xffffff, 1).fillRect(bx + u, by + u, u, u);
+        if (i < 2)
+          g.fillStyle(check, 1)
+            .fillRect(bx + u, by + u, u, u)
+            .fillRect(bx + 2 * u, by + 2 * u, u, u)
+            .fillRect(bx + 3 * u, by + u, u, u)
+            .fillRect(bx + 4 * u, by, u, u)
+            .fillRect(bx + 5 * u, by - u, u, u);
+      }
+      // 스프링 고리 (위 테두리에 4칸마다)
+      for (let x = L + 2 * u; x < R - u; x += 4 * u) g.fillStyle(ring, 1).fillRect(x, T - 2 * u, u, 2 * u);
       break;
     }
     case "star": {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isShopListed, itemById, permanentPrice, PERMANENT_MULTIPLIER } from "@tomb/protocol";
 import { pickDiscount } from "../champPerks";
-import { furnitureById } from "../housing/catalog";
+import { furnitureById, isExclusiveFurniture } from "../housing/catalog";
 import { discountedPrice } from "../titles";
 import { GHOST_DEAL_RATE, GHOST_LIMITED, GHOST_PRICEY, GHOST_SALE_RATE, ghostClock, ghostCost, ghostLimitedOf, ghostOpen, ghostPresence, ghostStock, ghostWeek } from "./ghostShip";
 
@@ -79,6 +79,27 @@ describe("이번 주 품목 (8개)", () => {
     expect(lim[0].rate).toBe(0);
     const L = ghostLimitedOf(week);
     expect(lim[0]).toMatchObject({ kind: L.kind, id: L.id, base: L.price });
+  });
+
+  it("11/20 할인·파격가 후보에 판매처가 따로 있는 전용·기간 한정 상품이 없어요 (한 해치 주)", () => {
+    let w = Date.UTC(2026, 10, 16);
+    for (let i = 0; i < 60; i++, w += 7 * 86_400_000) {
+      const week = new Date(w).toISOString().slice(0, 10).replace(/-/g, "");
+      for (const x of ghostStock(week).filter((s) => s.tag !== "limited")) {
+        if (x.kind === "furniture") {
+          const f = furnitureById(x.id)!;
+          expect(isExclusiveFurniture(f), `${week} ${x.id}`).toBe(false);
+          expect([f.ghost, f.seasonWeek, f.petShop, f.boriOnly].every((v) => !v), `${week} ${x.id}`).toBe(true);
+        } else {
+          const it = itemById(x.id)!;
+          expect(isShopListed(it), `${week} ${x.id}`).toBe(true);
+          expect([it.seasonSet, it.petShop, it.ghost, it.event].every((v) => !v), `${week} ${x.id}`).toBe(true);
+        }
+      }
+    }
+    // 판정 자체
+    for (const id of ["winter_stove", "nap_corgi", "sleepy_dog", "cat_cushion", "ghost_cat", "ghost_lamp"]) if (furnitureById(id)) expect(isExclusiveFurniture(furnitureById(id)!), id).toBe(true);
+    expect(isExclusiveFurniture(furnitureById("sofa")!)).toBe(false);
   });
 
   it("한정은 주마다 차례로 바뀌고, 상점·가구점엔 없어요", () => {

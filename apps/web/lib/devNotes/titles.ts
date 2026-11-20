@@ -1,7 +1,7 @@
 // 진입 화면 등 게임 화면에서 쓰는 개발자 노트 [제목, 쓴 시각] (posts.ts의 id·title·createdAt만 — 큰 본문을 게임 번들에 싣지 않으려고). posts.ts를 고치면 같이 고친다 (devNotes.test.ts가 확인)
 export const STATIC_NOTE_TITLES: Readonly<Record<string, readonly [string, number]>> = {
   "Fdnq9-pR0k": [
-    "처음 오신 분께",
+    "처음 오신 분들께 안내드립니다",
     1794743573688
   ],
   "qALW3m3LA_": [
@@ -66,10 +66,12 @@ export const STATIC_NOTE_TITLES: Readonly<Record<string, readonly [string, numbe
   ]
 };
 
-/** 정적 글 + 공지 저장소 공지 중 가장 최근 글 (제목은 다시 쓴 제목 우선) */
-export function latestDevNote(notices: readonly { id: string; title: string; createdAt: number }[] | null): { id: string; title: string } | null {
+/** 정적 글 + 공지 저장소 공지 중 가장 최근 글 (제목: 관리자 편집기로 고친 글(rich)이면 그 제목, 아니면 다시 쓴 정적 제목 우선) */
+export function latestDevNote(notices: readonly { id: string; title: string; createdAt: number; rich?: true }[] | null): { id: string; title: string } | null {
   let best: { id: string; title: string; at: number } | null = null;
-  for (const [id, [title, at]] of Object.entries(STATIC_NOTE_TITLES)) if (!best || at > best.at) best = { id, title, at };
-  for (const n of notices ?? []) if (!best || n.createdAt > best.at) best = { id: n.id, title: STATIC_NOTE_TITLES[n.id]?.[0] ?? n.title, at: n.createdAt };
+  const edited = new Map((notices ?? []).filter((n) => n.rich).map((n) => [n.id, n.title]));
+  for (const [id, [title, at]] of Object.entries(STATIC_NOTE_TITLES)) if (!best || at > best.at) best = { id, title: edited.get(id) ?? title, at };
+  for (const n of notices ?? [])
+    if (!best || n.createdAt > best.at) best = { id: n.id, title: n.rich ? n.title : (STATIC_NOTE_TITLES[n.id]?.[0] ?? n.title), at: n.createdAt };
   return best && { id: best.id, title: best.title };
 }

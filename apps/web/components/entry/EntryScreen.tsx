@@ -29,9 +29,10 @@ import { readItem, saveMyCode, writeItem } from "@/lib/storage";
 import { DORMANT_RENAME_MESSAGE, LS, type Me } from "@/lib/types";
 import { bgm } from "../bgm/engine";
 import { latestDevNote } from "@/lib/devNotes/titles";
+import { DEV_NOTES_TAB } from "@/lib/devNotes/open";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
-import { avatarColorSpec } from "@/game/sprites/avatar";
+import { avatarColorSpec } from "@/game/sprites/avatarCore";
 import AvatarSprite from "./AvatarSprite";
 import ChannelPicker, { type ChannelChoice } from "./ChannelPicker";
 import CodeStart from "./CodeStart";
@@ -92,7 +93,7 @@ export default function EntryScreen({ start, google, focusGraveId, entering, sta
         {hydrated && !entering ? (
           <>
             <EntryFlow start={start} google={google} focusGraveId={focusGraveId} onEnter={onEnter} />
-            <p className={styles.nonprofit}>개인이 만든 게임이에요. 후원도 광고도 유료 결제도 없어요.</p>
+            <p className={styles.nonprofit}>1인 포트폴리오입니다. 후원도 광고도 유료 결제도 없습니다.</p>
             <p className={styles.legal}>
               <Link href="/privacy">개인정보처리방침</Link> · <Link href="/terms">이용약관</Link> · <Link href="/faq">자주 묻는 질문</Link>
             </p>
@@ -217,12 +218,12 @@ function EntryFlow({ start, google, focusGraveId, onEnter }: Omit<Props, "enteri
               {previous}(으)로 이어서 들어가기
             </button>
           )}
-          {/* 11/20 개발자 노트: 가장 최근 글 한 줄 (새 탭). 못 불러오면 목록으로 */}
+          {/* 11/20 개발자 노트: 가장 최근 글 한 줄 (이름 붙은 새 탭 — 그 탭의 「게임 시작」이 이 탭으로 돌아온다). 못 불러오면 목록으로 */}
           <a
             className={styles.devNote}
             href={latestNote ? `/news/${encodeURIComponent(latestNote.id)}` : "/news"}
-            target="_blank"
-            rel="noopener"
+            target={DEV_NOTES_TAB}
+            rel="opener"
           >
             <span className={styles.devNoteTag}>개발자 노트</span>
             {latestNote && <span className={styles.devNoteTitle}>{latestNote.title}</span>}

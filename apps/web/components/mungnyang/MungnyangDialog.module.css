@@ -1,0 +1,124 @@
+/* 11/19 분양사 보리 창: 잡화점 창(ShopDialog.module.css) 틀을 그대로 쓰고, 무대(펫 걷기·가구 돌려 보기)와 목록만 따로 */
+
+.detail {
+  align-content: start;
+}
+
+.stageWrap {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  width: 100%;
+}
+
+/* 펫 무대: 풀밭 한 뼘 (발밑 그림자) */
+.petStage {
+  position: relative;
+  display: grid;
+  place-items: end center;
+  width: 100%;
+  /* 11/20 폰에서는 이 칸 폭이 그림 폭에 딱 맞춰져(자세히 보기 첫 칸 auto) 옆모습 꼬리·코끝이 칸 끝에 붙어 잘린 듯 보였다 → 좌우 여백·최소 폭 */
+  min-width: 132px;
+  min-height: 132px;
+  padding: 10px 12px 14px;
+  background:
+    radial-gradient(ellipse 34% 9% at 50% 88%, rgba(0, 0, 0, 0.28), transparent 100%),
+    radial-gradient(ellipse at 50% 95%, rgba(98, 140, 86, 0.38), transparent 70%);
+}
+
+.viewTag {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+/* 가구 큰 미리보기 (가구점·가구 보따리상과 같은 바탕) */
+.furnStage {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  padding: 4px 0;
+  background: radial-gradient(ellipse at 50% 90%, rgba(85, 112, 79, 0.25), transparent 70%);
+}
+
+.furnStage[data-night] {
+  background: radial-gradient(ellipse at 50% 80%, rgba(110, 130, 190, 0.18), transparent 70%), #0d1018;
+}
+
+.stageBar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+}
+
+.stageBtn {
+  min-height: 32px;
+  padding: 2px 10px;
+  font-size: 11px;
+}
+
+.rideTag {
+  margin-left: 6px;
+  padding: 0 4px;
+  background: var(--moss-deep);
+  color: var(--bone);
+  font-family: var(--font-small);
+  font-size: 10px;
+  vertical-align: middle;
+}
+
+.state {
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 11px;
+}
+
+.confirm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.confirm > * {
+  flex: 1 1 100%;
+}
+
+/* 목록: 한 칸 스크롤 (잡화점 격자와 같은 칸 크기) */
+.grid {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  grid-auto-rows: min-content;
+  gap: 6px;
+  min-height: 0;
+  margin: 0;
+  padding: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.empty {
+  grid-column: 1 / -1;
+  align-self: center;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+@media (max-width: 560px) {
+  .petStage {
+    min-width: 128px;
+    min-height: 96px;
+    padding: 6px 10px 10px;
+  }
+
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+    gap: 4px;
+  }
+}

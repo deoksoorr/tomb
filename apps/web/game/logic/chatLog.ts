@@ -4,7 +4,7 @@
 // 방에 들어올 때 서버가 보내 주는 최근 기록(chatLog — 서버가 잠들었다 깨도 맵별 최근 50줄은 남는다)은 받은 줄과
 // 서버 줄 id(key)로 합친다 (내가 쓴 줄은 글·시각으로 맞춘다).
 
-import { CHAT_HISTORY_MS, CHAT_MAX, CHAT_PLACE_TAG, CHAT_RECENT_MAX, CHAT_RECENT_MS, chatTagOf, mapOf, type ChatPlace, type MapId } from "@tomb/protocol";
+import { CHAT_HISTORY_MS, CHAT_MAX, CHAT_PLACE_TAG, CHAT_RECENT_MAX, CHAT_RECENT_MS, chatTagOf, mapOf, readChatNameStyle, type ChatPlace, type MapId } from "@tomb/protocol";
 
 /** "방금 오간 글"로 보는 시간: 폰 화면 글씨가 떠 있는 시간, 기록창에서 흐려지지 않는 시간 */
 export const CHAT_LOG_TTL_MS = CHAT_RECENT_MS;
@@ -135,7 +135,7 @@ export function readChatLog(serverNow: unknown, raw: unknown, localNow: number):
     if (typeof l.id !== "string" || !l.id || l.id.length > 64 || typeof l.at !== "number" || !Number.isFinite(l.at)) continue;
     if (typeof l.name !== "string" || typeof l.text !== "string" || !l.text) continue;
     const age = Math.max(0, serverNow - l.at);
-    out.push({ key: l.id, name: l.name.slice(0, 40), text: l.text.slice(0, CHAT_MAX * 2), mine: l.mine === true, ...(l.staff === true ? { staff: true } : {}), ...(l.mgr === true ? { mgr: true } : {}), ...chatTagOf(l.m), at: localNow - age });
+    out.push({ key: l.id, name: l.name.slice(0, 40), text: l.text.slice(0, CHAT_MAX * 2), mine: l.mine === true, ...(l.staff === true ? { staff: true } : {}), ...(l.mgr === true ? { mgr: true } : {}), ...chatTagOf(l.m), ...(readChatNameStyle(l.ns) ? { ns: readChatNameStyle(l.ns) } : {}), at: localNow - age });
   }
   return out;
 }

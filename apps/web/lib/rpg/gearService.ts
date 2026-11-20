@@ -67,7 +67,8 @@ export async function gearAction(acct: string, a: z.output<typeof GearActionSche
             // 화면에 보인 비용과 다르면 (다른 탭에서 먼저 강화 등) 돈을 받지 않고 다시 보여 준다
             if (need && need.cost !== a.cost)
               throw new RpgError(409, "COST_CHANGED", `강화 비용이 ${need.cost.toLocaleString("ko-KR")}P로 바뀌었어요. 다시 확인해 주세요.`);
-            return enhance(s, t, a.protect, rnd);
+            // 11/20 증폭권: 쓸지 말지만 받고 장수·확률은 서버 표에서 (옛 화면의 protect는 무시)
+            return enhance(s, t, a.amp, rnd);
           },
           "사냥터 강화",
           now,

@@ -320,7 +320,7 @@
 .firstChip {
   position: absolute;
   z-index: 2;
-  top: calc(var(--safe-top) + var(--top-h) + var(--top-gap) + var(--urgent-h, 0px) + var(--pin-h, 0px));
+  top: calc(var(--safe-top) + var(--top-h) + var(--top-gap) + var(--urgent-h, 0px) + var(--pin-h, 0px) + var(--note-h, 0px));
   left: var(--safe-left);
   display: inline-flex;
   align-items: center;

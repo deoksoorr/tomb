@@ -430,7 +430,8 @@ export const gatherNodeById = (id: string): GatherNode | undefined => NODE_BY_ID
 
 // ── NPC ── 물고기는 어부, 나머지는 수집가에게 판다 (NPC 앞에서만 — UI가 NPC 창에서만 판매를 연다)
 // 11/16 r11 사용자: 포구 시장을 뺐어요 → 바다 고기는 어부 영감, 갯벌에서 캔 것은 수집가 유령이 사요 (같은 판매 API)
-export type NpcId = "fishmonger" | "collector";
+// 11/20 달물결 포구 「해녀 할망」 좌판: 물고기·채집물을 한자리에서 다 사요 (값은 마을과 같아요 — 정류장 길 끝 모퉁이, game/sea/seaLayout SEA_BUYER)
+export type NpcId = "fishmonger" | "collector" | "haenyeo";
 export type Npc = { id: NpcId; name: string; title: string; x: number; y: number; buys: readonly LifeCat[]; hello: string; map?: "sea"; where?: Where };
 export const NPCS: readonly Npc[] = [
   {
@@ -454,7 +455,20 @@ export const NPCS: readonly Npc[] = [
     buys: ["bug", "herb", "ore", "dig"],
     hello: "남들이 지나친 것도 누군가에겐 보물이지요. 약초, 광석, 발굴품, 곤충 다 삽니다.",
   },
+  {
+    id: "haenyeo",
+    name: "해녀 할망",
+    title: "몽땅 삽니다",
+    // 11/20 바닷가 정류장 길이 산책로와 만나는 모퉁이 바로 위 (좌판은 왼쪽 — game/sea/seaLayout SEA_BUYER·SEA_BUYER_STALL)
+    x: 1556,
+    y: 300,
+    buys: LIFE_CATS,
+    hello: "죽어서도 물질은 못 끊었지 뭐예요. 생선이든 조개든 풀뿌리든 다 받아요. 값은 마을이랑 똑같이 쳐줘요.",
+    map: "sea",
+  },
 ];
+/** 물고기·채집물을 다 사는 상인인지 (판매 창 「물고기와 채집물 전부」, 포인트는 품목마다 낚시·채집 판매로 나눠 적립) */
+export const npcBuysAll = (npc: Npc): boolean => LIFE_CATS.every((c) => npc.buys.includes(c));
 /** 이 NPC가 이 종을 사는지 (11/16 갯벌 좌판은 갯벌에서 캔 것만) */
 export const npcBuys = (npc: Npc, s: Species): boolean => npc.buys.includes(s.cat) && (!npc.where || s.where.includes(npc.where));
 export const npcById = (id: string): Npc | undefined => NPCS.find((n) => n.id === id);

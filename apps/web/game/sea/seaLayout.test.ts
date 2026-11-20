@@ -39,6 +39,7 @@ import {
 } from "@tomb/protocol";
 import { SEA_FUTURE_SPOTS, SEA_INTERACTABLES, SEA_LIGHTS, SEA_PIER_POSTS, seaFurnitureColliders, seaGroundKind, seaStandable, seaStaticColliders, seaWalkGrid } from "./seaLayout";
 import { seaPickSeat } from "./seaSit";
+import { NPCS } from "@/lib/forage/catalog";
 import { SEA_LANDMARKS, SEA_MINIMAP_H, SEA_MINIMAP_W, seaMinimapPixels, toSeaMinimap } from "./seaMinimap";
 
 // 11/16 달물결 포구 배치: 내리는 자리에서 걸어서 갈 곳에 다 닿는지, 갯벌은 물때와 상관없이 늘 걷는지, 먼바다는 막히는지
@@ -294,6 +295,43 @@ describe("seaLayout — 물·바닥", () => {
       expect(m.x).toBeLessThan(SEA_MINIMAP_W);
       expect(m.y).toBeLessThan(SEA_MINIMAP_H);
     }
+  });
+});
+
+// 11/20 해녀 할망 좌판 (정류장 길 끝 모퉁이 — 물고기·채집물을 다 사요)
+describe("해녀 할망 좌판", () => {
+  const npc = NPCS.find((n) => n.id === "haenyeo")!;
+  const stand = { x: npc.x, y: npc.y + 10 }; // Foraging E 자리 (발 + 10, 반지름 20)
+  it("자리는 catalog NPC와 같고, 좌판은 할망 왼쪽, 파라솔 등은 밤 빛에 있어요", () => {
+    expect(npc.map).toBe("sea");
+    expect({ x: npc.x, y: npc.y }).toEqual(L.SEA_BUYER);
+    expect(L.SEA_BUYER).toEqual({ x: 1556, y: 300 });
+    expect(L.SEA_BUYER_STALL).toEqual({ x: 1526, y: 302 });
+    expect(L.SEA_BUYER_LAMP).toEqual({ x: 1541, y: 275 });
+    expect(SEA_LIGHTS.some((l) => l.x === 1541 && l.y === 275 && l.scale === 0.7)).toBe(true);
+    // 정류장에서 내려오는 길 끝, 산책로 바로 위 (뭍)
+    expect(npc.y).toBeLessThan(SEA_BOARDWALK.y);
+    expect(seaGroundKind(npc.x, npc.y - 4)).toBe("grass");
+  });
+  it("좌판·할망 발밑은 막히고, 손님 자리(할망 바로 아래)는 서서 걸어 닿아요. 다른 상호작용과 겹치지 않아요", () => {
+    expect(seaStandable(L.SEA_BUYER_STALL.x, L.SEA_BUYER_STALL.y - 2)).toBe(false);
+    expect(seaStandable(L.SEA_BUYER_STALL.x - 16, L.SEA_BUYER_STALL.y - 2)).toBe(false);
+    expect(seaStandable(npc.x, npc.y - 1)).toBe(false);
+    // 좌판과 할망 사이로 빠져나가지 못해요
+    expect(seaStandable(npc.x - 10, npc.y - 1)).toBe(false);
+    expect(seaStandable(stand.x, stand.y)).toBe(true);
+    expect(reachableNear(stand.x, stand.y, 20)).toBe(true);
+    for (const o of SEA_INTERACTABLES) expect(Math.hypot(o.x - stand.x, o.y - stand.y), o.id).toBeGreaterThan(o.r + 20);
+    // 가로등·길과 닿지 않아요 (막는 상자끼리 겹치지 않아요)
+    const own = L.seaBuyerColliders();
+    const others = [...seaStaticColliders(), ...seaFurnitureColliders()].filter((r) => !own.some((o) => o.x === r.x && o.y === r.y && o.w === r.w && o.h === r.h));
+    for (const b of own) for (const r of others) expect(r.x < b.x + b.w && r.x + r.w > b.x && r.y < b.y + b.h && r.y + r.h > b.y, JSON.stringify(r)).toBe(false);
+  });
+  it("원래 그 자리 소나무·들꽃만 비켜요 (둘레 나무·덤불은 그대로)", () => {
+    expect(L.SEA_TREES.some((t) => t.x === 1552 && t.y === 291)).toBe(false);
+    expect(L.SEA_DECOR.some((d) => d.x === 1550 && d.y === 280)).toBe(false);
+    expect(L.SEA_TREES.some((t) => t.kind === "bush" && t.x === 1504 && t.y === 266)).toBe(true);
+    for (const t of L.SEA_TREES) expect(t.x > 1500 && t.x < 1572 && t.y > 268 && t.y < 310, `${t.kind}@${t.x},${t.y}`).toBe(false);
   });
 });
 

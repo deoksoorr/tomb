@@ -1,10 +1,13 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import LegalLayout from "@/components/site/LegalLayout";
-import { SITE_VIEWPORT } from "@/lib/devNotes/meta";
+import { siteMetadata, SITE_VIEWPORT } from "@/lib/devNotes/meta";
 
 export const viewport = SITE_VIEWPORT;
-export const metadata: Metadata = { title: "이용약관 · At one time...", alternates: { canonical: "/terms" } };
+export const metadata = siteMetadata({
+  title: "이용약관",
+  description: "At one time... 이용약관이에요. 서비스가 무엇인지, 하지 말아 주셨으면 하는 일, 포인트와 아이템의 성격, 묘비와 방명록에 쓴 내용의 공개 범위, 서비스 변경과 중단에 대해 적었어요.",
+  path: "/terms",
+});
 
 const EFFECTIVE = "2026년 11월 13일";
 

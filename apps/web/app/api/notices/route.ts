@@ -12,7 +12,13 @@ export const GET = handler(async (req) => {
   // 공개 조회: 쿼리를 바꿔 CDN 캐시를 건너뛰는 반복 호출 방지 (메모리 한도)
   await rateLimit("publicGet", req);
   return json<NoticeListResponse>(
-    { notices: (await getNotices().list()).slice(0, NOTICE_LIST_MAX) },
+    // 게임은 제목·첫 문단·시각·고정만 쓴다 (11/20 개발자 노트 요약·대표 이미지는 싣지 않는다. 꼭지는 notice:doc에 따로 저장).
+    // rich: 정적 글을 관리자 편집기로 고친 글이면 게임 화면 제목도 고친 제목으로 (lib/devNotes/titles)
+    {
+      notices: (await getNotices().list())
+        .slice(0, NOTICE_LIST_MAX)
+        .map(({ id, title, body, createdAt, pinned, rich }) => ({ id, title, body, createdAt, pinned, ...(rich ? { rich } : {}) })),
+    },
     { headers: { "Vercel-CDN-Cache-Control": "max-age=60, stale-while-revalidate=300", "Cache-Control": "no-store" } },
   );
 });

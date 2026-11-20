@@ -52,6 +52,8 @@ export class SpeechBubble {
   private pop = 1;
   /** 겹침 풀기용 상자 (가운데 아래 원점, 월드 단위) */
   readonly box = { x: 0, y: 0, w: 0, h: 0 };
+  /** 11/19 말하는 사람 머리 위 x (상자는 화면 안으로 밀려도 꼬리는 여기를 가리킨다) */
+  private tailX = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -150,12 +152,22 @@ export class SpeechBubble {
     const content = chat ?? (this.mode === "text" ? this.text : this.icon);
     const cw = chat ? chat.displayWidth : this.mode === "text" ? this.text.width : this.icon.width * s * ICON_PX;
     const ch = chat ? chat.displayHeight : this.mode === "text" ? this.text.height : this.icon.height * s * ICON_PX;
-    this.box.x = Math.round(x);
+    this.tailX = Math.round(x);
     this.box.w = cw + (PAD_X * 2 + 2) * s;
     this.box.h = ch + (PAD_Y * 2 + 2 + TAIL) * s;
+    this.box.x = this.inView(this.tailX, this.box.w, s);
     this.setBottom(bottom);
     const a = Math.min(1, (now - this.born) / FADE_MS, (this.until - now) / FADE_MS);
     for (const o of [this.border, this.bg, this.tail, this.tailIn, content]) (o as Phaser.GameObjects.Image).setAlpha(a).setVisible(true);
+  }
+
+  /** 11/19 화면 가장자리에서 말풍선이 잘리지 않게 상자 가운데를 카메라 안쪽으로 민다 (꼬리는 말하는 사람 쪽에 남는다) */
+  private inView(x: number, w: number, s: number): number {
+    const v = this.scene.cameras?.main?.worldView;
+    if (!v || v.width <= 0 || w + 4 * s >= v.width) return x;
+    const lo = v.x + w / 2 + 2 * s;
+    const hi = v.right - w / 2 - 2 * s;
+    return Math.round(Math.max(lo, Math.min(hi, x)));
   }
 
   /** 겹침 풀기로 정해진 아래쪽 y (꼬리 끝) */
@@ -169,8 +181,10 @@ export class SpeechBubble {
     this.border.setPosition(x, b).setDisplaySize(w, h);
     this.bg.setPosition(x, b - s).setDisplaySize(w - 2 * s, h - 2 * s);
     // 꼬리: 테두리색 계단 삼각형 (3칸 → 1칸)
-    this.tail.setPosition(x, b).setDisplaySize(3 * s, s);
-    this.tailIn.setPosition(x, b + s).setDisplaySize(s, (TAIL - 1) * s);
+    // 꼬리는 말하는 사람 머리 위 (상자 안쪽 범위에서)
+    const tx = Math.max(x - w / 2 + 3 * s, Math.min(x + w / 2 - 3 * s, this.tailX || x));
+    this.tail.setPosition(tx, b).setDisplaySize(3 * s, s);
+    this.tailIn.setPosition(tx, b + s).setDisplaySize(s, (TAIL - 1) * s);
     const cy = b - s - PAD_Y * s;
     if (this.mode === "chat") this.chatText?.setPosition(x, cy);
     else if (this.mode === "text") this.text.setPosition(x, cy);

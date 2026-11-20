@@ -2,6 +2,8 @@ import { itemById, MAX_VALID_SPEED, permanentPrice, RUN_SPEED, TITLE_IDS, titleO
 import { NextRequest } from "next/server";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { getForageStore } from "@/lib/forage/store";
+import { HOUSE_TITLES } from "@/lib/housing/catalog";
+import { buyCottage, buyPlot, getHouseStore } from "@/lib/housing/service";
 import { itemLookScore, lookScore } from "@/lib/lookScore";
 import { getAccounts } from "@/lib/store";
 import { kstDay, lookOf } from "@/lib/store/accounts";
@@ -315,3 +317,32 @@ describe("칭호 사실 기억 (Redis 명령 절약)", () => {
   });
 });
 
+
+describe("내 집 칭호 (꾸밈 점수)", () => {
+  it("11/20 포구 오두막 점수도 센다: 마을 집과 오두막 중 높은 쪽 하나 (더하지 않는다)", async () => {
+    const v = await newVisitor();
+    const accounts = getAccounts();
+    await accounts.earn(v.visitorId, "flower", kstDay());
+    await accounts.adjustPoints(v.visitorId, 200_000);
+    const store = getHouseStore();
+    const t0 = 1_950_000_000_000;
+    // 오두막만 있을 때
+    const c = (await buyCottage(store, v.visitorId, "칭호 오두막", "", "a", null, 1)).house!;
+    for (let i = 0; i < 50; i++) await store.like(c.id, `liker-${i}`, kstDay());
+    const cs = (await store.get(c.id))!.score;
+    expect(cs).toBeGreaterThanOrEqual(150);
+    const want = (score: number) => HOUSE_TITLES.filter((t) => t.min > 0 && score >= t.min).map((t) => `t_house${t.min}`);
+    forgetTitles(v.visitorId);
+    let r = await titleStatus(v.visitorId, t0);
+    expect(r.earned.filter((id) => id.startsWith("t_house"))).toEqual(want(cs));
+    expect(r.progress.house).toBe(cs);
+    // 마을 집(점수 낮음)을 더 가져도 오두막 점수가 그대로 (합치지 않는다)
+    const h = (await buyPlot(store, v.visitorId, "칭호 마을 집", "", "a", null, 1)).house!;
+    const vs = (await store.get(h.id))!.score;
+    expect(vs).toBeLessThan(cs);
+    forgetTitles(v.visitorId);
+    r = await titleStatus(v.visitorId, t0 + 1);
+    expect(r.progress.house).toBe(Math.max(vs, cs));
+    expect(r.earned.filter((id) => id.startsWith("t_house"))).toEqual(want(Math.max(vs, cs)));
+  });
+});

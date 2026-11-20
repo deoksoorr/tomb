@@ -291,7 +291,7 @@ export type SgItem = {
   L: number;
   /** 옵션 다시 굴린 횟수 (비용이 두 배씩) */
   rr: number;
-  /** 강화 연속 실패 (실패할 때마다 다음 성공 확률 +ENH_FAIL_BONUS, 성공하면 0) */
+  /** 강화 연속 실패 (11/20 천장 — 같은 단계에서 lib/rpg/enhance ENH_PITY번 실패하면 다음은 반드시 성공, 성공하면 0) */
   f: number;
 };
 
@@ -733,10 +733,11 @@ export const MAT_INFO: Record<MatId, { name: string; desc: string; art: IconArt 
     desc: "25층보다 높은 우두머리 상자에서 나와요. +11부터 강화할 때와 옵션을 고정할 때 써요.",
     art: { shape: "mat_seal", main: 0xc8323c, accent: 0xe8b830 },
   },
+  // 11/20 옛 「보호 문서」 → 「강화 증폭권」 (id·저장 칸 prot는 그대로 — 가진 장 수도 그대로). 장수는 lib/rpg/enhance ENH_AMP_TABLE
   m_prot: {
-    name: "보호 문서",
-    desc: "이번 주 최고 층이 10층, 20층처럼 새로 10층을 넘을 때 받아요. 강화에 실패해도 단계가 내려가지 않게 막아 줘요.",
-    art: { shape: "mat_prot", main: 0x6cb4f0, accent: 0xf2f2f2 },
+    name: "강화 증폭권",
+    desc: "강화할 때 쓰면 성공 확률이 두 배가 돼요. +4부터 쓸 수 있고 단계가 높을수록 여러 장 들어요. 야근 빌딩 주간 기록, 7일 연속 출석, 미션 도장으로 받아요.",
+    art: { shape: "mat_prot", main: 0xf0a224, accent: 0xfff2a8 },
   },
 };
 export const isMatId = (id: string): id is MatId => (MAT_IDS as readonly string[]).includes(id);

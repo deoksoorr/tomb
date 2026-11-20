@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useState, type CSSProperties, type ReactNode } from "react";
 import { GEAR, GEAR_SLOTS, gearById, KIND_LABELS, POTIONS, SLOT_LABELS, slotKind, type GearDef, type GearSlot } from "@/lib/rpg/catalog";
-import { GEAR_INV_MAX, sellValue } from "@/lib/rpg/character";
+import { DROP_SELL_RATE, GEAR_INV_MAX, gearSaleSplit, gearSaleValue, pieceSaleBought, SELL_RATE, sellValue } from "@/lib/rpg/character";
 import { rpgApi, type CharacterAction, type GearAction } from "@/lib/rpg/client";
 import { DISASSEMBLE } from "@/lib/rpg/enhance";
 import { derive, type Derived } from "@/lib/rpg/formulas";
@@ -55,6 +55,7 @@ import {
   type BagTab,
   type StatDiff,
   statParts,
+  TOTAL_ROWS,
 } from "./gear";
 import EnhanceDialog, { type EnhanceTab } from "./EnhanceDialog";
 import HuntCapMeter from "./HuntCap";
@@ -86,18 +87,6 @@ const GEAR_SILHOUETTE: Record<GearSlot, string> = {
   acc1: "c_ide_ring",
   acc2: "c_earphones",
 };
-const TOTAL_ROWS: [keyof Omit<Derived, "stats">, string, (v: number) => string][] = [
-  ["atk", "ATK", String],
-  ["def", "DEF", String],
-  ["maxHp", "HP", String],
-  ["maxSp", "SP", String],
-  ["aspd", "공속", (v) => v.toFixed(2)],
-  ["crit", "치명", (v) => `${v}%`],
-  ["hit", "명중", String],
-  ["flee", "회피", String],
-  ["move", "이속", String],
-  ["skillPower", "스킬", (v) => `×${v.toFixed(2)}`],
-];
 const TABS: [BagTab, string][] = [
   ["all", "전체"],
   ["weapon", "무기"],
@@ -187,10 +176,20 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
     onCharacter({ type: "equip", slot, itemId: null }, name ? `${josa(name, "을", "를")} 뺐어요.` : undefined);
   }
 
+  // 11/20 사용자: 산 장비는 50%(환불), 주운 장비는 25% — n개를 팔 때 산 것부터 판 것으로 치는 서버와 같은 계산
+  function saleSplit(x: Extract<BagEntry, { type: "shop" }>, n: number) {
+    if (!x.piece) return gearSaleSplit(c, x.gear.id, n);
+    const b = pieceSaleBought(c, shopPieceOf(x.piece.code)!.id);
+    return { bought: b, drop: 1 - b };
+  }
+  const saleValue = (x: Extract<BagEntry, { type: "shop" }>, n: number) => gearSaleValue(x.gear.price, saleSplit(x, n));
+
   function sell(x: Extract<BagEntry, { type: "shop" }>, n: number) {
     if (n < 1) return;
     if (confirm !== `sell:${x.key}` && sellWarning(c, x.gear, n)) {
       setConfirm(`sell:${x.key}`);
+      // 11/20 카드에서 팔기를 누르면 확인은 카드 아래 펼친 자세히에 뜬다
+      setOpen(x.key);
       return;
     }
     setConfirm(null);
@@ -427,61 +426,37 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
                 </span>
               </div>
               {shop.length === 0 && <p className={g.note}>{shopTotal ? "이 부위 장비가 없어요." : "상점에서 사거나 사냥터에서 주워요."}</p>}
-              <ul className={g.list}>
+              {/* 11/20 운영자: 상점·주운 장비는 세로 카드 격자 (위 아이콘 → 이름 → 레벨 → 값 → 수량·팔기).
+                  카드를 누르면 다음 줄 전체에 자세히(비교·장착·강화·팔기 확인)가 펼쳐진다 (dense라 같은 줄 뒤 카드는 제자리) */}
+              <ul className={g.cards}>
                 {shop.map((x) => {
                   const free = x.count - x.equipped;
                   const n = free > 1 ? Math.min(qty[x.key] ?? 0, free) : 1;
+                  const isOpen = open === x.key;
+                  const confirming = confirm === `sell:${x.key}`;
+                  const split = free > 0 ? saleSplit(x, free) : null;
                   return (
-                    <Row key={x.key} x={x} open={open === x.key} onToggle={() => setOpen(open === x.key ? null : x.key)}>
-                      <div className={g.detail}>
-                        <Compare diff={diffOf(x)} target={targetOf(x.gear)} cur={c.equip[targetOf(x.gear)]} worn={free < 1} />
-                        <p className={g.note}>
-                          {x.gear.desc}
-                          {x.gear.kind === "weapon" ? ` · ${weaponStyleText(x.gear)}` : ""}
-                        </p>
-                        {confirm === `sell:${x.key}` ? (
-                          <div className={g.confirm} role="alert">
-                            <p>{sellWarning(c, x.gear, n)}</p>
-                            <div className={g.actions}>
-                              <button type="button" className={cx(ui.button, s.sellBtn)} disabled={working} onClick={() => sell(x, n)}>
-                                {n > 1 ? `${n}개 ` : ""}
-                                {pts(sellValue(x.gear.price) * n)}에 팔기
-                              </button>
-                              <button type="button" className={ui.button} onClick={() => setConfirm(null)}>
-                                그만두기
-                              </button>
-                            </div>
-                          </div>
+                    <Fragment key={x.key}>
+                      <GearCard
+                        x={x}
+                        open={isOpen}
+                        onToggle={() => {
+                          setOpen(isOpen ? null : x.key);
+                          if (confirming) setConfirm(null);
+                        }}
+                      >
+                        {free < 1 ? (
+                          <p className={g.cardLock}>빼야 팔 수 있어요.</p>
                         ) : (
-                          <div className={g.actions}>
-                            {free < 1 ? (
-                              <button type="button" className={ui.button} disabled={working} onClick={() => unequip(wornSlot(x)!)}>
-                                빼기
-                              </button>
-                            ) : (
-                              <button type="button" className={cx(ui.button, ui.primary)} disabled={working || x.low} onClick={() => equipEntry(x)}>
-                                장착
-                              </button>
-                            )}
-                            {onView && (
-                              <button
-                                type="button"
-                                className={ui.button}
-                                disabled={working || x.enh >= SHOP_ENH_MAX}
-                                onClick={() =>
-                                  setDlg(x.piece ? { kind: "enhance", piece: x.piece.u, tab: "enhance" } : { kind: "enhance", shop: x.gear.id, tab: "enhance" })
-                                }
-                              >
-                                {x.enh >= SHOP_ENH_MAX ? `강화 끝 +${SHOP_ENH_MAX}` : "강화"}
-                              </button>
-                            )}
+                          <>
+                            <CardPrice one={saleValue(x, 1)} n={free > 1 ? n : 0} total={saleValue(x, n)} />
                             {free > 1 ? (
                               <SellQty
                                 name={x.gear.name}
                                 max={free}
-                                unit={sellValue(x.gear.price)}
+                                valueOf={(k) => saleValue(x, k)}
                                 value={n}
-                                busy={working}
+                                busy={working || confirming}
                                 onChange={(v) =>
                                   setQty((q) => ({
                                     ...q,
@@ -490,20 +465,80 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
                                 }
                                 onSell={() => sell(x, n)}
                               />
-                            ) : free > 0 ? (
-                              <button type="button" className={cx(ui.button, s.sellBtn)} disabled={working} onClick={() => sell(x, 1)}>
-                                팔기 <b>{pts(sellValue(x.gear.price))}</b>
+                            ) : (
+                              <button
+                                type="button"
+                                className={cx(ui.button, s.sellBtn, g.cardSell)}
+                                disabled={working || confirming}
+                                onClick={() => sell(x, 1)}
+                                aria-label={`${plusName(x.gear.name, x.enh)} 팔기, ${pts(saleValue(x, 1))}`}
+                              >
+                                팔기
                               </button>
-                            ) : null}
-                          </div>
+                            )}
+                          </>
                         )}
-                        {!x.piece && x.count > 1 && <p className={g.note}>강화하면 한 개만 떼어 따로 올려요.</p>}
-                      </div>
-                    </Row>
+                      </GearCard>
+                      {isOpen && (
+                        <li className={g.cardDetail}>
+                          <div className={g.detail}>
+                            {confirming && (
+                              <div className={g.confirm} role="alert">
+                                <p>{sellWarning(c, x.gear, n)}</p>
+                                <div className={g.actions}>
+                                  <button type="button" className={cx(ui.button, s.sellBtn)} disabled={working} onClick={() => sell(x, n)}>
+                                    {n > 1 ? `${n}개 ` : ""}
+                                    {pts(saleValue(x, n))}에 팔기
+                                  </button>
+                                  <button type="button" className={ui.button} onClick={() => setConfirm(null)}>
+                                    그만두기
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                            <p className={g.opts}>
+                              <EnhStats id={x.piece?.code ?? x.gear.id} />
+                            </p>
+                            <Compare diff={diffOf(x)} target={targetOf(x.gear)} cur={c.equip[targetOf(x.gear)]} worn={free < 1} />
+                            <p className={g.note}>
+                              {x.gear.desc}
+                              {x.gear.kind === "weapon" ? ` · ${weaponStyleText(x.gear)}` : ""}
+                            </p>
+                            <div className={g.actions}>
+                              {free < 1 ? (
+                                <button type="button" className={ui.button} disabled={working} onClick={() => unequip(wornSlot(x)!)}>
+                                  빼기
+                                </button>
+                              ) : (
+                                <button type="button" className={cx(ui.button, ui.primary)} disabled={working || x.low} onClick={() => equipEntry(x)}>
+                                  장착
+                                </button>
+                              )}
+                              {onView && (
+                                <button
+                                  type="button"
+                                  className={ui.button}
+                                  disabled={working || x.enh >= SHOP_ENH_MAX}
+                                  onClick={() =>
+                                    setDlg(x.piece ? { kind: "enhance", piece: x.piece.u, tab: "enhance" } : { kind: "enhance", shop: x.gear.id, tab: "enhance" })
+                                  }
+                                >
+                                  {x.enh >= SHOP_ENH_MAX ? `강화 끝 +${SHOP_ENH_MAX}` : "강화"}
+                                </button>
+                              )}
+                            </div>
+                            {!x.piece && x.count > 1 && <p className={g.note}>강화하면 한 개만 떼어 따로 올려요.</p>}
+                            {split && <SaleNote split={split} />}
+                          </div>
+                        </li>
+                      )}
+                    </Fragment>
                   );
                 })}
               </ul>
-              <p className={g.note}>되팔면 산 값의 50%를 받아요.</p>
+              <p className={g.note}>
+                되팔면 상점에서 산 장비는 산 값의 {pct(SELL_RATE)}, 사냥에서 주운 장비는 상점 값의 {pct(DROP_SELL_RATE)}를 받아요.
+              </p>
             </>
           )}
         </div>
@@ -605,6 +640,42 @@ function Row({ x, open, onToggle, children }: { x: BagEntry; open: boolean; onTo
         ) : null}
       </button>
       {open && children}
+    </li>
+  );
+}
+
+/** 11/20 되팔기 카드 (상점·주운 장비): 위 아이콘(귀퉁이 ×개수·+강화) → 이름(직급 색) → 레벨·끼는 중 → children(값·수량·팔기). 위쪽을 누르면 자세히를 펼친다 */
+function GearCard({ x, open, onToggle, children }: { x: Extract<BagEntry, { type: "shop" }>; open: boolean; onToggle: () => void; children: ReactNode }) {
+  const grade = gearGrade(x.gear);
+  const e = x.enh;
+  const worn = x.equipped > 0;
+  const sub = `${grade.label} · ${KIND_LABELS[x.gear.kind]} · Lv.${x.gear.reqLevel}${x.gear.kind === "weapon" ? ` · ${weaponStyleOf(x.gear).name} · ${WEAPON_DMG_LABEL[weaponDmgKind(weaponStyleOf(x.gear).id)]}` : ""}`;
+  return (
+    <li className={g.card} data-open={open || undefined} data-low={x.low || undefined} style={{ "--grade": grade.color } as CSSProperties}>
+      <button
+        type="button"
+        className={g.cardPick}
+        title={`${plusName(x.gear.name, e)} (${grade.label} ${KIND_LABELS[x.gear.kind]})`}
+        aria-expanded={open}
+        onClick={onToggle}
+        aria-label={`${plusName(x.gear.name, e)}, ${sub}${worn ? ", 끼는 중" : ""}${x.low ? ", 아직 못 껴요" : ""}`}
+      >
+        <span className={cx(g.icon, g.cardIcon)}>
+          <RpgIcon art={x.gear.art} size={32} />
+          {e > 0 && (
+            <span className={g.enh} data-tier={enhTier(e)}>
+              +{e}
+            </span>
+          )}
+          {x.count > 1 && <span className={g.count}>×{x.count}</span>}
+        </span>
+        <span className={g.cardName}>{plusName(x.gear.name, e)}</span>
+        <span className={g.cardSub}>
+          <span>{x.low ? `Lv.${x.gear.reqLevel}부터` : `Lv.${x.gear.reqLevel}`}</span>
+          {worn && <span className={g.tag}>끼는 중</span>}
+        </span>
+      </button>
+      <div className={g.cardFoot}>{children}</div>
     </li>
   );
 }
@@ -777,61 +848,81 @@ function PotionList({
   const coarse = useMediaQuery("(pointer: coarse)");
   const potions = POTIONS.flatMap((p) => ((c.potions[p.id] ?? 0) > 0 ? [{ p, count: c.potions[p.id] }] : []));
   if (!potions.length) return <p className={g.note}>물약이 없어요. 상점에서 사거나 사냥터에서 주워요.</p>;
+  // 11/20 운영자: 물약도 세로 카드 격자 (위 아이콘 → 이름 → 단축키 → 값 → 수량·팔기). 설명은 카드에 올리면(title)
   return (
-    <ul className={g.list}>
-      {potions.map(({ p, count }) => {
-        const price = sellValue(p.price);
-        const n = count > 1 ? Math.min(qty[p.id] ?? 0, count) : 1;
-        const sell = (k: number) => {
-          if (k < 1) return;
-          setQty((q) => ({ ...q, [p.id]: 0 }));
-          onSell(p.id, k);
-        };
-        return (
-          <li key={p.id} className={g.row}>
-            <div className={g.pick}>
-              <span className={g.icon}>
-                <RpgIcon art={p.art} size={32} />
-                {count > 1 && <span className={g.count}>×{count}</span>}
-              </span>
-              <span className={g.info}>
-                <span className={g.name}>{p.name}</span>
-                <span className={g.sub}>{p.desc}</span>
-                <span className={g.sub}>{p.key ? (coarse ? "사냥 중 물약 버튼으로 먹어요" : `단축키 ${p.key}`) : "자동으로 먹어요"}</span>
-              </span>
-            </div>
-            <div className={g.detail}>
-              <div className={g.actions}>
+    <>
+      <ul className={g.cards}>
+        {potions.map(({ p, count }) => {
+          const price = sellValue(p.price);
+          const valueOf = (k: number) => price * k;
+          const n = count > 1 ? Math.min(qty[p.id] ?? 0, count) : 1;
+          const sell = (k: number) => {
+            if (k < 1) return;
+            setQty((q) => ({ ...q, [p.id]: 0 }));
+            onSell(p.id, k);
+          };
+          return (
+            <li key={p.id} className={g.card}>
+              <div className={g.cardPick} title={`${p.desc}. ${p.key ? (coarse ? "사냥 중 물약 버튼으로 먹어요" : `단축키 ${p.key}`) : "자동으로 먹어요"}`}>
+                <span className={cx(g.icon, g.cardIcon)}>
+                  <RpgIcon art={p.art} size={32} />
+                  {count > 1 && <span className={g.count}>×{count}</span>}
+                </span>
+                <span className={g.cardName}>{p.name}</span>
+                {/* 단축키는 키보드 기기에서만 (터치는 사냥 화면의 물약 버튼) */}
+                {p.key && !coarse && <span className={g.cardSub}>단축키 {p.key}</span>}
+              </div>
+              <div className={g.cardFoot}>
+                <CardPrice one={price} n={count > 1 ? n : 0} total={valueOf(n)} />
                 {count > 1 ? (
                   <SellQty
                     name={p.name}
                     max={count}
-                    unit={price}
+                    valueOf={valueOf}
                     value={n}
                     busy={busy}
                     onChange={(v) => setQty((q) => ({ ...q, [p.id]: Math.max(0, v) }))}
                     onSell={() => sell(n)}
                   />
                 ) : (
-                  <button type="button" className={cx(ui.button, s.sellBtn)} disabled={busy} onClick={() => sell(1)}>
-                    팔기 <b>{pts(price)}</b>
+                  <button type="button" className={cx(ui.button, s.sellBtn, g.cardSell)} disabled={busy} onClick={() => sell(1)} aria-label={`${p.name} 팔기, ${pts(price)}`}>
+                    팔기
                   </button>
                 )}
               </div>
-            </div>
-          </li>
-        );
-      })}
-      <li className={g.note}>되팔면 값의 50%를 받아요.</li>
-    </ul>
+            </li>
+          );
+        })}
+      </ul>
+      <p className={g.note}>되팔면 값의 50%를 받아요.</p>
+    </>
   );
 }
 
-/** 여러 개 되팔기: 0개부터 −/+·모두로 개수를 고르고, 팔기 버튼에 합계를 보여 준다 */
+/** 11/20 카드의 값 한 줄: 고르기 전엔 한 개 값 「7P」, 여러 개 중 고르면 「3개 21P」 */
+function CardPrice({ one, n, total }: { one: number; n: number; total: number }) {
+  return <span className={g.cardPrice}>{n > 0 ? `${n}개 ${pts(total)}` : pts(one)}</span>;
+}
+
+const pct = (r: number) => `${Math.round(r * 100)}%`;
+
+/** 11/20 산 장비·주운 장비 되팔기 값 안내 (팔 수 있는 것 전부 기준 — 산 것부터 판다) */
+function SaleNote({ split }: { split: { bought: number; drop: number } }) {
+  if (!split.bought) return null;
+  return (
+    <p className={g.note}>
+      {split.drop
+        ? `상점에서 산 ${split.bought}개(${pct(SELL_RATE)})부터 팔고, 주운 ${split.drop}개는 ${pct(DROP_SELL_RATE)}를 받아요.`
+        : `상점에서 산 장비라 ${pct(SELL_RATE)}를 돌려받아요.`}
+    </p>
+  );
+}
+
+/** 여러 개 되팔기: 0개부터 −/+·모두로 개수를 고르고, 팔기 버튼에 합계를 보여 준다 (11/20 valueOf = n개 판 값 — 산 것·주운 것 값이 달라서) */
 export function SellQty({
   name,
   max,
-  unit,
+  valueOf,
   value,
   busy,
   onChange,
@@ -839,37 +930,43 @@ export function SellQty({
 }: {
   name: string;
   max: number;
-  unit: number;
+  valueOf: (n: number) => number;
   value: number;
   busy: boolean;
   onChange: (n: number) => void;
   onSell: () => void;
 }) {
+  // 11/20 카드 아래: [− n/max +] / [모두|비우기][팔기] (고른 수 합계는 카드 값 줄에)
+  const full = value >= max;
   return (
-    <div className={s.sellQty}>
-      <span className={s.stepper} role="group" aria-label={`${name} 팔 개수 (최대 ${max}개)`}>
-        <button type="button" className={cx(ui.button, ui.quiet)} disabled={value <= 0} onClick={() => onChange(value - 1)} aria-label="1개 줄이기">
+    <div className={g.cardQty} role="group" aria-label={`${name} 팔 개수 (최대 ${max}개)`}>
+      <span className={g.cardStep}>
+        <button type="button" className={ui.button} disabled={value <= 0} onClick={() => onChange(value - 1)} aria-label="1개 줄이기">
           −
         </button>
-        <output className={s.sellCount} aria-live="polite">
+        <output className={g.cardCount} aria-live="polite">
           {value}
+          <small>/{max}</small>
         </output>
-        <button type="button" className={ui.button} disabled={value >= max} onClick={() => onChange(value + 1)} aria-label="1개 늘리기">
+        <button type="button" className={ui.button} disabled={full} onClick={() => onChange(value + 1)} aria-label="1개 늘리기">
           +
         </button>
-        <button type="button" className={cx(ui.button, s.sellAll)} disabled={value >= max} onClick={() => onChange(max)} aria-label={`모두(${max}개) 고르기`}>
-          모두
+      </span>
+      <span className={g.cardBtns}>
+        {/* 모두 고르기 ↔ 고른 것 비우기 (다 고르면 글자가 「비우기」, 수량 칸은 n/n 그대로) */}
+        <button type="button" className={ui.button} onClick={() => onChange(full ? 0 : max)} aria-label={full ? "고른 것 비우기" : `모두(${max}개) 고르기`}>
+          {full ? "비우기" : "모두"}
+        </button>
+        <button
+          type="button"
+          className={cx(ui.button, s.sellBtn, g.cardSell)}
+          disabled={busy || value < 1}
+          onClick={onSell}
+          aria-label={`${name} ${value}개 팔기, 합계 ${valueOf(value)}포인트`}
+        >
+          팔기
         </button>
       </span>
-      <button
-        type="button"
-        className={cx(ui.button, s.sellBtn)}
-        disabled={busy || value < 1}
-        onClick={onSell}
-        aria-label={`${name} ${value}개 팔기, 합계 ${unit * value}포인트`}
-      >
-        {value}개 팔기 <b>합계 {pts(unit * value)}</b>
-      </button>
     </div>
   );
 }

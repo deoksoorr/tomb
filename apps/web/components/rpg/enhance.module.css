@@ -438,3 +438,50 @@
     }
   }
 }
+
+/* 11/20 증폭권을 쓴 강화: 기다리는 동안 장비가 주황으로 달아오른다 */
+.stage[data-amp] .item {
+  filter: drop-shadow(0 0 8px #f0a224) brightness(1.15);
+}
+
+/* 11/20 천장 진행도 (같은 단계 연속 실패) */
+.pity {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pity[data-sure] {
+  color: #ffd76a;
+}
+
+.pityBar {
+  display: block;
+  height: 6px;
+  background: var(--bg-deep);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.pityBar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #c8a040, #ffd76a);
+  transition: width 0.4s ease-out;
+}
+
+/* 11/20 강화 증폭권 체크 */
+.amp {
+  padding: 4px 8px;
+  background: var(--bg-deep);
+  box-shadow: 0 0 0 1px var(--line);
+  line-height: 1.35;
+}
+
+.amp[data-on] {
+  box-shadow: 0 0 0 2px #f0a224;
+}
+
+.amp input:disabled + * {
+  opacity: 0.5;
+}

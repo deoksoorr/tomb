@@ -1,4 +1,4 @@
-import { BODY_TIER_INFO, bodyLabel, bodyTier, bodyUnlockPrice, DYE_PARTS, dyeSpecialOf, isRideablePet, itemById, PERMANENT_MULTIPLIER, PET_PRICE_UP, PET_RIDE_PRICE_UP, petPrice, type AvatarDye, type CosmeticSlot } from "@tomb/protocol";
+import { BODY_TIER_INFO, bodyLabel, bodyTier, bodyUnlockPrice, DYE_PARTS, dyeSpecialOf, isRideablePet, itemById, PERMANENT_MULTIPLIER, PET_PRICE_UP, PET_RIDE_PRICE_UP, petPrice, seasonSetsOfLook, type AvatarDye, type SeasonSetDef, type CosmeticSlot } from "@tomb/protocol";
 
 // 외형 꾸미기 점수 (서버 랭킹·내 정보·가방이 함께 쓰는 순수 계산. 서버 전용 모듈을 들이지 않는다).
 // 지금 "착용 중이고 만료 전"인 꾸미기만 센다 → 기간제가 끝나면 그 파츠 점수도 바로 사라진다.
@@ -12,6 +12,8 @@ import { BODY_TIER_INFO, bodyLabel, bodyTier, bodyUnlockPrice, DYE_PARTS, dyeSpe
 //  - 운영자 전용 꾸미기는 0
 //  - 주간 랭킹 1위 전용 꾸미기(금화 왕관 등)도 0: 상점 값이 없는 상징이라 1위 보상이 꾸미기 점수를 부풀리지 않게.
 //    1위 오라는 아이템이 아니라 1위 자격에 붙은 연출이라 점수에 들어가지 않는다
+//  - 11/19 계절 한정 세트: 한 점은 다른 꾸미기와 같은 공식 (펫은 영구 값 ÷ PET_PRICE_UP — 동물원 펫과 같다),
+//    한 벌 다섯 점을 다 입은 동안 세트 덤 점수(SEASON_SETS look)를 더한다
 
 /** 가치 몇 P당 1점인지 */
 export const LOOK_SCORE_DIVISOR = 5;
@@ -30,6 +32,10 @@ export function itemLookValue(itemId: string): number {
   const pet = petPrice(itemId);
   // 11/19 펫 값을 올렸지만(작은 펫 2배·타는 펫 3배) 꾸미기 점수·랭킹은 예전 값 그대로 (이미 산 사람 점수가 갑자기 뛰지 않게)
   if (pet != null) return Math.round(pet / (isRideablePet(itemId) ? PET_RIDE_PRICE_UP : PET_PRICE_UP));
+  // 11/19 계절 한정 펫: price가 곧 영구 값 → 동물원 펫처럼 값 올림 배수로 나눈다 (꼬마 눈오리 5,000P → 500점)
+  if (it.seasonSet && it.slot === "pet") return Math.round(it.price / PET_PRICE_UP);
+  // 11/19 멍냥 분양소 품종 펫: price가 곧 영구 값 → 동물원 펫과 같은 규칙 (1,700P → 850점)
+  if (it.petShop && it.slot === "pet") return Math.round(it.price / PET_PRICE_UP);
   return it.price * PERMANENT_MULTIPLIER;
 }
 
@@ -65,12 +71,22 @@ export function scoredParts(input: Pick<LookScoreInput, "equipped">, now: number
   return out.sort((a, b) => b.score - a.score);
 }
 
-/** 지금 꾸미기 점수 = 만료 전 착용 파츠 점수 + 프리미엄 외형 + 염색 특수 색 보너스 */
+/** 11/19 만료 전 착용품으로 한 벌을 다 입은 계절 한정 세트들 */
+export function wornSeasonSets(input: Pick<LookScoreInput, "equipped">, now: number): SeasonSetDef[] {
+  return seasonSetsOfLook(scoredParts(input, now).map((p) => p.itemId));
+}
+
+/** 11/19 계절 한정 세트 덤 점수: 한 벌을 다 입은 세트마다 + (SEASON_SETS look) */
+export function seasonSetBonus(input: Pick<LookScoreInput, "equipped">, now: number): number {
+  return wornSeasonSets(input, now).reduce((n, s) => n + s.look, 0);
+}
+
+/** 지금 꾸미기 점수 = 만료 전 착용 파츠 점수 + 프리미엄 외형 + 염색 특수 색 보너스 + 계절 한정 세트 덤 */
 export function lookScore(input: LookScoreInput, now: number): number {
   const parts = scoredParts(input, now).reduce((n, p) => n + p.score, 0);
   const body = bodyLookScore(input.body);
   const dye = input.dye ? DYE_PARTS.filter((p) => input.dye?.[p] && dyeSpecialOf(input.dye[p])).length * DYE_SPECIAL_BONUS : 0;
-  return parts + body + dye;
+  return parts + body + dye + seasonSetBonus(input, now);
 }
 
 /** 랭킹 줄에 착용 파츠를 늘어놓는 부위 순서 (머리 → 목 → 등 → 손 → 오라 → 발 → 펫 → 이름 글자 → 이름표, 그 뒤에 프리미엄 외형) */

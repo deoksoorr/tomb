@@ -17,6 +17,7 @@ import type { BanTarget } from "./BanPanel";
 import BansPanel from "./BansPanel";
 import CodeLogPanel from "./CodeLogPanel";
 import DashboardPanel from "./DashboardPanel";
+import DevNotesPanel from "./DevNotesPanel";
 import DyePanel from "./DyePanel";
 import EconomyPanel from "./EconomyPanel";
 import ErrorsPanel from "./ErrorsPanel";
@@ -355,6 +356,7 @@ export default function AdminApp() {
           {panel === "megaphone" && <MegaphonePanel key={version} {...p} />}
 
           {panel === "notices" && <NoticesPanel key={version} {...p} />}
+          {panel === "devnotes" && <DevNotesPanel {...p} version={version} />}
           {panel === "inquiries" && (
             <InquiriesPanel
               key={version}

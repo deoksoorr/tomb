@@ -1,7 +1,7 @@
 import { SEA_DECKS, SEA_FURNITURE, SEA_GHOST_BERTH, SEA_MATS, SEA_SCOPES, SEA_SPOTS, SEA_FLAT_Y0 } from "@tomb/protocol";
 import { Grid, hash2, mix, vnoise, type Color } from "../sprites/pixel";
 import type { Bulb } from "../sprites/winterArt";
-import { pathEdgeDist, seaFurnitureColliders, seaGroundKind, seaStandable, seaStaticColliders, SEA_DECOR, SEA_INTERACTABLES, SEA_LAMPS, SEA_TREES, type Rect } from "./seaLayout";
+import { pathEdgeDist, seaFurnitureColliders, seaGroundKind, seaStandable, seaStaticColliders, SEA_BUYER, SEA_BUYER_STALL, SEA_DECOR, SEA_INTERACTABLES, SEA_LAMPS, SEA_TREES, type Rect } from "./seaLayout";
 import { SEA_ICE, SEA_SNOW, seaSnowLineY } from "./seaWinterGround";
 
 // 11/17 달물결 포구 겨울·크리스마스 그림 조각 (순수 — Phaser·캔버스 없이 RGBA 배열과 Grid로). SeaConceptDecor가 텍스처에 얹어요.
@@ -312,6 +312,10 @@ export function seaXmasSpots(): { snowmen: Pt[]; gifts: Pt[] } {
     ...SEA_TREES,
     ...SEA_LAMPS,
     ...SEA_INTERACTABLES,
+    // 11/20 해녀 할망 좌판 (할망·궤짝 판·파라솔 갓 — 선물 더미가 파라솔 뒤에 숨지 않게)
+    SEA_BUYER,
+    SEA_BUYER_STALL,
+    { x: SEA_BUYER_STALL.x, y: SEA_BUYER_STALL.y - 32 },
   ];
   const placed: Pt[] = [];
   const free = (x: number, y: number) => {

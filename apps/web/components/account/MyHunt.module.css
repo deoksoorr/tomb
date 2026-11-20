@@ -1,0 +1,209 @@
+/* 11/20 [내 정보] 사냥 칸 (components/account/MyHuntSection): 어두운 판 하나에 레벨·경험치 → 전투 능력 → 낀 장비 → 세트 효과 */
+.box {
+  container: my-hunt / inline-size;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+/* 사냥 기록이 없을 때 칸 아래 한 줄 + 작은 단추 */
+.first {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+}
+
+.go {
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+.subhead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.left {
+  color: var(--candle);
+  font-variant-numeric: tabular-nums;
+}
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 10px;
+}
+
+.level {
+  color: var(--bone);
+}
+
+.level strong {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.level .star {
+  color: var(--candle);
+  font-size: 14px;
+}
+
+.exp {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 능력치 STR~LUK: 전투 능력 칸과 같은 모양 (한 줄에 여섯, 폰은 셋) */
+.base {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.gearPart {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+/* 전투 능력: 칸 이름 위·값 아래 작은 칸 (한 줄에 다섯, 아주 좁은 폰은 셋) */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+
+.base div,
+.stats div {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+  background: var(--surface);
+}
+
+.base dt,
+.stats dt {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.base dd,
+.stats dd {
+  color: var(--bone);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+@container my-hunt (max-width: 440px) {
+  .base {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .base div,
+  .stats div {
+    padding: 4px 5px;
+  }
+
+  .base dd,
+  .stats dd {
+    font-size: 13px;
+  }
+}
+
+@container my-hunt (max-width: 310px) {
+  .stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* 기록·장비: 칸 이름 | 값 두 칸 */
+.records,
+.gear {
+  display: grid;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+
+.records div,
+.gear div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 22px;
+}
+
+.records dt,
+.gear dt {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.records dd {
+  color: var(--candle);
+  font-variant-numeric: tabular-nums;
+}
+
+.gear dd {
+  min-width: 0;
+  color: var(--tone, var(--text));
+  font-size: 12px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.gear dd[data-empty] {
+  color: var(--muted);
+}
+
+.plus {
+  color: var(--candle);
+  font-weight: 400;
+}
+
+/* 켜진 세트 효과: 세트 색 띠 + 효과 한 줄씩 */
+.sets {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 0 0;
+  border-top: 1px dashed var(--line);
+  list-style: none;
+}
+
+.sets li {
+  display: grid;
+  gap: 2px;
+  padding-left: 8px;
+  box-shadow: inset 2px 0 0 var(--set);
+}
+
+.sets b {
+  color: var(--set);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.sets span {
+  color: var(--text);
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 1.6;
+}

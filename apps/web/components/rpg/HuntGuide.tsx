@@ -40,13 +40,14 @@ import {
   TOWER_WAVE_GAP_SEC,
   FLOORS_PER_THEME,
   towerFitFloor,
+  towerFloorPointsText,
 } from "@/lib/rpg/tower";
 import { HUNT_POINT_T_STOP } from "@/lib/rpg/formulas";
 import { monsterIdleCanvas } from "@/game/rpg/monsterArt";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
 import { BUILDS, buildSteps } from "@/lib/rpg/builds";
 import { SYNERGY, SYNERGY_GUARD } from "@/lib/rpg/skillTree";
-import { ENH_DROP_FROM, exchangeNeed } from "@/lib/rpg/enhance";
+import { ampNeed, exchangeNeed } from "@/lib/rpg/enhance";
 import { enhMul, SG_ENH_MAX, SG_GRADE_MULT, SG_GRADE_NAMES, SHOP_ENH_MAX } from "@/lib/rpg/setGear";
 import { SG_GRADE_FLOORS } from "@/lib/rpg/setGearRoll";
 import { MAX_SLOW, MONSTER_STATUS, POTION_CURES, STATUS_DIFF, STATUS_IDS, STATUSES, statusFor, type StatusId } from "@/lib/rpg/status";
@@ -495,7 +496,7 @@ function pages(): Page[] {
               포인트는 절반만 받고 EXP도 조금 깎여요. 권장 레벨보다 낮으면 조심해요.
             </Item>
             <Item art={skillArt("em_spark")} title="포인트">
-              사냥 포인트는 하루 한도 없이 받아요. 다만 내 레벨이 사냥터가 열리는 레벨보다 10 넘게 높으면 그 사냥터에서는 포인트를 받지 않아요. ★{50 + HUNT_POINT_T_STOP}부터는 일반 사냥터 전부 포인트가 없고 랭킹과 레이스에도 들어가지 않아요. 포인트와 레이스는 야근 빌딩에서 이어 가요. 주운 장비와 물약을 판 값도 사냥 포인트예요. 상점에서 산 장비는 언제든 50%를 돌려받아요. {sec(MIN_RUN_MS)}도 안 된 판은 보상이 없어요.
+              사냥 포인트는 하루 한도 없이 받아요. 다만 내 레벨이 사냥터가 열리는 레벨보다 10 넘게 높으면 그 사냥터에서는 포인트를 받지 않아요. ★{50 + HUNT_POINT_T_STOP}부터는 어느 일반 사냥터에서도 포인트를 받지 않고, 랭킹과 레이스에도 들어가지 않아요. 포인트와 레이스는 야근 빌딩에서 이어 가요. 주운 장비와 물약을 판 값도 사냥 포인트예요. 주운 장비는 상점 값의 25%, 물약은 50%를 받아요. 상점에서 산 장비는 언제든 50%를 돌려받아요. {sec(MIN_RUN_MS)}도 안 된 판은 보상이 없어요.
             </Item>
           </ul>
           <table className={s.guideTable}>
@@ -575,7 +576,7 @@ function pages(): Page[] {
             <Item art={{ shape: "sg:003", main: 0, accent: 0 }} title="세트 장비와 강화">
               세트 장비는 야근 빌딩 상자에서만 나와요. 세트는 야근, 결재, 회의, 출장 네 가지이고, 세트마다 부위가 다섯 개예요. 높은 층일수록 사원급에서 임원급까지 좋은 직급이 나와요. 기본 능력치는 {SG_GRADE_NAMES[0]}을 1로 치면 {SG_GRADE_NAMES.slice(1).map((n, i) => `${n} ${SG_GRADE_MULT[i + 1]}배`).join(", ")}예요.
               같은 세트를 두 개나 네 개 끼면 세트 효과가 붙어요. 장비 탭에서 강화하면 기본 능력치가 올라요. +5면 {enhMul(5)}배, +10이면 {enhMul(10)}배, +{SG_ENH_MAX}면 {enhMul(SG_ENH_MAX)}배예요. 세트 장비는 +{SG_ENH_MAX}, 상점 장비는 +{SHOP_ENH_MAX}까지 올릴 수 있어요.
-              +{ENH_DROP_FROM}에서 더 올리다 실패하면 한 단계 내려가요. 보호 문서가 있으면 막을 수 있어요. 안 쓰는 세트 장비는 분해해서 재료로 바꿔요. 같은 직급 {exchangeNeed(1)}개(무기는 {exchangeNeed(0)}개)를 원하는 부위 하나로
+              실패해도 단계는 그대로이고, 같은 단계에서 여러 번 실패하면 다음 강화는 반드시 성공해요. 강화 증폭권을 쓰면 성공 확률이 두 배가 돼요. +4부터 쓸 수 있고 +{SG_ENH_MAX}에는 {ampNeed(SG_ENH_MAX)}장이 들어요. 안 쓰는 세트 장비는 분해해서 재료로 바꿔요. 같은 직급 {exchangeNeed(1)}개(무기는 {exchangeNeed(0)}개)를 원하는 부위 하나로
               바꿀 수도 있어요. 강화한 장비는 같은 부위의 더 높은 직급 세트 장비에 강화를 물려줄 수 있어요(승계). 직급 차이가 클수록 받는 단계는 줄고, 물려준 장비는 사라져요.
             </Item>
             <Item art={POTIONS[0]?.art} title="야근 빌딩 보상">
@@ -583,7 +584,7 @@ function pages(): Page[] {
               {floorTExp(TOWER_STEEP_FROM + 1)}이에요. 쓰러져도 깬 층만큼은 받아요.
               {TOWER_CHEST_FROM}층부터는 우두머리 층을 깨면 우두머리 상자가 열려요. 물약과 강화 재료는 늘 들어 있어요. 세트 장비는 {Math.round(TOWER_CHEST_GEAR_CHANCE * 100)}% 확률로 아주 드물게 나와요.
               {gradeBandText()} 꾸미기 이용권도 가끔 나와요.
-              깬 층마다 포인트도 조금 받아요. 초월 레벨마다 적정 층이 있어서(★{50 + 30}이면 {towerFitFloor(30)}층) 그보다 10층 넘게 낮은 층은 포인트 없이 초월 경험치와 상자만 받아요. 잡은 몬스터 수는 주간 사냥 레이스에 들어가요. 50층 우두머리를 잡으면 다음부터 51층에서, 100층을 깨면 101층에서 바로 시작할 수 있어요. 그 위로는{" "}
+              깬 층마다 포인트도 조금 받아요({towerFloorPointsText()}). 초월 레벨마다 적정 층이 있어서(★{50 + 30}이면 {towerFitFloor(30)}층) 그보다 10층 넘게 낮은 층은 포인트 없이 초월 경험치와 상자만 받아요. 잡은 몬스터 수는 주간 사냥 레이스에 들어가요. 50층 우두머리를 잡으면 다음부터 51층에서, 100층을 깨면 101층에서 바로 시작할 수 있어요. 그 위로는{" "}
               {TOWER_CHECKPOINT_EVERY}층마다(121층, 141층 …) 엘리베이터가 켜져요.
             </Item>
             <Item art={GEAR.find((g) => g.kind === "acc")?.art} title="칭호와 랭킹">

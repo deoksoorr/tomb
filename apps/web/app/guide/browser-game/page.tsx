@@ -5,8 +5,7 @@ import { DEFAULT_CHANNEL_CAPACITY, DEFAULT_MAX_CHANNELS } from "@tomb/protocol";
 const PATH = "/guide/browser-game";
 const H1 = "설치 없이 하는 브라우저 도트 멀티 게임";
 const TITLE = "설치 없이 하는 브라우저 도트 멀티 게임 — 가입 없는 무료 실시간 마을 | At one time...";
-const DESCRIPTION =
-  "설치도 회원가입도 없이 브라우저에서 바로 하는 무료 실시간 멀티 도트 게임, At one time...입니다. 채널마다 최대 40명과 함께 사냥터·미니게임, 낚시, 집 꾸미기, 묘비 세우기를 즐겨요. 키보드와 휴대폰 터치 모두 돼요.";
+const DESCRIPTION = `설치와 회원가입 없이 브라우저에서 바로 하는 무료 실시간 멀티 도트 게임이에요. 채널마다 최대 ${DEFAULT_CHANNEL_CAPACITY}명이 한 마을에서 사냥, 낚시, 집 꾸미기를 하고 묘비를 세워요. 휴대폰 터치로도 할 수 있어요.`;
 
 export const metadata = pageMetadata(PATH, TITLE, DESCRIPTION);
 

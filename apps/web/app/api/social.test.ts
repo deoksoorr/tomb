@@ -92,7 +92,7 @@ describe("10번 출석 달력", () => {
     expect(cal.days[11]).toEqual({ day: 12, state: "today", points: 0 });
     expect(cal.days[10].state).toBe("missed");
     expect(cal.days[12].state).toBe("future");
-    expect(cal.rewards).toEqual({ daily: "커피 1개", streak: "보호 문서 1장", streakEvery: 7, monthly: "결재 서류 20장" });
+    expect(cal.rewards).toEqual({ daily: "커피 1개", streak: "강화 증폭권 1장", streakEvery: 7, monthly: "결재 서류 20장" });
     expect(await errOf(claim.POST(call("/api/me/calendar/claim", { method: "POST", visitor: v })))).toBe("NOT_YET");
 
     // 머무르기 (실제 화면은 10분마다 /api/me/presence) — 개발용 시계로 50분을 앞당긴다

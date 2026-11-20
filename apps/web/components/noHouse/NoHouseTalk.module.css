@@ -1,0 +1,181 @@
+/* 11/20 집 없는 손님 거절: NPC 얼굴(게임 그림 정수 배율) + 말풍선. 가구 보따리상은 작은 확인창, 보리는 탭 위 한 줄 */
+
+.talk {
+  display: grid;
+  gap: 10px;
+}
+
+.scene {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.faceWrap {
+  flex: none;
+  display: block;
+  transform-origin: 50% 100%;
+}
+
+.face {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+.poke {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.poke:focus-visible {
+  outline: 2px solid var(--candle);
+  outline-offset: 2px;
+}
+
+/* 고개 절레절레: 좌우로 뒤집어 보며(왼쪽·오른쪽을 번갈아 본다) 살짝 흔든다 */
+.shake {
+  animation: shake 0.9s steps(1, end) 1;
+}
+
+@keyframes shake {
+  0% {
+    transform: translateX(0) scaleX(1);
+  }
+  12% {
+    transform: translateX(-3px) scaleX(-1);
+  }
+  25% {
+    transform: translateX(3px) scaleX(1);
+  }
+  37% {
+    transform: translateX(-3px) scaleX(-1);
+  }
+  50% {
+    transform: translateX(3px) scaleX(1);
+  }
+  62% {
+    transform: translateX(-2px) scaleX(-1);
+  }
+  75% {
+    transform: translateX(1px) scaleX(1);
+  }
+  100% {
+    transform: translateX(0) scaleX(1);
+  }
+}
+
+/* 말풍선 (꼬리는 왼쪽 얼굴 쪽) */
+.bubble {
+  position: relative;
+  flex: 1;
+  margin: 0;
+  padding: 8px 10px;
+  background: #fff1d8;
+  box-shadow:
+    0 -2px 0 0 #24180e,
+    0 2px 0 0 #24180e,
+    -2px 0 0 0 #24180e,
+    2px 0 0 0 #24180e;
+  color: #24180e;
+  font-family: var(--font-read);
+  font-size: 15px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+  animation: pop 0.18s ease-out 1;
+}
+
+.bubble::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -8px;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  background: #fff1d8;
+  box-shadow:
+    0 -2px 0 0 #24180e,
+    0 2px 0 0 #24180e,
+    -2px 0 0 0 #24180e;
+  clip-path: polygon(-4px -4px, 100% -4px, 100% calc(100% + 4px), -4px calc(100% + 4px));
+}
+
+@keyframes pop {
+  from {
+    transform: scale(0.92);
+    opacity: 0.4;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.guide {
+  margin: 0;
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.actions {
+  display: grid;
+  gap: 6px;
+}
+
+.actions > button {
+  width: 100%;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+}
+
+.small {
+  min-height: 34px;
+  padding: 2px 10px;
+  font-size: 12px;
+}
+
+/* 보리 탭 위 한 줄 (목록은 아래에 그대로 — 구경만) */
+.inline {
+  gap: 10px;
+  padding: 6px 8px;
+  background: rgba(255, 241, 216, 0.06);
+}
+
+.inline .bubble {
+  font-size: 13px;
+  padding: 6px 8px;
+}
+
+.inlineText {
+  flex: 1;
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  min-width: 0;
+}
+
+.walkLink {
+  min-height: 28px;
+  font-size: 11px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shake,
+  .bubble {
+    animation: none;
+  }
+}

@@ -1,10 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { skyLabel, WEATHER_LABELS } from "@/lib/ambience";
 import { useAmbience } from "@/lib/hooks/useAmbience";
 import type { DexEntry } from "@/lib/forage/types";
 import { DIFFS, type Difficulty } from "@/lib/rpg/catalog";
 import { CONSTELLATIONS, constellationById } from "@/lib/rpg/constellations";
+import { gameDay } from "@/lib/gameDay";
+import { METEOR_DAY_ROLLS, METEOR_ITEM_NAME, meteorProgress } from "@/lib/rpg/meteorDrop";
 import { readItem, writeItem } from "@/lib/storage";
 import { InfoCard, InfoGrid, TipList } from "../ui/InfoBlocks";
 import styles from "./TelescopeExtras.module.css";
@@ -123,5 +126,25 @@ export function StarsDexCard({ dex, starry }: { dex: Record<string, DexEntry> | 
       </p>
       {got.length > 0 && <p className={styles.consNames}>{got.map((c) => c.name).join(" · ")}</p>}
     </InfoCard>
+  );
+}
+
+/**
+ * 11/20 유성우 오라 천장 진행 (캐릭터 저장 mt — lib/rpg/meteorDrop). mt를 아직 모르면(창을 막 열었을 때) 그리지 않는다.
+ * 맑은 밤에 별자리를 하나 이상 완성한 판만 줄어든다 (하루 앞 15판까지)
+ */
+export function MeteorNote({ mt }: { mt: unknown }) {
+  // 오늘(게임 날짜)은 창을 연 때로 (하루 남은 판 표시만 — 넘어가도 서버가 다시 센다)
+  const [day] = useState(() => gameDay(Date.now()));
+  if (mt === undefined) return null;
+  const p = meteorProgress(mt, day);
+  if (p.got) return <p className={styles.meteor}>「{METEOR_ITEM_NAME}」를 가지고 있어요.</p>;
+  return (
+    <p className={styles.meteor}>
+      「{METEOR_ITEM_NAME}」까지 최대 <b>{p.left}</b>판
+      <small>
+        맑은 밤에 별자리를 하나 이상 완성한 판만 줄어요. 하루 {METEOR_DAY_ROLLS}판까지{p.todayLeft < METEOR_DAY_ROLLS ? ` (오늘 ${p.todayLeft}판 남음)` : ""}.
+      </small>
+    </p>
   );
 }

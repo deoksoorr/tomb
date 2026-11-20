@@ -160,7 +160,9 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 //      야근 빌딩 상자 규칙·초월 경험치 줄임, 가방 300, 왼쪽 위 음악·확성기 한 줄 — 모두 한 번 새로고침 (11/19)
 // 76 = 사냥 포인트 적정 레벨(★58부터 사냥터 포인트 없음·야근 빌딩 적정 층)과 경고 배너, 집 외관 겨울·크리스마스 파츠,
 //      긴급 의뢰 무작위 꾸미기·행운의 배달부·받은 의뢰 목록 정리 — 모두 한 번 새로고침 (11/19)
-export const CLIENT_VERSION = 76;
+// 77 = 11/20 겨울 업데이트: 계절·가구 보따리상(코디 13벌 주 1회·2주 판매, 시즌 가구), 분양사 보리·품종 펫, 총무팀 문대리(맵 지문 바뀜), 강화 증폭권·하락 없음·천장,
+//      다른 마을 채팅 이름 꾸미기(ns), 닉네임 바로 반영, 야근 빌딩 분위기 층·층 포인트, 범퍼카 미션 — 모두 한 번 새로고침 (11/20)
+export const CLIENT_VERSION = 77;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */
@@ -249,6 +251,16 @@ export const STAFF_BODIES = [{ id: "reaper", label: "저승사자", desc: "갓�
 export const QUEST_BODIES = [
   { id: "collector", label: "수집가 유령", tier: "legend", item: "q_body_collector", desc: "등불을 들고 표본 가방을 멘 채집 장인 유령. 수집 의뢰 전용이에요. 포인트 색은 가방 끈과 탐험 모자 띠예요." },
 ] as const;
+
+/**
+ * 11/20 소장한 수집 의뢰 외형: 교환소 기록(bodies)에 있거나, 그 해금 아이템(QUEST_BODIES.item)을 가방에 가졌으면 (선물·운영자 지급).
+ * 교환소 기록에 있는 다른 외형 id도 그대로 둔다 (프리미엄 외형 소장 기록과 같은 목록)
+ */
+export function ownedQuestBodies(bodies: readonly string[], inventory: Readonly<Record<string, number>> | null | undefined): string[] {
+  const out = [...bodies];
+  for (const b of QUEST_BODIES) if (!out.includes(b.id) && (inventory?.[b.item] ?? 0) > 0) out.push(b.id);
+  return out;
+}
 
 /** 아바타 몸 모양 전부 (검증·그리기용). 옛 클라이언트는 모르는 몸을 후드 유령으로 그린다 */
 export const AVATAR_BODIES = [...STARTER_BODIES, ...PREMIUM_BODIES, ...STAFF_BODIES, ...QUEST_BODIES] as const;

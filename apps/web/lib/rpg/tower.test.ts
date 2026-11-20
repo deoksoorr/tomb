@@ -13,7 +13,9 @@ import {
   floorTExp,
   isBossFloor,
   TOWER_CHESTS_PER_DAY,
-  TOWER_FLOOR_POINTS,
+  towerFloorPoints,
+  towerFloorPointsText,
+  towerFloorsPoints,
   towerFitFloor,
   towerPointFrom,
   towerRunPoints,
@@ -305,7 +307,7 @@ describe("결과 검증 (층마다)", () => {
       best: 6,
       floorMs: 270_000,
       kills: Object.values(r.kills).reduce((a, b) => a + (b ?? 0), 0),
-      points: 6 * TOWER_FLOOR_POINTS,
+      points: 6 * 8, // 11/20 1~50층은 층마다 8P
       // 11/16 의심 판이 아니면 몬스터 도감에 더할 처치 수
       mobs: r.kills,
     });
@@ -700,12 +702,32 @@ describe("11/19 초월 레벨마다 적정 층 포인트", () => {
   });
   it("시작 층부터 깬 층 중 적정 아래는 0, 나머지는 층마다 그대로", () => {
     // ★80: 50층부터 포인트 — 1층부터 60층을 깨면 1~49층은 0, 50~60층 11층만
-    expect(towerRunPoints(1, 60, 30)).toEqual({ points: 11 * TOWER_FLOOR_POINTS, free: 49 });
+    // (11/20 50층은 8P, 51~60층은 14P)
+    expect(towerRunPoints(1, 60, 30)).toEqual({ points: 8 + 10 * 14, free: 49 });
     // 51층에서 시작하면 전부 받는다
-    expect(towerRunPoints(51, 10, 30)).toEqual({ points: 10 * TOWER_FLOOR_POINTS, free: 0 });
+    expect(towerRunPoints(51, 10, 30)).toEqual({ points: 10 * 14, free: 0 });
     // 적정 아래에서 끝나면 0
     expect(towerRunPoints(1, 20, 30)).toEqual({ points: 0, free: 20 });
     // 아직 초월 전이면 모두 받는다
-    expect(towerRunPoints(1, 8, 0)).toEqual({ points: 8 * TOWER_FLOOR_POINTS, free: 0 });
+    expect(towerRunPoints(1, 8, 0)).toEqual({ points: 8 * 8, free: 0 });
+  });
+});
+
+describe("11/20 야근 빌딩 층 구간마다 포인트 (1~50층 8P · 51~100층 14P · 101층부터 23P)", () => {
+  it("층 구간 경계", () => {
+    expect([1, 50, 51, 100, 101, 180].map(towerFloorPoints)).toEqual([8, 8, 14, 14, 23, 23]);
+    expect(towerFloorPointsText()).toBe("1~50층 8P, 51~100층 14P, 101층부터 23P");
+  });
+  it("구간을 걸친 판은 층마다 더한다", () => {
+    expect(towerFloorsPoints(48, 6)).toBe(3 * 8 + 3 * 14);
+    expect(towerFloorsPoints(99, 4)).toBe(2 * 14 + 2 * 23);
+    expect(towerFloorsPoints(1, 0)).toBe(0);
+  });
+  it("적정 층 아래 0은 그대로, 나머지는 구간 값", () => {
+    // ★100: 90층부터 포인트 — 81~100층을 깨면 81~89층은 0, 90~100층 11층 × 14P
+    expect(towerRunPoints(81, 20, 50)).toEqual({ points: 11 * 14, free: 9 });
+    // 91~110층: 91~100층 14P, 101~110층 23P
+    expect(towerRunPoints(91, 20, 50)).toEqual({ points: 10 * 14 + 10 * 23, free: 0 });
+    expect(towerRunPoints(101, 4, 50)).toEqual({ points: 4 * 23, free: 0 });
   });
 });

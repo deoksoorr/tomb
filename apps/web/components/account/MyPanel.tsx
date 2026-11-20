@@ -3,6 +3,7 @@
 import { useEffect, useId, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { checkNewName, dexBadgeCats } from "@tomb/protocol";
+import { bridge } from "@/game/bridge";
 import { api, errorMessage } from "@/lib/api";
 import { CAT_LABEL, dexBadgeBits } from "@/lib/forage/catalog";
 import { meStore, useMe } from "@/lib/hooks/useMe";
@@ -18,6 +19,7 @@ import type { MyGraveEntry } from "./items";
 import { InquiryButton } from "../notice/InquiryDialog";
 import GoogleSection, { GoogleBadge, useGoogleStatus } from "./GoogleSection";
 import MyGraves from "./MyGraves";
+import MyHuntSection from "./MyHuntSection";
 import PerksTab from "./PerksTab";
 import styles from "./MyPanel.module.css";
 import MyHouseLine from "../housing/MyHouseLine";
@@ -43,6 +45,8 @@ type Props = {
   houseChannel: number;
   onGoToMyHouse: (house: PublicHouse) => void;
   onOpenHousing: () => void;
+  /** 11/20 사냥 칸 빈 상태의 [사냥터 입구로 가기]: 창을 닫고 사냥터 입구까지 걸어간다 (아래 [사냥]과 같다) */
+  onGoHunt?: () => void;
   /** 11/17 보고 있는 탭 ([내 정보] · [혜택]). 가방 [레이스 보상]·1위 알림의 [혜택 보기]가 [혜택]으로 연다 */
   tab: MyTab;
   onTab: (tab: MyTab) => void;
@@ -70,6 +74,7 @@ export default function MyPanel({
   houseChannel,
   onGoToMyHouse,
   onOpenHousing,
+  onGoHunt,
   tab,
   onTab,
   onClose,
@@ -168,6 +173,8 @@ export default function MyPanel({
               <NameSection me={me} googleLinked={!!googleStatus?.linked} />
 
               <DexBadgeLine />
+
+              <MyHuntSection accountId={me.accountId} onGoHunt={onGoHunt} />
 
               <section className={styles.section}>
                 <h3 className={styles.heading}>내 묘비</h3>
@@ -462,8 +469,10 @@ function NameSection({ me, googleLinked }: { me: Me; googleLinked: boolean }) {
       const res = await api.changeName(check.name);
       meStore.set(res.me);
       writeItem(LS.name, check.name);
+      // 11/20 머리 위 이름도 바로 (게임이 새 이름으로 다시 접속한다)
+      bridge.emit("me:renamed", { name: res.me.name ?? check.name });
       setOpen(false);
-      setMessage("닉네임을 바꿨어요. 다음에 들어올 때부터 머리 위 이름도 바뀌어요.");
+      setMessage("닉네임을 바꿨어요.");
     } catch (err) {
       setMessage(errorMessage(err));
     } finally {

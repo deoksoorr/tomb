@@ -3,6 +3,7 @@ import Link from "next/link";
 import { cx } from "../ui/cx";
 import { Logo } from "./Logo";
 import SiteHeader, { type SiteNav } from "./SiteHeader";
+import SideFriends from "./SideFriends";
 import styles from "./site.module.css";
 
 export type { SiteNav };
@@ -16,7 +17,10 @@ export default function SiteShell({ current, children }: { current: SiteNav; chi
     <div className={styles.root}>
       <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       <SiteHeader current={current} />
-      <main className={styles.main}>{children}</main>
+      <main className={styles.main}>
+        {children}
+        <SideFriends page={current} />
+      </main>
       <div className={styles.strip} aria-hidden="true">
         {/* eslint-disable-next-line @next/next/no-img-element -- 도트 그림은 원본 크기 그대로 */}
         <img className={cx(styles.g, styles.grave)} src="/devnotes/brand/grave.png" alt="" width={36} height={44} />
@@ -29,7 +33,7 @@ export default function SiteShell({ current, children }: { current: SiteNav; chi
             <div className={styles.brand}>
               <Logo height={16} />
             </div>
-            <p>게임을 처음 만들어 보는 한 사람의 비영리 개인 프로젝트예요.</p>
+            <p>게임을 처음 만들어 보는 사람이 혼자 꾸려 가는 비영리 프로젝트예요.</p>
             <p className={styles.copy}>ⓒ 2026 At one time...</p>
           </div>
           <div className={styles.ftLinks}>

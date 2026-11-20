@@ -212,6 +212,25 @@ export const SEA_PIER_POSTS: readonly Pt[] = (() => {
   return out;
 })();
 
+/**
+ * 11/20 「해녀 할망」 좌판 (물고기·채집물을 다 사는 바닷가 상인 — 판매·이름은 lib/forage/catalog NPCS haenyeo, 그리기·E는 world/forage/Foraging).
+ * 정류장 길이 산책로와 만나는 모퉁이 바로 위: 할망 발 = SEA_BUYER, 좌판(파라솔 아래 궤짝 판) 발 가운데 = SEA_BUYER_STALL (할망 왼쪽).
+ * 손님은 할망 바로 아래(산책로 끝)에 서서 E (Foraging: 발 + 10, 반지름 20)
+ */
+export const SEA_BUYER: Pt = { x: 1556, y: 300 };
+export const SEA_BUYER_STALL: Pt = { x: SEA_BUYER.x - 30, y: SEA_BUYER.y + 2 };
+/** 좌판 파라솔에 매단 작은 등 (밤 불빛 — 좌판 그림 STALL_LAMP 자리) */
+export const SEA_BUYER_LAMP: Pt = { x: SEA_BUYER_STALL.x + 15, y: SEA_BUYER_STALL.y - 27 };
+/** 좌판·할망 자리 (나무·들꽃이 생기지 않아요 — 원래 소나무 한 그루·들꽃 하나가 있던 자리) */
+const SEA_BUYER_CLEAR: Rect = { x: SEA_BUYER_STALL.x - 22, y: SEA_BUYER.y - 30, w: SEA_BUYER.x + 14 - (SEA_BUYER_STALL.x - 22), h: 36 };
+/** 좌판(궤짝 판·스티로폼 상자·여벌 테왁)과 할망 발밑 — 막혀요 (마을 상인 노점처럼 그림 바닥 줄까지) */
+export function seaBuyerColliders(): Rect[] {
+  return [
+    { x: SEA_BUYER_STALL.x - 21, y: SEA_BUYER_STALL.y - 7, w: 42, h: 6 },
+    { x: SEA_BUYER.x - 6, y: SEA_BUYER.y - 5, w: 12, h: 5 },
+  ];
+}
+
 export function treeCollider(t: SeaTree): Rect {
   return t.kind === "bush" ? { x: t.x - 7, y: t.y - 4, w: 14, h: 4 } : { x: t.x - 3, y: t.y - 4, w: 6, h: 4 };
 }
@@ -223,6 +242,8 @@ function keepClear(x: number, y: number, pad: number): boolean {
   if (inRect({ x: SEA_REALTY.x - SEA_REALTY_W / 2, y: SEA_REALTY.y - SEA_REALTY_H, w: SEA_REALTY_W, h: SEA_REALTY_H + 20 }, x, y, pad)) return true;
   for (const l of SEA_LOTS) if (inRect(l, x, y, pad + 6)) return true;
   if (Math.hypot(x - SEA_NET_RACK.x, y - SEA_NET_RACK.y) < 34 + pad) return true;
+  // 11/20 해녀 할망 좌판 자리 (둘레 나무·덤불은 그대로 두려고 pad 없이)
+  if (inRect(SEA_BUYER_CLEAR, x, y)) return true;
   return false;
 }
 
@@ -360,6 +381,7 @@ export function seaStaticColliders(): Rect[] {
     ...SEA_LAMPS.map((p) => ({ x: p.x - 2, y: p.y - 3, w: 4, h: 3 })),
     ...SEA_CRATES.map((p) => ({ x: p.x - 9, y: p.y - 5, w: 18, h: 5 })),
     { x: SEA_NET_RACK.x - 24, y: SEA_NET_RACK.y - 4, w: 48, h: 4 },
+    ...seaBuyerColliders(),
   ];
 }
 
@@ -458,6 +480,8 @@ export const SEA_LIGHTS: readonly SeaLight[] = [
   { x: SEA_KIOSK.x, y: SEA_KIOSK.y - 24, scale: 0.7, tint: 0xffe6b0, base: 0.85 },
   // 산책로 가로등
   ...SEA_LAMPS.map((p) => ({ x: p.x, y: p.y - 30, scale: 0.8, tint: 0xffe2a8, base: 0.7 })),
+  // 11/20 해녀 할망 좌판 파라솔 등 (양옆 가로등 사이 모퉁이)
+  { x: SEA_BUYER_LAMP.x, y: SEA_BUYER_LAMP.y, scale: 0.7, tint: 0xffdc98, base: 0.85 },
   // 등대 등불
   { x: SEA_LIGHTHOUSE_LAMP.x, y: SEA_LIGHTHOUSE_LAMP.y, scale: 1.4, tint: 0xfff4c8, base: 1 },
 ];

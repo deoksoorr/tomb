@@ -228,7 +228,8 @@ function wallsAt(g: Grid, style: CottageStyleId, x0: number, x1: number, top: nu
   g.hline(x0, x1 - 1, top + 1, mix(g.get(x0 + 2, top + 3) >>> 8, 0x000000, 0.12));
 }
 
-type Built = { grid: Grid; baseY: number; door: { x: number; y: number }; lights: { x: number; y: number }[] };
+/** top = 가장 위에 칠한 줄 (그림 좌표 — 굴뚝·망루 포함, 마을 집 roofTop처럼 문패를 그 위에 세워요) */
+type Built = { grid: Grid; baseY: number; door: { x: number; y: number }; lights: { x: number; y: number }[]; top: number };
 
 const cache = new Map<string, Built>();
 
@@ -407,13 +408,19 @@ export function cottageGrid(o: CottageArtOpts): Built {
     }
   }
 
-  const out: Built = { grid: g, baseY: base, door: { x: doorX, y: base }, lights };
+  let top = 0;
+  const rowEmpty = (y: number) => {
+    for (let x = 0; x < W; x++) if (g.filled(x, y)) return false;
+    return true;
+  };
+  while (top < H - 1 && rowEmpty(top)) top++;
+  const out: Built = { grid: g, baseY: base, door: { x: doorX, y: base }, lights, top };
   if (cache.size > 64) cache.clear();
   cache.set(key, out);
   return out;
 }
 
-/** 오두막 그림 캔버스 (맵 텍스처용). baseY = 앞벽 밑 (depth 기준), door = 문 가운데 아래 */
+/** 오두막 그림 캔버스 (맵 텍스처용). baseY = 앞벽 밑 (depth 기준), door = 문 가운데 아래, top = 가장 위 칠한 줄 (문패 자리) */
 export function cottageCanvas(o: CottageArtOpts): {
   canvas: HTMLCanvasElement;
   w: number;
@@ -421,11 +428,12 @@ export function cottageCanvas(o: CottageArtOpts): {
   baseY: number;
   door: { x: number; y: number };
   lights: { x: number; y: number }[];
+  top: number;
 } {
   const b = cottageGrid(o);
   // 11/16 r14 바닷가 사물 결 (빛은 왼쪽 위 · 그늘 쪽 1px 테 · 나뭇결 — seaArt detailPass)
   detailPass(b.grid, { wood: true, salt: 5 });
-  return { canvas: b.grid.toCanvas(), w: b.grid.w, h: b.grid.h, baseY: b.baseY, door: b.door, lights: b.lights };
+  return { canvas: b.grid.toCanvas(), w: b.grid.w, h: b.grid.h, baseY: b.baseY, door: b.door, lights: b.lights, top: b.top };
 }
 
 /** 부동산 창 미리보기: 모래 마당 위 집 하나 (dataURL, scale배 픽셀) */

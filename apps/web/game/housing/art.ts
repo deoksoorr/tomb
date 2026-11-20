@@ -6,6 +6,9 @@ import { currentMapConcept } from "@/lib/mapConceptClient";
 import { FACADE_H, FACADE_W, facadeGrid } from "./exterior";
 import { winterFacadeGrid } from "./winterLots";
 import { isSeaArt, SEA_DRAW, SEA_EDGE, SEA_EDGE_A, SEA_FLOORS, SEA_PAPERS, SEA_SPIN, SEA_UP, SEA_WALL_CAP } from "./seaFurnitureArt";
+import { isSeasonArt, SEASON_DRAW, SEASON_EDGE, SEASON_EDGE_A, SEASON_NO_EDGE, SEASON_SPIN, SEASON_UP } from "./seasonFurnitureArt";
+import { BREED_FURN_DRAW, BREED_FURN_SPIN, BREED_FURN_UP_MAP, ghostCatBack, ghostCatSide, sleepyDogBack, sleepyDogSide } from "./breedFurnitureArt";
+import { isOfficeArt, OFFICE_AFTER_EDGE, OFFICE_DRAW, OFFICE_EDGE, OFFICE_EDGE_A, OFFICE_SPIN, OFFICE_UP } from "./officeFurnitureArt";
 
 // 하우징 물건·바닥·담장 픽셀아트 (캔버스만 쓴다: 게임 텍스처와 UI 아이콘이 같은 그림).
 //  - 물건 그림 크기 = (w×16) × (h×16 + up). 아래쪽 h×16이 차지 칸이고, up만큼 위로 솟는다(책장·나무 등).
@@ -55,6 +58,12 @@ const UP: Record<string, number> = {
   ghost_lamp: 18, // 11/17 유령선 한정 해골 등불 (기둥 위 매단 해골)
   // 11/16 바닷가 세트 (seaFurnitureArt)
   ...SEA_UP,
+  // 11/19 시즌 가구 (seasonFurnitureArt)
+  ...SEASON_UP,
+  // 11/19 멍냥 분양소 품종 펫 가구 (breedFurnitureArt — 앉은 귀가 칸 위로 조금)
+  ...BREED_FURN_UP_MAP,
+  // 11/20 총무팀 문대리 사무실 가구 (officeFurnitureArt)
+  ...OFFICE_UP,
 };
 
 export const artUp = (id: string) => UP[id] ?? 0;
@@ -876,6 +885,12 @@ const DRAW: Record<string, Draw> = {
   },
   // 11/16 바닷가 세트 (seaFurnitureArt)
   ...SEA_DRAW,
+  // 11/19 시즌 가구 (seasonFurnitureArt)
+  ...SEASON_DRAW,
+  // 11/19 멍냥 분양소 품종 펫 가구 (breedFurnitureArt)
+  ...BREED_FURN_DRAW,
+  // 11/20 총무팀 문대리 사무실 가구 (officeFurnitureArt)
+  ...OFFICE_DRAW,
 };
 
 // ── 잠자는 강아지 (1×1): 체크 담요 방석 위에 동그랗게 말려 자는 누렁이 (마을 강아지 game/world/life/sprites.ts의 누렁이 색) ──
@@ -1219,6 +1234,14 @@ const SPIN_ART: Record<string, SpinArt> = {
   },
   // 11/16 바닷가 세트 (seaFurnitureArt)
   ...SEA_SPIN,
+  // 11/19 시즌 가구 (seasonFurnitureArt) — 니트 러그(바닥 물건, 90°씩 돌림) 빼고 모두
+  ...SEASON_SPIN,
+  // 11/19 멍냥 분양소 품종 펫 가구 (앞·옆·뒤 — 변형의 d1·d2로 고른다) · 잠자는 강아지·잠든 유령 고양이도 네 방향으로 (예전 r 0~3은 앞모습 그대로)
+  ...BREED_FURN_SPIN,
+  sleepy_dog: { side: sleepyDogSide, back: sleepyDogBack },
+  ghost_cat: { side: ghostCatSide, back: ghostCatBack },
+  // 11/20 총무팀 문대리 사무실 가구 15종 (앞·옆·뒤)
+  ...OFFICE_SPIN,
 };
 
 /** 4방향 가구 그림의 방향 (변형 이름의 d1~d3. 없으면 0 = 앞) */
@@ -1235,6 +1258,8 @@ export const animFrames = (id: string) => (id === "pond" ? POND_FRAMES : 1);
 export const noFootShadow = (id: string) => id === "pond";
 /** 밤에 다른 그림을 쓰는 물건 (연못: 달이 비친다) */
 export const hasNightArt = (id: string) => id === "pond";
+/** 11/20 밤 그림 조각(n)을 받는 물건: 연못 + 이파리 햇빛가리개 (낮에만 바닥에 잎 그림자 — 밤 변형 n이면 안 그린다) */
+export const usesNightVariant = (id: string) => hasNightArt(id) || id === "leaf_shade";
 
 /**
  * 그림 변형 이름 잇기: 기본 변형(불 켜짐 등) + 세로(v)·밤(n)·장면(f1…). 빈 조각은 뺀다.
@@ -1246,7 +1271,7 @@ export function itemVariant(id: string, base: string, opts: { r?: number; night?
   // 4방향 가구: 앞(0)이 아니면 방향 d1~d3 (오른쪽을 보는 d3은 옆모습 d1을 뒤집어 쓴다)
   const sd = furnitureById(id)?.spin ? spinDir(opts.r ?? 0) : 0;
   if (sd) parts.push(`d${sd === 3 ? 1 : sd}`);
-  if (hasNightArt(id) && opts.night) parts.push("n");
+  if (usesNightVariant(id) && opts.night) parts.push("n");
   const n = animFrames(id);
   if (n > 1 && opts.frame && opts.frame % n) parts.push(`f${opts.frame % n}`);
   return parts.filter(Boolean).join("-");
@@ -1268,7 +1293,15 @@ export function furnitureGrid(id: string, variant = ""): Grid | null {
   (spin ? (sd === 2 ? spin.back : spin.side) : draw)(g, W, H, variant);
   // 11/16 바닷가 세트는 포구 그림처럼 연한 갈색 테
   if (isSeaArt(id)) g.outline(SEA_EDGE, false, SEA_EDGE_A);
-  else if (id !== "rug" && id !== "flowerbed" && id !== "stone_path") g.outline(OUT, false, 170);
+  // 11/19 시즌 가구는 따뜻한 갈색 테 (러그는 테 없이)
+  else if (isSeasonArt(id)) {
+    if (!SEASON_NO_EDGE.has(id)) g.outline(SEASON_EDGE, false, SEASON_EDGE_A);
+  }
+  // 11/20 사무실 가구는 차가운 먹색 테, 테를 두른 다음 반투명 그림(햇빛가리개 잎 그림자)을 얹는다
+  else if (isOfficeArt(id)) {
+    g.outline(OFFICE_EDGE, false, OFFICE_EDGE_A);
+    OFFICE_AFTER_EDGE[id]?.(g, W, H, variant);
+  } else if (id !== "rug" && id !== "flowerbed" && id !== "stone_path") g.outline(OUT, false, 170);
   return g;
 }
 
