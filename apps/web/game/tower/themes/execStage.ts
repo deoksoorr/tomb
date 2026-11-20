@@ -1481,9 +1481,11 @@ export class ExecStage implements TowerThemeRuntime {
       const lo = hor ? 30 : FLOOR_Y0 + 20;
       const hi = hor ? AW - 30 : AH - SIDE - 20;
       const near = hor ? P.x : P.y;
-      // 틈은 내 자리에서 조금 떨어진 곳 (움직여야 산다)
-      let gap = lo + this.rnd() * (hi - lo);
-      if (Math.abs(gap - near) < 50) gap = near + (gap < near ? -1 : 1) * (60 + this.rnd() * 40);
+      // 틈은 내 자리에서 조금 떨어진 곳 (움직여야 산다). 11/20 「초록 틈이 너무 멀다」: 방 아무 데나 → 내 자리에서 45~100px
+      const side = this.rnd() < 0.5 ? -1 : 1;
+      const off = 45 + this.rnd() * 55;
+      let gap = near + side * off;
+      if (gap < lo || gap > hi) gap = near - side * off;
       gap = Phaser.Math.Clamp(gap, lo, hi);
       this.beam = { hor, t0: now + 1700, t1: now + 1700 + 2600, gap, hit: false, src: m };
       this.snd("beam");
