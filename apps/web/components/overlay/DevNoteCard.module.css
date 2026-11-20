@@ -2,7 +2,8 @@
    왼쪽 위 쌓기 규칙: 긴급 의뢰 막대(--urgent-h)·고정 공지 칩(--pin-h) 밑에 서고, 떠 있는 동안 높이를 --note-h로 알려 그 아래 칩(첫 걸음·접속 보너스 등)이 내려간다 */
 .card {
   position: fixed;
-  top: calc(var(--safe-top) + var(--top-h) + var(--top-gap) + var(--urgent-h, 0px) + var(--pin-h, 0px));
+  /* 11/20 데스크톱은 위 줄 아래로 자라는 고정 공지·확성기 기록(--feed-h, MegaphoneFeed) 밑으로 */
+  top: calc(var(--safe-top) + var(--top-h) + var(--top-gap) + var(--urgent-h, 0px) + var(--pin-h, 0px) + var(--feed-h, 0px));
   left: var(--safe-left);
   z-index: 30;
   display: flex;

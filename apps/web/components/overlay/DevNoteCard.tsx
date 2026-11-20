@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { openDevNotes } from "@/lib/devNotes/open";
 import { latestDevNote } from "@/lib/devNotes/titles";
+import { useMe } from "@/lib/hooks/useMe";
 import { useNotices } from "@/lib/hooks/useNotices";
 import { readItem, UI_KEYS, writeItem } from "@/lib/storage";
 import styles from "./DevNoteCard.module.css";
@@ -11,28 +12,30 @@ import styles from "./DevNoteCard.module.css";
 // 누르거나 ×로 닫을 때까지 떠 있다 (11/20 저절로 사라지지 않게). 누르면 그 글을 새 탭으로 (본 것으로), 닫은 글로는 다시 뜨지 않는다 (빨간 점은 그대로).
 // 11/20 사용자 「모두에게 다 보이게, ×를 누르면 다시 안 보이게」: 새내기·이미 읽은 사람 가릴 것 없이 그 글을 닫기 전까지 띄운다.
 
-const CARD_KEY = UI_KEYS.devNoteCard;
+/** 11/20 닫은 글은 계정마다 기억한다 (같은 브라우저에서 새 계정을 만들면 그 계정에는 다시 뜬다) */
+const cardKey = (accountId: string) => `${UI_KEYS.devNoteCard}:${accountId}`;
 /** 들어오자마자 다른 안내와 겹치지 않게 조금 뒤에 */
 const DELAY_MS = 2_500;
 
 export default function DevNoteCard({ ready }: { ready: boolean }) {
   const { notices } = useNotices();
+  const accountId = useMe().me?.accountId ?? null;
   const latest = notices ? latestDevNote(notices) : null;
   const [shown, setShown] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
-  const eligible = ready && latest !== null;
+  const eligible = ready && latest !== null && accountId !== null;
   const latestId = latest?.id ?? null;
 
   useEffect(() => {
-    if (!eligible || !latestId || readItem(CARD_KEY) === latestId) return;
+    if (!eligible || !latestId || !accountId || readItem(cardKey(accountId)) === latestId) return;
     const t = setTimeout(() => setShown(latestId), DELAY_MS);
     return () => clearTimeout(t);
-  }, [eligible, latestId]);
+  }, [eligible, latestId, accountId]);
 
   /** 닫았다 (누름·×): 이 글로는 다시 띄우지 않는다 */
   const dismiss = () => {
-    if (shown) writeItem(CARD_KEY, shown);
+    if (shown && accountId) writeItem(cardKey(accountId), shown);
     setShown(null);
   };
 

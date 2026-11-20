@@ -1206,7 +1206,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {ready && <TitleNotice />}
       {/* 11/18 새 이웃 꾸러미·오늘 미션·첫 걸음 창 + 진행 듣기 */}
       {ready && <RetainLayer onOpenBag={() => setPanel("bag")} />}
-      <DevNoteCard ready={ready} />
+      {/* 11/20 사용자 「화면 전환이나 시점 변경할 때는 안 떠야」: 집·사냥터·미니게임·상점, 버스, 하늘·바다 보기·불멍, 시점 연출, 촬영 중엔 숨긴다 (닫지 않은 카드는 돌아오면 다시 보인다) */}
+      {!(away || inShop || riding || campfire || viewing || photo) && <DevNoteCard ready={ready} />}
       {panel === "calendar" && <CalendarDialog onClose={closePanel} />}
       {panel === "gifts" && <GiftsDialog onClose={closePanel} onOpenCalendar={() => setPanel("calendar")} />}
       {panel === "friends" && <FriendsDialog onClose={closePanel} />}

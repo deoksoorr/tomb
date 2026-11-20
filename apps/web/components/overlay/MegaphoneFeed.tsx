@@ -30,6 +30,8 @@ const RELOAD_MS = 10 * 60_000;
 export default function MegaphoneFeed({ channel, floating = false, lead }: { channel: number; floating?: boolean; lead?: ReactNode }) {
   const { entries, flash, flashUntil, collapsed, pins } = useMegaphone();
   const logRef = useRef<HTMLOListElement>(null);
+  const feedRef = useRef<HTMLElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   const iAmStaff = useBridgeValue("me:staff")?.on === true;
   // 지울 공지 (11/19 운영자 쓰기 창은 위쪽 줄의 MegaPinButton이 연다)
   const [removing, setRemoving] = useState<MegaPin | null>(null);
@@ -50,6 +52,26 @@ export default function MegaphoneFeed({ channel, floating = false, lead }: { cha
     const el = logRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [entries, collapsed]);
+
+  // 11/20 데스크톱: 위 줄 아래로 자라는 고정 공지·기록 높이를 --feed-h(문서 루트)로 알린다 → 왼쪽 위 새 개발자 노트 카드가 그 밑에 선다 (공지와 겹쳤다)
+  useEffect(() => {
+    const feed = feedRef.current;
+    const bar = barRef.current;
+    const root = document.documentElement;
+    if (floating || !feed || !bar) return;
+    const put = () => {
+      const below = Math.ceil(feed.getBoundingClientRect().bottom - bar.getBoundingClientRect().bottom);
+      if (below > 0) root.style.setProperty("--feed-h", `${below + 6}px`);
+      else root.style.removeProperty("--feed-h");
+    };
+    put();
+    const ro = new ResizeObserver(put);
+    ro.observe(feed);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty("--feed-h");
+    };
+  }, [floating]);
 
   // 기록을 접어 두면 첫 공지 한 줄만 (펼쳐 보면 모두)
   // 11/18 데스크톱 고정 공지는 늘 모두 펼쳐 둔다 (사용자 — 접기 없음). 터치는 칩(아래 floating)
@@ -81,8 +103,8 @@ export default function MegaphoneFeed({ channel, floating = false, lead }: { cha
   };
 
   return (
-    <section className={cx(styles.feed, lead != null && styles.joined)} aria-label="확성기">
-      <div className={styles.bar}>
+    <section ref={feedRef} className={cx(styles.feed, lead != null && styles.joined)} aria-label="확성기">
+      <div ref={barRef} className={styles.bar}>
         {lead}
         <button type="button" className={cx(ui.button, styles.toggle)} onClick={toggle} aria-expanded={open}>
           <PixelIcon name="megaphone" />
