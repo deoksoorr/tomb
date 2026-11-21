@@ -84,7 +84,6 @@ import SkyHud from "@/components/sky/SkyHud";
 import SeaViewHud from "@/components/sea/SeaViewHud";
 import GhostLayer, { GhostStaffButton } from "@/components/sea/GhostLayer";
 import SeasonShopDialog from "@/components/seasonShop/SeasonShopDialog";
-import BungeoCartDialog from "../bungeo/BungeoCartDialog";
 import MungnyangDialog from "@/components/mungnyang/MungnyangDialog";
 import OfficeShopDialog from "@/components/office/OfficeShopDialog";
 import OddsLayer from "@/components/odds/OddsLayer";
@@ -251,9 +250,7 @@ type Panel =
   /** 11/20 야근 빌딩 오른쪽 「총무팀 문대리」 (사무실 가구) */
   | "office"
   /** 11/19 어디서든 보는 의뢰판 (납품은 마을 의뢰 게시판에서) */
-  | "quests"
-  /** 11/22 골목 붕어빵 수레 (밤에 가끔 — components/bungeo) */
-  | "bungeo";
+  | "quests";
 
 /**
  * 11/16 창 단축키 (데스크톱): 마을·사냥·미니게임·집 어디에서도 쓰지 않는 글자만 골랐다 (B·G·L·N·O·P·U).
@@ -1200,7 +1197,6 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
         <SeasonShopDialog kind={panel === "seasonCos" ? "cos" : "furn"} onClose={closePanel} avatar={{ color: options.color, body: options.body }} />
       )}
       {panel === "mungnyang" && <MungnyangDialog onClose={closePanel} />}
-      {panel === "bungeo" && <BungeoCartDialog onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
       {panel === "office" && <OfficeShopDialog onClose={closePanel} />}
       {panel === "telescope" && <Telescope onClose={closePanel} />}
       {panel === "haunt" && <HauntDialog onClose={closePanel} />}

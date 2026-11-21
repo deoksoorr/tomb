@@ -54,7 +54,7 @@ const manyText = (first: string, count: number) =>
 
 /** 아이템 묶음: 캐릭터 꾸미기는 부위별, 나머지는 종류별 (실제 카탈로그에 있는 것만, 운영자 전용 꾸미기는 뺀다).
  *  12월 이벤트 한정(크리스마스 선물상자·세트)은 맨 앞 「12월 이벤트」 묶음에 따로 (선물상자가 맨 앞) */
-const PICKABLE = ITEMS.filter((i) => !i.staff && !i.stargaze && !i.alley).sort((a, b) => Number(b.id === XMAS_BOX_ID) - Number(a.id === XMAS_BOX_ID));
+const PICKABLE = ITEMS.filter((i) => !i.staff && !i.stargaze).sort((a, b) => Number(b.id === XMAS_BOX_ID) - Number(a.id === XMAS_BOX_ID));
 const groupOf = (i: ItemDef) =>
   i.event ? "event" : i.kind === "cosmetic" && i.slot ? `cosmetic:${i.slot}` : i.kind;
 const GROUPS: { key: string; label: string }[] = [

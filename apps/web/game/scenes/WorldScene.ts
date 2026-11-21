@@ -77,7 +77,6 @@ import { Foraging } from "../world/forage/Foraging";
 import { Riding } from "../world/zoo/Riding";
 import { ZOO_ARCH_AT, ZooView } from "../world/zoo/ZooView";
 import { SeasonStallView } from "../world/SeasonStallView";
-import { BungeoCartView } from "../world/BungeoCartView";
 import { MungnyangView } from "../world/MungnyangView";
 import { OfficeStallView } from "../world/OfficeStallView";
 import { Expressions } from "../world/Expressions";
@@ -162,8 +161,6 @@ export class WorldScene extends Phaser.Scene {
   private zoo!: ZooView;
   /** 11/19 광장 계절 보따리상: 노점·보따리상·이름표·밤 불빛 (world/SeasonStallView) */
   private season!: SeasonStallView;
-  /** 11/22 골목 붕어빵 수레 (밤에 가끔 — world/BungeoCartView) */
-  private bungeo!: BungeoCartView;
   /** 11/19 동물원 정문 왼쪽 「분양사 보리」: 분양사·발치 펫·방석·간식 상자·이름표·밤 등불 (world/MungnyangView) */
   private mungnyang!: MungnyangView;
   /** 11/20 야근 빌딩 오른쪽 「총무팀 문대리」: 사무실 가구 카트·문대리·이름표·밤 불빛 (world/OfficeStallView) */
@@ -463,7 +460,6 @@ export class WorldScene extends Phaser.Scene {
       seed: () => this.net.channel ?? (typeof opts.channel === "number" ? opts.channel : 1),
     });
     this.season = new SeasonStallView({ scene: this, atlas: this.atlas, reduced: this.reduced, colliders: this.map.colliders });
-    this.bungeo = new BungeoCartView({ scene: this, reduced: this.reduced, colliders: this.map.colliders, clock: () => this.net?.serverNow() ?? Date.now(), setItems: (items) => this.map.setCartItems(items) });
     this.mungnyang = new MungnyangView({ scene: this, atlas: this.atlas, reduced: this.reduced, colliders: this.map.colliders });
     this.office = new OfficeStallView({ scene: this, atlas: this.atlas, reduced: this.reduced, colliders: this.map.colliders });
     this.riding = new Riding({ player: () => this.player, net: () => this.net, remotes: () => this.remotes, toast: (m) => this.toast(m) });
@@ -2155,7 +2151,6 @@ export class WorldScene extends Phaser.Scene {
     this.zoo.scaleLabels(s);
     this.season.update(now);
     this.season.scaleLabels(s);
-    this.bungeo.update(now);
     this.mungnyang.update(now);
     this.mungnyang.scaleLabels(s);
     this.office.update(now);
@@ -2235,7 +2230,6 @@ export class WorldScene extends Phaser.Scene {
       this.forage.addLights(lit);
       this.sky.addLights(lit);
       this.season.addLights(lit);
-      this.bungeo.addLights(lit);
       this.mungnyang.addLights(lit);
       this.office.addLights(lit);
       this.lighthouse.addLights(lit); // 11/20 등대 빛 웅덩이

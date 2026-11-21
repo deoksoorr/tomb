@@ -186,9 +186,6 @@ export const TITLE_PERK_GROUP: Readonly<Record<TitleId, PerkGroup>> = {
   t_ssResol: "none",
   t_ssSmelt: "none",
   t_ssFrost: "none",
-  // 11/22 골목 붕어빵 수레 두 벌 덤 칭호: 능력 없음
-  t_ssCampus: "none",
-  t_ssDate: "none",
 };
 
 /** 칭호 능력 한 벌 (갈래가 아닌 칸은 0). 서버(보상·확률)와 화면(속도·표시)이 같이 쓴다 */
@@ -325,9 +322,6 @@ export type TitleMetric =
   | "ssResol"
   | "ssSmelt"
   | "ssFrost"
-  // 11/22 골목 붕어빵 수레 두 벌
-  | "ssCampus"
-  | "ssDate"
   | `dex_${DexCat}`;
 
 export type TitleDef = {
@@ -460,9 +454,6 @@ const STEP_ROWS: readonly StepRow[] = [
     ["t_ssResol", "사흘째 회원님", "bronze", "「작심삼일」 다섯 점을 함께 입으면", "ssResol", 1, "look"],
     ["t_ssSmelt", "얼음 위 강태공", "bronze", "「빙어 축제」 다섯 점을 함께 입으면", "ssSmelt", 1, "look"],
     ["t_ssFrost", "서리꽃 유령", "bronze", "「서리 내린 묘역」 다섯 점을 함께 입으면", "ssFrost", 1, "look"],
-    // 11/22 골목 붕어빵 수레 두 벌 (어디서 파는지는 안내하지 않는다 — 이스터에그)
-    ["t_ssCampus", "얼죽아", "bronze", "「캠퍼스 후드핏」 다섯 점을 함께 입으면", "ssCampus", 1, "look"],
-    ["t_ssDate", "겨울 데이트 장인", "bronze", "「겨울 데이트룩」 다섯 점을 함께 입으면", "ssDate", 1, "look"],
 ];
 const STEP_OF = new Map(STEP_ROWS.map((r) => [r[0], r]));
 

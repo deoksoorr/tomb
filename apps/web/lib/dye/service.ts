@@ -1,5 +1,5 @@
 import { customAlphabet, nanoid } from "nanoid";
-import { alleyBody, bodyLabel, bodyUnlockPrice, ownedQuestBodies, QUEST_BODIES, DYE_SPECIALS, isFixedDyeId, isStaffBody, itemById, PERMANENT_UNTIL, permanentPrice, type CosmeticSlot, type DyePart, type DyeSpecial } from "@tomb/protocol";
+import { bodyLabel, bodyUnlockPrice, ownedQuestBodies, QUEST_BODIES, DYE_SPECIALS, isFixedDyeId, isStaffBody, itemById, PERMANENT_UNTIL, permanentPrice, type CosmeticSlot, type DyePart, type DyeSpecial } from "@tomb/protocol";
 import { env } from "../env";
 import { sendGift } from "../gifts";
 import { HttpError } from "../http";
@@ -24,8 +24,8 @@ import { titleDiscount } from "../titlesServer";
 const style = (): StyleStore => getStyleStore(getAccounts());
 const view = (s: DyeSession, now: number): DyeSessionView => ({ ...s, serverNow: now });
 
-/** 바뀐 내 정보 + 착용 증서 (염색·몸 모양 포함) — 11/22 붕어빵 수레(lib/bungeo/service)도 외형을 사면 이것으로 돌려준다 */
-export async function changed(accountId: string, now: number, extra: Partial<StyleChangeResponse> = {}): Promise<StyleChangeResponse> {
+/** 바뀐 내 정보 + 착용 증서 (염색·몸 모양 포함) */
+async function changed(accountId: string, now: number, extra: Partial<StyleChangeResponse> = {}): Promise<StyleChangeResponse> {
   const me = await loadMe(getAccounts(), accountId, now);
   await recordLook(accountId, me, { now }); // 꾸미기 랭킹 점수 (외형·염색·영구 구매)
   return { me, lookGrant: await lookGrant(env.joinSecret(), accountId, lookOf(me), now, me), ...extra };
@@ -203,12 +203,6 @@ export async function reshape(accountId: string, body: string, now = Date.now())
   if (QUEST_BODIES.some((b) => b.id === body)) {
     const [st, acct] = await Promise.all([style().get(accountId), getAccounts().get(accountId, kstDay(now), now)]);
     if (!ownedQuestBodies(st.bodies, acct.inventory).includes(body)) throw new HttpError(403, "FORBIDDEN", "수집 의뢰 도장 교환소에서 받는 외형이에요.");
-    charged(await style().reshape(accountId, body, now), "지금 그 모습이에요.");
-    return changed(accountId, now);
-  }
-  // 11/22 붕어빵 수레 한정 외형(붕어빵 장수 유령): 수레에서 산 사람만 (소장 기록 bodies — lib/bungeo/service가 사면서 채운다), 산 뒤로는 무료로 바꾼다
-  if (alleyBody(body)) {
-    if (!(await style().get(accountId)).bodies.includes(body)) throw new HttpError(403, "FORBIDDEN", "아직 소장하지 않은 외형이에요.");
     charged(await style().reshape(accountId, body, now), "지금 그 모습이에요.");
     return changed(accountId, now);
   }

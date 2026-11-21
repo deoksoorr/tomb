@@ -3,7 +3,6 @@ import { DIR } from "@tomb/protocol";
 import { Grid, type Color } from "./pixel";
 import { art, over } from "./seasonSetGear";
 import { season2Aura, season2FxIconGrid, SEASON_FX2, SEASON_FX2_ART, SEASON_GEAR_FX2, SEASON_SET_FX2, type Season2Motion } from "./seasonSetFx2";
-import { BUNGEO_FX, BUNGEO_FX_ART, BUNGEO_MOTIONS, bungeoAura, bungeoFxIconGrid, type BungeoMotion } from "./bungeoFx";
 import { SEASON3_MOTIONS, season3Aura, season3FxIconGrid, SEASON_FX3, SEASON_FX3_ART, SEASON_GEAR_FX3, SEASON_SET_FX3, type Season3Motion } from "./seasonSetFx3";
 
 // 11/19 계절 한정 세트 중 "아바타 시트 밖에 따로 그리는 것" (코디 기획안 시안 코드를 움직이는 연출로 옮겼다):
@@ -13,7 +12,6 @@ import { SEASON3_MOTIONS, season3Aura, season3FxIconGrid, SEASON_FX3, SEASON_FX3
 // (이 파일은 cosmeticFx를 타입으로만 읽는다 — 서로 불러 초기화 순서가 꼬이지 않게).
 // 11/20 나머지 여섯 벌(야근 요정 · 안개 묘지기 · 설날 까치 · 의리 초콜릿 · 벚꽃 소풍 · 사내 체육대회)은 seasonSetFx2.ts — 아래 표에 합친다.
 // 11/20 새 다섯 벌(송년회 3차 · 해맞이 산행 · 작심삼일 · 빙어 축제 · 서리 내린 묘역)은 seasonSetFx3.ts — 아래 표에 합친다.
-// 11/22 골목 붕어빵 수레 한정(운동화 발자국 · 거리 전구 오라)은 bungeoFx.ts — 아래 표에 합친다.
 
 function frames(w: number, h: number, n: number, draw: (g: Grid, f: number) => void): () => Grid {
   return () => {
@@ -201,8 +199,6 @@ export const SEASON_FX_ART = {
   ...SEASON_FX2_ART,
   // 11/20 새 다섯 벌 (seasonSetFx3.ts)
   ...SEASON_FX3_ART,
-  // 11/22 골목 붕어빵 수레 (bungeoFx.ts)
-  ...BUNGEO_FX_ART,
 } as const;
 
 export type SeasonFxArtId = keyof typeof SEASON_FX_ART;
@@ -214,7 +210,6 @@ export const SEASON_FX = {
   sc_snowduck: { kind: "pet", art: "ssDuck", hover: 0, fps: 6, idleFps: 1.4, pose: { idle: [2, 2, 2, 3], act: [4, 4, 4, 5, 4, 4, 4, 4, 5, 4], actMs: 300, every: 9000 } },
   ...SEASON_FX2,
   ...SEASON_FX3,
-  ...BUNGEO_FX,
 } satisfies Record<string, FxSpec>;
 
 /** 시트 그림(seasonSetGear)에 덧붙는 빛 (cosmeticFx GEAR_EXTRA_FX에 섞인다): 군고구마 봉투의 따뜻한 빛 */
@@ -231,7 +226,7 @@ export const SEASON_SET_FX: Readonly<Record<string, FxSpec>> = {
   ...SEASON_SET_FX3,
 };
 
-export type SeasonMotion = "ssBreath" | "ssSnowSet" | "ssGoguma" | Season2Motion | Season3Motion | BungeoMotion;
+export type SeasonMotion = "ssBreath" | "ssSnowSet" | "ssGoguma" | Season2Motion | Season3Motion;
 
 /** cosmeticFx가 넘겨주는 그리기 도우미 (xmasFx XmasDraw와 같다) */
 export type SeasonDraw = {
@@ -256,7 +251,6 @@ export const BREATH_MS = 2600;
 /** 새 움직임 그리기. t = 시각(움직임 줄이기·미리보기면 0) */
 export function seasonAura(motion: SeasonMotion, f: FxInput, t: number, d: SeasonDraw): void {
   if ((SEASON3_MOTIONS as readonly string[]).includes(motion)) return season3Aura(motion as Season3Motion, f, t, d);
-  if ((BUNGEO_MOTIONS as readonly string[]).includes(motion)) return bungeoAura(motion as BungeoMotion, f, t, d);
   if (motion !== "ssBreath" && motion !== "ssSnowSet" && motion !== "ssGoguma") return season2Aura(motion as Season2Motion, f, t, d);
   const calm = f.reduced || !!f.still;
   switch (motion) {
@@ -392,6 +386,6 @@ export function seasonFxIconGrid(id: string): Grid | null {
     case "sc_snowduck":
       return duckIcon();
     default:
-      return season2FxIconGrid(id) ?? season3FxIconGrid(id) ?? bungeoFxIconGrid(id);
+      return season2FxIconGrid(id) ?? season3FxIconGrid(id);
   }
 }

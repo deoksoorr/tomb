@@ -99,21 +99,8 @@ export const WISH_BONUS_SPARKLE = 0.2;
 /** 반짝일 때 던진 것에 더 얹는 최대 포인트 (1~이 값) */
 export const WISH_SPARKLE_EXTRA = 3;
 
-/**
- * 11/22 골목 붕어빵 수레 실마리 (이스터에그 — 유일한 안내). 수레가 나오는 게임 날짜(lib/bungeo/cart isBungeoDay)에만,
- * 그날 소원을 빈 사람 중 이 확률로 운세 끝에 한 줄 붙는다. 다른 날엔 절대 안 나온다
- */
-export const BUNGEO_HINT_CHANCE = 0.4;
-export const BUNGEO_HINTS = ["오늘 밤엔 골목 어딘가에서 붕어빵 냄새가 날 것 같아요.", "밤이 깊으면 담장 밑 어딘가에 따뜻한 김이 피어오를지도 몰라요."] as const;
-
-/** 0..1 난수 → 운세 하나. hint = 붕어빵 수레가 오는 날이면 0..1 난수 (아니면 null — 실마리 없음) */
-export function pickFortune(r1: number, r2: number, hint: number | null = null): WishFortune {
-  const f = pickFortuneBase(r1, r2);
-  if (hint === null || hint >= BUNGEO_HINT_CHANCE) return f;
-  return { ...f, text: `${f.text} ${BUNGEO_HINTS[Math.floor((hint / BUNGEO_HINT_CHANCE) * BUNGEO_HINTS.length) % BUNGEO_HINTS.length]}` };
-}
-
-function pickFortuneBase(r1: number, r2: number): WishFortune {
+/** 0..1 난수 → 운세 하나 */
+export function pickFortune(r1: number, r2: number): WishFortune {
   let u = Math.max(0, Math.min(0.999999, r1)) * 100;
   let luck: WishLuck = "fair";
   for (const [l, w] of LUCK_WEIGHTS) {

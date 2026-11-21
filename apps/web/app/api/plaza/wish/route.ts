@@ -7,8 +7,6 @@ import { requireVisitor } from "@/lib/session";
 import { getAccounts, getWishDay } from "@/lib/store";
 import { kstDay, loadMe } from "@/lib/store/accounts";
 import { readBody } from "@/lib/validate";
-import { isBungeoDay } from "@/lib/bungeo/cart";
-import { gameDay } from "@/lib/gameDay";
 import { msUntilWishReset, pickFortune, rollBonus, WISH_MAX, WISH_MIN, WISH_USED_MESSAGE, type WishResponse } from "@/lib/wish";
 
 const WishSchema = z.object({
@@ -55,8 +53,7 @@ export const POST = handler(async (req) => {
     await days.release(visitorId, day);
     throw e;
   }
-  // 11/22 붕어빵 수레가 오는 게임 날짜에만 가끔 실마리 한 줄 (lib/wish BUNGEO_HINTS)
-  const fortune = pickFortune(rand(), rand(), isBungeoDay(gameDay(now)) ? rand() : null);
+  const fortune = pickFortune(rand(), rand());
   const roll = rollBonus(amount, rand(), rand());
   // 11/19 오늘 미션 「소원 분수에 동전 던지기」: 돌아온 포인트가 있으면 그 적립 스크립트에서, 없으면 따로 진행 칸 +1 (그날 미션일 때만 — lib/retainQuest)
   const quest = questHook(visitorId, day, "wish");

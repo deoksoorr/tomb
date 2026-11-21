@@ -10,7 +10,7 @@ import { GIFT_MAX_COUNT, GIFT_MAX_ITEMS, GIFT_MAX_TARGETS, giftHasTerm, isGiftTe
 // 11번 관리자 선물: 보내기 검증과 발송 (라우트·다른 기능 공용 — 예: 고정 색상 염색권을 선물함으로 보낼 때 sendGift를 부르면 된다)
 
 /** 선물에 넣을 수 있는 아이템: 상점 카탈로그(@tomb/protocol ITEMS)에 있는 것 (11/20 별자리 잇기 전용 유성우 오라는 빼요 — 망원경에서만) */
-export const isGiftItem = (id: string) => !!itemById(id) && !itemById(id)?.stargaze && !itemById(id)?.alley;
+export const isGiftItem = (id: string) => !!itemById(id) && !itemById(id)?.stargaze;
 export { GIFT_MAX_COUNT, GIFT_MAX_ITEMS, GIFT_MAX_TARGETS, giftHasTerm };
 export const GIFT_NOTE_MAX = 200;
 export const GIFT_FROM_DEFAULT = "마을 관리인";

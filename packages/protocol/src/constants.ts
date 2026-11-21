@@ -165,8 +165,7 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 // 78 = 11/21 판교의 등대·회장님 독대(1위 꾸미기·칭호), 분양 사무소·야근 빌딩 자리 이동(맵 지문 바뀜), 새 폭죽·광역 불꽃쇼(쇼 한 번에 하나),
 //      운영자 순간이동·정원 제외, 확성기 → 마을 소식 — 모두 한 번 새로고침 (11/21)
 // 79 = 회장님 독대 2관왕 전용 꾸미기·칭호(chair_duo_crown·chair_aura_stamp·t_chairDuo) — 모두 한 번 새로고침 (11/21)
-// 80 = 골목 붕어빵 수레 한정 꾸미기 12종·외형 「붕어빵 장수 유령」(vendor)·칭호 둘(t_ssCampus·t_ssDate) — 모두 한 번 새로고침 (11/22)
-export const CLIENT_VERSION = 80;
+export const CLIENT_VERSION = 79;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */
@@ -257,18 +256,6 @@ export const QUEST_BODIES = [
 ] as const;
 
 /**
- * 11/22 골목 붕어빵 수레 한정 외형: 선택권으로 살 수 없고, 수레에서 산 계정만 바꿀 수 있다 (소장 기록 bodies — web lib/bungeo·lib/dye/service).
- * 사기 전에는 꾸미기 창에도 나오지 않는다 (이스터에그). 등급 연출은 프리미엄 외형과 같다
- */
-export const ALLEY_BODIES = [
-  { id: "vendor", label: "붕어빵 장수 유령", tier: "legend", desc: "머리에 수건 질끈, 누빔 조끼에 앞치마, 집게로 갓 구운 붕어빵을 든 유령. 포인트 색은 앞치마예요." },
-] as const;
-/** 붕어빵 수레 한정 외형이면 그 정의 */
-export function alleyBody(b: unknown): (typeof ALLEY_BODIES)[number] | undefined {
-  return ALLEY_BODIES.find((x) => x.id === b);
-}
-
-/**
  * 11/20 소장한 수집 의뢰 외형: 교환소 기록(bodies)에 있거나, 그 해금 아이템(QUEST_BODIES.item)을 가방에 가졌으면 (선물·운영자 지급).
  * 교환소 기록에 있는 다른 외형 id도 그대로 둔다 (프리미엄 외형 소장 기록과 같은 목록)
  */
@@ -279,7 +266,7 @@ export function ownedQuestBodies(bodies: readonly string[], inventory: Readonly<
 }
 
 /** 아바타 몸 모양 전부 (검증·그리기용). 옛 클라이언트는 모르는 몸을 후드 유령으로 그린다 */
-export const AVATAR_BODIES = [...STARTER_BODIES, ...PREMIUM_BODIES, ...STAFF_BODIES, ...QUEST_BODIES, ...ALLEY_BODIES] as const;
+export const AVATAR_BODIES = [...STARTER_BODIES, ...PREMIUM_BODIES, ...STAFF_BODIES, ...QUEST_BODIES] as const;
 export type AvatarBody = (typeof AVATAR_BODIES)[number]["id"];
 export type PremiumBody = (typeof PREMIUM_BODIES)[number];
 export function isAvatarBody(b: unknown): b is AvatarBody {
@@ -299,7 +286,7 @@ export function questBody(b: unknown): (typeof QUEST_BODIES)[number] | undefined
 }
 /** 외형 등급 (프리미엄·의뢰 보상 외형, 아니면 null) — 등급 연출·꾸미기 점수용 */
 export function bodyTier(b: unknown): BodyTier | null {
-  return premiumBody(b)?.tier ?? questBody(b)?.tier ?? alleyBody(b)?.tier ?? null;
+  return premiumBody(b)?.tier ?? questBody(b)?.tier ?? null;
 }
 /** 운영자 전용 몸인지 */
 export function isStaffBody(b: unknown): boolean {

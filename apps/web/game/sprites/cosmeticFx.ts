@@ -6,7 +6,6 @@ import { THEME_FX, THEME_FX_ART, themeIconGrid } from "./themeFx";
 import { XMAS_FX, XMAS_FX_ART, XMAS_GEAR_FX, xmasAura, xmasIconGrid, type XmasMotion } from "./xmasFx";
 import { PET_PACK_ART, PET_PACK_FX, petPackIconGrid } from "./petPack";
 import { BREED_ART, BREED_FX, breedIconGrid } from "./petBreeds";
-import { LIGHTS_UP as BUNGEO_LIGHTS_UP } from "./bungeoFx";
 import { SEASON_FX, SEASON_FX_ART, SEASON_GEAR_FX, SEASON_SET_FX, seasonAura, seasonFxIconGrid, type SeasonMotion } from "./seasonSetFx";
 import { seasonSetsOfLook } from "@tomb/protocol";
 import { METEOR_FX, METEOR_FX_ART, meteorAura, meteorIcon } from "./meteorFx";
@@ -1578,8 +1577,6 @@ export class CosmeticFxSim {
       else if (s.kind === "aura" && s.motion === "chCrown") top = Math.max(top, artTop + CHAIR_CROWN_UP);
       // 11/24 명패 왕관(2관왕): 금 잔 불꽃이 왕관 위로 솟는 만큼
       else if (s.kind === "aura" && s.motion === "chDuoCrown") top = Math.max(top, artTop + CHAIR_DUO_UP);
-      // 11/22 거리 전구 오라: 머리 위 전구 줄 위로 이름표를 올린다 (bungeoFx LIGHTS_UP + 한 칸)
-      else if (s.kind === "aura" && s.motion === "bgLights") top = Math.max(top, artTop + BUNGEO_LIGHTS_UP + 1);
     }
     return top;
   }
@@ -2060,8 +2057,6 @@ export class CosmeticFxSim {
       case "ssSweatSet":
       case "ssSmeltSet":
       case "ssFlakeSet":
-      // 11/22 골목 붕어빵 수레 (bungeoFx.ts — seasonAura가 넘긴다)
-      case "bgLights":
         // 11/19 계절 한정 세트 (seasonSetFx.ts): 그리기 도우미를 넘겨 그 파일이 그린다
         seasonAura(s.motion, f, t, {
           push: (art, frame, x, y, o) => out.push(cmd(art, frame, x, y, o)),

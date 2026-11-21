@@ -16,7 +16,6 @@ import { myBig } from "@/game/camp/foodState";
 import { showFriendNotice } from "../overlay/FriendNotice";
 import AvatarThumb from "./AvatarThumb";
 import StaffPeople from "./StaffPeople";
-import StaffBungeoSchedule from "../bungeo/StaffBungeoSchedule";
 import { hopChannel } from "../housing/channelHop";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -234,7 +233,6 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
             운영자 계정은 친구 기능을 쓸 수 없어요. 대신 접속 중인 사람에게 순간이동할 수 있어요.
           </p>
           <StaffPeople myCh={myCh} myMap={myMap} onClose={onClose} />
-          <StaffBungeoSchedule />
         </div>
       </Dialog>
     );

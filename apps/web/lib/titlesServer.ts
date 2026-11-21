@@ -173,9 +173,6 @@ const SEASON_SET_METRIC: Readonly<Record<string, TitleMetric>> = {
   resolution: "ssResol",
   "smelt-fest": "ssSmelt",
   "frost-yard": "ssFrost",
-  // 11/22 골목 붕어빵 수레 두 벌 (protocol ALLEY_SETS)
-  "campus-hoodie": "ssCampus",
-  "winter-date": "ssDate",
 };
 
 /** 11/19 계절 한정 세트 칭호 진행 수치 (지금 한 벌을 다 입었으면 1) */

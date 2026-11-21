@@ -51,13 +51,6 @@ export type ItemDef = {
   /** 11/20 별자리 잇기(망원경) 전용 「유성우 오라」: 상점 목록에 없고 사거나 팔거나 선물할 수 없다. 맑은 밤 판에서 아주 드물게 영구로 떨어진다 (web lib/rpg/meteorDrop) */
   stargaze?: true;
   /**
-   * 11/22 골목 붕어빵 수레 한정 (이스터에그): 상점·계절 보따리상·상자·관리자 선물 목록에 없고, 밤에 가끔 나오는 수레에서만 영구로 산다 (web lib/bungeo).
-   * 영구 값 = price × 영구 배율 (꾸미기 점수도 같은 셈 — BUNGEO_PRICES)
-   */
-  alley?: true;
-  /** 11/22 붕어빵 수레 코디 한 벌 id (ALLEY_SETS — 한 벌 덤 칭호. 계절 보따리상 세트와 같은 틀이지만 그 노점에선 안 판다) */
-  alleySet?: string;
-  /**
    * 11/19 계절 한정 세트 id (예: "snow-commute"): 잡화점 목록에 없고, 기간 한정 노점 「계절 보따리상」에서만 판다 (web lib/seasonShop).
    * 하루권·영구 값은 seasonPrice, 한 벌 덤(칭호·꾸미기 점수·연출)은 SEASON_SETS
    */
@@ -383,29 +376,6 @@ export const ITEMS: readonly ItemDef[] = [
     ["gh_capt", "head", "유령 선장 모자", "녹색 도깨비불이 깃든 낡은 삼각 선장 모자. 유령선에서만 팔아요.", 420],
     ["gh_mist", "aura", "안개 오라", "발치에 바다 안개가 낮게 깔리고 녹색 불씨가 떠다녀요. 유령선에서만 팔아요.", 450],
   ]).map((it): ItemDef => ({ ...it, ghost: true })),
-  // ── 11/22 골목 붕어빵 수레 한정 (alley: 밤에 가끔 나오는 붕어빵 수레에서만 영구로 — web lib/bungeo). price = 영구 값 ÷ 4.
-  //    그림: 머리·목·손·등 web game/sprites/bungeoGear.ts · 오라·발자국 bungeoFx.ts · 외형 「붕어빵 장수 유령」(vendor)은 avatarCore
-  ...cosmetics([
-    // 「캠퍼스 후드핏」
-    ["kc_cap", "head", "워싱 볼캡", "물 빠진 남색 볼캡에 작은 꽃 자수. 1교시 지각 각이면 일단 눌러 써요.", 1500],
-    ["kc_hoodie", "back", "오버핏 후드티", "회색 멜란지 오버핏 후드티. 소매가 손을 다 덮어야 제맛이에요.", 2500],
-    ["kc_phones", "neck", "목에 건 헤드폰", "크림색 큰 무선 헤드폰. 안 듣고 목에 걸고만 다녀도 감성이에요.", 1250],
-    ["kc_icecoffee", "hand", "얼죽아 컵", "한겨울에도 얼음 가득 아이스 아메리카노. 얼어 죽어도 아이스예요.", 2000],
-    ["kc_sneaker", "feet", "운동화 발자국", "걸음마다 하얀 운동화 밑창 자국이 콕콕 찍혀요.", 1250],
-  ]).map((it): ItemDef => ({ ...it, alley: true, alleySet: "campus-hoodie", grade: "rare" })),
-  ...cosmetics([
-    // 「겨울 데이트룩」
-    ["kd_beanie", "head", "골지 니트 비니", "오트밀색 골지 비니. 단을 한 번 접어 올려 귀까지 따뜻해요.", 1500],
-    ["kd_coat", "back", "캐멀 롱코트", "무릎 아래까지 오는 캐멀 싱글 코트. 주머니에 손 넣고 걸으면 완성이에요.", 2500],
-    ["kd_muffler", "neck", "체크 머플러", "빨강 바탕 타탄 체크 머플러. 두 번 감고 한쪽 끝은 길게 늘어뜨려요.", 1250],
-    ["kd_bungeo", "hand", "붕어빵 봉투", "갓 구운 붕어빵 세 마리가 든 종이봉투. 김이 모락모락 나요.", 2000],
-    ["kd_lights", "aura", "거리 전구 오라", "머리 위로 노란 전구 줄이 늘어져요. 밤에 은은하게 빛나요.", 2000],
-  ]).map((it): ItemDef => ({ ...it, alley: true, alleySet: "winter-date", grade: "rare" })),
-  ...cosmetics([
-    // 낱개 겉옷
-    ["kn_cable", "back", "꽈배기 니트", "아이보리 꽈배기 니트에 접은 폴라 목. 할머니가 떠 주신 것 같은 포근함이에요.", 2500],
-    ["kn_fleece", "back", "뽀글이 플리스", "양털처럼 뽀글뽀글한 크림 플리스. 밤색 테두리와 가슴 주머니가 포인트예요.", 2500],
-  ]).map((it): ItemDef => ({ ...it, alley: true, grade: "rare" })),
   // ── 11/17 테마 꾸미기 묶음 (적은 부위 위주: 등·목·손·발·이름표). 겨울 니트 · 회사원 정장 소품 · 캠핑룩 · 바닷가룩.
   //    다른 꾸미기와 같은 24시간·영구(×4) 규칙. 그림: 등·목·손 web game/sprites/themeGear.ts · 발자국 themeFx.ts · 이름표 lib/nameStyle.ts
   ...cosmetics([
@@ -743,9 +713,9 @@ export function styleItemId(id: string): string | null {
 // 11/21 확성기는 판매 중지 (마을 소식으로 바뀜 — 아이템·API는 그대로, 가진 것은 가방에 남는다)
 export const SHOP_KINDS: readonly ItemKind[] = ["firework", "cosmetic", "graveStyle", "dye"];
 /** 상점 목록에 나오는지. 펫은 상점에서 팔지 않는다 (동물원 사육사에게서 영구로만 — ZOO_PETS) */
-/** 11/19 계절 한정 세트(seasonSet)도 잡화점에 없다 (계절 보따리상에서만 — SEASON_SETS). 11/22 붕어빵 수레 한정(alley)도 */
-export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot; staff?: true; champ?: true; chair?: true; quest?: true; urgent?: true; ghost?: true; event?: true; invite?: true; stargaze?: true; seasonSet?: string; alley?: true }): boolean {
-  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet" && !item.staff && !item.champ && !item.chair && !item.quest && !item.urgent && !item.ghost && !item.event && !item.invite && !item.stargaze && !item.seasonSet && !item.alley;
+/** 11/19 계절 한정 세트(seasonSet)도 잡화점에 없다 (계절 보따리상에서만 — SEASON_SETS) */
+export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot; staff?: true; champ?: true; chair?: true; quest?: true; urgent?: true; ghost?: true; event?: true; invite?: true; stargaze?: true; seasonSet?: string }): boolean {
+  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet" && !item.staff && !item.champ && !item.chair && !item.quest && !item.urgent && !item.ghost && !item.event && !item.invite && !item.stargaze && !item.seasonSet;
 }
 /** 12월 크리스마스 이벤트 한정인지 (상점·포인트로 살 수 없다 — 선물상자에서만) */
 export function isEventItem(id: unknown): boolean {
@@ -793,19 +763,7 @@ export const SEASON_SETS: readonly SeasonSetDef[] = [
   { id: "smelt-fest", name: "빙어 축제", items: ["ic_earmuff", "ic_rod", "ic_icebox", "ic_hotpack", "ic_penguin"], title: "t_ssSmelt", look: 100, fx: "다 입으면 멈춰 서 있을 때 가끔 발밑에서 빙어가 퐁 튀어 올라요." },
   { id: "frost-yard", name: "서리 내린 묘역", items: ["fr_icicle", "fr_cloak", "fr_rime", "fr_icename", "fr_snowbun"], title: "t_ssFrost", look: 150, fx: "다 입으면 밤에 몸 둘레로 작은 눈 결정이 천천히 돌아요." },
 ];
-/**
- * 11/22 골목 붕어빵 수레 코디 한 벌 (계절 세트와 같은 틀 — 칭호·꾸미기 점수 덤. 계절 보따리상 일정에는 없고 수레에서만 판다).
- * 덤 연출은 따로 없다 (fx 빈 문자열)
- */
-export const ALLEY_SETS: readonly SeasonSetDef[] = [
-  { id: "campus-hoodie", name: "캠퍼스 후드핏", items: ["kc_cap", "kc_hoodie", "kc_phones", "kc_icecoffee", "kc_sneaker"], title: "t_ssCampus", look: 100, fx: "" },
-  { id: "winter-date", name: "겨울 데이트룩", items: ["kd_beanie", "kd_coat", "kd_muffler", "kd_bungeo", "kd_lights"], title: "t_ssDate", look: 100, fx: "" },
-];
-/** 11/22 붕어빵 수레 한정인지 */
-export function isAlleyItem(id: unknown): boolean {
-  return typeof id === "string" && !!byId.get(id)?.alley;
-}
-const seasonSetById = new Map([...SEASON_SETS, ...ALLEY_SETS].map((s) => [s.id, s]));
+const seasonSetById = new Map(SEASON_SETS.map((s) => [s.id, s]));
 /** 계절 한정 세트 정의 (없으면 undefined) */
 export function seasonSetDef(id: string | null | undefined): SeasonSetDef | undefined {
   return id ? seasonSetById.get(id) : undefined;
@@ -817,8 +775,7 @@ export function isSeasonItem(id: unknown): boolean {
 /** 착용 목록에서 다 입은 계절 한정 세트들 (한 벌 다섯 점이 모두 있어야) */
 export function seasonSetsOfLook(look: readonly string[] | null | undefined): SeasonSetDef[] {
   if (!look?.length) return [];
-  // 11/22 붕어빵 수레 두 벌(ALLEY_SETS)도 같은 덤 (칭호·꾸미기 점수)
-  return [...SEASON_SETS, ...ALLEY_SETS].filter((s) => s.items.every((id) => look.includes(id)));
+  return SEASON_SETS.filter((s) => s.items.every((id) => look.includes(id)));
 }
 /**
  * 계절 한정 아이템 값: day = 하루권(24시간) 값 (펫은 하루권이 없어 null), perm = 영구 값 (하루권 × 영구 배율, 10P 단위 — 펫은 price 그대로).
@@ -1263,9 +1220,6 @@ export const TITLE_IDS = [
   "t_ssResol",
   "t_ssSmelt",
   "t_ssFrost",
-  // 11/22 골목 붕어빵 수레 두 벌 (ALLEY_SETS): 「캠퍼스 후드핏」 · 「겨울 데이트룩」
-  "t_ssCampus",
-  "t_ssDate",
   // 11/20 「회장님 독대」 주간 1위 (보통 · 지옥 — 한 주 동안 빌려 준다, web lib/titles TitleFacts.timed)
   "t_chairNormal",
   "t_chairHell",
