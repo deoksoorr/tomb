@@ -1,7 +1,7 @@
 import { STAFF_TP_GONE_MSG, type InternalPerson } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import { FRIEND_BIG_MSG } from "./friendRoute";
-import { filterPeople, findPerson, otherMapNames, staffPeopleOf, staffTpPlan, staffWhereText } from "./staffPeople";
+import { filterPeople, findPerson, insideLabel, otherMapNames, staffPeopleOf, staffTpPlan, staffWhereText } from "./staffPeople";
 
 // 11/20 운영자 「접속 중인 사람」·순간이동 계획
 
@@ -24,7 +24,7 @@ describe("staffPeopleOf", () => {
 describe("목록 문구·검색", () => {
   const list = staffPeopleOf(all, "me");
   it("장소 한 줄", () => {
-    expect(list.map(staffWhereText)).toEqual(["1채널 마을", "1채널 집 안", "1채널 바닷가", "2채널 캠핑장"]);
+    expect(list.map(staffWhereText)).toEqual(["1채널 마을", "1채널 마을 집 안", "1채널 바닷가", "2채널 캠핑장"]);
   });
   it("이름 검색은 띄어쓰기·대소문자 무시", () => {
     expect(filterPeople(list, "바다소").map((p) => p.name)).toEqual(["바다 소년"]);
@@ -32,10 +32,18 @@ describe("목록 문구·검색", () => {
   });
   it("채널 창(운영자): 이 채널 다른 맵·실내 이름을 곳마다 전부", () => {
     expect(otherMapNames(list, 1, "village")).toEqual([
-      { label: "집 안", names: ["구름"] },
+      { label: "기억숲 마을 집 안", names: ["구름"] },
       { label: "달물결 포구", names: ["바다 소년"] },
     ]);
     expect(otherMapNames(list, 2, "camp")).toEqual([]);
+  });
+  it("11/22 집·잡화점은 어느 맵인지 붙이고, 버스·사냥터는 이름 그대로", () => {
+    expect(insideLabel({ place: "house" })).toBe("기억숲 마을 집 안");
+    expect(insideLabel({ place: "house", map: "sea" })).toBe("달물결 포구 집 안");
+    expect(insideLabel({ place: "shop" })).toBe("기억숲 마을 잡화점");
+    expect(insideLabel({ place: "bus", map: "camp" })).toBe("버스 안");
+    expect(insideLabel({ place: "hunt" })).toBe("사냥터");
+    expect(insideLabel({})).toBe("실내");
   });
 });
 

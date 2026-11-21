@@ -17,6 +17,7 @@ import { DEPTH, GRAVE_NEAR_RADIUS, prefersReducedMotion, SIT_IDLE_MS } from "../
 import { GraveTooltip } from "../entities/Grave";
 import { isAttachKind, Player, type SeatRequester } from "../entities/Player";
 import { HAMMOCK_FRONT, RemoteAvatar, SWING_FRONT } from "../entities/RemoteAvatar";
+import { peerList } from "../logic/peerList";
 import { peerAt } from "../entities/peerHit";
 import { SeatHint } from "../entities/SeatHint";
 import { phraseOf } from "../entities/SpeechBubble";
@@ -1110,7 +1111,7 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("shop:closed", () => this.hub.setBlocked(bridge.last("ui:blockKeys")?.blocked ?? false)));
     on.push(bridge.on("wish:thrown", () => this.onWishThrown()));
     // 채널 이동 창의 "지금 이 채널에 있는 사람" 미리보기
-    on.push(bridge.on("peers:ask", () => !this.trip.away && bridge.emit("peers:list", { names: [...this.remotes.values()].map((r) => r.name), map: "village", staff: [...this.remotes.values()].filter((r) => r.view.staff).length })));
+    on.push(bridge.on("peers:ask", () => !this.trip.away && bridge.emit("peers:list", peerList(this.remotes.values(), "village"))));
   }
 
   private applyLook(look: string[], grant: string, extra?: AppearanceChange): void {

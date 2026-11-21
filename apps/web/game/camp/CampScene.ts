@@ -36,6 +36,7 @@ import { bridge } from "../bridge";
 import { DEPTH, SIT_IDLE_MS } from "../config";
 import { Player, type SeatRequester } from "../entities/Player";
 import { RemoteAvatar } from "../entities/RemoteAvatar";
+import { peerList } from "../logic/peerList";
 import { peerAt } from "../entities/peerHit";
 import { SeatHint } from "../entities/SeatHint";
 import { phraseOf } from "../entities/SpeechBubble";
@@ -755,7 +756,7 @@ export class CampScene extends Phaser.Scene {
         this.rig.recenter();
       }),
     );
-    on.push(bridge.on("peers:ask", () => bridge.emit("peers:list", { names: [...this.remotes.values()].map((r) => r.name), map: "camp", staff: [...this.remotes.values()].filter((r) => r.view.staff).length })));
+    on.push(bridge.on("peers:ask", () => bridge.emit("peers:list", peerList(this.remotes.values(), "camp"))));
     on.push(
       bridge.on("firework:fire", ({ item }) => {
         if (fireworkShowMs(item) > 0) return; // 광역 불꽃쇼는 서버가 돌려준 때에 (onFirework)

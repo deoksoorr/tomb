@@ -15,9 +15,16 @@ export function staffPeopleOf(all: readonly InternalPerson[], me: string): Staff
     .sort((a, b) => a.ch - b.ch || order[mapOf(a.map)] - order[mapOf(b.map)] || a.name.localeCompare(b.name, "ko"));
 }
 
-/** 한 줄 장소: 「2채널 언젠가 캠핑장」, 실내면 「2채널 집 안」 */
+/** 11/22 맵 안에 있는 실내(집·잡화점)는 어느 맵인지 붙인다: 「기억숲 마을 집 안」. 버스·분양 마을·사냥터 같은 곳은 이름 그대로 */
+const MAP_INSIDE: ReadonlySet<string> = new Set(["house", "shop"]);
+export function insideLabel(p: Pick<StaffPerson, "place" | "map">, names: Record<MapId, string> = PLACE_TITLE): string {
+  if (!p.place) return "실내";
+  return MAP_INSIDE.has(p.place) ? `${names[mapOf(p.map)]} ${AWAY_PLACE_LABEL[p.place]}` : AWAY_PLACE_LABEL[p.place];
+}
+
+/** 한 줄 장소: 「2채널 캠핑장」, 실내면 「2채널 마을 집 안」 */
 export function staffWhereText(p: StaffPerson): string {
-  if (p.inside) return `${p.ch}채널 ${p.place ? AWAY_PLACE_LABEL[p.place] : "실내"}`;
+  if (p.inside) return `${p.ch}채널 ${insideLabel(p, MAP_NAME)}`;
   return `${p.ch}채널 ${MAP_NAME[mapOf(p.map)]}`;
 }
 
@@ -32,7 +39,7 @@ export function otherMapNames(list: readonly StaffPerson[], ch: number, myMap: M
   const groups = new Map<string, string[]>();
   for (const p of list) {
     if (p.ch !== ch) continue;
-    const label = p.inside ? (p.place ? AWAY_PLACE_LABEL[p.place] : "실내") : mapOf(p.map) === myMap ? null : PLACE_TITLE[mapOf(p.map)];
+    const label = p.inside ? insideLabel(p) : mapOf(p.map) === myMap ? null : PLACE_TITLE[mapOf(p.map)];
     if (!label) continue;
     groups.set(label, [...(groups.get(label) ?? []), p.name]);
   }

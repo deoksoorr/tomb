@@ -48,6 +48,7 @@ import { bridge } from "../bridge";
 import { DEPTH, SIT_IDLE_MS } from "../config";
 import { Player, type SeatRequester } from "../entities/Player";
 import { RemoteAvatar } from "../entities/RemoteAvatar";
+import { peerList } from "../logic/peerList";
 import { peerAt } from "../entities/peerHit";
 import { SeatHint } from "../entities/SeatHint";
 import { phraseOf } from "../entities/SpeechBubble";
@@ -901,7 +902,7 @@ export class SeaScene extends Phaser.Scene {
         this.rig.recenter();
       }),
     );
-    on.push(bridge.on("peers:ask", () => bridge.emit("peers:list", { names: [...this.remotes.values()].map((r) => r.name), map: "sea", staff: [...this.remotes.values()].filter((r) => r.view.staff).length })));
+    on.push(bridge.on("peers:ask", () => bridge.emit("peers:list", peerList(this.remotes.values(), "sea"))));
     // 11/17 맵 컨셉 (마을과 같은 방식): 주소 시험 값(?concept=, 실서버는 막힘)이 있으면 그것만, 없으면 관리자가 고른 값을 따라 바로 바꿔요
     const conceptQa = parseConceptOverride(window.location.search);
     if (!conceptQa) {
