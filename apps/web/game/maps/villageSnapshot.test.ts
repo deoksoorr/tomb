@@ -91,7 +91,7 @@ describe("마을 지문 (캠핑장이 생겨도 그대로)", () => {
     // 11/20 분양 사무소·야근 빌딩·문대리 자리 바꿈 + 판교의 등대 (예전 값 22769866)
     // 11/21 등대 문이 회장님 독대 입구로(portal:lighthouse 「사직서 내러 가기」) — 충돌·걷기 격자는 그대로 (예전 값 a7ac2e0e)
     // 11/21 계절 보따리상 → 북쪽 길 위, 가구 보따리상 → 버스 정류장 마당, 의뢰 게시판·긴급 의뢰 현판 → 쉼터 광장(벤치 bY·bZ 뺌), 현판 E (예전 값 bc77ac90)
-    expect(layoutPrint()).toBe("f6cd898a");
+    expect(layoutPrint()).toBe("e7b50b4e");
   });
   it("걷기 격자", () => {
     const g = walkableGrid(8);
@@ -102,7 +102,7 @@ describe("마을 지문 (캠핑장이 생겨도 그대로)", () => {
     // 11/20 총무팀 문대리 카트·몸통 (예전 값 9bffc195)
     // 11/20 분양 사무소·야근 빌딩·문대리 자리 바꿈 + 판교의 등대 (예전 값 c2a2fff2)
     // 11/21 보따리상 둘·의뢰 게시판 자리 옮김, 쉼터 광장 벤치 둘 뺌 (예전 값 22086820)
-    expect(fnv(Array.from(g.cells as ArrayLike<number>).join(""))).toBe("327cc569");
+    expect(fnv(Array.from(g.cells as ArrayLike<number>).join(""))).toBe("ecb2ae09");
   });
   it("미니맵 바탕", () => {
     // 11/20 분양 사무소 문 앞 흙길을 빼서 다시 찍음 (예전 값 7b4c67cd)

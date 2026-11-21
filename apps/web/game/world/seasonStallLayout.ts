@@ -3,7 +3,7 @@ import type { Interactable, Rect } from "./layout";
 
 // 11/19 기간 한정 노점 배치 (순수 — layout.ts가 충돌·상호작용·미니맵에 더하고, 그림·이름표·밤 빛·몸 충돌은 SeasonStallView가 놓는다).
 //  - 「계절 보따리상」 (기간 한정 코디, kind cos): 북쪽 길 위 풀밭(행운권 가판대와 사냥터 오솔길 사이), 노점 (796,168) + 왼쪽에 보따리상 (753,166)
-//  - 「가구 보따리상」 (기간 한정 가구, kind furn): 버스 정류장 마당 예전 의뢰 게시판 자리, 손수레 (1190,700) + 왼쪽에 목수 유령 (1152,698)
+//  - 「가구 보따리상」 (기간 한정 가구, kind furn): 버스 정류장 마당 예전 의뢰 게시판 자리, 손수레 (1208,700) + 왼쪽에 목수 유령 (1170,698) — 긴급 의뢰 현판과 띄운다
 //  11/21 계절 보따리상은 예전 가구 보따리상 자리로 (보따리상 몸통 왼쪽 끝은 예전 목수 유령과 같은 746), 가구 보따리상은 정류장 마당으로 (광장 자리는 비움)
 //  원점 = 바닥 가운데. 판매 창은 components/seasonShop (portal:open seasonCos · seasonFurn)
 
@@ -26,8 +26,8 @@ export type StallSite = {
 
 export const SEASON_STALL = { x: 796, y: 168 } as const;
 export const SEASON_PEDDLER = { x: 753, y: 166 } as const;
-export const FURN_STALL = { x: 1190, y: 700 } as const;
-export const FURN_CRAFTER = { x: 1152, y: 698 } as const;
+export const FURN_STALL = { x: 1208, y: 700 } as const;
+export const FURN_CRAFTER = { x: 1170, y: 698 } as const;
 
 export const STALL_SITES: readonly StallSite[] = [
   {
