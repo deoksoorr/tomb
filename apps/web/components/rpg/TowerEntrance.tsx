@@ -175,7 +175,7 @@ export default function TowerEntrance({
               <b>물약 1~2개</b> 커피, 에너지드링크, 야근 도시락 중에서 늘 들어 있어요.
             </li>
             <li>
-              <b>세트 장비</b> {Math.round(TOWER_CHEST_GEAR_CHANCE * 100)}% 확률이에요. 아주 드물게 나와요.
+              <b>세트 장비</b> {Math.round(TOWER_CHEST_GEAR_CHANCE * 100)}% 확률로 나와요.
               높이 오를수록 직급이 올라요. {SG_GRADE_FLOORS[0]}층부터 대리급, {SG_GRADE_FLOORS[1]}층부터 과장급, {SG_GRADE_FLOORS[2]}층부터 임원급이에요.
             </li>
             <li>

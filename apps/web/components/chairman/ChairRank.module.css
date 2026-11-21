@@ -106,11 +106,27 @@
   white-space: nowrap;
 }
 
-.modeCard[aria-selected="true"] .modeLead {
+/* 11/22 「이번 주 현재 1위」는 작게 흐리게, 이름은 밝게 · 아래 줄 「피해 N」 */
+.leadName {
+  color: var(--text);
+}
+
+.modeDmg {
+  overflow: hidden;
+  color: var(--bone);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modeCard[aria-selected="true"] .leadName,
+.modeCard[aria-selected="true"] .modeDmg {
   color: #f2d27a;
 }
 
-.modeCard[data-mode="hell"][aria-selected="true"] .modeLead {
+.modeCard[data-mode="hell"][aria-selected="true"] .leadName,
+.modeCard[data-mode="hell"][aria-selected="true"] .modeDmg {
   color: #ffb8a0;
 }
 
@@ -237,6 +253,12 @@
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.stepDmg small {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
 }
 
 .step[data-place="1"] .stepDmg {
@@ -456,6 +478,167 @@
   color: var(--acc);
 }
 
+/* 11/22 내 순위: 오른쪽에 「피해 N」 크게 + 「버틴 시간 m:ss」 작게 (피해·버틴 시간 두 칸을 함께 쓴다) */
+.mineStat {
+  display: grid;
+  grid-column: 3 / -1;
+  justify-items: end;
+  line-height: 1.25;
+}
+
+.mineStat b {
+  color: var(--bone);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mineStat small {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── 11/22 명예의 전당 (지난 주들 1위 — 노멀·헬 함께, 레이스 탭 명예의 전당과 같은 상자) ── */
+.hall {
+  display: grid;
+  gap: 6px;
+  padding: 8px 6px;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+}
+
+.hallTitle {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 2px;
+  color: var(--bone);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.hallTitle span {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.hallEmpty {
+  margin: 0;
+  padding: 10px 8px;
+  background: var(--bg-deep);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+  word-break: keep-all;
+}
+
+.hallList {
+  display: grid;
+  gap: 2px;
+  max-height: 196px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.hallRow {
+  --hc: #f2d27a;
+  display: grid;
+  grid-template-columns: 92px 34px minmax(0, 1fr) auto 104px;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 3px 8px;
+  background: var(--bg-deep);
+  font-size: 12px;
+}
+
+.hallRow[data-mode="hell"] {
+  --hc: #ffb8a0;
+}
+
+/* 가장 최근 정산 주는 금테로 크게 */
+.hallRow[data-top] {
+  min-height: 36px;
+  background: linear-gradient(90deg, rgba(224, 195, 106, 0.16), transparent 75%), var(--bg-deep);
+  box-shadow: inset 0 0 0 1px rgba(224, 195, 106, 0.55);
+}
+
+.hallRow[data-top][data-mode="hell"] {
+  background: linear-gradient(90deg, rgba(255, 90, 60, 0.16), transparent 75%), var(--bg-deep);
+  box-shadow: inset 0 0 0 1px rgba(255, 120, 90, 0.55);
+}
+
+.hallWeek {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.modeBadge {
+  justify-self: start;
+  padding: 1px 4px;
+  border: 1px solid #ffd36a;
+  color: #ffe27a;
+  font-family: var(--font-small);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.modeBadge[data-mode="hell"] {
+  border-color: #ff7a5a;
+  color: #ffb0a0;
+}
+
+.hallName {
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hallRow[data-top] .hallName {
+  color: var(--hc);
+  font-size: 13px;
+}
+
+.crown {
+  margin-right: 4px;
+  color: var(--hc);
+}
+
+.hallName small {
+  margin-left: 6px;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.hallDmg {
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.hallMs {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
 .mineNote {
   grid-column: 1 / -1;
   color: var(--text);
@@ -488,8 +671,48 @@
     max-height: 168px;
   }
 
-  .wide {
-    display: none;
+  /* 11/22 모드 카드: 「이번 주 현재 1위」 / 이름 / 피해 세 줄 */
+  .modeLead {
+    display: grid;
+  }
+
+  .leadName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* 명예의 전당 두 줄: [헬] 이름 … 피해 / 11월 30일 정산 … 버틴 시간 */
+  .hallRow {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "badge name dmg"
+      "week week ms";
+    row-gap: 1px;
+    padding-block: 4px;
+  }
+
+  .hallRow .modeBadge {
+    grid-area: badge;
+  }
+
+  .hallName {
+    grid-area: name;
+  }
+
+  .hallDmg {
+    grid-area: dmg;
+  }
+
+  .hallWeek {
+    grid-area: week;
+  }
+
+  .hallMs {
+    grid-area: ms;
+  }
+
+  .hallList {
+    max-height: 236px;
   }
 }
 

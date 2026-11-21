@@ -165,7 +165,7 @@ export class WorldScene extends Phaser.Scene {
   private mungnyang!: MungnyangView;
   /** 11/20 야근 빌딩 오른쪽 「총무팀 문대리」: 사무실 가구 카트·문대리·이름표·밤 불빛 (world/OfficeStallView) */
   private office!: OfficeStallView;
-  /** 11/20 판교의 등대 (전광판 옆 이번 주 1위 이름표) */
+  /** 11/20 판교의 등대 (전광판 위 노멀·헬 현재 1위 이름표) */
   private lighthouse!: LighthouseView;
   /** 동물원 타는 펫 올라타기·내리기 (world/zoo/Riding) */
   private riding!: Riding;

@@ -261,8 +261,12 @@ async function board(mode: ChairMode, week: string, now: number): Promise<Board>
   return b;
 }
 
-/** 시험용: 랭킹 기억을 지운다 */
-export const resetChairRankCache = () => void rc.__tombChairRank?.clear();
+/** 시험용: 랭킹·명예의 전당 기억을 지운다 */
+export const resetChairRankCache = () => {
+  rc.__tombChairRank?.clear();
+  // 명예의 전당 기억 (lib/chairman/hall — 같은 전역 칸)
+  delete (globalThis as { __tombChairHall?: unknown }).__tombChairHall;
+};
 
 const strip = (rows: Board["rows"], me: string | null): ChairTopRow[] => rows.map(({ accountId, ...r }) => ({ ...r, me: accountId === me }));
 const leaderOf = (b: Board) => (b.rows[0] ? { name: b.rows[0].name, damage: b.rows[0].damage } : null);

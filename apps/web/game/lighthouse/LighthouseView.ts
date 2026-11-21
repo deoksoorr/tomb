@@ -19,6 +19,13 @@ import { BOARD_ART_H, BOARD_ART_W, LIGHTHOUSE, LIGHTHOUSE_ART_FOOT, LIGHTHOUSE_A
 const LED_STEP_MS = 110;
 /** 11/20 전광판이 화면에 보이면 이번 주 1위를 이 간격으로 다시 묻는다 (UI도 1분 캐시) */
 const WANT_MS = 60_000;
+/** 11/22 이름표 노멀 → 헬 번갈아 보이는 간격 · 바뀔 때 흐려졌다 켜지는 시간 */
+const TAG_MS = 4500;
+const TAG_FADE_MS = 260;
+/** 이름표 글자색: 노멀 금빛 · 헬 붉은빛 (레이스 탭 모드 색) */
+const TAG_TINT = { normal: 0xffd890, hell: 0xffb8a4 } as const;
+const TAG_ALPHA = 0.95;
+type BoardTag = { mode: "normal" | "hell"; text: string };
 
 export class LighthouseView {
   private readonly objs: Phaser.GameObjects.GameObject[] = [];
@@ -29,8 +36,10 @@ export class LighthouseView {
   readonly beam: BeamView;
   private readonly ledGlow: Phaser.GameObjects.Image;
   private readonly led: Phaser.GameObjects.Image;
-  /** 11/20 전광판 위 이름표 (이번 주 노멀 1위 — 한글은 LED 글꼴로 못 그려서 마을 이름표 글씨로) */
+  /** 11/20 전광판 위 이름표 (11/22 노멀·헬 현재 1위를 번갈아 — 한글은 LED 글꼴로 못 그려서 마을 이름표 글씨로) */
   private readonly tag: Phaser.GameObjects.BitmapText | null = null;
+  private tags: BoardTag[] = [];
+  private tagAt = 0;
   private ledText = LED_TEXT;
   private ledLoop = LED_LOOP;
   private ledOff = 0;
@@ -92,14 +101,16 @@ export class LighthouseView {
           },
         }),
       );
-    // 11/20 이름표: 판 위 (마을 이름표 글씨, 화면에서 늘 같은 크기 — scaleLabels)
+    // 11/20 이름표: 판 위 (마을 이름표 글씨, 화면에서 늘 같은 크기 — scaleLabels). 11/21 글이 길어져 등대 몸통 오른쪽 끝에서 시작한다 (몸통을 가리지 않게)
     if (atlas) {
-      this.tag = scene.add.bitmapText(B.x, bt - 2, FONT_KEY, "", FONT_PX).setOrigin(0.5, 1).setTint(0xffd890).setAlpha(0.95).setDepth(DEPTH.labels - 1).setVisible(false);
+      this.tag = scene.add.bitmapText(left + LIGHTHOUSE_ART_W + 3, bt - 2, FONT_KEY, "", FONT_PX).setOrigin(0, 1).setTint(TAG_TINT.normal).setAlpha(TAG_ALPHA).setDepth(DEPTH.labels - 1).setVisible(false);
       this.objs.push(this.tag);
+      // 11/22 노멀 → 헬 차례로 (움직임 줄이기면 흐려지지 않고 바로 바뀐다)
+      this.timers.push(scene.time.addEvent({ delay: TAG_MS, loop: true, callback: () => this.nextTag() }));
     }
-    this.offs.push(bridge.on("lighthouse:board", (b) => this.setBoard(b.led, b.name)));
+    this.offs.push(bridge.on("lighthouse:board", (b) => this.setBoard(b.led, b.tags)));
     const last = bridge.last("lighthouse:board");
-    if (last) this.setBoard(last.led, last.name);
+    if (last) this.setBoard(last.led, last.tags);
     // 밤 정도 따라 빛 층·빛줄기
     this.timers.push(scene.time.addEvent({ delay: 200, loop: true, callback: () => this.tick() }));
     this.tick();
@@ -114,7 +125,7 @@ export class LighthouseView {
   }
 
   /** 11/20 전광판 글·이름표 바꾸기 (UI가 lighthouse:board로) */
-  private setBoard(text: string, name: string | null): void {
+  private setBoard(text: string, tags: BoardTag[] | undefined): void {
     if (text && text !== this.ledText) {
       const t = ledTextures(this.scene, text);
       this.ledText = text;
@@ -125,9 +136,44 @@ export class LighthouseView {
       this.showLed();
     }
     if (this.tag) {
-      if (name) this.atlas?.ensure(name);
-      this.tag.setText(name ?? "").setVisible(!!name);
+      const next = (tags ?? []).filter((t) => t.text);
+      for (const t of next) this.atlas?.ensure(t.text);
+      const same = next.length === this.tags.length && next.every((t, i) => t.text === this.tags[i].text);
+      this.tags = next;
+      if (!same) this.tagAt = 0;
+      this.showTag();
     }
+  }
+
+  private showTag(): void {
+    const t = this.tags[this.tagAt % Math.max(1, this.tags.length)];
+    if (!this.tag) return;
+    if (!t) {
+      this.tag.setText("").setVisible(false);
+      return;
+    }
+    this.tag.setText(t.text).setTint(TAG_TINT[t.mode]).setAlpha(TAG_ALPHA).setVisible(true);
+  }
+
+  /** 11/22 이름표 다음 줄 (줄이 둘 이상일 때만) */
+  private nextTag(): void {
+    const tag = this.tag;
+    if (!tag || this.tags.length < 2) return;
+    const go = () => {
+      this.tagAt = (this.tagAt + 1) % this.tags.length;
+      this.showTag();
+    };
+    if (this.reduced || !tag.visible) return go();
+    this.scene.tweens.add({
+      targets: tag,
+      alpha: 0,
+      duration: TAG_FADE_MS,
+      onComplete: () => {
+        go();
+        tag.setAlpha(0);
+        this.scene.tweens.add({ targets: tag, alpha: TAG_ALPHA, duration: TAG_FADE_MS });
+      },
+    });
   }
 
   /** 1/zoom 배율 글씨 (WorldScene이 매 프레임) */

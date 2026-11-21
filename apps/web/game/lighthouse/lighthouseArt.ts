@@ -21,7 +21,7 @@ export const LTEX = {
 export const LED_BOX = { x: 4, y: 5, w: 26, h: 7 } as const;
 /** 흐르는 글 (3×5 점 글씨 — 영문 대문자·숫자·기호만) */
 export const LED_TEXT = "PANGYO LIGHTHOUSE * CEO 1:1 MEETING * ";
-/** 이번 주 노멀 1위가 있으면 (UI가 lighthouse:board로 준다 — components/chairman/chairText ledLine) */
+/** 이번 주 노멀·헬 현재 1위가 있으면 그 피해 (UI가 lighthouse:board로 준다 — components/chairman/chairText ledLine) */
 
 const OUT = 0x1f1d1a;
 const RED = { hi: 0xe0604c, mid: 0xbf402f, lo: 0x8c2a22 };

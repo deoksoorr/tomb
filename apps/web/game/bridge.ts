@@ -558,10 +558,10 @@ export type UiEvents = {
   // ── 11/20 회장님 독대 입장 (components/chairman) ──
   /** 게임 → UI: 등대 문 앞 E → 입장 창 */
   "chairman:door": undefined;
-  /** 게임 → UI: 등대 전광판이 화면에 보인다 → 이번 주 노멀 1위를 달라 (UI가 1분 캐시) */
+  /** 게임 → UI: 등대 전광판이 화면에 보인다 → 이번 주 노멀·헬 현재 1위를 달라 (UI가 1분 캐시) */
   "lighthouse:want": undefined;
-  /** UI → 게임: 전광판 글 (3×5 LED — 영문·숫자만) + 옆 이름표 (한글 이름, 없으면 null) */
-  "lighthouse:board": { led: string; name: string | null };
+  /** UI → 게임: 전광판 글 (3×5 LED — 영문·숫자만) + 판 위 이름표 줄 (11/22 노멀·헬 차례로 번갈아, 둘 다 비면 []) */
+  "lighthouse:board": { led: string; tags: { mode: "normal" | "hell"; text: string }[] };
 };
 
 export type ForageUse =

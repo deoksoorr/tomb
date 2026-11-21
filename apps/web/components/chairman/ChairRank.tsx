@@ -5,6 +5,7 @@ import { DIR, itemName } from "@tomb/protocol";
 import { errorMessage } from "@/lib/api";
 import { CHAIR_RANK_POINTS, CHAIR_REWARD } from "@/lib/chairman/rewards";
 import { chairWeek, type ChairMode } from "@/lib/chairman/rules";
+import type { ChairHallResponse, ChairHallRow } from "@/lib/chairman/hall";
 import type { ChairRankResponse, ChairTopRow } from "@/lib/chairman/service";
 import { tabHidden } from "@/lib/hooks/visibleAgain";
 import AvatarThumb from "../account/AvatarThumb";
@@ -12,15 +13,16 @@ import RaceCountdown from "../grave/RaceCountdown";
 import { RACE_REFRESH_MS } from "../grave/WeeklyRace";
 import { OutfitCanvas } from "../shop/OutfitPreview";
 import ItemIcon from "../ui/ItemIcon";
-import { chairRank } from "./chairData";
+import { chairHall, chairRank } from "./chairData";
 import ChairPortrait from "./ChairPortrait";
-import { lastedText, MODE_NAME, msClock, num } from "./chairText";
+import { dmgText, HALL_EMPTY, hallWeekText, lastedText, LEAD_LABEL, MODE_NAME, msClock, num } from "./chairText";
 import r from "./ChairRank.module.css";
 
 // 11/20 레이스 창 [회장님 독대] 탭 (이번 주 레이스 탭과 같은 짜임)
-//  위: 노멀·헬 카드 탭(초상 + 이번 주 1위 피해) → 남은 시간 줄
+//  위: 노멀·헬 카드 탭(초상 + 이번 주 현재 1위 이름·피해) → 남은 시간 줄
 //  가운데: 1·2·3위 시상대(캐릭터 모습) | 1위 보상 상자(칭호·모자·오라 입어 보기·포인트)
-//  아래: 4위부터 목록(고정 높이 스크롤) + 맨 아래 내 순위 줄. 헬은 붉은 강조색. 폰은 한 줄로 쌓는다
+//  아래: 4위부터 목록(고정 높이 스크롤) + 맨 아래 내 순위 줄 → 11/22 명예의 전당 (지난 주들 1위, 노멀·헬 함께). 헬은 붉은 강조색. 폰은 한 줄로 쌓는다
+//  11/22 순위는 피해량으로 정한다 — 큰 숫자는 늘 「피해」, 버틴 시간은 작게 「버틴 시간 1:10」
 
 const GHOST = "#e8d9b0";
 
@@ -61,15 +63,18 @@ export default function ChairRank({ initial }: { initial: ChairMode }) {
               <ChairPortrait hell={m === "hell"} className={r.modeArt} />
               <span className={r.modeText}>
                 <b>{MODE_NAME[m]}</b>
-                <span className={r.modeLead}>{!leaders ? (
-                    "…"
-                  ) : lead ? (
-                    <>
-                      <span className={r.wide}>이번 주 </span>1위 {num(lead.damage)}
-                    </>
-                  ) : (
-                    "아직 1위가 없어요"
-                  )}</span>
+                {!leaders ? (
+                  <span className={r.modeLead}>…</span>
+                ) : lead ? (
+                  <>
+                    <span className={r.modeLead}>
+                      <span className={r.leadLabel}>{LEAD_LABEL}</span> <span className={r.leadName}>{lead.name}</span>
+                    </span>
+                    <span className={r.modeDmg}>{dmgText(lead.damage)}</span>
+                  </>
+                ) : (
+                  <span className={r.modeLead}>아직 1위가 없어요</span>
+                )}
               </span>
             </button>
           );
@@ -97,7 +102,7 @@ export default function ChairRank({ initial }: { initial: ChairMode }) {
         <div className={r.head} aria-hidden="true">
           <span>순위</span>
           <span>이름</span>
-          <span>피해</span>
+          <span>피해량</span>
           <span>버틴 시간</span>
         </div>
         <ol className={r.rows}>
@@ -115,19 +120,76 @@ export default function ChairRank({ initial }: { initial: ChairMode }) {
             <>
               <span className={r.place}>{data.mine.rank}위</span>
               <span className={r.who}>내 기록</span>
-              <span className={r.dmg}>{num(data.mine.damage)}</span>
-              <span className={r.ms}>{msClock(data.mine.ms)}</span>
+              <span className={r.mineStat}>
+                <b>{dmgText(data.mine.damage)}</b>
+                <small>버틴 시간 {msClock(data.mine.ms)}</small>
+              </span>
             </>
           ) : (
             <span className={r.mineNote}>이번 주 내 기록이 아직 없어요.</span>
           )}
         </div>
       </section>
+      <HallBox />
     </section>
   );
 }
 
-/** 시상대 한 칸: 캐릭터 + 받침(등수) + 이름 · 피해 · 버틴 시간 */
+/** 11/22 명예의 전당: 지난 주들 1위 (노멀·헬 함께, 최근 주부터). 맨 위 주는 크게. 한 번만 받는다 (주마다 바뀐다) */
+function HallBox() {
+  const [hall, setHall] = useState<ChairHallResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    chairHall()
+      .then((v) => alive && setHall(v))
+      .catch((e: unknown) => alive && setError(errorMessage(e)));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const latest = hall?.rows[0]?.week;
+  return (
+    <section className={r.hall} aria-label="회장님 독대 명예의 전당" data-testid="chair-hall">
+      <h3 className={r.hallTitle}>
+        명예의 전당<span>지난 주 1위를 모아 둬요</span>
+      </h3>
+      {!hall ? (
+        <p className={r.none}>{error ?? "불러오는 중…"}</p>
+      ) : hall.rows.length === 0 ? (
+        <p className={r.hallEmpty}>{HALL_EMPTY}</p>
+      ) : (
+        <ol className={r.hallList}>
+          {hall.rows.map((h) => (
+            <HallLine key={`${h.week}:${h.mode}`} h={h} top={h.week === latest} />
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
+function HallLine({ h, top }: { h: ChairHallRow; top: boolean }) {
+  return (
+    <li className={r.hallRow} data-mode={h.mode} data-top={top || undefined}>
+      <span className={r.hallWeek}>{hallWeekText(h.week)}</span>
+      <span className={r.modeBadge} data-mode={h.mode}>
+        {MODE_NAME[h.mode]}
+      </span>
+      <span className={r.hallName}>
+        <span className={r.crown} aria-hidden="true">
+          ♛
+        </span>
+        {h.name}
+        {h.streak && h.streak > 1 && <small>{h.streak}주 연속</small>}
+      </span>
+      <span className={r.hallDmg}>{dmgText(h.damage)}</span>
+      <span className={r.hallMs}>{lastedText(h.ms) ?? "버틴 시간 -"}</span>
+    </li>
+  );
+}
+
+/** 시상대 한 칸: 캐릭터 + 받침(등수) + 이름 + 「피해 N」 + 작게 「버틴 시간 m:ss」 */
 function Step({ row }: { row: ChairTopRow }) {
   const a = row.avatar;
   const lasted = lastedText(row.ms);
@@ -139,7 +201,9 @@ function Step({ row }: { row: ChairTopRow }) {
         {row.name}
         {row.me && " (나)"}
       </span>
-      <span className={r.stepDmg}>{num(row.damage)}</span>
+      <span className={r.stepDmg}>
+        <small>피해</small> {num(row.damage)}
+      </span>
       <span className={r.stepMs}>{lasted ?? "버틴 시간 -"}</span>
     </li>
   );

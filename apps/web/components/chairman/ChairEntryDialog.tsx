@@ -12,7 +12,7 @@ import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import { chairStatus, peekStatus } from "./chairData";
 import ChairPortrait from "./ChairPortrait";
-import { goState, lastedText, num, pips, pointsLine, runsText, sealRule, sealTag, weekText } from "./chairText";
+import { dmgText, goState, lastedText, pips, pointsLine, runsText, sealRule, sealTag, weekText } from "./chairText";
 import s from "./ChairEntry.module.css";
 
 // 11/20 등대 문 앞 E → 회장님 독대 입장 창 (시안 dps3 .pk): 노멀·헬 카드, 오늘 남은 판, 판 포인트, 내 최고, 이번 주 순위.
@@ -122,14 +122,18 @@ export default function ChairEntryDialog({ onClose, onStart, onOpenRace }: Props
             )}
             <div>
               <dt>내 최고</dt>
+              {/* 11/22 순위는 피해로 — 「피해 N」, 버틴 시간은 아래 작게 */}
               <dd className={s.best}>
-                {st ? (st.best[mode] > 0 ? num(st.best[mode]) : "기록 없음") : "…"}
+                {st ? (st.best[mode] > 0 ? dmgText(st.best[mode]) : "기록 없음") : "…"}
                 {st && st.best[mode] > 0 && lastedText(st.bestMs?.[mode]) && <small>{lastedText(st.bestMs?.[mode])}</small>}
               </dd>
             </div>
             <div>
               <dt>이번 주</dt>
-              <dd className={st?.week[mode]?.rank === 1 ? s.gold : undefined}>{st ? weekText(st.week[mode]) : "…"}</dd>
+              <dd className={cx(s.best, st?.week[mode]?.rank === 1 && s.gold)}>
+                {st ? weekText(st.week[mode]) : "…"}
+                {st?.week[mode] && <small>{dmgText(st.week[mode].damage)}</small>}
+              </dd>
             </div>
           </dl>
           <button type="button" className={s.go} disabled={g.disabled} onClick={() => void go(mode)}>

@@ -582,7 +582,7 @@ function pages(): Page[] {
             <Item art={POTIONS[0]?.art} title="야근 빌딩 보상">
               깬 층마다 초월 경험치를 받아요. 1층은 {floorTExp(1)}, 30층은 {floorTExp(30)}, 100층은 {floorTExp(100)}만큼 받아요. {TOWER_STEEP_FROM + 1}층부터는 확 늘어서 {TOWER_STEEP_FROM + 1}층은{" "}
               {floorTExp(TOWER_STEEP_FROM + 1)}이에요. 쓰러져도 깬 층만큼은 받아요.
-              {TOWER_CHEST_FROM}층부터는 우두머리 층을 깨면 우두머리 상자가 열려요. 물약과 강화 재료는 늘 들어 있어요. 세트 장비는 {Math.round(TOWER_CHEST_GEAR_CHANCE * 100)}% 확률로 아주 드물게 나와요.
+              {TOWER_CHEST_FROM}층부터는 우두머리 층을 깨면 우두머리 상자가 열려요. 물약과 강화 재료는 늘 들어 있어요. 세트 장비는 {Math.round(TOWER_CHEST_GEAR_CHANCE * 100)}% 확률로 나와요.
               {gradeBandText()} 꾸미기 이용권도 가끔 나와요.
               깬 층마다 포인트도 조금 받아요({towerFloorPointsText()}). 초월 레벨마다 적정 층이 있어서(★{50 + 30}이면 {towerFitFloor(30)}층) 그보다 10층 넘게 낮은 층은 포인트 없이 초월 경험치와 상자만 받아요. 잡은 몬스터 수는 주간 사냥 레이스에 들어가요. 50층 우두머리를 잡으면 다음부터 51층에서, 100층을 깨면 101층에서 바로 시작할 수 있어요. 그 위로는{" "}
               {TOWER_CHECKPOINT_EVERY}층마다(121층, 141층 …) 엘리베이터가 켜져요.

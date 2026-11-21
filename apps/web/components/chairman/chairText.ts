@@ -1,3 +1,4 @@
+import { addDays } from "@/lib/gameDay";
 import { CHAIR_POINTS_PER_MIN, CHAIR_RUNS_PER_DAY, type ChairMode } from "@/lib/chairman/rules";
 
 // 11/20 회장님 독대 입장 창·전광판 글 (순수 — chairText.test.ts)
@@ -36,30 +37,58 @@ export function goState(mode: ChairMode, o: { eligible: boolean; remaining: numb
 export const pips = (left: number) => Array.from({ length: CHAIR_RUNS_PER_DAY }, (_, i) => i < left);
 export const runsText = (left: number) => `${Math.max(0, left)} / ${CHAIR_RUNS_PER_DAY}`;
 
-/** 전광판 글 (3×5 LED — 영문 대문자·숫자·기호만). 이번 주 노멀 1위가 있으면 그 피해 */
-export function ledLine(top: { damage: number } | null): string {
-  return top && top.damage > 0 ? `PANGYO LIGHTHOUSE * THIS WEEK #1 ${num(top.damage)} * ` : "PANGYO LIGHTHOUSE * CEO 1:1 MEETING * ";
+type Lead = { name: string; damage: number } | null;
+/** 모드마다 이번 주 현재 1위 */
+export type BoardTops = Record<ChairMode, Lead>;
+
+/** 11/22 전광판 글 (3×5 LED — 영문 대문자·숫자·기호만). 노멀·헬 현재 1위 피해를 차례로 (없는 모드는 WAITING) */
+export function ledLine(tops: BoardTops | null): string {
+  const n = tops?.normal && tops.normal.damage > 0 ? tops.normal : null;
+  const h = tops?.hell && tops.hell.damage > 0 ? tops.hell : null;
+  if (!n && !h) return "PANGYO LIGHTHOUSE * CEO 1:1 MEETING * ";
+  const part = (label: string, t: Lead) => (t ? `${label} NOW #1 ${num(t.damage)}` : `${label} #1 WAITING`);
+  return `PANGYO LIGHTHOUSE * ${part("NORMAL", n)} * ${part("HELL", h)} * `;
 }
 
-/** 이름표 (한글 이름 — 너무 길면 자른다) */
-export function boardName(name: string | null | undefined): string | null {
-  const n = name?.trim();
-  if (!n) return null;
-  const s = [...n];
-  return `이번 주 1위 ${s.length > 10 ? `${s.slice(0, 10).join("")}…` : n}`;
+/** 이름이 너무 길면 자른다 */
+const clip = (name: string) => {
+  const s = [...name.trim()];
+  return s.length > 10 ? `${s.slice(0, 10).join("")}…` : s.join("");
+};
+
+/** 11/22 등대 이름표 줄 (노멀 → 헬 차례로 번갈아 — 한글은 LED로 못 그려서 마을 이름표 글씨). 두 모드 다 비면 [] */
+export function boardTags(tops: BoardTops | null): { mode: ChairMode; text: string }[] {
+  const ok = (t: Lead) => !!t && t.damage > 0 && !!t.name?.trim();
+  if (!tops || (!ok(tops.normal) && !ok(tops.hell))) return [];
+  return (["normal", "hell"] as const).map((m) => {
+    const t = tops[m];
+    return { mode: m, text: t && ok(t) ? `${MODE_NAME[m]} 현재 1위 ${clip(t.name)} ${num(t.damage)}` : `${MODE_NAME[m]} 1위를 기다리고 있어요` };
+  });
 }
+
+/** 11/22 「이번 주 현재 1위」 이름 (레이스 탭 모드 카드) */
+export const LEAD_LABEL = "이번 주 현재 1위";
+
+/** 피해 칸 「피해 48,213,904」 */
+export const dmgText = (n: number) => `피해 ${num(n)}`;
+
+/** 11/22 「버틴 시간 14:32」 (옛 기록은 null) */
+export function lastedText(ms?: number | null): string | null {
+  return ms && ms > 0 ? `버틴 시간 ${msClock(ms)}` : null;
+}
+
+/** 11/22 명예의 전당 주 「11월 30일 정산」 (주 = 월요일 시작, 정산은 다음 월요일 새벽 5시) */
+export function hallWeekText(week: string): string {
+  const d = addDays(week, 7);
+  return `${Number(d.slice(4, 6))}월 ${Number(d.slice(6, 8))}일 정산`;
+}
+
+/** 11/22 명예의 전당이 비었을 때 */
+export const HALL_EMPTY = "첫 명예의 전당은 11월 30일 월요일 새벽 5시 정산 뒤에 채워져요.";
 
 /** 버틴 시간 열 "14:32" (옛 기록은 "-") */
 export function msClock(ms?: number | null): string {
   if (!ms || ms <= 0) return "-";
   const s = Math.floor(ms / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-}
-
-/** 「14분 32초 버팀」 (옛 기록은 null) */
-export function lastedText(ms?: number | null): string | null {
-  if (!ms || ms <= 0) return null;
-  const s = Math.floor(ms / 1000);
-  const m = Math.floor(s / 60);
-  return m > 0 ? `${m}분 ${s % 60}초 버팀` : `${s}초 버팀`;
 }

@@ -19,6 +19,7 @@ import type { ChairMode } from "./rules";
 //  - chair:w:{모드}:{주}       ZSET 계정 → 그 주 한 판 최고 피해 (운영자는 넣지 않는다). 60일 뒤 지워진다
 //  - chair:wa:{모드}:{주}      HASH 계정 → "시각|판 ms|최대 초당 피해" 그 최고 피해를 낸 판 (동점이면 먼저 낸 사람 · 1위 기록 확인에 싣는다)
 //  - chair:settle:{주}         STRING 그 주 정리 기록 JSON (SET NX — 처음 정한 것만)
+//  - chair:weeks               ZSET 정리한 주 → 점수 = 주 YYYYMMDD 숫자 (11/22 명예의 전당 색인 — createSettle 때마다 넣는다. 같은 주는 다시 넣어도 하나)
 //  - chair:lock:{주}           STRING 정리 잠금 (60초)
 //  - chair:paid                HASH 지급 표시 → 계정 (HSETNX — 같은 지급은 한 번만)
 
@@ -31,6 +32,7 @@ const mk = {
   week: (m: ChairMode, w: string) => `chair:w:${m}:${w}`,
   weekAt: (m: ChairMode, w: string) => `chair:wa:${m}:${w}`,
   settle: (w: string) => `chair:settle:${w}`,
+  weeks: "chair:weeks",
   lock: (w: string) => `chair:lock:${w}`,
   paid: "chair:paid",
 };
@@ -88,6 +90,8 @@ export interface ChairStore {
   getSettle(week: string): Promise<ChairSettle | null>;
   /** 처음이면 저장하고 true */
   createSettle(rec: ChairSettle): Promise<boolean>;
+  /** 11/22 명예의 전당: 정리 기록을 최근 주부터 limit개 */
+  hall(limit: number): Promise<ChairSettle[]>;
   lock(week: string): Promise<boolean>;
   unlock(week: string): Promise<void>;
   /** 지급 표시: 처음이면 true (원자적) */
@@ -206,6 +210,12 @@ export class MemoryChairStore implements ChairStore {
     if (this.settles.has(rec.week)) return false;
     this.settles.set(rec.week, structuredClone(rec));
     return true;
+  }
+  async hall(limit: number) {
+    return [...this.settles.values()]
+      .sort((a, b) => b.week.localeCompare(a.week))
+      .slice(0, Math.max(0, limit))
+      .map((r) => structuredClone(r));
   }
   async lock(week: string) {
     const now = Date.now();
@@ -406,12 +416,25 @@ export class RedisChairStore implements ChairStore {
       .slice(0, n);
   }
   async getSettle(week: string) {
-    const raw = await this.redis.get<unknown>(mk.settle(week));
-    if (!raw) return null;
-    return (typeof raw === "string" ? JSON.parse(raw) : raw) as ChairSettle;
+    return settleOf(await this.redis.get<unknown>(mk.settle(week)));
   }
   async createSettle(rec: ChairSettle) {
-    return (await this.redis.set(mk.settle(rec.week), JSON.stringify(rec), { nx: true })) !== null;
+    const ok = (await this.redis.set(mk.settle(rec.week), JSON.stringify(rec), { nx: true })) !== null;
+    // 처음이 아니어도 색인에 넣는다 (같은 주는 하나 — 기록만 있고 색인이 빠진 주도 다음 정리 때 채워진다)
+    await this.redis.zadd(mk.weeks, { score: Number(rec.week) || 0, member: rec.week });
+    return ok;
+  }
+  async hall(limit: number) {
+    if (limit <= 0) return [];
+    // 이 클라이언트는 자동으로 풀지 않는다 — 주는 문자열(또는 숫자), MGET은 JSON 문자열 배열로 온다
+    const weeks = ((await this.redis.zrange<unknown[]>(mk.weeks, 0, limit - 1, { rev: true })) ?? []).map(String);
+    if (!weeks.length) return [];
+    const raws = await this.redis.mget<unknown[]>(...weeks.map(mk.settle));
+    const list = Array.isArray(raws) ? raws : [];
+    return weeks.flatMap((_, i) => {
+      const r = settleOf(list[i]);
+      return r ? [r] : [];
+    });
   }
   async lock(week: string) {
     const t = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -434,6 +457,21 @@ export class RedisChairStore implements ChairStore {
   }
 }
 
+/** 정리 기록 한 칸 (JSON 문자열이든 이미 풀린 객체든 — 망가졌거나 없으면 null) */
+export function settleOf(raw: unknown): ChairSettle | null {
+  if (raw === null || raw === undefined || raw === "") return null;
+  let v: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      v = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  const r = v as Partial<ChairSettle> | null;
+  return r && typeof r === "object" && typeof r.week === "string" && r.ranks ? (r as ChairSettle) : null;
+}
+
 /** HMGET 결과를 필드 순서대로 (배열로 오든 이름 붙은 객체로 오든 — lib/store/accounts-redis hmgetList와 같은 규칙) */
 export function hmgetList(got: unknown, fields: readonly string[]): (string | null)[] {
   if (Array.isArray(got)) return fields.map((_, i) => (got[i] === null || got[i] === undefined ? null : String(got[i])));
@@ -450,5 +488,6 @@ export function getChairStore(): ChairStore {
   if (conn) return cur instanceof RedisChairStore ? cur : (g.__tombChair = new RedisChairStore(conn));
   if (env.isProd()) throw new Error("[chairman] Redis 환경변수가 없습니다.");
   if (cur instanceof MemoryChairStore) return cur;
-  return (g.__tombChair = new MemoryChairStore());
+  // 11/22 개발 서버가 이 모듈을 다시 읽으면(HMR) 클래스가 바뀌어 instanceof가 틀린다 — 예전 메모리 기록을 옮겨 담는다 (lib/store/champ getChamp와 같은 방식)
+  return (g.__tombChair = cur && "settles" in cur ? Object.assign(new MemoryChairStore(), cur) : new MemoryChairStore());
 }

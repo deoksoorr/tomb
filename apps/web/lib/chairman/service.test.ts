@@ -9,6 +9,7 @@ import { kstDay } from "../store/accounts";
 import { champUntil } from "../store/champ";
 import { CHAIR_REWARD } from "./rewards";
 import { CHAIR_UNFAIR_TEXT, type ChairMode } from "./rules";
+import { chairHall } from "./hall";
 import { abortChair, chairRank, finishChair, resetChairRankCache, startChair, chairStatus } from "./service";
 import { chairHolders, ensureChairSettled, resetChairMemo, settleChair } from "./settle";
 import { getChairStore } from "./store";
@@ -366,5 +367,33 @@ describe("주간 정리 시뮬레이션", () => {
     const r3 = (await listReviews()).find((r) => r.kind === "chair" && r.acct === a.id && r.week === W3);
     expect(r3).toMatchObject({ points: 2500, streak: ["normal"] });
     expect((await getMegaphone().recent(20, weekEndMs(W3) + 1000)).some((m) => m.text.includes("3주 연속"))).toBe(true);
+  });
+});
+
+describe("11/22 명예의 전당", () => {
+  it("정산 전엔 비고, 정산마다 모드별 1위가 쌓인다 (노멀·헬 함께, 최근 주부터, 지금 이름) · 다시 정리해도 한 번만", async () => {
+    const [a, b, c] = await Promise.all(["hallA", "hallB", "hallC"].map((n) => player(n)));
+    expect(await chairHall(at(W1, 1))).toEqual({ rows: [] });
+    await run(a, "normal", at(W1, 1), 0.5, 70_000);
+    await run(b, "normal", at(W1, 1, 14), 0.1);
+    await run(b, "hell", at(W1, 2), 0.4);
+    await settleChair(W1, weekEndMs(W1) + 1000);
+    // 2주차: 노멀만 (헬 기록 없음)
+    await run(c, "normal", at(W2, 1), 0.6);
+    await settleChair(W2, weekEndMs(W2) + 1000);
+    await settleChair(W2, weekEndMs(W2) + 2000);
+    // 이름을 바꾸면 지금 이름으로
+    expect(await getAccounts().changeName(a.id, "새이름", Date.now(), 0, 0)).toMatchObject({ ok: true });
+    resetChairRankCache();
+    const h = await chairHall(weekEndMs(W2) + 3000);
+    expect(h.rows.map((r) => [r.week, r.mode, r.name])).toEqual([
+      [W2, "normal", "hallC"],
+      [W1, "normal", "새이름"],
+      [W1, "hell", "hallB"],
+    ]);
+    expect(h.rows[1]).toMatchObject({ ms: 70_000 });
+    expect(h.rows[1].damage).toBeGreaterThan(0);
+    // 응답에 계정 id는 없다
+    expect(JSON.stringify(h)).not.toContain(a.id);
   });
 });

@@ -31,6 +31,8 @@ const DevSchema = z.discriminatedUnion("action", [
   // 11/21 오늘 판 수 되돌리기 (로컬 메모리 저장소만). acct를 주면 관리자 키로 그 계정 (운영자 시험용)
   // 11/22 refund: 오늘 판 돌려받기도 다시 쓸 수 있게
   z.object({ action: z.literal("refill"), acct: z.string().min(1).max(40).optional(), refund: z.boolean().default(false) }),
+  // 11/22 시험 기록 지우기 (로컬 메모리 저장소만): 모든 주 랭킹 · 정리 기록(명예의 전당) · 지급 표시
+  z.object({ action: z.literal("wipe") }),
 ]);
 
 /** 개발 전용 (운영 404): 회장님 독대 입장 창·레이스 탭 QA. 자격 층·랭킹 기록·오늘 판 쓰기를 바로 해 본다 */
@@ -42,6 +44,16 @@ export const POST = handler(async (req) => {
     const m = (getChairStore() as unknown as { me?: Map<string, { cn: number; ch: number; rf?: string }> }).me?.get(acct);
     if (m) Object.assign(m, { cn: 0, ch: 0 }, body.refund ? { rf: undefined } : {});
     return json({ ok: true, refilled: !!m });
+  }
+  if (body.action === "wipe") {
+    const mem = getChairStore() as unknown as { weeks?: Map<string, unknown>; settles?: Map<string, unknown>; marks?: Map<string, string> };
+    const n = { weeks: mem.weeks?.size ?? 0, settles: mem.settles?.size ?? 0 };
+    mem.weeks?.clear();
+    mem.settles?.clear();
+    mem.marks?.clear();
+    resetChairMemo();
+    resetChairRankCache();
+    return json({ ok: true, wiped: n });
   }
   const me = await requireVisitor(req);
   const now = Date.now();
