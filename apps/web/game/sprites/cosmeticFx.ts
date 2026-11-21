@@ -1574,7 +1574,7 @@ export class CosmeticFxSim {
       // 11/20 불타는 사직서 머리띠: 머리 위 불길만큼 이름표를 올린다 (chairFx bandFlame)
       else if (s.kind === "aura" && s.motion === "chFlame") top = Math.max(top, artTop + CHAIR_FLAME_UP);
       // 11/20 황금 사원증 왕관: 꼭대기 다이아·도는 별이 이름표에 닿지 않게 (사용자 「높이는 알아서」)
-      else if (s.kind === "aura" && s.motion === "chCrown") top = Math.max(top, artTop + CHAIR_CROWN_UP);
+      else if (s.kind === "aura" && (s.motion === "chCrown" || s.motion === "chDuoCrown")) top = Math.max(top, artTop + CHAIR_CROWN_UP);
     }
     return top;
   }
@@ -2075,6 +2075,8 @@ export class CosmeticFxSim {
       case "chEmber":
       case "chFlame":
       case "chCrown":
+      case "chStamp":
+      case "chDuoCrown":
         // 11/20 회장님 독대 1위 보상 (chairFx.ts): 그리기 도우미를 넘겨 그 파일이 그린다
         chairAura(s.motion, f, t, {
           push: (art, frame, x, y, o) => out.push(cmd(art, frame, x, y, o)),
@@ -2610,6 +2612,7 @@ export function fxIconGrid(id: string): Grid | null {
       return meteorIcon();
     case "chair_aura_gold":
     case "chair_aura_ember":
+    case "chair_aura_stamp":
       return chairIcon(id);
     case "hand_umbrella":
       blit(g, "umbrella", 0, 0, 2);

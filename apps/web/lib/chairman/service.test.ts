@@ -7,10 +7,11 @@ import { setStaff } from "../staff";
 import { getAccounts, getMegaphone } from "../store";
 import { kstDay } from "../store/accounts";
 import { champUntil } from "../store/champ";
-import { CHAIR_REWARD } from "./rewards";
+import { CHAIR_DUO, CHAIR_ITEM_IDS, CHAIR_REWARD } from "./rewards";
 import { CHAIR_UNFAIR_TEXT, type ChairMode } from "./rules";
 import { chairHall } from "./hall";
 import { abortChair, chairRank, finishChair, resetChairRankCache, startChair, chairStatus } from "./service";
+import { CHAMP_LEAD_COOLDOWN_MS } from "../weeklyChamp";
 import { chairHolders, ensureChairSettled, resetChairMemo, settleChair } from "./settle";
 import { getChairStore } from "./store";
 
@@ -367,6 +368,139 @@ describe("주간 정리 시뮬레이션", () => {
     const r3 = (await listReviews()).find((r) => r.kind === "chair" && r.acct === a.id && r.week === W3);
     expect(r3).toMatchObject({ points: 2500, streak: ["normal"] });
     expect((await getMegaphone().recent(20, weekEndMs(W3) + 1000)).some((m) => m.text.includes("3주 연속"))).toBe(true);
+  });
+});
+
+describe("11/23 이번 주 1위가 바뀌면 마을 소식", () => {
+  const leadNotes = async (now: number) => (await getMegaphone().recent(50, now)).filter((m) => m.text.includes("이번 주 1위로 올라섰어요")).map((m) => m.text);
+
+  it("다른 사람을 넘어 1위가 될 때만 (첫 기록·내 기록 갱신·같은 피해·연습·무적·운영자 판은 아님), 모드마다 쉼 시간에 한 번", async () => {
+    const [a, b, c, d, e, f, staff] = await Promise.all(["leadA", "leadB", "leadC", "leadD", "leadE", "leadF", "leadBoss"].map((n) => player(n)));
+    await setStaff(staff.id);
+    let clock = at(W1, 1, 10);
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => clock);
+    try {
+      const go = async (p: typeof a, mode: ChairMode, ratio: number, practice = false) => {
+        clock += MIN;
+        return run(p, mode, clock, ratio, 5 * MIN, practice);
+      };
+      await go(a, "normal", 0.3); // 그 주 첫 기록 → 없음
+      expect(await leadNotes(clock)).toEqual([]);
+      await go(b, "normal", 0.5); // a를 넘었다 → 공지
+      const nb = (await chairRank("normal", b.id, clock)).mine!.damage;
+      expect(await leadNotes(clock)).toEqual([`leadB님이 회장님 독대 노멀 이번 주 1위로 올라섰어요! 피해 ${nb.toLocaleString("ko-KR")}`]);
+      await go(f, "normal", 0.4); // 2위 → 없음
+      await go(b, "normal", 0.6); // 내 기록 갱신으로 1위 유지 → 없음
+      await go(staff, "normal", 0.95); // 운영자 → 순위에 안 들어간다
+      await go(c, "normal", 0.99, true); // 연습 판
+      expect(await leadNotes(clock)).toHaveLength(1);
+      // 헬은 따로: 첫 기록 d → 없음, e가 넘는다 → 공지 (노멀 쉼 시간과 별개)
+      await go(d, "hell", 0.3);
+      await go(e, "hell", 0.4);
+      expect((await leadNotes(clock)).filter((t) => t.includes("헬 이번 주"))).toEqual([expect.stringContaining("leadE님이 회장님 독대 헬 이번 주 1위로 올라섰어요! 피해 ")]);
+      // 노멀은 쉼 시간 안(앞 공지에서 6분)이라 c가 b를 넘어도 공지 없음 → 쉼 시간이 지나 a가 c를 넘으면 공지
+      await go(c, "normal", 0.7);
+      expect((await leadNotes(clock)).filter((t) => t.includes("노멀"))).toHaveLength(1);
+      clock += CHAMP_LEAD_COOLDOWN_MS;
+      await go(a, "normal", 0.8);
+      expect((await leadNotes(clock)).filter((t) => t.includes("노멀"))).toEqual([expect.stringContaining("leadA님"), expect.stringContaining("leadB님")]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("무적(시험) 판으로는 1위가 되어도 공지하지 않는다", async () => {
+    const [a, b] = await Promise.all(["godLeadA", "godLeadB"].map((n) => player(n)));
+    const t = at(W1, 2, 10);
+    await run(a, "normal", t, 0.3);
+    const s = await startChair(b.id, "normal", false, t + MIN);
+    await finishChair(b.id, s.ticket, b.dm * 0.9 * 300, 5 * MIN, t + 6 * MIN, { god: true });
+    expect(await leadNotes(t + 7 * MIN)).toEqual([]);
+  });
+});
+
+describe("11/23 2관왕 (노멀·헬 모두 1위)", () => {
+  it("두 벌 대신 2관왕 한 벌만 · 2위는 올라가지 않는다 · 포인트는 1위 몫 둘 · 공지 한 줄 · 칭호 하나 · 한 번만 · 다음 주 1위가 바뀌면 넘어간다", async () => {
+    const [a, b, c] = await Promise.all(["duoA", "duoB", "duoC"].map((n) => player(n)));
+    // 1주차: a가 노멀·헬 모두 1위, b가 둘 다 2위, c가 노멀 3위
+    await run(a, "normal", at(W1, 1), 0.5);
+    await run(b, "normal", at(W1, 1, 14), 0.4);
+    await run(c, "normal", at(W1, 2), 0.3);
+    await run(a, "hell", at(W1, 2, 14), 0.5);
+    await run(b, "hell", at(W1, 3), 0.4);
+    const settleAt = weekEndMs(W1) + 3_600_000;
+    const before = await Promise.all([a, b, c].map((p) => wallet(p.id, settleAt)));
+    const r = await settleChair(W1, settleAt);
+    expect(r.fresh.sort()).toEqual(["hell", "normal"]);
+    const after = await Promise.all([a, b, c].map((p) => wallet(p.id, settleAt)));
+    const until = champUntil(W1);
+    // a: 2관왕 한 벌만, 모드 꾸미기는 아무도 받지 않는다 (2위 b도)
+    expect(after[0].look).toEqual(expect.arrayContaining([{ itemId: CHAIR_DUO.hat, until }, { itemId: CHAIR_DUO.aura, until }]));
+    const singles = [CHAIR_REWARD.normal, CHAIR_REWARD.hell].flatMap((w) => [w.hat, w.aura]);
+    for (const w of after) expect(w.look.some((x) => singles.includes(x.itemId))).toBe(false);
+    expect(after[1].look.some((x) => x.itemId === CHAIR_DUO.hat)).toBe(false);
+    // 포인트: a 바로 0 + 인정 뒤 10,000 (5,000 + 5,000) · b 노멀·헬 2위 → 큰 쪽 하나 3,000 · c 3위 2,000
+    expect(after.map((w, i) => w.points - before[i].points)).toEqual([0, 3000, 2000]);
+    const review = (await listReviews()).find((x) => x.kind === "chair" && x.acct === a.id);
+    expect(review).toMatchObject({ points: 10_000 });
+    expect(review?.kind === "chair" && review.firsts.map((f) => f.mode).sort()).toEqual(["hell", "normal"]);
+    // 칭호: 2관왕 하나만
+    const holders = await chairHolders(settleAt);
+    expect([...holders]).toEqual([[CHAIR_DUO.title, a.id]]);
+    // 대여는 다음 정리 + 여유까지 (그 뒤엔 저절로 끝난다)
+    expect(until).toBeGreaterThan(weekEndMs(W2));
+    const expired = await wallet(a.id, until + 1);
+    expect(expired.look.some((x) => x.itemId === CHAIR_DUO.hat || x.itemId === CHAIR_DUO.aura)).toBe(false);
+    // 공지 한 줄
+    const notes = (await getMegaphone().recent(20, settleAt)).filter((m) => m.text.includes("회장님 독대"));
+    expect(notes.map((m) => m.text)).toEqual([expect.stringContaining("2관왕은 duoA님! 「차기 회장」")]);
+
+    // 다시 정리해도 그대로 (한 번만)
+    resetChairMemo();
+    await settleChair(W1, settleAt + 1000);
+    await ensureChairSettled(settleAt + 2000);
+    expect(await Promise.all([a, b, c].map(async (p) => (await wallet(p.id, settleAt)).points))).toEqual(after.map((w) => w.points));
+    expect((await listReviews()).filter((x) => x.kind === "chair" && x.acct === a.id)).toHaveLength(1);
+    expect((await getMegaphone().recent(20, settleAt + 2000)).filter((m) => m.text.includes("회장님 독대"))).toHaveLength(1);
+
+    // a가 2관왕 한 벌을 입고 있다가, 2주차엔 노멀만 1위 (헬 1위는 b) → 2관왕 한 벌은 거두고 입던 칸은 노멀 것으로 갈아입는다. b는 헬 한 벌
+    const accounts = getAccounts();
+    for (const id of [CHAIR_DUO.hat, CHAIR_DUO.aura]) expect(await accounts.wear(a.id, id, id === CHAIR_DUO.hat ? "head" : "aura", settleAt)).toBe(true);
+    await run(a, "normal", at(W2, 1), 0.5);
+    await run(b, "hell", at(W2, 1, 14), 0.5);
+    const s2 = weekEndMs(W2) + 1000;
+    await settleChair(W2, s2);
+    const a2 = await accounts.get(a.id, kstDay(s2), s2);
+    const u2 = champUntil(W2);
+    expect(a2.equipped).toEqual(expect.arrayContaining([expect.objectContaining({ itemId: CHAIR_REWARD.normal.hat, until: u2 }), expect.objectContaining({ itemId: CHAIR_REWARD.normal.aura, until: u2 })]));
+    expect([...a2.equipped, ...a2.stash].some((x) => x.itemId === CHAIR_DUO.hat || x.itemId === CHAIR_DUO.aura)).toBe(false);
+    expect((await wallet(b.id, s2)).look).toEqual(expect.arrayContaining([{ itemId: CHAIR_REWARD.hell.hat, until: u2 }]));
+    const h2 = await chairHolders(s2);
+    expect(h2.get(CHAIR_REWARD.normal.title)).toBe(a.id);
+    expect(h2.get(CHAIR_REWARD.hell.title)).toBe(b.id);
+    expect(h2.has(CHAIR_DUO.title)).toBe(false);
+    // 한 사람은 한 벌만: a에게 남은 회장님 독대 꾸미기는 노멀 한 벌뿐
+    expect([...a2.equipped, ...a2.stash].filter((x) => CHAIR_ITEM_IDS.includes(x.itemId)).map((x) => x.itemId).sort()).toEqual([CHAIR_REWARD.normal.aura, CHAIR_REWARD.normal.hat].sort());
+  });
+
+  it("명예의 전당: 2관왕 주는 「2관왕」 한 줄 (노멀·헬 기록 함께), 다른 주는 모드마다", async () => {
+    const [a, b] = await Promise.all(["hallDuoA", "hallDuoB"].map((n) => player(n)));
+    await run(a, "normal", at(W1, 1), 0.5, 80_000);
+    await run(a, "hell", at(W1, 2), 0.4, 60_000);
+    await run(b, "normal", at(W1, 2, 14), 0.1);
+    await settleChair(W1, weekEndMs(W1) + 1000);
+    await run(b, "normal", at(W2, 1), 0.5);
+    await run(a, "hell", at(W2, 1, 14), 0.5);
+    await settleChair(W2, weekEndMs(W2) + 1000);
+    const h = await chairHall(weekEndMs(W2) + 2000);
+    expect(h.rows.map((r) => [r.week, r.mode, r.name])).toEqual([
+      [W2, "normal", "hallDuoB"],
+      [W2, "hell", "hallDuoA"],
+      [W1, "duo", "hallDuoA"],
+    ]);
+    expect(h.rows[2]).toMatchObject({ ms: 80_000, hell: { ms: 60_000 } });
+    expect(h.rows[2].hell!.damage).toBeGreaterThan(0);
+    expect(h.rows[2].streak).toBeUndefined();
   });
 });
 

@@ -79,6 +79,9 @@ describe("칭호 목록 (lib/titles)", () => {
       expect(earnedTitleIds({ dexTitleNames: [], champBoards: [], metrics: {}, timed: [id] })).toEqual([id]);
     }
     expect(earnedTitleIds({ dexTitleNames: [], champBoards: ["points"], metrics: {} })).not.toContain("t_chairNormal");
+    // 11/23 2관왕 「차기 회장」: 전설 (두 금 칭호 대신 하나 — 걷기 +1%)
+    expect(titleDef("t_chairDuo")).toMatchObject({ name: "차기 회장", group: "champ", grade: "legend", transient: true, timed: true });
+    expect(earnedTitleIds({ dexTitleNames: [], champBoards: [], metrics: {}, timed: ["t_chairDuo"] })).toEqual(["t_chairDuo"]);
   });
 
   it("등급: 같은 줄은 단계가 높을수록 등급이 같거나 높고, 동·은·금·전설·신화가 모두 있다", () => {

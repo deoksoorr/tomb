@@ -557,6 +557,9 @@ export const ITEMS: readonly ItemDef[] = [
     ["chair_aura_gold", "aura", "연봉 인상 금박 오라", "따뜻한 금빛 속에 금박 조각과 작은 ↑ 화살표가 둥실 떠올라요. 회장님 독대(보통) 주간 1위 전용.", 0],
     ["chair_band", "head", "불타는 사직서 머리띠", "이마에 질끈 묶은 빨간 머리띠. 앞에 꽂은 사직서 끝이 타닥타닥 타올라요. 회장님 독대(지옥) 주간 1위 전용.", 0],
     ["chair_aura_ember", "aura", "사직서 불씨 오라", "주홍빛 속에 불씨와 타다 남은 사직서 조각이 피어올라요. 회장님 독대(지옥) 주간 1위 전용.", 0],
+    // 11/23 노멀·헬을 같은 사람이 모두 1위 하면 두 벌 대신 이 한 벌만 (CHAIR_REWARD.duo)
+    ["chair_duo_crown", "head", "회장실 금장 명패 왕관", "회장실 책상 위 금장 명패를 이마에 두른 보랏빛 금관. 꼭대기 에메랄드가 반짝여요. 회장님 독대 노멀과 헬 2관왕 전용.", 0],
+    ["chair_aura_stamp", "aura", "결재 도장 금빛 소나기", "금빛 빗줄기 사이로 결재 도장이 살랑살랑 내려와 발밑에 꾹 찍혀요. 회장님 독대 노멀과 헬 2관왕 전용.", 0],
   ]).map((it) => ({ ...it, chair: true as const })),
   // ── 동물원 펫 (사육사에게서 영구로만 산다 — 가격은 아래 ZOO_PETS. price는 같은 값을 적어 둔다) ──
   // 11/19 포인트 한도가 없어져 값을 올렸다: 작은 펫 2배, 타는 펫 3배 (이미 산 펫은 그대로) — 배수는 PET_PRICE_UP·PET_RIDE_PRICE_UP (꾸미기 점수는 예전 값으로 센다)
@@ -814,10 +817,11 @@ export function isChairItem(id: unknown): boolean {
 }
 /** 11/20 「회장님 독대」 주간 1위 보상 꾸미기 id 전부 */
 export const CHAIR_ITEM_IDS: readonly string[] = ITEMS.filter((i) => i.chair).map((i) => i.id);
-/** 11/20 「회장님 독대」 난이도별 주간 1위 보상 (칭호 · 머리 · 오라 — 한 주 동안 빌려 준다) */
+/** 11/20 「회장님 독대」 난이도별 주간 1위 보상 (칭호 · 머리 · 오라 — 한 주 동안 빌려 준다). 11/23 duo = 노멀·헬 모두 1위면 두 벌 대신 이것만 */
 export const CHAIR_REWARD = {
   normal: { title: "t_chairNormal", hat: "chair_crown", aura: "chair_aura_gold" },
   hell: { title: "t_chairHell", hat: "chair_band", aura: "chair_aura_ember" },
+  duo: { title: "t_chairDuo", hat: "chair_duo_crown", aura: "chair_aura_stamp" },
 } as const satisfies Record<string, { title: TitleId; hat: string; aura: string }>;
 /** 11/15 수집 의뢰 보상인지 (상점·포인트로 살 수 없다 — 도장 교환소에서 받기만) */
 export function isQuestItem(id: unknown): boolean {
@@ -1219,6 +1223,8 @@ export const TITLE_IDS = [
   // 11/20 「회장님 독대」 주간 1위 (보통 · 지옥 — 한 주 동안 빌려 준다, web lib/titles TitleFacts.timed)
   "t_chairNormal",
   "t_chairHell",
+  // 11/23 회장님 독대 2관왕 (노멀·헬 모두 1위 — 두 칭호 대신 이것 하나)
+  "t_chairDuo",
 ] as const;
 export type TitleId = (typeof TITLE_IDS)[number];
 const titleSet = new Set<string>(TITLE_IDS);

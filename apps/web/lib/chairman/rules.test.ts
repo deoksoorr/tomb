@@ -171,16 +171,20 @@ describe("주간 보상 나누기", () => {
     expect(chairRankPoints(1, 2)).toBe(5000);
     expect(chairRankPoints(1, 3)).toBe(2500);
   });
-  it("두 모드면 큰 쪽 하나: 바로 줄 몫(2·3위)을 먼저, 1위가 더 크면 차이만 인정 뒤에", () => {
+  it("두 모드면 큰 쪽 하나 (2관왕만 빼고): 바로 줄 몫(2·3위)을 먼저, 1위가 더 크면 차이만 인정 뒤에", () => {
     const pay = chairPayouts({ normal: ["a", "b", "c"], hell: ["b", "d", "a"] }, () => 1);
     const by = Object.fromEntries(pay.map((p) => [p.accountId, p]));
     expect(by.a).toMatchObject({ now: 2000, pending: 3000, ranks: { normal: 1, hell: 3 } });
     expect(by.b).toMatchObject({ now: 3000, pending: 2000 });
     expect(by.c).toMatchObject({ now: 2000, pending: 0 });
     expect(by.d).toMatchObject({ now: 3000, pending: 0 });
-    // 두 모드 1위 (한쪽은 연속으로 절반) → 큰 쪽 5,000만
+    // 11/23 두 모드 1위(2관왕)는 레이스 다관왕처럼 1위 몫을 모드마다 더한다 (연속 절반은 모드마다) → 2,500 + 5,000
     const both = chairPayouts({ normal: ["a"], hell: ["a"] }, (m) => (m === "normal" ? 3 : 1));
-    expect(both[0]).toMatchObject({ now: 0, pending: 5000, streak: ["normal"] });
+    expect(both[0]).toMatchObject({ now: 0, pending: 7500, streak: ["normal"] });
+    expect(chairPayouts({ normal: ["a", "b"], hell: ["a", "b"] }, () => 1)).toEqual([
+      { accountId: "a", ranks: { normal: 1, hell: 1 }, now: 0, pending: 10_000 },
+      { accountId: "b", ranks: { normal: 2, hell: 2 }, now: 3000, pending: 0 },
+    ]);
   });
 });
 

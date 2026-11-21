@@ -4,10 +4,11 @@ import { prevWeek, weekEndMs } from "../gameDay";
 import { chairReviewId, getReviewStore, type ChairReview } from "../rpg/reviewStore";
 import { staffAccountId } from "../staff";
 import { getAccounts, NO_NAME } from "../store";
+import { kstDay } from "../store/accounts";
 import { champUntil } from "../store/champ";
 import type { WalletRent } from "../store/types";
 import { pushVillageNotice } from "../weeklyChamp";
-import { CHAIR_RANK_POINTS, CHAIR_REWARD, chairPayouts } from "./rewards";
+import { CHAIR_DUO, CHAIR_ITEM_IDS, CHAIR_RANK_POINTS, chairPayouts, chairSets, type ChairRewardIds } from "./rewards";
 import { CHAIR_FIRST_WEEK, CHAIR_MODE_LABEL, CHAIR_MODES, chairWeek, type ChairMode } from "./rules";
 import { getChairStore, type ChairSettle, type ChairStore, type ChairWinner } from "./store";
 
@@ -15,6 +16,8 @@ import { getChairStore, type ChairSettle, type ChairStore, type ChairWinner } fr
 //  1) 그 주 모드마다 1·2·3위를 한 번 정해 저장한다 (운영자·정지 계정 제외, 처음 정한 것만 — 다시 계산해도 바뀌지 않는다)
 //  2) 지급 (표시 chair:paid로 한 번만): 2·3위 포인트는 바로, 1위 칭호·모자·오라 대여는 바로, 1위 포인트는 관리자 「기록 확인」(lib/rpg/reviewStore kind "chair")에 넣어 인정 뒤에
 //  3) 새 1위는 마을 확성기 줄에 한 번 알린다
+//  11/23 2관왕 (같은 사람이 노멀·헬 모두 1위): 주간 레이스 다관왕처럼 두 벌 대신 2관왕 전용 한 벌(CHAIR_DUO)만 · 공지도 한 줄 · 칭호도 하나.
+//   레이스 grantChamp처럼 새 한 벌을 줄 때 그 계정의 다른 회장님 독대 꾸미기는 거두고, 입고 있던 칸은 새 한 벌의 같은 칸으로 갈아입힌다
 // 주간 1위 다관왕(lib/weeklyChamp champHatOf·CHAMP_BOARDS)과는 따로다 — 그 기록·모자 규칙을 건드리지 않는다
 
 /** 처음 정리하는 주 (11/22 rules로 옮김 — 그 앞 주는 건너뛴다) */
@@ -32,7 +35,7 @@ export const chairMark = {
   now: (week: string, acct: string) => `${week}:${acct}:now`,
   queue: (week: string, acct: string) => `${week}:${acct}:queue`,
   first: (week: string, acct: string) => `${week}:${acct}:first`,
-  rent: (week: string, mode: ChairMode) => `${week}:${mode}:rent`,
+  rent: (week: string, mode: ChairMode | "duo") => `${week}:${mode}:rent`,
 };
 
 /** 그 주 모드별 상위 3명 (운영자·정지 제외, 피해 > 0) */
@@ -69,7 +72,7 @@ function marksOf(rec: ChairSettle): string[] {
     if (p.now > 0) m.push(chairMark.now(rec.week, p.accountId));
     if (p.pending > 0) m.push(chairMark.queue(rec.week, p.accountId));
   }
-  for (const mode of CHAIR_MODES) if (rec.ranks[mode][0]) m.push(chairMark.rent(rec.week, mode));
+  for (const set of chairSets(rec.ranks)) m.push(chairMark.rent(rec.week, set.key));
   return m;
 }
 
@@ -135,24 +138,43 @@ async function payout(store: ChairStore, rec: ChairSettle, now: number): Promise
     }
   }
   const fresh: ChairMode[] = [];
-  for (const mode of CHAIR_MODES) {
-    const w = rec.ranks[mode][0];
-    if (!w || !(await store.claim(chairMark.rent(week, mode), w.accountId))) continue;
-    const ids = CHAIR_REWARD[mode];
-    const until = champUntil(week);
-    const rent: WalletRent[] = [
-      { itemId: ids.hat, slot: itemById(ids.hat)?.slot ?? "head", until },
-      { itemId: ids.aura, slot: itemById(ids.aura)?.slot ?? "aura", until },
-    ];
-    await accounts.walletGrant(w.accountId, 0, "earn:chair", now, rent);
-    fresh.push(mode);
-    await pushVillageNotice(
-      `${CHAIR_NOTICE_ICON} 지난주 회장님 독대(${CHAIR_MODE_LABEL[mode]}) 1위는 ${w.name}님! 「${ids.titleName}」 (총 피해 ${fmt(w.damage)})${w.streak ? ` · ${w.streak}주 연속` : ""}`,
-      now,
-    ).catch((e) => console.warn("[chairman] 1위 알림 실패", e));
+  for (const set of chairSets(rec.ranks)) {
+    if (!(await store.claim(chairMark.rent(week, set.key), set.accountId))) continue;
+    await lendSet(set.accountId, set.ids, champUntil(week), now);
+    const modes = set.key === "duo" ? [...CHAIR_MODES] : [set.key];
+    fresh.push(...modes);
+    const w = rec.ranks[modes[0]][0]!;
+    const ds = duoStreak(rec);
+    const text =
+      set.key === "duo"
+        ? `${CHAIR_NOTICE_ICON} 지난주 회장님 독대 2관왕은 ${w.name}님! 「${CHAIR_DUO.titleName}」 (노멀 총 피해 ${fmt(w.damage)}, 헬 총 피해 ${fmt(rec.ranks.hell[0]!.damage)})${ds > 1 ? ` · ${ds}주 연속` : ""}`
+        : `${CHAIR_NOTICE_ICON} 지난주 회장님 독대(${CHAIR_MODE_LABEL[set.key]}) 1위는 ${w.name}님! 「${set.ids.titleName}」 (총 피해 ${fmt(w.damage)})${w.streak ? ` · ${w.streak}주 연속` : ""}`;
+    await pushVillageNotice(text, now).catch((e) => console.warn("[chairman] 1위 알림 실패", e));
   }
   if (fresh.length) await notifyMe([...new Set(fresh.map((m) => rec.ranks[m][0]!.accountId))]).catch(() => null);
   return fresh;
+}
+
+/** 2관왕 연속 주 수 = 두 모드 연속 1위 중 짧은 쪽 (둘 다 이어졌어야 지난주도 2관왕) */
+export function duoStreak(rec: Pick<ChairSettle, "ranks">): number {
+  return Math.min(rec.ranks.normal[0]?.streak ?? 1, rec.ranks.hell[0]?.streak ?? 1);
+}
+
+/**
+ * 1위 한 벌 빌려 주기 (until까지). 레이스 grantChamp처럼 한 사람은 한 벌만: 그 계정의 다른 회장님 독대 꾸미기는 거두고,
+ * 그걸 입고 있던 칸은 새 한 벌의 같은 칸으로 갈아입힌다 (지난주 2관왕이 이번 주 노멀만 1위면 명패 왕관 → 사원증 왕관)
+ */
+async function lendSet(acct: string, ids: ChairRewardIds, until: number, now: number): Promise<void> {
+  const accounts = getAccounts();
+  const mine = [ids.hat, ids.aura];
+  const others = CHAIR_ITEM_IDS.filter((x) => !mine.includes(x));
+  const worn = new Set(
+    (await accounts.get(acct, kstDay(now), now).catch(() => null))?.equipped.filter((e) => others.includes(e.itemId)).map((e) => itemById(e.itemId)?.slot) ?? [],
+  );
+  await accounts.revokeChamp(acct, others);
+  const rent: WalletRent[] = mine.map((itemId) => ({ itemId, slot: itemById(itemId)?.slot ?? (itemId === ids.hat ? "head" : "aura"), until }));
+  await accounts.walletGrant(acct, 0, "earn:chair", now, rent);
+  for (const r of rent) if (worn.has(r.slot)) await accounts.wear(acct, r.itemId, r.slot, now).catch(() => false);
 }
 
 /** 관리자 인정: 1위 포인트를 지갑에 (표시로 한 번만). 실제로 들어간 포인트 */
@@ -190,7 +212,7 @@ function primeChairHolders(rec: ChairSettle, now: number): void {
   if (rec.week === prevWeek(chairWeek(now))) memo.__tombChairHolders = { week: rec.week, at: now, rec };
 }
 
-/** 지금 1위 칭호 주인 (칭호 id → 계정): 지난주 정리 기록의 모드별 1위. 이번 주가 끝나면 다음 1위로 넘어간다 (잠깐 캐시) */
+/** 지금 1위 칭호 주인 (칭호 id → 계정): 지난주 정리 기록의 모드별 1위 (2관왕이면 2관왕 칭호 하나). 이번 주가 끝나면 다음 1위로 넘어간다 (잠깐 캐시) */
 export async function chairHolders(now = Date.now()): Promise<Map<string, string>> {
   const week = prevWeek(chairWeek(now));
   let c = memo.__tombChairHolders;
@@ -198,9 +220,7 @@ export async function chairHolders(now = Date.now()): Promise<Map<string, string
     c = memo.__tombChairHolders = { week, at: now, rec: await getChairStore().getSettle(week) };
   }
   const out = new Map<string, string>();
-  for (const mode of CHAIR_MODES) {
-    const w = c.rec?.ranks[mode][0];
-    if (w) out.set(CHAIR_REWARD[mode].title, w.accountId);
-  }
+  // 2관왕이면 2관왕 칭호 하나만 (두 모드 칭호는 그 주 아무도 없다)
+  if (c.rec) for (const set of chairSets(c.rec.ranks)) out.set(set.ids.title, set.accountId);
   return out;
 }

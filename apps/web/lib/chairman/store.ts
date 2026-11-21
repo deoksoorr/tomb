@@ -22,6 +22,8 @@ import type { ChairMode } from "./rules";
 //  - chair:weeks               ZSET 정리한 주 → 점수 = 주 YYYYMMDD 숫자 (11/22 명예의 전당 색인 — createSettle 때마다 넣는다. 같은 주는 다시 넣어도 하나)
 //  - chair:lock:{주}           STRING 정리 잠금 (60초)
 //  - chair:paid                HASH 지급 표시 → 계정 (HSETNX — 같은 지급은 한 번만)
+//  - chair:leadcool:{모드}     STRING 이번 주 1위 바뀜 공지 쉼 (PX — 레이스 champ:leadcool과 같은 규칙, 1위가 바뀐 판에서만 쓴다)
+//  11/23 1위 바뀜은 FINISH_LUA가 순위에 넣기 전 1위(ZREVRANGE 0 0 + 점수)와 비교해 같이 돌려준다 — 판마다 왕복은 그대로 한 번
 
 const WEEK_TTL_SEC = 60 * 86_400;
 const LOCK_SEC = 60;
@@ -35,6 +37,7 @@ const mk = {
   weeks: "chair:weeks",
   lock: (w: string) => `chair:lock:${w}`,
   paid: "chair:paid",
+  leadCool: (m: ChairMode) => `chair:leadcool:${m}`,
 };
 const countField = (m: ChairMode) => (m === "normal" ? "cn" : "ch");
 const bestField = (m: ChairMode) => (m === "normal" ? "bn" : "bh");
@@ -75,7 +78,11 @@ export type ChairFinishIn = {
   /** 지갑에 넣을 포인트 (0이면 없음) */
   points: number;
 };
-export type ChairFinishOut = { ok: false } | { ok: true; prevBest: number; best: number; weekRank: number | null; got: number; used: ChairCounts };
+/**
+ * overtook = 11/23 이 판으로 이번 주 1위가 다른 사람에서 나로 바뀌었다 (그 주 1위 기록보다 큰 피해 — 같은 피해는 먼저 낸 사람이 1위라 아니다).
+ * 그 주 첫 기록(앞 1위 없음)·내 기록 갱신으로 1위 유지는 아니다 (주간 레이스 noteLeaders와 같은 규칙)
+ */
+export type ChairFinishOut = { ok: false } | { ok: true; prevBest: number; best: number; weekRank: number | null; got: number; used: ChairCounts; overtook?: true };
 
 /** bestMs·ms = 그 최고 판 버틴 시간 (옛 기록은 0·없음) */
 export type ChairMine = { used: ChairCounts; refunded: boolean; best: ChairCounts; bestMs: ChairCounts; week: Record<ChairMode, { damage: number; rank: number; ms?: number } | null> };
@@ -97,6 +104,8 @@ export interface ChairStore {
   /** 지급 표시: 처음이면 true (원자적) */
   claim(mark: string, acct: string): Promise<boolean>;
   paid(marks: readonly string[]): Promise<(string | null)[]>;
+  /** 11/23 1위 바뀜 공지 쉼: ms 안에 그 모드 공지를 이미 했으면 false, 아니면 표시하고 true (원자적) */
+  leadCooldown(mode: ChairMode, ms: number): Promise<boolean>;
 }
 
 const zero = (): ChairCounts => ({ normal: 0, hell: 0 });
@@ -175,14 +184,19 @@ export class MemoryChairStore implements ChairStore {
       m[bestMsField(f.mode)] = Math.round(f.durationMs);
     }
     let weekRank: number | null = null;
+    let overtook = false;
     if (f.ranked) {
       const b = this.board(f.mode, f.week);
+      const lead = this.sorted(f.mode, f.week)[0];
       const cur = b.get(f.acct);
-      if (!cur || f.damage > cur.damage) b.set(f.acct, { damage: f.damage, at: f.at, ms: f.durationMs, dm: f.dm });
+      if (!cur || f.damage > cur.damage) {
+        b.set(f.acct, { damage: f.damage, at: f.at, ms: f.durationMs, dm: f.dm });
+        overtook = !!lead && lead.accountId !== f.acct && f.damage > lead.damage;
+      }
       weekRank = this.rankIn(f.mode, f.week, f.acct);
     }
     const got = f.points > 0 ? await this.accounts().walletGrant(f.acct, f.points, "earn:chair", f.at) : 0;
-    return { ok: true, prevBest, best: m[bf], weekRank, got, used: { normal: m.cn, hell: m.ch } };
+    return { ok: true, prevBest, best: m[bf], weekRank, got, used: { normal: m.cn, hell: m.ch }, ...(overtook ? { overtook: true as const } : {}) };
   }
   async mine(acct: string, day: string, week: string): Promise<ChairMine> {
     const m = this.me.get(acct);
@@ -225,6 +239,13 @@ export class MemoryChairStore implements ChairStore {
   }
   async unlock(week: string) {
     this.locks.delete(week);
+  }
+  private cools = new Map<ChairMode, number>();
+  async leadCooldown(mode: ChairMode, ms: number) {
+    const now = Date.now();
+    if ((this.cools.get(mode) ?? 0) > now) return false;
+    this.cools.set(mode, now + ms);
+    return true;
   }
   async claim(mark: string, acct: string) {
     if (this.marks.has(mark)) return false;
@@ -290,9 +311,12 @@ if ARGV[6] == '1' and dmg > prev then
   best = dmg
 end
 local rank = -1
+local over = 0
 if ARGV[7] == '1' then
   local cur = redis.call('ZSCORE', KEYS[3], ARGV[2])
   if (not cur) or dmg > tonumber(cur) then
+    local lead = redis.call('ZREVRANGE', KEYS[3], 0, 0, 'WITHSCORES')
+    if lead[1] and lead[1] ~= ARGV[2] and dmg > tonumber(lead[2]) then over = 1 end
     redis.call('ZADD', KEYS[3], dmg, ARGV[2])
     redis.call('HSET', KEYS[4], ARGV[2], ARGV[4])
     redis.call('EXPIRE', KEYS[3], ${WEEK_TTL_SEC})
@@ -318,7 +342,7 @@ if redis.call('HGET', KEYS[2], 'd') == ARGV[10] then
   cn = tonumber(redis.call('HGET', KEYS[2], 'cn') or '0')
   ch = tonumber(redis.call('HGET', KEYS[2], 'ch') or '0')
 end
-return {1, prev, best, rank, got, cn, ch}
+return {1, prev, best, rank, got, cn, ch, over}
 `;
 
 const num = (v: unknown) => Number(v ?? 0) || 0;
@@ -365,7 +389,15 @@ export class RedisChairStore implements ChairStore {
     );
     if (num(r[0]) !== 1) return { ok: false };
     const rank = num(r[3]);
-    return { ok: true, prevBest: num(r[1]), best: num(r[2]), weekRank: f.ranked && rank >= 0 ? rank + 1 : null, got: num(r[4]), used: { normal: num(r[5]), hell: num(r[6]) } };
+    return {
+      ok: true,
+      prevBest: num(r[1]),
+      best: num(r[2]),
+      weekRank: f.ranked && rank >= 0 ? rank + 1 : null,
+      got: num(r[4]),
+      used: { normal: num(r[5]), hell: num(r[6]) },
+      ...(num(r[7]) === 1 ? { overtook: true as const } : {}),
+    };
   }
   async mine(acct: string, day: string, week: string): Promise<ChairMine> {
     const [me, ns, nr, na, hs, hr, ha] = await this.redis
@@ -449,6 +481,9 @@ export class RedisChairStore implements ChairStore {
   }
   async claim(mark: string, acct: string) {
     return Number(await this.redis.hsetnx(mk.paid, mark, acct)) === 1;
+  }
+  async leadCooldown(mode: ChairMode, ms: number) {
+    return (await this.redis.set(mk.leadCool(mode), "1", { nx: true, px: Math.max(1, Math.round(ms)) })) !== null;
   }
   async paid(marks: readonly string[]) {
     if (!marks.length) return [];

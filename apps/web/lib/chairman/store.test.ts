@@ -71,3 +71,35 @@ describe("명예의 전당 (메모리)", () => {
     expect(await m.hall(0)).toEqual([]);
   });
 });
+
+// 11/23 끝 Lua가 「이번 주 1위가 바뀌었는지」를 8번째 칸으로 같이 돌려준다 (판마다 왕복은 그대로 한 번)
+describe("판 끝 결과 읽기 (Redis 모양)", () => {
+  const fin = { acct: "a", nonce: "n", mode: "normal" as const, week: "20261123", day: "20261124", damage: 100, at: 1, durationMs: 60_000, dm: 10, keepBest: true, ranked: true, points: 0 };
+  const fake = (reply: unknown) => {
+    const s = new RedisChairStore({ url: "https://example.invalid", token: "t" });
+    const calls: { script: string; keys: string[]; args: string[] }[] = [];
+    const sets: unknown[][] = [];
+    (s as unknown as { redis: unknown }).redis = {
+      eval: async (script: string, keys: string[], args: string[]) => (calls.push({ script, keys, args }), reply),
+      set: async (...a: unknown[]) => (sets.push(a), sets.length === 1 ? "OK" : null),
+    };
+    return { s, calls, sets };
+  };
+  it("1이면 overtook, 0·없으면 없다 (숫자 문자열도)", async () => {
+    expect(await fake([1, 50, 100, 0, 0, 1, 0, 1]).s.finish(fin)).toMatchObject({ ok: true, weekRank: 1, overtook: true });
+    expect(await fake([1, 50, 100, 0, 0, 1, 0, "1"]).s.finish(fin)).toMatchObject({ overtook: true });
+    expect(await fake([1, 50, 100, 1, 0, 1, 0, 0]).s.finish(fin)).not.toHaveProperty("overtook");
+    expect(await fake([1, 50, 100, 1, 0, 1, 0]).s.finish(fin)).not.toHaveProperty("overtook");
+    expect(await fake([-1]).s.finish(fin)).toEqual({ ok: false });
+  });
+  it("Lua는 순위에 넣기 전 1위(ZREVRANGE 0 0 + 점수)와 비교한다 · 쉼 표시는 SET NX PX 한 번", async () => {
+    const { s, calls, sets } = fake([1, 0, 100, 0, 0, 1, 0, 1]);
+    await s.finish(fin);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].script.indexOf("ZREVRANGE")).toBeLessThan(calls[0].script.indexOf("'ZADD'"));
+    expect(calls[0].keys[2]).toBe("chair:w:normal:20261123");
+    expect(await s.leadCooldown("hell", 600_000)).toBe(true);
+    expect(await s.leadCooldown("hell", 600_000)).toBe(false);
+    expect(sets[0]).toEqual(["chair:leadcool:hell", "1", { nx: true, px: 600_000 }]);
+  });
+});

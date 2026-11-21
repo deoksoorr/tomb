@@ -164,7 +164,8 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 //      다른 마을 채팅 이름 꾸미기(ns), 닉네임 바로 반영, 야근 빌딩 분위기 층·층 포인트, 범퍼카 미션 — 모두 한 번 새로고침 (11/20)
 // 78 = 11/21 판교의 등대·회장님 독대(1위 꾸미기·칭호), 분양 사무소·야근 빌딩 자리 이동(맵 지문 바뀜), 새 폭죽·광역 불꽃쇼(쇼 한 번에 하나),
 //      운영자 순간이동·정원 제외, 확성기 → 마을 소식 — 모두 한 번 새로고침 (11/21)
-export const CLIENT_VERSION = 78;
+// 79 = 회장님 독대 2관왕 전용 꾸미기·칭호(chair_duo_crown·chair_aura_stamp·t_chairDuo) — 모두 한 번 새로고침 (11/21)
+export const CLIENT_VERSION = 79;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */

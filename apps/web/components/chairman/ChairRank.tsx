@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { DIR, itemName } from "@tomb/protocol";
 import { errorMessage } from "@/lib/api";
-import { CHAIR_RANK_POINTS, CHAIR_REWARD } from "@/lib/chairman/rewards";
+import { CHAIR_DUO, CHAIR_RANK_POINTS, CHAIR_REWARD, type ChairRewardIds } from "@/lib/chairman/rewards";
 import { chairWeek, type ChairMode } from "@/lib/chairman/rules";
 import type { ChairHallResponse, ChairHallRow } from "@/lib/chairman/hall";
 import type { ChairRankResponse, ChairTopRow } from "@/lib/chairman/service";
@@ -23,6 +23,7 @@ import r from "./ChairRank.module.css";
 //  가운데: 1·2·3위 시상대(캐릭터 모습) | 1위 보상 상자(칭호·모자·오라 입어 보기·포인트)
 //  아래: 4위부터 목록(고정 높이 스크롤) + 맨 아래 내 순위 줄 → 11/22 명예의 전당 (지난 주들 1위, 노멀·헬 함께). 헬은 붉은 강조색. 폰은 한 줄로 쌓는다
 //  11/22 순위는 피해량으로 정한다 — 큰 숫자는 늘 「피해」, 버틴 시간은 작게 「버틴 시간 1:10」
+//  11/23 2관왕 (노멀·헬 모두 1위): 보상 상자 아래에 2관왕 전용 한 벌 · 명예의 전당은 그 주를 「2관왕」 한 줄로
 
 const GHOST = "#e8d9b0";
 
@@ -170,6 +171,7 @@ function HallBox() {
 }
 
 function HallLine({ h, top }: { h: ChairHallRow; top: boolean }) {
+  if (h.mode === "duo") return <DuoHallLine h={h} top={top} />;
   return (
     <li className={r.hallRow} data-mode={h.mode} data-top={top || undefined}>
       <span className={r.hallWeek}>{hallWeekText(h.week)}</span>
@@ -185,6 +187,37 @@ function HallLine({ h, top }: { h: ChairHallRow; top: boolean }) {
       </span>
       <span className={r.hallDmg}>{dmgText(h.damage)}</span>
       <span className={r.hallMs}>{lastedText(h.ms) ?? "버틴 시간 -"}</span>
+    </li>
+  );
+}
+
+/** 11/23 2관왕 주: 한 줄에 노멀·헬 피해를 위아래로 (버틴 시간도 같이) */
+function DuoHallLine({ h, top }: { h: ChairHallRow; top: boolean }) {
+  return (
+    <li className={r.hallRow} data-mode="duo" data-top={top || undefined}>
+      <span className={r.hallWeek}>{hallWeekText(h.week)}</span>
+      <span className={r.modeBadge} data-mode="duo">
+        2관왕
+      </span>
+      <span className={r.hallName}>
+        <span className={r.crown} aria-hidden="true">
+          ♛
+        </span>
+        {h.name}
+        {h.streak && h.streak > 1 && <small>{h.streak}주 연속</small>}
+      </span>
+      <span className={r.hallDmg}>
+        <span className={r.duoPart}>
+          <small>노멀</small> {dmgText(h.damage)}
+        </span>
+        <span className={r.duoPart}>
+          <small>헬</small> {dmgText(h.hell?.damage ?? 0)}
+        </span>
+      </span>
+      <span className={r.hallMs}>
+        <span className={r.duoPart}>{lastedText(h.ms) ?? "버틴 시간 -"}</span>
+        <span className={r.duoPart}>{lastedText(h.hell?.ms) ?? "버틴 시간 -"}</span>
+      </span>
     </li>
   );
 }
@@ -223,26 +256,12 @@ function Line({ row }: { row: ChairTopRow }) {
   );
 }
 
-/** 1위 보상: 칭호 배지 · 모자 · 오라 (입어 본 모습) · 1~3위 포인트 */
+/** 1위 보상: 칭호 배지 · 모자 · 오라 (입어 본 모습) · 1~3위 포인트 · 11/23 2관왕 전용 한 벌 */
 function RewardBox({ mode }: { mode: ChairMode }) {
-  const w = CHAIR_REWARD[mode];
   return (
     <section className={r.reward} aria-label={`${MODE_NAME[mode]} 1위 보상`}>
       <h3 className={r.h}>1위 보상</h3>
-      <div className={r.rewardTop}>
-        <OutfitCanvas color={GHOST} body="hood" look={[w.hat, w.aura]} dir={DIR.down} walking={false} label={`${itemName(w.hat)}와 ${itemName(w.aura)}를 입은 모습`} className={r.fit} />
-        <div className={r.rewardItems}>
-          <span className={r.badge}>♛ {w.titleName}</span>
-          <span className={r.item}>
-            <ItemIcon itemId={w.hat} size={24} />
-            <span>{itemName(w.hat)}</span>
-          </span>
-          <span className={r.item}>
-            <ItemIcon itemId={w.aura} size={24} />
-            <span>{itemName(w.aura)}</span>
-          </span>
-        </div>
-      </div>
+      <RewardSet w={CHAIR_REWARD[mode]} />
       <ol className={r.pts}>
         {CHAIR_RANK_POINTS.map((p, i) => (
           <li key={i} data-place={i + 1}>
@@ -252,6 +271,31 @@ function RewardBox({ mode }: { mode: ChairMode }) {
         ))}
       </ol>
       <p className={r.small}>포인트는 지갑에만 들어가요.</p>
+      <section className={r.duo} aria-label="2관왕 보상" data-testid="chair-duo-reward">
+        <span className={r.duoHead}>2관왕</span>
+        <RewardSet w={CHAIR_DUO} small />
+        <p className={r.small}>노멀과 헬을 모두 1위 하면 2관왕 전용 꾸미기만 받아요. 포인트는 두 모드 1위 몫을 다 받아요.</p>
+      </section>
     </section>
+  );
+}
+
+/** 칭호 배지 + 모자 + 오라 (입어 본 모습) */
+function RewardSet({ w, small = false }: { w: ChairRewardIds; small?: boolean }) {
+  return (
+    <div className={r.rewardTop}>
+      <OutfitCanvas color={GHOST} body="hood" look={[w.hat, w.aura]} dir={DIR.down} walking={false} label={`${itemName(w.hat)}와 ${itemName(w.aura)}를 입은 모습`} className={small ? `${r.fit} ${r.fitSmall}` : r.fit} />
+      <div className={r.rewardItems}>
+        <span className={r.badge}>♛ {w.titleName}</span>
+        <span className={r.item}>
+          <ItemIcon itemId={w.hat} size={24} />
+          <span>{itemName(w.hat)}</span>
+        </span>
+        <span className={r.item}>
+          <ItemIcon itemId={w.aura} size={24} />
+          <span>{itemName(w.aura)}</span>
+        </span>
+      </div>
+    </div>
   );
 }

@@ -367,7 +367,7 @@ describe("회장님 독대 1위 보상 연출 (chairFx)", () => {
   };
 
   it("한 벌을 다 입어도 그림 수가 상한 안이고, 연출 그림은 모두 FX_ART에 있다", () => {
-    for (const look of [["chair_crown", "chair_aura_gold"], ["chair_band", "chair_aura_ember"]]) {
+    for (const look of [["chair_crown", "chair_aura_gold"], ["chair_band", "chair_aura_ember"], ["chair_duo_crown", "chair_aura_stamp"]]) {
       const { max, all } = run(look);
       expect(max, look.join()).toBeLessThanOrEqual(40);
       for (const out of all) for (const c of out) expect(FX_ART[c.art], c.art).toBeDefined();
@@ -375,7 +375,7 @@ describe("회장님 독대 1위 보상 연출 (chairFx)", () => {
   });
 
   it("화면 밖이면 오라는 그리지 않고, 움직임 줄이기면 시각과 무관하게 같은 모습", () => {
-    for (const aura of ["chair_aura_gold", "chair_aura_ember"]) {
+    for (const aura of ["chair_aura_gold", "chair_aura_ember", "chair_aura_stamp"]) {
       expect(run([aura], { offscreen: true }, 20).max).toBe(0);
       const a = run([aura], { reduced: true, now: 5 }, 1).all[0];
       const b = run([aura], { reduced: true, now: 77777 }, 1).all[0];

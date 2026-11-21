@@ -10,7 +10,8 @@ describe("items", () => {
   });
   it("11/20 회장님 독대 1위 보상: 꾸미기 · 상점에 없음 · 값 0, 칭호 id는 칭호 목록에", async () => {
     const { CHAIR_REWARD, CHAIR_ITEM_IDS, isChairItem, isChampItem, isShopListed, isTitleId, itemById } = await import("./index");
-    expect([...CHAIR_ITEM_IDS].sort()).toEqual(["chair_aura_ember", "chair_aura_gold", "chair_band", "chair_crown"]);
+    expect([...CHAIR_ITEM_IDS].sort()).toEqual(["chair_aura_ember", "chair_aura_gold", "chair_aura_stamp", "chair_band", "chair_crown", "chair_duo_crown"]);
+    expect(Object.keys(CHAIR_REWARD)).toEqual(["normal", "hell", "duo"]);
     for (const r of Object.values(CHAIR_REWARD)) {
       expect(isTitleId(r.title)).toBe(true);
       expect(itemById(r.hat)).toMatchObject({ kind: "cosmetic", slot: "head", price: 0, chair: true });

@@ -90,6 +90,8 @@ export const TITLE_PERK_GROUP: Readonly<Record<TitleId, PerkGroup>> = {
   // 11/20 「회장님 독대」 주간 1위 (보통 · 지옥)
   t_chairNormal: "champ",
   t_chairHell: "champ",
+  // 11/23 회장님 독대 2관왕 (노멀·헬 모두 1위 — 두 칭호 대신)
+  t_chairDuo: "champ",
   // 11/18 새 이웃 꾸러미 졸업 칭호 (동 — 능력은 공통 속도뿐)
   t_grad: "none",
   // 집 꾸밈 점수 → 가구 할인
@@ -480,10 +482,14 @@ const TIMED_ROWS: readonly (readonly [TitleId, string, TitleGrade, string])[] = 
 ];
 const TIMED_OF = new Map(TIMED_ROWS.map((r) => [r[0], r]));
 
-/** 11/20 「회장님 독대」 주간 1위 칭호 (주간 1위 칭호처럼 금 등급 · 다음 1위가 정해질 때까지 빌려 준다 — 서버가 TitleFacts.timed로 알린다) */
-const CHAIR_ROWS: readonly (readonly [TitleId, string, string])[] = [
-  ["t_chairNormal", "연봉 협상의 신", "회장님 독대 주간 1위 (보통 — 다음 1위가 정해질 때까지)"],
-  ["t_chairHell", "맨주먹 협상가", "회장님 독대 주간 1위 (지옥 — 다음 1위가 정해질 때까지)"],
+/**
+ * 11/20 「회장님 독대」 주간 1위 칭호 (주간 1위 칭호처럼 금 등급 · 다음 1위가 정해질 때까지 빌려 준다 — 서버가 TitleFacts.timed로 알린다).
+ * 11/23 2관왕 「차기 회장」은 전설 — 두 금 칭호 대신 하나라 걷기 +1% (주간 레이스 다관왕 이동 속도 +1%와 같은 몫)
+ */
+const CHAIR_ROWS: readonly (readonly [TitleId, string, string, TitleGrade])[] = [
+  ["t_chairNormal", "연봉 협상의 신", "회장님 독대 주간 1위 (보통 — 다음 1위가 정해질 때까지)", "gold"],
+  ["t_chairHell", "맨주먹 협상가", "회장님 독대 주간 1위 (지옥 — 다음 1위가 정해질 때까지)", "gold"],
+  ["t_chairDuo", "차기 회장", "회장님 독대 주간 1위를 노멀과 헬 모두 (2관왕 — 다음 1위가 정해질 때까지)", "legend"],
 ];
 const CHAIR_OF = new Map(CHAIR_ROWS.map((r) => [r[0], r]));
 
@@ -509,7 +515,7 @@ function def(id: TitleId): TitleDef {
   const tm = TIMED_OF.get(id);
   if (tm) return { id, name: tm[1], group: "fish", grade: tm[2], how: tm[3], transient: true, timed: true };
   const ch = CHAIR_OF.get(id);
-  if (ch) return { id, name: ch[1], group: "champ", grade: "gold", how: ch[2], transient: true, timed: true };
+  if (ch) return { id, name: ch[1], group: "champ", grade: ch[3], how: ch[2], transient: true, timed: true };
   return { id, name: id, group: "dex", grade: "bronze", how: "" };
 }
 

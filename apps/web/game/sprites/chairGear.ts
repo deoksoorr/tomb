@@ -5,9 +5,11 @@ import { Grid, type Color } from "./pixel";
 //  chair_crown 황금 사원증 왕관(보통): 붉은 벨벳을 감싼 높은 금관 — 두 겹 금 띠 · 보석 띠(루비·사파이어·다이아) · 세 뾰족(양 끝 진주 · 가운데 다이아).
 //    금 사슬 목줄 끝에 회장실 사원증 (걸으면 흔들린다). 보석 반짝·둘레 별·밤빛은 chairFx
 //  chair_band 불타는 사직서 머리띠(지옥): 빨간 머리띠(끈 둘이 펄럭인다) + 이마 앞에 꽂은 높은 사직서 (윗머리가 그을려 타는 중 — 큰 불꽃은 chairFx)
+//  11/23 chair_duo_crown 회장실 금장 명패 왕관(2관왕): 보랏빛 벨벳 금관 — 이마 띠가 회장실 책상 명패(검은 옻칠 판 + 금 테 + 금박 글자 「회장」),
+//    세 뾰족(양 끝 에메랄드 · 가운데 다이아) · 양옆 금 구슬. 보라 리본 끝에 에메랄드 박힌 금 메달 (걸으면 흔들린다). 명패를 훑는 빛·반짝·밤빛은 chairFx
 // 그림 규칙은 avatarGear와 같다 (몸 기준점 GearM에 맞춰 모든 몸에, 외곽선은 avatar.ts가 프레임 전체에 한 번 두른다).
 
-export const CHAIR_HEAD = ["chair_crown", "chair_band"] as const;
+export const CHAIR_HEAD = ["chair_crown", "chair_band", "chair_duo_crown"] as const;
 
 const GOLD = 0xf6c83a;
 const GOLD_LO = 0xb8841a;
@@ -90,6 +92,7 @@ export function drawChairHead(g0: Grid, view: GearView, id: string, m: GearM, to
   const g = safe(g0);
   if (id === "chair_crown") return crown(g, view, m, top, hem);
   if (id === "chair_band") return band(g, g0, view, m, top, hem);
+  if (id === "chair_duo_crown") return duoCrown(g, view, m, top, hem);
 }
 
 /** 몸 기준점 → faceAnchor top 값 (avatarCore: AV_H - 1 - m.top). 머리 반지름으로 몸을 가른다 (앉기·출렁임에도 같은 왕관) */
@@ -148,6 +151,107 @@ function crown(g: Grid, view: GearView, m: GearM, top: number, hem: number): voi
   g.set(kx + 2, n + 3, RUBY);
   g.hline(kx, kx + 3, n + 4, GOLD);
   g.set(kx + 3, n + 4, GOLD_MID);
+}
+
+// ── 11/23 회장실 금장 명패 왕관 (2관왕) ──
+
+const EMER = 0x3ae0a0;
+const EMER_LO = 0x14946a;
+const VIO = 0x8a4ad8;
+const VIO_LO = 0x55289a;
+const PLATE = 0x231b30;
+const PLATE_HI = 0x40345a;
+const ENGRAVE = 0xffe28a;
+
+/** 명패 왕관 팔레트: 금 · 보라 벨벳(U u) · 에메랄드(E) · 검은 옻칠 명패(N, 윗줄 n) · 금박 글자(T) */
+const DUO_PAL: Record<string, Color> = {
+  G: GOLD,
+  H: GOLD_HI,
+  M: GOLD_MID,
+  L: GOLD_LO,
+  W: 0xffffff,
+  E: EMER,
+  e: EMER_LO,
+  U: VIO,
+  u: VIO_LO,
+  N: PLATE,
+  n: PLATE_HI,
+  T: ENGRAVE,
+};
+
+/**
+ * 명패 왕관 (맨 아랫줄 = 머리 윗면 줄, 12칸). 아래 다섯 줄이 명패: 금 윗테 · 검은 옻칠 판에 금박 글자 두 자(3×3 「회장」 — ㅁ 꼴 · ㅐ 꼴) · 금 밑테.
+ * 9줄(동글이) · 8줄(기본·이불 — 뾰족 대 한 줄을 뺀다) · 5줄(키다리) — 사원증 왕관(CROWN_9)과 같은 높이 규칙 (chairFx 반짝이도 같은 줄 수)
+ */
+export const DUO_CROWN_9 = [
+  "..E..WW..E..",
+  "..H..HM..M..",
+  "H.GU.GM.uG.H",
+  "GHGUUGMuuGML",
+  "HHHHHHHHHMMM",
+  "LNTTTNNTNTNL",
+  "LNTNTNNTTTNL",
+  "LNTTTNNTNTNL",
+  "LLMLLLLLLMLL",
+];
+const DUO_CROWN_8 = [DUO_CROWN_9[0], ...DUO_CROWN_9.slice(2)];
+const DUO_CROWN_5 = ["H.E..WW..E.H", "GHGUUGMuuGML", "HHHHHHHHHMMM", "LNTTNTTNTTNL", "LLMLLLLLLMLL"];
+const DUO_OF: Record<9 | 8 | 5, readonly string[]> = { 9: DUO_CROWN_9, 8: DUO_CROWN_8, 5: DUO_CROWN_5 };
+/** 명패 글자 줄이 머리 윗면 줄에서 몇 줄 위인지 (chairFx 명패 빛도 같은 값) — 9·8줄은 두 줄, 5줄은 한 줄 */
+export const duoPlateUp = (rows: 9 | 8 | 5) => (rows === 5 ? 1 : 2);
+
+/** 좁은 머리·옆모습 글자 (두 자를 2칸씩): 12칸 글자 줄 → 10칸 */
+const NARROW_TEXT: Record<string, string> = { LNTTTNNTNTNL: "LNTTNNTNNL", LNTNTNNTTTNL: "LNTTNNTTNL", LNTTNTTNTTNL: "LNTTNNTTNL" };
+/** 좁은 머리·옆모습: 1·10번째 칸을 빼고 글자 줄은 두 자로 다시 */
+function narrowDuo(art: readonly string[]): string[] {
+  return art.map((r) => NARROW_TEXT[r] ?? r.slice(0, 1) + r.slice(2, 10) + r.slice(11));
+}
+
+function duoCrown(g: Grid, view: GearView, m: GearM, top: number, hem: number): void {
+  const { cx } = m;
+  const side = view === "side";
+  const full = DUO_OF[crownRows(faceTopOf(m))];
+  let art = side || m.rx < 4.5 ? narrowDuo(full) : full;
+  // 뒷모습: 명패 뒤판은 금 (글자·옻칠 없이, 다이아 대신 금)
+  if (view === "up") art = art.map((r, j) => (j === 0 ? r.replace(/W/g, "H") : r.replace(/[TN]/g, "G")));
+  const x0 = cx - art[0].length / 2;
+  const y0 = top - art.length + 1;
+  art.forEach((r, j) => [...r].forEach((ch, i) => ch !== "." && g.set(x0 + i, y0 + j, DUO_PAL[ch])));
+
+  // 보라 리본 → 가슴의 에메랄드 금 메달 (걸으면 한 칸씩 흔들린다)
+  const n = m.neck;
+  const sw = hem === 1 ? -1 : hem === 2 ? 1 : 0;
+  if (view === "up") {
+    if (m.rx > 6) return;
+    for (let x = cx - 2; x <= cx + 1; x++) g.set(x, n, x % 2 ? VIO : VIO_LO);
+    return;
+  }
+  if (side) {
+    g.set(cx, n, VIO);
+    g.set(cx + 1 + Math.max(0, sw), n + 1, VIO_LO);
+    const kx = cx + 1 + sw;
+    g.set(kx, n + 2, GOLD_HI);
+    g.set(kx + 1, n + 2, GOLD);
+    g.set(kx, n + 3, EMER);
+    g.set(kx + 1, n + 3, GOLD_LO);
+    return;
+  }
+  g.set(cx - 3, n, VIO);
+  g.set(cx + 2, n, VIO_LO);
+  g.set(cx - 2 + Math.min(0, sw), n + 1, VIO);
+  g.set(cx + 1 + Math.max(0, sw), n + 1, VIO_LO);
+  // 리본 매듭 + 둥근 메달 4×3 (금 테 · 가운데 에메랄드)
+  const kx = cx - 2 + sw;
+  g.set(kx + 1, n + 1, VIO);
+  g.set(kx + 2, n + 1, VIO_LO);
+  g.set(kx + 1, n + 2, GOLD_HI);
+  g.set(kx + 2, n + 2, GOLD);
+  g.set(kx, n + 3, GOLD);
+  g.set(kx + 1, n + 3, EMER);
+  g.set(kx + 2, n + 3, EMER_LO);
+  g.set(kx + 3, n + 3, GOLD_LO);
+  g.set(kx + 1, n + 4, GOLD_MID);
+  g.set(kx + 2, n + 4, GOLD_LO);
 }
 
 /** 머리띠 끈 (매듭 기준 [dx, dy, 진하기]) — 걷기 단계마다 펄럭이는 세 모양. 옆모습은 뒤(-x)로 날린다 */
@@ -225,6 +329,16 @@ export function drawChairHeadGlow(g0: Grid, view: GearView, id: string, m: GearM
   if (id === "chair_crown") {
     if (view === "up") return;
     g.set(m.cx - 1, top - 1, 0xffffff);
+    return;
+  }
+  if (id === "chair_duo_crown") {
+    // 명패 금박 글자는 외곽선 뒤에도 또렷하게 (어두운 판 위 금빛)
+    if (view === "up") return;
+    const full = DUO_OF[crownRows(faceTopOf(m))];
+    const art = view === "side" || m.rx < 4.5 ? narrowDuo(full) : full;
+    const x0 = m.cx - art[0].length / 2;
+    const y0 = top - art.length + 1;
+    art.forEach((r, j) => [...r].forEach((ch, i) => ch === "T" && g.set(x0 + i, y0 + j, ENGRAVE)));
     return;
   }
   if (id !== "chair_band") return;
@@ -309,8 +423,35 @@ function bandIcon(): Grid {
   return out;
 }
 
+function duoCrownIcon(): Grid {
+  const g = new Grid(16, 16);
+  // 보라 리본 (왕관 양 끝에서 가운데 메달로)
+  for (const [x, y, c] of [[3, 10, VIO], [4, 11, VIO_LO], [5, 12, VIO], [12, 10, VIO_LO], [11, 11, VIO], [10, 12, VIO_LO]] as const) g.set(x, y, c);
+  DUO_CROWN_9.forEach((r, j) => [...r].forEach((ch, i) => ch !== "." && g.set(2 + i, j, DUO_PAL[ch])));
+  // 에메랄드 금 메달
+  g.set(7, 12, VIO);
+  g.set(8, 12, VIO_LO);
+  g.rect(6, 13, 4, 2, GOLD);
+  g.set(7, 13, GOLD_HI);
+  g.set(7, 14, EMER);
+  g.set(8, 14, EMER_LO);
+  g.set(6, 14, GOLD_MID);
+  g.set(9, 14, GOLD_LO);
+  g.hline(7, 8, 15, GOLD_LO);
+  const out = new Grid(16, 16);
+  out.draw(g, 0, 0);
+  out.outline(0x1e1c1a, false, 170);
+  out.set(7, 0, 0xffffff);
+  out.set(4, 0, 0xb0ffe0);
+  out.set(11, 0, 0xb0ffe0);
+  // 명패 금박 글자
+  DUO_CROWN_9.forEach((r, j) => [...r].forEach((ch, i) => ch === "T" && out.set(2 + i, j, ENGRAVE)));
+  return out;
+}
+
 export function chairGearIcon(id: string): Grid | null {
   if (id === "chair_crown") return crownIcon();
   if (id === "chair_band") return bandIcon();
+  if (id === "chair_duo_crown") return duoCrownIcon();
   return null;
 }

@@ -29,7 +29,7 @@ describe("가치 비례 점수 (영구 소장 기준 가치 ÷ 5, 1점 단위)",
     expect(itemLookScore("champ_crown")).toBe(0);
     expect(itemLookScore("champ_fishhat")).toBe(0);
     // 11/20 회장님 독대 1위 보상도 0
-    for (const id of ["chair_crown", "chair_aura_gold", "chair_band", "chair_aura_ember"]) expect(itemLookScore(id)).toBe(0);
+    for (const id of ["chair_crown", "chair_aura_gold", "chair_band", "chair_aura_ember", "chair_duo_crown", "chair_aura_stamp"]) expect(itemLookScore(id)).toBe(0);
     expect(itemLookScore("fw_small")).toBe(0);
     expect(itemLookScore("nope")).toBe(0);
     // 운영자 전용이 아닌 모든 코디는 1점 이상, 공식 그대로
