@@ -18,3 +18,13 @@ describe("/internal/online 서명", () => {
     expect(await verifyInternal(S, far.body, far.sig, now)).toBeNull();
   });
 });
+
+describe("11/21 행운권 정각 추첨 서명 (실시간 서버 → 웹)", () => {
+  it("lotteryDraw는 op만 받고, 다른 op 서명으로는 바꿔 쓸 수 없다", async () => {
+    const now = 1_800_000_000;
+    const ok = await signInternal(S, { op: "lotteryDraw", exp: now + 20 });
+    expect(await verifyInternal(S, ok.body, ok.sig, now)).toEqual({ op: "lotteryDraw", exp: now + 20 });
+    const online = await signInternal(S, { op: "online", exp: now + 20 });
+    expect(await verifyInternal(S, online.body.replace("online", "lotteryDraw"), online.sig, now)).toBeNull();
+  });
+});

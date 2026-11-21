@@ -28,6 +28,7 @@
  *   POST /internal/say       11/15 Vercel → 이 서버: 마을 공지 한 줄을 사람이 있는 채널 모두의 확성기 줄에 지금 띄운다. 본문 서명 필수
  *   POST /internal/pin       11/17 Vercel → 이 서버: 확성기 창 고정 공지가 바뀌었다 (그 채널 하나, 모든 채널이면 사람이 있는 채널 모두). 본문 서명 필수
  *   POST /internal/people    11/20 Vercel → 이 서버: 접속 중인 사람 전부 (운영자 순간이동 목록 — 채널·sid·이름·자리·맵·실내). 본문 서명 필수
+ *   (예약 작업) scheduled  11/21 토요일 20:00 KST — 웹 /api/internal/lottery-draw를 서명해서 불러 행운권을 정각에 추첨한다 (lotteryCron.ts)
  *   POST /internal/online    11/17 Vercel → 이 서버: 지금 접속 중인 방문자 id 전부 (관리자 선물 「지금 접속 중인 사람 모두」). 본문 서명 필수
  */
 import { CLOSE, HUNT_ROOMS_CACHE_SEC, INTERNAL_SIG_HEADER, LOBBY_CACHE_SEC, ROOM_ID_RE, WHERE_CACHE_MS, verifyInternal, type PeerWhere } from "@tomb/protocol";
@@ -46,6 +47,7 @@ import {
 } from "./auth";
 import { type Env, channelStub, lobbyStub, readConfig, roomStub } from "./config";
 import { mergeOnline } from "./lobbyState";
+import { drawLottery } from "./lotteryCron";
 import { IsolateMemo, isOutdatedClient, parseChannel, parseMap, parseSpawn, pinEvent, sayRelay } from "./logic";
 
 export { ChannelDO } from "./ChannelDO";
@@ -70,6 +72,9 @@ export default {
     }
     return new Response("not found", { status: 404 });
   },
+  async scheduled(_ctrl, env, ctx): Promise<void> {
+    ctx.waitUntil(drawLottery(env).then((r) => console.log("[lottery] 정각 추첨", r)));
+  },
 } satisfies ExportedHandler<Env>;
 
 // ── POST /internal/* (47번, 서버끼리) ──
@@ -88,6 +93,7 @@ async function internal(req: Request, env: Env, path: string): Promise<Response>
   if (!req.headers.get(INTERNAL_SIG_HEADER) || !(len <= INTERNAL_MAX_BYTES)) return notFound;
   const r = await verifyInternal(env.JOIN_SECRET, await req.text(), req.headers.get(INTERNAL_SIG_HEADER));
   if (!r || `/internal/${r.op}` !== path) return notFound;
+  if (r.op === "lotteryDraw") return notFound; // 웹이 받는 요청 (실시간 서버 → 웹)
   if (r.op === "kick") {
     if (r.code !== CLOSE.KICKED && r.code !== CLOSE.BANNED) return new Response("bad code", { status: 400 });
     // 방문자가 어느 채널에 있는지 로비 등록이 늦거나 비어 있을 수 있어, 열린 채널 전부에 묻는다 (채널 수가 적다).

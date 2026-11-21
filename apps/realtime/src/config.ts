@@ -27,6 +27,8 @@ export interface Env {
   RECONNECT_GRACE_SEC?: string;
   /** "1"이면 개발용 훅(POST /dev/goblin)을 연다. 로컬 wrangler dev에서만 --var DEV_HOOKS:1 로 준다 (운영에는 두지 않는다) */
   DEV_HOOKS?: string;
+  /** 11/21 웹 주소 (예: https://myproject.rip). 행운권 정각 추첨 예약 작업이 부른다. 없으면 예약 작업은 아무것도 안 한다 */
+  WEB_ORIGIN?: string;
 }
 
 export type Config = {

@@ -47,6 +47,12 @@ MAX_CHANNELS = "10"
 BASE_CHANNELS = "2"
 AUTO_OPEN_THRESHOLD = "0.8"
 RECONNECT_GRACE_SEC = "20"
+# 11/21 행운권 정각 추첨 예약 작업이 부르는 웹 주소 (src/lotteryCron.ts)
+WEB_ORIGIN = "https://myproject.rip"
+
+# 11/21 행운권 정각 추첨: 토요일 20:00 KST = 11:00 UTC. 2분·10분 뒤는 재시도 (이미 추첨했으면 웹이 아무것도 안 한다)
+[triggers]
+crons = ["0,2,10 11 * * SAT"]
 
 # 커스텀 도메인 rt.{도메인} 연결 (도메인이 Cloudflare 존에 있어야 한다)
 # routes = [
@@ -65,6 +71,10 @@ class_name = "ChannelDO"
 [[env.staging.durable_objects.bindings]]
 name = "LOBBY"
 class_name = "LobbyDO"
+
+# 테스트 서버는 예약 작업을 돌리지 않는다 (triggers는 위에서 물려받으므로 비워 둔다. WEB_ORIGIN도 없어 불려도 skip)
+[env.staging.triggers]
+crons = []
 
 [env.staging.vars]
 # 11/16 테스트 서버만 60명 (렌더 최적화 뒤 부하 실험: 60명이 예전 40명보다 가벼움). 운영은 위 [vars]의 40 그대로

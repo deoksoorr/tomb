@@ -15,6 +15,8 @@ import { hmacSign, hmacVerify } from "./token";
 //  - POST /internal/pin   { scope, ch, pin, exp }          → 11/17 확성기 창 고정 공지가 바뀌었다 (channel이면 그 채널만, all이면 사람이 있는 채널 모두. pin null = 지움)
 //  - POST /internal/online { exp }                         → 11/17 관리자 선물: 지금 접속 중인 방문자 id 전부 (채널·맵·방 상관없이, 한 번씩)
 //  - POST /internal/people { exp }                         → 11/20 운영자 순간이동: 접속 중인 사람 전부 (채널·sid·이름·자리·맵·실내)
+// 반대 방향 (실시간 서버 → 웹, 같은 서명):
+//  - POST {WEB_ORIGIN}/api/internal/lottery-draw { op: "lotteryDraw", exp } → 11/21 토요일 저녁 8시 예약 작업이 행운권 추첨을 정각에 돌린다
 
 export const INTERNAL_SIG_HEADER = "X-Tomb-Internal";
 /** 내부 요청 유효 시간 (초). 서버끼리라 짧게 */
@@ -37,7 +39,9 @@ export type InternalPin = { op: "pin"; scope: "channel" | "all"; ch: number; pin
 export type InternalOnline = { op: "online"; exp: number };
 /** 11/20 운영자 「접속 중인 사람」. 응답 { people: InternalPerson[] } (staffTp.ts) */
 export type InternalPeople = { op: "people"; exp: number };
-export type InternalRequest = InternalKick | InternalPeer | InternalMe | InternalWhere | InternalHello | InternalSay | InternalPin | InternalOnline | InternalPeople;
+/** 11/21 실시간 서버 → 웹: 행운권 정각 추첨 (토요일 20:00 KST 예약 작업). 웹만 받는다 */
+export type InternalLotteryDraw = { op: "lotteryDraw"; exp: number };
+export type InternalRequest = InternalKick | InternalPeer | InternalMe | InternalWhere | InternalHello | InternalSay | InternalPin | InternalOnline | InternalPeople | InternalLotteryDraw;
 /** 마을 공지 한 줄 최대 길이 (확성기 60자보다 넉넉히 — 시스템이 만든 문장이라 서명만 확인한다) */
 export const INTERNAL_SAY_MAX = 200;
 const SAY_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
@@ -117,6 +121,7 @@ export async function verifyInternal(
   }
   if (r.op === "online") return { op: "online", exp: r.exp };
   if (r.op === "people") return { op: "people", exp: r.exp };
+  if (r.op === "lotteryDraw") return { op: "lotteryDraw", exp: r.exp };
   if (r.op === "peer") {
     if (typeof r.sid !== "number" || !Number.isInteger(r.sid) || r.sid < 0) return null;
     const hasCh = typeof r.ch === "number" && Number.isInteger(r.ch) && r.ch >= 1;
