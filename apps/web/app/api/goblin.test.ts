@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { GoblinClaimResponse } from "@/lib/goblin";
 import { STARRY_NIGHT_BONUS, starryNight } from "@/lib/stargaze";
+import { getMegaphone } from "@/lib/store";
 import type { ApiError } from "@/lib/types";
 import * as goblin from "./goblin/route";
 import * as session from "./session/route";
@@ -43,6 +44,18 @@ describe("/api/goblin", () => {
     const again = await claim(v, grant);
     expect(again.status).toBe(409);
     expect(((await again.json()) as ApiError).error.code).toBe("ALREADY_CLAIMED");
+  });
+
+  it("11/21 잡은 소식은 마을 소식 창에 한 번 남는다 (채팅 [소식] 줄 대신)", async () => {
+    const v = await newVisitor();
+    const grant = await signGrant(SECRET, { kind: "goblin", visitorId: v.visitorId, points: 800, nonce: "gNews00001", exp: exp() });
+    expect((await claim(v, grant)).status).toBe(200);
+    expect((await claim(v, grant)).status).toBe(409);
+    await vi.waitFor(async () => {
+      const lines = (await getMegaphone().recent(50)).filter((r) => r.text.includes("황금 고블린을 잡았어요! +800P"));
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toMatchObject({ scope: "all", name: "공지" });
+    });
   });
 
   it("rejects someone else's grant, forged grants and other grant kinds", async () => {

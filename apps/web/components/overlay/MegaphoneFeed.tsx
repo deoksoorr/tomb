@@ -15,6 +15,8 @@ import { MegaPinDialog, MegaPinRemove } from "./MegaPinDialog";
 
 /** 기록을 다시 받는 간격 (관리자 숨김 반영·놓친 방송 보충. 새 방송은 실시간으로 오므로 10분, 숨긴 탭은 받지 않는다) */
 const RELOAD_MS = 10 * 60_000;
+/** 11/21 펼친 기록에 한 번에 보이는 소식 수 (나머지는 스크롤) */
+const VISIBLE_LINES = 5;
 
 /**
  * 23번 확성기 창 (데스크톱은 화면 왼쪽 위). 최근 20개는 펼쳐 볼 수 있다(접기 가능).
@@ -48,11 +50,20 @@ export default function MegaphoneFeed({ channel, floating = false, lead }: { cha
     }, RELOAD_MS);
     return () => clearInterval(t);
   }, [channel]);
-  // 펼쳐 둔 기록은 새 줄이 오면 맨 아래로
+  // 펼쳐 둔 기록은 새 줄이 오면 맨 아래로.
+  // 11/21 높이는 최근 소식 VISIBLE_LINES개만큼 (두 줄로 접히는 소식이 있어도 개수로 맞춘다 — 사용자), 나머지는 위로 스크롤
   useEffect(() => {
     const el = logRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [entries, collapsed]);
+    if (!el) return;
+    const kids = [...el.children] as HTMLElement[];
+    if (kids.length > VISIBLE_LINES) {
+      const cs = getComputedStyle(el);
+      const last = kids.slice(-VISIBLE_LINES);
+      const h = last.reduce((s, k) => s + k.offsetHeight, 0) + (parseFloat(cs.rowGap) || 0) * (last.length - 1) + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+      el.style.maxHeight = `${Math.ceil(Math.min(h, window.innerHeight * 0.4))}px`;
+    } else el.style.maxHeight = "";
+    el.scrollTop = el.scrollHeight;
+  }, [entries, collapsed, asked]);
 
   // 11/20 데스크톱: 위 줄 아래로 자라는 고정 공지·기록 높이를 --feed-h(문서 루트)로 알린다 → 왼쪽 위 새 개발자 노트 카드가 그 밑에 선다 (공지와 겹쳤다)
   useEffect(() => {

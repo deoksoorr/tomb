@@ -3,7 +3,10 @@ import { redisClient } from "./redisUsage";
 import { verifyGrant } from "@tomb/protocol";
 import { env } from "./env";
 import { HttpError } from "./http";
-import { earnPoints } from "./store";
+import { goblinCaughtLine } from "@/components/overlay/goblinText";
+import { displayName, earnPoints } from "./store";
+import { runAfter } from "./analyticsService";
+import { pushVillageNotice } from "./weeklyChamp";
 import type { Me } from "./types";
 
 // 22번 황금 고블린(보너스 요정) 보상 받기.
@@ -37,5 +40,10 @@ export async function claimGoblin(visitorId: string, token: string, ip: string |
   if (grant.visitorId !== visitorId) throw new HttpError(403, "BAD_GRANT", "다른 사람이 잡은 고블린이에요.");
   if (!(await claimOnce(grant.nonce, now))) throw new HttpError(409, "ALREADY_CLAIMED", "이미 받은 보상이에요.");
   const { earned, me } = await earnPoints(visitorId, "goblin", grant.points, ip);
+  // 11/21 잡은 소식은 채팅 [소식] 줄이 아니라 다른 마을 소식(행운권·1위 등)처럼 마을 소식 창에 남긴다 (사용자). 실패해도 보상은 그대로
+  runAfter(async () => {
+    const name = await displayName(visitorId, now).catch(() => "");
+    await pushVillageNotice(goblinCaughtLine(name, false, grant.points), now).catch((e) => console.warn("[goblin] 소식 실패", e));
+  });
   return { earned, points: grant.points, capped: earned < grant.points, me };
 }
