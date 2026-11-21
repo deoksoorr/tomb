@@ -173,14 +173,14 @@ export default function QuestBoard({ only, viewOnly = false }: { only?: LifeCat;
       </div>
       <ul className={q.list} aria-label="수집 의뢰">
         {weekly && row(weekly)}
-        {only && !daily.length && !weekly && <li className={q.empty}>오늘은 {CAT_LABEL[only]} 의뢰가 없어요. 다른 의뢰는 캠핑장행 정류장 옆 의뢰 게시판에 있어요.</li>}
+        {only && !daily.length && !weekly && <li className={q.empty}>오늘은 {CAT_LABEL[only]} 의뢰가 없어요. 다른 의뢰는 캠핑장행 정류장 왼쪽 의뢰 게시판에 있어요.</li>}
         {daily.map(row)}
       </ul>
       {!viewOnly && (
       <p className={ui.hint} role="status">
         {notice ??
           (only
-            ? `${CAT_LABEL[only]} 의뢰만 보여요. 모든 의뢰는 캠핑장행 정류장 옆 의뢰 게시판에 있어요.`
+            ? `${CAT_LABEL[only]} 의뢰만 보여요. 모든 의뢰는 캠핑장행 정류장 왼쪽 의뢰 게시판에 있어요.`
             : "납품한 것은 가방에서 사라져요. 도장은 포인트로 바꿀 수 없고, 도장 교환소에서만 써요.")}
       </p>
       )}

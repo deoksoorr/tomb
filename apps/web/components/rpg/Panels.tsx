@@ -120,7 +120,7 @@ export function StartPanel({
         {/* 11/15 레벨 50 이후의 중심은 마을의 야근 빌딩 (사냥터 창에서는 안내 한 줄만) */}
         {view.endgame && (
           <p className={s.towerHint}>
-            <b>레벨 50부터</b> 마을의 야근 빌딩에 들어갈 수 있어요. 마을 북쪽 분양 사무소 옆 높은 건물이에요. 지옥 사냥터에서도 초월 EXP를 받아요.
+            <b>레벨 50부터</b> 마을의 야근 빌딩에 들어갈 수 있어요. 마을 북쪽 판교의 등대 왼쪽 높은 건물이에요. 지옥 사냥터에서도 초월 EXP를 받아요.
           </p>
         )}
         <section className={s.section} aria-label="사냥터 고르기">

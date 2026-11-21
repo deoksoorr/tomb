@@ -13,12 +13,12 @@ export type FishDecorKind = "crates" | "barrel" | "questBoard" | "placard" | "bu
 export type FishDecor = { kind: FishDecorKind; x: number; y: number };
 type Box = { x: number; y: number; w: number; h: number };
 
-/** 의뢰 게시판 (받침 가운데). 앞(아래)에서 E → 수집 의뢰판 */
-export const WHARF_BOARD = { x: 1186, y: 700 } as const;
+/** 의뢰 게시판 (받침 가운데). 앞(아래)에서 E → 수집 의뢰판. 11/21 마당 서쪽 쉼터 광장(벤치 bY·bZ를 뺀 자리)으로 옮겼다 (예전 자리 (1186,700)는 가구 보따리상) */
+export const WHARF_BOARD = { x: 1064, y: 686 } as const;
 export const WHARF_BOARD_W = 56;
 export const WHARF_BOARD_H = 48;
-/** 게시판 오른쪽 빈 현판 — 나중에 "긴급 의뢰" 진행 막대를 걸 자리 (지금은 비어 있다) */
-export const WHARF_PLACARD = { x: 1230, y: 700 } as const;
+/** 게시판 오른쪽 「긴급 의뢰」 현판 — 11/21부터 앞에서 E 하면 의뢰판이 열린다 (forage:board2) */
+export const WHARF_PLACARD = { x: 1108, y: 686 } as const;
 /** 주말 버스 정류장 지붕 (받침 가운데 — 벤치 bE가 지붕 아래, 골목을 바라본다). 앞에서 E → 상호작용 "bus" */
 export const BUS_STOP = { x: 1330, y: 724 } as const;
 export const BUS_SHELTER_W = 64;

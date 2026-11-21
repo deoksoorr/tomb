@@ -105,7 +105,7 @@ export default function UrgentHud() {
       const rows = (urgentStore.getSnapshot().mine?.rows ?? []).filter((r) => r.done && r.reward && !r.claimed);
       if (!rows.length) return;
       const soonest = Math.min(...rows.map((r) => r.end + URGENT_CLAIM_MS)) - Date.now();
-      showToast(`받지 않은 긴급 의뢰 보상이 ${rows.length > 1 ? `${rows.length}개 ` : ""}있어요. ${urgentClaimLeft(soonest)} 안에 캠핑장행 정류장 옆 의뢰 게시판에서 받아 가세요.`, 7_000);
+      showToast(`받지 않은 긴급 의뢰 보상이 ${rows.length > 1 ? `${rows.length}개 ` : ""}있어요. ${urgentClaimLeft(soonest)} 안에 캠핑장행 정류장 왼쪽 의뢰 게시판에서 받아 가세요.`, 7_000);
     };
     if (!toasted.current.has(pendingKey)) {
       toasted.current.add(pendingKey);
@@ -279,7 +279,7 @@ export default function UrgentHud() {
               {d.unit}
             </span>
             {live ? <span className={u.pct}>{pct}%</span> : <span className={u.result}>{urgentFilled(ev.kind, ev.n, ev.goal, !!ev.early)}</span>}
-            {live && <span className={u.hudHint}>캠핑장행 정류장 옆 게시판</span>}
+            {live && <span className={u.hudHint}>캠핑장행 정류장 왼쪽 게시판</span>}
           </div>
           {!live && (rewardLine || canClaim) && (
             <div className={u.hudReward}>

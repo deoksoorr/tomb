@@ -45,7 +45,7 @@ function tutorialSteps(touch: boolean, firstSteps: boolean): Step[] {
     { title: "상점", text: "유령 잡화점이에요. 주인장에게 말을 걸면 포인트로 꾸미기·폭죽을 살 수 있어요.", point: "shop" },
     {
       title: "낚시 잔교",
-      text: `낚시 의자 앞에서 ${keyJosa("E", "를", touch)} 누르면 낚시를 해요. 잡은 물고기는 잔교 옆 어부 영감에게 팔아요. 수집 의뢰는 캠핑장행 정류장 옆 의뢰 게시판에 있어요.`,
+      text: `낚시 의자 앞에서 ${keyJosa("E", "를", touch)} 누르면 낚시를 해요. 잡은 물고기는 잔교 옆 어부 영감에게 팔아요. 수집 의뢰는 캠핑장행 정류장 왼쪽 의뢰 게시판에 있어요.`,
       point: "fishing",
     },
     {

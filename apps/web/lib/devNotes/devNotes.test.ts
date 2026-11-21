@@ -60,7 +60,8 @@ describe("개발자 노트 데이터", () => {
 
   it("미출시 콘텐츠 이름이 사이트 글에 없다", () => {
     const text = JSON.stringify([STATIC_NOTES, GUIDE_PARTS, FAQ]);
-    for (const w of ["보따리상", "분양사", "품종", "시즌 가구", "겨울 코디"]) expect(text).not.toContain(w);
+    // 11/21 보따리상은 11/20부터 마을에 열려 있어 뺐다 (11월 21일 노트가 자리 바꿈을 알린다)
+    for (const w of ["분양사", "품종", "시즌 가구", "겨울 코디"]) expect(text).not.toContain(w);
   });
 
   it("자주 묻는 질문: 33개, 분류가 모두 탭에 있다", () => {

@@ -707,9 +707,7 @@ export const FURNITURE: readonly Furniture[] = [
   { id: "bN", kind: "bench", x: 952, y: 262, facing: DIR.down, seatOffsets: two },
   { id: "bO", kind: "bench", x: 1060, y: 800, facing: DIR.down, seatOffsets: two },
   { id: "lE", kind: "bench", x: 1144, y: 800, facing: DIR.down, seatOffsets: four }, // 낚시터가 생기며 나루터 서쪽 호숫가로 옮김
-  // ── 11/15 쉼터 광장 (예전 10번지, 아래 골목을 바라본다) · 납품 부두 위 마당 (게시판 앞 · 버스 정류장 지붕 아래) ──
-  { id: "bY", kind: "bench", x: 1044, y: 704, facing: DIR.down, seatOffsets: two },
-  { id: "bZ", kind: "bench", x: 1100, y: 704, facing: DIR.down, seatOffsets: two },
+  // ── 11/15 납품 부두 위 마당 (가구 보따리상 앞 · 버스 정류장 지붕 아래). 11/21 쉼터 광장 벤치 bY·bZ는 의뢰 게시판이 그 자리로 오며 뺐다 ──
   { id: "bD", kind: "bench", x: 1192, y: 744, facing: DIR.up, seatOffsets: two },
   { id: "bE", kind: "bench", x: 1330, y: 716, facing: DIR.down, seatOffsets: two }, // 주말 버스 정류장 지붕 아래 (game/world/fishZone.ts BUS_STOP)
   { id: "bU", kind: "bench", x: 108, y: 592, facing: DIR.down, seatOffsets: two }, // 11/16 바닷가행 정류장 지붕 아래 (game/world/seaStop.ts SEA_STOP — 예전 서쪽 모닥불 자리)

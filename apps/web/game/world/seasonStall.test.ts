@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TILE } from "@tomb/protocol";
+import { TILE, WHARF_YARD } from "@tomb/protocol";
 import { groundKind, interactables, standable } from "./layout";
 import { ResidentSim, residentSpots, wanderPoints } from "./life/residentSim";
 import { RESIDENTS } from "./life/residentData";
@@ -19,6 +19,9 @@ describe("기간 한정 노점 배치", () => {
     for (const r of seasonStallColliders())
       for (let y = r.y; y < r.y + r.h; y += 2)
         for (let x = r.x; x < r.x + r.w; x += 2) {
+          // 11/21 가구 보따리상은 버스 정류장 자갈 마당(예전 의뢰 게시판 자리) — 마당은 길이 아니라 광장이라 뺀다
+          const Y = WHARF_YARD;
+          if (x >= Y.x && x < Y.x + Y.w && y >= Y.y && y < Y.y + Y.h) continue;
           const k = groundKind(Math.floor(x / TILE), Math.floor(y / TILE));
           expect(["dirt", "gravel", "cobble"].includes(k), `${x},${y} ${k}`).toBe(false);
         }

@@ -273,7 +273,11 @@ function myRow(b: Board, me: string, raw: { damage: number; rank: number; ms?: n
   const ms = hit ? hit.ms : raw?.ms;
   const t = ms ? { ms } : {};
   if (hit) return { rank: hit.rank, damage: hit.damage, ...t };
-  return raw ? { rank: Math.max(RANK_SIZE + 1, raw.rank), damage: raw.damage, ...t } : null;
+  if (!raw) return null;
+  // 11/21 보드는 30초 기억이라 방금 처음 낸 기록이 아직 없을 수 있다 — 보드가 덜 찼거나 마지막 줄보다 세면 저장소 순위를 그대로
+  const last = b.rows[b.rows.length - 1];
+  const fresh = b.rows.length < RANK_SIZE || !last || raw.damage > last.damage;
+  return { rank: fresh ? raw.rank : Math.max(RANK_SIZE + 1, raw.rank), damage: raw.damage, ...t };
 }
 
 export async function chairRank(mode: ChairMode, me: string | null, now = Date.now()): Promise<ChairRankResponse> {

@@ -367,8 +367,11 @@ export class RedisChairStore implements ChairStore {
       .zscore(mk.week("hell", week), acct)
       .zrevrank(mk.week("hell", week), acct)
       .hget(mk.weekAt("hell", week), acct)
-      .exec<[Record<string, unknown> | null, number | null, number | null, unknown, number | null, number | null, unknown]>();
-    const m = me ?? {};
+      .exec<[unknown, number | null, number | null, unknown, number | null, number | null, unknown]>();
+    // 11/21 이 클라이언트(redisClient)는 HMGET을 필드 이름 없는 배열로 준다 — 이름 붙은 객체로 바꿔 읽는다 (객체로 와도 그대로)
+    const ME = ["d", "cn", "ch", "bn", "bh", "mn", "mh", "rf"] as const;
+    const mv = hmgetList(me, ME);
+    const m = Object.fromEntries(ME.map((f, i) => [f, mv[i]])) as Record<(typeof ME)[number], string | null>;
     const today = String(m.d ?? "") === day;
     const wk = (s: number | null, r: number | null, at: unknown) => {
       if (s === null || s === undefined || r === null || r === undefined) return null;
@@ -393,10 +396,10 @@ export class RedisChairStore implements ChairStore {
       scores.push(num(raw[i + 1]));
     }
     if (!ids.length) return [];
-    const ats = ((await this.redis.hmget(mk.weekAt(mode, week), ...ids)) ?? {}) as Record<string, unknown>;
+    const ats = hmgetList(await this.redis.hmget(mk.weekAt(mode, week), ...ids), ids);
     return ids
       .map((accountId, i) => {
-        const [at, ms, dm] = String(ats[accountId] ?? "0").split("|").map(num);
+        const [at, ms, dm] = String(ats[i] ?? "0").split("|").map(num);
         return { accountId, damage: scores[i], at, ...(ms ? { ms } : {}), ...(dm ? { dm } : {}) };
       })
       .sort(byDamage)
@@ -426,9 +429,16 @@ export class RedisChairStore implements ChairStore {
   }
   async paid(marks: readonly string[]) {
     if (!marks.length) return [];
-    const r = ((await this.redis.hmget(mk.paid, ...marks)) ?? {}) as Record<string, unknown>;
-    return marks.map((m) => (r[m] === null || r[m] === undefined ? null : String(r[m])));
+    const r = hmgetList(await this.redis.hmget(mk.paid, ...marks), marks);
+    return r.map((v) => (v === null || v === undefined ? null : String(v)));
   }
+}
+
+/** HMGET 결과를 필드 순서대로 (배열로 오든 이름 붙은 객체로 오든 — lib/store/accounts-redis hmgetList와 같은 규칙) */
+export function hmgetList(got: unknown, fields: readonly string[]): (string | null)[] {
+  if (Array.isArray(got)) return fields.map((_, i) => (got[i] === null || got[i] === undefined ? null : String(got[i])));
+  const o = (got ?? {}) as Record<string, unknown>;
+  return fields.map((f) => (o[f] === null || o[f] === undefined ? null : String(o[f])));
 }
 
 const g = globalThis as typeof globalThis & { __tombChair?: ChairStore };

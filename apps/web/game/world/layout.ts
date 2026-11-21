@@ -469,7 +469,7 @@ const HAND_PROPS: readonly PropDef[] = [
   P("leaves", 780, 560, 1),
   P("flowers", 690, 612, 2),
   P("flowers", 752, 612, 0),
-  // ── 11/15 쉼터 광장 (예전 10번지: 가로등·꽃밭, 벤치 bY·bZ) · 버스 정류장 마당 가로등 ──
+  // ── 11/15 쉼터 광장 (예전 10번지: 가로등·꽃밭, 11/21부터 의뢰 게시판) · 버스 정류장 마당 가로등 ──
   P("lamp", REST_PLAZA.x + 10, REST_PLAZA.y + 16),
   P("lamp", REST_PLAZA.x + REST_PLAZA.w - 10, REST_PLAZA.y + 16),
   P("flowers", REST_PLAZA.x + 14, REST_PLAZA.y + 88, 1),
@@ -800,7 +800,7 @@ export function staticColliders(): Rect[] {
   out.push(...towerColliders()); // 11/15 야근 빌딩 로비·몸체 (tower/towerLayout.ts)
   out.push(...bumperColliders()); // 11/16 범퍼카장 고무 테두리·입구 막대·매표소 (bumper/bumperLayout.ts)
   out.push(...lotteryColliders()); // 행운권 판매대 (lotteryKiosk.ts)
-  out.push(...seasonStallColliders()); // 11/19 계절 보따리상(광장)·가구 보따리상(북쪽 길 위) 노점과 주인 (seasonStallLayout.ts)
+  out.push(...seasonStallColliders()); // 11/21 계절 보따리상(북쪽 길 위)·가구 보따리상(버스 정류장 마당) 노점과 주인 (seasonStallLayout.ts)
   out.push(...mungnyangColliders()); // 11/19 분양사 보리(동물원 정문 왼쪽 풀밭) 몸통·간식 상자·방석 (mungnyangLayout.ts)
   out.push(...officeColliders()); // 11/20 총무팀 문대리(야근 빌딩 오른쪽 풀밭) 사무실 가구 카트·문대리 몸통 (officeStallLayout.ts)
   out.push(...lighthouseColliders()); // 11/20 판교의 등대 돌 받침·전광판 다리 (lighthouse/lighthouseLayout.ts)

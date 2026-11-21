@@ -133,8 +133,8 @@ export const FIRST_STEPS: readonly FirstStep[] = [
     id: "quest",
     bit: 16384,
     label: "의뢰 하나 해결하기",
-    pc: "캠핑장행 정류장 옆 의뢰 게시판에서 E를 눌러 의뢰를 하나 해결해요.",
-    touch: "캠핑장행 정류장 옆 의뢰 게시판에서 [상호작용]을 눌러 의뢰를 하나 해결해요.",
+    pc: "캠핑장행 정류장 왼쪽 의뢰 게시판에서 E를 눌러 의뢰를 하나 해결해요.",
+    touch: "캠핑장행 정류장 왼쪽 의뢰 게시판에서 [상호작용]을 눌러 의뢰를 하나 해결해요.",
     reward: PLAY,
   },
 ];
@@ -248,7 +248,7 @@ export const TODO_POOL: readonly TodoDef[] = [
   { kind: "sell", cat: "life", label: "물고기나 채집물 팔기", need: 1, unit: "번", hint: "어부 영감이나 수집가에게 가방 속 것을 팔아요.", guide: "seller" },
   { kind: "wish", cat: "life", label: "소원 분수에 동전 던지기", need: 1, unit: "번", hint: "광장 소원 분수에서 동전을 던져요. 하루 한 번이에요.", guide: "wish" },
   { kind: "guestbook", cat: "life", label: "이웃 집 방명록 남기기", need: 1, unit: "번", hint: "이웃 집에 들어가 방명록에 한 줄 남겨요.", guide: "visit" },
-  { kind: "quest", cat: "life", label: "마을 의뢰 하나 납품하기", need: 1, unit: "번", hint: "캠핑장행 정류장 옆 의뢰 게시판에서 납품해요.", guide: "questBoard" },
+  { kind: "quest", cat: "life", label: "마을 의뢰 하나 납품하기", need: 1, unit: "번", hint: "캠핑장행 정류장 왼쪽 의뢰 게시판에서 납품해요.", guide: "questBoard" },
   // ── 놀이 ──
   { kind: "fish", cat: "play", label: "물고기 3마리 낚기", need: 3, unit: "마리", hint: "호수, 강, 바닷가 어디서든 직접 낚으면 세요. 자동 낚시는 세지 않아요.", group: "fish", guide: "fish" },
   { kind: "gather", cat: "play", label: "채집 2번 하기", need: 2, unit: "번", hint: "반짝이는 풀·돌·수풀에서 채집해요.", group: "gather", guide: "gather" },

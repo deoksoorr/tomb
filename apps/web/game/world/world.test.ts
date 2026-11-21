@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { WHARF_BOARD } from "./fishZone";
 import {
   BOAT_MOORING,
   BRIDGES,
@@ -365,8 +366,9 @@ describe("주거 구역 (분양 마을을 메인 맵에)", () => {
     expect(t(REST_PLAZA.x + 40, REST_PLAZA.y + 40)).toBe("stone");
     expect(t(REST_PLAZA.x + REST_PLAZA.w + 20, REST_PLAZA.y + 40)).toBe("gravel"); // 바로 오른쪽이 버스 정류장 마당
     expect(t(WHARF_YARD.x + 60, WHARF_YARD.y + 40)).toBe("gravel");
-    const benches = FURNITURE.filter((f) => inside(REST_PLAZA, f.x, f.y));
-    expect(benches.length).toBeGreaterThanOrEqual(2);
+    // 11/21 쉼터 광장 벤치 둘을 빼고 의뢰 게시판을 들였다
+    expect(FURNITURE.filter((f) => inside(REST_PLAZA, f.x, f.y))).toHaveLength(0);
+    expect(inside(REST_PLAZA, WHARF_BOARD.x, WHARF_BOARD.y - 4)).toBe(true);
     expect(allProps().filter((p) => p.kind === "lamp" && inside(REST_PLAZA, p.x, p.y)).length).toBeGreaterThanOrEqual(2);
     const ok = reachable();
     expect(ok(REST_PLAZA.x + 64, REST_PLAZA.y + 84)).toBe(true);

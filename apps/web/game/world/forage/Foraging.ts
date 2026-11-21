@@ -15,7 +15,7 @@ import type { Lighting } from "../Lighting";
 import { ensureForageTextures, ensureIconTexture, FTEX } from "./art";
 import { nodeWindow, windowEndsAt } from "@/lib/forage/rules";
 import { FishZoneView } from "./FishZoneView";
-import { WHARF_BOARD } from "../fishZone";
+import { WHARF_BOARD, WHARF_PLACARD } from "../fishZone";
 import { SEA_BUYER, SEA_BUYER_STALL } from "../../sea/seaLayout";
 import { destroyAura, ensureNodeFxTextures, gatheredFx, makeAura, spawnFx, updateAura, vanishFx, type NodeAura } from "./nodeFx";
 import { ForageSfx } from "./sounds";
@@ -215,7 +215,11 @@ export class Foraging {
     for (const n of this.npcs)
       items.push({ id: `forage:npc:${n.id}`, kind: "forage", forage: `npc:${n.id}`, x: n.x, y: n.y + 10, r: 20, ax: n.x, ay: n.y + 10, label: `${n.name}에게 팔기` });
     // 11/15 버스 정류장 마당 의뢰 게시판 (앞에서 E → 수집 의뢰판)
-    if (this.mapId === "village") items.push({ id: "forage:board", kind: "forage", forage: "board:quest", x: WHARF_BOARD.x, y: WHARF_BOARD.y + 12, r: 22, ax: WHARF_BOARD.x, ay: WHARF_BOARD.y + 12, label: "의뢰 게시판 보기" });
+    if (this.mapId === "village") {
+      items.push({ id: "forage:board", kind: "forage", forage: "board:quest", x: WHARF_BOARD.x, y: WHARF_BOARD.y + 12, r: 22, ax: WHARF_BOARD.x, ay: WHARF_BOARD.y + 12, label: "의뢰 게시판 보기" });
+      // 11/21 옆 「긴급 의뢰」 현판 앞에서도 같은 의뢰판이 열린다
+      items.push({ id: "forage:board2", kind: "forage", forage: "board:urgent", x: WHARF_PLACARD.x, y: WHARF_PLACARD.y + 12, r: 16, ax: WHARF_PLACARD.x, ay: WHARF_PLACARD.y + 12, label: "의뢰 게시판 보기" });
+    }
     for (const id of this.nodeIds) {
       const n = gatherNodeById(id);
       // 캐는 중인 지점은 안내를 띄우지 않는다
@@ -295,7 +299,8 @@ export class Foraging {
     }
     if (kind === "board") {
       if (pl.sitting) pl.stand(now, null);
-      pl.faceTo(WHARF_BOARD.x, WHARF_BOARD.y - 20, now);
+      const at = id === "urgent" ? WHARF_PLACARD : WHARF_BOARD;
+      pl.faceTo(at.x, at.y - 20, now);
       bridge.emit("forage:use", { kind: "board" });
       return;
     }
