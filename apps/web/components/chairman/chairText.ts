@@ -1,4 +1,3 @@
-import { ALL_PATS, KILL_INFO, PAT_GRADE, PAT_GRADE_NAME, PAT_INFO } from "@/game/chairman/rules";
 import { CHAIR_POINTS_PER_MIN, CHAIR_RUNS_PER_DAY, type ChairMode } from "@/lib/chairman/rules";
 
 // 11/20 회장님 독대 입장 창·전광판 글 (순수 — chairText.test.ts)
@@ -48,17 +47,6 @@ export function boardName(name: string | null | undefined): string | null {
   if (!n) return null;
   const s = [...n];
   return `이번 주 1위 ${s.length > 10 ? `${s.slice(0, 10).join("")}…` : n}`;
-}
-
-export type TechRow = { id: string; name: string; how: string; grade: string; kill?: boolean };
-
-/** 「오늘 나올 기술」: 11/21 판 전체 주머니 — 쉬운 등급부터 (나오는 순서와 같다) + 즉사 기술 */
-export function techRows(): TechRow[] {
-  const rows: TechRow[] = [...ALL_PATS]
-    .sort((a, b) => PAT_GRADE[a] - PAT_GRADE[b])
-    .map((id) => ({ id, name: PAT_INFO[id].name, how: PAT_INFO[id].how, grade: PAT_GRADE_NAME[PAT_GRADE[id]] }));
-  for (const [id, k] of Object.entries(KILL_INFO)) rows.push({ id, name: k.name, how: k.how, grade: "즉사", kill: true });
-  return rows;
 }
 
 /** 버틴 시간 열 "14:32" (옛 기록은 "-") */

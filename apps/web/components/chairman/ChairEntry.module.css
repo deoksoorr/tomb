@@ -301,60 +301,6 @@
   line-height: 1.5;
 }
 
-/* 기술 목록 */
-.tech {
-  display: grid;
-  gap: 6px;
-  padding: 8px 10px;
-  background: var(--bg-deep);
-  box-shadow: 0 0 0 2px var(--line);
-}
-
-.techLead {
-  margin: 0;
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.tech ul {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px 12px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.tech li {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0 6px;
-  font-size: 11px;
-}
-
-.techStep {
-  grid-row: span 2;
-  align-self: start;
-  padding: 1px 4px;
-  background: #2f3227;
-  color: var(--candle);
-  font-size: 10px;
-}
-
-.tech li[data-kill] .techStep {
-  background: #5a1a14;
-  color: #ffb8a0;
-}
-
-.tech b {
-  color: var(--bone);
-}
-
-.techHow {
-  color: var(--muted);
-  line-height: 1.4;
-}
-
 /* 헬 확인 */
 .confirm {
   --line-strong: #8a2a1e;
@@ -405,10 +351,6 @@
   .art {
     width: 72px;
     height: 72px;
-  }
-
-  .tech ul {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 

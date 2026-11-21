@@ -3,7 +3,7 @@ import { SKILL_FX } from "./skillTree";
 import { SKILLS, skillById, type SkillId } from "./catalog";
 import { learnSkill, newCharacter, normalize, resetSkills, setHotbar } from "./character";
 import { checkLearn, SKILL_TREE_VERSION, tierOpen, type Alloc } from "./skillRules";
-import { arrangeHotbar, autoBlock, cleanAuto, emptySlotFor, fitsSlot, isUltimate, MOVE_SKILLS, SKILL_SLOTS, ULT_SLOT } from "./hotbar";
+import { arrangeHotbar, autoBlock, cleanAuto, emptySlotFor, fitsSlot, isUltimate, MOVE_SKILLS, SKILL_SLOTS, startAuto, ULT_SLOT } from "./hotbar";
 import { AUTO_RULE, autoShape, autoSpOk, crowdAt, ultReserve, wantsCast, type AutoCtx, type AutoFoe } from "./autoSkill";
 
 // 11/15 단축 칸(스킬 5칸 + 궁극기 F 칸) · 옛 6칸 저장값 옮기기 · 자동 스킬 규칙
@@ -112,6 +112,22 @@ describe("자동 스킬 설정", () => {
     const b = setHotbar(a, ["em_fan", null, null, null, null, null]);
     expect(b.hotAuto).toEqual({ ids: ["em_fan"], on: true, keepUlt: true });
     expect(resetSkills(b).hotAuto?.ids).toEqual([]);
+  });
+});
+
+describe("11/21 판 시작 자동 (startAuto)", () => {
+  it("1~5 칸의 자동 되는 스킬 전부 + 전체 켬, 궁극기 칸은 빼고 keepUlt는 그대로", () => {
+    const bar = ["em_kindle", "so_wisp", null, "em_ring", "em_meteor", "em_bonfire"] as never;
+    const a = startAuto(bar, { ids: [], on: false, keepUlt: false });
+    expect(a.ids).toEqual(["em_kindle", "so_wisp", "em_ring", "em_meteor"]);
+    expect(a.on).toBe(true);
+    expect(a.keepUlt).toBe(false);
+    expect(startAuto([null, null, null, null, null, null] as never, { ids: [], on: true, keepUlt: true }).on).toBe(false);
+  });
+
+  it("몸 옮기기·켜고 끄는 스킬은 빠진다", () => {
+    const bar = ["wk_charge", "wk_whirl", "em_kindle", "fr_mist", null, null] as never;
+    expect(startAuto(bar, { ids: [], on: false, keepUlt: true }).ids).toEqual(["em_kindle"]);
   });
 });
 

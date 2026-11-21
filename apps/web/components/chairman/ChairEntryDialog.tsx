@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { CHAIR_RUN } from "@/game/chairman/rules";
 import { errorMessage } from "@/lib/api";
 import { chairFloorText, chairWeek, type ChairMode } from "@/lib/chairman/rules";
@@ -12,7 +12,7 @@ import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import { chairStatus, peekStatus } from "./chairData";
 import ChairPortrait from "./ChairPortrait";
-import { goState, lastedText, num, pips, pointsLine, runsText, sealRule, sealTag, techRows, weekText } from "./chairText";
+import { goState, lastedText, num, pips, pointsLine, runsText, sealRule, sealTag, weekText } from "./chairText";
 import s from "./ChairEntry.module.css";
 
 // 11/20 등대 문 앞 E → 회장님 독대 입장 창 (시안 dps3 .pk): 노멀·헬 카드, 오늘 남은 판, 판 포인트, 내 최고, 이번 주 순위.
@@ -39,18 +39,16 @@ export default function ChairEntryDialog({ onClose, onStart, onOpenRace }: Props
   const [st, setSt] = useState<ChairStatusResponse | null>(() => peekStatus());
   const [error, setError] = useState<string | null>(null);
   const [practice, setPractice] = useState(false);
-  const [tech, setTech] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<boolean>(false);
   const [noAsk, setNoAsk] = useState(false);
 
-  // 열 때 오늘 판을 다 썼으면 연습 모드로 (처음 한 번만 — 그 뒤는 사람이 바꾼 대로)
-  const autoPractice = useRef(false);
-  useEffect(() => {
-    if (!st || autoPractice.current) return;
-    autoPractice.current = true;
+  // 열 때 오늘 판을 다 썼으면 연습 모드로 (처음 한 번만 — 그 뒤는 사람이 바꾼 대로). 렌더 중에 한 번 맞춘다 (effect 안 setState 대신)
+  const [autoPracticed, setAutoPracticed] = useState(false);
+  if (st && !autoPracticed) {
+    setAutoPracticed(true);
     if (st.eligible && st.remaining.normal <= 0 && st.remaining.hell <= 0) setPractice(true);
-  }, [st]);
+  }
 
   useEffect(() => {
     let alive = true;
@@ -171,14 +169,10 @@ export default function ChairEntryDialog({ onClose, onStart, onOpenRace }: Props
           </div>
           {/* 11/22 오늘 돌려받기가 남았을 때만 한 줄 (하루 한 번, 두 모드 합쳐) */}
           {st && eligible && !practice && st.refundLeft === 1 && <p className={s.refundNote}>시작 전에 나가면 하루 한 번 판을 돌려드려요</p>}
-          {tech && <TechList />}
           <RaceCountdown compact weekOf={chairWeek} />
           <div className={s.foot}>
             <button type="button" className={s.sm} aria-pressed={practice} data-hint={(spentAny && !practice) || undefined} disabled={!eligible} onClick={() => setPractice((p) => !p)}>
               {practice ? "실전으로 돌아가기" : "연습 판 (포인트·기록 없음)"}
-            </button>
-            <button type="button" className={s.sm} aria-expanded={tech} onClick={() => setTech((t) => !t)}>
-              {tech ? "기술 목록 접기" : "오늘 나올 기술 보기"}
             </button>
             <button type="button" className={s.sm} onClick={onOpenRace}>
               이번 주 순위
@@ -236,26 +230,6 @@ function RunTip() {
     <p className={s.runTip}>
       <b>회장실에서는 달릴 수 있어요.</b> {coarse ? `[달리기] 단추를 켜면 ${CHAIR_RUN}배 빨라져요` : `Shift를 누르고 있으면 ${CHAIR_RUN}배 빨라져요`}
     </p>
-  );
-}
-
-/** 「오늘 나올 기술」: 단계마다 새로 나오는 기술 + 즉사 기술 */
-function TechList() {
-  const rows = techRows();
-  return (
-    <section className={s.tech} aria-label="회장님 기술">
-      {/* 11/22 달리기 띠는 창 아래에 이미 있다 — 여기선 뺀다 */}
-      <p className={s.techLead}>쉬운 기술부터 섞여 나와요. 처음 보는 기술은 피하는 법이 떠요.</p>
-      <ul>
-        {rows.map((r) => (
-          <li key={r.id} data-kill={r.kill || undefined}>
-            <span className={s.techStep}>{r.grade}</span>
-            <b>{r.name}</b>
-            <span className={s.techHow}>{r.how}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
   );
 }
 

@@ -1361,7 +1361,30 @@
   color: #e8dcc0;
   font-size: 10px;
 }
-.phCrunch {
+/* 11/22 시간 칸 둘 (이름 위 · 값 아래 — PC 계기판 .timers처럼) */
+.phTimes {
+  display: flex;
+  gap: 12px;
+  margin: 1px 0 0;
+}
+.phTimes div {
+  display: grid;
+  gap: 2px;
+}
+.phTimes dt {
+  color: #e8dcc0;
+  font-size: 10px;
+  line-height: 1.2;
+}
+.phTimes dd {
+  margin: 0;
+  color: #fff;
+  font-size: 19px;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+.phTimes .phCrunch dt,
+.phTimes .phCrunch dd {
   color: #ff7a60;
 }
 .phHeal {

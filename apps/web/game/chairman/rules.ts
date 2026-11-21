@@ -1,6 +1,6 @@
 // 11/20 회장님 독대 — 화면 쪽 순수 규칙 (Phaser 없음): 기술 이름·대사·피하는 법, 단계별 기술 묶음과 고르기,
 // 즉사 기술 일정, 지옥 봉인 적용, 숨을 곳(구조물) 충돌 기하. 세기 곡선·단계·봉인 수는 서버 규칙(lib/chairman/rules) 그대로.
-import { chairPhase, chairSealedCount, chairThreat, CHAIR_MAX_MS, type ChairMode } from "@/lib/chairman/rules";
+import { chairPhase, chairSealedCount, chairThreat, CHAIR_CRUNCH_MS, CHAIR_MAX_MS, CHAIR_PHASE_MS, type ChairMode } from "@/lib/chairman/rules";
 
 export { chairPhase, chairSealedCount, chairThreat, CHAIR_MAX_MS, type ChairMode };
 
@@ -81,7 +81,6 @@ export const PAT_GRADE: Record<PatId, PatGrade> = (() => {
   for (const id of ALL_PATS) out[id] ??= 2;
   return out;
 })();
-export const PAT_GRADE_NAME = ["쉬움", "보통", "어려움"] as const;
 /** 재섞기 때 앞 몇 개를 직전 몇 개와 겹치지 않게 */
 export const PAT_FRESH_N = 6;
 
@@ -538,6 +537,23 @@ export const CHAIR_GUARD_KEEP = 0.5;
 export const CHAIR_HEAL_MUL = 0.5;
 export const CHAIR_HEAL_CAP_PER_SEC = 0.03;
 export const CHAIR_HEAL_TEXT = "회장님 앞에서는 회복이 50% 줄어요";
+
+/** 「3:12」 (남은 시간은 올림) */
+export const clock = (ms: number) => {
+  const t = Math.max(0, Math.ceil(ms / 1000 - 1e-6));
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+};
+
+/** 11/21 시간 칸 (PC 계기판 · 폰 위 같이): 버틴 시간은 내림(0:59 → 1:00이 단계가 바뀌는 때와 맞게), 다음 단계까지 (크런치면 「지금 단계 크런치」) */
+export function chairTimes(ms: number): { up: string; phLabel: string; ph: string; crunch: boolean } {
+  const crunch = ms >= CHAIR_CRUNCH_MS;
+  return {
+    up: clock(Math.floor(Math.max(0, ms) / 1000) * 1000),
+    phLabel: crunch ? "지금 단계" : "다음 단계까지",
+    ph: crunch ? "크런치" : clock(CHAIR_PHASE_MS - (Math.max(0, ms) % CHAIR_PHASE_MS)),
+    crunch,
+  };
+}
 
 /**
  * 즉사 기술 일정 (11/20 단계 1분): 단계 시작(전환 화면·변신 뒤)부터 몇 초에 무엇을.

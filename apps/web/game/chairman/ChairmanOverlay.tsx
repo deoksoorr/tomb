@@ -6,11 +6,11 @@ import { cx } from "@/components/ui/cx";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
-import { CHAIR_CRUNCH_MS, CHAIR_PHASE_MS, CHAIR_UNFAIR_TEXT, chairQuitNote } from "@/lib/chairman/rules";
+import { CHAIR_UNFAIR_TEXT, chairQuitNote } from "@/lib/chairman/rules";
 import type { SkillId } from "@/lib/rpg/catalog";
 import { bridge, type UiEvents } from "../bridge";
 import { sealBrief } from "@/components/chairman/chairText";
-import { CHAIR_HEAL_MUL, MODE_NAME, phaseName } from "./rules";
+import { CHAIR_HEAL_MUL, chairTimes, clock, MODE_NAME, phaseName } from "./rules";
 import { CenterLine, PhoneTop } from "./PhoneHud";
 import { sealCard } from "./sealText";
 import RpgIcon from "@/components/rpg/RpgIcon";
@@ -29,13 +29,6 @@ type Status = "starting" | "fight" | "dead" | "error";
 const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
 const mmss = (ms: number) => `${String(Math.floor(ms / 60000)).padStart(2, "0")}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
 
-/** 「3:12」 */
-export const clock = (ms: number) => {
-  const t = Math.max(0, Math.ceil(ms / 1000 - 1e-6));
-  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
-};
-/** 버틴 시간은 내림 (0:59 → 1:00이 단계가 바뀌는 때와 맞게) */
-const upClock = (ms: number) => clock(Math.floor(Math.max(0, ms) / 1000) * 1000);
 
 /** PC 위 가운데 피해 계기판 (11/21 시간 칸 셋 · 아래 반려 아이콘 줄 — 회장님이 밑에 오면 통째로 흐려진다) */
 function Meter({ hotbar, skills }: { hotbar: readonly (string | null)[]; skills: Partial<Record<string, number>> }) {
@@ -81,12 +74,11 @@ function Meter({ hotbar, skills }: { hotbar: readonly (string | null)[]; skills:
       progEl.current!.style.width = `${(best > 0 ? Math.min(1, shown / best) * 100 : 0).toFixed(1)}%`;
       leftEl.current!.textContent = best <= 0 ? "첫 기록 도전 중" : rec ? "신기록 달성 중!" : `신기록까지 ${fmt(best - shown)}`;
       // 11/21 시간 칸: 버틴 시간 · 다음 단계까지(크런치면 「크런치」) · 다음 반려까지(헬)
-      const ms = h.ms ?? 0;
-      const crunch = ms >= CHAIR_CRUNCH_MS;
-      upEl.current!.textContent = upClock(ms);
-      phLabel.current!.textContent = crunch ? "지금 단계" : "다음 단계까지";
-      phEl.current!.textContent = crunch ? "크런치" : clock(CHAIR_PHASE_MS - (ms % CHAIR_PHASE_MS));
-      el.classList.toggle(s.crunchNow, crunch);
+      const t = chairTimes(h.ms ?? 0);
+      upEl.current!.textContent = t.up;
+      phLabel.current!.textContent = t.phLabel;
+      phEl.current!.textContent = t.ph;
+      el.classList.toggle(s.crunchNow, t.crunch);
       if (sealEl.current) {
         const sl = h.seal;
         sealEl.current.textContent = !sl ? "-" : sl.next ? clock(sl.left) : "다 반려됨";
@@ -504,10 +496,10 @@ export default function ChairmanOverlay() {
         {brief !== null && hotbar && !result && !paused && !leaving && <Brief phase={brief} hell={play.hell} slim={slim} onGo={() => bridge.emit("chairman:go")} />}
         {/* 11/22 PC: 다음 반려 예고(3·2·1)와 도장은 맵 가운데 카드 하나 */}
         {play.hell && hotbar && !result && !slim && brief === null && <SealCenter stamp={stamp} hotbar={hotbar} skills={play.skills} />}
-        {/* 11/21 폰: 반려는 가운데 한 줄 1.5초 */}
-        {stamp && !result && slim && <SealLine key={stamp.at} ev={stamp} hotbar={hotbar ?? []} skills={play.skills} />}
+        {/* 11/21 폰: 반려는 가운데 한 줄 1.5초. 11/22 같은 ms에 뜬 알림끼리 key가 겹치지 않게 앞에 종류를 붙인다 */}
+        {stamp && !result && slim && <SealLine key={`seal${stamp.at}`} ev={stamp} hotbar={hotbar ?? []} skills={play.skills} />}
         {caption && !result && (
-          <div key={caption.at} className={s.caption} role="note">
+          <div key={`cap${caption.at}`} className={s.caption} role="note">
             <p className={s.ck}>처음 보는 기술</p>
             <b>{caption.name}</b>
             <span>{caption.how}</span>
@@ -515,12 +507,12 @@ export default function ChairmanOverlay() {
         )}
         {/* 11/20 단계 전환 화면: 화면을 가로지르는 띠 + PHASE n · 이름 · 부제 (크런치는 붉게, 움직임 줄이기면 띠 없이 글자만) */}
         {phaseCard && !result && slim && (
-          <CenterLine key={phaseCard.at} hot={phaseCard.crunch}>
+          <CenterLine key={`ph${phaseCard.at}`} hot={phaseCard.crunch}>
             {phaseCard.crunch ? `CRUNCH MODE · ${phaseCard.sub}` : `PHASE ${phaseCard.n} · ${phaseCard.name}`}
           </CenterLine>
         )}
         {phaseCard && !result && !slim && (
-          <div key={phaseCard.at} className={`${s.phaseCard} ${phaseCard.crunch ? s.phaseCrunch : ""} ${phaseCard.reduced ? s.phaseStill : ""}`} role="status" aria-live="assertive">
+          <div key={`ph${phaseCard.at}`} className={`${s.phaseCard} ${phaseCard.crunch ? s.phaseCrunch : ""} ${phaseCard.reduced ? s.phaseStill : ""}`} role="status" aria-live="assertive">
             <div className={s.phaseBand}>
               <p className={s.phaseN}>{phaseCard.crunch ? "CRUNCH MODE" : `PHASE ${phaseCard.n}`}</p>
               {!phaseCard.crunch && <p className={s.phaseName}>{phaseCard.name}</p>}
@@ -529,7 +521,7 @@ export default function ChairmanOverlay() {
           </div>
         )}
         {banner && !result && (
-          <p key={banner.at} className={`${s.banner} ${banner.hot ? s.bannerHot : ""} ${banner.big ? s.bannerBig : ""}`}>
+          <p key={`bn${banner.at}`} className={`${s.banner} ${banner.hot ? s.bannerHot : ""} ${banner.big ? s.bannerBig : ""}`}>
             {banner.text}
           </p>
         )}

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { BRANCH_INFO, BRANCHES, HOTBAR_SIZE, SKILLS, skillById, TIERS, type BranchId, type SkillDef, type SkillId } from "@/lib/rpg/catalog";
 import type { CharacterAction } from "@/lib/rpg/client";
-import { cleanAuto, fitsSlot, isUltimate, SKILL_SLOTS, ULT_SLOT } from "@/lib/rpg/hotbar";
+import { autoBlock, cleanAuto, fitsSlot, isUltimate, SKILL_SLOTS, ULT_SLOT } from "@/lib/rpg/hotbar";
 import { checkLearn, rankCost, spentIn, spentPoints, tierGate, tierOpen } from "@/lib/rpg/skillRules";
 import TranscendPanel, { TRANSCEND_TONE, TranscendTop, tPointsLeft, type TResetAsk } from "./TranscendPanel";
 import {
@@ -681,7 +681,8 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
           {Array.from({ length: HOTBAR_SIZE }, (_, i) => {
             const sk = skillById(hotbar[i] ?? "");
             const look = slotLook(i, hotbar, picked, placeable, drag, over);
-            const auto = !!sk && !!c.hotAuto?.ids.includes(sk.id);
+            // 11/21 판마다 자동 되는 칸은 전부 켠 채로 시작 (lib/rpg/hotbar startAuto) — 저장값이 아니라 그 규칙대로 보인다
+            const auto = !!sk && i < SKILL_SLOTS && !autoBlock(sk.id);
             return (
               <button
                 key={i}
@@ -735,7 +736,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
             궁극기 쓸 SP는 남겨 두기
           </label>
           <span className={t.dockSub}>
-            자동으로 쓸 스킬은 사냥 중에 정해요. 스킬 칸을 오른쪽 클릭하면 그 칸이 자동이 되고, X를 누르면 전부 한 번에 켜고 꺼요. 폰은 스킬 칸을 길게 누르면 돼요.
+            판을 시작하면 자동이 되는 스킬은 전부 켜져요. 사냥 중에 스킬 칸을 오른쪽 클릭하면 그 칸만 끄고 켜고, X를 누르면 전부 한 번에 끄고 켜요. 폰은 스킬 칸을 길게 누르면 돼요.
           </span>
         </div>
       </section>

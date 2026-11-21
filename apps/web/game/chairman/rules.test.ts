@@ -697,18 +697,6 @@ describe("기술 목록", () => {
   it("열여덟 개", () => expect(ALL_PATS).toHaveLength(18));
 });
 
-describe("11/21 시작 자동 (lib/rpg/hotbar chairAuto)", () => {
-  it("1~5 칸의 자동 되는 스킬 전부 + 전체 켬, 궁극기 칸은 빼고 keepUlt는 그대로", async () => {
-    const { chairAuto } = await import("@/lib/rpg/hotbar");
-    const bar = ["em_kindle", "so_wisp", null, "em_ring", "em_meteor", "em_bonfire"] as never;
-    const a = chairAuto(bar, { ids: [], on: false, keepUlt: false });
-    expect(a.ids).toEqual(["em_kindle", "so_wisp", "em_ring", "em_meteor"]);
-    expect(a.on).toBe(true);
-    expect(a.keepUlt).toBe(false);
-    expect(chairAuto([null, null, null, null, null, null] as never, { ids: [], on: true, keepUlt: true }).on).toBe(false);
-  });
-});
-
 describe("chairQuit (11/22 브리핑 중 그만두기)", () => {
   it("브리핑(시작 전)이면 기록 없이 바로 닫는다", () => {
     expect(chairQuit({ started: false, done: false, died: false })).toBe("close");

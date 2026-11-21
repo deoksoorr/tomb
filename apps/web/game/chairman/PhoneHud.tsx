@@ -6,16 +6,15 @@ import { cx } from "@/components/ui/cx";
 import PixelIcon from "@/components/ui/PixelIcon";
 import ui from "@/components/ui/ui.module.css";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
-import { CHAIR_CRUNCH_MS, CHAIR_PHASE_MS } from "@/lib/chairman/rules";
 import type { RpgHud } from "@/lib/rpg/types";
 import { bridge, type UiEvents } from "../bridge";
-import { CHAIR_HEAL_TEXT } from "./rules";
+import { CHAIR_HEAL_TEXT, chairTimes } from "./rules";
 import { SealIcons } from "./SealParts";
 import { sealCard } from "./sealText";
 import s from "./chairman.module.css";
 
 // 11/21 회장님 독대 폰 HUD (시안 B 「체력은 머리 위」): 체력·SP는 HuntScene이 이름 아래에 그리고,
-// 위에는 판 없이 테두리 글자만 — 왼쪽 단계·남은 시간, 오른쪽 이번 판 피해(크게)·다음 반려(헬)·멈춤·무적(개발 운영자).
+// 위에는 판 없이 테두리 글자만 — 왼쪽 단계·버틴 시간·다음 단계까지(11/22), 오른쪽 이번 판 피해(크게)·다음 반려(헬)·멈춤·무적(개발 운영자).
 // 피해 숫자를 누르면 자세히 칸(D처럼): 체력·SP 숫자 · 초당 피해 · 내 최고 · 반려함 · 회복 감소 · 스킬 자동 전체 · 능력.
 // 회복 감소 한 줄은 싸움 시작 뒤 3초만 보였다가 숨는다.
 // 11/22 사용자 「모바일에서 반려 리스트를 출력하기엔 빡센가?」 → 「반려 N초」 밑에 반려된 스킬 작은 아이콘 줄 (새것이 오른쪽 · 6개 + 「+N」) — 누르면 자세히 칸.
@@ -24,10 +23,6 @@ type Lv = Partial<Record<string, number>>;
 type ChairHud = UiEvents["chairman:hud"];
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
-const clock = (ms: number) => {
-  const t = Math.max(0, Math.ceil(ms / 1000 - 1e-6));
-  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
-};
 const HEAL_SHOW_MS = 3_000;
 const STRIP_MAX = 6;
 const REVEAL_MS = 3_000;
@@ -66,8 +61,7 @@ export function PhoneTop({
   }, [briefing]);
 
   const c = rh?.chair;
-  const ms = c?.ms ?? 0;
-  const crunch = ms >= CHAIR_CRUNCH_MS;
+  const t = chairTimes(c?.ms ?? 0);
   const sl = ch?.seal;
   const reveal = !!sl?.next && sl.left <= REVEAL_MS;
   const next = reveal && sl?.next ? sealCard(sl.next, skills[sl.next] ?? 0, hotbar) : null;
@@ -84,11 +78,17 @@ export function PhoneTop({
           {practice && <i className={s.phTag}>연습</i>}
           {godRun && <i className={cx(s.phTag, s.phGod)}>무적 시험</i>}
         </p>
-        {/* 단계가 끝나기까지 (크런치는 버틴 시간) */}
-        <p className={cx(s.phTime, crunch && s.phCrunch)} aria-label={crunch ? "버틴 시간" : "이번 단계 남은 시간"}>
-          {crunch ? clock(Math.floor(ms / 1000) * 1000) : clock(CHAIR_PHASE_MS - (ms % CHAIR_PHASE_MS))}
-          <small>{crunch ? "버팀" : "남음"}</small>
-        </p>
+        {/* 11/22 시간 칸 둘: 버틴 시간 · 다음 단계까지 (크런치면 「지금 단계 크런치」 — PC 계기판과 같은 글 rules chairTimes). 헬 다음 반려는 오른쪽 「반려 N초」 */}
+        <dl className={s.phTimes}>
+          <div>
+            <dt>버틴 시간</dt>
+            <dd>{t.up}</dd>
+          </div>
+          <div className={cx(t.crunch && s.phCrunch)}>
+            <dt>{t.phLabel}</dt>
+            <dd>{t.ph}</dd>
+          </div>
+        </dl>
         {heal && <p className={s.phHeal}>{CHAIR_HEAL_TEXT}</p>}
       </div>
       <div className={s.phR}>

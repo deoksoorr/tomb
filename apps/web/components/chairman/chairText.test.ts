@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boardName, goState, lastedText, ledLine, msClock, pips, pointsLine, runsText, sealBrief, sealRule, sealTag, techRows, weekText } from "./chairText";
+import { boardName, goState, lastedText, ledLine, msClock, pips, pointsLine, runsText, sealBrief, sealRule, sealTag, weekText } from "./chairText";
 
 describe("chairText", () => {
   it("버틴 시간: 열은 m:ss, 입장 창은 「분 초 버팀」, 옛 기록은 -", () => {
@@ -41,16 +41,5 @@ describe("chairText", () => {
     expect(ledLine({ damage: 48_213_904 })).toContain("#1 48,213,904");
     expect(boardName(null)).toBeNull();
     expect(boardName("가나다라마바사아자차카")).toBe("이번 주 1위 가나다라마바사아자차…");
-  });
-
-  it("기술 목록: 18가지 쉬움 → 보통 → 어려움, 같은 기술 한 번 + 즉사 셋", () => {
-    const all = techRows();
-    const rows = all.filter((r) => !r.kill);
-    expect(rows).toHaveLength(18);
-    expect(new Set(rows.map((r) => r.id)).size).toBe(rows.length);
-    const order = ["쉬움", "보통", "어려움"];
-    expect(rows[0].grade).toBe("쉬움");
-    expect(rows.every((r, i) => i === 0 || order.indexOf(rows[i - 1].grade) <= order.indexOf(r.grade))).toBe(true);
-    expect(all.filter((r) => r.kill).map((r) => r.grade)).toEqual(["즉사", "즉사", "즉사"]);
   });
 });

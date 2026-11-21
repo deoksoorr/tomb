@@ -39,7 +39,7 @@ import { monsterFrame, monsterOrigin, playMonsterDeath } from "./monsterArt";
 import { huntBossDrop, huntDropsFor, MIN_RUN_MS, type DropTicket } from "@/lib/rpg/rewards";
 import { dropRevealMs } from "@/lib/rpg/reveal";
 import { LootLayer } from "./loot";
-import { autoBlock, chairAuto, cleanAuto, SKILL_SLOTS, ULT_SLOT, type HotAuto } from "@/lib/rpg/hotbar";
+import { autoBlock, cleanAuto, SKILL_SLOTS, startAuto, ULT_SLOT, type HotAuto } from "@/lib/rpg/hotbar";
 import { AUTO_GAP_MS, autoSpOk, ultReserve, wantsCast, type AutoCtx } from "@/lib/rpg/autoSkill";
 import { bridge } from "../bridge";
 // 11/15 야근 빌딩 능력 카드 (판 안에서 쌓는 힘)
@@ -662,9 +662,8 @@ export class HuntScene extends RpgScene {
     this.dodge = NO_DODGE;
     this.rollDone = 1;
     this.rollSaid = false;
-    this.auto = cleanAuto(play.hotAuto, play.hotbar);
-    // 11/21 회장님 독대: 자동 되는 칸 전부 자동 + 전체 켬으로 시작 (끄면 그 판 동안 그대로)
-    if (play.chairman) this.auto = chairAuto(play.hotbar, this.auto);
+    // 11/21 모든 판(사냥터·야근 빌딩·회장님 독대): 자동 되는 칸 전부 자동 + 전체 켬으로 시작. 판 중에 바꾸면 그 판 동안 그대로 (층이 바뀌어도)
+    this.auto = startAuto(play.hotbar, cleanAuto(play.hotAuto, play.hotbar));
     this.autoAt = 0;
     this.fightAt = -1e9;
     this.area = attackArea(play.equip);
@@ -920,7 +919,7 @@ export class HuntScene extends RpgScene {
       // 11/22 폰 [자동]: 켜면 자동이 되는 스킬 칸 전부(궁극기·이동 스킬·반려된 칸 빼고), 끄면 전부 끈다
       if (a.on) a.on = false;
       else {
-        a.ids = chairAuto(this.play.hotbar, a).ids.filter((id) => !this.sealed.has(id));
+        a.ids = startAuto(this.play.hotbar, a).ids.filter((id) => !this.sealed.has(id));
         a.on = a.ids.length > 0;
       }
       this.flash(a.on ? "자동 스킬 전부 켬" : a.ids.length ? "자동 스킬 전부 끔" : "자동으로 쓸 스킬이 없어요", 900);

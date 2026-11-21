@@ -339,10 +339,10 @@ describe("우두머리를 잡는 순간 그 자리에 우두머리 몫이 떨어
   });
 });
 
-// 11/21 야근 빌딩: 판 중에 정한 자동 스킬(칸마다 · 전체 X)은 다음 층으로 올라가도 그대로 (층마다 지도만 새로 깐다)
-describe("야근 빌딩: 자동 스킬 설정은 층이 바뀌어도 그대로", () => {
+// 11/21 모든 판은 자동 되는 칸 전부 자동 + 전체 켬으로 시작 (저장해 둔 설정이 꺼져 있어도). 판 중에 바꾼 것은 다음 층으로 올라가도 그대로
+describe("판 시작 자동 · 야근 빌딩 층이 바뀌어도 그대로", () => {
   type Tower = Scene & { floor: number; liftCut: unknown; liftTo(f: number): void; auto: { ids: string[]; on: boolean; keepUlt: boolean } };
-  function towerPlay(): RpgPlay {
+  function towerPlay(hotAuto = { ids: [] as string[], on: false, keepUlt: false }): RpgPlay {
     const c = newCharacter();
     return {
       game: "hunt",
@@ -353,27 +353,37 @@ describe("야근 빌딩: 자동 스킬 설정은 층이 바뀌어도 그대로",
       derived: derive(50, c.stats, c.equip),
       skills: { em_kindle: 1, so_wisp: 1 },
       hotbar: ["em_kindle", "so_wisp", null, null, null, null],
-      hotAuto: { ids: ["em_kindle"], on: true, keepUlt: true },
+      hotAuto: hotAuto as RpgPlay["hotAuto"],
       potions: {},
       equip: c.equip,
       tower: { start: 1, chestsLeft: 0 },
     };
   }
-
-  it("Shift+숫자로 켠 칸 · 전체 스위치가 엘리베이터를 타고 난 뒤에도 남는다", () => {
+  const boot = (play: RpgPlay) => {
     const scene = new HuntScene() as Tower;
-    scene.init({ play: towerPlay(), color: "#fff", name: "검수", body: "hood", look: [], atlas: null, reduced: true, onEnd: () => {} });
+    scene.init({ play, color: "#fff", name: "검수", body: "hood", look: [], atlas: null, reduced: true, onEnd: () => {} });
     scene.create();
-    expect(scene.auto).toEqual({ ids: ["em_kindle"], on: true, keepUlt: true });
+    return scene;
+  };
+
+  it("저장값이 꺼져 있어도 자동 되는 칸 전부 켠 채로 시작 (궁극기 SP 남겨 두기는 저장값)", () => {
+    expect(boot(towerPlay()).auto).toEqual({ ids: ["em_kindle", "so_wisp"], on: true, keepUlt: false });
+    const hunt: RpgPlay = { ...towerPlay({ ids: ["so_wisp"], on: false, keepUlt: true }), difficulty: "normal", tower: undefined };
+    expect(boot(hunt).auto).toEqual({ ids: ["em_kindle", "so_wisp"], on: true, keepUlt: true });
+  });
+
+  it("판 중에 끈 칸 · 전체 스위치가 엘리베이터를 타고 난 뒤에도 남는다", () => {
+    const scene = boot(towerPlay({ ids: [], on: false, keepUlt: true }));
     scene.keys.add("ShiftLeft");
     scene.onKey("Digit2");
     scene.keys.delete("ShiftLeft");
-    expect(scene.auto.ids).toEqual(["em_kindle", "so_wisp"]);
+    expect(scene.auto.ids).toEqual(["em_kindle"]);
     scene.liftCut = null;
     scene.liftTo(2);
     expect(scene.floor).toBe(2);
-    expect(scene.auto).toEqual({ ids: ["em_kindle", "so_wisp"], on: true, keepUlt: true });
+    expect(scene.auto).toEqual({ ids: ["em_kindle"], on: true, keepUlt: true });
+    scene.onKey("KeyX");
     scene.liftTo(3);
-    expect(scene.auto).toEqual({ ids: ["em_kindle", "so_wisp"], on: true, keepUlt: true });
+    expect(scene.auto).toEqual({ ids: ["em_kindle"], on: false, keepUlt: true });
   });
 });
