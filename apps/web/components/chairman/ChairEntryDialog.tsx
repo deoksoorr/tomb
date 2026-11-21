@@ -12,7 +12,7 @@ import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import { chairStatus, peekStatus } from "./chairData";
 import ChairPortrait from "./ChairPortrait";
-import { dmgText, goState, lastedText, pips, pointsLine, runsText, sealRule, sealTag, weekText } from "./chairText";
+import { dmgText, goState, lastedText, pips, pointsLine, runsNote, runsText, sealRule, sealTag, weekText } from "./chairText";
 import s from "./ChairEntry.module.css";
 
 // 11/20 등대 문 앞 E → 회장님 독대 입장 창 (시안 dps3 .pk): 노멀·헬 카드, 오늘 남은 판, 판 포인트, 내 최고, 이번 주 순위.
@@ -107,11 +107,11 @@ export default function ChairEntryDialog({ onClose, onStart, onOpenRace }: Props
                   <dt>오늘 남은 판</dt>
                   <dd>
                     <span className={s.pips} aria-hidden="true">
-                      {pips(st ? left : 0).map((on, i) => (
+                      {pips(st ? left : 0, st?.perDay).map((on, i) => (
                         <i key={i} data-on={on || undefined} />
                       ))}
                     </span>
-                    {st ? runsText(left) : "…"}
+                    {st ? runsText(left, st.perDay) : "…"}
                   </dd>
                 </div>
                 <div>
@@ -186,7 +186,7 @@ export default function ChairEntryDialog({ onClose, onStart, onOpenRace }: Props
           <p className={s.note}>
             {practice
               ? "연습 판은 몇 번이든 할 수 있어요. 포인트와 기록은 남지 않아요."
-              : "포인트를 주는 판은 하루 노멀 2판, 헬 2판이에요 (새벽 5시 초기화). 다 쓰면 연습 판만 열려요. 받은 포인트는 지갑에만 들어가요."}
+              : runsNote(st?.perDay, st?.perk)}
           </p>
         </div>
       </Dialog>

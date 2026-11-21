@@ -6,7 +6,9 @@ import { getAccounts } from "@/lib/store";
 import { loadMe } from "@/lib/store/accounts";
 import type { BuyResponse } from "@/lib/types";
 import { readBody, ShopBuySchema } from "@/lib/validate";
-import { champShopDiscount, pickDiscount } from "@/lib/champPerks";
+import { pickDiscount } from "@/lib/champPerks";
+import { perkShopDiscount } from "@/lib/chairPerks";
+import { chairPerkSafe } from "@/lib/chairman/settle";
 import { champBoardsSafe } from "@/lib/store/champ";
 import { discountedPrice } from "@/lib/titles";
 import { titleDiscount } from "@/lib/titlesServer";
@@ -23,8 +25,9 @@ export const POST = handler(async (req) => {
   const item = itemById(itemId)!;
   // 단 칭호의 상점 할인 (11/16 패션 갈래 칭호만 — lib/titles PERK_VALUES.look. 원가 × (1 − 할인율), 1P 단위 내림)
   // 11/17 포인트왕(지난주 1위) 20% (염색권은 빼고). 겹치면 큰 할인 하나만 (lib/champPerks)
-  const [title, champ] = await Promise.all([titleDiscount(visitorId), champBoardsSafe(visitorId)]);
-  const price = discountedPrice(item.price, pickDiscount(title, champShopDiscount(champ, "shop", item.kind)));
+  // 11/24 회장님 독대 노멀 1위·2관왕 30%도 같은 범위 — 셋 중 큰 할인 하나만 (lib/chairPerks)
+  const [title, champ, chair] = await Promise.all([titleDiscount(visitorId), champBoardsSafe(visitorId), chairPerkSafe(visitorId)]);
+  const price = discountedPrice(item.price, pickDiscount(title, perkShopDiscount(champ, chair, "shop", item.kind)));
   const result = await accounts.buy(visitorId, itemId, price, { unique: item.kind === "cosmetic" });
   if (result === "owned") throw new HttpError(409, "ALREADY_OWNED", "이미 가지고 있거나 착용 중이에요.");
   if (result === "insufficient") throw new HttpError(409, "NOT_ENOUGH_POINTS", "포인트가 모자라요.");

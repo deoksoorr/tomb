@@ -235,6 +235,7 @@ const DERIVED_ROWS: [keyof Derived, string, (v: number) => string][] = [
   ["flee", "회피(FLEE)", String],
   ["move", "이동속도", String],
   ["skillPower", "스킬 위력", (v) => `×${v.toFixed(2)}`],
+  ["workPower", "일꾼 스킬 위력", (v) => `×${(v ?? 1).toFixed(2)}`],
 ];
 
 export function CharacterPanel({ view, busy, onCharacter }: Common) {
@@ -257,6 +258,8 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
   const [confirmReset, setConfirmReset] = useState(false);
   const spent = spentStats(c);
   const resetCost = view.statResetCost;
+  // 11/21 무료 초기화가 남았으면 비용 0
+  const freeLeft = resetCost === 0 ? (c.freeStatReset ?? 0) : 0;
   const short = view.points < resetCost;
   return (
     <div className={s.lobby}>
@@ -322,17 +325,19 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
         <div className={s.startRow}>
           <span className={s.meta}>
             {view.superHunter ? "테스트 서버 슈퍼 계정이라 능력치 포인트를 최대 레벨만큼 다 받아요. " : ""}
-            {`능력치를 되돌리면 지갑(${view.points.toLocaleString("ko-KR")}P)에서 ${resetCost}P가 빠져요. 레벨이 오를수록 비싸지고, 가장 비싸면 ${RESPEC_MAX_COST}P예요.`}
+            {freeLeft > 0
+              ? `무료 초기화가 ${freeLeft}번 남았어요. 다 쓰면 지갑에서 레벨에 따라 최대 ${RESPEC_MAX_COST}P가 빠져요.`
+              : `능력치를 되돌리면 지갑(${view.points.toLocaleString("ko-KR")}P)에서 ${resetCost}P가 빠져요. 레벨이 오를수록 비싸지고, 가장 비싸면 ${RESPEC_MAX_COST}P예요.`}
           </span>
           <button type="button" className={ui.button} disabled={busy || spent === 0 || confirmReset} onClick={() => setConfirmReset(true)}>
-            능력치 초기화 ({resetCost}P)
+            능력치 초기화 ({freeLeft > 0 ? "무료" : `${resetCost}P`})
           </button>
         </div>
         {confirmReset && (
           <div className={s.confirm} role="alert">
             <p>
               올린 능력치를 모두 되돌리고 포인트 {spent}개를 돌려받아요. 장비로 붙은 능력치와 레벨, 스킬은 그대로예요.{" "}
-              지갑에서 {resetCost}P가 빠져요.
+              {freeLeft > 0 ? `무료 초기화를 한 번 써요. 포인트는 안 빠져요.` : `지갑에서 ${resetCost}P가 빠져요.`}
             </p>
             <div className={s.cellActions}>
               <button
@@ -345,7 +350,7 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
                   onCharacter({ type: "resetStats", cost: resetCost }, `능력치를 모두 되돌렸어요. 포인트 ${spent}개를 돌려받았어요.`);
                 }}
               >
-                {short ? "포인트가 모자라요" : `${resetCost}P 내고 초기화`}
+                {short ? "포인트가 모자라요" : freeLeft > 0 ? "무료로 초기화" : `${resetCost}P 내고 초기화`}
               </button>
               <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setConfirmReset(false)}>
                 그만두기

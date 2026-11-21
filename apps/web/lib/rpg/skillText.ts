@@ -122,7 +122,7 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     ],
   },
   em_ignite: {
-    summary: "기본 공격이 맞으면 가끔 불씨가 터져요. 둘레 적도 같이 타요.",
+    summary: "기본 공격이 맞으면 가끔 불씨가 터져요. 둘레 적도 같이 타요. 기본 공격과 삽날 회오리로 터지지만, 불씨 피해는 INT를 받는 마공이에요.",
     flavor: "스친 자리마다 불씨가 남는다.",
     types: ["basic"],
     synergy: [{ with: ["so_swift"], text: "공격 속도가 오르면 기본 공격이 잦아져 더 자주 터져요" }],
@@ -189,7 +189,7 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     synergy: [{ with: SLOWERS, text: "적을 느리게 하거나 묶는 스킬과 같이 쓰면 그동안 모든 공격이 더 아파요" }],
   },
   fr_ward: {
-    summary: "얼음 방패를 둘러요. 방패가 피해를 먼저 받아 주고, 최대 HP가 클수록 두꺼워요.",
+    summary: "얼음 방패를 둘러요. 방패가 피해를 먼저 받아 주고, 최대 HP와 INT가 클수록 두꺼워요.",
     flavor: "얇지만 단단한 새벽 얼음 한 겹.",
     types: ["defense"],
     synergy: [{ with: ["fr_collar"], text: "최대 HP가 늘수록 방패도 두꺼워져요" }],
@@ -237,10 +237,10 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     ],
   },
   fr_solstice: {
-    summary: "배워 두면 모든 스킬 쿨타임이 줄고, 받는 피해도 줄어요.",
+    summary: "배워 두면 마공 스킬 쿨타임만 줄고, 받는 피해도 줄어요. 삽자루 일꾼 스킬 쿨타임은 안 줄어요.",
     flavor: "가장 긴 밤에 한 맹세는 쉽게 녹지 않는다.",
     types: ["defense"],
-    synergy: [{ with: ["em_bonfire", "fr_blizzard", "so_procession"], text: "쿨타임이 긴 궁극기일수록 많이 줄어요. 갈래와 상관없어요" }],
+    synergy: [{ with: ["em_bonfire", "fr_blizzard", "so_procession"], text: "마공 스킬 쿨타임만 줄어요. 쿨타임이 긴 궁극기일수록 많이 줄어요" }],
   },
   // ── 넋 인도자 ──
   so_wisp: {
@@ -250,7 +250,7 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     synergy: [{ with: ["so_drain"], text: "여러 번 맞힐수록 HP를 자주 거둬요" }],
   },
   so_lamp: {
-    summary: "잠깐 멈춰 서서 등불에 빌어 HP를 채워요. INT가 높을수록 많이 차요.",
+    summary: "잠깐 멈춰 서서 등불에 빌어 HP를 채워요. 최대 HP 몫도 INT 위력만큼 커지고 INT×3이 더해져서, INT가 높을수록 많이 차요.",
     flavor: "등불 하나에 빌면, 넋들이 상처를 쓸어 준다.",
     types: ["heal"],
     synergy: [{ with: ["fr_collar"], text: "최대 HP가 늘면 회복량도 커져요" }],
@@ -326,7 +326,7 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
   },
   // ── 삽자루 일꾼 (11/19 물공: 지능을 받지 않고, 기본 공격처럼 명중 판정을 받아요) ──
   wk_charge: {
-    summary: "바라보는 쪽으로 돌진해 길 위의 적을 치고 밀쳐요. 무적이 아니라서 들어간 자리가 위험할 수 있어요.",
+    summary: "바라보는 쪽으로 돌진해 길 위의 적을 크게 한 방 치고 밀쳐요. 쿨타임이 길고, 무적이 아니라서 들어간 자리가 위험할 수 있어요.",
     flavor: "삽자루를 앞세우면 길이 난다.",
     types: ["melee", "move"],
     synergy: [{ with: ["wk_combo"], text: "돌진으로 붙자마자 찌르고 퍼 올리면 딱 맞아요" }],
@@ -338,7 +338,7 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     synergy: [{ with: ["wk_whirl"], text: "회오리는 기본 공격으로 베어서 같이 세져요" }],
   },
   wk_combo: {
-    summary: "앞을 두 번 찌르고 크게 퍼 올려요. 마지막 한 번에 적이 기절해요.",
+    summary: "앞을 두 번 찌르고 크게 퍼 올려요. 한 번 피해가 아주 크고 마지막 한 번에 적이 기절해요. 대신 쿨타임이 길어요.",
     flavor: "푹, 푹, 그리고 한 삽 가득.",
     types: ["melee", "control"],
     synergy: [{ with: ["fr_brittle"], text: "기절한 적은 살얼음 추가 피해를 받아요" }],
@@ -356,7 +356,7 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     synergy: [{ with: ["wk_leap"], text: "착지한 뒤 못 움직이는 동안 덜 아파요" }],
   },
   wk_leap: {
-    summary: "적이 가장 몰린 곳으로 뛰어올라 내려찍어요. 둘레 적이 기절하지만, 착지한 뒤 잠깐 못 움직여요.",
+    summary: "적이 가장 몰린 곳으로 뛰어올라 크게 내려찍어요. 둘레 적이 기절하지만, 착지한 뒤 잠깐 못 움직여요.",
     flavor: "봉분 하나쯤은 단숨에 넘는다.",
     types: ["melee", "move", "control"],
     synergy: [
@@ -371,10 +371,16 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     synergy: [{ with: ["wk_whirl"], text: "켜 두면 회오리가 더 자주 베어요" }],
   },
   wk_whirl: {
-    summary: "한 번 누르면 빙글빙글 돌며 둘레를 계속 베어요. 다시 누르거나 SP가 바닥나면 멈춰요.",
+    summary: "누르면 정해진 시간 동안 빙글빙글 돌며 둘레를 베어요. 끝나면 잠깐 쉬고, 다시 누르면 일찍 멈춰요.",
     flavor: "삽날이 바람을 가르는 소리.",
     types: ["melee", "basic"],
     synergy: [{ with: ["wk_grip", "wk_tireless"], text: "공격 속도가 빠를수록 더 자주 베어요" }],
+  },
+  wk_pack: {
+    summary: "배워 두면 STR이 높을수록 삽자루 일꾼 스킬의 SP가 덜 들고(최대 50%) 쿨타임이 짧아져요(최대 15%). INT 없이도 판 내내 스킬을 돌릴 수 있어요. 일꾼 스킬 쿨타임은 카드·장비까지 다 합쳐 25%까지만 줄어요.",
+    flavor: "짐을 잘 지는 등은 쉽게 지치지 않는다.",
+    types: ["buff"],
+    synergy: [{ with: ["wk_leap", "wk_combo"], text: "SP를 많이 쓰는 뛰어넘기와 퍼 올리기를 더 자주 써요" }],
   },
   wk_deep: {
     summary: "배워 두면 기본 공격과 일꾼 스킬의 치명타 피해가 늘 올라요.",
@@ -383,7 +389,7 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     synergy: [{ with: ["wk_grit"], text: "10번째 반드시 치명타가 더 아프게 들어가요" }],
   },
   wk_allnight: {
-    summary: "적 사이를 여섯 번 연달아 돌진해요. 돌진하는 순간만 무적이라 사이사이에는 맞을 수 있어요.",
+    summary: "적 사이를 여섯 번 연달아 돌진하며 한 번 한 번 크게 쳐요. 돌진하는 순간만 무적이라 사이사이에는 맞을 수 있어요.",
     flavor: "새벽이 올 때까지, 한 삽도 쉬지 않는다.",
     types: ["melee", "move"],
     synergy: [{ with: ["wk_deep"], text: "돌진 한 번 한 번이 치명타 피해를 받아요" }],
@@ -469,7 +475,7 @@ function effectRows(id: SkillId, lv: number): [string, string][] {
       return [["느려진·묶인 적 피해", `+${pct(SKILL_FX.fr_brittle(lv).vsSlowed)}`]];
     case "fr_ward": {
       const f = SKILL_FX.fr_ward(lv);
-      return [["방패", `최대 HP의 ${pct(f.shieldPct)}`], ["지속", sec(f.durMs)]];
+      return [["방패", `최대 HP의 ${pct(f.shieldPct)} × 스킬 위력`], ["지속", sec(f.durMs)]];
     }
     case "fr_nova": {
       const f = SKILL_FX.fr_nova(lv);
@@ -499,7 +505,7 @@ function effectRows(id: SkillId, lv: number): [string, string][] {
     }
     case "fr_solstice": {
       const f = SKILL_FX.fr_solstice(lv);
-      return [["모든 쿨타임", `-${pct(f.cdCut)}`], ["받는 피해", `-${pct(f.guard)}`]];
+      return [["마공 스킬 쿨타임", `-${pct(f.cdCut)}`], ["받는 피해", `-${pct(f.guard)}`]];
     }
     case "so_wisp": {
       const f = SKILL_FX.so_wisp(lv);
@@ -507,7 +513,7 @@ function effectRows(id: SkillId, lv: number): [string, string][] {
     }
     case "so_lamp": {
       const f = SKILL_FX.so_lamp(lv);
-      return [["회복", `최대 HP의 ${pct(f.healPct)} + INT×3`], ["멈춰 서기", sec(f.rootMs)]];
+      return [["회복", `최대 HP의 ${pct(f.healPct)} × 스킬 위력 + INT×3`], ["멈춰 서기", sec(f.rootMs)]];
     }
     case "so_drain":
       return [["흡혈", `준 피해의 ${pct(SKILL_FX.so_drain(lv).steal)}`], ["한 번 최대", "최대 HP의 3%"]];
@@ -576,7 +582,16 @@ function effectRows(id: SkillId, lv: number): [string, string][] {
     }
     case "wk_whirl": {
       const f = SKILL_FX.wk_whirl(lv);
-      return [["한 번 피해", dmg(f.mult)], ["반지름", `${f.radius}`], ["초당 SP", `${f.spPerSec}`], ["걷는 빠르기", pct(f.moveMul)]];
+      return [["한 번 피해", dmg(f.mult)], ["반지름", `${f.radius}`], ["도는 시간", sec(f.durMs)], ["걷는 빠르기", pct(f.moveMul)]];
+    }
+    case "wk_pack": {
+      const f = SKILL_FX.wk_pack(lv);
+      const p2 = (n: number) => `${Math.round(n * 10000) / 100}%`;
+      return [
+        ["SP 절약", `STR 1당 ${p2(f.perStr)} (최대 ${pct(f.cap)})`],
+        ["쿨타임 감소", `STR 1당 ${p2(f.cdPerStr)} (최대 ${pct(f.cdCap)})`],
+        ["STR 80이면", `SP −${pct(Math.min(f.cap, 80 * f.perStr))} · 쿨 −${pct(Math.min(f.cdCap, 80 * f.cdPerStr))}`],
+      ];
     }
     case "wk_deep":
       return [["치명타 피해", `+${pct(SKILL_FX.wk_deep(lv).critDmg)}`]];
@@ -591,11 +606,26 @@ function effectRows(id: SkillId, lv: number): [string, string][] {
   }
 }
 
-/** 랭크 lv의 수치 표 (액티브는 SP·쿨타임까지) */
+/** 11/21 INT(스킬 위력)로 커지는 스킬 (HuntScene에서 skillPower를 곱하는 곳 그대로) */
+const INT_DMG: readonly SkillId[] = [
+  "em_kindle", "em_ring", "em_fan", "em_meteor", "em_brazier", "em_bonfire", "em_ignite",
+  "fr_breath", "fr_icicle", "fr_mist", "fr_nova", "fr_tomb", "fr_field", "fr_blizzard",
+  "so_wisp", "so_chain", "so_harvest", "so_friend", "so_lantern", "so_procession",
+];
+/** 11/21 스킬 하나가 INT에서 받는 것 (스킬 창 수치 표 한 줄) */
+export function intRole(id: SkillId): string {
+  if (id === "fr_ward") return "방패가 커져요";
+  if (id === "so_lamp") return "회복이 늘어요";
+  if (INT_DMG.includes(id)) return "피해가 커져요";
+  return skillById(id)?.branch === "worker" ? "없어요 (STR을 받아요)" : "없어요";
+}
+
+/** 랭크 lv의 수치 표 (액티브는 SP·쿨타임까지 · 11/21 맨 끝에 INT 영향) */
 export function skillStats(def: SkillDef, lv: number): StatRow[] {
   const l = Math.max(1, Math.min(def.maxLevel, lv));
   const rows = effectRows(def.id, l).map(([label, value]) => ({ label, value }));
   if (def.kind === "active") rows.push({ label: "SP", value: `${def.sp(l)}` }, { label: "쿨타임", value: sec(def.cooldownMs(l)) });
+  rows.push({ label: "INT 영향", value: intRole(def.id) });
   return rows;
 }
 

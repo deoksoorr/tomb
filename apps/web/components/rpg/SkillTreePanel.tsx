@@ -281,7 +281,9 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
             ? `${josa(d.name, "은", "는")} 궁극기라 F 칸에만 놓여요.${dSlot >= 0 ? " 지금 F 칸에 있어요." : ""} F 칸을 누르거나 F 키를 누르세요.`
             : `${dSlot >= 0 ? `${josa(d.name, "은", "는")} 지금 ${dSlot + 1}번 칸에 있어요. ` : ""}${josa(d.name, "을", "를")} 넣을 칸이나 숫자 키(1~${SKILL_SLOTS})를 누르세요.`));
 
-  const resetLabel = `${view.respecCost}P`;
+  // 11/21 무료 초기화가 남았으면 비용 0
+  const freeLeft = view.respecCost === 0 ? (c.freeRespec ?? 0) : 0;
+  const resetLabel = freeLeft > 0 ? `무료 (${freeLeft}번 남음)` : `${view.respecCost}P`;
   // 창 바탕 톤: 보는 갈래 색 / 초월 수련은 금빛
   const tone = trans ? TRANSCEND_TONE : info;
 
@@ -330,7 +332,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
               <>
                 <span className={t.resetCost}>
                   초기화 비용 <b>{resetLabel}</b>
-                  <small>지갑 {view.points.toLocaleString("ko-KR")}P에서 빠져요</small>
+                  <small>{freeLeft > 0 ? "포인트는 안 빠져요" : `지갑 ${view.points.toLocaleString("ko-KR")}P에서 빠져요`}</small>
                 </span>
                 <button type="button" className={ui.button} disabled={busy || spentPoints(c.skills) === 0} onClick={() => setConfirmReset(true)}>
                   초기화
@@ -338,7 +340,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
               </>
             ) : (
               <span className={t.confirm} role="alert">
-                {view.respecCost}P를 내고 스킬 포인트 {spentPoints(c.skills)}개를 모두 돌려받을까요? 단축 칸도 비워져요.
+                {freeLeft > 0 ? "무료 초기화를 한 번 써서" : `${view.respecCost}P를 내고`} 스킬 포인트 {spentPoints(c.skills)}개를 모두 돌려받을까요? 단축 칸도 비워져요.
                 <span className={t.confirmBtns}>
                   <button
                     type="button"
@@ -617,7 +619,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
                 ))}
               </tbody>
             </table>
-            <p className={t.tableNote}>피해 %는 내 공격력이 기준이에요. INT가 높으면 스킬이 더 세져요. 거리는 화면의 점 개수예요.</p>
+            <p className={t.tableNote}>피해 %는 내 공격력이 기준이에요. INT가 높으면 모닥불, 서리, 넋 스킬이 더 세져요. 삽자루 일꾼 스킬은 INT를 받지 않아요. 삽자루는 INT 없이 STR로 키우는 갈래예요. STR이 높으면 일꾼 스킬이 더 세지고, 등짐 단련을 배우면 일꾼 스킬 SP가 덜 들고 쿨타임이 짧아져요. 거리는 화면의 점 개수예요.</p>
 
             {text.synergy.length > 0 && (
               <div className={t.block}>

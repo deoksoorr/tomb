@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { gearById, type GearDef } from "@/lib/rpg/catalog";
 import { rpgApi } from "@/lib/rpg/client";
+import { chairEnhanceDiscount, chairEnhanceNote } from "@/lib/chairPerks";
 import {
   ampNeed,
   enhanceChance,
@@ -179,7 +180,9 @@ export default function EnhanceDialog({
   if (!info) return null;
   const { def, e: lv, f, it, color, code, next } = info;
   const m = { doc: 0, seal: 0, prot: 0, ...view.character.mats };
-  const need = enhanceNeed(target, lv);
+  // 11/24 회장님 독대 노멀 1위·2관왕: 강화 포인트 30% 할인 (서버가 같은 값으로 — view.chair, lib/chairPerks)
+  const need = enhanceNeed(target, lv, chairEnhanceDiscount(view.chair));
+  const perkNote = chairEnhanceNote(view.chair);
   // 11/20 증폭권 장수·천장은 서버와 같은 표에서 (서버가 다시 계산하고, 요청에는 쓸지 말지만 보낸다)
   const ampN = need ? ampNeed(need.target) : 0;
   const left = need ? pityLeft(need.target, f) : 0;
@@ -455,6 +458,7 @@ export default function EnhanceDialog({
                     </span>
                   )}
                 </div>
+                {perkNote && <p className={g.note}>{perkNote}</p>}
                 {next && (
                   <ul className={g.statRows} aria-label="다음 강화 능력치">
                     {statRows(code).map((r0, i) => {

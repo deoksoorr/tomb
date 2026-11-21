@@ -171,10 +171,7 @@ export default function HuntPhoneTop({
             <p className={s.huntSheetBuffs}>
               {buffs.map((b) => (
                 <span key={b.id}>
-                  {buffNames[b.id]}{" "}
-                  {b.id === "wk_whirl"
-                    ? "켜짐"
-                    : `${Math.ceil(b.leftMs / 1000)}초`}
+                  {buffNames[b.id]} {Math.ceil(b.leftMs / 1000)}초
                 </span>
               ))}
             </p>

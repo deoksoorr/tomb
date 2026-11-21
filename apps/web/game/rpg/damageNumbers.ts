@@ -227,7 +227,8 @@ export class DamageNumbers {
   }
 
   /** 몬스터 피해 숫자 (같은 자리 근처에 흩어져 겹친다). group이 있으면 합계에 더한다 */
-  hit(x: number, y: number, n: number, crit: boolean, style: NumStyle, group?: DmgGroup | null): void {
+  /** counted = 묶음 합계에 더할 값 (실제로 깎은 체력 — 없으면 n). 한 방 숫자는 n 그대로 */
+  hit(x: number, y: number, n: number, crit: boolean, style: NumStyle, group?: DmgGroup | null, counted?: number): void {
     const z = this.zoom;
     const sx = (Math.random() - 0.5) * 22;
     const sy = (Math.random() - 0.5) * 14 - (crit ? 6 : 0);
@@ -238,7 +239,7 @@ export class DamageNumbers {
     if (crit) this.spawn("CRITICAL", "crit", x + sx / z, y + (sy - 22) / z, 0.6, "word", 760, 30, 0);
     if (group && !group.closed) {
       group.hits++;
-      group.total += n;
+      group.total += counted ?? n;
       if (crit) group.crits++;
       group.lastAt = performance.now();
       group.hx = x;

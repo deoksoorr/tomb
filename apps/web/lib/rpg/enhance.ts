@@ -37,6 +37,7 @@ import {
 } from "./setGear";
 import { rollOptions, rollSgFixed } from "./setGearRoll";
 import type { CharacterState, Drop } from "./types";
+import { discountedPrice } from "../titles";
 
 // 11/15 강화·옵션 굴리기·바꾸기·분해·세트 장비 끼기 (순수 함수 — 서비스가 저장소 원자 갱신 안에서 부른다).
 // 포인트는 서버가 같은 저장 명령(lib/rpg/store updatePaid) 안에서 지갑에서만 뺀다 (모은 포인트·랭킹은 그대로).
@@ -157,12 +158,15 @@ function settle(next: CharacterState): CharacterState {
   return next;
 }
 
-/** 다음 강화 비용 (상점 장비는 +SHOP_ENH_MAX까지, 세트 장비는 +15까지 — 끝이면 null) */
-export function enhanceNeed(t: EnhTarget, e: number): { target: number; cost: number; doc: number; seal: number } | null {
+/**
+ * 다음 강화 비용 (상점 장비는 +SHOP_ENH_MAX까지, 세트 장비는 +15까지 — 끝이면 null).
+ * discount = 11/24 회장님 독대 노멀 1위·2관왕 강화 포인트 할인 (lib/chairPerks chairEnhanceDiscount — 포인트만, 재료는 그대로. 1P 단위 내림 discountedPrice)
+ */
+export function enhanceNeed(t: EnhTarget, e: number, discount = 0): { target: number; cost: number; doc: number; seal: number } | null {
   const max = "sg" in t ? SG_ENH_MAX : SHOP_ENH_MAX;
   if (e >= max) return null;
   const row = ENHANCE_TABLE[e + 1];
-  return { target: e + 1, cost: row.cost, doc: row.doc, seal: row.seal };
+  return { target: e + 1, cost: discountedPrice(row.cost, discount), doc: row.doc, seal: row.seal };
 }
 
 /** 강화 대상의 지금 강화·연속 실패·이름 */
@@ -192,9 +196,9 @@ function findPiece(s: CharacterState, uid: number): { i: number; p: ShopPiece } 
  * 천장(같은 단계 연속 실패 ENH_PITY번)이면 반드시 성공. 실패하면 단계는 그대로, 연속 실패 +1. 깨지거나 내려가는 일은 없다.
  * 확률·장수는 모두 서버 표에서만 (요청에는 쓸지 말지만 온다). 포인트(cost)는 돌려주는 값으로 서비스가 같은 저장 명령에서 뺀다
  */
-export function enhance(s: CharacterState, t: EnhTarget, amp: boolean, rnd: () => number): { state: CharacterState; cost: number; result: EnhanceResult } {
+export function enhance(s: CharacterState, t: EnhTarget, amp: boolean, rnd: () => number, discount = 0): { state: CharacterState; cost: number; result: EnhanceResult } {
   const cur = enhanceState(s, t);
-  const need = enhanceNeed(t, cur.e);
+  const need = enhanceNeed(t, cur.e, discount);
   if (!need) throw new RpgError(409, "ENH_MAX", "sg" in t ? "이미 +15예요. 더는 못 올려요." : `상점 장비는 +${SHOP_ENH_MAX}까지만 올릴 수 있어요.`);
   const m = mats(s);
   if (m.doc < need.doc) throw new RpgError(409, "NO_MATS", `결재 서류가 ${need.doc - m.doc}장 모자라요.`);

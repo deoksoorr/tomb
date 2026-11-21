@@ -82,8 +82,8 @@ export function rollSgItem(r: () => number, g: SgGrade): Pick<SgItem, "s" | "p" 
 }
 
 /** 상자 하나의 세트 장비 굴림: SG_CHEST_CHANCE (11/19 천장 없음). force = 테스트 서버 슈퍼 계정 시험 드롭 (확률 굴림은 늘 한 번 뽑는다 — 난수 순서가 같게) */
-export function chestSetGear(r: () => number, f: number, force = false): Drop | null {
-  const hit = r() < SG_CHEST_CHANCE;
+export function chestSetGear(r: () => number, f: number, force = false, chance = SG_CHEST_CHANCE): Drop | null {
+  const hit = r() < chance;
   if (!hit && !force) return null;
   return { kind: "set", id: sgSpec(rollSgItem(r, sgGradeForFloor(f))), qty: 1 };
 }

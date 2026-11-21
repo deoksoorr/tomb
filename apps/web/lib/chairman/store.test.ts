@@ -103,3 +103,33 @@ describe("판 끝 결과 읽기 (Redis 모양)", () => {
     expect(sets[0]).toEqual(["chair:leadcool:hell", "1", { nx: true, px: 600_000 }]);
   });
 });
+
+// 11/24 1위 혜택 자격(chairPerkFor)은 새 읽기 없이 정리 기록 GET 하나 (chairHolders) — 이 클라이언트는 GET을 풀지 않고 JSON 문자열로 준다.
+// 2관왕 하루 판 수는 시작 Lua의 ARGV(하루 판 수)로만 바뀐다 — 돌아오는 배열 모양은 그대로
+describe("11/24 1위 혜택 (Redis 모양)", () => {
+  const rec: ChairSettle = {
+    week: "20261123",
+    settledAt: 1,
+    ranks: { normal: [{ accountId: "duo", name: "d", damage: 9, at: 1, rank: 1 }], hell: [{ accountId: "duo", name: "d", damage: 8, at: 1, rank: 1 }] },
+    pay: [],
+  };
+  it("정리 기록 GET: JSON 문자열 · 풀린 객체 · 없음", async () => {
+    for (const reply of [JSON.stringify(rec), rec]) {
+      const s = new RedisChairStore({ url: "https://example.invalid", token: "t" });
+      (s as unknown as { redis: unknown }).redis = { get: async () => reply };
+      expect((await s.getSettle("20261123"))?.ranks.hell[0].accountId).toBe("duo");
+    }
+    const none = new RedisChairStore({ url: "https://example.invalid", token: "t" });
+    (none as unknown as { redis: unknown }).redis = { get: async () => null };
+    expect(await none.getSettle("20261123")).toBeNull();
+  });
+  it("시작: 하루 판 수(2관왕 3)는 ARGV 여섯째, 숫자 문자열 배열 답도 읽는다", async () => {
+    const s = new RedisChairStore({ url: "https://example.invalid", token: "t" });
+    const argv: string[][] = [];
+    (s as unknown as { redis: unknown }).redis = { eval: async (_l: string, _k: string[], a: string[]) => (argv.push(a), ["1", "2", "0", "0"]) };
+    expect(await s.start({ acct: "duo", nonce: "n", mode: "normal", practice: false, day: "20261201", ttlMs: 1000, max: 3 })).toEqual({ ok: true, used: { normal: 2, hell: 0 }, refunded: false });
+    expect(argv[0][5]).toBe("3");
+    (s as unknown as { redis: unknown }).redis = { eval: async () => ["-2", "3", "1"] };
+    expect(await s.start({ acct: "duo", nonce: "n", mode: "normal", practice: false, day: "20261201", ttlMs: 1000, max: 3 })).toEqual({ ok: false, why: "no_runs", used: { normal: 3, hell: 1 } });
+  });
+});

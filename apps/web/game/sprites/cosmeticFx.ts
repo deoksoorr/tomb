@@ -9,7 +9,7 @@ import { BREED_ART, BREED_FX, breedIconGrid } from "./petBreeds";
 import { SEASON_FX, SEASON_FX_ART, SEASON_GEAR_FX, SEASON_SET_FX, seasonAura, seasonFxIconGrid, type SeasonMotion } from "./seasonSetFx";
 import { seasonSetsOfLook } from "@tomb/protocol";
 import { METEOR_FX, METEOR_FX_ART, meteorAura, meteorIcon } from "./meteorFx";
-import { CHAIR_CROWN_UP, CHAIR_FLAME_UP, CHAIR_FX, CHAIR_FX_ART, CHAIR_GEAR_FX, chairAura, chairIcon, type ChairMotion } from "./chairFx";
+import { CHAIR_CROWN_UP, CHAIR_DUO_UP, CHAIR_FLAME_UP, CHAIR_FX, CHAIR_FX_ART, CHAIR_GEAR_FX, chairAura, chairIcon, type ChairMotion } from "./chairFx";
 import { Grid, type Color } from "./pixel";
 
 // F8 캐릭터 꾸미기 추가분 중 "아바타 시트 밖에 따로 그리는 연출" (날개 2종·우산·풍선·발자국 5종·오라 6종·펫 6종).
@@ -1574,7 +1574,9 @@ export class CosmeticFxSim {
       // 11/20 불타는 사직서 머리띠: 머리 위 불길만큼 이름표를 올린다 (chairFx bandFlame)
       else if (s.kind === "aura" && s.motion === "chFlame") top = Math.max(top, artTop + CHAIR_FLAME_UP);
       // 11/20 황금 사원증 왕관: 꼭대기 다이아·도는 별이 이름표에 닿지 않게 (사용자 「높이는 알아서」)
-      else if (s.kind === "aura" && (s.motion === "chCrown" || s.motion === "chDuoCrown")) top = Math.max(top, artTop + CHAIR_CROWN_UP);
+      else if (s.kind === "aura" && s.motion === "chCrown") top = Math.max(top, artTop + CHAIR_CROWN_UP);
+      // 11/24 명패 왕관(2관왕): 금 잔 불꽃이 왕관 위로 솟는 만큼
+      else if (s.kind === "aura" && s.motion === "chDuoCrown") top = Math.max(top, artTop + CHAIR_DUO_UP);
     }
     return top;
   }

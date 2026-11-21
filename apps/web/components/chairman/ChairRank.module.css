@@ -1,69 +1,57 @@
 /* 11/20 레이스 창 [회장님 독대] 탭 (ChairRank). 노멀은 금빛, 헬은 붉은 강조색 */
 
 .wrap {
-  --acc: var(--candle);
-  --acc-deep: #6a4a10;
-  --acc-soft: rgba(224, 195, 106, 0.14);
-  --race-acc: var(--acc);
   container-type: inline-size;
   display: grid;
   gap: 8px;
 }
 
-.wrap[data-mode="hell"] {
-  --acc: #ff8a6a;
-  --acc-deep: #6a1a10;
-  --acc-soft: rgba(255, 90, 60, 0.14);
-}
-
-/* ── 모드 카드 탭 ── */
-.modes {
+/* ── 11/21 노멀(왼쪽) · 헬(오른쪽) 두 칸. 칸 안 세 줄(머리·시상대·내 기록)을 subgrid로 맞춘다 ── */
+.cols {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-rows: repeat(3, auto);
+  column-gap: 8px;
 }
 
-.modeCard {
+.col {
+  --acc: var(--candle);
+  --acc-soft: rgba(224, 195, 106, 0.14);
+  --acc-line: #d0a440;
+  --race-acc: var(--acc);
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  row-gap: 0;
+  min-width: 0;
+  background: var(--surface);
+  box-shadow:
+    0 0 0 2px var(--acc-line),
+    0 0 14px rgba(224, 195, 106, 0.12);
+}
+
+.col[data-mode="hell"] {
+  --acc: #ff8a6a;
+  --acc-soft: rgba(255, 90, 60, 0.14);
+  --acc-line: #c0402c;
+  box-shadow:
+    0 0 0 2px var(--acc-line),
+    0 0 14px rgba(255, 70, 40, 0.18);
+}
+
+/* 칸 머리: 초상 + 모드 이름 + 이번 주 현재 1위 이름 · 피해 */
+.colHead {
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
   padding: 6px 10px 6px 6px;
-  border: 0;
   background: linear-gradient(160deg, #22261c, #1b1d17);
-  box-shadow: 0 0 0 2px var(--line);
-  color: var(--muted);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  filter: saturate(0.55) brightness(0.85);
-  transition: filter 0.15s ease;
+  border-bottom: 2px solid var(--line);
 }
 
-.modeCard[data-mode="hell"] {
+.col[data-mode="hell"] .colHead {
   background: linear-gradient(160deg, #2c1614, #1d1212);
-}
-
-.modeCard:hover {
-  filter: none;
-}
-
-.modeCard[aria-selected="true"] {
-  filter: none;
-  box-shadow:
-    0 0 0 2px #d0a440,
-    0 0 14px rgba(224, 195, 106, 0.22);
-}
-
-.modeCard[data-mode="hell"][aria-selected="true"] {
-  box-shadow:
-    0 0 0 2px #c0402c,
-    0 0 14px rgba(255, 70, 40, 0.28);
-}
-
-.modeCard:focus-visible {
-  outline: 2px solid #fff;
-  outline-offset: 2px;
 }
 
 .modeArt {
@@ -75,7 +63,7 @@
   image-rendering: pixelated;
 }
 
-.modeCard[data-mode="hell"] .modeArt {
+.col[data-mode="hell"] .modeArt {
   background: radial-gradient(circle at 50% 40%, #4a1a14, #1a0c0a);
   box-shadow: 0 0 0 2px #6a2a24;
 }
@@ -92,7 +80,7 @@
   font-weight: 400;
 }
 
-.modeCard[data-mode="hell"] .modeText b {
+.col[data-mode="hell"] .modeText b {
   color: #ffb8a0;
 }
 
@@ -106,52 +94,33 @@
   white-space: nowrap;
 }
 
-/* 11/22 「이번 주 현재 1위」는 작게 흐리게, 이름은 밝게 · 아래 줄 「피해 N」 */
+/* 「이번 주 현재 1위」는 작게 흐리게, 이름은 모드 색 · 아래 줄 「피해 N」 */
 .leadName {
-  color: var(--text);
+  color: #f2d27a;
 }
 
 .modeDmg {
   overflow: hidden;
-  color: var(--bone);
+  color: #f2d27a;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.modeCard[aria-selected="true"] .leadName,
-.modeCard[aria-selected="true"] .modeDmg {
-  color: #f2d27a;
-}
-
-.modeCard[data-mode="hell"][aria-selected="true"] .leadName,
-.modeCard[data-mode="hell"][aria-selected="true"] .modeDmg {
+.col[data-mode="hell"] .leadName,
+.col[data-mode="hell"] .modeDmg {
   color: #ffb8a0;
 }
 
-/* ── 가운데: 시상대 | 1위 보상 ── */
-.mid {
+/* ── 시상대 ── */
+.stage {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 264px;
-  gap: 8px;
-  align-items: stretch;
-}
-
-.stage,
-.reward {
-  display: grid;
-  align-content: start;
+  align-content: end;
   gap: 6px;
   min-width: 0;
-  padding: 8px;
-  background: var(--surface);
-  box-shadow: var(--px-border);
-}
-
-.stage {
-  grid-template-rows: auto 1fr auto;
-  background: linear-gradient(180deg, var(--acc-soft), transparent 70%), var(--surface);
+  padding: 10px 8px 8px;
+  background: linear-gradient(180deg, var(--acc-soft), transparent 70%);
 }
 
 .h {
@@ -159,7 +128,7 @@
   justify-content: space-between;
   gap: 8px;
   margin: 0;
-  color: var(--acc);
+  color: var(--candle);
   font-family: var(--font-small);
   font-size: 11px;
   font-weight: 400;
@@ -219,7 +188,7 @@
   background: #8a92a2;
 }
 
-.wrap[data-mode="hell"] .step[data-place="1"] .block {
+.col[data-mode="hell"] .step[data-place="1"] .block {
   background: linear-gradient(180deg, #e0603c, #a02a1e);
   box-shadow:
     var(--px-border),
@@ -239,7 +208,7 @@
   color: #f2d27a;
 }
 
-.wrap[data-mode="hell"] .step[data-place="1"] .stepWho {
+.col[data-mode="hell"] .step[data-place="1"] .stepWho {
   color: #ffb8a0;
 }
 
@@ -249,9 +218,12 @@
 }
 
 .stepDmg {
+  max-width: 100%;
+  overflow: hidden;
   color: var(--bone);
-  font-size: 12px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -263,7 +235,7 @@
 
 .step[data-place="1"] .stepDmg {
   color: var(--acc);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .stepMs {
@@ -297,152 +269,22 @@
   text-align: center;
 }
 
-.rewardTop {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.fit {
-  --scale: 1.25;
-  flex: none;
-}
-
-.rewardItems {
-  display: grid;
-  justify-items: start;
-  gap: 4px;
-  min-width: 0;
-}
-
-.badge {
-  padding: 1px 5px;
-  border: 1px solid var(--acc);
-  color: var(--acc);
-  font-family: var(--font-small);
-  font-size: 10px;
-  white-space: nowrap;
-}
-
-.item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  color: var(--text);
-  font-size: 11px;
-  line-height: 1.3;
-}
-
-.item > span:last-child {
-  min-width: 0;
-  word-break: keep-all;
-}
-
-.pts {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.pts li {
-  display: grid;
-  justify-items: center;
-  padding: 3px 2px;
-  background: var(--bg-deep);
-  color: var(--muted);
-  font-family: var(--font-small);
-  font-size: 10px;
-}
-
-.pts b {
-  color: var(--bone);
-  font-size: 12px;
-  font-weight: 400;
-  font-variant-numeric: tabular-nums;
-}
-
-.pts li[data-place="1"] {
-  box-shadow: inset 0 0 0 1px var(--acc);
-}
-
-.pts li[data-place="1"] b {
-  color: var(--acc);
-}
-
-.small {
-  margin: 0;
-  color: var(--muted);
-  font-family: var(--font-small);
-  font-size: 10px;
-  line-height: 1.5;
-}
-
-/* 11/23 2관왕 전용 한 벌 (노멀 금 · 헬 주홍을 섞은 보랏빛 금테) */
-.duo {
-  position: relative;
-  display: grid;
-  gap: 4px;
-  margin-top: 4px;
-  padding: 10px 6px 6px;
-  background: linear-gradient(160deg, rgba(150, 100, 230, 0.16), rgba(224, 195, 106, 0.08) 60%, transparent), var(--bg-deep);
-  box-shadow: inset 0 0 0 1px rgba(224, 195, 106, 0.45);
-}
-
-.duoHead {
-  position: absolute;
-  top: -7px;
-  left: 6px;
-  padding: 0 5px;
-  background: linear-gradient(90deg, #f2c94a, #ff8a6a);
-  color: #2a1a08;
-  font-family: var(--font-small);
-  font-size: 10px;
-  line-height: 14px;
-}
-
-.fitSmall {
-  --scale: 1.1;
-}
-
-.duo .small {
-  word-break: keep-all;
-}
-
-.duo .badge {
-  border-color: #c9a8ff;
-  color: #e4d2ff;
-}
-
-.duoPart {
-  display: block;
-}
-
-.duoPart small {
-  margin-right: 3px;
-  color: var(--muted);
-  font-family: var(--font-small);
-  font-size: 10px;
-}
-
-/* ── 아래: 4위부터 + 내 순위 ── */
+/* ── 4위부터 + 내 기록 ── */
 .list {
   display: grid;
-  background: var(--surface);
-  box-shadow: var(--px-border);
+  grid-template-rows: auto 1fr;
+  min-width: 0;
+  border-top: 2px solid var(--line);
 }
 
 .head,
 .row,
 .mine {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 120px 72px;
+  grid-template-columns: 36px minmax(0, 1fr) 88px 52px;
   align-items: center;
-  gap: 8px;
-  padding: 3px 10px;
+  gap: 6px;
+  padding: 3px 8px;
 }
 
 .head {
@@ -460,7 +302,7 @@
 }
 
 .rows {
-  max-height: 114px;
+  height: 114px;
   margin: 0;
   padding: 0;
   overflow-y: auto;
@@ -511,10 +353,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* 내 순위: 늘 맨 아래, 금테 */
+/* 내 기록: 늘 칸 맨 아래, 모드 색 테 */
 .mine {
-  min-height: 34px;
-  border-top: 2px solid var(--line);
+  min-height: 38px;
   background: linear-gradient(90deg, var(--acc-soft), transparent 80%), var(--bg-deep);
   box-shadow: inset 0 0 0 2px var(--acc);
   font-size: 12px;
@@ -525,7 +366,7 @@
   color: var(--acc);
 }
 
-/* 11/22 내 순위: 오른쪽에 「피해 N」 크게 + 「버틴 시간 m:ss」 작게 (피해·버틴 시간 두 칸을 함께 쓴다) */
+/* 오른쪽에 「피해 N」 크게 + 「버틴 시간 m:ss」 작게 (피해·버틴 시간 두 칸을 함께 쓴다) */
 .mineStat {
   display: grid;
   grid-column: 3 / -1;
@@ -546,6 +387,258 @@
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.mineNote {
+  grid-column: 1 / -1;
+  color: var(--text);
+  text-align: center;
+}
+
+/* ── 11/21 보상 세 장 한 줄 (노멀 1위 · 헬 1위 · 2관왕) ── */
+.rewards {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+}
+
+.rewardRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.rewardCard {
+  --acc: var(--candle);
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+  background: linear-gradient(180deg, rgba(224, 195, 106, 0.1), transparent 60%), var(--bg-deep);
+  box-shadow: inset 0 0 0 1px rgba(224, 195, 106, 0.5);
+}
+
+.rewardCard[data-kind="hell"] {
+  --acc: #ff8a6a;
+  background: linear-gradient(180deg, rgba(255, 90, 60, 0.12), transparent 60%), var(--bg-deep);
+  box-shadow: inset 0 0 0 1px rgba(255, 120, 90, 0.55);
+}
+
+/* 2관왕: 노멀 금 · 헬 주홍을 섞은 보랏빛 금테 */
+.rewardCard[data-kind="duo"] {
+  --acc: #e4d2ff;
+  background: linear-gradient(160deg, rgba(150, 100, 230, 0.18), rgba(224, 195, 106, 0.08) 60%, transparent), var(--bg-deep);
+  box-shadow: inset 0 0 0 1px rgba(201, 168, 255, 0.6);
+}
+
+.cardHead {
+  justify-self: start;
+  margin: -8px 0 0 -2px;
+  padding: 0 6px;
+  background: linear-gradient(90deg, #e0b040, #a87a20);
+  color: #2a1a08;
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.rewardCard[data-kind="hell"] .cardHead {
+  background: linear-gradient(90deg, #e0603c, #a02a1e);
+  color: #fff0e8;
+}
+
+.rewardCard[data-kind="duo"] .cardHead {
+  background: linear-gradient(90deg, #f2c94a, #ff8a6a);
+}
+
+.rewardTop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fit {
+  --scale: 1.1;
+  flex: none;
+}
+
+.rewardItems {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.badge {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 1px 5px;
+  border: 1px solid var(--acc);
+  color: var(--acc);
+  font-family: var(--font-small);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rewardCard[data-kind="duo"] .badge {
+  border-color: #c9a8ff;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.item > span:last-child {
+  min-width: 0;
+  word-break: keep-all;
+}
+
+.cardPts {
+  justify-self: stretch;
+  padding: 3px 6px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--acc);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.cardPts small {
+  margin-right: 2px;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+/* 11/24 카드마다 1주일 혜택 (짧은 줄 — 다음 1위가 정해질 때까지) */
+.perks {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px 6px 5px;
+  background: rgba(0, 0, 0, 0.22);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--acc) 28%, transparent);
+}
+
+.perksHead {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 1.3;
+  word-break: keep-all;
+}
+
+.perkList {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.perkList li {
+  position: relative;
+  padding-left: 10px;
+  color: var(--bone);
+  font-size: 11px;
+  line-height: 1.35;
+  word-break: keep-all;
+}
+
+.perkList li::before {
+  content: "";
+  position: absolute;
+  top: 0.5em;
+  left: 1px;
+  width: 4px;
+  height: 4px;
+  background: var(--acc);
+}
+
+/* 1~3위 포인트 한 번 (모드마다 같다) */
+.ptsLine {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.ptsLabel {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.pts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pts li {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  padding: 3px 2px;
+  background: var(--bg-deep);
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.pts b {
+  color: var(--bone);
+  font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.pts li[data-place="1"] {
+  box-shadow: inset 0 0 0 1px var(--candle);
+}
+
+.pts li[data-place="1"] b {
+  color: var(--candle);
+}
+
+.small {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
+/* 명예의 전당 2관왕 줄: 노멀·헬 피해를 위아래로 */
+.duoPart {
+  display: block;
+}
+
+.duoPart small {
+  margin-right: 3px;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
 }
 
 /* ── 11/22 명예의 전당 (지난 주들 1위 — 노멀·헬 함께, 레이스 탭 명예의 전당과 같은 상자) ── */
@@ -703,16 +796,17 @@
   white-space: nowrap;
 }
 
-.mineNote {
-  grid-column: 1 / -1;
-  color: var(--text);
-  text-align: center;
-}
-
-/* 폰: 시상대 → 보상 → 목록 한 줄로 */
+/* 폰: 노멀 칸 → 헬 칸으로 쌓고, 보상 카드도 한 장씩 쌓는다 */
 @container (max-width: 560px) {
-  .mid {
+  .cols {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    row-gap: 12px;
+  }
+
+  .col {
+    grid-row: auto;
+    grid-template-rows: none;
   }
 
   .modeArt {
@@ -727,22 +821,29 @@
   .head,
   .row,
   .mine {
-    grid-template-columns: 40px minmax(0, 1fr) auto 44px;
-    padding-inline: 8px;
+    grid-template-columns: 36px minmax(0, 1fr) auto 44px;
   }
 
   .rows {
-    max-height: 168px;
+    height: auto;
+    max-height: 142px;
   }
 
-  /* 11/22 모드 카드: 「이번 주 현재 1위」 / 이름 / 피해 세 줄 */
-  .modeLead {
-    display: grid;
+  .rewardRow {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .leadName {
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .rewardTop {
+    gap: 10px;
+  }
+
+  .cardPts {
+    justify-self: start;
+  }
+
+  .ptsLine {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
   }
 
   /* 명예의 전당 두 줄: [헬] 이름 … 피해 / 11월 30일 정산 … 버틴 시간 */
@@ -777,11 +878,5 @@
 
   .hallList {
     max-height: 236px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .modeCard {
-    transition: none;
   }
 }

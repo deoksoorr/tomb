@@ -34,7 +34,8 @@ export type BuildDef = {
 /** 레벨 50 마공 능력치 (INT로 스킬 위력, STR로 공격력 — 스킬 피해는 공격력 × 위력이라 둘 다 필요해요) */
 const MAGE: Stats = { str: 45, agi: 1, vit: 30, int: 71, dex: 30, luk: 1 };
 const MAGE_VIT: Stats = { str: 40, agi: 1, vit: 45, int: 61, dex: 30, luk: 1 };
-const WORKER: Stats = { str: 77, agi: 25, vit: 30, int: 1, dex: 35, luk: 10 };
+// 11/21 일꾼은 순수 근접 딜러: STR 위주 + 명중 DEX + 공격 속도 AGI, VIT는 조금만 (INT는 일꾼 스킬에 안 들어간다)
+const WORKER: Stats = { str: 92, agi: 30, vit: 10, int: 1, dex: 35, luk: 10 };
 
 export const BUILDS: readonly BuildDef[] = [
   {
@@ -274,7 +275,7 @@ export const BUILDS: readonly BuildDef[] = [
     name: "회오리 일꾼",
     role: "회오리를 켜고 무리 사이를 걸어 다니며 베어요. 사방 삽질과 손에 익은 삽이 회오리를 더 빠르고 아프게 해요.",
     strong: "무리 정리",
-    weak: "SP·받는 피해",
+    weak: "스킬 사이 공백",
     core: ["wk_whirl"],
     support: ["wk_callus", "wk_grip"],
     order: [
@@ -287,9 +288,11 @@ export const BUILDS: readonly BuildDef[] = [
       ["wk_leap", 2],
       ["wk_tireless", 5],
       ["wk_back", 1],
+      ["wk_pack", 3],
       ["wk_whirl", 8],
       ["wk_grip", 5],
       ["wk_whirl", 12],
+      ["wk_pack", 5],
       ["wk_deep", 4],
       ["wk_grit", 3],
       ["wk_allnight", 1],
@@ -307,14 +310,14 @@ export const BUILDS: readonly BuildDef[] = [
     ],
     hotbar: ["wk_whirl", "wk_tireless", "wk_combo", "wk_charge", "wk_leap", "wk_allnight"],
     stats: WORKER,
-    statNote: "STR 77 · DEX 35 · VIT 30 · AGI 25 · LUK 10",
+    statNote: "STR 92 · DEX 35 · AGI 30 · LUK 10 · VIT 10",
   },
   {
     id: "leap",
     branch: "worker",
     name: "도약 일꾼",
     role: "돌진으로 파고들고, 경고가 뜨면 봉분을 뛰어넘어(공중 무적) 피하며 내려찍어요. 깊게 파기로 한 방이 무거워요.",
-    strong: "생존",
+    strong: "한 방",
     weak: "무리 정리",
     core: ["wk_leap"],
     support: ["wk_charge", "wk_deep"],
@@ -325,9 +328,11 @@ export const BUILDS: readonly BuildDef[] = [
       ["wk_back", 1],
       ["wk_charge", 7],
       ["wk_leap", 5],
+      ["wk_pack", 3],
       ["wk_charge", 10],
       ["wk_deep", 5],
       ["wk_leap", 8],
+      ["wk_pack", 5],
       ["wk_charge", 12],
       ["wk_leap", 12],
       ["wk_grit", 3],
@@ -347,7 +352,7 @@ export const BUILDS: readonly BuildDef[] = [
     ],
     hotbar: ["wk_leap", "wk_charge", "wk_combo", "wk_whirl", null, "wk_allnight"],
     stats: WORKER,
-    statNote: "STR 77 · DEX 35 · VIT 30 · AGI 25 · LUK 10",
+    statNote: "STR 92 · DEX 35 · AGI 30 · LUK 10 · VIT 10",
   },
 ];
 

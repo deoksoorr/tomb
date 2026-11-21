@@ -1,22 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { BRANCHES, SKILL_FX, SKILLS, skillById, TIER_GATES, type SkillId } from "./catalog";
-import { BUFF_SKILLS } from "./skillTree";
+import { BUFF_SKILLS, effLevel, packCdCut, packCut, skillSpCost, WK_CD_CUT_MAX, wkCdFloor } from "./skillTree";
 import { allocStats, equip, fitSkillBudget, fitToLevel, learnSkill, newCharacter, normalize, resetSkills, resetStats, RpgError, setHotbar, statPointsEarned } from "./character";
-import { MAX_LEVEL } from "./formulas";
+import { derive, MAX_LEVEL, workPowerOf } from "./formulas";
 import { ALL_SKILLS_POINTS, checkAllocation, checkLearn, costTo, rankCost, RESPEC_MAX_COST, respecCost, SKILL_TREE_VERSION, skillPointsEarned, spentIn, spentPoints, tierOpen, type Alloc } from "./skillRules";
 import { testServerEnv } from "./superHunter";
 
 // 스킬 트리 (저장 형식 3 — 11/19 갈래 넷·랭크 비용 1·1·2·2·3): 트리 모양 · 단·선행·포인트 규칙 · 초기화 비용 · 옛 데이터 이전 · 슈퍼 계정 환경 · 밸런스
 
 describe("트리 모양", () => {
-  it("갈래 4개 × 단 5개, 갈래당 9~11개, 선행은 같은 갈래의 아래 단", () => {
+  it("갈래 4개 × 단 5개, 갈래당 9~11개(일꾼은 등짐 단련까지 12개), 선행은 같은 갈래의 아래 단", () => {
     expect(BRANCHES).toEqual(["ember", "frost", "soul", "worker"]);
     expect(SKILLS.length).toBeGreaterThanOrEqual(36);
-    expect(SKILLS.length).toBeLessThanOrEqual(44);
+    expect(SKILLS.length).toBeLessThanOrEqual(45);
     for (const b of BRANCHES) {
       const n = SKILLS.filter((s) => s.branch === b);
       expect(n.length).toBeGreaterThanOrEqual(9);
-      expect(n.length).toBeLessThanOrEqual(11);
+      expect(n.length).toBeLessThanOrEqual(b === "worker" ? 12 : 11);
       for (let t = 1; t <= 5; t++) expect(n.some((s) => s.tier === t)).toBe(true);
     }
     const spots = new Set<string>();
@@ -440,4 +440,82 @@ describe("밸런스", () => {
       expect(ratio, `${name}: ${ratio.toFixed(2)}`).toBeLessThan(3);
     });
   }
+});
+
+// 11/21 삽자루는 INT 없이 STR로: 회오리 정해진 시간 · 근력 위력 · 등짐 단련 (SP·쿨)
+describe("삽자루 일꾼과 INT", () => {
+  const base = { str: 80, agi: 25, vit: 30, int: 1, dex: 35, luk: 10 };
+  it("삽날 회오리는 SP를 초당 쓰지 않고 정해진 시간만 돈다 (랭크만 본다)", () => {
+    const f = SKILL_FX.wk_whirl(12) as Record<string, number>;
+    expect(f.spPerSec).toBeUndefined();
+    expect(f.durMs).toBe(10_550);
+    expect(SKILL_FX.wk_whirl(1).durMs).toBe(8300);
+    expect(skillById("wk_whirl")!.cooldownMs(12)).toBe(10_000);
+    expect(f.minCdMs).toBe(3000);
+  });
+  it("근력 위력은 STR만 보고 INT는 안 본다", () => {
+    const lo = derive(50, base, {});
+    const hi = derive(50, { ...base, int: 100 }, {});
+    expect(hi.workPower).toBe(lo.workPower);
+    expect(lo.workPower).toBeCloseTo(1.4);
+    expect(derive(50, { ...base, str: 40 }, {}).workPower).toBeCloseTo(1.2);
+    expect(workPowerOf(0)).toBe(1);
+  });
+  it("등짐 단련: 일꾼 스킬 SP·쿨만 STR만큼 줄고(상한 50%·15%), 마공 스킬과 안 배운 사람은 그대로", () => {
+    const sk = { wk_pack: 5 } as Partial<Record<SkillId, number>>;
+    expect(packCut({}, 100)).toBe(0);
+    expect(packCut(sk, 80)).toBeCloseTo(0.4);
+    expect(packCut(sk, 300)).toBe(0.5);
+    expect(packCdCut(sk, 80)).toBeCloseTo(0.12);
+    expect(packCdCut(sk, 300)).toBe(0.15);
+    expect(packCut({ wk_pack: 1 }, 80)).toBeCloseTo(0.08);
+    const s1 = { str: 80, int: 0 };
+    expect(skillSpCost("wk_leap", 12, {}, s1)).toBe(14);
+    expect(skillSpCost("wk_leap", 12, sk, s1)).toBe(8);
+    expect(skillSpCost("wk_whirl", 12, sk, s1)).toBe(2);
+    expect(skillSpCost("em_meteor", 12, sk, { str: 300, int: 100 })).toBe(skillById("em_meteor")!.sp(12));
+    expect(skillSpCost("wk_callus", 5, sk, s1)).toBe(0);
+  });
+  it("일꾼 스킬 SP는 INT로 늘어난 SP 칸만큼 비싸진다 (INT를 찍어도 일꾼 스킬 지속이 안 는다)", () => {
+    const lo = derive(50, { ...base, int: 1 }, {});
+    const hi = derive(50, { ...base, int: 100 }, {});
+    const c = (d: typeof lo) => skillSpCost("wk_leap", 12, {}, d.stats);
+    // 가득 찬 SP로 쓸 수 있는 횟수가 INT와 상관없이 같다 (반올림 1회 안)
+    expect(Math.abs(Math.floor(hi.maxSp / c(hi)) - Math.floor(lo.maxSp / c(lo)))).toBeLessThanOrEqual(1);
+    expect(skillSpCost("em_meteor", 12, {}, hi.stats)).toBe(skillSpCost("em_meteor", 12, {}, lo.stats));
+  });
+  it("11/21 한 방 딜러: 실서버(11/19)보다 한 방·초당 피해가 작거나 SP가 비싼 일꾼 스킬이 없다", () => {
+    // 실서버 수치 (랭크 lv은 effLevel 환산 전 — 같은 환산을 거치니 그대로 비교)
+    const live: Record<string, { mult: (lv: number) => number; sp: (lv: number) => number; cd: number }> = {
+      wk_charge: { mult: (lv) => 1.6 + 0.2 * lv, sp: () => 6, cd: 5000 },
+      wk_combo: { mult: (lv) => 3.4 + 0.6 * lv, sp: () => 6, cd: 3000 },
+      wk_leap: { mult: (lv) => 1.8 + 0.22 * lv, sp: () => 14, cd: 9000 },
+      wk_allnight: { mult: (lv) => 0.8 + 0.1 * lv, sp: (lv) => 30 + 4 * lv, cd: 24_000 },
+      wk_whirl: { mult: (lv) => 0.3 + 0.04 * lv, sp: () => 4, cd: 1500 },
+    };
+    for (const [id, o] of Object.entries(live)) {
+      const def = skillById(id as SkillId)!;
+      for (let lv = 1; lv <= def.maxLevel; lv++) {
+        const e = effLevel(id, lv);
+        const now = (SKILL_FX as unknown as Record<string, (l: number) => { mult: number }>)[id](lv).mult;
+        expect(now, `${id} ${lv}`).toBeGreaterThanOrEqual(o.mult(e) - 1e-9);
+        expect(def.sp(lv), `${id} ${lv} SP`).toBeLessThanOrEqual(Math.round(o.sp(e)));
+        // 쿨을 늘린 스킬도 초당(쿨마다) 피해는 실서버 이상 — 회오리는 켜 둔 동안이라 따로 (위 정해진 시간 테스트)
+        if (id !== "wk_whirl") expect(now / def.cooldownMs(lv), `${id} ${lv} 초당`).toBeGreaterThanOrEqual(o.mult(e) / o.cd);
+      }
+    }
+  });
+  it("11/21 일꾼 스킬 쿨 감소는 다 합쳐 25%까지 (마공 스킬은 그대로)", () => {
+    expect(WK_CD_CUT_MAX).toBe(0.25);
+    const base = skillById("wk_leap")!.cooldownMs(12);
+    expect(wkCdFloor("wk_leap", 12, base * 0.4)).toBe(Math.round(base * 0.75));
+    expect(wkCdFloor("wk_leap", 12, base * 0.9)).toBe(base * 0.9);
+    expect(wkCdFloor("em_meteor", 12, 1000)).toBe(1000);
+  });
+  it("일꾼 스킬 수치·SP·쿨에 INT·skillPower·maxSp가 들어갈 자리가 없다 (랭크만 받는다)", () => {
+    for (const s of SKILLS.filter((x) => x.branch === "worker")) {
+      expect(s.sp.length + s.cooldownMs.length, s.id).toBeLessThanOrEqual(2);
+      expect((SKILL_FX as Record<string, (lv: number) => unknown>)[s.id].length, s.id).toBe(1);
+    }
+  });
 });

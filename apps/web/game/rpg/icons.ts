@@ -766,6 +766,16 @@ const P: Record<string, Painter> = {
     g.rect(6, 5, 4, 7, a);
     g.rect(7, 7, 2, 3, darken(a, 0.3));
   },
+  /** 11/21 등짐 단련: 지게(세로 다리 둘 + 가로대)에 묶은 짐 보따리 */
+  sk_wk_pack(g, m, a) {
+    g.vline(4, 2, 15, 0x8a6440);
+    g.vline(11, 2, 15, 0x8a6440);
+    g.hline(4, 11, 12, darken(0x8a6440, 0.2));
+    g.rect(3, 3, 10, 7, m);
+    g.rect(3, 3, 10, 1, darken(m, 0.25));
+    g.hline(3, 12, 6, a);
+    g.vline(8, 3, 9, a);
+  },
   /** 봉분 뛰어넘기: 포물선 + 아래 봉분 */
   sk_wk_leap(g, m, a) {
     for (let x = 1; x <= 14; x++) g.set(x, Math.round(10 - Math.sin(((x - 1) / 13) * Math.PI) * 8), a);

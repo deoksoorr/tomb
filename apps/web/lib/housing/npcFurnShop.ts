@@ -1,4 +1,6 @@
-import { champShopDiscount, pickDiscount } from "../champPerks";
+import { pickDiscount } from "../champPerks";
+import { perkShopDiscount } from "../chairPerks";
+import { chairPerkSafe } from "../chairman/settle";
 import { champBoardsSafe } from "../store/champ";
 import { discountedPrice } from "../titles";
 import { wornPerk } from "../titlesServer";
@@ -14,10 +16,10 @@ import { getHouseStore, houseIdFor, housePair } from "./service";
 /** 가구 한 줄 (값은 원가 · 내가 낼 값, have = 두 집 공용 가방에 가진 개수 — 다른 집에 놓인 것까지) */
 export type NpcFurnRow = { id: string; name: string; desc: string; base: number; cost: number; have: number };
 
-/** 가구 할인율: 가구점과 같다 (집 칭호·포인트왕 가구 중 큰 것 하나) */
+/** 가구 할인율: 가구점과 같다 (집 칭호·포인트왕·11/24 회장님 독대 노멀 1위 가구 중 큰 것 하나) */
 export async function npcFurnRate(accountId: string, now: number): Promise<number> {
-  const [perk, champ] = await Promise.all([wornPerk(accountId, now), champBoardsSafe(accountId, now)]);
-  return pickDiscount(perk.houseDiscount, champShopDiscount(champ, "furniture"));
+  const [perk, champ, chair] = await Promise.all([wornPerk(accountId, now), champBoardsSafe(accountId, now), chairPerkSafe(accountId, now)]);
+  return pickDiscount(perk.houseDiscount, perkShopDiscount(champ, chair, "furniture"));
 }
 
 /** 가구를 넣을 집 (마을 집 먼저, 없으면 포구 오두막). 둘 다 없으면 null */

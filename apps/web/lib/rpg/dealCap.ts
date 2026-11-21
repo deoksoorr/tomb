@@ -1,6 +1,6 @@
 import { derive } from "./formulas";
 import { sgCombatPower } from "./setGear";
-import { SKILL_FX, skillMods, synergyPeak, type SkillId } from "./skillTree";
+import { packCdCut, SKILL_FX, skillMods, synergyPeak, type SkillId } from "./skillTree";
 import { tMods, type TAlloc } from "./transcendTree";
 import type { GearSlot, MonsterId, Stats } from "./catalog";
 import type { HuntWave } from "./plan";
@@ -23,6 +23,8 @@ export const SKILL_K = 6;
 export const VULN_K = 1.5;
 export const AOE_K = 12;
 export const MARGIN = 3;
+/** 11/21 일꾼 한 방 스킬 몰아 쓰기 여유 */
+export const WK_BURST_K = 2;
 /** 치명타 피해 (lib/rpg/formulas damage — 1.5배, 방어 무시) */
 const CRIT = 1.5;
 /** 티켓에 싣는 값의 상한 (형식 검사) */
@@ -36,6 +38,9 @@ export const DEAL_MAX = 1e12;
  *    — 힘 일꾼은 skillPower가 약 1이라, 예전처럼 지능만 곱하면 정상 판이 「기록 확인」에 걸린다
  * 둘 다 공격 속도(손에 익은 삽·쉬지 않는 손·빠른 손목 포함) × 세트 장비 전투 배율 × 약화 여유
  * 11/19 연계 보너스: 배운 핵심 스킬 가운데 가장 큰 연계 배율을 스킬 여유에 곱한다 (대표 빌드가 「기록 확인」에 걸리지 않게)
+ * 11/21 물공: 근력 위력(STR)·등짐 단련 쿨 감소만큼 일꾼 스킬이 세진다. 한 방 스킬(돌진·퍼 올리기·뛰어넘기·밤샘)은 한 번이 커서
+ *  짧은 층에 몰아 쓰면 잠깐 초당 피해가 튀니 WK_BURST_K배 더 넉넉하게 (봇 101~180층: 가장 빠른 층도 상한의 2% 안 — scratchpad balance/bot/capchk).
+ *  회오리는 이제 정해진 시간만 돌아서(지능·SP 무관) 늘 켜져 있다고 본 예전보다 더 넉넉하다
  */
 export function maxDealPerSec(
   level: number,
@@ -51,7 +56,9 @@ export function maxDealPerSec(
   const tireless = skills.wk_tireless ? SKILL_FX.wk_tireless(skills.wk_tireless).aspd : 0;
   const aspd = d.aspd * (1 + m.aspdPct + tireless + t.aspd);
   const magic = (1 + Math.max(0, m.atkPct)) * (1 + stoke) * d.skillPower * (1 + t.magicPct) * CRIT;
-  const phys = (1 + m.basicPct + t.physPct) * (CRIT + m.physCritDmg) * (1 + t.dbl);
+  const burst = skills.wk_charge || skills.wk_combo || skills.wk_leap || skills.wk_allnight ? WK_BURST_K : 1;
+  const work = (burst * d.workPower) / (1 - packCdCut(skills, d.stats.str));
+  const phys = (1 + m.basicPct + t.physPct) * (CRIT + m.physCritDmg) * (1 + t.dbl) * work;
   const v = d.atk * aspd * sgCombatPower(equip) * (1 + t.bossPct) * SKILL_K * synergyPeak(skills) * VULN_K * (magic + phys);
   return Math.min(DEAL_MAX, Math.max(1, Math.ceil(v)));
 }

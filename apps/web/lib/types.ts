@@ -1,5 +1,6 @@
 // web 안에서 공유하는 데이터 타입과 API 응답 형태 (계약). 바꿀 때는 모든 사용처를 같이 고친다.
 
+import type { ChairPerk } from "./chairPerks";
 import type { PathGift, RetainView, TodoTick } from "./retain";
 import { itemById, type AvatarDye, type ChampBoard, type MegaPin } from "@tomb/protocol";
 
@@ -238,6 +239,8 @@ export type Me = {
   renameRequired?: true;
   /** 주간 랭킹 1위 (지난주 1위인 랭킹 비트 + 본인이 오라를 껐으면 CHAMP_AURA_OFF — @tomb/protocol). 1위가 아니면 없음 */
   champ?: number;
+  /** 11/24 회장님 독대 지난주 1위 혜택 갈래 (lib/chairPerks — 노멀 1위 normal · 헬 1위 hell · 2관왕 duo). 아니면 없음 */
+  chair?: ChairPerk;
   /** 11/16 매니저 (관리자가 임명 — 전용 칭호·채팅 딱지뿐). 아니면 없음 */
   manager?: true;
   /** 11/18 새 이웃 꾸러미·첫 걸음 미션·오늘의 할 일 (lib/retain). 예전 서버 응답에는 없을 수 있다 */

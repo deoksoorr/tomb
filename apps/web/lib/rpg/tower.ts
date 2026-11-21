@@ -558,7 +558,7 @@ export function towerChestFloors(start: number, floors: number, used: number): n
 }
 
 /** f층 우두머리 상자: 지옥 사냥터를 다 깬 판의 드롭 굴림 그대로 (우두머리 몫 + 처치 굴림 + 기간제 코디) — 층 시드로 정해진다 */
-export function towerChestDrops(seed: number, f: number, _start: number, _pity = 0, sup = false): Drop[] {
+export function towerChestDrops(seed: number, f: number, _start: number, _pity = 0, sup = false, sgChance = SG_CHEST_CHANCE): Drop[] {
   // 11/19 천장을 없앴다 (_pity는 부르는 쪽 모양을 그대로 두려고 받기만 한다)
   void _start;
   void _pity;
@@ -571,7 +571,8 @@ export function towerChestDrops(seed: number, f: number, _start: number, _pity =
   const potions = r() < 0.5 ? 1 : 2;
   for (let i = 0; i < potions; i++) drops.push(pickDropPotion(r));
   drops.push(...chestMats(f));
-  const sg = chestSetGear(r, f, sup);
+  // 11/24 sgChance = 세트 장비 확률 (회장님 독대 헬 1위·2관왕 20% — lib/chairPerks chairChestChance, 보통 15%)
+  const sg = chestSetGear(r, f, sup, sgChance);
   if (sg) drops.push(sg);
   const cos = chestCosmetic(fs, f, sup);
   if (cos) drops.push(cos);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boardTags, dmgText, goState, HALL_EMPTY, hallWeekText, lastedText, ledLine, msClock, pips, pointsLine, runsText, sealBrief, sealRule, sealTag, weekText } from "./chairText";
+import { boardTags, dmgText, goState, HALL_EMPTY, hallWeekText, lastedText, ledLine, msClock, pips, pointsLine, runsNote, runsText, sealBrief, sealRule, sealTag, weekText } from "./chairText";
 
 describe("chairText", () => {
   it("버틴 시간: 열은 m:ss, 11/22 칸 글은 「버틴 시간 m:ss」, 옛 기록은 - · 피해는 「피해 N」", () => {
@@ -35,6 +35,11 @@ describe("chairText", () => {
   it("남은 판·순위·봉인", () => {
     expect(pips(1)).toEqual([true, false]);
     expect(runsText(2)).toBe("2 / 2");
+    // 11/24 2관왕 혜택이면 하루 3판 (상태 응답 perDay)
+    expect(pips(2, 3)).toEqual([true, true, false]);
+    expect(runsText(3, 3)).toBe("3 / 3");
+    expect(runsNote(2)).toMatch(/^포인트를 주는 판은 하루 노멀 2판, 헬 2판이에요 \(새벽 5시 초기화\)\. 다 쓰면/);
+    expect(runsNote(3, "duo")).toMatch(/^포인트를 주는 판은 하루 노멀 3판, 헬 3판이에요 \(새벽 5시 초기화\)\. 「차기 회장」 혜택으로 한 판씩 더 해요\. 다 쓰면/);
     expect(weekText(null)).toBe("기록 없음");
     expect(weekText({ rank: 1 })).toBe("1위 ★");
     expect(weekText({ rank: 7 })).toBe("7위");

@@ -1,5 +1,7 @@
 import { itemById, PERMANENT_UNTIL, seasonPrice, type CosmeticSlot, type ItemDef } from "@tomb/protocol";
-import { champShopDiscount, pickDiscount } from "../champPerks";
+import { pickDiscount } from "../champPerks";
+import { perkShopDiscount } from "../chairPerks";
+import { chairPerkSafe } from "../chairman/settle";
 import { env } from "../env";
 import { HttpError } from "../http";
 import { furnitureById, type FurnitureDef } from "../housing/catalog";
@@ -66,10 +68,10 @@ function cosDef(id: string): { item: ItemDef & { slot: CosmeticSlot }; price: { 
 const furnDef = (id: string): FurnitureDef | null => furnitureById(id) ?? null;
 const has = (kind: SeasonKind) => (id: string) => (kind === "cos" ? cosDef(id) !== null : furnDef(id) !== null);
 
-/** 할인율: 코디 = 패션 칭호·포인트왕(상점), 가구 = 집 칭호·포인트왕(가구) */
+/** 할인율: 코디 = 패션 칭호·포인트왕(상점), 가구 = 집 칭호·포인트왕(가구). 11/24 회장님 독대 노멀 1위·2관왕도 같은 범위 — 큰 것 하나 */
 async function rateOf(accountId: string, kind: SeasonKind, now: number): Promise<number> {
-  const [perk, champ] = await Promise.all([wornPerk(accountId, now), champBoardsSafe(accountId, now)]);
-  return kind === "cos" ? pickDiscount(perk.discount, champShopDiscount(champ, "shop", "cosmetic")) : pickDiscount(perk.houseDiscount, champShopDiscount(champ, "furniture"));
+  const [perk, champ, chair] = await Promise.all([wornPerk(accountId, now), champBoardsSafe(accountId, now), chairPerkSafe(accountId, now)]);
+  return kind === "cos" ? pickDiscount(perk.discount, perkShopDiscount(champ, chair, "shop", "cosmetic")) : pickDiscount(perk.houseDiscount, perkShopDiscount(champ, chair, "furniture"));
 }
 
 /** 가구를 넣을 집 (마을 집 먼저, 없으면 포구 오두막). 둘 다 없으면 null */

@@ -71,6 +71,7 @@ export const SKILL_LOOK: Record<SkillId, SkillLook> = {
   wk_deep: { key: "deep", kind: "passive", weight: 0 },
   wk_allnight: { key: "allnight-ult", kind: "ultimate", weight: 4 },
   wk_grit: { key: "grit", kind: "passive", weight: 0 },
+  wk_pack: { key: "pack", kind: "passive", weight: 0 },
 };
 
 const TAU = Math.PI * 2;

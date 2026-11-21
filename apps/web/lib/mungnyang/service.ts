@@ -1,5 +1,7 @@
 import { isRideablePet, itemById } from "@tomb/protocol";
-import { champShopDiscount, pickDiscount } from "../champPerks";
+import { pickDiscount } from "../champPerks";
+import { perkShopDiscount } from "../chairPerks";
+import { chairPerkSafe } from "../chairman/settle";
 import { HttpError } from "../http";
 import { furnitureById, type HouseZone } from "../housing/catalog";
 import { buyFurnitureMe, getHouseStore, houseIdFor, housePair } from "../housing/service";
@@ -37,10 +39,10 @@ export type MungnyangStatus = {
 };
 export type MungnyangBuyResult = MungnyangStatus & { me: Me; lookGrant?: string; got: string; kind: MungnyangKind };
 
-/** 가구 할인율: 가구점과 같다 (집 칭호·포인트왕 가구 중 큰 것 하나) */
+/** 가구 할인율: 가구점과 같다 (집 칭호·포인트왕·11/24 회장님 독대 노멀 1위 가구 중 큰 것 하나) */
 async function furnRate(accountId: string, now: number): Promise<number> {
-  const [perk, champ] = await Promise.all([wornPerk(accountId, now), champBoardsSafe(accountId, now)]);
-  return pickDiscount(perk.houseDiscount, champShopDiscount(champ, "furniture"));
+  const [perk, champ, chair] = await Promise.all([wornPerk(accountId, now), champBoardsSafe(accountId, now), chairPerkSafe(accountId, now)]);
+  return pickDiscount(perk.houseDiscount, perkShopDiscount(champ, chair, "furniture"));
 }
 
 /** 가구를 넣을 집 (마을 집 먼저, 없으면 포구 오두막). 둘 다 없으면 null (가구 보따리상과 같은 규칙) */

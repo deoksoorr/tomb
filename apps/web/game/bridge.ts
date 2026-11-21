@@ -8,6 +8,7 @@ import type { HotAuto } from "@/lib/rpg/hotbar";
 import type { CardChoice, CardOfferView } from "@/lib/rpg/cards";
 import type { ProcView } from "@/lib/rpg/procs";
 import type { ResumeState } from "@/lib/resume";
+import type { ChairPerk } from "@/lib/chairPerks";
 import type { SoundMix } from "@/lib/soundMix";
 import type { IncomingChatLine } from "@/game/logic/chatLog";
 import type { RideStatus } from "@/lib/ridePolicy";
@@ -370,6 +371,8 @@ export type UiEvents = {
   "ui:blockKeys": { blocked: boolean };
   /** 31번: 내 계정이 운영자 계정인지 (sticky). 내 캐릭터를 저승사자 차림·"운영자" 배지로 그린다 */
   "me:staff": { on: boolean };
+  /** 11/24 회장님 독대 지난주 1위 혜택 갈래 (sticky, 내 정보 me.chair — 2관왕이면 마을 걷기 +2%, lib/chairPerks chairSpeedAdd). 아니면 null */
+  "me:chair": { perk: ChairPerk | null };
   /** 내 도감 100% 배지 (종류별 비트, sticky). 내 캐릭터 이름표 옆에 그린다 (다른 사람에겐 입장 토큰으로 간다) */
   "me:dex": { bits: number };
   /** 실시간 서버: 서버에서 내 계정(포인트·선물함)이 바뀌었다(관리자 지급 등) → UI가 내 정보·선물함을 다시 받는다 */
@@ -602,6 +605,7 @@ const STICKY = new Set<keyof AllEvents>([
   "village:data",
   "forage:nodes",
   "me:staff",
+  "me:chair",
   "me:dex",
   "whisper:online",
   "mood:state",

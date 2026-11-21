@@ -6,6 +6,7 @@
 // 각 스킬: 선행 스킬(필요 랭크), 단(아래 단에 쓴 포인트로 열림), 최대 랭크, 랭크별 수치(SKILL_FX), 액티브/패시브.
 // 11/19 랭크 비용: 1·1·2·2·3 (skillRules.rankCost) — 1~2랭크는 싸고 만렙은 비싸다.
 // 11/19 마공·물공: 모닥불·서리·넋 스킬 = 마공(지능 skillPower를 받는다), 일꾼 스킬·기본 공격 = 물공(지능을 받지 않는다).
+// 11/21 일꾼 스킬은 STR을 받는다 (근력 위력 formulas.workPower, 등짐 단련 SP·쿨 절약) — 지능·최대 SP는 일꾼 스킬 피해·지속·쿨·비용 어디에도 안 들어간다.
 //  모닥불 패시브(공격력·치명타·장작 더 넣기)는 마공에만, 일꾼 패시브(굳은살·깊게 파기·뚝심)는 물공에만 붙는다.
 // 게임(효과)과 UI(설명)·서버(검증, skillRules.ts)가 같이 쓴다. 이 파일은 catalog.ts의 타입만 가져온다 (순환 없음).
 import type { IconArt } from "./catalog";
@@ -57,8 +58,8 @@ export const BRANCH_INFO: Record<BranchId, BranchInfo> = {
   worker: {
     name: "삽자루 일꾼",
     dmg: "phys",
-    role: "근접 · 기본 공격 · 보스",
-    desc: "밤새 봉분을 다지던 일꾼이에요. 삽 한 자루로 적 한가운데 뛰어들어 몸으로 쳐요. 지능 대신 공격력만 받아요.",
+    role: "근접 딜러 · 한 방",
+    desc: "밤새 봉분을 다지던 일꾼이에요. 삽 한 자루로 적 한가운데 뛰어들어 크게 한 방씩 쳐요. 스킬 한 방은 마공보다 세지만, 쿨타임이 길어 쉬는 틈이 있어요. INT 없이 STR로 키워요. STR이 높을수록 일꾼 스킬이 세지고, 등짐 단련을 배우면 SP가 덜 들고 쿨타임이 짧아져요.",
     color: 0xb07a46,
     light: 0xe8d2a8,
     dark: 0x5a4636,
@@ -120,7 +121,9 @@ export type SkillId =
   | "wk_whirl"
   | "wk_deep"
   | "wk_allnight"
-  | "wk_grit";
+  | "wk_grit"
+  // 11/21 등짐 단련 (일꾼 스킬 SP 절약 — STR 비례)
+  | "wk_pack";
 
 export type SkillKind = "active" | "passive";
 
@@ -149,6 +152,7 @@ export type SkillDef = {
 };
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
+const pct2 = (n: number) => `${Math.round(n * 10000) / 100}%`;
 const sec = (ms: number) => `${Math.round(ms / 100) / 10}초`;
 
 /** 스킬 수치 (랭크 lv). 게임(효과)과 UI(설명)·테스트(밸런스)가 같이 쓴다 */
@@ -201,23 +205,29 @@ const SKILL_FX_V3 = {
   so_procession: (lv: number) => ({ screen: true, hitAt: [900, 1100, 1300, 1500, 1760] as const, castMs: 2300, mult: 0.55 + 0.1 * lv, healPct: 0.1 + 0.05 * lv }),
   so_kinship: (lv: number) => ({ summonPct: 0.2 * lv, durPct: 0.1 * lv }),
   // ── 삽자루 일꾼 (11/19, 물공: 공격력만 받는다 — scratchpad 시뮬 최종표) ──
+  // 11/21 한 방 딜러: 돌진·퍼 올리기·뛰어넘기·밤샘은 한 번 피해를 크게 올리고(실서버의 2.1~8배, 근력 위력은 그 위에 따로) 쿨을 늘렸다 (11/21 사장님 「쿨·피해를 중간으로」 — 한 방은 마공 대표 한 방 이상이 바닥).
+  //  한 방은 같은 ★ 마공 대표 한 방(별똥 장작·얼음 무덤·넋 소용돌이)의 1.0~1.3배, 회장님 독대(무한 체력 우두머리) 평균은 행렬 인도자의 1.35배 안 (scratchpad balance/worker-final.md · 야근 빌딩 봇)
   // 11/19 v2: 일꾼은 뛰어드는 만큼 확실히 더 다친다 — 돌진·도약 무적을 없앴다 (궁극기만 돌진 순간 짧게)
-  wk_charge: (lv: number) => ({ mult: 1.6 + 0.2 * lv, dist: 80, width: 20, invulnMs: 150, reach: 110, kb: 2.2 }),
+  wk_charge: (lv: number) => ({ mult: 13 + 1.6 * lv, dist: 80, width: 20, invulnMs: 150, reach: 110, kb: 2.2 }),
   // 11/19 사방 삽질: 기본 공격 피해 + 그리고 옆(40→70%)·뒤(22→50%)로도 같이 휘두른다 (일꾼 무리 정리)
   wk_callus: (lv: number) => ({ basicPct: 0.04 * lv, side: 0.325 + 0.075 * lv, back: 0.15 + 0.07 * lv }),
-  wk_combo: (lv: number) => ({ mult: 3.4 + 0.6 * lv, split: [0.3, 0.3, 0.4] as const, gapMs: 150, range: 40, arcDeg: 40, stunMs: 400 }),
+  wk_combo: (lv: number) => ({ mult: 11 + 1.9 * lv, split: [0.3, 0.3, 0.4] as const, gapMs: 150, range: 40, arcDeg: 40, stunMs: 400 }),
   wk_grip: (lv: number) => ({ aspd: 0.03 * lv }),
   // 11/19 뛰어드는 일꾼이 확실히 더 다치게 2% → 1%/랭크 (착지 경직과 같이)
   // 11/19 단단한 허리 + 자동 막기: 근접 공격(몸박·물기)을 랭크당 2% 확률로 삽으로 막아 70% 줄이고 밀친다 (같은 적에게 2초에 한 번)
   wk_back: (lv: number) => ({ guard: 0.02 * lv, parry: 0.02 * lv, parryCut: 0.7, parryGapMs: 2000 }),
   // 봉분 뛰어넘기: 가장 몰린 곳으로 뛰어올라(공중 무적) 착지하며 둘레를 친다. 착지 뒤 landMs 동안 못 움직인다 (뛰어드는 위험)
-  wk_leap: (lv: number) => ({ mult: 1.8 + 0.22 * lv, reach: 150, radius: 56, airMs: 450, stunMs: 700, landMs: 300 }),
+  wk_leap: (lv: number) => ({ mult: 3.9 + 0.46 * lv, reach: 150, radius: 56, airMs: 450, stunMs: 700, landMs: 300 }),
   wk_tireless: (lv: number) => ({ aspd: 0.15 + 0.05 * lv, rangeMul: 1.15, durMs: 8000 }),
-  // 삽날 회오리: 한 번 눌러 켜고 다시 눌러 끈다. 켜 있는 동안 공격 속도만큼 둘레를 기본 공격으로 벤다 (SP 초당 소모, 바닥나면 꺼짐)
-  wk_whirl: (lv: number) => ({ mult: 0.3 + 0.04 * lv, radius: 44, spPerSec: 15, moveMul: 0.6 }),
+  // 삽날 회오리: 한 번 눌러 켜고 다시 눌러 끈다. 켜 있는 동안 공격 속도만큼 둘레를 기본 공격으로 벤다
+  // 11/21 SP를 초당 쓰지 않는다 (지능·최대 SP로 끝없이 돌던 것) — 켤 때 SP 조금, durMs 동안 돌고 쿨(10초). 일찍 끄면 쿨은 돈 만큼 (최소 minCdMs)
+  //  INT 1 실서버 회오리(SP가 바닥날 때까지)보다 켜져 있는 시간이 길다: 우두머리 59% ← 55%, 무리 58% ← 44% (봇)
+  wk_whirl: (lv: number) => ({ mult: 0.3 + 0.04 * lv, radius: 44, durMs: 8000 + 300 * lv, minCdMs: 3000, moveMul: 0.6 }),
   wk_deep: (lv: number) => ({ critDmg: 0.08 * lv }),
-  wk_allnight: (lv: number) => ({ dashes: 6, gapMs: 260, len: 120, width: 26, mult: 0.8 + 0.1 * lv }),
+  wk_allnight: (lv: number) => ({ dashes: 6, gapMs: 260, len: 120, width: 26, mult: 3.8 + 0.46 * lv }),
   wk_grit: (lv: number) => ({ every: 10, basicPct: 0.08 * lv }),
+  // 11/21 등짐 단련: 일꾼 스킬 SP가 STR 1당 랭크마다 0.1% 덜 들고(최대 50%), 쿨타임이 0.03%씩 짧아진다(최대 15%) — STR 100·5랭크에서 상한. 마공 스킬엔 안 붙는다
+  wk_pack: (lv: number) => ({ perStr: 0.001 * lv, cap: 0.5, cdPerStr: 0.0003 * lv, cdCap: 0.15 }),
 } as const;
 
 /**
@@ -499,7 +509,7 @@ const SKILLS_V3: readonly SkillDef[] = [
     requires: [{ id: "fr_collar", level: 1 }],
     sp: () => 14,
     cooldownMs: () => 20_000,
-    describe: (lv) => `${sec(FX.fr_ward(lv).durMs)} 동안 얼음 방패를 둘러요. 방패가 최대 HP의 ${pct(FX.fr_ward(lv).shieldPct)}만큼 피해를 대신 받아요.`,
+    describe: (lv) => `${sec(FX.fr_ward(lv).durMs)} 동안 얼음 방패를 둘러요. 방패가 최대 HP의 ${pct(FX.fr_ward(lv).shieldPct)}만큼 피해를 대신 받아요. INT가 높을수록 방패가 커져요.`,
     art: { shape: "sk_iceshield", main: F.color, accent: F.dark },
   },
   {
@@ -592,7 +602,7 @@ const SKILLS_V3: readonly SkillDef[] = [
     tier: 5,
     col: 2,
     name: "동지의 맹세",
-    tag: "패시브 · 쿨타임↓·피해↓",
+    tag: "패시브 · 마공 쿨타임↓·피해↓",
     kind: "passive",
     maxLevel: 3,
     requires: [{ id: "fr_mist", level: 1 }],
@@ -627,7 +637,7 @@ const SKILLS_V3: readonly SkillDef[] = [
     maxLevel: 5,
     sp: (lv) => 10 + 2 * lv,
     cooldownMs: () => 9000,
-    describe: (lv) => `${sec(FX.so_lamp(lv).rootMs)} 동안 멈춰 서서 등불에 빌어요. 최대 HP의 ${pct(FX.so_lamp(lv).healPct)}에 INT×3을 더한 만큼 HP가 차요. 넋 갈래에 쓴 포인트가 많을수록 세져요 (30포인트에 100%).`,
+    describe: (lv) => `${sec(FX.so_lamp(lv).rootMs)} 동안 멈춰 서서 등불에 빌어요. 최대 HP의 ${pct(FX.so_lamp(lv).healPct)}(INT가 높을수록 커져요)에 INT×3을 더한 만큼 HP가 차요. 넋 갈래에 쓴 포인트가 많을수록 세져요 (30포인트에 100%).`,
     art: { shape: "sk_lamp", main: 0xffd27a, accent: S.dark },
   },
   {
@@ -779,11 +789,13 @@ const SKILLS_V3: readonly SkillDef[] = [
     tier: 1,
     col: 0,
     name: "삽자루 돌진",
-    tag: "돌진 · 밀치기",
+    tag: "돌진 · 한 방",
     kind: "active",
     maxLevel: 5,
+    // 11/21 SP는 실서버 그대로 (등짐 단련만큼 덜 든다)
     sp: () => 6,
-    cooldownMs: () => 5000,
+    // 11/21 한 방: 피해 약 8배 · 쿨 5 → 12초 (한 방은 마공 대표 한 방 이상, 회장님 독대 평균은 행렬 인도자의 1.35배 안)
+    cooldownMs: () => 12_000,
     describe: (lv) =>
       `바라보는 쪽으로 ${FX.wk_charge(lv).dist}만큼 돌진해요. 길 위의 적을 밀치며 공격력의 ${pct(FX.wk_charge(lv).mult)} 피해를 줘요.`,
     art: { shape: "sk_wk_charge", main: K.color, accent: K.light },
@@ -807,12 +819,13 @@ const SKILLS_V3: readonly SkillDef[] = [
     tier: 2,
     col: 0,
     name: "찌르고 퍼 올리기",
-    tag: "3연타 · 기절",
+    tag: "3연타 · 한 방 · 기절",
     kind: "active",
     maxLevel: 5,
     requires: [{ id: "wk_charge", level: 1 }],
     sp: () => 6,
-    cooldownMs: () => 3000,
+    // 11/21 한 방: 피해 3.2배 · 쿨 3 → 8초 (쿨마다 쓴 초당 피해도 실서버보다 크다)
+    cooldownMs: () => 8000,
     describe: (lv) =>
       `앞을 두 번 찌르고 크게 퍼 올려요. 세 번에 걸쳐 공격력의 ${pct(FX.wk_combo(lv).mult)} 피해를 주고, 마지막 한 번에 ${sec(FX.wk_combo(lv).stunMs)} 기절시켜요.`,
     art: { shape: "sk_wk_combo", main: K.color, accent: K.light },
@@ -851,13 +864,14 @@ const SKILLS_V3: readonly SkillDef[] = [
     tier: 3,
     col: 0,
     name: "봉분 뛰어넘기",
-    tag: "도약 · 착지 광역",
+    tag: "도약 · 착지 한 방",
     kind: "active",
     maxLevel: 5,
     aoe: true,
     requires: [{ id: "wk_charge", level: 2 }],
     sp: () => 14,
-    cooldownMs: () => 9000,
+    // 11/21 한 방: 피해 2.1배 · 쿨 9 → 12초
+    cooldownMs: () => 12_000,
     describe: (lv) =>
       `${FX.wk_leap(lv).reach} 안에서 적이 가장 몰린 곳으로 뛰어올라요. 착지하며 둘레 적에게 공격력의 ${pct(FX.wk_leap(lv).mult)} 피해를 주고 ${sec(FX.wk_leap(lv).stunMs)} 기절시켜요. 공중에서는 무적이지만 착지 뒤 ${sec(FX.wk_leap(lv).landMs)} 동안 못 움직여요.`,
     art: { shape: "sk_wk_leap", main: K.color, accent: K.light },
@@ -879,6 +893,22 @@ const SKILLS_V3: readonly SkillDef[] = [
     art: { shape: "sk_wk_tireless", main: K.light, accent: K.color },
   },
   {
+    // 11/21 등짐 단련: 일꾼 스킬 SP 절약 (STR 비례). INT를 안 찍는 일꾼이 판 내내 스킬을 돌리는 길
+    id: "wk_pack",
+    branch: "worker",
+    tier: 3,
+    col: 2,
+    name: "등짐 단련",
+    tag: "패시브 · 일꾼 스킬 SP·쿨↓",
+    kind: "passive",
+    maxLevel: 5,
+    requires: [{ id: "wk_back", level: 1 }],
+    ...passive,
+    describe: (lv) =>
+      `STR이 높을수록 삽자루 일꾼 스킬의 SP가 덜 들고 쿨타임이 짧아져요. STR 1당 SP ${pct2(FX.wk_pack(lv).perStr)}, 쿨타임 ${pct2(FX.wk_pack(lv).cdPerStr)} (최대 ${pct(FX.wk_pack(lv).cap)}·${pct(FX.wk_pack(lv).cdCap)}). 일꾼 스킬 쿨타임은 카드·장비까지 합쳐 ${pct(WK_CD_CUT_MAX)}까지만 줄어요. 모닥불, 서리, 넋 스킬엔 안 붙어요.`,
+    art: { shape: "sk_wk_pack", main: K.dark, accent: K.light },
+  },
+  {
     id: "wk_whirl",
     branch: "worker",
     tier: 4,
@@ -890,9 +920,10 @@ const SKILLS_V3: readonly SkillDef[] = [
     aoe: true,
     requires: [{ id: "wk_leap", level: 2 }],
     sp: () => 4,
-    cooldownMs: () => 1500,
+    // 11/21 정해진 시간만 돌아서 쿨 15 → 10초 (INT 1 실서버보다 켜져 있는 시간이 길게)
+    cooldownMs: () => 10_000,
     describe: (lv) =>
-      `한 번 누르면 삽을 휘두르며 빙글빙글 돌아요. 공격 속도만큼 둘레를 베어 한 번에 공격력의 ${pct(FX.wk_whirl(lv).mult)} 피해를 줘요. 도는 동안 초당 SP ${FX.wk_whirl(lv).spPerSec}을 쓰고 ${pct(FX.wk_whirl(lv).moveMul)} 빠르기로 걸어요. 다시 누르거나 SP가 바닥나면 멈춰요.`,
+      `누르면 ${sec(FX.wk_whirl(lv).durMs)} 동안 삽을 휘두르며 빙글빙글 돌아요. 공격 속도만큼 둘레를 베어 한 번에 공격력의 ${pct(FX.wk_whirl(lv).mult)} 피해를 주고, ${pct(FX.wk_whirl(lv).moveMul)} 빠르기로 걸어요. 다시 누르면 일찍 멈추고, 쿨타임은 돈 만큼만 걸려요.`,
     art: { shape: "sk_wk_whirl", main: K.color, accent: K.light },
   },
   {
@@ -921,7 +952,8 @@ const SKILLS_V3: readonly SkillDef[] = [
     aoe: true,
     requires: [{ id: "wk_whirl", level: 3 }],
     sp: (lv) => 30 + 4 * lv,
-    cooldownMs: () => 24_000,
+    // 11/21 한 방: 피해 4.7배 · 쿨 24 → 30초
+    cooldownMs: () => 30_000,
     describe: (lv) =>
       `적 사이를 ${FX.wk_allnight(lv).dashes}번 연달아 돌진해요. 지나가는 길의 적에게 한 번에 공격력의 ${pct(FX.wk_allnight(lv).mult)} 피해를 줘요. 돌진하는 순간만 무적이에요.`,
     art: { shape: "sk_wk_allnight", main: K.color, accent: 0xfff3c8 },
@@ -988,6 +1020,11 @@ export type SkillMods = {
   sidePct: number;
   backPct: number;
   parry: number;
+  /** 11/21 등짐 단련: 일꾼 스킬 SP 절약·쿨 감소 (STR 1당 비율 · 상한) */
+  packPerStr: number;
+  packCap: number;
+  packCdPerStr: number;
+  packCdCap: number;
 };
 
 export function skillMods(skills: Partial<Record<SkillId, number>>): SkillMods {
@@ -1014,7 +1051,55 @@ export function skillMods(skills: Partial<Record<SkillId, number>>): SkillMods {
     sidePct: on("wk_callus", (l) => FX.wk_callus(l).side, 0),
     backPct: on("wk_callus", (l) => FX.wk_callus(l).back, 0),
     parry: on("wk_back", (l) => FX.wk_back(l).parry, 0),
+    packPerStr: on("wk_pack", (l) => FX.wk_pack(l).perStr, 0),
+    packCap: on("wk_pack", (l) => FX.wk_pack(l).cap, 0),
+    packCdPerStr: on("wk_pack", (l) => FX.wk_pack(l).cdPerStr, 0),
+    packCdCap: on("wk_pack", (l) => FX.wk_pack(l).cdCap, 0),
   };
+}
+
+/** 11/21 등짐 단련으로 줄어드는 일꾼 스킬 SP 비율 (0~상한) */
+export function packCut(skills: Partial<Record<SkillId, number>>, str: number): number {
+  const lv = skills.wk_pack ?? 0;
+  if (lv < 1) return 0;
+  const f = FX.wk_pack(lv);
+  return Math.min(f.cap, Math.max(0, str) * f.perStr);
+}
+
+/** 11/21 등짐 단련으로 줄어드는 일꾼 스킬 쿨타임 비율 (0~상한) */
+export function packCdCut(skills: Partial<Record<SkillId, number>>, str: number): number {
+  const lv = skills.wk_pack ?? 0;
+  if (lv < 1) return 0;
+  const f = FX.wk_pack(lv);
+  return Math.min(f.cdCap, Math.max(0, str) * f.cdPerStr);
+}
+
+/**
+ * 11/21 일꾼 스킬 쿨타임 감소 합계 상한 (등짐 단련 · 손에 익은 연장 카드 · 세트 장비 쿨 옵션을 모두 곱한 뒤).
+ * 다 쌓아도 정해진 쿨의 75%보다 짧아지지 않는다 — 회장님 독대 쿨 최대 조합에서 일꾼이 마공 최고의 1.35배를 넘지 않게 (scratchpad balance/worker-final.md)
+ */
+export const WK_CD_CUT_MAX = 0.25;
+/** 11/21 일꾼 스킬 쿨 하한 적용 (마공·다른 스킬은 그대로) */
+export function wkCdFloor(id: SkillId, lv: number, ms: number): number {
+  const def = skillById(id);
+  if (!def || def.branch !== "worker") return ms;
+  return Math.max(ms, Math.round(def.cooldownMs(lv) * (1 - WK_CD_CUT_MAX)));
+}
+
+/** 11/21 INT가 최대 SP를 늘리는 배율 (formulas.derive maxSp와 같은 1 + INT × 0.02) */
+export const INT_SP_PER = 0.02;
+
+/**
+ * 11/21 실제로 드는 SP (게임·자동 스킬·스킬 칸 표시가 같이 쓴다). 마공 스킬은 그대로.
+ * 일꾼 스킬은 INT로 늘어난 SP 칸만큼 비용도 커진다 (1 + INT × 0.02) — INT를 찍어도 일꾼 스킬을 더 오래 못 돌리게.
+ * 그리고 등짐 단련만큼(STR 비례) 덜 든다
+ */
+export function skillSpCost(id: SkillId, lv: number, skills: Partial<Record<SkillId, number>>, stats: { str: number; int: number }): number {
+  const def = skillById(id);
+  if (!def || def.kind !== "active") return 0;
+  const base = def.sp(lv);
+  if (def.branch !== "worker" || base <= 0) return base;
+  return Math.max(1, Math.round(base * (1 + Math.max(0, stats.int) * INT_SP_PER) * (1 - packCut(skills, stats.str))));
 }
 
 // ════════ 11/19 연계 보너스 (대표 빌드) ════════

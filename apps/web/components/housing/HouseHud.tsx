@@ -11,6 +11,7 @@ import { housingApi } from "@/lib/housing/client";
 import { layoutCounts, placedScore, ROTATE_LABEL, rotateMode, styleTag, totalScore } from "@/lib/housing/layout";
 import type { MyHouseResponse, PublicHouse } from "@/lib/housing/types";
 import { furnitureDiscount } from "@/lib/champPerks";
+import { chairShopDiscount } from "@/lib/chairPerks";
 import { discountedPrice, equippedPerk } from "@/lib/titles";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -277,7 +278,7 @@ function EditToolbar({
   // 11/16 집 갈래 칭호의 가구 할인 (서버가 같은 규칙으로 깎는다)
   const { me } = useMe();
   // 11/17 포인트왕 할인과 겹치면 큰 것 하나 (lib/champPerks)
-  const trialCost = trialDef ? discountedPrice(trialDef.price, furnitureDiscount(equippedPerk(me?.equipped).houseDiscount, me?.champ)) : 0;
+  const trialCost = trialDef ? discountedPrice(trialDef.price, furnitureDiscount(equippedPerk(me?.equipped).houseDiscount, me?.champ, chairShopDiscount(me?.chair, "furniture"))) : 0;
   // 가방에 남은 게 있으면 사지 않고 바로 놓을 수 있다
   const trialLeft = trial ? (my.inventory[trial.itemId] ?? 0) - (counts[trial.itemId] ?? 0) : 0;
   // R·단추가 하는 일은 고른 가구에 따라: 네 방향으로 돌리기 / 좌우 뒤집기 (상점 미리보기와 같은 구분)

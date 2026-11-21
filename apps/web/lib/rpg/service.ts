@@ -5,7 +5,9 @@ import { b64urlDecode, hmacSign, itemById } from "@tomb/protocol";
 import { recordEvent } from "../analyticsService";
 import { displayName, earnPointsOnly, getAccounts, refundPoints, spendPoints } from "../store";
 import { kstDay, kstWeek } from "../store/accounts";
-import { champHuntExp, champTranscendExp, earnTerms } from "../champPerks";
+import { earnTerms } from "../champPerks";
+import { chairChestChance, perkHuntExp, perkTranscendExp } from "../chairPerks";
+import { chairPerkSafe } from "../chairman/settle";
 import { champBoardsSafe } from "../store/champ";
 import { earnBoost } from "../store/pointEvent";
 import { forgetTitles, forgetTowerTitles, wornPerk } from "../titlesServer";
@@ -148,7 +150,9 @@ export async function rpgView(acct: string, store: RpgStore = getRpgStore(), now
     earnBoost(now),
   ]);
   // 포인트 배수 이벤트로 사냥터를 고른 날은 사냥 한도도 늘어난 값으로 보여 준다 (lib/pointEvent). 11/17 사냥왕이면 + 300P (lib/champPerks)
-  const huntCap = earnTerms(boost, "hunt", await champBoardsSafe(acct, now)).dailyMax;
+  // 11/24 회장님 독대 1위 혜택 갈래 (강화 창 할인·야근 빌딩 상자 확률을 화면이 같은 값으로 보여 준다 — 판단은 서버)
+  const [champBoards, chair] = await Promise.all([champBoardsSafe(acct, now), chairPerkSafe(acct, now)]);
+  const huntCap = earnTerms(boost, "hunt", champBoards).dailyMax;
   const stored = fitAll(loaded, sup);
   // 슈퍼 계정: 화면에는 최대 레벨·넉넉한 스킬·능력치 포인트로 보인다 (저장값은 그대로)
   const character = sup
@@ -167,10 +171,11 @@ export async function rpgView(acct: string, store: RpgStore = getRpgStore(), now
     expToNext: Number.isFinite(expToNext(character.level)) ? expToNext(character.level) : 0,
     points: summary[0]?.points ?? 0,
     today: { huntPoints: Math.min(daily.points, huntCap), cap: huntCap, runs: daily.runs, runsPerHour: RUNS_PER_HOUR - runs, runsHourMax: RUNS_PER_HOUR },
-    respecCost: respecCost(stored.level),
-    statResetCost: respecCost(stored.level),
+    respecCost: resetCost(stored, "skills"),
+    statResetCost: resetCost(stored, "stats"),
     ...(sup ? { superHunter: true } : {}),
     ...(endgame ? { endgame } : {}),
+    ...(chair ? { chair } : {}),
   };
 }
 
@@ -207,10 +212,13 @@ export async function characterAction(acct: string, a: z.output<typeof Character
 
 /** 초기화 두 가지: 스킬(횟수 respecs)·능력치(횟수 statResets). 비용 공식(skillRules.respecCost)은 같고 횟수만 따로 센다 */
 const RESETS = {
-  skills: { name: "스킬", count: (s: CharacterState) => s.respecs, apply: (s: CharacterState, sup: boolean) => resetSkills(s, !sup) },
+  skills: { name: "스킬", count: (s: CharacterState) => s.respecs, free: "freeRespec", apply: (s: CharacterState, sup: boolean) => resetSkills(s, !sup) },
   // 능력치는 직접 올린 기본 능력치만 되돌린다 (장비·레벨·경험치·스킬은 그대로). 레벨에 맞춰 정리한 뒤 되돌린다
-  stats: { name: "능력치", count: (s: CharacterState) => s.statResets, apply: (s: CharacterState, sup: boolean) => resetStats(fitAll(s, sup), !sup) },
+  stats: { name: "능력치", count: (s: CharacterState) => s.statResets, free: "freeStatReset", apply: (s: CharacterState, sup: boolean) => resetStats(fitAll(s, sup), !sup) },
 } as const;
+
+/** 다음 초기화 비용: 11/21 무료 초기화가 남았으면 0, 아니면 레벨에 따른 지갑 포인트 */
+const resetCost = (s: CharacterState, kind: keyof typeof RESETS): number => ((s[RESETS[kind].free] ?? 0) > 0 ? 0 : respecCost(s.level));
 
 /**
  * 스킬·능력치 초기화: 늘 레벨에 따른 지갑 포인트 (skillRules.respecCost, 슈퍼 계정도 — 슈퍼 계정 지갑은 늘 채워진다). 슈퍼 계정은 횟수만 안 셈.
@@ -221,14 +229,16 @@ async function paidReset(acct: string, kind: keyof typeof RESETS, seen: number, 
   const r = RESETS[kind];
   const store = getRpgStore();
   const c = await store.get(acct);
-  const cost = respecCost(c.level);
+  const cost = resetCost(c, kind);
+  const free = cost === 0 && (c[r.free] ?? 0) > 0;
   if (cost !== seen) throw new HttpError(409, "COST_CHANGED", `초기화 비용이 ${cost}P로 바뀌었어요. 다시 확인해 주세요.`);
   if (cost > 0) await spendPoints(acct, cost, `사냥 ${r.name} 초기화`);
   try {
     const { state } = await http(
       store.update(acct, (s) => {
-        if (r.count(s) !== r.count(c)) throw new RpgError(409, "BUSY", "다른 곳에서 먼저 초기화했어요. 다시 시도해 주세요.");
-        return { state: r.apply(s, sup), result: null };
+        if (r.count(s) !== r.count(c) || (s[r.free] ?? 0) !== (c[r.free] ?? 0)) throw new RpgError(409, "BUSY", "다른 곳에서 먼저 초기화했어요. 다시 시도해 주세요.");
+        const next = r.apply(s, sup);
+        return { state: free ? { ...next, [r.free]: (s[r.free] ?? 0) - 1 } : next, result: null };
       }),
     );
     return rpgView(acct, store, Date.now(), state);
@@ -614,12 +624,14 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   // 11/15 초월 판: 판 EXP × 배율 × 그날 구간 비율 → 초월 EXP (일반 EXP는 레벨 50이라 어차피 버려진다)
   // 11/16 사냥 갈래 칭호: 사냥 판 경험치 + (초월 EXP도 이 값에서. 별자리 잇기 판은 그대로, 포인트와는 무관 — lib/titles)
   // 11/17 사냥왕(지난주 1위): 사냥 판 경험치 +15% (칭호 %에 더한다), 초월 판은 초월 EXP +10% (일반 EXP는 레벨 50이라 버려져 +15%를 얹지 않는다 — lib/champPerks)
-  const [huntExp, champ] = t.g === "hunt" ? await Promise.all([wornPerk(acct, now).then((p) => p.huntExp), champBoardsSafe(acct, now)]) : [0, []];
+  // 11/24 회장님 독대 헬 1위·2관왕: 사냥 +20% · 초월 +15% — 사냥왕과 겹치면 더하지 않고 큰 쪽 하나 (lib/chairPerks perkHuntExp·perkTranscendExp)
+  const [huntExp, champ, chair] = t.g === "hunt" ? await Promise.all([wornPerk(acct, now).then((p) => p.huntExp), champBoardsSafe(acct, now), chairPerkSafe(acct, now)]) : [0, [], null];
   const titled = huntExp > 0 ? Math.round(v.exp * (1 + huntExp)) : v.exp;
-  const champExpRate = t.tt ? 0 : champHuntExp(champ);
+  const perkExp = t.tt ? perkTranscendExp(champ, chair) : perkHuntExp(champ, chair);
+  const champExpRate = t.tt ? 0 : perkExp.rate;
   const exp = champExpRate > 0 ? Math.round(v.exp * (1 + huntExp + champExpRate)) : titled;
   const tBase = t.tt ? Math.round(titled * TRANSCEND_EXP_MUL * RUN_TIERS[t.tt].rate) : 0;
-  const tChamp = t.tt ? champTranscendExp(champ) : 0;
+  const tChamp = t.tt ? perkExp.rate : 0;
   const tGain = tChamp > 0 ? Math.round(titled * TRANSCEND_EXP_MUL * RUN_TIERS[t.tt!].rate * (1 + tChamp)) : tBase;
 
   // 11/20 유성우 오라: 맑은 밤(판 시작 시각)에 완성 별자리가 있는 판만 굴린다 — 진행은 아래 같은 저장(mt 칸)에 싣는다 (lib/rpg/meteorDrop)
@@ -696,6 +708,8 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
       ...(titled > v.exp ? { titleExp: titled - v.exp } : {}),
       // 11/17 사냥왕 혜택으로 더 받은 몫 (초월 판이면 초월 EXP 몫)
       ...(t.tt ? (tGain > tBase ? { champExp: tGain - tBase } : {}) : exp > titled ? { champExp: exp - titled } : {}),
+      // 11/24 그 몫을 준 1위 이름 (사냥왕 · 맨주먹 협상가 · 차기 회장 — 결과 화면 꼬리표)
+      ...((t.tt ? tGain > tBase : exp > titled) && perkExp.by ? { champBy: perkExp.by } : {}),
       pointsRaw,
       points: earned,
       capped: earned < pointsRaw,
@@ -1022,8 +1036,12 @@ async function settleTowerRun(
   const store = getRpgStore();
   const day = kstDay(now);
   const week = kstWeek(now);
-  // 11/17 사냥왕(지난주 1위): 층마다 받은 초월 EXP +10% (lib/champPerks)
-  const tChamp = champTranscendExp(await champBoardsSafe(acct, now));
+  // 11/17 사냥왕(지난주 1위): 층마다 받은 초월 EXP +10% (lib/champPerks). 11/24 회장님 독대 헬 1위·2관왕 +15% — 겹치면 큰 쪽 하나 (lib/chairPerks)
+  // 11/24 헬 1위·2관왕은 상자 세트 장비 확률 20% (보통 15% — 정산 때 서버가 정한다, 화면은 판 시작 응답의 view.chair로 같은 값을 미리 굴린다)
+  const [champ, chair] = await Promise.all([champBoardsSafe(acct, now), chairPerkSafe(acct, now)]);
+  const tPerk = perkTranscendExp(champ, chair);
+  const tChamp = tPerk.rate;
+  const chestP = chairChestChance(chair);
   // 11/19 적정 층 포인트: 판을 시작할 때(정산 전) 초월 레벨 기준
   let tAtStart = 0;
   const done = await http(
@@ -1037,7 +1055,7 @@ async function settleTowerRun(
       // 11/15 상자마다 세트 장비 천장을 이어서 센다 (게임이 판 안에서 같은 순서로 센다) · 슈퍼 계정 시험 드롭(sup)
       let pity = cur.sgPity ?? 0;
       const rolled = st.chests.flatMap((f) => {
-        const d = towerChestDrops(seed, f, start, pity, sup);
+        const d = towerChestDrops(seed, f, start, pity, sup, chestP);
         pity = nextPity(d, pity);
         return d;
       });
@@ -1142,7 +1160,7 @@ async function settleTowerRun(
       ...(mobs?.dex ? { dexReward: mobs.dex } : {}),
       ...(mobs?.fresh.length ? { newMobs: mobs.fresh } : {}),
       transcend: { exp: tChamp > 0 ? Math.round(st.tExp * (1 + tChamp)) : st.tExp, tier: lastTier, levelsGained: done.result.levels, tLevel: state.tLevel },
-      ...(tChamp > 0 && Math.round(st.tExp * (1 + tChamp)) > st.tExp ? { champExp: Math.round(st.tExp * (1 + tChamp)) - st.tExp } : {}),
+      ...(tChamp > 0 && Math.round(st.tExp * (1 + tChamp)) > st.tExp ? { champExp: Math.round(st.tExp * (1 + tChamp)) - st.tExp, ...(tPerk.by ? { champBy: tPerk.by } : {}) } : {}),
       tower: { start, floors: v.floors, best: st.best, newBest: st.newBest, newWeek: st.newWeek, runs: st.runs, chests: st.chests, emptyChests: st.emptyChests, titles, ...(suspect ? { suspect: true } : {}), ...(topPending ? { topPending: true } : {}) },
       ...(pioneer ? { pioneer } : {}),
       ...(firstPending.length ? { firstPending } : {}),

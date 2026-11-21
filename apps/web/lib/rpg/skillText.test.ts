@@ -3,8 +3,8 @@ import { SKILLS, skillById } from "./skillTree";
 import { compareStats, josa, requirements, SKILL_TEXT, skillStats, skillTypes, TYPE_TAG_GLYPH, unlocks } from "./skillText";
 
 describe("스킬 설명 (skillText)", () => {
-  it("44종 모두 요약·분위기 문장·유형이 있다", () => {
-    expect(SKILLS).toHaveLength(44);
+  it("45종 모두 요약·분위기 문장·유형이 있다 (11/21 등짐 단련)", () => {
+    expect(SKILLS).toHaveLength(45);
     for (const sk of SKILLS) {
       const tx = SKILL_TEXT[sk.id];
       expect(tx.summary.length, sk.id).toBeGreaterThan(8);

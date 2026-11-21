@@ -47,6 +47,8 @@ const DODGE_ART = { shape: "dodge", main: 0x9fc5e8, accent: 0xf2ead3 };
 
 /** 아이콘 위 원형 쿨다운 (남은 비율만큼 시계 방향으로 어둡게) */
 const ring = (left: number) => ({ background: `conic-gradient(rgba(10, 11, 9, 0.75) ${Math.round(left * 360)}deg, transparent 0deg)` });
+/** 11/21 도는 중인 스킬 칸: 남은 시간만큼 밝은 테두리 (안쪽은 비운다) */
+const spinRing = (left: number) => ({ background: `conic-gradient(rgba(232, 210, 168, 0.9) ${Math.round(left * 360)}deg, rgba(232, 210, 168, 0.15) 0deg)` });
 
 function Bar({ value, max, className, label }: { value: number; max: number; className: string; label: string }) {
   const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
@@ -470,7 +472,7 @@ export default function RunHud({
                         .filter((b) => BUFF_NAMES[b.id])
                         .map((b) => (
                           <span key={b.id}>
-                            {BUFF_NAMES[b.id]} {b.id === "wk_whirl" ? "켜짐" : `${Math.ceil(b.leftMs / 1000)}초`}
+                            {BUFF_NAMES[b.id]} {Math.ceil(b.leftMs / 1000)}초
                           </span>
                         ))}
                     </div>
@@ -583,6 +585,9 @@ export default function RunHud({
               {hotbar.map((id, i) => {
                 const sk = SKILLS.find((x) => x.id === id);
                 const cd = hud?.cooldowns[i] ?? 0;
+                // 11/21 도는 중인 회오리: 남은 시간 테두리 시계 + 남은 초
+                const spin = hud?.active?.[i] ?? 0;
+                const spinSec = spin > 0 ? Math.ceil((hud?.buffs.find((b) => b.id === id)?.leftMs ?? 0) / 1000) : 0;
                 if (!sk) return null;
                 // 11/15 1~5 + 궁극기 칸(F) · SP 모자람(어둡게 + 필요한 SP) · 자동(초록 테두리가 돈다, 전체 스위치가 꺼져 있으면 멈춘 점선)
                 const ult = i === ULT_SLOT;
@@ -616,6 +621,8 @@ export default function RunHud({
                     {auto && touch && <span className={cx(s.autoDot, live && s.autoDotOn)} aria-hidden="true" />}
                     {short && <span className={s.spNeed}>{need}</span>}
                     {cd > 0 && <span className={s.cool} style={ring(cd)} />}
+                    {spin > 0 && <span className={s.spinRing} style={spinRing(spin)} />}
+                    {spinSec > 0 && <span className={s.spinSec}>{spinSec}</span>}
                     {sealed && <span className={s.sealStamp}>반려</span>}
                   </button>
                 );

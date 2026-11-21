@@ -17,6 +17,7 @@ import {
   towerFloorPointsText,
   towerPointFrom,
 } from "@/lib/rpg/tower";
+import { chairChestChance, chairPerkName } from "@/lib/chairPerks";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { useMe } from "@/lib/hooks/useMe";
 import { equippedPerk } from "@/lib/titles";
@@ -175,7 +176,9 @@ export default function TowerEntrance({
               <b>물약 1~2개</b> 커피, 에너지드링크, 야근 도시락 중에서 늘 들어 있어요.
             </li>
             <li>
-              <b>세트 장비</b> {Math.round(TOWER_CHEST_GEAR_CHANCE * 100)}% 확률로 나와요.
+              {/* 11/24 회장님 독대 헬 1위·2관왕은 20% (서버가 같은 값으로 — lib/chairPerks chairChestChance) */}
+              <b>세트 장비</b> {Math.round(chairChestChance(view.chair) * 100)}% 확률로 나와요.
+              {chairChestChance(view.chair) > TOWER_CHEST_GEAR_CHANCE ? ` 「${chairPerkName(view.chair)}」 혜택으로 ${Math.round(TOWER_CHEST_GEAR_CHANCE * 100)}%에서 올랐어요. ` : " "}
               높이 오를수록 직급이 올라요. {SG_GRADE_FLOORS[0]}층부터 대리급, {SG_GRADE_FLOORS[1]}층부터 과장급, {SG_GRADE_FLOORS[2]}층부터 임원급이에요.
             </li>
             <li>

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AVATAR_BODIES, DIR, ITEMS, sanitizeLook } from "@tomb/protocol";
 import { AV_H, AV_W, avatarArtTop, avatarFrameGrid, handAnchor, lookKey, SPRITE_COSMETICS } from "./avatar";
 import { GEAR_HAND, GEAR_HEAD, GEAR_SHEET_IDS } from "./avatarGear";
@@ -371,6 +371,18 @@ describe("회장님 독대 1위 보상 연출 (chairFx)", () => {
       const { max, all } = run(look);
       expect(max, look.join()).toBeLessThanOrEqual(40);
       for (const out of all) for (const c of out) expect(FX_ART[c.art], c.art).toBeDefined();
+    }
+  });
+
+  it("11/24 밤(빛 층 겹그림이 느는 때)에도 한 벌 그림 수가 상한 40 안 — 2관왕은 쿵 순간까지", () => {
+    vi.useFakeTimers();
+    // 한국 시간 새벽 3시 (밤)
+    vi.setSystemTime(new Date(Date.UTC(2026, 10, 20, 18, 0)));
+    try {
+      for (const look of [["chair_crown", "chair_aura_gold"], ["chair_band", "chair_aura_ember"], ["chair_duo_crown", "chair_aura_stamp"]])
+        for (const top of [14, 17, 18, 21]) expect(run(look, { face: { dx: 0, up: 10, top } }, 500).max, `${look.join()} ${top}`).toBeLessThanOrEqual(40);
+    } finally {
+      vi.useRealTimers();
     }
   });
 

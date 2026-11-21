@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { champBoards, isNameSlot, isPermanentUntil, isShopListed, ITEMS, permanentPrice, SHOP_KINDS, titleOfLook, type ItemDef, type ItemKind } from "@tomb/protocol";
 import { CHAMP_SHOP_NOTE, champShopDiscount, pickDiscount } from "@/lib/champPerks";
+import { chairShopDiscount, chairShopNote, perkShopDiscount } from "@/lib/chairPerks";
 import { discountedPrice, titlePerk } from "@/lib/titles";
 import { api, errorMessage } from "@/lib/api";
 import { dyeApi } from "@/lib/dye/client";
@@ -75,7 +76,10 @@ export default function ShopDialog({ onClose, avatar }: Props) {
   const titleOff = me ? titlePerk(titleOfLook(me.equipped.map((e) => e.itemId))).discount : 0;
   /** 11/17 포인트왕(지난주 1위) 20% (염색권은 빼고). 칭호 할인과 겹치면 큰 것 하나만 — 서버도 같은 함수 (lib/champPerks) */
   const champ = champBoards(me?.champ);
-  const discountOf = (item: Pick<ItemDef, "kind">) => pickDiscount(titleOff, champShopDiscount(champ, "shop", item.kind));
+  // 11/24 회장님 독대 노멀 1위·2관왕 30%도 같은 범위 — 셋 중 큰 할인 하나 (서버 app/api/shop/buy와 같은 계산)
+  const chair = me?.chair;
+  const discountOf = (item: Pick<ItemDef, "kind">) => pickDiscount(titleOff, perkShopDiscount(champ, chair, "shop", item.kind));
+  const perkNote = chairShopDiscount(chair, "shop") > 0 && chairShopDiscount(chair, "shop") >= champShopDiscount(champ, "shop") ? `${chairShopNote(chair)} ` : champShopDiscount(champ, "shop") > 0 ? `${CHAMP_SHOP_NOTE} ` : "";
   const all = listed(tab, staffView);
   const items = all.filter((item) => tab !== "cosmetic" || matchesSlot(item.slot, slotFilter));
   const shown = all.find((i) => i.id === (hoverId ?? picked[tab])) ?? all[0];
@@ -196,8 +200,8 @@ export default function ShopDialog({ onClose, avatar }: Props) {
             내 포인트 <strong>{me ? me.points.toLocaleString("ko-KR") : "–"}</strong>
           </p>
           <p className={styles.topHint}>
-            {/* 11/17 포인트왕 혜택 안내 (염색 탭은 할인이 없어 다른 탭에서만) */}
-            {champShopDiscount(champ, "shop") > 0 && tab !== "dye" ? `${CHAMP_SHOP_NOTE} ` : ""}산 물건은 가방에 들어가요
+            {/* 11/17 포인트왕 혜택 안내 (염색 탭은 할인이 없어 다른 탭에서만). 11/24 회장님 독대 노멀 1위 할인이 더 크면 그 안내 하나 */}
+            {tab !== "dye" ? perkNote : ""}산 물건은 가방에 들어가요
           </p>
         </div>
         {!me && error && <p className={ui.error}>{error}</p>}

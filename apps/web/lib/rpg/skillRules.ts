@@ -98,6 +98,8 @@ export function cleanAlloc(a: Alloc): Alloc {
  * I0d 경제 기준(보통 유저 하루 약 200P, economy.ts)에서 반나절 벌이를 넘지 않게.
  */
 export const RESPEC_MAX_COST = 120;
+/** 11/21 무료 초기화 나눔 차례: 올리면 모든 캐릭터가 스킬·능력치 무료 초기화를 한 번씩 더 받는다 (character.normalize) */
+export const FREE_RESET_GRANT = 1;
 export function respecCost(level: number): number {
   return Math.min(RESPEC_MAX_COST, 30 + 2 * Math.max(1, Math.floor(level)));
 }

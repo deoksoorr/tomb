@@ -90,7 +90,14 @@ export async function loadMe(accounts: AccountStore, accountId: string, now = Da
   // 주간 1위 값 (지난주 1위면 비트, 오라를 껐으면 끔 표시까지) → 착용 증서에 실려 다른 사람 화면의 배지·오라도 맞춘다
   // 31번 운영자는 운영자 오라를 끈 것도 같은 값으로 (CHAMP_AURA_OFF)
   // 11/16 매니저 (관리자가 임명 — 전용 칭호. 착용 증서에 실려 다른 사람 화면에도)
-  const [a, style, champ, manager] = await Promise.all([accounts.get(accountId, day, now), getStyleStore(accounts).get(accountId), champWireFor(accountId, staff, now).catch(() => 0), isManager(accountId, now)]);
+  // 11/24 회장님 독대 1위 혜택 갈래 (lib/chairPerks — 상점 할인·강화 할인·걷기 표시용, 판단은 서버가 따로). chairman 모듈이 이 파일을 거꾸로 읽어 동적으로 가져온다
+  const [a, style, champ, manager, chair] = await Promise.all([
+    accounts.get(accountId, day, now),
+    getStyleStore(accounts).get(accountId),
+    champWireFor(accountId, staff, now).catch(() => 0),
+    isManager(accountId, now),
+    import("../chairman/settle").then((m) => m.chairPerkSafe(accountId, now)).catch(() => null),
+  ]);
   // 11/16 단 칭호를 기억해 둔다 (칭호 능력 — 계정을 읽지 않는 낚시·채집·사냥 흐름이 Redis를 다시 묻지 않게, lib/wornTitle)
   rememberWornTitle(accountId, lookOf(a), now);
   return {
@@ -104,6 +111,7 @@ export async function loadMe(accounts: AccountStore, accountId: string, now = Da
       return bodies.length ? { bodies } : {};
     })(),
     ...(champ ? { champ } : {}),
+    ...(chair ? { chair } : {}),
     ...(manager ? { manager: true as const } : {}),
   };
 }

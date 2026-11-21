@@ -76,10 +76,18 @@ export type Derived = {
   move: number;
   /** 스킬 위력 배율 */
   skillPower: number;
+  /** 11/21 근력 위력: 삽자루 일꾼 스킬 피해 배율 (STR — 마공 skillPower의 INT 몫과 짝) */
+  workPower: number;
 };
 
 /** STR 1당 ATK (7번: 예전 2는 피해 흔들림 ±10%에 묻혀 STR을 올려도 티가 안 났다) */
 export const ATK_PER_STR = 3;
+/**
+ * 11/21 근력 위력: STR 1당 삽자루 일꾼 스킬 피해 +0.5% (기본 공격·회오리 베기는 STR이 이미 ATK로 들어가서 뺀다).
+ * 실서버 수치 위에 그대로 더 곱한다 (깎은 스킬 없음) — STR을 덜 찍은 하이브리드는 덜 받는다 (scratchpad balance/worker-final.md)
+ */
+export const STR_WORK_POWER = 0.005;
+export const workPowerOf = (str: number) => round2(1 + Math.max(0, str) * STR_WORK_POWER);
 
 export function derive(level: number, stats: Stats, equip: Partial<Record<GearSlot, string | null>>): Derived {
   const b = gearBonus(equip);
@@ -99,6 +107,7 @@ export function derive(level: number, stats: Stats, equip: Partial<Record<GearSl
     flee: level + s.agi + Math.floor(s.luk / 5) + b.flee,
     move: Math.round((80 + s.agi * 0.5 + b.move) * (1 + g.movePct)),
     skillPower: round2((1 + s.int * 0.015) * (1 + g.skillPct)),
+    workPower: workPowerOf(s.str),
   };
 }
 

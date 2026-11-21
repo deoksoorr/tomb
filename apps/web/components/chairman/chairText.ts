@@ -1,5 +1,6 @@
 import { addDays } from "@/lib/gameDay";
 import { CHAIR_POINTS_PER_MIN, CHAIR_RUNS_PER_DAY, type ChairMode } from "@/lib/chairman/rules";
+import { chairPerkName, type ChairPerk } from "@/lib/chairPerks";
 
 // 11/20 회장님 독대 입장 창·전광판 글 (순수 — chairText.test.ts)
 
@@ -33,9 +34,15 @@ export function goState(mode: ChairMode, o: { eligible: boolean; remaining: numb
   return { label: mode === "normal" ? "노멀로 사직서 내기" : "헬로 사직서 내기", disabled: !o.eligible || o.busy };
 }
 
-/** 오늘 남은 판 칸 (켜진 칸 수) */
-export const pips = (left: number) => Array.from({ length: CHAIR_RUNS_PER_DAY }, (_, i) => i < left);
-export const runsText = (left: number) => `${Math.max(0, left)} / ${CHAIR_RUNS_PER_DAY}`;
+/** 오늘 남은 판 칸 (켜진 칸 수). max = 하루 판 수 (11/24 2관왕 혜택이면 3 — 상태 응답 perDay) */
+export const pips = (left: number, max: number = CHAIR_RUNS_PER_DAY) => Array.from({ length: max }, (_, i) => i < left);
+export const runsText = (left: number, max: number = CHAIR_RUNS_PER_DAY) => `${Math.max(0, left)} / ${max}`;
+
+/** 입장 창 아래 판 수 안내 (11/24 2관왕이면 3판 + 혜택 이름) */
+export function runsNote(perDay: number = CHAIR_RUNS_PER_DAY, perk?: ChairPerk | null): string {
+  const extra = perDay > CHAIR_RUNS_PER_DAY && chairPerkName(perk) ? ` 「${chairPerkName(perk)}」 혜택으로 한 판씩 더 해요.` : "";
+  return `포인트를 주는 판은 하루 노멀 ${perDay}판, 헬 ${perDay}판이에요 (새벽 5시 초기화).${extra} 다 쓰면 연습 판만 열려요. 받은 포인트는 바로 쓸 수 있지만, 포인트 랭킹과 포인트왕 레이스에는 들어가지 않아요.`;
+}
 
 type Lead = { name: string; damage: number } | null;
 /** 모드마다 이번 주 현재 1위 */

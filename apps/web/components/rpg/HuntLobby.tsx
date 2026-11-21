@@ -32,6 +32,7 @@ import type { HotAuto } from "@/lib/rpg/hotbar";
 import { readItem } from "@/lib/storage";
 import { LS } from "@/lib/types";
 import { equippedPerk } from "@/lib/titles";
+import { chairChestChance } from "@/lib/chairPerks";
 import { currentLook } from "../account/items";
 import { resolveAvatar } from "../account/wardrobe";
 import { cx } from "../ui/cx";
@@ -354,6 +355,8 @@ export default function HuntLobby({
                 ...(boost && res.view.superHunter && towerBoostAllowed() ? { boost: true } : {}),
                 // 11/16 야근 빌딩 갈래 칭호: 층마다 제한 시간 + (lib/titles towerSec)
                 ...(towerSec > 0 ? { bonusSec: towerSec } : {}),
+                // 11/24 회장님 독대 헬 1위·2관왕: 상자 세트 장비 20% (서버 정산과 같은 굴림으로 미리 보여 준다)
+                ...(res.view.chair ? { sgChance: chairChestChance(res.view.chair) } : {}),
               },
             }
           : {}),
@@ -720,7 +723,13 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
               {/* 11/16 사냥 갈래 칭호로 더 받은 몫 */}
               {!r.transcend && r.titleExp ? <small> (칭호 +{r.titleExp.toLocaleString("ko-KR")})</small> : null}
               {/* 11/17 사냥왕(지난주 1위) 혜택으로 더 받은 몫 (초월 판·야근 빌딩은 초월 EXP 몫) */}
-              {r.champExp ? <small> (사냥왕 +{r.champExp.toLocaleString("ko-KR")})</small> : null}
+              {/* 11/24 회장님 독대 헬 1위·2관왕 몫이면 그 칭호 이름 (사냥왕과 겹치면 큰 쪽 하나 — 서버 champBy) */}
+              {r.champExp ? (
+                <small>
+                  {" "}
+                  ({r.champBy ?? "사냥왕"} +{r.champExp.toLocaleString("ko-KR")})
+                </small>
+              ) : null}
             </div>
             <div>
               <strong>+{r.points}</strong>포인트

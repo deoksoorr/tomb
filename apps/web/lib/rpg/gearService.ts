@@ -6,6 +6,8 @@ import { displayName } from "../store";
 import { pushVillageNotice } from "../weeklyChamp";
 import { forgetTitles } from "../titlesServer";
 import { RpgError } from "./character";
+import { chairEnhanceDiscount } from "../chairPerks";
+import { chairPerkSafe } from "../chairman/settle";
 import { disassemble, enhance, enhanceNeed, enhanceState, equipSg, exchange, inherit, inheritPlan, reroll, rerollCost, type EnhanceResult, type EnhTarget, type InheritFrom, type InheritResult } from "./enhance";
 import type { GearActionSchema } from "./schemas";
 import { effectiveLevel, queueFirstTitles, rpgView } from "./service";
@@ -59,16 +61,18 @@ export async function gearAction(acct: string, a: z.output<typeof GearActionSche
     case "enhance": {
       const t: EnhTarget | null = a.sg !== undefined ? { sg: a.sg } : a.piece !== undefined ? { piece: a.piece } : a.shop ? { shop: a.shop } : null;
       if (!t) throw new HttpError(400, "INVALID_INPUT", "강화할 장비를 골라 주세요.");
+      // 11/24 회장님 독대 노멀 1위·2관왕: 강화 포인트 30% 할인 (재료는 그대로 — lib/chairPerks). 화면은 view.chair로 같은 값을 보여 준다
+      const off = chairEnhanceDiscount(await chairPerkSafe(acct, now));
       const r = await http(
         store.updatePaid(
           acct,
           (s) => {
-            const need = enhanceNeed(t, enhanceState(s, t).e);
+            const need = enhanceNeed(t, enhanceState(s, t).e, off);
             // 화면에 보인 비용과 다르면 (다른 탭에서 먼저 강화 등) 돈을 받지 않고 다시 보여 준다
             if (need && need.cost !== a.cost)
               throw new RpgError(409, "COST_CHANGED", `강화 비용이 ${need.cost.toLocaleString("ko-KR")}P로 바뀌었어요. 다시 확인해 주세요.`);
             // 11/20 증폭권: 쓸지 말지만 받고 장수·확률은 서버 표에서 (옛 화면의 protect는 무시)
-            return enhance(s, t, a.amp, rnd);
+            return enhance(s, t, a.amp, rnd, off);
           },
           "사냥터 강화",
           now,

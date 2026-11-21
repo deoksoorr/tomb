@@ -198,7 +198,7 @@ export const CARDS: Record<CardId, CardDef> = {
   // ── 전설 ──
   oneshot: c("oneshot", "원샷 결재", "legend", 1, "내 공격이 5% 확률로 일반 몬스터를 한 번에 잡아요.", 0xffd84a, 0xa83c3c),
   overtime: c("overtime", "무한 야근", "legend", 1, "내가 쓰러져도 한 번은 체력 30%로 다시 일어나요.", 0xe8dcff, 0xffd84a),
-  promote: c("promote", "팀장 승진", "legend", 1, "다른 카드의 수치가 모두 50% 더 세져요.", 0x3a3a5a, 0xffd84a),
+  promote: c("promote", "팀장 승진", "legend", 1, "다른 카드의 수치가 모두 50% 더 세져요. 넋 전용 카드는 빼고요.", 0x3a3a5a, 0xffd84a),
   corpcard: c("corpcard", "법인카드", "legend", 1, "내가 적을 잡으면 가끔 5초 동안 공격력, 공격 속도, 이동 속도 중 하나가 올라요.", 0x2a2a3a, 0xd8b84a),
   leave: c("leave", "연차 몰아 쓰기", "legend", 1, "내 체력이 30% 아래로 떨어지면 3초 동안 무적이 되고, 5초 동안 공격 속도가 50% 올라요. 층마다 한 번이에요.", 0x7ad0f0, 0xf2ead3),
   // ── 11/19 갈래 카드 (스킬 트리 갈래를 키운다) ──
@@ -213,11 +213,11 @@ export const CARDS: Record<CardId, CardDef> = {
   refill: c("refill", "텀블러 리필", "rare", 2, "최대 SP가 25% 늘고, SP가 1초에 1씩 더 차요.", 0x9ff0dc, 0x2a5a5a),
   refund: c("refund", "경비 환급", "unique", 1, "마공 스킬을 쓰면 쓴 SP의 30%를 돌려받아요.", 0xffd84a, 0x4a2a8a),
   // ── 11/19 넋 갈래 카드 ──
-  soulQuick: c("soulQuick", "손 빠른 동기", "magic", 2, "부른 넋(길동무 넋·망자의 초롱)의 공격 간격이 15% 짧아져요.", 0xb98aff, 0x9ff0dc),
+  soulQuick: c("soulQuick", "손 빠른 동기", "magic", 2, "부른 넋(길동무 넋·망자의 초롱)의 공격 간격이 13% 짧아져요.", 0xb98aff, 0x9ff0dc),
   soulDrain: c("soulDrain", "넋 수당", "magic", 2, "넋 스킬과 부른 넋이 준 피해의 2%만큼 HP가 차요. 한 번에 최대 HP의 1%까지예요.", 0x9ff0dc, 0x4a2a8a),
-  soulChain: c("soulChain", "끌려가는 결재", "rare", 1, "넋 사슬과 넋 소용돌이 범위가 25% 넓어지고, 넋 사슬 약화가 5%p 더 붙어요.", 0x8a5ad8, 0xe8d8ff),
+  soulChain: c("soulChain", "끌려가는 결재", "rare", 1, "넋 사슬 범위가 25% 넓어지고, 넋 사슬 약화가 5%p 더 붙어요.", 0x8a5ad8, 0xe8d8ff),
   soulLamp: c("soulLamp", "퇴근길 등불", "unique", 1, "넋 스킬이나 부른 넋으로 적을 쓰러뜨리면 넋불이 튀어 근처 적 둘을 쳐요.", 0x9ff0dc, 0xb98aff),
-  soulParade: c("soulParade", "백귀야행", "legend", 1, "별빛 행렬을 쓰면 8초 동안 부른 넋 피해가 50% 오르고, 넋 스킬 쿨타임이 30% 줄어요.", 0x2a1448, 0x9ff0dc),
+  soulParade: c("soulParade", "백귀야행", "legend", 1, "별빛 행렬을 쓰면 8초 동안 부른 넋 피해가 25% 오르고, 넋 스킬 쿨타임이 30% 줄어요.", 0x2a1448, 0x9ff0dc),
 };
 
 /** 11/19 카드마다 키우는 갈래 (주력 갈래 카드는 제안에 더 자주 — cardOffer) */
@@ -341,12 +341,16 @@ export function cardStackLine(id: CardId, have: number, owned?: CardCounts): str
   }
 }
 
+/** 11/21 팀장 승진을 받지 않는 넋 전용 카드 */
+const SOUL_ONLY: ReadonlySet<CardId> = new Set<CardId>(["soulQuick", "soulDrain", "soulChain", "soulLamp", "soulParade"]);
+
 /**
  * 11/17 팀장 승진을 가졌을 때 카드에 적힌 숫자 대신 실제로 받는 숫자 ("팀장 승진으로 공격력 +22.5%").
  * n = 이 카드를 몇 장 가진 셈으로 (새로 고르는 카드면 1). 승진이 없거나 숫자로 말할 수 없는 카드면 null — cardStats와 같은 숫자
  */
 export function cardPromoLine(id: CardId, n: number, owned: CardCounts | undefined, kind: CardKindStyle = "melee"): string | null {
-  if (id === "promote" || promoteMul(owned) === 1) return null;
+  // 11/21 넋 전용 카드는 팀장 승진을 받지 않는다 (cardStats와 같게)
+  if (id === "promote" || promoteMul(owned) === 1 || SOUL_ONLY.has(id)) return null;
   const k = PROMOTE_MUL;
   const up = (label: string, per: number, unit = "%") => `${label} +${fmt(per * k * n)}${unit}`;
   const down = (label: string, per: number) => `${label} −${fmt(per * k * n)}%`;
@@ -379,15 +383,15 @@ export function cardPromoLine(id: CardId, n: number, owned: CardCounts | undefin
       case "brSoul":
         return up("넋 스킬 피해", 15);
       case "soulQuick":
-        return down("부른 넋 공격 간격", 15);
+        return down("부른 넋 공격 간격", 13);
       case "soulDrain":
         return up("넋 피해 흡수", 2);
       case "soulChain":
-        return up("넋 사슬·소용돌이 범위", 25);
+        return up("넋 사슬 범위", 25);
       case "soulLamp":
         return up("넋불 피해", 60);
       case "soulParade":
-        return up("행렬 뒤 부른 넋 피해", 50);
+        return up("행렬 뒤 부른 넋 피해", 25);
       case "brWorker":
         return `${up("일꾼 스킬 피해", 15)}, ${down("일꾼 스킬 쿨타임", 10)}`;
       case "handover":
@@ -756,7 +760,7 @@ export type CardStats = {
   magicCd: number;
   spMul: number;
   refund: number;
-  /** 11/19 넋 갈래 카드: 부른 넋 공격 간격 배율 · 넋 피해 흡수(비율·한 번 상한) · 사슬·소용돌이 범위 배율·사슬 약화 + · 넋불 세기 · 백귀야행 */
+  /** 11/19 넋 갈래 카드: 부른 넋 공격 간격 배율 · 넋 피해 흡수(비율·한 번 상한) · 사슬 범위 배율(11/21 소용돌이 뺌)·사슬 약화 + · 넋불 세기 · 백귀야행 */
   soulEvery: number;
   soulSteal: number;
   soulStealCap: number;
@@ -847,12 +851,13 @@ export function cardStats(o: CardCounts): CardStats {
     magicCd: Math.min(0.4, 0.06 * k * n("brief")),
     spMul: 1 + 0.25 * k * n("refill"),
     refund: n("refund") > 0 ? Math.min(REFUND_MAX, 0.3 * k) : 0,
-    soulEvery: Math.max(0.5, 1 - 0.15 * k * n("soulQuick")),
-    soulSteal: 0.02 * k * n("soulDrain"),
+    // 11/21 넋 균형: 손 빠른 동기 장당 −15% → −13%. 넋 전용 카드 5장은 팀장 승진으로 키우지 않는다 (손 빠른 동기 2장 × 팀장 승진이면 소환 피해 1.8배 — 행렬 인도자 보스가 다른 갈래의 1.7배)
+    soulEvery: Math.max(0.5, 1 - 0.13 * n("soulQuick")),
+    soulSteal: 0.02 * n("soulDrain"),
     soulStealCap: 0.01,
-    soulRange: 1 + (n("soulChain") > 0 ? 0.25 * k : 0),
-    soulVuln: n("soulChain") > 0 ? 0.05 * k : 0,
-    soulBurst: n("soulLamp") > 0 ? 0.6 * k : 0,
+    soulRange: 1 + (n("soulChain") > 0 ? 0.25 : 0),
+    soulVuln: n("soulChain") > 0 ? 0.05 : 0,
+    soulBurst: n("soulLamp") > 0 ? 0.6 : 0,
     soulParade: n("soulParade") > 0,
   };
 }

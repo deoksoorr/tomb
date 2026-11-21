@@ -988,6 +988,37 @@ button.hotSlot:disabled {
   margin: 0 6px;
 }
 
+/* 11/21 도는 중인 회오리 칸: 남은 시간 테두리 (가운데는 비워 아이콘이 보이게) + 오른쪽 위 남은 초 */
+.spinRing {
+  position: absolute;
+  inset: -2px;
+  pointer-events: none;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  padding: 3px;
+}
+
+.spinSec {
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  z-index: 2;
+  font-family: var(--font-small);
+  font-size: 10px;
+  color: #f3e3bd;
+  text-shadow:
+    1px 0 0 #0a0b09,
+    -1px 0 0 #0a0b09,
+    0 1px 0 #0a0b09,
+    0 -1px 0 #0a0b09;
+  pointer-events: none;
+}
+
 /* 남은 쿨타임 초 (시계 위에 크게) */
 .coolSec {
   position: absolute;

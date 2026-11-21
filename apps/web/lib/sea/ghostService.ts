@@ -1,5 +1,6 @@
 import { itemById, PERMANENT_UNTIL, type CosmeticSlot } from "@tomb/protocol";
-import { champShopDiscount } from "../champPerks";
+import { perkShopDiscount } from "../chairPerks";
+import { chairPerkSafe } from "../chairman/settle";
 import { env } from "../env";
 import { HttpError } from "../http";
 import { buyFurniture, getHouseStore, houseIdFor } from "../housing/service";
@@ -69,10 +70,11 @@ async function houseZone(accountId: string): Promise<HouseZone | null> {
 
 /** 꾸미기·가구 칭호 할인 · 포인트왕 할인 */
 async function discounts(accountId: string, now: number) {
-  const [perk, champ] = await Promise.all([wornPerk(accountId, now), champBoardsSafe(accountId, now)]);
+  // 11/24 champ 칸 = 포인트왕과 회장님 독대 노멀 1위(·2관왕) 중 큰 것 (lib/chairPerks)
+  const [perk, champ, chair] = await Promise.all([wornPerk(accountId, now), champBoardsSafe(accountId, now), chairPerkSafe(accountId, now)]);
   return {
-    cosmetic: { title: perk.discount, champ: champShopDiscount(champ, "shop", GHOST_COSMETIC_KIND) },
-    furniture: { title: perk.houseDiscount, champ: champShopDiscount(champ, "furniture") },
+    cosmetic: { title: perk.discount, champ: perkShopDiscount(champ, chair, "shop", GHOST_COSMETIC_KIND) },
+    furniture: { title: perk.houseDiscount, champ: perkShopDiscount(champ, chair, "furniture") },
   };
 }
 

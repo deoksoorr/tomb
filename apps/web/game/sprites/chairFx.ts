@@ -1,5 +1,5 @@
 import { DIR } from "@tomb/protocol";
-import { BAND_PAPER_UP, crownRows, duoPlateUp } from "./chairGear";
+import { BAND_PAPER_UP, crownRows, DUO_CUP_DX, duoPlateUp } from "./chairGear";
 import type { FxArtId, FxCmd, FxInput, FxSpec } from "./cosmeticFx";
 import { Grid, mix, vnoise, type Color } from "./pixel";
 
@@ -13,11 +13,11 @@ import { Grid, mix, vnoise, type Color } from "./pixel";
 //    타는 사직서 조각이 말려 재가 되며, 3초마다 불길이 확 치솟아 불씨가 튄다 (밤이면 더 밝게)
 //  chair_crown 황금 사원증 왕관: 2초마다 보석 띠를 따라 빛이 훑고 꼭대기 다이아가 반짝, 작은 별 셋이 왕관을 돈다, 밤엔 금빛 번짐
 //  chair_band 불타는 사직서 머리띠: 사직서 탄 끝에서 큰 불길(네 장)이 일렁 + 불티 셋 · 불빛 번짐(밤엔 더 환하게)
-// 11/23 2관왕 (노멀·헬 모두 1위 — 두 벌 대신 이 한 벌만):
-//  chair_aura_stamp 결재 도장 금빛 소나기: 몸 뒤 금빛·보랏빛 은은한 빛 + 몸 둘레로 가늘게 내리는 금빛 빗줄기,
-//    금 결재 도장 여섯이 살랑살랑 흔들리며 내려와 발밑에 꾹 찍히고(붉은 인주 자국이 남았다 사라진다),
-//    4.2초마다 큰 금 도장이 옆에 쿵 내려앉아 금빛 「결재」 자국과 물결이 퍼진다 (밤이면 빗줄기·도장이 더 밝게)
-//  chair_duo_crown 회장실 금장 명패 왕관: 2.4초마다 명패 위로 빛이 훑고 꼭대기 다이아·양 끝 에메랄드가 번갈아 반짝, 밤엔 금빛 번짐
+// 11/23 2관왕 (노멀·헬 모두 1위 — 두 벌 대신 이 한 벌만). 11/24 「너무 심심하다」 → 노멀 금빛 + 헬 불꽃을 섞어 게임에서 가장 화려하게:
+//  chair_aura_stamp 결재 도장 금빛 소나기: 발밑에 금·진홍 결재 인장(새김 눈금·글자 마디가 서로 거꾸로 돌고 뒤 테두리에 금·불 혀),
+//    몸 뒤 금·진홍 햇살 + 빛기둥(밤엔 머리 위 하늘까지) + 금빛 빗줄기, 금·진홍 불씨가 나선으로 솟고 결재 서류 셋이 허리춤을 돈다.
+//    4.2초마다 큰 금 도장이 옆에 쿵 — 몸 뒤 섬광 · 인장 충격파 · 불꽃이 튀고 「결재」 금빛 글자가 솟는다 (밤이면 더 밝게)
+//  chair_duo_crown 회장실 금장 명패 왕관: 양 끝 금 잔의 금·진홍 불꽃이 일렁이고, 명패 위로 빛이 훑고 다이아 반짝 · 별 둘이 돈다, 밤엔 금빛 번짐
 
 export type ChairMotion = "chGold" | "chEmber" | "chFlame" | "chCrown" | "chStamp" | "chDuoCrown";
 
@@ -71,7 +71,15 @@ function glow(g: Grid, f: number): void {
  * 기둥 불꽃: 칸마다 높이가 다른 불 혀 (가운데가 높고 가장자리가 낮다, 노이즈로 들쭉날쭉) — 밑은 흰 노랑, 위로 주황·빨강·검붉게.
  * 장(f)마다 위쪽이 좌우로 휘어(sway) 일렁인다. rim = 바깥에 검붉은 테 한 줄
  */
-function flameCols(g: Grid, w: number, h: number, f: number, seed: number, o: { alpha?: number; jag?: number; hot?: number; sway?: number; rim?: boolean; peak?: number } = {}): void {
+function flameCols(
+  g: Grid,
+  w: number,
+  h: number,
+  f: number,
+  seed: number,
+  o: { alpha?: number; jag?: number; hot?: number; sway?: number; rim?: boolean; peak?: number; pal?: readonly [Color, Color, Color, Color, Color] } = {},
+): void {
+  const [cW, cY, cO, cR, cD] = o.pal ?? [FIRE_W, FIRE_Y, FIRE_O, FIRE_R, FIRE_D];
   const alpha = o.alpha ?? 255;
   const jag = o.jag ?? 0.5;
   const hot = o.hot ?? 0.3;
@@ -85,11 +93,11 @@ function flameCols(g: Grid, w: number, h: number, f: number, seed: number, o: { 
     for (let j = 0; j < colH; j++) {
       const v = j / colH;
       const core = dx < hot * (0.7 + 0.3 * n) && j / h < 0.26 + 0.18 * n;
-      const col = core ? (j / h < 0.12 && dx < hot * 0.4 ? FIRE_W : FIRE_Y) : v < 0.5 ? FIRE_O : v < 0.82 ? FIRE_R : FIRE_D;
+      const col = core ? (j / h < 0.12 && dx < hot * 0.4 ? cW : cY) : v < 0.5 ? cO : v < 0.82 ? cR : cD;
       g.set(x + Math.round(sw * Math.pow(j / h, 1.6)), h - 1 - j, col, Math.round(alpha * (v < 0.85 ? 1 : 0.75)));
     }
   }
-  if (o.rim) g.outline(FIRE_D, false, 150);
+  if (o.rim) g.outline(cD, false, 150);
 }
 
 /** 몸 뒤 금빛 햇살 (긴 빛살·짧은 빛살 번갈아 16갈래, 4단계 회전) */
@@ -212,38 +220,158 @@ const RAISE_GLYPHS: readonly (readonly string[])[] = [
 ];
 const RAISE_TEXT = RAISE_GLYPHS[0].map((_, y) => RAISE_GLYPHS.map((gl) => gl[y]).join("."));
 
-// ── 11/23 결재 도장 금빛 소나기 (2관왕) ──
+// ── 11/23 결재 도장 금빛 소나기 (2관왕) — 11/24 금빛 + 진홍 불꽃으로 다시 ──
 
 const INK_R = 0xe8343a;
 const INK_D = 0xa81c2a;
-const INK_L = 0xff8a8a;
+/** 더해 그려도 또렷한 진홍 · 짙은 진홍 */
+const CRIM = 0xff3a4a;
+const CRIM_D = 0xc8203a;
+/** 금빛 불꽃 팔레트 (속 → 끝): 흰 금 · 금 · 금 · 주홍 · 진홍 */
+const GOLD_FIRE: readonly [Color, Color, Color, Color, Color] = [0xfffbe0, GOLD_HI, GOLD, 0xff6a2a, CRIM_D];
 
-/** 금빛 빗줄기 판 36×52 (8장 — 한 장마다 6.5칸씩 내려와 처음으로 돈다). 위·아래·양옆으로 흐려지는 기둥 모양 */
-const RAIN_W = 36;
-const RAIN_H = 52;
-const rainBuild = frames(RAIN_W, RAIN_H, 8, (g, f) => {
-  for (let i = 0; i < 15; i++) {
-    const x = 1 + Math.floor(h01(i, 41) * (RAIN_W - 2));
-    const len = 3 + Math.floor(h01(i, 42) * 3);
-    const y0 = (h01(i, 43) * RAIN_H + (f * RAIN_H) / 8) % RAIN_H;
-    const ex = Math.abs(x + 0.5 - RAIN_W / 2) / (RAIN_W / 2);
-    const side = 1 - ex * ex * 0.7;
+/**
+ * 결재 인장 반쪽 (발밑 큰 원판 64×20 — 노멀 금 인장 고리 48보다 크다. back = 위쪽 반 + 불 혀 자리 → 몸 뒤, front = 아래쪽 반 → 발 앞).
+ * 바깥에서 안으로: 금 띠(눈금 32개가 돈다) · 진홍 띠(흰 금 글자 마디 8개가 거꾸로) · 가는 금 선 · 새김 살 12개 · 금 원 · 은은한 금빛 바닥.
+ * 테두리에서 금·진홍 불 혀가 솟는다 (뒤쪽은 높게, 앞쪽은 낮게). 8단계 회전
+ */
+const DS_W = 64;
+const DS_RY = 10;
+const DS_UP = 7;
+function duoSeal(half: "back" | "front"): () => Grid {
+  const hh = half === "back" ? DS_UP + DS_RY : DS_RY + 2;
+  return frames(DS_W, hh, 8, (g, ph) => {
+    // 가상 판: 타원 가운데 줄 = back 판의 맨 아래 / front 판의 맨 위
+    const cy = half === "back" ? hh : 0;
+    const cx = DS_W / 2;
+    const rx = cx - 0.5;
+    for (let y = 0; y < hh; y++)
+      for (let x = 0; x < DS_W; x++) {
+        const dx = (x + 0.5 - cx) / rx;
+        const dy = (y + 0.5 - cy) / DS_RY;
+        const d = Math.hypot(dx, dy);
+        if (d > 1.02) continue;
+        const ang = Math.atan2(dy, dx) / (Math.PI * 2) + 0.5;
+        if (d > 0.91) {
+          const tick = (ang * 32 + ph / 8) % 1 < 0.34;
+          g.set(x, y, tick ? GOLD_HI : GOLD, tick ? 250 : 190);
+        } else if (d > 0.8) {
+          const stud = (ang * 8 - ph / 16 + 1) % 1 < 0.1;
+          g.set(x, y, stud ? 0xfffbe0 : CRIM, stud ? 250 : 170);
+        } else if (d > 0.74) g.set(x, y, GOLD_MID, 150);
+        else if (d > 0.48) {
+          const spoke = (ang * 12 + ph / 8) % 1 < 0.16;
+          g.set(x, y, spoke ? GOLD : GOLD_MID, spoke ? 125 : 36);
+        } else if (d > 0.4) g.set(x, y, GOLD_HI, 140);
+        else g.set(x, y, GOLD, 52);
+      }
+    // 테두리 불 혀: 금 혀 · 불 혀가 뭉텅이로 번갈아
+    for (let x = 1; x < DS_W - 1; x++) {
+      const dx = (x + 0.5 - cx) / rx;
+      if (Math.abs(dx) > 0.96) continue;
+      const rimY = cy + (half === "back" ? -1 : 1) * DS_RY * Math.sqrt(1 - dx * dx);
+      const n = vnoise(x * 1.2, ph * 2.2, 1.6, half === "back" ? 31 : 32);
+      const th = Math.round(half === "back" ? 1 + 6 * n * n : 1 + 2.5 * n * n);
+      const gold = vnoise(x, 3, 3, 33) > 0.5;
+      for (let j = 0; j < th; j++) {
+        const y = Math.round(rimY) - j;
+        if (y < 0 || y >= hh) continue;
+        const v = j / th;
+        const col = gold ? (v < 0.35 ? 0xfffbe0 : v < 0.7 ? GOLD_HI : GOLD) : v < 0.3 ? FIRE_Y : v < 0.65 ? FIRE_O : FIRE_R;
+        g.set(x, y, col, Math.round(240 * (1 - v * 0.4)));
+      }
+    }
+  });
+}
+
+/** 몸 뒤 햇살 64×64 (20갈래: 긴 금 빛살 · 짧은 진홍 불 빛살 번갈아, 4단계 회전) */
+const duoRaysBuild = frames(64, 64, 4, (g, ph) => {
+  const N = 20;
+  for (let y = 0; y < 64; y++)
+    for (let x = 0; x < 64; x++) {
+      const dx = x + 0.5 - 32;
+      const dy = y + 0.5 - 32;
+      const r = Math.hypot(dx, dy);
+      const u = ((Math.atan2(dy, dx) / (Math.PI * 2) + 1) * N + ph / 4) % N;
+      const i = Math.floor(u);
+      const gold = i % 2 === 0;
+      const len = gold ? 31 : 23;
+      if (r > len || r < 8) continue;
+      const across = Math.abs((u % 1) - 0.5) * 2;
+      const wdt = gold ? 0.42 : 0.36;
+      if (across > wdt) continue;
+      const v = Math.min(1, (r - 8) / 6) * Math.pow(1 - r / len, 0.85) * (0.45 + 0.55 * (1 - across / wdt));
+      if (v < 0.06) continue;
+      const col = gold ? (v > 0.5 ? GOLD_HI : v > 0.25 ? GOLD : GOLD_MID) : v > 0.5 ? 0xffa040 : v > 0.25 ? 0xff5a2a : CRIM_D;
+      g.set(x, y, col, Math.round(215 * Math.min(1, v * 1.3)));
+    }
+});
+
+/** 금빛 빗줄기 44×56 (8장 — 한 장마다 7칸씩 내려와 처음으로 돈다). 위·아래·양옆으로 흐려지는 기둥 모양 */
+const DR_W = 44;
+const DR_H = 56;
+const duoRainBuild = frames(DR_W, DR_H, 8, (g, f) => {
+  for (let i = 0; i < 22; i++) {
+    const x = 1 + Math.floor(h01(i, 141) * (DR_W - 2));
+    const len = 3 + Math.floor(h01(i, 142) * 4);
+    const y0 = (h01(i, 143) * DR_H + (f * DR_H) / 8) % DR_H;
+    const ex = Math.abs(x + 0.5 - DR_W / 2) / (DR_W / 2);
+    const side = 1 - ex * ex * 0.6;
     for (let j = 0; j < len; j++) {
-      const y = Math.floor(y0) + j;
-      const yy = y % RAIN_H;
-      const v = yy / RAIN_H;
+      const yy = (Math.floor(y0) + j) % DR_H;
+      const v = yy / DR_H;
       const env = Math.min(1, v / 0.3) * Math.min(1, (1 - v) / 0.12);
       const head = j === len - 1;
-      const a = Math.round(230 * env * side * (head ? 1 : 0.35 + (0.5 * j) / len));
+      const a = Math.round(240 * env * side * (head ? 1 : 0.35 + (0.5 * j) / len));
       if (a > 8) g.set(x, yy, head ? 0xfffbe0 : j === len - 2 ? GOLD_HI : GOLD, a);
     }
   }
 });
 
-/** 금 결재 도장 5×6 (0 그대로 · 1 몸통에 빛이 스친다): 네모난 손잡이 · 곧은 몸통 · 붉은 인주 면 */
-const STAMP_ART = [".hgl.", ".mgl.", "hgggl", "hgggl", "mgggl", "rRRRr"];
-/** 인주 자국 9×9 (0 붉은 인주 · 1 금빛 — 큰 도장): 둥근 테 안에 「결」을 닮은 획 */
-const IMPRINT_ART = ["..ooooo..", ".o.....o.", "o.i.iii.o", "o...i.i.o", "o.i.iii.o", "o..i.i..o", "o.i.i.i.o", ".o.....o.", "..ooooo.."];
+/** 「결재」 금빛 글자 (10줄 글꼴 9칸씩 — 결 · 재, 진홍 테두리는 굽을 때) */
+const SIGN_GLYPHS: readonly (readonly string[])[] = [
+  ["#####..#.", "....#.##.", "....#..#.", "...#..##.", "..#....#.", ".#######.", ".......#.", ".#######.", ".#.......", ".#######."],
+  ["......#.#", "......#.#", "#####.#.#", "..#...#.#", "..#...###", ".#.#..#.#", "#...#.#.#", "......#.#", "......#.#", "......#.#"],
+];
+const SIGN_TEXT = SIGN_GLYPHS[0].map((_, y) => SIGN_GLYPHS.map((gl) => gl[y]).join("."));
+
+/** 큰 금 결재 도장 11×14 (손잡이 꼭지에 루비 · 몸통에 진홍 띠 · 붉은 인주 면) */
+const BIG_STAMP_ART = [
+  "....hgl....",
+  "...hgggl...",
+  "...hgRgl...",
+  "....hgl....",
+  "....hgl....",
+  "...hgggl...",
+  "..hgggggl..",
+  ".hgggggggl.",
+  "hgggggggggl",
+  "crrRRRRRrrc",
+  "hgggggggggl",
+  "mgggggggggl",
+  "mgggggggggl",
+  "dIIIIIIIIId",
+];
+/** 결재 인주 자국 11×10 (0 붉은 인주 · 1 금빛): 둥근 테 안에 네모 도장 글 */
+const DUO_IMPRINT_ART = [
+  "...ooooo...",
+  ".oo.....oo.",
+  ".o.iiiii.o.",
+  "o..i.i.i..o",
+  "o..iiiii..o",
+  "o..i.i.i..o",
+  "o..iiiii..o",
+  ".o.......o.",
+  ".oo.....oo.",
+  "...ooooo...",
+];
+/** 결재 서류 6×8 (금 집게 · 글줄 · 붉은 결재 도장) — 팔랑이는 네 장: 앞 · 기울게 · 날 · 뒷면 */
+const DOC_ART = [
+  ["..HG..", "PPPPPq", "PkkkPq", "PPPPPq", "PkkPPq", "PPPRRq", "PPPRrq", "qqqqqq"],
+  ["..HG..", ".PPPq.", ".PkPq.", ".PPPq.", ".PkPq.", ".PPRq.", ".PPrq.", ".qqqq."],
+  ["..G...", "..Pq..", "..Pq..", "..Pq..", "..Pq..", "..Pq..", "..Pq..", "..qq.."],
+  ["..GH..", ".qPPP.", ".qPPP.", ".qPPP.", ".qPPP.", ".qPPP.", ".qPPP.", ".qqqq."],
+];
 
 export const CHAIR_FX_ART = {
   /** 몸 뒤 빛 26×36 (0 금 · 1 주홍, 더해 그린다) */
@@ -391,103 +519,185 @@ export const CHAIR_FX_ART = {
       return g;
     },
   },
-  // ── 11/23 결재 도장 금빛 소나기 · 명패 왕관 (2관왕) ──
-  /** 몸 뒤 빛 26×36 — 가운데 금빛, 바깥 은은한 보랏빛 (더해 그린다) */
+  // ── 11/23 결재 도장 금빛 소나기 · 명패 왕관 (2관왕 — 11/24 금빛 + 진홍 불꽃으로 다시) ──
+  /** 몸 뒤 빛 30×40 — 가운데 흰 금, 금, 바깥 진홍 (더해 그린다) */
   chDuoGlow: {
-    w: 26,
-    h: 36,
+    w: 30,
+    h: 40,
     frames: 1,
     build: () => {
-      const g = new Grid(26, 36);
-      g.ellipse(13, 18, 13, 18, 0x6a3ab8, 30);
-      g.ellipse(13, 18, 9.5, 14, 0xd8a040, 44);
-      g.ellipse(13, 19, 6, 9.5, 0xfff0b0, 60);
+      const g = new Grid(30, 40);
+      g.ellipse(15, 20, 15, 20, CRIM_D, 36);
+      g.ellipse(15, 20, 11, 15.5, 0xe8a030, 52);
+      g.ellipse(15, 21, 6.5, 10, 0xfff0b0, 70);
       return g;
     },
   },
-  /** 발밑 빛 56×18 — 보랏빛 테 · 금빛 안 */
+  /** 발밑 빛 72×24 — 은은한 보랏빛 테 · 진홍 · 금빛 안 */
   chDuoGround: {
-    w: 56,
-    h: 18,
+    w: 72,
+    h: 24,
     frames: 1,
     build: () => {
-      const g = new Grid(56, 18);
-      g.ellipse(28, 9, 28, 9, 0x7a48c8, 36);
-      g.ellipse(28, 9, 20, 6.5, 0xe0b040, 58);
-      g.ellipse(28, 9, 11, 3.5, 0xfff0a0, 84);
+      const g = new Grid(72, 24);
+      g.ellipse(36, 12, 36, 12, 0x7a48c8, 34);
+      g.ellipse(36, 12, 28, 9, CRIM_D, 44);
+      g.ellipse(36, 12, 19, 6, 0xe0b040, 66);
+      g.ellipse(36, 12, 10, 3.2, 0xfff0a0, 90);
       return g;
     },
   },
-  /** 금빛 빗줄기 36×52 (8장, 더해 그린다) */
-  chRain: { w: RAIN_W, h: RAIN_H, frames: 8, build: () => rainBuild() },
-  /** 밤에 빛 층에 한 번 더 그리는 빗줄기 (몸 자리가 뚫렸다) */
-  chRainRim: { w: RAIN_W, h: RAIN_H, frames: 8, build: holed(() => rainBuild(), RAIN_W, 8, 18, 36, 8, 16) },
-  /** 금 결재 도장 5×6 (0 그대로 · 1 몸통 반짝) */
-  chStamp: {
-    w: 5,
-    h: 6,
-    frames: 2,
-    build: frames(5, 6, 2, (g, f) => {
-      rows(g, STAMP_ART, { h: f ? 0xffffff : GOLD_HI, g: GOLD, m: GOLD_MID, l: GOLD_LO, r: INK_D, R: INK_R });
-      if (f) g.set(1, 3, 0xffffff);
+  /** 결재 인장 뒤쪽 반(몸 뒤 — 불 혀 자리 포함)·앞쪽 반(발 앞) 64칸, 8단계 회전 */
+  chDuoSealBack: { w: DS_W, h: DS_UP + DS_RY, frames: 8, build: duoSeal("back") },
+  chDuoSealFront: { w: DS_W, h: DS_RY + 2, frames: 8, build: duoSeal("front") },
+  /** 몸 뒤 금·진홍 햇살 64×64 (4단계 회전 — 가운데는 몸에 가린다) */
+  chDuoRays: { w: 64, h: 64, frames: 4, build: () => duoRaysBuild() },
+  /** 밤에 빛 층에 한 번 더 그리는 햇살 (몸 자리가 뚫렸다) */
+  chDuoRaysRim: { w: 64, h: 64, frames: 4, build: holed(() => duoRaysBuild(), 64, 4, 32, 34, 10, 17) },
+  /** 빛기둥 9×64 (가운데 흰 금 → 금 → 바깥 진홍, 위로 갈수록 흐려진다) */
+  chDuoPillar: {
+    w: 9,
+    h: 64,
+    frames: 1,
+    build: () => {
+      const g = new Grid(9, 64);
+      const cols: readonly (readonly [number, Color, number])[] = [
+        [4, 0xfffbe0, 235],
+        [3, GOLD_HI, 185],
+        [5, GOLD_HI, 185],
+        [2, GOLD, 115],
+        [6, GOLD, 115],
+        [1, 0xff6a3a, 64],
+        [7, 0xff6a3a, 64],
+        [0, CRIM_D, 34],
+        [8, CRIM_D, 34],
+      ];
+      for (let y = 0; y < 64; y++) {
+        const k = Math.pow((y + 0.5) / 64, 1.1) * Math.min(1, (64 - y) / 5);
+        for (const [x, c, a] of cols) g.set(x, y, c, Math.round(a * k));
+      }
+      return g;
+    },
+  },
+  /** 금빛 빗줄기 44×56 (8장, 더해 그린다) */
+  chDuoRain: { w: DR_W, h: DR_H, frames: 8, build: () => duoRainBuild() },
+  /** 불씨 3×3 (0~2 금빛: 흰 금 → 금 → 식은 금 · 3~5 불씨: 노랑 → 주황 → 진홍) */
+  chDuoSpark: {
+    w: 3,
+    h: 3,
+    frames: 6,
+    build: frames(3, 3, 6, (g, f) => {
+      const [core, arm] = ([
+        [0xffffff, GOLD_HI],
+        [GOLD_HI, GOLD],
+        [GOLD, GOLD_MID],
+        [FIRE_Y, FIRE_O],
+        [FIRE_O, FIRE_R],
+        [FIRE_R, CRIM_D],
+      ] as const)[f];
+      g.set(1, 1, core);
+      for (const [x, y] of [[1, 0], [0, 1], [2, 1], [1, 2]] as const) g.set(x, y, arm, f % 3 === 0 ? 190 : 140);
     }),
   },
-  /** 큰 금 도장 9×12 (손잡이 꼭지에 에메랄드 — 「쿵」 찍는 도장) */
-  chStampBig: {
-    w: 9,
+  /** 결재 서류 6×8 (팔랑이는 네 장) */
+  chDuoDoc: {
+    w: 6,
+    h: 8,
+    frames: 4,
+    build: frames(6, 8, 4, (g, f) => rows(g, DOC_ART[f], { P: 0xfbf6e8, q: 0xd8ccb0, k: 0x8a8478, R: INK_R, r: INK_D, H: GOLD_HI, G: GOLD })),
+  },
+  /** 큰 금 결재 도장 13×16 (외곽선 포함 — 「쿵」 찍는 도장) */
+  chDuoStamp: {
+    w: 13,
+    h: 16,
+    frames: 1,
+    build: () => {
+      const g = new Grid(13, 16);
+      rows(g, BIG_STAMP_ART, { h: GOLD_HI, g: GOLD, m: GOLD_MID, l: GOLD_LO, R: 0xf0384e, r: CRIM_D, c: 0x8a1020, I: INK_R, d: INK_D }, 1, 1);
+      g.outline(0x4a1008, false, 220);
+      return g;
+    },
+  },
+  /** 결재 인주 자국 11×10 (0 붉은 인주 · 1 금빛 — 땅에 납작하게 sy로 눌러 그린다) */
+  chDuoImprint: {
+    w: 11,
+    h: 10,
+    frames: 2,
+    build: frames(11, 10, 2, (g, f) => rows(g, DUO_IMPRINT_ART, f ? { o: GOLD_HI, i: GOLD } : { o: INK_R, i: INK_D })),
+  },
+  /** 도장이 찍힌 자리 물결 36×12 (바깥 진홍 · 안 금 두 겹 타원 테) */
+  chDuoRipple: {
+    w: 36,
     h: 12,
     frames: 1,
     build: () => {
-      const g = new Grid(9, 12);
-      rows(g, ["...hgl...", "..hgggl..", "..hgEgl..", "...hgl...", "...hgl...", "..hgggl..", ".hgggggl.", "hgggggggl", "hgggggggl", "hgggggggl", "mgggggggl", "rRRRRRRRr"], {
-        h: GOLD_HI,
-        g: GOLD,
-        m: GOLD_MID,
-        l: GOLD_LO,
-        E: 0x3ae0a0,
-        r: INK_D,
-        R: INK_R,
-      });
-      g.outline(0x5a3008, false, 200);
-      return g;
-    },
-  },
-  /** 인주 자국 9×9 (0 붉은 인주 · 1 금빛 — 땅에 납작하게 sy로 눌러 그린다) */
-  chImprint: {
-    w: 9,
-    h: 9,
-    frames: 2,
-    build: frames(9, 9, 2, (g, f) => {
-      rows(g, IMPRINT_ART, f ? { o: GOLD, i: GOLD_HI } : { o: INK_R, i: INK_D });
-      // 인주가 덜 묻은 칸 두셋 (손으로 찍은 느낌)
-      if (!f) for (const [x, y] of [[2, 1], [7, 5]] as const) g.set(x, y, INK_L, 140);
-    }),
-  },
-  /** 큰 도장이 찍힐 때 퍼지는 금빛 물결 30×10 (타원 테) */
-  chRipple: {
-    w: 30,
-    h: 10,
-    frames: 1,
-    build: () => {
-      const g = new Grid(30, 10);
-      for (let y = 0; y < 10; y++)
-        for (let x = 0; x < 30; x++) {
-          const d = Math.hypot((x + 0.5 - 15) / 15, (y + 0.5 - 5) / 5);
-          if (d <= 1 && d > 0.78) g.set(x, y, d > 0.9 ? GOLD_HI : GOLD, Math.round(220 * (1 - Math.abs(d - 0.89) / 0.12)));
+      const g = new Grid(36, 12);
+      for (let y = 0; y < 12; y++)
+        for (let x = 0; x < 36; x++) {
+          const d = Math.hypot((x + 0.5 - 18) / 18, (y + 0.5 - 6) / 6);
+          if (d <= 1 && d > 0.86) g.set(x, y, CRIM, Math.round(200 * (1 - Math.abs(d - 0.93) / 0.08)));
+          else if (d <= 0.78 && d > 0.62) g.set(x, y, d > 0.7 ? GOLD_HI : GOLD, Math.round(230 * (1 - Math.abs(d - 0.7) / 0.09)));
         }
       return g;
     },
   },
-  /** 에메랄드 반짝 5×5 (명패 왕관 양 끝) */
-  chEmerald: {
-    w: 5,
-    h: 5,
+  /** 쿵 섬광 41×41 (몸 뒤 — 부드러운 금빛 속 + 금·진홍 빛살 16갈래) */
+  chDuoFlash: {
+    w: 41,
+    h: 41,
     frames: 1,
     build: () => {
-      const g = new Grid(5, 5);
-      g.set(2, 2, 0xffffff);
-      for (const [x, y] of [[1, 2], [3, 2], [2, 1], [2, 3]] as const) g.set(x, y, 0xb0ffe0);
-      for (const [x, y] of [[0, 2], [4, 2], [2, 0], [2, 4]] as const) g.set(x, y, 0x3ae0a0, 170);
+      const g = new Grid(41, 41);
+      g.ellipse(20.5, 20.5, 11, 11, GOLD, 60);
+      g.ellipse(20.5, 20.5, 6, 6, 0xfffbe0, 110);
+      for (let r = 0; r < 16; r++) {
+        const a = (r * Math.PI) / 8;
+        const len = r % 2 ? 14 : 20;
+        for (let d = 4; d <= len; d++)
+          g.set(Math.round(20 + Math.cos(a) * d), Math.round(20 + Math.sin(a) * d), d < 8 ? 0xffffff : r % 2 ? 0xff6a3a : GOLD_HI, Math.round(250 * (1 - d / (len + 1))));
+      }
+      return g;
+    },
+  },
+  /** 「결재」 금빛 글자 21×12 (진홍 테두리) */
+  chDuoText: {
+    w: 21,
+    h: 12,
+    frames: 1,
+    build: () => {
+      const g = new Grid(21, 12);
+      SIGN_TEXT.forEach((r, y) => [...r].forEach((ch, x) => ch === "#" && g.set(x + 1, y + 1, y < 3 ? 0xfffbe0 : y < 6 ? GOLD_HI : GOLD)));
+      g.outline(0x6a0e18, false, 255);
+      return g;
+    },
+  },
+  /** 명패 왕관 금 잔의 불꽃 5×9 (금빛 속 · 진홍 끝, 네 장 일렁임) */
+  chDuoTipFlame: {
+    w: 5,
+    h: 9,
+    frames: 4,
+    build: frames(5, 9, 4, (g, f) => {
+      flameCols(g, 5, 9, f, 41 + f, { jag: 0.45, hot: 0.55, sway: 1, peak: 1.15, pal: GOLD_FIRE });
+      for (let x = 1; x < 4; x++) g.set(x, 8, x === 2 ? 0xfffbe0 : GOLD_HI);
+    }),
+  },
+  /** 명패 왕관 둘레 금빛 번짐 34×20 (밤 — 가운데가 날개 달린 왕관 크기만큼 뚫렸다) */
+  chDuoCrownGlow: {
+    w: 34,
+    h: 20,
+    frames: 1,
+    build: () => {
+      const g = new Grid(34, 20);
+      for (let y = 0; y < 20; y++)
+        for (let x = 0; x < 34; x++) {
+          const dx = x + 0.5 - 17;
+          const dy = y + 0.5 - 10;
+          const out = Math.hypot(dx / 17, dy / 10);
+          const hole = Math.max(Math.abs(dx) / 9.5, Math.abs(dy) / 5.5);
+          if (out > 1 || hole < 1) continue;
+          const k = Math.min(1, (hole - 1) * 3) * Math.min(1, (1 - out) * 2.5);
+          g.set(x, y, k > 0.6 ? GOLD_HI : x % 3 === 0 ? 0xff7a4a : GOLD, Math.round(150 * k));
+        }
       return g;
     },
   },
@@ -601,6 +811,8 @@ function h01(i: number, salt = 0): number {
 export const CHAIR_FLAME_UP = 9;
 /** 황금 사원증 왕관 위 별·다이아 반짝임만큼 이름표를 올린다 (cosmeticFx labelTop) */
 export const CHAIR_CROWN_UP = 5;
+/** 명패 왕관 금 잔 불꽃이 그림 맨 위보다 솟는 높이 (cosmeticFx labelTop) */
+export const CHAIR_DUO_UP = 8;
 
 /** 「+연봉」 주기 · 불길 치솟음 주기 */
 const RAISE_MS = 3600;
@@ -819,99 +1031,154 @@ function crownShine(f: FxInput, t: number, d: ChairDraw): void {
   }
 }
 
-/** 결재 도장 금빛 소나기: 큰 도장이 쿵 찍히는 주기 · 작은 도장 수 */
-const BIG_STAMP_MS = 4200;
-const STAMPS = 6;
+/** 결재 도장 금빛 소나기: 큰 도장이 쿵 찍히는 주기 · 그 안에서 찍히는 때(0~1) · 불씨 수 */
+const SLAM_MS = 4200;
+const SLAM_HIT = 0.16;
+const DUO_SPARKS = 6;
 
+/**
+ * 결재 도장 금빛 소나기 (2관왕 — 게임에서 가장 화려한 오라. 몸은 덮지 않는다: 몸과 겹치는 것은 모두 몸 뒤, 몸 바깥 빛만 빛 층):
+ *  ① 몸 뒤 금·진홍 빛 · 햇살 · 빛기둥 (밤엔 햇살 테와 머리 위 빛기둥을 빛 층에 한 번 더) ② 발밑 빛 + 결재 인장 (도는 두 띠 · 금·불 혀)
+ *  ③ 금빛 빗줄기 ④ 금·진홍 불씨가 나선으로 솟는다 ⑤ 결재 서류 셋이 허리춤을 돈다
+ *  ⑥ 4.2초마다 큰 금 도장이 옆(번갈아)에 쿵 → 몸 뒤 섬광 · 인장 충격파 · 찍힌 자리 물결 · 불꽃 넷 · 「결재」 금빛 글자
+ * 그림 수: 밤·쿵 순간에도 31장 안팎 (왕관 7장과 합쳐 상한 40 안)
+ */
 function stampAura(f: FxInput, t: number, d: ChairDraw): void {
   const calm = f.reduced || !!f.still;
   const bx = f.x;
   const fy = Math.round(f.headY);
   const back = d.depth - 0.3;
-  const k = d.night ? 1 : 0.8;
+  const k = d.night ? 1 : 0.85;
   const W = f.aura?.wide ?? 1;
-  const breathe = calm ? 0.85 : 0.8 + 0.2 * Math.sin(t / 700);
+  const WY = 1 + (W - 1) * 0.5;
   const midY = Math.round(f.headY - f.artTop * 0.5);
   const lifted = f.y - f.headY > 3;
   const floor = lifted ? "body" : "ground";
   const floorDepth = lifted ? back - 0.04 : 0;
-  // ① 몸 뒤 금빛·보랏빛 · 발밑 빛
-  const gs = Math.max(0.85, (f.artTop + 8) / 34);
-  d.push("chDuoGlow", 0, bx, midY + 2, { sx: W, sy: gs, alpha: 0.85 * k * breathe, layer: "body", add: true, depth: back });
-  d.push("chDuoGround", 0, bx, fy, { sx: W, sy: 1 + (W - 1) * 0.5, alpha: k * (0.7 + 0.3 * breathe), layer: floor, add: true, depth: floorDepth });
-  // ② 금빛 빗줄기 (몸 뒤, 밤엔 몸 자리를 뚫은 판을 빛 층에 한 번 더)
-  const rs = Math.max(0.85, (f.artTop + 16) / 46);
-  const rf = calm ? 3 : Math.floor(t / 70) % 8;
-  d.push("chRain", rf, bx, fy + 2, { oy: 1, sx: rs * W, sy: rs, alpha: 0.9 * k, layer: "body", add: true, depth: back - 0.02 });
-  if (d.night) d.push("chRainRim", rf, bx, fy + 2, { oy: 1, sx: rs * W, sy: rs, alpha: 0.5, layer: "light", depth: 0 });
-  // ③ 작은 금 도장 여섯: 머리 위에서 살랑살랑 흔들리며 내려와 발밑 둘레에 꾹 → 붉은 인주 자국이 남았다 사라진다
-  const sky = f.artTop + 14;
-  for (let i = 0; i < STAMPS; i++) {
-    const per = 3000 + Math.round(h01(i, 50) * 900);
-    const raw = calm ? (i + 0.5) / STAMPS : (t / per + i / STAMPS + h01(i, 51) * 0.1) % 1;
-    const n = calm ? i : Math.floor(t / per + i / STAMPS + h01(i, 51) * 0.1);
-    // 내려앉는 자리: 발밑 타원 둘레 (그 바퀴마다 다른 자리, 몸 바로 앞 가운데는 비킨다)
-    const a = h01(n, 60 + i) * Math.PI * 2;
-    const lx = bx + Math.cos(a) * (9 + h01(n, 70 + i) * 7) * W;
-    const lz = Math.sin(a);
-    const ly = fy + lz * 3;
-    const land = 0.72;
-    if (raw < land) {
-      const u = raw / land;
-      // 내려올수록 조금 빨라지고(소나기), 좌우로 살랑 흔들리며 기운다
-      const e = u * (0.6 + 0.4 * u);
-      const sway = Math.sin(u * Math.PI * 2.2 + i * 1.7);
-      const x = lx + sway * 3 * (1 - u * 0.6);
-      const y = ly - (1 - e) * sky;
-      const al = Math.min(1, u / 0.15);
-      const glint = !calm && Math.floor(t / 110 + i * 2) % 7 === 0 ? 1 : 0;
-      d.push("chStamp", glint, Math.round(x), Math.round(y), { ...d.around(lz, { alpha: al }, d.night), oy: 1, rot: calm ? 0 : sway * 0.35 * (1 - u) });
-    } else {
-      // 꾹: 처음엔 살짝 크게 찍히고 천천히 사라진다
-      const v = (raw - land) / (1 - land);
-      const pop = 1 + 0.4 * Math.max(0, 1 - v / 0.12);
-      d.push("chImprint", 0, Math.round(lx), Math.round(ly), { sx: pop * 0.9, sy: pop * 0.5, alpha: (calm ? 0.8 : 1 - v) * 0.9, layer: floor, depth: floorDepth + 0.001 });
-      if (!calm && v < 0.18) d.push("chStar", 2, Math.round(lx), Math.round(ly - 3), { alpha: 1 - v / 0.18, layer: "light", depth: 0 });
-    }
+  const breathe = calm ? 0.85 : 0.8 + 0.2 * Math.sin(t / 650);
+  // 쿵 시각 (사람마다 어긋나게)
+  const off = (Math.round(bx) % 97) * 13;
+  const su = calm ? 1 : ((t + off) % SLAM_MS) / SLAM_MS;
+  const round = Math.floor((t + off) / SLAM_MS);
+  const sideX = round % 2 ? 1 : -1;
+  const hv = su >= SLAM_HIT ? (su - SLAM_HIT) / (1 - SLAM_HIT) : -1;
+  const flash = !calm && hv >= 0 && hv < 0.1 ? 1 - hv / 0.1 : 0;
+
+  // ① 몸 뒤 빛 · 햇살 · 빛기둥 (쿵 하면 확 밝아진다)
+  const gs = Math.max(0.9, (f.artTop + 8) / 34);
+  d.push("chDuoGlow", 0, bx, midY + 2, { sx: W * (1 + 0.15 * flash), sy: gs * (1 + 0.1 * flash), alpha: Math.min(1, 0.85 * k * breathe + 0.4 * flash), layer: "body", add: true, depth: back });
+  const rs = Math.max(0.9, (f.artTop + 14) / 46) * (1 + 0.18 * flash);
+  const rf = calm ? 0 : Math.floor(t / 220) % 4;
+  d.push("chDuoRays", rf, bx, midY - 2, { sx: rs * W, sy: rs, alpha: Math.min(1, (0.5 + 0.3 * breathe) * k + 0.4 * flash), layer: "body", add: true, depth: back - 0.03 });
+  if (d.night) d.push("chDuoRaysRim", rf, bx, midY - 2, { sx: rs * W, sy: rs, alpha: Math.min(1, 0.45 + 0.2 * breathe + 0.35 * flash), layer: "light", depth: 0 });
+  const pillar = calm ? 1 : 0.85 + 0.15 * Math.sin(t / 480);
+  d.push("chDuoPillar", 0, bx, fy + 1, { oy: 1, sx: W, sy: (pillar * (f.artTop + 34)) / 64, alpha: Math.min(1, (d.night ? 0.85 : 0.6) + 0.3 * flash), layer: "body", add: true, depth: back - 0.04 });
+  // 밤: 이름표 위부터 하늘로 빛기둥 (빛 층 — 몸·이름표와 겹치지 않게 그 위에서 시작)
+  if (d.night) d.push("chDuoPillar", 0, bx, Math.round(f.headY - f.artTop - 15), { oy: 1, sx: W * 0.85, sy: pillar * 0.9, alpha: Math.min(1, 0.55 + 0.3 * flash), layer: "light", depth: 0 });
+
+  // ② 발밑 빛 + 결재 인장 (뒤쪽 반은 몸 뒤, 앞쪽 반은 발 앞 빛 층)
+  // 낮: 밝은 바닥에 더해 그리면 분홍빛으로 바래서 인장은 제 색(금·진홍)으로 칠한다. 밤: 더해 그려 어둠 속에 빛난다
+  d.push("chDuoGround", 0, bx, fy, { sx: W, sy: WY, alpha: Math.min(1, (d.night ? 0.7 + 0.3 * breathe : 0.45 + 0.15 * breathe) + 0.3 * flash), layer: floor, add: true, depth: floorDepth });
+  const sp = calm ? 0 : Math.floor(t / 90) % 8;
+  const ss = (calm ? 1 : 1 + 0.025 * Math.sin(t / 320)) * (1 + 0.06 * flash);
+  const sealO = { sx: ss * W, sy: ss * WY };
+  d.push("chDuoSealBack", sp, bx, fy, { ...sealO, oy: 1, alpha: d.night ? 0.95 : 0.9, layer: "body", add: d.night || undefined, depth: back + 0.01 });
+  d.push("chDuoSealFront", sp, bx, fy, d.night ? { ...sealO, oy: 0, alpha: 0.95, layer: "light", depth: 0 } : { ...sealO, oy: 0, alpha: 0.9, layer: floor, depth: floorDepth + 0.001 });
+
+  // ③ 금빛 빗줄기 (몸 뒤)
+  const rr = Math.max(0.9, (f.artTop + 18) / 50);
+  d.push("chDuoRain", calm ? 3 : Math.floor(t / 65) % 8, bx, fy + 2, { oy: 1, sx: rr * W, sy: rr, alpha: 0.9 * k, layer: "body", add: true, depth: back - 0.02 });
+
+  // ④ 금·진홍 불씨: 몸 둘레 나선으로 솟는다 (짝수 = 금빛이 식으며 금으로, 홀수 = 불씨가 주황 → 진홍)
+  const nSpark = calm ? 4 : DUO_SPARKS;
+  for (let i = 0; i < nSpark; i++) {
+    const u = calm ? (i + 0.5) / nSpark : (t / 2300 + i / nSpark + h01(i, 101) * 0.06) % 1;
+    const a = i * 2.1 + u * 5.6 + (calm ? 0 : t / 1400);
+    const z = Math.sin(a);
+    const x = bx + Math.cos(a) * (14 - 5 * u) * W + (calm ? 0 : Math.sin(t / 170 + i * 2) * 0.7);
+    const y = fy - 2 - u * (f.artTop + 20) + z * 2;
+    const fr = (i % 2 ? 3 : 0) + Math.min(2, Math.floor(u * 3));
+    d.push("chDuoSpark", fr, Math.round(x), Math.round(y), d.around(z, { sx: 1.2, sy: 1.2, alpha: Math.min(1, Math.sin(Math.PI * u) * 1.5) }, true));
   }
-  // ④ 큰 금 도장: 4.2초마다 옆(번갈아 왼쪽·오른쪽)에 쿵 내려앉아 금빛 자국과 물결이 퍼진다
-  const bu = calm ? 0.5 : ((t + (Math.round(bx) % 97) * 13) % BIG_STAMP_MS) / BIG_STAMP_MS;
-  const sideX = calm ? 1 : Math.floor((t + (Math.round(bx) % 97) * 13) / BIG_STAMP_MS) % 2 ? 1 : -1;
-  const sx0 = Math.round(bx + sideX * 16 * W);
-  const hitAt = 0.18;
-  if (bu < 0.5) {
-    if (bu < hitAt + 0.12) {
-      // 내려온다 (점점 빨리) → 닿으면 납작하게 눌렸다가 → 들어 올리며 사라진다
-      const down = Math.min(1, bu / hitAt);
-      const lift = Math.max(0, (bu - hitAt) / 0.12);
-      const y = fy + 1 - (1 - down * down) * (sky * 0.7) - lift * 8;
-      const squash = bu >= hitAt && lift < 0.35 ? 0.82 : 1;
-      d.push("chStampBig", 0, sx0, Math.round(y), { oy: 1, sx: (2 - squash) * 0.95, sy: squash * 0.95, alpha: Math.min(1, down * 3) * (1 - lift), layer: "body", depth: d.depth + 0.1 });
-      if (d.night) d.push("chStampBig", 0, sx0, Math.round(y), { oy: 1, sx: (2 - squash) * 0.95, sy: squash * 0.95, alpha: 0.3 * (1 - lift), layer: "light", depth: 0 });
+
+  // ⑤ 결재 서류 셋: 허리춤을 천천히 돌며 팔랑인다 (몸 앞 가운데를 지날 땐 비켜 사라진다)
+  for (let i = 0; i < 3; i++) {
+    const a = (calm ? 0.5 : t / 2100) + (i * Math.PI * 2) / 3;
+    const c = Math.cos(a);
+    const z = Math.sin(a);
+    const vis = z < 0 ? 1 : Math.min(1, Math.max(0, (Math.abs(c) - 0.62) / 0.2));
+    if (vis < 0.05) continue;
+    const x = bx + c * 15 * W;
+    const y = midY + 2 + z * 3 + (calm ? 0 : Math.sin(t / 380 + i * 2) * 1.5);
+    const fr = calm ? 0 : Math.floor(t / 150 + i * 3) % 4;
+    d.push("chDuoDoc", fr, Math.round(x), Math.round(y), { ...d.around(z, { alpha: vis }), rot: calm ? 0 : Math.sin(t / 300 + i) * 0.25 });
+  }
+
+  // ⑥ 큰 결재 도장 쿵 (번갈아 왼쪽·오른쪽 — 인장 위에 찍힌다)
+  const sx0 = Math.round(bx + sideX * 19 * W);
+  if (calm) {
+    // 멈춘 그림(미리보기·움직임 줄이기): 찍힌 금빛 결재 자국 + 몸 뒤 은은한 섬광 (가장 화려한 한 장면)
+    d.push("chDuoImprint", 1, sx0, fy + 1, { sx: 1.1, sy: 0.6, alpha: 0.85, layer: floor, depth: floorDepth + 0.002 });
+    d.push("chDuoFlash", 0, bx, midY, { sx: 1.3 * W, sy: 1.3, alpha: 0.5, layer: "body", add: true, depth: back - 0.05 });
+    return;
+  }
+  if (su < SLAM_HIT + 0.08) {
+    // 내려온다 (점점 빨리) → 닿으면 납작하게 눌렸다가 → 들어 올리며 사라진다
+    const down = Math.min(1, su / SLAM_HIT);
+    const lift = Math.max(0, (su - SLAM_HIT) / 0.08);
+    const y = fy + 1 - (1 - down * down) * (f.artTop + 16) - lift * 6;
+    const squash = su >= SLAM_HIT && lift < 0.4 ? 0.8 : 1;
+    const al = Math.min(1, down * 3) * (1 - lift);
+    const o = { oy: 1, sx: 2 - squash, sy: squash };
+    d.push("chDuoStamp", 0, sx0, Math.round(y), { ...o, alpha: al, layer: "body", depth: d.depth + 0.1 });
+    if (d.night) d.push("chDuoStamp", 0, sx0, Math.round(y), { ...o, alpha: 0.35 * al, layer: "light", depth: 0 });
+  }
+  if (hv >= 0) {
+    // 금빛 결재 자국 (처음엔 크게 찍히고 서서히 사라진다)
+    const pop = 1 + 0.3 * Math.max(0, 1 - hv / 0.08);
+    d.push("chDuoImprint", 1, sx0, fy + 1, { sx: 1.1 * pop, sy: 0.6 * pop, alpha: (1 - hv) * 0.95, layer: floor, depth: floorDepth + 0.002 });
+    if (hv < 0.5) {
+      const v = hv / 0.5;
+      // 충격파: 결재 인장이 크게 퍼진다 · 찍힌 자리 물결
+      const gr = 1 + v * 0.8;
+      d.push("chDuoSealBack", sp, bx, fy, { oy: 1, sx: gr * W, sy: gr * WY, alpha: (1 - v) * 0.8, layer: "body", add: true, depth: back - 0.005 });
+      d.push("chDuoSealFront", sp, bx, fy, { oy: 0, sx: gr * W, sy: gr * WY, alpha: (1 - v) * 0.8, layer: "light", depth: 0 });
+      d.push("chDuoRipple", 0, sx0, fy + 1, { sx: 0.5 + v * 1.1, sy: 0.5 + v * 1.1, alpha: (1 - v) * 0.9, layer: floor, add: true, depth: floorDepth + 0.003 });
     }
-    if (bu >= hitAt) {
-      const v = (bu - hitAt) / (0.5 - hitAt);
-      d.push("chImprint", 1, sx0, fy + 1, { sx: 1.5, sy: 0.8, alpha: (calm ? 0.9 : 1 - v) * 0.95, layer: floor, depth: floorDepth + 0.002 });
-      if (!calm) {
-        d.push("chRipple", 0, sx0, fy + 1, { sx: 0.5 + v * 1.1, sy: 0.5 + v * 1.1, alpha: (1 - v) * 0.9, layer: floor, add: true, depth: floorDepth + 0.003 });
-        if (v < 0.35) d.push("chBurst", 0, sx0, fy - 2, { sx: 0.6 + v, sy: 0.4 + v * 0.6, alpha: (1 - v / 0.35) * 0.85, layer: "light", depth: 0 });
+    // 섬광: 몸 뒤 빛살이 터지고 찍힌 자리가 번쩍
+    if (hv < 0.14) {
+      const v = hv / 0.14;
+      d.push("chDuoFlash", 0, bx, midY, { sx: (1 + v * 1.2) * W, sy: 1 + v * 1.2, rot: v * 0.4, alpha: (1 - v) * 0.95, layer: "body", add: true, depth: back - 0.05 });
+      d.push("chBurst", 0, sx0, fy - 3, { sx: 0.8 + v, sy: 0.6 + v * 0.8, alpha: 1 - v, layer: "light", depth: 0 });
+    }
+    // 금·진홍 불꽃 넷이 바깥 위로 튄다 (몸 쪽으로는 튀지 않는다)
+    if (hv < 0.32) {
+      const v = hv / 0.32;
+      for (let i = 0; i < 4; i++) {
+        const a = Math.PI * (0.1 + 0.42 * (i / 3)) + (h01(round, 110 + i) - 0.5) * 0.25;
+        const x = sx0 + sideX * Math.cos(a) * (3 + v * 15);
+        const y = fy - 2 - Math.sin(a) * v * 18 + v * v * 8;
+        d.push("chDuoSpark", (i % 2 ? 3 : 0) + Math.min(2, Math.floor(v * 3)), Math.round(x), Math.round(y), { sx: 1.4, sy: 1.4, alpha: 1 - v * 0.7, layer: "light", depth: 0 });
       }
     }
-  }
-  // ⑤ 반짝 별 셋: 빗줄기 사이에서 켜졌다 꺼진다
-  if (!calm)
-    for (let i = 0; i < 3; i++) {
-      const per = 1100 + i * 230;
-      const n = Math.floor(t / per + i * 0.41);
-      const u = (t / per + i * 0.41) % 1;
-      const tw = Math.sin(Math.PI * u);
-      const x = bx + (h01(n, 80 + i) - 0.5) * 30 * W;
-      const y = fy - 4 - h01(n, 90 + i) * (f.artTop + 8);
-      d.push("chStar", tw > 0.75 ? 1 : tw > 0.4 ? 2 : 0, Math.round(x), Math.round(y), { alpha: tw * 0.9, layer: "light", depth: 0 });
+    // 「결재」 금빛 글자: 찍힌 자리 위로 톡 튀어 올라 사라진다
+    if (hv < 0.55) {
+      const v = hv / 0.55;
+      const pop2 = 1 + 0.35 * Math.max(0, 1 - v / 0.12);
+      const al = v > 0.65 ? (1 - v) / 0.35 : 1;
+      const ty = Math.round(fy - f.artTop * 0.6 - 4 - v * 8);
+      d.push("chDuoText", 0, sx0, ty, { sx: pop2, sy: pop2, alpha: al, layer: "body", depth: d.depth + 0.5 });
+      if (d.night) d.push("chDuoText", 0, sx0, ty, { sx: pop2, sy: pop2, alpha: al * 0.3, layer: "light", depth: 0 });
     }
+  } else {
+    // 도장이 내려오는 동안: 반짝 별 하나가 빗줄기 사이에서 켜졌다 꺼진다
+    const u = su / SLAM_HIT;
+    const tw = Math.sin(Math.PI * u);
+    d.push("chStar", tw > 0.75 ? 1 : 2, Math.round(bx - sideX * 12 * W), Math.round(midY - f.artTop * 0.3), { alpha: tw * 0.9, layer: "light", depth: 0 });
+  }
 }
 
-/** 회장실 금장 명패 왕관: 2.4초마다 명패 위를 훑는 빛 + 꼭대기 다이아 · 양 끝 에메랄드 번갈아 반짝 + 밤 금빛 번짐 */
+/** 회장실 금장 명패 왕관: 양 끝 금 잔 불꽃 일렁임 + 2.4초마다 명패 위를 훑는 빛 + 꼭대기 다이아 반짝 + 도는 별 둘 + 밤 금빛 번짐 */
 function duoCrownShine(f: FxInput, t: number, d: ChairDraw): void {
   if (f.hidden) return;
   const calm = f.reduced || !!f.still;
@@ -929,7 +1196,14 @@ function duoCrownShine(f: FxInput, t: number, d: ChairDraw): void {
   const tipY = Math.round(rowY(0));
   const plateY = Math.round(rowY(n - 1 - duoPlateUp(n)));
   const half = (narrow ? 5 : 6) * k;
-  if (d.night) d.push("chCrownGlow", 0, f.x, Math.round(rowY(n / 2)), { sx: (narrow ? 0.85 : 1) * k, sy: (n / 9) * k, alpha: 0.75, layer: "light", depth: 0 });
+  if (d.night) d.push("chDuoCrownGlow", 0, f.x, Math.round(rowY(n / 2)), { sx: (narrow ? 0.85 : 1) * k, sy: (n / 9) * k, alpha: 0.8, layer: "light", depth: 0 });
+  // 양 끝 금 잔의 불꽃 (밑 두 줄이 그림의 불꽃에 겹친다 — 밤엔 빛 층에서 환하게)
+  const cupY = Math.round(top + 2 * k);
+  for (let i = 0; i < 2; i++) {
+    const fr = calm ? i * 2 : Math.floor(t / 95 + i * 2 + (Math.round(f.x) % 5)) % 4;
+    const o = { oy: 1, sx: k, sy: k * (calm ? 1 : 1 + 0.12 * Math.sin(t / 140 + i * 2)), flip: i === 1 };
+    d.push("chDuoTipFlame", fr, f.x + (i ? 1 : -1) * DUO_CUP_DX * k, cupY, d.night ? { ...o, alpha: 0.85, layer: "light", depth: 0 } : { ...o, layer: "body", depth: d.depth + 0.25 });
+  }
   if (calm) {
     if (!back) d.push("chStar", 0, f.x, tipY, { sx: k, sy: k, alpha: 0.9, layer: "light", depth: 0 });
     return;
@@ -941,18 +1215,22 @@ function duoCrownShine(f: FxInput, t: number, d: ChairDraw): void {
     const x = f.x + (-half + v * half * 2) * mir;
     d.push("chPlateGlint", 0, Math.round(x), plateY, { sx: k, sy: k, alpha: Math.sin(Math.PI * v), layer: "light", depth: 0 });
   }
-  // 꼭대기 다이아 (훑고 나서 크게) · 양 끝 에메랄드 (번갈아)
+  // 꼭대기 다이아 (훑고 나서 크게)
   if (!back) {
     if (u > 0.52 && u < 0.7) {
       const v = (u - 0.52) / 0.18;
-      d.push("chStar", v < 0.3 || v > 0.75 ? 2 : 1, f.x, tipY, { sx: k * 1.1, sy: k * 1.1, alpha: 1, layer: "light", depth: 0 });
-    } else d.push("chStar", 0, f.x, tipY, { sx: k, sy: k, alpha: 0.35 + 0.25 * Math.sin(t / 260), layer: "light", depth: 0 });
+      d.push("chStar", v < 0.3 || v > 0.75 ? 2 : 1, f.x, tipY, { sx: k * 1.2, sy: k * 1.2, alpha: 1, layer: "light", depth: 0 });
+    } else d.push("chStar", 0, f.x, tipY, { sx: k, sy: k, alpha: 0.4 + 0.25 * Math.sin(t / 260), layer: "light", depth: 0 });
   }
-  const span = (narrow ? 2.5 : 3.5) * k;
+  // 왕관을 도는 별 둘 (뒤로 돌면 왕관 뒤에 숨고, 앞 가운데에서는 사라진다)
   for (let i = 0; i < 2; i++) {
-    const tw = Math.sin(t / 420 + i * Math.PI);
-    if (tw < 0.35) continue;
-    d.push("chEmerald", 0, Math.round(f.x + (i ? span : -span - k)), Math.round(rowY(0) + k * 0.5), { sx: k, sy: k, alpha: (tw - 0.35) / 0.65, layer: "light", depth: 0 });
+    const a = t / 1000 + i * Math.PI;
+    const z = Math.sin(a);
+    const tw = (0.55 + 0.45 * Math.sin(t / 170 + i * 2.1)) * (z < 0 ? 1 : Math.min(1, Math.abs(Math.cos(a)) * 2.2));
+    if (tw < 0.05) continue;
+    const x = Math.round(f.x + Math.cos(a) * (half + 4 * k));
+    const y = Math.round(rowY(n - 3) + z * 2 * k);
+    d.push("chStar", tw > 0.85 ? 2 : 0, x, y, z < 0 ? { sx: k, sy: k, alpha: tw * 0.7, layer: "body", add: true, depth: d.depth - 0.05 } : { sx: k, sy: k, alpha: tw, layer: "light", depth: d.depth + 0.25 });
   }
 }
 
@@ -1049,21 +1327,25 @@ function emberIcon(): Grid {
   return g;
 }
 
-/** 금빛·보랏빛 위에 내려오는 금 도장 + 붉은 결재 자국 + 금빛 빗줄기 */
+/** 금빛 → 진홍 둥근 빛 위에 금·진홍 결재 인장(뒤 테두리에 불 혀) + 그 위로 쿵 찍히는 금 도장 + 반짝·불씨 (2관왕 — 가방에서도 가장 튀게) */
 function stampIcon(): Grid {
   const a = new Grid(16, 16);
-  // 붉은 결재 자국 (왼쪽 아래)
-  rows(a, ["..ooo..", ".o...o.", "o.i.i.o", "o..i..o", "o.i.i.o", ".o...o.", "..ooo.."], { o: INK_R, i: INK_D }, 1, 8);
-  // 금 도장 (오른쪽 위, 살짝 내려오는 중)
-  rows(a, ["..hgl..", ".hgggl.", "..hgl..", "..hgl..", ".hgggl.", "hgggggl", "hgggggl", "mgggggl", "rRRRRRr"], { h: GOLD_HI, g: GOLD, m: GOLD_MID, l: GOLD_LO, r: INK_D, R: INK_R }, 8, 1);
-  const g = iconOn(0x8a5ad0, 0xffe8a0, a, 0x3a2008);
-  // 금빛 빗줄기 · 반짝 (외곽선 없이)
-  for (const [x, y] of [[3, 1], [5, 4], [14, 11], [12, 13], [6, 0]] as const) {
-    g.set(x, y, 0xfffbe0);
-    g.set(x, y - 1, GOLD, 160);
-  }
-  g.set(1, 5, 0xffffff);
-  g.set(15, 1, 0xffffff);
+  // 결재 인장 (발밑 타원: 금 테 눈금 · 진홍 띠 · 흰 금 가운데)
+  for (let y = 8; y < 16; y++)
+    for (let x = 0; x < 16; x++) {
+      const d = Math.hypot((x + 0.5 - 8) / 7.6, (y + 0.5 - 12.5) / 3.1);
+      if (d > 1.04) continue;
+      if (d > 0.74) a.set(x, y, x % 3 === 0 ? GOLD_HI : d > 0.9 ? GOLD : GOLD_MID);
+      else if (d > 0.46) a.set(x, y, x % 4 === 1 ? GOLD_HI : CRIM_D);
+      else a.set(x, y, 0xfff0b0);
+    }
+  // 인장 뒤 테두리 불 혀
+  for (const [x, y, c] of [[2, 8, FIRE_Y], [2, 9, FIRE_O], [1, 9, FIRE_R], [3, 8, FIRE_O], [3, 7, FIRE_R], [13, 8, FIRE_Y], [13, 9, FIRE_O], [14, 9, FIRE_R], [12, 8, FIRE_O], [12, 7, FIRE_R]] as const) a.set(x, y, c);
+  // 큰 금 도장 (루비 꼭지 · 진홍 띠 · 붉은 인주 면) — 인장 가운데로 쿵
+  rows(a, ["..hg..", ".hRRg.", "..hg..", "..hg..", ".hggl.", "hggggl", "crRRrc", "hggggl", "mggggl", "dIIIId"], { h: GOLD_HI, g: GOLD, m: GOLD_MID, l: GOLD_LO, R: 0xf0384e, r: CRIM_D, c: 0x8a1020, I: INK_R, d: INK_D }, 5, 2);
+  const g = iconOn(CRIM_D, 0xfff0b0, a, 0x3a1008);
+  // 불씨 · 반짝 (외곽선 없이 밝게)
+  for (const [x, y, c] of [[2, 9, FIRE_Y], [13, 9, FIRE_Y], [8, 0, 0xffffff], [2, 2, 0xffffff], [13, 1, GOLD_HI], [1, 5, FIRE_O], [14, 4, FIRE_Y], [12, 3, 0xffffff]] as const) g.set(x, y, c);
   return g;
 }
 

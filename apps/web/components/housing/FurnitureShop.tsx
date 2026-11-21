@@ -10,6 +10,7 @@ import { housingApi } from "@/lib/housing/client";
 import { rotateMode } from "@/lib/housing/layout";
 import type { MyHouseResponse } from "@/lib/housing/types";
 import { furnitureDiscount } from "@/lib/champPerks";
+import { chairShopDiscount } from "@/lib/chairPerks";
 import { discountedPrice, equippedPerk } from "@/lib/titles";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -78,7 +79,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
   // 11/16 집 갈래 칭호의 가구 할인 (서버가 같은 규칙으로 깎는다 — lib/titles discountedPrice).
   // 11/17 포인트왕(지난주 1위) 20%와 겹치면 큰 것 하나만 (lib/champPerks)
   const { me } = useMe();
-  const houseDiscount = furnitureDiscount(equippedPerk(me?.equipped).houseDiscount, me?.champ);
+  const houseDiscount = furnitureDiscount(equippedPerk(me?.equipped).houseDiscount, me?.champ, chairShopDiscount(me?.chair, "furniture"));
   const cost = (f: FurnitureDef) => discountedPrice(f.price, houseDiscount);
 
   const items = FURNITURE.filter((f) => f.category === cat && !f.ghost && !f.petShop && !f.boriOnly && !f.officeShop); // 11/17 유령선 한정은 가구점에 없어요 · 11/19 멍냥 분양소 품종 펫 가구도 · 11/20 분양사 보리만 파는 강아지·고양이 가구도 · 총무팀 문대리 사무실 가구도

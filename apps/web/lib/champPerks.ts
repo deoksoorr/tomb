@@ -65,8 +65,11 @@ export function pickDiscount(...rates: readonly (number | null | undefined)[]): 
   return Math.min(0.9, best);
 }
 
-/** 화면의 가구 상점 할인 (집 갈래 칭호 할인과 포인트왕 중 큰 것 — 서버 app/api/housing/me/buy와 같은 계산). bits = 내 정보의 champ 값 */
-export const furnitureDiscount = (titleHouse: number, bits: number | undefined) => pickDiscount(titleHouse, champShopDiscount(champBoards(bits), "furniture"));
+/**
+ * 화면의 가구 상점 할인 (집 갈래 칭호 할인과 포인트왕 중 큰 것 — 서버 app/api/housing/me/buy와 같은 계산). bits = 내 정보의 champ 값.
+ * chairOff = 11/24 회장님 독대 노멀 1위·2관왕 가구 할인 (lib/chairPerks chairShopDiscount(me.chair, "furniture")) — 셋 중 큰 것 하나
+ */
+export const furnitureDiscount = (titleHouse: number, bits: number | undefined, chairOff = 0) => pickDiscount(titleHouse, champShopDiscount(champBoards(bits), "furniture"), chairOff);
 
 /** 다관왕(2개 이상)이면 마을 이동 속도 + (비트 묶음으로 — 착용 증서·내 정보의 champ 값) */
 export function champSpeedAdd(bits: number | undefined): number {

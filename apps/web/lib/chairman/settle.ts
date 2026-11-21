@@ -8,7 +8,8 @@ import { kstDay } from "../store/accounts";
 import { champUntil } from "../store/champ";
 import type { WalletRent } from "../store/types";
 import { pushVillageNotice } from "../weeklyChamp";
-import { CHAIR_DUO, CHAIR_ITEM_IDS, CHAIR_RANK_POINTS, chairPayouts, chairSets, type ChairRewardIds } from "./rewards";
+import type { ChairPerk } from "../chairPerks";
+import { CHAIR_DUO, CHAIR_ITEM_IDS, CHAIR_RANK_POINTS, CHAIR_REWARD, chairPayouts, chairSets, type ChairRewardIds } from "./rewards";
 import { CHAIR_FIRST_WEEK, CHAIR_MODE_LABEL, CHAIR_MODES, chairWeek, type ChairMode } from "./rules";
 import { getChairStore, type ChairSettle, type ChairStore, type ChairWinner } from "./store";
 
@@ -224,3 +225,17 @@ export async function chairHolders(now = Date.now()): Promise<Map<string, string
   if (c.rec) for (const set of chairSets(c.rec.ranks)) out.set(set.ids.title, set.accountId);
   return out;
 }
+
+/**
+ * 11/24 지금 그 계정의 회장님 독대 1위 혜택 갈래 (lib/chairPerks — 아니면 null). 자격 = 지난주 정리 기록의 1위 (칭호 주인 chairHolders와 같은 기록·같은 캐시):
+ * 노멀 1위 → normal, 헬 1위 → hell, 2관왕 → duo. 다음 정리(월요일 새벽 5시 뒤 첫 정리)에 저절로 다음 1위로 넘어간다 (레이스 champBoardsFor와 같은 짜임)
+ */
+export async function chairPerkFor(accountId: string, now = Date.now()): Promise<ChairPerk | null> {
+  const holders = await chairHolders(now);
+  if (holders.get(CHAIR_DUO.title) === accountId) return "duo";
+  for (const mode of CHAIR_MODES) if (holders.get(CHAIR_REWARD[mode].title) === accountId) return mode;
+  return null;
+}
+
+/** 혜택 자격 읽기: 저장소를 못 읽으면 혜택 없이 (구매·적립이 1위 기록 때문에 실패하지 않게 — champBoardsSafe와 같다) */
+export const chairPerkSafe = (accountId: string, now = Date.now()): Promise<ChairPerk | null> => chairPerkFor(accountId, now).catch(() => null);

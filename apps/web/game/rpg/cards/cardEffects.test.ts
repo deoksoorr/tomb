@@ -133,6 +133,8 @@ afterEach(() => vi.restoreAllMocks());
  */
 type Row = {
   text?: string[];
+  /** 11/21 팀장 승진을 받지 않는 카드 (넋 전용) */
+  noPromote?: boolean;
   per?: [(s: CardStats) => number, number][];
   flag?: (s: CardStats, n: number) => boolean;
   stacks?: boolean;
@@ -263,11 +265,11 @@ const TABLE: Record<CardId, Row> = {
     stacks: true,
   },
   refund: { text: ["30%"], per: [[pct("refund"), 0.3]], stacks: false },
-  soulQuick: { text: ["15%"], per: [[(s) => 1 - s.soulEvery, 0.15]], stacks: true },
-  soulDrain: { text: ["2%", "1%"], per: [[pct("soulSteal"), 0.02]], stacks: true },
-  soulChain: { text: ["25%", "5%p"], per: [[pct("soulRange", 1), 0.25]], stacks: false },
+  soulQuick: { text: ["13%"], per: [[(s) => 1 - s.soulEvery, 0.13]], stacks: true, noPromote: true },
+  soulDrain: { text: ["2%", "1%"], per: [[pct("soulSteal"), 0.02]], stacks: true, noPromote: true },
+  soulChain: { text: ["25%", "5%p"], per: [[pct("soulRange", 1), 0.25]], stacks: false, noPromote: true },
   soulLamp: { flag: (s, n) => (s.soulBurst > 0) === n > 0 },
-  soulParade: { text: ["8초", "50%", "30%"], flag: (s, n) => s.soulParade === n > 0 },
+  soulParade: { text: ["8초", "25%", "30%"], flag: (s, n) => s.soulParade === n > 0 },
 };
 TABLE.bonus.per = [[pct("bossDmg"), 0.3]];
 
@@ -290,12 +292,12 @@ describe("11/17 카드 전수: 적힌 숫자 = 붙는 숫자 (1장·최대 겹�
           9,
         );
       if (row.flag) expect(row.flag(s, n), `${def.name} ${n}장`).toBe(true);
-      // 팀장 승진: 숫자 효과는 모두 ×1.5 (승진 자신 빼고)
+      // 팀장 승진: 숫자 효과는 모두 ×1.5 (승진 자신 빼고, 11/21 넋 전용 카드는 그대로)
       if (id !== "promote") {
         const sp = cardStats({ [id]: n, promote: 1 });
         for (const [get, per] of row.per ?? [])
           expect(get(sp), `${def.name} ${n}장 + 팀장 승진`).toBeCloseTo(
-            per * (row.stacks ? n : 1) * PROMOTE_MUL,
+            per * (row.stacks ? n : 1) * (row.noPromote ? 1 : PROMOTE_MUL),
             9,
           );
       }
@@ -579,6 +581,11 @@ describe("11/17 팀장 승진 (다른 카드 수치 ×1.5)", () => {
     // 적힌 숫자가 있는 카드는 모두 승진 줄이 있다 (설명에 % 숫자가 있으면)
     for (const id of CARD_IDS) {
       if (id === "promote" || id === "cc" || id === "corpcard") continue;
+      // 11/21 넋 전용 카드는 팀장 승진을 받지 않아 승진 줄이 없다
+      if (TABLE[id].noPromote || id === "soulLamp" || id === "soulParade") {
+        expect(cardPromoLine(id, 1, { promote: 1 }), id).toBeNull();
+        continue;
+      }
       if (/\d+%|\d+씩/.test(cardText(id, "melee")))
         expect(cardPromoLine(id, 1, { promote: 1 }), id).not.toBeNull();
       expect(cardPromoLine(id, 1, { promote: 1 }) ?? "").not.toMatch(/[:：]/);

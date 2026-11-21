@@ -356,6 +356,8 @@ const R: Record<SkillId, Recipes> = {
   },
   wk_grip: { hit: () => ({ ls: [nz(0, 0.04, 0.12, "highpass", 3000)], hit: 0, base: 200 }) },
   wk_back: { hit: () => ({ ls: [...thump(0, 80, 0.08, 0.18)], hit: 0, base: 80 }) },
+  // 11/21 등짐 단련 (패시브): 짐 고쳐 메는 툭
+  wk_pack: { hit: () => ({ ls: [...thump(0, 90, 0.08, 0.15), nz(0, 0.05, 0.1, "lowpass", 1100)], hit: 0, base: 90 }) },
   // 봉분 뛰어넘기: 도움닫기 휘익 (올라감) → 착지 쾅 + 흙 비
   wk_leap: {
     cast: (_p, o) => {

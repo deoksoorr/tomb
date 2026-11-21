@@ -8,6 +8,7 @@ node_modules
 *.tsbuildinfo
 coverage
 .local-uploads
+.local-dev
 .next
 out
 next-env.d.ts

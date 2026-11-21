@@ -10,6 +10,7 @@ import { housingApi } from "@/lib/housing/client";
 import { designScore, exteriorScore } from "@/lib/housing/layout";
 import type { HouseExterior, MyHouseResponse } from "@/lib/housing/types";
 import { furnitureDiscount } from "@/lib/champPerks";
+import { chairShopDiscount } from "@/lib/chairPerks";
 import { discountedPrice, equippedPerk } from "@/lib/titles";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -54,7 +55,7 @@ export default function ExteriorDialog({
   // 11/16 집 갈래 칭호의 가구 할인 (서버가 하나씩 같은 규칙으로 깎는다)
   const { me } = useMe();
   // 11/17 포인트왕 할인과 겹치면 큰 것 하나 (lib/champPerks)
-  const houseDiscount = furnitureDiscount(equippedPerk(me?.equipped).houseDiscount, me?.champ);
+  const houseDiscount = furnitureDiscount(equippedPerk(me?.equipped).houseDiscount, me?.champ, chairShopDiscount(me?.chair, "furniture"));
   const priceOf = (price: number) => discountedPrice(price, houseDiscount);
   const cost = toBuy.reduce((sum, id) => sum + priceOf(furnitureById(id)?.price ?? 0), 0);
   const short = cost > my.points;

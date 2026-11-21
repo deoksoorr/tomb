@@ -12,7 +12,9 @@ import type { Me } from "../types";
 import { buildBoard, colorAt, DYE_CENTER, DYE_GRACE_MS, DYE_TIME_MS, dyeReach } from "./palette";
 import { BASE_RESHAPE_PRICE, catalogDye, directDyeMode, DYE_DECIDE_MS, DYE_RESET_PRICE, dyeTicketCounts, fixedAllows, randomTier, specialDyeColor } from "./rules";
 import type { DyeSessionView, DyeStateResponse, DyeTimeoutResponse, StyleChangeResponse } from "./types";
-import { champShopDiscount, pickDiscount } from "../champPerks";
+import { pickDiscount } from "../champPerks";
+import { perkShopDiscount } from "../chairPerks";
+import { chairPerkSafe } from "../chairman/settle";
 import { champBoardsSafe } from "../store/champ";
 import { discountedPrice } from "../titles";
 import { titleDiscount } from "../titlesServer";
@@ -228,8 +230,8 @@ export async function buyPermanent(accountId: string, itemId: string, now = Date
   if (!item || item.kind !== "cosmetic" || !item.slot || price === null) throw new HttpError(400, "INVALID_INPUT", "영구로 살 수 없는 꾸미기예요.");
   if (item.staff && !(await isStaff(accountId))) throw new HttpError(403, "FORBIDDEN", "운영자만 받을 수 있는 꾸미기예요.");
   // 단 칭호의 상점 할인 (lib/titles — 원가 × (1 − 할인율), 1P 단위 내림). 11/17 꾸미기 상점의 영구 꾸미기라 포인트왕 할인도 — 겹치면 큰 것 하나 (lib/champPerks)
-  const [title, champ] = await Promise.all([titleDiscount(accountId, now), champBoardsSafe(accountId, now)]);
-  const paid = discountedPrice(price, pickDiscount(title, champShopDiscount(champ, "shop", item.kind)));
+  const [title, champ, chair] = await Promise.all([titleDiscount(accountId, now), champBoardsSafe(accountId, now), chairPerkSafe(accountId, now)]);
+  const paid = discountedPrice(price, pickDiscount(title, perkShopDiscount(champ, chair, "shop", item.kind)));
   const r = await style().buyPermanent(accountId, itemId, item.slot as CosmeticSlot, paid, PERMANENT_UNTIL, `shop:영구 ${itemId}`, now);
   if (r === "owned") throw new HttpError(409, "ALREADY_OWNED", "이미 영구로 가지고 있어요.");
   if (r === "ticket") throw new HttpError(409, "HAS_TICKET", "가방에 같은 꾸미기 이용권이 있어요. 먼저 입은 뒤에 영구로 바꿀 수 있어요.");

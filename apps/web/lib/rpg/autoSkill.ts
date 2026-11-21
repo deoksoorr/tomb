@@ -139,9 +139,9 @@ export function wantsCast(id: SkillId, lv: number, c: AutoCtx): boolean {
 /** 궁극기 SP 남겨 두기: 자동 시전 뒤에도 reserve만큼은 남아야 한다 */
 export const autoSpOk = (sp: number, cost: number, reserve: number, keepUlt: boolean): boolean => sp - cost >= (keepUlt ? reserve : 0) && sp >= cost;
 
-/** 궁극기 칸 스킬의 SP 비용 (없으면 0) */
-export function ultReserve(ultId: SkillId | null | undefined, skills: Partial<Record<SkillId, number>>): number {
+/** 궁극기 칸 스킬의 SP 비용 (없으면 0). 11/21 costOf: 실제 비용 (일꾼 스킬은 등짐 단련만큼 덜) */
+export function ultReserve(ultId: SkillId | null | undefined, skills: Partial<Record<SkillId, number>>, costOf?: (id: SkillId, lv: number) => number): number {
   const d = ultId ? skillById(ultId) : undefined;
   const lv = ultId ? (skills[ultId] ?? 0) : 0;
-  return d && lv > 0 ? d.sp(lv) : 0;
+  return d && ultId && lv > 0 ? (costOf ? costOf(ultId, lv) : d.sp(lv)) : 0;
 }

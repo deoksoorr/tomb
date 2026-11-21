@@ -15,7 +15,8 @@ import { staffAccountId } from "../staff";
 import { getAccounts, NO_NAME } from "../store";
 import type { ChampAvatar } from "../types";
 import { CHAMP_LEAD_COOLDOWN_MS, champLookOf, pushVillageNotice } from "../weeklyChamp";
-import { ensureChairSettled } from "./settle";
+import { chairRunsPerDay, type ChairPerk } from "../chairPerks";
+import { chairPerkSafe, ensureChairSettled } from "./settle";
 import {
   CHAIR_CURVE,
   CHAIR_FINISH_SLACK_MS,
@@ -58,6 +59,10 @@ export type ChairStatusResponse = {
   sealEveryMs: number;
   /** 11/22 오늘 시작 전 나가기로 판을 돌려받을 수 있다 (하루 한 번, 두 모드 합쳐) */
   refundLeft: 0 | 1;
+  /** 11/24 하루 유료 판 수 (모드마다 — 2관왕 혜택이면 3, 아니면 2) */
+  perDay: number;
+  /** 11/24 지난주 1위 혜택 갈래 (lib/chairPerks — 아니면 없음) */
+  perk?: ChairPerk;
 };
 /** leaders = 모드마다 이번 주 1위 (레이스 창 모드 카드에 보인다) */
 export type ChairRankResponse = { mode: ChairMode; week: string; rows: ChairTopRow[]; mine: ChairMyWeek | null; staff: boolean; leaders: Record<ChairMode, { name: string; damage: number } | null> };
@@ -128,10 +133,16 @@ async function verifyChair(token: string): Promise<ChairTicket | null> {
 
 // ── 공용 ──
 
-const remainingOf = (used: ChairCounts): ChairCounts => ({
-  normal: Math.max(0, CHAIR_RUNS_PER_DAY - used.normal),
-  hell: Math.max(0, CHAIR_RUNS_PER_DAY - used.hell),
+/** 오늘 남은 판 (max = 하루 판 수 — 11/24 2관왕은 모드마다 3, lib/chairPerks chairRunsPerDay) */
+const remainingOf = (used: ChairCounts, max: number = CHAIR_RUNS_PER_DAY): ChairCounts => ({
+  normal: Math.max(0, max - used.normal),
+  hell: Math.max(0, max - used.hell),
 });
+/** 11/24 그 계정 하루 판 수 (2관왕 혜택이면 +1 — 자격은 지난주 정리 기록, 못 읽으면 기본) */
+const runsFor = async (acct: string, now: number): Promise<{ perk: ChairPerk | null; max: number }> => {
+  const perk = await chairPerkSafe(acct, now);
+  return { perk, max: chairRunsPerDay(perk) };
+};
 
 function newSeed(): number {
   const a = new Uint32Array(1);
@@ -169,7 +180,9 @@ export async function startChair(acct: string, mode: ChairMode, practice: boolea
   if (!info.eligible) throw new HttpError(403, "NOT_ELIGIBLE", chairFloorText(info.floor));
   const seed = newSeed();
   const nonce = nanoid(16);
-  const r = await getChairStore().start({ acct, nonce, mode, practice, day: gameDay(now), ttlMs: CHAIR_TICKET_MS, max: CHAIR_RUNS_PER_DAY });
+  // 11/24 2관왕은 모드마다 하루 3판 (판 수 검사는 시작 Lua가 이 max로 — 돌려받기 규칙은 그대로)
+  const { max } = await runsFor(acct, now);
+  const r = await getChairStore().start({ acct, nonce, mode, practice, day: gameDay(now), ttlMs: CHAIR_TICKET_MS, max });
   if (!r.ok) throw new HttpError(409, "NO_RUNS", `오늘 ${CHAIR_MODE_LABEL[mode]} 독대를 다 했어요. 연습 판은 할 수 있어요.`);
   const ticket = await signChair({ n: nonce, a: acct, m: mode, p: practice ? 1 : 0, t: now, s: seed, dm: info.dm, ef: info.ef });
   return {
@@ -179,7 +192,7 @@ export async function startChair(acct: string, mode: ChairMode, practice: boolea
     practice,
     startedAt: now,
     ...(mode === "hell" ? { sealPool: chairSealOrder(seed, info.pool, info.rank) } : {}),
-    remaining: remainingOf(r.used),
+    remaining: remainingOf(r.used, max),
     curve: CHAIR_CURVE[mode],
     refundLeft: r.refunded ? 0 : 1,
   };
@@ -197,7 +210,7 @@ export async function abortChair(acct: string, ticket: string, durationMs: numbe
   const refund = t.p !== 1 && durationMs === 0 && age >= -CHAIR_FINISH_SLACK_MS && age <= CHAIR_REFUND_MS && gameDay(t.t) === day;
   const r = await getChairStore().abort({ acct, nonce: t.n, mode: t.m, day, refund });
   if (!r.ok) throw new HttpError(410, "RUN_GONE", "이미 끝났거나 시간이 지난 판이에요.");
-  return { ok: true, refunded: r.refunded, remaining: remainingOf(r.used), refundLeft: r.refundUsed ? 0 : 1 };
+  return { ok: true, refunded: r.refunded, remaining: remainingOf(r.used, (await runsFor(acct, now)).max), refundLeft: r.refundUsed ? 0 : 1 };
 }
 
 /** o.god: 11/21 무적(시험)을 켠 판 — 개발 서버에서만 연습 판으로 친다 (운영에서는 무시: 무적 단추가 아예 없다) */
@@ -229,7 +242,7 @@ export async function finishChair(acct: string, ticket: string, damage: number, 
     newBest: !practice && dmg > r.prevBest,
     best: r.best,
     weekRank: r.weekRank,
-    remaining: remainingOf(r.used),
+    remaining: remainingOf(r.used, (await runsFor(acct, now)).max),
   };
 }
 
@@ -313,7 +326,7 @@ export async function chairRank(mode: ChairMode, me: string | null, now = Date.n
 export async function chairStatus(acct: string, now = Date.now()): Promise<ChairStatusResponse> {
   await ensureChairSettled(now);
   const week = chairWeek(now);
-  const [info, mine, bn, bh] = await Promise.all([charInfo(acct), getChairStore().mine(acct, gameDay(now), week), board("normal", week, now), board("hell", week, now)]);
+  const [info, mine, bn, bh, runs] = await Promise.all([charInfo(acct), getChairStore().mine(acct, gameDay(now), week), board("normal", week, now), board("hell", week, now), runsFor(acct, now)]);
   const boards: Record<ChairMode, Board> = { normal: bn, hell: bh };
   const wk = {} as ChairStatusResponse["week"];
   const top = {} as ChairStatusResponse["top"];
@@ -321,5 +334,5 @@ export async function chairStatus(acct: string, now = Date.now()): Promise<Chair
     wk[m] = myRow(boards[m], acct, mine.week[m]);
     top[m] = strip(boards[m].rows.slice(0, 3), acct);
   }
-  return { eligible: info.eligible, floor: info.floor, remaining: remainingOf(mine.used), best: mine.best, bestMs: { normal: mine.bestMs.normal || null, hell: mine.bestMs.hell || null }, week: wk, top, sealEveryMs: CHAIR_SEAL_EVERY_MS, refundLeft: mine.refunded ? 0 : 1 };
+  return { eligible: info.eligible, floor: info.floor, remaining: remainingOf(mine.used, runs.max), perDay: runs.max, ...(runs.perk ? { perk: runs.perk } : {}), best: mine.best, bestMs: { normal: mine.bestMs.normal || null, hell: mine.bestMs.hell || null }, week: wk, top, sealEveryMs: CHAIR_SEAL_EVERY_MS, refundLeft: mine.refunded ? 0 : 1 };
 }

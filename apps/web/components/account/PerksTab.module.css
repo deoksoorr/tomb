@@ -193,3 +193,8 @@
   margin: 0;
   color: var(--bone);
 }
+
+/* 11/24 회장님 독대 1위 혜택 (금빛 — 회장실 사원증 왕관) */
+.card[data-kind="chair"] {
+  --accent: #e9c46a;
+}

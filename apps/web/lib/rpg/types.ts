@@ -9,6 +9,7 @@ import type { StatusId } from "./status";
 import type { HotAuto } from "./hotbar";
 import type { TNodeId } from "./transcendTree";
 import type { MeteorState } from "./meteorDrop";
+import type { ChairPerk } from "../chairPerks";
 
 // 사냥터(RPG) 데이터 형태: 저장 원본, API 응답, 게임 ↔ UI 브리지 페이로드.
 
@@ -34,6 +35,11 @@ export type CharacterState = {
   respecs: number;
   /** 능력치 초기화한 횟수 (스킬과 따로 센다, 비용에는 영향 없음). 옛 저장값에 없으면 0 */
   statResets: number;
+  /** 11/21 무료 초기화 남은 횟수 (스킬·능력치 따로). 밸런스 패치 때 FREE_RESET_GRANT를 올리면 모두에게 한 번씩 더 준다 (character.normalize) */
+  freeRespec?: number;
+  freeStatReset?: number;
+  /** 무료 초기화를 몇 번째 나눔까지 받았나 (FREE_RESET_GRANT와 같으면 이미 받음). 옛 저장값에는 없다 = 0 */
+  freeGrant?: number;
   /** 스킬 트리가 바뀌어 포인트를 돌려줬다는 안내를 아직 안 봤다 (한 번 보면 지운다) */
   treeNotice?: boolean;
   /** 가진 장비 (장착 중인 것 포함) itemId → 개수 */
@@ -135,6 +141,8 @@ export type RpgView = {
   superHunter?: boolean;
   /** 11/15 끝판 (레벨 50일 때만) */
   endgame?: EndgameView;
+  /** 11/24 회장님 독대 지난주 1위 혜택 갈래 (lib/chairPerks — 강화 포인트 할인·상자 세트 장비 확률을 화면이 같은 값으로). 아니면 없음 */
+  chair?: ChairPerk;
 };
 
 // ── 판 결과 (클라이언트가 보낸다, 서버가 계획·시간으로 검증한다) ──
@@ -217,6 +225,8 @@ export type RunReward = {
   titleExp?: number;
   /** 11/17 사냥왕(지난주 1위) 혜택으로 더 받은 몫 — 초월 판·야근 빌딩이면 초월 EXP 몫 (없으면 빠진다, lib/champPerks) */
   champExp?: number;
+  /** 11/24 champExp를 준 1위 이름 (사냥왕 · 맨주먹 협상가 · 차기 회장 — 사냥왕과 회장님 독대 헬 1위가 겹치면 큰 쪽 하나) */
+  champBy?: string;
   /** 계산된 포인트 (한도 전) */
   pointsRaw: number;
   /** 실제로 들어온 포인트 */
@@ -319,6 +329,8 @@ export type RpgPlay = {
     boost?: boolean;
     /** 11/16 야근 빌딩 갈래 칭호: 층마다 더하는 제한 시간 (초, lib/titles towerSec). 층 제한 시간은 화면만 재고 서버는 최소 시간만 본다 */
     bonusSec?: number;
+    /** 11/24 상자 세트 장비 확률 (회장님 독대 헬 1위·2관왕 20% — 판 시작 응답 view.chair로 lib/chairPerks chairChestChance. 없으면 보통 15%). 보상은 서버가 같은 값으로 정한다 */
+    sgChance?: number;
   };
   /** 11/15 연습 판 (초월 구간을 다 써서 드롭이 없다) — 바닥 드롭 연출을 하지 않는다 */
   noDrops?: boolean;
@@ -393,6 +405,8 @@ export type RpgHud = {
   message?: string;
   /** 11/15 칸별 SP 비용 (모자람 표시) · 자동 스킬 상태 (칸에 있는 스킬 중 자동으로 정한 것, 전체 스위치) */
   skillSp?: number[];
+  /** 11/21 도는 중인 스킬(삽날 회오리) 칸: 남은 시간 비율 0~1 (0이면 안 도는 중) */
+  active?: number[];
   auto?: { slots: boolean[]; on: boolean; keepUlt: boolean };
   /** 11/15 야근 빌딩 능력 카드: 판 레벨·이번 레벨 경험치, 가진 카드(겹친 수), 남은 다시 뽑기, 멈추면 집중 중, 내 무기 갈래 */
   run?: { lv: number; xp: number; need: number; cards: { id: CardId; n: number }[]; rerolls: number; focus: boolean; kind: CardKindStyle };

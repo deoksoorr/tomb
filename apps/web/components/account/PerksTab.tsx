@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CHAMP_BOARDS, CHAMP_TITLE, champBadgeText, champBoards, isChampBits, titleOfLook } from "@tomb/protocol";
 import { api } from "@/lib/api";
 import { CHAMP_BADGE_ONLY, champBoardPerkLines, champNamesText, champPerkLines, champUntilText } from "@/lib/champPerks";
+import { CHAIR_PERK_OVERLAP, chairPerkLines, chairPerkName, chairUntilLine } from "@/lib/chairPerks";
 import { earnRule } from "@/lib/economy";
 import { nextWeekStartMs } from "@/lib/gameDay";
 import { allSources, pointEventEndText, pointEventOn, pointEventWhat } from "@/lib/pointEvent";
@@ -50,14 +51,18 @@ export default function PerksTab({ me }: { me: Me }) {
   const t = Math.max(now, snap?.at ?? 0);
   const eventOn = !!ev && pointEventOn(ev, t);
 
-  if (!boards.length && !title && !eventOn)
+  // 11/24 회장님 독대 지난주 1위 혜택 (lib/chairPerks — 판단은 서버, 끝나는 때 = 이번 독대 주 정산)
+  const chair = me.chair ?? null;
+  const chairLines = chairPerkLines(chair);
+
+  if (!boards.length && !chairLines.length && !title && !eventOn)
     return (
       <div className={styles.empty}>
         <span className={styles.emptyIcon} aria-hidden="true">
           ✦
         </span>
         <p className={styles.emptyHead}>지금 붙어 있는 혜택이 없어요</p>
-        <p className={styles.meta}>레이스 1위를 하거나 칭호를 달면 여기에 모여요</p>
+        <p className={styles.meta}>레이스나 회장님 독대 1위를 하거나 칭호를 달면 여기에 모여요</p>
       </div>
     );
 
@@ -95,6 +100,26 @@ export default function PerksTab({ me }: { me: Me }) {
                 {line}
               </p>
             ))}
+        </section>
+      )}
+
+      {chairLines.length > 0 && (
+        <section className={styles.card} data-kind="chair" aria-label="회장님 독대 1위 혜택" data-testid="perks-chair">
+          <div className={styles.head}>
+            <span className={styles.icon} aria-hidden="true">
+              ♛
+            </span>
+            <h3 className={styles.heading}>회장님 독대 1위 혜택</h3>
+            <span className={styles.chip}>{chair === "duo" ? "지난주 2관왕" : chair === "hell" ? "지난주 헬 1위" : "지난주 노멀 1위"}</span>
+          </div>
+          <p className={styles.who}>지난주 1위 칭호 「{chairPerkName(chair)}」 혜택이에요.</p>
+          <p className={styles.until}>{chairUntilLine(now)}</p>
+          <ul className={styles.lines}>
+            {chairLines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+          <p className={styles.meta}>{CHAIR_PERK_OVERLAP}</p>
         </section>
       )}
 

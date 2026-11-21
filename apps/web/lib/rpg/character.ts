@@ -15,7 +15,7 @@ import {
 import { applyExp, baseStats, MAX_LEVEL, START_SKILL_POINTS, START_STAT_POINTS, STAT_MAX, statPointsAt } from "./formulas";
 import { applyTranscend, TBANK_MAX, TRANSCEND_MAX, transcendStatPoints } from "./endgame";
 import { TOWER_FLOORS_PER_RUN } from "./tower";
-import { checkAllocation, checkLearn, cleanAlloc, SKILL_TREE_VERSION, skillPointsEarned, spentPoints, type Alloc } from "./skillRules";
+import { checkAllocation, checkLearn, cleanAlloc, FREE_RESET_GRANT, SKILL_TREE_VERSION, skillPointsEarned, spentPoints, type Alloc } from "./skillRules";
 import { arrangeHotbar, cleanAuto, emptySlotFor, type HotAuto } from "./hotbar";
 import { checkTAllocation, checkTLearn, cleanTAlloc, type TAlloc, type TNodeId } from "./transcendTree";
 import type { CharacterState } from "./types";
@@ -58,6 +58,10 @@ export function newCharacter(): CharacterState {
     treeVer: SKILL_TREE_VERSION,
     respecs: 0,
     statResets: 0,
+    // 11/21 무료 초기화: 패치 뒤에 만든 캐릭터는 받지 않는다 (이미 받은 것으로 시작)
+    freeRespec: 0,
+    freeStatReset: 0,
+    freeGrant: FREE_RESET_GRANT,
     tLevel: 0,
     tExp: 0,
     tRuns: 0,
@@ -127,6 +131,8 @@ export function normalize(raw: unknown): CharacterState {
     respecs: Number.isInteger(r.respecs) && r.respecs! > 0 ? r.respecs! : 0,
     // 능력치 초기화 횟수: 옛 저장값에는 없다 → 0
     statResets: Number.isInteger(r.statResets) && r.statResets! > 0 ? r.statResets! : 0,
+    // 11/21 무료 초기화: 아직 받지 않은 나눔 차례만큼 스킬·능력치 한 번씩 더한다 (저장될 때 freeGrant가 같이 적혀 두 번 받지 않는다)
+    ...freeResets(r),
     ...(notice ? { treeNotice: true } : {}),
     bought: { ...r.bought },
     potions: { ...(r.potions ?? base.potions) },
@@ -299,6 +305,14 @@ export function learnTranscend(s: CharacterState, id: TNodeId, budget?: number):
   const next = clone(s);
   next.tSkills = { ...cur, [id]: (cur[id] ?? 0) + 1 };
   return next;
+}
+
+/** 무료 초기화 남은 횟수와 받은 나눔 차례 (normalize) */
+function freeResets(r: Partial<CharacterState>): Pick<CharacterState, "freeRespec" | "freeStatReset" | "freeGrant"> {
+  const got = Number.isInteger(r.freeGrant) && r.freeGrant! > 0 ? Math.min(r.freeGrant!, FREE_RESET_GRANT) : 0;
+  const add = FREE_RESET_GRANT - got;
+  const n = (v: unknown) => (Number.isInteger(v) && (v as number) > 0 ? (v as number) : 0);
+  return { freeRespec: n(r.freeRespec) + add, freeStatReset: n(r.freeStatReset) + add, freeGrant: FREE_RESET_GRANT };
 }
 
 /** 11/19 초월 수련 되돌리기 (무료 — 초월 포인트는 레벨로만 받는다) */

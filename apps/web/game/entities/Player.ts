@@ -1,6 +1,7 @@
 import * as Phaser from "phaser";
 import { DIR, isAvatarBody, JUMP_MS, STATE, titleOfLook, type DirId, type Seat, type StateName } from "@tomb/protocol";
 import { champSpeedAdd } from "@/lib/champPerks";
+import { chairSpeedAdd } from "@/lib/chairPerks";
 import { titlePerk } from "@/lib/titles";
 import { canJump, jumpHeight, shadowScale } from "../logic/jump";
 import { emptyMove, faceToward, resolveMove, type MoveInput } from "../logic/movement";
@@ -38,7 +39,8 @@ export const WET_HOLD_MS = 160;
 export const DIVE_SPEED = 0.45;
 /**
  * 땅 위 걸음 배율 상한 (타는 펫 × 칭호(+ 11/17 다관왕 0.01) × 캠핑장 먹거리). 실시간 서버는 달리기 × 1.5를 넘는 이동을 버린다 → 그 안쪽.
- * 먹거리 없이 가장 빠른 조합 = (1.08 + 0.01) × 1.35 = 1.4715 < 1.48 (lib/champPerks CHAMP_MULTI_SPEED)
+ * 먹거리 없이 가장 빠른 조합 = (1.08 + 0.01) × 1.35 = 1.4715 < 1.48 (lib/champPerks CHAMP_MULTI_SPEED).
+ * 11/24 회장님 독대 2관왕 +0.02가 더해지면 (1.08 + 0.01 + 0.02) × 1.35 = 1.4985 → 여기서 1.48로 자른다 (서버 1.5 안 — lib/chairPerks CHAIR_DUO_SPEED)
  */
 export const MAX_GROUND_MUL = 1.48;
 
@@ -318,7 +320,9 @@ export class Player {
       this.titleMul = titlePerk(titleOfLook(this.titleLook)).speed;
     }
     // 땅 위 배율: 타는 펫 × 칭호 × 11/15 캠핑장 먹거리 — 실시간 서버 속도 검증(달리기 × 1.5) 안에서 (MAX_GROUND_MUL)
-    const mul = wet ? (this.diving ? DIVE_SPEED : SWIM_SPEED) : Math.min(MAX_GROUND_MUL, this.rideMul * (this.titleSpeed ? this.titleMul + champSpeedAdd(this.view.champBits) : 1) * this.boost);
+    // 11/24 회장님 독대 2관왕 +2%도 같은 자리 (레이스 다관왕 +1%와 더한다 — 가장 빠른 칭호·펫과 겹치면 MAX_GROUND_MUL이 자른다, lib/chairPerks)
+    const perkAdd = this.titleSpeed ? champSpeedAdd(this.view.champBits) + chairSpeedAdd(bridge.last("me:chair")?.perk) : 0;
+    const mul = wet ? (this.diving ? DIVE_SPEED : SWIM_SPEED) : Math.min(MAX_GROUND_MUL, this.rideMul * (this.titleSpeed ? this.titleMul + perkAdd : 1) * this.boost);
     // 강물에 떠내려가는 만큼 (가만히 있어도 흘러간다)
     const cur = wet && this.current ? this.current(this.x, this.y) : null;
     const cvx = cur ? cur.vx : 0;

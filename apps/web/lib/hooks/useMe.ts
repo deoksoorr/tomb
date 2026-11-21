@@ -30,12 +30,15 @@ class MeStore {
     this.update({ me, error: null });
     // 31번 운영자 표시를 게임에도 알린다 (바뀔 때만)
     if (bridge.last("me:staff")?.on !== !!me.staff) bridge.emit("me:staff", { on: !!me.staff });
+    // 11/24 회장님 독대 1위 혜택 갈래도 (2관왕 걷기 +2% — game/entities/Player)
+    if ((bridge.last("me:chair")?.perk ?? null) !== (me.chair ?? null)) bridge.emit("me:chair", { perk: me.chair ?? null });
   }
 
   /** 새로 시작·로그아웃: 이전 계정 정보를 버린다 */
   reset(): void {
     this.update(INITIAL);
     if (bridge.last("me:staff")?.on) bridge.emit("me:staff", { on: false });
+    if (bridge.last("me:chair")?.perk) bridge.emit("me:chair", { perk: null });
   }
 
   async refresh(): Promise<Me | null> {
