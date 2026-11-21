@@ -38,9 +38,9 @@ describe("사냥 중 세트 장비 입기", () => {
     expect([...a.px].some((v, i) => v !== b.px[i])).toBe(true);
   });
 
-  it("상점·주운 장비도 입는다 (갑옷 10 · 머리 8 · 장신구 11 — 무기는 손에), +5 이상은 표시가 붙는다", () => {
+  it("상점·주운 장비도 입는다 (갑옷 12 · 머리 8 · 장신구 14 — 무기는 손에), +5 이상은 표시가 붙는다", () => {
     const worn = GEAR.filter((g) => g.kind !== "weapon");
-    expect(worn).toHaveLength(29);
+    expect(worn).toHaveLength(34);
     for (const g of worn) {
       const slot = g.kind === "acc" ? "acc1" : g.kind;
       const look = huntLook(["hat_cat", "neck_scarf"], { [slot]: g.id });

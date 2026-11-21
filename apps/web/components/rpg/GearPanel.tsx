@@ -564,7 +564,15 @@ function EnhStats({ id }: { id: string }) {
       {statParts(id).map((p, i) => (
         <span key={p.k}>
           {i > 0 && " · "}
-          {p.label} {p.base}
+          {p.neg ? (
+            <span className={g.down}>
+              {p.label} {p.base}
+            </span>
+          ) : (
+            <>
+              {p.label} {p.base}
+            </>
+          )}
           {p.plus && <span className={g.enhPart}> (+{p.plus})</span>}
         </span>
       ))}

@@ -97,7 +97,10 @@ const fixed = (...xs: number[]) => {
 describe("세트 장비 기본 능력치·코드", () => {
   it("기본 = 지금 상점 최고 장비 × 직급 배율 (11/19 사원 1.0 · 대리 1.5 · 과장 2.0 · 임원 2.5, 임원급 무기 공격력 295)", () => {
     const top = (k: GearKind) => GEAR.filter((g) => g.kind === k).sort((a, b) => b.reqLevel - a.reqLevel)[0];
-    expect(top("weapon").bonus.atk).toBe(118);
+    // 무기는 공격력이 가장 높은 것 (11/21 마공 책 「연간 사업계획서」 Lv.47은 레벨이 더 높아도 공격력 100 — 세트 기준은 결재 도장 118)
+    const topWeapon = GEAR.filter((g) => g.kind === "weapon").sort((a, b) => (b.bonus.atk ?? 0) - (a.bonus.atk ?? 0))[0];
+    expect(topWeapon.id).toBe("w_stamp");
+    expect(topWeapon.bonus.atk).toBe(118);
     expect(SG_BASE.armor).toEqual(top("armor").bonus);
     expect(SG_BASE.head).toEqual(top("head").bonus);
     expect(SG_BASE.acc).toEqual(top("acc").bonus);

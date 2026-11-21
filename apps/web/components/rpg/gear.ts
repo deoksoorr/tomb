@@ -198,6 +198,10 @@ export function statLine(id: string): string {
 }
 
 /** 능력치 한 줄을 조각으로 (화면이 강화 몫만 다른 색으로 그린다): 이름·강화 전 값·강화 몫(없으면 "") */
-export function statParts(id: string): { k: string; label: string; base: string; plus: string }[] {
-  return enhSplit(id, gearById).map(([k, base, plus]) => ({ k, label: STAT_KO[k] ?? k, base: n2(base), plus: plus ? n2(plus) : "" }));
+export function statParts(id: string): { k: string; label: string; base: string; plus: string; neg: boolean }[] {
+  // 깎는 값 (11/21 사직서 봉투 최대 체력 −120 등): 「최대 체력 −120」, 화면은 빨갛게
+  return enhSplit(id, gearById).map(([k, base, plus]) => {
+    const neg = base < 0;
+    return { k, label: neg && k === "hp" ? "최대 체력" : (STAT_KO[k] ?? k), base: neg ? `−${n2(-base)}` : n2(base), plus: plus ? n2(plus) : "", neg };
+  });
 }

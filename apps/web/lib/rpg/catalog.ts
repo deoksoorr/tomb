@@ -115,6 +115,10 @@ const GEAR_RAW: GearDef[] = [
   gear("w_selfie", "weapon", "워크숍 셀카봉", "단체 사진을 찍던 그 셀카봉. 끝까지 늘리면 무척 길다.", 36, 1300, { atk: 88, hit: 14, agi: 2 }, { shape: "spear", main: 0xffb0c8, accent: 0x2a2e36 }, { range: 48, arcDeg: 20 }, "thrust"),
   gear("w_tumbler", "weapon", "텀블러 캐논", "샷 추가. 멀리서 뜨겁게 맞힌다.", 42, 1800, { atk: 105, hit: 12, crit: 5 }, { shape: "tumbler", main: 0x40a050, accent: 0xf2f2f2 }, undefined, "shot"),
   gear("w_stamp", "weapon", "최종 결재 도장", "대표님 책상 위의 그 도장. 한 번 찍히면 되돌릴 수 없다.", 45, 2000, { atk: 118, str: 4, crit: 4, aspd: -0.08 }, { shape: "stamp", main: 0xa83c3c, accent: 0xe8b830 }, { range: 30, arcDeg: 170 }, "smash"),
+  // 11/21 상점 장비 8종: 마공 무기 2 (보고서·사업계획서), 맞교환 무기 1 (사직서 — 최대 체력을 깎는다)
+  gear("w_qreport", "weapon", "분기 보고서 마법서", "석 달 치 숫자를 한 권에 묶었다. 펼치면 그래프가 터져 나온다.", 38, 1450, { atk: 80, int: 44, sp: 75 }, { shape: "book", main: 0x2a6a9a, accent: 0xe8d9b0 }, undefined, "magic"),
+  gear("w_resign", "weapon", "사직서 봉투", "가슴에만 품고 다니던 봉투. 던지면 모두 다치고, 나도 조금 다친다.", 40, 1650, { atk: 115, crit: 10, hp: -120 }, { shape: "envelope", main: 0xf8f8f4, accent: 0x2a2e36 }, undefined, "card"),
+  gear("w_bizplan", "weapon", "연간 사업계획서", "한 해 목표를 빼곡히 적은 두꺼운 책. 낭독이 끝나면 아무도 서 있지 않다.", 47, 1900, { atk: 100, int: 40, sp: 90 }, { shape: "book", main: 0x2a5a3a, accent: 0xe8b830 }, undefined, "magic"),
   // ── 갑옷 ──
   gear("a_hoodie", "armor", "후드티", "회색. 모든 재택근무자의 기본 방어구.", 1, 30, { def: 3, hp: 20 }, { shape: "hoodie", main: 0x6e7076, accent: 0x4a4c52 }),
   gear("a_flannel", "armor", "체크 셔츠", "사흘째 야근 중인 사람의 갑옷.", 6, 120, { def: 7, hp: 45 }, { shape: "shirt", main: 0xa83c3c, accent: 0x3a2020 }),
@@ -126,6 +130,8 @@ const GEAR_RAW: GearDef[] = [
   gear("a_padding", "armor", "무릎까지 롱패딩", "출근길 영하 10도도 버틴다. 걸음은 조금 느려진다.", 16, 450, { def: 17, hp: 110, move: -4 }, { shape: "padding", main: 0x2a2e36, accent: 0x6a6e78 }),
   gear("a_suit", "armor", "면접 정장", "단추 하나까지 긴장한 옷. 입으면 운이 따른다는 소문.", 26, 850, { def: 26, hp: 180, luk: 3 }, { shape: "suit", main: 0x2a3a5a, accent: 0xf2f2f2 }),
   gear("a_hazmat", "armor", "마감 주간 방호복", "마감 주간에만 꺼내 입는다. 어떤 요청도 스며들지 않는다.", 42, 1700, { def: 40, hp: 320, vit: 3 }, { shape: "plate", main: 0xf0c83c, accent: 0x3a3f4a }),
+  gear("a_knit", "armor", "재택 니트 카디건", "화상 회의 화면 밖은 잠옷이다. 따뜻해서 머리가 잘 돈다.", 30, 1050, { def: 22, hp: 150, int: 5, sp: 40 }, { shape: "hoodie", main: 0xc89a4a, accent: 0x6a4a2a }),
+  gear("a_courier", "armor", "택배 상하차 조끼", "주말 부업의 흔적. 어떤 상자가 날아와도 받아 낸다.", 36, 1350, { def: 28, hp: 200, str: 4 }, { shape: "vest", main: 0xf07a2a, accent: 0xe8e8a0 }),
   // ── 머리 ──
   gear("h_cap", "head", "야구모자", "머리 안 감은 날의 친구.", 1, 20, { def: 1, flee: 3 }, { shape: "cap", main: 0x3c5a8a, accent: 0xe8d9b0 }),
   gear("h_headset", "head", "노이즈캔슬링 헤드셋", "부장님 호출이 들리지 않는다.", 8, 150, { def: 3, sp: 20, int: 2 }, { shape: "headset", main: 0x2a2a30, accent: 0xc8a050 }),
@@ -147,6 +153,9 @@ const GEAR_RAW: GearDef[] = [
   gear("c_pedometer", "acc", "만보기", "점심 산책 만 보. 다리가 가벼워진다.", 17, 380, { agi: 3, move: 6 }, { shape: "watch", main: 0xf0d050, accent: 0x2a2e36 }),
   gear("c_gold_card", "acc", "골드 카드 지갑", "포인트 적립은 생명이다.", 34, 1150, { crit: 6, luk: 4, str: 2 }, { shape: "badge", main: 0xe8b830, accent: 0x5a3e22 }),
   gear("c_bonus", "acc", "성과급 봉투", "1년을 버틴 보상. 생각보다 얇지만 든든하다.", 44, 1700, { str: 4, dex: 4, crit: 4 }, { shape: "envelope", main: 0xf2ead3, accent: 0xc83c5a }),
+  gear("c_wrist", "acc", "손목 보호대", "마우스 십 년의 훈장. 손끝이 정확해진다.", 30, 1000, { dex: 5, hit: 10 }, { shape: "watch", main: 0x2a3a6a, accent: 0xc8ccd2 }),
+  gear("c_coupon", "acc", "사내 카페 쿠폰북", "열 잔 마시면 한 잔 공짜. 도장이 찰수록 머리가 맑아진다.", 35, 1200, { int: 5, sp: 50 }, { shape: "envelope", main: 0xc8a070, accent: 0x6a4a30 }),
+  gear("c_lotto", "acc", "로또 한 장", "월요일 아침까지만 부자다. 그래도 혹시 모른다.", 38, 1400, { luk: 7, crit: 5 }, { shape: "namecard", main: 0xf8d8e0, accent: 0xd03a3a }),
 ];
 
 const KIND_ORDER: Record<GearKind, number> = { weapon: 0, armor: 1, head: 2, acc: 3 };

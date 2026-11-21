@@ -33,7 +33,7 @@ import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { weaponStyleText } from "@/lib/rpg/weapons";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
-import { bonusText, pts } from "./format";
+import { bonusParts, pts } from "./format";
 import { deltaText, equipTarget, gearDiff, gearGrade } from "./gear";
 import { HUNT_KEYS, HUNT_TOUCH } from "./huntKeys";
 import HuntCapMeter from "./HuntCap";
@@ -507,7 +507,13 @@ export function ShopPanel({ view, busy, onBuy }: { view: RpgView; busy: boolean;
                           {g.name}
                         </p>
                         <p className={s.meta}>
-                          Lv.{g.reqLevel} · {bonusText(g.bonus)}
+                          Lv.{g.reqLevel} ·{" "}
+                          {bonusParts(g.bonus).map((p, i) => (
+                            <span key={p.k}>
+                              {i > 0 && " · "}
+                              <span className={p.neg ? s.statNeg : undefined}>{p.text}</span>
+                            </span>
+                          ))}
                         </p>
                         {style && <p className={s.meta}>{style.split(" — ")[0]}</p>}
                         <div className={s.cmpRow} aria-label="지금 장비와 비교">

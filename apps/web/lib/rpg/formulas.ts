@@ -96,7 +96,8 @@ export function derive(level: number, stats: Stats, equip: Partial<Record<GearSl
   const g = sgStatic(equip);
   return {
     stats: s,
-    maxHp: Math.round((90 + level * 14 + b.hp) * (1 + s.vit * 0.02) * (1 + g.hpPct)),
+    // 11/21 최대 체력을 깎는 장비(사직서 봉투 −120)가 있어도 1 아래로는 안 간다
+    maxHp: Math.max(1, Math.round((90 + level * 14 + b.hp) * (1 + s.vit * 0.02) * (1 + g.hpPct))),
     maxSp: Math.round((24 + level * 3 + b.sp) * (1 + s.int * 0.02) * (1 + g.spPct)),
     atk: Math.round((s.str * ATK_PER_STR + Math.floor(s.dex / 4) + Math.floor(s.luk / 5) + level + b.atk) * (1 + g.atkPct)),
     def: b.def + Math.floor(s.vit / 2),

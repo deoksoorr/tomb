@@ -20,9 +20,18 @@ const LABELS: [keyof Bonus, string, (v: number) => string][] = [
   ["move", "이속", (v) => String(v)],
 ];
 
+/** 능력치 조각: 깎는 값은 neg (화면이 빨갛게 그린다). 11/21 최대 체력을 깎는 장비(사직서 봉투)는 「최대 체력 −120」 */
+export function bonusParts(b: Bonus): { k: keyof Bonus; text: string; neg: boolean }[] {
+  return LABELS.filter(([k]) => b[k]).map(([k, name, f]) => {
+    const v = b[k]!;
+    const neg = v < 0;
+    return { k, text: neg ? `${k === "hp" ? "최대 체력" : name} −${f(-v)}` : `${name} +${f(v)}`, neg };
+  });
+}
+
 export function bonusText(b: Bonus): string {
-  return LABELS.filter(([k]) => b[k])
-    .map(([k, name, f]) => `${name} ${b[k]! > 0 ? "+" : ""}${f(b[k]!)}`)
+  return bonusParts(b)
+    .map((p) => p.text)
     .join(" · ");
 }
 
