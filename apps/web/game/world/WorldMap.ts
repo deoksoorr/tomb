@@ -116,6 +116,8 @@ export class WorldMap {
   private houseItems: Interactable[] = [];
   /** 다른 모듈이 덧붙이는 상호작용 (4·32번 낚시 자리·NPC·채집 지점 — game/world/forage) */
   private extraItems: Interactable[] = [];
+  /** 11/22 골목 붕어빵 수레 (열린 밤에만 — game/world/BungeoCartView) */
+  private cartItems: Interactable[] = [];
   readonly height = MAP_HEIGHT;
   /** 정적 빛 (석등·오두막 창·가로등) — Atmosphere가 그린다 */
   readonly staticLights: LightSpot[] = [];
@@ -487,7 +489,14 @@ export class WorldMap {
   /** 덧붙이는 상호작용 대상을 통째로 바꾼다 (낚시·채집: 피어 있는 지점이 바뀔 때마다) */
   setExtraItems(items: Interactable[]): void {
     this.extraItems = items;
-    this.items = [...this.fixedItems, ...this.houseItems, ...this.extraItems];
+    this.items = [...this.fixedItems, ...this.houseItems, ...this.extraItems, ...this.cartItems];
+  }
+
+  /** 11/22 붕어빵 수레 상호작용 (열린 동안만 하나, 닫히면 빈 목록) */
+  setCartItems(items: Interactable[]): void {
+    if (items.length === 0 && this.cartItems.length === 0) return;
+    this.cartItems = items;
+    this.items = [...this.fixedItems, ...this.houseItems, ...this.extraItems, ...this.cartItems];
   }
 
   private addFurniture(f: Furniture): void {
@@ -757,7 +766,7 @@ export class WorldMap {
       if (it) items.push(it);
     }
     this.houseItems = items;
-    this.items = [...this.fixedItems, ...this.houseItems, ...this.extraItems];
+    this.items = [...this.fixedItems, ...this.houseItems, ...this.extraItems, ...this.cartItems];
     this.houseLots = new Set(byLot.keys());
     this.decor.setLots(this.houseLots);
     this.scene.events.emit(LOTS_CHANGED); // 11/21 등대 빛줄기가 새 집을 바로 가림·빛 대상으로

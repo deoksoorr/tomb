@@ -4,9 +4,10 @@
 import { registerSeasonArt, sheetCosmeticIds } from "./avatarCore";
 import { COSMETIC_FX_IDS } from "./cosmeticFx";
 // 11/19 계절 한정 세트 (첫눈 출근길 · 산타 견습 요정)의 시트 그림
-import { drawSsBack, drawSsGlow, drawSsHand, drawSsHead, drawSsNeck, SEASON_SHEET_IDS, seasonGearOf, ssCovers, ssHeadWorn } from "./seasonSetGear";
+// 11/22 골목 붕어빵 수레 한정 꾸미기 · 외형 「붕어빵 장수 유령」 덧그림도 같이 (bungeoGear.ts — seasonSetGear가 합친다)
+import { drawSsBack, drawSsGlow, drawSsHand, drawSsHead, drawSsNeck, SEASON_SHEET_IDS, seasonGearOf, ssCovers, ssFrameCtx, ssHeadWorn } from "./seasonSetGear";
 
-registerSeasonArt({ SEASON_SHEET_IDS, seasonGearOf, ssCovers, ssHeadWorn, drawSsBack, drawSsNeck, drawSsHead, drawSsHand, drawSsGlow });
+registerSeasonArt({ SEASON_SHEET_IDS, seasonGearOf, ssCovers, ssHeadWorn, drawSsBack, drawSsNeck, drawSsHead, drawSsHand, drawSsGlow, ssFrameCtx });
 
 export * from "./avatarCore";
 

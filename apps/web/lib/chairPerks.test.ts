@@ -167,7 +167,7 @@ describe("계산 경로", () => {
 describe("화면 문구", () => {
   it("카드 꼬리표 · 기간 · 혜택 문장", () => {
     expect(chairPerkTags("normal")).toEqual(["꾸미기와 가구 30% 할인", "장비 강화 포인트 30% 할인"]);
-    expect(chairPerkTags("hell")).toEqual(["사냥 경험치 +20%", "초월 경험치 +15%", "상자 세트 장비 20%"]);
+    expect(chairPerkTags("hell")).toEqual(["사냥 경험치 +20%", "초월 경험치 +15%", "상자 세트 장비 확률 15% → 20%"]);
     expect(chairPerkTags("duo")).toEqual(["노멀과 헬 1위 혜택 모두", "마을 걷기 +2%", "독대 하루 3판씩"]);
     expect(CHAIR_PERK_TERM).toBe("다음 1위가 정해질 때까지 1주일");
     expect(chairPerkLines(null)).toEqual([]);

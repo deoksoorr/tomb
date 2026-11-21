@@ -45,9 +45,10 @@ export const BODY_BASE: Readonly<Record<AvatarBody, BaseBody>> = {
   king: "hood",
   reaper: "tall",
   collector: "hood",
+  vendor: "hood",
 };
 /** 염색하지 않은 몸 부위의 원래 색 (몸 부위 = 상자·머그잔·망토·도포. 없으면 고른 색) */
-const BODY_DEFAULT: Partial<Record<AvatarBody, Color>> = { suit: 0x3e465c, box: 0xc89a5e, umbrella: 0xe8b83a, cup: 0xf0ebe2, king: 0xb02a3a, reaper: 0x2c2a34, collector: 0xc4a66a };
+const BODY_DEFAULT: Partial<Record<AvatarBody, Color>> = { suit: 0x3e465c, box: 0xc89a5e, umbrella: 0xe8b83a, cup: 0xf0ebe2, king: 0xb02a3a, reaper: 0x2c2a34, collector: 0xc4a66a, vendor: 0x3e4c6a };
 
 export const AV_W = 20;
 export const AV_H = 28;
@@ -128,6 +129,7 @@ export const BODY_METRICS: Record<AvatarBody, { top: number; shoulder: number }>
   king: { top: 21, shoulder: 7 },
   reaper: { top: 24, shoulder: 12 },
   collector: { top: 21, shoulder: 7 },
+  vendor: { top: 21, shoulder: 7 },
 };
 
 export function bodyOf(body: string | null | undefined): AvatarBody {
@@ -188,9 +190,9 @@ type Pal = {
  * 입장 화면 캐릭터 미리보기(기본 몸·색만)는 이 파일(avatarCore)만 불러 첫 화면 묶음에 계절 그림이 안 들어간다.
  * 게임·상점·꾸미기 등 나머지는 모두 avatar.ts를 부르므로 등록이 먼저 끝난 뒤에 그린다.
  */
-type SeasonArt = Pick<typeof SeasonSetGear, "SEASON_SHEET_IDS" | "seasonGearOf" | "ssCovers" | "ssHeadWorn" | "drawSsBack" | "drawSsNeck" | "drawSsHead" | "drawSsHand" | "drawSsGlow">;
+type SeasonArt = Pick<typeof SeasonSetGear, "SEASON_SHEET_IDS" | "seasonGearOf" | "ssCovers" | "ssHeadWorn" | "drawSsBack" | "drawSsNeck" | "drawSsHead" | "drawSsHand" | "drawSsGlow" | "ssFrameCtx">;
 const noop = (): void => {};
-let ssArt: SeasonArt = { SEASON_SHEET_IDS: [], seasonGearOf: () => [], ssCovers: () => false, ssHeadWorn: () => false, drawSsBack: noop, drawSsNeck: noop, drawSsHead: noop, drawSsHand: noop, drawSsGlow: noop };
+let ssArt: SeasonArt = { SEASON_SHEET_IDS: [], seasonGearOf: () => [], ssCovers: () => false, ssHeadWorn: () => false, drawSsBack: noop, drawSsNeck: noop, drawSsHead: noop, drawSsHand: noop, drawSsGlow: noop, ssFrameCtx: noop };
 /** 시트에 그려지는 꾸미기 (같은 조합이면 텍스처를 같이 쓴다) */
 const BASE_SHEET_COSMETICS = ["hat_straw", "hat_cat", "hat_flower", "hat_halo", "hand_lantern", "neck_scarf", ...GEAR_SHEET_IDS] as const;
 let SHEET_COSMETICS: readonly string[] = BASE_SHEET_COSMETICS;
@@ -470,8 +472,12 @@ export function waterSink(body: string, state: "swim" | "dive"): number {
 }
 
 /** 프레임 하나를 그린다 (오른쪽을 보는 옆모습 기준, 왼쪽은 좌우 반전) */
-function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gear): Grid {
+function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear0: Gear): Grid {
   let g = new Grid(AV_W, AV_H);
+  // 11/22 골목 외형 「붕어빵 장수 유령」: 앞치마·머리 수건·집게 붕어빵(bd_vendor)을 계절 꾸미기 자리 맨 나중에 덧그린다
+  // (누빔 조끼 bd_vendor_base는 아래 몸통 덧그림 자리에서). 그림은 bungeoGear.ts — 등록 전(입장 화면 미리보기)이면 그리지 않는다
+  const vendor = body === "vendor";
+  const gear: Gear = vendor ? { ...gear0, ss: [...gear0.ss, "bd_vendor"] } : gear0;
   if (gear.scarf) pal = { ...pal, scarf: 0xc8463c, scarfLo: 0x8e2a25 };
   const m = metrics(body, view, pose);
   const { cx, hy } = m;
@@ -482,9 +488,19 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   if (nw?.mitt) pal = { ...pal, hand: nw.mitt, handLo: darken(nw.mitt, 0.2) };
   if (nw?.boot) pal = { ...pal, feet: nw.boot.c };
   const nwc: NwCtx | null = nw
-    ? { view, fb, body, m, sit: pose.sit, bob: pose.bob, hem: pose.hem, f0: pose.f0, f1: pose.f1, lie: !!pose.lie, sink: !!pose.sink, arms: pose.arms ?? "none", handBusy: gear.lantern || !!gear.extra.hand || gear.ss.includes("sc_goguma") || gear.ss.includes("si_cookie") || body === "catmask" || body === "collector" }
+    ? { view, fb, body, m, sit: pose.sit, bob: pose.bob, hem: pose.hem, f0: pose.f0, f1: pose.f1, lie: !!pose.lie, sink: !!pose.sink, arms: pose.arms ?? "none", handBusy: gear.lantern || !!gear.extra.hand || gear.ss.includes("sc_goguma") || gear.ss.includes("si_cookie") || body === "catmask" || body === "collector" || vendor }
     : null;
   const headWorn = !!gear.hat || (!!gear.extra.head && gear.extra.head !== "hat_glasses") || nwHatWorn(nw) || ssArt.ssHeadWorn(gear.ss);
+  // 계절·골목 꾸미기 그림에 이 프레임의 색·착용 상태를 넘긴다 (붕어빵 장수: 다른 모자면 수건을 벗고, 손에 든 게 있으면 집게를 내려놓는다)
+  if (vendor)
+    ssArt.ssFrameCtx({
+      accent: pal.accent,
+      body: pal.bodyMid,
+      ids: gear.ss,
+      headBusy: !!gear.hat || (!!gear.extra.head && gear.extra.head !== "hat_glasses") || nwHatWorn(nw) || !!gear.sg.h,
+      handBusy: gear.lantern || !!gear.extra.hand,
+      neckBusy: gear.scarf || !!gear.extra.neck || !!nw?.scarf || !!gear.sg.a,
+    });
   const side = view === "side";
   const sitDrop = pose.sit === 1 ? 3 : pose.sit === 2 ? 2 : 0;
 
@@ -580,6 +596,8 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
 
   // 25번: 몸통 덧그림 (정장·고양이 탈 셔츠·왕관 망토·저승사자 도포)
   drawBodyExtra(g, body, "torso", view, pose, m, pal, headWorn);
+  // 11/22 붕어빵 장수 유령: 누빔 조끼 (몸 부위 색 — NPC 겨울 외투·사냥 갑옷·겉옷은 그 위에)
+  if (vendor) ssArt.drawSsBack(g, view, ["bd_vendor_base"], m, fb, "front", pose.hem, pose.sit, body);
   // 11/17 NPC 계절 외투 (몸통 위)
   if (nw && nwc) drawNwCoat(g, nwc, nw);
 
@@ -595,6 +613,8 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   if (gear.extra.back) drawBackGear(g, view, gear.extra.back, m, fb, "front", pose.hem, pose.sit);
   // 11/19 계절 한정: 롱패딩 외투 · 선물 자루 어깨끈 (뒷모습은 자루가 등을 덮는다)
   if (gear.ss.length) ssArt.drawSsBack(g, view, gear.ss, m, fb, "front", pose.hem, pose.sit, body);
+  // 붕어빵 장수 앞치마 위로 배낭·망토 끈이 다시 보이게
+  if (vendor && gear.extra.back) drawBackGear(g, view, gear.extra.back, m, fb, "front", pose.hem, pose.sit);
 
   // ── 목도리 (두건·키다리는 기본 천 목도리, 나머지는 목도리를 했을 때만) ──
   const plainNeck = body === "hood" || body === "tall";

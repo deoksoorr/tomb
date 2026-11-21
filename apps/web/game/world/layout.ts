@@ -1031,7 +1031,7 @@ export function groundKind(tx: number, ty: number): GroundKind {
 
 // ── 상호작용 오브젝트 (E/탭) ── WorldScene이 가장 가까운 것을 골라 안내 문구를 띄우고 상호작용한다.
 export type InteractKind = "tree" | "swing" | "hammock" | "bell" | "well" | "water" | "portal" | "door" | "lot" | "dock" | "wish" | "seesaw" | "trampoline" | "carousel" | "telescope" | "mat" | "forage" | "zoo" | "ferris" | "balloon" | "bus" | "bumper";
-export type PortalKind = "hunt" | "housing" | "shrine" | "haunt" | "tower" | "lottery" | "seasonCos" | "seasonFurn" | "mungnyang" | "office" | "lighthouse";
+export type PortalKind = "hunt" | "housing" | "shrine" | "haunt" | "tower" | "lottery" | "seasonCos" | "seasonFurn" | "mungnyang" | "office" | "lighthouse" | "bungeo";
 export type Interactable = {
   id: string;
   kind: InteractKind;
