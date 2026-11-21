@@ -3,6 +3,7 @@ import { drawNwCoat, type NwCtx } from "./npcWear";
 import { darken, Grid, lighten, mix, type Color } from "./pixel";
 import { GEAR2, ICONS2 } from "./seasonSetGear2";
 import { GEAR3, ICONS3 } from "./seasonSetGear3";
+import { GEAR4, ICONS4, setBungeoCtx } from "./bungeoGear";
 
 // 11/19 계절 한정 세트 중 "아바타 시트에 같이 그려지는 것" (avatar.ts drawFrame이 부른다 — 코디 기획안 시안 코드를 그대로 옮겼다).
 //  「첫눈 출근길」 귀달이 털모자 · 무릎까지 롱패딩 · 군고구마 봉투
@@ -13,6 +14,7 @@ import { GEAR3, ICONS3 } from "./seasonSetGear3";
 // 따로 그리는 연출(입김 오라 · 꼬마전구 발자국 · 꼬마 눈오리 · 세트 덤)은 seasonSetFx.ts, 이름표는 lib/nameStyle.ts.
 // 11/20 나머지 여섯 벌(야근 요정 · 안개 묘지기 · 설날 까치 · 의리 초콜릿 · 벚꽃 소풍 · 사내 체육대회)의 시트 그림은 seasonSetGear2.ts (여기서 함께 부른다).
 // 11/20 새 다섯 벌(송년회 3차 · 해맞이 산행 · 작심삼일 · 빙어 축제 · 서리 내린 묘역)의 시트 그림은 seasonSetGear3.ts (여기서 함께 부른다).
+// 11/22 골목 붕어빵 수레 한정 꾸미기 열 점 + 외형 「붕어빵 장수 유령」 덧그림(bd_*)은 bungeoGear.ts (여기서 함께 부른다).
 
 type FB = string;
 type V = GearView;
@@ -20,7 +22,8 @@ type V = GearView;
 /** 첫 두 벌 중 시트에 그려지는 것 */
 const SHEET_IDS_1 = ["sc_earflap", "sc_padding", "sc_goguma", "si_elfhat", "si_sack", "si_cookie"] as const;
 /** 시트에 그려지는 계절 한정 꾸미기 (시트 키에 들어간다) — 11/20 나머지 여섯 벌(seasonSetGear2 GEAR2)까지 */
-export const SEASON_SHEET_IDS: readonly string[] = [...SHEET_IDS_1, ...Object.keys(GEAR2), ...Object.keys(GEAR3)];
+//  11/22 붕어빵 수레(GEAR4)까지 — 외형 덧그림 bd_*는 착용 목록에 오지 않으니 뺀다 (avatarCore drawFrame이 vendor 몸이면 붙인다)
+export const SEASON_SHEET_IDS: readonly string[] = [...SHEET_IDS_1, ...Object.keys(GEAR2), ...Object.keys(GEAR3), ...Object.keys(GEAR4).filter((id) => !id.startsWith("bd_"))];
 
 type SsItem = {
   /** 두건 꼭지·새싹을 덮는 모자 */
@@ -655,6 +658,7 @@ const ITEMS: Readonly<Record<string, SsItem>> = {
   si_cookie: { hand: (g, v, m) => cookieHand(g, v, m) },
   ...GEAR2,
   ...GEAR3,
+  ...GEAR4,
 };
 
 const ICONS: Readonly<Record<string, () => Grid>> = {
@@ -667,6 +671,7 @@ const ICONS: Readonly<Record<string, () => Grid>> = {
   si_wrap: wrapIcon,
   ...ICONS2,
   ...ICONS3,
+  ...ICONS4,
 };
 
 /** 착용 목록 → 시트에 그릴 계절 한정 꾸미기 id (부위 순서는 상관없다 — 자리마다 따로 부른다) */
@@ -695,6 +700,34 @@ export function drawSsHand(g: Grid, v: V, ids: readonly string[], m: GearM, fb: 
 /** 외곽선 뒤에 밝게 찍는 점 (고구마 김 · 요정 모자 금방울 반짝) */
 export function drawSsGlow(g: Grid, v: V, ids: readonly string[], m: GearM, fb: FB, top: number, body: string): void {
   for (const i of each(ids)) i.glow?.(g, v, m, fb, top, body);
+}
+
+/** 프레임 하나를 그리기 전에 avatarCore drawFrame이 넘기는 상태 (붕어빵 장수 유령 덧그림: 앞치마·조끼 색, 수건·집게·깃을 벗을지) */
+export type SsFrameCtx = {
+  /** 포인트 색 (염색 전이면 null) */
+  accent: Color | null;
+  /** 몸 부위 색 (외형 기본색 포함) */
+  body: Color;
+  /** 이 프레임에 그리는 계절·골목 꾸미기 id (gear.ss) */
+  ids: readonly string[];
+  /** 계절 꾸미기 밖의 머리 꾸미기·모자를 썼다 */
+  headBusy: boolean;
+  /** 계절 꾸미기 밖의 손 꾸미기·등불을 들었다 */
+  handBusy: boolean;
+  /** 계절 꾸미기 밖의 목 꾸미기·목도리·갑옷을 했다 */
+  neckBusy: boolean;
+};
+export function ssFrameCtx(c: SsFrameCtx): void {
+  const mine = (id: string) => !id.startsWith("bd_");
+  const its = c.ids.filter(mine).map((id) => ITEMS[id]).filter((x): x is SsItem => !!x);
+  setBungeoCtx({
+    accent: c.accent,
+    body: c.body,
+    ids: c.ids,
+    headBusy: c.headBusy || its.some((i) => (i.headWorn ?? !!i.head) && !!i.head),
+    handBusy: c.handBusy || its.some((i) => !!i.hand),
+    neckBusy: c.neckBusy || its.some((i) => !!i.neck),
+  });
 }
 
 /** 시트 그림 꾸미기·이름표 아이콘 16×16 (해당 없으면 null) */

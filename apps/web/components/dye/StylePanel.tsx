@@ -3,7 +3,7 @@
 import { BASE_RESHAPE_PRICE } from "@/lib/dye/rules";
 import { QUEST_BODY_REWARD, questRewardById } from "@/lib/forage/quests/catalog";
 import { useEffect, useState, type ReactNode } from "react";
-import { BODY_TIER_INFO, bodyLabel, bodyTier, bodyUnlockPrice, DYE_PART_NAMES, DYE_PARTS, isStaffBody, ITEMS, PREMIUM_BODIES, premiumBody, QUEST_BODIES, questBody, STAFF_BODIES, STARTER_BODIES, type DyePart, type ItemDef } from "@tomb/protocol";
+import { ALLEY_BODIES, alleyBody, BODY_TIER_INFO, bodyLabel, bodyTier, bodyUnlockPrice, DYE_PART_NAMES, DYE_PARTS, isStaffBody, ITEMS, PREMIUM_BODIES, premiumBody, QUEST_BODIES, questBody, STAFF_BODIES, STARTER_BODIES, type DyePart, type ItemDef } from "@tomb/protocol";
 import { specDye, withDyePart } from "@/game/sprites/avatar";
 import { api, errorMessage } from "@/lib/api";
 import { dyeApi } from "@/lib/dye/client";
@@ -113,8 +113,9 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
   // 25번: 소장한 프리미엄 외형 (지금 그 몸이면 소장한 것과 같다 — 서버도 바꿀 때 소장 기록을 채운다)
   const unlocked = (id: string) => id === myBody || !!me?.bodies?.includes(id);
   /** 그 몸으로 바꾸는 값: 기본 6종은 싸게, 해금 전 프리미엄은 선택권 값, 소장한 프리미엄·운영자 외형은 무료 */
-  const bodyPrice = (id: string) => (premiumBody(id) || questBody(id) ? (unlocked(id) ? 0 : (bodyUnlockPrice(id) ?? 0)) : id === myBody ? 0 : BASE_RESHAPE_PRICE);
-  const ownedBodies = [...STARTER_BODIES, ...PREMIUM_BODIES.filter((b) => unlocked(b.id)), ...QUEST_BODIES.filter((b) => unlocked(b.id))];
+  const bodyPrice = (id: string) => (premiumBody(id) || questBody(id) || alleyBody(id) ? (unlocked(id) ? 0 : (bodyUnlockPrice(id) ?? 0)) : id === myBody ? 0 : BASE_RESHAPE_PRICE);
+  // 11/22 붕어빵 수레 한정 외형은 산 뒤에만 보인다 (사기 전엔 목록에도 없다 — 이스터에그)
+  const ownedBodies = [...STARTER_BODIES, ...PREMIUM_BODIES.filter((b) => unlocked(b.id)), ...QUEST_BODIES.filter((b) => unlocked(b.id)), ...ALLEY_BODIES.filter((b) => unlocked(b.id))];
   const lockedBodies = PREMIUM_BODIES.filter((b) => !unlocked(b.id));
   // 11/15 수집 의뢰 외형: 도장 교환소에서만 받는다 (선택권으로 살 수 없다 — 받기 전엔 미리 보기만)
   const lockedQuestBodies = QUEST_BODIES.filter((b) => !unlocked(b.id));
@@ -166,7 +167,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
   } else if (sel.kind === "body") {
     previewBody = sel.body;
     const same = sel.body === myBody;
-    const prem = premiumBody(sel.body) ?? questBody(sel.body);
+    const prem = premiumBody(sel.body) ?? questBody(sel.body) ?? alleyBody(sel.body);
     const questLocked = !!questBody(sel.body) && !unlocked(sel.body);
     const staffBody = isStaffBody(sel.body);
     const fresh = !!prem && !unlocked(sel.body);
@@ -297,7 +298,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
                 b.label,
                 b.id === myBody ? (
                   <span className={shop.badge}>지금</span>
-                ) : premiumBody(b.id) || questBody(b.id) ? (
+                ) : premiumBody(b.id) || questBody(b.id) || alleyBody(b.id) ? (
                   <>
                     무료<span className={shop.badge}>소장 중</span>
                   </>
