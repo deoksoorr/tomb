@@ -62,4 +62,10 @@ describe("문의함 (메모리)", () => {
     (await s.list())[0].message = "바꿈";
     expect((await s.list())[0].message).toBe("첫 줄 1\n둘째 줄");
   });
+
+  it("손님 문의(accountId null)도 그대로 저장한다", async () => {
+    const s = new MemoryInquiries();
+    await s.add(rec(1, { accountId: null, contact: "guest@example.com", source: "devnote" }));
+    expect((await s.list())[0]).toMatchObject({ accountId: null, contact: "guest@example.com", source: "devnote", status: "new" });
+  });
 });

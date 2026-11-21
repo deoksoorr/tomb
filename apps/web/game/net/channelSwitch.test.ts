@@ -107,6 +107,8 @@ describe("switchPolicy", () => {
     expect(lobbyChannelFull(l, 3)).toBe(true);
     expect(lobbyChannelFull(l, 7)).toBe(false);
     expect(lobbyChannelFull(null, 1)).toBe(false);
+    // 11/20 운영자는 정원 밖: 만석이어도 막지 않는다
+    expect(lobbyChannelFull(l, 1, true)).toBe(false);
     expect(friendChannelFullMsg("가람")).toBe("가람님이 있는 채널이 꽉 차서 갈 수 없어요.");
   });
 });

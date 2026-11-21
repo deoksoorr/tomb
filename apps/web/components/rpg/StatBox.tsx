@@ -12,14 +12,15 @@ import c from "./cards.module.css";
 
 const LS_OPEN = "tomb.rpg.statsOpen";
 
-export default function StatBox({ stats }: { stats: StatPanel | undefined }) {
+/** chair: 11/21 회장님 독대 — 기본 접힘 (펼치면 그 판 동안 유지, 다른 사냥 저장값은 안 건드림) · boxRef: 반투명 판정용 */
+export default function StatBox({ stats, chair = false, boxRef }: { stats: StatPanel | undefined; chair?: boolean; boxRef?: React.Ref<HTMLElement> }) {
   const coarse = useMediaQuery("(pointer: coarse)");
   // null = 아직 안 건드림: PC는 저장된 값(없으면 펼침), 폰은 접힘
   const [pick, setPick] = useState<boolean | null>(null);
-  const open = pick ?? (coarse ? false : readItem(LS_OPEN) !== "0");
+  const open = pick ?? (coarse || chair ? false : readItem(LS_OPEN) !== "0");
   const toggle = (v = !open) => {
     setPick(v);
-    if (!coarse) writeItem(LS_OPEN, v ? "1" : "0");
+    if (!coarse && !chair) writeItem(LS_OPEN, v ? "1" : "0");
   };
   const onKey = useEffectEvent((e: KeyboardEvent) => {
     if (e.code !== "KeyC" || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -37,12 +38,12 @@ export default function StatBox({ stats }: { stats: StatPanel | undefined }) {
   const stop = (e: React.PointerEvent) => e.stopPropagation();
   if (!open)
     return (
-      <button type="button" className={c.statOpen} onPointerDown={stop} onClick={() => toggle(true)} aria-expanded={false} title="능력치 펴기 (C)">
+      <button ref={boxRef as React.Ref<HTMLButtonElement>} type="button" className={c.statOpen} onPointerDown={stop} onClick={() => toggle(true)} aria-expanded={false} title="능력치 펴기 (C)">
         능력 {!coarse && <kbd>C</kbd>}
       </button>
     );
   return (
-    <section className={c.statBox} aria-label="지금 능력치" onPointerDown={stop}>
+    <section ref={boxRef} className={c.statBox} aria-label="지금 능력치" onPointerDown={stop}>
       <button type="button" className={c.statHead} onClick={() => toggle(false)} aria-expanded={true} title="능력치 접기 (C)">
         능력치 <span aria-hidden="true">▾</span>
         {!coarse && <kbd>C</kbd>}

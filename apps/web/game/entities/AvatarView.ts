@@ -205,6 +205,15 @@ export class AvatarView {
   private champBadge: ChampBadgeView | null = null;
   /** 칭호 「…」 (이름표 바로 위, 연한 금빛). 칭호를 달았을 때만 만든다 */
   private titleView: TitleView | null = null;
+  /** 칭호 글자 (없으면 null) — 11/21 폰 사냥 HUD가 자리를 잰다 */
+  get titleText(): Phaser.GameObjects.BitmapText | null {
+    return this.titleView?.text ?? null;
+  }
+  /** 이름표·칭호 깊이 (11/21 폰 사냥 HUD: 피해 숫자 위로) */
+  setNameDepth(d: number): void {
+    if (this.label.depth !== d) this.label.setDepth(d);
+    this.titleView?.setDepth(d);
+  }
   /** 착용 목록의 칭호 id (운영자 표시가 꺼지면 이것으로 되돌린다) */
   private wornTitle: string | null = null;
   /** 닉네임 꾸미기 (이름 글자 색·이름표 바탕판). 착용했을 때만 만든다 */
@@ -1220,6 +1229,7 @@ export class AvatarView {
           // 11/17 탈것(강 조각배·오리배, 바다 카약·제트스키, 놀이기구)에 타 있으면 펫은 숨긴다
           petOff: this.ride !== null || st === "boat",
           hop: this.hop,
+          seated: st === "sitChair",
           water: st === "swim" || st === "dive" ? st : null,
           // 앉기(피아노·책상·벤치)·집 안 자세는 그림 depth를 덮어쓴다: 날개 앞뒤도 그 값 기준이어야 몸에 안 가린다
           depth: this.depthOverride ?? s.y,

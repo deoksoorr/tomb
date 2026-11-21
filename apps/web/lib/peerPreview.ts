@@ -14,7 +14,7 @@ export function elsewhereCount(channelCount: number, namesHere: number): number 
 /** 지금 맵에 아무도 없을 때 한 줄 */
 export function aloneLine(map: MapId, elsewhere: number): string {
   if (elsewhere > 0) return `${PLACE_TITLE[map]}에는 지금 나 혼자예요. 이 맵이 아닌 곳에 ${elsewhere}명 더 있어요.`;
-  return "지금은 이 채널에 나 혼자 있어요. 확성기로 사람을 불러 보세요.";
+  return "지금은 이 채널에 나 혼자 있어요. 채팅으로 먼저 인사를 남겨 보세요.";
 }
 
 /** 지금 맵에 같이 있는 사람이 있을 때 목록 제목 (나는 빼고 센다) */

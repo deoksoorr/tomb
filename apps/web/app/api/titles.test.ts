@@ -72,6 +72,15 @@ describe("칭호 목록 (lib/titles)", () => {
     expect(got).toEqual(["t_champ3", "t_lv10", "t_lv20", "t_lv30", "t_kill100", "t_kill1k", "t_hell", "t_big50", "t_big100", "t_att7", "t_stay1", "t_stay10"]);
   });
 
+  it("11/20 회장님 독대 주간 1위 칭호: 주간 1위처럼 금 · 1위 갈래, 서버가 알린 동안만 (timed)", () => {
+    for (const [id, name] of [["t_chairNormal", "연봉 협상의 신"], ["t_chairHell", "맨주먹 협상가"]] as const) {
+      expect(titleDef(id)).toMatchObject({ name, group: "champ", grade: "gold", transient: true, timed: true });
+      expect(titleDef(id)?.how).toContain("회장님 독대 주간 1위");
+      expect(earnedTitleIds({ dexTitleNames: [], champBoards: [], metrics: {}, timed: [id] })).toEqual([id]);
+    }
+    expect(earnedTitleIds({ dexTitleNames: [], champBoards: ["points"], metrics: {} })).not.toContain("t_chairNormal");
+  });
+
   it("등급: 같은 줄은 단계가 높을수록 등급이 같거나 높고, 동·은·금·전설·신화가 모두 있다", () => {
     const order = { bronze: 0, silver: 1, gold: 2, legend: 3, mythic: 4, manager: 5 } as const;
     expect(new Set(TITLES.map((t) => t.grade))).toEqual(new Set(TITLE_GRADES));

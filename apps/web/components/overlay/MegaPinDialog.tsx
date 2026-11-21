@@ -52,7 +52,7 @@ export function MegaPinDialog({ channel, pins, onClose }: { channel: number; pin
   return (
     <Dialog title="공지 쓰기" onClose={onClose} closable={!pending} fitHeight>
       <form className={styles.form} onSubmit={(e) => void submit(e)}>
-        <p className={ui.hint}>확성기 창 맨 위에 계속 떠 있어요. 지울 때까지 남아요.</p>
+        <p className={ui.hint}>마을 소식 맨 위에 계속 떠 있어요. 지울 때까지 남아요.</p>
         <fieldset className={styles.kinds}>
           <legend className={ui.label}>어디에 올릴까요?</legend>
           {(["channel", "all"] as const).map((s) => (

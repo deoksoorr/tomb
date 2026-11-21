@@ -1,3 +1,4 @@
+import SiteBanner from "@/components/site/SiteBanner";
 import SiteShell from "@/components/site/SiteShell";
 import StoryDays from "@/components/site/StoryDays";
 import { cx } from "@/components/ui/cx";
@@ -25,13 +26,8 @@ export default function StoryPage() {
   const S = STORY;
   return (
     <SiteShell current="story">
-      <div className={styles.wrap}>
-        <header className={styles.head}>
-          <h1 className={styles.display}>만든 이야기</h1>
-          <p>{S.sub}</p>
-          <div className={styles.rule} />
-        </header>
-      </div>
+      {/* 11/21 머리 배너: 까마귀 연못 (밤) */}
+      <SiteBanner title="만든 이야기" sub={S.sub} video={{ webm: "/devnote/story-banner.webm", mp4: "/devnote/story-banner.mp4", poster: "/devnote/story-banner-poster.webp" }} />
       <article className={styles.story}>
         <p className={styles.lead}>{S.lead}</p>
         <div className={styles.stats}>

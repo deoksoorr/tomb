@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import SiteBanner from "@/components/site/SiteBanner";
 import SiteShell from "@/components/site/SiteShell";
 import { cx } from "@/components/ui/cx";
 import styles from "@/components/site/site.module.css";
@@ -76,12 +77,9 @@ export default async function GuideIndexPage({ searchParams }: Search) {
   const landing = GUIDE_PAGES.filter((p) => p.path.startsWith("/guide/"));
   return (
     <SiteShell current="guide">
+      {/* 11/21 머리 배너: 모닥불 광장 (밤) */}
+      <SiteBanner title="게임 가이드" sub="마을에서 할 수 있는 것들과 그 규칙을 정리해 두었어요." video={{ webm: "/devnote/guide-banner.webm", mp4: "/devnote/guide-banner.mp4", poster: "/devnote/guide-banner-poster.webp" }} />
       <div className={styles.wrap}>
-        <header className={styles.head}>
-          <h1 className={styles.display}>게임 가이드</h1>
-          <p>마을에서 할 수 있는 것들과 그 규칙을 정리해 두었어요.</p>
-          <div className={styles.rule} />
-        </header>
         <div className={styles.guide}>
           <nav className={styles.gnav} aria-label="가이드 파트">
             <ol>

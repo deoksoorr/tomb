@@ -34,4 +34,17 @@ describe("폭죽 미리보기 무대", () => {
     }
     expect(again).toBe(true);
   });
+
+  it("11/20 새 폭죽·오로라·광역 불꽃쇼도 미리보기 무대에서 터진다 (한도 안)", () => {
+    for (const id of ["fw_crackle", "fw_emoji", "fw_parachute", "fw_whistle", "fw_fish", "fw_pinwheel", "fw_rainbow", "fw_kiku", "fw_cascade", "fw_fountainrow", "fw_aurora", "fw_kamuro", "fw_niagara", "fw_town", "fw_hangang"]) {
+      const st = new FireworkStage(id, false, "");
+      let most = 0;
+      for (let t = 0; t < 6000; t += 16) {
+        st.step(16);
+        most = Math.max(most, st.sparks.length);
+      }
+      expect(most, id).toBeGreaterThan(20);
+      expect(most, id).toBeLessThanOrEqual(700);
+    }
+  });
 });

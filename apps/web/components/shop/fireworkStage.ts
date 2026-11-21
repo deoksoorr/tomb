@@ -26,6 +26,7 @@ import {
   type SparkSpec,
   type SparkState,
 } from "@/game/world/fwShapes";
+import { showProgram } from "@/game/world/fwShow";
 
 export const STAGE_W = 220;
 export const STAGE_H = 150;
@@ -82,6 +83,24 @@ export class FireworkStage {
       this.glow = Math.max(this.glow, this.reduced ? 0.12 : 0.22);
       return;
     }
+    if (special === "show") {
+      // 광역 불꽃쇼: 순서표를 빨리 감아(시간 ×0.45) 무대 전체에
+      const prog = showProgram(item, this.reduced);
+      const k = 0.45;
+      const minDim = Math.min(STAGE_W, STAGE_H);
+      for (const s of prog.shots) {
+        const bx = s.fx * STAGE_W;
+        const by = s.fy * STAGE_H;
+        this.rockets.push({ x: (s.lx ?? s.fx) * STAGE_W, y: STAGE_H * 0.96, bx, by, at: now + s.delay * k, rise: FW_SKY_RISE_MS, r: s.rw ? s.rw * STAGE_W : s.h * minDim, colors: s.colors, pattern: s.pattern, size: s.big ? 1.1 : 0.9, trailAt: 0, finale: true });
+      }
+      for (const a of prog.auroras) this.aurora(now + a.at * k, a.dur * k);
+      return;
+    }
+    if (special === "aurora") {
+      this.aurora(now + 200, 6000);
+      this.glow = Math.max(this.glow, 0.15);
+      return;
+    }
     if (special === "finale") {
       for (const s of finaleShots(plan, 300)) {
         const bx = s.fx * STAGE_W;
@@ -107,6 +126,24 @@ export class FireworkStage {
       const fit = s.ground ? { h: s.h, r: rs } : fitBurst(x, FEET.y, s.h, rs, stage);
       const rise = s.ground ? 1 : plan.power >= 4 ? FW_RISE_MS * 1.15 : FW_RISE_MS;
       this.rockets.push({ x, y: FEET.y, bx: x, by: FEET.y - fit.h, at: now + s.delay, rise, r: fit.r, colors: s.colors, pattern: s.pattern, size: 1, ground: s.ground, trailAt: 0, scale: s.scale });
+    }
+  }
+
+  /** 오로라: 무대 위쪽에 초록·보라 띠 불티를 계속 흘린다 */
+  private aurora(at: number, dur: number): void {
+    for (let t = 0; t < dur; t += this.reduced ? 120 : 50) {
+      this.timers.push({
+        at: at + t,
+        run: () => {
+          for (let q = 0; q < 3; q++) {
+            const fx = Math.random();
+            const band = q % 2;
+            const y = STAGE_H * (band ? 0.1 : 0.19) + Math.sin(fx * 7 + (at + t) * 0.0009) * STAGE_H * 0.04;
+            const env = Math.min(1, t / 1200, (dur - t) / 1200);
+            this.spawn(fx * STAGE_W, y, { vx: 0, vy: 5, life: 1200, color: band ? 0xc090ff : 0x7affb0, size: 1.6, drag: 0.6, grav: 0, bright: 0.5 * env, fadeFrom: 0.15 });
+          }
+        },
+      });
     }
   }
 
@@ -159,9 +196,10 @@ export class FireworkStage {
       if (t >= r.trailAt && k < 1) {
         r.trailAt = t + (this.reduced ? 90 : 35);
         const ry = r.y + (r.by - r.y) * e;
+        const rx = r.x + (r.bx - r.x) * e + (r.pattern === "whistle" && !this.reduced ? Math.sin(u / 55) * 5 * (1 - k * 0.7) : 0);
         // 게임과 같은 로켓 꼬리 (피날레 로켓은 한 줄)
-        const tail = r.finale ? rocketTrail("peony", 1) : rocketTrail(r.pattern, this.plan.power);
-        for (const s of tail) this.spawn(r.x + Math.sin(u / 70) * 0.8, ry, s);
+        const tail = r.finale ? rocketTrail(r.pattern === "whistle" ? "whistle" : "peony", 1) : rocketTrail(r.pattern, this.plan.power);
+        for (const s of tail) this.spawn(rx + Math.sin(u / 70) * 0.8, ry, s);
       }
       if (k >= 1) {
         this.rockets.splice(i, 1);

@@ -61,7 +61,7 @@ export const adminApi = {
   /** 11/18 기록 확인 (의심 판·서버 최초 칭호 대기) */
   reviews: () => request<AdminReviewResponse>("/api/admin/rpg/review", { cache: "no-store" }),
   review: (id: string, action: "approve" | "reject") =>
-    request<{ ok: true; result?: { kind: "tower"; reward: RunReward } | { kind: "first"; granted: boolean } | { kind: "top"; took: boolean } }>(
+    request<{ ok: true; result?: { kind: "tower"; reward: RunReward } | { kind: "first"; granted: boolean } | { kind: "top"; took: boolean } | { kind: "chair"; paid: number } }>(
       "/api/admin/rpg/review",
       post({ id, action }),
     ),

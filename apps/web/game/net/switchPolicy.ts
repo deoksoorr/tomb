@@ -20,8 +20,10 @@ export function houseChannelFullMsg(channel: number): string {
 /**
  * 로비로 본 그 채널이 만석인지 (채널 메뉴의 "만석"과 같은 규칙: count >= cap).
  * 로비가 없거나 목록에 없는(아직 열리지 않은) 채널은 만석이 아니다 — 들어가 보고 서버가 막으면 돌아온다
+ * 11/20 운영자(staff)는 정원 밖이라 꽉 찬 채널도 막지 않는다 (실시간 서버도 받는다)
  */
-export function lobbyChannelFull(lobby: LobbyInfo | null | undefined, channel: number): boolean {
+export function lobbyChannelFull(lobby: LobbyInfo | null | undefined, channel: number, staff = false): boolean {
+  if (staff) return false;
   const ch = lobby?.channels.find((c) => c.id === channel);
   return !!ch && channelStatus(ch, lobby?.threshold) === "full";
 }

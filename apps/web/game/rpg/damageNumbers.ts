@@ -127,6 +127,9 @@ export class DmgGroup {
   crits = 0;
   lastAt = 0;
   closed = false;
+  /** 11/21 마지막으로 맞은 몬스터 머리 위 (compact: 합계를 그 오른쪽 위에) */
+  hx: number | null = null;
+  hy = 0;
   constructor(
     public x: number,
     public y: number,
@@ -137,6 +140,9 @@ export class DmgGroup {
     public minHits: number,
   ) {}
 }
+
+/** 월드 좌표 사각형 */
+export type Box = { x0: number; y0: number; x1: number; y1: number };
 
 type Kind = "pop" | "crit" | "total" | "label" | "word";
 
@@ -156,6 +162,9 @@ type Num = {
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
 
+/** 11/21 회장님 독대 폰·낮은 화면: 크기 배율 · 수명 배율 · 비켜 띄우는 거리(화면 px, 오른쪽 위) · 종류마다 동시에 떠 있는 상한 */
+export const COMPACT = { k: 0.64, life: 0.62, dx: 20, dy: -26, pop: 1.8, cap: { pop: 8, total: 1, label: 1, crit: 2, word: 2 } as Partial<Record<Kind, number>> };
+
 export class DamageNumbers {
   private nums: Num[] = [];
   private pool: Phaser.GameObjects.Image[] = [];
@@ -164,6 +173,8 @@ export class DamageNumbers {
   /** 11/17 합치는 중인 내 피해 숫자 (종류마다 하나) */
   private tally: Partial<Record<HurtKind, { cell: HurtCell | null; num: Num | null; x: number; y: number }>> = {};
   readonly cap: number;
+  /** 11/21 회장님 독대 폰·낮은 화면 (COMPACT) */
+  private compact = false;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -177,6 +188,34 @@ export class DamageNumbers {
 
   private get zoom(): number {
     return this.scene.cameras.main.zoom || 1;
+  }
+
+  /**
+   * avoid: 내 캐릭터 자리 (숫자가 몸에 걸리면 옆으로 비킨다)
+   * keepOut: 내 이름·체력 막대·콤보 칸 (월드 좌표) — 합계·HIT는 절대 여기에 안 걸친다. topPad: 위 HUD가 가리는 화면 px
+   */
+  setCompact(on: boolean, avoid?: () => { x: number; y: number }, keepOut?: () => Box | null, topPad = 0): void {
+    this.compact = on;
+    this.avoid = avoid ?? null;
+    this.keepOut = keepOut ?? null;
+    this.topPad = topPad;
+  }
+  private avoid: (() => { x: number; y: number }) | null = null;
+  private keepOut: (() => Box | null) | null = null;
+  private topPad = 0;
+
+  /** compact: 글자가 내 캐릭터 몸(발 기준 위 76px·아래 18px)에 걸리면 오른쪽 옆으로 (k = 글자 배율 — 반폭 계산) */
+  private dodge(x: number, y: number, text: string, k: number): [number, number] {
+    const me = this.compact ? this.avoid?.() : null;
+    if (!me) return [x, y];
+    const z = this.zoom;
+    const hw = ([...text].reduce((s, ch) => s + (GLYPHS[ch] ? adv(ch) : 0), 0) * k * COMPACT.k) / 2;
+    const ox = COMPACT.dx / z;
+    const oy = COMPACT.dy / z;
+    const sx = (x + ox - me.x) * z;
+    const sy = (y + oy - me.y) * z;
+    if (Math.abs(sx) > 26 + hw || sy < -76 || sy > 18) return [x, y];
+    return [me.x + (34 + hw) / z - ox, me.y - 30 / z - oy];
   }
 
   /** 새 연타 묶음 (x,y: 합계를 띄울 자리) */
@@ -194,6 +233,7 @@ export class DamageNumbers {
     const sy = (Math.random() - 0.5) * 14 - (crit ? 6 : 0);
     const s = crit ? "crit" : style;
     const k = crit ? 1.7 : style === "basic" ? 0.85 : 1.05;
+    [x, y] = this.dodge(x, y, String(Math.round(n)), k);
     this.spawn(String(Math.round(n)), s, x + sx / z, y + sy / z, k, crit ? "crit" : "pop", crit ? 860 : 640, 0, (Math.random() - 0.5) * 10);
     if (crit) this.spawn("CRITICAL", "crit", x + sx / z, y + (sy - 22) / z, 0.6, "word", 760, 30, 0);
     if (group && !group.closed) {
@@ -201,6 +241,8 @@ export class DamageNumbers {
       group.total += n;
       if (crit) group.crits++;
       group.lastAt = performance.now();
+      group.hx = x;
+      group.hy = y;
     }
   }
 
@@ -240,9 +282,51 @@ export class DamageNumbers {
   private total(g: DmgGroup): void {
     const z = this.zoom;
     const big = g.hits >= 10 || g.crits > 0;
+    const kt = big ? 2.3 : 1.9;
+    const kl = big ? 1.15 : 1;
+    const label = `${g.hits} HIT`;
     // "N HIT"은 합계 숫자 위로 (합계 글자 높이의 절반 + 여백만큼 올린다)
-    this.spawn(`${g.hits} HIT`, g.style === "basic" ? "total" : g.style, g.x, g.y - (GH * (big ? 2.3 : 1.9) * 0.5 + GH * 0.6 + 12) / z, big ? 1.15 : 1, "label", 1500, 90, 0);
-    this.spawn(fmt(g.total), "total", g.x, g.y, big ? 2.3 : 1.9, "total", 1560, 0, 0);
+    const gap = (GH * kt * 0.5 + GH * 0.6 + 12) * (this.compact ? COMPACT.k : 1);
+    const [gx, gy] = this.compact && this.keepOut ? this.bigSpot(g, fmt(g.total), label, kt, kl, gap) : this.dodge(g.x, g.y, fmt(g.total), kt);
+    this.spawn(label, g.style === "basic" ? "total" : g.style, gx, gy - gap / z, kl, "label", 1500, 90, 0);
+    this.spawn(fmt(g.total), "total", gx, gy, kt, "total", 1560, 0, 0);
+  }
+
+  /**
+   * 11/21 폰(compact): 합계·HIT 자리 — 맞은 몬스터 오른쪽 위, 내 이름·막대 칸과 겹치면 그 위로(안 되면 옆으로), 화면 안으로.
+   * 돌려주는 값은 spawn이 compact 비킴(dx,dy)을 더하기 전 자리
+   */
+  private bigSpot(g: DmgGroup, total: string, label: string, kt: number, kl: number, gap: number): [number, number] {
+    const z = this.zoom;
+    const c = COMPACT.k;
+    const w = (t: string) => [...t].reduce((s, ch) => s + (GLYPHS[ch] ? adv(ch) : 0), 0);
+    // 처음 박힐 때 COMPACT.pop배까지 커진다 — 그 크기로 잰다
+    const p = COMPACT.pop;
+    const hw = (Math.max(w(total) * kt, w(label) * kl) * c * p) / 2 / z;
+    const up = (gap + (GH * kl * c * p) / 2) / z; // 합계 가운데 → 묶음 위끝
+    const dn = (GH * kt * c * p) / 2 / z; // 합계 가운데 → 묶음 아래끝
+    const m = 4 / z;
+    let x = (g.hx ?? g.x) + hw * 0.6 + 6 / z;
+    let y = (g.hx === null ? g.y : g.hy) - dn;
+    const v = this.scene.cameras.main.worldView;
+    const top = v.y + Math.max(this.topPad, 56) / z + up;
+    const fit = () => {
+      x = Math.min(Math.max(x, v.x + hw + m), v.right - hw - m);
+      y = Math.min(Math.max(y, top), v.bottom - dn - m);
+    };
+    fit();
+    const k = this.keepOut?.();
+    const hitK = () => !!k && x + hw + m > k.x0 && x - hw - m < k.x1 && y + dn + m > k.y0 && y - up - m < k.y1;
+    if (k && hitK()) {
+      // 위로 올려 보고, 화면 위로 넘치면 옆으로 (오른쪽 먼저)
+      y = k.y0 - m - dn;
+      fit();
+      if (hitK()) {
+        x = k.x1 + m + hw <= v.right - m - hw ? k.x1 + m + hw : k.x0 - m - hw;
+        fit();
+      }
+    }
+    return [x - COMPACT.dx / z, y - COMPACT.dy / z];
   }
 
   private take(style: NumStyle, ch: string): Phaser.GameObjects.Image {
@@ -258,6 +342,19 @@ export class DamageNumbers {
       const i = this.nums.findIndex((m) => m.kind === "pop" || m.kind === "crit" || m.kind === "word");
       if (i < 0) break;
       this.drop(i);
+    }
+    if (this.compact) {
+      const z = this.zoom;
+      k *= COMPACT.k;
+      life *= COMPACT.life;
+      delay *= COMPACT.life;
+      x += COMPACT.dx / z;
+      y += COMPACT.dy / z;
+      // 큰 숫자는 같은 종류 상한까지만 (오래된 것부터 거둔다)
+      const lim = COMPACT.cap[kind];
+      if (lim)
+        for (let i = this.nums.length - 1, c = 0; i >= 0; i--)
+          if (this.nums[i].kind === kind && ++c >= lim) this.drop(i);
     }
     const chars = [...text].filter((ch) => GLYPHS[ch]);
     const width = chars.reduce((s, ch) => s + adv(ch), 0);
@@ -310,7 +407,9 @@ export class DamageNumbers {
     } else {
       // 합계 · HIT: 크게 돌며 박혔다가, 맥박 → 떠오르며 사라짐
       const t0 = 230;
-      s = a < t0 ? 3.4 + (1 - 3.4) * backOut(a / t0) : 1 + 0.05 * Math.sin((a - t0) / 55) * Math.max(0, 1 - (a - t0) / 700);
+      // compact: 처음 크게 박히는 배율을 줄인다 (폰에서 3.4배면 잠깐 내 이름 칸까지 덮었다)
+      const s0 = this.compact ? COMPACT.pop : 3.4;
+      s = a < t0 ? s0 + (1 - s0) * backOut(a / t0) : 1 + 0.05 * Math.sin((a - t0) / 55) * Math.max(0, 1 - (a - t0) / 700);
       rot = a < t0 && !this.reduced ? -0.45 * (1 - backOut(a / t0)) : 0;
       if (n.kind === "label") rot = -rot;
       dy = -Math.max(0, a - (n.life - 360)) * 0.06;

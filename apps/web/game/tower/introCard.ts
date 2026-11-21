@@ -27,6 +27,8 @@ export class MonsterIntro {
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly tex: (id: MonsterId) => string,
+    /** 11/22 화면 위에서 몇 px 아래에 (폰 위 HUD 시안 B 글자 밑으로) */
+    private readonly top: () => number = () => 30,
   ) {
     this.box = scene.add.graphics().setDepth(DEPTH).setVisible(false);
     this.pic = scene.add.image(0, 0, "__DEFAULT").setDepth(DEPTH + 1).setVisible(false);
@@ -66,7 +68,7 @@ export class MonsterIntro {
     const w = Math.round(size * ps + 18 + tw);
     const h = Math.round(Math.max(size * ps + 8, 38 * s + 6));
     const x = Math.round(v.x + v.width / 2 - w / 2);
-    const y = Math.round(v.y + 30 * s - (1 - k) * 12);
+    const y = Math.round(v.y + this.top() * s - (1 - k) * 12);
     this.box.clear().setAlpha(k);
     this.box.fillStyle(0x0a0e18, 0.86).fillRect(x, y, w, h);
     this.box.lineStyle(1, 0xffd04a, 0.9).strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);

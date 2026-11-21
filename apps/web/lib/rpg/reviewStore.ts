@@ -6,6 +6,7 @@ import type { RunLog } from "./types";
 // 11/18 관리자 「확인 필요」 목록 (보안 검토): 서버가 확신할 수 없는 기록을 버리지 않고 관리자가 인정하거나 거절할 때까지 붙잡아 둔다.
 //  - tower: 의심 판으로 끝난 야근 빌딩 판. 판·포인트는 이미 받았고, 최고 층·랭킹·서버 최초·상자·초월 EXP·체크포인트는 인정하면 들어간다
 //  - first: 서버 최초 칭호(한 명뿐 — 30·50·100층, ★100, 강화 +15). 조건을 채운 순서(at)대로 줄을 서고, 인정하면 그때 칭호 주인이 된다
+//  - chair: 11/20 회장님 독대 주간 1위 포인트 (칭호·꾸미기는 정리 때 바로, 포인트만 인정 뒤에 — lib/chairman/settle)
 //  - top: 다른 사람이 가진 서버 전체 최고 층을 새로 깬 정상 판. 그 판의 보상·내 최고 층·주간 기록은 바로 받았고,
 //    「꼭대기 층 주인」 자리와 야근 빌딩 전체 랭킹 기록만 인정하면 들어간다 (거절하면 전체 랭킹·꼭대기에서 빠진다)
 //
@@ -63,11 +64,28 @@ export type TopReview = {
   /** 전체 랭킹 점수 (lib/rpg/tower towerScore) */
   score: number;
 };
-export type ReviewItem = TowerReview | FirstReview | TopReview;
+/** 11/20 회장님 독대 주간 1위 포인트 (lib/chairman/settle). 칭호·꾸미기·2·3위 몫은 정리 때 바로 받았고, 인정하면 points가 지갑에 들어간다 */
+export type ChairReview = {
+  id: string;
+  kind: "chair";
+  acct: string;
+  /** 정리한 시각 */
+  at: number;
+  /** 그 주 (월요일 YYYYMMDD) */
+  week: string;
+  /** 인정하면 줄 포인트 (두 모드 중 큰 쪽에서 바로 받은 몫을 뺀 것) */
+  points: number;
+  /** 1위한 모드와 그 판 (피해 · 판 시간 ms · 그 판 캐릭터 최대 초당 피해 dealCap) */
+  firsts: { mode: "normal" | "hell"; damage: number; ms?: number; dm?: number }[];
+  /** 3주 이상 연속 1위라 절반이 된 모드 */
+  streak?: ("normal" | "hell")[];
+};
+export type ReviewItem = TowerReview | FirstReview | TopReview | ChairReview;
 
 export const towerReviewId = (acct: string, at: number) => `t:${acct}:${at}`;
 export const firstReviewId = (titleId: string, acct: string) => `f:${titleId}:${acct}`;
 export const topReviewId = (acct: string, floor: number) => `p:${acct}:${floor}`;
+export const chairReviewId = (week: string, acct: string) => `c:${week}:${acct}`;
 
 export interface ReviewStore {
   /** 넣기 (같은 id가 있거나 목록이 꽉 찼으면 false) */
@@ -82,7 +100,7 @@ const KEY = "rpg:review";
 function parse(v: unknown): ReviewItem | null {
   try {
     const o = (typeof v === "string" ? JSON.parse(v) : v) as ReviewItem | null;
-    return o && typeof o === "object" && typeof o.id === "string" && (o.kind === "tower" || o.kind === "first" || o.kind === "top") ? o : null;
+    return o && typeof o === "object" && typeof o.id === "string" && (o.kind === "tower" || o.kind === "first" || o.kind === "top" || o.kind === "chair") ? o : null;
   } catch {
     return null;
   }

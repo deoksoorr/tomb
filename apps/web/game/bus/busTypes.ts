@@ -51,6 +51,8 @@ export type BusRideData = {
   reduced: boolean;
   /** 한국 시각 0~24 (하늘·창밖 색) */
   hour: number;
+  /** 11/20 운영자 순간이동: 창밖 연출을 굽지도 그리지도 않고 첫 프레임에 끝낸다 */
+  instant?: boolean;
   /** 연출이 끝났다 (건너뛰기 포함). 장면은 스스로 멈춘다 */
   onDone: () => void;
 };

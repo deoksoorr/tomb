@@ -1,5 +1,6 @@
 import { isPaidShape, type GraveShape } from "../graveShape";
 import { ghostGearIcon } from "./ghostGear";
+import { chairGearIcon } from "./chairGear";
 import { GEAR_SHEET_IDS } from "./avatarGear";
 import { COSMETIC_FX_IDS, fxIconGrid } from "./cosmeticFx";
 import { ghostCat, miniLantern } from "./extras";
@@ -750,6 +751,103 @@ function fwLetter(): Grid {
   return g;
 }
 
+// ── 11/20 새 폭죽 아이콘 (문자 그림 16×16) ──
+
+const FW_PAL: Record<string, Color> = {
+  w: 0xffffff, s: 0xe2ecff, y: 0xffe08a, Y: 0xffb860, o: 0xd8963c, p: 0xff8fb8, P: 0xff6f9f, c: 0x8fe0ff, C: 0x6ab8f0,
+  v: 0xd0a0ff, V: 0xa070e8, r: 0xff7a62, R: 0xff4a4a, g: 0xa6ff9a, G: 0x62e07e, l: 0xffe45a, b: 0x6a7cff, a: 0xffa040,
+};
+const FW_ART: Record<string, readonly string[]> = {
+  fw_crackle: ["..w.....y...w...", ".wyw..........y.", "..w...y.w.......", "........ywy..w..", ".y..w....w..wyw.", "...wyw........w.", "....w...yy......", "..y....yYYy..y..", "......yYwYy.....", ".w.....yYYy..w..", "wyw.....yy..wyw.", ".w..y........w..", "......w..y......", "..y..wyw........", "......w.....y...", "................"],
+  fw_emoji: ["................", "..l.......l.....", ".l.l.....l.l....", "l...l...l...l...", "................", "....l.....l.....", ".....lllll......", "................", "..........pp.pp.", ".........pPPpPPp", ".........pPPPPPp", "..........pPPPp.", "...........pPp..", "............p...", "................", "................"],
+  fw_parachute: ["................", "....w...........", "...wyw.....p....", "..wyYyw...pwp...", "...wyw.....p....", "....w...........", "....y.......p...", "...y.....s...p..", "....y...sws.p...", "...y...swYws....", "........sws.....", ".........s......", "........s.......", ".........s......", "........s.......", "................"],
+  fw_whistle: ["......w.s.w.....", ".......wsw......", "....s.swwws.s...", ".......wsw......", "......w.s.w.....", "........w.......", ".......w........", "......w.........", ".......w........", "........w.......", ".......w........", "......w.........", ".......y........", "........Y.......", ".......Y........", "................"],
+  fw_fish: ["................", "..c.........c...", "...C.......C....", "..c...w...c.....", "...C..c..C......", "....c.C.c...cC..", ".cC..wcw..Cc..c.", "c..Ccwwwc.....C.", "......cwcCc.....", "....cC.c...c....", "...c...C....C...", "....C..c...c....", "...c...C....C...", "....c.......c...", "................", "................"],
+  fw_pinwheel: ["................", "......yyy.......", "....yy...R......", "...y......R.....", "..y...RRR..R....", "..y..R...R.R....", "..y.R..w..RR....", "...yR.wYw.y.....", "....R..w..y.....", "....R....y..y...", ".....RRRy...y...", "............y...", "....R......y....", ".....RR..yy.....", ".......RR.......", "................"],
+  fw_rainbow: ["................", "................", ".....RRRRRR.....", "...RRaaaaaaRR...", "..RaalllllllaR..", ".Raalgggggglaar.", ".Ralggccccgglar.", "Ralgccbbbbccglar", "Ralgcb....bcglaR", "Ralgcb....bcglaR", "Ralgcb....bcglaR", "................", ".w............w.", "wsw..........wsw", ".w............w.", "................"],
+  fw_kiku: ["................", "...r...r...r....", "....r..r..r.....", ".r...r.r.r...r..", "..r...rrr...r...", "....r.gGg.r.....", "rr..rgGwGgr..rr.", "..rrrGwwwGrrr...", "....rgGwGgr.....", "....r.gGg.r.....", "..r...rrr...r...", ".r...r.r.r...r..", "....r..r..r.....", "...r...r...r....", "................", "................"],
+  fw_cascade: ["..p.p......c.c..", "...P........C...", "..p.p..y...c.c..", "......yYy.......", "...y.yYwYy.y....", "....yYwwwYy.....", "...y.yYwYy.y....", "......yYy.......", "..v.v..y...g.g..", "...V........G...", "..v.v......g.g..", "................", ".......y........", "........Y.......", ".......Y........", "................"],
+  fw_kamuro: ["................", "....y..y..y.....", "..y..yy.yy..y...", ".y..y..Y..y..y..", "y..y..yYy..y..y.", "y.y..yYwYy..y.y.", "o.y.yYwwwYy.y.o.", "o.o..yYwYy..o.o.", "o.o.o.yYy.o.o.o.", "o.o.o..y..o.o.o.", "y...o.....o...y.", "..o.y.....y.o...", "..y.........y...", "................", "................", "................"],
+  fw_niagara: ["................", "wywywywywywywywy", "y.y.y.y.y.y.y.y.", "o.oyo.o.yo.o.yo.", "y.o.y.oyo.y.oy.o", "o.y.o.y.o.yo.o.y", "y.o.yo.o.y.o.y.o", ".yo.o.y.oy.o.yo.", "o.y.o.yo.o.y.o.y", ".o.y.o.y.o.yo.o.", "y.o..y.o..o.y.o.", ".o.y..o.y..o..y.", "..y..o...y...o..", "o...y..o...y....", "..o...y...o...y.", "................"],
+};
+
+function fwArt(id: string): Grid | null {
+  const rows = FW_ART[id];
+  if (rows) {
+    const g = blank();
+    rows.forEach((r, y) => [...r].forEach((ch, x) => FW_PAL[ch] !== undefined && g.set(x, y, FW_PAL[ch])));
+    g.outline(OUT, false, 120);
+    return g;
+  }
+  if (id === "fw_fountainrow") {
+    // 발밑 좌우로 분수 다섯 개 (가운데가 가장 높다)
+    const g = blank();
+    const cols: Color[] = [0xffe08a, 0xff8fb8, 0xffffff, 0x8fe0ff, 0xffe45a];
+    [1, 4, 7, 10, 13].forEach((x, i) => {
+      const h = [6, 9, 12, 9, 6][i];
+      for (let d = 0; d < h; d++) g.set(x + (d > h - 3 ? (d % 2 ? -1 : 1) : 0), 14 - d, d % 3 === 2 ? 0xffffff : cols[i]);
+      g.set(x - 1, 15 - h + 1, cols[i], 170);
+      g.set(x + 1, 15 - h + 1, cols[i], 170);
+    });
+    g.hline(0, 15, 15, 0x5a4a3a);
+    return g;
+  }
+  if (id === "fw_aurora" || id === "fw_town" || id === "fw_hangang") {
+    // 밤하늘 액자: 오로라 띠 / 동네 지붕 위 불꽃 / 한강 다리 위 나이아가라와 불꽃
+    const g = blank();
+    for (let y = 1; y < 15; y++) g.hline(1, 14, y, y < 6 ? 0x1a1d3c : y < 11 ? 0x22264a : 0x2b2f58);
+    const edge: Color = id === "fw_hangang" ? 0xffd060 : id === "fw_town" ? 0xff9ab8 : 0x7ae0b0;
+    g.hline(2, 13, 0, edge);
+    g.hline(2, 13, 15, edge);
+    g.vline(0, 2, 13, edge);
+    g.vline(15, 2, 13, edge);
+    if (id === "fw_aurora") {
+      for (let x = 1; x <= 14; x++) {
+        const y = Math.round(5 + Math.sin(x * 0.8) * 1.5);
+        g.set(x, y - 2, 0xa070e8);
+        g.set(x, y - 1, 0xd0a0ff, 200);
+        g.set(x, y, 0x62e07e);
+        g.set(x, y + 1, 0xa6ff9a);
+        g.set(x, y + 2, 0x62e07e, 170);
+        if (x % 2) g.set(x, y + 3, 0x62e07e, 110);
+      }
+      for (const [x, y] of [[3, 11], [9, 12], [12, 10], [6, 13]]) g.set(x, y, 0xffffff, 200);
+      return g;
+    }
+    if (id === "fw_town") {
+      rays(g, 5, 5, 3, 0xfff4d0, 0xffd060, 0xffa050);
+      rays(g, 11, 4, 2, 0xffe4ee, 0xff8fb8, 0xff6f9f);
+      rays(g, 10, 9, 2, 0xd8f6ff, 0x8fe0ff, 0x6ab8f0);
+      // 동네 지붕
+      for (const [x0, w] of [[1, 4], [6, 4], [11, 4]] as const) {
+        for (let i = 0; i < w; i++) g.set(x0 + i, 12, 0x141428);
+        g.set(x0 + 1, 11, 0x141428);
+        g.set(x0 + 2, 11, 0x141428);
+      }
+      g.rect(1, 13, 14, 2, 0x141428);
+      g.set(3, 13, 0xffd27a);
+      g.set(8, 13, 0xffd27a);
+      g.set(13, 13, 0xffd27a);
+      return g;
+    }
+    // 한강: 위에 나이아가라 줄 + 불꽃 셋, 아래 다리와 물
+    g.hline(2, 13, 2, 0xfff4d0);
+    for (let x = 2; x <= 13; x += 2) {
+      g.set(x, 3, 0xffe08a);
+      g.set(x + (x % 4 ? 0 : 1), 4, 0xd8963c, 200);
+    }
+    rays(g, 5, 7, 2, 0xffe4ee, 0xff8fb8, 0xff6f9f);
+    rays(g, 10, 7, 2, 0xd8f6ff, 0x8fe0ff, 0x6ab8f0);
+    rays(g, 8, 5, 1, 0xfff4d0, 0xffd060, 0xffa050);
+    g.hline(1, 14, 11, 0x3a3a5a);
+    for (const x of [3, 7, 11]) g.vline(x, 12, 13, 0x3a3a5a);
+    g.hline(1, 14, 14, 0x2a4a7a);
+    for (const x of [4, 8, 12]) g.set(x, 13, 0xffd060, 150);
+    return g;
+  }
+  return null;
+}
+
 // ── F8 캐릭터 꾸미기 추가분 (시트에 그려지는 머리·목·손·등): 문자 그림 16×16 ──
 
 type Ascii = { rows: readonly string[]; pal: Record<string, Color> };
@@ -1035,7 +1133,7 @@ function gearIcon(id: string): Grid | null {
     g.outline(OUT, false, 170);
     return g;
   }
-  const gh = ghostGearIcon(id);
+  const gh = ghostGearIcon(id) ?? chairGearIcon(id);
   if (gh) return gh;
   const a = GEAR_ICONS[id];
   if (!a) return null;
@@ -1151,7 +1249,7 @@ function base(itemId: string): HTMLCanvasElement {
     default: {
       // F8 추가 꾸미기 (시트 그림 → 문자 아이콘, 따로 그리는 연출 → 그 그림으로 만든 아이콘)
       // 11/19 계절 한정 세트 (시트 그림·이름표는 seasonSetGear, 따로 그리는 연출은 fxIconGrid → seasonSetFx)
-      const f8 = seasonGearIcon(itemId) ?? gearIcon(itemId) ?? questUnlockIcon(itemId) ?? fxIconGrid(itemId) ?? megaphoneIcon(itemId) ?? dyeIcon(itemId) ?? nameStyleIcon(itemId) ?? bodyIconGrid(itemId);
+      const f8 = fwArt(itemId) ?? seasonGearIcon(itemId) ?? gearIcon(itemId) ?? questUnlockIcon(itemId) ?? fxIconGrid(itemId) ?? megaphoneIcon(itemId) ?? dyeIcon(itemId) ?? nameStyleIcon(itemId) ?? bodyIconGrid(itemId);
       if (f8) return f8.toCanvas();
       // 낚시·채집물 (4·32번: f_/b_/h_/o_/d_)
       return forageIconCanvas(itemId) ?? unknown().toCanvas();
@@ -1164,6 +1262,8 @@ export const ICON_IDS: readonly string[] = [
   "fw_small", "fw_heart", "fw_triple", "fw_big", "fw_grand", "fw_meteor", "fw_letter",
   "fw_fountain", "fw_ring", "fw_star", "fw_spiral", "fw_willow", "fw_crossette", "fw_smile", "fw_waterfall",
   "fw_twinring", "fw_butterfly", "fw_snow", "fw_strobe", "fw_chameleon", "fw_glitter", "fw_palm", "fw_tower",
+  "fw_crackle", "fw_emoji", "fw_parachute", "fw_whistle", "fw_fish", "fw_pinwheel", "fw_rainbow", "fw_kiku",
+  "fw_cascade", "fw_fountainrow", "fw_aurora", "fw_kamuro", "fw_niagara", "fw_town", "fw_hangang",
   "hat_straw", "hat_cat", "hat_flower", "hat_halo", "hand_lantern", "aura_firefly", "aura_fog", "neck_scarf",
   "back_wings", "pet_ghost", "feet_flowers",
   "decor_candles", "decor_wreath", "decor_ribbon", "decor_lantern", "decor_ghostcat", "decor_stars",

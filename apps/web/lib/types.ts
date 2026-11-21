@@ -377,14 +377,29 @@ export const INQUIRY_CATEGORIES = [
 export type InquiryCategory = (typeof INQUIRY_CATEGORIES)[number]["id"];
 
 /**
- * POST /api/inquiry (세션 필요) → 우리 문의함(관리자 문의 탭)에 저장된다. GitHub 설정(GITHUB_INQUIRY_REPO)이 있으면 이슈로도 보낸다.
- * message 10~1000자, contact(답장 받을 이메일 등)는 선택 100자.
+ * POST /api/inquiry → 우리 문의함(관리자 문의 탭)에 저장된다. GitHub 설정(GITHUB_INQUIRY_REPO)이 있으면 이슈로도 보낸다.
+ * message 10~1000자, contact(답장 받을 이메일 등)는 100자 — 게임 계정이 있으면 선택, 11/20 계정 없는 손님(개발자 노트)은 필수.
  * GitHub 저장소가 공개면 문의 내용이 공개되므로 UI는 `GET /api/inquiry` → { enabled, public }을 보고 안내한다.
  */
-export type InquiryInput = { category: InquiryCategory; message: string; contact?: string; /** 문의 당시 채널 (관리자 문의 탭·이슈에 표시) */ channel?: number };
+/** 11/20 문의를 보낸 곳 (없으면 게임 안 문의 창) */
+export const INQUIRY_SOURCES = ["game", "devnote"] as const;
+export type InquirySource = (typeof INQUIRY_SOURCES)[number];
+export type InquiryInput = {
+  category: InquiryCategory;
+  message: string;
+  contact?: string;
+  /** 문의 당시 채널 (관리자 문의 탭·이슈에 표시) */
+  channel?: number;
+  source?: InquirySource;
+  /** 11/20 봇 거르기 숨은 칸. 사람은 비워 두고, 채워 오면 접수한 척만 한다 */
+  homepage?: string;
+};
 export type InquiryResponse = { ok: true };
-/** enabled는 이제 늘 true (예전 클라이언트용으로 남긴다). public = GitHub으로도 보내고 그 저장소가 공개일 때만 true */
-export type InquiryInfoResponse = { enabled: boolean; public: boolean };
+/**
+ * enabled는 이제 늘 true (예전 클라이언트용으로 남긴다). public = GitHub으로도 보내고 그 저장소가 공개일 때만 true.
+ * signedIn = 11/20 게임 계정 쿠키가 있는지 (없으면 손님 — 연락처를 꼭 받는다)
+ */
+export type InquiryInfoResponse = { enabled: boolean; public: boolean; signedIn?: boolean };
 
 // ── v3: 성황당·포인트 랭킹·머무르기 ──
 

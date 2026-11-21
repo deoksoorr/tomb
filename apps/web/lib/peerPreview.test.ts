@@ -8,8 +8,8 @@ describe("채널 이동 창: 지금 맵 기준 같이 있는 사람", () => {
     expect(aloneLine("camp", 1)).toBe("언젠가 캠핑장에는 지금 나 혼자예요. 이 맵이 아닌 곳에 1명 더 있어요.");
   });
 
-  it("채널 전체에 나 혼자면 확성기 안내", () => {
-    expect(aloneLine("village", elsewhereCount(1, 0))).toBe("지금은 이 채널에 나 혼자 있어요. 확성기로 사람을 불러 보세요.");
+  it("채널 전체에 나 혼자면 채팅 인사 안내", () => {
+    expect(aloneLine("village", elsewhereCount(1, 0))).toBe("지금은 이 채널에 나 혼자 있어요. 채팅으로 먼저 인사를 남겨 보세요.");
   });
 
   it("같이 있는 사람이 있으면 맵 이름을 붙이고, 다른 곳 인원은 덧붙인다", () => {

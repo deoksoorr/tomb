@@ -27,7 +27,7 @@ import type { VillageHouse, VillageResponse } from "@/lib/housing/types";
 import type { MapConcept } from "@/lib/mapConcept";
 import { addCanvasTexture, TEX } from "../assets/manifest";
 import { DEPTH } from "../config";
-import { drawEmptyLot, drawHouseLot, scaleLotLabel, type LotGfx } from "../housing/worldLots";
+import { drawEmptyLot, drawHouseLot, LOTS_CHANGED, scaleLotLabel, type LotGfx } from "../housing/worldLots";
 import { CHUNK, CHUNK_COLS, CHUNK_ROWS, drawGroundChunk } from "../sprites/ground";
 import { SHOP_HUT_H } from "../sprites/extras";
 import { BENCH_UP_BACK_ROW } from "../sprites/props";
@@ -40,6 +40,7 @@ import { SEA_STOP_LIGHTS } from "./seaStop";
 import { ZOO_LIGHTS } from "./zoo/zooLayout";
 import { HAUNT_LIGHTS } from "../haunt/hauntLayout";
 import { TOWER_LIGHTS } from "../tower/towerLayout";
+import { LIGHTHOUSE, LIGHTHOUSE_ART_FOOT, LIGHTHOUSE_ART_H, LIGHTHOUSE_LIGHTS } from "../lighthouse/lighthouseLayout";
 import { BUMPER_LIGHTS } from "../bumper/bumperLayout";
 import { KIOSK_ART_H, KIOSK_ART_W, KIOSK_LIGHTS, LOTTERY_KIOSK, lotteryColliders, lotteryKioskArt } from "./lotteryKiosk";
 import {
@@ -185,7 +186,7 @@ export class WorldMap {
     for (const dx of [-14, 14]) this.staticLights.push({ x: SHOP.x + dx, y: SHOP.y - 17, scale: 0.4, tint: 0xffc870, base: 0.5 });
     this.addLabel(SHOP.x, SHOP.y - SHOP_HUT_H + 3, "유령 잡화점", 0xe8dcc0, 1); // 지붕(굴뚝) 바로 위
 
-    // 분양 사무소 (주거 구역 어귀)
+    // 분양 사무소 (11/20 모닥불 광장 동쪽 끝, 큰 모닥불 오른쪽·해먹 아래)
     const O = HOUSING_OFFICE;
     this.skin(scene.add.image(O.x, O.y + 2, WP.office).setOrigin(0.5, 1).setDepth(O.y), WP.office);
     this.addCollider(this.colliders, officeCollider());
@@ -222,6 +223,9 @@ export class WorldMap {
     this.staticLights.push(...HAUNT_LIGHTS);
     // 11/15 야근 빌딩 로비 유리문·옥상 네온 간판·창 불빛 (그림은 tower/TowerView)
     this.staticLights.push(...TOWER_LIGHTS);
+    // 11/20 판교의 등대 등실·창·문 등·전광판 (그림·빛줄기는 lighthouse/LighthouseView). 이름표는 지붕 꼭대기 위
+    this.staticLights.push(...LIGHTHOUSE_LIGHTS);
+    this.addLabel(LIGHTHOUSE.x, LIGHTHOUSE.y + LIGHTHOUSE_ART_FOOT - LIGHTHOUSE_ART_H - 1, "판교의 등대", 0xffe0c8, 1);
     // 11/16 범퍼카장 조명 기둥·간판·매표소 창 (그림은 bumper/BumperRide)
     this.staticLights.push(...BUMPER_LIGHTS);
     this.addLotteryKiosk();
@@ -756,6 +760,7 @@ export class WorldMap {
     this.items = [...this.fixedItems, ...this.houseItems, ...this.extraItems];
     this.houseLots = new Set(byLot.keys());
     this.decor.setLots(this.houseLots);
+    this.scene.events.emit(LOTS_CHANGED); // 11/21 등대 빛줄기가 새 집을 바로 가림·빛 대상으로
     return true;
   }
 

@@ -128,15 +128,22 @@ function InquiryCard({
     <li className={cx(m.case, !done && m.caseNew)}>
       <div className={m.caseHead}>
         <span className={m.type}>{CATEGORY_LABEL[row.category] ?? row.category}</span>
+        {/* 11/20 보낸 곳 (예전 문의는 게임) */}
+        {row.source === "devnote" ? <span className={m.type}>개발자 노트에서</span> : <span className={styles.meta}>게임에서</span>}
         {!done && <span className={m.newTag}>새 문의</span>}
-        <button
-          type="button"
-          className={cx(ui.button, ui.quiet, ui.small)}
-          onClick={() => onFindMember(row.accountId)}
-          title={`회원 목록 탭에서 이 계정을 찾아요 (${row.accountId})`}
-        >
-          {row.name ?? "이름 없는 계정"}
-        </button>
+        {/* 11/20 계정 없이 개발자 노트에서 보낸 손님은 찾을 계정이 없다 */}
+        {row.accountId === null ? (
+          <span className={m.type}>손님</span>
+        ) : (
+          <button
+            type="button"
+            className={cx(ui.button, ui.quiet, ui.small)}
+            onClick={() => onFindMember(row.accountId!)}
+            title={`회원 목록 탭에서 이 계정을 찾아요 (${row.accountId})`}
+          >
+            {row.name ?? "이름 없는 계정"}
+          </button>
+        )}
         <time className={styles.meta} dateTime={new Date(row.at).toISOString()}>
           {fullTime(row.at)}
         </time>

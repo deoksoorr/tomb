@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MegaphoneEntry } from "@/lib/types";
-import { MEGAPHONE_TTL_MS } from "@tomb/protocol";
-import { applyPinMsg, dropReplaced, flashEndsAt, liveMegaphones, MEGA_FLASH_MS, MEGA_FLASH_QUEUED_MS, MEGA_QUEUE_MAX, megaphoneStore, sortPins } from "./useMegaphone";
+import { MEGA_FEED_TTL_MS } from "@tomb/protocol";
+import { applyPinMsg, dropReplaced, feedOpen, flashEndsAt, liveMegaphones, MEGA_FLASH_MS, MEGA_FLASH_QUEUED_MS, MEGA_QUEUE_MAX, megaphoneStore, sortPins } from "./useMegaphone";
 
 let n = 0;
 const entry = (text: string): MegaphoneEntry => ({ id: `m${++n}`, name: `이름${n}`, text, scope: "channel", ch: 1, at: Date.now() });
@@ -70,13 +70,15 @@ describe("확성기 가운데 표시 차례", () => {
     expect(megaphoneStore.getSnapshot().queue.at(-1)?.text).toBe(`줄 ${MEGA_QUEUE_MAX + 2}`);
   });
 
-  it("외친 지 5분이 지난 한마디는 기록 목록에서 빠진다 (열려 있는 동안에도 타이머로)", () => {
+  it("하루가 지난 한마디는 기록 목록에서 빠진다 (열려 있는 동안에도 타이머로)", () => {
     const now = Date.now();
-    const old = { ...entry("오래됨"), at: now - MEGAPHONE_TTL_MS };
+    const old = { ...entry("오래됨"), at: now - MEGA_FEED_TTL_MS };
     const fresh = entry("방금");
     expect(liveMegaphones([old, fresh], now).map((e) => e.id)).toEqual([fresh.id]);
+    // 11/21 옛 5분 기준은 지났어도 하루 안이면 남는다
+    expect(liveMegaphones([{ ...entry("6분 전"), at: now - 6 * 60_000 }], now)).toHaveLength(1);
     megaphoneStore.push(fresh);
-    vi.advanceTimersByTime(MEGAPHONE_TTL_MS - 1_000);
+    vi.advanceTimersByTime(MEGA_FEED_TTL_MS - 1_000);
     expect(megaphoneStore.getSnapshot().entries.some((e) => e.id === fresh.id)).toBe(true);
     vi.advanceTimersByTime(2_000);
     expect(megaphoneStore.getSnapshot().entries.some((e) => e.id === fresh.id)).toBe(false);
@@ -128,5 +130,23 @@ describe("11/17 고정 공지 칸", () => {
     await megaphoneStore.load(4);
     expect(megaphoneStore.getSnapshot().pins.map((p) => p.text)).toEqual(["4채널"]);
     spy.mockRestore();
+  });
+});
+
+describe("11/21 마을 소식 기록 줄 열림 (feedOpen)", () => {
+  it("접혀 있으면 닫힘", () => {
+    expect(feedOpen(true, 3, true)).toBe(false);
+  });
+  it("소식이 있으면 펼침 상태 그대로", () => {
+    expect(feedOpen(false, 2, false)).toBe(true);
+  });
+  it("비어 있으면 직접 펼친 때만 (빈 줄 안내)", () => {
+    expect(feedOpen(false, 0, false)).toBe(false);
+    expect(feedOpen(false, 0, true)).toBe(true);
+  });
+  it("펼친 뒤 다시 받은 목록이 비어도 닫히지 않는다 (펼치자마자 접히던 것)", () => {
+    // 누르기 전: 실시간으로 온 줄 1개 → 펼침. 다시 받은 서버 목록은 0개
+    expect(feedOpen(false, 1, true)).toBe(true);
+    expect(feedOpen(false, 0, true)).toBe(true);
   });
 });

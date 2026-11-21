@@ -74,6 +74,9 @@ import { lotteryColliders, lotteryInteractables } from "./lotteryKiosk";
 import { FURN_STALL, SEASON_STALL, seasonStallColliders, seasonStallInteractables } from "./seasonStallLayout";
 import { MUNGNYANG_SELLER, mungnyangColliders, mungnyangInteractables } from "./mungnyangLayout";
 import { OFFICE_STALL, officeColliders, officeInteractables } from "./officeStallLayout";
+import { OFFICE_STALL_H, OFFICE_STALL_W } from "../sprites/officeSeller";
+import { TOWER_H, TOWER_W } from "../tower/towerArt";
+import { LIGHTHOUSE, lighthouseArtRects, lighthouseColliders, lighthouseInteractables } from "../lighthouse/lighthouseLayout";
 
 // 정적 맵 배치 (순수 데이터). 좌석·스폰·특별한 장소·강·연못·필지·묘역 좌표는 packages/protocol/src/world.ts가 원본이고,
 // 여기서는 그 사이를 채우는 나무·석등·오래된 묘비·철책·촛불·안개·종루·납골당 등 소품과 바닥 종류, 물(강·호수·연못), 물살, 충돌, 상호작용 대상을 정한다.
@@ -407,10 +410,9 @@ const HAND_PROPS: readonly PropDef[] = [
   P("lantern", 836, 66),
   P("lantern", 892, 66),
   P("cairn", 896, 160, 1),
-  P("pine", 936, 58, 0),
+  P("pine", 916, 56, 0), // 11/20 야근 빌딩이 옆(x 934~)으로 와서 (936,58)에서 비켰다
   P("snowPine", 806, 52, 1),
-  // 분양 사무소 옆
-  P("lantern", 996, 166),
+  // 11/20 예전 분양 사무소 옆 석등(996,166)은 야근 빌딩 로비 자리라 뺐다
   // ── 까마귀 연못 ──
   P("deadTree", 1052, 72, 0),
   P("willow", 1384, 64, 1),
@@ -422,7 +424,7 @@ const HAND_PROPS: readonly PropDef[] = [
   P("deadTree", 1150, 166, 1),
   P("deadTree", 1300, 164, 0),
   P("oldGrave", 1370, 150, 0),
-  P("oldGrave", 1086, 152, 1),
+  P("oldGrave", 1192, 162, 1), // 11/20 (1086,152)는 「판교의 등대」 돌 받침 자리라 연못 남쪽 둑으로
   // ── 별 보기 마당 (F3, 11/19 언덕 동쪽 반) ── 소나무·마른 나무, 돗자리, 해먹, 입구 석등 (서쪽 반은 옛 묘역)
   P("snowPine", 232, 56, 1),
   P("pine", 352, 60, 1),
@@ -555,6 +557,13 @@ function clearOfFences(x: number, y: number): boolean {
   return true;
 }
 
+/** 11/20 북쪽 길 위 키 큰 그림 자리 (야근 빌딩·문대리 카트·판교의 등대와 전광판) — 흩뿌리는 나무를 비운다 */
+const TALL_ART: readonly Rect[] = [
+  { x: TOWER.x - TOWER_W / 2, y: TOWER.y - TOWER_H, w: TOWER_W, h: TOWER_H },
+  { x: OFFICE_STALL.x - OFFICE_STALL_W / 2, y: OFFICE_STALL.y - OFFICE_STALL_H, w: OFFICE_STALL_W, h: OFFICE_STALL_H },
+  ...lighthouseArtRects(),
+];
+
 /** 길·물·좌석·특별한 자리·다른 소품과 겹치지 않는 자리인지 */
 function freeForProp(placed: readonly PropDef[], x: number, y: number, gap: number): boolean {
   if (x < WALL_THICKNESS + 10 || x > MAP_WIDTH - WALL_THICKNESS - 10 || y < WALL_THICKNESS + 30 || y > MAP_HEIGHT - TILE - 12) return false;
@@ -581,6 +590,7 @@ function freeForProp(placed: readonly PropDef[], x: number, y: number, gap: numb
   for (const k of RIDE_KEEPOUT) if (Math.hypot(k.x - x, k.y - y) < k.r) return false; // 50번 광장 놀거리 (rides.ts)
   for (const k of SKY_KEEPOUT) if (Math.hypot(k.x - x, k.y - y) < k.r) return false; // 관람차·열기구 출발장 (skyRides.ts)
   for (const p of [SHOP, HOUSING_OFFICE, HUNT_SIGN, SHRINE, TELESCOPE, TELESCOPE_2, FERRY_DOCK, DUCK_DOCK, WISH_FOUNTAIN]) if (Math.hypot(p.x - x, p.y - y) < 44) return false;
+  for (const r of TALL_ART) if (inRect(r, x, y, 8)) return false; // 11/20 야근 빌딩·문대리 카트·판교의 등대 그림 뒤에 나무가 숨거나 걸치지 않게
   if (Math.hypot(HUNT_GATE.x - x, HUNT_GATE.y - y) < 50) return false;
   for (const r of BUMPER_KEEPOUT) if (inRect(r, x, y)) return false; // 11/16 범퍼카장 간판 앞 · 호박밭 가는 틈
   return true;
@@ -793,6 +803,7 @@ export function staticColliders(): Rect[] {
   out.push(...seasonStallColliders()); // 11/19 계절 보따리상(광장)·가구 보따리상(북쪽 길 위) 노점과 주인 (seasonStallLayout.ts)
   out.push(...mungnyangColliders()); // 11/19 분양사 보리(동물원 정문 왼쪽 풀밭) 몸통·간식 상자·방석 (mungnyangLayout.ts)
   out.push(...officeColliders()); // 11/20 총무팀 문대리(야근 빌딩 오른쪽 풀밭) 사무실 가구 카트·문대리 몸통 (officeStallLayout.ts)
+  out.push(...lighthouseColliders()); // 11/20 판교의 등대 돌 받침·전광판 다리 (lighthouse/lighthouseLayout.ts)
   return out;
 }
 
@@ -987,9 +998,8 @@ export function groundKind(tx: number, ty: number): GroundKind {
   }
   // ── 북쪽 길 (언덕 동쪽 ~ 동쪽 담) ──
   if (NORTH_ROAD_TY.includes(ty) && tx > CLIFF_TX && tx < lastCol - 1) return "dirt";
-  // 잡화점·사무소 문 앞, 사냥터 동굴 길
+  // 잡화점 문 앞, 사냥터 동굴 길 (11/20 분양 사무소는 광장 포석 위로 옮겨 문 앞 흙길이 없다)
   if (between(ty, T(SHOP_DOOR.y), NORTH_ROAD_TY[0]) && Math.abs(tx * TILE + TILE / 2 - SHOP_DOOR.x) < TILE) return "dirt";
-  if (between(ty, T(HOUSING_DOOR.y), NORTH_ROAD_TY[0]) && Math.abs(tx * TILE + TILE / 2 - HOUSING_DOOR.x) < TILE) return "dirt";
   if (between(ty, 2, NORTH_ROAD_TY[0]) && between(tx, T(HUNT_GATE.x) - 1, T(HUNT_GATE.x))) return "dirt";
   // ── 주거 구역: 서쪽 골목(세로)과 집 앞 골목(가로) ──
   if (between(tx, HOUSE_TX0, HOUSE_TX0 + 1) && between(ty, NORTH_ROAD_TY[1] + 1, LAST_STREET_TY)) return "cobble";
@@ -1021,7 +1031,7 @@ export function groundKind(tx: number, ty: number): GroundKind {
 
 // ── 상호작용 오브젝트 (E/탭) ── WorldScene이 가장 가까운 것을 골라 안내 문구를 띄우고 상호작용한다.
 export type InteractKind = "tree" | "swing" | "hammock" | "bell" | "well" | "water" | "portal" | "door" | "lot" | "dock" | "wish" | "seesaw" | "trampoline" | "carousel" | "telescope" | "mat" | "forage" | "zoo" | "ferris" | "balloon" | "bus" | "bumper";
-export type PortalKind = "hunt" | "housing" | "shrine" | "haunt" | "tower" | "lottery" | "seasonCos" | "seasonFurn" | "mungnyang" | "office";
+export type PortalKind = "hunt" | "housing" | "shrine" | "haunt" | "tower" | "lottery" | "seasonCos" | "seasonFurn" | "mungnyang" | "office" | "lighthouse";
 export type Interactable = {
   id: string;
   kind: InteractKind;
@@ -1105,6 +1115,7 @@ export function interactables(): Interactable[] {
     out.push(...seasonStallInteractables()); // 11/19 계절 보따리상·가구 보따리상 (seasonStallLayout.ts)
     out.push(...mungnyangInteractables()); // 11/19 분양사 보리 (mungnyangLayout.ts)
     out.push(...officeInteractables()); // 11/20 총무팀 문대리 사무실 가구 카트 (officeStallLayout.ts)
+    out.push(...lighthouseInteractables()); // 11/20 판교의 등대 문 (lighthouse/lighthouseLayout.ts — 지금은 안내 한마디)
     fixedItems = out;
   }
   return fixedItems.slice();
@@ -1131,7 +1142,7 @@ export function bridgeAt(x: number, y: number): boolean {
 }
 
 /** 미니맵·안내용 주요 장소 (F17) */
-export type Landmark = { id: string; label: string; x: number; y: number; kind: "fire" | "grave" | "shop" | "hunt" | "housing" | "shrine" | "dock" | "telescope" | "wish" | "bell" | "fish" | "zoo" | "haunt" | "ferris" | "balloon" | "tower" | "bumper" | "busCamp" | "busSea" | "duck" | "season" | "furnStall" | "mungnyang" | "office" };
+export type Landmark = { id: string; label: string; x: number; y: number; kind: "fire" | "grave" | "shop" | "hunt" | "housing" | "shrine" | "dock" | "telescope" | "wish" | "bell" | "fish" | "zoo" | "haunt" | "ferris" | "balloon" | "tower" | "bumper" | "busCamp" | "busSea" | "duck" | "season" | "furnStall" | "mungnyang" | "office" | "lighthouse" };
 export const LANDMARKS: readonly Landmark[] = [
   { id: "fire", label: "큰 모닥불", x: PLAZA_FIRE.x, y: PLAZA_FIRE.y, kind: "fire" },
   ...GRAVE_AREAS.map((a) => ({ id: `grave${a.id}`, label: a.name, x: a.aisleX, y: a.y0 + a.dy / 2, kind: "grave" as const })),
@@ -1165,4 +1176,6 @@ export const LANDMARKS: readonly Landmark[] = [
   { id: "mungnyang", label: "분양사 보리", x: MUNGNYANG_SELLER.x - 4, y: MUNGNYANG_SELLER.y - 8, kind: "mungnyang" },
   // 11/20 총무팀 문대리 (야근 빌딩 오른쪽, 미니맵 사무 의자 그림)
   { id: "office", label: "총무팀 문대리", x: OFFICE_STALL.x, y: OFFICE_STALL.y - 10, kind: "office" },
+  // 11/20 판교의 등대 (예전 야근 빌딩 자리, 미니맵 줄무늬 등대 그림)
+  { id: "lighthouse", label: "판교의 등대", x: LIGHTHOUSE.x, y: LIGHTHOUSE.y - 10, kind: "lighthouse" },
 ];

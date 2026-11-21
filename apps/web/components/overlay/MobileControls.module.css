@@ -58,7 +58,10 @@
 }
 
 .action[data-slot="interact"][data-near="true"] {
+  padding: 8px;
   color: var(--bone);
+  line-height: 1.2;
+  word-break: keep-all;
   box-shadow:
     inset 0 0 0 2px var(--candle),
     0 0 14px rgba(224, 195, 106, 0.35);

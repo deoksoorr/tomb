@@ -456,6 +456,8 @@ button.hotSlot:disabled {
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  /* 길게 눌러도 iOS 그림 저장 메뉴가 뜨지 않게 (회장님 독대는 게임 셸 밖이라 셸 규칙이 안 닿는다) */
+  -webkit-touch-callout: none;
 }
 
 .hudTop {
@@ -500,6 +502,30 @@ button.hotSlot:disabled {
 
 .timer {
   color: var(--candle) !important;
+}
+
+/* 11/20 회장님 독대 연습 판: 청록 테두리 (오버레이 피해 계기판·결과 창과 같은 색) */
+.hudPanel[data-practice] {
+  background: color-mix(in srgb, var(--panel) 70%, #0e3a48);
+  box-shadow:
+    0 0 0 2px #141218,
+    0 0 0 4px #3ab8c8;
+}
+
+/* 11/20 회장님 독대 회복 감소 알림 (빨간 띠) */
+.healCut {
+  flex-basis: 100%;
+  padding: 1px 6px;
+  border: 1px solid #ff6a5a;
+  background: rgba(120, 16, 20, 0.55);
+  color: #ffd0c8 !important;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* 11/20 회장님 독대 크런치(10분부터) 버틴 시간 */
+.crunchTime {
+  color: #ff6a5a !important;
 }
 
 .hp > span {
@@ -625,6 +651,7 @@ button.hotSlot:disabled {
 }
 
 .skillBar {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -829,6 +856,11 @@ button.hotSlot:disabled {
   }
 }
 
+/* 11/22 좁은 폰(360px): 조이스틱 흐린 원이 스킬 칸 밑으로 들어가지 않게 조금 작게 (사냥·야근 빌딩·회장님 독대 같다) */
+.capture .stickZone {
+  --stick: clamp(100px, 22vmin, 200px);
+}
+
 /* 왼쪽 위 상태 칩: 스킬 자동 X (켜지면 초록) */
 .autoChip {
   display: inline-flex;
@@ -987,6 +1019,33 @@ button.hotSlot:disabled {
   padding-bottom: 8px;
   pointer-events: auto;
   background: color-mix(in srgb, var(--panel) 80%, #3c5a78);
+}
+
+/* 11/20 회장님 독대 [달리기]: 11/22 구르기 바로 위, 구르기와 같은 크기·모양 (그림 자리는 » 표) — 켜 두면 초록 */
+.runBtn {
+  width: 56px;
+  height: 56px;
+  padding-bottom: 8px;
+  pointer-events: auto;
+  background: color-mix(in srgb, var(--panel) 80%, #5a4a2a);
+}
+
+.runBtn[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--panel) 55%, var(--moss));
+  box-shadow:
+    var(--px-border),
+    inset 0 0 0 2px var(--auto-green);
+}
+
+.runGlyph {
+  font-family: var(--font-small);
+  font-size: 24px;
+  line-height: 1;
+  color: #f2d48a;
+}
+
+.runBtn[aria-pressed="true"] .runGlyph {
+  color: var(--auto-green);
 }
 
 .dodgeLabel {
@@ -1748,7 +1807,7 @@ button.hotSlot:disabled {
   align-content: start;
 }
 
-/* ── 11/19 사냥터·야근 빌딩 창(결과 창 포함)은 데스크톱에서 세로로 길게: 화면 높이 − 64px (큰 화면은 980px까지).
+/* ── 11/19 사냥터·야근 빌딩 창(결과 창은 11/21부터 내용만큼 — .huntResult)은 데스크톱에서 세로로 길게: 화면 높이 − 64px (큰 화면은 980px까지).
    폰(560px 이하)은 공용 창 규칙 그대로 화면 전체. dialog.를 붙여 공용 .dialog 높이보다 앞서게 */
 @media (min-width: 561px) {
   dialog.huntDialog {
@@ -1853,13 +1912,46 @@ button.hotSlot:disabled {
   font-variant-numeric: tabular-nums;
 }
 
-/* 가운데 두 칸이 남는 높이를 나눠 갖는다 */
+/* 11/21 운영자: 결과 창은 내용만큼 (고정 높이·최소 높이 없음). 주운 것·잡은 몬스터가 많을 때만 그 칸 안에서 스크롤 */
 .resultCols {
   display: grid;
-  flex: 1 0 auto;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 8px;
-  min-height: 140px;
+}
+
+.resultBox .drops,
+.resultBox .killList {
+  /* 데스크톱 약 12줄(장비 칸 3줄 반)까지, 넘치면 안에서 스크롤 */
+  max-height: 300px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* 폰: 결과 창도 화면 전체가 아니라 내용만큼 (가운데 카드). 길면 창 본문이 스크롤, 버튼은 아래에 붙는다 */
+@media (max-width: 560px) {
+  dialog.huntResult[data-kind="window"] {
+    width: calc(100vw - 16px);
+    height: fit-content;
+    max-height: var(--dialog-max-h);
+  }
+
+  /* 창 틀(.frame): 공용 폰 규칙(화면 전체·안전 영역 여백·그림자 없음)을 되돌린다. [open]은 명시도용 */
+  dialog.huntResult[data-kind="window"][open] > div {
+    height: auto;
+    max-height: var(--dialog-max-h);
+    padding: 0;
+    box-shadow:
+      var(--px-border-strong),
+      0 0 0 4px rgba(9, 10, 8, 0.55);
+  }
+
+  /* 약 8줄(장비 칸 2줄 반)까지 */
+  .resultBox .drops,
+  .resultBox .killList {
+    max-height: 200px;
+  }
 }
 
 .resultBox {
@@ -2840,4 +2932,219 @@ button.hotSlot:disabled {
 
 .towerDrops b {
   color: var(--bone);
+}
+
+/* 11/20 회장님 독대 지옥: 반려(봉인)된 스킬 칸 — 아이콘은 회색으로 보이게 두고 빨간 테두리·빗금 + 아래 작은 「반려」 띠 (11/22 칸 가운데를 덮던 도장 글자는 뺐다) */
+.sealedSlot > :first-child {
+  filter: grayscale(1) brightness(0.6);
+}
+.sealedSlot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: repeating-linear-gradient(-45deg, rgba(232, 58, 42, 0.28) 0 3px, transparent 3px 8px);
+  box-shadow: inset 0 0 0 2px #e83a2a;
+  pointer-events: none;
+}
+.sealStamp {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  bottom: 2px;
+  z-index: 3;
+  font-family: var(--font-small);
+  font-size: 9px;
+  line-height: 12px;
+  text-align: center;
+  color: #ffd8d0;
+  background: #a8221a;
+  pointer-events: none;
+}
+.sealWarn {
+  box-shadow:
+    var(--px-border),
+    inset 0 0 0 3px #ff3b30;
+  background: #5a1010;
+}
+
+/* 11/21 스킬 칸 바로 위 (회장님 독대 헬 반려 예고·반려함) — 칸 자리를 밀지 않게 띄운다 */
+.barTop {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  pointer-events: auto;
+}
+
+/* 11/21 회장님 독대 폰(세로·가로): 위 판 한 장을 촘촘하게 (판 이름·무적 칩 / 단계·시간·스킬 자동 / 회복 감소 한 줄 / HP·SP / 세로는 피해 띠) */
+@media (max-width: 560px) {
+  .hudPanel[data-chair] {
+    max-width: none;
+  }
+}
+
+@media (max-width: 560px), (max-height: 520px) {
+  .hudPanel[data-chair] {
+    gap: 2px;
+    padding: 5px 8px 6px;
+    font-size: 11px;
+  }
+
+  .hudPanel[data-chair] .hudStats {
+    gap: 2px 8px;
+    align-items: center;
+  }
+
+  .hudPanel[data-chair] .healCut {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: #ff9a8a !important;
+    font-size: 10px;
+  }
+
+  .hudPanel[data-chair] .barLabel {
+    font-size: 9px;
+    line-height: 1.1;
+  }
+
+  .hudPanel[data-chair] .bar {
+    height: 6px;
+  }
+}
+
+/* 11/22 사용자 「야근 빌딩 폰 하단 UI를 그대로」: 회장님 독대 폰(slim)도 아래 칸·단추는 사냥·야근 빌딩과 똑같다 (slim은 위 HUD만 바꾼다) */
+.autoDot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  z-index: 3;
+  width: 6px;
+  height: 6px;
+  background: var(--muted);
+  box-shadow: 0 0 0 1px #0a0b09;
+  pointer-events: none;
+}
+
+.autoDotOn {
+  background: var(--auto-green);
+  box-shadow:
+    0 0 0 1px #0a0b09,
+    0 0 4px var(--auto-green);
+}
+
+/* 길게 누르기 결과 · 게임 알림 한 줄 (스킬 칸 바로 위) */
+.slimToast {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  translate: -50% 0;
+  margin: 0;
+  padding: 4px 10px;
+  background: rgba(14, 12, 20, 0.88);
+  box-shadow: 0 0 0 1px #141218;
+  color: #e9f7d9;
+  font-family: var(--font-small);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: slimToast 1.3s ease forwards;
+}
+
+@keyframes slimToast {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  12%,
+  80% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slimToast {
+    animation: none;
+  }
+}
+
+/* 11/21 손가락 [자동]: 전체 스위치 상태 그대로 (켜짐 초록 · 꺼짐 회색) */
+.autoAllBtn {
+  font-size: 11px;
+  /* 11/22 가로 화면(칸 한 줄): 「자동 켜짐」이 두 줄로 꺾이지 않게 */
+  width: auto;
+  min-width: 48px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.autoAllBtn[aria-pressed="false"] {
+  background: var(--panel);
+  color: var(--muted);
+}
+
+/* 11/21 회장님 독대: 회장님 몸·말풍선이 밑에 오면 위 판 반투명 (계기판과 같은 0.35) */
+[data-chair-hud] .hudPanel,
+[data-chair-hud] .topButtons {
+  transition: opacity 0.25s;
+}
+.chairUnder {
+  opacity: 0.35;
+}
+
+/* ── 11/22 사냥터·야근 빌딩 폰 위 HUD (시안 B · HuntPhoneTop — 모양은 game/chairman ph* 그대로) ── */
+.huntTop {
+  z-index: 2;
+}
+
+.huntTopSub {
+  color: #e8dcc0;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.huntTopSub b {
+  color: #fff4dc;
+  font-weight: 400;
+}
+
+.huntTopStatus {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 2px;
+  text-shadow: none;
+}
+
+.huntTopLow {
+  color: #ff7a60 !important;
+}
+
+.huntSheet {
+  width: min(264px, calc(100vw - 20px));
+}
+
+.huntSheetBuffs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  color: var(--moss);
+  font-size: 10px;
+}
+
+/* 위 HUD 글자 밑으로: 우두머리 체력 막대·안내 줄 */
+.capture[data-phtop] .hudTop {
+  padding-top: 70px;
+}
+
+@media (max-height: 520px) {
+  .capture[data-phtop] .hudTop {
+    padding-top: 4px;
+    padding-left: 180px;
+    padding-right: 150px;
+  }
 }

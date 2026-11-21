@@ -21,7 +21,7 @@ export default function GraveGuide({ onBury, onShrine, onPassed }: Props) {
         <TipList
           tips={[
             "끝내지 못한 일(프로젝트·다짐)을 묘비로 세워요. 묘역은 채널마다 따로예요.",
-            "지나가던 사람이 헌화하면 내 소식으로 알려 드려요.",
+            "지나가던 사람이 헌화하면 알림으로 알려 드려요.",
             `세운 지 ${DEFAULT_PASS_DAYS}일이 지나면 성불해 묘역을 떠나고, '성불한 이야기들'에 남아요.`,
             `묘역(채널마다 ${GRAVEYARD_CAPACITY}자리)이 차면 가장 오래된 묘비부터 조금 일찍 성불해요.`,
           ]}

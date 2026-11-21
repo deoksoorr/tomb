@@ -1,4 +1,4 @@
-import { isPermanentUntil, itemById, ITEMS, MEGAPHONE_TTL_MS, plotLabel, sanitizeLook, type ItemDef, type ItemKind } from "@tomb/protocol";
+import { isPermanentUntil, itemById, ITEMS, plotLabel, sanitizeLook, type ItemDef, type ItemKind } from "@tomb/protocol";
 import type { Me, PublicGrave } from "@/lib/types";
 
 // 가방·착용·지속시간 표시용 순수 함수
@@ -56,7 +56,8 @@ export function effectLabel(item: ItemDef): string {
     if (item.kind === "decor") return `묘비에 놓으면 ${d} 유지`;
     return item.kind === "cosmetic" ? `착용하면 ${d} 유지` : `${d} 유지`;
   }
-  if (item.kind === "megaphone") return `한 번 외치면 사라져요 (기록은 ${durationLabel(MEGAPHONE_TTL_MS)} 뒤 사라져요)`;
+  // 11/21 확성기는 판매·외치기를 멈췄다 (가진 것은 가방에 그대로)
+  if (item.kind === "megaphone") return "지금은 쓸 수 없어요 (확성기는 마을 소식으로 바뀌었어요)";
   if (item.kind === "dye") return "한 번 염색하면 사라져요 (접속이 끊겨도 남은 시간 안에는 이어서 할 수 있어요)";
   if (item.kind === "firework") return "한 번 쏘면 사라져요 (채널 모두가 봐요)";
   if (item.kind === "box") return "가방에서 열면 사라져요";

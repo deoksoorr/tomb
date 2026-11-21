@@ -27,9 +27,11 @@
  *   POST /internal/where     친구 Vercel → 이 서버: 그 방문자들이 지금 어느 채널·자리에 있는지 (WHERE_CACHE_MS 기억). 본문 서명 필수
  *   POST /internal/say       11/15 Vercel → 이 서버: 마을 공지 한 줄을 사람이 있는 채널 모두의 확성기 줄에 지금 띄운다. 본문 서명 필수
  *   POST /internal/pin       11/17 Vercel → 이 서버: 확성기 창 고정 공지가 바뀌었다 (그 채널 하나, 모든 채널이면 사람이 있는 채널 모두). 본문 서명 필수
+ *   POST /internal/people    11/20 Vercel → 이 서버: 접속 중인 사람 전부 (운영자 순간이동 목록 — 채널·sid·이름·자리·맵·실내). 본문 서명 필수
  *   POST /internal/online    11/17 Vercel → 이 서버: 지금 접속 중인 방문자 id 전부 (관리자 선물 「지금 접속 중인 사람 모두」). 본문 서명 필수
  */
 import { CLOSE, HUNT_ROOMS_CACHE_SEC, INTERNAL_SIG_HEADER, LOBBY_CACHE_SEC, ROOM_ID_RE, WHERE_CACHE_MS, verifyInternal, type PeerWhere } from "@tomb/protocol";
+import { personOf } from "./people";
 import type { JoinTicket } from "./channel";
 import {
   TICKET_HEADER,
@@ -75,7 +77,7 @@ export default {
 
 /** /internal/* 본문 상한 (바이트) */
 const INTERNAL_MAX_BYTES = 8_000 * 4;
-const INTERNAL_PATHS = new Set(["/internal/kick", "/internal/peer", "/internal/me", "/internal/where", "/internal/hello", "/internal/say", "/internal/pin", "/internal/online"]);
+const INTERNAL_PATHS = new Set(["/internal/kick", "/internal/peer", "/internal/me", "/internal/where", "/internal/hello", "/internal/say", "/internal/pin", "/internal/online", "/internal/people"]);
 
 async function internal(req: Request, env: Env, path: string): Promise<Response> {
   const notFound = new Response("not found", { status: 404 });
@@ -124,18 +126,16 @@ async function internal(req: Request, env: Env, path: string): Promise<Response>
   if (r.op === "say") {
     // 마을 공지: 확성기 방송과 같은 모양(scope all)으로, 사람이 있는 채널마다 한 번 (채널이 nonce로 중복을 막는다 — 웹이 다시 보내도 한 번)
     const { nonce, until, data } = sayRelay(r);
-    const info = await lobbyStub(env).info();
+    const ids = await lobbyStub(env).liveChannels();
     const sent = await Promise.all(
-      info.channels
-        .filter((c) => c.count > 0)
-        .map((c) =>
-          channelStub(env, c.id)
-            .megaphoneRelay(nonce, until, data)
-            .catch((e) => {
-              console.error("say relay failed", c.id, e);
-              return false;
-            }),
-        ),
+      ids.map((id) =>
+        channelStub(env, id)
+          .megaphoneRelay(nonce, until, data)
+          .catch((e) => {
+            console.error("say relay failed", id, e);
+            return false;
+          }),
+      ),
     );
     return Response.json({ sent: sent.filter(Boolean).length });
   }
@@ -145,7 +145,7 @@ async function internal(req: Request, env: Env, path: string): Promise<Response>
     const data = pinEvent(r);
     let ids: number[];
     if (r.scope === "channel") ids = parseChannel(String(r.ch), readConfig(env).maxChannels) === null ? [] : [r.ch];
-    else ids = (await lobbyStub(env).info()).channels.filter((c) => c.count > 0).map((c) => c.id);
+    else ids = await lobbyStub(env).liveChannels();
     const sent = await Promise.all(
       ids.map((id) =>
         channelStub(env, id)
@@ -169,6 +169,11 @@ async function internal(req: Request, env: Env, path: string): Promise<Response>
       }),
     ]);
     return Response.json({ visitorIds: mergeOnline([[...map.keys()].map((visitorId) => ({ visitorId }))], registry) });
+  }
+  if (r.op === "people") {
+    // 11/20 운영자 「접속 중인 사람」: 사람이 있는 채널들의 지금 명단 (기억을 건너뛴다 — 순간이동 직전에도 묻는다)
+    const map = await whereMap(env, true);
+    return Response.json({ people: [...map].map(([visitorId, w]) => personOf(visitorId, w)) });
   }
   if (r.op === "hello") {
     await lobbyStub(env).friendHello(r.visitorId, r.name, r.key, r.friends);
@@ -198,8 +203,7 @@ let whereMemo: { at: number; map: Map<string, PeerWhere> } | null = null;
 async function whereMap(env: Env, fresh: boolean): Promise<Map<string, PeerWhere>> {
   const now = Date.now();
   if (!fresh && whereMemo && now - whereMemo.at < WHERE_CACHE_MS) return whereMemo.map;
-  const info = await lobbyStub(env).info();
-  const ids = info.channels.filter((c) => c.count > 0).map((c) => c.id);
+  const ids = await lobbyStub(env).liveChannels();
   const rosters = await Promise.all(
     ids.map((id) =>
       channelStub(env, id)

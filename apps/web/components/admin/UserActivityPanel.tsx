@@ -13,14 +13,18 @@ import { fullTime, joinDate, relativeTime } from "./memberFormat";
 import { opsAdminApi } from "./opsAdminApi";
 import { Empty, LoadState } from "./PanelState";
 import { usePanelLoad } from "./usePanelData";
+import UserStatsDialog from "./UserStatsDialog";
 
 type Props = {
   toast: (message: string) => void;
   onAuthLost: () => void;
   version: number;
-  /** 이름을 누르면 회원 목록 탭에서 그 계정을 찾는다 */
+  /** 상세 창의 [회원 목록에서 찾기] — 회원 목록 탭에서 그 계정을 찾는다 */
   onFindMember: (accountId: string) => void;
 };
+/** 표에서 이름을 누르면 여는 상세 창 대상 */
+type Target = { accountId: string; name: string | null };
+type OnPick = (p: Target) => void;
 
 type Sort = "days30" | "days7" | "stay" | "lifetime";
 const SORTS: [Sort, string][] = [
@@ -53,6 +57,7 @@ export default function UserActivityPanel({ toast, onAuthLost, version, onFindMe
   const [fresh, setFresh] = useState(0);
   const load = usePanelLoad(() => opsAdminApi.activity(staff, fresh > 0), [version, staff, fresh], toast, onAuthLost);
   const r = load.data;
+  const [pick, setPick] = useState<Target | null>(null);
 
   return (
     <section className={an.wrap} aria-label="유저 활동">
@@ -69,13 +74,27 @@ export default function UserActivityPanel({ toast, onAuthLost, version, onFindMe
           </span>
         )}
       </div>
-      {r ? <Report r={r} onFindMember={onFindMember} /> : <LoadState data={null} error={load.error} retry={load.retry} />}
+      {r ? <Report r={r} onFindMember={setPick} /> : <LoadState data={null} error={load.error} retry={load.retry} />}
       <SeedCard toast={toast} onAuthLost={onAuthLost} onDone={() => setFresh((n) => n + 1)} />
+      {pick && (
+        <UserStatsDialog
+          key={pick.accountId}
+          accountId={pick.accountId}
+          name={pick.name}
+          toast={toast}
+          onAuthLost={onAuthLost}
+          onClose={() => setPick(null)}
+          onFindMember={(id) => {
+            setPick(null);
+            onFindMember(id);
+          }}
+        />
+      )}
     </section>
   );
 }
 
-function Report({ r, onFindMember }: { r: UserActivityReport; onFindMember: (id: string) => void }) {
+function Report({ r, onFindMember }: { r: UserActivityReport; onFindMember: OnPick }) {
   const s = r.summary;
   return (
     <>
@@ -258,7 +277,7 @@ function WeeklyRetention({ r }: { r: UserActivityReport }) {
   );
 }
 
-function Frequent({ r, onFindMember }: { r: UserActivityReport; onFindMember: (id: string) => void }) {
+function Frequent({ r, onFindMember }: { r: UserActivityReport; onFindMember: OnPick }) {
   const [sort, setSort] = useState<Sort>("days30");
   const rows = [...r.frequent].sort(SORT_FN[sort]).slice(0, SHOW);
   return (
@@ -289,7 +308,7 @@ function UserTable({
 }: {
   rows: (ActivityUser | GoneUser)[];
   now: number;
-  onFindMember: (id: string) => void;
+  onFindMember: OnPick;
   gone?: boolean;
   empty: string;
 }) {
@@ -346,8 +365,8 @@ function UserTable({
                   <button
                     type="button"
                     className={cx(ui.button, ui.quiet, ui.small)}
-                    onClick={() => onFindMember(u.accountId)}
-                    title={`회원 목록 탭에서 이 계정을 찾아요 (${u.accountId})`}
+                    onClick={() => onFindMember({ accountId: u.accountId, name: u.name })}
+                    title={`지금까지의 수치를 봐요 (${u.accountId})`}
                   >
                     {u.name ?? "이름 없음"}
                   </button>

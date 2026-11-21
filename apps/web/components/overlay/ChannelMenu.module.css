@@ -239,3 +239,9 @@
     min-height: 0;
   }
 }
+
+/* 11/20 운영자: 곳마다 이름 묶음 */
+.peerGroup {
+  display: grid;
+  gap: 2px;
+}

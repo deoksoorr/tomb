@@ -198,13 +198,9 @@ export class ChannelDO extends DurableObject<Env> {
           if (room) return;
           const self = this.channel;
           const work = lobbyStub(env)
-            .info()
-            .then((info) =>
-              Promise.all(
-                info.channels
-                  .filter((c) => c.id !== self && c.count > 0)
-                  .map((c) => channelStub(env, c.id).megaphoneRelay(nonce, until, data)),
-              ),
+            .liveChannels()
+            .then((ids) =>
+              Promise.all(ids.filter((id) => id !== self).map((id) => channelStub(env, id).megaphoneRelay(nonce, until, data))),
             )
             .catch((e) => console.error("megaphone relay failed", e));
           ctx.waitUntil(work);
@@ -260,7 +256,7 @@ export class ChannelDO extends DurableObject<Env> {
     }
     if (ticket.room !== undefined && ticket.room !== this.room) {
       // 처음 들어온 방 입장: 이 DO("room:{id}")를 방 모드로 굳힌다. 이름이 채널과 겹치지 않으므로 처음 한 번뿐이고, 아직 아무도 없다
-      if (this.core.count > 0) return new Response("bad request", { status: 400 });
+      if (this.core.size > 0) return new Response("bad request", { status: 400 });
       this.room = ticket.room;
       this.ctx.storage.kv.put(ROOM_KEY, ticket.room);
       this.core = this.makeCore();
@@ -271,12 +267,14 @@ export class ChannelDO extends DurableObject<Env> {
     }
     // 만석이면 hibernation 소켓으로 받지 않고 바로 닫는다. hibernation 소켓으로 받은 직후 닫으면
     // 클로징 핸드셰이크가 DO가 다음에 깨어날 때까지(로컬에서 약 10초) 끝나지 않아 클라이언트의 재시도가 늦어진다.
-    if (!this.core.admits(ticket.visitorId)) return rejectSocket(CLOSE.CHANNEL_FULL, "channel full");
+    // 11/20 운영자는 정원 밖 (꽉 찬 채널에도 들어가고, 로비 대기열·잡아 둔 자리와도 상관없다)
+    const staff = ticket.staff === true;
+    if (!this.core.admits(ticket.visitorId, staff)) return rejectSocket(CLOSE.CHANNEL_FULL, "channel full");
     // 11/18 보안: 정상 종료로 나갔다 들어오기를 거듭하면 로비에 묻거나 입장 방송을 하기 전에 4008로 거절 (웹은 잠깐 기다렸다 다시 붙는다)
     if (this.core.rejoinBlocked(ticket.visitorId, Date.now())) return rejectSocket(CLOSE.RATE_LIMITED, "rejoin too fast");
     // 새 방문자는 로비의 대기열 순서를 따른다(줄이 있으면 새치기 불가, 잡아 둔 자리는 그 사람만). 기다리는 사이
     // 다른 요청이 끼어들 수 있으므로 돌아와서 상한을 다시 본다.
-    if (this.room === null && !this.core.has(ticket.visitorId)) {
+    if (this.room === null && !staff && !this.core.has(ticket.visitorId)) {
       if (!(await this.lobbyAdmits(ticket.visitorId)) || !this.core.admits(ticket.visitorId)) {
         return rejectSocket(CLOSE.CHANNEL_FULL, "channel full");
       }
@@ -307,8 +305,8 @@ export class ChannelDO extends DurableObject<Env> {
   }
 
   /** Lobby DO가 상태를 다시 맞출 때 부른다 (RPC) */
-  getCount(): { count: number; seq: number } {
-    return { count: this.core.count, seq: this.nextSeq() };
+  getCount(): { count: number; seq: number; staff: number } {
+    return { count: this.core.count, seq: this.nextSeq(), staff: this.core.staffCount };
   }
 
   /** 47번: Worker의 /internal/kick → 이 채널·방에 있는 그 방문자들을 code로 내보낸다. 내보낸 수 (RPC) */
@@ -516,7 +514,7 @@ export class ChannelDO extends DurableObject<Env> {
       return;
     }
     lobbyStub(this.env)
-      .report(this.channel, this.core.count, this.nextSeq())
+      .report(this.channel, this.core.count, this.nextSeq(), this.core.staffCount)
       .catch((e) => console.error("lobby report failed", e));
   }
 

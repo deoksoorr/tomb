@@ -1,5 +1,6 @@
 import Link from "next/link";
 import NewsFeature from "@/components/site/NewsFeature";
+import SiteBanner, { NEWS_BANNER } from "@/components/site/SiteBanner";
 import SiteShell from "@/components/site/SiteShell";
 import styles from "@/components/site/site.module.css";
 import { bigDate, dateParts, DEFAULT_HERO, isFresh, noteExcerpt } from "@/lib/devNotes/format";
@@ -61,11 +62,9 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
 
   return (
     <SiteShell current="news">
+      {/* 11/20 머리 배너: 마을 화면 짧은 영상 */}
+      <SiteBanner title="개발자 노트" sub="마을에 생긴 일들을 적어 두는 곳이에요." video={NEWS_BANNER} />
       <div className={styles.wrap}>
-        <header className={styles.head}>
-          <h1 className={styles.display}>개발자 노트</h1>
-          <p>마을에 생긴 일들을 적어 두는 곳이에요.</p>
-        </header>
         <NewsFeature items={feats} />
         <div className={styles.listHead}>
           <h2 className={styles.display}>모든 글</h2>

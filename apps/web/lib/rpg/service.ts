@@ -85,6 +85,7 @@ import type { z } from "zod";
 import type { CharacterActionSchema, ShopActionSchema } from "./schemas";
 import { getRpgStore, RUNS_PER_HOUR, type RpgStore } from "./store";
 import { signTicket, verifyTicket, type TicketClaims } from "./ticket";
+import { approveChairReview } from "../chairman/settle";
 import { firstReviewId, getReviewStore, topReviewId, towerReviewId, type ReviewItem, type TowerReview } from "./reviewStore";
 import type { CharacterState, DailyStats, Drop, RpgView, SoldInfo, RunFinishResponse, RunResult, RunReward, RunStartResponse } from "./types";
 
@@ -326,6 +327,12 @@ export async function dropSeedOf(nonce: string): Promise<number> {
   const sig = b64urlDecode(await hmacSign(env.sessionSecret(), `drop:${nonce}`));
   if (!sig || sig.length < 4) return 0;
   return ((sig[0] << 24) | (sig[1] << 16) | (sig[2] << 8) | sig[3]) & 0x7fffffff;
+}
+
+/** 11/20 판 수 누적 한 칸 +1 (관리자 유저 상세 — CharacterState.hz). clear = 깬 판(야근 빌딩은 깬 층 수) */
+function bumpRuns(hz: CharacterState["hz"], key: string, clear: number): NonNullable<CharacterState["hz"]> {
+  const [n, c] = hz?.[key] ?? [0, 0];
+  return { ...hz, [key]: [n + 1, c + clear] };
 }
 
 function newSeed(): number {
@@ -621,6 +628,8 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
       ? { starry: nightBonus, done: v.stars.length, legend: v.stars.some((d) => constellationById(d.id)?.rarity === 5), day: kstDay(now), seed: dropSeed, force: meteorForced(acct) }
       : null;
 
+  // 11/20 판 수 누적 칸: 사냥은 사냥터 id, 미니게임은 게임 이름
+  const runKey = t.g === "hunt" ? zoneFor(t.d, t.z).id : t.g;
   // 11/19 사냥터 포인트 막기는 판을 시작할 때(정산 전) 초월 레벨 기준
   let tAtStart = 0;
   const done = await http(
@@ -632,7 +641,7 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
       const dr = addDrops(g.state, vDrops);
       const mr = meteorRun ? rollMeteor(s.mt, meteorRun, now) : null;
       return {
-        state: { ...dr.state, runs: dr.state.runs + 1, ...(mr?.rolled ? { mt: mr.mt } : {}) },
+        state: { ...dr.state, runs: dr.state.runs + 1, hz: bumpRuns(dr.state.hz, runKey, v.hunt?.clearMs != null ? 1 : 0), ...(mr?.rolled ? { mt: mr.mt } : {}) },
         result: {
           levelsGained: t.tt ? 0 : g.levelsGained,
           tLevels: t.tt ? g.levelsGained : 0,
@@ -925,7 +934,7 @@ export async function listReviews(): Promise<ReviewItem[]> {
 export async function approveReview(
   id: string,
   now = Date.now(),
-): Promise<{ kind: "tower"; reward: RunReward } | { kind: "first"; granted: boolean } | { kind: "top"; took: boolean }> {
+): Promise<{ kind: "tower"; reward: RunReward } | { kind: "first"; granted: boolean } | { kind: "top"; took: boolean } | { kind: "chair"; paid: number }> {
   const reviews = getReviewStore();
   const all = await reviews.list();
   const cur = all.find((i) => i.id === id);
@@ -934,6 +943,8 @@ export async function approveReview(
     throw new HttpError(409, "NOT_FIRST", "같은 칭호를 먼저 기다리는 사람이 있어요. 앞의 것부터 확인해 주세요.");
   const item = await reviews.take(id);
   if (!item) throw new HttpError(404, "NOT_FOUND", "이미 처리한 항목이에요.");
+  // 11/20 회장님 독대 주간 1위 포인트 (지갑 전용 — lib/chairman/settle)
+  if (item.kind === "chair") return approveChairReview(item, now);
   if (item.kind === "top") {
     // 전체 랭킹 기록 (그 뒤에 더 높이 올라 이미 더 높은 점수가 있으면 그대로) → 꼭대기 층 주인 (지금 주인보다 높을 때만)
     const towers = getTowerStore();
@@ -1039,7 +1050,7 @@ async function settleTowerRun(
       const drops = sgd.drops;
       const dr = addDrops(sgd.state, drops);
       return {
-        state: { ...dr.state, runs: dr.state.runs + 1 },
+        state: { ...dr.state, runs: dr.state.runs + 1, hz: bumpRuns(dr.state.hz, "tower", v.floors) },
         result: { st, prevBest: cur.fBest, levels: g.levelsGained, lost: dr.lost, drops, star100: cur.tLevel < TRANSCEND_MAX && g.state.tLevel >= TRANSCEND_MAX },
       };
     }),

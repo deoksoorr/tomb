@@ -1,12 +1,12 @@
 import type { Redis } from "@upstash/redis";
 import { redisClient } from "../redisUsage";
-import { MEGAPHONE_TTL_MS, type MegaPin, type MegaphoneScope } from "@tomb/protocol";
+import { MEGA_FEED_TTL_MS, type MegaPin, type MegaphoneScope } from "@tomb/protocol";
 import type { MegaphoneEntry } from "../types";
 import { K } from "./keys";
 
 // 23번 확성기 기록. 최근 MEGA_KEEP개를 LIST 하나에 두고(최신 먼저), 관리자가 숨긴 id는 SET에 따로 둔다
 // (기록 JSON을 고치지 않아도 되고, 숨김 해제도 SREM 한 번). 계정마다 도배 제한 간격은 SET NX PX로 잡는다.
-// 외친 지 MEGAPHONE_TTL_MS(5분)가 지난 기록은 목록에서 빼고 저장소에서도 지운다 (Redis는 키 TTL + 읽을 때 LREM 정리).
+// 외친 지 MEGA_FEED_TTL_MS(11/21 5분 → 하루)가 지난 기록은 목록에서 빼고 저장소에서도 지운다 (Redis는 키 TTL + 읽을 때 LREM 정리).
 // 11/17 고정 공지(운영자)는 채널마다 하나 + 모든 채널 하나를 STRING JSON으로 둔다. 지울 때까지 남고, 읽기는 MGET 한 번.
 
 /** 저장하는 기록 수 (관리자 화면은 이만큼, 유저 창은 그중 MEGA_SHOW개) */
@@ -29,8 +29,8 @@ export function pinList(p: PinPair): MegaPin[] {
   return [p.channel, p.all].flatMap((r) => (r ? [{ scope: r.scope, ch: r.ch, text: r.text, name: r.name, at: r.at }] : []));
 }
 
-/** 아직 보여 줄 기록인지 (외친 지 5분이 안 됐는지) */
-export const megaLive = (at: number, now: number) => now - at < MEGAPHONE_TTL_MS;
+/** 아직 보여 줄 기록인지 (11/21 하루가 안 됐는지) */
+export const megaLive = (at: number, now: number) => now - at < MEGA_FEED_TTL_MS;
 
 export interface MegaphoneStore {
   /** 도배 제한: 간격이 지났으면 지금부터 ms 동안 잡아 두고 0, 아직이면 남은 ms */
@@ -112,12 +112,12 @@ export class RedisMegaphone implements MegaphoneStore {
     await this.redis.del(K.megaCool(accountId));
   }
   async push(rec: MegaRecord): Promise<void> {
-    // 목록 키는 마지막으로 외친 뒤 5분이면 통째로 사라진다 (그때는 모든 기록이 5분 지났다)
+    // 목록 키는 마지막으로 외친 뒤 하루면 통째로 사라진다 (그때는 모든 기록이 5분 지났다)
     await this.redis
       .multi()
       .lpush(K.megaLog, JSON.stringify(rec))
       .ltrim(K.megaLog, 0, MEGA_KEEP - 1)
-      .pexpire(K.megaLog, MEGAPHONE_TTL_MS)
+      .pexpire(K.megaLog, MEGA_FEED_TTL_MS)
       .exec();
   }
   /** 저장된 기록 중 5분 안 된 것만 돌려주고, 지난 것은 LREM으로 지운다 (값으로 지우니 동시에 들어온 LPUSH와 엇갈려도 안전) */
@@ -148,7 +148,7 @@ export class RedisMegaphone implements MegaphoneStore {
     else p.srem(K.megaHidden, id);
     if (stale.length) p.srem(K.megaHidden, ...stale);
     // 숨김 집합도 5분 뒤 사라지게 (숨긴 기록은 길어야 5분 뒤 만료된다)
-    p.pexpire(K.megaHidden, MEGAPHONE_TTL_MS);
+    p.pexpire(K.megaHidden, MEGA_FEED_TTL_MS);
     await p.exec();
     return true;
   }

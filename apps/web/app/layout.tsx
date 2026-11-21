@@ -19,6 +19,7 @@ export const metadata: Metadata = {
 };
 
 // 입력칸 글자를 16px 이상으로 둬서 iOS 확대를 막으므로 maximumScale로 확대를 막지 않는다 (접근성).
+// 11/22 사냥·야근 빌딩·회장님 독대 동안만 usePageZoomLock이 이 meta를 잠시 바꿔 확대를 막는다.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,

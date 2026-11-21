@@ -1,5 +1,6 @@
 import { bridge } from "@/game/bridge";
-import { api } from "@/lib/api";
+import { fireworkShowMs } from "@tomb/protocol";
+import { api, ApiRequestError } from "@/lib/api";
 import type { GraveCache } from "@/lib/hooks/useGraves";
 import { meStore } from "@/lib/hooks/useMe";
 import type { LookGrantResponse, Me } from "@/lib/types";
@@ -8,7 +9,14 @@ import { currentLook } from "./items";
 // 아이템 사용 → 서버가 소모하고 증서(grant)를 주면 게임에 넘긴다. 실패하면 ApiRequestError를 그대로 던진다.
 
 /** 폭죽: 내 자리에서 바로 터지고, 증서로 같은 채널 모두에게 보인다 */
+export const SHOW_BUSY_MSG = "지금 다른 불꽃쇼가 하고 있어요. 끝나고 다시 쏴 주세요";
+
 export async function fireFirework(itemId: string): Promise<void> {
+  // 11/20 광역 불꽃쇼는 채널에 한 번에 하나: 하고 있으면 쓰기 전에 막는다 (가방에서 빠지지 않게)
+  if (fireworkShowMs(itemId) > 0 && (bridge.last("firework:show")?.until ?? 0) > Date.now()) {
+    bridge.emit("toast", { message: SHOW_BUSY_MSG });
+    throw new ApiRequestError(409, "show_busy", SHOW_BUSY_MSG);
+  }
   const res = await api.spendItem(itemId);
   meStore.set(res.me);
   if (res.grant) bridge.emit("firework:fire", { item: itemId, grant: res.grant });

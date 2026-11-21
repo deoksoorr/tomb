@@ -338,6 +338,12 @@ export interface AccountStore {
    * 실제로 지갑에 들어간 포인트는 champ:wallet(mark → 포인트)에 남긴다 (랭킹 정리 때 이전 지급과 구분). 줬으면 true, 이미 줬으면 false
    */
   grantChamp(id: string, mark: string, itemId: string, slot: CosmeticSlot, until: number, points: number, now: number): Promise<boolean>;
+  /**
+   * 11/20 지갑 전용 지급 (회장님 독대 판·주간 보상 — lib/chairman): 포인트는 지갑에만 (모은 포인트·전체/주간 포인트 랭킹엔 넣지 않는다, 경제 통계 stat),
+   * rent 꾸미기는 until까지 빌려 준다 (입고 있으면 그 자리, 아니면 벗어 둔 꾸미기 — 이미 더 길면 그대로). 원자적. 한 번만은 부르는 쪽 표시가 지킨다.
+   * 실제로 지갑에 들어간 포인트
+   */
+  walletGrant(id: string, points: number, stat: string, now: number, rent?: readonly WalletRent[]): Promise<number>;
   /** 전용 꾸미기 거두기 (시험 해제): 가방·벗어 둔 꾸미기에서 지우고, 착용 중이면 벗긴다 (원자적) */
   revokeChamp(id: string, itemIds: readonly string[]): Promise<void>;
   /** 주간 1위 보상 지급 표시 (mark → 받은 계정, 없으면 null) */
@@ -474,6 +480,9 @@ export interface AccountStore {
 }
 
 /** 관리자 회원 목록 한 줄의 원재료 (계정 해시에서 바로 읽는 값) */
+/** 지갑 전용 지급에 함께 빌려 주는 꾸미기 (AccountStore.walletGrant) */
+export type WalletRent = { itemId: string; slot: CosmeticSlot; until: number };
+
 export type AccountSummary = {
   accountId: string;
   name: string | null;

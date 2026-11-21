@@ -82,6 +82,8 @@
 .row {
   display: flex;
   justify-content: center;
+  /* 한 번에 뜬 카드는 가장 긴 카드 높이로 같이 */
+  align-items: stretch;
   gap: 14px;
   width: 100%;
   perspective: 900px;
@@ -94,13 +96,11 @@
   --frame-lo: #38383e;
   --face: #26262b;
   --tag: #c0c0c8;
-  /* 11/15 높이: 가장 긴 설명 + 단계 + 수치 변화 줄이 다 들어가게 (한 줄에 놓인 카드는 늘 같은 높이) */
-  --card-h: 272px;
+  /* 11/21 높이는 내용에 맞춘다: 고정 최소 높이 없이, 한 번에 뜬 세 장은 가장 긴 카드 높이로 같이 (.row stretch) */
   position: relative;
   display: grid;
   flex: 0 1 184px;
   min-width: 0;
-  min-height: var(--card-h);
   padding: 0;
   border: 0;
   background: none;
@@ -503,22 +503,22 @@
   }
   .card {
     flex-basis: 118px;
-    --card-h: 318px;
   }
   .face {
-    padding: 8px 6px 10px;
-    gap: 3px;
+    padding: 7px 5px 8px;
+    gap: 2px;
   }
   .art {
-    width: 60px;
-    height: 60px;
+    width: 48px;
+    height: 48px;
   }
   .name {
     font-size: 13px;
+    line-height: 1.3;
   }
   .desc {
     font-size: 10px;
-    line-height: 1.45;
+    line-height: 1.4;
   }
   .level {
     padding: 1px 4px;
@@ -539,9 +539,6 @@
 @media (max-height: 460px) {
   .pick {
     gap: 8px;
-  }
-  .card {
-    --card-h: 0px;
   }
   .art {
     width: 44px;
@@ -1134,4 +1131,22 @@
 }
 .iconType[data-type="magic"] {
   color: #c8a8ff;
+}
+
+/* 11/21 회장님 독대 폰 세로: 위 판(피해 띠까지)이 길어 그 아래로 */
+@media (max-width: 560px) {
+  [data-chair-hud] .procStack {
+    top: calc(var(--safe-top, 0px) + 196px);
+  }
+}
+
+/* 11/21 회장님 독대 낮은 가로 화면: 가운데(내 캐릭터) 대신 오른쪽 위 계기판 아래 */
+@media (min-width: 561px) and (max-height: 520px) {
+  [data-chair-hud] .procStack {
+    top: calc(var(--safe-top, 0px) + 104px);
+    left: auto;
+    right: calc(var(--safe-right, 0px) + 76px);
+    align-items: flex-end;
+    transform: none;
+  }
 }

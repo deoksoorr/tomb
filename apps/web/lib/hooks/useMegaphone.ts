@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { MEGAPHONE_TTL_MS, type MegaPin, type MegaPinMsg } from "@tomb/protocol";
+import { MEGA_FEED_TTL_MS, type MegaPin, type MegaPinMsg } from "@tomb/protocol";
 import { socialApi } from "@/lib/socialApi";
 import { readItem, writeItem } from "@/lib/storage";
 import type { MegaphoneEntry } from "@/lib/types";
@@ -38,15 +38,24 @@ export function applyPinMsg(pins: MegaPin[], m: MegaPinMsg, channel: number): Me
   return sortPins([...pins.filter((p) => p.scope !== m.scope), ...(m.pin ? [m.pin] : [])]);
 }
 
-/** 외친 지 5분이 안 된 한마디만 (기록 목록은 열려 있는 동안에도 5분이 지나면 빠진다) */
+/** 하루가 안 된 소식만 (11/21 5분 → 하루. 열려 있는 동안에도 지나면 빠진다) */
 export function liveMegaphones(entries: MegaphoneEntry[], now: number): MegaphoneEntry[] {
-  return entries.filter((e) => now - e.at < MEGAPHONE_TTL_MS);
+  return entries.filter((e) => now - e.at < MEGA_FEED_TTL_MS);
 }
 
 /** 뒤 공지가 바꿔 끼운 앞 공지를 뺀다 (긴급 의뢰 시작 → 끝) */
 export function dropReplaced(entries: MegaphoneEntry[]): MegaphoneEntry[] {
   const gone = new Set(entries.flatMap((e) => (e.replaces ? [e.replaces] : [])));
   return gone.size ? entries.filter((e) => !gone.has(e.id)) : entries;
+}
+
+/**
+ * 11/21 데스크톱 [마을 소식] 기록 줄이 펼쳐져 보이는지. 접힘 상태 하나로만 정한다.
+ * 외침이 없을 때 줄을 숨기는 건 이번에 직접 펼치지 않았을 때만 (asked) — 펼친 뒤 목록이 비어도 닫히지 않는다
+ * (전에는 [마을 소식]을 누르면 다시 받은 서버 목록이 비어 「빈 줄 숨김」으로 바뀌며 펼치자마자 접혔다)
+ */
+export function feedOpen(collapsed: boolean, count: number, asked: boolean): boolean {
+  return !collapsed && (count > 0 || asked);
 }
 
 export type MegaphoneState = {
@@ -78,7 +87,8 @@ class MegaphoneStore {
   subscribe = (fn: () => void) => {
     if (!this.loaded) {
       this.loaded = true;
-      this.state = { ...this.state, collapsed: readItem(COLLAPSED_KEY) === "1" };
+      // 11/21 하루 보관이라 기록이 늘 차 있다 → 처음엔 접어 둔다 (직접 펼친 사람("0")만 펼친 채로)
+      this.state = { ...this.state, collapsed: readItem(COLLAPSED_KEY) !== "0" };
     }
     this.listeners.add(fn);
     return () => {
@@ -100,7 +110,7 @@ class MegaphoneStore {
     this.expiryTimer = null;
     if (!this.state.entries.length) return;
     const oldest = Math.min(...this.state.entries.map((e) => e.at));
-    const ms = Math.max(0, oldest + MEGAPHONE_TTL_MS - Date.now()) + 50;
+    const ms = Math.max(0, oldest + MEGA_FEED_TTL_MS - Date.now()) + 50;
     this.expiryTimer = setTimeout(() => this.update({ entries: this.state.entries }), ms);
   }
 

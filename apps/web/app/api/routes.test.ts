@@ -639,6 +639,12 @@ describe("POST /api/join", () => {
     expect(claims!.exp - Math.floor(Date.now() / 1000)).toBeGreaterThan(590);
   });
 
+  it("11/20 운영자는 정원 밖: 전체 만석이어도 대기열 없이 채널 토큰", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(Response.json(lobby([40, 40])));
+    const res = await issueJoin("auto", { visitorId: "op", name: "운영", color: "#9fc5a8", body: "hood", look: [], staff: true });
+    expect(res).toMatchObject({ mode: "channel", channel: 1 });
+  });
+
   it("세션·입력 검증, 분당 10회", async () => {
     expect((await join.POST(call("/api/join", { method: "POST", body }))).status).toBe(401);
     const v = await newVisitor();

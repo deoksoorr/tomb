@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { MegaPin } from "@tomb/protocol";
 import { useBridgeEvent, useBridgeValue } from "@/lib/hooks/useBridge";
 import { tabHidden } from "@/lib/hooks/visibleAgain";
-import { megaphoneStore, openMegaphone, useMegaphone } from "@/lib/hooks/useMegaphone";
+import { feedOpen, megaphoneStore, useMegaphone } from "@/lib/hooks/useMegaphone";
 import { reportStore } from "@/lib/reportClient";
 import { cx } from "../ui/cx";
 import PixelIcon from "../ui/PixelIcon";
@@ -26,6 +26,7 @@ const RELOAD_MS = 10 * 60_000;
  * 새 외침을 화면 가운데 크게 띄우는 연출(MegaphoneSpotlight)은 그대로
  * 11/19 데스크톱 왼쪽 위 한 줄: lead(배경 음악 줄)를 [확성기]·[외치기] 앞에 붙여 한 줄로 (옛 묘역이 언덕 위로 올라가 묘비를 덜 가리게).
  * 외침이 하나도 없으면 「아직 아무도 외치지 않았어요」 줄도 빼고, 외침이 오면 그 아래에 기록이 뜬다
+ * 11/21 「마을 소식」으로 이름을 바꾸고 [외치기]를 뺐다 (확성기 판매 중지 — 사용자). 시스템 줄·고정 공지 딱지는 「소식」, 기록은 하루 보관
  */
 export default function MegaphoneFeed({ channel, floating = false, lead }: { channel: number; floating?: boolean; lead?: ReactNode }) {
   const { entries, flash, flashUntil, collapsed, pins } = useMegaphone();
@@ -35,8 +36,8 @@ export default function MegaphoneFeed({ channel, floating = false, lead }: { cha
   const iAmStaff = useBridgeValue("me:staff")?.on === true;
   // 지울 공지 (11/19 운영자 쓰기 창은 위쪽 줄의 MegaPinButton이 연다)
   const [removing, setRemoving] = useState<MegaPin | null>(null);
-  // 11/19 한 줄로 합친 뒤 외침이 없으면 기록 줄을 숨기는데, [확성기]를 눌렀을 땐 「아직 아무도…」를 보여 준다 (안 그러면 눌러도 아무 일이 없어 고장처럼 보였다)
-  const [askedEmpty, setAskedEmpty] = useState(false);
+  // 11/19 한 줄로 합친 뒤 외침이 없으면 기록 줄을 숨기는데, 이번에 직접 펼쳤으면 비어도 「아직 마을 소식이 없어요」를 보여 준다
+  const [asked, setAsked] = useState(false);
 
   useBridgeEvent("megaphone:heard", (m) => megaphoneStore.push(m));
   useBridgeEvent("megaphone:pin", (m) => megaphoneStore.applyPin(m, channel));
@@ -88,44 +89,35 @@ export default function MegaphoneFeed({ channel, floating = false, lead }: { cha
     );
   }
 
-  const hideEmpty = lead != null && entries.length === 0;
-  const open = !collapsed && (!hideEmpty || askedEmpty);
+  // 11/21 열림은 접힘 상태 하나로 (목록 수에 따라 두 상태를 오가다 펼치자마자 접히던 것 고침 — feedOpen)
+  const open = feedOpen(collapsed, lead != null ? entries.length : 1, asked);
   const toggle = () => {
-    if (hideEmpty) {
-      // 외침이 없을 땐 빈 기록 줄을 보였다 숨겼다 (접기 상태는 펼침으로 맞춘다)
-      if (collapsed) megaphoneStore.setCollapsed(false);
-      setAskedEmpty(!open);
-      if (!open) void megaphoneStore.load(channel);
-      return;
-    }
-    megaphoneStore.setCollapsed(!collapsed);
-    if (collapsed) void megaphoneStore.load(channel);
+    megaphoneStore.setCollapsed(open);
+    setAsked(!open);
+    if (!open) void megaphoneStore.load(channel);
   };
 
   return (
-    <section ref={feedRef} className={cx(styles.feed, lead != null && styles.joined)} aria-label="확성기">
+    <section ref={feedRef} className={cx(styles.feed, lead != null && styles.joined)} aria-label="마을 소식">
       <div ref={barRef} className={styles.bar}>
         {lead}
         <button type="button" className={cx(ui.button, styles.toggle)} onClick={toggle} aria-expanded={open}>
-          <PixelIcon name="megaphone" />
-          확성기
+          <PixelIcon name="bell" />
+          마을 소식
           <span className={styles.caret} aria-hidden="true">
             {open ? "▾" : "▸"}
           </span>
           <span className="visually-hidden">{open ? " 기록 접기" : " 기록 펼치기"}</span>
         </button>
-        <button type="button" className={cx(ui.button, styles.shout)} onClick={openMegaphone}>
-          외치기
-        </button>
-        {/* 11/19 운영자 [공지 쓰기]는 오른쪽 위 선물 옆(MegaPinButton)으로 — 이 줄은 음악·확성기만 (좁은 줄이 깨지지 않게) */}
+        {/* 11/19 운영자 [공지 쓰기]는 오른쪽 위 선물 옆(MegaPinButton)으로 — 이 줄은 음악·마을 소식만 (좁은 줄이 깨지지 않게) */}
       </div>
       {shownPins.length > 0 && (
-        <ul className={cx(styles.pins, styles.pinsOpen)} aria-label="고정 공지">
+        <ul className={cx(styles.pins, styles.pinsOpen)} aria-label="고정 소식">
           {shownPins.map((p) => (
             <li key={p.scope} className={styles.pin}>
               <div className={styles.pinBody}>
                 {/* 모든 채널 공지는 딱지를 붉게 (전체 확성기와 같은 색) */}
-                <span className={cx(styles.pinTag, p.scope === "all" && styles.pinTagAll)}>공지</span>
+                <span className={cx(styles.pinTag, p.scope === "all" && styles.pinTagAll)}>소식</span>
                 <span className={styles.pinText}>{p.text}</span>
               </div>
               {iAmStaff && (
@@ -143,24 +135,31 @@ export default function MegaphoneFeed({ channel, floating = false, lead }: { cha
         </ul>
       )}
       {open && (
-        <ol ref={logRef} className={styles.log} aria-label="최근 확성기 20개">
-          {entries.length === 0 && <li className={styles.empty}>아직 아무도 외치지 않았어요.</li>}
+        <ol ref={logRef} className={styles.log} aria-label="최근 마을 소식 20개">
+          {entries.length === 0 && <li className={styles.empty}>아직 마을 소식이 없어요</li>}
           {entries.map((e) => (
             <li key={e.id} className={cx(styles.line, flash?.id === e.id && styles.newLine)}>
-              {e.scope === "all" && <span className={styles.all}>전체</span>}
-              <b className={cx(styles.name, e.staff && styles.staff)}>
-                {/* 11/15 운영자는 닉네임 그대로라 "운영자" 딱지로 알린다 (마을 공지 줄은 빼고) */}
-                {e.staff && !e.system && <span className={styles.staffTag}>운영자</span>}
-                {e.mgr && !e.staff && <span className={styles.mgrTag}>매니저</span>}
-                {e.name}
-              </b>
+              {/* 11/21 마을 공지 줄(시스템)은 보낸 이 이름 대신 「소식」 딱지 하나 */}
+              {e.system ? (
+                <span className={styles.newsTag}>소식</span>
+              ) : (
+                <>
+                  {e.scope === "all" && <span className={styles.all}>전체</span>}
+                  <b className={cx(styles.name, e.staff && styles.staff)}>
+                    {/* 11/15 운영자는 닉네임 그대로라 "운영자" 딱지로 알린다 */}
+                    {e.staff && <span className={styles.staffTag}>운영자</span>}
+                    {e.mgr && !e.staff && <span className={styles.mgrTag}>매니저</span>}
+                    {e.name}
+                  </b>
+                </>
+              )}
               <span className={styles.text}>{e.text}</span>
               {/* 47번 확성기 신고 (운영자 확성기는 신고 대상이 아니라 버튼이 없다) */}
               {!e.staff && (
                 <button
                   type="button"
                   className={styles.report}
-                  aria-label={`${e.name}의 확성기 신고`}
+                  aria-label={`${e.name}의 외침 신고`}
                   title="신고"
                   onClick={() => reportStore.open({ type: "megaphone", id: e.id, name: e.name, text: e.text })}
                 >
@@ -210,15 +209,15 @@ function PinChip({ channel, pins, staff, onRemove }: { channel: number; pins: Me
         aria-expanded={open}
       >
         <span aria-hidden="true">📌</span>
-        공지
+        소식
         {pins.length > 1 && <span className={styles.pinMore}>{pins.length}</span>}
       </button>
       {open && (
-        <ul className={cx(styles.pins, styles.pinsOpen, styles.pinSheet)} aria-label="고정 공지">
+        <ul className={cx(styles.pins, styles.pinsOpen, styles.pinSheet)} aria-label="고정 소식">
           {pins.map((p) => (
             <li key={p.scope} className={styles.pin}>
               <button type="button" className={styles.pinBody} onClick={() => setOpen(false)}>
-                <span className={cx(styles.pinTag, p.scope === "all" && styles.pinTagAll)}>공지</span>
+                <span className={cx(styles.pinTag, p.scope === "all" && styles.pinTagAll)}>소식</span>
                 <span className={styles.pinText}>{p.text}</span>
               </button>
               {staff && (

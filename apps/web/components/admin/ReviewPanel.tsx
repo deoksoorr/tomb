@@ -13,6 +13,7 @@ import s from "./ReviewPanel.module.css";
 //  - 의심 판: 너무 빨리 깬 야근 빌딩 판 (판·포인트만 받고 나머지는 인정하면 판 끝과 같은 정산)
 //  - 서버 최초 칭호: 한 명뿐인 칭호 (같은 칭호는 먼저 조건을 채운 사람부터)
 //  - 서버 최고 층: 남이 가진 서버 전체 최고 층을 새로 깬 정상 판 (보상은 다 받았고, 꼭대기 층 주인·전체 랭킹 기록만)
+//  - 11/20 회장님 독대 1위: 주간 1위 포인트 (칭호·꾸미기·2·3위 몫은 정리 때 받았고, 인정하면 포인트만 — lib/chairman/settle)
 
 type Props = { toast: (message: string) => void; onAuthLost: () => void };
 
@@ -27,7 +28,9 @@ const KIND: Record<AdminReviewRow["kind"], { label: string; cls: string }> = {
   tower: { label: "의심 판", cls: s.tagSus },
   first: { label: "서버 최초 칭호", cls: s.tagFirst },
   top: { label: "서버 최고 층", cls: s.tagTop },
+  chair: { label: "회장님 독대 1위", cls: s.tagFirst },
 };
+const CHAIR_MODE: Record<"normal" | "hell", string> = { normal: "일반", hell: "지옥" };
 
 /** 의심 사유를 사람 말로 (모르는 것은 운영 로그 표시 그대로) */
 function whyText(w: string): string {
@@ -44,6 +47,7 @@ function whyText(w: string): string {
 function what(it: AdminReviewRow): string {
   if (it.kind === "first") return `「${titleDef(it.titleId)?.name ?? it.titleId}」 칭호`;
   if (it.kind === "top") return `서버 최고 ${it.floor}층 기록`;
+  if (it.kind === "chair") return `회장님 독대 1위 포인트 ${it.points.toLocaleString("ko-KR")}P`;
   return `${it.start}층부터 ${it.start + it.floors - 1}층까지 깬 판`;
 }
 
@@ -83,6 +87,7 @@ export default function ReviewPanel({ toast, onAuthLost }: Props) {
       const res = r.result;
       if (action === "reject") toast("거절했어요.");
       else if (res?.kind === "first") toast(res.granted ? "칭호를 줬어요." : "이미 다른 사람이 주인이라 주지 못했어요.");
+      else if (res?.kind === "chair") toast(res.paid > 0 ? `${res.paid.toLocaleString("ko-KR")}P를 줬어요.` : "이미 준 포인트예요.");
       else if (res?.kind === "top") toast(res.took ? "꼭대기 층 주인과 랭킹에 올렸어요." : "랭킹에 올렸어요. 그사이 더 높은 기록이 있어 꼭대기 층 주인은 그대로예요.");
       else toast(`정산했어요. 우두머리 상자 ${res?.reward.tower?.chests.length ?? 0}개, 초월 EXP +${(res?.reward.transcend?.exp ?? 0).toLocaleString("ko-KR")}`);
       setVersion((v) => v + 1);
@@ -116,6 +121,20 @@ export default function ReviewPanel({ toast, onAuthLost }: Props) {
               <p>
                 {it.floor}층에 올라 서버 최고 기록을 새로 깼어요. 깬 시각은 판 시작부터 {mmss(it.floorMs)}이에요.
               </p>
+            )}
+            {it.kind === "chair" && (
+              <>
+                <p>
+                  {it.week} 주 1위, 인정하면 {it.points.toLocaleString("ko-KR")}P{it.streak?.length ? " (연속 1위라 절반)" : ""}
+                </p>
+                {it.firsts.map((f) => (
+                  <p key={f.mode} className={s.meta}>
+                    {CHAIR_MODE[f.mode]}: 총 피해 {Math.round(f.damage).toLocaleString("ko-KR")}
+                    {f.ms ? `, ${mmss(f.ms)} 버팀, 초당 ${Math.round(f.damage / (f.ms / 1000)).toLocaleString("ko-KR")}` : ""}
+                    {f.dm ? `, 최대 피해 ${f.dm.toLocaleString("ko-KR")}/초` : ""}
+                  </p>
+                ))}
+              </>
             )}
             {it.kind === "tower" && (
               <>

@@ -54,6 +54,7 @@ import OverLevelSpot, { OVER_LEVEL_SPOT_MS } from "./OverLevelSpot";
 import { HUNT_POINT_T_STOP, huntPointBlock } from "@/lib/rpg/formulas";
 import { towerFitFloor, towerPointFrom } from "@/lib/rpg/tower";
 import { rideGate } from "@/lib/rideGate";
+import { usePageZoomLock } from "@/lib/hooks/usePageZoomLock";
 
 // 사냥터 입구 창 (월드의 사냥터 입구에서 portal:open {kind:"hunt"} → UI가 이 컴포넌트를 띄운다).
 // 11/15 mode="tower": 마을의 야근 빌딩 (portal:open {kind:"tower"}) — 첫 탭이 엘리베이터 버튼판(TowerEntrance), 판·결과 흐름은 같다.
@@ -123,6 +124,8 @@ export default function HuntLobby({
   onTaunt?: () => void;
 }) {
   const tower = mode === "tower";
+  // 11/22 사냥터 창이 떠 있는 동안(판·결과 포함) 연타·두 손가락으로 페이지가 확대되지 않게
+  usePageZoomLock();
   const [view, setView] = useState<RpgView | null>(null);
   // 장비창 가운데 내 아바타 (게임 속 색·몸 + 지금 입은 꾸미기)
   const { me } = useMe();
@@ -436,7 +439,14 @@ export default function HuntLobby({
     const r = run.current;
     return (
       <>
-        {r && <RunHud game={r.game} hotbar={r.hotbar} onPause={pause} {...(r.tower ? { title: "야근 빌딩" } : {})} />}
+        {r && (
+          <RunHud
+            game={r.game}
+            hotbar={r.hotbar}
+            onPause={pause}
+            {...(r.tower ? { title: "야근 빌딩" } : r.game === "hunt" ? { place: zoneFor(r.difficulty, r.zone).name } : {})}
+          />
+        )}
         {overLevel && phase === "playing" && <OverLevelSpot until={overLevel.until} title={overLevel.title} text={overLevel.text} />}
         {phase === "submitting" && (
           <div className={s.submitting} role="status">
@@ -480,7 +490,8 @@ export default function HuntLobby({
 
   if (phase === "result" && outcome) {
     return (
-      <Dialog className={s.huntDialog} title={outcome.tower ? "야근 빌딩 결과" : `${GAMES[outcome.result.game].name} 결과`} onClose={() => setPhase("lobby")}>
+      // 11/21 운영자: 결과 창은 내용만큼만 (주운 게 적으면 짧게) — 데스크톱·폰 모두 fitHeight + huntResult
+      <Dialog className={s.huntResult} fitHeight title={outcome.tower ? "야근 빌딩 결과" : `${GAMES[outcome.result.game].name} 결과`} onClose={() => setPhase("lobby")}>
         <div className={s.resultFill}>
           <ResultView outcome={outcome} view={view} />
           {notice && <p className={s.notice}>{notice}</p>}
@@ -801,9 +812,7 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
               })}
             </div>
           ) : (
-            <p className={s.meta}>
-              {outcome.tower ? "이번 판엔 주운 게 없어요. 5층마다 나오는 우두머리를 잡으면 상자가 열려요." : "이번 판엔 주운 게 없어요. 많이 잡을수록 잘 나와요. 우두머리를 잡으면 더 잘 나와요."}
-            </p>
+            <p className={s.meta}>{outcome.tower ? "주운 것이 없어요. 5층마다 우두머리를 잡으면 상자가 열려요." : "주운 것이 없어요"}</p>
           )}
           {r && r.lostDrops > 0 && <p className={s.warn}>가방이 가득 차서 {r.lostDrops}개는 못 챙겼어요.</p>}
         </section>

@@ -447,6 +447,79 @@
 }
 @media (prefers-reduced-motion:reduce){.root *{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 
+/* 11/20 개발자 노트 머리 배너 (11/21 SiteBanner.tsx — 가이드·FAQ·만든 이야기·문의하기도): 마을 영상 위에 제목. 영상은 늘 밤 장면이라 글자는 뼈색으로 고정 */
+.banner{position:relative;z-index:1;height:168px;overflow:hidden;background:#1e1f1b;border-bottom:1px solid var(--line-strong)}
+.bannerMedia{position:absolute;inset:0;width:100%;height:100%;max-width:none;object-fit:cover}
+.bannerShade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(20,21,17,.78) 0%,rgba(20,21,17,.45) 38%,rgba(20,21,17,0) 70%),linear-gradient(0deg,rgba(20,21,17,.35),rgba(20,21,17,0) 45%)}
+.banner .wrap{position:relative;height:100%;display:flex;align-items:center}
+/* 11/21 위아래 여백을 같게: 가운데에 두되, 큰 제목이 위로 붙어 보여 살짝 내린다 */
+.bannerTxt{padding:14px 0 0}
+.bannerTxt h1{margin:0;font-size:40px;line-height:1.15;color:#ece0bd;text-shadow:0 2px 0 rgba(0,0,0,.45)}
+.bannerTxt p{margin:8px 0 0;font-size:15px;color:#d9d4c3;text-shadow:0 1px 0 rgba(0,0,0,.5)}
+/* 11/21 배너와 아래 첫 덩어리 사이를 넉넉하게 */
+.banner + .wrap .feature,.banner + .wrap .guide,.banner + .wrap .ct{padding-top:56px}
+.banner + .faq .search,.banner + .story .lead{margin-top:56px}
+@media (max-width:760px){
+  .banner{height:110px}
+  .bannerTxt{padding:8px 0 0}
+  .bannerTxt h1{font-size:24px}
+  .bannerTxt p{margin-top:4px;font-size:13px}
+  .banner + .wrap .feature,.banner + .wrap .guide,.banner + .wrap .ct{padding-top:32px}
+  .banner + .faq .search,.banner + .story .lead{margin-top:32px}
+}
+
+/* 11/20 문의하기 (/contact, ContactDesk.tsx): 왼쪽 쓰기, 오른쪽 안내. 글 목록과 같은 먹색 선·촛불빛 */
+.ct{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:56px;padding:32px 0 24px;align-items:start}
+.ctMain{min-width:0}
+.ctForm{display:grid;gap:28px;padding-top:28px}
+.ctForm .callout{margin:0}
+.ctField{margin:0;padding:0;border:0;min-width:0}
+.ctLabel{display:flex;justify-content:space-between;align-items:baseline;gap:12px;width:100%;margin:0 0 10px;padding:0;font-size:14px;font-weight:700;color:var(--ink)}
+.ctCounter{font-size:13px;font-weight:400;color:var(--faint);font-variant-numeric:tabular-nums}
+.ctOver{color:#b3361f}
+.ctChips{display:flex;flex-wrap:wrap;gap:8px}
+.ctChip{height:38px;padding:0 16px;border:1px solid var(--line);color:var(--muted);font-size:14px;font-weight:600;border-radius:1px;transition:background .12s,color .12s}
+.ctChip:hover{color:var(--ink);border-color:var(--ink)}
+.ctChip[aria-checked="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.ctChip:active{transform:translateY(1px)}
+.ctBox,.ctLine{display:block;width:100%;box-sizing:border-box;border:1px solid var(--ink);border-radius:1px;background:var(--bg);color:var(--ink);font:inherit;font-size:16px;line-height:1.75;padding:14px 16px;resize:vertical}
+.ctBox{min-height:200px}
+.ctLine{height:50px;padding:0 16px}
+.ctBox::placeholder,.ctLine::placeholder{color:var(--faint)}
+.ctBox:focus,.ctLine:focus{outline:none;box-shadow:inset 0 -3px 0 var(--candle)}
+.ctBox[aria-invalid="true"],.ctLine[aria-invalid="true"]{border-color:#b3361f}
+/* 봇 거르기 숨은 칸 (화면 밖) */
+.ctTrap{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+.ctTip{margin:10px 0 0;padding-left:12px;border-left:3px solid var(--candle);font-size:14px;line-height:1.6;color:var(--muted)}
+.ctErr{margin:8px 0 0;font-size:14px;font-weight:600;color:#b3361f}
+:global(html[data-site-theme="dark"]) .ctErr,:global(html[data-site-theme="dark"]) .ctOver{color:#e8846e}
+.ctSend{display:flex;align-items:center;gap:16px;border-top:1px solid var(--line);padding-top:24px}
+.ctSend .btn{height:46px;padding:0 32px;font-size:15px}
+.ctSend .btn:disabled{opacity:.55;cursor:default}
+.ctSide{position:sticky;top:96px;display:grid;gap:16px}
+.ctNote{padding:20px 22px;background:var(--paper);border-left:3px solid var(--candle)}
+.ctNote b{display:block;margin-bottom:8px;font-size:15px;color:var(--ink)}
+.ctNote ul{margin:0;padding-left:18px;list-style:disc;font-size:14px;line-height:1.75}
+.ctNote li::marker{color:var(--candle-ink)}
+.ctLoading{height:320px;margin-top:32px;background:linear-gradient(90deg,var(--paper),var(--bg),var(--paper));background-size:200% 100%;animation:ctShim 1.4s linear infinite}
+@keyframes ctShim{to{background-position:-200% 0}}
+.ctDone{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;padding:56px 16px;margin:28px 0 24px;border-bottom:1px solid var(--line)}
+.ctDone b{font-family:var(--display);font-size:20px;color:var(--ink)}
+.ctDone p{margin:0 0 10px;color:var(--muted);font-size:15px}
+.ctDone .ghost,.empty .ghost{animation:ctWalk .9s steps(2) infinite,bob 1.8s ease-in-out infinite;margin-bottom:6px}
+@keyframes ctWalk{to{background-position:-88px 0}}
+@media (max-width:1024px){.ct{grid-template-columns:minmax(0,1fr) 240px;gap:36px}}
+@media (max-width:760px){
+  .ct{grid-template-columns:minmax(0,1fr);gap:28px;padding-top:20px}
+  .ctSide{position:static}
+  .ctSide .ctNote{padding:14px 16px}
+  .ctForm{gap:24px;padding-top:22px}
+  .ctChips{display:grid;grid-template-columns:1fr 1fr}
+  .ctChip{width:100%}
+  .ctBox{min-height:180px;font-size:16px}
+  .ctSend .btn{width:100%;justify-content:center}
+}
+
 /* 게임 화면 공용 스타일이 목록 점을 지워 두어서, 글 안 목록만 되살린다 */
 .gsec ul,.st ul,.doc ul{list-style:disc}
 .doc li::marker{color:var(--candle-ink)}

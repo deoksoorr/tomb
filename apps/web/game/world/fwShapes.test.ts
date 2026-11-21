@@ -1,4 +1,4 @@
-import { isFireworkId, itemById, ITEMS } from "@tomb/protocol";
+import { fireworkShowMs, isFireworkId, itemById, ITEMS } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import { fireworkPlan } from "./fxMath";
 import {
@@ -16,9 +16,12 @@ import {
   sparkTrail,
   starPoint,
   stepSpark,
+  emojiMask,
+  FW_EMOJI,
   type FwPattern,
   type SparkState,
 } from "./fwShapes";
+import { showProgram } from "./fwShow";
 
 const FIREWORKS = ITEMS.filter((i) => isFireworkId(i.id));
 const NEW_IDS = ["fw_twinring", "fw_butterfly", "fw_snow", "fw_strobe", "fw_chameleon", "fw_glitter", "fw_palm", "fw_tower"];
@@ -26,17 +29,17 @@ const fixed = () => 0.5;
 const all = (n: number) => n;
 
 describe("폭죽 종류", () => {
-  it("14종 이상, 값은 경제 표(60~740P) 안, 종류마다 터지는 모양이 다르다", () => {
+  it("14종 이상, 값은 경제 표(60~740P, 광역 불꽃쇼만 2000P까지) 안, 종류마다 터지는 모양이 다르다", () => {
     expect(FIREWORKS.length).toBeGreaterThanOrEqual(14);
     const looks = new Set<string>();
     for (const it of FIREWORKS) {
       expect(it.price).toBeGreaterThanOrEqual(60);
-      expect(it.price).toBeLessThanOrEqual(740);
+      expect(it.price).toBeLessThanOrEqual(fireworkShowMs(it.id) > 0 ? 2000 : 740);
       const plan = fireworkPlan(it.power);
       const special = fireworkSpecial(it.id, plan);
       const shots = special ? [] : fireworkShots(it.id, plan);
       if (!special) expect(shots.length).toBeGreaterThan(0);
-      looks.add(special ?? shots.map((s) => `${s.pattern}:${s.colors[0]}`).join(","));
+      looks.add(special === "show" ? `show:${it.id}` : (special ?? shots.map((s) => `${s.pattern}:${s.colors[0]}`).join(",")));
     }
     expect(looks.size).toBe(FIREWORKS.length);
   });
@@ -80,6 +83,17 @@ describe("폭죽 무늬", () => {
     "chameleon",
     "glitter",
     "palm",
+    "kiku",
+    "niagara",
+    "kamuro",
+    "rainbow",
+    "crackle",
+    "whistle",
+    "fish",
+    "parachute",
+    "cascade",
+    "pinwheel",
+    "emoji",
   ];
 
   it("모든 무늬가 불티를 만들고, 입자 한도(budget)를 지킨다", () => {
@@ -222,5 +236,85 @@ describe("새 폭죽 8종", () => {
     }
     expect(rocketTrail("palm", 3, fixed).length).toBeGreaterThan(rocketTrail("peony", 3, fixed).length);
     expect(rocketTrail("brocade", 4, fixed)).toHaveLength(2);
+  });
+});
+
+describe("11/20 새 폭죽 13종 + 광역 불꽃쇼", () => {
+  const NEW = ["fw_crackle", "fw_emoji", "fw_parachute", "fw_whistle", "fw_fish", "fw_pinwheel", "fw_rainbow", "fw_kiku", "fw_cascade", "fw_fountainrow", "fw_aurora", "fw_kamuro", "fw_niagara"];
+  const opts = { life: 1, size: 1, budget: all, rand: fixed };
+
+  it("카탈로그: 세기는 값에 맞게 (2 < 200P ≤ 3 < 380P ≤ 4), 쇼는 세기 5 · 900P/2000P", () => {
+    for (const id of NEW) {
+      const it = itemById(id)!;
+      expect(it.kind, id).toBe("firework");
+      expect(it.power, id).toBe(it.price < 200 ? 2 : it.price < 380 ? 3 : 4);
+      expect(fireworkShowMs(id), id).toBe(0);
+    }
+    expect(itemById("fw_town")).toMatchObject({ price: 900, power: 5 });
+    expect(itemById("fw_hangang")).toMatchObject({ price: 2000, power: 5 });
+    expect(fireworkSpecial("fw_hangang", fireworkPlan(5))).toBe("show");
+    expect(fireworkSpecial("fw_aurora", fireworkPlan(3))).toBe("aurora");
+    expect(fireworkShots("fw_fountainrow", fireworkPlan(3)).filter((s) => s.ground)).toHaveLength(5);
+  });
+
+  it("물고기 떼는 옆으로 꿈틀대고, 낙하산 별은 거의 멈춘 채 좌우로 흔들리며 오래 떠 있다", () => {
+    const fish = burstSparks("fish", 40, FW_COLORS.cyan, opts)[0];
+    const a = sparkState(0, 0, fish);
+    const b = sparkState(0, 0, { ...fish, wig: 0 });
+    for (let t = 0; t < 400; t += 16) {
+      a.age += 16;
+      b.age += 16;
+      stepSpark(a, 16, fixed);
+      stepSpark(b, 16, fixed);
+    }
+    expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(1);
+    const stars = burstSparks("parachute", 40, FW_COLORS.silver, opts).filter((s) => s.life > 4000);
+    expect(stars.length).toBeGreaterThan(3);
+    expect(stars.every((s) => (s.wig ?? 0) > 0)).toBe(true);
+  });
+
+  it("팝콘·연쇄 국화는 뒤늦게 다시 터지고, 바람개비는 시간을 두고 돌며 뿌린다, 나이아가라는 왼쪽부터 붙는다", () => {
+    expect(burstSparks("crackle", 40, FW_COLORS.gold, opts).some((s) => (s.at ?? 0) > 400 && s.pop)).toBe(true);
+    expect(burstSparks("cascade", 40, FW_COLORS.gold, opts).filter((s) => (s.at ?? 0) > 600).length).toBeGreaterThan(20);
+    const pin = burstSparks("pinwheel", 40, FW_COLORS.gold, opts);
+    expect(Math.max(...pin.map((s) => s.at ?? 0))).toBeGreaterThan(1500);
+    const line = burstSparks("niagara", 40, FW_COLORS.gold, opts).filter((s) => s.drag === 3);
+    expect(line[0].ox!).toBeLessThan(0);
+    expect(line[line.length - 1].at!).toBeGreaterThan(line[0].at ?? 0);
+  });
+
+  it("하늘 이모티콘은 기호 모양 점으로 서고, 무지개는 일곱 색 띠", () => {
+    expect(emojiMask(FW_EMOJI[1].rows).pts.length).toBeGreaterThan(40);
+    expect(burstSparks("emoji", 40, FW_COLORS.pink, opts).length).toBeGreaterThan(30);
+    expect(new Set(burstSparks("rainbow", 40, FW_COLORS.red, opts).map((s) => s.color)).size).toBeGreaterThanOrEqual(7);
+  });
+
+  it("한강 불꽃쇼: 35초 남짓, 일제 발사·나이아가라(화면 너비)·오로라·30발 몰아치기·금빛 왕관, 화면 안 자리", () => {
+    const p = showProgram("fw_hangang", false, fixed);
+    const last = Math.max(...p.shots.map((s) => s.delay));
+    expect(last).toBeGreaterThan(33_000);
+    expect(p.ms).toBeLessThanOrEqual(fireworkShowMs("fw_hangang"));
+    expect(p.shots.length).toBeGreaterThan(110);
+    expect(p.shots.some((s) => s.pattern === "niagara" && (s.rw ?? 0) > 0.25)).toBe(true);
+    expect(p.auroras.length).toBeGreaterThan(0);
+    expect(p.shots.filter((s) => s.delay > 30_000 + 600 && s.delay < 34_500).length).toBeGreaterThanOrEqual(30);
+    expect(p.shots.filter((s) => s.pattern === "kamuro").length).toBeGreaterThanOrEqual(5);
+    for (const s of p.shots) {
+      expect(s.fx).toBeGreaterThan(0);
+      expect(s.fx).toBeLessThan(1);
+      expect(s.fy).toBeLessThan(0.5);
+    }
+    // 첫 일제 발사는 왼쪽 → 오른쪽
+    const first = p.shots.slice(0, 9).map((s) => s.fx);
+    expect(first).toEqual([...first].sort((a, b) => a - b));
+  });
+
+  it("동네 불꽃 한마당은 짧고, reduced면 발 수가 줄고 타닥·휘슬·꿈틀이 빠진다", () => {
+    const town = showProgram("fw_town", false, fixed);
+    expect(Math.max(...town.shots.map((s) => s.delay))).toBeLessThan(15_000);
+    expect(town.ms).toBeLessThanOrEqual(fireworkShowMs("fw_town"));
+    const calm = showProgram("fw_hangang", true, fixed);
+    expect(calm.shots.length).toBeLessThan(showProgram("fw_hangang", false, fixed).shots.length * 0.7);
+    expect(calm.shots.some((s) => s.pattern === "crackle" || s.pattern === "whistle" || s.pattern === "fish")).toBe(false);
   });
 });

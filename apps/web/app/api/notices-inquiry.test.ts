@@ -104,7 +104,7 @@ describe("문의 → 문의함 (+ GitHub 이슈는 덤)", () => {
 
   it("GitHub 설정이 없어도 문의함에 저장해 접수한다 (공개 안내 없음, GitHub 호출 없음)", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
-    expect(await bodyOf<InquiryInfoResponse>(inquiry.GET(call("/api/inquiry")))).toEqual({ enabled: true, public: false });
+    expect(await bodyOf<InquiryInfoResponse>(inquiry.GET(call("/api/inquiry")))).toEqual({ enabled: true, public: false, signedIn: false });
     const v = await newVisitor();
     const res = await send(v, { category: "account", message: "포인트가 갑자기\n사라졌어요 <b>확인</b>", contact: " me@example.com ", channel: 2 }, { "user-agent": "TestBrowser/1.0" });
     expect(res.status).toBe(200);
@@ -126,20 +126,23 @@ describe("문의 → 문의함 (+ GitHub 이슈는 덤)", () => {
   it("저장소 공개 여부를 GitHub에서 읽어 10분 캐시, 조회에 실패하면 공개로 본다", async () => {
     enable("owner/private-repo");
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ private: true }));
-    expect(await bodyOf(inquiry.GET(call("/api/inquiry")))).toEqual({ enabled: true, public: false });
-    expect(await bodyOf(inquiry.GET(call("/api/inquiry")))).toEqual({ enabled: true, public: false });
+    expect(await bodyOf(inquiry.GET(call("/api/inquiry")))).toEqual({ enabled: true, public: false, signedIn: false });
+    expect(await bodyOf(inquiry.GET(call("/api/inquiry")))).toMatchObject({ enabled: true, public: false });
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(String(fetchSpy.mock.calls[0][0])).toBe("https://api.github.com/repos/owner/private-repo");
 
     enable("owner/unknown-repo");
     fetchSpy.mockRejectedValueOnce(new Error("down"));
-    expect(await bodyOf(inquiry.GET(call("/api/inquiry")))).toEqual({ enabled: true, public: true });
+    expect(await bodyOf(inquiry.GET(call("/api/inquiry")))).toMatchObject({ enabled: true, public: true });
   });
 
-  it("세션·입력 검증", async () => {
+  it("세션·입력 검증 (세션 없으면 손님이라 연락처 필수)", async () => {
     enable();
-    expect((await send(undefined, valid)).status).toBe(401);
+    const res = await send(undefined, valid, { "x-forwarded-for": "10.7.0.1" });
+    expect(res.status).toBe(400);
+    expect((await errorOf(res)).message).toBe("답장 받을 연락처를 적어 주세요.");
     const v = await newVisitor();
+    expect(await bodyOf(inquiry.GET(call("/api/inquiry", { visitor: v })))).toMatchObject({ signedIn: true });
     expect((await errorOf(await send(v, { ...valid, message: "짧아요" }))).message).toBe("문의 내용을 10자 이상 적어 주세요.");
     expect((await send(v, { ...valid, category: "spam" })).status).toBe(400);
     expect((await send(v, { ...valid, contact: "가".repeat(101) })).status).toBe(400);
@@ -257,5 +260,59 @@ describe("관리자 문의 탭", () => {
     expect((await patch("nope", { status: "later" })).status).toBe(400);
     expect((await errorOf(await patch("nope", { memo: "가".repeat(INQUIRY_MEMO_MAX + 1) }))).message).toBe(`메모는 ${INQUIRY_MEMO_MAX}자까지 적을 수 있어요.`);
     expect((await patch("nope", { status: "done" })).status).toBe(404);
+  });
+});
+
+describe("개발자 노트 문의하기 (보낸 곳·손님)", () => {
+  const send = (body: object, opts: { who?: Visitor; ip?: string } = {}) =>
+    inquiry.POST(call("/api/inquiry", { visitor: opts.who, body, headers: opts.ip ? { "x-forwarded-for": opts.ip } : undefined }));
+  const adminRows = async () => (await bodyOf<{ inquiries: InquiryRow[] }>(adminInquiries.GET(call("/api/admin/inquiries", { headers: KEY })))).inquiries;
+  afterEach(() => vi.useRealTimers());
+
+  it("source=devnote로 보내면 관리자 문의함에 보낸 곳·종류가 남는다 (계정 문의는 그대로)", async () => {
+    const v = await newVisitor();
+    expect((await send({ category: "account", message: "포인트가 갑자기 줄었어요. 확인 부탁해요.", source: "devnote" }, { who: v })).status).toBe(200);
+    await new Promise((r) => setTimeout(r, 2));
+    expect((await send({ category: "bug", message: "게임 안에서 보낸 문의예요. 고마워요." }, { who: v })).status).toBe(200);
+    expect((await send({ category: "bug", message: "보낸 곳이 이상한 문의예요. 고마워요.", source: "web" }, { who: v })).status).toBe(400);
+    const ours = (await adminRows()).filter((r) => r.accountId === v.visitorId);
+    expect(ours.map((r) => [r.category, r.source])).toEqual([
+      ["bug", undefined],
+      ["account", "devnote"],
+    ]);
+  });
+
+  it("손님: 연락처를 적으면 accountId null로 접수, 숨은 칸을 채운 봇은 저장하지 않는다", async () => {
+    const body = { category: "idea", message: "계정 없이 보내는 건의예요. 고마워요.", source: "devnote", contact: "guest@example.com" };
+    expect((await send({ ...body, contact: "  " }, { ip: "10.8.0.1" })).status).toBe(400);
+    expect((await send(body, { ip: "10.8.0.1" })).status).toBe(200);
+    const row = (await adminRows()).find((r) => r.contact === "guest@example.com");
+    expect(row).toMatchObject({ accountId: null, name: null, source: "devnote", category: "idea", status: "new" });
+
+    const before = (await adminRows()).length;
+    const bot = await send({ ...body, contact: "bot@example.com", homepage: "http://spam" }, { ip: "10.8.0.2" });
+    expect(bot.status).toBe(200);
+    expect(await bot.json()).toEqual({ ok: true });
+    expect(await adminRows()).toHaveLength(before);
+  });
+
+  it("손님 한도: IP마다 1분에 1번, 하루 3번 (다른 IP는 따로)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.UTC(2026, 10, 20, 3));
+    const body = { category: "bug", message: "손님 한도를 확인하는 문의예요.", contact: "a@b.c" };
+    const ip = "10.9.0.1";
+    expect((await send(body, { ip })).status).toBe(200);
+    const burst = await send(body, { ip });
+    expect(burst.status).toBe(429);
+    expect((await errorOf(burst)).message).toBe("조금 뒤에 다시 보내 주세요.");
+    for (let i = 0; i < 2; i++) {
+      vi.advanceTimersByTime(61_000);
+      expect((await send(body, { ip })).status).toBe(200);
+    }
+    vi.advanceTimersByTime(61_000);
+    const day = await send(body, { ip });
+    expect(day.status).toBe(429);
+    expect((await errorOf(day)).message).toBe("문의는 하루에 3번까지 보낼 수 있어요.");
+    expect((await send(body, { ip: "10.9.0.2" })).status).toBe(200);
   });
 });

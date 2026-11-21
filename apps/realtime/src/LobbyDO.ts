@@ -9,6 +9,7 @@ import {
   countOf,
   emptyLobby,
   hasRecentChannels,
+  liveChannels,
   refreshTargets,
   startupTargets,
   type LobbyState,
@@ -72,9 +73,11 @@ export class LobbyDO extends DurableObject<Env> {
   }
 
   /** Channel DO → 인원 보고 (변화 시 1초 디바운스). seq는 채널 DO 안에서 단조 증가 */
-  report(channel: number, count: number, seq: number): void {
+  report(channel: number, count: number, seq: number, staff?: number): void {
     if (!this.validChannel(channel) || !Number.isInteger(count) || count < 0 || !Number.isFinite(seq)) return;
-    if (applyReport(this.state, channel, count, seq, Date.now(), true)) this.markDirty();
+    // 11/20 staff = 운영자 수 (count에 없다. 옛 채널 DO는 보내지 않는다)
+    const st = Number.isInteger(staff) && staff! >= 0 ? staff : undefined;
+    if (applyReport(this.state, channel, count, seq, Date.now(), true, st)) this.markDirty();
     this.settleQueue();
   }
 
@@ -109,6 +112,12 @@ export class LobbyDO extends DurableObject<Env> {
     const status = this.queue.poll(visitorId, Date.now(), this.counts);
     this.saveQueue();
     return status;
+  }
+
+  /** 11/20 사람이 있는 채널 id (운영자만 있어도) — 확성기·공지·친구 위치를 보낼 곳 (Worker·채널 DO, RPC) */
+  liveChannels(): number[] {
+    this.settleQueue();
+    return liveChannels(this.state, this.cfg, (id) => this.queue.heldIn(id));
   }
 
   /** Worker → GET /lobby. 대기열이 잡아 둔 자리도 인원으로 보여 준다 */
@@ -175,11 +184,10 @@ export class LobbyDO extends DurableObject<Env> {
 
   /** 사람이 있는 채널마다 그 친구들에게 전한다 (받을 사람이 없는 채널은 아무것도 안 한다) */
   private tellFriends(n: FriendNotice): void {
-    for (const c of computeLobby(this.state, this.cfg).channels) {
-      if (c.count <= 0) continue;
-      channelStub(this.env, c.id)
+    for (const id of liveChannels(this.state, this.cfg)) {
+      channelStub(this.env, id)
         .friendNotice(n.to, n.key, n.name, n.on)
-        .catch((e) => console.error("friendNotice failed", c.id, e));
+        .catch((e) => console.error("friendNotice failed", id, e));
     }
   }
 
@@ -210,7 +218,7 @@ export class LobbyDO extends DurableObject<Env> {
     const now = Date.now();
     ids.forEach((id, i) => {
       const r = results[i];
-      if (r && applyReport(this.state, id, r.count, r.seq, now, false)) this.markDirty();
+      if (r && applyReport(this.state, id, r.count, r.seq, now, false, Number.isInteger(r.staff) ? r.staff : undefined)) this.markDirty();
     });
     this.settleQueue();
   }

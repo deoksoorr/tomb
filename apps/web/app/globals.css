@@ -175,6 +175,13 @@ a {
   outline-offset: 3px;
 }
 
+/* 11/22 사냥 중(usePageZoomLock → html[data-nozoom]): 두 번 누르기 확대를 모든 요소에서 끈다.
+   :where라 우선순위 0 — 따로 정한 none(캔버스·판 덮개·조이스틱)·pan-y(채팅 목록)는 그대로 */
+:where(html[data-nozoom]),
+:where(html[data-nozoom]) :where(*) {
+  touch-action: manipulation;
+}
+
 ::selection {
   background: var(--moss-deep);
   color: var(--bone);

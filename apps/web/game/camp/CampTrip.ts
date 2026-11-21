@@ -305,6 +305,8 @@ export class CampTrip {
       route: this.dest.route,
       reduced: this.w.reduced,
       hour: this.hour(),
+      // 11/20 운영자 순간이동: 창밖 연출 없이 바로 (어두운 한 프레임 뒤 도착)
+      ...(friend?.tp ? { instant: true } : {}),
       onDone: () => (leg === "toCamp" ? this.arriveCamp(friend) : this.arriveVillage(friend)),
     };
     const sm = this.game.scene;
@@ -355,7 +357,8 @@ export class CampTrip {
     // 11/15 맵 옮기기(화면 UI도 함께 바뀐다)는 다음 프레임에 (캠핑장을 처음 그리는 프레임을 가볍게)
     this.afterFrames(2, () => {
       if (this.phase !== "camp") return;
-      w.net.switchMap(map, to.x, to.y);
+      // 11/20 운영자 순간이동이면 tp로 (그 사람 옆, 서버가 운영자 연결만 받는다)
+      w.net.switchMap(map, to.x, to.y, friend?.tp ? friend.sid : undefined);
       w.net.setAway(false);
     });
     // 11/15 화면 UI는 몇 프레임 뒤에 다시 보여요 (캠핑장을 처음 그리는 프레임과 겹치면 한 번 멈췄어요)
@@ -410,7 +413,7 @@ export class CampTrip {
     // 맵 옮기기: 마을 사람들 화면에는 정류장에 나타난다 (mapped → 월드가 마을 사람 목록을 맞춘다). 11/16 바닷가에서 오면 바닷가행 정류장에
     // 11/19 캠핑장 ↔ 바닷가 친구(friend.next)는 마을 정류장에 내려 버스 안에 숨은 채로 이어 탄다 (friend.x·y는 다음 맵 좌표)
     const land = friend && !friend.next ? { x: friend.x, y: friend.y } : d.land;
-    w.net.switchMap("village", land.x, land.y);
+    w.net.switchMap("village", land.x, land.y, friend?.tp && !friend.next ? friend.sid : undefined);
     if (friend?.next) {
       pl.warp(land.x, land.y, w.scene.time.now, null);
       w.net.setAway(true, "bus");

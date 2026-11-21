@@ -1,6 +1,7 @@
 import type { Redis } from "@upstash/redis";
 import { redisClient } from "../redisUsage";
 import { env } from "../env";
+import { devRpgSave } from "../devPersist";
 import { normalize, RpgError } from "./character";
 import { getAccounts } from "../store";
 import { econKeyFor, kstDay } from "../store/accounts";
@@ -96,6 +97,7 @@ export class MemoryRpgStore implements RpgStore {
   async update<T>(acct: string, fn: (s: CharacterState) => { state: CharacterState; result: T }) {
     const out = fn(structuredClone(this.chars.get(acct) ?? normalize(null)));
     this.chars.set(acct, structuredClone(out.state));
+    devRpgSave(acct, out.state);
     return out;
   }
 
@@ -104,6 +106,7 @@ export class MemoryRpgStore implements RpgStore {
     // 메모리 계정 저장소의 쓰기는 기다릴 일이 없어 이 사이에 다른 갱신이 끼지 않는다
     if (out.cost > 0 && (await getAccounts().spend(acct, out.cost, reason, now)) === null) throw noPoints();
     this.chars.set(acct, structuredClone(out.state));
+    devRpgSave(acct, out.state);
     return { state: out.state, result: out.result };
   }
   async startRun(acct: string, nonce: string, ttlSec: number, now: number): Promise<boolean> {

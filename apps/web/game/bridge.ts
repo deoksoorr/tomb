@@ -70,7 +70,7 @@ export type GameEvents = {
   /** 근접 툴팁 대상 묘비 (없으면 null). 모바일 상호작용 버튼 표시용 */
   "grave:near": { graveId: string } | null;
   /** 11/19 문 앞이면 폰 [상호작용] 단추 이름 (logic/doorHint, sticky) */
-  "door:near": "들어가기" | "나가기" | null;
+  "door:near": "들어가기" | "나가기" | "사직서 내러 가기" | null;
   /** 앉을 수 있는 빈 좌석 근처(없으면 null). 게임은 좌석 옆에 "X 앉기" 안내를, UI는 모바일 앉기 버튼을 강조한다 (sticky) */
   "seat:near": { seatId: string; kind: "bench" | "chair" } | null;
   /** 24번 벤치 상태 (sticky): seated = 의자·벤치에 앉아 있어 고를 수 있음, mood = 지금 고른 상태 (SEAT_MOODS id, 없으면 "") */
@@ -256,7 +256,8 @@ export type GameEvents = {
   /** 11/15 캠핑장 바베큐 그릴 앞에서 E → 메뉴 창 */
   "camp:bbq:open": { stand: BbqStand };
   /** 채널 이동 창: 지금 같은 채널에 보이는 사람들 닉네임 (peers:ask에 답한다, 나는 빼고). map = 지금 맵 (11/17 그 맵에 보이는 사람만이라서) */
-  "peers:list": { names: string[]; map: MapId };
+  /** 11/20 staff = names 중 운영자 수 (로비 채널 인원엔 운영자가 없다) */
+  "peers:list": { names: string[]; map: MapId; staff?: number };
 
   // ── 낚시·채집 (4·32번) ── (game/world/forage, components/forage)
   /** 낚시 자리에 앉음 / NPC 앞 / 채집 지점에서 E → UI가 낚시 창·판매 창·채집(게이지·곤충 미니게임)을 연다 */
@@ -396,6 +397,10 @@ export type UiEvents = {
   "look:set": { look: string[]; lookGrant: string; dye?: AvatarDye; body?: string; champ?: number; mgr?: 0 | 1 };
   /** 폭죽 발사: 내 위치에서 바로 터뜨리고 grant를 실시간 서버로 보낸다 */
   "firework:fire": { item: string; grant: string };
+  /** 11/20 광역 불꽃쇼가 이 채널(맵) 하늘에서 언제 끝나는지 (Date.now ms, sticky). 폭죽 창이 보고 다음 쇼를 막는다 */
+  "firework:show": { until: number };
+  /** 11/20 실시간 서버가 광역 불꽃쇼를 거절했다 (이미 하나 돌고 하나 기다리는 중). left = 남은 ms */
+  "firework:busy": { left: number };
   /** 23번 확성기: Vercel이 서명한 증서를 지금 채널의 실시간 서버로 보낸다 (서버가 채널·모든 채널에 방송) */
   "megaphone:send": { grant: string };
   /** 내 계정이 세운 묘비 id들 (sticky). 게임은 이 묘비들에 "내 묘비" 표시를 띄운다 */
@@ -485,7 +490,9 @@ export type UiEvents = {
   /** 친구: 지금 채널에 있는 친구들 (그 채널의 sid·이름) → 게임이 이름표 옆 하트·미니맵 하트로 그린다 (sticky) */
   "friends:here": { ch: number; list: { sid: number; name: string }[] };
   /** 친구한테 가기 (같은 채널 마을): 친구 옆 걸을 수 있는 칸으로 순간이동. x,y = 서버가 알려 준 위치 (화면에 친구가 없을 때 쓴다) */
-  "friend:goto": { sid: number; name: string; x: number; y: number; /** 11/15 친구가 캠핑장에 있으면 "camp", 11/16 바닷가면 "sea" (맵이 다르면 버스를 거쳐 간다) */ map?: AwayMapId };
+  "friend:goto": { sid: number; name: string; x: number; y: number; /** 11/15 친구가 캠핑장에 있으면 "camp", 11/16 바닷가면 "sea" (맵이 다르면 버스를 거쳐 간다) */ map?: AwayMapId; /** 11/20 운영자 순간이동: 버스 연출 없이, 서버에 tp로 (반짝임) */ tp?: true };
+  /** 11/20 누가 순간이동으로 (x,y)에서 사라졌다(out)·나타났다(in) → 그 맵 장면이 반짝임을 그린다. map = 받은 때의 내 맵 */
+  "tp:fx": { x: number; y: number; k: "out" | "in"; map: MapId };
   /** 11/15 캠핑장 대화 창: 다음 말 (E·Space·버튼) / 닫았다 */
   "camp:talkNext": undefined;
   /** 11/15 바베큐를 샀다 (증서) → 게임이 먹는 연출·커지기, 실시간 서버로 증서 */
@@ -493,6 +500,68 @@ export type UiEvents = {
   "camp:talkClose": undefined;
   /** 친구가 있는 집으로 따라 들어간다: 그 집 장면이 열리면 친구(이름)를 찾아 옆으로 옮긴다 (at = 누른 시각, 오래되면 무시. sticky) */
   "house:follow": { houseId: string; name: string; at: number } | null;
+
+  // ── 11/20 회장님 독대 (game/chairman) ──
+  /** 출근하기: 판 시작 요청 → 회장실 싸움 (입장 연출은 UI가 먼저 보여 주고 부른다). 오버레이·결과 창은 game/chairman이 띄운다 */
+  "chairman:enter": { mode: "normal" | "hell"; practice?: boolean };
+  /** 회장실에서 마을로 (결과 창 [마을로] · 판이 없을 때) */
+  "chairman:exit": undefined;
+  /** 11/22 브리핑(시작 전) 멈춤 창 [나가기] → 유료 판이면 판 돌려받기 시도(최대 1.5초) 뒤 마을로 */
+  "chairman:leave": undefined;
+  /** 11/22 시작 전 나가기 서버 응답 (refunded면 UI가 마을 토스트 · 입장 창 상태 새로 받기) */
+  "chairman:aborted": { refunded: boolean; remaining: { normal: number; hell: number }; refundLeft: 0 | 1 };
+  /** 결과 창 [한 판 더] */
+  "chairman:retry": undefined;
+  /** 업무 브리핑 [바로 시작] */
+  "chairman:go": undefined;
+  /** 11/21 개발 서버 운영자 무적(시험) 켜고 끄기 (오버레이 단추·G) — 운영 빌드에서는 싸움이 듣지 않는다 */
+  "chairman:god": undefined;
+  /** 게임 → 오버레이: 피해 계기판·단계 (초당 약 8번). god: 개발 서버 운영자만 실린다 (무적 켜짐 여부) · godUsed: 이번 판에 무적을 켠 채 싸운 적이 있다 */
+  "chairman:hud": { total: number; dps: number; best: number; phase: number; mode: "normal" | "hell"; practice: boolean; under: boolean; god?: boolean; godUsed?: boolean;
+    /** 11/21 버틴 시간 (판 시간 ms — 계기판 시간 칸) */
+    ms?: number;
+    /** 11/21 회장님 몸+말풍선 화면 상자 [l,t,r,b] (CSS px) — 위 HUD 판이 이 밑이면 반투명 */
+    box?: [number, number, number, number];
+    /** 11/22 내 캐릭터 화면 상자 [l,t,r,b] (CSS px) — PC 가운데 반려 카드가 이 위면 반투명 */
+    me?: [number, number, number, number];
+    /** 11/21 지옥 반려 예고·반려함: 반려된 것(순서대로) · 다음 것 · 남은 ms · 풀 크기 */
+    seal?: { ids: string[]; next: string | null; left: number; total: number };
+  };
+  /** 게임 → 오버레이: 한 번씩 띄우는 것 (브리핑·처음 보는 기술·배너) */
+  "chairman:ui":
+    /** pats: 11/21 판 전체 기술 주머니에서 먼저 나올 기술 (브리핑 목록) */
+    | { kind: "brief"; phase: number; pats?: string[] }
+    | { kind: "caption"; name: string; how: string }
+    /** big: 11/22 즉사 큰 글자 (프로젝트 드랍 — 위쪽에 짧게) */
+    | { kind: "banner"; text: string; hot?: boolean; big?: boolean }
+    /** 11/20 단계 전환 화면 (PHASE n · 이름 · 부제 — 크런치는 붉게) */
+    | { kind: "phase"; n: number; name: string; sub: string; crunch: boolean; reduced: boolean }
+    /** 11/21 지옥 반려 순간 (가운데 위 도장 — 회장님 한마디 · 스킬) */
+    | { kind: "seal"; id: string; line: string; reduced: boolean; side?: "l" | "r" }
+    | { kind: "status"; state: "starting" | "fight" | "dead" | "error"; message?: string };
+  /** 판 끝 결과 (서버 응답까지 담아서 — 오버레이 결과 창 · UI가 듣는다) */
+  "chairman:result": {
+    mode: "normal" | "hell";
+    practice: boolean;
+    damage: number;
+    durationMs: number;
+    points: number | null;
+    pointsReason?: string;
+    newBest: boolean;
+    best: number;
+    weekRank: number | null;
+    remaining: { normal: number; hell: number } | null;
+    error?: string;
+    /** 11/22 무적(시험)을 켠 판 (개발 서버 — 서버는 연습처럼 기록·포인트 없이 끝낸다). practice는 연습 버튼으로 시작한 판만 */
+    god?: boolean;
+  };
+  // ── 11/20 회장님 독대 입장 (components/chairman) ──
+  /** 게임 → UI: 등대 문 앞 E → 입장 창 */
+  "chairman:door": undefined;
+  /** 게임 → UI: 등대 전광판이 화면에 보인다 → 이번 주 노멀 1위를 달라 (UI가 1분 캐시) */
+  "lighthouse:want": undefined;
+  /** UI → 게임: 전광판 글 (3×5 LED — 영문·숫자만) + 옆 이름표 (한글 이름, 없으면 null) */
+  "lighthouse:board": { led: string; name: string | null };
 };
 
 export type ForageUse =
@@ -507,6 +576,7 @@ type AllEvents = GameEvents & UiEvents;
 type Handler<K extends keyof AllEvents> = (payload: AllEvents[K]) => void;
 
 const STICKY = new Set<keyof AllEvents>([
+  "firework:show",
   "net:status",
   "graves:set",
   "ui:blockKeys",
@@ -556,6 +626,7 @@ const STICKY = new Set<keyof AllEvents>([
   "snow:cool",
   "portal:walk",
   "route:guide",
+  "lighthouse:board",
 ]);
 
 class Bridge {

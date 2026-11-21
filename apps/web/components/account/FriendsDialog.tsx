@@ -15,6 +15,7 @@ import { friendRoute } from "@/lib/friendRoute";
 import { myBig } from "@/game/camp/foodState";
 import { showFriendNotice } from "../overlay/FriendNotice";
 import AvatarThumb from "./AvatarThumb";
+import StaffPeople from "./StaffPeople";
 import { hopChannel } from "../housing/channelHop";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -223,6 +224,19 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
   const nowMs = data ? loadedAt : 0;
   const friends = data?.friends ?? [];
 
+  // 11/20 운영자 계정은 친구 기능 대신 「접속 중인 사람」과 [순간이동]만
+  if (data?.staff)
+    return (
+      <Dialog title="유저" onClose={onClose}>
+        <div className={styles.wrap}>
+          <p className={ui.hint} role="status">
+            운영자 계정은 친구 기능을 쓸 수 없어요. 대신 접속 중인 사람에게 순간이동할 수 있어요.
+          </p>
+          <StaffPeople myCh={myCh} myMap={myMap} onClose={onClose} />
+        </div>
+      </Dialog>
+    );
+
   return (
     <Dialog title="친구" onClose={onClose}>
       <div className={styles.wrap}>
@@ -239,11 +253,7 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
           </p>
         )}
         {!data && !error && <p className={ui.hint}>불러오는 중…</p>}
-        {data?.staff && (
-          <p className={ui.hint} role="status">
-            운영자 계정은 친구 기능을 쓸 수 없어요.
-          </p>
-        )}
+
 
         {data && data.incoming.length > 0 && (
           <section className={styles.section} aria-labelledby="friend-in">

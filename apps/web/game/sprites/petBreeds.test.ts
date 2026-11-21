@@ -25,7 +25,8 @@ const input = (o: Partial<FxInput> = {}): FxInput => ({
 });
 
 /** 펫 하나를 걸리고(dir 방향으로 ms 동안) 그다음 멈춰 세운다. 걷는 동안·멈춘 뒤 펫 명령의 프레임·뒤집기 */
-function walkThenRest(id: string, dir: DirId, walkMs = 1200, restMs = 1500) {
+// 11/20 품종 펫이 한 발짝 떨어져 따라오므로(BREED_FAR) 멈춘 뒤 자리 잡는 데 조금 더 걸린다 → 기본 쉬는 시간 2초
+function walkThenRest(id: string, dir: DirId, walkMs = 1200, restMs = 2000) {
   const sim = new CosmeticFxSim();
   sim.setLook([id]);
   const art = (COSMETIC_FX[id] as { art: string }).art;

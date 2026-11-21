@@ -1,0 +1,28 @@
+/* 11/20 레이스 남은 시간 줄 (RaceCountdown) */
+.clock {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  margin: 0;
+  text-align: center;
+}
+
+.end {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.end b {
+  color: var(--race-acc, var(--candle));
+  font-variant-numeric: tabular-nums;
+}
+
+.next {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.clock[data-compact] .end {
+  font-size: 11px;
+}

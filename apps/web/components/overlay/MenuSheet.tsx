@@ -144,7 +144,7 @@ export default function MenuSheet({
             redDot: friendIncoming > 0,
           },
         ]),
-    { target: "activity", icon: "heart", label: "내 소식", desc: "헌화·방명록·좋아요 소식", badge: activityUnread ? String(activityUnread) : undefined },
+    { target: "activity", icon: "heart", label: "알림", desc: "헌화·방명록·좋아요 알림", badge: activityUnread ? String(activityUnread) : undefined },
     { target: "race", icon: "trophy", label: "이번 주 레이스 (U)", desc: "이번 주 1위를 겨뤄요" },
     { target: "ranking", icon: "list", label: "랭킹 (L)", desc: "포인트·사냥·집·헌화 순위" },
     { target: "notices", icon: "bell", label: "개발자 노트 (N)", desc: unreadNotice ? "새 글이 있어요 (새 탭)" : "업데이트·점검 소식 (새 탭)", dot: unreadNotice },

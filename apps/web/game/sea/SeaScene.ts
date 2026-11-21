@@ -39,6 +39,7 @@ import {
   type Seat,
   type Sid,
   type WelcomeMsg,
+  fireworkShowMs,
 } from "@tomb/protocol";
 import { ambienceAt, parseAmbienceOverride } from "@/lib/ambience";
 import type { ResumeState } from "@/lib/resume";
@@ -53,6 +54,8 @@ import { phraseOf } from "../entities/SpeechBubble";
 import type { KeyAction } from "../input/Keyboard";
 import { keyJosa } from "../input/keyHint";
 import { besideFriend, FRIEND_ARRIVED } from "../logic/friendSpot";
+import { playTeleportFx } from "../fx/teleportFx";
+import { STAFF_TP_ARRIVED, STAFF_TP_INSIDE_MSG } from "@tomb/protocol";
 import { DEADZONE_ENTER, type MoveInput } from "../logic/movement";
 import { sideIntent, standPoint } from "../logic/sit";
 import { inReach, reachDist } from "../logic/reach";
@@ -483,7 +486,11 @@ export class SeaScene extends Phaser.Scene {
     // 11/17 가진 갈매기 과자 (던지기 안내)
     void gullApi.get().then(publishSnacks, () => {});
     if (this.data0.arrive === "bus") this.arriveByBus();
-    else if (this.data0.arrive === "friend") bridge.emit("friend:notice", { message: FRIEND_ARRIVED });
+    else if (this.data0.arrive === "friend") {
+      // 11/20 운영자 순간이동이면 도착 반짝임
+      if (this.data0.friend?.tp) playTeleportFx(this, this.player.x, this.player.y, "in", this.host.reduced);
+      bridge.emit("friend:notice", { message: this.data0.friend?.tp ? STAFF_TP_ARRIVED : FRIEND_ARRIVED });
+    }
     this.maybeWelcome();
   }
 
@@ -642,7 +649,7 @@ export class SeaScene extends Phaser.Scene {
         v?.setLook(look ?? []);
         v?.applyAppearance(extra);
       },
-      onFirework: (sid, item, x, y) => this.fw().launch(item, x, y, this.rig.frameView(this.view), false, this.remotes.get(sid)?.name ?? ""),
+      onFirework: (sid, item, x, y, wait) => this.fw().launch(item, x, y, this.rig.frameView(this.view), false, this.remotes.get(sid)?.name ?? "", wait),
       onAct: (sid, kind) => {
         if (kind === "lamp") this.housing?.onLampAct();
         // 11/17 같은 바닷가 사람이 갈매기에게 과자를 던졌어요 → 우리 화면 갈매기도 그 앞으로 몰려가요
@@ -863,17 +870,19 @@ export class SeaScene extends Phaser.Scene {
       return last ? { ch: last.ch, bySid: new Map(last.list.map((f) => [f.sid, f.name])) } : this.friends;
     })();
     on.push(
-      bridge.on("friend:goto", ({ sid, name, x, y, map }) => {
+      bridge.on("friend:goto", ({ sid, name, x, y, map, tp }) => {
         // 11/19 마을·캠핑장 친구 모두 버스로 (캠핑장은 마을 정류장을 거쳐 이어 타요 — lib/friendRoute). 몸이 커져 있으면 버스를 못 타요
         const route = friendRoute("sea", map ?? "village", myBig());
-        if (route.do === "warp") this.goToFriend(sid, name, x, y);
+        if (route.do === "warp") this.goToFriend(sid, name, x, y, tp);
         else if (route.do === "block") bridge.emit("friend:notice", { message: route.message });
         else {
           const next = nextAfterVillage(route);
-          this.host.goVillage({ sid, name, x, y, ...(next ? { next } : {}) });
+          this.host.goVillage({ sid, name, x, y, ...(next ? { next } : {}), ...(tp ? { tp } : {}) });
         }
       }),
     );
+    // 11/20 운영자 순간이동 반짝임 (이 맵에 있을 때만)
+    on.push(bridge.on("tp:fx", ({ x, y, k, map }) => map === "sea" && !this.cleaned && !this.parked && playTeleportFx(this, x, y, k, this.host.reduced)));
     // 바닷가에서 채널을 옮기면 새 채널 바닷가 정류장에서 (캠핑장과 같은 규칙)
     let channelBack: { x: number; y: number } | null = null;
     on.push(
@@ -892,7 +901,7 @@ export class SeaScene extends Phaser.Scene {
         this.rig.recenter();
       }),
     );
-    on.push(bridge.on("peers:ask", () => bridge.emit("peers:list", { names: [...this.remotes.values()].map((r) => r.name), map: "sea" })));
+    on.push(bridge.on("peers:ask", () => bridge.emit("peers:list", { names: [...this.remotes.values()].map((r) => r.name), map: "sea", staff: [...this.remotes.values()].filter((r) => r.view.staff).length })));
     // 11/17 맵 컨셉 (마을과 같은 방식): 주소 시험 값(?concept=, 실서버는 막힘)이 있으면 그것만, 없으면 관리자가 고른 값을 따라 바로 바꿔요
     const conceptQa = parseConceptOverride(window.location.search);
     if (!conceptQa) {
@@ -903,6 +912,7 @@ export class SeaScene extends Phaser.Scene {
     }
     on.push(
       bridge.on("firework:fire", ({ item }) => {
+        if (fireworkShowMs(item) > 0) return; // 광역 불꽃쇼는 서버가 돌려준 때에 (onFirework)
         this.fw().launch(item, this.player.x, this.player.y, this.rig.frameView(this.view), true, this.host.name);
       }),
     );
@@ -1382,23 +1392,28 @@ export class SeaScene extends Phaser.Scene {
   }
 
   /** 같은 채널 바닷가의 친구 옆으로 (캠핑장 goToFriend와 같은 규칙) */
-  private goToFriend(sid: Sid, name: string, fx: number, fy: number): void {
+  private goToFriend(sid: Sid, name: string, fx: number, fy: number, tp?: true): void {
     const net = this.host.net;
     if (this.cleaned || !net.online || this.locked) return;
     const notice = (message: string) => bridge.emit("friend:notice", { message });
     const r = this.remotes.get(sid);
     const live = r && r.name === name ? r : null;
-    if (live?.away) return notice(`${name}님은 지금 실내에 있어요.`);
+    if (live?.away) return notice(tp ? STAFF_TP_INSIDE_MSG : `${name}님은 지금 실내에 있어요.`);
     const at = live ? { x: live.x, y: live.y } : { x: fx, y: fy };
     const pl = this.player;
     const now = this.time.now;
     if (pl.sitting) pl.stand(now, this.seatReq);
     const spot = this.besideFriend({ sid, name, x: at.x, y: at.y });
+    if (tp) playTeleportFx(this, pl.x, pl.y, "out", this.host.reduced);
     pl.warp(spot.x, spot.y, now, this.seatReq);
     pl.faceTo(at.x, at.y, now);
-    net.warp(spot.x, spot.y);
+    // 11/20 운영자는 서버에 tp로 (운영자 연결만 받는다)
+    if (tp) {
+      net.staffTp(sid, spot.x, spot.y);
+      playTeleportFx(this, spot.x, spot.y, "in", this.host.reduced);
+    } else net.warp(spot.x, spot.y);
     this.rig.recenter();
-    notice(FRIEND_ARRIVED);
+    notice(tp ? STAFF_TP_ARRIVED : FRIEND_ARRIVED);
   }
 
   /** 새로고침 직전 자리 (CampTrip.campResume) */

@@ -2,6 +2,7 @@
 // 게임(Fireworks.ts)과 상점·폭죽 창의 미리보기(components/shop/FireworkPreview)가 같은 코드로 터뜨리고,
 // 불티 처음 상태(sparkState)·움직임(stepSpark)·꼬리(sparkTrail)·밝기(sparkLook)·로켓 꼬리(rocketTrail)도 함께 쓴다.
 
+import { fireworkShowMs } from "@tomb/protocol";
 import { burstSpeed, finaleTimes, FW_BASE_RADIUS, heartPoint, sampleTextMask, type FireworkPlan } from "./fxMath";
 
 export type FwPattern =
@@ -24,7 +25,19 @@ export type FwPattern =
   | "strobe"
   | "chameleon"
   | "glitter"
-  | "palm";
+  | "palm"
+  // 11/20 새 무늬: 터지는 방식이 저마다 다르다
+  | "kiku"
+  | "niagara"
+  | "kamuro"
+  | "rainbow"
+  | "crackle"
+  | "whistle"
+  | "fish"
+  | "parachute"
+  | "cascade"
+  | "pinwheel"
+  | "emoji";
 
 /** 프레임이 느릴 때 입자 수 배율 (dtAvg = 프레임 시간 이동 평균 ms). 게임과 미리보기가 같은 기준으로 줄인다 */
 export function slowFactor(dtAvg: number): number {
@@ -51,6 +64,8 @@ export const FW_COLORS = {
   silver: [0xffffff, 0xe2ecff, 0xbcd0ff],
   yellow: [0xffe45a, 0xfff6b0, 0xffc830],
 } as const;
+/** 무지개 아치 띠 색 (안쪽 보라 → 바깥 빨강) */
+export const FW_RAINBOW: readonly number[] = [0xb070ff, 0x6a7cff, 0x5ad0ff, 0x7aff8a, 0xfff060, 0xffa040, 0xff5a5a];
 export const FINALE_COLORS: readonly (readonly number[])[] = [
   FW_COLORS.gold,
   FW_COLORS.pink,
@@ -95,6 +110,10 @@ export type SparkSpec = {
   /** 점멸 주기(ms)와 어긋남(0..1): 처음부터 깜빡인다 (별빛 점멸·금가루) */
   strobe?: number;
   strobeOff?: number;
+  /** 꿈틀: 가는 방향의 옆으로 이 세기(px/s)만큼 흔들린다 (물고기 떼). 거의 멈췄으면 좌우로 (낙하산 별) */
+  wig?: number;
+  wigHz?: number;
+  wigOff?: number;
 };
 
 export type BurstOpts = {
@@ -622,6 +641,251 @@ export function burstSparks(pattern: FwPattern, R: number, colors: readonly numb
       }
       break;
     }
+    case "kiku": {
+      // 국화 겹꽃: 꼬리 끄는 큰 국화(공 모양으로 고르게) + 안쪽에 다른 색 꽃술, 가운데 흰 심
+      const n = o.budget(84);
+      const m = o.budget(34);
+      const L = 1700 * life;
+      const pistil = FINALE_COLORS[(Math.max(0, FINALE_COLORS.indexOf(colors)) + 1) % FINALE_COLORS.length];
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + rnd() * 0.05;
+        const z = ((i * 0.618) % 1) * 2 - 1;
+        const sp = burstSpeed(R * Math.sqrt(1 - z * z * 0.8) * rand(0.96, 1.04), 1.4, 1.2);
+        add({ vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: L + rnd() * 250, color: colors[i % 2], size, drag: 1.4, grav: g * 0.7, trail: 40, trailLife: 340, trailColor: i % 3 ? colors[2] : undefined });
+      }
+      const sp2 = burstSpeed(R * 0.42, 1.5, 1);
+      for (let i = 0; i < m; i++) {
+        const a = (i / m) * Math.PI * 2 + 0.11;
+        add({ vx: Math.cos(a) * sp2 * rand(0.9, 1.05), vy: Math.sin(a) * sp2 * rand(0.9, 1.05), life: L * 0.75, color: pistil[i % 2], size: size * 1.1, drag: 1.5, grav: g * 0.5 });
+      }
+      const c = o.budget(8);
+      for (let i = 0; i < c; i++) {
+        const a = (i / c) * Math.PI * 2;
+        add({ vx: Math.cos(a) * 5 * s, vy: Math.sin(a) * 5 * s, life: 900 * life, color: 0xffffff, size: size * 0.9, drag: 1.6, grav: g * 0.3 });
+      }
+      break;
+    }
+    case "niagara": {
+      // 나이아가라: 왼쪽부터 불꽃 줄이 차례로 붙고, 붙은 자리마다 금빛 불티가 폭포처럼 쏟아진다
+      const half = R * 1.5;
+      const cols = Math.max(8, o.budget(30));
+      const ignite = 520;
+      const rows = Math.max(3, Math.floor(o.budget(cols * 9) / cols));
+      for (let c = 0; c < cols; c++) {
+        const x = ((c + 0.5) / cols - 0.5) * 2 * half;
+        const at = (c / cols) * ignite;
+        add({ vx: 0, vy: 0, life: 2600 * life, color: c % 3 ? 0xfff4d0 : 0xffffff, size: size * 1.15, drag: 3, grav: 1.5, at, ox: x, oy: rand(-1, 1), fadeFrom: 0.4 });
+        for (let r = 0; r < rows; r++) {
+          add({
+            vx: (rnd() - 0.5) * 4,
+            vy: rand(10, 22) * Math.min(2, Math.sqrt(s)),
+            life: rand(1500, 2100) * life,
+            color: (r + c) % 4 === 0 ? 0xffffff : colors[(r + c) % colors.length],
+            size: size * rand(0.8, 1),
+            drag: 1,
+            grav: g * 0.75,
+            at: at + 120 + r * 190 + rnd() * 90,
+            ox: x + (rnd() - 0.5) * 4,
+            oy: rand(-1, 1),
+            trail: (r + c) % 2 === 0 ? 45 : undefined,
+            trailLife: 320,
+            trailColor: (r + c) % 3 ? 0xd8963c : 0xffd070,
+          });
+        }
+      }
+      break;
+    }
+    case "kamuro": {
+      // 왕관 버드나무: 굵은 금빛 가지가 위·옆으로 퍼져 왕관 모양이 되고, 반짝이는 금가루 꼬리를 늘어뜨리며 아주 천천히 내려앉는다
+      const n = o.budget(64);
+      const L = 3400 * life;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + rnd() * 0.06;
+        const down = Math.sin(a) > 0.3;
+        const sp = burstSpeed(R * rand(0.86, 1) * (down ? 0.72 : 1), 2, 1);
+        add({
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp,
+          life: L + rnd() * 500,
+          color: i % 4 === 0 ? 0xfff4d0 : colors[i % 2],
+          size: size * 1.1,
+          drag: 2,
+          grav: g * 0.95,
+          trail: 52,
+          trailLife: 1350,
+          trailColor: i % 2 ? 0xffc860 : 0xe0a040,
+          trailFall: 9,
+          trailStrobe: o.reduced ? undefined : 150,
+        });
+      }
+      break;
+    }
+    case "rainbow": {
+      // 무지개 아치: 일곱 색 띠가 모양을 지키며 커진다 (안쪽 보라 → 바깥 빨강), 양 끝에 흰 구름 반짝이
+      const per = Math.max(5, Math.round(o.budget(18 * 7) / 7));
+      const sp = 52 * (R / (FW_BASE_RADIUS * 1.15));
+      for (let k = 0; k < 7; k++) {
+        const r = 0.6 + k * 0.068;
+        for (let i = 0; i < per; i++) {
+          const a = Math.PI + (i / (per - 1)) * Math.PI;
+          add({ vx: Math.cos(a) * r * sp, vy: Math.sin(a) * r * sp * 0.92, life: (2000 + rnd() * 250) * life, color: FW_RAINBOW[k], size: size * 1.05, drag: 0.5, grav: g * 0.22, fadeFrom: 0.25 });
+        }
+      }
+      const cl = o.budget(10);
+      for (const side of [-1, 1]) {
+        for (let i = 0; i < cl; i++) {
+          const a = rnd() * Math.PI * 2;
+          add({ vx: side * 0.82 * sp + Math.cos(a) * 6 * s, vy: Math.sin(a) * 4 * s, life: 1700 * life, color: 0xffffff, size: size * 0.9, drag: 0.55, grav: g * 0.2, strobe: o.reduced ? undefined : 130, strobeOff: rnd() });
+        }
+      }
+      break;
+    }
+    case "crackle": {
+      // 반짝 팝콘: 금빛 불티가 퍼지다가 저마다 다른 때에 톡톡 작게 다시 터진다 (몇 개는 타닥 소리)
+      const n = o.budget(44);
+      const sub = o.reduced ? 3 : 9;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + rnd() * 0.2;
+        const sp = burstSpeed(R * rand(0.6, 0.9), 1.5, 0.8);
+        const vx = Math.cos(a) * sp;
+        const vy = Math.sin(a) * sp;
+        const T = rand(0.45, 0.95);
+        add({ vx, vy, life: T * 1000, color: colors[i % colors.length], size: size * 0.95, drag: 1.5, grav: g * 0.6, trail: 45, trailLife: 220 });
+        const p = sparkOffset(vx, vy, 1.5, g * 0.6, T);
+        const k = Math.min(sub, o.budget(sub));
+        for (let q = 0; q < k; q++) {
+          const b = rnd() * Math.PI * 2;
+          const v = rand(26, 60) * Math.min(1.6, Math.sqrt(s));
+          add({ vx: Math.cos(b) * v, vy: Math.sin(b) * v, life: rand(320, 520), color: q % 3 === 2 ? colors[0] : q % 2 ? 0xffffff : 0xfff0b0, size: size * 0.95, drag: 4, grav: 8, strobe: o.reduced ? undefined : 60, strobeOff: rnd(), at: T * 1000 + q * 15, ox: p.x, oy: p.y, pop: q === 0 && i % 4 === 0 });
+        }
+      }
+      break;
+    }
+    case "whistle": {
+      // 휘슬 로켓: 하얗게 번쩍하는 티타늄 섬광 (빠르고 짧은 흰 불티) + 오래 남아 반짝이는 은가루
+      const n = o.budget(96);
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + rnd() * 0.1;
+        const sp = burstSpeed(R * rand(0.6, 1.15), 2.6, 0.5);
+        add({ vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(650, 1000) * life, color: i % 3 ? 0xffffff : 0xe2ecff, size: size * 1.05, drag: 2.6, grav: g * 0.5 });
+      }
+      const m = o.budget(34);
+      for (let i = 0; i < m; i++) {
+        const a = rnd() * Math.PI * 2;
+        const sp = burstSpeed(R * rand(0.2, 0.8), 2.5, 0.6);
+        add({ vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(1500, 2100) * life, color: colors[i % colors.length], size: size * 0.8, drag: 2.5, grav: g * 0.3, strobe: o.reduced ? undefined : rand(90, 140), strobeOff: rnd() });
+      }
+      break;
+    }
+    case "fish": {
+      // 물고기 떼: 터진 불티가 저마다 꼬리를 흔들며 헤엄치듯 꿈틀꿈틀 흩어진다
+      const n = o.budget(54);
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + rnd() * 0.3;
+        const sp = burstSpeed(R * rand(0.55, 1), 1.2, 1.7);
+        add({
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp,
+          life: rand(2000, 2600) * life,
+          color: i % 3 === 0 ? 0xffffff : colors[i % colors.length],
+          size: size * 0.95,
+          drag: 1.2,
+          grav: g * 0.22,
+          wig: (o.reduced ? 14 : 30) * Math.min(1.8, Math.sqrt(s)),
+          wigHz: rand(2.4, 3.6),
+          wigOff: rnd(),
+          trail: 30,
+          trailLife: 380,
+        });
+      }
+      break;
+    }
+    case "parachute": {
+      // 낙하산 별: 작게 터진 뒤 밝은 별 몇 개가 둥실 떠서 좌우로 흔들리며 아주 천천히 내려온다
+      const n = o.budget(20);
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const sp = burstSpeed(R * 0.55, 1.6, 0.8);
+        add({ vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 800 * life, color: 0xe2ecff, size: size * 0.8, drag: 1.6, grav: g * 0.4 });
+      }
+      const m = Math.max(3, o.budget(14));
+      const warm = [0xfff4d0, 0xffd0e0, 0xffe08a, 0xd8f0ff];
+      for (let i = 0; i < m; i++) {
+        const a = -Math.PI / 2 + ((i / Math.max(1, m - 1)) - 0.5) * 2.6;
+        const sp = burstSpeed(R * rand(0.45, 0.8), 2.6, 0.7);
+        add({ vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(4600, 5600) * life, color: warm[i % warm.length], size: size * 2.3, drag: 2.6, grav: 4.5, wig: 9, wigHz: rand(0.45, 0.7), wigOff: rnd(), fadeFrom: 0.5, trail: 90, trailLife: 600, trailColor: 0xfff0c0, trailStrobe: o.reduced ? undefined : 120 });
+      }
+      break;
+    }
+    case "cascade": {
+      // 연쇄 국화: 큰 금빛 국화 + 밝은 씨앗 네 개가 날아가 그 자리에서 작은 국화가 저마다 다른 색으로 다시 핀다
+      const n = o.budget(40);
+      const L = 1350 * life;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + rnd() * 0.08;
+        const sp = burstSpeed(R * rand(0.85, 1.02), 1.3, 1.1);
+        add({ vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: L + rnd() * 200, color: colors[i % colors.length], size, drag: 1.3, grav: g * 0.7 });
+      }
+      const seeds = 4;
+      const T = 0.72;
+      const pal = [FW_COLORS.pink, FW_COLORS.cyan, FW_COLORS.violet, FW_COLORS.green];
+      const per = Math.max(6, Math.floor(o.budget(seeds * 30) / seeds));
+      for (let j = 0; j < seeds; j++) {
+        const a = -Math.PI / 2 + (j - 1.5) * 0.95 + (rnd() - 0.5) * 0.15;
+        const sp = burstSpeed(R * 0.62, 1.3, T);
+        const vx = Math.cos(a) * sp;
+        const vy = Math.sin(a) * sp;
+        add({ vx, vy, life: T * 1000, color: 0xffffff, size: size * 1.3, drag: 1.3, grav: g * 0.5 });
+        const p = sparkOffset(vx, vy, 1.3, g * 0.5, T);
+        for (let q = 0; q < per; q++) {
+          const b = (q / per) * Math.PI * 2 + rnd() * 0.1;
+          const sp2 = burstSpeed(R * 0.6 * rand(0.55, 1.05), 1.4, 0.9);
+          add({ vx: Math.cos(b) * sp2, vy: Math.sin(b) * sp2, life: (1100 + rnd() * 250) * life, color: pal[j][q % 2], size: size * 0.95, drag: 1.4, grav: g * 0.6, at: T * 1000 + j * 70, ox: p.x, oy: p.y, pop: q === 0 });
+        }
+      }
+      break;
+    }
+    case "pinwheel": {
+      // 회전 바람개비: 터진 자리 둘레를 빙글빙글 돌며 두 팔로 불티를 뿌리고, 끝에 고리로 펑
+      const dur = 1700;
+      const steps = Math.max(10, o.budget(130));
+      const rr = R * 0.2;
+      const sp = R * 2.1;
+      for (let j = 0; j < steps; j++) {
+        const t = (j / steps) * dur;
+        const arm = j % 2;
+        const ang = (t / 1000) * Math.PI * 2 * 1.5 + arm * Math.PI;
+        const tx = -Math.sin(ang);
+        const ty = Math.cos(ang);
+        add({
+          vx: tx * sp + Math.cos(ang) * sp * 0.25,
+          vy: ty * sp + Math.sin(ang) * sp * 0.25,
+          life: rand(750, 1050) * life,
+          color: arm ? FW_COLORS.red[j % 3] : colors[j % colors.length],
+          size: size * 0.95,
+          drag: 2.2,
+          grav: g * 0.6,
+          at: t,
+          ox: Math.cos(ang) * rr,
+          oy: Math.sin(ang) * rr,
+        });
+      }
+      const k = o.budget(28);
+      const sp2 = burstSpeed(R * 0.8, 1.2, 1);
+      for (let i = 0; i < k; i++) {
+        const a = (i / k) * Math.PI * 2;
+        add({ vx: Math.cos(a) * sp2, vy: Math.sin(a) * sp2, life: 1200 * life, color: i % 2 ? 0xffffff : colors[0], size, drag: 1.2, grav: g * 0.5, at: dur, pop: i === 0 });
+      }
+      break;
+    }
+    case "emoji": {
+      // 하늘 이모티콘: ^^ · 하트 · 별 중 하나가 픽셀 불꽃으로 서서 머물다 흘러내린다
+      const glyph = FW_EMOJI[Math.floor(rnd() * FW_EMOJI.length) % FW_EMOJI.length];
+      const mask = emojiMask(glyph.rows);
+      const f = (R * 2.3) / Math.max(mask.w, mask.h);
+      for (const sp of letterSparks(mask, f, size * 1.15, o.budget(mask.pts.length), rnd, glyph.pal)) add(sp);
+      break;
+    }
     default: {
       const n = o.budget(44);
       for (let i = 0; i < n; i++) {
@@ -640,11 +904,13 @@ export function burstSparks(pattern: FwPattern, R: number, colors: readonly numb
 export type FwShot = { dx: number; delay: number; h: number; colors: readonly number[]; pattern: FwPattern; ground?: boolean; scale?: number };
 
 /** 특별 연출 (로켓이 아닌 것) */
-export type FwSpecial = "meteor" | "letter" | "finale";
+export type FwSpecial = "meteor" | "letter" | "finale" | "aurora" | "show";
 
 export function fireworkSpecial(item: string, plan: FireworkPlan): FwSpecial | null {
   if (item === "fw_meteor") return "meteor";
   if (item === "fw_letter") return "letter";
+  if (item === "fw_aurora") return "aurora";
+  if (fireworkShowMs(item) > 0) return "show";
   return plan.sky ? "finale" : null;
 }
 
@@ -690,6 +956,33 @@ export function fireworkShots(item: string, plan: FireworkPlan, bigH = FW_BURST_
       return one("glitter", FW_COLORS.gold, H + 12);
     case "fw_palm":
       return one("palm", FW_COLORS.green, H + 8);
+    case "fw_crackle":
+      return [{ dx: 0, delay: 0, h: H + 8, colors: FW_COLORS.gold, pattern: "crackle", scale: 1.5 }];
+    case "fw_emoji":
+      return one("emoji", FW_COLORS.pink, H + 12);
+    case "fw_parachute":
+      return one("parachute", FW_COLORS.silver, H + 16);
+    case "fw_whistle":
+      return one("whistle", FW_COLORS.silver, H + 12);
+    case "fw_fish":
+      return one("fish", FW_COLORS.cyan, H + 6);
+    case "fw_pinwheel":
+      return one("pinwheel", FW_COLORS.gold, H + 6);
+    case "fw_rainbow":
+      return one("rainbow", FW_COLORS.red, H + 2);
+    case "fw_kiku":
+      return one("kiku", FW_COLORS.red, H + 10);
+    case "fw_cascade":
+      return [{ dx: 0, delay: 0, h: H + 14, colors: FW_COLORS.gold, pattern: "cascade", scale: 1.25 }];
+    case "fw_kamuro":
+      return one("kamuro", FW_COLORS.gold, bigH);
+    case "fw_niagara":
+      return one("niagara", FW_COLORS.gold, bigH);
+    case "fw_fountainrow": {
+      // 분수 다섯 줄: 발밑 왼쪽부터 차례로
+      const cols = [FW_COLORS.gold, FW_COLORS.pink, FW_COLORS.silver, FW_COLORS.cyan, FW_COLORS.yellow];
+      return cols.map((colors, i) => ({ dx: (i - 2) * 36, delay: i * 260, h: 4, colors, pattern: "fountain" as const, ground: true }));
+    }
     case "fw_tower": {
       // 3단 불꽃탑: 한 자리에서 세 발이 점점 높이, 점점 크게
       const gap = plan.spanMs / 2;
@@ -722,6 +1015,7 @@ export function fireworkShots(item: string, plan: FireworkPlan, bigH = FW_BURST_
 export function rocketTrail(pattern: FwPattern, power: number, rnd: () => number = Math.random): SparkSpec[] {
   const out: SparkSpec[] = [{ vx: (rnd() - 0.5) * 6, vy: 8 + rnd() * 8, life: 380, color: 0xffe8b0, size: 1, drag: 1.3, grav: FW_GRAVITY }];
   if (power >= 4) out.push({ ox: (rnd() - 0.5) * 2, oy: 2, vx: (rnd() - 0.5) * 10, vy: 10 + rnd() * 10, life: 520, color: 0xffc070, size: 1.2, drag: 1.3, grav: FW_GRAVITY });
+  if (pattern === "whistle") out.push({ ox: (rnd() - 0.5) * 1.5, oy: 1, vx: (rnd() - 0.5) * 3, vy: 3 + rnd() * 4, life: 520, color: 0xffffff, size: 1.15, drag: 2, grav: 8 });
   if (pattern === "palm") out.push({ ox: (rnd() - 0.5) * 1.5, oy: 1, vx: (rnd() - 0.5) * 2, vy: 2 + rnd() * 3, life: 950, color: 0xffb860, size: 1.3, drag: 2, grav: 6, bright: 0.85 });
   return out;
 }
@@ -795,9 +1089,15 @@ export function letterMask(text: string): LetterMask {
 }
 
 /** 글자 폭죽 불티: 가운데에서 글자 점들로 날아가 서고, 머물다 흘러내린다. f = 글자 1px의 크기 */
-export function letterSparks(mask: LetterMask, f: number, size: number, count: number, rnd: () => number = Math.random): SparkSpec[] {
+export function letterSparks(
+  mask: LetterMask,
+  f: number,
+  size: number,
+  count: number,
+  rnd: () => number = Math.random,
+  pal: readonly (readonly number[])[] = [FW_COLORS.gold, FW_COLORS.pink, FW_COLORS.cyan, FW_COLORS.violet],
+): SparkSpec[] {
   const { pts, w } = mask;
-  const pal = [FW_COLORS.gold, FW_COLORS.pink, FW_COLORS.cyan, FW_COLORS.violet];
   const n = Math.min(pts.length, Math.max(0, Math.floor(count)));
   const stride = n > 0 ? pts.length / n : 1;
   const d = 6;
@@ -822,6 +1122,26 @@ export function letterSparks(mask: LetterMask, f: number, size: number, count: n
     });
   }
   return out;
+}
+
+// ── 하늘 이모티콘 ──
+
+/** 픽셀 기호 (#이 불꽃 자리) + 색 */
+export const FW_EMOJI: readonly { rows: readonly string[]; pal: readonly (readonly number[])[] }[] = [
+  { rows: [".#.......#.", "#.#.....#.#", "...........", "...#...#...", "....###...."], pal: [FW_COLORS.yellow, FW_COLORS.gold] },
+  { rows: [".##...##.", "####.####", "#########", "#########", ".#######.", "..#####..", "...###...", "....#...."], pal: [FW_COLORS.pink, FW_COLORS.red] },
+  { rows: ["....#....", "...###...", "#########", ".#######.", "..#####..", ".###.###.", "##.....##"], pal: [FW_COLORS.yellow, FW_COLORS.silver] },
+];
+
+/** 픽셀 기호 → 불꽃이 설 점들 (가운데 기준) */
+export function emojiMask(rows: readonly string[]): LetterMask {
+  const h = rows.length;
+  const w = Math.max(...rows.map((r) => r.length));
+  const pts: { x: number; y: number }[] = [];
+  // 점이 적은 기호(^^)는 칸마다 네 점으로 촘촘하게
+  const sub = rows.join("").split("#").length - 1 < 30 ? [-0.22, 0.22] : [0];
+  rows.forEach((r, y) => [...r].forEach((ch, x) => ch === "#" && sub.forEach((dx) => sub.forEach((dy) => pts.push({ x: x + 0.5 + dx - w / 2, y: y + 0.5 + dy - h / 2 })))));
+  return { pts, w, h };
 }
 
 // ── 불티 움직임 (게임·미리보기 공통) ──
@@ -851,6 +1171,9 @@ export type SparkState = {
   bright?: number;
   strobe?: number;
   strobeOff?: number;
+  wig?: number;
+  wigHz?: number;
+  wigOff?: number;
 };
 
 /** 불티 처음 상태: 터진 자리 (bx,by) + spec (게임·미리보기 공통) */
@@ -879,6 +1202,9 @@ export function sparkState(bx: number, by: number, s: SparkSpec): SparkState {
     bright: s.bright ?? 1,
     strobe: s.strobe ?? 0,
     strobeOff: s.strobeOff ?? 0,
+    wig: s.wig ?? 0,
+    wigHz: s.wigHz ?? 0,
+    wigOff: s.wigOff ?? 0,
   };
 }
 
@@ -897,6 +1223,15 @@ export function stepSpark(p: SparkState, dt: number, rnd: () => number = Math.ra
   p.vy = p.vy * drag + p.grav * s;
   p.x += p.vx * s;
   p.y += p.vy * s;
+  if (p.wig) {
+    // 가는 방향의 옆으로 흔들린다 (느리면 좌우로)
+    const v = Math.hypot(p.vx, p.vy);
+    const w = p.wig * Math.sin((p.age / 1000) * (p.wigHz ?? 1) * Math.PI * 2 + (p.wigOff ?? 0) * Math.PI * 2) * s;
+    if (v > 4) {
+      p.x += (-p.vy / v) * w;
+      p.y += (p.vx / v) * w;
+    } else p.x += w;
+  }
   if (p.colorAt !== undefined && p.age >= p.colorAt && p.color2 !== undefined) {
     p.colorAt = Infinity;
     p.color = p.color2;

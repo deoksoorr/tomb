@@ -9,6 +9,7 @@ import { BREED_ART, BREED_FX, breedIconGrid } from "./petBreeds";
 import { SEASON_FX, SEASON_FX_ART, SEASON_GEAR_FX, SEASON_SET_FX, seasonAura, seasonFxIconGrid, type SeasonMotion } from "./seasonSetFx";
 import { seasonSetsOfLook } from "@tomb/protocol";
 import { METEOR_FX, METEOR_FX_ART, meteorAura, meteorIcon } from "./meteorFx";
+import { CHAIR_CROWN_UP, CHAIR_FLAME_UP, CHAIR_FX, CHAIR_FX_ART, CHAIR_GEAR_FX, chairAura, chairIcon, type ChairMotion } from "./chairFx";
 import { Grid, type Color } from "./pixel";
 
 // F8 캐릭터 꾸미기 추가분 중 "아바타 시트 밖에 따로 그리는 연출" (날개 2종·우산·풍선·발자국 5종·오라 6종·펫 6종).
@@ -1124,6 +1125,8 @@ export const FX_ART = {
   ...SEASON_FX_ART,
   // 11/20 별자리 잇기 전용 유성우 오라 (meteorFx.ts)
   ...METEOR_FX_ART,
+  // 11/20 회장님 독대 1위 보상 (chairFx.ts)
+  ...CHAIR_FX_ART,
   // 11/19 멍냥 분양소 품종 펫 (petBreeds.ts — 옆 6장 + 앞·뒤 8장)
   ...BREED_ART,
 } satisfies Record<string, ArtDef>;
@@ -1160,7 +1163,7 @@ type TrailSpec = { kind: "trail"; art: FxArtId; step: number; life: number; moti
 type AuraSpec = {
   kind: "aura";
   /** tier* = 25번 프리미엄 외형 등급 연출 (꾸미기가 아니라 몸에 딸린다) */
-  motion: "orbit" | "snow" | "petals" | "cloud" | "notes" | "zzz" | "fall" | "float" | "steam" | "ring" | "tierFine" | "tierRare" | "tierLegend" | "champ" | "qFireflies" | "qNightfish" | "qCapeDust" | "qLamp" | "qSnowGlobe" | "qSnowPuff" | "qWishGlow" | "uSiren" | "gMist" | "mtMeteor" | XmasMotion | SeasonMotion;
+  motion: "orbit" | "snow" | "petals" | "cloud" | "notes" | "zzz" | "fall" | "float" | "steam" | "ring" | "tierFine" | "tierRare" | "tierLegend" | "champ" | "qFireflies" | "qNightfish" | "qCapeDust" | "qLamp" | "qSnowGlobe" | "qSnowPuff" | "qWishGlow" | "uSiren" | "gMist" | "mtMeteor" | ChairMotion | XmasMotion | SeasonMotion;
   art?: FxArtId;
   light?: boolean;
   /** champ = 주간 랭킹 1위 오라 테마 (champTheme) */
@@ -1236,6 +1239,8 @@ export const COSMETIC_FX: Readonly<Record<string, FxSpec>> = {
   ...SEASON_FX,
   // 11/20 별자리 잇기 전용 유성우 오라 (meteorFx.ts)
   ...METEOR_FX,
+  // 11/20 회장님 독대 1위 보상 오라 (chairFx.ts)
+  ...CHAIR_FX,
   // 11/19 멍냥 분양소 품종 펫 (petBreeds.ts — 네 방향 dirs)
   ...BREED_FX,
 };
@@ -1273,6 +1278,8 @@ export const GEAR_EXTRA_FX: Readonly<Record<string, FxSpec>> = {
   ...XMAS_GEAR_FX,
   // 11/19 계절 한정: 군고구마 봉투 따뜻한 빛 (seasonSetFx.ts)
   ...SEASON_GEAR_FX,
+  // 11/20 회장님 독대 1위: 불타는 사직서 머리띠 불꽃 (chairFx.ts)
+  ...CHAIR_GEAR_FX,
 };
 
 /**
@@ -1362,6 +1369,8 @@ export type FxInput = {
   riding?: boolean;
   /** 점프 높이 (타고 있을 때 펫도 같이 뛴다) */
   hop?: number;
+  /** 11/20 의자·벤치에 앉아 있다: 펫은 등받이 뒤가 아니라 발치 앞에 앉는다 (사용자 「벤치 뒤에 있어서 안 보여」) */
+  seated?: boolean;
   /** 11/17 배·카약·제트스키·놀이기구 같은 탈것에 타 있다: 펫을 아예 그리지 않고, 내리면 바로 옆에서 다시 나타난다 (사용자 요청) */
   petOff?: boolean;
   /** 주인이 물에서 수영(swim)·잠수(dive) 중: 걷는 펫도 따라 들어가 헤엄치거나 수면 아래로 (나는 펫은 물 위를 그대로 난다) */
@@ -1440,6 +1449,11 @@ export function isUnknownPetId(id: unknown): boolean {
 /** 몸 뒤쪽으로 조금 떨어진 펫 자리 (그림자 유령 친구와 같은 값) */
 export function petBack(dir: DirId): [number, number] {
   return dir === DIR.left ? [12, -1] : dir === DIR.right ? [-12, -1] : dir === DIR.up ? [7, 5] : [-9, -5];
+}
+
+/** 11/20 앉은 주인의 펫 자리: 옆 발치 앞 (y가 커서 벤치·의자보다 앞에 그려진다) */
+export function petSeat(dir: DirId): [number, number] {
+  return dir === DIR.left ? [-13, 9] : [13, 9];
 }
 
 function heading(dir: DirId): [number, number] {
@@ -1557,6 +1571,10 @@ export class CosmeticFxSim {
       else if (s.kind === "held" && s.item === "kite") continue; // 연은 머리 옆 위 — 이름표 자리를 비켜 난다
       else if (s.kind === "held") top = Math.max(top, s.item === "umbrella" ? artTop + 8 : artTop + 6);
       else if (s.kind === "aura" && s.motion === "cloud") top = Math.max(top, artTop + 10);
+      // 11/20 불타는 사직서 머리띠: 머리 위 불길만큼 이름표를 올린다 (chairFx bandFlame)
+      else if (s.kind === "aura" && s.motion === "chFlame") top = Math.max(top, artTop + CHAIR_FLAME_UP);
+      // 11/20 황금 사원증 왕관: 꼭대기 다이아·도는 별이 이름표에 닿지 않게 (사용자 「높이는 알아서」)
+      else if (s.kind === "aura" && s.motion === "chCrown") top = Math.max(top, artTop + CHAIR_CROWN_UP);
     }
     return top;
   }
@@ -1698,8 +1716,8 @@ export class CosmeticFxSim {
       return;
     }
     if (s.mount && f.riding) return this.mounted(s, f, t, out);
-    const back = petBack(f.dir);
-    const far = s.far ?? 1;
+    const back = f.seated ? petSeat(f.dir) : petBack(f.dir);
+    const far = f.seated ? 1 : (s.far ?? 1);
     const tx = f.x + back[0] * far;
     const ty = f.y + back[1] * far;
     if (f.still) {
@@ -1795,7 +1813,7 @@ export class CosmeticFxSim {
       out.push(cmd(s.art, over, px, py, { oy: 1, alpha: s.alpha ?? 1, layer: "body", depth: this.petY + 0.01 }));
       return;
     }
-    out.push(cmd(s.art, frame, px, py + sink, { oy: 1, sx, sy, flip, alpha: s.alpha ?? 1, layer: "body", depth: this.petY, ...(sink ? { crop: sink } : {}) }));
+    out.push(cmd(s.art, frame, px, py + sink, { oy: 1, sx, sy, flip, alpha: s.alpha ?? 1, layer: "body", depth: f.seated ? Math.max(this.petY, (f.depth ?? f.y) + 1) : this.petY, ...(sink ? { crop: sink } : {}) }));
   }
 
   /**
@@ -2049,6 +2067,18 @@ export class CosmeticFxSim {
         // 11/20 유성우 오라 (meteorFx.ts): 그리기 도우미를 넘겨 그 파일이 그린다 (밤 = 해질녘·밤, 미리보기는 늘 밤처럼)
         meteorAura(f, t, {
           push: (art, frame, x, y, o) => out.push(cmd(art, frame, x, y, o)),
+          night: !!f.still || isNight(f.now),
+          depth: bodyDepth(f),
+        });
+        break;
+      case "chGold":
+      case "chEmber":
+      case "chFlame":
+      case "chCrown":
+        // 11/20 회장님 독대 1위 보상 (chairFx.ts): 그리기 도우미를 넘겨 그 파일이 그린다
+        chairAura(s.motion, f, t, {
+          push: (art, frame, x, y, o) => out.push(cmd(art, frame, x, y, o)),
+          around: (z, o, light) => around(f, z, o, light),
           night: !!f.still || isNight(f.now),
           depth: bodyDepth(f),
         });
@@ -2578,6 +2608,9 @@ export function fxIconGrid(id: string): Grid | null {
   switch (id) {
     case "st_meteor":
       return meteorIcon();
+    case "chair_aura_gold":
+    case "chair_aura_ember":
+      return chairIcon(id);
     case "hand_umbrella":
       blit(g, "umbrella", 0, 0, 2);
       g.vline(8, 8, 14, 0x3a3a48);

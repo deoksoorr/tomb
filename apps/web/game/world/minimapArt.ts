@@ -96,6 +96,8 @@ export const LANDMARK_COLOR: Record<Landmark["kind"], string> = {
   mungnyang: "#f6a8b8",
   // 11/20 총무팀 문대리: 회사 청록
   office: "#6cc4bc",
+  // 11/20 판교의 등대: 빨간 띠
+  lighthouse: "#ff6a6a",
 };
 
 /** 관람차 아이콘 (미니맵 px, 가운데 기준 — 동그란 바퀴 + 다리) */

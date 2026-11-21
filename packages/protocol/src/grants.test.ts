@@ -6,7 +6,20 @@ describe("items", () => {
     expect(new Set(ITEMS.map((i) => i.id)).size).toBe(ITEMS.length);
     // 31번 운영자 전용·주간 1위 전용 꾸미기·11/15 긴급 의뢰 사이렌 모자·11/15 수집 의뢰 보상(이모티콘 묶음·외형·확정 염색권)만 값 0 (운영자만 영구로 받는다 / 1위만 빌려 입는다 / 도장 교환소에서만)
     // 12월 크리스마스 선물상자(event 상자)도 값 0 — 관리자 선물로만
-    expect(ITEMS.every((i) => i.price > 0 || i.staff || i.champ || i.urgent || i.quest || (i.event && i.kind === "box"))).toBe(true);
+    expect(ITEMS.every((i) => i.price > 0 || i.staff || i.champ || i.chair || i.urgent || i.quest || (i.event && i.kind === "box"))).toBe(true);
+  });
+  it("11/20 회장님 독대 1위 보상: 꾸미기 · 상점에 없음 · 값 0, 칭호 id는 칭호 목록에", async () => {
+    const { CHAIR_REWARD, CHAIR_ITEM_IDS, isChairItem, isChampItem, isShopListed, isTitleId, itemById } = await import("./index");
+    expect([...CHAIR_ITEM_IDS].sort()).toEqual(["chair_aura_ember", "chair_aura_gold", "chair_band", "chair_crown"]);
+    for (const r of Object.values(CHAIR_REWARD)) {
+      expect(isTitleId(r.title)).toBe(true);
+      expect(itemById(r.hat)).toMatchObject({ kind: "cosmetic", slot: "head", price: 0, chair: true });
+      expect(itemById(r.aura)).toMatchObject({ kind: "cosmetic", slot: "aura", price: 0, chair: true });
+    }
+    for (const id of CHAIR_ITEM_IDS) {
+      expect(isChairItem(id) && !isChampItem(id)).toBe(true);
+      expect(isShopListed(itemById(id)!)).toBe(false);
+    }
   });
   it("sanitizeLook keeps one cosmetic per slot and drops unknown/non-cosmetic ids", () => {
     expect(sanitizeLook(["hat_cat", "hat_straw", "fw_small", "nope", "aura_firefly"])).toEqual(["hat_cat", "aura_firefly"]);
@@ -83,7 +96,9 @@ describe("23번 확성기 증서·이벤트", () => {
     expect(megaphoneScope("mega_ch")).toBe("channel");
     expect(megaphoneScope("mega_all")).toBe("all");
     expect(megaphoneScope("fw_small")).toBeNull();
-    expect(isShopListed(itemById("mega_ch")!)).toBe(true);
+    // 11/21 확성기는 판매 중지 (아이템은 남는다)
+    expect(isShopListed(itemById("mega_ch")!)).toBe(false);
+    expect(isShopListed(itemById("mega_all")!)).toBe(false);
   });
 });
 

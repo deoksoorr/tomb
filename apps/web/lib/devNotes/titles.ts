@@ -4,6 +4,10 @@ export const STATIC_NOTE_TITLES: Readonly<Record<string, readonly [string, numbe
     "처음 오신 분들께 안내드립니다",
     1794743573688
   ],
+  "63hThUnh4v": [
+    "11월 21일 업데이트",
+    1795204800000
+  ],
   "qALW3m3LA_": [
     "11월 19일 업데이트",
     1795069008786

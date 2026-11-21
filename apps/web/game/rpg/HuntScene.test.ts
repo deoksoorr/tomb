@@ -34,6 +34,8 @@ vi.mock("phaser", () => {
     BlendModes: stub(),
     Scale: { Events: { RESIZE: "resize" } },
     Scenes: { Events: { SHUTDOWN: "shutdown", DESTROY: "destroy" } },
+    // 야근 빌딩 내 몸 빛(selfLight)이 렌더러 종류를 본다
+    WEBGL: 2,
   };
 });
 vi.mock("./sprites", () => ({ RTEX: stub(), avFrame: () => 0, ensureFloor: () => "floor", ensureRpgTextures: () => {}, makePlayer: () => {} }));
@@ -334,5 +336,44 @@ describe("우두머리를 잡는 순간 그 자리에 우두머리 몫이 떨어
     expect(scene.loot.count).toBe(2);
     scene.endRun(scene.result(), false, 1200);
     expect(scene.loot.count).toBe(2);
+  });
+});
+
+// 11/21 야근 빌딩: 판 중에 정한 자동 스킬(칸마다 · 전체 X)은 다음 층으로 올라가도 그대로 (층마다 지도만 새로 깐다)
+describe("야근 빌딩: 자동 스킬 설정은 층이 바뀌어도 그대로", () => {
+  type Tower = Scene & { floor: number; liftCut: unknown; liftTo(f: number): void; auto: { ids: string[]; on: boolean; keepUlt: boolean } };
+  function towerPlay(): RpgPlay {
+    const c = newCharacter();
+    return {
+      game: "hunt",
+      difficulty: "hell",
+      seed: 7,
+      timeLimitSec: 600,
+      level: 50,
+      derived: derive(50, c.stats, c.equip),
+      skills: { em_kindle: 1, so_wisp: 1 },
+      hotbar: ["em_kindle", "so_wisp", null, null, null, null],
+      hotAuto: { ids: ["em_kindle"], on: true, keepUlt: true },
+      potions: {},
+      equip: c.equip,
+      tower: { start: 1, chestsLeft: 0 },
+    };
+  }
+
+  it("Shift+숫자로 켠 칸 · 전체 스위치가 엘리베이터를 타고 난 뒤에도 남는다", () => {
+    const scene = new HuntScene() as Tower;
+    scene.init({ play: towerPlay(), color: "#fff", name: "검수", body: "hood", look: [], atlas: null, reduced: true, onEnd: () => {} });
+    scene.create();
+    expect(scene.auto).toEqual({ ids: ["em_kindle"], on: true, keepUlt: true });
+    scene.keys.add("ShiftLeft");
+    scene.onKey("Digit2");
+    scene.keys.delete("ShiftLeft");
+    expect(scene.auto.ids).toEqual(["em_kindle", "so_wisp"]);
+    scene.liftCut = null;
+    scene.liftTo(2);
+    expect(scene.floor).toBe(2);
+    expect(scene.auto).toEqual({ ids: ["em_kindle", "so_wisp"], on: true, keepUlt: true });
+    scene.liftTo(3);
+    expect(scene.auto).toEqual({ ids: ["em_kindle", "so_wisp"], on: true, keepUlt: true });
   });
 });

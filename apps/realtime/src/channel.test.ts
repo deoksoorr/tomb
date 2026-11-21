@@ -1,4 +1,5 @@
 import {
+  fireworkShowMs,
   AVATAR_COLORS,
   BOAT_SEATS,
   DUCK_DOCK,
@@ -27,7 +28,7 @@ import {
   CHAT_HISTORY_MS,
   CHAT_STORE_MAX,
 } from "@tomb/protocol";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   CLOSE_STALE,
   ChannelCore,
@@ -569,6 +570,36 @@ describe("v2: look / firework / sync / join-loss guards", () => {
       { t: "firework", sid: 1, item: "fw_heart", x: 200, y: 300 },
     ]);
     expect(events(a)).toEqual(events(b));
+  });
+
+  it("11/20 광역 불꽃쇼: 맵에 하나씩 — 돌고 있으면 끝난 뒤로 미루고(w), 하나가 이미 기다리면 보낸 사람에게만 거절", async () => {
+    const { core, join } = setup();
+    const a = join("a", 0, { x: 200, y: 300 });
+    const b = join("b");
+    const c = join("c");
+    clear(a, b, c);
+    const now = vi.spyOn(Date, "now");
+    const fw = (who: typeof a, id: string, nonce: string, t: number) => {
+      now.mockReturnValue(1_000_000 + t);
+      core.message(who, send({ t: "firework", grant: grantToken({ kind: "firework", visitorId: who === a ? "a" : who === b ? "b" : "c", item: id, nonce, exp: 9e9 }) }), t);
+    };
+    fw(a, "fw_hangang", "s1", 0);
+    await flush();
+    fw(b, "fw_town", "s2", 10_000); // 한강 쇼가 29초 남음 → 미뤄서
+    await flush();
+    fw(c, "fw_hangang", "s3", 12_000); // 이미 하나 기다림 → 거절
+    await flush();
+    fw(c, "fw_heart", "s4", 15_000); // 한 발짜리는 상관없다
+    await flush();
+    now.mockRestore();
+    const showMs = fireworkShowMs("fw_hangang");
+    expect(events(a).filter((e) => e.t === "firework")).toEqual([
+      { t: "firework", sid: 1, item: "fw_hangang", x: 200, y: 300 },
+      { t: "firework", sid: 2, item: "fw_town", x: expect.any(Number), y: expect.any(Number), w: showMs - 10_000 },
+      { t: "firework", sid: 3, item: "fw_heart", x: expect.any(Number), y: expect.any(Number) },
+    ]);
+    expect(events(c).filter((e) => e.t === "fireworkBusy")).toEqual([{ t: "fireworkBusy", left: showMs + fireworkShowMs("fw_town") - 12_000 }]);
+    expect(events(a).some((e) => e.t === "fireworkBusy")).toBe(false);
   });
 
   it("answers sync with the full peer list and seats, to the requester only, at most every 20s", () => {

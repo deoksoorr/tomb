@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import { itemById } from "@tomb/protocol";
+import { bridge } from "../bridge";
 import { TEX } from "../assets/manifest";
 import { DEPTH } from "../config";
 import { fireworkPlan, fitBurst, FW_BASE_RADIUS, heartPoint, meteorShower, type FireworkPlan, type MeteorStreak } from "./fxMath";
@@ -30,6 +31,7 @@ import {
   type SparkSpec,
   type SparkState,
 } from "./fwShapes";
+import { showProgram } from "./fwShow";
 import type { Lighting } from "./Lighting";
 import type { Sfx } from "./Sfx";
 
@@ -56,10 +58,16 @@ import type { Sfx } from "./Sfx";
 // 1~4는 터지는 자리가 화면 밖이면 하늘 레이어에서 그 방향 위쪽 하늘에 작게 터뜨린다 (분수는 땅에서 뿜으니 안 보인다).
 // 입자는 풀에서 꺼내 쓰고(최대 CAP), 모자라면 발당 입자 수를 줄인다. 프레임이 느려지면 입자 수를 더 줄인다.
 // reduced-motion이면 입자·발 수를 줄이고 흔들림·반짝임을 끈다.
+// 11/20 fw_aurora 오로라: 하늘 레이어 위쪽에 초록·보라 빛 띠(부드러운 빛 덩어리 줄)가 일렁이고 빛줄기 불티가 흘러내린다
+// 11/20 광역 불꽃쇼 (fw_town·fw_hangang): fwShow 순서표대로 하늘 레이어 전체(보는 사람 화면 너비 기준)에 수십 발.
+//   터질 때마다 땅(월드)도 그 아래가 밝아진다. 한 번에 하나 — 돌고 있는 동안 bridge "firework:show"로 끝나는 시각을 알린다
 
 const POOL = 420;
 /** 동시에 살아 있는 불티 최대 (피날레 동안에도 60fps) */
 const CAP = 1100;
+/** 광역 쇼가 도는 동안 (reduced 아니면): 화면 전체에 겹겹이 피도록 더. 화면이 작으면(폰) 조금만 */
+const SHOW_CAP = 2600;
+const SHOW_CAP_SMALL = 1600;
 const SKY_GLOW = "fw-sky-glow";
 /** 화면 밝아짐이 줄어드는 시간 상수 (ms) */
 const GLOW_TAU = 900;
@@ -99,8 +107,14 @@ type Rocket = {
   ground?: boolean;
   /** 반경 배율 (3단 불꽃탑) */
   scale?: number;
+  /** 광역 쇼: 로켓이 솟는 가로 자리 (화면 비율) · 반경을 화면 너비 비율로 */
+  lx?: number;
+  rw?: number;
+  show?: boolean;
 };
-type Flash = { x: number; y: number; age: number; r: number; ms: number };
+/** 오로라 띠 한 조각 (화면 비율 가로 fx) */
+type Ribbon = { img: Phaser.GameObjects.Image; fx: number; ph: number; t0: number; dur: number; band: number };
+type Flash = { x: number; y: number; age: number; r: number; ms: number; show?: boolean };
 type Timer = { at: number; run: () => void };
 
 export { heartPoint };
@@ -115,6 +129,11 @@ export class Fireworks {
   private readonly blooms: Bloom[] = [];
   private readonly timers: Timer[] = [];
   private readonly meteors: Meteor[] = [];
+  private readonly ribbons: Ribbon[] = [];
+  private auroraUntil = 0;
+  private auroraRayAt = 0;
+  /** 광역 쇼가 끝나는 장면 시각 (scene.time.now) */
+  private showUntil = 0;
   private readonly letterCache = new Map<string, { pts: { x: number; y: number }[]; w: number; h: number }>();
   private readonly skyGlow: Phaser.GameObjects.Image;
   private made = 0;
@@ -163,10 +182,20 @@ export class Fireworks {
    * (x,y): 쏜 사람의 발밑 (월드 좌표). mine이면 소리를 조금 크게.
    * view: 보이는 영역 (불멍 중이면 레터박스를 뺀 영역) — 화면 안에서 쏘면 터지는 높이·반경을 그 안에 맞춘다
    */
-  launch(item: string, x: number, y: number, view: Phaser.Geom.Rectangle, mine: boolean, label?: string): void {
+  launch(item: string, x: number, y: number, view: Phaser.Geom.Rectangle, mine: boolean, label?: string, wait = 0): void {
     const plan = fireworkPlan(itemById(item)?.power, this.reduced);
     const now = this.scene.time.now;
     const special = fireworkSpecial(item, plan);
+    if (special === "show") {
+      this.launchShow(item, plan, x, y, view, mine, now + Math.max(0, Math.min(90_000, wait)));
+      return;
+    }
+    if (special === "aurora") {
+      this.launchAurora(now + 200, this.reduced ? 6500 : 8000);
+      this.brighten({ ...plan, lift: this.reduced ? 0.1 : 0.18 }, 0x9affc8, 0.6);
+      this.sfx.play("launch", 0.25 * (mine ? 1.2 : 1), 0.7, 6);
+      return;
+    }
     if (special === "meteor") {
       this.launchMeteors(plan, mine, now);
       return;
@@ -213,6 +242,90 @@ export class Fireworks {
     }
     for (const s of finaleShots(plan, lead)) {
       this.rockets.push({ x: s.fx, y: s.fy, t0: now, delay: s.delay, h: s.h, r: 0, colors: s.colors, pattern: s.pattern, plan, mode: "finale", loud: mine, big: s.big, trailAt: 0, launched: false });
+    }
+  }
+
+  /** 광역 불꽃쇼: 순서표(fwShow)대로 하늘 레이어 전체에. t0 = 시작 장면 시각 (서버가 앞 쇼 뒤로 미뤘으면 그만큼 뒤) */
+  private launchShow(item: string, plan: FireworkPlan, x: number, y: number, view: Phaser.Geom.Rectangle, mine: boolean, t0: number): void {
+    const prog = showProgram(item, this.reduced);
+    const now = this.scene.time.now;
+    const base = t0 - now;
+    this.showUntil = Math.max(this.showUntil, t0 + prog.ms);
+    bridge.emit("firework:show", { until: Date.now() + (this.showUntil - now) });
+    const visible = x > view.x - 20 && x < view.right + 20 && y > view.y && y < view.bottom + 40;
+    if (visible) this.rockets.push({ x, y, t0: now, delay: base, h: y - view.y + 40, r: 0, colors: COLORS.gold, pattern: "peony", plan, mode: "signal", loud: mine, big: false, trailAt: 0, launched: false });
+    for (const s of prog.shots) {
+      this.rockets.push({ x: s.fx, y: s.fy, t0: now, delay: base + s.delay, h: s.h, r: 0, colors: s.colors, pattern: s.pattern, plan, mode: "finale", loud: mine, big: !!s.big, trailAt: 0, launched: false, lx: s.lx, rw: s.rw, show: true });
+    }
+    for (const a of prog.auroras) this.later(base + a.at, () => this.launchAurora(this.scene.time.now, a.dur));
+  }
+
+  /** 불티 한도: 광역 쇼 중이면 조금 더 (느린 기기는 slowFactor가 발당 수를 줄인다) */
+  private get cap(): number {
+    if (this.reduced || this.scene.time.now >= this.showUntil) return CAP;
+    const cam = this.scene.cameras.main;
+    return cam.width * cam.height > 700_000 ? SHOW_CAP : SHOW_CAP_SMALL;
+  }
+
+  /** 광역 쇼가 끝날 때까지 남은 ms (0 = 없음) */
+  get showLeft(): number {
+    return Math.max(0, this.showUntil - this.scene.time.now);
+  }
+
+  /** 오로라: 하늘 레이어 위쪽에 부드러운 빛 덩어리를 가로로 늘어세워 띠 두 줄 (초록 아래·보라 위). at = 시작 장면 시각 */
+  private launchAurora(at: number, dur: number): void {
+    const n = this.reduced ? 12 : 22;
+    for (let band = 0; band < 2; band++) {
+      for (let i = 0; i < n; i++) {
+        const img = this.scene.add.image(0, 0, TEX.glow).setBlendMode(Phaser.BlendModes.ADD).setScrollFactor(0).setDepth(DEPTH.weather - 5).setVisible(false);
+        this.ribbons.push({ img, fx: (i + 0.5) / n + (Math.random() - 0.5) * 0.02, ph: Math.random() * Math.PI * 2, t0: at + i * 40, dur, band });
+      }
+    }
+    this.auroraUntil = Math.max(this.auroraUntil, at + dur + 600);
+  }
+
+  private updateAurora(time: number): void {
+    const cam = this.scene.cameras.main;
+    const W = cam.width;
+    const H = cam.height;
+    const z = cam.zoom;
+    const n = this.reduced ? 12 : 22;
+    const cols = [0x5affa8, 0x46e0c0, 0x8a6aff, 0xc070ff];
+    for (let i = this.ribbons.length - 1; i >= 0; i--) {
+      const r = this.ribbons[i];
+      const t = time - r.t0;
+      if (t < 0) continue;
+      if (t >= r.dur) {
+        r.img.destroy();
+        this.ribbons.splice(i, 1);
+        continue;
+      }
+      const env = Math.min(1, t / 1400) * Math.min(1, (r.dur - t) / 1800);
+      const sway = this.reduced ? 0.4 : 1;
+      const y = H * (r.band ? 0.07 : 0.15) + Math.sin(r.fx * 7 + t * 0.0009 * sway + r.ph * 0.3) * H * 0.035 + Math.sin(r.fx * 17 + t * 0.0016 * sway) * H * 0.012;
+      const x = (r.fx + Math.sin(t * 0.0006 + r.ph) * 0.01) * W;
+      const p = this.toSky(x, y);
+      const w = (W / n / 64) * 2.2;
+      const hgt = (H * (r.band ? 0.2 : 0.28)) / 64;
+      const shimmer = 0.62 + 0.38 * Math.sin(t * 0.0021 * sway + r.ph * 2 + r.fx * 9);
+      r.img
+        .setVisible(true)
+        .setTint(cols[r.band * 2 + (Math.sin(r.fx * 5 + t * 0.0004) > 0 ? 0 : 1)])
+        .setPosition(p.x, p.y)
+        .setScale(w / z, hgt / z)
+        .setAlpha(env * shimmer * (this.reduced ? 0.7 : 1) * (r.band ? 0.5 : 0.6));
+    }
+    // 빛줄기: 띠 아래로 가늘게 흘러내리는 불티
+    if (time < this.auroraUntil && time >= this.auroraRayAt && this.ribbons.length) {
+      this.auroraRayAt = time + (this.reduced ? 120 : this.showUntil > time ? 50 : 28);
+      const r = this.ribbons[Math.floor(Math.random() * this.ribbons.length)];
+      const t = time - r.t0;
+      if (t > 0 && t < r.dur - 800) {
+        const p = this.toSky(r.fx * W + (Math.random() - 0.5) * (W / n), H * (r.band ? 0.1 : 0.19) + Math.sin(r.fx * 7 + t * 0.0009 + r.ph * 0.3) * H * 0.035);
+        for (let k = 0; k < 4; k++) {
+          this.spawnState(sparkState(p.x, p.y - k * 4, { vx: 0, vy: 9 + Math.random() * 6, life: 1300 + Math.random() * 600, color: r.band ? 0xd0a0ff : k % 2 ? 0x9affc8 : 0x5affa8, size: 1.2 - k * 0.15, drag: 0.5, grav: 0, bright: 0.7 - k * 0.12, fadeFrom: 0.2 }), true);
+        }
+      }
     }
   }
 
@@ -286,13 +399,13 @@ export class Fireworks {
   private take(): Phaser.GameObjects.Image | null {
     const img = this.free.pop();
     if (img) return img;
-    return this.made < CAP ? this.makeSpark() : null;
+    return this.made < this.cap ? this.makeSpark() : null;
   }
 
   /** 이번 폭발에 쓸 수 있는 입자 수 (풀 한도 + 느린 프레임) */
   private budget(want: number): number {
     const slow = slowFactor(this.dtAvg);
-    const room = this.free.length + (CAP - this.made);
+    const room = this.free.length + (this.cap - this.made);
     return Math.max(0, Math.min(Math.round(want * this.k * slow), room - 16));
   }
 
@@ -389,7 +502,7 @@ export class Fireworks {
 
   private spawnSpec(bx: number, by: number, s: SparkSpec, sky: boolean): void {
     this.spawnState(sparkState(bx, by, s), sky);
-    if (s.pop) this.sfx.play("burst", sky ? 0.2 : 0.35, 1.7);
+    if (s.pop) this.sfx.play("burst", sky ? 0.2 : 0.35, rand(1.6, 2), 6);
   }
 
   private burst(r: Rocket, view: Phaser.Geom.Rectangle): void {
@@ -398,9 +511,19 @@ export class Fireworks {
     if (r.mode === "finale") {
       const minDim = Math.min(cam.width, cam.height);
       const p = this.toSky(r.x * cam.width, r.y * cam.height);
-      const R = (r.h * minDim) / cam.zoom;
-      this.bloom(p.x, p.y, r.colors[1], true, R / 18, 620);
-      this.explode(p.x, p.y, R, r.pattern, r.colors, true, plan.life, r.big ? 1.15 : 1);
+      const R = ((r.rw ? r.rw * cam.width : r.h * minDim)) / cam.zoom;
+      const wide = r.pattern === "niagara";
+      if (!wide) this.bloom(p.x, p.y, r.colors[1], true, Math.min(R / 18, 6), 620);
+      this.explode(p.x, p.y, R, r.pattern, r.colors, true, plan.life, r.show ? (r.big ? 1.35 : 1.2) : r.big ? 1.15 : 1);
+      if (r.show) {
+        // 쇼: 그 아래 땅(동네)이 불꽃 색으로 잠깐 밝아진다 (가장 최근 몇 개만)
+        this.brighten(plan, r.colors[1], r.big ? 0.5 : 0.28);
+        const lit = this.flashes.filter((f) => f.show).length;
+        if (lit < 5) this.flashes.push({ x: view.x + r.x * view.width, y: view.y + view.height * Math.min(0.85, r.y + 0.42), age: 0, r: view.width * (r.big || wide ? 0.3 : 0.2), ms: wide ? 2600 : 1100, show: true });
+        if (r.big && !wide && Math.random() < 0.5) this.shake(plan.shake * 0.6);
+        this.sfx.play("burst", (r.big ? 0.95 : rand(0.4, 0.7)) * (r.loud ? 1 : 0.9), r.big ? rand(0.66, 0.76) : rand(0.85, 1.25), r.big ? 10 : 8);
+        return;
+      }
       this.brighten(plan, r.colors[1], r.big ? 0.8 : 0.5);
       if (r.big && (r.delay < 700 || Math.random() < 0.5)) this.shake(plan.shake);
       this.sfx.play("burst", (r.big ? 1 : rand(0.5, 0.8)) * (r.loud ? 1 : 0.9), r.big ? rand(0.68, 0.78) : rand(0.85, 1.2));
@@ -469,6 +592,7 @@ export class Fireworks {
     }
     const cam = this.scene.cameras.main;
     if (this.meteors.length) this.updateMeteors(time);
+    if (this.ribbons.length) this.updateAurora(time);
     for (let i = this.rockets.length - 1; i >= 0; i--) {
       const r = this.rockets[i];
       const t = time - r.t0 - r.delay;
@@ -479,21 +603,26 @@ export class Fireworks {
         const base = r.mode === "sky" ? 0.3 : finale ? 0.28 : r.loud ? 0.7 : 0.55;
         // 피날레 로켓 소리는 터지는 소리를 위해 자리를 남겨 둔다 (최대 7겹)
         this.sfx.play("launch", Math.min(1, base * (r.plan.volume / 0.8)), finale ? rand(0.9, 1.15) : 1, finale ? 7 : undefined);
+        if (r.pattern === "whistle" && !this.reduced) this.sfx.whistle(r.mode === "world" ? (r.loud ? 1 : 0.8) : 0.55, (finale ? SKY_RISE_MS * 1.6 : RISE_MS * 1.25) / 1000);
       }
-      const rise = r.ground ? 1 : finale ? SKY_RISE_MS : r.mode === "signal" ? RISE_MS * 0.8 : r.plan.power >= 4 ? RISE_MS * 1.15 : RISE_MS;
+      const whistle = r.pattern === "whistle";
+      const rise = r.ground ? 1 : finale ? SKY_RISE_MS * (whistle ? 1.6 : r.show ? 1.25 : 1) : r.mode === "signal" ? RISE_MS * 0.8 : r.plan.power >= 4 ? RISE_MS * 1.15 : whistle ? RISE_MS * 1.25 : RISE_MS;
+      // 휘슬 로켓은 지그재그로 오른다 (끝으로 갈수록 덜)
       const k = Math.min(1, t / rise);
+      const zig = whistle && !this.reduced ? Math.sin(t / 55) * (1 - k * 0.7) : 0;
       const e = 1 - Math.pow(1 - k, 2);
       if (time >= r.trailAt && k < 1) {
-        r.trailAt = time + (this.reduced ? 90 : finale ? 45 : 35);
+        r.trailAt = time + (this.reduced ? 90 : whistle ? 22 : finale ? 45 : 35);
         if (finale) {
-          // 하늘 레이어: 화면 아래쪽 지평선에서 터질 자리까지
+          // 하늘 레이어: 화면 아래쪽 지평선에서 터질 자리까지 (쇼의 일제 발사는 lx에서 비스듬히)
           const sy = cam.height * (0.96 - (0.96 - r.y) * e);
-          const p = this.toSky(r.x * cam.width + Math.sin(t / 60) * 1.5, sy);
-          this.spawn(p.x, p.y, (Math.random() - 0.5) * 4, 6 + Math.random() * 6, 360, 0xffe8b0, true, 0.8, 1.3, 8);
+          const fx = r.lx !== undefined ? r.lx + (r.x - r.lx) * e : r.x;
+          const p = this.toSky(fx * cam.width + Math.sin(t / 60) * 1.5 + zig * 9, sy);
+          this.spawn(p.x, p.y, (Math.random() - 0.5) * 4, 6 + Math.random() * 6, whistle ? 300 : 360, whistle ? 0xffffff : 0xffe8b0, true, whistle ? 0.95 : 0.8, 1.3, 8);
         } else if (r.mode !== "sky") {
           // 로켓 꼬리: 솟는 동안 작은 불티 (대형은 굵게 두 줄, 야자수는 오래 남는 줄기 — 미리보기와 같은 rocketTrail)
           const ry = r.y - 8 - (r.h - 8) * e;
-          const rx = r.x + Math.sin(t / 70) * 0.8;
+          const rx = r.x + Math.sin(t / 70) * 0.8 + zig * 6;
           for (const s of rocketTrail(r.pattern, r.plan.power)) this.spawnSpec(rx, ry, s, false);
         }
       }
@@ -529,7 +658,7 @@ export class Fireworks {
       p.img.setPosition(p.x, p.y).setAlpha(look.alpha).setScale(look.scale);
       // 꼬리 (버드나무 가지·금가루): 풀이 바닥나면 꼬리부터 건너뛴다
       const tail = sparkTrail(p, this.reduced);
-      if (tail && this.free.length + (CAP - this.made) > 24) this.spawnState(sparkState(p.x, p.y, tail), p.sky);
+      if (tail && this.free.length + (this.cap - this.made) > 24) this.spawnState(sparkState(p.x, p.y, tail), p.sky);
     }
     for (let i = this.flashes.length - 1; i >= 0; i--) {
       this.flashes[i].age += dt;
@@ -560,12 +689,12 @@ export class Fireworks {
     for (let i = 0; i < this.flashes.length; i++) {
       const f = this.flashes[i];
       const u = f.age / f.ms;
-      l.add(f.x, f.y, f.r * (0.85 + 0.15 * u), 0.85 * (1 - u));
+      l.add(f.x, f.y, f.r * (0.85 + 0.15 * u), (f.show ? 0.6 : 0.85) * (1 - u));
     }
   }
 
   get active(): number {
-    return this.sparks.length + this.rockets.length + this.meteors.length;
+    return this.sparks.length + this.rockets.length + this.meteors.length + this.ribbons.length;
   }
 
   destroy(): void {
@@ -574,6 +703,8 @@ export class Fireworks {
     for (const img of this.free) img.destroy();
     this.skyGlow.destroy();
     for (const m of this.meteors) m.head?.destroy();
+    for (const r of this.ribbons) r.img.destroy();
+    this.ribbons.length = 0;
     this.meteors.length = 0;
     this.sparks.length = 0;
     this.blooms.length = 0;

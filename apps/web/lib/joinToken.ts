@@ -50,14 +50,14 @@ export async function fetchLobbyServer(timeoutMs = LOBBY_TIMEOUT_MS, maxAgeMs = 
 }
 
 /**
- * 채널 결정. "auto"면 로비를 보고 pickChannel로 고르고(null = 전체 만석 → 대기열),
+ * 채널 결정. "auto"면 로비를 보고 pickChannel로 고르고(null = 전체 만석 → 대기열. 11/20 운영자는 정원 밖이라 대기열 없이 1채널),
  * 직접 고른 채널은 로비의 maxChannels 범위인지 확인한다.
  * 로비가 응답하지 않으면 auto는 1채널, 직접 고른 채널은 입력 검증(1~99)만으로 보낸다
  * (만석이면 Channel DO가 4001로 거절하고 클라이언트가 다른 채널로 재시도한다).
  */
-async function resolveChannel(requested: number | "auto"): Promise<number | null> {
+async function resolveChannel(requested: number | "auto", staff = false): Promise<number | null> {
   const lobby = await fetchLobbyServer();
-  if (requested === "auto") return lobby ? pickChannel(lobby) : 1;
+  if (requested === "auto") return lobby ? (pickChannel(lobby) ?? (staff ? 1 : null)) : 1;
   if (lobby && requested > lobby.maxChannels)
     throw new HttpError(400, "INVALID_INPUT", `채널은 1~${lobby.maxChannels} 중에서 골라 주세요.`);
   return requested;
@@ -76,7 +76,7 @@ type Claims = { visitorId: string; name: string; color: string; body: string; lo
  */
 export async function issueJoin(requested: number | "auto", claims: Claims): Promise<JoinResponse> {
   const wsBase = env.realtimeWsUrl();
-  const channel = await resolveChannel(requested);
+  const channel = await resolveChannel(requested, claims.staff === true);
   if (channel === null) {
     const token = await signJoinToken(env.joinSecret(), { ...claims, channel: QUEUE_CHANNEL }, QUEUE_TOKEN_TTL_SEC);
     return { mode: "queue", queueUrl: `${env.realtimePublicUrl()}/queue?t=${encodeURIComponent(token)}` };

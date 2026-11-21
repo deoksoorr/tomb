@@ -648,19 +648,20 @@ function ChannelStep({ path, look, custom, sharedChannel, onBack, onEnter, onNam
   const lobby = useLobby();
   // 내 집 채널: 평소 닫혀 있는 채널에 집이 있어도 목록에 보여 준다 (새로 시작이면 집이 없다)
   const houseCh = useMyHouseChannel(path.kind !== "new");
+  // 11/20 운영자 계정: 정원 밖이라 만석 채널도 고른다 (새로 시작이면 아니다)
+  const [staff, setStaff] = useState(path.kind === "code" && !!path.me.staff);
 
   useEffect(() => {
-    if (path.kind !== "new") return;
     api
       .me()
-      .then(setExisting)
+      .then((me) => (path.kind === "new" ? setExisting(me) : setStaff(!!me.staff)))
       .catch(() => {
         // 이 기기에 계정이 없다
       });
   }, [path.kind]);
 
   // 골라 둔 채널이 그사이 가득 차면 자동 배정으로 되돌린다
-  if (typeof channel === "number" && lobby.lobby && !isChannelSelectable(lobby.lobby, channel, [houseCh])) setChannel("auto");
+  if (typeof channel === "number" && lobby.lobby && !isChannelSelectable(lobby.lobby, channel, [houseCh], staff)) setChannel("auto");
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -746,7 +747,7 @@ function ChannelStep({ path, look, custom, sharedChannel, onBack, onEnter, onNam
       {sharedChannel ? (
         <p className={styles.shared}>공유받은 묘비가 있는 {sharedChannel}채널로 들어가요.</p>
       ) : (
-        <ChannelPicker lobby={lobby} value={channel} onChange={setChannel} allowAuto houseChannel={houseCh ?? null} />
+        <ChannelPicker lobby={lobby} value={channel} onChange={setChannel} allowAuto houseChannel={houseCh ?? null} staff={staff} />
       )}
 
       {confirmFresh && (

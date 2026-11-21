@@ -215,10 +215,13 @@ export const SHOP_DOOR = { x: 560, y: 160 } as const;
 export const HUNT_GATE = { x: 864, y: 44 } as const;
 /** 사냥터 팻말 (동굴로 가는 길가). 그림·이름표는 클라이언트 */
 export const HUNT_SIGN = { x: 824, y: 112 } as const;
-/** 분양 사무소(하우징): 주거 구역 골목 어귀, 북쪽 길가의 작은 사무실 오두막. 바닥 가운데 */
-export const HOUSING_OFFICE = { x: 960, y: 156 } as const;
+/**
+ * 분양 사무소(하우징): 모닥불 광장 동쪽 끝, 큰 모닥불 오른쪽·해먹 아래 포석 위의 작은 사무실 오두막. 바닥 가운데.
+ * 11/20 북쪽 길가(960,156)에서 광장으로 옮겼다 (그 자리는 야근 빌딩, 야근 빌딩 자리는 「판교의 등대」)
+ */
+export const HOUSING_OFFICE = { x: 896, y: 548 } as const;
 /** 분양 사무소 문 앞 */
-export const HOUSING_DOOR = { x: 960, y: 168 } as const;
+export const HOUSING_DOOR = { x: 896, y: 560 } as const;
 /**
  * 「옛 묘역 입구」 팻말 앞자리 (11/19 성황당을 없애고 그 일 — 성불 안내·성불한 이야기들 — 을 언덕 입구 팻말이 맡는다).
  * 이름은 예전 그대로 SHRINE (portal kind "shrine"). 입구(HILL_GATE) 바로 밖, 북쪽 길 남쪽 가장자리 (팻말은 길 아래 풀밭에)

@@ -1,4 +1,8 @@
 import {
+  STAFF_TP_GAP_MS,
+  STAFF_TP_NEAR_PX,
+  type StaffTpDenyWhy,
+  fireworkShowMs,
   CLOSE,
   DIR,
   GOBLIN_GRANT_TTL_SEC,
@@ -285,6 +289,11 @@ export const GRAVE_EVENT_INTERVAL_MS = 5_000;
 export const LOOK_INTERVAL_MS = 10_000;
 /** firework 증서 연결당 최소 간격 */
 export const FIREWORK_INTERVAL_MS = 3_000;
+/**
+ * 11/20 광역 불꽃쇼는 맵마다 한 번에 하나. 돌고 있으면 끝난 뒤로 미뤄(w) 보내되, 이만큼 넘게 기다려야 하면(이미 하나가 기다리는 중) 거절한다.
+ * 클라이언트가 먼저 막으니(firework:show) 여기 걸리는 건 거의 동시에 쏜 경우뿐
+ */
+export const FIREWORK_SHOW_QUEUE_MS = 40_000;
 /** megaphone 증서 연결당 최소 간격 (주된 도배 제한은 Vercel이 계정 단위로 한다) */
 export const MEGAPHONE_INTERVAL_MS = 3_000;
 /** sync(접속자 목록 다시 받기) 연결당 최소 간격. 클라이언트는 PEER_SYNC_MS(60초)마다 보낸다 */
@@ -386,6 +395,8 @@ type Peer<C> = PeerRecord & {
   lastHuntAt?: number;
   /** 11/15 맵 옮기기 (없으면 아직 안 씀) */
   lastMapAt?: number;
+  /** 11/20 운영자 순간이동 (없으면 아직 안 씀) */
+  lastTpAt?: number;
   /** 11/16 귓속말 상대 접속 확인 (없으면 아직 안 씀) */
   lastWhoOnAt?: number;
   /** 11/17 캠핑장 눈사람 세우기 (없으면 아직 안 씀) */
@@ -443,6 +454,8 @@ type SnowThrow = { n: number; at: number; map: MapId; x: number; y: number; tx: 
 
 export class ChannelCore<C extends object> {
   private readonly peers = new Map<number, Peer<C>>();
+  /** 11/20 맵마다 광역 불꽃쇼가 끝나는 시각 (Date.now ms, 메모리에만 — 잠들면 잊어도 그만) */
+  private readonly showUntil = new Map<string, number>();
   private readonly bySocket = new Map<C, number>();
   private readonly byVisitor = new Map<string, number>();
   /** 11/18 보안: 방금 나간 방문자의 연결 단위 기록 (visitorId → DEPART_MEMO_MS 동안) */
@@ -521,9 +534,25 @@ export class ChannelCore<C extends object> {
     private readonly host: ChannelHost<C>,
   ) {}
 
-  /** 접속 중 + 유예 예약. 상한 판정과 로비 보고에 쓴다 */
+  /**
+   * 접속 중 + 유예 예약. 상한 판정·로비 보고·화면 인원에 쓴다.
+   * 11/20 월드 채널은 운영자(staff)를 빼고 센다 (정원 밖 — 꽉 찬 채널에도 들어가고, 일반 유저 자리를 막지 않는다). 방은 그대로
+   */
   get count(): number {
+    return this.cfg.room ? this.peers.size : this.peers.size - this.staffCount;
+  }
+
+  /** 11/20 운영자 포함 전체 (방 모드로 굳히기 전 빈 DO 확인용) */
+  get size(): number {
     return this.peers.size;
+  }
+
+  /** 11/20 월드 채널에 있는 운영자 수 (정원·인원 밖. 로비가 「사람이 있는 채널」로 알게 따로 보고) */
+  get staffCount(): number {
+    if (this.cfg.room) return 0;
+    let n = 0;
+    for (const p of this.peers.values()) if (p.staff) n++;
+    return n;
   }
 
   /** 소켓이 붙어 있는 인원 (유예 중 제외) */
@@ -536,9 +565,9 @@ export class ChannelCore<C extends object> {
     return this.byVisitor.has(visitorId);
   }
 
-  /** 이 visitorId를 받을 수 있는지: 이미 자리가 있거나(복귀·중복 접속) 상한 미만 */
-  admits(visitorId: string): boolean {
-    return this.byVisitor.has(visitorId) || this.peers.size < this.cfg.capacity;
+  /** 이 visitorId를 받을 수 있는지: 이미 자리가 있거나(복귀·중복 접속) 상한 미만. 11/20 월드 채널 운영자는 정원 밖이라 늘 */
+  admits(visitorId: string, staff = false): boolean {
+    return this.byVisitor.has(visitorId) || (staff && !this.cfg.room) || this.count < this.cfg.capacity;
   }
 
   /** 테스트·디버그용 읽기 전용 사본 */
@@ -606,7 +635,7 @@ export class ChannelCore<C extends object> {
 
     // 상한은 접속 중 + 유예 예약으로 센다. 이 DO가 채널의 유일한 인스턴스이므로 경쟁 조건이 없다.
     // (DO는 admits()로 먼저 거르지만, 여기서도 한 번 더 지킨다)
-    const newSid = this.admits(t.visitorId) ? allocSid(this.peers) : null;
+    const newSid = this.admits(t.visitorId, !!t.staff) ? allocSid(this.peers) : null;
     if (newSid === null) return this.host.close(conn, CLOSE.CHANNEL_FULL, "channel full");
     // 11/18 보안: 방금 나간 사람이면 재접속 반복 제한을 이어서 센다 (DO가 로비에 묻기 전에 rejoinBlocked로 먼저 거른다)
     if (this.rejoinBlocked(t.visitorId, now)) return this.host.close(conn, CLOSE.RATE_LIMITED, "rejoin too fast");
@@ -644,7 +673,7 @@ export class ChannelCore<C extends object> {
     this.save(p);
     this.welcome(p, t.channel, false, now);
     this.broadcastMap(map, encodeEvent({ t: "join", ...this.info(p) }), p.sid);
-    this.host.countChanged(this.peers.size);
+    this.host.countChanged(this.count);
     this.broadcastCount(p.sid);
     this.host.visitorJoined(p.visitorId, p.joinedAt);
     this.host.liveChanged?.(true);
@@ -706,6 +735,7 @@ export class ChannelCore<C extends object> {
     } else {
       this.host.dropReservation(p.sid);
     }
+    const staffFlip = !!p.staff !== !!t.staff;
     const renamed =
       p.name !== t.name || p.color !== t.color || p.body !== t.body || p.look.join() !== t.look.join() || !sameDye(p.dye, t.dye) || !!p.staff !== !!t.staff || (p.dex ?? 0) !== (t.dex ?? 0) || (p.champ ?? 0) !== (t.champ ?? 0) || !!p.mgr !== !!t.mgr;
     p.name = t.name;
@@ -742,6 +772,11 @@ export class ChannelCore<C extends object> {
     this.welcome(p, t.channel, true, now);
     // 이름·색·몸·꾸미기는 입장 때 한 번만 보낸다. 바뀌었을 때만 join을 다시 보낸다(클라이언트는 같은 sid의 join을 덮어쓰기로 처리).
     if (renamed) this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "join", ...this.info(p) }), p.sid);
+    // 11/20 운영자 여부가 바뀌었다 → 인원(운영자 빼고 센다)도 바뀐다
+    if (staffFlip) {
+      this.host.countChanged(this.count);
+      this.broadcastCount(p.sid);
+    }
     this.host.visitorJoined(p.visitorId, p.joinedAt);
     this.host.liveChanged?.(true);
   }
@@ -805,7 +840,7 @@ export class ChannelCore<C extends object> {
       // 11/15 캠핑장·11/16 바닷가에 있으면 알린다 (마을이면 없다 — 옛 서버와 같은 모양)
       ...awayTag(map),
       // 11/15 채널 전체 인원 (마을·캠핑장 합계 — HUD "N/40명"). 방에는 없다
-      ...(this.cfg.room ? {} : { n: this.peers.size }),
+      ...(this.cfg.room ? {} : { n: this.count }),
     });
     // 11/17 캠핑장이면 지금 서 있는 눈사람
     if (!this.cfg.room && map === "camp") this.sendSnowmen(p, now);
@@ -931,10 +966,11 @@ export class ChannelCore<C extends object> {
    * 친구 위치: 이 채널에 자리를 가진 모든 사람(접속 중 + 재연결 유예 중)의 방문자 id·sid·서버 위치·실내 여부.
    * 실시간 서버 안(Worker)에서만 쓰고, 웹 서버는 친구 사이인 계정만 골라 브라우저에 넘긴다
    */
-  roster(): { visitorId: string; sid: number; x: number; y: number; away?: true; place?: AwayPlace; house?: string; map?: AwayMapId }[] {
+  roster(): { visitorId: string; sid: number; name: string; x: number; y: number; away?: true; place?: AwayPlace; house?: string; map?: AwayMapId }[] {
     return [...this.peers.values()].map((p) => ({
       visitorId: p.visitorId,
       sid: p.sid,
+      name: p.name,
       x: Math.round(p.x),
       y: Math.round(p.y),
       ...(p.away ? { away: true as const } : {}),
@@ -1162,6 +1198,9 @@ export class ChannelCore<C extends object> {
         if (now - (p.lastMapAt ?? -Infinity) < MAP_INTERVAL_MS) return;
         p.lastMapAt = now;
         return this.onMap(p, m.m, { x: m.x, y: m.y }, now);
+      case "tp":
+        if (this.cfg.room || !p.staff) return; // 운영자 연결만
+        return this.onStaffTp(p, m.sid, m.m, { x: m.x, y: m.y }, now);
       case "snowHold":
         return this.onSnowHold(p, m.h, now);
       case "snowPut":
@@ -1408,6 +1447,52 @@ export class ChannelCore<C extends object> {
   }
 
   /**
+   * 11/20 운영자 순간이동 (staffTp.ts): sid 옆 at으로. 친구 여부·쿨다운 없이 (겹친 요청만 STAFF_TP_GAP_MS로 거른다).
+   * 상대가 없거나 실내(away)거나 at이 상대 서버 위치에서 STAFF_TP_NEAR_PX보다 멀면 tpNo. 내가 실내여도 받지 않는다.
+   * want = 화면이 생각한 상대 맵: 지금 맵과 다르면(맵 옮기기 중) 결과와 상관없이 mapped로 답한다 (onMap과 같은 약속).
+   * 떠난 자리·도착한 자리에 tpFx (각 맵 사람들에게, 나 빼고 — 내 화면은 직접 그린다)
+   */
+  private onStaffTp(p: Peer<C>, sid: number, want: MapId, at: Point, now: number): void {
+    const cur = mapOfPeer(p);
+    const crossing = want !== cur;
+    const deny = (why: StaffTpDenyWhy) => {
+      this.sendTo(p, { t: "tpNo", why });
+      if (crossing) this.sendTo(p, { t: "mapped", m: cur, peers: this.othersOf(p), seats: this.seatsOf(cur) });
+    };
+    if (now - (p.lastTpAt ?? -Infinity) < STAFF_TP_GAP_MS) return crossing ? deny("far") : undefined;
+    p.lastTpAt = now;
+    const q = this.peers.get(sid);
+    if (!q || q === p) return deny("gone");
+    if (q.away) return deny("inside");
+    const target = mapOfPeer(q);
+    // 그사이 상대가 다른 맵으로 갔으면 받지 않는다 (화면이 다시 고른다). 버스 안(away)은 맵 옮기기 중일 때만
+    if (target !== want || (p.away && !crossing)) return deny("far");
+    if (Math.hypot(at.x - q.x, at.y - q.y) > STAFF_TP_NEAR_PX || !inMapBounds(target, at.x, at.y) || !mapAllowed(target, p)) return deny("far");
+    const from = { x: Math.round(p.x), y: Math.round(p.y) };
+    p.lastTeleportAt = now;
+    if (target === cur) {
+      if (p.seatId) this.releaseSeat(p);
+      if (p.state === STATE.sitChair || p.state === STATE.sitGround || spotKindOfState(p.state)) p.state = STATE.idle;
+      p.x = p.tx = at.x;
+      p.y = p.ty = at.y;
+      this.chasing.delete(p.sid);
+      p.budget = new MoveBudget(now);
+      this.markDirty(p);
+    } else {
+      p.lastMapAt = now;
+      this.switchMap(p, target, this.clearOfSeats(at, p.sid, target), now);
+    }
+    // 떠난 자리: 맵을 옮기는 중이면 이미 숨어 있지만(버스 안) 사라진 자리 그대로라 거기에
+    this.broadcastMap(cur, encodeEvent({ t: "tpFx", sid: p.sid, x: from.x, y: from.y, k: "out" }), p.sid);
+    this.broadcastMap(target, encodeEvent({ t: "tpFx", sid: p.sid, x: Math.round(p.x), y: Math.round(p.y), k: "in" }), p.sid);
+    if (crossing) {
+      this.sendTo(p, { t: "mapped", m: target, peers: this.othersOf(p), seats: this.seatsOf(target) });
+      if (target === "camp") this.sendSnowmen(p, now);
+      this.sendChatLog(p, now);
+    }
+  }
+
+  /**
    * 맵을 옮긴다 (본인에게는 보내지 않는다 — 부른 쪽이 mapped·welcome으로 알린다).
    * 좌석(배 낚싯대·벤치 상태 포함)을 놓고 실내 표시를 끄고, 옛 맵 사람들에게 leave, 새 맵 사람들에게 join.
    * 위치는 속도 검증 없이 바로 (순간이동과 같다). 타는 펫은 그대로 탄다
@@ -1499,8 +1584,14 @@ export class ChannelCore<C extends object> {
       return;
     }
     if (g.kind !== "firework") return; // 고블린 증서는 실시간 서버가 내주기만 한다 (받지 않는다)
+    const map = mapOfPeer(p);
+    const showMs = fireworkShowMs(g.item);
+    const now = Date.now();
+    const wait = showMs > 0 ? Math.max(0, (this.showUntil.get(map) ?? 0) - now) : 0;
+    if (wait > FIREWORK_SHOW_QUEUE_MS) return this.sendTo(p, { t: "fireworkBusy", left: wait }); // nonce는 남겨 둔다
     if (!this.host.claimNonce(g.nonce, g.exp * 1000)) return; // 이미 쏜 폭죽
-    this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "firework", sid: p.sid, item: g.item, x: p.x, y: p.y }));
+    if (showMs > 0) this.showUntil.set(map, now + wait + showMs);
+    this.broadcastMap(map, encodeEvent({ t: "firework", sid: p.sid, item: g.item, x: p.x, y: p.y, ...(wait > 0 ? { w: wait } : {}) }));
   }
 
   /**
@@ -1941,7 +2032,7 @@ export class ChannelCore<C extends object> {
     this.dirty.delete(p.sid);
     this.chasing.delete(p.sid);
     this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "leave", sid: p.sid }));
-    this.host.countChanged(this.peers.size);
+    this.host.countChanged(this.count);
     this.broadcastCount();
     this.host.visitorLeft(p.visitorId);
     this.host.liveChanged?.(true);
@@ -2028,7 +2119,7 @@ export class ChannelCore<C extends object> {
    */
   private broadcastCount(except?: number): void {
     if (this.cfg.room) return;
-    this.broadcast(encodeEvent({ t: "count", n: this.peers.size }), except);
+    this.broadcast(encodeEvent({ t: "count", n: this.count }), except);
   }
 
   private broadcast(data: string | ArrayBuffer, except?: number): void {

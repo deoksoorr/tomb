@@ -21,7 +21,7 @@ type Props = {
   onClose: () => void;
 };
 
-/** 내 소식: 자리를 비운 사이 내 묘비·집에 생긴 일. 열면 모두 읽음으로 */
+/** 알림 (11/21 「내 소식」 → 「알림」): 자리를 비운 사이 내 묘비·집에 생긴 일. 열면 모두 읽음으로 */
 export default function ActivityDialog({ onGoToGrave, onOpenHousing, onBury, footer, onClose }: Props) {
   const [items, setItems] = useState<ActivityItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +47,7 @@ export default function ActivityDialog({ onGoToGrave, onOpenHousing, onBury, foo
   }, []);
 
   return (
-    <Dialog title="내 소식" onClose={onClose}>
+    <Dialog title="알림" onClose={onClose}>
       <div className={styles.bag}>
         {items === null ? (
           <p className={styles.state} role="status">
@@ -56,13 +56,13 @@ export default function ActivityDialog({ onGoToGrave, onOpenHousing, onBury, foo
         ) : items.length === 0 ? (
           <EmptyHero
             icon="heart"
-            title="아직 소식이 없어요"
+            title="아직 알림이 없어요"
             actions={[
               ...(onBury ? [{ label: "묘비 쓰기", icon: "grave", onClick: onBury, primary: true } satisfies Shortcut] : []),
               { label: "분양 사무소", icon: "house", onClick: onOpenHousing } satisfies Shortcut,
             ]}
           >
-            묘비를 세우거나 집을 꾸며 두면, 누가 다녀간 소식이 여기에 모여요.
+            묘비를 세우거나 집을 꾸며 두면, 누가 다녀간 알림이 여기에 모여요.
           </EmptyHero>
         ) : (
           <ul className={styles.list}>
@@ -82,14 +82,14 @@ export default function ActivityDialog({ onGoToGrave, onOpenHousing, onBury, foo
           </ul>
         )}
         {footer}
-        <InfoCard title="이런 소식이 와요" icon="info">
+        <InfoCard title="이런 알림이 와요" icon="info">
           <TipList
             tips={[
               "누가 내 묘비에 헌화하면 알려 줘요. 누르면 그 묘비 앞으로 가요.",
               "누가 내 집에 좋아요나 방명록을 남기면 알려 줘요. 누르면 분양 사무소가 열려요.",
               "내 묘비가 성불하거나 성황당에서 다시 모셔지면 알려 줘요.",
               "주간 랭킹 1위 보상을 받으면 알려 줘요.",
-              "새 소식이 오면 [소식] 버튼에 숫자가 붙고, 이 창을 열면 모두 읽음이 돼요.",
+              "새 알림이 오면 [알림] 버튼에 숫자가 붙고, 이 창을 열면 모두 읽음이 돼요.",
             ]}
           />
         </InfoCard>

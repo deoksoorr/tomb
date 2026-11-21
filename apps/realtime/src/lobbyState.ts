@@ -14,6 +14,8 @@ export type ChannelRec = {
   pushedAt: number;
   /** 마지막으로 사람이 있던 시각. 최근에 쓰인 채널만 재확인 대상으로 삼는다 */
   lastNonEmptyAt: number;
+  /** 11/20 운영자 수 (count·정원 밖). 확성기·공지·친구 위치를 보낼 「사람이 있는 채널」에만 더한다 — 닫힌 채널을 열어 두지 않는다 */
+  staff?: number;
 };
 
 /** 채널 id → 기록. storage에 그대로 스냅샷한다 */
@@ -26,18 +28,32 @@ export const emptyLobby = (): LobbyState => ({ channels: {} });
 /**
  * 채널 인원을 반영한다. push = 채널 DO가 알려 온 것(report·admit), 아니면 로비의 재확인(getCount) 결과.
  * seq가 이미 반영한 것보다 오래됐으면 버린다. 인원이 바뀌었으면 true (저장 필요).
+ * staff = 11/20 운영자 수 (없으면 지난 값 그대로 — admit의 +1 같은 보고)
  */
-export function applyReport(s: LobbyState, id: number, count: number, seq: number, now: number, push: boolean): boolean {
+export function applyReport(s: LobbyState, id: number, count: number, seq: number, now: number, push: boolean, staff?: number): boolean {
   const prev = s.channels[id];
   if (prev && seq < prev.seq) return false;
   const prevCount = prev?.count ?? 0;
+  const prevStaff = prev?.staff ?? 0;
+  const st = staff === undefined ? prevStaff : staff;
   s.channels[id] = {
     count,
     seq,
     pushedAt: push ? now : (prev?.pushedAt ?? 0),
     lastNonEmptyAt: count > 0 || prevCount > 0 ? now : (prev?.lastNonEmptyAt ?? 0),
+    ...(st > 0 ? { staff: st } : {}),
   };
-  return count !== prevCount;
+  return count !== prevCount || st !== prevStaff;
+}
+
+/**
+ * 11/20 사람이 있는 채널 (확성기·공지·친구 위치를 보낼 곳): 인원(대기열이 잡아 둔 자리 포함) > 0 이거나 운영자만 있어도.
+ * 운영자는 인원·정원에서 빠지지만 혼자 있어도 공지는 받아야 한다
+ */
+export function liveChannels(s: LobbyState, cfg: LobbyConfig, held: (id: number) => number = () => 0): number[] {
+  const ids: number[] = [];
+  for (let id = 1; id <= cfg.maxChannels; id++) if (countOf(s, id) + held(id) > 0 || (s.channels[id]?.staff ?? 0) > 0) ids.push(id);
+  return ids;
 }
 
 export const countOf = (s: LobbyState, id: number) => s.channels[id]?.count ?? 0;
@@ -65,7 +81,7 @@ export function startupTargets(s: LobbyState, cfg: LobbyConfig, now: number): nu
   const ids: number[] = [];
   for (let id = 1; id <= cfg.maxChannels; id++) {
     const r = s.channels[id];
-    if (r && (r.count > 0 || now - r.lastNonEmptyAt < LOBBY_REFRESH_MS)) ids.push(id);
+    if (r && (r.count > 0 || (r.staff ?? 0) > 0 || now - r.lastNonEmptyAt < LOBBY_REFRESH_MS)) ids.push(id);
   }
   return ids;
 }

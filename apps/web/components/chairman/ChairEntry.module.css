@@ -1,0 +1,1035 @@
+/* 11/20 회장님 독대 입장 창 (시안 dps3 .pk — 게임 판 색·글꼴) · 입장 연출 · 레이스 탭 */
+
+.dialog {
+  --hell-line: #6a2a24;
+}
+
+.pk {
+  container-type: inline-size;
+  position: relative;
+  display: grid;
+  gap: 12px;
+  padding: 2px 0 4px;
+}
+
+.head {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.head b {
+  color: var(--candle);
+  font-size: 22px;
+  text-shadow: 0 2px 0 #3a2a10;
+}
+
+.head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.gate {
+  margin: 0;
+  padding: 8px 10px;
+  background: #2a1d16;
+  box-shadow: 0 0 0 2px #6a4a20;
+  color: #f2d27a;
+  font-size: 12px;
+  text-align: center;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
+.gateLine {
+  display: block;
+}
+
+.err {
+  margin: 0;
+  text-align: center;
+}
+
+/* 11/21 두 카드 줄 맞추기: 카드·dl이 .cards의 줄을 나눠 쓴다 (subgrid) — 제목·설명·(연습 안내)·dl 줄마다·단추가 옆 카드와 같은 높이.
+   줄 수: 실전 제목 1 + 설명 1 + dl 4 + 단추 1 = 7, 연습 제목 1 + 설명 1 + 안내 1 + dl 2 + 단추 1 = 6 */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 10px;
+  row-gap: 0;
+}
+
+.card {
+  position: relative;
+  display: grid;
+  grid-row: span 7;
+  grid-template-rows: subgrid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  column-gap: 10px;
+  row-gap: 6px;
+  min-width: 0;
+  padding: 10px;
+  background: linear-gradient(160deg, #22261c, #1b1d17);
+  box-shadow: 0 0 0 2px var(--line);
+}
+
+.card[data-mode="hell"] {
+  background: linear-gradient(160deg, #2c1614, #1d1212);
+  box-shadow:
+    0 0 0 2px var(--hell-line),
+    0 0 18px rgba(255, 70, 40, 0.18);
+}
+
+.card[data-mode="hell"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(255, 90, 60, 0.05) 0 2px, transparent 2px 4px);
+  pointer-events: none;
+}
+
+.card[data-spent] {
+  filter: saturate(0.35) brightness(0.8);
+}
+
+.art {
+  width: 96px;
+  height: 96px;
+  background: var(--bg-deep);
+  box-shadow: 0 0 0 2px var(--line);
+  image-rendering: pixelated;
+}
+
+.card[data-mode="hell"] .art {
+  background: radial-gradient(circle at 50% 40%, #4a1a14, #1a0c0a);
+  box-shadow: 0 0 0 2px var(--hell-line);
+}
+
+.cardBody {
+  display: contents;
+}
+
+.cardBody > * {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.card > .art {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  align-self: start;
+}
+
+.practice .card {
+  grid-row: span 6;
+}
+
+.cardBody h4 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--bone);
+  font-size: 16px;
+}
+
+.card[data-mode="hell"] h4 {
+  color: #ffb8a0;
+}
+
+.tag {
+  padding: 1px 6px;
+  background: #b0302a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 400;
+}
+
+/* 11/21 노멀·헬 카드 줄 맞추기: 설명 칸은 늘 4줄 높이 (짧으면 빈칸) — 「오늘 남은 판」부터 단추까지 두 카드가 같은 높이에 */
+.desc {
+  min-height: calc(11px * 1.5 * 4);
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.cardBody dl {
+  display: grid;
+  grid-row: span 4;
+  grid-template-rows: subgrid;
+  row-gap: 3px;
+  margin: 0;
+  font-size: 11px;
+}
+
+.practice .cardBody dl {
+  grid-row: span 2;
+}
+
+.cardBody dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 2px;
+  border-bottom: 1px dashed #33352b;
+}
+
+.cardBody dt {
+  color: var(--muted);
+}
+
+.cardBody dd {
+  margin: 0;
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.gold {
+  color: var(--candle) !important;
+}
+
+.pips {
+  display: inline-flex;
+  gap: 3px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.pips i {
+  width: 9px;
+  height: 9px;
+  background: #33352b;
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+
+.pips i[data-on] {
+  background: var(--candle);
+  box-shadow:
+    0 0 0 1px #8a6a20,
+    0 0 6px rgba(224, 195, 106, 0.6);
+}
+
+.card[data-mode="hell"] .pips i[data-on] {
+  background: #ff6a50;
+  box-shadow:
+    0 0 0 1px #8a2a1a,
+    0 0 6px rgba(255, 90, 60, 0.6);
+}
+
+.go {
+  min-height: 40px;
+  margin-top: 2px;
+  padding: 9px 10px;
+  border: 0;
+  background: linear-gradient(180deg, #f2d27a, #d0a440);
+  box-shadow:
+    0 0 0 2px #6a4a10,
+    inset 0 -3px 0 rgba(0, 0, 0, 0.2);
+  color: #1a1408;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.go:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.go:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.card[data-mode="hell"] .go,
+.go[data-mode="hell"] {
+  background: linear-gradient(180deg, #e0503c, #a82a1e);
+  box-shadow:
+    0 0 0 2px #4a0e08,
+    inset 0 -3px 0 rgba(0, 0, 0, 0.25);
+  color: #fff;
+}
+
+.go:disabled,
+.card[data-mode="hell"] .go:disabled {
+  background: #3a3c32;
+  box-shadow: 0 0 0 2px var(--line);
+  color: var(--muted);
+  cursor: default;
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.sm {
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 0;
+  background: var(--surface);
+  box-shadow: 0 0 0 2px var(--line);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.sm:hover:not(:disabled),
+.sm[data-hint],
+.sm[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--candle);
+  color: var(--candle);
+}
+
+.sm:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+.note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* 기술 목록 */
+.tech {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--bg-deep);
+  box-shadow: 0 0 0 2px var(--line);
+}
+
+.techLead {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.tech ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tech li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0 6px;
+  font-size: 11px;
+}
+
+.techStep {
+  grid-row: span 2;
+  align-self: start;
+  padding: 1px 4px;
+  background: #2f3227;
+  color: var(--candle);
+  font-size: 10px;
+}
+
+.tech li[data-kill] .techStep {
+  background: #5a1a14;
+  color: #ffb8a0;
+}
+
+.tech b {
+  color: var(--bone);
+}
+
+.techHow {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* 헬 확인 */
+.confirm {
+  --line-strong: #8a2a1e;
+}
+
+.cin {
+  display: grid;
+  gap: 10px;
+  text-align: center;
+}
+
+.cin p {
+  margin: 0;
+  color: #d8c0b8;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.cbtn {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.chk {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+@container (max-width: 520px) {
+  .cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .card + .card {
+    margin-top: 10px;
+  }
+
+  .card {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .art {
+    width: 72px;
+    height: 72px;
+  }
+
+  .tech ul {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ── 입장 연출 ── */
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  overflow: hidden;
+  background: #050106;
+  cursor: pointer;
+  transition: opacity 0.45s ease;
+}
+
+.intro[data-out] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.introCanvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+  transform-origin: 50% 58%;
+  will-change: transform;
+}
+
+/* 가장자리 어둠 (박동에 맞춰 숨쉰다, --hot이 크면 붉게) */
+.introVig {
+  --hot: 0;
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 75% 70% at 50% 52%, transparent 48%, rgb(calc(20 + 90 * var(--hot)) 0 6 / 0.55) 78%, rgb(8 0 4 / 0.92) 100%);
+  opacity: 0.35;
+  pointer-events: none;
+  will-change: opacity;
+}
+
+/* 글 세 줄: 한 줄씩 짧게 떴다 사라진다. 11/21 사용자 「화면 가운데로」: 위쪽 6% → 정가운데 */
+.introLine {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  color: #e8c8c0;
+  font-size: clamp(13px, 2.1vw, 18px);
+  letter-spacing: 0.32em;
+  text-shadow:
+    0 2px 0 #1a0408,
+    0 0 12px rgba(255, 40, 30, 0.45);
+  white-space: nowrap;
+  opacity: 0;
+  transform: translate(-50%, calc(-50% + 6px));
+  filter: blur(3px);
+  transition:
+    opacity 0.45s ease,
+    transform 0.6s ease,
+    filter 0.45s ease,
+    letter-spacing 1.4s ease;
+  pointer-events: none;
+}
+
+
+.introLine[data-on] {
+  opacity: 1;
+  transform: translate(-50%, -50%);
+  filter: none;
+  letter-spacing: 0.16em;
+}
+
+.introLine[data-big] {
+  color: #ffe2d0;
+  font-size: clamp(30px, 6.4vw, 58px);
+  font-weight: 700;
+  letter-spacing: 0.4em;
+  text-shadow:
+    0 3px 0 #3a0608,
+    0 0 6px rgba(255, 60, 30, 0.9),
+    0 0 26px rgba(255, 20, 10, 0.6);
+}
+
+.introLine[data-big][data-on] {
+  letter-spacing: 0.08em;
+  animation: lineJolt 0.32s steps(2) 1;
+}
+
+.intro[data-mode="hell"] .introLine[data-k="2"] {
+  color: #ff6a50;
+}
+
+@keyframes lineJolt {
+  0% {
+    transform: translate(calc(-50% - 4px), calc(-50% + 2px));
+  }
+  50% {
+    transform: translate(calc(-50% + 3px), calc(-50% - 1px));
+  }
+  100% {
+    transform: translate(-50%, -50%);
+  }
+}
+
+.introSkip {
+  position: absolute;
+  z-index: 1;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  color: rgba(255, 210, 200, 0.55);
+  font-size: 11px;
+}
+
+.flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease-in;
+}
+
+.flash[data-state="in"],
+.flash[data-state="out"] {
+  opacity: 1;
+}
+
+/* 11/20 회장님 등장 컷: 도트 회장님이 화면을 꽉 채우고, 포효 때 이름판이 쾅 */
+.splash {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #0c0a18;
+  pointer-events: none;
+}
+
+.splashCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  will-change: transform;
+}
+
+/* 하얀 섬광에서 확 들어오기 */
+.splashWhite {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  animation: splashWhite 0.32s var(--t, 0ms) ease-out both;
+}
+
+.splash[data-still] {
+  animation: splashFade 0.3s ease-out both;
+}
+
+.plate {
+  position: absolute;
+  left: max(3vw, 16px);
+  /* 11/21 가운데 대사와 안 겹치게 아래로 */
+  bottom: max(4vh, 20px);
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  max-width: min(46vw, 560px);
+  font-family: "Galmuri11", sans-serif;
+}
+
+@media (orientation: portrait) {
+  .plate {
+    top: max(7vh, 40px);
+    right: 16px;
+    bottom: auto;
+    left: 16px;
+    justify-items: center;
+    max-width: none;
+    text-align: center;
+  }
+}
+
+.plateK {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: rgba(8, 6, 14, 0.82);
+  box-shadow: 0 0 0 2px #e0c36a;
+  color: #9ad8ff;
+  font-size: clamp(11px, 1.4vw, 14px);
+  letter-spacing: 0.08em;
+  /* 11/21 이름판과 같이 (포효 직전에 미끄러져 들어온다 — 예전엔 0.15초부터 떠 있어 안경 던지기보다 먼저 보였다) */
+  animation: plateSlide 0.4s calc(var(--roar) - 0.08s + var(--t, 0ms)) cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.plateK em {
+  padding: 1px 6px;
+  background: #d8321e;
+  color: #fff3c4;
+  font-style: normal;
+  letter-spacing: 0;
+}
+
+.plateName {
+  position: relative;
+  padding: 2px 18px 6px;
+  color: #fff3c4;
+  font-size: clamp(40px, 7.4vw, 92px);
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+  text-shadow:
+    3px 0 0 #1a0408,
+    -3px 0 0 #1a0408,
+    0 3px 0 #1a0408,
+    0 -3px 0 #1a0408,
+    3px 3px 0 #1a0408,
+    -3px 3px 0 #1a0408,
+    3px -3px 0 #1a0408,
+    -3px -3px 0 #1a0408,
+    0 7px 0 #7a0c14;
+  animation: plateSlam 0.34s calc(var(--roar) + var(--t, 0ms)) cubic-bezier(0.3, 1.5, 0.5, 1) both;
+}
+
+/* 이름 뒤 비스듬한 붉은 띠 */
+.plateName::before {
+  position: absolute;
+  inset: 18% -6px 4% -6px;
+  z-index: -1;
+  background: linear-gradient(90deg, #b8141c, #e8321e 60%, #b8141c);
+  box-shadow:
+    0 0 0 3px #1a0408,
+    6px 6px 0 3px rgba(0, 0, 0, 0.55);
+  content: "";
+  transform: skewX(-14deg);
+}
+
+.splash[data-mode="hell"] .plateName::before {
+  background: linear-gradient(90deg, #c23a0a, #ff8a1a 60%, #c23a0a);
+}
+
+.plateLine {
+  padding: 6px 12px;
+  background: rgba(8, 4, 8, 0.86);
+  border-left: 4px solid #e8321e;
+  color: #f4ece0;
+  font-size: clamp(13px, 1.7vw, 18px);
+  line-height: 1.4;
+  animation: plateSlide 0.4s calc(var(--roar) + 0.2s + var(--t, 0ms)) cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@media (orientation: portrait) {
+  .plateLine {
+    border-left: 0;
+    border-bottom: 3px solid #e8321e;
+  }
+}
+
+/* 11/21 포효 대사: 가운데 크게 쾅 (2.2 → 0.95 → 1) + 붉은 번쩍 + 흔들림, 글자마다 부들부들 */
+.slamFlash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 236, 220, 0.92), rgba(255, 40, 24, 0.82) 42%, rgba(150, 0, 12, 0.78));
+  opacity: 0;
+  animation: slamFlash 0.26s calc(var(--roar) + 0.06s + var(--t, 0ms)) cubic-bezier(0.2, 0.7, 0.4, 1) forwards;
+}
+
+.splash[data-mode="hell"] .slamFlash {
+  background: radial-gradient(circle at 50% 50%, rgba(255, 246, 200, 0.92), rgba(255, 128, 20, 0.82) 42%, rgba(150, 30, 0, 0.78));
+}
+
+.slam {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  /* 가로 화면은 눈·입을 가리지 않게 이마 높이(위 30%)로 */
+  padding: 0 16px 40vh;
+  font-family: "Galmuri11", sans-serif;
+  font-weight: 700;
+  animation: slamShake 0.46s calc(var(--roar) + 0.12s + var(--t, 0ms)) linear both;
+}
+
+.slamIn {
+  display: grid;
+  transform: rotate(-5deg);
+  animation: slamPunch 0.4s calc(var(--roar) + var(--t, 0ms)) both;
+}
+
+.slamL {
+  /* 겹 순서 고정 (빨강 겹의 filter가 쌓임 맥락을 만들어 위로 뜨지 않게) */
+  position: relative;
+  display: flex;
+  grid-area: 1 / 1;
+  justify-content: center;
+  align-items: baseline;
+  column-gap: 0.3em;
+  margin: 0;
+  font-size: min(9vw, 17vh);
+  line-height: 1.08;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+@media (orientation: portrait) {
+  .slamL {
+    flex-direction: column;
+    align-items: center;
+    font-size: min(18.5vw, 10vh);
+  }
+
+  .slam {
+    padding-bottom: 0;
+  }
+}
+
+/* 겉선 (빨강, 아래로 그림자) */
+.slamL[data-k="red"] {
+  color: #e8221a;
+  -webkit-text-stroke: 0.3em #e8221a;
+  filter: drop-shadow(0 0.07em 0 #2a0206);
+}
+
+/* 속선 (검정) */
+.slamL[data-k="ink"] {
+  color: #12040a;
+  -webkit-text-stroke: 0.15em #12040a;
+}
+
+.slamL[data-k="face"] .slamC {
+  background: linear-gradient(180deg, #ffffff 58%, #ffd6cc 59%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.splash[data-mode="hell"] .slamL[data-k="red"] {
+  color: #c81e06;
+  -webkit-text-stroke-color: #c81e06;
+  filter: drop-shadow(0 0.07em 0 #2a0600) drop-shadow(0 0 0.1em #ffb020);
+}
+
+.splash[data-mode="hell"] .slamL[data-k="ink"] {
+  color: #2a0802;
+  -webkit-text-stroke-color: #2a0802;
+}
+
+.splash[data-mode="hell"] .slamL[data-k="face"] .slamC {
+  background-image: linear-gradient(180deg, #fff8d0 40%, #ffd060 62%, #ff8a1a);
+}
+
+.slamC {
+  display: inline-block;
+  animation: slamJit 0.18s steps(1) calc(var(--roar) + 0.36s + var(--i, 0) * -47ms + var(--t, 0ms)) infinite;
+}
+
+.splash[data-still] .slamFlash,
+.splash[data-still] .slam,
+.splash[data-still] .slamIn,
+.splash[data-still] .slamC {
+  animation: none;
+}
+
+.splash[data-freeze] *,
+.splash[data-freeze] {
+  animation-play-state: paused !important;
+}
+
+@keyframes splashWhite {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes splashFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes plateSlide {
+  from {
+    opacity: 0;
+    transform: translateX(-60px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes slamFlash {
+  from {
+    opacity: 0.85;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes slamPunch {
+  from {
+    opacity: 0;
+    transform: rotate(-10deg) scale(2.2);
+    animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.4);
+  }
+  12% {
+    opacity: 1;
+  }
+  40% {
+    transform: rotate(-4deg) scale(0.95);
+    animation-timing-function: cubic-bezier(0.2, 0.8, 0.3, 1);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(-5deg) scale(1);
+  }
+}
+
+@keyframes slamShake {
+  0%,
+  100% {
+    transform: none;
+  }
+  8% {
+    transform: translate(-16px, 9px);
+  }
+  18% {
+    transform: translate(14px, -11px);
+  }
+  30% {
+    transform: translate(-11px, 7px);
+  }
+  44% {
+    transform: translate(8px, -5px);
+  }
+  60% {
+    transform: translate(-5px, 3px);
+  }
+  78% {
+    transform: translate(3px, -2px);
+  }
+}
+
+@keyframes slamJit {
+  0% {
+    transform: none;
+  }
+  25% {
+    transform: translate(0.025em, -0.02em);
+  }
+  50% {
+    transform: translate(-0.02em, 0.02em);
+  }
+  75% {
+    transform: translate(0.015em, 0.025em);
+  }
+}
+
+@keyframes plateSlam {
+  from {
+    opacity: 0;
+    transform: scale(2.6) rotate(-4deg);
+  }
+  60% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .introLine,
+  .introLine[data-big][data-on],
+  .flash {
+    transition: none;
+    animation: none;
+  }
+
+  .splashWhite,
+  .plateK,
+  .plateName,
+  .plateLine,
+  .slamFlash,
+  .slam,
+  .slamIn,
+  .slamC {
+    animation: none;
+  }
+}
+
+/* ── 레이스 창 탭 ── */
+.raceTabs {
+  display: flex;
+  flex: none;
+  margin-bottom: 10px;
+  border-bottom: 2px solid var(--line);
+}
+
+.raceTab {
+  flex: 1;
+  min-height: 40px;
+  padding: 4px 2px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.raceTab[aria-selected="true"] {
+  color: var(--bone);
+  box-shadow: inset 0 -2px 0 var(--candle);
+}
+
+
+/* 내 최고: 피해 아래에 버틴 시간 */
+.cardBody dd.best {
+  display: grid;
+  justify-items: end;
+}
+
+.best small {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+/* ── 11/20 연습 모드: 창 전체가 청록으로 (싸움 화면 연습 모드와 같은 세 색: 테두리 #3ab8c8 · 띠 #1f6a78 · 글자 #9fe6f0) ── */
+.practice {
+  --panel-solid: #13232a;
+  --surface: #1a2f36;
+  --line: #1f6a78;
+  --line-strong: #3ab8c8;
+  --px-border-strong: 0 -2px 0 0 #3ab8c8, 0 2px 0 0 #3ab8c8, -2px 0 0 0 #3ab8c8, 2px 0 0 0 #3ab8c8;
+  --hell-line: #1f6a78;
+}
+
+.practice .head b {
+  color: #9fe6f0;
+  text-shadow: 0 2px 0 #0c2a32;
+}
+
+.practice .card,
+.practice .card[data-mode="hell"] {
+  background: linear-gradient(160deg, #183038, #12232a);
+  box-shadow: 0 0 0 2px var(--line);
+}
+
+.practice .card[data-mode="hell"] {
+  background: linear-gradient(160deg, #1a2638, #131b2a);
+  box-shadow: 0 0 0 2px var(--hell-line);
+}
+
+.practice .card[data-mode="hell"]::after {
+  display: none;
+}
+
+.practice .card[data-mode="hell"] h4 {
+  color: #9fe6f0;
+}
+
+.practice .cardBody dl div {
+  border-bottom-color: #1f6a78;
+}
+
+.practice .go,
+.practice .card[data-mode="hell"] .go {
+  background: linear-gradient(180deg, #9fe6f0, #3ab8c8);
+  box-shadow:
+    0 0 0 2px #1f6a78,
+    inset 0 -3px 0 rgba(0, 0, 0, 0.2);
+  color: #0a1c22;
+}
+
+.practice .sm[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px #3ab8c8;
+  color: #9fe6f0;
+}
+
+.practiceNote {
+  margin: 0;
+  padding: 6px 8px;
+  background: #1f6a78;
+  box-shadow: inset 0 0 0 1px #3ab8c8;
+  color: #9fe6f0;
+  font-size: 11px;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
+/* 11/20 달리기 안내 초록 띠 (싸움 전 브리핑 game/chairman .runTip과 같은 색) — 연습 모드에서도 그대로 */
+.runTip {
+  margin: 0;
+  padding: 8px 10px;
+  background: rgba(70, 140, 60, 0.28);
+  box-shadow: inset 0 0 0 1px #7fcf6a;
+  color: #e9f7d9;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+  word-break: keep-all;
+}
+
+.runTip b {
+  color: #b8f59a;
+}
+
+/* 11/22 시작 전 나가기 판 돌려받기 안내 (카드 바로 아래 작은 한 줄) */
+.refundNote {
+  margin: -2px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+  line-height: 1.4;
+}

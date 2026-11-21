@@ -18,6 +18,11 @@ import { winterLotLayers } from "./winterLots";
 //  + 굴뚝 연기 + 문패 3줄(지붕 위, 필지 폭에 맞춰 줄임 — houseLotLabels·scaleLotLabel). 필지 위치·크기는 호출자가 준다 (위치는 맵 레이아웃 담당).
 
 export type LotSpot = { lot: number; x: number; y: number };
+
+/** 11/21 등대 빛줄기가 집을 알아보게: 집·밤 창 그림 이름 + 필지를 다시 세웠을 때 씬 이벤트 (lighthouse/BeamView가 듣는다) */
+export const LOT_HOUSE = "lot-house";
+export const LOT_LIT = "lot-lit";
+export const LOTS_CHANGED = "lots:changed";
 export type LotLight = { x: number; y: number; scale: number; tint: number; base: number };
 
 export type LotGfx = {
@@ -53,11 +58,12 @@ export function drawHouseLot(scene: Phaser.Scene, atlas: GlyphAtlas, lot: LotSpo
   const pre = W ? `${concept}-` : "";
   const ground = scene.add.image(lot.x, lot.y, canvasTex(scene, pre + texKey("ground", h.tier, size, h.exterior), () => (W ?? L).ground.toCanvas())).setOrigin(0, 0).setDepth(DEPTH.decal + 1);
   const back = scene.add.image(lot.x, lot.y, canvasTex(scene, pre + texKey("back", h.tier, size, {}), () => (W ?? L).back.toCanvas())).setOrigin(0, 0).setDepth(lot.y + L.backBase);
-  const house = scene.add.image(lot.x, lot.y, canvasTex(scene, pre + texKey("house", h.tier, size, h.exterior), () => (W ?? L).house.toCanvas())).setOrigin(0, 0).setDepth(base);
+  const house = scene.add.image(lot.x, lot.y, canvasTex(scene, pre + texKey("house", h.tier, size, h.exterior), () => (W ?? L).house.toCanvas())).setOrigin(0, 0).setDepth(base).setName(LOT_HOUSE);
   const lit = scene.add
     .image(lot.x, lot.y, canvasTex(scene, texKey("lit", h.tier, size, h.exterior), () => L.lit.toCanvas()))
     .setOrigin(0, 0)
-    .setDepth(base + 0.01);
+    .setDepth(base + 0.01)
+    .setName(LOT_LIT);
   trackLit(scene, lit);
   const front = scene.add.image(lot.x, lot.y, canvasTex(scene, pre + texKey("front", h.tier, size, h.exterior), () => (W ?? L).front.toCanvas())).setOrigin(0, 0).setDepth(lot.y + size.h - 2);
   const objs: Phaser.GameObjects.GameObject[] = [ground, back, house, lit, front];

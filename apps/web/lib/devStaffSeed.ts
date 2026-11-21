@@ -10,11 +10,25 @@ import { T_NODES } from "./rpg/transcendTree";
 import type { CharacterState } from "./rpg/types";
 import { setStaff } from "./staff";
 import { codeHash } from "./store/accounts";
+import { addPresetGear, hasPresetGear } from "./devGear";
+import { devRpgLoad } from "./devPersist";
+import { normalize } from "./rpg/character";
 import type { AccountStore } from "./store/types";
 
 // 11/19 로컬 개발 전용 운영자 계정: 메모리 저장소가 비워져도(로컬 서버를 다시 켜거나 모듈을 새로 읽어도) 같은 코드·같은 id로 다시 만든다.
 // apps/web/.env.local의 DEV_STAFF_CODE(로그인 코드)·DEV_STAFF_NAME(닉네임). 운영(NODE_ENV=production)·Redis 연결·테스트에서는 아무것도 하지 않는다.
 // 사냥 캐릭터는 늘 레벨 50 · 초월 ★100(TRANSCEND_MAX), 일반 스킬·초월 수련은 모두 최대 랭크 (운영자는 테스트 서버 슈퍼 계정 — lib/rpg/superHunter)
+
+/** 11/20 사용자 「관리자 계정에는 고정으로」: 최종 세트(회의 세트 임원급 +15, 마법) 다섯 부위가 없으면 넣고 낀다 */
+function dressed(s: CharacterState): CharacterState {
+  if (hasPresetGear(s, "finalMagic15")) return s;
+  try {
+    return addPresetGear(s, "finalMagic15", true);
+  } catch (e) {
+    console.warn("[devStaff] 최종 세트를 넣지 못했어요", e);
+    return s;
+  }
+}
 
 /** 고정 계정 id (세션 쿠키가 로컬 서버를 다시 켜도 같은 계정을 가리키게). 세션 쿠키 규칙(lib/session VISITOR_ID_RE) 그대로 21자 */
 export const DEV_STAFF_ID = "devstaff-local-moon01";
@@ -51,11 +65,15 @@ export function ensureDevStaff(accounts: AccountStore): void {
       await accounts.setTutorialDone(DEV_STAFF_ID);
       await setStaff(DEV_STAFF_ID, now, name);
       // 레벨 50 · ★100, 스킬·초월 수련은 전부 최대 랭크로 찍어 두고(슈퍼 계정 예산), 능력치 포인트는 모두 남겨 둔다 (직접 배분해 시험)
-      await getRpgStore().update(DEV_STAFF_ID, (s) => {
+      // 11/20 저장해 둔 캐릭터(능력치 배분·장비·단축키)가 있으면 그걸로 시작 (lib/devPersist)
+      const saved = devRpgLoad<unknown>();
+      await getRpgStore().update(DEV_STAFF_ID, (cur) => {
+        const s = saved ? normalize(saved) : cur;
         const skills = Object.fromEntries(SKILLS.map((k) => [k.id, k.maxLevel])) as CharacterState["skills"];
         const tSkills = Object.fromEntries(T_NODES.map((n) => [n.id, n.maxLevel])) as CharacterState["tSkills"];
         return {
-          state: { ...s, level: Math.max(s.level, MAX_LEVEL), exp: 0, tLevel: TRANSCEND_MAX, tExp: 0, skills, tSkills, treeVer: SKILL_TREE_VERSION, skillPoints: 0 },
+          // 11/20 회장님 독대 시험: 야근 빌딩 120층 기록 (입장 조건 100층)
+          state: dressed({ ...s, level: Math.max(s.level, MAX_LEVEL), exp: 0, tLevel: TRANSCEND_MAX, tExp: 0, skills, tSkills, treeVer: SKILL_TREE_VERSION, skillPoints: 0, fBest: Math.max(s.fBest ?? 0, 120) }),
           result: null,
         };
       });

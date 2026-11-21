@@ -57,6 +57,7 @@ import {
   type WhisperMsg,
   WHO_ON_MAX,
   readChatNameStyle,
+  fireworkShowMs,
 } from "@tomb/protocol";
 import type { AppearanceChange } from "../sprites/avatar";
 import { readChatLog, type IncomingChatLine } from "../logic/chatLog";
@@ -70,6 +71,7 @@ import { MoveThrottle, type NetPose } from "./sendThrottle";
 import { bodyFromWsUrl, SYNC_EVERY_MS, SyncPolicy } from "./syncPolicy";
 import { deviceHeaders } from "@/lib/deviceMark";
 import { CHANNEL_FULL_MSG, lobbyChannelFull } from "./switchPolicy";
+import { staffTpDenyText, type StaffTpDenyWhy } from "@tomb/protocol";
 
 // 실시간 연결 (명세 3-2, 4-1).
 //  - (재)연결마다 POST /api/join 으로 새 토큰을 받는다 (토큰 60초 유효). 같은 채널로 돌아가면 서버 유예(20초) 안에서 sid·좌석 유지
@@ -107,7 +109,8 @@ export type NetCallbacks = {
   onPeers(peers: PeerInfo[], seats: Record<string, Sid>): void;
   /** extra = 46·25번 염색·몸 모양 변경 (새 서버만 보낸다) */
   onLook(sid: Sid, look: string[], extra?: AppearanceChange): void;
-  onFirework(sid: Sid, item: string, x: number, y: number): void;
+  /** wait = 11/20 광역 불꽃쇼가 앞 쇼 뒤로 밀린 ms (없으면 0) */
+  onFirework(sid: Sid, item: string, x: number, y: number, wait?: number): void;
   /** 한 번 하는 동작 (종 치기·물 튀기기·손 흔들기·환호). 내 것은 오지 않는다 */
   onAct(sid: Sid, kind: ActKind, x: number, y: number): void;
   /** 정해진 문장 말풍선 (PHRASES id). 내 것은 오지 않는다 */
@@ -190,7 +193,7 @@ const MAP_REPLY_MS = 4000;
 /** 맵 옮기기 답이 없을 때 다시 보내는 횟수 (서버는 맵 요청을 1초에 한 번만 받는다 — MAP_REPLY_MS 간격이면 넉넉하다) */
 const MAP_RETRIES = 2;
 /** 맵을 옮기는 중에 버리는 옛 맵 소식 (사람·자리·몸짓·말풍선). 11/19 goblinCaught는 채널 모두에게 오는 소식이라 버리지 않는다 */
-const OLD_MAP_EVENTS = new Set(["join", "leave", "seat", "emote", "graveEvent", "look", "act", "say", "emo", "chat", "mood", "ride", "rod", "away", "firework", "peers", "goblin", "goblinGone", "chatLog", "bbq", "snowman", "snowmanGone", "snowHold", "snowStack", "snowStackGone", "snowball", "snowHit"]);
+const OLD_MAP_EVENTS = new Set(["join", "leave", "seat", "emote", "graveEvent", "look", "act", "say", "emo", "chat", "mood", "ride", "rod", "away", "firework", "peers", "goblin", "goblinGone", "chatLog", "bbq", "snowman", "snowmanGone", "snowHold", "snowStack", "snowStackGone", "snowball", "snowHit", "tpFx"]);
 
 export type NetOptions = { name: string; color: string; channel: number | "auto"; debug?: boolean; body?: string };
 
@@ -272,7 +275,8 @@ export class RealtimeClient {
   private hidden = false;
   /** 휴식 중 (다른 창을 보는 중이라 게임 루프를 재움 — game/backgroundLoop). 탭 숨김과 똑같이 다룬다 */
   private resting = false;
-  private pendingWarp: { x: number; y: number } | null = null;
+  /** tp = 11/20 운영자 순간이동 (warp 대신 tp로 보낸다 — 서버가 운영자 연결만 받는다) */
+  private pendingWarp: { x: number; y: number; tp?: { sid: number; m: MapId } } | null = null;
   private readonly joinLimiter = new JoinLimiter();
   private token: CachedToken<Extract<JoinResponse, { mode: "channel" }>> | null = null;
   private hiddenIdleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -339,7 +343,7 @@ export class RealtimeClient {
    * 11/15 맵 옮기기 (버스). 접속 중이면 연결 그대로 서버에 알리고 mapped를 기다린다. 아니면 다음 접속을 그 맵으로.
    * 돌려주는 값: 서버에 보냈는지 (false면 접속이 없어 다음 접속 때 반영)
    */
-  switchMap(map: MapId, x: number, y: number): boolean {
+  switchMap(map: MapId, x: number, y: number, tpSid?: number): boolean {
     const from = this.map;
     this.map = map;
     this.pendingWarp = null;
@@ -349,7 +353,8 @@ export class RealtimeClient {
     this.mapPending = map;
     this.peers.clear();
     this.throttle.reset();
-    const msg = { t: "map", m: map, x: Math.round(x), y: Math.round(y) } as const;
+    // 11/20 운영자 순간이동이면 그 사람 옆으로 (tp — 서버가 같은 약속으로 mapped를 답한다)
+    const msg = tpSid !== undefined ? ({ t: "tp", sid: tpSid, m: map, x: Math.round(x), y: Math.round(y) } as const) : ({ t: "map", m: map, x: Math.round(x), y: Math.round(y) } as const);
     this.send(msg);
     // 답이 없으면 MAP_RETRIES번 다시 보낸다 (11/16 운영: 사람이 많은 채널에서 캠핑장에 내리자마자 마을로 돌아온 문의 — 서버는 같은 맵 요청을 자리 옮기기로만 받는다).
     // 그래도 없으면 (맵을 모르는 옛 서버) 옮기지 못한 것으로 — 처음 맵 그대로, 목록은 다시 받는다
@@ -412,7 +417,7 @@ export class RealtimeClient {
     const lobby = await fetchLobby();
     if (seq !== this.switchSeq || this.stopped) return;
     if (channel === this.channel && this.online) return;
-    if (lobbyChannelFull(lobby, channel)) {
+    if (lobbyChannelFull(lobby, channel, bridge.last("me:staff")?.on === true)) {
       this.refuse(channel, fullMsg, false);
       return;
     }
@@ -487,8 +492,10 @@ export class RealtimeClient {
     if (!this.online) return;
     if (this.pendingWarp) {
       // 서버 warp 쿨다운(1초) 안이면 기다린다. 그동안 MOVE도 보내지 않아야 속도 검증에 걸리지 않는다
-      if (now - this.lastWarpAt < WARP_COOLDOWN_MS || this.hidden) return;
-      this.send({ t: "warp", x: Math.round(this.pendingWarp.x), y: Math.round(this.pendingWarp.y) });
+      const w = this.pendingWarp;
+      if ((!w.tp && now - this.lastWarpAt < WARP_COOLDOWN_MS) || this.hidden) return;
+      if (w.tp) this.send({ t: "tp", sid: w.tp.sid, m: w.tp.m, x: Math.round(w.x), y: Math.round(w.y) });
+      else this.send({ t: "warp", x: Math.round(w.x), y: Math.round(w.y) });
       this.lastWarpAt = now;
       this.pendingWarp = null;
       this.throttle.reset();
@@ -514,6 +521,11 @@ export class RealtimeClient {
 
   warp(x: number, y: number): void {
     this.pendingWarp = { x, y };
+  }
+
+  /** 11/20 운영자 순간이동 (같은 맵): 다음 tick에 tp로 보낸다 (그 사이 MOVE는 보내지 않는다) */
+  staffTp(sid: number, x: number, y: number): void {
+    this.pendingWarp = { x, y, tp: { sid, m: this.map } };
   }
 
   sit(seatId: string): void {
@@ -992,8 +1004,12 @@ export class RealtimeClient {
           if (m.sid !== this.mySid && typeof m.on === "boolean") this.h.onAway?.(m.sid, m.on);
           break;
         case "firework":
-          // 내 폭죽은 누른 순간 이미 터뜨렸다 → 중복 재생하지 않는다
-          if (m.sid !== this.mySid) this.h.onFirework(m.sid, m.item, m.x, m.y);
+          // 내 폭죽은 누른 순간 이미 터뜨렸다 → 중복 재생하지 않는다 (광역 불꽃쇼는 서버가 정한 때에 모두 같이 — 내 것도 여기서)
+          if (m.sid !== this.mySid || fireworkShowMs(m.item) > 0) this.h.onFirework(m.sid, m.item, m.x, m.y, typeof m.w === "number" && m.w > 0 ? m.w : 0);
+          break;
+        case "fireworkBusy":
+          bridge.emit("firework:busy", { left: Math.max(0, Number(m.left) || 0) });
+          bridge.emit("toast", { message: "지금 다른 불꽃쇼가 하고 있어요. 끝나고 다시 쏴 주세요" });
           break;
         // ── 22번 황금 고블린 (판정은 서버, 여기서는 전달만) ──
         case "goblin":
@@ -1045,6 +1061,12 @@ export class RealtimeClient {
           break;
         case "squirrels":
           this.cb.onSquirrels?.({ by: typeof m.by === "string" ? m.by : "", seed: Number(m.seed) >>> 0, at: Number(m.at) || Date.now() });
+          break;
+        case "tpFx":
+          if (typeof m.x === "number" && typeof m.y === "number") bridge.emit("tp:fx", { x: m.x, y: m.y, k: m.k === "out" ? "out" : "in", map: this.map });
+          break;
+        case "tpNo":
+          bridge.emit("friend:notice", { message: staffTpDenyText(m.why as StaffTpDenyWhy) });
           break;
         case "squirrelsWait":
           this.cb.onSquirrelsWait?.(Math.max(0, Number(m.left) || 0));

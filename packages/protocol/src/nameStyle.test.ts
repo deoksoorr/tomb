@@ -7,6 +7,7 @@ import {
   encodeEvent,
   isNameSlot,
   isShopListed,
+  isChairItem,
   ITEMS,
   LOOK_MAX_PARTS,
   MAX_MESSAGE_BYTES,
@@ -133,7 +134,8 @@ describe("착용 목록 (look)", () => {
     // 닉네임 꾸미기가 없는 사람(옛 화면 포함)은 지금처럼 옛 실시간 서버 한도 안 → 웹을 먼저 올려도 그대로 보인다.
     // 11/15 수집 의뢰 보상은 새 실시간 서버와 함께 나오므로 옛 한도 계산에서 뺀다 (부위마다 의뢰 보상이 아닌 가장 긴 id, 몸도 처음부터 있던 것)
     const oldLongest = new Map<string, string>();
-    for (const i of ITEMS) if (i.kind === "cosmetic" && i.slot && !i.quest && (oldLongest.get(i.slot)?.length ?? 0) < i.id.length) oldLongest.set(i.slot, i.id);
+    // 11/20 회장님 독대 1위 보상도 새 실시간 서버와 함께 나온다 (옛 서버는 모르는 id를 버린다)
+    for (const i of ITEMS) if (i.kind === "cosmetic" && i.slot && !i.quest && !isChairItem(i.id) && (oldLongest.get(i.slot)?.length ?? 0) < i.id.length) oldLongest.set(i.slot, i.id);
     const oldBody = [...AVATAR_BODIES].filter((b) => !QUEST_BODIES.some((q) => q.id === b.id)).map((b) => b.id).sort((a, b) => b.length - a.length)[0];
     const without = await signGrant(s, { kind: "look", visitorId: "V1StGXR8_Z5jdHi6B-myT", look: [...oldLongest.values()].filter((id) => !isNameSlot(ITEMS.find((i) => i.id === id)?.slot)), exp, dye, body: oldBody, champ: CHAMP_ALL | CHAMP_AURA_OFF });
     expect(without.length).toBeLessThanOrEqual(400);

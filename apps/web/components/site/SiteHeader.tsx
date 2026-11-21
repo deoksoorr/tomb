@@ -23,13 +23,14 @@ const SUN = (
   </svg>
 );
 
-export type SiteNav = "news" | "guide" | "faq" | "story" | null;
+export type SiteNav = "news" | "guide" | "faq" | "story" | "contact" | null;
 
 const NAV: readonly { key: Exclude<SiteNav, null>; href: string; label: string }[] = [
   { key: "news", href: "/news", label: "개발자 노트" },
   { key: "guide", href: "/guide", label: "가이드" },
   { key: "faq", href: "/faq", label: "자주 묻는 질문" },
   { key: "story", href: "/story", label: "만든 이야기" },
+  { key: "contact", href: "/contact", label: "문의하기" },
 ];
 
 const THEME_KEY = "site.theme";

@@ -10,6 +10,7 @@ import type { PeerInfo, Sid } from "./types";
 import { isMapId, type AwayMapId, type ChatPlace, type MapId } from "./camp";
 import type { BbqItemId } from "./bbq";
 import { SNOWBALL_HIT_H_MAX } from "./snowfight";
+import type { StaffTpDenyWhy } from "./staffTp";
 import { SNOWMAN_ID_RE, isSnowBall, type SnowAct, type SnowBall, type SnowHold, type SnowmanDenyWhy, type SnowmanInfo, type SnowStackInfo } from "./snowman";
 
 // 드문 이벤트는 짧은 JSON text 프레임. 이름과 색은 입장 때(welcome/join) 한 번만 보낸다.
@@ -82,6 +83,11 @@ export type C2S =
    * 서버는 입장 토큰에 캠핑장 허락(camp)이 있을 때만 캠핑장으로 보내고, 결과를 mapped로 알린다. 옛 서버는 모르는 t라 버린다
    */
   | { t: "map"; m: MapId; x: number; y: number }
+  /**
+   * 11/20 운영자 순간이동: 같은 채널 sid 옆 (x,y)로, m = 그 사람이 있는 맵 (다르면 맵도 옮긴다 → mapped로 답한다).
+   * 서버는 운영자(staff) 연결만 받는다. 상대가 실내면 tpNo. 옛 서버는 모르는 t라 버린다 (staffTp.ts)
+   */
+  | { t: "tp"; sid: Sid; m: MapId; x: number; y: number }
   /** 11/15 캠핑장 바베큐 한 접시 증서 (웹이 포인트를 쓰고 서명). 서버가 검증해 같은 맵에 bbq로 알린다. 옛 서버는 버린다 */
   | { t: "bbq"; grant: string }
   // ── 11/18 캠핑장 눈사람 만드는 과정 (v73 — 11/17 snowman { x, y } 한 번 보내던 것을 바꿨다). 옛 서버는 모르는 t라 버린다 ──
@@ -141,7 +147,10 @@ export type S2C =
   | { t: "graveEvent"; sid: Sid; kind: GraveEventKind; graveId: string }
   /** 꾸미기 변경. 46·25번: dye·body가 있으면 염색·몸 모양도 바뀐 것 (옛 클라이언트는 look만 본다) */
   | { t: "look"; sid: Sid; look: string[]; dye?: AvatarDye; body?: string; /** 주간 1위 비트 (0 = 아님, 새 웹이 낸 증서일 때만). 옛 클라이언트는 무시한다 */ champ?: number; /** 11/16 매니저 표시 (1 = 매니저, 0 = 해제, 새 웹이 낸 증서일 때만). 옛 클라이언트는 무시한다 */ mgr?: 0 | 1 }
-  | { t: "firework"; sid: Sid; item: string; x: number; y: number }
+  /** w = 11/20 광역 불꽃쇼가 앞 쇼 뒤로 밀렸으면 그만큼(ms) 기다렸다 시작 (옛 클라이언트는 무시하고 바로 터뜨린다) */
+  | { t: "firework"; sid: Sid; item: string; x: number; y: number; w?: number }
+  /** 11/20 광역 불꽃쇼 거절: 이 맵에 이미 쇼가 돌고 하나 더 기다리는 중 (보낸 사람에게만). left = 남은 ms */
+  | { t: "fireworkBusy"; left: number }
   /** sync 응답: 나를 제외한 현재 접속자 전체와 좌석. 클라이언트는 이걸로 원격 아바타를 맞춘다 */
   | { t: "peers"; peers: PeerInfo[]; seats: Record<string, Sid> }
   | { t: "act"; sid: Sid; kind: ActKind; x: number; y: number }
@@ -231,7 +240,12 @@ export type S2C =
   /** sid가 n번 눈을 던졌다 (던진 사람 빼고). 받은 때부터 뭉치기 → 날기를 각자 같은 식으로 그린다 */
   | { t: "snowball"; sid: Sid; n: number; x: number; y: number; tx: number; ty: number }
   /** sid가 by의 n번 눈에 맞았다 (맞은 사람·던진 사람 포함 모두). h = 맞은 높이 (그 자리에 퍽, 없으면 얼굴) */
-  | { t: "snowHit"; sid: Sid; by: Sid; n: number; h?: number };
+  | { t: "snowHit"; sid: Sid; by: Sid; n: number; h?: number }
+  // ── 11/20 운영자 순간이동 (staffTp.ts. 옛 클라이언트는 모르는 t라 버린다) ──
+  /** sid가 순간이동으로 (x,y)에서 사라졌다(out)·나타났다(in) → 그 자리에 반짝임 (같은 맵, 움직인 사람 빼고) */
+  | { t: "tpFx"; sid: Sid; x: number; y: number; k: "out" | "in" }
+  /** 운영자에게만: tp를 받지 않았다 */
+  | { t: "tpNo"; why: StaffTpDenyWhy };
 
 /** 23번 확성기 방송 (보낸 사람에게도 간다) */
 /** staff = 운영자 계정이 외친 것 (Vercel이 증서에 넣은 것만 → 이름 금색) */
@@ -425,6 +439,10 @@ export function parseC2S(text: string): C2S | null {
       return { t: "snowHit", by: m.by as Sid, n: m.n as number, ...(isNum(m.h) ? { h: Math.max(0, Math.min(SNOWBALL_HIT_H_MAX, Math.round(m.h))) } : {}) };
     case "map":
       return isMapId(m.m) && isNum(m.x) && isNum(m.y) ? { t: "map", m: m.m, x: Math.round(m.x), y: Math.round(m.y) } : null;
+    case "tp":
+      return Number.isInteger(m.sid) && (m.sid as number) >= 0 && isMapId(m.m) && isNum(m.x) && isNum(m.y)
+        ? { t: "tp", sid: m.sid as Sid, m: m.m, x: Math.round(m.x), y: Math.round(m.y) }
+        : null;
     case "use":
       return typeof m.u === "string" && USE_ID_RE.test(m.u) && typeof m.a === "number" && Number.isInteger(m.a) && m.a >= 0 && m.a <= 255
         ? { t: "use", u: m.u, a: m.a }

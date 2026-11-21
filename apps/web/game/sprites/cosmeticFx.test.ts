@@ -24,7 +24,7 @@ describe("F8 catalog", () => {
       expect(SPRITE_COSMETICS as readonly string[]).toContain(it.id);
       expect(hasItemIcon(it.id), it.id).toBe(true);
       if (it.slot === "pet") continue; // 펫은 동물원 사육사가 영구로만 판다 (값은 ZOO_PETS, zoo.test.ts)
-      if (it.staff || it.champ || it.urgent) continue; // 31번 운영자 전용·주간 1위 전용은 값 0 (운영자만 영구로 받는다 / 1위만 빌려 입는다)
+      if (it.staff || it.champ || it.chair || it.urgent) continue; // 31번 운영자 전용·주간 1위 전용은 값 0 (운영자만 영구로 받는다 / 1위만 빌려 입는다)
       if (it.seasonSet) continue; // 11/19 계절 한정 세트는 코디 기획안 값 사다리(하루권 120~2,600)를 따른다 (seasonSet.test.ts)
       if (it.stargaze) continue; // 11/20 별자리 잇기 전용 전설 유성우 오라 (팔지 않는다 — 값은 꾸미기 점수용, lib/rpg/meteorDrop)
       expect(it.price).toBeGreaterThanOrEqual(60);
@@ -331,6 +331,56 @@ describe("F8 effects (CosmeticFxSim)", () => {
       let n = 0;
       for (let i = 0; i < g.px.length; i++) if (g.px[i] & 255) n++;
       expect(n, id).toBeGreaterThan(12);
+    }
+  });
+});
+
+describe("회장님 독대 1위 보상 연출 (chairFx)", () => {
+  // 가장 어려운 보상이라 화려하지만 가볍게: 한 사람에 그림 수 상한 · 화면 밖이면 오라는 안 그린다 · 움직임 줄이기면 더 적고 같은 모습
+  const input = (o: Partial<FxInput> = {}): FxInput => ({
+    now: 1000,
+    dt: 16,
+    x: 100,
+    y: 200,
+    headY: 200,
+    dir: DIR.down,
+    moving: false,
+    hidden: false,
+    artTop: 20,
+    shoulder: 7,
+    hand: { dx: 5.5, up: 6 },
+    reduced: false,
+    ...o,
+  });
+  const run = (look: string[], o: Partial<FxInput> = {}, n = 200) => {
+    const sim = new CosmeticFxSim();
+    sim.setLook(look, "hood");
+    let max = 0;
+    const all: FxCmd[][] = [];
+    for (let i = 0; i < n; i++) {
+      const out: FxCmd[] = [];
+      sim.step(input({ now: 1000 + i * 41, face: { dx: 0, up: 10, top: 17 }, ...o }), out);
+      max = Math.max(max, out.length);
+      all.push(out);
+    }
+    return { max, all };
+  };
+
+  it("한 벌을 다 입어도 그림 수가 상한 안이고, 연출 그림은 모두 FX_ART에 있다", () => {
+    for (const look of [["chair_crown", "chair_aura_gold"], ["chair_band", "chair_aura_ember"]]) {
+      const { max, all } = run(look);
+      expect(max, look.join()).toBeLessThanOrEqual(40);
+      for (const out of all) for (const c of out) expect(FX_ART[c.art], c.art).toBeDefined();
+    }
+  });
+
+  it("화면 밖이면 오라는 그리지 않고, 움직임 줄이기면 시각과 무관하게 같은 모습", () => {
+    for (const aura of ["chair_aura_gold", "chair_aura_ember"]) {
+      expect(run([aura], { offscreen: true }, 20).max).toBe(0);
+      const a = run([aura], { reduced: true, now: 5 }, 1).all[0];
+      const b = run([aura], { reduced: true, now: 77777 }, 1).all[0];
+      expect(a.map((c) => [c.art, c.frame, c.x, c.y])).toEqual(b.map((c) => [c.art, c.frame, c.x, c.y]));
+      expect(a.length).toBeLessThan(run([aura]).max);
     }
   });
 });

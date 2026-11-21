@@ -33,6 +33,9 @@ const LIMITS = {
   // 사냥 스킬 트리: 한 랭크에 한 번씩 누르므로 (초기화 뒤 다시 찍기 등) 상점보다 넉넉히
   rpgSkill: { visitor: 90, ip: 2400, windowSec: MIN, message: "스킬을 너무 빨리 찍고 있어요. 잠시 뒤에 다시 시도해 주세요." },
   inquiry: { visitor: 3, ip: 300, windowSec: DAY, message: "문의는 하루에 3번까지 보낼 수 있어요." },
+  // 11/20 개발자 노트 손님 문의 (계정 없이). 계정 한도가 없으니 IP로만 — 하루 3번, 연달아는 1분에 1번 (짧은 창은 메모리 한도)
+  inquiryGuest: { visitor: null, ip: 3, windowSec: DAY, message: "문의는 하루에 3번까지 보낼 수 있어요." },
+  inquiryGuestBurst: { visitor: null, ip: 1, windowSec: MIN, message: "조금 뒤에 다시 보내 주세요." },
   // 주기 호출(머무르기·친구 목록/접속·1위 확인·랭킹·체류 신호)은 메모리 한도(memory: true) — 화면마다 몇 분에 한 번씩
   // 부르는 읽기·기록이라 Redis 명령을 쓰지 않는다. 함수 인스턴스마다 따로 세지만 도배는 그대로 막는다 (창이 1분 이하인 한도도 모두 메모리, memoryOnly)
   presence: { visitor: 2, ip: 1200, windowSec: MIN, message: "요청이 너무 잦아요.", memory: true },
@@ -61,6 +64,8 @@ const LIMITS = {
   // 친구: 신청·수락·삭제 / 목록·위치 (접속 알림은 30초 남짓마다 묻는다)
   friend: { visitor: 30, ip: 2400, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   friendRead: { visitor: 30, ip: 4800, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요.", memory: true },
+  // 11/20 운영자 「접속 중인 사람」(순간이동·채널 창 다른 맵 명단). 운영자 계정만 통과하지만 연타로 실시간 서버를 깨우지 않게
+  staffPeople: { visitor: 40, ip: 400, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요.", memory: true },
   // 23번 확성기: 계정마다 간격(MEGAPHONE_COOLDOWN_MS)과 별개로 하루 상한 (도배 방지)
   megaphone: { visitor: 20, ip: 3000, windowSec: DAY, message: "확성기는 하루에 20번까지 쓸 수 있어요." },
   // 11/17 확성기 창 고정 공지 쓰기·지우기 (운영자 계정만 — 연타로 실시간 서버를 깨우지 않게)

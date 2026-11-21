@@ -1,0 +1,1649 @@
+/* 11/20 회장님 독대 오버레이 (사냥 HUD 위, 캔버스 누르기는 그대로 지나간다) */
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: 41;
+  pointer-events: none;
+  font-family: "Galmuri11", "Galmuri9", monospace;
+  color: #f2ead3;
+}
+.layer button,
+.brief,
+.result,
+.card {
+  pointer-events: auto;
+}
+
+/* ── 피해 계기판 (위 가운데) ── */
+.meter {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(340px, calc(100vw - 32px));
+  padding: 8px 12px 10px;
+  background: rgba(14, 12, 20, 0.78);
+  box-shadow:
+    0 0 0 2px #141218,
+    inset 0 0 0 1px rgba(255, 210, 120, 0.35);
+  text-align: center;
+  transition: opacity 0.25s;
+}
+.meter.under {
+  opacity: 0.35;
+}
+.mk {
+  margin: 0;
+  font-size: 11px;
+  color: #c8b890;
+}
+.total {
+  margin: 2px 0 4px;
+  font-size: 30px;
+  line-height: 1;
+  color: #ffd25a;
+  text-shadow:
+    2px 2px 0 #3a2008,
+    0 0 10px rgba(255, 200, 80, 0.45);
+  font-variant-numeric: tabular-nums;
+}
+.meter.rec .total {
+  color: #fff2a8;
+  text-shadow:
+    2px 2px 0 #5a2a08,
+    0 0 16px rgba(255, 230, 120, 0.8);
+}
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  margin-top: 3px;
+}
+.row b {
+  color: #fff4dc;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.heat,
+.prog {
+  position: relative;
+  display: block;
+  flex: 1;
+  height: 5px;
+  background: #2a2430;
+  box-shadow: 0 0 0 1px #141218;
+}
+.heat i,
+.prog i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: linear-gradient(90deg, #ff9a3c, #ffd25a);
+}
+.meter.hot .heat i {
+  background: linear-gradient(90deg, #ff5a3c, #ffe08a);
+  box-shadow: 0 0 6px #ff7a3c;
+}
+.prog {
+  margin-top: 4px;
+}
+.prog i {
+  background: linear-gradient(90deg, #6ab8ff, #9ff0c8);
+}
+.meter.rec .prog i {
+  background: linear-gradient(90deg, #ffd25a, #fff2a8);
+}
+.left {
+  color: #9ad8ff;
+}
+.meter.rec .left {
+  color: #fff2a8;
+}
+/* 11/20 연습 판: 청록 (#3ab8c8) 테두리 · 기록 안 남는다는 작은 줄 */
+.meter.practice {
+  background: rgba(10, 30, 40, 0.82);
+  box-shadow:
+    0 0 0 2px #141218,
+    inset 0 0 0 1px #3ab8c8,
+    0 0 0 4px rgba(58, 184, 200, 0.45);
+}
+.meter.practice .mk {
+  color: #9fe6f0;
+}
+.pnote {
+  display: none;
+  margin-top: 3px;
+  font-size: 10px;
+  color: #9fe6f0;
+}
+.meter.practice .pnote {
+  display: block;
+}
+
+/* 11/21 시간 칸 셋: 이름(작게) 위 · 값 아래, 옆으로 나란히 */
+.timers {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  margin: 6px 0 0;
+  padding-top: 5px;
+  border-top: 1px solid rgba(255, 210, 120, 0.22);
+}
+.timers > div {
+  display: grid;
+  gap: 1px;
+}
+.timers > div + div {
+  border-left: 1px solid rgba(255, 210, 120, 0.16);
+}
+.timers dt {
+  font-size: 9px;
+  color: #a89a7a;
+}
+.timers dd {
+  margin: 0;
+}
+.timers b {
+  font-size: 14px;
+  font-weight: 400;
+  color: #fff4dc;
+  font-variant-numeric: tabular-nums;
+}
+.meter.crunchNow .tPhase b {
+  color: #ff6a50;
+}
+.tSeal b {
+  color: #ffb0a0;
+}
+.meter.sealSoon .tSeal b {
+  color: #ff5a44;
+  animation: sealBlink 0.4s steps(1) infinite alternate;
+}
+@keyframes sealBlink {
+  to {
+    opacity: 0.4;
+  }
+}
+
+/* 11/21 계기판 아래 반려 줄 (계기판과 같이 흐려진다) */
+.sealRow {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  transform: translateX(-50%);
+}
+.sealRowLeft {
+  padding: 1px 5px;
+  background: rgba(14, 12, 20, 0.78);
+  color: #c8b890;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.sealIcons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sealIcons li {
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: rgba(14, 12, 20, 0.85);
+  box-shadow:
+    0 0 0 1px #141218,
+    inset 0 0 0 1px rgba(255, 106, 90, 0.55);
+  pointer-events: auto;
+}
+.sealIcons li img {
+  filter: grayscale(0.6) brightness(0.8);
+}
+.sealIcons li i {
+  position: absolute;
+  inset: 30% -3px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #e83a2a;
+  background: rgba(40, 6, 6, 0.55);
+  color: #ff5a44;
+  font-size: 8px;
+  font-style: normal;
+  line-height: 1;
+  transform: rotate(-14deg);
+}
+.result.practice {
+  box-shadow:
+    0 0 0 2px #141218,
+    0 0 0 4px #3ab8c8,
+    0 8px 0 4px rgba(0, 0, 0, 0.4);
+}
+.pband {
+  margin: -16px -18px 10px;
+  padding: 4px 0;
+  background: #1f6a78;
+  color: #e6fbff;
+  font-size: 12px;
+  letter-spacing: 2px;
+}
+/* 11/22 무적 시험 판 결과 (보라) */
+.result.godRun {
+  box-shadow:
+    0 0 0 2px #141218,
+    0 0 0 4px #a77cf0,
+    0 8px 0 4px rgba(0, 0, 0, 0.4);
+}
+.pband.godBand {
+  background: #4a2f70;
+  color: #f0e4ff;
+}
+/* 11/22 브리핑 중 멈춤: 나가면 어떻게 되는지 */
+.card p.pauseNote {
+  margin-top: -6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #cfc6b8;
+  word-break: keep-all;
+}
+.pauseNote small {
+  display: block;
+  font-size: 10px;
+}
+.pauseNote small[data-tone="warn"] {
+  color: #ffb28a;
+}
+.pauseNote small[data-tone="good"] {
+  color: #9ff0c8;
+}
+
+/* ── 업무 브리핑 · 결과 · 작은 창 ── */
+.brief,
+.result,
+.card {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  padding: 16px 18px;
+  background: #1c1822;
+  box-shadow:
+    0 0 0 2px #141218,
+    0 0 0 4px #6a4a30,
+    0 8px 0 4px rgba(0, 0, 0, 0.4);
+}
+.card {
+  width: min(320px, calc(100vw - 32px));
+  text-align: center;
+}
+.card p {
+  margin: 0 0 12px;
+}
+.bk {
+  margin: 0 0 4px;
+  font-size: 11px;
+  color: #ffc94a;
+}
+.brief h3,
+.result h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 400;
+  color: #fff4dc;
+}
+/* 11/22 업무 브리핑 간략화: 제목 한 줄 · 칩 두 줄 · (헬) 한 줄 · 시작 */
+.brief {
+  width: min(420px, calc(100vw - 32px));
+  padding: 14px 16px;
+}
+.bTitle {
+  margin: 0 0 10px;
+  font-size: 15px;
+  color: #fff4dc;
+}
+.bTitle small {
+  margin-left: 6px;
+  font-size: 11px;
+  color: #ffc94a;
+}
+.chips {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chips li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 3px 8px;
+  font-size: 12px;
+  color: #f2ead3;
+  background: #26202e;
+  box-shadow: inset 0 0 0 1px #3a3044;
+}
+.chips li i {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  box-shadow: 0 0 0 1px #141218;
+}
+.chips kbd,
+.brief .btn kbd {
+  padding: 1px 5px;
+  font: 11px "Galmuri9", monospace;
+  color: #fff4dc;
+  background: #3a3044;
+  box-shadow: inset 0 -2px 0 #141218;
+}
+.chips .cKey {
+  color: #e9f7d9;
+  background: rgba(70, 140, 60, 0.28);
+  box-shadow: inset 0 0 0 1px #7fcf6a;
+}
+.chips .cHeal {
+  color: #ffd0c6;
+  background: rgba(150, 30, 30, 0.3);
+  box-shadow: inset 0 0 0 1px #ff6a5a;
+}
+.chips .cCoffee {
+  color: #f6e2c0;
+  background: rgba(130, 90, 40, 0.3);
+  box-shadow: inset 0 0 0 1px #c89858;
+}
+.lr {
+  background: #ff3b30;
+}
+.lg {
+  background: #5fe0a0;
+}
+.ly {
+  background: transparent;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2px #ffd878,
+    0 0 0 3px #141218 !important;
+}
+.btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+.btn,
+.btnGhost {
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 0;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 0 0 2px #141218;
+}
+.btn {
+  background: #d8a840;
+  color: #2a1808;
+}
+.btn:hover {
+  background: #f2c46b;
+}
+.btnGhost {
+  background: #2e2836;
+  color: #f2ead3;
+}
+.btnGhost:hover {
+  background: #3e3646;
+}
+.brief .btn {
+  width: 100%;
+  margin-top: 4px;
+}
+.brief .btn kbd {
+  margin-left: 8px;
+  color: #2a1808;
+  background: rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.25);
+}
+
+/* ── 처음 보는 기술 · 배너 ── */
+.caption {
+  position: absolute;
+  left: 50%;
+  top: max(22%, 248px);
+  transform: translateX(-50%);
+  width: min(380px, calc(100vw - 32px));
+  padding: 8px 12px;
+  background: rgba(40, 10, 14, 0.9);
+  box-shadow:
+    0 0 0 2px #141218,
+    inset 0 0 0 1px #ff5a3c;
+  display: grid;
+  gap: 3px;
+  text-align: center;
+  animation: chairFade 2.6s ease forwards;
+}
+.ck {
+  margin: 0;
+  font-size: 10px;
+  color: #ff9a7a;
+}
+.caption b {
+  font-weight: 400;
+  font-size: 15px;
+  color: #fff4dc;
+}
+.caption span {
+  font-size: 11px;
+  color: #ffd8c8;
+  line-height: 1.45;
+  text-wrap: balance;
+}
+.banner {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 40%;
+  margin: 0;
+  padding: 0 16px;
+  text-align: center;
+  font-size: clamp(16px, 3.4vw, 28px);
+  color: #ffe8a8;
+  text-shadow:
+    2px 2px 0 #141218,
+    0 0 12px rgba(255, 200, 120, 0.5);
+  animation: chairFade 2.4s ease forwards;
+}
+.bannerHot {
+  color: #ff9a80;
+  text-shadow:
+    2px 2px 0 #141218,
+    0 0 14px rgba(255, 80, 50, 0.7);
+}
+/* 11/22 즉사 큰 글자 (프로젝트 드랍): 위쪽에 쾅 찍히고 1.5초에 걷힌다 — 달려갈 판 가운데는 가리지 않게 */
+.bannerBig {
+  /* PC 계기판(위 가운데) 밑 */
+  top: max(204px, 24%);
+  font-size: clamp(30px, 7vw, 60px);
+  letter-spacing: 0.06em;
+  color: #ff5a44;
+  text-shadow:
+    3px 3px 0 #141218,
+    -2px -2px 0 #141218,
+    0 0 18px rgba(255, 40, 30, 0.8);
+  animation: chairSlam 1.5s ease-out forwards;
+}
+/* 폰: 위 HUD 바로 밑 */
+@media (max-width: 560px), (max-height: 520px) {
+  .bannerBig {
+    top: max(86px, 13%);
+  }
+}
+@keyframes chairSlam {
+  0% {
+    opacity: 0;
+    transform: scale(1.8);
+  }
+  12% {
+    opacity: 1;
+    transform: scale(0.94);
+  }
+  20% {
+    transform: scale(1.04) translateX(-3px);
+  }
+  28% {
+    transform: scale(1) translateX(3px);
+  }
+  36% {
+    transform: none;
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+}
+@keyframes chairFade {
+  0% {
+    opacity: 0;
+    transform: translateX(var(--tx, 0)) scale(1.06);
+  }
+  10% {
+    opacity: 1;
+    transform: translateX(var(--tx, 0)) scale(1);
+  }
+  82% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.caption {
+  --tx: -50%;
+}
+.sending {
+  position: absolute;
+  left: 50%;
+  bottom: 22%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  color: #d8d0c0;
+  text-shadow: 1px 1px 0 #141218;
+}
+
+/* ── 결과 ── */
+.result {
+  text-align: center;
+  animation: chairRise 0.4s ease;
+}
+@keyframes chairRise {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -44%);
+  }
+}
+.rk {
+  margin: 0;
+  font-size: 11px;
+  color: #c8b890;
+}
+.rTotal {
+  margin: 2px 0 6px;
+  font-size: clamp(28px, 7vw, 40px);
+  line-height: 1.1;
+  color: #ffd25a;
+  text-shadow: 2px 2px 0 #3a2008;
+  font-variant-numeric: tabular-nums;
+}
+.newBest {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: #fff2a8;
+  text-shadow: 0 0 10px rgba(255, 230, 120, 0.8);
+  animation: chairPop 0.5s ease;
+}
+@keyframes chairPop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.15);
+  }
+}
+.rList {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+  margin: 0 0 10px;
+  font-size: 12px;
+}
+.rList div {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 6px;
+  background: #26202e;
+}
+.rList dt {
+  color: #b8a8c8;
+}
+.rList dd {
+  margin: 0;
+  color: #fff4dc;
+}
+.pts {
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+.pts b {
+  color: #9ff0c8;
+  font-weight: 400;
+}
+.warn {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: #ff9a7a;
+}
+.confetti {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.confetti i {
+  position: absolute;
+  top: -10px;
+  width: 6px;
+  height: 6px;
+  animation: chairFall 1.8s linear infinite;
+}
+@keyframes chairFall {
+  to {
+    transform: translateY(420px) rotate(540deg);
+    opacity: 0;
+  }
+}
+/* 11/20 단계 전환 화면: 격투 게임 라운드 전환처럼 화면을 가로지르는 굵은 띠 */
+.phaseCard {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 38%;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 5;
+}
+.phaseBand {
+  width: 100%;
+  padding: 14px 16px 16px;
+  text-align: center;
+  background: linear-gradient(90deg, transparent, rgba(20, 14, 24, 0.92) 12%, rgba(20, 14, 24, 0.92) 88%, transparent);
+  border-top: 3px solid #ffd25a;
+  border-bottom: 3px solid #ffd25a;
+  box-shadow: 0 0 0 2px rgba(20, 18, 24, 0.9);
+  animation: phaseSweep 1.7s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+}
+.phaseBand p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.phaseN {
+  font-size: clamp(30px, 8vw, 64px);
+  line-height: 1.05;
+  letter-spacing: 0.06em;
+  color: #ffe08a;
+  text-shadow:
+    3px 3px 0 #141218,
+    -2px -2px 0 #141218,
+    0 0 18px rgba(255, 200, 90, 0.55);
+}
+.phaseName {
+  margin-top: 4px !important;
+  font-size: clamp(18px, 4.6vw, 32px);
+  color: #fff4dc;
+  text-shadow: 2px 2px 0 #141218;
+}
+.phaseSub {
+  margin-top: 4px !important;
+  font-size: clamp(13px, 3.2vw, 18px);
+  color: #d8c8b0;
+  text-shadow: 1px 1px 0 #141218;
+}
+.phaseCrunch .phaseBand {
+  border-color: #ff5a3c;
+  background: linear-gradient(90deg, transparent, rgba(70, 6, 10, 0.94) 12%, rgba(70, 6, 10, 0.94) 88%, transparent);
+  animation:
+    phaseSweep 1.7s cubic-bezier(0.2, 0.9, 0.3, 1) forwards,
+    phaseRed 0.24s steps(2) 5;
+}
+.phaseCrunch .phaseN {
+  color: #ff8a70;
+  text-shadow:
+    3px 3px 0 #141218,
+    -2px -2px 0 #141218,
+    0 0 22px rgba(255, 60, 30, 0.8);
+}
+.phaseCrunch .phaseSub {
+  color: #ffd0c8;
+  font-size: clamp(15px, 3.8vw, 22px);
+}
+@keyframes phaseSweep {
+  0% {
+    transform: translateX(-110%) skewX(-12deg);
+    opacity: 0;
+  }
+  18% {
+    transform: translateX(0) skewX(-12deg);
+    opacity: 1;
+  }
+  26%,
+  78% {
+    transform: translateX(0) skewX(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(110%) skewX(-12deg);
+    opacity: 0;
+  }
+}
+@keyframes phaseRed {
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(20, 18, 24, 0.9),
+      0 0 40px 10px rgba(255, 40, 20, 0.7);
+  }
+}
+/* 움직임 줄이기: 띠 없이 글자만 잠깐 */
+.phaseStill .phaseBand {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  animation: chairFade 1.7s ease forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phaseBand {
+    background: none;
+    border: 0;
+    box-shadow: none;
+    animation: chairFade 1.7s ease forwards !important;
+  }
+  .confetti i,
+  .caption,
+  .banner,
+  .result,
+  .newBest {
+    animation-duration: 0.01s;
+  }
+  .caption,
+  .banner {
+    animation: none;
+  }
+}
+
+/* 폰: 사냥 HUD 윗줄(체력·SP) 아래로 계기판을 작게 */
+@media (max-width: 640px) {
+  .meter {
+    top: 108px;
+    width: min(240px, calc(100vw - 32px));
+    padding: 5px 8px 6px;
+  }
+  .total {
+    font-size: 22px;
+  }
+  /* 가운데(내 캐릭터)를 가리지 않게 스킬 칸 위로 */
+  .caption {
+    top: auto;
+    bottom: 220px;
+  }
+  .brief {
+    top: 54%;
+    /* 11/21 헬 반려 안내 한 줄이 늘어 화면 밖으로 넘쳤다 → 54% 가운데에서 위아래가 다 보이게 (넘치면 안에서 스크롤) */
+    max-height: calc(92dvh - 16px);
+  }
+  .sealRuleTip {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+  /* 스크롤해도 [바로 시작]은 늘 보이게 */
+  .brief > .btn {
+    position: sticky;
+    bottom: 0;
+    box-shadow: 0 0 0 6px #1c1822;
+  }
+}
+
+/* ── 11/21 개발 서버 운영자 무적(시험) 단추 (RunHud 키 안내 옆) · 켜짐 표시 ── */
+.godBtn {
+  min-height: 36px;
+  padding: 0 8px;
+  border: 0;
+  background: #2a2430;
+  color: #cfc6b8;
+  font: 11px "Galmuri11", "Galmuri9", monospace;
+  box-shadow:
+    0 0 0 2px #141218,
+    inset 0 0 0 1px #5a5064;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.godBtn kbd {
+  font-family: "Galmuri9", monospace;
+  opacity: 0.8;
+}
+.godOn {
+  background: #34244a;
+  color: #e2ccff;
+  box-shadow:
+    0 0 0 2px #141218,
+    inset 0 0 0 1px #a77cf0;
+}
+/* 11/22 무적 시험 = 보라 (연습 판 청록과 따로) */
+.godTag {
+  position: absolute;
+  top: 24px;
+  right: 104px;
+  margin: 0;
+  padding: 2px 6px;
+  font-size: 10px;
+  color: #e2ccff;
+  background: rgba(44, 28, 66, 0.9);
+  box-shadow: 0 0 0 1px #a77cf0;
+}
+@media (pointer: coarse) {
+  .godBtn kbd {
+    display: none;
+  }
+  .godTag {
+    top: 58px;
+    right: 12px;
+  }
+}
+
+/* ── 11/21 헬 반려: 브리핑 한 줄 · 스킬 칸 위 시계·반려함 (SealDock) · 11/22 PC 가운데 예고·도장 카드 (SealCenter) ── */
+.sealRuleTip {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #ffe0d8;
+  background: rgba(120, 14, 14, 0.45);
+  box-shadow: inset 0 0 0 2px #e83a2a;
+}
+
+.sealDock {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  font-family: "Galmuri11", "Galmuri9", monospace;
+  color: #f2ead3;
+  white-space: nowrap;
+}
+.sealClock,
+.sealList {
+  background: rgba(14, 12, 20, 0.86);
+  box-shadow:
+    0 0 0 2px #141218,
+    inset 0 0 0 1px rgba(255, 106, 90, 0.45);
+}
+.sealClock {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px 5px 5px;
+}
+.sealRing {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 50%;
+  background: conic-gradient(#ff5a44 calc(var(--k, 1) * 360deg), rgba(255, 255, 255, 0.12) 0deg);
+}
+.sealRing::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: #1c1418;
+}
+.sealRing > * {
+  position: relative;
+}
+.sealRing > i {
+  padding: 0 2px;
+  border: 1px solid #e83a2a;
+  color: #ff5a44;
+  font: 700 10px "Galmuri9", monospace;
+  font-style: normal;
+  transform: rotate(-12deg);
+}
+.sealTxt {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+}
+.sealTxt em {
+  font: 10px "Galmuri9", monospace;
+  font-style: normal;
+  color: #cfc6b8;
+}
+.sealTxt b {
+  font-size: 15px;
+  color: #ffd8cc;
+}
+.sealDock[data-reveal] .sealClock {
+  background: #5a1010;
+  box-shadow:
+    0 0 0 2px #141218,
+    inset 0 0 0 2px #ff3b30;
+  animation: sealBlink 0.34s steps(1) infinite;
+}
+.sealDock[data-reveal] .sealTxt em {
+  color: #ffb0a0;
+}
+.sealDock[data-reveal] .sealTxt b {
+  font-size: 13px;
+  color: #fff4dc;
+}
+@keyframes sealBlink {
+  50% {
+    background: #2a0808;
+    box-shadow:
+      0 0 0 2px #141218,
+      inset 0 0 0 2px #7a1a14;
+  }
+}
+
+/* 반려함: PC는 늘 펼친 띠, 폰은 칩 「반려 3」 → 눌러서 펼친다 */
+.sealBox {
+  position: relative;
+}
+.sealChip {
+  display: none;
+}
+.sealList {
+  padding: 5px 8px 6px;
+}
+.sealHead {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0 0 4px;
+  font-size: 11px;
+  color: #ffb0a0;
+}
+.sealHead b {
+  font-size: 13px;
+  color: #ff5a44;
+}
+.sealHead span {
+  margin-left: auto;
+  padding-left: 10px;
+  font: 10px "Galmuri9", monospace;
+  color: #cfc6b8;
+}
+.sealList ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  max-width: 280px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sealItem {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  background: #241a1e;
+  box-shadow: inset 0 0 0 1px #4a2a2a;
+  cursor: default;
+}
+.sealItem img {
+  filter: grayscale(0.75) brightness(0.85);
+}
+.sealItem i {
+  position: absolute;
+  inset: 11px 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid #e83a2a;
+  color: #ff5a44;
+  font: 700 8px "Galmuri9", monospace;
+  font-style: normal;
+  background: rgba(40, 6, 6, 0.3);
+  transform: rotate(-14deg);
+}
+.sealItemOn {
+  box-shadow: inset 0 0 0 2px #ffd25a;
+}
+.sealPick {
+  margin: 4px 0 0;
+  font: 10px "Galmuri9", monospace;
+  color: #f2ead3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sealDock[data-reveal] .sealClock {
+    animation: none;
+  }
+}
+
+/* 11/22 PC 반려 카드: 맵 가운데 (조금 위 — 카메라가 따라가는 내 캐릭터·이름표는 화면 가운데라서). 3초 예고(3·2·1) → 같은 카드에 도장 → 걷힌다 */
+.center {
+  position: absolute;
+  /* 낮은 화면(720)에서도 위 계기판·반려 줄 밑으로 */
+  top: max(36%, 296px);
+  left: 50%;
+  width: min(460px, calc(100vw - 48px));
+  padding: 12px 18px 14px;
+  translate: -50% -50%;
+  background: rgba(30, 8, 12, 0.9);
+  box-shadow:
+    0 0 0 2px #141218,
+    inset 0 0 0 2px #e83a2a,
+    0 8px 24px rgba(0, 0, 0, 0.45);
+  text-align: center;
+  animation: centerIn 0.22s ease-out both;
+  transition: filter 0.25s;
+}
+/* 회장님·말풍선·내 캐릭터가 밑에 오면 자리는 그대로, 반투명 (opacity는 애니메이션이 써서 filter로) */
+.centerUnder {
+  filter: opacity(0.6);
+}
+.centerHead {
+  margin: 0 0 10px;
+  font-size: 15px;
+  color: #ffb0a0;
+  text-shadow: 1px 1px 0 #141218;
+  animation: sealBlinkText 0.5s steps(1) infinite;
+}
+.centerBody {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.centerIcon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 80px;
+  height: 80px;
+  flex: none;
+  background: #241a1e;
+  box-shadow: inset 0 0 0 2px #4a2a2a;
+}
+.centerIcon i {
+  position: absolute;
+  inset: 20px -10px;
+  display: grid;
+  place-items: center;
+  border: 3px solid #e83a2a;
+  color: #ff4a36;
+  font: 700 22px "Galmuri11", monospace;
+  font-style: normal;
+  background: rgba(60, 8, 8, 0.3);
+  text-shadow: 1px 1px 0 #141218;
+  transform: rotate(-14deg);
+  animation: stampSlam 0.3s cubic-bezier(0.3, 1.5, 0.5, 1) both;
+}
+.centerTxt {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+}
+.centerTxt em {
+  justify-self: start;
+  padding: 1px 6px;
+  font: 12px "Galmuri9", monospace;
+  font-style: normal;
+  color: #1a1014;
+  background: #ff8a7a;
+}
+.centerTxt em[data-kind="패시브"] {
+  background: #9ad8ff;
+}
+.centerTxt em[data-kind="궁극기"] {
+  background: #ffd25a;
+}
+.centerTxt b {
+  font-size: 22px;
+  line-height: 1.2;
+  color: #fff4dc;
+}
+.centerTxt span {
+  font-size: 13px;
+  line-height: 1.45;
+  color: #ffd0c8;
+}
+.centerCount {
+  flex: none;
+  width: 64px;
+  font: 700 56px/1 "Galmuri11", monospace;
+  color: #ff5a44;
+  text-shadow:
+    2px 2px 0 #141218,
+    0 0 12px rgba(255, 70, 50, 0.6);
+  animation: centerTick 0.35s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+/* 반려 순간: 같은 카드 — 머리줄은 회장님 한마디, 아이콘은 회색, 도장 꽝, 흔들림, 2.6초 뒤 걷힌다 */
+.centerDone {
+  animation: centerOut 2.6s ease forwards;
+}
+.centerDone .centerHead {
+  color: #ffe8a8;
+  animation: none;
+}
+.centerDone .centerBody {
+  animation: stampNudge 0.22s linear 0.22s;
+}
+.centerDone .centerIcon img {
+  filter: grayscale(0.85) brightness(1.15);
+  transition: filter 0.2s;
+}
+.centerStill,
+.centerStill .centerBody,
+.centerStill .centerIcon i {
+  animation: none;
+}
+.centerStill {
+  animation: chairFade 2.6s ease forwards;
+}
+@keyframes centerIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+@keyframes centerTick {
+  from {
+    opacity: 0.2;
+    transform: scale(1.8);
+  }
+}
+@keyframes centerOut {
+  0%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes sealBlinkText {
+  50% {
+    color: #ff5a44;
+  }
+}
+@keyframes stampSlam {
+  0% {
+    opacity: 0;
+    transform: rotate(-14deg) scale(2.6);
+  }
+  100% {
+    opacity: 1;
+    transform: rotate(-14deg) scale(1);
+  }
+}
+@keyframes stampNudge {
+  25% {
+    transform: translate(-3px, 2px);
+  }
+  50% {
+    transform: translate(3px, -1px);
+  }
+  75% {
+    transform: translate(-2px, 1px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .center,
+  .centerHead,
+  .centerCount,
+  .centerDone .centerBody,
+  .centerIcon i {
+    animation: none;
+  }
+  .centerDone {
+    animation: chairFade 2.6s ease forwards;
+  }
+}
+
+/* 폰: 반려함은 칩 → 위로 펼침, 예고는 작게 (스킬 칸·조이스틱 위로 넘지 않게) */
+@media (pointer: coarse) and (max-width: 560px) {
+  .sealChip {
+    display: block;
+    min-height: 36px;
+    padding: 0 10px;
+    border: 0;
+    background: rgba(14, 12, 20, 0.86);
+    color: #ffb0a0;
+    font: 12px "Galmuri11", monospace;
+    box-shadow:
+      0 0 0 2px #141218,
+      inset 0 0 0 1px rgba(255, 106, 90, 0.6);
+    cursor: pointer;
+  }
+  .sealChip b {
+    color: #ff5a44;
+  }
+  .sealBox {
+    position: static;
+  }
+  .sealBox[data-open] .sealChip {
+    background: #3a1010;
+  }
+  .sealList {
+    display: none;
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 6px);
+    width: 196px;
+  }
+  .sealBox[data-open] .sealList {
+    display: block;
+  }
+  .sealList ul {
+    max-width: none;
+  }
+  .sealClock {
+    gap: 6px;
+    padding: 3px 8px 3px 3px;
+  }
+  .sealRing {
+    width: 38px;
+    height: 38px;
+  }
+  .sealTxt b {
+    font-size: 13px;
+  }
+  .sealDock[data-reveal] .sealTxt b {
+    font-size: 11px;
+  }
+}
+
+/* 11/21 손가락 기기 무적(시험): 단추는 「무적」 두 글자, 표는 판 이름 옆 칩 */
+.godSmall {
+  min-width: 36px;
+  min-height: 30px;
+  padding: 0 4px;
+  font-size: 10px;
+}
+.godChip {
+  padding: 0 4px;
+  font: 9px "Galmuri9", monospace;
+  line-height: 14px;
+  color: #e2ccff;
+  background: rgba(44, 28, 66, 0.9);
+  box-shadow: 0 0 0 1px #a77cf0;
+  white-space: nowrap;
+}
+
+/* 11/21 낮은 가로 화면(폰 가로): 계기판은 왼쪽 위 체력 판 오른쪽에 작게 (판·오른쪽 단추와 겹치지 않게) */
+@media (min-width: 561px) and (max-height: 520px) {
+  .meter {
+    top: 10px;
+    left: calc(var(--safe-left, 0px) + 370px);
+    right: calc(var(--safe-right, 0px) + 72px);
+    transform: none;
+    width: auto;
+    max-width: 300px;
+    padding: 4px 10px 6px;
+  }
+  .total {
+    font-size: 22px;
+  }
+  /* 연습은 판 이름에 이미 (연습 모드) */
+  .meter.practice .pnote {
+    display: none;
+  }
+}
+
+/* 11/21 처음 보는 기술: 폰 세로는 반려 시계(스킬 칸 위) 바로 위, 낮은 가로 화면은 계기판 자리 */
+@media (max-width: 560px) {
+  .caption {
+    bottom: calc(var(--safe-bottom, 16px) + 236px);
+  }
+}
+@media (min-width: 561px) and (max-height: 520px) {
+  .caption {
+    top: 10px;
+    left: calc((var(--safe-left, 16px) + 370px + 100vw - var(--safe-right, 16px) - 60px) / 2);
+    width: min(380px, calc(100vw - var(--safe-left, 16px) - var(--safe-right, 16px) - 442px));
+  }
+  .layer:has(> .caption) > .meter {
+    visibility: hidden;
+  }
+}
+
+/* ── 11/21 폰 HUD (시안 B · PhoneHud): 위는 판 없이 테두리 글자만, 피해 숫자를 누르면 자세히 칸 ── */
+.phTop {
+  --ol: #0a0810;
+  position: absolute;
+  top: max(6px, env(safe-area-inset-top));
+  left: max(10px, env(safe-area-inset-left));
+  right: max(8px, env(safe-area-inset-right));
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: none;
+}
+.phL,
+.phDmg {
+  text-shadow:
+    -1px -1px 0 var(--ol),
+    1px -1px 0 var(--ol),
+    -1px 1px 0 var(--ol),
+    1px 1px 0 var(--ol),
+    0 2px 0 var(--ol);
+}
+.phL {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.phL p {
+  margin: 0;
+}
+.phPhase {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #ffe9a8;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.phTag {
+  padding: 0 4px;
+  background: rgba(31, 106, 120, 0.9);
+  box-shadow: 0 0 0 1px #3ab8c8;
+  color: #9fe6f0;
+  font-size: 9px;
+  font-style: normal;
+  line-height: 14px;
+  text-shadow: none;
+}
+.phTime {
+  color: #fff;
+  font-size: 22px;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+.phTime small {
+  margin-left: 4px;
+  color: #e8dcc0;
+  font-size: 10px;
+}
+.phCrunch {
+  color: #ff7a60;
+}
+.phHeal {
+  color: #ff9a8a;
+  font-size: 10px;
+  animation: chairFade 3s ease forwards;
+}
+.phR {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.phDmg {
+  display: grid;
+  justify-items: end;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #e8dcc0;
+  font: inherit;
+  text-align: right;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.phDmg small {
+  font-size: 10px;
+  line-height: 1.2;
+}
+.phDmg b {
+  color: #ffd25a;
+  font-size: 26px;
+  font-weight: 400;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+.phDmg[aria-expanded="true"] b {
+  text-decoration: underline 2px rgba(255, 210, 90, 0.6);
+  text-underline-offset: 3px;
+}
+.phSeal {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #ff8a78;
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.phSealSoon {
+  color: #ff5a44;
+  animation: sealBlink 0.4s steps(1) infinite alternate;
+}
+.phSeal img {
+  filter: drop-shadow(0 0 2px #000);
+}
+/* 11/22 반려된 스킬 아이콘 줄 (폰 — 「반려 N초」 밑, 새것이 오른쪽) */
+.phStrip {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2px;
+  margin-top: 2px;
+}
+.phStripIc {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  overflow: hidden;
+  background: rgba(30, 14, 20, 0.88);
+  box-shadow:
+    0 0 0 1px var(--ol),
+    inset 0 0 0 1px #e83a2a;
+}
+.phStripIc img {
+  filter: grayscale(0.35) sepia(0.3) hue-rotate(-20deg) saturate(1.3);
+}
+/* 도장 빛 (붉은 막) + 가는 빗금 */
+.phStripIc::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, transparent 46%, rgba(255, 70, 50, 0.9) 46% 54%, transparent 54%),
+    rgba(220, 40, 30, 0.18);
+}
+.phMore {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 2px;
+  background: rgba(46, 8, 8, 0.88);
+  box-shadow: 0 0 0 1px var(--ol);
+  color: #ff8a78;
+  font-size: 10px;
+  font-style: normal;
+  line-height: 1;
+}
+/* 다음 반려까지 남은 몫 (작은 고리) */
+.phRing {
+  --k: 1;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: conic-gradient(#ff5a44 calc(var(--k) * 360deg), rgba(40, 10, 10, 0.85) 0);
+  box-shadow: 0 0 0 1px var(--ol);
+}
+.phBtns {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+}
+.phPause {
+  width: 36px;
+  height: 36px;
+  min-height: 0;
+  pointer-events: auto;
+}
+.phBtns .godBtn {
+  min-width: 0;
+  min-height: 20px;
+  padding: 0 4px;
+  font-size: 9px;
+}
+/* 자세히 칸 (D처럼 — 오른쪽 위 피해 숫자 아래) */
+.phSheet {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  display: grid;
+  gap: 6px;
+  width: min(236px, calc(100vw - 20px));
+  max-height: calc(100dvh - 90px);
+  overflow: auto;
+  padding: 8px 10px;
+  background: rgba(18, 16, 24, 0.94);
+  box-shadow:
+    0 0 0 2px #141218,
+    inset 0 0 0 1px rgba(255, 210, 120, 0.35);
+  font-size: 11px;
+  pointer-events: auto;
+}
+.phSheet p {
+  margin: 0;
+}
+.phRows {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+.phRows div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.phRows dt {
+  color: #a89a7a;
+}
+.phRows dd {
+  margin: 0;
+  color: #fff4dc;
+  font-variant-numeric: tabular-nums;
+}
+.phStats {
+  padding-top: 4px;
+  border-top: 1px dashed #3a3044;
+}
+.phBox {
+  display: grid;
+  gap: 4px;
+}
+.phBox > p {
+  display: flex;
+  justify-content: space-between;
+  color: #a89a7a;
+}
+.phBox > p b {
+  color: #ff6a50;
+  font-weight: 400;
+}
+.phNone {
+  color: #8a8070;
+  font-size: 10px;
+}
+.phNote {
+  color: #ff9a8a;
+  font-size: 10px;
+}
+.phPrac {
+  color: #9fe6f0;
+  font-size: 10px;
+}
+.phTag.phGod {
+  background: rgba(74, 47, 112, 0.92);
+  box-shadow: 0 0 0 1px #a77cf0;
+  color: #e2ccff;
+}
+.phPrac.phGodNote {
+  color: #d4b8ff;
+}
+.phPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.phPill {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  background: #2a2430;
+  box-shadow:
+    0 0 0 1px #141218,
+    inset 0 0 0 1px #5a5064;
+  color: #cfc6b8;
+  font: 11px "Galmuri11", "Galmuri9", monospace;
+  cursor: pointer;
+}
+.phPill[aria-pressed="true"] {
+  background: rgba(30, 70, 40, 0.9);
+  box-shadow:
+    0 0 0 1px #141218,
+    inset 0 0 0 1px #7fe08a;
+  color: #b8f5b0;
+}
+
+/* 단계·반려 알림: 가운데 한 줄 1.5초 (폰) */
+.cline {
+  position: absolute;
+  top: calc(max(6px, env(safe-area-inset-top)) + 76px);
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 24px);
+  margin: 0;
+  padding: 4px 12px;
+  background: linear-gradient(90deg, transparent, rgba(14, 12, 20, 0.82) 14%, rgba(14, 12, 20, 0.82) 86%, transparent);
+  color: #ffe9a8;
+  font-size: 14px;
+  white-space: nowrap;
+  text-shadow: 0 2px 0 #0a0810;
+  transform: translateX(-50%);
+  animation: clineFade 1.5s ease forwards;
+}
+.cline b {
+  color: #ff5a44;
+  font-weight: 400;
+}
+.clineHot {
+  color: #ffb0a0;
+}
+@keyframes clineFade {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -4px);
+  }
+  12%,
+  80% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cline,
+  .phSealSoon {
+    animation: none;
+  }
+}
+/* 낮은 가로 화면: 처음 보는 기술은 위 가운데 (왼쪽 단계·오른쪽 피해 사이) */
+@media (min-width: 561px) and (max-height: 520px) {
+  .caption {
+    top: max(6px, env(safe-area-inset-top));
+    left: 50%;
+    width: min(320px, calc(100vw - 520px));
+  }
+  .cline {
+    top: calc(max(6px, env(safe-area-inset-top)) + 62px);
+  }
+}

@@ -156,6 +156,11 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
     this.events.once(Phaser.Scenes.Events.DESTROY, this.cleanup, this);
     // 시작 시각은 첫 update에서 잡는다 (새 장면의 this.time.now는 첫 프레임 전엔 0이라 연출이 바로 끝나 버렸다)
     this.t0 = -1;
+    // 11/20 운영자 순간이동: 굽지도 그리지도 않고 검은 화면 한 프레임 (첫 update에서 끝)
+    if (this.ride.instant) {
+      this.addBack(0x000000);
+      return;
+    }
     if (this.bake.done) {
       this.build();
       return;
@@ -398,6 +403,8 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
 
   update(time: number, delta: number): void {
     if (this.finished) return;
+    // 11/20 운영자 순간이동: 연출 없이 바로 끝
+    if (this.ride.instant) return this.finish();
     if (this.pending) {
       // 건너뛰면 굽지 않고 바로 끝내요 (남은 그림은 다음 여행 전에 마저 구워요)
       if (this.skipped) return this.finish();

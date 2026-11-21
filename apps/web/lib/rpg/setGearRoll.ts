@@ -25,8 +25,8 @@ import type { Drop } from "./types";
 // 11/15 세트 장비·재료·꾸미기 굴림 (야근 빌딩 우두머리 상자). 게임이 상자를 열 때 떨구는 것과 서버가 판 끝에 주는 것이
 // 같은 시드 굴림이라 늘 같다 (lib/rpg/tower towerChestDrops가 부른다). 천장(연속으로 못 받은 상자 수)도 양쪽이 같은 값에서 센다.
 
-/** 상자에서 세트 장비가 나올 확률. 11/19 야근 빌딩 개편: 기본 장비로도 높이 오르니 15% → 2%, 천장은 없앴다 */
-export const SG_CHEST_CHANCE = 0.02;
+/** 상자에서 세트 장비가 나올 확률. 11/19 야근 빌딩 개편: 기본 장비로도 높이 오르니 15% → 2%, 천장은 없앴다. 11/20 사용자 「스펙업 재미로」 2% → 8% (천장 없이) */
+export const SG_CHEST_CHANCE = 0.08;
 /** 부위 비율 (무기는 일부러 귀하게) — 장신구 45%는 두 종류가 반씩 */
 export const SG_PIECE_WEIGHTS: Record<SgPiece, number> = {
   weapon: 15,

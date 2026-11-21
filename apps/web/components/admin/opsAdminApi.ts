@@ -1,5 +1,6 @@
 import type { AdminNameReindexResponse } from "@/app/api/admin/accounts/names/route";
 import type { AdminStayFillResponse } from "@/app/api/admin/accounts/stay/route";
+import type { AdminUserStatsResponse } from "@/app/api/admin/accounts/[id]/stats/route";
 import type { AdminActivitySeedResponse } from "@/app/api/admin/activity/seed/route";
 import type { UserActivityReport } from "@/lib/userActivity";
 import type { AdminChampResponse } from "@/app/api/admin/champ/route";
@@ -61,6 +62,9 @@ export const opsAdminApi = {
   /** 유저 활동 보고서 (staff = 운영자 계정도 세기, fresh = 5분 기억을 버리고 다시 세기) */
   activity: (staff: boolean, fresh = false) =>
     request<UserActivityReport>(`/api/admin/activity?${new URLSearchParams({ ...(staff ? { staff: "1" } : {}), ...(fresh ? { fresh: "1" } : {}) })}`, { cache: "no-store" }),
+  /** 11/20 계정 상세 수치 (fresh = 30초 기억을 버리고 다시 읽기) */
+  userStats: (accountId: string, fresh = false) =>
+    request<AdminUserStatsResponse>(`/api/admin/accounts/${encodeURIComponent(accountId)}/stats${fresh ? "?fresh=1" : ""}`, { cache: "no-store" }),
   /** 기록 전 활동 채우기 한 번 (next가 "0"이 될 때까지 이어서 부른다) */
   seedActivity: (cursor: string, count = 200) =>
     request<AdminActivitySeedResponse>("/api/admin/activity/seed", {

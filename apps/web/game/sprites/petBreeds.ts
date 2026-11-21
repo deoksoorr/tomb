@@ -964,19 +964,22 @@ const CAT_IDLE = [2, 2, 2, 3] as const;
 const DOG_IDLE = [2, 2, 3, 2] as const;
 
 /** 아이템 id(제안) → 연출. 고양이는 사무실 고양이(pet_cat)와, 강아지는 퇴근 강아지(pet_dog)와 걸음 빠르기가 같다 */
+/** 11/20 품종 펫은 주인과 한 발짝 떨어져 따라온다 (사용자 「너무 바짝 붙어 있다」) */
+const BREED_FAR = 1.8;
+
 export const BREED_FX = {
-  pet_cheese: { kind: "pet", art: "pbCatCheese", hover: 0, dirs: BREED_DIRS, fps: 7, idleFps: 1.5, pose: { idle: CAT_IDLE, act: [4, 4, 4, 5, 5, 5, 5, 4], actMs: 420, every: 9000 } },
-  pet_godeung: { kind: "pet", art: "pbCatMackerel", hover: 0, dirs: BREED_DIRS, fps: 7, idleFps: 1.5, pose: { idle: CAT_IDLE, act: [4, 5, 4, 5, 4, 5, 4], actMs: 220, every: 7000 } },
-  pet_tuxedo: { kind: "pet", art: "pbCatTux", hover: 0, dirs: BREED_DIRS, fps: 7, idleFps: 1.5, pose: { idle: CAT_IDLE, act: [4, 5, 5, 5, 4], actMs: 320, every: 8000 } },
-  pet_calico: { kind: "pet", art: "pbCatCalico", hover: 0, dirs: BREED_DIRS, fps: 7, idleFps: 1.5, pose: { idle: CAT_IDLE, act: [4, 5, 4, 5, 4, 5], actMs: 130, every: 6500 } },
-  pet_russian: { kind: "pet", art: "pbCatBlue", hover: 0, dirs: BREED_DIRS, fps: 7, idleFps: 1.5, pose: { idle: CAT_IDLE, act: [4, 5, 4, 5, 4, 5, 4, 5], actMs: 260, every: 7500 } },
-  pet_siamese: { kind: "pet", art: "pbCatSiam", hover: 0, dirs: BREED_DIRS, fps: 7, idleFps: 1.5, pose: { idle: CAT_IDLE, act: [4, 5, 4, 2, 4, 5], actMs: 260, every: 7000 } },
-  pet_shiba: { kind: "pet", art: "pbDogShiba", hover: 0, dirs: BREED_DIRS, fps: 8, idleFps: 2, pose: { idle: DOG_IDLE, act: [4, 4, 5, 4, 5, 4, 4], actMs: 320, every: 8000 } },
-  pet_jindo: { kind: "pet", art: "pbDogJindo", hover: 0, dirs: BREED_DIRS, fps: 8, idleFps: 2, far: 1.15, pose: { idle: DOG_IDLE, act: [4, 4, 5, 5, 5, 4], actMs: 260, every: 7000 } },
-  pet_corgi: { kind: "pet", art: "pbDogCorgi", hover: 0, dirs: BREED_DIRS, fps: 9, idleFps: 2, pose: { idle: DOG_IDLE, act: [4, 4, 5, 4, 5, 4, 4], actMs: 320, every: 8000 } },
-  pet_pom: { kind: "pet", art: "pbDogPom", hover: 0, dirs: BREED_DIRS, fps: 9, idleFps: 2, pose: { idle: DOG_IDLE, act: [4, 5, 4, 5, 4, 5], actMs: 150, every: 5500, lift: [0, 3, 0, 3, 0, 3] } },
-  pet_bichon: { kind: "pet", art: "pbDogBichon", hover: 0, dirs: BREED_DIRS, fps: 8, idleFps: 2, pose: { idle: DOG_IDLE, act: [4, 5, 4, 5, 4, 5, 4, 5], actMs: 90, every: 7000 } },
-  pet_dachs: { kind: "pet", art: "pbDogDachs", hover: 0, dirs: BREED_DIRS, fps: 9, idleFps: 2, far: 1.2, pose: { idle: DOG_IDLE, act: [4, 5, 4, 5, 4, 5, 4], actMs: 200, every: 7000 } },
+  pet_cheese: { kind: "pet", art: "pbCatCheese", hover: 0, far: BREED_FAR, dirs: BREED_DIRS, fps: 7, idleFps: 1.5, pose: { idle: CAT_IDLE, act: [4, 4, 4, 5, 5, 5, 5, 4], actMs: 420, every: 9000 } },
+  pet_godeung: { kind: "pet", art: "pbCatMackerel", hover: 0, far: BREED_FAR, dirs: BREED_DIRS, fps: 7, idleFps: 1.5, pose: { idle: CAT_IDLE, act: [4, 5, 4, 5, 4, 5, 4], actMs: 220, every: 7000 } },
+  pet_tuxedo: { kind: "pet", art: "pbCatTux", hover: 0, far: BREED_FAR, dirs: BREED_DIRS, fps: 7, idleFps: 1.5, pose: { idle: CAT_IDLE, act: [4, 5, 5, 5, 4], actMs: 320, every: 8000 } },
+  pet_calico: { kind: "pet", art: "pbCatCalico", hover: 0, far: BREED_FAR, dirs: BREED_DIRS, fps: 7, idleFps: 1.5, pose: { idle: CAT_IDLE, act: [4, 5, 4, 5, 4, 5], actMs: 130, every: 6500 } },
+  pet_russian: { kind: "pet", art: "pbCatBlue", hover: 0, far: BREED_FAR, dirs: BREED_DIRS, fps: 7, idleFps: 1.5, pose: { idle: CAT_IDLE, act: [4, 5, 4, 5, 4, 5, 4, 5], actMs: 260, every: 7500 } },
+  pet_siamese: { kind: "pet", art: "pbCatSiam", hover: 0, far: BREED_FAR, dirs: BREED_DIRS, fps: 7, idleFps: 1.5, pose: { idle: CAT_IDLE, act: [4, 5, 4, 2, 4, 5], actMs: 260, every: 7000 } },
+  pet_shiba: { kind: "pet", art: "pbDogShiba", hover: 0, far: BREED_FAR, dirs: BREED_DIRS, fps: 8, idleFps: 2, pose: { idle: DOG_IDLE, act: [4, 4, 5, 4, 5, 4, 4], actMs: 320, every: 8000 } },
+  pet_jindo: { kind: "pet", art: "pbDogJindo", hover: 0, dirs: BREED_DIRS, fps: 8, idleFps: 2, far: BREED_FAR * 1.15, pose: { idle: DOG_IDLE, act: [4, 4, 5, 5, 5, 4], actMs: 260, every: 7000 } },
+  pet_corgi: { kind: "pet", art: "pbDogCorgi", hover: 0, far: BREED_FAR, dirs: BREED_DIRS, fps: 9, idleFps: 2, pose: { idle: DOG_IDLE, act: [4, 4, 5, 4, 5, 4, 4], actMs: 320, every: 8000 } },
+  pet_pom: { kind: "pet", art: "pbDogPom", hover: 0, far: BREED_FAR, dirs: BREED_DIRS, fps: 9, idleFps: 2, pose: { idle: DOG_IDLE, act: [4, 5, 4, 5, 4, 5], actMs: 150, every: 5500, lift: [0, 3, 0, 3, 0, 3] } },
+  pet_bichon: { kind: "pet", art: "pbDogBichon", hover: 0, far: BREED_FAR, dirs: BREED_DIRS, fps: 8, idleFps: 2, pose: { idle: DOG_IDLE, act: [4, 5, 4, 5, 4, 5, 4, 5], actMs: 90, every: 7000 } },
+  pet_dachs: { kind: "pet", art: "pbDogDachs", hover: 0, dirs: BREED_DIRS, fps: 9, idleFps: 2, far: BREED_FAR * 1.2, pose: { idle: DOG_IDLE, act: [4, 5, 4, 5, 4, 5, 4], actMs: 200, every: 7000 } },
 } satisfies Record<string, FxSpec>;
 
 /** 품종 펫 아이콘 16×16: 앞을 보고 앉은 모습(프레임 8 — 얼굴·무늬가 가장 또렷)을 가운데·아래에 담는다. 해당 없으면 null */

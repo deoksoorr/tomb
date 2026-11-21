@@ -36,6 +36,8 @@ export type ItemDef = {
   staff?: true;
   /** 주간 랭킹 1위 전용 꾸미기: 상점 목록에 없고 사거나 영구로 살 수 없다. 1위가 되면 다음 1위가 정해질 때까지 빌려 입는다 (값 0 → 꾸미기 점수 0) */
   champ?: true;
+  /** 11/20 「회장님 독대」 주간 1위 보상 꾸미기: 상점 목록에 없고 사거나 영구로 살 수 없다. 1위(보통·지옥 따로)가 되면 한 주 동안 빌려 입는다 (값 0 → 꾸미기 점수 0) */
+  chair?: true;
   /** 11/15 수집 의뢰 보상: 상점 목록에 없고 포인트로 살 수 없다. 의뢰 도장 교환소에서 받기만 한다 (꾸미기는 영구로) */
   quest?: true;
   /** 11/15 긴급 의뢰 보상 (가장 많이 낸 사람의 사이렌 모자): 상점 목록에 없고 살 수 없다. 받으면 24시간 빌려 입는다 (값 0 → 꾸미기 점수 0) */
@@ -183,6 +185,23 @@ export const ITEMS: readonly ItemDef[] = [
   { id: "fw_meteor", kind: "firework", name: "별똥별", desc: "하늘을 가로지르는 별똥별 비가 쏟아져요.", price: 260, power: 3 },
   { id: "fw_letter", kind: "firework", name: "글자 폭죽", desc: "내 이름이 불꽃 글자로 떠올라요.", price: 320, power: 3 },
   { id: "fw_grand", kind: "firework", name: "밤하늘 피날레", desc: "채널 하늘 전체를 몇 초 동안 수놓아요.", price: 740, power: 5 },
+  // 11/20 새 폭죽: 터지는 방식이 저마다 다르다 (web game/world/fwShapes)
+  { id: "fw_crackle", kind: "firework", name: "반짝 팝콘", desc: "퍼진 불티가 타닥타닥 연달아 또 터져요. 전자레인지 앞 탕비실 소리 그대로.", price: 185, power: 2 },
+  { id: "fw_emoji", kind: "firework", name: "하늘 이모티콘", desc: "^^·하트·별 중 하나가 픽셀 불꽃으로 떠요. 메신저 답장은 이걸로 갈음해요.", price: 190, power: 2 },
+  { id: "fw_parachute", kind: "firework", name: "낙하산 별", desc: "작은 별들이 둥실 떠서 아주 천천히 내려와요. 퇴근 10분 전 시계처럼 느긋하게.", price: 195, power: 2 },
+  { id: "fw_whistle", kind: "firework", name: "휘슬 로켓", desc: "휘이익 소리를 내며 지그재그로 오르다 펑. 부장님 호출보다 먼저 들려요.", price: 215, power: 3 },
+  { id: "fw_fish", kind: "firework", name: "물고기 떼", desc: "터진 불티가 꼬물꼬물 헤엄치듯 흩어져요. 점심시간 직원들처럼 사방으로.", price: 235, power: 3 },
+  { id: "fw_pinwheel", kind: "firework", name: "회전 바람개비", desc: "공중에서 빙글빙글 돌며 불티를 뿌려요. 결재판 돌리는 속도로.", price: 255, power: 3 },
+  { id: "fw_rainbow", kind: "firework", name: "무지개 아치", desc: "일곱 빛깔 띠가 하늘에 아치를 그려요. 야근 끝에도 무지개는 떠요.", price: 270, power: 3 },
+  { id: "fw_kiku", kind: "firework", name: "국화 겹꽃", desc: "꼬리 끄는 큰 국화 안에 다른 색 꽃술이 한 겹 더. 여의도 그 국화예요.", price: 285, power: 3 },
+  { id: "fw_cascade", kind: "firework", name: "연쇄 국화", desc: "큰 꽃이 진 자리에서 작은 국화가 네 송이 더 피어요. 회의가 회의를 낳듯이.", price: 305, power: 3 },
+  { id: "fw_fountainrow", kind: "firework", name: "분수 다섯 줄", desc: "발밑 좌우로 분수 다섯 개가 차례로 솟아요. 출근 도장처럼 줄줄이.", price: 310, power: 3 },
+  { id: "fw_aurora", kind: "firework", name: "오로라 커튼", desc: "밤하늘 위쪽에 초록·보라 빛 띠가 일렁여요. 채널 모두의 하늘에 걸려요.", price: 340, power: 3 },
+  { id: "fw_kamuro", kind: "firework", name: "왕관 버드나무", desc: "금빛 가지가 왕관처럼 퍼졌다가 반짝이며 아주 천천히 내려앉아요.", price: 420, power: 4 },
+  { id: "fw_niagara", kind: "firework", name: "나이아가라", desc: "하늘에 금빛 줄이 길게 그어지고 불티가 폭포처럼 쏟아져요. 화면 끝에서 끝까지.", price: 460, power: 4 },
+  // 11/20 광역 불꽃쇼: 채널 모두의 하늘 전체에서 정해진 순서로. 한 채널에 한 번에 하나 (실시간 서버가 막는다)
+  { id: "fw_town", kind: "firework", name: "동네 불꽃 한마당", desc: "15초 동안 동네 하늘 끝에서 끝까지 불꽃이 차례로 올라가요. 채널 모두가 같이 봐요.", price: 900, power: 5 },
+  { id: "fw_hangang", kind: "firework", name: "한강 불꽃쇼", desc: "35초짜리 여의도급 불꽃쇼. 일제 발사부터 나이아가라, 금빛 피날레까지 채널 하늘 전체를 덮어요.", price: 2000, power: 5 },
 
   { id: "hat_straw", kind: "cosmetic", slot: "head", name: "밀짚모자", desc: "여름휴가 계획만 세 번 세웠다.", price: 80, durationMs: COSMETIC_DURATION_MS },
   { id: "hat_cat", kind: "cosmetic", slot: "head", name: "고양이 귀", desc: "쫑긋.", price: 100, durationMs: COSMETIC_DURATION_MS },
@@ -532,6 +551,13 @@ export const ITEMS: readonly ItemDef[] = [
     ["champ_duo_hf", "head", "홍청 쌍둥이 왕관", "붉은빛·푸른빛 두 왕관이 겹친 쌍둥이 왕관. 주간 사냥·낚시 2관왕 전용.", 0],
     ["champ_triple", "head", "삼관왕 대관", "무지개 보석이 박힌 커다란 대관. 주간 포인트·사냥·낚시 3관왕 전용.", 0],
   ]).map((it) => ({ ...it, champ: true as const })),
+  // ── 11/20 「회장님 독대」(판교 회장님) 주간 1위 보상 (값 0: 상점에 없고, 1위가 한 주 동안 빌려 입는다 — CHAIR_REWARD). 그림 web game/sprites/chairGear·chairFx ──
+  ...cosmetics([
+    ["chair_crown", "head", "황금 사원증 왕관", "회장님과의 연봉 협상을 이겨 낸 사람의 금관. 파란 목줄 끝에 회장실 사원증이 달려 있어요. 회장님 독대(보통) 주간 1위 전용.", 0],
+    ["chair_aura_gold", "aura", "연봉 인상 금박 오라", "따뜻한 금빛 속에 금박 조각과 작은 ↑ 화살표가 둥실 떠올라요. 회장님 독대(보통) 주간 1위 전용.", 0],
+    ["chair_band", "head", "불타는 사직서 머리띠", "이마에 질끈 묶은 빨간 머리띠. 앞에 꽂은 사직서 끝이 타닥타닥 타올라요. 회장님 독대(지옥) 주간 1위 전용.", 0],
+    ["chair_aura_ember", "aura", "사직서 불씨 오라", "주홍빛 속에 불씨와 타다 남은 사직서 조각이 피어올라요. 회장님 독대(지옥) 주간 1위 전용.", 0],
+  ]).map((it) => ({ ...it, chair: true as const })),
   // ── 동물원 펫 (사육사에게서 영구로만 산다 — 가격은 아래 ZOO_PETS. price는 같은 값을 적어 둔다) ──
   // 11/19 포인트 한도가 없어져 값을 올렸다: 작은 펫 2배, 타는 펫 3배 (이미 산 펫은 그대로) — 배수는 PET_PRICE_UP·PET_RIDE_PRICE_UP (꾸미기 점수는 예전 값으로 센다)
   { id: "pet_fox", kind: "cosmetic", slot: "pet", name: "달빛 여우", desc: "야근하는 밤에만 슬그머니 따라오는 여우. 꼬리가 은은하게 빛나요.", price: 2400, durationMs: COSMETIC_DURATION_MS },
@@ -681,11 +707,12 @@ export function styleItemId(id: string): string | null {
 /**
  * 상점에서 파는 종류 (F8: 묘비 꾸미기는 당분간 상점 목록에서 숨긴다 — 데이터·API·가방의 묘비에 놓기는 그대로).
  */
-export const SHOP_KINDS: readonly ItemKind[] = ["firework", "cosmetic", "graveStyle", "megaphone", "dye"];
+// 11/21 확성기는 판매 중지 (마을 소식으로 바뀜 — 아이템·API는 그대로, 가진 것은 가방에 남는다)
+export const SHOP_KINDS: readonly ItemKind[] = ["firework", "cosmetic", "graveStyle", "dye"];
 /** 상점 목록에 나오는지. 펫은 상점에서 팔지 않는다 (동물원 사육사에게서 영구로만 — ZOO_PETS) */
 /** 11/19 계절 한정 세트(seasonSet)도 잡화점에 없다 (계절 보따리상에서만 — SEASON_SETS) */
-export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot; staff?: true; champ?: true; quest?: true; urgent?: true; ghost?: true; event?: true; invite?: true; stargaze?: true; seasonSet?: string }): boolean {
-  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet" && !item.staff && !item.champ && !item.quest && !item.urgent && !item.ghost && !item.event && !item.invite && !item.stargaze && !item.seasonSet;
+export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot; staff?: true; champ?: true; chair?: true; quest?: true; urgent?: true; ghost?: true; event?: true; invite?: true; stargaze?: true; seasonSet?: string }): boolean {
+  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet" && !item.staff && !item.champ && !item.chair && !item.quest && !item.urgent && !item.ghost && !item.event && !item.invite && !item.stargaze && !item.seasonSet;
 }
 /** 12월 크리스마스 이벤트 한정인지 (상점·포인트로 살 수 없다 — 선물상자에서만) */
 export function isEventItem(id: unknown): boolean {
@@ -759,8 +786,10 @@ export function seasonPrice(id: string): { day: number | null; perm: number } | 
 }
 /** 23번 확성기 한마디 최대 글자 수 (코드포인트) */
 export const MEGAPHONE_MAX = 60;
-/** 확성기 한마디가 보이는 시간 (외친 시각 기준 5분). 지나면 목록·기록에서 빠지고 저장소에서도 지운다 */
+/** 실시간 서버가 같은 방송(nonce)을 한 번만 보내려고 기억하는 시간 (5분). 화면·저장 보관 시간은 MEGA_FEED_TTL_MS */
 export const MEGAPHONE_TTL_MS = 5 * 60_000;
+/** 11/21 마을 소식(옛 확성기 기록) 보관 시간: 하루. 지나면 목록에서 빠지고 저장소에서도 지운다 */
+export const MEGA_FEED_TTL_MS = 24 * 60 * 60_000;
 export type MegaphoneScope = "channel" | "all";
 /** 확성기 아이템이면 퍼지는 범위 (mega_all = 모든 채널), 아니면 null */
 export function megaphoneScope(id: unknown): MegaphoneScope | null {
@@ -779,6 +808,17 @@ export function isStaffItem(id: unknown): boolean {
 export function isChampItem(id: unknown): boolean {
   return typeof id === "string" && byId.get(id)?.champ === true;
 }
+/** 11/20 「회장님 독대」 주간 1위 보상 꾸미기인지 (사거나 영구로 살 수 없다) */
+export function isChairItem(id: unknown): boolean {
+  return typeof id === "string" && byId.get(id)?.chair === true;
+}
+/** 11/20 「회장님 독대」 주간 1위 보상 꾸미기 id 전부 */
+export const CHAIR_ITEM_IDS: readonly string[] = ITEMS.filter((i) => i.chair).map((i) => i.id);
+/** 11/20 「회장님 독대」 난이도별 주간 1위 보상 (칭호 · 머리 · 오라 — 한 주 동안 빌려 준다) */
+export const CHAIR_REWARD = {
+  normal: { title: "t_chairNormal", hat: "chair_crown", aura: "chair_aura_gold" },
+  hell: { title: "t_chairHell", hat: "chair_band", aura: "chair_aura_ember" },
+} as const satisfies Record<string, { title: TitleId; hat: string; aura: string }>;
 /** 11/15 수집 의뢰 보상인지 (상점·포인트로 살 수 없다 — 도장 교환소에서 받기만) */
 export function isQuestItem(id: unknown): boolean {
   return typeof id === "string" && byId.get(id)?.quest === true;
@@ -810,6 +850,14 @@ export function staffGateLook(look: Look, staff: boolean): Look {
 }
 export function isFireworkId(id: unknown): id is string {
   return typeof id === "string" && byId.get(id)?.kind === "firework";
+}
+/**
+ * 11/20 광역 불꽃쇼 길이 (ms, 마지막 불티가 사라질 때까지). 쇼가 아니면 0.
+ * 실시간 서버는 이 길이로 채널(맵)마다 한 번에 하나만 돌린다 — 이미 돌고 있으면 끝난 뒤로 미루거나 거절한다
+ */
+export const FIREWORK_SHOW_MS: Readonly<Record<string, number>> = { fw_town: 18_000, fw_hangang: 39_000 };
+export function fireworkShowMs(id: string): number {
+  return FIREWORK_SHOW_MS[id] ?? 0;
 }
 /** 착용 부위 수 = 착용 목록 최대 길이 (몸 7 + 닉네임 꾸미기 2) */
 export const LOOK_MAX_PARTS = 9;
@@ -1168,6 +1216,9 @@ export const TITLE_IDS = [
   "t_ssResol",
   "t_ssSmelt",
   "t_ssFrost",
+  // 11/20 「회장님 독대」 주간 1위 (보통 · 지옥 — 한 주 동안 빌려 준다, web lib/titles TitleFacts.timed)
+  "t_chairNormal",
+  "t_chairHell",
 ] as const;
 export type TitleId = (typeof TITLE_IDS)[number];
 const titleSet = new Set<string>(TITLE_IDS);

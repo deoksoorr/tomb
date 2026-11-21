@@ -9,9 +9,10 @@ import type { ChampAvatar, ChampResponse, RaceResponse, RaceRow } from "@/lib/ty
 import AvatarThumb from "../account/AvatarThumb";
 import StyledName from "../ui/StyledName";
 import { ChampPerksBox, ChampReward, ComboAuras } from "./ChampReward";
+import RaceCountdown from "./RaceCountdown";
 import styles from "./WeeklyRace.module.css";
 
-// 이번 주 레이스 (화면 위 [레이스] 버튼 · 메뉴 시트 → 표준 창): 포인트·사냥 처치·낚시마다 1~3등 시상대(캐릭터 모습), 마감(월요일 새벽 5시, 한국 시간)까지 남은 시간,
+// 이번 주 레이스 (화면 위 [레이스] 버튼 · 메뉴 시트 → 표준 창): 포인트·사냥 처치·낚시마다 1~3등 시상대(캐릭터 모습), 마감(월요일 새벽 5시, 한국 시간)까지 남은 시간·다음 레이스 시작(RaceCountdown),
 // 내 순위·1위와의 차이. 창이 열려 있는 동안 30초마다 다시 받는다. 아래에는 지난주 1위와 명예의 전당.
 
 /** 1위 보상 포인트 (응답이 오기 전 기본값 — lib/weeklyChamp CHAMP_POINTS와 같다) */
@@ -21,16 +22,6 @@ const CHAMP_POINTS_DEFAULT = 1000;
 export const RACE_REFRESH_MS = 30_000;
 
 const BOARD_NAME: Record<ChampBoard, string> = { points: "포인트", huntKills: "사냥 처치", fish: "낚시 · 가장 큰 물고기" };
-
-/** "2일 5시간" · "3시간 12분" · "8분" */
-export function leftText(ms: number): string {
-  const m = Math.max(0, Math.floor(ms / 60_000));
-  const d = Math.floor(m / 1440);
-  const h = Math.floor((m % 1440) / 60);
-  if (d > 0) return `${d}일 ${h}시간`;
-  if (h > 0) return `${h}시간 ${m % 60}분`;
-  return `${Math.max(1, m)}분`;
-}
 
 /** 11월 9일 주 */
 function weekLabel(week: string): string {
@@ -47,7 +38,6 @@ export default function WeeklyRace() {
   const [race, setRace] = useState<RaceResponse | null>(null);
   const [champ, setChamp] = useState<ChampResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     let alive = true;
@@ -58,7 +48,6 @@ export default function WeeklyRace() {
           if (!alive) return;
           setRace(r);
           setError(null);
-          setNow(Date.now());
         })
         .catch((e: unknown) => alive && setError(errorMessage(e)));
     void load();
@@ -77,13 +66,8 @@ export default function WeeklyRace() {
   if (!race) return <p className={styles.empty}>{error ?? "불러오는 중…"}</p>;
   return (
     <div className={styles.race}>
-      <p className={styles.deadline}>
-        <span className={styles.clock} aria-hidden="true">
-          ⏳
-        </span>
-        마감까지 <b>{leftText(race.endsAt - now)}</b>
-        <span className={styles.when}> · 월요일 새벽 5시</span>
-      </p>
+      {/* 11/20 남은 시간·다음 레이스 줄은 회장님 독대 탭·등대 입장 창과 같은 것 (RaceCountdown — 1분, 1시간 아래는 1초마다) */}
+      <RaceCountdown />
       <p className={styles.reward}>
         1위는 전용 모자(한 주), 전용 오라, 이름표 배지와 {(champ?.points ?? CHAMP_POINTS_DEFAULT).toLocaleString("ko-KR")}P를 받고, 다음 주 1주일 동안 랭킹마다 다른 혜택이 붙어요.
         {/* 11/16 사냥 칸 안에 두 줄로 있던 안내 (그 칸만 길어져 창에 스크롤이 생겼다) → 위 안내 줄로 */}

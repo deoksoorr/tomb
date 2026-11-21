@@ -1,13 +1,13 @@
 import type { Interactable, Rect } from "./layout";
 
 // 11/20 「총무팀 문대리」(사무실 가구 카트) 배치 (순수 — layout.ts가 충돌·상호작용·미니맵에 더하고, 그림·이름표·밤 빛·몸 충돌은 OfficeStallView가 놓는다).
-//  야근 빌딩 회전문 오른쪽 풀밭 (빌딩과 까마귀 연못 마른 나무 사이, 북쪽 큰길 바로 위). 카트 (1118,172), 문대리는 카트 뒤 12px (1117,160)에 서서
-//  상판 너머로 윗몸을 내민다 (그림 game/sprites/officeSeller.ts — OFFICE_CLERK_OFFSET).
+//  야근 빌딩 회전문 오른쪽 풀밭 (북쪽 큰길 바로 위). 11/20 빌딩이 서쪽(x 968)으로 옮겨 카트도 따라왔다 — 빌딩과 「판교의 등대」 사이.
+//  카트 (1026,172), 문대리는 카트 뒤 12px (1025,160)에 서서 상판 너머로 윗몸을 내민다 (그림 game/sprites/officeSeller.ts — OFFICE_CLERK_OFFSET).
 //  판매 창은 components/office (portal:open office), 서버는 /api/office (lib/office).
-//  큰길(y 176부터)·빌딩 몸 충돌(x ~1077)·옛 무덤 십자가(x ~1094)·마른 나무 기둥(x 1150)과 겹치지 않는다.
-//  까마귀 연못 서쪽 낚시 자리 (1102,108)로 가는 길은 카트 뒤 물가 풀밭으로 돌아간다 (officeStall.test — 16px쯤 더 걷는다)
+//  큰길(y 176부터)·빌딩 몸 충돌(x ~993)·등대 돌 받침(x ~1063)과 겹치지 않는다.
+//  까마귀 연못 서쪽 낚시 자리 (1102,108)로 가는 길은 건드리지 않는다 (officeStall.test)
 
-export const OFFICE_STALL = { x: 1118, y: 172 } as const;
+export const OFFICE_STALL = { x: 1026, y: 172 } as const;
 /** 문대리 발 (카트 뒤) — 그림 쪽 OFFICE_CLERK_OFFSET과 같은 값 (그림 모듈을 끌어오지 않게 적어 두고 officeStall.test가 맞춰 본다) */
 export const OFFICE_CLERK = { x: OFFICE_STALL.x - 1, y: OFFICE_STALL.y - 12 } as const;
 

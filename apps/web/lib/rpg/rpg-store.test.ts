@@ -167,5 +167,7 @@ describe(`사냥터 서비스 (${redisEnv ? "redis" : "memory"})`, () => {
     expect(total).toBe(cap + 20);
     expect(last).toEqual({ points: 20, capped: false });
     expect((await getRpgStore().daily(a, kstDay(now))).points).toBe(cap + 20);
+    // 11/20 판 수 누적 (관리자 유저 상세): 쉬움 첫 사냥터에 끝낸 판·깬 판
+    expect((await getRpgStore().get(a)).hz?.["meeting-room"]).toEqual([cap / 20 + 1, cap / 20 + 1]);
   });
 });

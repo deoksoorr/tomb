@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { CAMPFIRES, campfireOfSeat, dexBadgeCats, DIR, MAP_NAME, type AwayMapId, FURNITURE, LAKE_PIER, houseLot, MAP_HEIGHT, MAP_WIDTH, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, sanitizeDye, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, squirrelWaitText, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
+import { CAMPFIRES, fireworkShowMs, campfireOfSeat, dexBadgeCats, DIR, MAP_NAME, type AwayMapId, FURNITURE, LAKE_PIER, houseLot, MAP_HEIGHT, MAP_WIDTH, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, sanitizeDye, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, squirrelWaitText, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
 import { avatarColorSpec, type AppearanceChange } from "../sprites/avatar";
 import { saveResume, type ResumePose, type ResumeState } from "@/lib/resume";
 import { nameStyleIds } from "@/lib/nameStyle";
@@ -29,6 +29,8 @@ import { nearestObject, pickInteraction } from "../logic/interact";
 import { inReach } from "../logic/reach";
 import { anchorAt, nudgeSpot, restoreAfterDenied, resumeSpot, spotVerdict, standBesideSpot } from "../logic/restore";
 import { besideFriend, FRIEND_ARRIVED } from "../logic/friendSpot";
+import { playTeleportFx } from "../fx/teleportFx";
+import { STAFF_TP_ARRIVED, STAFF_TP_INSIDE_MSG } from "@tomb/protocol";
 import { doorFront } from "../logic/doorSpot";
 import { SPOT_TAKEN_HINT, SPOT_TAKEN_TOAST, spotOf, spotTaken } from "../logic/spots";
 import { neighborSeat, pickSeat, sideIntent, standPoint } from "../logic/sit";
@@ -69,6 +71,8 @@ import { RideSound } from "../world/RideSound";
 import { VillageLife } from "../world/life/VillageLife";
 import { HauntHouseView } from "../haunt/HauntHouseView";
 import { TowerView } from "../tower/TowerView";
+import { LighthouseView } from "../lighthouse/LighthouseView";
+import { LIGHTHOUSE_LABEL } from "../lighthouse/lighthouseLayout";
 import { Foraging } from "../world/forage/Foraging";
 import { Riding } from "../world/zoo/Riding";
 import { ZOO_ARCH_AT, ZooView } from "../world/zoo/ZooView";
@@ -161,6 +165,8 @@ export class WorldScene extends Phaser.Scene {
   private mungnyang!: MungnyangView;
   /** 11/20 야근 빌딩 오른쪽 「총무팀 문대리」: 사무실 가구 카트·문대리·이름표·밤 불빛 (world/OfficeStallView) */
   private office!: OfficeStallView;
+  /** 11/20 판교의 등대 (전광판 옆 이번 주 1위 이름표) */
+  private lighthouse!: LighthouseView;
   /** 동물원 타는 펫 올라타기·내리기 (world/zoo/Riding) */
   private riding!: Riding;
   /** 11/18 눈싸움 (겨울·크리스마스 판 바깥 — world/SnowFight) */
@@ -420,6 +426,7 @@ export class WorldScene extends Phaser.Scene {
     if (campResume?.where) this.net.map = campResume.where;
     new HauntHouseView(this, this.map.colliders, this.reduced, () => this.player); // 귀신의집 건물·간판·등불·안개·근처 소리 (game/haunt)
     new TowerView(this, this.map.colliders, this.reduced, () => this.atmos?.levels.darkness ?? 0); // 11/15 야근 빌딩 (game/tower)
+    this.lighthouse = new LighthouseView(this, this.map.colliders, this.reduced, () => this.atmos?.levels.darkness ?? 0, this.atlas); // 11/20 판교의 등대 (game/lighthouse)
     this.life = new VillageLife({
       scene: this,
       atlas: this.atlas,
@@ -648,8 +655,8 @@ export class WorldScene extends Phaser.Scene {
           v?.setLook(look ?? []);
           v?.applyAppearance(extra);
         },
-        onFirework: (sid, item, x, y) => {
-          this.fireworks.launch(item, x, y, this.fireworkView(), false, this.remotes.get(sid)?.name ?? "");
+        onFirework: (sid, item, x, y, wait) => {
+          this.fireworks.launch(item, x, y, this.fireworkView(), false, this.remotes.get(sid)?.name ?? "", wait);
           this.sky?.firework();
         },
         onAct: (sid, kind, x, y) => this.playAct(sid, kind, x, y),
@@ -958,12 +965,14 @@ export class WorldScene extends Phaser.Scene {
     );
     // 11/15 친구가 캠핑장에 있으면 버스를 거쳐 그 옆으로 (캠핑장에 있는 동안은 캠핑장 장면이 받는다). 11/16 바닷가도 같다
     on.push(
-      bridge.on("friend:goto", ({ sid, name, x, y, map }) => {
+      bridge.on("friend:goto", ({ sid, name, x, y, map, tp }) => {
         if (this.trip.away) return;
-        if (map) this.goToCampFriend({ sid, name, x, y }, map);
-        else this.goToFriend(sid, name, x, y);
+        if (map) this.goToCampFriend({ sid, name, x, y, ...(tp ? { tp } : {}) }, map);
+        else this.goToFriend(sid, name, x, y, tp);
       }),
     );
+    // 11/20 운영자 순간이동 반짝임 (마을에 있을 때만 — 캠핑장·바닷가는 그 장면이)
+    on.push(bridge.on("tp:fx", ({ x, y, k, map }) => map === "village" && !this.cleaned && !this.trip.away && !this.awayScene && !this.inShop && playTeleportFx(this, x, y, k, this.reduced)));
     on.push(bridge.on("input:joystick", ({ x, y }) => this.hub.setJoystick(x, y)));
     on.push(bridge.on("input:runToggle", ({ on: v }) => this.hub.setRunToggle(v)));
     on.push(bridge.on("input:sit", () => this.hub.dispatch("sit")));
@@ -1077,6 +1086,11 @@ export class WorldScene extends Phaser.Scene {
           this.net.firework(grant);
           return;
         }
+        // 11/20 광역 불꽃쇼는 서버가 돌려준 때에 모두 같이 터진다 (onFirework)
+        if (fireworkShowMs(item) > 0) {
+          this.net.firework(grant);
+          return;
+        }
         this.fireworks.launch(item, this.player.x, this.player.y, this.fireworkView(), true, this.ctx.opts.name);
         this.sky?.firework();
         this.net.firework(grant);
@@ -1092,7 +1106,7 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("shop:closed", () => this.hub.setBlocked(bridge.last("ui:blockKeys")?.blocked ?? false)));
     on.push(bridge.on("wish:thrown", () => this.onWishThrown()));
     // 채널 이동 창의 "지금 이 채널에 있는 사람" 미리보기
-    on.push(bridge.on("peers:ask", () => !this.trip.away && bridge.emit("peers:list", { names: [...this.remotes.values()].map((r) => r.name), map: "village" })));
+    on.push(bridge.on("peers:ask", () => !this.trip.away && bridge.emit("peers:list", { names: [...this.remotes.values()].map((r) => r.name), map: "village", staff: [...this.remotes.values()].filter((r) => r.view.staff).length })));
   }
 
   private applyLook(look: string[], grant: string, extra?: AppearanceChange): void {
@@ -1436,7 +1450,12 @@ export class WorldScene extends Phaser.Scene {
         this.doAct("splash");
         break;
       case "portal":
-        if (o.portal) {
+        // 11/20 판교의 등대: 회장님 독대 입장 창 (components/chairman)
+        if (o.portal === "lighthouse") {
+          pl.faceTo(o.x, o.y - 10, now);
+          if (pl.sitting) pl.stand(now, this.seatReq);
+          bridge.emit("chairman:door");
+        } else if (o.portal) {
           if (pl.sitting) pl.stand(now, this.seatReq);
           bridge.emit("portal:open", { kind: o.portal });
         }
@@ -1610,13 +1629,13 @@ export class WorldScene extends Phaser.Scene {
    * 이동은 기존 warp 그대로 — 서버가 범위·쿨다운을 보고 속도 검증은 건너뛴다(그 사이 MOVE는 보내지 않는다).
    * 화면에 친구가 보이면 지금 위치, 아니면 서버가 알려 준 위치(x, y) 둘레로
    */
-  private goToFriend(sid: Sid, name: string, fx: number, fy: number): void {
+  private goToFriend(sid: Sid, name: string, fx: number, fy: number, tp?: true, landed = false): void {
     if (this.cleaned || !this.net.online) return;
     const notice = (message: string) => bridge.emit("friend:notice", { message });
-    if (this.awayScene) return notice("마을로 나온 뒤에 친구한테 갈 수 있어요.");
+    if (this.awayScene) return notice(tp ? "마을로 나온 뒤에 순간이동할 수 있어요." : "마을로 나온 뒤에 친구한테 갈 수 있어요.");
     const r = this.remotes.get(sid);
     const live = r && r.name === name ? r : null;
-    if (live?.away) return notice(`${name}님은 지금 실내에 있어요.`);
+    if (live?.away) return notice(tp ? STAFF_TP_INSIDE_MSG : `${name}님은 지금 실내에 있어요.`);
     const at = live ? { x: live.x, y: live.y } : { x: fx, y: fy };
     if (this.inShop) this.exitShop();
     this.walker.cancel();
@@ -1627,13 +1646,18 @@ export class WorldScene extends Phaser.Scene {
     const others = [...this.remotes.values()].filter((o) => !o.away).map((o) => ({ x: o.x, y: o.y }));
     const spot = besideFriend(at, others, (x, y) => !standable(x, y) || inWater(x, y) || hitsLow(x, y));
     const now = this.time.now;
+    // 11/20 운영자 순간이동: 떠난 자리 반짝임 (버스로 막 내렸으면 떠난 자리는 다른 맵이라 없다)
+    if (tp && !landed) playTeleportFx(this, this.player.x, this.player.y, "out", this.reduced);
     this.player.warp(spot.x, spot.y, now, this.seatReq);
     this.player.faceTo(at.x, at.y, now);
-    this.net.warp(spot.x, spot.y);
+    // 운영자는 서버에 tp로 (운영자 연결만 받는다). 맵을 옮기며 이미 tp로 왔으면 옆 칸으로 warp만
+    if (tp && !landed) this.net.staffTp(sid, spot.x, spot.y);
+    else this.net.warp(spot.x, spot.y);
+    if (tp) playTeleportFx(this, spot.x, spot.y, "in", this.reduced);
     this.rig.recenter();
     this.recenterAt = 0;
     // 안내는 이동이 끝난 뒤 한 번만 (가는 중… 안내는 띄우지 않는다)
-    notice(FRIEND_ARRIVED);
+    notice(tp ? STAFF_TP_ARRIVED : FRIEND_ARRIVED);
   }
 
   /** 11/15 버스를 기다리거나 타는 동안 입력을 막는다 (장면은 그대로). 풀면 키 처리를 월드로 돌려받는다 */
@@ -1664,8 +1688,8 @@ export class WorldScene extends Phaser.Scene {
   private arrivedByBus(friend: CampFriend | null): void {
     if (!friend || this.cleaned) return;
     const next = friend.next;
-    if (!next) return this.goToFriend(friend.sid, friend.name, friend.x, friend.y);
-    if (this.goToCampFriend({ sid: friend.sid, name: friend.name, x: friend.x, y: friend.y }, next, true)) return;
+    if (!next) return this.goToFriend(friend.sid, friend.name, friend.x, friend.y, friend.tp, true);
+    if (this.goToCampFriend({ sid: friend.sid, name: friend.name, x: friend.x, y: friend.y, ...(friend.tp ? { tp: friend.tp } : {}) }, next, true)) return;
     this.player.view.fade = 1;
     this.net.setAway(false);
     bridge.emit("bus:state", { riding: false });
@@ -1688,7 +1712,7 @@ export class WorldScene extends Phaser.Scene {
     if (why) return notice(why);
     if (this.inShop) this.exitShop();
     this.leaveCampfire();
-    this.trip.board({ sid: f.sid, name: f.name, x: f.x, y: f.y }, map);
+    this.trip.board({ sid: f.sid, name: f.name, x: f.x, y: f.y, ...(f.tp ? { tp: f.tp } : {}) }, map);
     return this.trip.away;
   }
 
@@ -2131,6 +2155,7 @@ export class WorldScene extends Phaser.Scene {
     this.mungnyang.scaleLabels(s);
     this.office.update(now);
     this.office.scaleLabels(s);
+    this.lighthouse.scaleLabels(s);
 
     for (const r of this.remotes.values()) {
       r.update(pnow, view, s);
@@ -2207,6 +2232,7 @@ export class WorldScene extends Phaser.Scene {
       this.season.addLights(lit);
       this.mungnyang.addLights(lit);
       this.office.addLights(lit);
+      this.lighthouse.addLights(lit); // 11/20 등대 빛 웅덩이
     }
     lit.end();
   }
@@ -2336,7 +2362,7 @@ export class WorldScene extends Phaser.Scene {
     const obj = seat || pl.sitting ? null : this.objectHint();
     this.seatHint.update(seat, pl, sittingFor, hidden, labelScale, obj, standText);
     // 11/19 폰 [상호작용] 단추: 잡화점 문 앞이면 「들어가기」 (logic/doorHint)
-    setDoorHint(!hidden && obj?.text.endsWith("유령 잡화점 들어가기") ? "들어가기" : null);
+    setDoorHint(hidden || !obj ? null : obj.text.endsWith("유령 잡화점 들어가기") ? "들어가기" : obj.text.endsWith(LIGHTHOUSE_LABEL) ? LIGHTHOUSE_LABEL : null);
   }
 
   /** 좌석이 없을 때의 안내: 물속·매달리기·그네·근처 오브젝트·물가 */

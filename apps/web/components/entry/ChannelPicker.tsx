@@ -16,11 +16,13 @@ type Props = {
   currentChannel?: number | null;
   /** 내 집이 있는 채널: 평소 닫혀 있는 채널이어도 목록에 보이고 "내 집"으로 표시한다 */
   houseChannel?: number | null;
+  /** 11/20 운영자: 정원 밖이라 만석 채널도 고른다 */
+  staff?: boolean;
 };
 
 const STATUS_TEXT: Record<ChannelStatus, string> = { ok: "여유", busy: "혼잡", full: "만석" };
 
-export default function ChannelPicker({ lobby, value, onChange, allowAuto, currentChannel = null, houseChannel = null }: Props) {
+export default function ChannelPicker({ lobby, value, onChange, allowAuto, currentChannel = null, houseChannel = null, staff = false }: Props) {
   // 평소에는 채널 몇 개만 열려 있다 (붐비면 자동으로 더 열린다). 내 집·지금 채널은 닫혀 있어도 보여 준다
   const channels = visibleChannels(lobby.lobby, [currentChannel, houseChannel]);
   const threshold = lobby.lobby?.threshold;
@@ -58,14 +60,15 @@ export default function ChannelPicker({ lobby, value, onChange, allowAuto, curre
         {channels.map((ch) => {
           const status = channelStatus(ch, threshold);
           const here = ch.id === currentChannel;
+          const disabled = (status === "full" && !staff) || here;
           return (
-            <label key={ch.id} className={styles.option} data-disabled={status === "full" || here}>
+            <label key={ch.id} className={styles.option} data-disabled={disabled}>
               <input
                 type="radio"
                 name="channel"
                 className="visually-hidden"
                 checked={value === ch.id}
-                disabled={status === "full" || here}
+                disabled={disabled}
                 onChange={() => onChange(ch.id)}
               />
               <span className={styles.dot} data-status={status} aria-hidden="true" />

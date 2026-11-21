@@ -9,6 +9,8 @@ import { getHouseStore, houseIdFor } from "./housing/service";
 import { lookScore, wornSeasonSets } from "./lookScore";
 import { MAX_LEVEL } from "./rpg/formulas";
 import { getRpgStore } from "./rpg/store";
+import { chairHolders } from "./chairman/settle";
+import { CHAIR_TITLE_IDS } from "./chairman/rewards";
 import { getTowerStore } from "./rpg/towerStore";
 import { prevWeek } from "./gameDay";
 import { isSuperHunter, testServerEnv } from "./rpg/superHunter";
@@ -77,8 +79,14 @@ async function towerHolders(now: number): Promise<Map<string, string>> {
   const c = g.__tombTowerTitles;
   if (c && now - c.at < TOWER_TITLES_TTL_MS) return c.holders;
   const store = getTowerStore();
-  const [firsts, top, week] = await Promise.all([store.firsts(), store.topHolder(), store.top(1, prevWeek(kstWeek(now)))]);
-  const holders = new Map(Object.entries(firsts));
+  const [firsts, top, week, chair] = await Promise.all([
+    store.firsts(),
+    store.topHolder(),
+    store.top(1, prevWeek(kstWeek(now))),
+    // 11/20 회장님 독대 지난주 1위 칭호 (lib/chairman/settle — 정리 기록 하나, 프로세스 캐시)
+    chairHolders(now).catch(() => new Map<string, string>()),
+  ]);
+  const holders = new Map([...Object.entries(firsts), ...chair]);
   if (top) holders.set("t_topFloor", top.accountId);
   if (week[0]) holders.set("t_weekFloor", week[0].accountId);
   g.__tombTowerTitles = { at: now, holders };
@@ -250,7 +258,12 @@ async function readFacts(accountId: string, now: number): Promise<{ facts: Title
       // 11/15 신화: 지금 이 계정이 주인인 칭호 (운영자는 랭킹·최초에 들어가지 않는다 — lib/rpg/service)
       mythic: [...holders].filter(([, a]) => a === accountId).map(([id]) => id),
       // 11/15 긴급 의뢰 칭호: 받은 때부터 하루 (칭호 누적 해시에서 같이 읽는다 — 명령 추가 없음)
-      timed: [...(stats.urgKing > now ? ["t_urgKing"] : []), ...(stats.urgLast > now ? ["t_urgLast"] : [])],
+      timed: [
+        ...(stats.urgKing > now ? ["t_urgKing"] : []),
+        ...(stats.urgLast > now ? ["t_urgLast"] : []),
+        // 11/20 회장님 독대 1위 칭호는 한 주 동안만 — 정의가 「기간」이어도 「주인」이어도 붙게 둘 다에 싣는다
+        ...[...holders].filter(([id, a]) => a === accountId && CHAIR_TITLE_IDS.includes(id)).map(([id]) => id),
+      ],
     },
     equipped: titleOfLook((l?.equipped ?? []).map((e) => e.itemId)),
   };

@@ -31,15 +31,18 @@ function Spot({ entry, until }: { entry: MegaphoneEntry; until: number }) {
       <div className={cx(styles.spot, all && styles.all, leaving && styles.leaving)} role="status" aria-live="polite">
         <div className={styles.head}>
           <span className={styles.horn} aria-hidden="true">
-            <PixelIcon name="megaphone" size={21} />
+            <PixelIcon name={entry.system ? "bell" : "megaphone"} size={21} />
           </span>
-          <span className={styles.tag}>{all ? "전체 확성기" : `${entry.ch}채널 확성기`}</span>
+          {/* 11/21 마을 공지 줄(시스템)은 「마을 소식」, 보낸 이 이름("공지") 줄은 뺀다 */}
+          <span className={styles.tag}>{entry.system ? "마을 소식" : all ? "전체 확성기" : `${entry.ch}채널 확성기`}</span>
         </div>
-        <p className={cx(styles.name, entry.staff && styles.staff)}>
-          {entry.staff && !entry.system && <span className={styles.staffTag}>운영자</span>}
-          {entry.mgr && !entry.staff && <span className={styles.mgrTag}>매니저</span>}
-          {entry.name}
-        </p>
+        {!entry.system && (
+          <p className={cx(styles.name, entry.staff && styles.staff)}>
+            {entry.staff && <span className={styles.staffTag}>운영자</span>}
+            {entry.mgr && !entry.staff && <span className={styles.mgrTag}>매니저</span>}
+            {entry.name}
+          </p>
+        )}
         <p className={styles.text}>{entry.text}</p>
       </div>
     </div>

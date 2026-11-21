@@ -37,6 +37,7 @@ import {
   type PresenceTick,
   type Profile,
   type RankEntry,
+  type WalletRent,
 } from "./types";
 
 // 포인트·가방은 모두 Lua 스크립트 하나로 바꾼다. 스크립트 실행 중에는 다른 명령이 끼어들 수 없으므로
@@ -431,6 +432,38 @@ if pts > 0 then
 end
 redis.call('HSET', KEYS[5], ARGV[1], got)
 return 1
+`;
+
+// 11/20 지갑 전용 지급 (회장님 독대 — lib/chairman). 꾸미기: 입고 있으면 그 자리, 아니면 벗어 둔 꾸미기의 만료를 until로 늘린다 (이미 더 길면 그대로).
+// 포인트: 지갑에만 (지갑 상한, 모은 포인트·전체/주간 포인트 랭킹엔 넣지 않는다), 경제 통계 ARGV[3]. MemoryAccounts.walletGrant와 같은 규칙
+// KEYS: acct, econ, look, stash  ARGV: points, balanceCap, stat, now, (itemId, slot, until)... → 지갑에 들어간 포인트
+export const WALLET_GRANT_LUA = `
+local now = tonumber(ARGV[4])
+for i = 5, #ARGV, 3 do
+  local id, slot, target = ARGV[i], ARGV[i + 1], tonumber(ARGV[i + 2])
+  local cur = redis.call('HGET', KEYS[3], slot)
+  local wearing, had = false, 0
+  if cur then
+    local ci, cu = string.match(cur, '^([^|]+)|(.+)$')
+    if ci == id and (tonumber(cu) or 0) > now then wearing, had = true, tonumber(cu) end
+  end
+  if not wearing then
+    had = tonumber(redis.call('HGET', KEYS[4], id) or '0')
+  end
+  if target > had then
+    if wearing then redis.call('HSET', KEYS[3], slot, id .. '|' .. target) else redis.call('HSET', KEYS[4], id, target) end
+  end
+end
+local pts = tonumber(ARGV[1])
+if pts <= 0 then return 0 end
+local before = tonumber(redis.call('HGET', KEYS[1], 'points') or '0')
+local bal = math.min(tonumber(ARGV[2]), before + pts)
+if bal <= before then return 0 end
+redis.call('HSET', KEYS[1], 'points', bal)
+redis.call('HSETNX', KEYS[1], 'lifetime', before)
+redis.call('HINCRBY', KEYS[2], ARGV[3], bal - before)
+redis.call('EXPIRE', KEYS[2], ${ECON_TTL_SEC})
+return bal - before
 `;
 
 // 전용 꾸미기 거두기 (시험 해제): 가방·벗어 둔 꾸미기에서 지우고, 착용 칸에 있으면 벗긴다
@@ -1115,6 +1148,16 @@ export class RedisAccounts implements AccountStore {
       [mark, id, itemId, slot, String(until), String(points), String(WALLET_MAX), String(now), ...CHAMP_ITEM_IDS],
     );
     return Number(r) === 1;
+  }
+
+  async walletGrant(id: string, points: number, stat: string, now: number, rent: readonly WalletRent[] = []): Promise<number> {
+    if (points <= 0 && !rent.length) return 0;
+    const r = await this.redis.eval<string[], number>(
+      WALLET_GRANT_LUA,
+      [K.acct(id), await econKeyFor(id, kstDay(now)), K.look(id), K.stash(id)],
+      [String(Math.max(0, Math.floor(points))), String(WALLET_MAX), stat, String(now), ...rent.flatMap((x) => [x.itemId, x.slot, String(x.until)])],
+    );
+    return Number(r) || 0;
   }
 
   async revokeChamp(id: string, itemIds: readonly string[]): Promise<void> {

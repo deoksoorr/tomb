@@ -8,6 +8,8 @@ import { useBridgeEvent, useBridgeValue } from "@/lib/hooks/useBridge";
 import { isChannelSelectable, useLobby, visibleChannels } from "@/lib/hooks/useLobby";
 import { useMyHouseChannel } from "@/lib/hooks/useMyHouseChannel";
 import { aloneLine, elsewhereCount, elsewhereLine, hereLabel } from "@/lib/peerPreview";
+import { useStaffPeople } from "@/lib/hooks/useStaffPeople";
+import { otherMapNames } from "@/lib/staffPeople";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import { InfoCard, TipList } from "../ui/InfoBlocks";
@@ -25,12 +27,13 @@ type Props = {
   graveChannels?: readonly number[];
 };
 
-type Peers = { names: string[]; map: MapId };
+/** staff = names 중 운영자 수 (채널 인원에 없다) */
+type Peers = { names: string[]; map: MapId; staff: number };
 
 /** 지금 맵에 보이는 사람들 닉네임과 그 맵 (게임에 물어본다) */
 function usePeerNames(): Peers | null {
   const [peers, setPeers] = useState<Peers | null>(null);
-  useBridgeEvent("peers:list", (p) => setPeers({ names: p.names, map: p.map ?? "village" }));
+  useBridgeEvent("peers:list", (p) => setPeers({ names: p.names, map: p.map ?? "village", staff: p.staff ?? 0 }));
   useEffect(() => {
     bridge.emit("peers:ask");
     const t = setInterval(() => bridge.emit("peers:ask"), PEERS_POLL_MS);
@@ -51,11 +54,14 @@ export default function ChannelMenu({ onClose, graveChannels = [] }: Props) {
   const [previous] = useState(() => lastChannel(current));
   const houseCh = useMyHouseChannel();
   const peers = usePeerNames();
+  // 11/20 운영자에게만: 이 채널 다른 맵(·실내)에 있는 사람 이름 전부 (일반 유저는 「이 맵이 아닌 곳에 N명」만)
+  const staff = !!useBridgeValue("me:staff")?.on;
+  const staffPeople = useStaffPeople(staff, 10_000).data;
   // 평소에는 채널 몇 개만 열려 있다(붐비면 자동으로 더 열린다). 닫힌 채널이라도 내 집·내 묘비·지금 채널은 보여 준다
   const mine = [houseCh, current, ...graveChannels];
 
   // 골라 둔 채널이 그사이 가득 차면 선택을 푼다
-  if (choice !== null && lobby.lobby && !isChannelSelectable(lobby.lobby, choice, mine)) setChoice(null);
+  if (choice !== null && lobby.lobby && !isChannelSelectable(lobby.lobby, choice, mine, staff)) setChoice(null);
 
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -71,7 +77,8 @@ export default function ChannelMenu({ onClose, graveChannels = [] }: Props) {
   function card(ch: ChannelInfo) {
     const st = channelStatus(ch, threshold);
     const here = ch.id === current;
-    const disabled = st === "full" || here;
+    // 11/20 운영자는 정원 밖: 만석 채널도 고른다
+    const disabled = (st === "full" && !staff) || here;
     const fill = ch.cap > 0 ? Math.min(100, Math.round((ch.count / ch.cap) * 100)) : 0;
     const graves = graveCount(ch.id);
     const left = Math.max(0, ch.cap - ch.count);
@@ -95,7 +102,7 @@ export default function ChannelMenu({ onClose, graveChannels = [] }: Props) {
           <span className={styles.meterFill} data-status={st} style={{ width: `${fill}%` }} />
         </span>
         <span className={styles.count}>
-          {ch.count}/{ch.cap}명 · {st === "full" ? "자리가 없어요" : `${left}자리 남음`}
+          {ch.count}/{ch.cap}명 · {st === "full" ? (staff ? "꽉 찼지만 운영자는 들어가요" : "자리가 없어요") : `${left}자리 남음`}
         </span>
         {(previous === ch.id || houseCh === ch.id || graves > 0) && (
           <span className={styles.badges}>
@@ -112,7 +119,7 @@ export default function ChannelMenu({ onClose, graveChannels = [] }: Props) {
             )}
           </span>
         )}
-        {here && <PeerPreview peers={peers} channelCount={ch.count} />}
+        {here && <PeerPreview peers={peers} channelCount={ch.count} meStaff={staff} others={staff && staffPeople?.reached && peers ? otherMapNames(staffPeople.people, ch.id, peers.map) : null} />}
       </label>
     );
   }
@@ -146,7 +153,6 @@ export default function ChannelMenu({ onClose, graveChannels = [] }: Props) {
                   <b>혼잡</b>은 곧 찰 수 있다는 뜻이고, <b>만석</b>인 채널은 자리가 날 때까지 고를 수 없어요.
                 </>,
                 "내 집과 내 묘비는 만든 채널에만 있어요. 목록의 표시를 보고 찾아가세요.",
-                "확성기는 그 채널에만, 전체 확성기는 모든 채널에 들려요.",
               ]}
             />
           </InfoCard>
@@ -162,11 +168,13 @@ export default function ChannelMenu({ onClose, graveChannels = [] }: Props) {
 }
 
 /** 지금 채널 카드 안: 같이 있는 사람 닉네임 전부와 총 인원 */
-function PeerPreview({ peers, channelCount }: { peers: Peers | null; channelCount: number }) {
+function PeerPreview({ peers, channelCount, meStaff, others }: { peers: Peers | null; channelCount: number; meStaff: boolean; /** 운영자만: 다른 맵·실내 이름 */ others: { label: string; names: string[] }[] | null }) {
   if (peers === null) return <span className={styles.peers}>같이 있는 사람을 살펴보는 중…</span>;
   const { names, map } = peers;
   // 11/17 게임은 지금 맵에 보이는 사람만 안다 → 채널 인원과 견줘 다른 곳에 있는 사람도 알려 준다
-  const elsewhere = elsewhereCount(channelCount, names.length);
+  // 11/20 채널 인원엔 운영자가 없다 → 나(운영자)를 더하고, 보이는 운영자는 빼고 견준다
+  const elsewhere = elsewhereCount(channelCount + (meStaff ? 1 : 0), names.length - peers.staff);
+  if (others) return <StaffPeers names={names} map={map} others={others} />;
   if (names.length === 0) return <span className={styles.peers}>{aloneLine(map, elsewhere)}</span>;
   const more = elsewhereLine(elsewhere);
   return (
@@ -180,6 +188,28 @@ function PeerPreview({ peers, channelCount }: { peers: Peers | null; channelCoun
         ))}
       </span>
       {more && <span className={styles.more}>{more}</span>}
+    </span>
+  );
+}
+
+/** 11/20 운영자: 지금 맵 사람과 다른 맵·실내 사람을 곳마다 전부 (외 몇 명으로 줄이지 않는다) */
+function StaffPeers({ names, map, others }: { names: string[]; map: MapId; others: { label: string; names: string[] }[] }) {
+  const groups = [...(names.length ? [{ label: hereLabel(map, names.length), names }] : []), ...others.map((g) => ({ label: `${g.label} ${g.names.length}명`, names: g.names }))];
+  if (!groups.length) return <span className={styles.peers}>지금은 이 채널에 나 혼자 있어요.</span>;
+  return (
+    <span className={styles.peers}>
+      {groups.map((g) => (
+        <span key={g.label} className={styles.peerGroup}>
+          <span className={styles.peersLabel}>{g.label}</span>
+          <span className={styles.names}>
+            {g.names.map((n, i) => (
+              <span key={`${n}-${i}`} className={styles.peerName}>
+                {n}
+              </span>
+            ))}
+          </span>
+        </span>
+      ))}
     </span>
   );
 }

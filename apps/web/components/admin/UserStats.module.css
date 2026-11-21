@@ -1,0 +1,91 @@
+/* 11/20 유저 상세 (UserStatsDialog). 색은 Admin.module.css의 --ad-* 토큰만 쓴다 */
+
+/* 관리자 창은 조금 더 높게 (본문만 스크롤) */
+@media (min-width: 561px) {
+  .dialog {
+    height: min(820px, var(--dialog-max-h));
+  }
+}
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-family: var(--ad-font);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.body {
+  display: grid;
+  gap: 18px;
+  font-family: var(--ad-font);
+}
+
+.section {
+  display: grid;
+  gap: 8px;
+}
+
+.title {
+  margin: 0;
+  color: var(--ad-strong);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.note {
+  margin: 0;
+  color: var(--ad-faint);
+  font-size: 12px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.cell {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--ad-line);
+  border-radius: var(--ad-radius-sm);
+  background: var(--ad-surface);
+}
+
+.cell dt {
+  color: var(--ad-muted);
+  font-size: 12px;
+}
+
+.cell dd {
+  margin: 0;
+  color: var(--ad-strong);
+  font-size: 15px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.cell .cellNote {
+  color: var(--ad-faint);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+@media (max-width: 560px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

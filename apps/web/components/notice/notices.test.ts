@@ -29,5 +29,7 @@ describe("validateInquiry", () => {
       "message",
     ]);
     expect(validateInquiry({ category: "idea", message: "가".repeat(1001), contact: "" }).message).toBeDefined();
+    // 손님은 연락처 필수
+    expect(validateInquiry({ category: "bug", message: "열 글자가 넘는 문의 내용", contact: " ", needContact: true }).contact).toBe("답장 받을 연락처를 적어 주세요.");
   });
 });

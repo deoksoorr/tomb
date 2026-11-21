@@ -670,7 +670,7 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   drawGear(g, view, gear, m, pal, fb);
   // F8 머리·목·손 꾸미기 (avatarGear.ts)
   if (gear.extra.neck) drawNeckGear(g, view, gear.extra.neck, m, fb);
-  if (gear.extra.head) drawHeadGear(g, view, gear.extra.head, m, fb, fb === "round" ? m.top - 1 : m.top);
+  if (gear.extra.head) drawHeadGear(g, view, gear.extra.head, m, fb, fb === "round" ? m.top - 1 : m.top, pose.hem);
   if (gear.extra.hand) drawHandGear(g, view, gear.extra.hand, m);
   // 11/19 계절 한정: 롱패딩 높은 깃 → 모자 → 손에 든 것 (선물 자루는 머리를 다 그린 뒤 몸 뒤 빈칸에)
   if (gear.ss.length) {

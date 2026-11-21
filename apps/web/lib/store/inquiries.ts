@@ -1,7 +1,7 @@
 import type { Redis } from "@upstash/redis";
 import { redisClient } from "../redisUsage";
 import { env } from "../env";
-import type { InquiryCategory } from "../types";
+import type { InquiryCategory, InquirySource } from "../types";
 
 // 문의함: 유저가 [문의하기]로 보낸 문의를 우리 저장소에 남기고 관리자 문의 탭에서 읽는다 (GitHub 이슈는 덤으로 보낸다).
 // 최근 INQUIRY_KEEP개만 두고 오래된 것부터 지운다. 처리 여부·관리자 메모는 원본 JSON과 따로 둬서 고칠 때 원본을 다시 쓰지 않는다.
@@ -20,7 +20,8 @@ export type InquiryStatus = "new" | "done";
 export type InquiryRecord = {
   id: string;
   at: number;
-  accountId: string;
+  /** 11/20 null이면 게임에 들어오지 않고 개발자 노트에서 보낸 손님 (연락처 필수) */
+  accountId: string | null;
   /** 보낼 때의 닉네임 (없으면 이름 없는 계정) */
   name: string | null;
   category: InquiryCategory;
@@ -28,6 +29,8 @@ export type InquiryRecord = {
   contact?: string;
   channel?: number;
   userAgent: string | null;
+  /** 11/20 보낸 곳 (없으면 게임 안 문의 창) */
+  source?: InquirySource;
 };
 export type InquiryRow = InquiryRecord & { status: InquiryStatus; memo?: string; doneAt?: number };
 export type InquiryPatch = { status?: InquiryStatus; memo?: string };

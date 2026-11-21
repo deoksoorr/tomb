@@ -718,7 +718,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
             );
           })}
         </div>
-        {/* 11/15 자동 스킬: 칸 자동은 사냥 중에 정하고(Shift+숫자·우클릭·[자동] 버튼), 여기서는 궁극기 SP 남겨 두기만 */}
+        {/* 11/15 자동 스킬: 칸 자동은 사냥 중에 정하고(Shift+숫자·우클릭·폰은 칸 길게 누르기), 여기서는 궁극기 SP 남겨 두기만 */}
         <div className={t.autoRow}>
           <label className={t.autoKeep}>
             <input
@@ -735,7 +735,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
             궁극기 쓸 SP는 남겨 두기
           </label>
           <span className={t.dockSub}>
-            자동으로 쓸 스킬은 사냥 중에 정해요. 스킬 칸을 오른쪽 클릭하면 그 칸이 자동이 되고, X를 누르면 전부 한 번에 켜고 꺼요. 폰은 [자동]을 누른 다음 칸을 눌러요.
+            자동으로 쓸 스킬은 사냥 중에 정해요. 스킬 칸을 오른쪽 클릭하면 그 칸이 자동이 되고, X를 누르면 전부 한 번에 켜고 꺼요. 폰은 스킬 칸을 길게 누르면 돼요.
           </span>
         </div>
       </section>

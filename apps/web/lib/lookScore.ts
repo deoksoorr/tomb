@@ -11,6 +11,7 @@ import { BODY_TIER_INFO, bodyLabel, bodyTier, bodyUnlockPrice, DYE_PARTS, dyeSpe
 //  - 염색 특수 색(금빛·반짝이·무지개·야광): 부위마다 +DYE_SPECIAL_BONUS
 //  - 운영자 전용 꾸미기는 0
 //  - 주간 랭킹 1위 전용 꾸미기(금화 왕관 등)도 0: 상점 값이 없는 상징이라 1위 보상이 꾸미기 점수를 부풀리지 않게.
+//    11/20 「회장님 독대」 주간 1위 보상(chair)도 같다.
 //    1위 오라는 아이템이 아니라 1위 자격에 붙은 연출이라 점수에 들어가지 않는다
 //  - 11/19 계절 한정 세트: 한 점은 다른 꾸미기와 같은 공식 (펫은 영구 값 ÷ PET_PRICE_UP — 동물원 펫과 같다),
 //    한 벌 다섯 점을 다 입은 동안 세트 덤 점수(SEASON_SETS look)를 더한다
@@ -28,7 +29,7 @@ export function valueScore(value: number): number {
 /** 꾸미기 한 점의 영구 소장 기준 가치 (꾸미기가 아니거나 운영자 전용·주간 1위 전용이면 0) */
 export function itemLookValue(itemId: string): number {
   const it = itemById(itemId);
-  if (!it || it.kind !== "cosmetic" || it.staff || it.champ || it.urgent) return 0;
+  if (!it || it.kind !== "cosmetic" || it.staff || it.champ || it.chair || it.urgent) return 0;
   const pet = petPrice(itemId);
   // 11/19 펫 값을 올렸지만(작은 펫 2배·타는 펫 3배) 꾸미기 점수·랭킹은 예전 값 그대로 (이미 산 사람 점수가 갑자기 뛰지 않게)
   if (pet != null) return Math.round(pet / (isRideablePet(itemId) ? PET_RIDE_PRICE_UP : PET_PRICE_UP));

@@ -94,6 +94,11 @@ export type CharacterState = {
   sgEgg?: number;
   /** 11/20 유성우 오라 (별자리 잇기 전용 — lib/rpg/meteorDrop): 그날 굴린 판 수 · 천장 진행 · 받은 시각. 옛 저장값에 없으면 0부터 */
   mt?: MeteorState;
+  /**
+   * 11/20 판 수 누적 (관리자 유저 상세): 사냥터 id·"tower"·"bugs"·"stars" → [끝낸 판, 깬 판(야근 빌딩은 깬 층 합)].
+   * 판 끝 저장(캐릭터 JSON)에 같이 싣는다 — 명령 추가 없음. 옛 저장값에는 없다 = 11/20 전 판은 안 셌음
+   */
+  hz?: Record<string, [number, number]>;
 };
 
 export type DailyStats = { points: number; runs: number; exp: number };
@@ -326,6 +331,23 @@ export type RpgPlay = {
   superDrops?: boolean;
   /** 11/19 이미 발견한 숨겨진 5세트 효과 (캐릭터 sgEgg) — 처음 켜질 때만 「발견!」을 띄운다 */
   sgEgg?: number;
+  /** 11/20 회장님 독대 (game/chairman): 회장실 판 — 웨이브·드롭 없이 쓰러지지 않는 회장님과 싸운다 */
+  chairman?: {
+    mode: "normal" | "hell";
+    practice: boolean;
+    /** 지옥 봉인 순서 (서버 판 시작 응답 sealPool) */
+    sealPool: string[];
+    /** 내 최고 기록 (피해 계기판) */
+    best: number;
+    /** 처음 보는 기술 기억 키 (계정마다) */
+    acct: string;
+    /** 11/22 오늘 시작 전 나가기로 판을 돌려받을 수 있다 (유료 판 · 브리핑 멈춤 창 안내) */
+    refundLeft?: 0 | 1;
+    /** 11/22 돌려받기 마감 (이 화면 시계 ms — 판 시작 응답 받은 때 + 서버 창보다 조금 짧게) */
+    refundUntil?: number;
+    /** 쓰러짐(또는 20분)·회색 연출이 끝났다 → 서버에 판 끝을 알리고 결과 창 (game/chairman launch) */
+    ended: (r: { damage: number; durationMs: number; timeUp: boolean; potionsUsed: Record<string, number>; god?: boolean }) => void;
+  };
 };
 
 /** 곤충 채집 들판 시간대: 낮(나비) · 노을(잠자리) · 밤(반딧불이) */
@@ -376,6 +398,10 @@ export type RpgHud = {
   run?: { lv: number; xp: number; need: number; cards: { id: CardId; n: number }[]; rerolls: number; focus: boolean; kind: CardKindStyle };
   /** 11/15 판 안 능력치 판 (기본 + 카드가 더한 만큼, 카드 효과 칩) — lib/rpg/cards statPanel */
   stats?: StatPanel;
+  /** 11/20 회장님 독대: 남은 시간 대신 단계 이름 · 봉인된 칸(반려 도장) · 3초 뒤 봉인될 칸(빨간 깜빡임) */
+  /** 11/20 회장님 독대: ms = 버틴 시간(판 시간), crunch = 크런치(10분부터), practice = 연습 판 (청록 테두리) */
+  /** heal = 회복 감소 알림 (11/20 「회장님 앞에서는 회복이 70% 줄어요」) */
+  chair?: { title: string; practice: boolean; phase: string; sealed: number[]; warn: number[]; ms: number; crunch: boolean; heal?: string };
 };
 
 export type RpgAction =
@@ -387,9 +413,12 @@ export type RpgAction =
   | { kind: "hold"; on: boolean; x?: number; y?: number }
   | { kind: "skill"; slot: number }
   /** 11/15 칸 자동 켜기·끄기 (칸 우클릭·길게 누르기). "all" = 전체 스위치 (X) */
-  | { kind: "auto"; slot: number | "all" }
+  /** every: 11/22 폰 [자동] — 켤 때 자동이 되는 칸을 전부 켠다 (끌 때는 전체 스위치만) */
+  | { kind: "auto"; slot: number | "all"; every?: boolean }
   | { kind: "potion"; id: string }
   /** 11/17 사냥터 낙법 (Z·K, 폰 [구르기] 버튼) */
   | { kind: "dodge" }
+  /** 11/20 회장님 독대 달리기 (폰 [달리기] 켜고 끄기) */
+  | { kind: "run"; on: boolean }
   /** 버그 잡기 칸 누르기 */
   | { kind: "slot"; slot: number };

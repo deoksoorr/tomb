@@ -1,4 +1,6 @@
+import Link from "next/link";
 import FaqBrowser from "@/components/site/FaqBrowser";
+import SiteBanner from "@/components/site/SiteBanner";
 import SiteShell from "@/components/site/SiteShell";
 import styles from "@/components/site/site.module.css";
 import { absoluteUrl, FACTS_DATE, jsonLd, SITE_TITLE } from "../seo";
@@ -37,16 +39,17 @@ export default function FaqPage() {
   return (
     <SiteShell current="faq">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(LD) }} />
-      <div className={styles.wrap}>
-        <header className={styles.head}>
-          <h1 className={styles.display}>자주 묻는 질문</h1>
-          <p>자주 받는 질문과 답을 분류별로 모아 두었어요.</p>
-          <div className={styles.rule} />
-        </header>
-      </div>
+      {/* 11/21 머리 배너: 판교의 등대 빛줄기 (밤) */}
+      <SiteBanner title="자주 묻는 질문" sub="자주 받는 질문과 답을 분류별로 모아 두었어요." video={{ webm: "/devnote/faq-banner.webm", mp4: "/devnote/faq-banner.mp4", poster: "/devnote/faq-banner-poster.webp" }} focus="50% 8%" />
       <div className={styles.faq}>
         <FaqBrowser cats={FAQ.cats} items={FAQ.items} />
-        <p className={styles.faqMore}>찾으시는 답이 없으면 게임 안 [내 정보]의 [문의하기]로 물어봐 주세요.</p>
+        <p className={styles.faqMore}>
+          찾으시는 답이 없으면{" "}
+          <Link className={styles.textlink} href="/contact">
+            문의하기
+          </Link>
+          로 물어봐 주세요.
+        </p>
       </div>
     </SiteShell>
   );

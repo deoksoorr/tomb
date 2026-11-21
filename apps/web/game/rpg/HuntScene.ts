@@ -25,7 +25,8 @@ import { DEPTH_GROUND, PALETTES, SkillFx, SKT } from "./skillFx";
 // 스킬마다 고유 연출 (skillMoves) · 큰 도트 피해 숫자와 연타 합계 (damageNumbers)
 import { SKILL_LOOK, SkillMoves, skillPower } from "./skillMoves";
 import { art } from "./skillArt";
-import { DamageNumbers, type DmgGroup } from "./damageNumbers";
+import { DamageNumbers, type Box, type DmgGroup } from "./damageNumbers";
+import { DEPTH } from "../config";
 import { cancelCast, seedPatternTimers, tryStartPattern, updateCast, type Cast, type PatternHost } from "./monsterPatterns";
 import type { RpgSound } from "./sfx";
 import type { SoundEv, SoundOpt } from "./skillSound";
@@ -38,7 +39,7 @@ import { monsterFrame, monsterOrigin, playMonsterDeath } from "./monsterArt";
 import { huntBossDrop, huntDropsFor, MIN_RUN_MS, type DropTicket } from "@/lib/rpg/rewards";
 import { dropRevealMs } from "@/lib/rpg/reveal";
 import { LootLayer } from "./loot";
-import { autoBlock, cleanAuto, SKILL_SLOTS, ULT_SLOT, type HotAuto } from "@/lib/rpg/hotbar";
+import { autoBlock, chairAuto, cleanAuto, SKILL_SLOTS, ULT_SLOT, type HotAuto } from "@/lib/rpg/hotbar";
 import { AUTO_GAP_MS, autoSpOk, ultReserve, wantsCast, type AutoCtx } from "@/lib/rpg/autoSkill";
 import { bridge } from "../bridge";
 // 11/15 야근 빌딩 능력 카드 (판 안에서 쌓는 힘)
@@ -73,6 +74,12 @@ import { TOWER_THEME_RUNTIMES } from "../tower/themes";
 import type { ThemeHost, TowerThemeRuntime } from "../tower/themes/runtime";
 import type { MapConcept } from "@/lib/mapConcept";
 import { currentMapConcept } from "@/lib/mapConceptClient";
+// 11/20 회장님 독대: 회장실 바닥·쓰러지지 않는 회장님·밈 기술 (game/chairman)
+import { ChairArena, type ArenaLike } from "../chairman/arena";
+import { EXT_B as CHAIR_EXT_B, EXT_T as CHAIR_EXT_T } from "../chairman/art";
+import { ChairmanFight, type ChairHost } from "../chairman/fight";
+import { CHAIR_GUARD_KEEP, CHAIR_HEAL_CAP_PER_SEC, CHAIR_HEAL_MUL, CHAIR_RUN, chairQuit, liveSkills, WH as CHAIR_H, WW as CHAIR_W } from "../chairman/rules";
+import { chairBossStats } from "@/lib/chairman/rules";
 
 // 사냥터: 위에서 내려다보는 실시간 전투. 웨이브는 서버가 준 시드의 계획(huntPlan)대로 나온다.
 //  - 웨이브 i는 앞 웨이브를 다 잡았고 i×8초가 지났을 때, 또는 앞 웨이브 뒤 35초가 지나면 나온다
@@ -82,8 +89,21 @@ import { currentMapConcept } from "@/lib/mapConceptClient";
 //  - 공격: 바라보는 쪽 부채꼴(무기마다 다를 수 있음) 안의 몬스터를 모두 때린다.
 //    누를 때마다 한 번(쿨다운 중이면 버퍼에 한 번), 누르고 있으면(키·마우스·손가락) 공격 속도대로 계속.
 
-const W = 448;
-const H = 288;
+// 11/20 회장님 독대는 넓은 판(960×540) — 판을 시작할 때 정한다 (씬은 하나)
+let W = 448;
+let H = 288;
+
+/** 11/21 회장님 독대 폰: 화면 위·아래를 HUD가 가리는 높이 (CSS px — 게임 크기 = CSS 크기). 넓고 높은 화면은 [0, 0] */
+//  11/21 폰 HUD 시안 B: 위는 판 없이 글자 두 줄뿐 → 위 몫을 줄였다 (아래는 스킬 칸·공격 단추 높이). 0이 아니면 = 폰 HUD(slim)
+export function chairCamPad(w: number, h: number): [number, number] {
+  if (w <= 560) return [Math.round(Math.min(h * 0.12, 96)), Math.round(h * 0.26)];
+  if (h <= 520) return [64, Math.round(h * 0.1)];
+  return [0, 0];
+}
+/** 11/21 폰 HUD 머리 위 체력·SP 막대 높이 (화면 px — 테두리 포함) */
+const CHAIR_BAR_H = 12;
+/** 내 이름표 원래 깊이 (AvatarView: labels + 1) */
+const LABEL_DEPTH_ME = DEPTH.labels + 1;
 const WALL = 10;
 const PLAYER_R = 5;
 const HURT_IFRAME_MS = 450;
@@ -147,6 +167,9 @@ type Mon = {
   phase: number;
   /** 40번: 우두머리가 부른 졸개 (웨이브 마릿수에 들지 않는다) */
   minion?: boolean;
+  /** 11/20 회장님 독대: 회장님 자리 (그림·AI 없이 자리만 — game/chairman이 움직인다) · 머리 위 체력 막대 숨김 */
+  chair?: boolean;
+  noBar?: boolean;
   /** 11/12 정예 (plan ELITE: 크고 질기고 EXP 많이) */
   elite?: boolean;
 };
@@ -231,7 +254,19 @@ export class HuntScene extends RpgScene {
   private shots: Shot[] = [];
   private obstacles: Obstacle[] = [];
   /** 40번 사냥터 지도 (장애물·지형 기믹·길찾기) */
-  private arena!: Arena;
+  private arena!: ArenaLike;
+  // ── 11/20 회장님 독대 (play.chairman) ──
+  private chair: ChairmanFight | null = null;
+  private chairBoss: Mon | null = null;
+  /** 지옥 봉인된 스킬 (칸·패시브 모두) */
+  private sealed = new Set<string>();
+  /** 결과까지 나왔다 (이제 나가기만 남음) */
+  private chairDone = false;
+  private chairHudN = 0;
+  /** 11/21 회장님 독대 폰 HUD(시안 B): 체력·SP를 내 이름 아래에 그린다 */
+  /** 11/21 폰 HUD 시안 B (체력·SP는 이름 아래) — 회장님 독대, 11/22 사냥터·야근 빌딩 폰도 (RunHud와 같은 기준: 폭 ≤560 또는 높이 ≤520) */
+  private chairSlim = false;
+  private chairBars: Phaser.GameObjects.Graphics | null = null;
   private zone!: ZoneDef;
   private nextWave = 0;
   private lastWaveAt = 0;
@@ -298,7 +333,25 @@ export class HuntScene extends RpgScene {
   // 플레이어
   private px = W / 2;
   private py = H / 2;
-  private hp = 1;
+  private hpV = 1;
+  /**
+   * 11/20 회장님 독대: 회복이 줄고(curse.healMul — 11/21 50%) 초당 최대 HP의 일정 비율(CHAIR_HEAL_CAP_PER_SEC — 11/21 3%)까지만 찬다 (흡혈·재생·스킬 회복 — 물약은 healFree로 그대로).
+   * HP를 올리는 곳이 많아(흡혈·재생·스킬·옵션) 한 곳(setter)에서 막는다. 쓰러진 뒤(0 이하)에서 오르는 것(연차)은 막지 않는다
+   */
+  private chairHealOn = false;
+  private chairHealTok = 0;
+  private healFree = false;
+  private get hp(): number {
+    return this.hpV;
+  }
+  private set hp(v: number) {
+    if (this.chairHealOn && !this.healFree && v > this.hpV && this.hpV > 0) {
+      const add = Math.min(v - this.hpV, Math.max(0, this.chairHealTok));
+      this.chairHealTok -= add;
+      v = this.hpV + add;
+    }
+    this.hpV = v;
+  }
   private sp = 1;
   private dirRow: number = DIR_ROW.down;
   private face = { x: 0, y: 1 };
@@ -321,6 +374,10 @@ export class HuntScene extends RpgScene {
   private presence: RoomPresence | null = null;
   private peers = 0;
   private movingNow = false;
+  /** 11/20 회장님 독대만: 달리기 (PC Shift 누르고 있기 · 폰 [달리기] 켜고 끄기) */
+  private runTouch = false;
+  private runningNow = false;
+  private dustAt = 0;
   private pShadow!: Phaser.GameObjects.Image;
   private helper: { sprite: Phaser.GameObjects.Sprite; until: number; nextAtk: number; group?: DmgGroup | null } | null = null;
   /** 스킬 트리 패시브를 더한 능력치 (판마다 create()에서) */
@@ -425,6 +482,8 @@ export class HuntScene extends RpgScene {
   create(): void {
     this.setupCommon();
     const play = this.play;
+    W = play.chairman ? CHAIR_W : 448;
+    H = play.chairman ? CHAIR_H : 288;
     // 11/15 층마다 테마는 판 시드로 정해진다 (lib/rpg/tower towerBlock)
     const zone = play.tower ? towerZone(play.seed, play.tower.start, play.tower.start) : zoneFor(play.difficulty, play.zone);
     this.zone = zone;
@@ -432,7 +491,7 @@ export class HuntScene extends RpgScene {
     // 11/15 사냥 중에는 낀 세트 장비를 입는다 (같은 자리 마을 꾸미기보다 먼저 — game/sprites/setGearWear huntLook)
     const look = huntLook(this.data0.look, play.equip);
     makePlayer(this, this.data0.color, look, this.data0.body);
-    this.plan = play.tower ? towerPlan(play.seed, play.tower.start, play.tower.start) : huntPlan(play.seed, play.difficulty, zone.id);
+    this.plan = play.chairman ? [] : play.tower ? towerPlan(play.seed, play.tower.start, play.tower.start) : huntPlan(play.seed, play.difficulty, zone.id);
     this.mons = [];
     this.shots = [];
     this.nextWave = 0;
@@ -451,7 +510,9 @@ export class HuntScene extends RpgScene {
     this.cookieUsed = false;
     this.down?.destroy();
     this.down = null;
-    this.curse = play.tower ? towerCurseFx(play.tower.start) : NO_CURSE;
+    // 11/20 회장님 독대: 받는 회복 30% (물약은 아래 drink에서 따로 — 그대로)
+    this.curse = play.tower ? towerCurseFx(play.tower.start) : play.chairman ? { ...NO_CURSE, healMul: CHAIR_HEAL_MUL } : NO_CURSE;
+    this.chairHealOn = false;
     this.floor = play.tower?.start ?? 0;
     this.floorAt = this.floorsCleared = this.floorMs = 0;
     this.lift = this.quit = false;
@@ -513,7 +574,9 @@ export class HuntScene extends RpgScene {
     // 11/17 맵 컨셉(겨울·크리스마스)은 판을 시작할 때 한 번 읽는다 (판 도중 바뀌면 다음 판부터)
     this.concept = currentMapConcept();
     this.obstacles = [];
-    this.arena = new Arena(this, zone.id, play.tower ? floorSeed(play.seed, this.floor) : play.seed, (this.arenaHooks = {
+    this.arena = play.chairman
+      ? new ChairArena(this, () => this.chair?.covers ?? [])
+      : new Arena(this, zone.id, play.tower ? floorSeed(play.seed, this.floor) : play.seed, (this.arenaHooks = {
       hurtPlayer: (dmg) => this.hurtPlayer(dmg),
       healPlayer: (n0) => {
         if (this.died || this.hp >= this.dv.maxHp) return;
@@ -550,7 +613,8 @@ export class HuntScene extends RpgScene {
       this.player = this.me.sprite;
       const room = `hunt:${play.tower ? "tower" : zone.slug}:${play.difficulty}`;
       this.peers = 0;
-      this.presence = new RoomPresence(this, {
+      // 11/20 회장님 독대는 혼자 (같은 방 사람 없음)
+      this.presence = play.chairman ? null : new RoomPresence(this, {
         atlas,
         room,
         me: this.me,
@@ -599,6 +663,8 @@ export class HuntScene extends RpgScene {
     this.rollDone = 1;
     this.rollSaid = false;
     this.auto = cleanAuto(play.hotAuto, play.hotbar);
+    // 11/21 회장님 독대: 자동 되는 칸 전부 자동 + 전체 켬으로 시작 (끄면 그 판 동안 그대로)
+    if (play.chairman) this.auto = chairAuto(play.hotbar, this.auto);
     this.autoAt = 0;
     this.fightAt = -1e9;
     this.area = attackArea(play.equip);
@@ -667,7 +733,8 @@ export class HuntScene extends RpgScene {
     cam.setRoundPixels(true);
     this.applyZoom();
     cam.startFollow(this.player, true, 0.15, 0.15);
-    this.flash(
+    if (!play.chairman)
+      this.flash(
       play.tower
         ? `야근 빌딩 ${this.floor}층 · ${zone.name}`
         : `${zone.name} · ${zone.desc}${play.testDrops?.length ? " · 시험 드롭 예약됨" : ""}`,
@@ -678,7 +745,8 @@ export class HuntScene extends RpgScene {
     this.liftCut?.destroy();
     this.liftCut = null;
     this.intro?.destroy();
-    this.intro = play.tower ? new MonsterIntro(this, RTEX.monster) : null;
+    // 11/22 폰 세로(위 HUD 시안 B): 새 몬스터 카드는 위 글자 두세 줄 밑으로
+    this.intro = play.tower ? new MonsterIntro(this, RTEX.monster, () => (this.chairSlim && this.cameras.main.height > 520 ? 78 : 30)) : null;
     this.seenMons = new Set();
     if (play.tower?.boost) this.flash("테스트용 무적·공격력 ×20 (슈퍼 계정)", 3000);
     if (play.tower) {
@@ -690,7 +758,16 @@ export class HuntScene extends RpgScene {
       const f = this.floor;
       this.liftCut.start(this.now, "enter", 0, f, isBossFloor(f), () => undefined, () => this.liftOpened(f));
     }
+    // 11/20 회장님 독대
+    this.chair?.destroy();
+    this.chair = null;
+    this.chairBoss = null;
+    this.sealed = new Set();
+    this.chairDone = false;
+    if (play.chairman) this.startChair();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.chair?.destroy();
+      this.chair = null;
       this.theme?.destroy();
       this.theme = null;
       this.liftCut?.destroy();
@@ -748,7 +825,7 @@ export class HuntScene extends RpgScene {
         if (sc.status.apply({ id: "confuse", durMs: ms, power: 1 }, sc.now) === "new") sc.ringFx(STATUSES.confuse.color, 18);
       },
       place: (x, y, r) => sc.arena.place(x, y, r),
-      layout: () => sc.arena.layout,
+      layout: () => (sc.arena as Arena).layout,
       flash: (msg, ms) => sc.flash(msg, ms),
       float: (x, y, text, color) => sc.floatText(x, y, text, color, 10),
       sfx: (name, gain) => sc.sfx.play(name, gain),
@@ -771,12 +848,25 @@ export class HuntScene extends RpgScene {
 
   private applyZoom(): void {
     const cam = this.cameras.main;
+    // 11/20 회장님 독대도 사냥·야근 빌딩과 같은 배율로 나를 따라간다 (사용자 「캐릭터가 너무 작아져 긴장감이 없다」 — 예전엔 PC에서 판 전체를 한 화면에)
     const z = Phaser.Math.Clamp(Math.floor(Math.min(cam.width, cam.height) / 220), 2, 4);
     cam.setZoom(z);
     this.skfx?.resetZoom(z);
     const vw = cam.width / z;
     const vh = cam.height / z;
-    cam.setBounds(vw > W ? (W - vw) / 2 : 0, vh > H ? (H - vh) / 2 : 0, Math.max(W, vw), Math.max(H, vh));
+    // 11/21 폰 회장님 독대: 위 체력 판·아래 스킬 칸(반려 시계)이 판 위아래를 가려 내 캐릭터가 스킬 칸 뒤로 숨었다
+    //  → 가려지는 만큼 판 위아래로 더 굴러가게 하고, 나를 그 사이 띠 가운데에 둔다 (PC는 0 — 그대로)
+    const [pt, pb] = this.play.chairman ? chairCamPad(cam.width, cam.height) : [0, 0];
+    // 방 그림은 위·아래로 EXT_T·EXT_B까지 이어 그렸다 — 그보다 더 굴러가면 검은 빈칸이 보인다
+    const t = Math.min(pt / z, CHAIR_EXT_T);
+    const b = Math.min(pb / z, CHAIR_EXT_B);
+    const y0 = -t;
+    const h0 = H + t + b;
+    cam.setBounds(vw > W ? (W - vw) / 2 : 0, vh > h0 ? y0 + (h0 - vh) / 2 : y0, Math.max(W, vw), Math.max(h0, vh));
+    cam.setFollowOffset(0, (t - b) / 2);
+    this.chairSlim = this.play.chairman ? pt > 0 || pb > 0 : this.play.game === "hunt" && (cam.width <= 560 || cam.height <= 520);
+    // 11/21 폰 HUD B(회장님·빌딩·사냥터): 피해 숫자가 캐릭터·이름을 덮었다 → 작게·비켜서·빨리, 합계는 내 이름 칸을 피해서 (PC 그대로)
+    this.dmg?.setCompact(this.chairSlim, () => ({ x: this.px, y: this.py }), () => this.meNameBox(), pt);
   }
 
   protected onResize(): void {
@@ -800,7 +890,8 @@ export class HuntScene extends RpgScene {
     // 11/15 숫자 1~5 = 스킬 칸 (Shift+숫자 = 그 칸 자동 켜기·끄기), F = 궁극기 칸, X = 자동 전체 스위치
     else if (/^Digit[1-5]$/.test(code)) {
       const slot = Number(code.slice(5)) - 1;
-      if (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight")) this.toggleAuto(slot);
+      // 11/21 회장님 독대는 Shift가 달리기 → 달리며 숫자를 눌러도 스킬을 쓴다 (예전엔 자동이 꺼져 「자동이 풀린다」)
+      if (!this.chair && (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight"))) this.toggleAuto(slot);
       else this.useSkill(slot);
     } else if (code === "KeyF") this.useSkill(ULT_SLOT);
     else if (code === "KeyX") this.toggleAuto("all");
@@ -816,18 +907,27 @@ export class HuntScene extends RpgScene {
       this.holdOn = a.on;
       this.holdAim = a.on && a.x !== undefined && a.y !== undefined ? { x: a.x, y: a.y } : null;
     } else if (a.kind === "skill") this.useSkill(a.slot);
-    else if (a.kind === "auto") this.toggleAuto(a.slot);
+    else if (a.kind === "auto") this.toggleAuto(a.slot, a.every);
     else if (a.kind === "potion") this.usePotion(a.id);
     else if (a.kind === "dodge") this.roll();
+    else if (a.kind === "run") this.runTouch = a.on;
   }
 
   /** 11/15 칸 자동 켜기·끄기 (slot) / 전체 스위치 ("all" — 칸마다 정한 것은 그대로). 바뀌면 화면(HuntLobby)이 캐릭터에 저장한다 */
-  private toggleAuto(slot: number | "all"): void {
+  private toggleAuto(slot: number | "all", every = false): void {
     const a = this.auto;
-    if (slot === "all") {
+    if (slot === "all" && every) {
+      // 11/22 폰 [자동]: 켜면 자동이 되는 스킬 칸 전부(궁극기·이동 스킬·반려된 칸 빼고), 끄면 전부 끈다
+      if (a.on) a.on = false;
+      else {
+        a.ids = chairAuto(this.play.hotbar, a).ids.filter((id) => !this.sealed.has(id));
+        a.on = a.ids.length > 0;
+      }
+      this.flash(a.on ? "자동 스킬 전부 켬" : a.ids.length ? "자동 스킬 전부 끔" : "자동으로 쓸 스킬이 없어요", 900);
+    } else if (slot === "all") {
       if (!a.ids.length) {
         // 터치는 [자동]을 누른 다음 칸을 눌러 정한다 (HUNT_TOUCH)
-        this.flash(isTouchUi() ? "자동 칸이 없어요. [자동]을 누른 다음 칸을 눌러 정해요" : "자동 칸이 없어요. 칸을 우클릭하거나 Shift+숫자로 정해요", 1600);
+        this.flash(isTouchUi() ? "자동 칸이 없어요. 스킬 칸을 길게 눌러 정해요" : "자동 칸이 없어요. 칸을 우클릭하거나 Shift+숫자로 정해요", 1600);
         return;
       }
       a.on = !a.on;
@@ -1315,6 +1415,8 @@ export class HuntScene extends RpgScene {
     if (this.egg.any) dmg = Math.max(1, Math.round(dmg * this.egg.hitMul(this.now, !!opts.basic)));
     this.logDmg += Math.max(0, Math.min(dmg, m.hp));
     m.hp -= dmg;
+    // 11/20 회장님 독대: 넣은 피해가 그 판 기록 (회장님은 쓰러지지 않는다)
+    if (m.chair) this.chair?.dealt(dmg);
     const def = MONSTERS[m.id];
     const sk = opts.skill ? PALETTES[opts.skill] : null;
     const w = opts.weight ?? (opts.heavy ? 2 : 0);
@@ -1532,6 +1634,14 @@ export class HuntScene extends RpgScene {
   private useSkill(slot: number, quiet = false): boolean {
     const id = this.play.hotbar[slot];
     if (!id) return false;
+    // 11/20 회장님 독대 지옥: 반려된(봉인된) 스킬은 못 쓴다
+    if (this.sealed.has(id)) {
+      if (!quiet) {
+        this.flash("반려된 스킬이에요", 900);
+        this.sfx.play("miss", 0.4);
+      }
+      return false;
+    }
     const lv = this.play.skills[id] ?? 0;
     const def = skillById(id);
     if (!def || def.kind !== "active" || lv < 1) return false;
@@ -2111,7 +2221,7 @@ export class HuntScene extends RpgScene {
       }
       case "so_lamp": {
         const fx = SKILL_FX.so_lamp(lv);
-        const heal = Math.round((this.dv.maxHp * fx.healPct * pow + this.dv.stats.int * 3) * soulFocus(this.play.skills) * this.curse.healMul);
+        const heal = Math.round((this.dv.maxHp * fx.healPct * pow + this.dv.stats.int * 3) * soulFocus(this.skillsLive) * this.curse.healMul);
         this.hp = Math.min(this.dv.maxHp, this.hp + heal);
         this.rootUntil = now + fx.rootMs;
         this.cutIn("soul", false);
@@ -2126,7 +2236,7 @@ export class HuntScene extends RpgScene {
         snd("cast");
         mv.swift(this.px, this.py);
         // 11/19 v3 넋에 쓴 포인트만큼 (섞어 찍기는 약하게)
-        const k = soulFocus(this.play.skills);
+        const k = soulFocus(this.skillsLive);
         this.buffs.set("so_swift", { until: now + fx.durMs, v: fx.move * k });
         this.buffs.set("so_swift_aspd", { until: now + fx.durMs, v: fx.aspd * k });
         this.floatText(this.px, this.py - 24, "바람 넋", "#9ff0dc", 10);
@@ -2503,7 +2613,10 @@ export class HuntScene extends RpgScene {
     this.potionReadyAt = this.now + POTION_COOLDOWN_MS;
     const d = this.dv;
     // 11/15 번아웃 저주: 물약 회복 절반(2단계~), 받는 회복 절반(6단계~ — SP는 회복이 아니라 그대로)
-    if (p.hp) this.hp = Math.min(d.maxHp, this.hp + p.hp * this.curse.potionMul * this.curse.healMul * this.sg.potionMul());
+    // 11/20 회장님 독대: 물약은 회복 감소·초당 상한 없이 그대로 (쿨타임으로만 묶인다)
+    this.healFree = !!this.chair;
+    if (p.hp) this.hp = Math.min(d.maxHp, this.hp + p.hp * this.curse.potionMul * (this.chair ? 1 : this.curse.healMul) * this.sg.potionMul());
+    this.healFree = false;
     if (p.sp) this.sp = Math.min(d.maxSp, this.sp + p.sp * this.curse.potionMul);
     this.floatText(this.px, this.py - 20, p.name, "#ffe39a", 11);
     // 상태 이상 풀기 (커피: 독·화상·출혈, 에너지드링크: 둔화·빙결·혼란·침묵, 도시락: 전부)
@@ -2569,13 +2682,17 @@ export class HuntScene extends RpgScene {
     }
     // 11/15 테스트 서버 슈퍼 계정의 야근 빌딩 구경 (무적) — 화면이 슈퍼 계정에만 켠다 (lib/rpg/types RpgPlay.tower.boost)
     if (this.play.tower?.boost) return false;
+    // 11/21 회장님 독대 무적(시험) — 개발 서버 운영자만 (fight.godOn이 운영 빌드에선 늘 false)
+    if (this.chair?.godOn) return false;
     this.hurtUntil = this.now + HURT_IFRAME_MS;
     this.fightAt = this.now;
     // 11/12 부재중 자동응답: 보호막이 먼저 받는다
     // 동지의 맹세: 받는 피해 감소
-    dmg = Math.max(1, Math.round(dmg * (1 - this.mods.guard) * (1 - this.mods.wkGuard) * (1 - this.synGuard)));
+    // 11/20 회장님 독대: 받는 피해 감소(패시브·세트 옵션)는 반만 (CHAIR_GUARD_KEEP) — 만렙도 회장님 공격은 확실히 아프다
+    const soft = (m: number) => (this.chair ? 1 - (1 - m) * CHAIR_GUARD_KEEP : m);
+    dmg = Math.max(1, Math.round(dmg * soft((1 - this.mods.guard) * (1 - this.mods.wkGuard) * (1 - this.synGuard))));
     // 11/15 세트 장비: 받는 피해 옵션·야근 4세트 (맞은 시각도 적는다 — 출장 4세트)
-    dmg = Math.max(1, Math.round(dmg * this.sg.takenMul(this.now, this.hp, this.dv.maxHp)));
+    dmg = Math.max(1, Math.round(dmg * soft(this.sg.takenMul(this.now, this.hp, this.dv.maxHp))));
     // 11/15 능력 카드: 반차(층마다 첫 공격) · 사원증 목걸이 · 재택근무(서 있으면)
     if (this.cards) {
       dmg = this.cards.incoming(dmg, this.movingNow);
@@ -2624,7 +2741,7 @@ export class HuntScene extends RpgScene {
     this.hp = 0;
     this.showHurt(before);
     // 11/15 번아웃 저주 '사직서 즉시 수리'(10단계~): 부활 쿠키 없이 그 자리에서 끝
-    if (!this.cookieUsed && this.curse.revive && (this.play.potions.p_cookie ?? 0) > 0) {
+    if (!this.chair && !this.cookieUsed && this.curse.revive && (this.play.potions.p_cookie ?? 0) > 0) {
       // 부활 쿠키: 자동으로 먹고 반쯤 회복 (11/17 체력·무적은 연출이 끝날 때 — endDown)
       this.cookieUsed = true;
       this.potionsUsed.p_cookie = 1;
@@ -2642,7 +2759,8 @@ export class HuntScene extends RpgScene {
     this.flash("쓰러졌어요…", 1500);
     this.player.setAlpha(0.5);
     // 쓰러진 뒤 잠깐: 그때까지의 결과로 끝내고, 받을 드롭이 있으면 바닥에 떨궈 날아오게 한 뒤 끝낸다
-    this.time.delayedCall(900, () => !this.ended && !this.endSnap && this.endRun(this.result(), true, 0));
+    // 11/20 회장님 독대: 회색 느린 연출 → 결과 창은 game/chairman이 (드롭 없음)
+    if (!this.chair) this.time.delayedCall(900, () => !this.ended && !this.endSnap && this.endRun(this.result(), true, 0));
     return true;
   }
 
@@ -2870,6 +2988,53 @@ export class HuntScene extends RpgScene {
     const color = now < this.gaugeFlashUntil ? 0xffffff : this.atkBuffered ? 0x9fc5a8 : ready ? 0xe0c36a : 0x8a7a5a;
     g.fillStyle(color, 1).fillRect(x, y, Math.round(w * p), 2);
     g.setDepth(this.py + 2);
+  }
+
+  /**
+   * 11/21 회장님 독대 폰 HUD(시안 B): 이름 바로 아래 체력(빨강)·SP(파랑) 막대 46px — 피해 숫자·콤보보다 위에 그린다.
+   * 이름표를 막대 높이만큼 올려(unit.lift) 머리와 이름 사이에 막대 자리를 낸다
+   */
+  private drawChairBars(now: number): void {
+    const on = this.chairSlim && !this.died;
+    if (this.me) this.me.unit.lift = on ? CHAIR_BAR_H / this.cameras.main.zoom : 0;
+    // 이름표·칭호도 피해 숫자(1e6+)보다 위로 — 늘 읽히게 (PC는 원래 깊이)
+    this.me?.setNameDepth(on ? 1e6 + 999 : LABEL_DEPTH_ME);
+    if (!on) {
+      this.chairBars?.setVisible(false);
+      return;
+    }
+    if (!this.chairBars?.scene) this.chairBars = this.add.graphics().setDepth(1e6 + 1000);
+    const g = this.chairBars.clear().setVisible(true);
+    const z = this.cameras.main.zoom;
+    const lb = this.me?.label;
+    g.setPosition(lb ? lb.x : this.px, lb ? lb.y + 1 / z : this.py - 40).setScale(1 / z);
+    const w = 46;
+    const x = -w / 2;
+    const hp = Math.max(0, Math.min(1, this.hp / Math.max(1, this.dv.maxHp)));
+    const sp = Math.max(0, Math.min(1, this.sp / Math.max(1, this.dv.maxSp)));
+    const low = hp < 0.3 && Math.floor(now / 180) % 2 === 0;
+    g.fillStyle(0x0a0b10, 0.9).fillRect(x - 1, 0, w + 2, CHAIR_BAR_H - 1);
+    g.fillStyle(0x3a1414, 1).fillRect(x, 1, w, 5);
+    g.fillStyle(low ? 0xff8a70 : 0xe0483a, 1).fillRect(x, 1, Math.round(w * hp), 5);
+    g.fillStyle(0xff9a8a, 0.5).fillRect(x, 1, Math.round(w * hp), 1);
+    g.fillStyle(0x14203a, 1).fillRect(x, 7, w, 3);
+    g.fillStyle(0x5aa8ff, 1).fillRect(x, 7, Math.round(w * sp), 3);
+  }
+
+  /** 11/21 폰: 내 칭호 + 이름 + 아래 체력·SP 막대 + 오른쪽 콤보 칸 (월드 좌표) — 합계 숫자가 피해 간다 */
+  private meNameBox(): Box | null {
+    const lb = this.me?.label;
+    if (!lb || !this.chairSlim) return null;
+    const z = this.cameras.main.zoom;
+    const hw = Math.max(lb.displayWidth / 2, 23 / z);
+    const box = { x0: lb.x - hw, y0: lb.y - lb.displayHeight, x1: lb.x + hw + 44 / z, y1: lb.y + CHAIR_BAR_H / z };
+    const tt = this.me?.titleText;
+    if (tt?.visible && tt.text) {
+      box.x0 = Math.min(box.x0, tt.x - tt.displayWidth / 2);
+      box.x1 = Math.max(box.x1, tt.x + tt.displayWidth / 2);
+      box.y0 = Math.min(box.y0, tt.y - tt.displayHeight);
+    }
+    return box;
   }
 
   private ringFx(color: number, radius: number): void {
@@ -3130,6 +3295,8 @@ export class HuntScene extends RpgScene {
    * 공격은 모두 패턴으로 한다 (물기·돌진·사격·자폭·기습·우두머리 단계 패턴 — 바닥 경고가 먼저 보인다)
    */
   private updateMonster(m: Mon, dt: number): void {
+    // 11/20 회장님은 game/chairman이 움직인다
+    if (m.chair) return;
     const def = MONSTERS[m.id];
     const now = this.now;
     if (m.kbx || m.kby) {
@@ -3270,6 +3437,12 @@ export class HuntScene extends RpgScene {
   }
 
   private step(delta: number): void {
+    // 11/20 회장님 독대: 업무 브리핑(멈춤) · 처음 보는 기술(0.3배) · 쓰러짐(회색 느리게)
+    if (this.chair && !this.paused) {
+      delta = this.chair.frame(delta);
+      // 브리핑·결과 대기(시간이 안 흐름)에도 HUD는 보낸다
+      if (delta <= 0 && ++this.chairHudN % 8 === 0) bridge.emit("rpg:hud", this.hud());
+    }
     if (this.hitstop > 0 && !this.paused) {
       this.hitstop -= delta;
       return;
@@ -3292,7 +3465,9 @@ export class HuntScene extends RpgScene {
 
     // 웨이브
     const aliveAll = this.pendingSpawns > 0 || this.mons.some((m) => m.alive);
-    if (this.nextWave < this.plan.length) {
+    if (this.chair) {
+      // 11/20 회장님 독대: 웨이브·승리 없음 (내가 쓰러질 때까지)
+    } else if (this.nextWave < this.plan.length) {
       const w = this.plan[this.nextWave];
       const prevDone = !aliveAll;
       // 11/15 야근 빌딩: 엘리베이터 문이 열리기 전에는 나오지 않는다
@@ -3323,6 +3498,7 @@ export class HuntScene extends RpgScene {
     }
 
     // 재생·버프
+    if (this.chairHealOn) this.chairHealTok = Math.min(d.maxHp * CHAIR_HEAL_CAP_PER_SEC, this.chairHealTok + d.maxHp * CHAIR_HEAL_CAP_PER_SEC * dt);
     if (now >= this.regenAt) {
       this.regenAt = now + 1000;
       this.sp = Math.min(d.maxSp, this.sp + huntSpRegen(d.maxSp) * (1 + this.tm.spRegen));
@@ -3353,7 +3529,9 @@ export class HuntScene extends RpgScene {
       const rolled = this.rollStep(now);
       const moving = !rolled && Math.hypot(a.x, a.y) > 0.15 && now >= this.rootUntil && !frozen;
       // 40번 지형: 늪·덩굴은 느리게, 웅덩이는 미끄럽게, 컨베이어·문·바람은 밀어낸다
-      const spd = moving ? d.move * (1 + this.buff("so_swift")) * this.status.moveMul(now) * this.arena.speedMul(this.px, this.py) * (this.whirl ? SKILL_FX.wk_whirl(this.whirl.lv).moveMul : 1) * this.eggMove : 0;
+      // 11/20 회장님 독대만 달린다 (Shift는 숫자와 같이 누르면 자동 켜기·끄기 — 혼자 누르면 달리기)
+      const run = moving && this.canRun() && (this.runTouch || this.keys.has("ShiftLeft") || this.keys.has("ShiftRight"));
+      const spd = moving ? this.moveSpd(now, run) : 0;
       const v0 = rolled ? { x: 0, y: 0 } : this.arena.playerVelocity(a.x * spd, a.y * spd, this.px, this.py, dt, now);
       // 11/15 냉각수 웅덩이: 미끄러진다
       const v = !rolled && this.theme?.playerVelocity ? this.theme.playerVelocity(v0, dt) : v0;
@@ -3375,8 +3553,16 @@ export class HuntScene extends RpgScene {
         this.walkT += delta;
       }
       this.movingNow = moving || rolled;
+      this.runningNow = run && !rolled;
       if (rolled) this.walkT += delta;
-      if (this.me) this.me.apply(this.movingNow ? "walk" : "idle", (this.dirRow as DirId) ?? DIR.down, this.time.now);
+      else if (this.runningNow) {
+        this.walkT += delta * (CHAIR_RUN - 1);
+        if (now - this.dustAt > 90) {
+          this.dustAt = now;
+          this.fx.dust(this.px, this.py);
+        }
+      }
+      if (this.me) this.me.apply(this.runningNow ? "run" : this.movingNow ? "walk" : "idle", (this.dirRow as DirId) ?? DIR.down, this.time.now);
       else this.player.setFrame(avFrame(this.dirRow, this.movingNow ? 2 + (Math.floor(this.walkT / 120) % 4) : Math.floor(now / 500) % 2));
       // 버퍼에 한 번 있거나, 공격 키·마우스·손가락을 누르고 있으면 쿨다운이 끝나는 순간 친다
       const held = this.holdOn || this.keys.has("Space") || this.keys.has("KeyJ");
@@ -3408,6 +3594,7 @@ export class HuntScene extends RpgScene {
     this.selfLight?.update(this.px, this.py - 10, now);
     this.drawGauge(now);
     this.drawStatus(now);
+    this.drawChairBars(now);
 
     // 도우미 유령
     const h = this.helper;
@@ -3458,7 +3645,7 @@ export class HuntScene extends RpgScene {
       const top = m.y - size - 3;
       // 11/15: 체력 막대는 늘 보인다 — 어두운 맵·숨는 몬스터 때문에 어디 있는지 몰라 답답했다 (사용자 요청).
       // 어둠·숨기 기믹은 몸 그림에만 걸린다
-      const showBar = true;
+      const showBar = !m.noBar;
       const eTop = m.elite ? m.y - size * ELITE.scale - 3 : top;
       m.barBg.setPosition(m.x, eTop).setVisible(showBar);
       m.bar.setPosition(m.x - size / 2, eTop).setSize(Math.max(0, (size * m.hp) / m.st.maxHp), 2).setVisible(showBar);
@@ -3468,12 +3655,16 @@ export class HuntScene extends RpgScene {
     // 40번: 지형 기믹·우두머리 졸개·조명·입자
     this.arena.update(now, dt, { x: this.px, y: this.py }, this.mons, this.face);
     this.theme?.update(now, dt);
+    this.chair?.update(dt);
     // 2번 바닥 경고 · 40번 내 투사체 · 16번 콤보
     this.tele.update(now);
     this.updatePShots(dt);
     this.cards?.update(dt);
     if (this.combo && now - this.comboAt > COMBO_RESET_MS) this.combo = 0;
-    this.fx.combo(this.died ? 0 : this.combo, this.px, this.py - 33);
+    // 11/21 폰 HUD B: 이름 아래는 체력 막대 → 콤보는 이름 오른쪽 옆에 (이름을 덮지 않게)
+    const lb = this.chairSlim ? this.me?.label : undefined;
+    if (lb) this.fx.combo(this.died ? 0 : this.combo, lb.x + lb.displayWidth / 2 + 3 / this.cameras.main.zoom, lb.y + 1 / this.cameras.main.zoom, true);
+    else this.fx.combo(this.died ? 0 : this.combo, this.px, this.py - 33);
 
     // 투사체 (11/15 서류 폭풍이면 바람에 휘어 날아온다)
     const wind = this.arena.shotWind(now);
@@ -3552,7 +3743,138 @@ export class HuntScene extends RpgScene {
       ...(this.cards ? { run: this.cards.hud(!this.movingNow && !this.died) } : {}),
       // 11/15 능력치 판: 카드를 얹기 전(dvBase)과 전투가 쓰는 지금(dv) — 보통 사냥은 카드 몫 없이
       stats: statPanel(this.dvBase, this.dv, this.wstyle.cdMul, this.cards?.stats ?? null, this.cards?.spare),
+      // 11/20 회장님 독대: 체력 막대·웨이브 대신 단계 이름 · 반려 도장
+      ...(this.chair ? { chair: this.chair.hudChair(), boss: null, wave: undefined } : {}),
     };
+  }
+
+  // ── 11/20 회장님 독대 (game/chairman) ──
+
+  /** 봉인된 스킬을 뺀 스킬 표 (패시브·연계 보너스 계산용) */
+  private get skillsLive(): Partial<Record<SkillId, number>> {
+    return this.sealed.size ? liveSkills(this.play.skills, this.sealed) : this.play.skills;
+  }
+
+  /** 달릴 수 있는 판 (회장님 독대만 — 다른 사냥 밸런스는 그대로) */
+  private canRun(): boolean {
+    return !!this.chair;
+  }
+
+  /** 이동 속도 (px/s): 능력치 × 버프·상태·지형·휘두르기·이스터에그 × 달리기 */
+  private moveSpd(now: number, run: boolean): number {
+    const d = this.dv;
+    return d.move * (1 + this.buff("so_swift")) * this.status.moveMul(now) * this.arena.speedMul(this.px, this.py) * (this.whirl ? SKILL_FX.wk_whirl(this.whirl.lv).moveMul : 1) * this.eggMove * (run ? CHAIR_RUN : 1);
+  }
+
+  /** 회장님(쓰러지지 않는 자리) + 싸움 실행부 */
+  private startChair(): void {
+    const c = this.play.chairman!;
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- 게터 안에서 씬을 가리킨다
+    const sc = this;
+    const host: ChairHost = {
+      scene: this,
+      skfx: this.skfx,
+      fx: this.fx,
+      dmg: this.dmg,
+      reduced: this.data0.reduced,
+      mode: c.mode,
+      practice: c.practice,
+      sealPool: c.mode === "hell" ? c.sealPool : [],
+      hotbar: this.play.hotbar,
+      best: c.best,
+      acct: c.acct,
+      now: () => sc.now,
+      player: () => ({ x: sc.px, y: sc.py }),
+      moveMax: () => sc.moveSpd(sc.now, true),
+      topPad: () => chairCamPad(sc.cameras.main.width, sc.cameras.main.height)[0],
+      rolling: () => rolling(sc.dodge, sc.now),
+      hurt: (d) => sc.hurtPlayer(d),
+      // 당첨 캡슐(물약)은 회복 감소 없이
+      heal: (pct) => {
+        if (sc.died) return;
+        const n = Math.max(1, Math.round(sc.dv.maxHp * pct));
+        sc.healFree = true;
+        sc.hp = Math.min(sc.dv.maxHp, sc.hp + n);
+        sc.healFree = false;
+        sc.dmg.heal(sc.px, sc.py - 20, n);
+      },
+      maxHp: () => sc.dv.maxHp,
+      dead: () => sc.died,
+      boss: () => sc.chairBoss,
+      spawnBug: (x, y, speed) => {
+        sc.spawn("pending_sheet", x, y, 0);
+        const m = sc.mons[sc.mons.length - 1];
+        if (!m) return null;
+        m.minion = true;
+        m.noBar = true;
+        m.pats = [];
+        m.st = { ...m.st, maxHp: 1, speed };
+        m.hp = 1;
+        m.sprite.setVisible(false);
+        return m;
+      },
+      removeMob: (mm) => {
+        const m = mm as Mon;
+        if (!m.alive) return;
+        m.alive = false;
+        m.sprite.destroy();
+        m.shadow.destroy();
+        m.bar.destroy();
+        m.barBg.destroy();
+      },
+      float: (x, y, text, color) => sc.floatText(x, y, text, color, 10),
+      sfx: (name, gain) => sc.sfx.play(name, gain),
+      synth: (key, layers, gapMs) => sc.sfx.synth(key, layers, gapMs),
+      hitstop: (ms) => (sc.hitstop = Math.max(sc.hitstop, ms)),
+      seal: (ids) => sc.applySeal(ids),
+      flash: (msg, ms) => sc.flash(msg, ms),
+      ended: (r) => {
+        sc.chairDone = true;
+        c.ended({ ...r, potionsUsed: { ...sc.potionsUsed } });
+      },
+    };
+    this.chair = new ChairmanFight(host);
+    this.chair.create(this.play.seed);
+    this.chairHealOn = true;
+    this.chairHealTok = this.dv.maxHp * CHAIR_HEAL_CAP_PER_SEC;
+    // 회장님 자리: 우두머리 크기 몬스터 하나 (맞는 판정·피해 숫자·자동 스킬 조준이 사냥 그대로 돈다)
+    this.spawn("midnight_bell", CHAIR_W / 2, 190, 0);
+    const m = this.mons[this.mons.length - 1];
+    m.chair = true;
+    m.noBar = true;
+    m.boss = true;
+    m.pats = [];
+    m.st = { ...chairBossStats(), maxHp: 1e12 };
+    m.hp = m.st.maxHp;
+    m.sprite.setVisible(false);
+    this.chairBoss = m;
+  }
+
+  /** 지옥 봉인: 칸은 못 쓰고, 패시브는 효과가 빠진다 (능력치·연계 보너스를 다시 계산) */
+  private applySeal(ids: readonly string[]): void {
+    const fresh = ids.filter((id) => !this.sealed.has(id));
+    if (!fresh.length) return;
+    for (const id of fresh) this.sealed.add(id);
+    const live = this.skillsLive;
+    this.mods = skillMods(live);
+    this.syn = {};
+    for (const id of Object.keys(SYNERGY) as SkillId[]) this.syn[id] = synergyMul(id, live);
+    this.dv = withPassives(this.play.derived, this.mods, this.tm);
+    this.dvBase = this.dv;
+    this.hp = Math.min(this.hp, this.dv.maxHp);
+    this.auto.ids = this.auto.ids.filter((id) => !this.sealed.has(id));
+    if (this.whirl && this.sealed.has("wk_whirl")) this.stopWhirl();
+    // 11/21 반려 알림은 오버레이 가운데 위 도장이 맡는다 (game/chairman/SealParts) — 띠 글자는 겹쳐서 뺐다
+  }
+
+  /** 싸우는 중 그만두기: 그 자리에서 쓰러진 것으로 (회색 연출 → 결과) */
+  private chairGiveUp(): void {
+    if (this.died) return;
+    this.hp = 0;
+    this.died = true;
+    this.status.clear();
+    this.sfx.play("defeat");
+    this.player.setAlpha(0.5);
   }
 
   /**
@@ -3630,6 +3952,14 @@ export class HuntScene extends RpgScene {
 
   /** 드롭만 줍던 중에 나가도 판은 이미 끝났으니 정상 종료로 */
   protected finish(aborted = false): void {
+    // 11/20 회장님 독대: 싸우는 중 그만두기 = 그 자리에서 쓰러진 것 (기록을 낸다). 결과 창에서 나갈 때만 진짜로 닫는다
+    // 11/22 업무 브리핑 중(시작 전)이면 기록 없이 바로 닫는다 (예전엔 쓰러진 채 브리핑이 걷힐 때까지 기다렸다)
+    if (this.chair) {
+      const q = chairQuit({ started: this.chair.started, done: this.chairDone, died: this.died });
+      if (q === "giveUp") this.chairGiveUp();
+      if (q !== "close") return;
+      this.chairDone = true;
+    }
     if (aborted && !this.endSnap) this.quit = true;
     super.finish(aborted && !this.endSnap);
   }

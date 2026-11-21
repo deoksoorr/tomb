@@ -9,7 +9,7 @@ import { RedisAccounts } from "./accounts-redis";
 import { MemoryGifts, RedisGifts, GIFT_KEEP_MS, type GiftRecord, type GiftStore } from "./gifts";
 import { K } from "./keys";
 import { MemoryStore } from "./memory";
-import { MEGAPHONE_TTL_MS } from "@tomb/protocol";
+import { MEGA_FEED_TTL_MS } from "@tomb/protocol";
 import { MEGA_KEEP, MemoryMegaphone, pinList, RedisMegaphone, type MegaphoneStore } from "./megaphone";
 import type { AccountStore } from "./types";
 
@@ -197,12 +197,12 @@ function megaContract(make: () => { store: MegaphoneStore; cleanup(ids: string[]
     await cleanup([id]);
   });
 
-  it("확성기: 외친 지 5분이 지난 기록은 목록에서 빠지고 저장소에서도 지워진다", async () => {
+  it("확성기: 하루가 지난 기록은 목록에서 빠지고 저장소에서도 지워진다", async () => {
     const { store, cleanup } = make();
     const id = `t-${nanoid(10)}`;
     const now = Date.now();
     const rec = (at: number) => ({ id: `m-${nanoid(8)}`, name: "외침이", text: "한마디", scope: "all" as const, ch: 1, at, accountId: id });
-    const old = rec(now - MEGAPHONE_TTL_MS - 1);
+    const old = rec(now - MEGA_FEED_TTL_MS - 1);
     const fresh = rec(now);
     await store.push(old);
     await store.push(fresh);
@@ -211,8 +211,8 @@ function megaContract(make: () => { store: MegaphoneStore; cleanup(ids: string[]
     expect(ids).not.toContain(old.id);
     // 지워졌으니 숨기기도 찾지 못한다
     expect(await store.setHidden(old.id, true)).toBe(false);
-    // 5분이 지나면 방금 것도 빠진다
-    expect((await store.recent(MEGA_KEEP, now + MEGAPHONE_TTL_MS)).some((r) => r.id === fresh.id)).toBe(false);
+    // 하루가 지나면 방금 것도 빠진다
+    expect((await store.recent(MEGA_KEEP, now + MEGA_FEED_TTL_MS)).some((r) => r.id === fresh.id)).toBe(false);
     await cleanup([id]);
   });
 

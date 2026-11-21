@@ -44,7 +44,8 @@ import { openDevNotes } from "@/lib/devNotes/open";
 import DevNoteCard from "./DevNoteCard";
 import RankingList from "../grave/RankingList";
 import RankingPanel from "../grave/RankingPanel";
-import WeeklyRace from "../grave/WeeklyRace";
+import ChairLayer from "../chairman/ChairLayer";
+import RaceWindow, { openRaceTab } from "../chairman/RaceWindow";
 import ShopDialog from "../shop/ShopDialog";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -478,9 +479,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
         setRadial(true);
         return;
       }
-      // 운영자 계정은 출석 달력·친구 버튼이 없다 → 단축키도 없다
+      // 운영자 계정은 출석 달력 버튼이 없다 → 단축키도 없다 (11/20 친구 창은 운영자에게 「접속 중인 사람」 순간이동으로 연다)
       const target = PANEL_KEYS[e.code];
-      if ((target === "calendar" || target === "friends") && iAmStaff) return;
+      if (target === "calendar" && iAmStaff) return;
       e.preventDefault();
       setRadial(false);
       if (e.code === RANK_KEY) setRankOpen((v) => !v);
@@ -817,7 +818,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                   {(unreadNotice || (me?.activityUnread ?? 0) > 0 || titleNew) && (
                     <>
                       <span className={styles.dot} aria-hidden="true" />
-                      <span className="visually-hidden"> (새 소식 있음)</span>
+                      <span className="visually-hidden"> (새 알림 있음)</span>
                     </>
                   )}
                 </button>
@@ -874,21 +875,20 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 </button>
                 {/* 11/19 운영자만: 확성기 고정 공지 쓰기 (왼쪽 위 확성기 줄에서 옮겼다) */}
                 <MegaPinButton channel={channel} className={cx(ui.button, ui.icon, ui.top, styles.topButton)} />
-                {/* 친구: 위쪽 버튼 줄에 글자와 함께 바로 (받은 신청이 있으면 빨간 점). 운영자 계정은 친구 기능이 없다 */}
-                {!iAmStaff && (
-                  <button
-                    type="button"
-                    className={cx(ui.button, ui.top, styles.topButton)}
-                    onClick={() => setPanel("friends")}
-                    aria-label={friendIncoming ? `친구 (받은 신청 ${friendIncoming}개)` : "친구"}
-                    title="친구 (O)"
-                  >
-                    <PixelIcon name="heart" />
-                    친구
-                    <span className={cx(styles.dockKey, styles.topKey)} aria-hidden="true">O</span>
-                    {friendIncoming > 0 && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
-                  </button>
-                )}
+                {/* 친구: 위쪽 버튼 줄에 글자와 함께 바로 (받은 신청이 있으면 빨간 점). 11/20 운영자 계정은 같은 창에서 접속 중인 사람에게 순간이동 */}
+                <button
+                  type="button"
+                  className={cx(ui.button, ui.top, styles.topButton)}
+                  onClick={() => setPanel("friends")}
+                  aria-label={iAmStaff ? "유저" : friendIncoming ? `친구 (받은 신청 ${friendIncoming}개)` : "친구"}
+                  title={iAmStaff ? "유저 (O)" : "친구 (O)"}
+                >
+                  <PixelIcon name="heart" />
+                  {/* 11/20 운영자는 친구 대신 접속 중인 유저 목록 → 이름도 「유저」 */}
+                  {iAmStaff ? "유저" : "친구"}
+                  <span className={cx(styles.dockKey, styles.topKey)} aria-hidden="true">O</span>
+                  {friendIncoming > 0 && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
+                </button>
                 {/* 11/17 운영자만: 「다람쥐를 뿌려라」 채널 쿨타임 바로 풀기 */}
                 {iAmStaff && (
                   <button type="button" className={cx(ui.button, ui.top, styles.topButton)} onClick={() => bridge.emit("fx:squirrelsReset")}>
@@ -984,7 +984,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
               </button>
               <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("activity")}>
                 <PixelIcon name="heart" />
-                소식
+                {/* 11/21 「소식」 → 「알림」 (왼쪽 위 마을 소식과 헷갈리지 않게) */}
+                알림
                 {(me?.activityUnread ?? 0) > 0 && <span className={styles.badge}>{me?.activityUnread}</span>}
               </button>
               <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => openDevNotes()} title="개발자 노트 (새 탭)">
@@ -1075,7 +1076,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           onLeave={onLeave}
           onLoggedOut={onLoggedOut}
           onOpenShrine={() => setPanel("shrine")}
-          onOpenFriends={iAmStaff ? undefined : () => setPanel("friends")}
+          onOpenFriends={() => setPanel("friends")}
           houseChannel={houseChannel}
           onGoToMyHouse={goToMyHouse}
           onOpenHousing={() => {
@@ -1147,7 +1148,6 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           giftCount={giftCount}
           friendIncoming={friendIncoming}
           titleNew={titleNew}
-          noFriends={iAmStaff}
           huntBlocked={rideOff}
           canPhoto={canPhoto}
           points={me ? me.points : null}
@@ -1164,7 +1164,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {/* 11/16 높이를 내용만큼(fitHeight) 두면 어떤 브라우저에서 창이 머리말만 남고 납작하게 접혔다 → 표준 창 크기 (본문만 스크롤) */}
       {panel === "race" && (
         <Dialog title="이번 주 레이스" onClose={closePanel}>
-          <WeeklyRace />
+          <RaceWindow />
         </Dialog>
       )}
       {panel === "fireworks" && <FireworkDialog onClose={closePanel} onOpenShop={() => goShopFor("", "firework")} />}
@@ -1200,6 +1200,18 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {panel === "office" && <OfficeShopDialog onClose={closePanel} />}
       {panel === "telescope" && <Telescope onClose={closePanel} />}
       {panel === "haunt" && <HauntDialog onClose={closePanel} />}
+      {/* 11/20 회장님 독대: 등대 문 E → 입장 창 → 입장 연출 → 회장실 (components/chairman) */}
+      {ready && (
+        <ChairLayer
+          color={options.color}
+          body={options.body ?? "hood"}
+          canOpen={panel === null && openGraveId === null}
+          onOpenRace={() => {
+            openRaceTab("chair");
+            setPanel("race");
+          }}
+        />
+      )}
       <GoblinClaim />
       {/* 주간 랭킹 1위 알림 창 (본인에게 한 번) */}
       {ready && <ChampNotice onOpenPerks={openPerks} />}

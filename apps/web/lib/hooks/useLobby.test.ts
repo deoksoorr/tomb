@@ -43,6 +43,12 @@ describe("isChannelSelectable", () => {
     expect(isChannelSelectable(lobby, 1, [1])).toBe(false);
   });
 
+  it("11/20 운영자는 정원 밖: 만석 채널도 고른다 (닫힌·없는 채널은 그대로)", () => {
+    expect(isChannelSelectable(lobby, 1, [], true)).toBe(true);
+    expect(isChannelSelectable(lobby, 3, [], true)).toBe(false);
+    expect(isChannelSelectable(lobby, 9, [], true)).toBe(false);
+  });
+
   it("목록에는 열린 채널과 내 채널(닫혀 있어도)만 보인다", () => {
     expect(visibleChannels(lobby).map((c) => c.id)).toEqual([1, 2]);
     expect(visibleChannels(lobby, [null, 3, undefined]).map((c) => c.id)).toEqual([1, 2, 3]);

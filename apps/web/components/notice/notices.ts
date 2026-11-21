@@ -21,8 +21,9 @@ export const INQUIRY_LIMITS = { min: 10, max: 1000, contact: 100 } as const;
 export type InquiryErrors = Partial<Record<"category" | "message" | "contact", string>>;
 
 /** 서버와 같은 기준 (글자 수는 코드포인트) */
-export function validateInquiry(v: { category: InquiryCategory | null; message: string; contact: string }): InquiryErrors {
+export function validateInquiry(v: { category: InquiryCategory | null; message: string; contact: string; needContact?: boolean }): InquiryErrors {
   const len = [...v.message.trim()].length;
+  const contactLen = [...v.contact.trim()].length;
   const errors: InquiryErrors = {
     category: v.category ? undefined : "어떤 문의인지 골라 주세요.",
     message:
@@ -31,7 +32,13 @@ export function validateInquiry(v: { category: InquiryCategory | null; message: 
         : len > INQUIRY_LIMITS.max
           ? `${INQUIRY_LIMITS.max}자까지 적을 수 있어요.`
           : undefined,
-    contact: [...v.contact.trim()].length > INQUIRY_LIMITS.contact ? `${INQUIRY_LIMITS.contact}자까지 적을 수 있어요.` : undefined,
+    // 11/20 손님(계정 없음)은 답장할 길이 연락처뿐이라 꼭 받는다
+    contact:
+      contactLen > INQUIRY_LIMITS.contact
+        ? `${INQUIRY_LIMITS.contact}자까지 적을 수 있어요.`
+        : v.needContact && contactLen === 0
+          ? "답장 받을 연락처를 적어 주세요."
+          : undefined,
   };
   return Object.fromEntries(Object.entries(errors).filter(([, m]) => m)) as InquiryErrors;
 }

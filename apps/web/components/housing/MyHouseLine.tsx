@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { houseChannelFullMsg, lobbyChannelFull } from "@/game/net/switchPolicy";
 import { houseLabel } from "@/lib/housing/catalog";
+import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { useLobby } from "@/lib/hooks/useLobby";
 import { housingApi } from "@/lib/housing/client";
 import type { PublicHouse } from "@/lib/housing/types";
@@ -19,6 +20,8 @@ export default function MyHouseLine({ channel, onGo, onOffice }: { channel: numb
   const [house, setHouse] = useState<PublicHouse | null | undefined>(undefined);
   const [sea, setSea] = useState<PublicHouse | null>(null);
   const lobby = useLobby().lobby;
+  // 11/20 운영자는 정원 밖: 꽉 찬 채널이어도 막지 않는다
+  const staff = useBridgeValue("me:staff")?.on === true;
   useEffect(() => {
     let alive = true;
     housingApi
@@ -37,7 +40,7 @@ export default function MyHouseLine({ channel, onGo, onOffice }: { channel: numb
   if (house === undefined) return <p className={styles.muted}>불러오는 중…</p>;
   const line = (h: PublicHouse, label: string) => {
     const here = h.ch === channel;
-    const full = !here && lobbyChannelFull(lobby, h.ch) ? houseChannelFullMsg(h.ch) : null;
+    const full = !here && lobbyChannelFull(lobby, h.ch, staff) ? houseChannelFullMsg(h.ch) : null;
     return (
       <div className={styles.spread} key={h.id}>
         <p className={styles.small}>

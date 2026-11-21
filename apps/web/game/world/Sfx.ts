@@ -118,6 +118,40 @@ export class Sfx extends AudioHost {
     if (longest) releaseOnEnd(longest, out);
   }
 
+  private whistleAt = 0;
+
+  /** 11/20 휘슬 로켓: 높은 음이 휘이익 내려가며 떨린다 (sec 동안). 여러 발이 한꺼번에 올라도 0.15초에 한 번만 */
+  whistle(gain = 1, sec = 0.8): void {
+    const ac = this.audio();
+    if (!ac || this.hidden) return;
+    const now = ac.currentTime;
+    if (now < this.whistleAt) return;
+    this.whistleAt = now + 0.15;
+    const t = now + 0.01;
+    const v = Math.min(1, this.busGain() * gain) * 0.07;
+    if (v <= 0) return;
+    const o = ac.createOscillator();
+    const lfo = ac.createOscillator();
+    const depth = ac.createGain();
+    const g = ac.createGain();
+    o.type = "sine";
+    o.frequency.setValueAtTime(2300, t);
+    o.frequency.exponentialRampToValueAtTime(1150, t + sec);
+    lfo.frequency.value = 22;
+    depth.gain.value = 60;
+    lfo.connect(depth).connect(o.frequency);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(v, t + 0.05);
+    g.gain.setValueAtTime(v, t + sec * 0.75);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + sec);
+    o.connect(g).connect(this.output);
+    o.start(t);
+    lfo.start(t);
+    o.stop(t + sec + 0.05);
+    lfo.stop(t + sec + 0.05);
+    releaseOnEnd(o, g);
+  }
+
   /** 물 튀기는 소리: 걸러낸 잡음 + 물방울 몇 개 */
   splash(gain = 1): void {
     const ac = this.audio();

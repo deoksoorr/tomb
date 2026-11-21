@@ -295,8 +295,8 @@ export class CombatFx {
     this.shake(90, 0.0025);
   }
 
-  /** 머리 위 "N 콤보" (늘 때마다 톡 튄다). n<2면 숨김 */
-  combo(n: number, x: number, y: number): void {
+  /** 머리 위 "N 콤보" (늘 때마다 톡 튄다). n<2면 숨김. side: 11/21 폰 — (x,y)가 왼쪽 아래 끝 (이름 오른쪽에 붙인다, 피해 숫자 위로) */
+  combo(n: number, x: number, y: number, side = false): void {
     if (n < 2) {
       if (this.comboText) {
         const t = this.comboText;
@@ -309,7 +309,7 @@ export class CombatFx {
     const color = COMBO_TIERS.find((c) => n >= c.at)!.color;
     if (!this.comboText) this.comboText = this.text(x, y, "", color, 11);
     const t = this.comboText;
-    t.setPosition(x, y);
+    t.setPosition(x, y).setOrigin(side ? 0 : 0.5, 1).setDepth(side ? DEPTH_TOP + 999 : DEPTH_TOP);
     if (n !== this.comboShown) {
       this.comboShown = n;
       t.setText(`${n} 콤보`).setColor(color).setAlpha(1);
@@ -360,6 +360,13 @@ export class CombatFx {
         return s;
       }
     }
+  }
+
+  /** 11/20 달리기 발밑 흙먼지 (마을 Effects.dust처럼 작게) */
+  dust(x: number, y: number): void {
+    if (this.reduced && Math.random() < 0.6) return;
+    const s = this.scene.add.sprite(x + (Math.random() - 0.5) * 4, y - 1, FXT.puff, 0).setDepth(y - 1).setAlpha(0.5).setScale(0.55).setTint(0xd8ccb0);
+    playFrames(this.scene, s, 3, 70);
   }
 
   /** 내려찍기: 바닥 금 + 먼지 */

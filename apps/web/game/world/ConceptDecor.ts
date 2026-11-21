@@ -4,7 +4,7 @@ import { isSnowy, type MapConcept } from "@/lib/mapConcept";
 import { addCanvasTexture, TEX } from "../assets/manifest";
 import { DEPTH } from "../config";
 import { SHOP_HUT_H, SHOP_HUT_W } from "../sprites/extras";
-import { OFFICE_H, OFFICE_W, WP } from "../sprites/worldProps";
+import { OFFICE_H, WP } from "../sprites/worldProps";
 import {
   bareTree,
   breathPuff,
@@ -168,11 +168,11 @@ export function hutGlowKey(scene: Phaser.Scene, base: string, concept: MapConcep
   return scene.textures.exists(k) ? k : null;
 }
 
-// ── 다른 장소 그림(동물원·야근 빌딩·놀이기구·관람차·귀신의집·버스 정류장·범퍼카장·묘비)은 그 모듈을 건드리지 않고
+// ── 다른 장소 그림(동물원·야근 빌딩·판교의 등대·놀이기구·관람차·귀신의집·버스 정류장·범퍼카장·묘비)은 그 모듈을 건드리지 않고
 //    텍스처 자리에서 바로 눈을 얹는다 (원본 픽셀은 따로 두었다가 기본으로 돌아가면 되돌린다). 프레임 시트는 프레임마다 따로
 
 const WORLD_SNOW_KEYS =
-  /^(?:zoo-(?:trough|stall|sign|shed|post|doghouse|den|arch|fence-v|fence-h|perch|hay)|tower-(?:body|door|sign)|sky-(?:sign|pad|ferris-frame)|ride-(?:carousel-top|fountain|duck-sign|trampoline|seesaw-base)|haunt-house|fishzone-(?:questBoard|busShelter|sea-shelter|busSign|sea-sign|timetable|placard|crates|barrel|stool)|bumper-(?:pillar|pole|sign|tyre)|gy-hunt-sign|grave-[A-Za-z]+-\d+|forage-stall-[a-z]+)$/;
+  /^(?:zoo-(?:trough|stall|sign|shed|post|doghouse|den|arch|fence-v|fence-h|perch|hay)|tower-(?:body|door|sign)|lighthouse-(?:body|board)|sky-(?:sign|pad|ferris-frame)|ride-(?:carousel-top|fountain|duck-sign|trampoline|seesaw-base)|haunt-house|fishzone-(?:questBoard|busShelter|sea-shelter|busSign|sea-sign|timetable|placard|crates|barrel|stool)|bumper-(?:pillar|pole|sign|tyre)|gy-hunt-sign|grave-[A-Za-z]+-\d+|forage-stall-[a-z]+)$/;
 const originals = new Map<string, HTMLCanvasElement>();
 
 /** 목록에 있는 텍스처에 눈을 얹거나(on) 원래대로 (off). 아직 안 만든 텍스처는 다음 부름에 (ConceptDecor가 몇 초마다 다시 본다) */
@@ -263,12 +263,9 @@ export class ConceptDecor {
     if (!isSnowy(concept)) return;
     // 늦게 만들어지는 다른 장소 그림 (관람차 칸·놀이기구 등)도 따라 덮는다 — 처음 1분만 몇 초마다
     this.recheck = scene.time.addEvent({ delay: 4000, repeat: 15, callback: () => snowWorldTextures(scene, isSnowy(this.concept)) });
-    // 장작더미 (잡화점 동쪽 벽·분양 사무소 서쪽 벽에 붙여서)
+    // 장작더미 (잡화점 동쪽 벽에 붙여서). 11/20 분양 사무소는 광장으로 옮겨 서쪽 벽 옆이 벤치 bC라 뺐다
     if (!scene.textures.exists("concept-woodpile")) addCanvasTexture(scene, "concept-woodpile", { canvas: woodpile() });
-    for (const [x, y] of [
-      [SHOP.x + SHOP_HUT_W / 2 + 8, SHOP.y - 2],
-      [HOUSING_OFFICE.x - OFFICE_W / 2 - 9, HOUSING_OFFICE.y - 4],
-    ] as const)
+    for (const [x, y] of [[SHOP.x + SHOP_HUT_W / 2 + 8, SHOP.y - 2]] as const)
       this.add(scene.add.image(x, y + 1, "concept-woodpile").setOrigin(0.5, 1).setDepth(y), x, y);
     // 잡화점 굴뚝 연기 (겨울엔 불을 땐다)
     if (!this.reduced && scene.textures.exists(WP.smoke)) {

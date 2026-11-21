@@ -33,6 +33,7 @@ import {
   type PresenceTick,
   type Profile,
   type RankEntry,
+  type WalletRent,
 } from "./types";
 
 /** 칭호를 두는 착용 칸 (꾸미기 부위가 아니다 — 착용 목록에 실려 머리 위에 보일 뿐) */
@@ -579,6 +580,30 @@ export class MemoryAccounts implements AccountStore {
     }
     this.champWallet.set(mark, got);
     return true;
+  }
+
+  async walletGrant(id: string, points: number, stat: string, now: number, rent: readonly WalletRent[] = []): Promise<number> {
+    // await 없이 한 번에 (accounts-redis.ts WALLET_GRANT_LUA와 같은 규칙)
+    const a = this.acct(id);
+    this.prune(a, now);
+    for (const r of rent) {
+      const cur = a.look.get(r.slot);
+      const wearing = cur?.itemId === r.itemId && cur.until > now;
+      const had = wearing ? cur.until : (this.stashOf(a).get(r.itemId) ?? 0);
+      if (r.until <= had) continue;
+      if (wearing) a.look.set(r.slot, { itemId: r.itemId, until: r.until });
+      else this.stashOf(a).set(r.itemId, r.until);
+    }
+    if (points <= 0) return 0;
+    const before = a.points;
+    a.points = Math.min(WALLET_MAX, before + points);
+    const got = a.points - before;
+    if (got > 0) {
+      // 지갑에만 (모은 포인트·포인트 랭킹엔 넣지 않는다)
+      a.lifetime ??= before;
+      this.stat(a, kstDay(now), stat, got);
+    }
+    return got;
   }
 
   async revokeChamp(id: string, itemIds: readonly string[]): Promise<void> {

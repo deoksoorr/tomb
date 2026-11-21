@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { CLOSE, INTERNAL_SIG_HEADER, INTERNAL_TTL_SEC, signInternal, WHERE_MAX_IDS, type InternalRequest, type PeerWhere } from "@tomb/protocol";
+import { CLOSE, INTERNAL_SIG_HEADER, INTERNAL_TTL_SEC, signInternal, WHERE_MAX_IDS, type InternalPerson, type InternalRequest, type PeerWhere } from "@tomb/protocol";
 import type { NextRequest } from "next/server";
 import { env } from "./env";
 import { clientIp, HttpError } from "./http";
@@ -108,8 +108,8 @@ export const toNotice = (r: BanRecord): BanNotice => ({ reason: r.reason, startA
 export const bannedError = (r: BanRecord) =>
   new HttpError(403, "BANNED", `이용이 제한됐어요. 사유: ${r.reason} · ${untilText(r.until)}`);
 
-/** 방문자 API 공용: 정지·차단이면 403 BANNED (캐시한 색인으로 판정) */
-export async function assertNotBanned(req: NextRequest, accountId: string, fresh = false): Promise<void> {
+/** 방문자 API 공용: 정지·차단이면 403 BANNED (캐시한 색인으로 판정). accountId가 null이면 IP 차단만 본다 (11/20 손님 문의) */
+export async function assertNotBanned(req: NextRequest, accountId: string | null, fresh = false): Promise<void> {
   const ban = await findBan(accountId, clientIp(req), { fresh });
   if (ban) throw bannedError(ban);
 }
@@ -222,6 +222,12 @@ export async function whereOf(visitorIds: string[], fresh = false): Promise<Reco
 export async function onlineVisitorIds(): Promise<string[] | null> {
   const r = await internal<{ visitorIds: unknown }>("/internal/online", { op: "online" }, 5000);
   return r && Array.isArray(r.visitorIds) ? r.visitorIds.filter((v): v is string => typeof v === "string") : null;
+}
+
+/** 11/20 운영자 「접속 중인 사람」 전부 (채널·sid·이름·자리·맵·실내). 실시간 서버에 닿지 못하면(옛 실시간 서버 포함) null */
+export async function onlinePeople(): Promise<InternalPerson[] | null> {
+  const r = await internal<{ people: unknown }>("/internal/people", { op: "people" }, 4000);
+  return r && Array.isArray(r.people) ? (r.people as InternalPerson[]) : null;
 }
 
 /**

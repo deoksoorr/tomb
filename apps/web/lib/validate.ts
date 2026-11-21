@@ -10,6 +10,7 @@ import { HttpError } from "./http";
 import {
   CAUSE_TAGS,
   INQUIRY_CATEGORIES,
+  INQUIRY_SOURCES,
   LIFESPAN_PRESETS,
   MAX_PASS_DAYS,
   MIN_PASS_DAYS,
@@ -219,13 +220,16 @@ export const ShopBuySchema = z.object({
     .refine((id) => itemById(id)?.slot !== "pet", "펫은 동물원 사육사에게서만 데려올 수 있어요.")
     .refine((id) => !itemById(id)?.staff, "운영자 전용 꾸미기는 살 수 없어요.")
     .refine((id) => !itemById(id)?.champ, "주간 1위 전용 꾸미기는 살 수 없어요.")
+    .refine((id) => !itemById(id)?.chair, "회장님 독대 1위 전용 꾸미기는 살 수 없어요.")
     .refine((id) => !itemById(id)?.quest, "수집 의뢰 보상은 도장 교환소에서만 받을 수 있어요.")
     .refine((id) => !itemById(id)?.urgent, "긴급 의뢰 보상은 살 수 없어요.")
     .refine((id) => !itemById(id)?.ghost, "유령선 한정은 토요일 밤 유령선 장터에서만 팔아요.")
     .refine((id) => !itemById(id)?.event, "크리스마스 한정은 선물상자에서만 나와요.")
     .refine((id) => !itemById(id)?.invite, "친구 초대 한정은 친구를 데려오면 받아요.")
     .refine((id) => !itemById(id)?.stargaze, "유성우 오라는 망원경에서만 나와요.")
-    .refine((id) => !itemById(id)?.seasonSet, "계절 한정은 계절 보따리상에서만 팔아요."),
+    .refine((id) => !itemById(id)?.seasonSet, "계절 한정은 계절 보따리상에서만 팔아요.")
+    // 11/21 확성기는 「마을 소식」으로 바뀌어 더 팔지 않는다 (상점 목록에서도 빠짐)
+    .refine((id) => itemById(id)?.kind !== "megaphone", "확성기는 이제 팔지 않아요."),
 });
 export const ShopUseSchema = z.object({
   itemId: shopItem,
@@ -290,6 +294,10 @@ export const InquirySchema = z.object({
   contact: optional(z.string().trim().overwrite(oneLine).refine(within(100), "연락처는 100자까지 적을 수 있어요.")),
   /** 문의를 보낸 채널 (계약에는 없지만 UI가 보내면 운영자가 상황을 보기 쉽다) */
   channel: graveChannel.optional(),
+  /** 11/20 보낸 곳 (개발자 노트·게임) */
+  source: z.enum(INQUIRY_SOURCES).optional(),
+  /** 11/20 봇 거르기 숨은 칸 (채워 오면 라우트가 저장하지 않는다) */
+  homepage: z.string().max(500).optional(),
 });
 
 export const AdminLoginSchema = z.object({ key: z.string().min(1, "관리자 키를 입력해 주세요.").max(500) });

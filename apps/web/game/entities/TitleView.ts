@@ -62,7 +62,7 @@ export class TitleView {
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly atlas: GlyphAtlas,
-    private readonly depth: number,
+    private depth: number,
     private readonly reduced: boolean,
   ) {
     this.text = scene.add.bitmapText(0, 0, FONT_KEY, "", FONT_PX).setOrigin(0.5, 1).setDepth(depth);
@@ -111,6 +111,16 @@ export class TitleView {
       this.halo = null;
     }
     this.halo?.setTint(grade === "staff" ? 0xa070ff : grade === "mythic" ? 0xffb838 : grade === "manager" ? 0x30d8a8 : 0xfff0c0);
+  }
+
+  /** 11/21 폰 사냥 HUD: 이름표와 함께 피해 숫자 위로 올린다 (장식·반짝이·후광도 같은 순서 그대로) */
+  setDepth(d: number): void {
+    if (d === this.depth) return;
+    this.depth = d;
+    this.text.setDepth(d);
+    for (const sp of this.sparks) sp.setDepth(d + 0.01);
+    this.orn?.img.setDepth(d - 0.01);
+    this.halo?.setDepth(d - 0.02);
   }
 
   get height(): number {

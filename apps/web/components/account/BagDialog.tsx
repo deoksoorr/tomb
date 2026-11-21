@@ -16,7 +16,6 @@ import BagDyeSection, { dyeTicketCount } from "../dye/BagDyeSection";
 import ItemIcon from "../ui/ItemIcon";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
-import { openMegaphone } from "@/lib/hooks/useMegaphone";
 import { decorateGrave, fireFirework } from "./actions";
 import ChampRewardsTab from "./ChampRewardsTab";
 import { bagEntries, countLabel, fireworkEntries, KIND_LABELS, type MyGraveEntry } from "./items";
@@ -202,18 +201,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace
                             </button>
                           )}
                           {kind === "graveStyle" && <span className={styles.meta}>묘비 세울 때 골라요</span>}
-                          {kind === "megaphone" && (
-                            <button
-                              type="button"
-                              className={ui.button}
-                              onClick={() => {
-                                onClose();
-                                openMegaphone();
-                              }}
-                            >
-                              외치기
-                            </button>
-                          )}
+                          {/* 11/21 확성기 [외치기]는 뺐다 (마을 소식으로 바뀜 — 가진 것은 그대로 남는다) */}
                         </li>
                       ))}
                     </ul>

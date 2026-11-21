@@ -83,5 +83,11 @@ export function cleanAuto(raw: unknown, hotbar: Slots): HotAuto {
   return { ids, on: r.on === true, keepUlt: r.keepUlt !== false };
 }
 
+/** 11/21 회장님 독대 시작 자동: 1~5 칸의 자동 되는 스킬 전부 + 전체 스위치 켬 (궁극기·몸 옮기기·켜고 끄기는 autoBlock 그대로 빠진다) */
+export function chairAuto(hotbar: Slots, prev: HotAuto): HotAuto {
+  const ids = [...new Set(hotbar.slice(0, SKILL_SLOTS).filter((x): x is SkillId => !!x && !autoBlock(x)))];
+  return { ids, on: ids.length > 0, keepUlt: prev.keepUlt };
+}
+
 /** 이 칸이 자동으로 돌고 있나 (전체 스위치까지) */
 export const slotAuto = (a: HotAuto, hotbar: Slots, slot: number): boolean => slot < SKILL_SLOTS && !!hotbar[slot] && a.ids.includes(hotbar[slot]!);

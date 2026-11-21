@@ -39,9 +39,10 @@ export function visibleChannels(lobby: LobbyInfo | null, mine: Iterable<number |
 }
 
 /** 목록에 보이고 만석이 아닌 채널인지 (mine = visibleChannels와 같은, 닫혀 있어도 보여 줄 내 채널들) */
-export function isChannelSelectable(lobby: LobbyInfo | null, channel: number, mine: Iterable<number | null | undefined> = []): boolean {
+export function isChannelSelectable(lobby: LobbyInfo | null, channel: number, mine: Iterable<number | null | undefined> = [], staff = false): boolean {
   const ch = visibleChannels(lobby, mine).find((c) => c.id === channel);
-  return !!ch && channelStatus(ch, lobby?.threshold) !== "full";
+  // 11/20 운영자는 정원 밖: 꽉 찬 채널도 고른다
+  return !!ch && (staff || channelStatus(ch, lobby?.threshold) !== "full");
 }
 
 /** 폴러가 쓰는 바깥 세계 (시험에서 바꿔 끼운다) */
