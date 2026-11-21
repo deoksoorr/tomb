@@ -52,7 +52,7 @@ import styles from "./RetainHud.module.css";
 
 // 11/18 둘째 날 다시 오게 (lib/retain.ts): 새 이웃 꾸러미(가입 첫 7일) · 첫 걸음 미션 · 오늘 미션(11/19 「오늘의 할 일」에서 바꿈). 11/19 보상은 모두 아이템
 //  - 칩: 데스크톱은 오른쪽 아래 묶음(RetainDock — 꾸러미·「미션 n/3」 칩 + 첫 걸음 칩). 11/19 폰은 [메뉴] 줄 아래 칩 하나(RetainPhoneChip):
-//    첫 걸음이 남아 있으면 「첫 걸음 n/15」, 다 끝내 사라지면 「미션 n/3」 → 칸을 모은 창(hub). 위쪽 줄(메뉴·음악·채널)에는 칩을 두지 않는다
+//    첫 걸음이 남아 있으면 「첫 걸음 n/14」, 다 끝내 사라지면 「미션 n/3」 → 칸을 모은 창(hub). 위쪽 줄(메뉴·음악·채널)에는 칩을 두지 않는다
 //  - 창(RetainLayer): 칩이 어디 있든 같은 창을 연다. 진행은 행동 응답에 실려 온 `todo`로 바로 맞춘다 (lib/api onApiJson — 추가 요청 없음)
 
 /** hub = 11/19 폰: 첫 걸음·꾸러미·할 일을 칸으로 모은 창 ([메뉴] 아래 칩 하나) */
@@ -499,7 +499,7 @@ function todoReadyOf(me: Me, items: TodoItem[]): boolean {
 
 /**
  * 11/19 폰: [메뉴] 줄 아래 칩 하나 (모든 계정 — 위쪽 줄에는 꾸러미·미션 칩을 두지 않는다).
- * 첫 걸음이 남아 있으면 「첫 걸음 n/15」 → 창의 첫 걸음 칸, 큰 선물까지 받아 사라졌으면 「미션 n/3」 → 오늘 미션 칸 (꾸러미가 남았으면 꾸러미 칸도).
+ * 첫 걸음이 남아 있으면 「첫 걸음 n/14」 → 창의 첫 걸음 칸, 큰 선물까지 받아 사라졌으면 「미션 n/3」 → 오늘 미션 칸 (꾸러미가 남았으면 꾸러미 칸도).
  * 칸 어디든 받을 것이 있으면 빨간 점. 높이·여백·글자는 [지도] 등 위쪽 단추(ui.top)와 같다
  */
 export function RetainPhoneChip() {
@@ -970,7 +970,6 @@ export function RetainLayer({ onOpenBag }: { onOpenBag: () => void }) {
   );
   useBridgeEvent("rpg:ended", ({ result, aborted }) => {
     if (aborted) return;
-    if (result.game === "stars") markFirstStep("stars");
     if (result.game === "hunt") markFirstStep("hunt");
   });
   useBridgeEvent("input:chat", () => markFirstStep("chat"));

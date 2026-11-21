@@ -83,15 +83,15 @@ describe("다시 찾기·목적지", () => {
 });
 
 describe("첫 걸음 미션 목적지", () => {
-  it("15개 미션, 새 비트 4096·8192·16384, 갈 곳이 있는 미션만 목적지", () => {
-    expect(FIRST_STEPS.length).toBe(15);
-    expect(FIRST_ALL).toBe(32767);
+  it("14개 미션 (11/21 별자리 512 뺌), 새 비트 4096·8192·16384, 갈 곳이 있는 미션만 목적지", () => {
+    expect(FIRST_STEPS.length).toBe(14);
+    expect(FIRST_ALL).toBe(32767 - 512);
     expect(FIRST_STEPS.find((s) => s.id === "quest")?.bit).toBe(16384);
     expect(firstGuideTarget("quest")).toBe("questBoard");
     expect(FIRST_STEPS.find((s) => s.id === "camp")?.bit).toBe(4096);
     expect(FIRST_STEPS.find((s) => s.id === "sea")?.bit).toBe(8192);
     const routed = FIRST_STEPS.filter((s) => firstGuideTarget(s.id)).map((s) => s.id);
-    expect(routed).toEqual(["look", "sit", "fish", "gather", "stars", "hunt", "visit", "camp", "sea", "quest"]);
+    expect(routed).toEqual(["look", "sit", "fish", "gather", "hunt", "visit", "camp", "sea", "quest"]);
     for (const id of ["run", "jump", "emote", "chat", "bag"] as const) expect(firstGuideTarget(id)).toBeNull();
     // 안내 문구: 짧은 해요체, 「라벨: 설명」 콜론 없음
     for (const s of FIRST_STEPS.filter((x) => ["camp", "sea", "quest"].includes(x.id)))

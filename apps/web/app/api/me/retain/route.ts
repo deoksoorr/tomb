@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { handler, HttpError, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
-import { FIRST_STEPS, TODO_COUNT } from "@/lib/retain";
+import { FIRST_STEPS, RETIRED_FIRST_STEPS, TODO_COUNT } from "@/lib/retain";
 import { endPlay, PLAY_KINDS, startPlay, type PlayEndResponse, type PlayStartResponse } from "@/lib/retainPlay";
 import { claimFirstSteps, claimGiftPath, claimTodo, markFirstStep, markPathSeen } from "@/lib/retainServer";
 import { requireVisitor } from "@/lib/session";
@@ -13,7 +13,7 @@ const RetainSchema = z.discriminatedUnion("do", [
   // 새 이웃 꾸러미: 오늘 꾸러미 받기
   z.object({ do: z.literal("path") }),
   // 첫 걸음 한 칸 했음 (꾸미기·인사·채팅은 화면만 아는 행동이라 화면이 알린다 — 선물이 작고 계정마다 한 번뿐)
-  z.object({ do: z.literal("step"), step: z.enum(FIRST_STEPS.map((s) => s.id) as [string, ...string[]]) }),
+  z.object({ do: z.literal("step"), step: z.enum([...FIRST_STEPS.map((s) => s.id), ...RETIRED_FIRST_STEPS] as [string, ...string[]]) }),
   // 첫 걸음 네 칸을 다 했으면 선물
   z.object({ do: z.literal("first") }),
   // 11/19 꾸러미 창이 오늘 저절로 열렸다 (하루 한 번)

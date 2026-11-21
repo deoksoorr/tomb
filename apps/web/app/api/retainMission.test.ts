@@ -100,6 +100,15 @@ describe("오늘 미션 뽑기 규칙 (순수)", () => {
     expect([...seen].sort()).toEqual(TODO_POOL.map((d) => d.kind).sort());
   });
 
+  it("11/21 별자리는 11/22(게임 날짜)부터 뽑지 않는다 (11/21까지는 그대로 뽑혀 하루 중간에 목록이 바뀌지 않는다)", () => {
+    let before = false;
+    for (let i = 0; i < 2000; i++) {
+      if (todoPicks("20261121", `acct${i}`).includes("stars")) before = true;
+      for (let d = 0; d < 7; d++) expect(todoPicks(addDays("20261122", d), `acct${i}`)).not.toContain("stars");
+    }
+    expect(before).toBe(true);
+  });
+
   it("바닷가가 닫힌 서버면 바닷가 미션은 뽑지 않고, 캠핑장·바닷가가 모두 닫히면 놀이·사냥에서 고른다", () => {
     const seaOnly = new Set(TODO_POOL.filter((d) => d.open === "sea").map((d) => d.kind));
     const campOnly = new Set(TODO_POOL.filter((d) => d.open === "camp").map((d) => d.kind));

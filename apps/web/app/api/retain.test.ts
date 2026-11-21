@@ -245,7 +245,19 @@ describe("첫 걸음 미션 (라우트)", () => {
     expect((await post(cookie, { do: "step", step: "run" }, T0)).json.mask).toBe(-1);
   });
 
-  it("11/19 캠핑장·바닷가 미션 (새 비트 4096·8192) — 15칸을 다 해야 큰 선물", async () => {
+  it("11/21 별자리 첫 걸음은 뺐다 — 옛 화면이 보내도 조용히 넘기고, 나머지 14칸이면 큰 선물", async () => {
+    const { cookie } = await newAccount();
+    expect(FIRST_STEPS.some((x) => (x.id as string) === "stars")).toBe(false);
+    expect(FIRST_ALL & 512).toBe(0);
+    const old = await post(cookie, { do: "step", step: "stars" }, T0);
+    expect(old.status).toBe(200);
+    expect(old.json.mask).toBe(-1);
+    expect(old.json.text).toBeUndefined();
+    for (const s of FIRST_STEPS) await post(cookie, { do: "step", step: s.id }, T0);
+    expect((await post(cookie, { do: "first" }, T0)).status).toBe(200);
+  });
+
+  it("11/19 캠핑장·바닷가 미션 (새 비트 4096·8192) — 14칸을 다 해야 큰 선물", async () => {
     const { cookie } = await newAccount();
     for (const s of FIRST_STEPS.filter((x) => x.id !== "sea")) await post(cookie, { do: "step", step: s.id }, T0);
     expect((await post(cookie, { do: "first" }, T0)).json.error?.code).toBe("FIRST_NOT_YET");
@@ -256,9 +268,9 @@ describe("첫 걸음 미션 (라우트)", () => {
     expect((await post(cookie, { do: "first" }, T0)).status).toBe(200);
   });
 
-  it("11/19 의뢰 하나 해결하기 (새 비트 16384, 200P) — 15칸을 다 해야 큰 선물", async () => {
+  it("11/19 의뢰 하나 해결하기 (새 비트 16384, 200P) — 14칸을 다 해야 큰 선물", async () => {
     const { cookie } = await newAccount();
-    expect(FIRST_STEPS).toHaveLength(15);
+    expect(FIRST_STEPS).toHaveLength(14);
     for (const s of FIRST_STEPS.filter((x) => x.id !== "quest")) await post(cookie, { do: "step", step: s.id }, T0);
     expect((await post(cookie, { do: "first" }, T0)).json.error?.code).toBe("FIRST_NOT_YET");
     const q = await post(cookie, { do: "step", step: "quest" }, T0);

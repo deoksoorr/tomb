@@ -102,7 +102,7 @@ export const owedPathGifts = (v: Pick<PathView, "got" | "owed">): PathGift[] => 
 
 // ── 첫 걸음 미션 (새 계정 첫 며칠 — 마을에서 할 수 있는 것을 하나씩 알려 준다) ──
 
-export type FirstStepId = "run" | "jump" | "look" | "sit" | "emote" | "chat" | "bag" | "fish" | "gather" | "stars" | "hunt" | "visit" | "camp" | "sea" | "quest";
+export type FirstStepId = "run" | "jump" | "look" | "sit" | "emote" | "chat" | "bag" | "fish" | "gather" | "hunt" | "visit" | "camp" | "sea" | "quest";
 /** label = 미션, pc·touch = 조작 안내 (데스크톱·폰 따로), reward = 그 칸을 처음 하면 바로 받는 포인트 (11/19 사용자 「차라리 보상은 포인트를」) */
 export type FirstStep = { id: FirstStepId; bit: number; label: string; pc: string; touch: string; reward: Reward };
 
@@ -122,7 +122,7 @@ export const FIRST_STEPS: readonly FirstStep[] = [
   { id: "bag", bit: 64, label: "가방 열어 보기", pc: "I를 눌러 꾸미기를 구경해요.", touch: "아래 [가방]을 눌러요.", reward: ENERGY },
   { id: "fish", bit: 128, label: "물고기 한 마리 낚기", pc: "호수 잔교나 강둑의 낚시 자리에서 E를 눌러 직접 낚아요. 자동 낚시는 세지 않아요.", touch: "낚시 자리에서 [상호작용]을 눌러 직접 낚아요. 자동 낚시는 세지 않아요.", reward: DOC2 },
   { id: "gather", bit: 256, label: "채집 한 번 하기", pc: "숲이나 풀밭에서 반짝이는 풀이나 돌 앞에서 E를 눌러요.", touch: "반짝이는 풀이나 돌 앞에서 [상호작용]을 눌러요.", reward: DOC2 },
-  { id: "stars", bit: 512, label: "별자리 한 판 잇기", pc: "마을 곳곳의 망원경 앞에서 E를 눌러요. 지도에 망원경으로 표시돼요.", touch: "망원경 앞에서 [상호작용]을 눌러요.", reward: DOC2 },
+  // 11/21 「별자리 한 판 잇기」(bit 512)는 뺐다 — 어렵다고 다들 남겨 둬서 큰 선물을 못 받았다 (사용자). 512는 다시 쓰지 않는다 (옛 계정 기록에 켜져 있다)
   { id: "hunt", bit: 1024, label: "사냥터 한 판 하기", pc: "아래 [사냥]을 누르면 사냥터 입구까지 걸어가요.", touch: "아래 [사냥]을 누르면 사냥터 입구까지 걸어가요.", reward: { points: 300 } },
   { id: "visit", bit: 2048, label: "이웃 집 구경하기", pc: "아래 [집]에서 「주거 구역 보기」를 누르면 집들이 모인 곳이 보여요. 이웃 집 문 앞에서 E를 눌러 들어가요.", touch: "아래 [집]에서 「주거 구역 보기」를 눌러요. 이웃 집 문 앞에서 [상호작용]을 눌러 들어가요.", reward: DOC2 },
   // 11/19 버스 나들이 (도착 = 게임 map:changed camp·sea)
@@ -149,7 +149,6 @@ const FIRST_GUIDE: Partial<Record<FirstStepId, FirstGuideTarget>> = {
   look: "look",
   fish: "fish",
   gather: "gather",
-  stars: "stars",
   hunt: "hunt",
   visit: "visit",
   camp: "busCamp",
@@ -161,6 +160,8 @@ export const firstGuideTarget = (id: FirstStepId): FirstGuideTarget | null => FI
 export const FIRST_REWARD = { points: 1000, itemId: "hat_cat", count: 1, bundle: { mats: { m_doc: 10, m_prot: 1 } } as RpgBundle } as const;
 
 export const firstStepById = (id: string): FirstStep | undefined => FIRST_STEPS.find((s) => s.id === id);
+/** 11/21 뺀 첫 걸음 (새로고침 전 옛 화면이 아직 보낸다 — 서버는 조용히 넘긴다) */
+export const RETIRED_FIRST_STEPS: readonly string[] = ["stars"];
 
 export type FirstView = { mask: number };
 
@@ -236,6 +237,8 @@ export type TodoDef = {
   group?: "fish" | "gather";
   open?: "camp" | "sea" | "trip";
   guide?: FirstGuideTarget;
+  /** 이 게임 날짜(YYYYMMDD)부터 뽑지 않는다 — 그날 이미 뽑힌 미션이 하루 중간에 바뀌지 않게 날짜로 끊는다 */
+  until?: string;
 };
 
 export const TODO_POOL: readonly TodoDef[] = [
@@ -252,7 +255,8 @@ export const TODO_POOL: readonly TodoDef[] = [
   // ── 놀이 ──
   { kind: "fish", cat: "play", label: "물고기 3마리 낚기", need: 3, unit: "마리", hint: "호수, 강, 바닷가 어디서든 직접 낚으면 세요. 자동 낚시는 세지 않아요.", group: "fish", guide: "fish" },
   { kind: "gather", cat: "play", label: "채집 2번 하기", need: 2, unit: "번", hint: "반짝이는 풀·돌·수풀에서 채집해요.", group: "gather", guide: "gather" },
-  { kind: "stars", cat: "play", label: "별자리 한 판 잇기", need: 1, unit: "판", hint: "마을 곳곳의 망원경에서 해요. 지도에 망원경으로 표시돼요.", guide: "stars" },
+  // 11/21 별자리는 어렵다고 다들 남겨 둬서 11/22(게임 날짜)부터 뽑지 않는다 (사용자). 그 전 날의 진행·보상 확인용으로 정의는 남긴다
+  { kind: "stars", cat: "play", label: "별자리 한 판 잇기", need: 1, unit: "판", hint: "마을 곳곳의 망원경에서 해요. 지도에 망원경으로 표시돼요.", guide: "stars", until: "20261122" },
   {
     kind: "haunt",
     cat: "play",
@@ -336,7 +340,7 @@ export function todoPicks(day: string, accountId: string, open: TodoOpen = ALL_O
     h >>>= 0;
     return h;
   };
-  const avail = TODO_POOL.filter((d) => isOpen(d, open));
+  const avail = TODO_POOL.filter((d) => isOpen(d, open) && !(d.until && day >= d.until));
   const trip = avail.filter((d) => d.cat === "trip");
   const cats: TodoCat[][] = trip.length >= 2 ? [["life"], ["play"], ["trip"]] : [["life"], ["play"], ["play", "trip"]];
   const out: TodoDef[] = [];

@@ -4,6 +4,7 @@ import {
   FIRST_ALL,
   FIRST_REWARD,
   firstStepById,
+  RETIRED_FIRST_STEPS,
   owedPathGifts,
   PATH,
   PATH_WEAR_DAYS,
@@ -110,6 +111,7 @@ export type FirstClaimResponse = { me: Me; text: string };
 
 export async function markFirstStep(accountId: string, stepId: string): Promise<FirstStepResponse> {
   const step = firstStepById(stepId);
+  if (!step && RETIRED_FIRST_STEPS.includes(stepId)) return { mask: -1 };
   if (!step) throw new HttpError(400, "INVALID_INPUT", "모르는 미션이에요.");
   const r = await getAccounts().markFirstStep(accountId, step.bit);
   if (!r) return { mask: -1 };
