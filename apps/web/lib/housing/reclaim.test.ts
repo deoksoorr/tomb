@@ -132,6 +132,19 @@ describe.skipIf(!!conn)("오래 비운 집 정리", () => {
     expect(await points(owner)).toBe(before + sellPrice(desk));
   });
 
+  it("11/22 정리를 돌 때 순위 점수 맞추기를 저장소마다 한 번만 묻는다 (실패해도 정리는 그대로)", async () => {
+    const s = new MemoryHouseStore();
+    const spy = vi.spyOn(s, "syncRankScores").mockRejectedValueOnce(new Error("끊김"));
+    const err = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    expect((await sweepReclaim(s, T, { force: true })).checked).toBe(0);
+    await sweepReclaim(s, T, { force: true });
+    await sweepReclaim(s, T, { force: true });
+    // 처음은 실패 → 다음 정리에서 다시, 성공한 뒤로는 묻지 않는다
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(err).toHaveBeenCalledTimes(1);
+    err.mockRestore();
+  });
+
   it("운영자 집은 비우지 않는다", async () => {
     const owner = await account(PLOT);
     await buyPlot(store, owner, "운영자 집", "", "운영자");

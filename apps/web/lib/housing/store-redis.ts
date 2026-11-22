@@ -11,6 +11,8 @@ import {
   housingChannelOf,
   LEGACY_HOUSING_CHANNEL,
   LIKE_WEIGHT,
+  PLOT_TIERS,
+  TIER_SCORE_BONUS,
   cottageStyleOf,
   type CottageStyleId,
   type HouseSort,
@@ -26,6 +28,7 @@ import {
   invView,
   LIKE_TTL_SEC,
   pairIds,
+  SCORE_RULE_VER,
   scoreOf,
   SEA_STARTER_KEEP,
   type HousePair,
@@ -71,6 +74,8 @@ import type { HouseExterior, HouseLayout } from "./types";
 //  house:guestday:{visitor}:{yyyymmdd}   STRING 오늘 남긴 방명록 수
 //  houses:all                ZSET 분양 시각 (숨김 포함, 관리자 목록)
 //  houses:new / houses:score / houses:likes   ZSET 공개 목록 (숨긴 집은 빠진다)
+//                            houses:score 점수 = placedScore + likes × LIKE_WEIGHT + 11/22 터 크기 점수 (TIER_FN — 집 해시에는 물건 몫만 남긴다)
+//  houses:score:ver          STRING 11/22 houses:score를 맞춘 점수 규칙 판 (SCORE_RULE_VER와 다르면 syncRankScores가 한 번 다시 맞춘다)
 export const HK = {
   meta: (id: string) => `house:${id}`,
   layout: (id: string) => `house:${id}:layout`,
@@ -94,6 +99,8 @@ export const HK = {
   new: "houses:new",
   score: "houses:score",
   likes: "houses:likes",
+  /** 11/22 순위 ZSET을 맞춘 점수 규칙 판 */
+  scoreVer: "houses:score:ver",
   /** 채널 ch의 번지 색인 */
   lots: (ch: number) => `houses:lots:${ch}`,
   /** 11/16 채널 ch의 포구 오두막 터 색인 */
@@ -108,6 +115,17 @@ const lotsKey = (ch: number, zone?: HouseZone | string | null) => (zone === "sea
 const STARTER_MARK = "~starter";
 
 const SORT_KEY: Record<HouseSort, string> = { score: HK.score, likes: HK.likes, new: HK.new };
+
+// 11/22 터 크기 꾸밈 점수 (catalog TIER_SCORE_BONUS를 상수로 박는다) + 순위 점수 한 곳 계산 (store.ts scoreOf와 같은 식).
+// 집 해시의 placedScore는 물건 몫만이라, 순위 ZSET을 쓰는 Lua마다 이 함수로 그 집의 지금 tier·likes에서 다시 센다
+const TIER_FN = `
+local TIER_BONUS = {${PLOT_TIERS.map((t) => `${t.id}=${TIER_SCORE_BONUS[t.id]}`).join(",")}}
+local function tierBonus(t) return TIER_BONUS[t or ''] or 0 end
+local function rankScore(meta, w)
+  local v = redis.call('HMGET', meta, 'placedScore', 'likes', 'tier')
+  return (tonumber(v[1] or '0') or 0) + (tonumber(v[2] or '0') or 0) * tonumber(w) + tierBonus(v[3])
+end
+`;
 
 // 가장 앞의 빈 번지 (없으면 nil)
 // 비운 번지(CLOSED_LOTS, 지금은 없다)는 자동 배정에서 건너뛴다 (스크립트에 상수로 박는다 — 키·인자는 그대로)
@@ -161,7 +179,7 @@ return redis.call('HGETALL', KEYS[1])
 //       zone(''|'sea'), style, starterJson(''=없음: 가방에 +1씩, ~starter 표시가 없을 때만),
 //       placedJson(''=없음: 처음 배치에 놓인 개수), placedScore, itemsCount
 // 반환: 번지, -1 이미 있음, -2 그 번지는 이미 분양됨, -3 빈 번지 없음
-const CREATE_LUA = `${FREE_LOT_FN}${MIGRATE_FN}
+const CREATE_LUA = `${FREE_LOT_FN}${MIGRATE_FN}${TIER_FN}
 if redis.call('EXISTS', KEYS[1]) == 1 then return -1 end
 if ARGV[13] == '1' then migrateLegacy(KEYS[8], KEYS[7]) end
 local lot
@@ -190,7 +208,7 @@ if ARGV[18] and ARGV[18] ~= '' then
 end
 redis.call('ZADD', KEYS[3], ARGV[7], ARGV[1])
 redis.call('ZADD', KEYS[4], ARGV[7], ARGV[1])
-redis.call('ZADD', KEYS[5], score0, ARGV[1])
+redis.call('ZADD', KEYS[5], score0 + tierBonus(ARGV[6]), ARGV[1])
 redis.call('ZADD', KEYS[6], 0, ARGV[1])
 return lot
 `;
@@ -253,11 +271,21 @@ return 1
 `;
 
 // 낸 포인트(paid)는 기록이 있을 때만 넓히기 값을 더한다 (기록 없는 옛 집에 넓히기 값만 남지 않게)
-// KEYS: meta  ARGV: from, to, now, price
-const UPGRADE_LUA = `
+// 11/22 같은 Lua에서 순위 점수도 새 터 크기 점수로 (숨긴 집은 순위에 없으니 그대로)
+// KEYS: meta, score  ARGV: from, to, now, price, id, likeWeight
+const UPGRADE_LUA = `${TIER_FN}
 if redis.call('HGET', KEYS[1], 'tier') ~= ARGV[1] then return 0 end
 redis.call('HSET', KEYS[1], 'tier', ARGV[2], 'updatedAt', ARGV[3])
 if tonumber(ARGV[4] or '0') > 0 and redis.call('HEXISTS', KEYS[1], 'paid') == 1 then redis.call('HINCRBY', KEYS[1], 'paid', ARGV[4]) end
+if redis.call('HGET', KEYS[1], 'hidden') ~= '1' then redis.call('ZADD', KEYS[2], rankScore(KEYS[1], ARGV[6]), ARGV[5]) end
+return 1
+`;
+
+// 11/22 한 집의 순위 점수를 지금 규칙으로 다시 쓴다 (터 크기 점수가 생기기 전에 넓힌 집. 숨긴 집·없는 집은 건드리지 않는다 → 몇 번을 불러도 같다)
+// KEYS: meta, score  ARGV: id, likeWeight  반환: 1 썼음, 0 건너뜀
+const RESCORE_LUA = `${TIER_FN}
+if redis.call('EXISTS', KEYS[1]) == 0 or redis.call('HGET', KEYS[1], 'hidden') == '1' then return 0 end
+redis.call('ZADD', KEYS[2], rankScore(KEYS[1], ARGV[2]), ARGV[1])
 return 1
 `;
 
@@ -382,7 +410,7 @@ return 1
 // KEYS: pool, inv, otherInv, placed, otherPlaced, meta, layout, score, states, plants
 // ARGV: sea, id, tier, layoutJson(''=그대로), placedScore, itemsCount, now, likeWeight, exteriorJson(''=그대로),
 //       sigsJson(배치 id → 서명, 상태 없는 가구는 ''), potsJson(화분 배치 id → true), [itemId, count]...
-const SAVE_LUA = `${POOL_FN}
+const SAVE_LUA = `${POOL_FN}${TIER_FN}
 if redis.call('EXISTS', KEYS[6]) == 0 then return -1 end
 if redis.call('HGET', KEYS[6], 'tier') ~= ARGV[3] then return -2 end
 local was = tonumber(redis.call('HGET', KEYS[6], 'updatedAt') or '0') or 0
@@ -419,19 +447,18 @@ end
 if ARGV[9] ~= '' then redis.call('HSET', KEYS[6], 'exterior', ARGV[9]) end
 redis.call('HSET', KEYS[6], 'placedScore', ARGV[5], 'updatedAt', math.max(tonumber(ARGV[7]), was + 1))
 if redis.call('HGET', KEYS[6], 'hidden') ~= '1' then
-  local likes = tonumber(redis.call('HGET', KEYS[6], 'likes') or '0')
-  redis.call('ZADD', KEYS[8], tonumber(ARGV[5]) + likes * tonumber(ARGV[8]), ARGV[2])
+  redis.call('ZADD', KEYS[8], rankScore(KEYS[6], ARGV[8]), ARGV[2])
 end
 return 1
 `;
 
 // KEYS: meta, likeMark, score, likes  ARGV: id, ttl, likeWeight
 // 11/18 KEYS[5]·ARGV[4]·ARGV[5]가 있으면 누른 사람의 오늘의 할 일 진행 칸도 +1 (오늘 적립 해시, 칸이 처음 생기면 만료) → 맨 뒤에 진행 값
-const LIKE_LUA = `
+const LIKE_LUA = `${TIER_FN}
 if redis.call('EXISTS', KEYS[1]) == 0 or redis.call('HGET', KEYS[1], 'hidden') == '1' then return nil end
 if not redis.call('SET', KEYS[2], '1', 'NX', 'EX', ARGV[2]) then return {0} end
 local likes = redis.call('HINCRBY', KEYS[1], 'likes', 1)
-local score = tonumber(redis.call('HGET', KEYS[1], 'placedScore') or '0') + likes * tonumber(ARGV[3])
+local score = rankScore(KEYS[1], ARGV[3])
 redis.call('ZADD', KEYS[3], score, ARGV[1])
 redis.call('ZADD', KEYS[4], likes, ARGV[1])
 if KEYS[5] then
@@ -444,7 +471,7 @@ return {1, likes, score}
 
 // 숨기면 공개 목록에서 빼고, 풀면 현재 값으로 다시 넣는다
 // KEYS: meta, new, score, likes  ARGV: id, hidden('1'|'0'), likeWeight
-const HIDE_LUA = `
+const HIDE_LUA = `${TIER_FN}
 if redis.call('EXISTS', KEYS[1]) == 0 then return 0 end
 if ARGV[2] == '1' then
   redis.call('HSET', KEYS[1], 'hidden', '1')
@@ -455,7 +482,7 @@ else
   redis.call('HDEL', KEYS[1], 'hidden')
   local likes = tonumber(redis.call('HGET', KEYS[1], 'likes') or '0')
   redis.call('ZADD', KEYS[2], redis.call('HGET', KEYS[1], 'createdAt'), ARGV[1])
-  redis.call('ZADD', KEYS[3], tonumber(redis.call('HGET', KEYS[1], 'placedScore') or '0') + likes * tonumber(ARGV[3]), ARGV[1])
+  redis.call('ZADD', KEYS[3], rankScore(KEYS[1], ARGV[3]), ARGV[1])
   redis.call('ZADD', KEYS[4], likes, ARGV[1])
 end
 return 1
@@ -560,7 +587,7 @@ function toRecord(id: string, m: Map<string, string>, layout: HouseLayout | null
     layout: layout ?? emptyLayout(),
     likes,
     placedScore,
-    score: scoreOf(placedScore, likes),
+    score: scoreOf(placedScore, likes, m.get("tier") ?? "small"),
     items: Number(m.get("items") ?? 0),
     createdAt: Number(m.get("createdAt") ?? 0),
     updatedAt: Number(m.get("updatedAt") ?? 0),
@@ -726,7 +753,25 @@ export class RedisHouseStore implements HouseStore {
   }
 
   async upgrade(id: string, from: PlotTierId, to: PlotTierId, now: number, price = 0) {
-    return Number(await this.redis.eval<string[], number>(UPGRADE_LUA, [HK.meta(id)], [from, to, String(now), String(price)])) === 1;
+    return Number(await this.redis.eval<string[], number>(UPGRADE_LUA, [HK.meta(id), HK.score], [from, to, String(now), String(price), id, String(LIKE_WEIGHT)])) === 1;
+  }
+
+  /**
+   * 11/22 순위 ZSET을 지금 점수 규칙으로 한 번 다시 맞춘다 (터 크기 점수가 생기기 전에 넓힌 집 — 다시 저장하지 않아도).
+   * 표시(houses:score:ver)가 SCORE_RULE_VER면 GET 하나로 끝. 아니면 모든 집(houses:all)을 집마다 Lua 하나로 다시 쓰고 표시를 남긴다.
+   * 집마다 그 집의 지금 값에서 세므로 두 인스턴스가 겹쳐 돌거나 좋아요·저장과 겹쳐도 같은 결과다 (멱등)
+   */
+  async syncRankScores(): Promise<number | null> {
+    if ((await this.redis.get<string>(HK.scoreVer)) === SCORE_RULE_VER) return null;
+    const ids = await this.redis.zrange<string[]>(HK.all, 0, -1);
+    let n = 0;
+    for (let i = 0; i < ids.length; i += 50) {
+      const p = this.redis.pipeline();
+      for (const id of ids.slice(i, i + 50)) p.eval(RESCORE_LUA, [HK.meta(id), HK.score], [id, String(LIKE_WEIGHT)]);
+      n += (await p.exec<number[]>()).reduce((sum, r) => sum + (Number(r) === 1 ? 1 : 0), 0);
+    }
+    await this.redis.set(HK.scoreVer, SCORE_RULE_VER);
+    return n;
   }
 
   async reclaim(id: string, r: ReclaimInput): Promise<ReclaimResult> {
@@ -907,7 +952,9 @@ export class RedisHouseStore implements HouseStore {
 
   async list(sort: HouseSort, limit: number) {
     const ids = await this.redis.zrange<string[]>(SORT_KEY[sort], 0, limit - 1, { rev: true });
-    return (await this.records(ids, false)).filter((r) => !r.hidden);
+    const out = (await this.records(ids, false)).filter((r) => !r.hidden);
+    // 11/22 점수 순은 읽은 집 기록의 점수(터 크기 점수 포함)로 한 번 더 줄 세운다 — 순위 ZSET을 아직 다시 맞추지 않은 옛 집도 화면 순서가 맞게 (같은 점수는 ZSET 순서 그대로)
+    return sort === "score" ? out.sort((a, b) => b.score - a.score) : out;
   }
 
   async listAll() {

@@ -13,6 +13,7 @@ import {
   nextTitle,
   PLOT_TIERS,
   plotCost,
+  TIER_SCORE_BONUS,
   type CottageStyleId,
   type HouseExteriorMap,
   type PlotTierId,
@@ -233,7 +234,7 @@ export function TierPicker({
             )}
             <strong>{t.name}</strong>
             <span className={styles.small}>
-              방 {t.w}×{t.h}칸 · 물건 {t.maxItems}개
+              방 {t.w}×{t.h}칸 · 물건 {t.maxItems}개{TIER_SCORE_BONUS[t.id] > 0 ? ` · 꾸밈 +${TIER_SCORE_BONUS[t.id]}점` : ""}
             </span>
             <span className={styles.points}>
               <strong>{fmt(cost)}P</strong>

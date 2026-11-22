@@ -1,6 +1,6 @@
 import type { Redis } from "@upstash/redis";
 import { redisClient } from "../redisUsage";
-import { DYE_PARTS, premiumBody, PREMIUM_BODIES, type AvatarDye, type CosmeticSlot, type DyePart } from "@tomb/protocol";
+import { DYE_COLOR_SLOTS_MAX, DYE_PARTS, isCharDyePart, premiumBody, PREMIUM_BODIES, type AvatarDye, type CosmeticSlot, type DyePart, type DyeTarget } from "@tomb/protocol";
 import { env } from "../env";
 import type { DyeTier } from "../dye/palette";
 import { econKeyFor, kstDay } from "./accounts";
@@ -13,7 +13,9 @@ import { ECON_TTL_SEC, spendCategory, type AccountStore } from "./types";
 //
 // Redis 키
 //  - acct:{id}:style   HASH  head/body/accent → "#rrggbb"(염색한 부위만), session → 진행 중인 무작위 염색 JSON,
-//                            bodies → 선택권으로 해금한 프리미엄 외형 id (쉼표로 이음)
+//                            bodies → 선택권으로 해금한 프리미엄 외형 id (쉼표로 이음),
+//                            11/22 아이템 색 보관함: i:{아이템id}:{칸 0~2} → 칠한 색, s:{아이템id} → 지금 입는 칸("0"~"2", "-" = 원래 색,
+//                            없으면 0번 칸이 칠해져 있으면 그 칸), c:{아이템id} → 연 커스텀 칸 수(없으면 1 — 처음 염색하면 저절로 생기는 칸)
 //  - dye:fixed         HASH  고정 색 염색권 id(dyefix_*) → 정의 JSON {name, color, parts?, createdAt}
 //  - dye:fixed:log     LIST  관리자 발급 기록 JSON (최신 먼저 최대 100개)
 // 계정 포인트·가방·착용 키(acct:{id}, :inv, :look, :stash, :ledger)와 경제 통계(econ:{날짜})는 accounts-redis.ts와 같이 쓴다.
@@ -26,7 +28,10 @@ const FIXED_LOG_KEY = "dye:fixed:log";
 export type DyeSession = {
   seed: string;
   tier: DyeTier;
-  part: DyePart;
+  /** 염색 대상: 캐릭터 부위 또는 11/22 아이템 id */
+  part: DyeTarget;
+  /** 아이템이면 칠할 색 보관함 칸 (0~2) */
+  slot?: number;
   itemId: string;
   startedAt: number;
   endsAt: number;
@@ -39,8 +44,10 @@ export type FixedDyeDef = { id: string; name: string; color: string; parts?: Dye
 /** 관리자 발급 기록 (giftId = 선물함으로 보낸 선물) */
 export type FixedDyeIssue = { at: number; defId: string; name: string; color: string; count: number; target: "all" | string; giftId: string };
 
-/** bodies = 선택권으로 영구 해금한 프리미엄 외형 */
-export type StyleState = { dye: AvatarDye; session: DyeSession | null; bodies: string[] };
+/** 11/22 아이템 하나의 색 보관함: colors = 커스텀 칸(연 칸 수만큼, 빈 칸은 null), sel = 지금 입는 칸 (-1 = 원래 색) */
+export type ItemDyeState = { colors: (string | null)[]; sel: number };
+/** bodies = 선택권으로 영구 해금한 프리미엄 외형. dye.items = 아이템마다 지금 입는 색, items = 아이템마다 색 보관함 */
+export type StyleState = { dye: AvatarDye; items: Record<string, ItemDyeState>; session: DyeSession | null; bodies: string[] };
 export type ChargeResult = "ok" | "insufficient" | "same";
 /** 외형 바꾸기 결과: ok = 소장한 외형으로 무료로 바꿨다, unlocked = 프리미엄 외형을 이번에 해금하면서 바꿨다 (선택권 값을 냈다) */
 export type ReshapeResult = ChargeResult | "unlocked";
@@ -62,8 +69,14 @@ export interface StyleStore {
   propose(id: string, seed: string, candidate: DyeCandidate): Promise<boolean>;
   /** 진행 중인 판(seed)을 색을 바꾸지 않고 끝낸다 (염색권은 돌려주지 않는다). 판이 없거나 다른 판이면 false */
   cancel(id: string, seed: string): Promise<boolean>;
-  /** 고정 색 염색권 1장을 쓰고 part를 color로. 가방에 없으면 false */
-  applyFixed(id: string, itemId: string, part: DyePart, color: string): Promise<boolean>;
+  /** 고정 색 염색권 1장을 쓰고 대상(부위, 또는 아이템의 slot번 칸 — 그 칸을 입는다)을 color로. 가방에 없으면 false */
+  applyFixed(id: string, itemId: string, target: DyeTarget, color: string, slot?: number): Promise<boolean>;
+  /** 11/22 아이템이 입을 색 보관함 칸을 고른다 (-1 = 원래 색, 무료). 그 칸이 비었으면 false */
+  selectItemColor(id: string, item: string, sel: number): Promise<boolean>;
+  /** 11/22 색 보관함 칸 하나를 더 연다 (next = 열고 나서 칸 수). 이미 그만큼 있으면 "same", 순서가 틀리면 "order" */
+  buyColorSlot(id: string, item: string, next: number, price: number, reason: string, now: number): Promise<ChargeResult | "order">;
+  /** 11/22 그 아이템의 염색 기록·색 보관함을 지운다 (되팔기) */
+  clearItemDye(id: string, item: string): Promise<void>;
   /** price 포인트를 내고 part를 기본색으로 되돌린다. 이미 기본색이면 "same" (포인트를 쓰지 않는다) */
   reset(id: string, part: DyePart, price: number, reason: string, now: number): Promise<ChargeResult>;
   /**
@@ -92,11 +105,43 @@ function hashOf(flat: unknown): Record<string, string> {
   return out;
 }
 
-function dyeOf(h: Record<string, string>): AvatarDye {
-  const out: AvatarDye = {};
-  for (const p of DYE_PARTS) if (h[p]) out[p] = h[p];
-  return out;
+/** 스타일 해시 → 캐릭터 염색 + 아이템 색 보관함 + 아이템마다 지금 색 (Redis·메모리가 같이 쓴다) */
+export function styleDyeOf(h: Record<string, string>): { dye: AvatarDye; items: Record<string, ItemDyeState> } {
+  const dye: AvatarDye = {};
+  for (const p of DYE_PARTS) if (h[p]) dye[p] = h[p];
+  const items: Record<string, ItemDyeState> = {};
+  for (const [k, v] of Object.entries(h)) {
+    const m = /^i:([a-z0-9_]{1,40}):([0-2])$/.exec(k);
+    if (!m || !v) continue;
+    const st = (items[m[1]] ??= { colors: [], sel: 0 });
+    st.colors[Number(m[2])] = v;
+  }
+  for (const [item, st] of Object.entries(items)) {
+    const cap = Math.min(DYE_COLOR_SLOTS_MAX, Math.max(1, Number(h[`c:${item}`] ?? 1) || 1, st.colors.length));
+    st.colors = Array.from({ length: cap }, (_, i) => st.colors[i] ?? null);
+    const sel = h[`s:${item}`];
+    st.sel = sel === "-" ? -1 : sel !== undefined && /^[0-2]$/.test(sel) && st.colors[Number(sel)] ? Number(sel) : st.colors[0] ? 0 : -1;
+  }
+  // 칠한 적은 없지만 칸만 산 아이템
+  for (const [k, v] of Object.entries(h)) {
+    const m = /^c:([a-z0-9_]{1,40})$/.exec(k);
+    if (m && !items[m[1]]) items[m[1]] = { colors: Array.from({ length: Math.min(DYE_COLOR_SLOTS_MAX, Number(v) || 1) }, () => null), sel: -1 };
+  }
+  const worn: Record<string, string> = {};
+  for (const [item, st] of Object.entries(items)) if (st.sel >= 0 && st.colors[st.sel]) worn[item] = st.colors[st.sel]!;
+  if (Object.keys(worn).length) dye.items = worn;
+  return { dye, items };
 }
+
+/** 염색 대상 → 저장 칸: 캐릭터 부위는 그 이름, 아이템은 i:{id}:{칸} + 그 칸을 입게 s:{id} */
+export function dyeFields(target: DyeTarget, slot = 0): { field: string; sel?: [string, string] } {
+  if (isCharDyePart(target)) return { field: target };
+  const k = Math.max(0, Math.min(DYE_COLOR_SLOTS_MAX - 1, Math.floor(slot)));
+  return { field: `i:${target}:${k}`, sel: [`s:${target}`, String(k)] };
+}
+
+/** 그 아이템의 저장 칸 이름 전부 (지우기용) */
+const itemFields = (item: string) => [...Array.from({ length: DYE_COLOR_SLOTS_MAX }, (_, k) => `i:${item}:${k}`), `s:${item}`, `c:${item}`];
 
 function parseSession(raw: string | undefined | null): DyeSession | null {
   if (!raw) return null;
@@ -110,7 +155,8 @@ function parseSession(raw: string | undefined | null): DyeSession | null {
 // ── 메모리 (로컬 개발) ──
 
 export class MemoryStyle implements StyleStore {
-  private styles = new Map<string, { dye: AvatarDye; session: DyeSession | null; bodies?: string[] }>();
+  /** h = Redis 스타일 해시와 같은 필드 (head·body·accent·i:…·s:…·c:…) */
+  private styles = new Map<string, { h: Record<string, string>; session: DyeSession | null; bodies?: string[] }>();
   private fixed = new Map<string, FixedDyeDef>();
   private log: FixedDyeIssue[] = [];
   /** 계정 저장소 (HMR로 바뀌어도 최신 것을 쓰게 매번 받는다) */
@@ -120,13 +166,13 @@ export class MemoryStyle implements StyleStore {
 
   private st(id: string) {
     let s = this.styles.get(id);
-    if (!s) this.styles.set(id, (s = { dye: {}, session: null }));
+    if (!s) this.styles.set(id, (s = { h: {}, session: null }));
     return s;
   }
 
   async get(id: string): Promise<StyleState> {
     const s = this.styles.get(id);
-    return { dye: { ...(s?.dye ?? {}) }, session: s?.session ? { ...s.session } : null, bodies: [...(s?.bodies ?? [])] };
+    return { ...styleDyeOf(s?.h ?? {}), session: s?.session ? { ...s.session } : null, bodies: [...(s?.bodies ?? [])] };
   }
 
   /** 11/15 수집 의뢰 교환소: 외형 해금 (소장 기록 bodies에 더한다, 동기 — MemoryQuestStore가 부른다) */
@@ -146,7 +192,8 @@ export class MemoryStyle implements StyleStore {
   async finish(id: string, seed: string, color: string): Promise<boolean> {
     const s = this.styles.get(id);
     if (!s?.session || s.session.seed !== seed) return false;
-    s.dye = { ...s.dye, [s.session.part]: color };
+    const f = dyeFields(s.session.part, s.session.slot);
+    s.h = { ...s.h, [f.field]: color, ...(f.sel ? { [f.sel[0]]: f.sel[1] } : {}) };
     s.session = null;
     return true;
   }
@@ -165,20 +212,46 @@ export class MemoryStyle implements StyleStore {
     return true;
   }
 
-  async applyFixed(id: string, itemId: string, part: DyePart, color: string): Promise<boolean> {
+  async applyFixed(id: string, itemId: string, target: DyeTarget, color: string, slot?: number): Promise<boolean> {
     if (!this.accounts().styleTake(id, itemId)) return false;
     const s = this.st(id);
-    s.dye = { ...s.dye, [part]: color };
+    const f = dyeFields(target, slot);
+    s.h = { ...s.h, [f.field]: color, ...(f.sel ? { [f.sel[0]]: f.sel[1] } : {}) };
     return true;
+  }
+
+  async selectItemColor(id: string, item: string, sel: number): Promise<boolean> {
+    const s = this.st(id);
+    if (sel >= 0 && !s.h[`i:${item}:${sel}`]) return false;
+    s.h = { ...s.h, [`s:${item}`]: sel < 0 ? "-" : String(sel) };
+    return true;
+  }
+
+  async buyColorSlot(id: string, item: string, next: number, price: number, reason: string, now: number): Promise<ChargeResult | "order"> {
+    const s = this.st(id);
+    const cur = Number(s.h[`c:${item}`] ?? 1) || 1;
+    if (cur >= next) return "same";
+    if (cur !== next - 1) return "order";
+    if (!this.accounts().styleCharge(id, price, reason, now)) return "insufficient";
+    s.h = { ...s.h, [`c:${item}`]: String(next) };
+    return "ok";
+  }
+
+  async clearItemDye(id: string, item: string): Promise<void> {
+    const s = this.styles.get(id);
+    if (!s) return;
+    const h = { ...s.h };
+    for (const f of itemFields(item)) delete h[f];
+    s.h = h;
   }
 
   async reset(id: string, part: DyePart, price: number, reason: string, now: number): Promise<ChargeResult> {
     const s = this.st(id);
-    if (!s.dye[part]) return "same";
+    if (!s.h[part]) return "same";
     if (!this.accounts().styleCharge(id, price, reason, now)) return "insufficient";
-    const next = { ...s.dye };
+    const next = { ...s.h };
     delete next[part];
-    s.dye = next;
+    s.h = next;
     return "ok";
   }
 
@@ -262,10 +335,16 @@ const FINISH_LUA = `
 local cur = redis.call('HGET', KEYS[1], 'session')
 if not cur then return 0 end
 if string.match(cur, '"seed":"([^"]+)"') ~= ARGV[1] then return 0 end
-local part = string.match(cur, '"part":"([a-z]+)"')
+local part = string.match(cur, '"part":"([a-z0-9_]+)"')
 if not part then return 0 end
 redis.call('HDEL', KEYS[1], 'session')
-redis.call('HSET', KEYS[1], part, ARGV[2])
+if part == 'head' or part == 'body' or part == 'accent' then
+  redis.call('HSET', KEYS[1], part, ARGV[2])
+else
+  -- 11/22 아이템: 색 보관함 칸(slot)에 칠하고 그 칸을 입는다
+  local slot = string.match(cur, '"slot":(%d)') or '0'
+  redis.call('HSET', KEYS[1], 'i:' .. part .. ':' .. slot, ARGV[2], 's:' .. part, slot)
+end
 return 1
 `;
 
@@ -288,10 +367,29 @@ redis.call('HDEL', KEYS[1], 'session')
 return 1
 `;
 
-// KEYS: inv, style  ARGV: itemId, part, color
+// KEYS: inv, style  ARGV: itemId, field, color, selField('' = 없음), selValue
 const FIXED_LUA = `${TAKE_FN}
 if not take(KEYS[1], ARGV[1]) then return 0 end
 redis.call('HSET', KEYS[2], ARGV[2], ARGV[3])
+if ARGV[4] ~= '' then redis.call('HSET', KEYS[2], ARGV[4], ARGV[5]) end
+return 1
+`;
+
+// 11/22 색 보관함 칸 고르기: KEYS: style  ARGV: item, sel("-" 또는 "0"~"2") → 0 빈 칸 | 1
+const SELECT_LUA = `
+if ARGV[2] ~= '-' and redis.call('HEXISTS', KEYS[1], 'i:' .. ARGV[1] .. ':' .. ARGV[2]) == 0 then return 0 end
+redis.call('HSET', KEYS[1], 's:' .. ARGV[1], ARGV[2])
+return 1
+`;
+
+// 11/22 색 보관함 칸 사기: KEYS: acct, ledger, econ, style  ARGV: item, next, price, entry, field → -1 이미 | -2 순서 | 0 부족 | 1
+const SLOT_LUA = `${CHARGE_FN}
+local cur = tonumber(redis.call('HGET', KEYS[4], 'c:' .. ARGV[1]) or '1') or 1
+local nxt = tonumber(ARGV[2])
+if cur >= nxt then return -1 end
+if cur ~= nxt - 1 then return -2 end
+if not charge(KEYS[1], KEYS[2], KEYS[3], tonumber(ARGV[3]), ARGV[4], ARGV[5]) then return 0 end
+redis.call('HSET', KEYS[4], 'c:' .. ARGV[1], ARGV[2])
 return 1
 `;
 
@@ -357,7 +455,7 @@ export class RedisStyle implements StyleStore {
 
   async get(id: string): Promise<StyleState> {
     const h = hashOf(await this.redis.hgetall(styleKey(id)));
-    return { dye: dyeOf(h), session: parseSession(h.session), bodies: h.bodies ? h.bodies.split(",").filter(Boolean) : [] };
+    return { ...styleDyeOf(h), session: parseSession(h.session), bodies: h.bodies ? h.bodies.split(",").filter(Boolean) : [] };
   }
 
   async begin(id: string, itemId: string, session: DyeSession) {
@@ -380,8 +478,30 @@ export class RedisStyle implements StyleStore {
     return Number(await this.redis.eval<string[], number>(CANCEL_LUA, [styleKey(id)], [seed])) === 1;
   }
 
-  async applyFixed(id: string, itemId: string, part: DyePart, color: string): Promise<boolean> {
-    return Number(await this.redis.eval<string[], number>(FIXED_LUA, [K.inv(id), styleKey(id)], [itemId, part, color])) === 1;
+  async applyFixed(id: string, itemId: string, target: DyeTarget, color: string, slot?: number): Promise<boolean> {
+    const f = dyeFields(target, slot);
+    return Number(await this.redis.eval<string[], number>(FIXED_LUA, [K.inv(id), styleKey(id)], [itemId, f.field, color, f.sel?.[0] ?? "", f.sel?.[1] ?? ""])) === 1;
+  }
+
+  async selectItemColor(id: string, item: string, sel: number): Promise<boolean> {
+    return Number(await this.redis.eval<string[], number>(SELECT_LUA, [styleKey(id)], [item, sel < 0 ? "-" : String(sel)])) === 1;
+  }
+
+  async buyColorSlot(id: string, item: string, next: number, price: number, reason: string, now: number): Promise<ChargeResult | "order"> {
+    const r = Number(
+      await this.redis.eval<string[], number>(SLOT_LUA, [K.acct(id), K.ledger(id), await econKeyFor(id, kstDay(now)), styleKey(id)], [
+        item,
+        String(next),
+        String(price),
+        this.entry(price, reason, now),
+        `spend:${spendCategory(reason)}`,
+      ]),
+    );
+    return r === 1 ? "ok" : r === 0 ? "insufficient" : r === -2 ? "order" : "same";
+  }
+
+  async clearItemDye(id: string, item: string): Promise<void> {
+    await this.redis.hdel(styleKey(id), ...itemFields(item));
   }
 
   private entry(amount: number, reason: string, now: number): string {

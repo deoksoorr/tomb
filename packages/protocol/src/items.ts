@@ -16,7 +16,9 @@ const DAY = 24 * HOUR;
 /** box = 11/15 긴급 의뢰 「수집가의 뒷주머니」처럼 가방에서 [열기]로 여는 상자 (상점에 없다) */
 export type ItemKind = "firework" | "cosmetic" | "decor" | "graveStyle" | "megaphone" | "dye" | "unlock" | "box";
 // nameColor·namePlate(닉네임 꾸미기): 머리 위 이름표 글자 색 · 이름표 바탕판. 몸 그림에는 그려지지 않고 이름표·화면의 이름에만 보인다
-export type CosmeticSlot = "head" | "hand" | "aura" | "neck" | "back" | "pet" | "feet" | "nameColor" | "namePlate";
+// 11/22 back(화면 「옷」) = 몸에 입는 옷(코트·패딩·니트·재킷·망토), pack(화면 「등」) = 등에 메거나 다는 것(배낭·가방·자루·악기·날개·연).
+// 옷과 등은 같이 입는다. 예전엔 둘 다 back이라 하나만 입었다 — 저장소는 칸 이름(back)에 남은 등 꾸미기를 읽을 때 pack으로 옮긴다 (web lib/store)
+export type CosmeticSlot = "head" | "hand" | "aura" | "neck" | "back" | "pack" | "pet" | "feet" | "nameColor" | "namePlate";
 
 export type ItemDef = {
   id: string;
@@ -73,6 +75,11 @@ export type ItemDef = {
   unlock?: "emo" | "body";
   /** unlock = "body"일 때 여는 몸 id (constants QUEST_BODIES) */
   body?: string;
+  /**
+   * 11/22 입은 꾸미기 염색(모자·목·옷 칸)을 받지 않는 꾸미기. 머리·목·등 꾸미기는 기본으로 모두 염색되고, 색을 바꾸면 안 되는 것만
+   * 카탈로그 줄에 noDye: true를 단다 (isDyeableCosmetic). 지금은 붙인 꾸미기가 없다
+   */
+  noDye?: true;
 };
 
 export const COSMETIC_DURATION_MS = DAY;
@@ -217,7 +224,7 @@ export const ITEMS: readonly ItemDef[] = [
   { id: "aura_firefly", kind: "cosmetic", slot: "aura", name: "반딧불 오라", desc: "반딧불이 졸졸 따라와요.", price: 140, durationMs: COSMETIC_DURATION_MS },
   { id: "neck_scarf", kind: "cosmetic", slot: "neck", name: "빨간 목도리", desc: "밤바람이 차요.", price: 60, durationMs: COSMETIC_DURATION_MS },
   { id: "hat_halo", kind: "cosmetic", slot: "head", name: "후광", desc: "머리 위에 은은한 빛의 고리.", price: 160, durationMs: COSMETIC_DURATION_MS },
-  { id: "back_wings", kind: "cosmetic", slot: "back", name: "작은 날개", desc: "등에서 파닥이는 유령 날개.", price: 180, durationMs: COSMETIC_DURATION_MS },
+  { id: "back_wings", kind: "cosmetic", slot: "pack", name: "작은 날개", desc: "등에서 파닥이는 유령 날개.", price: 180, durationMs: COSMETIC_DURATION_MS },
   { id: "pet_ghost", kind: "cosmetic", slot: "pet", name: "그림자 유령 친구", desc: "작은 그림자 유령이 졸졸 따라와요.", price: 1300, durationMs: COSMETIC_DURATION_MS },
   { id: "feet_flowers", kind: "cosmetic", slot: "feet", name: "발자국 꽃", desc: "걷는 자리마다 작은 꽃이 피어요.", price: 140, durationMs: COSMETIC_DURATION_MS },
   { id: "aura_fog", kind: "cosmetic", slot: "aura", name: "안개 망토", desc: "발밑에 푸른 안개가 일렁여요.", price: 120, durationMs: COSMETIC_DURATION_MS },
@@ -249,10 +256,10 @@ export const ITEMS: readonly ItemDef[] = [
     ["hand_lantern_blue", "hand", "도깨비 등롱", "푸르스름한 불빛이 흔들흔들. 주변도 환해져요.", 180],
     ["hand_balloon", "hand", "풍선", "창립기념일에 받은 풍선. 바람 따라 둥실.", 100],
     // 등
-    ["back_backpack", "back", "출근 배낭", "노트북, 충전기, 그리고 한 줌의 희망.", 100],
+    ["back_backpack", "pack", "출근 배낭", "노트북, 충전기, 그리고 한 줌의 희망.", 100],
     ["back_cape", "back", "퇴근 망토", "6시 정각, 망토를 휘날리며 퇴근.", 160],
-    ["back_wings_bat", "back", "박쥐 날개", "야근 사흘째에 돋아났어요.", 200],
-    ["back_wings_butterfly", "back", "나비 날개", "봄바람 타고 출근하는 날개.", 320],
+    ["back_wings_bat", "pack", "박쥐 날개", "야근 사흘째에 돋아났어요.", 200],
+    ["back_wings_butterfly", "pack", "나비 날개", "봄바람 타고 출근하는 날개.", 320],
     // 발
     ["feet_prints", "feet", "발도장", "지나간 자리마다 콩콩 발자국.", 60],
     ["feet_puddle", "feet", "첨벙 장화", "맑은 날에도 걸음마다 첨벙첨벙.", 100],
@@ -295,11 +302,11 @@ export const ITEMS: readonly ItemDef[] = [
     ["hand_bouquet", "hand", "꽃다발", "승진 축하 꽃다발. 남의 거 아니에요.", 160],
     ["hand_wand", "hand", "요술봉", "야근을 없애 주는 요술봉. (효과는 아직)", 240],
     // 등
-    ["back_shell", "back", "거북 등껍질", "느긋하게, 그래도 지각은 안 하게.", 140],
-    ["back_guitar", "back", "통기타", "퇴근 후엔 밴드 동아리 기타리스트.", 200],
-    ["back_jetpack", "back", "제트팩", "지각 1분 전 비상 출근용.", 360],
-    ["back_wings_angel", "back", "천사 날개", "칼퇴를 허락받은 자의 날개.", 400],
-    ["back_wings_dragon", "back", "용 날개", "결재 반려 세 번이면 돋아나요.", 480],
+    ["back_shell", "pack", "거북 등껍질", "느긋하게, 그래도 지각은 안 하게.", 140],
+    ["back_guitar", "pack", "통기타", "퇴근 후엔 밴드 동아리 기타리스트.", 200],
+    ["back_jetpack", "pack", "제트팩", "지각 1분 전 비상 출근용.", 360],
+    ["back_wings_angel", "pack", "천사 날개", "칼퇴를 허락받은 자의 날개.", 400],
+    ["back_wings_dragon", "pack", "용 날개", "결재 반려 세 번이면 돋아나요.", 480],
     // 발
     ["feet_snowprints", "feet", "눈 발자국", "첫눈 온 날 출근길, 뽀득뽀득.", 80],
     ["feet_paws", "feet", "젤리 발도장", "고양이 발바닥 젤리 도장, 꾹꾹.", 100],
@@ -365,7 +372,7 @@ export const ITEMS: readonly ItemDef[] = [
     ["hand_plush", "hand", "곰돌이 인형", "책상 위 모니터 옆을 지키던 그 곰돌이.", 140],
     ["hand_dango", "hand", "삼색 경단 꼬치", "분홍·하양·연두. 하나씩 아껴 먹어요.", 80],
     // 등
-    ["back_bunnybag", "back", "토끼 백팩", "뒤에서 보면 토끼가 빤히 쳐다봐요.", 180],
+    ["back_bunnybag", "pack", "토끼 백팩", "뒤에서 보면 토끼가 빤히 쳐다봐요.", 180],
     ["back_milkcape", "back", "딸기우유 망토", "분홍 물방울 망토. 퇴근길이 조금 달콤해져요.", 200],
     // 발
     ["feet_jelly", "feet", "젤리 발자국", "분홍·민트·레몬 젤리 발바닥 도장이 콩콩.", 120],
@@ -417,12 +424,12 @@ export const ITEMS: readonly ItemDef[] = [
     ["back_jacket", "back", "어깨 걸친 재킷", "퇴근길엔 재킷을 어깨에 툭. 넥타이는 이미 주머니 속.", 140],
     ["np_card", "namePlate", "사원증 이름표", "파란 띠 사원증에 이름이 또박또박. 삑, 출입 허가.", 120],
     // 캠핑룩
-    ["back_camppack", "back", "캠핑 배낭", "돌돌 만 침낭을 얹은 큰 배낭. 주말엔 무조건 숲으로.", 160],
+    ["back_camppack", "pack", "캠핑 배낭", "돌돌 만 침낭을 얹은 큰 배낭. 주말엔 무조건 숲으로.", 160],
     ["neck_bandana", "neck", "등산 반다나", "주황 바탕에 흰 점무늬. 산꼭대기 인증 사진 필수품.", 60],
     ["hand_mug", "hand", "캠핑 머그", "법랑 머그에 코코아가 모락모락. 불멍엔 이게 최고.", 80],
     ["feet_embers", "feet", "모닥불 불씨 걸음", "걸음마다 작은 불씨가 톡톡 튀어 올라요.", 180],
     // 바닷가룩
-    ["back_surf", "back", "서핑보드", "파도 기다리는 중. 일단 메고 다니면 서퍼예요.", 240],
+    ["back_surf", "pack", "서핑보드", "파도 기다리는 중. 일단 메고 다니면 서퍼예요.", 240],
     ["neck_shell", "neck", "조개 목걸이", "바닷가에서 주운 조개를 엮었어요. 파도 소리가 들릴지도.", 100],
     ["hand_icecream", "hand", "아이스크림 콘", "녹기 전에 빨리! 딸기 한 스쿱, 바닐라 한 스쿱.", 60],
     ["feet_sand", "feet", "모래사장 발자국", "모래 위에 콕콕 발자국. 가끔 작은 조개가 빼꼼.", 100],
@@ -464,7 +471,7 @@ export const ITEMS: readonly ItemDef[] = [
   ...cosmetics([
     // 「산타 견습 요정」 (크리스마스)
     ["si_elfhat", "head", "견습 요정 모자", "끝에 금방울 달린 초록과 빨강 줄무늬 모자. 수습 기간 석 달째예요.", 450],
-    ["si_sack", "back", "선물 배달 자루", "산타 사무소 물류팀 지급품. 오늘 배송 물량은 묻지 마세요.", 2600],
+    ["si_sack", "pack", "선물 배달 자루", "산타 사무소 물류팀 지급품. 오늘 배송 물량은 묻지 마세요.", 2600],
     ["si_cookie", "hand", "진저브레드 쿠키", "포장하다 하나 슬쩍. 단추는 초코칩이에요.", 120],
     ["si_bulbs", "feet", "꼬마전구 발자국", "걸음마다 알록달록 꼬마전구가 톡톡 켜졌다 꺼져요.", 500],
     ["si_wrap", "namePlate", "선물 포장 이름표", "빨강과 초록 줄무늬 포장지에 금 리본을 묶은 이름표예요.", 350],
@@ -474,7 +481,7 @@ export const ITEMS: readonly ItemDef[] = [
   ...cosmetics([
     // 「야근 요정」 (회사원). 이름 글자 id는 착용 증서 길이 때문에 기획안 of_bluelight 대신 짧게
     ["of_antenna", "head", "형광등 더듬이", "머리띠 끝에 달린 형광등이 깜빡깜빡. 밤 10시가 넘으면 더 밝아져요.", 350],
-    ["of_a4wings", "back", "A4 종이 날개", "이면지를 접어 만든 날개. 집게 두 개로 겨우 붙어 있어요.", 1200],
+    ["of_a4wings", "pack", "A4 종이 날개", "이면지를 접어 만든 날개. 집게 두 개로 겨우 붙어 있어요.", 1200],
     ["of_drink", "hand", "에너지 드링크", "번개 무늬 캔. 마시면 날개가 돋는다는 그 음료예요.", 100],
     ["of_postit", "aura", "포스트잇 소용돌이", "할 일 메모가 머리 둘레를 빙글빙글. 다 떼면 퇴근이에요.", 400],
     ["of_blueglow", "nameColor", "블루라이트 이름", "모니터 불빛처럼 푸르게 빛나는 이름이에요.", 200],
@@ -483,7 +490,7 @@ export const ITEMS: readonly ItemDef[] = [
     // 「안개 묘지기」 (기억숲 묘지 마을)
     ["gk_moonwreath", "head", "달맞이꽃 화관", "밤에만 피는 하얀 달맞이꽃을 엮은 화관. 안개 속에서 은은하게 빛나요.", 1200],
     ["gk_firefly", "hand", "반딧불 유리병", "기억숲 반딧불을 잠깐 빌려 담은 병. 아침이면 꼭 놓아줘요.", 600],
-    ["gk_stonepack", "back", "이끼 비석 배낭", "이끼 낀 작은 비석에 끈을 달아 멨어요. 위에 켠 촛불은 바람에도 안 꺼져요.", 1500],
+    ["gk_stonepack", "pack", "이끼 비석 배낭", "이끼 낀 작은 비석에 끈을 달아 멨어요. 위에 켠 촛불은 바람에도 안 꺼져요.", 1500],
     ["gk_fadesteps", "feet", "흐려지는 발자국", "푸른 발자국이 안개처럼 천천히 사라져요.", 500],
     ["gk_owl", "pet", "등불 부엉이", "눈이 등불처럼 빛나는 유령 부엉이. 밤엔 발밑을 밝혀 줘요.", 12000],
   ]).map((it): ItemDef => ({ ...it, seasonSet: "fog-keeper", grade: SEASON_GRADES[it.id] })),
@@ -506,7 +513,7 @@ export const ITEMS: readonly ItemDef[] = [
   ...cosmetics([
     // 「벚꽃 소풍」 (봄)
     ["sp_buckethat", "head", "벚꽃 버킷햇", "벚꽃 무늬를 콕콕 박은 버킷햇. 햇빛도 꽃가루도 막아 줘요.", 350],
-    ["sp_matpack", "back", "돗자리 배낭", "돌돌 만 체크 돗자리를 얹은 배낭. 명당은 일찍 맡아야 해요.", 600],
+    ["sp_matpack", "pack", "돗자리 배낭", "돌돌 만 체크 돗자리를 얹은 배낭. 명당은 일찍 맡아야 해요.", 600],
     ["sp_gimbap", "hand", "김밥 도시락", "꼬마 김밥이 줄줄이 든 도시락. 꼬다리는 내 몫이에요.", 150],
     ["sp_sprouts", "feet", "새싹 걸음", "밟는 자리마다 연두 새싹이 퐁퐁 돋아요.", 400],
     ["sp_bee", "pet", "꼬마 꿀벌", "김밥 냄새를 맡고 따라온 통통한 꿀벌. 붕붕 날다 가끔 머리 위에 앉아요.", 4400],
@@ -515,7 +522,7 @@ export const ITEMS: readonly ItemDef[] = [
     // 「사내 체육대회」 (회사원, 네 점 — 펫 없음)
     ["sd_headband", "head", "청팀 머리띠", "이마에 질끈 묶은 파란 머리띠. 끝자락이 바람에 휘날려요.", 200],
     ["sd_baton", "hand", "계주 바통", "마지막 주자에게만 오는 빨간 바통. 떨어뜨리면 큰일 나요.", 150],
-    ["sd_flag", "back", "응원 깃발", "등에 꽂은 청팀 응원 깃발. 부장님이 직접 그린 호랑이예요.", 500],
+    ["sd_flag", "pack", "응원 깃발", "등에 꽂은 청팀 응원 깃발. 부장님이 직접 그린 호랑이예요.", 500],
     ["sd_dash", "feet", "흙먼지 질주", "달릴 때마다 흙먼지가 뽀얗게 일어요.", 400],
   ]).map((it): ItemDef => ({ ...it, seasonSet: "sports-day", grade: SEASON_GRADES[it.id] })),
   // 11/20 새 다섯 벌 (코디 기획안 2차 시안 — 운영자 확정). 12/26부터 토요일마다 한 벌씩, 2주씩 판다 (web lib/seasonShop/schedule COS_RELEASES).
@@ -524,14 +531,14 @@ export const ITEMS: readonly ItemDef[] = [
     // 「송년회 3차」 (회식 끝자락)
     ["ye_tiehead", "head", "넥타이 머리띠", "풀었던 넥타이를 이마에 질끈. 3차부터는 이게 정장이에요.", 350],
     ["ye_mic", "hand", "애창곡 마이크", "금빛 노래방 마이크. 번호만 누르면 손이 먼저 올라가요.", 150],
-    ["ye_tambo", "back", "흥부자 탬버린", "등에 메고 다니다 전주만 나오면 꺼내요. 리본이 박자보다 먼저 흔들려요.", 600],
+    ["ye_tambo", "pack", "흥부자 탬버린", "등에 메고 다니다 전주만 나오면 꺼내요. 리본이 박자보다 먼저 흔들려요.", 600],
     ["ye_tipsy", "aura", "알딸딸 오라", "볼이 발그레해지고 분홍 거품이 보글보글 올라가요. 내일 아침 일은 내일 생각해요.", 450],
     ["ye_raccoon", "pet", "꼬마 너구리", "3차까지 따라온 너구리예요. 머리에 넥타이를 맨 건 누가 봐도 부장님 따라 한 거예요.", 6000],
   ]).map((it): ItemDef => ({ ...it, seasonSet: "year-end", grade: SEASON_GRADES[it.id] })),
   ...cosmetics([
     // 「해맞이 산행」 (새해 첫 해돋이)
     ["su_beanie", "head", "해돋이 털모자", "빨강에서 노랑으로 물드는 털모자. 정수리에 해가 하나 떠 있어요.", 400],
-    ["su_pack", "back", "등산 배낭", "돗자리 말아 얹고 양은 컵까지 매단 배낭이에요. 정상 리본도 하나 묶었어요.", 1200],
+    ["su_pack", "pack", "등산 배낭", "돗자리 말아 얹고 양은 컵까지 매단 배낭이에요. 정상 리본도 하나 묶었어요.", 1200],
     ["su_flask", "hand", "믹스커피 보온병", "정상에서 따라 마시는 믹스커피 한 잔. 산 위에선 뭐든 맛있어요.", 150],
     ["su_sunrise", "aura", "첫 햇살 오라", "등 뒤로 새해 첫 해가 둥실 떠올라요. 사진 찍으면 다들 실루엣만 나와요.", 700],
     ["su_goat", "pet", "꼬마 산양", "바위 타기 선수 산양이에요. 새해라고 빨간 목도리를 둘렀고 정상엔 늘 먼저 가 있어요.", 10000],
@@ -540,7 +547,7 @@ export const ITEMS: readonly ItemDef[] = [
     // 「작심삼일」 (신년 계획, 펫 없음)
     ["rs_band", "head", "헬스 머리띠", "형광 줄무늬 땀 머리띠. 아직 땀은 한 방울도 안 묻었어요.", 200],
     ["rs_shake", "hand", "단백질 쉐이크", "초코 맛 단백질 쉐이크. 운동은 건너뛰어도 이건 꼭 마셔요.", 150],
-    ["rs_gymbag", "back", "새 운동 가방", "1년권 사은품 운동 가방이에요. 가격표가 아직 그대로 달려 있어요.", 1100],
+    ["rs_gymbag", "pack", "새 운동 가방", "1년권 사은품 운동 가방이에요. 가격표가 아직 그대로 달려 있어요.", 1100],
     ["rs_planner", "namePlate", "새해 계획표 이름표", "체크 칸이 세 개인 계획표 이름표예요. 셋째 칸은 늘 비어 있어요.", 350],
     ["rs_day3", "feet", "사흘째 발자국", "운동화 자국 두 번 다음엔 꼭 삼선 슬리퍼 자국이 찍혀요.", 450],
   ]).map((it): ItemDef => ({ ...it, seasonSet: "resolution", grade: SEASON_GRADES[it.id] })),
@@ -548,7 +555,7 @@ export const ITEMS: readonly ItemDef[] = [
     // 「빙어 축제」 (겨울 얼음낚시)
     ["ic_earmuff", "head", "털 귀마개", "복슬복슬 털 귀마개. 입질 소리만 빼고 다 막아 줘요.", 350],
     ["ic_rod", "hand", "빙어 낚싯대", "손바닥만 한 얼음낚시 낚싯대. 줄 끝에 빙어가 파닥파닥 매달려 있어요.", 200],
-    ["ic_icebox", "back", "빙어 아이스박스", "어깨에 멘 하늘색 아이스박스. 오늘 잡은 건 세 마리, 펭귄이 가져간 건 열 마리예요.", 1100],
+    ["ic_icebox", "pack", "빙어 아이스박스", "어깨에 멘 하늘색 아이스박스. 오늘 잡은 건 세 마리, 펭귄이 가져간 건 열 마리예요.", 1100],
     ["ic_hotpack", "aura", "핫팩 오라", "주머니마다 핫팩을 넣었더니 몸 둘레로 따뜻한 김이 아른아른 올라가요.", 300],
     ["ic_penguin", "pet", "빙어 도둑 펭귄", "아이스박스 빙어를 하나씩 물고 가는 펭귄이에요. 들키면 모른 척 뒤뚱거려요.", 7000],
   ]).map((it): ItemDef => ({ ...it, seasonSet: "smelt-fest", grade: SEASON_GRADES[it.id] })),
@@ -649,7 +656,7 @@ export const ITEMS: readonly ItemDef[] = [
     { id: "q_hand_wishlamp", kind: "cosmetic", slot: "hand", grade: "fine", name: "새해 소원 등불", desc: "소원을 적은 한지 풍등. 밤이면 둘레를 따뜻하게 밝혀요.", price: 240 },
     { id: "q_name_newyear", kind: "cosmetic", slot: "namePlate", grade: "rare", name: "새해 복 이름표", desc: "금테 두른 다홍 이름표에 복 매듭. 금가루가 둥실 떠올라요.", price: 300 },
     { id: "q_pet_penguin", kind: "cosmetic", slot: "pet", grade: "rare", name: "꼬마 펭귄 펫", desc: "뒤뚱뒤뚱 따라오다가 가끔 배로 쭉 미끄러져요.", price: 240 },
-    { id: "q_back_kite", kind: "cosmetic", slot: "back", grade: "fine", name: "연 날리는 등", desc: "등에 맨 얼레에서 방패연이 바람 따라 펄럭여요.", price: 240 },
+    { id: "q_back_kite", kind: "cosmetic", slot: "pack", grade: "fine", name: "연 날리는 등", desc: "등에 맨 얼레에서 방패연이 바람 따라 펄럭여요.", price: 240 },
   ] satisfies ItemDef[]).map((it) => ({ ...it, ...(it.kind === "cosmetic" ? { durationMs: COSMETIC_DURATION_MS } : {}), quest: true as const })),
 
   // ── 11/15 긴급 의뢰 가장 많이 낸 사람 (24시간 대여 — 상점·교환소에 없다). 그림: 머리 avatarGear.ts · 도는 불빛 cosmeticFx.ts ──
@@ -906,8 +913,8 @@ export const FIREWORK_SHOW_MS: Readonly<Record<string, number>> = { fw_town: 18_
 export function fireworkShowMs(id: string): number {
   return FIREWORK_SHOW_MS[id] ?? 0;
 }
-/** 착용 부위 수 = 착용 목록 최대 길이 (몸 7 + 닉네임 꾸미기 2) */
-export const LOOK_MAX_PARTS = 9;
+/** 착용 부위 수 = 착용 목록 최대 길이 (몸 8 + 닉네임 꾸미기 2). 11/22 옷·등 칸을 나눠 9 → 10 */
+export const LOOK_MAX_PARTS = 10;
 /** 착용 중인 꾸미기 (부위별 최대 1개, 최대 LOOK_MAX_PARTS개). 서버 브로드캐스트·렌더링용.
  * 이 빌드가 모르는 id는 버린 뒤에 센다 → 옛 실시간 서버(최대 7개)도 새 닉네임 꾸미기만 버리고 나머지는 그대로 받는다 */
 export type Look = string[];
@@ -1289,3 +1296,39 @@ export function titleOfLook(look: readonly string[] | null | undefined): TitleId
   for (const id of look ?? []) if (isTitleId(id)) return id;
   return null;
 }
+
+// ── 11/22 입은 꾸미기 염색 (아이템마다 색 — dye.ts AvatarDye.items) ──
+// 머리·목·옷·등 칸 꾸미기는 기본으로 모두 염색된다 (web game/sprites/gearDye.ts가 그 아이템이 칠한 픽셀만 다시 칠한다).
+// 한정·계절·이벤트·운영자 꾸미기도 예외 없이 된다. 안 되게 할 꾸미기만 카탈로그 줄에 noDye: true를 단다 (지금은 하나도 없다).
+// 날개·연처럼 아바타 시트 밖에 따로 그리는 등 꾸미기(web cosmeticFx)는 다시 칠할 수 없어 빠진다 (GEAR_DYE_SEPARATE)
+
+/** 염색되는 꾸미기 칸 (화면 순서: 머리 · 목 · 옷 · 등) */
+export const DYE_GEAR_SLOTS: readonly CosmeticSlot[] = ["head", "neck", "back", "pack"];
+
+/** 등 칸이지만 아바타 시트 밖에 따로 그려 염색이 닿지 않는 꾸미기 (web avatar.ts SPRITE_COSMETICS 중 시트 밖) */
+export const GEAR_DYE_SEPARATE: ReadonlySet<string> = new Set(["back_wings", "back_wings_bat", "back_wings_butterfly", "back_wings_angel", "back_wings_dragon", "q_back_kite"]);
+
+/** 염색되는 칸의 꾸미기인지 (염색할 수 있는지와 별개 — 「못 바꿔요」로 보여 줄 대상) */
+export function isDyeSlotCosmetic(id: string | null | undefined): boolean {
+  const it = id ? byId.get(id) : undefined;
+  return !!it && it.kind === "cosmetic" && !!it.slot && DYE_GEAR_SLOTS.includes(it.slot);
+}
+
+/** 이 꾸미기를 염색할 수 있는지: 머리·목·옷·등 꾸미기면 기본으로 된다 (noDye 표시 · 시트 밖 그림만 빠진다) */
+export function isDyeableCosmetic(id: string | null | undefined): boolean {
+  return isDyeSlotCosmetic(id) && !byId.get(id!)!.noDye && !GEAR_DYE_SEPARATE.has(id!);
+}
+
+/** 착용 목록에서 염색되는 칸에 입은 꾸미기 (머리 · 목 · 옷 · 등 순서, 칸마다 하나) */
+export function wornDyeItems(look: readonly string[] | null | undefined): { slot: CosmeticSlot; id: string; dyeable: boolean }[] {
+  return DYE_GEAR_SLOTS.flatMap((slot) => {
+    const id = (look ?? []).find((x) => byId.get(x)?.kind === "cosmetic" && byId.get(x)?.slot === slot);
+    return id ? [{ slot, id, dyeable: isDyeableCosmetic(id) }] : [];
+  });
+}
+
+// ── 11/22 색 보관함: 아이템마다 칠한 색을 여러 칸에 두고 가방에서 공짜로 바꿔 입는다 ──
+// 「원래 색」은 늘 있고 칸 수에 들지 않는다. 처음 염색하면 커스텀 칸 1개가 저절로 생기고, 2·3번째 칸은 포인트로 산다 (최대 3칸)
+export const DYE_COLOR_SLOTS_MAX = 3;
+/** 커스텀 칸 n번째(1부터)를 여는 값 — 1번째는 처음 염색할 때 저절로 */
+export const DYE_COLOR_SLOT_PRICES: readonly number[] = [0, 2000, 5000];

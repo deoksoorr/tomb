@@ -32,6 +32,8 @@ export const GET = handler(async (req) => {
       if (k.startsWith("earn:")) earned[k.slice(5)] = v;
       else if (k.startsWith("spend:")) spent[k.slice(6)] = v;
       else if (k === "refund") earned.refund = v;
+      // 11/22 꾸미기 되팔기 (환불과 따로 센다)
+      else if (k === "resell") earned.resell = v;
     }
     return { date, earned, spent };
   });

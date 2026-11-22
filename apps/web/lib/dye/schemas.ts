@@ -1,14 +1,19 @@
-import { AVATAR_BODIES, DYE_PARTS, DYE_SPECIALS, isFixedDyeId, itemById, normalizeDyeColor, permanentPrice } from "@tomb/protocol";
+import { AVATAR_BODIES, DYE_COLOR_SLOTS_MAX, DYE_ITEM_ID_RE, DYE_PARTS, DYE_SPECIALS, isCharDyePart, isFixedDyeId, itemById, normalizeDyeColor, permanentPrice } from "@tomb/protocol";
 import { z } from "zod";
 import { DYE_LIMIT } from "./palette";
 
 // 46·25·30번 요청 검증. 사용자가 색 값을 직접 보내는 경로는 없다 (무작위 = 판 좌표, 고정 = 아이템 id).
 
 const part = z.enum(DYE_PARTS);
+/** 11/22 염색 대상: 캐릭터 부위 또는 꾸미기 아이템 id (칠할 수 있는지는 서버가 가방·카탈로그로 따진다 — lib/dye/rules dyeTargetBlock) */
+const target = z.string().max(40).refine((t) => isCharDyePart(t) || DYE_ITEM_ID_RE.test(t), "염색할 수 없는 대상이에요.");
+/** 아이템이면 칠할 색 보관함 칸 (0부터) */
+const slot = z.number().int().min(0).max(DYE_COLOR_SLOTS_MAX - 1).optional();
+const item = z.string().regex(DYE_ITEM_ID_RE);
 const randomTicket = z.string().refine((id) => itemById(id)?.dye?.mode === "random", "무작위 염색권이 아니에요.");
 const fixedTicket = z.string().refine((id) => itemById(id)?.dye?.mode === "fixed" || isFixedDyeId(id), "고정 색 염색권이 아니에요.");
 
-export const DyeStartSchema = z.object({ itemId: randomTicket, part });
+export const DyeStartSchema = z.object({ itemId: randomTicket, part: target, slot });
 /** 판 위 좌표 (칸 단위 실수). 판 밖이면 거절 */
 export const DyeFinishSchema = z.object({
   seed: z.string().regex(/^[A-Za-z0-9_-]{6,32}$/),
@@ -20,13 +25,14 @@ export const DyeFinishSchema = z.object({
 export const DyeTimeoutSchema = DyeFinishSchema;
 export const DyeChooseSchema = z.object({ seed: DyeFinishSchema.shape.seed, apply: z.boolean() });
 export const DyeCancelSchema = z.object({ seed: DyeFinishSchema.shape.seed });
-export const DyeFixedSchema = z.object({ itemId: fixedTicket, part });
+export const DyeFixedSchema = z.object({ itemId: fixedTicket, part: target, slot });
 // 11/15 수집 의뢰 염색권: 색 확정은 사용자가 보통 색("#rrggbb")을 직접 보낸다 (특수 표시 "~x"는 받지 않는다 — 특수 색은 특수색 확정 염색권만)
 const pickTicket = z.string().refine((id) => itemById(id)?.dye?.mode === "pick", "색 확정 염색권이 아니에요.");
 const specialTicket = z.string().refine((id) => itemById(id)?.dye?.mode === "special", "특수색 확정 염색권이 아니에요.");
 export const DyePickSchema = z.object({
   itemId: pickTicket,
-  part,
+  part: target,
+  slot,
   color: z
     .string()
     .max(7)
@@ -34,8 +40,11 @@ export const DyePickSchema = z.object({
     .transform((c) => normalizeDyeColor(c)!),
 });
 /** 특수색 확정: 종류만 받는다 (바탕 색은 서버가 lib/dye/rules specialDyeColor로 정한다) */
-export const DyeSpecialSchema = z.object({ itemId: specialTicket, part, kind: z.enum(DYE_SPECIALS) });
+export const DyeSpecialSchema = z.object({ itemId: specialTicket, part: target, slot, kind: z.enum(DYE_SPECIALS) });
 export const DyeResetSchema = z.object({ part });
+/** 11/22 색 보관함: 입을 칸 고르기 (-1 = 원래 색, 무료) · 칸 더 열기 */
+export const DyeSelectSchema = z.object({ item, sel: z.number().int().min(-1).max(DYE_COLOR_SLOTS_MAX - 1) });
+export const DyeSlotSchema = z.object({ item });
 export const ReshapeSchema = z.object({ body: z.enum(AVATAR_BODIES.map((b) => b.id) as [string, ...string[]]) });
 /** POST /api/shop/permanent { itemId } — 영구로 살 수 있는 꾸미기만 */
 export const PermanentBuySchema = z.object({ itemId: z.string().refine((id) => permanentPrice(id) !== null, "영구로 살 수 없는 꾸미기예요.") });

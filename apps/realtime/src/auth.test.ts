@@ -35,6 +35,13 @@ describe("admit", () => {
     expect(withLook?.look).toEqual(["hat_cat"]); // 카탈로그에 없는 것·같은 부위 중복은 빠진다
   });
 
+  it("11/22 입은 아이템 색(idye)도 캐릭터 염색과 합쳐 입장표에 싣는다 (착용 목록에 없는 아이템 색은 버린다)", async () => {
+    const dye = { head: "#f4a7b9", items: { hat_beanie: "#e03030", sc_padding: "#3050e0~s", hat_cap: "#20a040" } };
+    const t = await admit(SECRET, await signJoinToken(SECRET, { ...claims, look: ["hat_beanie", "sc_padding", "back_wings_butterfly"], dye }), 3, undefined);
+    expect(t?.look).toEqual(["hat_beanie", "sc_padding", "back_wings_butterfly"]);
+    expect(t?.dye).toEqual({ head: "#f4a7b9", items: { hat_beanie: "#e03030", sc_padding: "#3050e0~s" } });
+  });
+
   it("keeps the staff account's own nickname (staff flag only marks it)", async () => {
     const t = await admit(SECRET, await signJoinToken(SECRET, { ...claims, staff: true }), 3, undefined);
     expect(t?.name).toBe("달빛 산책");

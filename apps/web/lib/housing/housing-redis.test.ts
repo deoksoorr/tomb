@@ -8,10 +8,11 @@ import * as villageRoute from "@/app/api/housing/village/route";
 import { env } from "../env";
 import { getAccounts } from "../store";
 import { kstDay } from "../store/accounts";
-import { defaultExterior, furnitureById, PLOT_TIERS } from "./catalog";
+import { defaultExterior, furnitureById, LIKE_WEIGHT, PLOT_TIERS, TIER_SCORE_BONUS } from "./catalog";
+import { resetRankSync, sweepReclaim } from "./reclaim";
 import { buyFurniture, buyPlot, getHouseStore, houseIdFor, housePair, houseStates, resetLegacyLotFill, saveExterior, sellFurniture, setHouseState, village } from "./service";
 import { placedSig, WINDOW_SIG } from "./states";
-import type { HousePair } from "./store";
+import { SCORE_RULE_VER, type HousePair } from "./store";
 import { HK, RedisHouseStore } from "./store-redis";
 
 /** 오두막 없는 집 하나 (공용 가방 = 이 집 id) */
@@ -83,7 +84,7 @@ describe.skipIf(!conn)("하우징 v4 (실제 Redis)", () => {
         new NextRequest("http://localhost/api/housing/me/exterior", {
           method: "PUT",
           headers: { cookie, "x-forwarded-for": OPERATOR_IP, "content-type": "application/json" },
-          body: JSON.stringify({ exterior }),
+          body: JSON.stringify({ ch: 1, exterior }),
         }),
         { params: Promise.resolve({}) },
       );
@@ -178,5 +179,50 @@ describe.skipIf(!conn)("하우징 v4 (실제 Redis)", () => {
     expect((await houseStates(store, id)).states).toEqual({ f1: 1, w0: 1 });
     await store.remove(id);
     expect(await raw.exists(HK.states(id))).toBe(0);
+  });
+
+  it("11/22 순위 ZSET에 터 크기 점수: 분양·넓히기·좋아요가 바로 쓰고, 그 전에 넓힌 집은 syncRankScores가 한 번 맞춘다(멱등)", async () => {
+    const zs = async (id: string) => Number(await raw.zscore(HK.score, id));
+    const id = nanoid(12);
+    // 1채널은 앞 시험들이 다 채운다 → 다른 채널
+    expect(await store.create({ id, owner: nanoid(), name: "넓은", intro: "", ownerName: "주인", tier: "wide", ch: 8, lot: null, now: 1, placedScore: 7, placed: { pot: 1 }, layout: { items: [{ u: "a", i: "pot", x: 0, y: 0, r: 0 }], floor: "floor_grass", wall: "wall_fence" } })).toMatchObject({ lot: expect.any(Number) });
+    expect(await zs(id)).toBe(7 + TIER_SCORE_BONUS.wide);
+    expect(await store.upgrade(id, "wide", "manor", 2)).toBe(true);
+    expect(await zs(id)).toBe(7 + TIER_SCORE_BONUS.manor);
+    expect(await store.like(id, "v1", "20261122")).toEqual({ likes: 1, score: 7 + LIKE_WEIGHT + TIER_SCORE_BONUS.manor });
+    expect(await zs(id)).toBe(7 + LIKE_WEIGHT + TIER_SCORE_BONUS.manor);
+    // 숨긴 집은 넓혀도 순위에 다시 들어가지 않는다
+    const hid = nanoid(12);
+    expect(await store.create({ id: hid, owner: nanoid(), name: "숨김", intro: "", ownerName: "주인", tier: "small", ch: 8, lot: null, now: 1 })).toMatchObject({ lot: expect.any(Number) });
+    await store.setHidden(hid, true);
+    expect(await store.upgrade(hid, "small", "wide", 2)).toBe(true);
+    expect(await raw.zscore(HK.score, hid)).toBeNull();
+
+    // 터 크기 점수가 생기기 전에 넓힌 집: 순위 ZSET에 물건 + 좋아요만 남아 있다
+    await raw.zadd(HK.score, { score: 7 + LIKE_WEIGHT, member: id });
+    await raw.del(HK.scoreVer);
+    // 그래도 목록·읽기 점수는 이미 맞다 (읽을 때 센다)
+    expect((await store.get(id))!.score).toBe(7 + LIKE_WEIGHT + TIER_SCORE_BONUS.manor);
+    expect(await store.syncRankScores()).toBeGreaterThanOrEqual(1);
+    expect(await zs(id)).toBe(7 + LIKE_WEIGHT + TIER_SCORE_BONUS.manor);
+    expect(await raw.zscore(HK.score, hid)).toBeNull();
+    expect(await raw.get(HK.scoreVer)).toBe(SCORE_RULE_VER);
+    // 두 번째는 표시만 보고 끝
+    await raw.zadd(HK.score, { score: 1, member: id });
+    expect(await store.syncRankScores()).toBeNull();
+    expect(await zs(id)).toBe(1);
+    await store.remove(id);
+    await store.remove(hid);
+  });
+
+  it("11/22 오래 비운 집 정리를 돌면 순위 점수 맞추기도 한 번 돈다 (배포 뒤 따로 할 일 없음)", async () => {
+    const id = nanoid(12);
+    expect(await store.create({ id, owner: nanoid(), name: "옛 넓은 집", intro: "", ownerName: "주인", tier: "wide", ch: 8, lot: null, now: 1 })).toMatchObject({ lot: expect.any(Number) });
+    await raw.zadd(HK.score, { score: 0, member: id });
+    await raw.del(HK.scoreVer);
+    resetRankSync(store);
+    await sweepReclaim(store, Date.now(), { force: true });
+    expect(Number(await raw.zscore(HK.score, id))).toBe(TIER_SCORE_BONUS.wide);
+    await store.remove(id);
   });
 });

@@ -8,7 +8,7 @@ import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { AWAY_MSG, DEFAULT_FLOOR, DEFAULT_FLOOR_NAME, DEFAULT_WALL, DEFAULT_WALL_NAME, FURNITURE, furnitureById, LIKE_WEIGHT, tierById } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
-import { layoutCounts, placedScore, ROTATE_LABEL, rotateMode, styleTag, totalScore } from "@/lib/housing/layout";
+import { designScore, layoutCounts, ROTATE_LABEL, rotateMode, styleTag, totalScore } from "@/lib/housing/layout";
 import type { MyHouseResponse, PublicHouse } from "@/lib/housing/types";
 import { furnitureDiscount } from "@/lib/champPerks";
 import { chairShopDiscount } from "@/lib/chairPerks";
@@ -77,7 +77,8 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
 
   const editing = !!edit?.editing;
   const layout = editing && edit ? { items: edit.items, floor: edit.floor, wall: edit.wall } : house.layout;
-  const score = editing ? totalScore(placedScore(layout), house.likes) : house.score;
+  // 11/22 편집 미리보기도 서버 점수와 같은 식 (외관 + 터 크기 점수까지)
+  const score = editing ? totalScore(designScore(layout, house.exterior), house.likes, house.tier) : house.score;
   const tag = styleTag(layout);
   const tier = tierById(house.tier)!;
 

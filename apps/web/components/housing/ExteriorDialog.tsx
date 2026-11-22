@@ -5,9 +5,9 @@ import { useState, useSyncExternalStore } from "react";
 import { facadePreview } from "@/game/housing/art";
 import { errorMessage } from "@/lib/api";
 import { meStore, useMe } from "@/lib/hooks/useMe";
-import { EXT_SLOTS, FURNITURE, furnitureById, isExtBase, LIKE_WEIGHT, lotLabel, tierById, type ExtSlot } from "@/lib/housing/catalog";
+import { EXT_SLOTS, FURNITURE, furnitureById, isExtBase, lotLabel, tierById, type ExtSlot } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
-import { designScore, exteriorScore } from "@/lib/housing/layout";
+import { designScore, exteriorScore, totalScore } from "@/lib/housing/layout";
 import type { HouseExterior, MyHouseResponse } from "@/lib/housing/types";
 import { furnitureDiscount } from "@/lib/champPerks";
 import { chairShopDiscount } from "@/lib/chairPerks";
@@ -47,7 +47,7 @@ export default function ExteriorDialog({
   const client = useSyncExternalStore(noop, () => true, () => false);
   const dirty = JSON.stringify(draft) !== JSON.stringify(house.exterior);
   const view: HouseExterior = hover ? { ...draft, [hover.slot]: hover.id } : draft;
-  const score = designScore(house.layout, view) + house.likes * LIKE_WEIGHT;
+  const score = totalScore(designScore(house.layout, view), house.likes, house.tier);
   const preview = client ? facadePreview(view, house.tier, 2, night) : null;
   const owns = (id: string) => isExtBase(id) || (my.inventory[id] ?? 0) > 0;
   // 미리보기로 입혀 본, 아직 안 산 아이템

@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type Ref } from "react";
-import { DIR, DYE_PART_NAMES, DYE_PARTS, type DyePart } from "@tomb/protocol";
+import { DIR, dyeOfTarget, isCharDyePart, type DyePart, type DyeTarget } from "@tomb/protocol";
 import { avatarColors, specDye, withDyePart } from "@/game/sprites/avatar";
 import { ApiRequestError, errorMessage } from "@/lib/api";
 import { dyeApi } from "@/lib/dye/client";
 import { colorLabel, swatchStyle } from "@/lib/dye/look";
 import { boardColor, buildBoard, cellOf, chunkRgba, chunkSpots, DYE_BOARD_H, DYE_BOARD_W, DYE_TIERS, DYE_TIME_MS, specialLabel, wobbleLabel, type DyeTier } from "@/lib/dye/palette";
-import { DYE_DECIDE_MS, fixedAllows } from "@/lib/dye/rules";
+import { DYE_DECIDE_MS, dyeTargetBlock, dyeTargetName, fixedAllows } from "@/lib/dye/rules";
 import type { DyeCandidate, DyeSessionView, DyeTimeoutResponse, StyleChangeResponse } from "@/lib/dye/types";
 import { meStore } from "@/lib/hooks/useMe";
 import { applyStyle } from "../account/actions";
@@ -17,6 +17,8 @@ import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import { aimAt, BoardPointers, clampView, dyeCloseGuard, keyPan, PAN_KEYS, startScale, toBoard, wheelFactor, zoomAt, type BoardView } from "./board";
 import { drawSpots } from "./spots";
+import { fittingLook } from "../shop/fitting";
+import DyePartPicker, { DyeSlotPicker, type ItemDyes } from "./DyePartPicker";
 import styles from "./DyeDialog.module.css";
 import { OddsLink } from "../odds/OddsLayer";
 
@@ -42,28 +44,50 @@ type Props = {
   onClose: (pending?: Promise<unknown>) => void;
   /** 끝났을 때 한 줄 안내 (부모의 알림 줄) */
   onDone?: (message: string) => void;
+  /** 11/22 아이템마다 색 보관함 (내 정보 itemDyes) — 칠할 칸 고르기 */
+  itemDyes?: ItemDyes;
+  /** 11/22 처음 골라 둘 대상 (가방 아이템 [염색]에서 열면 그 아이템 id) */
+  initialTarget?: DyeTarget;
 };
 
 type Phase = "part" | "play" | "choose" | "sending" | "done";
 type Picked = { x: number; y: number; color: string };
 
 const hexOf = (c: number) => `#${c.toString(16).padStart(6, "0")}`;
-/** 지금 그 부위 색 (기본 포인트는 몸마다 달라 "기본"으로 보인다) */
-function partColor(spec: string, part: DyePart): string | null {
-  const d = specDye(spec)[part];
+/** 지금 그 부위·아이템 색 (기본 포인트·안 칠한 아이템은 몸·꾸미기마다 달라 "기본"으로 보인다) */
+function partColor(spec: string, part: DyeTarget): string | null {
+  const d = dyeOfTarget(specDye(spec), part);
   if (d) return d;
-  if (part === "accent") return null;
+  if (part === "accent" || !isCharDyePart(part)) return null;
   const c = avatarColors(spec);
   return hexOf(part === "head" ? c.head : c.body);
 }
 
-export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDone }: Props) {
+/** 아이템 색 보관함에서 처음 골라 둘 칸: 지금 입는 칸 · 첫 빈 칸 · 0 (서버 assertDyeable과 같은 규칙) */
+export function defaultDyeSlot(itemDyes: ItemDyes | undefined, item: DyeTarget): number {
+  const st = itemDyes?.[item];
+  if (!st) return 0;
+  if (st.sel >= 0) return st.sel;
+  const empty = st.colors.findIndex((c) => !c);
+  return empty >= 0 ? empty : 0;
+}
+
+export default function DyeDialog({ ticket, resume, avatar, look: wornLook, onClose, onDone, itemDyes, initialTarget }: Props) {
   const [phase, setPhase] = useState<Phase>(resume?.candidate ? "choose" : resume ? "play" : "part");
-  const [part, setPart] = useState<DyePart>(resume?.part ?? (ticket?.mode === "fixed" && ticket.parts?.length ? ticket.parts[0] : "body"));
+  const [part, setPart] = useState<DyeTarget>(resume?.part ?? initialTarget ?? (ticket?.mode === "fixed" && ticket.parts?.length ? ticket.parts[0] : "body"));
+  /** 11/22 아이템의 칠할 색 칸 (대상이 바뀌면 그 아이템의 기본 칸) */
+  const [slotPick, setSlotPick] = useState<{ t: DyeTarget; k: number } | null>(null);
+  const slot = slotPick?.t === part ? slotPick.k : defaultDyeSlot(itemDyes, part);
+  const itemTarget = !isCharDyePart(part);
+  const slotColors = itemTarget ? (itemDyes?.[part]?.colors.length ? itemDyes[part].colors : [null]) : [];
+  /** 이미 칠한 칸에 다시 칠하기 확인 */
+  const [askOverwrite, setAskOverwrite] = useState(false);
+  // 입지 않은 아이템을 칠하면(가방에서 연 경우) 미리보기에 그 아이템을 입혀 본다
+  const look = useMemo(() => (itemTarget ? fittingLook(wornLook, part).look : [...wornLook]), [wornLook, part, itemTarget]);
   const [session, setSession] = useState<DyeSessionView | null>(resume ?? null);
   const [error, setError] = useState<string | null>(null);
   /** 끝난 결과 (before = 염색 전 내 색 표기 — 결과 창에서 전·후를 나란히 보여 준다) */
-  const [result, setResult] = useState<{ part: DyePart; late: boolean; kept: boolean; before: string } | null>(null);
+  const [result, setResult] = useState<{ part: DyeTarget; late: boolean; kept: boolean; before: string } | null>(null);
   /** 시간이 끝나 고르는 중인 후보 색 (decideBy = 내 시계 기준 마감) */
   const [candidate, setCandidate] = useState<DyeCandidate | null>(() =>
     resume?.candidate ? { color: resume.candidate.color, decideBy: Date.now() + (resume.candidate.decideBy - resume.serverNow) } : null,
@@ -74,7 +98,10 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
   const [confirmQuit, setConfirmQuit] = useState(false);
 
   const fixedColor = ticket?.mode === "fixed" ? ticket.color : null;
-  const allowed = (p: DyePart) => ticket?.mode !== "fixed" || fixedAllows(ticket.parts, p);
+  const allowed = (p: DyeTarget) => ticket?.mode !== "fixed" || fixedAllows(ticket.parts, p);
+  // 11/22 색을 바꿀 수 없는 꾸미기면 시작하지 않는다 (서버도 같은 규칙으로 거절 — 염색권은 그대로)
+  const blocked = phase === "part" || phase === "sending" ? dyeTargetBlock(part, () => true) : null;
+  const slotArg = itemTarget ? slot : undefined;
 
   function finished(res: StyleChangeResponse, late = false) {
     // 내 정보 + 게임의 내 아바타(look:set)를 바로 바꾼다
@@ -87,7 +114,7 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
     setCandidate(null);
     setResult({ part: p, late: late || !!res.late, kept, before: spec });
     setPhase("done");
-    onDone?.(kept ? `${DYE_PART_NAMES[p]} 색은 그대로 두었어요.` : `${DYE_PART_NAMES[p]}을(를) ${color}(으)로 염색했어요.`);
+    onDone?.(kept ? `${dyeTargetName(p)} 색은 그대로 두었어요.` : `${dyeTargetName(p)}을(를) ${color}(으)로 염색했어요.`);
   }
 
   /** 시간 끝 → 후보 색 (없으면 너무 늦어 색 그대로 끝남) */
@@ -96,7 +123,7 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
       setCandidate(null);
       setResult({ part: res.part, late: true, kept: true, before: spec });
       setPhase("done");
-      onDone?.(`시간이 지나 ${DYE_PART_NAMES[res.part]} 색은 그대로 두었어요.`);
+      onDone?.(`시간이 지나 ${dyeTargetName(res.part)} 색은 그대로 두었어요.`);
       return;
     }
     setCandidate({ color: res.candidate.color, decideBy: Date.now() + (res.candidate.decideBy - res.serverNow) });
@@ -107,20 +134,26 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
   function close() {
     if (session && (phase === "play" || phase === "choose")) {
       const pending = dyeApi.cancel(session.seed).catch(() => {});
-      onDone?.(`${DYE_PART_NAMES[session.part]} 염색을 그만뒀어요. 색은 그대로예요.`);
+      onDone?.(`${dyeTargetName(session.part)} 염색을 그만뒀어요. 색은 그대로예요.`);
       onClose(pending);
       return;
     }
     onClose();
   }
 
-  async function begin() {
+  async function begin(confirmed = false) {
     if (!ticket) return;
     setError(null);
+    // 11/22 이미 칠한 칸에 다시 칠하면 덮어쓴다 → 한 번 묻는다
+    if (itemTarget && slotColors[slot] && !confirmed) {
+      setAskOverwrite(true);
+      return;
+    }
+    setAskOverwrite(false);
     if (ticket.mode === "fixed") {
       setPhase("sending");
       try {
-        finished(await dyeApi.fixed(ticket.itemId, part));
+        finished(await dyeApi.fixed(ticket.itemId, part, slotArg));
       } catch (e) {
         setError(errorMessage(e));
         setPhase("part");
@@ -129,7 +162,7 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
     }
     setPhase("sending");
     try {
-      const res = await dyeApi.start(ticket.itemId, part);
+      const res = await dyeApi.start(ticket.itemId, part, slotArg);
       // 서버가 염색권 1장을 뺐다(또는 진행 중인 판을 이어 줌) → 가방 표시를 서버 값으로
       meStore.set(res.me);
       setSession(res.session);
@@ -187,8 +220,8 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
           <div className={styles.choose}>
             <p className={styles.note} role="status">
               {result.kept
-                ? `${DYE_PART_NAMES[result.part]} 색은 그대로예요${result.late ? " (고르는 시간이 지났어요)" : ""}.`
-                : `${DYE_PART_NAMES[result.part]} 염색 완료! 다른 사람 화면에도 바로 이 색으로 보여요.`}
+                ? `${dyeTargetName(result.part)} 색은 그대로예요${result.late ? " (고르는 시간이 지났어요)" : ""}.`
+                : `${dyeTargetName(result.part)} 염색 완료! 다른 사람 화면에도 바로 이 색으로 보여요.`}
             </p>
             <DyeVersus
               part={result.part}
@@ -224,25 +257,26 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
                   </>
                 )}
               </p>
-              <div className={styles.parts} role="group" aria-label="염색할 부위">
-                {DYE_PARTS.map((p) => {
-                  const c = partColor(spec, p);
-                  return (
-                    <button
-                      key={p}
-                      type="button"
-                      className={cx(ui.button, styles.part)}
-                      aria-pressed={part === p}
-                      disabled={!allowed(p) || phase === "sending"}
-                      onClick={() => setPart(p)}
-                    >
-                      <span className={styles.swatch} style={c ? swatchStyle(c) : { background: DEFAULT_SWATCH }} aria-hidden="true" />
-                      {DYE_PART_NAMES[p]}
-                      {!c && <span className={styles.note}>기본</span>}
+              <DyePartPicker spec={spec} look={wornLook} target={part} onPick={setPart} allowed={allowed} disabled={phase === "sending"} baseColor={(p) => partColor(spec, p)} extraItem={initialTarget && !isCharDyePart(initialTarget) ? initialTarget : null} />
+              {itemTarget && !blocked && <DyeSlotPicker colors={slotColors} slot={slot} onPick={(k) => setSlotPick({ t: part, k })} disabled={phase === "sending"} />}
+              {askOverwrite && (
+                <div className={styles.quit} role="alertdialog" aria-label="덮어쓰기 확인">
+                  <p className={styles.note}>커스텀 {slot + 1} 칸은 이미 칠했어요. 새 색으로 덮어쓸까요?</p>
+                  <div className={styles.actions}>
+                    <button type="button" className={ui.button} onClick={() => setAskOverwrite(false)}>
+                      그만두기
                     </button>
-                  );
-                })}
-              </div>
+                    <button type="button" className={cx(ui.button, ui.primary)} onClick={() => void begin(true)}>
+                      덮어쓰기
+                    </button>
+                  </div>
+                </div>
+              )}
+              {blocked && (
+                <p className={styles.note} role="status">
+                  {blocked} 염색권은 쓰지 않아요.
+                </p>
+              )}
               {fixedColor && (
                 <p className={styles.pick}>
                   <span className={styles.swatchBig} style={{ background: fixedColor }} aria-hidden="true" />
@@ -261,8 +295,8 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
                 <button type="button" className={ui.button} onClick={close}>
                   닫기
                 </button>
-                <button type="button" className={cx(ui.button, ui.primary)} disabled={!ticket || !allowed(part) || phase === "sending"} onClick={begin}>
-                  {phase === "sending" ? "잠깐만요…" : ticket?.mode === "fixed" ? `${DYE_PART_NAMES[part]}을(를) 이 색으로` : `${DYE_PART_NAMES[part]} 염색 시작 (60초)`}
+                <button type="button" className={cx(ui.button, ui.primary)} disabled={!ticket || !allowed(part) || !!blocked || phase === "sending"} onClick={() => void begin()}>
+                  {phase === "sending" ? "잠깐만요…" : ticket?.mode === "fixed" ? `${dyeTargetName(part)}을(를) 이 색으로` : `${dyeTargetName(part)} 염색 시작 (60초)`}
                 </button>
               </div>
             </div>
@@ -659,7 +693,7 @@ function DyeBoard({
         </p>
       </div>
       <div className={styles.panel}>
-        <TimeLeft label={`${DYE_PART_NAMES[session.part]} 염색`} left={left} total={DYE_TIME_MS} />
+        <TimeLeft label={`${dyeTargetName(session.part)} 염색`} left={left} total={DYE_TIME_MS} />
         <div className={styles.compare}>
           <LookCard spec={spec} body={body} look={look} label="지금 내 모습" title="지금 색" color={now} />
           <LookCard
@@ -769,7 +803,7 @@ function DyeVersus({
   beforeTitle = "지금",
   afterTitle = "바꾼 뒤",
 }: {
-  part: DyePart;
+  part: DyeTarget;
   /** 바꾸기 전 / 바꾼 뒤 색 표기 (spec) */
   before: string;
   after: string;
@@ -778,7 +812,7 @@ function DyeVersus({
   beforeTitle?: string;
   afterTitle?: string;
 }) {
-  const name = DYE_PART_NAMES[part];
+  const name = dyeTargetName(part);
   return (
     <div className={styles.versus}>
       <LookCard spec={before} body={body} look={look} label={`${beforeTitle} 내 모습`} title={`${beforeTitle} · ${name}`} color={partColor(before, part)} />
@@ -843,7 +877,7 @@ function DyeChoice({
     return () => window.clearInterval(t);
   }, [candidate.decideBy]);
 
-  const name = DYE_PART_NAMES[session.part];
+  const name = dyeTargetName(session.part);
   // [지금] → [바꾼 뒤] 아바타를 나란히, 아래에 남은 시간 · 버튼 (결과 창과 같은 모양)
   return (
     <div className={styles.choose}>

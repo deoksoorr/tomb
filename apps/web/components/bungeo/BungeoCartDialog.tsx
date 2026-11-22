@@ -1,5 +1,6 @@
 "use client";
 
+import { resellBuyNote } from "@/lib/resell";
 import { useCallback, useEffect, useState } from "react";
 import { ALLEY_BODIES, ALLEY_SETS, bodyLabel, isPermanentUntil, itemById } from "@tomb/protocol";
 import { errorMessage } from "@/lib/api";
@@ -124,6 +125,8 @@ export default function BungeoCartDialog({ onClose, avatar }: Props) {
           </p>
           <p className={shop.desc}>{descOf(r)}</p>
           {!isBody && <LookScoreBadge itemId={r.id} className={shop.lookScore} />}
+          {/* 11/22 수레 한정 판매는 되팔 수 없다 (lib/resell) */}
+          {!isBody && <p className={shop.meta}>{resellBuyNote(r.id)}</p>}
           {!isBody && fitting.replaced && !fitting.wearing && (
             <p className={shop.fitNote}>
               입으면 지금 입은 {fitting.replaced.name}

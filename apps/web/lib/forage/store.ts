@@ -2,6 +2,7 @@ import type { Redis } from "@upstash/redis";
 import { redisClient } from "../redisUsage";
 import { env } from "../env";
 import { BAG_MAX, bagIdOf, DEX_CATS, DEX_REWARD, DEX_REWARD_TABLE, DEX_TIERS, dexCatOf, dexClaimKey, dexRewardOf, takePlan, type DexCat, type FishGrade } from "./catalog";
+import { nodeBaseWindow, tookMember } from "./rules";
 import type { DexEntry, LifeDay } from "./types";
 import type { QuestHook } from "../store/types";
 
@@ -24,6 +25,7 @@ import type { QuestHook } from "../store/types";
 //                                예전 fishP/gatherP/dexP(판 포인트, 한도용)는 11/19부터 쓰지 않는다
 //  - forage:{a}:tk:{b}      SET   11/16 창 TOOK_BUCKET개(10분 × 3 = 30분)를 한 키로: `${창}:${지점 id}` (40분).
 //                                창을 15분 → 10분으로 줄이며 창마다 키를 만들지 않게 묶었다 (예전 took:{창} = 15분마다 한 키·2시간)
+//                                11/22 긴급 의뢰 5분 창(음수 id — lib/forage/rules nodeBloomRule)도 자기가 든 10분 창의 키에 같이 (키·읽기가 늘지 않는다)
 //  - forage:{a}:auto        STRING 자동 낚시 세션 JSON (lib/forage/auto.ts, 바꿀 때는 이전 값과 같을 때만 = 비교 후 교체)
 
 export type ClaimResult = { status: "ok"; payload: string } | { status: "reused" | "stale" };
@@ -47,7 +49,8 @@ export type Snapshot = {
   claims: Record<string, string>;
   pay: DexPay;
   day: LifeDay;
-  taken: string[];
+  /** 11/22 이번 묶음 키의 캔 자리 기록 그대로 (`${창}:${지점}` — 지점마다 어느 창을 볼지는 규칙이 정한다: lib/forage/rules takenNow) */
+  took: string[];
 };
 export type DayField = keyof LifeDay;
 
@@ -57,22 +60,16 @@ const DAY_TTL_SEC = 2 * 86_400;
 export const TOOK_BUCKET = 3;
 /** 묶음 키 보관: 묶음(30분)이 끝나고 진행 중인 채집(최대 2분 반)까지 넉넉히 */
 export const TOOK_TTL_SEC = 40 * 60;
-/** 창 w의 캔 지점 멤버 (`${w}:${지점}`) → 그 창 것만 지점 id로 */
-const tookMember = (w: number, node: string) => `${w}:${node}`;
-const takenIn = (members: Iterable<unknown>, w: number): string[] => {
-  const p = `${w}:`;
-  const out: string[] = [];
-  for (const m of members) if (typeof m === "string" && m.startsWith(p)) out.push(m.slice(p.length));
-  return out;
-};
+/** 묶음 키 멤버 (`${창}:${지점}`) 중 글자만 */
+const tookOf = (members: Iterable<unknown>): string[] => [...members].filter((m): m is string => typeof m === "string");
 /** 자동 낚시 세션 보관 (켜 둔 채 떠나도 다음 날 돌아와 정산할 수 있게) */
 export const AUTO_TTL_SEC = 2 * 86_400;
 
 export interface ForageStore {
   /** 가방·도감·보상·오늘 기록·이번 창에 캔 지점 */
   snapshot(acct: string, day: string, window: number): Promise<Snapshot>;
-  /** 오늘 기록과 이번 창에 캔 지점만 (시작 확인용 — 가방·도감을 읽지 않는다, 명령 2개) */
-  today(acct: string, day: string, window: number): Promise<Pick<Snapshot, "day" | "taken">>;
+  /** 오늘 기록과 이번 묶음의 캔 자리 기록만 (시작 확인용 — 가방·도감을 읽지 않는다, 명령 2개). window = 10분 창 (5분 창 id여도 같은 키) */
+  today(acct: string, day: string, window: number): Promise<Pick<Snapshot, "day" | "took">>;
   /** 남의 도감 구경용 (가방·오늘 기록 없이) */
   dex(acct: string): Promise<{ dex: Record<string, DexEntry>; claims: Record<string, string>; pay: DexPay }>;
   /** 도감 기록만 (입장 배지용 — 보상·지급 기록은 읽지 않는다, 명령 1개) */
@@ -149,8 +146,8 @@ export const lk = {
   used: (a: string, n: string) => `forage:${a}:used:${n}`,
   hour: (a: string, h: string) => `forage:${a}:hour:${h}`,
   day: (a: string, d: string) => `forage:${a}:day:${d}`,
-  /** 창 w가 든 묶음 키 (창 TOOK_BUCKET개마다 하나) */
-  took: (a: string, w: number) => `forage:${a}:tk:${Math.floor(w / TOOK_BUCKET)}`,
+  /** 창 w가 든 묶음 키 (10분 창 TOOK_BUCKET개마다 하나 — 11/22 5분 창은 자기가 든 10분 창의 키) */
+  took: (a: string, w: number) => `forage:${a}:tk:${Math.floor(nodeBaseWindow(w) / TOOK_BUCKET)}`,
   auto: (a: string) => `forage:${a}:auto`,
   pay: (a: string) => `forage:${a}:dexpay`,
 };
@@ -251,12 +248,12 @@ export class MemoryForageStore implements ForageStore {
       claims: Object.fromEntries(a.claims),
       pay: payFromHash(Object.fromEntries(a.pay)),
       day: { ...(this.days.get(lk.day(acct, day)) ?? emptyDay()) },
-      taken: takenIn(this.took.get(lk.took(acct, window)) ?? [], window),
+      took: tookOf(this.took.get(lk.took(acct, window)) ?? []),
     };
   }
 
   async today(acct: string, day: string, window: number) {
-    return { day: { ...(this.days.get(lk.day(acct, day)) ?? emptyDay()) }, taken: takenIn(this.took.get(lk.took(acct, window)) ?? [], window) };
+    return { day: { ...(this.days.get(lk.day(acct, day)) ?? emptyDay()) }, took: tookOf(this.took.get(lk.took(acct, window)) ?? []) };
   }
 
   async dex(acct: string) {
@@ -875,7 +872,7 @@ export class RedisForageStore implements ForageStore {
       claims: hashOf(claims),
       pay: payFromHash(hashOf(pay)),
       day: dayFromHash(hashOf(d)),
-      taken: Array.isArray(took) ? takenIn(took, window) : [],
+      took: Array.isArray(took) ? tookOf(took) : [],
     };
   }
 
@@ -889,7 +886,7 @@ export class RedisForageStore implements ForageStore {
     p.hgetall(lk.day(acct, day));
     p.smembers(lk.took(acct, window));
     const [d, took] = await p.exec<[unknown, unknown]>();
-    return { day: dayFromHash(hashOf(d)), taken: Array.isArray(took) ? takenIn(took, window) : [] };
+    return { day: dayFromHash(hashOf(d)), took: Array.isArray(took) ? tookOf(took) : [] };
   }
 
   async dexEntries(acct: string) {

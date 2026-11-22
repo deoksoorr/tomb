@@ -82,14 +82,14 @@ describe("23번 확성기 증서·이벤트", () => {
     expect(wire.length).toBeLessThan(MAX_MEGAPHONE_MESSAGE_BYTES);
     expect(parseC2S(wire)).toEqual({ t: "megaphone", grant });
   });
-  it("61자·빈 문장·모르는 범위는 거절, 다른 이벤트는 여전히 512자 한도", async () => {
+  it("61자·빈 문장·모르는 범위는 거절, 착용 증서는 960자 한도", async () => {
     const { parseC2S } = await import("./index");
     expect(await verifyGrant(s, await signGrant(s, { kind: "megaphone", visitorId: "v", nonce: "n", name: "a", text: text + "가", scope: "channel", ch: 1, exp }))).toBeNull();
     expect(await verifyGrant(s, await signGrant(s, { kind: "megaphone", visitorId: "v", nonce: "n", name: "a", text: "", scope: "channel", ch: 1, exp }))).toBeNull();
     expect(
       await verifyGrant(s, await signGrant(s, { kind: "megaphone", visitorId: "v", nonce: "n", name: "a", text: "hi", scope: "world" as "all", ch: 1, exp })),
     ).toBeNull();
-    expect(parseC2S(JSON.stringify({ t: "look", grant: "x".repeat(600) }))).toBeNull();
+    expect(parseC2S(JSON.stringify({ t: "look", grant: "x".repeat(970) }))).toBeNull();
     expect(parseC2S(JSON.stringify({ t: "megaphone", grant: "x".repeat(1300) }))).toBeNull();
   });
   it("확성기 아이템과 범위", async () => {

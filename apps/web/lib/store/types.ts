@@ -256,6 +256,11 @@ export interface AccountStore {
    * 횟수 규칙·모은 포인트·랭킹과 무관하다. reason은 사용 기록에 남는다. 새 잔액을 돌려준다
    */
   refund(id: string, amount: number, reason: string, now: number): Promise<number>;
+  /**
+   * 11/22 꾸미기 되팔기: 영구로 벗어 둔 꾸미기 itemId를 빼고 amount를 돌려준다 (지갑 상한에서 잘림, 경제 통계 resell — 관리자 경제 탭 「꾸미기 되팔기」). 한 번에 (두 번 눌러도 한 번만).
+   * worn = 입고 있다, none = 영구로 벗어 둔 게 없다 (기간제·이미 팜). 되면 새 잔액
+   */
+  sellPermanent(id: string, itemId: string, amount: number, reason: string, now: number): Promise<number | "worn" | "none">;
   /** 머무르기: 직전 지급 후 PRESENCE_MIN_GAP_MS가 지났으면 적립. 너무 이르면 null */
   presence(id: string, day: string, now: number): Promise<number | null>;
   /**

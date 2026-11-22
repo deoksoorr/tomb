@@ -1,5 +1,6 @@
 import type { AvatarDye, AwayMapId, BbqItemId, ChatPlace, BbqStand, FishWater, GraveEventKind, MapId, MegaPinMsg, QueueStatus } from "@tomb/protocol";
 import type { NpcId } from "@/lib/forage/catalog";
+import type { NodeUrgent } from "@/lib/forage/rules";
 import type { PublicGrave } from "@/lib/types";
 import type { HouseEditState, HouseTool } from "@/game/housing/events";
 import type { PublicHouse, VillageResponse } from "@/lib/housing/types";
@@ -464,8 +465,8 @@ export type UiEvents = {
   "haunt:joystick": { x: number; y: number };
 
   // ── 낚시·채집 (4·32번) ──
-  /** 지금 나에게 피어 있는 채집 지점 id (sticky). 게임이 그 지점만 그리고 상호작용을 붙인다 */
-  "forage:nodes": { ids: string[] };
+  /** 지금 나에게 피어 있는 채집 지점 id (sticky). 게임이 그 지점만 그리고 상호작용을 붙인다. ev = 11/22 이 목록을 만든 긴급 의뢰 (깜빡임 시각 — rules nodeBloomRule) */
+  "forage:nodes": { ids: string[]; ev?: NodeUrgent | null };
   /** 내 낚싯대 연출 단계. tension 0..1 (감는 중 줄 팽팽함) */
   "forage:rod": { phase: ForageRodPhase; tension?: number };
   /** 채집 게이지: start(ms 동안 머리 위 막대) / end(ok면 그 지점을 지운다) */

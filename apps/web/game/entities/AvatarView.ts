@@ -1121,7 +1121,8 @@ export class AvatarView {
       if (on) {
         const side = this.dir === DIR.left ? -3 : this.dir === DIR.right ? 3 : 0;
         this.blush
-          .setPosition(Math.round(s.x - this.poseDx + side * this.big), Math.round(s.y - this.hop - this.poseDy - (this.shoulder + 3 + sitLift) * this.big))
+          // 11/22 앉으면 머리가 sitLift만큼 내려간다 → 볼도 그만큼 내린다 (예전엔 더해서 눈썹까지 올라갔다)
+          .setPosition(Math.round(s.x - this.poseDx + side * this.big), Math.round(s.y - this.hop - this.poseDy - (this.shoulder + 3 - sitLift) * this.big))
           .setScale(this.big)
           .setAngle(s.angle)
           .setCrop(side < 0 ? 0 : side > 0 ? 8 : 0, 0, side === 0 ? 11 : 3, 3)

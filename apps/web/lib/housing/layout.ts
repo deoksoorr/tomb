@@ -8,7 +8,7 @@ import {
   furnitureById,
   isFloorSkin,
   isWallSkin,
-  LIKE_WEIGHT,
+  houseScore,
   STYLE_TAGS,
   tierById,
   type FurnitureDef,
@@ -142,7 +142,8 @@ export function placedScore(layout: HouseLayout): number {
   return s;
 }
 
-export const totalScore = (placed: number, likes: number) => placed + likes * LIKE_WEIGHT;
+/** 꾸밈 점수 (물건 + 좋아요 + 11/22 터 크기 점수) — 편집 중 미리보기용, 서버 scoreOf와 같은 식 */
+export const totalScore = (placed: number, likes: number, tier: PlotTierId) => houseScore(placed, likes, tier);
 
 /**
  * 서버 검증. tier 크기·문·겹침·개수 상한·가진 개수를 모두 본다.

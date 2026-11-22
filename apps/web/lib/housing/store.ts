@@ -7,8 +7,8 @@ import {
   GUEST_PER_DAY,
   GUEST_REPORT_HIDE,
   housingChannelOf,
+  houseScore,
   LEGACY_HOUSING_CHANNEL,
-  LIKE_WEIGHT,
   reclaimLastSeen,
   SEA_LOT_COUNT,
   SEA_STARTER,
@@ -262,9 +262,18 @@ export interface HouseStore {
   states(id: string): Promise<Record<string, HouseState>>;
   /** st가 null이거나 값이 0이면 지운다 */
   setState(id: string, u: string, st: HouseState | null): Promise<void>;
+  /**
+   * 11/22 순위 ZSET(houses:score)을 지금 점수 규칙(터 크기 점수 포함)으로 다시 맞춘다. 규칙 판(SCORE_RULE_VER)마다 한 번만 (표시를 남긴다).
+   * 맞춘 집 수, 이미 맞췄으면 null. 메모리는 읽을 때 계산하므로 할 일이 없다
+   */
+  syncRankScores(): Promise<number | null>;
 }
 
-export const scoreOf = (placed: number, likes: number) => placed + likes * LIKE_WEIGHT;
+/** 11/22 순위 점수 규칙 판 (규칙을 바꾸면 올린다 → 다음 정리 때 순위 ZSET을 한 번 다시 맞춘다) */
+export const SCORE_RULE_VER = "2026-11-22-tier";
+
+/** 꾸밈 점수 = 물건 점수 + 좋아요 × LIKE_WEIGHT + 터 크기 점수 (11/22 tier — catalog houseScore) */
+export const scoreOf = (placed: number, likes: number, tier: string | null | undefined) => houseScore(placed, likes, tier);
 
 // ── 메모리 (로컬 개발·테스트) ──
 
@@ -332,7 +341,7 @@ export class MemoryHouseStore implements HouseStore {
       ch: housingChannelOf(r.ch),
       lot: r.lot ?? 0,
       exterior: normalizeExterior(r.exterior),
-      score: scoreOf(r.placedScore, r.likes),
+      score: scoreOf(r.placedScore, r.likes, r.tier),
       items: r.layout.items.length,
     };
   }
@@ -576,7 +585,7 @@ export class MemoryHouseStore implements HouseStore {
     this.likes.add(key);
     if (quest) quest.have = quest.local(1);
     h.rec.likes += 1;
-    return { likes: h.rec.likes, score: scoreOf(h.rec.placedScore, h.rec.likes) };
+    return { likes: h.rec.likes, score: scoreOf(h.rec.placedScore, h.rec.likes, h.rec.tier) };
   }
 
   async likedToday(id: string, visitorId: string, day: string) {
@@ -669,5 +678,9 @@ export class MemoryHouseStore implements HouseStore {
   async guestReports(id: string) {
     const h = this.houses.get(id);
     return new Map([...(h?.guestReports ?? [])].map(([k, v]) => [k, v.size]));
+  }
+
+  async syncRankScores() {
+    return null;
   }
 }

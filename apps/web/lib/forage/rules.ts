@@ -1,10 +1,12 @@
 import { ambienceAt, type Season, type TimePhase, type Weather } from "../ambience";
 import { bugsCount, bugsPlan } from "../rpg/plan";
 import type { BugsResult } from "../rpg/types";
+import type { UrgentKind } from "./quests/urgent";
 import {
   GATHER_NODES,
   gradable,
   GRADE_U,
+  NODE_CAT,
   RARITY_WEIGHT,
   SPECIES,
   type FishGrade,
@@ -152,9 +154,52 @@ export const REEL_MAX_MS = 60_000;
 export const NODE_WINDOW_MS = 10 * 60_000;
 /** 창마다 지점이 피어 있을 확률 (사람마다 따로 굴린다) */
 // 11/16 갯벌 구멍(clam)은 물이 빠진 동안만 캘 수 있어서 조금 더 자주 피어요
-export const NODE_DENSITY: Record<NodeKind, number> = { herb: 0.6, ore: 0.5, dig: 0.4, bug: 0.55, clam: 0.6 };
+// 11/22 사용자 「광석 긴급 의뢰 때 광석이 너무 늦게 펴요」 → 광석 0.5 → 0.6 (약초와 같게). 긴급 의뢰 동안은 아래 nodeBloomRule
+export const NODE_DENSITY: Record<NodeKind, number> = { herb: 0.6, ore: 0.6, dig: 0.4, bug: 0.55, clam: 0.6 };
 export const nodeWindow = (now: number) => Math.floor(now / NODE_WINDOW_MS);
-export const windowEndsAt = (w: number) => (w + 1) * NODE_WINDOW_MS;
+
+/**
+ * 11/22 긴급 의뢰(약초·광석·발굴품)가 열려 있는 동안 그 종류 지점은 이 창마다 모두(100%) 다시 핀다 (발굴품 = 땅 파기 + 갯벌 구멍 — NODE_CAT).
+ * 생선 의뢰·다른 종류 지점은 그대로 10분 창
+ */
+export const NODE_FAST_MS = 5 * 60_000;
+/**
+ * 11/22 창 id: 10분 창은 0 이상(nodeWindow), 5분 창은 음수 −(5분 창 번호 + 1) → 「캔 자리」 기록(`${창}:${지점}`)이 두 창끼리 겹치지 않는다.
+ * 5분 창은 늘 10분 창 하나 안에 들어가 nodeBaseWindow로 그 10분 창의 묶음 키를 같이 쓴다 (lib/forage/store — 키·읽기가 늘지 않는다)
+ */
+const fastWindow = (now: number) => -(Math.floor(now / NODE_FAST_MS) + 1);
+export const nodeBaseWindow = (w: number) => (w >= 0 ? w : Math.floor((-w - 1) / (NODE_WINDOW_MS / NODE_FAST_MS)));
+export const windowEndsAt = (w: number) => (w >= 0 ? (w + 1) * NODE_WINDOW_MS : -w * NODE_FAST_MS);
+
+/** 11/22 지점 규칙이 보는 긴급 의뢰 (종류·시작·끝 — 150%로 일찍 끝났으면 그 시각이 end. 서버는 일정에서, 화면은 /api/forage/urgent의 ev에서) */
+export type NodeUrgent = { kind: UrgentKind; start: number; end: number };
+/** density = 이 창에 필 확률 · window = 창 id (캔 자리 기록·피는 굴림에 쓴다) · endsAt = 이 규칙이 바뀌는 시각 (창 끝 또는 의뢰 시작·끝) */
+export type NodeBloom = { density: number; window: number; endsAt: number };
+
+/** 11/22 이 종류 지점에 지금 긴급 의뢰 빠른 창이 걸려 있나 */
+export const nodeFast = (kind: NodeKind, now: number, ev: NodeUrgent | null | undefined): boolean =>
+  !!ev && ev.kind !== "fish" && NODE_CAT[kind] === ev.kind && ev.start <= now && now < ev.end;
+
+/**
+ * 11/22 지점 종류·시각·진행 중인 긴급 의뢰 → 피는 규칙 (서버·화면 공통 — 둘이 어긋나지 않게 여기 하나만).
+ * 의뢰 동안 맞는 종류는 5분 창·100%, 아니면 10분 창·NODE_DENSITY. 5분 창의 끝은 의뢰 끝을 넘지 않는다 (끝나면 바로 10분 창으로)
+ */
+export function nodeBloomRule(kind: NodeKind, now: number, ev: NodeUrgent | null | undefined): NodeBloom {
+  if (nodeFast(kind, now, ev)) {
+    const window = fastWindow(now);
+    return { density: 1, window, endsAt: Math.min(windowEndsAt(window), ev!.end) };
+  }
+  const window = nodeWindow(now);
+  const end = windowEndsAt(window);
+  // 곧 시작할 의뢰를 이미 알면 (화면이 막 받은 경우) 시작 시각에 규칙이 바뀐다
+  const soon = ev && ev.kind !== "fish" && NODE_CAT[kind] === ev.kind && now < ev.start && ev.start < end ? ev.start : end;
+  return { density: NODE_DENSITY[kind], window, endsAt: soon };
+}
+
+/** 11/22 모든 지점 종류 중 가장 먼저 규칙이 바뀌는 시각 (상태 refreshAt — 화면이 그때 지점을 다시 굴린다) */
+export function nodeRefreshAt(now: number, ev: NodeUrgent | null | undefined): number {
+  return Math.min(...(Object.keys(NODE_DENSITY) as NodeKind[]).map((k) => nodeBloomRule(k, now, ev).endsAt));
+}
 
 /** FNV-1a 32비트 → [0,1) */
 export function hash01(s: string): number {
@@ -175,9 +220,9 @@ export function hash01(s: string): number {
  */
 export const nodeSeed = (acct: string): string => Math.floor(hash01(`node|${acct}`) * 2 ** 32).toString(36);
 
-/** 씨앗으로 이 창에 이 지점이 피어 있는지 (서버·화면 공통) */
-export function nodeActiveSeed(seed: string, n: GatherNode, w: number): boolean {
-  return hash01(`${seed}|${n.id}|${w}`) < NODE_DENSITY[n.kind];
+/** 씨앗으로 이 창에 이 지점이 피어 있는지 (서버·화면 공통). density = 11/22 그 창 규칙의 확률 (없으면 평소) */
+export function nodeActiveSeed(seed: string, n: GatherNode, w: number, density = NODE_DENSITY[n.kind]): boolean {
+  return hash01(`${seed}|${n.id}|${w}`) < density;
 }
 
 /**
@@ -188,22 +233,54 @@ export function nodeActive(acct: string, n: GatherNode, w: number): boolean {
   return nodeActiveSeed(nodeSeed(acct), n, w);
 }
 
-/** 씨앗으로 창 w에 피는 지점 id 전부 (새 창이라 아직 캔 것이 없다 — 화면이 창이 바뀔 때 서버에 묻지 않고 쓴다) */
+/** 11/22 씨앗·시각·긴급 의뢰로 이 지점이 지금 피어 있는지 (창 안에서 캤는지는 따로) */
+export function nodeBloomsAt(seed: string, n: GatherNode, now: number, ev: NodeUrgent | null | undefined): boolean {
+  const r = nodeBloomRule(n.kind, now, ev);
+  return nodeActiveSeed(seed, n, r.window, r.density);
+}
+
+/** 씨앗으로 창 w에 피는 지점 id 전부 (평소 10분 창 — 새 창이라 아직 캔 것이 없다) */
 export function nodeIdsAt(seed: string, w: number): string[] {
   return GATHER_NODES.filter((n) => nodeActiveSeed(seed, n, w)).map((n) => n.id);
 }
 
+/** 11/22 캔 자리 기록 한 줄 (`${창}:${지점}` — 저장소 묶음 키의 멤버와 같다) */
+export const tookMember = (w: number, node: string) => `${w}:${node}`;
+/** 11/22 지금 각 지점의 규칙 창에 캔 지점 id (묶음 키 멤버 중 지금 창 것만 — 5분 창·10분 창이 섞여 있어도 지점마다 자기 창만 본다) */
+export function takenNow(members: readonly string[], now: number, ev: NodeUrgent | null | undefined): Set<string> {
+  const have = new Set(members);
+  return new Set(GATHER_NODES.filter((n) => have.has(tookMember(nodeBloomRule(n.kind, now, ev).window, n.id))).map((n) => n.id));
+}
+
 /**
- * 11/16 화면은 창 NODE_SYNC_WINDOWS개마다 한 번만 서버에서 상태를 다시 받고(w % 3 === 0), 그 사이 창은 nodeIdsAt으로 스스로 바꾼다.
+ * 11/16 화면은 창 NODE_SYNC_WINDOWS개마다 한 번만 서버에서 상태를 다시 받고(w % 3 === 0), 그 사이 창은 스스로 바꾼다.
  * 10분 창 × 3 = 30분마다 한 번 → 예전(15분 창마다 한 번)보다 상태 읽기가 절반 (components/forage/forageStore)
  */
 export const NODE_SYNC_WINDOWS = 3;
 
-/** 지금 이 사람에게 피어 있는 지점 (이번 창에 이미 캔 것 제외) */
-export function activeNodes(acct: string, now: number, taken: ReadonlySet<string>): GatherNode[] {
-  const w = nodeWindow(now);
+/** 지금 이 사람에게 피어 있는 지점 (이번 창에 이미 캔 것 제외 — taken은 takenNow로 만든 지점 id). ev = 11/22 진행 중인 긴급 의뢰 */
+export function activeNodes(acct: string, now: number, taken: ReadonlySet<string>, ev?: NodeUrgent | null): GatherNode[] {
   const seed = nodeSeed(acct);
-  return GATHER_NODES.filter((n) => !taken.has(n.id) && nodeActiveSeed(seed, n, w));
+  return GATHER_NODES.filter((n) => !taken.has(n.id) && nodeBloomsAt(seed, n, now, ev));
+}
+
+/**
+ * 11/22 화면이 서버에 묻지 않고 지점 목록을 다른 시각·의뢰 상태로 바꾼다 (창이 바뀔 때·긴급 의뢰가 열리고 닫힐 때).
+ * 규칙 창이 그대로인 지점은 지금 목록 그대로(캔 것이 빠진 채), 창이 바뀐 지점만 씨앗으로 새로 굴린다 (새 창엔 아직 캔 것이 없다 → 서버와 같다).
+ * from = 지금 목록을 만든 시각·그때 본 의뢰, to = 바꿀 시각·지금 본 의뢰
+ */
+export function rollNodeIds(
+  seed: string,
+  ids: readonly string[],
+  from: { at: number; ev: NodeUrgent | null | undefined },
+  to: { at: number; ev: NodeUrgent | null | undefined },
+): string[] {
+  const had = new Set(ids);
+  return GATHER_NODES.filter((n) => {
+    const a = nodeBloomRule(n.kind, from.at, from.ev);
+    const b = nodeBloomRule(n.kind, to.at, to.ev);
+    return a.window === b.window ? had.has(n.id) : nodeActiveSeed(seed, n, b.window, b.density);
+  }).map((n) => n.id);
 }
 
 /** 게이지 시간 (ms) */

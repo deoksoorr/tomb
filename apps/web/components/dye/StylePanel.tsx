@@ -1,6 +1,6 @@
 "use client";
 
-import { BASE_RESHAPE_PRICE } from "@/lib/dye/rules";
+import { BASE_RESHAPE_PRICE, dyeTargetName } from "@/lib/dye/rules";
 import { QUEST_BODY_REWARD, questRewardById } from "@/lib/forage/quests/catalog";
 import { useEffect, useState, type ReactNode } from "react";
 import { ALLEY_BODIES, alleyBody, BODY_TIER_INFO, bodyLabel, bodyTier, bodyUnlockPrice, DYE_PART_NAMES, DYE_PARTS, isStaffBody, ITEMS, PREMIUM_BODIES, premiumBody, QUEST_BODIES, questBody, STAFF_BODIES, STARTER_BODIES, type DyePart, type ItemDef } from "@tomb/protocol";
@@ -70,7 +70,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
         // 서버 가방에는 있는데 내 정보에 없는 염색권(선물함에서 막 받음) → 내 정보를 다시 받는다
         const stale = Object.keys(s.tickets).some((id) => !invKey.split(",").includes(id));
         if (stale) void meStore.refresh();
-        if (s.ended) onNotice(`시간이 지난 ${DYE_PART_NAMES[s.ended.part]} 염색은 끝났어요. 색은 그대로예요.`);
+        if (s.ended) onNotice(`시간이 지난 ${dyeTargetName(s.ended.part)} 염색은 끝났어요. 색은 그대로예요.`);
       })
       .catch(() => {});
     return () => {
@@ -141,7 +141,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
     const n = owned(item.id);
     title = item.name;
     const tier = item.dye?.mode === "random" ? item.dye.tier : 1;
-    desc = `${item.desc} 흔들림 ${wobbleLabel(tier)}, 특수 색은 ${specialLabel(tier)}. 판에 드물게 숨은 특수 색을 고르면 그 부위가 빛나요. 금빛 광택, 반짝이, 무지개, 야광이 있어요. 제한 시간은 60초예요.`;
+    desc = `${item.desc} 흔들림 ${wobbleLabel(tier)}, 특수 색은 ${specialLabel(tier)}. 판에 드물게 숨은 특수 색을 고르면 그 부위가 빛나요. 금빛 광택, 반짝이, 무지개, 야광이 있어요. 제한 시간은 60초예요. 캐릭터뿐 아니라 입은 꾸미기도 아이템마다 염색해요.`;
     action = (
       <>
         <button type="button" className={cx(ui.button, ui.primary, shop.buy)} disabled={!me || pending || short(item.price)} onClick={() => buyTicket(item)}>
@@ -201,7 +201,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
     const dyed = !!dye[sel.part];
     previewColor = withDyePart(avatar.color, sel.part, null);
     title = `${DYE_PART_NAMES[sel.part]} 원래 색으로`;
-    desc = "염색한 부위를 처음 색으로 되돌려요.";
+    desc = "염색한 부위를 처음 색으로 되돌려요. 꾸미기 색은 가방 [꾸미기]에서 아이템마다 공짜로 원래 색으로 바꿔요.";
     action = (
       <button type="button" className={cx(ui.button, ui.primary, shop.buy)} disabled={!me || pending || !dyed || short(DYE_RESET_PRICE)} onClick={() => doReset(sel.part)}>
         {!dyed ? "이미 원래 색이에요" : `${DYE_RESET_PRICE}P${short(DYE_RESET_PRICE) ? " · 모자라요" : " · 되돌리기"}`}
@@ -254,7 +254,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
       <div className={shop.listCol}>
         {session && (
           <div className={styles.banner} role="status">
-            <span>{DYE_PART_NAMES[session.part]} 염색이 진행 중이에요.</span>
+            <span>{dyeTargetName(session.part)} 염색이 진행 중이에요.</span>
             <button type="button" className={cx(ui.button, ui.primary)} onClick={() => setOpen({ ticket: null, resume: session })}>
               이어서 하기
             </button>
@@ -376,6 +376,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
           resume={open.resume}
           avatar={avatar}
           look={look}
+          itemDyes={me?.itemDyes}
           onClose={() => setOpen(null)}
           onDone={(m) => {
             onNotice(m);

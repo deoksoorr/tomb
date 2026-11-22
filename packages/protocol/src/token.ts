@@ -1,6 +1,6 @@
 import { JOIN_TOKEN_TTL_SEC, ROOM_ID_RE, isAvatarBody, isChampValue, isDexBadge, staffGateBody } from "./constants";
 import { mgrGateLook, sanitizeLook, staffGateLook } from "./items";
-import { hasDye, packDye, unpackDye, type AvatarDye } from "./dye";
+import { packDye, packItemDye, sanitizeItemDye, unpackWireDye, type AvatarDye } from "./dye";
 
 // 입장 토큰: base64url(JSON payload) + "." + base64url(HMAC-SHA256(payload, JOIN_SECRET))
 // Web Crypto만 사용하므로 Node(>=20, Vercel)와 Cloudflare Workers 양쪽에서 같은 코드가 돈다.
@@ -90,14 +90,21 @@ export async function signJoinToken(
   nowSec = Math.floor(Date.now() / 1000),
 ): Promise<string> {
   const { dye, ...rest } = claims;
-  const payload = { ...rest, ...(hasDye(dye) ? { dye: packDye(dye) } : {}), exp: nowSec + ttlSec };
+  // 11/22 염색은 캐릭터 3부위(dye, 옛 형식)와 입은 아이템 색(idye "아이템id:rrggbb,…")을 나눠 싣는다 — 옛 실시간 서버는 idye를 모르고 지나간다
+  const charDye = packDye(dye);
+  const itemDye = packItemDye(sanitizeItemDye(dye?.items, claims.look ?? []));
+  const payload = { ...rest, ...(charDye ? { dye: charDye } : {}), ...(itemDye ? { idye: itemDye } : {}), exp: nowSec + ttlSec };
   const body = b64urlEncode(enc.encode(JSON.stringify(payload)));
   return `${body}.${await hmacSign(secret, body)}`;
 }
 
 /** 서명이 틀리거나 만료됐거나 형식이 맞지 않으면 null */
 /** 입장 토큰 최대 길이 (서명 검증 전에 거른다) */
-export const JOIN_TOKEN_MAX_LEN = 900;
+// 11/22 입은 아이템 색(idye — 입은 칸 수 × (아이템 id + 색), 많아야 130자 남짓)이 실려 넉넉하게 (예전 900).
+// 옛 실시간 서버는 900 그대로라, 웹(lib/joinToken)이 900을 넘는 토큰은 idye를 빼고 다시 만든다 (색은 바로 뒤 착용 증서로 간다)
+export const JOIN_TOKEN_MAX_LEN = 1100;
+/** 옛 실시간 서버가 받던 입장 토큰 최대 길이 */
+export const LEGACY_JOIN_TOKEN_MAX_LEN = 900;
 
 export async function verifyJoinToken(
   secret: string,
@@ -121,7 +128,7 @@ export async function verifyJoinToken(
     return null;
   }
   if (!c || typeof c !== "object") return null;
-  const { visitorId, name, color, channel, exp, look, body: rawBody, room, dye, staff, dex, champ, camp, sea, mgr } = c as Record<string, unknown>;
+  const { visitorId, name, color, channel, exp, look, body: rawBody, room, dye, idye, staff, dex, champ, camp, sea, mgr } = c as Record<string, unknown>;
   // 방 id가 있는데 형식이 틀리면 토큰째 버린다 (방 없는 채널 0 토큰 = 대기열 토큰으로 바뀌지 않게)
   if (room !== undefined && !(typeof room === "string" && ROOM_ID_RE.test(room))) return null;
   if (
@@ -137,5 +144,8 @@ export async function verifyJoinToken(
   // 운영자 전용 몸·꾸미기는 토큰에 운영자 표시(staff)가 있을 때만 (없으면 후드 유령·빼고)
   const isStaff = staff === true;
   // 11/16 매니저 전용 칭호는 매니저 표시(mgr)가 있을 때만
-  return { visitorId, name, color, channel, exp, look: mgrGateLook(staffGateLook(sanitizeLook(look), isStaff), mgr === true), body: staffGateBody(isAvatarBody(rawBody) ? rawBody : "hood", isStaff), ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(typeof dye === "string" && dye ? { dye: unpackDye(dye) } : {}), ...(staff === true ? { staff: true as const } : {}), ...(isDexBadge(dex) ? { dex } : {}), ...(isChampValue(champ) ? { champ } : {}), ...(camp === true ? { camp: true as const } : {}), ...(sea === true ? { sea: true as const } : {}), ...(mgr === true ? { mgr: true as const } : {}) };
+  const lk = mgrGateLook(staffGateLook(sanitizeLook(look), isStaff), mgr === true);
+  // 염색: 캐릭터 3부위 + 입은 아이템 색 (착용 목록에 없는 아이템 색은 버린다)
+  const wireDye = unpackWireDye(dye, idye, lk);
+  return { visitorId, name, color, channel, exp, look: lk, body: staffGateBody(isAvatarBody(rawBody) ? rawBody : "hood", isStaff), ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(Object.keys(wireDye).length ? { dye: wireDye } : {}), ...(staff === true ? { staff: true as const } : {}), ...(isDexBadge(dex) ? { dex } : {}), ...(isChampValue(champ) ? { champ } : {}), ...(camp === true ? { camp: true as const } : {}), ...(sea === true ? { sea: true as const } : {}), ...(mgr === true ? { mgr: true as const } : {}) };
 }

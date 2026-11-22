@@ -1,11 +1,11 @@
 import type { Redis } from "@upstash/redis";
 import { redisClient } from "../redisUsage";
-import { DYE_PARTS, itemById, type AvatarDye } from "@tomb/protocol";
+import { itemById, type AvatarDye } from "@tomb/protocol";
 import { env } from "../env";
 import { MemoryFillMark, RedisFillMark, type FillMark } from "../rankFill";
 import { kstDay } from "./accounts";
 import { K } from "./keys";
-import { getStyleStore, styleKey } from "./style";
+import { getStyleStore, styleDyeOf, styleKey } from "./style";
 import type { AccountStore, EquippedItem } from "./types";
 
 // 외형 꾸미기 점수 랭킹 저장소. 점수는 "후보를 고르는 색인"일 뿐 믿지 않는다 —
@@ -182,9 +182,9 @@ export class RedisLookRank implements LookRankStore {
         const [itemId, until] = v.split("|");
         return itemId ? [{ itemId, until: Number(until) || 0 }] : [];
       });
-      const st = Object.fromEntries(entriesOf(style));
-      const dye: AvatarDye = {};
-      for (const part of DYE_PARTS) if (st[part]) dye[part] = st[part];
+      const st = Object.fromEntries(entriesOf(style).map(([k, v]) => [k, String(v)]));
+      // 캐릭터 3부위 + 11/22 아이템마다 지금 색 (특수 색 점수는 입은 아이템만 — lib/lookScore)
+      const dye: AvatarDye = styleDyeOf(st).dye;
       out.set(id, { name: name === null ? null : String(name), body: body === null ? null : String(body), dye, equipped });
     });
     return out;

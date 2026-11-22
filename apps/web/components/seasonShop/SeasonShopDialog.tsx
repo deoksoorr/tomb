@@ -1,5 +1,6 @@
 "use client";
 
+import { resellBuyNote } from "@/lib/resell";
 import { useCallback, useEffect, useId, useState } from "react";
 import { isNameSlot, isPermanentUntil, itemById } from "@tomb/protocol";
 import { errorMessage } from "@/lib/api";
@@ -198,6 +199,8 @@ export default function SeasonShopDialog({ kind, onClose, avatar }: Props) {
             <p className={shop.desc}>{row.desc}</p>
             <LookScoreBadge itemId={row.id} className={shop.lookScore} />
             <p className={cx(styles.when, tab === "soon" && styles.whenSoon)}>{when}</p>
+            {/* 11/22 기간 한정 판매는 되팔 수 없다 (lib/resell) */}
+            <p className={shop.meta}>{resellBuyNote(row.id)}</p>
             {fitNote && <p className={shop.fitNote}>{fitNote}</p>}
             {buyButtons(row)}
           </div>

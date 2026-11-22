@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { DYE_PART_NAMES, DYE_PARTS, isFixedDyeId, ITEMS } from "@tomb/protocol";
+import { DYE_PART_NAMES, DYE_PARTS, isFixedDyeId, itemById, ITEMS } from "@tomb/protocol";
 import { specDye } from "@/game/sprites/avatar";
 import { dyeApi } from "@/lib/dye/client";
 import { colorLabel, swatchStyle } from "@/lib/dye/look";
 import { specialLabel, wobbleLabel } from "@/lib/dye/palette";
-import { dyeCountsDiffer } from "@/lib/dye/rules";
+import { dyeCountsDiffer, dyeTargetName } from "@/lib/dye/rules";
 import type { DyeSessionView, FixedDyeDef } from "@/lib/dye/types";
 import { meStore } from "@/lib/hooks/useMe";
 import type { Me } from "@/lib/types";
@@ -50,7 +50,7 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
         setTickets(s.tickets);
         // 선물함에서 막 받음 · 시작하며 1장 씀 · 만료로 정리됨 → 서버 개수와 다르면 내 정보를 다시 받는다
         if (dyeCountsDiffer(meStore.getSnapshot().me?.inventory ?? {}, s.counts ?? {})) void meStore.refresh();
-        if (s.ended) onNotice(`시간이 지난 ${DYE_PART_NAMES[s.ended.part]} 염색은 끝났어요. 색은 그대로예요.`);
+        if (s.ended) onNotice(`시간이 지난 ${dyeTargetName(s.ended.part)} 염색은 끝났어요. 색은 그대로예요.`);
       })
       .catch(() => {});
   }, [onNotice]);
@@ -91,12 +91,14 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
 
   const look = currentLook(me.equipped, openedAt);
   const dye = specDye(avatar.color);
+  /** 11/22 염색한 꾸미기 (아이템마다 지금 입는 색 — 색 보관함은 [꾸미기] 탭의 아이템 정보에서) */
+  const dyedItems = Object.entries(me.itemDyes ?? {}).filter(([, st]) => st.colors.some(Boolean));
 
   return (
     <div className={bag.others}>
       {session && (
         <div className={styles.banner} role="status">
-          <span>{DYE_PART_NAMES[session.part]} 염색이 진행 중이에요.</span>
+          <span>{dyeTargetName(session.part)} 염색이 진행 중이에요.</span>
           <button type="button" className={cx(ui.button, ui.primary)} onClick={() => setOpen({ ticket: null, resume: session })}>
             이어서 하기
           </button>
@@ -145,6 +147,24 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
             </li>
           ))}
         </ul>
+        {dyedItems.length > 0 && (
+          <ul className={bag.list} aria-label="염색한 꾸미기">
+            {dyedItems.map(([id, st]) => {
+              const c = st.sel >= 0 ? st.colors[st.sel] : null;
+              return (
+                <li key={id} className={bag.row}>
+                  <ItemIcon itemId={id} size={32} dye={c} />
+                  <span className={bag.main}>
+                    <span className={bag.name}>{itemById(id)?.name ?? id}</span>
+                    <span className={bag.meta}>
+                      {c ? colorLabel(c) : "원래 색"} · 칠한 칸 {st.colors.filter(Boolean).length}/{st.colors.length}
+                    </span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
         <div className={styles.banner}>
           {/* 11/19 가방에서 바로 상점 창을 여는 단추는 뺐어요 (어디서든 상점을 여는 통로가 됐다). 잡화점에 직접 가야 해요 */}
           <span>원래 색으로 되돌리거나 외형을 바꾸려면 잡화점에 들러요.</span>
@@ -155,6 +175,7 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
           ticket={direct}
           avatar={avatar}
           look={look}
+          itemDyes={me.itemDyes}
           onClose={() => {
             setDirect(null);
             sync();
@@ -168,6 +189,7 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
           resume={open.resume}
           avatar={avatar}
           look={look}
+          itemDyes={me.itemDyes}
           onClose={(pending) => {
             setOpen(null);
             // 포기 요청이 끝난 뒤에 상태를 받아야 이미 끝난 판이 "진행 중"으로 남지 않는다

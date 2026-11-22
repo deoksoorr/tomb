@@ -15,6 +15,7 @@ import {
   GUEST_KEEP,
   GUEST_PER_DAY,
   GUEST_REPORT_HIDE,
+  houseScore,
   houseTitle,
   HOUSE_TITLES,
   LIKE_WEIGHT,
@@ -23,6 +24,8 @@ import {
   PLOT_TIERS,
   plotCost,
   sellPrice,
+  TIER_SCORE_BONUS,
+  TIER_SCORE_NOTE,
   villageLots,
 } from "./catalog";
 import { emptyLayout, normalizeExterior, findFreeSpot, footprint, gateTiles, placedScore, styleTag, validateLayout } from "./layout";
@@ -132,6 +135,20 @@ describe("점수·호칭", () => {
     expect(houseTitle(10_000).name).toBe("전설의 명당");
     expect(nextTitle(160)?.name).toBe("소문난 별장");
     expect(nextTitle(900)).toBeNull();
+  });
+  it("11/22 터 크기 점수: 넓은 터 +30, 대저택 +80 (확장 값 30P당 1점의 10%), 호칭 구간에도 들어간다", () => {
+    expect(TIER_SCORE_BONUS).toEqual({ small: 0, wide: 30, manor: 80 });
+    // 확장 값(작은 터 분양가를 뺀 누적 넓히기 값) / 30 × 10%
+    for (const t of PLOT_TIERS) expect(TIER_SCORE_BONUS[t.id]).toBe(Math.round(((plotCost(t.id) - plotCost("small")) / 30) * 0.1));
+    expect(TIER_SCORE_NOTE).toBe("넓은 터 +30점, 대저택 +80점");
+    expect(houseScore(10, 2, "small")).toBe(10 + 2 * LIKE_WEIGHT);
+    expect(houseScore(10, 2, "manor")).toBe(10 + 2 * LIKE_WEIGHT + 80);
+    // 모르는 값(옛 기록)은 0
+    expect(houseScore(10, 0, undefined)).toBe(10);
+    // 빈 넓은 터 20점짜리도 50점 → 아늑한 보금자리, 대저택 70점짜리는 150점 → 정갈한 정원
+    expect(houseTitle(houseScore(20, 0, "wide")).name).toBe("아늑한 보금자리");
+    expect(houseTitle(houseScore(20, 0, "small")).name).toBe("쓸쓸한 터");
+    expect(houseTitle(houseScore(70, 0, "manor")).name).toBe("정갈한 정원");
   });
   it("배치 점수와 별칭", () => {
     const l = lay([p("a", "server_rack", 0, 0), p("b", "monitor_desk", 1, 0), p("c", "pot", 4, 0)], DEFAULT_FLOOR, "wall_iron");
@@ -251,6 +268,45 @@ describe.each(kits)("HouseStore (%s)", (_name, make) => {
     expect(await s.like(b, "v2", "20261109")).toBeNull();
     expect(await s.setHidden(b, false)).toBe(true);
     expect((await s.list("new", 50)).some((h) => h.id === b)).toBe(true);
+  });
+
+  it("11/22 터 크기 점수: 넓히면 점수·순위가 바로 오르고 좋아요·저장·숨김 풀기에도 그대로, 순위 맞추기는 멱등", async () => {
+    const a = await fresh();
+    const b = await fresh();
+    const s = kit.store;
+    await s.addItem(solo(a), "village", "pot", 5);
+    await s.addItem(solo(b), "village", "pot", 5);
+    expect(await s.saveDesign(solo(a), "village", "small", lay([p("a", "pot", 0, 0)]), null, { pot: 1 }, 40, 1)).toBe("ok");
+    expect(await s.saveDesign(solo(b), "village", "small", lay([p("a", "pot", 0, 0)]), null, { pot: 1 }, 20, 1)).toBe("ok");
+    const order = async () => (await s.list("score", 300)).filter((h) => h.id === a || h.id === b).map((h) => [h.id, h.score]);
+    expect(await order()).toEqual([[a, 40], [b, 20]]);
+    // 넓히기 → 물건 몫은 그대로, 점수와 순위가 바로
+    expect(await s.upgrade(b, "small", "wide", 2)).toBe(true);
+    expect(await s.get(b)).toMatchObject({ tier: "wide", placedScore: 20, score: 50 });
+    expect(await order()).toEqual([[b, 50], [a, 40]]);
+    // 좋아요 응답 점수에도
+    expect(await s.like(b, "v1", "20261122")).toEqual({ likes: 1, score: 50 + LIKE_WEIGHT });
+    // 다시 저장해도 물건 몫만 저장되고 보너스는 한 번만
+    expect(await s.saveDesign(solo(b), "village", "wide", lay([p("a", "pot", 0, 0)]), null, { pot: 1 }, 20, 3)).toBe("ok");
+    expect((await s.get(b))!.score).toBe(50 + LIKE_WEIGHT);
+    expect(await s.upgrade(b, "wide", "manor", 4)).toBe(true);
+    expect((await s.get(b))!.score).toBe(100 + LIKE_WEIGHT);
+    // 숨겼다 풀어도 보너스 포함
+    await s.setHidden(b, true);
+    await s.setHidden(b, false);
+    expect(await order()).toEqual([[b, 100 + LIKE_WEIGHT], [a, 40]]);
+    // 순위 맞추기는 몇 번을 불러도 같다
+    await s.syncRankScores();
+    expect(await s.syncRankScores()).toBeNull();
+    expect(await order()).toEqual([[b, 100 + LIKE_WEIGHT], [a, 40]]);
+  });
+
+  it("11/22 터 크기 점수: 이미 넓힌 집(다시 저장하지 않은)도 읽을 때 점수에 붙는다", async () => {
+    const id = nanoid(12);
+    made.push(id);
+    await kit.store.create({ id, owner: `o_${id}`, name: "옛 대저택", intro: "", ownerName: "주인", tier: "manor", lot: null, now: Date.now() });
+    expect(await kit.store.get(id)).toMatchObject({ placedScore: 0, score: 80 });
+    expect((await kit.store.list("score", 300)).find((h) => h.id === id)?.score).toBe(80);
   });
 
   it("방명록: 최신 먼저, 하루 한도, 보관 개수, 신고 누적 숨김, 지우기", async () => {
@@ -422,6 +478,8 @@ describe.skipIf(!!conn)("하우징 서비스 (포인트 연동)", () => {
     await expect(sellFurniture(store, id, "desk")).rejects.toMatchObject({ code: "PLACED" });
     await expect(upgradePlot(store, id, "manor")).rejects.toMatchObject({ code: "BAD_TIER" });
     const up = await upgradePlot(store, id, "wide");
+    // 11/22 넓히면 응답 점수에 넓은 터 점수가 바로 붙는다
+    expect(up.house!.score).toBe(up.house!.placedScore + up.house!.likes * LIKE_WEIGHT + TIER_SCORE_BONUS.wide);
     expect(up.house?.tier).toBe("wide");
     expect(up.house?.layout.items).toHaveLength(1);
     await expect(saveLayout(store, id, "small", lay([]))).rejects.toMatchObject({ code: "CONFLICT" });

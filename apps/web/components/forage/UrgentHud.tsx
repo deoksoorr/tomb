@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { clockText, FEST_FIREWORK_MS, FEST_MS, URGENT_CLAIM_MS, URGENT_DEF, URGENT_LAST_MS, URGENT_NOBODY_LINE, urgentClaimLeft, urgentFilled, urgentRewardLine, urgentStage } from "@/lib/forage/quests/urgent";
+import { clockText, FEST_FIREWORK_MS, FEST_MS, URGENT_CLAIM_MS, URGENT_DEF, URGENT_LAST_MS, URGENT_NOBODY_LINE, URGENT_REGROW_LINE, urgentClaimLeft, urgentFilled, urgentRewardLine, urgentStage } from "@/lib/forage/quests/urgent";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { showToast } from "@/lib/hooks/useToasts";
@@ -68,7 +68,7 @@ const fill = (n: number, goal: number) => `${Math.min(100, goal > 0 ? (n / (goal
 
 export default function UrgentHud() {
   const space = useUrgentSpace();
-  const { pub, mine, announce: ann } = useUrgent();
+  const { pub, mine } = useUrgent();
   const scene = useBridgeValue("scene:changed")?.scene;
   const [now, setNow] = useState(() => Date.now());
   const [hidden, setHiddenState] = useState<string | null>(readClosed);
@@ -121,8 +121,6 @@ export default function UrgentHud() {
 
   if (!ev || scene === "hunt" || scene === "minigame") return null;
   const live = now < ev.end;
-  // 시작 알림은 의뢰가 끝나면 바로 내린다 (남은 시간 "(20분)"이 끝난 막대와 같이 보이지 않게)
-  const announce = live && ann && ann.id === ev.id && now < ann.until ? ann : null;
   const left = ev.end - now;
   const hurry = live && left <= URGENT_LAST_MS;
   const pct = ev.goal > 0 ? Math.floor((ev.n * 100) / ev.goal) : 0;
@@ -138,18 +136,12 @@ export default function UrgentHud() {
   const iGave = mine ? !!myRow && myRow.mine > 0 : null;
   const rewardLine = live || nobody ? "" : urgentRewardLine({ n: ev.n, goal: ev.goal, mine: iGave, claimed: !!myRow?.claimed });
   const canClaim = !live && !!myRow?.reward && !myRow.claimed;
+  // 11/22 약초·광석·발굴품 의뢰 동안 그 지점이 5분마다 모두 다시 핀다 (lib/forage/rules nodeBloomRule)
+  const regrow = live ? URGENT_REGROW_LINE[ev.kind] : null;
 
   return (
     <>
-      {announce && (
-        <div className={u.announce} role="alert" key={announce.id}>
-          <span className={u.siren} aria-hidden="true" />
-          <span className={u.announceText}>
-            <b>{announce.text}</b>
-            <small>의뢰 게시판에 내면 서버 전체 막대가 차요</small>
-          </span>
-        </div>
-      )}
+      {/* 11/22 시작 알림은 마을 소식 가운데 표시 하나로 (서버 공지 urg-<id>-a0). 이 막대의 사이렌 창은 같은 말을 한 번 더 띄워 창이 두 개였다 */}
       {/* 11/22 터치: 칩·펼친 막대는 왼쪽 위 칩 묶음 맨 앞으로 (TopLeftCluster). 시작 알림은 제자리 */}
       <TopLeftItem kind="urgent">
         {fireworks && coarse && !open && (
@@ -296,6 +288,11 @@ export default function UrgentHud() {
                   {live ? <span className={u.pct}>{pct}%</span> : <span className={u.result}>{urgentFilled(ev.kind, ev.n, ev.goal, !!ev.early)}</span>}
                   {live && <span className={u.hudHint}>캠핑장행 정류장 왼쪽 게시판</span>}
                 </div>
+                {regrow && (
+                  <div className={u.hudReward}>
+                    <span>{regrow}</span>
+                  </div>
+                )}
                 {!live && (rewardLine || canClaim) && (
                   <div className={u.hudReward}>
                     {rewardLine && <span>{rewardLine}</span>}
@@ -310,6 +307,7 @@ export default function UrgentHud() {
                   <>
                     <span>캠핑장행 정류장 왼쪽 의뢰 게시판에 내면 서버 전체 막대가 차요.</span>
                     <span>눈금 50%·100%를 넘기면 보상이 커지고, 150%(끝)까지 채우면 불꽃축제가 열려요.</span>
+                    {regrow && <span>{regrow}</span>}
                   </>
                 ) : (
                   <span className={u.result}>{urgentFilled(ev.kind, ev.n, ev.goal, !!ev.early)}</span>

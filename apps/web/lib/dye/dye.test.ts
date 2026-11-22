@@ -263,7 +263,7 @@ describe("46번 팔레트 (11/12 개편: 연속 색 공간)", () => {
     expect(DyeFinishSchema.safeParse({ seed: "abcdefgh", x: 10, y: -DYE_LIMIT - 1 }).success).toBe(false);
     expect(DyeStartSchema.safeParse({ itemId: "dye_basic", part: "head" }).success).toBe(true);
     expect(DyeStartSchema.safeParse({ itemId: "hat_cat", part: "head" }).success).toBe(false);
-    expect(DyeStartSchema.safeParse({ itemId: "dye_basic", part: "feet" }).success).toBe(false);
+    expect(DyeStartSchema.safeParse({ itemId: "dye_basic", part: "Feet!" }).success).toBe(false);
     // 관리자 발급 색은 형식을 맞춘다
     expect(AdminDyeIssueSchema.parse({ name: "벚꽃 분홍", color: "F4A7B9", count: 1, target: "all" }).color).toBe("#f4a7b9");
     expect(AdminDyeIssueSchema.safeParse({ name: "x", color: "pink", count: 1, target: "all" }).success).toBe(false);

@@ -231,6 +231,8 @@ export type Me = {
   graves: string[];
   /** 46번: 염색한 부위 색 (없으면 color 하나 — 머리 = 몸, 포인트는 몸마다 원래 색) */
   dye?: AvatarDye;
+  /** 11/22 아이템마다 색 보관함: colors = 커스텀 칸(빈 칸 null), sel = 지금 입는 칸 (-1 = 원래 색). 염색한 적 없는 아이템은 없다 */
+  itemDyes?: Record<string, { colors: (string | null)[]; sel: number }>;
   /** 31번 운영자 계정 (관리자 화면에서 지정). 포인트가 줄지 않고 확성기가 무료, 묘비 상세에 운영자 삭제 버튼 */
   staff?: boolean;
   /** 25번: 선택권으로 영구 해금한 프리미엄 외형 id (PREMIUM_BODIES). 없으면 처음 6종만 */

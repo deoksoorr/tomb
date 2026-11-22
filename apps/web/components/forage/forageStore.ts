@@ -5,12 +5,22 @@ import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import { dexBadgeBits, takePlan } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
-import { NODE_SYNC_WINDOWS, nodeIdsAt, nodeWindow, windowEndsAt } from "@/lib/forage/rules";
+import { NODE_SYNC_WINDOWS, NODE_WINDOW_MS, nodeRefreshAt, nodeWindow, rollNodeIds, type NodeUrgent } from "@/lib/forage/rules";
 import { onVisibleAgain, tabHidden } from "@/lib/hooks/visibleAgain";
 import type { ForageState } from "@/lib/forage/types";
+import { urgentStore } from "./urgentStore";
 
 // 내 낚시·채집 상태(가방의 물고기·채집물, 도감, 오늘 기록, 피어 있는 채집 지점)의 클라이언트 사본.
 // 서버 응답의 state로 통째로 바꾼다. 바뀔 때마다 피어 있는 지점을 게임에 알린다 (forage:nodes).
+// 11/22 긴급 의뢰(약초·광석·발굴품) 동안 그 종류 지점은 5분마다 모두 핀다 (lib/forage/rules nodeBloomRule — 서버와 같은 함수).
+// 의뢰는 긴급 의뢰 사본(urgentStore)에서 보고, 의뢰가 열리고 닫히면 서버에 묻지 않고 지점을 다시 굴린다
+
+/** 11/22 지점 규칙이 볼 긴급 의뢰 (긴급 의뢰 사본의 ev — 시각 판단은 규칙이 한다) */
+function urgentEv(): NodeUrgent | null {
+  const ev = urgentStore.getSnapshot().pub?.ev;
+  return ev && ev.kind !== "fish" ? { kind: ev.kind, start: ev.start, end: ev.end } : null;
+}
+const evKey = (ev: NodeUrgent | null) => (ev ? `${ev.kind}|${ev.start}|${ev.end}` : "");
 
 export type ForageSnapshot = { state: ForageState | null; error: string | null };
 
@@ -22,6 +32,15 @@ class ForageStore {
   /** 뒤로 간 동안 새 창이 열렸다 (돌아오면 한 번 받는다) */
   private due = false;
   private offVisible: (() => void) | null = null;
+  /** 11/22 지금 지점 목록이 기준으로 삼은 시각·긴급 의뢰 (다음에 굴릴 때 지점마다 창이 바뀌었는지 본다) */
+  private idsAt = 0;
+  private idsEv: NodeUrgent | null = null;
+  /** 마지막으로 본 긴급 의뢰 (바뀌면 다시 굴린다) */
+  private seenEv = "";
+
+  constructor() {
+    urgentStore.subscribe(() => this.onUrgent());
+  }
 
   subscribe = (fn: () => void) => {
     this.listeners.add(fn);
@@ -32,15 +51,32 @@ class ForageStore {
 
   getSnapshot = () => this.snap;
 
-  set(state: ForageState): void {
+  set(state: ForageState, ev: NodeUrgent | null = state.nodes.ev ?? null): void {
     this.due = false;
     this.snap = { state, error: null };
-    bridge.emit("forage:nodes", { ids: state.nodes.ids });
+    // 서버 목록이면 서버가 본 의뢰(nodes.ev), 스스로 굴린 목록이면 굴릴 때 본 의뢰
+    this.idsAt = Date.now();
+    this.idsEv = ev;
+    bridge.emit("forage:nodes", { ids: state.nodes.ids, ev });
     // 도감 100% 배지: 바뀔 때만 게임에 알린다 (내 캐릭터 이름표 옆)
     const bits = dexBadgeBits(state.dex);
     if (bridge.last("me:dex")?.bits !== bits) bridge.emit("me:dex", { bits });
-    this.schedule(state.nodes.refreshAt);
+    // 서버가 의뢰를 아직 몰랐어도(또는 반대로) 화면이 아는 의뢰 경계에서 다시 굴린다
+    this.schedule(Math.min(state.nodes.refreshAt, nodeRefreshAt(this.idsAt, urgentEv())));
     this.listeners.forEach((fn) => fn());
+  }
+
+  /** 11/22 긴급 의뢰가 열리거나 닫히거나 일찍 끝나면 (사본이 바뀌면) 서버에 묻지 않고 지점을 다시 굴린다 */
+  private onUrgent(): void {
+    const ev = urgentEv();
+    const key = evKey(ev);
+    if (key === this.seenEv) return;
+    this.seenEv = key;
+    const st = this.snap.state;
+    const seed = st?.nodes.seed;
+    if (!st || !seed || evKey(this.idsEv) === key) return;
+    const now = Date.now();
+    this.set({ ...st, nodes: { ids: rollNodeIds(seed, st.nodes.ids, { at: this.idsAt, ev: this.idsEv }, { at: now, ev }), refreshAt: nodeRefreshAt(now, ev), seed } }, ev);
   }
 
   /**
@@ -79,13 +115,17 @@ class ForageStore {
     }, ms);
   }
 
-  /** 창이 바뀌는 시각 at에 서버에 묻지 않고 새 창 지점으로 바꾼다. 서버에서 받을 차례·씨앗 없음·시계가 크게 어긋남(잠자기 등)이면 false */
+  /**
+   * 창이 바뀌는 시각 at에 서버에 묻지 않고 새 창 지점으로 바꾼다. 서버에서 받을 차례·씨앗 없음·시계가 크게 어긋남(잠자기 등)이면 false.
+   * 11/22 지점마다 자기 규칙 창만 새로 굴린다 (긴급 의뢰 5분 창이 바뀌어도 다른 종류는 이번 10분 창 그대로 — 캔 것이 빠진 채). 서버 차례는 10분 창 경계에서만
+   */
   private rollLocal(at: number): boolean {
     const st = this.snap.state;
     const seed = st?.nodes.seed;
-    const w = nodeWindow(at);
-    if (!st || !seed || w % NODE_SYNC_WINDOWS === 0 || Math.abs(Date.now() - at) > 60_000) return false;
-    this.set({ ...st, nodes: { ids: nodeIdsAt(seed, w), refreshAt: windowEndsAt(w), seed } });
+    const sync = at % NODE_WINDOW_MS === 0 && nodeWindow(at) % NODE_SYNC_WINDOWS === 0;
+    if (!st || !seed || sync || Math.abs(Date.now() - at) > 60_000) return false;
+    const ev = urgentEv();
+    this.set({ ...st, nodes: { ids: rollNodeIds(seed, st.nodes.ids, { at: this.idsAt, ev: this.idsEv }, { at, ev }), refreshAt: nodeRefreshAt(at, ev), seed } }, ev);
     return true;
   }
 

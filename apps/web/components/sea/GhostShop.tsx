@@ -1,6 +1,7 @@
 "use client";
 
 /* eslint-disable @next/next/no-img-element -- 캔버스로 만든 dataURL 픽셀아트 */
+import { resellBuyNote } from "@/lib/resell";
 import { useEffect, useState } from "react";
 import { isNameSlot, itemById } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
@@ -104,6 +105,8 @@ function GhostPreview({ row, avatar, wearing, name }: { row: GhostRow; avatar: {
       <div className={s.previewInfo}>
         <p className={s.previewName}>{row.name}</p>
         <p className={s.previewDesc}>{item?.desc}</p>
+        {/* 11/22 유령선 장터 한정 판매는 되팔 수 없다 (lib/resell) */}
+        {item?.kind === "cosmetic" && <p className={s.previewNote}>{resellBuyNote(item.id)}</p>}
         {note && <p className={s.previewNote}>{note}</p>}
       </div>
     </section>

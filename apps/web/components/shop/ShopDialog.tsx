@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { resellBuyNote, resellPrice } from "@/lib/resell";
+import { ItemDyeLine } from "../dye/itemDyeInfo";
 import { champBoards, isNameSlot, isPermanentUntil, isShopListed, ITEMS, permanentPrice, SHOP_KINDS, titleOfLook, type ItemDef, type ItemKind } from "@tomb/protocol";
 import { CHAMP_SHOP_NOTE, champShopDiscount, pickDiscount } from "@/lib/champPerks";
 import { chairShopDiscount, chairShopNote, perkShopDiscount } from "@/lib/chairPerks";
@@ -273,6 +275,17 @@ export default function ShopDialog({ onClose, avatar }: Props) {
                   {stashed(shown) && " · 벗어 둠"}
                 </p>
                 {fitNote && shown.kind === "cosmetic" && <p className={styles.fitNote}>{fitNote}</p>}
+                {/* 11/22 내가 가진 꾸미기의 염색 값 · 되팔기 안내 (영구로 사면 정가의 30%로 판다) */}
+                {shown.kind === "cosmetic" && (owned(shown) > 0 || stashed(shown) || forever(shown) || worn(shown)) && (
+                  <p className={styles.meta}>
+                    <ItemDyeLine itemId={shown.id} itemDyes={me?.itemDyes} />
+                  </p>
+                )}
+                {shown.kind === "cosmetic" && permanentPrice(shown.id) !== null && !shown.staff && (
+                  <p className={styles.meta}>
+                    {forever(shown) ? `되팔기 ${resellPrice(shown.id).toLocaleString("ko-KR")}P (정가의 30%) · 가방 [꾸미기]에서 팔아요` : resellBuyNote(shown.id)}
+                  </p>
+                )}
                 {forever(shown) || shown.staff ? null : buyButton(shown)}
                 {foreverButton(shown)}
               </div>

@@ -360,8 +360,23 @@ export const MAX_OWN_PER_ITEM = 20;
 /** 11/16 가구는 마을 집·오두막 공용 가방: 가진 것이 모두 다른 집에 놓여 있을 때 (가방·상점·저장 오류가 같은 말) */
 export const AWAY_MSG = "다른 집에 놓여 있어요. 거기서 치우면 여기 놓을 수 있어요.";
 
-/** 꾸밈 점수 = 놓은 물건 점수 합 + 좋아요 × LIKE_WEIGHT */
+/** 꾸밈 점수 = 놓은 물건 점수 합 + 좋아요 × LIKE_WEIGHT + 터 크기 점수(TIER_SCORE_BONUS) */
 export const LIKE_WEIGHT = 3;
+
+/**
+ * 11/22 터 크기 꾸밈 점수 (누적 값: 대저택은 합쳐서 80). 마을 집·포구 오두막 같은 값.
+ * 확장 값의 가구 비율(30P당 1점)의 10% — 넓은 터 9,000P → 30점, 대저택 누적 24,000P → 80점.
+ * 저장된 placedScore는 물건 몫만이고, 이 값은 읽을 때(scoreOf)와 순위 ZSET을 쓸 때(store-redis TIER_FN) 더한다.
+ * 캠핑장 앞마당 단계(아직 없음)도 생기면 같은 규칙(확장 값 30P당 1점의 10%)으로 여기 옆에 둔다
+ */
+export const TIER_SCORE_BONUS: Record<PlotTierId, number> = { small: 0, wide: 30, manor: 80 };
+export const tierScoreBonus = (tier: string | null | undefined): number => TIER_SCORE_BONUS[tier as PlotTierId] ?? 0;
+/** 꾸밈 점수 한 곳 계산 (저장소·화면 공용) */
+export const houseScore = (placed: number, likes: number, tier: string | null | undefined): number => placed + likes * LIKE_WEIGHT + tierScoreBonus(tier);
+/** "넓은 터 +30점, 대저택 +80점" (화면 안내용) */
+export const TIER_SCORE_NOTE = PLOT_TIERS.filter((t) => TIER_SCORE_BONUS[t.id] > 0)
+  .map((t) => `${t.name} +${TIER_SCORE_BONUS[t.id]}점`)
+  .join(", ");
 /** 좋아요를 받으면 주인이 받는 포인트 (lib/economy.ts의 houseLike 규칙과 같은 값) */
 export const LIKE_REWARD = 2;
 

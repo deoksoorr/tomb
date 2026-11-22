@@ -2,6 +2,8 @@ import { ACT_KINDS, MAX_MESSAGE_BYTES, isEmoId, isPhraseId, isSeatMood, type Act
 import { normalizeChat, type ChatLogLine } from "./chat";
 import { NAME_MAX, normalizeName } from "./names";
 import { MAX_GRANT_LEN } from "./grants";
+/** 착용 증서 최대 길이 (11/22 600 → 960) */
+export const LOOK_GRANT_MAX = 960;
 import type { MegaphoneScope } from "./items";
 import { GOBLIN_ID_RE, type GoblinInfo } from "./npc";
 import type { AvatarDye } from "./dye";
@@ -365,9 +367,10 @@ export function parseC2S(text: string): C2S | null {
     case "warp":
       return isNum(m.x) && isNum(m.y) ? { t: "warp", x: Math.round(m.x), y: Math.round(m.y) } : null;
     // 착용 증서는 염색·몸 모양·주간 1위 값까지 실어 폭죽 증서보다 길 수 있다 (몸 꾸미기 7개·염색 전부여도 400자 안팎,
-    // 닉네임 꾸미기 2개까지 더하면 430자 안팎 — 메시지 전체 512바이트 안. nameStyle.test.ts가 가장 긴 경우를 잰다)
+    // 닉네임 꾸미기 2개까지 더하면 430자 안팎 — 메시지 전체 512바이트 안. nameStyle.test.ts가 가장 긴 경우를 잰다).
+    // 11/22 옷·등 칸 나눔 + 입은 아이템 색(idye)으로 가장 긴 증서가 800자 안팎 → 960 (메시지 한도 MAX_MESSAGE_BYTES 1024 안)
     case "look":
-      return typeof m.grant === "string" && m.grant.length <= 600 ? { t: m.t, grant: m.grant } : null;
+      return typeof m.grant === "string" && m.grant.length <= LOOK_GRANT_MAX ? { t: m.t, grant: m.grant } : null;
     case "firework":
       return typeof m.grant === "string" && m.grant.length <= 400 ? { t: m.t, grant: m.grant } : null;
     case "sync":

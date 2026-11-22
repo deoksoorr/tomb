@@ -553,6 +553,26 @@ describe("v2: look / firework / sync / join-loss guards", () => {
     expect(events(b)).toEqual([{ t: "look", sid: 1, look: [], dye: { head: "#e8b84a~g", accent: "#ff00aa~r" } }]);
   });
 
+  it("11/22 입은 아이템 색·옷+등 동시 착용도 welcome·join·look으로 실리고, 아이템 색만 바뀌어도 다시 알린다", async () => {
+    const { core, join, conn } = setup();
+    const a = conn("a");
+    const look = ["hat_beanie", "sc_padding", "back_wings_butterfly"];
+    core.join(a, { visitorId: "a", name: "a", color: AVATAR_COLORS[0], channel: 1, look, body: "hood", dye: { items: { sc_padding: "#3050e0" } } }, 0);
+    const b = join("b");
+    expect(welcome(b).peers[0].look).toEqual(look);
+    expect(welcome(b).peers[0].dye).toEqual({ items: { sc_padding: "#3050e0" } });
+    clear(a, b);
+    const dye = { head: "#f4a7b9", items: { hat_beanie: "#e03030", sc_padding: "#3050e0~s" } };
+    core.message(a, send({ t: "look", grant: grantToken({ kind: "look", visitorId: "a", look, exp: 9e9, dye }) }), 0);
+    await flush();
+    expect(events(b)).toEqual([{ t: "look", sid: 1, look, dye }]);
+    expect(a.att?.dye).toEqual(dye);
+    // 새 토큰으로 다시 들어오면서 아이템 색만 달라져도 join을 다시 보낸다
+    clear(a, b);
+    core.join(conn("a2"), { visitorId: "a", name: "a", color: AVATAR_COLORS[0], channel: 1, look, body: "hood", dye: { ...dye, items: { sc_padding: "#2040a0" } } }, 20_000);
+    expect(events(b).find((e) => e.t === "join")).toMatchObject({ sid: 1, dye: { items: { sc_padding: "#2040a0" } } });
+  });
+
   it("fires a verified firework once per nonce at the sender's server position (3s per connection)", async () => {
     const { core, join } = setup();
     const a = join("a", 0, { x: 200, y: 300 });

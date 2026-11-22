@@ -132,6 +132,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace
           {tab === "look" ? (
             <LookPane
               entries={wardrobe}
+              itemDyes={me.itemDyes}
               now={now}
               avatar={resolveAvatar(avatar, me, savedColor)}
               score={lookScore(me, now)}
@@ -142,7 +143,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace
               }}
             />
           ) : tab === "wear" ? (
-            <PickPane entries={wardrobe} now={now} pending={pending} act={act} avatar={resolveAvatar(avatar, me, savedColor)} name={me.name ?? ""} filter={slotFilter} onFilter={setSlotFilter} />
+            <PickPane entries={wardrobe} now={now} pending={pending} act={act} avatar={resolveAvatar(avatar, me, savedColor)} name={me.name ?? ""} filter={slotFilter} onFilter={setSlotFilter} me={me} onNotice={setNotice} />
           ) : tab === "title" ? (
             <TitlesPane me={me} pending={pending} act={act} />
           ) : tab === "dye" ? (

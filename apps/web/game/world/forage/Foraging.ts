@@ -13,7 +13,7 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../../text/GlyphAtlas";
 import type { Interactable } from "../layout";
 import type { Lighting } from "../Lighting";
 import { ensureForageTextures, ensureIconTexture, FTEX } from "./art";
-import { nodeWindow, windowEndsAt } from "@/lib/forage/rules";
+import { nodeBloomRule, type NodeUrgent } from "@/lib/forage/rules";
 import { FishZoneView } from "./FishZoneView";
 import { WHARF_BOARD, WHARF_PLACARD } from "../fishZone";
 import { SEA_BUYER, SEA_BUYER_STALL } from "../../sea/seaLayout";
@@ -103,8 +103,9 @@ export class Foraging {
   private readonly npcs: readonly Npc[];
   private readonly nodes = new Map<string, NodeView>();
   private nodeIds: string[] = [];
-  /** 지금 지점 목록을 받은 창 번호 (창이 바뀌었는데 아직 새 목록이 안 왔으면 깜빡임을 이어 간다) */
-  private nodesWindow = -1;
+  /** 지금 지점 목록을 받은 시각·그때 긴급 의뢰 (지점 규칙 창이 바뀌었는데 아직 새 목록이 안 왔으면 깜빡임을 이어 간다 — 11/22 종류마다 창이 달라서) */
+  private nodesAt = 0;
+  private nodesEv: NodeUrgent | null = null;
   /** 처음 목록을 받았는지 (첫 목록은 소리 없이 피어난다) */
   private nodesLoaded = false;
   /** 방금 캐러 간 지점 (목록에서 빠지면 "캐서 없어짐" 연출) */
@@ -164,7 +165,7 @@ export class Foraging {
       this.addCollider(npc.x + at.dx - 12, npc.y + at.dy - 6, 24, 6);
     }
     this.offs.push(
-      bridge.on("forage:nodes", ({ ids }) => this.setNodes(ids)),
+      bridge.on("forage:nodes", ({ ids, ev }) => this.setNodes(ids, ev)),
       // 11/15 캠핑장에 가 있는 동안 마을 장면은 잔다 → 낚싯대·게이지·소리는 지금 깨어 있는 맵(캠핑장)의 것만 (두 번 울리지 않게)
       bridge.on("forage:rod", ({ phase, tension }) => this.live() && this.setRod(phase, tension ?? 0)),
       bridge.on("forage:gauge", (e) => this.live() && (e.phase === "start" ? this.startGauge(e.ms, e.kind, e.node) : this.endGauge(e.ok, e.node))),
@@ -173,7 +174,7 @@ export class Foraging {
       bridge.on("forage:coin", () => this.live() && this.sfx.play("coin", 0.8)),
     );
     const nodes = bridge.last("forage:nodes");
-    if (nodes) this.setNodes(nodes.ids);
+    if (nodes) this.setNodes(nodes.ids, nodes.ev);
     else this.rebuildItems();
   }
 
@@ -228,13 +229,14 @@ export class Foraging {
     this.d.setItems(items);
   }
 
-  private setNodes(ids: string[]): void {
+  private setNodes(ids: string[], ev?: NodeUrgent | null): void {
     // 서버는 두 맵의 지점을 함께 알려 준다 → 이 맵 것만 (11/15 캠핑장)
     this.nodeIds = ids.filter((id) => {
       const n = gatherNodeById(id);
       return !!n && nodeOnMap(n, this.mapId);
     });
-    this.nodesWindow = nodeWindow(Date.now());
+    this.nodesAt = Date.now();
+    this.nodesEv = ev ?? null;
     const keep = new Set(this.nodeIds);
     const pl = this.d.player();
     const now = this.scene.time.now;
@@ -845,10 +847,20 @@ export class Foraging {
   private updateNodeAuras(now: number): void {
     if (this.nodes.size === 0) return;
     const wall = Date.now();
-    const w = nodeWindow(wall);
-    // 창이 이미 바뀌었는데 새 목록이 아직이면 계속 깜빡인다 (곧 사라진다)
-    const remain = w !== this.nodesWindow ? 0 : windowEndsAt(w) - wall;
-    const blink = remain < NODE_BLINK_MS ? 1 - remain / NODE_BLINK_MS : 0;
+    const ev = this.nodesEv;
+    // 11/22 종류마다 규칙 창이 다르다 (긴급 의뢰 종류는 5분 창) → 깜빡임도 종류마다 한 번씩만 계산
+    const blinkOf = new Map<string, number>();
+    const blinkFor = (kind: GatherNode["kind"]): number => {
+      let b = blinkOf.get(kind);
+      if (b !== undefined) return b;
+      const r = nodeBloomRule(kind, wall, ev);
+      // 창이 이미 바뀌었는데 새 목록이 아직이면 계속 깜빡인다 (곧 사라진다).
+      // 의뢰 중 5분 창은 다음 창에도 모두 다시 피니 깜빡이지 않는다 (의뢰가 끝나는 창만)
+      const remain = r.window !== nodeBloomRule(kind, this.nodesAt, ev).window ? 0 : r.density >= 1 && ev && r.endsAt < ev.end ? Infinity : r.endsAt - wall;
+      b = remain < NODE_BLINK_MS ? 1 - remain / NODE_BLINK_MS : 0;
+      blinkOf.set(kind, b);
+      return b;
+    };
     const pl = this.d.player();
     for (const v of this.nodes.values()) {
       if (this.gauge?.node === v.node.id) continue;
@@ -862,7 +874,7 @@ export class Foraging {
       if (hide) continue;
       const d = Math.hypot(v.node.x - pl.x, v.node.y - pl.y);
       const near = d < 64 ? 1 - d / 64 : 0;
-      const a = updateAura(v.aura, now, near, blink, this.d.reduced);
+      const a = updateAura(v.aura, now, near, blinkFor(v.node.kind), this.d.reduced);
       if (v.img.alpha !== a && !this.scene.tweens.isTweening(v.img)) v.img.setAlpha(a);
     }
   }

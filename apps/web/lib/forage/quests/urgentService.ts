@@ -11,6 +11,7 @@ import { getTitleStats, type MemoryTitleStats } from "../../store/titleStats";
 import { forgetTitles } from "../../titlesServer";
 import { pushVillageNotice } from "../../weeklyChamp";
 import { dexCatOf, dexRewardOf, speciesById, STACK_MAX } from "../catalog";
+import type { NodeUrgent } from "../rules";
 import { getForageStore, type MemoryForageStore } from "../store";
 import { STAMP_CAP } from "./catalog";
 import { cosmeticsOfTier } from "../../rpg/setGearRoll";
@@ -440,23 +441,46 @@ export async function backfillPocketDex(now = Date.now(), days = 7): Promise<{ c
 
 // ── 축제 (낚시·채집 희귀 확률) ──
 
+/** 이 의뢰가 150%에 닿은 시각 (아직이면 0). 인스턴스마다 의뢰당 30초에 한 번만 저장소를 본다 (닿았으면 더 묻지 않는다) */
+async function festOf(ev: UrgentSlot, now: number): Promise<number> {
+  const m = memo().fest;
+  let c = m.get(ev.id);
+  if (!c || (c.fest === 0 && now - c.at >= 30_000)) {
+    c = { at: now, fest: (await urgentStore().state(ev.id)).fest };
+    m.set(ev.id, c);
+  }
+  return c.fest;
+}
+
 /** 지금 마을 축제인지. 축제가 있을 수 있는 때(의뢰 시작 ~ 끝 + 1시간)에만 저장소를 본다 (인스턴스마다 의뢰당 30초에 한 번) */
 export async function festivalOn(now = Date.now()): Promise<boolean> {
   try {
     const evs = (await eventsAround(now)).filter((e) => e.start <= now && now < e.end + FEST_MS);
     for (const ev of evs) {
-      const m = memo().fest;
-      let c = m.get(ev.id);
-      if (!c || (c.fest === 0 && now - c.at >= 30_000)) {
-        c = { at: now, fest: (await urgentStore().state(ev.id)).fest };
-        m.set(ev.id, c);
-      }
-      if (c.fest > 0 && now < c.fest + FEST_MS) return true;
+      const fest = await festOf(ev, now);
+      if (fest > 0 && now < fest + FEST_MS) return true;
     }
   } catch (e) {
     console.warn("[urgent] 축제 확인 실패", e);
   }
   return false;
+}
+
+/**
+ * 11/22 채집 지점 규칙이 볼 진행 중인 긴급 의뢰 (생선 의뢰는 지점과 상관없어 null — lib/forage/rules nodeBloomRule).
+ * 화면을 믿지 않고 서버가 스스로 본다: 일정은 (비밀값, 날짜)로 정해져 기억에서 바로, 시험 의뢰는 테스트 서버에서만 3초 기억,
+ * 150%로 일찍 끝났는지는 축제 기억(festOf — 의뢰 동안 30초에 한 번)으로. 의뢰가 없을 때는 저장소를 보지 않는다
+ */
+export async function urgentNodeEvent(now = Date.now()): Promise<NodeUrgent | null> {
+  try {
+    const ev = [...(await eventsAround(now))].reverse().find((e) => e.start <= now && now < e.end && e.kind !== "fish");
+    if (!ev) return null;
+    const end = urgentEndAt(ev.end, await festOf(ev, now));
+    return now < end ? { kind: ev.kind, start: ev.start, end } : null;
+  } catch (e) {
+    console.warn("[urgent] 채집 지점용 의뢰 확인 실패", e);
+    return null;
+  }
 }
 
 // ── 테스트 서버 운영자 시험 ──

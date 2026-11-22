@@ -104,6 +104,8 @@ export async function loadMe(accounts: AccountStore, accountId: string, now = Da
     ...toMe(accountId, a, day, now, { noRetain: staff }),
     body: shownBody(a.body, staff),
     dye: style.dye,
+    // 11/22 아이템마다 색 보관함 (가방 아이템 정보·염색 창)
+    ...(Object.keys(style.items).length ? { itemDyes: style.items } : {}),
     ...(staff ? { staff: true } : {}),
     // 11/20 수집 의뢰 외형은 교환소 기록(bodies)뿐 아니라 그 해금 아이템을 가방에 가졌을 때도 (선물로 받은 경우)
     ...(() => {

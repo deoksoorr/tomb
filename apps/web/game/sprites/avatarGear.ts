@@ -1,4 +1,4 @@
-import type { AvatarBody } from "@tomb/protocol";
+import { itemById, type AvatarBody } from "@tomb/protocol";
 import { CUTE_BACK, CUTE_COVERING, CUTE_HAND, CUTE_HEAD, CUTE_NECK, drawCuteBack, drawCuteHand, drawCuteHead, drawCuteNeck } from "./cuteGear";
 import { darken, Grid } from "./pixel";
 import { drawGhostHead, drawGhostHeadGlow, GHOST_HEAD } from "./ghostGear";
@@ -42,11 +42,14 @@ export const GEAR_SHEET_IDS: readonly string[] = [...GEAR_HEAD, ...GEAR_NECK, ..
 /** 두건·키다리 끝·동글이 새싹을 덮는 모자 (그 위에 꼭지를 그리지 않는다) */
 export const COVERING_HATS: ReadonlySet<string> = new Set(["hat_straw", "hat_cat", "hat_beanie", "hat_crown", "hat_party", "hat_wizard", "hat_cap", "hat_beret", "hat_hardhat", "hat_chef", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat", "champ_duo_ph", "champ_duo_pf", "champ_duo_hf", "champ_triple", "q_hat_angler", "q_hat_miner", "q_hat_snow", "u_hat_siren", ...CUTE_COVERING, ...GHOST_HEAD, ...XMAS_COVERING, ...CHAIR_HEAD]);
 
-export type ExtraGear = { head: string | null; neck: string | null; hand: string | null; back: string | null };
+/** back = 몸에 입는 옷(망토·재킷·숄·도포), pack = 11/22 등에 메는 것(배낭·기타·제트팩·서핑보드 — 옷과 같이 입는다) */
+export type ExtraGear = { head: string | null; neck: string | null; hand: string | null; back: string | null; pack: string | null };
 
 export function extraGearOf(look: readonly string[]): ExtraGear {
   const pick = (ids: readonly string[]) => look.find((id) => ids.includes(id)) ?? null;
-  return { head: pick(GEAR_HEAD), neck: pick(GEAR_NECK), hand: pick(GEAR_HAND), back: pick(GEAR_BACK) };
+  const backs = GEAR_BACK.filter((id) => itemById(id)?.slot !== "pack");
+  const packs = GEAR_BACK.filter((id) => itemById(id)?.slot === "pack");
+  return { head: pick(GEAR_HEAD), neck: pick(GEAR_NECK), hand: pick(GEAR_HAND), back: pick(backs), pack: pick(packs) };
 }
 
 /** 머리 한 줄의 반폭 (타원 공식, 머리 밖이면 0) */

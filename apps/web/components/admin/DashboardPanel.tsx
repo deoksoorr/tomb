@@ -38,7 +38,7 @@ const KIND_LABEL = { account: "계정 정지", ip: "IP 차단", both: "계정+IP
 const BAN_STATUS = { active: "진행 중", expired: "기간 끝남", lifted: "해제됨" } as const;
 const KST = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 /** 오늘 획득에서 빼는 항목: 관리자 지급·선물·환불 (활동으로 번 포인트만) / 사용에서 빼는 항목: 관리자 회수 */
-const EARN_EXCLUDED = new Set(["admin", "gift", "refund"]);
+const EARN_EXCLUDED = new Set(["admin", "gift", "refund", "resell"]);
 const SPEND_EXCLUDED = new Set(["admin"]);
 const RECENT = 5;
 

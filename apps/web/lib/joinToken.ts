@@ -1,4 +1,4 @@
-import { LOBBY_CACHE_SEC, pickChannel, signJoinToken, type AvatarDye, type LobbyInfo } from "@tomb/protocol";
+import { LEGACY_JOIN_TOKEN_MAX_LEN, LOBBY_CACHE_SEC, pickChannel, signJoinToken, type AvatarDye, type LobbyInfo } from "@tomb/protocol";
 import { z } from "zod";
 import { env } from "./env";
 import { HttpError } from "./http";
@@ -83,6 +83,12 @@ export async function issueJoin(requested: number | "auto", claims: Claims): Pro
   }
 
   // 토큰은 배정된 채널 하나에만 유효하다 (토큰 하나로 여러 채널 자리를 차지하지 못하게)
-  const token = await signJoinToken(env.joinSecret(), { ...claims, channel });
+  let token = await signJoinToken(env.joinSecret(), { ...claims, channel });
+  // 11/22 입은 아이템 색(idye)까지 실어 옛 실시간 서버 한도(900자)를 넘으면 아이템 색만 빼고 다시 만든다 (색은 바로 뒤 착용 증서로 간다)
+  if (token.length > LEGACY_JOIN_TOKEN_MAX_LEN && claims.dye?.items) {
+    const charDye = { ...claims.dye };
+    delete charDye.items;
+    token = await signJoinToken(env.joinSecret(), { ...claims, dye: charDye, channel });
+  }
   return { mode: "channel", channel, token, wsUrl: `${wsBase}/ch/${channel}?t=${encodeURIComponent(token)}`, ...(claims.camp ? { campOpen: true as const } : {}), ...(claims.sea ? { seaOpen: true as const } : {}) };
 }

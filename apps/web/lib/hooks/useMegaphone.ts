@@ -22,6 +22,7 @@ export const MEGA_QUEUE_MAX = 5;
 export function flashEndsAt(startedAt: number, waiting: number): number {
   return startedAt + (waiting > 0 ? MEGA_FLASH_QUEUED_MS : MEGA_FLASH_MS);
 }
+
 const COLLAPSED_KEY = "tomb.ui.megaphoneCollapsed";
 
 /** 실시간으로 바뀐 고정 공지는 이만큼 서버 목록보다 먼저 믿는다 (목록은 CDN에 30초 + 갱신 중 2분까지 옛것일 수 있다) */

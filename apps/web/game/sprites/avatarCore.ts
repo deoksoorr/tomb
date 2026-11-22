@@ -1,5 +1,7 @@
-import { bodyTier, hasDye, isAvatarBody, type AvatarBody, type AvatarDye } from "@tomb/protocol";
+import { bodyTier, hasDye, isAvatarBody, isDyeableCosmetic, itemById, withDyeTarget, type AvatarBody, type AvatarDye, type DyeTarget } from "@tomb/protocol";
 import { darken, Grid, lighten, mix, parseHex, type Color } from "./pixel";
+// 11/22 입은 꾸미기 염색 (모자·목·옷 칸): 꾸미기가 칠한 픽셀만 염색 색으로 다시 칠한다
+import { GEAR_DYE_REGIONS, itemRefOf, recolorDrawn, tallyDrawn, type ItemRef } from "./gearDye";
 import { COVERING_HATS, drawBackGear, drawHandGear, drawHandGlow, drawHeadGear, drawHeadGlow, drawNeckGear, extraGearOf, GEAR_SHEET_IDS, type ExtraGear } from "./avatarGear";
 // 11/15 사냥 중 입은 세트 장비 (착용 목록의 "sgw.…" — game/sprites/setGearWear)
 import { drawSetSpark, drawWearAcc, drawWearArmor, drawWearHead, isTopWear, sgHeadCovers, sgWearOf, sparkFrame, SGW_PREFIX, type SgWear } from "./setGearWear";
@@ -183,6 +185,8 @@ type Pal = {
   /** 손 흔들기·환호 때 보이는 손 (몸보다 밝게) */
   hand: Color;
   handLo: Color;
+  /** 11/22 아이템마다 염색 색 (없는 아이템은 원래 색) */
+  itemDye: ReadonlyMap<string, Color>;
 };
 
 /**
@@ -202,7 +206,7 @@ export const sheetCosmeticIds = (): readonly string[] => SHEET_COSMETICS;
 export function registerSeasonArt(art: SeasonArt): void {
   ssArt = art;
   SHEET_COSMETICS = [...BASE_SHEET_COSMETICS, ...art.SEASON_SHEET_IDS];
-  for (const c of [handCache, faceCache, artTopCache, previewCache, seatedCache]) c.clear();
+  for (const c of [handCache, faceCache, artTopCache, previewCache, seatedCache, refCache]) c.clear();
 }
 type Gear = { hat: "hat_straw" | "hat_cat" | "hat_flower" | "hat_halo" | null; lantern: boolean; scarf: boolean; /** F8 추가분 (avatarGear.ts) */ extra: ExtraGear; /** 11/15 사냥 중 세트 장비 */ sg: SgWear; /** 11/17 NPC 계절 옷 */ nw: NpcWear | null; /** 11/19 계절 한정 세트 (seasonSetGear.ts) */ ss: string[] };
 
@@ -223,9 +227,18 @@ export function lookKey(look: readonly string[]): string {
 
 /**
  * 46번 아바타 3부위 색. 색 표기(spec)는 "#기본색" 하나이거나, 염색했으면 "#기본색|머리|몸|포인트"(빈 칸 = 기본).
- * 게임·미리보기는 이 문자열 하나를 색으로 넘기고(텍스처 키에도 그대로 들어간다), 시트를 그릴 때만 3색으로 푼다.
+ * 11/22 아이템을 염색했으면 뒤에 "|아이템id:rrggbb;아이템id:rrggbb~x"가 더 붙는다 (없으면 예전 모양 그대로).
+ * 게임·미리보기는 이 문자열 하나를 색으로 넘기고(텍스처 키에도 그대로 들어간다), 시트를 그릴 때만 색으로 푼다.
  */
-export type AvatarColors = { base: Color; head: Color; body: Color; accent: Color | null };
+export type AvatarColors = { base: Color; head: Color; body: Color; accent: Color | null; items: ReadonlyMap<string, Color> };
+
+/** 아이템 색 → 색 표기 끝 칸 (id 순서) */
+function itemSpec(items: Record<string, string> | undefined): string {
+  return Object.entries(items ?? {})
+    .sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0))
+    .map(([id, c]) => `${id}:${c}`)
+    .join(";");
+}
 
 /** 46·25번: 실시간 서버가 알리는 염색·몸 모양 변경 (look 이벤트에 실린다, 없는 값은 그대로) */
 /** champ = 주간 랭킹 1위 값 (새 웹이 낸 착용 증서에만, 0 = 1위 아님) */
@@ -236,7 +249,9 @@ export type AppearanceChange = { dye?: AvatarDye; body?: string; champ?: number;
 export function avatarColorSpec(base: string, dye?: AvatarDye | null): string {
   const b = base.split("|")[0];
   if (!hasDye(dye)) return b;
-  return [b, dye!.head ?? "", dye!.body ?? "", dye!.accent ?? ""].join("|");
+  const char = [b, dye!.head ?? "", dye!.body ?? "", dye!.accent ?? ""];
+  const items = itemSpec(dye!.items);
+  return (items ? [...char, items] : char).join("|");
 }
 
 /** 염색한 색 표기인지 (avatarColorSpec은 염색이 없으면 기본색 하나만 돌려준다) */
@@ -244,30 +259,46 @@ export function isDyedSpec(spec: string): boolean {
   return hasDye(specDye(spec));
 }
 
-/** 색 표기에 담긴 염색 (미리보기에서 한 부위만 바꿔 볼 때) */
+/** 색 표기에 담긴 염색 (미리보기에서 한 부위·아이템만 바꿔 볼 때) */
 export function specDye(spec: string): AvatarDye {
-  const [, h, b, a] = spec.split("|");
-  return { ...(h ? { head: h } : {}), ...(b ? { body: b } : {}), ...(a ? { accent: a } : {}) };
+  const [, h, b, a, it] = spec.split("|");
+  const out: AvatarDye = { ...(h ? { head: h } : {}), ...(b ? { body: b } : {}), ...(a ? { accent: a } : {}) };
+  if (it) {
+    const items: Record<string, string> = {};
+    for (const cell of it.split(";")) {
+      const i = cell.indexOf(":");
+      if (i > 0) items[cell.slice(0, i)] = cell.slice(i + 1);
+    }
+    if (Object.keys(items).length) out.items = items;
+  }
+  return out;
 }
 
-/** 색 표기의 한 부위만 바꾼다 (color = null이면 그 부위를 기본색으로) */
-export function withDyePart(spec: string, part: keyof AvatarDye, color: string | null): string {
-  const d = specDye(spec);
-  if (color) d[part] = color;
-  else delete d[part];
-  return avatarColorSpec(spec, d);
+/** 색 표기의 한 부위(또는 11/22 아이템 id)만 바꾼다 (color = null이면 기본색·원래 색으로) */
+export function withDyePart(spec: string, target: DyeTarget, color: string | null): string {
+  return avatarColorSpec(spec, withDyeTarget(specDye(spec), target, color));
 }
 
-/** 색 표기 → 3부위 색 (머리·몸은 염색 안 했으면 기본색) */
+/** 색 표기 → 3부위 색 (머리·몸은 염색 안 했으면 기본색) + 아이템 색 */
 export function avatarColors(spec: string): AvatarColors {
   const [b, h, bo, a] = spec.split("|");
   const base = parseHex(b ?? "");
-  return { base, head: h ? parseHex(h, base) : base, body: bo ? parseHex(bo, base) : base, accent: a ? parseHex(a) : null };
+  const items = new Map<string, Color>();
+  for (const [id, c] of Object.entries(specDye(spec).items ?? {})) items.set(id, parseHex(c));
+  return { base, head: h ? parseHex(h, base) : base, body: bo ? parseHex(bo, base) : base, accent: a ? parseHex(a) : null, items };
+}
+
+/** 짧은 해시 (FNV-1a, 16진 8자리) — 텍스처 키에 아이템 색을 넣을 때 */
+function hash8(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
+  return (h >>> 0).toString(16).padStart(8, "0");
 }
 
 /**
  * 텍스처 키에 들어가는 색 부분: 염색이 없으면 기본색 hex 6자리(예전 키와 같다), 있으면 "기본_머리_몸_포인트"(빈 칸 = 기본).
- * 색 표기 전체를 hex 하나로 읽으면 염색한 아바타가 모두 같은 키가 되어 낡은 그림을 다시 쓴다 (11/12 머리 염색 풀림)
+ * 색 표기 전체를 hex 하나로 읽으면 염색한 아바타가 모두 같은 키가 되어 낡은 그림을 다시 쓴다 (11/12 머리 염색 풀림).
+ * 11/22 아이템 색은 끝에 해시 8자리 (키에 쓸 수 없는 글자가 많아서)
  */
 export function avatarColorKey(spec: string): string {
   const hex = (c: number) => c.toString(16).padStart(6, "0");
@@ -276,7 +307,9 @@ export function avatarColorKey(spec: string): string {
   const d = specDye(spec);
   if (!hasDye(d)) return base;
   const part = (c: string | undefined) => (c ? hex(parseHex(c)) : "");
-  return [base, part(d.head), part(d.body), part(d.accent)].join("_");
+  const char = [base, part(d.head), part(d.body), part(d.accent)];
+  const items = itemSpec(d.items);
+  return (items ? [...char, hash8(items)] : char).join("_");
 }
 
 function palette(colors: AvatarColors, body: AvatarBody): Pal {
@@ -311,7 +344,52 @@ function palette(colors: AvatarColors, body: AvatarBody): Pal {
     muzzle: lighten(colors.head, 0.62),
     hand: mix(lighten(bh, 0.5), 0xfff4dc, 0.45),
     handLo: darken(mix(lighten(bh, 0.5), 0xfff4dc, 0.45), 0.14),
+    itemDye: colors.items,
   };
+}
+
+// ── 11/22 입은 꾸미기 염색 (모자·목·옷 칸) ──
+// 꾸미기 하나를 그리는 호출을 감싸, 그 호출이 칠한 픽셀만 그 아이템의 염색 색으로 다시 칠한다 (gearDye.ts). 몸·눈·외곽선(외곽선은 나중에 두른다)은 건드리지 않는다.
+// 기준 색(바탕 천)은 꾸미기마다 한 번, 두건 유령에 앞·옆·뒤로 그려 모은다 → 몸·자세·프레임이 달라도 같은 색으로 칠해진다.
+// 고양이 귀처럼 캐릭터 색을 따라 칠하는 꾸미기가 있어서 기준은 캐릭터 색(팔레트)마다 따로 둔다.
+
+/** 기준 색을 모으는 중인 꾸미기 (그동안 drawFrame은 그 꾸미기가 칠한 색을 센다) */
+let refCapture: { id: string; hist: Map<Color, number> } | null = null;
+const refCache = new Map<string, ItemRef | null>();
+
+function gearRef(id: string, pal0: Pal): ItemRef | null {
+  const key = [id, pal0.hood, pal0.hoodHi, pal0.hoodLo, pal0.cloak, pal0.bodyMid, pal0.accent, pal0.scarf].join("|");
+  const hit = refCache.get(key);
+  if (hit !== undefined) return hit;
+  const hist = new Map<Color, number>();
+  refCapture = { id, hist };
+  try {
+    const pal: Pal = { ...pal0, itemDye: new Map() };
+    for (const view of ["down", "side", "up"] as const) drawFrame("hood", view, framesFor(view)[0], pal, gearOf([id]));
+  } finally {
+    refCapture = null;
+  }
+  const ref = itemRefOf(hist, GEAR_DYE_REGIONS[id]);
+  if (refCache.size > 600) refCache.delete(refCache.keys().next().value!);
+  refCache.set(key, ref);
+  return ref;
+}
+
+/** 그 아이템의 염색 색 (안 칠했으면 null) */
+function itemDye(pal: Pal, id: string | null | undefined): Color | null {
+  return id ? (pal.itemDye.get(id) ?? null) : null;
+}
+
+/** 꾸미기 id를 그리는 fn을 감싼다: 칸 색이 있고 염색할 수 있는 꾸미기면 칠한 픽셀을 그 색으로 */
+function wornDraw(g: Grid, pal: Pal, id: string | null | undefined, fn: () => void): void {
+  const color = itemDye(pal, id);
+  const capture = id && refCapture?.id === id ? refCapture : null;
+  const ref = !capture && id && color !== null && isDyeableCosmetic(id) ? gearRef(id, pal) : null;
+  if (!capture && !ref) return fn();
+  const before = g.px.slice();
+  fn();
+  if (capture) tallyDrawn(g.px, before, capture.hist);
+  else recolorDrawn(g.px, before, ref!, color!);
 }
 
 const P = (bob = 0, f0: [number, number] = [0, 0], f1: [number, number] = [0, 0], lean = 0, sit: 0 | 1 | 2 = 0, hem = 0): Pose => ({
@@ -503,11 +581,28 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear0: Ge
     });
   const side = view === "side";
   const sitDrop = pose.sit === 1 ? 3 : pose.sit === 2 ? 2 : 0;
+  // 11/22 입은 꾸미기 염색: 옷 칸 꾸미기 그리기 (칸 색이 있으면 그 색으로 다시 칠한다)
+  // 11/22 옷(back)을 먼저, 등에 메는 것(pack)은 그 위에 (배낭을 코트 위에 멘다) — F8 꾸미기·계절 꾸미기를 섞어도 이 순서
+  const backGear = (layer: "back" | "front", ss = true) => {
+    const extra = (id: string | null) => {
+      if (id) wornDraw(g, pal, id, () => drawBackGear(g, view, id, m, fb, layer, pose.hem, pose.sit));
+    };
+    const season = (pack: boolean) => {
+      if (ss) for (const id of gear.ss) if ((itemById(id)?.slot === "pack") === pack) wornDraw(g, pal, id, () => ssArt.drawSsBack(g, view, [id], m, fb, layer, pose.hem, pose.sit, body));
+    };
+    extra(gear.extra.back);
+    season(false);
+    extra(gear.extra.pack);
+    season(true);
+  };
+  // 계절·골목 한정 꾸미기는 한 벌을 한꺼번에 그리는 함수라 하나씩 나눠 그 꾸미기 칸 색으로 (롱패딩의 높은 깃도 옷 칸 색)
+  const ssEach = (draw: (ids: readonly string[]) => void) => {
+    for (const id of gear.ss) wornDraw(g, pal, id, () => draw([id]));
+  };
 
   // F8 등 꾸미기: 몸 뒤로 삐져나오는 부분 (배낭·망토)
-  if (gear.extra.back) drawBackGear(g, view, gear.extra.back, m, fb, "back", pose.hem, pose.sit);
+  backGear("back");
   // 11/19 계절 한정 등 꾸미기: 몸 뒤로 삐져나오는 부분 (롱패딩 후드 뭉치)
-  if (gear.ss.length) ssArt.drawSsBack(g, view, gear.ss, m, fb, "back", pose.hem, pose.sit, body);
 
   // ── 발 (망토 밑단 아래로 살짝). 이불 유령은 발이 없다 ──
   const footY = 25;
@@ -610,17 +705,17 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear0: Ge
     if (spot && isTopWear(gear.sg.a)) sgSpots.push(spot);
   }
   // F8 등 꾸미기: 뒷모습에서 등을 덮는 부분·앞모습 어깨끈 (머리보다 먼저)
-  if (gear.extra.back) drawBackGear(g, view, gear.extra.back, m, fb, "front", pose.hem, pose.sit);
+  backGear("front");
   // 11/19 계절 한정: 롱패딩 외투 · 선물 자루 어깨끈 (뒷모습은 자루가 등을 덮는다)
-  if (gear.ss.length) ssArt.drawSsBack(g, view, gear.ss, m, fb, "front", pose.hem, pose.sit, body);
   // 붕어빵 장수 앞치마 위로 배낭·망토 끈이 다시 보이게
-  if (vendor && gear.extra.back) drawBackGear(g, view, gear.extra.back, m, fb, "front", pose.hem, pose.sit);
+  if (vendor) backGear("front", false);
 
   // ── 목도리 (두건·키다리는 기본 천 목도리, 나머지는 목도리를 했을 때만) ──
   const plainNeck = body === "hood" || body === "tall";
   // 11/15 세트 갑옷을 입으면 기본 천 목도리는 옷깃에 가린다
   if (nw?.scarf && nwc) drawNwScarf(g, nwc, nw);
-  else if ((plainNeck && !gear.sg.a) || gear.scarf) {
+  // 빨간 목도리(neck_scarf)를 했으면 목 칸 색으로 (기본 천 목도리는 캐릭터 포인트 색 그대로)
+  else if ((plainNeck && !gear.sg.a) || gear.scarf) wornDraw(g, pal, gear.scarf ? "neck_scarf" : null, () => {
     const sy = m.neck;
     const half = fb === "round" ? 6 : fb === "sheet" ? 6 : fb === "tall" ? 3 : 4;
     for (let x = cx - half; x < cx + half; x++) if (g.filled(x, sy) || x >= cx - half + 1) g.set(x, sy, pal.scarf);
@@ -634,7 +729,7 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear0: Ge
       g.set(cx - 2, sy + 1, pal.scarfLo);
       g.set(cx - 2, sy + 2, pal.scarfLo);
     }
-  }
+  });
 
   // ── 머리 ──
   if (fb === "hood" || fb === "tall" || fb === "cat" || fb === "bun") {
@@ -681,22 +776,25 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear0: Ge
   // 25번: 머리·앞 덧그림 (상자·머그잔·튜브는 머리 아래를 가리고, 갓·왕관·우산은 머리 위에)
   drawBodyExtra(g, body, "front", view, pose, m, pal, headWorn);
   // 앞을 가리는 몸(상자·머그잔·튜브)이면 뒷모습 등 꾸미기를 그 위에 다시 (배낭이 상자에 묻히지 않게)
-  if (gear.extra.back && view !== "side" && (body === "box" || body === "cup" || body === "tube")) drawBackGear(g, view, gear.extra.back, m, fb, "front", pose.hem, pose.sit);
-  if (gear.ss.length && view !== "side" && (body === "box" || body === "cup" || body === "tube")) ssArt.drawSsBack(g, view, gear.ss, m, fb, "front", pose.hem, pose.sit, body);
+  if (view !== "side" && (body === "box" || body === "cup" || body === "tube")) backGear("front");
   // 11/15 사냥 중 갑옷: 몸통을 가리는 몸(상자·머그잔·튜브)은 그 위에 한 번 더 입힌다 (사냥 장비가 먼저 보이게)
   if (gear.sg.a && (body === "box" || body === "cup" || body === "tube"))
     drawWearArmor(g, view, fb, m, [pal.cloak, pal.cloakLo, pal.bodyMid, pal.bodyLo, pal.bodyHi], [pal.cloakLo, pal.bodyLo], gear.sg.a);
 
-  drawGear(g, view, gear, m, pal, fb);
-  // F8 머리·목·손 꾸미기 (avatarGear.ts)
-  if (gear.extra.neck) drawNeckGear(g, view, gear.extra.neck, m, fb);
-  if (gear.extra.head) drawHeadGear(g, view, gear.extra.head, m, fb, fb === "round" ? m.top - 1 : m.top, pose.hem);
+  // 처음 모자 3종(밀짚·고양이 귀·꽃 핀)은 모자 칸 색으로, 등불은 그대로
+  wornDraw(g, pal, gear.hat, () => drawGear(g, view, { ...gear, lantern: false }, m, pal, fb));
+  if (gear.lantern) drawGear(g, view, { ...gear, hat: null }, m, pal, fb);
+  // F8 머리·목·손 꾸미기 (avatarGear.ts). 11/22 머리·목은 모자·목 칸 색으로
+  const neckId = gear.extra.neck;
+  const headId = gear.extra.head;
+  if (neckId) wornDraw(g, pal, neckId, () => drawNeckGear(g, view, neckId, m, fb));
+  if (headId) wornDraw(g, pal, headId, () => drawHeadGear(g, view, headId, m, fb, fb === "round" ? m.top - 1 : m.top, pose.hem));
   if (gear.extra.hand) drawHandGear(g, view, gear.extra.hand, m);
   // 11/19 계절 한정: 롱패딩 높은 깃 → 모자 → 손에 든 것 (선물 자루는 머리를 다 그린 뒤 몸 뒤 빈칸에)
   if (gear.ss.length) {
-    ssArt.drawSsNeck(g, view, gear.ss, m, fb, body);
-    ssArt.drawSsHead(g, view, gear.ss, m, fb, fb === "round" ? m.top - 1 : m.top, body);
-    ssArt.drawSsHand(g, view, gear.ss, m, fb, body);
+    ssEach((ids) => ssArt.drawSsNeck(g, view, ids, m, fb, body));
+    ssEach((ids) => ssArt.drawSsHead(g, view, ids, m, fb, fb === "round" ? m.top - 1 : m.top, body));
+    ssEach((ids) => ssArt.drawSsHand(g, view, ids, m, fb, body));
   }
   // 11/15 사냥 중 세트 장신구·머리 + 임원급 반짝임 (시트 프레임 홀짝으로 두 장)
   for (const c of gear.sg.c) drawWearAcc(g, view, fb, m, c);
@@ -751,14 +849,15 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear0: Ge
   if (pose.arms === "up") drawHangBranch(g, m, view);
   if (nw && nwc) drawNwBoots(g, nwc, nw);
   g.outline(pal.line);
-  if (gear.ss.length) ssArt.drawSsGlow(g, view, gear.ss, m, fb, fb === "round" ? m.top - 1 : m.top, body);
+  ssEach((ids) => ssArt.drawSsGlow(g, view, ids, m, fb, fb === "round" ? m.top - 1 : m.top, body));
   // 25번: 외곽선 밖으로 가늘게 뻗는 덧그림 (고양이 탈 수염)
   drawBodyAfterOutline(g, body, view, pose, m);
   // 등불 창은 외곽선 뒤에도 밝게 (빛나는 점)
   if (gear.lantern && view !== "up") g.set(m.hx, m.hY + 1, 0xfff0b0);
   if (gear.extra.hand) drawHandGlow(g, view, gear.extra.hand, m);
-  if (gear.extra.head) drawHeadGlow(g, view, gear.extra.head, m, fb === "round" ? m.top - 1 : m.top);
-  if (gear.hat === "hat_halo") drawHalo(g, m, view);
+  // 외곽선 뒤에 찍는 빛도 같은 칸 색 기준으로 (무리 밖의 흰 반짝임은 그대로 남는다)
+  if (headId) wornDraw(g, pal, headId, () => drawHeadGlow(g, view, headId, m, fb === "round" ? m.top - 1 : m.top));
+  if (gear.hat === "hat_halo") wornDraw(g, pal, "hat_halo", () => drawHalo(g, m, view));
   // 11/17 유령 산타 모자(반투명 — 외곽선 없이) · 방울 반짝
   if (nw && nwc) drawNwGlow(g, nwc, nw, fb === "round" ? m.top - 1 : m.top);
   // 손 흔들기·환호: 팔 없는 몸은 몸 전체를 기울이고, 손은 밝은 색 + 외곽선으로 몸 밖에 크게 그린다

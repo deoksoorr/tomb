@@ -69,7 +69,7 @@ export const QUEST_REWARDS: readonly QuestReward[] = [
   // 11/15 이달의 교환소 추가분 (화면은 protocol items.ts에 등록된 이름·설명을 먼저 쓴다)
   { id: "q_hat_snow", name: "눈 털모자", price: 25, kind: "cosmetic", slot: "head", desc: "눈꽃 무늬 털모자" },
   { id: "q_hand_wishlamp", name: "새해 소원 등불", price: 40, kind: "cosmetic", slot: "hand", desc: "소원을 적은 한지 풍등" },
-  { id: "q_back_kite", name: "연 날리는 등", price: 45, kind: "cosmetic", slot: "back", desc: "등 뒤에서 펄럭이는 방패연" },
+  { id: "q_back_kite", name: "연 날리는 등", price: 45, kind: "cosmetic", slot: "pack", desc: "등 뒤에서 펄럭이는 방패연" },
   { id: "q_name_newyear", name: "새해 복 이름표", price: 50, kind: "cosmetic", slot: "namePlate", desc: "금테 두른 다홍 이름표" },
   { id: "q_aura_snowglobe", name: "스노볼 오라", price: 70, kind: "cosmetic", slot: "aura", desc: "유리 돔 안에 눈이 소용돌이쳐요" },
   { id: "q_pet_penguin", name: "꼬마 펭귄 펫", price: 90, kind: "cosmetic", slot: "pet", desc: "뒤뚱뒤뚱 따라오는 펭귄" },

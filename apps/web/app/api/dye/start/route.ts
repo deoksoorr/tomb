@@ -12,7 +12,7 @@ import { readBody } from "@/lib/validate";
  */
 export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
-  const { itemId, part } = await readBody(req, DyeStartSchema);
+  const { itemId, part, slot } = await readBody(req, DyeStartSchema);
   await rateLimit("shop", req, visitorId);
-  return json<DyeStartResponse>(await startDye(visitorId, itemId, part));
+  return json<DyeStartResponse>(await startDye(visitorId, itemId, part, Date.now(), slot));
 });

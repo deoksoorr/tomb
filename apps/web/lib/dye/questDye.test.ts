@@ -32,7 +32,7 @@ describe("11/15 수집 의뢰 염색권 규칙", () => {
     expect(DyePickSchema.safeParse({ itemId: "q_dye_pick", part: "body", color: "#a1b2c3~g" }).success).toBe(false);
     expect(DyePickSchema.safeParse({ itemId: "q_dye_pick", part: "body", color: "a1b2c3" }).success).toBe(false);
     expect(DyePickSchema.safeParse({ itemId: "q_dye_pick", part: "body", color: "#fff" }).success).toBe(false);
-    expect(DyePickSchema.safeParse({ itemId: "q_dye_pick", part: "feet", color: "#a1b2c3" }).success).toBe(false);
+    expect(DyePickSchema.safeParse({ itemId: "q_dye_pick", part: "Feet!", color: "#a1b2c3" }).success).toBe(false);
     expect(DyePickSchema.safeParse({ itemId: "dye_basic", part: "body", color: "#a1b2c3" }).success).toBe(false);
     expect(DyePickSchema.safeParse({ itemId: "q_dye_special", part: "body", color: "#a1b2c3" }).success).toBe(false);
     for (const c of DYE_PICK_SWATCHES) expect(c).toMatch(/^#[0-9a-f]{6}$/);

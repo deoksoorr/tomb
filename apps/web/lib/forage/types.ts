@@ -3,6 +3,7 @@ import type { FishWater } from "@tomb/protocol";
 import type { TimePhase } from "../ambience";
 import type { Me } from "../types";
 import type { DexCat, DexTier, FishGrade, LifeCat, NodeKind, NpcId } from "./catalog";
+import type { NodeUrgent } from "./rules";
 
 // 낚시·채집·도감 API 계약 (서버 ↔ UI)
 
@@ -28,9 +29,10 @@ export type ForageState = {
   today: LifeDay;
   /**
    * 지금 나에게 피어 있는 채집 지점 id와 다음에 다시 피는 시각.
-   * seed = 11/16 내 채집 지점 씨앗 (lib/forage/rules nodeIdsAt — 화면이 다음 창 지점을 서버에 묻지 않고 계산한다). 옛 서버 응답엔 없다
+   * seed = 11/16 내 채집 지점 씨앗 (lib/forage/rules rollNodeIds — 화면이 다음 창 지점을 서버에 묻지 않고 계산한다). 옛 서버 응답엔 없다.
+   * ev = 11/22 서버가 이 목록을 만들 때 본 진행 중인 긴급 의뢰 (그 종류 지점은 5분마다 모두 — rules nodeBloomRule). 없으면 없음
    */
-  nodes: { ids: string[]; refreshAt: number; seed?: string };
+  nodes: { ids: string[]; refreshAt: number; seed?: string; ev?: NodeUrgent };
 };
 
 /** 도감 보상 (칸별). got = 이 칸에서 지금까지 받은 포인트 (예전 단계 보상 포함), pending = 아직 못 받은 것 */

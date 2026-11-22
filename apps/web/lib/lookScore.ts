@@ -1,4 +1,4 @@
-import { BODY_TIER_INFO, bodyLabel, bodyTier, bodyUnlockPrice, DYE_PARTS, dyeSpecialOf, isRideablePet, itemById, PERMANENT_MULTIPLIER, PET_PRICE_UP, PET_RIDE_PRICE_UP, petPrice, seasonSetsOfLook, type AvatarDye, type SeasonSetDef, type CosmeticSlot } from "@tomb/protocol";
+import { BODY_TIER_INFO, bodyLabel, bodyTier, bodyUnlockPrice, DYE_PARTS, dyeSpecialOf, isDyeableCosmetic, isRideablePet, itemById, PERMANENT_MULTIPLIER, PET_PRICE_UP, PET_RIDE_PRICE_UP, petPrice, seasonSetsOfLook, type AvatarDye, type SeasonSetDef, type CosmeticSlot } from "@tomb/protocol";
 
 // 외형 꾸미기 점수 (서버 랭킹·내 정보·가방이 함께 쓰는 순수 계산. 서버 전용 모듈을 들이지 않는다).
 // 지금 "착용 중이고 만료 전"인 꾸미기만 센다 → 기간제가 끝나면 그 파츠 점수도 바로 사라진다.
@@ -86,12 +86,15 @@ export function seasonSetBonus(input: Pick<LookScoreInput, "equipped">, now: num
 export function lookScore(input: LookScoreInput, now: number): number {
   const parts = scoredParts(input, now).reduce((n, p) => n + p.score, 0);
   const body = bodyLookScore(input.body);
-  const dye = input.dye ? DYE_PARTS.filter((p) => input.dye?.[p] && dyeSpecialOf(input.dye[p])).length * DYE_SPECIAL_BONUS : 0;
+  // 11/22 아이템 특수 색은 지금 입고 있어 보이는(염색이 그려지는) 아이템만 친다
+  const worn = scoredParts(input, now).map((p) => p.itemId);
+  const items = Object.entries(input.dye?.items ?? {}).filter(([id, c]) => worn.includes(id) && isDyeableCosmetic(id) && dyeSpecialOf(c)).length;
+  const dye = input.dye ? (DYE_PARTS.filter((p) => input.dye?.[p] && dyeSpecialOf(input.dye[p])).length + items) * DYE_SPECIAL_BONUS : 0;
   return parts + body + dye + seasonSetBonus(input, now);
 }
 
-/** 랭킹 줄에 착용 파츠를 늘어놓는 부위 순서 (머리 → 목 → 등 → 손 → 오라 → 발 → 펫 → 이름 글자 → 이름표, 그 뒤에 프리미엄 외형) */
-export const LOOK_SLOT_ORDER: Readonly<Record<CosmeticSlot, number>> = { head: 0, neck: 1, back: 2, hand: 3, aura: 4, feet: 5, pet: 6, nameColor: 7, namePlate: 8 };
+/** 랭킹 줄에 착용 파츠를 늘어놓는 부위 순서 (머리 → 목 → 옷(back) → 등(pack) → 손 → 오라 → 발 → 펫 → 이름 글자 → 이름표, 그 뒤에 프리미엄 외형) */
+export const LOOK_SLOT_ORDER: Readonly<Record<CosmeticSlot, number>> = { head: 0, neck: 1, back: 2, pack: 3, hand: 4, aura: 5, feet: 6, pet: 7, nameColor: 8, namePlate: 9 };
 /** 파츠 목록에서 프리미엄 외형을 나타내는 id 접두사 ("body:king") — 아이콘은 game/sprites/itemIcons가 몸 그림으로 그린다 */
 export const BODY_PART_PREFIX = "body:";
 

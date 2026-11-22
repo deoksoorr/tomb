@@ -92,6 +92,14 @@ export const URGENT_DEF: Readonly<Record<UrgentKind, KindDef>> = {
   dig: { cat: "dig", per: 2, min: 10, max: 200, unit: "개", label: "시상식 트로피용 발굴품", what: "연말 시상식 트로피로 쓸 발굴품", noun: "발굴품", nobody: "시상식 트로피는 문구점에서 샀대요." },
 };
 
+/** 11/22 긴급 의뢰 동안 그 종류 채집 지점이 5분마다 모두 다시 핀다는 한 줄 (생선 의뢰는 없음 — lib/forage/rules nodeBloomRule) */
+export const URGENT_REGROW_LINE: Readonly<Record<UrgentKind, string | null>> = {
+  fish: null,
+  herb: "긴급 의뢰 동안 약초가 더 자주 피어요.",
+  ore: "긴급 의뢰 동안 광석이 더 자주 피어요.",
+  dig: "긴급 의뢰 동안 땅 파 볼 자리와 갯벌 구멍이 더 자주 나와요.",
+};
+
 /** 시작 알림 한 줄 */
 export const urgentAnnounce = (kind: UrgentKind, goal: number) => `긴급! ${URGENT_DEF[kind].what} ${goal}${URGENT_DEF[kind].unit}가 당장 필요하대요`;
 

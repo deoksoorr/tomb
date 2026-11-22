@@ -537,6 +537,34 @@ redis.call('EXPIRE', KEYS[3], ${ECON_TTL_SEC})
 return bal
 `;
 
+// 11/22 꾸미기 되팔기: KEYS acct, look, stash, ledger, econ  ARGV item, permUntil, amount, walletMax, entry → -2 입는 중 | -1 영구로 벗어 둔 게 없음 | 새 잔액
+const SELL_LUA = `
+for _, v in ipairs(redis.call('HVALS', KEYS[2])) do
+  if string.sub(v, 1, #ARGV[1] + 1) == ARGV[1] .. '|' then return -2 end
+end
+if tonumber(redis.call('HGET', KEYS[3], ARGV[1]) or '0') < tonumber(ARGV[2]) then return -1 end
+redis.call('HDEL', KEYS[3], ARGV[1])
+local before = tonumber(redis.call('HGET', KEYS[1], 'points') or '0')
+redis.call('HSETNX', KEYS[1], 'lifetime', before)
+local bal = math.min(tonumber(ARGV[4]), before + tonumber(ARGV[3]))
+redis.call('HSET', KEYS[1], 'points', bal)
+redis.call('LPUSH', KEYS[4], ARGV[5])
+redis.call('LTRIM', KEYS[4], 0, 99)
+redis.call('HINCRBY', KEYS[5], 'resell', bal - before)
+redis.call('EXPIRE', KEYS[5], ${ECON_TTL_SEC})
+return bal
+`;
+
+// 11/22 옷(back)·등(pack) 칸 나눔: 예전 back 칸에 입혀 둔 등 꾸미기를 pack 칸으로 옮긴다 (pack 칸이 비어 있을 때만)
+// KEYS look  ARGV from, to → 1 옮김 | 0
+const SLOT_MOVE_LUA = `
+local v = redis.call('HGET', KEYS[1], ARGV[1])
+if not v or redis.call('HEXISTS', KEYS[1], ARGV[2]) == 1 then return 0 end
+redis.call('HSET', KEYS[1], ARGV[2], v)
+redis.call('HDEL', KEYS[1], ARGV[1])
+return 1
+`;
+
 // 포인트 쓰기 (다른 기능 공용). 모자라면 -1, 아니면 남은 잔액
 // KEYS: acct, ledger, econ  ARGV: amount, entryJson, 통계 필드(spend:{분류})
 const SPEND_LUA = `
@@ -841,6 +869,7 @@ export class RedisAccounts implements AccountStore {
     const earnMap = hashEntries(earnToday);
     const [today, stay, bonus] = [earnMap.get("_total"), earnMap.get("_stay"), earnMap.get("_bonus")];
     const a = pairs(acct);
+    await this.fixLookSlots(id, pairs(look));
     const equipped: EquippedItem[] = [...pairs(look).values()].flatMap((v) => {
       const [itemId, until] = v.split("|");
       return Number(until) > now ? [{ itemId, until: Number(until) }] : [];
@@ -937,6 +966,29 @@ export class RedisAccounts implements AccountStore {
         entry,
       ]),
     );
+  }
+
+  async sellPermanent(id: string, itemId: string, amount: number, reason: string, now: number): Promise<number | "worn" | "none"> {
+    assertPointAmount(amount);
+    const entry = JSON.stringify({ at: now, amount, reason });
+    const r = Number(
+      await this.redis.eval<string[], number>(SELL_LUA, [K.acct(id), K.look(id), K.stash(id), K.ledger(id), await econKeyFor(id, kstDay(now))], [
+        itemId,
+        String(PERMANENT_UNTIL),
+        String(amount),
+        String(WALLET_MAX),
+        entry,
+      ]),
+    );
+    return r === -2 ? "worn" : r === -1 ? "none" : r;
+  }
+
+  /** 11/22 칸 이름과 아이템 칸이 다른 착용(예전 back 칸의 등 꾸미기)을 제 칸으로 옮긴다 */
+  private async fixLookSlots(id: string, look: Map<string, string>): Promise<void> {
+    for (const [field, v] of look) {
+      const slot = itemById(v.split("|")[0])?.slot;
+      if (field === "back" && slot === "pack") await this.redis.eval<string[], number>(SLOT_MOVE_LUA, [K.look(id)], ["back", "pack"]);
+    }
   }
 
   async appearance(id: string, now: number): Promise<Pick<AccountRecord, "name" | "color" | "body" | "equipped">> {

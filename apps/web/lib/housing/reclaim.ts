@@ -53,6 +53,24 @@ export const reclaimGiftId = (houseId: string, at: number): string =>
 export type ReclaimDone = { id: string; name: string; ownerName: string; label: string; points: number };
 export type ReclaimReport = { checked: number; reclaimed: ReclaimDone[]; kept: number };
 
+// 11/22 순위 ZSET을 지금 점수 규칙(터 크기 점수)으로 한 번 맞춘다 — 그 전에 넓힌 집이 다시 저장하지 않아도 순위에 점수가 붙게.
+// 배포 뒤 첫 분양 마을 요청(또는 관리자 「지금 정리하기」)에서 돈다. 인스턴스마다 한 번만 묻고(맞춘 뒤엔 GET 하나), 실패하면 정리는 그대로 하고 다음에 다시
+const rankSynced = new WeakSet<HouseStore>();
+/** 시험용: 순위 점수 맞추기를 다시 묻게 한다 */
+export function resetRankSync(store: HouseStore) {
+  rankSynced.delete(store);
+}
+async function syncRanksOnce(store: HouseStore): Promise<void> {
+  if (rankSynced.has(store)) return;
+  try {
+    const n = await store.syncRankScores();
+    rankSynced.add(store);
+    if (n) console.info("[housing] 순위 점수 다시 맞춤 (터 크기 점수)", n);
+  } catch (e) {
+    console.error("[housing] 순위 점수 다시 맞추기 실패", e);
+  }
+}
+
 /**
  * 오래 비운 집을 모두 정리한다. force가 아니면 잠금으로 RECLAIM_SWEEP_MS에 한 번만 돈다.
  * 몇 번을 다시 돌려도 결과가 같다 (집 저장소 reclaim이 "그대로일 때만" 비운다).
@@ -66,6 +84,7 @@ export async function sweepReclaim(
 ): Promise<ReclaimReport> {
   const since = opts.since ?? RECLAIM_SINCE;
   const report: ReclaimReport = { checked: 0, reclaimed: [], kept: 0 };
+  await syncRanksOnce(store);
   if (!opts.force && !(await store.lockReclaim(RECLAIM_SWEEP_MS))) return report;
   const accounts = getAccounts();
   const [all, staff] = await Promise.all([store.listAll(), staffAccountId(now)]);

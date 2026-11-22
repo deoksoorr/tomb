@@ -51,13 +51,60 @@
   padding: 8px 6px;
 }
 
-.part[aria-pressed="true"] {
+/* 11/22 마우스를 올린 채여도 고른 부위가 보이게 (버튼 hover 색보다 앞선다) */
+.part[aria-pressed="true"],
+.part[aria-pressed="true"]:hover:not(:disabled) {
   background: var(--moss-deep);
   color: var(--bone);
 }
 
 .part:disabled {
   opacity: 0.4;
+}
+
+/* 11/22 부위 고르기 두 줄: 캐릭터 · 입은 꾸미기 (DyePartPicker) */
+.partGroups {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.partHead {
+  margin: 2px 0 0;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.partLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 입은 꾸미기 칸: 꾸미기 그림 + 칸 이름 + 꾸미기 이름(한 줄, 넘치면 …) */
+.gearPart {
+  min-width: 0;
+}
+
+.gearPart .note {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.partItem {
+  display: flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+}
+
+.partItem[data-empty] {
+  opacity: 0.25;
+  filter: grayscale(1);
 }
 
 .swatch {
@@ -404,4 +451,29 @@
     flex: 1;
     min-height: 44px;
   }
+}
+
+/* 11/22 아이템 색 보관함에서 칠할 칸 고르기 (DyeSlotPicker) */
+.slotRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.slotBtn {
+  gap: 4px;
+  padding: 4px 8px;
+  min-height: 32px;
+}
+
+.slotBtn[aria-pressed="true"],
+.slotBtn[aria-pressed="true"]:hover:not(:disabled) {
+  background: var(--moss-deep);
+  color: var(--bone);
+}
+
+.slotBtn .swatch[data-empty] {
+  box-shadow: inset 0 0 0 1px currentColor;
+  opacity: 0.5;
 }

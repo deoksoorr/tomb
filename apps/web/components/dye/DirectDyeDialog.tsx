@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { DIR, DYE_PART_NAMES, DYE_PARTS, DYE_SPECIAL_DESC, DYE_SPECIAL_NAMES, DYE_SPECIALS, type DirId, type DyePart, type DyeSpecial } from "@tomb/protocol";
+import { DIR, DYE_SPECIAL_DESC, DYE_SPECIAL_NAMES, DYE_SPECIALS, dyeOfTarget, isCharDyePart, type DirId, type DyeSpecial, type DyeTarget } from "@tomb/protocol";
 import { specDye, withDyePart } from "@/game/sprites/avatar";
 import { ApiRequestError, errorMessage } from "@/lib/api";
 import { dyeApi } from "@/lib/dye/client";
 import { colorLabel, swatchStyle } from "@/lib/dye/look";
-import { DYE_PICK_SWATCHES, specialDyeColor } from "@/lib/dye/rules";
+import { DYE_PICK_SWATCHES, dyeTargetBlock, dyeTargetName, specialDyeColor } from "@/lib/dye/rules";
 import type { StyleChangeResponse } from "@/lib/dye/types";
 import { meStore } from "@/lib/hooks/useMe";
 import { applyStyle } from "../account/actions";
@@ -15,6 +15,9 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import base from "./DyeDialog.module.css";
+import { fittingLook } from "../shop/fitting";
+import { defaultDyeSlot } from "./DyeDialog";
+import DyePartPicker, { DyeSlotPicker, type ItemDyes } from "./DyePartPicker";
 import styles from "./DirectDyeDialog.module.css";
 
 // 11/15 수집 의뢰 염색권 창 (판·조준 없음).
@@ -31,6 +34,10 @@ type Props = {
   look: readonly string[];
   onClose: () => void;
   onDone?: (message: string) => void;
+  /** 11/22 아이템마다 색 보관함 (내 정보 itemDyes) */
+  itemDyes?: ItemDyes;
+  /** 11/22 처음 골라 둘 대상 (가방 아이템 [염색]에서 열면 그 아이템 id) */
+  initialTarget?: DyeTarget;
 };
 
 type Hsv = { h: number; s: number; v: number };
@@ -62,8 +69,15 @@ const PREVIEW_MS = 120;
 /** 돌려 보기 순서 (앞 → 오른쪽 → 뒤 → 왼쪽) */
 const TURN: readonly DirId[] = [DIR.down, DIR.right, DIR.up, DIR.left];
 
-export default function DirectDyeDialog({ ticket, avatar, look, onClose, onDone }: Props) {
-  const [part, setPart] = useState<DyePart>("body");
+export default function DirectDyeDialog({ ticket, avatar, look: wornLook, onClose, onDone, itemDyes, initialTarget }: Props) {
+  const [part, setPart] = useState<DyeTarget>(initialTarget ?? "body");
+  const itemTarget = !isCharDyePart(part);
+  const [slotPick, setSlotPick] = useState<{ t: DyeTarget; k: number } | null>(null);
+  const slot = slotPick?.t === part ? slotPick.k : defaultDyeSlot(itemDyes, part);
+  const slotColors = itemTarget ? (itemDyes?.[part]?.colors.length ? itemDyes[part].colors : [null]) : [];
+  const [askOverwrite, setAskOverwrite] = useState(false);
+  // 입지 않은 아이템을 칠하면(가방에서 연 경우) 미리보기에 그 아이템을 입혀 본다
+  const look = itemTarget ? fittingLook(wornLook, part).look : wornLook;
   const cur = specDye(avatar.color);
   const [hsv, setHsv] = useState<Hsv>(() => hexHsv(cur.body ? cur.body.slice(0, 7) : "#4aa8f0"));
   const [kind, setKind] = useState<DyeSpecial>("s");
@@ -74,7 +88,8 @@ export default function DirectDyeDialog({ ticket, avatar, look, onClose, onDone 
   const [body, setBody] = useState(avatar.body);
 
   const pick = ticket.mode === "pick";
-  const color = pick ? hsvHex(hsv) : specialDyeColor(kind, specDye(spec)[part]);
+  // 특수색 바탕: 캐릭터 부위는 지금 색, 아이템은 칠할 칸의 색 (서버와 같은 규칙)
+  const color = pick ? hsvHex(hsv) : specialDyeColor(kind, itemTarget ? slotColors[slot] : dyeOfTarget(specDye(spec), part));
   const [preview, setPreview] = useState(color);
   // 끄는 동안은 PREVIEW_MS마다 한 번만 미리보기에 입힌다
   useEffect(() => {
@@ -83,18 +98,27 @@ export default function DirectDyeDialog({ ticket, avatar, look, onClose, onDone 
   }, [color]);
 
   const previewSpec = phase === "done" ? spec : withDyePart(spec, part, preview);
+  // 11/22 색을 바꿀 수 없는 꾸미기면 염색하지 않는다 (서버도 같은 규칙 — 염색권은 그대로)
+  const blocked = dyeTargetBlock(part, () => true);
 
-  async function confirm() {
+  async function confirm(confirmed = false) {
     setError(null);
+    // 11/22 이미 칠한 칸에 다시 칠하면 덮어쓴다 → 한 번 묻는다
+    if (itemTarget && slotColors[slot] && !confirmed) {
+      setAskOverwrite(true);
+      return;
+    }
+    setAskOverwrite(false);
     setPhase("sending");
+    const k = itemTarget ? slot : undefined;
     try {
-      const res: StyleChangeResponse = pick ? await dyeApi.pick(ticket.itemId, part, color) : await dyeApi.special(ticket.itemId, part, kind);
+      const res: StyleChangeResponse = pick ? await dyeApi.pick(ticket.itemId, part, color, k) : await dyeApi.special(ticket.itemId, part, kind, k);
       applyStyle(res);
       const done = res.color ?? color;
       setSpec(withDyePart(spec, res.part ?? part, done));
       if (res.me.body) setBody(res.me.body);
       setPhase("done");
-      onDone?.(`${DYE_PART_NAMES[res.part ?? part]}을(를) ${colorLabel(done)}(으)로 염색했어요.`);
+      onDone?.(`${dyeTargetName(res.part ?? part)}을(를) ${colorLabel(done)}(으)로 염색했어요.`);
     } catch (e) {
       setError(errorMessage(e));
       setPhase("pick");
@@ -115,7 +139,7 @@ export default function DirectDyeDialog({ ticket, avatar, look, onClose, onDone 
           {phase === "done" ? (
             <div className={base.side}>
               <p className={base.note} role="status">
-                {DYE_PART_NAMES[part]} 염색 완료! 다른 사람 화면에도 바로 이 색으로 보여요.
+                {dyeTargetName(part)} 염색 완료! 다른 사람 화면에도 바로 이 색으로 보여요.
               </p>
               <div className={base.actions}>
                 <button type="button" className={cx(ui.button, ui.primary)} onClick={onClose}>
@@ -130,31 +154,36 @@ export default function DirectDyeDialog({ ticket, avatar, look, onClose, onDone 
                   ? "흔들림도 운도 없어요. 원하는 색을 골라 그대로 칠해요. 금빛 광택 같은 특수 색은 특수색 확정 염색권으로 칠해요."
                   : "특수 색 하나를 골라 바로 입혀요. 금빛 광택은 금빛으로 칠해요. 다른 특수 색은 지금 색에 효과만 더해요."}
               </p>
-              <div className={base.parts} role="group" aria-label="염색할 부위">
-                {DYE_PARTS.map((p) => {
-                  const c = specDye(spec)[p];
-                  return (
-                    <button key={p} type="button" className={cx(ui.button, base.part)} aria-pressed={part === p} disabled={phase === "sending"} onClick={() => setPart(p)}>
-                      <span className={base.swatch} style={c ? swatchStyle(c) : { background: "#c9c2b0" }} aria-hidden="true" />
-                      {DYE_PART_NAMES[p]}
-                      {!c && <span className={base.note}>기본</span>}
+              <DyePartPicker spec={spec} look={wornLook} target={part} onPick={setPart} disabled={phase === "sending"} extraItem={initialTarget && !isCharDyePart(initialTarget) ? initialTarget : null} />
+              {itemTarget && !blocked && <DyeSlotPicker colors={slotColors} slot={slot} onPick={(k) => setSlotPick({ t: part, k })} disabled={phase === "sending"} />}
+              {askOverwrite && (
+                <div role="alertdialog" aria-label="덮어쓰기 확인">
+                  <p className={base.note}>커스텀 {slot + 1} 칸은 이미 칠했어요. 새 색으로 덮어쓸까요?</p>
+                  <div className={base.actions}>
+                    <button type="button" className={ui.button} onClick={() => setAskOverwrite(false)}>
+                      그만두기
                     </button>
-                  );
-                })}
-              </div>
+                    <button type="button" className={cx(ui.button, ui.primary)} onClick={() => void confirm(true)}>
+                      덮어쓰기
+                    </button>
+                  </div>
+                </div>
+              )}
               {pick ? <ColorPicker hsv={hsv} onChange={setHsv} disabled={phase === "sending"} /> : <SpecialPicker kind={kind} onChange={setKind} disabled={phase === "sending"} />}
               <p className={base.pick}>
                 <span className={base.swatchBig} style={swatchStyle(color)} aria-hidden="true" />
                 <span className={base.hex}>{colorLabel(color)}</span>
               </p>
-              <p className={base.note}>[염색하기]를 누르면 염색권 1장을 써요. 창을 그냥 닫으면 쓰지 않아요.</p>
+              <p className={base.note} role={blocked ? "status" : undefined}>
+                {blocked ? `${blocked} 염색권은 쓰지 않아요.` : "[염색하기]를 누르면 염색권 1장을 써요. 창을 그냥 닫으면 쓰지 않아요."}
+              </p>
               {error && <p className={ui.error}>{error}</p>}
               <div className={base.actions}>
                 <button type="button" className={ui.button} onClick={onClose}>
                   닫기
                 </button>
-                <button type="button" className={cx(ui.button, ui.primary)} disabled={phase === "sending"} onClick={confirm}>
-                  {phase === "sending" ? "잠깐만요…" : `${DYE_PART_NAMES[part]} 염색하기`}
+                <button type="button" className={cx(ui.button, ui.primary)} disabled={phase === "sending" || !!blocked} onClick={() => void confirm()}>
+                  {phase === "sending" ? "잠깐만요…" : `${dyeTargetName(part)} 염색하기`}
                 </button>
               </div>
             </div>

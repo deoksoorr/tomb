@@ -54,7 +54,7 @@ import { DYE_TIME_MS } from "@/lib/dye/palette";
 import { AUTO_PACE_NOTE, AUTO_RANK_NOTE } from "@/lib/forage/auto";
 import { BAG_MAX, DEX_NEW_REWARD, GRADE_PRICE_NOTE } from "@/lib/forage/catalog";
 import { SKY_LABEL_ORDER, WEATHER_BLOCK_MS, WEATHER_LABELS, WEATHERS } from "@/lib/ambience";
-import { PLOT_TIERS, plotCost } from "@/lib/housing/catalog";
+import { PLOT_TIERS, plotCost, TIER_SCORE_NOTE } from "@/lib/housing/catalog";
 import { DYE_SPECIAL_BONUS, LOOK_SCORE_DIVISOR } from "@/lib/lookScore";
 import { BRANCH_INFO, BRANCHES, POTIONS, TIER_GATES } from "@/lib/rpg/catalog";
 import { SKILL_SLOTS } from "@/lib/rpg/hotbar";
@@ -262,7 +262,8 @@ const forage = (touch: boolean): ReactNode[][] => [
     `캠핑장행 정류장 왼쪽 의뢰 게시판에서 ${keyName("E", touch)}`,
     `오늘의 의뢰는 ${QUEST_DAILY}개예요. ${DAY_RESET_TEXT}에 새로 나오고, 하루 1번 무료로 바꿀 수 있어요. 월요일마다 이번 주 큰 의뢰도 1개 나와요. 모은 것을 납품하면 의뢰 도장을 ${QUEST_STAMPS.easy}~${QUEST_STAMPS.hard}개, 큰 의뢰는 ${QUEST_STAMPS.weekly}개 받아요. 끝낸 수로 칭호도 받아요. 어디서든 ${touch ? "메뉴의 [의뢰 보기]" : "바로 가기 줄의 [의뢰]"}로 의뢰를 볼 수 있어요.`,
   ],
-  ["긴급 의뢰", "의뢰 게시판 오른쪽 긴급 의뢰 현판", "가끔 갑자기 열려요. 서버 모두가 같이 막대를 채우고, 혼자서도 끝까지 낼 수 있어요. 1개만 내도 보상을 받아요."],
+  // 11/22 약초·광석·발굴품 의뢰 동안 그 채집 지점은 5분마다 모두 다시 펴요 (lib/forage/rules nodeBloomRule)
+  ["긴급 의뢰", "의뢰 게시판 오른쪽 긴급 의뢰 현판", "가끔 갑자기 열려요. 서버 모두가 같이 막대를 채우고, 혼자서도 끝까지 낼 수 있어요. 1개만 내도 보상을 받아요. 약초, 광석, 발굴품 의뢰 동안에는 그 채집 지점이 평소(10분)보다 자주, 5분마다 모두 다시 피어요."],
   ["도장 교환소", "의뢰 게시판의 [도장 교환소] 칸", "이달의 물건은 매달 1일 새벽 5시에 바뀌고, 염색권은 늘 있어요. 도장은 사라지지 않지만 포인트로 바꾸거나 남에게 줄 수는 없어요."],
 ];
 
@@ -500,6 +501,9 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
               ["창 닫기", "바깥을 눌러도 안 닫혀요. 직접 닫으면 포기한 걸로 쳐요."],
               ["이어서 하기", "도중에 나가도 시간이 남았으면 가방이나 잡화점에서 이어 해요"],
               ["시간이 끝나면", "지금 색과 새 색 중에서 골라요"],
+              ["입은 꾸미기", "아이템마다 색이 따로 남아요. 가방 [꾸미기]에서 골라 [염색]해요. 날개와 연은 못 바꿔요"],
+              ["색 보관함", "원래 색과 칠한 색을 가방에서 공짜로 바꿔 입어요. 칸은 3개까지예요 (2번째 2,000P, 3번째 5,000P)"],
+              ["되팔기", "잡화점 꾸미기를 영구로 가졌으면 가방에서 정가의 30%로 팔아요. 한정·보상은 못 팔아요"],
             ]}
           />
         </section>
@@ -518,7 +522,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
                 "포구 오두막",
                 `바닷가 포구 부동산에서 오두막 터 ${SEA_LOT_COUNT}곳 중에 골라요. 값은 같은 크기 마을 집의 ${SEA_COTTAGE_RATE}배예요. 마을에 집이 있으면 별장이 되어 ${SEA_VILLA_RATE}배예요.`,
               ],
-              ["넓히기", "작은 터에서 넓은 터, 대저택으로 넓혀요"],
+              ["넓히기", `작은 터에서 넓은 터, 대저택으로 넓혀요. 꾸밈 점수도 올라요 (${TIER_SCORE_NOTE}).`],
               ["꾸미기", "가구와 외관을 사서 놓아요"],
               ["놀러 가기", "다른 집을 구경하고 좋아요나 방명록을 남겨요"],
               ["확대·축소", "집 안에서도 마우스 휠이나 두 손가락으로 해요"],

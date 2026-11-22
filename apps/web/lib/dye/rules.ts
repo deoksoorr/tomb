@@ -1,4 +1,4 @@
-import { dyeHex, isDyeColor, isFixedDyeId, itemById, withDyeSpecial, type DyePart, type DyeSpecial, type DyeTicketSpec, type ItemDef } from "@tomb/protocol";
+import { DYE_PART_NAMES, dyeHex, isCharDyePart, isDyeableCosmetic, isDyeColor, isDyeSlotCosmetic, isFixedDyeId, itemById, withDyeSpecial, type DyePart, type DyeSpecial, type DyeTarget, type DyeTicketSpec, type ItemDef } from "@tomb/protocol";
 import type { DyeTier } from "./palette";
 
 // 46·25번 꾸미기 서비스 값 (포인트). 염색권 가격은 카탈로그(packages/protocol items.ts)에 있다.
@@ -21,9 +21,9 @@ export function catalogDye(itemId: string): (ItemDef & { dye: DyeTicketSpec }) |
   return it?.kind === "dye" && it.dye ? (it as ItemDef & { dye: DyeTicketSpec }) : null;
 }
 
-/** 고정 색 염색권이 그 부위에 쓸 수 있는지 (parts가 없으면 모든 부위) */
-export function fixedAllows(parts: readonly DyePart[] | undefined, part: DyePart): boolean {
-  return !parts || parts.length === 0 || parts.includes(part);
+/** 고정 색 염색권이 그 대상에 쓸 수 있는지 (parts가 없으면 모든 부위·아이템, 있으면 그 캐릭터 부위에만) */
+export function fixedAllows(parts: readonly DyePart[] | undefined, target: DyeTarget): boolean {
+  return !parts || parts.length === 0 || (isCharDyePart(target) && parts.includes(target));
 }
 
 /** 시간이 끝난 뒤 "지금 색 vs 새 색"을 고를 수 있는 시간. 안 고르면 지금 색 그대로 (후보는 버린다) */
@@ -75,4 +75,28 @@ export const SPECIAL_DYE_BASE: Readonly<Record<DyeSpecial, string>> = { g: "#e2b
 export function specialDyeColor(kind: DyeSpecial, current: string | null | undefined): string {
   const keep = kind !== "g" && isDyeColor(current) ? dyeHex(current) : null;
   return withDyeSpecial(keep ?? SPECIAL_DYE_BASE[kind], kind);
+}
+
+// ── 11/22 입은 꾸미기 염색 (아이템마다 색) ──
+
+/** 염색 대상 이름: 캐릭터 부위(머리·몸·포인트) 또는 아이템 이름 */
+export function dyeTargetName(target: DyeTarget): string {
+  return isCharDyePart(target) ? DYE_PART_NAMES[target] : (itemById(target)?.name ?? target);
+}
+
+/** 가진 꾸미기인지 (입은 것·벗어 둔 것 — 만료 전, 가방의 새것) */
+export function ownsCosmetic(a: { equipped: readonly { itemId: string; until: number }[]; stash?: readonly { itemId: string; until: number }[]; inventory: Readonly<Record<string, number>> }, item: string, now: number): boolean {
+  return a.equipped.some((e) => e.itemId === item && e.until > now) || (a.stash ?? []).some((e) => e.itemId === item && e.until > now) || (a.inventory[item] ?? 0) > 0;
+}
+
+/**
+ * 그 대상을 지금 염색할 수 없는 까닭 (되면 null). 서버와 염색 창이 같이 쓴다 — 거절되면 염색권을 쓰지 않는다.
+ * owns = 그 꾸미기를 가졌는지 (캐릭터 부위는 늘 된다)
+ */
+export function dyeTargetBlock(target: DyeTarget, owns: (item: string) => boolean): string | null {
+  if (isCharDyePart(target)) return null;
+  if (!isDyeSlotCosmetic(target)) return "염색할 수 없는 꾸미기예요.";
+  if (!isDyeableCosmetic(target)) return "이 꾸미기는 색을 바꿀 수 없어요.";
+  if (!owns(target)) return "가진 꾸미기만 염색할 수 있어요.";
+  return null;
 }

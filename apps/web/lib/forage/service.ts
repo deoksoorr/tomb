@@ -29,7 +29,9 @@ import {
   gatherCount,
   HOOK_WINDOW_MS,
   insectRolls,
-  nodeActive,
+  nodeBloomRule,
+  nodeBloomsAt,
+  nodeRefreshAt,
   nodeSeed,
   nodeWindow,
   pickGather,
@@ -42,14 +44,16 @@ import {
   sizeGrade,
   verifyBugs,
   insectPoints,
-  windowEndsAt,
+  takenNow,
+  tookMember,
   withHighTide,
+  type NodeUrgent,
 } from "./rules";
 import { newAutoSession } from "./auto";
 import { autoStatus, settleAuto, type AutoSettled } from "./autoSettle";
 import { getFishRank } from "./fishRank";
 import { festWeight } from "./quests/urgent";
-import { festivalOn } from "./quests/urgentService";
+import { festivalOn, urgentNodeEvent } from "./quests/urgentService";
 import { pickSunkenCosmetic, SUNKEN_CHANCE, sunkenFallbackFish, sunkenName } from "./sunken";
 import { grantSunkenCosmetic, ownedPermanent } from "./sunkenGrant";
 import { getForageStore, type GrantItem, type Granted, type ForageStore, type Snapshot } from "./store";
@@ -95,8 +99,8 @@ const SOURCE_OF_NPC: Record<NpcId, SellSource | null> = { fishmonger: "fish", co
 /** 이 상인에게 이 품목을 판 값이 쌓이는 포인트 항목 (포인트 배수 이벤트·하루 한도가 이 항목을 본다) */
 export const sellSourceOf = (npcId: NpcId, s: Species): SellSource => SOURCE_OF_NPC[npcId] ?? (s.cat === "fish" ? "fish" : "gather");
 
-function toState(acct: string, snap: Snapshot, now: number): ForageState {
-  const w = nodeWindow(now);
+/** ev = 11/22 진행 중인 긴급 의뢰 (그 종류 지점은 5분마다 모두 핀다 — rules nodeBloomRule) */
+function toState(acct: string, snap: Snapshot, now: number, ev: NodeUrgent | null): ForageState {
   return {
     bag: snap.bag,
     dex: snap.dex,
@@ -104,7 +108,7 @@ function toState(acct: string, snap: Snapshot, now: number): ForageState {
     titles: titlesOf(snap.dex, snap.claims, snap.pay.marks),
     reward: rewardState(snap.claims, snap.pay),
     today: snap.day,
-    nodes: { ids: activeNodes(acct, now, new Set(snap.taken)).map((n) => n.id), refreshAt: windowEndsAt(w), seed: nodeSeed(acct) },
+    nodes: { ids: activeNodes(acct, now, takenNow(snap.took, now, ev), ev).map((n) => n.id), refreshAt: nodeRefreshAt(now, ev), seed: nodeSeed(acct), ...(ev ? { ev } : {}) },
   };
 }
 
@@ -124,7 +128,8 @@ async function readSnap(store: ForageStore, acct: string, now: number): Promise<
 }
 
 export async function forageState(acct: string, now = Date.now(), store: ForageStore = getForageStore()): Promise<ForageState> {
-  return toState(acct, await readSnap(store, acct, now), now);
+  const [snap, ev] = await Promise.all([readSnap(store, acct, now), urgentNodeEvent(now)]);
+  return toState(acct, snap, now, ev);
 }
 
 /** 처음 등록 보상 지급 (lib/forage/dexReward). 지급이 실패해도 잡은 결과는 그대로 — 쌓인 보상은 도감 창에서 받는다 */
@@ -239,7 +244,7 @@ export async function reelIn(acct: string, token: string, ok: boolean, now = Dat
 
 async function autoResponse(store: ForageStore, acct: string, r: AutoSettled, now: number, ip?: string): Promise<AutoFishResponse> {
   const dex = await dexGainOf(store, acct, r.items, ip, now);
-  const snap = await readSnap(store, acct, now);
+  const [snap, ev] = await Promise.all([readSnap(store, acct, now), urgentNodeEvent(now)]);
   return {
     auto: r.session ? autoStatus(r.session, snap.day, now) : null,
     items: r.items,
@@ -248,7 +253,7 @@ async function autoResponse(store: ForageStore, acct: string, r: AutoSettled, no
     ...(r.full ? { full: true } : {}),
     ...(r.ended ? { ended: r.ended } : {}),
     ...withDex(dex),
-    state: toState(acct, snap, now),
+    state: toState(acct, snap, now, ev),
   };
 }
 
@@ -322,10 +327,11 @@ export async function startGather(acct: string, nodeId: string, now = Date.now()
   const store = getForageStore();
   // 11/16 갯벌 구멍: 물이 빠져 구멍이 드러났을 때만 (protocol seaDigOpen — 화면과 같은 계산, 저장소를 읽기 전에 막는다)
   if (n.kind === "clam" && !seaDigOpen(n, now)) throw new HttpError(409, "TIDE_IN", SEA_DIG_CLOSED_MSG);
-  const w = nodeWindow(now);
-  // 오늘 기록·이번 창에 캔 지점만 (명령 2개)
-  const snap = await store.today(acct, kstDay(now), w);
-  if (!nodeActive(acct, n, w) || snap.taken.includes(n.id)) throw new HttpError(409, "NODE_EMPTY", "지금은 비어 있어요. 조금 뒤에 다시 피어나요.");
+  // 오늘 기록·이번 묶음의 캔 자리 기록만 (명령 2개). 11/22 긴급 의뢰는 서버가 스스로 본다 (일정은 기억 — 의뢰 중에만 30초에 한 번 저장소)
+  const [snap, ev] = await Promise.all([store.today(acct, kstDay(now), nodeWindow(now)), urgentNodeEvent(now)]);
+  // 11/22 지점마다 자기 규칙 창 (긴급 의뢰 종류면 5분 창·음수 id) — 티켓·캔 자리 기록도 이 창으로
+  const w = nodeBloomRule(n.kind, now, ev).window;
+  if (!nodeBloomsAt(nodeSeed(acct), n, now, ev) || snap.took.includes(tookMember(w, n.id))) throw new HttpError(409, "NODE_EMPTY", "지금은 비어 있어요. 조금 뒤에 다시 피어나요.");
   const nonce = nanoid(16);
   const begin = async (payload: GatherPayload, ttl: number) => {
     if (!(await store.begin(acct, nonce, JSON.stringify(payload), ttl, hourBucket(now), FORAGE_STARTS_PER_HOUR)))
@@ -413,7 +419,7 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
   const npc = npcById(npcId);
   if (!npc) throw new HttpError(400, "INVALID_INPUT", "그런 상인은 없어요.");
   const day = kstDay(now);
-  const [snap, acc, boost] = await Promise.all([store.snapshot(acct, day, nodeWindow(now)), getAccounts().get(acct, day, now), earnBoost(now)]);
+  const [snap, acc, boost, ev] = await Promise.all([store.snapshot(acct, day, nodeWindow(now)), getAccounts().get(acct, day, now), earnBoost(now), urgentNodeEvent(now)]);
   // 11/22 id는 가방 칸 (대물·월척은 `${종}~1`·`~2` — 한 개 값은 등급 배수를 반올림, catalog gradedPrice). 사는지는 종으로 본다
   const units: { id: string; price: number; src: SellSource }[] = [];
   const unitPrice: Record<string, number> = {};
@@ -444,7 +450,7 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
   }
   const asked = value.fish + value.gather;
   const capped = asked < units.reduce((n, u) => n + u.price, 0);
-  if (!asked) return { sold: {}, earned: 0, capped: true, state: toState(acct, snap, now), me: await loadMe(getAccounts(), acct, now) };
+  if (!asked) return { sold: {}, earned: 0, capped: true, state: toState(acct, snap, now, ev), me: await loadMe(getAccounts(), acct, now) };
   if (!(await store.remove(acct, plan))) throw new HttpError(409, "BAG_CHANGED", "가방이 바뀌었어요. 다시 골라 주세요.");
   // 11/19 오늘의 할 일 「물고기나 채집물 팔기」면 같은 적립 스크립트에서 진행도 (내 정보를 다시 읽어 화면이 바로 맞춘다).
   // 11/20 항목이 둘이면 적립도 둘 — 할 일 진행은 한 번 판 것이니 첫 적립에만

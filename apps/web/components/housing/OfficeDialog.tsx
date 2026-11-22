@@ -21,6 +21,8 @@ import {
   seaUpgradeCost,
   SORT_LABELS,
   SORTS,
+  TIER_SCORE_BONUS,
+  TIER_SCORE_NOTE,
   tierById,
   type CottageStyleId,
   type HouseSort,
@@ -376,7 +378,8 @@ function MyPlot({
         <p className={styles.score}>
           꾸밈 점수 <strong>{fmt(h.score)}</strong>{" "}
           <span className={styles.small}>
-            (물건 {fmt(h.placedScore)} + 좋아요 {h.likes}×{LIKE_WEIGHT})
+            (물건 {fmt(h.placedScore)} + 좋아요 {h.likes}×{LIKE_WEIGHT}
+            {TIER_SCORE_BONUS[h.tier] > 0 ? ` + ${tier.name} ${TIER_SCORE_BONUS[h.tier]}` : ""})
           </span>
         </p>
         <TitleProgress score={h.score} />
@@ -438,6 +441,8 @@ function MyPlot({
                 ? `오두막은 한 채만 가질 수 있어요. 대신 ${up.name}(${up.w}×${up.h}칸, 물건 ${up.maxItems}개)으로 넓힐 수 있어요. 놓아 둔 물건은 그대로예요. 포구에 선 오두막도 더 크게 바뀌어요.`
                 : `집은 한 채만 가질 수 있어요. 대신 ${up.name}(${up.w}×${up.h}칸, 물건 ${up.maxItems}개)으로 넓힐 수 있어요. 놓아 둔 물건은 그대로예요. 마을에 있는 집도 더 크게 바뀌어요.`}
             </p>
+            {/* 11/22 터 크기 꾸밈 점수 (누적 값) */}
+            <p className={styles.small}>넓히면 꾸밈 점수도 올라요 ({TIER_SCORE_NOTE}).</p>
             <TierCompare exterior={h.exterior} current={h.tier} {...(sea ? { cottage: h.style ?? "wood" } : {})} />
             <button
               type="button"
@@ -492,7 +497,7 @@ function HouseList({ onVisit, myId, busy }: { onVisit: (id: string) => void; myI
         ))}
       </div>
       <p className={styles.small}>
-        {sort === "new" ? "최근에 분양된 집이에요." : `${SORT_LABELS[sort]} 순 상위 50곳이에요. 꾸밈 점수는 놓은 물건 점수에 좋아요 × ${LIKE_WEIGHT}를 더한 값이에요.`}
+        {sort === "new" ? "최근에 분양된 집이에요." : `${SORT_LABELS[sort]} 순 상위 50곳이에요. 꾸밈 점수는 놓은 물건 점수에 좋아요 × ${LIKE_WEIGHT}와 터 크기 점수(${TIER_SCORE_NOTE})를 더한 값이에요.`}
       </p>
       {error && <p className={styles.error}>{error}</p>}
       {!houses && !error && <p className={styles.muted}>불러오는 중…</p>}

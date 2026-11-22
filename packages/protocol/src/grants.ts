@@ -1,7 +1,7 @@
 import { b64urlDecode, b64urlEncode, hmacSign, hmacVerify } from "./token";
 import { sanitizeLook, isFireworkId, MEGAPHONE_MAX, type Look, type MegaphoneScope } from "./items";
 import { CHAMP_ALL, CHAMP_AURA_OFF, isAvatarBody } from "./constants";
-import { packDye, unpackDye, type AvatarDye } from "./dye";
+import { packDye, packItemDye, sanitizeItemDye, unpackWireDye, type AvatarDye } from "./dye";
 import { bbqItem, DRUNK_MAX, DRUNK_STEP_MS, isBbqId, type BbqItemId } from "./bbq";
 import { GOBLIN_POINTS_CAP } from "./npc";
 
@@ -36,8 +36,10 @@ const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 export async function signGrant(secret: string, g: Grant): Promise<string> {
-  // look 증서의 염색은 짧은 형식("aabbcc..f4a7b9", 기본색이면 "")으로 싣는다
-  const wire = g.kind === "look" && g.dye !== undefined ? { ...g, dye: packDye(g.dye) } : g;
+  // look 증서의 염색은 짧은 형식("aabbcc..f4a7b9", 기본색이면 "")으로 싣는다.
+  // 11/22 입은 아이템 색은 idye에 따로 (dye는 옛 형식 그대로 — 옛 실시간 서버는 32자 넘는 dye를 통째로 버린다). 없으면 idye는 뺀다
+  const itemDye = g.kind === "look" && g.dye !== undefined ? packItemDye(sanitizeItemDye(g.dye.items, g.look)) : "";
+  const wire = g.kind === "look" && g.dye !== undefined ? { ...g, dye: packDye(g.dye), ...(itemDye ? { idye: itemDye } : {}) } : g;
   const body = b64urlEncode(enc.encode(JSON.stringify(wire)));
   return `${body}.${await hmacSign(secret, "grant:" + body)}`;
 }
@@ -61,13 +63,14 @@ export async function verifyGrant(
     return null;
   }
   if (typeof g.visitorId !== "string" || typeof g.exp !== "number" || g.exp < nowSec) return null;
+  const look = g.kind === "look" ? sanitizeLook(g.look) : [];
   if (g.kind === "look")
     return {
       kind: "look",
       visitorId: g.visitorId,
-      look: sanitizeLook(g.look),
+      look,
       exp: g.exp,
-      ...(typeof g.dye === "string" ? { dye: unpackDye(g.dye) } : {}),
+      ...(typeof g.dye === "string" ? { dye: unpackWireDye(g.dye, g.idye, look) } : {}),
       ...(isAvatarBody(g.body) ? { body: g.body } : {}),
       ...(isChampField(g.champ) ? { champ: g.champ } : {}),
       ...(g.mgr === 0 || g.mgr === 1 ? { mgr: g.mgr } : {}),

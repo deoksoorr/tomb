@@ -1,4 +1,4 @@
-import { DYE_PARTS, dyeSpecialOf, type DyePart, type DyeSpecial } from "@tomb/protocol";
+import { DYE_PARTS, dyeSpecialOf, type DyeSpecial, type DyeTarget } from "@tomb/protocol";
 import { kstHour, parseAmbienceOverride, timePhase } from "@/lib/ambience";
 import { AV_COLS, AV_H, AV_W, buildAvatarSheet, specDye, withDyePart } from "./avatar";
 import { parseHex, type Color } from "./pixel";
@@ -10,7 +10,8 @@ import { parseHex, type Color } from "./pixel";
 //  r 무지개:    시간이 지나며 색상이 한 바퀴 돈다 (명암은 그대로)
 //  n 야광:      밤(해질녘·밤)이면 은은하게 빛난다 (미리보기에서는 늘 빛나 보인다)
 
-export type DyeFxPart = { part: DyePart; kind: DyeSpecial; color: Color };
+/** part = 캐릭터 부위 또는 11/22 염색한 아이템 id */
+export type DyeFxPart = { part: DyeTarget; kind: DyeSpecial; color: Color };
 
 /** 색 표기(avatarColorSpec)에 담긴 특수 색 부위들 */
 export function specSpecials(spec: string): DyeFxPart[] {
@@ -20,6 +21,11 @@ export function specSpecials(spec: string): DyeFxPart[] {
     const c = d[part];
     const kind = dyeSpecialOf(c);
     if (c && kind) out.push({ part, kind, color: parseHex(c) });
+  }
+  // 11/22 아이템 특수 색 (입지 않은 아이템은 가면이 비어 연출도 없다)
+  for (const [part, c] of Object.entries(d.items ?? {})) {
+    const kind = dyeSpecialOf(c);
+    if (kind) out.push({ part, kind, color: parseHex(c) });
   }
   return out;
 }
@@ -34,7 +40,7 @@ const maskCache = new Map<string, HTMLCanvasElement>();
  * 부위 가면 시트 (buildAvatarSheet와 같은 배치): 그 부위 픽셀만 흰색 명암으로 남긴다.
  * 그 부위를 거의 흰색·거의 검은색으로 칠한 두 시트를 비교해, 달라진 픽셀을 흰색 쪽 명암으로 둔다.
  */
-export function buildPartMask(spec: string, look: readonly string[], body: string, part: DyePart): HTMLCanvasElement {
+export function buildPartMask(spec: string, look: readonly string[], body: string, part: DyeTarget): HTMLCanvasElement {
   const key = `${spec}|${look.join(",")}|${body}|${part}`;
   const hit = maskCache.get(key);
   if (hit) return hit;
@@ -163,7 +169,7 @@ const css = (c: Color) => `#${c.toString(16).padStart(6, "0")}`;
  * 미리보기 캔버스에 특수 색 연출을 그린다: 시트 칸 col 프레임을 (dx, dy)에 그린 아바타 위에.
  * masks = 부위별 가면 시트. 미리보기는 야광을 늘 켠다 (night = true)
  */
-export function drawDyeFx(ctx: CanvasRenderingContext2D, fxs: readonly DyeFxPart[], masks: ReadonlyMap<DyePart, HTMLCanvasElement>, col: number, dx: number, dy: number, now: number, night = true): void {
+export function drawDyeFx(ctx: CanvasRenderingContext2D, fxs: readonly DyeFxPart[], masks: ReadonlyMap<DyeTarget, HTMLCanvasElement>, col: number, dx: number, dy: number, now: number, night = true): void {
   if (!fxs.length) return;
   scratch ??= document.createElement("canvas");
   scratch.width = AV_W;

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  isDyeableCosmetic,
+  JOIN_TOKEN_MAX_LEN,
+  LOOK_GRANT_MAX,
   AVATAR_BODIES,
   CHAMP_ALL,
   CHAMP_AURA_OFF,
@@ -85,8 +88,8 @@ describe("닉네임 꾸미기 아이템", () => {
 describe("착용 목록 (look)", () => {
   const body = ["hat_cat", "neck_scarf", "back_wings", "hand_lantern", "aura_firefly", "feet_flowers", "pet_ghost"];
 
-  it("몸 7부위 + 이름 글자 + 이름표 = 9개까지, 부위마다 하나", () => {
-    expect(LOOK_MAX_PARTS).toBe(9);
+  it("몸 8부위(11/22 옷·등 나눔) + 이름 글자 + 이름표 = 10개까지, 부위마다 하나", () => {
+    expect(LOOK_MAX_PARTS).toBe(10);
     const full = [...body, "nf_rainbow", "np_cloud"];
     expect(sanitizeLook(full)).toEqual(full);
     // 같은 부위 두 번째는 버린다 (이름 글자 둘, 바탕판 둘)
@@ -120,13 +123,15 @@ describe("착용 목록 (look)", () => {
     const look = [...longest.values(), [...TITLE_IDS].sort((a, b) => b.length - a.length)[0]];
     expect(look.length).toBe(LOOK_MAX_PARTS + 1);
     const bodyId = [...AVATAR_BODIES].map((b) => b.id).sort((a, b) => b.length - a.length)[0];
-    const dye = { head: "#aabbcc~g", body: "#aabbcc~s", accent: "#aabbcc~r" };
+    // 11/22 염색되는 칸(머리·목·옷·등) 아이템마다 특수 색까지
+    const items = Object.fromEntries(look.filter((id) => isDyeableCosmetic(id)).map((id) => [id, "#aabbcc~g"]));
+    const dye = { head: "#aabbcc~g", body: "#aabbcc~s", accent: "#aabbcc~r", items };
     const exp = 1_999_999_999;
     const sign = (l: string[]) => signGrant(s, { kind: "look", visitorId: "V1StGXR8_Z5jdHi6B-myT", look: l, exp, dye, body: bodyId, champ: CHAMP_ALL | CHAMP_AURA_OFF });
 
     const withNames = await sign(look);
     const wire = encodeEvent({ t: "look", grant: withNames });
-    expect(withNames.length).toBeLessThanOrEqual(600);
+    expect(withNames.length).toBeLessThanOrEqual(LOOK_GRANT_MAX);
     expect(wire.length).toBeLessThanOrEqual(MAX_MESSAGE_BYTES);
     expect(parseC2S(wire)).toEqual({ t: "look", grant: withNames });
     expect(await verifyGrant(s, withNames, exp - 10)).toMatchObject({ look });
@@ -135,9 +140,10 @@ describe("착용 목록 (look)", () => {
     // 11/15 수집 의뢰 보상은 새 실시간 서버와 함께 나오므로 옛 한도 계산에서 뺀다 (부위마다 의뢰 보상이 아닌 가장 긴 id, 몸도 처음부터 있던 것)
     const oldLongest = new Map<string, string>();
     // 11/20 회장님 독대 1위 보상도 새 실시간 서버와 함께 나온다 (옛 서버는 모르는 id를 버린다)
-    for (const i of ITEMS) if (i.kind === "cosmetic" && i.slot && !i.quest && !isChairItem(i.id) && (oldLongest.get(i.slot)?.length ?? 0) < i.id.length) oldLongest.set(i.slot, i.id);
+    // 11/22 등(pack) 칸은 옛 서버엔 옷(back)과 같은 칸이라 한 칸으로 센다
+    for (const i of ITEMS) if (i.kind === "cosmetic" && i.slot && !i.quest && !isChairItem(i.id) && (oldLongest.get(i.slot === "pack" ? "back" : i.slot)?.length ?? 0) < i.id.length) oldLongest.set(i.slot === "pack" ? "back" : i.slot, i.id);
     const oldBody = [...AVATAR_BODIES].filter((b) => !QUEST_BODIES.some((q) => q.id === b.id)).map((b) => b.id).sort((a, b) => b.length - a.length)[0];
-    const without = await signGrant(s, { kind: "look", visitorId: "V1StGXR8_Z5jdHi6B-myT", look: [...oldLongest.values()].filter((id) => !isNameSlot(ITEMS.find((i) => i.id === id)?.slot)), exp, dye, body: oldBody, champ: CHAMP_ALL | CHAMP_AURA_OFF });
+    const without = await signGrant(s, { kind: "look", visitorId: "V1StGXR8_Z5jdHi6B-myT", look: [...oldLongest.values()].filter((id) => !isNameSlot(ITEMS.find((i) => i.id === id)?.slot)), exp, dye: { head: dye.head, body: dye.body, accent: dye.accent }, body: oldBody, champ: CHAMP_ALL | CHAMP_AURA_OFF });
     expect(without.length).toBeLessThanOrEqual(400);
   });
 
@@ -159,7 +165,12 @@ describe("착용 목록 (look)", () => {
       dex: 31,
       champ: 7,
     });
-    expect(token.length).toBeLessThanOrEqual(600);
+    // 11/22 옷·등 칸이 나뉘어 9부위 → 10부위 (600 → 640). 아이템 색까지 실으면 입장 토큰 한도(JOIN_TOKEN_MAX_LEN) 안
+    expect(token.length).toBeLessThanOrEqual(640);
+    const items = Object.fromEntries(look.filter((id) => isDyeableCosmetic(id)).map((id) => [id, "#aabbcc~g"]));
+    const dyed = await signJoinToken(s, { visitorId: "V1StGXR8_Z5jdHi6B-myT", name: "가나다라마바사아자차카타", color: "#aabbcc", channel: 12, look, body: bodyId, dye: { head: "#aabbcc~g", items }, staff: true, dex: 31, champ: 7 });
+    expect(dyed.length).toBeLessThanOrEqual(JOIN_TOKEN_MAX_LEN);
+    expect((await verifyJoinToken(s, dyed))?.dye?.items).toEqual(items);
     const claims = await verifyJoinToken(s, token);
     expect(nameStyleOfLook(claims?.look)).toEqual(nameStyleOfLook(look));
     expect(nameStyleOfLook(look).color).not.toBeNull();

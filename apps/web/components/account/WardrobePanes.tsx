@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { DIR, isChampItem, type CosmeticSlot } from "@tomb/protocol";
+import { DIR, isChampItem, isDyeableCosmetic, isDyeSlotCosmetic, type CosmeticSlot } from "@tomb/protocol";
+import type { Me } from "@/lib/types";
+import { resellBlock, resellPrice } from "@/lib/resell";
+import { ItemDyeLine, ItemDyePanel, itemColorOf } from "../dye/itemDyeInfo";
 import { fittingLook } from "../shop/fitting";
 import { OutfitCanvas, useOutfitView, ViewControls } from "../shop/OutfitPreview";
 import { cx } from "../ui/cx";
@@ -35,8 +38,8 @@ import styles from "./WardrobePanes.module.css";
 //    작은 입어 보기(지금 모습 + 고른 것, 이름 꾸미기면 이름표까지)에 보이고 거기서도 입는다
 // 주간 1위 전용 모자는 [레이스 보상] 칸에서 다룬다 (지금 모습에는 입은 그대로 보이고, 목록·칩 개수에서는 뺀다)
 
-/** 몸 위치에 맞춘 칸 배치 (낮은 칸 compact): 아바타는 가운데 세 줄, 왼쪽 머리·등·오라, 오른쪽 목·손·펫, 맨 아래 이름 글자·발·이름표 */
-const DOLL_AREAS = `"head fig neck" "back fig hand" "aura fig pet" "nameColor feet namePlate"`;
+/** 몸 위치에 맞춘 칸 배치 (낮은 칸 compact): 아바타는 가운데 네 줄, 왼쪽 머리·옷·손·오라, 오른쪽 목·등·펫·발, 맨 아래 이름 글자·이름표 (11/22 등 칸 추가) */
+const DOLL_AREAS = `"head fig neck" "back fig pack" "hand fig pet" "aura fig feet" "nameColor . namePlate"`;
 
 type Act = (task: () => Promise<void>, done: string) => Promise<void>;
 type Avatar = { color: string; body: string };
@@ -58,6 +61,14 @@ function runWear(entries: readonly WardrobeEntry[], e: WardrobeEntry, act: Act):
   return act(() => wearStashed(e.item.id), `${name}을(를) 다시 입었어요.${swap}`);
 }
 
+/** 칸 말풍선에 붙는 염색 한 줄 */
+function dyeTip(itemId: string, itemDyes: Me["itemDyes"]): string {
+  if (!isDyeSlotCosmetic(itemId)) return "";
+  if (!isDyeableCosmetic(itemId)) return "\n염색: 염색 불가";
+  const c = itemColorOf(itemDyes, itemId);
+  return `\n염색: ${c ? c.slice(0, 7) : "원래 색"}`;
+}
+
 // ── [지금 모습] ──
 
 export function LookPane({
@@ -67,7 +78,10 @@ export function LookPane({
   score,
   name,
   onPickSlot,
+  itemDyes,
 }: {
+  /** 11/22 아이템마다 색 보관함 (칸 아이콘을 칠한 색으로) */
+  itemDyes?: Me["itemDyes"];
   entries: WardrobeEntry[];
   now: number;
   avatar: Avatar;
@@ -106,10 +120,10 @@ export function LookPane({
               area={slot}
               label={label}
               name={e?.item.name ?? null}
-              icon={e ? <ItemIcon itemId={e.item.id} size={48} /> : null}
+              icon={e ? <ItemIcon itemId={e.item.id} size={48} dye={itemColorOf(itemDyes, e.item.id)} /> : null}
               silhouette={<ItemIcon itemId={SLOT_SILHOUETTE[slot]} size={48} />}
               meter={e?.until ? { ratio: timeLeftRatio(e.until, now), text: remainingLabel(e.until, now) } : null}
-              tip={e ? { title: e.item.name, body: e.item.desc } : { title: `${label} · 비어 있어요`, body: "눌러서 이 부위에 입을 것을 골라요." }}
+              tip={e ? { title: e.item.name, body: `${e.item.desc}${dyeTip(e.item.id, itemDyes)}` } : { title: `${label} · 비어 있어요`, body: "눌러서 이 부위에 입을 것을 골라요." }}
               ariaLabel={`${label} 칸, ${e ? `${e.item.name} 착용 중, ${remainingLabel(e.until!, now)}` : "비어 있음"}. 누르면 [꾸미기]에서 ${label} 목록`}
               onClick={() => onPickSlot(slot)}
             />
@@ -138,7 +152,12 @@ export function PickPane({
   name,
   filter,
   onFilter,
+  me,
+  onNotice,
 }: {
+  /** 11/22 아이템 정보의 염색·색 보관함·되팔기 (없으면 그 칸을 그리지 않는다) */
+  me?: Me;
+  onNotice?: (m: string | null) => void;
   entries: WardrobeEntry[];
   now: number;
   pending: boolean;
@@ -180,6 +199,9 @@ export function PickPane({
               {sel ? entryStatus(sel, now) : "카드를 누르면 여기서 입어 볼 수 있어요."}
               {selOld && ` · 입으면 ${selOld.name}은(는) 벗어 둬요`}
             </p>
+            {sel && me && onNotice && (
+              <ItemDyePanel me={me} itemId={sel.item.id} state={sel.state} until={sel.until} avatar={avatar} look={wornLook(entries)} onNotice={onNotice} />
+            )}
             {sel && (
               <button
                 type="button"
@@ -214,13 +236,15 @@ export function PickPane({
                       return (
                         <li key={k} className={styles.card} data-state={e.state} data-picked={picked === k || undefined}>
                           <button type="button" className={styles.cardPick} aria-pressed={picked === k} title={e.item.desc} onClick={() => setPicked(picked === k ? null : k)}>
-                            <ItemIcon itemId={e.item.id} size={32} />
+                            <ItemIcon itemId={e.item.id} size={32} dye={itemColorOf(me?.itemDyes, e.item.id)} />
                             <span className={styles.cardMain}>
                               <span className={styles.cardName}>{e.item.name}</span>
                               <LookScoreBadge itemId={e.item.id} short />
                               <span className={styles.status} data-state={e.state}>
                                 {entryStatus(e, now)}
                               </span>
+                              <ItemDyeLine itemId={e.item.id} itemDyes={me?.itemDyes} className={styles.cardDye} />
+                              {!resellBlock(e.item.id, e.state, e.until) && <span className={styles.cardDye}>되팔기 {resellPrice(e.item.id).toLocaleString("ko-KR")}P</span>}
                             </span>
                           </button>
                           <button

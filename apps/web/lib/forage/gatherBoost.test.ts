@@ -68,9 +68,9 @@ describe("지점 수 (맵마다·종류마다)", () => {
 });
 
 describe("얼마나 자주 피나 (기대값)", () => {
-  it("창 10분, 밀도는 그대로", () => {
+  it("창 10분, 밀도는 그대로 (11/22 광석만 0.5 → 0.6 — 약초와 같게)", () => {
     expect(NODE_WINDOW_MS).toBe(10 * 60_000);
-    expect(NODE_DENSITY).toEqual(BEFORE_DENSITY);
+    expect(NODE_DENSITY).toEqual({ ...BEFORE_DENSITY, ore: 0.6 });
   });
 
   it("한 시간에 피는 지점이 맵마다 두 배쯤 (마을·캠핑장 약 2.3배, 바닷가는 뭍 지점이 새로 4배 남짓)", () => {
@@ -83,9 +83,10 @@ describe("얼마나 자주 피나 (기대값)", () => {
     }
     expect(after("sea") / before("sea")).toBeGreaterThan(2.5);
     // 한 창에 피어 있는 수 (마을: 20.55 → 31.05, 캠핑장: 12.15 → 18.45, 바닷가: 7.2 → 20.6). 한 시간에: 마을 82 → 186, 캠핑장 49 → 111, 바닷가 29 → 124
-    expect(openPerWindow(countOf("village") as Record<NodeKind, number>, NODE_DENSITY)).toBeCloseTo(31.05, 2);
-    expect(openPerWindow(countOf("camp") as Record<NodeKind, number>, NODE_DENSITY)).toBeCloseTo(18.45, 2);
-    expect(openPerWindow(countOf("sea") as Record<NodeKind, number>, NODE_DENSITY)).toBeCloseTo(20.6, 2);
+    // 11/22 광석 0.6 → 마을 32.25(광석 6 → 7.2), 캠핑장 19.25, 바닷가 21.0
+    expect(openPerWindow(countOf("village") as Record<NodeKind, number>, NODE_DENSITY)).toBeCloseTo(32.25, 2);
+    expect(openPerWindow(countOf("camp") as Record<NodeKind, number>, NODE_DENSITY)).toBeCloseTo(19.25, 2);
+    expect(openPerWindow(countOf("sea") as Record<NodeKind, number>, NODE_DENSITY)).toBeCloseTo(21.0, 2);
   });
 
   it("실제로 굴려도 기대값 근처 (사람 200 × 창 30)", () => {

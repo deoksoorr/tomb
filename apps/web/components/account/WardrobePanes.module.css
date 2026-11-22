@@ -177,7 +177,8 @@
 /* 목록(왼쪽) + 입어 보기(오른쪽, 목록을 내려도 그 자리) */
 .pickBody {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 176px;
+  /* 11/22 자세히 보기에 색 보관함·되팔기가 들어가 조금 넓게 (176 → 204) */
+  grid-template-columns: minmax(0, 1fr) 204px;
   grid-template-areas: "list fit";
   align-items: start;
   gap: 10px;
@@ -200,6 +201,9 @@
   padding: 8px 6px;
   background: var(--bg-deep);
   box-shadow: var(--px-border);
+  /* 11/22 붙어 다니는 칸이 화면보다 길면 아래가 잘려서, 칸 안에서 스크롤한다 */
+  max-height: calc(100dvh - 240px);
+  overflow-y: auto;
 }
 
 /* 작은 입어 보기 무대 (×2 = 144×128) */
@@ -357,6 +361,8 @@
       "stage info";
     align-items: center;
     padding: 4px 8px 6px;
+    /* 11/22 색 보관함·되팔기가 들어가 길어져도 목록을 다 가리지 않게 */
+    max-height: 46dvh;
   }
 
   .fitting > .namePv {
@@ -378,4 +384,10 @@
   .card {
     scroll-margin-top: 180px;
   }
+}
+
+/* 11/22 카드의 염색·되팔기 한 줄 */
+.cardDye {
+  font-size: 11px;
+  opacity: 0.85;
 }

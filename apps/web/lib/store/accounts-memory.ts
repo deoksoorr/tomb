@@ -211,9 +211,19 @@ export class MemoryAccounts implements AccountStore {
     return (a.stash ??= new Map());
   }
 
-  /** 만료된 착용품·벗어 둔 꾸미기를 지운다 */
+  /** 11/22 옷(back)·등(pack) 칸 나눔: 예전 back 칸에 입혀 둔 등 꾸미기는 pack 칸으로 옮긴다 (pack이 비어 있을 때만) */
+  private fixSlots(a: Acct): void {
+    const back = a.look.get("back");
+    if (back && itemById(back.itemId)?.slot === "pack" && !a.look.has("pack")) {
+      a.look.set("pack", back);
+      a.look.delete("back");
+    }
+  }
+
+  /** 만료된 착용품·벗어 둔 꾸미기를 지운다 (옷·등 칸 옮기기도) */
   private prune(a: Acct, now: number): void {
     for (const [slot, e] of a.look) if (e.until <= now) a.look.delete(slot);
+    this.fixSlots(a);
     const stash = this.stashOf(a);
     for (const [itemId, until] of stash) if (until <= now) stash.delete(itemId);
   }
@@ -233,6 +243,7 @@ export class MemoryAccounts implements AccountStore {
 
   async get(id: string, day: string, now: number): Promise<AccountRecord> {
     const a = this.accts.get(id) ?? this.blank();
+    this.fixSlots(a);
     return {
       points: a.points,
       lifetimePoints: a.lifetime ?? a.points,
@@ -309,6 +320,21 @@ export class MemoryAccounts implements AccountStore {
     const before = a.points;
     a.points = Math.min(WALLET_MAX, a.points + amount);
     this.stat(a, kstDay(now), "refund", a.points - before);
+    a.ledger = [{ at: now, amount, reason }, ...(a.ledger ?? [])].slice(0, 100);
+    return a.points;
+  }
+
+  async sellPermanent(id: string, itemId: string, amount: number, reason: string, now: number): Promise<number | "worn" | "none"> {
+    assertPointAmount(amount);
+    const a = this.acct(id);
+    if ([...a.look.values()].some((e) => e.itemId === itemId)) return "worn";
+    const stash = this.stashOf(a);
+    if ((stash.get(itemId) ?? 0) < PERMANENT_UNTIL) return "none";
+    stash.delete(itemId);
+    a.lifetime ??= a.points;
+    const before = a.points;
+    a.points = Math.min(WALLET_MAX, a.points + amount);
+    this.stat(a, kstDay(now), "resell", a.points - before);
     a.ledger = [{ at: now, amount, reason }, ...(a.ledger ?? [])].slice(0, 100);
     return a.points;
   }

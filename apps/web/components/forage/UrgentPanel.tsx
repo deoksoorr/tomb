@@ -16,6 +16,7 @@ import {
   urgentCapLine,
   urgentFilled,
   URGENT_KING_LINE,
+  URGENT_REGROW_LINE,
   urgentRewardLine,
   urgentStage,
   URGENT_CLAIM_MS,
@@ -356,6 +357,8 @@ function LiveCard({ ev, now, mine, cap, bag }: { ev: UrgentLive; now: number; mi
             </p>
           )}
           {cap > 0 && <p className={ui.hint}>{urgentCapLine(ev.kind, cap, room)}</p>}
+          {/* 11/22 약초·광석·발굴품 의뢰 동안 그 지점이 5분마다 모두 다시 핀다 (lib/forage/rules nodeBloomRule) */}
+          {URGENT_REGROW_LINE[ev.kind] && <p className={ui.hint}>{URGENT_REGROW_LINE[ev.kind]}</p>}
           <div className={u.deliverRow}>
             <span className={u.quick}>
               <button type="button" className={ui.button} disabled={busy || !rows.length || room <= 0} onClick={() => pickAll(true)}>

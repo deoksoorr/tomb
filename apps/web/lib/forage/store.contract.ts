@@ -21,7 +21,7 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
     const a = acct();
     const s = await store.snapshot(a, DAY, 1);
     const pay = { settled: null, pending: {}, paid: {}, marks: [] };
-    expect(s).toEqual({ bag: {}, dex: {}, claims: {}, pay, day: { fish: 0, gather: 0, auto: 0 }, taken: [] });
+    expect(s).toEqual({ bag: {}, dex: {}, claims: {}, pay, day: { fish: 0, gather: 0, auto: 0 }, took: [] });
     expect(await store.dex(a)).toEqual({ dex: {}, claims: {}, pay });
   });
 
@@ -73,17 +73,19 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
     expect((await store.snapshot(a, "20261113", 1)).day.fish).toBe(2);
   });
 
-  it("today: 오늘 기록·이번 창에 캔 지점은 snapshot과 같다", async () => {
+  it("today: 오늘 기록·이번 묶음의 캔 자리 기록은 snapshot과 같다", async () => {
     const a = acct();
-    expect(await store.today(a, DAY, 3)).toEqual({ day: { fish: 0, gather: 0, auto: 0 }, taken: [] });
+    expect(await store.today(a, DAY, 3)).toEqual({ day: { fish: 0, gather: 0, auto: 0 }, took: [] });
     await store.grant(a, DAY, "gather", [{ id: "h_mugwort", size: 0 }], 99, { window: 3, node: "n_a" });
     await store.grant(a, DAY, "fish", [{ id: "f_carp", size: 400 }], 99);
     const t = await store.today(a, DAY, 3);
     const s = await store.snapshot(a, DAY, 3);
-    expect(t).toEqual({ day: s.day, taken: s.taken });
-    expect(t.taken).toEqual(["n_a"]);
+    expect(t).toEqual({ day: s.day, took: s.took });
+    expect(t.took).toEqual(["3:n_a"]);
     expect(t.day).toMatchObject({ fish: 1, gather: 1 });
-    expect((await store.today(a, DAY, 4)).taken).toEqual([]);
+    // 11/22 기록은 `${창}:${지점}` 그대로 — 같은 묶음(창 3·4·5)이면 같이 보이고, 지점마다 어느 창을 볼지는 규칙이 정한다 (rules takenNow)
+    expect((await store.today(a, DAY, 4)).took).toEqual(["3:n_a"]);
+    expect((await store.today(a, DAY, 6)).took).toEqual([]);
   });
 
   it("한 칸이 가득 차면 가방에는 안 들어가도 도감엔 남는다", async () => {
@@ -104,12 +106,18 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
     // 다른 창이면 또 캘 수 있다
     expect(await store.grant(a, DAY, "gather", [{ id: "o_coal", size: 0 }], 99, { window: 8, node: "o48_200" })).not.toBeNull();
     const s7 = await store.snapshot(a, DAY, 7);
-    expect(s7.taken.sort()).toEqual(["b874_1088", "o48_200"]);
-    // 11/16 창 셋(6·7·8)이 한 키에 묶여도 창마다 따로 센다
-    expect((await store.today(a, DAY, 8)).taken).toEqual(["o48_200"]);
-    expect((await store.today(a, DAY, 6)).taken).toEqual([]);
-    expect((await store.today(a, DAY, 9)).taken).toEqual([]);
+    expect(s7.took.sort()).toEqual(["7:b874_1088", "7:o48_200", "8:o48_200"]);
+    // 11/16 창 셋(6·7·8)이 한 키에 묶여도 창마다 따로 센다. 다음 묶음(9)은 빈 키
+    expect((await store.today(a, DAY, 6)).took.sort()).toEqual(s7.took);
+    expect((await store.today(a, DAY, 9)).took).toEqual([]);
+    // 11/22 긴급 의뢰 5분 창(음수 id)은 자기가 든 10분 창의 묶음에, 10분 창 기록과 따로 센다
+    // 5분 창 번호 15 → id −16 (10분 창 7 안)
+    expect(await store.grant(a, DAY, "gather", [{ id: "o_coal", size: 0 }], 99, { window: -16, node: "o48_200" })).not.toBeNull();
+    expect(await store.grant(a, DAY, "gather", [{ id: "o_coal", size: 0 }], 99, { window: -16, node: "o48_200" })).toBeNull();
+    expect((await store.today(a, DAY, 7)).took).toContain("-16:o48_200");
+    expect((await store.today(a, DAY, 9)).took).toEqual([]);
     expect(s7.bag.o_coal).toBe(2);
+    expect((await store.snapshot(a, DAY, 7)).bag.o_coal).toBe(3);
     expect(s7.day.gather).toBe(2);
   });
 

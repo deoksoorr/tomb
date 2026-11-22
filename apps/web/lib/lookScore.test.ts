@@ -52,6 +52,11 @@ describe("가치 비례 점수 (영구 소장 기준 가치 ÷ 5, 1점 단위)",
     expect(lookScore({ equipped, body: "king" }, NOW)).toBe(308 + 1000);
     expect(lookScore({ equipped, dye: { head: withDyeSpecial("#ff0000", "g"), body: "#00ff00", accent: withDyeSpecial("#0000ff", "r") } }, NOW)).toBe(308 + 2 * DYE_SPECIAL_BONUS);
     expect(DYE_SPECIAL_BONUS).toBe(10);
+    // 11/22 아이템 특수 색은 지금 입고 있는 아이템만 (후광은 입었고, 비니·날개는 안 입었거나 염색이 안 그려진다)
+    const itemSpecial = { items: { hat_halo: withDyeSpecial("#ff0000", "g"), hat_beanie: withDyeSpecial("#00ff00", "s"), back_wings: withDyeSpecial("#0000ff", "r") } };
+    expect(lookScore({ equipped, dye: itemSpecial }, NOW)).toBe(308 + DYE_SPECIAL_BONUS);
+    const wings = [{ itemId: "back_wings", until: NOW + HOUR }];
+    expect(lookScore({ equipped: wings, dye: itemSpecial }, NOW)).toBe(lookScore({ equipped: wings }, NOW));
     expect(wornParts({ equipped }, NOW)).toEqual(["hat_halo", "pet_cat"]);
   });
 });
@@ -79,7 +84,7 @@ describe("기간제가 끝나면 점수도 사라진다", () => {
 });
 
 describe("랭킹 한 줄의 착용 파츠 (빠짐없이, 부위 순)", () => {
-  it("모든 부위를 점수와 상관없이 머리 → 목 → 등 → 손 → 오라 → 발 → 펫 → 프리미엄 외형 순으로", () => {
+  it("모든 부위를 점수와 상관없이 머리 → 목 → 옷 → 손 → 오라 → 발 → 펫 → 프리미엄 외형 순으로", () => {
     const equipped = [
       { itemId: "neck_tie", until: NOW - 1 }, // 끝난 이용권은 빼고, 그 부위의 다음 착용품을 쓴다
       { itemId: "pet_cat", until: PERMANENT_UNTIL },
