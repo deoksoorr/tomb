@@ -13,3 +13,7 @@ coverage
 out
 next-env.d.ts
 .claude/worktrees/
+
+# npm 임시 링크 (배포 사본에서 생김)
+.node_modules-*
+**/.node_modules-*
