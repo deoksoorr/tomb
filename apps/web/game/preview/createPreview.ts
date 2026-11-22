@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import { installRenderGuard } from "../renderGuard";
+import { installViewportSync } from "../viewportSync";
 import { PreviewScene, type PreviewSceneData } from "./PreviewScene";
 
 // 입장 화면 배경용 가벼운 Phaser 게임 (월드 씬·네트워크·입력·소리 없음).
@@ -73,6 +74,8 @@ export function createPreview(parent: HTMLElement, opts: PreviewOptions): Previe
     },
   };
   game.scene.add("preview", PreviewScene, true, data);
+  // 11/22 폰 회전 뒤 캔버스가 예전 크기에 멈추지 않게 (game/viewportSync)
+  const offSync = installViewportSync(game);
 
   return {
     pause(p: boolean) {
@@ -82,6 +85,7 @@ export function createPreview(parent: HTMLElement, opts: PreviewOptions): Previe
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      offSync();
       // 잠든 루프는 다음 프레임 정리(pendingDestroy)를 돌리지 못한다 → 깨워서 정리하게.
       // 먼저 destroy로 정리 표시를 한 뒤 깨운다: 깨우면 그 자리에서 한 프레임이 도는데, 표시가 없으면 이미 떼어진(크기 0) 캔버스로
       // 화면 크기를 다시 맞추다 예외가 나 React 정리 중에 오류 화면으로 튕긴다 (운영 오류 기록, 아이폰)

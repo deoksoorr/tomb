@@ -15,7 +15,7 @@ import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { showToast } from "@/lib/hooks/useToasts";
-import { rideGate } from "@/lib/rideGate";
+import { rideGateAlert } from "@/lib/rideStop";
 import { derive } from "@/lib/rpg/formulas";
 import type { BugsResult, RpgPlay, RunResult } from "@/lib/rpg/types";
 import RunHud from "../rpg/RunHud";
@@ -113,7 +113,8 @@ export default function ForageLayer() {
   async function startGather(node: string) {
     if (busy.current || gather || insect) return;
     // 11/16 곤충 채집은 따로 장면(미니게임)으로 간다 → 탈것에 탄 채로는 못 한다 (lib/rideGate)
-    if (gatherNodeById(node)?.kind === "bug" && rideGate("곤충 채집을 할")) return;
+    // 11/22 아래 토스트 대신 가운데 알림 (펫이면 [내리고 채집하기] — 내린 뒤 그 자리에서 다시 채집)
+    if (gatherNodeById(node)?.kind === "bug" && rideGateAlert("곤충 채집을 할", { label: "내리고 채집하기", run: () => void startGather(node) })) return;
     busy.current = true;
     try {
       const r = await forageApi.gatherStart(node);
@@ -387,7 +388,7 @@ function CatchCard({ card }: { card: Card }) {
         <div className={s.catchMeta}>
           <strong>{cosmetic.name}</strong>
           <span className={s.badgeNew}>반짝! 영구 소장 꾸미기를 건졌어요</span>
-          <span>가방에서 꾸미기 칸을 눌러 입을 수 있어요</span>
+          <span>가방 [꾸미기]에서 입을 수 있어요</span>
         </div>
       </div>
     );

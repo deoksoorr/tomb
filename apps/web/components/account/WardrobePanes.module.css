@@ -10,13 +10,13 @@
   min-height: calc(100cqh - 1px);
 }
 
-/* 장비창: 네 줄이 남은 높이를 나눠 갖고(칸이 줄 높이를 채운다 — PaperDoll compact="large"), 아바타는 가운데 세 줄 가운데.
+/* 장비창: 다섯 줄이 남은 높이를 나눠 갖고(칸이 줄 높이를 채운다 — PaperDoll compact="large"), 아바타는 가운데 다섯 줄 가운데.
    아바타 배율은 칸 높이로 고른다: 아래 @container */
 .look .doll {
   --scale: 3;
   width: min(100%, 640px);
   height: 100%;
-  grid-template-rows: repeat(4, minmax(min-content, 1fr));
+  grid-template-rows: repeat(5, minmax(min-content, 1fr));
   gap: 6px;
   padding: 8px;
 }
@@ -25,7 +25,7 @@
   min-width: 0;
 }
 
-/* 넓은 칸(데스크톱): 칸 높이 440px부터 ×4, 470px부터 ×5 (1280×620처럼 낮으면 ×3에 칸을 늘린다) */
+/* 넓은 칸(데스크톱·태블릿): 칸 높이 440px부터 ×4, 470px부터 ×5 (1280×620처럼 낮으면 ×3에 칸을 늘린다) */
 @container bagpanel (min-width: 561px) and (min-height: 440px) {
   .look .doll {
     --scale: 4;
@@ -38,27 +38,29 @@
   }
 }
 
-/* 폰: 칸이 좁아 이름이 잘리지 않게 아바타를 위에 두고 부위 칸 9개를 세 개씩 세 줄로 (몸 위에서 아래 순서) */
+/* 11/22 폰: 아바타를 위에 가득(가운데), 아래 칸 10개를 2열×5줄 전폭으로 — 이름이 잘리지 않는다 (SLOT_ORDER 순서) */
 @container bagpanel (max-width: 560px) {
   .look .doll {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: auto repeat(3, minmax(min-content, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto repeat(5, minmax(min-content, 1fr));
     grid-template-areas:
-      "fig fig fig"
-      "head neck back"
-      "hand aura feet"
-      "pet nameColor namePlate";
+      "fig fig"
+      "head neck"
+      "back pack"
+      "hand aura"
+      "feet pet"
+      "nameColor namePlate";
   }
 }
 
-/* 폰 높이에 맞춰: 540px부터 ×4, 630px부터 ×5 */
-@container bagpanel (max-width: 560px) and (min-height: 540px) {
+/* 폰 높이에 맞춰: 600px부터 ×4, 700px부터 ×5 (칸 다섯 줄 + 방향·점수 줄이 스크롤 없이 들어가게) */
+@container bagpanel (max-width: 560px) and (min-height: 600px) {
   .look .doll {
     --scale: 4;
   }
 }
 
-@container bagpanel (max-width: 560px) and (min-height: 630px) {
+@container bagpanel (max-width: 560px) and (min-height: 700px) {
   .look .doll {
     --scale: 5;
   }
@@ -177,8 +179,8 @@
 /* 목록(왼쪽) + 입어 보기(오른쪽, 목록을 내려도 그 자리) */
 .pickBody {
   display: grid;
-  /* 11/22 자세히 보기에 색 보관함·되팔기가 들어가 조금 넓게 (176 → 204) */
-  grid-template-columns: minmax(0, 1fr) 204px;
+  /* 11/22 색 보관함·되팔기는 아이템 페이지로 옮겨 자세히 보기는 다시 좁게 (204 → 176) */
+  grid-template-columns: minmax(0, 1fr) 176px;
   grid-template-areas: "list fit";
   align-items: start;
   gap: 10px;
@@ -269,10 +271,15 @@
   gap: 6px;
 }
 
+/* 11/22 한 줄 = [카드 고르기 · 입기] + 아래 작은 색 칸 (염색되는 꾸미기만) */
 .card {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "pick wear"
+    "dye wear";
   align-items: stretch;
-  gap: 4px;
+  gap: 0 4px;
   min-width: 0;
   padding: 3px;
   background: var(--bg-deep);
@@ -290,8 +297,8 @@
 }
 
 .cardPick {
+  grid-area: pick;
   display: flex;
-  flex: 1;
   align-items: center;
   gap: 8px;
   min-width: 0;
@@ -337,7 +344,7 @@
 }
 
 .wearBtn {
-  flex: none;
+  grid-area: wear;
   align-self: center;
   min-width: 52px;
   min-height: 40px;
@@ -386,8 +393,10 @@
   }
 }
 
-/* 11/22 카드의 염색·되팔기 한 줄 */
-.cardDye {
-  font-size: 11px;
-  opacity: 0.85;
+
+/* 11/22 카드 아래 작은 색 칸 (아이콘 오른쪽, 글줄과 같은 줄에서 시작) */
+.cardMinis {
+  grid-area: dye;
+  justify-self: start;
+  padding: 0 0 5px 44px;
 }

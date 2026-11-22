@@ -5,6 +5,7 @@ import { getHouseStore } from "@/lib/housing/service";
 import { handler, HttpError, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
+import { sproutLeftMinutes } from "@/lib/sprout";
 import { isManager } from "@/lib/managers";
 import { isStaff } from "@/lib/staff";
 import { getAccounts, NO_NAME } from "@/lib/store";
@@ -44,10 +45,12 @@ export const POST = handler(async (req) => {
     // 11/16 매니저 (전용 칭호·채팅 딱지 — 사냥터에서도)
     isManager(visitorId, now),
   ]);
+  // 11/22 새싹 (사냥터·집 방에서도 이름표·채팅에)
+  const nb = sproutLeftMinutes(a, { staff, mgr });
   const token = await signJoinToken(
     env.joinSecret(),
     // 31번: 운영자 표시는 서버가 확인한 뒤에만. 11/15: 이름은 운영자도 닉네임 그대로
-    { visitorId, name: a.name ?? NO_NAME, color: a.color ?? AVATAR_COLORS[0], body: a.body ?? "hood", look: [...lookOf(a), ...gear], dye: style.dye, channel: 0, room, ...(staff ? { staff: true as const } : {}), ...(dex ? { dex } : {}), ...(champ ? { champ } : {}), ...(mgr ? { mgr: true as const } : {}) },
+    { visitorId, name: a.name ?? NO_NAME, color: a.color ?? AVATAR_COLORS[0], body: a.body ?? "hood", look: [...lookOf(a), ...gear], dye: style.dye, channel: 0, room, ...(staff ? { staff: true as const } : {}), ...(dex ? { dex } : {}), ...(champ ? { champ } : {}), ...(mgr ? { mgr: true as const } : {}), ...(nb ? { nb } : {}) },
     ROOM_TOKEN_TTL_SEC,
   );
   return json<RoomJoinResponse>({ room, token, wsUrl: `${env.realtimeWsUrl()}/room/${encodeURIComponent(room)}?t=${encodeURIComponent(token)}` });

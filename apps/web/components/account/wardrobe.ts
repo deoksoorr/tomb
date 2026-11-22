@@ -3,6 +3,7 @@ import {
   COSMETIC_DURATION_MS,
   isAvatarBody,
   isAvatarColor,
+  isPermanentUntil,
   isShopListed,
   itemById,
   ITEMS,
@@ -37,7 +38,7 @@ export const SLOT_SILHOUETTE: Record<CosmeticSlot, string> = {
   head: "hat_straw",
   neck: "neck_scarf",
   hand: "hand_lantern",
-  back: "back_cape",
+  back: "kd_coat",
   pack: "back_wings",
   aura: "aura_firefly",
   feet: "feet_flowers",
@@ -53,7 +54,8 @@ type Wardrobe = { inventory: Readonly<Record<string, number>>; equipped: readonl
 
 /** worn: 착용 중 · stash: 벗어 둠(시간은 흐른다) · new: 가방의 새것(입는 순간 24시간 시작) */
 export type WearState = "worn" | "stash" | "new";
-export type WardrobeEntry = { item: ItemDef; slot: CosmeticSlot; state: WearState; until: number | null };
+/** extend = 11/22 새것(이용권)인데 같은 꾸미기를 기간제로 이미 가졌다 → 입으면 남은 기간에 이용 기간이 더해진다 */
+export type WardrobeEntry = { item: ItemDef; slot: CosmeticSlot; state: WearState; until: number | null; extend?: boolean };
 
 const STATE_ORDER: Record<WearState, number> = { worn: 0, stash: 1, new: 2 };
 
@@ -76,9 +78,11 @@ export function wardrobeEntries(w: Wardrobe, now: number): WardrobeEntry[] {
     const item = cosmetic(e.itemId);
     if (item && e.until > now) out.push({ item, slot: item.slot, state: "stash", until: e.until });
   }
+  // 11/22 이미 영구로 가진 꾸미기의 이용권은 카드로 안 보인다 (입어도 영구 그대로 입혀지고 이용권은 안 쓴다 — 서버 equip)
+  const forever = new Set(out.filter((e) => e.until !== null && isPermanentUntil(e.until)).map((e) => e.item.id));
   for (const [id, n] of Object.entries(w.inventory)) {
     const item = cosmetic(id);
-    if (item && n > 0) out.push({ item, slot: item.slot, state: "new", until: null });
+    if (item && n > 0 && !forever.has(id)) out.push({ item, slot: item.slot, state: "new", until: null, ...(out.some((e) => e.item.id === id) ? { extend: true } : {}) });
   }
   return out.sort(
     (a, b) => SLOT_ORDER.indexOf(a.slot) - SLOT_ORDER.indexOf(b.slot) || STATE_ORDER[a.state] - STATE_ORDER[b.state],
@@ -121,7 +125,8 @@ export function wearAction(e: Pick<WardrobeEntry, "state"> & { slot?: CosmeticSl
 }
 
 /** 목록 한 줄 상태: "착용 중 · 18시간 남음" · "벗어 둠 · 5시간 남음" · "새것 · 입으면 24시간" */
-export function entryStatus(e: Pick<WardrobeEntry, "state" | "until"> & { slot?: CosmeticSlot }, now: number): string {
+export function entryStatus(e: Pick<WardrobeEntry, "state" | "until" | "extend"> & { slot?: CosmeticSlot }, now: number): string {
+  if (e.state === "new" && e.extend) return `새것 · 입으면 남은 기간에 ${Math.round(COSMETIC_DURATION_MS / 3_600_000)}시간 더해져요`;
   if (e.state === "new") return `새것 · 입으면 ${Math.round(COSMETIC_DURATION_MS / 3_600_000)}시간`;
   const left = remainingLabel(e.until ?? now, now);
   if (e.slot === "pet") return `${e.state === "worn" ? "데리고 다니는 중" : "집에서 쉬는 중"} · ${left}`;
@@ -141,7 +146,9 @@ export function canDropOn(itemId: string, slot: CosmeticSlot): boolean {
 /** 이 아이템을 입으면 그 부위에서 벗겨지는 것 (없으면 null) */
 export function displaced(entries: readonly WardrobeEntry[], e: WardrobeEntry): ItemDef | null {
   if (e.state === "worn") return null;
-  return wornBySlot(entries)[e.slot]?.item ?? null;
+  const w = wornBySlot(entries)[e.slot]?.item ?? null;
+  // 11/22 같은 꾸미기를 이용권으로 더 입는 것(기간 더하기)은 바꿔 끼우는 게 아니다
+  return w && w.id !== e.item.id ? w : null;
 }
 
 /**

@@ -82,7 +82,7 @@ const PLAN: readonly (readonly [string, CosmeticSlot, string, string, number | n
   ["ic_hotpack", "aura", "핫팩 오라", "fine", 300, 1200],
   ["ic_penguin", "pet", "빙어 도둑 펭귄", "rare", null, 7000],
   ["fr_icicle", "head", "고드름 왕관", "rare", 1000, 4000],
-  ["fr_cloak", "back", "서리꽃 망토", "legend", 2800, 11200],
+  ["fr_cloak", "pack", "서리꽃 망토", "legend", 2800, 11200],
   ["fr_rime", "feet", "성에 발자국", "fine", 500, 2000],
   ["fr_icename", "nameColor", "서리 앉은 이름", "fine", 350, 1400],
   ["fr_snowbun", "pet", "꼬마 눈토끼", "rare", null, 6000],

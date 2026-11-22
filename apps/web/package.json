@@ -11,7 +11,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:redis": "bash scripts/test-redis.sh"
   },
   "dependencies": {
     "@tomb/protocol": "*",

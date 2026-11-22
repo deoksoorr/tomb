@@ -2,6 +2,8 @@
 
 .wrap {
   display: inline-block;
+  /* 11/22 바탕판 여백(최대 15px)까지 칸 폭 안에 (content-box면 긴 이름 + 판이 칸보다 넓어져 오른쪽 판 끝이 잘렸다 — 레이스 시상대) */
+  box-sizing: border-box;
   max-width: 100%;
   vertical-align: bottom;
   line-height: inherit;
@@ -18,6 +20,15 @@
 }
 
 /* ── 글자 ── */
+
+/* 11/22 빛 무리(빛 테두리·불꽃·서리)는 글자 밖으로 번진다: 판 없이 이름이 칸 맨 앞이면 첫 글자 왼쪽 빛이 칸에(글자 칸 자신의 넘침 자르기에도) 잘렸다
+   → 판 없는 빛 이름만 글자 칸 양옆에 2px 여유 (판이 있으면 판 여백이 그 몫) */
+.wrap:not([data-plate]) > .text[data-kind="glow"],
+.wrap:not([data-plate]) > .text[data-kind="flame"],
+.wrap:not([data-plate]) > .text[data-kind="frost"] {
+  box-sizing: border-box;
+  padding: 0 2px;
+}
 
 .text[data-kind="solid"] {
   color: var(--ns-color);
@@ -176,14 +187,17 @@
   }
 }
 
-/* ── 바탕판 (작은 배경 판) ── */
+/* ── 바탕판 (작은 배경 판) ──
+   11/22 운영자 「이름표 왼쪽이 잘린다」 (채팅 「솔의눈」): 테두리·금테·꽃 점선을 판 바깥(바깥 그림자·outline)에 그려서
+   이름이 줄 맨 앞이면 채팅 기록(스크롤 상자)이 왼쪽 1~2px, 맨 아랫줄은 아래 2px를 잘랐다 (랭킹·친구처럼 넘침을 자르는 칸도 같음).
+   → 판의 모든 장식을 판 상자 안쪽(inset 그림자·안쪽 outline)에만 그린다. 판 크기는 글줄 높이 그대로라 어느 칸에서도 안 잘린다 */
 
 .wrap[data-plate] {
   padding: 0 5px;
   background: var(--np-fill);
   box-shadow:
-    inset 0 1px 0 var(--np-light),
-    0 0 0 1px var(--np-edge);
+    inset 0 0 0 1px var(--np-edge),
+    inset 0 2px 0 var(--np-light);
 }
 
 /* 판 위 글자는 게임 이름표처럼 어두운 1px 외곽선 (그라데이션 글자에도 되게 filter로) */
@@ -213,7 +227,10 @@
 .wrap[data-plate="wreath"] {
   border-radius: 4px;
   outline: 1px dotted var(--np-dot);
-  outline-offset: 1px;
+  outline-offset: -1px;
+  box-shadow:
+    inset 0 0 0 2px var(--np-edge),
+    inset 0 3px 0 var(--np-light);
 }
 
 .wrap[data-plate="ribbon"] {
@@ -256,9 +273,9 @@
     radial-gradient(circle 1px at 50% 30%, #fff2b0 0 60%, transparent 100%) 0 0 / 11px 100% repeat-x,
     linear-gradient(180deg, var(--np-fill) 0 78%, var(--np-edge) 78% 86%, var(--np-fill) 86%);
   box-shadow:
-    inset 0 1px 0 var(--np-light),
-    0 0 0 1px var(--np-edge),
-    0 0 0 2px #4a0a10;
+    inset 0 0 0 1px #4a0a10,
+    inset 0 0 0 2px var(--np-edge),
+    inset 0 3px 0 var(--np-light);
   animation: npNewyear 3s linear infinite;
 }
 
@@ -269,17 +286,17 @@
     repeating-linear-gradient(90deg, transparent 0 5px, color-mix(in srgb, var(--np-light) 70%, transparent) 5px 6px),
     var(--np-fill);
   box-shadow:
-    inset 0 2px 0 var(--np-dot),
-    inset 0 -2px 0 var(--np-dot),
-    0 0 0 1px var(--np-edge);
+    inset 0 0 0 1px var(--np-edge),
+    inset 0 3px 0 var(--np-dot),
+    inset 0 -3px 0 var(--np-dot);
 }
 
 /* 11/17 사원증 이름표: 은빛 테 남색 카드 + 위 파란 띠 */
 .wrap[data-plate="card"] {
   border-radius: 3px;
   box-shadow:
-    inset 0 2px 0 var(--np-light),
-    0 0 0 1px var(--np-edge);
+    inset 0 0 0 1px var(--np-edge),
+    inset 0 3px 0 var(--np-light);
 }
 
 /* 11/17 모래사장 이름표: 위 물거품 띠 + 오른쪽 아래 불가사리 */
@@ -289,8 +306,8 @@
     radial-gradient(circle at calc(100% - 5px) calc(100% - 4px), var(--np-dot) 0 1.5px, transparent 2px),
     var(--np-fill);
   box-shadow:
-    inset 0 2px 0 #8ad8f0,
-    0 0 0 1px var(--np-edge);
+    inset 0 0 0 1px var(--np-edge),
+    inset 0 3px 0 #8ad8f0;
 }
 
 /* 12월 호랑가시 이름표: 눈 덮인 상록 판 + 금테 + 양 귀퉁이 빨간 열매 */
@@ -302,8 +319,8 @@
     radial-gradient(circle at calc(100% - 3px) 4px, var(--np-dot) 0 1.5px, transparent 2px),
     var(--np-fill);
   box-shadow:
-    inset 0 2px 0 #f8fbff,
-    0 0 0 1px var(--np-edge);
+    inset 0 0 0 1px var(--np-edge),
+    inset 0 3px 0 #f8fbff;
 }
 
 /* 11/19 선물 포장 이름표: 빨강·초록 사선 줄무늬 포장지 + 가운데 금 리본 띠 (글자 뒤) */
@@ -313,8 +330,8 @@
     linear-gradient(90deg, transparent calc(50% - 1px), #f2c84a calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
     repeating-linear-gradient(135deg, var(--np-fill) 0 4px, var(--np-dot) 4px 6px);
   box-shadow:
-    inset 0 1px 0 var(--np-light),
-    0 0 0 1px var(--np-edge);
+    inset 0 0 0 1px var(--np-edge),
+    inset 0 2px 0 var(--np-light);
 }
 
 /* 11/20 편지봉투 이름표: 분홍 편지지 + 덮개 V선 + 아래 가운데 하트 봉인 */
@@ -326,8 +343,8 @@
     linear-gradient(to bottom left, transparent calc(50% - 0.5px), color-mix(in srgb, var(--np-edge) 55%, transparent) calc(50% - 0.5px) calc(50% + 0.5px), transparent calc(50% + 0.5px)) 100% 0 / 50% 60% no-repeat,
     var(--np-fill);
   box-shadow:
-    inset 0 1px 0 var(--np-light),
-    0 0 0 1px var(--np-edge);
+    inset 0 0 0 1px var(--np-edge),
+    inset 0 2px 0 var(--np-light);
 }
 
 /* 11/20 새해 계획표 이름표: 크림 종이 + 옅은 줄 + 빨간 여백선 + 위 스프링 고리, 왼쪽 체크 칸 셋(초록 둘 + 빈칸 하나)은 ::before */
@@ -340,9 +357,9 @@
     repeating-linear-gradient(180deg, transparent 0 4px, color-mix(in srgb, var(--np-dot) 70%, transparent) 4px 5px),
     var(--np-fill);
   box-shadow:
-    inset 0 1px 0 var(--np-light),
-    0 0 0 1px var(--np-edge),
-    0 -2px 0 -1px #8a92a4;
+    inset 0 1px 0 #8a92a4,
+    inset 0 0 0 1px var(--np-edge),
+    inset 0 2px 0 var(--np-light);
 }
 
 .wrap[data-plate="planner"]::before {

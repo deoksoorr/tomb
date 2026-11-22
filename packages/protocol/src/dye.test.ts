@@ -142,8 +142,15 @@ describe("11/22 입은 꾸미기 염색 (아이템마다 색)", () => {
     expect(wire.dye).toBe(".112233.");
     expect(wire.idye).toBe("hat_beanie:e03030,sc_padding:3050e0~s");
     expect(await verifyGrant(s, g)).toEqual({ kind: "look", visitorId: "v", look: ["hat_beanie", "sc_padding", "back_wings_butterfly"], exp, dye: { body: "#112233", items: { hat_beanie: "#e03030", sc_padding: "#3050e0~s" } } });
-    // 길이: 입은 4칸 모두 긴 id + 특수 색이어도 짧다
+    // 길이: 입은 4칸 모두 긴 id + 특수 색이어도 짧다 (11/22 날개도 실린다 — 가장 긴 날개 id)
     expect(packItemDye({ hat_headphones: "#aabbcc~g", neck_bandana: "#aabbcc~g", back_milkcape: "#aabbcc~g", back_camppack: "#aabbcc~g" }).length).toBeLessThan(130);
+    const wingWire = packItemDye({ hat_headphones: "#aabbcc~g", neck_bandana: "#aabbcc~g", back_milkcape: "#aabbcc~g", back_wings_butterfly: "#aabbcc~g" });
+    expect(wingWire.length).toBeLessThan(130);
+    expect(unpackItemDye(wingWire, ["hat_headphones", "neck_bandana", "back_milkcape", "back_wings_butterfly"])).toMatchObject({ back_wings_butterfly: "#aabbcc~g" });
+    // 11/22 날개 색은 착용 증서 idye로 다른 사람에게 간다
+    const wg = await signGrant(s, { kind: "look", visitorId: "v", look: ["back_wings_angel"], exp, dye: { items: { back_wings_angel: "#e03030~r" } } });
+    expect(payload(wg).idye).toBe("back_wings_angel:e03030~r");
+    expect((await verifyGrant(s, wg))).toMatchObject({ dye: { items: { back_wings_angel: "#e03030~r" } } });
     // 되돌림(빈 염색)은 dye ""만, idye 없음
     const reset = await signGrant(s, { kind: "look", visitorId: "v", look: [], exp, dye: {} });
     expect(payload(reset)).toMatchObject({ dye: "" });
@@ -152,15 +159,16 @@ describe("11/22 입은 꾸미기 염색 (아이템마다 색)", () => {
     expect(oldSanitize({ head: "#aabbcc", items: { hat_cap: "#112233" } })).toEqual({ head: "#aabbcc" });
   });
 
-  it("머리·목·옷·등 꾸미기는 한정·운영자 것까지 기본으로 모두 염색된다 (noDye 표시·시트 밖 날개·연만 빠진다)", () => {
+  it("머리·목·옷·등 꾸미기는 한정·운영자 것까지 기본으로 모두 염색된다 (noDye 표시·시트 밖 연·순위·수집 의뢰 보상만 빠진다 — 11/22 날개는 된다)", () => {
     for (const it of ITEMS) {
       if (it.kind !== "cosmetic") continue;
       const gear = it.slot === "head" || it.slot === "neck" || it.slot === "back" || it.slot === "pack";
-      expect(isDyeableCosmetic(it.id), it.id).toBe(gear && !it.noDye && !GEAR_DYE_SEPARATE.has(it.id));
+      expect(isDyeableCosmetic(it.id), it.id).toBe(gear && !it.noDye && !it.champ && !it.chair && !it.urgent && !it.quest && !GEAR_DYE_SEPARATE.has(it.id));
     }
     expect(ITEMS.filter((i) => i.noDye)).toEqual([]);
-    for (const id of ["hat_crown", "hat_cat", "kd_coat", "sc_padding", "staff_robe", "champ_crown", "back_backpack", "si_sack", "neck_medal"]) expect(isDyeableCosmetic(id), id).toBe(true);
-    for (const id of ["back_wings", "back_wings_butterfly", "q_back_kite", "hand_coffee", "aura_firefly", "pet_ghost", "dye_basic", "nope", null]) expect(isDyeableCosmetic(id), String(id)).toBe(false);
+    for (const id of ["hat_crown", "hat_cat", "kd_coat", "sc_padding", "staff_robe", "back_cape", "back_backpack", "si_sack", "neck_medal", "back_wings", "back_wings_bat", "back_wings_butterfly", "back_wings_angel", "back_wings_dragon", "of_a4wings"]) expect(isDyeableCosmetic(id), id).toBe(true);
+    expect([...GEAR_DYE_SEPARATE]).toEqual(["q_back_kite"]);
+    for (const id of ["q_back_kite", "champ_crown", "champ_duo_ph", "chair_crown", "chair_band", "u_hat_siren", "q_back_cape", "hand_coffee", "aura_firefly", "pet_ghost", "dye_basic", "nope", null]) expect(isDyeableCosmetic(id), String(id)).toBe(false);
     for (const id of GEAR_DYE_SEPARATE) expect(itemById(id)?.slot, id).toBe("pack");
   });
 
@@ -172,10 +180,10 @@ describe("11/22 입은 꾸미기 염색 (아이템마다 색)", () => {
     expect(wornDyeItems(["sc_padding", "back_wings_butterfly", "hat_beanie"])).toEqual([
       { slot: "head", id: "hat_beanie", dyeable: true },
       { slot: "back", id: "sc_padding", dyeable: true },
-      { slot: "pack", id: "back_wings_butterfly", dyeable: false },
+      { slot: "pack", id: "back_wings_butterfly", dyeable: true },
     ]);
     expect(DYE_COLOR_SLOTS_MAX).toBe(3);
-    expect(DYE_COLOR_SLOT_PRICES).toEqual([0, 2000, 5000]);
+    expect(DYE_COLOR_SLOT_PRICES).toEqual([0, 500, 1500]);
   });
 });
 

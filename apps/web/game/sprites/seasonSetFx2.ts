@@ -506,14 +506,15 @@ export function season2Aura(motion: Season2Motion, f: FxInput, t: number, d: Dra
       // 손에 든 캔의 연두빛 · 유리병 반딧불 빛 (뒷모습은 몸에 가려 없음). 반딧불 하나는 병 밖으로 빠져나와 맴돈다
       if (f.hidden || f.dir === DIR.up) return;
       const jar = motion === "ssJar";
-      const hx = Math.round(f.x + f.hand.dx);
+      // 11/22 손 꾸미기 크게 (heldGear): 캔은 손에서 바깥으로 한 칸·위로 한 칸, 병은 끈 아래로 세 칸
+      const hx = Math.round(f.x + f.hand.dx + (jar ? 0 : Math.sign(f.hand.dx || 1)));
       const hy = Math.round(f.headY - f.hand.up);
       const pulse = calm ? 1 : 0.85 + 0.15 * Math.sin(t / 300);
       d.push(
         "ssHalo",
         jar ? H_FLY : H_LIME,
         hx,
-        hy + (jar ? 1 : 0),
+        hy + (jar ? 3 : -1),
         light({
           alpha: (d.night ? 0.9 : 0.2) * pulse,
           sx: jar ? 1 : 0.5,

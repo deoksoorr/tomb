@@ -68,7 +68,7 @@ export class Expressions {
     // 채팅 기록창: 내 글도 보낼 때 바로 (이름은 이름표 그대로 — 운영자면 금색 + "운영자" 딱지)
     const ns = nameStyleIds(view.wearing);
     const camp = awayTag(this.h.net().map);
-    bridge.emit("chat:line", { name: view.label.text, text: shown, mine: true, ...(view.staff ? { staff: true as const } : {}), ...(view.manager ? { mgr: true as const } : {}), ...(ns ? { ns } : {}), ...camp });
+    bridge.emit("chat:line", { name: view.label.text, text: shown, mine: true, ...(view.staff ? { staff: true as const } : {}), ...(view.manager ? { mgr: true as const } : {}), ...(ns ? { ns } : {}), ...(view.sprout ? { nb: true as const } : {}), ...camp });
     this.h.sfx.play("say", 0.35);
   }
 
@@ -82,7 +82,7 @@ export class Expressions {
     const view = this.h.player().view;
     this.h.net().chat(text);
     const ns = nameStyleIds(view.wearing);
-    bridge.emit("chat:line", { name: view.label.text, text: maskChat(text), mine: true, ...(view.staff ? { staff: true as const } : {}), ...(view.manager ? { mgr: true as const } : {}), ...(ns ? { ns } : {}), m: "hunt" });
+    bridge.emit("chat:line", { name: view.label.text, text: maskChat(text), mine: true, ...(view.staff ? { staff: true as const } : {}), ...(view.manager ? { mgr: true as const } : {}), ...(ns ? { ns } : {}), ...(view.sprout ? { nb: true as const } : {}), m: "hunt" });
   }
 
   /**
@@ -94,13 +94,15 @@ export class Expressions {
     const camp = chatTagOf(meta?.m);
     const r = this.h.remotes().get(sid);
     if (!r) {
-      if (meta?.name) bridge.emit("chat:line", { name: meta.name, text, mine: false, ...(key ? { key } : {}), ...(meta.staff ? { staff: true as const } : {}), ...(meta.mgr ? { mgr: true as const } : {}), ...(meta.ns ? { ns: meta.ns } : {}), ...camp });
+      if (meta?.name) bridge.emit("chat:line", { name: meta.name, text, mine: false, ...(key ? { key } : {}), ...(meta.staff ? { staff: true as const } : {}), ...(meta.mgr ? { mgr: true as const } : {}), ...(meta.ns ? { ns: meta.ns } : {}), ...(meta.nb ? { nb: true as const } : {}), ...camp });
       return;
     }
     const bubble = !r.away && meta?.m !== "hunt";
     if (bubble) r.view.chat(text, performance.now());
     const ns = nameStyleIds(r.view.wearing);
-    bridge.emit("chat:line", { name: r.name, text, mine: false, ...(key ? { key } : {}), ...(r.view.staff ? { staff: true as const } : {}), ...(r.view.manager ? { mgr: true as const } : {}), ...(ns ? { ns } : {}), ...camp });
+    // 11/22 새싹: 서버가 붙인 표시 (옛 서버면 화면이 아는 값)
+    const nb = meta?.nb === true || r.view.sprout;
+    bridge.emit("chat:line", { name: r.name, text, mine: false, ...(key ? { key } : {}), ...(r.view.staff ? { staff: true as const } : {}), ...(r.view.manager ? { mgr: true as const } : {}), ...(ns ? { ns } : {}), ...(nb ? { nb: true as const } : {}), ...camp });
     if (bubble && r.visible) this.h.sfx.play("say", 0.2, 1.1, 6);
   }
 

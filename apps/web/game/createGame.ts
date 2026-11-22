@@ -18,6 +18,8 @@ import { installWorldTint } from "./world/worldTint";
 import { installSquirrelRain } from "./fx/SquirrelRain";
 import { installPhoto } from "./photo/install";
 import { qaUrlAllowed } from "@/lib/qaUrl";
+import { avatarTexLedger } from "./assets/manifest";
+import { installViewportSync } from "./viewportSync";
 
 // Phaser 게임 생성. GameCanvas가 브라우저에서만 동적 import 한다 (Phaser는 이 경로로만 로드된다).
 
@@ -60,12 +62,16 @@ export function createGame(parent: HTMLElement, opts: GameStartOptions): GameHan
   installHousing(game, ctx); // 하우징: 집 씬 등록 + 월드 ↔ 집 전환 (game/housing)
   // 다른 창을 보는 중(뒤로 간 상태)에는 갱신·그리기를 줄인다 (소리·실시간 연결은 그대로, game/backgroundLoop)
   ctx.disposers.push(installBackgroundLoop(game));
+  // 11/22 폰 회전(가로 ↔ 세로) 뒤 캔버스가 예전 크기에 멈추지 않게 실제 부모 크기와 맞춘다 (game/viewportSync)
+  ctx.disposers.push(installViewportSync(game));
   // 11/16 이스터에그 「다람쥐를 뿌려라」: 실시간 서버가 보낸 squirrels → 지금 보이는 장면에 다람쥐 (game/fx/SquirrelRain)
   ctx.disposers.push(installSquirrelRain(game));
   // 11/19 촬영 모드: 들어갈 때만 game/photo/PhotoController를 불러온다 (평소엔 듣기만)
   ctx.disposers.push(installPhoto(game));
   // ?debug=1: 콘솔에서 상태를 들여다볼 수 있게 (게임 화면에는 아무것도 그리지 않는다. 수치는 UI의 NetHud가 net:stats로 표시)
   if (opts.debug) (window as unknown as { __tombGame?: Phaser.Game }).__tombGame = game;
+  // 11/22 아바타 시트 원장도 (콘솔에서 __tombTexLedger.stats() — 쓰는 시트·남겨 둔 시트·지운 수)
+  if (opts.debug) (window as unknown as { __tombTexLedger?: unknown }).__tombTexLedger = avatarTexLedger(game);
   // 11/16 바닷가 물때 시험: 주소 ?tide=분 (한 바퀴 안의 분, 0 = 만조 · 90 = 간조), ?debug=1이면 콘솔에서 __tombTide.set(분)·__tombTide.set(null)
   applyTideQuery(window.location.search);
   if (opts.debug && qaUrlAllowed()) (window as unknown as { __tombTide?: { set(min: number | null): void } }).__tombTide = { set: (min) => setTideMinute(min) };

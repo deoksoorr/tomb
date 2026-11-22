@@ -2,7 +2,7 @@
 
 import { resellBuyNote } from "@/lib/resell";
 import { useCallback, useEffect, useState } from "react";
-import { ALLEY_BODIES, ALLEY_SETS, bodyLabel, isPermanentUntil, itemById } from "@tomb/protocol";
+import { ALLEY_BODIES, DIR, ALLEY_SETS, bodyLabel, isPermanentUntil, itemById } from "@tomb/protocol";
 import { errorMessage } from "@/lib/api";
 import { BUNGEO_TITLE } from "@/lib/bungeo/cart";
 import { bungeoApi } from "@/lib/bungeo/client";
@@ -117,6 +117,7 @@ export default function BungeoCartDialog({ onClose, avatar }: Props) {
           body={isBody ? r.id : body}
           look={isBody ? wearing : fitting.look}
           label={isBody ? `내 아바타가 ${r.name}${batchim(r.name) ? "으로" : "로"} 바뀐 모습` : `내 아바타가 ${r.name}${batchim(r.name) ? "을" : "를"} 입어 본 모습`}
+          facing={!isBody && itemById(r.id)?.slot === "pack" ? DIR.up : DIR.down}
         />
         <div className={shop.info}>
           <p className={shop.name}>

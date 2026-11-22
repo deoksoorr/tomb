@@ -283,11 +283,26 @@ export async function setCottageStyle(store: HouseStore, accountId: string, styl
 
 // 옛 집 번지 보충(전체 목록 읽기 = 집 수만큼 명령)을 이미 해 본 저장소. 인스턴스마다 처음 한 번만 한다
 //  (지금 분양은 늘 번지를 받고, 번지 없는 옛 집도 주인이 내 집을 열면 myHouse가 번지를 준다 → 매 요청 훑을 필요가 없다)
-const legacyFilled = new WeakSet<HouseStore>();
+//  11/22 동시에 연 요청도 같은 보충을 기다린다 (먼저 연 요청만 기다리고 나머지는 보충 전 목록을 받아 옛 집이 빠져 보였다)
+const legacyFilled = new WeakMap<HouseStore, Promise<void>>();
 
 /** 시험용: 옛 집 번지 보충을 다시 하게 한다 */
 export function resetLegacyLotFill(store: HouseStore) {
   legacyFilled.delete(store);
+}
+
+function fillLegacyLots(store: HouseStore): Promise<void> {
+  let p = legacyFilled.get(store);
+  if (!p) {
+    const run = (async () => {
+      const missing = (await store.listAll()).filter((h) => !h.lot);
+      for (const h of missing) await store.assignLot(h.id);
+    })();
+    // 실패하면 다음 요청이 다시 해 본다 (실패한 약속을 붙들고 있으면 1채널 마을이 계속 실패)
+    run.catch(() => legacyFilled.get(store) === run && legacyFilled.delete(store));
+    legacyFilled.set(store, (p = run));
+  }
+  return p;
 }
 
 /** 한 채널의 분양 마을: 그 채널에 번지가 있는 집들의 외관·문패 (숨긴 집은 자리만) */
@@ -304,16 +319,9 @@ export async function village(store: HouseStore, ch: number = LEGACY_HOUSING_CHA
       generatedAt: now,
     };
   }
-  let all = await store.village(ch);
   // 마을이 생기기 전에 분양받은 집(번지·채널 없음 → 1채널)은 1채널 마을을 열 때 빈 번지를 받는다 (인스턴스마다 처음 한 번만 훑는다)
-  if (ch === LEGACY_HOUSING_CHANNEL && !legacyFilled.has(store)) {
-    legacyFilled.add(store);
-    const missing = (await store.listAll()).filter((h) => !h.lot);
-    if (missing.length) {
-      for (const h of missing) await store.assignLot(h.id);
-      all = await store.village(ch);
-    }
-  }
+  if (ch === LEGACY_HOUSING_CHANNEL) await fillLegacyLots(store);
+  const all = await store.village(ch);
   const shown = all.filter((h) => !h.hidden);
   const maxLot = all.reduce((m, h) => Math.max(m, h.lot), 0);
   return {

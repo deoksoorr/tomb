@@ -7,10 +7,11 @@ import { recordLook } from "../lookRank";
 import { isStaff } from "../staff";
 import { getAccounts } from "../store";
 import { kstDay, lookGrant, lookOf, loadMe } from "../store/accounts";
-import { getStyleStore, type DyeSession, type FixedDyeDef, type StyleStore } from "../store/style";
+import { getStyleStore, type DyeSession, type FixedDyeDef, type StyleState, type StyleStore } from "../store/style";
+import type { AccountReadOpts, AccountRecord } from "../store/types";
 import type { Me } from "../types";
 import { buildBoard, colorAt, DYE_CENTER, DYE_GRACE_MS, DYE_TIME_MS, dyeReach } from "./palette";
-import { BASE_RESHAPE_PRICE, catalogDye, directDyeMode, DYE_DECIDE_MS, DYE_RESET_PRICE, dyeTargetBlock, dyeTicketCounts, fixedAllows, ownsCosmetic, randomTier, specialDyeColor } from "./rules";
+import { BASE_RESHAPE_PRICE, catalogDye, directDyeMode, DYE_DECIDE_MS, DYE_RESET_PRICE, dyeTargetBlock, dyeTicketCounts, fixedAllows, ownsCosmetic, randomTier, specialDyeColor, waitLabel } from "./rules";
 import type { DyeSessionView, DyeStateResponse, DyeTimeoutResponse, StyleChangeResponse } from "./types";
 import { pickDiscount } from "../champPerks";
 import { perkShopDiscount } from "../chairPerks";
@@ -25,8 +26,9 @@ const style = (): StyleStore => getStyleStore(getAccounts());
 const view = (s: DyeSession, now: number): DyeSessionView => ({ ...s, serverNow: now });
 
 /** 바뀐 내 정보 + 착용 증서 (염색·몸 모양 포함) — 11/22 붕어빵 수레(lib/bungeo/service)도 외형을 사면 이것으로 돌려준다 */
-export async function changed(accountId: string, now: number, extra: Partial<StyleChangeResponse> = {}): Promise<StyleChangeResponse> {
-  const me = await loadMe(getAccounts(), accountId, now);
+/** account = 11/22 이 요청에서 이미 읽었고 그 뒤 계정 쪽(포인트·가방·착용)이 바뀌지 않았으면 다시 읽지 않는다 ({ bought: true }로 읽은 것 — 색 칸 고르기) */
+export async function changed(accountId: string, now: number, extra: Partial<StyleChangeResponse> = {}, account?: AccountRecord): Promise<StyleChangeResponse> {
+  const me = await loadMe(getAccounts(), accountId, now, account);
   await recordLook(accountId, me, { now }); // 꾸미기 랭킹 점수 (외형·염색·영구 구매)
   return { me, lookGrant: await lookGrant(env.joinSecret(), accountId, lookOf(me), now, me), ...extra };
 }
@@ -35,12 +37,13 @@ export async function changed(accountId: string, now: number, extra: Partial<Sty
  * 11/22 아이템 염색: 가진 꾸미기이고 염색할 수 있는 것(noDye·시트 밖 그림 아님)일 때만 염색권을 쓴다 (아니면 빼기 전에 거절).
  * 캐릭터 부위는 그대로 통과. 아이템이면 칠할 색 보관함 칸을 정해 돌려준다: 고른 칸(연 칸 안) · 지금 입는 칸 · 첫 빈 칸 · 0번
  */
-async function assertDyeable(accountId: string, target: DyeTarget, now: number, slot?: number): Promise<number | undefined> {
+async function assertDyeable(accountId: string, target: DyeTarget, now: number, slot?: number, items?: StyleState["items"]): Promise<number | undefined> {
   if (isCharDyePart(target)) return undefined;
-  const a = await getAccounts().get(accountId, kstDay(now), now);
+  // 11/22 계정·스타일을 같이 읽는다 (부른 쪽이 이미 스타일을 읽었으면 그것으로 — items)
+  const [a, styleItems] = await Promise.all([getAccounts().get(accountId, kstDay(now), now), items ?? style().get(accountId).then((x) => x.items)]);
   const block = dyeTargetBlock(target, (item) => ownsCosmetic(a, item, now));
   if (block) throw new HttpError(409, "NOT_DYEABLE", block);
-  const st = (await style().get(accountId)).items[target];
+  const st = styleItems[target];
   const colors = st?.colors ?? [null];
   if (slot !== undefined) {
     if (slot >= colors.length) throw new HttpError(409, "NO_SLOT", "아직 열지 않은 색 칸이에요.");
@@ -61,19 +64,22 @@ const expired = (s: DyeSession, now: number) => now > (s.candidate ? s.candidate
 
 /**
  * 끝나지 않은 채 시간이 지난 판(창을 닫고 떠났거나 고르지 않음) → 색을 바꾸지 않고 끝낸다 (염색권은 쓴 것으로).
- * 끝냈으면 그 부위
+ * ended = 끝냈으면 그 부위. state = 11/22 정리한 뒤의 스타일 (판만 지웠으니 읽은 것에서 판만 뺀다 — 부르는 쪽이 다시 읽지 않게. 겹친 요청이 판을 먼저 바꿨으면 null → 다시 읽는다)
  */
-async function settleExpired(accountId: string, now: number): Promise<{ part: DyeTarget } | null> {
+async function settleExpired(accountId: string, now: number): Promise<{ ended: { part: DyeTarget } | null; state: StyleState | null }> {
   const st = style();
-  const { session } = await st.get(accountId);
-  if (!session || !expired(session, now)) return null;
-  return (await st.cancel(accountId, session.seed)) ? { part: session.part } : null;
+  const state = await st.get(accountId);
+  const session = state.session;
+  if (!session || !expired(session, now)) return { ended: null, state };
+  return (await st.cancel(accountId, session.seed)) ? { ended: { part: session.part }, state: { ...state, session: null } } : { ended: null, state: null };
 }
 
 export async function dyeState(accountId: string, now = Date.now()): Promise<DyeStateResponse> {
-  const ended = await settleExpired(accountId, now);
   const st = style();
-  const [{ dye, session, items }, me] = await Promise.all([st.get(accountId), getAccounts().get(accountId, kstDay(now), now)]);
+  // 11/22 판 정리와 계정 읽기를 같이 (판 정리는 가방을 바꾸지 않는다), 스타일은 정리하며 읽은 것을 그대로 (예전엔 한 번 더 읽었다)
+  const [settled, me] = await Promise.all([settleExpired(accountId, now), getAccounts().get(accountId, kstDay(now), now)]);
+  const ended = settled.ended;
+  const { dye, session, items } = settled.state ?? (await st.get(accountId));
   const fixedIds = Object.keys(me.inventory).filter((id) => isFixedDyeId(id) && me.inventory[id] > 0);
   const tickets = fixedIds.length ? await st.fixedDefs(fixedIds) : {};
   // counts: 서버 가방의 염색권 개수 (진행 중인 판에 쓴 1장은 이미 빠져 있다) → 화면이 가방 표시를 이 값에 맞춘다
@@ -84,9 +90,9 @@ export async function dyeState(accountId: string, now = Date.now()): Promise<Dye
 export async function startDye(accountId: string, itemId: string, part: DyeTarget, now = Date.now(), slot?: number) {
   const tier = randomTier(itemId);
   if (!tier) throw new HttpError(400, "INVALID_INPUT", "무작위 염색권이 아니에요.");
-  await settleExpired(accountId, now);
+  const cur = (await settleExpired(accountId, now)).state ?? (await style().get(accountId));
   // 진행 중인 판이 있으면 이어서 하므로(염색권을 더 쓰지 않는다) 그때는 대상을 따지지 않는다
-  const k = (await style().get(accountId)).session ? undefined : await assertDyeable(accountId, part, now, slot);
+  const k = cur.session ? undefined : await assertDyeable(accountId, part, now, slot, cur.items);
   const session: DyeSession = { seed: nanoid(12), tier, part, ...(k !== undefined ? { slot: k } : {}), itemId, startedAt: now, endsAt: now + DYE_TIME_MS };
   const r = await style().begin(accountId, itemId, session);
   if (!r) throw new HttpError(409, "NO_ITEM", "가방에 그 염색권이 없어요.");
@@ -196,8 +202,8 @@ export async function applyPickDye(accountId: string, itemId: string, part: DyeT
 /** 특수색 확정 염색권: 고른 특수 색 종류 + 서버가 정한 바탕 색 (rules specialDyeColor — 지금 그 부위 색을 이어받거나 대표 색) */
 export async function applySpecialDye(accountId: string, itemId: string, part: DyeTarget, kind: DyeSpecial, now = Date.now(), slot?: number): Promise<StyleChangeResponse> {
   if (directDyeMode(itemId) !== "special" || !(DYE_SPECIALS as readonly string[]).includes(kind)) throw new HttpError(400, "INVALID_INPUT", "특수색 확정 염색권으로 쓸 수 없는 색이에요.");
-  const k = await assertDyeable(accountId, part, now, slot);
   const { dye, items } = await style().get(accountId);
+  const k = await assertDyeable(accountId, part, now, slot, items);
   // 바탕 색: 캐릭터 부위는 지금 색, 아이템은 칠할 칸의 색
   const color = specialDyeColor(kind, isCharDyePart(part) ? dye[part] : items[part]?.colors[k ?? 0]);
   if (!(await style().applyFixed(accountId, itemId, part, color, k))) throw new HttpError(409, "NO_ITEM", "가방에 그 염색권이 없어요.");
@@ -211,24 +217,36 @@ const charged = (r: "ok" | "insufficient" | "same" | "unlocked", same: string) =
 
 // ── 11/22 색 보관함 (아이템마다 칠한 색 여러 칸 — 「원래 색」은 늘 있고 칸 수에 안 든다) ──
 
-async function assertOwnsDyeable(accountId: string, item: string, now: number): Promise<void> {
-  const a = await getAccounts().get(accountId, kstDay(now), now);
+/** 읽은 계정을 돌려준다 (opts — 응답을 만들 때 다시 쓸 수 있게 산 기록까지 읽을 때) */
+async function assertOwnsDyeable(accountId: string, item: string, now: number, opts?: AccountReadOpts): Promise<AccountRecord> {
+  const a = await getAccounts().get(accountId, kstDay(now), now, opts);
   const block = dyeTargetBlock(item, (id) => ownsCosmetic(a, id, now));
   if (block) throw new HttpError(409, "NOT_DYEABLE", block);
+  return a;
+}
+
+/** 「이 색 입기」 연타 잠금 응답 (429 + Retry-After 초 — 화면이 남은 시간을 센다) */
+export function selectLocked(waitMs: number): HttpError {
+  const sec = Math.max(1, Math.ceil(waitMs / 1000));
+  return new HttpError(429, "DYE_SELECT_LOCKED", `너무 자주 바꿨어요. ${waitLabel(waitMs)} 뒤에 다시 입을 수 있어요.`, { "Retry-After": String(sec) });
 }
 
 /** 입을 칸 고르기 (무료): sel = 0부터, -1 = 원래 색. 빈 칸이면 거절 */
 export async function selectItemColor(accountId: string, item: string, sel: number, now = Date.now()): Promise<StyleChangeResponse> {
-  await assertOwnsDyeable(accountId, item, now);
-  if (!(await style().selectItemColor(accountId, item, sel))) throw new HttpError(409, "EMPTY_SLOT", "아직 칠하지 않은 칸이에요. 염색권으로 칠해 주세요.");
-  return changed(accountId, now, { part: item });
+  // 11/22 칸 고르기는 스타일만 바꾼다 → 확인할 때 읽은 계정으로 응답(내 정보)을 만든다 (계정 읽기 두 번 → 한 번, 명령 21 → 14)
+  const a = await assertOwnsDyeable(accountId, item, now, { bought: true });
+  // 11/22 연타 잠금은 칸 고르기와 같은 저장소 연산 하나에서 센다 (Redis Lua 한 번)
+  const r = await style().selectItemColor(accountId, item, sel, now);
+  if (r.r === "locked") throw selectLocked(r.waitMs);
+  if (r.r === "empty") throw new HttpError(409, "EMPTY_SLOT", "아직 칠하지 않은 칸이에요. 염색권으로 칠해 주세요.");
+  return changed(accountId, now, { part: item }, a);
 }
 
-/** 색 칸 하나 더 열기 (2번째 2,000P · 3번째 5,000P — protocol DYE_COLOR_SLOT_PRICES). 새 칸은 비어 있고 다음 염색권으로 칠한다 */
+/** 색 칸 하나 더 열기 (2번째 500P · 3번째 1,500P — protocol DYE_COLOR_SLOT_PRICES). 새 칸은 비어 있고 다음 염색권으로 칠한다 */
 export async function buyColorSlot(accountId: string, item: string, now = Date.now()): Promise<StyleChangeResponse> {
-  await assertOwnsDyeable(accountId, item, now);
+  const [, st] = await Promise.all([assertOwnsDyeable(accountId, item, now), style().get(accountId)]);
   if (!isDyeableCosmetic(item)) throw new HttpError(409, "NOT_DYEABLE", "이 꾸미기는 색을 바꿀 수 없어요.");
-  const cap = (await style().get(accountId)).items[item]?.colors.length ?? 1;
+  const cap = st.items[item]?.colors.length ?? 1;
   if (cap >= DYE_COLOR_SLOTS_MAX) throw new HttpError(409, "MAX_SLOTS", `색 칸은 ${DYE_COLOR_SLOTS_MAX}개까지예요.`);
   const next = cap + 1;
   const price = DYE_COLOR_SLOT_PRICES[next - 1];

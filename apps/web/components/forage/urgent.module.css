@@ -266,79 +266,7 @@
   }
 }
 
-/* ── 시작 알림 (확성기처럼 크게, 몇 초 뒤 사라진다) ── */
-.announce {
-  position: fixed;
-  z-index: 30;
-  top: calc(var(--safe-top, 16px) + var(--top-h, 36px) + 84px);
-  left: 50%;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: min(560px, max(280px, calc(100vw / var(--uz) - 2 * (var(--safe-right, 16px) + var(--minimap-w, 270px) + 8px))));
-  padding: 12px 14px;
-  transform: translateX(-50%);
-  background: rgba(60, 18, 12, 0.95);
-  box-shadow:
-    0 -3px 0 0 #ff6a50,
-    0 3px 0 0 #ff6a50,
-    -3px 0 0 0 #ff6a50,
-    3px 0 0 0 #ff6a50,
-    0 8px 24px rgba(0, 0, 0, 0.5);
-  color: #fff1dc;
-  pointer-events: none;
-  animation: announceIn 9s ease-out forwards;
-}
-
-@keyframes announceIn {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, -12px) scale(0.96);
-  }
-  4% {
-    opacity: 1;
-    transform: translate(-50%, 0) scale(1.03);
-  }
-  8% {
-    transform: translate(-50%, 0) scale(1);
-  }
-  90% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-
-.announceText {
-  display: grid;
-  gap: 4px;
-  line-height: 1.35;
-}
-
-.announceText b {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.announceText small {
-  color: #f0b8a0;
-  font-size: 12px;
-}
-
-/* 픽셀 경광등: 빨강·파랑이 번갈아 */
-.siren {
-  flex: none;
-  width: 22px;
-  height: 18px;
-  background: #ff4a3a;
-  box-shadow:
-    0 6px 0 -2px #3a3a48,
-    0 0 14px 4px rgba(255, 74, 58, 0.6);
-  clip-path: polygon(20% 0, 80% 0, 100% 100%, 0 100%);
-  animation: siren 0.6s steps(2, jump-none) infinite;
-}
-
+/* 경광등 깜빡임 (빨강·파랑) — .tabBadge가 쓴다. 11/22 시작 알림 창(.announce·.siren)은 뺐다 */
 @keyframes siren {
   50% {
     background: #3a8aff;
@@ -382,13 +310,6 @@
   .hudHint {
     flex-basis: 100%;
     color: var(--bone);
-  }
-  .announce {
-    top: calc(var(--safe-top, 16px) + var(--top-h, 40px) + var(--minimap-h, 110px) + 64px);
-    width: calc(100vw / var(--uz) - var(--safe-left, 16px) - var(--safe-right, 16px));
-  }
-  .announceText b {
-    font-size: 14px;
   }
 }
 
@@ -481,11 +402,6 @@
     line-height: 14px;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  /* 시작 알림도 왼쪽 소식 칸을 덮지 않는 폭 (마을 소식 알림과 같은 --spot-w) */
-  .announce {
-    width: var(--spot-w);
   }
 }
 
@@ -672,11 +588,7 @@ button.chip[data-done] {
 @media (prefers-reduced-motion: reduce) {
   .tag,
   .hud[data-hurry],
-  .hud[data-hurry] .clock,
-  .siren {
-    animation: none;
-  }
-  .announce {
+  .hud[data-hurry] .clock {
     animation: none;
   }
 }

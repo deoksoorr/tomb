@@ -1,10 +1,10 @@
 import { itemById, type AvatarBody } from "@tomb/protocol";
-import { CUTE_BACK, CUTE_COVERING, CUTE_HAND, CUTE_HEAD, CUTE_NECK, drawCuteBack, drawCuteHand, drawCuteHead, drawCuteNeck } from "./cuteGear";
-import { darken, Grid } from "./pixel";
+import { CUTE_BACK, CUTE_COVERING, CUTE_HAND, CUTE_HEAD, CUTE_NECK, drawCuteBack, drawCuteHead, drawCuteNeck } from "./cuteGear";
+import { Grid } from "./pixel";
 import { drawGhostHead, drawGhostHeadGlow, GHOST_HEAD } from "./ghostGear";
 import { CHAIR_HEAD, drawChairHead, drawChairHeadGlow } from "./chairGear";
-import { drawThemeBack, drawThemeHand, drawThemeNeck, THEME_BACK, THEME_HAND, THEME_NECK } from "./themeGear";
-import { drawXmasBack, drawXmasGlow, drawXmasHand, drawXmasHead, drawXmasNeck, XMAS_BACK, XMAS_COVERING, XMAS_HAND, XMAS_HEAD, XMAS_NECK } from "./xmasGear";
+import { drawThemeBack, drawThemeNeck, THEME_BACK, THEME_HAND, THEME_NECK } from "./themeGear";
+import { drawXmasBack, drawXmasGlow, drawXmasHead, drawXmasNeck, XMAS_BACK, XMAS_COVERING, XMAS_HAND, XMAS_HEAD, XMAS_NECK } from "./xmasGear";
 
 // F8 캐릭터 꾸미기 추가분 중 "아바타 시트에 같이 그려지는 것" (avatar.ts drawFrame이 부른다):
 //  머리 9종(비니·헤드폰·왕관·리본·고깔·안경·마법사 모자·체육대회 모자·새싹), 목 5종(넥타이·사원증·나비넥타이·방울·꽃 목걸이),
@@ -42,7 +42,7 @@ export const GEAR_SHEET_IDS: readonly string[] = [...GEAR_HEAD, ...GEAR_NECK, ..
 /** 두건·키다리 끝·동글이 새싹을 덮는 모자 (그 위에 꼭지를 그리지 않는다) */
 export const COVERING_HATS: ReadonlySet<string> = new Set(["hat_straw", "hat_cat", "hat_beanie", "hat_crown", "hat_party", "hat_wizard", "hat_cap", "hat_beret", "hat_hardhat", "hat_chef", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat", "champ_duo_ph", "champ_duo_pf", "champ_duo_hf", "champ_triple", "q_hat_angler", "q_hat_miner", "q_hat_snow", "u_hat_siren", ...CUTE_COVERING, ...GHOST_HEAD, ...XMAS_COVERING, ...CHAIR_HEAD]);
 
-/** back = 몸에 입는 옷(망토·재킷·숄·도포), pack = 11/22 등에 메는 것(배낭·기타·제트팩·서핑보드 — 옷과 같이 입는다) */
+/** back = 몸에 입는 옷(코트·패딩·니트·후드티·도포), pack = 11/22 등에 메거나 걸치는 것(배낭·기타·제트팩·서핑보드·날개·망토 5종·어깨 걸친 재킷·체크 담요 숄 — 옷과 같이 입는다) */
 export type ExtraGear = { head: string | null; neck: string | null; hand: string | null; back: string | null; pack: string | null };
 
 export function extraGearOf(look: readonly string[]): ExtraGear {
@@ -59,7 +59,7 @@ function halfAt(m: GearM, y: number): number {
 }
 
 /** 몸마다 눈 자리 (drawFace와 같은 값) */
-function eyes(body: AvatarBody, view: GearView, m: GearM): { xs: number[]; y: number } {
+export function eyes(body: AvatarBody, view: GearView, m: GearM): { xs: number[]; y: number } {
   const { cx, hy } = m;
   const side = view === "side";
   switch (body) {
@@ -280,19 +280,26 @@ export function drawHeadGear(g: Grid, view: GearView, id: string, m: GearM, body
     }
     case "hat_chef": {
       // 하얀 요리사 모자: 띠 + 뭉게뭉게 윗부분 (프레임 위에 붙은 몸은 한 칸 낮게)
-      const w = 0xfbfbf6;
-      const sh = 0xdcdcd2;
+      // 11/22 염색 티: 흰 천 네 톤(빛 · 바탕 · 그늘 · 주름) — 띠는 세로 주름, 윗부분은 왼쪽 위가 밝고 오른쪽·뭉치 사이 골이 어둡다 (gearDye GEAR_DYE_REGIONS.hat_chef)
+      const [hi, w, sh, deep] = CHEF_TONES;
       const lift = top >= 8 ? 0 : 1;
-      g.hline(cx - rx + 1, cx + rx - 2, top, 0xe8e8e0);
-      g.hline(cx - rx + 1, cx + rx - 2, top - 1, w);
-      for (const [y, h] of [
-        [top - 2, rx],
-        [top - 3, rx],
-        [top - 4 + lift, rx - 1],
-      ] as [number, number][])
-        for (let x = cx - h; x < cx + h; x++) g.set(x, y, x >= cx + h - 2 ? sh : w);
-      g.set(cx - 2, top - 4 + lift, sh);
-      g.set(cx + 1, top - 4 + lift, sh);
+      const bl = cx - rx + 1;
+      const br = cx + rx - 2;
+      // 띠: 세로 주름 (두 칸마다 그늘) · 오른쪽 끝 주름 그늘
+      for (let x = bl; x <= br; x++) g.set(x, top, x >= br - 1 ? sh : (x - bl) % 2 ? sh : w);
+      // 띠 윗줄 = 부푼 윗부분 그림자
+      for (let x = bl; x <= br; x++) g.set(x, top - 1, x === bl ? w : x >= br - 1 ? deep : sh);
+      for (const [y, h, k] of [
+        [top - 2, rx, 0],
+        [top - 3, rx, 1],
+        [top - 4 + lift, rx - 1, 2],
+      ] as [number, number, number][])
+        for (let x = cx - h; x < cx + h; x++) {
+          const right = x >= cx + h - 2;
+          // 뭉치 사이 골 (윗줄은 짙게, 가운데 줄은 그늘)
+          const crease = (x === cx - 2 || x === cx + 1) && k > 0;
+          g.set(x, y, right ? (k === 0 ? deep : sh) : crease ? (k === 2 ? deep : sh) : k > 0 && x < cx - 2 ? hi : w);
+        }
       break;
     }
     case "hat_horns": {
@@ -314,15 +321,19 @@ export function drawHeadGear(g: Grid, view: GearView, id: string, m: GearM, body
     }
     case "hat_santa": {
       // 빨간 고깔이 옆으로 접히고 흰 털 테두리·방울
-      const r = 0xd8323c;
-      const lo = 0xa02430;
+      // 11/22 염색 티: 빨간 천 네 톤(빛 · 바탕 · 그늘 · 접힌 골) — 왼쪽 위 빛, 오른쪽 그늘, 접혀 넘어가는 자리 짙게 (흰 털은 그대로)
+      const [hi, r, lo, deep] = SANTA_TONES;
       const fur = 0xf8f6f0;
       const d = side ? -1 : 1;
       g.hline(cx - rx, cx + rx - 1, top, fur);
-      g.hline(cx - rx + 1, cx + rx - 2, top - 1, r);
-      g.hline(cx - 3, cx + 2, top - 2, r);
+      const l1 = cx - rx + 1;
+      const r1 = cx + rx - 2;
+      for (let x = l1; x <= r1; x++) g.set(x, top - 1, x <= l1 + 1 ? hi : x >= r1 - 1 ? lo : r);
+      for (let x = cx - 3; x <= cx + 2; x++) g.set(x, top - 2, x === cx - 3 ? hi : x >= cx + 1 ? lo : r);
       g.hline(cx - 2 + d, cx + 1 + d, top - 3, lo);
+      g.set(cx + (d > 0 ? 1 : -2) + d, top - 3, deep);
       g.set(cx + 3 * d, top - 3, r);
+      g.set(cx + 3 * d, top - 2, deep);
       g.rect(d > 0 ? cx + 4 : cx - 5, top - 3, 2, 2, fur);
       break;
     }
@@ -642,6 +653,12 @@ const DUO_COLORS: Record<string, [CrownColor, CrownColor]> = {
   champ_duo_pf: [CROWN_GOLD, CROWN_BLUE],
   champ_duo_hf: [CROWN_RED, CROWN_BLUE],
 };
+/** 11/22 요리사 모자 흰 천 네 톤 (빛 · 바탕 · 그늘 · 주름) — 염색 때 함께 옮겨 간다 (gearDye GEAR_DYE_REGIONS.hat_chef) */
+export const CHEF_TONES = [0xfefefb, 0xf2f2ea, 0xdcdcd2, 0xc4c4b8] as const;
+/** 11/22 출근 배낭 국방색 천 네 톤 (빛 · 바탕 · 그늘 · 짙은 그늘) */
+export const BACKPACK_TONES = [0x9aaa6a, 0x7a8a4a, 0x5c6838, 0x444e28] as const;
+/** 11/22 산타 모자 빨간 천 네 톤 (빛 · 바탕 · 그늘 · 접힌 골) */
+export const SANTA_TONES = [0xf0505a, 0xd8323c, 0xa02430, 0x74121e] as const;
 /** 3관왕 대관 무지개 보석 */
 const RAINBOW_GEMS = [0xff4a5a, 0xffa030, 0xfff06a, 0x5ae08a, 0x4ab0ff, 0xb87aff];
 
@@ -849,194 +866,12 @@ export function drawNeckGear(g: Grid, view: GearView, id: string, m: GearM, body
   }
 }
 
-// ── 손 (앞·옆모습에서만 보인다. 뒷모습은 몸에 가려진다) ──
-
-/** 손에 든 것. 외곽선 전에 칠한다 */
-export function drawHandGear(g: Grid, view: GearView, id: string, m: GearM): void {
-  if ((CUTE_HAND as readonly string[]).includes(id)) return drawCuteHand(g, view, id, m);
-  if ((XMAS_HAND as readonly string[]).includes(id)) return drawXmasHand(g, view, id, m);
-  if ((THEME_HAND as readonly string[]).includes(id)) return drawThemeHand(g, view, id, m);
-  if (view === "up") return;
-  const x = m.hx;
-  const y = m.hY;
-  switch (id) {
-    case "hand_coffee":
-      g.vline(x + 1, y - 3, y - 2, 0x3aa86a);
-      g.hline(x - 1, x + 1, y - 1, 0xf4f4f4);
-      g.rect(x - 1, y, 3, 3, 0x5a3420);
-      g.vline(x - 1, y, y + 2, 0xc89a6a);
-      g.hline(x - 1, x + 1, y + 1, 0x2a6a4a);
-      break;
-    case "hand_briefcase":
-      g.hline(x, x + 1, y, 0x3a2414);
-      g.rect(x - 1, y + 1, 4, 3, 0x7a4a2a);
-      g.hline(x - 1, x + 2, y + 1, 0x9a6a3a);
-      g.set(x, y + 2, 0xf2c43a);
-      break;
-    case "hand_phone":
-      g.rect(x - 1, y, 2, 3, 0x2a2a34);
-      g.set(x - 1, y + 2, 0x4a4a58);
-      break;
-    case "hand_lantern_blue":
-      g.set(x, y - 1, 0x2a3a4a);
-      g.rect(x - 1, y, 3, 3, 0x2a4a5a);
-      g.set(x, y + 1, 0x8ae8ff);
-      break;
-    case "hand_donut":
-      g.rect(x - 1, y, 3, 3, 0xd8a060);
-      g.hline(x - 1, x + 1, y, 0xf08ab0);
-      g.set(x, y + 1, 0x5a3a20);
-      g.set(x + 1, y, 0x9ae0ff);
-      break;
-    case "hand_clipboard":
-      g.rect(x - 1, y - 1, 3, 4, 0x9a6a32);
-      g.rect(x - 1, y, 3, 2, 0xf6f4ec);
-      g.set(x, y - 1, 0xc8ccd8);
-      g.set(x, y + 1, 0x9a9488);
-      break;
-    case "hand_mic":
-      g.vline(x, y, y + 2, 0x2a2a34);
-      g.rect(x - 1, y - 2, 3, 2, 0x8a8a98);
-      g.set(x - 1, y - 2, 0xc8c8d8);
-      break;
-    case "hand_bouquet":
-      g.hline(x - 1, x + 1, y + 1, 0xe8d4b0);
-      g.set(x, y + 2, 0xe8d4b0);
-      g.hline(x - 1, x + 1, y, 0x5aa84a);
-      g.set(x - 1, y - 1, 0xe84a5a);
-      g.set(x + 1, y - 1, 0xffd04a);
-      g.set(x, y - 1, 0xffffff);
-      g.set(x, y - 2, 0xff9ac0);
-      break;
-    case "hand_wand":
-      g.vline(x, y - 1, y + 2, 0xd88ab8);
-      g.set(x, y - 3, 0xffe066);
-      g.hline(x - 1, x + 1, y - 2, 0xffe066);
-      break;
-    case "staff_ledger":
-      // 31번 저승 명부: 검은 책 + 붉은 제목 칸 + 종이 끝
-      g.rect(x - 1, y, 3, 4, 0x1e1c24);
-      g.vline(x - 1, y, y + 3, 0x3a3446);
-      g.vline(x + 1, y, y + 3, 0xe8e0d0);
-      g.set(x, y + 1, 0xc83a3a);
-      break;
-    case "q_hand_net": {
-      // 11/15 수집 의뢰 채집망: 손에서 위로 뻗은 대나무 자루 + 초록 고리 + 그 밑으로 처진 반투명 그물 자루 (끝에 잡힌 주황 나비)
-      const pole = 0xd0a868;
-      const poleLo = 0x94703e;
-      const ring = 0x2e9a62;
-      const ringHi = 0x7ae0a0;
-      const mesh = 0xf2f8f4;
-      for (let i = 0; i <= 8; i++) g.set(x, y + 2 - i, i % 3 === 2 ? poleLo : pole);
-      const hy = y - 10;
-      // 고리 (가로로 납작한 타원)
-      g.hline(x - 1, x + 1, hy - 2, ring);
-      g.set(x - 2, hy - 1, ringHi);
-      g.set(x + 2, hy - 1, ring);
-      g.set(x - 3, hy, ringHi);
-      g.set(x + 3, hy, ring);
-      g.set(x - 2, hy + 1, ring);
-      g.set(x + 2, hy + 1, ring);
-      g.hline(x - 1, x + 1, hy + 2, ring);
-      // 고리 안 그물 (성글게)
-      for (const [dx, dy] of [[-1, -1], [1, -1], [0, 0], [-2, 0], [2, 0], [-1, 1], [1, 1]]) g.set(x + dx, hy + dy, mesh, 120);
-      // 처진 그물 자루 + 잡힌 나비
-      for (let xx = x - 1; xx <= x + 1; xx++) g.set(xx, hy + 3, mesh, 190);
-      g.set(x - 1, hy + 4, mesh, 150);
-      g.set(x + 1, hy + 4, mesh, 150);
-      g.set(x, hy + 4, 0xff8a2a);
-      g.set(x, hy + 5, mesh, 200);
-      g.set(x - 1, hy + 3, 0xffb84a);
-      break;
-    }
-    case "inv_hand_lantern":
-      // 11/19 친구 초대 한정 마중 등불: 손에 쥔 짧은 대나무 손잡이 + 둥근 연분홍 초롱 (가운데 하트 두 개가 겹쳐 빛난다, 빛은 drawHandGlow)
-      g.set(x, y, 0xb08a52);
-      g.set(x, y - 1, 0xb08a52);
-      g.hline(x - 1, x + 1, y - 2, 0x8a5a2e);
-      g.hline(x - 2, x + 2, y - 3, 0xf4b8c0);
-      g.hline(x - 3, x + 3, y - 4, 0xf8cad0);
-      g.hline(x - 3, x + 3, y - 5, 0xf8cad0);
-      g.hline(x - 3, x + 3, y - 6, 0xf4b8c0);
-      g.hline(x - 2, x + 2, y - 7, 0xe89aa8);
-      g.hline(x - 1, x + 1, y - 8, 0x8a5a2e);
-      // 겹친 하트 (따뜻한 빨강·금빛)
-      g.set(x - 2, y - 6, 0xe0485a);
-      g.set(x - 1, y - 6, 0xe0485a);
-      g.set(x - 2, y - 5, 0xe0485a);
-      g.set(x - 1, y - 5, 0xff7a6a);
-      g.set(x, y - 6, 0xffd27a);
-      g.set(x + 1, y - 6, 0xffd27a);
-      g.set(x, y - 5, 0xffe6a0);
-      g.set(x + 1, y - 5, 0xffd27a);
-      g.set(x - 1, y - 4, 0xff7a6a);
-      g.set(x, y - 4, 0xffd27a);
-      g.set(x + 3, y - 5, 0xd8909c);
-      break;
-    case "q_hand_wishlamp":
-      // 11/15 수집 의뢰 새해 소원 등불: 손에서 끈으로 띄운 귤빛 한지 풍등 (안쪽은 따뜻한 불빛, 불꽃은 drawHandGlow)
-      g.set(x, y - 1, 0xe8d8b0);
-      g.hline(x - 1, x + 1, y - 7, 0xb83a2a);
-      g.hline(x - 2, x + 2, y - 6, 0xf0903a);
-      g.hline(x - 2, x + 2, y - 5, 0xf0903a);
-      g.hline(x - 2, x + 2, y - 4, 0xe8782a);
-      g.hline(x - 1, x + 1, y - 3, 0xe06a24);
-      g.set(x - 1, y - 6, 0xffc070);
-      g.set(x, y - 5, 0xffe6a0);
-      g.set(x - 1, y - 5, 0xffd27a);
-      g.set(x + 1, y - 5, 0xffd27a);
-      g.set(x, y - 4, 0xffd27a);
-      g.set(x + 2, y - 4, 0xc85a1a);
-      g.set(x, y - 2, 0x6a3a1a);
-      break;
-    case "q_hand_brush":
-      // 11/15 수집 의뢰 발굴 붓: 짙은 나무 자루 + 놋쇠 고리 + 부채꼴 솔
-      g.set(x + 1, y + 2, 0x5a3820);
-      g.set(x, y + 1, 0x7a4a28);
-      g.set(x, y, 0x8a5a32);
-      g.set(x, y - 1, 0xe0b040);
-      g.set(x, y - 2, 0xf0dca8);
-      g.set(x - 1, y - 3, 0xe4cc90);
-      g.set(x, y - 3, 0xfff0c8);
-      g.set(x + 1, y - 3, 0xd8bc80);
-      g.set(x - 1, y - 4, 0xf0dca8);
-      g.set(x + 1, y - 4, 0xe4cc90);
-      break;
-    case "staff_lamp":
-      // 31번 저승 등불: 흰 종이 초롱 + 검은 덮개 (불빛은 drawHandGlow)
-      g.set(x, y - 2, 0x2a2a34);
-      g.hline(x - 1, x + 1, y - 1, 0x2a2a34);
-      g.rect(x - 1, y, 3, 3, 0xe8f0f8);
-      g.hline(x - 1, x + 1, y + 3, 0x2a2a34);
-      break;
-  }
-}
-
-/** 외곽선 뒤에도 밝게 남는 점 (화면·불빛) */
-export function drawHandGlow(g: Grid, view: GearView, id: string, m: GearM): void {
-  if (view === "up") return;
-  if ((XMAS_HAND as readonly string[]).includes(id)) return drawXmasGlow(g, view, null, id, m, 0);
-  if (id === "hand_phone") {
-    g.set(m.hx - 1, m.hY, 0x9ad8ff);
-    g.set(m.hx, m.hY + 1, 0x9ad8ff);
-  } else if (id === "hand_lantern_blue") g.set(m.hx, m.hY + 1, 0xd8fcff);
-  else if (id === "hand_wand") g.set(m.hx, m.hY - 2, 0xfffbe0);
-  else if (id === "staff_lamp") {
-    g.set(m.hx, m.hY + 1, 0x9af0ff);
-    g.set(m.hx, m.hY, 0xd8faff);
-  } else if (id === "q_hand_wishlamp") {
-    g.set(m.hx, m.hY - 5, 0xfff6d0);
-    g.set(m.hx, m.hY - 3, 0xffe08a);
-  } else if (id === "inv_hand_lantern") {
-    g.set(m.hx, m.hY - 5, 0xfff2c8);
-    g.set(m.hx - 1, m.hY - 5, 0xffb0a0);
-  }
-}
+// ── 손: 11/22부터 손 꾸미기 그림·자리는 heldGear.ts (avatarCore drawHeld가 레이어에 그려 얹는다) ──
 
 /** 외곽선 뒤에도 밝게 남는 점 (머리 꾸미기): 광부 헬멧 이마 등불 */
 export function drawHeadGlow(g: Grid, view: GearView, id: string, m: GearM, top: number): void {
   if ((GHOST_HEAD as readonly string[]).includes(id)) return drawGhostHeadGlow(g, view, id, m, top);
-  if ((XMAS_HEAD as readonly string[]).includes(id)) return drawXmasGlow(g, view, id, null, m, top);
+  if ((XMAS_HEAD as readonly string[]).includes(id)) return drawXmasGlow(g, view, id, m, top);
   if ((CHAIR_HEAD as readonly string[]).includes(id)) return drawChairHeadGlow(g, view, id, m, top);
   if (id === "u_hat_siren") {
     // 경광등 돔은 외곽선 뒤에도 밝게
@@ -1073,20 +908,28 @@ export function drawBackGear(g: Grid, view: GearView, id: string, m: GearM, body
   const side = view === "side";
   const up = view === "up";
   if (id === "back_backpack") {
-    const c = 0x7a8a4a;
-    const lo = darken(c, 0.25);
+    // 11/22 염색 티: 국방색 천 네 톤 (빛 · 바탕 · 그늘 · 짙은 그늘) — 왼쪽 빛, 오른쪽·밑단 그늘, 앞주머니는 덮개 그림자로 한 단 깊게 (갈색 끈·버클은 그대로)
+    const [hi, c, lo, deep] = BACKPACK_TONES;
     const strap = 0x5a4a32;
     if (up && layer === "front") {
       const w = body === "tall" ? 6 : 7;
       const x0 = Math.round(cx - w / 2);
-      g.rect(x0, shY - 1, w, 6, c);
-      g.hline(x0, x0 + w - 1, shY - 1, 0x9aaa6a);
-      g.rect(x0 + 1, shY + 2, w - 2, 2, lo);
+      const x1 = x0 + w - 1;
+      for (let y = shY - 1; y <= shY + 4; y++)
+        for (let x = x0; x <= x1; x++) {
+          const bottom = y === shY + 4;
+          g.set(x, y, y === shY - 1 ? (x === x1 ? c : hi) : x === x0 ? hi : x === x1 ? (bottom ? deep : lo) : bottom ? lo : c);
+        }
+      // 앞주머니: 윗줄 = 덮개 그림자(짙게), 아랫줄 = 그늘
+      g.hline(x0 + 1, x1 - 1, shY + 2, deep);
+      g.hline(x0 + 1, x1 - 1, shY + 3, lo);
       g.set(cx - 1, shY + 2, 0xd8c8a0);
       g.hline(x0 + 1, x0 + w - 2, shY, strap);
     } else if (side && layer === "back") {
       g.rect(cx - 7, shY - 1, 4, 6, c);
+      g.hline(cx - 6, cx - 4, shY - 1, hi);
       g.vline(cx - 7, shY + 1, shY + 4, lo);
+      g.hline(cx - 6, cx - 4, shY + 4, deep);
       g.set(cx - 6, shY + 2, 0xd8c8a0);
     } else if (view === "down" && layer === "front") {
       // 앞에서는 어깨끈만
@@ -1186,7 +1029,9 @@ export function drawBackGear(g: Grid, view: GearView, id: string, m: GearM, body
         for (let x = x0; x <= x1; x++) {
           if (y === bottom && (x + hem) % 3 === 2) continue;
           const edge = x === x0 || x === x1;
-          g.set(x, y, y >= bottom - 1 ? (y === bottom ? goldLo : gold) : edge ? gold : x <= x0 + 1 ? hi : x >= x1 - 1 ? lo : c);
+          // 11/22 세로 주름 (네 칸마다 그늘 · 그 왼쪽 빛) — 펄럭이는 자락이 입체로, 염색해도 결이 남는다
+          const fold = y > shY && (x - cx + 40) % 4;
+          g.set(x, y, y >= bottom - 1 ? (y === bottom ? goldLo : gold) : edge ? gold : x <= x0 + 1 ? hi : x >= x1 - 1 ? lo : fold === 0 ? lo : fold === 3 ? hi : c);
         }
       }
       g.hline(shL, shR, shY - 1, gold);
@@ -1236,7 +1081,9 @@ export function drawBackGear(g: Grid, view: GearView, id: string, m: GearM, body
         const x1 = shR + spread;
         for (let x = x0; x <= x1; x++) {
           if (y === bottom && (x + hem) % 3 === 2) continue;
-          g.set(x, y, x <= x0 + 1 ? hi : x >= x1 - 1 ? lo : c);
+          // 11/22 퇴근 망토: 세로 주름 (네 칸마다 그늘 · 그 왼쪽 빛) + 밑단 짙은 그늘 (도포는 예전 그대로)
+          const fold = !robe && y > shY && (x - cx + 40) % 4;
+          g.set(x, y, x <= x0 + 1 ? hi : x >= x1 - 1 ? lo : fold === 0 ? lo : fold === 3 ? hi : !robe && y === bottom ? lo : c);
         }
       }
       g.hline(shL, shR, shY - 1, clasp);

@@ -42,6 +42,7 @@ import {
   urgentEndNotice,
   urgentGoal,
   urgentLastAcct,
+  urgentPct,
   urgentCosRoll,
   urgentLucky,
   urgentReward,
@@ -50,8 +51,20 @@ import {
   type UrgentKind,
   type UrgentSlot,
 } from "./urgent";
-import { getUrgentStore, type ClaimPlan, type PocketDex, type UrgentMemDeps, type UrgentStore, type UrgentTest } from "./urgentStore";
-import type { UrgentClaimed, UrgentClaimResponse, UrgentDeliverResponse, UrgentMeResponse, UrgentMineRow, UrgentOpenResponse, UrgentPublic } from "./urgentTypes";
+import { getUrgentStore, URGENT_RESULTS_KEEP, type ClaimPlan, type PocketDex, type UrgentMemDeps, type UrgentState, type UrgentStore, type UrgentTest, type UrgentTop } from "./urgentStore";
+import type {
+  AdminUrgentResult,
+  AdminUrgentResultsResponse,
+  UrgentClaimed,
+  UrgentClaimResponse,
+  UrgentDeliverResponse,
+  UrgentMeResponse,
+  UrgentMineRow,
+  UrgentOpenResponse,
+  UrgentPublic,
+  UrgentResult,
+  UrgentResultRow,
+} from "./urgentTypes";
 
 // 11/15: 긴급 의뢰 서버 로직 (라우트는 세션 확인·입력 검증만).
 //  - 상태 보기(/api/forage/urgent): 의뢰가 없을 때는 저장소를 읽지 않는다 (시각은 시드). 있을 때 명령 2~3개, 누구에게나 같아 CDN이 몇 초 캐시한다
@@ -223,6 +236,8 @@ export async function urgentPublic(now = Date.now()): Promise<UrgentPublicResult
   if (live && !st.a0) await notice(ev, "a0", `📢 ${urgentAnnounce(ev.kind, goal)} (${Math.ceil((end - now) / 60_000)}분)`, now);
   if (st.fest > 0 && !st.a2) await notice(ev, "a2", `🎆 긴급 의뢰 150% 달성! 불꽃축제가 열렸어요`, now);
   if (!live && !st.a1) await notice(ev, "a1", urgentEndNotice(ev.kind, goal, st.n, early), now);
+  // 11/22 끝나면 관리자 결과 기록을 한 번 남긴다 (처음 본 요청 — 저장소가 rs 표시로 한 번만 받는다)
+  if (!live && !st.rs) await recordUrgentResult(ev, st, goal, cap, now);
   return { body, cacheSec: live ? 5 : 15 };
 }
 
@@ -273,16 +288,23 @@ const parseClaimed = (raw: string | null): UrgentClaimed | null => {
 /** 11/19 행운의 배달부 (끝난 의뢰는 낸 사람이 바뀌지 않으니 인스턴스 메모리에 기억) */
 const LUCKY_LOOK = 2000;
 const gl = globalThis as typeof globalThis & { __tombUrgLucky?: Map<string, string | null> };
-async function luckyOf(id: string, store: UrgentStore, kingAcct: string | null, stage: number): Promise<string | null> {
+/** 낸 사람 전체(많이 낸 순)로 행운의 배달부 — 배달왕은 꾸미기가 겹치는 150% 판에서만 뺀다 (11/22 100%~149% 배달왕은 칭호만이라 그대로 후보) */
+function luckyFrom(id: string, all: readonly UrgentTop[], stage: number): string | null {
+  if (stage < 100) return null;
+  return urgentLucky(id, all.filter((r) => r.n > 0).map((r) => r.acct), stage >= 150 ? (all[0]?.acct ?? null) : null);
+}
+async function luckyOf(id: string, store: UrgentStore, stage: number): Promise<string | null> {
   if (stage < 100) return null;
   const memo = (gl.__tombUrgLucky ??= new Map());
   if (memo.has(id)) return memo.get(id) ?? null;
-  const all = await store.top(id, LUCKY_LOOK);
-  const lucky = urgentLucky(id, all.filter((r) => r.n > 0).map((r) => r.acct), stage >= 150 ? kingAcct : null);
+  const lucky = luckyFrom(id, await store.top(id, LUCKY_LOOK), stage);
   if (memo.size > 200) memo.clear();
   memo.set(id, lucky);
   return lucky;
 }
+
+/** 11/22 순위 보상을 보는 앞 사람 수 (1·2·3등) */
+const RANK_LOOK = 3;
 
 /** 11/19 무작위 꾸미기 등급별 후보 (상점 캐릭터 꾸미기 — 야근 빌딩 상자와 같은 목록) */
 const COS_TIERS = [0, 1, 2, 3].map((t) => cosmeticsOfTier(t as 0 | 1 | 2 | 3).map((i) => i.id));
@@ -308,11 +330,11 @@ export async function urgentMine(acct: string, now = Date.now()): Promise<Urgent
     const done = now >= end;
     // 지금 진행 중인 것은 늘, 끝난 것은 내가 낸 것만
     if (done && m.n <= 0) continue;
-    const top = done && !m.got ? await store.top(ev.id, 1) : [];
+    const top = done && !m.got ? await store.top(ev.id, RANK_LOOK) : [];
     const { goal, cap } = await goalOf(ev, st);
     const claimed = parseClaimed(m.got);
-    const lucky = done && !claimed ? await luckyOf(ev.id, store, top[0]?.acct ?? null, urgentStage(st.n, goal)) : null;
-    const r = done && !claimed ? urgentReward({ id: ev.id, acct, n: st.n, goal, cap, mine: m.n, top: top[0]?.acct ?? null, last: urgentLastAcct(st), lucky }) : null;
+    const lucky = done && !claimed ? await luckyOf(ev.id, store, urgentStage(st.n, goal)) : null;
+    const r = done && !claimed ? urgentReward({ id: ev.id, acct, n: st.n, goal, cap, mine: m.n, top: top[0]?.acct ?? null, ranks: top.map((t) => t.acct), last: urgentLastAcct(st), lucky }) : null;
     rows.push({
       id: ev.id,
       kind: ev.kind,
@@ -336,21 +358,36 @@ export async function claimUrgent(acct: string, id: string, now = Date.now()): P
   if (!ev) throw new HttpError(404, "NOT_FOUND", "그런 긴급 의뢰는 없어요.");
   if (now >= ev.end + URGENT_CLAIM_MS) throw new HttpError(409, "URGENT_EXPIRED", "보상을 받을 수 있는 기간이 지났어요.");
   const store = urgentStore();
-  const [st, top, [m]] = await Promise.all([store.state(ev.id), store.top(ev.id, 1), store.mine([ev.id], acct)]);
+  // 11/22 1·2·3등 순위 보상 (끝난 뒤라 순위가 바뀌지 않는다)
+  const [st, top, [m]] = await Promise.all([store.state(ev.id), store.top(ev.id, RANK_LOOK), store.mine([ev.id], acct)]);
   // 11/15 150%를 채웠으면 그 순간 끝난 것 → 남은 시간과 상관없이 바로 받는다
   if (now < urgentEndAt(ev.end, st.fest)) throw new HttpError(409, "URGENT_LIVE", "아직 진행 중이에요. 끝나면 받을 수 있어요.");
   if (m.got) throw new HttpError(409, "URGENT_CLAIMED", "이미 받았어요.");
   const { goal, cap } = await goalOf(ev, st);
-  const lucky = await luckyOf(ev.id, store, top[0]?.acct ?? null, urgentStage(st.n, goal));
-  const r = urgentReward({ id: ev.id, acct, n: st.n, goal, cap, mine: m.n, top: top[0]?.acct ?? null, last: urgentLastAcct(st), lucky });
+  const lucky = await luckyOf(ev.id, store, urgentStage(st.n, goal));
+  const r = urgentReward({ id: ev.id, acct, n: st.n, goal, cap, mine: m.n, top: top[0]?.acct ?? null, ranks: top.map((t) => t.acct), last: urgentLastAcct(st), lucky });
   if (!hasReward(r)) throw new HttpError(409, "NO_REWARD", m.n > 0 ? "목표의 절반을 못 채워서 이번엔 받을 보상이 없어요." : "이번 의뢰에 낸 것이 없어요.");
   // 「수집가의 뒷주머니」는 바로 열지 않고 가방에 넣는다 (가방에서 [열기] — openUrgentPocket). 내용물은 (의뢰, 계정) 시드로 이미 정해져 있다
   // 11/19 배달왕·행운의 배달부: 상점 꾸미기 하나를 무작위 기간제로 (영구로 가진 것은 빼고, (의뢰, 계정) 시드라 다시 받아도 같다)
-  const cos = r.king || r.lucky ? urgentCosRoll(`${ev.id}|${acct}`, COS_TIERS, await permOwned(acct, now)) : null;
-  const claimed: UrgentClaimed = { stage: r.stage, stamps: r.stamps, box: null, pocket: !!r.box, king: r.king, lucky: r.lucky, cos, last: r.last, at: now };
+  // 11/22 배달왕 꾸미기는 150% 판에서만 (kingCos — 100%~149% 배달왕은 칭호만)
+  const cos = r.kingCos || r.lucky ? urgentCosRoll(`${ev.id}|${acct}`, COS_TIERS, await permOwned(acct, now)) : null;
+  const claimed: UrgentClaimed = {
+    stage: r.stage,
+    stamps: r.stamps,
+    box: null,
+    pocket: !!r.box,
+    king: r.king,
+    ...(r.kingCos ? { kingCos: true } : {}),
+    ...(r.rank > 0 ? { rank: r.rank, rankStamps: r.rankStamps } : {}),
+    lucky: r.lucky,
+    cos,
+    last: r.last,
+    at: now,
+  };
+  // 단계 도장 + 순위 보너스 도장을 받은 표시와 같은 Lua 한 번에 (표시 HSETNX가 먼저 — 두 번 받을 수 없다)
   const plan: ClaimPlan = {
     record: JSON.stringify(claimed),
-    stamps: r.stamps,
+    stamps: r.stamps + r.rankStamps,
     stampCap: STAMP_CAP,
     pocket: r.box ? URGENT_POCKET : "",
     hat: cos ? { id: cos.id, slot: itemById(cos.id)?.slot ?? "head", until: now + cos.days * 86_400_000 } : null,
@@ -437,6 +474,97 @@ export async function backfillPocketDex(now = Date.now(), days = 7): Promise<{ c
     }
   }
   return { checked, added };
+}
+
+// ── 11/22 관리자 「긴급 의뢰 결과」 ──
+
+/** 기록에 남기는 낸 사람 수 (많이 낸 순 — 나머지는 count만) */
+export const URGENT_RESULT_ROWS = 50;
+
+/**
+ * 끝난 의뢰의 결과 기록을 한 번 남긴다 (낸 사람·순위·받을 보상·행운의 배달부). 받는 사람마다 계산하는 urgentReward 그대로라
+ * 실제로 받는 것과 같다 (무작위 꾸미기는 받을 때 정해져 관리자 화면이 받은 기록에서 덧붙인다). 실패해도 의뢰는 그대로
+ */
+async function recordUrgentResult(ev: UrgentSlot, st: UrgentState, goal: number, cap: number, now: number): Promise<void> {
+  try {
+    const store = urgentStore();
+    const all = st.n > 0 ? await store.top(ev.id, LUCKY_LOOK) : [];
+    const given = all.filter((r) => r.n > 0);
+    const stage = urgentStage(st.n, goal);
+    const lucky = luckyFrom(ev.id, given, stage);
+    const last = urgentLastAcct(st);
+    const end = urgentEndAt(ev.end, st.fest);
+    const ranks = given.slice(0, RANK_LOOK).map((r) => r.acct);
+    const rowOf = (t: UrgentTop, i: number): UrgentResultRow => {
+      const r = urgentReward({ id: ev.id, acct: t.acct, n: st.n, goal, cap, mine: t.n, top: given[0]?.acct ?? null, ranks, last, lucky });
+      return {
+        acct: t.acct,
+        name: t.name || NO_NAME,
+        n: t.n,
+        rank: i + 1,
+        stamps: r ? r.stamps + r.rankStamps : 0,
+        box: !!r?.box,
+        king: !!r?.king,
+        kingCos: !!r?.kingCos,
+        lucky: !!r?.lucky,
+        last: !!r?.last,
+      };
+    };
+    const who = async (acct: string | null) => (acct ? { acct, name: given.find((g) => g.acct === acct)?.name || (await nameOf(acct, now).catch(() => NO_NAME)) } : null);
+    const rec: UrgentResult = {
+      id: ev.id,
+      kind: ev.kind,
+      start: ev.start,
+      end,
+      goal,
+      n: st.n,
+      pct: urgentPct(st.n, goal),
+      stage,
+      early: end < ev.end,
+      at: now,
+      count: given.length,
+      rows: given.slice(0, URGENT_RESULT_ROWS).map(rowOf),
+      lucky: await who(lucky),
+      last: stage >= 100 ? await who(last) : null,
+    };
+    await store.saveResult(ev.id, JSON.stringify(rec), URGENT_RESULTS_KEEP);
+  } catch (e) {
+    console.warn("[urgent] 결과 기록 실패", e);
+  }
+}
+
+/**
+ * 관리자 결과 목록 (최신 순). 먼저 최근 끝난 의뢰(그저께~오늘 + 시험) 중 아직 기록이 없는 것을 남긴다 —
+ * 끝난 뒤 아무도 상태를 묻지 않았어도 빠지지 않게. 받기 기록이 남아 있는 동안(약 4일)은 누가 받았는지·무슨 꾸미기를 받았는지 덧붙인다
+ */
+export async function adminUrgentResults(now = Date.now()): Promise<AdminUrgentResultsResponse> {
+  const store = urgentStore();
+  for (const ev of await eventsAround(now)) {
+    if (now < ev.start) continue;
+    const st = await store.state(ev.id);
+    // 목표가 없으면 아무도 보지 않은 의뢰 (빈 키를 만들지 않는다)
+    if (st.goal <= 0 || st.rs || now < urgentEndAt(ev.end, st.fest)) continue;
+    await recordUrgentResult(ev, st, st.goal, st.cap, now);
+  }
+  const results: AdminUrgentResult[] = [];
+  for (const raw of await store.results(URGENT_RESULTS_KEEP)) {
+    let rec: UrgentResult;
+    try {
+      rec = JSON.parse(raw) as UrgentResult;
+    } catch {
+      continue;
+    }
+    const want = new Set([...rec.rows.map((r) => r.acct), ...(rec.lucky ? [rec.lucky.acct] : [])]);
+    const claimed: AdminUrgentResult["claimed"] = {};
+    if (now < rec.end + URGENT_CLAIM_MS + 86_400_000)
+      for (const [acct, json] of Object.entries(await store.claimedAll(rec.id))) {
+        if (!want.has(acct)) continue;
+        const c = parseClaimed(json);
+        if (c) claimed[acct] = { at: c.at, cos: c.cos ?? null };
+      }
+    results.push({ ...rec, claimed });
+  }
+  return { results };
 }
 
 // ── 축제 (낚시·채집 희귀 확률) ──

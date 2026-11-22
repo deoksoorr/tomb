@@ -66,6 +66,11 @@ export interface GiftStore {
   remove(accountId: string, giftId: string, acctCreatedAt: number, now: number): Promise<boolean>;
   /** 관리자 발송 기록 (최신 먼저) */
   log(limit: number): Promise<GiftLogEntry[]>;
+  /**
+   * 11/22 이 계정이 선물로 받은(받았을 수 있는) 영구 꾸미기 id — 산 기록 채우기(lib/resellBought)의 선물 근거.
+   * 상태가 남은(31일) 선물 중 받음(c:) 또는 지움(d — 받고 지웠는지 모르면 받은 것으로 친다)이고, 내용(발송 기록·전체·계정 앞)에 영구 꾸미기가 있는 것
+   */
+  permGiftItems(accountId: string): Promise<Set<string>>;
   /** 랭킹 정리용: 선물 포인트가 모은 포인트·랭킹에도 들어가던 때(지갑 전용 표시 `w:` 없이) 받은 선물을 계정별로 (legacyGiftPoints) */
   legacyClaims(): Promise<LegacyGiftPoints>;
 }
@@ -126,6 +131,16 @@ export function legacyGiftPoints(
       out.deleted += ids.length;
       for (const id of ids) add(id, giftId);
     } else out.ambiguous += k;
+  }
+  return out;
+}
+
+/** 상태 해시(선물 id → c:시각 | d, w:…) + 선물 내용 → 받았을(수 있는) 선물의 영구 꾸미기 id (메모리·Redis 공용) */
+export function permItemsOf(state: Map<string, string>, gifts: Map<string, GiftRecord>): Set<string> {
+  const out = new Set<string>();
+  for (const [field, v] of state) {
+    if (field.startsWith("w:") || !(v.startsWith("c:") || v === "d")) continue;
+    for (const it of gifts.get(field)?.items ?? []) if (it.term === "perm") out.add(it.itemId);
   }
   return out;
 }
@@ -217,6 +232,12 @@ export class MemoryGifts implements GiftStore {
 
   async log(limit: number): Promise<GiftLogEntry[]> {
     return this.sent.slice(0, limit).map((g) => ({ ...g, claims: this.claims.get(g.id) ?? 0 }));
+  }
+
+  async permGiftItems(accountId: string): Promise<Set<string>> {
+    const gifts = new Map<string, GiftRecord>();
+    for (const g of [...this.sent, ...this.all.values(), ...(this.to.get(accountId)?.values() ?? [])]) gifts.set(g.id, g);
+    return permItemsOf(this.state.get(accountId) ?? new Map(), gifts);
   }
 
   async legacyClaims(): Promise<LegacyGiftPoints> {
@@ -395,6 +416,28 @@ export class RedisGifts implements GiftStore {
     if (!rows.length) return [];
     const counts = (await this.redis.hmget(K.giftClaims, ...rows.map((g) => g.id))) as unknown as (string | null)[] | null;
     return rows.map((g, i) => ({ ...g, claims: Number(counts?.[i] ?? 0) }));
+  }
+
+  async permGiftItems(accountId: string): Promise<Set<string>> {
+    const [st, log, all, to] = await this.redis
+      .pipeline()
+      .hgetall(K.giftState(accountId))
+      .lrange(K.giftLog, 0, -1)
+      .hgetall(K.giftsAll)
+      .hgetall(K.giftsTo(accountId))
+      .exec<[string[] | null, string[] | null, string[] | null, string[] | null]>();
+    const state = new Map(pairs(st));
+    if (!state.size) return new Set();
+    const gifts = new Map<string, GiftRecord>();
+    for (const raw of [...(log ?? []), ...pairs(all).map(([, v]) => v), ...pairs(to).map(([, v]) => v)]) {
+      try {
+        const g = (typeof raw === "string" ? JSON.parse(raw) : raw) as GiftRecord;
+        if (g?.id) gifts.set(g.id, g);
+      } catch {
+        /* 깨진 기록은 건너뛴다 */
+      }
+    }
+    return permItemsOf(state, gifts);
   }
 
   async legacyClaims(): Promise<LegacyGiftPoints> {

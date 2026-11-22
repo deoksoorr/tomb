@@ -227,6 +227,8 @@ export type Me = {
   equipped: { itemId: string; until: number }[];
   /** 벗어 둔 꾸미기 (만료 전). 남은 시간은 벗어 둔 동안에도 흐른다. POST /api/me/wear로 다시 입는다 */
   stash: { itemId: string; until: number }[];
+  /** 11/22 포인트를 내고 영구로 산 꾸미기 id (되팔기는 이것만 — 선물·보상으로 받은 건 「판매 불가」). 없으면 빈 것 */
+  bought?: string[];
   /** 내 계정이 세운 묘비 id */
   graves: string[];
   /** 46번: 염색한 부위 색 (없으면 color 하나 — 머리 = 몸, 포인트는 몸마다 원래 색) */

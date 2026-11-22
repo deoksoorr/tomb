@@ -1,4 +1,4 @@
-import { bodyTier, champAuraOn, CHAMP_AURA_OFF, champBoards, CHAMP_BOARDS, DIR, itemById, type DirId } from "@tomb/protocol";
+import { bodyTier, champAuraOn, CHAMP_AURA_OFF, champBoards, CHAMP_BOARDS, DIR, dyeSpecialOf, isDyeableCosmetic, itemById, type DirId } from "@tomb/protocol";
 import { foxSheet, MOUNT_FRAMES, MOUNT_GLIDE, MOUNT_H, MOUNT_SIDE_SHIFT, MOUNT_W, mountLift, mountSheet, mountSideOver, type MountKind } from "./mountArt";
 import { kstHour, parseAmbienceOverride, timePhase } from "@/lib/ambience";
 import { CUTE_FX, CUTE_FX_ART, cuteIconGrid } from "./cuteFx";
@@ -11,7 +11,10 @@ import { SEASON_FX, SEASON_FX_ART, SEASON_GEAR_FX, SEASON_SET_FX, seasonAura, se
 import { seasonSetsOfLook } from "@tomb/protocol";
 import { METEOR_FX, METEOR_FX_ART, meteorAura, meteorIcon } from "./meteorFx";
 import { CHAIR_CROWN_UP, CHAIR_DUO_UP, CHAIR_FLAME_UP, CHAIR_FX, CHAIR_FX_ART, CHAIR_GEAR_FX, chairAura, chairIcon, type ChairMotion } from "./chairFx";
-import { Grid, type Color } from "./pixel";
+import { Grid, parseHex, type Color } from "./pixel";
+import { avatarWingsGrid } from "./fx";
+import { dyeFxAt, glowTime, type DyeFxPart } from "./dyeFxCore";
+import { dyeWingGrid, wingMaskGrid } from "./wingDye";
 
 // F8 캐릭터 꾸미기 추가분 중 "아바타 시트 밖에 따로 그리는 연출" (날개 2종·우산·풍선·발자국 5종·오라 6종·펫 6종).
 // 그림(FX_ART)과 움직임(CosmeticFxSim)을 한곳에 두고, 게임(entities/CosmeticFxView, Phaser)과
@@ -136,6 +139,18 @@ function champRing(half: "back" | "front"): Grid {
 }
 
 export const FX_ART = {
+  // 11/22 등의 작은 유령 날개 (예전 AvatarView·outfitStage가 따로 그리던 것 — 염색되게 다른 날개와 같은 길로 옮겼다. 그림은 fx.avatarWingsGrid 그대로)
+  wingsSmall: { w: 26, h: 12, frames: 2, build: avatarWingsGrid },
+  // 11/22 염색 특수 색(금빛 광택·반짝이) 반짝 별: 0 = 한 점, 1 = 십자 (dyeFx drawDyeFx 별과 같은 모양)
+  dyeGlint: {
+    w: 3,
+    h: 3,
+    frames: 2,
+    build: frames(3, 3, 2, (g, f) => {
+      g.set(1, 1, 0xfffbe8);
+      if (f) for (const [x, y] of [[1, 0], [1, 2], [0, 1], [2, 1]]) g.set(x, y, 0xfffbe8, 180);
+    }),
+  },
   wingsBat: {
     w: 26,
     h: 12,
@@ -1170,11 +1185,14 @@ type AuraSpec = {
   /** champ = 주간 랭킹 1위 오라 테마 (champTheme) */
   theme?: number;
 };
-type WingSpec = { kind: "wings"; art: FxArtId; flapMs: number; amp: number };
+/** runFlapMs = 11/22 달릴 때 파닥이는 빠르기 (작은 날개 — 없으면 flapMs 그대로) */
+type WingSpec = { kind: "wings"; art: FxArtId; flapMs: number; amp: number; runFlapMs?: number };
 type HeldSpec = { kind: "held"; item: "umbrella" | "balloon" | "kite" };
 export type FxSpec = PetSpec | TrailSpec | AuraSpec | WingSpec | HeldSpec;
 
 export const COSMETIC_FX: Readonly<Record<string, FxSpec>> = {
+  // 11/22 작은 날개 (예전 AvatarView 값 그대로: 150ms에 ±16%, 달리면 70ms)
+  back_wings: { kind: "wings", art: "wingsSmall", flapMs: 150, amp: 0.16, runFlapMs: 70 },
   hand_umbrella: { kind: "held", item: "umbrella" },
   hand_balloon: { kind: "held", item: "balloon" },
   back_wings_bat: { kind: "wings", art: "wingsBat", flapMs: 95, amp: 0.2 },
@@ -1337,6 +1355,10 @@ export type FxCmd = {
   dim?: number;
   /** 아래쪽에서 잘라 낼 줄 수 (물에 잠긴 펫). 없으면 0 — 캔버스 미리보기는 물이 없어 쓰지 않는다 */
   crop?: number;
+  /** 11/22 그림 변형 (fxArtGrid): "rrggbb" = 그 색으로 염색한 날개, "m" = 특수 색 가면. 없으면 원래 그림 */
+  tex?: string;
+  /** 11/22 곱할 색 (특수 색 가면 덮개 — Phaser setTint와 같은 뜻) */
+  tint?: Color;
 };
 
 export type FxInput = {
@@ -1351,6 +1373,10 @@ export type FxInput = {
   dir: DirId;
   /** 걷거나 달리는 중 (발자국) */
   moving: boolean;
+  /** 11/22 달리는 중 (작은 날개가 빨리 파닥인다) */
+  running?: boolean;
+  /** 11/22 야광 특수 색이 빛나는지 (미리보기 무대가 정한다). 없으면 지금 시각(해질녘·밤 — dyeFx glowTime) */
+  glow?: boolean;
   /** 잠수·해먹·매달리기처럼 몸에 붙은 연출을 숨길 때 */
   hidden: boolean;
   /** 발바닥에서 그림 맨 위 (머리 꾸미기 포함), 어깨 높이 */
@@ -1511,6 +1537,42 @@ export class CosmeticFxSim {
   private petRestAt = NaN;
   /** 11/19 펫이 마지막으로 걸은 방향 (네 방향 펫 dirs가 앞·뒷모습을 고른다. -1 = 아직 안 걸음 → 옆모습) */
   private petFace = -1;
+  /** 11/22 입은 아이템 색 (색 표기 specDye.items — 날개만 쓴다) */
+  private itemDye: Readonly<Record<string, string>> = {};
+  /** 11/22 염색한 날개: 아이템 id → 그림 변형(색 hex) · 특수 색 */
+  private wingDye = new Map<string, { tex: string; fx: DyeFxPart | null }>();
+  /** 특수 색 박자를 아바타마다 어긋나게 (DyeFxView salt와 같은 뜻) */
+  private readonly salt = Math.floor(Math.random() * 1000);
+
+  /** 11/22 입은 아이템 색 (색 표기의 items). 날개는 그 색으로 다시 칠한 그림을 쓴다 */
+  setDye(items: Readonly<Record<string, string>> | undefined): void {
+    this.itemDye = items ?? {};
+    this.refreshWingDye();
+  }
+
+  /** 지금 입은 염색 날개가 쓰는 그림 변형 (원래 색 + 특수 색이면 가면) — 게임이 텍스처를 잡고 놓는 데 쓴다 */
+  dyedArt(): { art: FxArtId; tex: string }[] {
+    const out: { art: FxArtId; tex: string }[] = [];
+    for (const [id, s] of this.specs) {
+      const d = s.kind === "wings" ? this.wingDye.get(id) : undefined;
+      if (!d || s.kind !== "wings") continue;
+      out.push({ art: s.art, tex: d.tex });
+      if (d.fx) out.push({ art: s.art, tex: "m" });
+    }
+    return out;
+  }
+
+  private refreshWingDye(): void {
+    this.wingDye.clear();
+    for (const [id, s] of this.specs) {
+      const c = s.kind === "wings" ? this.itemDye[id] : undefined;
+      if (!c || !isDyeableCosmetic(id)) continue;
+      const color = parseHex(c, -1);
+      if (color < 0) continue;
+      const kind = dyeSpecialOf(c);
+      this.wingDye.set(id, { tex: color.toString(16).padStart(6, "0"), fx: kind ? { part: id, kind, color } : null });
+    }
+  }
 
   /** body = 몸 id (프리미엄 외형 등급 연출을 함께 건다), champ = 주간 랭킹 1위 값 (1위 오라를 함께 건다 — 착용 오라와 자리를 나눠 둘 다 보인다) */
   setLook(look: readonly string[], body?: string | null, champ?: number, staff?: boolean): void {
@@ -1544,6 +1606,7 @@ export class CosmeticFxSim {
     if (!next.some(([, s]) => s.kind === "held" && s.item === "balloon")) this.balOn = false;
     if (!next.some(([, s]) => s.kind === "held" && s.item === "kite")) this.kiteOn = false;
     this.specs = next;
+    this.refreshWingDye();
   }
 
   /** 좌표계를 옮긴다 (입어 보기 무대가 가끔 원점으로 되돌릴 때) */
@@ -1589,11 +1652,11 @@ export class CosmeticFxSim {
     // 11/16 커진 몸: 몸에 붙은 그림은 원래 크기 입력(g)으로 계산해 발밑 기준으로 키운다
     const k = f.scale ?? 1;
     const g = k === 1 ? f : { ...f, artTop: f.artTop / k, shoulder: f.shoulder / k };
-    for (const [, s] of this.specs) {
+    for (const [id, s] of this.specs) {
       const n0 = out.length;
       switch (s.kind) {
         case "wings":
-          this.wings(s, g, t, out);
+          this.wings(s, g, t, out, this.wingDye.get(id));
           if (k !== 1) scaleCmds(out, n0, f.x, f.headY, k);
           break;
         case "held":
@@ -1625,18 +1688,18 @@ export class CosmeticFxSim {
     }
   }
 
-  private wings(s: WingSpec, f: FxInput, t: number, out: FxCmd[]): void {
+  private wings(s: WingSpec, f: FxInput, t: number, out: FxCmd[], dye?: { tex: string; fx: DyeFxPart | null }): void {
     if (f.hidden) return;
     const side = f.dir === DIR.left || f.dir === DIR.right;
-    const flap = 1 + s.amp * Math.sin(t / s.flapMs);
-    out.push(
-      cmd(s.art, side ? 1 : 0, f.x + (f.dir === DIR.right ? 2 : f.dir === DIR.left ? -2 : 0), f.headY - f.shoulder - 3, {
-        sx: flap,
-        flip: f.dir === DIR.right,
-        layer: "body",
-        depth: bodyDepth(f) + (f.dir === DIR.up ? 0.05 : -0.05),
-      }),
-    );
+    const flap = 1 + s.amp * Math.sin(t / (f.running && s.runFlapMs ? s.runFlapMs : s.flapMs));
+    const frame = side ? 1 : 0;
+    const x = f.x + (f.dir === DIR.right ? 2 : f.dir === DIR.left ? -2 : 0);
+    const y = f.headY - f.shoulder - 3;
+    const flip = f.dir === DIR.right;
+    const depth = bodyDepth(f) + (f.dir === DIR.up ? 0.05 : -0.05);
+    // 11/22 염색한 날개는 그 색으로 다시 칠한 그림 (fxArtGrid)
+    out.push(cmd(s.art, frame, x, y, { sx: flap, flip, layer: "body", depth, ...(dye ? { tex: dye.tex } : {}) }));
+    if (dye?.fx) wingDyeFx(s.art, frame, x, y, flap, flip, depth, dye.fx, f, out, this.salt);
   }
 
   private umbrella(f: FxInput, out: FxCmd[]): void {
@@ -2551,7 +2614,8 @@ function questAura(motion: "qFireflies" | "qNightfish" | "qCapeDust" | "qLamp" |
       // 새해 소원 등불: 손에 든 풍등 둘레의 따뜻한 번짐 (밤에 밝게, 뒷모습은 몸에 가려 없음)
       if (f.hidden || f.dir === DIR.up) return;
       const flick = calm ? 1 : 0.85 + 0.15 * Math.sin(t / 110) * Math.sin(t / 47);
-      out.push(cmd("qLampFlare", 0, Math.round(f.x + f.hand.dx), Math.round(f.headY - f.hand.up - 5), { alpha: (night ? 0.9 : 0.25) * flick, sx: 1.1, sy: 1.1, layer: "light", depth: 0 }));
+      // 11/22 손 꾸미기 크게: 소원 등불은 손 위 여섯~일곱 칸, 마중 등불은 네다섯 칸 — 둘 사이 (heldGear)
+      out.push(cmd("qLampFlare", 0, Math.round(f.x + f.hand.dx), Math.round(f.headY - f.hand.up - 6), { alpha: (night ? 0.9 : 0.25) * flick, sx: 1.1, sy: 1.1, layer: "light", depth: 0 }));
       break;
     }
     case "qLamp": {
@@ -2594,6 +2658,66 @@ function sirenFx(f: FxInput, t: number, out: FxCmd[]): void {
 
 function cmd(art: FxArtId, frame: number, x: number, y: number, o: Partial<FxCmd> = {}): FxCmd {
   return { art, frame, x, y, ox: 0.5, oy: 0.5, alpha: 1, sx: 1, sy: 1, rot: 0, flip: false, layer: "body", depth: y, ...o };
+}
+
+// ── 11/22 날개 염색 (wingDye.ts) ──
+
+let wingItems: Map<string, string> | null = null;
+
+/** 날개 그림 → 그 날개 아이템 id (염색 묶음 GEAR_DYE_REGIONS가 아이템 id로 되어 있다) */
+function wingItemOf(art: FxArtId): string | undefined {
+  if (!wingItems) {
+    wingItems = new Map();
+    for (const [id, s] of Object.entries(COSMETIC_FX)) if (s.kind === "wings") wingItems.set(s.art, id);
+  }
+  return wingItems.get(art);
+}
+
+/**
+ * 연출 그림 (FxCmd.tex 변형까지): tex가 없으면 원래 그림, "rrggbb"면 그 색으로 염색한 날개, "m"이면 특수 색 가면.
+ * 게임(CosmeticFxView)과 미리보기(outfitStage)가 같은 그림을 쓴다 — 둘 다 텍스처·캔버스로 한 번 굽고 다시 쓴다
+ */
+export function fxArtGrid(art: FxArtId, tex?: string): Grid {
+  const base = FX_ART[art].build();
+  const item = tex ? wingItemOf(art) : undefined;
+  if (!tex || !item) return base;
+  if (tex === "m") return wingMaskGrid(base, item);
+  return /^[0-9a-f]{6}$/.test(tex) ? dyeWingGrid(base, item, parseInt(tex, 16)) : base;
+}
+
+const glintPixels = new Map<string, number[]>();
+
+/** 날개 프레임 안 염색 묶음 픽셀 (y * w + x) — 반짝 별 자리 */
+function wingGlintPixels(art: FxArtId, frame: number): number[] {
+  const key = `${art}|${frame}`;
+  let out = glintPixels.get(key);
+  if (out) return out;
+  const a = FX_ART[art];
+  const g = fxArtGrid(art, "m");
+  out = [];
+  for (let y = 0; y < a.h; y++) for (let x = 0; x < a.w; x++) if (g.px[y * g.w + frame * a.w + x] & 255) out.push(y * a.w + x);
+  glintPixels.set(key, out);
+  return out;
+}
+
+/**
+ * 염색한 날개의 특수 색 연출 (아바타 시트의 DyeFxView·drawDyeFx와 같은 박자): 가면(tex "m")에 색을 곱해 같은 자리·같은 파닥임으로 겹치고,
+ * 금빛 광택·반짝이는 날개 위 한 점에서 반짝 별. 야광은 밤 어둠 위(빛 층)에 그린다
+ */
+function wingDyeFx(art: FxArtId, frame: number, x: number, y: number, sx: number, flip: boolean, depth: number, fx: DyeFxPart, f: FxInput, out: FxCmd[], salt: number): void {
+  // 움직임 줄이기: 무지개는 천천히 멈춘 듯, 반짝 별은 없다 (DyeFxView와 같게). 멈춘 미리보기는 시각 0
+  const t = f.still ? 0 : f.reduced ? Math.floor(f.now / 4000) * 4000 : f.now;
+  const { layer, glint } = dyeFxAt(fx, t, f.still ? 0 : salt, f.glow ?? glowTime(f.now));
+  if (layer && layer.alpha > 0.01)
+    out.push(cmd(art, frame, x, y, { sx, flip, tex: "m", tint: layer.tint, alpha: layer.alpha, add: layer.add, layer: fx.kind === "n" ? "light" : "body", depth: depth + 0.01 }));
+  if (f.reduced || glint.k <= 0.05) return;
+  const pts = wingGlintPixels(art, frame);
+  if (!pts.length) return;
+  const a = FX_ART[art];
+  const i = pts[Math.abs(Math.imul(glint.pick + 1, 2654435761) >>> 0) % pts.length];
+  const dx = ((i % a.w) + 0.5 - a.w / 2) * sx * (flip ? -1 : 1);
+  const dy = Math.floor(i / a.w) + 0.5 - a.h / 2;
+  out.push(cmd("dyeGlint", glint.k > 0.4 ? 1 : 0, x + dx, y + dy, { alpha: Math.min(1, glint.k), add: true, layer: "body", depth: depth + 0.02 }));
 }
 
 // ── 상점·가방 아이콘 (16×16, itemIcons.ts가 쓴다) ──

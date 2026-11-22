@@ -5,7 +5,10 @@ import { env } from "../env";
 import { getAccounts } from "./index";
 import { kstDay } from "./accounts";
 import { RedisStaff } from "./staff";
-import { getStyleStore, RedisStyle, type DyeSession } from "./style";
+import { Redis } from "@upstash/redis";
+import { DYE_SELECT_LEVEL_KEEP_MS, DYE_SELECT_LOCK_MS } from "../dye/rules";
+import { K } from "./keys";
+import { getStyleStore, RedisStyle, styleKey, type DyeSession } from "./style";
 
 // 46·25·30번 Lua 계약: 실제 Redis(일회용 DB)에서만 (메모리 쪽은 lib/dye/dye.test.ts)
 const conn = env.redis();
@@ -35,7 +38,7 @@ describe.skipIf(!conn)("꾸미기 저장소 (실제 Redis)", () => {
     expect(await style.finish(id, "seedB2", "#112233")).toBe(false);
     expect(await style.finish(id, "seedA1", "#112233")).toBe(true);
     expect(await style.finish(id, "seedA1", "#445566")).toBe(false);
-    expect(await style.get(id)).toEqual({ dye: { body: "#112233" }, session: null, bodies: [] });
+    expect(await style.get(id)).toEqual({ dye: { body: "#112233" }, items: {}, session: null, bodies: [] });
     expect(await style.begin(id, "dye_basic", session("seedC3"))).toBeNull();
   });
 
@@ -89,5 +92,44 @@ describe.skipIf(!conn)("꾸미기 저장소 (실제 Redis)", () => {
     expect(a.equipped.find((e) => e.itemId === "hat_crown")?.until).toBe(PERMANENT_UNTIL);
     expect(a.stash.find((e) => e.itemId === "staff_robe")?.until).toBe(PERMANENT_UNTIL);
     expect(await staff.grant(accounts, nanoid(), items, PERMANENT_UNTIL)).toBe(-1);
+  });
+
+  it("11/22 색 칸 고르기 + 연타 잠금이 Lua 한 번에: 5번까지 되고 6번째 10분, 단계 상승·상한, 단계 키가 지워지면 처음으로, 키는 TTL", async () => {
+    const raw = new Redis({ url: conn!.url, token: conn!.token });
+    const id = await account(0);
+    await raw.hset(styleKey(id), { "i:wr_shirt:0": "#112233", "i:wr_shirt:1": "#223344" });
+    const MIN = 60_000;
+    let t = Date.now();
+    const sel = (k: number, at = t) => style.selectItemColor(id, "wr_shirt", k, at);
+    expect(await sel(2)).toEqual({ r: "empty" });
+    for (const k of [0, 1, -1, 1]) expect(await sel(k)).toEqual({ r: "ok" });
+    expect((await style.get(id)).items.wr_shirt.sel).toBe(1);
+    expect(await sel(0)).toEqual({ r: "locked", waitMs: 10 * MIN });
+    // 잠긴 요청은 칸을 바꾸지 않는다
+    expect((await style.get(id)).items.wr_shirt.sel).toBe(1);
+    expect(await sel(0, t + 4 * MIN)).toEqual({ r: "locked", waitMs: 6 * MIN });
+    // 키는 모두 TTL (잠금 = 단계 길이, 단계 = 길이 + 24시간, 횟수 키는 잠그며 지운다)
+    const ttl = async (k: string) => Number(await raw.pttl(k));
+    expect(await ttl(K.dyeSelLock(id))).toBeGreaterThan(10 * MIN - 5_000);
+    expect(await ttl(K.dyeSelLock(id))).toBeLessThanOrEqual(10 * MIN);
+    expect(await ttl(K.dyeSelLv(id))).toBeGreaterThan(10 * MIN + DYE_SELECT_LEVEL_KEEP_MS - 5_000);
+    expect(await raw.exists(K.dyeSelN(id))).toBe(0);
+    // 풀린 뒤(시계를 민다 — 잠금 키는 남아 있어도 끝 시각이 지났다) 다시 연타 → 30분 → 1시간 → 3시간 → 24시간 → 24시간
+    const waits: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      t += 25 * 3_600_000;
+      for (let j = 0; j < 5; j++) expect(await sel(j % 2, t + j)).toEqual({ r: "ok" });
+      const r = await sel(0, t + 5);
+      waits.push(r.r === "locked" ? r.waitMs : 0);
+    }
+    expect(waits).toEqual([...DYE_SELECT_LOCK_MS.slice(1), DYE_SELECT_LOCK_MS[4]]);
+    // 단계 키가 TTL로 사라지면(마지막 잠금 끝 + 24시간) 처음 단계
+    await raw.del(K.dyeSelLv(id));
+    t += 25 * 3_600_000;
+    for (let j = 0; j < 5; j++) await sel(0, t + j);
+    expect(await sel(0, t + 5)).toEqual({ r: "locked", waitMs: 10 * MIN });
+    // 다른 계정은 그대로
+    const other = await account(0);
+    expect(await style.selectItemColor(other, "wr_shirt", -1, t)).toEqual({ r: "ok" });
   });
 });

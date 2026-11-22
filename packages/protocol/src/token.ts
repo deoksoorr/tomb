@@ -1,5 +1,6 @@
 import { JOIN_TOKEN_TTL_SEC, ROOM_ID_RE, isAvatarBody, isChampValue, isDexBadge, staffGateBody } from "./constants";
 import { mgrGateLook, sanitizeLook, staffGateLook } from "./items";
+import { isSproutLeft } from "./sprout";
 import { packDye, packItemDye, sanitizeItemDye, unpackWireDye, type AvatarDye } from "./dye";
 
 // 입장 토큰: base64url(JSON payload) + "." + base64url(HMAC-SHA256(payload, JOIN_SECRET))
@@ -28,6 +29,8 @@ export type JoinClaims = {
   champ?: number;
   /** 11/16 매니저 (관리자가 임명, Vercel이 확인한 뒤에만 넣는다 → 매니저 전용 칭호·채팅 딱지). 일반 계정엔 없다 */
   mgr?: true;
+  /** 11/22 새싹 (총 접속 3시간 미만 새 이웃, 운영자·매니저 빼고): 새싹으로 남은 분 1~180. Vercel이 계정 기록을 확인한 뒤에만 넣는다 */
+  nb?: number;
   /** 11/15 캠핑장에 갈 수 있다 (테스트 서버이거나 운영 CAMP_ENABLED=1일 때 Vercel이 넣는다). 없으면 버스를 타도 마을에 그대로 */
   camp?: true;
   /** 11/16 바닷가(달물결 포구)에 갈 수 있다 (테스트 서버이거나 운영 SEA_ENABLED=1일 때 Vercel이 넣는다). 없으면 바닷가행 버스를 타도 마을에 그대로 */
@@ -128,7 +131,7 @@ export async function verifyJoinToken(
     return null;
   }
   if (!c || typeof c !== "object") return null;
-  const { visitorId, name, color, channel, exp, look, body: rawBody, room, dye, idye, staff, dex, champ, camp, sea, mgr } = c as Record<string, unknown>;
+  const { visitorId, name, color, channel, exp, look, body: rawBody, room, dye, idye, staff, dex, champ, camp, sea, mgr, nb } = c as Record<string, unknown>;
   // 방 id가 있는데 형식이 틀리면 토큰째 버린다 (방 없는 채널 0 토큰 = 대기열 토큰으로 바뀌지 않게)
   if (room !== undefined && !(typeof room === "string" && ROOM_ID_RE.test(room))) return null;
   if (
@@ -147,5 +150,5 @@ export async function verifyJoinToken(
   const lk = mgrGateLook(staffGateLook(sanitizeLook(look), isStaff), mgr === true);
   // 염색: 캐릭터 3부위 + 입은 아이템 색 (착용 목록에 없는 아이템 색은 버린다)
   const wireDye = unpackWireDye(dye, idye, lk);
-  return { visitorId, name, color, channel, exp, look: lk, body: staffGateBody(isAvatarBody(rawBody) ? rawBody : "hood", isStaff), ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(Object.keys(wireDye).length ? { dye: wireDye } : {}), ...(staff === true ? { staff: true as const } : {}), ...(isDexBadge(dex) ? { dex } : {}), ...(isChampValue(champ) ? { champ } : {}), ...(camp === true ? { camp: true as const } : {}), ...(sea === true ? { sea: true as const } : {}), ...(mgr === true ? { mgr: true as const } : {}) };
+  return { visitorId, name, color, channel, exp, look: lk, body: staffGateBody(isAvatarBody(rawBody) ? rawBody : "hood", isStaff), ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(Object.keys(wireDye).length ? { dye: wireDye } : {}), ...(staff === true ? { staff: true as const } : {}), ...(isDexBadge(dex) ? { dex } : {}), ...(isChampValue(champ) ? { champ } : {}), ...(camp === true ? { camp: true as const } : {}), ...(sea === true ? { sea: true as const } : {}), ...(mgr === true ? { mgr: true as const } : {}), ...(isSproutLeft(nb) && staff !== true && mgr !== true ? { nb } : {}) };
 }

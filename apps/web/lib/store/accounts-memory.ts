@@ -23,6 +23,8 @@ import {
   type NameChangeResult,
   type NameClaimResult,
   type VisitResult,
+  type AccountReadOpts,
+  type AccountAppearance,
   type AccountRecord,
   type AccountStore,
   type AccountSummary,
@@ -64,6 +66,9 @@ type Acct = {
   look: Map<CosmeticSlot, EquippedItem>;
   /** 벗어 둔 꾸미기: itemId → 만료 ms. 예전(HMR 전) 계정에는 없을 수 있다 */
   stash?: Map<string, number>;
+  /** 11/22 포인트를 내고 영구로 산 꾸미기 id (되팔기 조건 — accounts-redis.ts K.bought와 같다), 채우기를 끝냈는지 (boughtFill) */
+  bought?: Set<string>;
+  boughtFill?: boolean;
   graves: Set<string>;
   /** 오늘 적립 기록 (source → 점수, `_total`). 날짜가 바뀌면 버린다 */
   earnDay: string | null;
@@ -211,13 +216,16 @@ export class MemoryAccounts implements AccountStore {
     return (a.stash ??= new Map());
   }
 
-  /** 11/22 옷(back)·등(pack) 칸 나눔: 예전 back 칸에 입혀 둔 등 꾸미기는 pack 칸으로 옮긴다 (pack이 비어 있을 때만) */
+  /**
+   * 11/22 옷(back)·등(pack) 칸 나눔: 예전 back 칸에 입혀 둔 등 꾸미기(배낭·날개, 같은 날 옮긴 망토·걸친 재킷·숄)는 pack 칸으로 옮긴다.
+   * pack 칸이 이미 차 있으면 벗어 둔 꾸미기(stash)로 — 남은 시간은 그대로, 등 칸에 입은 것은 건드리지 않는다
+   */
   private fixSlots(a: Acct): void {
     const back = a.look.get("back");
-    if (back && itemById(back.itemId)?.slot === "pack" && !a.look.has("pack")) {
-      a.look.set("pack", back);
-      a.look.delete("back");
-    }
+    if (!back || itemById(back.itemId)?.slot !== "pack") return;
+    a.look.delete("back");
+    if (!a.look.has("pack")) a.look.set("pack", back);
+    else this.stashOf(a).set(back.itemId, Math.max(back.until, this.stashOf(a).get(back.itemId) ?? 0));
   }
 
   /** 만료된 착용품·벗어 둔 꾸미기를 지운다 (옷·등 칸 옮기기도) */
@@ -241,7 +249,7 @@ export class MemoryAccounts implements AccountStore {
     a.look.set(slot, item);
   }
 
-  async get(id: string, day: string, now: number): Promise<AccountRecord> {
+  async get(id: string, day: string, now: number, opts: AccountReadOpts = {}): Promise<AccountRecord> {
     const a = this.accts.get(id) ?? this.blank();
     this.fixSlots(a);
     return {
@@ -262,6 +270,8 @@ export class MemoryAccounts implements AccountStore {
         .filter(([, until]) => until > now)
         .map(([itemId, until]) => ({ itemId, until }))
         .sort((x, y) => x.until - y.until || x.itemId.localeCompare(y.itemId)),
+      ...(opts.bought ? { bought: [...(a.bought ?? [])] } : {}),
+      boughtFilled: !!a.boughtFill,
       graves: [...a.graves],
       todayEarned: a.earnDay === day ? (a.earned.get("_total") ?? 0) : 0,
       activityUnread: (a.activity ?? []).filter((x) => x.kind !== "revive" && x.at > (a.activitySeen ?? 0)).length,
@@ -282,9 +292,9 @@ export class MemoryAccounts implements AccountStore {
     };
   }
 
-  async appearance(id: string, now: number): Promise<Pick<AccountRecord, "name" | "color" | "body" | "equipped">> {
+  async appearance(id: string, now: number): Promise<AccountAppearance> {
     const a = this.accts.get(id) ?? this.blank();
-    return { name: a.name, color: a.color ?? null, body: a.body ?? null, equipped: [...a.look.values()].filter((e) => e.until > now) };
+    return { name: a.name, color: a.color ?? null, body: a.body ?? null, equipped: [...a.look.values()].filter((e) => e.until > now), stayMin: a.stayMin ?? 0, createdAt: a.createdAt ?? 0 };
   }
 
   async earn(id: string, source: EarnSource, day: string, opts: EarnOptions = {}): Promise<number> {
@@ -324,19 +334,34 @@ export class MemoryAccounts implements AccountStore {
     return a.points;
   }
 
-  async sellPermanent(id: string, itemId: string, amount: number, reason: string, now: number): Promise<number | "worn" | "none"> {
+  async sellPermanent(id: string, itemId: string, amount: number, reason: string, now: number): Promise<number | "worn" | "none" | "gift"> {
     assertPointAmount(amount);
     const a = this.acct(id);
     if ([...a.look.values()].some((e) => e.itemId === itemId)) return "worn";
     const stash = this.stashOf(a);
     if ((stash.get(itemId) ?? 0) < PERMANENT_UNTIL) return "none";
+    if (!a.bought?.has(itemId)) return "gift";
     stash.delete(itemId);
+    a.bought.delete(itemId);
     a.lifetime ??= a.points;
     const before = a.points;
     a.points = Math.min(WALLET_MAX, a.points + amount);
     this.stat(a, kstDay(now), "resell", a.points - before);
     a.ledger = [{ at: now, amount, reason }, ...(a.ledger ?? [])].slice(0, 100);
     return a.points;
+  }
+
+  async fillBought(id: string, items: readonly string[]): Promise<boolean> {
+    const a = this.accts.get(id);
+    if (!a || a.boughtFill) return false;
+    a.bought ??= new Set();
+    for (const it of items) a.bought.add(it);
+    a.boughtFill = true;
+    return true;
+  }
+
+  async ledger(id: string): Promise<{ at: number; amount: number; reason: string }[]> {
+    return [...(this.accts.get(id)?.ledger ?? [])];
   }
 
   async presence(id: string, day: string, now: number): Promise<number | null> {
@@ -801,9 +826,19 @@ export class MemoryAccounts implements AccountStore {
 
   async equip(id: string, itemId: string, slot: CosmeticSlot, until: number, now: number): Promise<boolean> {
     const a = this.acct(id);
-    if (!this.take(a, itemId)) return false;
     this.prune(a, now);
-    this.putOn(a, slot, { itemId, until });
+    // 11/22 이미 영구로 가진 꾸미기면 이용권을 쓰지 않고 영구 그대로 입힌다 (accounts-redis.ts EQUIP_LUA와 같다)
+    const cur = a.look.get(slot);
+    if (cur?.itemId === itemId && cur.until >= PERMANENT_UNTIL) return true;
+    const had = this.stashOf(a).get(itemId) ?? 0;
+    if (had >= PERMANENT_UNTIL) {
+      this.putOn(a, slot, { itemId, until: had });
+      return true;
+    }
+    if (!this.take(a, itemId)) return false;
+    // 11/22 기간제로 가진 것(입었든 벗어 뒀든)이면 남은 기간에 이용 기간을 더한다 (accounts-redis.ts EQUIP_LUA와 같다 — 줄지 않는다)
+    const left = Math.max(had, cur?.itemId === itemId ? cur.until : 0);
+    this.putOn(a, slot, { itemId, until: left > now ? Math.min(PERMANENT_UNTIL, left + (until - now)) : until });
     return true;
   }
 
@@ -1180,6 +1215,8 @@ export class MemoryAccounts implements AccountStore {
     if (!apply) return "ok";
     if (cur?.itemId === itemId && cur.until > now) a.look.set(slot, { itemId, until: permUntil });
     else stash.set(itemId, permUntil);
+    // 11/22 산 기록 (되팔기 조건 — style.ts PERMANENT_LUA와 같다)
+    (a.bought ??= new Set()).add(itemId);
     return "ok";
   }
 }

@@ -52,11 +52,14 @@ describe("가치 비례 점수 (영구 소장 기준 가치 ÷ 5, 1점 단위)",
     expect(lookScore({ equipped, body: "king" }, NOW)).toBe(308 + 1000);
     expect(lookScore({ equipped, dye: { head: withDyeSpecial("#ff0000", "g"), body: "#00ff00", accent: withDyeSpecial("#0000ff", "r") } }, NOW)).toBe(308 + 2 * DYE_SPECIAL_BONUS);
     expect(DYE_SPECIAL_BONUS).toBe(10);
-    // 11/22 아이템 특수 색은 지금 입고 있는 아이템만 (후광은 입었고, 비니·날개는 안 입었거나 염색이 안 그려진다)
+    // 11/22 아이템 특수 색은 지금 입고 있는 아이템만 (후광은 입었고, 비니·날개는 안 입었다)
     const itemSpecial = { items: { hat_halo: withDyeSpecial("#ff0000", "g"), hat_beanie: withDyeSpecial("#00ff00", "s"), back_wings: withDyeSpecial("#0000ff", "r") } };
     expect(lookScore({ equipped, dye: itemSpecial }, NOW)).toBe(308 + DYE_SPECIAL_BONUS);
     const wings = [{ itemId: "back_wings", until: NOW + HOUR }];
-    expect(lookScore({ equipped: wings, dye: itemSpecial }, NOW)).toBe(lookScore({ equipped: wings }, NOW));
+    // 11/22 날개도 염색되니 입으면 특수 색 점수가 붙는다. 연(수집 의뢰 보상)은 염색이 안 그려져 없다
+    expect(lookScore({ equipped: wings, dye: itemSpecial }, NOW)).toBe(lookScore({ equipped: wings }, NOW) + DYE_SPECIAL_BONUS);
+    const kite = [{ itemId: "q_back_kite", until: NOW + HOUR }];
+    expect(lookScore({ equipped: kite, dye: { items: { q_back_kite: withDyeSpecial("#0000ff", "r") } } }, NOW)).toBe(lookScore({ equipped: kite }, NOW));
     expect(wornParts({ equipped }, NOW)).toEqual(["hat_halo", "pet_cat"]);
   });
 });

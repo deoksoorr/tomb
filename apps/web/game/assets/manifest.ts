@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import { DIR, STATE_NAMES, type DirId, type StateName } from "@tomb/protocol";
 import { AV_ACT_ANIM, AV_ANIM, AV_COLS, AV_H, AV_W, avatarColorKey, bodyOf, buildAvatarSheet, lookKey, type AvatarActAnim } from "../sprites/avatar";
 import * as fx from "../sprites/fx";
+import { AvatarTexLedger } from "./avatarTexLedger";
 import { SHAPE_SIZE, shapeVariants, type GraveShape } from "../graveShape";
 import { flowersCanvas, graveCanvas, graveTexKey, mineFlagCanvas, plotCanvas, upMarkerCanvas } from "../sprites/graves";
 import * as props from "../sprites/props";
@@ -83,7 +84,6 @@ export const TEX = {
   shopDoor: "shop-door",
   mineFlag: "grave-mine-flag",
   // 아바타 꾸미기 연출 (AvatarView)
-  avWings: "av-wings",
   avPetGhost: "av-pet-ghost",
   avFootFlower: "av-foot-flower",
   avRipple: "av-ripple",
@@ -171,7 +171,6 @@ function buildManifest(): Record<string, TextureSource> {
     [TEX.shopKeeper]: proc(art.shopKeeper, { frameW: 16, frameH: 22 }),
     [TEX.shopDoor]: proc(art.shopDoor),
     [TEX.mineFlag]: proc(mineFlagCanvas),
-    [TEX.avWings]: proc(fx.avatarWings, { frameW: 26, frameH: 12 }),
     [TEX.avPetGhost]: proc(fx.petGhost),
     [TEX.avFootFlower]: proc(fx.footFlower, { frameW: 5, frameH: 5 }),
     [TEX.avRipple]: proc(fx.ripple),
@@ -245,6 +244,34 @@ export function avatarActAnimKey(texKey: string, act: AvatarActAnim, dir: DirId)
 
 export function avatarAnimKey(texKey: string, state: StateName, dir: DirId): string {
   return `${texKey}:${state}:${dir}`;
+}
+
+// 11/22 아바타 시트 원장 (게임마다 하나 — 장면끼리 텍스처 매니저를 같이 쓴다). 안 쓰는 옛 시트·거기서 만든 그림을 지운다 (avatarTexLedger.ts)
+const ledgers = new WeakMap<Phaser.Game, AvatarTexLedger>();
+
+export function avatarTexLedger(game: Phaser.Game): AvatarTexLedger {
+  return ledgerOf(ledgers, game);
+}
+
+// 11/22 염색한 날개 텍스처 원장 (날개 × 색마다 하나 — cfx-<그림>~<색>). 아바타 시트와 칸 수(IDLE_KEEP)를 나눠 쓰지 않게 따로 둔다
+const fxLedgers = new WeakMap<Phaser.Game, AvatarTexLedger>();
+
+export function fxTexLedger(game: Phaser.Game): AvatarTexLedger {
+  return ledgerOf(fxLedgers, game);
+}
+
+function ledgerOf(map: WeakMap<Phaser.Game, AvatarTexLedger>, game: Phaser.Game): AvatarTexLedger {
+  let l = map.get(game);
+  if (!l) {
+    l = new AvatarTexLedger({
+      textures: { exists: (k) => game.textures.exists(k), remove: (k) => game.textures.remove(k), getTextureKeys: () => game.textures.getTextureKeys() },
+      anims: { keys: () => (game.anims as unknown as { anims: { keys(): string[] } }).anims.keys(), remove: (k) => game.anims.remove(k) },
+      displayLists: () => game.scene.scenes.map((sc) => sc.sys.displayList?.list ?? []),
+      alive: () => !(game as unknown as { pendingDestroy?: boolean }).pendingDestroy && !!game.textures,
+    });
+    map.set(game, l);
+  }
+  return l;
 }
 
 /** 아바타 텍스처와 애니메이션을 준비하고 텍스처 키를 돌려준다 */

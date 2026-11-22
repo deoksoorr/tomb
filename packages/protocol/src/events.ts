@@ -137,6 +137,13 @@ export type WelcomeMsg = {
   m?: MapId;
   /** 11/15 채널 전체 인원 (마을·캠핑장 합계, 유예 중 포함). 없으면 옛 서버 → 같은 맵 사람 수로 */
   n?: number;
+  /**
+   * 11/22 이 서버는 look 증서를 버리지 않고 줄 세운다 (lookQueue.ts — 토큰이 없으면 마지막 하나를 들고 있다 곧 반영).
+   * 1이면 클라이언트는 기다리지 않고 바로 보낸다. 없으면 옛 서버(10초 안 두 번째 look은 버림) → 예전처럼 10.5초 간격
+   */
+  lk?: 1;
+  /** 11/22 내 새싹 표시가 끝나는 시각 (epoch ms, PeerInfo.nb와 같다 — 내 머리 위에도 새싹). 없으면 새싹 아님·옛 서버 */
+  nb?: number;
 };
 
 export type S2C =
@@ -185,7 +192,7 @@ export type S2C =
   | { t: "me" }
   /** 말풍선 자유 채팅 (보낸 사람 빼고, 서버가 가린 글. 옛 클라이언트는 모르는 t라 버린다). id = 줄 id(chatLog와 중복 제거), at = 서버 시각 */
   /** 11/16 채팅은 채널 전체(마을·캠핑장·바닷가)로 간다: name·staff·mgr = 다른 맵이라 화면에 없는 사람도 채팅창에 이름을 쓰게, m = 쓴 사람의 맵(캠핑장 "camp"·바닷가 "sea", 마을이면 없음) */
-  | { t: "chat"; sid: Sid; text: string; id?: string; at?: number; name?: string; staff?: true; mgr?: true; /** 11/17 사냥 중이면 "hunt" */ m?: ChatPlace; /** 11/20 닉네임 꾸미기 id */ ns?: string[] }
+  | { t: "chat"; sid: Sid; text: string; id?: string; at?: number; name?: string; staff?: true; mgr?: true; /** 11/17 사냥 중이면 "hunt" */ m?: ChatPlace; /** 11/20 닉네임 꾸미기 id */ ns?: string[]; /** 11/22 새싹(새 이웃)이 쓴 줄 */ nb?: true }
   /**
    * 11/16 귓속말 (받는 사람과 보낸 사람에게만, 서버가 가린 글. 기록에 남기지 않는다). from·fromName = 보낸 사람, to·toName = 받는 사람,
    * staff·mgr = 보낸 사람 딱지, toStaff·toMgr = 받는 사람 딱지. 옛 클라이언트는 모르는 t라 버린다

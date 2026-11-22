@@ -183,9 +183,9 @@ export type GameEvents = {
   /** 47번: 실시간 서버가 이용 제한으로 내보냄(4012) → UI가 새로고침해 제한 화면을 띄운다 */
   "app:banned": undefined;
   /** 47번: 다른 사람 캐릭터(또는 이름표)를 눌렀다 → UI가 작은 메뉴(신고하기)를 띄운다. ch = 월드 채널, room = 방 id */
-  "peer:menu": { sid: number; name: string; ch?: number; room?: string; /** 그 사람 머리 위에 지금 떠 있는 자유 채팅 (신고에 붙인다) */ chat?: string };
+  "peer:menu": { sid: number; name: string; ch?: number; room?: string; /** 그 사람 머리 위에 지금 떠 있는 자유 채팅 (신고에 붙인다) */ chat?: string; /** 11/22 새싹(새 이웃) → 메뉴에 한 줄 안내 */ sprout?: true };
   /** 채팅 기록창 한 줄: 같은 채널·방에서 받은 자유 채팅(가린 글) 또는 내가 보낸 글. 화면 메모리에만 1분. key = 서버 줄 id(중복 제거) */
-  "chat:line": { name: string; text: string; mine: boolean; key?: string; /** 운영자(실시간 서버가 알린 staff) → 이름 금색 */ staff?: true; /** 11/16 매니저(실시간 서버가 알린 mgr) → "매니저" 딱지 */ mgr?: true; /** 닉네임 꾸미기 id (lib/nameStyle nameStyleIds) */ ns?: string[]; /** 11/16 쓴 사람이 캠핑장·바닷가에 있었다, 11/17 사냥 중이었다("hunt") */ m?: ChatPlace; /** 11/16 귓속말 줄 (chatLog.ts ChatLine.w) */ w?: "out" | "in" | "fail" | "note" };
+  "chat:line": { name: string; text: string; mine: boolean; key?: string; /** 운영자(실시간 서버가 알린 staff) → 이름 금색 */ staff?: true; /** 11/16 매니저(실시간 서버가 알린 mgr) → "매니저" 딱지 */ mgr?: true; /** 닉네임 꾸미기 id (lib/nameStyle nameStyleIds) */ ns?: string[]; /** 11/16 쓴 사람이 캠핑장·바닷가에 있었다, 11/17 사냥 중이었다("hunt") */ m?: ChatPlace; /** 11/16 귓속말 줄 (chatLog.ts ChatLine.w) */ w?: "out" | "in" | "fail" | "note"; /** 11/22 새싹(총 접속 3시간 미만 새 이웃)이 쓴 줄 → 이름 앞 새싹 */ nb?: true };
   /** 11/16 최근 귓속말 상대가 지금 이 채널에 있는지 (input:whoOn의 답, 서버가 준 그대로). on = 있음, off = 없음 (sticky) */
   "whisper:online": { on: string[]; off: string[] };
   /** 방에 들어올 때 서버가 보낸 이 방의 최근 1분 채팅 (이 기기 시계로 옮긴 줄). ch = 월드 채널이면 그 번호 (방이면 없음) */
@@ -376,6 +376,10 @@ export type UiEvents = {
   "me:chair": { perk: ChairPerk | null };
   /** 내 도감 100% 배지 (종류별 비트, sticky). 내 캐릭터 이름표 옆에 그린다 (다른 사람에겐 입장 토큰으로 간다) */
   "me:dex": { bits: number };
+  /** 11/22 내 새싹 표시가 끝나는 시각 (epoch ms, 0 = 아님, sticky). 실시간 서버 welcome이 알려 준다 → 내 이름표 왼쪽 새싹·내 채팅 줄 */
+  "me:sprout": { until: number };
+  /** 11/22 머리 위 새싹에 마우스를 올리거나 눌렀다: 말풍선 자리 (화면 px, 새싹 그림 가운데 위). null = 치운다. tap = 눌러서 띄움 (잠깐 뒤 저절로 닫힌다) */
+  "sprout:tip": { x: number; y: number; tap?: boolean } | null;
   /** 실시간 서버: 서버에서 내 계정(포인트·선물함)이 바뀌었다(관리자 지급 등) → UI가 내 정보·선물함을 다시 받는다 */
   "me:stale": undefined;
   /** 시점을 내 캐릭터로 되돌리고 다시 따라가기 */
@@ -608,6 +612,7 @@ const STICKY = new Set<keyof AllEvents>([
   "me:staff",
   "me:chair",
   "me:dex",
+  "me:sprout",
   "whisper:online",
   "mood:state",
   "audio:mix",

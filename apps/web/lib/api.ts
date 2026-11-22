@@ -58,6 +58,8 @@ export class ApiRequestError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    /** 429면 서버가 준 Retry-After (초) — 11/22 색 입기 잠금 남은 시간 */
+    readonly retryAfter?: number,
   ) {
     super(message);
   }
@@ -96,7 +98,8 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const err = (body as Partial<ApiError> | null)?.error;
     // 서버가 터진 경우만 운영자에게 알린다 (4xx는 사용자 입력 문제)
     if (res.status >= 500) reportClientError("api", new Error(`${init?.method ?? "GET"} ${path} → ${res.status} ${err?.code ?? ""}`));
-    throw new ApiRequestError(res.status, err?.code ?? "UNKNOWN", err?.message ?? FALLBACK_MESSAGE);
+    const retry = Number(res.headers?.get?.("retry-after"));
+    throw new ApiRequestError(res.status, err?.code ?? "UNKNOWN", err?.message ?? FALLBACK_MESSAGE, retry > 0 ? retry : undefined);
   }
   for (const fn of jsonListeners) {
     try {

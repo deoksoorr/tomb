@@ -2,7 +2,10 @@ import { bodyTier, hasDye, isAvatarBody, isDyeableCosmetic, itemById, withDyeTar
 import { darken, Grid, lighten, mix, parseHex, type Color } from "./pixel";
 // 11/22 입은 꾸미기 염색 (모자·목·옷 칸): 꾸미기가 칠한 픽셀만 염색 색으로 다시 칠한다
 import { GEAR_DYE_REGIONS, itemRefOf, recolorDrawn, tallyDrawn, type ItemRef } from "./gearDye";
-import { COVERING_HATS, drawBackGear, drawHandGear, drawHandGlow, drawHeadGear, drawHeadGlow, drawNeckGear, extraGearOf, GEAR_SHEET_IDS, type ExtraGear } from "./avatarGear";
+import { drawCapeOver, hasCapeOver } from "./capeArt";
+import { COVERING_HATS, drawBackGear, drawHeadGear, drawHeadGlow, drawNeckGear, extraGearOf, eyes, GEAR_SHEET_IDS, type ExtraGear } from "./avatarGear";
+// 11/22 손 꾸미기 크게: 손 칸 꾸미기 그림·자리 잡기·몸 위에 얹기 (heldGear.ts)
+import { hasHeldArt, heldGlowDots, heldOrigin, heldSprite, paintHeld, stampHeld } from "./heldGear";
 // 11/15 사냥 중 입은 세트 장비 (착용 목록의 "sgw.…" — game/sprites/setGearWear)
 import { drawSetSpark, drawWearAcc, drawWearArmor, drawWearHead, isTopWear, sgHeadCovers, sgWearOf, sparkFrame, SGW_PREFIX, type SgWear } from "./setGearWear";
 // 11/17 NPC 계절 옷 (겨울·크리스마스판 주민 — 착용 목록의 "nw.…")
@@ -556,6 +559,8 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear0: Ge
   // (누빔 조끼 bd_vendor_base는 아래 몸통 덧그림 자리에서). 그림은 bungeoGear.ts — 등록 전(입장 화면 미리보기)이면 그리지 않는다
   const vendor = body === "vendor";
   const gear: Gear = vendor ? { ...gear0, ss: [...gear0.ss, "bd_vendor"] } : gear0;
+  // 11/22 손 칸 꾸미기 하나 (처음 등불 · F8 · 계절·골목 한정 어느 쪽이든) — 칸 맨 끝(외곽선 직전)에 몸 위로 얹는다
+  const heldId = gear.extra.hand ?? (gear.lantern ? "hand_lantern" : null) ?? gear.ss.find((id) => itemById(id)?.slot === "hand") ?? null;
   if (gear.scarf) pal = { ...pal, scarf: 0xc8463c, scarfLo: 0x8e2a25 };
   const m = metrics(body, view, pose);
   const { cx, hy } = m;
@@ -566,7 +571,7 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear0: Ge
   if (nw?.mitt) pal = { ...pal, hand: nw.mitt, handLo: darken(nw.mitt, 0.2) };
   if (nw?.boot) pal = { ...pal, feet: nw.boot.c };
   const nwc: NwCtx | null = nw
-    ? { view, fb, body, m, sit: pose.sit, bob: pose.bob, hem: pose.hem, f0: pose.f0, f1: pose.f1, lie: !!pose.lie, sink: !!pose.sink, arms: pose.arms ?? "none", handBusy: gear.lantern || !!gear.extra.hand || gear.ss.includes("sc_goguma") || gear.ss.includes("si_cookie") || body === "catmask" || body === "collector" || vendor }
+    ? { view, fb, body, m, sit: pose.sit, bob: pose.bob, hem: pose.hem, f0: pose.f0, f1: pose.f1, lie: !!pose.lie, sink: !!pose.sink, arms: pose.arms ?? "none", handBusy: !!heldId || body === "catmask" || body === "collector" || vendor }
     : null;
   const headWorn = !!gear.hat || (!!gear.extra.head && gear.extra.head !== "hat_glasses") || nwHatWorn(nw) || ssArt.ssHeadWorn(gear.ss);
   // 계절·골목 꾸미기 그림에 이 프레임의 색·착용 상태를 넘긴다 (붕어빵 장수: 다른 모자면 수건을 벗고, 손에 든 게 있으면 집게를 내려놓는다)
@@ -576,7 +581,7 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear0: Ge
       body: pal.bodyMid,
       ids: gear.ss,
       headBusy: !!gear.hat || (!!gear.extra.head && gear.extra.head !== "hat_glasses") || nwHatWorn(nw) || !!gear.sg.h,
-      handBusy: gear.lantern || !!gear.extra.hand,
+      handBusy: !!heldId,
       neckBusy: gear.scarf || !!gear.extra.neck || !!nw?.scarf || !!gear.sg.a,
     });
   const side = view === "side";
@@ -690,7 +695,7 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear0: Ge
   }
 
   // 25번: 몸통 덧그림 (정장·고양이 탈 셔츠·왕관 망토·저승사자 도포)
-  drawBodyExtra(g, body, "torso", view, pose, m, pal, headWorn);
+  drawBodyExtra(g, body, "torso", view, pose, m, pal, headWorn, !!heldId);
   // 11/22 붕어빵 장수 유령: 누빔 조끼 (몸 부위 색 — NPC 겨울 외투·사냥 갑옷·겉옷은 그 위에)
   if (vendor) ssArt.drawSsBack(g, view, ["bd_vendor_base"], m, fb, "front", pose.hem, pose.sit, body);
   // 11/17 NPC 계절 외투 (몸통 위)
@@ -715,21 +720,25 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear0: Ge
   // 11/15 세트 갑옷을 입으면 기본 천 목도리는 옷깃에 가린다
   if (nw?.scarf && nwc) drawNwScarf(g, nwc, nw);
   // 빨간 목도리(neck_scarf)를 했으면 목 칸 색으로 (기본 천 목도리는 캐릭터 포인트 색 그대로)
-  else if ((plainNeck && !gear.sg.a) || gear.scarf) wornDraw(g, pal, gear.scarf ? "neck_scarf" : null, () => {
-    const sy = m.neck;
-    const half = fb === "round" ? 6 : fb === "sheet" ? 6 : fb === "tall" ? 3 : 4;
-    for (let x = cx - half; x < cx + half; x++) if (g.filled(x, sy) || x >= cx - half + 1) g.set(x, sy, pal.scarf);
-    if (view === "down") {
-      g.set(cx + 2, sy + 1, pal.scarfLo);
-      g.set(cx + 2, sy + 2, pal.scarfLo);
-    } else if (side) {
-      g.set(cx - half, sy + 1, pal.scarfLo);
-      if (pose.lean) g.set(cx - half - 1, sy + 1, pal.scarfLo);
-    } else {
-      g.set(cx - 2, sy + 1, pal.scarfLo);
-      g.set(cx - 2, sy + 2, pal.scarfLo);
-    }
-  });
+  // 11/22 빨간 목도리는 옷 깃을 그린 뒤 한 번 더 그린다 (아래 목 꾸미기 차례 — 옷 깃이 목도리를 덮지 않게)
+  const drawScarf = () =>
+    wornDraw(g, pal, gear.scarf ? "neck_scarf" : null, () => {
+      const sy = m.neck;
+      const half = fb === "round" ? 6 : fb === "sheet" ? 6 : fb === "tall" ? 3 : 4;
+      for (let x = cx - half; x < cx + half; x++) if (g.filled(x, sy) || x >= cx - half + 1) g.set(x, sy, pal.scarf);
+      if (view === "down") {
+        g.set(cx + 2, sy + 1, pal.scarfLo);
+        g.set(cx + 2, sy + 2, pal.scarfLo);
+      } else if (side) {
+        g.set(cx - half, sy + 1, pal.scarfLo);
+        if (pose.lean) g.set(cx - half - 1, sy + 1, pal.scarfLo);
+      } else if (!hasCapeOver(gear.extra.pack) && !gear.ss.some(hasCapeOver)) {
+        // 뒷모습 늘어진 끝 (11/22 등에 망토·재킷·숄을 걸치면 그 아래로 들어가 안 보인다)
+        g.set(cx - 2, sy + 1, pal.scarfLo);
+        g.set(cx - 2, sy + 2, pal.scarfLo);
+      }
+    });
+  if (!(nw?.scarf && nwc) && ((plainNeck && !gear.sg.a) || gear.scarf)) drawScarf();
 
   // ── 머리 ──
   if (fb === "hood" || fb === "tall" || fb === "cat" || fb === "bun") {
@@ -774,28 +783,42 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear0: Ge
   // ── 얼굴 ──
   drawFace(g, fb, view, m, pal);
   // 25번: 머리·앞 덧그림 (상자·머그잔·튜브는 머리 아래를 가리고, 갓·왕관·우산은 머리 위에)
-  drawBodyExtra(g, body, "front", view, pose, m, pal, headWorn);
+  drawBodyExtra(g, body, "front", view, pose, m, pal, headWorn, !!heldId);
   // 앞을 가리는 몸(상자·머그잔·튜브)이면 뒷모습 등 꾸미기를 그 위에 다시 (배낭이 상자에 묻히지 않게)
   if (view !== "side" && (body === "box" || body === "cup" || body === "tube")) backGear("front");
   // 11/15 사냥 중 갑옷: 몸통을 가리는 몸(상자·머그잔·튜브)은 그 위에 한 번 더 입힌다 (사냥 장비가 먼저 보이게)
   if (gear.sg.a && (body === "box" || body === "cup" || body === "tube"))
     drawWearArmor(g, view, fb, m, [pal.cloak, pal.cloakLo, pal.bodyMid, pal.bodyLo, pal.bodyHi], [pal.cloakLo, pal.bodyLo], gear.sg.a);
 
-  // 처음 모자 3종(밀짚·고양이 귀·꽃 핀)은 모자 칸 색으로, 등불은 그대로
-  wornDraw(g, pal, gear.hat, () => drawGear(g, view, { ...gear, lantern: false }, m, pal, fb));
-  if (gear.lantern) drawGear(g, view, { ...gear, hat: null }, m, pal, fb);
+  // 11/22 옷 깃·셔츠 넥타이(계절·골목·잡화점 옷의 neck 자리)를 목 꾸미기보다 먼저 → 사원증·목도리·넥타이가 깃 위로 보인다
+  if (gear.ss.length) {
+    ssEach((ids) => ssArt.drawSsNeck(g, view, ids, m, fb, body));
+    if (gear.scarf && !(nw?.scarf && nwc) && fb !== "round" && fb !== "sheet") drawScarf();
+  }
+  // 처음 모자 3종(밀짚·고양이 귀·꽃 핀)은 모자 칸 색으로 (손등불은 11/22부터 손 꾸미기 레이어 — drawHeld)
+  wornDraw(g, pal, gear.hat, () => drawGear(g, view, gear, m, pal, fb));
   // F8 머리·목·손 꾸미기 (avatarGear.ts). 11/22 머리·목은 모자·목 칸 색으로
   const neckId = gear.extra.neck;
   const headId = gear.extra.head;
   if (neckId) wornDraw(g, pal, neckId, () => drawNeckGear(g, view, neckId, m, fb));
   if (headId) wornDraw(g, pal, headId, () => drawHeadGear(g, view, headId, m, fb, fb === "round" ? m.top - 1 : m.top, pose.hem));
-  if (gear.extra.hand) drawHandGear(g, view, gear.extra.hand, m);
-  // 11/19 계절 한정: 롱패딩 높은 깃 → 모자 → 손에 든 것 (선물 자루는 머리를 다 그린 뒤 몸 뒤 빈칸에)
+  // 11/19 계절 한정: 모자 → 손에 든 것 (선물 자루는 머리를 다 그린 뒤 몸 뒤 빈칸에). 옷 깃(롱패딩 높은 깃 등)은 위에서 목 꾸미기보다 먼저
   if (gear.ss.length) {
-    ssEach((ids) => ssArt.drawSsNeck(g, view, ids, m, fb, body));
     ssEach((ids) => ssArt.drawSsHead(g, view, ids, m, fb, fb === "round" ? m.top - 1 : m.top, body));
-    ssEach((ids) => ssArt.drawSsHand(g, view, ids, m, fb, body));
+    // 손 칸 꾸미기는 아래 heldLayer에서 (여기는 붕어빵 장수 집게처럼 몸에 딸린 손 그림만)
+    for (const id of gear.ss) if (id !== heldId) wornDraw(g, pal, id, () => ssArt.drawSsHand(g, view, [id], m, fb, body));
   }
+  // 11/22 등에 걸친 망토·재킷·숄: 머리·목·계절 꾸미기까지 그린 뒤 뒷덜미를 감싸는 어깨 깃 (뒷모습에서 어깨부터 자락까지 이어진다 — capeArt.ts)
+  //  뒷모습은 망토 몸판을 한 번 더 (롱패딩 털 후드처럼 목 칸에 그린 옷이 등판을 덮지 않게 — 망토는 옷 위에 걸친다)
+  for (const id of [gear.extra.pack, ...gear.ss])
+    if (hasCapeOver(id))
+      wornDraw(g, pal, id, () => {
+        if (view === "up") {
+          if (id === gear.extra.pack) drawBackGear(g, view, id, m, fb, "front", pose.hem, pose.sit);
+          else ssArt.drawSsBack(g, view, [id], m, fb, "front", pose.hem, pose.sit, body);
+        }
+        drawCapeOver(g, view, id, m, fb, body);
+      });
   // 11/15 사냥 중 세트 장신구·머리 + 임원급 반짝임 (시트 프레임 홀짝으로 두 장)
   for (const c of gear.sg.c) drawWearAcc(g, view, fb, m, c);
   if (gear.sg.h) {
@@ -848,13 +871,16 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear0: Ge
   // 17번 매달리기: 손으로 잡는 가지 (빈칸에만 → 몸·머리 뒤에 놓이고 외곽선이 함께 둘러진다)
   if (pose.arms === "up") drawHangBranch(g, m, view);
   if (nw && nwc) drawNwBoots(g, nwc, nw);
+  // 11/22 손 꾸미기: 맨 나중에 몸 위로 (몸과 맞닿는 둘레에 외곽선) · 뒷모습은 반대편 손에 몸 뒤로
+  const heldAt = heldId ? drawHeld(g, heldId, view, pose, m, pal, fb, body, gear.ss.includes(heldId)) : null;
   g.outline(pal.line);
-  ssEach((ids) => ssArt.drawSsGlow(g, view, ids, m, fb, fb === "round" ? m.top - 1 : m.top, body));
+  for (const id of gear.ss) if (id !== heldId || !hasHeldArt(id)) wornDraw(g, pal, id, () => ssArt.drawSsGlow(g, view, [id], m, fb, fb === "round" ? m.top - 1 : m.top, body));
   // 25번: 외곽선 밖으로 가늘게 뻗는 덧그림 (고양이 탈 수염)
-  drawBodyAfterOutline(g, body, view, pose, m);
-  // 등불 창은 외곽선 뒤에도 밝게 (빛나는 점)
-  if (gear.lantern && view !== "up") g.set(m.hx, m.hY + 1, 0xfff0b0);
-  if (gear.extra.hand) drawHandGlow(g, view, gear.extra.hand, m);
+  drawBodyAfterOutline(g, body, view, pose, m, !!heldId);
+  // 손 꾸미기 불빛·김·반짝임 (외곽선 뒤에도 밝게)
+  if (heldAt) {
+    for (const [x, y, c, a] of heldGlowDots(heldAt.art, pose.hem)) glowDot(g, heldAt.x + x, heldAt.y + y, c, a ?? 255);
+  }
   // 외곽선 뒤에 찍는 빛도 같은 칸 색 기준으로 (무리 밖의 흰 반짝임은 그대로 남는다)
   if (headId) wornDraw(g, pal, headId, () => drawHeadGlow(g, view, headId, m, fb === "round" ? m.top - 1 : m.top));
   if (gear.hat === "hat_halo") wornDraw(g, pal, "hat_halo", () => drawHalo(g, m, view));
@@ -916,8 +942,8 @@ function tierRim(g: Grid, rainbow: boolean): void {
 }
 
 /** 외곽선 다음에 그리는 가는 선 (외곽선에 묻히지 않게): 고양이 탈의 밖으로 뻗은 수염 */
-function drawBodyAfterOutline(g: Grid, body: AvatarBody, view: View, pose: Pose, m: M): void {
-  if (body === "collector") return collectorGlow(g, view, pose, m);
+function drawBodyAfterOutline(g: Grid, body: AvatarBody, view: View, pose: Pose, m: M, handHeld = false): void {
+  if (body === "collector") return handHeld ? undefined : collectorGlow(g, view, pose, m);
   if (body !== "catmask" || pose.lie || view === "up") return;
   const { cx } = m;
   const hy = Math.round(m.hy);
@@ -951,7 +977,8 @@ function collectorGlow(g: Grid, view: View, pose: Pose, m: M): void {
 // phase "torso" = 망토(몸통) 위·팔과 머리 전 (셔츠·넥타이·담비털·띠), "front" = 얼굴 다음·꾸미기 전 (상자·머그잔·튜브·갓·왕관·우산·수염)
 // 머리 위에 늘 쓰는 것(우산·왕관·갓)은 머리 꾸미기를 쓰면(headWorn) 벗는다.
 
-function drawBodyExtra(g: Grid, body: AvatarBody, phase: "torso" | "front", view: View, pose: Pose, m: M, pal: Pal, headWorn: boolean): void {
+/** handHeld = 11/22 손 꾸미기를 들었다 (고양이 탈 서류 가방·수집가 채집 등불을 내려놓는다 — 손 꾸미기가 그 자리를 크게 덮어서) */
+function drawBodyExtra(g: Grid, body: AvatarBody, phase: "torso" | "front", view: View, pose: Pose, m: M, pal: Pal, headWorn: boolean, handHeld = false): void {
   const { cx, hy, neck, top } = m;
   const side = view === "side";
   const up = view === "up";
@@ -1196,7 +1223,7 @@ function drawBodyExtra(g: Grid, body: AvatarBody, phase: "torso" | "front", view
         g.rect(cx - 1, hy - 1, 2, 2, 0x5a4a3a);
       }
       // 서류 가방 (손에 들고 다닌다 — 매달리기·그네·해먹·물에서는 내려놓는다)
-      if (pose.lie || pose.sink || pose.arms === "up" || pose.arms === "rope") return;
+      if (pose.lie || pose.sink || pose.arms === "up" || pose.arms === "rope" || handHeld) return;
       const hy0 = Math.round(hy);
       const bx = view === "down" ? cx + 4 : up ? cx - 9 : cx - 2;
       const by = hy0 + 5;
@@ -1227,7 +1254,7 @@ function drawBodyExtra(g: Grid, body: AvatarBody, phase: "torso" | "front", view
       g.set(bx + 1, by - 2, 0xc89a5a);
       g.set(bx + 1, by - 1, 0xbfe8f0);
       g.set(bx + 2, by - 1, 0x6ac06a);
-      if (pose.sink || pose.arms === "up" || pose.arms === "rope" || up) break;
+      if (pose.sink || pose.arms === "up" || pose.arms === "rope" || up || handHeld) break;
       // 채집 등불: 고리 + 놋쇠 틀 + 따뜻한 유리
       const lx = m.hx;
       const ly = m.hY;
@@ -1694,6 +1721,40 @@ function drawHalo(g: Grid, m: M, view: View): void {
 }
 
 /** 머리·손 꾸미기 (외곽선 전에 그려 같이 테두리를 두른다) */
+/**
+ * 11/22 손 꾸미기: 빈 레이어에 그려 몸 위에 얹는다 (heldGear.ts). 뒷모습은 앞모습을 그려 좌우로 뒤집어 반대편 손 자리에 몸 뒤로 깐다.
+ * 그림이 heldGear에 없는 것(골목 수레 얼죽아 컵·붕어빵 봉투)은 계절 그림 함수(bungeoGear)를 레이어에 그대로 부른다.
+ * 돌려주는 값 = 불빛 점을 찍을 그림 자리 (뒷모습·원래 그림이면 null)
+ */
+function drawHeld(g: Grid, id: string, view: View, pose: Pose, m: M, pal: Pal, fb: BaseBody, body: AvatarBody, season: boolean): { x: number; y: number; art: NonNullable<ReturnType<typeof heldSprite>>["art"] } | null {
+  const layer = new Grid(AV_W, AV_H);
+  const v = view === "up" ? "down" : view;
+  const s = heldSprite(id, view, pose.hem);
+  let at: { x: number; y: number } | null = null;
+  if (s) {
+    // 눈(과 그 둘레 한 칸)은 가리지 않는다
+    const e = eyes(fb, v, m);
+    const guard: [number, number][] = [];
+    if (view !== "up") for (const ex of e.xs) for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 2; dy++) guard.push([ex + dx, e.y + dy]);
+    at = heldOrigin(s.rows, s.grip, m.hx, m.hY, guard, !!s.art.float);
+    paintHeld(layer, s.rows, s.art, at.x, at.y);
+  } else if (season) ssArt.drawSsHand(layer, v, [id], m, fb, body);
+  if (view === "up") {
+    stampHeld(g, layer.mirrored(), pal.line, "behind");
+    return null;
+  }
+  stampHeld(g, layer, pal.line, "front");
+  return s && at ? { ...at, art: s.art } : null;
+}
+
+/** 외곽선 뒤에 찍는 빛 점 (반투명이면 밑 색과 섞는다, 칸 둘레 한 칸은 비운다) */
+function glowDot(g: Grid, x: number, y: number, c: Color, a: number): void {
+  if (x < 1 || x > AV_W - 2 || y < 3 || y > AV_H - 2) return;
+  const d = g.get(x, y);
+  if (a >= 255 || (d & 255) === 0) return g.set(x, y, c, a);
+  g.set(x, y, mix(d >>> 8, c, a / 255), d & 255);
+}
+
 function drawGear(g: Grid, view: View, gear: Gear, m: M, pal: Pal, body: BaseBody): void {
   const { cx } = m;
   // 동글이는 얼굴이 머리 위쪽까지 올라와 있어 모자를 조금 더 얹는다
@@ -1739,14 +1800,6 @@ function drawGear(g: Grid, view: View, gear: Gear, m: M, pal: Pal, body: BaseBod
     g.set(fx - 1, fy - 1, petalHi);
     g.set(fx, fy, 0xffe066);
     g.set(fx + (view === "side" ? 2 : -2), fy + 2, 0x7fbf5a);
-  }
-  if (gear.lantern && view !== "up") {
-    // 손에 든 작은 등불 (아래·옆모습에서 보인다)
-    const lx = m.hx;
-    const ly = m.hY;
-    g.set(lx, ly - 1, 0x3a3127);
-    g.rect(lx - 1, ly, 3, 3, 0x6b4f32);
-    g.set(lx, ly + 1, 0xffd77a);
   }
 }
 

@@ -43,8 +43,9 @@ type Props = {
 
 export function ticketOf(item: ItemDef): DyeTicket | null {
   const d = item.dye;
-  // 11/15 색 확정·특수색 확정(수집 의뢰)은 판·고정 색 창이 아니라 따로 (components/dye/DirectDyeDialog)
-  if (!d || d.mode === "pick" || d.mode === "special") return null;
+  if (!d) return null;
+  // 11/22 색 확정·특수색 확정(수집 의뢰)도 같은 염색 창 (판 없이 색을 골라 바로 칠한다)
+  if (d.mode === "pick" || d.mode === "special") return { itemId: item.id, name: item.name, mode: d.mode };
   return d.mode === "random" ? { itemId: item.id, name: item.name, mode: "random", tier: d.tier } : { itemId: item.id, name: item.name, mode: "fixed", color: d.color, parts: d.parts };
 }
 

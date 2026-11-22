@@ -220,3 +220,127 @@ export class BoardPointers {
     this.moved = 0;
   }
 }
+
+/**
+ * 11/22 덮어쓰기 확인(「커스텀 N을 바꿀까요?」)을 그만뒀을 때 염색 창도 닫는지: 아이템 페이지에서 무작위 염색권으로 바로 연 창(autoStart)이
+ * 아직 시작 전이면 닫고 아이템 페이지로 (판 설명 화면에 남아 [염색 시작]을 다시 누르면 같은 확인이 되풀이되던 것). 색 고르기 화면에서 물었으면 그 화면에 남는다
+ */
+export function overwriteDismissCloses(o: { autoStart: boolean; lockTarget: boolean; phase: string }): boolean {
+  return o.autoStart && o.lockTarget && o.phase === "part";
+}
+
+// ── 11/22 판 타일 미리 그리기 (끊김·검은 칸 없애기) ──
+
+/** 거친 자리 채우기 그림: 이 칸마다 한 칸만 계산 (40×25 — 한 장 ~0.2ms) */
+export const TILE_LOW = 8;
+
+export type TileNeed = { i: number; j: number; step: number };
+
+/**
+ * 11/22 선명한 타일을 몇 장까지 기억할지 (한 장 320×200 RGBA = 256KB). 기기에 맞춘다:
+ *  - 메모리 2GB 이하 → 32장(8MB) · 폰 크기 화면(짧은 변 600px 미만) 또는 메모리 4GB 이하 → 48장(12MB) · 그 밖 → 96장(24MB)
+ * deviceMemory는 크롬 계열만 준다 (사파리는 없음 → 화면 크기로)
+ */
+export function tileKeep(deviceMemory: number | undefined, screenW: number, screenH: number): number {
+  const mem = Number.isFinite(deviceMemory) ? (deviceMemory as number) : undefined;
+  if (mem !== undefined && mem <= 2) return 32;
+  const short = Math.min(screenW, screenH);
+  if ((Number.isFinite(short) && short > 0 && short < 600) || (mem !== undefined && mem <= 4)) return 48;
+  return 96;
+}
+
+/** 판 좌표 상자(칸) → 덮는 구역 범위 */
+function chunkBox(x0: number, y0: number, x1: number, y1: number): { i0: number; i1: number; j0: number; j1: number } {
+  return { i0: Math.floor(x0 / DYE_BOARD_W), i1: Math.floor(x1 / DYE_BOARD_W), j0: Math.floor(y0 / DYE_BOARD_H), j1: Math.floor(y1 / DYE_BOARD_H) };
+}
+
+/** 지금 보이는 구역 범위 */
+export function visibleChunks(v: BoardView, w: number, h: number): { i0: number; i1: number; j0: number; j1: number } {
+  const hw = w / 2 / v.scale;
+  const hh = h / 2 / v.scale;
+  return chunkBox(v.cx - hw, v.cy - hh, v.cx + hw, v.cy + hh);
+}
+
+/**
+ * 그려 둘 타일과 순서 (앞일수록 먼저). 화면이 판을 넘어가기 전에 둘레를 미리 그려 둔다:
+ *  ① 보이는 구역 거친 그림 ② 보이는 구역 선명 그림 (조준점 가까운 것부터)
+ *  ③ 둘레 선명 그림 — 반 구역 또는 2배 축소만큼 (움직이는 쪽 먼저) ④ 더 먼 둘레 거친 그림 — 1구역 또는 3배 축소만큼
+ * dir = 판이 움직이는 방향 (판 좌표, 크기 상관없음 — 0이면 고르게)
+ */
+export function tilePlan(v: BoardView, w: number, h: number, dir: { x: number; y: number } = { x: 0, y: 0 }, maxFull = Infinity): TileNeed[] {
+  const hw = w / 2 / v.scale;
+  const hh = h / 2 / v.scale;
+  const vis = chunkBox(v.cx - hw, v.cy - hh, v.cx + hw, v.cy + hh);
+  const fx = Math.max(DYE_BOARD_W / 2, hw);
+  const fy = Math.max(DYE_BOARD_H / 2, hh);
+  const full = chunkBox(v.cx - hw - fx, v.cy - hh - fy, v.cx + hw + fx, v.cy + hh + fy);
+  const lx = Math.max(DYE_BOARD_W, 2 * hw);
+  const ly = Math.max(DYE_BOARD_H, 2 * hh);
+  const low = chunkBox(v.cx - hw - lx, v.cy - hh - ly, v.cx + hw + lx, v.cy + hh + ly);
+  const dl = Math.hypot(dir.x, dir.y);
+  const ux = dl > 0 ? dir.x / dl : 0;
+  const uy = dl > 0 ? dir.y / dl : 0;
+  // 구역 가운데까지 거리 (구역 단위) — 움직이는 쪽은 가깝게 친다
+  const dist = (i: number, j: number) => {
+    const dx = ((i + 0.5) * DYE_BOARD_W - v.cx) / DYE_BOARD_W;
+    const dy = ((j + 0.5) * DYE_BOARD_H - v.cy) / DYE_BOARD_H;
+    return Math.hypot(dx, dy) - 0.75 * (dx * ux + dy * uy);
+  };
+  const inVis = (i: number, j: number) => i >= vis.i0 && i <= vis.i1 && j >= vis.j0 && j <= vis.j1;
+  const box = (b: { i0: number; i1: number; j0: number; j1: number }, keep: (i: number, j: number) => boolean) => {
+    const out: { i: number; j: number; d: number }[] = [];
+    for (let j = b.j0; j <= b.j1; j++) for (let i = b.i0; i <= b.i1; i++) if (keep(i, j)) out.push({ i, j, d: dist(i, j) });
+    return out.sort((a, b2) => a.d - b2.d);
+  };
+  const seen = new Set<string>();
+  const plan: TileNeed[] = [];
+  let fulls = 0;
+  /** limit: 선명한 그림은 기억할 수 있는 장수(maxFull)까지만 — 보이는 구역은 늘 넣고, 둘레는 가까운 것부터 남는 만큼 */
+  const add = (list: { i: number; j: number }[], step: number, limit = false) => {
+    for (const t of list) {
+      if (step === 1 && limit && fulls >= maxFull) break;
+      const k = `${t.i},${t.j},${step}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      if (step === 1) fulls++;
+      plan.push({ i: t.i, j: t.j, step });
+    }
+  };
+  const visList = box(vis, () => true);
+  add(visList, TILE_LOW);
+  add(visList, 1);
+  add(box(full, (i, j) => !inVis(i, j)), 1, true);
+  add(box(low, (i, j) => !inVis(i, j)), TILE_LOW);
+  return plan;
+}
+
+/**
+ * 키 이동 부드럽게 (시간 상수 ms): 누르면 ACCEL에 걸쳐 빨라지고, 떼면 STOP에 걸쳐 멈춘다.
+ * 멈출 때는 더 짧게 — 뗀 뒤 더 가는 거리 ≈ 속도 × STOP (보통 360px/초 → 약 9px, Shift → 약 27px) → 조준이 미끄러지지 않게
+ */
+export const KEY_ACCEL_MS = 60;
+export const KEY_STOP_MS = 25;
+/** 이보다 느리면(화면 px/초) 멈춘 것으로 본다 (한 프레임에 0.3px 미만) */
+const KEY_STILL = 20;
+
+/**
+ * 키 이동 속도(화면 px/초)를 목표 속도 쪽으로 dt만큼 다가가게 한다 (지수 감쇠 — 프레임 시간이 고르지 않아도 같은 움직임).
+ * 거의 멈췄으면 0으로 붙인다
+ */
+export function easeVelocity(vel: { x: number; y: number }, target: { x: number; y: number }, dtMs: number): { x: number; y: number } {
+  const dt = Number.isFinite(dtMs) ? Math.min(100, Math.max(0, dtMs)) : 0;
+  // 축마다: 목표 쪽으로 빨라지는 중이면 ACCEL, 줄거나 반대로 가는 중이면 STOP (반대 방향 키를 누르면 빨리 꺾인다)
+  const axis = (v: number, t: number) => {
+    const speeding = t !== 0 && Math.sign(t) === Math.sign(v || t) && Math.abs(t) >= Math.abs(v);
+    const n = v + (t - v) * (1 - Math.exp(-dt / (speeding ? KEY_ACCEL_MS : KEY_STOP_MS)));
+    return t === 0 && Math.abs(n) < KEY_STILL ? 0 : n;
+  };
+  return { x: axis(vel.x, target.x), y: axis(vel.y, target.y) };
+}
+
+/** 누르고 있는 키 → 목표 속도 (화면 px/초, 대각선도 같은 빠르기) */
+export function keyTarget(held: Iterable<string>, fast: boolean): { x: number; y: number } {
+  // keyPan은 dt를 100ms로 자르므로 100ms 이동량 × 10 = 1초 이동량 (배율 1 → 화면 px)
+  const d = keyPan(held, fast, 100, 1);
+  return { x: d.dx * 10, y: d.dy * 10 };
+}

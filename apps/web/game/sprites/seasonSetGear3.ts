@@ -107,34 +107,6 @@ function tieIcon(): Grid {
 }
 
 // ── 애창곡 마이크: 금빛 손잡이 + 은색 그릴 공 + 분홍 불빛 테 ──
-function micHand(g0: Grid, v: V, m: GearM): void {
-  if (v === "up") return;
-  const g = g0;
-  const x = m.hx;
-  const y = m.hY;
-  // 손잡이 (아래로 가늘어진다)
-  g.set(x, y, GOLD);
-  g.set(x, y + 1, GOLD_LO);
-  g.set(x, y + 2, GOLD_LO);
-  g.set(x - 1, y, GOLD_HI);
-  // 분홍 불빛 테
-  g.set(x - 1, y - 1, PINK);
-  g.set(x, y - 1, PINK);
-  g.set(x + 1, y - 1, 0xc83a80);
-  // 그릴 공 (3×3, 모서리 깎음)
-  g.set(x - 1, y - 3, SILVER_HI);
-  g.set(x, y - 3, SILVER);
-  g.set(x - 1, y - 2, SILVER);
-  g.set(x, y - 2, SILVER_LO);
-  g.set(x + 1, y - 2, SILVER_LO);
-  g.set(x + 1, y - 3, SILVER_LO);
-  g.set(x, y - 4, SILVER);
-}
-function micGlow(g: Grid, v: V, m: GearM): void {
-  if (v === "up") return;
-  g.set(m.hx - 1, m.hY - 1, PINK_HI);
-  g.set(m.hx - 1, m.hY - 3, 0xffffff);
-}
 function micIcon(): Grid {
   return iconOf(
     [
@@ -544,31 +516,6 @@ function packIcon(): Grid {
 }
 
 // ── 믹스커피 보온병: 은빛 몸 + 빨간 컵 뚜껑 + 김 ──
-function flaskHand(g0: Grid, v: V, m: GearM): void {
-  if (v === "up") return;
-  const g = g0;
-  const x = m.hx;
-  const y = m.hY;
-  // 몸 (2×5) + 밝은 결
-  for (let yy = y - 2; yy <= y + 2; yy++) {
-    g.set(x - 1, yy, yy === y - 1 ? STEEL_HI : STEEL);
-    g.set(x, yy, STEEL_LO);
-  }
-  g.set(x - 1, y + 2, STEEL_LO);
-  // 빨간 컵 뚜껑 (위로 조금 넓게)
-  g.set(x - 1, y - 3, RED);
-  g.set(x, y - 3, RED_LO);
-  g.set(x - 2, y - 4, 0xf06050);
-  g.set(x - 1, y - 4, RED);
-  g.set(x, y - 4, RED);
-  g.set(x + 1, y - 4, RED_LO);
-}
-function flaskGlow(g: Grid, v: V, m: GearM): void {
-  if (v === "up") return;
-  dot(g, m.hx, m.hY - 6, 0xffffff, 170);
-  dot(g, m.hx - 1, m.hY - 7, 0xffffff, 120);
-  dot(g, m.hx, m.hY - 8, 0xffffff, 70);
-}
 function flaskIcon(): Grid {
   return iconOf(
     [
@@ -802,25 +749,6 @@ function bandIcon(): Grid {
 }
 
 // ── 단백질 쉐이크: 까만 뚜껑 + 반투명 통 + 초코 ──
-function shakeHand(g0: Grid, v: V, m: GearM): void {
-  if (v === "up") return;
-  const g = g0;
-  const x = m.hx;
-  const y = m.hY;
-  // 뚜껑 + 꼭지 고리
-  g.set(x - 1, y - 3, CAP_HI);
-  g.set(x, y - 3, CAP);
-  g.set(x + 1, y - 3, CAP);
-  g.set(x, y - 4, CAP);
-  g.set(x + 1, y - 5, CAP_HI);
-  // 통 (위는 거품, 아래는 초코)
-  for (let yy = y - 2; yy <= y + 2; yy++) {
-    const foam = yy === y - 2;
-    g.set(x - 1, yy, foam ? BOTTLE : yy === y - 1 ? BOTTLE : CHOCO_HI);
-    g.set(x, yy, foam ? 0xe8d0b0 : CHOCO);
-    g.set(x + 1, yy, foam ? 0xc8a888 : CHOCO_LO);
-  }
-}
 function shakeIcon(): Grid {
   return iconOf(
     [
@@ -1050,24 +978,6 @@ function smelt(g: Grid, x: number, y: number, wiggle: number): void {
   g.set(x + wiggle, y + 3, SMELT);
   g.set(x - 1 + wiggle, y + 4, SMELT_BK);
   g.set(x + 1 + wiggle, y + 4, SMELT_BK);
-}
-function rodHand(g0: Grid, v: V, m: GearM): void {
-  if (v === "up") return;
-  const g = g0;
-  const x = m.hx;
-  const y = m.hY;
-  g.set(x, y, CORK);
-  g.set(x, y + 1, 0x9a7040);
-  // 낚싯대: 손에서 위로, 끝은 앞으로 (손이 칸 오른쪽에 붙은 몸은 끝을 안쪽으로 — 빙어 꼬리까지 x ≤ 17)
-  const dx = Math.min(2, 16 - x);
-  const tipY = y - 5;
-  for (let i = 1; i <= 5; i++) g.set(x + Math.round((dx * i) / 5), y - i, i % 2 ? ROD : ROD_W);
-  // 줄 + 빙어 (빙어 다섯 줄이 칸 바닥 위에 들게)
-  const fx = x + dx + (dx >= 0 ? 1 : -1);
-  const fy = Math.min(y, 22);
-  for (let yy = tipY + 1; yy < fy; yy++) g.set(fx, yy, LINE, 170);
-  g.set(fx, tipY, LINE, 170);
-  smelt(g, fx, fy, 0);
 }
 function rodIcon(): Grid {
   const g = new Grid(16, 16);
@@ -1686,18 +1596,18 @@ const PET3_SHEETS: Readonly<Record<string, () => PetSheet>> = {
 /** 시트에 그려지는 것: 자리별 그리기 (seasonSetGear ITEMS에 섞인다) */
 export const GEAR3: Readonly<Record<string, SsItem>> = {
   ye_tiehead: { head: (g, v, m, fb, top) => tieHead(g, v, m, fb, top) },
-  ye_mic: { hand: (g, v, m) => micHand(g, v, m), glow: (g, v, m) => micGlow(g, v, m) },
+  ye_mic: {} /* 11/22 손 그림은 heldGear.ts */,
   // 탬버린·배낭·운동 가방·아이스박스·망토 자락은 head 자리에서 "머리 다 그린 뒤 몸 뒤 빈칸"에 놓는다 (모자를 쓴 것은 아니다)
   ye_tambo: { headWorn: false, back: tamboBack, head: (g, v, m, fb, _top, body) => tamboBehind(g, v, m, fb, body) },
   ye_tipsy: { glow: (g, v, m, fb) => tipsyBlush(g, v, m, fb) },
   su_beanie: { covers: true, head: (g, v, m, fb, top) => beanieHead(g, v, m, fb, top) },
   su_pack: { headWorn: false, back: packBack, head: (g, v, m, fb, _top, body) => packBehind(g, v, m, fb, body) },
-  su_flask: { hand: (g, v, m) => flaskHand(g, v, m), glow: (g, v, m) => flaskGlow(g, v, m) },
+  su_flask: {} /* 11/22 손 그림은 heldGear.ts */,
   rs_band: { head: (g, v, m, fb, top) => bandHead(g, v, m, fb, top), glow: (g, v, m, fb, top) => bandGlow(g, v, m, fb, top) },
-  rs_shake: { hand: (g, v, m) => shakeHand(g, v, m) },
+  rs_shake: {} /* 11/22 손 그림은 heldGear.ts */,
   rs_gymbag: { headWorn: false, back: bagBack, head: (g, v, m, fb) => bagBehind(g, v, m, fb) },
   ic_earmuff: { head: (g, v, m, fb, top) => muffHead(g, v, m, fb, top) },
-  ic_rod: { hand: (g, v, m) => rodHand(g, v, m) },
+  ic_rod: {} /* 11/22 손 그림은 heldGear.ts */,
   ic_icebox: { headWorn: false, back: boxBack, head: (g, v, m, fb) => boxBehind(g, v, m, fb) },
   fr_icicle: { covers: true, head: (g, v, m, fb, top) => crownHead(g, v, m, fb, top), glow: (g, v, m, fb, top) => crownGlow(g, v, m, fb, top) },
   fr_cloak: { headWorn: false, back: cloakBack, head: (g, v, m, fb, _top, body) => cloakBehind(g, v, m, fb, body) },

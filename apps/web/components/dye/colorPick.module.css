@@ -1,14 +1,4 @@
-/* 11/15 수집 의뢰 염색권 창 (색 확정·특수색 확정). 공통 칸은 DyeDialog.module.css */
-
-.figure {
-  gap: 4px;
-}
-
-.turn {
-  padding: 2px 8px;
-  font-family: var(--font-small);
-  font-size: 11px;
-}
+/* 11/22 색 고르기 (색 확정 · 특수색 확정 — DyeDialog가 쓴다). 11/15 DirectDyeDialog에서 옮겼다 */
 
 .picker {
   display: flex;
@@ -19,7 +9,7 @@
 /* 채도(가로)·밝기(세로) 판 */
 .sv {
   position: relative;
-  height: 112px;
+  height: 84px;
   box-shadow: var(--px-border);
   cursor: crosshair;
   touch-action: none;
@@ -62,14 +52,15 @@
   outline-offset: 2px;
 }
 
+/* 11/22 견본 40색: 10열 × 4줄로 딱 나눠 떨어지게 (마지막 줄에 칸이 홀로 남지 않게), 칸은 납작하게 */
 .swatches {
   display: grid;
-  grid-template-columns: repeat(12, 1fr);
+  grid-template-columns: repeat(10, minmax(0, 1fr));
   gap: 3px;
 }
 
 .chip {
-  aspect-ratio: 1;
+  aspect-ratio: 3 / 2;
   min-width: 0;
   padding: 0;
   border: 0;
@@ -95,7 +86,7 @@
 }
 
 .code input {
-  width: 9ch;
+  width: 11ch;
   font-variant-numeric: tabular-nums;
 }
 
@@ -132,10 +123,58 @@
 }
 
 @media (max-width: 420px) {
-  .swatches {
-    grid-template-columns: repeat(8, 1fr);
-  }
   .specials {
     grid-template-columns: 1fr;
   }
+}
+
+
+/* 11/22 색 코드 · 「내 다른 색」 한 줄 (이 아이템에 칠해 둔 다른 색을 눌러 그대로 가져온다) */
+.codeRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+/* 고른 색 (색 코드 앞) */
+.picked {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  box-shadow: var(--px-border);
+}
+
+.mine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mineHead {
+  color: var(--text);
+  font-family: var(--font-small);
+  font-size: 12px;
+}
+
+.mineChip {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  box-shadow: var(--px-border);
+  cursor: pointer;
+}
+
+.mineChip[aria-pressed="true"] {
+  outline: 2px solid var(--candle);
+  outline-offset: 1px;
+}
+
+.note {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 11px;
+  line-height: 1.5;
 }

@@ -8,27 +8,32 @@
   min-height: 0;
 }
 
+/* ── 예전 염색 화면 (작은 창): 미리보기 위 · 설명 · 색 고르기 · 버튼 ── */
 .row {
   display: flex;
   gap: 12px;
   align-items: flex-start;
 }
 
-.figure {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
+/* 11/22 예전 염색 화면 미리보기: 낮은 상자에 캐릭터를 크게 (×5), [돌려 보기]는 상자 오른쪽 아래에 */
+.colorFig {
+  position: relative;
 }
 
-/* 입어 보기 무대(72×64)를 정수 배율로 (OutfitPreview.module.css의 --scale) */
-.figure {
-  --scale: 3;
+.colorStage {
+  --scale: 5;
+  --feet: 92%;
+  height: 132px;
 }
 
-.figureSmall {
-  --scale: 2;
+.turn {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  min-height: 26px;
+  padding: 2px 8px;
+  font-family: var(--font-small);
+  font-size: 11px;
 }
 
 .side {
@@ -39,80 +44,26 @@
   gap: 8px;
 }
 
-.parts {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-}
-
-.part {
+.start {
   flex-direction: column;
-  gap: 4px;
-  padding: 8px 6px;
+  align-items: stretch;
 }
 
-/* 11/22 마우스를 올린 채여도 고른 부위가 보이게 (버튼 hover 색보다 앞선다) */
-.part[aria-pressed="true"],
-.part[aria-pressed="true"]:hover:not(:disabled) {
-  background: var(--moss-deep);
-  color: var(--bone);
-}
-
-.part:disabled {
-  opacity: 0.4;
-}
-
-/* 11/22 부위 고르기 두 줄: 캐릭터 · 입은 꾸미기 (DyePartPicker) */
-.partGroups {
+/* 11/22 칠할 곳 한 줄 (아이템 · 칸) */
+.target {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.partHead {
-  margin: 2px 0 0;
-  font-size: 12px;
-  opacity: 0.75;
-}
-
-.partLabel {
-  display: inline-flex;
   align-items: center;
-  gap: 4px;
-}
-
-/* 입은 꾸미기 칸: 꾸미기 그림 + 칸 이름 + 꾸미기 이름(한 줄, 넘치면 …) */
-.gearPart {
-  min-width: 0;
-}
-
-.gearPart .note {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-}
-
-.partItem {
-  display: flex;
-  width: 32px;
-  height: 32px;
-  align-items: center;
-  justify-content: center;
-}
-
-.partItem[data-empty] {
-  opacity: 0.25;
-  filter: grayscale(1);
-}
-
-.swatch {
-  display: inline-block;
-  width: 18px;
-  height: 18px;
+  gap: 8px;
+  margin: 0;
+  padding: 6px 8px;
+  background: var(--bg-deep);
   box-shadow: var(--px-border);
-  vertical-align: middle;
+  font-size: 12px;
+}
+
+.target b {
+  color: var(--bone);
+  font-weight: 400;
 }
 
 .swatchBig {
@@ -147,6 +98,14 @@
   grid-template-columns: minmax(0, 1fr) 216px;
   grid-template-rows: minmax(0, 1fr);
   gap: 12px;
+}
+
+/* 11/22 데스크톱: 창 높이를 내용에 맞추므로(fitHeight) 판 높이를 정해 둔다 (화면이 낮으면 줄어든다) */
+@media (min-width: 561px) {
+  .play {
+    flex: none;
+    height: min(520px, calc(var(--dialog-max-h, 100dvh) - 110px));
+  }
 }
 
 .panel {
@@ -354,16 +313,6 @@
   gap: 10px;
 }
 
-/* 시작 단계: 작은 창 너비에 맞춰 그림 위, 부위·설명·버튼 아래로 */
-.start {
-  flex-direction: column;
-  align-items: stretch;
-}
-
-.start > .figure {
-  align-self: center;
-}
-
 /* [지금] → [바꾼 뒤]: 두 아바타를 같은 크기로 나란히, 가운데 화살표 */
 .versus {
   display: grid;
@@ -410,20 +359,6 @@
 }
 
 @media (max-width: 560px) {
-  .row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .figure {
-    flex-direction: row;
-    justify-content: center;
-  }
-
-  .figure {
-    --scale: 2;
-  }
-
   /* 폰: 판은 위에서 남는 높이를 모두, 아래 칸에 시간 · 지금 색 vs 새 색(좌우) · 확정 */
   .play {
     grid-template-columns: minmax(0, 1fr);
@@ -453,27 +388,211 @@
   }
 }
 
-/* 11/22 아이템 색 보관함에서 칠할 칸 고르기 (DyeSlotPicker) */
-.slotRow {
+
+/* ── 11/22 시작 화면: 왼쪽(폰은 위) 지금 ▶ 칠한 뒤, 오른쪽 ① 칠할 곳 ② 칸 ③ 색 + 아래 줄 [칠하기] ── */
+.setup {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+/* 고르기 화면 왼쪽: 지금 내 모습 (오른쪽 ①② 높이에 맞춘다) */
+.now {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+
+.nowStage {
+  --scale: 6;
+  --feet: 84%;
+  flex: 1;
+  width: 100%;
+  min-height: 200px;
+}
+
+.baCap {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.baArrow {
+  position: absolute;
+  left: 50%;
+  top: 56%;
+  transform: translate(-50%, -50%);
+  color: var(--candle);
+  font-size: 14px;
+}
+
+.steps {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.stepHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--bone);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.stepN {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  background: var(--candle);
+  color: #1b1c18;
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.stepAside {
+  margin-left: auto;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+/* 아래 줄: 무엇을 어디에 · 가진 장 수 · [칠하기] (폰은 화면 아래에 붙는다) */
+/* 아래 줄은 창 아래에 붙는다 (①②③이 길어 본문이 스크롤돼도 [칠하기]는 늘 보인다) */
+.bar {
+  position: sticky;
+  bottom: calc(-1 * var(--dialog-pad-y, 12px));
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 calc(-1 * var(--dialog-pad-y, 12px));
+  padding: 12px 0 var(--dialog-pad-y, 12px);
+  border-top: 2px solid var(--line);
+  background: var(--panel-solid);
+}
+
+.barSum {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.barSum b {
+  color: var(--bone);
+  font-weight: 400;
+}
+
+.barCount {
+  flex-basis: 100%;
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.go {
+  min-width: 120px;
+  min-height: 40px;
+}
+
+/* 덮어쓰기 확인: 지금 색 ▶ 새 색 */
+.over {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.over > .note {
+  text-align: center;
+}
+
+.swap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 4px 0;
+}
+
+.swap .baArrow {
+  position: static;
+  transform: none;
+}
+
+.swapSide {
+  display: grid;
+  justify-items: center;
   gap: 6px;
 }
 
-.slotBtn {
-  gap: 4px;
-  padding: 4px 8px;
-  min-height: 32px;
+.swapSide[data-gone] .swapBox {
+  opacity: 0.55;
 }
 
-.slotBtn[aria-pressed="true"],
-.slotBtn[aria-pressed="true"]:hover:not(:disabled) {
-  background: var(--moss-deep);
-  color: var(--bone);
+.swapBox {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
 }
 
-.slotBtn .swatch[data-empty] {
-  box-shadow: inset 0 0 0 1px currentColor;
-  opacity: 0.5;
+.qmark {
+  color: var(--candle);
+  font-size: 24px;
+}
+
+@media (max-width: 560px) {
+  .row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* 폰: 내용이 짧아도 아래 줄은 화면 맨 아래에 */
+  .setup {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .steps > .bar {
+    margin-top: auto;
+  }
+
+  .now {
+    display: none;
+  }
+
+  .bar {
+    margin: 0 calc(-1 * var(--dialog-pad-x, 12px)) calc(-1 * var(--dialog-pad-y, 10px));
+    padding: 10px var(--dialog-pad-x, 12px) calc(10px + env(safe-area-inset-bottom));
+    background: var(--panel-solid);
+  }
+
+  .over .actions > button {
+    flex: 1 1 100%;
+  }
 }

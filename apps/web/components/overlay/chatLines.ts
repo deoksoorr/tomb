@@ -22,9 +22,9 @@ const EMPTY: ChatLine[] = [];
 
 export const chatStore = {
   /** 새 줄이면 true */
-  push(name: string, text: string, mine: boolean, key?: string, staff?: true, ns?: string[], mgr?: true, m?: ChatLine["m"], w?: ChatLine["w"]): boolean {
+  push(name: string, text: string, mine: boolean, key?: string, staff?: true, ns?: string[], mgr?: true, m?: ChatLine["m"], w?: ChatLine["w"], nb?: true): boolean {
     if (key && lines.some((l) => l.key === key)) return false; // chatLog로 이미 받은 줄
-    lines = addChatLine(lines, { id: ++seq, name, text, mine, at: Date.now(), ...(key ? { key } : {}), ...(staff ? { staff } : {}), ...(mgr ? { mgr } : {}), ...(ns ? { ns } : {}), ...(m ? { m } : {}), ...(w ? { w } : {}) });
+    lines = addChatLine(lines, { id: ++seq, name, text, mine, at: Date.now(), ...(key ? { key } : {}), ...(staff ? { staff } : {}), ...(mgr ? { mgr } : {}), ...(ns ? { ns } : {}), ...(m ? { m } : {}), ...(w ? { w } : {}), ...(nb ? { nb } : {}) });
     notify();
     return true;
   },
@@ -75,8 +75,8 @@ export function useChatLines(): ChatLine[] {
 
 // 화면이 아직 안 떴어도(입장 직후 welcome·chatLog가 먼저 올 수 있다) 받은 줄을 모은다 — 모듈에서 한 번만 구독
 if (typeof window !== "undefined") {
-  bridge.on("chat:line", ({ name, text, mine, key, staff, ns, mgr, m, w }) => {
-    const added = chatStore.push(name, text, mine, key, staff, ns, mgr, m, w);
+  bridge.on("chat:line", ({ name, text, mine, key, staff, ns, mgr, m, w, nb }) => {
+    const added = chatStore.push(name, text, mine, key, staff, ns, mgr, m, w, nb);
     // 실시간으로 새로 온 다른 사람 채팅에만 작은 알림음 (지난 기록 chat:log에는 울리지 않는다)
     chimeForChat({ mine, added, shown: shownNow, enabled: chatChime.getSnapshot() }, Date.now());
     // 11/16 귓속말 상대는 최근 목록 맨 앞으로 (입력칸 이름 칩·/w + Enter). 처음 받은 귓속말 뒤에는 답장하는 법을 한 번 알려 준다

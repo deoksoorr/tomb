@@ -2,7 +2,7 @@
 
 import { resellBuyNote } from "@/lib/resell";
 import { useCallback, useEffect, useId, useState } from "react";
-import { isNameSlot, isPermanentUntil, itemById } from "@tomb/protocol";
+import { DIR, isNameSlot, isPermanentUntil, itemById } from "@tomb/protocol";
 import { errorMessage } from "@/lib/api";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { rotateMode } from "@/lib/housing/layout";
@@ -189,7 +189,7 @@ export default function SeasonShopDialog({ kind, onClose, avatar }: Props) {
           {name ? (
             <NameStylePreview className={shop.namePreview} color={color} body={body} look={fitting.look} name={me?.name ?? "내 이름"} label={`내 이름표에 ${row.name}${batchim(row.name) ? "을" : "를"} 달아 본 모습 (낮·밤)`} />
           ) : (
-            <OutfitPreview className={shop.fitPreview} color={color} body={body} look={fitting.look} label={`내 아바타가 ${row.name}${batchim(row.name) ? "을" : "를"} 입어 본 모습`} />
+            <OutfitPreview className={shop.fitPreview} color={color} body={body} look={fitting.look} label={`내 아바타가 ${row.name}${batchim(row.name) ? "을" : "를"} 입어 본 모습`} facing={row.slot === "pack" ? DIR.up : DIR.down} />
           )}
           <div className={shop.info}>
             <p className={shop.name}>

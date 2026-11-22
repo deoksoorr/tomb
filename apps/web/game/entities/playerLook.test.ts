@@ -29,6 +29,7 @@ vi.mock("./AvatarView", () => ({
     setDexBadge() {}
     setChamp() {}
     setMgr() {}
+    setSprout() {}
     // 운영자면 내 이름표도 "운영자"로 바꾼다 (Player가 부른다)
     shownName = "";
     setName(n: string) {
@@ -39,6 +40,11 @@ vi.mock("./AvatarView", () => ({
     }
     applyAppearance(a: unknown) {
       this.calls.push({ kind: "appearance", arg: a });
+    }
+    // 11/22 꾸미기·염색을 한 번에 (시트 한 장) — 실제 AvatarView처럼 setLook → applyAppearance 순서
+    changeLook(look: string[] | null, a: unknown) {
+      if (look) this.setLook(look);
+      this.applyAppearance(a);
     }
     destroy() {
       this.sprite.scene = undefined;

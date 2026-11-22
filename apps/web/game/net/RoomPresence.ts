@@ -144,9 +144,7 @@ export class RoomPresence {
           for (const e of entries) if (e.sid !== me) this.remotes.get(e.sid)?.push(t, e.x, e.y, e.state, e.dir);
         },
         onLook: (sid, look, extra) => {
-          const v = this.remotes.get(sid)?.view;
-          v?.setLook(this.peerLook(look));
-          v?.applyAppearance(extra);
+          this.remotes.get(sid)?.view.changeLook(this.peerLook(look), extra);
         },
         onAct: (sid, kind, x, y) => {
           const r = this.remotes.get(sid);
@@ -164,12 +162,14 @@ export class RoomPresence {
           if (!r || !isEmoId(id)) return;
           r.view.emote(emoIcon(id), performance.now(), EMO_SHOW_MS);
         },
-        onChat: (sid, text, key) => {
+        onChat: (sid, text, key, meta) => {
           const r = this.remotes.get(sid);
           if (!r) return;
           r.view.chat(text, performance.now());
           const ns = nameStyleIds(r.view.wearing);
-          bridge.emit("chat:line", { name: r.name, text, mine: false, ...(key ? { key } : {}), ...(r.view.staff ? { staff: true as const } : {}), ...(r.view.manager ? { mgr: true as const } : {}), ...(ns ? { ns } : {}) });
+          // 11/22 새싹: 서버가 붙인 표시 (옛 서버면 화면이 아는 값)
+          const nb = meta?.nb === true || r.view.sprout;
+          bridge.emit("chat:line", { name: r.name, text, mine: false, ...(key ? { key } : {}), ...(r.view.staff ? { staff: true as const } : {}), ...(r.view.manager ? { mgr: true as const } : {}), ...(ns ? { ns } : {}), ...(nb ? { nb: true as const } : {}) });
         },
         // 이 방의 최근 1분 채팅 → 채팅창에 합친다
         // 지난 채팅에도 지금 방에 있는 사람(나 포함)이면 닉네임 꾸미기를 붙인다
@@ -200,12 +200,14 @@ export class RoomPresence {
     o.me?.setChamp(bridge.last("look:set")?.champ);
     // 11/16 매니저 표시(칭호)도 마지막 착용 증서 값으로
     o.me?.setMgr(bridge.last("look:set")?.mgr === 1);
+    // 11/22 새싹: 내 아바타를 Player 없이 만든 장면(사냥터)도 마지막 값으로 (방 welcome이 다시 알려 준다). Player면 Player가 듣는다
+    o.me?.setSprout(bridge.last("me:sprout")?.until);
+    this.offs.push(bridge.on("me:sprout", ({ until }) => o.me?.setSprout(until)));
     // 31번 운영자 표시(저승사자 차림·운영자 오라)도 — 사냥터처럼 Player 없이 내 아바타를 만든 장면에서
     if (o.me && !o.me.staff && bridge.last("me:staff")?.on === true) o.me.setStaff(true);
     this.offLook = bridge.on("look:set", ({ look, lookGrant, dye, body, champ, mgr }) => {
       const clean = Array.isArray(look) ? look.filter((x): x is string => typeof x === "string") : [];
-      o.me?.setLook(o.huntGear ? o.huntGear.me(clean) : clean);
-      o.me?.applyAppearance({ dye, body, champ, mgr });
+      o.me?.changeLook(o.huntGear ? o.huntGear.me(clean) : clean, { dye, body, champ, mgr });
       if (lookGrant) this.client.look(lookGrant);
     });
     if (o.expressions) {
@@ -293,7 +295,7 @@ export class RoomPresence {
     this.client.chat(text);
     // 채팅 기록창: 내 글도 바로 (이름은 내 이름표 그대로)
     const ns = nameStyleIds(this.o.me?.wearing);
-    if (this.o.me) bridge.emit("chat:line", { name: this.o.me.label.text, text: shown, mine: true, ...(this.o.me.staff ? { staff: true as const } : {}), ...(this.o.me.manager ? { mgr: true as const } : {}), ...(ns ? { ns } : {}) });
+    if (this.o.me) bridge.emit("chat:line", { name: this.o.me.label.text, text: shown, mine: true, ...(this.o.me.staff ? { staff: true as const } : {}), ...(this.o.me.manager ? { mgr: true as const } : {}), ...(ns ? { ns } : {}), ...(this.o.me.sprout ? { nb: true as const } : {}) });
   }
 
   /** 몸짓 (손 흔들기·환호 등): 내 아바타가 바로 하고 방에 보낸다 */
@@ -346,6 +348,7 @@ export class RoomPresence {
     r.view.setStaff(p.staff === true); // 31번 운영자 차림
     r.view.setChamp(p.champ); // 주간 랭킹 1위 배지·오라
     r.view.setMgr(p.mgr === true); // 11/16 매니저 칭호
+    r.view.setSprout(p.nb); // 11/22 새싹 (끝나는 시각까지)
     this.remotes.set(p.sid, r);
     if (p.away) this.away.add(p.sid);
     else this.away.delete(p.sid);
@@ -366,6 +369,7 @@ export class RoomPresence {
         r.view.setLook(this.peerLook(p.look ?? []));
         r.view.setChamp(p.champ);
         r.view.setMgr(p.mgr === true);
+        r.view.setSprout(p.nb);
       }
     }
     for (const [sid, r] of this.remotes) {

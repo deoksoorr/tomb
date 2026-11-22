@@ -29,6 +29,8 @@ export type RecentChat = {
   m?: ChatPlace;
   /** 11/20 쓴 사람의 닉네임 꾸미기 id (쓸 때 착용 그대로) */
   ns?: string[];
+  /** 11/22 새싹(새 이웃)이 쓴 줄 (쓸 때 그대로) */
+  nb?: true;
 };
 
 export class ChatRecent {
@@ -72,6 +74,7 @@ export class ChatRecent {
       ...(l.mgr ? { mgr: true as const } : {}),
       ...(isChatPlace(l.m) ? { m: l.m } : {}),
       ...(l.ns ? { ns: l.ns } : {}),
+      ...(l.nb ? { nb: true as const } : {}),
       ...(visitorId !== undefined && l.visitorId === visitorId
         ? { mine: true as const }
         : {}),
@@ -142,5 +145,6 @@ function readStored(v: unknown): RecentChat | null {
     ...(l.mgr === true ? { mgr: true as const } : {}),
     ...(isChatPlace(l.m) ? { m: l.m } : {}),
     ...(readChatNameStyle(l.ns) ? { ns: readChatNameStyle(l.ns) } : {}),
+    ...(l.nb === true ? { nb: true as const } : {}),
   };
 }

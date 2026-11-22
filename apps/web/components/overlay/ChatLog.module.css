@@ -19,6 +19,16 @@
   color: var(--bone);
 }
 
+/* 11/22 운영자 「이름표 줄만 세로로 커 보이고 가운데가 안 맞는다」: 이름표 판이 글줄 높이 전체(위아래 꽉)라 이웃 줄에 붙어 보였다.
+   → 판을 글줄보다 2px 낮게(위아래 1px씩 여유) + 1px 올려 글줄 가운데에 둔다. 판 안 글자 기준선은 바깥 글과 그대로 같다
+   (판 줄 높이를 2px 줄이면 판 안 글자가 1px 내려가고, 판째 1px 올리면 제자리 — 글꼴과 상관없이 맞는다).
+   모든 줄 높이는 글줄 높이 그대로라 이름표·딱지가 있든 없든 줄 간격이 같다 */
+.name [data-plate] {
+  position: relative;
+  top: -1px;
+  line-height: calc(1.45em - 2px);
+}
+
 .mine .name,
 .mine .sep,
 .mine .text {
@@ -111,7 +121,8 @@
   gap: 1px;
   height: calc(8 * 1.45em + 7px);
   margin: 0;
-  padding: 0 2px 0 0;
+  /* 11/22 왼쪽 2px: 줄 맨 앞 글자의 검은 테두리(-1px)·빛 그림자가 스크롤 상자 왼쪽 끝에 잘렸다 */
+  padding: 0 2px 0 2px;
   overflow-y: auto;
   overscroll-behavior: contain;
   list-style: none;

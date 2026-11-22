@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { AVATAR_BODIES, DIR, ITEMS, sanitizeLook } from "@tomb/protocol";
 import { AV_H, AV_W, avatarArtTop, avatarFrameGrid, handAnchor, lookKey, SPRITE_COSMETICS } from "./avatar";
-import { GEAR_HAND, GEAR_HEAD, GEAR_SHEET_IDS } from "./avatarGear";
+import { GEAR_HEAD, GEAR_SHEET_IDS } from "./avatarGear";
 import { COSMETIC_FX, COSMETIC_FX_IDS, CosmeticFxSim, FX_ART, fxIconGrid, petSinkTarget, type FxCmd, type FxInput } from "./cosmeticFx";
 import { hasItemIcon } from "./itemIcons";
 
@@ -75,10 +75,7 @@ describe("F8 sheet gear fits all 6 bodies", () => {
       }
   });
 
-  it("hand gear hides behind the body from the back", () => {
-    for (const id of GEAR_HAND)
-      for (const b of AVATAR_BODIES) expect(diff(avatarFrameGrid(b.id, "up", 0, COLOR), avatarFrameGrid(b.id, "up", 0, COLOR, [id])), `${id} ${b.id}`).toBe(0);
-  });
+  // 11/22 손 꾸미기 뒷모습(몸 뒤 반대편 손에 삐져나온다)은 heldGear.test.ts
 
   it("back gear shows on the back view", () => {
     for (const id of ["back_backpack", "back_cape"])
@@ -326,6 +323,7 @@ describe("F8 effects (CosmeticFxSim)", () => {
 
   it("bag icons for effect items are filled 16×16 grids", () => {
     for (const id of COSMETIC_FX_IDS) {
+      if (id === "back_wings") continue; // 11/22 작은 날개는 연출만 이쪽으로 옮겼고 아이콘은 예전 그대로 (itemIcons backWings)
       const g = fxIconGrid(id)!;
       expect(g, id).not.toBeNull();
       expect([g.w, g.h]).toEqual([16, 16]);

@@ -4,6 +4,10 @@ export const STATIC_NOTE_TITLES: Readonly<Record<string, readonly [string, numbe
     "처음 오신 분들께 안내드립니다",
     1794743573688
   ],
+  "ISEcTqlGHO": [
+    "꾸미기 염색과 색 보관함",
+    1795395600000
+  ],
   "DXvWB5lsd6": [
     "낚시 개편, 대물과 월척",
     1795310050475

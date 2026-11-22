@@ -930,8 +930,9 @@ const GEAR_ICONS: Record<string, Ascii> = {
     pal: { t: 0x2a4a5a, T: 0x1e3640, c: 0x4a8aa0, l: 0x8ae8ff, w: 0xe8ffff, k: 0x2a3a4a },
   },
   back_backpack: {
-    rows: [".....ssssss", "....s......s", "...pppppppppp", "..pphhhhhhhhpp", "..pphhhhhhhhpp", "..pppppppppppp", "..pppppppppppp", "..pplllllllppp", "..ppl.....lppp", "..ppl..k..lppp", "..pplllllllppp", "..pppppppppppp", "...pppppppppp"],
-    pal: { p: 0x7a8a4a, h: 0x9aaa6a, l: 0x5a6a32, k: 0xd8c8a0, s: 0x5a4a32 },
+    // 11/22 염색 티: 배낭과 같은 네 톤 (avatarGear BACKPACK_TONES)
+    rows: [".....ssssss", "....s......s", "...hhhhhhhhhp", "..hhhhhhhhhhpl", "..hphhhhhhhhpl", "..hppppppppppl", "..hppppppppppl", "..hpddddddddpl", "..hpl.....lppl", "..hpl..k..lppl", "..hplllllllppl", "..hpppppppppdl", "...lllllllldd"],
+    pal: { p: 0x7a8a4a, h: 0x9aaa6a, l: 0x5c6838, d: 0x444e28, k: 0xd8c8a0, s: 0x5a4a32 },
   },
   back_cape: {
     rows: ["", "..yy........yy", "..rrrrrrrrrrrr", "..rhrrrrrrrrrl", ".rhrrrrrrrrrrrl", ".rhrrrrrrrrrrrl", "rhrrrrrrrrrrrrrl", "rhrrrrrrrrrrrrrl", "rhrrrrrrrrrrrrrl", "rhrrrrrrrrrrrrrl", "r.rr.rr.rr.rr.rl"],
@@ -946,17 +947,18 @@ const GEAR_ICONS: Record<string, Ascii> = {
     rows: ["", "", "", ".....yyyyy", "....yyhyyyl", "...yyyhyyyll", "..yyyyhyygyll", "..yyyyhyyyyll", ".llllllllllllll"],
     pal: { y: 0xf2c43a, h: 0xfff09a, l: 0xc8961a, g: 0x3aa86a },
   },
+  // 11/22 요리사 모자·산타 모자: 염색 티 나게 천 네 톤 (avatarGear CHEF_TONES · SANTA_TONES와 같은 색 — 아이콘 염색이 같은 묶음으로 옮긴다)
   hat_chef: {
-    rows: ["...wwww.wwww", "..wwwwwwwwwws", "..wwwwwwwwwws", "..wwwwwwwwwws", "...wwwwwwwws", "...wwwwwwwws", "...eeeeeeeee", "...wwwwwwwww"],
-    pal: { w: 0xfbfbf6, s: 0xdcdcd2, e: 0xe0e0d6 },
+    rows: ["...hhww.wdww", "..hhwwwdwwwss", "..hwwwwdwwwss", "..wwwwwwwwwss", "...sssssssssd", "...wwwwwwwwsd", "...wswswswssd", "...wswswswssd"],
+    pal: { h: 0xfefefb, w: 0xf2f2ea, s: 0xdcdcd2, d: 0xc4c4b8 },
   },
   hat_horns: {
     rows: ["", "", "..t.........t", "...t.......t", "...cc.....cc", "..ccc.....ccc", "..ccc.....ccc", "..ggggggggggg", "..ggggggggggg"],
     pal: { t: 0xfff0c0, c: 0xe8603a, g: 0x9fc5a8 },
   },
   hat_santa: {
-    rows: ["", "...........ww", "..........rww", "........rrrr", "......rrrrrr", ".....rrrrrrr", "....rrrrrrrrl", "...rrrrrrrrrl", "..wwwwwwwwwwww", "..wwwwwwwwwwww"],
-    pal: { r: 0xd8323c, l: 0xa02430, w: 0xf8f6f0 },
+    rows: ["", "...........ww", "..........dww", "........rrrl", "......hrrrrl", ".....hrrrrrl", "....hhrrrrrll", "...hhrrrrrrll", "..wwwwwwwwwwww", "..wwwwwwwwwwww"],
+    pal: { h: 0xf0505a, r: 0xd8323c, l: 0xa02430, d: 0x74121e, w: 0xf8f6f0 },
   },
   staff_crown: {
     rows: ["", "", "..s....bb....s", "..k...kkkk...k", "..kk.kkkkkk.kk", "..kkkkkkkkkkkk", "..kkkkkbkkkkkk", "..kkkkkkkkkkkk", "..llllllllllll"],

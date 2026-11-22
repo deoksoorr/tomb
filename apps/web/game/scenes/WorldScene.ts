@@ -14,6 +14,7 @@ import { SnowGrid, type SnowNpc } from "../world/snowNpc";
 import { SnowOccluders } from "../world/snowMask";
 import { startMapConceptSync } from "@/lib/mapConceptClient";
 import { DEPTH, GRAVE_NEAR_RADIUS, prefersReducedMotion, SIT_IDLE_MS } from "../config";
+import type { AvatarView } from "../entities/AvatarView";
 import { GraveTooltip } from "../entities/Grave";
 import { isAttachKind, Player, type SeatRequester } from "../entities/Player";
 import { HAMMOCK_FRONT, RemoteAvatar, SWING_FRONT } from "../entities/RemoteAvatar";
@@ -96,6 +97,8 @@ import { publishRide, rideBlocked, standForGate } from "@/lib/rideGate";
 // 유령 잡화점에 들어가면 이 씬은 숨기만 하고(업데이트·연결은 유지) 상점 씬이 그 위에 그려진다.
 
 const FOCUS_WAIT_MS = 4000;
+/** 11/22 머리 위 새싹을 눌러 띄운 말풍선이 저절로 닫히는 시간 */
+const SPROUT_TAP_TIP_MS = 2500;
 const BURY_WAIT_MS = 15_000;
 const REMOTE_BURY_TTL_MS = 30_000;
 /** 묘비가 솟아오른 뒤 캐릭터를 그 앞으로 옮기는 시점 */
@@ -359,7 +362,7 @@ export class WorldScene extends Phaser.Scene {
     if (this.resume) this.applyResumePose(this.resume);
     this.playerGlow = this.add.image(spawn.x, spawn.y, TEX.glow).setBlendMode(Phaser.BlendModes.ADD).setTint(0xffe2a8).setDepth(DEPTH.lights);
 
-    this.rig = new CameraRig(this, this.player.sprite, canvas, (x, y) => this.onTap(x, y));
+    this.rig = new CameraRig(this, this.player.sprite, canvas, (x, y) => this.onTap(x, y), (w) => this.onHoverSprout(w));
     this.rig.setMapHeight(this.map.height);
     // 마을 색조: 셰이더가 그림마다 곱한다 (맵은 그대로, 캐릭터는 절반만). WebGL이 아니면 예전 곱하기 판
     const tint = worldTintOf(this.game);
@@ -656,9 +659,7 @@ export class WorldScene extends Phaser.Scene {
         },
         onPeers: (peers, seats) => this.reconcilePeers(peers, seats),
         onLook: (sid, look, extra) => {
-          const v = this.remotes.get(sid)?.view;
-          v?.setLook(look ?? []);
-          v?.applyAppearance(extra);
+          this.remotes.get(sid)?.view.changeLook(look ?? [], extra);
         },
         onFirework: (sid, item, x, y, wait) => {
           this.fireworks.launch(item, x, y, this.fireworkView(), false, this.remotes.get(sid)?.name ?? "", wait);
@@ -857,6 +858,7 @@ export class WorldScene extends Phaser.Scene {
     r.view.setChamp(p.champ); // 주간 랭킹 1위 배지·오라 (입장 토큰·착용 증서에 서버가 넣은 것만 온다)
     r.view.setStaff(p.staff === true); // 31번 운영자: 저승사자 차림·"운영자" 배지 (서버가 넣은 표시만 온다)
     r.view.setMgr(p.mgr === true); // 11/16 매니저 칭호 (서버가 넣은 표시만 온다)
+    r.view.setSprout(p.nb); // 11/22 새싹 (총 접속 3시간 미만 새 이웃 — 끝나는 시각까지)
     // 같은 sid가 다시 들어오면(이름·색 변경) 앉아 있던 좌석을 이어받는다
     r.seatId = prev?.seatId ?? null;
     r.view.setMood(p.mood); // 24번: 늦게 온 사람도 앉아 있는 사람의 상태를 본다
@@ -887,6 +889,7 @@ export class WorldScene extends Phaser.Scene {
       r.view.setLook(p.look ?? []);
       r.view.setChamp(p.champ);
       r.view.setMgr(p.mgr === true);
+      r.view.setSprout(p.nb);
       r.view.setMood(p.mood ?? null);
       this.riding.applyPeer(r, p);
       this.forage.applyPeer(p);
@@ -1961,9 +1964,56 @@ export class WorldScene extends Phaser.Scene {
     return best;
   }
 
+  /** 11/22 월드 좌표에 있는 새싹 그림의 주인 (나·다른 사람 머리 위, 보이는 것만) */
+  private sproutViewAt(wx: number, wy: number): AvatarView | null {
+    const views = [this.player.view, ...[...this.remotes.values()].filter((r) => r.visible).map((r) => r.view)];
+    return views.find((v) => v.sproutAt(wx, wy)) ?? null;
+  }
+
+  /**
+   * 11/22 떠 있는 새싹 말풍선: 누구 새싹인지·눌러서 띄웠으면 닫힐 시각·마지막으로 알린 화면 자리.
+   * 매 프레임 그 사람 새싹 자리로 따라가고(followSproutTip), 새싹이 안 보이게 되면(숨음·끝남·나감) 닫는다
+   */
+  private sproutTip: { view: AvatarView; until: number; x: number; y: number } | null = null;
+  private openSproutTip(view: AvatarView | null, tapUntil = 0): void {
+    if (!view) {
+      if (this.sproutTip) bridge.emit("sprout:tip", null);
+      this.sproutTip = null;
+      return;
+    }
+    if (this.sproutTip?.view === view && !tapUntil) return;
+    this.sproutTip = { view, until: tapUntil, x: NaN, y: NaN };
+    this.followSproutTip(performance.now());
+  }
+  private followSproutTip(now: number): void {
+    const t = this.sproutTip;
+    if (!t) return;
+    const a = t.view.sproutAnchor;
+    if (!a || (t.until && now >= t.until) || this.inShop || this.cleaned || this.hub.isBlocked) return this.openSproutTip(null);
+    const c = this.rig.toClient(a.x, a.y);
+    if (Math.abs(c.x - t.x) < 0.5 && Math.abs(c.y - t.y) < 0.5) return;
+    t.x = c.x;
+    t.y = c.y;
+    bridge.emit("sprout:tip", { x: c.x, y: c.y, ...(t.until ? { tap: true as const } : {}) });
+  }
+
+  /** 11/22 마우스를 머리 위 새싹에 올리면 「마을에 온 지 얼마 안 된 이웃이에요」 (벗어나면 닫는다, 그 사람이 움직이면 따라간다) */
+  private onHoverSprout(w: { x: number; y: number } | null): void {
+    const view = w && !this.hub.isBlocked && !this.cleaned && !this.inShop ? this.sproutViewAt(w.x, w.y) : null;
+    // 눌러서 띄운 말풍선은 마우스가 지나가도 그대로 (시간이 되면 닫힌다)
+    if (!view && this.sproutTip?.until) return;
+    this.openSproutTip(view);
+  }
+
   private onTap(wx: number, wy: number): void {
     this.walker.cancel();
     if (this.hub.isBlocked || this.cleaned || this.inShop || this.tripLock) return;
+    // 11/22 머리 위 새싹을 누르면 말풍선만 (폰 — 그 사람을 따라가다 잠깐 뒤 저절로 닫힌다)
+    const sprout = this.sproutViewAt(wx, wy);
+    if (sprout) {
+      this.openSproutTip(sprout, performance.now() + SPROUT_TAP_TIP_MS);
+      return;
+    }
     // 47번: 다른 사람 캐릭터(몸·이름표)를 누르면 작은 메뉴(신고하기)
     const hit = peerAt(
       [...this.remotes.values()].map((r) => ({ sid: r.sid, name: r.name, x: r.x, y: r.y, visible: r.visible, label: r.view.label.getBounds() })),
@@ -1974,7 +2024,8 @@ export class WorldScene extends Phaser.Scene {
     if (hit && this.remotes.get(hit.sid)?.view.staff) return;
     if (hit && this.net.channel !== null) {
       const chat = this.remotes.get(hit.sid)?.view.chatText(performance.now());
-      bridge.emit("peer:menu", { sid: hit.sid, name: hit.name, ch: this.net.channel, ...(chat ? { chat } : {}) });
+      // 11/22 새싹이면 메뉴 맨 위에 「마을에 온 지 얼마 안 된 이웃이에요」 (폰은 새싹이 작아 이름표를 누르는 일이 많다)
+      bridge.emit("peer:menu", { sid: hit.sid, name: hit.name, ch: this.net.channel, ...(chat ? { chat } : {}), ...(this.remotes.get(hit.sid)?.view.sprout ? { sprout: true as const } : {}) });
       return;
     }
     const p = graveAt(this.field.layout, wx, wy);
@@ -2190,6 +2241,7 @@ export class WorldScene extends Phaser.Scene {
     this.atmos.update(now, dt, view);
     this.fireworks.update(now, dt, view);
     this.updateFestival(now);
+    this.followSproutTip(pnow);
     this.updateLighting(view);
 
     this.net.tick(pnow);

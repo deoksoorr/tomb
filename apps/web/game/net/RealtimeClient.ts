@@ -2,6 +2,7 @@ import {
   ACT_KINDS,
   CLIENT_VERSION,
   isPhraseId,
+  isSproutUntil,
   CHAT_MAX,
   isEmoId,
   isSeatMood,
@@ -184,7 +185,7 @@ export type NetCallbacks = {
 };
 
 /** 11/16 채팅에 실려 오는 보낸 사람 정보 (맵이 달라 화면에 없는 사람도 채팅창에 쓰게) */
-export type ChatMeta = { name?: string; staff?: true; mgr?: true; /** 11/17 사냥 중이면 "hunt" */ m?: ChatPlace; /** 11/20 서버가 실은 닉네임 꾸미기 id (다른 맵 사람) */ ns?: string[] };
+export type ChatMeta = { name?: string; staff?: true; mgr?: true; /** 11/17 사냥 중이면 "hunt" */ m?: ChatPlace; /** 11/20 서버가 실은 닉네임 꾸미기 id (다른 맵 사람) */ ns?: string[]; /** 11/22 새싹(새 이웃)이 쓴 줄 */ nb?: true };
 
 /** 맵이 바뀌어도 늘 처음 콜백(월드)이 받는 것: 계정·친구·확성기·내 몸 모양·고블린 보상 */
 const GLOBAL_CALLBACKS = ["onMegaphone", "onMegaPin", "onMeStale", "onFriend", "onSelfBody", "onGoblinGrant", "onSquirrels", "onSquirrelsWait"] as const;
@@ -971,6 +972,7 @@ export class RealtimeClient {
               ...(m.mgr === true ? { mgr: true as const } : {}),
               ...chatTagOf(m.m),
               ...(readChatNameStyle(m.ns) ? { ns: readChatNameStyle(m.ns) } : {}),
+              ...(m.nb === true ? { nb: true as const } : {}),
             });
           break;
         case "chatLog":
@@ -1149,12 +1151,14 @@ export class RealtimeClient {
     this.syncPolicy.mark(performance.now());
     this.startSync();
     this.setMode("online");
+    // 11/22 내 새싹 표시 (서버가 입장 토큰으로 정한 끝 시각 — 없으면 새싹 아님)
+    bridge.emit("me:sprout", { until: isSproutUntil(m.nb) ? m.nb : 0 });
     this.h.onWelcome({ ...m, peers: m.peers.filter((p) => p.sid !== m.sid) });
     // 실내 표시: 들어가 있으면 새 연결에 다시 알린다. 유예 안에 자리를 되찾았으면 서버가 옛 값을 들고 있을 수 있어 나와 있어도 알린다
     if (this.away || m.resumed) this.send(this.awayMsg());
     // 새 연결: 서버 간격이 처음부터라 지금 착용 증서를 바로 보낸다 (기다리던 것도 함께 정리)
-    if (this.lookGrant) this.lookPacer.push(this.lookGrant);
-    this.lookPacer.reset();
+    // 11/22 lk: 1 = 서버가 look을 줄 세운다 → 이후 바꿈도 기다리지 않고 바로 (옛 서버면 10.5초 간격)
+    this.lookPacer.reconnected(this.lookGrant, m.lk === 1);
   }
 
   // ── 대기열 ──

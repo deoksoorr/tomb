@@ -5,6 +5,7 @@ import { bridge } from "@/game/bridge";
 import { WALLET_MAX } from "@/lib/economy";
 import { api, errorMessage } from "@/lib/api";
 import type { Me, PresenceTickInfo } from "@/lib/types";
+import { withWornItemDyes } from "@/lib/dye/itemWorn";
 
 // 내 계정(포인트·가방·착용·내 묘비) 클라이언트 사본. 서버 응답의 me로 통째로 바꾸는 것이 기본이고,
 // 반응 응답처럼 earned만 오는 경우에는 숫자만 더해 둔다(다음 /api/me 때 서버 값으로 맞춰진다).
@@ -26,7 +27,9 @@ class MeStore {
 
   getSnapshot = () => this.state;
 
-  set(me: Me): void {
+  set(raw: Me): void {
+    // 11/22 /api/me는 입은 아이템 색(dye.items)을 싣지 않는다 → 색 보관함(itemDyes)에서 채운다 (다른 응답은 실어 오면 그대로)
+    const me = withWornItemDyes(raw);
     this.update({ me, error: null });
     // 31번 운영자 표시를 게임에도 알린다 (바뀔 때만)
     if (bridge.last("me:staff")?.on !== !!me.staff) bridge.emit("me:staff", { on: !!me.staff });
@@ -43,9 +46,8 @@ class MeStore {
 
   async refresh(): Promise<Me | null> {
     try {
-      const me = await api.me();
-      this.set(me);
-      return me;
+      this.set(await api.me());
+      return this.state.me;
     } catch (e) {
       this.update({ ...this.state, error: errorMessage(e) });
       return null;

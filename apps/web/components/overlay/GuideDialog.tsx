@@ -15,6 +15,9 @@ import {
   DECOR_DURATION_MS,
   DEFAULT_CHANNEL_CAPACITY,
   DEFAULT_MAX_CHANNELS,
+  DYE_COLOR_SLOT_PRICES,
+  DYE_COLOR_SLOTS_MAX,
+  DYE_GEAR_SLOTS,
   FERRIS_CAR_SEATS,
   FERRIS_PERIOD_MS,
   FRIEND_LEAVE_GRACE_MS,
@@ -75,6 +78,10 @@ import ItemIcon from "../ui/ItemIcon";
 import { InquiryButton } from "../notice/InquiryDialog";
 import { OddsLink } from "../odds/OddsLayer";
 import { QUEST_DAILY, QUEST_STAMPS } from "@/lib/forage/quests/catalog";
+import { FEST_MS, URGENT_FROM_HOUR, URGENT_MS, URGENT_RANK_STAMPS, URGENT_STAMPS, URGENT_TO_HOUR } from "@/lib/forage/quests/urgent";
+import { NODE_FAST_MS, NODE_WINDOW_MS } from "@/lib/forage/rules";
+import { RESELL_RATE } from "@/lib/resell";
+import { SLOT_NAMES, SLOT_ORDER } from "../account/wardrobe";
 import styles from "./GuideDialog.module.css";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
@@ -179,7 +186,7 @@ const places = (touch: boolean): ReactNode[][] => [
   ["모닥불", "모닥불 광장", "곁에 앉아 같이 불멍해요"],
   ["소원 분수", "큰 모닥불 북쪽", "하루 한 번 동전 던지기"],
   ["귀신의집", "큰 모닥불 북쪽, 소원 분수 옆", "혼자 들어가는 공포 미로예요"],
-  ["유령 잡화점", touch ? "상점 주인장에게 [말 걸기]" : "상점 주인장에게 E", "꾸미기, 폭죽, 염색권을 팔아요"],
+  ["유령 잡화점", touch ? "상점 주인장에게 [말 걸기]" : "상점 주인장에게 E", "꾸미기, 폭죽, 염색권을 팔아요. 포인트로 영구로 산 꾸미기는 되사 줘요"],
   ["범퍼카장", "가운데 다리 건너 바로", `입구에서 ${keyJosa("E", "로", touch)} 타요. 무료예요`],
   ["동물원", "서쪽 다리 건너 바로", `사육사에게 펫 분양 (${won(Math.min(...petPrices))}~${won(Math.max(...petPrices))}P)`],
   // 11/20 강아지·고양이 펫과 집 가구는 정문 옆 분양사 보리만 판다
@@ -262,8 +269,8 @@ const forage = (touch: boolean): ReactNode[][] => [
     `캠핑장행 정류장 왼쪽 의뢰 게시판에서 ${keyName("E", touch)}`,
     `오늘의 의뢰는 ${QUEST_DAILY}개예요. ${DAY_RESET_TEXT}에 새로 나오고, 하루 1번 무료로 바꿀 수 있어요. 월요일마다 이번 주 큰 의뢰도 1개 나와요. 모은 것을 납품하면 의뢰 도장을 ${QUEST_STAMPS.easy}~${QUEST_STAMPS.hard}개, 큰 의뢰는 ${QUEST_STAMPS.weekly}개 받아요. 끝낸 수로 칭호도 받아요. 어디서든 ${touch ? "메뉴의 [의뢰 보기]" : "바로 가기 줄의 [의뢰]"}로 의뢰를 볼 수 있어요.`,
   ],
-  // 11/22 약초·광석·발굴품 의뢰 동안 그 채집 지점은 5분마다 모두 다시 펴요 (lib/forage/rules nodeBloomRule)
-  ["긴급 의뢰", "의뢰 게시판 오른쪽 긴급 의뢰 현판", "가끔 갑자기 열려요. 서버 모두가 같이 막대를 채우고, 혼자서도 끝까지 낼 수 있어요. 1개만 내도 보상을 받아요. 약초, 광석, 발굴품 의뢰 동안에는 그 채집 지점이 평소(10분)보다 자주, 5분마다 모두 다시 피어요."],
+  // 11/22 약초·광석·발굴품 의뢰 동안 그 채집 지점은 5분마다 모두 다시 펴요 (lib/forage/rules nodeBloomRule). 11/22 1·2·3등 순위 도장 (lib/forage/quests/urgent URGENT_RANK_STAMPS)
+  ["긴급 의뢰", "의뢰 게시판 오른쪽 긴급 의뢰 현판", `낮 ${URGENT_FROM_HOUR}시부터 밤 ${URGENT_TO_HOUR - 12}시 사이에 가끔 갑자기 열려서 ${min(URGENT_MS)}분 동안 받아요. 서버 모두가 같이 막대를 채우고, 혼자서도 끝까지 낼 수 있어요. 50%를 넘기면 1개라도 낸 사람 모두 도장 ${URGENT_STAMPS[50]}개, 100%를 넘기면 도장 ${URGENT_STAMPS[100]}개와 수집가의 뒷주머니를 더 받아요. 100%부터는 많이 낸 1·2·3등이 도장을 ${URGENT_RANK_STAMPS.join("·")}개 더 받고, 1등은 「긴급 배달왕」 칭호를 달아요. 낸 사람 중 한 명은 행운의 배달부로 뽑혀 무작위 꾸미기를 받아요. 150%를 채우면 불꽃축제가 ${min(FEST_MS) / 60}시간 열리고 1등도 무작위 꾸미기를 받아요. 약초, 광석, 발굴품 의뢰 동안에는 그 채집 지점이 평소(${min(NODE_WINDOW_MS)}분)보다 자주, ${min(NODE_FAST_MS)}분마다 모두 다시 피어요.`],
   ["도장 교환소", "의뢰 게시판의 [도장 교환소] 칸", "이달의 물건은 매달 1일 새벽 5시에 바뀌고, 염색권은 늘 있어요. 도장은 사라지지 않지만 포인트로 바꾸거나 남에게 줄 수는 없어요."],
 ];
 
@@ -441,7 +448,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
           <Table
             head={["종류", "얻는 곳", "쓰면"]}
             rows={[
-              [KIND_LABELS.cosmetic, "유령 잡화점", `입으면 ${durationLabel(COSMETIC_DURATION_MS)} 동안 써요. 이용권 값의 ${PERMANENT_MULTIPLIER}배로 영구 소장도 할 수 있어요.`],
+              [KIND_LABELS.cosmetic, "유령 잡화점", `입으면 ${durationLabel(COSMETIC_DURATION_MS)} 동안 써요. 기간제로 가진 꾸미기에 이용권을 또 쓰면 남은 기간에 ${durationLabel(COSMETIC_DURATION_MS)}이 더해져요. 이용권 값의 ${PERMANENT_MULTIPLIER}배로 영구 소장도 할 수 있어요.`],
               ["펫", "동물원 사육사, 분양사 보리", "평생 함께해요. 한 번에 한 마리씩 데리고 다녀요."],
               [KIND_LABELS.firework, "유령 잡화점", "쏘면 사라지고 같은 채널 모두가 봐요. 놀이기구를 타는 중에는 위쪽 폭죽 버튼으로 쏴요."],
               [KIND_LABELS.dye, "잡화점 염색·외형 탭", "한 번 염색하면 사라져요"],
@@ -450,9 +457,11 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
             ]}
           />
           <ul className={styles.points}>
-            <li>같은 부위는 마지막에 입은 것으로 바뀌어요. 잡화점 코디는 모두 영구 소장으로도 살 수 있어요.</li>
             <li>
-              {`꾸미기 점수는 지금 입은 코디로 매겨요. 영구 소장 값 ${LOOK_SCORE_DIVISOR}P마다 1점이에요. 특수 염색은 부위마다 ${DYE_SPECIAL_BONUS}점을 더 줘요. 기간제가 끝나면 그 점수도 빠져요. 순위는 랭킹 [꾸미기] 탭에서 봐요.`}
+              {`꾸미기 칸은 ${SLOT_ORDER.map((s) => SLOT_NAMES[s]).join(", ")} ${SLOT_ORDER.length}개예요. 옷과 등은 따로라 옷을 입은 채로 날개, 배낭, 망토를 같이 걸쳐요. 같은 칸은 마지막에 입은 것으로 바뀌어요. 잡화점 코디는 모두 영구 소장으로도 살 수 있어요.`}
+            </li>
+            <li>
+              {`꾸미기 점수는 지금 입은 코디로 매겨요. 영구 소장 값 ${LOOK_SCORE_DIVISOR}P마다 1점이에요. 특수 색으로 염색한 캐릭터 부위와 입은 꾸미기마다 ${DYE_SPECIAL_BONUS}점을 더 줘요. 기간제가 끝나면 그 점수도 빠져요. 순위는 랭킹 [꾸미기] 탭에서 봐요.`}
             </li>
           </ul>
           <details className={styles.more}>
@@ -496,14 +505,28 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
           <Table
             head={["알아 둘 것", "내용"]}
             rows={[
-              ["시작", `부위를 고르고 ${DYE_TIME_MS / 1000}초 안에 색을 찾아요`],
+              ["시작", `무작위 염색권은 칠할 곳을 고르고 ${DYE_TIME_MS / 1000}초 안에 색을 찾아요. 색 확정, 특수색 확정, 정해진 색 염색권은 판 없이 바로 칠해요`],
               ["판", "판은 끝없이 이어져요. 특수 색이 드물게 숨어 있어요."],
               ["창 닫기", "바깥을 눌러도 안 닫혀요. 직접 닫으면 포기한 걸로 쳐요."],
               ["이어서 하기", "도중에 나가도 시간이 남았으면 가방이나 잡화점에서 이어 해요"],
               ["시간이 끝나면", "지금 색과 새 색 중에서 골라요"],
-              ["입은 꾸미기", "아이템마다 색이 따로 남아요. 가방 [꾸미기]에서 골라 [염색]해요. 날개와 연은 못 바꿔요"],
-              ["색 보관함", "원래 색과 칠한 색을 가방에서 공짜로 바꿔 입어요. 칸은 3개까지예요 (2번째 2,000P, 3번째 5,000P)"],
-              ["되팔기", "잡화점 꾸미기를 영구로 가졌으면 가방에서 정가의 30%로 팔아요. 한정·보상은 못 팔아요"],
+              [
+                "꾸미기 염색",
+                `${DYE_GEAR_SLOTS.map((s) => SLOT_NAMES[s]).join(", ")} 꾸미기는 아이템마다 색이 따로 남아요. 가방 [꾸미기]에서 고르고 [색 보관함]을 눌러요. 날개도 염색돼요. 손, 오라, 발, 펫, 이름 꾸미기와 주간 1위·회장님 독대 1위 모자, 사이렌 모자, 도장 교환소에서 받은 꾸미기(연 날리는 등 포함)는 원래 색만 입어요`,
+              ],
+              [
+                "색 보관함",
+                `꾸미기마다 원래 색 칸 하나와 커스텀 칸이 ${DYE_COLOR_SLOTS_MAX}개까지 있어요. 처음 염색하면 커스텀 1칸이 저절로 열리고, 2번째는 ${won(DYE_COLOR_SLOT_PRICES[1])}P, 3번째는 ${won(DYE_COLOR_SLOT_PRICES[2])}P로 열어요. 연 칸은 그 꾸미기에 계속 남아요. 칸을 누르면 미리 보기만 하고, [이 색 입기]를 눌러야 공짜로 바꿔 입어요`,
+              ],
+              ["칠하기", "색 보관함에서 칠할 칸을 고르고 칠하기 단추를 눌러 가진 염색권을 써요. 빈 칸은 바로 칠하고, 색이 있는 칸이면 덮어쓸지 먼저 물어요"],
+              [
+                "바꾸기 잠금",
+                "[이 색 입기]를 너무 자주 누르면 잠깐 막혀요. 개인이 사비로 운영하는 서버라 운영비 부담이 커서 넣은 제한이에요. 자꾸 걸리면 막히는 시간이 길어지고, 막힌 동안에도 미리 보기는 돼요",
+              ],
+              [
+                "되팔기",
+                `포인트를 내고 영구로 산 잡화점 꾸미기는 상점에서 그 꾸미기를 골라 정가의 ${Math.round(RESELL_RATE * 100)}%로 팔아요. 선물, 보상, 한정, 기간제는 못 팔고, 입고 있으면 먼저 벗어요. 팔면 색 칸과 칠한 색은 돌려받지 않아요`,
+              ],
             ]}
           />
         </section>

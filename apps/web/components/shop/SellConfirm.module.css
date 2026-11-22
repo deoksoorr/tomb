@@ -1,0 +1,17 @@
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.confirm p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

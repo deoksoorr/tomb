@@ -537,6 +537,19 @@ if n >= tonumber(ARGV[4]) then redis.call('SADD', KEYS[4], ARGV[1]) end
 return 1
 `;
 
+/**
+ * 집 해시의 ch·lot·zone (HMGET). 이 클라이언트(redisClient, automaticDeserialization false)는 HMGET을 이름 없는 배열로 준다 —
+ * 객체로 읽으면(meta.ch) 늘 비어 지우기가 번지를 못 비우고, 다른 채널 집도 1채널 색인을 썼다 (11/22 실제 Redis 시험으로 잡음). 객체로 와도 받는다
+ */
+async function metaLoc(redis: Redis, id: string): Promise<{ lot: string | null; ch: string | null; zone: string | null }> {
+  const got = (await redis.hmget(HK.meta(id), "lot", "ch", "zone")) as unknown;
+  const at = (i: number, f: string) => {
+    const v = Array.isArray(got) ? got[i] : (got as Record<string, unknown> | null)?.[f];
+    return v === null || v === undefined ? null : String(v);
+  };
+  return { lot: at(0, "lot"), ch: at(1, "ch"), zone: at(2, "zone") };
+}
+
 function pairs(flat: string[] | null): Map<string, string> {
   const m = new Map<string, string>();
   for (let i = 0; flat && i < flat.length; i += 2) m.set(flat[i], flat[i + 1]);
@@ -677,7 +690,7 @@ export class RedisHouseStore implements HouseStore {
 
   async assignLot(id: string) {
     // 집의 채널은 바뀌지 않는다 (분양 때 정해진다). 먼저 읽고 그 채널 색인으로 Lua를 부른다
-    const meta = await this.redis.hmget<{ ch: string | null; zone: string | null }>(HK.meta(id), "ch", "zone");
+    const meta = await metaLoc(this.redis, id);
     const ch = housingChannelOf(meta?.ch);
     const zone = meta?.zone === "sea" ? "sea" : undefined;
     const r = Number(
@@ -714,14 +727,14 @@ export class RedisHouseStore implements HouseStore {
   }
 
   async unlot(id: string) {
-    const meta = await this.redis.hmget<{ ch: string | null; zone: string | null }>(HK.meta(id), "ch", "zone");
+    const meta = await metaLoc(this.redis, id);
     const ch = housingChannelOf(meta?.ch ?? undefined);
     const zone = meta?.zone === "sea" ? "sea" : undefined;
     return Number(await this.redis.eval<string[], number>(UNASSIGN_LOT_LUA, [HK.meta(id), lotsKey(ch, zone), HK.legacyLots], [id, isLegacyCh(ch, zone)])) === 1;
   }
 
   async moveLot(id: string, lot: number) {
-    const meta = await this.redis.hmget<{ ch: string | null; zone: string | null }>(HK.meta(id), "ch", "zone");
+    const meta = await metaLoc(this.redis, id);
     const ch = housingChannelOf(meta?.ch ?? undefined);
     const zone = meta?.zone === "sea" ? "sea" : undefined;
     await this.clearStaleLot(ch, lot, zone);
@@ -732,7 +745,7 @@ export class RedisHouseStore implements HouseStore {
   async remove(id: string) {
     const [eids, meta] = await Promise.all([
       this.guestbook(id, true).then((l) => l.map((g) => g.id)),
-      this.redis.hmget<{ lot: string | null; ch: string | null; zone: string | null }>(HK.meta(id), "lot", "ch", "zone"),
+      metaLoc(this.redis, id),
     ]);
     if (meta?.lot) await this.redis.eval<string[], number>(UNLOT_LUA, [lotsKey(housingChannelOf(meta.ch), meta.zone), HK.legacyLots], [String(meta.lot), id]);
     const p = this.redis.pipeline();

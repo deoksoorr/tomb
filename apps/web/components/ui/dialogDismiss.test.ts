@@ -19,5 +19,8 @@ describe("창 닫힘 판단", () => {
     expect(escapeAction(true, true)).toBe("escape");
     expect(escapeAction(true, false)).toBe("close");
     expect(escapeAction(false, true)).toBe("none");
+    // 11/22 안쪽 창(아이템 페이지·확인 창)에서 온 Esc는 바깥 창(가방·상점)이 처리하지 않는다 — 맨 위 한 겹만 닫힌다
+    expect(escapeAction(true, false, false)).toBe("none");
+    expect(escapeAction(true, true, false)).toBe("none");
   });
 });

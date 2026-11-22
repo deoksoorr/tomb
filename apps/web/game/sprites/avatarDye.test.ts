@@ -2,6 +2,10 @@ import { AVATAR_BODIES, GEAR_DYE_SEPARATE, isDyeableCosmetic, itemById, ITEMS } 
 import { describe, expect, it } from "vitest";
 import { avatarColorKey, avatarColors, avatarColorSpec, avatarFrameGrid, sheetCosmeticIds, specDye, withDyePart } from "./avatar";
 import { dyeItemColor, GEAR_DYE_REGIONS, itemRefOf, toHsl } from "./gearDye";
+import { COSMETIC_FX, CosmeticFxSim, FX_ART, fxArtGrid, type FxArtId, type FxCmd, type FxInput } from "./cosmeticFx";
+import { BACKPACK_TONES, CHEF_TONES, SANTA_TONES } from "./avatarGear";
+import { MOCHI_TONES } from "./cuteGear";
+import { PAD_TONES } from "./seasonSetGear";
 
 // 46번 아바타 3부위 색: 염색 전에는 예전과 똑같이, 염색한 부위만 바뀐다
 
@@ -96,8 +100,8 @@ describe("11/22 입은 꾸미기 염색", () => {
     for (const k of keys) expect(k).toMatch(/^[0-9a-f_]+$/);
   });
 
-  it("염색할 수 있는 꾸미기는 그 꾸미기 픽셀만 바뀌고 몸·눈·외곽선은 그대로 (머리·목·옷·등, 앞·옆·뒤)", () => {
-    for (const id of ITEMS.filter((i) => isDyeableCosmetic(i.id)).map((i) => i.id)) {
+  it("염색할 수 있는 꾸미기는 그 꾸미기 픽셀만 바뀌고 몸·눈·외곽선은 그대로 (머리·목·옷·등, 앞·옆·뒤 — 시트 밖 날개는 아래 따로)", () => {
+    for (const id of ITEMS.filter((i) => isDyeableCosmetic(i.id) && !(COSMETIC_FX[i.id]?.kind === "wings")).map((i) => i.id)) {
       let total = 0;
       for (const view of ["down", "side", "up"] as const) {
         const plain = frame([], BASE, view);
@@ -118,10 +122,14 @@ describe("11/22 입은 꾸미기 염색", () => {
     }
   });
 
-  it("머리·목·옷·등 꾸미기 중 시트 밖에 따로 그리는 것(날개·연)만 GEAR_DYE_SEPARATE — 새 꾸미기를 넣으면 여기서 걸린다", () => {
+  it("머리·목·옷·등 꾸미기 중 시트 밖에 따로 그리는 것은 날개(다시 칠한다)와 GEAR_DYE_SEPARATE(연)뿐 — 새 꾸미기를 넣으면 여기서 걸린다", () => {
     const sheet = new Set(sheetCosmeticIds());
     const outside = ITEMS.filter((i) => i.kind === "cosmetic" && (i.slot === "head" || i.slot === "neck" || i.slot === "back" || i.slot === "pack") && !sheet.has(i.id)).map((i) => i.id);
-    expect(new Set(outside)).toEqual(new Set(GEAR_DYE_SEPARATE));
+    const wings = outside.filter((id) => COSMETIC_FX[id]?.kind === "wings");
+    expect(new Set(wings)).toEqual(new Set(WINGS));
+    expect(new Set(outside.filter((id) => !wings.includes(id)))).toEqual(new Set(GEAR_DYE_SEPARATE));
+    // 날개는 모두 염색 묶음이 있다 (가장 많이 쓴 색 규칙에 맡기지 않는다)
+    for (const id of WINGS) expect(GEAR_DYE_REGIONS[id], id).toBeDefined();
   });
 
   it("noDye 표시·안 입은 아이템 색·다른 아이템 색은 그림을 바꾸지 않는다", () => {
@@ -146,6 +154,7 @@ describe("11/22 입은 꾸미기 염색", () => {
   it("아이템별 바꿀 색 묶음(GEAR_DYE_REGIONS): 묶음 색만 바뀌고 금테·흰 반짝임 같은 장식은 그대로", () => {
     const colorsOf = (g: number[]) => new Set(g.filter((v) => (v & 255) === 255).map((v) => v >>> 8));
     for (const [id, r] of Object.entries(GEAR_DYE_REGIONS)) {
+      if (COSMETIC_FX[id]?.kind === "wings") continue; // 날개는 시트 밖 그림 — 아래 「11/22 날개 염색」에서 본다
       const all = new Set<number>();
       const after = new Set<number>();
       for (const view of ["down", "side", "up"] as const) {
@@ -157,10 +166,8 @@ describe("11/22 입은 꾸미기 염색", () => {
       // 묶음 색은 사라지고 (다른 색으로 바뀌고)
       if (r.colors) for (const c of r.colors) if (all.has(c)) expect(after.has(c), `${id} ${c.toString(16)}`).toBe(false);
     }
-    // 채집왕 망토의 금테는 그대로, 보라 천만 바뀐다
-    const cape = new Set(frame(["q_back_cape"], dyed({ q_back_cape: "#3a6ae0" }), "up").map((v) => v >>> 8));
-    expect(cape.has(0xf2c43a)).toBe(true);
-    expect(cape.has(0x5a3a9e)).toBe(false);
+    // 11/22 수집 의뢰 보상(채집왕 망토)은 염색 불가 — 아이템 색이 와도 기본 그림 그대로
+    expect(frame(["q_back_cape"], dyed({ q_back_cape: "#3a6ae0" }), "up")).toEqual(frame(["q_back_cape"], BASE, "up"));
   });
 
   it("옷(back)과 등(pack)을 같이 입으면 둘 다 그려지고 각자 색이 따로 간다 (롱패딩 + 배낭)", () => {
@@ -192,6 +199,67 @@ describe("11/22 입은 꾸미기 염색", () => {
       }
   });
 
+  it("11/22 염색 티 손본 꾸미기: 천 명암 단계가 모두 묶음에 들고, 그린 천 픽셀은 다 바뀌고 장식은 그대로 (명암 순서 유지)", () => {
+    const pad = PAD_TONES;
+    const RAMPS: Record<string, readonly number[]> = {
+      sc_padding: [pad.shine, pad.hi, pad.base, pad.lo, pad.seam],
+      hat_chef: CHEF_TONES,
+      hat_santa: SANTA_TONES,
+      hat_mochibun: MOCHI_TONES,
+      kn_fleece: [0xfbf5e8, 0xebe1cc, 0xcdbfa4, 0xaa9a7e],
+      kn_cable: [0xfffaee, 0xefe6d2, 0xd0c3a6, 0xae9f80],
+      neck_mochi: [0xfaf2e2, 0xe0d4bc],
+      gh_capt: [0x4a5270, 0x2e3346, 0x1e2232],
+      sp_buckethat: [0xfffbf0, 0xf6ecd4, 0xd6c4a0, 0xb8a47c],
+      // 11/22 등 칸으로 옮긴 망토 (뒷덜미 깃·세로 주름) · 출근 배낭 네 톤 · 아이스박스 통 · 돗자리 배낭
+      back_cape: [0xd85a68, 0xb83a4a, 0x8a2a38, 0x6a1e2a],
+      back_milkcape: [0xffcad6, 0xf6a8bc, 0xd8849c, 0xb8687e],
+      back_backpack: BACKPACK_TONES,
+      ic_icebox: [0x8ad0f6, 0x5ab4e8, 0x3a86c0],
+      // 11/22 잡화점 「옷」 다섯 벌 (shopWearGear SHOP_WEAR_TONES — 빛·바탕·그늘·가장 짙은 선)
+      wr_shirt: [0xfcfdff, 0xe0e7f3, 0xbfc9dd, 0x8e9ab8],
+      wr_puffer: [0xa3a065, 0x7d7a48, 0x5e5c34, 0x40401f],
+      wr_robe: [0xe496b0, 0xc46a8a, 0x9a4e6a, 0x6e3049],
+      wr_apron: [0x5fb48a, 0x3f8f6a, 0x2e6e50, 0x1f4c37],
+      wr_coat: [0x6a5c80, 0x4a3f5c, 0x372e46, 0x241e30],
+    };
+    const bodies = ["hood", "tall", "cat", "round", "sheet", "suit"];
+    for (const [id, ramp] of Object.entries(RAMPS)) {
+      const region = GEAR_DYE_REGIONS[id];
+      // 천 명암 단계가 전부 묶음에 있다
+      for (const c of ramp) expect(region?.colors?.includes(c), `${id} ${c.toString(16)}`).toBe(true);
+      const used = new Set<number>();
+      for (const body of bodies)
+        for (const view of ["down", "side", "up"] as const) {
+          const bare = frame([], BASE, view, body);
+          const worn = frame([id], BASE, view, body);
+          for (const target of ["#d0304a", "#26262c", "#f6b8cc"]) {
+            const after = frame([id], dyed({ [id]: target }), view, body);
+            const pairs = new Map<number, number>();
+            for (let i = 0; i < worn.length; i++) {
+              if (worn[i] === bare[i] || (worn[i] & 255) !== 255) continue;
+              const c = worn[i] >>> 8;
+              if (ramp.includes(c)) {
+                used.add(c);
+                // 천 톤 픽셀은 모두 염색된다 (흰 점·남색 얼룩으로 남지 않는다)
+                expect(after[i], `${id} ${body} ${view} ${target} ${c.toString(16)}`).not.toBe(worn[i]);
+                pairs.set(c, after[i] >>> 8);
+              } else if (worn[i] !== bare[i] && !region!.colors!.includes(c)) {
+                // 천 밖 색(털 테·지퍼·금테·눈·분홍 줄)은 그대로
+                expect(after[i], `${id} ${body} ${view} ${target} keep ${c.toString(16)}`).toBe(worn[i]);
+              }
+            }
+            // 염색 뒤에도 천 톤의 밝기 순서가 그대로 (명암이 뭉개지거나 뒤집히지 않는다)
+            const list = [...pairs].sort((a, b) => toHsl(a[0]).l - toHsl(b[0]).l);
+            for (let k = 1; k < list.length; k++) expect(toHsl(list[k][1]).l, `${id} ${target} order`).toBeGreaterThanOrEqual(toHsl(list[k - 1][1]).l - 0.005);
+          }
+        }
+      // 천 톤은 실제 그림에 쓰인다 (그림이 바뀌어 묶음이 빗나가면 여기서 걸린다)
+      expect(used.size, id).toBeGreaterThanOrEqual(Math.min(ramp.length, 2));
+      if (["sc_padding", "hat_chef", "hat_santa", "hat_mochibun", "back_cape", "back_backpack", "wr_shirt", "wr_puffer", "wr_robe", "wr_apron", "wr_coat"].includes(id)) expect(used.size, `${id} 네 톤 이상`).toBeGreaterThanOrEqual(4);
+    }
+  });
+
   it("색 옮기기 함수: 바탕 천 → 고른 색, 무리 밖(장식) 색은 그대로", () => {
     const ref = itemRefOf(
       new Map([
@@ -220,5 +288,120 @@ describe("11/22 입은 꾸미기 염색", () => {
       expect(ls[0]).toBeLessThan(ls[1]);
       expect(ls[1]).toBeLessThan(ls[2]);
     }
+  });
+});
+
+// 11/22 날개 염색 (운영자 「날개까지 염색 가능하게 되면 안 돼? 어차피 등이잖아」): 시트 밖 날개 그림(cosmeticFx)을 같은 규칙으로 다시 칠한다
+const WINGS = ["back_wings", "back_wings_bat", "back_wings_butterfly", "back_wings_angel", "back_wings_dragon"];
+const artOf = (id: string) => (COSMETIC_FX[id] as { art: FxArtId }).art;
+
+describe("11/22 날개 염색", () => {
+  const wingInput = (o: Partial<FxInput> = {}): FxInput => ({
+    now: 1000, dt: 16, x: 100, y: 200, headY: 200, dir: 3 as FxInput["dir"], moving: false, hidden: false, artTop: 20, shoulder: 12, hand: { dx: 4, up: 8 }, reduced: false, ...o,
+  });
+
+  it("날개 5종 모두 염색된다 · 연은 안 된다", () => {
+    for (const id of WINGS) expect(isDyeableCosmetic(id), id).toBe(true);
+    expect(isDyeableCosmetic("q_back_kite")).toBe(false);
+  });
+
+  it("염색한 날개 그림: 묶음 색만 바뀌고 외곽선·흰 점·투명도는 그대로, 여섯 색이 모두 서로 달라 보인다", () => {
+    const colors = [0xe0303a, 0x3060e0, 0x222222, 0x6ad8b8, 0xf6b8cc];
+    for (const id of WINGS) {
+      const art = artOf(id);
+      const base = fxArtGrid(art);
+      const region = new Set(GEAR_DYE_REGIONS[id].colors);
+      const looks = new Set<string>();
+      for (const c of colors) {
+        const g = fxArtGrid(art, c.toString(16).padStart(6, "0"));
+        let changed = 0;
+        for (let i = 0; i < base.px.length; i++) {
+          const v = base.px[i];
+          expect(g.px[i] & 255, `${id} alpha`).toBe(v & 255);
+          if (!(v & 255)) continue;
+          if (region.has(v >>> 8)) changed += g.px[i] !== v ? 1 : 0;
+          else expect(g.px[i], `${id} ${i} 묶음 밖은 그대로`).toBe(v);
+        }
+        expect(changed, `${id} ${c.toString(16)}`).toBeGreaterThan(20);
+        looks.add([...g.px].join());
+      }
+      expect(looks.size, id).toBe(colors.length);
+    }
+  });
+
+  it("고른 색이 날개 바탕에 또렷이 보인다 (가장 많이 칠한 색의 색상이 고른 색 ±30°, 밝은 흰 날개도)", () => {
+    for (const id of WINGS) {
+      for (const target of [0xe0303a, 0x3060e0, 0x6ad8b8]) {
+        const g = fxArtGrid(artOf(id), target.toString(16).padStart(6, "0"));
+        const hist = new Map<number, number>();
+        for (const v of g.px) if (v & 255) hist.set(v >>> 8, (hist.get(v >>> 8) ?? 0) + 1);
+        const top = [...hist].sort((a, b) => b[1] - a[1])[0][0];
+        const h = toHsl(top);
+        const dh = Math.abs(((h.h - toHsl(target).h + 540) % 360) - 180);
+        expect(dh, `${id} ${target.toString(16)}`).toBeLessThan(30);
+        expect(h.s, `${id} ${target.toString(16)} 채도`).toBeGreaterThan(0.3);
+      }
+    }
+  });
+
+  it("연출: 염색한 날개는 그 색 그림(tex), 특수 색이면 같은 자리에 가면 덮개(tex m)를 겹친다 · 안 칠했거나 다른 아이템 색이면 원래 그림", () => {
+    const sim = new CosmeticFxSim();
+    sim.setLook(["back_wings_butterfly"]);
+    const run = (o: Partial<FxInput> = {}) => {
+      const out: FxCmd[] = [];
+      sim.step(wingInput(o), out);
+      return out;
+    };
+    expect(run().map((c) => c.tex)).toEqual([undefined]);
+    sim.setDye({ hat_beanie: "#e03030" });
+    expect(run().map((c) => c.tex)).toEqual([undefined]);
+    sim.setDye({ back_wings_butterfly: "#E03030" });
+    expect(run().map((c) => c.tex)).toEqual(["e03030"]);
+    expect(sim.dyedArt()).toEqual([{ art: "wingsButterfly", tex: "e03030" }]);
+    // 무지개: 가면 덮개가 날개와 같은 자리·파닥임·뒤집기로
+    sim.setDye({ back_wings_butterfly: "#e03030~r" });
+    const [w, m] = run({ dir: 2 as FxInput["dir"], now: 1234 });
+    expect(w.tex).toBe("e03030");
+    expect(m).toMatchObject({ art: w.art, frame: w.frame, x: w.x, y: w.y, sx: w.sx, flip: w.flip, tex: "m" });
+    expect(m.tint).toBeDefined();
+    expect(m.depth).toBeGreaterThan(w.depth);
+    expect(sim.dyedArt()).toEqual([
+      { art: "wingsButterfly", tex: "e03030" },
+      { art: "wingsButterfly", tex: "m" },
+    ]);
+    // 야광: 밤에만 빛 층으로
+    sim.setDye({ back_wings_butterfly: "#e03030~n" });
+    expect(run({ glow: false }).length).toBe(1);
+    expect(run({ glow: true })[1]).toMatchObject({ tex: "m", layer: "light", add: true });
+    // 반짝이: 가끔 날개 위 한 점에서 반짝 별 (날개 그림 범위 안)
+    sim.setDye({ back_wings_butterfly: "#e03030~s" });
+    let glints = 0;
+    for (let t = 0; t < 9000; t += 50) {
+      for (const c of run({ now: t })) {
+        if (c.art !== "dyeGlint") continue;
+        glints++;
+        expect(Math.abs(c.x - 100)).toBeLessThanOrEqual(FX_ART.wingsButterfly.w);
+        expect(Math.abs(c.y - (200 - 12 - 3))).toBeLessThanOrEqual(FX_ART.wingsButterfly.h / 2);
+      }
+    }
+    expect(glints).toBeGreaterThan(0);
+    // 숨는 자세면 아무것도 없다 · 날개를 벗으면 잡을 그림도 없다
+    expect(run({ hidden: true })).toEqual([]);
+    sim.setLook([]);
+    expect(sim.dyedArt()).toEqual([]);
+  });
+
+  it("작은 날개도 같은 연출 길: 예전처럼 150ms·달리면 70ms로 파닥이고, 이름표는 어깨 + 9 위", () => {
+    const sim = new CosmeticFxSim();
+    sim.setLook(["back_wings"]);
+    expect(sim.labelTop(20, 12)).toBe(21);
+    const at = (now: number, running: boolean) => {
+      const out: FxCmd[] = [];
+      sim.step(wingInput({ now, running }), out);
+      return out[0].sx;
+    };
+    expect(at(150 * (Math.PI / 2), false)).toBeCloseTo(1.16, 5);
+    expect(at(70 * (Math.PI / 2), true)).toBeCloseTo(1.16, 5);
+    expect(at(1000, false)).toBeCloseTo(1 + 0.16 * Math.sin(1000 / 150), 5);
   });
 });

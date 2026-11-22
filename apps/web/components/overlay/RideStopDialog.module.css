@@ -1,0 +1,31 @@
+/* 11/22 탈것에 탄 채 입구에서 막혔을 때 가운데 알림 (RideStopDialog) */
+.body {
+  display: grid;
+  gap: 10px;
+  text-align: center;
+}
+
+.text {
+  margin: 0;
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 16px;
+  line-height: 1.5;
+  /* 「있어/요.」처럼 낱말 가운데서 줄이 바뀌지 않게 */
+  word-break: keep-all;
+  text-wrap: balance;
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+}

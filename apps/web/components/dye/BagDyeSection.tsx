@@ -15,7 +15,6 @@ import { currentLook } from "../account/items";
 import { cx } from "../ui/cx";
 import ItemIcon from "../ui/ItemIcon";
 import ui from "../ui/ui.module.css";
-import DirectDyeDialog, { type DirectDyeTicket } from "./DirectDyeDialog";
 import DyeDialog, { type DyeTicket } from "./DyeDialog";
 import { fixedTicket, ticketOf } from "./StylePanel";
 import styles from "./StylePanel.module.css";
@@ -34,8 +33,6 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
   const [session, setSession] = useState<DyeSessionView | null>(null);
   const [tickets, setTickets] = useState<Record<string, FixedDyeDef>>({});
   const [open, setOpen] = useState<{ ticket: DyeTicket | null; resume: DyeSessionView | null } | null>(null);
-  /** 11/15 수집 의뢰 염색권 (색 확정·특수색 확정) 창 — 판이 없어 진행 중인 판과 상관없이 연다 */
-  const [direct, setDirect] = useState<DirectDyeTicket | null>(null);
   const invKey = Object.keys(me.inventory).join(",");
   const [openedAt] = useState(() => Date.now());
   const alive = useRef(true);
@@ -63,12 +60,10 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
     };
   }, [invKey, sync]);
 
-  type Row = { key: string; name: string; desc: string; count: number; icon: ReactNode; ticket: DyeTicket | DirectDyeTicket };
+  type Row = { key: string; name: string; desc: string; count: number; icon: ReactNode; ticket: DyeTicket };
   const rows: Row[] = [
     ...RANDOM.flatMap((item): Row[] => {
       const n = me.inventory[item.id] ?? 0;
-      const m = item.dye?.mode;
-      if (n > 0 && (m === "pick" || m === "special")) return [{ key: item.id, name: item.name, desc: item.desc, count: n, icon: <ItemIcon itemId={item.id} size={32} />, ticket: { itemId: item.id, name: item.name, mode: m } }];
       const t = ticketOf(item);
       return n > 0 && t ? [{ key: item.id, name: item.name, desc: t.mode === "random" ? `${item.desc} (흔들림 ${wobbleLabel(t.tier)}, 특수 색은 ${specialLabel(t.tier)})` : item.desc, count: n, icon: <ItemIcon itemId={item.id} size={32} />, ticket: t }] : [];
     }),
@@ -119,14 +114,14 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
                   </span>
                   <span className={bag.meta}>{r.desc}</span>
                 </span>
-                {/* 진행 중인 판이 있으면 새 염색권을 쓰지 않고 그 판을 이어서 연다 (서버도 같은 규칙). 색 확정·특수색 확정은 판이 없어 늘 바로 */}
-                {r.ticket.mode === "pick" || r.ticket.mode === "special" ? (
-                  <button type="button" className={ui.button} onClick={() => setDirect(r.ticket as DirectDyeTicket)}>
-                    쓰기
+                {/* 진행 중인 판이 있으면 무작위 염색권은 새로 쓰지 않고 그 판을 이어서 연다 (서버도 같은 규칙). 고정 색·색 확정·특수색 확정은 판이 없어 늘 바로 */}
+                {r.ticket.mode === "random" && session ? (
+                  <button type="button" className={ui.button} onClick={() => setOpen({ ticket: null, resume: session })}>
+                    이어서
                   </button>
                 ) : (
-                  <button type="button" className={ui.button} onClick={() => setOpen(session ? { ticket: null, resume: session } : { ticket: r.ticket as DyeTicket, resume: null })}>
-                    {session ? "이어서" : "쓰기"}
+                  <button type="button" className={ui.button} onClick={() => setOpen({ ticket: r.ticket, resume: null })}>
+                    쓰기
                   </button>
                 )}
               </li>
@@ -167,22 +162,9 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
         )}
         <div className={styles.banner}>
           {/* 11/19 가방에서 바로 상점 창을 여는 단추는 뺐어요 (어디서든 상점을 여는 통로가 됐다). 잡화점에 직접 가야 해요 */}
-          <span>원래 색으로 되돌리거나 외형을 바꾸려면 잡화점에 들러요.</span>
+          <span>꾸미기 색은 [꾸미기]의 색 보관함에서 공짜로 바꿔 입어요. 캐릭터 색을 원래대로 되돌리거나 외형을 바꾸려면 잡화점에 들러요.</span>
         </div>
       </section>
-      {direct && (
-        <DirectDyeDialog
-          ticket={direct}
-          avatar={avatar}
-          look={look}
-          itemDyes={me.itemDyes}
-          onClose={() => {
-            setDirect(null);
-            sync();
-          }}
-          onDone={onNotice}
-        />
-      )}
       {open && (
         <DyeDialog
           ticket={open.ticket}

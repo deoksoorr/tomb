@@ -49,11 +49,11 @@ export type PathGift = {
 
 /** 7일 꾸러미 (실제 아이템 id). 포인트는 없다. 모두 되팔 수 없다 */
 export const PATH: readonly PathGift[] = [
-  { n: 1, name: "빨간 목도리", desc: "7일 동안 두를 수 있는 꾸미기예요. 가방의 벗어 둔 꾸미기에서 둘러요.", art: { item: "neck_scarf" }, wear: "neck_scarf" },
+  { n: 1, name: "빨간 목도리", desc: "7일 동안 두를 수 있는 꾸미기예요. 가방 [꾸미기]에서 둘러요.", art: { item: "neck_scarf" }, wear: "neck_scarf" },
   { n: 2, name: "물약 꾸러미", desc: "커피 3잔과 에너지드링크 2캔이에요. 사냥터에서 써요.", art: { potion: "p_coffee" }, bundle: { potions: { p_coffee: 3, p_energy: 2 } } },
   { n: 3, name: "작은 폭죽", desc: "밤하늘에 한 발 쏘면 채널 모두가 같이 봐요.", art: { item: "fw_small" }, items: [{ itemId: "fw_small", count: 1 }] },
   { n: 4, name: "결재 서류 10장", desc: "장비를 강화할 때 써요. 사냥 가방에 들어가요.", art: { mat: "m_doc" }, bundle: { mats: { m_doc: 10 } } },
-  { n: 5, name: "얼룩 염색권", desc: "몸이나 머리 색을 바꿔 봐요.", art: { item: "dye_basic" }, items: [{ itemId: "dye_basic", count: 1 }] },
+  { n: 5, name: "얼룩 염색권", desc: "몸이나 머리, 입은 꾸미기 색을 바꿔 봐요.", art: { item: "dye_basic" }, items: [{ itemId: "dye_basic", count: 1 }] },
   { n: 6, name: "도시락 꾸러미", desc: "야근 도시락 2개와 부활 쿠키 1개예요. 야근 빌딩에서 든든해요.", art: { potion: "p_lunchbox" }, bundle: { potions: { p_lunchbox: 2, p_cookie: 1 } } },
   {
     n: 7,

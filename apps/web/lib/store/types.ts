@@ -159,6 +159,8 @@ export type EarnOptions = { amount?: number; ipHash?: string; boost?: EarnBoost;
 export type QuestHook = { key: string; field: string; ttlSec: number; local: (n: number) => number; have?: number };
 export type Profile = { name?: string | null; color?: string | null; body?: string | null };
 export type RankEntry = { accountId: string; name: string | null; points: number; rank: number };
+/** 입장 토큰용 계정 모습 (AccountStore.appearance). stayMin = 총 접속 시간(분, 11/16부터 쌓임), createdAt = 처음 입장 시각 (0 = 모름) */
+export type AccountAppearance = Pick<AccountRecord, "name" | "color" | "body" | "equipped" | "createdAt"> & { stayMin: number };
 
 export type AccountRecord = {
   points: number;
@@ -182,6 +184,10 @@ export type AccountRecord = {
   equipped: EquippedItem[];
   /** 벗어 둔 꾸미기 (만료 전). 남은 시간은 벗어 둔 동안에도 흐른다. 다시 입을 수 있고, 산 것으로 친다(중복 구매 불가) */
   stash: EquippedItem[];
+  /** 11/22 포인트를 내고 영구로 산 꾸미기 id (되팔기는 이것만). 선물·보상으로 받은 건 없다. get(…, { bought: true })로 읽었을 때만 있다 */
+  bought?: string[];
+  /** 11/22 되팔기 전에 가진 꾸미기의 산 기록 채우기를 끝냈는지 (lib/resellBought) */
+  boughtFilled?: boolean;
   graves: string[];
   /** 오늘 쌓은 포인트 */
   todayEarned: number;
@@ -245,8 +251,11 @@ export type PresenceTick = {
   stayTicks: number;
 };
 
+/** 11/22 get이 더 읽을 것 — bought = 산 기록(SMEMBERS 하나 더. 내 정보·되팔기만 — 나머지 30곳 넘는 읽기는 이름·가방만 본다) */
+export type AccountReadOpts = { bought?: boolean };
+
 export interface AccountStore {
-  get(id: string, day: string, now: number): Promise<AccountRecord>;
+  get(id: string, day: string, now: number, opts?: AccountReadOpts): Promise<AccountRecord>;
   /** 횟수 규칙이 남은 항목의 하루 최대·지갑 상한 안에서 적립하고 실제 쌓인 점수를 돌려준다 (0 = 막힘). 포인트 배수 이벤트로 고른 항목이면 늘어난 점수로 */
   earn(id: string, source: EarnSource, day: string, opts?: EarnOptions): Promise<number>;
   /** 원자적 차감. 잔액이 모자라면 null, 아니면 남은 잔액. reason은 계정의 최근 사용 기록(최대 100개)에 남는다 */
@@ -258,9 +267,17 @@ export interface AccountStore {
   refund(id: string, amount: number, reason: string, now: number): Promise<number>;
   /**
    * 11/22 꾸미기 되팔기: 영구로 벗어 둔 꾸미기 itemId를 빼고 amount를 돌려준다 (지갑 상한에서 잘림, 경제 통계 resell — 관리자 경제 탭 「꾸미기 되팔기」). 한 번에 (두 번 눌러도 한 번만).
-   * worn = 입고 있다, none = 영구로 벗어 둔 게 없다 (기간제·이미 팜). 되면 새 잔액
+   * worn = 입고 있다, none = 영구로 벗어 둔 게 없다 (기간제·이미 팜), gift = 산 기록(bought)이 없다 (선물·보상으로 받음). 되면 새 잔액.
+   * 팔면 산 기록도 같이 지운다 → 나중에 같은 꾸미기를 선물로 다시 받아도 팔 수 없다
    */
-  sellPermanent(id: string, itemId: string, amount: number, reason: string, now: number): Promise<number | "worn" | "none">;
+  sellPermanent(id: string, itemId: string, amount: number, reason: string, now: number): Promise<number | "worn" | "none" | "gift">;
+  /**
+   * 11/22 되팔기 전부터 가진 꾸미기의 산 기록 채우기 (계정마다 한 번 — lib/resellBought). 이미 채웠으면 아무것도 안 하고 false.
+   * items를 산 기록에 넣고 채움 표시를 남긴다 (한 번에)
+   */
+  fillBought(id: string, items: readonly string[]): Promise<boolean>;
+  /** 11/22 최근 포인트 사용 기록 (최신 먼저, 최대 100개 — 산 기록 채우기의 구매 근거) */
+  ledger(id: string): Promise<{ at: number; amount: number; reason: string }[]>;
   /** 머무르기: 직전 지급 후 PRESENCE_MIN_GAP_MS가 지났으면 적립. 너무 이르면 null */
   presence(id: string, day: string, now: number): Promise<number | null>;
   /**
@@ -268,8 +285,11 @@ export interface AccountStore {
    * 머무르기 응답이 계정 전체(loadMe)를 다시 읽지 않게. sid(화면마다 하나)를 주면 presenceCatchup 규칙으로 몰아서 정산. 너무 이르면 null
    */
   presenceTick(id: string, day: string, now: number, sid?: string): Promise<PresenceTick | null>;
-  /** 입장 토큰용: 이름·색·몸 모양·지금 입은 꾸미기만 (계정 전체 get = 명령 9개 대신 2개) */
-  appearance(id: string, now: number): Promise<Pick<AccountRecord, "name" | "color" | "body" | "equipped">>;
+  /**
+   * 입장 토큰용: 이름·색·몸 모양·지금 입은 꾸미기만 (계정 전체 get = 명령 9개 대신 2개).
+   * 11/22 새싹 판정용 처음 입장 시각(createdAt)·총 접속 시간(stayMin, 분)도 같은 HMGET에서 (명령 수 그대로)
+   */
+  appearance(id: string, now: number): Promise<AccountAppearance>;
   /**
    * 접속 시간 보너스 받기 (원자적): 오늘 머문 기록으로 열린 구간 중 아직 안 받은 구간을 한꺼번에 받는다.
    * 받을 구간이 없으면 null. 받은 구간은 지갑이 가득 차 덜 들어와도 받은 것으로 친다
@@ -384,7 +404,9 @@ export interface AccountStore {
   /**
    * 가방에서 1개 쓰고 그 부위에 착용. 같은 부위에 입던 것은 사라지지 않고 벗어 둔 꾸미기(stash)로 옮긴다
    * (이미 만료됐으면 버린다). 같은 아이템이 stash에 있으면 지운다 (새로 입는 쪽이 더 오래 간다 → 한 아이템은
-   * 입은 곳과 stash 중 한 곳에만 있다). now는 만료 판정 기준 (만료된 착용품·stash는 이때 정리한다). 가방에 없으면 false
+   * 입은 곳과 stash 중 한 곳에만 있다). now는 만료 판정 기준 (만료된 착용품·stash는 이때 정리한다). 가방에 없으면 false.
+   * 11/22 이미 영구로 가진 꾸미기면 이용권을 쓰지 않고 영구 그대로 입힌다 (true) — 영구가 이용권 기간으로 줄지 않는다.
+   * 기간제로 가진 것(입었든 벗어 뒀든)이면 남은 기간에 이용 기간(until − now)을 더한다
    */
   equip(id: string, itemId: string, slot: CosmeticSlot, until: number, now: number): Promise<boolean>;
   /**

@@ -27,6 +27,8 @@ import {
   type DirId,
   CHAT_HISTORY_MS,
   CHAT_STORE_MAX,
+  LOOK_BURST,
+  LOOK_REFILL_MS,
 } from "@tomb/protocol";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -501,7 +503,7 @@ describe("lobby registry hooks / evict / stale connections", () => {
 describe("v2: look / firework / sync / join-loss guards", () => {
   const flush = () => new Promise((r) => setTimeout(r, 0));
 
-  it("carries the token's look in welcome/join, and a verified look grant updates everyone (10s per connection)", async () => {
+  it("carries the token's look in welcome/join, and a verified look grant updates everyone", async () => {
     const { core, join } = setup();
     const a = join("a", 0, undefined, undefined, ["hat_cat"]);
     const b = join("b");
@@ -514,11 +516,45 @@ describe("v2: look / firework / sync / join-loss guards", () => {
     expect(events(b)).toEqual([{ t: "look", sid: 1, look: ["hat_straw", "neck_scarf"] }]);
     expect(events(a)).toEqual(events(b)); // 본인도 받는다
     expect(a.att?.look).toEqual(["hat_straw", "neck_scarf"]); // attachment에 저장
-    look("a", ["hat_flower"], 5_000); // 10초 안 → 무시
     look("b", ["hat_flower"], 10_000); // 다른 사람 앞으로 발급된 증서 → 무시
     core.message(a, send({ t: "look", grant: "bad" }), 20_000); // 서명이 틀림 → 무시
     await flush();
     expect(events(b)).toHaveLength(1);
+  });
+
+  // 11/22 염색 칸을 연달아 바꾸면 다른 사람 화면에 10초 늦게(입장 직후엔 아예 안) 보였다 → 토큰 버킷 + 마지막 하나 줄 세우기
+  it("11/22: look grants in a burst apply at once, extras queue (latest only) and apply on a later tick — never dropped", async () => {
+    const { core, join } = setup();
+    const a = join("a");
+    const b = join("b");
+    expect(welcome(a).lk).toBe(1); // 클라이언트가 기다리지 않고 바로 보내도 되는 서버
+    clear(a, b);
+    const look = (l: string[], t: number) => core.message(a, send({ t: "look", grant: grantToken({ kind: "look", visitorId: "a", look: l, exp: 9e9 }) }), t);
+    const seen = () => events(b).filter((e) => e.t === "look").map((e) => (e as { look: string[] }).look[0]);
+    for (let i = 0; i < LOOK_BURST; i++) look([`hat_${i}`], 100 * i);
+    await flush();
+    expect(seen()).toEqual(Array.from({ length: LOOK_BURST }, (_, i) => `hat_${i}`)); // 처음 몇 번은 바로
+    look(["hat_old"], 400);
+    look(["hat_new"], 500); // 토큰 없음 → 최신 하나만 들고 있다
+    expect(core.tick(600)).toBe(true); // 기다리는 게 있으면 틱이 멈추지 않는다
+    await flush();
+    expect(seen()).toHaveLength(LOOK_BURST);
+    expect(core.tick(LOOK_REFILL_MS + 100)).toBe(false); // 토큰이 차면 반영 → 더 기다릴 것 없음
+    await flush();
+    expect(seen().slice(LOOK_BURST)).toEqual(["hat_new"]); // 사이의 hat_old는 건너뛰고 마지막 것만
+  });
+
+  it("11/22: a queued look is dropped when its socket leaves (the reconnect re-sends the current one)", async () => {
+    const { core, join } = setup();
+    const a = join("a");
+    const b = join("b");
+    clear(a, b);
+    for (let i = 0; i <= LOOK_BURST; i++) core.message(a, send({ t: "look", grant: grantToken({ kind: "look", visitorId: "a", look: [`hat_${i}`], exp: 9e9 }) }), 0);
+    await flush();
+    core.disconnect(a, 1000, 0);
+    expect(core.tick(LOOK_REFILL_MS * 2)).toBe(false);
+    await flush();
+    expect(events(b).filter((e) => e.t === "look")).toHaveLength(LOOK_BURST);
   });
 
   it("46·25번: 입장 토큰의 염색이 welcome/join에 실리고, look 증서의 dye·body가 모두에게 바뀐다", async () => {

@@ -98,48 +98,6 @@ export function drawThemeNeck(g: Grid, view: GearView, id: string, m: GearM, bod
   }
 }
 
-// ── 손 (뒷모습은 몸에 가려 그리지 않는다) ──
-
-export function drawThemeHand(g: Grid, view: GearView, id: string, m: GearM): void {
-  if (view === "up") return;
-  const x = m.hx;
-  const y = m.hY;
-  switch (id) {
-    case "hand_mug": {
-      // 캠핑 머그: 하늘빛 법랑 컵 (테두리 남색 · 하얀 점) + 손잡이, 코코아 위로 김 한 줄
-      const c = 0x7ab8e0;
-      const lo = 0x4a88b8;
-      const rim = 0x2a4a7a;
-      g.hline(x - 1, x + 1, y - 1, rim);
-      g.rect(x - 1, y, 3, 3, c);
-      g.vline(x + 1, y, y + 2, lo);
-      g.set(x - 1, y + 1, 0xf4fbff);
-      g.set(x + 2, y, rim);
-      g.set(x + 2, y + 1, rim);
-      g.set(x, y - 1, 0x6a3a1e); // 코코아
-      g.set(x - 1, y - 3, 0xf0f0f0, 170);
-      g.set(x, y - 4, 0xf0f0f0, 130);
-      break;
-    }
-    case "hand_icecream": {
-      // 아이스크림 콘: 와플 콘 위에 딸기 한 스쿱 + 바닐라 한 스쿱, 꼭대기 체리
-      const cone = 0xe0a860;
-      const coneLo = 0xb07a3a;
-      g.hline(x - 1, x + 1, y, cone);
-      g.set(x, y, coneLo);
-      g.set(x, y + 1, cone);
-      g.set(x, y + 2, coneLo);
-      g.hline(x - 1, x + 1, y - 1, 0xfff4dc);
-      g.set(x + 1, y - 1, 0xf0dcb8);
-      g.hline(x - 1, x + 1, y - 2, 0xff9ab8);
-      g.set(x - 1, y - 2, 0xffc8d8);
-      g.set(x, y - 3, 0xff9ab8);
-      g.set(x, y - 4, 0xe02a3a);
-      break;
-    }
-  }
-}
-
 // ── 등 (layer "back" = 몸보다 먼저, "front" = 몸 다음) ──
 
 export function drawThemeBack(g: Grid, view: GearView, id: string, m: GearM, body: AvatarBody, layer: "back" | "front", hem: number, sit: number): void {

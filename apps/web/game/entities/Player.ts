@@ -127,6 +127,7 @@ export class Player {
 
   private readonly offStaff: () => void;
   private readonly offDex: () => void;
+  private readonly offSprout: () => void;
   private readonly offLook: () => void;
 
   constructor(
@@ -148,8 +149,7 @@ export class Player {
     this.offLook = bridge.on("look:set", (e) => {
       // 장면이 정리돼 그림이 사라졌으면 (게임 종료 등) 더 듣지 않는다
       if (!this.view.sprite.scene) return this.offLook();
-      if (Array.isArray(e.look)) this.view.setLook(e.look.filter((v): v is string => typeof v === "string"));
-      this.view.applyAppearance({ dye: e.dye, body: e.body, champ: e.champ, mgr: e.mgr });
+      this.view.changeLook(Array.isArray(e.look) ? e.look.filter((v): v is string => typeof v === "string") : null, { dye: e.dye, body: e.body, champ: e.champ, mgr: e.mgr });
     });
     // 31번 운영자 계정이면 내 캐릭터도 저승사자 차림·금빛 이름표·「운영자」 칭호 (/api/me가 알려 준 값, 바뀌면 바로). 이름은 닉네임 그대로
     this.view.setStaff(bridge.last("me:staff")?.on === true);
@@ -157,6 +157,9 @@ export class Player {
     // 도감 100% 배지 (내 도감 상태가 바뀌면 바로)
     this.view.setDexBadge(bridge.last("me:dex")?.bits);
     this.offDex = bridge.on("me:dex", ({ bits }) => this.view.setDexBadge(bits));
+    // 11/22 새싹 (총 접속 3시간 미만 새 이웃이면 내 이름표 왼쪽에도 — 실시간 서버 welcome이 알려 준 끝 시각)
+    this.view.setSprout(bridge.last("me:sprout")?.until);
+    this.offSprout = bridge.on("me:sprout", ({ until }) => this.view.setSprout(until));
     scene.physics.add.existing(this.view.sprite);
     this.body = this.view.sprite.body as Phaser.Physics.Arcade.Body;
     const s = this.view.sprite;
@@ -743,6 +746,7 @@ export class Player {
     this.food = null;
     this.offStaff();
     this.offDex();
+    this.offSprout();
     this.offLook();
     this.snap?.stop();
     this.view.destroy();

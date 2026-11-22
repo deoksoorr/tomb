@@ -292,8 +292,9 @@ export function shimmer(): HTMLCanvasElement {
 
 // ── 아바타 꾸미기 연출 (AvatarView) ──
 
-/** 등의 작은 유령 날개: 프레임 0 = 앞·뒷모습(양쪽 날개), 1 = 옆모습(뒤로 뻗은 한쪽 날개). 각 26×12 */
-export function avatarWings(): HTMLCanvasElement {
+/** 등의 작은 유령 날개: 프레임 0 = 앞·뒷모습(양쪽 날개), 1 = 옆모습(뒤로 뻗은 한쪽 날개). 각 26×12.
+ *  11/22 염색되게 cosmeticFx 날개(wingsSmall)로 옮겼다 — 그림은 그대로 */
+export function avatarWingsGrid(): Grid {
   const g = new Grid(52, 12);
   const fill = 0xf4f1ff;
   const mid = 0xe2ddf6;
@@ -311,7 +312,7 @@ export function avatarWings(): HTMLCanvasElement {
   wing(14, 1, 10);
   wing(26 + 15, 1, 10);
   g.outline(0x5e5880, false, 210);
-  return g.toCanvas();
+  return g;
 }
 
 /** 그림자 유령 친구 (9×10): 반투명 보랏빛 그림자에 눈 두 점 */

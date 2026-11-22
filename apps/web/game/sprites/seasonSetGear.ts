@@ -1,9 +1,10 @@
 import type { GearM, GearView } from "./avatarGear";
-import { drawNwCoat, type NwCtx } from "./npcWear";
-import { darken, Grid, lighten, mix, type Color } from "./pixel";
+import { drawNwCoat, pufferTone, type NwCtx, type PufferTones } from "./npcWear";
+import { Grid, lighten, mix, type Color } from "./pixel";
 import { GEAR2, ICONS2 } from "./seasonSetGear2";
 import { GEAR3, ICONS3 } from "./seasonSetGear3";
 import { GEAR4, ICONS4, setBungeoCtx } from "./bungeoGear";
+import { GEAR5, ICONS5 } from "./shopWearGear";
 
 // 11/19 계절 한정 세트 중 "아바타 시트에 같이 그려지는 것" (avatar.ts drawFrame이 부른다 — 코디 기획안 시안 코드를 그대로 옮겼다).
 //  「첫눈 출근길」 귀달이 털모자 · 무릎까지 롱패딩 · 군고구마 봉투
@@ -15,6 +16,7 @@ import { GEAR4, ICONS4, setBungeoCtx } from "./bungeoGear";
 // 11/20 나머지 여섯 벌(야근 요정 · 안개 묘지기 · 설날 까치 · 의리 초콜릿 · 벚꽃 소풍 · 사내 체육대회)의 시트 그림은 seasonSetGear2.ts (여기서 함께 부른다).
 // 11/20 새 다섯 벌(송년회 3차 · 해맞이 산행 · 작심삼일 · 빙어 축제 · 서리 내린 묘역)의 시트 그림은 seasonSetGear3.ts (여기서 함께 부른다).
 // 11/22 골목 붕어빵 수레 한정 꾸미기 열 점 + 외형 「붕어빵 장수 유령」 덧그림(bd_*)은 bungeoGear.ts (여기서 함께 부른다).
+// 11/22 잡화점 「옷」 다섯 벌(wr_*)은 shopWearGear.ts (GEAR5 — 여기서 함께 부른다).
 
 type FB = string;
 type V = GearView;
@@ -23,7 +25,7 @@ type V = GearView;
 const SHEET_IDS_1 = ["sc_earflap", "sc_padding", "sc_goguma", "si_elfhat", "si_sack", "si_cookie"] as const;
 /** 시트에 그려지는 계절 한정 꾸미기 (시트 키에 들어간다) — 11/20 나머지 여섯 벌(seasonSetGear2 GEAR2)까지 */
 //  11/22 붕어빵 수레(GEAR4)까지 — 외형 덧그림 bd_*는 착용 목록에 오지 않으니 뺀다 (avatarCore drawFrame이 vendor 몸이면 붙인다)
-export const SEASON_SHEET_IDS: readonly string[] = [...SHEET_IDS_1, ...Object.keys(GEAR2), ...Object.keys(GEAR3), ...Object.keys(GEAR4).filter((id) => !id.startsWith("bd_"))];
+export const SEASON_SHEET_IDS: readonly string[] = [...SHEET_IDS_1, ...Object.keys(GEAR2), ...Object.keys(GEAR3), ...Object.keys(GEAR4).filter((id) => !id.startsWith("bd_")), ...Object.keys(GEAR5)];
 
 type SsItem = {
   /** 두건 꼭지·새싹을 덮는 모자 */
@@ -141,9 +143,13 @@ const CREAM = 0xf4ecda;
 const CREAM_LO = 0xd2c6ac;
 const SC_RED = 0xd8464c;
 const SC_RED_LO = 0x9e2c36;
-const PAD = 0x3a4054;
-const PAD_HI = 0x5c6680;
-const PAD_LO = 0x272b3a;
+// 11/22 롱패딩 남색 다섯 톤 (빛 → 그늘: 반짝 · 밝은 · 바탕 · 그늘 · 누빔 선) — 염색 때 다섯 톤이 함께 옮겨 간다 (gearDye GEAR_DYE_REGIONS.sc_padding)
+export const PAD_SHINE = 0x7a88ae;
+const PAD_HI = 0x5a6690;
+const PAD = 0x3a4458;
+const PAD_LO = 0x2a3044;
+const PAD_SEAM = 0x1c2234;
+export const PAD_TONES: PufferTones = { shine: PAD_SHINE, hi: PAD_HI, base: PAD, lo: PAD_LO, seam: PAD_SEAM };
 const FUR = 0xf2efe8;
 const FUR_LO = 0xc8c8d0;
 const KRAFT = 0xcf9f5c;
@@ -243,12 +249,14 @@ function sheetPadding(g: Grid, m: GearM): void {
   const { cx } = m;
   const y0 = Math.round(m.hy) + 4;
   // 11/20 칸 검사: 누빈 칸 부풂까지 아바타 칸 안(x 1~18)에서만 (칸 끝으로 나가면 테두리 없이 잘린다)
+  // 11/22 다섯 톤: 칸 윗줄(밝은 · 왼쪽 반짝) · 아랫줄(바탕, 부푼 줄) · 누빔 선, 왼쪽 자락 밝게 · 오른쪽 자락 그늘
   for (let y = y0; y < 27; y++)
     for (let x = 1; x <= 18; x++) {
       if (!g.filled(x, y)) continue;
       const k = y - y0;
-      let c = x >= cx + 4 ? PAD_LO : x <= cx - 6 ? PAD_HI : PAD;
-      if (k % 3 === 2) c = darken(PAD, 0.4);
+      const left = x <= cx - 6;
+      const right = x >= cx + 4;
+      const c = k % 3 === 2 ? PAD_SEAM : k % 3 === 0 ? (left ? PAD_SHINE : right ? PAD : PAD_HI) : left ? PAD_HI : right ? PAD_LO : PAD;
       g.set(x, y, c);
       // 누빈 칸마다 한 칸 부풂
       if (k % 3 === 1 && !g.filled(x - 1, y) && x < cx && x - 1 >= 1) g.set(x - 1, y, PAD_HI);
@@ -262,16 +270,21 @@ function paddingBack(g: Grid, v: V, m: GearM, fb: FB, layer: "back" | "front", h
   if (layer === "back") {
     // 옆모습: 등 뒤로 도톰한 후드 뭉치
     if (v === "side" && fb !== "round" && fb !== "sheet") {
+      // 11/22 털 테 · 밝은 윗면 · 그늘 진 아랫면
       g.rect(cx - 5, neck - 2, 3, 3, PAD);
       g.set(cx - 5, neck - 2, FUR);
       g.set(cx - 4, neck - 2, FUR_LO);
-      g.set(cx - 5, neck - 1, PAD_HI);
+      g.set(cx - 3, neck - 2, PAD_HI);
+      g.set(cx - 5, neck - 1, PAD_SHINE);
+      g.set(cx - 4, neck - 1, PAD_HI);
+      g.set(cx - 5, neck, PAD_HI);
+      g.set(cx - 3, neck, PAD_LO);
     }
     return;
   }
   if (objectBody(body)) return;
   if (fb === "sheet") sheetPadding(g, m);
-  else drawNwCoat(g, ctxOf(v, m, fb, body, hem, sit), { coat: { kind: "puffer", c: PAD, c2: PAD_HI } });
+  else drawNwCoat(g, ctxOf(v, m, fb, body, hem, sit), { coat: { kind: "puffer", c: PAD, c2: PAD_HI, tones: PAD_TONES } });
   // 가슴 상표 (흰 네모 하나)
   if (v === "down" && fb !== "round" && fb !== "sheet") {
     const y = (fb === "tall" ? 13 : 18) + (sit === 1 ? 3 : sit === 2 ? 2 : 0) + 2;
@@ -287,10 +300,9 @@ function objectPaddingNeck(g: Grid, v: V, m: GearM, fb: FB): void {
   const x0 = v === "side" ? cx - half + 2 : cx - half;
   const x1 = cx + half - 1;
   for (let x = x0; x <= x1; x++) {
-    const edge = x === x0 || x === x1;
-    g.set(x, y0 - 1, v === "up" ? ((x + 1) % 3 === 0 ? FUR_LO : FUR) : edge ? PAD : x >= x1 - 1 ? PAD_LO : PAD_HI);
-    g.set(x, y0, x >= x1 - 1 ? PAD_LO : x === x0 ? PAD_HI : PAD);
-    g.set(x, y0 + 1, x >= x1 - 1 ? PAD_LO : darken(PAD, 0.25));
+    g.set(x, y0 - 1, v === "up" ? ((x + 1) % 3 === 0 ? FUR_LO : FUR) : pufferTone(PAD_TONES, 0, x, x0, x1 + 1));
+    g.set(x, y0, pufferTone(PAD_TONES, 1, x, x0, x1 + 1));
+    g.set(x, y0 + 1, pufferTone(PAD_TONES, 3, x, x0, x1 + 1));
   }
   if (v === "down") {
     g.set(cx - 1, y0 - 1, 0xd8dce6);
@@ -306,21 +318,24 @@ function paddingNeck(g: Grid, v: V, m: GearM, fb: FB, body: string): void {
   const half = neckHalf(fb);
   if (v === "up") {
     // 뒷모습: 목 뒤 털 후드
+    // 11/22 후드: 털 테 → 밝은 윗면(왼쪽 반짝) → 바탕 → 가운데 끝은 그늘 (아래 패딩 누빔 선과 갈린다)
     for (let x = cx - half; x < cx + half; x++) {
       g.set(x, neck, (x + 1) % 3 === 0 ? FUR_LO : FUR);
-      g.set(x, neck + 1, x >= cx + half - 2 ? PAD_LO : PAD_HI);
-      g.set(x, neck + 2, x >= cx + half - 2 ? PAD_LO : PAD);
+      g.set(x, neck + 1, pufferTone(PAD_TONES, 0, x, cx - half, cx + half));
+      g.set(x, neck + 2, pufferTone(PAD_TONES, 1, x, cx - half, cx + half));
     }
-    g.set(cx - 1, neck + 3, PAD_LO);
+    g.set(cx - 2, neck + 3, PAD_LO);
+    g.set(cx - 1, neck + 3, PAD);
     g.set(cx, neck + 3, PAD_LO);
     return;
   }
   // 앞·옆: 턱 밑까지 올린 높은 깃 + 지퍼 손잡이
   const x0 = v === "side" ? cx - half + 1 : cx - half;
   const x1 = cx + half - 1;
+  // 11/22 깃 두 줄: 윗줄 = 접힌 깃 끝(밝은 · 반짝), 아랫줄 = 깃 안쪽 그늘 → 몸판 누빔과 갈린다
   for (let x = x0; x <= x1; x++) {
-    g.set(x, neck - 1, x === x0 ? PAD_HI : x >= x1 - 1 ? PAD_LO : PAD);
-    g.set(x, neck, x >= x1 - 1 ? PAD_LO : x === x0 ? PAD_HI : PAD);
+    g.set(x, neck - 1, pufferTone(PAD_TONES, 0, x, x0, x1 + 1));
+    g.set(x, neck, x === x0 ? PAD_HI : x >= x1 - 1 ? PAD_SEAM : PAD_LO);
   }
   if (v === "down") {
     g.set(cx - 1, neck - 1, 0xd8dce6);
@@ -329,50 +344,29 @@ function paddingNeck(g: Grid, v: V, m: GearM, fb: FB, body: string): void {
 }
 
 function paddingIcon(): Grid {
+  // 11/22 다섯 톤: 누빔 칸마다 윗줄 밝게(왼쪽 반짝) · 아랫줄 바탕 · 오른쪽 그늘 · 누빔 선
   return iconOf(
     [
       "....fFffFf....",
-      "...fppppppf...",
-      "..hpppzppppl..",
-      ".hhpppzpppppl.",
+      "...fhhhhhhf...",
+      "..hHhhzhhhpl..",
+      ".hpppppzpppll.",
       ".hsssszsssssl.",
-      "hhppppzwppppll",
-      "hpppppzpppppll",
+      "hHhhhhzwhhhpll",
+      "hpppppzpppplll",
       "hssssszsssssll",
-      "hpppppzpppppll",
+      "hHhhhhzhhhhpll",
       ".hppppzppppl..",
       ".hssssszsssl..",
-      ".hpppppzpppl..",
+      ".hHhhhhzhhpl..",
       ".hpppppzpppl..",
       "..llllllllll..",
     ],
-    { f: FUR, F: FUR_LO, p: PAD, h: PAD_HI, l: PAD_LO, s: darken(PAD, 0.4), z: 0xd8dce6, w: 0xf4f4f8 },
+    { f: FUR, F: FUR_LO, H: PAD_SHINE, p: PAD, h: PAD_HI, l: PAD_LO, s: PAD_SEAM, z: 0xd8dce6, w: 0xf4f4f8 },
   );
 }
 
 // ── 군고구마 봉투: 크라프트 종이봉투 위로 삐죽 나온 군고구마 + 김 (김은 외곽선 밖 반투명) ──
-function gogumaHand(g: Grid, v: V, m: GearM): void {
-  if (v === "up") return;
-  const x = m.hx;
-  const y = m.hY;
-  // 11/20 칸 검사: 앉은 자세(손이 내려간다)에선 봉투 밑을 한 칸 줄여 칸 바닥(y 26) 위에서 닫는다
-  const h = Math.min(4, 27 - y);
-  g.rect(x - 1, y, 3, h, KRAFT);
-  g.vline(x + 1, y + 1, y + h - 1, KRAFT_LO);
-  g.hline(x - 1, x + 1, y, KRAFT_HI);
-  g.set(x, y + h - 1, KRAFT_LO);
-  g.set(x - 1, y - 1, YAM);
-  g.set(x, y - 1, YAM_IN);
-  g.set(x, y - 2, YAM);
-  g.set(x + 1, y - 1, YAM_LO);
-}
-function gogumaGlow(g: Grid, v: V, m: GearM): void {
-  if (v === "up") return;
-  dot(g, m.hx, m.hY - 4, 0xffffff, 170);
-  dot(g, m.hx - 1, m.hY - 5, 0xffffff, 120);
-  dot(g, m.hx, m.hY - 6, 0xffffff, 80);
-  g.set(m.hx, m.hY - 1, YAM_IN);
-}
 function gogumaIcon(): Grid {
   return iconOf(
     [
@@ -601,12 +595,6 @@ function sackIcon(): Grid {
 }
 
 // ── 진저브레드 쿠키 ──
-const COOKIE = [".hbB.", ".wbw.", "hbbbB", ".brB.", ".bwB.", "hB.bB"];
-const COOKIE_PAL: Record<string, Color> = { b: GB, h: GB_HI, B: GB_LO, w: ICING, r: RED };
-function cookieHand(g: Grid, v: V, m: GearM): void {
-  if (v === "up") return;
-  g.draw(art(COOKIE, COOKIE_PAL), m.hx - 2, m.hY - 3);
-}
 function cookieIcon(): Grid {
   return iconOf(
     [
@@ -651,14 +639,15 @@ function wrapIcon(): Grid {
 const ITEMS: Readonly<Record<string, SsItem>> = {
   sc_earflap: { covers: true, head: (g, v, m, fb, top) => earflapHead(g, v, m, fb, top) },
   sc_padding: { back: paddingBack, neck: paddingNeck },
-  sc_goguma: { hand: (g, v, m) => gogumaHand(g, v, m), glow: (g, v, m) => gogumaGlow(g, v, m) },
+  sc_goguma: {} /* 11/22 손 그림은 heldGear.ts */,
   si_elfhat: { covers: true, head: (g, v, m, fb, top) => elfHead(g, v, m, fb, top), glow: (g, v, m, fb, top) => elfGlow(g, v, m, fb, top) },
   // 선물 자루는 head 자리에서 "머리 다 그린 뒤 몸 뒤 빈칸"에 자루를 놓는다 (모자를 쓴 것은 아니다)
   si_sack: { headWorn: false, back: sackBack, head: (g, v, m, fb) => sackBehind(g, v, m, fb) },
-  si_cookie: { hand: (g, v, m) => cookieHand(g, v, m) },
+  si_cookie: {} /* 11/22 손 그림은 heldGear.ts */,
   ...GEAR2,
   ...GEAR3,
   ...GEAR4,
+  ...GEAR5,
 };
 
 const ICONS: Readonly<Record<string, () => Grid>> = {
@@ -672,6 +661,7 @@ const ICONS: Readonly<Record<string, () => Grid>> = {
   ...ICONS2,
   ...ICONS3,
   ...ICONS4,
+  ...ICONS5,
 };
 
 /** 착용 목록 → 시트에 그릴 계절 한정 꾸미기 id (부위 순서는 상관없다 — 자리마다 따로 부른다) */

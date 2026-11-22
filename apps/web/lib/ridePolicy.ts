@@ -82,3 +82,21 @@ export function rideBlockReason(st: RideStatus | null | undefined, bus = false, 
   if (!kind) return null;
   return `${NOUN[kind]}에서 내린 다음에 ${todo} 수 있어요.`;
 }
+
+/** 11/22 입구에서 막혔을 때 화면 가운데 알림 (components/overlay/RideStopDialog) */
+export type RideStopNotice = { title: string; text: string; hint: string | null; dismount: boolean };
+
+/**
+ * 11/22 운영자: 「펫을 타고는 못 들어가요」가 아래 작은 글씨로만 떠서 손님이 잘 몰랐다 → 창을 닫고 가운데에 크게 알린다.
+ * todo = 하려는 일 ("사냥터에 들어갈"·"곤충 채집을 할" … — rideGate와 같은 말), touch = 화면 버튼(폰)이면 [내리기] 버튼, 컴퓨터면 R 키로 안내해요.
+ * 타는 펫만 그 자리에서 내릴 수 있어서 dismount(=[내리고 들어가기])는 펫일 때만 켜요 (배·놀이기구는 내리는 곳이 정해져 있어요)
+ */
+export function rideStopNotice(kind: RideKind, todo: string, touch: boolean): RideStopNotice {
+  const pet = kind === "pet";
+  return {
+    title: `${NOUN[kind]}에서 내려 주세요`,
+    text: `${NOUN[kind]}에서 내린 뒤에 ${todo} 수 있어요.`,
+    hint: pet ? (touch ? "직접 내리려면 [내리기] 버튼을 눌러요." : "직접 내리려면 R 키를 눌러요.") : null,
+    dismount: pet,
+  };
+}

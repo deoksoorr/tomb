@@ -771,6 +771,7 @@ export class SeaScene extends Phaser.Scene {
     r.view.setChamp(p.champ);
     r.view.setStaff(p.staff === true);
     r.view.setMgr(p.mgr === true);
+    r.view.setSprout(p.nb); // 11/22 새싹
     r.seatId = prev?.seatId ?? null;
     r.view.setMood(p.mood);
     this.riding.applyPeer(r, p);
@@ -798,6 +799,7 @@ export class SeaScene extends Phaser.Scene {
       r.view.setLook(p.look ?? []);
       r.view.setChamp(p.champ);
       r.view.setMgr(p.mgr === true);
+      r.view.setSprout(p.nb);
       r.view.setMood(p.mood ?? null);
       this.riding.applyPeer(r, p);
       r.setAway(p.away === true, now);
@@ -1307,7 +1309,7 @@ export class SeaScene extends Phaser.Scene {
     if (hit && this.remotes.get(hit.sid)?.view.staff) return;
     if (hit && h.net.channel !== null) {
       const chat = this.remotes.get(hit.sid)?.view.chatText(performance.now());
-      bridge.emit("peer:menu", { sid: hit.sid, name: hit.name, ch: h.net.channel, ...(chat ? { chat } : {}) });
+      bridge.emit("peer:menu", { sid: hit.sid, name: hit.name, ch: h.net.channel, ...(chat ? { chat } : {}), ...(this.remotes.get(hit.sid)?.view.sprout ? { sprout: true as const } : {}) });
       return;
     }
     // 오브젝트를 탭: 가까이 서 있으면 E와 같아요

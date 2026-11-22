@@ -5,6 +5,7 @@ import { mapOf } from "@tomb/protocol";
 import { chatAtBottom, chatLineAgo, chatLineDim, chatLineTone, chatPlaceTag, chatScrollAction, type ChatHere, type ChatLine } from "@/game/logic/chatLog";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
+import SproutMark from "../ui/SproutMark";
 import StyledName from "../ui/StyledName";
 import styles from "./ChatLog.module.css";
 
@@ -29,6 +30,8 @@ export const ChatLineItem = memo(function ChatLineItem({ line, opacity, ago, her
       {line.staff && <span className={styles.staffTag}>운영자</span>}
       {/* 11/16 매니저 딱지 (운영자가 아닐 때만 — 실시간 서버가 붙인 mgr 표시) */}
       {line.mgr && !line.staff && <span className={styles.mgrTag}>매니저</span>}
+      {/* 11/22 새싹 (총 접속 3시간 미만 새 이웃 — 실시간 서버가 붙인 nb 표시만, 운영자·매니저는 없다) */}
+      {line.nb && !line.staff && !line.mgr && <SproutMark />}
       {line.staff ? line.name : <StyledName name={line.name} look={line.ns} />}
     </b>
   );

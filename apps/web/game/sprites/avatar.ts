@@ -11,5 +11,5 @@ registerSeasonArt({ SEASON_SHEET_IDS, seasonGearOf, ssCovers, ssHeadWorn, drawSs
 
 export * from "./avatarCore";
 
-/** 아바타가 그리는 꾸미기 전체: 시트에 그려지는 것 + AvatarView가 따로 붙이는 것(날개·유령 친구·발자국 꽃·안개) */
-export const SPRITE_COSMETICS: readonly string[] = [...sheetCosmeticIds(), "back_wings", "pet_ghost", "feet_flowers", "aura_fog", ...COSMETIC_FX_IDS];
+/** 아바타가 그리는 꾸미기 전체: 시트에 그려지는 것 + AvatarView가 따로 붙이는 것(유령 친구·발자국 꽃·안개) + 따로 그리는 연출(날개 — 11/22 작은 날개도 cosmeticFx로) */
+export const SPRITE_COSMETICS: readonly string[] = [...sheetCosmeticIds(), "pet_ghost", "feet_flowers", "aura_fog", ...COSMETIC_FX_IDS];

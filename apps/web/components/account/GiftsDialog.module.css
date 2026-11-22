@@ -102,3 +102,11 @@
   color: var(--bone);
   font-size: 13px;
 }
+
+/* 11/22 모두 받기 · 받은 선물 지우기 */
+.bulk {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}

@@ -80,14 +80,13 @@ describe("붕어빵 수레 한정 꾸미기 (시트 그림)", () => {
     expect(bad).toEqual([]);
   }, 60_000);
 
-  it("모든 몸에서 앞·옆·뒤 중 어딘가 그림이 바뀌고, 손에 든 것은 뒷모습에서 가려진다", () => {
+  // 11/22 손에 든 것(얼죽아 컵·붕어빵 봉투)의 뒷모습은 heldGear.test.ts (몸 뒤 반대편 손에 깔린다)
+  it("모든 몸에서 앞·옆·뒤 중 어딘가 그림이 바뀐다", () => {
     for (const id of SHEET)
       for (const b of AVATAR_BODIES) {
         const changed = (["down", "side", "up"] as const).some((v) => diff(avatarFrameGrid(b.id, v, 0, COLOR), avatarFrameGrid(b.id, v, 0, COLOR, [id])) > 0);
         expect(changed, `${id} ${b.id}`).toBe(true);
       }
-    for (const id of ["kc_icecoffee", "kd_bungeo"])
-      for (const b of AVATAR_BODIES) expect(diff(avatarFrameGrid(b.id, "up", 0, COLOR), avatarFrameGrid(b.id, "up", 0, COLOR, [id])), `${id} ${b.id}`).toBe(0);
   });
 });
 

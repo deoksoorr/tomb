@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { clockText, FEST_FIREWORK_MS, FEST_MS, URGENT_CLAIM_MS, URGENT_DEF, URGENT_LAST_MS, URGENT_NOBODY_LINE, URGENT_REGROW_LINE, urgentClaimLeft, urgentFilled, urgentRewardLine, urgentStage } from "@/lib/forage/quests/urgent";
+import { clockText, FEST_FIREWORK_MS, FEST_MS, URGENT_CLAIM_MS, URGENT_DEF, URGENT_LAST_MS, URGENT_NOBODY_LINE, URGENT_RANK_STAMPS, URGENT_REGROW_LINE, urgentClaimLeft, urgentFilled, urgentRewardLine, urgentStage } from "@/lib/forage/quests/urgent";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { showToast } from "@/lib/hooks/useToasts";
@@ -134,7 +134,9 @@ export default function UrgentHud() {
   const nobody = !live && ev.n <= 0;
   const myRow = mine?.rows.find((r) => r.id === ev.id) ?? null;
   const iGave = mine ? !!myRow && myRow.mine > 0 : null;
-  const rewardLine = live || nobody ? "" : urgentRewardLine({ n: ev.n, goal: ev.goal, mine: iGave, claimed: !!myRow?.claimed });
+  // 11/22 100%를 넘긴 판의 1·2·3등은 「2등이라 도장 3개를 더 받았어요」까지 (받기 전엔 받을 보상의 순위, 받은 뒤엔 받은 기록의 순위)
+  const myRank = myRow?.claimed?.rank ?? myRow?.reward?.rank ?? 0;
+  const rewardLine = live || nobody ? "" : urgentRewardLine({ n: ev.n, goal: ev.goal, mine: iGave, claimed: !!myRow?.claimed, rank: myRank });
   const canClaim = !live && !!myRow?.reward && !myRow.claimed;
   // 11/22 약초·광석·발굴품 의뢰 동안 그 지점이 5분마다 모두 다시 핀다 (lib/forage/rules nodeBloomRule)
   const regrow = live ? URGENT_REGROW_LINE[ev.kind] : null;
@@ -307,6 +309,8 @@ export default function UrgentHud() {
                   <>
                     <span>캠핑장행 정류장 왼쪽 의뢰 게시판에 내면 서버 전체 막대가 차요.</span>
                     <span>눈금 50%·100%를 넘기면 보상이 커지고, 150%(끝)까지 채우면 불꽃축제가 열려요.</span>
+                    {/* 11/22 100%를 넘긴 판의 순위 보상 */}
+                    <span>100%를 넘기면 많이 낸 1·2·3등이 도장을 {URGENT_RANK_STAMPS.join("·")}개 더 받고, 1등은 「긴급 배달왕」 칭호도 달아요.</span>
                     {regrow && <span>{regrow}</span>}
                   </>
                 ) : (

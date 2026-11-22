@@ -1,8 +1,10 @@
+import { nanoid } from "nanoid";
 import { describe, expect, it } from "vitest";
+import { env } from "../env";
 import { speciesById, npcBuys, NPCS } from "../forage/catalog";
 import { candidates } from "../forage/rules";
 import { eatSpicy, FEATHER_CHANCE, FEATHER_ID, gullHotLevel, gullHotOver, heldHot, holdHot, hotLevel, HOT_FADE_MS, HOT_MS, HOT_RAMP_MS, RED_FEATHER_ID, rollFeather, SNACK, SNACK_DAY_LIMIT, type GullHot, SNACK_NO_LIMIT, SNACK_HOLD_MAX, RED_FEATHER_SHARE } from "./gull";
-import { MemoryGullStore } from "./gullStore";
+import { MemoryGullStore, RedisGullStore } from "./gullStore";
 
 // 11/17 포구 갈매기 과자 순수 규칙 · 저장소
 describe("갈매기 과자 (gull)", () => {
@@ -110,5 +112,19 @@ describe("갈매기 과자 (gull)", () => {
     expect(hotLevel(300, false)).toBe(1);
     expect(hotLevel(HOT_MS - HOT_FADE_MS / 2)).toBeCloseTo(0.5);
     expect(hotLevel(HOT_MS)).toBe(0);
+  });
+});
+
+// 11/22 실제 Redis(일회용 DB)에서만: 보기(HMGET)는 이 클라이언트에서 배열로 와서, 객체로 읽던 때는 가진 과자가 늘 0개로 보였다
+const conn = env.redis();
+describe.skipIf(!conn)("갈매기 과자 저장소 (실제 Redis)", () => {
+  it("산 과자가 보기에도 그대로 나온다", async () => {
+    const store = new RedisGullStore(conn!);
+    const acct = `t-${nanoid(10)}`;
+    expect(await store.get(acct, "20261122")).toEqual({ plain: 0, spicy: 0, bought: 0 });
+    await store.buy(acct, "20261122", "plain");
+    await store.buy(acct, "20261122", "plain");
+    await store.buy(acct, "20261122", "spicy");
+    expect(await store.get(acct, "20261122")).toEqual({ plain: 2, spicy: 1, bought: 3 });
   });
 });

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { BACKGROUND_FPS, BackgroundStepper, LoopController, loopMode } from "./backgroundStepper";
+import { BACKGROUND_FPS, BackgroundStepper, COVERED_FPS, LoopController, loopMode } from "./backgroundStepper";
 
 const FRAME = 1000 / 60;
 const STEP = 1000 / BACKGROUND_FPS;
 
 /** 60fps로 ms 동안 돌린 결과: 갱신 횟수·그리기 횟수·넘긴 시간 합 */
-function run(live: boolean, ms: number) {
-  const s = new BackgroundStepper();
+function run(live: boolean, ms: number, fps?: number) {
+  const s = new BackgroundStepper(fps);
   let updates = 0;
   let renders = 0;
   let total = 0;
@@ -40,6 +40,59 @@ describe("뒤로 간 동안 게임 루프 줄이기 (BackgroundStepper)", () => 
     expect(r.renders).toBeGreaterThanOrEqual(10 * BACKGROUND_FPS - 1);
     expect(r.renders).toBeLessThanOrEqual(10 * BACKGROUND_FPS + 1);
     expect(Math.abs(r.total - 10_000)).toBeLessThan(1);
+  });
+});
+
+describe("11/22 창이 마을을 덮은 동안 (covered)", () => {
+  it("갱신은 매 프레임(네트워크·위치·시간 그대로), 그리기만 초당 COVERED_FPS번 남짓 (60Hz에선 8프레임마다 = 7.5번)", () => {
+    const r = run(true, 10_000, COVERED_FPS);
+    expect(r.updates).toBe(600);
+    expect(r.renders).toBeGreaterThanOrEqual(10 * COVERED_FPS * 0.9);
+    expect(r.renders).toBeLessThanOrEqual(10 * COVERED_FPS + 1);
+    expect(Math.abs(r.total - 10_000)).toBeLessThan(1);
+  });
+
+  it("loopMode: 앞에서 덮이면 covered, 뒤로 가면 덮임과 상관없이 예전 규칙", () => {
+    expect(loopMode(false, false, true)).toBe("covered");
+    expect(loopMode(false, true, true)).toBe("covered");
+    expect(loopMode(true, false, true)).toBe("rest");
+    expect(loopMode(true, true, true)).toBe("live");
+    expect(loopMode(false, false)).toBe("normal");
+  });
+
+  it("덮이면 켜고, 창이 닫히면 바로 끈다. 덮인 채 뒤로 가면 덮임을 끄고 휴식, 돌아오면 다시 덮임", () => {
+    const st = { bg: false, covered: false };
+    const log: string[] = [];
+    const ctl = new LoopController({
+      started: () => true,
+      background: () => st.bg,
+      live: () => false,
+      sleep: () => log.push("sleep"),
+      wake: () => log.push("wake"),
+      enterLive: () => log.push("live+"),
+      leaveLive: () => log.push("live-"),
+      covered: () => st.covered,
+      enterCovered: () => log.push("cover+"),
+      leaveCovered: () => log.push("cover-"),
+      rest: (on) => log.push(on ? "rest" : "awake"),
+    });
+    st.covered = true;
+    ctl.apply();
+    expect(log).toEqual(["cover+", "awake"]);
+    st.bg = true;
+    ctl.apply();
+    expect(log.slice(-3)).toEqual(["cover-", "sleep", "rest"]);
+    st.bg = false;
+    ctl.apply();
+    expect(log.slice(-3)).toEqual(["wake", "cover+", "awake"]);
+    st.covered = false;
+    ctl.apply();
+    expect(log.slice(-2)).toEqual(["cover-", "awake"]);
+    expect(ctl.mode).toBe("normal");
+    st.covered = true;
+    ctl.apply();
+    ctl.dispose();
+    expect(log.slice(-3)).toEqual(["cover+", "awake", "cover-"]);
   });
 });
 

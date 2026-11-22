@@ -2,9 +2,9 @@ import * as Phaser from "phaser";
 import { champAuraOn, CHAT_SHOW_MS, dexBadgeCats, DIR, isChampBits, isChampValue, isNameSlot, itemById, ridePetOfLook, sanitizeDye, SNOW_FACE_MS, SNOW_WOBBLE_MS, titleOfLook, type ActKind, type DirId, type StateName } from "@tomb/protocol";
 import { hasNameStyle, nameStyleRef } from "@/lib/nameStyle";
 import { headTitle, titlePerk } from "@/lib/titles";
-import { addCanvasTexture, avatarActAnimKey, avatarAnimKey, avatarFrame, ensureAvatarTexture, TEX } from "../assets/manifest";
+import { addCanvasTexture, avatarActAnimKey, avatarAnimKey, avatarFrame, avatarTexLedger, ensureAvatarTexture, TEX } from "../assets/manifest";
 import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from "../config";
-import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, faceAnchor, handAnchor, waterSink, type AppearanceChange } from "../sprites/avatar";
+import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, faceAnchor, handAnchor, specDye, waterSink, type AppearanceChange } from "../sprites/avatar";
 import { CosmeticFxView } from "./CosmeticFxView";
 import { DyeFxView } from "./DyeFxView";
 import { bodyFx, riderBobs, riderLift } from "../sprites/cosmeticFx";
@@ -25,6 +25,7 @@ import { NameStyleView } from "./NameStyleView";
 import { TitleView } from "./TitleView";
 import { markCharTint } from "../world/charTint";
 import { ensureSnowFightTextures, SNOWFIGHT_TEX } from "../world/snowFightArt";
+import { ensureSproutTexture, SPROUT_H, SPROUT_W } from "../sprites/sproutIcon";
 import { SNOW_BODY_HALF, snowBodyTop, type SnowBody } from "../world/snowHit";
 
 /** 도감 100% 배지: 종류마다 별 하나 (금빛) */
@@ -32,6 +33,8 @@ const DEX_BADGE_STAR = "★";
 /** 친구 표시: 이름표 왼쪽 작은 하트 (분홍) */
 const FRIEND_HEART = "♥";
 const FRIEND_TINT = 0xff8fb8;
+/** 11/22 새싹 ↔ 이름표(바탕판)·친구 하트 간격 (화면 px) */
+const SPROUT_GAP = 2;
 const DEX_BADGE_TINT = 0xffd45e;
 const DOING_TINT = 0xbfd4ff;
 /** 칭호 위아래로 보이는 간격 (화면 px): 이름표 ↔ 칭호 ↔ 1위 배지·말풍선 */
@@ -60,6 +63,8 @@ const LIE_PERIOD = 2400;
 const HAMMOCK_SWAY_PERIOD = 2800;
 /** 해먹 누운 그림: 텍스처마다 몸 맨 윗줄 (이름표 자리) */
 const lieTops = new Map<string, number>();
+/** 11/22 원장이 지운 해먹 그림의 머리 높이도 버린다 (게임마다 한 번만 듣는다) */
+const lieTopsWired = new WeakSet<Phaser.Game>();
 /** 수면 줄: 발바닥에서 위로 */
 const WATER_LINE = 5;
 const ACT_MS = 1200;
@@ -71,8 +76,6 @@ const BUBBLE_MS = 900;
 /** 꾸미기 반짝임 주기·길이 (착용하면 가끔 머리 위에서 반짝) */
 const SPARKLE_EVERY_MS = 2600;
 const SPARKLE_MS = 520;
-/** 날개 그림: 어깨에서 이만큼 위가 날개 끝 */
-const WING_TIP = 9;
 
 /** 11/15 바베큐로 이만큼 커지면 뒤에 가려진 사람이 보이게 몸을 반투명하게 (SEE_THRU_ALPHA) */
 const SEE_THRU_BIG = 1.6;
@@ -83,6 +86,8 @@ const LIVE = new Set<AvatarView>();
 const LABEL_LIFT_MS = 110;
 
 export class AvatarView {
+  /** 11/22 changeLook 도중엔 시트를 만들지 않는다 (끝에 한 번) */
+  private texHeld = false;
   readonly sprite: Phaser.GameObjects.Sprite;
   readonly label: Phaser.GameObjects.BitmapText;
   /**
@@ -99,6 +104,8 @@ export class AvatarView {
   /** 말풍선 자리에 지금 떠 있는 자유 채팅 (신고용) */
   private chatShown: { text: string; until: number } | null = null;
   private texKey: string;
+  /** 11/22 원장에 잡아 둔 시트 키 (destroy에서 한 번 놓는다) */
+  private heldKey: string | null = null;
   private look: readonly string[] = [];
   private body: string;
   private labelGap: number;
@@ -221,7 +228,13 @@ export class AvatarView {
   private readonly isMe: boolean;
   /** 친구 하트 (이름표 왼쪽). 친구일 때만 만든다 */
   private friendMark: Phaser.GameObjects.BitmapText | null = null;
-  private wings: Phaser.GameObjects.Image | null = null;
+  /** 11/22 새싹 표시가 끝나는 시각 (epoch ms, 0 = 아님)과 이름표 왼쪽 새싹 그림 (새싹일 때만 만든다) */
+  private sproutUntil = 0;
+  private sproutImg: Phaser.GameObjects.Image | null = null;
+  /** 새싹이 있으면 [새싹 이름] 묶음이 머리 가운데 오게 이름을 오른쪽으로 민 양 (월드 단위, 칭호·말풍선은 원래 가운데) */
+  private rowShift = 0;
+  /** 지금 새싹 그림 자리 (월드 단위, 마우스 올림·누름 판정) */
+  private readonly sproutBox = { x: 0, y: 0, w: 0, h: 0, on: false };
   private pet: Phaser.GameObjects.Image | null = null;
   private petX = 0;
   private petY = 0;
@@ -259,6 +272,14 @@ export class AvatarView {
     this.labelGap = m.top + 2;
     this.shoulder = m.shoulder;
     this.texKey = ensureAvatarTexture(scene, color, look, this.body);
+    // 11/22 이 시트를 쓴다고 원장에 적는다 (아무도 안 쓰게 되면 원장이 잠깐 뒤 지운다 — assets/avatarTexLedger)
+    const ledger = avatarTexLedger(scene.game);
+    ledger.hold(this.texKey);
+    this.heldKey = this.texKey;
+    if (!lieTopsWired.has(scene.game)) {
+      lieTopsWired.add(scene.game);
+      ledger.onRemoved((k) => lieTops.delete(k));
+    }
     // 마을 시간대·날씨 색조는 캐릭터에 절반만 (world/worldTint — 꾸미기 연출·펫도 같이)
     this.sprite = markCharTint(scene.add.sprite(x, y, this.texKey, avatarFrame("idle", DIR.down)).setOrigin(0.5, AV_ORIGIN_Y));
     this.baseOriginX = this.sprite.displayOriginX;
@@ -278,8 +299,14 @@ export class AvatarView {
   }
 
   private retexture(): void {
+    if (this.texHeld) return;
     const key = ensureAvatarTexture(this.scene, this.color, this.look, this.body);
     if (key !== this.texKey) {
+      // 11/22 새 시트를 잡고 옛 시트를 놓는다 (옛 시트는 아무도 안 쓰면 원장이 잠깐 뒤 지운다)
+      const ledger = avatarTexLedger(this.scene.game);
+      ledger.hold(key);
+      if (this.heldKey) ledger.release(this.heldKey);
+      this.heldKey = key;
       this.texKey = key;
       this.anim = "";
       this.swingFrame = -1;
@@ -302,10 +329,21 @@ export class AvatarView {
     }
   }
 
+  /** F8 꾸미기 연출 (처음 쓸 때 만든다 — 11/22 염색한 날개 색도 같이 건다) */
+  private fxView(): CosmeticFxView {
+    if (!this.cfx) {
+      this.cfx = new CosmeticFxView(this.scene);
+      this.cfx.setDye(specDye(this.color).items);
+    }
+    return this.cfx;
+  }
+
   /** 46번: 색 표기 변경 (avatarColorSpec — 염색) */
   setColor(spec: string): void {
     if (spec === this.color) return;
     this.color = spec;
+    // 11/22 날개는 시트 밖 그림이라 연출 쪽에 색을 따로 알린다
+    this.cfx?.setDye(specDye(spec).items);
     this.retexture();
   }
 
@@ -381,7 +419,7 @@ export class AvatarView {
   /** 1위 오라·운영자 오라 다시 걸기 (운영자 오라가 우선, 본인이 끄면 CHAMP_AURA_OFF) */
   private refreshAura(): void {
     const staff = !!this.staffFx;
-    if (this.cfx || champAuraOn(this.champ) || staff) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(this.look, this.body, this.champ, staff);
+    if (this.cfx || champAuraOn(this.champ) || staff) this.fxView().setLook(this.look, this.body, this.champ, staff);
   }
 
   /** 11/16 매니저 표시 켜기·끄기: 매니저 전용 칭호는 이 표시가 있을 때만 머리 위에 뜬다 (오라는 없다) */
@@ -572,6 +610,57 @@ export class AvatarView {
     return !!this.friendMark;
   }
 
+  /**
+   * 11/22 새싹 표시 (실시간 서버가 알린 끝나는 시각 PeerInfo.nb, epoch ms): 그 시각 전까지 이름표 왼쪽에 작은 새싹.
+   * 없거나 지난 값이면 없앤다. 접속해 있는 동안 시각이 지나면 sync가 저절로 없앤다
+   */
+  setSprout(until: number | undefined): void {
+    const next = typeof until === "number" && until > Date.now() ? until : 0;
+    this.sproutUntil = next;
+    if (!next) {
+      this.sproutImg?.destroy();
+      this.sproutImg = null;
+      this.rowShift = 0;
+      this.sproutBox.on = false;
+      return;
+    }
+    this.sproutImg ??= this.scene.add.image(0, 0, ensureSproutTexture(this.scene)).setOrigin(0, 1).setDepth(this.label.depth).setVisible(false);
+  }
+
+  /** 지금 새싹으로 보이는지 (채팅 줄 표시) */
+  get sprout(): boolean {
+    return this.sproutUntil > Date.now();
+  }
+
+  /** 지금 새싹 그림 윗변 가운데 (월드 단위, 말풍선이 따라간다). 안 보이거나 새싹이 끝났으면 null */
+  get sproutAnchor(): { x: number; y: number } | null {
+    const b = this.sproutBox;
+    return b.on && this.sproutImg?.visible ? { x: b.x + b.w / 2, y: b.y } : null;
+  }
+
+  /** 월드 좌표가 새싹 그림 위인지 (마우스 올림·누름, 1px 넉넉히). 맞으면 그림 자리 (월드 단위) */
+  sproutAt(wx: number, wy: number): { x: number; y: number; w: number; h: number } | null {
+    const b = this.sproutBox;
+    if (!b.on || !this.sproutImg?.visible) return null;
+    const pad = b.w / SPROUT_W;
+    return wx >= b.x - pad && wx <= b.x + b.w + pad && wy >= b.y - pad && wy <= b.y + b.h + pad ? b : null;
+  }
+
+  /**
+   * 11/22 꾸미기 목록과 염색·몸 모양을 한 번에 바꾼다 (look 이벤트·내 착용 증서). 시트는 마지막에 한 장만 만든다
+   * — 예전엔 setLook이 옛 색으로 한 장, setColor가 새 색으로 또 한 장 만들어 염색한 옷을 입을 때 폰에서 두 번 멈칫했다
+   */
+  changeLook(look: readonly string[] | null, extra: AppearanceChange | undefined): void {
+    this.texHeld = true;
+    try {
+      if (look) this.setLook(look);
+      this.applyAppearance(extra);
+    } finally {
+      this.texHeld = false;
+    }
+    this.retexture();
+  }
+
   /** 46·25번: 실시간 서버가 알린 염색·몸 모양 (없는 값은 그대로 둔다) */
   applyAppearance(extra: AppearanceChange | undefined): void {
     if (!extra) return;
@@ -590,16 +679,15 @@ export class AvatarView {
     // 11/15 수집가 유령은 채집 등불을 들고 있다 (밤 빛)
     this.lantern = this.look.includes("hand_lantern") || this.look.includes("hand_lantern_blue") || this.look.includes("q_hat_miner") || this.look.includes("q_hand_wishlamp") || b === "collector";
     // 25번 프리미엄 외형 등급 연출은 몸에 딸린다 (다른 사람 화면에서도 몸 id로 똑같이)
-    if (this.cfx || bodyFx(b)) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(this.look, b, this.champ, !!this.staffFx);
+    if (this.cfx || bodyFx(b)) this.fxView().setLook(this.look, b, this.champ, !!this.staffFx);
     this.relayout();
     this.retexture();
   }
 
-  /** 머리 위 쌓기 높이: 그림 맨 위(머리 꾸미기 포함)와 날개 끝 중 높은 곳 + 2px 위에 이름표 */
+  /** 머리 위 쌓기 높이: 그림 맨 위(머리 꾸미기 포함)와 날개 끝 중 높은 곳 + 2px 위에 이름표 (날개는 cfx.labelTop — 11/22 작은 날개도) */
   private relayout(): void {
     this.artTop = avatarArtTop(this.body, this.look);
-    const wings = this.look.includes("back_wings") ? this.shoulder + WING_TIP : 0;
-    this.labelGap = Math.max(this.artTop, wings, this.cfx?.labelTop(this.artTop, this.shoulder) ?? 0) + 2;
+    this.labelGap = Math.max(this.artTop, this.cfx?.labelTop(this.artTop, this.shoulder) ?? 0) + 2;
   }
 
   get bodyId(): string {
@@ -634,7 +722,7 @@ export class AvatarView {
       this.mountPet = mount;
       this.anim = "";
     }
-    if (this.cfx || look.length || bodyFx(this.body) || champAuraOn(this.champ) || !!this.staffFx) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(look, this.body, this.champ, !!this.staffFx);
+    if (this.cfx || look.length || bodyFx(this.body) || champAuraOn(this.champ) || !!this.staffFx) this.fxView().setLook(look, this.body, this.champ, !!this.staffFx);
     this.relayout();
     this.retexture();
     this.setNameStyle(look);
@@ -654,12 +742,6 @@ export class AvatarView {
     } else {
       this.haloGlow?.destroy();
       this.haloGlow = null;
-    }
-    if (look.includes("back_wings")) {
-      this.wings ??= markCharTint(this.scene.add.image(0, 0, TEX.avWings, 0).setVisible(vis));
-    } else {
-      this.wings?.destroy();
-      this.wings = null;
     }
     if (look.includes("pet_ghost")) {
       if (!this.pet) {
@@ -1103,6 +1185,10 @@ export class AvatarView {
     }
     const baseLabelY = labelY - moodLift;
     this.label.setPosition(Math.round(st === "hammock" ? s.x : s.x - this.poseDx), baseLabelY - Math.round(this.liftNow));
+    // 11/22 새싹: 끝나는 시각이 지나면 저절로 없앤다. 있으면 [새싹 이름] 묶음이 머리 가운데 오게 이름을 (새싹 + 간격)의 절반만큼 오른쪽으로
+    if (this.sproutUntil && Date.now() >= this.sproutUntil) this.setSprout(0);
+    this.rowShift = this.sproutImg ? Math.round((SPROUT_W + SPROUT_GAP) / 2) * labelScale : 0;
+    if (this.rowShift) this.label.x += this.rowShift;
     if (this.shadow) this.shadow.setPosition(s.x, s.y - 1).setDepth((this.depthOverride ?? s.y) - 0.5);
     if (this.label.scaleX !== labelScale) this.label.setScale(labelScale);
     const vis = s.visible;
@@ -1159,10 +1245,13 @@ export class AvatarView {
       if (this.dexBadge.scaleX !== labelScale) this.dexBadge.setScale(labelScale);
       this.dexBadge.setPosition(Math.round(l.x + l.width / 2 + 2 * labelScale + side), l.y).setAlpha(fa).setVisible(vis && l.visible);
     }
+    // 11/22 새싹은 이름표(바탕판) 바로 왼쪽, 친구 하트는 그 바깥: [♥][새싹][이름]
+    const sproutLeft = this.sproutImg ? this.placeSprout(labelScale, side, vis, fa) : null;
     if (this.friendMark) {
       const l = this.label;
       if (this.friendMark.scaleX !== labelScale) this.friendMark.setScale(labelScale);
-      this.friendMark.setPosition(Math.round(l.x - l.width / 2 - 2 * labelScale - side), l.y).setAlpha(fa).setVisible(vis && l.visible);
+      const right = sproutLeft !== null ? sproutLeft - SPROUT_GAP * labelScale : l.x - l.width / 2 - 2 * labelScale - side;
+      this.friendMark.setPosition(Math.round(right), l.y).setAlpha(fa).setVisible(vis && l.visible);
     }
     if (this.shadow && this.shadow.alpha !== fa) this.shadow.setAlpha(fa);
 
@@ -1214,6 +1303,8 @@ export class AvatarView {
           headY,
           dir: d,
           moving: st === "walk" || st === "run",
+          // 11/22 작은 날개는 달리면 빨리 파닥인다 (예전 AvatarView 그대로)
+          running: st === "run",
           hidden: st === "dive" || st === "hammock" || st === "swim" || st === "hang" || st === "lie" || st === "bath",
           // 11/15 바베큐로 커지면 날개·꾸미기 연출 자리도 커진 몸에 맞춘다
           artTop: Math.round(this.artTop * this.big),
@@ -1260,7 +1351,7 @@ export class AvatarView {
       const cellTop = this.label.y - this.label.height;
       const visibleTop = cellTop - (lift > 0 ? lift : -pad.top * sc);
       const titleBottom = visibleTop - gap + pad.bottom * sc;
-      t.place(Math.round(this.label.x), Math.round(titleBottom), sc, vis && this.label.visible, fa, now);
+      t.place(Math.round(this.label.x - this.rowShift), Math.round(titleBottom), sc, vis && this.label.visible, fa, now);
       const titleInkTop = titleBottom - t.height + pad.top * sc;
       // 1위 배지 판 아랫변 = 칭호 글자 윗선 − 간격 (ChampBadgeView: 판 아랫변 = 칸 위 − 1px − lift)
       lift = cellTop - sc - (titleInkTop - gap);
@@ -1271,11 +1362,11 @@ export class AvatarView {
     if (this.doingTag) {
       const d = this.doingTag;
       if (d.scaleX !== labelScale) d.setScale(labelScale);
-      d.setPosition(Math.round(this.label.x), Math.round(labelTop - labelScale)).setAlpha(fa).setVisible(vis && this.label.visible);
+      d.setPosition(Math.round(this.label.x - this.rowShift), Math.round(labelTop - labelScale)).setAlpha(fa).setVisible(vis && this.label.visible);
       labelTop -= d.height + labelScale;
     }
     this.measureUnit(baseLabelY, labelTop, labelScale, side);
-    if (this.speech) this.speech.place(this.label.x, labelTop - labelScale, labelScale, now, vis);
+    if (this.speech) this.speech.place(this.label.x - this.rowShift, labelTop - labelScale, labelScale, now, vis);
     // 벤치 상태를 고르면 기본 "…"은 띄우지 않는다
     const longSit = !speaking && !this.mood && this.sitSince > 0 && now - this.sitSince > SIT_IDLE_MS;
     if (longSit) {
@@ -1294,6 +1385,40 @@ export class AvatarView {
   }
 
   /**
+   * 11/22 새싹 그림을 이름표(바탕판 포함) 바로 왼쪽, 글자 잉크 높이 가운데에 놓고 그 왼쪽 끝(월드 x)을 돌려준다.
+   * 화면 픽셀 격자에 맞춘다 — 폰 줌 3.5처럼 정수가 아닌 줌에서 반 픽셀 어긋나 잎 픽셀이 빠지거나 두꺼워지지 않게
+   */
+  private placeSprout(sc: number, side: number, vis: boolean, fa: number): number {
+    const img = this.sproutImg!;
+    const l = this.label;
+    if (img.scaleX !== sc) img.setScale(sc);
+    const w = SPROUT_W * sc;
+    const h = SPROUT_H * sc;
+    const pad = this.atlas.inkPad;
+    const inkBottom = l.y - pad.bottom * sc;
+    const inkH = l.height - (pad.top + pad.bottom) * sc;
+    let x = l.x - l.width / 2 - side - SPROUT_GAP * sc - w;
+    let y = inkBottom - Math.max(0, Math.round((inkH - h) / 2 / sc) * sc);
+    const cam = this.scene.cameras.main;
+    const z = cam.zoom;
+    if (z > 0) {
+      const wv = cam.worldView;
+      x = Math.round((x - wv.x) * z) / z + wv.x;
+      y = Math.round((y - wv.y) * z) / z + wv.y;
+    }
+    const on = vis && l.visible;
+    img.setPosition(x, y).setAlpha(fa).setVisible(on);
+    if (img.depth !== l.depth) img.setDepth(l.depth);
+    const b = this.sproutBox;
+    b.x = x;
+    b.y = y - h;
+    b.w = w;
+    b.h = h;
+    b.on = on;
+    return x;
+  }
+
+  /**
    * 이름표 묶음을 잰다 (겹침 풀기용, 월드 단위). baseLabelY = 비키기 전 이름표 아랫변, labelTop = 지금 묶음 꼭대기(말풍선 아래).
    * 이름 줄 = 글자 + 바탕판 여백 + 옆 표시(친구 하트·도감 별), 윗칸 = 칭호·1위 배지·하는 일
    */
@@ -1301,10 +1426,15 @@ export class AvatarView {
     const u = this.unit;
     const l = this.label;
     const plate = this.nameFx?.topLift(sc) ?? 0;
-    const mark = Math.max(this.friendMark ? this.friendMark.width : 0, this.dexBadge ? this.dexBadge.width : 0);
-    u.x = l.x;
+    // 11/22 새싹이 있으면 왼쪽에 (새싹 + 간격)이 더 붙고 묶음 가운데는 이름을 밀기 전 자리 → 가운데에서 먼 쪽 기준으로 잰다
+    const sprout = this.sproutImg ? (SPROUT_W + SPROUT_GAP) * sc : 0;
+    const leftMark = sprout + (this.friendMark ? this.friendMark.width + (sprout ? SPROUT_GAP * sc : 2 * sc) : 0);
+    const rightMark = this.dexBadge ? this.dexBadge.width + 2 * sc : 0;
+    const cx = l.x - this.rowShift;
+    const half = Math.max(l.x - cx + l.width / 2 + side + sc + leftMark, cx - l.x + l.width / 2 + side + sc + rightMark);
+    u.x = cx;
     u.y = baseLabelY + plate;
-    u.w = l.width + 2 * (side + sc) + (mark > 0 ? 2 * (mark + 2 * sc) : 0);
+    u.w = 2 * half;
     u.h = l.height + 2 * plate;
     const rowTop = l.y - l.height - plate;
     u.th = Math.max(0, rowTop - labelTop);
@@ -1413,19 +1543,6 @@ export class AvatarView {
       this.haloGlow.setPosition(x, headY - Math.round(this.artTop * this.big) + 1 + sink + sitDrop).setAlpha(pulse).setVisible(vis && st !== "dive" && st !== "hammock");
       if (this.haloGlow.scaleX !== 0.28 * this.big) this.haloGlow.setScale(0.28 * this.big); // 11/16 커지면 후광 빛도 같이
     }
-    if (this.wings) {
-      const side = this.dir === DIR.left || this.dir === DIR.right;
-      const flap = this.reduced ? 1 : 1 + 0.16 * Math.sin(now / (st === "run" ? 70 : 150));
-      const w = this.wings;
-      if (w.frame.name !== (side ? "1" : "0")) w.setFrame(side ? 1 : 0);
-      w.setFlipX(this.dir === DIR.right)
-        .setPosition(x + (this.dir === DIR.right ? 2 : this.dir === DIR.left ? -2 : 0) * this.big, headY - (this.shoulder + 3) * this.big)
-        .setScale(flap * this.big, this.big)
-        // 뒷모습(up)이면 날개가 앞에 보이고, 나머지는 몸 뒤
-        .setDepth(this.dir === DIR.up ? depth + 0.05 : depth - 0.05)
-        // 이불 속·욕조 물속에서는 날개를 숨긴다 (꾸미기 연출과 같은 규칙)
-        .setVisible(vis && !wet && st !== "hammock" && st !== "lie" && st !== "bath");
-    }
     if (this.pet) {
       // 몸 뒤쪽으로 조금 떨어져 느긋하게 따라온다
       const back = this.dir === DIR.left ? [12, -1] : this.dir === DIR.right ? [-12, -1] : this.dir === DIR.up ? [7, 5] : [-9, -5];
@@ -1511,7 +1628,6 @@ export class AvatarView {
     // 11/18 눈 묻은 얼굴은 다시 보일 때 sync가 켠다
     if (!v) this.snowFace?.setVisible(false);
     if (!v) this.snowCap?.setVisible(false);
-    this.wings?.setVisible(v);
     this.pet?.setVisible(v);
     this.cfx?.setVisible(v);
     this.dyeFx?.setVisible(v);
@@ -1523,6 +1639,8 @@ export class AvatarView {
     this.nameFx?.setVisible(v);
     this.titleView?.setVisible(v);
     this.friendMark?.setVisible(v);
+    this.sproutImg?.setVisible(v);
+    if (!v) this.sproutBox.on = false;
     for (const f of this.fog) f.setVisible(v);
     this.ripple?.setVisible(v);
     if (!v) for (const b of this.bubbles) b.setVisible(false);
@@ -1576,6 +1694,8 @@ export class AvatarView {
     this.titleView?.destroy();
     this.titleView = null;
     this.friendMark?.destroy();
+    this.sproutImg?.destroy();
+    this.sproutImg = null;
     this.bubble?.destroy();
     this.bubble = null;
     this.speech?.destroy();
@@ -1588,8 +1708,6 @@ export class AvatarView {
     this.haloGlow = null;
     this.sparkle?.destroy();
     this.sparkle = null;
-    this.wings?.destroy();
-    this.wings = null;
     this.pet?.destroy();
     this.pet = null;
     this.cfx?.destroy();
@@ -1608,5 +1726,8 @@ export class AvatarView {
     this.ripple = null;
     for (const b of this.bubbles) b.destroy();
     this.bubbles = [];
+    // 11/22 시트를 놓는다 (장면이 끝나 게임이 없으면 원장도 없다)
+    if (this.heldKey && this.scene.game) avatarTexLedger(this.scene.game).release(this.heldKey);
+    this.heldKey = null;
   }
 }

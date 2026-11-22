@@ -527,11 +527,10 @@ function zoneColor(p: DyePalette, z: Zone, X: number, Y: number, wx: number, wy:
   const u = (X * z.dx + Y * z.dy) >> 4;
   const v = (Y * z.dx - X * z.dy) >> 4;
   switch (z.kind) {
-    case "blot": {
-      const [ax, ay] = tiltA(X, Y);
-      sample(p.base, ax, ay, out);
+    case "blot":
+      // tiltA를 풀어 쓴다 (값은 같다)
+      sample(p.base, (13 * X + 7 * Y) >> 4, (13 * Y - 7 * X) >> 4, out);
       return;
-    }
     case "stripe":
       rampAt(z.ramp, z.k, Math.floor(u / z.period) + z.phase, z.sharp, true, out);
       return;
@@ -665,12 +664,14 @@ function cellBase(p: DyePalette, cx: number, cy: number): number {
       for (let c = 0; c < 3; c++) buf3[c] = buf3b[c] + (((buf3[c] - buf3b[c]) * w) >> 8);
     }
   }
-  const [bx, by] = tiltB(PX, PY);
-  sample(p.tint, bx, by, buf3b);
+  // tiltB를 그대로 풀어 쓴다 (칸마다 배열·함수를 만들지 않게 — 값은 같다)
+  sample(p.tint, (11 * PX - 9 * PY) >> 4, (11 * PY + 9 * PX) >> 4, buf3b);
   sample(p.grain, X, Y, buf1);
   const g = buf1[0];
-  const ch = (k: number) => clamp255((buf3[k] + buf3b[k] + g) >> 8);
-  return (ch(0) << 16) | (ch(1) << 8) | ch(2);
+  const r = clamp255((buf3[0] + buf3b[0] + g) >> 8);
+  const gg = clamp255((buf3[1] + buf3b[1] + g) >> 8);
+  const bb = clamp255((buf3[2] + buf3b[2] + g) >> 8);
+  return (r << 16) | (gg << 8) | bb;
 }
 
 /** 칸의 특수 색 종류 (없으면 null) */
@@ -728,12 +729,13 @@ export const DYE_CENTER = { x: DYE_BOARD_W / 2, y: DYE_BOARD_H / 2 } as const;
 // ── 11/12 끝없는 판: 구역(i, j)마다 시드+구역 좌표로 새 팔레트, 이음매는 양쪽 SEAM칸을 정수로 섞는다 ──
 
 /** 끝없는 판 (구역 팔레트를 만들어 두고 다시 쓴다) */
-export type DyeBoard = { seed: string; tier: DyeTier; chunks: Map<string, DyePalette> };
+export type DyeBoard = { seed: string; tier: DyeTier; chunks: Map<string, DyePalette>; /** 기억해 두는 구역 팔레트 수 (없으면 CHUNK_CACHE) */ cap?: number };
 /** 구역 팔레트를 기억해 두는 수 (넘으면 오래된 것부터 버린다) */
 const CHUNK_CACHE = 48;
 
-export function buildBoard(seed: string, tier: DyeTier): DyeBoard {
-  return { seed, tier, chunks: new Map() };
+/** cap: 구역 팔레트를 몇 개까지 기억할지 (11/22 화면 타일 일꾼은 넓게 볼 때 이웃까지 ~100구역을 오가므로 크게 둔다) */
+export function buildBoard(seed: string, tier: DyeTier, cap?: number): DyeBoard {
+  return cap ? { seed, tier, chunks: new Map(), cap } : { seed, tier, chunks: new Map() };
 }
 
 /** 구역 (i, j)의 팔레트. (0, 0)은 예전 판과 같은 시드 */
@@ -747,7 +749,7 @@ export function chunkAt(b: DyeBoard, i: number, j: number): DyePalette {
   }
   p = buildPalette(i === 0 && j === 0 ? b.seed : `${b.seed}@${key}`, b.tier);
   b.chunks.set(key, p);
-  if (b.chunks.size > CHUNK_CACHE) b.chunks.delete(b.chunks.keys().next().value!);
+  if (b.chunks.size > (b.cap ?? CHUNK_CACHE)) b.chunks.delete(b.chunks.keys().next().value!);
   return p;
 }
 
@@ -810,20 +812,60 @@ export function boardColor(b: DyeBoard, cx: number, cy: number): string {
   return withDyeSpecial(`#${boardRgb(b, cx, cy).toString(16).padStart(6, "0")}`, boardSpecial(b, cx, cy));
 }
 
-/** 구역 (i, j) 한 장을 RGBA로 (화면 타일 — 보이는 구역만 그려 캐시한다) */
-export function chunkRgba(b: DyeBoard, i: number, j: number): Uint8ClampedArray {
-  const out = new Uint8ClampedArray(DYE_BOARD_W * DYE_BOARD_H * 4);
-  const x0 = i * DYE_BOARD_W;
-  const y0 = j * DYE_BOARD_H;
-  for (let y = 0; y < DYE_BOARD_H; y++)
-    for (let x = 0; x < DYE_BOARD_W; x++) {
-      const v = boardRgb(b, x0 + x, y0 + y);
-      const k = (y * DYE_BOARD_W + x) * 4;
-      out[k] = (v >> 16) & 255;
-      out[k + 1] = (v >> 8) & 255;
-      out[k + 2] = v & 255;
-      out[k + 3] = 255;
+/**
+ * 구역 (i, j) 한 장을 RGBA로 (화면 타일 — 보이는 구역만 그려 캐시한다).
+ * 11/22 판 끊김: 예전엔 칸마다 boardRgb(구역 찾기·문자열 키·LRU 갱신 ×2~5번)를 불러 한 장에 ~37ms(PC)였다.
+ * 이웃 9구역 팔레트를 한 번만 찾고 이음매 무게를 줄·칸마다 미리 계산한다 — 결과는 boardRgb와 한 칸도 다르지 않다 (테스트).
+ * step > 1이면 step칸마다 한 칸만 계산한 거친 그림 (ceil(W/step) × ceil(H/step)) — 선명한 타일이 오기 전 자리 채우기용
+ */
+export function chunkRgba(b: DyeBoard, i: number, j: number, step = 1): Uint8ClampedArray {
+  const k = Math.max(1, Math.floor(step));
+  const w = Math.ceil(DYE_BOARD_W / k);
+  const h = Math.ceil(DYE_BOARD_H / k);
+  const off = k >> 1;
+  const out = new Uint8ClampedArray(w * h * 4);
+  // 이웃 구역 팔레트 (필요할 때 한 번만)
+  const near: (DyePalette | undefined)[] = new Array(9);
+  const pal = (di: number, dj: number): DyePalette => (near[(dj + 1) * 3 + di + 1] ??= chunkAt(b, i + di, j + dj));
+  const own = pal(0, 0);
+  const spots = own.spots.length > 0;
+  // 열마다 이음매 (이웃 방향·이웃 안 좌표·내 무게)
+  const colD = new Int8Array(w);
+  const colN = new Int32Array(w);
+  const colW = new Int32Array(w);
+  for (let x = 0; x < w; x++) {
+    const [d, n, wt] = seam(Math.min(DYE_BOARD_W - 1, x * k + off), DYE_BOARD_W);
+    colD[x] = d;
+    colN[x] = n;
+    colW[x] = wt;
+  }
+  for (let y = 0; y < h; y++) {
+    const ly = Math.min(DYE_BOARD_H - 1, y * k + off);
+    const [dj, ny, wy] = seam(ly, DYE_BOARD_H);
+    for (let x = 0; x < w; x++) {
+      const lx = Math.min(DYE_BOARD_W - 1, x * k + off);
+      const di = colD[x];
+      const wx = colW[x];
+      // boardBase와 같은 순서·같은 섞기
+      const mine = cellBase(own, lx, ly);
+      const rowA = wx < 256 ? mixRgb(mine, cellBase(pal(di, 0), colN[x], ly), wx) : mine;
+      let v = rowA;
+      if (wy !== 256) {
+        const vb = cellBase(pal(0, dj), lx, ny);
+        const rowB = wx < 256 ? mixRgb(vb, cellBase(pal(di, dj), colN[x], ny), wx) : vb;
+        v = mixRgb(rowA, rowB, wy);
+      }
+      if (spots) {
+        const s = spotAt(own, lx, ly);
+        if (s) v = spotRgb(s, lx, ly, v);
+      }
+      const o = (y * w + x) * 4;
+      out[o] = (v >> 16) & 255;
+      out[o + 1] = (v >> 8) & 255;
+      out[o + 2] = v & 255;
+      out[o + 3] = 255;
     }
+  }
   return out;
 }
 

@@ -64,8 +64,8 @@ describe("개발자 노트 데이터", () => {
     for (const w of ["분양사", "품종", "시즌 가구", "겨울 코디"]) expect(text).not.toContain(w);
   });
 
-  it("자주 묻는 질문: 33개, 분류가 모두 탭에 있다", () => {
-    expect(FAQ.items).toHaveLength(33);
+  it("자주 묻는 질문: 35개, 분류가 모두 탭에 있다", () => {
+    expect(FAQ.items).toHaveLength(35);
     for (const it of FAQ.items) expect(FAQ.cats).toContain(it.cat);
   });
 });

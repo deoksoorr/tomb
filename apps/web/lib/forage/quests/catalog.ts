@@ -63,7 +63,7 @@ export const QUEST_REWARDS: readonly QuestReward[] = [
   { id: "q_dye_special", name: "특수색 확정 염색권", price: 60, kind: "ticket", desc: "금빛 광택·반짝이·무지개·야광 중 하나를 골라 염색 (몇 장이든)" },
   { id: "q_pet_goldfish", name: "금붕어 펫", price: 80, kind: "cosmetic", slot: "pet", desc: "머리 위를 따라다니는 작은 금붕어" },
   { id: "q_aura_nightfish", name: "밤낚시 오라", price: 100, kind: "cosmetic", slot: "aura", tier: "rare", desc: "발밑에 밤 물결과 물고기 그림자" },
-  { id: "q_back_cape", name: "채집왕 망토", price: 120, kind: "cosmetic", slot: "back", tier: "rare", desc: "의뢰를 끝낸 자의 망토" },
+  { id: "q_back_cape", name: "채집왕 망토", price: 120, kind: "cosmetic", slot: "pack", tier: "rare", desc: "의뢰를 끝낸 자의 망토" },
   { id: "q_ride_carp", name: "월척 잉어", price: 150, kind: "cosmetic", slot: "pet", ride: true, desc: "타고 다니는 커다란 잉어" },
   { id: QUEST_BODY_REWARD, name: "수집가 유령 외형", price: 200, kind: "body", tier: "legend", desc: "수집가 유령의 모습 + 칭호 「수집왕」" },
   // 11/15 이달의 교환소 추가분 (화면은 protocol items.ts에 등록된 이름·설명을 먼저 쓴다)

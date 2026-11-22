@@ -27,6 +27,8 @@ import {
   type NameChangeResult,
   type NameClaimResult,
   type VisitResult,
+  type AccountReadOpts,
+  type AccountAppearance,
   type AccountRecord,
   type AccountStore,
   type AccountSummary,
@@ -537,13 +539,16 @@ redis.call('EXPIRE', KEYS[3], ${ECON_TTL_SEC})
 return bal
 `;
 
-// 11/22 꾸미기 되팔기: KEYS acct, look, stash, ledger, econ  ARGV item, permUntil, amount, walletMax, entry → -2 입는 중 | -1 영구로 벗어 둔 게 없음 | 새 잔액
+// 11/22 꾸미기 되팔기: KEYS acct, look, stash, ledger, econ, bought  ARGV item, permUntil, amount, walletMax, entry
+// → -2 입는 중 | -1 영구로 벗어 둔 게 없음 | -3 산 기록 없음(선물·보상) | 새 잔액. 팔면 산 기록도 지운다
 const SELL_LUA = `
 for _, v in ipairs(redis.call('HVALS', KEYS[2])) do
   if string.sub(v, 1, #ARGV[1] + 1) == ARGV[1] .. '|' then return -2 end
 end
 if tonumber(redis.call('HGET', KEYS[3], ARGV[1]) or '0') < tonumber(ARGV[2]) then return -1 end
+if redis.call('SISMEMBER', KEYS[6], ARGV[1]) == 0 then return -3 end
 redis.call('HDEL', KEYS[3], ARGV[1])
+redis.call('SREM', KEYS[6], ARGV[1])
 local before = tonumber(redis.call('HGET', KEYS[1], 'points') or '0')
 redis.call('HSETNX', KEYS[1], 'lifetime', before)
 local bal = math.min(tonumber(ARGV[4]), before + tonumber(ARGV[3]))
@@ -555,14 +560,32 @@ redis.call('EXPIRE', KEYS[5], ${ECON_TTL_SEC})
 return bal
 `;
 
+// 11/22 되팔기 전부터 가진 꾸미기의 산 기록 채우기 (계정마다 한 번): KEYS acct, bought  ARGV 산 것으로 칠 꾸미기 id들 → 1 채움 | 0 이미 채움·계정 없음
+const FILL_BOUGHT_LUA = `
+if redis.call('EXISTS', KEYS[1]) == 0 or redis.call('HEXISTS', KEYS[1], 'boughtFill') == 1 then return 0 end
+if #ARGV > 0 then redis.call('SADD', KEYS[2], unpack(ARGV)) end
+redis.call('HSET', KEYS[1], 'boughtFill', '1')
+return 1
+`;
+
 // 11/22 옷(back)·등(pack) 칸 나눔: 예전 back 칸에 입혀 둔 등 꾸미기를 pack 칸으로 옮긴다 (pack 칸이 비어 있을 때만)
 // KEYS look  ARGV from, to → 1 옮김 | 0
+// 11/22 옷(back) 칸에 남은 등 꾸미기를 등(pack) 칸으로. 등 칸이 이미 차 있으면 벗어 둔 꾸미기(stash)로 (남은 시간 그대로, 더 긴 쪽)
+// KEYS: look, stash  ARGV: from, to
 const SLOT_MOVE_LUA = `
 local v = redis.call('HGET', KEYS[1], ARGV[1])
-if not v or redis.call('HEXISTS', KEYS[1], ARGV[2]) == 1 then return 0 end
-redis.call('HSET', KEYS[1], ARGV[2], v)
+if not v then return 0 end
 redis.call('HDEL', KEYS[1], ARGV[1])
-return 1
+if redis.call('HEXISTS', KEYS[1], ARGV[2]) == 0 then
+  redis.call('HSET', KEYS[1], ARGV[2], v)
+  return 1
+end
+local item, untilMs = string.match(v, '^([^|]+)|(.+)$')
+if item then
+  local old = tonumber(redis.call('HGET', KEYS[2], item) or '0')
+  if tonumber(untilMs) > old then redis.call('HSET', KEYS[2], item, untilMs) end
+end
+return 2
 `;
 
 // 포인트 쓰기 (다른 기능 공용). 모자라면 -1, 아니면 남은 잔액
@@ -585,11 +608,31 @@ return 0
 `;
 
 // 가방에서 꺼내 입기 (입던 것은 stash로)
-// KEYS: inv, look, stash  ARGV: itemId, slot, until, now
+// KEYS: inv, look, stash  ARGV: itemId, slot, until(지금 + 이용 기간), now, permUntil → 1 이용권을 써서 입음 | 2 이미 영구로 가짐(이용권은 그대로, 영구로 입음) | 0 이용권 없음
+// 11/22 이미 영구로 가진 꾸미기면 이용권을 쓰지 않고 영구 그대로 입힌다 (예전엔 이용권으로 덮어써 영구가 24시간짜리가 됐다)
+// 11/22 기간제로 가진 꾸미기(입었든 벗어 뒀든)면 남은 기간에 이용 기간을 더한다 (관리자 기간 선물과 같은 규칙 — 기간이 줄지 않는다)
 const EQUIP_LUA = `${TAKE_FN}${LOOK_FN}
-if not take(KEYS[1], ARGV[1]) then return 0 end
 prune(KEYS[2], KEYS[3], tonumber(ARGV[4]))
-puton(KEYS[2], KEYS[3], ARGV[2], ARGV[1], ARGV[3])
+local perm = tonumber(ARGV[5])
+local cur = redis.call('HGET', KEYS[2], ARGV[2])
+if cur then
+  local ci, cu = string.match(cur, '^([^|]+)|(.+)$')
+  if ci == ARGV[1] and (tonumber(cu) or 0) >= perm then return 2 end
+end
+local had = redis.call('HGET', KEYS[3], ARGV[1])
+if had and (tonumber(had) or 0) >= perm then
+  puton(KEYS[2], KEYS[3], ARGV[2], ARGV[1], had)
+  return 2
+end
+if not take(KEYS[1], ARGV[1]) then return 0 end
+local now, u = tonumber(ARGV[4]), tonumber(ARGV[3])
+local left = tonumber(had or '0') or 0
+if cur then
+  local ci, cu = string.match(cur, '^([^|]+)|(.+)$')
+  if ci == ARGV[1] then left = math.max(left, tonumber(cu) or 0) end
+end
+if left > now then u = math.min(perm, left + (u - now)) end
+puton(KEYS[2], KEYS[3], ARGV[2], ARGV[1], string.format('%d', u))
 return 1
 `;
 
@@ -854,9 +897,10 @@ export class RedisAccounts implements AccountStore {
     this.redis = redisClient(conn, "accounts");
   }
 
-  async get(id: string, day: string, now: number): Promise<AccountRecord> {
+  async get(id: string, day: string, now: number, opts: AccountReadOpts = {}): Promise<AccountRecord> {
     // 오늘 적립 기록은 HGETALL 하나로 (합계·머문 기록·보너스 구간)
-    const [acct, inv, look, graves, earnToday, activity, stashRaw] = await this.redis
+    // 11/22 산 기록(bought)은 부른 쪽이 원할 때만 (내 정보·되팔기) — 이름·가방만 보는 읽기마다 SMEMBERS가 붙지 않게
+    const p = this.redis
       .pipeline()
       .hgetall(K.acct(id))
       .hgetall(K.inv(id))
@@ -864,17 +908,24 @@ export class RedisAccounts implements AccountStore {
       .smembers(K.acctGraves(id))
       .hgetall(K.earn(id, day))
       .lrange(K.activity(id), 0, -1)
-      .hgetall(K.stash(id))
-      .exec<[string[] | null, string[] | null, string[] | null, string[], unknown, string[], string[] | null]>();
+      .hgetall(K.stash(id));
+    if (opts.bought) p.smembers(K.bought(id));
+    const [acct, inv, look, graves, earnToday, activity, stashRaw, bought] = await p.exec<
+      [string[] | null, string[] | null, string[] | null, string[], unknown, string[], string[] | null, string[] | null | undefined]
+    >();
     const earnMap = hashEntries(earnToday);
     const [today, stay, bonus] = [earnMap.get("_total"), earnMap.get("_stay"), earnMap.get("_bonus")];
     const a = pairs(acct);
-    await this.fixLookSlots(id, pairs(look));
-    const equipped: EquippedItem[] = [...pairs(look).values()].flatMap((v) => {
+    // 옷 칸에 남은 등 꾸미기를 옮겼으면 (등 칸이 차 있어 벗어 둔 경우도) 이번 응답부터 맞게 다시 읽는다
+    const moved = await this.fixLookSlots(id, pairs(look));
+    const [lookNow, stashNow] = moved
+      ? await this.redis.pipeline().hgetall(K.look(id)).hgetall(K.stash(id)).exec<[string[] | null, string[] | null]>()
+      : [look, stashRaw];
+    const equipped: EquippedItem[] = [...pairs(lookNow).values()].flatMap((v) => {
       const [itemId, until] = v.split("|");
       return Number(until) > now ? [{ itemId, until: Number(until) }] : [];
     });
-    const stash: EquippedItem[] = [...pairs(stashRaw)]
+    const stash: EquippedItem[] = [...pairs(stashNow)]
       .map(([itemId, until]) => ({ itemId, until: Number(until) }))
       .filter((e) => e.until > now)
       .sort((x, y) => x.until - y.until || x.itemId.localeCompare(y.itemId));
@@ -893,6 +944,8 @@ export class RedisAccounts implements AccountStore {
       inventory: Object.fromEntries([...pairs(inv)].map(([k, v]) => [k, Number(v)])),
       equipped,
       stash,
+      ...(opts.bought ? { bought: (bought ?? []).map(String) } : {}),
+      boughtFilled: a.get("boughtFill") === "1",
       graves,
       todayEarned: Number(today ?? 0),
       activityUnread: activity.filter((raw) => {
@@ -968,11 +1021,11 @@ export class RedisAccounts implements AccountStore {
     );
   }
 
-  async sellPermanent(id: string, itemId: string, amount: number, reason: string, now: number): Promise<number | "worn" | "none"> {
+  async sellPermanent(id: string, itemId: string, amount: number, reason: string, now: number): Promise<number | "worn" | "none" | "gift"> {
     assertPointAmount(amount);
     const entry = JSON.stringify({ at: now, amount, reason });
     const r = Number(
-      await this.redis.eval<string[], number>(SELL_LUA, [K.acct(id), K.look(id), K.stash(id), K.ledger(id), await econKeyFor(id, kstDay(now))], [
+      await this.redis.eval<string[], number>(SELL_LUA, [K.acct(id), K.look(id), K.stash(id), K.ledger(id), await econKeyFor(id, kstDay(now)), K.bought(id)], [
         itemId,
         String(PERMANENT_UNTIL),
         String(amount),
@@ -980,29 +1033,48 @@ export class RedisAccounts implements AccountStore {
         entry,
       ]),
     );
-    return r === -2 ? "worn" : r === -1 ? "none" : r;
+    return r === -2 ? "worn" : r === -1 ? "none" : r === -3 ? "gift" : r;
   }
 
-  /** 11/22 칸 이름과 아이템 칸이 다른 착용(예전 back 칸의 등 꾸미기)을 제 칸으로 옮긴다 */
-  private async fixLookSlots(id: string, look: Map<string, string>): Promise<void> {
+  async fillBought(id: string, items: readonly string[]): Promise<boolean> {
+    return Number(await this.redis.eval<string[], number>(FILL_BOUGHT_LUA, [K.acct(id), K.bought(id)], [...items])) === 1;
+  }
+
+  async ledger(id: string): Promise<{ at: number; amount: number; reason: string }[]> {
+    const rows = await this.redis.lrange<unknown>(K.ledger(id), 0, 99);
+    return rows.flatMap((r) => {
+      try {
+        const e = (typeof r === "string" ? JSON.parse(r) : r) as { at?: unknown; amount?: unknown; reason?: unknown };
+        return typeof e?.reason === "string" ? [{ at: Number(e.at) || 0, amount: Number(e.amount) || 0, reason: e.reason }] : [];
+      } catch {
+        return [];
+      }
+    });
+  }
+
+  /** 11/22 칸 이름과 아이템 칸이 다른 착용(예전 back 칸의 등 꾸미기)을 제 칸으로 옮긴다 — 옮긴 게 있으면 true (부르는 쪽이 착용·stash를 다시 읽는다) */
+  private async fixLookSlots(id: string, look: Map<string, string>): Promise<boolean> {
+    let moved = false;
     for (const [field, v] of look) {
       const slot = itemById(v.split("|")[0])?.slot;
-      if (field === "back" && slot === "pack") await this.redis.eval<string[], number>(SLOT_MOVE_LUA, [K.look(id)], ["back", "pack"]);
+      if (field === "back" && slot === "pack") moved = Number(await this.redis.eval<string[], number>(SLOT_MOVE_LUA, [K.look(id), K.stash(id)], ["back", "pack"])) > 0 || moved;
     }
+    return moved;
   }
 
-  async appearance(id: string, now: number): Promise<Pick<AccountRecord, "name" | "color" | "body" | "equipped">> {
+  async appearance(id: string, now: number): Promise<AccountAppearance> {
+    // 11/22 새싹 판정(stayMin·createdAt)도 같은 HMGET에 (명령 수 그대로)
     const [nb, look] = await this.redis
       .pipeline()
-      .hmget(K.acct(id), "name", "color", "body")
+      .hmget(K.acct(id), "name", "color", "body", "stayMin", "createdAt")
       .hgetall(K.look(id))
       .exec<[unknown, string[] | null]>();
-    const [name, color, body] = hmgetList(nb, ["name", "color", "body"]);
+    const [name, color, body, stayMin, createdAt] = hmgetList(nb, ["name", "color", "body", "stayMin", "createdAt"]);
     const equipped: EquippedItem[] = [...pairs(look).values()].flatMap((v) => {
       const [itemId, until] = v.split("|");
       return Number(until) > now ? [{ itemId, until: Number(until) }] : [];
     });
-    return { name: name ?? null, color: color ?? null, body: body ?? null, equipped };
+    return { name: name ?? null, color: color ?? null, body: body ?? null, equipped, stayMin: Number(stayMin ?? 0) || 0, createdAt: Number(createdAt ?? 0) || 0 };
   }
 
   async presence(id: string, day: string, now: number): Promise<number | null> {
@@ -1332,8 +1404,9 @@ export class RedisAccounts implements AccountStore {
       slot,
       String(until),
       String(now),
+      String(PERMANENT_UNTIL),
     ]);
-    return Number(r) === 1;
+    return Number(r) >= 1;
   }
 
   async wear(id: string, itemId: string, slot: CosmeticSlot, now: number): Promise<boolean> {

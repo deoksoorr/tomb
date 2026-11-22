@@ -44,6 +44,9 @@ export class ChairmanHostScene extends Phaser.Scene {
       bridge.on("rpg:ended", () => {
         if (!this.inRun) return;
         this.inRun = false;
+        // 11/22 안전장치: 결과도 나가기도 없이 판이 끝났으면(판 티켓이 남아 있음 — 시작 전에 다른 길로 닫힘) 브리핑 「나가기」처럼
+        // 판을 돌려받기 부르고 회장님 화면을 닫는다. 정상 종료(결과·마을로·나가기·한 판 더)는 이 신호 전에 티켓을 이미 비운다
+        if (this.cur) void this.leave();
       }),
     ];
     const ctx = this.registry.get("ctx") as GameContext | undefined;

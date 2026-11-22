@@ -1,36 +1,50 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type Ref } from "react";
-import { DIR, dyeOfTarget, isCharDyePart, type DyePart, type DyeTarget } from "@tomb/protocol";
+import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type Ref } from "react";
+import { DIR, dyeOfTarget, isCharDyePart, itemById, type DirId, type DyePart, type DyeSpecial, type DyeTarget } from "@tomb/protocol";
 import { avatarColors, specDye, withDyePart } from "@/game/sprites/avatar";
 import { ApiRequestError, errorMessage } from "@/lib/api";
 import { dyeApi } from "@/lib/dye/client";
 import { colorLabel, swatchStyle } from "@/lib/dye/look";
-import { boardColor, buildBoard, cellOf, chunkRgba, chunkSpots, DYE_BOARD_H, DYE_BOARD_W, DYE_TIERS, DYE_TIME_MS, specialLabel, wobbleLabel, type DyeTier } from "@/lib/dye/palette";
-import { DYE_DECIDE_MS, dyeTargetBlock, dyeTargetName, fixedAllows } from "@/lib/dye/rules";
+import { boardColor, buildBoard, cellOf, DYE_BOARD_H, DYE_BOARD_W, DYE_TIERS, DYE_TIME_MS, specialLabel, wobbleLabel, type DyeSpot, type DyeTier } from "@/lib/dye/palette";
+import { DYE_DECIDE_MS, dyeTargetBlock, dyeTargetName, fixedAllows, specialDyeColor } from "@/lib/dye/rules";
 import type { DyeCandidate, DyeSessionView, DyeTimeoutResponse, StyleChangeResponse } from "@/lib/dye/types";
-import { meStore } from "@/lib/hooks/useMe";
+import { meStore, useMe } from "@/lib/hooks/useMe";
 import { applyStyle } from "../account/actions";
 import { OutfitCanvas } from "../shop/OutfitPreview";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
+import ItemIcon from "../ui/ItemIcon";
+import PixelIcon from "../ui/PixelIcon";
 import ui from "../ui/ui.module.css";
-import { aimAt, BoardPointers, clampView, dyeCloseGuard, keyPan, PAN_KEYS, startScale, toBoard, wheelFactor, zoomAt, type BoardView } from "./board";
+import { aimAt, BoardPointers, clampView, dyeCloseGuard, easeVelocity, keyTarget, overwriteDismissCloses, PAN_KEYS, startScale, tilePlan, toBoard, visibleChunks, wheelFactor, zoomAt, type BoardView } from "./board";
+import { DyeTiles } from "./tiles";
+import { coverGame } from "@/lib/gameCover";
 import { drawSpots } from "./spots";
 import { fittingLook } from "../shop/fitting";
-import DyePartPicker, { DyeSlotPicker, type ItemDyes } from "./DyePartPicker";
+import { ColorPicker, hexHsv, hsvHex, SpecialPicker, type Hsv } from "./colorPick";
+import { defaultDyeSlot, needsOverwrite, openColors, otherEmptySlot, otherPaintedColors, type ItemDyes } from "./colorSlots";
+import { colorText, SlotPicker, TargetPicker } from "./DyeTargetPicker";
+import ZoomStage from "./ZoomStage";
 import styles from "./DyeDialog.module.css";
 import { OddsLink } from "../odds/OddsLayer";
 
-// 46번 염색 창. 무작위 염색권: 부위 고르기 → 60초 동안 무작위 팔레트(일부만 보이는 연속 색 공간)를 드래그·휠(핀치)로 뒤진다.
+// 46번 염색 창 (11/22 염색권 네 가지가 한 창: 무작위 · 고정 색 · 색 확정 · 특수색 확정).
+// 새 고르기 화면 = ① 어디에 칠할까요(캐릭터 · 입은 꾸미기) ② 어느 칸에(아이템 색 보관함 칸) → [다음] (염색권 탭·상점에서 열 때).
+// 그다음 실제 염색은 예전 화면 그대로: 무작위 = 60초 판, 고정 색·색 확정·특수색 확정 = 미리보기 + 색 고르기 + [염색하기] (칠할 곳 한 줄만 더했다).
+// 가방 아이템 페이지에서 열면 칠할 곳·칸이 정해져 고르기 화면 없이 바로 예전 화면(무작위는 바로 판). 칠한 칸에 다시 칠하면 한 번 묻는다
+// (비어 있는 다른 칸이 있으면 그 칸에 칠하기도 고를 수 있다).
+// 무작위 염색권: 60초 동안 무작위 팔레트(일부만 보이는 연속 색 공간)를 드래그·휠(핀치)로 뒤진다.
 // 조준점은 마우스를 따라가고(폰은 화면 가운데) 흔들린다 — 그 아래 색이 바로 "지금 고른 색"(미리보기에 입혀짐).
 // [이 색으로 염색]·엔터를 누른 순간의 조준점 색으로 확정. 시간이 끝나면 그 순간 조준점 색을 후보로 "지금 색 vs 새 색"을 고른다
 // (안 고르면 지금 색 유지). 도중에 창을 닫으면 포기 — 색은 그대로, 염색권은 쓴 것으로.
-// 고정 색 염색권: 부위만 고르면 미리 보고 바로 그 색. 결과 색은 서버가 정한다 (여기서는 판 좌표만 보낸다).
+// 고정 색·색 확정·특수색 확정: 미리 보고 [칠하기]를 누를 때만 염색권 1장을 쓴다. 결과 색은 서버가 정한다 (무작위는 판 좌표만 보낸다).
 
 export type DyeTicket =
   | { itemId: string; name: string; mode: "random"; tier: DyeTier }
-  | { itemId: string; name: string; mode: "fixed"; color: string; parts?: DyePart[] };
+  | { itemId: string; name: string; mode: "fixed"; color: string; parts?: DyePart[] }
+  /** 11/15 수집 의뢰 염색권: 색 확정(pick) · 특수색 확정(special) — 판 없이 색을 골라 바로 칠한다 */
+  | { itemId: string; name: string; mode: "pick" | "special" };
 
 type Props = {
   /** 쓸 염색권 (진행 중인 판을 이어서 할 때는 null) */
@@ -46,12 +60,25 @@ type Props = {
   onDone?: (message: string) => void;
   /** 11/22 아이템마다 색 보관함 (내 정보 itemDyes) — 칠할 칸 고르기 */
   itemDyes?: ItemDyes;
-  /** 11/22 처음 골라 둘 대상 (가방 아이템 [염색]에서 열면 그 아이템 id) */
+  /** 11/22 처음 골라 둘 대상 (가방 아이템 페이지에서 열면 그 아이템 id) */
   initialTarget?: DyeTarget;
+  /** 11/22 처음 골라 둘 칸 (아이템 페이지에서 고른 커스텀 칸) */
+  initialSlot?: number;
+  /** 11/22 칠할 곳·칸이 정해진 채 연다 (아이템 페이지 [이 칸 칠하기]) — 고르기 화면 없이 바로 예전 염색 화면 */
+  lockTarget?: boolean;
+  /** 11/22 열자마자 시작 (아이템 페이지에서 무작위 염색권 [판 시작]) — 칠한 칸이면 먼저 묻는다 */
+  autoStart?: boolean;
 };
 
 type Phase = "part" | "play" | "choose" | "sending" | "done";
 type Picked = { x: number; y: number; color: string };
+
+/** 돌려 보기 순서 (앞 → 오른쪽 → 뒤 → 왼쪽) */
+const TURN: readonly DirId[] = [DIR.down, DIR.right, DIR.up, DIR.left];
+/** 11/22 운영자: 등 칸 꾸미기(망토·배낭 등)를 칠할 땐 뒷모습으로 보여 준다 */
+function facingOf(part: DyeTarget): DirId {
+  return !isCharDyePart(part) && itemById(part)?.slot === "pack" ? DIR.up : DIR.down;
+}
 
 const hexOf = (c: number) => `#${c.toString(16).padStart(6, "0")}`;
 /** 지금 그 부위·아이템 색 (기본 포인트·안 칠한 아이템은 몸·꾸미기마다 달라 "기본"으로 보인다) */
@@ -63,23 +90,20 @@ function partColor(spec: string, part: DyeTarget): string | null {
   return hexOf(part === "head" ? c.head : c.body);
 }
 
-/** 아이템 색 보관함에서 처음 골라 둘 칸: 지금 입는 칸 · 첫 빈 칸 · 0 (서버 assertDyeable과 같은 규칙) */
-export function defaultDyeSlot(itemDyes: ItemDyes | undefined, item: DyeTarget): number {
-  const st = itemDyes?.[item];
-  if (!st) return 0;
-  if (st.sel >= 0) return st.sel;
-  const empty = st.colors.findIndex((c) => !c);
-  return empty >= 0 ? empty : 0;
-}
-
-export default function DyeDialog({ ticket, resume, avatar, look: wornLook, onClose, onDone, itemDyes, initialTarget }: Props) {
+export default function DyeDialog({ ticket, resume, avatar, look: wornLook, onClose, onDone, itemDyes, initialTarget, initialSlot, lockTarget = false, autoStart = false }: Props) {
+  const { me } = useMe();
   const [phase, setPhase] = useState<Phase>(resume?.candidate ? "choose" : resume ? "play" : "part");
   const [part, setPart] = useState<DyeTarget>(resume?.part ?? initialTarget ?? (ticket?.mode === "fixed" && ticket.parts?.length ? ticket.parts[0] : "body"));
   /** 11/22 아이템의 칠할 색 칸 (대상이 바뀌면 그 아이템의 기본 칸) */
-  const [slotPick, setSlotPick] = useState<{ t: DyeTarget; k: number } | null>(null);
+  const [slotPick, setSlotPick] = useState<{ t: DyeTarget; k: number } | null>(initialTarget && initialSlot !== undefined ? { t: initialTarget, k: initialSlot } : null);
   const slot = slotPick?.t === part ? slotPick.k : defaultDyeSlot(itemDyes, part);
   const itemTarget = !isCharDyePart(part);
-  const slotColors = itemTarget ? (itemDyes?.[part]?.colors.length ? itemDyes[part].colors : [null]) : [];
+  const slotColors = itemTarget ? openColors(itemDyes, part) : [];
+  /**
+   * 11/22 시작 단계 화면: where = 새 고르기 화면(① 칠할 곳 ② 칸, 염색권 탭·상점에서 열 때),
+   * color = 예전 염색 화면(미리보기 · 색 고르기 · [염색하기] — 아이템 페이지에서 칠할 곳·칸을 정하고 열면 바로 여기)
+   */
+  const [step, setStep] = useState<"where" | "color">(lockTarget ? "color" : "where");
   /** 이미 칠한 칸에 다시 칠하기 확인 */
   const [askOverwrite, setAskOverwrite] = useState(false);
   // 입지 않은 아이템을 칠하면(가방에서 연 경우) 미리보기에 그 아이템을 입혀 본다
@@ -92,16 +116,47 @@ export default function DyeDialog({ ticket, resume, avatar, look: wornLook, onCl
   const [candidate, setCandidate] = useState<DyeCandidate | null>(() =>
     resume?.candidate ? { color: resume.candidate.color, decideBy: Date.now() + (resume.candidate.decideBy - resume.serverNow) } : null,
   );
-  const [spec, setSpec] = useState(avatar.color);
+  // 칠하기 전 모습: 입지 않은 아이템의 색 보관함 색도 입혀 둔다 (가방에서 고른 색으로 보이게)
+  const [spec, setSpec] = useState(() => {
+    const t = initialTarget;
+    const st = t && !isCharDyePart(t) ? itemDyes?.[t] : undefined;
+    const c = st && st.sel >= 0 ? st.colors[st.sel] : null;
+    return t && c && !dyeOfTarget(specDye(avatar.color), t) ? withDyePart(avatar.color, t, c) : avatar.color;
+  });
   const [body, setBody] = useState(avatar.body);
   /** Esc로 띄운 "그만둘까요?" 확인 (판·고르기 단계) */
   const [confirmQuit, setConfirmQuit] = useState(false);
+  // 색 확정: 처음 색은 칠할 칸·부위의 지금 색 (없으면 하늘색)
+  const [hsv, setHsv] = useState<Hsv>(() => {
+    const now = itemTarget ? openColors(itemDyes, part)[slot] : partColor(avatar.color, part);
+    return hexHsv(now ? now.slice(0, 7) : "#4aa8f0");
+  });
+  const [kind, setKind] = useState<DyeSpecial>("s");
+  /** 예전 색 확정 화면의 [돌려 보기] */
+  const [dirIdx, setDirIdx] = useState(() => TURN.indexOf(facingOf(part)));
+  // 칠할 곳을 바꾸면 그쪽이 잘 보이는 방향부터
+  useEffect(() => setDirIdx(TURN.indexOf(facingOf(part))), [part]);
 
-  const fixedColor = ticket?.mode === "fixed" ? ticket.color : null;
+  const mode = ticket?.mode ?? "random";
   const allowed = (p: DyeTarget) => ticket?.mode !== "fixed" || fixedAllows(ticket.parts, p);
   // 11/22 색을 바꿀 수 없는 꾸미기면 시작하지 않는다 (서버도 같은 규칙으로 거절 — 염색권은 그대로)
   const blocked = phase === "part" || phase === "sending" ? dyeTargetBlock(part, () => true) : null;
-  const slotArg = itemTarget ? slot : undefined;
+  /** 칠할 색 (무작위는 판에서 고르니 아직 없다). 특수색 바탕은 서버와 같은 규칙: 아이템은 칠할 칸의 색, 캐릭터는 지금 색 */
+  const newColor =
+    ticket?.mode === "fixed"
+      ? ticket.color
+      : ticket?.mode === "pick"
+        ? hsvHex(hsv)
+        : ticket?.mode === "special"
+          ? specialDyeColor(kind, itemTarget ? slotColors[slot] : dyeOfTarget(specDye(spec), part))
+          : null;
+  // 끄는 동안은 120ms마다 한 번만 미리보기에 입힌다
+  const [preview, setPreview] = useState(newColor);
+  useEffect(() => {
+    const t = setTimeout(() => setPreview(newColor), PREVIEW_MS);
+    return () => clearTimeout(t);
+  }, [newColor]);
+  const owned = ticket ? (me?.inventory[ticket.itemId] ?? 0) : 0;
 
   function finished(res: StyleChangeResponse, late = false) {
     // 내 정보 + 게임의 내 아바타(look:set)를 바로 바꾼다
@@ -114,7 +169,7 @@ export default function DyeDialog({ ticket, resume, avatar, look: wornLook, onCl
     setCandidate(null);
     setResult({ part: p, late: late || !!res.late, kept, before: spec });
     setPhase("done");
-    onDone?.(kept ? `${dyeTargetName(p)} 색은 그대로 두었어요.` : `${dyeTargetName(p)}을(를) ${color}(으)로 염색했어요.`);
+    onDone?.(kept ? `${dyeTargetName(p)} 색은 그대로 두었어요.` : `${dyeTargetName(p)}을(를) ${colorLabel(color)}(으)로 염색했어요.`);
   }
 
   /** 시간 끝 → 후보 색 (없으면 너무 늦어 색 그대로 끝남) */
@@ -141,33 +196,35 @@ export default function DyeDialog({ ticket, resume, avatar, look: wornLook, onCl
     onClose();
   }
 
-  async function begin(confirmed = false) {
+  /** 칠하기·판 시작. k = 칠할 칸 (덮어쓰기 확인에서 [빈 칸에 칠하기]를 고르면 그 칸) */
+  async function begin(confirmed = false, k = slot) {
     if (!ticket) return;
     setError(null);
     // 11/22 이미 칠한 칸에 다시 칠하면 덮어쓴다 → 한 번 묻는다
-    if (itemTarget && slotColors[slot] && !confirmed) {
+    if (itemTarget && needsOverwrite(slotColors, k) && !confirmed) {
       setAskOverwrite(true);
       return;
     }
     setAskOverwrite(false);
-    if (ticket.mode === "fixed") {
-      setPhase("sending");
-      try {
-        finished(await dyeApi.fixed(ticket.itemId, part, slotArg));
-      } catch (e) {
-        setError(errorMessage(e));
-        setPhase("part");
-      }
-      return;
-    }
+    const slotArg = itemTarget ? k : undefined;
     setPhase("sending");
     try {
-      const res = await dyeApi.start(ticket.itemId, part, slotArg);
-      // 서버가 염색권 1장을 뺐다(또는 진행 중인 판을 이어 줌) → 가방 표시를 서버 값으로
-      meStore.set(res.me);
-      setSession(res.session);
-      setPart(res.session.part);
-      setPhase("play");
+      if (ticket.mode === "random") {
+        const res = await dyeApi.start(ticket.itemId, part, slotArg);
+        // 서버가 염색권 1장을 뺐다(또는 진행 중인 판을 이어 줌) → 가방 표시를 서버 값으로
+        meStore.set(res.me);
+        setSession(res.session);
+        setPart(res.session.part);
+        setPhase("play");
+        return;
+      }
+      finished(
+        ticket.mode === "fixed"
+          ? await dyeApi.fixed(ticket.itemId, part, slotArg)
+          : ticket.mode === "pick"
+            ? await dyeApi.pick(ticket.itemId, part, hsvHex(hsv), slotArg)
+            : await dyeApi.special(ticket.itemId, part, kind, slotArg),
+      );
     } catch (e) {
       setError(errorMessage(e));
       setPhase("part");
@@ -176,17 +233,45 @@ export default function DyeDialog({ ticket, resume, avatar, look: wornLook, onCl
     }
   }
 
-  const title = phase === "choose" ? "색 고르기" : phase === "play" || phase === "sending" ? "염색 중" : "염색";
+  // 11/22 아이템 페이지에서 [판 시작]을 눌러 열었으면 바로 시작 (칠한 칸이면 덮어쓰기부터 묻는다)
+  const autoRef = useRef(autoStart);
+  useEffect(() => {
+    if (!autoRef.current) return;
+    autoRef.current = false;
+    void begin();
+    // 처음 한 번만
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const title = phase === "choose" ? "색 고르기" : phase === "play" ? "염색 중" : phase === "done" ? "염색" : (ticket?.name ?? "염색");
   const guard = dyeCloseGuard(phase);
-  const previewSpec = phase === "part" && fixedColor ? withDyePart(spec, part, fixedColor) : spec;
+  const setup = phase === "part" || phase === "sending";
+  /** 새 고르기 화면(① 칠할 곳 ② 칸)인지 — 아니면 예전 염색 화면 (색 고르기·시작) */
+  const choosing = setup && step === "where";
+  const sending = phase === "sending";
+  const targetName = dyeTargetName(part);
+  const where = itemTarget ? `${targetName} 커스텀 ${slot + 1}` : targetName;
+  const empty = itemTarget ? otherEmptySlot(itemDyes, part, slot) : null;
+  /**
+   * 덮어쓰기 확인을 그만두기 (× · Esc · [그만두기]): 아이템 페이지에서 무작위 염색권으로 바로 연 창(autoStart)이면 판 설명 화면에 남지 않고
+   * 창을 닫아 아이템 페이지로 돌아간다 (11/22 운영자 보고 — 다시 [염색 시작]을 누르면 같은 확인이 되풀이됐다). 색 고르기 화면에서 물었으면 그 화면으로
+   */
+  function dismissOverwrite() {
+    setAskOverwrite(false);
+    if (overwriteDismissCloses({ autoStart, lockTarget, phase })) onClose();
+  }
 
   return (
-    // 판을 도는 동안만 표준 창. 시작(부위 고르기)·비교(고르기)·결과 단계는 내용 크기에 맞는 작은 창
+    // 시작 화면·판은 표준 창, 시간 끝 고르기·결과는 내용 크기에 맞는 작은 창
     // 판·고르기·결과 단계는 배경 클릭으로 닫히지 않는다. 판·고르기는 Esc가 그만두기 확인을 거친다 (× 만 바로 닫는다)
     <Dialog
       title={title}
       onClose={close}
-      kind={phase === "play" ? "window" : "confirm"}
+      onBack={setup ? (step === "color" && !lockTarget ? () => setStep("where") : close) : undefined}
+      kind={phase === "play" || choosing ? "window" : "confirm"}
+      // 11/22 연 창(가방·아이템 페이지·상점)은 감추고, 데스크톱은 창 높이를 내용에 맞춘다 (판은 정해 둔 높이 — DyeDialog.module.css .play)
+      coverBelow
+      fitHeight={choosing || phase === "play"}
       backdropClose={guard.backdrop}
       onEscape={guard.escConfirm ? () => setConfirmQuit((q) => !q) : undefined}
     >
@@ -232,78 +317,190 @@ export default function DyeDialog({ ticket, resume, avatar, look: wornLook, onCl
               beforeTitle="이전"
               afterTitle={result.kept ? "그대로" : "바꾼 뒤"}
             />
-            {!result.kept && <p className={styles.note}>원래 색으로 되돌리기는 상점의 염색·외형에서 할 수 있어요.</p>}
+            {!result.kept && (
+              <p className={styles.note}>
+                {isCharDyePart(result.part) ? "원래 색으로 되돌리기는 상점의 염색·외형에서 할 수 있어요." : "가방 [꾸미기]의 색 보관함에서 언제든 다른 칸 색으로 바꿔 입어요."}
+              </p>
+            )}
             <div className={styles.actions}>
               <button type="button" className={cx(ui.button, ui.primary)} onClick={close}>
                 닫기
               </button>
             </div>
           </div>
-        ) : (
-          <div className={cx(styles.row, styles.start)}>
-            <div className={cx(styles.figure, styles.figureSmall)}>
-              <OutfitCanvas color={previewSpec} body={body} look={look} label={fixedColor ? "염색해 본 내 모습" : "지금 내 모습"} dir={DIR.down} walking={false} />
-            </div>
-            <div className={styles.side}>
-              <p className={styles.note}>
-                {ticket?.name ?? "염색권"} ·{" "}
-                {ticket?.mode === "fixed"
-                  ? "정해진 색으로 바로 염색해요."
-                  : `60초 안에 무작위 판에서 색을 찾아요. 흔들림 ${ticket ? wobbleLabel(ticket.tier) : ""}, 특수 색은 ${ticket ? specialLabel(ticket.tier) : ""}.`}
-                {ticket?.mode !== "fixed" && (
-                  <>
-                    {" "}
-                    <OddsLink section="dye" label="특수 색 확률 보기" />
-                  </>
-                )}
-              </p>
-              <DyePartPicker spec={spec} look={wornLook} target={part} onPick={setPart} allowed={allowed} disabled={phase === "sending"} baseColor={(p) => partColor(spec, p)} extraItem={initialTarget && !isCharDyePart(initialTarget) ? initialTarget : null} />
-              {itemTarget && !blocked && <DyeSlotPicker colors={slotColors} slot={slot} onPick={(k) => setSlotPick({ t: part, k })} disabled={phase === "sending"} />}
-              {askOverwrite && (
-                <div className={styles.quit} role="alertdialog" aria-label="덮어쓰기 확인">
-                  <p className={styles.note}>커스텀 {slot + 1} 칸은 이미 칠했어요. 새 색으로 덮어쓸까요?</p>
-                  <div className={styles.actions}>
-                    <button type="button" className={ui.button} onClick={() => setAskOverwrite(false)}>
-                      그만두기
-                    </button>
-                    <button type="button" className={cx(ui.button, ui.primary)} onClick={() => void begin(true)}>
-                      덮어쓰기
-                    </button>
-                  </div>
+        ) : choosing ? (
+            // ── 새 고르기 화면: ① 어디에 칠할까요 ② 어느 칸에 → [다음] (무작위는 바로 60초 판) ──
+            <div className={styles.setup}>
+              <figure className={styles.now}>
+                <figcaption className={styles.baCap}>지금 내 모습</figcaption>
+                <ZoomStage className={styles.nowStage} color={spec} body={body} look={look} label="지금 내 모습" dir={facingOf(part)} />
+              </figure>
+              <div className={styles.steps}>
+                <section className={styles.step}>
+                  <h3 className={styles.stepHead}>
+                    <span className={styles.stepN}>1</span>
+                    어디에 칠할까요
+                  </h3>
+                  <TargetPicker
+                    spec={spec}
+                    look={wornLook}
+                    target={part}
+                    onPick={setPart}
+                    allowed={allowed}
+                    disabled={sending}
+                    baseColor={(p) => partColor(spec, p)}
+                    extraItem={initialTarget && !isCharDyePart(initialTarget) ? initialTarget : null}
+                  />
+                </section>
+                <section className={styles.step}>
+                  <h3 className={styles.stepHead}>
+                    <span className={styles.stepN}>2</span>
+                    어느 칸에 칠할까요
+                    {itemTarget && !blocked && <span className={styles.stepAside}>원래 색 칸은 칠할 수 없어요</span>}
+                  </h3>
+                  {itemTarget && !blocked ? (
+                    <SlotPicker itemDyes={itemDyes} item={part} slot={slot} onPick={(k) => setSlotPick({ t: part, k })} disabled={sending} />
+                  ) : (
+                    <p className={styles.note}>{blocked ? `${blocked} 염색권은 쓰지 않아요.` : "캐릭터 부위는 칸 없이 한 가지 색이에요."}</p>
+                  )}
+                </section>
+                {error && <p className={ui.error}>{error}</p>}
+                <div className={styles.bar}>
+                  <span className={styles.barSum}>
+                    <b>{where}</b>에 칠해요
+                    <span className={styles.barCount}>
+                      {ticket?.name} {owned}장 있어요
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    className={cx(ui.button, ui.primary, styles.go)}
+                    disabled={!ticket || owned < 1 || !allowed(part) || !!blocked || sending}
+                    onClick={() => (mode === "random" ? void begin() : setStep("color"))}
+                  >
+                    {sending ? "잠깐만요…" : mode === "random" ? "시작 · 60초" : "다음"}
+                  </button>
                 </div>
-              )}
-              {blocked && (
-                <p className={styles.note} role="status">
-                  {blocked} 염색권은 쓰지 않아요.
-                </p>
-              )}
-              {fixedColor && (
-                <p className={styles.pick}>
-                  <span className={styles.swatchBig} style={{ background: fixedColor }} aria-hidden="true" />
-                  {fixedColor}. 왼쪽이 염색해 본 모습이에요.
-                </p>
-              )}
-              {ticket?.mode === "random" && (
-                <p className={styles.note}>
-                  시작하면 염색권 1장을 써요. 판을 끌어서 옮기고, 휠로 확대·축소해요. 폰은 두 손가락을 써요. 가운데 조준점 아래 색이 지금 고른
-                  색이에요. [이 색으로 염색]을 누르면 정해져요. 시간이 끝나면 그때 색과 지금 색 중에서 골라요. 도중에 창을 닫으면 색은 그대로고
-                  염색권은 돌아오지 않아요.
-                </p>
-              )}
-              {error && <p className={ui.error}>{error}</p>}
-              <div className={styles.actions}>
-                <button type="button" className={ui.button} onClick={close}>
-                  닫기
-                </button>
-                <button type="button" className={cx(ui.button, ui.primary)} disabled={!ticket || !allowed(part) || !!blocked || phase === "sending"} onClick={() => void begin()}>
-                  {phase === "sending" ? "잠깐만요…" : ticket?.mode === "fixed" ? `${dyeTargetName(part)}을(를) 이 색으로` : `${dyeTargetName(part)} 염색 시작 (60초)`}
-                </button>
               </div>
             </div>
-          </div>
+          ) : (
+            // ── 예전 염색 화면 (오늘 개편 전 모양 그대로 + 칠할 곳 한 줄): 미리보기 · 설명 · 색 고르기 · [염색하기] ──
+            <div className={cx(styles.row, styles.start)}>
+              {/* 11/22 미리보기는 낮게, 캐릭터는 크게 (빈 땅을 줄여 창이 화면 안에 들어오게) */}
+              <div className={styles.colorFig}>
+                <ZoomStage
+                  className={styles.colorStage}
+                  color={preview ? withDyePart(spec, part, preview) : spec}
+                  body={body}
+                  look={look}
+                  label={preview ? "염색해 본 내 모습" : "지금 내 모습"}
+                  dir={TURN[dirIdx]}
+                />
+                <button type="button" className={cx(ui.button, styles.turn)} onClick={() => setDirIdx((i) => (i + 1) % TURN.length)}>
+                  돌려 보기
+                </button>
+              </div>
+              <div className={styles.side}>
+                <p className={styles.target}>
+                  {itemTarget && <ItemIcon itemId={part} size={24} dye={slotColors[slot] ?? undefined} />}
+                  <span>
+                    <b>{where}</b>
+                    {itemTarget && <span className={styles.note}> · {slotColors[slot] ? `${colorText(slotColors[slot]!)} 위에 덮어 칠해요` : "빈 칸에 칠해요"}</span>}
+                  </span>
+                </p>
+                <p className={styles.note}>
+                  {ticket?.mode === "pick" ? (
+                    "원하는 색을 골라 그대로 칠해요. [염색하기]를 누를 때만 염색권 1장을 써요."
+                  ) : ticket?.mode === "special" ? (
+                    "특수 색 하나를 골라 입혀요. 금빛 광택 말고는 지금 색에 효과만 더해요."
+                  ) : ticket?.mode === "fixed" ? (
+                    "정해진 색으로 바로 칠해요. 누를 때만 염색권 1장을 써요."
+                  ) : (
+                    <>
+                      {ticket?.name ?? "염색권"} · 60초 안에 무작위 판에서 색을 찾아요. 흔들림 {ticket?.mode === "random" ? wobbleLabel(ticket.tier) : ""}, 특수 색은{" "}
+                      {ticket?.mode === "random" ? specialLabel(ticket.tier) : ""}. <OddsLink section="dye" label="특수 색 확률 보기" />
+                    </>
+                  )}
+                </p>
+                {ticket?.mode === "pick" && <ColorPicker hsv={hsv} onChange={setHsv} disabled={sending} mine={itemTarget ? otherPaintedColors(itemDyes, part, slot) : []} />}
+                {ticket?.mode === "special" && <SpecialPicker kind={kind} onChange={setKind} disabled={sending} />}
+                {newColor && ticket?.mode !== "pick" && (
+                  <p className={styles.pick}>
+                    <span className={styles.swatchBig} style={swatchStyle(newColor)} aria-hidden="true" />
+                    <span className={styles.hex}>{colorLabel(newColor)}</span>
+                  </p>
+                )}
+                {ticket?.mode === "random" && (
+                  <p className={styles.note}>
+                    시작하면 염색권 1장을 써요. 판을 끌어서 옮기고, 휠로 확대·축소해요. 폰은 두 손가락을 써요. 가운데 조준점 아래 색이 지금 고른 색이에요. [이 색으로
+                    염색]을 누르면 정해져요. 시간이 끝나면 그때 색과 지금 색 중에서 골라요. 도중에 창을 닫으면 색은 그대로고 염색권은 돌아오지 않아요.
+                  </p>
+                )}
+                {blocked && (
+                  <p className={styles.note} role="status">
+                    {blocked} 염색권은 쓰지 않아요.
+                  </p>
+                )}
+                {error && <p className={ui.error}>{error}</p>}
+                <div className={styles.actions}>
+                  <button type="button" className={ui.button} onClick={close}>
+                    닫기
+                  </button>
+                  <button type="button" className={cx(ui.button, ui.primary)} disabled={!ticket || owned < 1 || !allowed(part) || !!blocked || sending} onClick={() => void begin()}>
+                    {/* 대상 이름은 위 칠할 곳 줄에 있으니 단추는 짧게 (폰에서 두 줄로 꺾이지 않게) */}
+                    {sending ? "잠깐만요…" : ticket?.mode === "random" ? "염색 시작 (60초)" : "염색하기"}
+                  </button>
+                </div>
+              </div>
+            </div>
         )}
         {(phase === "play" || phase === "choose") && error && <p className={ui.error}>{error}</p>}
       </div>
+      {askOverwrite && (
+        <Dialog title={`커스텀 ${slot + 1}을 바꿀까요?`} onClose={dismissOverwrite} kind="confirm">
+          <div className={styles.over}>
+            <div className={styles.swap}>
+              <span className={styles.swapSide} data-gone="">
+                <span className={styles.swapBox}>
+                  <ItemIcon itemId={part} size={48} dye={slotColors[slot] ?? undefined} />
+                </span>
+                <span className={styles.note}>{slotColors[slot] ? colorText(slotColors[slot]!) : ""}</span>
+              </span>
+              <span className={styles.baArrow} aria-hidden="true">
+                ▶
+              </span>
+              <span className={styles.swapSide}>
+                <span className={styles.swapBox}>{newColor ? <ItemIcon itemId={part} size={48} dye={newColor} /> : <span className={styles.qmark}>?</span>}</span>
+                <span className={styles.note}>{newColor ? colorText(newColor) : "판에서 골라요"}</span>
+              </span>
+            </div>
+            <p className={styles.note}>
+              지금 색은 사라져요.{empty !== null ? ` 비어 있는 커스텀 ${empty + 1}에 칠할 수도 있어요.` : ""}
+            </p>
+            <div className={styles.actions}>
+              <button type="button" className={ui.button} onClick={dismissOverwrite}>
+                그만두기
+              </button>
+              {empty !== null && (
+                <button
+                  type="button"
+                  className={ui.button}
+                  onClick={() => {
+                    setSlotPick({ t: part, k: empty });
+                    void begin(true, empty);
+                  }}
+                >
+                  비어 있는 커스텀 {empty + 1}에 칠하기
+                </button>
+              )}
+              <button type="button" className={cx(ui.button, ui.danger)} autoFocus={empty === null} onClick={() => void begin(true)}>
+                <PixelIcon name="brush" size={12} />
+                바꾸기
+              </button>
+            </div>
+          </div>
+        </Dialog>
+      )}
     </Dialog>
   );
 }
@@ -312,6 +509,13 @@ export default function DyeDialog({ ticket, resume, avatar, look: wornLook, onCl
 
 /** 미리보기 캐릭터를 다시 그리는 최소 간격 (색이 거의 매 프레임 바뀌므로) */
 const PREVIEW_MS = 120;
+/**
+ * 11/22 판을 옮기는 동안은 미리보기를 이 간격으로만 (새 색마다 캐릭터 시트를 통째로 다시 물들여 폰에서 한 번에 ~20ms —
+ * 판 그리기와 같은 프레임에 겹치면 끊긴다). 멈추면 바로 그 색으로
+ */
+const PREVIEW_MOVING_MS = 320;
+/** 마지막 이동(끌기·키·휠) 뒤 이만큼 지나면 멈춘 것으로 본다 */
+const SETTLE_MS = 140;
 
 function DyeBoard({
   session,
@@ -357,29 +561,10 @@ function DyeBoard({
   /** 루프 안에서 부르는 최신 함수 (시간 끝 → 그 순간 색을 후보로) */
   const timeoutRef = useRef<() => void>(() => {});
 
-  // 판 그림 타일 (구역 하나 = 칸 1개 1px 캔버스) — 보이는 구역만 그려 두고 다시 쓴다 (오래된 것부터 버린다)
-  const sheet = useMemo(() => {
-    if (typeof document === "undefined") return null;
-    const tiles = new Map<string, HTMLCanvasElement>();
-    /** 구역 (i, j) 타일. make = false면 없을 때 만들지 않는다 (한 프레임에 하나만 새로 만들어 끊김을 줄인다) */
-    return (i: number, j: number, make: boolean): HTMLCanvasElement | null => {
-      const key = `${i},${j}`;
-      const hit = tiles.get(key);
-      if (hit || !make) return hit ?? null;
-      const c = document.createElement("canvas");
-      c.width = DYE_BOARD_W;
-      c.height = DYE_BOARD_H;
-      const ctx = c.getContext("2d");
-      if (!ctx) return null;
-      const img = ctx.createImageData(DYE_BOARD_W, DYE_BOARD_H);
-      img.data.set(chunkRgba(palette, i, j));
-      ctx.putImageData(img, 0, 0);
-      tiles.set(key, c);
-      // 넓게 볼 때 보이는 구역(많아야 6×6)이 모두 남도록 넉넉히 둔다
-      if (tiles.size > 64) tiles.delete(tiles.keys().next().value!);
-      return c;
-    };
-  }, [palette]);
+  /** 마지막으로 판이 움직인 때 (미리보기 간격 · 타일 미리 그리기 방향) */
+  const movedAt = useRef(0);
+  /** 키 이동 속도 (화면 px/초 — 누르면 짧게 빨라지고 떼면 짧게 멈춘다) */
+  const velRef = useRef({ x: 0, y: 0 });
 
   /** 지금 조준점이 가리키는 칸과 그 색 (확정·미리보기·그리기가 모두 이 값) */
   const aimNow = (now = performance.now()): Picked => {
@@ -421,7 +606,9 @@ function DyeBoard({
   useEffect(() => {
     const canvas = canvasRef.current;
     const box = boxRef.current;
-    if (!canvas || !box || !sheet) return;
+    if (!canvas || !box) return;
+    // 11/22 구역 그림은 일꾼이 그린다 (화면 스레드는 받은 그림을 올리기만) — tiles.ts
+    const tiles = new DyeTiles(palette);
     t0.current = performance.now();
     let raf = 0;
     let lastTick = 0;
@@ -443,21 +630,34 @@ function DyeBoard({
     const ro = new ResizeObserver(fit);
     ro.observe(box);
     let lastFrame = 0;
+    /** 지난 프레임 화면 (움직이는 방향 → 그쪽 타일 먼저) */
+    let prevView: BoardView | null = null;
+    let dir = { x: 0, y: 0 };
+    let plan: { v: BoardView; w: number; h: number; list: ReturnType<typeof tilePlan> } | null = null;
     const loop = (now: number) => {
       // 다음 프레임을 먼저 예약한다 — 그리기에서 예외가 나도 루프가 죽지 않는다 (시간 끝이면 아래에서 취소)
       raf = requestAnimationFrame(loop);
-      // WASD·방향키를 누르고 있는 동안 판을 부드럽게 옮긴다 (조준점은 가운데 고정 → 조준 위치가 바뀐다)
+      // WASD·방향키: 키 반복이 아니라 프레임 시간(dt)만큼 연속으로 옮긴다. 누르면 짧게 빨라지고 떼면 짧게 멈춘다 (board.ts easeVelocity)
       const dt = lastFrame ? now - lastFrame : 0;
       lastFrame = now;
       const v0 = viewRef.current;
-      if (v0 && heldRef.current.size && !sentRef.current) {
-        const d = keyPan(heldRef.current, fastRef.current, dt, v0.scale);
-        if (d.dx || d.dy) {
+      if (v0 && !sentRef.current) {
+        const target = keyTarget(heldRef.current, fastRef.current);
+        const vel = (velRef.current = easeVelocity(velRef.current, target, dt));
+        if (vel.x || vel.y) {
           const { w, h } = sizeRef.current;
+          const k = Math.min(100, Math.max(0, dt)) / 1000 / v0.scale;
           aimBase.current = null;
-          viewRef.current = clampView({ ...v0, cx: v0.cx + d.dx, cy: v0.cy + d.dy }, w, h);
+          viewRef.current = clampView({ ...v0, cx: v0.cx + vel.x * k, cy: v0.cy + vel.y * k }, w, h);
         }
       }
+      const v1 = viewRef.current;
+      if (v1 && prevView && (v1.cx !== prevView.cx || v1.cy !== prevView.cy || v1.scale !== prevView.scale)) {
+        movedAt.current = now;
+        // 움직이는 방향 (판 좌표) — 조금씩 따라가게 섞는다
+        dir = { x: dir.x * 0.7 + (v1.cx - prevView.cx) * 0.3, y: dir.y * 0.7 + (v1.cy - prevView.cy) * 0.3 };
+      }
+      prevView = v1;
       try {
         draw(now);
       } catch (err) {
@@ -491,23 +691,27 @@ function DyeBoard({
         ctx.fillRect(0, 0, w, h);
         const left0 = w / 2 - v.cx * v.scale;
         const top0 = h / 2 - v.cy * v.scale;
-        // 보이는 구역 타일만 (한 프레임에 새 타일은 하나만 만든다 — 아직 없는 구역은 바탕색)
-        const i0 = Math.floor((v.cx - w / 2 / v.scale) / DYE_BOARD_W);
-        const i1 = Math.floor((v.cx + w / 2 / v.scale) / DYE_BOARD_W);
-        const j0 = Math.floor((v.cy - h / 2 / v.scale) / DYE_BOARD_H);
-        const j1 = Math.floor((v.cy + h / 2 / v.scale) / DYE_BOARD_H);
-        let budget = 1;
-        const spots: ReturnType<typeof chunkSpots> = [];
-        for (let j = j0; j <= j1; j++)
-          for (let i = i0; i <= i1; i++) {
-            const had = sheet(i, j, false);
-            const tile = had ?? sheet(i, j, budget > 0);
-            if (!had && tile) budget--;
-            if (tile) {
-              ctx.drawImage(tile, left0 + i * DYE_BOARD_W * v.scale, top0 + j * DYE_BOARD_H * v.scale, DYE_BOARD_W * v.scale, DYE_BOARD_H * v.scale);
-              spots.push(...chunkSpots(palette, i, j));
-            }
+        // 보이는 구역 + 둘레를 미리 (움직이는 쪽 먼저). 선명한 그림이 아직이면 거친 그림을 부드럽게 늘려 채운다 → 검은 칸이 보이지 않게
+        const vis = visibleChunks(v, w, h);
+        // 화면이 그대로면 지난 순서를 그대로 쓴다 (순서 계산·문자열을 프레임마다 만들지 않게)
+        if (!plan || plan.v !== v || plan.w !== w || plan.h !== h) plan = { v, w, h, list: tilePlan(v, w, h, dir, tiles.keep) };
+        tiles.update(plan.list, (t) => t.i >= vis.i0 && t.i <= vis.i1 && t.j >= vis.j0 && t.j <= vis.j1);
+        const spots: DyeSpot[] = [];
+        // 타일 가장자리를 기기 픽셀에 맞춘다 (이웃 타일과 같은 경계 → 사이에 실금이 생기지 않게). 위치는 소수로 들고 그릴 때만 맞춘다
+        const snap = (n: number) => Math.round(n * k) / k;
+        for (let j = vis.j0; j <= vis.j1; j++)
+          for (let i = vis.i0; i <= vis.i1; i++) {
+            const t = tiles.get(i, j);
+            if (!t) continue;
+            const x0 = snap(left0 + i * DYE_BOARD_W * v.scale);
+            const y0 = snap(top0 + j * DYE_BOARD_H * v.scale);
+            const x1 = snap(left0 + (i + 1) * DYE_BOARD_W * v.scale);
+            const y1 = snap(top0 + (j + 1) * DYE_BOARD_H * v.scale);
+            ctx.imageSmoothingEnabled = !t.sharp;
+            ctx.drawImage(t.canvas, x0, y0, x1 - x0, y1 - y0);
+            if (t.spots.length) spots.push(...t.spots);
           }
+        ctx.imageSmoothingEnabled = false;
         // 특수 색 무리 연출 (판에 아주 드물게 숨은 희귀 색 — 금빛 광택·반짝이·무지개·야광)
         drawSpots(ctx, spots, left0, top0, v.scale, w, h, now);
         // 흔들리는 조준점 (마우스 자리 또는 화면 가운데 + 흔들림)
@@ -537,9 +741,16 @@ function DyeBoard({
             liveRef.current.style.background = String(st.background ?? "");
             liveRef.current.style.boxShadow = String(st.boxShadow ?? "");
           }
-          if (liveTextRef.current) liveTextRef.current.textContent = colorLabel(a.color);
+          // 글자 마디만 바꾼다 (textContent는 자식 마디를 갈아 끼워 창의 MutationObserver가 매 프레임 레이아웃을 읽었다)
+          const el = liveTextRef.current;
+          if (el) {
+            const label = colorLabel(a.color);
+            if (el.firstChild && el.firstChild === el.lastChild && el.firstChild.nodeType === Node.TEXT_NODE) el.firstChild.nodeValue = label;
+            else el.textContent = label;
+          }
         }
-        if (a.color !== shown && now - lastPreview > PREVIEW_MS) {
+        const moving = now - movedAt.current < SETTLE_MS;
+        if (a.color !== shown && now - lastPreview > (moving ? PREVIEW_MOVING_MS : PREVIEW_MS)) {
           lastPreview = now;
           shown = a.color;
           setLive(a);
@@ -550,14 +761,18 @@ function DyeBoard({
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      tiles.dispose();
     };
     // aimNow는 ref만 읽는다
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sheet, palette, amp, localEnds]);
+  }, [palette, amp, localEnds]);
 
   useEffect(() => {
     timeoutRef.current = () => void expire(aimNow());
   });
+
+  // 11/22 판이 열린 동안 뒤 마을은 그리기만 줄인다 (갱신·동기화는 그대로 — game/backgroundLoop). 판이 닫히면 바로 원래대로
+  useEffect(() => coverGame(), []);
 
   // 휠 확대·축소 (passive가 아니어야 페이지가 스크롤되지 않는다)
   useEffect(() => {
@@ -695,13 +910,14 @@ function DyeBoard({
       <div className={styles.panel}>
         <TimeLeft label={`${dyeTargetName(session.part)} 염색`} left={left} total={DYE_TIME_MS} />
         <div className={styles.compare}>
-          <LookCard spec={spec} body={body} look={look} label="지금 내 모습" title="지금 색" color={now} />
+          <LookCard spec={spec} body={body} look={look} label="지금 내 모습" title="지금 색" color={now} dir={facingOf(session.part)} />
           <LookCard
             spec={preview}
             body={body}
             look={look}
             label="지금 고른 색으로 염색해 본 내 모습"
             title="새 색"
+            dir={facingOf(session.part)}
             color={live?.color ?? null}
             swatchRef={liveRef}
             hexRef={liveTextRef}
@@ -748,8 +964,11 @@ function TimeLeft({ label, left, total }: { label: string; left: number; total: 
 
 const DEFAULT_SWATCH = "repeating-linear-gradient(45deg,#d9ceb2 0 4px,#e6a3b0 4px 8px)";
 
-/** 비교 칸 하나: 그 색을 입은 내 모습(칸을 꽉 채워 크게) + 이름 · 견본 · 색 코드 */
-function LookCard({
+/**
+ * 비교 칸 하나: 그 색을 입은 내 모습(칸을 꽉 채워 크게) + 이름 · 견본 · 색 코드.
+ * 11/22 memo: 판의 남은 시간(0.2초마다)이 바뀌어도 캐릭터 칸은 다시 그리지 않는다
+ */
+const LookCard = memo(function LookCard({
   spec,
   body,
   look,
@@ -759,7 +978,9 @@ function LookCard({
   swatchRef,
   hexRef,
   hexTestId,
+  dir = DIR.down,
 }: {
+  dir?: DirId;
   spec: string;
   body: string;
   look: readonly string[];
@@ -775,7 +996,7 @@ function LookCard({
   return (
     <figure className={styles.look}>
       <div className={styles.stageBox}>
-        <OutfitCanvas color={spec} body={body} look={look} label={label} dir={DIR.down} walking={false} />
+        <OutfitCanvas color={spec} body={body} look={look} label={label} dir={dir} walking={false} />
       </div>
       <figcaption className={styles.caption}>
         <span className={styles.capTitle}>{title}</span>
@@ -791,7 +1012,7 @@ function LookCard({
       </figcaption>
     </figure>
   );
-}
+});
 
 /** 지금 모습 → 바꾼 뒤 모습을 나란히 (시간 끝 고르기·확정 결과가 같은 모양). 특수 색은 무대가 그 연출로 그린다 */
 function DyeVersus({
@@ -815,11 +1036,11 @@ function DyeVersus({
   const name = dyeTargetName(part);
   return (
     <div className={styles.versus}>
-      <LookCard spec={before} body={body} look={look} label={`${beforeTitle} 내 모습`} title={`${beforeTitle} · ${name}`} color={partColor(before, part)} />
+      <LookCard spec={before} body={body} look={look} label={`${beforeTitle} 내 모습`} title={`${beforeTitle} · ${name}`} color={partColor(before, part)} dir={facingOf(part)} />
       <span className={styles.arrow} aria-hidden="true">
         →
       </span>
-      <LookCard spec={after} body={body} look={look} label={`${afterTitle} 내 모습`} title={`${afterTitle} · ${name}`} color={partColor(after, part)} />
+      <LookCard spec={after} body={body} look={look} label={`${afterTitle} 내 모습`} title={`${afterTitle} · ${name}`} color={partColor(after, part)} dir={facingOf(part)} />
     </div>
   );
 }

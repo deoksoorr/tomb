@@ -645,7 +645,7 @@ export function RetainDock({ showFirst }: { showFirst: boolean }) {
 
 function PathDialog({ me, onOpenBag }: { me: Me; onOpenBag: () => void }) {
   return (
-    <Dialog title={PATH_NAME} onClose={() => setPanel(null)} fitHeight>
+    <Dialog title={PATH_NAME} onClose={() => setPanel(null)} fitHeight phoneCard>
       <PathBody me={me} onOpenBag={onOpenBag} />
     </Dialog>
   );
@@ -708,7 +708,8 @@ function PathBody({ me, onOpenBag }: { me: Me; onOpenBag: () => void }) {
           </span>
           <div>
             <b className={styles.cardName}>{got.length > 1 ? `꾸러미 ${got.length}개를 한꺼번에 받았어요` : `${got[0].name}${josa(got[0].name, "을", "를")} 받았어요`}</b>
-            <p className={styles.cardDesc}>{got.map((g) => g.name).join(", ")}</p>
+            {/* 11/22 하나만 받았으면 제목에 이름이 이미 있어 같은 이름을 또 쓰지 않고 설명을 (폰에서 같은 글이 두 줄로 보였다) */}
+            <p className={styles.cardDesc}>{got.length > 1 ? got.map((g) => g.name).join(", ") : got[0].desc}</p>
             {got.some((g) => g.wear) && (
               <button type="button" className={cx(ui.button, styles.small)} onClick={onOpenBag}>
                 가방에서 입어 보기 ({PATH_WEAR_DAYS}일)
@@ -753,7 +754,7 @@ function PathBody({ me, onOpenBag }: { me: Me; onOpenBag: () => void }) {
           </span>
           <div>
             <b className={styles.cardName}>꾸러미 7개를 모두 받았어요</b>
-            <p className={styles.cardDesc}>가방의 칭호 칸에서 「마을 새내기 졸업」을 달 수 있어요.</p>
+            <p className={styles.cardDesc}>가방 [칭호]에서 「마을 새내기 졸업」을 달 수 있어요.</p>
           </div>
         </div>
       )}
@@ -791,10 +792,9 @@ function TodoBody({ me, onRoute }: { me: Me; onRoute?: () => void }) {
   }
 
   return (
-    <div className={styles.todoBody}>
-      <p className={styles.lead}>
-        날마다 {DAY_RESET_TEXT}에 새 미션 3개가 무작위로 나와요. 미션 셋을 다 하면 도장을 찍고, 도장 {TODO_PROT_EVERY}개마다 강화 증폭권을 더 받아요.
-      </p>
+    // 11/22 위 안내는 한 문장만 (도장·강화 증폭권 이야기는 아래 도장 카드에 같은 말이 있다). 폰 새 이웃 창에서는 이 칸이 스크롤 칸 (watchMoreBelow → 아래 흐림)
+    <div ref={watchMoreBelow} className={cx(styles.todoBody, "more-fade")}>
+      <p className={styles.lead}>날마다 {DAY_RESET_TEXT}에 새 미션 3개가 무작위로 나와요.</p>
       <ul className={styles.todoList}>
         {items.map((it, i) => {
           const done = isDone(it);
@@ -802,45 +802,49 @@ function TodoBody({ me, onRoute }: { me: Me; onRoute?: () => void }) {
           const routed = !!d?.guide && !done;
           const on = routed && guide === todoKey(it.kind);
           return (
+            // 11/22 칸 배치: 체크 · [제목 + 보상] · [진행 막대 + 숫자] · [하는 법 + 안내] · 받기. 넓으면 받기가 오른쪽 세로 가운데,
+            // 폰(560px 이하)은 받기가 맨 아래 줄 오른쪽으로 내려와 글이 화면 폭을 다 쓴다 (네 칸이 한 줄에 끼어 글이 글자 단위로 끊기던 것)
             <li key={it.kind} className={styles.todoRow} data-done={done || undefined} data-guide={on || undefined}>
               <span className={styles.box} aria-hidden="true">
                 {it.claimed && <PixelIcon name="check" size={12} />}
               </span>
-              <span className={styles.todoText}>
-                <span className={styles.todoLabel}>
-                  {it.label}
-                  <RewardChips reward={TODO_GIFT} />
-                </span>
+              <span className={styles.todoHead}>
+                <span className={styles.todoLabel}>{it.label}</span>
+                <RewardChips reward={TODO_GIFT} />
+              </span>
+              <span className={styles.todoProg}>
                 <span className={styles.bar} aria-hidden="true">
                   <span style={{ width: `${Math.min(100, (it.have / it.need) * 100)}%` }} />
                 </span>
                 <small className={styles.todoCount}>{todoProgressText(it)}</small>
-                {d && !it.claimed && (
-                  <span className={styles.todoHintRow}>
-                    <small className={styles.firstHint}>{d.hint}</small>
-                    {routed && (
-                      <button
-                        type="button"
-                        className={styles.todoGuide}
-                        aria-pressed={on}
-                        aria-label={`${it.label}: ${on ? "길 안내 끄기" : "가는 길 보기"}`}
-                        title={on ? "누르면 길 안내를 꺼요" : "누르면 가는 길을 화살표로 보여 줘요"}
-                        onClick={() => pickTodoGuide(it.kind, touch, onRoute)}
-                      >
-                        <PixelIcon name="target" size={10} />
-                        {on ? "안내 중" : "안내"}
-                      </button>
-                    )}
-                  </span>
+              </span>
+              {d && !it.claimed && (
+                <span className={styles.todoHintRow}>
+                  <small className={styles.firstHint}>{d.hint}</small>
+                  {routed && (
+                    <button
+                      type="button"
+                      className={styles.todoGuide}
+                      aria-pressed={on}
+                      aria-label={`${it.label}: ${on ? "길 안내 끄기" : "가는 길 보기"}`}
+                      title={on ? "누르면 길 안내를 꺼요" : "누르면 가는 길을 화살표로 보여 줘요"}
+                      onClick={() => pickTodoGuide(it.kind, touch, onRoute)}
+                    >
+                      <PixelIcon name="target" size={10} />
+                      {on ? "안내 중" : "안내"}
+                    </button>
+                  )}
+                </span>
+              )}
+              <span className={styles.todoAct}>
+                {it.claimed ? (
+                  <span className={styles.claimed}>받았어요</span>
+                ) : (
+                  <button type="button" className={cx(ui.button, done && ui.primary, styles.small)} disabled={!done || pending !== null} onClick={() => claim(i)}>
+                    {done ? "받기" : "아직"}
+                  </button>
                 )}
               </span>
-              {it.claimed ? (
-                <span className={styles.claimed}>받았어요</span>
-              ) : (
-                <button type="button" className={cx(ui.button, done && ui.primary, styles.small)} disabled={!done || pending !== null} onClick={() => claim(i)}>
-                  {done ? "받기" : "아직"}
-                </button>
-              )}
             </li>
           );
         })}
@@ -882,10 +886,14 @@ function HubDialog({ me, onOpenBag }: { me: Me; onOpenBag: () => void }) {
     { id: "todo", label: TODO_NAME, ready: todoReady },
   ];
   const cur = tabs.some((t) => t.id === tab) ? tab : tabs[0].id;
+  const tabsRef = useRef<HTMLDivElement>(null);
+  // 11/22 가운데 카드 창(phoneCard). 칸을 바꿀 때마다 창 높이가 바뀌면 가운데 맞춤 창의 칸 줄이 손가락 밑에서 위아래로 튄다 →
+  // 칸 몸통을 모두 한 자리에 겹쳐 두고 지금 칸만 보여 준다. 창 높이 = 꾸러미 칸 — 첫 걸음·오늘 미션은 그 높이 안에서 목록만 스크롤
+  // (가장 긴 첫 걸음에 맞추면 꾸러미 칸 아래가 40%, 오늘 미션에 맞춰도 16~36%가 비었다). 꾸러미를 다 받아 칸이 없으면 오늘 미션 높이. RetainHud.module.css .hubPane
   return (
-    <Dialog title={r?.first ? "마을 첫 걸음" : TODO_NAME} onClose={() => setPanel(null)} fitHeight>
+    <Dialog title={r?.first ? "마을 첫 걸음" : TODO_NAME} onClose={() => setPanel(null)} fitHeight phoneCard>
       {tabs.length > 1 && (
-      <div className={styles.hubTabs} role="tablist" aria-label="마을 안내">
+      <div ref={tabsRef} className={styles.hubTabs} role="tablist" aria-label="마을 안내">
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -896,6 +904,13 @@ function HubDialog({ me, onOpenBag }: { me: Me; onOpenBag: () => void }) {
             onClick={() => {
               hubTab = t.id;
               setTab(t.id);
+              // 11/22 새 칸은 맨 위부터 (칸 줄은 창 본문 맨 위에 붙어 있다 — 본문 = 칸 줄의 부모)
+              const body = tabsRef.current?.parentElement;
+              if (body) {
+                body.scrollTop = 0;
+                // 칸 안에서 스크롤하는 목록(첫 걸음·오늘 미션)도 맨 위로
+                for (const el of body.querySelectorAll<HTMLElement>(`[data-pane="${t.id}"] .more-fade`)) el.scrollTop = 0;
+              }
             }}
           >
             {t.label}
@@ -904,7 +919,13 @@ function HubDialog({ me, onOpenBag }: { me: Me; onOpenBag: () => void }) {
         ))}
       </div>
       )}
-      {cur === "first" ? <FirstBody me={me} /> : cur === "path" ? <PathBody me={me} onOpenBag={onOpenBag} /> : <TodoBody me={me} onRoute={() => setPanel(null)} />}
+      <div className={styles.hubPanes}>
+        {tabs.map((t) => (
+          <div key={t.id} className={styles.hubPane} role="tabpanel" aria-label={t.label} data-pane={t.id} data-on={cur === t.id || undefined} inert={cur !== t.id}>
+            {t.id === "first" ? <FirstBody me={me} /> : t.id === "path" ? <PathBody me={me} onOpenBag={onOpenBag} /> : <TodoBody me={me} onRoute={() => setPanel(null)} />}
+          </div>
+        ))}
+      </div>
     </Dialog>
   );
 }
@@ -914,28 +935,37 @@ function FirstBody({ me }: { me: Me }) {
   const first = me.retain?.first;
   if (!first) return null;
   const all = (first.mask & FIRST_ALL) === FIRST_ALL;
+  // 11/22 목록과 아래 글·단추 사이를 띄운다 (붙어 있었다). 다 했으면 받기 카드를 목록 위에 — 열자마자 보이게, 단추는 꾸러미 받기처럼 크게
+  const claimCard = all && (
+    <div className={cx(styles.card, styles.cardToday)}>
+      <div>
+        <small className={styles.cardTag}>첫 걸음 미션을 다 했어요</small>
+        <b className={styles.cardName}>{rewardName()}</b>
+      </div>
+      <button
+        type="button"
+        className={cx(ui.button, ui.primary, styles.cardButton, styles.bigClaim)}
+        disabled={pending}
+        onClick={() => {
+          setPending(true);
+          claimFirst().finally(() => setPending(false));
+        }}
+      >
+        선물 받기
+      </button>
+    </div>
+  );
   return (
-    <>
+    <div className={styles.firstBody}>
+      {claimCard}
       <FirstList mask={first.mask} onRoute={() => setPanel(null)} />
-      {all ? (
-        <button
-          type="button"
-          className={cx(ui.button, ui.primary, styles.claim)}
-          disabled={pending}
-          onClick={() => {
-            setPending(true);
-            claimFirst().finally(() => setPending(false));
-          }}
-        >
-          선물 받기
-        </button>
-      ) : (
+      {!all && (
         <small className={styles.note}>
           미션을 다 하면 {rewardName()}
           {josa(rewardName(), "을", "를")} 더 줘요.
         </small>
       )}
-    </>
+    </div>
   );
 }
 

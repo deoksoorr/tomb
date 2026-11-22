@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { resellBuyNote, resellPrice } from "@/lib/resell";
+import { resellBlock, resellBuyNote, resellPrice } from "@/lib/resell";
 import { ItemDyeLine } from "../dye/itemDyeInfo";
-import { champBoards, isNameSlot, isPermanentUntil, isShopListed, ITEMS, permanentPrice, SHOP_KINDS, titleOfLook, type ItemDef, type ItemKind } from "@tomb/protocol";
+import { champBoards, DIR, isNameSlot, isPermanentUntil, isShopListed, ITEMS, permanentPrice, SHOP_KINDS, titleOfLook, type ItemDef, type ItemKind } from "@tomb/protocol";
 import { CHAMP_SHOP_NOTE, champShopDiscount, pickDiscount } from "@/lib/champPerks";
 import { chairShopDiscount, chairShopNote, perkShopDiscount } from "@/lib/chairPerks";
 import { discountedPrice, titlePerk } from "@/lib/titles";
@@ -24,6 +24,7 @@ import { useMoreBelowRef, watchMoreBelow } from "../ui/moreBelow";
 import ui from "../ui/ui.module.css";
 import { fittingLook } from "./fitting";
 import FireworkPreview from "./FireworkPreview";
+import SellConfirm from "./SellConfirm";
 import NameStylePreview from "./NameStylePreview";
 import OutfitPreview from "./OutfitPreview";
 import { takeShopTab } from "./shopTab";
@@ -60,6 +61,8 @@ export default function ShopDialog({ onClose, avatar }: Props) {
   const [slotFilter, setSlotFilter] = useState<SlotFilter>("all");
   const [pending, setPending] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /** 11/22 되팔기 확인 창 (상점 자세히 보기의 [팔기] — 되팔기는 상점 한 곳에서만) */
+  const [selling, setSelling] = useState<string | null>(null);
   const baseId = useId();
   // 착용 남은 시간 판단 기준 (렌더 중에 시계를 읽지 않는다)
   const [openedAt] = useState(() => Date.now());
@@ -152,7 +155,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
     setNotice(null);
     try {
       applyStyle(await dyeApi.buyPermanent(item.id));
-      setNotice(`${item.name}을(를) 영구로 가졌어요. 가방의 캐릭터 꾸미기에서 언제든 입을 수 있어요.`);
+      setNotice(`${item.name}을(를) 영구로 가졌어요. 가방 [꾸미기]에서 언제든 입을 수 있어요.`);
     } catch (e) {
       setNotice(errorMessage(e));
     } finally {
@@ -190,6 +193,27 @@ export default function ShopDialog({ onClose, avatar }: Props) {
           </span>
         )}
       </button>
+    );
+  }
+
+  /** 영구로 가진 꾸미기를 지금 팔 수 있는지 (되면 null, 아니면 까닭 — 서버 lib/resellService와 같은 규칙) */
+  function sellBlock(item: ItemDef): string | null {
+    const wornForever = me?.equipped.some((e) => e.itemId === item.id && isPermanentUntil(e.until));
+    const until = [...(me?.equipped ?? []), ...(me?.stash ?? [])].find((e) => e.itemId === item.id && isPermanentUntil(e.until))?.until ?? null;
+    return resellBlock(item.id, wornForever ? "worn" : "stash", until, me?.bought);
+  }
+
+  /** 되팔기 줄: 팔 수 있으면 값 + [팔기], 아니면 「판매 불가 · 까닭」 */
+  function sellRow(item: ItemDef) {
+    const block = sellBlock(item);
+    if (block) return <p className={styles.meta}>판매 불가 · {block}</p>;
+    return (
+      <p className={cx(styles.meta, styles.sellRow)}>
+        <span>되팔기 {resellPrice(item.id).toLocaleString("ko-KR")}P (정가의 30%)</span>
+        <button type="button" className={cx(ui.button, styles.sellBtn)} disabled={pending !== null} onClick={() => setSelling(item.id)}>
+          팔기
+        </button>
+      </p>
     );
   }
 
@@ -254,6 +278,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
                   body={body}
                   look={fitting.look}
                   label={`내 아바타가 ${shown.name}을(를) 입어 본 모습`}
+                  facing={shown.slot === "pack" ? DIR.up : DIR.down}
                 />
               ) : shown.kind === "firework" ? (
                 <FireworkPreview className={styles.fwPreview} itemId={shown.id} label={me?.name ?? ""} />
@@ -275,16 +300,14 @@ export default function ShopDialog({ onClose, avatar }: Props) {
                   {stashed(shown) && " · 벗어 둠"}
                 </p>
                 {fitNote && shown.kind === "cosmetic" && <p className={styles.fitNote}>{fitNote}</p>}
-                {/* 11/22 내가 가진 꾸미기의 염색 값 · 되팔기 안내 (영구로 사면 정가의 30%로 판다) */}
+                {/* 11/22 내가 가진 꾸미기의 염색 값 · 되팔기 (되팔기는 상점 한 곳에서만 — 영구로 산 것만 정가의 30%) */}
                 {shown.kind === "cosmetic" && (owned(shown) > 0 || stashed(shown) || forever(shown) || worn(shown)) && (
                   <p className={styles.meta}>
                     <ItemDyeLine itemId={shown.id} itemDyes={me?.itemDyes} />
                   </p>
                 )}
                 {shown.kind === "cosmetic" && permanentPrice(shown.id) !== null && !shown.staff && (
-                  <p className={styles.meta}>
-                    {forever(shown) ? `되팔기 ${resellPrice(shown.id).toLocaleString("ko-KR")}P (정가의 30%) · 가방 [꾸미기]에서 팔아요` : resellBuyNote(shown.id)}
-                  </p>
+                  forever(shown) ? sellRow(shown) : <p className={styles.meta}>{resellBuyNote(shown.id)}</p>
                 )}
                 {forever(shown) || shown.staff ? null : buyButton(shown)}
                 {foreverButton(shown)}
@@ -349,6 +372,18 @@ export default function ShopDialog({ onClose, avatar }: Props) {
         <p className={styles.notice} role="status">
           {notice}
         </p>
+        {selling && (
+          <SellConfirm
+            itemId={selling}
+            dyed={!!me?.itemDyes?.[selling]}
+            onClose={() => setSelling(null)}
+            onSold={(res) => {
+              applyStyle(res);
+              setSelling(null);
+              setNotice(`${ITEMS.find((i) => i.id === selling)?.name ?? "꾸미기"}을(를) ${res.paid.toLocaleString("ko-KR")}P에 팔았어요.`);
+            }}
+          />
+        )}
       </div>
     </Dialog>
   );

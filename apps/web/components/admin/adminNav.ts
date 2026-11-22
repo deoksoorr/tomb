@@ -26,6 +26,7 @@ export type PanelId =
   | "residents"
   | "pointEvent"
   | "lottery"
+  | "urgent"
   | "mapConcept"
   | "graveRules"
   | "errors"
@@ -93,6 +94,7 @@ export const NAV: NavGroup[] = [
       { id: "residents", label: "마을 주민", desc: "돌아다니는 마을 주민(NPC)을 켜고 끄고 수를 정해요." },
       { id: "pointEvent", label: "포인트 2배 이벤트", desc: "고른 항목의 적립을 늘리는 이벤트를 켜고 꺼요. 끝나는 시각을 정하면 저절로 꺼져요." },
       { id: "lottery", label: "행운권 추첨", desc: "이번 주 행운권 판매와 상금을 보고 지원금을 더해요. 최근 추첨 결과도 여기 있어요." },
+      { id: "urgent", label: "긴급 의뢰 결과", desc: "최근 끝난 긴급 의뢰 20개의 최종 %, 낸 사람과 순위, 받을 보상, 행운의 배달부, 누가 받아 갔는지를 봐요." },
       { id: "mapConcept", label: "마을 맵 컨셉", desc: "마을 그림을 기본, 겨울, 크리스마스 중에서 골라요. 길과 건물은 그대로예요." },
       { id: "graveRules", label: "묘역 규칙", desc: "묘비가 성불하기까지의 기간과 채널마다 묘역 정원이에요." },
     ],

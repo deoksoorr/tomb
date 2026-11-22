@@ -11,7 +11,9 @@ import {
   URGENT_LAST_MS,
   URGENT_NEXT_HINT,
   URGENT_PICK_MAX,
+  URGENT_RANK_STAMPS,
   URGENT_STAMPS,
+  urgentRankLine,
   urgentAnnounce,
   urgentCapLine,
   urgentFilled,
@@ -172,10 +174,15 @@ function Stages({ n, goal }: { n: number; goal: number }) {
         <b>100%</b>
         <span>도장 {URGENT_STAMPS[100]}개 더</span>
         <span>수집가의 뒷주머니</span>
+        {/* 11/22 100%를 넘긴 판의 많이 낸 1·2·3등 보너스 도장 */}
+        <span>
+          1·2·3등 도장 +{URGENT_RANK_STAMPS.join("·")}
+        </span>
       </li>
       <li className={u.stage} data-on={stage >= 150 || undefined}>
         <b>150%</b>
         <span>불꽃축제</span>
+        <span>1등 무작위 꾸미기</span>
       </li>
     </ul>
   );
@@ -211,6 +218,7 @@ function Top3({ ev, ended = false }: { ev: UrgentLive; ended?: boolean }) {
   // 끝난 뒤에는 "첫 납품의 주인공" 같은 진행 중 문구를 쓰지 않는다
   if (!ev.top.length) return ended ? null : <p className={u.subhead}>아직 낸 사람이 없어요. 첫 납품의 주인공이 되어 보세요.</p>;
   const unit = URGENT_DEF[ev.kind].unit;
+  const rankOn = urgentStage(ev.n, ev.goal) >= 100;
   return (
     <>
       <p className={u.subhead}>가장 많이 낸 사람</p>
@@ -223,6 +231,8 @@ function Top3({ ev, ended = false }: { ev: UrgentLive; ended?: boolean }) {
             <span>
               {t.n}
               {unit}
+              {/* 11/22 100%를 넘겨 끝났으면 순위 보너스 도장을 옆에 */}
+              {ended && rankOn && URGENT_RANK_STAMPS[i] ? <small className={ui.hint}> 도장 +{URGENT_RANK_STAMPS[i]}</small> : null}
             </span>
           </li>
         ))}
@@ -311,7 +321,7 @@ function LiveCard({ ev, now, mine, cap, bag }: { ev: UrgentLive; now: number; mi
               내가 낸 수 <strong>{mine}</strong>
               {d.unit}
             </span>
-            <span className={ui.hint}>1개만 내도 보상을 받아요</span>
+            <span className={ui.hint}>1개라도 내면 50%부터 같이 받아요</span>
           </div>
           <Top3 ev={ev} />
         </div>
@@ -406,26 +416,33 @@ function EndedSummary({ ev, now }: { ev: UrgentLive; now: number }) {
   );
 }
 
+/** 11/22 순위 보너스 줄 아이콘 (1·2·3등) */
+const RANK_ICON = ["🥇", "🥈", "🥉"];
+
 /** 받을 것·받은 것 한 줄씩 */
 function Prizes({ c, isNew, boxPending }: { c: UrgentClaimed; isNew: boolean; boxPending?: boolean }) {
   const items: { key: string; icon: React.ReactNode; title: string; sub?: string }[] = [];
   if (c.stamps > 0) items.push({ key: "st", icon: "印", title: `의뢰 도장 ${c.stamps}개`, sub: c.stage >= 100 ? "50%와 100% 단계 도장" : "50% 단계 도장" });
+  // 11/22 100%를 넘긴 판의 1·2·3등 보너스 도장 (받기 전엔 "받아요", 받은 뒤엔 "받았어요")
+  if (c.rank && c.rankStamps)
+    items.push({ key: "rank", icon: RANK_ICON[c.rank - 1] ?? "印", title: `${c.rank}등 보너스 도장 ${c.rankStamps}개`, sub: urgentRankLine(c.rank, c.at > 0) });
   if (c.box) {
     const b = c.box;
     const icon = b.kind === "stamps" ? "印" : <ItemIcon itemId={b.kind === "fish" ? b.id : b.kind === "dye_pick" ? "q_dye_pick" : "q_dye_special"} size={24} />;
     const sub = b.kind === "fish" ? (c.fishKept === false ? "가방 칸이 가득해서 도장 3개로 바꿨어요" : `${RARITY_LABEL[speciesById(b.id)?.rarity ?? 3]} 물고기, 가방에 넣었어요`) : b.kind === "stamps" ? "상자에서 나온 도장" : "가방에 넣었어요";
     items.push({ key: "box", icon, title: `수집가의 뒷주머니에서 ${prizeText(b)}`, sub });
-  } else if (c.pocket) items.push({ key: "box", icon: <ItemIcon itemId="u_box_pocket" size={24} />, title: "수집가의 뒷주머니를 가방에 넣었어요", sub: "가방의 소모품 칸에서 열어 보세요" });
+  } else if (c.pocket) items.push({ key: "box", icon: <ItemIcon itemId="u_box_pocket" size={24} />, title: "수집가의 뒷주머니를 가방에 넣었어요", sub: "가방 [소모품]에서 열어 보세요" });
   else if (boxPending) items.push({ key: "box", icon: <ItemIcon itemId="u_box_pocket" size={24} />, title: "수집가의 뒷주머니", sub: "가방에 들어가요. 열면 도장이나 염색권, 희귀 물고기가 나와요" });
-  if (c.king) items.push({ key: "king", icon: "👑", title: "칭호 「긴급 배달왕」", sub: "가장 많이 낸 1등. 하루 동안 가방의 칭호 칸에서 달아요" });
+  if (c.king) items.push({ key: "king", icon: "👑", title: "칭호 「긴급 배달왕」", sub: "가장 많이 낸 1등. 하루 동안 가방 [칭호]에서 달아요" });
+  // 11/22 배달왕 꾸미기는 150% 판에서만 (kingCos). 예전 기록(kingCos 없음)은 받은 꾸미기(cos)로 보인다
   if (c.lucky) items.push({ key: "lucky", icon: "🍀", title: "행운의 배달부로 뽑혔어요!", sub: "낸 사람 중 한 명을 뽑아 무작위 꾸미기를 드려요" });
   // 11/19 무작위 꾸미기 (배달왕·행운의 배달부): 받으면 무엇인지, 받기 전엔 무작위
   if (c.cos) {
     const it = itemById(c.cos.id);
-    items.push({ key: "cos", icon: <ItemIcon itemId={c.cos.id} size={24} />, title: `${it?.name ?? "꾸미기"} ${c.cos.days}일`, sub: "가방의 꾸미기에서 입어요" });
-  } else if (!c.at && (c.king || c.lucky))
+    items.push({ key: "cos", icon: <ItemIcon itemId={c.cos.id} size={24} />, title: `${it?.name ?? "꾸미기"} ${c.cos.days}일`, sub: "가방 [꾸미기]에서 입어요" });
+  } else if (!c.at && (c.kingCos || c.lucky))
     items.push({ key: "cos", icon: "🎁", title: "무작위 꾸미기 하나", sub: `상점 꾸미기 중 하나가 ${URGENT_COS_DAYS.map(([d]) => d).join("·")}일 기간제로 들어가요. 아주 드물게 사이렌 모자가 나와요` });
-  if (c.last) items.push({ key: "last", icon: "⏱", title: "칭호 「아슬아슬 마감」", sub: "하루 동안. 가방의 칭호 칸에서 달아요" });
+  if (c.last) items.push({ key: "last", icon: "⏱", title: "칭호 「아슬아슬 마감」", sub: "하루 동안. 가방 [칭호]에서 달아요" });
   return (
     <ul className={u.prizes}>
       {items.map((it, i) => (

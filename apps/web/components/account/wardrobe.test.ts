@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AVATAR_COLORS, COSMETIC_DURATION_MS } from "@tomb/protocol";
+import { AVATAR_COLORS, COSMETIC_DURATION_MS, PERMANENT_UNTIL } from "@tomb/protocol";
 import {
   canDropOn,
   displaced,
@@ -41,6 +41,26 @@ describe("wardrobeEntries", () => {
       ["pet_ghost", "worn"],
       ["pet_ghost", "new"],
     ]);
+  });
+
+  it("11/22 영구로 가진 꾸미기의 이용권은 새것 카드로 안 보인다 (기간제로 가진 건 보인다)", () => {
+    const P = PERMANENT_UNTIL;
+    const w = { inventory: { hat_cat: 1, hat_halo: 1, neck_scarf: 1 }, equipped: [{ itemId: "hat_cat", until: P }], stash: [{ itemId: "hat_halo", until: P }, { itemId: "neck_scarf", until: now + 1000 }] };
+    const list = wardrobeEntries(w, now);
+    expect(list.map((e) => [e.item.id, e.state])).toEqual([
+      ["hat_cat", "worn"],
+      ["hat_halo", "stash"],
+      ["neck_scarf", "stash"],
+      ["neck_scarf", "new"],
+    ]);
+    // 기간제로 가진 것의 이용권: 입으면 남은 기간에 더해진다는 안내, 같은 꾸미기라 바꿔 끼우는 게 아니다
+    const ticket = list.find((e) => e.state === "new")!;
+    expect(ticket.extend).toBe(true);
+    expect(entryStatus(ticket, now)).toBe("새것 · 입으면 남은 기간에 24시간 더해져요");
+    const worn = { inventory: { neck_scarf: 1 }, equipped: [{ itemId: "neck_scarf", until: now + 1000 }] };
+    const wl = wardrobeEntries(worn, now);
+    expect(displaced(wl, wl.find((e) => e.state === "new")!)).toBeNull();
+    expect(entryStatus(wardrobeEntries({ inventory: { neck_scarf: 1 }, equipped: [] }, now)[0], now)).toBe("새것 · 입으면 24시간");
   });
 
   it("stash가 없는 옛 응답도 받는다", () => {

@@ -9,11 +9,11 @@ import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import s from "../rpg/rpg.module.css";
 import ShakeToggle from "../rpg/ShakeToggle";
 import { cx } from "../ui/cx";
+import { useRideStopGate } from "../overlay/RideStopDialog";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import h from "./haunt.module.css";
 import { isBetter, readBest, saveBest, type HauntBest } from "./record";
-import { rideGate } from "@/lib/rideGate";
 import { endPlayTodo, playWanted, startPlayTodo } from "../overlay/RetainHud";
 
 // 귀신의집 (월드의 귀신의집 문 앞 E → portal:open {kind:"haunt"}). 혼자 하는 공포 미로 — 포인트 보상 없음.
@@ -117,6 +117,8 @@ function Hud({ onQuit }: { onQuit: () => void }) {
 }
 
 export default function HauntDialog({ onClose }: { onClose: () => void }) {
+  // 11/22 탈것에 탄 채 [들어가기] → 이 창 대신 가운데 알림 (펫이면 [내리고 들어가기])
+  const { rideStop, gate } = useRideStopGate(onClose);
   const [phase, setPhase] = useState<Phase>("intro");
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [best, setBest] = useState<HauntBest | null>(readBest);
@@ -158,8 +160,8 @@ export default function HauntDialog({ onClose }: { onClose: () => void }) {
   }, [phase]);
 
   function enter() {
-    // 11/16 탈것에 탄 채로는 못 들어간다 (lib/rideGate — 안내 토스트). 의자·벤치면 일어나서
-    if (entering || rideGate("귀신의 집에 들어갈")) return;
+    // 11/16 탈것에 탄 채로는 못 들어간다. 의자·벤치면 일어나서. 11/22 아래 토스트 대신 창 자리에 가운데 알림
+    if (entering || gate("귀신의 집에 들어갈", { label: "내리고 들어가기", run: enter })) return;
     // 11/19 오늘 미션이면 서버 시드로 (미션이 아니면 요청 없이 바로)
     if (!playWanted("haunt")) {
       begin(newSeed());
@@ -200,6 +202,7 @@ export default function HauntDialog({ onClose }: { onClose: () => void }) {
   });
 
   if (phase === "playing") return <Hud onQuit={() => bridge.emit("haunt:quit")} />;
+  if (rideStop) return rideStop;
 
   if (phase === "result" && outcome) {
     return (

@@ -37,7 +37,7 @@ export type RoomCallbacks = {
   /** 5번 이모티콘 (방 안에서도 서버가 중계한다) */
   onEmo?(sid: Sid, id: string): void;
   /** 말풍선 자유 채팅 (서버가 가린 글). id = 서버 줄 id (옛 서버는 없음) */
-  onChat?(sid: Sid, text: string, id?: string): void;
+  onChat?(sid: Sid, text: string, id?: string, meta?: { nb?: true }): void;
   /** 입장·재접속 때 이 방의 최근 1분 채팅 (이 기기 시계로 옮긴 줄, 내 줄은 mine) */
   onChatLog?(lines: IncomingChatLine[]): void;
   /** sync 응답: 서버가 아는 방 인원 전체 (나 제외)와 좌석 점유표 */
@@ -456,7 +456,7 @@ export class RoomClient {
           this.cb.onEmo?.(ev.sid, ev.id);
           break;
         case "chat":
-          this.cb.onChat?.(ev.sid, ev.text, ev.id);
+          this.cb.onChat?.(ev.sid, ev.text, ev.id, ev.nb ? { nb: true } : undefined);
           break;
         case "chatLog":
           this.cb.onChatLog?.(ev.lines);
@@ -519,11 +519,13 @@ export class RoomClient {
     this.syncPolicy.mark(performance.now());
     this.startSync();
     this.mode = "online";
+    // 11/22 내 새싹 표시 (방 입장 토큰으로 서버가 정한 끝 시각 — 사냥터·집에서도 내 머리 위에)
+    bridge.emit("me:sprout", { until: m.nb ?? 0 });
     this.cb.onWelcome?.(m);
     this.emitStatus();
     // 방 안에서 꾸미기를 바꿨으면 새 연결에도 알린다 (입장 토큰은 잠깐 재사용돼 옛 착용일 수 있다)
-    if (this.lookGrant) this.lookPacer.push(this.lookGrant);
-    this.lookPacer.reset();
+    // 11/22 lk: 1 = 서버가 look을 줄 세운다 → 이후 바꿈도 기다리지 않고 바로 (옛 서버면 10.5초 간격)
+    this.lookPacer.reconnected(this.lookGrant, m.lk === 1);
     // 11/13 사냥터 방: 새 연결마다 지금 자리 비움 상태를 한 번 (이어받은 자리에 옛 값이 남아 있을 수 있다)
     this.awaySent = null;
     this.awaySentAt = -Infinity;

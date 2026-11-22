@@ -65,6 +65,7 @@ export function toMe(accountId: string, a: AccountRecord, day: string, now: numb
     inventory: a.inventory,
     equipped: a.equipped,
     stash: a.stash,
+    ...(a.bought?.length ? { bought: a.bought } : {}),
     graves: a.graves,
     activityUnread: a.activityUnread,
     // 첫 변경은 무료, 그다음부터 NAME_CHANGE_PRICE
@@ -82,22 +83,29 @@ export function toMe(accountId: string, a: AccountRecord, day: string, now: numb
  */
 export const shownBody = (body: string | null, staff: boolean): string | null => (body ? staffGateBody(body, staff) : body);
 
-export async function loadMe(accounts: AccountStore, accountId: string, now = Date.now()): Promise<Me> {
+/**
+ * pre = 11/22 같은 요청에서 방금 { bought: true }로 읽은 계정 (그 뒤 계정 쪽이 바뀌지 않은 경우만 — 염색 색 칸 고르기). 있으면 계정을 다시 읽지 않는다.
+ * 운영자는 잔액을 채운 뒤 다시 읽어야 해서 쓰지 않는다
+ */
+export async function loadMe(accounts: AccountStore, accountId: string, now = Date.now(), pre?: AccountRecord): Promise<Me> {
   const day = kstDay(now);
   // 31번 운영자 계정은 잔액을 지갑 상한까지 채운 뒤 읽는다 (포인트가 줄지 않는다)
   const staff = await topUpIfStaff(accounts, accountId);
+  const reuse = !staff && pre?.bought !== undefined ? pre : null;
   // 46번 염색은 따로 저장한다 (lib/store/style.ts)
   // 주간 1위 값 (지난주 1위면 비트, 오라를 껐으면 끔 표시까지) → 착용 증서에 실려 다른 사람 화면의 배지·오라도 맞춘다
   // 31번 운영자는 운영자 오라를 끈 것도 같은 값으로 (CHAMP_AURA_OFF)
   // 11/16 매니저 (관리자가 임명 — 전용 칭호. 착용 증서에 실려 다른 사람 화면에도)
   // 11/24 회장님 독대 1위 혜택 갈래 (lib/chairPerks — 상점 할인·강화 할인·걷기 표시용, 판단은 서버가 따로). chairman 모듈이 이 파일을 거꾸로 읽어 동적으로 가져온다
   const [a, style, champ, manager, chair] = await Promise.all([
-    accounts.get(accountId, day, now),
+    reuse ?? accounts.get(accountId, day, now, { bought: true }),
     getStyleStore(accounts).get(accountId),
     champWireFor(accountId, staff, now).catch(() => 0),
     isManager(accountId, now),
     import("../chairman/settle").then((m) => m.chairPerkSafe(accountId, now)).catch(() => null),
   ]);
+  // 11/22 되팔기 산 기록: 되팔기 전부터 가진 꾸미기는 처음 읽을 때 한 번 채운다 (lib/resellBought — 채운 뒤엔 읽기만)
+  if (!a.boughtFilled) a.bought = await import("../resellBought").then((m) => m.ensureBoughtFill(accounts, accountId, a, now)).catch(() => a.bought);
   // 11/16 단 칭호를 기억해 둔다 (칭호 능력 — 계정을 읽지 않는 낚시·채집·사냥 흐름이 Redis를 다시 묻지 않게, lib/wornTitle)
   rememberWornTitle(accountId, lookOf(a), now);
   return {

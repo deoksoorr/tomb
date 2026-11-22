@@ -39,7 +39,22 @@ export type UrgentPublic = {
 /** 받은 보상 (저장된 기록 그대로) */
 /** 받은 보상 (저장된 기록 그대로). pocket = 「수집가의 뒷주머니」를 가방에 넣었다 (box는 예전 기록 — 받을 때 바로 열던 때의 내용물) */
 /** cos = 11/19 받은 무작위 꾸미기 (배달왕·행운의 배달부) · lucky = 행운의 배달부로 뽑혔다 */
-export type UrgentClaimed = { stage: UrgentStage; stamps: number; box: BoxPrize | null; pocket?: boolean; king: boolean; lucky?: boolean; cos?: UrgentCos | null; last: boolean; at: number; fishKept?: boolean };
+/** 11/22 rank·rankStamps = 100%를 넘긴 판의 많이 낸 순위(1~3)와 보너스 도장 (stamps는 단계 도장 그대로) · kingCos = 배달왕이 꾸미기도 받았다 (150%) */
+export type UrgentClaimed = {
+  stage: UrgentStage;
+  stamps: number;
+  box: BoxPrize | null;
+  pocket?: boolean;
+  king: boolean;
+  kingCos?: boolean;
+  rank?: number;
+  rankStamps?: number;
+  lucky?: boolean;
+  cos?: UrgentCos | null;
+  last: boolean;
+  at: number;
+  fishKept?: boolean;
+};
 
 /** 나와 관련된 긴급 의뢰 한 줄 */
 export type UrgentMineRow = {
@@ -82,3 +97,31 @@ export type UrgentDeliverResponse = {
 export type UrgentClaimResponse = { claimed: UrgentClaimed; stamps: number };
 /** 상자 열기: 나온 것, 물고기면 가방에 들어갔는지(가득이면 도장으로), 지금 도장 수, 남은 상자 수, 내 정보(가방) */
 export type UrgentOpenResponse = { prize: BoxPrize; fishKept?: boolean; stamps: number; left: number; me: Me };
+
+// ── 11/22 관리자 「긴급 의뢰 결과」 (끝난 의뢰마다 한 번 남기는 기록 — urgentStore saveResult, 최근 URGENT_RESULTS_KEEP개) ──
+
+/** 낸 사람 한 줄 (많이 낸 순). stamps = 단계 + 순위 보너스 도장 (상자 도장은 열 때라 뺀다) */
+export type UrgentResultRow = { acct: string; name: string; n: number; rank: number; stamps: number; box: boolean; king: boolean; kingCos: boolean; lucky: boolean; last: boolean };
+export type UrgentResult = {
+  id: string;
+  kind: UrgentKind;
+  start: number;
+  /** 실제로 끝난 시각 (150%면 그 시각) */
+  end: number;
+  goal: number;
+  n: number;
+  pct: number;
+  stage: UrgentStage;
+  early: boolean;
+  /** 기록한 시각 */
+  at: number;
+  /** 낸 사람 수 (rows는 앞 URGENT_RESULT_ROWS명까지) */
+  count: number;
+  rows: UrgentResultRow[];
+  /** 행운의 배달부·아슬아슬 마감 (rows 밖일 수 있어 따로) */
+  lucky: { acct: string; name: string } | null;
+  last: { acct: string; name: string } | null;
+};
+/** 관리자 화면: 기록 + 받기 상태 (받은 기록이 남아 있는 동안 — 끝나고 약 4일) */
+export type AdminUrgentResult = UrgentResult & { claimed: Record<string, { at: number; cos: UrgentCos | null }> };
+export type AdminUrgentResultsResponse = { results: AdminUrgentResult[] };

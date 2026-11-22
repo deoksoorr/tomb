@@ -100,3 +100,24 @@ export function dyeTargetBlock(target: DyeTarget, owns: (item: string) => boolea
   if (!owns(target)) return "가진 꾸미기만 염색할 수 있어요.";
   return null;
 }
+
+// ── 11/22 색 보관함 「이 색 입기」 연타 잠금 (계정마다, 서버 저장소의 칸 고르기와 한 번에 센다 — lib/store/style.ts) ──
+
+const MIN_MS = 60_000;
+const HOUR_MS = 60 * MIN_MS;
+/** 10초 안에 5번까지는 된다. 6번째부터 잠근다 */
+export const DYE_SELECT_BURST = 5;
+export const DYE_SELECT_WINDOW_MS = 10_000;
+/** 잠금 단계별 길이: 1회 10분 → 30분 → 1시간 → 3시간 → 5회부터 24시간(상한) */
+export const DYE_SELECT_LOCK_MS: readonly number[] = [10 * MIN_MS, 30 * MIN_MS, HOUR_MS, 3 * HOUR_MS, 24 * HOUR_MS];
+/** 마지막 잠금이 끝나고 이만큼 다시 걸리지 않으면 단계를 처음으로 */
+export const DYE_SELECT_LEVEL_KEEP_MS = 24 * HOUR_MS;
+
+/** 남은 시간 글자: "9:41" · "2:59:41" (초 단위 올림) */
+export function waitLabel(ms: number): string {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = String(s % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+}

@@ -16,7 +16,7 @@ import { useMyGraves } from "@/lib/hooks/useMyGraves";
 import { useNotices } from "@/lib/hooks/useNotices";
 import { showToast, useToasts } from "@/lib/hooks/useToasts";
 import { useRideBlocked } from "@/lib/hooks/useRideBlocked";
-import { rideGate } from "@/lib/rideGate";
+import { rideGateAlert } from "@/lib/rideStop";
 import { HUNT_NO_PATH_TOAST, huntPress, huntWalkHint, walkingAfter } from "@/lib/huntWalk";
 import { SHOP_NO_PATH_TOAST, shopPress, shopWalkHint } from "@/lib/shopWalk";
 import { HOUSING_NO_PATH_TOAST, housingWalkHint } from "../noHouse/noHouseText";
@@ -56,6 +56,7 @@ import CameraControls from "./CameraControls";
 import ChannelMenu from "./ChannelMenu";
 import FireworkButton from "./FireworkButton";
 import GuideDialog from "./GuideDialog";
+import { RideStopHost } from "./RideStopDialog";
 import Hud, { StatusBanners, ToastList } from "./Hud";
 import MenuSheet, { type MenuTarget } from "./MenuSheet";
 import MobileControls from "./MobileControls";
@@ -65,6 +66,7 @@ import SayDialog from "./SayDialog";
 import { ChatSheet } from "./ChatInput";
 import ChatLog, { focusChatLog } from "./ChatLog";
 import ReportLayer from "./ReportLayer";
+import SproutTip from "./SproutTip";
 import Tutorial from "./Tutorial";
 import UpdateNotice from "./UpdateNotice";
 import styles from "./GameShell.module.css";
@@ -731,8 +733,16 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   function pressHunt() {
     const act = huntPress({ map: mapNow, walking: huntWalking, rideWhy: huntBlocked });
     if (act.do === "cancel") bridge.emit("portal:walkTo", { kind: null });
-    else if (act.do === "toast") showToast(act.message);
-    else if (!rideGate("사냥터에 갈")) bridge.emit("portal:walkTo", { kind: "hunt" });
+    else if (act.do === "toast") {
+      // 11/22 탈것 때문에 막혔으면 가운데 알림 (펫이면 [내리고 가기]). 캠핑장·바닷가 안내는 그대로 토스트
+      if (huntBlocked && act.message === huntBlocked) rideGateAlert("사냥터에 들어갈", { label: "내리고 가기", run: walkHunt });
+      else showToast(act.message);
+    } else if (!rideGateAlert("사냥터에 들어갈", { label: "내리고 가기", run: walkHunt })) walkHunt();
+  }
+
+  /** 사냥터 입구까지 걷기 (막혔으면 위 알림이 대신 뜬다) */
+  function walkHunt() {
+    bridge.emit("portal:walkTo", { kind: "hunt" });
   }
 
   /**
@@ -745,9 +755,13 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     if (act.do === "toast") return showToast(act.message);
     openShopTab(kind, itemId || undefined);
     if (act.do === "open") return setPanel("shop");
-    if (rideGate("잡화점에 갈")) return void takeShopTab();
-    setPanel(null);
-    bridge.emit("portal:walkTo", { kind: "shop" });
+    // 11/22 탈것이면 가운데 알림 ([내리고 가기]는 내린 뒤 그대로 걸어간다, [확인]이면 열려던 탭을 버린다)
+    const walk = () => {
+      setPanel(null);
+      bridge.emit("portal:walkTo", { kind: "shop" });
+    };
+    if (rideGateAlert("잡화점에 갈", { label: "내리고 가기", run: walk }, () => void takeShopTab())) return setPanel(null);
+    walk();
   }
 
   /** 터치 메뉴 시트에서 고른 것 열기 */
@@ -790,6 +804,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {ready && <UpdateNotice />}
       {/* 47번 다른 사람 캐릭터 메뉴(신고하기)·신고 창 */}
       {ready && <ReportLayer />}
+      {/* 11/22 머리 위 새싹 말풍선 「마을에 온 지 얼마 안 된 이웃이에요」 */}
+      {ready && <SproutTip />}
       {/* 친구 안내 띠 (접속·퇴장·친구 옆으로): 화면 가운데, 집·사냥터 안에서도 보이게 월드 HUD 밖에 */}
       {ready && <FriendNotice />}
       {/* 11/15 캠핑장: NPC 대화 창·배경음 (캠핑장에 있을 때만 일한다) */}
@@ -1196,6 +1212,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
         <HousingOffice key={housingIntent?.houseId ?? `${housingIntent?.zone ?? ""}${housingIntent?.lot ?? "office"}`} intent={housingIntent} channel={houseChannel} onClose={closePanel} />
       )}
       {panel === "hunt" && <HuntLobby onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
+      {/* 11/22 탈것에 탄 채 입구에서 막혔을 때 가운데 알림 (lib/rideStop) */}
+      <RideStopHost />
       {/* 11/15 마을의 야근 빌딩 (사냥 레벨 50 전이면 창 없이 경비원 한마디) */}
       {panel === "tower" && (
         <HuntLobby

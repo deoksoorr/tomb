@@ -36,6 +36,9 @@ import {
   urgentEndAt,
   urgentEndNotice,
   URGENT_KING_LINE,
+  URGENT_RANK_STAMPS,
+  urgentRankLine,
+  urgentRankStamps,
   urgentFilled,
   urgentLastAcct,
   urgentGoal,
@@ -47,6 +50,7 @@ import {
   type UrgentSlot,
 } from "./urgent";
 import {
+  adminUrgentResults,
   backfillPocketDex,
   claimUrgent,
   deliverUrgent,
@@ -65,7 +69,7 @@ import { verifyInternal, type InternalSay } from "@tomb/protocol";
 import { NextRequest } from "next/server";
 import { getMegaphone } from "../../store";
 import { setStaff } from "../../staff";
-import { MemoryUrgentStore, URGENT_DELIVER_LUA, URGENT_GOAL_LUA, type UrgentMemDeps } from "./urgentStore";
+import { MemoryUrgentStore, URGENT_DELIVER_LUA, URGENT_GOAL_LUA, URGENT_RESULT_LUA, URGENT_RESULTS_KEEP, type UrgentMemDeps } from "./urgentStore";
 
 // 11/15 긴급 의뢰: 시각(시드·범위)·목표·단계·보상·상자 확률·축제 범위, 그리고 서버 흐름(제한 시간·중복 수령)을 메모리 저장소로.
 // Redis Lua는 같은 계약 (lib/forage/quests/urgentStore.ts 주석)
@@ -197,15 +201,17 @@ describe("단계 · 보상 판정", () => {
     expect(full.box).not.toBeNull();
     expect(urgentReward({ ...base, n: 170, mine: 5 })).toMatchObject({ stage: 150, stamps: 5 });
   });
-  it("11/18 가장 많이 낸 사람은 150%를 채웠을 때만 배달왕, 마감 칭호는 100%를 채운 사람만", () => {
+  it("11/22 가장 많이 낸 사람은 100%를 넘기면 배달왕 칭호, 꾸미기는 150%일 때만. 마감 칭호는 100%를 채운 사람만", () => {
     expect(urgentReward({ ...base, n: 30, mine: 30, top: "me" })!.king).toBe(false);
     expect(urgentReward({ ...base, n: 60, mine: 30, top: "me" })!.king).toBe(false);
-    expect(urgentReward({ ...base, n: 100, mine: 30, top: "me" })!.king).toBe(false);
-    expect(urgentReward({ ...base, n: 150, mine: 30, top: "me" })!.king).toBe(true);
+    expect(urgentReward({ ...base, n: 99, mine: 30, top: "me" })).toMatchObject({ king: false, kingCos: false });
+    expect(urgentReward({ ...base, n: 100, mine: 30, top: "me" })).toMatchObject({ king: true, kingCos: false });
+    expect(urgentReward({ ...base, n: 149, mine: 30, top: "me" })).toMatchObject({ king: true, kingCos: false });
+    expect(urgentReward({ ...base, n: 150, mine: 30, top: "me" })).toMatchObject({ king: true, kingCos: true });
     expect(urgentReward({ ...base, n: 60, mine: 30, last: "me" })!.last).toBe(false);
     expect(urgentReward({ ...base, n: 100, mine: 30, last: "me" })!.last).toBe(true);
   });
-  it("11/18 공동 배달왕은 없다: 상한까지 다 내도 1등이 아니면 아니고, 1등 한 사람만 (150%일 때)", () => {
+  it("11/18 공동 배달왕은 없다: 상한까지 다 내도 1등이 아니면 아니고, 1등 한 사람만", () => {
     expect(urgentReward({ ...base, cap: 25, n: 150, mine: 25, top: "other" })!.king).toBe(false);
     expect(urgentReward({ ...base, cap: 25, n: 150, mine: 25, top: "me" })!.king).toBe(true);
     expect(urgentReward({ ...base, cap: 25, n: 150, mine: 20, top: "other" })!.king).toBe(false);
@@ -231,7 +237,8 @@ describe("끝난 뒤 문구 (위쪽 막대·게시판·확성기)", () => {
   it("끝 확성기: 0개면 '아무도 오지 않은 채', 채웠으면 몇 %를 채웠는지 ('멈춤' 같은 말은 쓰지 않는다)", () => {
     expect(urgentEndNotice("dig", 5, 0)).toBe("긴급 의뢰(발굴품 5개)는 아무도 오지 않은 채 끝났어요.");
     expect(urgentEndNotice("fish", 20, 9)).toBe("긴급 의뢰(생선 20마리)가 끝났어요. 목표의 45%를 채웠어요.");
-    expect(urgentEndNotice("dig", 5, 6)).toBe("긴급 의뢰(발굴품 5개)가 끝났어요. 목표의 120%를 채웠어요! 낸 사람은 게시판에서 보상을 받아요.");
+    expect(urgentEndNotice("dig", 5, 6)).toBe("긴급 의뢰(발굴품 5개)가 끝났어요. 목표의 120%를 채웠어요! 낸 사람은 게시판에서 보상을 받고, 많이 낸 1·2·3등은 도장을 더 받아요.");
+    expect(urgentEndNotice("dig", 10, 7)).toBe("긴급 의뢰(발굴품 10개)가 끝났어요. 목표의 70%를 채웠어요! 낸 사람은 게시판에서 보상을 받아요.");
     for (const k of URGENT_KINDS) for (const n of [0, 1, 7, 10, 15, 30]) expect(urgentEndNotice(k, 10, n)).not.toMatch(/멈/);
   });
 
@@ -256,7 +263,7 @@ describe("끝난 뒤 문구 (위쪽 막대·게시판·확성기)", () => {
     expect(urgentEndAt(10_000, 0)).toBe(10_000);
     expect(urgentEndAt(10_000, 4_000)).toBe(4_000);
     expect(urgentFilled("fish", 24, 15, true)).toBe("목표의 160%를 채워서 일찍 끝났어요");
-    expect(urgentEndNotice("fish", 15, 23, true)).toBe("긴급 의뢰(생선 15마리)가 목표의 153%를 채워서 일찍 끝났어요! 낸 사람은 게시판에서 보상을 받아요.");
+    expect(urgentEndNotice("fish", 15, 23, true)).toBe("긴급 의뢰(생선 15마리)가 목표의 153%를 채워서 일찍 끝났어요! 낸 사람은 게시판에서 보상을 받고, 많이 낸 1·2·3등은 도장을 더 받아요.");
     // 마지막 1분에 100%를 넘긴 사람이 있으면 그 사람, 없으면 150%를 채워 끝낸 사람, 예전 기록(festBy 없음)은 없음
     expect(urgentLastAcct({ fest: 5, festBy: "b", last: "a" })).toBe("a");
     expect(urgentLastAcct({ fest: 5, festBy: "b", last: null })).toBe("b");
@@ -493,15 +500,16 @@ describe("서버 흐름", () => {
     const stamps0 = (await questBoard(big, t)).stamps;
     const mine = await urgentMine(big, t);
     const row = mine.rows.find((r) => r.id === ev.id)!;
-    expect(row).toMatchObject({ done: true, goal, mine: goal - 6 + Math.ceil(goal / 2), reward: { stage: 150, stamps: 5, box: true, king: true, last: false }, claimed: null });
+    expect(row).toMatchObject({ done: true, goal, mine: goal - 6 + Math.ceil(goal / 2), reward: { stage: 150, stamps: 5, rank: 1, rankStamps: 5, box: true, king: true, kingCos: true, last: false }, claimed: null });
     expect(row.cap).toBeUndefined();
     // 예전 규칙: 1등이 아니면 배달왕이 아니다
     expect((await urgentMine(late, t)).rows.find((r) => r.id === ev.id)!.reward).toMatchObject({ king: false, last: true });
 
     const r1 = await claimUrgent(big, ev.id, t);
     // 상자는 바로 열지 않고 가방에 (내용물은 아직 안 준다)
-    expect(r1.claimed).toMatchObject({ stage: 150, stamps: 5, king: true, pocket: true, box: null });
-    expect(r1.stamps).toBe(stamps0 + 5);
+    expect(r1.claimed).toMatchObject({ stage: 150, stamps: 5, rank: 1, rankStamps: 5, king: true, kingCos: true, pocket: true, box: null });
+    // 11/22 단계 도장 5 + 1등 보너스 5
+    expect(r1.stamps).toBe(stamps0 + 10);
     expect((await getAccounts().get(big, DAY, t)).inventory[URGENT_POCKET]).toBe(1);
     // 가방에서 열기: (의뢰, 계정) 시드 그대로, 상자 1개가 빠지고 내용물 지급. 두 번 열 수 없다
     const prize = openBox(`${ev.id}|${big}`);
@@ -878,7 +886,7 @@ describe("끝 확성기 (기록 + 실시간 + 시작 공지 바꿔 끼우기)", 
     const a1 = urgentNoticeId(t.id, "a1");
     await vi.waitFor(() => expect(said.map((x) => x.id)).toContain(a1));
     expect(said.find((x) => x.id === a1)).toMatchObject({
-      text: `긴급 의뢰(생선 ${goal}마리)가 목표의 150%를 채워서 일찍 끝났어요! 낸 사람은 게시판에서 보상을 받아요.`,
+      text: `긴급 의뢰(생선 ${goal}마리)가 목표의 150%를 채워서 일찍 끝났어요! 낸 사람은 게시판에서 보상을 받고, 많이 낸 1·2·3등은 도장을 더 받아요.`,
       replaces: urgentNoticeId(t.id, "a0"),
     });
     // 바로 받는다 (시험 운영자가 낸 것으로 센다)
@@ -914,5 +922,216 @@ describe("11/16 주머니 물고기 도감", () => {
     expect(e.max).toBeGreaterThan(0);
     expect((await backfillPocketDex(now)).added.find((x) => x.acct === a)).toBeUndefined();
     expect((await getForageStore().dexEntries(a))[fish].n).toBe(1);
+  });
+});
+
+// ── 11/22 순위 보상 (100%를 넘긴 판: 1·2·3등 도장 5·3·2, 배달왕 칭호는 100%부터, 꾸미기는 150%) · 관리자 결과 기록 ──
+
+describe("11/22 순위 보상 (판정)", () => {
+  const base = { id: "20261122-0", goal: 100, cap: 0, top: "a", ranks: ["a", "b", "c", "d"], last: null };
+  const at = (n: number, acct: string) => urgentReward({ ...base, n, acct, mine: 10 })!;
+  it("1·2·3등 보너스 도장은 5·3·2, 4등부터는 없다", () => {
+    expect(URGENT_RANK_STAMPS).toEqual([5, 3, 2]);
+    expect([0, 1, 2, 3, 4].map(urgentRankStamps)).toEqual([0, 5, 3, 2, 0]);
+  });
+  it("99%: 순위 보상·배달왕 없음 (단계 도장 2만)", () => {
+    for (const a of ["a", "b", "c", "d"]) expect(at(99, a)).toMatchObject({ stage: 50, stamps: 2, rank: 0, rankStamps: 0, king: false, kingCos: false });
+  });
+  it("100%: 1등 +5·배달왕 칭호(꾸미기 없음), 2등 +3, 3등 +2, 4등 없음", () => {
+    expect(at(100, "a")).toMatchObject({ stage: 100, stamps: 5, rank: 1, rankStamps: 5, king: true, kingCos: false });
+    expect(at(100, "b")).toMatchObject({ rank: 2, rankStamps: 3, king: false });
+    expect(at(100, "c")).toMatchObject({ rank: 3, rankStamps: 2, king: false });
+    expect(at(100, "d")).toMatchObject({ rank: 0, rankStamps: 0, king: false });
+  });
+  it("150%: 같은 순위 도장 + 1등만 꾸미기", () => {
+    expect(at(150, "a")).toMatchObject({ stage: 150, rank: 1, rankStamps: 5, king: true, kingCos: true });
+    expect(at(150, "b")).toMatchObject({ rank: 2, rankStamps: 3, kingCos: false });
+    expect(at(150, "c")).toMatchObject({ rank: 3, rankStamps: 2 });
+  });
+  it("ranks가 없으면 top 한 사람만 1등 (예전 호출)", () => {
+    expect(urgentReward({ ...base, ranks: undefined, n: 100, acct: "a", mine: 1 })).toMatchObject({ rank: 1, rankStamps: 5 });
+    expect(urgentReward({ ...base, ranks: undefined, n: 100, acct: "b", mine: 1 })).toMatchObject({ rank: 0, rankStamps: 0 });
+  });
+  it("결과 문구: 순위와 보너스를 알려 준다 (100% 아래·순위 밖은 붙이지 않는다)", () => {
+    expect(urgentRankLine(2, true)).toBe("2등이라 도장 3개를 더 받았어요.");
+    expect(urgentRankLine(3)).toBe("3등이라 도장 2개를 더 받아요.");
+    expect(urgentRankLine(1, true)).toBe("1등이라 도장 5개를 더 받고 「긴급 배달왕」 칭호도 받았어요.");
+    expect(urgentRankLine(4)).toBe("");
+    expect(urgentRewardLine({ n: 24, goal: 20, mine: true, claimed: true, rank: 2 })).toBe("100%를 넘겨 도장 5개와 수집가의 뒷주머니를 받았어요. 2등이라 도장 3개를 더 받았어요.");
+    expect(urgentRewardLine({ n: 19, goal: 20, mine: true, rank: 1 })).toBe("50%를 넘겨 도장 2개를 받아요.");
+    expect(URGENT_KING_LINE).toContain("1·2·3등이 도장을 5·3·2개");
+  });
+});
+
+describe("11/22 순위 보상 (서버 흐름)", () => {
+  const GOAL = 30;
+  async function open(offset: number) {
+    const ev = urgentSchedule(addDays(DAY, offset), env.sessionSecret())[0];
+    await urgentStore().setGoal(ev.id, GOAL, 0);
+    return ev;
+  }
+  const stampsOf = async (a: string, t: number) => (await questBoard(a, t)).stamps;
+
+  it("100%: 같은 수면 먼저 닿은 사람이 위, 1·2·3등만 도장을 더 받고 1등은 배달왕 칭호(꾸미기는 행운의 배달부일 때만), 결과 줄에 순위", async () => {
+    const ev = await open(10);
+    const [a, b, c, e, d] = await Promise.all(["일등", "이등", "삼등", "동점늦게", "적게"].map((n) => newAcct(n, ev.start)));
+    await deliverUrgent(d, ev.id, await fill(d, ev, 4), ev.start + 10_000);
+    await deliverUrgent(c, ev.id, await fill(c, ev, 6), ev.start + 30_000);
+    await deliverUrgent(a, ev.id, await fill(a, ev, 10), ev.start + 60_000);
+    await deliverUrgent(b, ev.id, await fill(b, ev, 10), ev.start + 120_000);
+    // e는 c와 같은 6개지만 두 번에 나눠 더 늦게 닿았다 → c 아래
+    await deliverUrgent(e, ev.id, await fill(e, ev, 3), ev.start + 5_000);
+    await deliverUrgent(e, ev.id, await fill(e, ev, 3), ev.start + 200_000);
+    const t = ev.end + 60_000;
+    expect((await urgentStore().top(ev.id, 5)).map((r) => r.acct)).toEqual([a, b, c, e, d]);
+    expect((await urgentMine(a, t)).rows.find((r) => r.id === ev.id)!.reward).toMatchObject({ stage: 100, stamps: 5, rank: 1, rankStamps: 5, king: true, kingCos: false });
+    expect((await urgentMine(e, t)).rows.find((r) => r.id === ev.id)!.reward).toMatchObject({ rank: 0, rankStamps: 0, king: false });
+
+    const before = await Promise.all([a, b, c, e, d].map((x) => stampsOf(x, t)));
+    const got = await Promise.all([a, b, c, e, d].map((x) => claimUrgent(x, ev.id, t)));
+    expect(got.map((g) => g.claimed.rank ?? 0)).toEqual([1, 2, 3, 0, 0]);
+    expect(got.map((g) => g.claimed.rankStamps ?? 0)).toEqual([5, 3, 2, 0, 0]);
+    expect(got.map((g, i) => g.stamps - before[i])).toEqual([10, 8, 7, 5, 5]);
+    // 배달왕 칭호는 100%부터 (하루), 꾸미기는 150% 판에서만 — 행운의 배달부로 뽑혔을 때만 꾸미기가 있다
+    expect(got[0].claimed).toMatchObject({ king: true });
+    expect(got[0].claimed.kingCos).toBeUndefined();
+    expect(!!got[0].claimed.cos).toBe(!!got[0].claimed.lucky);
+    expect((await getTitleStats().get(a)).urgKing).toBe(t + 24 * HOUR);
+    expect((await getTitleStats().get(b)).urgKing).toBe(0);
+    // 행운의 배달부는 여전히 한 명 (100%~149% 판은 1등도 후보)
+    expect(got.filter((g) => g.claimed.lucky)).toHaveLength(1);
+    // 결과 줄 (위쪽 막대)
+    expect(urgentRewardLine({ n: GOAL + 6, goal: GOAL, mine: true, claimed: true, rank: got[1].claimed.rank })).toContain("2등이라 도장 3개를 더 받았어요.");
+  });
+
+  it("같은 수·같은 ms면 계정 id가 사전 순으로 뒤인 사람이 위 (Redis ZREVRANGE와 같은 순서) — 늘 같은 결과", async () => {
+    const ev = await open(11);
+    const tag = nanoid(6);
+    const x = `t-urg-tie-${tag}-a`;
+    const y = `t-urg-tie-${tag}-b`;
+    await getAccounts().enter(x, { name: "동점가" }, ev.start);
+    await getAccounts().enter(y, { name: "동점나" }, ev.start);
+    const at = ev.start + 50_000;
+    await deliverUrgent(x, ev.id, await fill(x, ev, 15), at);
+    await deliverUrgent(y, ev.id, await fill(y, ev, 15), at);
+    expect((await urgentStore().top(ev.id, 2)).map((r) => r.acct)).toEqual([y, x]);
+    const t = ev.end + 1_000;
+    expect((await urgentMine(x, t)).rows.find((r) => r.id === ev.id)!.reward).toMatchObject({ rank: 2, rankStamps: 3, king: false });
+    const [cy, cx] = [await claimUrgent(y, ev.id, t), await claimUrgent(x, ev.id, t)];
+    expect(cy.claimed).toMatchObject({ rank: 1, rankStamps: 5, king: true });
+    expect(cx.claimed).toMatchObject({ rank: 2, rankStamps: 3, king: false });
+  });
+
+  it("99%: 순위 보상·배달왕 없음 (도장 2만)", async () => {
+    const ev = await open(12);
+    const a = await newAcct("거의", ev.start);
+    await deliverUrgent(a, ev.id, await fill(a, ev, GOAL - 1), ev.start + 1_000);
+    const t = ev.end + 1_000;
+    const s0 = await stampsOf(a, t);
+    const r = await claimUrgent(a, ev.id, t);
+    expect(r.claimed).toMatchObject({ stage: 50, stamps: 2, king: false });
+    expect(r.claimed.rank).toBeUndefined();
+    expect(r.stamps - s0).toBe(2);
+    expect((await getTitleStats().get(a)).urgKing).toBe(0);
+  });
+
+  it("150%: 1등은 칭호 + 무작위 꾸미기 + 도장 5개 더, 2등 3개 더. 같은 사람이 동시에 두 번 받아도 한 번만 (순위 도장도)", async () => {
+    const ev = await open(13);
+    const a = await newAcct("백오십일등", ev.start);
+    const b = await newAcct("백오십이등", ev.start);
+    await deliverUrgent(a, ev.id, await fill(a, ev, GOAL), ev.start + 1_000);
+    await deliverUrgent(b, ev.id, await fill(b, ev, GOAL / 2), ev.start + 2_000);
+    expect((await urgentStore().state(ev.id)).fest).toBe(ev.start + 2_000);
+    const t = ev.start + 3_000;
+    const [s0a, s0b] = [await stampsOf(a, t), await stampsOf(b, t)];
+    const rs = await Promise.all([claimUrgent(a, ev.id, t), claimUrgent(a, ev.id, t)].map((p) => p.catch((e: { code: string }) => e.code)));
+    expect(rs.filter((x) => x === "URGENT_CLAIMED")).toHaveLength(1);
+    const ok = rs.find((x) => typeof x !== "string") as Awaited<ReturnType<typeof claimUrgent>>;
+    expect(ok.claimed).toMatchObject({ stage: 150, rank: 1, rankStamps: 5, king: true, kingCos: true });
+    expect(ok.claimed.cos).toBeTruthy();
+    expect(await stampsOf(a, t)).toBe(s0a + 10);
+    await expect(claimUrgent(a, ev.id, t + 1)).rejects.toMatchObject({ code: "URGENT_CLAIMED" });
+    expect(await stampsOf(a, t)).toBe(s0a + 10);
+    const cb = await claimUrgent(b, ev.id, t);
+    expect(cb.claimed).toMatchObject({ rank: 2, rankStamps: 3, king: false });
+    expect(cb.stamps - s0b).toBe(8);
+  });
+
+  it("관리자 결과 기록: 끝나면 한 번만 남고(동시에 불러도), 시각·종류·최종 %·낸 사람(수·순위·보상)·행운의 배달부, 받은 뒤엔 받음 표시", async () => {
+    const ev = await open(14);
+    const [a, b, c, d] = await Promise.all(["기록일", "기록이", "기록삼", "기록사"].map((n) => newAcct(n, ev.start)));
+    await deliverUrgent(a, ev.id, await fill(a, ev, 15), ev.start + 1_000);
+    await deliverUrgent(b, ev.id, await fill(b, ev, 10), ev.start + 2_000);
+    await deliverUrgent(c, ev.id, await fill(c, ev, 6), ev.start + 3_000);
+    await deliverUrgent(d, ev.id, await fill(d, ev, 2), ev.start + 4_000);
+    // 진행 중엔 남기지 않는다
+    await urgentPublic(ev.start + 5_000);
+    expect((await urgentStore().state(ev.id)).rs).toBe(false);
+    await Promise.all([urgentPublic(ev.end + 1_000), urgentPublic(ev.end + 1_000)]);
+    expect((await urgentStore().state(ev.id)).rs).toBe(true);
+    await claimUrgent(b, ev.id, ev.end + 2_000);
+    const { results } = await adminUrgentResults(ev.end + 3_000);
+    const mine = results.filter((r) => r.id === ev.id);
+    expect(mine).toHaveLength(1);
+    const r = mine[0];
+    expect(r).toMatchObject({ kind: ev.kind, start: ev.start, end: ev.end, goal: GOAL, n: 33, pct: 110, stage: 100, early: false, count: 4, at: ev.end + 1_000 });
+    expect(r.rows.map((x) => [x.acct, x.n, x.rank, x.stamps])).toEqual([
+      [a, 15, 1, 10],
+      [b, 10, 2, 8],
+      [c, 6, 3, 7],
+      [d, 2, 4, 5],
+    ]);
+    expect(r.rows.map((x) => x.king)).toEqual([true, false, false, false]);
+    expect(r.rows.every((x) => x.box && !x.kingCos)).toBe(true);
+    expect(r.rows.filter((x) => x.lucky)).toHaveLength(1);
+    expect(r.lucky?.acct).toBe(r.rows.find((x) => x.lucky)!.acct);
+    expect(r.rows[1].name).toBe("기록이");
+    // 받은 사람만 받음 표시
+    expect(Object.keys(r.claimed)).toEqual([b]);
+    expect(r.claimed[b].at).toBe(ev.end + 2_000);
+    // 다시 불러도 그대로 (두 번 남기지 않는다)
+    expect((await adminUrgentResults(ev.end + 4_000)).results.filter((x) => x.id === ev.id)).toHaveLength(1);
+    expect(await urgentStore().saveResult(ev.id, "{}", URGENT_RESULTS_KEEP)).toBe(false);
+  });
+
+  it("관리자 결과: 아무도 상태를 묻지 않고 끝난 의뢰도 관리자 화면을 열 때 남는다", async () => {
+    const ev = await open(15);
+    const a = await newAcct("조용히", ev.start);
+    await deliverUrgent(a, ev.id, await fill(a, ev, 3), ev.start + 1_000);
+    expect((await urgentStore().state(ev.id)).rs).toBe(false);
+    const r = (await adminUrgentResults(ev.end + 1_000)).results.find((x) => x.id === ev.id);
+    expect(r).toMatchObject({ n: 3, pct: 10, stage: 0, count: 1, lucky: null, last: null });
+    expect(r!.rows[0]).toMatchObject({ acct: a, rank: 1, stamps: 0, king: false, box: false });
+  });
+
+  it("결과 목록은 최근 20개까지 (최신이 앞), 같은 의뢰는 한 번만", async () => {
+    const st = new MemoryUrgentStore(() => ({}) as UrgentMemDeps);
+    for (let i = 0; i < 25; i++) expect(await st.saveResult(`e${i}`, JSON.stringify({ i }), URGENT_RESULTS_KEEP)).toBe(true);
+    expect(await st.saveResult("e3", "{}", URGENT_RESULTS_KEEP)).toBe(false);
+    const rows = await st.results(100);
+    expect(URGENT_RESULTS_KEEP).toBe(20);
+    expect(rows).toHaveLength(20);
+    expect(JSON.parse(rows[0])).toEqual({ i: 24 });
+    expect(JSON.parse(rows[19])).toEqual({ i: 5 });
+  });
+
+  it("Redis Lua도 같은 계약: 표시(HSETNX rs)가 먼저, 목록은 앞에 넣고 남길 수만큼 자른다, 빈 키엔 TTL", () => {
+    const lua = URGENT_RESULT_LUA;
+    expect(lua.indexOf("HSETNX")).toBeLessThan(lua.indexOf("LPUSH"));
+    expect(lua.indexOf("LPUSH")).toBeLessThan(lua.indexOf("LTRIM"));
+    expect(lua).toContain("'rs'");
+    expect(lua).toMatch(/TTL[\s\S]*EXPIRE/);
+  });
+
+  it("관리자 결과 API는 관리자만 (열쇠 없으면 401)", async () => {
+    const route = await import("@/app/api/admin/urgent/route");
+    const no = await route.GET(new NextRequest("http://localhost/api/admin/urgent", { headers: { "x-forwarded-for": "127.0.0.9" } }));
+    expect(no.status).toBe(401);
+    const bad = await route.GET(new NextRequest("http://localhost/api/admin/urgent", { headers: { "x-admin-key": "nope", "x-forwarded-for": "127.0.0.8" } }));
+    expect(bad.status).toBe(401);
+    const ok = await route.GET(new NextRequest("http://localhost/api/admin/urgent", { headers: { "x-admin-key": "dev-admin", "x-forwarded-for": "127.0.0.1" } }));
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get("cache-control")).toBe("no-store");
+    expect(Array.isArray(((await ok.json()) as { results: unknown[] }).results)).toBe(true);
   });
 });

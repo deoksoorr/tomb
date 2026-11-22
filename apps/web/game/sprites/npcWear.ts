@@ -16,8 +16,8 @@ export type NpcWear = {
   hat?: { kind: NwHatKind; c?: Color; c2?: Color; c3?: Color };
   /** 목도리 (c 바탕 · c2 무늬, thick = 두툼하게 두 줄, tail = 늘어진 끝) */
   scarf?: { c: Color; c2?: Color; pat?: NwPattern; thick?: boolean; tail?: boolean };
-  /** 외투 (몸통을 덮는다 — 상자·머그잔·튜브 몸은 건너뛴다) */
-  coat?: { kind: NwCoatKind; c: Color; c2?: Color };
+  /** 외투 (몸통을 덮는다 — 상자·머그잔·튜브 몸은 건너뛴다). tones = 11/22 누빔 패딩 다섯 톤 (꾸미기 롱패딩 — 없으면 예전 두 톤 누빔) */
+  coat?: { kind: NwCoatKind; c: Color; c2?: Color; tones?: PufferTones };
   /** 벙어리장갑 색 (손 흔들기·환호 손도 이 색) */
   mitt?: Color;
   /** 장화 (cuff = 위 단: 털·뜨개) */
@@ -33,6 +33,22 @@ export type NpcWear = {
   /** 머그잔 몸: 뜨개 덮개(knit) · 사탕 지팡이 줄무늬(candy) */
   cup?: "knit" | "candy";
 };
+
+/**
+ * 11/22 누빔 패딩 다섯 톤 (꾸미기 「무릎까지 롱패딩」 — 염색 때 다섯 톤이 함께 옮겨 가도록 팔레트를 정해 둔다, gearDye GEAR_DYE_REGIONS).
+ * 빛은 왼쪽 위: 누빔 칸 윗줄 = hi (왼쪽 끝 shine), 아랫줄 = base, 오른쪽 두 칸 = lo, 누빔 선 = seam
+ */
+export type PufferTones = { shine: Color; hi: Color; base: Color; lo: Color; seam: Color };
+
+/** 누빔 칸 한 픽셀 (row: 0 = 칸 윗줄(부푼 줄) · 1 = 칸 아랫줄 · 2 = 누빔 선 · 3 = 밑단, l·r = 그 줄 [왼쪽, 오른쪽)) */
+export function pufferTone(t: PufferTones, row: 0 | 1 | 2 | 3, x: number, l: number, r: number): Color {
+  const right = x >= r - 2;
+  if (row === 2) return x === l ? t.lo : t.seam;
+  if (row === 3) return right ? t.seam : t.lo;
+  // 부푼 윗줄: 왼쪽 60%만 밝게 (오른쪽은 바탕) → 줄무늬가 아니라 둥근 누빔 칸으로 읽힌다
+  if (row === 0) return x === l + 1 ? t.shine : right || x >= l + (r - l) * 0.6 ? t.base : t.hi;
+  return x === l ? t.hi : right ? t.lo : t.base;
+}
 
 const registry = new Map<string, NpcWear>();
 
@@ -124,7 +140,7 @@ export function drawNwCoat(g: Grid, c: NwCtx, w: NpcWear): void {
   const coat = w.coat;
   if (!coat || objectBody(c.body)) return;
   if (c.fb === "sheet") return drawPoncho(g, c, coat.c, coat.c2 ?? hi(coat.c));
-  if (c.fb === "round") return drawRoundCoat(g, c, coat.kind, coat.c, coat.c2 ?? hi(coat.c));
+  if (c.fb === "round") return drawRoundCoat(g, c, coat.kind, coat.c, coat.c2 ?? hi(coat.c), coat.kind === "puffer" ? coat.tones : undefined);
   const { cx, neck } = c.m;
   const side = c.view === "side";
   const tall = c.fb === "tall";
@@ -134,16 +150,25 @@ export function drawNwCoat(g: Grid, c: NwCtx, w: NpcWear): void {
   const base = coat.c;
   const c2 = coat.c2 ?? hi(base);
   const puffer = coat.kind === "puffer";
+  const tones = puffer ? coat.tones : undefined;
   for (let y = top; y <= bot; y++) {
     const [l0, r0] = cloakSpan(c, y);
     const k = y - top;
+    // 11/22 다섯 톤 누빔: 밑단부터 세 줄씩 (밑단 · 부푼 윗줄 · 누빔 선 · 아랫줄 · 부푼 윗줄 …) → 목깃 아래로 칸이 두 개 이상 보인다
+    const q = (bot - y) % 3;
+    const qRow: 0 | 1 | 2 | 3 = y === bot ? 3 : q === 1 ? 0 : q === 2 ? 2 : 1;
     // 패딩: 세 줄마다 누빔 선, 그 사이 줄은 한 칸씩 부푼다 (뒤쪽은 옆모습에서 덜)
-    const bulge = puffer && k % 3 === 1 && y < bot && !c.lie ? 1 : 0;
+    //  (다섯 톤: 맨 아래 칸은 부풀리지 않는다 — 밑단이 치마처럼 퍼지지 않게, 예전 실루엣 폭 그대로)
+    const bulge = puffer && (tones ? qRow === 0 && y < bot - 1 : k % 3 === 1 && y < bot) && !c.lie ? 1 : 0;
     const l = l0 - (side ? 0 : bulge);
     const r = r0 + bulge;
     for (let x = l; x < r; x++) {
       // 정장 위 롱코트·패딩: 가슴의 셔츠·넥타이는 보이게 비워 둔다
       if (c.body === "suit" && y < neck + 4 && (c.view === "down" ? x >= cx - 2 && x <= cx + 1 : side && x >= cx + 1)) continue;
+      if (tones) {
+        g.set(x, y, pufferTone(tones, qRow, x, l, r));
+        continue;
+      }
       let col = x >= r - 2 || y === bot ? lo(base) : x === l ? hi(base) : base;
       if (puffer && k % 3 === 0 && k > 0 && x > l && x < r - 1) col = seam(base);
       if (coat.kind === "duffle" && (x * 3 + y * 5) % 7 === 0 && x > l && x < r - 2) col = darken(base, 0.08); // 모직 결
@@ -157,8 +182,8 @@ export function drawNwCoat(g: Grid, c: NwCtx, w: NpcWear): void {
     }
   }
   if (c.lie) return;
-  const lc = lo(base);
-  const deep = seam(base);
+  const lc = tones?.lo ?? lo(base);
+  const deep = tones?.seam ?? seam(base);
   if (coat.kind === "puffer") {
     // 지퍼 (앞: 가운데 은색 줄 + 손잡이, 옆: 앞섶)
     if (c.view === "down") {
@@ -241,7 +266,7 @@ function drawPoncho(g: Grid, c: NwCtx, base: Color, c2: Color): void {
 }
 
 /** 동글이: 배를 감싸는 조끼·패딩 (공 아래쪽 반) */
-function drawRoundCoat(g: Grid, c: NwCtx, kind: NwCoatKind, base: Color, c2: Color): void {
+function drawRoundCoat(g: Grid, c: NwCtx, kind: NwCoatKind, base: Color, c2: Color, tones?: PufferTones): void {
   const { cx, hy } = c.m;
   const ry = c.sit ? 5.5 : 6;
   const inBall = (x: number, y: number) => ((x + 0.5 - cx) / 6.5) ** 2 + ((y + 0.5 - hy) / ry) ** 2 <= 1;
@@ -250,6 +275,17 @@ function drawRoundCoat(g: Grid, c: NwCtx, kind: NwCoatKind, base: Color, c2: Col
     for (let x = 0; x < 20; x++) {
       if (!g.filled(x, y) || !inBall(x, y)) continue;
       const k = y - y0;
+      if (tones) {
+        // 11/22 다섯 톤 누빔 (공 아래쪽 반): 부푼 윗줄 · 아랫줄 · 누빔 선, 공 밑 둥근 그늘은 lo · 오른쪽 아래 사선 그늘
+        let l = x;
+        let r = x + 1;
+        while (l > 0 && g.filled(l - 1, y) && inBall(l - 1, y)) l--;
+        while (r < 20 && g.filled(r, y) && inBall(r, y)) r++;
+        const shade = x - cx - (y - hy) > 3.5;
+        const qRow: 0 | 1 | 2 | 3 = y >= hy + ry - 1 ? 3 : k % 3 === 0 ? 0 : k % 3 === 1 ? 1 : 2;
+        g.set(x, y, shade && qRow !== 2 ? (qRow === 0 ? tones.base : tones.lo) : pufferTone(tones, qRow, x, l, r));
+        continue;
+      }
       let col = x - cx - (y - hy) > 3.5 || y >= hy + ry - 1 ? lo(base) : x - cx < -4 ? hi(base) : base;
       if ((kind === "puffer" || kind === "vest") && k === 2) col = seam(base);
       if (kind === "sweater" && k === 1) col = (x + y) % 2 ? c2 : FUR;

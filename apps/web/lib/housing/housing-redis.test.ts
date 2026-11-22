@@ -1,7 +1,7 @@
 import { Redis } from "@upstash/redis";
 import { nanoid } from "nanoid";
 import { NextRequest } from "next/server";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import * as exteriorRoute from "@/app/api/housing/me/exterior/route";
 import * as session from "@/app/api/session/route";
 import * as villageRoute from "@/app/api/housing/village/route";
@@ -33,8 +33,14 @@ describe.skipIf(!conn)("하우징 v4 (실제 Redis)", () => {
     vi.stubEnv("ADMIN_ALLOWED_IPS", OPERATOR_IP);
     expect(store).toBeInstanceOf(RedisHouseStore);
   });
+  // 시험마다 만든 집은 지운다 (번지 칸도 비운다) — 1채널 15번지를 다음 시험·다음 실행이 다시 쓴다
+  const made: string[] = [];
+  afterEach(async () => {
+    for (const id of made.splice(0)) await store.remove(id);
+  });
 
   async function account(points: number, id = nanoid()): Promise<string> {
+    made.push(houseIdFor(id));
     await accounts.earn(id, "flower", kstDay());
     const now = (await accounts.get(id, kstDay(), Date.now())).points;
     await accounts.adjustPoints(id, points - now);
@@ -153,8 +159,34 @@ describe.skipIf(!conn)("하우징 v4 (실제 Redis)", () => {
     const again = await village(store);
     expect(ids.map((id) => again.houses.find((h) => h.id === id)?.lot)).toEqual(lots);
   });
+  it("11/22 번지 빼기·옮기기·다시 받기·지우기는 그 집 채널 색인만 쓴다 (1채널 색인을 건드리지 않는다)", async () => {
+    const id = nanoid(12);
+    made.push(id);
+    const lots = async (ch: number) => {
+      const flat = ((await raw.hgetall(HK.lots(ch))) as unknown as string[] | null) ?? [];
+      const m = new Map<string, string>();
+      for (let i = 0; i < flat.length; i += 2) m.set(flat[i], flat[i + 1]);
+      return m;
+    };
+    const has1 = async () => [...(await lots(1)).values()].includes(id);
+    const got = await store.create({ id, owner: nanoid(), name: "3채널", intro: "", ownerName: "주인", tier: "small", ch: 3, lot: null, now: 1 });
+    expect(got).toMatchObject({ lot: expect.any(Number) });
+    const lot = (got as { lot: number }).lot;
+    expect((await lots(3)).get(String(lot))).toBe(id);
+    expect(await store.unlot(id)).toBe(true);
+    expect([...(await lots(3)).values()]).not.toContain(id);
+    expect(await store.assignLot(id)).toBeGreaterThan(0);
+    expect([...(await lots(3)).values()]).toContain(id);
+    expect(await store.moveLot(id, 300)).toBe("ok");
+    expect((await lots(3)).get("300")).toBe(id);
+    expect(await has1()).toBe(false);
+    await store.remove(id);
+    expect([...(await lots(3)).values()]).not.toContain(id);
+  });
+
   it("3번 가구 상태: 저장·0이면 지움, 배치 저장 Lua가 치우거나 옮긴 가구 상태·없어진 화분 기록을 같이 지운다", async () => {
     const id = nanoid(12).toLowerCase().replace(/[^a-z0-9]/g, "a");
+    made.push(id);
     await store.create({ id, owner: nanoid(), name: "상태", intro: "", ownerName: "주인", tier: "small", lot: null, now: 1 });
     const fire = { u: "f1", i: "fireplace", x: 1, y: 1, r: 0 };
     const lamp = { u: "l1", i: "floor_lamp", x: 5, y: 1, r: 0 };
@@ -184,7 +216,8 @@ describe.skipIf(!conn)("하우징 v4 (실제 Redis)", () => {
   it("11/22 순위 ZSET에 터 크기 점수: 분양·넓히기·좋아요가 바로 쓰고, 그 전에 넓힌 집은 syncRankScores가 한 번 맞춘다(멱등)", async () => {
     const zs = async (id: string) => Number(await raw.zscore(HK.score, id));
     const id = nanoid(12);
-    // 1채널은 앞 시험들이 다 채운다 → 다른 채널
+    made.push(id);
+    // 1채널은 다른 시험들이 쓴다 → 다른 채널
     expect(await store.create({ id, owner: nanoid(), name: "넓은", intro: "", ownerName: "주인", tier: "wide", ch: 8, lot: null, now: 1, placedScore: 7, placed: { pot: 1 }, layout: { items: [{ u: "a", i: "pot", x: 0, y: 0, r: 0 }], floor: "floor_grass", wall: "wall_fence" } })).toMatchObject({ lot: expect.any(Number) });
     expect(await zs(id)).toBe(7 + TIER_SCORE_BONUS.wide);
     expect(await store.upgrade(id, "wide", "manor", 2)).toBe(true);
@@ -193,6 +226,7 @@ describe.skipIf(!conn)("하우징 v4 (실제 Redis)", () => {
     expect(await zs(id)).toBe(7 + LIKE_WEIGHT + TIER_SCORE_BONUS.manor);
     // 숨긴 집은 넓혀도 순위에 다시 들어가지 않는다
     const hid = nanoid(12);
+    made.push(hid);
     expect(await store.create({ id: hid, owner: nanoid(), name: "숨김", intro: "", ownerName: "주인", tier: "small", ch: 8, lot: null, now: 1 })).toMatchObject({ lot: expect.any(Number) });
     await store.setHidden(hid, true);
     expect(await store.upgrade(hid, "small", "wide", 2)).toBe(true);
@@ -217,6 +251,7 @@ describe.skipIf(!conn)("하우징 v4 (실제 Redis)", () => {
 
   it("11/22 오래 비운 집 정리를 돌면 순위 점수 맞추기도 한 번 돈다 (배포 뒤 따로 할 일 없음)", async () => {
     const id = nanoid(12);
+    made.push(id);
     expect(await store.create({ id, owner: nanoid(), name: "옛 넓은 집", intro: "", ownerName: "주인", tier: "wide", ch: 8, lot: null, now: 1 })).toMatchObject({ lot: expect.any(Number) });
     await raw.zadd(HK.score, { score: 0, member: id });
     await raw.del(HK.scoreVer);

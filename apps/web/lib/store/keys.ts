@@ -78,6 +78,12 @@ export const K = {
   inv: (id: string) => `acct:${id}:inv`, // HASH itemId → 개수
   look: (id: string) => `acct:${id}:look`, // HASH 부위 → `${itemId}|${만료 ms}`
   stash: (id: string) => `acct:${id}:stash`, // HASH 벗어 둔 꾸미기 itemId → 만료 ms (look과 겹치지 않는다)
+  /** 11/22 SET 포인트를 내고 영구로 산 꾸미기 id (되팔기 조건 — 상점 영구 구매 Lua만 넣고, 되팔면 뺀다. 선물·보상은 안 넣는다) */
+  bought: (id: string) => `acct:${id}:bought`,
+  /** 11/22 색 보관함 「이 색 입기」 연타 잠금 (lib/store/style.ts SELECT_LUA): n = 10초 창 횟수, lock = 잠금 끝 시각(ms), lv = 잠금 단계 — 모두 TTL로 저절로 지워진다 */
+  dyeSelN: (id: string) => `acct:${id}:dyesel:n`,
+  dyeSelLock: (id: string) => `acct:${id}:dyesel:lock`,
+  dyeSelLv: (id: string) => `acct:${id}:dyesel:lv`,
   acctGraves: (id: string) => `acct:${id}:graves`, // SET 세운 묘비 id
   earn: (id: string, day: string) => `acct:${id}:earn:${day}`, // HASH source → 점수, `_total`. 2일 TTL
   code: (codeHash: string) => `code:${codeHash}`, // STRING → 계정 id

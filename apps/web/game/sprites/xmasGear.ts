@@ -157,28 +157,6 @@ export function drawXmasNeck(g: Grid, view: GearView, id: string, m: GearM, body
   g.hline(tx, tx + 1, neck + 5, FUR);
 }
 
-// ── 손: 별 지팡이 사탕 (뒷모습은 몸에 가려 그리지 않는다) ──
-
-export function drawXmasHand(g: Grid, view: GearView, id: string, m: GearM): void {
-  if (id !== "xm_cane" || view === "up") return;
-  const x = m.hx;
-  const y = m.hY;
-  // 빨강·하양 줄무늬 막대 (손에서 위아래로) + 바깥쪽으로 둥글게 굽은 손잡이 (∩)
-  for (let yy = y - 4; yy <= y + 2; yy++) g.set(x, yy, (yy - y + 10) % 2 ? FUR : RED);
-  g.set(x, y - 5, FUR);
-  g.set(x + 1, y - 6, RED);
-  g.set(x + 2, y - 5, FUR);
-  g.set(x + 2, y - 4, RED);
-  // 손잡이 위 금별 (+ 모양, 가운데가 밝다)
-  const sx = x + 1;
-  const sy = y - 8;
-  g.set(sx, sy, GOLD_HI);
-  g.set(sx - 1, sy, GOLD);
-  g.set(sx + 1, sy, GOLD);
-  g.set(sx, sy - 1, GOLD);
-  g.set(sx, sy + 1, GOLD_LO);
-}
-
 // ── 등: 털 달린 빨간 망토 (layer "back" = 몸보다 먼저, "front" = 몸 다음) ──
 
 /** 등 가운데 금실 눈꽃 자수 (5×5) */
@@ -212,11 +190,12 @@ export function drawXmasBack(g: Grid, view: GearView, id: string, m: GearM, body
     }
     const spreadB = Math.round((bottom - shY) * 0.45);
     for (let x = shL - spreadB; x <= shR + spreadB; x++) furHem(x, bottom);
-    // 털 깃 (어깨를 감싼다)
-    for (let x = shL - 1; x <= shR + 1; x++) {
-      g.set(x, shY - 1, (x + 1) % 3 === 0 ? FUR_LO : FUR);
-      g.set(x, shY, x === shL - 1 || x === shR + 1 ? FUR_LO : (x + 2) % 3 === 0 ? FUR_LO : FUR);
-    }
+    // 털 깃 (어깨를 감싼다). 11/22 머리 있는 몸은 머리를 그린 뒤 뒷덜미를 덮는 두 줄 털 깃(capeArt)이 대신한다 — 여기선 벨벳 몸판만
+    if (body === "round" || body === "sheet")
+      for (let x = shL - 1; x <= shR + 1; x++) {
+        g.set(x, shY - 1, (x + 1) % 3 === 0 ? FUR_LO : FUR);
+        g.set(x, shY, x === shL - 1 || x === shR + 1 ? FUR_LO : (x + 2) % 3 === 0 ? FUR_LO : FUR);
+      }
     const midY = Math.round((shY + bottom) / 2);
     if (bottom - shY >= 8) snowflakeEmbroidery(g, cx - 1, midY);
     else g.set(cx - 1, midY, GOLD);
@@ -263,7 +242,7 @@ export function drawXmasBack(g: Grid, view: GearView, id: string, m: GearM, body
 // ── 외곽선 뒤에도 밝게 남는 점 ──
 
 /** 왕관 얼음 결정·지팡이 별의 가운데 빛 (avatar.ts가 외곽선을 두른 뒤에 부른다) */
-export function drawXmasGlow(g0: Grid, view: GearView, head: string | null, hand: string | null, m: GearM, top: number): void {
+export function drawXmasGlow(g0: Grid, view: GearView, head: string | null, m: GearM, top: number): void {
   const g = safe(g0);
   if (head === "xm_crown") {
     const c = view === "side" ? m.cx : m.cx - 1;
@@ -274,7 +253,6 @@ export function drawXmasGlow(g0: Grid, view: GearView, head: string | null, hand
       g.set(m.cx - 1, top - 1, 0xff8a90);
     }
   }
-  if (hand === "xm_cane" && view !== "up") g.set(m.hx + 1, m.hY - 8, 0xffffff);
 }
 
 // ── 아이콘 (16×16) ──

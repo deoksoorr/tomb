@@ -25,6 +25,12 @@ const dateText = (t: number) => {
   return `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일`;
 };
 
+/** 11/22 한 번에 받기·지우기 대상: 안 받은 선물(모두 받기) · 받은 선물(받은 선물 지우기 — 안 받은 선물은 절대 지우지 않는다) */
+export function splitGifts(gifts: readonly GiftEntry[] | null | undefined): { unclaimed: GiftEntry[]; claimed: GiftEntry[] } {
+  const list = gifts ?? [];
+  return { unclaimed: list.filter((g) => g.claimedAt === null), claimed: list.filter((g) => g.claimedAt !== null) };
+}
+
 /** 11번 선물함: 운영자가 보낸 쪽지·포인트·아이템. 받기(한 번만)·지우기. 받지 않은 선물은 30일 보관 */
 export default function GiftsDialog({ onClose, onOpenCalendar }: { onClose: () => void; onOpenCalendar?: () => void }) {
   const { gifts } = useGifts();
@@ -81,10 +87,69 @@ export default function GiftsDialog({ onClose, onOpenCalendar }: { onClose: () =
     }
   }
 
+  // 11/22 운영자: 선물이 여러 개면 한 번에 받기 · 받은 선물 기록 한 번에 지우기 (서버는 하나씩 — 받기마다 지갑 상한·중복 검사가 그대로 돈다)
+  const { unclaimed, claimed: claimedList } = splitGifts(gifts);
+
+  async function claimAll() {
+    setPending("all");
+    setNotice(null);
+    let points = 0;
+    let items = 0;
+    let failed: string | null = null;
+    for (const g of unclaimed) {
+      try {
+        const res = await socialApi.claimGift(g.id);
+        meStore.set(res.me);
+        giftsStore.replace(g.id, res.gift);
+        points += res.points;
+        items += g.items.length;
+      } catch (e) {
+        failed = errorMessage(e);
+      }
+    }
+    if (failed) void giftsStore.refresh();
+    const got = [...(points ? [`${points.toLocaleString("ko-KR")}P`] : []), ...(items ? [`아이템 ${items}종류`] : [])];
+    const msg = got.length ? `선물을 모두 받았어요: ${got.join(", ")}${failed ? ` (일부는 못 받았어요: ${failed})` : ""}` : (failed ?? "받을 선물이 없어요.");
+    setNotice(msg);
+    if (got.length) showToast(msg, 5_000);
+    setPending(null);
+  }
+
+  async function dropClaimed() {
+    setPending("all");
+    setConfirmDrop(null);
+    let failed = false;
+    for (const g of claimedList) {
+      try {
+        await socialApi.deleteGift(g.id);
+        giftsStore.replace(g.id, null);
+      } catch {
+        failed = true;
+      }
+    }
+    if (failed) void giftsStore.refresh();
+    setNotice(failed ? "일부 기록은 지우지 못했어요. 다시 해 주세요." : "받은 선물 기록을 지웠어요.");
+    setPending(null);
+  }
+
   return (
     <Dialog title="선물함" onClose={onClose}>
       <div className={styles.wrap}>
         <p className={ui.hint}>마을 관리인이 보낸 선물이 여기로 와요. 받지 않은 선물은 보낸 날부터 30일 동안 보관돼요.</p>
+        {(unclaimed.length > 1 || claimedList.length > 0) && (
+          <div className={styles.bulk}>
+            {unclaimed.length > 1 && (
+              <button type="button" className={cx(ui.button, ui.primary)} disabled={pending !== null} onClick={() => void claimAll()}>
+                모두 받기 ({unclaimed.length})
+              </button>
+            )}
+            {claimedList.length > 0 && (
+              <button type="button" className={cx(ui.button, ui.quiet)} disabled={pending !== null} onClick={() => void dropClaimed()}>
+                받은 선물 지우기 ({claimedList.length})
+              </button>
+            )}
+          </div>
+        )}
         {gifts === null && <p className={ui.hint}>불러오는 중…</p>}
         {gifts?.length === 0 && (
           <EmptyHero icon="gift" title="선물함이 비어 있어요">
@@ -146,7 +211,7 @@ export default function GiftsDialog({ onClose, onOpenCalendar }: { onClose: () =
               "점검이나 오류로 불편했던 날에는 마을 관리인이 사과 선물을 보내요.",
               "이벤트·명절·업데이트 기념 선물이 오기도 해요.",
               "받은 포인트는 바로 내 포인트에, 아이템은 가방에 들어가요.",
-              "받은 선물 기록도 30일 동안 여기에 남아요. 필요 없으면 지워도 돼요.",
+              "받은 선물 기록도 30일 동안 여기에 남아요. [받은 선물 지우기]로 한 번에 지울 수 있어요.",
             ]}
           />
         </InfoCard>

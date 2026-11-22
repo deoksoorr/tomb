@@ -9,18 +9,25 @@ import { useCallback, type RefObject } from "react";
 export function watchMoreBelow(el: HTMLElement | null): (() => void) | undefined {
   if (!el) return;
   const check = () => {
+    raf = 0;
     const more = el.scrollHeight - el.scrollTop - el.clientHeight > 4;
     if (more) el.dataset.more = "";
-    else delete el.dataset.more;
+    else if (el.dataset.more !== undefined) delete el.dataset.more;
+  };
+  // 11/22 한 프레임에 한 번만 잰다: 창 안 글자가 매 프레임 바뀌면(염색 판 색 이름·남은 시간) 바뀔 때마다 레이아웃을 강제로 읽어 판이 끊겼다
+  let raf = 0;
+  const later = () => {
+    if (!raf) raf = requestAnimationFrame(check);
   };
   check();
-  el.addEventListener("scroll", check, { passive: true });
-  const ro = new ResizeObserver(check);
+  el.addEventListener("scroll", later, { passive: true });
+  const ro = new ResizeObserver(later);
   ro.observe(el);
-  const mo = new MutationObserver(check);
+  const mo = new MutationObserver(later);
   mo.observe(el, { childList: true, subtree: true });
   return () => {
-    el.removeEventListener("scroll", check);
+    if (raf) cancelAnimationFrame(raf);
+    el.removeEventListener("scroll", later);
     ro.disconnect();
     mo.disconnect();
   };

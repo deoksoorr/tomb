@@ -99,8 +99,10 @@ export class RedisGullStore implements GullStore {
     this.redis = redisClient(conn, "sea/gull");
   }
   async get(acct: string, day: string) {
-    const [h, d] = await Promise.all([this.redis.hmget<Record<string, string | number | null>>(snackKey(acct), "plain", "spicy"), this.redis.get<number>(snackDayKey(acct, day))]);
-    return { plain: Number(h?.plain ?? 0) || 0, spicy: Number(h?.spicy ?? 0) || 0, bought: Number(d ?? 0) || 0 };
+    const [h, d] = await Promise.all([this.redis.hmget(snackKey(acct), "plain", "spicy") as Promise<unknown>, this.redis.get<number>(snackDayKey(acct, day))]);
+    // 이 클라이언트(redisClient)는 HMGET을 이름 없는 배열로 준다 (객체로 와도 받는다)
+    const [plain, spicy] = Array.isArray(h) ? h : [(h as Record<string, unknown> | null)?.plain, (h as Record<string, unknown> | null)?.spicy];
+    return { plain: Number(plain ?? 0) || 0, spicy: Number(spicy ?? 0) || 0, bought: Number(d ?? 0) || 0 };
   }
   async buy(acct: string, day: string, kind: SnackKind): Promise<BuyResult> {
     const r = await this.redis.eval<string[], number[]>(BUY_LUA, [snackKey(acct), snackDayKey(acct, day)], [kind, String(SNACK_DAY_LIMIT), String(SNACK_HOLD_MAX), String(HOLD_TTL_SEC), String(DAY_TTL_SEC)]);

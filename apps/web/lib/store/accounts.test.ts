@@ -215,10 +215,11 @@ function contract(make: () => Kit) {
     await accounts.unequip(id, "head", 100);
     expect(await accounts.buy(id, "hat_cat", 50, { unique: true, now: 4999 })).toBe("owned");
     expect(await accounts.buy(id, "hat_cat", 50, { unique: true, now: 5000 })).toBe("ok");
-    // 가방의 새 것을 입으면 stash에 남은(만료 전) 같은 아이템은 지운다 → 한 곳에만
+    // 가방의 새 것을 입으면 stash에 남은(만료 전) 같은 아이템은 지운다 → 한 곳에만.
+    // 11/22 남은 기간(5000까지)에 이용 기간(9000)을 더한다 — 덮어써서 줄지 않는다
     await accounts.equip(id, "hat_cat", "head", 9000, 0);
     const a = await accounts.get(id, DAY, 0);
-    expect(a.equipped).toEqual([{ itemId: "hat_cat", until: 9000 }]);
+    expect(a.equipped).toEqual([{ itemId: "hat_cat", until: 14000 }]);
     expect(a.stash).toEqual([]);
   });
 

@@ -2,6 +2,7 @@ import { handler, json } from "@/lib/http";
 import { requireVisitor } from "@/lib/session";
 import { getAccounts } from "@/lib/store";
 import { loadMe } from "@/lib/store/accounts";
+import { withoutWornItemDyes } from "@/lib/dye/itemWorn";
 import type { Me } from "@/lib/types";
 
 /**
@@ -13,5 +14,6 @@ export const GET = handler(async (req) => {
   const accounts = getAccounts();
   const now = Date.now();
   await accounts.visit(visitorId, now, false);
-  return json<Me>(await loadMe(accounts, visitorId, now));
+  // 11/22 입은 아이템 색(dye.items)은 색 보관함(itemDyes)에서 화면이 다시 계산한다 (lib/hooks/useMe) — 응답에서 중복을 뺀다
+  return json<Me>(withoutWornItemDyes(await loadMe(accounts, visitorId, now)));
 });

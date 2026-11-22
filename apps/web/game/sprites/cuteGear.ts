@@ -13,6 +13,8 @@ export const CUTE_BACK = ["back_bunnybag", "back_milkcape"] as const;
 /** 두건 꼭지·새싹을 덮는 모자 */
 export const CUTE_COVERING = ["hat_mochibun", "hat_hamhood"] as const;
 
+/** 11/22 찹쌀떡 토끼 모자 떡 네 톤 (윤기 · 바탕 · 그늘 · 짙은 그늘) — 염색 때 함께 옮겨 간다 */
+export const MOCHI_TONES = [0xfffdf9, 0xfbf5ec, 0xeae0d2, 0xd8ccbc] as const;
 const BLUSH = 0xf6a0b4;
 const EYE = 0x3a2a2e;
 
@@ -47,8 +49,8 @@ export function drawCuteHead(g: Grid, view: GearView, id: string, m: GearM, top:
     }
     case "hat_mochibun": {
       // 찹쌀떡 토끼 모자: 하얀 말랑 모자 + 양옆으로 처진 토끼 귀 + 모자에 그린 점 눈·볼터치
-      const c = 0xfbf7f0;
-      const lo = 0xe2d8cc;
+      // 11/22 염색 티: 떡 네 톤(윤기 · 바탕 · 그늘 · 아래 짙은 그늘) — 왼쪽 위 윤기, 오른쪽으로 갈수록 그늘, 아랫단은 짙게 (gearDye GEAR_DYE_REGIONS.hat_mochibun)
+      const [shine, c, mid, lo] = MOCHI_TONES;
       const pink = 0xf6c0cc;
       const rows: [number, number][] = [
         [top - 2, Math.max(2, Math.round(rx * 0.55))],
@@ -56,10 +58,16 @@ export function drawCuteHead(g: Grid, view: GearView, id: string, m: GearM, top:
         [top, rx],
         [top + 1, rx],
       ];
-      for (const [y, h] of rows) for (let x = cx - h; x < cx + h; x++) g.set(x, y, x >= cx + h - 2 || y === top + 1 ? lo : c);
+      for (const [y, h] of rows)
+        for (let x = cx - h; x < cx + h; x++) {
+          const bottom = y === top + 1;
+          const col = x === cx + h - 1 || (bottom && x >= cx + h - 3) ? lo : x === cx + h - 2 || bottom ? mid : (y === top - 2 || y === top - 1) && x <= cx - h + 2 ? shine : c;
+          g.set(x, y, col);
+        }
       // 처진 귀 (앞·뒤 = 양옆, 옆 = 뒤쪽 하나)
       const ear = (x: number, inner: boolean) => {
         g.rect(x, top, 2, 4, c);
+        g.vline(x + (x < cx ? 0 : 1), top + 1, top + 2, mid);
         g.set(x, top + 3, lo);
         g.set(x + 1, top + 3, lo);
         if (inner) g.vline(x + (x < cx ? 1 : 0), top + 1, top + 2, pink);
@@ -229,71 +237,6 @@ export function drawCuteNeck(g: Grid, view: GearView, id: string, m: GearM, body
   }
 }
 
-// ── 손 (뒷모습은 몸에 가려 그리지 않는다 — avatarGear drawHandGear가 먼저 거른다) ──
-
-export function drawCuteHand(g: Grid, view: GearView, id: string, m: GearM): void {
-  if (view === "up") return;
-  const x = m.hx;
-  const y = m.hY;
-  switch (id) {
-    case "hand_bungeo": {
-      // 붕어빵: 노릇한 물고기 모양 빵 (비늘 무늬 · 갈라진 꼬리 · 점 눈)
-      const c = 0xdc9c48;
-      const lo = 0xb87430;
-      const hi = 0xf4c878;
-      g.hline(x - 1, x + 2, y, c);
-      g.hline(x - 1, x + 2, y + 1, lo);
-      g.hline(x, x + 1, y - 1, hi);
-      g.set(x + 3, y - 1, c);
-      g.set(x + 3, y + 2, lo);
-      g.set(x + 3, y, lo);
-      g.set(x + 3, y + 1, c);
-      g.set(x - 1, y, 0x4a2a14);
-      g.set(x + 1, y, hi);
-      g.set(x, y + 1, c);
-      break;
-    }
-    case "hand_plush": {
-      // 곰돌이 인형: 동그란 귀·점 눈·크림 주둥이 + 목에 분홍 리본
-      const fur = 0xc8905a;
-      const lo = 0xa06a3a;
-      const cream = 0xf6e4c4;
-      g.set(x - 1, y - 4, lo);
-      g.set(x + 2, y - 4, lo);
-      g.hline(x - 1, x + 2, y - 3, fur);
-      g.set(x - 1, y - 2, fur);
-      g.set(x, y - 2, EYE);
-      g.set(x + 1, y - 2, EYE);
-      g.set(x + 2, y - 2, fur);
-      g.hline(x - 1, x + 2, y - 1, fur);
-      g.hline(x, x + 1, y - 1, cream);
-      g.hline(x, x + 1, y, 0xff7aa0);
-      g.set(x - 1, y, fur);
-      g.set(x + 2, y, fur);
-      g.hline(x - 1, x + 2, y + 1, fur);
-      g.set(x - 1, y + 2, lo);
-      g.set(x + 2, y + 2, lo);
-      break;
-    }
-    case "hand_dango": {
-      // 삼색 경단 꼬치: 분홍·하양·연두 경단 셋 + 나무 꼬치
-      const stick = 0xc8a060;
-      g.vline(x, y + 1, y + 3, stick);
-      g.set(x, y - 7, stick);
-      const ball = (yy: number, c: Color, lo: Color) => {
-        g.hline(x - 1, x + 1, yy, c);
-        g.hline(x - 1, x + 1, yy + 1, lo);
-        g.set(x - 1, yy, 0xffffff);
-      };
-      ball(y - 6, 0xf8a8c0, 0xe080a0);
-      ball(y - 4, 0xfbf6ee, 0xe2d8cc);
-      ball(y - 2, 0xb8e08a, 0x8ac060);
-      g.set(x, y, 0x8ac060);
-      break;
-    }
-  }
-}
-
 // ── 등 (layer "back" = 몸보다 먼저, "front" = 몸 다음) ──
 
 export function drawCuteBack(g: Grid, view: GearView, id: string, m: GearM, body: AvatarBody, layer: "back" | "front", hem: number, sit: number): void {
@@ -359,7 +302,9 @@ export function drawCuteBack(g: Grid, view: GearView, id: string, m: GearM, body
         for (let x = x0; x <= x1; x++) {
           if (y === bottom && (x + hem) % 2 === 1) continue;
           const polka = (x + y * 2) % 5 === 0 && y > shY && y < bottom - 1;
-          g.set(x, y, y === bottom ? 0xffffff : polka ? dot : x <= x0 + 1 ? hi : x >= x1 - 1 ? lo : c);
+          // 11/22 세로 주름 (네 칸마다 그늘) — 물방울 사이로 자락 결이 보인다
+          const fold = y > shY && (x - cx + 40) % 4 === 0;
+          g.set(x, y, y === bottom ? 0xffffff : polka ? dot : x <= x0 + 1 ? hi : x >= x1 - 1 ? lo : fold ? lo : c);
         }
       }
       g.hline(shL, shR, shY - 1, hi);
@@ -394,8 +339,9 @@ const CUTE_ICONS: Record<string, Ascii> = {
     pal: { c: 0xd49a62, p: 0xf6b8b8, b: 0x8a5a36 },
   },
   hat_mochibun: {
-    rows: [".....wwwww......", "...wwwwwwwww....", "..wwwkwwwkwww...", "..wwbwwwwwbww...", "wwwlllllllllwww.", "wp.l.......l.pw.", "wp...........pw.", "ww...........ww."],
-    pal: { w: 0xfbf7f0, l: 0xe2d8cc, k: 0x3a2a2e, b: 0xf6a0b4, p: 0xf6c0cc },
+    // 11/22 염색 티: 떡 네 톤 (MOCHI_TONES와 같은 색)
+    rows: [".....sswww......", "...sswwwwwmm....", "..swwkwwwkwmm...", "..wwbwwwwwbmm...", "wwwmmmmmmmmmwwl.", "wp.l.......l.pl.", "wp...........pl.", "ml...........ml."],
+    pal: { s: 0xfffdf9, w: 0xfbf5ec, m: 0xeae0d2, l: 0xd8ccbc, k: 0x3a2a2e, b: 0xf6a0b4, p: 0xf6c0cc },
   },
   hat_hamhood: {
     rows: ["...pc.....cp....", "...cccccccccc...", "..ccccwwccccc...", "..cccccccccccl..", "..cc.......ccl..", "..cc.......ccl..", "..cc.......ccl..", "..ww.......ww..."],

@@ -18,13 +18,15 @@ vi.mock("../assets/manifest", () => ({
   avatarActAnimKey: () => "act",
   avatarAnimKey: () => "anim",
   avatarFrame: () => 0,
+  // 11/22 아바타 시트 원장 (잡기·놓기만 흘려보낸다)
+  avatarTexLedger: () => ({ hold() {}, release() {}, onRemoved() {} }),
   ensureAvatarTexture: (_s: unknown, color: string, _look: unknown, body: string) => {
     textures.push({ color, body });
     return `av:${color}:${body}`;
   },
 }));
 vi.mock("./StaffFxView", () => ({ StaffFxView: class { sync() {} setVisible() {} destroy() {} } }));
-vi.mock("./CosmeticFxView", () => ({ CosmeticFxView: class { setLook() {} labelTop() { return 0; } destroy() {} } }));
+vi.mock("./CosmeticFxView", () => ({ CosmeticFxView: class { setLook() {} setDye() {} labelTop() { return 0; } destroy() {} } }));
 vi.mock("./TitleView", () => ({ TitleView: class { setStaff() {} set() {} destroy() {} } }));
 
 type View = { setStaff(on: boolean): void; setColor(spec: string): void; colorSpec: string; bodyId: string; staff: boolean };

@@ -439,7 +439,7 @@ export function season3Aura(motion: Season3Motion, f: FxInput, t: number, d: Dra
       // 애창곡 마이크 분홍 불빛 테 (뒷모습은 몸에 가려 없음)
       if (f.hidden || f.dir === DIR.up) return;
       const pulse = calm ? 1 : 0.8 + 0.2 * Math.sin(t / 260);
-      d.push("ssHalo3", H_PINK, Math.round(f.x + f.hand.dx), Math.round(f.headY - f.hand.up - 1), light({ alpha: (d.night ? 0.9 : 0.2) * pulse, sx: 0.55, sy: 0.55 }));
+      d.push("ssHalo3", H_PINK, Math.round(f.x + f.hand.dx), Math.round(f.headY - f.hand.up - 2), light({ alpha: (d.night ? 0.9 : 0.2) * pulse, sx: 0.55, sy: 0.55 }));
       break;
     }
     case "ssIcicle": {

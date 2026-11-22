@@ -1,0 +1,292 @@
+/* 11/22 염색 창 ① 칠할 곳 · ② 칸 고르기 · 칸 열기 확인 (DyeTargetPicker.tsx) */
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.groupLabel {
+  flex: none;
+  width: 64px;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.none {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 11px;
+}
+
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 76px;
+  height: 62px;
+  padding: 4px 2px;
+  border: 0;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+  color: var(--text);
+  font-size: 11px;
+  touch-action: manipulation;
+}
+
+.tile:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.tile[aria-pressed="true"],
+.tile[aria-pressed="true"]:hover:not(:disabled) {
+  background: var(--surface);
+  box-shadow: 0 -2px 0 0 var(--bone), 0 2px 0 0 var(--bone), -2px 0 0 0 var(--bone), 2px 0 0 0 var(--bone);
+  color: var(--bone);
+}
+
+.tile:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tileName {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tileNote {
+  font-family: var(--font-small);
+  font-size: 9px;
+}
+
+.sw {
+  width: 22px;
+  height: 22px;
+  box-shadow:
+    0 0 0 2px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+/* ② 커스텀 칸 3개 */
+.slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.slot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 54px;
+  padding: 0 10px;
+  border: 0;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+  color: var(--text);
+  text-align: left;
+  touch-action: manipulation;
+}
+
+.slot:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.slot[aria-pressed="true"],
+.slot[aria-pressed="true"]:hover:not(:disabled) {
+  background: var(--surface);
+  box-shadow: 0 -2px 0 0 var(--bone), 0 2px 0 0 var(--bone), -2px 0 0 0 var(--bone), 2px 0 0 0 var(--bone);
+}
+
+.slot[data-state="empty"] {
+  background: transparent;
+  box-shadow: none;
+  outline: 2px dashed var(--line-strong);
+  outline-offset: -2px;
+}
+
+.slot[data-state="empty"][aria-pressed="true"] {
+  outline-color: var(--bone);
+  color: var(--bone);
+}
+
+.slot[data-state="locked"] {
+  background: repeating-linear-gradient(135deg, #191a16 0 6px, #1d1e19 6px 12px);
+  color: var(--candle);
+}
+
+.slot[data-state="locked"]:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.slotSw {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  box-shadow:
+    0 0 0 2px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+.slotIcon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+}
+
+.slotText {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  font-size: 11px;
+}
+
+.slotText > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ribbon {
+  position: absolute;
+  top: -8px;
+  right: 6px;
+  padding: 0 5px;
+  background: var(--candle);
+  color: #1b1c18;
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.gold {
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+/* 칸 열기 확인 */
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.confirm p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.price {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.price b {
+  display: block;
+  color: var(--bone);
+  font-size: 18px;
+  font-weight: 400;
+}
+
+.priceIcon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+  color: var(--candle);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* 폰: 캐릭터 · 입은 꾸미기를 한 줄에 나란히 (넘치면 다음 줄), 이름은 칸 위에 작게 */
+@media (max-width: 560px) {
+  .groups {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+  }
+
+  .group {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .groupLabel {
+    width: auto;
+  }
+
+  .tiles {
+    flex-wrap: nowrap;
+    gap: 5px;
+  }
+
+  .tile {
+    width: 52px;
+    height: 56px;
+    font-size: 10px;
+  }
+
+  .tileNote {
+    display: none;
+  }
+
+  .slots {
+    gap: 6px;
+  }
+
+  .slot {
+    gap: 6px;
+    height: 50px;
+    padding: 0 6px;
+  }
+
+  .actions > button {
+    flex: 1;
+    min-height: 44px;
+  }
+}

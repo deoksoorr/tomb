@@ -89,7 +89,7 @@ export default function CalendarDialog({ onClose }: { onClose: () => void }) {
       setFreshTiers(new Set(tiers.map((g) => g.days)));
       setNotice([msg, ...tiers.map(tierRewardText)].join(" · "));
       showToast(`출석 도장 꾹! ${msg}`, 5_000);
-      for (const g of tiers) showToast(`반짝! ${tierRewardText(g)} 도착! 가방 꾸미기에서 입어 보세요.`, 7_000);
+      for (const g of tiers) showToast(`반짝! ${tierRewardText(g)} 도착! 가방 [꾸미기]에서 입어 보세요.`, 7_000);
     } catch (e) {
       setNotice(errorMessage(e));
     } finally {

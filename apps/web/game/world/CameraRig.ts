@@ -70,6 +70,8 @@ export class CameraRig {
     private readonly follow: Phaser.GameObjects.Sprite,
     private readonly canvas: HTMLCanvasElement,
     private readonly onTap: (wx: number, wy: number) => void,
+    /** 11/22 마우스가 캔버스 위를 움직였다 (버튼을 누르지 않고 — 머리 위 새싹 말풍선). 캔버스를 벗어나면 null */
+    private readonly onHover?: (w: { x: number; y: number } | null) => void,
   ) {
     this.cam = scene.cameras.main;
     let stored: string | null = null;
@@ -87,6 +89,26 @@ export class CameraRig {
     this.applyBounds();
     this.attach();
     this.emitState();
+    // 11/22 화면 크기가 바뀌면(폰 회전·주소창) 줌·경계를 새 크기로 다시 잡고, 따라가는 중이면 캐릭터를 바로 가운데로 (game/viewportSync)
+    const onResize = () => this.resized();
+    scene.scale.on(Phaser.Scale.Events.RESIZE, onResize);
+    this.off.push(() => scene.scale.off(Phaser.Scale.Events.RESIZE, onResize));
+  }
+
+  /**
+   * 11/22 화면 크기가 바뀐 직후: 줌(맵 맞춤 최소 줌 포함)·경계를 새 크기로 맞추고, 캐릭터를 따라가는 중이면 미끄러지지 않고 바로 가운데에 둔다.
+   * (lerp로 따라가면 roundPixels 때문에 마지막 몇 px을 못 따라가 회전 뒤 캐릭터가 처음 들어왔을 때보다 한쪽으로 치우쳐 보였다)
+   * 둘러보기 중(우클릭·두 손가락 끌기)이나 연출 구도 중에는 위치를 건드리지 않는다
+   */
+  resized(): void {
+    if (this.camGone()) return;
+    const cam = this.cam;
+    const eff = Math.max(this.fitMin(), this.zoom * this.accent);
+    if (cam.zoom !== eff) cam.setZoom(eff);
+    this.applyBounds();
+    if (!this.following || this.cine) return;
+    cam.scrollX = cam.clampX(this.follow.x - cam.width / 2);
+    cam.scrollY = cam.clampY(this.follow.y - CAMERA_FOLLOW_OFFSET_Y - cam.height / 2);
   }
 
   /** 라벨을 화면 1:1 픽셀로 보이게 하는 배율 */
@@ -311,6 +333,15 @@ export class CameraRig {
     return { x: this.tmp.x, y: this.tmp.y };
   }
 
+  /** 11/22 월드 좌표 → 화면(client) px (toWorld의 반대 — 말풍선 자리) */
+  toClient(wx: number, wy: number): Pt {
+    const r = this.canvas.getBoundingClientRect();
+    const wv = this.cam.worldView;
+    const sx = (wx - wv.x) * this.cam.zoom;
+    const sy = (wy - wv.y) * this.cam.zoom;
+    return { x: r.left + (sx * r.width) / Math.max(1, this.canvas.width), y: r.top + (sy * r.height) / Math.max(1, this.canvas.height) };
+  }
+
   private panBy(dxScreen: number, dyScreen: number): void {
     this.detach();
     this.panGoal = null;
@@ -341,6 +372,9 @@ export class CameraRig {
     this.listen("contextmenu", (e) => e.preventDefault());
     this.listen("pointerdown", (e) => this.onDown(e));
     this.listen("pointermove", (e) => this.onMove(e));
+    this.listen("pointerleave", (e) => {
+      if (e.pointerType === "mouse") this.onHover?.(null);
+    });
     this.listen("pointerup", (e) => this.onUp(e, false));
     this.listen("pointercancel", (e) => this.onUp(e, true));
     // 브라우저가 터치를 가져가 캡처가 풀리면(떼는 이벤트 없이) 취소로 친다 — 묵은 손가락이 남아 다음 탭이 두 손가락으로 잡히지 않게
@@ -392,6 +426,7 @@ export class CameraRig {
 
   private onMove(e: PointerEvent): void {
     if (this.tap && this.tap.id === e.pointerId && Math.hypot(e.clientX - this.tap.x, e.clientY - this.tap.y) > TAP_SLOP) this.tap = null;
+    if (this.onHover && e.pointerType === "mouse" && !this.rightDrag && e.buttons === 0) this.onHover(this.toWorld(e.clientX, e.clientY));
 
     const rd = this.rightDrag;
     if (rd && rd.id === e.pointerId) {

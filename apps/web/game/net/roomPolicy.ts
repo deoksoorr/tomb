@@ -1,4 +1,4 @@
-import { ACT_KINDS, CHAT_MAX, CLIENT_VERSION, CLOSE, isEmoId, isPhraseId, parseHuntAct, ROOM_ID_RE, USE_ID_RE, sanitizeDye, type ActKind, type AvatarDye, type EmoId, type HuntAct, type PeerInfo, type PhraseId, type Sid } from "@tomb/protocol";
+import { ACT_KINDS, CHAT_MAX, CLIENT_VERSION, CLOSE, isEmoId, isPhraseId, isSproutUntil, parseHuntAct, ROOM_ID_RE, USE_ID_RE, sanitizeDye, type ActKind, type AvatarDye, type EmoId, type HuntAct, type PeerInfo, type PhraseId, type Sid } from "@tomb/protocol";
 import { readChatLog, type IncomingChatLine } from "../logic/chatLog";
 
 // 방(room) 연결의 순수 규칙: 접속 URL, 닫힘 코드 → 다음 행동, 받은 JSON 검증. Phaser·WebSocket 없이 테스트한다.
@@ -48,7 +48,7 @@ export function roomCloseAction(code: number, intentional: boolean): RoomCloseAc
  * 방 안에서 쓰는 서버 메시지 (묘비·폭죽 등은 방에 없다).
  * 3번: 집 안 가구 1인 자리(seat/seatDenied)와 가구 쓰기(use). spots = 서버가 집 안 자리를 판정한다 (없으면 이전 서버 → 혼자 앉는다)
  */
-export type RoomWelcome = { sid: Sid; cap: number; peers: PeerInfo[]; resumed: boolean; seats: Record<string, Sid>; spots: boolean };
+export type RoomWelcome = { sid: Sid; cap: number; peers: PeerInfo[]; resumed: boolean; seats: Record<string, Sid>; spots: boolean; /** 11/22 서버가 look을 줄 세운다 (protocol WelcomeMsg.lk) */ lk?: 1; /** 11/22 내 새싹 끝 시각 (protocol WelcomeMsg.nb) */ nb?: number };
 export type RoomEvent =
   | { t: "welcome"; m: RoomWelcome }
   | { t: "join"; p: PeerInfo }
@@ -57,7 +57,7 @@ export type RoomEvent =
   | { t: "act"; sid: Sid; kind: ActKind; x: number; y: number }
   | { t: "say"; sid: Sid; id: PhraseId }
   | { t: "emo"; sid: Sid; id: EmoId }
-  | { t: "chat"; sid: Sid; text: string; id?: string }
+  | { t: "chat"; sid: Sid; text: string; id?: string; /** 11/22 새싹(새 이웃)이 쓴 줄 */ nb?: true }
   /** 방에 들어올 때 이 방의 최근 1분 채팅 (이 기기 시계로 옮긴 줄) */
   | { t: "chatLog"; lines: IncomingChatLine[] }
   | { t: "peers"; peers: PeerInfo[]; seats: Record<string, Sid> }
@@ -105,7 +105,7 @@ export function parseRoomMessage(text: string, mySid: Sid | null): RoomEvent | n
       if (!isSid(m.sid) || !Array.isArray(m.peers)) return null;
       const sid = m.sid;
       const peers = (m.peers as unknown[]).filter(peerOk).filter((p) => p.sid !== sid).map(cleanPeer);
-      return { t: "welcome", m: { sid, cap: num(m.cap) ? m.cap : 0, peers, resumed: m.resumed === true, seats: cleanSeats(m.seats), spots: m.spots === true } };
+      return { t: "welcome", m: { sid, cap: num(m.cap) ? m.cap : 0, peers, resumed: m.resumed === true, seats: cleanSeats(m.seats), spots: m.spots === true, ...(m.lk === 1 ? { lk: 1 as const } : {}), ...(isSproutUntil(m.nb) ? { nb: m.nb } : {}) } };
     }
     case "join":
       return peerOk(m) && m.sid !== mySid ? { t: "join", p: cleanPeer(m as unknown as PeerInfo) } : null;
@@ -133,7 +133,7 @@ export function parseRoomMessage(text: string, mySid: Sid | null): RoomEvent | n
       return isSid(m.sid) && m.sid !== mySid && isEmoId(m.id) ? { t: "emo", sid: m.sid, id: m.id } : null;
     case "chat":
       return isSid(m.sid) && m.sid !== mySid && typeof m.text === "string" && m.text
-        ? { t: "chat", sid: m.sid, text: m.text.slice(0, CHAT_MAX * 2), ...(typeof m.id === "string" && m.id ? { id: m.id } : {}) }
+        ? { t: "chat", sid: m.sid, text: m.text.slice(0, CHAT_MAX * 2), ...(typeof m.id === "string" && m.id ? { id: m.id } : {}), ...(m.nb === true ? { nb: true as const } : {}) }
         : null;
     case "chatLog":
       return { t: "chatLog", lines: readChatLog(m.now, m.lines, Date.now()) };

@@ -2,7 +2,9 @@ import type { Redis } from "@upstash/redis";
 import { redisClient } from "../redisUsage";
 import { DYE_COLOR_SLOTS_MAX, DYE_PARTS, isCharDyePart, premiumBody, PREMIUM_BODIES, type AvatarDye, type CosmeticSlot, type DyePart, type DyeTarget } from "@tomb/protocol";
 import { env } from "../env";
+import { wornItemDyes } from "../dye/itemWorn";
 import type { DyeTier } from "../dye/palette";
+import { DYE_SELECT_BURST, DYE_SELECT_LEVEL_KEEP_MS, DYE_SELECT_LOCK_MS, DYE_SELECT_WINDOW_MS } from "../dye/rules";
 import { econKeyFor, kstDay } from "./accounts";
 import type { MemoryAccounts } from "./accounts-memory";
 import { K } from "./keys";
@@ -49,6 +51,8 @@ export type ItemDyeState = { colors: (string | null)[]; sel: number };
 /** bodies = 선택권으로 영구 해금한 프리미엄 외형. dye.items = 아이템마다 지금 입는 색, items = 아이템마다 색 보관함 */
 export type StyleState = { dye: AvatarDye; items: Record<string, ItemDyeState>; session: DyeSession | null; bodies: string[] };
 export type ChargeResult = "ok" | "insufficient" | "same";
+/** 11/22 색 칸 고르기 결과: empty = 빈 칸, locked = 연타 잠금 중(waitMs 뒤에 풀린다 — 이번 요청이 잠금을 걸었을 수도) */
+export type SelectResult = { r: "ok" } | { r: "empty" } | { r: "locked"; waitMs: number };
 /** 외형 바꾸기 결과: ok = 소장한 외형으로 무료로 바꿨다, unlocked = 프리미엄 외형을 이번에 해금하면서 바꿨다 (선택권 값을 냈다) */
 export type ReshapeResult = ChargeResult | "unlocked";
 /** 아직 해금하지 않은 프리미엄 외형이면 이 값·사유로 해금하면서 바꾼다 (이미 소장했으면 무료) */
@@ -71,8 +75,12 @@ export interface StyleStore {
   cancel(id: string, seed: string): Promise<boolean>;
   /** 고정 색 염색권 1장을 쓰고 대상(부위, 또는 아이템의 slot번 칸 — 그 칸을 입는다)을 color로. 가방에 없으면 false */
   applyFixed(id: string, itemId: string, target: DyeTarget, color: string, slot?: number): Promise<boolean>;
-  /** 11/22 아이템이 입을 색 보관함 칸을 고른다 (-1 = 원래 색, 무료). 그 칸이 비었으면 false */
-  selectItemColor(id: string, item: string, sel: number): Promise<boolean>;
+  /**
+   * 11/22 아이템이 입을 색 보관함 칸을 고른다 (-1 = 원래 색, 무료). 그 칸이 비었으면 empty.
+   * 연타 잠금을 같은 연산 안에서 센다: 10초 안에 6번째 요청부터 잠그고(1회 10분 → 30분 → 1시간 → 3시간 → 24시간),
+   * 마지막 잠금이 끝나고 24시간 안 걸리면 단계가 처음으로 (lib/dye/rules DYE_SELECT_*)
+   */
+  selectItemColor(id: string, item: string, sel: number, now?: number): Promise<SelectResult>;
   /** 11/22 색 보관함 칸 하나를 더 연다 (next = 열고 나서 칸 수). 이미 그만큼 있으면 "same", 순서가 틀리면 "order" */
   buyColorSlot(id: string, item: string, next: number, price: number, reason: string, now: number): Promise<ChargeResult | "order">;
   /** 11/22 그 아이템의 염색 기록·색 보관함을 지운다 (되팔기) */
@@ -127,8 +135,8 @@ export function styleDyeOf(h: Record<string, string>): { dye: AvatarDye; items: 
     const m = /^c:([a-z0-9_]{1,40})$/.exec(k);
     if (m && !items[m[1]]) items[m[1]] = { colors: Array.from({ length: Math.min(DYE_COLOR_SLOTS_MAX, Number(v) || 1) }, () => null), sel: -1 };
   }
-  const worn: Record<string, string> = {};
-  for (const [item, st] of Object.entries(items)) if (st.sel >= 0 && st.colors[st.sel]) worn[item] = st.colors[st.sel]!;
+  // 입은 색 = 고른 칸의 색 (화면 meStore도 같은 함수로 다시 계산한다 — lib/dye/itemWorn)
+  const worn = wornItemDyes(items);
   if (Object.keys(worn).length) dye.items = worn;
   return { dye, items };
 }
@@ -150,6 +158,24 @@ function parseSession(raw: string | undefined | null): DyeSession | null {
   } catch {
     return null;
   }
+}
+
+/** 메모리 저장소의 계정별 연타 잠금 상태: n = 이번 10초 창 횟수, until = 잠금 끝, level = 잠금 단계(levelEnd가 지나면 0) */
+type SelectGate = { n: number; winEnd: number; until: number; level: number; levelEnd: number };
+
+/** 「이 색 입기」 요청 하나를 센다 → 다음 상태 + 기다릴 시간(0 = 통과). Redis SELECT_LUA와 같은 규칙 */
+export function selectGate(cur: SelectGate | undefined, now: number): { next: SelectGate; waitMs: number } {
+  const g: SelectGate = { ...(cur ?? { n: 0, winEnd: 0, until: 0, level: 0, levelEnd: 0 }) };
+  if (g.until > now) return { next: g, waitMs: g.until - now };
+  if (now >= g.winEnd) {
+    g.n = 0;
+    g.winEnd = now + DYE_SELECT_WINDOW_MS;
+  }
+  g.n += 1;
+  if (g.n <= DYE_SELECT_BURST) return { next: g, waitMs: 0 };
+  const level = Math.min(DYE_SELECT_LOCK_MS.length, (g.levelEnd > now ? g.level : 0) + 1);
+  const dur = DYE_SELECT_LOCK_MS[level - 1];
+  return { next: { n: 0, winEnd: 0, until: now + dur, level, levelEnd: now + dur + DYE_SELECT_LEVEL_KEEP_MS }, waitMs: dur };
 }
 
 // ── 메모리 (로컬 개발) ──
@@ -220,11 +246,17 @@ export class MemoryStyle implements StyleStore {
     return true;
   }
 
-  async selectItemColor(id: string, item: string, sel: number): Promise<boolean> {
+  /** 11/22 「이 색 입기」 연타 잠금 (Redis SELECT_LUA와 같은 규칙) */
+  private selGates = new Map<string, SelectGate>();
+
+  async selectItemColor(id: string, item: string, sel: number, now = Date.now()): Promise<SelectResult> {
+    const gate = selectGate(this.selGates.get(id), now);
+    this.selGates.set(id, gate.next);
+    if (gate.waitMs > 0) return { r: "locked", waitMs: gate.waitMs };
     const s = this.st(id);
-    if (sel >= 0 && !s.h[`i:${item}:${sel}`]) return false;
+    if (sel >= 0 && !s.h[`i:${item}:${sel}`]) return { r: "empty" };
     s.h = { ...s.h, [`s:${item}`]: sel < 0 ? "-" : String(sel) };
-    return true;
+    return { r: "ok" };
   }
 
   async buyColorSlot(id: string, item: string, next: number, price: number, reason: string, now: number): Promise<ChargeResult | "order"> {
@@ -375,11 +407,28 @@ if ARGV[4] ~= '' then redis.call('HSET', KEYS[2], ARGV[4], ARGV[5]) end
 return 1
 `;
 
-// 11/22 색 보관함 칸 고르기: KEYS: style  ARGV: item, sel("-" 또는 "0"~"2") → 0 빈 칸 | 1
+// 11/22 색 보관함 칸 고르기 + 연타 잠금 (요청 한 번에 같이 — 새 왕복 없이)
+// KEYS: style, 횟수(n), 잠금(lock), 단계(lv)  ARGV: item, sel("-" 또는 "0"~"2"), now, 창 ms, 허용 횟수, 단계 유지 ms, 단계별 잠금 ms…
+// → {1, 0} 바꿈 | {0, 0} 빈 칸 | {-1, 남은 ms} 잠금 (이번 요청이 잠갔으면 그 단계 길이)
 const SELECT_LUA = `
-if ARGV[2] ~= '-' and redis.call('HEXISTS', KEYS[1], 'i:' .. ARGV[1] .. ':' .. ARGV[2]) == 0 then return 0 end
+local now = tonumber(ARGV[3])
+local untilAt = tonumber(redis.call('GET', KEYS[3]) or '0') or 0
+if untilAt > now then return {-1, untilAt - now} end
+local n = redis.call('INCR', KEYS[2])
+if redis.call('PTTL', KEYS[2]) < 0 then redis.call('PEXPIRE', KEYS[2], ARGV[4]) end
+if n > tonumber(ARGV[5]) then
+  local steps = #ARGV - 6
+  local lv = (tonumber(redis.call('GET', KEYS[4]) or '0') or 0) + 1
+  if lv > steps then lv = steps end
+  local dur = tonumber(ARGV[6 + lv])
+  redis.call('SET', KEYS[3], tostring(now + dur), 'PX', dur)
+  redis.call('SET', KEYS[4], tostring(lv), 'PX', dur + tonumber(ARGV[6]))
+  redis.call('DEL', KEYS[2])
+  return {-1, dur}
+end
+if ARGV[2] ~= '-' and redis.call('HEXISTS', KEYS[1], 'i:' .. ARGV[1] .. ':' .. ARGV[2]) == 0 then return {0, 0} end
 redis.call('HSET', KEYS[1], 's:' .. ARGV[1], ARGV[2])
-return 1
+return {1, 0}
 `;
 
 // 11/22 색 보관함 칸 사기: KEYS: acct, ledger, econ, style  ARGV: item, next, price, entry, field → -1 이미 | -2 순서 | 0 부족 | 1
@@ -424,7 +473,7 @@ return 1
 `;
 
 // 30번 영구 꾸미기. look = HASH 부위 → `${itemId}|${만료 ms}`, stash = HASH itemId → 만료 ms (accounts-redis.ts LOOK_FN과 같은 모양)
-// KEYS: acct, inv, look, stash, ledger, econ  ARGV: itemId, slot, price, now, permUntil, entry, field
+// KEYS: acct, inv, look, stash, ledger, econ, bought(11/22 산 기록 — 되팔기 조건)  ARGV: itemId, slot, price, now, permUntil, entry, field
 // → -1 이미 영구 | -2 가방에 이용권 | 0 부족 | 1
 const PERMANENT_LUA = `${CHARGE_FN}
 local item, slot, now, perm = ARGV[1], ARGV[2], tonumber(ARGV[4]), tonumber(ARGV[5])
@@ -443,6 +492,7 @@ if curItem == item and curUntil > now then
 else
   redis.call('HSET', KEYS[4], item, ARGV[5])
 end
+redis.call('SADD', KEYS[7], item)
 return 1
 `;
 
@@ -483,8 +533,14 @@ export class RedisStyle implements StyleStore {
     return Number(await this.redis.eval<string[], number>(FIXED_LUA, [K.inv(id), styleKey(id)], [itemId, f.field, color, f.sel?.[0] ?? "", f.sel?.[1] ?? ""])) === 1;
   }
 
-  async selectItemColor(id: string, item: string, sel: number): Promise<boolean> {
-    return Number(await this.redis.eval<string[], number>(SELECT_LUA, [styleKey(id)], [item, sel < 0 ? "-" : String(sel)])) === 1;
+  async selectItemColor(id: string, item: string, sel: number, now = Date.now()): Promise<SelectResult> {
+    const [code, ms] = await this.redis.eval<string[], [number, number]>(
+      SELECT_LUA,
+      [styleKey(id), K.dyeSelN(id), K.dyeSelLock(id), K.dyeSelLv(id)],
+      [item, sel < 0 ? "-" : String(sel), String(now), String(DYE_SELECT_WINDOW_MS), String(DYE_SELECT_BURST), String(DYE_SELECT_LEVEL_KEEP_MS), ...DYE_SELECT_LOCK_MS.map(String)],
+    );
+    if (Number(code) === -1) return { r: "locked", waitMs: Math.max(1, Number(ms)) };
+    return Number(code) === 1 ? { r: "ok" } : { r: "empty" };
   }
 
   async buyColorSlot(id: string, item: string, next: number, price: number, reason: string, now: number): Promise<ChargeResult | "order"> {
@@ -537,7 +593,7 @@ export class RedisStyle implements StyleStore {
     const r = Number(
       await this.redis.eval<string[], number>(
         PERMANENT_LUA,
-        [K.acct(id), K.inv(id), K.look(id), K.stash(id), K.ledger(id), await econKeyFor(id, kstDay(now))],
+        [K.acct(id), K.inv(id), K.look(id), K.stash(id), K.ledger(id), await econKeyFor(id, kstDay(now)), K.bought(id)],
         [itemId, slot, String(price), String(now), String(permUntil), this.entry(price, reason, now), `spend:${spendCategory(reason)}`],
       ),
     );

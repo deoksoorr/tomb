@@ -1,0 +1,21 @@
+/* 11/22 캐릭터를 크게 보는 무대: 72×64 무대를 --scale배로 키우고, 발(44px)이 칸 높이의 --feet 자리에 오게 가운데를 잘라 보인다 */
+
+.box {
+  --scale: 6;
+  --feet: 86%;
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.box > .canvas {
+  position: absolute;
+  left: calc(50% - 36px * var(--scale));
+  /* 칸이 무대보다 높으면 위가 비지 않게 무대 윗끝을 칸 윗끝에 붙인다 */
+  top: min(0px, calc(var(--feet) - 44px * var(--scale)));
+  box-shadow: none;
+  background: transparent;
+}

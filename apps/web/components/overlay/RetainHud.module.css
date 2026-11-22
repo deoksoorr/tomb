@@ -228,6 +228,9 @@
   gap: 2px;
   min-width: 0;
   color: var(--text);
+  /* 11/22 한글은 낱말 단위로 줄바꿈 (폰에서 「앞에|서」 「낚시|는」처럼 글자 중간에서 끊겼다) */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .firstLabel {
@@ -309,6 +312,8 @@
 }
 
 .note {
+  word-break: keep-all;
+  overflow-wrap: break-word;
   color: var(--faint);
   font-family: var(--font-small);
   font-size: 10px;
@@ -348,6 +353,8 @@
 
 .lead {
   margin: 0;
+  word-break: keep-all;
+  overflow-wrap: break-word;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.55;
@@ -396,6 +403,8 @@
 .card > div {
   flex: 1;
   min-width: 0;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .cardArt {
@@ -462,11 +471,75 @@
 
 /* 11/19 폰 새 이웃 창의 칸 (첫 걸음 · 꾸러미 · 할 일) */
 .hubTabs {
+  /* 11/22 본문을 내려도 칸 줄은 위에 그대로 (첫 걸음 14칸을 내리면 칸 줄이 같이 올라가 다른 칸으로 못 갔다 — 폰 가로는 본문이 300px 남짓).
+     본문 여백만큼 바깥으로 넓혀 아래로 지나가는 글을 가린다 */
+  position: sticky;
+  top: calc(-1 * var(--dialog-pad-y, 12px));
+  z-index: 2;
   display: grid;
   grid-auto-columns: minmax(0, 1fr);
   grid-auto-flow: column;
   gap: 6px;
-  margin-bottom: 10px;
+  margin: calc(-1 * var(--dialog-pad-y, 12px)) calc(-1 * var(--dialog-pad-x, 14px)) 10px;
+  padding: var(--dialog-pad-y, 12px) var(--dialog-pad-x, 14px) 8px;
+  background: var(--panel-solid);
+}
+
+/* 11/22 칸 몸통 겹치기: 모든 칸을 같은 격자 칸에 두고 지금 칸만 보인다 → 창 높이가 가장 긴 칸에 맞춰져 칸을 바꿔도 안 튄다.
+   안 보이는 칸은 창에 들어가는 높이(--dialog-max-h − 머리말·칸 줄·본문 여백 — 폰 132px, 넓은 화면 136px)까지만 자리를 잡는다 —
+   짧은 칸(꾸러미)에서 긴 칸(첫 걸음 14개) 높이만큼 빈 곳이 아래로 스크롤되지 않게 */
+.hubPanes {
+  display: grid;
+}
+
+.hubPane {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+
+.hubPane:not([data-on]) {
+  max-height: calc(var(--dialog-max-h, 100dvh) - 112px - 2 * var(--dialog-pad-y, 12px));
+  overflow: hidden;
+  visibility: hidden;
+}
+
+/* 11/22 창 높이는 꾸러미 칸이 정한다. 첫 걸음·오늘 미션 칸은 높이를 정하지 않고 (contain: size → 자기 키 0, 격자 칸 높이로 늘어난다)
+   그 안에서 목록만 스크롤한다 — 첫 걸음은 위 받기 카드·아래 안내 글은 그대로, 오늘 미션은 칸 전체. 아래 흐림은 more-fade.
+   꾸러미 칸이 없으면(7개 다 받음) 오늘 미션이 높이를 정하고 첫 걸음만 따른다. 안 보이는 칸과 같은 높이 상한(창에 들어가는 만큼) — 본문과 겹으로 스크롤되지 않게 */
+.hubPanes:has(> .hubPane + .hubPane) > .hubPane[data-pane="first"],
+.hubPanes:has(> .hubPane[data-pane="path"]) > .hubPane[data-pane="todo"] {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(var(--dialog-max-h, 100dvh) - 112px - 2 * var(--dialog-pad-y, 12px));
+  contain: size;
+}
+
+.hubPanes:has(> .hubPane[data-pane="path"]) > .hubPane[data-pane="todo"] .todoBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px;
+  margin: -2px;
+  scrollbar-width: thin;
+}
+
+.hubPane[data-pane="first"] .firstBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.hubPane[data-pane="first"] .firstList {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* 칸 픽셀 테두리가 스크롤 칸 가장자리에서 잘리지 않게 */
+  padding: 2px;
+  margin: -2px;
+  scrollbar-width: thin;
 }
 
 .hubTab {
@@ -498,6 +571,12 @@
 }
 
 /* ── 새 이웃 꾸러미 ── */
+
+/* 11/22 폰 창의 첫 걸음 칸: 받기 카드 · 목록 · 아래 글 사이 틈 */
+.firstBody {
+  display: grid;
+  gap: 12px;
+}
 
 .pathBody,
 .todoBody {
@@ -599,35 +678,60 @@
   list-style: none;
 }
 
+/* 11/22 칸 배치 (grid): 체크 | 제목+보상 / 진행 막대+숫자 / 하는 법+[안내] | 받기 (넓으면 받기가 오른쪽 세 줄 가운데) */
 .todoRow {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
+  column-gap: 10px;
   align-items: center;
-  gap: 10px;
   padding: 10px 12px;
   background: var(--surface);
   box-shadow: var(--px-border);
+  color: var(--text);
+  font-size: 13px;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+.todoRow > .box {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: start;
+  margin-top: 2px;
+}
+
+.todoHead {
+  display: flex;
+  grid-column: 2;
+  grid-row: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
 }
 
 .todoLabel {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-
-.todoText {
-  display: grid;
-  flex: 1;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 5px 10px;
   min-width: 0;
-  color: var(--text);
-  font-size: 13px;
 }
 
-.todoRow[data-done] .todoText {
+.todoRow[data-done] .todoLabel {
   color: var(--bone);
+}
+
+.todoProg {
+  display: flex;
+  grid-column: 2;
+  grid-row: 2;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 6px;
+}
+
+.todoProg .bar {
+  flex: 1;
+  min-width: 0;
 }
 
 .bar {
@@ -644,8 +748,7 @@
 }
 
 .todoCount {
-  grid-row: 1 / span 2;
-  grid-column: 2;
+  flex: none;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   font-size: 11px;
@@ -654,11 +757,20 @@
 /* 11/19 미션 한 줄 안내 + [안내] 단추 (누르면 그곳까지 금빛 화살표 — 첫 걸음 길 안내와 같다) */
 .todoHintRow {
   display: flex;
-  grid-column: 1 / -1;
+  grid-column: 2;
+  grid-row: 3;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   min-width: 0;
+  margin-top: 4px;
+}
+
+.todoAct {
+  display: flex;
+  grid-column: 3;
+  grid-row: 1 / -1;
+  justify-content: flex-end;
 }
 
 .todoGuide {
@@ -675,6 +787,14 @@
   font-size: 10px;
   line-height: 18px;
   cursor: pointer;
+}
+
+/* 11/22 터치는 누를 자리를 넉넉히 (글자 줄 18px뿐이라 손가락으로 잘 안 눌렸다) */
+@media (pointer: coarse) {
+  .todoGuide {
+    min-height: 30px;
+    padding-inline: 10px 12px;
+  }
 }
 
 .todoGuide:hover,
@@ -715,18 +835,42 @@
 }
 
 @media (max-width: 560px) {
-  /* 폰: 7칸을 한 줄로 두고 옆으로 밀어 본다 (4+3으로 접히면 빈칸이 생긴다) */
+  /* 11/22 폰: 7칸을 4 + 3으로 (마지막 7일째 졸업 칸이 두 칸 폭 — 빈칸 없이).
+     예전엔 한 줄로 두고 옆으로 밀게 했더니 5일째가 글자 중간에서 잘리고 6·7일째(다음에 받을 졸업 칸)가 안 보였다 */
   .track {
-    grid-auto-columns: 74px;
-    grid-auto-flow: column;
-    grid-template-columns: none;
-    overflow-x: auto;
-    padding-bottom: 4px;
-    scroll-snap-type: x proximity;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  .slot {
-    scroll-snap-align: start;
+  .slot:last-child {
+    grid-column: span 2;
+  }
+
+  /* 폰 미션 칸: 받기가 맨 아래 줄 오른쪽으로 (제목·막대가 칸 폭을 다 쓴다) */
+  .todoHead,
+  .todoProg {
+    grid-column: 2 / -1;
+  }
+
+  .todoAct {
+    grid-row: 3;
+    align-self: end;
+    margin-top: 6px;
+  }
+
+  /* 받은 칸은 하는 법 줄이 없다 → 「받았어요」를 막대 줄 오른쪽에 (빈 줄 하나가 더 생기지 않게) */
+  .todoRow:has(.claimed) .todoProg {
+    grid-column: 2;
+  }
+
+  .todoAct:has(.claimed) {
+    grid-row: 2;
+    align-self: center;
+    margin-top: 6px;
+  }
+
+  .todoAct .small {
+    min-height: 32px;
+    padding-inline: 14px;
   }
 
   .card {
@@ -735,6 +879,16 @@
 
   .cardButton {
     width: 100%;
+  }
+
+  /* 11/22 도장 카드는 단추를 옆에 그대로 (한 줄을 더 쓰면 오늘 미션 칸이 길어져 스크롤이 는다) */
+  .stampCard {
+    flex-wrap: nowrap;
+  }
+
+  .stampCard .cardButton {
+    width: auto;
+    padding-inline: 10px;
   }
 }
 

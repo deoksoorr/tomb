@@ -16,7 +16,8 @@ const DAY = 24 * HOUR;
 /** box = 11/15 긴급 의뢰 「수집가의 뒷주머니」처럼 가방에서 [열기]로 여는 상자 (상점에 없다) */
 export type ItemKind = "firework" | "cosmetic" | "decor" | "graveStyle" | "megaphone" | "dye" | "unlock" | "box";
 // nameColor·namePlate(닉네임 꾸미기): 머리 위 이름표 글자 색 · 이름표 바탕판. 몸 그림에는 그려지지 않고 이름표·화면의 이름에만 보인다
-// 11/22 back(화면 「옷」) = 몸에 입는 옷(코트·패딩·니트·재킷·망토), pack(화면 「등」) = 등에 메거나 다는 것(배낭·가방·자루·악기·날개·연).
+// 11/22 back(화면 「옷」) = 몸에 입는 옷(코트·패딩·니트·후드티·도포), pack(화면 「등」) = 등에 메거나 걸치는 것(배낭·가방·자루·악기·날개·연·망토·걸친 재킷·숄).
+//  11/22 운영자 결정: 망토 5종(퇴근·딸기우유·털 달린 빨간·서리꽃·채집왕)과 어깨 걸친 재킷·체크 담요 숄은 등 뒤에 걸치는 것이라 pack (롱패딩 위에 망토를 두른다)
 // 옷과 등은 같이 입는다. 예전엔 둘 다 back이라 하나만 입었다 — 저장소는 칸 이름(back)에 남은 등 꾸미기를 읽을 때 pack으로 옮긴다 (web lib/store)
 export type CosmeticSlot = "head" | "hand" | "aura" | "neck" | "back" | "pack" | "pet" | "feet" | "nameColor" | "namePlate";
 
@@ -257,7 +258,7 @@ export const ITEMS: readonly ItemDef[] = [
     ["hand_balloon", "hand", "풍선", "창립기념일에 받은 풍선. 바람 따라 둥실.", 100],
     // 등
     ["back_backpack", "pack", "출근 배낭", "노트북, 충전기, 그리고 한 줌의 희망.", 100],
-    ["back_cape", "back", "퇴근 망토", "6시 정각, 망토를 휘날리며 퇴근.", 160],
+    ["back_cape", "pack", "퇴근 망토", "6시 정각, 망토를 휘날리며 퇴근.", 160],
     ["back_wings_bat", "pack", "박쥐 날개", "야근 사흘째에 돋아났어요.", 200],
     ["back_wings_butterfly", "pack", "나비 날개", "봄바람 타고 출근하는 날개.", 320],
     // 발
@@ -373,7 +374,7 @@ export const ITEMS: readonly ItemDef[] = [
     ["hand_dango", "hand", "삼색 경단 꼬치", "분홍·하양·연두. 하나씩 아껴 먹어요.", 80],
     // 등
     ["back_bunnybag", "pack", "토끼 백팩", "뒤에서 보면 토끼가 빤히 쳐다봐요.", 180],
-    ["back_milkcape", "back", "딸기우유 망토", "분홍 물방울 망토. 퇴근길이 조금 달콤해져요.", 200],
+    ["back_milkcape", "pack", "딸기우유 망토", "분홍 물방울 망토. 퇴근길이 조금 달콤해져요.", 200],
     // 발
     ["feet_jelly", "feet", "젤리 발자국", "분홍·민트·레몬 젤리 발바닥 도장이 콩콩.", 120],
     ["feet_mochi", "feet", "말랑 찹쌀 걸음", "걸을 때마다 볼 빨간 찹쌀떡이 퐁퐁.", 160],
@@ -418,10 +419,10 @@ export const ITEMS: readonly ItemDef[] = [
   ...cosmetics([
     // 겨울 니트
     ["neck_knit", "neck", "꽈배기 니트 목도리", "할머니 손뜨개 꽈배기 무늬. 출근길 칼바람도 끄떡없어요.", 100],
-    ["back_shawl", "back", "체크 담요 숄", "사무실 의자에 늘 걸려 있던 그 담요. 어깨에 두르면 반차 기분.", 180],
+    ["back_shawl", "pack", "체크 담요 숄", "사무실 의자에 늘 걸려 있던 그 담요. 어깨에 두르면 반차 기분.", 180],
     ["np_knit", "namePlate", "니트 이름표", "포근한 털실 꽈배기 무늬 위에 이름을 떠 넣어요.", 140],
     // 회사원 정장 소품
-    ["back_jacket", "back", "어깨 걸친 재킷", "퇴근길엔 재킷을 어깨에 툭. 넥타이는 이미 주머니 속.", 140],
+    ["back_jacket", "pack", "어깨 걸친 재킷", "퇴근길엔 재킷을 어깨에 툭. 넥타이는 이미 주머니 속.", 140],
     ["np_card", "namePlate", "사원증 이름표", "파란 띠 사원증에 이름이 또박또박. 삑, 출입 허가.", 120],
     // 캠핑룩
     ["back_camppack", "pack", "캠핑 배낭", "돌돌 만 침낭을 얹은 큰 배낭. 주말엔 무조건 숲으로.", 160],
@@ -435,6 +436,15 @@ export const ITEMS: readonly ItemDef[] = [
     ["feet_sand", "feet", "모래사장 발자국", "모래 위에 콕콕 발자국. 가끔 작은 조개가 빼꼼.", 100],
     ["np_beach", "namePlate", "모래사장 이름표", "따끈한 모래 위에 불가사리와 조개를 콕콕.", 160],
   ]),
+  // ── 11/22 잡화점 「옷」 다섯 벌 (옷 칸 — 다른 꾸미기와 같은 24시간·영구(×4)·되팔기 규칙, 염색 기본 가능).
+  //    벌마다 윤곽을 바꾸는 큰 특징 하나 (휘날리는 넥타이 · 부푼 점퍼 · 바닥까지 끌리는 가운 · 솟은 가슴판 · 세운 깃). 그림 web game/sprites/shopWearGear.ts
+  ...cosmetics([
+    ["wr_shirt", "back", "지각 셔츠", "지각 직전 전력 질주 중. 넥타이는 벌써 어깨 너머로 넘어갔어요.", 140],
+    ["wr_puffer", "back", "지하철 숏패딩", "빵빵해서 출근 지하철에선 한 사람 반 자리를 차지해요.", 200],
+    ["wr_robe", "back", "재택 수면 가운", "재택근무 정장이에요. 바닥까지 끌려서 슬리퍼만 빼꼼 보여요.", 180],
+    ["wr_apron", "back", "탕비실 앞치마", "커피 머신 청소 당번의 앞치마. 주머니엔 믹스커피 세 봉이에요.", 120],
+    ["wr_coat", "back", "말 걸지 마 코트", "깃을 끝까지 세우면 아무도 말을 안 걸어요.", 220],
+  ]),
   // ── 12월 크리스마스 이벤트 한정 (event: 상점 목록에 없고 살 수 없다 — 관리자가 선물함으로 뿌리는 선물상자에서만 영구로).
   //    빨간 벨벳 · 흰 털 · 금빛 · 얼음빛이 한 벌로 이어진다. price = 꾸미기 점수용 가치 (영구 가치 = ×4, 펫도 같은 식)
   //    그림: 머리·목·손·등 web game/sprites/xmasGear.ts · 발자국·오라·펫 xmasFx.ts · 이름 lib/nameStyle.ts. 나올 확률은 web lib/xmas/box.ts XMAS_BOX_TABLE
@@ -444,7 +454,7 @@ export const ITEMS: readonly ItemDef[] = [
       ["xm_crown", "head", "눈꽃 왕관", "얼음 결정으로 빚은 은빛 왕관. 가운데 눈꽃 보석이 반짝여요. 12월 이벤트 한정.", 360],
       ["xm_scarf", "neck", "리본 목도리", "흰 털 단을 두른 빨간 목도리에 금방울 리본. 걸으면 딸랑. 12월 이벤트 한정.", 160],
       ["xm_cane", "hand", "별 지팡이 사탕", "빨강·하양 줄무늬 지팡이 사탕 끝에 금별이 반짝. 12월 이벤트 한정.", 200],
-      ["xm_cape", "back", "털 달린 빨간 망토", "흰 털 깃과 밑단을 두른 빨간 벨벳 망토. 등에 금실 눈꽃 자수. 12월 이벤트 한정.", 400],
+      ["xm_cape", "pack", "털 달린 빨간 망토", "흰 털 깃과 밑단을 두른 빨간 벨벳 망토. 등에 금실 눈꽃 자수. 12월 이벤트 한정.", 400],
       ["xm_bells", "feet", "썰매 방울 걸음", "걸음마다 금방울이 딸랑, 눈송이가 포슬. 12월 이벤트 한정.", 160],
       ["xm_snow", "aura", "눈송이 오라", "커다란 눈 결정이 몸 둘레를 천천히 돌며 반짝여요. 12월 이벤트 한정.", 400],
       ["xm_deer", "pet", "꼬마 루돌프", "빨간 코가 반짝이는 꼬마 순록. 목에 금방울을 달고 종종 따라와요. 12월 이벤트 한정.", 300],
@@ -562,7 +572,7 @@ export const ITEMS: readonly ItemDef[] = [
   ...cosmetics([
     // 「서리 내린 묘역」 (마을다운 겨울 유령)
     ["fr_icicle", "head", "고드름 왕관", "처마 끝 고드름을 엮은 왕관이에요. 해가 뜨면 한 방울씩 녹으니 밤에만 써요.", 1000],
-    ["fr_cloak", "back", "서리꽃 망토", "새벽 비석에 핀 서리꽃을 수놓은 망토예요. 자락 끝엔 작은 고드름이 달랑거려요.", 2800],
+    ["fr_cloak", "pack", "서리꽃 망토", "새벽 비석에 핀 서리꽃을 수놓은 망토예요. 자락 끝엔 작은 고드름이 달랑거려요.", 2800],
     ["fr_rime", "feet", "성에 발자국", "밟는 자리마다 유리창 성에 같은 얼음 꽃이 사르르 번져요.", 500],
     ["fr_icename", "nameColor", "서리 앉은 이름", "글자 윗머리마다 하얀 서리가 소복이 앉은 얼음빛 이름이에요.", 350],
     ["fr_snowbun", "pet", "꼬마 눈토끼", "눈을 뭉쳐 잎사귀 귀를 꽂았더니 깡충 따라왔어요. 밤엔 몸이 푸르스름하게 빛나요.", 6000],
@@ -647,7 +657,7 @@ export const ITEMS: readonly ItemDef[] = [
     { id: "q_aura_firefly", kind: "cosmetic", slot: "aura", grade: "rare", name: "반딧불 수집가 오라", desc: "모아 둔 반딧불이 줄지어 몸 둘레를 돌아요. 밤엔 더 환하게.", price: 360 },
     { id: "q_pet_goldfish", kind: "cosmetic", slot: "pet", grade: "rare", name: "금붕어 펫", desc: "동그란 물방울 어항 속 금붕어가 둥실둥실 따라와요.", price: 240 },
     { id: "q_aura_nightfish", kind: "cosmetic", slot: "aura", grade: "rare", name: "밤낚시 오라", desc: "발밑에 물결이 번지고, 달빛 윤슬이 몸 둘레에서 반짝여요. 가끔 은빛 물고기가 뛰어올라요.", price: 480 },
-    { id: "q_back_cape", kind: "cosmetic", slot: "back", grade: "rare", name: "채집왕 망토", desc: "등에 금실 나비 문장을 수놓은 보랏빛 금테 망토. 끝자락에서 금가루가 흩날려요.", price: 480 },
+    { id: "q_back_cape", kind: "cosmetic", slot: "pack", grade: "rare", name: "채집왕 망토", desc: "등에 금실 나비 문장을 수놓은 보랏빛 금테 망토. 끝자락에서 금가루가 흩날려요.", price: 480 },
     { id: "q_ride_carp", kind: "cosmetic", slot: "pet", grade: "rare", name: "월척 잉어 (타는 펫)", desc: "전설의 월척 비단잉어. 등에 타면 물 흐르듯 미끄러져요. (타고 다닐 수 있어요)", price: 600 },
     { id: "q_body_collector", kind: "unlock", unlock: "body", body: "collector", grade: "legend", name: "수집가 유령 (전설 외형)", desc: "등불과 표본 가방을 든 채집 장인 유령. 받으면 외형에서 언제든 바꿀 수 있어요.", price: 0 },
     // 11/15 월마다 바뀌는 교환소 겨울·새해 묶음 (전설 없음)
@@ -660,7 +670,7 @@ export const ITEMS: readonly ItemDef[] = [
   ] satisfies ItemDef[]).map((it) => ({ ...it, ...(it.kind === "cosmetic" ? { durationMs: COSMETIC_DURATION_MS } : {}), quest: true as const })),
 
   // ── 11/15 긴급 의뢰 가장 많이 낸 사람 (24시간 대여 — 상점·교환소에 없다). 그림: 머리 avatarGear.ts · 도는 불빛 cosmeticFx.ts ──
-  { id: "u_hat_siren", kind: "cosmetic", slot: "head", grade: "rare", name: "사이렌 모자", desc: "긴급 배달왕의 모자. 머리 위 경광등이 빙글빙글 돌아요.", price: 0, durationMs: COSMETIC_DURATION_MS, urgent: true },
+  { id: "u_hat_siren", kind: "cosmetic", slot: "head", grade: "rare", name: "사이렌 모자", desc: "긴급 의뢰 무작위 꾸미기에서 아주 드물게 나오는 모자. 머리 위 경광등이 빙글빙글 돌아요.", price: 0, durationMs: COSMETIC_DURATION_MS, urgent: true },
   // 11/19 친구 초대 한정 (상점·교환소에 없다 — 추천 보상 선물함으로 영구). 그림: 손 avatarGear.ts · 아이콘 itemIcons.ts · 불빛 cosmeticFx.ts
   { id: "inv_hand_lantern", kind: "cosmetic", slot: "hand", grade: "rare", name: "마중 등불", desc: "친구를 마을로 데려온 이웃이 드는 초롱. 두 사람의 하트가 따뜻하게 빛나요.", price: 300, durationMs: COSMETIC_DURATION_MS, invite: true },
   // 11/20 별자리 잇기 전용 전설 오라 (상점·교환소·유령선에 없다 — 맑은 밤 판에서 아주 드물게 영구로, web lib/rpg/meteorDrop). 그림 web game/sprites/meteorFx.ts
@@ -1299,14 +1309,16 @@ export function titleOfLook(look: readonly string[] | null | undefined): TitleId
 
 // ── 11/22 입은 꾸미기 염색 (아이템마다 색 — dye.ts AvatarDye.items) ──
 // 머리·목·옷·등 칸 꾸미기는 기본으로 모두 염색된다 (web game/sprites/gearDye.ts가 그 아이템이 칠한 픽셀만 다시 칠한다).
-// 한정·계절·이벤트·운영자 꾸미기도 예외 없이 된다. 안 되게 할 꾸미기만 카탈로그 줄에 noDye: true를 단다 (지금은 하나도 없다).
-// 날개·연처럼 아바타 시트 밖에 따로 그리는 등 꾸미기(web cosmeticFx)는 다시 칠할 수 없어 빠진다 (GEAR_DYE_SEPARATE)
+// 한정·계절·이벤트·운영자 꾸미기도 된다. 안 되게 할 꾸미기만 카탈로그 줄에 noDye: true를 단다 (지금은 하나도 없다).
+// 레이스 1위 모자(champ·chair)·긴급 의뢰 사이렌 모자(urgent)·수집 의뢰 보상(quest)은 보상 표시라 빠진다 (isDyeableCosmetic)
+// 11/22 운영자 「날개까지 염색 가능하게 되면 안 돼? 어차피 등이잖아」: 시트 밖에 따로 그리는 날개 5종(web cosmeticFx)도 날개 그림을 같은 규칙으로 다시 칠해 염색된다.
+// 연 날리는 등(q_back_kite)만 시트 밖 그림인데 다시 칠하지 않는다 (수집 의뢰 보상이라 어차피 염색 불가 — GEAR_DYE_SEPARATE)
 
 /** 염색되는 꾸미기 칸 (화면 순서: 머리 · 목 · 옷 · 등) */
 export const DYE_GEAR_SLOTS: readonly CosmeticSlot[] = ["head", "neck", "back", "pack"];
 
-/** 등 칸이지만 아바타 시트 밖에 따로 그려 염색이 닿지 않는 꾸미기 (web avatar.ts SPRITE_COSMETICS 중 시트 밖) */
-export const GEAR_DYE_SEPARATE: ReadonlySet<string> = new Set(["back_wings", "back_wings_bat", "back_wings_butterfly", "back_wings_angel", "back_wings_dragon", "q_back_kite"]);
+/** 등 칸이지만 아바타 시트 밖에 따로 그려 염색이 닿지 않는 꾸미기 (web avatar.ts SPRITE_COSMETICS 중 시트 밖 — 11/22 날개는 빠지고 연만 남았다) */
+export const GEAR_DYE_SEPARATE: ReadonlySet<string> = new Set(["q_back_kite"]);
 
 /** 염색되는 칸의 꾸미기인지 (염색할 수 있는지와 별개 — 「못 바꿔요」로 보여 줄 대상) */
 export function isDyeSlotCosmetic(id: string | null | undefined): boolean {
@@ -1314,9 +1326,12 @@ export function isDyeSlotCosmetic(id: string | null | undefined): boolean {
   return !!it && it.kind === "cosmetic" && !!it.slot && DYE_GEAR_SLOTS.includes(it.slot);
 }
 
-/** 이 꾸미기를 염색할 수 있는지: 머리·목·옷·등 꾸미기면 기본으로 된다 (noDye 표시 · 시트 밖 그림만 빠진다) */
+/** 이 꾸미기를 염색할 수 있는지: 머리·목·옷·등 꾸미기면 기본으로 된다 (noDye 표시 · 다시 칠하지 않는 시트 밖 그림(연) · 순위·수집 의뢰 보상만 빠진다) */
 export function isDyeableCosmetic(id: string | null | undefined): boolean {
-  return isDyeSlotCosmetic(id) && !byId.get(id!)!.noDye && !GEAR_DYE_SEPARATE.has(id!);
+  if (!isDyeSlotCosmetic(id)) return false;
+  const it = byId.get(id!)!;
+  // 11/22 운영자: 레이스(주간 랭킹·회장님 독대) 1위 모자, 긴급 의뢰 사이렌 모자, 수집 의뢰 보상은 그 모습이 곧 「보상 표시」라 염색 불가
+  return !it.noDye && !it.champ && !it.chair && !it.urgent && !it.quest && !GEAR_DYE_SEPARATE.has(id!);
 }
 
 /** 착용 목록에서 염색되는 칸에 입은 꾸미기 (머리 · 목 · 옷 · 등 순서, 칸마다 하나) */
@@ -1331,4 +1346,5 @@ export function wornDyeItems(look: readonly string[] | null | undefined): { slot
 // 「원래 색」은 늘 있고 칸 수에 들지 않는다. 처음 염색하면 커스텀 칸 1개가 저절로 생기고, 2·3번째 칸은 포인트로 산다 (최대 3칸)
 export const DYE_COLOR_SLOTS_MAX = 3;
 /** 커스텀 칸 n번째(1부터)를 여는 값 — 1번째는 처음 염색할 때 저절로 */
-export const DYE_COLOR_SLOT_PRICES: readonly number[] = [0, 2000, 5000];
+// 11/22 운영자: 여러 옷을 재미로 칠해 보게 칸 값을 낮췄다 (2,000 · 5,000 → 500 · 1,500P — 한 벌 꽉 채워도 잡화점 옷 한두 벌 값)
+export const DYE_COLOR_SLOT_PRICES: readonly number[] = [0, 500, 1500];

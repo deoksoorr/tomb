@@ -235,22 +235,6 @@ function ofA4Icon(): Grid {
 }
 
 // ── 에너지 드링크 (번개 무늬 캔) ──
-function ofDrinkHand(g: Grid, v: V, m: GearM): void {
-  if (v === "up") return;
-  const x = m.hx;
-  const y = m.hY;
-  const can = ["rRr", "kLk", "LLK", "kLK", "kkK"];
-  can.forEach((row, j) =>
-    [...row].forEach((ch, i) => {
-      const c = ch === "r" ? OF_RIM : ch === "R" ? 0xf4f6fa : ch === "k" ? OF_CAN : ch === "K" ? OF_CAN_LO : OF_LIME;
-      g.set(x - 1 + i, y - 2 + j, c);
-    }),
-  );
-}
-function ofDrinkGlow(g: Grid, v: V, m: GearM): void {
-  if (v === "up") return;
-  g.set(m.hx, m.hY - 1, 0xd8ff9a);
-}
 function ofDrinkIcon(): Grid {
   return iconOf(
     [".rrRrr.", "rRrrrrr", "kkkkkkK", "kkkLLkK", "kkLLkkK", "kLLLLkK", "kkkLLkK", "kkLLkkK", "kkLkkkK", "kkkkkkK", "gggggggg", "kkkkkkK", ".KKKKK."].map((r) => r.slice(0, 7)),
@@ -382,7 +366,6 @@ const GK_CORK_LO = 0x7a5232;
 const GK_GLASS = 0x9fd0dc;
 const GK_GLASS_HI = 0xe8fbff;
 const GK_GLASS_IN = 0x2c4c58;
-const GK_GLASS_IN2 = 0x3a6270;
 const GK_FLY = 0xfff27a;
 const GK_FLY_HI = 0xffffe0;
 const GK_GHOST = 0x8ad6ff;
@@ -504,38 +487,6 @@ function gkWreathIcon(): Grid {
 
 // ── 반딧불 유리병 ──
 
-/** 병 속 반딧불 자리 (손 기준) */
-const GK_FLIES: readonly [number, number][] = [
-  [-1, 0],
-  [1, 1],
-  [0, 2],
-];
-
-function gkJarHand(g: Grid, v: V, m: GearM): void {
-  if (v === "up") return;
-  const x = m.hx;
-  const y = m.hY;
-  // 끈 고리 + 코르크
-  g.set(x, y - 3, GK_STRAP);
-  g.hline(x - 1, x + 1, y - 2, GK_CORK);
-  g.set(x - 1, y - 2, GK_CORK_HI);
-  g.set(x + 1, y - 2, GK_CORK_LO);
-  // 유리병 (3×4): 왼쪽 빛줄 · 오른쪽 그늘 · 안은 짙은 밤빛
-  for (let yy = y - 1; yy <= y + 2; yy++) {
-    g.set(x - 1, yy, yy === y - 1 ? GK_GLASS_HI : GK_GLASS);
-    g.set(x, yy, yy === y - 1 ? GK_GLASS : GK_GLASS_IN);
-    g.set(x + 1, yy, yy === y + 2 ? GK_GLASS_IN : GK_GLASS_IN2);
-  }
-  g.set(x - 1, y + 2, GK_GLASS_IN2);
-  for (const [dx, dy] of GK_FLIES) g.set(x + dx, y + dy, GK_FLY);
-}
-function gkJarGlow(g: Grid, v: V, m: GearM): void {
-  if (v === "up") return;
-  for (const [dx, dy] of GK_FLIES) g.set(m.hx + dx, m.hY + dy, GK_FLY_HI);
-  // 병 밖으로 빠져나온 반딧불 하나
-  dot(g, m.hx + 2, m.hY - 4, GK_FLY, 230);
-  dot(g, m.hx + 2, m.hY - 4, GK_FLY_HI, 120);
-}
 function gkJarIcon(): Grid {
   return iconOf(
     [
@@ -1030,19 +981,6 @@ function smSaekdongIcon(): Grid {
 }
 
 // ── 복주머니: 다홍 비단 주머니 + 금 끈 매듭 + 가운데 금박 복 무늬 ──
-const SM_POUCH = [".y.y.", "..Y..", ".dhd.", "hddDl", "ddYdl", ".dDl."];
-const SM_POUCH_PAL: Record<string, Color> = {
-  y: SM_GOLD,
-  Y: SM_GOLD_HI,
-  d: SM_DAHONG,
-  h: SM_DAHONG_HI,
-  D: SM_DAHONG,
-  l: SM_DAHONG_LO,
-};
-function smPouchHand(g: Grid, v: V, m: GearM): void {
-  if (v === "up") return;
-  g.draw(art(SM_POUCH, SM_POUCH_PAL), m.hx - 2, m.hY - 2);
-}
 function smPouchIcon(): Grid {
   return iconOf(
     ["...y....y...", "....y..y....", ".....YY.....", "....hddd....", "...dhdddl...", "..hddddddl..", ".hddyyyyddl.", ".hdyYddyydl.", ".hddyyyyddl.", ".hddyddyddl.", "..dddddddl..", "...llllll..."],
@@ -1214,32 +1152,6 @@ function vcHeartbandIcon(): Grid {
 }
 
 // ── 의리 초콜릿 상자 (하트 상자 + 금 리본 매듭) ──
-/** 11/20 칸 검사: 손이 칸 끝에 붙은 넓은 몸(동글이·이불 유령·머그잔·튜브)은 상자를 한 칸 안쪽으로 (오른쪽 끝 x 18) */
-const vcBoxX = (m: GearM) => Math.min(m.hx, 16);
-function vcChocoboxHand(g: Grid, v: V, m: GearM): void {
-  if (v === "up") return;
-  const x = vcBoxX(m);
-  const y = m.hY;
-  const pal: Record<string, Color> = {
-    h: VC_BOX_HI,
-    r: VC_BOX,
-    l: VC_BOX_LO,
-    g: VC_GOLD,
-    G: VC_GOLD_HI,
-    k: VC_GOLD_LO,
-  };
-  // 리본 매듭 (상자 위 두 고리)
-  g.set(x - 1, y - 2, VC_GOLD);
-  g.set(x + 1, y - 2, VC_GOLD_LO);
-  g.set(x, y - 2, VC_GOLD_HI);
-  // 하트 상자 (5×4) + 가운데 금 리본 띠
-  const box = ["hr.rr", "rrgrl", ".rgl.", "..k.."];
-  box.forEach((row, j) => [...row].forEach((ch, i) => ch !== "." && g.set(x - 2 + i, y - 1 + j, pal[ch])));
-}
-function vcChocoboxGlow(g: Grid, v: V, m: GearM): void {
-  if (v === "up") return;
-  g.set(vcBoxX(m) - 2, m.hY - 1, 0xffd0d4);
-}
 function vcChocoboxIcon(): Grid {
   return iconOf(
     [
@@ -1573,26 +1485,6 @@ function spMatpackIcon(): Grid {
 }
 
 // ── 김밥 도시락 ──
-function spGimbapHand(g: Grid, v: V, m: GearM): void {
-  if (v === "up") return;
-  // 11/20 칸 검사: 손이 칸 끝에 붙은 넓은 몸은 도시락·젓가락을 안쪽으로 (젓가락 끝 x 18)
-  const x = Math.min(m.hx, 15);
-  const y = m.hY;
-  // 젓가락 (도시락 뒤에서 비스듬히)
-  g.set(x + 2, y - 2, 0xc89a5a);
-  g.set(x + 3, y - 3, 0xe0b878);
-  // 민트 도시락 통 (5×3): 테두리 + 김밥 단면 셋 (김 · 밥 · 속 노랑/주황/초록)
-  g.hline(x - 2, x + 2, y + 1, SP_MINT);
-  g.hline(x - 2, x + 2, y + 2, SP_MINT_LO);
-  g.set(x - 2, y, SP_MINT);
-  g.set(x + 2, y, SP_MINT_LO);
-  g.set(x - 1, y, SP_LAVER);
-  g.set(x, y, SP_EGG);
-  g.set(x + 1, y, SP_LAVER);
-  g.set(x - 1, y - 1, SP_RICE);
-  g.set(x, y - 1, SP_CARROT);
-  g.set(x + 1, y - 1, SP_SPINACH);
-}
 function spGimbapIcon(): Grid {
   return iconOf(["...........o.", "..........o..", ".kkk.kkk.o...", "kwyw.wcwko...", "kwew.wsw.k...", ".kkk.kkk.....", "mmmmmmmmmmmm.", "mkkkmkkkmkkkm", "mwswmwywmwcwm", "MMMMMMMMMMMMM"], {
     k: SP_LAVER,
@@ -1770,24 +1662,6 @@ function sdHeadbandIcon(): Grid {
 }
 
 // ── 계주 바통 ──
-function sdBatonHand(g: Grid, v: V, m: GearM): void {
-  if (v === "up") return;
-  const x = m.hx;
-  const y = m.hY;
-  // 손에서 위로 비스듬히: 두 칸 폭 빨간 관 + 가운데 흰 테이프
-  const pts: [number, number][] = [
-    [0, -3],
-    [0, -2],
-    [0, -1],
-    [0, 0],
-    [-1, 1],
-    [-1, 2],
-  ];
-  pts.forEach(([dx, dy], i) => {
-    g.set(x + dx, y + dy, i === 0 ? SD_BAT_HI : i === 3 ? SD_WHITE : SD_BAT);
-    g.set(x + dx + 1, y + dy, i === 3 ? 0xd8d8d0 : SD_BAT_LO);
-  });
-}
 function sdBatonIcon(): Grid {
   return iconOf(["........Rr", ".......Rrl", "......Rrl.", ".....wwd..", "....Rrl...", "...Rrl....", "..Rrl.....", ".Rrl......", "Rrl.......", "rl........"], {
     R: SD_BAT_HI,
@@ -1932,18 +1806,12 @@ export const GEAR2: Readonly<Record<string, SsItem>> = {
   },
   // A4 날개는 머리를 다 그린 뒤(목 차례) 몸 뒤 빈칸에 (뒷모습은 등판을 덮는다)
   of_a4wings: { neck: (g, v, m, fb) => ofA4Draw(g, v, m, fb) },
-  of_drink: {
-    hand: (g, v, m) => ofDrinkHand(g, v, m),
-    glow: (g, v, m) => ofDrinkGlow(g, v, m),
-  },
+  of_drink: {} /* 11/22 손 그림은 heldGear.ts */,
   gk_moonwreath: {
     head: (g, v, m, fb, top) => gkWreathHead(g, v, m, fb, top),
     glow: (g, v, m, fb, top) => gkWreathGlow(g, v, m, fb, top),
   },
-  gk_firefly: {
-    hand: (g, v, m) => gkJarHand(g, v, m),
-    glow: (g, v, m) => gkJarGlow(g, v, m),
-  },
+  gk_firefly: {} /* 11/22 손 그림은 heldGear.ts */,
   // 비석 배낭: 앞·옆은 몸 뒤(back), 뒷모습은 머리를 그린 뒤 등에 (neck 차례)
   gk_stonepack: {
     back: (g, v, m, fb, layer) => gkPackBack(g, v, m, fb, layer),
@@ -1956,15 +1824,12 @@ export const GEAR2: Readonly<Record<string, SsItem>> = {
     glow: (g, v, m, fb, top) => smJobawiGlow(g, v, m, fb, top),
   },
   sm_saekdong: { neck: (g, v, m, fb) => smSaekdongNeck(g, v, m, fb) },
-  sm_pouch: { hand: (g, v, m) => smPouchHand(g, v, m) },
+  sm_pouch: {} /* 11/22 손 그림은 heldGear.ts */,
   vc_heartband: {
     head: (g, v, m, fb, top) => vcHeartbandHead(g, v, m, fb, top),
     glow: (g, v, m, fb, top) => vcHeartbandGlow(g, v, m, fb, top),
   },
-  vc_chocobox: {
-    hand: (g, v, m) => vcChocoboxHand(g, v, m),
-    glow: (g, v, m) => vcChocoboxGlow(g, v, m),
-  },
+  vc_chocobox: {} /* 11/22 손 그림은 heldGear.ts */,
   sp_buckethat: {
     covers: true,
     head: (g, v, m, fb, top) => spBucketHead(g, v, m, fb, top),
@@ -1974,12 +1839,12 @@ export const GEAR2: Readonly<Record<string, SsItem>> = {
     back: spMatpackBack,
     neck: (g, v, m, fb) => spMatpackNeck(g, v, m, fb),
   },
-  sp_gimbap: { hand: (g, v, m) => spGimbapHand(g, v, m) },
+  sp_gimbap: {} /* 11/22 손 그림은 heldGear.ts */,
   sd_headband: {
     headWorn: true,
     head: (g, v, m, fb, top) => sdHeadbandHead(g, v, m, fb, top),
   },
-  sd_baton: { hand: (g, v, m) => sdBatonHand(g, v, m) },
+  sd_baton: {} /* 11/22 손 그림은 heldGear.ts */,
   // 응원 깃발은 head 자리에서 "머리 다 그린 뒤 몸 뒤 빈칸"에 꽂는다 (모자를 쓴 것은 아니다)
   sd_flag: {
     headWorn: false,

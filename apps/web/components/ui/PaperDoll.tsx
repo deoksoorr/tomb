@@ -26,11 +26,20 @@ type DollProps = {
    * "large" = 같은 모양을 크게 (그림 48px·글자 크게) + 칸이 줄 높이를 꽉 채운다 (가방 [지금 모습]이 창 높이를 다 쓸 때)
    */
   compact?: boolean | "large";
+  /** 11/22 빈 칸을 조용하게: 테두리만 옅게 + 흐린 그림 + 부위 이름 (「비어 있음」 글자는 뺀다 — 가방 [지금 모습]) */
+  quietEmpty?: boolean;
 };
 
-export function PaperDoll({ areas, figure, caption, label, children, className, compact }: DollProps) {
+export function PaperDoll({ areas, figure, caption, label, children, className, compact, quietEmpty }: DollProps) {
   return (
-    <div role="group" aria-label={label} className={cx(styles.doll, className)} data-compact={compact === true ? "" : compact || undefined} style={{ "--areas": areas } as CSSProperties}>
+    <div
+      role="group"
+      aria-label={label}
+      className={cx(styles.doll, className)}
+      data-compact={compact === true ? "" : compact || undefined}
+      data-quiet={quietEmpty || undefined}
+      style={{ "--areas": areas } as CSSProperties}
+    >
       <div className={styles.figure} style={{ gridArea: "fig" }}>
         <div className={styles.crop}>{figure}</div>
         {caption}
@@ -66,10 +75,12 @@ type SlotProps = {
   onClick: () => void;
   /** 끌어다 놓기 (데스크톱). accepts: 지금 끄는 것을 받을 수 있는지 */
   drop?: { accepts: boolean; onDrop: (data: string) => void };
+  /** 11/22 마우스를 올리거나 초점이 오면 true, 떠나면 false (가방 지금 모습: 등 칸이면 뒷모습으로 돌려 보여 준다) */
+  onPeek?: (on: boolean) => void;
 };
 
 /** 장비창 한 칸 (누르면 그 부위 메뉴, 끌어다 놓기도 받는다) */
-export function DollSlot({ area, label, name, icon, silhouette, meter, sub, tone, tip, tipAlign, highlight, selected, ariaLabel, onClick, drop }: SlotProps) {
+export function DollSlot({ area, label, name, icon, silhouette, meter, sub, tone, tip, tipAlign, highlight, selected, ariaLabel, onClick, drop, onPeek }: SlotProps) {
   const tipId = useId();
   const areas = use(AreasContext);
   const [over, setOver] = useState(false);
@@ -101,6 +112,10 @@ export function DollSlot({ area, label, name, icon, silhouette, meter, sub, tone
         aria-label={ariaLabel}
         aria-describedby={tipId}
         onClick={onClick}
+        onPointerEnter={onPeek && (() => onPeek(true))}
+        onPointerLeave={onPeek && (() => onPeek(false))}
+        onFocus={onPeek && (() => onPeek(true))}
+        onBlur={onPeek && (() => onPeek(false))}
         {...dragProps}
       >
         <span className={styles.slotLabel}>{label}</span>

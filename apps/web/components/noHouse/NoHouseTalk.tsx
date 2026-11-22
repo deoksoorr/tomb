@@ -6,7 +6,7 @@ import { FURNITURE_CRAFTER_H, FURNITURE_CRAFTER_W, furnitureCrafter } from "@/ga
 import { MUNGNYANG_SELLER_H, MUNGNYANG_SELLER_W, mungnyangSeller } from "@/game/sprites/mungnyangSeller";
 import { OFFICE_CLERK_H, OFFICE_CLERK_W, officeClerk } from "@/game/sprites/officeSeller";
 import { currentMapConcept } from "@/lib/mapConceptClient";
-import { rideGate } from "@/lib/rideGate";
+import { rideGateAlert } from "@/lib/rideStop";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
@@ -37,11 +37,12 @@ function useSaid(who: NoHouseWho, line: string): void {
   }, [who, line]);
 }
 
-/** 분양 사무소 문 앞까지 걸어가기 (탈것이면 안내 토스트만). 창을 닫고 걷는다 — 도착하면 분양 사무소 창이 열린다 */
+/** 분양 사무소 문 앞까지 걸어가기. 창을 닫고 걷는다 — 도착하면 분양 사무소 창이 열린다.
+ *  11/22 탈것이면 창을 닫고 가운데 알림 (펫이면 [내리고 가기] — 내린 뒤 그대로 걷는다) */
 export function walkToHousing(close: () => void): void {
-  if (rideGate("분양 사무소에 갈")) return;
+  const walk = () => bridge.emit("portal:walkTo", { kind: "housing" });
   close();
-  bridge.emit("portal:walkTo", { kind: "housing" });
+  if (!rideGateAlert("분양 사무소에 갈", { label: "내리고 가기", run: walk })) walk();
 }
 
 /** NPC 얼굴 (게임과 같은 그림을 정수 배율로). shake가 바뀔 때마다 고개를 젓는다 */

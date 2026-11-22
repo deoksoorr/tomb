@@ -140,7 +140,7 @@ export default function XmasBoxOpen({ count, onClose }: { count: number; onClose
                   <b>
                     {grade && <span className={s.grade} data-grade={grade}>{GRADE_LABEL[grade]}</span>} {subj(item.name)} 나왔어요!
                   </b>
-                  <small>영구로 옷장에 들어갔어요. 가방의 꾸미기에서 입어 보세요</small>
+                  <small>영구로 옷장에 들어갔어요. 가방 [꾸미기]에서 입어 보세요</small>
                 </>
               ) : (
                 <>

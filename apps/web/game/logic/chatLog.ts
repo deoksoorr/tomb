@@ -47,6 +47,8 @@ export type ChatLine = {
   w?: "out" | "in" | "fail" | "note";
   /** 11/19 마을 소식 줄 (이 화면에만, 서버 기록에는 없다): goblin = 「○○님이 황금 고블린을 잡았어요!」. text만, 금빛으로 */
   sys?: "goblin";
+  /** 11/22 새싹(총 접속 3시간 미만 새 이웃)이 쓴 줄 (실시간 서버·게임이 붙인 표시만) → 이름 앞 작은 새싹 */
+  nb?: true;
 };
 
 /** 서버 chatLog 한 줄을 이 기기 시계로 옮긴 것 */
@@ -135,7 +137,7 @@ export function readChatLog(serverNow: unknown, raw: unknown, localNow: number):
     if (typeof l.id !== "string" || !l.id || l.id.length > 64 || typeof l.at !== "number" || !Number.isFinite(l.at)) continue;
     if (typeof l.name !== "string" || typeof l.text !== "string" || !l.text) continue;
     const age = Math.max(0, serverNow - l.at);
-    out.push({ key: l.id, name: l.name.slice(0, 40), text: l.text.slice(0, CHAT_MAX * 2), mine: l.mine === true, ...(l.staff === true ? { staff: true } : {}), ...(l.mgr === true ? { mgr: true } : {}), ...chatTagOf(l.m), ...(readChatNameStyle(l.ns) ? { ns: readChatNameStyle(l.ns) } : {}), at: localNow - age });
+    out.push({ key: l.id, name: l.name.slice(0, 40), text: l.text.slice(0, CHAT_MAX * 2), mine: l.mine === true, ...(l.staff === true ? { staff: true } : {}), ...(l.mgr === true ? { mgr: true } : {}), ...chatTagOf(l.m), ...(readChatNameStyle(l.ns) ? { ns: readChatNameStyle(l.ns) } : {}), ...(l.nb === true ? { nb: true } : {}), at: localNow - age });
   }
   return out;
 }

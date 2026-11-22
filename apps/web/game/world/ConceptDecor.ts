@@ -408,8 +408,9 @@ export class ConceptDecor {
           lifespan: { min: 1100, max: 1500 },
           speedX: { min: sx[0], max: sx[1] },
           speedY: { min: sy[0], max: sy[1] },
-          scale: { start: 0.6, end: 1.7 },
-          alpha: { start: 0.8, end: 0 },
+          // 11/22 운영자: 얼굴을 덮지 않게 작고 옅게 (예전 0.6→1.7 · 0.8)
+          scale: { start: 0.45, end: 1.05 },
+          alpha: { start: 0.55, end: 0 },
           emitting: false,
         })
         .setDepth(DEPTH.worldMax - 1);
@@ -430,11 +431,11 @@ export class ConceptDecor {
           if (!this.breathAt.has(a.key)) this.breathAt.set(a.key, due);
           continue;
         }
-        this.breathAt.set(a.key, now + 2200 + Math.random() * 900);
+        this.breathAt.set(a.key, now + 4000 + Math.random() * 2000); // 11/22 덜 자주 (예전 2.2~3.1초)
         if (a.dir === DIR.up) continue; // 등을 보이면 입김이 안 보인다
         const e = a.dir === DIR.left ? this.breath[1] : a.dir === DIR.right ? this.breath[2] : this.breath[0];
         const ox = a.dir === DIR.left ? -4 : a.dir === DIR.right ? 4 : 0;
-        e.explode(3, a.x + ox, a.y - 15);
+        e.explode(2, a.x + ox, a.y - 12); // 11/22 입 높이로 조금 내리고 2개만
       }
     }
     if (this.glints && now >= this.nextGlint) {

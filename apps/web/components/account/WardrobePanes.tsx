@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { DIR, isChampItem, isDyeableCosmetic, isDyeSlotCosmetic, type CosmeticSlot } from "@tomb/protocol";
 import type { Me } from "@/lib/types";
-import { resellBlock, resellPrice } from "@/lib/resell";
-import { ItemDyeLine, ItemDyePanel, itemColorOf } from "../dye/itemDyeInfo";
+import { itemColorOf } from "../dye/itemDyeInfo";
+import ItemWardrobe, { MiniColorSlots } from "../dye/ItemWardrobe";
 import { fittingLook } from "../shop/fitting";
 import { OutfitCanvas, useOutfitView, ViewControls } from "../shop/OutfitPreview";
 import { cx } from "../ui/cx";
@@ -38,8 +38,11 @@ import styles from "./WardrobePanes.module.css";
 //    작은 입어 보기(지금 모습 + 고른 것, 이름 꾸미기면 이름표까지)에 보이고 거기서도 입는다
 // 주간 1위 전용 모자는 [레이스 보상] 칸에서 다룬다 (지금 모습에는 입은 그대로 보이고, 목록·칩 개수에서는 뺀다)
 
-/** 몸 위치에 맞춘 칸 배치 (낮은 칸 compact): 아바타는 가운데 네 줄, 왼쪽 머리·옷·손·오라, 오른쪽 목·등·펫·발, 맨 아래 이름 글자·이름표 (11/22 등 칸 추가) */
-const DOLL_AREAS = `"head fig neck" "back fig pack" "hand fig pet" "aura fig feet" "nameColor . namePlate"`;
+/**
+ * 칸 배치 (낮은 칸 compact): 아바타는 가운데 다섯 줄, 칸 10개는 왼쪽 → 오른쪽으로 읽으면 SLOT_ORDER 순서
+ * (머리·목 / 옷·등 / 손·오라 / 발·펫 / 이름 글자·이름표). 폰은 아바타를 위에 가득, 아래 2열×5줄 (WardrobePanes.module.css)
+ */
+const DOLL_AREAS = `"head fig neck" "back fig pack" "hand fig aura" "feet fig pet" "nameColor fig namePlate"`;
 
 type Act = (task: () => Promise<void>, done: string) => Promise<void>;
 type Avatar = { color: string; body: string };
@@ -57,7 +60,8 @@ function runWear(entries: readonly WardrobeEntry[], e: WardrobeEntry, act: Act):
   if (a.kind === "unequip") return act(() => takeOff(e.slot), `${name}을(를) 벗어 두었어요. 남은 시간은 계속 흘러요.`);
   const old = displaced(entries, e);
   const swap = old ? ` ${old.name}은(는) 벗어 두었어요.` : "";
-  if (a.kind === "spend") return act(() => wearCosmetic(e.item.id), `${name}을(를) 입었어요. 지금부터 24시간 유지돼요.${swap}`);
+  if (a.kind === "spend")
+    return act(() => wearCosmetic(e.item.id), `${name}을(를) 입었어요. ${e.extend ? "남은 기간에 24시간이 더해졌어요." : "지금부터 24시간 유지돼요."}${swap}`);
   return act(() => wearStashed(e.item.id), `${name}을(를) 다시 입었어요.${swap}`);
 }
 
@@ -93,6 +97,8 @@ export function LookPane({
   onPickSlot: (slot: CosmeticSlot) => void;
 }) {
   const view = useOutfitView(false);
+  // 11/22 운영자: 등 칸에 마우스를 올리거나 누르면 바로 뒷모습 (눌러서 [꾸미기] 등 목록으로 가도 그쪽 입어 보기가 뒷모습)
+  const [peekBack, setPeekBack] = useState(false);
   const worn = wornBySlot(entries);
   const look = wornLook(entries);
   const wornCount = Object.keys(worn).length;
@@ -103,8 +109,9 @@ export function LookPane({
         areas={DOLL_AREAS}
         label="착용 부위"
         compact="large"
+        quietEmpty
         // 야광은 마을의 내 캐릭터처럼 해질녘·밤에만 (늘 켜 두면 낮에 가방과 마을 색이 달라 보인다)
-        figure={<OutfitCanvas color={avatar.color} body={avatar.body} look={look} label="지금 내 모습" dir={view.dir} walking={view.walking} onRotate={view.rotate} liveGlow />}
+        figure={<OutfitCanvas color={avatar.color} body={avatar.body} look={look} label="지금 내 모습" dir={peekBack ? DIR.up : view.dir} walking={view.walking} onRotate={view.rotate} liveGlow />}
         caption={
           <span className={styles.namePv}>
             <StyledName name={name || "내 이름"} look={look} />
@@ -126,6 +133,7 @@ export function LookPane({
               tip={e ? { title: e.item.name, body: `${e.item.desc}${dyeTip(e.item.id, itemDyes)}` } : { title: `${label} · 비어 있어요`, body: "눌러서 이 부위에 입을 것을 골라요." }}
               ariaLabel={`${label} 칸, ${e ? `${e.item.name} 착용 중, ${remainingLabel(e.until!, now)}` : "비어 있음"}. 누르면 [꾸미기]에서 ${label} 목록`}
               onClick={() => onPickSlot(slot)}
+              onPeek={slot === "pack" ? setPeekBack : undefined}
             />
           );
         })}
@@ -155,7 +163,7 @@ export function PickPane({
   me,
   onNotice,
 }: {
-  /** 11/22 아이템 정보의 염색·색 보관함·되팔기 (없으면 그 칸을 그리지 않는다) */
+  /** 11/22 아이템 페이지(색 보관함)와 목록의 작은 색 칸 (없으면 그리지 않는다) */
   me?: Me;
   onNotice?: (m: string | null) => void;
   entries: WardrobeEntry[];
@@ -169,13 +177,17 @@ export function PickPane({
 }) {
   /** 입어 보기에 올린 카드 */
   const [picked, setPicked] = useState<string | null>(null);
+  /** 11/22 연 아이템 페이지 (아이템 id — 입기·벗기로 상태가 바뀌어도 그대로 따라간다) */
+  const [page, setPage] = useState<string | null>(null);
   const listed = entries.filter((e) => !isChampItem(e.item.id));
   const counts = slotCounts(listed);
   const shown = listed.filter((e) => matchesSlot(e.slot, filter));
   const sel = shown.find((e) => entryKey(e) === picked) ?? null;
+  // 11/22 운영자: 등 칸 꾸미기(날개·배낭·망토)는 뒷모습으로 미리 본다 (고른 게 없어도 등 목록이면 뒷모습)
   const fit = fittingLook(wornLook(entries), sel && sel.state !== "worn" ? sel.item.id : null);
   const worn = wornBySlot(entries);
   const selOld = sel ? displaced(entries, sel) : null;
+  const pageEntry = page ? (listed.find((e) => e.item.id === page) ?? null) : null;
 
   return (
     <div className={styles.pick}>
@@ -192,16 +204,13 @@ export function PickPane({
           <span className={styles.namePv}>
             <StyledName name={name || "내 이름"} look={fit.look} />
           </span>
-          <OutfitCanvas className={styles.fitStage} color={avatar.color} body={avatar.body} look={fit.look} label={sel ? `${sel.item.name}을(를) 입어 본 내 모습` : "지금 내 모습"} dir={DIR.down} walking={false} />
+          <OutfitCanvas className={styles.fitStage} color={avatar.color} body={avatar.body} look={fit.look} label={sel ? `${sel.item.name}을(를) 입어 본 내 모습` : "지금 내 모습"} dir={(sel ? sel.item.slot : filter) === "pack" ? DIR.up : DIR.down} walking={false} />
           <div className={styles.fitInfo}>
             <p className={styles.fitName}>{sel ? sel.item.name : "지금 내 모습"}</p>
             <p className={styles.fitNote}>
               {sel ? entryStatus(sel, now) : "카드를 누르면 여기서 입어 볼 수 있어요."}
               {selOld && ` · 입으면 ${selOld.name}은(는) 벗어 둬요`}
             </p>
-            {sel && me && onNotice && (
-              <ItemDyePanel me={me} itemId={sel.item.id} state={sel.state} until={sel.until} avatar={avatar} look={wornLook(entries)} onNotice={onNotice} />
-            )}
             {sel && (
               <button
                 type="button"
@@ -210,6 +219,12 @@ export function PickPane({
                 onClick={() => void runWear(entries, sel, act).then(() => setPicked(null))}
               >
                 {wearAction(sel).label}
+              </button>
+            )}
+            {/* 11/22 색 보관함은 아이템 페이지에서 (자세히 보기에는 입기만). 되팔기는 상점에서만 */}
+            {sel && me && onNotice && (
+              <button type="button" className={cx(ui.button, styles.fitBtn)} onClick={() => setPage(sel.item.id)}>
+                {isDyeableCosmetic(sel.item.id) ? "색 보관함" : "자세히 보기"}
               </button>
             )}
           </div>
@@ -243,10 +258,10 @@ export function PickPane({
                               <span className={styles.status} data-state={e.state}>
                                 {entryStatus(e, now)}
                               </span>
-                              <ItemDyeLine itemId={e.item.id} itemDyes={me?.itemDyes} className={styles.cardDye} />
-                              {!resellBlock(e.item.id, e.state, e.until) && <span className={styles.cardDye}>되팔기 {resellPrice(e.item.id).toLocaleString("ko-KR")}P</span>}
                             </span>
                           </button>
+                          {/* 11/22 작은 색 칸: 보기 전용 (갈아입기는 아이템 페이지의 색 보관함에서만) */}
+                          {onNotice && <MiniColorSlots className={styles.cardMinis} itemId={e.item.id} itemDyes={me?.itemDyes} />}
                           <button
                             type="button"
                             className={cx(ui.button, a.kind !== "unequip" && ui.primary, styles.wearBtn)}
@@ -265,6 +280,20 @@ export function PickPane({
           )}
         </div>
       </div>
+      {pageEntry && me && onNotice && (
+        <ItemWardrobe
+          me={me}
+          entry={pageEntry}
+          look={wornLook(entries)}
+          avatar={avatar}
+          name={name}
+          now={now}
+          pending={pending}
+          onWear={() => runWear(entries, pageEntry, act)}
+          onClose={() => setPage(null)}
+          onNotice={onNotice}
+        />
+      )}
     </div>
   );
 }

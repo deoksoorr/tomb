@@ -20,6 +20,8 @@ import { countOf, URGENT_TTL_SEC, type UrgentKind } from "./urgent";
 //  - urg:{id}:nm    HASH  계정 → 이름 (순위 3명 표시용)
 //  - urg:{id}:got   HASH  계정 → 받은 보상 JSON (한 번만 — HSETNX)
 //  - urg:test       STRING 테스트 서버 시험 의뢰 JSON (운영 서버에서는 읽지도 쓰지도 않는다)
+//                         rs = 11/22 관리자 결과 기록을 남김 (saveResult — 한 번만)
+//  - urg:results    LIST  11/22 관리자 「긴급 의뢰 결과」 JSON (최신이 앞, URGENT_RESULTS_KEEP개까지 — TTL 없음)
 //  - urgbox:{a}     HASH  아직 안 연 「수집가의 뒷주머니」: 의뢰 id → 받은 시각 (내용물은 (의뢰, 계정) 시드라 저장하지 않는다. TTL 없음 — 열 때까지 남는다)
 //                         가방의 상자 개수(acct:{a}:inv u_box_pocket)와 함께 바뀐다
 // 함께 바꾸는 키: 가방 forage:{a}:bag(납품·상자 물고기) · 의뢰 도장 quest:{a}(st) · 계정 acct:{a}:inv(염색권)·:look·:stash(사이렌 모자)
@@ -31,10 +33,14 @@ export const uk = {
   nm: (id: string) => `urg:${id}:nm`,
   got: (id: string) => `urg:${id}:got`,
   test: "urg:test",
+  results: "urg:results",
   box: (a: string) => `urgbox:${a}`,
 };
 
-export type UrgentState = { goal: number; cap: number; n: number; fest: number; at100: number; last: string | null; festBy: string | null; a0: boolean; a1: boolean; a2: boolean };
+export type UrgentState = { goal: number; cap: number; n: number; fest: number; at100: number; last: string | null; festBy: string | null; a0: boolean; a1: boolean; a2: boolean; rs: boolean };
+
+/** 11/22 관리자 결과 기록을 남겨 두는 수 */
+export const URGENT_RESULTS_KEEP = 20;
 export type NoticeField = "a0" | "a1" | "a2";
 export type UrgentTop = { acct: string; name: string; n: number };
 export type UrgentMine = { id: string; n: number; got: string | null };
@@ -128,8 +134,15 @@ export interface UrgentStore {
    * onlyNew = 아직 도감에 없을 때만 (지난 주머니 채우기 — 여러 번 돌려도 두 번 세지 않는다). 처음 등록이면 true
    */
   pocketDex(acct: string, d: PocketDex, onlyNew: boolean): Promise<boolean>;
-  /** 그 의뢰에서 보상을 받은 계정 → 받은 기록(JSON) (지난 주머니 채우기용) */
+  /** 그 의뢰에서 보상을 받은 계정 → 받은 기록(JSON) (지난 주머니 채우기·관리자 결과용) */
   claimedAll(id: string): Promise<Record<string, string>>;
+  /**
+   * 11/22 끝난 의뢰의 결과 기록 남기기 (원자적, 의뢰마다 한 번 — 표시 rs가 먼저). 처음이면 true.
+   * 결과 목록 맨 앞에 넣고 최근 keep개만 남긴다
+   */
+  saveResult(id: string, json: string, keep: number): Promise<boolean>;
+  /** 11/22 결과 기록 (최신 순, JSON) */
+  results(limit: number): Promise<string[]>;
   /** 시험 의뢰 (테스트 서버 전용) */
   testGet(): Promise<UrgentTest | null>;
   testSet(t: UrgentTest | null): Promise<void>;
@@ -137,7 +150,7 @@ export interface UrgentStore {
 
 const num = (v: unknown) => Number(v) || 0;
 export function stateOf(h: Record<string, string>): UrgentState {
-  return { goal: num(h.goal), cap: num(h.cap), n: num(h.n), fest: num(h.fest), at100: num(h.at100), last: h.last || null, festBy: h.festBy || null, a0: h.a0 === "1", a1: h.a1 === "1", a2: h.a2 === "1" };
+  return { goal: num(h.goal), cap: num(h.cap), n: num(h.n), fest: num(h.fest), at100: num(h.at100), last: h.last || null, festBy: h.festBy || null, a0: h.a0 === "1", a1: h.a1 === "1", a2: h.a2 === "1", rs: h.rs === "1" };
 }
 
 // ── 메모리 (로컬·시험) ──
@@ -167,6 +180,7 @@ export class MemoryUrgentStore implements UrgentStore {
   private gots = new Map<string, Map<string, string>>();
   private boxes = new Map<string, Map<string, string>>();
   private test: UrgentTest | null = null;
+  private resultLog: string[] = [];
   constructor(private deps: () => UrgentMemDeps) {}
 
   private ev(id: string) {
@@ -271,6 +285,17 @@ export class MemoryUrgentStore implements UrgentStore {
   }
   async claimedAll(id: string) {
     return Object.fromEntries(this.gots.get(id) ?? new Map<string, string>());
+  }
+  async saveResult(id: string, json: string, keep: number) {
+    const e = this.ev(id);
+    if (e.rs === "1") return false;
+    e.rs = "1";
+    // HMR로 옛 저장소를 이어받았으면 목록이 없을 수 있다
+    this.resultLog = [json, ...(this.resultLog ?? [])].slice(0, keep);
+    return true;
+  }
+  async results(limit: number) {
+    return (this.resultLog ?? []).slice(0, limit);
   }
   async testGet() {
     return this.test;
@@ -404,6 +429,16 @@ if tonumber(redis.call('HGET', KEYS[1], 'max:' .. id) or '0') < tonumber(ARGV[3]
 return isNew and 1 or 0
 `;
 
+// 11/22 결과 기록. KEYS: ev, results  ARGV: 기록 JSON, 남길 수, ttl → 처음이면 1 (표시 rs HSETNX가 먼저 — 두 번 남기지 않는다)
+// 의뢰 해시에 TTL이 없으면(처음 만든 키) 같이 건다 — 결과 목록은 TTL 없이 남길 수만큼
+export const URGENT_RESULT_LUA = `
+if redis.call('HSETNX', KEYS[1], 'rs', '1') == 0 then return 0 end
+if redis.call('TTL', KEYS[1]) < 0 then redis.call('EXPIRE', KEYS[1], ARGV[3]) end
+redis.call('LPUSH', KEYS[2], ARGV[1])
+redis.call('LTRIM', KEYS[2], 0, tonumber(ARGV[2]) - 1)
+return 1
+`;
+
 function hashOf(flat: unknown): Record<string, string> {
   const out: Record<string, string> = {};
   if (Array.isArray(flat)) for (let i = 0; i + 1 < flat.length; i += 2) out[String(flat[i])] = String(flat[i + 1]);
@@ -502,6 +537,14 @@ export class RedisUrgentStore implements UrgentStore {
   }
   async claimedAll(id: string) {
     return hashOf(await this.redis.hgetall(uk.got(id)));
+  }
+  async saveResult(id: string, json: string, keep: number) {
+    const r = await this.redis.eval<string[], unknown>(URGENT_RESULT_LUA, [uk.ev(id), uk.results], [json, String(keep), String(URGENT_TTL_SEC)]);
+    return Number(r) === 1;
+  }
+  async results(limit: number) {
+    const rows = ((await this.redis.lrange<string>(uk.results, 0, limit - 1)) as unknown[]) ?? [];
+    return rows.map(String);
   }
   async testGet() {
     const raw = await this.redis.get<string>(uk.test);

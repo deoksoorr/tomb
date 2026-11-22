@@ -18,7 +18,7 @@ import ExteriorDialog from "./ExteriorDialog";
 import HouseHud from "./HouseHud";
 import styles from "./housing.module.css";
 import OfficeDialog from "./OfficeDialog";
-import { rideGate } from "@/lib/rideGate";
+import { useRideStopGate } from "../overlay/RideStopDialog";
 
 type Mode = { kind: "office" } | { kind: "pending" } | { kind: "village" } | { kind: "house"; house: PublicHouse; mine: boolean; edit: boolean };
 /** 메인 맵 주거 구역에서 열었을 때: 그 집 문(houseId) 또는 빈 필지(lot) */
@@ -50,6 +50,11 @@ type Overlay = { kind: "office"; lot: number | null } | { kind: "exterior" } | n
  */
 export default function HousingOffice({ onClose, intent = null, channel }: { onClose: () => void; intent?: HousingIntent; channel: number }) {
   const [mode, setMode] = useState<Mode>(intent?.houseId ? { kind: "pending" } : { kind: "office" });
+  // 11/22 탈것에 탄 채 집·마을로 가려다 막힘 → 이 창 대신 가운데 알림 (펫이면 [내리고 ○○] — 내린 뒤 이어서). enterTry = 집 들어가기 다시 해 보기
+  const { rideStop, gate } = useRideStopGate(onClose);
+  const [enterTry, setEnterTry] = useState(0);
+  /** 11/22 [내리고 가기] 뒤 분양 마을 다시 가기 (showVillage 자기 자신) */
+  const showVillageRef = useRef<((ch: number, spawnLot: number | null, fresh?: boolean) => Promise<void>) | null>(null);
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [my, setMy] = useState<MyHouseResponse | null>(null);
   const [myError, setMyError] = useState<string | null>(null);
@@ -145,7 +150,7 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
       if (inScene.current && !spawnLot && fresh) emitVillage(village, myHouseId);
       else {
         // 11/16 마을에서 분양 마을로 갈 때: 탈것에 탄 채로는 못 간다 (lib/rideGate)
-        if (!inScene.current && rideGate("분양 마을에 갈")) return;
+        if (!inScene.current && gate("분양 마을에 갈", { label: "내리고 가기", run: () => void showVillageRef.current?.(ch, spawnLot, fresh) })) return;
         bridge.emit("village:enter", { village, myHouseId, spawnLot });
       }
       inScene.current = true;
@@ -156,7 +161,10 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [gate]);
+  useEffect(() => {
+    showVillageRef.current = showVillage;
+  }, [showVillage]);
 
   /** 내 집이 다른 채널에 있으면 그 채널로 옮긴 뒤 run (이미 그 채널이면 바로) */
   const inMyChannel = useCallback((run: () => void) => {
@@ -238,15 +246,13 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
   const enterKey = mode.kind === "house" ? `${mode.house.id}:${mode.edit}` : null;
   useEffect(() => {
     if (mode.kind !== "house") return;
-    // 11/16 마을에서 바로 들어갈 때: 탈것에 탄 채로는 못 들어간다 (lib/rideGate — 안내 토스트 후 창을 닫는다). 의자·벤치면 일어나서
-    if (!inScene.current && rideGate("집에 들어갈")) {
-      onCloseRef.current();
-      return;
-    }
+    // 11/16 마을에서 바로 들어갈 때: 탈것에 탄 채로는 못 들어간다. 의자·벤치면 일어나서
+    // 11/22 아래 토스트 대신 가운데 알림 ([확인]이면 창을 닫고, [내리고 들어가기]면 내린 뒤 다시 — enterTry)
+    if (!inScene.current && gate("집에 들어갈", { label: "내리고 들어가기", run: () => setEnterTry((n) => n + 1) })) return;
     inScene.current = true;
     bridge.emit("house:enter", { house: mode.house, mine: mode.mine, edit: mode.edit });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 같은 집 안에서 정보만 바뀔 때(좋아요·저장)는 다시 들어가지 않는다
-  }, [enterKey]);
+  }, [enterKey, enterTry]);
 
   const visit = useCallback(async (id: string) => {
     setVisitError(null);
@@ -367,6 +373,7 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
 
   // 터치 기기는 E 키 대신 [상호작용] 버튼
   const coarse = useMediaQuery("(pointer: coarse)");
+  if (rideStop) return rideStop;
   if (mode.kind === "pending") return null;
 
   if (mode.kind === "house") {

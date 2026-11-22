@@ -134,8 +134,10 @@ export function ViewControls({
 }
 
 /** 방향·자세 상태 (무대와 버튼이 같이 쓴다) */
-export function useOutfitView(initialWalking = true) {
-  const [dir, setDir] = useState<DirId>(DIR.down);
+export function useOutfitView(initialWalking = true, facing: DirId = DIR.down) {
+  const [dir, setDir] = useState<DirId>(facing);
+  // 11/22 고른 꾸미기가 바뀌면 그 꾸미기가 잘 보이는 쪽으로 다시 돌린다 (등 칸 = 뒷모습)
+  useEffect(() => setDir(facing), [facing]);
   const [walking, setWalking] = useState(initialWalking);
   const rotate = (step: number) => setDir((d) => rotateView(d, step));
   return { dir, setDir, walking, setWalking, rotate };
@@ -145,8 +147,8 @@ export function useOutfitView(initialWalking = true) {
  * 상점 입어 보기: 내 아바타가 고른 꾸미기를 입은 모습 (게임과 같은 그림, 정수 배율 캔버스).
  * compact(기본) = 무대는 크게 두고 방향·자세 버튼은 한 줄에 작게 (상점 자세히 보기가 스크롤 없이 들어가게)
  */
-export default function OutfitPreview({ color, body, look, label, className, compact = true }: Props & { className?: string; compact?: boolean }) {
-  const { dir, setDir, walking, setWalking, rotate } = useOutfitView();
+export default function OutfitPreview({ color, body, look, label, className, compact = true, facing }: Props & { className?: string; compact?: boolean; facing?: DirId }) {
+  const { dir, setDir, walking, setWalking, rotate } = useOutfitView(true, facing);
   const hintId = useId();
   const flowersIdle = look.includes("feet_flowers") && !walking;
 

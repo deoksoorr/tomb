@@ -256,7 +256,8 @@ export function xmasAura(motion: XmasMotion, f: FxInput, t: number, d: XmasDraw)
     case "xCane": {
       // 지팡이 사탕 별: 따뜻한 금빛 번짐이 숨 쉬듯 + 가끔 반짝 (뒷모습은 손이 가려 없음)
       if (f.hidden || f.dir === DIR.up) return;
-      const sx = Math.round(f.x + f.hand.dx + Math.sign(f.hand.dx || 1));
+      // 11/22 손 꾸미기 크게: 별은 손에서 바깥으로 두 칸, 위로 여덟 칸 (heldGear xm_cane)
+      const sx = Math.round(f.x + f.hand.dx + Math.sign(f.hand.dx || 1) * 2);
       const sy = Math.round(f.headY - f.hand.up - 8);
       const pulse = calm ? 0.8 : 0.65 + 0.35 * Math.sin(t / 520);
       d.push("xmHalo", 0, sx, sy, { alpha: (d.night ? 0.95 : 0.45) * pulse, sx: 0.8, sy: 0.8, layer: "light", depth: 0 });

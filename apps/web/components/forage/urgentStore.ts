@@ -4,7 +4,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import { urgentApi } from "@/lib/forage/quests/urgentClient";
-import { FEST_MS, GOAL_CHEER_MS, urgentAnnounce, urgentStage } from "@/lib/forage/quests/urgent";
+import { FEST_MS, GOAL_CHEER_MS, urgentStage } from "@/lib/forage/quests/urgent";
 import type { UrgentDeliverResponse, UrgentMeResponse, UrgentPublic } from "@/lib/forage/quests/urgentTypes";
 
 // 11/15: 긴급 의뢰의 클라이언트 사본 (위쪽 막대·게시판 칸이 같이 본다).
@@ -12,31 +12,11 @@ import type { UrgentDeliverResponse, UrgentMeResponse, UrgentPublic } from "@/li
 //  - 내 것(/api/forage/urgent/me)은 게시판을 열 때·의뢰가 끝났을 때만
 //  - 축제 끝 시각은 게임에 urgent:fest로 알린다 (폭죽·금빛 모닥불)
 
-/** 시작 알림 (until까지 크게) */
-export type UrgentAnnounce = { id: string; text: string; until: number };
-export type UrgentSnapshot = { pub: UrgentPublic | null; mine: UrgentMeResponse | null; error: string | null; announce: UrgentAnnounce | null };
-
-const SEEN_KEY = "tomb:urgentSeen";
-/** 시작 알림을 띄운 의뢰 (이 브라우저가 기억 — 새로고침해도 다시 안 뜬다) */
-function seenIds(): string[] {
-  try {
-    return JSON.parse(localStorage.getItem(SEEN_KEY) ?? "[]") as string[];
-  } catch {
-    return [];
-  }
-}
-function markSeen(id: string) {
-  try {
-    localStorage.setItem(SEEN_KEY, JSON.stringify([...seenIds().filter((x) => x !== id), id].slice(-8)));
-  } catch {
-    /* 저장 못 해도 알림만 한 번 더 뜬다 */
-  }
-}
-/** 시작 알림을 보이는 시간 */
-const ANNOUNCE_MS = 9_000;
+// 11/22 시작 알림 창(announce·본 의뢰 기억)은 뺐다 — 시작 알림은 마을 소식 가운데 표시 하나로
+export type UrgentSnapshot = { pub: UrgentPublic | null; mine: UrgentMeResponse | null; error: string | null };
 
 class UrgentClientStore {
-  private snap: UrgentSnapshot = { pub: null, mine: null, error: null, announce: null };
+  private snap: UrgentSnapshot = { pub: null, mine: null, error: null };
   private listeners = new Set<() => void>();
   private users = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -99,15 +79,11 @@ class UrgentClientStore {
     return this.mineInflight;
   }
 
-  /** 새 서버 상태 받기: 진행 중인 의뢰를 처음 보면 시작 알림, 끝난 걸 처음 보면 내 보상 확인 */
+  /** 새 서버 상태 받기: 끝난 걸 처음 보면 내 보상 확인 */
   private accept(pub: UrgentPublic) {
     const ev = pub.ev;
     const now = Date.now();
-    if (ev && now < ev.end && !seenIds().includes(ev.id)) {
-      markSeen(ev.id);
-      const mins = Math.max(1, Math.ceil((ev.end - now) / 60_000));
-      this.set({ pub, error: null, announce: { id: ev.id, text: `${urgentAnnounce(ev.kind, ev.goal)} (${mins}분)`, until: now + ANNOUNCE_MS } });
-    } else this.set({ pub, error: null });
+    this.set({ pub, error: null });
     if (ev && now >= ev.end && !this.doneSeen.has(ev.id)) {
       this.doneSeen.add(ev.id);
       void this.refreshMine();

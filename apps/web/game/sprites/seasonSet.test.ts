@@ -65,10 +65,7 @@ describe("11/19 계절 한정 세트 시트 그림 (15가지 몸)", () => {
       }
   });
 
-  it("손에 든 것은 뒷모습에서 몸에 가려진다", () => {
-    for (const id of ["sc_goguma", "si_cookie", "of_drink", "gk_firefly", "sm_pouch", "vc_chocobox", "sp_gimbap", "sd_baton", "ye_mic", "su_flask", "rs_shake", "ic_rod"])
-      for (const b of AVATAR_BODIES) expect(diff(avatarFrameGrid(b.id, "up", 0, COLOR), avatarFrameGrid(b.id, "up", 0, COLOR, [id])), `${id} ${b.id}`).toBe(0);
-  });
+  // 11/22 손에 든 것의 뒷모습(몸 뒤로 깔린다)은 heldGear.test.ts
 
   it("한 벌을 다 입어도 모든 몸·자세가 그려진다 (앉기·걷기 포함)", () => {
     for (const s of SEASON_SETS)

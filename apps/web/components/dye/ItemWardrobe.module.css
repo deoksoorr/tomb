@@ -1,0 +1,619 @@
+/* 11/22 가방 아이템 페이지 (색 보관함 — ItemWardrobe.tsx) + 가방 목록의 작은 색 칸 */
+
+.page {
+  --sel-border: 0 -2px 0 0 var(--bone), 0 2px 0 0 var(--bone), -2px 0 0 0 var(--bone), 2px 0 0 0 var(--bone);
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 216px minmax(0, 1fr);
+  gap: 18px;
+  /* 11/22 되팔기 줄은 할 일 줄 바로 아래 (사이를 비우지 않는다), 왼쪽 무대는 오른쪽 내용 높이에 맞춰 끝을 맞춘다 */
+  align-content: start;
+  align-items: stretch;
+}
+
+/* ── 왼쪽 무대: 좁게, 캐릭터는 크게 ── */
+.left {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.stageWrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.stage {
+  --scale: 7;
+  --feet: 82%;
+  flex: 1;
+  width: 100%;
+  min-height: 340px;
+}
+
+.who {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  color: var(--candle);
+  font-size: 11px;
+  text-shadow: 0 1px 0 #000;
+}
+
+.seg {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  background: rgba(20, 21, 17, 0.85);
+  box-shadow: var(--px-border);
+}
+
+.seg button {
+  min-width: 28px;
+  min-height: 24px;
+  padding: 2px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  touch-action: manipulation;
+}
+
+.seg button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--bone);
+}
+
+.live {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 1px 6px;
+  background: rgba(47, 66, 52, 0.85);
+  box-shadow: 0 0 0 1px var(--moss);
+  color: var(--moss);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+/* ── 오른쪽 ── */
+.right {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.info {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--line);
+}
+
+.ic {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.infoText {
+  min-width: 0;
+}
+
+.nm {
+  margin: 0;
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+}
+
+.tag {
+  padding: 0 5px;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.sec {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.sec h3 {
+  margin: 0;
+  color: var(--bone);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.sec .muted {
+  margin-left: auto;
+}
+
+/* 색 칸 4개: 원래 색 · 커스텀 1~3 */
+.slots {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 6px;
+}
+
+.slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  height: 138px;
+  padding: 12px 4px 10px;
+  border: 0;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+  color: var(--text);
+  touch-action: manipulation;
+}
+
+.slot:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.slot[data-worn] {
+  background: #20231c;
+}
+
+.slot[aria-pressed="true"],
+.slot[aria-pressed="true"]:hover:not(:disabled) {
+  background: var(--surface);
+  box-shadow: var(--sel-border);
+}
+
+/* 고른 칸 아래 꼬리 (설명 줄을 가리킨다) */
+.slot[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -11px;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--bone);
+  border-bottom: 0;
+}
+
+.slot:disabled {
+  cursor: progress;
+}
+
+.slot[data-state="empty"] {
+  background: transparent;
+  box-shadow: none;
+  outline: 2px dashed var(--line-strong);
+  outline-offset: -2px;
+  color: var(--faint);
+}
+
+.slot[data-state="empty"][aria-pressed="true"] {
+  outline-color: var(--bone);
+  color: var(--bone);
+}
+
+.slot[data-state="locked"] {
+  background: repeating-linear-gradient(135deg, #191a16 0 6px, #1d1e19 6px 12px);
+}
+
+.lb {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.art {
+  display: grid;
+  place-items: center;
+  height: 56px;
+}
+
+.shadow {
+  filter: brightness(0) opacity(0.35);
+}
+
+.hx {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  overflow: hidden;
+  font-family: var(--font-small);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.chip {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+
+.ribbon {
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  transform: translateX(-50%);
+  background: var(--candle);
+  color: #1b1c18;
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+/* 미리보기 중인 칸 (입은 칸 리본과 같은 자리, 테두리만) */
+.previewTag {
+  background: var(--bg-deep);
+  color: var(--bone);
+  box-shadow: 0 0 0 1px var(--bone);
+}
+
+/* 「이 색 입기」 연타 잠금 카운트다운 (누를 수 없는 단추 자리) */
+.lockBtn:disabled {
+  opacity: 1;
+  white-space: nowrap;
+  color: var(--candle);
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+
+.picker .chip {
+  display: inline-block;
+  vertical-align: -1px;
+}
+
+/* 고른 칸 한 줄 */
+.detail {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 2px;
+  padding: 10px 14px;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+}
+
+.detail > :first-child {
+  flex: none;
+}
+
+.big {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  box-shadow:
+    0 0 0 2px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.12);
+}
+
+.bigEmpty {
+  box-shadow: none;
+  outline: 2px dashed var(--line-strong);
+  outline-offset: -2px;
+}
+
+.bigLock {
+  background: #191a16;
+  color: var(--candle);
+}
+
+.detailText {
+  flex: 1;
+  min-width: 0;
+}
+
+.detailText p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.detailText p + p {
+  margin-top: 3px;
+}
+
+.detailText b {
+  color: var(--bone);
+  font-weight: 400;
+}
+
+.hex {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.acts {
+  display: flex;
+  gap: 8px;
+}
+
+.acts > button {
+  min-height: 44px;
+}
+
+.grow {
+  flex: 1;
+}
+
+.goldBtn {
+  background: #3a331a;
+  color: var(--candle);
+  box-shadow:
+    0 -2px 0 0 #8a7638,
+    0 2px 0 0 #8a7638,
+    -2px 0 0 0 #8a7638,
+    2px 0 0 0 #8a7638;
+}
+
+.goldText {
+  color: var(--candle);
+}
+
+/* 염색할 수 없는 꾸미기 */
+.nodye {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 168px;
+  padding: 16px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+  text-align: center;
+}
+
+.nodye p {
+  margin: 0;
+}
+
+.nodyeIcon {
+  color: var(--faint);
+  font-size: 28px;
+  line-height: 1;
+}
+
+.nodyeTitle {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.muted {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.faint {
+  color: var(--faint);
+}
+
+.gold {
+  color: var(--candle);
+}
+
+/* ── 염색권 고르기 (가운데 작은 창) ── */
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.resume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+  font-size: 11px;
+}
+
+.resume span {
+  flex: 1;
+}
+
+.tks {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 2px;
+  list-style: none;
+}
+
+.tk {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 6px 12px 6px 8px;
+  border: 0;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+  color: var(--text);
+  text-align: left;
+  touch-action: manipulation;
+}
+
+.tk:hover {
+  background: var(--surface-hover);
+}
+
+.tk[aria-checked="true"] {
+  background: var(--surface);
+  box-shadow: var(--sel-border);
+}
+
+.tkSw {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  box-shadow: var(--px-border);
+}
+
+.tkText {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.tkN {
+  color: var(--candle);
+  font-size: 11px;
+}
+
+.sheetGo {
+  min-height: 44px;
+}
+
+/* ── 가방 목록 한 줄의 작은 색 칸 ── */
+.minis {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mini {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: var(--bg-deep);
+  box-shadow: 0 0 0 1px var(--line-strong);
+  color: var(--faint);
+  touch-action: manipulation;
+}
+
+.mini[data-worn] {
+  box-shadow:
+    0 0 0 2px var(--candle),
+    0 0 0 3px #000;
+}
+
+.mini[data-state="empty"] {
+  background: transparent;
+  box-shadow: none;
+  outline: 1px dashed var(--line-strong);
+  outline-offset: -1px;
+}
+
+.mini[data-state="locked"] {
+  background: repeating-linear-gradient(135deg, #191a16 0 3px, #1d1e19 3px 6px);
+}
+
+/* 11/22 염색 불가 꾸미기의 커스텀 칸 */
+.mini[data-state="no"] {
+  background: #151612;
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+
+/* ── 폰: 무대 위에, 아래로 머리말 · 칸 · 설명 · 할 일 · 되팔기 (스크롤 없이 한 화면) ── */
+@media (max-width: 560px) {
+  .page {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  /* 폰은 화면 전체: 무대가 남는 높이를 다 갖는다 (아래 할 일·되팔기 줄까지 스크롤 없이, 맨 아래가 비지 않게) */
+  .left {
+    flex: 1 1 auto;
+    min-height: 180px;
+  }
+
+  .stage {
+    --scale: 7;
+    --feet: 88%;
+    min-height: 180px;
+    max-height: 440px;
+  }
+
+  .right {
+    flex: none;
+    gap: 10px;
+  }
+
+  .nodye {
+    flex: none;
+  }
+
+  .info {
+    gap: 10px;
+    padding-bottom: 10px;
+  }
+
+  .ic {
+    width: 48px;
+    height: 48px;
+  }
+
+  .slots {
+    gap: 6px;
+    padding-top: 4px;
+  }
+
+  .slot {
+    height: 108px;
+    padding: 10px 2px 8px;
+  }
+
+  .art {
+    height: 48px;
+  }
+
+  .detail {
+    padding: 8px 10px;
+  }
+
+  .acts {
+    gap: 6px;
+  }
+
+  .acts > button {
+    padding: 6px 8px;
+  }
+}

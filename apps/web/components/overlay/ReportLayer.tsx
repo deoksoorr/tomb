@@ -13,11 +13,12 @@ import { REPORT_MEMO_MAX, USER_REPORT_REASON_LABELS, USER_REPORT_REASONS, type U
 import { toUi } from "@/lib/uiScale";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
+import { SproutLine } from "../ui/SproutMark";
 import ui from "../ui/ui.module.css";
 import { chatStore } from "./chatLines";
 import styles from "./ReportLayer.module.css";
 
-type Menu = { sid: number; name: string; ch?: number; room?: string; chat?: string; x: number; y: number };
+type Menu = { sid: number; name: string; ch?: number; room?: string; chat?: string; sprout?: true; x: number; y: number };
 const MENU_W = 180;
 const MENU_H = 208;
 
@@ -77,6 +78,8 @@ export default function ReportLayer() {
       {menu && (
         <div ref={menuRef} className={styles.menu} style={{ left: menu.x, top: menu.y }} role="menu" aria-label={`${menu.name} 메뉴`}>
           <p className={styles.menuName}>{menu.name}</p>
+          {/* 11/22 새싹(총 접속 3시간 미만 새 이웃) 안내 한 줄 */}
+          {menu.sprout && <SproutLine />}
           <button
             type="button"
             role="menuitem"

@@ -1,13 +1,13 @@
 import { DIR, WALK_SPEED, type DirId } from "@tomb/protocol";
-import { AV_ANIM, AV_COLS, AV_H, AV_W, avatarArtTop, BODY_METRICS, bodyOf, buildAvatarSheet, faceAnchor, handAnchor, lookKey } from "@/game/sprites/avatar";
-import { CosmeticFxSim, FX_ART, type FxArtId, type FxCmd } from "@/game/sprites/cosmeticFx";
+import { AV_ANIM, AV_COLS, AV_H, AV_W, avatarArtTop, BODY_METRICS, bodyOf, buildAvatarSheet, faceAnchor, handAnchor, lookKey, specDye } from "@/game/sprites/avatar";
+import { CosmeticFxSim, FX_ART, fxArtGrid, type FxCmd } from "@/game/sprites/cosmeticFx";
 import { buildPartMask, drawDyeFx, glowTime, specSpecials } from "@/game/sprites/dyeFx";
 import * as fx from "@/game/sprites/fx";
 import { grassTile } from "@/game/sprites/ground";
 import { css, makeCanvas, type Color } from "@/game/sprites/pixel";
 
 // 상점 "입어 보기" 무대: 게임과 같은 아바타 시트·꾸미기 그림을 캔버스 2D로 그린다 (Phaser 없이).
-// 위치·흔들림 공식은 AvatarView.syncCosmetics를 그대로 옮겼다 (날개 파닥임, 유령 친구 따라오기·둥실,
+// 위치·흔들림 공식은 AvatarView.syncCosmetics를 그대로 옮겼다 (유령 친구 따라오기·둥실,
 // 발자국 꽃, 안개, 반딧불, 후광 빛). 걷기는 제자리걸음: 아바타는 가운데 두고 바닥과 꽃이 뒤로 흐른다.
 
 /** 무대 크기 (논리 px). 화면에는 정수 배율로 키운다 */
@@ -44,7 +44,6 @@ type Flower = { x: number; y: number; frame: number; born: number };
 
 type Art = {
   ground: HTMLCanvasElement;
-  wings: HTMLCanvasElement;
   pet: HTMLCanvasElement;
   flower: HTMLCanvasElement;
   firefly: HTMLCanvasElement;
@@ -73,7 +72,6 @@ function getArt(): Art {
   const glow = fx.glow();
   art = {
     ground,
-    wings: fx.avatarWings(),
     pet: fx.petGhost(),
     flower: fx.footFlower(),
     firefly: fx.firefly(),
@@ -109,15 +107,56 @@ function petBack(dir: DirId): [number, number] {
 
 type Sprite = { depth: number; draw: () => void };
 
-const fxCanvases = new Map<FxArtId, HTMLCanvasElement>();
+const fxCanvases = new Map<string, HTMLCanvasElement>();
+/** 염색한 날개 그림은 (그림, 색)마다 하나라 이만큼만 남긴다 (오래된 것부터 버린다 — 원래 그림은 늘 남긴다) */
+const FX_DYED_KEEP = 24;
+let fxDyed = 0;
+
+/** 연출 그림 캔버스 (11/22 tex 변형 = 염색한 날개·특수 색 가면) */
+function fxCanvas(c: FxCmd): HTMLCanvasElement {
+  const key = c.tex ? `${c.art}~${c.tex}` : c.art;
+  let art = fxCanvases.get(key);
+  if (art) return art;
+  if (c.tex && ++fxDyed > FX_DYED_KEEP) {
+    for (const k of fxCanvases.keys())
+      if (k.includes("~")) {
+        fxCanvases.delete(k);
+        fxDyed--;
+        break;
+      }
+  }
+  art = fxArtGrid(c.art, c.tex).toCanvas();
+  fxCanvases.set(key, art);
+  return art;
+}
+
+let tintScratch: HTMLCanvasElement | null = null;
+
+/** 그림 한 프레임에 색을 곱한 캔버스 (Phaser setTint와 같은 결과 — 특수 색 가면 덮개) */
+function tintedFrame(src: HTMLCanvasElement, sx: number, w: number, h: number, tint: Color): HTMLCanvasElement {
+  tintScratch ??= document.createElement("canvas");
+  tintScratch.width = w;
+  tintScratch.height = h;
+  const s = tintScratch.getContext("2d")!;
+  s.clearRect(0, 0, w, h);
+  s.drawImage(src, sx, 0, w, h, 0, 0, w, h);
+  s.globalCompositeOperation = "multiply";
+  s.fillStyle = css(tint);
+  s.fillRect(0, 0, w, h);
+  s.globalCompositeOperation = "destination-in";
+  s.drawImage(src, sx, 0, w, h, 0, 0, w, h);
+  s.globalCompositeOperation = "source-over";
+  return tintScratch;
+}
 
 /** F8 연출 명령 하나를 그린다 (Phaser 이미지와 같은 규칙: 원점 기준 회전·뒤집기·배율) */
 function drawFx(ctx: CanvasRenderingContext2D, c: FxCmd, x: number, y: number): void {
   const a = FX_ART[c.art];
-  let art = fxCanvases.get(c.art);
-  if (!art) {
-    art = a.build().toCanvas();
-    fxCanvases.set(c.art, art);
+  let art = fxCanvas(c);
+  let sx = c.frame * a.w;
+  if (c.tint !== undefined) {
+    art = tintedFrame(art, sx, a.w, a.h, c.tint);
+    sx = 0;
   }
   ctx.save();
   ctx.globalAlpha = Math.max(0, Math.min(1, c.alpha));
@@ -127,7 +166,7 @@ function drawFx(ctx: CanvasRenderingContext2D, c: FxCmd, x: number, y: number): 
   ctx.translate(x, y);
   if (c.rot) ctx.rotate(c.rot);
   ctx.scale((c.flip ? -1 : 1) * c.sx, c.sy);
-  ctx.drawImage(art, c.frame * a.w, 0, a.w, a.h, -c.ox * a.w, -c.oy * a.h, a.w, a.h);
+  ctx.drawImage(art, sx, 0, a.w, a.h, -c.ox * a.w, -c.oy * a.h, a.w, a.h);
   ctx.restore();
 }
 
@@ -266,25 +305,6 @@ export class OutfitStage {
       },
     });
 
-    if (l.look.includes("back_wings")) {
-      const side = dir === DIR.left || dir === DIR.right;
-      const flap = still ? 1 : 1 + 0.16 * Math.sin(t / 150);
-      const w = Math.round(26 * flap);
-      const cx = sx(this.ax) + (dir === DIR.right ? 2 : dir === DIR.left ? -2 : 0);
-      const cy = sy(this.ay) - m.shoulder - 3;
-      sprites.push({
-        // 뒷모습이면 날개가 앞에 보이고, 나머지는 몸 뒤
-        depth: this.ay + (dir === DIR.up ? 0.05 : -0.05),
-        draw: () => {
-          ctx.save();
-          ctx.translate(cx, cy - 6);
-          if (dir === DIR.right) ctx.scale(-1, 1);
-          ctx.drawImage(a.wings, side ? 26 : 0, 0, 26, 12, -Math.round(w / 2), 0, w, 12);
-          ctx.restore();
-        },
-      });
-    }
-
     if (l.look.includes("pet_ghost")) {
       const bob = still ? 0 : Math.sin(t / 420) * 1.5;
       const px = Math.round(this.petX);
@@ -323,10 +343,12 @@ export class OutfitStage {
 
     // ── F8 연출 (우산·풍선·날개·발자국·오라·펫): 게임과 같은 CosmeticFxSim ──
     // 몸도 함께: 프리미엄 외형 등급 연출 (빛·반짝이)
-    const fxKey = `${body}|${l.look.join(",")}|${l.champ ?? 0}|${l.staff ? 1 : 0}`;
+    const fxKey = `${body}|${l.look.join(",")}|${l.champ ?? 0}|${l.staff ? 1 : 0}|${l.color}`;
     if (fxKey !== this.fxKey) {
       this.fxKey = fxKey;
       this.fx.setLook(l.look, body, l.champ, l.staff);
+      // 11/22 염색한 날개 (색 표기의 아이템 색)
+      this.fx.setDye(specDye(l.color).items);
     }
     const fxCmds: FxCmd[] = [];
     if (!this.fx.empty) {
@@ -349,6 +371,8 @@ export class OutfitStage {
           face: faceAnchor(body, dirName(dir)),
           reduced: still,
           still,
+          // 11/22 야광 날개도 몸의 야광 부위와 같은 때 빛난다
+          glow: stageGlow(l),
         },
         fxCmds,
       );

@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- 캔버스로 만든 dataURL 픽셀아트 */
 import { resellBuyNote } from "@/lib/resell";
 import { useEffect, useState } from "react";
-import { isNameSlot, itemById } from "@tomb/protocol";
+import { DIR, isNameSlot, itemById } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { animFrames } from "@/game/housing/art";
 import { ghostMerchantArt, MERCHANT_H, MERCHANT_W } from "@/game/sea/ghostShipArt";
@@ -100,7 +100,7 @@ function GhostPreview({ row, avatar, wearing, name }: { row: GhostRow; avatar: {
       {isNameSlot(item?.slot) ? (
         <NameStylePreview className={s.namePreview} color={avatar.color} body={avatar.body} look={fit.look} name={name} label={`내 이름표에 ${row.name}을(를) 달아 본 모습 (낮·밤)`} />
       ) : (
-        <OutfitPreview className={s.fit} color={avatar.color} body={avatar.body} look={fit.look} label={`내 아바타가 ${row.name}을(를) 입어 본 모습`} />
+        <OutfitPreview className={s.fit} color={avatar.color} body={avatar.body} look={fit.look} label={`내 아바타가 ${row.name}을(를) 입어 본 모습`} facing={item?.slot === "pack" ? DIR.up : DIR.down} />
       )}
       <div className={s.previewInfo}>
         <p className={s.previewName}>{row.name}</p>
@@ -149,7 +149,7 @@ export default function GhostShop({ onClose, avatar }: { onClose: () => void; av
       if (r.lookGrant) applyStyle({ me: r.me, lookGrant: r.lookGrant });
       else meStore.set(r.me);
       bridge.emit("forage:coin");
-      setNotice(row.kind === "cosmetic" ? `${r.got}, 영구로 가졌어요. 가방의 꾸미기에서 입을 수 있어요.` : `${r.got}, 가구 가방에 넣었어요. 집에서 꾸미기로 놓을 수 있어요.`);
+      setNotice(row.kind === "cosmetic" ? `${r.got}, 영구로 가졌어요. 가방 [꾸미기]에서 입을 수 있어요.` : `${r.got}, 가구 가방에 넣었어요. 집에서 꾸미기로 놓을 수 있어요.`);
     } catch (e) {
       setNotice(errorMessage(e));
       // 값·열림이 바뀌었을 수 있어요 → 다시 받아요

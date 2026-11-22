@@ -1,6 +1,9 @@
 import {
   STAFF_TP_GAP_MS,
   STAFF_TP_NEAR_PX,
+  newLookBucket,
+  takeLookToken,
+  type LookBucket,
   type StaffTpDenyWhy,
   fireworkShowMs,
   CLOSE,
@@ -51,6 +54,8 @@ import {
   staffGateBody,
   staffGateLook,
   mgrGateLook,
+  isSproutUntil,
+  sproutOn,
   isChampValue,
   isDexBadge,
   isAwayPlace,
@@ -151,6 +156,8 @@ export type PeerRecord = {
   champ?: number;
   /** 11/16 매니저 (JoinClaims.mgr, 착용 증서로 바뀔 수 있다) */
   mgr?: true;
+  /** 11/22 새싹 표시가 끝나는 시각 (epoch ms, 입장 때 Worker가 토큰의 남은 분으로 정한다). 지나도 그대로 두고 화면이 시각으로 거른다 */
+  nb?: number;
   /** 이 연결로 자리를 잡은 시각. 로비의 채널 간 중복 정리(kick)가 더 새 연결을 내보내지 않게 비교한다 */
   joinedAt: number;
   /**
@@ -194,6 +201,8 @@ export type JoinTicket = {
   champ?: number;
   /** 11/16 매니저 (JoinClaims.mgr, 착용 증서로 바뀔 수 있다) */
   mgr?: true;
+  /** 11/22 새싹 표시가 끝나는 시각 (epoch ms, Worker가 JoinClaims.nb 남은 분으로 계산) */
+  nb?: number;
   /** 11/15 캠핑장 허락 (JoinClaims.camp) */
   camp?: true;
   /** 11/16 바닷가 허락 (JoinClaims.sea) */
@@ -285,8 +294,7 @@ export const EMOTE_INTERVAL_MS = 250;
 export const EMOTE_DEDUPE_MS = 1_000;
 /** graveEvent: 연결당 최소 간격이자, 채널 안에서 같은 graveId를 중계하는 최소 간격 */
 export const GRAVE_EVENT_INTERVAL_MS = 5_000;
-/** look 증서 연결당 최소 간격 */
-export const LOOK_INTERVAL_MS = 10_000;
+// look 증서: 11/22부터 연결당 토큰 버킷 (protocol lookQueue.ts — LOOK_BURST개, LOOK_REFILL_MS마다 하나). 예전 10초 간격은 없앴다
 /** firework 증서 연결당 최소 간격 */
 export const FIREWORK_INTERVAL_MS = 3_000;
 /**
@@ -373,7 +381,10 @@ type Peer<C> = PeerRecord & {
   lastTeleportAt?: number;
   lastEmoteAt: number;
   lastGraveEventAt: number;
-  lastLookAt: number;
+  /** 11/22 look 증서 토큰 버킷 (없으면 가득). 재접속(유예 안)이면 새로, 나갔다 바로 다시 들어오면 이어 붙인다 (DEPART_KEEP) */
+  lookBucket?: LookBucket;
+  /** 11/22 토큰이 모자라 아직 반영 못 한 마지막 look 증서 (최신 하나만 — 연결 단위, 저장하지 않는다) */
+  lookPending?: string;
   lastFireworkAt: number;
   lastSyncAt: number;
   lastActAt: number;
@@ -429,7 +440,7 @@ const DEPART_KEEP = [
   "rejoins",
   "lastEmoteAt",
   "lastGraveEventAt",
-  "lastLookAt",
+  "lookBucket",
   "lastFireworkAt",
   "lastActAt",
   "lastSayAt",
@@ -466,6 +477,8 @@ export class ChannelCore<C extends object> {
   private readonly dirty = new Set<number>();
   /** 속도 예산 때문에 아직 보고된 위치에 닿지 못한 sid */
   private readonly chasing = new Set<number>();
+  /** 11/22 look 토큰을 기다리는 증서가 있는 sid (tick마다 다시 본다) */
+  private readonly lookWaiting = new Set<number>();
   /** 채널 단위 이벤트 중복 제거: 키 → 마지막 중계 시각 */
   private readonly recentEvents = new Map<string, number>();
   private tickNo = 0;
@@ -661,6 +674,7 @@ export class ChannelCore<C extends object> {
       ...(t.dex ? { dex: t.dex } : {}),
       ...(t.champ ? { champ: t.champ } : {}),
       ...(t.mgr ? { mgr: true as const } : {}),
+      ...(isSproutUntil(t.nb) ? { nb: t.nb } : {}),
       joinedAt: now,
       ...mapField(map),
       ...(t.camp ? { camp: true as const } : {}),
@@ -737,7 +751,7 @@ export class ChannelCore<C extends object> {
     }
     const staffFlip = !!p.staff !== !!t.staff;
     const renamed =
-      p.name !== t.name || p.color !== t.color || p.body !== t.body || p.look.join() !== t.look.join() || !sameDye(p.dye, t.dye) || !!p.staff !== !!t.staff || (p.dex ?? 0) !== (t.dex ?? 0) || (p.champ ?? 0) !== (t.champ ?? 0) || !!p.mgr !== !!t.mgr;
+      p.name !== t.name || p.color !== t.color || p.body !== t.body || p.look.join() !== t.look.join() || !sameDye(p.dye, t.dye) || !!p.staff !== !!t.staff || (p.dex ?? 0) !== (t.dex ?? 0) || (p.champ ?? 0) !== (t.champ ?? 0) || !!p.mgr !== !!t.mgr || sproutMoved(p.nb, t.nb);
     p.name = t.name;
     p.color = t.color;
     p.look = t.look;
@@ -747,6 +761,7 @@ export class ChannelCore<C extends object> {
     p.dex = t.dex || undefined;
     p.champ = t.champ || undefined;
     p.mgr = t.mgr ? true : undefined;
+    p.nb = isSproutUntil(t.nb) ? t.nb : undefined;
     p.camp = t.camp ? true : undefined;
     p.sea = t.sea ? true : undefined;
     p.joinedAt = now;
@@ -841,6 +856,10 @@ export class ChannelCore<C extends object> {
       ...awayTag(map),
       // 11/15 채널 전체 인원 (마을·캠핑장 합계 — HUD "N/40명"). 방에는 없다
       ...(this.cfg.room ? {} : { n: this.count }),
+      // 11/22 look 증서를 줄 세운다 → 클라이언트는 기다리지 않고 바로 보낸다 (protocol lookQueue.ts)
+      lk: 1,
+      // 11/22 내 새싹 표시 끝 시각 (내 머리 위·내 채팅 줄에도 새싹)
+      ...(p.nb ? { nb: p.nb } : {}),
     });
     // 11/17 캠핑장이면 지금 서 있는 눈사람
     if (!this.cfg.room && map === "camp") this.sendSnowmen(p, now);
@@ -1098,9 +1117,9 @@ export class ChannelCore<C extends object> {
         p.lastGraveEventAt = now;
         return this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "graveEvent", sid: p.sid, kind: m.kind, graveId: m.graveId }), p.sid);
       case "look":
-        if (now - p.lastLookAt < LOOK_INTERVAL_MS) return;
-        p.lastLookAt = now;
-        return this.verifyThenApply(p, "look", m.grant);
+        // 11/22 간격 안이면 버리지 않고 최신 하나를 들고 있다 토큰이 차자마자 반영 (tick)
+        p.lookPending = m.grant;
+        return this.flushLook(p, now);
       case "bbq":
         // 11/15 캠핑장 바베큐: 웹이 서명한 한 접시 증서 → 검증 뒤 같은 맵에 (applyGrant)
         if (now - (p.lastBbqAt ?? -Infinity) < BBQ_INTERVAL_MS) return;
@@ -1167,7 +1186,8 @@ export class ChannelCore<C extends object> {
         const camp: { m?: ChatPlace } = hunting ? { m: "hunt" } : awayTag(mapOfPeer(p));
         // 11/20 닉네임 꾸미기도 싣는다: 다른 맵 사람(착용을 모름)과 늦게 들어온 사람의 채팅창에도 꾸민 이름이 보이게
         const ns = chatNameStyle(p.look);
-        const tags = { ...(p.staff ? { staff: true as const } : {}), ...(p.mgr ? { mgr: true as const } : {}), ...(ns ? { ns } : {}) };
+        // 11/22 새싹(새 이웃) 줄: 쓴 순간 아직 새싹이면
+        const tags = { ...(p.staff ? { staff: true as const } : {}), ...(p.mgr ? { mgr: true as const } : {}), ...(ns ? { ns } : {}), ...(sproutOn(p.nb, now) ? { nb: true as const } : {}) };
         const c = this.chatLog(now).push({ sid: p.sid, visitorId: p.visitorId, name: p.name, text: maskChat(m.text), ...tags, ...camp }, now);
         this.host.chatsChanged?.("village");
         this.broadcast(encodeEvent({ t: "chat", sid: p.sid, text: c.text, id: c.id, at: c.at, name: p.name, ...tags, ...camp }), p.sid);
@@ -1520,6 +1540,29 @@ export class ChannelCore<C extends object> {
   /** 월드 채널은 그 사람이 있는 맵 범위, 방은 크기를 모르므로 u16 범위만 */
   private inBounds(x: number, y: number, map: MapId): boolean {
     return this.cfg.room ? x >= 0 && x <= 0xffff && y >= 0 && y <= 0xffff : inMapBounds(map, x, y);
+  }
+
+  /**
+   * 11/22 기다리는 look 증서를 토큰이 있으면 반영하고, 없으면 tick에서 다시 본다 (검증 CPU·브로드캐스트는 토큰만큼만).
+   * 연결이 없으면 버린다 (다시 붙으면 클라이언트가 지금 착용 증서를 다시 보낸다)
+   */
+  private flushLook(p: Peer<C>, now: number): void {
+    const grant = p.lookPending;
+    if (grant === undefined || !p.conn) {
+      p.lookPending = undefined;
+      this.lookWaiting.delete(p.sid);
+      return;
+    }
+    if (!takeLookToken((p.lookBucket ??= newLookBucket()), now)) {
+      if (!this.lookWaiting.has(p.sid)) {
+        this.lookWaiting.add(p.sid);
+        this.host.requestTick();
+      }
+      return;
+    }
+    p.lookPending = undefined;
+    this.lookWaiting.delete(p.sid);
+    this.verifyThenApply(p, "look", grant);
   }
 
   /** 증서 검증(HMAC, 비동기)은 연결당 간격을 통과한 뒤에만 한다 — 검증 CPU를 아끼려고. */
@@ -1976,6 +2019,12 @@ export class ChannelCore<C extends object> {
    * 보낼 것이 없으면 false → 호출한 쪽이 루프를 멈춘다(그래야 DO가 hibernate된다).
    */
   tick(now: number): boolean {
+    // 11/22 토큰을 기다리던 look 증서 (차면 반영 — 반영 결과는 바로 브로드캐스트)
+    for (const sid of this.lookWaiting) {
+      const p = this.peers.get(sid);
+      if (p) this.flushLook(p, now);
+      else this.lookWaiting.delete(sid);
+    }
     for (const sid of this.chasing) {
       const p = this.peers.get(sid);
       if (p && this.chase(p, now)) this.markDirty(p);
@@ -2003,7 +2052,7 @@ export class ChannelCore<C extends object> {
       this.tickNo = (this.tickNo + 1) & 0xffff;
       return true;
     }
-    if (this.chasing.size > 0) return true;
+    if (this.chasing.size > 0 || this.lookWaiting.size > 0) return true;
     // 루프가 멈춘다 = 곧 hibernate될 수 있다. MOVE마다 하지 않고 이때 한 번 attachment를 갱신한다.
     for (const p of this.peers.values()) if (!p.saved) this.save(p);
     return false;
@@ -2031,6 +2080,7 @@ export class ChannelCore<C extends object> {
     this.byVisitor.delete(p.visitorId);
     this.dirty.delete(p.sid);
     this.chasing.delete(p.sid);
+    this.lookWaiting.delete(p.sid);
     this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "leave", sid: p.sid }));
     this.host.countChanged(this.count);
     this.broadcastCount();
@@ -2078,7 +2128,6 @@ export class ChannelCore<C extends object> {
       lastWarpAt: -Infinity,
       lastEmoteAt: -Infinity,
       lastGraveEventAt: -Infinity,
-      lastLookAt: -Infinity,
       lastFireworkAt: -Infinity,
       lastSyncAt: -Infinity,
       lastActAt: -Infinity,
@@ -2100,7 +2149,9 @@ export class ChannelCore<C extends object> {
     p.lastTeleportAt = now;
     p.lastEmoteAt = -Infinity;
     p.lastGraveEventAt = -Infinity;
-    p.lastLookAt = -Infinity;
+    p.lookBucket = undefined;
+    p.lookPending = undefined;
+    this.lookWaiting.delete(p.sid);
     p.lastFireworkAt = -Infinity;
     p.lastSyncAt = -Infinity;
     p.lastActAt = -Infinity;
@@ -2148,6 +2199,7 @@ export class ChannelCore<C extends object> {
       ...(p.dex ? { dex: p.dex } : {}),
       ...(p.champ ? { champ: p.champ } : {}),
       ...(p.mgr ? { mgr: true as const } : {}),
+      ...(p.nb ? { nb: p.nb } : {}),
       ...(p.ride ? { ride: true as const } : {}),
       ...(p.rod ? { rod: true as const } : {}),
       ...(p.away ? { away: true as const } : {}),
@@ -2168,8 +2220,17 @@ export class ChannelCore<C extends object> {
     const ride = r.ride === true && !seatId && ridePetOfLook(look) ? { ride: true as const } : {};
     // 배 위 낚싯대는 조각배 자리에 앉아 있을 때만 이어 간다
     const rod = r.rod === true && seatId && boatSeatById(seatId) ? { rod: true as const } : {};
-    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), ...mood, ...ride, ...rod, ...(r.away === true ? { away: true as const } : {}), ...(r.away === true && isAwayPlace(r.place) ? { place: r.place } : {}), ...(r.away === true && r.place === "house" && typeof r.house === "string" ? { house: r.house } : {}), ...(r.staff === true ? { staff: true as const } : {}), ...(isDexBadge(r.dex) ? { dex: r.dex } : {}), ...(isChampValue(r.champ) ? { champ: r.champ } : {}), ...(r.mgr === true ? { mgr: true as const } : {}), joinedAt: r.joinedAt ?? 0, ...(isAwayMap(r.map) ? { map: r.map } : {}), ...(r.camp === true ? { camp: true as const } : {}), ...(r.sea === true ? { sea: true as const } : {}), ...(isBbqEffect(r.bbq) ? { bbq: { i: r.bbq.i, u: r.bbq.u } } : {}), ...(isBbqEffect(r.spd) ? { spd: { i: r.spd.i, u: r.spd.u } } : {}), ...(isDrunkState(r.drunk) ? { drunk: { lv: r.drunk.lv, at: r.drunk.at } } : {}), ...snowOfRecord(r) };
+    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), ...mood, ...ride, ...rod, ...(r.away === true ? { away: true as const } : {}), ...(r.away === true && isAwayPlace(r.place) ? { place: r.place } : {}), ...(r.away === true && r.place === "house" && typeof r.house === "string" ? { house: r.house } : {}), ...(r.staff === true ? { staff: true as const } : {}), ...(isDexBadge(r.dex) ? { dex: r.dex } : {}), ...(isChampValue(r.champ) ? { champ: r.champ } : {}), ...(r.mgr === true ? { mgr: true as const } : {}), ...(isSproutUntil(r.nb) ? { nb: r.nb } : {}), joinedAt: r.joinedAt ?? 0, ...(isAwayMap(r.map) ? { map: r.map } : {}), ...(r.camp === true ? { camp: true as const } : {}), ...(r.sea === true ? { sea: true as const } : {}), ...(isBbqEffect(r.bbq) ? { bbq: { i: r.bbq.i, u: r.bbq.u } } : {}), ...(isBbqEffect(r.spd) ? { spd: { i: r.spd.i, u: r.spd.u } } : {}), ...(isDrunkState(r.drunk) ? { drunk: { lv: r.drunk.lv, at: r.drunk.at } } : {}), ...snowOfRecord(r) };
   }
+}
+
+/**
+ * 11/22 다시 붙을 때 새싹 끝 시각이 눈에 띄게 바뀌었는지 (켜짐·꺼짐, 또는 1분 넘게 차이) → 다른 사람에게 join을 다시 보낸다.
+ * 끝 시각은 입장할 때마다 "지금 + 남은 분"으로 새로 정해 몇 초씩 흔들리므로, 그 정도로는 다시 알리지 않는다
+ */
+function sproutMoved(prev: number | undefined, next: number | undefined): boolean {
+  if (!prev || !next) return !!prev !== !!next;
+  return Math.abs(prev - next) > 60_000;
 }
 
 /** 11/18 저장 형태의 들고 있는 눈덩이 (캠핑장에 있을 때만, 모양이 맞을 때만) */

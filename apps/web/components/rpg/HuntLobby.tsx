@@ -54,7 +54,7 @@ import s from "./rpg.module.css";
 import OverLevelSpot, { OVER_LEVEL_SPOT_MS } from "./OverLevelSpot";
 import { HUNT_POINT_T_STOP, huntPointBlock } from "@/lib/rpg/formulas";
 import { towerFitFloor, towerPointFrom } from "@/lib/rpg/tower";
-import { rideGate } from "@/lib/rideGate";
+import { useRideStopGate } from "../overlay/RideStopDialog";
 import { usePageZoomLock } from "@/lib/hooks/usePageZoomLock";
 
 // 사냥터 입구 창 (월드의 사냥터 입구에서 portal:open {kind:"hunt"} → UI가 이 컴포넌트를 띄운다).
@@ -145,6 +145,8 @@ export default function HuntLobby({
   const [overLevel, setOverLevel] = useState<{ until: number; title: string; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // 11/22 탈것에 탄 채 [출발]을 누름 → 사냥 창 대신 가운데 알림 ([내리고 들어가기]는 내린 뒤 같은 값으로 다시 출발)
+  const { rideStop, gate } = useRideStopGate(onClose);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // 사냥 안내서 (로비·멈춤 창 대신 같은 크기 창으로 띄운다)
   const [guide, setGuide] = useState(false);
@@ -284,9 +286,9 @@ export default function HuntLobby({
 
   async function start(game = cur.game, difficulty = cur.diff, towerFloor?: number, boost = false) {
     // 11/16 오리배·조각배 같은 탈것에 탄 채로는 못 간다 (끝나고 돌아오면 다시 배 위였다). 의자·벤치면 일어나서 간다
-    const why = rideGate(tower ? "야근 빌딩에 갈" : "사냥터에 갈");
-    if (why) {
-      setNotice(why);
+    // 11/22 운영자: 창 아래 작은 글씨로는 손님이 잘 몰랐다 → 사냥 창을 닫고 가운데에 알린다 (펫이면 [내리고 들어가기])
+    if (gate(tower ? "야근 빌딩에 들어갈" : "사냥터에 들어갈", { label: "내리고 들어가기", run: () => void start(game, difficulty, towerFloor, boost) })) {
+      setNotice(null);
       return;
     }
     setPhase("starting");
@@ -490,6 +492,8 @@ export default function HuntLobby({
       </>
     );
   }
+
+  if (rideStop) return rideStop;
 
   if (phase === "result" && outcome) {
     return (

@@ -15,6 +15,10 @@ import { hash01 } from "../rules";
 //    100%를 넘긴 판에선 낸 사람 중 한 명(배달왕 빼고, 낸 수와 상관없이 똑같은 확률)을 뽑아 「행운의 배달부」로 같은 무작위 꾸미기를 준다.
 //    사이렌 모자는 무작위 꾸미기 후보에 아주 드물게 (URGENT_COS_SIREN)
 //    (마지막 1분에 100%를 넘긴 사람이 없고 150%로 일찍 끝났으면 「아슬아슬 마감」은 150%를 채워 끝낸 사람 — urgentLastAcct)
+//    11/22 사용자 「100%로 끝나면 많이 낸 사람이 받는 게 없다」: 100%를 넘긴 판은 많이 낸 순위 1·2·3등이 도장 5·3·2개를 더 받고(URGENT_RANK_STAMPS),
+//    「긴급 배달왕」 칭호도 100%부터 1등에게. 150%를 채운 판은 1등에게 무작위 꾸미기를 더 준다 (kingCos). 50%~99%는 순위 보상 없음.
+//    순위는 낸 수가 많은 순, 같은 수면 그 수에 먼저 닿은 사람이 위 (rankScore 소수부 — 저장소 순위 그대로). 같은 ms까지 같으면 계정 id가 사전 순으로 뒤인 사람이 위
+//    (Redis ZREVRANGE와 메모리 저장소가 같은 순서 — urgentStore top)
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -176,8 +180,13 @@ export function urgentCapLine(kind: UrgentKind, cap: number, left: number): stri
   return `한 사람이 ${cap}${unit}까지 낼 수 있어요. 지금 ${left}${unit} 더 낼 수 있어요.`;
 }
 
-/** 11/18 배달왕 안내 한 줄 (게시판 순위 위): 공동 배달왕은 없앴다 — 150%를 채운 판의 1등 한 명만 */
-export const URGENT_KING_LINE = "150%를 채우면 가장 많이 낸 1등이 「긴급 배달왕」과 무작위 꾸미기를, 100%를 넘기면 낸 사람 중 한 명이 뽑혀 무작위 꾸미기를 받아요.";
+/** 11/22 100%를 넘긴 판의 많이 낸 순위 보너스 도장 [1등, 2등, 3등] (단계 도장에 더한다) */
+export const URGENT_RANK_STAMPS = [5, 3, 2] as const;
+/** 순위(1~3) 보너스 도장 (순위 밖이면 0) */
+export const urgentRankStamps = (rank: number) => (rank >= 1 && rank <= URGENT_RANK_STAMPS.length ? URGENT_RANK_STAMPS[rank - 1] : 0);
+
+/** 11/18 배달왕 안내 한 줄 (게시판 순위 위). 11/22 100%부터 1·2·3등 보너스 도장과 1등 칭호, 150%면 1등 꾸미기 */
+export const URGENT_KING_LINE = `100%를 넘기면 많이 낸 1·2·3등이 도장을 ${URGENT_RANK_STAMPS.join("·")}개 더 받고, 1등은 「긴급 배달왕」 칭호도 달아요. 150%를 채우면 1등에게 무작위 꾸미기를 더 드려요. 100%를 넘기면 낸 사람 중 한 명을 뽑아 무작위 꾸미기도 드려요.`;
 
 /** 11/16 상한에 걸린 납품 거절 문구 */
 export function urgentCapError(kind: UrgentKind, cap: number, left: number): string {
@@ -236,29 +245,45 @@ export function urgentPrize(stage: UrgentStage): string {
 }
 
 /**
+ * 11/22 순위 보너스 한 줄 ("2등이라 도장 3개를 더 받았어요."). 1등은 배달왕 칭호까지. 순위 밖이면 빈 문자열
+ */
+export function urgentRankLine(rank: number, claimed = false): string {
+  const b = urgentRankStamps(rank);
+  if (b <= 0) return "";
+  if (rank === 1) return claimed ? `1등이라 도장 ${b}개를 더 받고 「긴급 배달왕」 칭호도 받았어요.` : `1등이라 도장 ${b}개를 더 받고 「긴급 배달왕」 칭호도 받아요.`;
+  return claimed ? `${rank}등이라 도장 ${b}개를 더 받았어요.` : `${rank}등이라 도장 ${b}개를 더 받아요.`;
+}
+
+/**
  * 끝난 의뢰의 보상 한 줄 (n > 0).
  *  - 50%를 못 넘겼으면 모두에게 "50%를 못 넘겨 이번엔 보상이 없어요."
  *  - 낸 사람: "50%를 넘겨 도장 2개를 받아요." (받았으면 "…받았어요.")
  *  - 내지 않은 사람(mine=false): "낸 사람은 도장 2개를 받아요."
  *  - 아직 모르면(mine=null) 빈 문자열
  */
-export function urgentRewardLine(o: { n: number; goal: number; mine: boolean | null; claimed?: boolean }): string {
+export function urgentRewardLine(o: { n: number; goal: number; mine: boolean | null; claimed?: boolean; rank?: number }): string {
   const stage = urgentStage(o.n, o.goal);
   if (stage < 50) return "50%를 못 넘겨 이번엔 보상이 없어요.";
   if (o.mine === null) return "";
   const prize = urgentPrize(stage);
   if (!o.mine) return `낸 사람은 ${prize}를 받아요.`;
   const reach = `${stage}%를 ${urgentPct(o.n, o.goal) > stage ? "넘겨" : "채워"}`;
-  return o.claimed ? `${reach} ${prize}를 받았어요.` : `${reach} ${prize}를 받아요.`;
+  const line = o.claimed ? `${reach} ${prize}를 받았어요.` : `${reach} ${prize}를 받아요.`;
+  // 11/22 100%를 넘긴 판의 1·2·3등은 순위 보너스 한 줄을 더 붙인다
+  const rank = stage >= 100 ? urgentRankLine(o.rank ?? 0, o.claimed) : "";
+  return rank ? `${line} ${rank}` : line;
 }
 
 /** 끝 확성기 한 줄 (150% 축제 공지는 따로). early = 150%를 채워 일찍 끝났다 */
 export function urgentEndNotice(kind: UrgentKind, goal: number, n: number, early = false): string {
   const name = `긴급 의뢰(${urgentWhat(kind, goal)})`;
   if (n <= 0) return `${name}는 아무도 오지 않은 채 끝났어요.`;
-  if (early) return `${name}가 ${urgentFilled(kind, n, goal, true)}! 낸 사람은 게시판에서 보상을 받아요.`;
+  if (early) return `${name}가 ${urgentFilled(kind, n, goal, true)}! 낸 사람은 게시판에서 보상을 받고, 많이 낸 1·2·3등은 도장을 더 받아요.`;
   const filled = urgentFilled(kind, n, goal);
-  return urgentStage(n, goal) >= 50 ? `${name}가 끝났어요. ${filled}! 낸 사람은 게시판에서 보상을 받아요.` : `${name}가 끝났어요. ${filled}.`;
+  const stage = urgentStage(n, goal);
+  // 11/22 100%를 넘기면 순위 보너스도 같이 알린다
+  if (stage >= 100) return `${name}가 끝났어요. ${filled}! 낸 사람은 게시판에서 보상을 받고, 많이 낸 1·2·3등은 도장을 더 받아요.`;
+  return stage >= 50 ? `${name}가 끝났어요. ${filled}! 낸 사람은 게시판에서 보상을 받아요.` : `${name}가 끝났어요. ${filled}.`;
 }
 
 // ── 수집가의 뒷주머니 (100% 상자) ──
@@ -299,11 +324,17 @@ export function prizeText(p: BoxPrize): string {
 /** 한 사람의 보상 */
 export type UrgentReward = {
   stage: UrgentStage;
-  /** 단계 도장 (상자 도장은 box에) */
+  /** 단계 도장 (상자 도장은 box에, 순위 보너스는 rankStamps에) */
   stamps: number;
   box: BoxPrize | null;
-  /** 가장 많이 낸 한 사람 (11/18 150%를 채운 판에서만, 공동 배달왕 없음) → 칭호 「긴급 배달왕」 + 무작위 꾸미기 (11/19) */
+  /** 11/22 많이 낸 순위 (1~3, 100%를 넘긴 판에서만 — 아니면 0) */
+  rank: number;
+  /** 11/22 순위 보너스 도장 (URGENT_RANK_STAMPS, 아니면 0) */
+  rankStamps: number;
+  /** 가장 많이 낸 한 사람 (공동 배달왕 없음) → 칭호 「긴급 배달왕」. 11/22 150%가 아니라 100%를 넘긴 판부터 */
   king: boolean;
+  /** 11/22 배달왕이 무작위 꾸미기도 받는다 (150%를 채운 판에서만 — 11/19 그대로) */
+  kingCos: boolean;
   /** 11/19 행운의 배달부: 100%를 넘긴 판에서 낸 사람 중 뽑힌 한 명 (배달왕 빼고) → 무작위 꾸미기 */
   lucky: boolean;
   /** 마지막 1분에 100%를 채운 사람 → 칭호 「아슬아슬 마감」 */
@@ -312,18 +343,26 @@ export type UrgentReward = {
 
 /**
  * 보상 판정 (끝난 뒤, 막대가 멈춘 값으로). mine = 내가 낸 수 (0이면 보상 없음 → null).
- * 11/18 배달왕: 150%를 채운 판에서 가장 많이 낸 한 사람(top — 같은 수면 먼저 닿은 사람이 위)만. 공동 배달왕(상한까지 낸 사람 모두)은 없앴다.
+ * 11/18 배달왕: 가장 많이 낸 한 사람(top — 같은 수면 먼저 닿은 사람이 위)만. 공동 배달왕(상한까지 낸 사람 모두)은 없앴다.
+ * 11/22 ranks = 많이 낸 순 계정 (저장소 순위 그대로, 앞 3명만 본다 — 없으면 [top]). 100%를 넘긴 판에서 1·2·3등 보너스 도장,
+ * 배달왕 칭호는 100%부터, 무작위 꾸미기(kingCos)는 150%일 때만.
  * cap은 예전 호출과 맞추려고 그대로 받는다 (배달왕 판정엔 쓰지 않는다)
  */
-export function urgentReward(o: { id: string; acct: string; n: number; goal: number; cap: number; mine: number; top: string | null; last: string | null; lucky?: string | null }): UrgentReward | null {
+export function urgentReward(o: { id: string; acct: string; n: number; goal: number; cap: number; mine: number; top: string | null; ranks?: readonly string[]; last: string | null; lucky?: string | null }): UrgentReward | null {
   if (o.mine <= 0) return null;
   const stage = urgentStage(o.n, o.goal);
   const stamps = (stage >= 50 ? URGENT_STAMPS[50] : 0) + (stage >= 100 ? URGENT_STAMPS[100] : 0);
+  const ranks = (o.ranks ?? (o.top ? [o.top] : [])).slice(0, URGENT_RANK_STAMPS.length);
+  const rank = stage >= 100 ? ranks.indexOf(o.acct) + 1 : 0;
+  const king = stage >= 100 && o.top === o.acct;
   return {
     stage,
     stamps,
     box: stage >= 100 ? openBox(`${o.id}|${o.acct}`) : null,
-    king: stage >= 150 && o.top === o.acct,
+    rank,
+    rankStamps: urgentRankStamps(rank),
+    king,
+    kingCos: king && stage >= 150,
     lucky: stage >= 100 && !!o.lucky && o.lucky === o.acct,
     last: stage >= 100 && o.last === o.acct,
   };
@@ -366,7 +405,8 @@ export function urgentCosRoll(seed: string, tiers: readonly (readonly string[])[
   return null;
 }
 
-/** 행운의 배달부: 낸 사람(accts) 중 한 명 (결정적 — 의뢰 id 시드, 계정 이름 순으로 줄 세워 뽑는다). 배달왕(king)은 뺀다 */
+/** 행운의 배달부: 낸 사람(accts) 중 한 명 (결정적 — 의뢰 id 시드, 계정 이름 순으로 줄 세워 뽑는다). 배달왕(king)은 뺀다
+ *  (11/22 배달왕이 칭호만 받는 100%~149% 판은 king = null로 부른다 — 꾸미기가 겹치는 150% 판만 뺀다. urgentService luckyFrom) */
 export function urgentLucky(id: string, accts: readonly string[], king: string | null): string | null {
   const pool = [...new Set(accts)].filter((a) => a !== king).sort();
   if (!pool.length) return null;
@@ -374,7 +414,7 @@ export function urgentLucky(id: string, accts: readonly string[], king: string |
 }
 
 /** 받을 것이 있는지 */
-export const hasReward = (r: UrgentReward | null): r is UrgentReward => !!r && (r.stamps > 0 || !!r.box || r.king || r.lucky || r.last);
+export const hasReward = (r: UrgentReward | null): r is UrgentReward => !!r && (r.stamps > 0 || r.rankStamps > 0 || !!r.box || r.king || r.lucky || r.last);
 
 // ── 축제 ──
 

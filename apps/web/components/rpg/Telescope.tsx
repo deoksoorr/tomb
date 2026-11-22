@@ -27,7 +27,7 @@ import StarsHud from "./StarsHud";
 import s from "./rpg.module.css";
 import { MeteorNote, readStarsRecords, saveStarsRecord, StarsDexCard, StarsInfo, StarsPreview } from "./TelescopeExtras";
 import x from "./TelescopeExtras.module.css";
-import { rideGate } from "@/lib/rideGate";
+import { useRideStopGate } from "../overlay/RideStopDialog";
 
 // 22번 별 보기 언덕의 망원경 (월드에서 망원경 앞 E → portal:open {kind:"telescope"}). 11/16 마을 곳곳·캠핑장·바닷가 망원경도 같은 창 (game/scopes)
 // 사냥터 로비에 있던 "별자리 잇기"를 여기서 한다. 판 시작·결과 검증은 사냥터와 같은 /api/rpg/run (game "stars") —
@@ -57,6 +57,8 @@ function readDiff(): Difficulty {
 }
 
 export default function Telescope({ onClose }: { onClose: () => void }) {
+  // 11/22 탈것에 탄 채 [시작] → 이 창 대신 가운데 알림 (펫이면 [내리고 시작하기])
+  const { rideStop, gate } = useRideStopGate(onClose);
   const [diff, setDiff] = useState<Difficulty>(readDiff);
   // 터치 기기는 키 대신 탭 안내
   const coarse = useMediaQuery("(pointer: coarse)");
@@ -137,9 +139,8 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
 
   async function start() {
     // 11/16 탈것에 탄 채로는 못 한다 (lib/rideGate). 의자·벤치면 일어나서
-    const why = rideGate("별자리 잇기를 할");
-    if (why) {
-      setNotice(why);
+    if (gate("별자리 잇기를 할", { label: "내리고 시작하기", run: () => void start() })) {
+      setNotice(null);
       return;
     }
     setPhase("starting");
@@ -244,6 +245,8 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
     );
   }
 
+  if (rideStop) return rideStop;
+
   if (phase === "result" && outcome) {
     const r = outcome.reward;
     const all = outcome.result.game === "stars" ? outcome.result.perfect + outcome.result.good + outcome.result.miss : 0;
@@ -274,7 +277,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
                 {r.nightBonus && <p className={s.levelUp}>맑은 밤이라 포인트를 {STARRY_NIGHT_BONUS}배 받았어요!</p>}
                 {r.meteor && (
                   <p className={x.meteorWin} role="status">
-                    별똥별 부스러기가 떨어졌어요! 전설 <b>「{METEOR_ITEM_NAME}」</b>를 영구로 받았어요. 가방에서 꾸미기 칸을 눌러 입을 수 있어요.
+                    별똥별 부스러기가 떨어졌어요! 전설 <b>「{METEOR_ITEM_NAME}」</b>를 영구로 받았어요. 가방 [꾸미기]에서 입을 수 있어요.
                   </p>
                 )}
                 <ResultConstellations reward={r} />
