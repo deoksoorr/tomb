@@ -7,6 +7,7 @@ import type { NpcFurnRow } from "@/lib/housing/npcFurnShop";
 import { FurnitureStage, FurnitureThumb } from "../housing/parts";
 import shop from "../shop/ShopDialog.module.css";
 import { cx } from "../ui/cx";
+import { watchMoreBelow } from "../ui/moreBelow";
 import ui from "../ui/ui.module.css";
 import styles from "./NpcFurniturePanel.module.css";
 
@@ -65,7 +66,7 @@ export default function NpcFurniturePanel({ rows, points, signedIn, noHouse, pen
     const ways = def && rotateMode(def) === "turn" ? 4 : 2;
     const short = points !== null && points < r.cost;
     return (
-      <section className={cx(shop.detail, styles.detail)} aria-label={`${r.name} 자세히 보기`} aria-live="polite">
+      <section ref={watchMoreBelow} className={cx(shop.detail, styles.detail, "more-fade")} aria-label={`${r.name} 자세히 보기`} aria-live="polite">
         <div className={styles.stageWrap}>
           <div className={styles.furnStage} data-night={night || undefined}>
             <FurnitureStage itemId={r.id} w={200} h={140} r={turn % ways} night={night} />
@@ -96,7 +97,7 @@ export default function NpcFurniturePanel({ rows, points, signedIn, noHouse, pen
     <div className={shop.panel}>
       {row ? detail(row) : <section className={shop.detail} aria-hidden="true" />}
       <div className={shop.listCol}>
-        <ul className={styles.grid} aria-label={listLabel}>
+        <ul ref={watchMoreBelow} className={cx(styles.grid, "more-fade")} aria-label={listLabel}>
           {list.map((r) => (
             <li key={r.id}>
               <button

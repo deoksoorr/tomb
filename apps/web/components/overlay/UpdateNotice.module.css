@@ -13,7 +13,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  max-width: calc(100vw - var(--safe-left) - var(--safe-right));
+  max-width: calc(100vw / var(--uz) - var(--safe-left) - var(--safe-right));
   padding: 6px 6px 6px 14px;
   background: var(--panel);
   color: var(--bone);

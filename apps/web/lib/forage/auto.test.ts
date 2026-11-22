@@ -4,9 +4,10 @@ import {
   AUTO_BEAT_GAP_MS,
   AUTO_CATCH_CHANCE,
   AUTO_FISH_EVERY_MS,
-  AUTO_FISH_MAX_MS,
+  AUTO_NO_END,
   autoAliveMs,
   autoCatchTimes,
+  autoChipText,
   autoHit,
   autoNextInMs,
   autoRareFactor,
@@ -91,9 +92,22 @@ describe("경과 시간 → 시도 수", () => {
     expect(autoAliveMs(beatAuto(newAutoSession(1, "f", "lake", 1, T0), T0 + AUTO_BEAT_GAP_MS + 1))).toBe(0);
   });
 
-  it("한 세션은 켠 뒤 최대 6시간까지만", () => {
+  it("11/22 시간 제한 없음: 9시간 켜 두면 9시간을 다 센다", () => {
     const s = beats(newAutoSession(1, "f", "lake", 1, T0), T0, T0 + 9 * 3_600_000, 5 * MIN);
-    expect(autoAliveMs(s)).toBe(AUTO_FISH_MAX_MS);
+    expect(autoAliveMs(s)).toBe(9 * 3_600_000);
+    expect(s.end).toBe(AUTO_NO_END);
+  });
+
+  it("11/22 6시간 제한 때 저장된 세션도 읽으면 끝이 없어지고, 물때 세션은 끝 시각을 지킨다", () => {
+    const old = { ...newAutoSession(1, "f", "lake", 1, T0), end: T0 + 6 * 3_600_000 };
+    const p = parseAutoSession(JSON.stringify(old))!;
+    expect(p.end).toBe(AUTO_NO_END);
+    expect(autoAliveMs(beats(p, T0, T0 + 8 * 3_600_000, 5 * MIN))).toBe(8 * 3_600_000);
+    const tide = { ...old, end: T0 + 2 * 3_600_000, tide: true as const };
+    expect(parseAutoSession(JSON.stringify(tide))!.end).toBe(T0 + 2 * 3_600_000);
+    // 새 세션은 JSON으로 저장·읽기가 그대로 (Infinity가 아니라 유한한 먼 시각)
+    const fresh = newAutoSession(1, "f", "lake", 1, T0);
+    expect(parseAutoSession(JSON.stringify(fresh))).toEqual(fresh);
   });
 
   it("같은 시각·과거 신호는 아무것도 바꾸지 않는다", () => {
@@ -105,7 +119,7 @@ describe("경과 시간 → 시도 수", () => {
   it("k번째 물고기의 시각은 접속 구간을 이어 붙여 채워지는 순간", () => {
     let s = newAutoSession(1, "f", "lake", 1, T0);
     s = beatAuto(s, T0 + AUTO_FISH_EVERY_MS * 1.5); // 첫 구간: 1.5마리분
-    s = beatAuto(s, s.beat + 5 * 3_600_000); // 끊김 (6시간 끝까지 가지 않게 짧게)
+    s = beatAuto(s, s.beat + 5 * 3_600_000); // 끊김
     s = { ...s, end: s.beat + 10 * MIN };
     const back = s.beat;
     s = beatAuto(s, back + AUTO_FISH_EVERY_MS); // 둘째 구간
@@ -254,5 +268,19 @@ describe("요약", () => {
       { id: "c", isNew: false, size: 0 },
     ];
     expect(autoSummary(items, (id) => id.toUpperCase())).toBe("B 1(새 도감·61.0cm), A 2(최대 42.3cm·새 기록), C 3");
+  });
+});
+
+describe("11/22 터치 화면 위쪽 자동 낚시 칩 글귀", () => {
+  it("낚은 수와 다음 찌 올리기까지 (분 단위, 1분 안이면 곧)", () => {
+    expect(autoChipText(3, 70_000, false)).toEqual({ head: "자동 낚시 중", count: "3마리", next: "다음 약 1분" });
+    expect(autoChipText(0, 10_000, false).next).toBe("다음 곧");
+    expect(autoChipText(0, -5_000, false).next).toBe("다음 곧");
+  });
+  it("세션이 끝나 다음 시각이 없으면 다음 칸은 비운다", () => {
+    expect(autoChipText(2, null, false)).toEqual({ head: "자동 낚시 중", count: "2마리", next: "" });
+  });
+  it("가방이 가득 차면 쉰다고 (낚은 수는 뒤로)", () => {
+    expect(autoChipText(5, 70_000, true)).toEqual({ head: "자동 낚시", count: "가방 가득", next: "쉬는 중 · 5마리" });
   });
 });

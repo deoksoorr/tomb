@@ -616,7 +616,7 @@
 .detail {
   position: sticky;
   top: 40px;
-  max-height: calc(min(660px, 100dvh - 32px) - 236px);
+  max-height: calc(min(660px, 100dvh / var(--uz) - 32px) - 236px);
   min-height: 240px;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1273,7 +1273,7 @@
     bottom: 0;
     left: 0;
     z-index: 20;
-    max-height: 62dvh;
+    max-height: calc(62dvh / var(--uz));
     padding: 12px 14px calc(14px + env(safe-area-inset-bottom));
     overflow-y: auto;
     overscroll-behavior: contain;

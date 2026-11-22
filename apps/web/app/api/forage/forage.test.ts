@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { WALLET_MAX } from "@/lib/economy";
-import { DEX_REWARD, dexRewardOf, dexTitleNeed, GATHER_NODES, gatherNodeById, speciesById, speciesOf } from "@/lib/forage/catalog";
+import { env } from "@/lib/env";
+import { bagIdOf, DEX_REWARD, dexRewardOf, dexTitleNeed, GATHER_NODES, gatherNodeById, speciesById, speciesOf } from "@/lib/forage/catalog";
 import { BUG_DIFFICULTY, BUG_ROUND_SEC, BUG_STATS, reelMinMs } from "@/lib/forage/rules";
 import { payNewDex } from "@/lib/forage/dexReward";
 import { getForageStore } from "@/lib/forage/store";
@@ -97,12 +98,35 @@ describe("낚시", () => {
     const sp = speciesById(got.result!.id)!;
     expect(sp.cat).toBe("fish");
     expect(got.result).toMatchObject({ kept: true, isNew: true });
-    expect(got.state.bag[sp.id]).toBe(1);
+    // 11/22 크기가 크면 대물·월척 칸에 (크기는 그때그때 굴린다)
+    expect(got.state.bag[bagIdOf(sp.id, got.result!.grade ?? 0)]).toBe(1);
     expect(got.state.dex[sp.id]).toMatchObject({ n: 1, first: kstDay(realNow()) });
     expect(got.state.today.fish).toBe(1);
     const again = await reel.POST(call("/x", v, { ticket: c.ticket, ok: true }));
     expect(again.status).toBe(409);
     expect(await errCode(again)).toBe("TICKET_USED");
+  });
+
+  it("11/22 직접 낚은 큰 물고기는 대물·월척 칸에 (도감·최대 크기는 종으로), 보통 크기는 보통 칸", async () => {
+    const v = await newVisitor();
+    const store = getForageStore();
+    const reelWith = async (nonce: string, sz: number) => {
+      const t = realNow();
+      expect(await store.begin(v.id, nonce, JSON.stringify({ k: "fish", sp: "f_carp", sz }), 120, "h-grade", 300)).toBe(true);
+      const ticket = await signForageTicket(env.sessionSecret(), { n: nonce, a: v.id, k: "fish", x: PIER, t, b: t, p: 1 });
+      later(reelMinMs(1) + 50);
+      const r = await body<ReelResponse>(await reel.POST(call("/x", v, { ticket, ok: true })));
+      vi.restoreAllMocks();
+      return r;
+    };
+    const big = await reelWith("grade-n1", 850);
+    expect(big.result).toMatchObject({ id: "f_carp", size: 850, kept: true, grade: 2 });
+    const mid = await reelWith("grade-n2", 700);
+    expect(mid.result).toMatchObject({ id: "f_carp", grade: 1 });
+    const plain = await reelWith("grade-n3", 400);
+    expect(plain.result!.grade).toBeUndefined();
+    expect(plain.state.bag).toEqual({ f_carp: 1, "f_carp~1": 1, "f_carp~2": 1 });
+    expect(plain.state.dex.f_carp).toMatchObject({ n: 3, max: 850 });
   });
 
   it("배 위 낚시: boat:lake·boat:river 가상 자리로 던지면 그 물의 물고기가 잡힌다 (모르는 배 자리는 400)", async () => {
@@ -245,11 +269,55 @@ describe("NPC 판매", () => {
     const day = kstDay(realNow());
     const store = getForageStore();
     await store.grant(v.id, day, "fish", [{ id: "f_koi", size: 500 }, { id: "f_carp", size: 1 }, { id: "f_carp", size: 1 }], 99);
-    // 지갑 여유 10P → 금잉어(32)는 못 팔고 잉어(6) 1마리만
+    // 지갑 여유 10P → 금잉어(42)는 못 팔고 잉어(8) 1마리만 (11/22 물고기 값 ×1.3)
     await getAccounts().earn(v.id, "fish", day, { amount: WALLET_MAX - 10 });
     const s1 = await body<SellResponse>(await sell.POST(call("/x", v, { npc: "fishmonger", items: { f_koi: 1, f_carp: 2 } })));
-    expect(s1).toMatchObject({ sold: { f_carp: 1 }, earned: 6, capped: true });
+    expect(s1).toMatchObject({ sold: { f_carp: 1 }, earned: 8, capped: true });
     expect(s1.state.bag).toEqual({ f_koi: 1, f_carp: 1 });
+  });
+
+  it("11/22 대물·월척은 칸 id로 팔고 한 개 값은 등급 배수를 반올림 (잉어 8P → 대물 12P, 월척 20P)", async () => {
+    const v = await newVisitor();
+    const day = kstDay(realNow());
+    const store = getForageStore();
+    await store.grant(v.id, day, "fish", [{ id: "f_carp", size: 400 }, { id: "f_carp", size: 700, grade: 1 }, { id: "f_carp", size: 820, grade: 2 }, { id: "f_carp", size: 820, grade: 2 }], 99);
+    expect((await sell.POST(call("/x", v, { npc: "fishmonger", items: { "f_carp~3": 1 } }))).status).toBe(400);
+    expect((await sell.POST(call("/x", v, { npc: "collector", items: { "f_carp~1": 1 } }))).status).toBe(400);
+    const s = await body<SellResponse>(await sell.POST(call("/x", v, { npc: "fishmonger", items: { "f_carp~1": 1, "f_carp~2": 1, f_carp: 1 } })));
+    expect(s).toMatchObject({ sold: { "f_carp~1": 1, "f_carp~2": 1, f_carp: 1 }, earned: 12 + 20 + 8, capped: false });
+    expect(s.state.bag).toEqual({ "f_carp~2": 1 });
+    // 해녀 할망도 종으로 사는지 본다 (잉어는 호수 물고기라도 물고기는 다 산다)
+    const s2 = await body<SellResponse>(await sell.POST(call("/x", v, { npc: "haenyeo", items: { "f_carp~2": 1 } })));
+    expect(s2).toMatchObject({ sold: { "f_carp~2": 1 }, earned: 20 });
+  });
+
+  it("11/22 지갑 여유 안에서 비싼 칸부터 (월척이 보통보다 먼저), 넘치는 칸은 가방에", async () => {
+    const v = await newVisitor();
+    const day = kstDay(realNow());
+    const store = getForageStore();
+    await store.grant(v.id, day, "fish", [{ id: "f_carp", size: 820, grade: 2 }, { id: "f_carp", size: 1 }, { id: "f_carp", size: 1 }], 99);
+    // 지갑 여유 25P → 월척(20) + 보통(8)은 28이라 월척 하나만 넣고, 남은 5P로는 보통(8)도 못 판다
+    await getAccounts().earn(v.id, "fish", day, { amount: WALLET_MAX - 25 });
+    const s = await body<SellResponse>(await sell.POST(call("/x", v, { npc: "fishmonger", items: { "f_carp~2": 1, f_carp: 2 } })));
+    expect(s).toMatchObject({ sold: { "f_carp~2": 1 }, earned: 20, capped: true });
+    expect(s.state.bag).toEqual({ f_carp: 2 });
+  });
+
+  it("11/22 그 사이 지갑이 차서 값을 덜 받으면 싼 칸부터 등급 칸 그대로 가방에 되돌린다", async () => {
+    const v = await newVisitor();
+    const day = kstDay(realNow());
+    const store = getForageStore();
+    await store.grant(v.id, day, "fish", [{ id: "f_carp", size: 820, grade: 2 }, { id: "f_carp", size: 700, grade: 1 }, { id: "f_carp", size: 1 }], 99);
+    // 판매가 계획을 세울 때는 지갑이 비어 보이지만(낡은 읽기), 실제로는 여유가 25P뿐 → 40P(20+12+8) 중 25P만 받는다
+    await getAccounts().earn(v.id, "fish", day, { amount: WALLET_MAX - 25 });
+    const accts = getAccounts();
+    const real = accts.get.bind(accts);
+    vi.spyOn(accts, "get").mockImplementationOnce(async (...a: Parameters<typeof accts.get>) => ({ ...(await real(...a)), points: 0 }));
+    const s = await body<SellResponse>(await sell.POST(call("/x", v, { npc: "fishmonger", items: { "f_carp~2": 1, "f_carp~1": 1, f_carp: 1 } })));
+    // 받은 만큼(25P)을 비싼 칸부터 채운다: 월척 20 → 대물 12는 넘쳐 되돌리고 → 보통 8도 넘쳐 되돌린다
+    expect(s.earned).toBe(25);
+    expect(s).toMatchObject({ sold: { "f_carp~2": 1 }, capped: true });
+    expect(s.state.bag).toEqual({ "f_carp~1": 1, f_carp: 1 });
   });
 });
 

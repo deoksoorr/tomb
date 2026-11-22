@@ -6,7 +6,7 @@ import { getAccounts } from "../../store";
 import { getStyleStore } from "../../store/style";
 import { getTitleStats } from "../../store/titleStats";
 import { earnedTitleIds, titleDef } from "../../titles";
-import { LIFE_CATS, SPECIES, STACK_MAX, speciesById } from "../catalog";
+import { bagIdOf, gradable, LIFE_CATS, SPECIES, speciesBag, STACK_MAX, speciesById, takePlan } from "../catalog";
 import { getForageStore } from "../store";
 import {
   inMonthShop,
@@ -120,7 +120,7 @@ describe("납품할 것 고르기", () => {
   const kinds: QuestSpec = { cat: "herb", count: 2, minRar: 1, distinct: true };
   it("기본은 값이 가장 싼 맞는 것부터 (잡동사니·다른 갈래·낮은 희귀도는 빼고)", () => {
     const bag = { f_crucian: 5, f_shoe: 3, f_carp: 2, f_catfish: 4, f_koi: 1, h_mugwort: 2 };
-    // 잉어 6P 2마리 + 야근 메기 7P 1마리 (붕어 ★1·구두 잡동사니·금잉어 32P는 뒤로)
+    // 잉어 9P 2마리 + 야근 메기 11P 1마리 (붕어 ★1·구두 잡동사니·금잉어 48P는 뒤로 — 11/22 물고기 값 ×1.5)
     expect(defaultPick(rar2, bag)).toEqual({ f_carp: 2, f_catfish: 1 });
     expect(defaultPick(rar2, { f_carp: 2 })).toBeNull();
     expect(defaultPick(kinds, { h_mugwort: 5, h_clover: 1, h_fourleaf: 1 })).toEqual({ h_mugwort: 1, h_clover: 1 });
@@ -174,6 +174,33 @@ describe("의뢰판·납품·바꾸기 (메모리 저장소)", () => {
     expect((await questBoard(a, T0)).stamps).toBe(0);
     expect((await questBoard(a, T0)).daily[0].done).toBe(false);
     expect((await getForageStore().snapshot(a, DAY, 0)).bag[id] ?? 0).toBe((bag[id] ?? 0) - 1);
+  });
+
+  it("11/22 대물·월척도 그 종으로 낸다: 보통부터, 그다음 대물·월척 (가방 칸 id로 고르지 않는다)", async () => {
+    // 물고기를 여러 마리 내는(서로 다른 종이 아닌) 오늘 의뢰가 있는 계정을 찾는다
+    let a = "";
+    let q: Quest | undefined;
+    for (let i = 0; i < 200 && !q; i++) {
+      a = acct();
+      q = (await questBoard(a, T0)).daily.find((d) => d.cat === "fish" && !d.distinct && d.count >= 3);
+    }
+    expect(q).toBeDefined();
+    const s = SPECIES.filter((x) => matches(q!, x.id) && gradable(x)).sort((x, y) => x.price - y.price)[0];
+    const store = getForageStore();
+    // 보통 1 · 대물 q.count−1 · 월척 2 → q.count마리를 내면 보통 1, 대물 전부가 빠지고 월척은 남는다
+    await store.grant(a, DAY, "fish", [{ id: s.id, size: 1 }], STACK_MAX);
+    await store.grant(a, DAY, "fish", Array.from({ length: q!.count - 1 }, () => ({ id: s.id, size: 1, grade: 1 as const })), STACK_MAX);
+    await store.grant(a, DAY, "fish", [{ id: s.id, size: 1, grade: 2 }, { id: s.id, size: 1, grade: 2 }], STACK_MAX);
+    const bag = (await store.snapshot(a, DAY, 0)).bag;
+    expect(speciesBag(bag)[s.id]).toBe(q!.count + 2);
+    // 화면은 종으로 합친 가방으로 고른다
+    const pick = defaultPick(q!, speciesBag(bag))!;
+    expect(pick).toEqual({ [s.id]: q!.count });
+    const r = await deliverQuest(a, q!.key, pick, T0);
+    expect(r.used).toEqual(pick);
+    expect((await store.snapshot(a, DAY, 0)).bag).toEqual({ [bagIdOf(s.id, 2)]: 2 });
+    // 화면 사본도 같은 차례로 뺀다 (catalog takePlan)
+    expect(takePlan(bag, r.used)).toEqual({ [s.id]: 1, [bagIdOf(s.id, 1)]: q!.count - 1 });
   });
 
   it("맞지 않는 것을 고르면 거절", async () => {

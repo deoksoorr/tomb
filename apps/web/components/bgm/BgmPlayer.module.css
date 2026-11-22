@@ -51,7 +51,7 @@
   z-index: 3;
   top: calc(100% + 10px);
   left: 0;
-  width: min(290px, calc(100vw - var(--safe-left) - var(--safe-right)));
+  width: min(290px, calc(100vw / var(--uz) - var(--safe-left) - var(--safe-right)));
   display: grid;
   gap: 10px;
   padding: 12px;
@@ -63,7 +63,7 @@
   position: fixed;
   top: calc(var(--safe-top) + var(--top-h) + 10px);
   left: var(--safe-left);
-  max-height: calc(100dvh - var(--safe-top) - var(--top-h) - 10px - var(--safe-bottom) - 120px - 8px - 30px - 8px);
+  max-height: calc(100dvh / var(--uz) - var(--safe-top) - var(--top-h) - 10px - var(--safe-bottom) - 120px - 8px - 30px - 8px);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -71,8 +71,8 @@
 /* 가로 폰처럼 낮은 화면: 확성기 창(폭 ≤260px) 오른쪽 칸에 띄워 아래 가장자리까지 쓴다 */
 @media (max-height: 520px) {
   .compact .panel {
-    left: calc(var(--safe-left) + min(260px, 50vw - var(--safe-left)) + var(--top-gap));
-    max-height: calc(100dvh - var(--safe-top) - var(--top-h) - 10px - var(--safe-bottom));
+    left: calc(var(--safe-left) + min(260px, 50vw / var(--uz) - var(--safe-left)) + var(--top-gap));
+    max-height: calc(100dvh / var(--uz) - var(--safe-top) - var(--top-h) - 10px - var(--safe-bottom));
   }
 }
 

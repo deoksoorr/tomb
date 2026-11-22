@@ -55,6 +55,7 @@ import { CHAIN_GRACE_MS, FINISHER_EVERY, WEAPON_STYLES, weaponStyleOf } from "@/
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
+import { watchMoreBelow } from "../ui/moreBelow";
 import ui from "../ui/ui.module.css";
 import { DEMO_H, DEMO_SCALE, DEMO_SCENES, DEMO_W, drawDemo } from "./huntDemo";
 import RpgIcon from "./RpgIcon";
@@ -697,7 +698,7 @@ export default function HuntGuide({ onClose }: { onClose: () => void }) {
             </button>
           ))}
         </div>
-        <section className={s.guidePage} role="tabpanel" aria-label={p.title} key={i}>
+        <section ref={watchMoreBelow} className={cx(s.guidePage, "more-fade")} role="tabpanel" aria-label={p.title} key={i}>
           <h3 className={s.sectionTitle}>
             {i + 1}. {p.title}
           </h3>

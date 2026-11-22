@@ -6,11 +6,13 @@ import { useBridgeEvent, useBridgeValue } from "@/lib/hooks/useBridge";
 import { tabHidden } from "@/lib/hooks/visibleAgain";
 import { feedOpen, megaphoneStore, useMegaphone } from "@/lib/hooks/useMegaphone";
 import { reportStore } from "@/lib/reportClient";
+import { toUi } from "@/lib/uiScale";
 import { cx } from "../ui/cx";
 import PixelIcon from "../ui/PixelIcon";
 import ui from "../ui/ui.module.css";
 import styles from "./MegaphoneFeed.module.css";
 import MegaphoneSpotlight from "./MegaphoneSpotlight";
+import { TopLeftItem } from "./TopLeftCluster";
 import { MegaPinDialog, MegaPinRemove } from "./MegaPinDialog";
 
 /** 기록을 다시 받는 간격 (관리자 숨김 반영·놓친 방송 보충. 새 방송은 실시간으로 오므로 10분, 숨긴 탭은 받지 않는다) */
@@ -60,7 +62,7 @@ export default function MegaphoneFeed({ channel, floating = false, lead }: { cha
       const cs = getComputedStyle(el);
       const last = kids.slice(-VISIBLE_LINES);
       const h = last.reduce((s, k) => s + k.offsetHeight, 0) + (parseFloat(cs.rowGap) || 0) * (last.length - 1) + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-      el.style.maxHeight = `${Math.ceil(Math.min(h, window.innerHeight * 0.4))}px`;
+      el.style.maxHeight = `${Math.ceil(Math.min(h, toUi(window.innerHeight) * 0.4))}px`;
     } else el.style.maxHeight = "";
     el.scrollTop = el.scrollHeight;
   }, [entries, collapsed, asked]);
@@ -72,7 +74,8 @@ export default function MegaphoneFeed({ channel, floating = false, lead }: { cha
     const root = document.documentElement;
     if (floating || !feed || !bar) return;
     const put = () => {
-      const below = Math.ceil(feed.getBoundingClientRect().bottom - bar.getBoundingClientRect().bottom);
+      // 11/22 큰 화면 HUD 배율(zoom) 안의 CSS px로 (lib/uiScale)
+      const below = Math.ceil(toUi(feed.getBoundingClientRect().bottom - bar.getBoundingClientRect().bottom));
       if (below > 0) root.style.setProperty("--feed-h", `${below + 6}px`);
       else root.style.removeProperty("--feed-h");
     };
@@ -129,7 +132,10 @@ export default function MegaphoneFeed({ channel, floating = false, lead }: { cha
               <div className={styles.pinBody}>
                 {/* 모든 채널 공지는 딱지를 붉게 (전체 확성기와 같은 색) */}
                 <span className={cx(styles.pinTag, p.scope === "all" && styles.pinTagAll)}>소식</span>
-                <span className={styles.pinText}>{p.text}</span>
+                {/* 11/22 데스크톱은 긴급 의뢰 자리 앞까지 한 줄 — 넘치면 …, 올리면 전문 */}
+                <span className={styles.pinText} title={p.text}>
+                  {p.text}
+                </span>
               </div>
               {iAmStaff && (
                 <button
@@ -149,7 +155,8 @@ export default function MegaphoneFeed({ channel, floating = false, lead }: { cha
         <ol ref={logRef} className={styles.log} aria-label="최근 마을 소식 20개">
           {entries.length === 0 && <li className={styles.empty}>아직 마을 소식이 없어요</li>}
           {entries.map((e) => (
-            <li key={e.id} className={cx(styles.line, flash?.id === e.id && styles.newLine)}>
+            // 11/22 좁은 데스크톱은 줄마다 한 줄로 줄인다 (MegaphoneFeed.module.css) — 올리면 전문
+            <li key={e.id} className={cx(styles.line, flash?.id === e.id && styles.newLine)} title={e.system ? e.text : `${e.name}: ${e.text}`}>
               {/* 11/21 마을 공지 줄(시스템)은 보낸 이 이름 대신 「소식」 딱지 하나 */}
               {e.system ? (
                 <span className={styles.newsTag}>소식</span>
@@ -189,63 +196,50 @@ export default function MegaphoneFeed({ channel, floating = false, lead }: { cha
 
 /**
  * 11/17 터치 화면 고정 공지 칩: 긴급 의뢰 칩 아래(없으면 그 자리)에 [📌 공지] 한 줄. 누르면 공지 전문이 펼쳐지고 다시 누르면 접힌다.
- * 차지한 높이를 --pin-h(문서 루트)로 알려 그 아래 칸(접속 보너스·물때·포인트 이벤트 줄)이 내려간다.
+ * 11/22 왼쪽 위 칩 묶음(TopLeftCluster) 둘째 줄 맨 앞 (펼치면 한 줄을 다 쓴다). 그 아래 칸은 묶음 높이(--tl-bottom)로 내려간다.
  * 운영자에게는 펼친 안에 [지우기] (11/19 [공지 쓰기]는 위쪽 줄 운영자 단추 MegaPinButton으로 옮겼다)
  */
 function PinChip({ channel, pins, staff, onRemove }: { channel: number; pins: MegaPin[]; staff: boolean; onRemove: (p: MegaPin) => void }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
   // 11/19 운영자 쓰기 단추는 위쪽 줄(MegaPinButton)로 옮겼다 — 칩은 공지가 있을 때만
-  const shown = pins.length > 0;
-  useEffect(() => {
-    const el = ref.current;
-    const root = document.documentElement;
-    if (!el || !shown) return;
-    const put = () => root.style.setProperty("--pin-h", `${Math.ceil(el.getBoundingClientRect().height) + 6}px`);
-    put();
-    const ro = new ResizeObserver(put);
-    ro.observe(el);
-    return () => {
-      ro.disconnect();
-      root.style.removeProperty("--pin-h");
-    };
-  }, [shown]);
-  if (!shown) return null;
+  if (pins.length === 0) return null;
   return (
-    <div ref={ref} className={styles.pinChipBox}>
-      <button
-        type="button"
-        className={cx(styles.pinChip, open && styles.pinChipOpen)}
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-      >
-        <span aria-hidden="true">📌</span>
-        소식
-        {pins.length > 1 && <span className={styles.pinMore}>{pins.length}</span>}
-      </button>
-      {open && (
-        <ul className={cx(styles.pins, styles.pinsOpen, styles.pinSheet)} aria-label="고정 소식">
-          {pins.map((p) => (
-            <li key={p.scope} className={styles.pin}>
-              <button type="button" className={styles.pinBody} onClick={() => setOpen(false)}>
-                <span className={cx(styles.pinTag, p.scope === "all" && styles.pinTagAll)}>소식</span>
-                <span className={styles.pinText}>{p.text}</span>
-              </button>
-              {staff && (
-                <button
-                  type="button"
-                  className={styles.pinDel}
-                  aria-label={p.scope === "all" ? "모든 채널 공지 지우기" : `${channel}채널 공지 지우기`}
-                  onClick={() => onRemove(p)}
-                >
-                  지우기
+    <TopLeftItem kind="pin" overlay>
+      <div className={styles.pinChipBox} data-open={open || undefined}>
+        <button
+          type="button"
+          className={cx(styles.pinChip, open && styles.pinChipOpen)}
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+        >
+          <span aria-hidden="true">📌</span>
+          소식
+          {pins.length > 1 && <span className={styles.pinMore}>{pins.length}</span>}
+        </button>
+        {open && (
+          <ul className={cx(styles.pins, styles.pinsOpen, styles.pinSheet)} aria-label="고정 소식">
+            {pins.map((p) => (
+              <li key={p.scope} className={styles.pin}>
+                <button type="button" className={styles.pinBody} onClick={() => setOpen(false)}>
+                  <span className={cx(styles.pinTag, p.scope === "all" && styles.pinTagAll)}>소식</span>
+                  <span className={styles.pinText}>{p.text}</span>
                 </button>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+                {staff && (
+                  <button
+                    type="button"
+                    className={styles.pinDel}
+                    aria-label={p.scope === "all" ? "모든 채널 공지 지우기" : `${channel}채널 공지 지우기`}
+                    onClick={() => onRemove(p)}
+                  >
+                    지우기
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </TopLeftItem>
   );
 }
 

@@ -3,7 +3,7 @@ import { redisClient } from "../../redisUsage";
 import { env } from "../../env";
 import { K } from "../../store/keys";
 import { titleStatsKey } from "../../store/titleStats";
-import { lk } from "../store";
+import { BAG_TAKE_LUA, lk } from "../store";
 import { questKey } from "./store";
 import { countOf, URGENT_TTL_SEC, type UrgentKind } from "./urgent";
 
@@ -293,7 +293,8 @@ return redis.call('HMGET', KEYS[1], 'goal', 'cap')
 // KEYS: ev, by, nm, bag  ARGV: 계정, 이름, 목표, 지금, 순위 소수부, 마지막 1분 시작, ttl, 'bag'|'free'(시험: 가방·상한 안 봄), 한 사람 상한(0 = 없음), (id, 개수)...
 // → {'ok', 막대, 내 수, fest} | {'bag'} | {'done'} (11/15 이미 150%를 넘겨 끝난 의뢰 — 아무것도 바꾸지 않는다)
 //   | {'cap', 더 낼 수 있는 수} (11/16 내 수 + 이번 납품이 상한을 넘는다 — 아무것도 바꾸지 않는다. ZSCORE를 앞으로 옮겨 명령 수는 그대로)
-export const URGENT_DELIVER_LUA = `
+// 11/22 가방은 종 단위로 본다 (대물·월척 칸도 그 종 — 보통부터 낸다, store BAG_TAKE_LUA)
+export const URGENT_DELIVER_LUA = `${BAG_TAKE_LUA}
 if tonumber(redis.call('HGET', KEYS[1], 'fest') or '0') > 0 then return {'done'} end
 local free = ARGV[8] == 'free'
 local add = 0
@@ -303,11 +304,9 @@ local cap = tonumber(ARGV[9])
 if not free and cap > 0 and had + add > cap then return {'cap', math.max(0, cap - had)} end
 if not free then
   for i = 10, #ARGV, 2 do
-    if tonumber(redis.call('HGET', KEYS[4], ARGV[i]) or '0') < tonumber(ARGV[i + 1]) then return {'bag'} end
+    if bagHave(KEYS[4], ARGV[i]) < tonumber(ARGV[i + 1]) then return {'bag'} end
   end
-  for i = 10, #ARGV, 2 do
-    if redis.call('HINCRBY', KEYS[4], ARGV[i], -tonumber(ARGV[i + 1])) <= 0 then redis.call('HDEL', KEYS[4], ARGV[i]) end
-  end
+  for i = 10, #ARGV, 2 do bagTake(KEYS[4], ARGV[i], tonumber(ARGV[i + 1])) end
 end
 local goal, now = tonumber(ARGV[3]), tonumber(ARGV[4])
 local n = redis.call('HINCRBY', KEYS[1], 'n', add)

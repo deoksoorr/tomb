@@ -65,7 +65,7 @@ function memDeps(): UrgentMemDeps {
   const forage = () => getForageStore() as MemoryForageStore;
   const accts = () => getAccounts() as MemoryAccounts;
   return {
-    takeBag: (a, items) => forage().removeNow(a, items),
+    takeBag: (a, items) => forage().takeSpeciesNow(a, items),
     bagHas: (a, id) => forage().bagNow(a, id),
     giveBag: (a, id, n) => forage().giveNow(a, id, n),
     hasAccount: (a) => accts().questHas(a),

@@ -4,6 +4,10 @@ export const STATIC_NOTE_TITLES: Readonly<Record<string, readonly [string, numbe
     "처음 오신 분들께 안내드립니다",
     1794743573688
   ],
+  "DXvWB5lsd6": [
+    "낚시 개편, 대물과 월척",
+    1795310050475
+  ],
   "IJsACTCCh9": [
     "긴급 밸런스 패치, 넋 카드와 삽자루",
     1795249741599

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { BOAT_FISHING_SPOTS, CAMP_FISHING_SPOTS, FISHING_SPOTS, SEA_FISHING_SPOTS } from "@tomb/protocol";
-import { DEX_CATS, GATHER_NODES, NPCS, SPECIES, type DexCat, type NpcId } from "./catalog";
+import { BAG_IDS, DEX_CATS, GATHER_NODES, NPCS, type DexCat, type NpcId } from "./catalog";
 
 // 낚시·채집·판매·도감 API 입력 검증 (zod)
 
@@ -9,7 +9,8 @@ const ticket = z.string().min(10).max(1000);
 // 11/15 캠핑장 계곡 낚시 자리도 (CAMP_FISHING_SPOTS) · 11/16 바닷가 갯바위 낚시 자리도 (SEA_FISHING_SPOTS)
 const spotId = z.enum([...FISHING_SPOTS.map((s) => s.id), ...Object.keys(BOAT_FISHING_SPOTS), ...CAMP_FISHING_SPOTS.map((s) => s.id), ...SEA_FISHING_SPOTS.map((s) => s.id)] as [string, ...string[]], "여기서는 낚시를 할 수 없어요.");
 const nodeId = z.enum(GATHER_NODES.map((n) => n.id) as [string, ...string[]], "여기서는 캘 게 없어요.");
-const speciesId = z.enum(SPECIES.map((s) => s.id) as [string, ...string[]], "모르는 물건이에요.");
+// 11/22 팔 때는 가방 칸 id (대물·월척 `${종}~1`·`~2` 포함 — catalog BAG_IDS)
+const bagId = z.enum(BAG_IDS as [string, ...string[]], "모르는 물건이에요.");
 
 export const CastSchema = z.object({ spot: spotId });
 export const ReelSchema = z.object({ ticket, ok: z.boolean() });
@@ -35,7 +36,8 @@ const bugsResult = z.object({
 export const GatherFinishSchema = z.object({ ticket, result: bugsResult.optional() });
 export const SellSchema = z.object({
   npc: z.enum(NPCS.map((n) => n.id) as [NpcId, ...NpcId[]]),
-  items: z.partialRecord(speciesId, z.number().int().min(1).max(999)).refine((o) => Object.keys(o).length > 0 && Object.keys(o).length <= 80, "팔 것을 골라 주세요."),
+  // 11/22 등급 칸이 따로라 칸 수가 늘 수 있어 80 → 120
+  items: z.partialRecord(bagId, z.number().int().min(1).max(999)).refine((o) => Object.keys(o).length > 0 && Object.keys(o).length <= 120, "팔 것을 골라 주세요."),
 });
 /** [도감 보상 받기]: 그 칸에 쌓인 받을 보상 */
 export const DexPaySchema = z.object({ cat: z.enum(DEX_CATS as [DexCat, ...DexCat[]]) });

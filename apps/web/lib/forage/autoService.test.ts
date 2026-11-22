@@ -6,6 +6,7 @@ import * as session from "@/app/api/session/route";
 import { kstDay, kstWeek } from "../store/accounts";
 import { AUTO_FISH_EVERY_MS, autoCatchTimes, autoHit, beatAuto, newAutoSession, rollAutoCatch } from "./auto";
 import { beatAutoFish } from "./autoSettle";
+import { BAG_MAX } from "./catalog";
 import { rollAutoSunken } from "./sunken";
 import { getFishRank } from "./fishRank";
 import { castLine, startAutoFish, stopAutoFish, syncAutoFish } from "./service";
@@ -194,16 +195,17 @@ describe("자동 낚시 정산", () => {
     }
   });
 
-  it("6시간이 지나면 정산하고 끝난다", async () => {
+  it("11/22 시간 제한 없음: 7시간이 지나도 끝나지 않고 그동안 걸린 것을 다 넣는다", async () => {
     const a = acct();
     await startAutoFish(a, PIER, 1, T0);
     const seed = await seedOf(a);
     for (let t = T0 + 10 * MIN; t <= T0 + 7 * 3_600_000; t += 10 * MIN) await beatAutoFish(a, t);
     const r = await syncAutoFish(a, T0 + 7 * 3_600_000);
-    expect(r.ended).toBe("time");
-    expect(r.auto).toBeNull();
-    // 6시간 = 720번 올려 걸린 것 모두 (예전엔 하루 75마리에서 잘렸다)
-    expect(caught(r)).toBe(hitsIn(seed, 1, tries(6 * 3_600_000)));
+    expect(r.ended).toBeUndefined();
+    expect(r.auto).toMatchObject({ endsAt: null });
+    expect(r.auto!.nextInMs).not.toBeNull();
+    // 7시간 = 840번 올려 걸린 것 모두 (예전엔 6시간에서 끝났다). 가방(300) 안에서
+    expect(caught(r)).toBe(Math.min(hitsIn(seed, 1, tries(7 * 3_600_000)), BAG_MAX));
   });
 
   it("직접 찌를 던지면 자동 낚시는 정산하고 끝난다", async () => {

@@ -747,7 +747,7 @@
   display: grid;
   gap: 4px;
   width: 230px;
-  max-width: calc(100vw - 24px);
+  max-width: calc(100vw / var(--uz) - 24px);
   padding: 6px 9px 8px;
   background: var(--panel);
   box-shadow: var(--px-border);

@@ -19,6 +19,7 @@ import {
   type SkillTypeTag,
 } from "@/lib/rpg/skillText";
 import type { RpgView } from "@/lib/rpg/types";
+import { toUi } from "@/lib/uiScale";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import RpgIcon from "./RpgIcon";
@@ -243,7 +244,8 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
       ev.preventDefault();
       // 창(dialog)이 transform을 가져 fixed가 화면 기준이 아닐 수 있어서, 이 창 안 좌표로 그린다
       const box = wrapRef.current?.getBoundingClientRect();
-      setDrag({ id, from, x: ev.clientX - (box?.left ?? 0), y: ev.clientY - (box?.top ?? 0) });
+      // 11/22 큰 화면 HUD 배율(zoom) 안의 CSS px로 (lib/uiScale)
+      setDrag({ id, from, x: toUi(ev.clientX - (box?.left ?? 0)), y: toUi(ev.clientY - (box?.top ?? 0)) });
       setOver(slotAt(ev.clientX, ev.clientY));
     };
     const up = (ev: PointerEvent) => {

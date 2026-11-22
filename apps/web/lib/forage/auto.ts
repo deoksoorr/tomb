@@ -21,8 +21,12 @@ export const AUTO_FISH_EVERY_MS = Math.round(DIRECT_FISH_AVG_MS * 2.5);
  * 자동은 30초마다 25% → 평균 2분에 한 마리 (한 시간 약 30마리, 직접 낚시 평균 12초의 약 1/10)
  */
 export const AUTO_CATCH_CHANCE = 0.25;
-/** 한 세션 최대 길이 (켠 시각부터). 탭을 켜 두고 잊어도 끝없이 돌지 않게 — 다시 켜면 또 돈다 */
-export const AUTO_FISH_MAX_MS = 6 * 3_600_000;
+/**
+ * 11/22 운영자: 한 세션 6시간 제한(예전 AUTO_FISH_MAX_MS)을 없앴다. 끝나는 것은 끄기(움직임·일어남·탭 닫기 — AUTO_BEAT_GAP_MS)와
+ * 바닷가 갯바위 물때(tide)뿐이고, 가방이 가득 차면 팔 때까지 쉰다. 저장 값 end는 그대로 두되(JSON에 Infinity를 못 넣는다) 물때가 아니면 이 값 —
+ * 사실상 끝이 없다 (Date가 나타낼 수 있는 가장 먼 시각)
+ */
+export const AUTO_NO_END = 8.64e15;
 /**
  * 신호 사이가 이보다 길면 끊긴 것으로 본다 (숨은 탭의 머무르기 기록 30분 간격 + 타이머 지연 여유.
  * 머무르기 몰아서 정산 창 PRESENCE_CATCHUP_WINDOW_MS와 같다. 탭을 닫으면 자동 낚시는 꺼진다)
@@ -42,7 +46,7 @@ export type AutoSession = {
   /** 켤 때 있던 채널 (모르면 null) */
   ch: number | null;
   start: number;
-  /** 이 시각 뒤로는 세지 않는다 (start + AUTO_FISH_MAX_MS) */
+  /** 이 시각 뒤로는 세지 않는다. 11/22부터 바닷가 물때(tide)일 때만 실제 시각, 아니면 AUTO_NO_END (예전 세션의 start + 6시간은 읽을 때 지운다) */
   end: number;
   /** 마지막 신호 시각 */
   beat: number;
@@ -55,7 +59,7 @@ export type AutoSession = {
 };
 
 export function newAutoSession(seed: number, spot: string, water: FishWater, ch: number | null, now: number): AutoSession {
-  return { v: 1, seed, spot, water, ch, start: now, end: now + AUTO_FISH_MAX_MS, beat: now, segs: [], done: 0 };
+  return { v: 1, seed, spot, water, ch, start: now, end: AUTO_NO_END, beat: now, segs: [], done: 0 };
 }
 
 /** 저장 문자열 → 세션 (형식이 이상하면 null) */
@@ -64,6 +68,8 @@ export function parseAutoSession(raw: string | null): AutoSession | null {
   try {
     const s = JSON.parse(raw) as AutoSession;
     if (s?.v !== 1 || !Number.isFinite(s.start) || !Number.isFinite(s.beat) || !Array.isArray(s.segs)) return null;
+    // 11/22 시간 제한 없음: 물때로 끝나는 세션만 end를 지킨다 (6시간 제한 때 저장된 세션도 시간 때문에 끝나지 않게)
+    if (!s.tide || !Number.isFinite(s.end)) s.end = AUTO_NO_END;
     return s;
   } catch {
     return null;
@@ -157,6 +163,15 @@ export function rollAutoCatch(seed: number, k: number, water: FishWater, at: num
 export function autoNextLabel(ms: number): string {
   const min = Math.round(ms / 60_000);
   return min >= 1 ? `약 ${min}분` : "곧";
+}
+
+/**
+ * 11/22 터치 화면 위쪽 자동 낚시 칩 글귀 (낚시 창을 접어 둔 동안): 「자동 낚시 중 · 3마리 · 다음 약 1분」.
+ * 가방이 가득 차면 쉰다고 (다음 시각 대신). next는 좁은 화면에서 숨긴다 — 비어 있을 수 있다
+ */
+export function autoChipText(today: number, nextMs: number | null, full: boolean): { head: string; count: string; next: string } {
+  if (full) return { head: "자동 낚시", count: "가방 가득", next: `쉬는 중 · ${today}마리` };
+  return { head: "자동 낚시 중", count: `${today}마리`, next: nextMs == null ? "" : `다음 ${autoNextLabel(Math.max(0, nextMs))}` };
 }
 
 /** 자동 낚시 안내 (낚시 창·결과 알림이 같이 쓴다) */

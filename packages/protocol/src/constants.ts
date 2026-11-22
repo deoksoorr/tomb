@@ -166,7 +166,8 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 //      운영자 순간이동·정원 제외, 확성기 → 마을 소식 — 모두 한 번 새로고침 (11/21)
 // 79 = 회장님 독대 2관왕 전용 꾸미기·칭호(chair_duo_crown·chair_aura_stamp·t_chairDuo) — 모두 한 번 새로고침 (11/21)
 // 80 = 골목 붕어빵 수레 한정 꾸미기 12종·외형 「붕어빵 장수 유령」(vendor)·칭호 둘(t_ssCampus·t_ssDate) — 모두 한 번 새로고침 (11/22)
-export const CLIENT_VERSION = 80;
+// 81 = 물고기 크기 등급(대물·월척 — 가방 칸 id f_x~1/~2)·물고기 값 ×1.3·자동 낚시 시간 제한 없앰, 위쪽 HUD 정리 — 옛 화면은 등급 칸·새 값을 몰라 한 번 새로고침 (11/22)
+export const CLIENT_VERSION = 81;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */

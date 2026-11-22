@@ -22,6 +22,7 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ItemIcon from "../ui/ItemIcon";
 import LookScoreBadge from "../ui/LookScoreBadge";
+import { watchMoreBelow } from "../ui/moreBelow";
 import ui from "../ui/ui.module.css";
 
 // 11/22 「골목 붕어빵 수레」 창 (이스터에그 한정 상점 — 밤에 가끔 나오는 수레 앞에서 E). 서버 /api/bungeo (lib/bungeo/service).
@@ -108,7 +109,7 @@ export default function BungeoCartDialog({ onClose, avatar }: Props) {
     const isBody = r.kind === "body";
     const slot = isBody ? null : itemById(r.id)?.slot;
     return (
-      <section className={shop.detail} aria-label="자세히 보기" aria-live="polite">
+      <section ref={watchMoreBelow} className={cx(shop.detail, "more-fade")} aria-label="자세히 보기" aria-live="polite">
         <OutfitPreview
           className={shop.fitPreview}
           color={color}
@@ -153,7 +154,7 @@ export default function BungeoCartDialog({ onClose, avatar }: Props) {
           ) : (
             <>
               {shown ? detail(shown) : <section className={shop.detail} aria-hidden="true" />}
-              <div className={cx(shop.listCol, season.groups)} aria-label="수레 물건">
+              <div ref={watchMoreBelow} className={cx(shop.listCol, season.groups, "more-fade")} aria-label="수레 물건">
                 {groups.map((g) => {
                   const set = SET_OF[g.name];
                   const bonus = set && ALLEY_SETS.some((s) => s.id === set) ? setBonusText(set) : "";

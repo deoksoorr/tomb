@@ -783,9 +783,10 @@ describe("서버 흐름", () => {
     const capAt = URGENT_DELIVER_LUA.indexOf("return {'cap'");
     expect(capAt).toBeGreaterThan(0);
     expect(capAt).toBeLessThan(URGENT_DELIVER_LUA.indexOf("return {'bag'}"));
-    expect(capAt).toBeLessThan(URGENT_DELIVER_LUA.indexOf("HINCRBY', KEYS[4]"));
+    // 11/22 가방 빼기는 종 단위 bagTake (store BAG_TAKE_LUA — 대물·월척 칸도 그 종, 보통부터)
+    expect(capAt).toBeLessThan(URGENT_DELIVER_LUA.indexOf("bagTake(KEYS[4]"));
     expect(URGENT_DELIVER_LUA).toMatch(/if not free and cap > 0 and had \+ add > cap then/);
-    // 예전 스크립트와 같은 redis.call 수 (ZSCORE를 앞으로 옮겼을 뿐)
+    // 예전 스크립트와 같은 redis.call 수 (ZSCORE를 앞으로 옮겼을 뿐. 11/22 HGET·HINCRBY·HDEL이 BAG_TAKE_LUA의 HMGET·HINCRBY·HDEL로)
     expect(URGENT_DELIVER_LUA.match(/redis\.call\(/g)).toHaveLength(16);
     expect(URGENT_GOAL_LUA).toMatch(/if redis\.call\('HSETNX', KEYS\[1\], 'goal', ARGV\[1\]\) == 1 then redis\.call\('HSET', KEYS\[1\], 'cap', ARGV\[2\]\) end/);
   });

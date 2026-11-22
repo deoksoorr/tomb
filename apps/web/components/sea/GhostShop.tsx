@@ -24,6 +24,7 @@ import OutfitPreview from "../shop/OutfitPreview";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ItemIcon from "../ui/ItemIcon";
+import { watchMoreBelow } from "../ui/moreBelow";
 import ui from "../ui/ui.module.css";
 import s from "./GhostShop.module.css";
 
@@ -71,7 +72,7 @@ function GhostPreview({ row, avatar, wearing, name }: { row: GhostRow; avatar: {
     const desc = furnitureById(row.id)?.desc ?? "";
     const size = phone ? 128 : 200;
     return (
-      <section className={s.preview} aria-label="미리 보기" aria-live="polite">
+      <section ref={watchMoreBelow} className={cx(s.preview, "more-fade")} aria-label="미리 보기" aria-live="polite">
         <div className={s.furniStage} data-night={night || undefined}>
           <FurnitureStage itemId={row.id} w={size} h={size} night={night} frame={reduced ? 0 : frame} />
         </div>
@@ -94,7 +95,7 @@ function GhostPreview({ row, avatar, wearing, name }: { row: GhostRow; avatar: {
   const fit = fittingLook(wearing, row.id);
   const note = fit.wearing ? "지금 착용 중이에요." : fit.replaced ? `입으면 지금 입은 ${fit.replaced.name}은(는) 벗어 둬요.` : null;
   return (
-    <section className={s.preview} aria-label="미리 보기" aria-live="polite">
+    <section ref={watchMoreBelow} className={cx(s.preview, "more-fade")} aria-label="미리 보기" aria-live="polite">
       {isNameSlot(item?.slot) ? (
         <NameStylePreview className={s.namePreview} color={avatar.color} body={avatar.body} look={fit.look} name={name} label={`내 이름표에 ${row.name}을(를) 달아 본 모습 (낮·밤)`} />
       ) : (
@@ -179,7 +180,7 @@ export default function GhostShop({ onClose, avatar }: { onClose: () => void; av
         {st && (
           <div className={s.body}>
           {shown && <GhostPreview key={shown.key} row={shown} avatar={{ color, body }} wearing={wearing} name={me?.name ?? "내 이름"} />}
-          <ul className={s.grid} aria-label="이번 주 유령선 물건">
+          <ul ref={watchMoreBelow} className={cx(s.grid, "more-fade")} aria-label="이번 주 유령선 물건">
             {st.items.map((row) => {
               const short = st.points < row.cost;
               const noHouse = row.kind === "furniture" && !st.house;

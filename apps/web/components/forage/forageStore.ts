@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
-import { dexBadgeBits } from "@/lib/forage/catalog";
+import { dexBadgeBits, takePlan } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
 import { NODE_SYNC_WINDOWS, nodeIdsAt, nodeWindow, windowEndsAt } from "@/lib/forage/rules";
 import { onVisibleAgain, tabHidden } from "@/lib/hooks/visibleAgain";
@@ -43,12 +43,15 @@ class ForageStore {
     this.listeners.forEach((fn) => fn());
   }
 
-  /** 11/15 수집 의뢰 납품: 가방 사본에서 낸 것만 뺀다 (낚시 상태를 다시 읽지 않게) */
+  /**
+   * 11/15 수집 의뢰 납품: 가방 사본에서 낸 것만 뺀다 (낚시 상태를 다시 읽지 않게).
+   * 11/22 used는 종 단위 → 서버와 같은 차례(보통 → 대물 → 월척, catalog takePlan)로 칸에서 뺀다 (사본이 모자라면 종 칸에서만)
+   */
   takeFromBag(used: Record<string, number>): void {
     const st = this.snap.state;
     if (!st) return;
     const bag = { ...st.bag };
-    for (const [id, n] of Object.entries(used)) {
+    for (const [id, n] of Object.entries(takePlan(bag, used) ?? used)) {
       const left = (bag[id] ?? 0) - n;
       if (left > 0) bag[id] = left;
       else delete bag[id];

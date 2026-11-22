@@ -15,6 +15,7 @@ import XmasBoxOpen from "../xmas/XmasBoxOpen";
 import BagDyeSection, { dyeTicketCount } from "../dye/BagDyeSection";
 import ItemIcon from "../ui/ItemIcon";
 import { cx } from "../ui/cx";
+import { watchMoreBelow } from "../ui/moreBelow";
 import ui from "../ui/ui.module.css";
 import { decorateGrave, fireFirework } from "./actions";
 import ChampRewardsTab from "./ChampRewardsTab";
@@ -127,7 +128,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace
           ))}
         </div>
 
-        <div id={`${baseId}-panel`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`} className={styles.panel}>
+        <div id={`${baseId}-panel`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`} ref={watchMoreBelow} className={cx(styles.panel, "more-fade")}>
           {tab === "look" ? (
             <LookPane
               entries={wardrobe}

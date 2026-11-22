@@ -4,7 +4,7 @@ import { env } from "../../env";
 import { K } from "../../store/keys";
 import { styleKey } from "../../store/style";
 import { titleStatsKey } from "../../store/titleStats";
-import { lk } from "../store";
+import { BAG_TAKE_LUA, lk } from "../store";
 
 // 11/15: 수집 의뢰 저장소. 의뢰 목록은 저장하지 않고(lib/forage/quests/gen이 시드로 만든다) 끝낸 표시·바꾼 칸·도장만 둔다.
 // 바뀌는 연산은 하나씩 원자적이다 (Redis는 Lua 한 번, 메모리는 await 없는 구간). store.test.ts가 메모리 구현에 계약을 돌린다.
@@ -102,7 +102,7 @@ const setDone = (dd: string, slot: number) => {
 
 /** 메모리 구현이 함께 바꾸는 다른 저장소 (모두 동기) */
 export type QuestMemDeps = {
-  /** 가방에서 빼기 (전부 있을 때만) */
+  /** 가방에서 빼기 (전부 있을 때만). 11/22 종 단위 — 보통부터 대물·월척 칸 차례로 */
   takeBag(acct: string, items: Record<string, number>): boolean;
   hasAccount(acct: string): boolean;
   /** 계정 가방(acct inv)에 더하기. flag면 1개로 둔다 */
@@ -203,9 +203,10 @@ export class MemoryQuestStore implements QuestStore {
 
 // ── Redis (운영) ──
 
-// KEYS: quest, bag, tstats  ARGV: today, week, 칸('w' = 이번 주, 아니면 오늘 칸 번호), 본 바꾼 칸('' = 없음), 도장, 상한, (id, 개수)...
+// KEYS: quest, bag, tstats  ARGV: today, week, 칸('w' = 이번 주, 아니면 오늘 칸 번호), 본 바꾼 칸('' = 없음), 도장, 상한, (종 id, 개수)...
 // → {'ok', 도장, 끝낸 수} | {'done'} | {'changed'} | {'bag'}
-export const DELIVER_LUA = `
+// 11/22 가방은 종 단위로 본다 (대물·월척 칸도 그 종 — 보통부터 낸다, store BAG_TAKE_LUA)
+export const DELIVER_LUA = `${BAG_TAKE_LUA}
 local q = KEYS[1]
 local week = ARGV[3] == 'w'
 local fresh = redis.call('HGET', q, 'day') == ARGV[1]
@@ -223,11 +224,9 @@ else
   if string.sub(dd, s, s) == '1' then return {'done'} end
 end
 for i = 7, #ARGV, 2 do
-  if tonumber(redis.call('HGET', KEYS[2], ARGV[i]) or '0') < tonumber(ARGV[i + 1]) then return {'bag'} end
+  if bagHave(KEYS[2], ARGV[i]) < tonumber(ARGV[i + 1]) then return {'bag'} end
 end
-for i = 7, #ARGV, 2 do
-  if redis.call('HINCRBY', KEYS[2], ARGV[i], -tonumber(ARGV[i + 1])) <= 0 then redis.call('HDEL', KEYS[2], ARGV[i]) end
-end
+for i = 7, #ARGV, 2 do bagTake(KEYS[2], ARGV[i], tonumber(ARGV[i + 1])) end
 if week then
   redis.call('HSET', q, 'wk', ARGV[2], 'wd', '1')
 else

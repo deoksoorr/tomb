@@ -289,134 +289,178 @@ function EditToolbar({
   const coarse = useMediaQuery("(pointer: coarse)");
   const skinName = (id: string) => (id === DEFAULT_FLOOR ? DEFAULT_FLOOR_NAME : id === DEFAULT_WALL ? DEFAULT_WALL_NAME : (furnitureById(id)?.name ?? id));
 
+  // 11/22 아래쪽 시트 정리: 가방 한 줄만 보이고 [가구 | 바닥 | 벽지] 칸으로 바꿔 본다 (시트 안 세로 스크롤 없이 방이 더 보이게)
+  const [tab, setTab] = useState<"items" | "floor" | "wall">("items");
+  const TABS = [
+    { id: "items", label: "가구", n: owned.length },
+    { id: "floor", label: "바닥", n: floors.length },
+    { id: "wall", label: "벽지", n: walls.length },
+  ] as const;
+  const skins = tab === "floor" ? floors : walls;
+  const hint = coarse ? "끌어서 옮기기 · 빈 곳을 끌면 화면 이동" : `끌어서 옮기기 · 방향키 한 칸 · ${rKey} · Del 치우기 · Q/E 차례로 고르기 · 빈 곳을 끌면 화면 이동`;
+
   return (
     <section className={cx(ui.panel, styles.toolbar)} aria-label="꾸미기 도구">
-      <div className={styles.spread}>
-        <p className={styles.small}>
-          {coarse ? "끌어서 옮기기 · 빈 곳을 끌면 화면 이동" : `끌어서 옮기기 · 방향키 한 칸 · ${rKey} · Del 치우기 · Q/E 차례로 고르기 · 빈 곳을 끌면 화면 이동`}
-          {` (물건 ${edit.items.length}/${maxItems})`}
-        </p>
-        <div className={styles.row}>
-          <button type="button" className={ui.button} onClick={onShop}>
-            가구 상점
-          </button>
-          <button type="button" className={ui.button} onClick={() => bridge.emit("house:edit", { on: false, revert: true })} disabled={saving}>
-            {edit.dirty ? "되돌리기" : "닫기"}
-          </button>
-          <button type="button" className={cx(ui.button, ui.primary)} onClick={() => onSave(true)} disabled={saving || !edit.dirty}>
-            {saving ? "저장 중…" : "저장"}
-          </button>
-        </div>
-      </div>
-
-      {trial && trialDef && (
-        <div className={cx(styles.selBar, styles.trialBar)} aria-live="polite" role="group" aria-label="놓아 보는 중">
-          <FurnitureIcon itemId={trial.itemId} size={32} />
-          <span className={ui.label}>
-            {trialDef.name} 놓아 보는 중{" "}
-            <span className={styles.small}>
-              · 끌어서 옮기고 {coarse ? "" : "R로 "}
-              {rotateMode(trialDef) === "turn" ? "돌려" : "뒤집어"} 보세요. 저장은 안 돼요.
-            </span>
-          </span>
-          <button type="button" className={ui.button} onClick={() => tool({ action: "rotate" })} aria-label={`${trialDef.name} ${rotateMode(trialDef) === "turn" ? "돌리기" : "좌우 뒤집기"}`}>
-            {ROTATE_LABEL[rotateMode(trialDef)]}
-          </button>
-          {trialLeft > 0 ? (
-            <button type="button" className={cx(ui.button, ui.primary)} onClick={() => tool({ action: "tryEnd", keep: true })}>
-              가방에서 놓기
-            </button>
-          ) : (
-            <button
-              type="button"
-              className={cx(ui.button, ui.primary)}
-              disabled={buying || saving || my.points < trialCost}
-              onClick={() => onBuyTrial(trialDef.id)}
-              aria-label={`${trialDef.name}, ${trialCost}포인트에 사서 이 자리에 놓기`}
-            >
-              {buying ? "…" : `${fmt(trialCost)}P${my.points < trialCost ? ` · ${fmt(trialCost - my.points)}P 부족해요` : " · 사서 놓기"}`}
-            </button>
-          )}
-          <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => tool({ action: "tryEnd", keep: false })}>
-            그만 보기
-          </button>
-        </div>
-      )}
-
-      {sel && selDef && (
-        <div className={styles.selBar} aria-live="polite">
-          <FurnitureIcon itemId={sel.i} size={32} />
-          <span className={ui.label}>{selDef.name}</span>
-          <button type="button" className={ui.button} onClick={() => tool({ action: "rotate" })} aria-label={`${selDef.name} ${rotateMode(selDef) === "turn" ? "돌리기" : "좌우 뒤집기"}`}>
-            {ROTATE_LABEL[rotateMode(selDef)]}
-          </button>
-          <button type="button" className={cx(ui.button, ui.danger)} onClick={() => tool({ action: "remove" })}>
-            치우기
-          </button>
-          <div className={styles.row} style={{ gap: 2 }} role="group" aria-label="한 칸씩 옮기기">
-            <button type="button" className={cx(ui.button, ui.icon)} onClick={() => tool({ action: "nudge", dx: -1, dy: 0 })} aria-label="왼쪽으로">
-              ←
-            </button>
-            <button type="button" className={cx(ui.button, ui.icon)} onClick={() => tool({ action: "nudge", dx: 0, dy: -1 })} aria-label="위로">
-              ↑
-            </button>
-            <button type="button" className={cx(ui.button, ui.icon)} onClick={() => tool({ action: "nudge", dx: 0, dy: 1 })} aria-label="아래로">
-              ↓
-            </button>
-            <button type="button" className={cx(ui.button, ui.icon)} onClick={() => tool({ action: "nudge", dx: 1, dy: 0 })} aria-label="오른쪽으로">
-              →
-            </button>
-          </div>
-          <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => tool({ action: "deselect" })}>
-            선택 해제
-          </button>
-        </div>
-      )}
-
-      {owned.length === 0 ? (
-        <p className={styles.muted}>가방이 비어 있어요. 가구 상점에서 물건을 사 오세요.</p>
-      ) : (
-        <div className={styles.palette} role="group" aria-label="가방: 눌러서 놓기">
-          {owned.map((f) => {
-            const left = (my.inventory[f.id] ?? 0) - (counts[f.id] ?? 0);
-            const elsewhere = left < 1 && away(f.id) > 0;
-            return (
+      {/* 지금 손에 든 것: 놓아 보는 물건 / 고른 물건 (맨 위, 한 줄 — 폰은 두 줄) */}
+      {((trial && trialDef) || (sel && selDef)) && (
+        <div className={styles.selStack}>
+          {trial && trialDef && (
+            <div className={cx(styles.selBar, styles.trialBar)} aria-live="polite" role="group" aria-label="놓아 보는 중">
+              <span className={styles.selHead}>
+                <FurnitureIcon itemId={trial.itemId} size={32} />
+                <span className={styles.selText}>
+                  <span className={styles.selName}>{trialDef.name} 놓아 보는 중</span>
+                  <span className={styles.small}>
+                    끌어서 옮기고 {coarse ? "" : "R로 "}
+                    {rotateMode(trialDef) === "turn" ? "돌려" : "뒤집어"} 보세요. 저장은 안 돼요.
+                  </span>
+                </span>
+              </span>
               <button
-                key={f.id}
                 type="button"
-                className={styles.paletteItem}
-                disabled={left < 1 && !elsewhere}
-                aria-disabled={elsewhere || undefined}
-                style={elsewhere ? { opacity: 0.55 } : undefined}
-                title={elsewhere ? AWAY_MSG : undefined}
-                onClick={() => (elsewhere ? bridge.emit("house:notice", { message: `${f.name}, ${AWAY_MSG}` }) : tool({ action: "place", itemId: f.id }))}
-                aria-label={elsewhere ? `${f.name}, ${AWAY_MSG}` : `${f.name} 놓기, 남은 개수 ${left}`}
+                className={cx(ui.button, styles.selRot)}
+                onClick={() => tool({ action: "rotate" })}
+                aria-label={`${trialDef.name} ${rotateMode(trialDef) === "turn" ? "돌리기" : "좌우 뒤집기"}`}
               >
-                <span className={styles.count}>{Math.max(0, left)}</span>
-                <FurnitureIcon itemId={f.id} size={36} />
-                <span className={styles.paletteLabel}>{f.name}</span>
+                {ROTATE_LABEL[rotateMode(trialDef)]}
               </button>
-            );
-          })}
+              {trialLeft > 0 ? (
+                <button type="button" className={cx(ui.button, ui.primary, styles.selMain)} onClick={() => tool({ action: "tryEnd", keep: true })}>
+                  가방에서 놓기
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={cx(ui.button, ui.primary, styles.selMain)}
+                  disabled={buying || saving || my.points < trialCost}
+                  onClick={() => onBuyTrial(trialDef.id)}
+                  aria-label={`${trialDef.name}, ${trialCost}포인트에 사서 이 자리에 놓기`}
+                >
+                  {buying ? "…" : `${fmt(trialCost)}P${my.points < trialCost ? ` · ${fmt(trialCost - my.points)}P 부족해요` : " · 사서 놓기"}`}
+                </button>
+              )}
+              <button type="button" className={cx(ui.button, ui.quiet, styles.selOff)} onClick={() => tool({ action: "tryEnd", keep: false })}>
+                그만 보기
+              </button>
+            </div>
+          )}
+
+          {sel && selDef && (
+            <div className={styles.selBar} aria-live="polite">
+              <span className={styles.selHead}>
+                <FurnitureIcon itemId={sel.i} size={32} />
+                <span className={styles.selName}>{selDef.name}</span>
+              </span>
+              <button
+                type="button"
+                className={cx(ui.button, styles.selRot)}
+                onClick={() => tool({ action: "rotate" })}
+                aria-label={`${selDef.name} ${rotateMode(selDef) === "turn" ? "돌리기" : "좌우 뒤집기"}`}
+              >
+                {ROTATE_LABEL[rotateMode(selDef)]}
+              </button>
+              <button type="button" className={cx(ui.button, ui.danger, styles.selMain)} onClick={() => tool({ action: "remove" })}>
+                치우기
+              </button>
+              <div className={styles.nudge} role="group" aria-label="한 칸씩 옮기기">
+                <button type="button" className={cx(ui.button, ui.icon)} onClick={() => tool({ action: "nudge", dx: -1, dy: 0 })} aria-label="왼쪽으로">
+                  ←
+                </button>
+                <button type="button" className={cx(ui.button, ui.icon)} onClick={() => tool({ action: "nudge", dx: 0, dy: -1 })} aria-label="위로">
+                  ↑
+                </button>
+                <button type="button" className={cx(ui.button, ui.icon)} onClick={() => tool({ action: "nudge", dx: 0, dy: 1 })} aria-label="아래로">
+                  ↓
+                </button>
+                <button type="button" className={cx(ui.button, ui.icon)} onClick={() => tool({ action: "nudge", dx: 1, dy: 0 })} aria-label="오른쪽으로">
+                  →
+                </button>
+              </div>
+              <button type="button" className={cx(ui.button, ui.quiet, styles.selOff)} onClick={() => tool({ action: "deselect" })}>
+                선택 해제
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      <div className={styles.row}>
-        <span className={styles.small}>바닥</span>
-        {floors.map((id) => (
-          <button key={id} type="button" className={styles.paletteItem} aria-pressed={edit.floor === id} onClick={() => tool({ action: "skin", floor: id })} style={{ width: 56, minHeight: 56 }}>
-            <FurnitureIcon itemId={id} size={28} />
-            <span className={styles.paletteLabel}>{skinName(id)}</span>
-          </button>
-        ))}
-        <span className={styles.small}>벽지</span>
-        {walls.map((id) => (
-          <button key={id} type="button" className={styles.paletteItem} aria-pressed={edit.wall === id} onClick={() => tool({ action: "skin", wall: id })} style={{ width: 56, minHeight: 56 }}>
-            <FurnitureIcon itemId={id} size={28} />
-            <span className={styles.paletteLabel}>{skinName(id)}</span>
+      <div className={styles.editTabs} role="tablist" aria-label="가방 칸">
+        {TABS.map((t) => (
+          <button key={t.id} type="button" role="tab" className={styles.editTab} aria-selected={tab === t.id} onClick={() => setTab(t.id)}>
+            {t.label}
+            <span className={styles.editTabN}>{t.n}</span>
           </button>
         ))}
       </div>
+      <span className={styles.editCount}>
+        물건 {edit.items.length}/{maxItems}
+      </span>
+
+      <div className={styles.editActions}>
+        <button type="button" className={ui.button} onClick={onShop}>
+          가구 상점
+        </button>
+        <button type="button" className={ui.button} onClick={() => bridge.emit("house:edit", { on: false, revert: true })} disabled={saving}>
+          {edit.dirty ? "되돌리기" : "닫기"}
+        </button>
+        <button type="button" className={cx(ui.button, ui.primary)} onClick={() => onSave(true)} disabled={saving || !edit.dirty}>
+          {saving ? "저장 중…" : "저장"}
+        </button>
+      </div>
+
+      {/* 가방 한 줄 (가로로만 넘긴다 — 마우스 휠도 가로로) */}
+      {tab === "items" && owned.length === 0 ? (
+        <p className={cx(styles.muted, styles.paletteEmpty)}>가방이 비어 있어요. 가구 상점에서 물건을 사 오세요.</p>
+      ) : (
+        <div
+          className={styles.palette}
+          role="group"
+          aria-label={tab === "items" ? "가방: 눌러서 놓기" : tab === "floor" ? "바닥 고르기" : "벽지 고르기"}
+          onWheel={(e) => {
+            if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) e.currentTarget.scrollLeft += e.deltaY;
+          }}
+        >
+          {tab === "items"
+            ? owned.map((f) => {
+                const left = (my.inventory[f.id] ?? 0) - (counts[f.id] ?? 0);
+                const elsewhere = left < 1 && away(f.id) > 0;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    className={styles.paletteItem}
+                    disabled={left < 1 && !elsewhere}
+                    aria-disabled={elsewhere || undefined}
+                    style={elsewhere ? { opacity: 0.55 } : undefined}
+                    title={elsewhere ? AWAY_MSG : f.name}
+                    onClick={() => (elsewhere ? bridge.emit("house:notice", { message: `${f.name}, ${AWAY_MSG}` }) : tool({ action: "place", itemId: f.id }))}
+                    aria-label={elsewhere ? `${f.name}, ${AWAY_MSG}` : `${f.name} 놓기, 남은 개수 ${left}`}
+                  >
+                    <span className={styles.count}>{Math.max(0, left)}</span>
+                    <FurnitureIcon itemId={f.id} size={36} />
+                    <span className={styles.paletteLabel}>{f.name}</span>
+                  </button>
+                );
+              })
+            : skins.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={styles.paletteItem}
+                  aria-pressed={(tab === "floor" ? edit.floor : edit.wall) === id}
+                  title={skinName(id)}
+                  onClick={() => tool(tab === "floor" ? { action: "skin", floor: id } : { action: "skin", wall: id })}
+                >
+                  <FurnitureIcon itemId={id} size={36} />
+                  <span className={styles.paletteLabel}>{skinName(id)}</span>
+                </button>
+              ))}
+        </div>
+      )}
+
+      <p className={styles.editHint} title={hint}>
+        {hint}
+      </p>
     </section>
   );
 }

@@ -1,0 +1,114 @@
+/* 11/22 터치 화면 왼쪽 위 칩 묶음 (TopLeftCluster): [메뉴] 줄 바로 아래, 오른쪽 위 [지도] 단추 칸을 비운 폭.
+   칩 모양(높이 --top-h·어두운 패널·픽셀 테두리·왼쪽 색 표시)은 칩마다 자기 CSS에서 같은 규칙으로 맞춘다 */
+.cluster {
+  position: fixed;
+  /* 월드 HUD(.overlay 10)·아래 채팅(11) 위, 창·안내(20~)보다 아래 */
+  z-index: 12;
+  top: calc(var(--safe-top) + var(--top-h) + var(--top-gap));
+  left: var(--safe-left);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--top-gap);
+  /* [지도] 단추(약 66px)와 그 앞 간격만 비운다 */
+  width: min(640px, calc(100vw / var(--uz) - var(--safe-left) - var(--safe-right) - 80px));
+  pointer-events: none;
+  /* 11/22 칩 바탕(--panel, 92%)으로 뒤 이름표 글자가 비쳤다 → 묶음 안에서는 같은 색 불투명 패널 (칩·펼친 칸 모두) */
+  --panel: var(--panel-solid);
+}
+
+/* 지도를 펼쳐 두면 그 칸(--minimap-w)까지 비운다 (지도 그림이 [지도] 단추 아래로 내려온다) */
+:root:has(canvas[data-minimap]) .cluster {
+  width: min(640px, calc(100vw / var(--uz) - var(--safe-left) - var(--safe-right) - var(--minimap-w) - 8px));
+}
+
+/* 한 줄: [긴급 · 자동 낚시] / [소식 · 개발자 노트 · 첫 걸음]. 칩이 없는 줄은 자리도 차지하지 않는다 */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--top-gap);
+  max-width: 100%;
+}
+
+.row:not(:has(> .item:not(:empty))),
+.cluster[data-hide] .row:not(:has(> .item:not(:empty):not([data-overlay]))) {
+  display: none;
+}
+
+/* 세로 폰처럼 좁으면 줄 구분 없이 순서대로 흘린다 (넘치는 칩만 아래 줄로) */
+@media (max-width: 560px) {
+  .cluster {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .row {
+    display: contents;
+  }
+}
+
+.item {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.item:empty {
+  display: none;
+}
+
+.item[data-tl="urgent"] {
+  order: 1;
+}
+
+.item[data-tl="fish"] {
+  order: 2;
+}
+
+.item[data-tl="pin"] {
+  order: 3;
+}
+
+/* 개발자 노트 칩은 남는 폭만큼 (제목이 길면 말줄임) */
+.item[data-tl="note"] {
+  order: 4;
+  flex: 1 1 140px;
+  max-width: 250px;
+}
+
+.item[data-tl="retain"] {
+  order: 5;
+}
+
+/* 펼친 것(긴급 막대·불꽃축제·고정 소식 목록)은 한 줄을 다 쓰고, 나머지 칩은 그 아래로 */
+.item:has(> [data-open]) {
+  flex-basis: 100%;
+}
+
+/* 칩들의 원래 고정 자리(top·left 계산)는 묶음 안에서 쓰지 않는다 (relative: 칩 안 빨간 점 등은 칩 기준 그대로) */
+.cluster .item > * {
+  position: relative;
+  inset: auto;
+  max-width: 100%;
+}
+
+.cluster :where(button, a, input, select, label) {
+  pointer-events: auto;
+}
+
+/* 예전 월드 HUD 안 칩(소식·첫 걸음): 집·사냥터·탈것·바라보기 중엔 숨고, 불멍 중엔 흐리게 (GameShell .away·.viewing·.campfire와 같게) */
+.cluster[data-hide] .item[data-overlay] {
+  display: none;
+}
+
+.cluster[data-dim] .item[data-overlay] {
+  opacity: 0.35;
+  transition: opacity 0.6s ease;
+}
+
+.cluster[data-dim] .item[data-overlay]:hover,
+.cluster[data-dim] .item[data-overlay]:focus-within {
+  opacity: 1;
+}

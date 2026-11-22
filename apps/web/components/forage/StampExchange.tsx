@@ -8,6 +8,7 @@ import { questApi } from "@/lib/forage/quests/client";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { cx } from "../ui/cx";
 import ItemIcon from "../ui/ItemIcon";
+import { watchMoreBelow } from "../ui/moreBelow";
 import ui from "../ui/ui.module.css";
 import { questStore, useQuests } from "./questStore";
 import q from "./quest.module.css";
@@ -120,7 +121,7 @@ export default function StampExchange({ viewOnly = false }: { viewOnly?: boolean
 
   return (
     <div className={q.board}>
-      <div className={q.shopScroll}>
+      <div ref={watchMoreBelow} className={cx(q.shopScroll, "more-fade")}>
         <h4 className={q.secHead}>
           <span>이달의 교환소 · {monthLabel(shop.month)}</span>
           <small>남은 기간 {leftText(shop.endsAt - now)}</small>

@@ -1,6 +1,6 @@
 .dialog {
-  --dialog-max-h: calc(100dvh - var(--safe-top) - var(--safe-bottom));
-  --dialog-max-w: calc(100vw - var(--safe-left) - var(--safe-right));
+  --dialog-max-h: calc(100dvh / var(--uz) - var(--safe-top) - var(--safe-bottom));
+  --dialog-max-w: calc(100vw / var(--uz) - var(--safe-left) - var(--safe-right));
   /* 표준 창 크기 (게임 안의 모든 창이 같다). 확인창(kind="confirm")만 아래에서 작게 */
   width: min(760px, var(--dialog-max-w));
   height: min(660px, var(--dialog-max-h));
@@ -87,14 +87,17 @@
   }
 }
 
-/* 11/20 아래에 더 있을 때만 맨 아래를 살짝 흐리게 (data-more는 Dialog.tsx가 스크롤·크기 변화 때 붙인다) */
+/* 11/20 아래에 더 있을 때만 맨 아래를 살짝 흐리게 (data-more는 Dialog.tsx가 스크롤·크기 변화 때 붙인다)
+   11/22 표준 창 본문은 flex 세로줄이라 ::after도 줄 한 칸 → 내용이 넘치면 높이 0으로 줄어 흐림이 안 보였다 (사냥터·표현·메뉴·집·레이스 등 본문이 스크롤되는 창 전부).
+   줄지 않게 두고, 여백도 표준 창 변수(--dialog-pad-*)를 따른다 */
 .body[data-more]::after {
   content: "";
   position: sticky;
-  bottom: -16px;
+  bottom: calc(-1 * var(--dialog-pad-y, 16px));
   display: block;
+  flex-shrink: 0;
   height: 36px;
-  margin: -36px -16px -16px;
+  margin: -36px calc(-1 * var(--dialog-pad-x, 16px)) calc(-1 * var(--dialog-pad-y, 16px));
   background: linear-gradient(to bottom, rgba(27, 28, 24, 0), var(--panel-solid) 85%);
   pointer-events: none;
 }
@@ -155,13 +158,13 @@
 /* 폰: 표준 창은 화면 전체 (머리말은 위에 고정, 본문만 스크롤) */
 @media (max-width: 560px) {
   .dialog[data-kind="window"] {
-    width: 100vw;
-    height: 100dvh;
-    max-height: 100dvh;
+    width: calc(100vw / var(--uz));
+    height: calc(100dvh / var(--uz));
+    max-height: calc(100dvh / var(--uz));
   }
 
   .dialog[data-kind="window"] .frame {
-    max-height: 100dvh;
+    max-height: calc(100dvh / var(--uz));
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     box-shadow: none;
   }

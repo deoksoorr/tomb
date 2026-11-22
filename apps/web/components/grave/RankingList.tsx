@@ -9,6 +9,7 @@ import { stayText } from "@/lib/stayTime";
 import type { PublicGrave, RankBoard, RankPeriod, RankResponse } from "@/lib/types";
 import RpgIcon from "../rpg/RpgIcon";
 import ItemIcon from "../ui/ItemIcon";
+import { watchMoreBelow } from "../ui/moreBelow";
 import StyledName from "../ui/StyledName";
 import styles from "./RankingPanel.module.css";
 
@@ -177,7 +178,7 @@ export default function RankingList({ graves, onPick }: Props) {
           )}
         </div>
       )}
-      <div id={`${baseId}-list`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`} className={styles.listWrap}>
+      <div id={`${baseId}-list`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`} ref={watchMoreBelow} className={`${styles.listWrap} more-fade`}>
         {tab === "flower" ? (
           flowered.length === 0 ? (
             <p className={styles.empty}>이 채널 묘비에 아직 놓인 꽃이 없어요.</p>

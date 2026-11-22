@@ -5,6 +5,8 @@ import { clockText, FEST_FIREWORK_MS, FEST_MS, URGENT_CLAIM_MS, URGENT_DEF, URGE
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { showToast } from "@/lib/hooks/useToasts";
+import { toUi } from "@/lib/uiScale";
+import { TopLeftItem } from "../overlay/TopLeftCluster";
 import { urgentStore, useUrgent } from "./urgentStore";
 import u from "./urgent.module.css";
 
@@ -17,7 +19,8 @@ function useUrgentSpace(): (el: HTMLElement | null) => void {
   useEffect(() => {
     const root = document.documentElement;
     if (!el) return;
-    const put = () => root.style.setProperty("--urgent-h", `${Math.ceil(el.getBoundingClientRect().height) + 10}px`);
+    // 11/22 큰 화면 HUD 배율(zoom) 안의 CSS px로 (lib/uiScale)
+    const put = () => root.style.setProperty("--urgent-h", `${Math.ceil(toUi(el.getBoundingClientRect().height)) + 10}px`);
     put();
     const ro = new ResizeObserver(put);
     ro.observe(el);
@@ -36,6 +39,7 @@ function useUrgentSpace(): (el: HTMLElement | null) => void {
 //    (11/15 아무도 내지 않았으면 막대 없이 한 줄만 몇 초 보여 주고 저절로 내린다. 「게시판에서 보상 받기」는 내가 받을 보상이 있을 때만)
 // 사냥·미니게임 중에는 숨긴다 (그 화면 위쪽 막대와 겹치지 않게)
 // 11/17 터치 화면: 평소엔 한 줄 칩([긴급] 11:37 40%)으로 접어 두고, 누르면 지금 막대가 펼쳐진다 (다시 누르면 접힌다). 불꽃축제 타이머도 같은 식
+// 11/22 데스크톱: 위 줄 바로 아래 가운데에 제 자리(--urgent-w)를 따로 잡은 낮은 한 줄 + 얇은 막대. 안내·결과·보상 줄은 마우스를 올리면. 소식·알림보다 늘 위
 
 /** "00:30" (남은 ms, 분도 두 자리) */
 const mmss = (ms: number) => {
@@ -146,149 +150,177 @@ export default function UrgentHud() {
           </span>
         </div>
       )}
-      {fireworks && coarse && !open && (
-        <div ref={space} className={u.chipRow}>
-          <button type="button" className={u.chip} data-fest onClick={toggle} aria-expanded={false} aria-label={`불꽃축제 남은 시간 ${mmss(fwLeft)}, 펼치기`}>
+      {/* 11/22 터치: 칩·펼친 막대는 왼쪽 위 칩 묶음 맨 앞으로 (TopLeftCluster). 시작 알림은 제자리 */}
+      <TopLeftItem kind="urgent">
+        {fireworks && coarse && !open && (
+          <div ref={space} className={u.chipRow}>
+            <button type="button" className={u.chip} data-fest onClick={toggle} aria-expanded={false} aria-label={`불꽃축제 남은 시간 ${mmss(fwLeft)}, 펼치기`}>
+              <span className={u.fwSpark} aria-hidden="true">
+                ✦
+              </span>
+              <span className={u.chipFest}>불꽃축제</span>
+              <span className={u.chipClock}>{mmss(fwLeft)}</span>
+            </button>
+          </div>
+        )}
+        {fireworks && (!coarse || open) && (
+          <div ref={space} className={u.fwTimer} data-open={coarse || undefined} onClick={coarse ? toggle : undefined} role="status" aria-label={`불꽃축제 남은 시간 ${mmss(fwLeft)}`}>
             <span className={u.fwSpark} aria-hidden="true">
               ✦
             </span>
-            <span className={u.chipFest}>불꽃축제</span>
-            <span className={u.chipClock}>{mmss(fwLeft)}</span>
-          </button>
-        </div>
-      )}
-      {fireworks && (!coarse || open) && (
-        <div ref={space} className={u.fwTimer} data-open={coarse || undefined} onClick={coarse ? toggle : undefined} role="status" aria-label={`불꽃축제 남은 시간 ${mmss(fwLeft)}`}>
-          <span className={u.fwSpark} aria-hidden="true">
-            ✦
-          </span>
-          <b>불꽃축제</b>
-          <span className={u.fwClock}>{mmss(fwLeft)}</span>
-          <small>목표의 150%를 채웠어요! 모닥불이 1시간 동안 금빛으로 타요.</small>
-        </div>
-      )}
-      {hidden !== ev.id && !fireworks && nobody && coarse && (
-        <div ref={space} className={u.chipRow} role="status" aria-label="긴급 의뢰">
-          <span className={u.chip} data-done>
-            <span className={u.tag}>긴급 끝</span>
-            <span className={u.chipText}>아무도 오지 않았어요</span>
-          </span>
-          <button type="button" className={u.chipClose} onClick={() => setHidden(ev.id)} aria-label="긴급 의뢰 막대 닫기">
-            ×
-          </button>
-        </div>
-      )}
-      {hidden !== ev.id && !fireworks && nobody && !coarse && (
-        <div ref={space} className={u.hud} data-done role="status" aria-label="긴급 의뢰">
-          <div className={u.hudTop}>
-            <span className={u.endLine}>{URGENT_NOBODY_LINE}</span>
-            <button type="button" className={u.close} onClick={() => setHidden(ev.id)} aria-label="긴급 의뢰 막대 닫기">
-              ×
-            </button>
+            <b>불꽃축제</b>
+            <span className={u.fwClock}>{mmss(fwLeft)}</span>
+            <small>목표의 150%를 채웠어요! 모닥불이 1시간 동안 금빛으로 타요.</small>
           </div>
-        </div>
-      )}
-      {hidden !== ev.id && !fireworks && !nobody && coarse && !open && (
-        <div ref={space} className={u.chipRow} role="status" aria-label="긴급 의뢰">
-          <button
-            type="button"
-            className={u.chip}
-            data-hurry={hurry || undefined}
-            data-done={!live || undefined}
-            data-fest={fest || undefined}
-            onClick={toggle}
-            aria-expanded={false}
-          >
-            <span className={u.tag}>{live ? "긴급" : "긴급 끝"}</span>
-            {live && (
-              <span className={u.chipClock} aria-label={`남은 시간 ${clockText(left)}`}>
-                {clockText(left)}
-              </span>
-            )}
-            <span className={u.chipPct}>{pct}%</span>
-            {canClaim && <span className={u.chipClaim}>보상</span>}
-            <span className="visually-hidden">, 펼치기</span>
-          </button>
-          {!live && (
+        )}
+        {hidden !== ev.id && !fireworks && nobody && coarse && (
+          <div ref={space} className={u.chipRow} role="status" aria-label="긴급 의뢰">
+            <span className={u.chip} data-done>
+              <span className={u.tag}>긴급 끝</span>
+              <span className={u.chipText}>아무도 오지 않았어요</span>
+            </span>
             <button type="button" className={u.chipClose} onClick={() => setHidden(ev.id)} aria-label="긴급 의뢰 막대 닫기">
               ×
             </button>
-          )}
-        </div>
-      )}
-      {hidden !== ev.id && !fireworks && !nobody && (!coarse || open) && (
-        <div
-          ref={space}
-          className={u.hud}
-          data-hurry={hurry || undefined}
-          data-done={!live || undefined}
-          data-fest={fest || undefined}
-          data-open={coarse || undefined}
-          onClick={coarse ? toggle : undefined}
-          role="status"
-          aria-label="긴급 의뢰"
-        >
-          <div className={u.hudTop}>
-            {/* 터치 화면은 칩과 같이 짧게 (좁은 막대 첫 줄에 남은 시간·접기까지 들어가게) */}
-            <span className={u.tag}>{coarse ? (live ? "긴급" : "긴급 끝") : live ? "긴급 의뢰" : "긴급 의뢰 끝"}</span>
-            <span className={u.what}>
-              {d.label} {ev.goal}
-              {d.unit}
-            </span>
-            {live ? (
-              <span className={u.clock} aria-label={`남은 시간 ${clockText(left)}`}>
-                {clockText(left)}
-              </span>
-            ) : null}
-            {coarse && (
-              <button
-                type="button"
-                className={u.fold}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggle();
-                }}
-                aria-expanded={true}
-                aria-label="긴급 의뢰 접기"
-              >
-                ▴
+          </div>
+        )}
+        {hidden !== ev.id && !fireworks && nobody && !coarse && (
+          <div ref={space} className={u.hud} data-done role="status" aria-label="긴급 의뢰">
+            <div className={u.hudTop}>
+              <span className={u.endLine}>{URGENT_NOBODY_LINE}</span>
+              <button type="button" className={u.close} onClick={() => setHidden(ev.id)} aria-label="긴급 의뢰 막대 닫기">
+                ×
               </button>
-            )}
+            </div>
+          </div>
+        )}
+        {hidden !== ev.id && !fireworks && !nobody && coarse && !open && (
+          <div ref={space} className={u.chipRow} role="status" aria-label="긴급 의뢰">
+            <button
+              type="button"
+              className={u.chip}
+              data-hurry={hurry || undefined}
+              data-done={!live || undefined}
+              data-fest={fest || undefined}
+              onClick={toggle}
+              aria-expanded={false}
+            >
+              <span className={u.tag}>{live ? "긴급" : "긴급 끝"}</span>
+              {live && (
+                <span className={u.chipClock} aria-label={`남은 시간 ${clockText(left)}`}>
+                  {clockText(left)}
+                </span>
+              )}
+              <span className={u.chipPct}>{pct}%</span>
+              {canClaim && <span className={u.chipClaim}>보상</span>}
+              <span className="visually-hidden">, 펼치기</span>
+            </button>
             {!live && (
-              <button
-                type="button"
-                className={u.close}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setHidden(ev.id);
-                }}
-                aria-label="긴급 의뢰 막대 닫기"
-              >
+              <button type="button" className={u.chipClose} onClick={() => setHidden(ev.id)} aria-label="긴급 의뢰 막대 닫기">
                 ×
               </button>
             )}
           </div>
-          <div className={u.bar} aria-hidden="true">
-            <span className={u.fill} style={{ width: fill(ev.n, ev.goal) }} />
-            <i className={u.mark} style={{ left: "33.333%" }} data-on={stage >= 50 || undefined} />
-            <i className={u.mark} style={{ left: "66.667%" }} data-on={stage >= 100 || undefined} />
-          </div>
-          <div className={u.hudBottom}>
-            <span>
-              {ev.n} / {ev.goal}
-              {d.unit}
-            </span>
-            {live ? <span className={u.pct}>{pct}%</span> : <span className={u.result}>{urgentFilled(ev.kind, ev.n, ev.goal, !!ev.early)}</span>}
-            {live && <span className={u.hudHint}>캠핑장행 정류장 왼쪽 게시판</span>}
-          </div>
-          {!live && (rewardLine || canClaim) && (
-            <div className={u.hudReward}>
-              {rewardLine && <span>{rewardLine}</span>}
-              {canClaim && <span className={u.claimHint}>게시판에서 보상 받기</span>}
+        )}
+        {hidden !== ev.id && !fireworks && !nobody && (!coarse || open) && (
+          <div
+            ref={space}
+            className={u.hud}
+            data-hurry={hurry || undefined}
+            data-done={!live || undefined}
+            data-fest={fest || undefined}
+            data-open={coarse || undefined}
+            onClick={coarse ? toggle : undefined}
+            role="status"
+            aria-label="긴급 의뢰"
+          >
+            <div className={u.hudTop}>
+              {/* 터치 화면은 칩과 같이 짧게 (좁은 막대 첫 줄에 남은 시간·접기까지 들어가게) */}
+              <span className={u.tag}>{coarse ? (live ? "긴급" : "긴급 끝") : live ? "긴급 의뢰" : "긴급 의뢰 끝"}</span>
+              <span className={u.what}>
+                {d.label} {ev.goal}
+                {d.unit}
+              </span>
+              {/* 11/22 데스크톱은 한 줄에 모은 수·%. 받을 보상이 있으면 그 옆에 작게 */}
+              {!coarse && (
+                <span className={u.nums}>
+                  {ev.n}/{ev.goal} · <span className={u.pct}>{pct}%</span>
+                </span>
+              )}
+              {!coarse && canClaim && <span className={u.claimTag}>보상 받기</span>}
+              {live ? (
+                <span className={u.clock} aria-label={`남은 시간 ${clockText(left)}`}>
+                  {clockText(left)}
+                </span>
+              ) : null}
+              {coarse && (
+                <button
+                  type="button"
+                  className={u.fold}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggle();
+                  }}
+                  aria-expanded={true}
+                  aria-label="긴급 의뢰 접기"
+                >
+                  ▴
+                </button>
+              )}
+              {!live && (
+                <button
+                  type="button"
+                  className={u.close}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setHidden(ev.id);
+                  }}
+                  aria-label="긴급 의뢰 막대 닫기"
+                >
+                  ×
+                </button>
+              )}
             </div>
-          )}
-        </div>
-      )}
+            <div className={u.bar} aria-hidden="true">
+              <span className={u.fill} style={{ width: fill(ev.n, ev.goal) }} />
+              <i className={u.mark} style={{ left: "33.333%" }} data-on={stage >= 50 || undefined} />
+              <i className={u.mark} style={{ left: "66.667%" }} data-on={stage >= 100 || undefined} />
+            </div>
+            {coarse ? (
+              <>
+                <div className={u.hudBottom}>
+                  <span>
+                    {ev.n} / {ev.goal}
+                    {d.unit}
+                  </span>
+                  {live ? <span className={u.pct}>{pct}%</span> : <span className={u.result}>{urgentFilled(ev.kind, ev.n, ev.goal, !!ev.early)}</span>}
+                  {live && <span className={u.hudHint}>캠핑장행 정류장 왼쪽 게시판</span>}
+                </div>
+                {!live && (rewardLine || canClaim) && (
+                  <div className={u.hudReward}>
+                    {rewardLine && <span>{rewardLine}</span>}
+                    {canClaim && <span className={u.claimHint}>게시판에서 보상 받기</span>}
+                  </div>
+                )}
+              </>
+            ) : (
+              // 11/22 데스크톱: 막대는 낮은 한 줄로 두고 안내·결과·보상 줄은 마우스를 올리면 막대 아래에 펼친다 (높이가 바뀌지 않게 겹쳐 띄움)
+              <div className={u.more}>
+                {live ? (
+                  <>
+                    <span>캠핑장행 정류장 왼쪽 의뢰 게시판에 내면 서버 전체 막대가 차요.</span>
+                    <span>눈금 50%·100%를 넘기면 보상이 커지고, 150%(끝)까지 채우면 불꽃축제가 열려요.</span>
+                  </>
+                ) : (
+                  <span className={u.result}>{urgentFilled(ev.kind, ev.n, ev.goal, !!ev.early)}</span>
+                )}
+                {!live && rewardLine && <span>{rewardLine}</span>}
+                {canClaim && <span className={u.claimHint}>캠핑장행 정류장 왼쪽 게시판에서 보상 받기</span>}
+              </div>
+            )}
+          </div>
+        )}
+      </TopLeftItem>
     </>
   );
 }

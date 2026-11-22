@@ -91,31 +91,31 @@ export default function StaffPeople({ myCh, myMap, onClose }: { myCh: number | n
           {list.map((p) => {
             const here = p.ch === myCh && !p.inside && mapOf(p.map) === myMap;
             return (
-              <li key={`${p.ch}:${p.sid}`} className={styles.row}>
-                <span className={styles.name}>
+              <li key={`${p.ch}:${p.sid}`} className={styles.person}>
+                <span className={styles.name} title={p.name}>
                   <span className={cx(styles.lamp, !p.inside && styles.on)} aria-hidden="true" />
                   {p.name}
                 </span>
-                <span className={styles.actions}>
-                  <span className={styles.meta}>{here ? `${staffWhereText(p)} (여기)` : staffWhereText(p)}</span>
-                  <button
-                    type="button"
-                    className={cx(ui.button, !p.inside && ui.primary)}
-                    disabled={pending !== null}
-                    title={p.inside ? "지금 들어갈 수 없는 곳에 있어요" : undefined}
-                    onClick={() => void tp(p)}
-                  >
-                    순간이동
-                  </button>
-                </span>
+                <span className={styles.meta}>{here ? `${staffWhereText(p)} (여기)` : staffWhereText(p)}</span>
+                <button
+                  type="button"
+                  className={cx(ui.button, !p.inside && ui.primary)}
+                  disabled={pending !== null}
+                  title={p.inside ? "지금 들어갈 수 없는 곳에 있어요" : undefined}
+                  onClick={() => void tp(p)}
+                >
+                  순간이동
+                </button>
               </li>
             );
           })}
         </ul>
       )}
-      <p className={styles.notice} role="status">
-        {notice}
-      </p>
+      {notice && (
+        <p className={styles.notice} role="status">
+          {notice}
+        </p>
+      )}
     </section>
   );
 }

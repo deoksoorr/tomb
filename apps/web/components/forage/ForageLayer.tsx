@@ -6,7 +6,7 @@ import { bridge, type ForageUse } from "@/game/bridge";
 import { meadowTone } from "@/game/rpg/meadowLayout";
 import type { TimePhase } from "@/lib/ambience";
 import { errorMessage } from "@/lib/api";
-import { gatherNodeById, NODE_LABEL, RARITY_LABEL, speciesById, type NpcId } from "@/lib/forage/catalog";
+import { gatherNodeById, GRADE_LABEL, gradedPrice, NODE_LABEL, RARITY_LABEL, speciesById, type NpcId } from "@/lib/forage/catalog";
 import { forageApi, type DexPeer } from "@/lib/forage/client";
 import { BUG_DIFFICULTY } from "@/lib/forage/rules";
 import type { CatchResult, SunkenCatch } from "@/lib/forage/types";
@@ -393,17 +393,25 @@ function CatchCard({ card }: { card: Card }) {
     );
   const sp = speciesById(item.id);
   if (!sp) return null;
+  // 11/22 직접 낚은 대물·월척 (값은 등급 배수)
+  const grade = item.grade ?? 0;
   return (
     <div className={s.catchCard} role="status" aria-live="polite">
       <ItemIcon itemId={sp.id} size={48} />
       <div className={s.catchMeta}>
+        {grade > 0 && (
+          <span className={s.catchGrade} data-grade={grade}>
+            {GRADE_LABEL[grade]}!
+          </span>
+        )}
         <strong>
           {sp.name}
           {item.size > 0 && ` ${(item.size / 10).toFixed(1)}cm`}
         </strong>
         <span className={s.stars}>
           {"★".repeat(sp.rarity)}
-          {"☆".repeat(5 - sp.rarity)} {RARITY_LABEL[sp.rarity]} · {sp.price}P
+          {/* 11/22 대물·월척이면 희귀도 글자(「보통」 등)는 빼고 별만 — 「월척! … 보통」처럼 등급과 헷갈린다 */}
+          {"☆".repeat(5 - sp.rarity)} {grade > 0 ? "" : `${RARITY_LABEL[sp.rarity]} `}· {gradedPrice(sp, grade)}P
         </span>
         {item.isNew && <span className={s.badgeNew}>도감에 새로 등록!</span>}
         {item.record && <span className={s.badgeNew}>가장 큰 기록을 새로 세웠어요!</span>}

@@ -233,8 +233,8 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
           <p className={ui.hint} role="status">
             운영자 계정은 친구 기능을 쓸 수 없어요. 대신 접속 중인 사람에게 순간이동할 수 있어요.
           </p>
-          <StaffPeople myCh={myCh} myMap={myMap} onClose={onClose} />
           <StaffBungeoSchedule />
+          <StaffPeople myCh={myCh} myMap={myMap} onClose={onClose} />
         </div>
       </Dialog>
     );

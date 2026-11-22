@@ -38,6 +38,8 @@ export default function GameCanvas(props: GameStartOptions) {
     <div
       ref={hostRef}
       aria-hidden="true"
+      // 11/22 큰 화면 HUD 배율(lib/uiScale)의 zoom에서 빼는 표시 — 캔버스는 늘 1배 (게임 확대는 따로)
+      data-game=""
       style={{
         position: "fixed",
         inset: 0,

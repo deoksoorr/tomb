@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
-import { CAT_LABEL, RARITY_LABEL, speciesById, type LifeCat } from "@/lib/forage/catalog";
+import { CAT_LABEL, RARITY_LABEL, speciesBag, speciesById, type LifeCat } from "@/lib/forage/catalog";
 import { QUEST_DAILY } from "@/lib/forage/quests/catalog";
 import { questApi } from "@/lib/forage/quests/client";
 import { defaultPick, eligibleOf, pickError, questProgress } from "@/lib/forage/quests/gen";
 import type { QuestCard } from "@/lib/forage/quests/types";
 import { cx } from "../ui/cx";
 import ItemIcon from "../ui/ItemIcon";
+import { watchMoreBelow } from "../ui/moreBelow";
 import ui from "../ui/ui.module.css";
 import { forageStore, useForage } from "./forageStore";
 import { questStore, useQuests } from "./questStore";
@@ -46,7 +47,8 @@ export default function QuestBoard({ only, viewOnly = false }: { only?: LifeCat;
     if (board && now >= Math.min(board.dayResetAt, board.weekResetAt)) void questStore.refresh(true);
   }, [board, now]);
 
-  const bag = useMemo(() => state?.bag ?? {}, [state]);
+  // 11/22 의뢰는 등급을 가리지 않는다 → 대물·월척 칸도 그 종으로 합쳐 본다 (납품은 서버가 보통부터 낸다)
+  const bag = useMemo(() => speciesBag(state?.bag ?? {}), [state]);
   const daily = (board?.daily ?? []).filter((d) => !only || d.cat === only);
   const weekly = board && (!only || board.weekly.cat === only) ? board.weekly : null;
 
@@ -171,7 +173,7 @@ export default function QuestBoard({ only, viewOnly = false }: { only?: LifeCat;
         <span>새 의뢰까지 {left(board.dayResetAt - now)}</span>
         {!viewOnly && <span>{board.rerollLeft > 0 ? "바꾸기 ↻ 1번 남음" : "오늘 바꾸기 끝"}</span>}
       </div>
-      <ul className={q.list} aria-label="수집 의뢰">
+      <ul ref={watchMoreBelow} className={cx(q.list, "more-fade")} aria-label="수집 의뢰">
         {weekly && row(weekly)}
         {only && !daily.length && !weekly && <li className={q.empty}>오늘은 {CAT_LABEL[only]} 의뢰가 없어요. 다른 의뢰는 캠핑장행 정류장 왼쪽 의뢰 게시판에 있어요.</li>}
         {daily.map(row)}

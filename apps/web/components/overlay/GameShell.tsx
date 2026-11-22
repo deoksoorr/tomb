@@ -42,6 +42,7 @@ import StayBonus from "./StayBonus";
 import { guideToQuestBoard, RetainDock, RetainLayer, RetainPhoneChip, useLookStep, useNewbie } from "./RetainHud";
 import { openDevNotes } from "@/lib/devNotes/open";
 import DevNoteCard from "./DevNoteCard";
+import { TopLeftCluster, TopLeftProvider, useTopLeftSlots } from "./TopLeftCluster";
 import RankingList from "../grave/RankingList";
 import RankingPanel from "../grave/RankingPanel";
 import ChairLayer from "../chairman/ChairLayer";
@@ -120,6 +121,7 @@ import GraveyardNow from "../grave/GraveyardNow";
 import MySummary from "../account/MySummary";
 import { rememberChannel } from "@/lib/channelHistory";
 import { photoAllowed, photoKeyAction, type PhotoGate } from "@/lib/photo/photoRules";
+import { toUi, useUiScale } from "@/lib/uiScale";
 
 const GameCanvas = dynamic(() => import("@/game/GameCanvas"), { ssr: false });
 // 11/19 촬영 모드 화면은 들어갈 때만 불러온다
@@ -320,10 +322,14 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   /** 주거 구역의 집 문·빈 필지에서 하우징 창을 열었으면 그 집/번지 */
   const [housingIntent, setHousingIntent] = useState<{ houseId?: string; lot?: number; zone?: "sea" } | null>(null);
   const coarse = useMediaQuery("(pointer: coarse)");
+  // 11/22 큰 데스크톱 화면(27인치 등): HTML HUD·창 전체를 화면 크기만큼 키운다 (html[data-uiz] + zoom — lib/uiScale, 터치는 그대로)
+  useUiScale(coarse);
   // 11/19 폰 새 이웃(가입 이틀 안·첫 걸음 선물 전): 위쪽을 단순하게 — 긴급 의뢰·고정 공지 칩을 숨긴다 (RetainHud isNewbie).
   // 접속 보너스 창은 받을 보너스가 있을 때만 뜨므로 그대로 둔다
   const newbie = useNewbie();
   const quietTop = coarse && newbie;
+  // 11/22 터치: 왼쪽 위 칩(긴급·자동 낚시·소식·개발자 노트·첫 걸음)을 한 묶음 상자로 (TopLeftCluster). 데스크톱은 제자리 그대로
+  const topLeft = useTopLeftSlots(coarse);
   // 데스크톱인데 창이 좁으면 윗줄에 채널 표시 자리가 없다 → 아래 안내 줄로
   const narrow = useMediaQuery("(max-width: 700px)");
   // 11/18 데스크톱: 확성기·고정 공지 창과 채팅창 폭을 아래 바로 가기 줄의 [집] 단추 오른쪽 끝에 맞춘다 (--dock-w, 문서 루트. [공지] 끝은 너무 넓었다)
@@ -335,7 +341,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     const root = document.documentElement;
     if (!nav || !btn) return;
     const fit = () => {
-      const w = Math.round(btn.getBoundingClientRect().right - nav.getBoundingClientRect().left);
+      // 11/22 큰 화면 HUD 배율(zoom) 안의 CSS px로 (lib/uiScale)
+      const w = Math.round(toUi(btn.getBoundingClientRect().right - nav.getBoundingClientRect().left));
       if (w > 200) root.style.setProperty("--dock-w", `${w}px`);
     };
     fit();
@@ -776,6 +783,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
 
   return (
     <div className={styles.shell} data-photo={photo ? "" : undefined}>
+      <TopLeftProvider value={topLeft.value}>
       <GameCanvas {...options} />
       {photo && <PhotoMode touch={coarse} onExit={() => setPhoto(false)} />}
       {ready && disconnected && <div className={styles.dim} aria-hidden="true" />}
@@ -802,6 +810,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {ready && <SnackVendLayer />}
       {/* 11/15 긴급 의뢰: 시작 알림 · 위쪽 남은 시간·서버 전체 막대 (마을 어디서든) */}
       {ready && !quietTop && <UrgentHud />}
+      {/* 11/22 터치 왼쪽 위 칩 묶음 상자 (칩들이 여기로 포털한다). 예전 월드 HUD 안 칩(소식·첫 걸음)은 HUD가 숨거나 흐려질 때 같이 */}
+      {ready && coarse && <TopLeftCluster setA={topLeft.setA} setB={topLeft.setB} hide={away || riding || viewing} dim={campfire} />}
 
       {ready && (
         <div className={cx(styles.overlay, (away || riding) && styles.away, campfire && styles.campfire, viewing && styles.viewing)}>
@@ -1241,6 +1251,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       )}
       <MegaphoneLayer channel={channel} onOpenShop={goShopFor} />
       {panel === "shop" && <ShopDialog onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
+      </TopLeftProvider>
     </div>
   );
 }

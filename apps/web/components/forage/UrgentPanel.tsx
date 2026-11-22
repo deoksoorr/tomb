@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
-import { RARITY_LABEL, speciesById } from "@/lib/forage/catalog";
+import { RARITY_LABEL, speciesBag, speciesById } from "@/lib/forage/catalog";
 import {
   clockText,
   prizeText,
@@ -30,6 +30,7 @@ import type { UrgentClaimed, UrgentLive, UrgentMineRow } from "@/lib/forage/ques
 import { meStore } from "@/lib/hooks/useMe";
 import { cx } from "../ui/cx";
 import ItemIcon from "../ui/ItemIcon";
+import { watchMoreBelow } from "../ui/moreBelow";
 import ui from "../ui/ui.module.css";
 import { forageStore, useForage } from "./forageStore";
 import { questStore } from "./questStore";
@@ -70,7 +71,8 @@ export default function UrgentPanel() {
     return () => void urgentStore.refreshMine();
   }, [liveId]);
 
-  const bag = useMemo(() => state?.bag ?? {}, [state]);
+  // 11/22 긴급 의뢰도 등급을 가리지 않는다 → 대물·월척 칸도 그 종으로 합쳐 본다 (납품은 서버가 보통부터 낸다)
+  const bag = useMemo(() => speciesBag(state?.bag ?? {}), [state]);
   // 11/19 끝난 의뢰: 받은 것은 목록에서 뺀다 (방금 받은 것은 무엇을 받았는지 보이게 창을 닫을 때까지만), 받을 것이 없는 것은 끝나고 1시간까지만.
   // 안 받은 것은 받기 기한(끝나고 3일) 안에 남는다 (사용자)
   const done = (mine?.rows ?? []).filter((r) => r.done && r.mine > 0 && (r.claimed ? !!fresh[r.id] : r.reward ? true : now < r.end + URGENT_SHOW_MS));
@@ -114,7 +116,7 @@ export default function UrgentPanel() {
   if (!pub) return <p className={error ? ui.error : ui.hint}>{error ?? "긴급 의뢰를 확인하는 중…"}</p>;
 
   return (
-    <div className={u.panel}>
+    <div ref={watchMoreBelow} className={cx(u.panel, "more-fade")}>
       {live && ev && <LiveCard ev={ev} now={now} mine={myLive} cap={myCap} bag={bag} />}
       {ev && !live && now >= ev.end && !done.some((r) => r.id === ev.id) && <EndedSummary ev={ev} now={now} />}
       {done.map((row) => (

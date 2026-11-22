@@ -3,8 +3,11 @@ import { bugsCount, bugsPlan } from "../rpg/plan";
 import type { BugsResult } from "../rpg/types";
 import {
   GATHER_NODES,
+  gradable,
+  GRADE_U,
   RARITY_WEIGHT,
   SPECIES,
+  type FishGrade,
   type GatherNode,
   type LifeCat,
   type NodeKind,
@@ -54,11 +57,31 @@ export const SEA_HIGH_TIDE_LEVEL = 0.75;
 export const SEA_HIGH_TIDE_BIG = 0.3;
 export const withHighTide = (chance: number, level: number): number => (level >= SEA_HIGH_TIDE_LEVEL ? 1 - (1 - chance) * (1 - SEA_HIGH_TIDE_BIG) : chance);
 
+/** 크기 분포의 굽기 (size = lo + (hi − lo)·u^SIZE_CURVE) — 큰 것일수록 드물다 */
+const SIZE_CURVE = 1.8;
+
 /** 크기 (0.1cm 단위 정수 = cm×10). 큰 것일수록 드물다. 크기를 재지 않는 것은 0 */
 export function rollSize10(s: Species, rand: number): number {
   if (!s.size) return 0;
   const [lo, hi] = s.size;
-  return Math.round((lo + (hi - lo) * Math.pow(rand, 1.8)) * 10);
+  return Math.round((lo + (hi - lo) * Math.pow(rand, SIZE_CURVE)) * 10);
+}
+
+/** 11/22 그 등급이 되는 가장 작은 크기 (cm×10, 소수 그대로 — 크기를 재지 않는 종은 Infinity) */
+export function gradeMin10(s: Species, grade: Exclude<FishGrade, 0>): number {
+  if (!s.size) return Infinity;
+  const [lo, hi] = s.size;
+  return (lo + (hi - lo) * Math.pow(GRADE_U[grade], SIZE_CURVE)) * 10;
+}
+
+/**
+ * 11/22 물고기 크기 등급: 대물(1) = 크기 분포 위 20%, 월척(2) = 위 5% (catalog GRADE_U). 직접 낚은 것에만 쓴다 (service reelIn).
+ * 크기를 재지 않는 종·잡동사니·물고기가 아닌 것은 늘 보통(0). 칭호·만조의 「크기 한 번 더 굴리기」는 등급 확률도 그대로 올린다
+ */
+export function sizeGrade(s: Species, size10: number): FishGrade {
+  if (!gradable(s) || size10 <= 0) return 0;
+  if (size10 >= gradeMin10(s, 2)) return 2;
+  return size10 >= gradeMin10(s, 1) ? 1 : 0;
 }
 
 /**

@@ -390,7 +390,7 @@
 
   .panel > .compare {
     flex: none;
-    height: clamp(120px, 24dvh, 220px);
+    height: clamp(120px, 24dvh / var(--uz), 220px);
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-rows: minmax(0, 1fr);
     gap: 8px;

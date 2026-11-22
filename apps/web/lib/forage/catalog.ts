@@ -64,63 +64,64 @@ const W = { L: ["lake"], R: ["river"], LR: ["lake", "river"] } as const;
 const ALL_GROUND: readonly Where[] = ["forest", "meadow", "hill", "cave", "lakeside"];
 
 // ── 물고기 (40) ── 앞의 24종은 그대로 두고 뒤에 이어 붙인다 (id·값을 바꾸면 이미 잡은 도감·가방·순위가 어긋난다)
+// 11/22 운영자: 물고기 값(price)을 모두 예전의 ×1.3으로 올렸다 (반올림, .5는 올림 — 3→4, 6→8, 80→104. 바닷물고기도). 대물·월척 배수는 이 값에 곱한다
 const FISH: Species[] = [
-  { id: "f_crucian", cat: "fish", name: "월요병 붕어", rarity: 1, price: 3, where: W.LR, size: [10, 32], desc: "월요일 아침마다 유난히 잘 잡힌다. 표정이 어딘가 지쳐 있다." },
-  { id: "f_bluegill", cat: "fish", name: "블루길", rarity: 1, price: 3, where: W.L, time: ["day", "dusk"], size: [8, 22], desc: "어디서 왔는지 모르지만 이미 이 호수의 터줏대감." },
-  { id: "f_minnow", cat: "fish", name: "칼퇴 송사리", rarity: 1, price: 2, where: W.R, time: ["day", "dusk"], size: [2, 6], desc: "여섯 시 정각이 되면 쏜살같이 사라진다." },
-  { id: "f_chub", cat: "fish", name: "피라미", rarity: 1, price: 3, where: W.R, time: ["dawn", "day"], size: [6, 16], desc: "여울에서 반짝이며 떼 지어 다닌다." },
-  { id: "f_loach", cat: "fish", name: "회의 빠지는 미꾸라지", rarity: 1, price: 3, where: W.R, weather: ["cloudy", "fog", "rain"], size: [8, 20], desc: "회의 시간만 되면 손 사이로 빠져나간다." },
-  { id: "f_carp", cat: "fish", name: "잉어", rarity: 2, price: 6, where: W.L, size: [30, 85], desc: "느긋하게 헤엄치는 호수의 어른." },
-  { id: "f_catfish", cat: "fish", name: "야근 메기", rarity: 2, price: 7, where: W.LR, time: ["night"], size: [30, 95], desc: "불 꺼진 사무실 같은 밤 물에서만 입질한다." },
-  { id: "f_bass", cat: "fish", name: "배스", rarity: 2, price: 6, where: W.L, time: ["dawn", "dusk"], size: [20, 55], desc: "해가 뜨고 질 무렵 가장 배고프다." },
-  { id: "f_smelt", cat: "fish", name: "빙어", rarity: 2, price: 6, where: W.L, season: ["winter"], size: [7, 15], desc: "꽁꽁 언 겨울 호수의 은빛 손님." },
-  { id: "f_sweetfish", cat: "fish", name: "은어", rarity: 2, price: 6, where: W.R, time: ["day"], season: ["summer", "autumn"], size: [12, 25], desc: "맑은 물에서만 사는 수박 향 물고기." },
-  { id: "f_bullhead", cat: "fish", name: "퇴근길 동자개", rarity: 2, price: 6, where: W.R, time: ["dusk", "night"], season: ["summer", "autumn"], size: [15, 30], desc: "빠가빠가 우는 소리가 퇴근 지하철 안내 방송 같다." },
-  { id: "f_kkeokji", cat: "fish", name: "꺽지", rarity: 2, price: 6, where: W.R, time: ["day"], season: ["spring", "summer"], size: [10, 20], desc: "봄볕이 드는 바위 틈을 좋아한다." },
-  { id: "f_mandarin", cat: "fish", name: "쏘가리", rarity: 3, price: 14, where: W.R, time: ["dawn", "dusk"], weather: ["clear", "cloudy"], size: [20, 50], desc: "강의 호랑이. 줄무늬 정장이 잘 어울린다." },
-  { id: "f_rainbow", cat: "fish", name: "무지개송어", rarity: 3, price: 14, where: W.L, weather: ["rain", "fog"], size: [25, 60], desc: "비 오는 날이면 비늘에 무지개가 뜬다." },
-  { id: "f_eel", cat: "fish", name: "마감 장어", rarity: 3, price: 16, where: W.R, time: ["night"], weather: ["rain"], size: [40, 100], desc: "마감 전날 밤, 비가 오면 꿈틀대며 올라온다." },
-  { id: "f_snakehead", cat: "fish", name: "결재 가물치", rarity: 3, price: 15, where: W.L, time: ["day", "dusk"], season: ["summer", "autumn"], size: [40, 90], desc: "한번 물면 결재가 날 때까지 놓지 않는다." },
-  { id: "f_trout", cat: "fish", name: "산천어", rarity: 3, price: 14, where: W.R, time: ["day"], season: ["winter"], size: [20, 40], desc: "눈 녹은 찬물에서만 잡히는 겨울 손님." },
-  { id: "f_koi", cat: "fish", name: "보너스 금잉어", rarity: 4, price: 32, where: W.L, time: ["day"], weather: ["clear"], size: [40, 90], desc: "맑은 날에만 금빛으로 반짝인다. 1년에 한 번 볼까 말까." },
-  { id: "f_salmon", cat: "fish", name: "귀향 연어", rarity: 4, price: 34, where: W.R, time: ["dawn"], season: ["autumn"], size: [50, 90], desc: "가을 새벽, 명절처럼 고향 강으로 돌아온다." },
-  { id: "f_sturgeon", cat: "fish", name: "철갑상어", rarity: 4, price: 36, where: W.L, time: ["night"], weather: ["fog"], size: [100, 220], desc: "안개 낀 밤 호수 바닥에서 올라오는 고대의 물고기." },
-  { id: "f_king", cat: "fish", name: "정시퇴근 잉어왕", rarity: 5, price: 80, where: W.L, time: ["dusk"], weather: ["clear"], size: [90, 150], desc: "전설. 맑은 날 해질녘, 딱 퇴근 시간에만 나타난다는 소문." },
-  { id: "f_moon", cat: "fish", name: "새벽 달빛 송어", rarity: 5, price: 80, where: W.R, time: ["dawn"], weather: ["fog"], size: [40, 70], desc: "안개 낀 새벽에만 비치는 달빛 비늘. 본 사람이 거의 없다." },
+  { id: "f_crucian", cat: "fish", name: "월요병 붕어", rarity: 1, price: 4, where: W.LR, size: [10, 32], desc: "월요일 아침마다 유난히 잘 잡힌다. 표정이 어딘가 지쳐 있다." },
+  { id: "f_bluegill", cat: "fish", name: "블루길", rarity: 1, price: 4, where: W.L, time: ["day", "dusk"], size: [8, 22], desc: "어디서 왔는지 모르지만 이미 이 호수의 터줏대감." },
+  { id: "f_minnow", cat: "fish", name: "칼퇴 송사리", rarity: 1, price: 3, where: W.R, time: ["day", "dusk"], size: [2, 6], desc: "여섯 시 정각이 되면 쏜살같이 사라진다." },
+  { id: "f_chub", cat: "fish", name: "피라미", rarity: 1, price: 4, where: W.R, time: ["dawn", "day"], size: [6, 16], desc: "여울에서 반짝이며 떼 지어 다닌다." },
+  { id: "f_loach", cat: "fish", name: "회의 빠지는 미꾸라지", rarity: 1, price: 4, where: W.R, weather: ["cloudy", "fog", "rain"], size: [8, 20], desc: "회의 시간만 되면 손 사이로 빠져나간다." },
+  { id: "f_carp", cat: "fish", name: "잉어", rarity: 2, price: 8, where: W.L, size: [30, 85], desc: "느긋하게 헤엄치는 호수의 어른." },
+  { id: "f_catfish", cat: "fish", name: "야근 메기", rarity: 2, price: 9, where: W.LR, time: ["night"], size: [30, 95], desc: "불 꺼진 사무실 같은 밤 물에서만 입질한다." },
+  { id: "f_bass", cat: "fish", name: "배스", rarity: 2, price: 8, where: W.L, time: ["dawn", "dusk"], size: [20, 55], desc: "해가 뜨고 질 무렵 가장 배고프다." },
+  { id: "f_smelt", cat: "fish", name: "빙어", rarity: 2, price: 8, where: W.L, season: ["winter"], size: [7, 15], desc: "꽁꽁 언 겨울 호수의 은빛 손님." },
+  { id: "f_sweetfish", cat: "fish", name: "은어", rarity: 2, price: 8, where: W.R, time: ["day"], season: ["summer", "autumn"], size: [12, 25], desc: "맑은 물에서만 사는 수박 향 물고기." },
+  { id: "f_bullhead", cat: "fish", name: "퇴근길 동자개", rarity: 2, price: 8, where: W.R, time: ["dusk", "night"], season: ["summer", "autumn"], size: [15, 30], desc: "빠가빠가 우는 소리가 퇴근 지하철 안내 방송 같다." },
+  { id: "f_kkeokji", cat: "fish", name: "꺽지", rarity: 2, price: 8, where: W.R, time: ["day"], season: ["spring", "summer"], size: [10, 20], desc: "봄볕이 드는 바위 틈을 좋아한다." },
+  { id: "f_mandarin", cat: "fish", name: "쏘가리", rarity: 3, price: 18, where: W.R, time: ["dawn", "dusk"], weather: ["clear", "cloudy"], size: [20, 50], desc: "강의 호랑이. 줄무늬 정장이 잘 어울린다." },
+  { id: "f_rainbow", cat: "fish", name: "무지개송어", rarity: 3, price: 18, where: W.L, weather: ["rain", "fog"], size: [25, 60], desc: "비 오는 날이면 비늘에 무지개가 뜬다." },
+  { id: "f_eel", cat: "fish", name: "마감 장어", rarity: 3, price: 21, where: W.R, time: ["night"], weather: ["rain"], size: [40, 100], desc: "마감 전날 밤, 비가 오면 꿈틀대며 올라온다." },
+  { id: "f_snakehead", cat: "fish", name: "결재 가물치", rarity: 3, price: 20, where: W.L, time: ["day", "dusk"], season: ["summer", "autumn"], size: [40, 90], desc: "한번 물면 결재가 날 때까지 놓지 않는다." },
+  { id: "f_trout", cat: "fish", name: "산천어", rarity: 3, price: 18, where: W.R, time: ["day"], season: ["winter"], size: [20, 40], desc: "눈 녹은 찬물에서만 잡히는 겨울 손님." },
+  { id: "f_koi", cat: "fish", name: "보너스 금잉어", rarity: 4, price: 42, where: W.L, time: ["day"], weather: ["clear"], size: [40, 90], desc: "맑은 날에만 금빛으로 반짝인다. 1년에 한 번 볼까 말까." },
+  { id: "f_salmon", cat: "fish", name: "귀향 연어", rarity: 4, price: 44, where: W.R, time: ["dawn"], season: ["autumn"], size: [50, 90], desc: "가을 새벽, 명절처럼 고향 강으로 돌아온다." },
+  { id: "f_sturgeon", cat: "fish", name: "철갑상어", rarity: 4, price: 47, where: W.L, time: ["night"], weather: ["fog"], size: [100, 220], desc: "안개 낀 밤 호수 바닥에서 올라오는 고대의 물고기." },
+  { id: "f_king", cat: "fish", name: "정시퇴근 잉어왕", rarity: 5, price: 104, where: W.L, time: ["dusk"], weather: ["clear"], size: [90, 150], desc: "전설. 맑은 날 해질녘, 딱 퇴근 시간에만 나타난다는 소문." },
+  { id: "f_moon", cat: "fish", name: "새벽 달빛 송어", rarity: 5, price: 104, where: W.R, time: ["dawn"], weather: ["fog"], size: [40, 70], desc: "안개 낀 새벽에만 비치는 달빛 비늘. 본 사람이 거의 없다." },
   { id: "f_shoe", cat: "fish", name: "출근 구두 한 짝", rarity: 1, price: 1, where: W.LR, junk: true, weight: 12, desc: "누가 강으로 출근했나 보다." },
-  { id: "f_badge", cat: "fish", name: "잃어버린 사원증", rarity: 2, price: 2, where: W.LR, weather: ["rain", "fog", "cloudy"], junk: true, weight: 5, desc: "사진 속 얼굴이 묘하게 낯익다." },
+  { id: "f_badge", cat: "fish", name: "잃어버린 사원증", rarity: 2, price: 3, where: W.LR, weather: ["rain", "fog", "cloudy"], junk: true, weight: 5, desc: "사진 속 얼굴이 묘하게 낯익다." },
   // 2차 (16) — 계절·날씨·새벽에 고루 흩어 둔다
-  { id: "f_bitterling", cat: "fish", name: "납자루", rarity: 1, price: 3, where: W.R, time: ["day"], season: ["spring", "summer"], size: [4, 9], desc: "조개 속에 알을 맡긴다. 전세 계약서도 없이." },
-  { id: "f_willow", cat: "fish", name: "버들치", rarity: 1, price: 3, where: W.R, time: ["dawn", "day"], size: [6, 13], desc: "계곡 찬물에서 누구보다 먼저 출근한다." },
-  { id: "f_goby", cat: "fish", name: "밀어", rarity: 1, price: 2, where: W.L, time: ["dusk", "night"], size: [3, 7], desc: "바닥에 붙어 소곤소곤. 이름처럼 비밀 이야기를 좋아한다." },
-  { id: "f_skygazer", cat: "fish", name: "강준치", rarity: 2, price: 6, where: W.L, time: ["dusk"], season: ["summer"], size: [30, 80], desc: "입이 하늘을 향해 있다. 늘 위만 본다." },
-  { id: "f_nuchi", cat: "fish", name: "누치", rarity: 2, price: 6, where: W.R, time: ["day"], season: ["spring", "summer"], size: [20, 50], desc: "큰 몸집에 순한 얼굴. 여울을 천천히 거슬러 오른다." },
-  { id: "f_lunchcarp", cat: "fish", name: "점심시간 떡붕어", rarity: 2, price: 7, where: W.L, time: ["day"], weather: ["clear", "cloudy"], size: [20, 45], desc: "열두 시 정각이면 물 위로 입을 뻐끔댄다." },
-  { id: "f_grasscarp", cat: "fish", name: "초어", rarity: 2, price: 6, where: W.L, time: ["day", "dusk"], season: ["spring", "summer"], size: [40, 100], desc: "풀만 먹고도 1미터. 꾸준함의 힘." },
-  { id: "f_report", cat: "fish", name: "물 먹은 보고서", rarity: 2, price: 2, where: W.R, weather: ["rain"], junk: true, weight: 4, desc: "결재란이 빗물에 번져 아무도 읽을 수 없다." },
-  { id: "f_lenok", cat: "fish", name: "열목어", rarity: 3, price: 15, where: W.R, time: ["dawn", "day"], season: ["summer"], size: [30, 70], desc: "눈이 빨갛다. 밤새 보고서를 쓴 사람처럼." },
-  { id: "f_miyugi", cat: "fish", name: "미유기", rarity: 3, price: 14, where: W.R, time: ["night"], season: ["autumn", "winter"], size: [15, 30], desc: "산골 계곡의 작은 메기. 찬 바람이 불면 수염을 세운다." },
-  { id: "f_ungeo", cat: "fish", name: "웅어", rarity: 3, price: 14, where: W.R, time: ["dawn"], season: ["spring"], size: [20, 30], desc: "봄 새벽, 은빛 칼처럼 번쩍이며 강을 거슬러 온다." },
-  { id: "f_whitefish", cat: "fish", name: "백조어", rarity: 3, price: 14, where: W.L, time: ["dawn", "dusk"], weather: ["fog", "cloudy"], size: [15, 35], desc: "백조처럼 흰 몸. 흐리거나 안개 낀 호수를 미끄러지듯 지난다." },
-  { id: "f_goldmandarin", cat: "fish", name: "황쏘가리", rarity: 4, price: 34, where: W.R, time: ["dusk"], weather: ["clear", "cloudy"], season: ["summer"], size: [25, 50], desc: "천연기념물. 여름 해질녘 금빛 줄무늬가 번뜩인다." },
-  { id: "f_huchen", cat: "fish", name: "자치", rarity: 4, price: 36, where: W.R, time: ["dawn", "day"], weather: ["snow"], season: ["winter"], size: [60, 120], desc: "눈 내리는 겨울 강의 은둔자. 사라졌다고들 했다." },
-  { id: "f_ghostcarp", cat: "fish", name: "묘역 유령 잉어", rarity: 4, price: 34, where: W.L, time: ["dusk", "night"], weather: ["cloudy", "rain"], season: ["autumn"], size: [40, 90], desc: "비늘 너머가 비쳐 보인다. 끝내지 못한 낚시가 있었나 보다." },
-  { id: "f_dragon", cat: "fish", name: "승진 용잉어", rarity: 5, price: 80, where: W.L, time: ["dawn"], weather: ["snow"], season: ["winter"], size: [80, 140], desc: "전설. 등용문을 넘은 잉어. 눈 오는 겨울 새벽에만 비늘을 보인다." },
+  { id: "f_bitterling", cat: "fish", name: "납자루", rarity: 1, price: 4, where: W.R, time: ["day"], season: ["spring", "summer"], size: [4, 9], desc: "조개 속에 알을 맡긴다. 전세 계약서도 없이." },
+  { id: "f_willow", cat: "fish", name: "버들치", rarity: 1, price: 4, where: W.R, time: ["dawn", "day"], size: [6, 13], desc: "계곡 찬물에서 누구보다 먼저 출근한다." },
+  { id: "f_goby", cat: "fish", name: "밀어", rarity: 1, price: 3, where: W.L, time: ["dusk", "night"], size: [3, 7], desc: "바닥에 붙어 소곤소곤. 이름처럼 비밀 이야기를 좋아한다." },
+  { id: "f_skygazer", cat: "fish", name: "강준치", rarity: 2, price: 8, where: W.L, time: ["dusk"], season: ["summer"], size: [30, 80], desc: "입이 하늘을 향해 있다. 늘 위만 본다." },
+  { id: "f_nuchi", cat: "fish", name: "누치", rarity: 2, price: 8, where: W.R, time: ["day"], season: ["spring", "summer"], size: [20, 50], desc: "큰 몸집에 순한 얼굴. 여울을 천천히 거슬러 오른다." },
+  { id: "f_lunchcarp", cat: "fish", name: "점심시간 떡붕어", rarity: 2, price: 9, where: W.L, time: ["day"], weather: ["clear", "cloudy"], size: [20, 45], desc: "열두 시 정각이면 물 위로 입을 뻐끔댄다." },
+  { id: "f_grasscarp", cat: "fish", name: "초어", rarity: 2, price: 8, where: W.L, time: ["day", "dusk"], season: ["spring", "summer"], size: [40, 100], desc: "풀만 먹고도 1미터. 꾸준함의 힘." },
+  { id: "f_report", cat: "fish", name: "물 먹은 보고서", rarity: 2, price: 3, where: W.R, weather: ["rain"], junk: true, weight: 4, desc: "결재란이 빗물에 번져 아무도 읽을 수 없다." },
+  { id: "f_lenok", cat: "fish", name: "열목어", rarity: 3, price: 20, where: W.R, time: ["dawn", "day"], season: ["summer"], size: [30, 70], desc: "눈이 빨갛다. 밤새 보고서를 쓴 사람처럼." },
+  { id: "f_miyugi", cat: "fish", name: "미유기", rarity: 3, price: 18, where: W.R, time: ["night"], season: ["autumn", "winter"], size: [15, 30], desc: "산골 계곡의 작은 메기. 찬 바람이 불면 수염을 세운다." },
+  { id: "f_ungeo", cat: "fish", name: "웅어", rarity: 3, price: 18, where: W.R, time: ["dawn"], season: ["spring"], size: [20, 30], desc: "봄 새벽, 은빛 칼처럼 번쩍이며 강을 거슬러 온다." },
+  { id: "f_whitefish", cat: "fish", name: "백조어", rarity: 3, price: 18, where: W.L, time: ["dawn", "dusk"], weather: ["fog", "cloudy"], size: [15, 35], desc: "백조처럼 흰 몸. 흐리거나 안개 낀 호수를 미끄러지듯 지난다." },
+  { id: "f_goldmandarin", cat: "fish", name: "황쏘가리", rarity: 4, price: 44, where: W.R, time: ["dusk"], weather: ["clear", "cloudy"], season: ["summer"], size: [25, 50], desc: "천연기념물. 여름 해질녘 금빛 줄무늬가 번뜩인다." },
+  { id: "f_huchen", cat: "fish", name: "자치", rarity: 4, price: 47, where: W.R, time: ["dawn", "day"], weather: ["snow"], season: ["winter"], size: [60, 120], desc: "눈 내리는 겨울 강의 은둔자. 사라졌다고들 했다." },
+  { id: "f_ghostcarp", cat: "fish", name: "묘역 유령 잉어", rarity: 4, price: 44, where: W.L, time: ["dusk", "night"], weather: ["cloudy", "rain"], season: ["autumn"], size: [40, 90], desc: "비늘 너머가 비쳐 보인다. 끝내지 못한 낚시가 있었나 보다." },
+  { id: "f_dragon", cat: "fish", name: "승진 용잉어", rarity: 5, price: 104, where: W.L, time: ["dawn"], weather: ["snow"], season: ["winter"], size: [80, 140], desc: "전설. 등용문을 넘은 잉어. 눈 오는 겨울 새벽에만 비늘을 보인다." },
 ];
 
 // ── 11/16 바닷물고기 (10) ── 달물결 포구 갯바위·선착장 끝에서만 (where "sea"). 도감은 물고기 칸에 같이 들어가요 (물고기 50종).
-// 만조 앞뒤엔 큰 놈이 더 잘 물어요 (lib/forage/service castLine — 크기 한 번 더 굴리기)
+// 만조 앞뒤엔 큰 놈이 더 잘 물어요 (lib/forage/service castLine — 크기 한 번 더 굴리기). 11/22 값은 위 물고기처럼 ×1.3
 const SEA_FISH: Species[] = [
-  { id: "f_mackerel", cat: "fish", name: "고등어", rarity: 1, price: 3, where: ["sea"], size: [20, 42], desc: "등이 새파랗다. 월요일 아침 출근길 얼굴빛." },
-  { id: "f_horsemack", cat: "fish", name: "전갱이", rarity: 1, price: 3, where: ["sea"], time: ["day", "dusk", "night"], size: [15, 35], desc: "떼 지어 몰려다닌다. 점심시간 구내식당 줄처럼." },
-  { id: "f_rockfish", cat: "fish", name: "우럭", rarity: 2, price: 6, where: ["sea"], time: ["dusk", "night", "dawn"], size: [20, 50], desc: "바위 틈에 숨어 입만 크다. 회의 때 목소리만 큰 사람 같다." },
-  { id: "f_flounder", cat: "fish", name: "광어", rarity: 2, price: 7, where: ["sea"], time: ["dawn", "day"], size: [30, 80], desc: "두 눈이 한쪽에 몰려 있다. 모니터 두 대를 한 번에 본다." },
-  { id: "f_mullet", cat: "fish", name: "숭어", rarity: 2, price: 6, where: ["sea"], size: [30, 70], desc: "툭하면 물 위로 뛰어오른다. 금요일 오후의 기분." },
-  { id: "f_redbream", cat: "fish", name: "참돔", rarity: 3, price: 15, where: ["sea"], time: ["dawn", "dusk"], weather: ["clear", "cloudy"], size: [30, 90], desc: "분홍 비늘에 파란 점. 회식 자리 상석은 늘 이 녀석 차지." },
-  { id: "f_cuttle", cat: "fish", name: "갑오징어", rarity: 3, price: 14, where: ["sea"], time: ["dusk", "night"], size: [15, 35], desc: "놀라면 먹물을 뿜고 사라진다. 결재 서류에 커피를 쏟은 날처럼." },
-  { id: "f_octopus", cat: "fish", name: "문어", rarity: 3, price: 16, where: ["sea"], weather: ["cloudy", "fog", "rain"], size: [40, 150], desc: "팔이 여덟 개. 여덟 가지 일을 한꺼번에 해낸다." },
-  { id: "f_yellowtail", cat: "fish", name: "대방어", rarity: 4, price: 34, where: ["sea"], time: ["dawn", "day"], season: ["autumn", "winter"], size: [70, 120], desc: "찬 바다의 주인. 연말 보너스처럼 기름이 잔뜩 올랐다." },
-  { id: "f_whalescale", cat: "fish", name: "유령 고래 비늘", rarity: 5, price: 80, where: ["sea"], time: ["night"], weather: ["fog"], desc: "전설. 안개 낀 밤 먼바다에서 떠오른 커다란 은빛 비늘. 고래를 본 사람은 아직 없다." },
+  { id: "f_mackerel", cat: "fish", name: "고등어", rarity: 1, price: 4, where: ["sea"], size: [20, 42], desc: "등이 새파랗다. 월요일 아침 출근길 얼굴빛." },
+  { id: "f_horsemack", cat: "fish", name: "전갱이", rarity: 1, price: 4, where: ["sea"], time: ["day", "dusk", "night"], size: [15, 35], desc: "떼 지어 몰려다닌다. 점심시간 구내식당 줄처럼." },
+  { id: "f_rockfish", cat: "fish", name: "우럭", rarity: 2, price: 8, where: ["sea"], time: ["dusk", "night", "dawn"], size: [20, 50], desc: "바위 틈에 숨어 입만 크다. 회의 때 목소리만 큰 사람 같다." },
+  { id: "f_flounder", cat: "fish", name: "광어", rarity: 2, price: 9, where: ["sea"], time: ["dawn", "day"], size: [30, 80], desc: "두 눈이 한쪽에 몰려 있다. 모니터 두 대를 한 번에 본다." },
+  { id: "f_mullet", cat: "fish", name: "숭어", rarity: 2, price: 8, where: ["sea"], size: [30, 70], desc: "툭하면 물 위로 뛰어오른다. 금요일 오후의 기분." },
+  { id: "f_redbream", cat: "fish", name: "참돔", rarity: 3, price: 20, where: ["sea"], time: ["dawn", "dusk"], weather: ["clear", "cloudy"], size: [30, 90], desc: "분홍 비늘에 파란 점. 회식 자리 상석은 늘 이 녀석 차지." },
+  { id: "f_cuttle", cat: "fish", name: "갑오징어", rarity: 3, price: 18, where: ["sea"], time: ["dusk", "night"], size: [15, 35], desc: "놀라면 먹물을 뿜고 사라진다. 결재 서류에 커피를 쏟은 날처럼." },
+  { id: "f_octopus", cat: "fish", name: "문어", rarity: 3, price: 21, where: ["sea"], weather: ["cloudy", "fog", "rain"], size: [40, 150], desc: "팔이 여덟 개. 여덟 가지 일을 한꺼번에 해낸다." },
+  { id: "f_yellowtail", cat: "fish", name: "대방어", rarity: 4, price: 44, where: ["sea"], time: ["dawn", "day"], season: ["autumn", "winter"], size: [70, 120], desc: "찬 바다의 주인. 연말 보너스처럼 기름이 잔뜩 올랐다." },
+  { id: "f_whalescale", cat: "fish", name: "유령 고래 비늘", rarity: 5, price: 104, where: ["sea"], time: ["night"], weather: ["fog"], desc: "전설. 안개 낀 밤 먼바다에서 떠오른 커다란 은빛 비늘. 고래를 본 사람은 아직 없다." },
 ];
 
 // ── 곤충 (30) ── 수풀에서 벌레 잡기 미니게임으로 (낮: 나비·잠자리 / 밤: 반딧불이)
@@ -484,6 +485,70 @@ export const BAG_MAX = 300;
 export const bagCount = (bag: Record<string, number> | undefined): number => Object.values(bag ?? {}).reduce((n, v) => n + Math.max(0, v), 0);
 // 11/19 하루에 잡을·캘 수 있는 수 한도(물고기 150·채집 200)는 없앴다. 자동화 막이는 시간당 시작 수(service FORAGE_STARTS_PER_HOUR)·
 // 티켓 검사·감기 최소 시간·채집 지점 창(한 지점 10분에 한 번)이 한다
+
+// ── 11/22 물고기 크기 등급 (대물·월척) ──
+// 직접 낚은 물고기만 크기로 등급이 붙는다 (lib/forage/rules sizeGrade — 자동 낚시·가라앉은 보물·채집은 늘 보통).
+// 가방에는 등급마다 따로 쌓인다: 보통 = 종 id 그대로, 대물 = `${종}~1`, 월척 = `${종}~2` (종 id에는 "~"가 없고, "@"는 가방에 들어가지 않는 자리).
+// 한 칸 STACK_MAX·가방 전체 BAG_MAX는 그대로 (등급 칸도 한 칸). 팔 때 값은 등급 배수 (gradedPrice), 의뢰 납품은 등급을 가리지 않고 보통부터 낸다
+export type FishGrade = 0 | 1 | 2;
+export const GRADE_LABEL: Record<FishGrade, string> = { 0: "보통", 1: "대물", 2: "월척" };
+/** 파는 값 배수 */
+export const GRADE_MULT: Record<FishGrade, number> = { 0: 1, 1: 1.5, 2: 2.5 };
+/** 등급 문턱 (크기 분포의 난수 자리 u — 대물 = 위 20%, 월척 = 위 5%) */
+export const GRADE_U: Record<Exclude<FishGrade, 0>, number> = { 1: 0.8, 2: 0.95 };
+const GRADE_SEP = "~";
+/** 가방 칸 id (보통은 종 id 그대로) */
+export const bagIdOf = (id: string, grade: FishGrade = 0): string => (grade > 0 ? `${id}${GRADE_SEP}${grade}` : id);
+/** 가방 칸 id → 종 id */
+export const baseIdOf = (bagId: string): string => {
+  const i = bagId.indexOf(GRADE_SEP);
+  return i < 0 ? bagId : bagId.slice(0, i);
+};
+/** 가방 칸 id → 등급 (모르는 꼬리는 보통) */
+export const gradeOf = (bagId: string): FishGrade => {
+  const g = bagId.slice(bagId.indexOf(GRADE_SEP) + 1);
+  return bagId.includes(GRADE_SEP) && (g === "1" || g === "2") ? (Number(g) as FishGrade) : 0;
+};
+/** 등급이 붙을 수 있는 종 (크기를 재는 물고기 — 잡동사니 제외) */
+export const gradable = (s: Species): boolean => s.cat === "fish" && !!s.size && !s.junk;
+/** 가방 칸 id의 종 (모르는 id·등급이 붙을 수 없는 종에 붙은 등급이면 undefined) */
+export function bagSpecies(bagId: string): Species | undefined {
+  const s = speciesById(baseIdOf(bagId));
+  if (!s) return undefined;
+  if (bagId === s.id) return s;
+  return gradable(s) && bagId === bagIdOf(s.id, gradeOf(bagId)) && gradeOf(bagId) > 0 ? s : undefined;
+}
+/** 가방에 있을 수 있는 칸 id 전부 (판매 입력 검사용) */
+export const BAG_IDS: readonly string[] = SPECIES.flatMap((s) => (gradable(s) ? [s.id, bagIdOf(s.id, 1), bagIdOf(s.id, 2)] : [s.id]));
+/** 안내 창·가이드에 쓰는 한 줄 (lib/economy 물고기 팔기 설명도 같은 말 — forage.test가 맞춰 본다) */
+export const GRADE_PRICE_NOTE = `직접 낚은 대물은 ${GRADE_MULT[1]}배, 월척은 ${GRADE_MULT[2]}배로 팔려요. 자동 낚시로 낚은 건 보통 값이에요.`;
+/** 한 개 파는 값 (반올림) — 예) 3P 대물 = round(4.5) = 5P, 3P 월척 = round(7.5) = 8P */
+export const gradedPrice = (s: Species, grade: FishGrade): number => Math.round(s.price * GRADE_MULT[grade]);
+/** 그 종의 가방 칸들 (꺼내는 차례: 보통 → 대물 → 월척) */
+export const bagIdsOfSpecies = (id: string): string[] => [id, bagIdOf(id, 1), bagIdOf(id, 2)];
+/** 가방을 종 단위로 합친다 (의뢰 진행·납품 고르기처럼 등급을 가리지 않는 곳) */
+export function speciesBag(bag: Readonly<Record<string, number>>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [id, n] of Object.entries(bag)) if (n > 0) out[baseIdOf(id)] = (out[baseIdOf(id)] ?? 0) + n;
+  return out;
+}
+/**
+ * 종 단위 개수(items: 종 id → 개수)를 가방 칸 단위로 (보통부터, 그다음 대물·월척). 모자라면 null.
+ * 서버 납품(메모리 저장소 — Redis는 store BAG_TAKE_LUA가 같은 차례)과 화면의 가방 사본이 같이 쓴다
+ */
+export function takePlan(bag: Readonly<Record<string, number>>, items: Readonly<Record<string, number>>): Record<string, number> | null {
+  const out: Record<string, number> = {};
+  for (const [id, want] of Object.entries(items)) {
+    let left = want;
+    for (const k of bagIdsOfSpecies(baseIdOf(id))) {
+      const t = Math.min(left, Math.max(0, (bag[k] ?? 0) - (out[k] ?? 0)));
+      if (t > 0) out[k] = (out[k] ?? 0) + t;
+      left -= Math.max(0, t);
+    }
+    if (left > 0) return null;
+  }
+  return out;
+}
 
 // ── 도감 칸 ── 잡는 것(LifeCat) + 별자리 + 11/16 몬스터. 별자리·몬스터는 별자리 잇기·사냥으로 모으는 도감 표시용 칸이라
 // 가방·NPC 판매·상점 값과는 상관없다 (LifeCat을 넓히지 않는다 — 판매·가방 코드는 LifeCat·SPECIES만 본다).

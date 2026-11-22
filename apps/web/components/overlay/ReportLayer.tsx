@@ -10,6 +10,7 @@ import { reportStore, submitReport, useReportTarget, type ReportTarget } from "@
 import { CHAT_LOG_TTL_MS } from "@/game/logic/chatLog";
 import { whisperPrefill } from "@/game/logic/whisper";
 import { REPORT_MEMO_MAX, USER_REPORT_REASON_LABELS, USER_REPORT_REASONS, type UserReportReason } from "@/lib/reports";
+import { toUi } from "@/lib/uiScale";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
@@ -47,8 +48,10 @@ export default function ReportLayer() {
     return () => window.removeEventListener("pointerup", onUp, true);
   }, []);
   useBridgeEvent("peer:menu", (m) => {
-    const { x, y } = pointer.current;
-    setMenu({ ...m, x: Math.max(8, Math.min(x + 8, window.innerWidth - MENU_W - 8)), y: Math.max(8, Math.min(y - 12, window.innerHeight - MENU_H - 8)) });
+    // 11/22 화면 px(포인터·창 크기) → 큰 화면 HUD 배율(zoom) 안의 CSS px (lib/uiScale)
+    const x = toUi(pointer.current.x);
+    const y = toUi(pointer.current.y);
+    setMenu({ ...m, x: Math.max(8, Math.min(x + 8, toUi(window.innerWidth) - MENU_W - 8)), y: Math.max(8, Math.min(y - 12, toUi(window.innerHeight) - MENU_H - 8)) });
   });
   // 메뉴 밖을 누르거나 ESC면 닫는다
   useEffect(() => {

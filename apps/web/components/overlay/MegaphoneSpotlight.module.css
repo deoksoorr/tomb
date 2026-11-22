@@ -3,7 +3,8 @@
 .layer {
   position: fixed;
   z-index: 5;
-  top: 22vh;
+  /* 11/22 긴급 의뢰 막대·칩(--urgent-h, UrgentHud)이 떠 있으면 그 밑에서 시작 (낮은 화면에서 막대를 덮었다) */
+  top: max(var(--spot-top, 22vh / var(--uz)), calc(var(--safe-top) + var(--top-h) + var(--urgent-h, 0px) + 6px));
   left: 0;
   right: 0;
   display: flex;
@@ -141,7 +142,7 @@
 /* 폰: 위쪽 바·확성기 기록 아래, 캐릭터보다 위 */
 @media (max-width: 560px) {
   .layer {
-    top: 30vh;
+    --spot-top: calc(30vh / var(--uz));
   }
 
   .spot {
@@ -160,11 +161,38 @@
 /* 낮은 화면(가로로 든 폰 등): 위쪽에 바짝 */
 @media (max-height: 500px) {
   .layer {
-    top: 16vh;
+    --spot-top: calc(16vh / var(--uz));
   }
 
   .text {
     font-size: 16px;
+  }
+}
+
+/* 11/22 데스크톱: 가운데 긴급 의뢰 자리 밑에서 시작하고(위 .layer top), 폭은 왼쪽 고정 소식·기록 칸(--left-col-w)을 양쪽에서 비운 만큼 (--spot-w, globals.css).
+   낮은 화면에서 왼쪽 소식 줄을 덮었다. 넓은 화면은 예전처럼 560px */
+@media not all and (pointer: coarse) {
+  /* 11/22 큰 화면에서 22vh면 긴급 막대 밑 200px쯤 떠 있었다 → 어느 크기든 긴급 의뢰 자리(없으면 위 줄) 바로 밑 10px.
+     --urgent-h = 위 줄 밑 10px + 막대 높이 (UrgentHud). 폭(--spot-w)이 왼쪽 칸을 비워 왼쪽 소식·기록과도 겹치지 않는다 */
+  .layer {
+    top: calc(var(--safe-top) + var(--top-h) + var(--urgent-h, 0px) + 10px);
+  }
+
+  .spot {
+    width: min(var(--spot-w), 100%);
+  }
+
+  /* 좁아진 알림에서 낱말 가운데가 아니라 띄어쓰기에서 줄을 바꾼다 */
+  .text {
+    word-break: keep-all;
+  }
+}
+
+/* 11/22 터치 화면(폰·태블릿): 왼쪽 위 칩 묶음(TopLeftCluster) 맨 아래(--tl-bottom)보다 위로는 올라가지 않는다 — 칩을 가리지 않게.
+   가로 폰은 칩 묶음이 두 줄 이하라 아래 조작 단추 위에 들어간다 */
+@media (pointer: coarse) {
+  .layer {
+    top: max(var(--spot-top, 22vh / var(--uz)), calc(var(--safe-top) + var(--top-h) + var(--top-gap)), calc(var(--tl-bottom, 0px) + 10px));
   }
 }
 

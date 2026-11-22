@@ -14,6 +14,7 @@ import { chairShopDiscount } from "@/lib/chairPerks";
 import { discountedPrice, equippedPerk } from "@/lib/titles";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
+import { useMoreBelowRef } from "../ui/moreBelow";
 import ui from "../ui/ui.module.css";
 import styles from "./housing.module.css";
 import { fmt, FurnitureStage, FurnitureThumb } from "./parts";
@@ -67,6 +68,8 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
   const [pending, setPending] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  // 11/22 목록 격자·자세히 보기 칸이 창의 바깥 스크롤 → 아래에 더 있으면 맨 아래를 흐리게 (more-fade)
+  const listMore = useMoreBelowRef(listRef);
   const id = useId();
 
   // 큰 미리보기: 돌린 방향(고른 물건이 바뀌면 처음 방향)·낮밤·잔물결 장면
@@ -90,6 +93,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
   // 데스크톱: 왼쪽 자세히 보기가 스크롤 없이 들어가게 미리보기 칸 높이를 남은 높이에 맞춘다
   // (창이 낮은 화면·브라우저 확대에서는 미리보기 배율이 저절로 한 단계씩 줄어든다)
   const detailRef = useRef<HTMLElement>(null);
+  const detailMore = useMoreBelowRef(detailRef);
   const [stageFit, setStageFit] = useState(STAGE_MAX_H);
   const shownId = shown?.id;
   useLayoutEffect(() => {
@@ -169,7 +173,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
     const sw = phone ? 140 : 216;
     const sh = phone ? 140 : stageFit;
     return (
-      <section ref={detailRef} className={styles.fsDetail} aria-label="자세히 보기">
+      <section ref={detailMore} className={cx(styles.fsDetail, "more-fade")} aria-label="자세히 보기">
         <div className={styles.fsStageWrap} data-stage-wrap="">
           <div className={styles.fsStage} data-stage="" data-night={night || undefined}>
             <FurnitureStage itemId={f.id} w={sw} h={sh} r={r} night={night} frame={reduced ? 0 : frame} />
@@ -300,7 +304,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
         </div>
         <div id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-${cat}`} className={styles.fsPanel}>
           {shown && detail(shown)}
-          <ul ref={listRef} className={styles.fsGrid} aria-label={`${CATEGORY_LABELS[cat]} 목록`}>
+          <ul ref={listMore} className={cx(styles.fsGrid, "more-fade")} aria-label={`${CATEGORY_LABELS[cat]} 목록`}>
             {items.map((f) => {
               const owned = (my.inventory[f.id] ?? 0) + (my.away?.[f.id] ?? 0);
               return (

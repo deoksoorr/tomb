@@ -6,6 +6,7 @@ import { bridge } from "@/game/bridge";
 import { isTouchUi } from "@/game/input/keyHint";
 import { emoteDataUrl } from "@/game/sprites/emotes";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
+import { toUi } from "@/lib/uiScale";
 import { cx } from "../ui/cx";
 import styles from "./ExprRadial.module.css";
 import { favLabel, sendFav, slotOf, useFavs, type FavKey } from "./sayFavorites";
@@ -81,10 +82,11 @@ export default function ExprRadial({ onClose }: { onClose: () => void }) {
   const n = favs.length;
   const R = radiusFor(n);
   const pad = R + EDGE;
-  const vw = typeof window === "undefined" ? 0 : window.innerWidth;
-  const vh = typeof window === "undefined" ? 0 : window.innerHeight;
-  const cxp = Math.max(pad, Math.min(pos.x, vw - pad));
-  const cyp = Math.max(pad, Math.min(pos.y, vh - pad));
+  // 11/22 화면 px(내 캐릭터 화면 위치·창 크기) → 큰 화면 HUD 배율(zoom) 안의 CSS px (lib/uiScale)
+  const vw = typeof window === "undefined" ? 0 : toUi(window.innerWidth);
+  const vh = typeof window === "undefined" ? 0 : toUi(window.innerHeight);
+  const cxp = Math.max(pad, Math.min(toUi(pos.x), vw - pad));
+  const cyp = Math.max(pad, Math.min(toUi(pos.y), vh - pad));
 
   function pick(key: FavKey) {
     closeRef.current();

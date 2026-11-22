@@ -24,6 +24,7 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ItemIcon from "../ui/ItemIcon";
 import LookScoreBadge from "../ui/LookScoreBadge";
+import { watchMoreBelow } from "../ui/moreBelow";
 import ui from "../ui/ui.module.css";
 import { houseKnown, NoHouseTalk, rememberHouse } from "../noHouse/NoHouseTalk";
 import { NO_HOUSE_BROWSING } from "../noHouse/noHouseText";
@@ -183,7 +184,7 @@ export default function SeasonShopDialog({ kind, onClose, avatar }: Props) {
     if (isCos(row)) {
       const name = isNameSlot(row.slot);
       return (
-        <section className={cx(shop.detail, name && shop.detailName)} aria-label="자세히 보기" aria-live="polite">
+        <section ref={watchMoreBelow} className={cx(shop.detail, name && shop.detailName, "more-fade")} aria-label="자세히 보기" aria-live="polite">
           {name ? (
             <NameStylePreview className={shop.namePreview} color={color} body={body} look={fitting.look} name={me?.name ?? "내 이름"} label={`내 이름표에 ${row.name}${batchim(row.name) ? "을" : "를"} 달아 본 모습 (낮·밤)`} />
           ) : (
@@ -206,7 +207,7 @@ export default function SeasonShopDialog({ kind, onClose, avatar }: Props) {
     const def = furnitureById(row.id);
     const ways = def && rotateMode(def) === "turn" ? 4 : 2;
     return (
-      <section className={shop.detail} aria-label="자세히 보기" aria-live="polite">
+      <section ref={watchMoreBelow} className={cx(shop.detail, "more-fade")} aria-label="자세히 보기" aria-live="polite">
         <div className={styles.furnWrap}>
         <div className={styles.furnStage} data-night={night || undefined}>
           <FurnitureStage itemId={row.id} w={200} h={150} r={turn % ways} night={night} />
@@ -272,7 +273,7 @@ export default function SeasonShopDialog({ kind, onClose, avatar }: Props) {
           ) : (
             <>
               {shown ? detail(shown) : <section className={shop.detail} aria-hidden="true" />}
-              <div className={cx(shop.listCol, styles.groups)} aria-label={tab === "on" ? "판매 중인 물건" : "판매 예정인 물건"}>
+              <div ref={watchMoreBelow} className={cx(shop.listCol, styles.groups, "more-fade")} aria-label={tab === "on" ? "판매 중인 물건" : "판매 예정인 물건"}>
                 {groups.map((g) => (
                   <section key={`${g.set}-${g.start}`} className={styles.group} aria-label={g.setName}>
                     <header className={styles.groupHead}>

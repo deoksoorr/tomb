@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { bridge } from "@/game/bridge";
 import { npcPortraitUrl } from "@/game/world/forage/art";
 import { errorMessage } from "@/lib/api";
-import { CAT_LABEL, LIFE_CATS, npcBuys, npcBuysAll, npcById, RARITY_LABEL, speciesById, type NpcId } from "@/lib/forage/catalog";
+import { bagSpecies, CAT_LABEL, GRADE_LABEL, gradedPrice, gradeOf, LIFE_CATS, npcBuys, npcBuysAll, npcById, RARITY_LABEL, type FishGrade, type NpcId, type Species } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
 import { meStore } from "@/lib/hooks/useMe";
 import { cx } from "../ui/cx";
@@ -21,6 +21,9 @@ import s from "./forage.module.css";
 // 11/15: NPC는 사기만 한다. 수집 의뢰·도장 교환소는 버스 정류장 마당 의뢰 게시판 한 곳 (WharfBoard)
 // 11/16 r11: 포구 시장을 빼서 바다 고기는 어부 영감, 갯벌에서 캔 것은 수집가 유령에게 팔아요
 // 11/20 바닷가 해녀 할망은 물고기·채집물을 다 사요 (값은 마을과 같아요 — 한 목록에 다 나와요)
+// 11/22 직접 낚은 대물·월척은 칸이 따로 (아이콘에 등급 표, 값은 등급 배수). 월척이 섞이면 팔기 전에 한 번 묻는다
+
+type Row = { id: string; sp: Species; grade: FishGrade; price: number; n: number };
 
 const EMPTY: Record<NpcId, string> = {
   fishmonger: "팔 물고기가 없어요. 호수 잔교나 강둑, 바닷가 갯바위에서 낚아 와요.",
@@ -37,31 +40,43 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
   const [pick, setPick] = useState<Record<string, number> | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  /** 11/22 월척을 같이 팔지 묻는 중 (전부 팔기 = true, 고른 것 팔기 = false) */
+  const [askBig, setAskBig] = useState<{ all: boolean; n: number } | null>(null);
   const portrait = useMemo(() => (typeof document === "undefined" ? "" : npcPortraitUrl(npc.id)), [npc.id]);
 
+  // 가방 칸마다 한 장 (11/22 같은 종의 보통·대물·월척은 나란히)
   const rows = useMemo(() => {
     const bag = state?.bag ?? {};
     return Object.entries(bag)
-      .map(([id, n]) => ({ sp: speciesById(id), n }))
-      .filter((r): r is { sp: NonNullable<typeof r.sp>; n: number } => !!r.sp && npcBuys(npc, r.sp) && r.n > 0)
-      .sort((a, b) => LIFE_CATS.indexOf(a.sp.cat) - LIFE_CATS.indexOf(b.sp.cat) || b.sp.price - a.sp.price);
+      .flatMap(([id, n]): Row[] => {
+        const sp = bagSpecies(id);
+        if (!sp || !npcBuys(npc, sp) || n <= 0) return [];
+        const grade = gradeOf(id);
+        return [{ id, sp, grade, price: gradedPrice(sp, grade), n }];
+      })
+      .sort((a, b) => LIFE_CATS.indexOf(a.sp.cat) - LIFE_CATS.indexOf(b.sp.cat) || b.sp.price - a.sp.price || a.sp.id.localeCompare(b.sp.id) || a.grade - b.grade);
   }, [state, npc]);
 
   // F16: 처음엔 아무것도 고르지 않은 상태(0개) → [고른 것 팔기]는 −/+로 고른 만큼, [전부 팔기]는 가진 것 전부
   const qty = (id: string, owned: number) => Math.min(owned, pick?.[id] ?? 0);
-  const total = rows.reduce((n, r) => n + qty(r.sp.id, r.n) * r.sp.price, 0);
+  const total = rows.reduce((n, r) => n + qty(r.id, r.n) * r.price, 0);
 
   function setQty(id: string, owned: number, v: number) {
+    setAskBig(null);
     setPick((p) => ({ ...(p ?? {}), [id]: Math.max(0, Math.min(owned, v)) }));
   }
 
-  async function sell(all: boolean) {
+  async function sell(all: boolean, sure = false) {
     const items: Record<string, number> = {};
     for (const r of rows) {
-      const n = all ? r.n : qty(r.sp.id, r.n);
-      if (n > 0) items[r.sp.id] = n;
+      const n = all ? r.n : qty(r.id, r.n);
+      if (n > 0) items[r.id] = n;
     }
     if (!Object.keys(items).length) return;
+    // 11/22 월척이 섞이면 한 번 묻는다 (아끼던 걸 [전부 팔기]로 같이 팔지 않게)
+    const big = rows.reduce((k, r) => k + (r.grade === 2 ? (items[r.id] ?? 0) : 0), 0);
+    if (big > 0 && !sure) return setAskBig({ all, n: big });
+    setAskBig(null);
     setBusy(true);
     setNotice(null);
     try {
@@ -101,33 +116,40 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
             // 11/20 운영자: 가로 한 줄 목록 → 세로 카드 격자 (위 아이콘 → 이름 → 등급·개수 → 값 → −/+·모두). 이 칸만 스크롤
             <div ref={watchMoreBelow} className={s.sellScroll}>
               <div className={s.sellList} role="list">
-                {rows.map(({ sp, n }) => {
-                  const q = qty(sp.id, n);
+                {rows.map(({ id, sp, grade, price, n }) => {
+                  const q = qty(id, n);
+                  // 11/22 「대물 잉어」처럼 등급을 이름 앞에 (읽어 주는 이름·버튼 이름도)
+                  const name = grade > 0 ? `${GRADE_LABEL[grade]} ${sp.name}` : sp.name;
                   return (
                     <div
-                      key={sp.id}
+                      key={id}
                       className={s.sellCard}
                       role="listitem"
                       data-picked={q > 0 || undefined}
-                      title={`${sp.name} (${RARITY_LABEL[sp.rarity]}, ${n}개 있음)`}
-                      aria-label={`${sp.name}, ${RARITY_LABEL[sp.rarity]}, ${n}개 있음, 한 개 ${sp.price}P`}
+                      title={`${name} (${RARITY_LABEL[sp.rarity]}, ${n}개 있음)`}
+                      aria-label={`${name}, ${RARITY_LABEL[sp.rarity]}, ${n}개 있음, 한 개 ${price}P`}
                     >
-                      {/* 11/20 2차: 개수는 아이콘 귀퉁이, 값은 이름 아래 한 줄 (고르면 「3개 21P」) */}
+                      {/* 11/20 2차: 개수는 아이콘 귀퉁이, 값은 이름 아래 한 줄 (고르면 「3개 21P」). 11/22 등급 표는 왼쪽 위 귀퉁이 */}
                       <span className={s.cardIcon}>
                         <ItemIcon itemId={sp.id} size={32} />
                         <span className={s.cardCount}>×{n}</span>
+                        {grade > 0 && (
+                          <span className={s.gradeBadge} data-grade={grade} aria-hidden>
+                            {GRADE_LABEL[grade]}
+                          </span>
+                        )}
                       </span>
                       <span className={s.cardName}>{sp.name}</span>
-                      <span className={s.cardPrice}>{q > 0 ? `${q}개 ${fmtP(q * sp.price)}P` : `${fmtP(sp.price)}P`}</span>
+                      <span className={s.cardPrice}>{q > 0 ? `${q}개 ${fmtP(q * price)}P` : grade > 0 ? `개당 ${fmtP(price)}P` : `${fmtP(price)}P`}</span>
                       <span className={s.qty}>
-                        <button type="button" className={ui.button} onClick={() => setQty(sp.id, n, q - 1)} disabled={busy || q <= 0} aria-label={`${sp.name} 하나 덜`}>
+                        <button type="button" className={ui.button} onClick={() => setQty(id, n, q - 1)} disabled={busy || q <= 0} aria-label={`${name} 하나 덜`}>
                           −
                         </button>
-                        <span className={s.qtyNum} aria-label={`${sp.name} 팔 개수`} aria-live="polite">
+                        <span className={s.qtyNum} aria-label={`${name} 팔 개수`} aria-live="polite">
                           {q}
                           <small>/{n}</small>
                         </span>
-                        <button type="button" className={ui.button} onClick={() => setQty(sp.id, n, q + 1)} disabled={busy || q >= n} aria-label={`${sp.name} 하나 더`}>
+                        <button type="button" className={ui.button} onClick={() => setQty(id, n, q + 1)} disabled={busy || q >= n} aria-label={`${name} 하나 더`}>
                           +
                         </button>
                       </span>
@@ -135,9 +157,9 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
                       <button
                         type="button"
                         className={cx(ui.button, s.qtyAll)}
-                        onClick={() => setQty(sp.id, n, q >= n ? 0 : n)}
+                        onClick={() => setQty(id, n, q >= n ? 0 : n)}
                         disabled={busy}
-                        aria-label={q >= n ? `${sp.name} 고른 것 비우기` : `${sp.name} ${n}개 모두 고르기`}
+                        aria-label={q >= n ? `${name} 고른 것 비우기` : `${name} ${n}개 모두 고르기`}
                       >
                         {q >= n ? "비우기" : "모두"}
                       </button>
@@ -145,6 +167,19 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
                   );
                 })}
               </div>
+            </div>
+          )}
+          {askBig && (
+            <div className={s.askBig} role="alert">
+              <span>월척 {askBig.n}마리도 같이 팔아요?</span>
+              <span style={{ display: "flex", gap: 6 }}>
+                <button type="button" className={ui.button} disabled={busy} onClick={() => setAskBig(null)}>
+                  그만둘래요
+                </button>
+                <button type="button" className={cx(ui.button, ui.primary)} disabled={busy} onClick={() => void sell(askBig.all, true)}>
+                  같이 팔아요
+                </button>
+              </span>
             </div>
           )}
           <div className={s.sellFoot}>

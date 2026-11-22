@@ -16,6 +16,13 @@
   background: var(--bg);
 }
 
+/* 11/22 큰 데스크톱 화면(27인치 등): 게임 캔버스(data-game)를 뺀 바로 밑 칸(월드 HUD·창·알림·채팅 등)을 화면 크기만큼 키운다.
+   배율·html[data-uiz]는 lib/uiScale(useUiScale)이 정한다. zoom 안에서는 vw·vh도 커지므로 HUD CSS는 vw·vh를 --uz로 나눈다 */
+:global(html[data-uiz]) .shell > :not([data-game]) {
+  zoom: var(--ui-scale, 1);
+  --uz: var(--ui-scale, 1);
+}
+
 /* 11/19 촬영 모드: 게임 캔버스와 촬영 단추(data-photo-keep)만 남기고 화면 위 UI를 모두 숨긴다 (사진에는 캔버스만 찍힌다) */
 .shell[data-photo] > :not(:has(> canvas)):not([data-photo-keep]),
 .shell[data-photo] > :not(:has(> canvas)):not([data-photo-keep]) * {

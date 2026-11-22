@@ -13,7 +13,7 @@ import { kstDay, kstWeek, loadMe } from "../store/accounts";
 import { earnTerms } from "../pointEvent";
 import { earnBoost } from "../store/pointEvent";
 import type { BugsResult } from "../rpg/types";
-import { dexBadgeBits, dexIdsOf, gatherNodeById, NODE_CAT, npcBuys, npcById, speciesById, STACK_MAX, type DexCat, type NpcId, type Species } from "./catalog";
+import { bagSpecies, dexBadgeBits, dexIdsOf, gatherNodeById, gradedPrice, gradeOf, NODE_CAT, npcBuys, npcById, speciesById, STACK_MAX, type DexCat, type NpcId, type Species } from "./catalog";
 import { claimPendingDex, ensureDexSettled, payNewDex, reachedTitleKeys, rewardState, titlesOf } from "./dexReward";
 import {
   activeNodes,
@@ -39,6 +39,7 @@ import {
   reelMinMs,
   rollFishSize10,
   rollSize10,
+  sizeGrade,
   verifyBugs,
   insectPoints,
   windowEndsAt,
@@ -220,7 +221,10 @@ export async function reelIn(acct: string, token: string, ok: boolean, now = Dat
   if (payload.g !== undefined) return reelSunken(store, acct, payload, now, ip);
   // 11/18 오늘 미션 「물고기 3마리」면 같은 스크립트에서 진행도 (lib/retainQuest). 11/19 바닷가 자리면 「바닷가에서 물고기 2마리」도
   const quest = questHook(acct, day, anyFishingWaterOf(t.x) === "sea" ? ["seaFish", "fish"] : "fish");
-  const got = await store.grant(acct, day, "fish", [{ id: payload.sp, size: payload.sz }], STACK_MAX, undefined, quest);
+  // 11/22 크기 등급(대물·월척)은 직접 낚은 것만 — 시작할 때 굴린 크기로 (rules sizeGrade). 가방은 등급 칸에, 도감·최대어는 종 그대로
+  const sp = speciesById(payload.sp);
+  const grade = sp ? sizeGrade(sp, payload.sz) : 0;
+  const got = await store.grant(acct, day, "fish", [{ id: payload.sp, size: payload.sz, ...(grade ? { grade } : {}) }], STACK_MAX, undefined, quest);
   // 최대어 랭킹: 크기는 시작할 때 서버가 굴린 값 (가방이 가득 차 못 넣었어도 잡은 기록은 남는다). 랭킹 저장 실패가 낚시를 막지는 않는다
   // 운영자 계정은 순위에 남기지 않는다
   if (got?.[0] && payload.sz > 0 && !(await isStaff(acct)))
@@ -410,13 +414,16 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
   if (!npc) throw new HttpError(400, "INVALID_INPUT", "그런 상인은 없어요.");
   const day = kstDay(now);
   const [snap, acc, boost] = await Promise.all([store.snapshot(acct, day, nodeWindow(now)), getAccounts().get(acct, day, now), earnBoost(now)]);
+  // 11/22 id는 가방 칸 (대물·월척은 `${종}~1`·`~2` — 한 개 값은 등급 배수를 반올림, catalog gradedPrice). 사는지는 종으로 본다
   const units: { id: string; price: number; src: SellSource }[] = [];
+  const unitPrice: Record<string, number> = {};
   for (const [id, raw] of Object.entries(want)) {
-    const s = speciesById(id);
+    const s = bagSpecies(id);
     if (!s || !npcBuys(npc, s)) throw new HttpError(400, "INVALID_INPUT", `${npc.name}은(는) 그건 안 사요.`);
     const n = Math.min(Math.max(0, Math.floor(raw)), snap.bag[id] ?? 0);
     const src = sellSourceOf(npc.id, s);
-    for (let i = 0; i < n; i++) units.push({ id, price: s.price, src });
+    const price = (unitPrice[id] = gradedPrice(s, gradeOf(id)));
+    for (let i = 0; i < n; i++) units.push({ id, price, src });
   }
   if (!units.length) throw new HttpError(409, "NOTHING_TO_SELL", "팔 게 없어요.");
   // 지갑 여유(포인트)를 값 단위로: 포인트 배수 이벤트로 이 항목을 골랐으면 판 값은 배수로 들어온다 (lib/pointEvent — 저장소 적립과 같은 계산).
@@ -453,13 +460,13 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
     if (r.paid >= value[src]) continue;
     // 그 사이 다른 적립으로 지갑이 찼다 → 값을 못 받은 만큼(그 항목에서 싼 것부터) 가방에 되돌린다
     const soldUnits = Object.entries(plan)
-      .flatMap(([id, k]) => Array.from({ length: k }, () => speciesById(id)!))
-      .filter((s) => sellSourceOf(npc.id, s) === src)
+      .flatMap(([id, k]) => Array.from({ length: k }, () => ({ id, price: unitPrice[id] })))
+      .filter((u) => sellSourceOf(npc.id, bagSpecies(u.id)!) === src)
       .sort((a, b) => b.price - a.price);
     let kept = 0;
-    for (const s of soldUnits) {
-      if (kept + s.price <= r.paid) kept += s.price;
-      else back[s.id] = (back[s.id] ?? 0) + 1;
+    for (const u of soldUnits) {
+      if (kept + u.price <= r.paid) kept += u.price;
+      else back[u.id] = (back[u.id] ?? 0) + 1;
     }
   }
   for (const [id, k] of Object.entries(back)) {

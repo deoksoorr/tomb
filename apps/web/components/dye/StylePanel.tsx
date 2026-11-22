@@ -20,6 +20,7 @@ import OutfitPreview from "../shop/OutfitPreview";
 import { cx } from "../ui/cx";
 import ItemIcon from "../ui/ItemIcon";
 import LookScoreBadge from "../ui/LookScoreBadge";
+import { watchMoreBelow } from "../ui/moreBelow";
 import ui from "../ui/ui.module.css";
 import DyeDialog, { type DyeTicket } from "./DyeDialog";
 import styles from "./StylePanel.module.css";
@@ -233,7 +234,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
 
   return (
     <>
-      <section className={shop.detail} aria-label="자세히 보기" aria-live="polite">
+      <section ref={watchMoreBelow} className={cx(shop.detail, "more-fade")} aria-label="자세히 보기" aria-live="polite">
         <OutfitPreview className={shop.fitPreview} color={previewColor} body={previewBody} look={look} label={`${title} 미리 보기`} />
         <div className={shop.info}>
           <p className={shop.name}>
@@ -259,7 +260,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
             </button>
           </div>
         )}
-        <div className={styles.scroll}>
+        <div ref={watchMoreBelow} className={cx(styles.scroll, "more-fade")}>
           <h3 className={styles.heading}>염색권</h3>
           <ul className={shop.grid} aria-label="염색권">
             {DYE_ITEMS.map((item) => (

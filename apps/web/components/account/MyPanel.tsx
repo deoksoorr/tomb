@@ -14,6 +14,7 @@ import { forgetMyCode, readMyCode, saveMyCode, writeItem } from "@/lib/storage";
 import { LS, type Me } from "@/lib/types";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
+import { watchMoreBelow } from "../ui/moreBelow";
 import ui from "../ui/ui.module.css";
 import type { MyGraveEntry } from "./items";
 import { InquiryButton } from "../notice/InquiryDialog";
@@ -148,7 +149,7 @@ export default function MyPanel({
             </button>
           ))}
         </div>
-        <div id={`${tabsId}-panel`} role="tabpanel" aria-labelledby={`${tabsId}-${tab}`} className={styles.tabPanel}>
+        <div id={`${tabsId}-panel`} role="tabpanel" aria-labelledby={`${tabsId}-${tab}`} ref={watchMoreBelow} className={cx(styles.tabPanel, "more-fade")}>
           {tab === "perks" ? (
             <PerksTab me={me} />
           ) : (

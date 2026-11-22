@@ -1,0 +1,49 @@
+/* 11/22 운영자 「유저」 창 위쪽: 골목 붕어빵 수레 다음 출현 (작은 카드) */
+.card {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0;
+  color: var(--bone);
+  font-size: 14px;
+}
+
+.state {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.open {
+  color: #f3c86b;
+}
+
+.slots {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 561px) {
+  .slots {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.now {
+  color: #f3c86b;
+}

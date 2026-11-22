@@ -124,6 +124,47 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
     expect((await store.snapshot(a, DAY, 1)).bag).toEqual({ f_carp: 3, f_koi: 1 });
   });
 
+  it("11/22 대물·월척: 가방은 등급 칸(`~1`·`~2`)에 따로, 도감·최대 크기는 종 id로. 꺼내기·되돌리기도 등급 칸 그대로", async () => {
+    const a = acct();
+    const g = await store.grant(a, DAY, "fish", [{ id: "f_carp", size: 700, grade: 1 }], 99);
+    expect(g).toEqual([{ id: "f_carp", size: 700, kept: true, isNew: true, record: false, grade: 1 }]);
+    await store.grant(a, DAY, "fish", [{ id: "f_carp", size: 820, grade: 2 }, { id: "f_carp", size: 820, grade: 2 }, { id: "f_carp", size: 400 }], 99);
+    const s = await store.snapshot(a, DAY, 1);
+    expect(s.bag).toEqual({ f_carp: 1, "f_carp~1": 1, "f_carp~2": 2 });
+    expect(s.dex.f_carp).toEqual({ n: 4, max: 820, first: DAY });
+    expect(Object.keys(s.dex)).toEqual(["f_carp"]);
+    expect(s.day.fish).toBe(4);
+    // 꺼내기는 칸 id 그대로 (보통이 모자라면 대물에서 빼지 않는다)
+    expect(await store.remove(a, { f_carp: 2 })).toBe(false);
+    expect(await store.remove(a, { "f_carp~2": 1, f_carp: 1 })).toBe(true);
+    expect((await store.snapshot(a, DAY, 1)).bag).toEqual({ "f_carp~1": 1, "f_carp~2": 1 });
+    // 되돌리기도 칸마다 상한 (등급 칸도 한 칸)
+    await store.restore(a, { "f_carp~2": 5, f_carp: 1 }, 3);
+    expect((await store.snapshot(a, DAY, 1)).bag).toEqual({ f_carp: 1, "f_carp~1": 1, "f_carp~2": 3 });
+  });
+
+  it("11/22 한 칸 상한은 등급 칸마다, 가방 전체(BAG_MAX)는 등급 칸까지 합쳐서", async () => {
+    const a = acct();
+    await store.grant(a, DAY, "fish", Array.from({ length: 3 }, () => ({ id: "f_carp", size: 900, grade: 2 as const })), 2);
+    expect((await store.snapshot(a, DAY, 1)).bag).toEqual({ "f_carp~2": 2 });
+    await store.grant(a, DAY, "fish", [{ id: "f_carp", size: 1 }], 2);
+    expect((await store.snapshot(a, DAY, 1)).bag).toEqual({ f_carp: 1, "f_carp~2": 2 });
+    const ids = speciesOf("fish").filter((s) => !s.junk && s.id !== "f_carp").map((s) => s.id).slice(0, Math.ceil(BAG_MAX / 99));
+    for (const id of ids) await store.grant(a, DAY, "fish", Array.from({ length: 99 }, () => ({ id, size: 100 })), 99);
+    const s = await store.snapshot(a, DAY, 1);
+    expect(Object.values(s.bag).reduce((n, v) => n + v, 0)).toBe(BAG_MAX);
+    const g = await store.grant(a, DAY, "fish", [{ id: "f_carp", size: 900, grade: 1 }], 99);
+    expect(g?.[0]).toMatchObject({ kept: false, grade: 1 });
+    expect((await store.snapshot(a, DAY, 1)).bag["f_carp~1"]).toBeUndefined();
+  });
+
+  it("11/22 자동 낚시는 등급을 넘겨도 늘 보통 칸에", async () => {
+    const a = acct();
+    const r = await store.grantAuto(a, DAY, [{ id: "f_carp", size: 840, grade: 2 }], 99);
+    expect(r[0].grade).toBeUndefined();
+    expect((await store.snapshot(a, DAY, 1)).bag).toEqual({ f_carp: 1 });
+  });
+
   it("오늘 낚은 수 더하기·예전 단계 보상 표시는 한 번만", async () => {
     const a = acct();
     await store.addDay(a, DAY, "fish", 2);

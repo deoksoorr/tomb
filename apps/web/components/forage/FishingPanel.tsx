@@ -5,8 +5,8 @@ import { SEA_TIDE_OUT_MSG, type FishWater } from "@tomb/protocol";
 import { bridge, type ForageRodPhase } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import { onBackgroundChange } from "@/lib/background";
-import { AUTO_PACE_NOTE, AUTO_RANK_NOTE, AUTO_SYNC_MS, autoNextLabel } from "@/lib/forage/auto";
-import { BAG_MAX, bagCount, speciesById } from "@/lib/forage/catalog";
+import { AUTO_PACE_NOTE, AUTO_RANK_NOTE, AUTO_SYNC_MS, autoChipText, autoNextLabel } from "@/lib/forage/auto";
+import { BAG_MAX, bagCount, GRADE_LABEL, speciesById } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
 import { sunkenText } from "@/lib/forage/sunken";
 import type { AutoFishResponse, AutoFishStatus, CastResponse, CatchResult, SunkenCatch } from "@/lib/forage/types";
@@ -14,6 +14,7 @@ import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { showToast } from "@/lib/hooks/useToasts";
 import { tabHidden } from "@/lib/hooks/visibleAgain";
+import { TopLeftItem } from "../overlay/TopLeftCluster";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import { noteDexGain, toastAutoCatch } from "./autoToast";
@@ -35,7 +36,6 @@ const SNAP_AT = 1;
 /** 손을 놓고 이만큼 지나면 물고기가 도망간다 */
 // 11/15 낚시 난이도 살짝 올림: 느슨한 줄 3.2초 → 2.8초, 챔질 창 0.8 → 0.7, 당김·물고기 힘 조금 세게
 const SLACK_MS = 2_800;
-
 
 export default function FishingPanel({
   spot,
@@ -68,6 +68,8 @@ export default function FishingPanel({
   const autoRef = useRef<AutoFishStatus | null>(null);
   const [nextAt, setNextAt] = useState(0);
   const [clock, setClock] = useState(0);
+  // 11/22 터치 화면(폰·태블릿): 자동 낚시가 도는 동안 창을 접어 왼쪽 위 칩 한 줄로 (눌러 펼치면 지금 창, [접기]로 다시)
+  const [unfold, setUnfold] = useState(false);
 
   const go = (p: Phase) => {
     phaseRef.current = p;
@@ -114,7 +116,9 @@ export default function FishingPanel({
         }
         if (r.result) {
           onCatch(r.result);
-          bridge.emit("forage:pop", { itemId: r.result.id });
+          bridge.emit("forage:pop", { itemId: r.result.id, ...(r.result.grade ? { sparkle: true } : {}) });
+          // 11/22 직접 낚은 대물·월척
+          if (r.result.grade) setMsg({ text: `${GRADE_LABEL[r.result.grade]}! ${speciesById(r.result.id)?.name ?? ""}`, tone: "hot" });
         }
       })
       .catch((e) => setMsg({ text: errorMessage(e), tone: "bad" }))
@@ -189,8 +193,8 @@ export default function FishingPanel({
     if (!r.auto) {
       rod("idle");
       go("ready");
-      if (r.ended === "time") setMsg({ text: "자동 낚시 시간이 다 됐어요 (한 번에 최대 6시간)" });
-      else if (r.ended === "tide") setMsg({ text: SEA_TIDE_OUT_MSG });
+      // 11/22 6시간 제한을 없애 시간으로 끝나는 일은 없다 (물때·끄기만)
+      if (r.ended === "tide") setMsg({ text: SEA_TIDE_OUT_MSG });
       else setMsg({ text: "자동 낚시를 껐어요. 찌를 던져 보세요" });
     }
   }
@@ -204,7 +208,11 @@ export default function FishingPanel({
       forageApi
         .autoStop()
         .then((r) => applyAuto(r, false))
-        .catch((e) => setMsg({ text: errorMessage(e), tone: "bad" }))
+        .catch((e) => {
+          // 접어 둔 칩에서 껐다가 안 됐으면 창을 펼쳐 까닭을 보여 준다
+          setUnfold(true);
+          setMsg({ text: errorMessage(e), tone: "bad" });
+        })
         .finally(() => setAutoBusy(false));
       return;
     }
@@ -218,6 +226,9 @@ export default function FishingPanel({
         go("ready");
         rod("wait");
         setMsg({ text: "자동 낚시 중… 움직이거나 일어나면 꺼져요", tone: "good" });
+        // 터치 화면은 칩으로, 데스크톱은 작은 창으로 바로 접히니 같은 안내를 토스트로 한 번 (11/22 데스크톱도)
+        setUnfold(false);
+        showToast("자동 낚시를 켰어요. 움직이거나 일어나면 꺼져요");
       })
       .catch((e) => {
         rod("idle");
@@ -396,11 +407,65 @@ export default function FishingPanel({
   // 터치 기기(화면 버튼)는 키 대신 위의 큰 버튼으로 던지고 당긴다
   const coarse = useMediaQuery("(pointer: coarse)");
 
+  // 11/22 터치 화면: 자동 낚시 중엔 창 대신 왼쪽 위 칩 한 줄 [● 자동 낚시 중 3마리 다음 약 1분][끄기] — 왼쪽 위 칩 묶음(TopLeftCluster)의 긴급 의뢰 옆
+  if (coarse && auto && !unfold) {
+    const chip = autoChipText(auto.today, auto.nextInMs == null ? null : nextAt - clock, bagFull);
+    return (
+      <TopLeftItem kind="fish">
+        <div className={s.autoChip} role="region" aria-label="자동 낚시">
+          <button type="button" className={s.autoChipMain} data-full={bagFull || undefined} onClick={() => setUnfold(true)} aria-expanded={false}>
+            <span className={s.autoDot} aria-hidden="true" />
+            <b>{chip.head}</b>
+            <span className={s.autoCount}>{chip.count}</span>
+            {chip.next && <span className={s.autoNext}>{chip.next}</span>}
+            <span className="visually-hidden">, 낚시 창 펼치기</span>
+          </button>
+          <button type="button" className={s.autoChipStop} onClick={toggleAuto} disabled={autoBusy} aria-label="자동 낚시 끄기">
+            끄기
+          </button>
+        </div>
+      </TopLeftItem>
+    );
+  }
+
+  // 11/22 데스크톱 자동 낚시 중: 안내·다른 단추 없이 제목 · 상태 한 줄 · [자동 낚시 끄기]만 (사용자). 끄면 원래 창으로.
+  // 일어나기는 Esc·방향키로 되니 뺐다. 끄기가 안 됐으면 상태 줄에 까닭을
+  if (!coarse && auto) {
+    const chip = autoChipText(auto.today, auto.nextInMs == null ? null : nextAt - clock, bagFull);
+    return (
+      <div className={cx(s.dock, s.dockAuto)} role="region" aria-label="자동 낚시">
+        <div className={s.dockHead}>
+          <strong>낚시 · {water === "sea" ? "바다" : water === "lake" ? "호수" : "강"}</strong>
+        </div>
+        <p className={s.autoLine} data-full={bagFull || undefined} data-tone={msg.tone === "bad" ? "bad" : undefined} role="status" aria-live="polite">
+          {msg.tone === "bad" ? (
+            msg.text
+          ) : (
+            <>
+              <span className={s.autoDot} aria-hidden="true" />
+              <b>{chip.head}</b>
+              <span className={s.autoCount}>{chip.count}</span>
+              {chip.next && <span className={s.autoNext}>{chip.next}</span>}
+            </>
+          )}
+        </p>
+        <button type="button" className={cx(ui.button, ui.primary)} onClick={toggleAuto} disabled={autoBusy}>
+          자동 낚시 끄기
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className={s.dock} role="region" aria-label="낚시">
       <div className={s.dockHead}>
         <strong>낚시 · {water === "sea" ? "바다" : water === "lake" ? "호수" : "강"}</strong>
         <span>오늘 {caught}마리</span>
+        {coarse && auto && (
+          <button type="button" className={s.dockFold} onClick={() => setUnfold(false)} aria-expanded={true} aria-label="낚시 창 접기">
+            접기 ▴
+          </button>
+        )}
       </div>
       <p className={s.status} data-tone={msg.tone} role="status" aria-live="polite">
         {msg.text}
@@ -459,13 +524,8 @@ export default function FishingPanel({
           일어나기
         </button>
       </div>
-      {/* 자동 낚시 켜기 버튼 바로 아래 안내 (감는 중엔 숨긴다) */}
-      {phase !== "reel" && (
-        <p className={s.keys}>
-          자동 낚시는 {AUTO_PACE_NOTE} {AUTO_RANK_NOTE}
-        </p>
-      )}
-      <p className={s.keys}>{coarse ? "큰 버튼으로 던지고 당겨요. 감을 땐 누르고 있어요. 낚시 중에도 [채팅]으로 이야기할 수 있어요." : "Space나 E로 던지고 당겨요. 감을 땐 누르고 있어요. 낚시 중에도 Enter로 채팅해요. Esc나 방향키로 일어나요."}</p>
+      {/* 11/22 안내는 조작만 (사용자 — 자동 낚시 규칙은 [자동 낚시 켜기]에 올리면 보이는 글로). 자동 낚시 중(터치 펼친 창)엔 조작 안내도 뺀다 */}
+      {!auto && <p className={s.keys}>{coarse ? "큰 버튼으로 던지고 당겨요. 감을 땐 누르고 있어요. [채팅]으로 이야기해요." : "Space나 E로 던지고 당겨요. 감을 땐 누르고 있어요. Enter로 채팅해요. Esc나 방향키로 일어나요."}</p>}
     </div>
   );
 }

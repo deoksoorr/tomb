@@ -93,7 +93,7 @@
   display: grid;
   gap: 6px;
   /* 11/18 폭은 아래 바로 가기 줄의 [집] 단추 오른쪽 끝까지 (--dock-w, GameShell) */
-  width: min(var(--dock-w, 520px), calc(100vw - var(--safe-left) - var(--safe-right)));
+  width: min(var(--dock-w, 520px), calc(100vw / var(--uz) - var(--safe-left) - var(--safe-right)));
   padding: 6px 8px 8px;
   font-family: var(--font-chat);
   font-size: 13px;
@@ -165,7 +165,7 @@
 }
 
 .box[data-size="large"] .log {
-  height: max(calc(8 * 1.45em + 7px), min(calc(14 * 1.45em + 13px), calc(100vh - 500px)));
+  height: max(calc(8 * 1.45em + 7px), min(calc(14 * 1.45em + 13px), calc(100vh / var(--uz) - 500px)));
 }
 
 /* 크기 탭: 상자 오른쪽 위 모서리에 붙은 작은 [−][+] (기록 글자를 가리지 않게 상자 바깥 위로). 평소엔 옅게, 상자에 올리면 또렷하게.
@@ -283,7 +283,7 @@
   display: flex;
   flex-direction: column;
   /* 11/18 화면 폭 가득이면 바탕(은은한 반투명)이 오른쪽 행동 단추를 가렸다 → 예전 폭으로 (사용자 긴급) */
-  width: min(300px, 72vw);
+  width: min(300px, 72vw / var(--uz));
   padding: 0;
   font-family: var(--font-chat);
   font-size: 13px;
@@ -318,7 +318,7 @@
 /* 폰 채팅 입력 줄(ChatSheet) 위에 붙는 같은 기록: 키보드가 떠도 입력칸이 보이게 낮게 (가로 폰은 더 낮다) */
 .sheetLog {
   height: auto;
-  max-height: min(calc(6 * 1.45em + 5px), 24vh);
+  max-height: min(calc(6 * 1.45em + 5px), 24vh / var(--uz));
   margin-bottom: 6px;
   font-family: var(--font-chat);
   font-size: 13px;
@@ -328,7 +328,7 @@
 /* 가로 폰: 세로와 같이 조이스틱 바로 위, 가운데 내 캐릭터에 닿지 않게 왼쪽 38vw 안·네 줄 */
 @media (pointer: coarse) and (max-height: 520px) {
   .mobileBox {
-    width: min(300px, 38vw);
+    width: min(300px, 38vw / var(--uz));
     font-size: 12px;
   }
 
@@ -388,7 +388,7 @@
 .box.huntBox {
   z-index: 41;
   bottom: calc(var(--safe-bottom) + 8px);
-  width: min(400px, 40vw);
+  width: min(400px, 40vw / var(--uz));
 }
 
 .huntBox .log {
@@ -401,5 +401,5 @@
 }
 
 .huntBox[data-size="large"] .log {
-  height: max(calc(6 * 1.45em + 5px), min(calc(9 * 1.45em + 8px), calc(100vh - 560px)));
+  height: max(calc(6 * 1.45em + 5px), min(calc(9 * 1.45em + 8px), calc(100vh / var(--uz) - 560px)));
 }

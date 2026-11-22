@@ -13,6 +13,7 @@ import { otherMapNames } from "@/lib/staffPeople";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import { InfoCard, TipList } from "../ui/InfoBlocks";
+import { watchMoreBelow } from "../ui/moreBelow";
 import PixelIcon from "../ui/PixelIcon";
 import ui from "../ui/ui.module.css";
 import styles from "./ChannelMenu.module.css";
@@ -127,7 +128,7 @@ export default function ChannelMenu({ onClose, graveChannels = [] }: Props) {
   return (
     <Dialog title="채널 이동" onClose={onClose}>
       <form className={styles.form} onSubmit={submit}>
-        <div className={styles.scroll}>
+        <div ref={watchMoreBelow} className={cx(styles.scroll, "more-fade")}>
           <div className={styles.legend}>
             <span>채널 고르기</span>
             {lobby.lobby && (

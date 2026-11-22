@@ -164,7 +164,8 @@ describe("카탈로그", () => {
         expect(s.price, s.id).toBeLessThanOrEqual(hi);
       }
     }
-    for (const s of SPECIES.filter((x) => x.junk)) expect(s.price, s.id).toBeLessThanOrEqual(2);
+    // 11/22 물고기 값 ×1.3으로 잡동사니도 1·2P → 1·3P
+    for (const s of SPECIES.filter((x) => x.junk)) expect(s.price, s.id).toBeLessThanOrEqual(3);
   });
 
   it("물고기마다: 그 조건에서 직접·자동 낚시 후보에 들고, 자동 낚시로도 걸릴 수 있다. 꾸미기 대체는 희귀(★3 이상)만", () => {

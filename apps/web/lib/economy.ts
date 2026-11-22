@@ -63,8 +63,8 @@ export const EARN_RULES: readonly EarnRule[] = [
   { source: "bugs", label: "곤충 채집", points: 0, dailyMax: null, note: "마을 곤충 자리에서 잡은 만큼 받아요. 잡은 곤충은 따로 팔 수도 있어요." },
   { source: "stars", label: "별자리 잇기", points: 0, dailyMax: null, note: "성적에 따라 달라요." },
   { source: "houseLike", label: "내 집이 좋아요 받음", points: 2, dailyMax: 20, note: "다른 사람이 내 집에 좋아요를 누를 때, 하루 10번까지" },
-  // 낚시·채집은 잡을 때가 아니라 NPC에게 팔 때 들어온다 (값은 lib/forage/catalog.ts)
-  { source: "fish", label: "물고기 팔기", points: 0, dailyMax: null, note: "호수 낚시 잔교의 어부 영감에게 팔아요. 희귀할수록 비싸요." },
+  // 낚시·채집은 잡을 때가 아니라 NPC에게 팔 때 들어온다 (값은 lib/forage/catalog.ts). 11/22 대물·월척 배수 글은 catalog GRADE_PRICE_NOTE와 같게
+  { source: "fish", label: "물고기 팔기", points: 0, dailyMax: null, note: "호수 낚시 잔교의 어부 영감에게 팔아요. 희귀할수록 비싸요. 직접 낚은 대물은 1.5배, 월척은 2.5배로 팔려요. 자동 낚시로 낚은 건 보통 값이에요." },
   { source: "gather", label: "채집물 팔기", points: 0, dailyMax: null, note: "동물원과 오리배 사이 둑의 수집가에게 팔아요" },
   // 종마다 처음 등록 보상 (lib/forage/dexReward, 값은 catalog DEX_NEW_REWARD)
   { source: "dex", label: "도감 등록 보상", points: 0, dailyMax: null, note: "새 종을 처음 올릴 때마다 3~50P, 희귀할수록 많이 받아요" },
@@ -100,7 +100,7 @@ export const WALLET_MAX = 999_999_999;
  * 11/19 지갑 상한은 WALLET_MAX로 따로 뺐다.
  *
  * I0d 경제 기준 (가격을 바꿀 때 이 표를 함께 본다): 보통 유저 = 하루 한 번 20~30분 → 약 200P
- * (머무르기 10~15 · 접속 보너스 10 (30분 머물면 첫 구간) · 헌화 10~20 · 쉬움 사냥 3~4판 60~80 · 낚시 10분 80~120 · 채집 몇 곳 20~40 · 초반 도감 보상).
+ * (머무르기 10~15 · 접속 보너스 10 (30분 머물면 첫 구간) · 헌화 10~20 · 쉬움 사냥 3~4판 60~80 · 낚시 10분 105~155 (11/22 물고기 값 ×1.3) · 채집 몇 곳 20~40 · 초반 도감 보상).
  *  - 기본 코디(하루권 60~100P): 첫 플레이에 하나
  *  - 영구 소장 코디(상점 코디 전부, 하루권의 4배 — protocol PERMANENT_MULTIPLIER, 7배에서 내림): 기본 코디 240~400P(1~2일) · 가장 비싼 코디(하루권 480P) 1,920P(약 10일)
  *  - 입문 펫(450P, 동물원 ZOO_PETS): 2~3번째 플레이

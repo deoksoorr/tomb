@@ -27,7 +27,7 @@ function memDeps(): QuestMemDeps {
   const style = () => getStyleStore(getAccounts()) as MemoryStyle;
   const stats = () => getTitleStats() as MemoryTitleStats;
   return {
-    takeBag: (a, items) => forage().removeNow(a, items),
+    takeBag: (a, items) => forage().takeSpeciesNow(a, items),
     hasAccount: (a) => accts().questHas(a),
     giveInv: (a, id, flag) => accts().questGive(a, id, flag),
     ownsPermanent: (a, id, slot, perm) => accts().questOwnsPermanent(a, id, slot, perm),

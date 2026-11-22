@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { bridge } from "@/game/bridge";
-import { BAG_MAX, bagCount, buyerOf, LIFE_CATS, speciesById } from "@/lib/forage/catalog";
+import { BAG_MAX, bagCount, bagSpecies, buyerOf, GRADE_LABEL, gradedPrice, gradeOf, LIFE_CATS, type FishGrade, type Species } from "@/lib/forage/catalog";
 import { sizeText } from "@/lib/forage/rules";
 import ItemIcon from "../ui/ItemIcon";
 import ui from "../ui/ui.module.css";
@@ -12,6 +12,7 @@ import s from "./forage.module.css";
 import q from "./quest.module.css";
 
 // 가방의 "물고기·채집물" 칸 (BagDialog 안). 겹쳐 쌓이고, 파는 것은 NPC 앞에서만 (어부 영감·수집가 유령).
+// 11/22 직접 낚은 대물·월척은 따로 쌓인다 (등급 표, 같은 종 옆에)
 
 export default function ForageBag() {
   const { state, error } = useForage();
@@ -22,9 +23,11 @@ export default function ForageBag() {
     void questStore.refresh();
   }, []);
   const items = Object.entries(state?.bag ?? {})
-    .map(([id, n]) => ({ sp: speciesById(id), n }))
-    .filter((r): r is { sp: NonNullable<typeof r.sp>; n: number } => !!r.sp && r.n > 0)
-    .sort((a, b) => LIFE_CATS.indexOf(a.sp.cat) - LIFE_CATS.indexOf(b.sp.cat) || b.sp.rarity - a.sp.rarity);
+    .flatMap(([id, n]): { id: string; sp: Species; grade: FishGrade; n: number }[] => {
+      const sp = bagSpecies(id);
+      return sp && n > 0 ? [{ id, sp, grade: gradeOf(id), n }] : [];
+    })
+    .sort((a, b) => LIFE_CATS.indexOf(a.sp.cat) - LIFE_CATS.indexOf(b.sp.cat) || b.sp.rarity - a.sp.rarity || a.sp.id.localeCompare(b.sp.id) || a.grade - b.grade);
   // 가방은 종류별 개수만 둔다 → 크기는 도감의 가장 큰 기록(직접·자동 모두)으로 보여 준다
   const maxOf = (id: string) => state?.dex[id]?.max ?? 0;
   // 11/19 가방 전체 한도 (물고기·채집물 합)
@@ -47,13 +50,18 @@ export default function ForageBag() {
         <p className={ui.hint}>아직 없어요. 호수 잔교·강둑·연못가에서 낚시하고, 숲, 풀밭, 북서쪽 언덕의 반짝이는 곳에서 캐 보세요.</p>
       ) : (
         <div className={s.bagGrid}>
-          {items.map(({ sp, n }) => (
+          {items.map(({ id, sp, grade, n }) => (
             <div
-              key={sp.id}
+              key={id}
               className={s.bagItem}
-              title={`${sp.name}${maxOf(sp.id) ? ` · 가장 큰 ${sizeText(maxOf(sp.id))}` : ""} · ${buyerOf(sp.cat).name}에게 ${sp.price}P`}
+              title={`${grade > 0 ? `${GRADE_LABEL[grade]} ` : ""}${sp.name}${maxOf(sp.id) ? ` · 가장 큰 ${sizeText(maxOf(sp.id))}` : ""} · ${buyerOf(sp.cat).name}에게 ${gradedPrice(sp, grade)}P`}
             >
               <b>{n}</b>
+              {grade > 0 && (
+                <span className={s.gradeBadge} data-grade={grade}>
+                  {GRADE_LABEL[grade]}
+                </span>
+              )}
               <ItemIcon itemId={sp.id} size={32} />
               <span>{sp.name}</span>
             </div>

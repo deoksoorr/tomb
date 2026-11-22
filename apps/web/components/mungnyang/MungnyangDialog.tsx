@@ -18,6 +18,7 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ItemIcon from "../ui/ItemIcon";
 import LookScoreBadge from "../ui/LookScoreBadge";
+import { watchMoreBelow } from "../ui/moreBelow";
 import ui from "../ui/ui.module.css";
 import { NoHouseBubble, rememberHouse, walkToHousing } from "../noHouse/NoHouseTalk";
 import styles from "./MungnyangDialog.module.css";
@@ -166,7 +167,7 @@ export default function MungnyangDialog({ onClose }: { onClose: () => void }) {
     const view = petViewAt(row.id, turn);
     const busy = pending !== null;
     return (
-      <section className={cx(shop.detail, styles.detail)} aria-label={`${row.name} 자세히 보기`} aria-live="polite">
+      <section ref={watchMoreBelow} className={cx(shop.detail, styles.detail, "more-fade")} aria-label={`${row.name} 자세히 보기`} aria-live="polite">
         <div className={styles.stageWrap}>
           <div className={styles.petStage}>
             <PetTurnArt petId={row.id} view={view} actKey={actKey} box={120} />
@@ -240,7 +241,7 @@ export default function MungnyangDialog({ onClose }: { onClose: () => void }) {
     const short = points !== null && points < row.cost;
     const noHouse = status?.house === false;
     return (
-      <section className={cx(shop.detail, styles.detail)} aria-label={`${row.name} 자세히 보기`} aria-live="polite">
+      <section ref={watchMoreBelow} className={cx(shop.detail, styles.detail, "more-fade")} aria-label={`${row.name} 자세히 보기`} aria-live="polite">
         <div className={styles.stageWrap}>
           <div className={styles.furnStage} data-night={night || undefined}>
             <FurnitureStage itemId={row.id} w={200} h={140} r={turn % ways} night={night} />
@@ -302,7 +303,7 @@ export default function MungnyangDialog({ onClose }: { onClose: () => void }) {
         <div id={`${baseId}-panel`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`} className={shop.panel}>
           {tab === "pet" && pet ? petDetail(pet) : tab === "furn" && item ? furnDetail(item) : <section className={shop.detail} aria-hidden="true" />}
           <div className={shop.listCol}>
-            <ul className={styles.grid} aria-label={tab === "pet" ? "분양하는 펫" : "파는 집 가구"}>
+            <ul ref={watchMoreBelow} className={cx(styles.grid, "more-fade")} aria-label={tab === "pet" ? "분양하는 펫" : "파는 집 가구"}>
               {tab === "pet"
                 ? pets.map((r) => {
                     const o = ownedOf(me, r.id, openedAt);

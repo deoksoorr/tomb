@@ -362,6 +362,8 @@ export default function Minimap() {
         <canvas
           ref={canvas}
           className={styles.map}
+          // 11/22 터치 왼쪽 위 칩 묶음이 펼친 지도 칸을 비운다 (TopLeftCluster.module.css)
+          data-minimap=""
           width={(map !== "village" ? AWAY_MINIMAP[map].w : MINIMAP_W) * SCALE}
           height={(map !== "village" ? AWAY_MINIMAP[map].h : MINIMAP_H) * SCALE}
           // 11/16 r19 지도 비율 그대로 (가로세로 같은 배율 — 바닷가 지도가 늘어나 보이던 것 고침)

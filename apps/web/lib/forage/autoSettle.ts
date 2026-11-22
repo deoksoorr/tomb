@@ -31,7 +31,8 @@ export type AutoSettled = {
   gear: SunkenCatch[];
   /** 11/19 가방이 가득 차서 쉰 시도가 있었는지 */
   full?: boolean;
-  ended?: "stop" | "time" | "tide";
+  /** 11/22 시간 제한이 없어져 "time"(예전 6시간)은 더 나오지 않는다 */
+  ended?: "stop" | "tide";
 };
 
 /** 정산: 지금까지 올린 시도 번호 중 아직 안 본 것을 그 시각 조건으로 굴려 걸린 것만 그날(게임 날짜, 새벽 5시 경계) 기록으로 넣는다. stop이면 세션을 끝낸다 */
@@ -47,12 +48,13 @@ export async function settleAuto(store: ForageStore, acct: string, now: number, 
     }
     const beaten = beatAuto(cur, now);
     const total = autoTriesTotal(beaten);
+    // 11/22 end는 바닷가 물때로 끝날 때만 실제 시각 (그 밖에는 AUTO_NO_END — lib/forage/auto)
     const timeUp = now >= beaten.end;
     const finish = stop || timeUp;
     const next: AutoSession = { ...beaten, done: Math.max(cur.done, total) };
     if (!(await store.autoSwap(acct, raw, finish ? null : JSON.stringify(next)))) continue;
     const { items, missed, gear, full } = await grantRange(store, acct, beaten, cur.done + 1, total, now);
-    return { session: finish ? null : next, items, missed, gear, ...(full ? { full } : {}), ...(finish ? { ended: stop ? ("stop" as const) : cur.tide ? ("tide" as const) : ("time" as const) } : {}) };
+    return { session: finish ? null : next, items, missed, gear, ...(full ? { full } : {}), ...(finish ? { ended: stop || !cur.tide ? ("stop" as const) : ("tide" as const) } : {}) };
   }
   throw new Error("[forage] 자동 낚시 정산이 계속 겹쳤어요");
 }
@@ -142,7 +144,8 @@ export function autoStatus(s: AutoSession, day: LifeDay, now: number): AutoFishS
     spot: s.spot,
     water: s.water,
     startedAt: s.start,
-    endsAt: s.end,
+    // 11/22 끝이 있는 건 바닷가 물때뿐 (나머지는 null)
+    endsAt: s.tide ? s.end : null,
     nextInMs: now >= s.end ? null : autoNextInMs(s),
     today: day.auto,
   };

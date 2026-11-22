@@ -46,9 +46,11 @@ import RpgIcon from "../rpg/RpgIcon";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ItemIcon from "../ui/ItemIcon";
+import { watchMoreBelow } from "../ui/moreBelow";
 import PixelIcon from "../ui/PixelIcon";
 import ui from "../ui/ui.module.css";
 import styles from "./RetainHud.module.css";
+import { TopLeftItem } from "./TopLeftCluster";
 
 // 11/18 둘째 날 다시 오게 (lib/retain.ts): 새 이웃 꾸러미(가입 첫 7일) · 첫 걸음 미션 · 오늘 미션(11/19 「오늘의 할 일」에서 바꿈). 11/19 보상은 모두 아이템
 //  - 칩: 데스크톱은 오른쪽 아래 묶음(RetainDock — 꾸러미·「미션 n/3」 칩 + 첫 걸음 칩). 11/19 폰은 [메뉴] 줄 아래 칩 하나(RetainPhoneChip):
@@ -431,7 +433,7 @@ function FirstList({ mask, onRoute }: { mask: number; onRoute?: () => void }) {
   const guide = useGuide();
   const touch = useMediaQuery("(pointer: coarse)");
   return (
-    <ol className={styles.firstList}>
+    <ol ref={watchMoreBelow} className={cx(styles.firstList, "more-fade")}>
       {FIRST_STEPS.map((s) => {
         const done = (mask & s.bit) !== 0;
         const routed = !!firstGuideTarget(s.id);
@@ -501,24 +503,14 @@ function todoReadyOf(me: Me, items: TodoItem[]): boolean {
  * 11/19 폰: [메뉴] 줄 아래 칩 하나 (모든 계정 — 위쪽 줄에는 꾸러미·미션 칩을 두지 않는다).
  * 첫 걸음이 남아 있으면 「첫 걸음 n/14」 → 창의 첫 걸음 칸, 큰 선물까지 받아 사라졌으면 「미션 n/3」 → 오늘 미션 칸 (꾸러미가 남았으면 꾸러미 칸도).
  * 칸 어디든 받을 것이 있으면 빨간 점. 높이·여백·글자는 [지도] 등 위쪽 단추(ui.top)와 같다
+ * 11/22 왼쪽 위 칩 묶음(TopLeftCluster) 둘째 줄 끝 (좁으면 들어가는 줄에). 그 아래 칸은 묶음 높이(--tl-bottom)로 내려간다
  */
 export function RetainPhoneChip() {
   const { me } = useMe();
-  const chipRef = useRef<HTMLButtonElement>(null);
   const r = retainOf(me);
   const first = r?.first ?? null;
   const items = me && r ? todoItems(me) : [];
   const shown = !!r && (!!first || items.length > 0 || !!r.path);
-  // 칩이 차지한 높이를 --retain-h로 알린다 (그 아래 접속 보너스·물때 줄이 내려간다 — 고정 공지 칩과 같은 방식)
-  useEffect(() => {
-    const el = chipRef.current;
-    if (!shown || !el) return;
-    const root = document.documentElement;
-    root.style.setProperty("--retain-h", `${Math.ceil(el.getBoundingClientRect().height) + 6}px`);
-    return () => {
-      root.style.removeProperty("--retain-h");
-    };
-  }, [shown]);
   if (!me || !r || !shown) return null;
   const path = r.path;
   const todoReady = todoReadyOf(me, items);
@@ -528,22 +520,23 @@ export function RetainPhoneChip() {
   const ready = firstAll || !!path?.canClaim || todoReady;
   const extra = [path?.canClaim ? "오늘 꾸러미 받기" : "", todoReady ? "미션 선물 받기" : ""].filter(Boolean).join(", ");
   return (
-    <button
-      ref={chipRef}
-      type="button"
-      className={cx(ui.button, ui.top, styles.firstChip, ready && styles.chipReady)}
-      onClick={() => {
-        // 첫 걸음이 있으면 첫 걸음 칸부터, 없으면 미션 칸부터 (꾸러미는 그날 처음 들어올 때 저절로 열린다)
-        hubTab = first ? "first" : items.length ? "todo" : "path";
-        setPanel("hub");
-      }}
-      aria-label={first ? `첫 걸음 미션 ${firstN}/${FIRST_STEPS.length}${extra ? `, ${extra}` : ""} (꾸러미·${TODO_NAME}도 여기서)` : `${TODO_NAME} ${doneN}/${items.length}${extra ? `, ${extra}` : ""}`}
-    >
-      <PixelIcon name={first ? "check" : "todo"} />
-      {first ? "첫 걸음" : "미션"}
-      <b className={styles.count}>{first ? `${firstN}/${FIRST_STEPS.length}` : `${doneN}/${items.length}`}</b>
-      {ready && <span className={styles.dot} aria-hidden="true" />}
-    </button>
+    <TopLeftItem kind="retain" overlay>
+      <button
+        type="button"
+        className={cx(ui.button, ui.top, styles.firstChip, ready && styles.chipReady)}
+        onClick={() => {
+          // 첫 걸음이 있으면 첫 걸음 칸부터, 없으면 미션 칸부터 (꾸러미는 그날 처음 들어올 때 저절로 열린다)
+          hubTab = first ? "first" : items.length ? "todo" : "path";
+          setPanel("hub");
+        }}
+        aria-label={first ? `첫 걸음 미션 ${firstN}/${FIRST_STEPS.length}${extra ? `, ${extra}` : ""} (꾸러미·${TODO_NAME}도 여기서)` : `${TODO_NAME} ${doneN}/${items.length}${extra ? `, ${extra}` : ""}`}
+      >
+        <PixelIcon name={first ? "check" : "todo"} />
+        {first ? "첫 걸음" : "미션"}
+        <b className={styles.count}>{first ? `${firstN}/${FIRST_STEPS.length}` : `${doneN}/${items.length}`}</b>
+        {ready && <span className={styles.dot} aria-hidden="true" />}
+      </button>
+    </TopLeftItem>
   );
 }
 

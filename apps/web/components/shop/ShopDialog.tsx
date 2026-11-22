@@ -18,6 +18,7 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ItemIcon from "../ui/ItemIcon";
 import LookScoreBadge from "../ui/LookScoreBadge";
+import { useMoreBelowRef, watchMoreBelow } from "../ui/moreBelow";
 import ui from "../ui/ui.module.css";
 import { fittingLook } from "./fitting";
 import FireworkPreview from "./FireworkPreview";
@@ -64,6 +65,8 @@ export default function ShopDialog({ onClose, avatar }: Props) {
   const [picked, setPicked] = useState(() => (start?.item && listed(start.kind, false).some((i) => i.id === start.item) ? { ...FIRST, [start.kind]: start.item } : FIRST));
   const [hoverId, setHoverId] = useState<string | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  // 11/22 목록 격자가 창의 바깥 스크롤 → 아래에 더 있으면 맨 아래를 흐리게 (more-fade)
+  const listMore = useMoreBelowRef(listRef);
   const [savedColor] = useState(() => readItem(LS.color));
 
   useEffect(() => {
@@ -231,7 +234,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
           ) : (
           <>
           {shown && (
-            <section className={cx(styles.detail, shown.kind === "cosmetic" && isNameSlot(shown.slot) && styles.detailName)} aria-label="자세히 보기" aria-live="polite">
+            <section ref={watchMoreBelow} className={cx(styles.detail, shown.kind === "cosmetic" && isNameSlot(shown.slot) && styles.detailName, "more-fade")} aria-label="자세히 보기" aria-live="polite">
               {shown.kind === "cosmetic" && isNameSlot(shown.slot) ? (
                 // 닉네임 꾸미기: 낮·밤 머리 위 이름표 미리보기 (지금 입은 이름 글자·이름표에 고른 것을 바꿔 끼운 모습)
                 <NameStylePreview
@@ -297,7 +300,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
                 ))}
               </div>
             )}
-            <ul ref={listRef} className={styles.grid} aria-label={`${KIND_LABELS[tab]} 목록`}>
+            <ul ref={listMore} className={cx(styles.grid, "more-fade")} aria-label={`${KIND_LABELS[tab]} 목록`}>
               {items.map((item) => {
                 const isPicked = picked[tab] === item.id;
                 const n = owned(item);

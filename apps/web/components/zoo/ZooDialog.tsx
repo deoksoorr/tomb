@@ -18,6 +18,7 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ItemIcon from "../ui/ItemIcon";
 import LookScoreBadge from "../ui/LookScoreBadge";
+import { watchMoreBelow } from "../ui/moreBelow";
 import ui from "../ui/ui.module.css";
 import PetArt, { hasPetArt } from "./PetArt";
 import s from "./zoo.module.css";
@@ -116,7 +117,7 @@ export default function ZooDialog({ onClose }: { onClose: () => void }) {
         {!me && error && <p className={ui.error}>{error}</p>}
 
         <div className={s.body}>
-          <section className={s.detail} aria-label={`${item.name} 자세히 보기`} aria-live="polite">
+          <section ref={watchMoreBelow} className={cx(s.detail, "more-fade")} aria-label={`${item.name} 자세히 보기`} aria-live="polite">
             <div className={s.stage}>{hasPetArt(pick.id) ? <PetArt petId={pick.id} box={112} /> : <ItemIcon itemId={pick.id} size={96} />}</div>
             <h3 className={s.name}>
               {item.name}
@@ -175,7 +176,7 @@ export default function ZooDialog({ onClose }: { onClose: () => void }) {
             )}
           </section>
 
-          <ul className={s.list} aria-label="분양하는 펫">
+          <ul ref={watchMoreBelow} className={cx(s.list, "more-fade")} aria-label="분양하는 펫">
             {ZOO_SHOP_PETS.map((p) => {
               const it = itemById(p.id)!;
               const o = ownedOf(me, p.id, openedAt);

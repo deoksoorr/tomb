@@ -1,7 +1,7 @@
 import type { Redis } from "@upstash/redis";
 import { redisClient } from "../redisUsage";
 import { env } from "../env";
-import { BAG_MAX, DEX_CATS, DEX_REWARD, DEX_REWARD_TABLE, DEX_TIERS, dexCatOf, dexClaimKey, dexRewardOf, type DexCat } from "./catalog";
+import { BAG_MAX, bagIdOf, DEX_CATS, DEX_REWARD, DEX_REWARD_TABLE, DEX_TIERS, dexCatOf, dexClaimKey, dexRewardOf, takePlan, type DexCat, type FishGrade } from "./catalog";
 import type { DexEntry, LifeDay } from "./types";
 import type { QuestHook } from "../store/types";
 
@@ -9,7 +9,7 @@ import type { QuestHook } from "../store/types";
 // (Redis는 Lua 한 번, 메모리는 await 없는 구간). 로컬은 같은 규칙의 메모리 구현을 쓴다. store.test.ts가 두 구현에 같은 계약을 돌린다.
 //
 // Redis 키 (모두 forage:{accountId}:*)
-//  - forage:{a}:bag         HASH  종류 id → 개수 (0이 되면 지운다)
+//  - forage:{a}:bag         HASH  종류 id → 개수 (0이 되면 지운다). 11/22 직접 낚은 대물·월척은 `${종}~1`·`${종}~2` 칸에 따로 (catalog bagIdOf)
 //  - forage:{a}:dex         HASH  n:{id} 잡은 수 · max:{id} 가장 큰 크기(cm×10) · first:{id} 처음 잡은 날(YYYYMMDD)
 //                                별자리(c_*)는 n = 완성 횟수 · pf:{id} 완벽으로만 이은 횟수 (가방에는 들어가지 않는다)
 //                                11/16 몬스터(lib/rpg/catalog id)는 n = 처치 수 · first = 처음 쓰러뜨린 날 (가방에는 들어가지 않는다)
@@ -27,12 +27,13 @@ import type { QuestHook } from "../store/types";
 //  - forage:{a}:auto        STRING 자동 낚시 세션 JSON (lib/forage/auto.ts, 바꿀 때는 이전 값과 같을 때만 = 비교 후 교체)
 
 export type ClaimResult = { status: "ok"; payload: string } | { status: "reused" | "stale" };
-export type GrantItem = { id: string; size: number };
+/** grade = 11/22 크기 등급 (직접 낚은 물고기만 — 가방은 등급 칸에, 도감은 종 id에. grantAuto는 보지 않는다) */
+export type GrantItem = { id: string; size: number; grade?: FishGrade };
 /** 별자리 도감 등록 한 건 */
 export type StarDexItem = { id: string; perfect: boolean };
 /** 11/16 몬스터 도감에 더할 처치 한 건 (id = 몬스터, n = 이번 판 처치 수) */
 export type MobKillItem = { id: string; n: number };
-export type Granted = { id: string; size: number; kept: boolean; isNew: boolean; record: boolean; rest?: boolean };
+export type Granted = { id: string; size: number; kept: boolean; isNew: boolean; record: boolean; rest?: boolean; grade?: FishGrade };
 /** 도감 보상 장부 (forage:{a}:dexpay). marks = 붙은 칭호 표시 (`${cat}:${50|100}`) */
 export type DexPay = {
   settled: string | null;
@@ -96,7 +97,7 @@ export interface ForageStore {
     /** 11/18 오늘의 할 일 진행 (lib/retainQuest — 하나라도 들어가면 같은 스크립트에서 +1, 올린 값은 quest.have) */
     quest?: QuestHook | null,
   ): Promise<Granted[] | null>;
-  /** 가방에서 꺼내기 (전부 있을 때만, 한 번에). 모자라면 false */
+  /** 가방에서 꺼내기 (가방 칸 id 그대로 — 전부 있을 때만, 한 번에). 모자라면 false */
   remove(acct: string, items: Record<string, number>): Promise<boolean>;
   /** 가방에 되돌리기 (한 칸 stackMax까지) */
   restore(acct: string, items: Record<string, number>, stackMax: number): Promise<void>;
@@ -305,11 +306,13 @@ export class MemoryForageStore implements ForageStore {
     this.days.set(dk, d);
     const a = this.acct(acct);
     let total = [...a.bag.values()].reduce((n, v) => n + v, 0);
-    return items.map(({ id, size }) => {
-      const have = a.bag.get(id) ?? 0;
+    return items.map(({ id, size, grade = 0 }) => {
+      // 11/22 대물·월척은 가방의 등급 칸에 (도감은 종 id 그대로)
+      const bid = bagIdOf(id, grade);
+      const have = a.bag.get(bid) ?? 0;
       const kept = have < stackMax && total < BAG_MAX;
       if (kept) {
-        a.bag.set(id, have + 1);
+        a.bag.set(bid, have + 1);
         total++;
       }
       const n = Number(a.dex.get(`n:${id}`) ?? 0) + 1;
@@ -327,7 +330,7 @@ export class MemoryForageStore implements ForageStore {
           record = old > 0;
         }
       }
-      return { id, size, kept, isNew, record };
+      return { id, size, kept, isNew, record, ...(grade > 0 ? { grade } : {}) };
     });
   }
 
@@ -345,6 +348,15 @@ export class MemoryForageStore implements ForageStore {
       else a.bag.delete(id);
     }
     return true;
+  }
+
+  /**
+   * 11/22 종 단위로 꺼내기 (동기 — 수집·긴급 의뢰 메모리 저장소가 납품과 한 번에 부른다): 그 종의 보통 → 대물 → 월척 칸 차례로 (catalog takePlan).
+   * 모자라면 아무것도 빼지 않고 false (Redis는 BAG_TAKE_LUA가 같은 차례)
+   */
+  takeSpeciesNow(acct: string, items: Record<string, number>): boolean {
+    const plan = takePlan(Object.fromEntries(this.acct(acct).bag), items);
+    return !!plan && this.removeNow(acct, plan);
   }
 
   /** 가방의 그 칸 수 (동기 — 긴급 의뢰 메모리 저장소가 받기와 한 번에 본다) */
@@ -574,6 +586,8 @@ if KEYS[6] and n > 0 then
 end
 for i = 9, 8 + 4 * n, 4 do
   local id = ARGV[i]
+  -- 11/22 id는 가방 칸 (대물·월척이면 '~1'·'~2'가 붙는다). 도감은 꼬리를 뗀 종 id로
+  local sp = (string.gsub(id, '~%d$', ''))
   local size = tonumber(ARGV[i + 1])
   local kept = '0'
   if total < ${BAG_MAX} and tonumber(redis.call('HGET', KEYS[1], id) or '0') < stackMax then
@@ -582,17 +596,17 @@ for i = 9, 8 + 4 * n, 4 do
     kept = '1'
   end
   local isNew = '0'
-  if redis.call('HINCRBY', KEYS[2], 'n:' .. id, 1) == 1 then
+  if redis.call('HINCRBY', KEYS[2], 'n:' .. sp, 1) == 1 then
     isNew = '1'
-    redis.call('HSET', KEYS[2], 'first:' .. id, ARGV[1])
+    redis.call('HSET', KEYS[2], 'first:' .. sp, ARGV[1])
     local pts = tonumber(ARGV[i + 3])
     if settled and pts > 0 then redis.call('HINCRBY', KEYS[5], 'p:' .. ARGV[i + 2], pts) end
   end
   local rec = '0'
   if size > 0 then
-    local old = tonumber(redis.call('HGET', KEYS[2], 'max:' .. id) or '0')
+    local old = tonumber(redis.call('HGET', KEYS[2], 'max:' .. sp) or '0')
     if size > old then
-      redis.call('HSET', KEYS[2], 'max:' .. id, ARGV[i + 1])
+      redis.call('HSET', KEYS[2], 'max:' .. sp, ARGV[i + 1])
       if old > 0 then rec = '1' end
     end
   end
@@ -611,6 +625,33 @@ for i = 1, #ARGV, 2 do
   if redis.call('HINCRBY', KEYS[1], ARGV[i], -tonumber(ARGV[i + 1])) <= 0 then redis.call('HDEL', KEYS[1], ARGV[i]) end
 end
 return 1
+`;
+
+/**
+ * 11/22 종 단위로 가방에서 꺼내는 Lua 함수 (수집 의뢰 DELIVER_LUA·긴급 의뢰 URGENT_DELIVER_LUA 맨 앞에 붙인다).
+ * bagHave(가방 키, 종) = 보통·대물·월척 칸 합 (HMGET 한 번), bagTake(가방 키, 종, 개수) = 보통 → 대물 → 월척 차례로 뺀다 (catalog takePlan과 같은 차례).
+ * 부르는 쪽이 먼저 bagHave로 다 있는지 본 뒤 bagTake를 부른다
+ */
+export const BAG_TAKE_LUA = `
+local function bagCells(bag, sp)
+  local v = redis.call('HMGET', bag, sp, sp .. '~1', sp .. '~2')
+  return {tonumber(v[1] or '0'), tonumber(v[2] or '0'), tonumber(v[3] or '0')}
+end
+local function bagHave(bag, sp)
+  local c = bagCells(bag, sp)
+  return c[1] + c[2] + c[3]
+end
+local function bagTake(bag, sp, n)
+  local c = bagCells(bag, sp)
+  local ks = {sp, sp .. '~1', sp .. '~2'}
+  for j = 1, 3 do
+    local t = math.min(n, c[j])
+    if t > 0 then
+      if redis.call('HINCRBY', bag, ks[j], -t) <= 0 then redis.call('HDEL', bag, ks[j]) end
+      n = n - t
+    end
+  end
+end
 `;
 
 // KEYS: bag  ARGV: stackMax, (id, n)...  한 칸 stackMax까지만 되돌린다
@@ -788,9 +829,9 @@ if tonumber(ARGV[3]) > 0 then redis.call('HINCRBY', KEYS[1], 'g:' .. ARGV[1], to
 return 1
 `;
 
-/** Lua 인자: 아이템마다 (id, 크기, 칸, 처음 등록 보상) */
+/** Lua 인자: 아이템마다 (가방 칸 id, 크기, 칸, 처음 등록 보상). 11/22 대물·월척이면 가방 칸 id에 등급 꼬리 (GRANT_LUA가 도감엔 떼고 쓴다) */
 function grantArgs(items: GrantItem[]): string[] {
-  return items.flatMap((it) => [it.id, String(Math.max(0, Math.round(it.size))), dexCatOf(it.id) ?? "", String(dexRewardOf(it.id))]);
+  return items.flatMap((it) => [bagIdOf(it.id, it.grade ?? 0), String(Math.max(0, Math.round(it.size))), dexCatOf(it.id) ?? "", String(dexRewardOf(it.id))]);
 }
 
 /** GRANT_LUA 결과 한 줄 → 기록 (크기는 넘긴 값) */
@@ -799,7 +840,15 @@ export function parseGranted(lines: unknown, items: GrantItem[]): Granted[] | nu
   return items.map((it, i) => {
     const s = String(lines[i] ?? "");
     const f = s.slice(s.lastIndexOf(":") + 1);
-    return { id: it.id, size: it.size, kept: f[0] === "1", isNew: f[1] === "1", record: f[2] === "1", ...(f[3] === "1" ? { rest: true } : {}) };
+    return {
+      id: it.id,
+      size: it.size,
+      kept: f[0] === "1",
+      isNew: f[1] === "1",
+      record: f[2] === "1",
+      ...(f[3] === "1" ? { rest: true } : {}),
+      ...(it.grade ? { grade: it.grade } : {}),
+    };
   });
 }
 
@@ -960,6 +1009,8 @@ export class RedisForageStore implements ForageStore {
 
   async grantAuto(acct: string, day: string, items: GrantItem[], stackMax: number) {
     if (!items.length) return [];
+    // 11/22 자동 낚시는 늘 보통 (등급을 넘겨도 버린다)
+    items = items.map(({ id, size }) => ({ id, size }));
     const argv = [day, String(stackMax), String(DAY_TTL_SEC), ...grantArgs(items)];
     const r = await this.redis.eval<string[], unknown>(GRANT_AUTO_LUA, [lk.bag(acct), lk.dex(acct), lk.day(acct, day), lk.pay(acct)], argv);
     if (!Array.isArray(r)) return [];

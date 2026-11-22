@@ -9,7 +9,7 @@
   display: grid;
   gap: 4px;
   /* 오른쪽 위 지도(미니맵)와 겹치지 않게: 양쪽에서 지도 폭만큼 비운다 */
-  width: min(400px, max(200px, calc(100vw - 2 * (var(--safe-right, 16px) + var(--minimap-w, 270px) + 8px))));
+  width: min(400px, max(200px, calc(100vw / var(--uz) - 2 * (var(--safe-right, 16px) + var(--minimap-w, 270px) + 8px))));
   padding: 6px 10px 6px;
   transform: translateX(-50%);
   background: rgba(32, 14, 12, 0.88);
@@ -210,7 +210,7 @@
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 2px 10px;
-  width: min(400px, max(200px, calc(100vw - 2 * (var(--safe-right, 16px) + var(--minimap-w, 270px) + 8px))));
+  width: min(400px, max(200px, calc(100vw / var(--uz) - 2 * (var(--safe-right, 16px) + var(--minimap-w, 270px) + 8px))));
   padding: 8px 12px;
   transform: translateX(-50%);
   background: linear-gradient(rgba(70, 44, 10, 0.92), rgba(40, 24, 8, 0.92));
@@ -260,7 +260,8 @@
 @media (pointer: coarse) {
   .fwTimer {
     left: var(--safe-left, 16px);
-    width: calc(100vw - var(--safe-left, 16px) - var(--safe-right, 16px) - var(--minimap-w, 154px) - 8px);
+    /* 11/22 왼쪽 위 칩 묶음(TopLeftCluster) 한 줄을 다 쓴다 */
+    width: min(400px, 100%);
     transform: none;
   }
 }
@@ -274,7 +275,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  width: min(560px, max(280px, calc(100vw - 2 * (var(--safe-right, 16px) + var(--minimap-w, 270px) + 8px))));
+  width: min(560px, max(280px, calc(100vw / var(--uz) - 2 * (var(--safe-right, 16px) + var(--minimap-w, 270px) + 8px))));
   padding: 12px 14px;
   transform: translateX(-50%);
   background: rgba(60, 18, 12, 0.95);
@@ -351,8 +352,8 @@
 @media (pointer: coarse) {
   .hud {
     left: var(--safe-left, 16px);
-    /* 11/17 패드처럼 넓은 화면에서도 데스크톱 막대 폭(400px)까지만 */
-    width: min(400px, calc(100vw - var(--safe-left, 16px) - var(--safe-right, 16px) - var(--minimap-w, 154px) - 8px));
+    /* 11/17 패드처럼 넓은 화면에서도 데스크톱 막대 폭(400px)까지만. 11/22 왼쪽 위 칩 묶음(TopLeftCluster) 한 줄 폭 안에서 */
+    width: min(400px, 100%);
     transform: none;
   }
   .hudTop {
@@ -384,23 +385,171 @@
   }
   .announce {
     top: calc(var(--safe-top, 16px) + var(--top-h, 40px) + var(--minimap-h, 110px) + 64px);
-    width: calc(100vw - var(--safe-left, 16px) - var(--safe-right, 16px));
+    width: calc(100vw / var(--uz) - var(--safe-left, 16px) - var(--safe-right, 16px));
   }
   .announceText b {
     font-size: 14px;
   }
 }
 
-/* ── 11/17 터치 화면 칩: 긴급 의뢰·불꽃축제를 평소엔 한 줄로 접어 둔다 (누르면 막대가 펼쳐진다) ── */
+/* ── 11/22 데스크톱 긴급 의뢰 자리: 위 줄 바로 아래 가운데, 폭 --urgent-w(globals.css — 왼쪽 소식 칸·가운데 알림이 이 자리를 비운다).
+   「[긴급 의뢰] 회식용 생선 60마리 · 24/60 · 40% · 14:28」 한 줄 + 얇은 막대(눈금 그대로)로 44px 안. 안내·결과·보상 줄은 올리면 아래에 겹쳐 뜬다.
+   마을 소식(월드 HUD 10 안)·새 개발자 노트(29)보다 위 ── */
+@media not all and (pointer: coarse) {
+  .hud,
+  .fwTimer {
+    z-index: 30;
+    width: var(--urgent-w);
+  }
+
+  .hud {
+    gap: 5px;
+    padding: 5px 6px 6px 6px;
+    /* 뒤 이름표가 비치지 않게 조금 더 진하게 */
+    background: rgba(32, 14, 12, 0.95);
+    /* 11/22 막대 몸통은 마우스를 받지 않는다 (밑 땅을 누르면 그대로 걷는다 — 막대 자리 420×36이 클릭을 막았다).
+       자세히는 아래 손잡이(딱지·수·보상 받기·남은 시간)에 올리면, ×는 그대로 눌린다 */
+  }
+
+  .hud :is(.tag, .nums, .claimTag, .clock) {
+    pointer-events: auto;
+    cursor: help;
+  }
+
+  .hud[data-done] {
+    background: rgba(24, 25, 21, 0.95);
+  }
+
+  .hudTop {
+    gap: 7px;
+    height: 20px;
+  }
+
+  .tag {
+    line-height: 16px;
+  }
+
+  .clock {
+    font-size: 16px;
+  }
+
+  .hud[data-hurry] .clock {
+    font-size: 17px;
+  }
+
+  .close {
+    min-width: 20px;
+    min-height: 20px;
+    margin-right: -2px;
+    font-size: 15px;
+    line-height: 1;
+  }
+
+  .endLine {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .bar {
+    height: 4px;
+  }
+
+  .mark {
+    top: -2px;
+    bottom: -2px;
+  }
+
+  /* 불꽃축제 30초: 두 줄을 낮게 (축하 한 줄은 말줄임) */
+  .fwTimer {
+    row-gap: 1px;
+    padding: 4px 12px 5px;
+    line-height: 18px;
+  }
+
+  .fwTimer b {
+    font-size: 14px;
+    line-height: 18px;
+  }
+
+  .fwClock {
+    font-size: 18px;
+  }
+
+  .fwTimer small {
+    overflow: hidden;
+    line-height: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* 시작 알림도 왼쪽 소식 칸을 덮지 않는 폭 (마을 소식 알림과 같은 --spot-w) */
+  .announce {
+    width: var(--spot-w);
+  }
+}
+
+/* 한 줄 안 수·% (데스크톱만 그린다) */
+.nums {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 받을 보상이 있으면 한 줄 끝에 작게 (게시판 위치는 올리면 보인다) */
+.claimTag {
+  flex: none;
+  padding: 0 4px;
+  color: var(--candle);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  box-shadow: inset 0 0 0 1px rgba(224, 195, 106, 0.6);
+}
+
+/* 올리면(포커스가 가면) 막대 바로 아래에 겹쳐 뜨는 자세히 칸 — 막대 높이(--urgent-h)는 그대로 */
+.more {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  display: none;
+  gap: 2px;
+  padding: 5px 8px;
+  background: rgba(32, 14, 12, 0.95);
+  box-shadow:
+    0 -2px 0 0 #8a3a2c,
+    0 2px 0 0 #8a3a2c,
+    -2px 0 0 0 #8a3a2c,
+    2px 0 0 0 #8a3a2c;
+  color: var(--bone);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.more .result {
+  font-size: 11px;
+}
+
+.hud[data-done] .more {
+  background: rgba(24, 25, 21, 0.95);
+  box-shadow: var(--px-border-strong);
+}
+
+.hud:hover .more,
+.hud:focus-within .more {
+  display: grid;
+}
+
+/* ── 11/17 터치 화면 칩: 긴급 의뢰·불꽃축제를 평소엔 한 줄로 접어 둔다 (누르면 막대가 펼쳐진다) ──
+   11/22 왼쪽 위 칩 묶음(TopLeftCluster) 맨 앞. 칩 공통 모양: 높이 --top-h · 어두운 패널 · 위쪽 단추와 같은 픽셀 테두리 · 왼쪽 색 표시(빨강)만 */
 .chipRow {
-  position: fixed;
-  z-index: 3;
-  top: calc(var(--safe-top, 16px) + var(--top-h, 36px) + 10px);
-  left: var(--safe-left, 16px);
   display: flex;
   align-items: stretch;
   gap: 4px;
-  max-width: calc(100vw - var(--safe-left, 16px) - var(--safe-right, 16px) - var(--minimap-w, 154px) - 8px);
+  min-width: 0;
 }
 
 .chip {
@@ -408,15 +557,11 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
-  min-height: 28px;
-  padding: 2px 8px 2px 4px;
+  height: var(--top-h);
+  padding: 0 10px 0 9px;
   border: 0;
-  background: rgba(32, 14, 12, 0.88);
-  box-shadow:
-    0 -2px 0 0 #8a3a2c,
-    0 2px 0 0 #8a3a2c,
-    -2px 0 0 0 #8a3a2c,
-    2px 0 0 0 #8a3a2c;
+  background: var(--panel);
+  box-shadow: var(--px-border), inset 3px 0 0 #c8432f;
   color: var(--bone);
   font: inherit;
   font-size: 12px;
@@ -425,8 +570,7 @@
 }
 
 .chip[data-done] {
-  background: rgba(24, 25, 21, 0.88);
-  box-shadow: var(--px-border-strong);
+  box-shadow: var(--px-border), inset 3px 0 0 var(--line-strong);
   cursor: default;
 }
 
@@ -435,11 +579,7 @@ button.chip[data-done] {
 }
 
 .chip[data-fest] {
-  box-shadow:
-    0 -2px 0 0 #c9a13a,
-    0 2px 0 0 #c9a13a,
-    -2px 0 0 0 #c9a13a,
-    2px 0 0 0 #c9a13a;
+  box-shadow: var(--px-border), inset 3px 0 0 #e0a83a;
 }
 
 .chip[data-done] .tag {
@@ -448,7 +588,19 @@ button.chip[data-done] {
 }
 
 .chip[data-hurry] {
-  animation: hurryEdge 1s steps(2, jump-none) infinite;
+  animation: chipHurry 1s steps(2, jump-none) infinite;
+}
+
+/* 마지막 1분: 테두리가 붉게 깜빡 (왼쪽 색 표시는 그대로) */
+@keyframes chipHurry {
+  50% {
+    box-shadow:
+      0 -2px 0 0 #ff6a50,
+      0 2px 0 0 #ff6a50,
+      -2px 0 0 0 #ff6a50,
+      2px 0 0 0 #ff6a50,
+      inset 3px 0 0 #c8432f;
+  }
 }
 
 .chipClock {
@@ -485,11 +637,12 @@ button.chip[data-done] {
 
 .chipClose {
   flex: none;
-  min-width: 28px;
+  min-width: var(--top-h);
+  height: var(--top-h);
   padding: 0;
   border: 0;
-  background: rgba(24, 25, 21, 0.88);
-  box-shadow: var(--px-border-strong);
+  background: var(--panel);
+  box-shadow: var(--px-border);
   color: var(--muted);
   font: inherit;
   font-size: 16px;

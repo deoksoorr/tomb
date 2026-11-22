@@ -6,7 +6,7 @@
   /* 내 캐릭터(화면 가운데)와 왼쪽 아래 메뉴 줄을 가리지 않게 오른쪽 아래 (줌 버튼 위) */
   right: var(--safe-right);
   bottom: calc(var(--safe-bottom) + 100px);
-  width: min(340px, calc(100vw - 2 * var(--gutter)));
+  width: min(340px, calc(100vw / var(--uz) - 2 * var(--gutter)));
   padding: 10px 12px 12px;
   background: var(--panel);
   box-shadow: var(--px-border-strong);
@@ -31,6 +31,25 @@
 .dockHead strong {
   color: var(--bone);
   font-size: 13px;
+}
+
+/* 오늘 N마리는 오른쪽 끝 (터치 자동 낚시 중이면 그 뒤에 [접기]) */
+.dockHead > span {
+  margin-left: auto;
+}
+
+/* 11/22 터치 화면 자동 낚시 중: 펼친 창을 다시 위쪽 칩으로 접는 단추 */
+.dockFold {
+  flex: none;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+  color: var(--bone);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
 }
 
 .status {
@@ -138,6 +157,158 @@
   }
 }
 
+/* 11/22 터치 화면(폰·태블릿) 자동 낚시 칩: 낚시 창 대신 왼쪽 위 칩 묶음(TopLeftCluster)에서 긴급 의뢰 칩 옆 한 칸.
+   11/22 왼쪽 위 칩 공통 모양: 높이 --top-h · 어두운 패널 · 위쪽 단추와 같은 픽셀 테두리 · 왼쪽 색 표시(초록)만 */
+.autoChip {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+  pointer-events: auto;
+}
+
+.autoChipMain {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  min-width: 0;
+  height: var(--top-h);
+  padding: 0 10px 0 11px;
+  border: 0;
+  background: var(--panel);
+  box-shadow: var(--px-border), inset 3px 0 0 var(--status-ok);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.autoChipMain[data-full] {
+  box-shadow: var(--px-border), inset 3px 0 0 var(--candle);
+}
+
+.autoChipMain b {
+  color: var(--bone);
+  font-weight: inherit;
+}
+
+.autoChipMain[data-full] b,
+.autoChipMain[data-full] .autoCount {
+  color: var(--candle);
+}
+
+/* 찌가 떠 있는 표시: 작게 깜빡이는 점 */
+.autoDot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: var(--status-ok);
+  animation: bob 1.6s steps(2, jump-none) infinite;
+}
+
+.autoChipMain[data-full] .autoDot {
+  background: var(--candle);
+  animation: none;
+}
+
+@keyframes bob {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.autoCount {
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 칸 사이 가운뎃점 (흐리게) */
+.autoCount::before,
+.autoNext::before {
+  content: "· ";
+  color: var(--faint);
+}
+
+.autoNext {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--muted);
+  text-overflow: ellipsis;
+}
+
+/* 세로 폰처럼 좁으면 다음 시각은 빼고 낚은 수까지만 (펼치면 보인다) */
+@media (max-width: 420px) {
+  .autoNext {
+    display: none;
+  }
+}
+
+.autoChipStop {
+  flex: none;
+  min-width: 44px;
+  height: var(--top-h);
+  padding: 0 10px;
+  border: 0;
+  background: var(--panel);
+  box-shadow: var(--px-border);
+  color: var(--bone);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.autoChipStop:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+/* 11/22 데스크톱 자동 낚시 중: 작은 창 (제목 · 상태 한 줄 · [자동 낚시 끄기]) */
+.dockAuto {
+  width: min(260px, calc(100vw / var(--uz) - 2 * var(--gutter)));
+  gap: 6px;
+  padding: 8px 10px 10px;
+}
+
+.autoLine {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.autoLine b {
+  color: var(--status-ok);
+  font-weight: inherit;
+}
+
+.autoLine[data-full] b,
+.autoLine[data-full] .autoCount {
+  color: var(--candle);
+}
+
+.autoLine[data-full] .autoDot {
+  background: var(--candle);
+  animation: none;
+}
+
+.autoLine[data-tone="bad"] {
+  color: var(--danger);
+  white-space: normal;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .autoDot {
+    animation: none;
+  }
+}
+
 /* ── 잡았다 카드 ── */
 .catchCard {
   position: fixed;
@@ -193,7 +364,7 @@
   display: grid;
   justify-items: center;
   gap: 8px;
-  width: min(300px, calc(100vw - 32px));
+  width: min(300px, calc(100vw / var(--uz) - 32px));
   padding: 12px 16px 14px;
   color: #fff4dc;
   font-variant-numeric: tabular-nums;
@@ -732,4 +903,57 @@
 
 .dexDot {
   color: var(--candle);
+}
+
+/* ── 11/22 물고기 크기 등급 표 (가방 칸·판매 카드 아이콘 왼쪽 위) — 대물 = 촛불빛, 월척 = 더 진한 주황 ── */
+.gradeBadge {
+  position: absolute;
+  left: -1px;
+  top: -1px;
+  padding: 0 3px;
+  background: var(--candle);
+  color: #1a1208;
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 13px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.gradeBadge[data-grade="2"] {
+  background: #ff8a3d;
+  box-shadow: 0 0 0 1px #ffd9a0;
+}
+
+.bagItem .gradeBadge {
+  left: 2px;
+  top: 2px;
+}
+
+/* 월척을 같이 팔지 묻는 줄 (판매 창 합계 위) */
+.askBig {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  padding: 6px 8px;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px #ff8a3d;
+  color: var(--bone);
+  font-size: 13px;
+}
+
+/* 11/22 잡은 물고기 카드의 「대물!」·「월척!」 */
+.catchGrade {
+  justify-self: start;
+  padding: 0 4px;
+  background: var(--candle);
+  color: #1a1208;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.catchGrade[data-grade="2"] {
+  background: #ff8a3d;
 }

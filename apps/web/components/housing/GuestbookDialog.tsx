@@ -7,6 +7,7 @@ import { housingApi } from "@/lib/housing/client";
 import type { GuestEntryView } from "@/lib/housing/types";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
+import { watchMoreBelow } from "../ui/moreBelow";
 import ui from "../ui/ui.module.css";
 import styles from "./housing.module.css";
 
@@ -80,7 +81,7 @@ export default function GuestbookDialog({ houseId, houseName, mine, onClose }: {
         {entries === null && !msg && <p className={styles.muted}>불러오는 중…</p>}
         {entries?.length === 0 && <p className={styles.muted}>아직 아무도 다녀가지 않았어요.</p>}
         {entries && entries.length > 0 && (
-          <ul className={styles.guestList}>
+          <ul ref={watchMoreBelow} className={cx(styles.guestList, "more-fade")}>
             {entries.map((g) => (
               <li key={g.id} className={styles.guest}>
                 <div className={styles.spread}>

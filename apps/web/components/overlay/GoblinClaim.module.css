@@ -3,7 +3,7 @@
 .layer {
   position: fixed;
   z-index: 6;
-  top: 12vh;
+  top: calc(12vh / var(--uz));
   left: 0;
   right: 0;
   display: flex;
@@ -192,7 +192,7 @@
 .burstLayer {
   position: fixed;
   z-index: 6;
-  top: 38vh;
+  top: calc(38vh / var(--uz));
   left: 0;
   right: 0;
   display: flex;
@@ -293,7 +293,7 @@
 /* 폰: 위쪽 바 아래 */
 @media (max-width: 560px) {
   .layer {
-    top: 17vh;
+    top: calc(17vh / var(--uz));
   }
 
   .band {
@@ -325,11 +325,11 @@
 /* 낮은 화면(가로로 든 폰 등): 위쪽에 바짝 */
 @media (max-height: 500px) {
   .layer {
-    top: 9vh;
+    top: calc(9vh / var(--uz));
   }
 
   .burstLayer {
-    top: 32vh;
+    top: calc(32vh / var(--uz));
   }
 }
 

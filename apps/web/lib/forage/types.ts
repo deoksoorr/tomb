@@ -2,7 +2,7 @@ import type { TodoTick } from "../retain";
 import type { FishWater } from "@tomb/protocol";
 import type { TimePhase } from "../ambience";
 import type { Me } from "../types";
-import type { DexCat, DexTier, LifeCat, NodeKind, NpcId } from "./catalog";
+import type { DexCat, DexTier, FishGrade, LifeCat, NodeKind, NpcId } from "./catalog";
 
 // 낚시·채집·도감 API 계약 (서버 ↔ UI)
 
@@ -16,7 +16,7 @@ export type DexEntry = { n: number; max: number; first: string; pf?: number };
 export type LifeDay = { fish: number; gather: number; auto: number };
 
 export type ForageState = {
-  /** 가방의 물고기·채집물 (id → 개수) */
+  /** 가방의 물고기·채집물 (가방 칸 id → 개수). 11/22 직접 낚은 대물·월척은 `${종}~1`·`${종}~2` 칸 (catalog bagIdOf·bagSpecies) */
   bag: Record<string, number>;
   dex: Record<string, DexEntry>;
   /** 예전 단계 보상으로 받은 기록 (`${cat}:${tier}` → 받은 날). 11/14부터 새로 생기지 않는다 (옛 화면 호환·정산 근거) */
@@ -52,6 +52,8 @@ export type CatchResult = {
   isNew: boolean;
   /** 가장 큰 기록을 새로 세움 */
   record: boolean;
+  /** 11/22 크기 등급 (직접 낚은 대물 1·월척 2만 — 보통·자동 낚시·채집은 없다). id는 늘 종 id */
+  grade?: FishGrade;
 };
 
 /**
@@ -65,8 +67,8 @@ export type AutoFishStatus = {
   spot: string;
   water: FishWater;
   startedAt: number;
-  /** 이 시각이 지나면 더 낚지 않는다 (한 세션 최대 길이) */
-  endsAt: number;
+  /** 이 시각이 지나면 더 낚지 않는다. 11/22 6시간 제한을 없애 바닷가 물때로 끝나는 세션만 시각, 아니면 null (끝 없음) */
+  endsAt: number | null;
   /** 다음 찌 올리기까지 남은 접속 시간 (ms). 세션이 끝났으면 null */
   nextInMs: number | null;
   /** 오늘 자동으로 낚은 수 (11/19 하루 한도 없음) */
@@ -84,7 +86,8 @@ export type AutoFishResponse = {
   /** 11/19 가방(물고기·채집물 합 BAG_MAX)이 가득 차서 이번에 쉰 시도가 있었으면 true */
   full?: boolean;
   /** 세션이 끝난 까닭 (끄기·시간 다 됨·11/16 물이 빠짐). 켜져 있으면 없음 */
-  ended?: "stop" | "time" | "tide";
+  /** 11/22 시간 제한이 없어져 "time"(예전 6시간)은 더 나오지 않는다 */
+  ended?: "stop" | "tide";
   /** 이번 정산으로 도감에 처음 등록한 보상 */
   dex?: DexGain;
   state: ForageState;

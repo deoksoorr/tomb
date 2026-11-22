@@ -4,6 +4,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { HUNT_DROP_ROLLS, KILLS_PER_DROP_ROLL } from "@/lib/rpg/rewards";
 import { TOWER_BOSS_EVERY } from "@/lib/rpg/tower";
 import { METEOR_ITEM_NAME } from "@/lib/rpg/meteorDrop";
+import { GRADE_MULT, GRADE_U } from "@/lib/forage/catalog";
 import Dialog from "../ui/Dialog";
 import { cx } from "../ui/cx";
 import {
@@ -204,6 +205,10 @@ export default function OddsDialog({ section, onClose }: { section: OddsSection;
               직접 낚시하면 {f.sunken}, 자동 낚시는 걸린 한 마리마다 {f.sunkenAuto} 확률로 물고기 대신 물에 빠진 꾸미기가 걸려요.
             </li>
             <li>바닷가 만조 앞뒤 30분쯤은 {f.highTide} 확률로 크기를 한 번 더 굴려 큰 쪽을 가져요.</li>
+            {/* 11/22 물고기 크기 등급 (catalog GRADE_U·GRADE_MULT) */}
+            <li>
+              직접 낚은 물고기는 크기가 그 종의 위 {Math.round((1 - GRADE_U[1]) * 100)}%면 대물, 위 {Math.round((1 - GRADE_U[2]) * 100)}%면 월척이에요. 대물은 {GRADE_MULT[1]}배, 월척은 {GRADE_MULT[2]}배 값에 팔려요. 자동 낚시는 늘 보통이에요.
+            </li>
             <li>채집은 {f.gatherDouble} 확률로 같은 것이 2개 나와요. 갯벌 파기는 늘 1개예요.</li>
             <li>긴급 의뢰 축제 동안은 희귀 이상이 {f.festBoost} 더 잘 나와요.</li>
           </ul>

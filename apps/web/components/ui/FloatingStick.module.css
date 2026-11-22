@@ -1,6 +1,6 @@
 /* 11/15 떠다니는 조이스틱: 왼쪽 약 45% (위 HUD 아래). 크기는 화면에 맞춘다 */
 .zone {
-  --stick: clamp(120px, 22vmin, 200px);
+  --stick: clamp(120px, 22vmin / var(--uz), 200px);
   position: absolute;
   left: 0;
   bottom: 0;

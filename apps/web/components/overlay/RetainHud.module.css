@@ -53,7 +53,7 @@
   display: grid;
   gap: 8px;
   /* 11/19 넓게 (안내 문구가 한 줄로 더 들어가게) — 좁은 화면은 화면폭 − 32px까지 */
-  width: min(440px, calc(100vw - 32px));
+  width: min(440px, calc(100vw / var(--uz) - 32px));
   padding: 10px 12px;
   font-size: 12px;
 }
@@ -147,7 +147,7 @@
 /* 11/19 미션이 12칸이라 데스크톱 카드에서는 목록만 스크롤 (아래 단추 줄을 가리지 않게) */
 /* 오른쪽 위 미니맵(아래 끝 약 300px)에 닿지 않게: 화면 높이에서 미니맵·아래 줄·머리말 몫을 뺀 만큼 */
 .first .firstList {
-  max-height: clamp(160px, calc(100vh - 530px), 420px);
+  max-height: clamp(160px, calc(100vh / var(--uz) - 530px), 420px);
   overflow-y: auto;
   padding-right: 4px;
   scrollbar-width: thin;
@@ -315,13 +315,11 @@
   line-height: 1.45;
 }
 
-/* ── 첫 걸음 칩 (터치): [메뉴] 줄 아래 왼쪽, 긴급 의뢰·고정 공지 칩 밑 ── */
+/* ── 첫 걸음 칩 (터치): [메뉴] 줄 아래 왼쪽, 긴급 의뢰·고정 공지 칩 밑 ──
+   11/22 왼쪽 위 칩 묶음(TopLeftCluster) 둘째 줄 끝. 칩 공통 모양 — 왼쪽 색 표시(금색)만 */
 
 .firstChip {
-  position: absolute;
-  z-index: 2;
-  top: calc(var(--safe-top) + var(--top-h) + var(--top-gap) + var(--urgent-h, 0px) + var(--pin-h, 0px) + var(--note-h, 0px));
-  left: var(--safe-left);
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -338,6 +336,12 @@
   line-height: 1;
   pointer-events: auto;
   cursor: pointer;
+}
+
+/* 11/22 왼쪽 금색 표시 (ui.button.top 테두리 규칙보다 세게. 받을 것이 있으면 .chipReady 금테 그대로) */
+.firstChip[type="button"]:not(.chipReady) {
+  padding-left: calc(var(--top-pad) + 1px);
+  box-shadow: var(--px-border), inset 3px 0 0 var(--candle);
 }
 
 /* ── 창 공통 ── */
