@@ -1,3 +1,4 @@
+import { recordKingCatch } from "./kingFish";
 import { kstDay } from "../store/accounts";
 import {
   autoCatchTimes,
@@ -105,6 +106,8 @@ async function grantRange(store: ForageStore, acct: string, s: AutoSession, from
   for (const [day, list] of byDay) {
     // 넣은 순서 그대로 (got[i] ↔ list[i])
     const got = await store.grantAuto(acct, day, list.map((e) => e.item), STACK_MAX);
+    // 11/23 낚시왕이면 자동 낚시로 잡은 물고기도 이번 주 판매 보너스 표에 (lib/forage/kingFish — 꾸미기 자리 「@」는 빼고)
+    await recordKingCatch(acct, got.filter((g) => !g.rest && !g.id.startsWith("@")).map((g) => g.id), now);
     for (let i = 0; i < got.length; i++) {
       // 11/19 가방이 가득 차서 쉰 자리 (아무것도 받지 않는다)
       if (got[i].rest) {

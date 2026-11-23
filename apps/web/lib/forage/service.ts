@@ -13,7 +13,9 @@ import { kstDay, kstWeek, loadMe } from "../store/accounts";
 import { earnTerms } from "../pointEvent";
 import { earnBoost } from "../store/pointEvent";
 import type { BugsResult } from "../rpg/types";
-import { bagSpecies, dexBadgeBits, dexIdsOf, gatherNodeById, gradedPrice, gradeOf, NODE_CAT, npcBuys, npcById, speciesById, STACK_MAX, type DexCat, type NpcId, type Species } from "./catalog";
+import { recordKingCatch, takeKingCatch } from "./kingFish";
+import { CHAMP_FISH_SELL } from "../champPerks";
+import { bagIdOf, bagSpecies, dexBadgeBits, dexIdsOf, gatherNodeById, gradedPrice, gradeOf, NODE_CAT, npcBuys, npcById, speciesById, STACK_MAX, type DexCat, type NpcId, type Species } from "./catalog";
 import { claimPendingDex, ensureDexSettled, payNewDex, reachedTitleKeys, rewardState, titlesOf } from "./dexReward";
 import {
   activeNodes,
@@ -230,6 +232,8 @@ export async function reelIn(acct: string, token: string, ok: boolean, now = Dat
   const sp = speciesById(payload.sp);
   const grade = sp ? sizeGrade(sp, payload.sz) : 0;
   const got = await store.grant(acct, day, "fish", [{ id: payload.sp, size: payload.sz, ...(grade ? { grade } : {}) }], STACK_MAX, undefined, quest);
+  // 11/23 낚시왕이면 이번 주 판매 보너스 표에 (lib/forage/kingFish)
+  if (got?.[0]) await recordKingCatch(acct, [bagIdOf(payload.sp, grade)], now);
   // 최대어 랭킹: 크기는 시작할 때 서버가 굴린 값 (가방이 가득 차 못 넣었어도 잡은 기록은 남는다). 랭킹 저장 실패가 낚시를 막지는 않는다
   // 운영자 계정은 순위에 남기지 않는다
   if (got?.[0] && payload.sz > 0 && !(await isStaff(acct)))
@@ -306,6 +310,7 @@ async function reelSunken(store: ForageStore, acct: string, p: FishPayload, now:
   }
   const alt = p.alt ?? p.sp;
   const got = await store.grant(acct, day, "fish", [{ id: alt, size: 0 }], STACK_MAX);
+  if (got?.[0]) await recordKingCatch(acct, [alt], now);
   const dex = await dexGainOf(store, acct, got ?? [], ip, now);
   return {
     result: got?.[0] ?? null,
@@ -480,6 +485,12 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
     if (plan[id] <= 0) delete plan[id];
   }
   if (Object.keys(back).length) await store.restore(acct, back, STACK_MAX);
+  // 11/23 낚시왕(지난주 낚시 1위): 낚시왕인 이번 주에 잡아서 지금 판 물고기 값의 15%를 더 준다 (그 전에 잡은 것·다음 주에 판 것은 없음 — lib/forage/kingFish).
+  // 포인트왕 레이스에는 넣지 않으려고 적립(earn)이 아니라 돌려주기(refund — 지갑 상한 적용, 순위 기록 없음)로 따로 넣는다
+  const fishSold = Object.fromEntries(Object.entries(plan).filter(([id]) => sellSourceOf(npc.id, bagSpecies(id)!) === "fish"));
+  const king = await takeKingCatch(acct, fishSold, now);
+  const bonus = Math.floor(Object.entries(king).reduce((n, [id, k]) => n + unitPrice[id] * k, 0) * CHAMP_FISH_SELL);
+  if (bonus > 0 && (await getAccounts().refund(acct, bonus, "fishking:낚시왕 판매 보너스", now)) > 0) earned += bonus;
   // 내 정보는 earnPoints와 같게 지금 시각으로 읽는다 (적립 뒤 한 번)
   const [state, me] = await Promise.all([forageState(acct, now, store), loadMe(getAccounts(), acct)]);
   return { sold: plan, earned, capped: capped || Object.keys(back).length > 0, state, me };

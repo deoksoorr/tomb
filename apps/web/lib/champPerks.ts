@@ -6,7 +6,7 @@ import { earnTerms as termsOf, type EarnBoost, type EarnTerms } from "./pointEve
 // 자격 = 지난주 1위 (lib/store/champ.ts champBoardsFor — 배지·오라와 같은 기록). 그래서 배포하는 순간 지금 1위들에게 바로 붙고,
 // 다음 1위가 정해지는 월요일 새벽 5시(한국 시간)에 저절로 넘어간다. 판단은 늘 서버가 한다 (화면은 같은 함수로 보여 주기만).
 //  - 사냥왕: 사냥 경험치 +15% · 초월 경험치 +10% (야근 빌딩 층 포함)
-//  - 낚시왕: 칭호·배지·오라 (포인트 혜택 없음)
+//  - 낚시왕: 칭호·배지·오라 + 11/23 물고기 판매 +15% (포인트왕 레이스에는 안 들어감 — lib/forage/service sellTo)
 //  - 포인트왕: 꾸미기 상점·가구 상점 20% 할인
 //  - 2관왕·3관왕: 차지한 혜택 모두 + 마을 이동 속도 +1%
 // 11/19 「편하게 노는 게임」 개편: 포인트를 늘리던 혜택(낚시왕 판매 +20%·한도 +150P, 사냥왕 한도 +300P,
@@ -17,6 +17,8 @@ import { earnTerms as termsOf, type EarnBoost, type EarnTerms } from "./pointEve
 export const CHAMP_HUNT_EXP = 0.15;
 /** 사냥왕: 초월 경험치 + (지옥 초월 판·야근 빌딩 층 모두) */
 export const CHAMP_TRANSCEND_EXP = 0.1;
+/** 11/23 낚시왕: 물고기를 팔 때 판 값의 15%를 더 (refund로 넣어 포인트왕 레이스에는 안 센다) */
+export const CHAMP_FISH_SELL = 0.15;
 /** 포인트왕: 꾸미기 상점(염색권 빼고)·가구 상점 할인 */
 export const CHAMP_SHOP_DISCOUNT = 0.2;
 /**
@@ -87,14 +89,14 @@ export const CHAMP_BADGE_ONLY = "1위 배지와 오라를 1주일 달아요.";
 /** 랭킹 하나의 혜택 문장들 (11/19 낚시왕은 포인트 혜택이 빠져 배지·오라만 — 문장이 없다, 화면은 CHAMP_BADGE_ONLY) */
 export function champBoardPerkLines(board: ChampBoard): string[] {
   if (board === "huntKills") return [`사냥 경험치를 ${pctText(CHAMP_HUNT_EXP)} 더 받아요.`, `초월 경험치를 ${pctText(CHAMP_TRANSCEND_EXP)} 더 받아요. 야근 빌딩 층도 같아요.`];
-  if (board === "fish") return [];
+  if (board === "fish") return [`물고기를 ${pctText(CHAMP_FISH_SELL)} 더 비싸게 팔아요. 더 받은 포인트는 포인트 레이스에 들어가지 않아요.`];
   return [`꾸미기 상점과 가구 상점에서 ${pctText(CHAMP_SHOP_DISCOUNT)} 싸게 사요. 염색권은 빠져요.`];
 }
 
 /** 11/17 레이스 창 「1위 보상」 칸에 붙이는 짧은 혜택 꼬리표 (긴 문장은 내 정보 [혜택] 탭 — champBoardPerkLines) */
 export function champBoardPerkTags(board: ChampBoard): string[] {
   if (board === "huntKills") return [`사냥 경험치 +${pctText(CHAMP_HUNT_EXP)}`, `초월 경험치 +${pctText(CHAMP_TRANSCEND_EXP)}`];
-  if (board === "fish") return [];
+  if (board === "fish") return [`물고기 판매 +${pctText(CHAMP_FISH_SELL)}`];
   return [`꾸미기와 가구 ${pctText(CHAMP_SHOP_DISCOUNT)} 할인`];
 }
 
