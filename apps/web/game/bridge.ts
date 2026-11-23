@@ -140,7 +140,7 @@ export type GameEvents = {
   // 11/19 seasonCos = 광장 「계절 보따리상」(기간 한정 코디), seasonFurn = 「가구 보따리상」(기간 한정 가구 — 노점 그림이 나오면 월드에 세운다)
   // 11/19 mungnyang = 동물원 정문 왼쪽 「분양사 보리」(강아지·고양이 분양 — components/mungnyang)
   // 11/20 office = 야근 빌딩 오른쪽 「총무팀 문대리」(사무실 가구 — components/office)
-  "portal:open": { kind: "hunt" | "housing" | "shrine" | "telescope" | "wish" | "haunt" | "tower" | "lottery" | "seasonCos" | "seasonFurn" | "mungnyang" | "office" | "bungeo"; houseId?: string; lot?: number; zone?: "sea" };
+  "portal:open": { kind: "hunt" | "housing" | "shrine" | "telescope" | "wish" | "haunt" | "tower" | "lottery" | "seasonCos" | "seasonFurn" | "mungnyang" | "office" | "bungeo"; houseId?: string; lot?: number; zone?: "sea"; /** 11/23 붕어빵 수레: 말을 건 맵·자리 (서버가 수레 가까이인지 본다) */ at?: { map: MapId; x: number; y: number } };
   /** 11/16 포구 오두막이 바뀌었다 (분양·겉모습·넓히기·이름) → 바닷가 장면이 오두막을 다시 받아 그린다 (myHouseId = 내 오두막 — 문패 「(내 집)」) */
   "sea:cottages": { myHouseId: string | null };
   /** 11/16 바닷가에서 그 오두막 터 앞으로 (내 집 가기) */

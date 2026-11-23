@@ -234,6 +234,8 @@ export async function finishChair(acct: string, ticket: string, damage: number, 
   if (!r.ok) throw new HttpError(410, "RUN_GONE", "이미 끝났거나 시간이 지난 판이에요.");
   // 11/23 이 판으로 이번 주 1위가 바뀌었으면 마을 소식에 (연습·무적·운영자 판은 순위에 안 들어가 overtook이 없다)
   if (r.overtook) await noteChairLeader(acct, t.m, dmg, now).catch((e) => console.warn("[chairman] 1위 바뀜 공지 실패", e));
+  // 11/23 운영자: 1위가 자기 1위 기록을 깨도 「1위 기록 갱신」으로 알린다 (같은 쉼 규칙)
+  else if (r.leadUp) await noteChairLeader(acct, t.m, dmg, now, true).catch((e) => console.warn("[chairman] 1위 기록 갱신 공지 실패", e));
   return {
     ok: true,
     damage: dmg,
@@ -253,10 +255,14 @@ const LEAD_MODE: Record<ChairMode, string> = { normal: "노멀", hell: "헬" };
  * 11/23 이번 주 1위가 바뀌면 마을 소식 한 줄 (주간 레이스 noteLeaders와 같은 규칙: 1위가 다른 사람으로 바뀔 때만 — 그 주 첫 기록·내 기록 갱신은 아니다,
  * 같은 모드는 CHAMP_LEAD_COOLDOWN_MS에 한 번까지 — 그사이 바뀐 것은 알리지 않는다). 판단은 끝 Lua가 같이 돌려준 overtook — 바뀐 판에서만 쉼 표시·이름을 읽는다
  */
-export async function noteChairLeader(acct: string, mode: ChairMode, damage: number, now = Date.now()): Promise<boolean> {
+export async function noteChairLeader(acct: string, mode: ChairMode, damage: number, now = Date.now(), renewed = false): Promise<boolean> {
   if (!(await getChairStore().leadCooldown(mode, CHAMP_LEAD_COOLDOWN_MS))) return false;
   const name = (await getAccounts().summaries([acct]))[0]?.name ?? NO_NAME;
-  await pushVillageNotice(`${name}님이 회장님 독대 ${LEAD_MODE[mode]} 이번 주 1위로 올라섰어요! 피해 ${Math.floor(damage).toLocaleString("ko-KR")}`, now);
+  const dmgText = Math.floor(damage).toLocaleString("ko-KR");
+  await pushVillageNotice(
+    renewed ? `${name}님이 회장님 독대 ${LEAD_MODE[mode]} 이번 주 1위 기록을 새로 세웠어요! 피해 ${dmgText}` : `${name}님이 회장님 독대 ${LEAD_MODE[mode]} 이번 주 1위로 올라섰어요! 피해 ${dmgText}`,
+    now,
+  );
   return true;
 }
 

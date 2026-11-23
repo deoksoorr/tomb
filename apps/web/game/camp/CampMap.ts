@@ -69,7 +69,21 @@ export class CampMap implements CampMapApi {
   readonly height = CAMP_HEIGHT;
   readonly colliders: Phaser.Physics.Arcade.StaticGroup;
   readonly furnitureColliders: Phaser.Physics.Arcade.StaticGroup;
-  readonly interactables: readonly CampInteractable[] = Lay.CAMP_INTERACTABLES;
+  private baseItems: readonly CampInteractable[] = Lay.CAMP_INTERACTABLES;
+  private cartItems: readonly CampInteractable[] = [];
+  private allItems: readonly CampInteractable[] = Lay.CAMP_INTERACTABLES;
+  /** E로 쓰는 것 (고정 목록 — 터 상호작용은 하우징이 바꿔 끼운다) + 11/23 붕어빵 수레 말 걸기 (열린 동안만 — game/world/BungeoCartView) */
+  get interactables(): readonly CampInteractable[] {
+    return this.allItems;
+  }
+  set interactables(v: readonly CampInteractable[]) {
+    this.baseItems = v.filter((o) => o.kind !== "bungeo");
+    this.allItems = this.cartItems.length ? [...this.baseItems, ...this.cartItems] : this.baseItems;
+  }
+  setCartItems(items: readonly CampInteractable[]): void {
+    this.cartItems = items;
+    this.allItems = items.length ? [...this.baseItems, ...items] : this.baseItems;
+  }
   /** 11/17 판마다 다른 밤 빛 (크리스마스판은 트리 빛 + 랜턴·화롯대가 더 따뜻하고 넓게) */
   private lights: readonly CampLight[] = Lay.CAMP_LIGHTS;
   get staticLights(): readonly CampLight[] {

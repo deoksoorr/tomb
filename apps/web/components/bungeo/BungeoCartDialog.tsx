@@ -6,7 +6,7 @@ import { ALLEY_BODIES, DIR, ALLEY_SETS, bodyLabel, isPermanentUntil, itemById } 
 import { errorMessage } from "@/lib/api";
 import { BUNGEO_TITLE } from "@/lib/bungeo/cart";
 import { bungeoApi } from "@/lib/bungeo/client";
-import type { BungeoRow, BungeoStatus } from "@/lib/bungeo/service";
+import type { BungeoAt, BungeoRow, BungeoStatus } from "@/lib/bungeo/service";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { batchim, setBonusText } from "@/lib/seasonShop/rules";
 import { readItem } from "@/lib/storage";
@@ -31,7 +31,8 @@ import ui from "../ui/ui.module.css";
 //  - 입어 보기는 계절 보따리상과 같은 무대 (OutfitPreview). 외형은 그 몸으로 바꿔 본 모습
 //  - 수레가 떠난 뒤에 열면 「떠났어요」만 (언제 오는지는 말하지 않는다)
 
-type Props = { onClose: () => void; avatar?: { color: string; body?: string } };
+/** at = 수레에 말을 건 맵·자리 (11/23 서버가 그 회차 수레 가까이인지 본다 — 멀면 「수레 가까이에서 살 수 있어요」) */
+type Props = { onClose: () => void; at?: BungeoAt | null; avatar?: { color: string; body?: string } };
 
 const HELLO = "어서 와요, 갓 구운 붕어빵 냄새 맡고 왔죠? 여기 물건은 이 수레에서만 팔아요. 모두 영구 소장이에요.";
 const SET_OF: Record<string, string> = { "캠퍼스 후드핏": "campus-hoodie", "겨울 데이트룩": "winter-date" };
@@ -40,7 +41,7 @@ function descOf(r: BungeoRow): string {
   return r.kind === "body" ? (ALLEY_BODIES.find((b) => b.id === r.id)?.desc ?? "") : (itemById(r.id)?.desc ?? "");
 }
 
-export default function BungeoCartDialog({ onClose, avatar }: Props) {
+export default function BungeoCartDialog({ onClose, at = null, avatar }: Props) {
   const { me } = useMe();
   const [status, setStatus] = useState<BungeoStatus | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -88,7 +89,7 @@ export default function BungeoCartDialog({ onClose, avatar }: Props) {
     setPending(r.id);
     setNotice(null);
     try {
-      const res = await bungeoApi.buy(r.id);
+      const res = await bungeoApi.buy(r.id, at);
       setStatus(res);
       applyStyle({ me: res.me, lookGrant: res.lookGrant });
       setNotice(

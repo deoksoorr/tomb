@@ -467,7 +467,14 @@ export class WorldScene extends Phaser.Scene {
       seed: () => this.net.channel ?? (typeof opts.channel === "number" ? opts.channel : 1),
     });
     this.season = new SeasonStallView({ scene: this, atlas: this.atlas, reduced: this.reduced, colliders: this.map.colliders });
-    this.bungeo = new BungeoCartView({ scene: this, reduced: this.reduced, colliders: this.map.colliders, clock: () => this.net?.serverNow() ?? Date.now(), setItems: (items) => this.map.setCartItems(items) });
+    this.bungeo = new BungeoCartView({
+      scene: this,
+      map: "village",
+      reduced: this.reduced,
+      colliders: this.map.colliders,
+      clock: () => this.net?.serverNow() ?? Date.now(),
+      setItems: (items) => this.map.setCartItems(items.map((t) => ({ id: `portal:${t.id}`, kind: "portal", portal: "bungeo", x: t.x, y: t.y, r: t.r, ax: t.x, ay: t.y, label: t.label }))),
+    });
     this.mungnyang = new MungnyangView({ scene: this, atlas: this.atlas, reduced: this.reduced, colliders: this.map.colliders });
     this.office = new OfficeStallView({ scene: this, atlas: this.atlas, reduced: this.reduced, colliders: this.map.colliders });
     this.riding = new Riding({ player: () => this.player, net: () => this.net, remotes: () => this.remotes, toast: (m) => this.toast(m) });
@@ -1465,7 +1472,8 @@ export class WorldScene extends Phaser.Scene {
           bridge.emit("chairman:door");
         } else if (o.portal) {
           if (pl.sitting) pl.stand(now, this.seatReq);
-          bridge.emit("portal:open", { kind: o.portal });
+          // 11/23 붕어빵 수레: 말을 건 자리를 같이 (서버가 수레 가까이인지 본다)
+          bridge.emit("portal:open", { kind: o.portal, ...(o.portal === "bungeo" ? { at: { map: "village" as const, x: Math.round(pl.x), y: Math.round(pl.y) } } : {}) });
         }
         break;
       case "door":

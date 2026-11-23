@@ -8,7 +8,7 @@ import type { ReachZone } from "../logic/reach";
 export const SEA_TEX_PREFIX = "sea-";
 
 /** E로 쓰는 것 (자리 앉기는 좌석 체계 — SEA_SEATS — 가 따로). 다음 차수에 쉴거리·캐기·등대가 여기 붙어요 */
-export type SeaInteractKind = "bus" | "sign" | "lot" | "realty" | "kiosk" | "vending" | "snackVend" | "lighthouse" | "keeper";
+export type SeaInteractKind = "bus" | "sign" | "lot" | "realty" | "kiosk" | "vending" | "snackVend" | "lighthouse" | "keeper" | "bungeo";
 export type SeaInteractable = {
   id: string;
   kind: SeaInteractKind;

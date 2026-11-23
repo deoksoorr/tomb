@@ -89,6 +89,7 @@ import { friendRoute, nextAfterVillage } from "@/lib/friendRoute";
 import { SEA_DRUNK_MSG, seaDrunkBlocked, seaDrunkStep } from "./seaDrunk";
 import { FoodFx } from "../camp/foodFx";
 import { SeaForage } from "./seaForage";
+import { BungeoCartView } from "../world/BungeoCartView";
 import { SeaLife } from "./seaLife";
 import { SeaRides } from "./SeaRides";
 import { SeaKayaks } from "./SeaKayaks";
@@ -168,6 +169,8 @@ export class SeaScene extends Phaser.Scene {
   private horn: SeaHornSound | null = null;
   /** 11/16 갯바위 낚시 (마을 낚시를 바닷가로) */
   private forage!: SeaForage;
+  /** 11/23 골목 붕어빵 수레 (그 회차 자리가 이 맵일 때만 — world/BungeoCartView) */
+  private bungeo: BungeoCartView | null = null;
   /** 11/16 포구 주민 (돌아다니는 유령들 — game/sea/seaLife) */
   private life: SeaLife | null = null;
   /** 11/16 포구 오두막·등대 등불 (game/sea/seaHousing) */
@@ -428,6 +431,14 @@ export class SeaScene extends Phaser.Scene {
       if (d > 420 || this.viewOn) return;
       this.host.sfx.gull((scared ? 0.9 : 0.6) * Math.max(0.15, 1 - d / 420), Math.max(-1, Math.min(1, (x - this.player.x) / 260)));
     };
+    this.bungeo = new BungeoCartView({
+      scene: this,
+      map: "sea",
+      reduced: h.reduced,
+      colliders: this.map.colliders,
+      clock: () => h.net.serverNow(),
+      setItems: (items) => this.map.setCartItems(items.map((t): SeaInteractable => ({ id: t.id, kind: "bungeo", x: t.x, y: t.y, r: t.r, label: t.label }))),
+    });
     this.forage = new SeaForage({ scene: this, atlas: h.atlas, reduced: h.reduced, colliders: this.map.colliders, player: () => this.player, net: () => h.net, seats: () => this.seats, remotes: () => this.remotes, toast: (m) => this.toast(m), tide: () => this.tide });
     this.life = new SeaLife({ scene: this, atlas: h.atlas, sfx: h.sfx, reduced: h.reduced, player: () => this.player, net: () => h.net, water: () => this.map.waterState, override: this.hourOverride });
     this.housing = new SeaHousing({
@@ -1291,6 +1302,13 @@ export class SeaScene extends Phaser.Scene {
         this.lookoutAt = { x: pl.x, y: pl.y };
         this.toggleView();
         break;
+      case "bungeo":
+        // 11/23 골목 붕어빵 수레 (회차마다 자리가 바뀌어 바닷가에 설 때도 있다) — 말을 건 자리를 같이 (서버가 수레 가까이인지 본다)
+        if (this.rest) this.leaveRest(now);
+        if (pl.sitting) pl.stand(now, this.seatReq);
+        pl.faceTo(o.x, o.y - 10, now);
+        bridge.emit("portal:open", { kind: "bungeo", at: { map: "sea", x: Math.round(pl.x), y: Math.round(pl.y) } });
+        break;
       case "keeper":
         // 11/16 등대지기: 다음 갯벌 열리는 때 셋
         this.toast(keeperTideText(Date.now()));
@@ -1492,6 +1510,7 @@ export class SeaScene extends Phaser.Scene {
     const s = this.rig.labelScale;
     const view = this.rig.frameView(this.view);
     this.expr.update(now);
+    this.bungeo?.update(now);
     this.meScreen.update(pl.x, pl.y);
     pl.view.sync(now, s);
     const L = this.atmos.levels;
@@ -1649,6 +1668,7 @@ export class SeaScene extends Phaser.Scene {
       for (const sp of this.map.staticLights) lit.add(sp.x, sp.y + 6, lr * sp.scale * 1.4, 0.88);
       this.fireworks?.addLights(lit);
       this.forage.f.addLights(lit);
+      this.bungeo?.addLights(lit);
       this.life?.addLights(lit);
       // 11/16 r19 오징어잡이배 · 등대 빛줄기도 밤 어둠을 밝혀요
       this.ships?.addLights(lit, L.darkness);
@@ -1961,6 +1981,8 @@ export class SeaScene extends Phaser.Scene {
     if (this.viewBusy) bridge.emit("view:busy", { on: false });
     this.viewBusy = false;
     this.forage?.f.destroy();
+    this.bungeo?.destroy();
+    this.bungeo = null;
     this.life?.destroy();
     this.life = null;
     this.housing?.destroy();

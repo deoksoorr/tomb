@@ -192,7 +192,21 @@ export class SeaMap implements SeaMapApi {
   readonly lotPlates = new Map<number, SignPlate>();
   /** 11/16 오늘 등대 등불이 켜졌는지 (밤에 켜지 않았으면 등대가 어두워요. 안개 낀 날 스스로 켜지는 불은 그대로 — seaLamp) */
   lampLit = false;
-  readonly interactables: readonly SeaInteractable[] = Lay.SEA_INTERACTABLES;
+  private baseItems: readonly SeaInteractable[] = Lay.SEA_INTERACTABLES;
+  private cartItems: readonly SeaInteractable[] = [];
+  private allItems: readonly SeaInteractable[] = Lay.SEA_INTERACTABLES;
+  /** E로 쓰는 것 (고정 목록 — 터 상호작용은 하우징이 바꿔 끼운다) + 11/23 붕어빵 수레 말 걸기 (열린 동안만 — game/world/BungeoCartView) */
+  get interactables(): readonly SeaInteractable[] {
+    return this.allItems;
+  }
+  set interactables(v: readonly SeaInteractable[]) {
+    this.baseItems = v.filter((o) => o.kind !== "bungeo");
+    this.allItems = this.cartItems.length ? [...this.baseItems, ...this.cartItems] : this.baseItems;
+  }
+  setCartItems(items: readonly SeaInteractable[]): void {
+    this.cartItems = items;
+    this.allItems = items.length ? [...this.baseItems, ...items] : this.baseItems;
+  }
   readonly staticLights: readonly SeaLight[] = Lay.SEA_LIGHTS;
 
   private readonly objs: Phaser.GameObjects.GameObject[] = [];

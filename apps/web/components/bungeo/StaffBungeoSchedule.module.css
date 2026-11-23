@@ -27,21 +27,15 @@
 }
 
 .slots {
+  /* 11/23 「날짜 - 자리」 한 줄씩 (자리 이름이 붙어 두 칸이면 줄이 꺾인다) */
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 2px 12px;
+  gap: 2px;
   margin: 0;
   padding: 0;
   list-style: none;
   color: var(--muted);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
-}
-
-@media (min-width: 561px) {
-  .slots {
-    grid-template-columns: 1fr 1fr;
-  }
 }
 
 .now {

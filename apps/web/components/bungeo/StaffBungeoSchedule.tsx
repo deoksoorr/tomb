@@ -8,7 +8,7 @@ import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import styles from "./StaffBungeoSchedule.module.css";
 
-// 11/22 운영자 전용: 골목 붕어빵 수레 다음 출현 일정 (게임 안 「유저」 창 — 운영자 계정만 보는 칸).
+// 11/22 운영자 전용: 골목 붕어빵 수레 다음 출현 일정 「날짜 - 자리」 (게임 안 「유저」 창 — 운영자 계정만 보는 칸).
 // 서버도 운영자 계정이 아니면 403 (GET /api/bungeo/schedule). 일반 계정 화면·응답에는 일정이 실리지 않는다
 
 /** 「11/22 (일) 22:00」 */
@@ -49,7 +49,7 @@ export default function StaffBungeoSchedule() {
             const now = data.now >= s.opensAt && data.now < s.closesAt;
             return (
               <li key={s.day} className={cx(now && styles.now)}>
-                {kst(s.opensAt)} ~ 다음날 {kstTime(s.closesAt)}
+                {kst(s.opensAt)} ~ 다음날 {kstTime(s.closesAt)} - {s.spot}
                 {now ? " (지금)" : ""}
               </li>
             );

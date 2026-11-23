@@ -75,7 +75,7 @@ import { hopChannel } from "@/components/housing/channelHop";
 import { houseChannelFullMsg } from "@/game/net/switchPolicy";
 import { graveChannelFor } from "@/game/world/graveChannel";
 import type { PublicHouse } from "@/lib/housing/types";
-import { isRideablePet, isWorldLot, type ItemKind } from "@tomb/protocol";
+import { isRideablePet, isWorldLot, type ItemKind, type MapId } from "@tomb/protocol";
 import HuntLobby from "@/components/rpg/HuntLobby";
 import { towerTaunt } from "@/lib/rpg/tower";
 import ForageLayer from "@/components/forage/ForageLayer";
@@ -323,6 +323,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const [chatOpen, setChatOpen] = useState(false);
   /** 주거 구역의 집 문·빈 필지에서 하우징 창을 열었으면 그 집/번지 */
   const [housingIntent, setHousingIntent] = useState<{ houseId?: string; lot?: number; zone?: "sea" } | null>(null);
+  /** 11/23 붕어빵 수레에 말을 건 맵·자리 (구매 때 서버로) */
+  const [bungeoAt, setBungeoAt] = useState<{ map: MapId; x: number; y: number } | null>(null);
   const coarse = useMediaQuery("(pointer: coarse)");
   // 11/22 큰 데스크톱 화면(27인치 등): HTML HUD·창 전체를 화면 크기만큼 키운다 (html[data-uiz] + zoom — lib/uiScale, 터치는 그대로)
   useUiScale(coarse);
@@ -407,7 +409,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   useEffect(() => {
     if (onlineChannel) rememberChannel(onlineChannel);
   }, [onlineChannel]);
-  useBridgeEvent("portal:open", ({ kind, houseId, lot, zone }) => {
+  useBridgeEvent("portal:open", ({ kind, houseId, lot, zone, at }) => {
+    if (kind === "bungeo") setBungeoAt(at ?? null);
     setHousingIntent(kind === "housing" && (houseId || lot || zone) ? { houseId, lot, zone } : null);
     setPanel(kind);
     // 집으로 바로 들어갈 때(친구 창 [집 놀러 가기]·[친구한테 가기]·집 문): 떠 있던 다른 창·목록은 닫는다
@@ -1231,7 +1234,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {panel === "mungnyang" && <MungnyangDialog onClose={closePanel} />}
       {/* 11/22 수레가 열린 밤 마을 채팅의 「붕어빵 사세요~」 (화면마다, 서버 없이) */}
       <BungeoCalls />
-      {panel === "bungeo" && <BungeoCartDialog onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
+      {panel === "bungeo" && <BungeoCartDialog onClose={closePanel} at={bungeoAt} avatar={{ color: options.color, body: options.body }} />}
       {panel === "office" && <OfficeShopDialog onClose={closePanel} />}
       {panel === "telescope" && <Telescope onClose={closePanel} />}
       {panel === "haunt" && <HauntDialog onClose={closePanel} />}

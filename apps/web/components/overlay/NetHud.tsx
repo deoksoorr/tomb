@@ -9,6 +9,8 @@ import styles from "./NetHud.module.css";
 export default function NetHud() {
   const [stats, setStats] = useState<NetStats | null>(null);
   const status = useBridgeValue("net:status");
+  // 11/23 운영자가 자리(붕어빵 수레 후보 등)를 캡처로 알려 줄 때 쓰는 내 위치 (맵 · x,y)
+  const dots = useBridgeValue("minimap:dots");
   useBridgeEvent("net:stats", setStats);
 
   const rows: [string, string][] = [
@@ -18,6 +20,7 @@ export default function NetHud() {
     ["peers", stats ? String(stats.peers) : "-"],
     ["fps", stats ? String(Math.round(stats.fps)) : "-"],
     ["in", stats ? `${stats.inKBps.toFixed(2)}KB/s` : "-"],
+    ["pos", dots ? `${dots.map ?? "village"} ${Math.round(dots.me.x)},${Math.round(dots.me.y)}` : "-"],
   ];
 
   return (

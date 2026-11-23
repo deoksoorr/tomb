@@ -92,8 +92,10 @@ class BgmEngine {
         .then(parseManifest)
         .then(withAllPlaylist)
         .catch(() => []);
-      // 처음 들어오면 저장해 둔 목록과 상관없이 첫 목록(FIRST_PLAYLIST_ID, 지금은 레트로)의 아무 곡부터 (그 뒤 고른 목록은 이 탭에서 그대로 따른다)
-      const start = randomStart(playlists, FIRST_PLAYLIST_ID);
+      // 11/23 마지막으로 고른 목록이 있으면 그 목록의 아무 곡부터 (새로고침해도 이어서), 없거나 사라졌으면 첫 목록(FIRST_PLAYLIST_ID, 지금은 레트로)
+      const saved = readItem(LS.bgmPlaylist);
+      const keep = saved && playlists.some((p) => p.id === saved && p.tracks.length > 0) ? saved : FIRST_PLAYLIST_ID;
+      const start = randomStart(playlists, keep);
       const startTracks = playlists.find((p) => p.id === start.playlistId)?.tracks.length ?? 0;
       this.order = shuffledOrder(startTracks, start.index);
       const savedVolume = readItem(LS.volume);
@@ -189,6 +191,7 @@ class BgmEngine {
     this.remember();
     this.order = shuffledOrder(length, index);
     this.set({ playlistId: id, index, hasPrev: this.history.length > 0 });
+    writeItem(LS.bgmPlaylist, id);
     if (this.state.playing) this.startTrack();
   }
 

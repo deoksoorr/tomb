@@ -89,6 +89,10 @@ describe("판 끝 결과 읽기 (Redis 모양)", () => {
     expect(await fake([1, 50, 100, 0, 0, 1, 0, 1]).s.finish(fin)).toMatchObject({ ok: true, weekRank: 1, overtook: true });
     expect(await fake([1, 50, 100, 0, 0, 1, 0, "1"]).s.finish(fin)).toMatchObject({ overtook: true });
     expect(await fake([1, 50, 100, 1, 0, 1, 0, 0]).s.finish(fin)).not.toHaveProperty("overtook");
+    // 11/23 2 = 이미 1위인 내가 내 1위 기록을 올렸다 → leadUp (overtook 아님)
+    const up = await fake([1, 50, 100, 0, 0, 1, 0, 2]).s.finish(fin);
+    expect(up).toMatchObject({ leadUp: true });
+    expect(up).not.toHaveProperty("overtook");
     expect(await fake([1, 50, 100, 1, 0, 1, 0]).s.finish(fin)).not.toHaveProperty("overtook");
     expect(await fake([-1]).s.finish(fin)).toEqual({ ok: false });
   });

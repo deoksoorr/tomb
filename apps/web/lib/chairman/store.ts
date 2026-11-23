@@ -79,10 +79,10 @@ export type ChairFinishIn = {
   points: number;
 };
 /**
- * overtook = 11/23 이 판으로 이번 주 1위가 다른 사람에서 나로 바뀌었다 (그 주 1위 기록보다 큰 피해 — 같은 피해는 먼저 낸 사람이 1위라 아니다).
+ * leadUp = 11/23 이미 이번 주 1위인 내가 내 1위 기록을 더 올렸다. overtook = 11/23 이 판으로 이번 주 1위가 다른 사람에서 나로 바뀌었다 (그 주 1위 기록보다 큰 피해 — 같은 피해는 먼저 낸 사람이 1위라 아니다).
  * 그 주 첫 기록(앞 1위 없음)·내 기록 갱신으로 1위 유지는 아니다 (주간 레이스 noteLeaders와 같은 규칙)
  */
-export type ChairFinishOut = { ok: false } | { ok: true; prevBest: number; best: number; weekRank: number | null; got: number; used: ChairCounts; overtook?: true };
+export type ChairFinishOut = { ok: false } | { ok: true; prevBest: number; best: number; weekRank: number | null; got: number; used: ChairCounts; overtook?: true; leadUp?: true };
 
 /** bestMs·ms = 그 최고 판 버틴 시간 (옛 기록은 0·없음) */
 export type ChairMine = { used: ChairCounts; refunded: boolean; best: ChairCounts; bestMs: ChairCounts; week: Record<ChairMode, { damage: number; rank: number; ms?: number } | null> };
@@ -185,6 +185,7 @@ export class MemoryChairStore implements ChairStore {
     }
     let weekRank: number | null = null;
     let overtook = false;
+    let leadUp = false;
     if (f.ranked) {
       const b = this.board(f.mode, f.week);
       const lead = this.sorted(f.mode, f.week)[0];
@@ -192,11 +193,12 @@ export class MemoryChairStore implements ChairStore {
       if (!cur || f.damage > cur.damage) {
         b.set(f.acct, { damage: f.damage, at: f.at, ms: f.durationMs, dm: f.dm });
         overtook = !!lead && lead.accountId !== f.acct && f.damage > lead.damage;
+        leadUp = !!lead && lead.accountId === f.acct && f.damage > lead.damage;
       }
       weekRank = this.rankIn(f.mode, f.week, f.acct);
     }
     const got = f.points > 0 ? await this.accounts().walletGrant(f.acct, f.points, "earn:chair", f.at) : 0;
-    return { ok: true, prevBest, best: m[bf], weekRank, got, used: { normal: m.cn, hell: m.ch }, ...(overtook ? { overtook: true as const } : {}) };
+    return { ok: true, prevBest, best: m[bf], weekRank, got, used: { normal: m.cn, hell: m.ch }, ...(overtook ? { overtook: true as const } : leadUp ? { leadUp: true as const } : {}) };
   }
   async mine(acct: string, day: string, week: string): Promise<ChairMine> {
     const m = this.me.get(acct);
@@ -316,7 +318,8 @@ if ARGV[7] == '1' then
   local cur = redis.call('ZSCORE', KEYS[3], ARGV[2])
   if (not cur) or dmg > tonumber(cur) then
     local lead = redis.call('ZREVRANGE', KEYS[3], 0, 0, 'WITHSCORES')
-    if lead[1] and lead[1] ~= ARGV[2] and dmg > tonumber(lead[2]) then over = 1 end
+    if lead[1] and lead[1] ~= ARGV[2] and dmg > tonumber(lead[2]) then over = 1
+    elseif lead[1] == ARGV[2] and dmg > tonumber(lead[2]) then over = 2 end
     redis.call('ZADD', KEYS[3], dmg, ARGV[2])
     redis.call('HSET', KEYS[4], ARGV[2], ARGV[4])
     redis.call('EXPIRE', KEYS[3], ${WEEK_TTL_SEC})
@@ -396,7 +399,7 @@ export class RedisChairStore implements ChairStore {
       weekRank: f.ranked && rank >= 0 ? rank + 1 : null,
       got: num(r[4]),
       used: { normal: num(r[5]), hell: num(r[6]) },
-      ...(num(r[7]) === 1 ? { overtook: true as const } : {}),
+      ...(num(r[7]) === 1 ? { overtook: true as const } : num(r[7]) === 2 ? { leadUp: true as const } : {}),
     };
   }
   async mine(acct: string, day: string, week: string): Promise<ChairMine> {

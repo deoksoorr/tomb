@@ -76,6 +76,7 @@ import { BIG_RIDE_TOAST, BIG_SEAT_TOAST, bigSeatBlocked, foodOfPeer, myBig, RIDI
 import { friendRoute, nextAfterVillage } from "@/lib/friendRoute";
 import { CAMP_BBQ } from "./campLayout";
 import { CampForage } from "./campForage";
+import { BungeoCartView } from "../world/BungeoCartView";
 import { CampLife } from "./campLife";
 import { CampSnowmen } from "./CampSnowmen";
 import { CAMP_SCENE, type CampFriend, type CampHost, type CampSceneData } from "./campHost";
@@ -123,6 +124,8 @@ export class CampScene extends Phaser.Scene {
   private riding!: Riding;
   /** A-6 계곡 낚시·숲 채집 (마을 Foraging을 캠핑장 맵으로 — game/camp/campForage) */
   private forage!: CampForage;
+  /** 11/23 골목 붕어빵 수레 (그 회차 자리가 이 맵일 때만 — world/BungeoCartView) */
+  private bungeo: BungeoCartView | null = null;
   /** 11/16 캠핑장 주민 (돌아다니는 캠퍼 유령들 — game/camp/campLife) */
   private life: CampLife | null = null;
   /** 11/17 눈사람 만들기 (겨울·크리스마스 판 — game/camp/CampSnowmen) */
@@ -284,6 +287,14 @@ export class CampScene extends Phaser.Scene {
     this.riding = new Riding({ player: () => this.player, net: () => h.net, remotes: () => this.remotes, toast: (m) => this.toast(m) });
     this.food = new FoodFx({ scene: this, reduced: h.reduced, sfx: h.sfx, player: () => this.player, remotes: () => this.remotes });
     yield;
+    this.bungeo = new BungeoCartView({
+      scene: this,
+      map: "camp",
+      reduced: h.reduced,
+      colliders: this.map.colliders,
+      clock: () => h.net.serverNow(),
+      setItems: (items) => this.map.setCartItems(items.map((t): CampInteractable => ({ id: t.id, kind: "bungeo", x: t.x, y: t.y, r: t.r, label: t.label }))),
+    });
     this.forage = new CampForage({ scene: this, atlas: h.atlas, reduced: h.reduced, colliders: this.map.colliders, player: () => this.player, net: () => h.net, seats: () => this.seats, remotes: () => this.remotes, toast: (m) => this.toast(m) });
     this.life = new CampLife({ scene: this, atlas: h.atlas, sfx: h.sfx, reduced: h.reduced, player: () => this.player, net: () => h.net, override: this.hourOverride });
     this.snow = new CampSnowmen({ scene: this, atlas: h.atlas, sfx: h.sfx, reduced: h.reduced, player: () => this.player, net: () => h.net, remotes: () => this.remotes, myName: () => h.name, toast: (m) => this.toast(m), concept });
@@ -938,6 +949,13 @@ export class CampScene extends Phaser.Scene {
         this.stars.use(spot);
         break;
       }
+      case "bungeo":
+        // 11/23 골목 붕어빵 수레 (캠핑장 자리가 생기면) — 말을 건 자리를 같이 (서버가 수레 가까이인지 본다)
+        this.closeTalk();
+        if (pl.sitting) pl.stand(now, this.seatReq);
+        pl.faceTo(o.x, o.y - 10, now);
+        bridge.emit("portal:open", { kind: "bungeo", at: { map: "camp", x: Math.round(pl.x), y: Math.round(pl.y) } });
+        break;
       case "lookout":
         // 전망대 망원경: 광장·데크를 내려다본다 (LookoutScope)
         this.closeTalk();
@@ -1166,6 +1184,7 @@ export class CampScene extends Phaser.Scene {
     const s = this.rig.labelScale;
     const view = this.rig.frameView(this.view);
     this.expr.update(now);
+    this.bungeo?.update(now);
     this.meScreen.update(pl.x, pl.y);
     pl.view.sync(now, s);
     const L = this.atmos.levels;
@@ -1297,6 +1316,7 @@ export class CampScene extends Phaser.Scene {
       for (const sp of this.map.staticLights) lit.add(sp.x, sp.y + 6, lr * sp.scale * 1.4, 0.88);
       this.fireworks?.addLights(lit);
       this.forage.f.addLights(lit);
+      this.bungeo?.addLights(lit);
       this.life?.addLights(lit);
     }
     lit.end();
@@ -1342,6 +1362,8 @@ export class CampScene extends Phaser.Scene {
     this.clearRemotes();
     this.expr?.destroy();
     this.forage?.f.destroy();
+    this.bungeo?.destroy();
+    this.bungeo = null;
     this.life?.destroy();
     this.life = null;
     this.snow?.destroy();

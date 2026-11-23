@@ -10,7 +10,7 @@ export const CAMP_TEX_PREFIX = "camp-";
 
 /** E로 쓰는 것 (자리 앉기는 좌석 체계 — CAMP_SEATS — 가 따로) */
 /** lookout = 전망대 망원경 (망원 뷰, LookoutScope) · telescope = 11/16 별 망원경 (별자리 잇기, protocol CAMP_SCOPES — game/scopes) */
-export type CampInteractKind = "bus" | "npc" | "van" | "deck" | "board" | "sign" | "lookout" | "bbq" | "vending" | "telescope";
+export type CampInteractKind = "bus" | "npc" | "van" | "deck" | "board" | "sign" | "lookout" | "bbq" | "vending" | "telescope" | "bungeo";
 export type CampInteractable = {
   id: string;
   kind: CampInteractKind;

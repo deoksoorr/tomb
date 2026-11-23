@@ -334,6 +334,8 @@ export const LS = {
   color: "tomb.color",
   volume: "tomb.volume",
   muted: "tomb.muted",
+  /** 11/23 마지막으로 고른 배경음악 목록 (새로고침해도 그 목록으로 시작) */
+  bgmPlaylist: "tomb.bgmPlaylist",
   playlist: "tomb.playlist",
   lastChannel: "tomb.lastChannel",
   /** { [graveId]: ownerToken } */

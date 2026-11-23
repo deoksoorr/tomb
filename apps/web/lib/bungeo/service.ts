@@ -6,14 +6,15 @@ import { getAccounts } from "../store";
 import { loadMe } from "../store/accounts";
 import { getStyleStore } from "../store/style";
 import type { Me } from "../types";
-import { BUNGEO_CLOSED_MSG, BUNGEO_GOODS, bungeoGoods, bungeoOpen, bungeoUpcoming, type BungeoKind, type BungeoSlot } from "./cart";
+import { BUNGEO_CLOSED_MSG, BUNGEO_FAR_MSG, BUNGEO_GOODS, bungeoGoods, bungeoNear, bungeoOpen, bungeoUpcoming, type BungeoKind, type BungeoSlot } from "./cart";
 
 // 11/22 골목 붕어빵 수레 (서버). 일정·목록은 lib/bungeo/cart (순수).
 // 사기: ① 열려 있는지 (밤 10시~새벽 2시, 사흘에 한 번 — 아니면 409 BUNGEO_CLOSED, 포인트 그대로) ② 판매 목록에 있는지
 //  ③ 이미 가졌는지 ④ 차감 + 소장 — 꾸미기 = 영구 꾸미기 저장소 한 번 (style buyPermanent: 이미 영구 → owned · 부족 → insufficient, 원자적)
 //     외형 = 외형 선택권과 같은 reshape(unlock) 한 번 (값을 내고 소장 기록에 더하며 그 모습으로 바뀐다, 원자적)
 // 값은 고정 (칭호·포인트왕 할인 없음). 운영자 계정도 다른 상점처럼 그대로 값을 낸다 (유령선 장터와 같다).
-// 서버는 수레 자리를 몰라요 (창을 어디서 열어도 같은 값이라 이득이 없다 — 유령선 장터와 같다).
+// 11/23 자리가 회차마다 바뀌어서(lib/bungeo/cart bungeoSpotOf) 사기 전에 화면이 보낸 맵·자리가 그 회차 수레 가까이인지 본다
+//  (아니면 403 BUNGEO_FAR 「수레 가까이에서 살 수 있어요」, 포인트 그대로 — 열려 있는지 확인 다음).
 // 일반 계정 응답에는 다음 출현 일정을 절대 싣지 않는다 (bungeoSchedule — 운영자만, 아니면 403)
 
 export type BungeoRow = { kind: BungeoKind; id: string; name: string; group: string; price: number; owned: boolean };
@@ -25,6 +26,8 @@ export type BungeoStatus = {
 };
 export type BungeoBuyResult = BungeoStatus & { me: Me; lookGrant: string; got: string };
 export type BungeoSchedule = { now: number; open: boolean; next: BungeoSlot[] };
+/** 화면이 보내는 내 맵·자리 (수레에 말을 건 곳) */
+export type BungeoAt = { map: string; x: number; y: number };
 
 /** 이미 가진 꾸미기(영구) · 외형 */
 async function owned(accountId: string, me: Me): Promise<Set<string>> {
@@ -50,8 +53,9 @@ export async function bungeoStatus(accountId: string, now = Date.now()): Promise
 }
 
 /** 수레에서 사기 (id = 꾸미기 id 또는 외형 id) */
-export async function buyBungeo(accountId: string, id: string, now = Date.now()): Promise<BungeoBuyResult> {
+export async function buyBungeo(accountId: string, id: string, at: BungeoAt | null, now = Date.now()): Promise<BungeoBuyResult> {
   if (!bungeoOpen(now)) throw new HttpError(409, "BUNGEO_CLOSED", BUNGEO_CLOSED_MSG);
+  if (!bungeoNear(now, at)) throw new HttpError(403, "BUNGEO_FAR", BUNGEO_FAR_MSG);
   const g = bungeoGoods(id);
   if (!g) throw new HttpError(400, "INVALID_INPUT", "수레에서 팔지 않는 물건이에요.");
   const store = getStyleStore(getAccounts());

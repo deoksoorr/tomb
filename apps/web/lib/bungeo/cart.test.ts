@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isShopListed, ITEMS, itemById, permanentPrice, seasonSetsOfLook, ALLEY_SETS, ALLEY_BODIES, isAvatarBody } from "@tomb/protocol";
-import { BUNGEO_CALLS, BUNGEO_GOODS, BUNGEO_LAST_DAY, bungeoCalls, bungeoOpen, bungeoUpcoming, isBungeoDay } from "./cart";
+import { readFileSync } from "node:fs";
+import { BUNGEO_BUY_RADIUS, BUNGEO_CALLS, BUNGEO_GOODS, BUNGEO_LAST_DAY, BUNGEO_SPOTS, bungeoCalls, bungeoCallsDue, bungeoDays, bungeoLastSpot, bungeoNear, bungeoOpen, bungeoOpenSpot, bungeoSpotOf, bungeoUpcoming, isBungeoDay } from "./cart";
 import { SUNKEN_POOL } from "../forage/sunken";
 import { CHEST_COSMETICS } from "../rpg/setGearRoll";
 import { COSMETIC_DROPS } from "../rpg/catalog";
@@ -9,12 +10,11 @@ import { XMAS_BOX_TABLE } from "../xmas/box";
 import { isGiftItem } from "../gifts";
 import { ghostStock } from "../sea/ghostShip";
 import { addDays } from "../gameDay";
-import { BUNGEO_HINTS, pickFortune } from "../wish";
 
-// 11/22 골목 붕어빵 수레: 일정 순수 함수 · 판매 목록 · 다른 판매처에 안 섞이는지 · 운세 실마리
+// 11/22 골목 붕어빵 수레: 일정 순수 함수 · 판매 목록 · 다른 판매처에 안 섞이는지
 
 /** 한국 시각 → ms */
-const kst = (y: number, mo: number, d: number, h: number, mi = 0) => Date.UTC(y, mo - 1, d, h - 9, mi);
+const kst = (y: number, mo: number, d: number, h: number, mi = 0, sec = 0) => Date.UTC(y, mo - 1, d, h - 9, mi, sec);
 const ALLEY_IDS = ITEMS.filter((i) => i.alley).map((i) => i.id);
 
 describe("일정 (게임 날짜 기준 사흘에 한 번, 밤 10시 ~ 새벽 2시)", () => {
@@ -58,10 +58,99 @@ describe("일정 (게임 날짜 기준 사흘에 한 번, 밤 10시 ~ 새벽 2�
     expect(next.map((s) => s.day)).toEqual(["20261121", "20261122", "20261125", "20261128", "20261201"]);
     expect(next[1].opensAt).toBe(kst(2026, 11, 22, 22, 0));
     expect(next[1].closesAt).toBe(kst(2026, 11, 23, 2, 0));
+    // 11/23 자리 이름은 회차마다 그 회차 자리 (bungeoSpotOf)
+    expect(next.map((s) => s.spot)).toEqual(next.map((s) => bungeoSpotOf(s.day).name));
     expect(bungeoUpcoming(kst(2026, 11, 22, 0, 10), 2).map((s) => s.day)).toEqual(["20261121", "20261122"]);
     expect(bungeoUpcoming(kst(2026, 11, 22, 3, 0), 1)[0].day).toBe("20261122");
     expect(bungeoUpcoming(kst(2026, 11, 23, 1, 0), 1)[0].day).toBe("20261122");
     expect(bungeoUpcoming(kst(2026, 11, 23, 3, 0), 1)[0].day).toBe("20261125");
+  });
+});
+
+describe("11/23 회차마다 무작위 자리 (씨앗 = 게임 날짜)", () => {
+  const days = bungeoDays();
+  const SEQ = ["fence", "seaRocks", "fence", "alley", "fence", "seaLot1"];
+  it("출현 날짜 목록: 따로 여는 날 + 3일 간격, 오름차순·중복 없음", () => {
+    expect(days[0]).toBe("20261121");
+    expect(days[1]).toBe("20261122");
+    expect(days[days.length - 1] <= BUNGEO_LAST_DAY).toBe(true);
+    expect([...days].sort()).toEqual([...days]);
+    expect(new Set(days).size).toBe(days.length);
+    for (const d of days) expect(isBungeoDay(d), d).toBe(true);
+  });
+  it("결정적: 같은 날짜는 언제 물어도 같은 자리 (순서·캐시와 상관없이)", () => {
+    const a = days.map((d) => bungeoSpotOf(d).id);
+    const b = [...days].reverse().map((d) => bungeoSpotOf(d).id).reverse();
+    expect(b).toEqual(a);
+    // 고정값 (씨앗·뽑기 규칙이 바뀌면 운영자 일정이 바뀐다 — 일부러 바꿀 때만 고친다)
+    expect(a.slice(0, 6)).toEqual(SEQ);
+  });
+  it("바로 앞 회차와 같은 자리는 안 나온다", () => {
+    for (let i = 1; i < days.length; i++) expect(bungeoSpotOf(days[i]).id, `${days[i - 1]} → ${days[i]}`).not.toBe(bungeoSpotOf(days[i - 1]).id);
+  });
+  it("시즌 전체로 다섯 자리가 고루 (자리마다 3번 이상, 한 자리가 40%를 넘지 않음) · 바닷가도 나온다", () => {
+    const count = new Map<string, number>();
+    for (const d of days) count.set(bungeoSpotOf(d).id, (count.get(bungeoSpotOf(d).id) ?? 0) + 1);
+    for (const s of BUNGEO_SPOTS) expect(count.get(s.id) ?? 0, s.id).toBeGreaterThanOrEqual(3);
+    for (const [id, n] of count) expect(n / days.length, id).toBeLessThanOrEqual(0.4);
+    expect(days.some((d) => bungeoSpotOf(d).map === "sea")).toBe(true);
+    expect(days.some((d) => bungeoSpotOf(d).map === "village")).toBe(true);
+  });
+  it("운영자 일정: 회차마다 그 회차 자리 이름, 다섯 회차에 두 곳 이상", () => {
+    const next = bungeoUpcoming(kst(2026, 11, 23, 12, 0), 5);
+    expect(next.map((s) => s.spot)).toEqual(next.map((s) => bungeoSpotOf(s.day).name));
+    expect(new Set(next.map((s) => s.spot)).size).toBeGreaterThanOrEqual(2);
+  });
+  it("열린 동안만 지금 자리, 닫히면 null · 바퀴 자국은 가장 최근 회차 자리", () => {
+    const d = "20261125";
+    expect(bungeoOpenSpot(kst(2026, 11, 25, 22, 30))).toBe(bungeoSpotOf(d));
+    expect(bungeoOpenSpot(kst(2026, 11, 25, 21, 0))).toBeNull();
+    expect(bungeoLastSpot(kst(2026, 11, 25, 21, 0))).toBe(bungeoSpotOf("20261122"));
+    expect(bungeoLastSpot(kst(2026, 11, 26, 3, 0))).toBe(bungeoSpotOf(d));
+    expect(bungeoLastSpot(kst(2026, 11, 20, 12, 0))).toBeNull();
+  });
+  it("자리를 새로 더해도(from) 그 전 회차 자리는 그대로 — from 이전 날짜는 뽑기에 안 들어간다", () => {
+    const late = BUNGEO_SPOTS.filter((s) => s.from);
+    for (const s of late) for (const d of days) if (d < s.from!) expect(bungeoSpotOf(d).id).not.toBe(s.id);
+  });
+});
+
+describe("11/23 서버 구매 자리 확인 (그 회차 맵 · 수레에서 64px 안)", () => {
+  // 바닷가 회차 하나 · 마을 회차 하나
+  const days = bungeoDays();
+  const seaDay = days.find((d) => d >= "20261125" && bungeoSpotOf(d).map === "sea")!;
+  const vilDay = days.find((d) => d >= "20261125" && bungeoSpotOf(d).map === "village")!;
+  const openAt = (d: string) => Date.UTC(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6, 8), 22 - 9, 30);
+  it("가까우면 된다, 멀거나 다른 맵·자리 없음·닫힌 시간이면 안 된다", () => {
+    for (const d of [seaDay, vilDay]) {
+      const s = bungeoSpotOf(d);
+      const now = openAt(d);
+      expect(bungeoNear(now, { map: s.map, x: s.x + 10, y: s.y + 40 }), d).toBe(true);
+      expect(bungeoNear(now, { map: s.map, x: s.x, y: s.y + BUNGEO_BUY_RADIUS })).toBe(true);
+      expect(bungeoNear(now, { map: s.map, x: s.x, y: s.y + BUNGEO_BUY_RADIUS + 1 })).toBe(false);
+      expect(bungeoNear(now, { map: s.map === "sea" ? "village" : "sea", x: s.x, y: s.y })).toBe(false);
+      expect(bungeoNear(now, { map: "camp", x: s.x, y: s.y })).toBe(false);
+      expect(bungeoNear(now, null)).toBe(false);
+      expect(bungeoNear(now, { map: s.map })).toBe(false);
+      expect(bungeoNear(now - 2 * 3600_000, { map: s.map, x: s.x, y: s.y })).toBe(false);
+      // 다른 자리 (같은 맵이어도) 는 안 된다
+      for (const o of BUNGEO_SPOTS) if (o.id !== s.id) expect(bungeoNear(now, { map: o.map, x: o.x, y: o.y + 30 }), o.id).toBe(false);
+    }
+  });
+});
+
+describe("11/23 외침은 맵을 가리지 않는다 (마을·바닷가·캠핑장)", () => {
+  it("bungeoCallsDue는 시각만 보고, 외침 줄에는 자리 이름·맵 이름이 없다", () => {
+    const at = kst(2026, 11, 25, 22, 0, 30);
+    expect(bungeoCallsDue(at).map((c) => c.text)).toEqual([BUNGEO_CALLS[0]]);
+    expect(bungeoCallsDue(kst(2026, 11, 25, 22, 2))).toEqual([]);
+    const words = ["마을", "바닷가", "포구", "캠핑", "묘역", "연못", "빌딩", "등대", "터", "갯바위", "골목", "철책", "단풍"];
+    for (const t of BUNGEO_CALLS) for (const w of words) expect(t.includes(w), `${t} ${w}`).toBe(false);
+  });
+  it("화면 컴포넌트(BungeoCalls)가 맵으로 거르지 않는다", () => {
+    const src = readFileSync(new URL("../../components/bungeo/BungeoCalls.tsx", import.meta.url), "utf8");
+    expect(src).not.toMatch(/map:changed|=== "village"|!== "village"/);
+    expect(src).toContain("bungeoCallsDue");
   });
 });
 
@@ -124,16 +213,5 @@ describe("수레에서만 — 잡화점·계절 보따리상·상자·선물 목
       for (const p of pools) expect(p.includes(id), id).toBe(false);
       expect(isGiftItem(id), id).toBe(false);
     }
-  });
-});
-
-describe("소원 분수 운세 실마리 (여는 게임 날짜에만)", () => {
-  it("실마리 난수가 없으면(다른 날) 절대 안 붙고, 여는 날엔 확률 안에서만 붙는다", () => {
-    const has = (t: string) => BUNGEO_HINTS.some((h) => t.includes(h));
-    for (let i = 0; i < 50; i++) expect(has(pickFortune(i / 50, (i * 7) % 50 / 50, null).text)).toBe(false);
-    expect(has(pickFortune(0.5, 0.5, 0.1).text)).toBe(true);
-    expect(has(pickFortune(0.5, 0.5, 0.39).text)).toBe(true);
-    expect(has(pickFortune(0.5, 0.5, 0.4).text)).toBe(false);
-    expect(has(pickFortune(0.5, 0.5, 0.99).text)).toBe(false);
   });
 });
