@@ -6,6 +6,7 @@ import {
   defaultExterior,
   FURNITURE,
   isHouseOwnDef,
+  isSharedSkinDef,
   GUEST_KEEP,
   GUEST_PER_DAY,
   GUEST_REPORT_HIDE,
@@ -329,14 +330,20 @@ return 1
 `;
 
 // 11/16 공용 가구 가방 (store.ts invView·fitsPool·takeFrom과 같은 규칙).
-//  OWN = 집에 딸린 물건 (바닥·벽지·외관 — 공용 가방에 넣지 않는다), KEEP = 오두막 시작 가구 (오두막 몫으로 1개씩)
+//  OWN = 집에 딸린 물건 (외관 — 공용 가방에 넣지 않는다), KEEP = 오두막 시작 가구 (오두막 몫으로 1개씩)
 //  pmerge: 옛 집 가방(물건이 다 들어 있던 inv)의 가구를 공용 가방으로 한 번만 옮긴다. "~pooled" 표시를 HSETNX로 먼저 세우므로
 //  몇 번을 불러도 두 번 더하지 않는다(멱등). 가방을 쓰는 Lua마다 맨 앞에서 두 집 가방에 부른다 → 옮기기와 그 동작이 한 번에(원자적으로).
 //  시작 가구를 받은 오두막(~starter)은 시작 가구를 1개씩 오두막 몫으로 남긴다. 놓인 개수(placed)는 그대로 → 옮긴 뒤에도 배치가 유효하다
 //  (각 집이 몫을 넘게 놓은 수 ≤ 그 집이 옮긴 수라서 두 집 합계 ≤ 공용 개수)
+//  11/24 smerge: 바닥·벽지(SKIN)도 공용 가방. 예전 집 몫(~pooled 뒤에 남은 것·오두막 시작 바닥·벽지·비운 집 가방)을 공용 가방으로 옮긴다.
+//  옮긴 칸은 지우므로 몇 번 불러도 두 번 더하지 않는다(멱등). placed는 그대로 → 지금 입힌 바닥·벽지는 그대로 쓰는 중으로 센다
+//  (각 집이 몫을 넘게 놓은 수가 옮긴 만큼만 늘어 두 집 합계 ≤ 공용 개수)
 //  over: 그 집이 몫을 넘게 놓은 수 = 공용 가방에서 꺼내 놓은 수
 const POOL_FN = `
 local OWN = {${FURNITURE.filter((f) => isHouseOwnDef(f))
+  .map((f) => `[${JSON.stringify(f.id)}]=true`)
+  .join(",")}}
+local SKIN = {${FURNITURE.filter((f) => isSharedSkinDef(f))
   .map((f) => `[${JSON.stringify(f.id)}]=true`)
   .join(",")}}
 local KEEP = {${SEA_STARTER_KEEP.map((i) => `[${JSON.stringify(i)}]=true`).join(",")}}
@@ -356,6 +363,16 @@ local function pmerge(inv, pool, sea)
     end
   end
 end
+local function smerge(inv, pool)
+  local flat = redis.call('HGETALL', inv)
+  for i = 1, #flat, 2 do
+    if SKIN[flat[i]] then
+      local n = tonumber(flat[i + 1]) or 0
+      if n > 0 then redis.call('HINCRBY', pool, flat[i], n) end
+      redis.call('HDEL', inv, flat[i])
+    end
+  end
+end
 local function over(placed, inv, it)
   local d = num(placed, it) - num(inv, it)
   if d > 0 then return d end
@@ -367,6 +384,8 @@ end
 const POOL_MERGE = `
 pmerge(KEYS[2], KEYS[1], ARGV[1] == '1')
 pmerge(KEYS[3], KEYS[1], ARGV[1] ~= '1')
+smerge(KEYS[2], KEYS[1])
+smerge(KEYS[3], KEYS[1])
 `;
 
 // 그 집에서 본 가방 (옮기기 먼저)  반환: {pool, inv, otherInv, otherPlaced} HGETALL 넷

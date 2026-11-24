@@ -78,7 +78,7 @@ export type FurnitureDef = {
   light?: { color: number; r: number };
   /**
    * 바닥·담장 스킨: 칸에 놓지 않고 집 전체에 입힌다.
-   * 11/24 "window" = 안쪽 벽 창문 모양 (눈꽃 창가). 바닥·벽지와 달리 두 집 공용 가방 가구라 isHouseOwnDef에서 빠진다
+   * 11/24 "window" = 안쪽 벽 창문 모양 (눈꽃 창가). 바닥·벽지·창문 모두 두 집 공용 가방 (하나로 집 한 채 — isHouseOwnDef는 외관만)
    */
   skin?: "floor" | "wall" | "window";
   /** 외관 아이템: 마을에 보이는 집 바깥의 한 자리 (지붕·벽·울타리…). 칸에 놓지 않는다 */
@@ -348,6 +348,9 @@ export const DEFAULT_WINDOW_NAME = "기본";
 
 const BY_ID = new Map(FURNITURE.map((f) => [f.id, f]));
 export const furnitureById = (id: string): FurnitureDef | undefined => BY_ID.get(id);
+/** 바닥·벽·창문 이름 (기본 것은 가구 목록에 없어 따로) */
+export const skinName = (id: string): string =>
+  id === DEFAULT_FLOOR ? DEFAULT_FLOOR_NAME : id === DEFAULT_WALL ? DEFAULT_WALL_NAME : id === DEFAULT_WINDOW ? DEFAULT_WINDOW_NAME : (furnitureById(id)?.name ?? id);
 /**
  * 11/20 판매처가 따로 있는 전용·기간 한정 가구인지: 유령선 한정(ghost)·가구 보따리상 시즌 가구(seasonWeek)·
  * 분양사 보리 품종 가구(petShop)·보리만 파는 강아지·고양이 가구(boriOnly)·총무팀 문대리 사무실 가구(officeShop). 유령선 주간 할인 후보 등 「아무 가구나」 고르는 곳에서 뺀다
@@ -360,8 +363,24 @@ export const isWallSkin = (id: string) => id === DEFAULT_WALL || furnitureById(i
 export const isWindowSkin = (id: string) => id === DEFAULT_WINDOW || furnitureById(id)?.skin === "window";
 /** 창문 스킨 목록 (꾸미기 「창문」 칸: 기본 + 가진 것·못 가진 것 모두) */
 export const WINDOW_SKINS: readonly string[] = [DEFAULT_WINDOW, ...FURNITURE.filter((f) => f.skin === "window").map((f) => f.id)];
-/** 집에 딸린 물건 (바닥·벽지·외관 — 산 집 가방에 남는다). 창문 스킨(눈꽃 창가)은 시즌 가구라 두 집 공용 가방 */
-export const isHouseOwnDef = (d: Pick<FurnitureDef, "skin" | "ext"> | undefined): boolean => !!(d?.ext || d?.skin === "floor" || d?.skin === "wall");
+/**
+ * 집에 딸린 물건 (외관만 — 산 집 가방에 남는다).
+ * 11/24 바닥·벽지도 창문 스킨(눈꽃 창가)처럼 두 집 공용 가방: 하나로 집 한 채 (예전 집 가방의 바닥·벽지는 저장소가 읽을 때 공용 가방으로 옮긴다)
+ */
+export const isHouseOwnDef = (d: Pick<FurnitureDef, "skin" | "ext"> | undefined): boolean => !!d?.ext;
+/** 11/24 공용 가방으로 옮기는 예전 집 몫 바닥·벽지 (store.ts·store-redis.ts 이전) */
+export const isSharedSkinDef = (d: Pick<FurnitureDef, "skin" | "ext"> | undefined): boolean => !d?.ext && (d?.skin === "floor" || d?.skin === "wall");
+/** 11/24 바닥·벽지·창문 스킨이 다른 집에서 쓰이고 있을 때 (꾸미기 칸·되팔기·저장 오류가 같은 말) */
+export const SKIN_AWAY_MSG = "다른 집에 쓰고 있어요. 하나로 집 한 채에 쓸 수 있어요.";
+/** 11/24 상점 미리보기 한 줄: 산 집에만 남는 것(외관)·바닥·벽지·두 집 공용 가방 가구를 구분 (창문 스킨은 설명에 「하나로 집 한 채」가 있어 없음) */
+export const houseUseNote = (d: Pick<FurnitureDef, "skin" | "ext"> | undefined): string | null =>
+  !d || d.skin === "window"
+    ? null
+    : isHouseOwnDef(d)
+      ? "산 집에서만 쓸 수 있어요."
+      : d.skin
+        ? "마을 집과 포구 오두막 어디든 쓸 수 있어요. 하나로 집 한 채에 써요."
+        : "마을 집과 포구 오두막 어디든 놓을 수 있어요.";
 
 /** 되팔 때 돌려받는 비율 */
 export const SELL_BACK_RATE = 0.5;

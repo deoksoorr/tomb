@@ -70,12 +70,13 @@ import SproutTip from "./SproutTip";
 import Tutorial from "./Tutorial";
 import UpdateNotice from "./UpdateNotice";
 import styles from "./GameShell.module.css";
-import HousingOffice from "@/components/housing/HousingOffice";
+import HousingOffice, { type HousingIntent } from "@/components/housing/HousingOffice";
+import MyHouseDialog from "@/components/housing/MyHouseDialog";
 import { hopChannel } from "@/components/housing/channelHop";
 import { houseChannelFullMsg } from "@/game/net/switchPolicy";
 import { graveChannelFor } from "@/game/world/graveChannel";
 import type { PublicHouse } from "@/lib/housing/types";
-import { isRideablePet, isWorldLot, type ItemKind, type MapId } from "@tomb/protocol";
+import { isRideablePet, type ItemKind, type MapId } from "@tomb/protocol";
 import HuntLobby from "@/components/rpg/HuntLobby";
 import { towerTaunt } from "@/lib/rpg/tower";
 import ForageLayer from "@/components/forage/ForageLayer";
@@ -242,6 +243,8 @@ type Panel =
   | "wish"
   | "telescope"
   | "housing"
+  /** 11/24 [집]: 내 집 한눈에 보기 (집이 없으면 바로 분양 사무소) */
+  | "myhouse"
   | "activity"
   | "passed"
   | "calendar"
@@ -317,7 +320,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   /** 말풍선 채팅 입력: 데스크톱 Enter 막대 · 터치 [채팅] 버튼 한 줄 입력칸 */
   const [chatOpen, setChatOpen] = useState(false);
   /** 주거 구역의 집 문·빈 필지에서 하우징 창을 열었으면 그 집/번지 */
-  const [housingIntent, setHousingIntent] = useState<{ houseId?: string; lot?: number; zone?: "sea" } | null>(null);
+  const [housingIntent, setHousingIntent] = useState<HousingIntent>(null);
   /** 11/23 붕어빵 수레에 말을 건 맵·자리 (구매 때 서버로) */
   const [bungeoAt, setBungeoAt] = useState<{ map: MapId; x: number; y: number } | null>(null);
   const coarse = useMediaQuery("(pointer: coarse)");
@@ -657,32 +660,32 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     bridge.emit("channel:switch", { channel: grave.channel });
   }
 
-  /** 내 집: 다른 채널에 있으면 그 채널로 옮긴 뒤 주거 구역의 그 번지를 비춘다 (2단지 번지는 분양 사무소로) */
+  /**
+   * 내 집: 다른 채널에 있으면 그 채널로 옮긴 뒤 집 안으로 바로 들어간다 (마을 집·포구 오두막 모두).
+   * 11/24 예전엔 마을 집이면 주거 구역의 그 번지를 비추기만 했다. 바로 들어간 집에서 나오면 문 앞이 아니라 들어가기 전 자리로 (stay)
+   */
   function goToMyHouse(house: PublicHouse) {
     setPanel(null);
     hopChannel(
       house.ch,
       houseChannel,
       () => {
-        // 11/16 포구 오두막: 바닷가에 있으면 그 터 앞으로, 아니면 오두막 안으로 바로 들어가요
-        if (house.zone === "sea") {
-          if ((bridge.last("map:changed")?.map ?? "village") === "sea") bridge.emit("sea:lot", { lot: house.lot });
-          else {
-            setHousingIntent({ houseId: house.id });
-            setPanel("housing");
-          }
-          return;
-        }
-        if (isWorldLot(house.lot)) bridge.emit("world:lot", { lot: house.lot, label: "내 집" });
-        else {
-          setHousingIntent(null);
-          setPanel("housing");
-        }
+        setHousingIntent({ houseId: house.id, stay: true });
+        setPanel("housing");
       },
       // 꽉 찬 채널이면 게임이 옮기지 않고 이미 안내했다
       (full) => !full && showToast(`${house.ch}채널로 옮기지 못했어요. 잠시 뒤 다시 해 주세요.`),
       { fullMsg: houseChannelFullMsg(house.ch) },
     );
+  }
+
+  /**
+   * 분양 사무소 창 (들어갈 집 없이). 11/24 [집]이 마지막에 들어간 집으로 들어가던 문제: 집 문에서 남은 housingIntent(houseId)를
+   * 지우지 않고 setPanel("housing")만 해서 HousingOffice가 그 집으로 바로 들어갔다. 사무소를 열 때는 늘 비운다
+   */
+  function openOffice() {
+    setHousingIntent(null);
+    setPanel("housing");
   }
 
   /** 내 묘비가 하나뿐이면 바로 그 앞으로, 아니면 목록 */
@@ -780,7 +783,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     } else if (target === "photo") {
       setPanel(null);
       openPhoto();
-    } else if (target === "notices") {
+    } else if (target === "housing") setPanel("myhouse");
+    else if (target === "notices") {
       // 11/20 개발자 노트 사이트를 새 탭으로
       setPanel(null);
       openDevNotes();
@@ -1008,7 +1012,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 <PixelIcon name="board" />
                 <span className={styles.dockWideLabel}>의뢰</span>
               </button>
-              <button ref={houseBtnRef} type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("housing")}>
+              <button ref={houseBtnRef} type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("myhouse")}>
                 <PixelIcon name="house" />집
               </button>
               <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("activity")}>
@@ -1103,10 +1107,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           onLoggedOut={onLoggedOut}
           houseChannel={houseChannel}
           onGoToMyHouse={goToMyHouse}
-          onOpenHousing={() => {
-            setHousingIntent(null);
-            setPanel("housing");
-          }}
+          onOpenHousing={openOffice}
           onClose={closePanel}
         />
       )}
@@ -1123,7 +1124,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {panel === "activity" && (
         <ActivityDialog
           onGoToGrave={goToGraveById}
-          onOpenHousing={() => setPanel("housing")}
+          onOpenHousing={openOffice}
           onBury={startBury}
           onClose={closePanel}
         />
@@ -1195,8 +1196,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           footer={<GraveyardNow graves={graves.graves} channel={graves.channel} onPick={lookAtGrave} />}
         />
       )}
+      {panel === "myhouse" && <MyHouseDialog channel={houseChannel} onGo={goToMyHouse} onOffice={openOffice} onClose={closePanel} />}
       {panel === "housing" && (
-        <HousingOffice key={housingIntent?.houseId ?? `${housingIntent?.zone ?? ""}${housingIntent?.lot ?? "office"}`} intent={housingIntent} channel={houseChannel} onClose={closePanel} />
+        <HousingOffice key={housingIntent?.houseId ? `${housingIntent.houseId}${housingIntent.stay ? ":stay" : ""}` : `${housingIntent?.zone ?? ""}${housingIntent?.lot ?? "office"}`} intent={housingIntent} channel={houseChannel} onClose={closePanel} />
       )}
       {panel === "hunt" && <HuntLobby onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
       {/* 11/22 탈것에 탄 채 입구에서 막혔을 때 가운데 알림 (lib/rideStop) */}

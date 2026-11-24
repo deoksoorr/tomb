@@ -1,8 +1,8 @@
 import type { Redis } from "@upstash/redis";
 import { nanoid } from "nanoid";
 import { afterAll, expect, it } from "vitest";
-import { HOUSING_CHANNELS, SEA_STARTER, type HouseZone } from "./catalog";
-import type { HousePair, HouseStore } from "./store";
+import { HOUSING_CHANNELS, SEA_FLOOR, SEA_STARTER, SEA_WALL, type HouseZone } from "./catalog";
+import { SEA_STARTER_KEEP, type HousePair, type HouseStore } from "./store";
 
 // 11/16 공용 가구 가방 계약: MemoryHouseStore·RedisHouseStore가 똑같이 지켜야 하는 동작 (sharedBag.test.ts가 두 구현에 돌린다).
 // raw가 있으면(Redis) 옛 집마다 가방 → 공용 가방 옮기기도 본다. seen = Redis 정리 Lua가 읽는 주인 접속 기록 심기
@@ -90,29 +90,53 @@ export function sharedBagContract(kit: BagKit) {
     const { pair, owner, ch } = await both(true);
     await store.addItem(pair, "village", "pot", 20);
     expect(await save(pair, "sea", { ...Object.fromEntries(SEA_STARTER.map((i) => [i, 1])), pot: 1 })).toBe("ok");
-    expect(await view(pair, "village")).toEqual({ have: {}, away: { pot: 1 } });
+    // 11/24 시작 바닥·벽지도 공용 가방 → 오두막에 입힌 것은 마을 집에서 「다른 집에」
+    expect(await view(pair, "village")).toEqual({ have: {}, away: { pot: 1, [SEA_FLOOR]: 1, [SEA_WALL]: 1 } });
     await kit.seen?.(owner, 5);
     const r = await store.reclaim(pair.sea, { owner, tier: "small", ch, points: 0, cutoff: 10, since: 0, lastSeenAt: 5, label: "x", now: 20, zone: "sea" });
     expect(r).toEqual({ points: 0 });
-    expect(await view(pair, "village")).toEqual({ have: { pot: 1 }, away: {} });
-    expect(await save(pair, "village", { pot: 1 })).toBe("ok");
+    expect(await view(pair, "village")).toEqual({ have: { pot: 1, [SEA_FLOOR]: 1, [SEA_WALL]: 1 }, away: {} });
+    expect(await save(pair, "village", { pot: 1, [SEA_FLOOR]: 1 })).toBe("ok");
     const own = await store.ownItems(pair.sea);
-    for (const it of SEA_STARTER) expect(own[it]).toBe(1);
+    for (const it of SEA_STARTER_KEEP) expect(own[it]).toBe(1);
+    expect(own[SEA_FLOOR]).toBeUndefined();
   });
 
-  it("바닥·벽지·외관은 산 집 것 (공용 가방에 들어가지 않는다)", async () => {
+  it("11/24 바닥·벽지는 두 집 공용 (하나로 집 한 채), 외관은 산 집 것", async () => {
     const { pair } = await both();
     expect(await store.addItem(pair, "sea", "floor_wood", 20)).toBe("ok");
     expect(await store.addItem(pair, "village", "roof_red", 20)).toBe("ok");
     expect(await view(pair, "sea")).toEqual({ have: { floor_wood: 1 }, away: {} });
-    expect(await view(pair, "village")).toEqual({ have: { roof_red: 1 }, away: {} });
-    expect(await save(pair, "village", { floor_wood: 1 })).toBe("not_owned");
-    expect(await save(pair, "sea", { floor_wood: 1 })).toBe("ok");
+    expect(await view(pair, "village")).toEqual({ have: { roof_red: 1, floor_wood: 1 }, away: {} });
     expect(await save(pair, "sea", { roof_red: 1 })).toBe("not_owned");
-    expect(await store.takeItem(pair, "village", "floor_wood")).toBe("none");
-    // 바닥은 1장씩만 산다 (상한 1) — 다른 집 것과 따로 센다
-    expect(await store.addItem(pair, "village", "floor_wood", 1)).toBe("ok");
-    expect(await store.addItem(pair, "village", "floor_wood", 1)).toBe("max");
+    // 마을 집에 입히면 오두막에선 다른 집에 쓰는 중
+    expect(await save(pair, "village", { floor_wood: 1 })).toBe("ok");
+    expect(await view(pair, "sea")).toEqual({ have: {}, away: { floor_wood: 1 } });
+    expect(await save(pair, "sea", { floor_wood: 1 })).toBe("not_owned");
+    expect(await store.takeItem(pair, "sea", "floor_wood")).toBe("away");
+    expect(await store.takeItem(pair, "village", "floor_wood")).toBe("placed");
+    // 상한은 공용 기준 (어느 집에서 사든)
+    expect(await store.addItem(pair, "sea", "floor_wood", 1)).toBe("max");
+    // 마을 집에서 벗기면 오두막에 쓸 수 있다
+    expect(await save(pair, "village", {})).toBe("ok");
+    expect(await save(pair, "sea", { floor_wood: 1 })).toBe("ok");
+    expect(await store.takeItem(pair, "village", "floor_wood")).toBe("away");
+  });
+
+  it("11/24 예전 집 몫 바닥·벽지(오두막 시작 바닥·벽지)는 공용 가방으로 한 번만 옮기고, 입힌 것은 쓰는 중으로 센다", async () => {
+    const { pair } = await both(true);
+    const sea = await view(pair, "sea");
+    expect(sea.have).toMatchObject({ [SEA_FLOOR]: 1, [SEA_WALL]: 1 });
+    expect(await view(pair, "village")).toEqual({ have: {}, away: { [SEA_FLOOR]: 1, [SEA_WALL]: 1 } });
+    // 다시 읽어도 같다 (두 번 더하지 않는다)
+    expect(await view(pair, "sea")).toEqual(sea);
+    expect((await store.ownItems(pair.sea))[SEA_FLOOR]).toBeUndefined();
+    expect(await save(pair, "village", { [SEA_FLOOR]: 1 })).toBe("not_owned");
+    expect(await save(pair, "sea", Object.fromEntries(SEA_STARTER.map((i) => [i, 1])))).toBe("ok");
+    expect(await store.takeItem(pair, "sea", SEA_FLOOR)).toBe("placed");
+    // 오두막에서 벗기면 마을 집에 쓸 수 있다
+    expect(await save(pair, "sea", Object.fromEntries(SEA_STARTER_KEEP.map((i) => [i, 1])))).toBe("ok");
+    expect(await save(pair, "village", { [SEA_FLOOR]: 1, [SEA_WALL]: 1 })).toBe("ok");
   });
 
   it("오두막 시작 가구는 오두막 몫: 마을 집에서 못 쓰고, 산 것은 공용으로 더해진다", async () => {
@@ -157,8 +181,9 @@ export function sharedBagContract(kit: BagKit) {
       await raw.hset(placed(pair.village), { desk: "2", floor_wood: "1" });
       await raw.hset(placed(pair.sea), { sea_hammock: "1", desk: "1" });
       const views = await Promise.all(Array.from({ length: 6 }, (_, i) => view(pair, i % 2 ? "sea" : "village")));
-      const village = { have: { desk: 2, floor_wood: 1, pot: 1, sea_hammock: 1 }, away: { desk: 1 } };
-      const sea = { have: { desk: 1, sea_hammock: 2, floor_deck: 1, pot: 1 }, away: { desk: 2 } };
+      // 11/24 바닥·벽지도 공용 가방으로 (마을 집에 입힌 floor_wood는 오두막에서 「다른 집에」)
+      const village = { have: { desk: 2, floor_wood: 1, pot: 1, sea_hammock: 1, floor_deck: 1 }, away: { desk: 1 } };
+      const sea = { have: { desk: 1, sea_hammock: 2, floor_deck: 1, pot: 1 }, away: { desk: 2, floor_wood: 1 } };
       views.forEach((v, i) => expect(v).toEqual(i % 2 ? sea : village));
       const hash = async (k: string) => {
         const flat = ((await raw.hgetall(k)) as unknown as string[] | null) ?? [];
@@ -166,17 +191,38 @@ export function sharedBagContract(kit: BagKit) {
         for (let i = 0; i < flat.length; i += 2) o[flat[i]] = String(flat[i + 1]);
         return o;
       };
-      expect(await hash(`house:${pair.village}:pool`)).toEqual({ desk: "3", pot: "1", sea_hammock: "1" });
-      expect(await hash(inv(pair.village))).toEqual({ "~pooled": "1", floor_wood: "1" });
-      expect(await hash(inv(pair.sea))).toEqual({ "~pooled": "1", "~starter": "1", sea_hammock: "1", floor_deck: "1" });
+      const pool = { desk: "3", pot: "1", sea_hammock: "1", floor_wood: "1", floor_deck: "1" };
+      expect(await hash(`house:${pair.village}:pool`)).toEqual(pool);
+      expect(await hash(inv(pair.village))).toEqual({ "~pooled": "1" });
+      expect(await hash(inv(pair.sea))).toEqual({ "~pooled": "1", "~starter": "1", sea_hammock: "1" });
       // 다시 읽어도 같다 (두 번 더하지 않는다)
       expect(await view(pair, "village")).toEqual(village);
-      expect(await hash(`house:${pair.village}:pool`)).toEqual({ desk: "3", pot: "1", sea_hammock: "1" });
+      expect(await hash(`house:${pair.village}:pool`)).toEqual(pool);
       // 놓인 그대로 저장할 수 있고, 하나 더는 안 된다
       expect(await save(pair, "village", { desk: 2, floor_wood: 1 })).toBe("ok");
       expect(await save(pair, "sea", { sea_hammock: 1, desk: 1 })).toBe("ok");
       expect(await save(pair, "sea", { sea_hammock: 1, desk: 2 })).toBe("not_owned");
       expect(await save(pair, "sea", { sea_hammock: 2, desk: 1 })).toBe("ok");
+    });
+
+  if (kit.raw)
+    it("11/24 이미 공용으로 옮긴(~pooled) 집 몫 가방의 바닥·벽지: 동시에 읽어도 한 번만 공용으로, 입힌 것은 그대로", async () => {
+      const raw = kit.raw!();
+      const { pair } = await both();
+      // 지금 실서버 모양: 두 집 몫에 같은 바닥이 하나씩, 각자 입혀 쓰는 중 + 벽지 하나는 안 씀
+      await raw.hset(`house:${pair.village}:inv`, { "~pooled": "1", floor_wood: "1", wall_paper: "1", roof_red: "1" });
+      await raw.hset(`house:${pair.sea}:inv`, { "~pooled": "1", floor_wood: "1" });
+      await raw.hset(`house:${pair.village}:placed`, { floor_wood: "1", roof_red: "1" });
+      await raw.hset(`house:${pair.sea}:placed`, { floor_wood: "1" });
+      await Promise.all(Array.from({ length: 6 }, (_, i) => view(pair, i % 2 ? "sea" : "village")));
+      expect(await view(pair, "village")).toEqual({ have: { floor_wood: 1, wall_paper: 1, roof_red: 1 }, away: { floor_wood: 1 } });
+      expect(await view(pair, "sea")).toEqual({ have: { floor_wood: 1, wall_paper: 1 }, away: { floor_wood: 1 } });
+      expect(await store.ownItems(pair.village)).toEqual({ roof_red: 1 });
+      // 둘 다 쓰는 중이라 못 판다, 그대로 저장은 된다, 벽지는 오두막에 쓸 수 있다
+      expect(await store.takeItem(pair, "village", "floor_wood")).toBe("placed");
+      expect(await save(pair, "village", { floor_wood: 1, roof_red: 1 })).toBe("ok");
+      expect(await save(pair, "sea", { floor_wood: 1, wall_paper: 1 })).toBe("ok");
+      expect(await save(pair, "village", { floor_wood: 1, roof_red: 1, wall_paper: 1 })).toBe("not_owned");
     });
 
   if (kit.raw)

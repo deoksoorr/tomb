@@ -25,9 +25,8 @@ import {
 } from "@/lib/rpg/catalog";
 import { spentStats } from "@/lib/rpg/character";
 import type { CharacterAction } from "@/lib/rpg/client";
-import { starLabel, transcendStatPoints } from "@/lib/rpg/endgame";
+import { starLabel } from "@/lib/rpg/endgame";
 import { countsForRace, derive, HUNT_POINT_T_STOP, huntPointBlock, levelPenalty, STAT_MAX, type Derived } from "@/lib/rpg/formulas";
-import { RESPEC_MAX_COST } from "@/lib/rpg/skillRules";
 import type { RpgView } from "@/lib/rpg/types";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { weaponStyleText } from "@/lib/rpg/weapons";
@@ -293,35 +292,40 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
               </div>
             );
           })}
+          {/* 11/24 운영자: 올리기·초기화는 능력치 칸에 붙여서 — PC는 DEX·LUK 줄 오른쪽 아래, 폰은 그 아래 가운데 */}
+            <span className={s.statActions}>
+              <button
+                type="button"
+                className={cx(ui.button, ui.primary)}
+                disabled={!used || busy}
+                title={used ? `${used}포인트 적용` : "올릴 능력치를 [+]로 골라 주세요"}
+                onClick={() => {
+                  onCharacter({ type: "alloc", stats: plan }, "능력치를 올렸어요.");
+                  setPlan({});
+                }}
+              >
+                올리기
+              </button>
+              <button
+                type="button"
+                className={ui.button}
+                disabled={busy || spent === 0 || confirmReset}
+                title={`능력치 초기화 (${freeLeft > 0 ? "무료" : `${resetCost}P`})`}
+                onClick={() => setConfirmReset(true)}
+              >
+                초기화
+              </button>
+            </span>
         </div>
-        <p className={s.meta}>{STAT_KEYS.map((k) => `${STAT_LABELS[k].name} ${STAT_LABELS[k].desc}.`).join(" ")}</p>
+        {/* 11/24 운영자: 스탯 설명은 한 줄로 (자세한 건 칸에 마우스를 올리면 STAT_LABELS desc) */}
+        <p className={s.meta}>STR은 공격력, AGI는 공격 속도·회피·이동, VIT는 HP·방어, INT는 SP·스킬 위력, DEX는 명중, LUK는 치명타를 올려요.</p>
+        {/* 11/24 운영자: 올리기·초기화 버튼은 같은 크기·같은 글자 수로 한 줄에, 설명도 한 줄로 */}
         <div className={s.startRow}>
           <span className={s.meta}>
-            레벨이 오를 때마다 능력치 포인트를 3개, 5의 배수 레벨에는 5개 받아요.
-            {view.endgame ? ` 초월 레벨마다 1개씩 받아요. 초월로 지금까지 ${transcendStatPoints(c.tLevel)}개 받았어요.` : ""}
+            {view.superHunter ? "테스트 서버 슈퍼 계정이라 포인트를 다 받아요. " : ""}
+            레벨이 오르면 3포인트(5의 배수 레벨은 5포인트){view.endgame ? ", 초월 레벨마다 1포인트" : ""}를 받아요.{" "}
+            {freeLeft > 0 ? `무료 초기화가 ${freeLeft}번 남았어요.` : `초기화는 ${resetCost}P예요.`}
           </span>
-          <button
-            type="button"
-            className={cx(ui.button, ui.primary)}
-            disabled={!used || busy}
-            onClick={() => {
-              onCharacter({ type: "alloc", stats: plan }, "능력치를 올렸어요.");
-              setPlan({});
-            }}
-          >
-            {used ? `${used}포인트 적용` : "올릴 능력치를 골라 주세요"}
-          </button>
-        </div>
-        <div className={s.startRow}>
-          <span className={s.meta}>
-            {view.superHunter ? "테스트 서버 슈퍼 계정이라 능력치 포인트를 최대 레벨만큼 다 받아요. " : ""}
-            {freeLeft > 0
-              ? `무료 초기화가 ${freeLeft}번 남았어요. 다 쓰면 레벨에 따라 최대 ${RESPEC_MAX_COST}P가 차감돼요.`
-              : `능력치를 초기화하면 지갑(${view.points.toLocaleString("ko-KR")}P)에서 ${resetCost}P가 차감돼요. 레벨이 높을수록 비싸지고, 최대 ${RESPEC_MAX_COST}P예요.`}
-          </span>
-          <button type="button" className={ui.button} disabled={busy || spent === 0 || confirmReset} onClick={() => setConfirmReset(true)}>
-            능력치 초기화 ({freeLeft > 0 ? "무료" : `${resetCost}P`})
-          </button>
         </div>
         {confirmReset && (
           <div className={s.confirm} role="alert">
@@ -547,7 +551,7 @@ export function ShopPanel({ view, busy, onBuy }: { view: RpgView; busy: boolean;
 }
 
 /** 11/15 한 시간 사냥 판 수 (매크로 막기): 「한 시간 사냥 한도 24 / 30판 남음」 */
-function RunsHourLine({ today }: { today: RpgView["today"] }) {
+export function RunsHourLine({ today }: { today: RpgView["today"] }) {
   const max = today.runsHourMax ?? 30;
   const left = Math.max(0, today.runsPerHour);
   return (

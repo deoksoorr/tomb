@@ -997,7 +997,8 @@
   display: grid;
   align-content: start;
   justify-items: center;
-  gap: 8px;
+  /* 11/24 그림 칸 아래 글·단추 줄이 늘어도(집 안내 한 줄) 스크롤 없이 들어가게 간격을 조였다 */
+  gap: 6px;
   min-height: 0;
   padding: 10px;
   /* 그림 칸은 창 크기로만 정해져(FurnitureShop STAGE_TIERS) 물건마다 높이가 그대로 → 스크롤바 자리를 늘 비워 둘 필요가 없다.
@@ -1065,7 +1066,7 @@
 
 .fsInfo {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
   min-width: 0;
 }
@@ -1105,7 +1106,7 @@
   color: var(--muted);
   font-family: var(--font-small);
   font-size: 10px;
-  line-height: 1.5;
+  line-height: 1.4;
   list-style: none;
 }
 

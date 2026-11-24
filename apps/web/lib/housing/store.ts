@@ -9,6 +9,7 @@ import {
   housingChannelOf,
   houseScore,
   isHouseOwnDef,
+  isSharedSkinDef,
   LEGACY_HOUSING_CHANNEL,
   reclaimLastSeen,
   SEA_LOT_COUNT,
@@ -62,7 +63,7 @@ export type NewHouse = {
 /**
  * 11/16 공용 가구 가방: 한 계정의 두 집 id (마을 집·포구 오두막, service housePair).
  * 가구는 마을 집 id에 붙은 공용 가방 하나에 모이고 (마을 집이 없어도 같은 자리), 두 집이 나눠 놓는다 — N개를 가지면 두 집 합쳐 N개까지.
- * 바닥·벽지·외관(isHouseOwnItem)과 오두막 시작 가구는 그 집 몫 (집 가방 inv에 남는다)
+ * 외관(isHouseOwnItem)과 오두막 시작 가구는 그 집 몫 (집 가방 inv에 남는다). 11/24 바닥·벽지는 공용 가방 (예전 집 몫은 읽을 때 옮긴다 — mergeSkins)
  */
 export type HousePair = { village: string; sea: string };
 
@@ -70,11 +71,11 @@ export type HousePair = { village: string; sea: string };
 export const pairIds = (pair: HousePair, zone: HouseZone | undefined) =>
   zone === "sea" ? { self: pair.sea, other: pair.village } : { self: pair.village, other: pair.sea };
 
-/** 집에 딸린 물건 (바닥·벽지·외관): 공용 가방에 넣지 않고 산 집 가방에 */
+/** 집에 딸린 물건 (외관): 공용 가방에 넣지 않고 산 집 가방에 */
 export const isHouseOwnItem = (itemId: string) => isHouseOwnDef(furnitureById(itemId));
 
 /** 오두막 시작 가구 중 가구 (오두막 몫으로 1개씩 남긴다 — 옛 가방을 옮길 때도) */
-export const SEA_STARTER_KEEP: readonly string[] = SEA_STARTER.filter((i) => !isHouseOwnItem(i));
+export const SEA_STARTER_KEEP: readonly string[] = SEA_STARTER.filter((i) => !isHouseOwnItem(i) && !isSharedSkinDef(furnitureById(i)));
 
 /**
  * 한 집에서 본 가방. have = 이 집에 놓을 수 있는 개수 (이 집 몫 + 공용 − 다른 집이 공용에서 꺼내 놓은 것),
@@ -209,7 +210,7 @@ export interface HouseStore {
   setProfile(id: string, name: string, intro: string, now: number): Promise<boolean>;
   /** tier가 from일 때만 to로 바꾼다. price = 넓히기 값 (낸 포인트 기록 paid가 있으면 더한다) */
   upgrade(id: string, from: PlotTierId, to: PlotTierId, now: number, price?: number): Promise<boolean>;
-  /** 가방에 1개: 가구는 공용 가방, 바닥·벽지·외관은 그 집 가방 (그 가방에서 max 이상이면 "max", 그 집이 없으면 "no_house") */
+  /** 가방에 1개: 가구·바닥·벽지는 공용 가방, 외관은 그 집 가방 (그 가방에서 max 이상이면 "max", 그 집이 없으면 "no_house") */
   addItem(pair: HousePair, zone: HouseZone, itemId: string, max: number): Promise<"ok" | "max" | "no_house">;
   /** 두 집 어디에도 놓이지 않은 1개를 뺀다 (되팔기, takeFrom). 이 집에 다 놓였으면 "placed", 남은 게 다른 집에 놓였으면 "away", 없으면 "none" */
   takeItem(pair: HousePair, zone: HouseZone, itemId: string): Promise<"ok" | "placed" | "away" | "none">;
@@ -369,7 +370,25 @@ export class MemoryHouseStore implements HouseStore {
     return m;
   }
 
+  /**
+   * 11/24 예전 집 몫 가방(비운 집 가방 포함)의 바닥·벽지를 공용 가방으로 옮긴다. 옮긴 뒤 집 몫은 0이라 몇 번 불러도 같다(멱등).
+   * 놓인 개수(placed)는 그대로 — 두 집 합계 ≤ 공용 개수가 그대로 맞는다 (Redis smerge와 같은 규칙)
+   */
+  private mergeSkins(pair: HousePair): void {
+    const pool = this.pool(pair);
+    for (const id of [pair.village, pair.sea]) {
+      const inv = this.houses.get(id)?.inv ?? this.keptInv.get(id);
+      if (!inv) continue;
+      for (const [it, n] of [...inv])
+        if (isSharedSkinDef(furnitureById(it))) {
+          if (n > 0) pool.set(it, (pool.get(it) ?? 0) + n);
+          inv.delete(it);
+        }
+    }
+  }
+
   async inventory(pair: HousePair, zone: HouseZone) {
+    this.mergeSkins(pair);
     const { self, other } = pairIds(pair, zone);
     return invView(Object.fromEntries(this.pool(pair)), this.own(self), this.own(other), this.placedOf(other));
   }
@@ -530,6 +549,7 @@ export class MemoryHouseStore implements HouseStore {
   async addItem(pair: HousePair, zone: HouseZone, itemId: string, max: number) {
     const h = this.houses.get(pairIds(pair, zone).self);
     if (!h) return "no_house" as const;
+    this.mergeSkins(pair);
     const bag = isHouseOwnItem(itemId) ? h.inv : this.pool(pair);
     const n = bag.get(itemId) ?? 0;
     if (n >= max) return "max" as const;
@@ -538,6 +558,7 @@ export class MemoryHouseStore implements HouseStore {
   }
 
   async takeItem(pair: HousePair, zone: HouseZone, itemId: string) {
+    this.mergeSkins(pair);
     const { self, other } = pairIds(pair, zone);
     const pool = this.pool(pair);
     const from = takeFrom(itemId, Object.fromEntries(pool), this.own(self), this.placedOf(self), this.own(other), this.placedOf(other));
@@ -566,6 +587,7 @@ export class MemoryHouseStore implements HouseStore {
     if (!h) return "no_house" as const;
     if (h.rec.tier !== tier) return "tier" as const;
     if (base !== undefined && h.rec.updatedAt !== base) return "conflict" as const;
+    this.mergeSkins(pair);
     if (!fitsPool(counts, Object.fromEntries(this.pool(pair)), this.own(id), this.own(other), this.placedOf(other))) return "not_owned" as const;
     h.placed = new Map(Object.entries(counts));
     if (layout) {

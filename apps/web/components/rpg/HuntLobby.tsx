@@ -528,7 +528,7 @@ export default function HuntLobby({
   // 야근 빌딩: 캐릭터를 읽기 전엔 창을 띄우지 않는다 (레벨이 모자라면 경비원 한마디만 — 아래 효과)
   if (tower && !loadError && !view?.endgame) return null;
   return (
-    <Dialog className={s.huntDialog} title={tower ? "야근 빌딩" : "사냥터"} onClose={onClose}>
+    <Dialog className={s.huntDialog} fitHeight title={tower ? "야근 빌딩" : "사냥터"} onClose={onClose}>
       <div className={cx(s.lobby, s.lobbyFill)}>
         {view && c ? (
           <>
@@ -604,7 +604,7 @@ export default function HuntLobby({
               ))}
             </div>
             <div id={`${baseId}-panel`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`} className={s.tabPanel} data-tab={tab}>
-              {tab === "start" && tower && view.endgame && <TowerEntrance view={view} busy={phase === "starting"} onStart={(f, boost) => void start("hunt", "hell", f, boost)} />}
+              {tab === "start" && tower && view.endgame && <TowerEntrance view={view} busy={phase === "starting"} onStart={(f, boost) => void start("hunt", "hell", f, boost)} onGuide={() => setGuide(true)} />}
               {tab === "start" && !tower && (
                 <StartPanel
                   view={view}

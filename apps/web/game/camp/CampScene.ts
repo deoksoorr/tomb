@@ -80,6 +80,7 @@ import { BungeoCartView } from "../world/BungeoCartView";
 import { CampLife } from "./campLife";
 import { CampSnowmen } from "./CampSnowmen";
 import { CAMP_SCENE, type CampFriend, type CampHost, type CampSceneData } from "./campHost";
+import { campHousingHost, type CampHousingHost } from "./campHousingHost";
 import { campLines, campNpcName, CAMP_WELCOME } from "./campTalk";
 import { campNeighborSeat, campPickSeat, CAMP_MULTI_SEAT } from "./campSit";
 import { publishRide, standForGate } from "@/lib/rideGate";
@@ -702,6 +703,19 @@ export class CampScene extends Phaser.Scene {
 
   private bindBridge(): void {
     const on = this.unsubs;
+    // 11/24 [내 집 가기]로 캠핑장에서 바로 집에 들어갈 때 집 씬이 빌려 써요 (나오면 이 자리에서 이어져요)
+    const housing: CampHousingHost = {
+      atlas: this.host.atlas,
+      hub: this.host.hub,
+      reduced: this.host.reduced,
+      active: () => !this.cleaned && !this.parked && !this.locked && !this.covered && this.building === null && !!this.player,
+      look: () => this.player.view.wearing,
+      body: () => this.player.view.bodyId,
+    };
+    campHousingHost.current = housing;
+    on.push(() => {
+      if (campHousingHost.current === housing) campHousingHost.current = null;
+    });
     // 11/17 맵 컨셉: 주소 시험 값(?concept=, 실서버는 막힘)이 있으면 그것만, 없으면 관리자가 고른 값 (1분 확인·공지로 바로)
     this.applyConcept(campConceptNow());
     if (!parseConceptOverride(window.location.search)) {

@@ -424,7 +424,8 @@ export type UiEvents = {
 
   // ── 하우징 ── (game/housing, components/housing)
   /** 집에 들어간다 (분양 사무소 → 내 집/다른 사람 집). 월드는 숨기고 연결은 유지한다 */
-  "house:enter": { house: PublicHouse; mine: boolean; edit?: boolean };
+  /** stay: [집] → [내 집 가기]로 바로 들어감 — 나오면 문 앞이 아니라 들어가기 전 자리 (game/housing/housePlace) */
+  "house:enter": { house: PublicHouse; mine: boolean; edit?: boolean; stay?: boolean };
   /** 집에서 나간다 (UI의 나가기 버튼) */
   "house:exit": undefined;
   /** 저장 등으로 집 정보가 바뀜 → 다시 그린다 */

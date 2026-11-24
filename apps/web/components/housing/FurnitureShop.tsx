@@ -5,7 +5,7 @@ import { animFrames } from "@/game/housing/art";
 import { errorMessage } from "@/lib/api";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { meStore, useMe } from "@/lib/hooks/useMe";
-import { AWAY_MSG, CATEGORY_LABELS, FURNITURE, MAX_OWN_PER_ITEM, sellPrice, type FurnitureCategory, type FurnitureDef } from "@/lib/housing/catalog";
+import { AWAY_MSG, SKIN_AWAY_MSG, CATEGORY_LABELS, FURNITURE, houseUseNote, MAX_OWN_PER_ITEM, sellPrice, type FurnitureCategory, type FurnitureDef } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
 import { rotateMode } from "@/lib/housing/layout";
 import type { MyHouseResponse } from "@/lib/housing/types";
@@ -158,7 +158,8 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
     const free = here - placedHere;
     const short = my.points < cost(f);
     const full = owned >= MAX_OWN_PER_ITEM;
-    const once = (!!f.skin || !!f.ext) && owned > 0;
+    // 11/24 바닥·벽지·창문은 두 집 공용(하나로 집 한 채) → 두 집 몫 2개까지, 외관은 산 집에만 1개
+    const once = f.ext ? owned > 0 : !!f.skin && owned >= 2;
     const allAway = free < 1 && away > 0 && placedHere === 0;
     const r = turn.id === f.id ? turn.r : 0;
     // 돌리는 물건(turn)·4방향 가구(spin)는 4방향, 아니면 좌우 뒤집기 2방향
@@ -198,6 +199,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
           <p className={styles.fsText} title={f.desc}>
             {f.desc}
           </p>
+          {houseUseNote(f) && <p className={styles.small}>{houseUseNote(f)}</p>}
           <p className={styles.fsScore}>
             {placeable(f) && <span className={styles.fsSize}>{f.w}×{f.h}칸</span>}
             꾸밈 점수 <strong>+{f.score}</strong>
@@ -210,7 +212,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
               </span>
             )}
           </p>
-          {allAway && <p className={styles.small}>{AWAY_MSG}</p>}
+          {allAway && <p className={styles.small}>{f.skin ? SKIN_AWAY_MSG : AWAY_MSG}</p>}
           {abilities(f, coarse).length > 0 && (
             <ul className={styles.fsAbilities} aria-label="할 수 있는 일">
               {abilities(f, coarse).map((a) => (
@@ -247,7 +249,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
                 disabled={pending !== null || free < 1}
                 onClick={() => act(f, true)}
                 aria-label={`${f.name} 하나를 ${sellPrice(f)}포인트에 되팔기`}
-                title={allAway ? AWAY_MSG : free < 1 ? "놓여 있는 물건은 먼저 치운 뒤 저장해야 팔 수 있어요" : undefined}
+                title={allAway ? (f.skin ? SKIN_AWAY_MSG : AWAY_MSG) : free < 1 ? "놓여 있는 물건은 먼저 치운 뒤 저장해야 팔 수 있어요" : undefined}
               >
                 되팔기 {sellPrice(f)}P
               </button>
@@ -316,7 +318,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
                     <span className={styles.fsTilePrice}>
                       {cost(f) < f.price && <s className={styles.fsOldPrice}>{fmt(f.price)}P</s>}
                       {fmt(cost(f))}P
-                      {owned > 0 && <span className={styles.fsBadge}>{(f.skin || f.ext) ? "가짐" : `×${owned}`}</span>}
+                      {owned > 0 && <span className={styles.fsBadge}>{f.ext ? "가짐" : `×${owned}`}</span>}
                     </span>
                   </button>
                 </li>

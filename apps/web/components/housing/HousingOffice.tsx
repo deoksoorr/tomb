@@ -22,7 +22,8 @@ import { useRideStopGate } from "../overlay/RideStopDialog";
 
 type Mode = { kind: "office" } | { kind: "pending" } | { kind: "village" } | { kind: "house"; house: PublicHouse; mine: boolean; edit: boolean };
 /** 메인 맵 주거 구역에서 열었을 때: 그 집 문(houseId) 또는 빈 필지(lot) */
-export type HousingIntent = { houseId?: string; lot?: number; zone?: "sea" } | null;
+/** stay: [집] → [내 집 가기]로 바로 들어감 — 나오면 들어가기 전 자리로 (문 앞이 아니라. game/housing/housePlace) */
+export type HousingIntent = { houseId?: string; lot?: number; zone?: "sea"; stay?: boolean } | null;
 /**
  * 마을 정보를 게임(메인 맵 집·마을 씬)에 넘긴다. 저장 직후 연달아 받은 응답이 순서가 뒤바뀌어 와도
  * 이미 보낸 것보다 먼저 만든 정보(generatedAt)는 버린다 (업그레이드 뒤 외관 저장이 옛 그림으로 덮이던 문제)
@@ -250,7 +251,8 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
     // 11/22 아래 토스트 대신 가운데 알림 ([확인]이면 창을 닫고, [내리고 들어가기]면 내린 뒤 다시 — enterTry)
     if (!inScene.current && gate("집에 들어갈", { label: "내리고 들어가기", run: () => setEnterTry((n) => n + 1) })) return;
     inScene.current = true;
-    bridge.emit("house:enter", { house: mode.house, mine: mode.mine, edit: mode.edit });
+    const stay = !!intent?.stay && mode.house.id === intent.houseId;
+    bridge.emit("house:enter", { house: mode.house, mine: mode.mine, edit: mode.edit, ...(stay ? { stay } : {}) });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 같은 집 안에서 정보만 바뀔 때(좋아요·저장)는 다시 들어가지 않는다
   }, [enterKey, enterTry]);
 

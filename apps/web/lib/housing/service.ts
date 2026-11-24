@@ -10,6 +10,7 @@ import { kstDay, kstWeek } from "../store/accounts";
 import type { Me } from "../types";
 import {
   AWAY_MSG,
+  SKIN_AWAY_MSG,
   cottageStyleOf,
   DEFAULT_FLOOR,
   DEFAULT_WALL,
@@ -231,7 +232,9 @@ export async function buyCottage(
   if (lot !== null && (await store.village(ch, "sea")).some((h) => h.lot === lot)) throw lotTaken();
   // 시작 가구는 한 집 id에 한 번만 준다 (철거 뒤 다시 사면 오두막 몫 가방에 남은 것만 그 자리에 놓는다 — 공용 가방은 건드리지 않는다)
   const given = await store.hasStarter(id);
-  const owned = given ? await store.ownItems(id) : null;
+  // 11/24 바닥·벽지는 공용 가방: 다른 집에 쓰지 않은 것이 있으면 시작 바닥·벽지를 그대로 (inventory가 예전 집 몫도 공용으로 먼저 옮긴다)
+  const shared = given ? (await store.inventory(housePair(accountId), "sea")).have : null;
+  const owned = given && shared ? { ...(await store.ownItems(id)), [SEA_FLOOR]: shared[SEA_FLOOR] ?? 0, [SEA_WALL]: shared[SEA_WALL] ?? 0 } : null;
   const layout = starterFor(seaStarterLayout(), owned);
   const ext = defaultExterior();
   await spend(accountId, cost, villa ? `villa:${tier.id}` : `cottage:${tier.id}`);
@@ -387,7 +390,7 @@ export async function buyFurnitureMe(
   // 11/20 사무실 가구 15종은 야근 빌딩 옆 총무팀 문대리만 판다 (lib/office가 ghostSale = true로 부른다)
   if (def.officeShop && !ghostSale) throw new HttpError(400, "INVALID_INPUT", "사무실 가구는 야근 빌딩 옆 총무팀 문대리에게서 사요.");
   await mustHave(store, accountId, zone);
-  // 가구는 두 집 공용 가방 (다른 집에 놓인 것까지), 바닥·벽지·외관은 이 집 것만 센다
+  // 가구·바닥·벽지는 두 집 공용 가방 (다른 집에 놓인 것까지), 외관은 이 집 것만 센다
   const bag = await store.inventory(housePair(accountId), zone);
   const owned = (bag.have[itemId] ?? 0) + (isHouseOwnItem(itemId) ? 0 : (bag.away[itemId] ?? 0));
   if (owned >= MAX_OWN_PER_ITEM) throw new HttpError(409, "MAX_OWNED", `${def.name}, 이미 ${MAX_OWN_PER_ITEM}개를 다 가졌어요.`);
@@ -412,8 +415,10 @@ export async function sellFurniture(store: HouseStore, accountId: string, itemId
   if (r === "none") throw new HttpError(409, "NO_ITEM", "그 물건을 가지고 있지 않아요.");
   // 11/24 창문 모양으로 쓰는 중이면 그 안내 (바닥·벽지처럼 쓰는 동안은 못 판다)
   if (r === "placed" && def.skin === "window") throw new HttpError(409, "PLACED", "벽 창문에 쓰고 있어요. 꾸미기 「창문」 칸에서 기본으로 바꿔 저장한 뒤 팔 수 있어요.");
+  // 11/24 바닥·벽지도 두 집 공용: 이 집이나 다른 집에 입혀 쓰는 동안은 못 판다
+  if (r === "placed" && def.skin) throw new HttpError(409, "PLACED", `${def.skin === "floor" ? "바닥" : "벽지"}로 쓰고 있어요. 꾸미기에서 다른 것으로 바꿔 저장한 뒤 팔 수 있어요.`);
   if (r === "placed") throw new HttpError(409, "PLACED", "모두 놓여 있어요. 먼저 집에서 치운 뒤 저장해 주세요.");
-  if (r === "away") throw new HttpError(409, "PLACED", AWAY_MSG);
+  if (r === "away") throw new HttpError(409, "PLACED", def.skin ? `${def.name}, ${SKIN_AWAY_MSG}` : AWAY_MSG);
   const refunded = sellPrice(def);
   const me = await refund(accountId, refunded);
   return { ...(await myHouse(store, accountId, me, zone)), refunded };
@@ -423,7 +428,9 @@ export async function sellFurniture(store: HouseStore, accountId: string, itemId
 function awayHint(v: { code: string; message: string }, layout: HouseLayout, bag: { have: Record<string, number>; away: Record<string, number> }): string {
   if (v.code !== "NOT_OWNED") return v.message;
   const short = Object.entries(layoutCounts(layout)).find(([it, n]) => (bag.have[it] ?? 0) < n);
-  return short && (bag.away[short[0]] ?? 0) > 0 ? `${furnitureById(short[0])?.name ?? short[0]}, ${AWAY_MSG}` : v.message;
+  return short && (bag.away[short[0]] ?? 0) > 0
+    ? `${furnitureById(short[0])?.name ?? short[0]}, ${furnitureById(short[0])?.skin ? SKIN_AWAY_MSG : AWAY_MSG}`
+    : v.message;
 }
 
 /** 11/18 배치·외관을 거의 동시에 저장했을 때 (두 번째 저장은 다시 열어서) */

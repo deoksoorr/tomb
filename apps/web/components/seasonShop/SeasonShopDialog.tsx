@@ -7,7 +7,7 @@ import { errorMessage } from "@/lib/api";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { previewTurnLabel, rotateMode } from "@/lib/housing/layout";
-import { furnitureById } from "@/lib/housing/catalog";
+import { furnitureById, houseUseNote } from "@/lib/housing/catalog";
 import { batchim, endText, soonText } from "@/lib/seasonShop/rules";
 import { seasonApi } from "@/lib/seasonShop/client";
 import type { SeasonKind } from "@/lib/seasonShop/schedule";
@@ -233,6 +233,7 @@ export default function SeasonShopDialog({ kind, onClose, avatar }: Props) {
         <div className={shop.info}>
           <p className={shop.name}>{row.name}</p>
           <p className={shop.desc}>{row.desc}</p>
+          {furnitureById(row.id) && houseUseNote(furnitureById(row.id)) && <p className={shop.meta}>{houseUseNote(furnitureById(row.id))}</p>}
           <p className={cx(styles.when, tab === "soon" && styles.whenSoon)}>{when}</p>
           {row.have > 0 && <p className={shop.meta}>가방에 {row.have}개 있어요</p>}
           {buyButtons(row)}

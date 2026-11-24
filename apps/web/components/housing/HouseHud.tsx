@@ -6,7 +6,7 @@ import type { HouseEditState, HouseTool } from "@/game/housing/events";
 import { errorMessage } from "@/lib/api";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { meStore, useMe } from "@/lib/hooks/useMe";
-import { AWAY_MSG, DEFAULT_FLOOR, DEFAULT_FLOOR_NAME, DEFAULT_WALL, DEFAULT_WALL_NAME, DEFAULT_WINDOW, DEFAULT_WINDOW_NAME, FURNITURE, furnitureById, LIKE_WEIGHT, tierById, WINDOW_SKINS } from "@/lib/housing/catalog";
+import { AWAY_MSG, SKIN_AWAY_MSG, DEFAULT_FLOOR, DEFAULT_WALL, DEFAULT_WINDOW, FURNITURE, furnitureById, LIKE_WEIGHT, skinName, tierById, WINDOW_SKINS } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
 import { designScore, layoutCounts, ROTATE_LABEL, rotateMode, styleTag, totalScore, WINDOW_LOCKED_MSG } from "@/lib/housing/layout";
 import type { MyHouseResponse, PublicHouse } from "@/lib/housing/types";
@@ -273,8 +273,9 @@ function EditToolbar({
   // 11/16 가구는 두 집 공용 가방: 다른 집에 다 놓인 것도 보여 주고, 누르면 거기서 치우라고 알려 준다
   const away = (id: string) => my.away?.[id] ?? 0;
   const owned = FURNITURE.filter((f) => !f.skin && !f.ext && ((my.inventory[f.id] ?? 0) > 0 || away(f.id) > 0));
-  const floors = [DEFAULT_FLOOR, ...FURNITURE.filter((f) => f.skin === "floor" && (my.inventory[f.id] ?? 0) > 0).map((f) => f.id)];
-  const walls = [DEFAULT_WALL, ...FURNITURE.filter((f) => f.skin === "wall" && (my.inventory[f.id] ?? 0) > 0).map((f) => f.id)];
+  // 11/24 바닥·벽지도 두 집 공용 가방: 다른 집에 쓰고 있는 것도 잠금으로 보여 준다
+  const floors = [DEFAULT_FLOOR, ...FURNITURE.filter((f) => f.skin === "floor" && ((my.inventory[f.id] ?? 0) > 0 || away(f.id) > 0)).map((f) => f.id)];
+  const walls = [DEFAULT_WALL, ...FURNITURE.filter((f) => f.skin === "wall" && ((my.inventory[f.id] ?? 0) > 0 || away(f.id) > 0)).map((f) => f.id)];
   const tool = (t: HouseTool) => bridge.emit("house:tool", t);
   const trial = edit.trial;
   const trialDef = trial ? furnitureById(trial.itemId) : undefined;
@@ -290,23 +291,24 @@ function EditToolbar({
   const rKey = mode === "turn" ? "R 돌리기" : mode === "flip" ? "R 뒤집기" : "R 돌리기·뒤집기";
   // 터치 기기(화면 버튼을 쓰는 기기)는 키 안내 대신 손가락으로 하는 것만
   const coarse = useMediaQuery("(pointer: coarse)");
-  const skinName = (id: string) =>
-    id === DEFAULT_FLOOR ? DEFAULT_FLOOR_NAME : id === DEFAULT_WALL ? DEFAULT_WALL_NAME : id === DEFAULT_WINDOW ? DEFAULT_WINDOW_NAME : (furnitureById(id)?.name ?? id);
   // 11/24 창문 모양: 기본 + 눈꽃 창가 (가구 보따리상 눈꽃 창가가 이 집 가방에 있어야 고른다. 없으면 잠금으로 보여 준다)
   const windowLock = (id: string): string | null =>
     id === DEFAULT_WINDOW || (my.inventory[id] ?? 0) > 0 ? null : away(id) > 0 ? `${skinName(id)}는 다른 집 창문에 쓰고 있어요. 하나로 집 한 채에 쓸 수 있어요.` : WINDOW_LOCKED_MSG;
+  const skinLock = (id: string): string | null =>
+    id === DEFAULT_FLOOR || id === DEFAULT_WALL || (my.inventory[id] ?? 0) > 0 || away(id) < 1 ? null : `${skinName(id)}, ${SKIN_AWAY_MSG}`;
 
   // 11/22 아래쪽 시트 정리: 가방 한 줄만 보이고 [가구 | 바닥 | 벽지] 칸으로 바꿔 본다 (시트 안 세로 스크롤 없이 방이 더 보이게)
   const [tab, setTab] = useState<"items" | "floor" | "wall" | "window">("items");
   const TABS = [
     { id: "items", label: "가구", n: owned.length },
-    { id: "floor", label: "바닥", n: floors.length },
-    { id: "wall", label: "벽지", n: walls.length },
+    { id: "floor", label: "바닥", n: floors.filter((id) => !skinLock(id)).length },
+    { id: "wall", label: "벽지", n: walls.filter((id) => !skinLock(id)).length },
     { id: "window", label: "창문", n: WINDOW_SKINS.filter((id) => !windowLock(id)).length },
   ] as const;
   const skins = tab === "floor" ? floors : tab === "wall" ? walls : WINDOW_SKINS;
   const picked = tab === "floor" ? edit.floor : tab === "wall" ? edit.wall : edit.window;
-  const locked = tab === "window" ? WINDOW_SKINS.map(windowLock).find((m) => m) : undefined;
+  const lockOf = tab === "window" ? windowLock : skinLock;
+  const locked = tab === "items" ? undefined : (skins.map(lockOf).find((m) => m) ?? undefined);
   const hint =
     locked ??
     (coarse ? "끌어서 옮기기 · 빈 곳을 끌면 화면 이동" : `끌어서 옮기기 · 방향키 한 칸 · ${rKey} · Del 치우기 · Q/E 차례로 고르기 · 빈 곳을 끌면 화면 이동`);
@@ -455,7 +457,7 @@ function EditToolbar({
                 );
               })
             : skins.map((id) => {
-                const lock = tab === "window" ? windowLock(id) : null;
+                const lock = lockOf(id);
                 return (
                   <button
                     key={id}

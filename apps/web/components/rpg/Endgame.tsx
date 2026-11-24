@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { PIONEER_DAYS, PIONEER_FLOOR, RUN_TIERS, starLabel, type RunTier } from "@/lib/rpg/endgame";
+import { RUN_TIERS, starLabel, type RunTier } from "@/lib/rpg/endgame";
 import { titleDef } from "@/lib/titles";
 import type { EndgameView, RunReward } from "@/lib/rpg/types";
 import { cx } from "../ui/cx";
@@ -36,19 +35,12 @@ export function TranscendBar({ tLevel, tExp, eg }: { tLevel: number; tExp: numbe
   );
 }
 
-/** 개척자 모집 한 줄 (모집 중이거나 받은 번호가 있을 때만) */
+/** 개척자 번호 한 줄 (받은 사람에게만) */
 export function PioneerLine({ eg }: { eg: EndgameView }) {
-  const [now] = useState(() => Date.now());
   const p = eg.pioneer;
   if (p.n) return <p className={s.meta}>개척자 #{p.n}. 칭호 「개척자」를 받았어요.</p>;
-  if (!p.until || now >= p.until) return null;
-  const d = new Date(p.until + 9 * 3_600_000);
-  return (
-    <p className={s.meta}>
-      개척자를 {PIONEER_DAYS}일 동안 모아요. {d.getUTCMonth() + 1}월 {d.getUTCDate()}일 {d.getUTCHours()}시까지 ★51에 닿거나 야근 빌딩{" "}
-      {PIONEER_FLOOR}층을 넘으면 「개척자」 칭호와 번호를 받아요. 먼저 닿을수록 번호가 앞이에요.
-    </p>
-  );
+  // 11/24 운영자: 개척자 모집 안내 줄은 뺐다 (받은 사람에게만 번호 한 줄)
+  return null;
 }
 
 /** 판 결과: 초월 EXP·구간, 야근 빌딩(층·기록·상자·칭호), 개척자 */
