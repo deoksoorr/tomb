@@ -684,7 +684,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
    * 지우지 않고 setPanel("housing")만 해서 HousingOffice가 그 집으로 바로 들어갔다. 사무소를 열 때는 늘 비운다
    */
   function openOffice() {
-    setHousingIntent(null);
+    // 11/24 운영자: 지금 있는 맵의 사무소 — 바닷가면 포구 부동산(오두막), 그 밖엔 마을 분양 사무소
+    setHousingIntent(mapNow === "sea" ? { zone: "sea" } : null);
     setPanel("housing");
   }
 
