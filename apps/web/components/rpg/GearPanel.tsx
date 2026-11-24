@@ -58,7 +58,6 @@ import {
   TOTAL_ROWS,
 } from "./gear";
 import EnhanceDialog, { type EnhanceTab } from "./EnhanceDialog";
-import HuntCapMeter from "./HuntCap";
 import HuntDoll from "./HuntDoll";
 import RpgIcon from "./RpgIcon";
 import { ExchangeDialog } from "./SetGearBag";
@@ -257,7 +256,6 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
 
   return (
     <div className={s.lobby}>
-      <HuntCapMeter today={view.today} where="bag" />
       <div className={g.wrap}>
         <div className={g.left}>
           {doll}
@@ -350,7 +348,7 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
                   </div>
                 </li>
               ))}
-              <li className={g.note}>재료는 다른 사람에게 줄 수 없어요. 쓰지 않는 세트 장비를 분해해도 나와요.</li>
+              <li className={g.note}>재료는 거래할 수 없어요. 쓰지 않는 세트 장비를 분해해도 얻을 수 있어요.</li>
             </ul>
           ) : tab === "potions" ? (
             <PotionList view={view} busy={working} qty={qty} setQty={setQty} onSell={onSell} />
@@ -537,7 +535,7 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
                 })}
               </ul>
               <p className={g.note}>
-                되팔면 상점에서 산 장비는 산 값의 {pct(SELL_RATE)}, 사냥에서 주운 장비는 상점 값의 {pct(DROP_SELL_RATE)}를 받아요.
+                되팔면 산 장비는 구매가의 {pct(SELL_RATE)}, 드롭 장비는 상점가의 {pct(DROP_SELL_RATE)}를 받아요.
               </p>
             </>
           )}
@@ -920,7 +918,7 @@ function SaleNote({ split }: { split: { bought: number; drop: number } }) {
   return (
     <p className={g.note}>
       {split.drop
-        ? `상점에서 산 ${split.bought}개(${pct(SELL_RATE)})부터 팔고, 주운 ${split.drop}개는 ${pct(DROP_SELL_RATE)}를 받아요.`
+        ? `산 ${split.bought}개(${pct(SELL_RATE)})부터 팔고, 드롭 장비 ${split.drop}개는 ${pct(DROP_SELL_RATE)}를 받아요.`
         : `상점에서 산 장비라 ${pct(SELL_RATE)}를 돌려받아요.`}
     </p>
   );

@@ -25,7 +25,7 @@ export function bonusParts(b: Bonus): { k: keyof Bonus; text: string; neg: boole
   return LABELS.filter(([k]) => b[k]).map(([k, name, f]) => {
     const v = b[k]!;
     const neg = v < 0;
-    return { k, text: neg ? `${k === "hp" ? "최대 체력" : name} −${f(-v)}` : `${name} +${f(v)}`, neg };
+    return { k, text: neg ? `${k === "hp" ? "최대 HP" : name} −${f(-v)}` : `${name} +${f(v)}`, neg };
   });
 }
 
@@ -42,6 +42,13 @@ export function statPair(k: keyof Bonus, v: number): [string, string] {
 }
 
 export const pts = (n: number) => `${n.toLocaleString("ko-KR")}P`;
+
+/** 초 → 「2분」 「1분 30초」 「45초」 (안내 문장용) */
+export function secText(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const r = Math.round(sec % 60);
+  return m > 0 ? `${m}분${r > 0 ? ` ${r}초` : ""}` : `${r}초`;
+}
 
 export function mmss(ms: number): string {
   const s = Math.ceil(ms / 1000);

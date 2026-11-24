@@ -16,6 +16,7 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import { useMoreBelowRef } from "../ui/moreBelow";
 import ui from "../ui/ui.module.css";
+import shop from "../shop/ShopDialog.module.css";
 import styles from "./housing.module.css";
 import { fmt, FurnitureStage, FurnitureThumb } from "./parts";
 
@@ -35,9 +36,15 @@ type Props = {
   onTry?: (itemId: string) => void;
 };
 
-/** 데스크톱 큰 미리보기 칸 높이 (남은 높이에 맞춰 이 사이에서 고른다) */
-const STAGE_MAX_H = 204;
-const STAGE_MIN_H = 72;
+/**
+ * 11/24 데스크톱 큰 미리보기 칸 높이: 자세히 보기 칸 높이(= 창 높이)로만 고른다 — 고른 물건마다 바뀌지 않는다.
+ * 예전엔 설명·버튼 높이를 빼고 남은 만큼으로 정해서 물건을 바꿀 때마다 그림 칸이 커졌다 작아졌다 했다
+ */
+const STAGE_TIERS: readonly { minH: number; h: number }[] = [
+  { minH: 500, h: 196 },
+  { minH: 430, h: 150 },
+  { minH: 0, h: 110 },
+];
 
 /** 칸에 놓는 물건인지 (바닥·벽지·외관은 돌리거나 놓아 볼 수 없다) */
 const placeable = (f: FurnitureDef) => !f.skin && !f.ext;
@@ -90,39 +97,26 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
   const frames = shown ? animFrames(shown.id) : 1;
 
   // 움직이는 그림(연못 잔물결)만 천천히 장면을 넘긴다. 동작 줄이기면 멈춘 그림
-  // 데스크톱: 왼쪽 자세히 보기가 스크롤 없이 들어가게 미리보기 칸 높이를 남은 높이에 맞춘다
-  // (창이 낮은 화면·브라우저 확대에서는 미리보기 배율이 저절로 한 단계씩 줄어든다)
+  // 데스크톱: 미리보기 그림 칸 = 자세히 보기 칸 폭 가득 × 칸 높이로 고른 높이 (STAGE_TIERS).
+  // 칸 크기(창 크기)만 보고 고른 물건·설명 길이는 보지 않는다 → 물건을 바꿔도 그림 칸이 그대로
   const detailRef = useRef<HTMLElement>(null);
   const detailMore = useMoreBelowRef(detailRef);
-  const [stageFit, setStageFit] = useState(STAGE_MAX_H);
-  const shownId = shown?.id;
+  const [stageBox, setStageBox] = useState({ w: 320, h: STAGE_TIERS[0].h });
+  const hasShown = !!shown;
   useLayoutEffect(() => {
     const el = detailRef.current;
     if (!el || phone || typeof ResizeObserver === "undefined") return;
     const measure = () => {
-      const wrap = el.querySelector<HTMLElement>("[data-stage-wrap]");
-      const stage = el.querySelector<HTMLElement>("[data-stage]");
-      const info = el.querySelector<HTMLElement>("[data-info]");
-      if (!wrap || !stage || !info) return;
       const cs = getComputedStyle(el);
-      const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-      const gap = parseFloat(cs.rowGap) || 0;
-      const stagePad = stage.offsetHeight - stage.clientHeight + parseFloat(getComputedStyle(stage).paddingTop) + parseFloat(getComputedStyle(stage).paddingBottom);
-      const inner = stage.offsetHeight - stagePad;
-      // 미리보기 그림 칸을 뺀 나머지 (단추 줄·설명·사기 단추)
-      const rest = wrap.offsetHeight - inner + gap + info.offsetHeight;
-      const avail = Math.floor(el.clientHeight - pad - rest);
-      const next = Math.max(STAGE_MIN_H, Math.min(STAGE_MAX_H, avail));
-      // 1~2px 차이로 다시 맞추면 줄바꿈이 바뀌어 크기가 오락가락한다 → 작은 차이는 무시
-      setStageFit((cur) => (Math.abs(cur - next) < 3 ? cur : next));
+      const w = Math.floor(el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
+      const h = (STAGE_TIERS.find((t) => el.clientHeight >= t.minH) ?? STAGE_TIERS[STAGE_TIERS.length - 1]).h;
+      setStageBox((cur) => (cur.w === w && cur.h === h ? cur : { w, h }));
     };
     const ro = new ResizeObserver(measure);
     ro.observe(el);
-    const info = el.querySelector("[data-info]");
-    if (info) ro.observe(info);
     measure();
     return () => ro.disconnect();
-  }, [phone, shownId]);
+  }, [phone, hasShown]);
 
   useEffect(() => {
     if (frames < 2 || reduced) return;
@@ -170,8 +164,8 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
     // 돌리는 물건(turn)·4방향 가구(spin)는 4방향, 아니면 좌우 뒤집기 2방향
     const four = rotateMode(f) === "turn";
     const ways = four ? 4 : 2;
-    const sw = phone ? 140 : 216;
-    const sh = phone ? 140 : stageFit;
+    const sw = phone ? 140 : stageBox.w;
+    const sh = phone ? 140 : stageBox.h;
     return (
       <section ref={detailMore} className={cx(styles.fsDetail, "more-fade")} aria-label="자세히 보기">
         <div className={styles.fsStageWrap} data-stage-wrap="">
@@ -277,13 +271,13 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
   }
 
   return (
-    <Dialog title="가구 상점" onClose={onClose}>
+    <Dialog title="가구 상점" onClose={onClose} className={shop.window}>
       <div className={styles.fsShop}>
         <div className={styles.fsTop}>
           <p className={styles.points}>
             내 포인트 <strong>{fmt(my.points)}P</strong>
           </p>
-          <p className={cx(styles.small, styles.fsHint)}>되팔면 산 값의 절반을 받아요. 놓아 둔 물건은 치우고 저장한 뒤에 팔 수 있어요.</p>
+          <p className={cx(styles.small, styles.fsHint)}>되팔면 정가의 절반을 받아요. 놓아 둔 물건은 치우고 저장한 뒤에 팔 수 있어요.</p>
         </div>
         <div className={styles.fsTabs} role="tablist" aria-label="물건 갈래">
           {cats.map((c) => (

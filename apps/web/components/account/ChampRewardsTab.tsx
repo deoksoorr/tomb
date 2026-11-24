@@ -108,7 +108,7 @@ export default function ChampRewardsTab({
       )}
       {bits > 0 && (
         <section className={styles.champPerks} aria-label="1주일 혜택">
-          <p className={styles.champPerkHead}>혜택은 내 정보 [혜택] 탭에서 볼 수 있어요</p>
+          <p className={styles.champPerkHead}>혜택은 내 정보에서 볼 수 있어요</p>
           {onOpenPerks && (
             <button type="button" className={ui.button} onClick={onOpenPerks}>
               혜택 보기

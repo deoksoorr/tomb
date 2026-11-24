@@ -1525,10 +1525,9 @@ export class HuntScene extends RpgScene {
     const split = MONSTERS[m.id].split;
     if (split) for (let i = 0; i < split.n; i++) this.spawn(split.id, m.x + (i - (split.n - 1) / 2) * 16, m.y, m.wave);
     this.theme?.killed?.(m);
-    // 11/15 야근 빌딩 우두머리: 쓰러진 자리에 상자 (층을 다 깨면 열린다 — 오늘 상자가 없으면 알림만)
-    if (this.play.tower && m.boss && m.id === this.zone.boss && isBossFloor(this.floor) && !this.bossChest) {
-      if (this.chestsLeft > 0 && isChestFloor(this.floor)) this.bossChest = new BossChest(this, m.x, m.y, this.now, RTEX.glow, this.data0.reduced);
-      else this.floatText(m.x, m.y - 24, "오늘 상자는 다 받았어요", "#c8c0a8", 10);
+    // 11/15 야근 빌딩 우두머리: 쓰러진 자리에 상자 (층을 다 깨면 열린다). 11/24 상자 없는 층(TOWER_CHEST_FROM 아래)은 알림 없이 넘긴다 — 하루 상자 한도가 없어서 「오늘 상자는 다 받았어요」는 틀린 말이었다
+    if (this.play.tower && m.boss && m.id === this.zone.boss && isBossFloor(this.floor) && !this.bossChest && this.chestsLeft > 0 && isChestFloor(this.floor)) {
+      this.bossChest = new BossChest(this, m.x, m.y, this.now, RTEX.glow, this.data0.reduced);
     }
   }
 
@@ -4129,18 +4128,19 @@ export class HuntScene extends RpgScene {
           this.sfx.play("levelup", 0.7);
           this.fx.shake(140, 0.004);
           try {
+            // 상자에는 물약·결재 서류가 늘 들어 있어서(towerChestDrops) 빈 상자는 없다 — 드롭이 없으면 시드를 못 받은 것
             if (drops.length) this.loot.drop(drops, c.x, c.y - 8, false, 60);
-            else if (this.dropSeed === null) this.floatText(c.x, c.y - 26, "상자 안은 결과 화면에서 보여요", "#c8c0a8", 10);
-            else this.floatText(c.x, c.y - 26, "이번 상자는 비어 있어요", "#c8c0a8", 10);
+            else this.floatText(c.x, c.y - 26, "상자 안은 결과 화면에서 보여요", "#c8c0a8", 10);
           } catch {
             // 연출만 빠진다 (보상은 서버가)
           }
         });
-        this.flash(`${f}층 우두머리를 잡았어요! 체력이 회복되고 상자가 열려요`, 2200);
+        this.flash(`${f}층 우두머리를 처치했어요! HP가 회복되고 상자가 열려요`, 2200);
       } else {
         this.bossChest?.destroy();
         this.bossChest = null;
-        this.flash(`${f}층 우두머리를 잡았어요! 체력이 회복됐어요. 오늘 상자는 다 받았어요`, 2400);
+        // 11/24 상자 없는 우두머리 층(50층까지). 하루 상자 한도는 없어서(TOWER_CHESTS_PER_DAY) 「오늘 상자는 다 받았어요」는 뺐다
+        this.flash(`${f}층 우두머리를 처치했어요! HP가 회복됐어요`, 2400);
       }
       // 상자에서 나온 것을 보여 줄 틈: 다 주웠으면 바로, 아니면 잠시 뒤 끌어오고 엘리베이터 (아무것도 놓치지 않는다)
       if (opened) {

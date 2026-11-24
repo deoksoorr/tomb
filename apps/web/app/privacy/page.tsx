@@ -87,7 +87,7 @@ export default function PrivacyPage() {
 
         <h2>3. 보관 기간</h2>
         <ul>
-          <li>이장한 묘비: 성황당에서 {SHRINE_KEEP_DAYS}일 동안 보관한 뒤 지워요.</li>
+          <li>이장한 묘비: {SHRINE_KEEP_DAYS}일 동안 보관한 뒤 지워요.</li>
           <li>성불한 묘비: 「성불한 이야기들」에 남겨 두고, 지워 달라고 요청하면 지워요.</li>
           <li>오류 보고: 14일 뒤 지워요.</li>
           <li>문의는 최근 500건까지만 두고 오래된 것부터 지워요.</li>

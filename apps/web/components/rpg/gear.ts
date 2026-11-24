@@ -9,7 +9,7 @@ import { decodeSg, isSgCode, SG_GRADE_COLORS, SG_GRADE_NAMES, SG_PIECE_KIND, SG_
 export const TOTAL_ROWS: readonly (readonly [keyof Omit<Derived, "stats">, string, (v: number) => string, string])[] = [
   ["atk", "ATK", String, "공격력"],
   ["def", "DEF", String, "방어"],
-  ["maxHp", "HP", String, "체력"],
+  ["maxHp", "HP", String, "최대 HP"],
   ["maxSp", "SP", String, "SP"],
   ["aspd", "공속", (v) => v.toFixed(2), "공격 속도"],
   ["crit", "치명", (v) => `${v}%`, "치명타"],
@@ -187,7 +187,7 @@ export function bagEntries(c: Pick<CharacterState, "equip" | "inv" | "sg" | "si"
 
 // ── 11/15 강화가 보이게: 능력치를 "강화 전 값 (+강화 몫)"으로 ──
 
-const STAT_KO: Record<string, string> = { atk: "공격력", def: "방어", hp: "체력", sp: "SP", str: "STR", agi: "AGI", vit: "VIT", int: "INT", dex: "DEX", luk: "LUK", aspd: "공속", crit: "치명", hit: "명중", flee: "회피", move: "이속" };
+const STAT_KO: Record<string, string> = { atk: "공격력", def: "방어", hp: "HP", sp: "SP", str: "STR", agi: "AGI", vit: "VIT", int: "INT", dex: "DEX", luk: "LUK", aspd: "공격 속도", crit: "치명타", hit: "명중", flee: "회피", move: "이동 속도" };
 const n2 = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(2));
 
 /** "공격력 136 (+136) · 방어 40 (+16)" — 강화가 없으면 괄호 없이 */
@@ -202,6 +202,6 @@ export function statParts(id: string): { k: string; label: string; base: string;
   // 깎는 값 (11/21 사직서 봉투 최대 체력 −120 등): 「최대 체력 −120」, 화면은 빨갛게
   return enhSplit(id, gearById).map(([k, base, plus]) => {
     const neg = base < 0;
-    return { k, label: neg && k === "hp" ? "최대 체력" : (STAT_KO[k] ?? k), base: neg ? `−${n2(-base)}` : n2(base), plus: plus ? n2(plus) : "", neg };
+    return { k, label: neg && k === "hp" ? "최대 HP" : (STAT_KO[k] ?? k), base: neg ? `−${n2(-base)}` : n2(base), plus: plus ? n2(plus) : "", neg };
   });
 }

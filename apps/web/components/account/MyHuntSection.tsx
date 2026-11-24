@@ -80,13 +80,13 @@ function HuntStats({ view }: { view: RpgView }) {
           {eg && c.tLevel > 0 && <strong className={h.star}> {starLabel(c.tLevel)}</strong>}
         </p>
         <p className={h.exp}>
-          {eg ? "초월 경험치" : "경험치"} {won(exp)} / {need ? won(need) : "MAX"}
+          {eg ? "초월 EXP" : "EXP"} {won(exp)} / {need ? won(need) : "MAX"}
         </p>
       </div>
       <div
         className={cx(rpg.expBar, eg && rpg.tBar)}
         role="meter"
-        aria-label={eg ? "초월 경험치" : "경험치"}
+        aria-label={eg ? "초월 EXP" : "EXP"}
         aria-valuenow={exp}
         aria-valuemin={0}
         aria-valuemax={need || 1}

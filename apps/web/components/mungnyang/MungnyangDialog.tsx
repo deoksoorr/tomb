@@ -271,7 +271,7 @@ export default function MungnyangDialog({ onClose }: { onClose: () => void }) {
   const shown = tab === "pet" ? pet : item;
 
   return (
-    <Dialog title={MUNGNYANG_SHOP_TITLE} onClose={onClose}>
+    <Dialog title={MUNGNYANG_SHOP_TITLE} onClose={onClose} className={shop.window}>
       <div className={shop.shop}>
         <div className={shop.top}>
           <p className={shop.balance}>

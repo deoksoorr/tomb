@@ -31,7 +31,7 @@ import BagDialog from "../account/BagDialog";
 import FireworkDialog from "../account/FireworkDialog";
 import { fireworkEntries, pointsText, type MyGraveEntry } from "../account/items";
 import MyGraves from "../account/MyGraves";
-import MyPanel, { type MyTab } from "../account/MyPanel";
+import MyPanel from "../account/MyPanel";
 import ShrineDialog from "../account/ShrineDialog";
 import BgmPlayer from "../bgm/BgmPlayer";
 import BuryForm, { type BuryMode } from "../grave/BuryForm";
@@ -84,6 +84,8 @@ import ZooLayer from "@/components/zoo/ZooLayer";
 import WishDialog from "@/components/plaza/WishDialog";
 import LotteryDialog from "@/components/plaza/LotteryDialog";
 import SkyHud from "@/components/sky/SkyHud";
+import PlayGauges from "./PlayGauge";
+import { markPresence } from "@/lib/presenceClock";
 import SeaViewHud from "@/components/sea/SeaViewHud";
 import GhostLayer, { GhostStaffButton } from "@/components/sea/GhostLayer";
 import SeasonShopDialog from "@/components/seasonShop/SeasonShopDialog";
@@ -112,7 +114,6 @@ import FriendNotice from "./FriendNotice";
 import CampTalk from "../camp/CampTalk";
 import CampBgm from "../camp/CampBgm";
 import CampBbq from "../camp/CampBbq";
-import MegaphoneLayer from "./MegaphoneDialog";
 import MegaphoneFeed, { MegaPinButton } from "./MegaphoneFeed";
 import { installViewKeyGuard } from "@/lib/viewKeyGuard";
 import { useSocial } from "./useSocial";
@@ -120,7 +121,6 @@ import { useSocial } from "./useSocial";
 import GraveGuide from "../account/GraveGuide";
 import RankingGuide from "../grave/RankingGuide";
 import GraveyardNow from "../grave/GraveyardNow";
-import MySummary from "../account/MySummary";
 import { rememberChannel } from "@/lib/channelHistory";
 import { photoAllowed, photoKeyAction, type PhotoGate } from "@/lib/photo/photoRules";
 import { toUi, useUiScale } from "@/lib/uiScale";
@@ -186,6 +186,7 @@ function usePresencePoints(active: boolean) {
   useEffect(() => {
     if (!active) return;
     let sentAt = Date.now();
+    markPresence(sentAt);
     let timer: ReturnType<typeof setTimeout> | null = null;
     const schedule = () => {
       if (timer) clearTimeout(timer);
@@ -198,6 +199,7 @@ function usePresencePoints(active: boolean) {
       api
         .presence(PRESENCE_SID)
         .then(({ earned, me, tick }) => {
+          markPresence();
           if (me) meStore.set(me);
           else if (tick) meStore.applyPresence(tick);
           if (earned > 0) showToast(`머무른 덕분에 +${earned} 포인트`);
@@ -307,13 +309,6 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const [openGraveId, setOpenGraveId] = useState<string | null>(null);
   const [bury, setBury] = useState<BuryMode | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
-  /** 11/17 내 정보 창의 탭. [혜택 보기]는 [혜택] 탭으로 열고, 내 정보 창이 닫히면(어느 길로든) [내 정보]로 돌아간다 */
-  const [meTab, setMeTab] = useState<MyTab>("info");
-  const [lastPanel, setLastPanel] = useState<Panel | null>(null);
-  if (panel !== lastPanel) {
-    setLastPanel(panel);
-    if (panel !== "me") setMeTab("info");
-  }
   /** 오른쪽 접이식 랭킹 (L 키로도 열고 닫는다) */
   const [rankOpen, setRankOpen] = useState(false);
   /** 표현 창(T: 말풍선·이모티콘·벤치 상태)과 즐겨찾기 원형 목록(Y). 집·마을 HUD(panel "housing") 위에서도 열리게 panel과 따로 둔다 */
@@ -713,9 +708,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     setPanel(null);
   }
 
-  /** 11/17 내 정보 [혜택] 탭 바로 가기 (가방 [레이스 보상] · 1위 알림 창) */
+  /** 11/17 [혜택 보기] (가방 [레이스 보상] · 1위 알림 창): 11/24 내 정보 한 화면 맨 위에 혜택이 있어 내 정보를 그대로 연다 */
   function openPerks() {
-    setMeTab("perks");
     setPanel("me");
   }
 
@@ -820,6 +814,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {ready && <ZooLayer />}
       {/* 놀이기구 2: 관람차·열기구 안내 (지나가는 곳·남은 시간) */}
       {ready && <SkyHud />}
+      {/* 11/24 시간 미션 게이지: 범퍼카(몬 시간)·불멍 (관람차·열기구는 SkyHud 안) */}
+      {ready && <PlayGauges />}
       {/* 11/16 바닷가: 앉아 있을 때 「바다 보기」 (V) */}
       {ready && <SeaViewHud />}
       {ready && <GhostLayer avatar={{ color: options.color, body: options.body }} />}
@@ -961,7 +957,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                   레이스
                   <span className={cx(styles.dockKey, styles.topKey)} aria-hidden="true">U</span>
                 </button>
-                <RankingPanel graves={graves.graves} onPick={lookAtGrave} open={rankOpen} onOpenChange={setRankOpen} />
+                <RankingPanel open={rankOpen} onOpenChange={setRankOpen} />
               </div>
             </>
           )}
@@ -1103,25 +1099,14 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       )}
       {panel === "me" && (
         <MyPanel
-          myGraves={myGraves}
-          onGoToMyGrave={goToMyGrave}
-          onBury={startBury}
           onLeave={onLeave}
           onLoggedOut={onLoggedOut}
-          onOpenShrine={() => setPanel("shrine")}
-          onOpenFriends={() => setPanel("friends")}
           houseChannel={houseChannel}
           onGoToMyHouse={goToMyHouse}
           onOpenHousing={() => {
             setHousingIntent(null);
             setPanel("housing");
           }}
-          onGoHunt={() => {
-            setPanel(null);
-            if (!huntWalking) pressHunt();
-          }}
-          tab={meTab}
-          onTab={setMeTab}
           onClose={closePanel}
         />
       )}
@@ -1129,7 +1114,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
         <Dialog title="내 묘비 가기" onClose={closePanel}>
           <MyGraves entries={myGraves.entries} pending={myGraves.pending} onGo={goToMyGrave} onBury={startBury} />
           <GraveyardNow graves={graves.graves} channel={graves.channel} onPick={lookAtGrave} />
-          <GraveGuide onBury={myGraves.entries.length > 0 ? startBury : undefined} onShrine={() => setPanel("shrine")} onPassed={() => setPanel("passed")} />
+          <GraveGuide onBury={myGraves.entries.length > 0 ? startBury : undefined} onPassed={() => setPanel("passed")} />
         </Dialog>
       )}
       {panel === "bag" && (
@@ -1140,7 +1125,6 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           onGoToGrave={goToGraveById}
           onOpenHousing={() => setPanel("housing")}
           onBury={startBury}
-          footer={<MySummary graves={myGraves.entries} onGraves={myGraves.entries.length ? openMyGraves : undefined} onHousing={() => setPanel("housing")} />}
           onClose={closePanel}
         />
       )}
@@ -1190,7 +1174,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       )}
       {panel === "ranking" && (
         <Dialog title="랭킹" onClose={closePanel}>
-          <RankingList graves={graves.graves} onPick={lookAtGrave} />
+          <RankingList />
           <RankingGuide />
         </Dialog>
       )}
@@ -1270,7 +1254,6 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           }}
         />
       )}
-      <MegaphoneLayer channel={channel} onOpenShop={goShopFor} />
       {panel === "shop" && <ShopDialog onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
       </TopLeftProvider>
     </div>

@@ -21,7 +21,7 @@ export type StatKey = (typeof STAT_KEYS)[number];
 export type Stats = Record<StatKey, number>;
 
 export const STAT_LABELS: Record<StatKey, { name: string; desc: string }> = {
-  str: { name: "STR", desc: "공격력이 올라요 (1당 ATK +3). 삽자루 일꾼 스킬은 1당 0.5% 더 세져요" },
+  str: { name: "STR", desc: "STR 1당 공격력이 3 올라요. 삽자루 일꾼 스킬 위력도 1당 0.5% 올라요" },
   agi: { name: "AGI", desc: "공격 속도, 회피, 이동 속도가 올라요" },
   vit: { name: "VIT", desc: "최대 HP와 방어가 올라요" },
   int: { name: "INT", desc: "최대 SP와 모닥불, 서리, 넋 스킬 위력이 올라요. 삽자루 일꾼 스킬은 안 받아요" },
@@ -563,7 +563,7 @@ export const HUNT_ZONES: Record<ZoneId, ZoneDef> = {
     desc: "새 다짐이 처음으로 반대에 부딪히는 곳.",
     unlockLevel: 1,
     power: 1,
-    gimmick: { name: "발표 조명", desc: "천천히 움직이는 프로젝터 조명 안에 서 있으면 HP가 차요." },
+    gimmick: { name: "발표 조명", desc: "천천히 움직이는 프로젝터 조명 안에 서 있으면 HP가 회복돼요." },
     pool: ["scope_creep", "endless_meeting", "req_change"],
     boss: "opposing_lead",
     summon: { id: "scope_creep", n: 2 },
@@ -841,5 +841,5 @@ export function dropInfo(d: { kind: DropKind; id: string }): DropInfo | null {
   }
   if (d.kind === "mat") return isMatId(d.id) ? { name: MAT_INFO[d.id].name, art: MAT_INFO[d.id].art, kind: "mat" } : null;
   const it = itemById(d.id);
-  return it ? { name: it.name, art: COSMETIC_DROP_ART, kind: "cosmetic", note: "캐릭터 꾸미기 하루권이에요. 상점 가방에 들어갔어요" } : null;
+  return it ? { name: it.name, art: COSMETIC_DROP_ART, kind: "cosmetic" } : null;
 }

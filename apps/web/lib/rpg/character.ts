@@ -336,9 +336,9 @@ export function setHotbar(s: CharacterState, slots?: (SkillId | null)[], auto?: 
   const seen = new Set<string>();
   for (const id of slots) {
     if (id === null) continue;
-    if (!(s.skills[id] ?? 0)) throw new RpgError(409, "SKILL_NOT_LEARNED", "배운 스킬만 단축키에 놓을 수 있어요.");
-    if (skillById(id)?.kind !== "active") throw new RpgError(409, "SKILL_PASSIVE", "패시브는 늘 켜져 있어서 단축키에 놓지 않아요.");
-    if (seen.has(id)) throw new RpgError(400, "INVALID_INPUT", "같은 스킬을 두 칸에 놓을 수 없어요.");
+    if (!(s.skills[id] ?? 0)) throw new RpgError(409, "SKILL_NOT_LEARNED", "배운 스킬만 단축 칸에 등록할 수 있어요.");
+    if (skillById(id)?.kind !== "active") throw new RpgError(409, "SKILL_PASSIVE", "패시브는 항상 적용돼서 단축 칸에 등록할 수 없어요.");
+    if (seen.has(id)) throw new RpgError(400, "INVALID_INPUT", "같은 스킬을 두 칸에 등록할 수 없어요.");
     seen.add(id);
   }
   const hotbar = arrangeHotbar(slots, () => true);

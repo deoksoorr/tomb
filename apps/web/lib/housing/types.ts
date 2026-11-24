@@ -6,7 +6,11 @@ import type { CottageStyleId, HouseExteriorMap, HouseSort, PlotTierId } from "./
 /** 놓인 물건 하나. u = 배치 고유 id(같은 물건을 여러 개 놓을 때 구분), i = 카탈로그 id, r = 0..3 (90°씩) */
 export type Placed = { u: string; i: string; x: number; y: number; r: number };
 
-export type HouseLayout = { items: Placed[]; floor: string; wall: string };
+/**
+ * window = 11/24 안쪽 벽 창문 모양 (없으면 기본 창문 DEFAULT_WINDOW, "frost_window" = 눈꽃 창가).
+ * 바닥·벽지처럼 그 물건 1개를 쓴다. 예전 저장·예전 화면은 이 칸이 없다
+ */
+export type HouseLayout = { items: Placed[]; floor: string; wall: string; window?: string };
 
 export type HouseExterior = HouseExteriorMap;
 

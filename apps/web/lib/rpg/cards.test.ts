@@ -388,8 +388,8 @@ describe("11/15 등급 개편: 레벨 업 층·팀장 승진·능력치 판", ()
     expect(row("공격력")).toEqual({ label: "공격력", v: "240", plus: "+40" });
     expect(row("공격 속도").v).toBe(`${((2 * 1.08) / 1.1).toFixed(1)}/초`);
     expect(row("치명타")).toMatchObject({ v: "16%", plus: "+6%" });
-    expect(row("치명 피해")).toMatchObject({ v: "183%", plus: "+33%" });
-    expect(row("최대 체력")).toMatchObject({ v: "1,100", plus: "+100" });
+    expect(row("치명타 피해")).toMatchObject({ v: "183%", plus: "+33%" });
+    expect(row("최대 HP")).toMatchObject({ v: "1,100", plus: "+100" });
     expect(row("받는 피해").v).toBe("−12%");
     expect(p.chips).toEqual(expect.arrayContaining(["결재판 2장", "인턴 1명"]));
     // 보통 사냥: 카드 몫 없이

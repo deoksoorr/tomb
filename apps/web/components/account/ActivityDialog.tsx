@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
 import { meStore } from "@/lib/hooks/useMe";
 import type { ActivityItem } from "@/lib/types";
+import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
-import { EmptyHero, InfoCard, TipList, type Shortcut } from "../ui/InfoBlocks";
+import ui from "../ui/ui.module.css";
 import { activityText, isHouseActivity, relativeTime } from "./activity";
-import styles from "./BagDialog.module.css";
+import styles from "./ActivityDialog.module.css";
 
 type Props = {
   /** 묘비 소식: 그 묘비로 (다른 채널이면 채널을 옮긴다) */
@@ -16,13 +17,14 @@ type Props = {
   onOpenHousing: () => void;
   /** 소식이 없을 때 [묘비 쓰기] */
   onBury?: () => void;
-  /** 아래에 덧붙일 내용 (게임 안: 내 묘비·집 요약) */
-  footer?: ReactNode;
   onClose: () => void;
 };
 
-/** 알림 (11/21 「내 소식」 → 「알림」): 자리를 비운 사이 내 묘비·집에 생긴 일. 열면 모두 읽음으로 */
-export default function ActivityDialog({ onGoToGrave, onOpenHousing, onBury, footer, onClose }: Props) {
+/**
+ * 알림 (11/21 「내 소식」 → 「알림」): 자리를 비운 사이 내 묘비·집에 생긴 일. 열면 모두 읽음으로.
+ * 11/24 내용만큼 작은 창: 소식은 한 줄씩(누가·무엇 + 언제), 아래 요약·설명 칸은 뺐다
+ */
+export default function ActivityDialog({ onGoToGrave, onOpenHousing, onBury, onClose }: Props) {
   const [items, setItems] = useState<ActivityItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // 상대 시간 기준 (렌더 중에 시계를 읽지 않는다)
@@ -47,53 +49,49 @@ export default function ActivityDialog({ onGoToGrave, onOpenHousing, onBury, foo
   }, []);
 
   return (
-    <Dialog title="알림" onClose={onClose}>
-      <div className={styles.bag}>
-        {items === null ? (
-          <p className={styles.state} role="status">
-            {error ?? "불러오는 중…"}
-          </p>
-        ) : items.length === 0 ? (
-          <EmptyHero
-            icon="heart"
-            title="아직 알림이 없어요"
-            actions={[
-              ...(onBury ? [{ label: "묘비 쓰기", icon: "grave", onClick: onBury, primary: true } satisfies Shortcut] : []),
-              { label: "분양 사무소", icon: "house", onClick: onOpenHousing } satisfies Shortcut,
-            ]}
-          >
-            묘비를 세우거나 집을 꾸며 두면, 누가 다녀간 알림이 여기에 모여요.
-          </EmptyHero>
-        ) : (
-          <ul className={styles.list}>
-            {items.map((item) => (
+    <Dialog title="알림" onClose={onClose} fitHeight phoneCard>
+      {items === null ? (
+        <p className={styles.state} role="status">
+          {error ?? "불러오는 중…"}
+        </p>
+      ) : items.length === 0 ? (
+        <div className={styles.empty}>
+          <p>아직 알림이 없어요.</p>
+          {onBury && (
+            <button type="button" className={cx(ui.button, ui.primary)} onClick={onBury}>
+              묘비 쓰기
+            </button>
+          )}
+        </div>
+      ) : (
+        <ul className={styles.list}>
+          {items.map((item) => {
+            const body = (
+              <>
+                <span className={styles.text}>{activityText(item)}</span>
+                <span className={styles.time}>{relativeTime(item.at, openedAt)}</span>
+              </>
+            );
+            return (
               <li key={item.id}>
-                <button
-                  type="button"
-                  className={styles.placeChoice}
-                  // 주간 1위 소식은 갈 곳이 없다 (보상은 이미 가방·코디에 들어가 있다)
-                  onClick={() => (item.kind === "champ" ? undefined : isHouseActivity(item) ? onOpenHousing() : onGoToGrave(item.targetId))}
-                >
-                  {activityText(item)}
-                  <span className={styles.meta}>{relativeTime(item.at, openedAt)}</span>
-                </button>
+                {/* 주간 1위 소식은 갈 곳이 없다 (보상은 이미 가방·코디에 들어가 있다) */}
+                {item.kind === "champ" ? (
+                  <div className={styles.row}>{body}</div>
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.row}
+                    title={activityText(item)}
+                    onClick={() => (isHouseActivity(item) ? onOpenHousing() : onGoToGrave(item.targetId))}
+                  >
+                    {body}
+                  </button>
+                )}
               </li>
-            ))}
-          </ul>
-        )}
-        {footer}
-        <InfoCard title="이런 알림이 와요" icon="info">
-          <TipList
-            tips={[
-              "누가 내 묘비에 헌화하면 알려 줘요. 누르면 그 묘비 앞으로 가요.",
-              "누가 내 집에 좋아요나 방명록을 남기면 알려 줘요. 누르면 분양 사무소가 열려요.",
-              "내 묘비가 성불하거나 성황당에서 다시 모셔지면 알려 줘요.",
-              "주간 랭킹 1위 보상을 받으면 알려 줘요.",
-              "새 알림이 오면 [알림] 버튼에 숫자가 붙고, 이 창을 열면 모두 읽음이 돼요.",
-            ]}
-          />
-        </InfoCard>
-      </div>
+            );
+          })}
+        </ul>
+      )}
     </Dialog>
   );
 }

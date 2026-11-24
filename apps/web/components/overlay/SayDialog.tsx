@@ -16,14 +16,12 @@ import { InfoCard, TipList } from "../ui/InfoBlocks";
 import ui from "../ui/ui.module.css";
 import FavStar from "./FavStar";
 import ChatInput from "./ChatInput";
-import SayBoard from "./SayBoard";
 import styles from "./SayDialog.module.css";
 import { FAV_MAX, slotKey, slotOf, useFavs, type FavKey } from "./sayFavorites";
 
-type Tab = "emo" | "say" | "mood";
+type Tab = "emo" | "mood";
 const TABS: readonly [Tab, string][] = [
   ["emo", "이모티콘"],
-  ["say", "말풍선"],
   ["mood", "벤치 상태"],
 ];
 
@@ -41,7 +39,7 @@ const rememberCat = (c: EmoCat) => {
   lastCat = c;
 };
 
-/** 즐겨찾기 중 이모티콘·몸짓 칸만 (문장은 말풍선 탭 몫) */
+/** 즐겨찾기 중 이모티콘·몸짓 칸만 (11/24 정해진 문장 「말풍선」 탭은 없앴다 — 예전에 별 단 문장은 Y 펼치기에서 그대로 쓴다) */
 const favSlots = (favs: readonly FavKey[]): EmoSlot[] =>
   favs.filter((k) => k.startsWith("e:") || k.startsWith("a:")).flatMap((k) => slotOf(k.slice(2)) ?? []);
 
@@ -204,7 +202,6 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
           </>
         )}
 
-        {tab === "say" && <SayBoard onSent={onClose} />}
 
         {tab === "mood" &&
           (seated ? (

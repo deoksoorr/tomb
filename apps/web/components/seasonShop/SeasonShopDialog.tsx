@@ -4,8 +4,9 @@ import { resellBuyNote } from "@/lib/resell";
 import { useCallback, useEffect, useId, useState } from "react";
 import { DIR, isNameSlot, isPermanentUntil, itemById } from "@tomb/protocol";
 import { errorMessage } from "@/lib/api";
+import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { meStore, useMe } from "@/lib/hooks/useMe";
-import { rotateMode } from "@/lib/housing/layout";
+import { previewTurnLabel, rotateMode } from "@/lib/housing/layout";
 import { furnitureById } from "@/lib/housing/catalog";
 import { batchim, endText, soonText } from "@/lib/seasonShop/rules";
 import { seasonApi } from "@/lib/seasonShop/client";
@@ -60,6 +61,7 @@ export default function SeasonShopDialog({ kind, onClose, avatar }: Props) {
   const [savedColor] = useState(() => readItem(LS.color));
   const [turn, setTurn] = useState(0);
   const [night, setNight] = useState(false);
+  const phone = useMediaQuery("(max-width: 560px)");
   // 11/20 집 없는 손님: 거절 창을 넘기고 구경만 (furn). 집 유무를 처음 알아내는 동안은 잠깐 아무것도 띄우지 않는다 (큰 창이 떴다 작은 창으로 바뀌지 않게)
   const [browse, setBrowse] = useState(false);
   const [waited, setWaited] = useState(false);
@@ -186,11 +188,14 @@ export default function SeasonShopDialog({ kind, onClose, avatar }: Props) {
       const name = isNameSlot(row.slot);
       return (
         <section ref={watchMoreBelow} className={cx(shop.detail, name && shop.detailName, "more-fade")} aria-label="자세히 보기" aria-live="polite">
-          {name ? (
-            <NameStylePreview className={shop.namePreview} color={color} body={body} look={fitting.look} name={me?.name ?? "내 이름"} label={`내 이름표에 ${row.name}${batchim(row.name) ? "을" : "를"} 달아 본 모습 (낮·밤)`} />
-          ) : (
-            <OutfitPreview className={shop.fitPreview} color={color} body={body} look={fitting.look} label={`내 아바타가 ${row.name}${batchim(row.name) ? "을" : "를"} 입어 본 모습`} facing={row.slot === "pack" ? DIR.up : DIR.down} />
-          )}
+          {/* 11/24 그림 칸은 고정 크기 (잡화점과 같은 칸 — 물건을 바꿔도 글·사기 버튼 자리가 그대로) */}
+          <div className={shop.stageBox} data-preview-box="">
+            {name ? (
+              <NameStylePreview className={shop.namePreview} color={color} body={body} look={fitting.look} name={me?.name ?? "내 이름"} label={`내 이름표에 ${row.name}${batchim(row.name) ? "을" : "를"} 달아 본 모습 (낮·밤)`} />
+            ) : (
+              <OutfitPreview className={shop.fitPreview} color={color} body={body} look={fitting.look} label={`내 아바타가 ${row.name}${batchim(row.name) ? "을" : "를"} 입어 본 모습`} facing={row.slot === "pack" ? DIR.up : DIR.down} />
+            )}
+          </div>
           <div className={shop.info}>
             <p className={shop.name}>
               <span className={shop.slotTag}>{SLOT_NAMES[row.slot]}</span>
@@ -211,13 +216,14 @@ export default function SeasonShopDialog({ kind, onClose, avatar }: Props) {
     const ways = def && rotateMode(def) === "turn" ? 4 : 2;
     return (
       <section ref={watchMoreBelow} className={cx(shop.detail, "more-fade")} aria-label="자세히 보기" aria-live="polite">
-        <div className={styles.furnWrap}>
+        {/* 11/24 그림 칸 고정 (데스크톱은 넓어진 자세히 보기 칸 폭에 맞춰 크게, 폰은 가구점과 같은 140 — 옆 글 칸이 좁지 않게) */}
+        <div className={styles.furnWrap} data-preview-box="">
         <div className={styles.furnStage} data-night={night || undefined}>
-          <FurnitureStage itemId={row.id} w={200} h={150} r={turn % ways} night={night} />
+          <FurnitureStage itemId={row.id} w={phone ? 140 : 300} h={phone ? 140 : 190} r={turn % ways} night={night} />
         </div>
         <div className={styles.stageBar}>
           <button type="button" className={cx(ui.button, styles.stageBtn)} onClick={() => setTurn((t) => (t + 1) % ways)}>
-            {ways === 4 ? "돌려 보기" : "뒤집어 보기"}
+            {def ? previewTurnLabel(def, turn % ways) : "뒤집어 보기"}
           </button>
           <button type="button" className={cx(ui.button, styles.stageBtn)} aria-pressed={night} onClick={() => setNight((n) => !n)}>
             {night ? "낮으로" : "밤으로"}
@@ -242,7 +248,7 @@ export default function SeasonShopDialog({ kind, onClose, avatar }: Props) {
   if (house === null && !loadError && !waited) return null;
 
   return (
-    <Dialog title={SEASON_SHOP_TITLE[kind]} onClose={onClose}>
+    <Dialog title={SEASON_SHOP_TITLE[kind]} onClose={onClose} className={shop.window}>
       <div className={shop.shop}>
         <div className={shop.top}>
           <p className={shop.balance}>

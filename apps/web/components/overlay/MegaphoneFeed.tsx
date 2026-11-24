@@ -40,7 +40,7 @@ export default function MegaphoneFeed({ channel, floating = false, lead }: { cha
   const iAmStaff = useBridgeValue("me:staff")?.on === true;
   // 지울 공지 (11/19 운영자 쓰기 창은 위쪽 줄의 MegaPinButton이 연다)
   const [removing, setRemoving] = useState<MegaPin | null>(null);
-  // 11/19 한 줄로 합친 뒤 외침이 없으면 기록 줄을 숨기는데, 이번에 직접 펼쳤으면 비어도 「아직 마을 소식이 없어요」를 보여 준다
+  // 11/19 한 줄로 합친 뒤 외침이 없으면 기록 줄을 숨기는데, 이번에 직접 펼쳤으면 비어도 「아직 소식이 없어요」를 보여 준다
   const [asked, setAsked] = useState(false);
 
   useBridgeEvent("megaphone:heard", (m) => megaphoneStore.push(m));
@@ -112,12 +112,12 @@ export default function MegaphoneFeed({ channel, floating = false, lead }: { cha
   };
 
   return (
-    <section ref={feedRef} className={cx(styles.feed, lead != null && styles.joined)} aria-label="마을 소식">
+    <section ref={feedRef} className={cx(styles.feed, lead != null && styles.joined)} aria-label="소식">
       <div ref={barRef} className={styles.bar}>
         {lead}
         <button type="button" className={cx(ui.button, styles.toggle)} onClick={toggle} aria-expanded={open}>
           <PixelIcon name="bell" />
-          마을 소식
+          소식
           <span className={styles.caret} aria-hidden="true">
             {open ? "▾" : "▸"}
           </span>
@@ -152,7 +152,7 @@ export default function MegaphoneFeed({ channel, floating = false, lead }: { cha
         </ul>
       )}
       {open && (
-        <ol ref={logRef} className={styles.log} aria-label="최근 마을 소식 20개">
+        <ol ref={logRef} className={styles.log} aria-label="최근 소식 20개">
           {entries.length === 0 && <li className={styles.empty}>아직 마을 소식이 없어요</li>}
           {entries.map((e) => (
             // 11/22 좁은 데스크톱은 줄마다 한 줄로 줄인다 (MegaphoneFeed.module.css) — 올리면 전문

@@ -1,4 +1,4 @@
-import { DEFAULT_FLOOR, DEFAULT_WALL, defaultExterior, furnitureById, type HouseExteriorMap } from "@/lib/housing/catalog";
+import { DEFAULT_FLOOR, DEFAULT_WALL, DEFAULT_WINDOW, defaultExterior, furnitureById, type HouseExteriorMap } from "@/lib/housing/catalog";
 import { footprint, SPIN_R0, spinDir } from "@/lib/housing/layout";
 import { darken, Grid, hash2, lighten, type Color } from "../sprites/pixel";
 import { isSnowy } from "@/lib/mapConcept";
@@ -1489,7 +1489,9 @@ export function wallFaceColor(id: string): Color {
 export const WINDOW_W = 32;
 export const WINDOW_H = 24;
 
-export function windowGrid(night: boolean, open: boolean): Grid {
+/** 창문 그림. style = 창문 모양 (기본 DEFAULT_WINDOW · 11/24 "frost_window" 눈꽃 창가) */
+export function windowGrid(night: boolean, open: boolean, style: string = DEFAULT_WINDOW): Grid {
+  if (style === "frost_window") return frostWindowGrid(night, open);
   const g = new Grid(WINDOW_W, WINDOW_H);
   const W = WINDOW_W;
   const H = WINDOW_H;
@@ -1540,6 +1542,187 @@ export function windowGrid(night: boolean, open: boolean): Grid {
   return g;
 }
 
+/**
+ * 눈꽃 창가 창턱 아래 라디에이터 몫 (그림 높이 = WINDOW_H + 이 값. 창턱은 기본 창문과 같은 자리).
+ * 창턱 밑(바닥선 9px 위)부터 바닥선까지 = 9: 라디에이터가 바닥에 다리를 딛고 걸레받이 앞에 선다
+ */
+export const FROST_RADIATOR_DROP = 9;
+/** 4×4 순서 디더 문턱 (서리 번짐) */
+const DITHER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16);
+/** 종이 눈꽃 (5×5) */
+const PAPER_FLAKE = ["..#..", "#.#.#", ".###.", "#.#.#", "..#.."];
+
+/**
+ * 11/24 눈꽃 창가 (가구 보따리상 「눈꽃 창가」를 가지면 고르는 벽 창문 모양, 32×(24+9)).
+ * 기본 창문과 같은 크기·창턱 자리: 크림색 칠한 창틀 + 귀퉁이 서리 + 종이 눈꽃, 바깥은 눈 내리는 전나무 숲,
+ * 위에는 솔가지 꼬마전구 띠와 빨간 리본, 창턱 아래엔 양말 둘을 걸어 말리는 라디에이터. 열면 창짝이 양옆으로 젖혀지고 눈송이가 들어온다
+ */
+function frostWindowGrid(night: boolean, open: boolean): Grid {
+  const W = WINDOW_W;
+  const H = WINDOW_H;
+  const g = new Grid(W, H + FROST_RADIATOR_DROP);
+  const FR = [0xfffdf6, 0xf1e8d6, 0xdccdb0, 0xbfa982] as const;
+  const frost = night ? 0xbccae6 : 0xffffff;
+  // 창틀 (빛은 왼쪽 위에서)
+  g.rect(0, 0, W, H - 2, FR[1]);
+  g.hline(0, W - 1, 0, FR[0]);
+  g.vline(0, 0, H - 3, FR[0]);
+  g.vline(W - 1, 1, H - 3, FR[3]);
+  g.hline(1, W - 2, 1, FR[2]);
+  g.vline(1, 1, H - 4, FR[2]);
+  g.vline(W - 2, 1, H - 4, FR[0]);
+  // 바깥: 하늘 → 먼 눈 덮인 전나무 → 눈밭 (유리 x 2..29, y 2..19)
+  const x0 = 2;
+  const x1 = W - 3;
+  const y0 = 2;
+  const y1 = H - 5;
+  for (let y = y0; y <= y1; y++) {
+    const t = (y - y0) / (y1 - y0);
+    g.hline(x0, x1, y, night ? mixColor(0x161e3a, 0x2e3a66, t) : mixColor(0x98bfe2, 0xdcebf7, t));
+  }
+  if (night) for (const [x, y] of [[5, 4], [11, 3], [20, 6], [8, 8]] as const) g.set(x, y, 0xe8ecff);
+  /** 달 (오른쪽 위 — 서리 위에 그려 또렷하게) */
+  const moon = () => {
+    if (!night) return;
+    const sky = (g.get(21, 3) >>> 8) & 0xffffff;
+    g.ellipse(22, 6, 2.6, 2.6, 0xf4eecc);
+    g.ellipse(23.2, 5, 2, 2, sky);
+  };
+  // 먼 전나무 넷 (왼쪽은 밝고 오른쪽은 그늘, 층마다 가지 끝에 눈)
+  const tree = night ? 0x3c4c76 : 0x7c9cb4;
+  const treeD = night ? 0x2e3c64 : 0x62829c;
+  const cap = night ? 0xaab8d8 : 0xf6f9fd;
+  for (const [cx, h] of [[5, 8], [12, 6], [20, 9], [27, 6]] as const) {
+    const base = y1 - 2;
+    for (let k = 0; k < h; k++) {
+      const y = base - h + 1 + k;
+      // 층진 원뿔: 세 줄마다 조금 좁아졌다 다시 넓어진다
+      const half = Math.min(4, Math.floor(k / 2) + (k % 3 === 2 ? 1 : 0));
+      for (let x = cx - half; x <= cx + half; x++) if (x >= x0 && x <= x1) g.set(x, y, x <= cx ? tree : treeD);
+      if (k % 3 === 2 || k === 0) {
+        g.set(cx - half, y, cap);
+        if (half > 1) g.set(cx - half + 1, y, cap);
+      }
+    }
+  }
+  const snowA = night ? 0x9aaacd : 0xf6f9fd;
+  const snowB = night ? 0x8494bc : 0xe0e9f3;
+  for (let x = x0; x <= x1; x++) {
+    g.set(x, y1 - 1, (x * 7) % 5 === 0 ? snowB : snowA);
+    g.set(x, y1, snowA);
+  }
+  // 내리는 눈
+  const flakeDot = night ? 0xdce4f6 : 0xffffff;
+  for (const [x, y] of open ? ([[4, 7], [7, 3], [12, 6], [18, 3], [22, 8], [27, 9], [10, 12], [16, 13], [23, 12], [14, 9]] as const) : ([[12, 6], [18, 4], [9, 13], [26, 12]] as const)) g.set(x, y, flakeDot);
+  // 바깥 창턱에 쌓인 눈 (유리 아래에 몽글몽글)
+  for (let x = x0; x <= x1; x++) if (x % 6 === 1 || x % 6 === 2 || x % 9 === 5) g.set(x, y1 - 2, snowA);
+  if (!open) {
+    // 창살 (가운데 세로 2줄 + 가로 1줄) — 창틀과 같은 크림색
+    g.rect(15, y0, 2, y1 - y0 + 1, FR[1]);
+    g.vline(15, y0, y1, FR[0]);
+    g.hline(x0, x1, 10, FR[1]);
+    g.hline(x0, x1, 11, FR[2]);
+    // 유리 네 칸 귀퉁이에서 번지는 서리
+    const panes = [
+      [x0, y0, 14, 9],
+      [17, y0, x1, 9],
+      [x0, 12, 14, y1],
+      [17, 12, x1, y1],
+    ] as const;
+    for (const [px0, py0, px1, py1] of panes)
+      for (let y = py0; y <= py1; y++)
+        for (let x = px0; x <= px1; x++) {
+          const cd = Math.min(Math.hypot(x - px0, y - py0), Math.hypot(px1 - x, py1 - y), Math.hypot(x - px0, py1 - y), Math.hypot(px1 - x, y - py0));
+          const fr = 1 - cd / (night ? 2.8 : 3.4);
+          if (fr > DITHER4[((y & 3) << 2) | (x & 3)]) g.set(x, y, mixColor((g.get(x, y) >>> 8) & 0xffffff, frost, night ? 0.5 : 0.62));
+        }
+    moon();
+    // 유리 반사 (낮)
+    if (!night) for (let i = 0; i < 3; i++) g.set(20 + i, 8 - i, 0xffffff);
+    // 종이 눈꽃 (안쪽에 붙여서 밤에도 방 불빛에 하얗다)
+    const paper = night ? 0xeef0f4 : 0xffffff;
+    const paperS = night ? 0xc8ccd6 : 0xdfe8f2;
+    const stampFlake = (ox: number, oy: number) =>
+      PAPER_FLAKE.forEach((row, j) => [...row].forEach((ch, i) => ch === "#" && g.set(ox + i, oy + j, i + j > 5 ? paperS : paper)));
+    stampFlake(5, 4);
+    stampFlake(21, 13);
+    // 작은 눈꽃 (밤엔 달이 있는 칸이라 아래 왼쪽으로)
+    const [sx, sy] = night ? [10, 15] : [25, 4];
+    g.set(sx, sy, paper);
+    g.set(sx - 1, sy + 1, paper);
+    g.set(sx + 1, sy + 1, paper);
+    g.set(sx, sy + 2, paper);
+    g.set(sx, sy + 1, paperS);
+  } else {
+    // 열린 창: 서리 낀 창짝이 양옆으로 젖혀졌다
+    for (const sx of [x0, x1 - 3]) {
+      g.rect(sx, y0, 4, y1 - y0 + 1, FR[1]);
+      g.vline(sx, y0, y1, FR[0]);
+      for (let y = y0 + 1; y < y1; y++)
+        for (let x = sx + 1; x <= sx + 2; x++) g.set(x, y, mixColor(night ? 0x46557e : 0xc8dcee, frost, DITHER4[((y & 3) << 2) | (x & 3)] < 0.55 ? 0.7 : 0.25));
+      g.hline(sx, sx + 3, 10, FR[2]);
+    }
+    moon();
+    // 바람에 들어오는 눈송이
+    for (const [x, y] of [[9, 16], [13, 18], [20, 17], [23, 19]] as const) g.set(x, y, flakeDot);
+  }
+  // 위: 솔가지 띠 + 꼬마전구 + 가운데 빨간 리본
+  for (let x = 1; x < W - 1; x++) {
+    const y = x % 4 === 0 ? 1 : 0;
+    g.set(x, y, x % 3 === 0 ? 0x346c48 : 0x4f8a5c);
+    if (x % 5 === 2) g.set(x, y + 1, 0x3f7a50);
+  }
+  const bulbs = night ? [0xff9a80, 0xffe48a, 0x9ff0b8] : [0xe0564a, 0xf2c24a, 0x5cb07a];
+  for (let x = 3, i = 0; x < W - 2; x += 4, i++) if (x < 13 || x > 18) g.set(x, 2 - (x % 8 === 3 ? 0 : 1), bulbs[i % 3]);
+  for (const [x, y, c] of [[13, 0, 0xd84a44], [14, 1, 0xd84a44], [17, 1, 0xd84a44], [18, 0, 0xd84a44], [13, 2, 0xa8323a], [18, 2, 0xa8323a], [15, 1, 0x9e2e30], [16, 1, 0x9e2e30], [15, 2, 0xd84a44], [16, 3, 0xd84a44], [14, 3, 0xa8323a], [17, 4, 0xa8323a]] as const) g.set(x, y, c);
+  // 창턱 (크림색) + 안쪽에 들어온 눈 한 줌
+  g.rect(0, H - 4, W, 2, FR[1]);
+  g.hline(0, W - 1, H - 4, FR[0]);
+  g.rect(-1, H - 2, W + 2, 2, FR[3]);
+  g.hline(0, W - 1, H - 1, 0x8e7a5a);
+  if (open) for (const x of [11, 12, 21]) g.set(x, H - 4, 0xffffff);
+  // 창턱 아래 라디에이터 (가구 「눈꽃 창가」 그림과 같은 은색 골 · 바닥에 다리를 딛고 걸레받이 앞에 선다)
+  const SV = [0xffffff, 0xdde3eb, 0xb6bec9, 0x8c96a5, 0x666e7d] as const;
+  const rx0 = 4;
+  const rx1 = W - 5;
+  const ry0 = H; // 창턱 바로 아래 (위 테)
+  const ry1 = H + FROST_RADIATOR_DROP - 2; // 아래 테 (그 밑 한 줄은 다리)
+  for (let x = rx0; x <= rx1; x++) {
+    const k = (x - rx0) % 3;
+    for (let y = ry0 + 1; y < ry1; y++) {
+      const t = (y - ry0 - 1) / (ry1 - ry0 - 2);
+      // 골 두 줄(왼쪽이 밝다) + 골 사이 그늘
+      g.set(x, y, k === 2 ? 0x5e6676 : mixColor(k === 0 ? 0xd2d9e2 : 0xb0b9c5, 0x7f8999, t));
+    }
+  }
+  g.hline(rx0, rx1, ry0, SV[2]);
+  g.hline(rx0 + 1, rx1 - 1, ry0, SV[1]);
+  g.hline(rx0, rx1, ry1, SV[4]);
+  g.set(rx0 + 1, ry1 + 1, SV[4]);
+  g.set(rx1 - 1, ry1 + 1, SV[4]);
+  // 오른쪽 끝 놋쇠 밸브
+  g.set(rx1 + 1, ry0 + 2, 0xdeae48);
+  g.set(rx1 + 1, ry0 + 3, 0xb6862e);
+  // 라디에이터 위 테에 걸쳐 말리는 양말 둘 (흰 발목이 테에 접혀 걸리고, 발끝은 오른쪽)
+  const sock = (ox: number, body: number, dark: number) => {
+    const y = ry0;
+    g.hline(ox, ox + 2, y, 0xfaf6ec);
+    g.hline(ox, ox + 2, y + 1, 0xe4d8c2);
+    for (let k = 2; k <= 4; k++) g.hline(ox, ox + 2, y + k, body);
+    g.set(ox + 2, y + 2, dark);
+    g.set(ox + 2, y + 3, dark);
+    g.hline(ox + 1, ox + 3, y + 5, body);
+    g.set(ox, y + 4, dark);
+    g.set(ox + 3, y + 5, dark);
+    // 라디에이터에 진 양말 그림자
+    for (let k = 1; k <= 4; k++) g.set(ox + 3, y + k, 0x4a5060);
+  };
+  sock(7, 0xd6625c, 0xa8404a);
+  sock(20, 0x5ca272, 0x3e7e56);
+  g.outline(OUT, false, 200);
+  return g;
+}
+
 function mixColor(a: Color, b: Color, t: number): Color {
   const ch = (s: number) => Math.round(((a >> s) & 255) * (1 - t) + ((b >> s) & 255) * t);
   return (ch(16) << 16) | (ch(8) << 8) | ch(0);
@@ -1573,6 +1756,9 @@ export function furnitureIcon(id: string, scale: number): { url: string; w: numb
     src = new Grid(32, WALL_H);
     src.draw(wallGrid(id, 0), 0, 0);
     src.draw(wallGrid(id, 1), 16, 0);
+  } else if (def?.skin === "window" || id === DEFAULT_WINDOW) {
+    // 11/24 창문 모양: 낮에 닫힌 창 그대로
+    src = windowGrid(false, false, id);
   } else if (def?.ext) src = seasonFacade({ ...defaultExterior(), [def.ext]: id }, "small", false);
   else src = furnitureGrid(id);
   const g = src ?? new Grid(16, 16);
@@ -1653,7 +1839,9 @@ function nightShade(g: Grid, lights: PreviewLight[]): void {
  */
 export function furniturePreview(id: string, scale: number, opts: PreviewOpts = {}): { url: string; w: number; h: number } {
   const def = furnitureById(id);
-  const r = def?.skin || def?.ext ? 0 : (((opts.r ?? 0) % 4) + 4) % 4;
+  // 11/24 창문 모양은 돌리기 대신 열고 닫은 모습 (r 홀수 = 열림)
+  const winSkin = def?.skin === "window";
+  const r = winSkin ? (((opts.r ?? 0) % 2) + 2) % 2 : def?.skin || def?.ext ? 0 : (((opts.r ?? 0) % 4) + 4) % 4;
   const night = !!opts.night;
   const frame = animFrames(id) > 1 ? (opts.frame ?? 0) % animFrames(id) : 0;
   const stage = !!opts.stage;
@@ -1677,14 +1865,14 @@ export function furniturePreview(id: string, scale: number, opts: PreviewOpts = 
     const span = flat && (def.turn || def.spin) ? Math.max(def.w, def.h) : 0;
     W = (span || fw) * 16 + 16;
     floorH = (span || fh) * 16 + 8;
-    wallShow = def?.skin === "wall" ? WALL_H - 4 : Math.max(12, artUp(id) + 4);
+    wallShow = winSkin ? WALL_H : def?.skin === "wall" ? WALL_H - 4 : Math.max(12, artUp(id) + 4);
     left = Math.round((W - fw * 16) / 2);
   } else {
     const cols = Math.max(3, fw + 2);
     W = cols * 16;
     floorH = (fh + 1) * 16;
     // 벽지 스킨은 벽을 거의 다 보여 준다 (아래 판·무늬가 같이 보이게)
-    wallShow = def?.skin === "wall" ? WALL_H - 4 : 18;
+    wallShow = winSkin ? WALL_H : def?.skin === "wall" ? WALL_H - 4 : 18;
     left = Math.floor((cols - fw) / 2) * 16;
   }
   const H = wallShow + floorH;
@@ -1701,6 +1889,8 @@ export function furniturePreview(id: string, scale: number, opts: PreviewOpts = 
   }
   // 벽 밑 그늘
   for (let x = 0; x < W; x++) g.set(x, wallShow, darken(((g.get(x, wallShow) >>> 8) & 0xffffff) as Color, 0.35));
+  // 11/24 창문 모양: 집 안과 같은 자리(창턱이 바닥선 9px 위)에 건 창
+  if (winSkin) g.draw(windowGrid(night, r === 1, id), Math.round((W - WINDOW_W) / 2), wallShow - 9 - WINDOW_H);
   const lights: PreviewLight[] = [];
   if (def && !def.skin && !def.ext) {
     // 밤에는 켜고 끄는 빛(벽난로·스탠드)을 켠 모습으로 보여 준다

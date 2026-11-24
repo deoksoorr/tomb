@@ -154,7 +154,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace
             <ChampRewardsTab me={me} now={now} pending={pending} act={act} onOpenRace={onOpenRace} onOpenPerks={onOpenPerks} />
           ) : (
             <div className={styles.others}>
-              {others.length === 0 && <p className={styles.empty}>폭죽·확성기·묘비 꾸미기 같은 소모품이 없어요. 상점에서 포인트로 살 수 있어요.</p>}
+              {others.length === 0 && <p className={styles.empty}>폭죽, 묘비 꾸미기 같은 소모품이 없어요. 유령 잡화점에서 포인트로 살 수 있어요.</p>}
               {OTHER_KINDS.map((kind) => {
                 const items = others.filter((e) => e.item.kind === kind);
                 if (items.length === 0) return null;

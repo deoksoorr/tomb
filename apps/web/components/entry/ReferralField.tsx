@@ -38,7 +38,7 @@ export default function ReferralField() {
         aria-describedby={`${id}-hint`}
       />
       <p id={`${id}-hint`} className={check?.ok === false ? ui.error : ui.hint} role="status">
-        {message ?? "없으면 비워 두세요. 나중에 내 정보에서 3일 안에 넣을 수도 있어요."}
+        {message ?? "없으면 비워 두세요. 추천 코드는 가입할 때만 넣을 수 있어요."}
       </p>
     </div>
   );

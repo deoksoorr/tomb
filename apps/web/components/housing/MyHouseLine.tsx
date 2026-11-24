@@ -63,7 +63,6 @@ export default function MyHouseLine({ channel, onGo, onOffice }: { channel: numb
   if (house && sea)
     return (
       <div className={styles.stack}>
-        <p className={styles.small}>어느 집으로 갈까요?</p>
         {line(house, "마을 집 가기")}
         {line(sea, "오두막 가기")}
       </div>
@@ -72,7 +71,7 @@ export default function MyHouseLine({ channel, onGo, onOffice }: { channel: numb
   if (!house)
     return (
       <div className={styles.spread}>
-        <p className={styles.muted}>아직 내 집이 없어요. 분양 사무소에서 지금 채널({channel}채널)의 빈 자리를 분양받을 수 있어요.</p>
+        <p className={styles.muted}>아직 내 집이 없어요.</p>
         <button type="button" className={ui.button} onClick={onOffice}>
           분양 사무소
         </button>

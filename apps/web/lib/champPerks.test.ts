@@ -28,9 +28,9 @@ describe("1위 혜택 — 11/19 포인트 혜택 없음", () => {
     expect(earnTerms(NO_BOOST, "stayBonus", ["points"])).toEqual({ m100: 100, dailyMax: NO_LIMIT });
   });
 
-  it("혜택 문구에 한도 말이 없다 (11/23 낚시왕은 물고기 판매 +15%만, 포인트 레이스 제외)", () => {
+  it("혜택 문구에 한도 말이 없다 (11/23 낚시왕은 그 주에 낚아 그 주에 판 물고기만 +15%, 포인트 레이스 제외)", () => {
     for (const b of ["points", "huntKills", "fish"] as const) for (const l of [...champBoardPerkLines(b), ...champBoardPerkTags(b)]) expect(l).not.toMatch(/한도|포인트를|머무르기|접속 보너스/);
-    expect(champBoardPerkLines("fish")).toEqual(["물고기를 15% 더 비싸게 팔아요. 더 받은 포인트는 포인트 레이스에 들어가지 않아요."]);
+    expect(champBoardPerkLines("fish")).toEqual(["낚시왕인 주에 낚아서 그 주 안에 판 물고기는 15% 더 받아요. 더 받은 포인트는 포인트 레이스에 들어가지 않아요."]);
   });
 });
 
@@ -69,7 +69,7 @@ describe("1위 혜택 — 2관왕·3관왕", () => {
     expect((1.08 + 0.01) * 1.35).toBeLessThan(1.48);
     const two = champPerkLines(["huntKills", "fish"]);
     expect(two).toContain("2관왕이라 마을에서 1% 더 빨리 걸어요.");
-    expect(two).toContain("사냥 경험치를 15% 더 받아요.");
+    expect(two).toContain("사냥 EXP를 15% 더 받아요.");
     const three = champPerkLines(["points", "huntKills", "fish"]);
     expect(three).toHaveLength(1 + 2 + 1 + 1);
     expect(three[three.length - 1]).toContain("3관왕");
@@ -79,8 +79,8 @@ describe("1위 혜택 — 2관왕·3관왕", () => {
   });
 
   it("레이스 창 짧은 꼬리표는 같은 표의 숫자를 쓴다", () => {
-    expect(champBoardPerkTags("huntKills")).toEqual(["사냥 경험치 +15%", "초월 경험치 +10%"]);
-    expect(champBoardPerkTags("fish")).toEqual(["물고기 판매 +15%"]);
+    expect(champBoardPerkTags("huntKills")).toEqual(["사냥 EXP +15%", "초월 EXP +10%"]);
+    expect(champBoardPerkTags("fish")).toEqual(["그 주에 낚은 물고기 판매 +15%"]);
     expect(champBoardPerkTags("points")).toEqual(["꾸미기와 가구 20% 할인"]);
     for (const b of ["points", "huntKills", "fish"] as const) for (const t of champBoardPerkTags(b)) expect(t).not.toMatch(/:| · /);
   });

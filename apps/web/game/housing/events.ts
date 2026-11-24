@@ -7,6 +7,8 @@ export type HouseEditState = {
   items: Placed[];
   floor: string;
   wall: string;
+  /** 11/24 벽 창문 모양 (기본 DEFAULT_WINDOW · 눈꽃 창가) */
+  window: string;
   /** 고른 물건의 배치 id (없으면 null) */
   selected: string | null;
   /** 마지막 저장 이후 바뀌었는지 (놓아 보는 물건은 빼고 본다) */
@@ -25,4 +27,4 @@ export type HouseTool =
   | { action: "remove" }
   | { action: "deselect" }
   | { action: "nudge"; dx: number; dy: number }
-  | { action: "skin"; floor?: string; wall?: string };
+  | { action: "skin"; floor?: string; wall?: string; window?: string };

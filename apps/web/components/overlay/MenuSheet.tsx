@@ -104,13 +104,8 @@ export default function MenuSheet({
 }: Props) {
   // 운영자 계정은 출석 도장을 받지 않는다 → 출석 달력 칸을 뺀다
   const staff = !!useMe().me?.staff;
-  /** 감정 표현은 시트를 닫고 바로 보여 준다 */
-  const act = (kind: "wave" | "cheer") => {
-    onClose();
-    bridge.emit("input:act", { kind });
-  };
   const entries: Entry[] = [
-    { target: "say", icon: "chat", label: "표현 (T)", desc: "말풍선·이모티콘으로 인사하기" },
+    { target: "say", icon: "chat", label: "표현 (T)", desc: "이모티콘·손 흔들기로 인사하기" },
     { target: "favs", icon: "spark", label: "즐겨찾기 표현 (Y)", desc: "별 표시한 표현을 바로 보내기" },
     { target: "bag", icon: "bag", label: "가방 (I)", desc: titleNew ? "새 칭호를 얻었어요!" : bagNew ? "새로 생긴 물건이 있어요" : "꾸미기·폭죽·잡은 것 꺼내기", dot: titleNew || bagNew },
     { target: "hunt", icon: "sword", label: "사냥터", desc: huntBlocked ?? "몬스터를 잡고 포인트 모으기", off: !!huntBlocked },
@@ -193,15 +188,6 @@ export default function MenuSheet({
         </h3>
         <TodayFacts />
       </section>
-      <div className={styles.zoom} role="group" aria-label="감정 표현">
-        <span>감정 표현</span>
-        <button type="button" className={ui.button} onClick={() => act("wave")}>
-          손 흔들기
-        </button>
-        <button type="button" className={ui.button} onClick={() => act("cheer")}>
-          환호
-        </button>
-      </div>
       <div className={styles.zoom} role="group" aria-label="화면 확대·축소">
         <span>화면 크기</span>
         <button type="button" className={cx(ui.button, ui.icon)} onClick={() => bridge.emit("camera:zoom", { delta: -1 })} aria-label="축소">

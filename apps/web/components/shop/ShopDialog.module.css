@@ -1,3 +1,13 @@
+/* 11/24 상점 계열 창(잡화점·가구점·보따리상·분양사·문대리·붕어빵)은 데스크톱에서 표준 창보다 조금 크게:
+   왼쪽 자세히 보기가 긴 설명·보유 줄·사기 버튼 둘까지 스크롤 없이 들어가게. 폰(560px 이하)은 공용 창 규칙 그대로 화면 전체.
+   dialog.를 붙여 공용 .dialog 크기보다 앞서게 (사냥터 창 huntDialog와 같은 방식) */
+@media (min-width: 561px) {
+  dialog.window {
+    width: min(880px, var(--dialog-max-w));
+    height: min(720px, calc(100dvh / var(--uz) - 48px), var(--dialog-max-h));
+  }
+}
+
 /* 상점: 고정 크기 창(Dialog fixed) 안을 채운다. 위(포인트·탭)는 그대로, 목록만 스크롤 */
 .shop {
   display: flex;
@@ -72,7 +82,8 @@
 .panel {
   display: grid;
   flex: 1;
-  grid-template-columns: 236px minmax(0, 1fr);
+  /* 11/24 자세히 보기 칸 폭 고정 340px (예전 236px — 설명이 길면 칸 안에 스크롤이 생겼다) */
+  grid-template-columns: 340px minmax(0, 1fr);
   /* 줄 높이를 창 높이에 묶는다: 목록이 길어도 칸이 늘지 않고 목록 안에서만 스크롤한다 */
   grid-template-rows: minmax(0, 1fr);
   gap: 10px;
@@ -86,8 +97,8 @@
   gap: 6px;
   min-height: 0;
   padding: 10px;
-  /* 자세히 보기는 스크롤 없이 다 보이게 (무대는 크게, 글·조작은 작게 → 사기 버튼까지 들어간다).
-     그래도 넘치면(낮은 화면·이름표 미리보기처럼 긴 칸) 사기 버튼이 잘리지 않게 이 칸 안에서만 스크롤 */
+  /* 자세히 보기는 스크롤 없이 다 보이게 (그림 칸은 고정, 글·조작은 작게 → 사기 버튼까지 들어간다).
+     그래도 넘치면(아주 낮은 화면) 사기 버튼이 잘리지 않게 이 칸 안에서만 스크롤 */
   overflow-x: hidden;
   overflow-y: auto;
   background: var(--bg-deep);
@@ -101,14 +112,31 @@
   }
 }
 
-/* 입어 보기 무대: 칸 폭을 꽉 채우는 3배 (216×192). 칸이 낮으면 2배로 줄여 사기 버튼까지 스크롤 없이 보이게
+/* 11/24 그림 칸: 물건을 바꿔도 크기가 그대로인 고정 칸 (입어 보기·이름표·폭죽·아이콘 모두 이 안 가운데).
+   예전엔 종류마다 그림 높이가 달라 글·사기 버튼이 오르내렸다 */
+.stageBox {
+  /* 그림 칸 높이 (물건마다 같다 — 자세히 보기 칸 높이로만 정한다: 아래 @container) */
+  --stage-h: 232px;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 100%;
+  height: var(--stage-h);
+  overflow: hidden;
+}
+
+/* 입어 보기 무대: 3배 (216×192) + 방향 단추 줄. 칸이 낮으면(낮은 화면) 2배로 — 물건마다 바뀌지 않고 창 높이로만 바뀐다
    (2클래스로 OutfitPreview 기본값을 이긴다) */
 .detail .fitPreview {
   --scale: 3;
   gap: 4px;
 }
 
-@container (max-height: 400px) {
+@container (max-height: 479px) {
+  .stageBox {
+    --stage-h: 168px;
+  }
+
   .detail .fitPreview {
     --scale: 2;
   }
@@ -124,6 +152,11 @@
   max-width: 320px;
 }
 
+/* 이름표 미리보기는 그림 칸 높이를 넘지 않게 (아바타 ×3 두 칸) */
+.stageBox > .namePreview {
+  max-height: 100%;
+}
+
 /* 폰: 이름표 미리보기는 낮·밤 두 칸이라 옆에 글을 두면 좁아 사기 버튼이 칸 밖으로 밀린다 → 미리보기 위, 글·사기 버튼 아래로
    (닉네임 꾸미기를 고르면 ShopDialog가 detailName을 붙인다 — :has를 못 쓰는 브라우저도 같게) */
 @media (max-width: 560px) {
@@ -132,16 +165,16 @@
   }
 }
 
-/* 폭죽 미리보기: 자세히 보기 칸 폭을 꽉 채운다 */
+/* 폭죽 미리보기: 그림 칸에 꽉 (22:15 — 칸 높이를 넘지 않는 폭) */
 .fwPreview {
-  width: 100%;
+  width: min(100%, calc(var(--stage-h) * 22 / 15));
 }
 
 .bigIcon {
   display: grid;
   place-items: center;
   width: 100%;
-  min-height: 112px;
+  height: 100%;
   background: radial-gradient(ellipse at 50% 90%, rgba(85, 112, 79, 0.25), transparent 70%);
 }
 
@@ -475,13 +508,20 @@
     padding: 8px;
   }
 
+  /* 폰 그림 칸: 150×158 고정 (입어 보기 2배 144×128 + 방향 단추 줄이 들어가는 크기 — 폭죽·아이콘도 같은 칸) */
+  .stageBox {
+    width: 150px;
+    height: 158px;
+  }
+
   .detail .fitPreview {
     --scale: 2;
   }
 
-  .bigIcon {
-    width: 96px;
-    min-height: 96px;
+  /* 이름표 미리보기는 낮·밤 두 칸이라 폭 가득 (위 detailName — 높이는 이름표 칸이 늘 같다) */
+  .detail.detailName .stageBox {
+    width: 100%;
+    height: auto;
   }
 
   /* 2클래스: FireworkPreview의 .stage { width: 100% }를 이긴다 (예전엔 1클래스라 CSS 순서에 따라 무대가 칸 폭을 꽉 채워
@@ -506,8 +546,11 @@
     white-space: nowrap;
   }
 
+  /* 폰은 글 칸이 좁다(그림 칸 옆) → 설명을 다섯 줄까지 (가장 긴 설명도 다 보인다) */
   .desc {
     font-size: 12px;
+    -webkit-line-clamp: 5;
+    line-clamp: 5;
   }
 
   /* 폰은 목록 칸이 낮다 → 카드를 작게 4칸으로 (한 화면에 더 많이) */

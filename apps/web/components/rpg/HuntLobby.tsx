@@ -38,9 +38,8 @@ import { resolveAvatar } from "../account/wardrobe";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
-import { mmss, pts } from "./format";
+import { mmss, pts, secText } from "./format";
 import { gearGrade } from "./gear";
-import HuntCapMeter from "./HuntCap";
 import HuntGuide from "./HuntGuide";
 import { EndgameResult, TranscendBar } from "./Endgame";
 import { CharacterPanel, GearPanel, LOBBY_HIDDEN, ShopPanel, SkillPanel, StartPanel } from "./Panels";
@@ -53,7 +52,8 @@ import TowerEntrance, { towerBoostAllowed } from "./TowerEntrance";
 import s from "./rpg.module.css";
 import OverLevelSpot, { OVER_LEVEL_SPOT_MS } from "./OverLevelSpot";
 import { HUNT_POINT_T_STOP, huntPointBlock } from "@/lib/rpg/formulas";
-import { towerFitFloor, towerPointFrom } from "@/lib/rpg/tower";
+import { TOWER_CHEST_FROM, towerFitFloor, towerNoPointGain, towerPointFrom } from "@/lib/rpg/tower";
+import { FINISH_GRACE_SEC, PAUSE_ALLOW_MS } from "@/lib/rpg/rewards";
 import { useRideStopGate } from "../overlay/RideStopDialog";
 import { usePageZoomLock } from "@/lib/hooks/usePageZoomLock";
 
@@ -270,13 +270,13 @@ export default function HuntLobby({
         const name = gearById(id)?.name ?? potionById(id)?.name ?? id;
         const n = v.sold?.count ?? count;
         const what = `${name}${n > 1 ? ` ${n}개` : ""}`;
-        // 한도에 막혀 못 판 것은 가방에 그대로 남는다 (서버가 되돌린다)
+        // 포인트를 못 받은 것은 가방에 그대로 남는다 (서버가 되돌린다). 11/24 사냥 포인트 하루 한도는 없어서 지갑 상한(WALLET_MAX)에 닿을 때만 생긴다
         const left = count - n;
         setNotice(
           n <= 0
-            ? `오늘 받을 포인트를 다 채워서 ${name}을(를) 못 팔았어요. 가방에 그대로 있어요.`
+            ? `포인트를 더 받을 수 없어서 ${name}을(를) 팔지 못했어요. 가방에 그대로 있어요.`
             : v.sold?.capped
-              ? `${what}을(를) ${pts(v.sold.value)}에 팔았어요. 오늘 받을 포인트를 다 채워서 일부만 받았어요.${left > 0 ? ` ${left}개는 가방에 남겨 뒀어요.` : ""}`
+              ? `${what}을(를) ${pts(v.sold.value)}에 팔았어요. 포인트를 더 받을 수 없어서 일부만 받았어요.${left > 0 ? ` ${left}개는 가방에 남겨 뒀어요.` : ""}`
               : `${what}을(를) ${pts(v.sold?.value ?? 0)}에 팔았어요.`,
         );
       })
@@ -317,14 +317,14 @@ export default function HuntLobby({
       setOverLevel(
         res.tower
           ? res.tower < from
-            ? { until, title: `${from}층부터 포인트를 받아요`, text: `${starLabel(c.tLevel)}의 적정 층은 ${towerFitFloor(c.tLevel)}층이에요. ${from - 1}층까지는 초월 경험치와 상자만 받아요.` }
+            ? { until, title: `${from}층부터 포인트를 받아요`, text: `${starLabel(c.tLevel)}의 적정 층은 ${towerFitFloor(c.tLevel)}층이에요. ${from - 1}층까지는 포인트 없이 ${towerNoPointGain(res.tower, from - 1)} 받아요.` }
             : null
           : game !== "hunt"
             ? null
             : huntPointBlock(c.level, c.tLevel, difficulty, runZone) === "star"
-              ? { until, title: "사냥터에서는 포인트를 받을 수 없어요", text: `${starLabel(HUNT_POINT_T_STOP)}부터는 일반 사냥터에서 포인트를 받지 않고 랭킹과 레이스에도 들어가지 않아요. 야근 빌딩에서 이어 가요.` }
+              ? { until, title: "사냥터에서는 포인트를 받을 수 없어요", text: `${starLabel(HUNT_POINT_T_STOP)}부터는 일반 사냥터에서 포인트를 받지 않고 랭킹과 레이스에도 반영되지 않아요. 야근 빌딩에서 이어 가요.` }
               : huntPointBlock(c.level, c.tLevel, difficulty, runZone) === "level"
-                ? { until, title: "이 사냥터에서는 포인트를 받을 수 없어요", text: `내 레벨이 이 사냥터(Lv.${runZone.unlockLevel})보다 10 넘게 높아요. EXP도 조금만 받고 랭킹에도 들어가지 않아요.` }
+                ? { until, title: "이 사냥터에서는 포인트를 받을 수 없어요", text: `내 레벨이 이 사냥터(Lv.${runZone.unlockLevel})보다 10 넘게 높아서 EXP가 줄고 랭킹에도 반영되지 않아요.` }
                 : null,
       );
       bridge.emit("rpg:play", {
@@ -465,7 +465,7 @@ export default function HuntLobby({
               <p>
                 {run.current?.tower
                   ? "멈춘 동안은 시간이 흐르지 않아요. 지금 나가면 깬 층까지 기록돼요."
-                  : "멈춘 동안은 시간이 흐르지 않아요. 2분 넘게 멈춰 있으면 보상을 못 받아요."}
+                  : `멈춘 동안은 판 시간이 흐르지 않아요. 다만 판을 시작한 뒤 제한 시간에서 ${secText(FINISH_GRACE_SEC)}이 더 지나면 보상을 받을 수 없어요.${run.current?.game === "hunt" ? ` ${secText(PAUSE_ALLOW_MS / 1000)} 넘게 멈춘 판은 최단 기록 랭킹에 들어가지 않아요.` : ""}`}
               </p>
               <div className={s.buttons}>
                 <button type="button" className={cx(ui.button, ui.primary)} onClick={resume}>
@@ -562,11 +562,11 @@ export default function HuntLobby({
               </button>
             </div>
             {view.endgame ? (
-              <div className={cx(s.expBar, s.tBar)} role="meter" aria-label="초월 경험치" aria-valuenow={c.tExp} aria-valuemin={0} aria-valuemax={view.endgame.tExpToNext || 1}>
+              <div className={cx(s.expBar, s.tBar)} role="meter" aria-label="초월 EXP" aria-valuenow={c.tExp} aria-valuemin={0} aria-valuemax={view.endgame.tExpToNext || 1}>
                 <span style={{ width: `${view.endgame.tExpToNext ? Math.min(100, (c.tExp / view.endgame.tExpToNext) * 100) : 100}%` }} />
               </div>
             ) : (
-              <div className={s.expBar} role="meter" aria-label="경험치" aria-valuenow={c.exp} aria-valuemin={0} aria-valuemax={view.expToNext || 1}>
+              <div className={s.expBar} role="meter" aria-label="EXP" aria-valuenow={c.exp} aria-valuemin={0} aria-valuemax={view.expToNext || 1}>
                 <span
                   style={{
                     width: `${view.expToNext ? Math.min(100, (c.exp / view.expToNext) * 100) : 100}%`,
@@ -714,7 +714,7 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
       {outcome.error ? (
         <p className={ui.error} role="alert">
           {/* 11/15 야근 빌딩: 쓰러짐 제목에 묻혀 거절을 못 알아챘다 → 기록이 안 남았다는 걸 먼저 분명히 */}
-          {outcome.tower && <strong>이번 판은 기록이 저장되지 않았어요 (최고 층·초월 EXP·상자 없음). </strong>}
+          {outcome.tower && <strong>이번 판은 기록이 저장되지 않아 최고 층, 초월 EXP, 상자가 반영되지 않아요. </strong>}
           {outcome.error}
         </p>
       ) : r ? (
@@ -746,18 +746,18 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
           {r.overLevel && (
             <p className={s.warn}>
               {r.overLevel === "star"
-                ? `${starLabel(HUNT_POINT_T_STOP)}부터는 사냥터에서 포인트를 받지 않아요. 포인트는 야근 빌딩에서 받아요.`
-                : "적정 레벨보다 낮은 사냥터라 포인트는 받지 않았어요. 내 레벨에 맞는 사냥터에서 포인트를 받아요."}
+                ? `${starLabel(HUNT_POINT_T_STOP)}부터는 사냥터에서 포인트를 받지 않고, 야근 빌딩에서 받아요.`
+                : "적정 레벨보다 낮은 사냥터라 포인트를 받지 못했어요."}
             </p>
           )}
           {r.lowFloors && (
             <p className={s.warn}>
-              적정 층보다 낮은 {r.lowFloors.floors}층은 포인트 없이 초월 경험치와 상자만 받았어요. {r.lowFloors.from}층부터 포인트를 받아요.
+              적정 층보다 낮은 {r.lowFloors.floors}층은 포인트를 받지 않았어요. {r.lowFloors.from}층부터 포인트를 받아요.
             </p>
           )}
           {r.capped && !r.overLevel && (
             <p className={ui.hint}>
-              오늘 받을 포인트를 다 채워서 {r.pointsRaw}P 중 {r.points}P만 받았어요.
+              포인트를 더 받을 수 없어서 {r.pointsRaw}P 중 {r.points}P만 받았어요.
             </p>
           )}
           <EndgameResult reward={r} />
@@ -825,7 +825,7 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
               })}
             </div>
           ) : (
-            <p className={s.meta}>{outcome.tower ? "주운 것이 없어요. 5층마다 우두머리를 잡으면 상자가 열려요." : "주운 것이 없어요"}</p>
+            <p className={s.meta}>{outcome.tower ? `주운 것이 없어요. ${TOWER_CHEST_FROM}층부터 우두머리 층을 깨면 상자가 열려요.` : "주운 것이 없어요"}</p>
           )}
           {r && r.lostDrops > 0 && <p className={s.warn}>가방이 가득 차서 {r.lostDrops}개는 못 챙겼어요.</p>}
         </section>
@@ -850,13 +850,12 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
       {view && c && view.endgame && (
         <div className={s.resultProgress}>
           <TranscendBar tLevel={c.tLevel} tExp={c.tExp} eg={view.endgame} />
-          <HuntCapMeter today={view.today} where="result" />
         </div>
       )}
       {view && c && !view.endgame && (
         <div className={s.resultProgress}>
           <div className={s.barLabel}>
-            <span>Lv.{c.level} 경험치</span>
+            <span>Lv.{c.level} EXP</span>
             <span>
               {c.exp.toLocaleString("ko-KR")} / {view.expToNext ? view.expToNext.toLocaleString("ko-KR") : "MAX"}
             </span>
@@ -868,7 +867,6 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
               }}
             />
           </div>
-          <HuntCapMeter today={view.today} where="result" />
         </div>
       )}
     </div>

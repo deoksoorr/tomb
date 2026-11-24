@@ -25,7 +25,7 @@ type Props = {
   footer?: ReactNode;
 };
 
-/** 성황당: 내가 이장한 묘비가 잠시 머무는 곳. 보관 기간 안에는 다시 모실(복구) 수 있다 */
+/** 이장한 묘비 (11/19 성황당 건물은 없앴고 옛 묘역 입구 팻말·내 정보에서 연다): 내가 이장한 묘비가 잠시 머무는 곳. 보관 기간 안에는 다시 모실(복구) 수 있다 */
 export default function ShrineDialog({ cache, onGo, onClose, onOpenPassed, footer }: Props) {
   const [entries, setEntries] = useState<ShrineEntry[] | null>(null);
   const [pending, setPending] = useState<string | null>(null);
@@ -71,11 +71,10 @@ export default function ShrineDialog({ cache, onGo, onClose, onOpenPassed, foote
   }
 
   return (
-    <Dialog title="옛 묘역 입구 · 성황당" onClose={onClose}>
+    <Dialog title="이장한 묘비" onClose={onClose}>
       <div className={styles.bag}>
         <p className={ui.hint}>
-          성황당은 자리를 옮긴 묘비가 잠시 머무는 곳이에요. 옛 묘역 입구 팻말에서 열어요. 이장한 내 묘비는 {SHRINE_KEEP_DAYS}일 동안 여기 있어요. 그 안에 다시
-          모시면 원래 채널 맨 뒤 자리로 돌아가요. 기간이 지나면 지워져요.
+          이장한 묘비는 {SHRINE_KEEP_DAYS}일 동안 보관돼요. 그 안에 다시 모시면 원래 채널 맨 뒤 자리로 돌아가고, 기간이 지나면 지워져요.
         </p>
         <p className={ui.hint}>
           세운 지 {DEFAULT_PASS_DAYS}일이 지난 묘비는 성불해 묘역을 떠나요. 묘역(채널마다 {GRAVEYARD_CAPACITY}자리)이 꽉 차면 가장

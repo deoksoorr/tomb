@@ -4,15 +4,13 @@ import { InfoCard, InfoGrid, Shortcuts, TipList, type Shortcut } from "../ui/Inf
 
 type Props = {
   onBury?: () => void;
-  onShrine?: () => void;
   onPassed?: () => void;
 };
 
 /** "내 묘비 가기" 창 아래: 묘비의 한살이와 관련 창 바로 가기 */
-export default function GraveGuide({ onBury, onShrine, onPassed }: Props) {
+export default function GraveGuide({ onBury, onPassed }: Props) {
   const links: Shortcut[] = [
     ...(onBury ? [{ label: "묘비 쓰기", icon: "grave", onClick: onBury } satisfies Shortcut] : []),
-    ...(onShrine ? [{ label: "성황당", icon: "candle", onClick: onShrine } satisfies Shortcut] : []),
     ...(onPassed ? [{ label: "성불한 이야기들", icon: "book", onClick: onPassed } satisfies Shortcut] : []),
   ];
   return (
@@ -32,7 +30,7 @@ export default function GraveGuide({ onBury, onShrine, onPassed }: Props) {
           tips={[
             "목록에서 묘비를 누르면 그 앞까지 걸어가요. 다른 채널이면 채널을 옮겨 가요.",
             "묘비 상세에서 내용을 고칠 수 있고, 가방의 묘비 꾸미기를 놓아 줄 수도 있어요.",
-            `[이장]하면 성황당에 ${SHRINE_KEEP_DAYS}일 동안 모셔지고, 그 안에 다시 모실 수 있어요.`,
+            `[이장]한 묘비는 ${SHRINE_KEEP_DAYS}일 동안 보관되고, 그 안에 다시 모실 수 있어요.`,
           ]}
         />
         <Shortcuts items={links} />

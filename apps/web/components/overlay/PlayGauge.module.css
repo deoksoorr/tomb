@@ -1,0 +1,132 @@
+/* 11/24 시간 미션 게이지: 이름 · 잰 시간 + 차오르는 막대 (SkyHud 안내 줄과 같은 어두운 판) */
+.gauge {
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 220px;
+  max-width: calc(100vw / var(--uz, 1) - 32px);
+  padding: 7px 12px 9px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: rgba(10, 12, 20, 0.66);
+  color: #e8e2d4;
+  font-size: 0.85rem;
+  pointer-events: none;
+  animation: gaugeIn 0.25s ease both;
+}
+
+/* 범퍼카·불멍: 아래 가운데, 알림(토스트) 한 줄 위 (관람차·열기구는 SkyHud 묶음 안 — 셋은 함께 할 수 없다) */
+.fixed {
+  position: fixed;
+  bottom: calc(var(--safe-bottom, 0px) + 132px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 11;
+  --gx: -50%;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.title {
+  color: #ffd27a;
+}
+
+.time {
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.track {
+  margin-top: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+/* 범퍼카는 1초마다 오니 1초에 걸쳐 이어 채운다 (멈추면 그 자리에 선다) */
+.fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #f0a64a, #ffd27a);
+  transform-origin: left center;
+  transition: transform 1s linear;
+}
+
+.note {
+  display: block;
+  margin-top: 6px;
+  color: #b9b4a4;
+  font-size: 0.75rem;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gauge[data-done] {
+  border-color: rgba(143, 220, 140, 0.6);
+  animation: gaugeDone 2.4s ease both;
+}
+
+.gauge[data-done] .time {
+  color: #9fe39b;
+  font-weight: 700;
+}
+
+.gauge[data-done] .fill {
+  background: linear-gradient(90deg, #6cc46a, #9fe39b);
+  transition: none;
+}
+
+@keyframes gaugeIn {
+  from {
+    opacity: 0;
+    transform: translate(var(--gx, 0), 6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(var(--gx, 0), 0);
+  }
+}
+
+@keyframes gaugeDone {
+  0% {
+    transform: translate(var(--gx, 0), 0) scale(1);
+  }
+  12% {
+    transform: translate(var(--gx, 0), 0) scale(1.06);
+  }
+  25%,
+  80% {
+    opacity: 1;
+    transform: translate(var(--gx, 0), 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--gx, 0), 0) scale(1);
+  }
+}
+
+/* 좁은 화면: 터치는 조이스틱·행동 버튼 위 (GameShell .shell --hud-bottom), 좁은 데스크톱 창은 150px */
+@media (max-width: 520px) {
+  .fixed {
+    bottom: var(--hud-bottom, calc(var(--safe-bottom, 0px) + 150px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gauge,
+  .gauge[data-done] {
+    animation: none;
+  }
+
+  .fill {
+    transition: none;
+  }
+}

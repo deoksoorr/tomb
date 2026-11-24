@@ -3,7 +3,7 @@ import { DIR, STATE, type DirId, type Sid } from "@tomb/protocol";
 import { bgm } from "@/components/bgm/engine";
 import { furnitureById, tierById, type PlotTier } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
-import { buildOccupancy, findFreeSpot, footprint, gateTiles, newUid, nextRotation, SPIN_R0, spinDir } from "@/lib/housing/layout";
+import { buildOccupancy, findFreeSpot, footprint, gateTiles, liftWindowSkins, newUid, nextRotation, SPIN_R0, spinDir, windowOf } from "@/lib/housing/layout";
 import { GROW_MS, plantStage, type PlantState } from "@/lib/housing/plants";
 import { roomPlan, type RoomPlan } from "@/lib/housing/rooms";
 import { placedSig } from "@/lib/housing/states";
@@ -31,7 +31,7 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { Atmosphere } from "../world/Atmosphere";
 import { Lighting, playerLightRadius } from "../world/Lighting";
 import type { LightSpot } from "../world/WorldMap";
-import { animFrames, artUp, DOG_BREATH_FRAMES, drawsTurned, floorGrid, furnitureGrid, hasNightArt, itemVariant, noFootShadow, sconceGrid, usesNightVariant, wallCapColor, wallFaceColor, WALL_H, wallGrid, windowGrid, WINDOW_W, yardGrid, zzzGrid } from "./art";
+import { animFrames, artUp, DOG_BREATH_FRAMES, drawsTurned, floorGrid, furnitureGrid, hasNightArt, itemVariant, noFootShadow, sconceGrid, usesNightVariant, wallCapColor, wallFaceColor, WALL_H, wallGrid, windowGrid, WINDOW_H, WINDOW_W, yardGrid, zzzGrid } from "./art";
 import type { HouseEditState, HouseTool } from "./events";
 import { wornRingGrid } from "./seaFurnitureArt";
 import { HouseSfx, hearGain, type HouseSound } from "./houseSfx";
@@ -283,7 +283,7 @@ export class HouseScene extends Phaser.Scene {
     this.remoteTick = new Map();
     this.follow = null;
     this.promptQuiet = null;
-    this.work = structuredClone(data.house.layout);
+    this.work = sceneLayout(data.house.layout);
     this.baseline = JSON.stringify(this.work);
   }
 
@@ -522,10 +522,11 @@ export class HouseScene extends Phaser.Scene {
       return c;
     });
     this.walls.push(this.add.image(L, top, backKey).setOrigin(0, 1).setDepth(top - 2));
-    // 창문 (낮·밤, 열림·닫힘은 updateWindows가 바꾼다)
+    // 창문 (낮·밤, 열림·닫힘은 updateWindows가 바꾼다). 11/24 창문 모양(눈꽃 창가)은 창턱 아래로 양말이 늘어져 그림이 조금 길다: 창턱을 같은 높이에 맞춘다
     this.plan.windows.forEach((w, i) => {
       const x = L + w.x * T + (w.w * T - WINDOW_W) / 2;
-      const img = this.add.image(x, top - 9, this.windowKey(this.night, this.isOpen(`w${i}`))).setOrigin(0, 1).setDepth(top - 1);
+      const img = this.add.image(x, top - 9, this.windowKey(this.night, this.isOpen(`w${i}`))).setDepth(top - 1);
+      img.setOrigin(0, WINDOW_H / img.height);
       this.walls.push(img);
       this.windows.push({ img, key: "" });
     });
@@ -602,7 +603,8 @@ export class HouseScene extends Phaser.Scene {
   }
 
   private windowKey(night: boolean, open: boolean): string {
-    return this.canvasTex(`house-window-${night ? "n" : "d"}-${open ? "o" : "c"}`, () => windowGrid(night, open).toCanvas());
+    const style = windowOf(this.work);
+    return this.canvasTex(`house-window-${style}-${night ? "n" : "d"}-${open ? "o" : "c"}`, () => windowGrid(night, open, style).toCanvas());
   }
 
   private sconceKey(on: boolean): string {
@@ -2138,6 +2140,7 @@ export class HouseScene extends Phaser.Scene {
       items: structuredClone(w.items),
       floor: w.floor,
       wall: w.wall,
+      window: windowOf(w),
       selected: this.selected,
       dirty: JSON.stringify(w) !== this.baseline,
       trial: trial ? { u: trial.u, itemId: trial.i } : null,
@@ -2365,8 +2368,9 @@ export class HouseScene extends Phaser.Scene {
       case "skin":
         if (t.floor) this.work.floor = t.floor;
         if (t.wall) this.work.wall = t.wall;
+        if (t.window) this.work.window = t.window;
         if (t.floor) this.drawGround();
-        if (t.wall) this.drawWalls();
+        if (t.wall || t.window) this.drawWalls();
         return this.changed();
     }
   }
@@ -2496,7 +2500,7 @@ export class HouseScene extends Phaser.Scene {
     const after = new Map(house.layout.items.map((p) => [p.u, placedSig(p)]));
     for (const u of [...this.toggles.keys()]) if ((before.has(u) || after.has(u)) && before.get(u) !== after.get(u)) this.toggles.delete(u);
     this.trialU = null;
-    this.work = structuredClone(house.layout);
+    this.work = sceneLayout(house.layout);
     this.baseline = JSON.stringify(this.work);
     this.refreshAll();
     this.changed();
@@ -2521,4 +2525,10 @@ export class HouseScene extends Phaser.Scene {
       plants: this.plants,
     };
   }
+}
+
+/** 11/24 장면이 쓰는 배치: 예전에 바닥에 놓은 눈꽃 창가는 창문 모양으로, 창문 칸은 늘 채운다 (저장 화면과 되돌리기 비교가 같게) */
+function sceneLayout(l: HouseLayout): HouseLayout {
+  const out = liftWindowSkins(structuredClone(l));
+  return { ...out, window: windowOf(out) };
 }

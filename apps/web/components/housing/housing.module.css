@@ -985,7 +985,8 @@
 .fsPanel {
   display: grid;
   flex: 1;
-  grid-template-columns: 236px minmax(0, 1fr);
+  /* 11/24 자세히 보기 칸 폭 고정 340px (잡화점과 같다 — 예전 236px은 긴 설명에 칸 안 스크롤이 생겼다) */
+  grid-template-columns: 340px minmax(0, 1fr);
   /* 줄 높이를 창에 묶어 목록이 길어도 칸이 늘지 않게 (목록 안에서만 스크롤) */
   grid-template-rows: minmax(0, 1fr);
   gap: 10px;
@@ -999,9 +1000,10 @@
   gap: 8px;
   min-height: 0;
   padding: 10px;
+  /* 그림 칸은 창 크기로만 정해져(FurnitureShop STAGE_TIERS) 물건마다 높이가 그대로 → 스크롤바 자리를 늘 비워 둘 필요가 없다.
+     아주 낮은 화면에서 넘치면 사기 단추가 잘리지 않게 이 칸 안에서만 스크롤 */
+  overflow-x: hidden;
   overflow-y: auto;
-  /* 스크롤바가 생겼다 없어져도 폭이 그대로 → 설명 줄바꿈·미리보기 높이가 오락가락하며 흔들리지 않게 */
-  scrollbar-gutter: stable;
   background: var(--bg-deep);
   box-shadow: var(--px-border);
 }
@@ -1218,7 +1220,6 @@
     grid-template-columns: auto minmax(0, 1fr);
     align-items: start;
     justify-items: stretch;
-    max-height: calc(42dvh / var(--uz));
     padding: 8px;
   }
 
@@ -1238,8 +1239,11 @@
     font-size: 10px;
   }
 
+  /* 폰은 글 칸이 좁다(그림 칸 옆) → 설명을 네 줄까지 (가장 긴 설명도 다 보인다) */
   .fsText {
     font-size: 12px;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
   }
 
   .fsActions > button:not(:first-child) {

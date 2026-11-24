@@ -8,6 +8,7 @@ import {
   GUEST_REPORT_HIDE,
   housingChannelOf,
   houseScore,
+  isHouseOwnDef,
   LEGACY_HOUSING_CHANNEL,
   reclaimLastSeen,
   SEA_LOT_COUNT,
@@ -18,7 +19,7 @@ import {
   type PlotTierId,
 } from "./catalog";
 import type { ReportBy } from "../reports";
-import { emptyLayout, normalizeExterior } from "./layout";
+import { emptyLayout, liftWindowSkins, normalizeExterior } from "./layout";
 import type { PlantState } from "./plants";
 import { keepState, stateSigs, type HouseState } from "./states";
 import type { GuestEntry, HouseExterior, HouseLayout, PublicHouse } from "./types";
@@ -70,10 +71,7 @@ export const pairIds = (pair: HousePair, zone: HouseZone | undefined) =>
   zone === "sea" ? { self: pair.sea, other: pair.village } : { self: pair.village, other: pair.sea };
 
 /** 집에 딸린 물건 (바닥·벽지·외관): 공용 가방에 넣지 않고 산 집 가방에 */
-export const isHouseOwnItem = (itemId: string) => {
-  const d = furnitureById(itemId);
-  return !!(d?.skin || d?.ext);
-};
+export const isHouseOwnItem = (itemId: string) => isHouseOwnDef(furnitureById(itemId));
 
 /** 오두막 시작 가구 중 가구 (오두막 몫으로 1개씩 남긴다 — 옛 가방을 옮길 때도) */
 export const SEA_STARTER_KEEP: readonly string[] = SEA_STARTER.filter((i) => !isHouseOwnItem(i));
@@ -335,14 +333,16 @@ export class MemoryHouseStore implements HouseStore {
 
   private view(h: MemHouse): HouseRecord {
     const r = h.rec;
+    // 11/24 예전에 바닥에 놓은 눈꽃 창가는 창문 모양으로 읽는다 (layout.ts liftWindowSkins)
+    const layout = liftWindowSkins(structuredClone(r.layout));
     return {
       ...r,
-      layout: structuredClone(r.layout),
+      layout,
       ch: housingChannelOf(r.ch),
       lot: r.lot ?? 0,
       exterior: normalizeExterior(r.exterior),
       score: scoreOf(r.placedScore, r.likes, r.tier),
-      items: r.layout.items.length,
+      items: layout.items.length,
     };
   }
 

@@ -2,14 +2,13 @@
 
 /* eslint-disable @next/next/no-img-element -- 캔버스로 만든 dataURL 픽셀아트 */
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { DIFFICULTIES, DIFFS, gearById, MONSTERS, zonesOf, type ZoneDef, type ZoneId } from "@/lib/rpg/catalog";
+import { DIFFICULTIES, DIFFS, zonesOf, type ZoneDef, type ZoneId } from "@/lib/rpg/catalog";
 import { fetchHuntCrowd, type HuntCrowd } from "@/lib/rpg/client";
 import { huntPointBlock } from "@/lib/rpg/formulas";
 import { isSnowy, type MapConcept } from "@/lib/mapConcept";
 import { currentMapConcept } from "@/lib/mapConceptClient";
 import { cx } from "../ui/cx";
 import s from "./rpg.module.css";
-import { OddsLink } from "../odds/OddsLayer";
 
 // 40번 사냥터 고르기: 난이도마다 두세 곳, 카드마다 지도 미리보기(게임과 같은 그림)·이름·입장 레벨·지형 기믹.
 // 난이도 줄은 창 너비를 다 쓰고, 그 난이도의 사냥터 카드가 한 줄에 모두 보인다 (카드 수만큼 균등 분할).
@@ -133,7 +132,7 @@ export default function ZonePicker({ level, tLevel = 0, zone, onZone, detail }: 
         return (
           <div key={d} className={s.zoneTier}>
             <p className={s.zoneTierHead}>
-              <b>{DIFFS[d].name}</b> · 권장 Lv.{DIFFS[d].recLevel}+ · 최대 {DIFFS[d].huntPoints}P~
+              <b>{DIFFS[d].name}</b> · 권장 Lv.{DIFFS[d].recLevel}+ · 다 깨면 {DIFFS[d].huntPoints}P부터
             </p>
             <div className={s.zoneGrid}>
               {zs.map((z) => (
@@ -173,10 +172,8 @@ export default function ZonePicker({ level, tLevel = 0, zone, onZone, detail }: 
   );
 }
 
-/** 고른 사냥터 자세히: 설명·기믹·몬스터·드롭 */
+/** 고른 사냥터 자세히: 이름·설명, 패턴(기믹), 웨이브·제한 시간 (11/24 운영자: 몬스터·드롭·조작은 사냥 안내서에서) */
 export function ZoneInfo({ z }: { z: ZoneDef }) {
-  const D = DIFFS[z.difficulty];
-  const favor = z.favor.map((id) => gearById(id)?.name).filter(Boolean);
   return (
     <div className={s.zoneInfo}>
       <p className={s.zoneInfoHead}>
@@ -186,14 +183,7 @@ export function ZoneInfo({ z }: { z: ZoneDef }) {
         <b className={s.zoneGimmick}>{z.gimmick.name}</b> {z.gimmick.desc}
       </p>
       <p className={s.meta}>
-        나오는 몬스터 {[...new Set(z.pool)].map((id) => MONSTERS[id].name).join(", ")}
-        <br />
-        우두머리 <b>{MONSTERS[z.boss].name}</b>, 화나면 {MONSTERS[z.summon.id].name}을(를) 불러요
-        <br />
-        웨이브 {z.waves}개, 제한 시간 {z.timeLimitSec}초, 장비 드롭 Lv.
-        {Math.max(1, D.dropMaxLevel - 20)}~{D.dropMaxLevel}
-        {favor.length > 0 && <><br />잘 나오는 장비 {favor.join(", ")}</>}{" "}
-        <OddsLink section="hunt" />
+        웨이브 {z.waves}개, 제한 시간 {z.timeLimitSec}초
       </p>
     </div>
   );

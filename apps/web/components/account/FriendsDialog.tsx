@@ -20,7 +20,7 @@ import StaffBungeoSchedule from "../bungeo/StaffBungeoSchedule";
 import { hopChannel } from "../housing/channelHop";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
-import { EmptyHero, InfoCard, TipList } from "../ui/InfoBlocks";
+import { EmptyHero } from "../ui/InfoBlocks";
 import PixelIcon from "../ui/PixelIcon";
 import StyledName from "../ui/StyledName";
 import ui from "../ui/ui.module.css";
@@ -418,18 +418,6 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
           친구가 마을에 오면 알려 주기
         </label>
 
-        <InfoCard title="친구는 이렇게 써요" icon="info">
-          <TipList
-            tips={[
-              `친구는 ${FRIEND_MAX}명까지예요. 서로 받아 줘야 친구가 되고, 한쪽이 끊으면 둘 다 목록에서 사라져요.`,
-              "같은 채널 마을에 있는 친구는 지도에 분홍 하트로, 이름표 옆에 작은 하트로 보여요.",
-              "[친구한테 가기]를 누르면 친구 옆으로 가요. 다른 채널이면 채널도 같이 옮겨요.",
-              "친구가 다른 맵(마을·캠핑장·바닷가)에 있으면 버스를 타고 가요. 바베큐로 몸이 커져 있으면 버스를 못 타요.",
-              "친구가 집 안에 있으면 그 집으로 따라 들어가요. 사냥터나 잡화점에는 따라갈 수 없어요. 친구 집은 [집 놀러 가기]로 구경해요.",
-              "친구를 맺어도 포인트나 아이템은 주지 않아요. 답하지 않은 신청은 14일 뒤 사라져요.",
-            ]}
-          />
-        </InfoCard>
       </div>
     </Dialog>
   );

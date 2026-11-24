@@ -504,7 +504,7 @@ describe("11/17 무한 야근 (부활)", () => {
     a.give("promote");
     expect(a.run.reviveHp).toBeCloseTo(0.45);
     expect(cardPromoLine("overtime", 1, { promote: 1 })).toBe(
-      "팀장 승진으로 다시 일어날 때 체력 45%",
+      "팀장 승진으로 다시 일어날 때 HP 45%",
     );
   });
 });

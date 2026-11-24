@@ -27,7 +27,7 @@ export default function RunCards({ run }: { run: NonNullable<RpgHud["run"]> }) {
     <div className={c.runBox}>
       <div className={c.lvLine}>
         <span>판 Lv.{run.lv}</span>
-        <div className={c.lvBar} role="meter" aria-label="판 레벨 경험치" aria-valuenow={run.xp} aria-valuemin={0} aria-valuemax={run.need}>
+        <div className={c.lvBar} role="meter" aria-label="판 레벨 EXP" aria-valuenow={run.xp} aria-valuemin={0} aria-valuemax={run.need}>
           <span style={{ width: `${pct}%` }} />
         </div>
         <span className={cx(c.focus, run.focus && c.focusOn)} title="서 있으면 공격 속도가 40% 빨라져요">

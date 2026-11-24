@@ -82,7 +82,7 @@ export default function OfficeShopDialog({ onClose }: { onClose: () => void }) {
   if (house === null && !loadError && !waited) return null;
 
   return (
-    <Dialog title={OFFICE_SHOP_TITLE} onClose={onClose}>
+    <Dialog title={OFFICE_SHOP_TITLE} onClose={onClose} className={shop.window}>
       <div className={shop.shop}>
         <div className={shop.top}>
           <p className={shop.balance}>

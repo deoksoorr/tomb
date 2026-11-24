@@ -5,6 +5,7 @@ import { CLOSED_LOTS } from "@tomb/protocol";
 import {
   defaultExterior,
   FURNITURE,
+  isHouseOwnDef,
   GUEST_KEEP,
   GUEST_PER_DAY,
   GUEST_REPORT_HIDE,
@@ -21,7 +22,7 @@ import {
 } from "./catalog";
 import type { ReportBy } from "../reports";
 import { K } from "../store/keys";
-import { emptyLayout, normalizeExterior } from "./layout";
+import { emptyLayout, liftWindowSkins, normalizeExterior } from "./layout";
 import {
   GUEST_DAY_TTL_SEC,
   GUEST_REPORT_TTL_SEC,
@@ -335,7 +336,7 @@ return 1
 //  (각 집이 몫을 넘게 놓은 수 ≤ 그 집이 옮긴 수라서 두 집 합계 ≤ 공용 개수)
 //  over: 그 집이 몫을 넘게 놓은 수 = 공용 가방에서 꺼내 놓은 수
 const POOL_FN = `
-local OWN = {${FURNITURE.filter((f) => f.skin || f.ext)
+local OWN = {${FURNITURE.filter((f) => isHouseOwnDef(f))
   .map((f) => `[${JSON.stringify(f.id)}]=true`)
   .join(",")}}
 local KEEP = {${SEA_STARTER_KEEP.map((i) => `[${JSON.stringify(i)}]=true`).join(",")}}
@@ -570,7 +571,8 @@ function parseLayout(raw: string | null): HouseLayout {
   if (!raw) return emptyLayout();
   try {
     const v = JSON.parse(raw) as HouseLayout;
-    return Array.isArray(v.items) ? v : emptyLayout();
+    // 11/24 예전에 바닥에 놓은 눈꽃 창가는 창문 모양으로 읽는다 (layout.ts liftWindowSkins)
+    return Array.isArray(v.items) ? liftWindowSkins(v) : emptyLayout();
   } catch {
     return emptyLayout();
   }

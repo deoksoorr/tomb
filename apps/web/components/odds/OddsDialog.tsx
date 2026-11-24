@@ -4,6 +4,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { HUNT_DROP_ROLLS, KILLS_PER_DROP_ROLL } from "@/lib/rpg/rewards";
 import { TOWER_BOSS_EVERY } from "@/lib/rpg/tower";
 import { METEOR_ITEM_NAME } from "@/lib/rpg/meteorDrop";
+import { WISH_SPARKLE_EXTRA } from "@/lib/wish";
 import { GRADE_MULT, GRADE_U } from "@/lib/forage/catalog";
 import Dialog from "../ui/Dialog";
 import { cx } from "../ui/cx";
@@ -224,7 +225,7 @@ export default function OddsDialog({ section, onClose }: { section: OddsSection;
           <OddsTable head={["운세", "확률"]} rows={wishRows()} bar={1} />
           <ul className={styles.facts}>
             <li>{w.jackpot}는 대박이라 던진 동전의 두 배에 5P를 더 돌려받아요.</li>
-            <li>{w.sparkle}는 반짝이라 던진 동전에 1~5P를 더 돌려받아요.</li>
+            <li>{w.sparkle}는 반짝이라 던진 동전에 1~{WISH_SPARKLE_EXTRA}P를 더 돌려받아요.</li>
             <li>나머지 {w.none}는 돌아오지 않아요.</li>
           </ul>
         </Section>

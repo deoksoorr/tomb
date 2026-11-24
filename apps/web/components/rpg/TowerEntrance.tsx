@@ -6,6 +6,9 @@ import {
   CURSES,
   cursesAt,
   nextCheckpoint,
+  TOWER_BOSS_EVERY,
+  TOWER_BOSS_HEAL,
+  TOWER_CHECKPOINT_EVERY,
   TOWER_CHEST_FROM,
   TOWER_CHEST_GEAR_CHANCE,
   towerFloorSec,
@@ -15,6 +18,7 @@ import {
   towerFitFloor,
   towerFloorPoints,
   towerFloorPointsText,
+  towerNoPointGain,
   towerPointFrom,
 } from "@/lib/rpg/tower";
 import { chairChestChance, chairPerkName } from "@/lib/chairPerks";
@@ -98,7 +102,7 @@ export default function TowerEntrance({
         <h3 id="tower-lift" className={s.sectionTitle}>
           몇 층부터 오를까요?{" "}
           <span className={s.meta}>
-            10층 우두머리를 잡을 때마다 그다음 층 버튼에 불이 들어와요.
+            50층을 깨면 51층, 100층을 깨면 101층 버튼에 불이 들어와요. 그 위로는 {TOWER_CHECKPOINT_EVERY}층마다(121층, 141층 …) 켜져요.
             {view.superHunter ? " 슈퍼 계정은 101층까지 열려요." : ""}
           </span>
         </h3>
@@ -127,15 +131,15 @@ export default function TowerEntrance({
             {start}층부터
           </b>{" "}
           테마는 다섯 층마다 바뀌어요. {TOWER_THEMES.length}곳 중 어디가 나올지는 타 봐야 알아요.
-          몬스터는 {TOWER_STEEP_FROM}층까지 조금씩, 그 위로는 빠르게 세져요. 이 층 몬스터 체력은 1층의 ×{(towerHpMul(start) / towerHpMul(1)).toFixed(2)}예요. 한 층은 {towerFloorSec(start) + towerSec}초예요
+          몬스터는 {TOWER_STEEP_FROM}층까지 조금씩, 그 위로는 빠르게 강해져요. 이 층 몬스터 HP는 1층의 ×{(towerHpMul(start) / towerHpMul(1)).toFixed(2)}예요. 한 층은 {towerFloorSec(start) + towerSec}초예요
           {towerSec > 0 ? ` (칭호 덕분에 ${towerSec}초 더)` : ""}.
-          5층마다 우두머리가 나와요. 잡으면 체력이 30% 차고 상자가 열려요.
+          {TOWER_BOSS_EVERY}층마다 우두머리가 나와요. 우두머리 층을 깨면 최대 HP의 {Math.round(TOWER_BOSS_HEAL * 100)}%를 회복하고, {TOWER_CHEST_FROM}층부터는 우두머리 상자도 열려요.
         </p>
         {/* 11/19 초월 레벨마다 적정 층: 그보다 낮은 층은 포인트 없음 (저층 쓸어 가기 막기) */}
         {pointFrom > 1 && (
           <p className={start < pointFrom ? s.warn : s.meta}>
             <b>★{50 + tLv}의 적정 층은 {towerFitFloor(tLv)}층이에요.</b> {pointFrom}층부터 포인트를 받아요.
-            {start < pointFrom ? ` ${start}층부터 ${pointFrom - 1}층까지는 포인트 없이 초월 경험치와 상자만 받아요.` : ""}
+            {start < pointFrom ? ` ${start}층부터 ${pointFrom - 1}층까지는 포인트 없이 ${towerNoPointGain(start, pointFrom - 1)} 받아요.` : ""}
           </p>
         )}
         {/* 11/20 사용자: 층 구간마다 포인트가 달라졌다 (서버 정산과 같은 towerFloorPoints) */}
@@ -170,7 +174,7 @@ export default function TowerEntrance({
         {/* 11/15 오르기 전에 무엇이 떨어지는지 */}
         <section className={s.towerDrops} aria-labelledby="tower-drops">
           <h4 id="tower-drops">우두머리 상자에서 나오는 것</h4>
-          <p>5층마다 우두머리가 있어요. {TOWER_CHEST_FROM}층부터는 우두머리 층을 다 깨면 상자가 열려요. 상자는 하루에 몇 개든 열 수 있어요.</p>
+          <p>5층마다 우두머리가 있어요. {TOWER_CHEST_FROM}층부터는 우두머리 층을 깨면 상자가 열리고, 하루 제한 없이 열 수 있어요.</p>
           <ul>
             <li>
               <b>물약 1~2개</b> 커피, 에너지드링크, 야근 도시락 중에서 늘 들어 있어요.
@@ -182,7 +186,7 @@ export default function TowerEntrance({
               높이 오를수록 직급이 올라요. {SG_GRADE_FLOORS[0]}층부터 대리급, {SG_GRADE_FLOORS[1]}층부터 과장급, {SG_GRADE_FLOORS[2]}층부터 임원급이에요.
             </li>
             <li>
-              <b>강화 재료</b> 결재 서류가 들어 있고, 10층 오를 때마다 1장씩 늘어요. {SG_GRADE_FLOORS[0]}층부터는 인감 도장도 나와요.
+              <b>강화 재료</b> 결재 서류가 들어 있고, 10층마다 1장씩 늘어요. {SG_GRADE_FLOORS[0]}층부터는 인감 도장도 나와요.
               이번 주 기록이 {PROT_FROM_FLOOR}층부터 새 10층을 넘으면 강화 증폭권을 받아요. 한 주에 2장까지예요.
             </li>
             <li>
@@ -196,22 +200,22 @@ export default function TowerEntrance({
         </section>
         <ul className={s.towerWhy}>
           <li>
-            오른 층만큼 초월 경험치가 쌓여요. 높은 층일수록 더 많이 줘요. 쓰러져도 오른 만큼은 받아요.
+            오른 층만큼 초월 EXP가 쌓이고, 높은 층일수록 많이 받아요. 쓰러져도 오른 만큼은 받아요.
           </li>
           <li>
             10층, 20층, 30층, 50층, 100층에 오르면 칭호를 받아요. 서버에서 가장 먼저 오른 사람만 받는 칭호도 있어요.
             지금 가장 높이 오른 사람이 다는 칭호도 있어요.
           </li>
           <li>
-            이번 주 최고 층으로 겨루는 레이스예요. 랭킹 [야근 빌딩] 이번 주 순위는 높은 층 순서이고, 같은 층이면 먼저 오른 사람이 앞이에요. 1위는 다음 한 주 동안
+            이번 주 최고 층으로 겨루는 레이스예요. 랭킹 [야근 빌딩]에서 높은 층 순으로 보이고, 같은 층이면 먼저 오른 사람이 앞서요. 1위는 다음 한 주 동안
             신화 칭호 「지난주 최고층」을 달아요.
           </li>
           {/* 11/15 능력 카드 */}
           <li>
-            몬스터를 잡으면 판 레벨이 올라요. 오를 때마다 능력 카드를 한 장 골라요. 카드는 그 판에서만 써요.
+            몬스터를 처치해 판 레벨이 오를 때마다 능력 카드를 한 장 선택해요. 카드는 그 판에서만 적용돼요.
             51층처럼 위에서 시작하면 건너뛴 10층마다 카드를 세 장씩 먼저 골라요.
           </li>
-          <li>쓰러지면 그 자리에서 끝나요. 부활 쿠키는 못 써요. 전설 카드 「무한 야근」이 있으면 한 번 다시 일어나요. {coarse ? "멈춤 버튼으로" : "Esc로"} 나가도 그 층까지는 기록돼요.</li>
+          <li>쓰러지면 바로 종료되고 부활 쿠키는 사용할 수 없어요. 전설 카드 「무한 야근」이 있으면 한 번 부활해요. {coarse ? "멈춤 버튼으로" : "Esc로"} 나가도 그 층까지는 기록돼요.</li>
         </ul>
       </section>
       <PioneerLine eg={eg} />

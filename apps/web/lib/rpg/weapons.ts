@@ -46,7 +46,7 @@ export const WEAPON_STYLES: Record<WeaponStyleId, WeaponStyle> = {
   swing: {
     id: "swing",
     name: "휘두르기",
-    desc: "앞쪽 부채꼴을 넓게 베요. 3번째 연속 공격은 더 넓고 세게 나가요.",
+    desc: "전방 부채꼴을 넓게 베요. 3번째 연속 공격은 더 넓고 세게 나가요.",
     area: { range: 26, arcDeg: 120 },
     hits: 1,
     hitGapMs: 0,
@@ -74,7 +74,7 @@ export const WEAPON_STYLES: Record<WeaponStyleId, WeaponStyle> = {
   thrust: {
     id: "thrust",
     name: "찌르기",
-    desc: "길고 좁게 찔러요. 앞에 줄 선 적을 모두 꿰뚫어요. 3번째는 더 멀리 닿아요.",
+    desc: "길고 좁게 찔러요. 앞에 줄 선 적을 모두 관통해요. 3번째는 더 멀리 닿아요.",
     area: { range: 44, arcDeg: 22 },
     hits: 1,
     hitGapMs: 0,
@@ -117,7 +117,7 @@ export const WEAPON_STYLES: Record<WeaponStyleId, WeaponStyle> = {
   magic: {
     id: "magic",
     name: "범위 마법",
-    desc: "앞쪽 적 발밑에 잉크를 터뜨려 둘레를 모두 쳐요. 3번째는 더 크게 터져요.",
+    desc: "전방 적 발밑에 잉크를 터뜨려 주변을 모두 쳐요. 3번째는 더 크게 터져요.",
     area: { range: 80, arcDeg: 70 },
     hits: 1,
     hitGapMs: 0,

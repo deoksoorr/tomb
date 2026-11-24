@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 import { bridge } from "@/game/bridge";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
+import { useMediaQuery } from "@/lib/hooks/useMedia";
+import { PlayGaugeView, usePlayGauge } from "../overlay/PlayGauge";
 import styles from "./SkyHud.module.css";
 
 /** 입력칸에서 친 V는 무시한다 */
@@ -19,6 +21,9 @@ function isEditable(t: EventTarget | null): boolean {
 export default function SkyHud() {
   const hud = useBridgeValue("sky:hud");
   const sky = !!hud?.sky;
+  // 11/24 오늘 미션 「관람차나 열기구 타기」 게이지 (미션 조건은 탄 시간뿐 — 시점 안내는 곁들임. 맵 위 보기로 바꿨으면 안내 숨김)
+  const gauge = usePlayGauge("sky");
+  const touch = useMediaQuery("(pointer: coarse)");
 
   useEffect(() => {
     if (!sky) return;
@@ -41,6 +46,13 @@ export default function SkyHud() {
         </div>
       )}
       <div className={styles.dock}>
+        {gauge && (
+          <PlayGaugeView
+            kind="sky"
+            g={gauge}
+            note={sky && hud.view === "scene" ? (touch ? "[시점 변경하기]로 풍경 보기 · 내리면 처음부터" : "V로 풍경 보기 · 내리면 처음부터") : "내리면 처음부터"}
+          />
+        )}
         {hud.sky && (
           <button
             type="button"

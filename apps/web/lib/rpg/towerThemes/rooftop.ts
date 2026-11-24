@@ -58,7 +58,7 @@ export const RF_MONSTERS: Record<RfMonsterId, RfDef> = {
   rf_lightning_rod: mon({
     id: "rf_lightning_rod",
     name: "피뢰침",
-    desc: "빌딩 꼭대기의 피뢰침이에요. 번개를 끌어와 바닥에 줄줄이 떨어뜨려요. 체력이 반으로 줄면 폭풍이 거세지고, 마지막엔 하늘 전체에서 번개가 쏟아져요. 고무 매트 위가 안전해요.",
+    desc: "빌딩 꼭대기의 피뢰침이에요. 번개를 끌어와 바닥에 줄줄이 떨어뜨려요. HP가 절반 아래로 줄면 폭풍이 거세지고, 마지막엔 하늘 전체에서 번개가 쏟아져요. 고무 매트 위가 안전해요.",
     hp: 2300,
     atk: 24,
     def: 9,

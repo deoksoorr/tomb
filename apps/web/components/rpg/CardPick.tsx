@@ -142,13 +142,13 @@ function PickView({ view }: { view: CardOfferView }) {
               <span>
                 받을게요 <kbd>1</kbd>
               </span>
-              <small>최대 체력 −{Math.round(BOSS_DEAL_HP_COST * 100)}%</small>
+              <small>최대 HP −{Math.round(BOSS_DEAL_HP_COST * 100)}%</small>
             </button>
             <button type="button" className={cx(ui.button, c.dealBtn)} onClick={() => answer(false)} disabled={chosen !== null}>
               <span>
                 됐어요, 쉴래요 <kbd>2</kbd>
               </span>
-              <small>체력이 가득 차요</small>
+              <small>HP를 모두 회복해요</small>
             </button>
           </div>
         ) : (

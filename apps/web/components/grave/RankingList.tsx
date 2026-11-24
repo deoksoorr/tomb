@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
 import { lookPartName } from "@/lib/lookScore";
 import { speciesOf } from "@/lib/forage/catalog";
-import { DIFFICULTIES, DIFFS, gearById, ZONE_IDS, zonesOf, type ZoneId } from "@/lib/rpg/catalog";
+import { gearById, ZONE_IDS, type ZoneId } from "@/lib/rpg/catalog";
 import { stayText } from "@/lib/stayTime";
-import type { PublicGrave, RankBoard, RankPeriod, RankResponse } from "@/lib/types";
+import type { RankBoard, RankPeriod, RankResponse } from "@/lib/types";
 import RpgIcon from "../rpg/RpgIcon";
 import ItemIcon from "../ui/ItemIcon";
 import { watchMoreBelow } from "../ui/moreBelow";
@@ -15,8 +15,7 @@ import styles from "./RankingPanel.module.css";
 
 // 49번: 랭킹은 포인트·사냥 중심. 묘비(헌화 순)는 작은 탭 하나로만 남긴다 (살려주세요 순위는 없어졌다).
 
-type Tab = "points" | "hunt" | "level" | "tower" | "fish" | "look" | "house" | "stay" | "flower";
-type HuntMode = "huntKills" | "huntBest";
+type Tab = "points" | "hunt" | "level" | "tower" | "fish" | "look" | "house" | "stay";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "points", label: "포인트" },
@@ -27,7 +26,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "look", label: "꾸미기" },
   { id: "house", label: "집 꾸미기" },
   { id: "stay", label: "접속 시간" },
-  { id: "flower", label: "헌화" },
 ];
 /** 탭 → 서버 랭킹 (사냥은 처치 수·최단 클리어 중 고른 것, 없으면 포인트) */
 const TAB_BOARD: Partial<Record<Tab, RankBoard>> = { house: "house", fish: "fish", look: "look", level: "huntLevel", tower: "tower", stay: "stay" };
@@ -51,7 +49,6 @@ const FISH_OPTIONS = speciesOf("fish").filter((sp) => sp.size);
 const STAFF_RANK_NOTE = "운영자는 순위에 들지 않아요.";
 const EMPTY_HOUSE_WEEK = "이번 주에 꾸민 집이 아직 없어요.";
 
-const LIMIT = 20;
 
 /** 1:23.4 (최단 클리어) */
 export function clearTime(ms: number): string {
@@ -72,28 +69,15 @@ export function rankValue(board: RankBoard, value: number): string {
   return `${value.toLocaleString("ko-KR")}P`;
 }
 
-type Props = {
-  /** 지금 채널 묘비 (헌화 탭은 채널별) */
-  graves: readonly PublicGrave[];
-  /** 헌화 탭 항목 클릭: 카메라만 그 묘비로 + 상세 */
-  onPick: (graveId: string) => void;
-};
-
-/** 탭 9개: 포인트(이번 주·전체) · 사냥(처치 수·사냥터별 최단 클리어) · 사냥 레벨(같으면 경험치) · 야근 빌딩(11/15 최고 층, 이번 주·전체) · 낚시(물고기별·전체 최대어) · 꾸미기(지금 입은 코디 점수) · 집 꾸미기(F11 꾸밈 점수) · 접속 시간(총 머문 시간) · 헌화(지금 채널 묘비) */
-export default function RankingList({ graves, onPick }: Props) {
+export default function RankingList() {
   const [tab, setTab] = useState<Tab>("points");
   const [period, setPeriod] = useState<RankPeriod>("week");
-  const [hunt, setHunt] = useState<HuntMode>("huntBest");
-  const [zone, setZone] = useState<ZoneId>(ZONE_IDS[0]);
   const [fish, setFish] = useState("all");
   const baseId = useId();
-  const flowered = useMemo(
-    () => (tab === "flower" ? graves.filter((g) => g.flowers > 0).sort((a, b) => b.flowers - a.flowers).slice(0, LIMIT) : []),
-    [graves, tab],
-  );
-  const board: RankBoard = tab === "hunt" ? hunt : (TAB_BOARD[tab] ?? "points");
+  // 11/24 사냥 탭은 처치 수(이번 주·전체)만, 집 꾸미기는 전체 기간 점수만
+  const board: RankBoard = tab === "hunt" ? "huntKills" : (TAB_BOARD[tab] ?? "points");
   /** 기간 없이 전체만 있는 판 */
-  const allOnly = board === "look" || board === "huntLevel" || board === "stay";
+  const allOnly = board === "look" || board === "huntLevel" || board === "stay" || board === "house";
 
   return (
     <>
@@ -128,16 +112,15 @@ export default function RankingList({ graves, onPick }: Props) {
           <span className={styles.hint}>마을에 머문 시간을 모두 더했어요. 오래 머문 순이에요.</span>
         </div>
       )}
-      {tab !== "flower" && tab !== "look" && tab !== "level" && tab !== "stay" && (
+      {tab !== "look" && tab !== "level" && tab !== "stay" && tab !== "house" && (
         <div className={styles.filters}>
           <div className={styles.chips} role="group" aria-label="기간">
             {PERIODS.map((p) => (
               <button key={p.id} type="button" className={styles.chip} aria-pressed={period === p.id} onClick={() => setPeriod(p.id)}>
-                {tab === "house" && p.id === "week" ? "이번 주 꾸민 집" : p.label}
+                {p.label}
               </button>
             ))}
           </div>
-          {tab === "house" && <span className={styles.hint}>안팎에 놓은 물건 점수에 좋아요 × 3을 더해요.</span>}
           {tab === "tower" && <span className={styles.hint}>높이 오른 순이에요. 같은 층이면 먼저 오른 사람이 위예요. 이번 주 1위는 다음 한 주 동안 신화 칭호 「지난주 최고층」을 달아요.</span>}
           {tab === "fish" && <span className={styles.hint}>직접 낚은 물고기만 올라요. 자동 낚시로 낚은 것은 도감에만 남아요.</span>}
           {tab === "fish" && (
@@ -150,60 +133,16 @@ export default function RankingList({ graves, onPick }: Props) {
               ))}
             </select>
           )}
-          {tab === "hunt" && (
-            <>
-              <div className={styles.chips} role="group" aria-label="사냥 기록">
-                <button type="button" className={styles.chip} aria-pressed={hunt === "huntBest"} onClick={() => setHunt("huntBest")}>
-                  최단 클리어
-                </button>
-                <button type="button" className={styles.chip} aria-pressed={hunt === "huntKills"} onClick={() => setHunt("huntKills")}>
-                  처치 수
-                </button>
-              </div>
-              {hunt === "huntBest" && (
-                // 11/16 사냥터 12곳 전부 (난이도별로 묶고, 열리는 레벨 순)
-                <select className={styles.zone} value={zone} onChange={(e) => setZone(e.target.value as ZoneId)} aria-label="사냥터">
-                  {DIFFICULTIES.map((d) => (
-                    <optgroup key={d} label={DIFFS[d].name}>
-                      {zonesOf(d).map((z) => (
-                        <option key={z.id} value={z.id}>
-                          {z.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-              )}
-            </>
-          )}
         </div>
       )}
       <div id={`${baseId}-list`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`} ref={watchMoreBelow} className={`${styles.listWrap} more-fade`}>
-        {tab === "flower" ? (
-          flowered.length === 0 ? (
-            <p className={styles.empty}>이 채널 묘비에 아직 놓인 꽃이 없어요.</p>
-          ) : (
-            <ol className={styles.list}>
-              {flowered.map((g, i) => (
-                <li key={g.id}>
-                  <button type="button" className={styles.item} onClick={() => onPick(g.id)}>
-                    <span className={styles.rank}>{i + 1}</span>
-                    <span className={styles.name}>{g.name}</span>
-                    <span className={styles.metric}>🌼 {g.flowers}</span>
-                  </button>
-                </li>
-              ))}
-            </ol>
-          )
-        ) : (
-          <BoardRanking
-            key={`${board}-${allOnly ? "all" : period}-${board === "huntBest" ? zone : board === "fish" ? fish : ""}`}
-            board={board}
-            period={allOnly ? "all" : period}
-            zone={zone}
-            fish={fish}
-          />
-        )}
+        <BoardRanking
+          key={`${board}-${allOnly ? "all" : period}-${board === "fish" ? fish : ""}`}
+          board={board}
+          period={allOnly ? "all" : period}
+          zone={ZONE_IDS[0]}
+          fish={fish}
+        />
       </div>
     </>
   );

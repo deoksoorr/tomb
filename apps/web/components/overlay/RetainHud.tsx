@@ -37,6 +37,8 @@ import {
   type TodoKind,
   type TodoTick,
 } from "@/lib/retain";
+import { playSendMs, stayLive } from "@/lib/playGauge";
+import { presenceAt } from "@/lib/presenceClock";
 import { rewardText } from "@/lib/rewardText";
 import { potionById } from "@/lib/rpg/catalog";
 import { isMatId, MAT_INFO } from "@/lib/rpg/setGear";
@@ -770,6 +772,20 @@ function TodoDialog({ me }: { me: Me }) {
   );
 }
 
+/** 11/24 머무르기 줄: 서버 값(10분 단위)에 마지막 머무르기 응답 뒤 지난 분을 더해 1분마다 늘린다 (다음 10분 칸은 서버 값이 와야 넘는다) */
+function StayProg({ stayMin, needMin }: { stayMin: number; needMin: number }) {
+  const now = useNow(15_000);
+  const live = stayLive(stayMin, now - presenceAt(), needMin);
+  return (
+    <span className={styles.todoProg}>
+      <span className={styles.bar} aria-hidden="true">
+        <span style={{ width: `${Math.min(100, live.frac * 100)}%` }} />
+      </span>
+      <small className={styles.todoCount}>{live.text}</small>
+    </span>
+  );
+}
+
 function TodoBody({ me, onRoute }: { me: Me; onRoute?: () => void }) {
   const [pending, setPending] = useState<number | null>(null);
   const guide = useGuide();
@@ -812,12 +828,16 @@ function TodoBody({ me, onRoute }: { me: Me; onRoute?: () => void }) {
                 <span className={styles.todoLabel}>{it.label}</span>
                 <RewardChips reward={TODO_GIFT} />
               </span>
-              <span className={styles.todoProg}>
-                <span className={styles.bar} aria-hidden="true">
-                  <span style={{ width: `${Math.min(100, (it.have / it.need) * 100)}%` }} />
+              {it.kind === "stay" && !done ? (
+                <StayProg stayMin={Math.max(me.attendance.stayMinutes, it.have * (d?.scale ?? 1))} needMin={it.need * (d?.scale ?? 1)} />
+              ) : (
+                <span className={styles.todoProg}>
+                  <span className={styles.bar} aria-hidden="true">
+                    <span style={{ width: `${Math.min(100, (it.have / it.need) * 100)}%` }} />
+                  </span>
+                  <small className={styles.todoCount}>{todoProgressText(it)}</small>
                 </span>
-                <small className={styles.todoCount}>{todoProgressText(it)}</small>
-              </span>
+              )}
               {d && !it.claimed && (
                 <span className={styles.todoHintRow}>
                   <small className={styles.firstHint}>{d.hint}</small>
@@ -1024,25 +1044,37 @@ export function RetainLayer({ onOpenBag }: { onOpenBag: () => void }) {
     if (wanted) showToast("범퍼카 미션은 1분 넘게 몰고 다녀야 채워져요. 멈춰 있던 시간은 세지 않아요.", 4_500);
   });
   useBridgeEvent("bumper:drive", ({ ms }) => {
-    if (bumperSent.current || ms < PLAY_MIN_MS.bumper + 1_500) return;
+    if (bumperSent.current || ms < playSendMs("bumper")) return;
     bumperSent.current = true;
     endPlayTodo("bumper", true);
   });
+  // 11/24 관람차·열기구·불멍도 시간이 다 차면(게이지 PlayGauge가 꽉 차는 때) 내리기 전에 그 자리에서 미션에 센다. 내릴 때 한 번 더 부르는 건 할 일이 없다 (playRuns에서 빠짐)
+  const playTimers = useRef<Partial<Record<"sky" | "fire", ReturnType<typeof setTimeout>>>>({});
+  useEffect(() => {
+    const t = playTimers.current;
+    return () => Object.values(t).forEach(clearTimeout);
+  }, []);
+  const togglePlay = (kind: "sky" | "fire", on: boolean) => {
+    clearTimeout(playTimers.current[kind]);
+    delete playTimers.current[kind];
+    if (!on) return endPlayTodo(kind, true);
+    if (!playWanted(kind)) return;
+    void startPlayTodo(kind);
+    playTimers.current[kind] = setTimeout(() => endPlayTodo(kind, true), playSendMs(kind));
+  };
   const skyOn = useRef(false);
   useBridgeEvent("sky:hud", (hud) => {
     const on = !!hud;
     if (on === skyOn.current) return;
     skyOn.current = on;
-    if (on) void startPlayTodo("sky");
-    else endPlayTodo("sky", true);
+    togglePlay("sky", on);
   });
   const fireOn = useRef(false);
   useBridgeEvent("view:mode", ({ mode }) => {
     const on = mode === "campfire";
     if (on === fireOn.current) return;
     fireOn.current = on;
-    if (on) void startPlayTodo("fire");
-    else endPlayTodo("fire", true);
+    togglePlay("fire", on);
   });
   // 11/19 길 안내가 끝났다 (게임이 먼저 지웠다): 닿았으면 할 일을 한 번 더 알려 준다
   useBridgeEvent("route:state", ({ target, status }) => {

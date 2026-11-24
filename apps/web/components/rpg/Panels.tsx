@@ -35,8 +35,6 @@ import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import { bonusParts, pts } from "./format";
 import { deltaText, equipTarget, gearDiff, gearGrade } from "./gear";
-import { HUNT_KEYS, HUNT_TOUCH } from "./huntKeys";
-import HuntCapMeter from "./HuntCap";
 import RpgIcon from "./RpgIcon";
 import ZonePicker, { ZoneInfo, zoneOpen, zoneUnlockAll } from "./ZonePicker";
 import s from "./rpg.module.css";
@@ -98,14 +96,8 @@ export function StartPanel({
   const zoneLocked = game === "hunt" && !zoneOpen(zone, c.level, zoneUnlockAll());
   const monsters = [...new Set([...zone.pool])].map((id) => MONSTERS[id].name);
   const canStart = !busy && view.today.runsPerHour > 0 && !zoneLocked;
-  // 오늘 사냥 포인트 한도는 늘 막대로 보여 준다 (한도에 닿으면 안내까지)
-  const todayLine = (
-    <>
-      <HuntCapMeter today={view.today} where="start" />
-      {/* 11/15 한 시간 판 수 한도(매크로 막기): 남은 판 / 할 수 있는 판 */}
-      <RunsHourLine today={view.today} />
-    </>
-  );
+  // 11/15 한 시간 판 수 한도(매크로 막기): 남은 판 / 할 수 있는 판. 11/24 사냥 포인트 하루 한도 막대(HuntCap)는 한도가 없어져서 뺐다
+  const todayLine = <RunsHourLine today={view.today} />;
   const startButton = (
     <button type="button" className={cx(ui.button, ui.primary, s.start)} onClick={onStart} disabled={!canStart}>
       {busy ? "준비 중…" : zoneLocked ? `Lv.${zone.unlockLevel}부터` : `${game === "hunt" ? zone.name : GAMES[game].name} 출발`}
@@ -116,11 +108,10 @@ export function StartPanel({
   if (game === "hunt" && onZone) {
     return (
       <div className={s.lobby}>
-        <HuntCapMeter today={view.today} where="start" />
         {/* 11/15 레벨 50 이후의 중심은 마을의 야근 빌딩 (사냥터 창에서는 안내 한 줄만) */}
         {view.endgame && (
           <p className={s.towerHint}>
-            <b>레벨 50부터</b> 마을의 야근 빌딩에 들어갈 수 있어요. 마을 북쪽 판교의 등대 왼쪽 높은 건물이에요. 지옥 사냥터에서도 초월 EXP를 받아요.
+            <b>레벨 50부터</b> 마을의 야근 빌딩에 입장할 수 있어요. 마을 북쪽 판교 등대 왼쪽의 높은 건물이에요. 지옥 사냥터에서도 초월 EXP를 받아요.
           </p>
         )}
         <section className={s.section} aria-label="사냥터 고르기">
@@ -137,21 +128,20 @@ export function StartPanel({
                     이 사냥터는 Lv.{zone.unlockLevel}부터 갈 수 있어요.
                   </p>
                 )}
-                {!zoneLocked && low && <p className={s.warn}>권장 레벨보다 낮아요. 쓰러지면 보상이 절반이에요.</p>}
+                {!zoneLocked && low && <p className={s.warn}>권장 레벨보다 낮아요. 쓰러지면 포인트는 절반, EXP는 70%만 받아요.</p>}
                 {!zoneLocked && starBlock && (
                   <p className={s.warn}>
-                    <b>사냥터에서는 포인트를 받을 수 없어요.</b> {starLabel(HUNT_POINT_T_STOP)}부터는 일반 사냥터에서 포인트를 받지 않아요. 잡은 몬스터는 사냥 랭킹과 주간 레이스에도 들어가지 않아요. 초월 경험치와 드롭은 그대로이고, 포인트와 레이스는 야근 빌딩에서 이어 가요.
+                    <b>사냥터에서는 포인트를 받을 수 없어요.</b> {starLabel(HUNT_POINT_T_STOP)}부터는 일반 사냥터에서 포인트를 받지 않고, 처치 기록도 사냥 랭킹과 주간 레이스에 반영되지 않아요. 초월 EXP와 드롭은 그대로이고, 포인트와 레이스는 야근 빌딩에서 이어 가요.
                   </p>
                 )}
                 {!zoneLocked && noRace && !starBlock && (
                   <p className={s.warn}>
-                    <b>포인트를 받을 수 없는 사냥터예요.</b> 내 레벨이 이 사냥터(Lv.{zone.unlockLevel})보다 10 넘게 높아요. EXP는 {Math.round(expCut * 100)}%만 받고, 잡은 몬스터는 사냥 랭킹과 주간 레이스에 들어가지 않아요. 포인트는 Lv.{c.level - 10} 이상 사냥터에서 받아요.
+                    <b>포인트를 받을 수 없는 사냥터예요.</b> 내 레벨이 이 사냥터(Lv.{zone.unlockLevel})보다 10 넘게 높아서 EXP는 {Math.round(expCut * 100)}%만 받고, 처치 기록은 사냥 랭킹과 주간 레이스에 반영되지 않아요. 포인트는 Lv.{c.level - 10} 이상 사냥터에서 받아요.
                   </p>
                 )}
                 <div className={s.zoneGo}>
                   <RunsHourLine today={view.today} />
-                  {/* 화면 흔들림 효과 켜기·끄기: 출발 전에 고른다 (이 기기에 기억) */}
-                  <HuntKeysStrip />
+                  {/* 화면 흔들림 효과 켜기·끄기: 출발 전에 고른다 (이 기기에 기억). 11/24 조작 키 줄은 뺐다 (사냥 안내서에 있다) */}
                   <ShakeToggle />
                   {startButton}
                 </div>
@@ -185,7 +175,7 @@ export function StartPanel({
               <span className={s.meta}>
                 {game === "hunt" ? ZONES[d].name : `권장 Lv.${DIFFS[d].recLevel}+`}
                 <br />
-                최대 {game === "hunt" ? DIFFS[d].huntPoints : game === "stars" ? STARS_POINTS[d] : DIFFS[d].miniPoints}P
+                {game === "hunt" ? `다 깨면 ${DIFFS[d].huntPoints}P부터` : `최대 ${game === "stars" ? STARS_POINTS[d] : DIFFS[d].miniPoints}P`}
               </span>
             </button>
           ))}
@@ -199,7 +189,7 @@ export function StartPanel({
         ) : (
           <p className={s.meta}>{how(game)}</p>
         )}
-        {low && <p className={s.warn}>권장 레벨보다 낮아요. 쓰러지면 보상이 절반이에요.</p>}
+        {low && <p className={s.warn}>{game === "hunt" ? "권장 레벨보다 낮아요. 쓰러지면 포인트는 절반, EXP는 70%만 받아요." : "권장 레벨보다 낮아요."}</p>}
       </section>
 
       <p className={s.meta}>{game === "hunt" ? how("hunt") : "끝나면 점수만큼 포인트와 EXP를 받아요."}</p>
@@ -307,7 +297,7 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
         <p className={s.meta}>{STAT_KEYS.map((k) => `${STAT_LABELS[k].name} ${STAT_LABELS[k].desc}.`).join(" ")}</p>
         <div className={s.startRow}>
           <span className={s.meta}>
-            레벨이 오를 때마다 능력치 포인트를 3개 받아요. 5의 배수 레벨엔 5개예요.
+            레벨이 오를 때마다 능력치 포인트를 3개, 5의 배수 레벨에는 5개 받아요.
             {view.endgame ? ` 초월 레벨마다 1개씩 받아요. 초월로 지금까지 ${transcendStatPoints(c.tLevel)}개 받았어요.` : ""}
           </span>
           <button
@@ -326,8 +316,8 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
           <span className={s.meta}>
             {view.superHunter ? "테스트 서버 슈퍼 계정이라 능력치 포인트를 최대 레벨만큼 다 받아요. " : ""}
             {freeLeft > 0
-              ? `무료 초기화가 ${freeLeft}번 남았어요. 다 쓰면 지갑에서 레벨에 따라 최대 ${RESPEC_MAX_COST}P가 빠져요.`
-              : `능력치를 되돌리면 지갑(${view.points.toLocaleString("ko-KR")}P)에서 ${resetCost}P가 빠져요. 레벨이 오를수록 비싸지고, 가장 비싸면 ${RESPEC_MAX_COST}P예요.`}
+              ? `무료 초기화가 ${freeLeft}번 남았어요. 다 쓰면 레벨에 따라 최대 ${RESPEC_MAX_COST}P가 차감돼요.`
+              : `능력치를 초기화하면 지갑(${view.points.toLocaleString("ko-KR")}P)에서 ${resetCost}P가 차감돼요. 레벨이 높을수록 비싸지고, 최대 ${RESPEC_MAX_COST}P예요.`}
           </span>
           <button type="button" className={ui.button} disabled={busy || spent === 0 || confirmReset} onClick={() => setConfirmReset(true)}>
             능력치 초기화 ({freeLeft > 0 ? "무료" : `${resetCost}P`})
@@ -336,7 +326,7 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
         {confirmReset && (
           <div className={s.confirm} role="alert">
             <p>
-              올린 능력치를 모두 되돌리고 포인트 {spent}개를 돌려받아요. 장비로 붙은 능력치와 레벨, 스킬은 그대로예요.{" "}
+              올린 능력치를 모두 초기화하고 포인트 {spent}개를 돌려받아요. 장비 능력치와 레벨, 스킬은 그대로예요.{" "}
               {freeLeft > 0 ? `무료 초기화를 한 번 써요. 포인트는 안 빠져요.` : `지갑에서 ${resetCost}P가 빠져요.`}
             </p>
             <div className={s.cellActions}>
@@ -556,25 +546,6 @@ export function ShopPanel({ view, busy, onBuy }: { view: RpgView; busy: boolean;
   );
 }
 
-/** 11/15 출발 전 조작 키 한눈에 (PC는 키, 손가락 기기는 터치 조작). 판 안에서는 H로 다시 본다 */
-function HuntKeysStrip() {
-  const coarse = useMediaQuery("(pointer: coarse)");
-  const rows = coarse ? HUNT_TOUCH : HUNT_KEYS;
-  return (
-    <details className={s.keysStrip} open={!coarse}>
-      <summary>조작 키</summary>
-      <dl>
-        {rows.map(([k, v]) => (
-          <div key={k}>
-            <dt>{k}</dt>
-            <dd>{v}</dd>
-          </div>
-        ))}
-      </dl>
-    </details>
-  );
-}
-
 /** 11/15 한 시간 사냥 판 수 (매크로 막기): 「한 시간 사냥 한도 24 / 30판 남음」 */
 function RunsHourLine({ today }: { today: RpgView["today"] }) {
   const max = today.runsHourMax ?? 30;
@@ -582,7 +553,7 @@ function RunsHourLine({ today }: { today: RpgView["today"] }) {
   return (
     <p className={s.meta}>
       한 시간 사냥 한도 <strong>{left}</strong> / {max}판 남음
-      {left === 0 && <> 다음 정각에 다시 채워져요.</>}
+      {left === 0 && <> 가장 먼저 시작한 판부터 한 시간이 지나는 대로 한 판씩 다시 채워져요.</>}
     </p>
   );
 }

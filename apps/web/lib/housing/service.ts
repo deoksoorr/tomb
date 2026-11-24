@@ -410,6 +410,8 @@ export async function sellFurniture(store: HouseStore, accountId: string, itemId
   await mustHave(store, accountId, zone);
   const r = await store.takeItem(housePair(accountId), zone, itemId);
   if (r === "none") throw new HttpError(409, "NO_ITEM", "그 물건을 가지고 있지 않아요.");
+  // 11/24 창문 모양으로 쓰는 중이면 그 안내 (바닥·벽지처럼 쓰는 동안은 못 판다)
+  if (r === "placed" && def.skin === "window") throw new HttpError(409, "PLACED", "벽 창문에 쓰고 있어요. 꾸미기 「창문」 칸에서 기본으로 바꿔 저장한 뒤 팔 수 있어요.");
   if (r === "placed") throw new HttpError(409, "PLACED", "모두 놓여 있어요. 먼저 집에서 치운 뒤 저장해 주세요.");
   if (r === "away") throw new HttpError(409, "PLACED", AWAY_MSG);
   const refunded = sellPrice(def);
@@ -427,11 +429,13 @@ function awayHint(v: { code: string; message: string }, layout: HouseLayout, bag
 /** 11/18 배치·외관을 거의 동시에 저장했을 때 (두 번째 저장은 다시 열어서) */
 const DESIGN_CONFLICT_MSG = "방금 다른 곳에서 집이 바뀌었어요. 다시 열어 저장해 주세요.";
 
-export async function saveLayout(store: HouseStore, accountId: string, tier: PlotTierId, layout: HouseLayout, ch?: number, zone: HouseZone = "village"): Promise<MyHouseResponse> {
+export async function saveLayout(store: HouseStore, accountId: string, tier: PlotTierId, sent: HouseLayout, ch?: number, zone: HouseZone = "village"): Promise<MyHouseResponse> {
   const h = await mustHave(store, accountId, zone);
   assertChannel(h, ch);
   if (h.tier !== tier) throw new HttpError(409, "CONFLICT", "터 크기가 바뀌었어요. 다시 열어 주세요.");
   const pair = housePair(accountId);
+  // 11/24 창문 칸이 없는 저장(예전 화면)은 지금 창문 모양을 그대로 둔다
+  const layout: HouseLayout = sent.window === undefined && h.layout.window !== undefined ? { ...sent, window: h.layout.window } : sent;
   const bag = await store.inventory(pair, zone);
   const v = validateLayout(layout, tier, bag.have);
   if (!v.ok) throw new HttpError(400, v.code, awayHint(v, layout, bag));

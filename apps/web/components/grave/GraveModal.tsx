@@ -145,7 +145,7 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
       forgetOwnerToken(graveId);
       cache.remove(graveId);
       bridge.emit("grave:changed", { graveId, kind: "removed" });
-      showToast(`묘비를 이장했어요. 성황당에 ${SHRINE_KEEP_DAYS}일 동안 모셔져요.`);
+      showToast(`묘비를 이장했어요. ${SHRINE_KEEP_DAYS}일 안에는 다시 모실 수 있어요.`);
       onClose();
     });
 
@@ -331,7 +331,7 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
                   ? "이 묘비를 신고할까요?"
                   : confirming === "staffDelete"
                     ? "운영자 권한으로 이 묘비를 완전히 지울까요? 사진도 함께 지워지고 되돌릴 수 없어요."
-                    : `이 묘비를 이장할까요? 성황당에 ${SHRINE_KEEP_DAYS}일 동안 모셔져요. 그 안에는 다시 모실 수 있어요.`}
+                    : `이 묘비를 이장할까요? ${SHRINE_KEEP_DAYS}일 안에는 다시 모실 수 있어요.`}
               </p>
               {confirming === "report" && (
                 <fieldset className={styles.reasons}>

@@ -144,7 +144,7 @@ export default function BungeoCartDialog({ onClose, at = null, avatar }: Props) 
   }
 
   return (
-    <Dialog title={BUNGEO_TITLE} onClose={onClose}>
+    <Dialog title={BUNGEO_TITLE} onClose={onClose} className={shop.window}>
       <div className={shop.shop}>
         <div className={shop.top}>
           <p className={shop.balance}>

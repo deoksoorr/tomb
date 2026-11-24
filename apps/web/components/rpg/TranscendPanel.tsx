@@ -69,7 +69,7 @@ const FX_TEXT: Record<string, { label: string; fmt: (v: number) => string }> = {
 };
 const fxAt = (id: TNodeId, lv: number) => Object.entries(T_FX[id](lv)) as [string, number][];
 
-const SIDE_DESC = "손끝 단련은 기본 공격·일꾼 스킬(물공)에만, 주문 다듬기는 모닥불·서리·넋 스킬(마공)에만 붙어요. 공통은 모두에게. 랭크마다 1포인트, 되돌리기는 무료예요.";
+const SIDE_DESC = "손끝 단련은 기본 공격·일꾼 스킬(물공)에만, 주문 다듬기는 모닥불·서리·넋 스킬(마공)에만 적용되고, 공통은 모두에 적용돼요. 랭크마다 1포인트, 되돌리기는 무료예요.";
 
 type NodeState = "locked" | "open" | "learned" | "max";
 
@@ -305,7 +305,7 @@ export default function TranscendPanel({ view, busy, onCharacter, ask, setAsk }:
           <ul className={t.tags} aria-label="수련 종류">
             <li data-tag="passive">{d.side === "phys" ? "물공" : d.side === "magic" ? "마공" : "공통"}</li>
             <li>{T_SIDE_ROLE[d.side]}</li>
-            <li>늘 켜짐</li>
+            <li>항상 적용</li>
           </ul>
           {why && dRank < d.maxLevel && why.code === "NO_SKILL_POINTS" && <p className={t.warn}>{why.message}</p>}
           <div className={t.actions}>

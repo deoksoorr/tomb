@@ -6,9 +6,9 @@ import type { HouseEditState, HouseTool } from "@/game/housing/events";
 import { errorMessage } from "@/lib/api";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { meStore, useMe } from "@/lib/hooks/useMe";
-import { AWAY_MSG, DEFAULT_FLOOR, DEFAULT_FLOOR_NAME, DEFAULT_WALL, DEFAULT_WALL_NAME, FURNITURE, furnitureById, LIKE_WEIGHT, tierById } from "@/lib/housing/catalog";
+import { AWAY_MSG, DEFAULT_FLOOR, DEFAULT_FLOOR_NAME, DEFAULT_WALL, DEFAULT_WALL_NAME, DEFAULT_WINDOW, DEFAULT_WINDOW_NAME, FURNITURE, furnitureById, LIKE_WEIGHT, tierById, WINDOW_SKINS } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
-import { designScore, layoutCounts, ROTATE_LABEL, rotateMode, styleTag, totalScore } from "@/lib/housing/layout";
+import { designScore, layoutCounts, ROTATE_LABEL, rotateMode, styleTag, totalScore, WINDOW_LOCKED_MSG } from "@/lib/housing/layout";
 import type { MyHouseResponse, PublicHouse } from "@/lib/housing/types";
 import { furnitureDiscount } from "@/lib/champPerks";
 import { chairShopDiscount } from "@/lib/chairPerks";
@@ -76,7 +76,7 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
   }, [notice]);
 
   const editing = !!edit?.editing;
-  const layout = editing && edit ? { items: edit.items, floor: edit.floor, wall: edit.wall } : house.layout;
+  const layout = editing && edit ? { items: edit.items, floor: edit.floor, wall: edit.wall, window: edit.window } : house.layout;
   // 11/22 편집 미리보기도 서버 점수와 같은 식 (외관 + 터 크기 점수까지)
   const score = editing ? totalScore(designScore(layout, house.exterior), house.likes, house.tier) : house.score;
   const tag = styleTag(layout);
@@ -98,7 +98,7 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
     if (!edit) return;
     setSaving(true);
     try {
-      const r = await housingApi.saveLayout(channel, house.tier, { items: edit.items, floor: edit.floor, wall: edit.wall }, house.zone === "sea" ? "sea" : "village");
+      const r = await housingApi.saveLayout(channel, house.tier, { items: edit.items, floor: edit.floor, wall: edit.wall, window: edit.window }, house.zone === "sea" ? "sea" : "village");
       onMy(r);
       if (r.house) {
         onHouse(r.house);
@@ -197,7 +197,7 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
       {modal === "shop" && my && (
         <FurnitureShop
           my={my}
-          placed={edit ? layoutCounts({ items: edit.items, floor: edit.floor, wall: edit.wall }) : layoutCounts(house.layout)}
+          placed={edit ? layoutCounts({ items: edit.items, floor: edit.floor, wall: edit.wall, window: edit.window }) : layoutCounts(house.layout)}
           onMy={onMy}
           onClose={() => setModal(null)}
           onTry={
@@ -205,6 +205,8 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
               ? (itemId) => {
                   // 상점을 닫고 집 바닥에 반투명으로 얹는다 (사지 않음·저장 안 됨)
                   setModal(null);
+                  // 11/24 창문 모양(눈꽃 창가)은 바닥에 놓지 않는다
+                  if (furnitureById(itemId)?.skin === "window") return setNotice("눈꽃 창가는 바닥에 놓지 않고 꾸미기 「창문」 칸에서 골라요.");
                   bridge.emit("house:tool", { action: "try", itemId });
                 }
               : undefined
@@ -265,7 +267,7 @@ function EditToolbar({
   onShop: () => void;
   onBuyTrial: (itemId: string) => void;
 }) {
-  const counts = layoutCounts({ items: edit.items, floor: edit.floor, wall: edit.wall });
+  const counts = layoutCounts({ items: edit.items, floor: edit.floor, wall: edit.wall, window: edit.window });
   const sel = edit.selected ? edit.items.find((p) => p.u === edit.selected) : undefined;
   const selDef = sel && furnitureById(sel.i);
   // 11/16 가구는 두 집 공용 가방: 다른 집에 다 놓인 것도 보여 주고, 누르면 거기서 치우라고 알려 준다
@@ -288,17 +290,26 @@ function EditToolbar({
   const rKey = mode === "turn" ? "R 돌리기" : mode === "flip" ? "R 뒤집기" : "R 돌리기·뒤집기";
   // 터치 기기(화면 버튼을 쓰는 기기)는 키 안내 대신 손가락으로 하는 것만
   const coarse = useMediaQuery("(pointer: coarse)");
-  const skinName = (id: string) => (id === DEFAULT_FLOOR ? DEFAULT_FLOOR_NAME : id === DEFAULT_WALL ? DEFAULT_WALL_NAME : (furnitureById(id)?.name ?? id));
+  const skinName = (id: string) =>
+    id === DEFAULT_FLOOR ? DEFAULT_FLOOR_NAME : id === DEFAULT_WALL ? DEFAULT_WALL_NAME : id === DEFAULT_WINDOW ? DEFAULT_WINDOW_NAME : (furnitureById(id)?.name ?? id);
+  // 11/24 창문 모양: 기본 + 눈꽃 창가 (가구 보따리상 눈꽃 창가가 이 집 가방에 있어야 고른다. 없으면 잠금으로 보여 준다)
+  const windowLock = (id: string): string | null =>
+    id === DEFAULT_WINDOW || (my.inventory[id] ?? 0) > 0 ? null : away(id) > 0 ? `${skinName(id)}는 다른 집 창문에 쓰고 있어요. 하나로 집 한 채에 쓸 수 있어요.` : WINDOW_LOCKED_MSG;
 
   // 11/22 아래쪽 시트 정리: 가방 한 줄만 보이고 [가구 | 바닥 | 벽지] 칸으로 바꿔 본다 (시트 안 세로 스크롤 없이 방이 더 보이게)
-  const [tab, setTab] = useState<"items" | "floor" | "wall">("items");
+  const [tab, setTab] = useState<"items" | "floor" | "wall" | "window">("items");
   const TABS = [
     { id: "items", label: "가구", n: owned.length },
     { id: "floor", label: "바닥", n: floors.length },
     { id: "wall", label: "벽지", n: walls.length },
+    { id: "window", label: "창문", n: WINDOW_SKINS.filter((id) => !windowLock(id)).length },
   ] as const;
-  const skins = tab === "floor" ? floors : walls;
-  const hint = coarse ? "끌어서 옮기기 · 빈 곳을 끌면 화면 이동" : `끌어서 옮기기 · 방향키 한 칸 · ${rKey} · Del 치우기 · Q/E 차례로 고르기 · 빈 곳을 끌면 화면 이동`;
+  const skins = tab === "floor" ? floors : tab === "wall" ? walls : WINDOW_SKINS;
+  const picked = tab === "floor" ? edit.floor : tab === "wall" ? edit.wall : edit.window;
+  const locked = tab === "window" ? WINDOW_SKINS.map(windowLock).find((m) => m) : undefined;
+  const hint =
+    locked ??
+    (coarse ? "끌어서 옮기기 · 빈 곳을 끌면 화면 이동" : `끌어서 옮기기 · 방향키 한 칸 · ${rKey} · Del 치우기 · Q/E 차례로 고르기 · 빈 곳을 끌면 화면 이동`);
 
   return (
     <section className={cx(ui.panel, styles.toolbar)} aria-label="꾸미기 도구">
@@ -416,7 +427,7 @@ function EditToolbar({
         <div
           className={styles.palette}
           role="group"
-          aria-label={tab === "items" ? "가방: 눌러서 놓기" : tab === "floor" ? "바닥 고르기" : "벽지 고르기"}
+          aria-label={tab === "items" ? "가방: 눌러서 놓기" : tab === "floor" ? "바닥 고르기" : tab === "wall" ? "벽지 고르기" : "창문 고르기"}
           onWheel={(e) => {
             if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) e.currentTarget.scrollLeft += e.deltaY;
           }}
@@ -443,19 +454,34 @@ function EditToolbar({
                   </button>
                 );
               })
-            : skins.map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  className={styles.paletteItem}
-                  aria-pressed={(tab === "floor" ? edit.floor : edit.wall) === id}
-                  title={skinName(id)}
-                  onClick={() => tool(tab === "floor" ? { action: "skin", floor: id } : { action: "skin", wall: id })}
-                >
-                  <FurnitureIcon itemId={id} size={36} />
-                  <span className={styles.paletteLabel}>{skinName(id)}</span>
-                </button>
-              ))}
+            : skins.map((id) => {
+                const lock = tab === "window" ? windowLock(id) : null;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    className={styles.paletteItem}
+                    aria-pressed={picked === id}
+                    aria-disabled={lock ? true : undefined}
+                    style={lock ? { opacity: 0.55 } : undefined}
+                    title={lock ?? skinName(id)}
+                    aria-label={lock ? `${skinName(id)}, ${lock}` : undefined}
+                    onClick={() =>
+                      lock
+                        ? bridge.emit("house:notice", { message: lock })
+                        : tool(tab === "floor" ? { action: "skin", floor: id } : tab === "wall" ? { action: "skin", wall: id } : { action: "skin", window: id })
+                    }
+                  >
+                    {lock && (
+                      <span className={styles.count} aria-hidden="true">
+                        <PixelIcon name="lock" />
+                      </span>
+                    )}
+                    <FurnitureIcon itemId={id} size={36} />
+                    <span className={styles.paletteLabel}>{skinName(id)}</span>
+                  </button>
+                );
+              })}
         </div>
       )}
 

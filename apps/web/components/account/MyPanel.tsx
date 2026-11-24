@@ -8,76 +8,45 @@ import { api, errorMessage } from "@/lib/api";
 import { CAT_LABEL, dexBadgeBits } from "@/lib/forage/catalog";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { useNameTaken } from "@/lib/hooks/useNameTaken";
-import { lookScore } from "@/lib/lookScore";
 import { useForage } from "../forage/forageStore";
 import { forgetMyCode, readMyCode, saveMyCode, writeItem } from "@/lib/storage";
 import { LS, type Me } from "@/lib/types";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
-import { watchMoreBelow } from "../ui/moreBelow";
 import ui from "../ui/ui.module.css";
-import type { MyGraveEntry } from "./items";
 import { InquiryButton } from "../notice/InquiryDialog";
 import GoogleSection, { GoogleBadge, useGoogleStatus } from "./GoogleSection";
-import MyGraves from "./MyGraves";
 import MyHuntSection from "./MyHuntSection";
-import PerksTab from "./PerksTab";
+import PerksSection from "./PerksSection";
 import styles from "./MyPanel.module.css";
 import MyHouseLine from "../housing/MyHouseLine";
-import { isOnline, useFriends } from "@/lib/hooks/useFriends";
-import PixelIcon from "../ui/PixelIcon";
-import ReferralRewardTable from "./ReferralRewardTable";
 import ReferralSection from "./ReferralSection";
 import type { PublicHouse } from "@/lib/housing/types";
 
 type Props = {
-  myGraves: { entries: MyGraveEntry[]; pending: number };
-  onGoToMyGrave: (entry: MyGraveEntry) => void;
-  onBury: () => void;
   /** 접속 종료: 게임을 내리고 입장 화면으로 */
   onLeave: () => void;
   /** 로그아웃이 끝났다: 게임을 내리고 입장 첫 화면으로 */
   onLoggedOut: () => void;
-  /** 이장한 묘비를 다시 모시는 곳 */
-  onOpenShrine: () => void;
-  /** 친구 창 (목록·받은 신청·보낸 신청) */
-  onOpenFriends?: () => void;
   /** 내 집 (채널마다 주거 구역이 따로다): 지금 채널, 내 집 가기(필요하면 채널을 옮긴 뒤), 분양 사무소 열기 */
   houseChannel: number;
   onGoToMyHouse: (house: PublicHouse) => void;
   onOpenHousing: () => void;
-  /** 11/20 사냥 칸 빈 상태의 [사냥터 입구로 가기]: 창을 닫고 사냥터 입구까지 걸어간다 (아래 [사냥]과 같다) */
-  onGoHunt?: () => void;
-  /** 11/17 보고 있는 탭 ([내 정보] · [혜택]). 가방 [레이스 보상]·1위 알림의 [혜택 보기]가 [혜택]으로 연다 */
-  tab: MyTab;
-  onTab: (tab: MyTab) => void;
   onClose: () => void;
 };
 
-/** info = 포인트·묘비·코드 등 원래 내 정보, perks = 지금 붙어 있는 혜택 (components/account/PerksTab) */
-export type MyTab = "info" | "perks";
-const MY_TABS: readonly (readonly [MyTab, string])[] = [
-  ["info", "내 정보"],
-  ["perks", "혜택"],
-];
-
 type Ending = "leave" | "logout" | null;
 
-/** 내 정보: [내 정보] 포인트·출석, 내 묘비, 개인 코드, 접속 종료·로그아웃 / [혜택] 지금 붙어 있는 혜택 (가방은 HUD의 [가방]) */
+/**
+ * 내 정보 (11/24 한 화면으로 합침 — 탭·설명 문단을 뺐다): 포인트·출석, 혜택, 닉네임·도감 배지 줄, 사냥 능력치·낀 장비, 내 집 (11/24 내 묘비 칸은 뺐다),
+ * 추천 코드, 개인 코드, 구글 계정, 문의하기·접속 종료·로그아웃. 친구·꾸미기 점수·사냥 능력치는 각자 창(친구·가방·사냥)에서 본다
+ */
 export default function MyPanel({
-  myGraves,
-  onGoToMyGrave,
-  onBury,
   onLeave,
   onLoggedOut,
-  onOpenShrine,
-  onOpenFriends,
   houseChannel,
   onGoToMyHouse,
   onOpenHousing,
-  onGoHunt,
-  tab,
-  onTab,
   onClose,
 }: Props) {
   const { me, error } = useMe();
@@ -85,11 +54,9 @@ export default function MyPanel({
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const codeButtonId = useId();
-  const tabsId = useId();
-  // 꾸미기 점수의 만료 판정 기준 시각 (렌더 중에 시계를 읽지 않는다)
-  const [openedAt] = useState(() => Date.now());
-  // 구글 연결 상태 (닉네임 옆 표시와 아래 구글 계정 칸이 같이 쓴다. 구글 설정이 없으면 null)
+  // 구글 연결 상태 (닉네임 옆 표시·개인 코드 안내·로그아웃 확인·아래 구글 계정 칸이 같이 쓴다. 구글 설정이 없으면 null)
   const [googleStatus, setGoogleStatus] = useGoogleStatus();
+  const googleLinked = !!googleStatus?.linked;
 
   useEffect(() => {
     void meStore.refresh();
@@ -119,7 +86,7 @@ export default function MyPanel({
 
   if (!me) {
     return (
-      <Dialog title="내 정보" onClose={onClose}>
+      <Dialog title="내 정보" onClose={onClose} fitHeight>
         <p className={styles.state} role="status">
           {error ?? "불러오는 중…"}
         </p>
@@ -130,139 +97,105 @@ export default function MyPanel({
     );
   }
 
+  // 코드도 구글도 없으면 로그아웃 뒤 다시 들어올 길이 없다
+  const noWayBack = !me.hasCode && !googleLinked;
+
   return (
-    <Dialog title="내 정보" onClose={onClose}>
-      <div className={styles.tabbed}>
-        <div className={styles.tabs} role="tablist" aria-label="내 정보 칸">
-          {MY_TABS.map(([k, label]) => (
-            <button
-              key={k}
-              type="button"
-              role="tab"
-              id={`${tabsId}-${k}`}
-              aria-selected={tab === k}
-              aria-controls={`${tabsId}-panel`}
-              className={styles.tab}
-              onClick={() => onTab(k)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <div id={`${tabsId}-panel`} role="tabpanel" aria-labelledby={`${tabsId}-${tab}`} ref={watchMoreBelow} className={cx(styles.tabPanel, "more-fade")}>
-          {tab === "perks" ? (
-            <PerksTab me={me} />
-          ) : (
-            <div className={styles.panel}>
-              <section className={styles.points} aria-label="포인트">
-                <p className={styles.balance}>
-                  <strong>{me.points.toLocaleString("ko-KR")}</strong> 포인트
-                </p>
-                {/* 운영자 계정은 출석 도장을 받지 않는다 → 출석 줄을 뺀다 */}
-                {!me.staff && (
-                  <p className={styles.sub}>
-                    연속 출석 {me.attendance.streak}일
-                    {me.attendance.today && " · 오늘 출석 완료"}
-                  </p>
-                )}
-                <p className={styles.sub}>내 꾸미기 점수 {lookScore(me, openedAt)}점 (지금 입은 코디 기준)</p>
-              </section>
+    <Dialog title="내 정보" onClose={onClose} fitHeight>
+      <div className={styles.panel}>
+        <section className={styles.points} aria-label="포인트">
+          <p className={styles.balance}>
+            <strong>{me.points.toLocaleString("ko-KR")}</strong> 포인트
+          </p>
+          {/* 운영자 계정은 출석 도장을 받지 않는다 → 출석 줄을 뺀다 */}
+          {!me.staff && (
+            <p className={styles.sub}>
+              연속 출석 {me.attendance.streak}일{me.attendance.today && " · 오늘 출석 완료"}
+            </p>
+          )}
+        </section>
 
-              {/* 11/16 추천 보상 공식 (운영자 계정은 추천에 참여하지 않는다) */}
-              {!me.staff && <ReferralRewardTable />}
+        <PerksSection me={me} />
 
-              <NameSection me={me} googleLinked={!!googleStatus?.linked} />
+        <ProfileRows me={me} googleLinked={googleLinked} />
 
-              <DexBadgeLine />
+        {/* 사냥 능력치·낀 장비 (11/24 운영자: 안내가 필요하다) */}
+        <MyHuntSection accountId={me.accountId} />
 
-              <MyHuntSection accountId={me.accountId} onGoHunt={onGoHunt} />
+        <section className={styles.section}>
+          <h3 className={styles.heading}>내 집</h3>
+          <MyHouseLine channel={houseChannel} onGo={onGoToMyHouse} onOffice={onOpenHousing} />
+        </section>
 
-              <section className={styles.section}>
-                <h3 className={styles.heading}>내 묘비</h3>
-                <MyGraves entries={myGraves.entries} pending={myGraves.pending} onGo={onGoToMyGrave} onBury={onBury} />
-              </section>
+        <ReferralSection />
 
-              <section className={styles.section}>
-                <h3 className={styles.heading}>내 집</h3>
-                <MyHouseLine channel={houseChannel} onGo={onGoToMyHouse} onOffice={onOpenHousing} />
-              </section>
+        <CodeSection me={me} buttonId={codeButtonId} googleLinked={googleLinked} />
 
-              {onOpenFriends && <FriendsLine onOpen={onOpenFriends} />}
+        <GoogleSection me={me} status={googleStatus} onStatus={setGoogleStatus} />
 
-              <ReferralSection />
-
-              <CodeSection me={me} buttonId={codeButtonId} />
-
-              <GoogleSection me={me} status={googleStatus} onStatus={setGoogleStatus} />
-
-              <div className={styles.endButtons}>
-                <button type="button" className={cx(ui.button, styles.leave)} onClick={onOpenShrine}>
-                  성황당 (이장한 묘비)
+        <section className={styles.section}>
+          {ending === "leave" ? (
+            <div className={styles.confirm}>
+              <p>마을을 떠날까요?</p>
+              <div className={styles.confirmButtons}>
+                <button type="button" className={cx(ui.button, ui.danger)} onClick={onLeave} autoFocus>
+                  떠나기
                 </button>
-                <InquiryButton className={styles.leave} />
+                <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setEnding(null)}>
+                  머무르기
+                </button>
               </div>
-
-              <section className={styles.section}>
-                {ending === "leave" ? (
-                  <div className={styles.confirm}>
-                    <p>마을을 떠날까요?</p>
-                    <div className={styles.confirmButtons}>
-                      <button type="button" className={cx(ui.button, ui.danger)} onClick={onLeave} autoFocus>
-                        떠나기
-                      </button>
-                      <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setEnding(null)}>
-                        머무르기
-                      </button>
-                    </div>
-                  </div>
-                ) : ending === "logout" ? (
-                  <div className={styles.confirm}>
-                    <p>
-                      {me.hasCode
-                        ? "로그아웃할까요? 다시 들어오려면 개인 코드가 필요해요. 이 기기에 저장된 코드도 지워지니 먼저 적어 두세요."
-                        : "코드를 발급받지 않으면 이 계정으로 다시 들어올 수 없어요."}
-                    </p>
-                    <div className={styles.confirmButtons}>
-                      {!me.hasCode && (
-                        <button type="button" className={cx(ui.button, ui.primary)} onClick={goToCode} autoFocus>
-                          코드 발급하기
-                        </button>
-                      )}
-                      <button type="button" className={cx(ui.button, ui.danger)} onClick={logout} disabled={pending}>
-                        {me.hasCode ? "로그아웃" : "그래도 로그아웃"}
-                      </button>
-                      <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setEnding(null)}>
-                        그만두기
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className={styles.endButtons}>
-                    <button type="button" className={cx(ui.button, styles.leave)} onClick={() => setEnding("leave")}>
-                      접속 종료
-                    </button>
-                    <button type="button" className={cx(ui.button, styles.leave)} onClick={() => setEnding("logout")}>
-                      로그아웃
-                    </button>
-                  </div>
-                )}
-                <p className={styles.notice} role="status">
-                  {notice}
-                </p>
-              </section>
-
-              <p className={styles.legal}>
-                <Link href="/privacy" target="_blank">
-                  개인정보처리방침
-                </Link>
-                {" · "}
-                <Link href="/terms" target="_blank">
-                  이용약관
-                </Link>
+            </div>
+          ) : ending === "logout" ? (
+            <div className={styles.confirm}>
+              <p>
+                {me.hasCode
+                  ? "로그아웃할까요? 이 기기에 저장된 코드도 지워지니 먼저 적어 두세요."
+                  : noWayBack
+                    ? "개인 코드가 없으면 이 계정으로 다시 들어올 수 없어요."
+                    : "로그아웃할까요?"}
               </p>
+              <div className={styles.confirmButtons}>
+                {noWayBack && (
+                  <button type="button" className={cx(ui.button, ui.primary)} onClick={goToCode} autoFocus>
+                    코드 발급하기
+                  </button>
+                )}
+                <button type="button" className={cx(ui.button, ui.danger)} onClick={logout} disabled={pending}>
+                  {noWayBack ? "그래도 로그아웃" : "로그아웃"}
+                </button>
+                <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setEnding(null)}>
+                  그만두기
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className={styles.endButtons}>
+              <InquiryButton className={styles.leave} />
+              <button type="button" className={cx(ui.button, styles.leave)} onClick={() => setEnding("leave")}>
+                접속 종료
+              </button>
+              <button type="button" className={cx(ui.button, styles.leave)} onClick={() => setEnding("logout")}>
+                로그아웃
+              </button>
             </div>
           )}
-        </div>
+          {notice && (
+            <p className={styles.notice} role="status">
+              {notice}
+            </p>
+          )}
+        </section>
+
+        <p className={styles.legal}>
+          <Link href="/privacy" target="_blank">
+            개인정보처리방침
+          </Link>
+          {" · "}
+          <Link href="/terms" target="_blank">
+            이용약관
+          </Link>
+        </p>
       </div>
     </Dialog>
   );
@@ -274,32 +207,28 @@ const MASKED_CODE = "••••-••••-••••";
  * 개인 코드. 서버는 해시만 들고 있어 원문을 다시 못 보여 준다 → 이 기기에서 발급받았거나 코드로 들어왔으면
  * 기기 저장본을 보여 주고(가리기·보기·복사), 없으면 새로 발급하게 한다 (예전 코드는 바로 못 쓰게 된다)
  */
-/** 친구: 접속 중인 친구 수 · 받은 신청 + [친구 창] */
-function FriendsLine({ onOpen }: { onOpen: () => void }) {
-  const { friends, incoming } = useFriends();
-  const online = friends?.filter((f) => isOnline(f.where)).length ?? 0;
-  return (
-    <section className={styles.section}>
-      <h3 className={styles.heading}>친구</h3>
-      <p className={styles.sub}>
-        {friends === null ? "불러오는 중…" : friends.length ? `친구 ${friends.length}명 · 지금 접속 ${online}명` : "아직 친구가 없어요"}
-        {incoming > 0 && ` · 받은 신청 ${incoming}개`}
-      </p>
-      <button type="button" className={cx(ui.button, styles.leave)} onClick={onOpen}>
-        <PixelIcon name="friends" />
-        친구 창 열기
-      </button>
-    </section>
-  );
-}
-
-function CodeSection({ me, buttonId }: { me: Me; buttonId: string }) {
+function CodeSection({ me, buttonId, googleLinked }: { me: Me; buttonId: string; googleLinked: boolean }) {
   const [code, setCode] = useState<string | null>(() => readMyCode(me.accountId));
   const [shown, setShown] = useState(false);
-  const [confirming, setConfirming] = useState(false);
+  // 확인 칸: issue = 새 코드 발급, others = 11/18 다른 기기에서 모두 로그아웃 (이 계정으로 들어와 있는 다른 기기를 끊는다. 지금 기기는 그대로)
+  const [confirming, setConfirming] = useState<"issue" | "others" | null>(null);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const hasCode = me.hasCode || code !== null;
+
+  async function logoutOthers() {
+    setPending(true);
+    setMessage(null);
+    try {
+      await api.logoutOthers();
+      setConfirming(null);
+      setMessage("다른 기기를 모두 로그아웃했어요. 1분 안에 끊겨요.");
+    } catch (e) {
+      setMessage(errorMessage(e));
+    } finally {
+      setPending(false);
+    }
+  }
 
   async function issue() {
     setPending(true);
@@ -309,7 +238,7 @@ function CodeSection({ me, buttonId }: { me: Me; buttonId: string }) {
       saveMyCode(me.accountId, res.code);
       setCode(res.code);
       setShown(true);
-      setConfirming(false);
+      setConfirming(null);
       setMessage("새 코드를 만들었어요. 안전한 곳에 적어 두세요.");
       void meStore.refresh();
     } catch (e) {
@@ -331,10 +260,8 @@ function CodeSection({ me, buttonId }: { me: Me; buttonId: string }) {
   return (
     <section className={styles.section}>
       <h3 className={styles.heading}>개인 코드</h3>
-      <p className={ui.hint}>
-        다른 기기에서 이 계정(포인트·가방·내 묘비)으로 들어올 때 쓰는 코드예요. 입장 화면의 &quot;코드로 시작&quot;에
-        넣으면 돼요.
-      </p>
+      {/* 구글이 연결돼 있으면 코드를 잃어도 구글로 들어온다 → 그때는 남에게 알리지 말라는 말만 */}
+      <p className={styles.warn}>{googleLinked ? "코드는 남에게 알려 주지 마세요." : "코드를 잃어버리면 계정을 찾을 수 없어요."}</p>
       {code && (
         <div className={styles.codeBox}>
           <output className={styles.code} aria-label={shown ? "개인 코드" : "개인 코드 (가려짐)"}>
@@ -348,104 +275,52 @@ function CodeSection({ me, buttonId }: { me: Me; buttonId: string }) {
               복사
             </button>
           </div>
-          <p className={styles.warning} role="note">
-            비밀번호처럼 다뤄 주세요. 이 코드를 알면 누구나 내 계정에 들어올 수 있어요.
-          </p>
         </div>
       )}
-      {!code && hasCode && (
-        <p className={ui.hint}>
-          이 기기에는 코드가 저장돼 있지 않아요. 코드는 안전을 위해 다시 보여 드리지 않아요. 잊었다면 새로
-          발급받으세요.
-        </p>
-      )}
+      {!code && hasCode && <p className={styles.sub}>이 기기에는 저장된 코드가 없어요.</p>}
       {confirming ? (
         <div className={styles.confirm}>
-          <p>새로 발급하면 예전 코드는 바로 쓸 수 없게 돼요. 예전 코드로 들어와 있던 다른 기기도 모두 로그아웃돼요.</p>
+          <p>
+            {confirming === "issue"
+              ? "새로 발급하면 예전 코드는 바로 쓸 수 없고, 그 코드로 들어온 다른 기기는 로그아웃돼요."
+              : "이 기기만 남기고 다른 기기는 모두 로그아웃할까요?"}
+          </p>
           <div className={styles.confirmButtons}>
-            <button type="button" className={cx(ui.button, ui.danger)} onClick={issue} disabled={pending} autoFocus>
-              {pending ? "만드는 중…" : "새 코드 발급"}
+            <button type="button" className={cx(ui.button, ui.danger)} onClick={confirming === "issue" ? issue : logoutOthers} disabled={pending} autoFocus>
+              {confirming === "issue" ? (pending ? "만드는 중…" : "새 코드 발급") : pending ? "로그아웃하는 중…" : "다른 기기 로그아웃"}
             </button>
-            <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setConfirming(false)}>
+            <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setConfirming(null)}>
               그만두기
             </button>
           </div>
         </div>
       ) : (
-        <button
-          id={buttonId}
-          type="button"
-          className={cx(ui.button, code && ui.quiet)}
-          onClick={hasCode ? () => setConfirming(true) : issue}
-          disabled={pending}
-        >
-          {pending ? "만드는 중…" : hasCode ? "새 코드 발급" : "개인 코드 만들기"}
-        </button>
+        <div className={styles.pairButtons}>
+          <button
+            id={buttonId}
+            type="button"
+            className={cx(ui.button, code ? ui.quiet : !hasCode && ui.primary)}
+            onClick={hasCode ? () => setConfirming("issue") : issue}
+            disabled={pending}
+          >
+            {pending ? "만드는 중…" : hasCode ? "새 코드 발급" : "개인 코드 만들기"}
+          </button>
+          <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setConfirming("others")}>
+            다른 기기 로그아웃
+          </button>
+        </div>
       )}
       {message && (
         <p className={styles.sub} role="status">
           {message}
         </p>
       )}
-      <LogoutOthers />
     </section>
   );
 }
 
-/**
- * 11/18 다른 기기에서 모두 로그아웃: 이 계정으로 들어와 있는 다른 기기(코드·구글)를 모두 끊는다. 지금 기기는 그대로.
- * 코드가 새어 나갔을 때 새 코드 발급과 함께 쓴다
- */
-function LogoutOthers() {
-  const [confirming, setConfirming] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-
-  async function run() {
-    setPending(true);
-    setMessage(null);
-    try {
-      await api.logoutOthers();
-      setConfirming(false);
-      setMessage("다른 기기를 모두 로그아웃했어요. 1분 안에 끊겨요.");
-    } catch (e) {
-      setMessage(errorMessage(e));
-    } finally {
-      setPending(false);
-    }
-  }
-
-  return (
-    <div className={styles.othersBox}>
-      {confirming ? (
-        <div className={styles.confirm}>
-          <p>이 기기만 남기고 다른 기기는 모두 로그아웃할까요? 다른 기기에서는 개인 코드나 구글로 다시 들어와야 해요.</p>
-          <div className={styles.confirmButtons}>
-            <button type="button" className={cx(ui.button, ui.danger)} onClick={run} disabled={pending} autoFocus>
-              {pending ? "로그아웃하는 중…" : "다른 기기 로그아웃"}
-            </button>
-            <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setConfirming(false)}>
-              그만두기
-            </button>
-          </div>
-        </div>
-      ) : (
-        <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setConfirming(true)}>
-          다른 기기에서 모두 로그아웃
-        </button>
-      )}
-      <p className={ui.hint}>내가 모르는 기기에서 내 계정을 쓰는 것 같으면 눌러 주세요.</p>
-      {message && (
-        <p className={styles.sub} role="status">
-          {message}
-        </p>
-      )}
-    </div>
-  );
-}
-
-/** 닉네임 바꾸기: 첫 변경은 무료, 이후 포인트와 대기 기간 (서버가 정한 값을 그대로 보여 준다) */
-function NameSection({ me, googleLinked }: { me: Me; googleLinked: boolean }) {
+/** 닉네임(바꾸기) · 사냥 · 도감 배지 줄. 닉네임 첫 변경은 무료, 이후 포인트와 대기 기간 (서버가 정한 값을 그대로 보여 준다) */
+function ProfileRows({ me, googleLinked }: { me: Me; googleLinked: boolean }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(me.name ?? "");
   const [pending, setPending] = useState(false);
@@ -460,6 +335,9 @@ function NameSection({ me, googleLinked }: { me: Me; googleLinked: boolean }) {
   // 닉네임 중복: 입력 중 가볍게 미리 확인 (지금 내 이름은 묻지 않는다). 저장 때 서버가 다시 판정한다
   const taken = useNameTaken(open ? name : "", me.name);
   const price = cost === 0 ? "이번 변경은 무료예요." : `바꾸면 ${cost.toLocaleString("ko-KR")} 포인트가 들어요.`;
+  const { state } = useForage();
+  // 도감 100% 배지: 다 채운 종류 (이름표 옆 별과 같다)
+  const cats = dexBadgeCats(state ? dexBadgeBits(state.dex) : 0);
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -482,9 +360,38 @@ function NameSection({ me, googleLinked }: { me: Me; googleLinked: boolean }) {
   }
 
   return (
-    <section className={styles.section}>
-      <h3 className={styles.heading}>닉네임</h3>
-      {open ? (
+    <section className={styles.section} aria-label="내 캐릭터">
+      <dl className={styles.rows}>
+        <div>
+          <dt>닉네임</dt>
+          <dd className={styles.nameValue}>
+            <span className={styles.nameNow}>
+              {me.name ?? "이름 없음"}
+              {googleLinked && <GoogleBadge />}
+            </span>
+            {!open && (
+              <button type="button" className={cx(ui.button, styles.smallButton)} onClick={() => setOpen(true)} disabled={waiting}>
+                바꾸기
+              </button>
+            )}
+          </dd>
+        </div>
+        {cats.length > 0 && (
+          <div>
+            <dt>도감 배지</dt>
+            <dd>
+              {"★".repeat(cats.length)} {cats.map((c) => `${CAT_LABEL[c]} 100%`).join(" · ")}
+            </dd>
+          </div>
+        )}
+      </dl>
+      {waiting && (
+        <p className={styles.sub}>
+          닉네임은{" "}
+          {new Date(nextAllowedAt).toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}부터 바꿀 수 있어요.
+        </p>
+      )}
+      {open && (
         <form className={styles.nameForm} onSubmit={submit} noValidate>
           <input
             id={id}
@@ -508,40 +415,12 @@ function NameSection({ me, googleLinked }: { me: Me; googleLinked: boolean }) {
             </button>
           </div>
         </form>
-      ) : (
-        <div className={styles.nameRow}>
-          <span className={styles.nameNow}>
-            {me.name ?? "이름 없음"}
-            {googleLinked && <GoogleBadge />}
-          </span>
-          <button type="button" className={ui.button} onClick={() => setOpen(true)} disabled={waiting}>
-            닉네임 바꾸기
-          </button>
-        </div>
       )}
-      <p className={ui.hint}>
-        {waiting
-          ? `${new Date(nextAllowedAt).toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}부터 바꿀 수 있어요.`
-          : price}
-      </p>
       {message && (
         <p className={styles.sub} role="status">
           {message}
         </p>
       )}
-    </section>
-  );
-}
-
-/** 도감 100% 배지: 다 채운 종류 (이름표 옆 별과 같다. 다른 사람에게는 다음 입장부터 보인다) */
-function DexBadgeLine() {
-  const { state } = useForage();
-  const cats = dexBadgeCats(state ? dexBadgeBits(state.dex) : 0);
-  if (!cats.length) return null;
-  return (
-    <section className={styles.section} aria-label="도감 배지">
-      <h3 className={styles.heading}>도감 배지 {"★".repeat(cats.length)}</h3>
-      <p className={styles.sub}>{cats.map((c) => `${CAT_LABEL[c]} 100%`).join(" · ")}</p>
     </section>
   );
 }

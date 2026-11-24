@@ -77,11 +77,10 @@ export default function GoogleSection({ me, status, onStatus }: { me: Me; status
               </button>
             )}
           </div>
-          <p className={ui.hint}>입구의 [구글로 시작하기]로 이 계정에 바로 들어올 수 있어요.</p>
           {confirming && (
             <div className={styles.confirm} role="alertdialog" aria-label="구글 연결 끊기 확인">
-              <p>끊으면 구글로는 들어올 수 없어요. 개인 코드를 꼭 적어 두세요.</p>
-              {!me.hasCode && <p className={styles.warning}>아직 개인 코드가 없어요. 끊기 전에 위 [개인 코드 만들기]로 먼저 만들어 두세요.</p>}
+              <p>끊으면 구글로는 들어올 수 없어요.</p>
+              {!me.hasCode && <p className={styles.warning}>개인 코드가 없어요. 끊기 전에 먼저 만들어 두세요.</p>}
               <div className={styles.confirmButtons}>
                 <button type="button" className={cx(ui.button, ui.danger)} onClick={unlink} disabled={pending} autoFocus>
                   {pending ? "끊는 중…" : "연결 끊기"}
@@ -94,19 +93,18 @@ export default function GoogleSection({ me, status, onStatus }: { me: Me; status
           )}
         </>
       ) : (
-        <>
-          <p className={ui.hint}>
-            연결하면 다음부터 이 구글 계정으로 바로 들어올 수 있어요. 구글 하나는 계정 하나에만 연결돼요. 개인 코드는 그대로 쓸 수
-            있어요.
-          </p>
+        <div className={styles.nameRow}>
+          <span className={styles.nameNow}>연결 안 됨</span>
           <a href="/api/auth/google/start?mode=link" className={cx(ui.button, ui.primary, google.link)}>
             <span className={google.mark} aria-hidden="true">
               G
             </span>
             구글 계정 연결
           </a>
-          <p className={ui.hint}>구글에서는 고유 번호만 받아 알아볼 수 없게 바꿔 저장해요. 이메일·이름·사진은 받지 않아요.</p>
-        </>
+        </div>
+      )}
+      {status !== undefined && !status?.linked && (
+        <p className={ui.hint}>연결하면 코드 없이 구글로 바로 들어올 수 있어요. 이메일, 이름, 사진은 받지 않아요.</p>
       )}
       {message && (
         <p className={styles.sub} role="status">

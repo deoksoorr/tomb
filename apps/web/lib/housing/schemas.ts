@@ -67,6 +67,8 @@ export const LayoutSchema = z.object({
     items: z.array(placed).max(200, "물건이 너무 많아요."),
     floor: z.string().max(40),
     wall: z.string().max(40),
+    // 11/24 벽 창문 모양 (없으면 저장된 값을 그대로 둔다 — 예전 화면 호환)
+    window: z.string().max(40).optional(),
   }),
 });
 

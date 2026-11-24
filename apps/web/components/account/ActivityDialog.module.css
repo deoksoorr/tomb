@@ -1,0 +1,71 @@
+/* 11/24 알림 창: 내용만큼 작게, 소식은 한 줄씩 촘촘하게 */
+.state {
+  padding: 16px 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.list {
+  display: grid;
+  /* 긴 줄(nowrap)이 칸을 밀어 넓히지 않게 */
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  background: var(--bg-deep);
+  list-style: none;
+}
+
+.list > li + li {
+  border-top: 1px solid var(--line);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--bone);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+
+button.row {
+  cursor: pointer;
+}
+
+button.row:hover {
+  background: var(--surface-hover);
+}
+
+button.row:focus-visible {
+  outline-offset: -2px;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.time {
+  flex: none;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}

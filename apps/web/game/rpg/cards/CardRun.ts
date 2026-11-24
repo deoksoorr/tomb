@@ -322,7 +322,7 @@ export class CardRun<M extends CardMon> {
         if (n > 0) this.h.heal(n, true);
         const p = this.h.player();
         this.h.ring(p.x, p.y, 0x7ae0a0, 34);
-        this.h.flash("정중히 거절했어요. 체력이 가득 찼어요", 1800);
+        this.h.flash("정중히 거절했어요. HP를 모두 회복했어요", 1800);
       }
     } else {
       if (c.k === "b") return;

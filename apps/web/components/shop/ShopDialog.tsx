@@ -222,7 +222,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
   const worn = (item: ItemDef) => item.kind === "cosmetic" && !!me?.equipped.some((e) => e.itemId === item.id && e.until > openedAt);
 
   return (
-    <Dialog title="상점" onClose={onClose}>
+    <Dialog title="상점" onClose={onClose} className={styles.window}>
       <div className={styles.shop}>
         <div className={styles.top}>
           <p className={styles.balance}>
@@ -261,6 +261,8 @@ export default function ShopDialog({ onClose, avatar }: Props) {
           <>
           {shown && (
             <section ref={watchMoreBelow} className={cx(styles.detail, shown.kind === "cosmetic" && isNameSlot(shown.slot) && styles.detailName, "more-fade")} aria-label="자세히 보기" aria-live="polite">
+              {/* 11/24 그림 칸은 고정 크기 (물건을 바꿔도 글·사기 버튼 자리가 그대로) */}
+              <div className={styles.stageBox} data-preview-box="">
               {shown.kind === "cosmetic" && isNameSlot(shown.slot) ? (
                 // 닉네임 꾸미기: 낮·밤 머리 위 이름표 미리보기 (지금 입은 이름 글자·이름표에 고른 것을 바꿔 끼운 모습)
                 <NameStylePreview
@@ -287,6 +289,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
                   <ItemIcon itemId={shown.id} size={shown.id.startsWith("gs_") ? 96 : 64} />
                 </div>
               )}
+              </div>
               <div className={styles.info}>
                 <p className={styles.name}>
                   {shown.slot && <span className={styles.slotTag}>{SLOT_NAMES[shown.slot]}</span>}

@@ -29,14 +29,14 @@ describe("발동 표시", () => {
   });
 
   it("그때의 숫자를 적는다 (팀장 승진이면 더 크게)", () => {
-    expect(cardProc("overtime", { reviveHp: 0.45, big: true })).toMatchObject({ line: "체력 45%로 다시 일어나요", left: "남은 부활 0번", big: true });
+    expect(cardProc("overtime", { reviveHp: 0.45, big: true })).toMatchObject({ line: "HP 45%로 다시 일어나요", left: "남은 부활 0번", big: true });
     expect(cardProc("overtime").big).toBeUndefined();
     expect(cardProc("leave", { leaveAspd: 0.75 }).line).toBe("3초 무적, 공격 속도 +75%");
     expect(cardProc("corpcard", { perk: "이동 속도", perkV: 0.3 }).line).toBe("5초 동안 이동 속도 +30%");
   });
 
   it("세트 장비·부활 쿠키도 같은 모양", () => {
-    expect(sgProc("vacation", ICON)).toMatchObject({ name: "연차", line: "체력 1로 버텼어요", art: { icon: ICON } });
+    expect(sgProc("vacation", ICON)).toMatchObject({ name: "연차", line: "HP 1로 버텼어요", art: { icon: ICON } });
     expect(sgProc("overtimeFour", ICON).name).toBe("야근 세트");
     expect(sgProc("bossLow", ICON).name).toBe("결재 완료");
     expect(cookieProc()).toMatchObject({ name: "부활 쿠키", big: true });

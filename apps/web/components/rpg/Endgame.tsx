@@ -24,12 +24,12 @@ export function TranscendBar({ tLevel, tExp, eg }: { tLevel: number; tExp: numbe
   return (
     <>
       <div className={s.barLabel}>
-        <span>{tLevel > 0 ? `${starLabel(tLevel)} 초월 경험치` : "초월 경험치 (★51까지)"}</span>
+        <span>{tLevel > 0 ? `${starLabel(tLevel)} 초월 EXP` : "초월 EXP (★51까지)"}</span>
         <span>
           {tExp.toLocaleString("ko-KR")} / {need ? need.toLocaleString("ko-KR") : "MAX"}
         </span>
       </div>
-      <div className={cx(s.expBar, s.tBar)} role="meter" aria-label="초월 경험치" aria-valuenow={tExp} aria-valuemin={0} aria-valuemax={need || 1}>
+      <div className={cx(s.expBar, s.tBar)} role="meter" aria-label="초월 EXP" aria-valuenow={tExp} aria-valuemin={0} aria-valuemax={need || 1}>
         <span style={{ width: `${need ? Math.min(100, (tExp / need) * 100) : 100}%` }} />
       </div>
     </>
@@ -69,17 +69,17 @@ export function EndgameResult({ reward }: { reward: RunReward }) {
       )}
       {w?.suspect && (
         <p className={s.meta} role="status">
-          기록 확인 중이에요. 포인트는 받았고, 확인되면 최고 층과 랭킹, 상자, 초월 EXP가 들어가요.
+          포인트는 지급됐어요. 기록 확인이 끝나면 최고 층, 랭킹, 상자, 초월 EXP가 반영돼요.
         </p>
       )}
       {w?.topPending && (
         <p className={cx(s.levelUp, s.mythicLine)} role="status">
-          서버 최고 기록이에요! 운영자가 확인하면 꼭대기 층 주인으로 올라가요.
+          서버 최고 기록이에요! 운영자 확인 후 꼭대기 층 주인으로 등록돼요.
         </p>
       )}
       {reward.firstPending?.map((id) => (
         <p key={id} className={cx(s.levelUp, s.mythicLine)} role="status">
-          서버 최초 기록이에요! 운영자가 확인하면 「{titleDef(id)?.name ?? id}」 칭호를 드려요.
+          서버 최초 기록이에요! 운영자 확인 후 「{titleDef(id)?.name ?? id}」 칭호가 지급돼요.
         </p>
       ))}
       {w && (w.newBest || w.newWeek) && (
@@ -88,12 +88,8 @@ export function EndgameResult({ reward }: { reward: RunReward }) {
           {w.newBest && w.newWeek ? " 이번 주 랭킹에도 올랐어요." : ""}
         </p>
       )}
-      {w && (w.chests.length > 0 || w.emptyChests > 0) && (
-        <p className={s.meta}>
-          {w.chests.length > 0 && `우두머리 상자 ${w.chests.length}개 (${w.chests.map((f) => `${f}층`).join(" · ")})`}
-          {w.emptyChests > 0 && `${w.chests.length > 0 ? ". " : ""}오늘 상자를 다 열어서 ${w.emptyChests}개는 비어 있었어요`}
-        </p>
-      )}
+      {/* 11/24 하루 상자 한도가 없어서(TOWER_CHESTS_PER_DAY) emptyChests는 늘 0 — 「오늘 상자를 다 열어서 …」 줄은 뺐다 */}
+      {w && w.chests.length > 0 && <p className={s.meta}>우두머리 상자 {w.chests.length}개 ({w.chests.map((f) => `${f}층`).join(" · ")})</p>}
       {w &&
         w.titles.map((id) => (
           <p key={id} className={cx(s.levelUp, s.mythicLine)} role="status">

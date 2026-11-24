@@ -236,7 +236,10 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
   return (
     <>
       <section ref={watchMoreBelow} className={cx(shop.detail, "more-fade")} aria-label="자세히 보기" aria-live="polite">
-        <OutfitPreview className={shop.fitPreview} color={previewColor} body={previewBody} look={look} label={`${title} 미리 보기`} />
+        {/* 11/24 그림 칸 고정 (상점 다른 탭과 같은 칸 — 탭·물건을 바꿔도 글·단추 자리가 그대로) */}
+        <div className={shop.stageBox} data-preview-box="">
+          <OutfitPreview className={shop.fitPreview} color={previewColor} body={previewBody} look={look} label={`${title} 미리 보기`} />
+        </div>
         <div className={shop.info}>
           <p className={shop.name}>
             {title}

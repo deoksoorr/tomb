@@ -9,7 +9,7 @@ export function relativeTime(at: number, now: number): string {
   return `${Math.floor(s / 86_400)}일 전`;
 }
 
-/** 소식 한 줄 */
+/** 소식 한 줄 (11/24 알림 창이 한 줄로 촘촘하게 보여 준다 — 짧게) */
 export function activityText(item: ActivityItem): string {
   const target = `'${item.targetName}'`;
   switch (item.kind) {
@@ -19,15 +19,15 @@ export function activityText(item: ActivityItem): string {
       // 49번에서 없어진 소식 (API가 걸러 낸다)
       return `${target}에 마음이 닿았어요`;
     case "passed":
-      return `${target}이(가) 성불했어요. 성불한 이야기들에서 다시 볼 수 있어요`;
+      return `${target}이(가) 성불했어요`;
     case "houseLike":
       return `${item.who}님이 내 집 ${target}에 좋아요를 눌렀어요`;
     case "guestbook":
       return `${item.who}님이 ${target} 방명록에 글을 남겼어요`;
     case "restore":
-      return `${target}이(가) 성황당에서 다시 모셔졌어요`;
+      return `${target}이(가) 다시 모셔졌어요`;
     case "champ":
-      return `지난주 ${item.targetName}에 올랐어요! 전용 꾸미기·전용 오라·배지와 포인트를 받았어요`;
+      return `지난주 ${item.targetName}에 올라 보상을 받았어요`;
   }
 }
 

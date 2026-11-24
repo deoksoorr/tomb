@@ -134,7 +134,7 @@ export function meetingTime(min: number): MtTime {
 export const MT_LOOPS: readonly { name: string; trait: string; desc: string }[] = [
   { name: "노을 회의", trait: "", desc: "블라인드 틈으로 주황 노을이 줄무늬로 든다." },
   { name: "야근 회의", trait: "카페인 각성", desc: "블라인드가 내려가고 형광등이 흐려져요. 몬스터가 가끔 커피 김을 뿜으며 확 빨라져요." },
-  { name: "새벽 회의", trait: "회의록 공유", desc: "푸른 새벽빛이 들어요. 몬스터가 쓰러지면 가까운 몬스터 둘의 체력이 차요." },
+  { name: "새벽 회의", trait: "회의록 공유", desc: "푸른 새벽빛이 들어요. 몬스터가 쓰러지면 가까운 몬스터 둘의 HP가 회복돼요." },
   { name: "밤샘 회의", trait: "안건 폭주", desc: "아침 해가 떠요. 정예 「안건 추가」가 층마다 나오고 졸개를 더 많이 불러요." },
   { name: "다음 날 회의", trait: "연장 또 연장", desc: "다음 날 낮이에요. 테이블이 더 자주, 더 깊이 밀려와요." },
 ];

@@ -47,11 +47,12 @@ describe("시즌 가구 카탈로그", () => {
     expect(furnitureById("knit_rug")).toMatchObject({ w: 3, h: 2, floor: true, turn: true });
   });
 
-  it("러그만 빼고 모두 네 방향 가구(spin), 러그는 90°씩 돌리는 바닥 물건", () => {
+  it("러그·눈꽃 창가만 빼고 모두 네 방향 가구(spin), 러그는 90°씩 돌리는 바닥 물건, 눈꽃 창가는 벽 창문 모양 (11/24)", () => {
     for (const f of SEASON) {
-      if (f.id === "knit_rug") expect(f.spin).toBeUndefined();
+      if (f.id === "knit_rug" || f.id === "frost_window") expect(f.spin).toBeUndefined();
       else expect(f.spin, f.id).toBe(true);
     }
+    expect(furnitureById("frost_window")!.skin).toBe("window");
   });
 
   it("다른 갈래에는 seasonWeek가 없고, 가구점에서는 살 수 없다 (보따리상 판매만)", async () => {
@@ -114,10 +115,12 @@ describe("시즌 가구 그림: 네 방향", () => {
 });
 
 describe("시즌 가구 쓰기: 서서 쓰는 가구는 돌린 앞쪽에 서서 바라본다", () => {
-  const standers = SEASON.filter((f) => !f.floor && f.id !== "party_sofa");
+  // 11/24 눈꽃 창가는 바닥에 놓지 않는다 (벽 창문 모양)
+  const placeable = SEASON.filter((f) => f.skin !== "window");
+  const standers = placeable.filter((f) => !f.floor && f.id !== "party_sofa");
 
   it("모든 가구·모든 방향에서 쓸 대상과 안내가 있다", () => {
-    for (const f of SEASON)
+    for (const f of placeable)
       for (let r = SPIN_R0; r < SPIN_R0 + 4; r++) {
         const rr = f.turn ? r - SPIN_R0 : r;
         const t = houseTargets([at(f.id, rr)], small, plan, F).filter((x) => x.item === f.id);

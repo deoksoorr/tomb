@@ -86,49 +86,49 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     synergy: [{ with: ["so_chain"], text: "사슬로 한데 모인 적들이 작은 폭발에 같이 휘말려요" }],
   },
   em_hearth: {
-    summary: "배워 두면 마공 스킬(모닥불·서리·넋)의 공격력이 늘 올라요. 기본 공격과 일꾼 스킬에는 붙지 않아요.",
+    summary: "마공 스킬(모닥불, 서리, 넋)의 공격력이 올라요. 기본 공격과 일꾼 스킬에는 적용되지 않아요.",
     flavor: "화롯가에 손을 녹이면, 무거운 삽도 가볍다.",
     types: ["buff"],
     synergy: [{ with: ["so_friend", "so_lantern"], text: "길동무 넋과 초롱도 내 공격력을 따라 같이 세져요" }],
   },
   em_fan: {
-    summary: "앞쪽 부채꼴로 불길을 뿜어 여러 마리를 한꺼번에 태워요.",
+    summary: "전방 부채꼴로 불길을 뿜어 여러 마리를 한꺼번에 태워요.",
     flavor: "부채 한 번에 불길이 들판처럼 번진다.",
     types: ["melee", "aoe"],
     synergy: [{ with: ["em_ashheart"], text: "광역 스킬이라 피해가 더 올라요" }],
   },
   em_stoke: {
-    summary: "잠깐 동안 마공 스킬의 공격력을 크게 올려요. 큰 스킬을 쓰기 전에 켜 두세요.",
+    summary: "잠시 마공 스킬 공격력이 크게 올라요. 주력 스킬을 쓰기 전에 사용하세요.",
     flavor: "장작 하나 더. 밤은 아직 길다.",
     types: ["buff"],
     synergy: [
-      { with: ["em_bonfire", "em_meteor"], text: "켜 둔 동안 쓰면 오른 공격력으로 터져요" },
+      { with: ["em_bonfire", "em_meteor"], text: "켜 둔 동안 오른 공격력이 그대로 적용돼요" },
       { with: ["so_friend", "so_lantern"], text: "길동무 넋과 초롱도 내 공격력을 따라 세져요" },
     ],
   },
   em_spark: {
-    summary: "배워 두면 마공 스킬의 치명타 확률이 늘 올라요. 기본 공격과 일꾼 스킬에는 붙지 않아요.",
+    summary: "마공 스킬의 치명타 확률이 올라요. 기본 공격과 일꾼 스킬에는 적용되지 않아요.",
     flavor: "탁, 탁. 불티는 늘 엉뚱한 데로 튄다.",
     types: ["buff"],
     synergy: [{ with: ["fr_icicle", "so_wisp"], text: "여러 번 때리는 스킬일수록 치명타가 자주 터져요" }],
   },
   em_ring: {
-    summary: "내 발밑에서 불의 고리가 터져 둘레 적을 모두 태워요.",
+    summary: "내 발밑에서 불의 고리가 터져 주변 적을 모두 태워요.",
     flavor: "둘러앉은 모닥불처럼, 빙 둘러 붉게.",
     types: ["melee", "aoe"],
     synergy: [
-      { with: ["so_chain"], text: "사슬로 내 앞에 끌어모은 뒤 터뜨리면 한 마리도 안 빠져요" },
+      { with: ["so_chain"], text: "사슬로 끌어모은 적을 한 마리도 놓치지 않아요" },
       { with: ["em_ashheart"], text: "광역 스킬이라 피해가 더 올라요" },
     ],
   },
   em_ignite: {
-    summary: "기본 공격이 맞으면 가끔 불씨가 터져요. 둘레 적도 같이 타요. 기본 공격과 삽날 회오리로 터지지만, 불씨 피해는 INT를 받는 마공이에요.",
+    summary: "기본 공격이나 삽날 회오리가 적중하면 일정 확률로 불씨가 터져 주변 적에게도 피해를 줘요. 불씨 피해는 INT가 적용되는 마공이에요.",
     flavor: "스친 자리마다 불씨가 남는다.",
     types: ["basic"],
     synergy: [{ with: ["so_swift"], text: "공격 속도가 오르면 기본 공격이 잦아져 더 자주 터져요" }],
   },
   em_meteor: {
-    summary: "가장 가까운 적 자리에 불붙은 장작을 떨어뜨려요. 조금 늦게 크게 터져요.",
+    summary: "가장 가까운 적 위치에 불붙은 장작을 떨어뜨려요. 잠시 후 크게 폭발해요.",
     flavor: "별똥이 떨어지면 소원을 빌라고? 여기선 장작이 떨어진다.",
     types: ["ranged", "aoe", "delayed"],
     synergy: [
@@ -137,7 +137,7 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     ],
   },
   em_brazier: {
-    summary: "그 자리에 화톳불을 놓아요. 불이 있는 동안 둘레 적이 계속 타요.",
+    summary: "바로 앞에 화톳불을 설치해 주변 적에게 지속 피해를 줘요.",
     flavor: "불 꺼진 마을에 화톳불 하나, 다가오는 것은 모두 그을린다.",
     types: ["field", "aoe"],
     synergy: [
@@ -146,101 +146,101 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     ],
   },
   em_bonfire: {
-    summary: "모닥불지기의 궁극기예요. 불기둥이 화면을 덮어 보이는 적을 모두 여러 번 태워요.",
+    summary: "불기둥이 화면을 덮어 화면 안의 모든 적에게 여러 번 피해를 줘요.",
     flavor: "축제의 밤, 마을 한가운데 큰 불이 오른다.",
     types: ["melee", "aoe"],
     synergy: [
-      { with: ["em_stoke"], text: "공격력을 올려 두고 쓰면 모든 타격이 세게 들어가요" },
+      { with: ["em_stoke"], text: "오른 공격력이 모든 타격에 적용돼요" },
       { with: ["em_ashheart"], text: "광역 스킬이라 피해가 더 올라요" },
     ],
   },
   em_ashheart: {
-    summary: "배워 두면 광역 스킬 피해가 늘 올라요.",
+    summary: "광역 스킬 피해가 올라요.",
     flavor: "다 타고 남은 재 속에도 불씨는 숨 쉰다.",
     types: ["buff"],
     synergy: [{ with: AOE_IDS, text: "◎ 표시가 붙은 광역 스킬은 갈래와 상관없이 모두 피해가 올라요" }],
   },
   // ── 서리 묘지기 ──
   fr_breath: {
-    summary: "앞쪽으로 서리 입김을 뿜어요. 맞은 적은 피해를 받고 느려져요.",
+    summary: "전방으로 서리 입김을 뿜어 피해를 주고 둔화시켜요.",
     flavor: "새벽 공기에 하얀 입김, 그 앞의 것은 얼어붙는다.",
     types: ["melee", "aoe", "control"],
     synergy: [
-      { with: ["fr_brittle"], text: "느려진 적이 피해를 더 받아요" },
+      { with: ["fr_brittle"], text: "둔화된 적이 피해를 더 받아요" },
       { with: ["em_ashheart"], text: "광역 스킬이라 피해가 더 올라요" },
     ],
   },
   fr_collar: {
-    summary: "배워 두면 방어와 최대 HP가 늘 올라요.",
+    summary: "방어와 최대 HP가 올라요.",
     flavor: "옷깃을 여미면, 서리도 바람도 들지 않는다.",
     types: ["defense"],
     synergy: [{ with: ["fr_ward", "so_lamp"], text: "최대 HP가 늘면 방패도, 등불 회복량도 같이 커져요" }],
   },
   fr_icicle: {
-    summary: "앞쪽 부채꼴로 고드름을 여러 개 날려요. 고드름 하나가 한 마리를 꿰뚫어요.",
+    summary: "전방 부채꼴로 고드름을 여러 개 날려요. 고드름은 적 1마리를 관통해요.",
     flavor: "처마 끝 고드름이 한꺼번에 떨어져 날아간다.",
     types: ["ranged", "projectile", "control"],
-    synergy: [{ with: ["fr_brittle"], text: "고드름에 맞은 적은 잠깐 느려져 뒤따르는 공격이 더 아파요" }],
+    synergy: [{ with: ["fr_brittle"], text: "고드름에 맞은 적이 잠시 둔화돼 이어지는 마공 스킬 피해가 늘어나요" }],
   },
   fr_brittle: {
-    summary: "느려지거나 얼어서 묶인 적은 모든 피해를 더 받아요.",
+    summary: "둔화, 빙결, 기절 상태인 적은 마공 스킬 피해를 더 받아요. 기본 공격과 일꾼 스킬에는 적용되지 않아요.",
     flavor: "언 땅은 쉽게 깨진다.",
     types: ["buff"],
-    synergy: [{ with: SLOWERS, text: "적을 느리게 하거나 묶는 스킬과 같이 쓰면 그동안 모든 공격이 더 아파요" }],
+    synergy: [{ with: SLOWERS, text: "둔화, 빙결, 기절 상태인 적에게 주는 마공 피해가 올라요" }],
   },
   fr_ward: {
-    summary: "얼음 방패를 둘러요. 방패가 피해를 먼저 받아 주고, 최대 HP와 INT가 클수록 두꺼워요.",
+    summary: "얼음 방패를 둘러 피해를 먼저 흡수해요. 최대 HP와 INT가 높을수록 두꺼워져요.",
     flavor: "얇지만 단단한 새벽 얼음 한 겹.",
     types: ["defense"],
     synergy: [{ with: ["fr_collar"], text: "최대 HP가 늘수록 방패도 두꺼워져요" }],
   },
   fr_nova: {
-    summary: "내 둘레에 서리꽃을 피워요. 맞은 적은 피해를 받고 잠깐 얼어서 못 움직여요.",
+    summary: "주변에 서리꽃을 피워 피해를 주고 잠시 빙결시켜요.",
     flavor: "발끝에서 서리꽃이 피면, 모두 숨을 멈춘다.",
     types: ["melee", "aoe", "control"],
     synergy: [
-      { with: ["fr_brittle"], text: "얼어 묶인 동안 모든 공격이 더 아파요" },
-      { with: ["em_meteor", "fr_tomb"], text: "얼려 두면 늦게 터지는 스킬을 피하지 못해요" },
+      { with: ["fr_brittle"], text: "빙결된 동안 마공 스킬 피해가 늘어나요" },
+      { with: ["em_meteor", "fr_tomb"], text: "빙결된 적은 늦게 터지는 스킬을 피하지 못해요" },
     ],
   },
   fr_mist: {
-    summary: "바라보는 쪽으로 안개처럼 미끄러져요. 지나가며 적을 베고, 그동안은 안 맞아요.",
+    summary: "바라보는 방향으로 안개처럼 미끄러지며 적을 베요. 그동안 무적이에요.",
     flavor: "안개가 걷히면, 묘지기는 이미 저편에 서 있다.",
     types: ["move", "control", "defense"],
-    synergy: [{ with: ["fr_brittle"], text: "지나친 적은 느려져 피해를 더 받아요" }],
+    synergy: [{ with: ["fr_brittle"], text: "지나친 적이 둔화돼 마공 피해를 더 받아요" }],
   },
   fr_tomb: {
-    summary: "가장 가까운 적 자리에 얼음 무덤을 솟게 해요. 갇힌 적은 못 움직이고 피해를 더 받아요.",
+    summary: "가장 가까운 적 위치에 얼음 무덤을 솟게 해요. 갇힌 적은 기절하고 받는 피해가 늘어요.",
     flavor: "서리로 지은 무덤엔 문이 없다.",
     types: ["ranged", "aoe", "delayed", "control"],
     synergy: [
-      { with: ["em_meteor", "so_harvest"], text: "약해진 적에게 큰 광역기를 이어 쓰면 피해가 커져요" },
-      { with: ["fr_brittle"], text: "묶인 동안은 살얼음 피해도 더해져요" },
+      { with: ["em_meteor", "so_harvest"], text: "받는 피해가 늘어난 적에게 큰 광역기를 이어 쓰기 좋아요" },
+      { with: ["fr_brittle"], text: "기절한 동안 살얼음 피해도 더해져요" },
     ],
   },
   fr_field: {
-    summary: "그 자리에 서리밭을 깔아요. 안에 있는 적은 느려지고 약해지며 계속 피해를 받아요.",
+    summary: "내 자리에 서리밭을 깔아요. 안에 있는 적은 둔화되고 받는 피해가 늘며, 지속 피해를 받아요.",
     flavor: "고요한 서리밭, 발을 들이면 다시는 빨리 걷지 못한다.",
     types: ["field", "aoe", "control"],
     synergy: [
-      { with: ["fr_brittle"], text: "서리밭의 적은 늘 느려져 있어 살얼음 피해가 더해져요" },
-      { with: ["em_ring", "so_harvest"], text: "약해진 적 위에 광역기를 쓰면 더 아파요" },
+      { with: ["fr_brittle"], text: "서리밭 안의 적은 계속 둔화돼 살얼음 피해가 더해져요" },
+      { with: ["em_ring", "so_harvest"], text: "받는 피해가 늘어난 적에게 광역기를 쓰면 피해가 커져요" },
     ],
   },
   fr_blizzard: {
-    summary: "서리 묘지기의 궁극기예요. 화면 가득 눈보라가 불어 보이는 적을 모두 여러 번 때리고 느리게 해요.",
+    summary: "화면 가득 눈보라가 불어 화면 안의 모든 적에게 여러 번 피해를 주고 둔화시켜요.",
     flavor: "한겨울 밤, 눈보라 속에 서 있는 것은 묘지기뿐.",
     types: ["aoe", "control"],
     synergy: [
-      { with: ["fr_brittle"], text: "눈보라에 느려진 적이 피해를 더 받아요" },
+      { with: ["fr_brittle"], text: "눈보라에 둔화된 적이 피해를 더 받아요" },
       { with: ["em_ashheart"], text: "광역 스킬이라 매번 피해가 더 올라요" },
     ],
   },
   fr_solstice: {
-    summary: "배워 두면 마공 스킬 쿨타임만 줄고, 받는 피해도 줄어요. 삽자루 일꾼 스킬 쿨타임은 안 줄어요.",
+    summary: "마공 스킬 쿨타임과 받는 피해가 줄어요. 일꾼 스킬 쿨타임에는 적용되지 않아요.",
     flavor: "가장 긴 밤에 한 맹세는 쉽게 녹지 않는다.",
     types: ["defense"],
-    synergy: [{ with: ["em_bonfire", "fr_blizzard", "so_procession"], text: "마공 스킬 쿨타임만 줄어요. 쿨타임이 긴 궁극기일수록 많이 줄어요" }],
+    synergy: [{ with: ["em_bonfire", "fr_blizzard", "so_procession"], text: "쿨타임이 긴 궁극기일수록 줄어드는 시간이 길어요" }],
   },
   // ── 넋 인도자 ──
   so_wisp: {
@@ -250,16 +250,16 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     synergy: [{ with: ["so_drain"], text: "여러 번 맞힐수록 HP를 자주 거둬요" }],
   },
   so_lamp: {
-    summary: "잠깐 멈춰 서서 등불에 빌어 HP를 채워요. 최대 HP 몫도 INT 위력만큼 커지고 INT×3이 더해져서, INT가 높을수록 많이 차요.",
+    summary: "잠시 멈춰 서서 등불에 빌어 HP를 회복해요. INT가 높을수록 회복량이 커져요.",
     flavor: "등불 하나에 빌면, 넋들이 상처를 쓸어 준다.",
     types: ["heal"],
     synergy: [{ with: ["fr_collar"], text: "최대 HP가 늘면 회복량도 커져요" }],
   },
   so_drain: {
-    summary: "배워 두면 내가 준 피해의 일부만큼 HP가 차요. 한 번에 최대 HP의 3%까지예요.",
+    summary: "준 피해의 일부만큼 HP를 회복해요.",
     flavor: "넋은 가져가되, 조금은 나눠 받는다.",
     types: ["heal"],
-    synergy: [{ with: ["fr_blizzard", "em_brazier", "so_wisp"], text: "자주 여러 번 때리는 스킬과 같이 쓰면 HP가 꾸준히 차요" }],
+    synergy: [{ with: ["fr_blizzard", "em_brazier", "so_wisp"], text: "HP가 꾸준히 회복돼요" }],
   },
   so_swift: {
     summary: "잠깐 동안 이동 속도와 공격 속도가 함께 올라요.",
@@ -268,21 +268,21 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     synergy: [{ with: ["em_ignite"], text: "기본 공격이 빨라져 불씨가 더 자주 터져요" }],
   },
   so_friend: {
-    summary: "길동무 넋을 불러요. 한동안 내 곁에서 같이 싸워요.",
+    summary: "길동무 넋을 불러요. 지속 시간 동안 내 곁에서 함께 싸워요.",
     flavor: "혼자 걷는 밤길은 없다.",
     types: ["summon"],
     synergy: [
-      { with: ["so_kinship"], text: "길동무 피해와 머무는 시간이 늘어요" },
-      { with: ["em_stoke", "em_hearth"], text: "내 공격력을 따라 싸워서 공격력 강화가 그대로 실려요" },
+      { with: ["so_kinship"], text: "길동무 피해와 지속 시간이 늘어요" },
+      { with: ["em_stoke", "em_hearth"], text: "공격력 증가 효과가 그대로 적용돼요" },
     ],
   },
   so_chain: {
-    summary: "넋 사슬로 둘레 적을 내 앞에 끌어모아요. 묶인 적은 피해를 더 받아요.",
+    summary: "넋 사슬로 주변 적을 내 앞에 끌어모아 기절시켜요. 끌려온 적은 받는 피해가 늘어요.",
     flavor: "흩어진 넋들을 한 줄로 엮어 데려간다.",
     types: ["aoe", "control"],
     synergy: [
-      { with: ["em_ring", "fr_nova", "em_bonfire"], text: "끌어모은 바로 그 자리에 내 둘레 광역기를 터뜨리면 모두 맞아요" },
-      { with: ["fr_brittle"], text: "묶인 동안 살얼음 피해가 더해져요" },
+      { with: ["em_ring", "fr_nova", "em_bonfire"], text: "끌어모은 자리에서 내 주변 광역기를 쓰면 모두 맞아요" },
+      { with: ["fr_brittle"], text: "기절한 동안 살얼음 피해가 더해져요" },
     ],
   },
   so_veil: {
@@ -292,71 +292,71 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     synergy: [{ with: ["fr_solstice"], text: "쿨타임이 줄어 위험할 때 더 자주 피할 수 있어요" }],
   },
   so_harvest: {
-    summary: "가장 가까운 적 자리에 넋 소용돌이를 열어요. 세 번 휘몰아치고, 맞힌 만큼 HP가 차요.",
+    summary: "가장 가까운 적 위치에 넋 소용돌이를 열어요. 세 번 휘몰아치고, 맞힌 만큼 HP를 회복해요.",
     flavor: "소용돌이 한가운데서 넋들이 등불 쪽으로 빨려 든다.",
     types: ["ranged", "aoe", "heal"],
     synergy: [
-      { with: ["fr_tomb", "so_chain"], text: "묶여 있는 적 위에 열면 세 번 모두 맞아요" },
+      { with: ["fr_tomb", "so_chain"], text: "기절한 적 위에 열면 세 번 모두 맞아요" },
       { with: ["em_ashheart"], text: "광역 스킬이라 피해가 더 올라요" },
     ],
   },
   so_lantern: {
-    summary: "그 자리에 초롱을 걸어요. 한동안 초롱이 가까운 적에게 넋불을 쏴요.",
+    summary: "바로 앞에 초롱을 설치해요. 지속 시간 동안 초롱이 가까운 적에게 넋불을 쏴요.",
     flavor: "망자의 초롱은 꺼지지 않는다. 다만 잠들 뿐.",
     types: ["summon", "ranged"],
     synergy: [
-      { with: ["so_kinship"], text: "초롱 피해와 머무는 시간이 늘어요" },
-      { with: ["em_stoke", "em_hearth"], text: "내 공격력을 따라 쏴서 공격력 강화가 그대로 실려요" },
+      { with: ["so_kinship"], text: "초롱 피해와 지속 시간이 늘어요" },
+      { with: ["em_stoke", "em_hearth"], text: "공격력 증가 효과가 그대로 적용돼요" },
     ],
   },
   so_procession: {
-    summary: "넋 인도자의 궁극기예요. 넋들의 행렬이 화면을 휩쓸어 보이는 적을 모두 여러 번 때리고, 내 HP도 채워 줘요.",
+    summary: "넋들의 행렬이 화면을 휩쓸어 화면 안의 모든 적에게 여러 번 피해를 주고, 내 HP도 회복해요.",
     flavor: "별빛을 따라 걷는 행렬, 모두가 마침내 집으로 간다.",
     types: ["melee", "aoe", "heal"],
     synergy: [
-      { with: ["so_chain"], text: "약해진 적이 많을 때 쓰면 모든 타격이 더 아파요" },
+      { with: ["so_chain"], text: "받는 피해가 늘어난 적이 많을수록 모든 타격이 강해져요" },
       { with: ["em_ashheart"], text: "광역 스킬이라 피해가 더 올라요" },
     ],
   },
   so_kinship: {
-    summary: "배워 두면 길동무 넋과 망자의 초롱이 더 세지고 더 오래 머물러요.",
+    summary: "길동무 넋과 망자의 초롱의 피해와 지속 시간이 늘어요.",
     flavor: "한 번 맺은 인연은 저승길에서도 이어진다.",
     types: ["summon"],
-    synergy: [{ with: ["so_friend", "so_lantern"], text: "부르는 스킬의 피해와 머무는 시간이 늘어요" }],
+    synergy: [{ with: ["so_friend", "so_lantern"], text: "소환 스킬의 피해와 지속 시간이 늘어요" }],
   },
   // ── 삽자루 일꾼 (11/19 물공: 지능을 받지 않고, 기본 공격처럼 명중 판정을 받아요) ──
   wk_charge: {
-    summary: "바라보는 쪽으로 돌진해 길 위의 적을 크게 한 방 치고 밀쳐요. 쿨타임이 길고, 무적이 아니라서 들어간 자리가 위험할 수 있어요.",
+    summary: "가까운 적 방향으로, 적이 없으면 바라보는 방향으로 돌진해 경로의 적에게 큰 피해를 주고 밀쳐내요. 돌진하는 순간만 무적이라 도착한 자리가 위험할 수 있어요. 쿨타임이 길어요.",
     flavor: "삽자루를 앞세우면 길이 난다.",
     types: ["melee", "move"],
-    synergy: [{ with: ["wk_combo"], text: "돌진으로 붙자마자 찌르고 퍼 올리면 딱 맞아요" }],
+    synergy: [{ with: ["wk_combo"], text: "돌진으로 붙은 직후 바로 이어 쓰기 좋아요" }],
   },
   wk_callus: {
-    summary: "배워 두면 기본 공격 피해가 오르고, 근접 기본 공격이 옆과 뒤로도 같이 나가요.",
+    summary: "기본 공격 피해가 오르고, 근접 기본 공격이 옆과 뒤로도 나가요.",
     flavor: "앞만 보고 파는 일꾼은 없다.",
     types: ["basic", "buff"],
     synergy: [{ with: ["wk_whirl"], text: "회오리는 기본 공격으로 베어서 같이 세져요" }],
   },
   wk_combo: {
-    summary: "앞을 두 번 찌르고 크게 퍼 올려요. 한 번 피해가 아주 크고 마지막 한 번에 적이 기절해요. 대신 쿨타임이 길어요.",
+    summary: "전방을 두 번 찌르고 크게 퍼 올려요. 피해가 매우 크고 마지막 타격에 적을 기절시켜요. 대신 쿨타임이 길어요.",
     flavor: "푹, 푹, 그리고 한 삽 가득.",
     types: ["melee", "control"],
-    synergy: [{ with: ["fr_brittle"], text: "기절한 적은 살얼음 추가 피해를 받아요" }],
+    synergy: [{ with: ["fr_brittle"], text: "기절한 적에게 마공 스킬을 쓰면 살얼음 추가 피해가 붙어요. 퍼 올리기 자체에는 붙지 않아요" }],
   },
   wk_grip: {
-    summary: "배워 두면 공격 속도가 늘 빨라져요.",
+    summary: "공격 속도가 올라요.",
     flavor: "손에 익은 삽은 저절로 움직인다.",
     types: ["basic", "buff"],
     synergy: [{ with: ["wk_whirl"], text: "공격 속도가 빠를수록 회오리가 더 자주 베어요" }],
   },
   wk_back: {
-    summary: "배워 두면 받는 피해가 줄고, 근접 공격과 투사체를 가끔 삽으로 막거나 쳐내요. 광역·바닥 장판은 못 막아요.",
+    summary: "받는 피해가 줄고, 일정 확률로 근접 공격과 투사체를 막아 피해를 크게 줄여요. 광역 공격과 바닥 장판은 막을 수 없어요.",
     flavor: "허리가 버텨야 밤새 판다.",
     types: ["defense"],
-    synergy: [{ with: ["wk_leap"], text: "착지한 뒤 못 움직이는 동안 덜 아파요" }],
+    synergy: [{ with: ["wk_leap"], text: "착지 후 움직일 수 없는 동안 받는 피해가 줄어요" }],
   },
   wk_leap: {
-    summary: "적이 가장 몰린 곳으로 뛰어올라 크게 내려찍어요. 둘레 적이 기절하지만, 착지한 뒤 잠깐 못 움직여요.",
+    summary: "적이 가장 많이 모인 곳으로 도약해 내려찍고 주변 적을 기절시켜요. 착지 후 잠시 움직일 수 없어요.",
     flavor: "봉분 하나쯤은 단숨에 넘는다.",
     types: ["melee", "move", "control"],
     synergy: [
@@ -365,40 +365,40 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     ],
   },
   wk_tireless: {
-    summary: "잠깐 동안 공격 속도가 빨라지고 기본 공격이 더 멀리 닿아요.",
+    summary: "잠시 공격 속도가 오르고 기본 공격 사거리가 늘어요.",
     flavor: "쉬면 굳는다. 그러니 계속 판다.",
     types: ["basic", "buff"],
     synergy: [{ with: ["wk_whirl"], text: "켜 두면 회오리가 더 자주 베어요" }],
   },
   wk_whirl: {
-    summary: "누르면 정해진 시간 동안 빙글빙글 돌며 둘레를 베어요. 끝나면 잠깐 쉬고, 다시 누르면 일찍 멈춰요.",
+    summary: "누르면 일정 시간 회전하며 주변 적을 베요. 다시 누르면 일찍 멈추고, 회전한 시간만큼만 쿨타임이 돌아요.",
     flavor: "삽날이 바람을 가르는 소리.",
     types: ["melee", "basic"],
     synergy: [{ with: ["wk_grip", "wk_tireless"], text: "공격 속도가 빠를수록 더 자주 베어요" }],
   },
   wk_pack: {
-    summary: "배워 두면 STR이 높을수록 삽자루 일꾼 스킬의 SP가 덜 들고(최대 50%) 쿨타임이 짧아져요(최대 15%). INT 없이도 판 내내 스킬을 돌릴 수 있어요. 일꾼 스킬 쿨타임은 카드·장비까지 다 합쳐 25%까지만 줄어요.",
+    summary: "STR이 높을수록 일꾼 스킬의 SP 소모량과 쿨타임이 줄어요. INT 없이도 스킬을 계속 쓸 수 있어요. 일꾼 스킬 쿨타임 감소는 카드와 장비를 합쳐 최대 25%예요.",
     flavor: "짐을 잘 지는 등은 쉽게 지치지 않는다.",
     types: ["buff"],
     synergy: [{ with: ["wk_leap", "wk_combo"], text: "SP를 많이 쓰는 뛰어넘기와 퍼 올리기를 더 자주 써요" }],
   },
   wk_deep: {
-    summary: "배워 두면 기본 공격과 일꾼 스킬의 치명타 피해가 늘 올라요.",
+    summary: "기본 공격과 일꾼 스킬의 치명타 피해가 올라요.",
     flavor: "얕게 백 번보다 깊게 한 번.",
     types: ["basic", "buff"],
-    synergy: [{ with: ["wk_grit"], text: "10번째 반드시 치명타가 더 아프게 들어가요" }],
+    synergy: [{ with: ["wk_grit"], text: "10번째 확정 치명타의 피해도 커져요" }],
   },
   wk_allnight: {
-    summary: "적 사이를 여섯 번 연달아 돌진하며 한 번 한 번 크게 쳐요. 돌진하는 순간만 무적이라 사이사이에는 맞을 수 있어요.",
+    summary: "적 사이를 여섯 번 연속 돌진하며 큰 피해를 줘요. 돌진하는 순간만 무적이라 그 사이에는 공격받을 수 있어요.",
     flavor: "새벽이 올 때까지, 한 삽도 쉬지 않는다.",
     types: ["melee", "move"],
-    synergy: [{ with: ["wk_deep"], text: "돌진 한 번 한 번이 치명타 피해를 받아요" }],
+    synergy: [{ with: ["wk_deep"], text: "돌진마다 치명타 피해 증가가 적용돼요" }],
   },
   wk_grit: {
-    summary: "배워 두면 기본 공격 10번째마다 반드시 치명타가 나고, 기본 공격 피해가 올라요.",
+    summary: "기본 공격 피해가 오르고, 기본 공격 10번째마다 치명타가 반드시 터져요.",
     flavor: "열 번째 삽질은 늘 제일 깊다.",
     types: ["basic", "buff"],
-    synergy: [{ with: ["wk_deep"], text: "반드시 치명타가 치명타 피해를 그대로 받아요" }],
+    synergy: [{ with: ["wk_deep"], text: "확정 치명타에도 치명타 피해 증가가 적용돼요" }],
   },
 };
 
@@ -439,7 +439,7 @@ function effectRows(id: SkillId, lv: number): [string, string][] {
       return [["치명타 확률", `+${SKILL_FX.em_spark(lv).crit}%`]];
     case "em_ring": {
       const f = SKILL_FX.em_ring(lv);
-      return [["피해", dmg(f.mult)], ["범위", `내 둘레 반지름 ${f.radius}`]];
+      return [["피해", dmg(f.mult)], ["범위", `내 주변 반지름 ${f.radius}`]];
     }
     case "em_ignite": {
       const f = SKILL_FX.em_ignite(lv);
@@ -469,17 +469,17 @@ function effectRows(id: SkillId, lv: number): [string, string][] {
     }
     case "fr_icicle": {
       const f = SKILL_FX.fr_icicle(lv);
-      return [["고드름", `${f.n}개`], ["하나 피해", dmg(f.mult)], ["거리", `${f.range} · ${f.pierce}마리 꿰뚫기`]];
+      return [["고드름", `${f.n}개`], ["하나 피해", dmg(f.mult)], ["거리", `${f.range} · ${f.pierce}마리 관통`]];
     }
     case "fr_brittle":
-      return [["느려진·묶인 적 피해", `+${pct(SKILL_FX.fr_brittle(lv).vsSlowed)}`]];
+      return [["둔화·빙결·기절한 적에게 마공 피해", `+${pct(SKILL_FX.fr_brittle(lv).vsSlowed)}`]];
     case "fr_ward": {
       const f = SKILL_FX.fr_ward(lv);
       return [["방패", `최대 HP의 ${pct(f.shieldPct)} × 스킬 위력`], ["지속", sec(f.durMs)]];
     }
     case "fr_nova": {
       const f = SKILL_FX.fr_nova(lv);
-      return [["피해", dmg(f.mult)], ["범위", `내 둘레 반지름 ${f.radius}`], ["얼려 묶기", sec(f.freezeMs)]];
+      return [["피해", dmg(f.mult)], ["범위", `내 주변 반지름 ${f.radius}`], ["빙결", sec(f.freezeMs)]];
     }
     case "fr_mist": {
       const f = SKILL_FX.fr_mist(lv);
@@ -491,7 +491,7 @@ function effectRows(id: SkillId, lv: number): [string, string][] {
         ["피해", dmg(f.mult)],
         ["범위", `반지름 ${f.radius} · 사거리 ${f.reach}`],
         ["솟기까지", sec(f.delayMs)],
-        ["묶기", sec(f.stunMs)],
+        ["기절", sec(f.stunMs)],
         ["약화", `받는 피해 +${pct(f.vuln)} · ${sec(f.vulnMs)}`],
       ];
     }
@@ -523,11 +523,11 @@ function effectRows(id: SkillId, lv: number): [string, string][] {
     }
     case "so_friend": {
       const f = SKILL_FX.so_friend(lv);
-      return [["길동무 공격", `${dmg(f.atkPct)} · ${sec(f.everyMs)}마다`], ["머무는 시간", sec(f.durMs)]];
+      return [["길동무 공격", `${dmg(f.atkPct)} · ${sec(f.everyMs)}마다`], ["지속 시간", sec(f.durMs)]];
     }
     case "so_chain": {
       const f = SKILL_FX.so_chain(lv);
-      return [["피해", dmg(f.mult)], ["끌어오는 범위", `반지름 ${f.radius}`], ["묶기", sec(f.stunMs)], ["약화", `받는 피해 +${pct(f.vuln)}`]];
+      return [["피해", dmg(f.mult)], ["끌어오는 범위", `반지름 ${f.radius}`], ["기절", sec(f.stunMs)], ["약화", `받는 피해 +${pct(f.vuln)}`]];
     }
     case "so_veil": {
       const f = SKILL_FX.so_veil(lv);
@@ -543,7 +543,7 @@ function effectRows(id: SkillId, lv: number): [string, string][] {
     }
     case "so_lantern": {
       const f = SKILL_FX.so_lantern(lv);
-      return [["넋불 피해", `${dmg(f.atkPct)} · ${sec(f.everyMs)}마다`], ["머무는 시간", sec(f.durMs)], ["사거리", `${f.range}`]];
+      return [["넋불 피해", `${dmg(f.atkPct)} · ${sec(f.everyMs)}마다`], ["지속 시간", sec(f.durMs)], ["사거리", `${f.range}`]];
     }
     case "so_procession": {
       const f = SKILL_FX.so_procession(lv);
@@ -551,12 +551,12 @@ function effectRows(id: SkillId, lv: number): [string, string][] {
     }
     case "so_kinship": {
       const f = SKILL_FX.so_kinship(lv);
-      return [["소환 피해", `+${pct(f.summonPct)}`], ["머무는 시간", `+${pct(f.durPct)}`]];
+      return [["소환 피해", `+${pct(f.summonPct)}`], ["지속 시간", `+${pct(f.durPct)}`]];
     }
     // ── 삽자루 일꾼 (물공) ──
     case "wk_charge": {
       const f = SKILL_FX.wk_charge(lv);
-      return [["피해", dmg(f.mult)], ["돌진 거리", `${f.dist}`], ["무적", sec(f.invulnMs)]];
+      return [["피해", dmg(f.mult)], ["돌진 거리", `${f.dist}`], ["무적", `${f.invulnMs / 1000}초`]];
     }
     case "wk_callus": {
       const f = SKILL_FX.wk_callus(lv);
@@ -574,15 +574,15 @@ function effectRows(id: SkillId, lv: number): [string, string][] {
     }
     case "wk_leap": {
       const f = SKILL_FX.wk_leap(lv);
-      return [["착지 피해", dmg(f.mult)], ["착지 반지름", `${f.radius}`], ["기절", sec(f.stunMs)], ["착지 뒤 못 움직임", sec(f.landMs)]];
+      return [["착지 피해", dmg(f.mult)], ["착지 반지름", `${f.radius}`], ["기절", sec(f.stunMs)], ["착지 후 경직", sec(f.landMs)]];
     }
     case "wk_tireless": {
       const f = SKILL_FX.wk_tireless(lv);
-      return [["공격 속도", `+${pct(f.aspd)}`], ["닿는 거리", `+${pct(f.rangeMul - 1)}`], ["지속", sec(f.durMs)]];
+      return [["공격 속도", `+${pct(f.aspd)}`], ["사거리", `+${pct(f.rangeMul - 1)}`], ["지속", sec(f.durMs)]];
     }
     case "wk_whirl": {
       const f = SKILL_FX.wk_whirl(lv);
-      return [["한 번 피해", dmg(f.mult)], ["반지름", `${f.radius}`], ["도는 시간", sec(f.durMs)], ["걷는 빠르기", pct(f.moveMul)]];
+      return [["한 번 피해", dmg(f.mult)], ["반지름", `${f.radius}`], ["도는 시간", sec(f.durMs)], ["이동 속도", pct(f.moveMul)]];
     }
     case "wk_pack": {
       const f = SKILL_FX.wk_pack(lv);
@@ -590,7 +590,7 @@ function effectRows(id: SkillId, lv: number): [string, string][] {
       return [
         ["SP 절약", `STR 1당 ${p2(f.perStr)} (최대 ${pct(f.cap)})`],
         ["쿨타임 감소", `STR 1당 ${p2(f.cdPerStr)} (최대 ${pct(f.cdCap)})`],
-        ["STR 80이면", `SP −${pct(Math.min(f.cap, 80 * f.perStr))} · 쿨 −${pct(Math.min(f.cdCap, 80 * f.cdPerStr))}`],
+        ["STR 80이면", `SP −${pct(Math.min(f.cap, 80 * f.perStr))} · 쿨타임 −${pct(Math.min(f.cdCap, 80 * f.cdPerStr))}`],
       ];
     }
     case "wk_deep":
@@ -691,7 +691,7 @@ export function linkLines(id: SkillId, a: Alloc): LinkLine[] {
   if (links)
     out.push({
       kind: "core",
-      text: `연계: ${links.map((l) => `${skillById(l.id)!.name} 랭크마다 +${pctN(l.pct)}%`).join(" · ")} · 몰아 찍으면 야근 빌딩에서 받는 피해 최대 −${pctN((SYNERGY_GUARD[id] ?? 0))}%`,
+      text: `연계: ${links.map((l) => `${skillById(l.id)!.name} 랭크마다 +${pctN(l.pct)}%`).join(" · ")} · 야근 빌딩에서 받는 피해 최대 −${pctN((SYNERGY_GUARD[id] ?? 0))}%`,
       now: pctN(synergyMul(id, a) - 1),
       guard: pctN(synergyGuardOf(id, a)),
       ids: links.map((l) => l.id),
@@ -699,7 +699,7 @@ export function linkLines(id: SkillId, a: Alloc): LinkLine[] {
   for (const t of synergyTargets(id))
     out.push({
       kind: "support",
-      text: `연계: 이 스킬 랭크마다 ${skillById(t.core)!.name} 피해 +${pctN(t.pct)}% · 야근 빌딩에서 받는 피해 −${Math.round(synergyGuardPerRank(t.core, id) * 1000) / 10}%(핵심 랭크만큼)`,
+      text: `연계: 랭크마다 ${skillById(t.core)!.name} 피해 +${pctN(t.pct)}% · 야근 빌딩에서 받는 피해 −${Math.round(synergyGuardPerRank(t.core, id) * 1000) / 10}%(핵심 랭크만큼)`,
       now: pctN(t.pct * (a[id] ?? 0)),
       guard: pctN(synergyGuardOf(t.core, a)),
       ids: [t.core],

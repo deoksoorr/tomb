@@ -108,7 +108,7 @@ function statRows(code: string): { k: string; label: string; base: number; plus:
 const STAT_NAMES: Record<string, string> = {
   atk: "공격력",
   def: "방어",
-  hp: "체력",
+  hp: "HP",
   sp: "SP",
   str: "STR",
   agi: "AGI",
@@ -116,11 +116,11 @@ const STAT_NAMES: Record<string, string> = {
   int: "INT",
   dex: "DEX",
   luk: "LUK",
-  aspd: "공속",
-  crit: "치명",
+  aspd: "공격 속도",
+  crit: "치명타",
   hit: "명중",
   flee: "회피",
-  move: "이속",
+  move: "이동 속도",
 };
 const num = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(2));
 
@@ -512,7 +512,7 @@ export default function EnhanceDialog({
         ) : tab === "inherit" ? (
           <>
             <p className={g.note}>
-              같은 부위의 강화한 장비를 재료로 써서 더 높은 직급의 이 장비에 강화를 옮겨요. 기본 능력치가 재료보다 떨어지지 않는 단계로 옮겨지고, 재료 장비는 사라져요.{" "}
+              같은 부위의 강화된 장비를 재료로 써서 더 높은 직급의 이 장비로 강화 단계를 옮겨요. 기본 능력치가 재료보다 낮아지지 않는 단계로 옮겨지고, 재료 장비는 사라져요.{" "}
               <OddsLink section="enhance" label="승계표" />
             </p>
             {inherited && (

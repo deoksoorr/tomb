@@ -5,9 +5,11 @@ import {
   type HouseExteriorMap,
   DEFAULT_FLOOR,
   DEFAULT_WALL,
+  DEFAULT_WINDOW,
   furnitureById,
   isFloorSkin,
   isWallSkin,
+  isWindowSkin,
   houseScore,
   STYLE_TAGS,
   tierById,
@@ -56,6 +58,13 @@ export const rotateMode = (def: Pick<FurnitureDef, "turn" | "spin">): "turn" | "
 /** 단추·안내 이름 */
 export const ROTATE_LABEL = { turn: "↻ 돌리기", flip: "⇆ 뒤집기" } as const;
 
+/**
+ * 상점 큰 미리보기 단추 이름: 4방향 「돌려 보기」, 나머지 「뒤집어 보기」.
+ * 11/24 창문 모양(눈꽃 창가)은 방향이 없어 돌리지 않고 열고 닫은 모습만 본다 (r 홀수 = 열림)
+ */
+export const previewTurnLabel = (def: Pick<FurnitureDef, "turn" | "spin" | "skin">, r: number): string =>
+  def.skin === "window" ? (r % 2 ? "닫아 보기" : "열어 보기") : rotateMode(def) === "turn" ? "돌려 보기" : "뒤집어 보기";
+
 /** 이 물건에 쓸 수 있는 r인지 (4~7은 4방향 가구만) */
 export const validRotation = (def: Pick<FurnitureDef, "spin">, r: number): boolean =>
   Number.isInteger(r) && r >= 0 && r <= (def.spin ? MAX_R : 3);
@@ -68,6 +77,9 @@ export function gateTiles(tier: Pick<PlotTier, "w" | "h">): { x: number; y: numb
     { x: x + 1, y: tier.h - 1 },
   ];
 }
+
+/** 창문 스킨을 못 고를 때 (꾸미기 「창문」 칸 안내와 같은 말) */
+export const WINDOW_LOCKED_MSG = "가구 보따리상의 눈꽃 창가가 있으면 고를 수 있어요.";
 
 export type LayoutError = { ok: false; code: string; message: string };
 export type LayoutOk = { ok: true; counts: Record<string, number>; placedScore: number };
@@ -127,12 +139,28 @@ export function buildOccupancy(items: readonly Placed[], tier: TierShape, skipU?
   return occ;
 }
 
-/** 이 배치에서 쓰는 물건 수 (기본 스킨 제외) */
+/** 이 배치에서 쓰는 물건 수 (기본 스킨 제외). 11/24 창문 스킨(눈꽃 창가)도 바닥·벽지처럼 1개를 쓰고 점수도 한 번 */
 export function layoutCounts(layout: HouseLayout): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const p of layout.items) counts[p.i] = (counts[p.i] ?? 0) + 1;
-  for (const s of [layout.floor, layout.wall]) if (s !== DEFAULT_FLOOR && s !== DEFAULT_WALL) counts[s] = (counts[s] ?? 0) + 1;
+  for (const s of [layout.floor, layout.wall, layout.window ?? DEFAULT_WINDOW])
+    if (s !== DEFAULT_FLOOR && s !== DEFAULT_WALL && s !== DEFAULT_WINDOW) counts[s] = (counts[s] ?? 0) + 1;
   return counts;
+}
+
+/** 지금 창문 모양 (없거나 모르는 값이면 기본) */
+export const windowOf = (layout: Pick<HouseLayout, "window">): string => (layout.window && isWindowSkin(layout.window) ? layout.window : DEFAULT_WINDOW);
+
+/**
+ * 11/24 눈꽃 창가는 바닥 가구에서 벽 창문 모양으로 바뀌었다. 예전에 바닥에 놓아 저장한 배치를 읽을 때:
+ * 놓인 것은 배치에서 빼고, 창문이 기본이면 그 창문 모양으로 입힌다 (산 사람이 원한 모습 · 쓰는 개수 1 · 점수 한 번).
+ * 둘 이상 놓았으면 나머지는 가방으로 (다음 저장 때 놓은 개수가 다시 세어진다). 바꿀 것이 없으면 같은 객체를 돌려준다
+ */
+export function liftWindowSkins(layout: HouseLayout): HouseLayout {
+  const lifted = layout.items.filter((p) => furnitureById(p.i)?.skin === "window");
+  if (!lifted.length) return layout;
+  const cur = windowOf(layout);
+  return { ...layout, items: layout.items.filter((p) => furnitureById(p.i)?.skin !== "window"), window: cur !== DEFAULT_WINDOW ? cur : lifted[0].i };
 }
 
 /** 놓은 물건 + 입힌 스킨의 꾸밈 점수 (좋아요 제외) */
@@ -154,6 +182,7 @@ export function validateLayout(layout: HouseLayout, tierId: PlotTierId, owned: R
   if (!tier) return fail("BAD_TIER", "터 크기를 알 수 없어요.");
   if (!isFloorSkin(layout.floor)) return fail("BAD_SKIN", "알 수 없는 바닥이에요.");
   if (!isWallSkin(layout.wall)) return fail("BAD_SKIN", "알 수 없는 담장이에요.");
+  if (layout.window !== undefined && !isWindowSkin(layout.window)) return fail("BAD_SKIN", "알 수 없는 창문이에요.");
   if (layout.items.length > tier.maxItems)
     return fail("TOO_MANY", `${tier.name}에는 물건을 ${tier.maxItems}개까지 놓을 수 있어요.`);
   const occ = new Occupancy(tier);
@@ -162,6 +191,7 @@ export function validateLayout(layout: HouseLayout, tierId: PlotTierId, owned: R
     if (!UID_RE.test(p.u) || seen.has(p.u)) return fail("BAD_LAYOUT", "배치 정보가 올바르지 않아요.");
     seen.add(p.u);
     const def = furnitureById(p.i);
+    if (def?.skin === "window") return fail("BAD_ITEM", `${def.name}: 바닥에 놓지 않고 꾸미기의 「창문」 칸에서 골라요.`);
     if (!def || def.skin || def.ext) return fail("BAD_ITEM", "알 수 없는 물건이 있어요.");
     if (![p.x, p.y].every(Number.isInteger) || !validRotation(def, p.r)) return fail("BAD_LAYOUT", "배치 정보가 올바르지 않아요.");
     const why = occ.check(def, p.x, p.y, p.r);
@@ -171,7 +201,11 @@ export function validateLayout(layout: HouseLayout, tierId: PlotTierId, owned: R
   const counts = layoutCounts(layout);
   if (owned) {
     for (const [id, n] of Object.entries(counts))
-      if ((owned[id] ?? 0) < n) return fail("NOT_OWNED", `가진 ${furnitureById(id)?.name ?? id}보다 더 많이 놓았어요.`);
+      if ((owned[id] ?? 0) < n)
+        return fail(
+          "NOT_OWNED",
+          furnitureById(id)?.skin === "window" ? WINDOW_LOCKED_MSG : `가진 ${furnitureById(id)?.name ?? id}보다 더 많이 놓았어요.`,
+        );
   }
   return { ok: true, counts, placedScore: placedScore(layout) };
 }

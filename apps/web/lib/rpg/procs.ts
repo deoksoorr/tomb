@@ -52,7 +52,7 @@ export function cardProc(id: ProcCardId, o: { reviveHp?: number; leaveAspd?: num
   const base = { key: `card:${id}`, name: def.name, color: RARITY_COLOR[def.rarity], art: { card: id } as ProcArt };
   switch (id) {
     case "overtime":
-      return { ...base, line: `체력 ${pct(o.reviveHp ?? 0.3)}로 다시 일어나요`, left: "남은 부활 0번", ...(o.big ? { big: true } : {}) };
+      return { ...base, line: `HP ${pct(o.reviveHp ?? 0.3)}로 다시 일어나요`, left: "남은 부활 0번", ...(o.big ? { big: true } : {}) };
     case "halfday":
       return { ...base, line: "이번 공격은 안 아파요", left: "다음 층에서 다시 차요" };
     case "leave":
@@ -68,9 +68,9 @@ export function sgProc(kind: SgProcKind, icon: IconArt, grade = 3): ProcInfo {
   const art = { icon };
   switch (kind) {
     case "vacation":
-      return { key: "sg:vacation", name: SG_LEGENDS[3].name, line: "체력 1로 버텼어요", left: "남은 횟수 0번", color, art };
+      return { key: "sg:vacation", name: SG_LEGENDS[3].name, line: "HP 1로 버텼어요", left: "남은 횟수 0번", color, art };
     case "overtimeFour":
-      return { key: "sg:overtimeFour", name: SG_SET_INFO.overtime.name, line: "공격력 +25%, 받는 피해 −10%", color: hexOf(SG_SET_INFO.overtime.color), art };
+      return { key: "sg:overtimeFour", name: SG_SET_INFO.overtime.name, line: "공격력 +25%, 받는 피해 −15%", color: hexOf(SG_SET_INFO.overtime.color), art };
     case "bossLow":
       return { key: "sg:bossLow", name: SG_LEGENDS[1].name, line: "우두머리에게 주는 피해 +25%", color, art };
   }
@@ -96,7 +96,7 @@ export function cookieProc(big = true): ProcInfo {
   return {
     key: "potion:p_cookie",
     name: p?.name ?? "부활 쿠키",
-    line: "체력 50%로 다시 일어나요",
+    line: "HP 50%로 다시 일어나요",
     left: "한 판에 한 번이에요",
     color: 0xffe39a,
     art: { icon: p?.art ?? { shape: "cookie", main: 0xc89a5a, accent: 0x5a3e22 } },

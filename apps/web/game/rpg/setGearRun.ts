@@ -103,7 +103,7 @@ export class SetGearRun {
     return this.four.has("trip") && now - this.lastHurt >= SG_FX.tripIdleMs;
   }
 
-  /** 받는 피해 배율 (옵션 받는 피해 − · 야근 4세트 체력 30% 아래 −10%). 맞은 시각을 적는다 (출장 4세트) */
+  /** 받는 피해 배율 (옵션 받는 피해 − · 야근 4세트 늘 −8% · 체력 30% 아래 −15% 더). 맞은 시각을 적는다 (출장 4세트) */
   takenMul(now: number, hp: number, maxHp: number): number {
     this.lastHurt = now;
     let k = 1 - this.c.guard;

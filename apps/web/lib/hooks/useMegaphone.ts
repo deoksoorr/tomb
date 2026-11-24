@@ -68,14 +68,12 @@ export type MegaphoneState = {
   /** 지금 한마디가 내려가는 시각 (뒤에 기다리는 것이 생기면 당겨진다) */
   flashUntil: number;
   collapsed: boolean;
-  /** 외치기 창 열림 */
-  composing: boolean;
   /** 11/17 맨 위 고정 공지 (그 채널 것 먼저, 모든 채널 것 다음) */
   pins: MegaPin[];
 };
 
 class MegaphoneStore {
-  private state: MegaphoneState = { entries: [], flash: null, queue: [], flashUntil: 0, collapsed: false, composing: false, pins: [] };
+  private state: MegaphoneState = { entries: [], flash: null, queue: [], flashUntil: 0, collapsed: false, pins: [] };
   private listeners = new Set<() => void>();
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
   private flashStartedAt = 0;
@@ -193,18 +191,11 @@ class MegaphoneStore {
     writeItem(COLLAPSED_KEY, collapsed ? "1" : "0");
     this.update({ collapsed });
   }
-
-  compose(open: boolean): void {
-    this.update({ composing: open });
-  }
 }
 
 export const megaphoneStore = new MegaphoneStore();
 
-/** 가방 등 다른 곳에서 외치기 창을 연다 */
-export const openMegaphone = () => megaphoneStore.compose(true);
-
-const SERVER: MegaphoneState = { entries: [], flash: null, queue: [], flashUntil: 0, collapsed: false, composing: false, pins: [] };
+const SERVER: MegaphoneState = { entries: [], flash: null, queue: [], flashUntil: 0, collapsed: false, pins: [] };
 export function useMegaphone(): MegaphoneState {
   return useSyncExternalStore(megaphoneStore.subscribe, megaphoneStore.getSnapshot, () => SERVER);
 }

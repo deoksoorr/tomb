@@ -1,5 +1,7 @@
 "use client";
 
+import { AUTO_CROWD, AUTO_HEAL_HP } from "@/lib/rpg/autoSkill";
+import { CHAIR_HEAL_CAP_PER_SEC, CHAIR_HEAL_MUL } from "@/game/chairman/rules";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { bridge } from "@/game/bridge";
 import { GAMES, POTIONS, SKILLS, type GameKind, type SkillId } from "@/lib/rpg/catalog";
@@ -99,7 +101,7 @@ function KeyHelp({ chair }: { chair: boolean }) {
           </div>
         ))}
       </dl>
-      <small>자동 스킬은 쓰기 좋은 때를 기다렸다가 써요. 궁극기와 이동 스킬은 자동이 안 돼요.</small>
+      <small>자동 스킬은 사거리 안에 적이 있을 때 사용해요. 광역 스킬은 적이 {AUTO_CROWD}마리 이상 모이거나 우두머리가 있을 때, 회복 스킬은 HP가 {Math.round(AUTO_HEAL_HP * 100)}% 미만일 때 사용해요. 궁극기, 이동 스킬, 켜고 끄는 삽날 회오리는 자동으로 사용할 수 없어요.</small>
     </div>
   );
 }
@@ -321,7 +323,7 @@ export default function RunHud({
       const touch = window.matchMedia?.("(pointer: coarse)").matches;
       setHint(
         touch
-          ? "[자동]을 누르면 자동 스킬이 전부 켜지고 꺼져요. 화면 왼쪽을 누른 채 끌면 걸어요."
+          ? "[자동]을 누르면 자동 스킬을 모두 켜고 꺼요. 화면 왼쪽을 끌면 이동해요."
           : "H를 누르면 키 안내가 다시 떠요",
       );
       timer = setTimeout(() => setHint(null), AUTO_HINT_MS);
@@ -394,7 +396,7 @@ export default function RunHud({
                     </span>
                     {/* 11/20 회복 감소 (흡혈·재생·스킬 회복 — 물약은 그대로) */}
                     {hud.chair.heal && (
-                      <span className={s.healCut} title="흡혈·재생·스킬 회복이 30%로, 초당 최대 체력의 2%까지만 차요. 물약은 그대로예요">
+                      <span className={s.healCut} title={`흡혈, 재생, 스킬 회복량이 ${Math.round((1 - CHAIR_HEAL_MUL) * 100)}% 줄고, 1초에 최대 HP의 ${Math.round(CHAIR_HEAL_CAP_PER_SEC * 100)}%까지만 회복해요. 물약 회복량은 그대로예요.`}>
                         {hud.chair.heal}
                       </span>
                     )}
@@ -575,7 +577,7 @@ export default function RunHud({
                 className={cx(s.skillBtn, s.dodgeSlot)}
                 onPointerDown={(e) => act(e, { kind: "dodge" })}
                 aria-label={`낙법 (Z)${dodgeSec > 0 ? `, ${dodgeSec}초 뒤에 다시 써요` : ""}`}
-                title="낙법 (Z · K). 보는 쪽으로 구르고, 구르는 동안은 안 맞아요"
+                title="낙법 (Z · K). 바라보는 방향으로 구르고, 그동안 무적이에요"
               >
                 <RpgIcon art={DODGE_ART} size={32} />
                 <span className={s.skillKey}>Z</span>
@@ -613,7 +615,7 @@ export default function RunHud({
                       e.stopPropagation();
                     }}
                     aria-label={`${sk.name} (${key})${auto ? (live ? ", 자동" : ", 자동 꺼둠") : ""}${short ? `, SP ${need} 필요` : ""}`}
-                    title={ult ? `${sk.name} (F). 궁극기는 직접 써요` : `${sk.name} (${key}). 오른쪽 클릭이나 Shift+${key}로 자동을 켜고 꺼요`}
+                    title={ult ? `${sk.name} (F). 궁극기는 직접 써요` : `${sk.name} (${key}). 우클릭이나 Shift+${key}로 자동 사용을 켜고 꺼요`}
                   >
                     <RpgIcon art={sk.art} size={32} />
                     <span className={s.skillKey}>{key}</span>
@@ -637,8 +639,8 @@ export default function RunHud({
                     e.preventDefault();
                     setEdit(!editing);
                   }}
-                  aria-label={editing ? "자동 고르기 끝내기" : "자동 고르기. 누른 다음 스킬 칸을 누르면 그 칸이 자동이 돼요"}
-                  title="누른 다음 스킬 칸을 누르면 그 칸이 자동이 돼요. 스킬은 나가지 않아요."
+                  aria-label={editing ? "자동 고르기 끝내기" : "자동 고르기. 누른 뒤 스킬 칸을 누르면 그 칸이 자동 사용으로 설정돼요"}
+                  title="누른 뒤 스킬 칸을 누르면 그 칸이 자동 사용으로 설정돼요. 스킬은 사용되지 않아요."
                 >
                   자동
                 </button>
@@ -670,7 +672,7 @@ export default function RunHud({
                 type="button"
                 className={cx(s.skillBtn, s.dodgeBtn)}
                 onPointerDown={(e) => act(e, { kind: "dodge" })}
-                aria-label={`구르기${dodgeSec > 0 ? `, ${dodgeSec}초 뒤에 다시 써요` : ". 구르는 동안은 안 맞아요"}`}
+                aria-label={`구르기${dodgeSec > 0 ? `, ${dodgeSec}초 뒤에 다시 써요` : ". 구르는 동안 무적이에요"}`}
               >
                 <RpgIcon art={DODGE_ART} size={32} />
                 <span className={s.dodgeLabel}>구르기</span>

@@ -76,8 +76,11 @@ export type FurnitureDef = {
   spin?: boolean;
   /** 밤에 빛을 내는 물건 (색, 반지름 px) */
   light?: { color: number; r: number };
-  /** 바닥·담장 스킨: 칸에 놓지 않고 집 전체에 입힌다 */
-  skin?: "floor" | "wall";
+  /**
+   * 바닥·담장 스킨: 칸에 놓지 않고 집 전체에 입힌다.
+   * 11/24 "window" = 안쪽 벽 창문 모양 (눈꽃 창가). 바닥·벽지와 달리 두 집 공용 가방 가구라 isHouseOwnDef에서 빠진다
+   */
+  skin?: "floor" | "wall" | "window";
   /** 외관 아이템: 마을에 보이는 집 바깥의 한 자리 (지붕·벽·울타리…). 칸에 놓지 않는다 */
   ext?: ExtSlot;
   /** 집 안에서 E로 할 수 있는 일 (상점 안내용 짧은 말. 실제 동작은 game/housing/interact.ts) */
@@ -212,7 +215,8 @@ export const FURNITURE: readonly FurnitureDef[] = [
   ...season("w1", [
     ["winter_stove", "무쇠 난로", "연통 달린 까만 난로예요. 위에서 주전자가 보글보글 끓어요.", 360, 18, 1, 1, "불 켜기·끄기", { color: 0xffa050, r: 30 }],
     ["knit_rug", "니트 러그", "눈꽃을 떠 넣은 도톰한 뜨개 러그예요. 위에 다른 가구를 올려도 돼요.", 200, 10, 3, 2, "러그에 앉기"],
-    ["frost_window", "눈꽃 창가", "서리 낀 창에 종이 눈꽃을 붙였어요. 아래 라디에이터에선 양말이 말라 가요.", 220, 11, 2, 1, "창에 입김 불기"],
+    // 11/24 바닥에 놓는 가구가 아니라 벽 창문 모양 (skin "window"). 예전에 놓은 것은 읽을 때 창문으로 옮긴다 (layout.ts liftWindowSkins)
+    ["frost_window", "눈꽃 창가", "서리 낀 창에 종이 눈꽃을 붙였어요. 집 꾸미기에서 벽 창문을 눈꽃 창가로 바꿀 수 있어요. 하나로 집 한 채에 쓸 수 있어요.", 220, 11, 2, 1, "창문 열기·닫기"],
     ["log_basket", "장작 바구니", "통나무를 가득 담은 바구니예요. 솔방울은 덤이에요.", 120, 6, 1, 1, "장작 한 아름 안기"],
     ["cocoa_table", "코코아 탁자", "생크림 코코아 두 잔이 식기 전에 와요.", 160, 8, 1, 1, "코코아 마시기"],
     ["scarf_grave", "털모자 쓴 비석", "추울까 봐 털모자랑 목도리를 씌워 줬어요. 묘지 마을의 겨울 인사예요.", 180, 9, 1, 1, "목도리 고쳐 매 주기"],
@@ -293,7 +297,7 @@ export const FURNITURE: readonly FurnitureDef[] = [
   ]),
 ];
 
-/** 11/19 시즌 가구 한 묶음: 니트 러그만 바닥에 까는 물건(돌리면 90°씩 돌아감), 나머지는 모두 네 방향 가구 */
+/** 11/19 시즌 가구 한 묶음: 니트 러그만 바닥에 까는 물건(돌리면 90°씩 돌아감), 11/24 눈꽃 창가는 벽 창문 모양, 나머지는 모두 네 방향 가구 */
 function season(week: string, rows: [string, string, string, number, number, number, number, string, FurnitureDef["light"]?][]): FurnitureDef[] {
   return rows.map(([id, name, desc, price, score, w, h, use, light]) => ({
     id,
@@ -305,7 +309,7 @@ function season(week: string, rows: [string, string, string, number, number, num
     w,
     h,
     use,
-    ...(id === "knit_rug" ? { floor: true, turn: true } : { spin: true }),
+    ...(id === "knit_rug" ? { floor: true, turn: true } : id === "frost_window" ? { skin: "window" as const } : { spin: true }),
     ...(light ? { light } : {}),
     seasonWeek: week,
   }));
@@ -338,6 +342,9 @@ export const DEFAULT_WALL = "wall_fence";
 /** 기본 스킨 이름 (화면 표시용) */
 export const DEFAULT_FLOOR_NAME = "낡은 장판";
 export const DEFAULT_WALL_NAME = "나무 판자 벽";
+/** 11/24 안쪽 벽 기본 창문 (배치에 window가 없으면 이것). 무료·점수 없음 */
+export const DEFAULT_WINDOW = "window_plain";
+export const DEFAULT_WINDOW_NAME = "기본";
 
 const BY_ID = new Map(FURNITURE.map((f) => [f.id, f]));
 export const furnitureById = (id: string): FurnitureDef | undefined => BY_ID.get(id);
@@ -350,6 +357,11 @@ export const isExclusiveFurniture = (f: Pick<FurnitureDef, "ghost" | "seasonWeek
 
 export const isFloorSkin = (id: string) => id === DEFAULT_FLOOR || furnitureById(id)?.skin === "floor";
 export const isWallSkin = (id: string) => id === DEFAULT_WALL || furnitureById(id)?.skin === "wall";
+export const isWindowSkin = (id: string) => id === DEFAULT_WINDOW || furnitureById(id)?.skin === "window";
+/** 창문 스킨 목록 (꾸미기 「창문」 칸: 기본 + 가진 것·못 가진 것 모두) */
+export const WINDOW_SKINS: readonly string[] = [DEFAULT_WINDOW, ...FURNITURE.filter((f) => f.skin === "window").map((f) => f.id)];
+/** 집에 딸린 물건 (바닥·벽지·외관 — 산 집 가방에 남는다). 창문 스킨(눈꽃 창가)은 시즌 가구라 두 집 공용 가방 */
+export const isHouseOwnDef = (d: Pick<FurnitureDef, "skin" | "ext"> | undefined): boolean => !!(d?.ext || d?.skin === "floor" || d?.skin === "wall");
 
 /** 되팔 때 돌려받는 비율 */
 export const SELL_BACK_RATE = 0.5;

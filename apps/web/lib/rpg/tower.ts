@@ -472,7 +472,7 @@ export function checkTowerStart(a: {
   if (!towerCheckpoints(a.best, a.sup).includes(a.start))
     return {
       code: "TOWER_LOCKED",
-      message: `${a.start}층 버튼은 아직 불이 꺼져 있어요. ${a.start - 1}층 우두머리를 잡으면 켜져요.`,
+      message: `${a.start}층 버튼은 아직 불이 꺼져 있어요. ${a.start - 1}층 우두머리를 처치하면 켜져요.`,
     };
   return null;
 }
@@ -531,6 +531,12 @@ export const TOWER_POINT_GRACE = 10;
 export const towerFitFloor = (tLevel: number) => Math.max(1, Math.floor(Math.max(0, tLevel)) * TOWER_FIT_PER_T);
 /** 이 층부터 포인트를 준다 */
 export const towerPointFrom = (tLevel: number) => Math.max(1, towerFitFloor(tLevel) - TOWER_POINT_GRACE);
+/** 11/24 포인트 없는 lo~hi층에서 받는 것 (「초월 경험치만」 / 상자 층이 끼면 상자까지) — 「… 받아요」 앞에 붙인다 */
+export function towerNoPointGain(lo: number, hi: number): string {
+  if (hi < TOWER_CHEST_FROM) return "초월 EXP만";
+  if (lo >= TOWER_CHEST_FROM) return "초월 EXP와 우두머리 상자만";
+  return `초월 EXP와 ${TOWER_CHEST_FROM}층부터 열리는 우두머리 상자만`;
+}
 /** start층부터 깬 floors층의 포인트 (적정보다 낮은 층은 0). 초월 레벨은 판을 시작할 때 값 */
 export function towerRunPoints(start: number, floors: number, tLevel: number): { points: number; free: number } {
   const from = towerPointFrom(tLevel);

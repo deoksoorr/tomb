@@ -74,8 +74,8 @@ export const SG_SET_INFO: Record<SgSet, SgSetInfo> = {
       acc1: "반지 위에 번개 캔이 얹혀 있다.",
       acc2: "목걸이 끝에 뚜껑 덮인 빈 종이컵.",
     },
-    two: "최대 체력 +10%",
-    four: "늘 받는 피해 −8%, 체력이 30% 아래일 때 공격력 +25%·받는 피해 −15% 더",
+    two: "최대 HP +10%",
+    four: "받는 피해 −8%, HP 30% 미만일 때 공격력 +25%, 받는 피해 −15% 추가",
   },
   approval: {
     name: "결재 세트",
@@ -97,7 +97,7 @@ export const SG_SET_INFO: Record<SgSet, SgSetInfo> = {
       acc1: "로제트 위에 펜촉이 꽂힌 브로치.",
       acc2: "붉은 목줄 출입증. 사장실 문이 열린다.",
     },
-    two: "치명타 +6%",
+    two: "치명타 확률 +6%",
     four: "치명타가 터질 때마다 3초 동안 공격 속도 +20%",
   },
   meeting: {
@@ -120,8 +120,8 @@ export const SG_SET_INFO: Record<SgSet, SgSetInfo> = {
       acc1: "빨간 점이 반짝이는 귀걸이.",
       acc2: "스프링 수첩. 회의록은 아무도 안 읽는다.",
     },
-    two: "SP +20%, 마법 피해 +8%",
-    four: "스킬을 쓸 때마다 다음 스킬 재사용 시간 −15%",
+    two: "SP +20%, 마공 피해 +8%",
+    four: "스킬을 쓸 때마다 다음 스킬 쿨타임 −15%",
   },
   trip: {
     name: "출장 세트",
@@ -144,7 +144,7 @@ export const SG_SET_INFO: Record<SgSet, SgSetInfo> = {
       acc2: "바코드가 찍힌, 끝이 말린 영수증.",
     },
     two: "이동 속도 +8%",
-    four: "3초 동안 안 맞았을 때 다음 공격 피해 +40%",
+    four: "3초 동안 피해를 받지 않으면 다음 기본 공격 피해 +40%",
   },
 };
 
@@ -232,12 +232,12 @@ export const SG_OPTS: Record<SgOpt, SgOptDef> = {
   d: { name: "치명타 피해", lo: [8, 12], hi: [15, 20], on: ["weapon", "acc"] },
   s: { name: "공격 속도", lo: [3, 5], hi: [6, 8], on: ["weapon", "acc"] },
   b: { name: "우두머리 피해", lo: [5, 8], hi: [11, 15], on: ["weapon"] },
-  h: { name: "최대 체력", lo: [4, 6], hi: [8, 10], on: ["armor", "head"] },
+  h: { name: "최대 HP", lo: [4, 6], hi: [8, 10], on: ["armor", "head"] },
   r: { name: "받는 피해", minus: true, lo: [2, 3], hi: [5, 6], on: ["armor"] },
   p: { name: "물약 회복량", lo: [10, 15], hi: [25, 30], on: ["armor", "acc"] },
   m: { name: "이동 속도", lo: [2, 3], hi: [5, 6], on: ["head", "acc"] },
   k: {
-    name: "스킬 재사용 시간",
+    name: "스킬 쿨타임",
     minus: true,
     lo: [3, 4],
     hi: [7, 8],
@@ -245,8 +245,8 @@ export const SG_OPTS: Record<SgOpt, SgOptDef> = {
   },
   // 11/19 물공·마공 옵션
   t: { name: "명중", lo: [4, 6], hi: [10, 14], on: ["weapon", "head", "acc"] },
-  f: { name: "물리 피해", lo: [3, 5], hi: [7, 10], on: ["weapon", "acc"] },
-  g: { name: "마법 피해", lo: [3, 5], hi: [7, 10], on: ["weapon", "acc"] },
+  f: { name: "물공 피해", lo: [3, 5], hi: [7, 10], on: ["weapon", "acc"] },
+  g: { name: "마공 피해", lo: [3, 5], hi: [7, 10], on: ["weapon", "acc"] },
 };
 export const SG_OPT_IDS = Object.keys(SG_OPTS) as SgOpt[];
 /** 직급별 랜덤 옵션 수 */
@@ -254,13 +254,13 @@ export const SG_OPT_COUNT = [2, 2, 3, 3] as const;
 /** 임원급에만 붙는 전설 옵션 확률 */
 export const SG_LEGEND_CHANCE = 0.1;
 export const SG_LEGENDS: Record<number, { name: string; desc: string }> = {
-  1: { name: "결재 완료", desc: "우두머리 체력이 30% 아래일 때 주는 피해 +25%" },
+  1: { name: "결재 완료", desc: "우두머리 HP가 30% 미만일 때 주는 피해 +25%" },
   2: { name: "칼퇴", desc: "판 시작 20초 동안 공격 속도 +30%" },
   3: {
     name: "연차",
-    desc: "한 판에 한 번, 쓰러질 피해를 받아도 체력 1로 버텨요",
+    desc: "한 판에 한 번, 쓰러질 피해를 받아도 HP 1로 버텨요",
   },
-  4: { name: "야근 수당", desc: "몬스터를 잡을 때마다 체력 1% 회복" },
+  4: { name: "야근 수당", desc: "몬스터를 처치할 때마다 HP 1% 회복" },
 };
 export const SG_LEGEND_IDS = [1, 2, 3, 4] as const;
 
@@ -541,13 +541,13 @@ export const SG_EGG: Record<SgSet, SgEggInfo> = {
   },
   approval: {
     name: "도장 쾅",
-    desc: "치명타가 터질 때 가끔 적에게 빨간 「승인」 도장이 쾅 — 그 적은 0.3초 멈춰요",
+    desc: "치명타가 터질 때 일정 확률로 적에게 빨간 「승인」 도장이 쾅 — 그 적은 0.3초 멈춰요",
     line: "치명타에 「승인」 도장이 찍혀요",
   },
   meeting: {
     name: "회의가 길어진다",
-    desc: "스킬을 쓰면 가끔 「…그래서 말인데요」 — 둘레 적이 1초 꾸벅꾸벅 졸며 느려져요",
-    line: "둘레 적이 꾸벅꾸벅 졸아요",
+    desc: "스킬을 쓰면 일정 확률로 「…그래서 말인데요」 — 주변 적이 1초 꾸벅꾸벅 졸며 둔화돼요",
+    line: "주변 적이 꾸벅꾸벅 졸아요",
   },
   trip: {
     name: "마일리지 적립",

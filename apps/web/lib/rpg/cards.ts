@@ -125,16 +125,16 @@ const c = (id: CardId, name: string, rarity: CardRarity, max: number, desc: stri
 
 export const CARDS: Record<CardId, CardDef> = {
   // ── 일반 ──
-  raise: c("raise", "연봉 협상", "common", 5, "공격력이 10% 올라요. 기본 공격과 모든 스킬(물공·마공)이 같이 세져요.", 0xffc84a, 0x5a3a1a),
+  raise: c("raise", "연봉 협상", "common", 5, "공격력이 10% 올라요. 기본 공격과 모든 스킬(물공, 마공)에 적용돼요.", 0xffc84a, 0x5a3a1a),
   quick: c("quick", "손이 빨라짐", "common", 5, "공격 속도가 8% 빨라져요.", 0x6ae0d0, 0x1e3a3a),
-  health: c("health", "체력 관리", "common", 5, "최대 체력이 10% 늘어요.", 0xe86a8a, 0xffe0e8),
+  health: c("health", "체력 관리", "common", 5, "최대 HP가 10% 늘어요.", 0xe86a8a, 0xffe0e8),
   commute: c("commute", "빠른 퇴근길", "common", 3, "이동 속도가 10% 빨라져요.", 0x7ac8f0, 0x2a3a5a),
-  coffee: c("coffee", "커피 수혈", "common", Infinity, "지금 바로 내 체력이 40% 차요.", 0x8a5a3a, 0xf2ead3),
-  offwork: c("offwork", "칼퇴 의지", "common", 2, "내가 적을 잡을 때마다 내 체력이 1% 차요.", 0x5ad08a, 0xf2ead3),
+  coffee: c("coffee", "커피 수혈", "common", Infinity, "즉시 최대 HP의 40%를 회복해요.", 0x8a5a3a, 0xf2ead3),
+  offwork: c("offwork", "칼퇴 의지", "common", 2, "적을 처치할 때마다 최대 HP의 1%를 회복해요.", 0x5ad08a, 0xf2ead3),
   sharp: c("sharp", "예리한 지적", "common", 4, "치명타 확률이 6%, 치명타 피해가 15% 올라요.", 0xe84a6a, 0xf2ead3),
   mix: c("mix", "믹스커피", "common", 3, "SP가 1초에 2씩 더 차요.", 0xe8b84a, 0xc83a3a),
   memo: c("memo", "메모 습관", "common", 3, "치명타 피해가 18% 올라요.", 0xf0e08a, 0x3a6ac8),
-  walk: c("walk", "점심 산책", "common", 3, "최대 체력이 6%, 이동 속도가 4% 올라요.", 0x7ad07a, 0x8a6a40),
+  walk: c("walk", "점심 산책", "common", 3, "최대 HP가 6%, 이동 속도가 4% 올라요.", 0x7ad07a, 0x8a6a40),
   // ── 매직 ──
   circular: c("circular", "회람", "magic", 2, "내 공격이 양쪽 대각선으로도 나가요.", 0xe8c86a, 0x5a4a2a, {
     melee: "양쪽 대각선으로도 같이 휘둘러요.",
@@ -161,11 +161,11 @@ export const CARDS: Record<CardId, CardDef> = {
     ranged: "쏜 공격이 맞힌 뒤 근처 적에게 튕겨 가요.",
     magic: "터진 자리에서 서류가 근처 적에게 튕겨 가요.",
   }),
-  papers: c("papers", "서류 방패", "magic", 2, "서류가 내 둘레를 돌며 날아오는 공격을 막아요.", 0xf2ead3, 0x7ab8e8),
-  snack: c("snack", "탕비실 간식", "magic", 2, "층을 깰 때마다 내 체력이 8% 차요.", 0xe8a86a, 0xe84a6a),
+  papers: c("papers", "서류 방패", "magic", 2, "서류가 내 주변을 돌며 날아오는 공격을 막아요.", 0xf2ead3, 0x7ab8e8),
+  snack: c("snack", "탕비실 간식", "magic", 2, "층을 깰 때마다 최대 HP의 8%를 회복해요.", 0xe8a86a, 0xe84a6a),
   badge: c("badge", "사원증 목걸이", "magic", 3, "받는 피해가 6% 줄어요.", 0x4a8ad8, 0xf2ead3),
   halfday: c("halfday", "반차", "magic", 1, "층마다 내가 처음 맞는 공격 한 번은 안 아파요.", 0xf0d070, 0x5a8ad8),
-  minutes: c("minutes", "회의록 정리", "magic", 2, "이번 판 경험치를 15% 더 받아요.", 0x9ad0a0, 0x3a4a6a),
+  minutes: c("minutes", "회의록 정리", "magic", 2, "이번 판 EXP를 15% 더 받아요.", 0x9ad0a0, 0x3a4a6a),
   // ── 레어 ──
   cc: c("cc", "참조 추가", "rare", 3, "공격이 한 번 더 나가요. 대신 한 번 피해가 10% 줄어요.", 0x7ab8e8, 0xf2ead3, {
     melee: "한 번 더 휘둘러요. 대신 한 번 피해가 10% 줄어요.",
@@ -175,32 +175,32 @@ export const CARDS: Record<CardId, CardDef> = {
   parallel: c("parallel", "병렬 처리", "rare", 2, "내 공격이 앞으로 한 줄 더 나가요.", 0x5ad0a0, 0x1e3a4a, {
     melee: "휘두르면 앞으로 서류 바람이 날아가요. 적을 뚫고 가요.",
     ranged: "앞으로 나란히 한 발 더 쏴요.",
-    magic: "앞쪽 다른 적 발밑에서도 잉크가 터져요.",
+    magic: "전방의 다른 적 발밑에서도 잉크가 터져요.",
   }),
   direct: c("direct", "직보", "rare", 1, "내 공격이 더 멀리 닿아요.", 0xe85a5a, 0xffe08a, {
     melee: "공격이 35% 더 멀리 닿아요.",
     ranged: "쏜 공격이 적을 뚫고 지나가요. 원래 뚫는 무기면 피해가 20% 올라요.",
     magic: "잉크가 35% 더 넓게 터져요.",
   }),
-  passion: c("passion", "야근 열정", "rare", 1, "내가 때린 적이 한동안 불타요.", 0xff7a3a, 0xffe08a),
-  chill: c("chill", "냉랭한 분위기", "rare", 1, "내가 때린 적이 느려지고, 가끔 꽁꽁 얼어요.", 0x8ad8f0, 0xe8f8ff),
+  passion: c("passion", "야근 열정", "rare", 1, "내가 때린 적에게 화상을 입혀요.", 0xff7a3a, 0xffe08a),
+  chill: c("chill", "냉랭한 분위기", "rare", 1, "내가 때린 적이 둔화되고, 일정 확률로 빙결돼요.", 0x8ad8f0, 0xe8f8ff),
   solo: c("solo", "독박 업무", "rare", 1, "내가 때린 적에게 독이 쌓여요. 많이 쌓일수록 독 피해가 커져요.", 0x8ac83a, 0x2a3a1a),
   urgent: c("urgent", "급한 호출", "rare", 1, "내가 공격할 때마다 번개가 근처 적 셋에게 옮겨 가요.", 0xf0e05a, 0x3a3aa8),
-  boards: c("boards", "도는 결재판", "rare", 3, "결재판이 내 둘레를 돌며 닿는 적을 쳐요.", 0xc8884a, 0xf2ead3),
+  boards: c("boards", "도는 결재판", "rare", 3, "결재판이 내 주변을 돌며 닿는 적을 쳐요.", 0xc8884a, 0xf2ead3),
   intern: c("intern", "인턴 소환", "rare", 2, "인턴이 따라다니며 서류를 던져요.", 0x6ab0e8, 0xf0c8a0),
   // ── 유니크 ──
-  afterparty: c("afterparty", "회식 2차", "unique", 1, "내가 잡은 적이 펑 터져서 둘레 적도 피해를 받아요.", 0xff8a3a, 0xffe08a),
-  resign: c("resign", "퇴사 각", "unique", 1, "내 체력이 적을수록 세게 쳐요. 내 체력이 거의 바닥이면 피해가 60% 올라요.", 0xd84a4a, 0xf2ead3),
+  afterparty: c("afterparty", "회식 2차", "unique", 1, "내가 처치한 적이 펑 터져 주변 적도 피해를 받아요.", 0xff8a3a, 0xffe08a),
+  resign: c("resign", "퇴사 각", "unique", 1, "HP가 낮을수록 주는 피해가 커지고, HP가 거의 없으면 최대 60%까지 올라요.", 0xd84a4a, 0xf2ead3),
   chainline: c("chainline", "결재 라인", "unique", 1, "번개가 다섯 번 옮겨 가고 더 세져요. 급한 호출이 없어도 번개가 나가요.", 0x6a6ae8, 0xfff06a),
   wfh: c("wfh", "재택근무", "unique", 2, "가만히 서 있으면 받는 피해가 15% 줄어요.", 0x7ac8a8, 0xe8d8b0),
   politics: c("politics", "사내 정치", "unique", 1, "내가 때린 적이 15% 확률로 옆에 있는 적을 대신 때려요.", 0xb86ad8, 0xffd84a),
   bonus: c("bonus", "성과급", "unique", 2, "우두머리와 정예에게 주는 피해가 30% 올라요.", 0x5ad08a, 0xffd84a),
   // ── 전설 ──
   oneshot: c("oneshot", "원샷 결재", "legend", 1, "내 공격이 5% 확률로 일반 몬스터를 한 번에 잡아요.", 0xffd84a, 0xa83c3c),
-  overtime: c("overtime", "무한 야근", "legend", 1, "내가 쓰러져도 한 번은 체력 30%로 다시 일어나요.", 0xe8dcff, 0xffd84a),
+  overtime: c("overtime", "무한 야근", "legend", 1, "쓰러져도 한 번은 HP 30%로 다시 일어나요.", 0xe8dcff, 0xffd84a),
   promote: c("promote", "팀장 승진", "legend", 1, "다른 카드의 수치가 모두 50% 더 세져요. 넋 전용 카드는 빼고요.", 0x3a3a5a, 0xffd84a),
-  corpcard: c("corpcard", "법인카드", "legend", 1, "내가 적을 잡으면 가끔 5초 동안 공격력, 공격 속도, 이동 속도 중 하나가 올라요.", 0x2a2a3a, 0xd8b84a),
-  leave: c("leave", "연차 몰아 쓰기", "legend", 1, "내 체력이 30% 아래로 떨어지면 3초 동안 무적이 되고, 5초 동안 공격 속도가 50% 올라요. 층마다 한 번이에요.", 0x7ad0f0, 0xf2ead3),
+  corpcard: c("corpcard", "법인카드", "legend", 1, "적을 처치하면 일정 확률로 5초 동안 공격력, 공격 속도, 이동 속도 중 하나가 올라요.", 0x2a2a3a, 0xd8b84a),
+  leave: c("leave", "연차 몰아 쓰기", "legend", 1, "HP가 30% 미만이 되면 3초 동안 무적이 되고, 5초 동안 공격 속도가 50% 올라요. 층마다 1번 발동해요.", 0x7ad0f0, 0xf2ead3),
   // ── 11/19 갈래 카드 (스킬 트리 갈래를 키운다) ──
   brEmber: c("brEmber", "불씨 단속", "magic", 2, "모닥불 스킬 피해가 15% 올라요.", 0xff7a2e, 0xffd27a),
   brFrost: c("brFrost", "서리 낀 창문", "magic", 2, "서리 스킬 피해가 15% 올라요.", 0x8fd8ff, 0xf2fbff),
@@ -214,7 +214,7 @@ export const CARDS: Record<CardId, CardDef> = {
   refund: c("refund", "경비 환급", "unique", 1, "마공 스킬을 쓰면 쓴 SP의 30%를 돌려받아요.", 0xffd84a, 0x4a2a8a),
   // ── 11/19 넋 갈래 카드 ──
   soulQuick: c("soulQuick", "손 빠른 동기", "magic", 2, "부른 넋(길동무 넋·망자의 초롱)의 공격 간격이 13% 짧아져요.", 0xb98aff, 0x9ff0dc),
-  soulDrain: c("soulDrain", "넋 수당", "magic", 2, "넋 스킬과 부른 넋이 준 피해의 2%만큼 HP가 차요. 한 번에 최대 HP의 1%까지예요.", 0x9ff0dc, 0x4a2a8a),
+  soulDrain: c("soulDrain", "넋 수당", "magic", 2, "넋 스킬과 부른 넋이 준 피해의 2%만큼 HP를 회복해요. 한 번에 최대 HP의 1%까지예요.", 0x9ff0dc, 0x4a2a8a),
   soulChain: c("soulChain", "끌려가는 결재", "rare", 1, "넋 사슬 범위가 25% 넓어지고, 넋 사슬 약화가 5%p 더 붙어요.", 0x8a5ad8, 0xe8d8ff),
   soulLamp: c("soulLamp", "퇴근길 등불", "unique", 1, "넋 스킬이나 부른 넋으로 적을 쓰러뜨리면 넋불이 튀어 근처 적 둘을 쳐요.", 0x9ff0dc, 0xb98aff),
   soulParade: c("soulParade", "백귀야행", "legend", 1, "별빛 행렬을 쓰면 8초 동안 부른 넋 피해가 25% 오르고, 넋 스킬 쿨타임이 30% 줄어요.", 0x2a1448, 0x9ff0dc),
@@ -282,17 +282,17 @@ export function cardStackLine(id: CardId, have: number, owned?: CardCounts): str
     case "sharp":
       return `${step("치명타", 6)}, ${step("치명타 피해", 15)}`;
     case "health":
-      return step("최대 체력", 10);
+      return step("최대 HP", 10);
     case "commute":
       return step("이동 속도", 10);
     case "offwork":
-      return step("처치할 때 체력", 1);
+      return step("처치할 때 HP 회복", 1);
     case "mix":
       return step("SP 회복", 2, "/초");
     case "memo":
       return step("치명타 피해", 18);
     case "walk":
-      return `${step("최대 체력", 6)}, ${step("이동 속도", 4)}`;
+      return `${step("최대 HP", 6)}, ${step("이동 속도", 4)}`;
     case "brEmber":
       return step("모닥불 스킬 피해", 15);
     case "brFrost":
@@ -312,11 +312,11 @@ export function cardStackLine(id: CardId, have: number, owned?: CardCounts): str
     case "refill":
       return `${step("최대 SP", 25)}, ${step("SP 회복", 1, "/초")}`;
     case "snack":
-      return step("층을 깰 때 체력", 8);
+      return step("층을 깰 때 HP 회복", 8);
     case "badge":
       return down("받는 피해", 6);
     case "minutes":
-      return step("판 경험치", 15);
+      return step("판 EXP", 15);
     case "wfh":
       return down("서 있을 때 받는 피해", 15);
     case "bonus":
@@ -361,13 +361,13 @@ export function cardPromoLine(id: CardId, n: number, owned: CardCounts | undefin
       case "quick":
         return up("공격 속도", 8);
       case "health":
-        return up("최대 체력", 10);
+        return up("최대 HP", 10);
       case "commute":
         return up("이동 속도", 10);
       case "coffee":
-        return `바로 체력 +${fmt(40 * k)}%`;
+        return `즉시 HP 회복 +${fmt(40 * k)}%`;
       case "offwork":
-        return up("처치할 때 체력", 1);
+        return up("처치할 때 HP 회복", 1);
       case "sharp":
         return `${up("치명타", 6)}, ${up("치명타 피해", 15)}`;
       case "mix":
@@ -375,7 +375,7 @@ export function cardPromoLine(id: CardId, n: number, owned: CardCounts | undefin
       case "memo":
         return up("치명타 피해", 18);
       case "walk":
-        return `${up("최대 체력", 6)}, ${up("이동 속도", 4)}`;
+        return `${up("최대 HP", 6)}, ${up("이동 속도", 4)}`;
       case "brEmber":
         return up("모닥불 스킬 피해", 15);
       case "brFrost":
@@ -405,15 +405,15 @@ export function cardPromoLine(id: CardId, n: number, owned: CardCounts | undefin
       case "refund":
         return `쓴 SP ${fmt(Math.min(REFUND_MAX, 0.3 * k) * 100)}% 환급`;
       case "snack":
-        return up("층을 깰 때 체력", 8);
+        return up("층을 깰 때 HP 회복", 8);
       case "badge":
         return down("받는 피해", 6);
       case "minutes":
-        return up("판 경험치", 15);
+        return up("판 EXP", 15);
       case "direct":
         return kind === "melee" ? up("닿는 거리", 35) : kind === "magic" ? up("터지는 범위", 35) : `원래 뚫는 무기면 피해 +${fmt(20 * k)}%`;
       case "resign":
-        return `체력이 바닥일 때 피해 +${fmt(60 * k)}%`;
+        return `HP가 바닥일 때 피해 +${fmt(60 * k)}%`;
       case "wfh":
         return down("서 있을 때 받는 피해", 15);
       case "bonus":
@@ -423,7 +423,7 @@ export function cardPromoLine(id: CardId, n: number, owned: CardCounts | undefin
       case "oneshot":
         return `원샷 확률 ${fmt(5 * k)}%`;
       case "overtime":
-        return `다시 일어날 때 체력 ${fmt(30 * k)}%`;
+        return `다시 일어날 때 HP ${fmt(30 * k)}%`;
       case "leave":
         return `5초 동안 공격 속도 +${fmt(50 * k)}%`;
       default:
@@ -956,8 +956,8 @@ export function statPanel(
     { label: "공격력", v: Math.round(cur.atk).toLocaleString("ko-KR"), plus: signed(cur.atk - base.atk) },
     { label: "공격 속도", v: `${(cur.aspd / cd).toFixed(1)}/초`, plus: signed((cur.aspd - base.aspd) / cd, 1) },
     { label: "치명타", v: `${Math.round(cur.crit)}%`, plus: signed(cur.crit - base.crit, 0, "%") },
-    { label: "치명 피해", v: `${Math.round(critDmg)}%`, plus: signed(critDmg - 150, 0, "%") },
-    { label: "최대 체력", v: Math.round(cur.maxHp).toLocaleString("ko-KR"), plus: signed(cur.maxHp - base.maxHp) },
+    { label: "치명타 피해", v: `${Math.round(critDmg)}%`, plus: signed(critDmg - 150, 0, "%") },
+    { label: "최대 HP", v: Math.round(cur.maxHp).toLocaleString("ko-KR"), plus: signed(cur.maxHp - base.maxHp) },
     { label: "이동 속도", v: String(Math.round(cur.move)), plus: signed(cur.move - base.move) },
   ];
   // 11/15 스킬 위력 (INT·장비) × 카드가 더한 스킬 피해 — 전투의 스킬 피해 배율과 같다
@@ -987,7 +987,7 @@ export function statPanel(
   if (s.killHeal) chips.push(`처치 회복 ${Math.round(s.killHeal * 1000) / 10}%`);
   if (s.floorHeal) chips.push(`층 회복 ${pct(s.floorHeal)}%`);
   if (s.spRegen) chips.push(`SP +${Math.round(s.spRegen * 10) / 10}/초`);
-  if (s.xpMul > 1) chips.push(`경험치 +${pct(s.xpMul - 1)}%`);
+  if (s.xpMul > 1) chips.push(`EXP +${pct(s.xpMul - 1)}%`);
   if (s.explode) chips.push("회식 2차");
   if (s.resign) chips.push(`퇴사 각 최대 +${pct(s.resign)}%`);
   if (s.politics) chips.push("사내 정치");
@@ -995,7 +995,7 @@ export function statPanel(
   if (s.oneshot) chips.push(`원샷 ${Math.round(s.oneshotP * 1000) / 10}%`);
   if (s.corpcard) chips.push("법인카드");
   if (s.magicDmg) chips.push(`마공 +${pct(s.magicDmg)}%`);
-  if (s.magicCd) chips.push(`마공 쿨 −${pct(s.magicCd)}%`);
+  if (s.magicCd) chips.push(`마공 쿨타임 −${pct(s.magicCd)}%`);
   if (s.refund) chips.push(`SP 환급 ${pct(s.refund)}%`);
   if (spare?.halfday) chips.push("반차 남음");
   if (spare?.revive) chips.push("부활 1번");

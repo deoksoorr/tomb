@@ -267,7 +267,7 @@ export const TODO_POOL: readonly TodoDef[] = [
     guide: "haunt",
   },
   { kind: "bumper", cat: "play", label: "범퍼카 한 판 타기", need: 1, unit: "판", hint: "범퍼카를 타고 1분 넘게 몰고 다녀요. 멈춰 있던 시간은 세지 않아요.", guide: "bumper" },
-  { kind: "sky", cat: "play", label: "관람차나 열기구 타기", need: 1, unit: "번", hint: "관람차나 열기구에 올라 40초 넘게 하늘 구경해요.", guide: "sky" },
+  { kind: "sky", cat: "play", label: "관람차나 열기구 타기", need: 1, unit: "번", hint: "관람차나 열기구에 올라 40초 넘게 하늘 구경해요. [시점 변경하기]를 누르면 풍경을 내려다볼 수 있어요.", guide: "sky" },
   { kind: "fire", cat: "play", label: "모닥불 앞에서 2분 불멍하기", need: 1, unit: "번", hint: "모닥불 둘레 자리에 앉아 2분 동안 불을 바라봐요.", guide: "campfire" },
   // ── 나들이 (사냥·바닷가·캠핑장) ──
   { kind: "hunt", cat: "trip", label: "사냥 한 판 하기", need: 1, unit: "판", hint: "사냥터나 야근 빌딩에서 한 판 끝내요.", guide: "hunt" },
@@ -329,7 +329,17 @@ function fnv(s: string): number {
  * 11/19 마을 일상 하나 · 놀이 하나 · 나들이 하나. 같은 묶음(group — 낚시·채집)은 하루에 하나만, 닫힌 장소(캠핑장·바닷가)는 뽑지 않는다.
  * 나들이 칸에 고를 것이 둘이 안 되면(캠핑장·바닷가가 모두 닫힌 서버) 놀이·나들이를 합쳐 고른다
  */
+/** 11/24 로컬 시험용: 계정마다 오늘 미션을 정해 둔다 (운영 빌드에서는 쓰지 않는다 — /api/admin/dev-todos) */
+const DEV_TODOS_KEY = "__tombDevTodos";
+export function devTodoOverrides(): Map<string, TodoKind[]> | null {
+  if (process.env.NODE_ENV === "production") return null;
+  const g = globalThis as unknown as Record<string, Map<string, TodoKind[]> | undefined>;
+  return (g[DEV_TODOS_KEY] ??= new Map());
+}
+
 export function todoPicks(day: string, accountId: string, open: TodoOpen = ALL_OPEN): TodoKind[] {
+  const dev = devTodoOverrides()?.get(accountId);
+  if (dev) return dev;
   let h = fnv(`${day}|${accountId}`);
   const next = () => {
     // xorshift로 다음 수를 섞는다

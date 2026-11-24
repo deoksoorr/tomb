@@ -50,7 +50,7 @@ describe("연계 보너스 (SYNERGY)", () => {
     const a = { em_kindle: 12, em_ring: 6, em_meteor: 1 };
     const core = linkLines("em_meteor", a);
     expect(core).toHaveLength(1);
-    expect(core[0].text).toBe("연계: 불씨 튕기기 랭크마다 +8% · 불의 고리 랭크마다 +8% · 몰아 찍으면 야근 빌딩에서 받는 피해 최대 −80%");
+    expect(core[0].text).toBe("연계: 불씨 튕기기 랭크마다 +8% · 불의 고리 랭크마다 +8% · 야근 빌딩에서 받는 피해 최대 −80%");
     expect(core[0].now).toBe(144);
     const sup = linkLines("em_kindle", a);
     expect(sup[0].kind).toBe("support");
