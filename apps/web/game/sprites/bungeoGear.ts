@@ -161,9 +161,10 @@ function capHead(g0: Grid, v: V, m: GearM, top: number, fb: FB): void {
   // 11/25 운영자 「귀 빠져나오는 모양이 다르다·뒷모습 원근감이 이상함」: 고양이 귀(위 세 줄, 바깥 끝이 뾰족)가 크라운 안에 덮여
   // 모자에 붙인 무늬처럼 보였다 → 고양이 몸이면 크라운 위 두 줄을 비워 양쪽 귀만 모자 위로 솟게 한다 (가운데 돔도 더듬이처럼 보여 뺐다)
   const catEars = fb === "cat";
-  // 낮고 둥근 크라운: 머리 윗면 위로 두 줄만 솟고, 아래 세 줄은 머리를 감싼다 (머리보다 한 칸씩 넓게)
+  // 낮은 크라운: 머리 윗면 위로 두 줄 돔이 솟고, 아래 세 줄은 머리 폭 그대로 감싼다
+  // 11/25 운영자 「너무 넙대대」→ 머리보다 한 칸씩 넓던 폭을 머리 폭으로 (세 줄 돔은 「너무 둥글다」로 두 줄 유지, 시안 A)
   const back = v === "side" ? -1 : 0;
-  const H = Math.round(m.rx) + 1;
+  const H = Math.round(m.rx);
   const rowsH: [number, number][] = [
     [top - 2, H - 2],
     [top - 1, H - 1],
@@ -186,7 +187,10 @@ function capHead(g0: Grid, v: V, m: GearM, top: number, fb: FB): void {
   const by = top + 3;
   if (v === "down") {
     // 앞판 가운데 박음질. 꽃 자수는 11/25 운영자 「캡 가운데 뭐가 보인다」로 뺐다 — 크림·분홍 세 땀이 이 크기에선 얼룩·더듬이처럼 보였다 (상점 아이콘에는 그대로)
-    if (!catEars) g.set(cx - 1, top - 1, CAP_LO);
+    if (!catEars) {
+      g.set(cx - 1, top - 2, CAP_LO);
+      g.set(cx - 1, top - 1, CAP_LO);
+    }
     g.set(cx - 1, top, CAP_LO);
     // 둥근 챙: 크라운보다 양옆 한 칸씩 튀어나오고 + 가운데가 한 줄 더 내려온다 (위 박음질 선, 아래 그늘)
     // 11/25 운영자 「챙 약간 튀어나와 있는 건?」: 예전엔 크라운과 폭이 같아 띠처럼 보였다
@@ -562,9 +566,12 @@ const BN_DEEP = 0x968669;
 const BN_TAG = 0xb8583a;
 const BN_RIB = 0xcbbea2;
 
-function beanieHead(g0: Grid, v: V, m: GearM, top: number): void {
+function beanieHead(g0: Grid, v: V, m: GearM, top: number, fb: FB): void {
   const g = brush(g0);
   const { cx } = m;
+  // 11/25 운영자 「니트 비니도 오른쪽 귀랑 왼쪽 귀가 안 맞음」: 볼캡과 같이 고양이 귀(위 세 줄)가 정수리 안에 덮이고 라벨이 오른쪽 귀 밑이었다
+  // → 고양이 몸이면 정수리 위 줄들을 비워 양쪽 귀만 솟게, 라벨은 뺀다
+  const catEars = fb === "cat";
   // 11/22 다듬기: 머리가 넓은 몸(동글이·이불·머그잔·튜브)에서 버섯처럼 넓던 것을 한 칸 줄인다 (머리 윗면을 덮는 만큼만)
   const R = Math.min(Math.round(m.rx), 5);
   const back = v === "side" ? -1 : 0;
@@ -578,6 +585,7 @@ function beanieHead(g0: Grid, v: V, m: GearM, top: number): void {
   ];
   for (const [y, h] of dome)
     for (let x = cx - h + back; x < cx + h + back; x++) {
+      if (catEars && y < top) continue;
       const l = x === cx - h + back;
       const r = x >= cx + h + back - 2;
       g.set(x, y, l ? BN_HI : r ? (x === cx + h + back - 1 ? BN_LO : rib(x) ? BN_LO : BN) : rib(x) ? BN_RIB : y === top - 3 ? BN_HI : BN);
@@ -588,9 +596,11 @@ function beanieHead(g0: Grid, v: V, m: GearM, top: number): void {
     g.set(x, top + 1, r ? BN_LO : x === cx - cuff + back ? BN_HI : rib(x) ? BN : BN_HI);
     g.set(x, top + 2, r ? BN_DEEP : rib(x) ? BN_LO : BN_RIB);
   }
+  if (catEars) return;
   // 정수리 꼭지 한 땀
   g.set(cx - 1 + back, top - 4, BN_LO);
-  // 단 끝 작은 무지 라벨 (글자 없는 천 조각 한 칸)
+  // 단 끝 작은 무지 라벨 (글자 없는 천 조각 한 칸) — 토끼는 오른쪽 귀 바로 밑이라 귀가 길어 보여 뺀다
+  if (fb === "bun") return;
   if (v === "down") g.set(cx + 2, top + 1, BN_TAG);
   else if (v === "side") g.set(cx + 1 + back, top + 1, BN_TAG);
 }
@@ -1294,7 +1304,7 @@ export const GEAR4: Readonly<Record<string, SsItem>> = {
   kc_phones: { neck: phonesNeck },
   kd_muffler: { neck: mufflerNeck },
   kc_cap: { covers: true, head: (g, v, m, fb, top) => capHead(g, v, m, top, fb) },
-  kd_beanie: { covers: true, head: (g, v, m, _fb, top) => beanieHead(g, v, m, top) },
+  kd_beanie: { covers: true, head: (g, v, m, fb, top) => beanieHead(g, v, m, top, fb) },
   kc_icecoffee: { hand: (g, v, m) => cupHand(g, v, m), glow: (g, v, m) => cupGlow(g, v, m) },
   kd_bungeo: { hand: (g, v, m) => bungeoHand(g, v, m), glow: (g, v, m) => bungeoGlow(g, v, m) },
   bd_vendor: {
