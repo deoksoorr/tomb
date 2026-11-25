@@ -576,7 +576,7 @@ function MapPanel({ map, canvasRef, onClose, coarse }: { map: MapId; canvasRef: 
         </button>
       </header>
       <div className={styles.big}>
-        <div className={styles.bigFrame} style={{ aspectRatio: `${size.w} / ${size.h}` }}>
+        <div className={styles.bigFrame} data-zoomout={coarse ? undefined : ""} onClick={coarse ? undefined : onClose} title={coarse ? undefined : "누르면 작은 지도로"} style={{ aspectRatio: `${size.w} / ${size.h}` }}>
           <canvas ref={canvasRef} className={styles.bigMap} width={size.w * BIG_SCALE} height={size.h * BIG_SCALE} role="img" aria-label={`${PLACE_TITLE[map]} 큰 지도 (노란 점이 나, 분홍 하트가 친구)`} />
           <MapLabels map={map} focus={null} />
         </div>

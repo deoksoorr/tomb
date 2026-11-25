@@ -429,3 +429,8 @@
   min-height: 32px;
   padding: 0;
 }
+
+/* 11/25 운영자: PC 큰 지도는 마우스를 올리면 축소 돋보기, 누르면 작은 지도로 돌아간다 */
+.bigFrame[data-zoomout] {
+  cursor: zoom-out;
+}
