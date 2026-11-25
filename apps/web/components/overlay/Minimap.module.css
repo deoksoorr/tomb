@@ -227,8 +227,18 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 4px 4px 12px;
+  /* 11/25 운영자 「제목 균형·더 좁게」: 머리줄 높이 = [×] 28px + 위아래 2px, 제목은 같은 높이 안에서 가운데 */
+  height: 32px;
+  padding: 0 2px 0 12px;
   border-bottom: 2px solid var(--line);
+}
+
+.panelHead button {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
 }
 
 .panelTitle {
@@ -238,8 +248,10 @@
   color: var(--bone);
   font-size: 14px;
   font-weight: 400;
-  line-height: 1;
-  align-self: center;
+  display: flex;
+  align-items: center;
+  height: 28px;
+  line-height: 28px;
 }
 
 .panelHint {
