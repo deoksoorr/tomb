@@ -195,7 +195,7 @@ function drawAway(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, map: Away
   const px = (n: number) => n / unit;
   for (let i = 0; i + 1 < d.others.length; i += 2) {
     const p = toMap(d.others[i], d.others[i + 1]);
-    dot(ctx, p.x, p.y, px(3), px(1.5), "#6fe3ff", "rgba(8,10,14,0.9)");
+    dot(ctx, p.x, p.y, px(3), px(1.5), "#c49bff", "rgba(8,10,14,0.9)");
   }
   const fs = d.friends ?? [];
   for (let i = 0; i + 1 < fs.length; i += 2) {
@@ -318,10 +318,10 @@ export default function Minimap() {
       const p = toMinimap(rs[i], rs[i + 1]);
       dot(ctx, p.x, p.y, px(2), px(1), "#a9aaa4", "rgba(8,10,14,0.8)");
     }
-    // 다른 사람: 하늘색 점 + 검은 테두리 (어두운 바탕에서도 또렷하게)
+    // 다른 사람: 연보라 점 + 검은 테두리 (11/25 운영자 — 하늘색은 물·얼음 위에서 묻혀서. 노랑=나, 분홍 하트=친구와도 갈린다)
     for (let i = 0; i + 1 < d.others.length; i += 2) {
       const p = toMinimap(d.others[i], d.others[i + 1]);
-      dot(ctx, p.x, p.y, px(3), px(1.5), "#6fe3ff", "rgba(8,10,14,0.9)");
+      dot(ctx, p.x, p.y, px(3), px(1.5), "#c49bff", "rgba(8,10,14,0.9)");
     }
     // 친구: 분홍 하트 (다른 사람 점보다 조금 크게, 그 위에)
     const fs = d.friends ?? [];
