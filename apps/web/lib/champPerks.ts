@@ -90,14 +90,14 @@ export const CHAMP_BADGE_ONLY = "1위 배지와 오라를 1주일 달아요.";
 export function champBoardPerkLines(board: ChampBoard): string[] {
   if (board === "huntKills") return [`사냥 EXP를 ${pctText(CHAMP_HUNT_EXP)} 더 받아요.`, `초월 EXP를 ${pctText(CHAMP_TRANSCEND_EXP)} 더 받아요. 야근 빌딩 층도 같아요.`];
   if (board === "fish") return [`낚시왕인 주에 낚아서 그 주 안에 판 물고기는 ${pctText(CHAMP_FISH_SELL)} 더 받아요. 더 받은 포인트는 포인트 레이스에 들어가지 않아요.`];
-  return [`꾸미기 상점과 가구 상점에서 ${pctText(CHAMP_SHOP_DISCOUNT)} 싸게 사요. 염색권은 빠져요.`];
+  return [`꾸미기 상점과 가구 상점에서 ${pctText(CHAMP_SHOP_DISCOUNT)} 싸게 사요. 염색권은 할인에서 제외돼요.`];
 }
 
 /** 11/17 레이스 창 「1위 보상」 칸에 붙이는 짧은 혜택 꼬리표 (긴 문장은 내 정보 [혜택] 탭 — champBoardPerkLines) */
 export function champBoardPerkTags(board: ChampBoard): string[] {
   if (board === "huntKills") return [`사냥 EXP +${pctText(CHAMP_HUNT_EXP)}`, `초월 EXP +${pctText(CHAMP_TRANSCEND_EXP)}`];
   if (board === "fish") return [`그 주에 낚은 물고기 판매 +${pctText(CHAMP_FISH_SELL)}`];
-  return [`꾸미기와 가구 ${pctText(CHAMP_SHOP_DISCOUNT)} 할인`];
+  return [`꾸미기와 가구 ${pctText(CHAMP_SHOP_DISCOUNT)} 할인 (염색권 제외)`];
 }
 
 /** 차지한 랭킹들의 혜택 문장 (다관왕이면 이동 속도 줄까지) */

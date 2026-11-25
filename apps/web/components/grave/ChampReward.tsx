@@ -82,8 +82,10 @@ export function ChampReward({ board, points }: { board: ChampBoard; points: numb
 export function ChampPerksBox() {
   return (
     <section className={styles.hallBox} aria-label="1위 1주일 혜택">
-      <h3 className={styles.title}>1위가 받는 1주일 혜택</h3>
-      <p className={styles.perkNote}>1위 한 사람만 다음 주 월요일 새벽 5시부터 1주일 동안 받는 개인 혜택이에요.</p>
+      {/* 11/25 운영자: 설명 문장 대신 한 줄 제목 */}
+      <h3 className={styles.title}>
+        1위 1주일 혜택 <span className={styles.perkWhen}>다음 주 월요일 새벽 5시부터</span>
+      </h3>
       <div className={`${styles.boards} ${styles.perkGrid}`}>
         {CHAMP_BOARDS.map((board) => (
           <div key={board} className={styles.perkCol}>

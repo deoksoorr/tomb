@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { checkNewName, dexBadgeCats } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
@@ -103,21 +103,33 @@ export default function MyPanel({
   return (
     <Dialog title="내 정보" onClose={onClose} fitHeight>
       <div className={styles.panel}>
-        <section className={styles.points} aria-label="포인트">
-          <p className={styles.balance}>
-            <strong>{me.points.toLocaleString("ko-KR")}</strong> 포인트
-          </p>
-          {/* 운영자 계정은 출석 도장을 받지 않는다 → 출석 줄을 뺀다 */}
-          {!me.staff && (
-            <p className={styles.sub}>
-              연속 출석 {me.attendance.streak}일{me.attendance.today && " · 오늘 출석 완료"}
-            </p>
-          )}
-        </section>
-
-        <PerksSection me={me} />
-
-        <ProfileRows me={me} googleLinked={googleLinked} />
+        {/* 11/25 운영자: 한 카드 — 닉네임 줄에 포인트·출석 칩 (포인트는 큰 띠로 따로 빼지 않는다), 그 아래 혜택 배지 줄 */}
+        <div className={styles.profile}>
+          <ProfileRows
+            me={me}
+            googleLinked={googleLinked}
+            chips={
+              <>
+                <span className={cx(styles.chip, styles.pointChip)} aria-label={`포인트 ${me.points.toLocaleString("ko-KR")}`}>
+                  <i aria-hidden>◆</i>
+                  <b>
+                    {me.points.toLocaleString("ko-KR")}
+                    <small>P</small>
+                  </b>
+                </span>
+                {/* 운영자 계정은 출석 도장을 받지 않는다 → 출석 칩을 뺀다 */}
+                {!me.staff && (
+                  <span className={styles.chip} data-today={me.attendance.today || undefined}>
+                    <span>연속 출석</span>
+                    <b>{me.attendance.streak}일</b>
+                    {me.attendance.today && <em>· 오늘 완료</em>}
+                  </span>
+                )}
+              </>
+            }
+          />
+          <PerksSection me={me} />
+        </div>
 
         {/* 사냥 능력치·낀 장비 (11/24 운영자: 안내가 필요하다) */}
         <MyHuntSection accountId={me.accountId} />
@@ -319,8 +331,8 @@ function CodeSection({ me, buttonId, googleLinked }: { me: Me; buttonId: string;
   );
 }
 
-/** 닉네임(바꾸기) · 사냥 · 도감 배지 줄. 닉네임 첫 변경은 무료, 이후 포인트와 대기 기간 (서버가 정한 값을 그대로 보여 준다) */
-function ProfileRows({ me, googleLinked }: { me: Me; googleLinked: boolean }) {
+/** 닉네임(바꾸기) · 포인트·출석 칩 · 도감 배지 줄. 닉네임 첫 변경은 무료, 이후 포인트와 대기 기간 (서버가 정한 값을 그대로 보여 준다) */
+function ProfileRows({ me, googleLinked, chips }: { me: Me; googleLinked: boolean; chips: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(me.name ?? "");
   const [pending, setPending] = useState(false);
@@ -360,31 +372,24 @@ function ProfileRows({ me, googleLinked }: { me: Me; googleLinked: boolean }) {
   }
 
   return (
-    <section className={styles.section} aria-label="내 캐릭터">
-      <dl className={styles.rows}>
-        <div>
-          <dt>닉네임</dt>
-          <dd className={styles.nameValue}>
-            <span className={styles.nameNow}>
-              {me.name ?? "이름 없음"}
-              {googleLinked && <GoogleBadge />}
-            </span>
-            {!open && (
-              <button type="button" className={cx(ui.button, styles.smallButton)} onClick={() => setOpen(true)} disabled={waiting}>
-                바꾸기
-              </button>
-            )}
-          </dd>
-        </div>
-        {cats.length > 0 && (
-          <div>
-            <dt>도감 배지</dt>
-            <dd>
-              {"★".repeat(cats.length)} {cats.map((c) => `${CAT_LABEL[c]} 100%`).join(" · ")}
-            </dd>
-          </div>
+    <section className={styles.who} aria-label="내 캐릭터">
+      <div className={styles.idRow}>
+        <span className={styles.nameBig}>
+          {me.name ?? "이름 없음"}
+          {googleLinked && <GoogleBadge />}
+        </span>
+        <span className={styles.chips}>{chips}</span>
+        {!open && (
+          <button type="button" className={cx(ui.button, styles.smallButton, styles.rename)} onClick={() => setOpen(true)} disabled={waiting}>
+            바꾸기
+          </button>
         )}
-      </dl>
+      </div>
+      {cats.length > 0 && (
+        <p className={styles.dex}>
+          <span aria-hidden>{"★".repeat(cats.length)}</span> 도감 배지 · {cats.map((c) => `${CAT_LABEL[c]} 100%`).join(" · ")}
+        </p>
+      )}
       {waiting && (
         <p className={styles.sub}>
           닉네임은{" "}

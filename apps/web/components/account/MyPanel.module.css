@@ -10,23 +10,191 @@
   text-align: center;
 }
 
-.points {
+/* 11/25 맨 위 카드: 닉네임 줄(포인트·출석 칩) → 혜택 배지 줄 (없으면 흐린 한 줄) */
+.profile {
+  container: my-profile / inline-size;
   display: grid;
-  gap: 2px;
-  padding: 8px 12px;
+  gap: 10px;
+  padding: 12px;
   background: var(--bg-deep);
-  text-align: center;
+  box-shadow: var(--px-border);
 }
 
-.balance {
+.who {
+  display: grid;
+  gap: 4px;
+}
+
+.nameBig {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
   color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 16px;
+  overflow-wrap: anywhere;
 }
 
-.balance strong {
+.dex {
   color: var(--candle);
-  font-size: 24px;
-  font-weight: 700;
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+/* 닉네임 | 포인트·출석 칩 | [바꾸기]. 좁으면 칩 둘은 닉네임 줄 아래 한 줄로 */
+.idRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "name chips btn";
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.nameBig {
+  grid-area: name;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  grid-area: chips;
+}
+
+.rename {
+  grid-area: btn;
+}
+
+@container my-profile (max-width: 460px) {
+  .idRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "name btn"
+      "chips chips";
+  }
+}
+
+/* 칩: 포인트(금색 숫자) · 출석(오늘 도장을 받았으면 이끼색). 높이 고정 + 가운데 맞춤, 좌우 여백 같게 */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  color: var(--muted);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.chip > * {
+  line-height: 1;
+}
+
+.chip b {
+  color: var(--bone);
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
+}
+
+.chip em {
+  color: var(--moss);
+  font-style: normal;
+}
+
+/* 끝 글자 P의 오른쪽 여백(글꼴 몫 1px)만큼 덜어 좌우를 맞춘다 */
+.pointChip {
+  gap: 5px;
+  padding-right: 7px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--candle) 45%, transparent);
+}
+
+.pointChip i {
+  color: var(--candle);
+  font-size: 9px;
+  font-style: normal;
+}
+
+.pointChip b {
+  color: var(--candle);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* P는 숫자와 같은 크기 (기준선이 같다), 흐린 색 */
+.pointChip small {
+  margin-left: 1px;
+  color: var(--muted);
+  font-size: inherit;
+  font-weight: 400;
+}
+
+.chip[data-today] {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--moss) 55%, transparent);
+}
+
+/* 혜택: 색 배지(어디서) | 꼬리표(무엇) — 배지 칸 폭을 맞춰 줄이 가지런하다 */
+.perks {
+  display: grid;
+  gap: 6px;
+}
+
+.perkList {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: start;
+  gap: 6px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.perkList li {
+  display: contents;
+}
+
+.perkBadge {
+  padding: 0 6px;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 55%, transparent);
+  font-size: 11px;
+  line-height: 20px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.perkTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 12px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.perkTags > span {
+  display: inline-flex;
+  gap: 5px;
+  min-width: 0;
+}
+
+.perkTags > span::before {
+  flex: none;
+  content: "▪";
+  color: var(--tone);
+}
+
+.perksEmpty {
+  color: var(--faint);
+  font-family: var(--font-small);
+  font-size: 10px;
 }
 
 .sub {
@@ -85,10 +253,6 @@
   color: var(--bone);
   font-size: 12px;
   overflow-wrap: anywhere;
-}
-
-.perkValue {
-  color: var(--candle) !important;
 }
 
 .nameValue {

@@ -5,7 +5,7 @@ import { errorMessage } from "@/lib/api";
 import { GEAR_SLOTS, gearById, SLOT_LABELS, STAT_KEYS, STAT_LABELS } from "@/lib/rpg/catalog";
 import { cachedRpgView, myRpgView } from "@/lib/rpg/client";
 import { starLabel } from "@/lib/rpg/endgame";
-import { activeSets, eggKnown, enhOfId, SG_EGG, SG_SET_INFO, SG_SETS } from "@/lib/rpg/setGear";
+import { activeSets, decodeSg, eggKnown, enhOfId, SG_EGG, SG_PIECES, SG_SET_INFO, SG_SETS, sgSetOf } from "@/lib/rpg/setGear";
 import type { RpgView } from "@/lib/rpg/types";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
@@ -69,7 +69,8 @@ function HuntStats({ view }: { view: RpgView }) {
   // 레벨 50(끝판)이면 초월 경험치, 아니면 레벨 경험치 (사냥 창 위쪽 막대와 같다)
   const [exp, need] = eg ? [c.tExp, eg.tExpToNext] : [c.exp, view.expToNext];
   const { counts } = activeSets(c.equip);
-  const sets = SG_SETS.filter((set) => counts[set] >= 2);
+  // 한 부위라도 낀 세트 (섞어 끼면 세트마다 한 줄)
+  const sets = SG_SETS.filter((set) => counts[set] >= 1);
   const towerBest = eg?.tower.best ?? c.fBest;
 
   return (
@@ -141,41 +142,75 @@ function HuntStats({ view }: { view: RpgView }) {
         </dl>
       )}
 
-      <dl className={h.gear} aria-label="낀 장비">
+      {/* 11/25 운영자: 부위마다 무슨 세트·직급인지 — 세트는 왼쪽 색 띠·이름표(같은 세트끼리 같은 색), 직급은 테 색 꼬리표 (가방 칸 테와 같은 색) */}
+      <div className={h.subhead}>
+        <span>낀 장비</span>
+      </div>
+      <ul className={h.gear} aria-label="낀 장비">
         {GEAR_SLOTS.map((slot) => {
           const id = c.equip[slot];
           const def = id ? gearById(id) : undefined;
           const e = enhOfId(id);
           const grade = slotGrade(id);
+          const it = decodeSg(id);
+          const set = it ? SG_SET_INFO[sgSetOf(it)] : null;
           return (
-            <div key={slot}>
-              <dt>{SLOT_LABELS[slot]}</dt>
-              <dd style={grade ? ({ "--tone": grade.color } as CSSProperties) : undefined} data-empty={!def || undefined}>
-                {def ? def.name : "비어 있음"}
-                {def && e > 0 && <b className={h.plus}> +{e}</b>}
-              </dd>
-            </div>
+            <li key={slot} style={set ? ({ "--set": set.color } as CSSProperties) : undefined} data-set={set ? "" : undefined}>
+              <span className={h.slot}>{SLOT_LABELS[slot]}</span>
+              {def ? (
+                <span className={h.main}>
+                  <span className={h.name}>
+                    {def.name}
+                    {e > 0 && <b className={h.plus}> +{e}</b>}
+                  </span>
+                  <span className={h.tags}>
+                    {set && <span className={h.setTag}>{set.name}</span>}
+                    {grade && (
+                      <span className={h.grade} style={{ "--tone": grade.color } as CSSProperties} data-top={it?.g === 3 || undefined}>
+                        {grade.label}
+                      </span>
+                    )}
+                  </span>
+                </span>
+              ) : (
+                <span className={h.empty}>비어 있음</span>
+              )}
+            </li>
           );
         })}
-      </dl>
+      </ul>
 
+      {/* 세트 효과: 세트마다 한 줄 — 켜진 단계는 밝게, 아직인 단계는 흐리게 (2개·4개, 다섯 부위는 숨은 효과 — 찾기 전엔 ???) */}
       {sets.length > 0 && (
-        <ul className={h.sets} aria-label="켜진 세트 효과">
-          {sets.map((set) => {
-            const info = SG_SET_INFO[set];
-            const n = counts[set];
-            return (
-              <li key={set} style={{ "--set": info.color } as CSSProperties}>
-                <b>
-                  {info.name} {n}개
-                </b>
-                <span>{info.two}</span>
-                {n >= 4 && <span>{info.four}</span>}
-                {n >= 5 && eggKnown(c.sgEgg, set) && <span>{SG_EGG[set].name}</span>}
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          <div className={h.subhead}>
+            <span>세트 효과</span>
+          </div>
+          <ul className={h.sets} aria-label="세트 효과">
+            {sets.map((set) => {
+              const info = SG_SET_INFO[set];
+              const n = counts[set];
+              const steps = [
+                { at: 2, text: info.two },
+                { at: 4, text: info.four },
+                { at: SG_PIECES.length, text: eggKnown(c.sgEgg, set) ? SG_EGG[set].name : "???" },
+              ];
+              return (
+                <li key={set} style={{ "--set": info.color } as CSSProperties}>
+                  <b className={h.setName}>
+                    {info.name} <span>{n}/{SG_PIECES.length}</span>
+                  </b>
+                  {steps.map((st) => (
+                    <span key={st.at} className={h.step} data-on={n >= st.at || undefined}>
+                      <i>{st.at}개</i>
+                      {st.text}
+                    </span>
+                  ))}
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
     </div>
   );

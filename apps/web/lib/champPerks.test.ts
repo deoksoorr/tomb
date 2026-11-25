@@ -81,7 +81,7 @@ describe("1위 혜택 — 2관왕·3관왕", () => {
   it("레이스 창 짧은 꼬리표는 같은 표의 숫자를 쓴다", () => {
     expect(champBoardPerkTags("huntKills")).toEqual(["사냥 EXP +15%", "초월 EXP +10%"]);
     expect(champBoardPerkTags("fish")).toEqual(["그 주에 낚은 물고기 판매 +15%"]);
-    expect(champBoardPerkTags("points")).toEqual(["꾸미기와 가구 20% 할인"]);
+    expect(champBoardPerkTags("points")).toEqual(["꾸미기와 가구 20% 할인 (염색권 제외)"]);
     for (const b of ["points", "huntKills", "fish"] as const) for (const t of champBoardPerkTags(b)) expect(t).not.toMatch(/:| · /);
   });
 });

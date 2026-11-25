@@ -91,7 +91,7 @@ export function chairPerkName(perk: ChairPerk | null | undefined): string | null
   return null;
 }
 
-const NORMAL_LINES = [`꾸미기 상점과 가구 상점에서 ${pct(CHAIR_SHOP_DISCOUNT)} 싸게 사요. 염색권은 빠져요.`, `장비 강화 포인트가 ${pct(CHAIR_ENHANCE_DISCOUNT)} 덜 들어요. 재료는 그대로예요.`];
+const NORMAL_LINES = [`꾸미기 상점과 가구 상점에서 ${pct(CHAIR_SHOP_DISCOUNT)} 싸게 사요. 염색권은 할인에서 제외돼요.`, `장비 강화 포인트가 ${pct(CHAIR_ENHANCE_DISCOUNT)} 덜 들어요. 재료는 그대로예요.`];
 const HELL_LINES = [
   `사냥 경험치를 ${pct(CHAIR_HUNT_EXP)} 더 받아요.`,
   `초월 경험치를 ${pct(CHAIR_TRANSCEND_EXP)} 더 받아요. 야근 빌딩 층도 같아요.`,
@@ -109,7 +109,7 @@ export function chairPerkLines(perk: ChairPerk | null | undefined): string[] {
 
 /** 레이스 창 [회장님 독대] 보상 카드의 짧은 혜택 줄 */
 export function chairPerkTags(kind: ChairPerk): string[] {
-  if (kind === "normal") return [`꾸미기와 가구 ${pct(CHAIR_SHOP_DISCOUNT)} 할인`, `장비 강화 포인트 ${pct(CHAIR_ENHANCE_DISCOUNT)} 할인`];
+  if (kind === "normal") return [`꾸미기와 가구 ${pct(CHAIR_SHOP_DISCOUNT)} 할인 (염색권 제외)`, `장비 강화 포인트 ${pct(CHAIR_ENHANCE_DISCOUNT)} 할인`];
   if (kind === "hell") return [`사냥 경험치 +${pct(CHAIR_HUNT_EXP)}`, `초월 경험치 +${pct(CHAIR_TRANSCEND_EXP)}`, `상자 세트 장비 확률 ${pct(SG_CHEST_CHANCE)} → ${pct(CHAIR_CHEST_SG_CHANCE)}`];
   return ["노멀과 헬 1위 혜택 모두", `마을 걷기 +${pct(CHAIR_DUO_SPEED)}`, `독대 하루 ${chairRunsPerDay("duo")}판씩`];
 }
