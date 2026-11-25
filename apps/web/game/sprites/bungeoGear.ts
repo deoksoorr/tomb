@@ -155,9 +155,12 @@ const EMB_PINK = 0xf2a0b4;
 /** 물 빠진 얼룩: 칸마다 정해진 자리만 살짝 밝게 */
 const washed = (x: number, y: number, c: Color) => (hash2(x, y, 71) < 0.16 ? CAP_WASH : hash2(x, y, 73) < 0.12 ? CAP_HI : c);
 
-function capHead(g0: Grid, v: V, m: GearM, top: number): void {
+function capHead(g0: Grid, v: V, m: GearM, top: number, fb: FB): void {
   const g = brush(g0);
   const { cx } = m;
+  // 11/25 운영자 「귀 빠져나오는 모양이 다르다·뒷모습 원근감이 이상함」: 고양이 귀(위 세 줄, 바깥 끝이 뾰족)가 크라운 안에 덮여
+  // 모자에 붙인 무늬처럼 보였다 → 고양이 몸이면 위 두 줄은 두 귀 사이 낮은 돔만 칠해 귀가 모자 위로 솟게 한다
+  const catEars = fb === "cat" && v !== "side";
   // 낮고 둥근 크라운: 머리 윗면 위로 두 줄만 솟고, 아래 세 줄은 머리를 감싼다 (머리보다 한 칸씩 넓게)
   const back = v === "side" ? -1 : 0;
   const H = Math.round(m.rx) + 1;
@@ -170,21 +173,28 @@ function capHead(g0: Grid, v: V, m: GearM, top: number): void {
   ];
   for (const [y, h] of rowsH)
     for (let x = cx - h + back; x < cx + h + back; x++) {
+      if (catEars && y < top && (y === top - 2 ? x < cx - 1 || x > cx : x < cx - 2 || x > cx + 1)) continue;
       const edgeL = x === cx - h + back;
       const edgeR = x >= cx + h + back - 2;
       g.set(x, y, edgeR ? (x === cx + h + back - 1 ? CAP_DEEP : CAP_LO) : edgeL ? CAP_HI : y === top - 2 ? CAP_HI : washed(x, y, CAP));
     }
-  // 꼭지 단추
-  g.set(cx - 1 + back, top - 3, CAP_LO);
-  g.set(cx + back, top - 3, CAP_DEEP);
+  // 꼭지 단추 (고양이 귀 사이 낮은 돔이면 없다 — 귀보다 솟아 보인다)
+  if (!catEars) {
+    g.set(cx - 1 + back, top - 3, CAP_LO);
+    g.set(cx + back, top - 3, CAP_DEEP);
+  }
   const by = top + 3;
   if (v === "down") {
     // 앞판 가운데 박음질 + 아주 작은 자수 (크림 꽃 한 송이: 크림 두 땀 + 분홍 한 땀)
+    // 귀 있는 몸(고양이·토끼)은 꽃이 귀 안쪽 분홍 바로 밑이라 귀가 길어 보였다 → 두 귀 사이 가운데로 (귀 안쪽 분홍과 한 줄 띄워서)
+    const ears = fb === "cat" || fb === "bun";
     g.set(cx - 1, top - 1, CAP_LO);
-    g.set(cx - 1, top, CAP_LO);
-    g.set(cx - 3, top + 1, EMB);
-    g.set(cx - 2, top + 1, EMB_PINK);
-    g.set(cx - 3, top + 2, EMB);
+    if (!ears) g.set(cx - 1, top, CAP_LO);
+    const fx = ears ? cx - 1 : cx - 3;
+    const fy = top + 1;
+    g.set(fx, fy, EMB);
+    g.set(fx + 1, fy, EMB_PINK);
+    g.set(fx, fy + 1, EMB);
     // 둥근 챙: 머리 폭만큼 + 가운데가 한 줄 더 내려온다 (위 박음질 선, 아래 그늘)
     for (let x = cx - H; x < cx + H; x++) g.set(x, by, x === cx - H ? CAP_HI : x >= cx + H - 1 ? CAP_DEEP : (x + 40) % 2 === 0 ? 0x8a9cbc : CAP);
     for (let x = cx - H + 2; x < cx + H - 2; x++) g.set(x, by + 1, x >= cx + H - 4 ? CAP_DEEP : CAP_LO);
@@ -1289,7 +1299,7 @@ export const GEAR4: Readonly<Record<string, SsItem>> = {
   kn_fleece: { back: fleeceBack, neck: fleeceNeck },
   kc_phones: { neck: phonesNeck },
   kd_muffler: { neck: mufflerNeck },
-  kc_cap: { covers: true, head: (g, v, m, _fb, top) => capHead(g, v, m, top) },
+  kc_cap: { covers: true, head: (g, v, m, fb, top) => capHead(g, v, m, top, fb) },
   kd_beanie: { covers: true, head: (g, v, m, _fb, top) => beanieHead(g, v, m, top) },
   kc_icecoffee: { hand: (g, v, m) => cupHand(g, v, m), glow: (g, v, m) => cupGlow(g, v, m) },
   kd_bungeo: { hand: (g, v, m) => bungeoHand(g, v, m), glow: (g, v, m) => bungeoGlow(g, v, m) },
