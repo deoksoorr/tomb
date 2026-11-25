@@ -1,6 +1,8 @@
 import { HOUSE_LOT_H, HOUSE_LOT_W, HOUSE_LOTS, MAP_HEIGHT, MAP_WIDTH, TILE } from "@tomb/protocol";
 import { isSnowy, type MapConcept } from "@/lib/mapConcept";
-import { DECKS, groundKind, inWaterBody, LANDMARKS, type GroundKind, type Landmark } from "./layout";
+import { npcById } from "@/lib/forage/catalog";
+import { WHARF_BOARD } from "./fishZone";
+import { DECKS, groundKind, inWaterBody, LANDMARKS as PLACE_LANDMARKS, type GroundKind, type Landmark } from "./layout";
 
 // F17 미니맵 바탕 (순수 계산 — DOM 없이 테스트한다). 월드 MINIMAP_CELL px = 미니맵 1px.
 // 바닥 종류·물·판자·필지를 색으로 칠한 RGBA 배열을 만들고, UI(components/overlay/Minimap)가 캔버스에 한 번 찍은 뒤
@@ -98,6 +100,10 @@ export const LANDMARK_COLOR: Record<Landmark["kind"], string> = {
   office: "#6cc4bc",
   // 11/20 판교의 등대: 빨간 띠
   lighthouse: "#ff6a6a",
+  // 11/25 지도 이름표용: 의뢰 게시판·어부 영감·수집가 유령
+  board: "#d8a868",
+  fishmonger: "#c89a60",
+  collector: "#e0c080",
 };
 
 /** 관람차 아이콘 (미니맵 px, 가운데 기준 — 동그란 바퀴 + 다리) */
@@ -136,4 +142,19 @@ export function toMinimap(x: number, y: number): { x: number; y: number } {
   return { x: x / MINIMAP_CELL, y: y / MINIMAP_CELL };
 }
 
-export { LANDMARKS };
+/** 11/25 NPC 자리 (lib/forage/catalog NPCS — 상인 자리는 거기 한 곳) */
+function npcAt(id: "fishmonger" | "collector"): { x: number; y: number } {
+  const n = npcById(id);
+  return { x: n?.x ?? 0, y: n?.y ?? 0 };
+}
+
+/**
+ * 미니맵 주요 장소 = 안내 장소(layout LANDMARKS) + 11/25 길치 이슈로 지도 이름표에 더한 곳 (자리는 원래 데이터 그대로):
+ * 의뢰 게시판(도장 교환소도 여기 — fishZone WHARF_BOARD) · 어부 영감 · 수집가 유령 (NPC는 노점 바로 위)
+ */
+export const LANDMARKS: readonly Landmark[] = [
+  ...PLACE_LANDMARKS,
+  { id: "board", label: "의뢰 게시판", x: WHARF_BOARD.x, y: WHARF_BOARD.y - 12, kind: "board" },
+  { id: "fishmonger", label: "어부 영감", x: npcAt("fishmonger").x, y: npcAt("fishmonger").y - 10, kind: "fishmonger" },
+  { id: "collector", label: "수집가 유령", x: npcAt("collector").x, y: npcAt("collector").y - 10, kind: "collector" },
+];

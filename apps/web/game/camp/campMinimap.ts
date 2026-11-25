@@ -1,4 +1,5 @@
 import {
+  CAMP_BOARD_SPOT,
   CAMP_BUS_STOP,
   CAMP_DECK_H,
   CAMP_DECK_W,
@@ -14,7 +15,7 @@ import {
   CAMP_VANS,
   CAMP_WIDTH,
 } from "@tomb/protocol";
-import { campGroundKind, CAMP_TREES, inRect, vanCollider, type CampGround } from "./campLayout";
+import { campGroundKind, CAMP_BBQ, CAMP_TREES, inRect, vanCollider, type CampGround } from "./campLayout";
 
 // 캠핑장 미니맵 바탕 (순수 계산 — DOM 없이 테스트한다). 마을 game/world/minimapArt.ts와 같은 방식:
 // 월드 CAMP_MINIMAP_CELL px = 미니맵 1px. 바닥·물·데크·건물·캠핑카·숲(나무가 빽빽한 곳)을 색으로 칠한 RGBA 배열.
@@ -132,7 +133,7 @@ export function toCampMinimap(x: number, y: number): { x: number; y: number } {
   return { x: x / CAMP_MINIMAP_CELL, y: y / CAMP_MINIMAP_CELL };
 }
 
-export type CampLandmark = { id: string; label: string; x: number; y: number; kind: "bus" | "office" | "fire" | "lookout" | "tarp" | "van" | "stream" | "telescope" };
+export type CampLandmark = { id: string; label: string; x: number; y: number; kind: "bus" | "office" | "fire" | "lookout" | "tarp" | "van" | "stream" | "telescope" | "bbq" | "vending" | "board" };
 /** 미니맵 주요 장소 (UI가 작은 표시를 그린다) */
 export const CAMP_LANDMARKS: readonly CampLandmark[] = [
   { id: "bus", label: "버스 정류장", x: CAMP_BUS_STOP.x, y: CAMP_BUS_STOP.y, kind: "bus" },
@@ -142,6 +143,10 @@ export const CAMP_LANDMARKS: readonly CampLandmark[] = [
   { id: "tarp", label: "큰 타프", x: CAMP_TARP.x + CAMP_TARP.w / 2, y: CAMP_TARP.y + CAMP_TARP.h / 2, kind: "tarp" },
   { id: "vans", label: "캠핑카", x: CAMP_VANS[1].x, y: CAMP_VANS[1].y - 10, kind: "van" },
   { id: "stream", label: "계곡", x: 1046, y: 470, kind: "stream" },
+  // 11/25 지도 이름표용: 바베큐 그릴·음료 자판기·의뢰판 (자리는 campLayout CAMP_BBQ·protocol CAMP_BOARD_SPOT 그대로)
+  { id: "bbq", label: "바베큐장", x: CAMP_BBQ.grill.x, y: CAMP_BBQ.grill.y - 8, kind: "bbq" },
+  { id: "vending", label: "음료 자판기", x: CAMP_BBQ.vending.x, y: CAMP_BBQ.vending.y - 10, kind: "vending" },
+  { id: "board", label: "의뢰판", x: CAMP_BOARD_SPOT.x, y: CAMP_BOARD_SPOT.y - 12, kind: "board" },
   // 11/16 별 망원경 (전망대 계단 아래·계곡 둑 — 미니맵 망원경 그림)
   ...CAMP_SCOPES.map((s): CampLandmark => ({ id: s.id, label: s.name, x: s.x, y: s.y, kind: "telescope" })),
 ];
@@ -155,4 +160,7 @@ export const CAMP_LANDMARK_COLOR: Record<CampLandmark["kind"], string> = {
   van: "#e8e0c8",
   stream: "#9ad8ff",
   telescope: "#fff2a0",
+  bbq: "#ff8a40",
+  vending: "#e05a5a",
+  board: "#d8a868",
 };

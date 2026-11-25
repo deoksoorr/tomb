@@ -44,7 +44,34 @@
 
 /* 너비는 --minimap-w (globals.css, 터치에서 작게). 11/16 r19 높이는 그 맵 비율대로 (style aspect-ratio — 마을·캠핑장·바닷가 모두
    같은 너비·테두리·자리, 가로세로 같은 배율이라 내 점이 찌그러지지 않아요). 마을은 --minimap-h와 같은 높이 */
+/* 11/25 지금 맵 이름 딱지 (지도 왼쪽 위에 겹쳐) */
+.mapBox {
+  position: relative;
+  display: block;
+}
+
+/* 11/25 맵 이름 딱지 + [크게] 단추 한 줄 */
+.mapChips {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  display: flex;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.mapName {
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(20, 18, 16, 0.78);
+  color: #f3e6c4;
+  font-size: 11px;
+  line-height: 16px;
+  pointer-events: none;
+}
+
 .map {
+  display: block;
   width: var(--minimap-w);
   height: auto;
   border: 1px solid rgba(232, 220, 192, 0.4);
@@ -53,11 +80,352 @@
   /* 캔버스는 3배 해상도라 부드럽게 줄여 그린다 */
   image-rendering: auto;
   opacity: 0.92;
+  /* 11/25 누르면 크게 보기 */
+  pointer-events: auto;
+  cursor: zoom-in;
 }
 
-/* 터치 화면은 단축키가 없어 칸을 숨긴다 */
+/* 11/25 [크게] 단추 (맵 이름 딱지 옆, 같은 모양) */
+.bigBtn {
+  padding: 1px 6px;
+  border: 0;
+  border-radius: 3px;
+  background: rgba(20, 18, 16, 0.78);
+  color: #f3e6c4;
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.bigBtn:hover {
+  color: var(--candle);
+}
+
+/* 11/25 지도 이름표 칸 (캔버스와 같은 자리 — 작은 지도는 1px 테두리 안쪽) */
+.labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.labels[data-corner] {
+  inset: 1px;
+}
+
+/* 이름표: 갈무리11 11px, 어두운 바탕 딱지 (자리·크기는 Minimap MapLabels가 고른다 — 높이 15px, 좌우 여백 4px) */
+.label {
+  position: absolute;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 2px;
+  background: rgba(16, 14, 12, 0.8);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+  color: #f3ecd8;
+  font-family: var(--font-body);
+  font-size: 11px;
+  line-height: 15px;
+  white-space: nowrap;
+}
+
+.label[data-group="shop"] {
+  color: #ffd9a0;
+}
+
+/* 다른 맵으로 가는 정류장: 가는 곳 색 딱지에 어두운 글자 (캠핑장행 초록 · 바닷가행 바다 · 마을행 노랑) */
+.label[data-group="bus"],
+.chip[data-group="bus"] {
+  background: #ffd84a;
+  color: #17140c;
+}
+
+.label[data-dest="busCamp"],
+.chip[data-dest="busCamp"] {
+  background: #9ae0a8;
+}
+
+.label[data-dest="busSea"],
+.chip[data-dest="busSea"] {
+  background: #6fd0ff;
+}
+
+.label[data-focus] {
+  box-shadow:
+    0 0 0 1px #14110d,
+    0 0 0 2px var(--candle);
+}
+
+/* 목록에서 고른 장소: 깜빡이는 고리 */
+.focusRing {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px;
+  border: 2px solid var(--candle);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2px rgba(10, 10, 8, 0.7),
+    inset 0 0 0 2px rgba(10, 10, 8, 0.7);
+  animation: ring 1s ease-in-out infinite;
+}
+
+@keyframes ring {
+  50% {
+    transform: scale(1.35);
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .focusRing {
+    animation: none;
+  }
+}
+
+/* ── 11/25 크게 보기 지도 ── 창(dialog)이 아니라 떠 있는 판: 걸으면서 본다 (게임 키·조이스틱이 그대로).
+   데스크톱은 오른쪽 위 버튼 줄 아래에 붙어 가운데 캐릭터를 가리지 않고, 오른쪽 아래 확대·축소 단추 위까지만 */
+.panel {
+  position: absolute;
+  z-index: 3;
+  top: calc(var(--safe-top) + var(--top-h) + var(--top-gap));
+  right: var(--safe-right);
+  display: flex;
+  flex-direction: column;
+  /* 11/25 운영자 「지도에 맞춰야지」: 창 폭 = 지도 높이 × 지도 비율 + 안쪽 여백 (빈 옆자리 없게) */
+  /* 화면이 낮으면 지도 높이를 줄여 창 안 스크롤이 생기지 않게 (머리줄·범례 줄 ≈ 104px + 아래 여백) */
+  --big-map-h: min(9999px, calc(100dvh / var(--uz) - var(--safe-top) - var(--top-h) - var(--top-gap) - var(--safe-bottom) - 220px));
+  /* 11/25 운영자 「크게 볼 때 폭은 맵마다 똑같이, 세로만 맵 비율대로」: 폭 560px 고정 (화면이 낮아 세로가 모자랄 때만 줄인다) */
+  width: min(560px, calc(60vw / var(--uz)), calc(var(--big-map-h) * var(--map-aspect, 1.4) + 16px));
+  max-height: calc(100% - var(--safe-top) - var(--top-h) - var(--top-gap) - var(--safe-bottom) - 104px);
+  /* 뒤 화면이 살짝 비치되 흐리게 (월드 이름표 글자가 지도 글자와 겹쳐 읽히지 않게) */
+  background: rgba(24, 22, 19, 0.86);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  color: var(--text);
+  box-shadow:
+    var(--px-border-strong),
+    0 0 0 4px rgba(9, 10, 8, 0.45),
+    0 16px 32px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+}
+
+/* 폰: 화면 가운데 카드 (폭 약 90%, 높이는 지도 + [목록] 줄만큼 — 위 HUD·아래 조이스틱·버튼은 보이게), 배경이 살짝 비친다 */
+.panel[data-coarse] {
+  top: 50%;
+  right: auto;
+  left: 50%;
+  /* 11/25 운영자 「폰 큰 지도가 너무 작다」: 폭을 거의 다 쓴다 */
+  width: 97%;
+  max-height: calc(100% - var(--safe-top) - var(--safe-bottom) - 300px);
+  transform: translate(-50%, -50%);
+  background: rgba(24, 22, 19, 0.8);
+  touch-action: pan-y;
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 12px;
+  border-bottom: 2px solid var(--line);
+}
+
+.panelTitle {
+  /* 11/25 제목이 남는 폭을 차지해 [×]가 오른쪽 끝에 붙고, 줄 높이를 맞춰 세로 가운데 */
+  flex: 1;
+  margin: 0;
+  color: var(--bone);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1;
+  align-self: center;
+}
+
+.panelHint {
+  flex: 1;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: right;
+}
+
+.panel[data-coarse] .panelTitle {
+  flex: 1;
+}
+
+.big {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  padding: 8px;
+  /* 11/25 운영자 「스크롤 없이」: 지도 높이를 창에 맞춰 줄이므로 안쪽 스크롤은 없다 */
+  overflow: hidden;
+}
+
+/* 폰 지도 높이: 화면 높이에서 위 HUD·아래 조작 자리·카드 머리말을 빼고 (가로 화면에서도 카드가 넘치지 않게) */
+.panel[data-coarse] .big {
+  --big-map-h: max(150px, calc(100dvh / var(--uz) - 380px));
+  padding: 3px;
+}
+
+.legendRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.listToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-block: 4px;
+  font-size: 12px;
+}
+
+.list {
+  display: grid;
+  gap: 10px;
+}
+
+.bigFrame {
+  position: relative;
+  width: 100%;
+  margin: 0 auto;
+  background: #24221f;
+  box-shadow: 0 0 0 1px rgba(232, 220, 192, 0.4);
+}
+
+.bigMap {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.legendMe,
+.legendOther {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #14110d;
+  border-radius: 50%;
+  background: #ffe14a;
+}
+
+.legendOther {
+  margin-left: 6px;
+  background: #6fe3ff;
+}
+
+.legendFriend {
+  display: inline-flex;
+  margin-left: 6px;
+  color: #ff8fb8;
+}
+
+.group {
+  display: grid;
+  gap: 6px;
+}
+
+.groupName {
+  margin: 0;
+  color: var(--bone);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  padding: 4px 8px;
+  border: 0;
+  background: var(--line);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.chip[data-group="shop"] {
+  color: #ffd9a0;
+}
+
+.chip[aria-pressed="true"] {
+  box-shadow:
+    0 0 0 1px #14110d,
+    0 0 0 3px var(--candle);
+}
+
+/* 터치 화면은 단축키가 없어 칸을 숨긴다. 11/25 [크게]는 손가락으로 누르기 좋게 (보이는 딱지 24px + 누르는 자리 사방 8px 더) */
 @media (pointer: coarse) {
   .key {
     display: none;
   }
+
+  /* 11/25 폰: 이름 딱지·[크게]는 지도 위에 겹치지 않고 지도 바로 위 한 줄 (이름 왼쪽, [크게] 오른쪽) */
+  .mapBox {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  /* 이름표 칸은 캔버스 자리만 (위 한 줄 = 22px + 간격 4px 만큼 내려서) */
+  .labels[data-corner] {
+    inset: 27px 1px 1px 1px;
+  }
+
+  .mapChips {
+    position: static;
+    order: -1;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .mapName {
+    line-height: 22px;
+  }
+
+  .bigBtn {
+    position: relative;
+    padding: 1px 10px;
+    font-size: 12px;
+    line-height: 22px;
+    box-shadow: 0 0 0 1px rgba(243, 230, 196, 0.45);
+  }
+
+  .bigBtn::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+  }
+}
+
+/* 11/25 운영자 「폰 큰 지도 제목·[×] 줄이 너무 길다」: 머리줄을 얇게 (버튼 32px, 위아래 여백 2px) */
+.panel[data-coarse] .panelHead {
+  padding: 2px 2px 2px 10px;
+}
+
+.panel[data-coarse] .panelHead button {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
 }

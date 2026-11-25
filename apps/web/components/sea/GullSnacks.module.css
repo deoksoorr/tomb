@@ -103,15 +103,23 @@
 }
 
 /* 터치 화면: 오른쪽 위 지도 단추 아래에 세로로 (개수 줄 + 던지기 단추), 손가락 크기로 */
+/* 11/25 작은 지도를 펼쳐 두면 그 아래로 (--minimap-bottom — Minimap이 [지도] 단추·지도 묶음 맨 아래를 알린다).
+   물때 줄(왼쪽 위 칩 묶음·작은 지도 아래 + 6px, 높이 약 23px — Hud .compactStack)보다도 아래로 */
+/* 11/25 운영자: 폰은 오른쪽 아래 행동 버튼 묶음 바로 위 (오른손 엄지로 걸으면서 던지게 — 지도·물때 줄과도 안 겹친다) */
 .bar[data-compact] {
   position: fixed;
-  top: calc(var(--safe-top, 0px) + 112px);
-  right: 8px;
+  bottom: calc(var(--safe-bottom, 0px) + 162px);
+  right: calc(var(--safe-right, 0px) + 12px);
   z-index: 10;
   flex-direction: column;
   flex-wrap: nowrap;
   align-items: stretch;
   max-width: 160px;
+}
+
+/* 11/25 큰 지도 카드(화면 가운데)가 떠 있는 동안은 숨긴다 (카드와 겹치지 않게 — 닫으면 다시) */
+:root:has([data-bigmap]) .bar[data-compact] {
+  display: none;
 }
 
 .bar[data-compact] .chip {

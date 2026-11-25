@@ -72,10 +72,11 @@
 
 /* 11/16 터치 화면: 위 가장자리 바 바로 아래 가운데에 물때 줄 → 포인트 이벤트 띠 순서로 쌓는 묶음.
    11/17 왼쪽 위 긴급 의뢰 칩·고정 공지 칩(펼치면 넓어진다)과 겹치지 않게 그 높이만큼 내린다.
-   11/22 왼쪽 위 칩은 한 묶음(TopLeftCluster) — 그 맨 아래(--tl-bottom, 화면 기준)보다 아래로 (이 줄은 위 가장자리 바 기준이라 --safe-top을 뺀다) */
+   11/22 왼쪽 위 칩은 한 묶음(TopLeftCluster) — 그 맨 아래(--tl-bottom, 화면 기준)보다 아래로 (이 줄은 위 가장자리 바 기준이라 --safe-top을 뺀다).
+   11/25 오른쪽 위 작은 지도를 펼쳐 두면 그 아래로도 (--minimap-bottom — 물때 줄이 지도 왼쪽을 덮었다) */
 .compactStack {
   position: absolute;
-  top: max(calc(var(--top-h) + 6px), calc(var(--tl-bottom, 0px) - var(--safe-top) + 6px));
+  top: max(calc(var(--top-h) + 6px), calc(var(--tl-bottom, 0px) - var(--safe-top) + 6px), calc(var(--minimap-bottom, 0px) - var(--safe-top) + 6px));
   left: 50%;
   display: flex;
   flex-direction: column;
