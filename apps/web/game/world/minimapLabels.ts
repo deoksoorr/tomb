@@ -97,7 +97,17 @@ export function placeLabels(items: readonly LabelItem[], W: number, H: number, o
   for (const it of sorted) {
     const { x, y, w, h, g } = it;
     const clampX = (l: number) => Math.max(1, Math.min(W - w - 1, l));
+    // 11/25 정류장 딱지는 고리와 균형 있게: 가운데 위(밀리지 않을 때) → 지도 가장자리면 반대쪽 옆에 세로 가운데 → 가운데 아래
+    const centeredFits = x - w / 2 >= 1 && x + w / 2 <= W - 1;
+    const busFirst: [number, number][] = it.hard
+      ? [
+          ...(centeredFits && y - g - h - 1 >= 0 ? [[x - w / 2, y - g - h - 1] as [number, number]] : []),
+          x < W / 2 ? ([x + g + 3, y - h / 2] as [number, number]) : ([x - g - 3 - w, y - h / 2] as [number, number]),
+          ...(centeredFits ? [[x - w / 2, y + g + 1] as [number, number]] : []),
+        ]
+      : [];
     const cands: [number, number][] = [
+      ...busFirst,
       [clampX(x - w / 2), y - g - h - 1],
       [clampX(x - w / 2), y + g + 1],
       [x + g + 2, y - h / 2],
@@ -117,7 +127,15 @@ export function placeLabels(items: readonly LabelItem[], W: number, H: number, o
     const fits = (r: Rect, level: number) =>
       r.x >= 0 && r.y >= 0 && r.x + r.w <= W && r.y + r.h <= H && !placed.some((p) => hit(p, r, pad)) && !icons.some((ic) => ic.id !== it.id && avoids(ic, level) && hit(ic.r, r, 0));
     let got: Rect | null = null;
-    for (const level of [2, 1, 0]) {
+    // 정류장 딱지는 균형 자리(busFirst)를 먼저 — 작은 그림을 조금 덮더라도 고리 가운데 위·옆에 붙인다
+    for (const [l, t] of busFirst) {
+      const r = { x: Math.round(l), y: Math.round(t), w, h };
+      if (fits(r, 0)) {
+        got = r;
+        break;
+      }
+    }
+    for (const level of got ? [] : [2, 1, 0]) {
       for (const [l, t] of cands) {
         const r = { x: Math.round(l), y: Math.round(t), w, h };
         if (fits(r, level)) {

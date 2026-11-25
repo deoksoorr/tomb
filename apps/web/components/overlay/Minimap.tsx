@@ -116,7 +116,21 @@ function drawBus(ctx: CanvasRenderingContext2D, kind: string, x: number, y: numb
   ctx.lineWidth = 1.5 / unit;
   ctx.strokeStyle = BUS_TINT[kind] ?? "#ffd84a";
   ctx.stroke();
-  drawIcon(ctx, kind, x, y, k);
+  // 11/25 그림을 고리 정중앙에 (drawIcon은 왼쪽 위 칸 기준이라 칸 크기만큼 오른쪽·아래로 밀린다) — 화면 픽셀에 맞춰 반올림
+  const ic = MAP_ICONS[kind];
+  if (!ic) return;
+  const xs = ic.px.map(([dx]) => dx);
+  const ys = ic.px.map(([, dy]) => dy);
+  const snap = (v: number) => Math.round(v * unit) / unit;
+  const ox = snap(x - ((Math.min(...xs) + Math.max(...xs) + 1) * k) / 2);
+  const oy = snap(y - ((Math.min(...ys) + Math.max(...ys) + 1) * k) / 2);
+  const edge = Math.max(1, Math.round(unit)) / unit;
+  ctx.fillStyle = "rgba(0,0,0,0.75)";
+  for (const [dx, dy] of ic.px) ctx.fillRect(ox + dx * k - edge, oy + dy * k - edge, k + edge * 2, k + edge * 2);
+  for (const [dx, dy, acc] of ic.px) {
+    ctx.fillStyle = acc ? ic.accent : ic.color;
+    ctx.fillRect(ox + dx * k, oy + dy * k, k, k);
+  }
 }
 
 /** 테두리 두른 동그란 점 (지도 칸 단위 좌표·반지름) */
