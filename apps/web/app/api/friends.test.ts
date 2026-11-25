@@ -358,6 +358,24 @@ describe("친구 창 한 줄 (마지막 접속·자랑거리·정렬)", () => {
     expect(JSON.stringify(p)).not.toContain("lastSeen");
     expect(JSON.stringify(p)).not.toContain("card");
   });
+
+  it("11/25 바닷가 집만 있는 친구도 집이 뜨고, 두 채면 마을·바닷가 둘 다 온다", async () => {
+    const [a, b] = [await newVisitor(), await newVisitor("두채")];
+    fakeRealtime({ 2: b }, {});
+    await ask(a, 2);
+    await reply(b, (await list(b)).incoming[0].key, true);
+    const seaId = houseIdFor(b.id, "sea");
+    await getHouseStore().create({ id: seaId, owner: b.id, name: "오두막", intro: "", ownerName: "두채", tier: "small", lot: null, now: Date.now() });
+    forgetFriendCard();
+    let f = (await list(a)).friends[0];
+    expect(f).toMatchObject({ houseId: null, seaHouseId: seaId });
+    expect(f.card?.seaHouse?.id).toBe(seaId);
+    const villageId = houseIdFor(b.id);
+    await getHouseStore().create({ id: villageId, owner: b.id, name: "작은 집", intro: "", ownerName: "두채", tier: "small", lot: null, now: Date.now() });
+    forgetFriendCard();
+    f = (await list(a)).friends[0];
+    expect(f).toMatchObject({ houseId: villageId, seaHouseId: seaId });
+  });
 });
 
 describe("친구 들고 남 밀어 주기 등록", () => {

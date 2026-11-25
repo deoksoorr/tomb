@@ -89,11 +89,12 @@
   opacity: 1;
 }
 
+/* 11/25 줄이 넘치면 왼쪽부터 (오른쪽 정렬이면 폰에서 버튼 줄이 들쭉날쭉) — [삭제]만 오른쪽 끝 */
 .actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 8px;
 }
 

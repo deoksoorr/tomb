@@ -42,7 +42,7 @@ describe("채널 값", () => {
     expect(housingChannelOf("0")).toBe(1);
     expect(housingChannelOf(String(HOUSING_CHANNELS + 1))).toBe(1);
     expect(housingChannelOf("3")).toBe(3);
-    expect(lotLabel(2, 7)).toBe("2채널 7번지");
+    expect(lotLabel(2, 7)).toBe("2채널 기억숲 마을 7번지");
   });
 });
 
@@ -150,7 +150,7 @@ describe.skipIf(!!conn)("채널별 분양 (서비스·라우트)", () => {
     const s = new MemoryHouseStore();
     await s.create({ id: houseIdFor("r1"), owner: "r1", name: "랭킹집", intro: "", ownerName: "주인장", tier: "small", ch: 7, lot: 3, now: 1 });
     const r = await houseRank(s, "all", null, 10);
-    expect(r.rows[0].sub).toBe("7채널 3번지 · 주인장");
+    expect(r.rows[0].sub).toBe("7채널 기억숲 마을 3번지 · 주인장");
   });
 
   // 라우트: 채널을 받아 그 채널만 다룬다
@@ -195,7 +195,7 @@ describe.skipIf(!!conn)("채널별 분양 (서비스·라우트)", () => {
     expect(wrong.status).toBe(409);
     expect(((await wrong.json()) as { error: { code: string; message: string } }).error).toMatchObject({
       code: "WRONG_CHANNEL",
-      message: expect.stringContaining("6채널 2번지"),
+      message: expect.stringContaining("6채널 기억숲 마을 2번지"),
     });
     expect((await ext(6)).status).toBe(200);
     const layout = (ch: number) =>

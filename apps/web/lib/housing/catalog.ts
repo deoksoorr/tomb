@@ -1,4 +1,4 @@
-import { DEFAULT_MAX_CHANNELS, SEA_LOTS } from "@tomb/protocol";
+import { DEFAULT_MAX_CHANNELS, SEA_LOTS, VILLAGE_TITLE } from "@tomb/protocol";
 
 // 하우징(개인 집) 카탈로그와 밸런스 값. 서버(검증·가격)와 클라이언트(상점·게임 그림)가 같이 쓴다.
 // 가격·점수를 바꾸면 상점 화면과 서버 검증이 함께 바뀐다. 이미 놓인 물건의 점수는 다음 저장 때 다시 계산된다.
@@ -488,8 +488,8 @@ export const housingChannelOf = (raw: unknown): number => {
   const n = Number(raw);
   return isHousingChannel(n) ? n : LEGACY_HOUSING_CHANNEL;
 };
-/** "3채널 5번지" */
-export const lotLabel = (ch: number, lot: number) => `${ch}채널 ${lot}번지`;
+/** "3채널 기억숲 마을 5번지" (11/25 운영자: 바닷가·캠핑장 집과 헷갈리지 않게 마을 이름을 붙인다) */
+export const lotLabel = (ch: number, lot: number) => `${ch}채널 ${VILLAGE_TITLE} ${lot}번지`;
 
 /** 주인이 이만큼 들어오지 않으면 집을 비우고 낸 포인트를 돌려준다 (lib/housing/reclaim.ts) */
 export const RECLAIM_DAYS = 7;

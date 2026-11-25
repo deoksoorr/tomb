@@ -31,7 +31,10 @@ export type FriendWhere =
 export type FriendCard = {
   look: { color: string; body: string; look: string[]; dye?: AvatarDye };
   /** 집 꾸밈 점수 (집 랭킹 점수). 집이 없거나 숨겨졌으면 null */
-  house: { id: string; score: number } | null;
+  /** label = 어느 구역 몇 번 (「3채널 12번지」 — 번지가 없는 옛 집이면 없음) */
+  house: { id: string; score: number; label?: string } | null;
+  /** 11/25 바닷가 집(포구 오두막). 없거나 숨겨졌으면 null (예전 응답엔 없을 수 있다). label = 「3채널 포구 2번 오두막」 */
+  seaHouse?: { id: string; score: number; label?: string } | null;
   /** 사냥 레벨 */
   hunt: number;
   /** 도감 채운 비율 (0~100, 모든 종류 합쳐) */
@@ -50,6 +53,8 @@ export type FriendEntry = {
   where: FriendWhere;
   /** 친구 집 (분양받았고 숨겨지지 않았으면). 목록(GET /api/friends)에만 있다 */
   houseId?: string | null;
+  /** 11/25 친구 바닷가 집 (분양받았고 숨겨지지 않았으면). 목록에만 있다 */
+  seaHouseId?: string | null;
   /** 마지막 접속 (마지막 머무르기 기록 시각, 없으면 null). 목록에만 있다 */
   lastSeen?: number | null;
   /** 자랑거리 한 줄. 목록에만 있다 */

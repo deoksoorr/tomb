@@ -3,6 +3,7 @@ import { SPECIES, speciesOf } from "./forage/catalog";
 import { getForageStore } from "./forage/store";
 import type { FriendCard } from "./friendTypes";
 import { getHouseStore, houseIdFor } from "./housing/service";
+import { houseLabel, type HouseZone } from "./housing/catalog";
 import { lookScore } from "./lookScore";
 import { MAX_LEVEL } from "./rpg/formulas";
 import { getRpgStore } from "./rpg/store";
@@ -37,16 +38,24 @@ export function biggestFish(dex: Record<string, { n: number; max: number }>): Fr
   return best;
 }
 
+/** 11/25 운영자 「어느 구역 몇 번인지 표현」: 집 자리 이름 (번지가 없는 옛 집이면 비운다) */
+const placeOf = (h: { ch: number; lot: number | null; zone?: HouseZone }): { label?: string } => (h.lot != null ? { label: houseLabel({ ch: h.ch, lot: h.lot, zone: h.zone }) } : {});
+
 async function build(accountId: string, now: number): Promise<FriendCard> {
   const accounts = getAccounts();
   const houseId = houseIdFor(accountId);
-  const [acct, style, house, rpg, sup, dex] = await Promise.all([
+  // 11/25 운영자 「바닷가에 집 샀는데 친구 목록에 안 뜬다」: 마을 집만 읽고 있었다 → 바닷가 집도 같이
+  const seaId = houseIdFor(accountId, "sea");
+  const [acct, style, house, sea, rpg, sup, dex] = await Promise.all([
     accounts.get(accountId, kstDay(now), now),
     getStyleStore(accounts)
       .get(accountId)
       .catch(() => null),
     getHouseStore()
       .get(houseId)
+      .catch(() => null),
+    getHouseStore()
+      .get(seaId)
       .catch(() => null),
     getRpgStore()
       .get(accountId)
@@ -59,7 +68,8 @@ async function build(accountId: string, now: number): Promise<FriendCard> {
   ]);
   return {
     look: { color: acct.color ?? AVATAR_COLORS[0], body: acct.body ?? "hood", look: lookOf(acct), ...(style?.dye ? { dye: style.dye } : {}) },
-    house: house && !house.hidden ? { id: houseId, score: house.score } : null,
+    house: house && !house.hidden ? { id: houseId, score: house.score, ...placeOf(house) } : null,
+    seaHouse: sea && !sea.hidden ? { id: seaId, score: sea.score, ...placeOf(sea) } : null,
     hunt: sup ? MAX_LEVEL : (rpg?.level ?? 1),
     dex: dexPercentAll(dex),
     bigFish: biggestFish(dex),

@@ -116,7 +116,6 @@ async function houseOf(accountId: string): Promise<string | null> {
   const id = houseIdFor(accountId);
   const h = await getHouseStore().get(id);
   if (h && !h.hidden) return id;
-  if (h) return null;
   const seaId = houseIdFor(accountId, "sea");
   const sea = await getHouseStore().get(seaId);
   return sea && !sea.hidden ? seaId : null;
@@ -157,6 +156,7 @@ export async function friendList(me: string, now = Date.now()): Promise<FriendLi
     since: f.at,
     where: toFriendWhere(where?.[f.id], where !== null),
     houseId: cards[j]?.house?.id ?? null,
+    seaHouseId: cards[j]?.seaHouse?.id ?? null,
     lastSeen: seen[j] || null,
     ...(cards[j] ? { card: cards[j] } : {}),
   }));

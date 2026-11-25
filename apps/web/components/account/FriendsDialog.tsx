@@ -63,7 +63,14 @@ export function friendFullReason(name: string, w: FriendWhere, myCh: number | nu
 export function cardStats(c: FriendCard): string[] {
   return [
     ...(c.fashion !== undefined ? [`꾸미기 ${c.fashion}점`] : []),
-    c.house ? `집 ${c.house.score.toLocaleString("ko-KR")}점` : "집 없음",
+    // 11/25 집이 두 채(마을·바닷가)면 둘 다
+    ...(c.house && c.seaHouse
+      ? [`마을 집 ${c.house.score.toLocaleString("ko-KR")}점`, `바닷가 집 ${c.seaHouse.score.toLocaleString("ko-KR")}점`]
+      : c.house
+        ? [`집 ${c.house.score.toLocaleString("ko-KR")}점`]
+        : c.seaHouse
+          ? [`바닷가 집 ${c.seaHouse.score.toLocaleString("ko-KR")}점`]
+          : ["집 없음"]),
     `사냥 Lv ${c.hunt}`,
     `도감 ${c.dex}%`,
     c.bigFish ? `최대어 ${c.bigFish.name} ${(c.bigFish.size / 10).toFixed(1)}cm` : "최대어 없음",
@@ -214,10 +221,9 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
   }
 
   /** 친구 집 놀러 가기 (분양 사무소의 집 방문 흐름을 그대로 쓴다) */
-  function visit(f: FriendEntry) {
-    if (!f.houseId) return;
+  function visit(houseId: string) {
     onClose();
-    bridge.emit("portal:open", { kind: "housing", houseId: f.houseId });
+    bridge.emit("portal:open", { kind: "housing", houseId });
   }
 
   const busy = pending !== null;
@@ -341,9 +347,17 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
                         <button type="button" className={cx(ui.button, online && !full && ui.primary)} disabled={busy || !!full} title={full ?? undefined} onClick={() => void go(f)}>
                           {f.where.at === "world" && !here ? `친구한테 가기 (${f.where.ch}채널 ${MAP_NAME[mapOf(f.where.map)]})` : "친구한테 가기"}
                         </button>
+                        {/* 11/25 집마다 버튼 하나: 어느 구역 몇 번인지 (「3채널 12번지」·「3채널 포구 2번 오두막」) */}
                         {f.houseId && (
-                          <button type="button" className={ui.button} disabled={busy} onClick={() => visit(f)}>
-                            <PixelIcon name="house" />집 놀러 가기
+                          <button type="button" className={ui.button} disabled={busy} title="집 놀러 가기" onClick={() => visit(f.houseId!)}>
+                            <PixelIcon name="house" />
+                            {f.card?.house?.label ?? "마을 집"}
+                          </button>
+                        )}
+                        {f.seaHouseId && (
+                          <button type="button" className={ui.button} disabled={busy} title="집 놀러 가기" onClick={() => visit(f.seaHouseId!)}>
+                            <PixelIcon name="house" />
+                            {f.card?.seaHouse?.label ?? "바닷가 집"}
                           </button>
                         )}
                         <button

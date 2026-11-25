@@ -60,7 +60,7 @@ describe.skipIf(!!conn)("오래 비운 집 정리", () => {
     expect(await store.get(id)).not.toBeNull();
 
     const r = await sweep(T + RECLAIM_MS + 1);
-    expect(r.reclaimed.find((d) => d.id === id)).toMatchObject({ points: PLOT + WIDE, label: `1채널 ${lot}번지` });
+    expect(r.reclaimed.find((d) => d.id === id)).toMatchObject({ points: PLOT + WIDE, label: `1채널 기억숲 마을 ${lot}번지` });
     expect(await store.get(id)).toBeNull();
     expect((await village(store, 1)).houses.some((h) => h.lot === lot)).toBe(false);
 
