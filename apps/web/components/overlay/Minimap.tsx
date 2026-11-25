@@ -409,6 +409,9 @@ export default function Minimap() {
   }, [wrapEl]);
 
   const size = mapSize(map);
+  const crop = edgeCrop(map);
+  const vw = size.w - crop.l - crop.r;
+  const vh = size.h - crop.t - crop.b;
   return (
     <>
       <div ref={setWrapEl} className={styles.wrap}>
@@ -433,20 +436,23 @@ export default function Minimap() {
         {open && (
           // 11/25 운영자: 펼친 지도에 지금 맵 이름 딱지 하나 (왼쪽 위) · [크게] (오른쪽 위) · 다른 맵 가는 정류장 이름표
           <div className={styles.mapBox}>
-            <canvas
-              ref={canvas}
-              className={styles.map}
-              // 11/22 터치 왼쪽 위 칩 묶음이 펼친 지도 칸을 비운다 (TopLeftCluster.module.css)
-              data-minimap=""
-              width={size.w * SCALE}
-              height={size.h * SCALE}
-              // 11/16 r19 지도 비율 그대로 (가로세로 같은 배율 — 바닷가 지도가 늘어나 보이던 것 고침)
-              style={{ aspectRatio: `${size.w} / ${size.h}` }}
-              aria-label={`${map !== "village" ? AWAY_MINIMAP[map].label : "마을 지도"} (노란 점이 나, 분홍 하트가 친구)`}
-              role="img"
-              onClick={() => setBig(true)}
-            />
-            <MapLabels map={map} corner coarse={coarse} />
+            {/* 11/25 큰 지도처럼 가장자리 검은 담장 줄은 잘라 낸다 (테두리 칸 = 보이는 지도, 캔버스는 잘린 만큼 밖으로) */}
+            <div className={styles.mapFrame} style={{ aspectRatio: `${vw} / ${vh}` }}>
+              <canvas
+                ref={canvas}
+                className={styles.map}
+                // 11/22 터치 왼쪽 위 칩 묶음이 펼친 지도 칸을 비운다 (TopLeftCluster.module.css)
+                data-minimap=""
+                width={size.w * SCALE}
+                height={size.h * SCALE}
+                // 11/16 r19 지도 비율 그대로 (가로세로 같은 배율 — 바닷가 지도가 늘어나 보이던 것 고침)
+                style={{ left: `${(-crop.l / vw) * 100}%`, top: `${(-crop.t / vh) * 100}%`, width: `${(size.w / vw) * 100}%`, height: `${(size.h / vh) * 100}%` }}
+                aria-label={`${map !== "village" ? AWAY_MINIMAP[map].label : "마을 지도"} (노란 점이 나, 분홍 하트가 친구)`}
+                role="img"
+                onClick={() => setBig(true)}
+              />
+            </div>
+            <MapLabels map={map} corner coarse={coarse} crop={crop} />
             {/* 바닷가 정류장이 오른쪽 위 끝이라 [크게]도 왼쪽 위 이름 딱지 옆에 */}
             <div className={styles.mapChips}>
               <span className={styles.mapName}>{PLACE_TITLE[map]}</span>
@@ -465,6 +471,43 @@ export default function Minimap() {
 /** 그 맵 지도 크기 (지도 칸) */
 function mapSize(map: MapId): { w: number; h: number } {
   return map !== "village" ? { w: AWAY_MINIMAP[map].w, h: AWAY_MINIMAP[map].h } : { w: MINIMAP_W, h: MINIMAP_H };
+}
+
+/** 지도 가장자리에서 잘라 낼 칸 수 (왼·위·오른·아래) */
+type Crop = { l: number; t: number; r: number; b: number };
+const NO_CROP: Crop = { l: 0, t: 0, r: 0, b: 0 };
+const cropCache = new Map<MapId, Crop>();
+/**
+ * 11/25 운영자 「지도랑 바깥 사이 검은 간격을 다 붙이자」: 큰 지도는 가장자리의 검은 담장 줄(마을 바깥 담 — 왼·위·오른 4칸, 아래 2칸)을 잘라
+ * 지도 그림이 테두리 줄에 바로 붙게. 줄의 90% 이상이 거의 검은 칸이면 담장 줄로 본다 (성문 길 몇 칸은 같이 잘린다)
+ */
+function edgeCrop(map: MapId): Crop {
+  const hit = cropCache.get(map);
+  if (hit) return hit;
+  const { w, h } = mapSize(map);
+  const px = map !== "village" ? AWAY_MINIMAP[map].pixels() : minimapPixels();
+  const dark = (x: number, y: number) => {
+    const i = (y * w + x) * 4;
+    return px[i] + px[i + 1] + px[i + 2] < 0x30 * 3;
+  };
+  const col = (x: number) => {
+    let n = 0;
+    for (let y = 0; y < h; y++) if (dark(x, y)) n++;
+    return n >= h * 0.9;
+  };
+  const row = (y: number) => {
+    let n = 0;
+    for (let x = 0; x < w; x++) if (dark(x, y)) n++;
+    return n >= w * 0.9;
+  };
+  const run = (len: number, f: (i: number) => boolean) => {
+    let n = 0;
+    while (n < Math.min(8, len / 4) && f(n)) n++;
+    return n;
+  };
+  const c = { l: run(w, col), t: run(h, row), r: run(w, (i) => col(w - 1 - i)), b: run(h, (i) => row(h - 1 - i)) };
+  cropCache.set(map, c);
+  return c;
 }
 
 /** 그 맵 주요 장소 (월드 좌표) */
@@ -502,7 +545,7 @@ function useBoxSize(ref: RefObject<HTMLElement | null>): { w: number; h: number 
  * 11/25 지도 이름표 (캔버스 위에 글자로): corner = 작은 지도 (다른 맵 가는 정류장만), 아니면 크게 보기 (MAP_LABELS 전부, 겹치면 앞 순위만).
  * focus = 목록에서 고른 장소 (맨 먼저 자리를 잡고 깜빡이는 고리)
  */
-function MapLabels({ map, corner = false, focus = null, coarse = false }: { map: MapId; corner?: boolean; focus?: string | null; coarse?: boolean }) {
+function MapLabels({ map, corner = false, focus = null, coarse = false, crop = NO_CROP }: { map: MapId; corner?: boolean; focus?: string | null; coarse?: boolean; crop?: Crop }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const box = useBoxSize(ref);
   // 글꼴이 늦게 들어오면 폭을 다시 잰다
@@ -517,7 +560,8 @@ function MapLabels({ map, corner = false, focus = null, coarse = false }: { map:
   const layout = useMemo(() => {
     if (!box.w || !box.h) return { placed: [], anchors: new Map<string, { x: number; y: number }>() };
     const size = mapSize(map);
-    const unit = box.w / size.w;
+    // 이름표 칸 = 보이는 지도 (큰 지도는 가장자리 담장 줄을 잘라 낸 만큼 당겨 놓는다)
+    const unit = box.w / (size.w - crop.l - crop.r);
     const labels = MAP_LABELS[map];
     const to = map !== "village" ? AWAY_MINIMAP[map].to : toMinimap;
     const items: (LabelItem & { group: LabelGroup })[] = [];
@@ -527,8 +571,8 @@ function MapLabels({ map, corner = false, focus = null, coarse = false }: { map:
     for (const l of spotsOf(map)) {
       const lab = labels[l.id];
       const p = to(l.x, l.y);
-      const x = p.x * unit;
-      const y = p.y * unit;
+      const x = (p.x - crop.l) * unit;
+      const y = (p.y - crop.t) * unit;
       if (!lab || (corner && lab.group !== "bus")) {
         const g = Math.max(2, Math.round(3 * unit));
         soft.push({ x: x - g, y: y - g, w: g * 2, h: g * 2 });
@@ -543,7 +587,7 @@ function MapLabels({ map, corner = false, focus = null, coarse = false }: { map:
     return { placed: placeLabels(items, box.w, box.h, obstacles, 2, soft), anchors };
     // fontsTick: 글꼴이 들어오면 다시 잰다
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [box.w, box.h, map, corner, focus, fontsTick, coarse]);
+  }, [box.w, box.h, map, corner, focus, fontsTick, coarse, crop]);
   const labels = MAP_LABELS[map];
   const f = focus ? layout.anchors.get(focus) : undefined;
   return (
@@ -567,8 +611,12 @@ function MapLabels({ map, corner = false, focus = null, coarse = false }: { map:
  */
 function MapPanel({ map, canvasRef, onClose, coarse }: { map: MapId; canvasRef: RefObject<HTMLCanvasElement | null>; onClose: () => void; coarse: boolean }) {
   const size = mapSize(map);
+  // 11/25 가장자리 검은 담장 줄은 잘라 내고 보이는 칸만큼의 비율로 (캔버스는 통째로 그리고 잘린 만큼 바깥으로 밀어 둔다 — 점 좌표는 그대로)
+  const crop = edgeCrop(map);
+  const vw = size.w - crop.l - crop.r;
+  const vh = size.h - crop.t - crop.b;
   return (
-    <section className={styles.panel} style={{ "--map-aspect": size.w / size.h } as CSSProperties} data-coarse={coarse || undefined} data-bigmap="" aria-label={`${PLACE_TITLE[map]} 큰 지도`} onPointerDown={(e) => e.stopPropagation()}>
+    <section className={styles.panel} style={{ "--map-aspect": vw / vh } as CSSProperties} data-coarse={coarse || undefined} data-bigmap="" aria-label={`${PLACE_TITLE[map]} 큰 지도`} onPointerDown={(e) => e.stopPropagation()}>
       <header className={styles.panelHead}>
         <h2 className={styles.panelTitle}>{PLACE_TITLE[map]}</h2>
         <button type="button" className={cx(ui.button, ui.quiet, ui.icon)} onClick={onClose} aria-label="큰 지도 닫기" title={coarse ? "닫기" : "닫기 (Esc·M)"}>
@@ -576,9 +624,11 @@ function MapPanel({ map, canvasRef, onClose, coarse }: { map: MapId; canvasRef: 
         </button>
       </header>
       <div className={styles.big}>
-        <div className={styles.bigFrame} data-zoomout={coarse ? undefined : ""} onClick={coarse ? undefined : onClose} title={coarse ? undefined : "누르면 작은 지도로"} style={{ aspectRatio: `${size.w} / ${size.h}` }}>
-          <canvas ref={canvasRef} className={styles.bigMap} width={size.w * BIG_SCALE} height={size.h * BIG_SCALE} role="img" aria-label={`${PLACE_TITLE[map]} 큰 지도 (노란 점이 나, 분홍 하트가 친구)`} />
-          <MapLabels map={map} focus={null} />
+        <div className={styles.bigFrame} data-zoomout={coarse ? undefined : ""} onClick={coarse ? undefined : onClose} title={coarse ? undefined : "누르면 작은 지도로"} style={{ aspectRatio: `${vw} / ${vh}` }}>
+          <div className={styles.bigCrop} style={{ left: `${(-crop.l / vw) * 100}%`, top: `${(-crop.t / vh) * 100}%`, width: `${(size.w / vw) * 100}%`, height: `${(size.h / vh) * 100}%` }}>
+            <canvas ref={canvasRef} className={styles.bigMap} width={size.w * BIG_SCALE} height={size.h * BIG_SCALE} role="img" aria-label={`${PLACE_TITLE[map]} 큰 지도 (노란 점이 나, 분홍 하트가 친구)`} />
+          </div>
+          <MapLabels map={map} focus={null} crop={crop} />
         </div>
         <div className={styles.legendRow}>
           <p className={styles.legend}>

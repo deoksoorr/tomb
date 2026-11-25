@@ -70,16 +70,24 @@
   pointer-events: none;
 }
 
-.map {
-  display: block;
-  width: var(--minimap-w);
-  height: auto;
+/* 11/25 테두리 칸 = 보이는 지도 (가장자리 검은 담장 줄은 캔버스를 밖으로 밀어 잘라 낸다 — 자리·크기는 Minimap이 %로) */
+.mapFrame {
+  position: relative;
+  /* 비율은 안쪽(캔버스 칸)에 맞추고 바깥 폭은 그대로 --minimap-w */
+  box-sizing: content-box;
+  width: calc(var(--minimap-w) - 2px);
+  overflow: hidden;
   border: 1px solid rgba(232, 220, 192, 0.4);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
   background: #24221f;
+  opacity: 0.92;
+}
+
+.map {
+  position: absolute;
+  display: block;
   /* 캔버스는 3배 해상도라 부드럽게 줄여 그린다 */
   image-rendering: auto;
-  opacity: 0.92;
   /* 11/25 누르면 크게 보기 */
   pointer-events: auto;
   cursor: zoom-in;
@@ -196,7 +204,7 @@
   /* 화면이 낮으면 지도 높이를 줄여 창 안 스크롤이 생기지 않게 (머리줄·범례 줄 ≈ 104px + 아래 여백) */
   --big-map-h: min(9999px, calc(100dvh / var(--uz) - var(--safe-top) - var(--top-h) - var(--top-gap) - var(--safe-bottom) - 220px));
   /* 11/25 운영자 「크게 볼 때 폭은 맵마다 똑같이, 세로만 맵 비율대로」: 폭 560px 고정 (화면이 낮아 세로가 모자랄 때만 줄인다) */
-  width: min(560px, calc(60vw / var(--uz)), calc(var(--big-map-h) * var(--map-aspect, 1.4) + 16px));
+  width: min(560px, calc(60vw / var(--uz)), calc(var(--big-map-h) * var(--map-aspect, 1.4)));
   max-height: calc(100% - var(--safe-top) - var(--top-h) - var(--top-gap) - var(--safe-bottom) - 104px);
   /* 뒤 화면이 살짝 비치되 흐리게 (월드 이름표 글자가 지도 글자와 겹쳐 읽히지 않게) */
   background: rgba(24, 22, 19, 0.86);
@@ -267,9 +275,10 @@
 
 .big {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   min-height: 0;
-  padding: 8px;
+  /* 11/25 운영자 「지도를 테두리에 맞춰 꽉」: 지도는 창 끝까지, 범례 줄만 아래 여백 */
+  padding: 0 0 6px;
   /* 11/25 운영자 「스크롤 없이」: 지도 높이를 창에 맞춰 줄이므로 안쪽 스크롤은 없다 */
   overflow: hidden;
 }
@@ -277,7 +286,7 @@
 /* 폰 지도 높이: 화면 높이에서 위 HUD·아래 조작 자리·카드 머리말을 빼고 (가로 화면에서도 카드가 넘치지 않게) */
 .panel[data-coarse] .big {
   --big-map-h: max(150px, calc(100dvh / var(--uz) - 380px));
-  padding: 3px;
+  padding: 0 0 6px;
 }
 
 .legendRow {
@@ -285,6 +294,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  padding-inline: 10px;
 }
 
 .listToggle {
@@ -305,7 +315,13 @@
   width: 100%;
   margin: 0 auto;
   background: #24221f;
-  box-shadow: 0 0 0 1px rgba(232, 220, 192, 0.4);
+  /* 11/25 가장자리 검은 담장 줄은 밖으로 밀려 잘린다 (.bigCrop) */
+  overflow: hidden;
+}
+
+/* 캔버스 한 장을 통째로 놓고, 잘라 낼 칸만큼 바깥으로 밀고 크게 (자리·크기는 Minimap MapPanel이 % 로) */
+.bigCrop {
+  position: absolute;
 }
 
 .bigMap {
