@@ -46,7 +46,7 @@ import type {
 } from "./types";
 import type { ReportReason } from "./reports";
 import type { PlayEndResponse, PlayKind, PlayStartResponse } from "./retainPlay";
-import { pageLeaving, reportClientError } from "./hooks/errorReporting";
+import { netQuiet, reportClientError } from "./hooks/errorReporting";
 import { deviceHeaders } from "./deviceMark";
 import { signalMaintenance } from "./maintClient";
 import { firstSource } from "./signupSourceClient";
@@ -94,8 +94,8 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } catch (e) {
     if (isAbortError(e)) throw e;
     // 11/26 API 실패(연결 실패)도 남긴다 — 같은 경로는 세션당 한 번·분당 5건 (errorReporting이 묶어 보낸다).
-    // 11/27 새로고침·닫는 중이거나 기기가 오프라인이면 남기지 않는다 (배포 때 새로고침하며 끊긴 요청이 오류로 쌓였다)
-    if (!pageLeaving() && navigator.onLine !== false) reportClientError("api", new Error(`${init?.method ?? "GET"} ${path.split("?")[0]} → 연결 실패`));
+    // 11/27 새로고침·닫는 중, 탭이 뒤에 있거나 막 깬 직후, 오프라인이면 남기지 않는다 (서버 탓이 아닌 끊김이 오류로 쌓였다)
+    if (!netQuiet() && navigator.onLine !== false) reportClientError("api", new Error(`${init?.method ?? "GET"} ${path.split("?")[0]} → 연결 실패`));
     throw new ApiRequestError(0, "NETWORK", FALLBACK_MESSAGE);
   }
   const body: unknown = await res.json().catch(() => null);

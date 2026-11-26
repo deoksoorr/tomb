@@ -3,7 +3,7 @@ import { api, ApiRequestError } from "./api";
 
 const rep = vi.hoisted(() => ({ leaving: false, reports: [] as string[] }));
 vi.mock("./hooks/errorReporting", () => ({
-  pageLeaving: () => rep.leaving,
+  netQuiet: () => rep.leaving,
   reportClientError: (_kind: string, e: Error) => void rep.reports.push(e.message),
 }));
 
@@ -67,7 +67,7 @@ describe("연결 실패 기록 (11/27)", () => {
     await expect(api.listGraves(1)).rejects.toBeInstanceOf(ApiRequestError);
     expect(rep.reports).toEqual(["GET /api/graves → 연결 실패"]);
   });
-  it("새로고침·닫는 중에 끊긴 요청은 남기지 않는다", async () => {
+  it("새로고침·닫는 중, 탭이 뒤에 있거나 막 깬 직후에 끊긴 요청은 남기지 않는다", async () => {
     failFetch();
     rep.leaving = true;
     await expect(api.listGraves(1)).rejects.toBeInstanceOf(ApiRequestError);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createErrorGate, isForeignError } from "./errorReporting";
+import { createErrorGate, isForeignError, netQuiet } from "./errorReporting";
 
 describe("createErrorGate", () => {
   it("같은 메시지는 한 번만, 분당 한도까지만", () => {
@@ -27,5 +27,11 @@ describe("isForeignError (11/18 우리 탓이 아닌 오류 거르기)", () => {
     expect(isForeignError("Cannot read properties of null (reading 'x')", "TypeError\n    at dp.panBy (https://myproject.rip/_next/static/chunks/a.js:46:5440)")).toBe(false);
     expect(isForeignError("boom", "Error\n    at a (https://myproject.rip/_next/static/chunks/a.js:1:1)\n    at b (chrome-extension://abc/x.js:1:1)")).toBe(false);
     expect(isForeignError("지워진 텍스처를 그리려 함: forage-node-bug-0 (Image, world)")).toBe(false);
+  });
+});
+
+describe("netQuiet (11/27 서버 탓이 아닌 끊김)", () => {
+  it("평소(앞에 있는 탭, 깬 지 오래)에는 남긴다", () => {
+    expect(netQuiet(Date.now())).toBe(false);
   });
 });

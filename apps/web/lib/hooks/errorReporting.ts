@@ -65,14 +65,30 @@ export function isForeignError(message: string, stack?: string): boolean {
   return !!stack && FOREIGN_STACK.test(stack) && !stack.includes("/_next/");
 }
 
-/** 11/27 페이지를 떠나는 중(새로고침·닫기)인지 — 그때 끊기는 요청은 서버 탓이 아니라 남기지 않는다 (lib/api) */
+/**
+ * 11/27 지금 끊긴 요청이 서버 탓이 아닐 때 — 남기지 않는다 (lib/api):
+ * 페이지를 떠나는 중(새로고침·닫기), 탭이 뒤로 갔을 때(핸드폰 앱 전환·화면 끔), 다시 앞으로 오거나 잠자기에서 깬 직후 WAKE_GRACE_MS
+ * (기기 네트워크가 다시 붙기 전이라 그동안 보낸 요청이 한꺼번에 끊긴다)
+ */
+export const WAKE_GRACE_MS = 8000;
+/** 타이머가 이만큼 늦게 오면 기기가 잠들었다 깬 것으로 본다 */
+const SLEEP_GAP_MS = 10_000;
 let leaving = false;
-export const pageLeaving = (): boolean => leaving;
+let wokeAt = -Infinity;
+export function netQuiet(now = Date.now()): boolean {
+  if (leaving) return true;
+  if (typeof document !== "undefined" && document.visibilityState === "hidden") return true;
+  return now - wokeAt < WAKE_GRACE_MS;
+}
 const markLeaving = () => {
   leaving = true;
 };
 const markBack = () => {
   leaving = false;
+  wokeAt = Date.now();
+};
+const onVisibility = () => {
+  if (document.visibilityState === "visible") wokeAt = Date.now();
 };
 
 export function reportClientError(kind: ErrorReport["kind"], error: unknown): void {
@@ -100,7 +116,19 @@ export function installErrorReporting(): () => void {
   window.addEventListener("beforeunload", markLeaving);
   window.addEventListener("pagehide", markLeaving);
   window.addEventListener("pageshow", markBack);
+  document.addEventListener("visibilitychange", onVisibility);
+  window.addEventListener("online", markBack);
+  // 잠자기 감지: 2초마다 도는 타이머가 크게 늦으면 방금 깬 것
+  let tick = Date.now();
+  const sleepTimer = window.setInterval(() => {
+    const now = Date.now();
+    if (now - tick > SLEEP_GAP_MS) wokeAt = now;
+    tick = now;
+  }, 2000);
   return () => {
+    document.removeEventListener("visibilitychange", onVisibility);
+    window.removeEventListener("online", markBack);
+    window.clearInterval(sleepTimer);
     window.removeEventListener("beforeunload", markLeaving);
     window.removeEventListener("pagehide", markLeaving);
     window.removeEventListener("pageshow", markBack);
