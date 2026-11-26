@@ -1,7 +1,7 @@
 import { readItem, writeItem } from "./storage";
 
 // 11/26 설정 창 (components/overlay/SettingsDialog): 이 기기에만 저장하는 화면 설정.
-//  - weather: 날씨 효과 (끄면 비·눈·안개·흐림 막·낙엽·천둥을 그리지 않는다 — 시간대 색은 그대로, 화면 위 날씨 글자에 가로줄)
+//  - weather: 날씨 효과 (설정 창에서는 「날씨 효과 끄기」 스위치 — 켜짐 = false. 끄면 비·눈·안개·흐림 막·낙엽·천둥을 그리지 않는다 — 시간대 색은 그대로, 화면 위 날씨 글자에 가로줄)
 //  - powerSave: 절전 모드 (가만히 있을 때 초당 20번, 비·눈은 먼 겹만, 반딧불·낙엽 줄이기, 밤 불빛 일렁임 끄기 — game/frameGovernor·Atmosphere)
 // 게임(Phaser)과 화면(React)이 같은 값을 읽는다: 게임은 get()을 프레임마다(가볍다), 화면은 useSyncExternalStore로.
 // 저장소를 못 쓰면(사생활 보호 모드 등) 기본값으로 동작하고 기억만 못 한다.

@@ -1,20 +1,18 @@
 import { AWAY_PLACE_LABEL, CAMP_LOTS, MAP_NAME, mapOf, type CampHomeKind, type InternalPerson, type MaintState } from "@tomb/protocol";
 import { onlinePeople } from "./ban";
-import { env } from "./env";
-import { HOUSING_CHANNELS, SEA_LOT_COUNT, type HouseZone } from "./housing/catalog";
+import { HOUSING_CHANNELS, SEA_LOT_COUNT } from "./housing/catalog";
 import { getHouseStore } from "./housing/service";
-import { HK } from "./housing/store-redis";
+import type { HouseRecord } from "./housing/store";
 import { readMaint, rememberMaint } from "./maintenance";
 import type { MapConcept } from "./mapConcept";
 import { connHealth24h, type ConnHealth } from "./opsLog";
-import { redisClient } from "./redisUsage";
 import { kstDay } from "./store/accounts";
 import { getMapConceptStore } from "./store/mapConcept";
 import { getSignupSrc } from "./store/signupSrc";
 
 // 11/26 관리자 대시보드 한 번에 (GET /api/admin/dashboard). 열 때와 [새로고침] 때만 부른다 — 자동으로 다시 묻지 않는다.
 // 실시간 서버: 지금 명단(맵별 인원)·점검 상태 (Redis 없음)
-// Redis: 맵 컨셉 GET 1 + 24시간 접속 종료 시간 칸 24 (파이프라인 1번) + 가입 유입 날짜 칸 7 (파이프라인 2번) + 집터 색인 31 (파이프라인 1번, 1분 기억)
+// Redis: 맵 컨셉 GET 1 + 24시간 접속 종료 시간 칸 24 (파이프라인 1번) + 가입 유입 날짜 칸 7 (파이프라인 2번) + 집 기록 ZRANGE 1·집 수만큼 HGETALL (파이프라인 1번, 1분 기억)
 // 한 칸이 실패해도 나머지는 보여 준다 (그 칸만 null)
 
 export type CountRow = { label: string; n: number };
@@ -87,40 +85,28 @@ export function onlineOf(people: readonly InternalPerson[]): DashOnline {
 const HOUSING_MEMO_MS = 60_000;
 const g = globalThis as typeof globalThis & { __tombDashHousing?: DashHousing };
 
-/** 채널마다 집터 색인 크기 (Redis는 파이프라인 한 번 — 캠핑장 HKEYS·바닷가 HLEN·마을 HLEN, 1분 기억) */
+/**
+ * 집 기록 → 채널별 줄 (순수). 번지가 있는 집만 센다 (숨긴 집도 터를 차지하니 센다).
+ * 11/27 번지 색인 크기(HLEN)로 세던 것을 집 기록으로 바꿨다 — 철거한 집이 색인에 남은 낡은 칸이 「2채널 마을 1」로 보였다 (운영, 그 채널엔 집이 없었다)
+ */
+export function housingRowsOf(houses: readonly Pick<HouseRecord, "ch" | "lot" | "zone">[], channels = HOUSING_CHANNELS): DashHousingRow[] {
+  const rows = new Map<number, { camp: number[]; sea: number; village: number }>();
+  for (let ch = 1; ch <= channels; ch++) rows.set(ch, { camp: [], sea: 0, village: 0 });
+  for (const h of houses) {
+    const r = rows.get(h.ch);
+    if (!r || !(h.lot > 0)) continue;
+    if (h.zone === "camp") r.camp.push(h.lot);
+    else if (h.zone === "sea") r.sea += 1;
+    else r.village += 1;
+  }
+  return [...rows].map(([ch, r]) => ({ ch, camp: campKinds(r.camp), sea: r.sea, village: r.village }));
+}
+
+/** 채널마다 분양 수 — 관리자 하우징 목록·채널 목록과 같은 집 기록(listAll: ZRANGE 1 + 집마다 HGETALL, 파이프라인 1번)에서 센다. 1분 기억 */
 async function loadHousing(now: number): Promise<DashHousing> {
   const memo = g.__tombDashHousing;
   if (memo && now - memo.at < HOUSING_MEMO_MS) return memo;
-  const chs = Array.from({ length: HOUSING_CHANNELS }, (_, i) => i + 1);
-  const conn = env.redis();
-  let rows: DashHousingRow[];
-  if (conn) {
-    const p = redisClient(conn, "adminDashboard").pipeline();
-    for (const ch of chs) {
-      p.hkeys(HK.campLots(ch));
-      p.hlen(HK.seaLots(ch));
-      p.hlen(HK.lots(ch));
-    }
-    p.hlen(HK.legacyLots); // 채널이 생기기 전 색인 (1채널로 옮기기 전이면 1채널에 더한다)
-    const got = await p.exec<unknown[]>();
-    rows = chs.map((ch, i) => ({
-      ch,
-      camp: campKinds(Array.isArray(got[i * 3]) ? (got[i * 3] as string[]) : []),
-      sea: Number(got[i * 3 + 1]) || 0,
-      village: (Number(got[i * 3 + 2]) || 0) + (ch === 1 ? Number(got[chs.length * 3]) || 0 : 0),
-    }));
-  } else {
-    // 로컬(메모리 저장소): 채널·구역마다 분양 마을을 그대로 센다
-    const store = getHouseStore();
-    const count = (ch: number, zone?: HouseZone) => store.village(ch, zone);
-    rows = await Promise.all(
-      chs.map(async (ch) => {
-        const [camp, sea, village] = await Promise.all([count(ch, "camp"), count(ch, "sea"), count(ch)]);
-        return { ch, camp: campKinds(camp.map((h) => h.lot)), sea: sea.length, village: village.length };
-      }),
-    );
-  }
-  const out = housingOf(rows, now);
+  const out = housingOf(housingRowsOf(await getHouseStore().listAll()), now);
   g.__tombDashHousing = out;
   return out;
 }

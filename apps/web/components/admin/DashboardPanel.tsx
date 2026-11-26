@@ -38,7 +38,7 @@ type Props = {
   reportsOpen: number | null;
   /** 처리 안 한 문의 수 (메뉴 배지) */
   inquiriesNew: number | null;
-  /** 오늘 오류 묶음 수 (메뉴 배지) */
+  /** 오늘 새 오류 묶음 수 — 마지막 확인 뒤에 난 것 (메뉴 배지) */
   errorsToday: number | null;
   /** 새로고침 버튼마다 바뀐다 */
   version: number;
@@ -103,13 +103,11 @@ export default function DashboardPanel({ toast, onAuthLost, lobby, graveCount, r
         <MaintCard state={part("maint")} toast={toast} fail={fail} onDone={() => setAgain((n) => n + 1)} />
         <ConceptCard concept={part("concept")} toast={toast} fail={fail} />
       </div>
-      {/* 11/26 운영자 외치기: 모든 채널에 확성기 모양 알림 (기록에 남지 않는다) */}
-      <OpShoutCard toast={toast} fail={fail} />
 
       <div className={d.todo} aria-label="처리할 일">
         <TodoTile label="신고 대기" n={openCount} href="#reports" tone="alert" none="처리할 신고가 없어요" />
         <TodoTile label="새 문의" n={inquiriesNew} href="#inquiries" tone="warn" none="새 문의가 없어요" />
-        <TodoTile label="오늘 오류 묶음" n={errorsToday} href="#errors" tone="warn" none="오늘 오류가 없어요" />
+        <TodoTile label="오늘 새 오류" n={errorsToday} href="#errors" tone="warn" none="새 오류가 없어요" />
         <TodoTile label="신고된 묘비" n={reportedCount} href="#graves" tone="warn" none={`묘역 묘비 ${fmt(graveCount)}개`} />
       </div>
 
@@ -126,8 +124,9 @@ export default function DashboardPanel({ toast, onAuthLost, lobby, graveCount, r
         <Mini label="사용 포인트" value={fmt(today ? sumExcept(today.spent, SPEND_EXCLUDED) : null)} sub="관리자 회수 제외" href="#economy" />
       </div>
 
+      {/* 11/27 접속 종료는 한 줄 요약 (누르면 펼침) */}
+      <ConnHealthCard h={part("conn")} />
       <div className={d.grid3}>
-        <ConnHealthCard h={part("conn")} />
         <SignupCard s={part("signups")} />
         <HousingCard h={part("housing")} />
       </div>
@@ -202,6 +201,9 @@ export default function DashboardPanel({ toast, onAuthLost, lobby, graveCount, r
           ))}
         </RecentCard>
       </div>
+
+      {/* 11/26 운영자 외치기: 모든 채널에 확성기 모양 알림 (기록에 남지 않는다). 11/27 대시보드 맨 아래로 */}
+      <OpShoutCard toast={toast} fail={fail} />
     </section>
   );
 }
@@ -455,7 +457,7 @@ function SignupCard({ s }: { s: AdminDashboardResponse["signups"] | undefined })
   );
 }
 
-/** 분양 현황: 채널마다 캠핑장 종류별 팔린 터·바닷가 오두막·마을 집 */
+/** 분양 현황: 채널마다 캠핑장 종류별 팔린 터·바닷가 오두막·마을 집 (11/27 번지 색인 크기 대신 집 기록으로 센다 — 낡은 색인 칸이 집으로 세이던 것) */
 function HousingCard({ h }: { h: AdminDashboardResponse["housing"] | undefined }) {
   return (
     <div className={styles.card}>
@@ -531,6 +533,7 @@ function HousingCard({ h }: { h: AdminDashboardResponse["housing"] | undefined }
               </table>
             </div>
           )}
+          <p className={cx(ui.hint, d.faint)}>하우징 목록과 같은 집 기록에서 센 수예요 (숨긴 집 포함).</p>
         </>
       )}
     </div>

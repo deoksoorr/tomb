@@ -85,7 +85,9 @@ export default function AdminApp() {
   /** 47번 신고 배지(처리 대기 수, 묘비·방명록·유저·확성기 합계)와 "정지로 이동" 대상 */
   const [reportsOpen, setReportsOpen] = useState<number | null>(null);
   const [activeBans, setActiveBans] = useState<number | null>(null);
+  /** 오늘 오류 묶음 중 마지막 확인 뒤에 난 것 (11/27 — 오류 탭을 열면 0) */
   const [errorsToday, setErrorsToday] = useState<number | null>(null);
+  const errorsSeen = useCallback(() => setErrorsToday(0), []);
   /** 처리 안 한 문의 수 (문의 탭 배지) */
   const [inquiriesNew, setInquiriesNew] = useState<number | null>(null);
   /** 문의 탭에서 이름을 누르면 회원 목록 탭을 이 계정 id로 찾은 채 연다 */
@@ -148,7 +150,7 @@ export default function AdminApp() {
       () => {},
     );
     adminApi.errors(1).then(
-      (r) => alive && setErrorsToday(r.errors.length),
+      (r) => alive && setErrorsToday(r.fresh),
       () => {},
     );
     inquiryAdminApi.list("new", 1).then(
@@ -399,7 +401,7 @@ export default function AdminApp() {
           {panel === "lottery" && <LotteryPanel key={version} {...p} />}
           {panel === "urgent" && <UrgentResultsPanel key={version} {...p} />}
 
-          {panel === "errors" && <ErrorsPanel key={version} {...p} />}
+          {panel === "errors" && <ErrorsPanel key={version} {...p} onSeen={errorsSeen} />}
           {panel === "maintenance" && <MaintenancePanel {...p} version={version} />}
           {panel === "system" && <SystemPanel {...p} />}
         </div>

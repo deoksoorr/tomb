@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { useId, useState, useSyncExternalStore, type ReactNode } from "react";
 import { api, errorMessage } from "@/lib/api";
 import { chatChime } from "@/lib/chatChime";
 import { deviceSettings } from "@/lib/deviceSettings";
@@ -31,30 +31,38 @@ const MASKED_CODE = "••••-••••-••••";
 
 /**
  * 11/26 설정 (PC: 창이 없을 때 Esc·메뉴 ⚙ 설정 · 터치: 위쪽 줄 ⚙ 단추). 이 기기에만 저장한다 (lib/deviceSettings · 소리는 예전 소리 설정 그대로).
- * 화면(날씨 효과·절전 모드) → 소리(배경음악·환경음·효과음·채팅 알림음) → 접속 종료·로그아웃 (내 정보와 같은 흐름 — 로그아웃 전에 개인 코드를 먼저 보여 준다)
+ * 화면을 가볍게(날씨 효과 끄기·절전 모드 — 둘 다 켜면 가벼워진다) → 소리(배경음악·환경음·효과음·채팅 알림음) → 접속 종료·로그아웃 (내 정보와 같은 흐름 — 로그아웃 전에 개인 코드를 먼저 보여 준다)
  */
 export default function SettingsDialog({ onLeave, onLoggedOut, onOpenMe, onClose }: Props) {
   const settings = useSyncExternalStore(deviceSettings.subscribe, deviceSettings.getSnapshot, deviceSettings.getServerSnapshot);
   const [ending, setEnding] = useState<Ending>(null);
+  const lightId = useId();
 
   return (
     <Dialog title="설정" onClose={onClose} fitHeight phoneCard className={styles.dialog}>
       <div className={styles.panel}>
-        <section className={styles.section} aria-label="화면">
-          <Toggle
-            label="날씨 효과"
-            desc="끄면 비·눈·안개·낙엽을 그리지 않아요."
-            on={settings.weather}
-            onChange={(v) => deviceSettings.set({ weather: v })}
-            name="weather"
-          />
-          <Toggle
-            label="절전 모드"
-            desc="가만히 있을 때 화면을 덜 자주 그리고 눈·비·반짝임·밤 불빛을 줄여요. 기기가 뜨거워지면 켜 보세요."
-            on={settings.powerSave}
-            onChange={(v) => deviceSettings.set({ powerSave: v })}
-            name="powerSave"
-          />
+        {/* 11/27 운영자: 「날씨는 끄는 게, 절전은 켜는 게 목적이라 반대 같다」 — 둘 다 「켜면 화면이 가벼워지는」 스위치로 (기본 꺼짐).
+            저장값은 그대로: 날씨 효과 끄기 켜짐 = weather:false */}
+        <section className={styles.section} aria-labelledby={lightId}>
+          <p id={lightId} className={styles.caption}>
+            화면을 가볍게
+          </p>
+          <div className={styles.toggles}>
+            <Toggle
+              label="날씨 효과 끄기"
+              desc="비·눈·안개·낙엽을 그리지 않아요. 시간대 색은 그대로예요."
+              on={!settings.weather}
+              onChange={(v) => deviceSettings.set({ weather: !v })}
+              name="weather"
+            />
+            <Toggle
+              label="절전 모드"
+              desc={"화면을 덜 자주 그리고 반짝임·불빛을 줄여요. 기기가 뜨거울 때 켜\u00a0보세요."}
+              on={settings.powerSave}
+              onChange={(v) => deviceSettings.set({ powerSave: v })}
+              name="powerSave"
+            />
+          </div>
         </section>
 
         <SoundSection />
@@ -90,26 +98,33 @@ export default function SettingsDialog({ onLeave, onLoggedOut, onOpenMe, onClose
   );
 }
 
-/** 켜기·끄기 한 줄 (이름 · 설명 · 오른쪽 스위치) */
+/** 켜기·끄기 한 줄: 줄 전체가 스위치 (이름 · 설명 · 오른쪽 켜짐/꺼짐 칸). data-setting은 저장 칸 이름 (weather는 켜짐 = 날씨 숨김) */
 function Toggle({ label, desc, on, onChange, name }: { label: string; desc: ReactNode; on: boolean; onChange: (v: boolean) => void; name: string }) {
+  const id = useId();
   return (
-    <div className={styles.toggleRow}>
-      <div className={styles.toggleText}>
-        <span className={styles.label}>{label}</span>
-        <span className={styles.desc}>{desc}</span>
-      </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={on}
-        aria-label={label}
-        className={cx(ui.button, styles.switch, on && ui.primary)}
-        onClick={() => onChange(!on)}
-        data-setting={name}
-      >
-        {on ? "켜짐" : "꺼짐"}
-      </button>
-    </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-labelledby={`${id}-l`}
+      aria-describedby={`${id}-d`}
+      className={styles.toggleRow}
+      onClick={() => onChange(!on)}
+      data-setting={name}
+    >
+      <span className={styles.toggleText}>
+        <span id={`${id}-l`} className={styles.label}>
+          {label}
+        </span>
+        <span id={`${id}-d`} className={styles.desc}>
+          {desc}
+        </span>
+      </span>
+      <span className={styles.switch} aria-hidden>
+        <span className={styles.switchText}>{on ? "켜짐" : "꺼짐"}</span>
+        <span className={styles.knob} />
+      </span>
+    </button>
   );
 }
 

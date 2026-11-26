@@ -291,3 +291,83 @@
     width: 100%;
   }
 }
+
+/* 11/27 대시보드 「24시간 접속 종료」: 한 줄 요약 → 누르면 펼침 */
+.foldCard {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.foldHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.foldSummary {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--ad-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.foldSummary b {
+  color: var(--ad-strong);
+  font-weight: 650;
+}
+
+.foldSummary b.foldWarn {
+  color: var(--ad-danger);
+}
+
+.foldToggle {
+  margin-left: auto;
+  color: var(--ad-faint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.foldHead:hover .foldToggle {
+  color: var(--ad-text);
+}
+
+.foldBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 12px 20px;
+}
+
+.foldSide {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .foldBody {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .foldToggle {
+    order: 2;
+  }
+
+  .foldSummary {
+    order: 3;
+    flex-basis: 100%;
+  }
+}

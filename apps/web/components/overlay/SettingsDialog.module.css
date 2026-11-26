@@ -15,7 +15,7 @@
 }
 
 /* 이 창의 단추는 한 줄 높이로 (PC 32px · 터치 40px — 공용 .button 터치 44px보다 낮게, 위쪽 줄 단추와 같은 높이) */
-.panel :is(.switch, .mute, .end) {
+.panel :is(.mute, .end) {
   min-height: 32px;
 }
 
@@ -25,7 +25,7 @@
 }
 
 @media (pointer: coarse) {
-  .panel :is(.switch, .mute, .end) {
+  .panel :is(.mute, .end) {
     min-height: 40px;
   }
 
@@ -34,26 +34,64 @@
   }
 }
 
-/* 켜기·끄기 한 줄: 이름·설명 | 스위치 */
-.toggleRow {
+/* 11/27 「화면을 가볍게」 묶음: 머리 띠가 아니라 작은 글 한 줄 + 한 상자에 스위치 두 줄 (둘 다 켜면 가벼워지는 쪽, 기본 꺼짐) */
+.caption {
+  padding-left: 2px;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.toggles {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 8px 7px 10px;
   background: var(--bg-deep);
   box-shadow: var(--px-border);
 }
 
+/* 줄 전체가 스위치 단추: 이름·설명 | 켜짐/꺼짐 칸 */
+.toggleRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  touch-action: manipulation;
+  user-select: none;
+  transition: background-color 0.15s;
+}
+
+.toggleRow + .toggleRow {
+  box-shadow: 0 -2px 0 0 var(--line);
+}
+
+@media (hover: hover) {
+  .toggleRow:hover {
+    background: var(--surface);
+  }
+}
+
+.toggleRow:focus-visible {
+  outline-offset: -2px;
+}
+
 .toggleText {
   display: grid;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
 }
 
 .label {
   color: var(--text);
   font-size: 13px;
+}
+
+.toggleRow[aria-checked="true"] .label {
+  color: var(--bone);
 }
 
 .desc {
@@ -64,14 +102,91 @@
   word-break: keep-all;
 }
 
+/* 켜짐/꺼짐 칸: 꺼짐 = 어두운 칸·왼쪽 손잡이·흐린 글 / 켜짐 = 이끼색으로 꽉 참·오른쪽 손잡이·진한 글 */
 .switch {
-  min-width: 60px;
-  padding-block: 4px;
-  justify-content: center;
+  --sw-w: 66px;
+  --sw-h: 26px;
+  --knob: 18px;
+  position: relative;
+  flex: none;
+  width: var(--sw-w);
+  height: var(--sw-h);
+  background: #0c0d0a;
+  box-shadow:
+    0 -2px 0 0 var(--line-strong),
+    0 2px 0 0 var(--line-strong),
+    -2px 0 0 0 var(--line-strong),
+    2px 0 0 0 var(--line-strong),
+    inset 0 2px 0 rgba(0, 0, 0, 0.45);
+  transition: background-color 0.15s;
 }
 
-.switch[aria-checked="false"] {
+.knob {
+  position: absolute;
+  top: calc((var(--sw-h) - var(--knob)) / 2);
+  left: 4px;
+  width: var(--knob);
+  height: var(--knob);
+  background: var(--faint);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.3);
+  transition:
+    left 0.15s steps(3),
+    background-color 0.15s;
+}
+
+.switchText {
+  position: absolute;
+  inset: 0 6px 0 calc(var(--knob) + 6px);
+  display: grid;
+  place-items: center;
   color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.toggleRow[aria-checked="true"] .switch {
+  background: var(--moss);
+  box-shadow:
+    0 -2px 0 0 var(--bone),
+    0 2px 0 0 var(--bone),
+    -2px 0 0 0 var(--bone),
+    2px 0 0 0 var(--bone),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.2);
+}
+
+.toggleRow[aria-checked="true"] .knob {
+  left: calc(var(--sw-w) - var(--knob) - 4px);
+  background: var(--bone);
+  box-shadow:
+    inset 0 -3px 0 rgba(0, 0, 0, 0.18),
+    0 0 0 2px var(--moss-deep);
+}
+
+.toggleRow[aria-checked="true"] .switchText {
+  inset: 0 calc(var(--knob) + 6px) 0 6px;
+  color: var(--bg-deep);
+}
+
+@media (pointer: coarse) {
+  .toggleRow {
+    min-height: 60px;
+  }
+
+  .switch {
+    --sw-w: 76px;
+    --sw-h: 32px;
+    --knob: 22px;
+  }
+
+  .switchText {
+    font-size: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .knob {
+    transition: none;
+  }
 }
 
 /* 소리 줄: 이름 | 끄기 | 볼륨 (줄 사이 여백 없이 단추 높이만) */

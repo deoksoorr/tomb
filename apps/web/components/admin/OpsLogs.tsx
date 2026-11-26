@@ -180,53 +180,94 @@ export function AccountLogs({ accountId, toast, onAuthLost }: Common & { account
   );
 }
 
-/** 대시보드: 최근 24시간 접속 종료 (비정상 종료 비율). 11/26 값은 대시보드 한 번에(/api/admin/dashboard) 받아 넘긴다 — undefined = 불러오는 중, null = 못 읽음 */
+const CONN_OPEN_KEY = "tomb.admin.connOpen";
+
+/**
+ * 대시보드: 최근 24시간 접속 종료 (비정상 종료 비율). 11/26 값은 대시보드 한 번에(/api/admin/dashboard) 받아 넘긴다 — undefined = 불러오는 중, null = 못 읽음.
+ * 11/27 운영: 평소엔 한 줄 요약만, 누르면 펼친다 (펼침 여부는 이 기기에 기억 — 기록·수집은 그대로)
+ */
 export function ConnHealthCard({ h }: { h: ConnHealth | null | undefined }) {
+  // 관리 화면은 로그인 확인 뒤(브라우저에서만) 그려져 첫 값을 바로 읽어도 서버 그림과 어긋나지 않는다
+  const [open, setOpen] = useState(() => {
+    try {
+      return typeof window !== "undefined" && localStorage.getItem(CONN_OPEN_KEY) === "1";
+    } catch {
+      return false; // 저장소를 못 쓰면 접힌 채로
+    }
+  });
+  const toggle = () => {
+    setOpen((o) => {
+      try {
+        localStorage.setItem(CONN_OPEN_KEY, o ? "0" : "1");
+      } catch {
+        /* 기억만 못 한다 */
+      }
+      return !o;
+    });
+  };
   const pct = h && h.ratio !== null ? `${Math.round(h.ratio * 1000) / 10}%` : "—";
+  const warn = !!h && h.ratio !== null && h.ratio >= 0.2;
   const top = h ? (Object.entries(h.byWhy) as [ConnWhy, number][]).sort((a, b) => b[1] - a[1]) : [];
   return (
-    <div className={styles.card}>
-      <div className={styles.cardHead}>
-        <h3 className={styles.cardTitle}>24시간 접속 종료</h3>
-        <a className={styles.cardLink} href="#activity">
-          접속 기록 →
-        </a>
-      </div>
-      {h === undefined ? (
-        <Loading inline />
-      ) : h === null ? (
-        <p className={ui.hint}>접속 기록을 읽지 못했어요.</p>
-      ) : (
-        <>
-          <div className={ops.kpis}>
-            <div className={cx(ops.kpi, h.ratio !== null && h.ratio >= 0.2 && ops.kpiWarn)}>
-              <span className={ops.kpiLabel}>비정상 종료 비율</span>
-              <span className={ops.kpiValue}>{pct}</span>
-              <span className={ops.kpiNote}>연결 끊김·응답 없음·오류 {fmt(h.abnormal)} / 나감 {fmt(h.outs)}</span>
+    <div className={cx(styles.card, ops.foldCard)}>
+      <button type="button" className={ops.foldHead} onClick={toggle} aria-expanded={open}>
+        <span className={styles.cardTitle}>24시간 접속 종료</span>
+        <span className={ops.foldSummary}>
+          {h === undefined ? (
+            "불러오는 중…"
+          ) : h === null ? (
+            "읽지 못했어요"
+          ) : (
+            <>
+              나감 <b>{fmt(h.outs)}</b>건 · 비정상 <b className={warn ? ops.foldWarn : undefined}>{pct}</b> · 들어옴 <b>{fmt(h.ins)}</b>
+            </>
+          )}
+        </span>
+        <span className={ops.foldToggle} aria-hidden="true">
+          {open ? "접기 ▴" : "자세히 ▾"}
+        </span>
+      </button>
+      {open &&
+        (h === undefined ? (
+          <Loading inline />
+        ) : h === null ? (
+          <p className={ui.hint}>접속 기록을 읽지 못했어요.</p>
+        ) : (
+          <div className={ops.foldBody}>
+            <div className={ops.kpis}>
+              <div className={cx(ops.kpi, warn && ops.kpiWarn)}>
+                <span className={ops.kpiLabel}>비정상 종료 비율</span>
+                <span className={ops.kpiValue}>{pct}</span>
+                <span className={ops.kpiNote}>연결 끊김·응답 없음·오류 {fmt(h.abnormal)} / 나감 {fmt(h.outs)}</span>
+              </div>
+              <div className={ops.kpi}>
+                <span className={ops.kpiLabel}>들어옴</span>
+                <span className={ops.kpiValue}>{fmt(h.ins)}</span>
+                <span className={ops.kpiNote}>채널 이동·재접속은 빼고</span>
+              </div>
             </div>
-            <div className={ops.kpi}>
-              <span className={ops.kpiLabel}>들어옴</span>
-              <span className={ops.kpiValue}>{fmt(h.ins)}</span>
-              <span className={ops.kpiNote}>채널 이동·재접속은 빼고</span>
+            <div className={ops.foldSide}>
+              {top.length > 0 ? (
+                <ul className={ops.bars} aria-label="나감 종류">
+                {top.map(([w, n]) => (
+                  <li key={w} className={ops.barItem}>
+                    <span className={ops.barName}>{CONN_WHY_LABEL[w]}</span>
+                    <span className={ops.barTrack}>
+                      <span className={ops.barFill} style={{ width: `${Math.max(3, (n / Math.max(1, h.outs)) * 100)}%`, display: "block" }} />
+                    </span>
+                    <span className={ops.barCount}>{fmt(n)}</span>
+                  </li>
+                ))}
+                </ul>
+              ) : (
+                <p className={ui.hint}>아직 나간 기록이 없어요.</p>
+              )}
+              <a className={styles.cardLink} href="#activity">
+                접속 기록 →
+              </a>
             </div>
           </div>
-          {top.length > 0 ? (
-            <ul className={ops.bars} aria-label="나감 종류">
-              {top.map(([w, n]) => (
-                <li key={w} className={ops.barItem}>
-                  <span className={ops.barName}>{CONN_WHY_LABEL[w]}</span>
-                  <span className={ops.barTrack}>
-                    <span className={ops.barFill} style={{ width: `${Math.max(3, (n / Math.max(1, h.outs)) * 100)}%`, display: "block" }} />
-                  </span>
-                  <span className={ops.barCount}>{fmt(n)}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className={ui.hint}>아직 나간 기록이 없어요.</p>
-          )}
-        </>
-      )}
+        ))}
     </div>
   );
 }

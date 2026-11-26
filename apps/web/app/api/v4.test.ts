@@ -258,6 +258,31 @@ describe("오류 수집", () => {
     const group = (await adminList()).errors.find((e) => e.message.includes("db exploded"))!;
     expect(group).toMatchObject({ source: "server", kind: "api", url: "/api/boom", count: 1 });
   });
+
+  // 11/27 운영: 오류 탭을 확인해도 메뉴 배지 숫자가 그대로였다 (배지 = 오늘 묶음 수 전부)
+  it("확인하면 새 오류 수(fresh)가 0이 되고, 그 뒤에 또 난 오류만 다시 센다", async () => {
+    const today = () => bodyOf<AdminErrorsResponse>(adminErrors.GET(call("/api/admin/errors?days=1", { headers: ADMIN })));
+    await report("10.66.1.1", { kind: "error", message: `확인 전 ${Math.random()}`, url: "/" });
+    const before = await today();
+    expect(before.fresh).toBeGreaterThan(0);
+    const upTo = Math.max(...before.errors.map((e) => e.lastAt));
+    const seen = (body: object, headers: Record<string, string> = ADMIN) => adminErrors.POST(call("/api/admin/errors", { headers, body }));
+    expect((await seen({ upTo }, {})).status).toBe(401);
+    expect((await seen({ upTo: -1 })).status).toBe(400);
+    expect((await bodyOf<{ seenAt: number }>(seen({ upTo }))).seenAt).toBe(upTo);
+    const after = await today();
+    expect(after.fresh).toBe(0);
+    expect(after.errors.length).toBe(before.errors.length); // 목록은 그대로 (지우지 않는다)
+    expect(after.seenAt).toBe(upTo);
+    // 미래 시각은 지금으로 잘린다 → 그 뒤 오류가 숨지 않는다
+    await seen({ upTo: Date.now() + 86_400_000 });
+    await new Promise((r) => setTimeout(r, 5));
+    const msg = `확인 뒤 ${Math.random()}`;
+    await report("10.66.1.1", { kind: "error", message: msg, url: "/" });
+    const later = await today();
+    expect(later.fresh).toBe(1);
+    expect(later.errors.find((e) => e.lastAt > later.seenAt)?.message).toBe(msg);
+  });
 });
 
 describe("경제 통계", () => {

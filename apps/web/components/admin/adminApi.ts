@@ -42,6 +42,8 @@ export const adminApi = {
   guestAction: (id: string, entryId: string, action: ModAction) =>
     request<{ ok: true }>(`/api/admin/housing/${encodeURIComponent(id)}/guestbook/${encodeURIComponent(entryId)}`, post({ action })),
   errors: (days: number) => request<AdminErrorsResponse>(`/api/admin/errors?days=${days}`, { cache: "no-store" }),
+  /** 11/27 오류 확인: upTo(보이는 묶음의 가장 늦은 시각)까지 확인한 것으로 — 메뉴 배지가 0이 된다 */
+  errorsSeen: (upTo: number) => request<{ seenAt: number }>("/api/admin/errors", post({ upTo })),
   economy: (days: number) => request<EconomyResponse>(`/api/admin/economy?days=${days}`, { cache: "no-store" }),
   /** 유저 포인트 잔액 (운영자 제외, 서버가 몇 분 기억한다. fresh면 다시 훑는다) */
   balances: (scope: BalanceScope, q: string, fresh = false) =>

@@ -19,11 +19,11 @@ type Props = {
   toast: (message: string) => void;
   onAuthLost: () => void;
   onClose: () => void;
-  /** 회원 목록 탭에서 이 계정 찾기 */
-  onFindMember: (accountId: string) => void;
+  /** 회원 목록 탭에서 이 계정 찾기 (11/27 회원 목록에서 열면 없다 — 버튼을 그리지 않는다) */
+  onFindMember?: (accountId: string) => void;
 };
 
-/** 11/20 유저 활동 → 유저 상세: 지금까지의 수치를 묶음별로 (서버가 30초 기억, [다시 읽기]로 바로) */
+/** 11/20 유저 활동 → 유저 상세: 지금까지의 수치를 묶음별로 (서버가 30초 기억, [다시 읽기]로 바로). 지금 접속자·회원 목록에서 이름을 눌러도 이 창 */
 export default function UserStatsDialog({ accountId, name, toast, onAuthLost, onClose, onFindMember }: Props) {
   const [fresh, setFresh] = useState(0);
   const load = usePanelLoad(() => opsAdminApi.userStats(accountId, fresh > 0), [accountId, fresh], toast, onAuthLost);
@@ -36,9 +36,11 @@ export default function UserStatsDialog({ accountId, name, toast, onAuthLost, on
           <button type="button" className={cx(ui.button, ui.small)} onClick={() => setFresh((n) => n + 1)}>
             다시 읽기
           </button>
-          <button type="button" className={cx(ui.button, ui.small)} onClick={() => onFindMember(accountId)}>
-            회원 목록에서 찾기
-          </button>
+          {onFindMember && (
+            <button type="button" className={cx(ui.button, ui.small)} onClick={() => onFindMember(accountId)}>
+              회원 목록에서 찾기
+            </button>
+          )}
         </div>
       </div>
       {d ? <Body d={d} /> : <LoadState data={null} error={load.error} retry={load.retry} />}

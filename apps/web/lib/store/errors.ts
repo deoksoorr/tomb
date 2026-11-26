@@ -3,6 +3,7 @@ import { redisClient } from "../redisUsage";
 
 // 오류 모음 (외부 서비스 없이). 같은 오류는 해시로 묶어 하루마다 횟수·마지막 시각·샘플 1개만 둔다.
 // Redis: HASH errors:{YYYYMMDD} — `{해시}` → 샘플 JSON(처음 것), `{해시}:n` → 횟수, `{해시}:last` → 마지막 시각. 14일 보관
+// 11/27 STRING errors:seen — 관리자가 오류 탭을 열어 확인한 시각 (메뉴 배지 = 오늘 묶음 중 이보다 늦게 난 것)
 
 export const ERROR_KEEP_DAYS = 14;
 const TTL_SEC = ERROR_KEEP_DAYS * 86_400;
@@ -28,6 +29,10 @@ export interface ErrorStore {
   record(day: string, hash: string, sample: ErrorSample, now: number, cap?: number): Promise<boolean>;
   /** 그날 모은 오류 묶음 */
   day(day: string): Promise<ErrorGroup[]>;
+  /** 11/27 관리자가 오류를 어디까지 확인했나 (마지막 시각 lastAt이 이보다 늦은 묶음 = 새 오류). 0 = 아직 없음 */
+  seenAt(): Promise<number>;
+  /** 확인 시각을 at으로 (앞으로만 간다 — 늦게 도착한 옛 요청이 되돌리지 못하게). 반환: 저장된 값 */
+  markSeen(at: number): Promise<number>;
 }
 
 export class MemoryErrors implements ErrorStore {
@@ -45,7 +50,24 @@ export class MemoryErrors implements ErrorStore {
   async day(day: string): Promise<ErrorGroup[]> {
     return [...(this.days.get(day)?.values() ?? [])].map((g) => ({ ...g }));
   }
+
+  private seen = 0;
+  async seenAt(): Promise<number> {
+    return this.seen;
+  }
+  async markSeen(at: number): Promise<number> {
+    return (this.seen = Math.max(this.seen, at));
+  }
 }
+
+/** 11/27 오류 확인 시각 (만료 없음 — 숫자 하나) */
+const SEEN_KEY = "errors:seen";
+// KEYS[1] 확인 시각 · ARGV 새 시각. 더 늦을 때만 쓴다. 반환: 저장된 값
+const SEEN_LUA = `
+local cur = tonumber(redis.call('GET', KEYS[1]) or '0') or 0
+local at = tonumber(ARGV[1]) or 0
+if at > cur then redis.call('SET', KEYS[1], ARGV[1]) return at end
+return cur`;
 
 // KEYS[1] 그날 해시 · ARGV 해시, 샘플, 시각, TTL, 필드 상한(0 = 무제한). 새 종류인데 상한에 닿았으면 0
 const RECORD_LUA = `
@@ -85,5 +107,13 @@ export class RedisErrors implements ErrorStore {
         count: Number(f.get(`${hash}:n`) ?? 1),
         lastAt: Number(f.get(`${hash}:last`) ?? 0),
       }));
+  }
+
+  async seenAt(): Promise<number> {
+    return Number(await this.redis.get(SEEN_KEY)) || 0;
+  }
+
+  async markSeen(at: number): Promise<number> {
+    return Number(await this.redis.eval(SEEN_LUA, [SEEN_KEY], [String(Math.floor(at))])) || 0;
   }
 }

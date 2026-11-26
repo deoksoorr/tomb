@@ -25,8 +25,11 @@ export type AdminPassedResponse = { entries: AdminPassed[]; next: number | null;
 /** GET·PATCH /api/admin/graves/settings — 성불 기간(일)과 묘역 정원(채널마다, 코드 상수) */
 export type AdminGraveSettings = { passDays: number; capacity: number };
 
-/** GET /api/admin/errors 응답: 오류 묶음(날짜를 합친 횟수, 며칠에 걸쳐 났는지) */
-export type AdminErrorsResponse = { errors: (ErrorGroup & { days: number })[] };
+/**
+ * GET /api/admin/errors 응답: 오류 묶음(날짜를 합친 횟수, 며칠에 걸쳐 났는지).
+ * 11/27 seenAt = 관리자가 마지막으로 확인한 시각, fresh = 이 기간 묶음 중 그 뒤에 또 난 것 (메뉴 배지·「새」 표시)
+ */
+export type AdminErrorsResponse = { errors: (ErrorGroup & { days: number })[]; seenAt: number; fresh: number };
 
 /** POST /api/admin/accounts/points 응답 */
 export type AdminPointsResponse = { accountId: string; points: number };

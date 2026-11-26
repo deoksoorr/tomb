@@ -35,6 +35,13 @@ function contract(make: () => ErrorStore) {
     // 상한이 없으면(서버 500) 그대로 쌓인다
     expect(await store.record(day, "d", sample("d"), 5)).toBe(true);
   });
+
+  it("11/27 확인 시각: 앞으로만 간다", async () => {
+    const cur = await store.seenAt();
+    expect(await store.markSeen(cur + 10)).toBe(cur + 10);
+    expect(await store.markSeen(cur + 5)).toBe(cur + 10);
+    expect(await store.seenAt()).toBe(cur + 10);
+  });
 }
 
 describe("MemoryErrors", () => contract(() => new MemoryErrors()));

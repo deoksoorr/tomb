@@ -14,7 +14,9 @@ import styles from "./Admin.module.css";
 import LinkedNames, { hasLinks } from "./LinkedNames";
 import mm from "./Members.module.css";
 import m from "./Moderation.module.css";
+import ops from "./Ops.module.css";
 import { Empty, Loading } from "./PanelState";
+import UserStatsDialog from "./UserStatsDialog";
 
 type Props = {
   toast: (message: string) => void;
@@ -59,6 +61,8 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
   const [issued, setIssued] = useState<Issued | null>(null);
   const [reissuing, setReissuing] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  /** 11/27 이름을 누르면 지금 접속자와 같은 유저 상세 창 */
+  const [pick, setPick] = useState<{ accountId: string; name: string | null } | null>(null);
 
   const fail = useCallback(
     (e: unknown) => {
@@ -226,7 +230,9 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
               <tbody key={r.accountId} className={mm.group}>
                 <tr>
                   <td className={mm.nameCell}>
-                    {r.name ?? "이름 없음"}
+                    <button type="button" className={ops.nameButton} onClick={() => setPick({ accountId: r.accountId, name: r.name })} title="상세 보기">
+                      {r.name ?? "이름 없음"}
+                    </button>
                     <span className={mm.id}>{r.accountId}</span>
                   </td>
                   <td className={styles.nowrap} data-label="가입일" title={fullTime(r.createdAt)}>
@@ -298,6 +304,8 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
           </button>
         </nav>
       )}
+
+      {pick && <UserStatsDialog key={pick.accountId} accountId={pick.accountId} name={pick.name} toast={toast} onAuthLost={onAuthLost} onClose={() => setPick(null)} />}
 
       {banTarget && (
         <BanDialog

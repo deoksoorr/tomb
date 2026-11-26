@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import type { InternalPerson } from "@tomb/protocol";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import * as route from "@/app/api/admin/dashboard/route";
-import { campKinds, housingOf, loadDashboard, onlineOf, type AdminDashboardResponse } from "./adminDashboard";
+import { campKinds, housingOf, housingRowsOf, loadDashboard, onlineOf, type AdminDashboardResponse } from "./adminDashboard";
 import { onlineView } from "./adminOnlineView";
 import { getHouseStore } from "./housing/service";
 import { rememberMaint } from "./maintenance";
@@ -41,6 +41,29 @@ describe("housingOf — 채널별 줄 → 합계", () => {
     expect(h.rows.map((r) => r.ch)).toEqual([1, 3]);
     expect(h.total).toEqual({ camp: { caravan: 4, pension: 1, rural: 2 }, sea: 2, village: 8 });
     expect(h.cap).toEqual({ camp: { caravan: 12, pension: 2, rural: 2 }, sea: 11 });
+  });
+});
+
+describe("housingRowsOf — 집 기록 → 채널별 줄", () => {
+  it("구역별로 나누고, 번지 없는 집·없는 채널은 뺀다", () => {
+    const rows = housingRowsOf(
+      [
+        { ch: 1, lot: 3 },
+        { ch: 1, lot: 0 }, // 필지 대기 (번지 없음)
+        { ch: 1, lot: 2, zone: "camp" },
+        { ch: 1, lot: 14, zone: "camp" },
+        { ch: 1, lot: 5, zone: "sea" },
+        { ch: 3, lot: 1 },
+        { ch: 99, lot: 1 },
+      ],
+      3,
+    );
+    expect(rows).toEqual([
+      { ch: 1, camp: { caravan: 1, pension: 1, rural: 0 }, sea: 1, village: 1 },
+      { ch: 2, camp: { caravan: 0, pension: 0, rural: 0 }, sea: 0, village: 0 },
+      { ch: 3, camp: { caravan: 0, pension: 0, rural: 0 }, sea: 0, village: 1 },
+    ]);
+    expect(housingOf(rows, 0).rows.map((r) => r.ch)).toEqual([1, 3]);
   });
 });
 
