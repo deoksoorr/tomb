@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { MonsterId } from "@/lib/rpg/catalog";
 import type { CardOfferView } from "@/lib/rpg/cards";
-import { cardPower, isBossDealFloor } from "@/lib/rpg/cards";
+import { cardPower, isBossDealFloor, runLevelBase } from "@/lib/rpg/cards";
 import { seeded } from "@/lib/rpg/formulas";
 import { huntSpawnable } from "@/lib/rpg/plan";
 import { RunFinishSchema } from "@/lib/rpg/schemas";
@@ -154,7 +154,7 @@ function runTower(seed: number, o: Sim): { result: HuntResult; cards: CardRun<Mo
 /** 판 끝 요청 그대로: zod 형식 검사를 거친 결과로 서버가 검증한다 (finishRun → finishTower → evalTower) */
 function serverCheck(seed: number, start: number, r: HuntResult, gp = 1) {
   const parsed = RunFinishSchema.parse({ ticket: "t".repeat(20), result: r }).result as HuntResult;
-  return evalTower({ seed, level: 50, start, ...(gp > 1 ? { gp } : {}) }, parsed, r.durationMs + 1500);
+  return evalTower({ seed, level: 50, start, ...(gp > 1 ? { gp } : {}), ...(runLevelBase(start) ? { rb: runLevelBase(start) } : {}) }, parsed, r.durationMs + 1500);
 }
 
 describe("야근 빌딩 긴 판 (실제 CardRun → 판 끝 요청 형식 → evalTower)", () => {
@@ -174,6 +174,21 @@ describe("야근 빌딩 긴 판 (실제 CardRun → 판 끝 요청 형식 → ev
       }
     expect(bad, bad.slice(0, 5).join("\n")).toEqual([]);
     expect(n).toBe(360);
+  });
+
+  it("11/26 엘리베이터 판(51·101·301층 시작): 시작 판 레벨부터 세서 레벨 업이 올라온 판만큼만 나오고, 정직한 판은 모두 통과", () => {
+    const bad: string[] = [];
+    for (const start of [51, 101, 301])
+      for (let s = 1; s <= 20; s++) {
+        const seed = (s * 104729 + start) >>> 0;
+        const { result } = runTower(seed, { start, dieAt: start + 12 + (s % 9), fast: s % 2 === 0, rerollP: s % 3 ? 0.3 : 0 });
+        const v = serverCheck(seed, start, result);
+        if (!towerClean(v)) bad.push(`seed ${seed} start ${start}: ${v.ok ? v.suspect?.join(" | ") : v.message}`);
+        // 첫 10층 레벨 업 카드: 예전(0레벨부터)엔 10장 안팎, 지금은 올라온 판처럼 서너 장 안
+        const first10 = (result.cards ?? []).filter((p) => p.k === "l" && (p.f ?? start) < start + 10).length;
+        expect(first10, `seed ${seed} start ${start}`).toBeLessThanOrEqual(5);
+      }
+    expect(bad, bad.slice(0, 5).join("\n")).toEqual([]);
   });
 
   it("레벨 업 카드 기록의 오른 층(f)은 판 끝 요청 형식을 지나도 남는다", () => {

@@ -5,6 +5,13 @@ import {
   BUMPER_SEATS,
   CAMP_ARRIVE,
   CAMP_FISHING_SPOTS,
+  CAMP_SLIDE,
+  CAMP_SLIDE_SEAT,
+  CAMP_TRAMP_AREA,
+  CAMP_TRAMP_GATE,
+  CAMP_TRAMP_IN,
+  CAMP_TRAMPOLINE,
+  campTrampSeatId,
   DIR,
   SPAWN,
   STATE,
@@ -20,6 +27,7 @@ import {
   type Grant,
   type S2C,
   type StateId,
+  CAMP_HAMMOCKS,
 } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import { admit } from "./auth";
@@ -244,6 +252,20 @@ describe("seats per map", () => {
     expect(events(v)).toContainEqual({ t: "seatDenied", seatId: "qL1" });
   });
 
+  it("11/26 camp hammocks (qM1~4): one person lies (state hammock), the next is refused, village has none", () => {
+    const { core, join } = setup();
+    const h = CAMP_HAMMOCKS[0];
+    const a = join("a", { camp: true, map: "camp", spawn: { x: h.x, y: h.y + 4 } });
+    core.message(a, send({ t: "sit", seatId: h.id }), 0);
+    expect(core.peer(1)).toMatchObject({ seatId: h.id, state: STATE.hammock });
+    const b = join("b", { camp: true, map: "camp", spawn: { x: h.x, y: h.y + 6 } });
+    core.message(b, send({ t: "sit", seatId: h.id }), 0);
+    expect(events(b)).toContainEqual({ t: "seatDenied", seatId: h.id });
+    const v = join("v", { spawn: { x: h.x, y: h.y + 4 } });
+    core.message(v, send({ t: "sit", seatId: h.id }), 0);
+    expect(events(v)).toContainEqual({ t: "seatDenied", seatId: h.id });
+  });
+
   it("A-6 camp fishing spots: one person per spot in camp, unknown in the village", () => {
     const { core, join } = setup();
     const f = CAMP_FISHING_SPOTS[0];
@@ -274,6 +296,69 @@ describe("seats per map", () => {
     expect(welcome(c2).seats).toEqual({ [spot]: 2 });
     const v2 = join("v2");
     expect(welcome(v2).seats).toEqual({ [spot]: 1 });
+  });
+
+  it("11/26 놀이터 트램펄린: 사다리(입구) 앞에서만 타고, 매트 안을 다니며(MOVE 따라감), 매트 밖으로는 못 나가고, 내려서면 자리를 놓는다", () => {
+    const { core, join } = setup();
+    const id = campTrampSeatId(0);
+    const G = CAMP_TRAMP_GATE;
+    const A = CAMP_TRAMP_AREA;
+    // 사다리 밖 E 자리에서 탄다 → 서버 위치는 탄 자리 그대로(움직이는 자리), 매트 안 첫 자리로 MOVE
+    const a = join("a", { camp: true, map: "camp", spawn: { x: G.x, y: G.y } });
+    core.message(a, send({ t: "sit", seatId: id }), 0);
+    expect(core.peer(1)).toMatchObject({ seatId: id, state: STATE.trampoline });
+    core.message(a, move(CAMP_TRAMP_IN.x, CAMP_TRAMP_IN.y, STATE.trampoline), 300);
+    core.tick(400);
+    // 매트 안을 다닌다 (서버가 따라간다)
+    core.message(a, move(A.x - 20, A.y, STATE.trampoline), 1000);
+    core.tick(1100);
+    expect(core.peer(1)).toMatchObject({ seatId: id, x: A.x - 20, y: A.y, state: STATE.trampoline });
+    // 매트 밖으로 보낸 위치는 매트 안으로 당긴다
+    core.message(a, move(A.x - 80, A.y, STATE.trampoline), 1600);
+    core.tick(2000);
+    expect(core.peer(1)?.seatId).toBe(id);
+    expect(core.peer(1)!.x).toBeGreaterThanOrEqual(A.x - A.rx - 0.01);
+    // 매트 옆(사다리가 아닌 곳)에서는 못 탄다
+    const b = join("b", { camp: true, map: "camp", spawn: { x: CAMP_TRAMPOLINE.x - CAMP_TRAMPOLINE.rx - 8, y: CAMP_TRAMPOLINE.y - 20 } });
+    core.message(b, send({ t: "sit", seatId: campTrampSeatId(1) }), 0);
+    expect(events(b)).toContainEqual({ t: "seatDenied", seatId: campTrampSeatId(1) });
+    // 같은 자리는 한 명, 다른 자리는 사다리 앞에서 탄다
+    const c = join("c", { camp: true, map: "camp", spawn: { x: G.x, y: G.y } });
+    core.message(c, send({ t: "sit", seatId: id }), 0);
+    expect(events(c)).toContainEqual({ t: "seatDenied", seatId: id });
+    core.message(c, send({ t: "sit", seatId: campTrampSeatId(2) }), 0);
+    expect(core.peer(3)).toMatchObject({ seatId: campTrampSeatId(2), state: STATE.trampoline });
+    // 아무 좌표 트램펄린 자리(j_x_y)는 캠핑장에 없다
+    const d = join("d", { camp: true, map: "camp", spawn: { x: 300, y: 500 } });
+    core.message(d, send({ t: "sit", seatId: spotSeatId("trampoline", 300, 500) }), 0);
+    expect(events(d)).toContainEqual({ t: "seatDenied", seatId: spotSeatId("trampoline", 300, 500) });
+    core.message(d, move(300, 500, STATE.trampoline), 50);
+    core.tick(100);
+    expect(core.peer(4)).toMatchObject({ seatId: null, state: STATE.idle });
+    // 사다리 앞으로 내려서면 (서 있는 MOVE) 자리를 놓는다
+    core.message(a, move(G.x, G.y + 2, STATE.idle), 3000);
+    expect(core.peer(1)?.seatId).toBeNull();
+  });
+
+  it("11/26 워터 슬라이드(qZ): 사다리 밑에서 타고, 타는 동안 위치가 따라가며(움직이는 자리), 내리면 놓는다", () => {
+    const { core, join } = setup();
+    const Z = CAMP_SLIDE_SEAT;
+    const a = join("a", { camp: true, map: "camp", spawn: { x: Z.x, y: Z.y + 4 } });
+    core.message(a, send({ t: "sit", seatId: Z.id }), 0);
+    expect(core.peer(1)).toMatchObject({ seatId: Z.id, state: STATE.boat });
+    // 사다리를 오른다 (위치가 서버에도 따라간다 — 앵커에 묶지 않는다)
+    core.message(a, move(Z.x, Z.y - 40, STATE.boat), 700);
+    core.tick(800);
+    expect(core.peer(1)).toMatchObject({ seatId: Z.id, x: Z.x, y: Z.y - 40 });
+    // 다른 사람은 그동안 못 탄다
+    const b = join("b", { camp: true, map: "camp", spawn: { x: Z.x, y: Z.y + 4 } });
+    core.message(b, send({ t: "sit", seatId: Z.id }), 0);
+    expect(events(b)).toContainEqual({ t: "seatDenied", seatId: Z.id });
+    // 풀가에 내려서면 (서 있는 MOVE) 자리를 놓고, 다음 사람이 탄다
+    core.message(a, move(CAMP_SLIDE.pool.x, CAMP_SLIDE.pool.y + 19, STATE.idle), 2000);
+    expect(core.peer(1)?.seatId).toBeNull();
+    core.message(b, send({ t: "sit", seatId: Z.id }), 2100);
+    expect(core.peer(2)?.seatId).toBe(Z.id);
   });
 
   it("MOVE bounds follow the map", () => {
@@ -321,13 +406,13 @@ describe("reconnect and records", () => {
   });
 });
 
-describe("golden goblin is village only", () => {
-  it("camp people neither see it nor can catch it (even standing on the same coordinates), but hear who caught it", () => {
-    // 고블린이 캠핑장 범위 안의 좌표에 있는 판을 고른다 (같은 좌표에 선 캠핑장 사람이 거리로는 닿게)
+describe("golden goblin on another map (11/26 맵 무작위)", () => {
+  it("camp people hear a village goblin but cannot catch it (even standing on the same coordinates); hear who caught it", () => {
+    // 마을 고블린이 캠핑장 범위 안의 좌표에 있는 판을 고른다 (같은 좌표에 선 캠핑장 사람이 거리로는 닿게)
     const T = 20 + MAP_INTERVAL_MS;
     let found: { r: number; x: number; y: number } | null = null;
-    for (let k = 1; k < 200 && !found; k++) {
-      const r = k / 200;
+    for (let k = 1; k < 100 && !found; k++) {
+      const r = k / 200; // 0.5 아래 = 마을
       const { core } = setup(10, { goblin: true, random: () => r });
       const probe = core;
       probe.join({ id: "p", out: [] }, { visitorId: "p", name: "p", color: AVATAR_COLORS[0], channel: 1, look: [], body: "hood" }, 0);
@@ -341,13 +426,14 @@ describe("golden goblin is village only", () => {
     const v = join("v");
     const c = join("c", { camp: true });
     const g = core.forceGoblin(0)!;
+    expect(g.m).toBeUndefined();
     expect(events(v).some((e) => e.t === "goblin")).toBe(true);
     clear(v, c);
     core.message(c, send({ t: "map", m: "camp", x, y }), 20);
     expect(core.peer(2)).toMatchObject({ map: "camp", x, y });
     core.message(c, send({ t: "goblin", id: g.id }), T);
     expect(events(v).some((e) => e.t === "goblinCaught")).toBe(false);
-    expect(events(c).some((e) => e.t === "goblin" || e.t === "goblinCaught")).toBe(false);
+    expect(events(c).some((e) => e.t === "goblinCaught")).toBe(false);
     // 같은 자리의 마을 사람은 잡는다 (대조군). 11/18 입장 스폰도 순간이동이라 그 2초 뒤에 잡는다
     const w = join("w", { spawn: { x, y }, now: T - GOBLIN_AFTER_TELEPORT_MS });
     core.message(w, send({ t: "goblin", id: g.id }), T);
@@ -356,7 +442,6 @@ describe("golden goblin is village only", () => {
     const heard = events(c).filter((e) => e.t === "goblinCaught");
     expect(heard).toHaveLength(1);
     expect(heard[0]).toMatchObject({ id: g.id, name: "w" });
-    expect(events(c).some((e) => e.t === "goblin")).toBe(false);
   });
 });
 
@@ -482,5 +567,69 @@ describe("컨디숑 (11/15 술 깨기)", () => {
     expect(events(a).filter((e) => e.t === "bbq").at(-1)).toEqual({ t: "bbq", sid: 1, i: "hangover", u: 5_000, lv: 0, at: 5_000 });
     const c = join("c", { camp: true, map: "camp", spawn: { x: 320, y: 600 } });
     expect(welcome(c).peers.find((p) => p.sid === 1)?.drunk).toBeUndefined();
+  });
+});
+
+describe("11/26 촌캉스 아궁이 불 (use ag{터} — 마당 근처·1초에 한 번·늦게 온 사람도 본다)", () => {
+  // 싸리울집(16번 터)은 x 172..322, y 36..196 — 마당 안(대문 근처)에서 켠다
+  const YARD16 = { x: 240, y: 180 };
+  const fires = (c: Conn) => events(c).filter((e) => e.t === "use");
+
+  it("캠핑장에서 그 촌캉스 마당 근처에 있는 사람만, 같은 캠핑장 사람에게만 (값은 0·1로)", () => {
+    const { core, join } = setup();
+    const a = join("a", { camp: true, map: "camp", spawn: YARD16 });
+    const b = join("b", { camp: true, map: "camp", spawn: { x: 320, y: 600 } });
+    const v = join("v"); // 마을
+    clear(a, b, v);
+    core.message(a, send({ t: "use", u: "ag16", a: 7 }), 0);
+    expect(fires(b)).toEqual([{ t: "use", sid: 1, u: "ag16", a: 1 }]);
+    expect(fires(a)).toEqual([]);
+    expect(fires(v)).toEqual([]);
+    // 멀리(캠핑장 아래쪽)에서 보낸 것·카라반 터(ag1)·다른 촌캉스 터(15번, 마당 밖)는 버린다
+    clear(b);
+    core.message(b, send({ t: "use", u: "ag16", a: 0 }), 5_000);
+    core.message(a, send({ t: "use", u: "ag1", a: 1 }), 5_000);
+    core.message(a, send({ t: "use", u: "ag15", a: 1 }), 6_000);
+    expect(fires(a)).toEqual([]);
+    expect(fires(b)).toEqual([]);
+  });
+
+  it("마을에서 보낸 아궁이 알림은 버린다 (캠핑장에 없는 사람)", () => {
+    const { core, join } = setup();
+    const v = join("v", { spawn: YARD16 });
+    const w = join("w");
+    clear(v, w);
+    core.message(v, send({ t: "use", u: "ag16", a: 1 }), 0);
+    expect(fires(w)).toEqual([]);
+  });
+
+  it("사람마다 1초에 한 번 (깜빡이기 도배 방지)", () => {
+    const { core, join } = setup();
+    const a = join("a", { camp: true, map: "camp", spawn: YARD16 });
+    const b = join("b", { camp: true, map: "camp", spawn: { x: 320, y: 600 } });
+    clear(a, b);
+    core.message(a, send({ t: "use", u: "ag16", a: 1 }), 0);
+    core.message(a, send({ t: "use", u: "ag16", a: 0 }), 100);
+    core.message(a, send({ t: "use", u: "ag16", a: 1 }), 900);
+    core.message(a, send({ t: "use", u: "ag16", a: 0 }), 1_000);
+    expect(fires(b).map((e) => (e as { a: number }).a)).toEqual([1, 0]);
+  });
+
+  it("늦게 온 사람: 캠핑장에 들어오면(처음 입장·버스) 기억한 불 상태를 받고, 15분이 지난 상태는 받지 않는다", () => {
+    const { core, join } = setup();
+    const a = join("a", { camp: true, map: "camp", spawn: YARD16 });
+    core.message(a, send({ t: "use", u: "ag16", a: 0 }), 1_000);
+    const late = join("late", { camp: true, map: "camp", spawn: { x: 320, y: 600 }, now: 2_000 });
+    expect(fires(late)).toEqual([{ t: "use", sid: 0, u: "ag16", a: 0 }]);
+    // 마을에서 버스로 넘어와도
+    const bus = join("bus", { camp: true, now: 3_000 });
+    clear(bus);
+    core.message(bus, toCamp(), 3_000);
+    expect(fires(bus)).toEqual([{ t: "use", sid: 0, u: "ag16", a: 0 }]);
+    // 마을 사람은 받지 않는다
+    const vil = join("vil", { now: 3_000 });
+    expect(fires(vil)).toEqual([]);
+    const old = join("old", { camp: true, map: "camp", spawn: { x: 320, y: 600 }, now: 1_000 + 15 * 60_000 + 1 });
+    expect(fires(old)).toEqual([]);
   });
 });

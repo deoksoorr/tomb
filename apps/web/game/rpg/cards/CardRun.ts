@@ -11,6 +11,7 @@ import {
   FOCUS_ASPD,
   rerollsAllowed,
   runLevel,
+  runLevelBase,
   runXpOf,
   startPicks,
   type CardChoice,
@@ -163,8 +164,12 @@ export class CardRun<M extends CardMon> {
   readonly kind: CardKindStyle;
   private owned: CardCounts = {};
   private log: CardPick[] = [];
+  /** 11/26 자동 고르기로 고른 직후 (다음 제안까지 소리·효과 없이) */
+  private quiet = false;
   private s: CardStats = cardStats({});
   private xp = 0;
+  /** 11/26 판 시작 레벨 (엘리베이터 판은 그 층까지 올라왔을 레벨 — 서버도 티켓의 같은 값으로 센다) */
+  private readonly lv0: number;
   private earned = 0;
   private nStart = 0;
   private rerollsUsed = 0;
@@ -214,11 +219,14 @@ export class CardRun<M extends CardMon> {
     private readonly start: number,
     /** 11/19 주력 갈래 (그 갈래 카드가 제안에 더 자주) */
     private readonly main: MainBranch | null = null,
+    /** 11/26 시작 판 레벨 (판 시작 응답 — 서버 티켓과 같은 값. 없으면 시작 층으로 계산) */
+    lv0 = runLevelBase(start),
   ) {
     ensureCardTextures(h.scene);
     this.kind = cardStyleKind(h.style().id);
     this.gfx = h.scene.add.graphics().setDepth(DEPTH + 5);
     this.off = bridge.on("rpg:cardPick", (c) => this.choose(c));
+    this.lv0 = lv0;
     // 체크포인트 시작: 건너뛴 10층마다 세 장 (첫 층 전에)
     for (let i = 0; i < startPicks(start); i++) this.queue.push({ k: "s", i, at: 0, f: start });
   }
@@ -235,7 +243,7 @@ export class CardRun<M extends CardMon> {
   /** 처치: 판 경험치 → 판 레벨 업이면 고르기를 줄 세운다. 칼퇴 의지 회복 */
   onKill(m: M): void {
     this.xp += runXpOf(m.id) * this.s.xpMul;
-    const lv = runLevel(this.xp).level;
+    const lv = runLevel(this.xp, this.lv0).level;
     while (this.earned < lv) {
       this.queue.push({ k: "l", i: this.earned, at: this.h.now() + 420, f: this.start + this.h.floorsCleared() });
       this.earned++;
@@ -289,11 +297,13 @@ export class CardRun<M extends CardMon> {
       owned: { ...this.owned },
       style: this.kind,
       rerolls: c.k === "b" ? 0 : this.rerollsLeft,
-      ...(c.k === "l" ? { lv: c.i + 1 } : {}),
+      ...(c.k === "l" ? { lv: this.lv0 + c.i + 1 } : {}),
       ...(c.k === "s" ? { step: [c.i + 1, total] as [number, number] } : {}),
       ...(c.k === "l" && this.queue.some((q) => q.k === "l") ? { more: this.queue.filter((q) => q.k === "l").length } : {}),
       ...(c.k === "b" ? { floor: c.i } : {}),
     });
+    // 11/26 자동 고르기 중엔 장마다 소리를 내지 않는다 (30장이면 3초 내내 울렸다)
+    if (this.quiet) return;
     this.h.synth("card-flip", CARD_SND.flip);
     // 11/15 유니크·전설이 섞이면 뒤집히는 순간 따로 울린다
     const top = Math.max(...c.cards.map((id) => RARITIES.indexOf(CARDS[id].rarity)));
@@ -330,6 +340,7 @@ export class CardRun<M extends CardMon> {
       if (!id) return;
     }
     this.cur = null;
+    this.quiet = "slot" in ch && !!ch.quiet;
     if (id) {
       this.log.push({ k: c.k, i: c.i, r: c.r, c: id, ...(c.k === "l" ? { f: c.f } : {}) });
       if (c.k === "b") {
@@ -346,6 +357,7 @@ export class CardRun<M extends CardMon> {
       this.emit();
       return;
     }
+    this.quiet = false;
     bridge.emit("rpg:cards", null);
     this.h.hold(false);
   }
@@ -365,6 +377,7 @@ export class CardRun<M extends CardMon> {
     const legend = def.rarity === "legend";
     const big = legend || def.rarity === "unique";
     const color = RARITY_COLOR[def.rarity];
+    if (this.quiet) return;
     this.h.ring(p.x, p.y, color, legend ? 52 : 34);
     this.h.float(p.x, p.y - 26, def.name, `#${color.toString(16).padStart(6, "0")}`, 12);
     this.burst(p.x, p.y - 8, color, legend ? 26 : big ? 18 : 12);
@@ -1298,9 +1311,9 @@ export class CardRun<M extends CardMon> {
   // ── 화면·결과 ──
 
   hud(focus: boolean): NonNullable<RpgHud["run"]> {
-    const L = runLevel(this.xp);
+    const L = runLevel(this.xp, this.lv0);
     return {
-      lv: L.level,
+      lv: this.lv0 + L.level,
       xp: L.into,
       need: L.need,
       cards: (Object.entries(this.owned) as [CardId, number][]).filter(([, n]) => n > 0).map(([id, n]) => ({ id, n })),

@@ -48,7 +48,7 @@ import {
 import { MemoryHouseStore, type HousePair, type HouseStore } from "./store";
 
 /** 오두막 없는 집 하나 (공용 가방 = 이 집 id) */
-const solo = (id: string): HousePair => ({ village: id, sea: `${id}-sea` });
+const solo = (id: string): HousePair => ({ village: id, sea: `${id}-sea`, camp: `${id}-camp` });
 import { HK, RedisHouseStore } from "./store-redis";
 import { checkGuestText, checkHouseName, checkIntro, hasBanned } from "./text";
 import type { HouseLayout, Placed } from "./types";
@@ -61,8 +61,12 @@ describe("카탈로그", () => {
     expect(FURNITURE.length).toBeGreaterThanOrEqual(30);
     expect(new Set(FURNITURE.map((f) => f.id)).size).toBe(FURNITURE.length);
     for (const f of FURNITURE) {
-      expect(f.price).toBeGreaterThan(0);
-      expect(f.score).toBeGreaterThan(0);
+      // 11/26 캠핑장 집 기본 가구(fixture)는 집에 딸려 값·점수 0
+      if (f.fixture) expect([f.price, f.score]).toEqual([0, 0]);
+      else {
+        expect(f.price).toBeGreaterThan(0);
+        expect(f.score).toBeGreaterThan(0);
+      }
       expect(/^[a-z0-9_]+$/.test(f.id)).toBe(true);
     }
   });

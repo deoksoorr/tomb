@@ -205,6 +205,7 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
               <tr>
                 <th scope="col">이름</th>
                 <th scope="col">가입일</th>
+                <th scope="col">유입</th>
                 <th scope="col">마지막 접속</th>
                 <th scope="col" className={styles.num}>
                   포인트
@@ -230,6 +231,9 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
                   </td>
                   <td className={styles.nowrap} data-label="가입일" title={fullTime(r.createdAt)}>
                     {joinDate(r.createdAt)}
+                  </td>
+                  <td className={mm.src} data-label="유입" title={r.src === "기록 없음" ? "11/26 전에 가입해서 유입 기록이 없어요" : undefined}>
+                    {r.src ?? "—"}
                   </td>
                   <td className={styles.nowrap} data-label="마지막 접속" title={fullTime(r.lastSeenAt)}>
                     {relativeTime(r.lastSeenAt, now)}
@@ -272,7 +276,7 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
                 {/* 같은 IP·같은 기기로 들어온 다른 계정 전부 (없으면 줄을 그리지 않는다) */}
                 {hasLinks(r.links) && (
                   <tr className={mm.linkRow}>
-                    <td colSpan={8}>
+                    <td colSpan={9}>
                       <LinkedNames links={r.links} onFind={find} />
                     </td>
                   </tr>

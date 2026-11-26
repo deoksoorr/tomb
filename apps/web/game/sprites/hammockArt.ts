@@ -54,12 +54,15 @@ const ROPE = 0xc8b894;
  * 11/16 해먹 천 무늬 (기본 = 마을 해먹 빨강·크림 줄무늬).
  * "sea" = 포구 오두막 바닷가 세트 해먹: 산호·조개·물빛 넓은 띠 + 옅은 줄 + 부드러운 갈색 테 (game/housing/seaFurnitureArt 해먹과 같은 색)
  */
-export type HammockSkin = "village" | "sea";
+export type HammockSkin = "village" | "sea" | "campSun" | "campMint";
 type SkinDef = { stripe: (tx: number) => Color; rope: Color; out: Color };
 const SEA_BANDS: readonly Color[] = [0xf4b1a0, 0xfbe0cc, 0xade6e4];
 const SKINS: Record<HammockSkin, SkinDef> = {
   village: { stripe: (tx) => stripe(tx), rope: ROPE, out: OUT },
   sea: { stripe: (tx) => SEA_BANDS[Math.floor((tx - FABRIC_X0) / 4) % 3], rope: 0xd8c8a8, out: 0x5c4a42 },
+  // 11/26 캠핑장 해먹 (펜션 정원·간판 입구·달빛채 마당·캠프파이어 존 — 캠핑장 해먹 그림과 같은 색, 3칸 줄무늬)
+  campSun: { stripe: (tx) => (Math.floor((tx - FABRIC_X0) / 3) % 2 ? 0xe8a03a : 0xfaf2de), rope: 0xd8c09a, out: 0x2c2018 },
+  campMint: { stripe: (tx) => (Math.floor((tx - FABRIC_X0) / 3) % 2 ? 0x4f9a88 : 0xf2ead0), rope: 0xd8c09a, out: 0x2c2018 },
 };
 /** 기둥 매듭 (해먹 소품의 기둥 x=3..5, 42..44 바로 안쪽) */
 const KNOT_L = { x: 6, y: 8 };
@@ -179,4 +182,4 @@ export function hammockLieSheet(body: string, color: string, look: readonly stri
  * 11/16 "-hammock": 예전 "-lie"는 집 침대 자세(indoorPoseKey(key, "lie"))와 키가 같아, 해먹에 한 번 누운(또는 해먹에 누운 같은 생김새를 본)
  * 화면에서는 침대에 누워도 이미 만든 해먹 그림이 그대로 쓰였다 (텍스처는 씬끼리 같이 쓴다)
  */
-export const hammockLieKey = (avatarKey: string, skin: HammockSkin = "village") => (skin === "sea" ? `${avatarKey}-hammock-sea` : `${avatarKey}-hammock`);
+export const hammockLieKey = (avatarKey: string, skin: HammockSkin = "village") => (skin === "village" ? `${avatarKey}-hammock` : `${avatarKey}-hammock-${skin}`);

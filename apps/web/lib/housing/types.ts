@@ -1,5 +1,5 @@
 import type { TodoTick } from "../retain";
-import type { CottageStyleId, HouseExteriorMap, HouseSort, PlotTierId } from "./catalog";
+import type { CampHomeKind, CampInfo, CampYard, CaravanGrade, CottageStyleId, HouseExteriorMap, HouseSort, PlotTierId } from "./catalog";
 
 // 하우징 API 계약 (서버·클라이언트 공용). 계정 id는 절대 내보내지 않는다: 집 id는 계정 id의 HMAC이다.
 
@@ -20,10 +20,14 @@ export type PublicHouse = {
   ch: number;
   /** 그 채널 분양 마을의 번지 (1부터. 1..WORLD_LOTS는 메인 맵, 그보다 크면 2단지) */
   lot: number;
-  /** 11/16 "sea" = 달물결 포구 오두막 (lot = 포구 터 번호 1..11). 없으면 마을 집 */
-  zone?: "sea";
+  /** 11/16 "sea" = 달물결 포구 오두막 (lot = 포구 터 번호 1..11). 11/26 "camp" = 언젠가 캠핑장 집 (lot = 캠핑장 터 1..16). 없으면 마을 집 */
+  zone?: "sea" | "camp";
   /** 오두막 겉모습 (zone sea만) */
   style?: CottageStyleId;
+  /** 11/26 캠핑장 집 종류(터로 정해짐)·앞마당 단계 (zone camp만) */
+  camp?: CampInfo;
+  /** 11/26 별장 (살 때 이미 다른 집이 있었다 — 분양·넓히기 값 × 4/3). 첫 집이면 없다 */
+  villa?: true;
   exterior: HouseExterior;
   name: string;
   intro: string;
@@ -43,8 +47,10 @@ export type HouseSummary = {
   id: string;
   ch: number;
   lot: number;
-  zone?: "sea";
+  zone?: "sea" | "camp";
   style?: CottageStyleId;
+  camp?: CampInfo;
+  villa?: true;
   name: string;
   ownerName: string;
   tier: PlotTierId;
@@ -71,11 +77,38 @@ export type MyHouseResponse = {
   /** 11/16 공용 가방 가구 중 다른 집에 놓여 있어 여기서 못 쓰는 개수 (치우면 여기 놓을 수 있다). 가진 수 = inventory + away */
   away?: Record<string, number>;
   points: number;
+  /** 11/26 이 사람 기준 값표 (분양·넓히기·앞마당 — 화면은 값을 따로 계산하지 않고 이것을 보여 준다) */
+  prices?: HousePrices;
   /**
-   * 11/18 마을 집이 없고 포구 오두막이 먼저 있으면: 마을 집 분양가에 더해지는 별장 값 차이 (오두막을 별장 값으로 친다 — 순서를 바꿔 별장 값을 피하지 못하게).
-   * 없거나 0이면 빠진다
+   * @deprecated 11/26 별장 규칙 변경(두 번째로 산 집부터 별장)으로 차액 제도를 없앴다 — 서버가 더는 보내지 않는다. prices를 쓴다
    */
   villaFee?: number;
+};
+
+/** 캠핑장 터 하나의 값 (이 사람 기준: 분양·앞마당 모두 별장이면 × 4/3). 11/26 넓히기(wide)는 앞마당에 합쳐 없앴다 */
+export type CampLotPrice = {
+  lot: number;
+  kind: CampHomeKind;
+  grade?: CaravanGrade;
+  /** 분양가 */
+  buy: number;
+  /** 앞마당 1→2단계 · 2→3단계 값 */
+  yard2: number;
+  yard3: number;
+};
+
+/**
+ * 11/26 값표 (GET·POST /api/housing/me 응답 prices). villa[구역] = 그 구역 집이 별장인지
+ * (가진 집이면 그 집의 기록, 아직 없으면 지금 사면 별장인지 — 다른 구역에 집이 있으면 true).
+ * village·sea = 터 크기별 바로 사기 값, camp = 터마다, upgrade·yard = 지금 연 구역(zone) 내 집의 다음 넓히기(마을·포구)·앞마당(캠핑장) 값 (없으면 null)
+ */
+export type HousePrices = {
+  villa: { village: boolean; sea: boolean; camp: boolean };
+  village: Record<PlotTierId, number>;
+  sea: Record<PlotTierId, number>;
+  camp: CampLotPrice[];
+  upgrade: { to: PlotTierId; price: number } | null;
+  yard: { to: CampYard; price: number } | null;
 };
 
 export type HouseDetailResponse = { house: PublicHouse };
@@ -104,4 +137,4 @@ export type AdminHouse = HouseSummary & {
 export type VillageHouse = HouseSummary & { exterior: HouseExterior };
 
 /** 한 채널의 분양 마을: ch = 그 채널, lots = 지금 그리는 필지 수, taken = 숨긴 집 등 정보 없이 자리만 찬 번지 */
-export type VillageResponse = { ch: number; zone?: "sea"; lots: number; houses: VillageHouse[]; taken: number[]; generatedAt: number };
+export type VillageResponse = { ch: number; zone?: "sea" | "camp"; lots: number; houses: VillageHouse[]; taken: number[]; generatedAt: number };

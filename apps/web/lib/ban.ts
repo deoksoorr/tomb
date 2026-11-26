@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { CLOSE, INTERNAL_SIG_HEADER, INTERNAL_TTL_SEC, signInternal, WHERE_MAX_IDS, type InternalPerson, type InternalRequest, type PeerWhere } from "@tomb/protocol";
+import { CLOSE, INTERNAL_SIG_HEADER, INTERNAL_TTL_SEC, signInternal, WHERE_MAX_IDS, type HomesZone, type InternalPerson, type InternalRequest, type PeerWhere } from "@tomb/protocol";
 import type { NextRequest } from "next/server";
 import { env } from "./env";
 import { clientIp, HttpError } from "./http";
@@ -198,6 +198,15 @@ export async function sayAll(line: { id: string; name: string; text: string; at:
  */
 export async function pinNotify(scope: "channel" | "all", ch: number, pin: { text: string; name: string; at: number } | null): Promise<number | null> {
   const r = await internal<{ sent: number }>("/internal/pin", { op: "pin", scope, ch: scope === "all" ? 0 : ch, pin }, 2000);
+  return r ? r.sent : null;
+}
+
+/**
+ * 11/26 그 채널의 zone 집 목록이 바뀌었다 (분양·외관·카라반 디자인·앞마당·넓히기) → 실시간 서버가 그 채널에 homes 한 줄.
+ * 같은 채널 화면들은 같은 v로 다시 받는다 (5분 주기를 기다리지 않게). 보낸 채널 수, 닿지 못하면 null (그때는 5분 주기에 보인다)
+ */
+export async function homesNotify(ch: number, zone: HomesZone, v: number): Promise<number | null> {
+  const r = await internal<{ sent: number }>("/internal/homes", { op: "homes", ch, zone, v }, 2000);
   return r ? r.sent : null;
 }
 

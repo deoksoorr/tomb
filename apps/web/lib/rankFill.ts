@@ -56,12 +56,17 @@ export class RedisFillMark implements FillMark {
     private redis: Redis,
     private key: string,
   ) {}
+  /** 11/26 "done"을 한 번 본 인스턴스는 다시 묻지 않는다 (끝난 채우기는 되돌리지 않는다 — 랭킹을 열 때마다 GET 1번·왕복 1번 아끼기) */
+  private done = false;
   async get() {
+    if (this.done) return FILL_DONE;
     const v = await this.redis.get<string>(this.key);
+    if (v !== null && v !== undefined && String(v) === FILL_DONE) this.done = true;
     return v === null || v === undefined ? null : String(v);
   }
   async set(value: string) {
     await this.redis.set(this.key, value);
+    this.done = value === FILL_DONE;
   }
   async lock() {
     this.token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;

@@ -10,7 +10,7 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { seasonKey } from "../sprites/npcSeasonArt";
 import * as Art from "./seaArt";
 import { SEA_DEPTH } from "./SeaMap";
-import { FLAG_H, GATE_POST_H, GHOST_LAMPS, GHOST_SAILS, GHOST_TEX, MERCHANT_H, PLANK_IMG, STALLS_G, STALLS_H } from "./ghostShipArt";
+import { FLAG_H, FLAG_PAD, GATE_POST_H, GATE_POST_PAD, GHOST_HULL_PAD, GHOST_LAMPS, GHOST_SAILS, GHOST_TEX, MERCHANT_H, PLANK_IMG, STALLS_G, STALLS_H, STALLS_PAD } from "./ghostShipArt";
 import { clampGhostDeck, G_CABIN, G_DECK_X0, G_DECK_X1, G_MASTS, G_WATER, GHOST_ART_H, GHOST_GATE_POSTS, GHOST_HULL, GHOST_LADDER, GHOST_MERCHANT, GHOST_ORIGIN, GHOST_PLANK, GHOST_PLANK_WALK, onGhostWalk } from "./ghostShipLayout";
 
 // 11/17 유령선 특가 장터 (바닷가 장면 안의 배 — 그림·타기·장터 창 열기). 시간표·품목·값은 lib/sea/ghostShip (서버가 판정해요).
@@ -100,15 +100,17 @@ export class GhostShip {
     this.wakes = [0, 1, 2].map(() => s.add.image(0, 0, Art.SEA_TEX.wake).setDepth(SEA_DEPTH.shimmer + 7));
     this.plank = s.add.image(PLANK_IMG.x, PLANK_IMG.y, T.plank).setOrigin(0, 0).setDepth(GHOST_PLANK.y0 - 6);
     this.plankFront = s.add.image(PLANK_IMG.x, PLANK_IMG.y, T.plankFront).setOrigin(0, 0).setDepth(GHOST_PLANK.y1 + 2);
-    this.posts = GATE_POSTS.map((p) => s.add.image(p.x, p.y, T.gatePost).setOrigin(0.5, 1).setDepth(p.y));
+    this.posts = GATE_POSTS.map((p) => s.add.image(p.x, p.y + GATE_POST_PAD.bottom, T.gatePost).setOrigin(0.5, 1).setDepth(p.y));
     this.postGlows = GATE_POSTS.map(() => s.add.image(0, 0, T.glow).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights + 2));
-    this.back = s.add.image(O.x, O.y, T.back).setOrigin(0, 0).setDepth(backDepth);
+    // 11/26 뒤판·앞판·창 빛·좌판·깃발 텍스처는 둘레 여백(ghostShipArt *_PAD)만큼 넓다 → 그만큼 왼쪽·위로 옮겨 세워 자리 그대로
+    const HP = GHOST_HULL_PAD;
+    this.back = s.add.image(O.x - HP.x, O.y - HP.top, T.back).setOrigin(0, 0).setDepth(backDepth);
     this.sails = GHOST_SAILS.map((sl, i) => s.add.image(O.x + sl.gx + (sl.tri ? sl.w / 2 - 1 : 0), O.y + sl.gy, T.sail(i)).setOrigin(sl.tri ? 1 : 0.5, 0).setDepth(backDepth + 0.5));
-    this.flag = s.add.image(O.x + G_MASTS[1].x + 1, O.y + G_MASTS[1].top, T.flag, 0).setOrigin(0, 1).setDepth(backDepth + 0.6);
-    this.stalls = s.add.image(O.x + STALLS_G.x, O.y + STALLS_G.y, T.stalls).setOrigin(0, 0).setDepth(O.y + STALLS_G.y + STALLS_H - 4);
+    this.flag = s.add.image(O.x + G_MASTS[1].x + 1 - FLAG_PAD.x, O.y + G_MASTS[1].top, T.flag, 0).setOrigin(0, 1).setDepth(backDepth + 0.6);
+    this.stalls = s.add.image(O.x + STALLS_G.x - STALLS_PAD.x, O.y + STALLS_G.y - STALLS_PAD.top, T.stalls).setOrigin(0, 0).setDepth(O.y + STALLS_G.y + STALLS_H - 4);
     this.merchant = s.add.image(GHOST_MERCHANT.x, GHOST_MERCHANT.y, T.merchant, 0).setOrigin(0.5, 1).setDepth(GHOST_MERCHANT.y);
-    this.front = s.add.image(O.x, O.y, T.front).setOrigin(0, 0).setDepth(O.y + G_WATER + 2);
-    this.windows = s.add.image(O.x, O.y, T.windows).setOrigin(0, 0).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights + 1);
+    this.front = s.add.image(O.x - HP.x, O.y - HP.top, T.front).setOrigin(0, 0).setDepth(O.y + G_WATER + 2);
+    this.windows = s.add.image(O.x - HP.x, O.y - HP.top, T.windows).setOrigin(0, 0).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights + 1);
     this.lamps = GHOST_LAMPS.map(() => s.add.image(0, 0, T.glow).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights + 2));
     for (let i = 0; i < MIST_NEAR + MIST_WIDE; i++) {
       const wide = i >= MIST_NEAR;
@@ -265,9 +267,9 @@ export class GhostShip {
     const a = p * shimmer;
     const x0 = O.x + this.dx;
     const y0 = O.y + bob;
-    this.back.setVisible(true).setPosition(x0, y0).setAlpha(a);
-    this.front.setVisible(true).setPosition(x0, y0).setAlpha(a);
-    this.stalls.setVisible(true).setPosition(x0 + STALLS_G.x, y0 + STALLS_G.y).setAlpha(a);
+    this.back.setVisible(true).setPosition(x0 - GHOST_HULL_PAD.x, y0 - GHOST_HULL_PAD.top).setAlpha(a);
+    this.front.setVisible(true).setPosition(x0 - GHOST_HULL_PAD.x, y0 - GHOST_HULL_PAD.top).setAlpha(a);
+    this.stalls.setVisible(true).setPosition(x0 + STALLS_G.x - STALLS_PAD.x, y0 + STALLS_G.y - STALLS_PAD.top).setAlpha(a);
     this.reflect
       .setVisible(true)
       .setPosition(x0 + G_DECK_X0, O.y + G_WATER + 2)
@@ -286,7 +288,7 @@ export class GhostShip {
     this.flag
       .setVisible(true)
       .setFrame(calm ? 0 : Math.floor(now / 200) % 3)
-      .setPosition(x0 + G_MASTS[1].x + 1, y0 + G_MASTS[1].top + FLAG_H - 9)
+      .setPosition(x0 + G_MASTS[1].x + 1 - FLAG_PAD.x, y0 + G_MASTS[1].top + FLAG_H - 9)
       .setAlpha(a);
     // 유령 상인: 둥실 떠서 등불을 흔들어요
     const mb = calm ? 0 : Math.round(Math.sin(now / 800) * 1.5);
@@ -309,7 +311,7 @@ export class GhostShip {
     this.plank.setVisible(this.docked).setAlpha(pa);
     this.plankFront.setVisible(this.docked).setAlpha(pa);
     // 다리 입구 기둥 등불 넷 (고물 둘은 배를 따라 · 선착장 둘은 제자리) — 다리가 놓였을 때만
-    this.posts.forEach((img, i) => img.setVisible(this.docked).setPosition(GATE_POSTS[i].x + (i < 2 ? this.dx : 0), GATE_POSTS[i].y + (i < 2 ? bob : 0)).setAlpha(pa));
+    this.posts.forEach((img, i) => img.setVisible(this.docked).setPosition(GATE_POSTS[i].x + (i < 2 ? this.dx : 0), GATE_POSTS[i].y + GATE_POST_PAD.bottom + (i < 2 ? bob : 0)).setAlpha(pa));
     this.postGlows.forEach((g, i) => {
       const fl = calm ? 1 : 0.82 + 0.18 * Math.sin(now / (110 + i * 17) + i);
       g.setVisible(this.docked)
@@ -318,7 +320,7 @@ export class GhostShip {
         .setAlpha(pa * (0.45 + 0.5 * night) * fl);
     });
     // 등불·창 빛: 밤엔 환하게, 낮엔 은은하게 · 촛불처럼 떨려요
-    this.windows.setVisible(true).setPosition(x0, y0).setAlpha(p * (0.45 + 0.55 * night) * (calm ? 1 : 0.85 + 0.15 * Math.sin(now / 130)));
+    this.windows.setVisible(true).setPosition(x0 - GHOST_HULL_PAD.x, y0 - GHOST_HULL_PAD.top).setAlpha(p * (0.45 + 0.55 * night) * (calm ? 1 : 0.85 + 0.15 * Math.sin(now / 130)));
     this.lamps.forEach((g, i) => {
       const [gx, gy] = GHOST_LAMPS[i];
       const fl = calm ? 1 : 0.8 + 0.2 * Math.sin(now / (90 + i * 23) + i * 2);

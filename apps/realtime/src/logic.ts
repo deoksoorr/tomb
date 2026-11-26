@@ -1,4 +1,21 @@
-import { MAX_VALID_SPEED, MEGAPHONE_TTL_MS, MIN_CLIENT_VERSION, RATE_LIMIT_KICK_SEC, RATE_LIMIT_PER_SEC, encodeEvent, inMapBounds, mapOf, parseClientVersion, type InternalPin, type InternalSay, type MapId } from "@tomb/protocol";
+import {
+  MAX_VALID_SPEED,
+  MEGAPHONE_TTL_MS,
+  MIN_CLIENT_VERSION,
+  RATE_LIMIT_KICK_SEC,
+  RATE_LIMIT_PER_SEC,
+  encodeEvent,
+  inMapBounds,
+  mapOf,
+  parseClientVersion,
+  publicMaint,
+  verifyMaintRead,
+  type InternalHomes,
+  type InternalPin,
+  type InternalSay,
+  type MaintState,
+  type MapId,
+} from "@tomb/protocol";
 
 // Workers 런타임 API에 의존하지 않는 작은 순수 로직. vitest로 단위 테스트한다(logic.test.ts).
 
@@ -142,6 +159,24 @@ export function sayRelay(r: Pick<InternalSay, "id" | "name" | "text" | "at" | "r
 export function pinEvent(r: Pick<InternalPin, "scope" | "ch" | "pin">): string {
   const ch = r.scope === "all" ? 0 : r.ch;
   return encodeEvent({ t: "megaPin", scope: r.scope, ch, pin: r.pin ? { scope: r.scope, ch, text: r.pin.text, name: r.pin.name, at: r.pin.at } : null });
+}
+
+// ── 11/26 집 목록 바뀜 (/internal/homes) ──
+
+/** 웹이 알린 집 바뀜을 그 채널에 보낼 homes 이벤트로 (분양·외관·디자인·앞마당·넓히기 — 화면이 같은 v로 다시 받는다) */
+export function homesEvent(r: Pick<InternalHomes, "zone" | "v">): string {
+  return encodeEvent({ t: "homes", zone: r.zone, v: r.v });
+}
+
+// ── 11/26 GET /maintenance 응답 ──
+
+/**
+ * 점검 상태 응답 본문: 통과 목록 해시(skip)는 Origin이 없고(서버끼리) 웹이 서명한 머리글(MAINT_READ_HEADER)이 맞을 때만.
+ * 그 밖(브라우저·curl·틀린 서명)은 공개 모양
+ */
+export async function maintBodyFor(state: MaintState, req: { origin: string | null; auth: string | null }, secret: string, nowSec = Math.floor(Date.now() / 1000)): Promise<MaintState> {
+  const signed = !req.origin && (await verifyMaintRead(secret, req.auth, nowSec));
+  return signed ? state : publicMaint(state);
 }
 
 // ── 11/17 아이솔레이트 메모 (GET /lobby·/hunt-rooms) ──

@@ -18,9 +18,9 @@ describe("바닥·벽지 공용 (카탈로그)", () => {
     expect(isHouseOwnDef(furnitureById(FLOOR))).toBe(false);
     expect(isHouseOwnDef(furnitureById("wall_paper"))).toBe(false);
     expect(isHouseOwnDef(furnitureById("roof_red"))).toBe(true);
-    expect(houseUseNote(furnitureById(FLOOR))).toBe("마을 집과 포구 오두막 어디든 쓸 수 있어요. 하나로 집 한 채에 써요.");
+    expect(houseUseNote(furnitureById(FLOOR))).toBe("마을·바닷가·캠핑장 집 어디든 쓸 수 있어요. 하나로 집 한 채에 써요.");
     expect(houseUseNote(furnitureById("roof_red"))).toBe("산 집에서만 쓸 수 있어요.");
-    expect(houseUseNote(furnitureById("sofa"))).toBe("마을 집과 포구 오두막 어디든 놓을 수 있어요.");
+    expect(houseUseNote(furnitureById("sofa"))).toBe("마을·바닷가·캠핑장 집 어디든 놓을 수 있어요.");
   });
 });
 

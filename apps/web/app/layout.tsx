@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { preload } from "react-dom";
 import VisitTracker from "@/components/VisitTracker";
+import MaintenanceWatcher from "@/components/MaintenanceWatcher";
 import { HOME_TITLE, IS_PRODUCTION, SITE_DESCRIPTION, SITE_TITLE, shareMetadata, siteUrl } from "./seo";
 import "./globals.css";
 import "./pretendard.css";
@@ -38,6 +39,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         {children}
         {/* 47번 방문 분석 (방문·체류 신호만, 화면에는 그리지 않는다) */}
         <VisitTracker />
+        {/* 11/26 점검 모드 화면 (점검 신호가 올 때만 그린다) */}
+        <MaintenanceWatcher />
         {/* 테스트 서버(staging 갈래 배포)에서만: 실제 서버와 헷갈리지 않게 왼쪽 위 작은 표시 */}
         {process.env.VERCEL_GIT_COMMIT_REF === "staging" && (
           <div

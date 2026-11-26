@@ -1,6 +1,7 @@
 import * as Phaser from "phaser";
 import { ambienceAt, parseAmbienceOverride, timePhase } from "@/lib/ambience";
 import { isSnowy } from "@/lib/mapConcept";
+import { weatherFxOn } from "@/lib/deviceSettings";
 import { ART_H, buildCaption, buildInterior, buildSky, HORIZON, LAYERS, VIEW_MAX, WIN_BOT, WIN_TOP, type LayerSpec } from "./busRideArt";
 import { GULL_FRAMES, LEAF_COLORS, rideBake, type RideBake } from "./busRideBake";
 import { captionAlpha, captionAt, distanceAt, lightsOn, rideReversed, segmentAt, segmentsFor, shakeAt, skyColors, starsOn, strapAngle, type RideSegment } from "./busRideMath";
@@ -180,7 +181,8 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
     const bake = this.bake;
     // 11/17 날씨는 마을과 같은 시계·같은 QA 덮어쓰기 (?weather) — 시각은 버스를 부른 쪽이 정한 hour
     const amb = ambienceAt(Date.now(), { ...parseAmbienceOverride(typeof window === "undefined" ? "" : window.location.search), hour });
-    this.wx = rideWeather(amb.weather, amb.intensity);
+    // 11/26 설정에서 날씨 효과를 끈 기기는 창밖도 맑게 (lib/deviceSettings)
+    this.wx = weatherFxOn() ? rideWeather(amb.weather, amb.intensity) : NO_RIDE_WEATHER;
     this.wt0 = (Date.now() / 1000) % 100_000;
     if (this.wx.rain || this.wx.snow || this.wx.fog) bake.ensureWeather();
     const phase = timePhase(hour);
@@ -191,7 +193,7 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
 
     this.outside = this.add.container(0, 0).setDepth(D.sky);
     // 흐림·비·눈·안개면 하늘을 회색 쪽으로 (날씨는 마을과 같은 시계)
-    const overcast = amb.weather === "clear" ? 0 : amb.weather === "cloudy" || amb.weather === "fog" ? 0.6 : 1;
+    const overcast = amb.weather === "clear" || !weatherFxOn() ? 0 : amb.weather === "cloudy" || amb.weather === "fog" ? 0.6 : 1;
     const sky = skyColors(hour, overcast);
     this.sky = this.add.image(0, 0, this.tex("sky", buildSky(css(sky.top), css(sky.bottom)))).setOrigin(0, 0);
     this.stars = this.add.tileSprite(0, 0, 16, 16, bake.key("stars")).setOrigin(0, 0).setAlpha(starsOn(hour) ? 0.9 : 0);

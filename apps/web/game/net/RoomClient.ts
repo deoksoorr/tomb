@@ -7,6 +7,7 @@ import { backoffDelay, retryDelay, retrySoonOnVisible } from "./backoff";
 import { JoinLimiter, TOKEN_REUSE_MS } from "./joinPolicy";
 import { LookPacer } from "./lookPacer";
 import { isRoomId, parseRoomMessage, roomCloseAction, roomSocketUrl, type RoomWelcome } from "./roomPolicy";
+import { signalMaintenance } from "@/lib/maintClient";
 import { MoveThrottle, type NetPose } from "./sendThrottle";
 import { SYNC_EVERY_MS, SyncPolicy } from "./syncPolicy";
 
@@ -556,6 +557,10 @@ export class RoomClient {
       case "outdated":
         this.setMode("offline");
         bridge.emit("app:outdated", { source: "room" });
+        return;
+      case "maintenance":
+        this.setMode("offline");
+        signalMaintenance();
         return;
       case "refetch":
         this.token = null;

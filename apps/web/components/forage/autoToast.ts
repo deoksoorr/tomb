@@ -14,6 +14,8 @@ export function dexGainText(g: DexGain | undefined): string {
   if (g.earned > 0) parts.push(`도감 +${g.earned}P`);
   if (g.pending > 0) parts.push(`받을 도감 보상 +${g.pending}P (지갑이 꽉 차 도감 창에서 받아요)`);
   for (const t of g.titles) parts.push(`칭호 「${t}」`);
+  // 11/26 맵 도감 완성 배지 (완성 보상은 위 도감 +P에 같이 들어 있어요)
+  for (const b of g.badges ?? []) parts.push(`「${b.name}」 배지${b.points > 0 ? ` (완성 보상 ${b.points}P)` : ""}`);
   return parts.join(" · ");
 }
 
@@ -22,7 +24,7 @@ export function noteDexGain(g: DexGain | undefined, alone = true): void {
   if (!g) return;
   if (g.me) meStore.set(g.me);
   const text = dexGainText(g);
-  if (alone && text) showToast(text, g.titles.length ? 6_000 : 3_500);
+  if (alone && text) showToast(text, g.titles.length || g.badges?.length ? 6_000 : 3_500);
 }
 
 /** 자동 낚시 정산 결과 → 토스트 (새로 받은 게 있을 때만, 종류별 가장 큰 크기 포함). away = 숨어 있다 돌아옴 */

@@ -1,6 +1,6 @@
-import { CLIENT_VERSION, MAP_WIDTH, MAX_VALID_SPEED, RUN_SPEED } from "@tomb/protocol";
+import { CLIENT_VERSION, MAP_WIDTH, MAX_VALID_SPEED, RUN_SPEED, signMaintRead } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
-import { IsolateMemo, MoveBudget, RateLimiter, allocSid, isOutdatedClient, parseChannel, parseSpawn, pinEvent, sayRelay, stepToward } from "./logic";
+import { IsolateMemo, MoveBudget, RateLimiter, allocSid, isOutdatedClient, maintBodyFor, parseChannel, parseSpawn, pinEvent, sayRelay, stepToward, homesEvent } from "./logic";
 
 describe("RateLimiter", () => {
   it("drops messages over 20/s for the rest of that second", () => {
@@ -133,5 +133,29 @@ describe("11/17 IsolateMemo (GET /lobby·/hunt-rooms 아이솔레이트 메모)"
     expect(await memo.get(10_000, async () => ({ v: "edge", at: 7_000 }))).toBe("edge");
     expect(await memo.get(11_999, async () => ({ v: "fresh" }))).toBe("edge");
     expect(await memo.get(12_000, async () => ({ v: "fresh" }))).toBe("fresh");
+  });
+});
+
+describe("homesEvent (11/26 집 목록 바뀜 → homes)", () => {
+  it("구역·v만 담은 한 줄 (채널 DO 중계로 그 채널 모두에게)", () => {
+    expect(JSON.parse(homesEvent({ zone: "camp", v: 123 }))).toEqual({ t: "homes", zone: "camp", v: 123 });
+    expect(JSON.parse(homesEvent({ zone: "village", v: 9 }))).toEqual({ t: "homes", zone: "village", v: 9 });
+  });
+});
+
+describe("maintBodyFor (11/26 GET /maintenance — 통과 목록 skip은 서명한 웹 서버에게만)", () => {
+  const state = { on: true, msg: "점검", until: null, at: 1, skip: ["0123456789abcdef"] };
+  const pub = { on: true, msg: "점검", until: null, at: 1 };
+  const now = 1_800_000_000;
+
+  it("Origin 없음 + 맞는 서명이면 skip까지, 그 밖(서명 없음·틀림·지남·브라우저)은 공개 모양", async () => {
+    const auth = await signMaintRead("s3cret", now);
+    expect(await maintBodyFor(state, { origin: null, auth }, "s3cret", now)).toEqual(state);
+    expect(await maintBodyFor(state, { origin: null, auth: null }, "s3cret", now)).toEqual(pub); // curl
+    expect(await maintBodyFor(state, { origin: null, auth }, "other", now)).toEqual(pub);
+    expect(await maintBodyFor(state, { origin: null, auth }, "s3cret", now + 61)).toEqual(pub); // 지남
+    expect(await maintBodyFor(state, { origin: "https://myproject.rip", auth }, "s3cret", now)).toEqual(pub);
+    expect(await maintBodyFor(state, { origin: null, auth: `${now + 9999}.${auth.split(".")[1]}` }, "s3cret", now)).toEqual(pub); // 만료를 바꾼 것
+    expect(await maintBodyFor(state, { origin: null, auth }, "", now)).toEqual(pub); // 비밀값이 없으면 아무에게도
   });
 });

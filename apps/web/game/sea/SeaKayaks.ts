@@ -1,8 +1,9 @@
 import * as Phaser from "phaser";
-import { DIR, SEA_HEIGHT, SEA_KAYAK_DOCK, SEA_KAYAKS, SEA_WIDTH, seaKayakDismount, seaKayakSeatById, seaKayakWater, tideLineY, type DirId, type Sid } from "@tomb/protocol";
+import { DIR, SEA_HEIGHT, SEA_KAYAK_DOCK, SEA_KAYAKS, SEA_WIDTH, seaKayakDismount, seaKayakSeatById, seaKayakWater, seaWet, tideLineY, type DirId, type Sid } from "@tomb/protocol";
 import { BIG_RIDE_TOAST, myBig } from "../camp/foodState";
 import type { RemoteAvatar } from "../entities/RemoteAvatar";
-import { hullBlocks } from "../logic/boat";
+import { bridge } from "../bridge";
+import { hullBlocks, PASSENGER_GRACE_MS, passengerDrop, passengerMoves } from "../logic/boat";
 import { Bounce, knockMove, nudgeAmp, nudgeOffset, resolveHulls, SHIP_GAIN, strongerGain, touchContact } from "../logic/bounce";
 import type { MoveInput } from "../logic/movement";
 import { RideSound } from "../world/RideSound";
@@ -17,7 +18,7 @@ import { remoteTouch, type SeaHull, type SeaRideHost } from "./SeaRides";
 //  - 같이 타기: 선착장·옆에서 E. 서버는 노 젓는 사람 곁이면 바다 위에서도 받아요 (protocol 2인승 규칙)
 //  - 속도 36px/s (튜브와 조각배 사이). 얕은 물도 다니지만 마른 갯벌·모래는 못 가요 — 모래에 대면 둘 다 내려요.
 //    데크·바위·매어 둔 제트스키에 부딪혀요. 아무도 안 저으면 튜브처럼 물결 따라 떠다녀요
-//  - 내리기: 카약 선착장 가까이에서 E (데크 위에 서요), 또는 모래에 대기. 빈 카약은 천천히 매어 둔 자리로 돌아가요
+//  - 내리기: 카약 선착장 가까이에서 E (데크 위에 서요), 또는 모래에 대기. 11/26 같이 탄 사람은 어디서든 E (바다 한가운데면 카약 옆 물로 — 헤엄). 빈 카약은 천천히 매어 둔 자리로 돌아가요
 //  - 다른 사람 카약은 그 사람 아바타(보간 위치·방향)로 그려요. 노 젓는 모습은 둘 다 같은 시계로 저어요
 
 type View = {
@@ -69,6 +70,11 @@ export class SeaKayaks {
   /** 11/16 r19 내가 노 젓는 카약이 부딪혀 튕기는 중 */
   private readonly bounce = new Bounce();
   private strokeAt = 0;
+  /** 11/26 마지막으로 탄 때 · 터치 [내리기] (boat:passenger)에 알린 값 */
+  private boardAt = 0;
+  private passengerShown = false;
+  /** 터치 [내리기] */
+  private readonly offMoveOff = bridge.on("boat:moveOff", () => void this.passengerOff());
   private riders = new Set<RemoteAvatar>();
   /** 11/17 긴급: 노 젓는 사람의 카약 자리에 붙여 그리는 원격 동승자 (posOverride를 넣은 사람) */
   private pinned = new Set<RemoteAvatar>();
@@ -137,7 +143,8 @@ export class SeaKayaks {
 
   hint(prefix: string): { x: number; y: number; text: string } | null {
     const m = this.mine();
-    if (m) return this.nearDock(m.v) ? { x: m.v.x, y: m.v.y + 12, text: `${prefix}내리기` } : null;
+    // 11/26 같이 탄 사람은 어디서든 내린다 (E·X·방향키 — 운영자 「얻어 타면 납치된다」, 바다 한가운데면 카약 옆 물로 뛰어내려 헤엄)
+    if (m) return this.nearDock(m.v) || m.k === 1 ? { x: m.v.x, y: m.v.y + 12, text: m.k === 1 && !this.nearDock(m.v) ? `${prefix}내리기 · 이동해도 내려요` : `${prefix}내리기` } : null;
     const c = this.candidate();
     if (!c) return null;
     return { x: c.v.x, y: c.v.y + 12, text: `${prefix}${c.k === 0 ? "카약 타기" : "카약 같이 타기"}` };
@@ -152,7 +159,7 @@ export class SeaKayaks {
     const m = this.mine();
     if (m) {
       if (this.nearDock(m.v)) this.leave(m.v, seaKayakDismount({ x: m.v.x, y: m.v.y }));
-      else this.host.toast("카약은 카약 선착장이나 모래에 대면 내려요");
+      else if (!this.passengerOff()) this.host.toast("카약은 카약 선착장이나 모래에 대면 내려요");
       return true;
     }
     const c = this.candidate();
@@ -177,6 +184,7 @@ export class SeaKayaks {
     const now = h.scene.time.now;
     const at = this.seatPos(v, k);
     pl.board(`pK${v.n + 1}-${k}`, at.x, at.y, v.dir, now, null);
+    this.boardAt = now;
     v.seat[k] = -1;
     v.leftFrom = null;
     v.ret = null;
@@ -218,6 +226,24 @@ export class SeaKayaks {
     if (!m || seatId !== `pK${m.v.n + 1}-${m.k}`) return false;
     this.leave(m.v, this.safeSpot(m.v), "카약에 탈 수 없었어요. 다시 눌러 주세요");
     return true;
+  }
+
+  /** 11/26 같이 탄 사람 내리기 (E·X·방향키·터치 [내리기]). 같이 탄 사람이 아니면 false */
+  passengerOff(): boolean {
+    const m = this.mine();
+    if (!m || m.k !== 1) return false;
+    this.leave(m.v, this.nearDock(m.v) ? seaKayakDismount({ x: m.v.x, y: m.v.y }) : this.dropSpot(m.v));
+    return true;
+  }
+
+  /** 같이 탄 사람이 바다 한가운데서 내릴 자리: 카약 옆 헤엄칠 물. 없으면(얕은 모래 곁) 물가 모래, 그것도 아니면 선착장 */
+  private dropSpot(v: View): { x: number; y: number } {
+    const level = this.host.tide();
+    const me = this.host.player();
+    const wet = passengerDrop(me.x, me.y, v.dir, (x, y) => seaWet(x, y, level));
+    if (wet) return wet;
+    const shore = Math.round(tideLineY(level) - 6);
+    return me.y - shore < 40 ? { x: Math.round(me.x), y: shore } : seaKayakDismount({ x: v.x, y: v.y });
   }
 
   /** 자리를 놓쳤을 때: 선착장 가까우면 데크, 아니면 그 자리 (물이면 헤엄) */
@@ -263,6 +289,11 @@ export class SeaKayaks {
       v.y = this.motion.y;
       v.dir = this.motion.dir;
     } else {
+      // 11/26 같이 탄 사람은 움직이면 내린다 (탄 직후 잠깐은 빼고)
+      if (passengerMoves(move) && now - this.boardAt >= PASSENGER_GRACE_MS) {
+        this.passengerOff();
+        return;
+      }
       // 같이 탄 사람: 노 젓는 사람이 내렸으면 — 물가면 같이 내리고, 아니면 뒤 자리로 옮겨 앉아 이어 저어요
       const drv = this.seatOwner(v.n, 0);
       if (drv === null) {
@@ -353,6 +384,11 @@ export class SeaKayaks {
     const h = this.host;
     const now = h.scene.time.now;
     const wall = Date.now();
+    const passenger = this.mine()?.k === 1;
+    if (passenger !== this.passengerShown) {
+      this.passengerShown = passenger;
+      bridge.emit("boat:passenger", { on: passenger });
+    }
     const remotes = h.remotes();
     const seen = new Set<RemoteAvatar>();
     const pinned = new Set<RemoteAvatar>();
@@ -476,12 +512,13 @@ export class SeaKayaks {
       const ride = { ox: 0, lift: SIT_LIFT, depth: v.y + 1 + k, alt: "sitGround" as const };
       const cv = v.covers[k];
       if (cv.texture.key !== key) cv.setTexture(key);
-      if (side) cv.setCrop(0, 6, Art.KAYAK_SIDE_W, Art.KAYAK_SIDE_H - 6).setPosition(x, y).setFlipX(v.dir === DIR.left).setFlipY(false);
+      // 11/26 자르기 줄은 그린 그림 줄 + 텍스처 위 여백 (KAYAK_*_PAD)
+      if (side) cv.setCrop(0, 6 + Art.KAYAK_SIDE_PAD.top, Art.KAYAK_SIDE_W, Art.KAYAK_SIDE_H - 6 - Art.KAYAK_SIDE_PAD.top).setPosition(x, y).setFlipX(v.dir === DIR.left).setFlipY(false);
       else {
         // 세로 카약: 그 자리 구멍 바로 앞(가는 쪽) 몸통 한 토막
         // 그림의 아래 구멍(29)이 뱃머리 쪽 — 위로 갈 땐 뒤집어 그려서 자리 0(앞)은 늘 29번 줄
         const cy = k === 0 ? 29 : 13;
-        cv.setCrop(0, cy + 1, Art.KAYAK_VERT_W, 8).setPosition(x, y).setFlipX(false).setFlipY(v.dir === DIR.up);
+        cv.setCrop(0, cy + 1 + Art.KAYAK_VERT_PAD.top, Art.KAYAK_VERT_W, 8).setPosition(x, y).setFlipX(false).setFlipY(v.dir === DIR.up);
       }
       cv.setVisible(true).setDepth(v.y + 2.5 + k);
       if (who === -1) this.host.player().view.ride = ride;
@@ -522,7 +559,9 @@ export class SeaKayaks {
   }
 
   destroy(): void {
+    this.offMoveOff();
     this.dismount();
+    if (this.passengerShown) bridge.emit("boat:passenger", { on: false });
     for (const r of this.riders) r.view.ride = null;
     this.riders.clear();
     for (const r of this.pinned) r.posOverride = null;

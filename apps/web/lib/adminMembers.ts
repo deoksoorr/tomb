@@ -8,6 +8,8 @@ import { getAdminAudit, type AdminAuditEntry } from "./store/adminAudit";
 import { getBanStore } from "./store/bans";
 import { DORMANT_MS, type AccountStore, type AccountSummary } from "./store/types";
 import { memberLinks } from "./sameUser";
+import { srcText } from "./signupSource";
+import { getSignupSrc } from "./store/signupSrc";
 import type { MemberLinks } from "./sameUserRules";
 
 // 관리자 '회원 목록' 탭의 회원 목록·접속 코드 재발급 (라우트: app/api/admin/accounts/list, app/api/admin/accounts/code).
@@ -17,10 +19,10 @@ import type { MemberLinks } from "./sameUserRules";
 // 훑은 결과는 이 서버 인스턴스에 SNAPSHOT_MS 동안 기억한다 (페이지를 넘길 때마다 다시 훑지 않게, fresh면 다시).
 
 export const MEMBERS_PAGE = 50;
-/** 한 번 훑을 때 SCAN count (키 전체를 돌므로 크게) */
-const SCAN_COUNT = 1000;
-/** 훑기 상한 (SCAN 호출 수). 넘으면 partial로 알린다 */
-const SCAN_MAX_CALLS = 500;
+/** 한 번 훑을 때 SCAN count (키 전체를 돌므로 크게). 11/26 1000 → 5000: 계정마다 키가 여럿이라 키 전체가 계정 수보다 훨씬 많다 — 훑기 횟수(차례로 기다리는 Redis 왕복)를 1/5로 */
+const SCAN_COUNT = 5000;
+/** 훑기 상한 (SCAN 호출 수). 넘으면 partial로 알린다 (상한 키 수는 예전과 같은 50만) */
+const SCAN_MAX_CALLS = 100;
 const SNAPSHOT_MS = 30_000;
 
 export type MemberStatus = "normal" | "banned" | "dormant" | "staff";
@@ -49,6 +51,8 @@ export type AdminMemberRow = {
   stayMinutes: number;
   /** 같은 IP(최근 30일)·같은 기기(90일)로 들어온 다른 계정 전부 (없으면 빈 목록, lib/sameUser.ts memberLinks) */
   links: MemberLinks;
+  /** 11/26 가입 유입 (lib/signupSource srcText — 11/26 배포 전 가입은 「기록 없음」) */
+  src?: string;
 };
 /** 목록 순서: recent = 최근 접속 순, stay = 총 접속 시간 순 (운영자 포함) */
 export type MemberSort = "recent" | "stay";
@@ -76,16 +80,28 @@ export type Snapshot = {
 const g = globalThis as typeof globalThis & { __tombMembersSnap?: Snapshot };
 
 export async function scanAllAccounts(accounts: AccountStore): Promise<{ rows: AccountSummary[]; partial: boolean }> {
-  const seen = new Map<string, AccountSummary>();
+  // 11/26 훑기(SCAN)는 차례로일 수밖에 없지만, 찾은 계정의 요약 읽기(HMGET 파이프라인)는 다음 훑기와 겹쳐 돌린다
+  // (예전엔 훑기 → 요약 → 훑기 → 요약… 으로 Redis 왕복이 훑기 횟수의 두 배였다). 순서·결과는 같다
+  const pages: Promise<(AccountSummary | null)[]>[] = [];
   let cursor = "0";
+  let partial = true;
   for (let calls = 0; calls < SCAN_MAX_CALLS; calls++) {
-    const r = await accounts.scanAccounts(cursor, SCAN_COUNT);
-    // SCAN은 같은 키를 두 번 돌려줄 수 있다
-    for (const a of r.accounts) seen.set(a.accountId, a);
+    const r = await accounts.scanIds(cursor, SCAN_COUNT);
+    if (r.ids.length) {
+      const page = accounts.summaries(r.ids);
+      page.catch(() => undefined);
+      pages.push(page);
+    }
     cursor = r.next;
-    if (cursor === "0") return { rows: [...seen.values()], partial: false };
+    if (cursor === "0") {
+      partial = false;
+      break;
+    }
   }
-  return { rows: [...seen.values()], partial: true };
+  // SCAN은 같은 키를 두 번 돌려줄 수 있다
+  const seen = new Map<string, AccountSummary>();
+  for (const rows of await Promise.all(pages)) for (const a of rows) if (a) seen.set(a.accountId, a);
+  return { rows: [...seen.values()], partial };
 }
 
 /** 훑어 둔 회원 목록 (SNAPSHOT_MS 동안 같은 것, fresh면 다시 훑는다). 경제 탭 잔액 보기(lib/adminBalances)도 같이 쓴다 */
@@ -169,7 +185,7 @@ export async function listMembers(
   const snap = await membersSnapshot(accounts, !!opts.fresh, now);
   const page = pageMembers(snap.rows, { q: opts.q, cursor: opts.cursor, sort: opts.sort });
   const ids = page.rows.map((r) => r.accountId);
-  const [staffId, bans, scores, links] = await Promise.all([
+  const [staffId, bans, scores, links, srcs] = await Promise.all([
     staffAccountId(now),
     getBanStore().index(),
     getHuntLevelStore(accounts)
@@ -182,6 +198,10 @@ export async function listMembers(
         console.error("[members] 같은 IP·기기 계정 읽기 실패", e);
         return new Map<string, MemberLinks>();
       }),
+    // 11/26 가입 유입 (한 페이지 HMGET 1번)
+    getSignupSrc()
+      .get(ids)
+      .catch(() => ids.map(() => null)),
   ]);
   const members = page.rows.map((r, i): AdminMemberRow => {
     const ban = bans.get(`a:${r.accountId}`);
@@ -201,6 +221,7 @@ export async function listMembers(
       hasCode: r.hasCode,
       stayMinutes: r.stayMinutes,
       links: links.get(r.accountId) ?? { ip: [], device: [] },
+      src: srcText(srcs[i]),
     };
   });
   return {

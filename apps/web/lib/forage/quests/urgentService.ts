@@ -139,10 +139,11 @@ async function testEvent(now: number): Promise<UrgentTest | null> {
   return t;
 }
 
-/** now 무렵의 의뢰 (그저께·어제·오늘 + 시험), 시작 순 */
-async function eventsAround(now: number): Promise<UrgentSlot[]> {
+/** now 무렵의 의뢰 (back일 전 ~ 오늘 + 시험, 기본 그저께부터), 시작 순 */
+async function eventsAround(now: number, back = 2): Promise<UrgentSlot[]> {
   const day = gameDay(now);
-  const list = [...scheduleOf(addDays(day, -2)), ...scheduleOf(addDays(day, -1)), ...scheduleOf(day)];
+  const list: UrgentSlot[] = [];
+  for (let k = back; k >= 0; k--) list.push(...scheduleOf(addDays(day, -k)));
   const t = await testEvent(now);
   if (t) list.push(t);
   return list.sort((a, b) => a.start - b.start);
@@ -317,7 +318,8 @@ async function permOwned(acct: string, now: number): Promise<Set<string>> {
 
 /** 나와 관련된 긴급 의뢰: 지금 것 + 끝난 지 URGENT_CLAIM_MS 안의 것 중 내가 낸 것 */
 export async function urgentMine(acct: string, now = Date.now()): Promise<UrgentMeResponse> {
-  const evs = (await eventsAround(now)).filter((e) => e.start <= now && now < e.end + URGENT_CLAIM_MS);
+  // 11/26 받기 기한(끝나고 3일)이 3일 뒤 새벽 5시(게임 날짜)를 넘기므로 그끄저께 일정까지 본다 — 기한이 지나는 순간에 빠진다
+  const evs = (await eventsAround(now, 3)).filter((e) => e.start <= now && now < e.end + URGENT_CLAIM_MS);
   const store = urgentStore();
   const [mine, sup] = await Promise.all([store.mine(evs.map((e) => e.id), acct), isSuperHunter(acct).catch(() => false)]);
   const rows: UrgentMineRow[] = [];

@@ -1,4 +1,20 @@
-import { DEFAULT_MAX_CHANNELS, SEA_LOTS, VILLAGE_TITLE } from "@tomb/protocol";
+import {
+  CAMP_HOME_KIND_NAME,
+  CAMP_LOTS,
+  CAMP_TITLE,
+  campLotByNo,
+  campLotName,
+  campLotShort,
+  DEFAULT_MAX_CHANNELS,
+  isOpenLot,
+  SEA_LOTS,
+  VILLAGE_TITLE,
+  WORLD_LOTS,
+  type CampHomeKind,
+  type CampYard,
+  type CaravanDesign,
+  type CaravanGrade,
+} from "@tomb/protocol";
 
 // 하우징(개인 집) 카탈로그와 밸런스 값. 서버(검증·가격)와 클라이언트(상점·게임 그림)가 같이 쓴다.
 // 가격·점수를 바꾸면 상점 화면과 서버 검증이 함께 바뀐다. 이미 놓인 물건의 점수는 다음 저장 때 다시 계산된다.
@@ -40,7 +56,8 @@ export const plotCost = (id: PlotTierId): number => {
   return PLOT_TIERS.slice(0, i + 1).reduce((sum, t) => sum + t.price, 0);
 };
 
-export type FurnitureCategory = "furniture" | "living" | "dev" | "nature" | "mood" | "sea" | "season" | "skin" | "exterior";
+/** 11/26 fixture = 캠핑장 집 종류별 기본 가구 (가구점 갈래가 아니다 — 가구점 탭 목록에 없어서 보이지 않는다) */
+export type FurnitureCategory = "furniture" | "living" | "dev" | "nature" | "mood" | "sea" | "season" | "skin" | "exterior" | "fixture";
 
 export const CATEGORY_LABELS: Record<FurnitureCategory, string> = {
   furniture: "가구",
@@ -52,6 +69,7 @@ export const CATEGORY_LABELS: Record<FurnitureCategory, string> = {
   season: "시즌",
   skin: "바닥·벽지",
   exterior: "외관",
+  fixture: "기본 가구",
 };
 
 export type FurnitureDef = {
@@ -104,6 +122,11 @@ export type FurnitureDef = {
    * 문대리 창(buyFurniture 한정 판매 인자 — lib/office)으로만 산다. 그림 game/housing/officeFurnitureArt.ts, 모두 네 방향
    */
   officeShop?: true;
+  /**
+   * 11/26 캠핑장 집 종류별 기본 가구 (CAMP_FIXTURES): 그 종류 집에 딸려 있다 — 사기·팔기·없애기 불가, 가방에 없음, 가구 수(maxItems)에 안 셈,
+   * 옮기기·돌리기는 된다 (배치 저장 때 그 종류 기본 가구가 정확히 하나씩 있어야 한다 — layout.ts validateLayout). 값·점수 0
+   */
+  fixture?: CampHomeKind;
 };
 
 /** 11/20 사용자 「가구 값을 두 배 정도로 올려, 문대리도. 특별이니까」: 시즌 가구·문대리 사무실 가구 값만 표의 2배 (꾸미기 점수는 표 그대로) */
@@ -261,6 +284,24 @@ export const FURNITURE: readonly FurnitureDef[] = [
   { id: "wall_shell", name: "조개 벽지", desc: "크림색 바탕에 조개와 불가사리가 흩어진 벽지.", category: "skin", price: 280, score: 11, w: 1, h: 1, skin: "wall" },
   { id: "wall_driftwood", name: "유목 판자 벽", desc: "바랜 회갈색 가로 널. 오래된 배 창고 같다.", category: "skin", price: 320, score: 13, w: 1, h: 1, skin: "wall" },
   { id: "wall_iron", name: "남색 장식 벽지", desc: "짙은 남색 바탕에 금빛 무늬가 들어간 고풍스러운 벽지.", category: "skin", price: 420, score: 18, w: 1, h: 1, skin: "wall" },
+  // ── 11/26 캠핑장 집 기본 가구 (fixture — 가구점·보따리상에 없고, 분양 때 그 종류 집에 놓여 있다. 값·점수 0). 모두 네 방향 ──
+  ...fixtures("caravan", [
+    ["fx_cv_bed", "카라반 침대", "창가에 붙은 좁은 침대예요.", 2, 2, "눕기"],
+    ["fx_cv_dinette", "카라반 식탁", "둘이 마주 앉는 작은 식탁과 의자예요.", 2, 2, "앉기"],
+    ["fx_cv_kitchen", "간이 부엌", "버너 하나, 개수대 하나. 라면 끓이기엔 충분해요.", 2, 1, "요리하기"],
+    ["fx_cv_toilet", "화장실 칸", "문이 달린 작은 화장실이에요.", 2, 2, "문 열기·닫기"],
+  ]),
+  ...fixtures("pension", [
+    ["fx_pn_tv", "펜션 TV", "벽에 건 큰 TV예요.", 2, 1, "켜기·끄기"],
+    ["fx_pn_sofa", "펜션 소파", "TV 앞에 둔 푹신한 소파예요.", 2, 1, "앉기 (2자리)"],
+    ["fx_pn_kitchen", "펜션 주방", "싱크대와 가스레인지가 나란히 있어요.", 3, 1, "요리하기"],
+    ["fx_pn_bed", "펜션 침대", "하얀 이불을 깐 더블 침대예요.", 2, 2, "눕기"],
+  ]),
+  ...fixtures("rural", [
+    ["fx_rr_jagae", "자개장", "자개로 꽃과 학을 새긴 옛날 장롱이에요.", 2, 1, "문 열어 보기"],
+    ["fx_rr_ibul", "이불장", "두툼한 솜이불이 차곡차곡 들어 있어요.", 2, 1, "이불 꺼내기"],
+    ["fx_rr_bapsang", "밥상", "다리를 펴서 쓰는 둥근 밥상이에요.", 2, 1, "앉아서 밥 먹기"],
+  ]),
   // ── 외관 (마을에서 보이는 집 바깥. 자리마다 하나씩 고른다) ──
   ...ext("roof", [
     ["roof_red", "붉은 기와 지붕", "멀리서도 눈에 띄는 붉은 기와.", 240, 8],
@@ -315,6 +356,11 @@ function season(week: string, rows: [string, string, string, number, number, num
   }));
 }
 
+/** 11/26 캠핑장 집 기본 가구 한 종류 묶음 (값·점수 0, 네 방향) */
+function fixtures(kind: CampHomeKind, rows: [string, string, string, number, number, string][]): FurnitureDef[] {
+  return rows.map(([id, name, desc, w, h, use]) => ({ id, name, desc, category: "fixture" as const, price: 0, score: 0, w, h, use, spin: true, fixture: kind }));
+}
+
 function ext(slot: ExtSlot, rows: [string, string, string, number, number][]): FurnitureDef[] {
   return rows.map(([id, name, desc, price, score]) => ({ id, name, desc, category: "exterior" as const, price, score, w: 1, h: 1, ext: slot }));
 }
@@ -350,16 +396,23 @@ const BY_ID = new Map(FURNITURE.map((f) => [f.id, f]));
 export const furnitureById = (id: string): FurnitureDef | undefined => BY_ID.get(id);
 /** 바닥·벽·창문 이름 (기본 것은 가구 목록에 없어 따로) */
 export const skinName = (id: string): string =>
-  id === DEFAULT_FLOOR ? DEFAULT_FLOOR_NAME : id === DEFAULT_WALL ? DEFAULT_WALL_NAME : id === DEFAULT_WINDOW ? DEFAULT_WINDOW_NAME : (furnitureById(id)?.name ?? id);
+  id === DEFAULT_FLOOR
+    ? DEFAULT_FLOOR_NAME
+    : id === DEFAULT_WALL
+      ? DEFAULT_WALL_NAME
+      : id === DEFAULT_WINDOW
+        ? DEFAULT_WINDOW_NAME
+        : (CAMP_SKIN_NAMES[id] ?? furnitureById(id)?.name ?? id);
 /**
  * 11/20 판매처가 따로 있는 전용·기간 한정 가구인지: 유령선 한정(ghost)·가구 보따리상 시즌 가구(seasonWeek)·
  * 분양사 보리 품종 가구(petShop)·보리만 파는 강아지·고양이 가구(boriOnly)·총무팀 문대리 사무실 가구(officeShop). 유령선 주간 할인 후보 등 「아무 가구나」 고르는 곳에서 뺀다
  */
-export const isExclusiveFurniture = (f: Pick<FurnitureDef, "ghost" | "seasonWeek" | "petShop" | "boriOnly" | "officeShop">): boolean =>
-  !!(f.ghost || f.seasonWeek || f.petShop || f.boriOnly || f.officeShop);
+export const isExclusiveFurniture = (f: Pick<FurnitureDef, "ghost" | "seasonWeek" | "petShop" | "boriOnly" | "officeShop" | "fixture">): boolean =>
+  !!(f.ghost || f.seasonWeek || f.petShop || f.boriOnly || f.officeShop || f.fixture);
 
-export const isFloorSkin = (id: string) => id === DEFAULT_FLOOR || furnitureById(id)?.skin === "floor";
-export const isWallSkin = (id: string) => id === DEFAULT_WALL || furnitureById(id)?.skin === "wall";
+/** 바닥 스킨인지 (11/26 캠핑장 집 기본 바닥 floor_caravan 등도 — 그 종류 집에만 쓰는지는 validateLayout이 본다) */
+export const isFloorSkin = (id: string) => id === DEFAULT_FLOOR || CAMP_FLOOR_SET.has(id) || furnitureById(id)?.skin === "floor";
+export const isWallSkin = (id: string) => id === DEFAULT_WALL || CAMP_WALL_SET.has(id) || furnitureById(id)?.skin === "wall";
 export const isWindowSkin = (id: string) => id === DEFAULT_WINDOW || furnitureById(id)?.skin === "window";
 /** 창문 스킨 목록 (꾸미기 「창문」 칸: 기본 + 가진 것·못 가진 것 모두) */
 export const WINDOW_SKINS: readonly string[] = [DEFAULT_WINDOW, ...FURNITURE.filter((f) => f.skin === "window").map((f) => f.id)];
@@ -379,8 +432,8 @@ export const houseUseNote = (d: Pick<FurnitureDef, "skin" | "ext"> | undefined):
     : isHouseOwnDef(d)
       ? "산 집에서만 쓸 수 있어요."
       : d.skin
-        ? "마을 집과 포구 오두막 어디든 쓸 수 있어요. 하나로 집 한 채에 써요."
-        : "마을 집과 포구 오두막 어디든 놓을 수 있어요.";
+        ? "마을·바닷가·캠핑장 집 어디든 쓸 수 있어요. 하나로 집 한 채에 써요."
+        : "마을·바닷가·캠핑장 집 어디든 놓을 수 있어요.";
 
 /** 되팔 때 돌려받는 비율 */
 export const SELL_BACK_RATE = 0.5;
@@ -403,7 +456,9 @@ export const LIKE_WEIGHT = 3;
 export const TIER_SCORE_BONUS: Record<PlotTierId, number> = { small: 0, wide: 30, manor: 80 };
 export const tierScoreBonus = (tier: string | null | undefined): number => TIER_SCORE_BONUS[tier as PlotTierId] ?? 0;
 /** 꾸밈 점수 한 곳 계산 (저장소·화면 공용) */
-export const houseScore = (placed: number, likes: number, tier: string | null | undefined): number => placed + likes * LIKE_WEIGHT + tierScoreBonus(tier);
+/** sizeBonus를 주면 터 크기 점수 대신 그 값 (11/26 캠핑장 집 — houseSizeBonus) */
+export const houseScore = (placed: number, likes: number, tier: string | null | undefined, sizeBonus?: number): number =>
+  placed + likes * LIKE_WEIGHT + (sizeBonus ?? tierScoreBonus(tier));
 /** "넓은 터 +30점, 대저택 +80점" (화면 안내용) */
 export const TIER_SCORE_NOTE = PLOT_TIERS.filter((t) => TIER_SCORE_BONUS[t.id] > 0)
   .map((t) => `${t.name} +${TIER_SCORE_BONUS[t.id]}점`)
@@ -434,7 +489,7 @@ export function nextTitle(score: number): HouseTitle | null {
 }
 
 /** 가장 많이 놓은 갈래에 따라 붙는 별칭 (물건이 3개 이상일 때) */
-export const STYLE_TAGS: Record<Exclude<FurnitureCategory, "skin" | "exterior">, string> = {
+export const STYLE_TAGS: Record<Exclude<FurnitureCategory, "skin" | "exterior" | "fixture">, string> = {
   furniture: "살림꾼의 집",
   living: "생활의 온기",
   dev: "야근 감성",
@@ -505,9 +560,10 @@ export const reclaimLastSeen = (lastSeenAt: number, since: number = RECLAIM_SINC
 
 // ── 11/16 포구 오두막 (바닷가 별장) ──
 
-/** 집이 있는 곳: 마을 주거 구역 또는 달물결 포구 오두막 터 */
-export type HouseZone = "village" | "sea";
-export const isHouseZone = (z: unknown): z is HouseZone => z === "village" || z === "sea";
+/** 집이 있는 곳: 마을 주거 구역 · 달물결 포구 오두막 터 · 11/26 언젠가 캠핑장 집터 (카라반·펜션·촌캉스). 한 계정이 구역마다 한 채 */
+export type HouseZone = "village" | "sea" | "camp";
+export const HOUSE_ZONES: readonly HouseZone[] = ["village", "sea", "camp"];
+export const isHouseZone = (z: unknown): z is HouseZone => z === "village" || z === "sea" || z === "camp";
 /** 포구 오두막 터 수 (채널마다, protocol SEA_LOTS와 같다 — 11/19 6 → 11) */
 export const SEA_LOT_COUNT = SEA_LOTS.length;
 /** 오두막 값 = 같은 크기 마을 집 값 × 이 배수. 마을 집이 이미 있으면 별장이라 SEA_VILLA_RATE */
@@ -529,10 +585,281 @@ export const isCottageStyle = (s: unknown): s is CottageStyleId => COTTAGE_STYLE
 export const cottageStyleOf = (s: unknown): CottageStyleId => (isCottageStyle(s) ? s : "wood");
 /** "3채널 포구 2번 오두막" */
 export const seaLotLabel = (ch: number, lot: number) => `${ch}채널 포구 ${lot}번 오두막`;
-/** 집 번지 표시 (오두막이면 포구 번호) */
-export const houseLabel = (h: { ch: number; lot: number; zone?: HouseZone }) => (h.zone === "sea" ? seaLotLabel(h.ch, h.lot) : lotLabel(h.ch, h.lot));
+/** 11/26 "3채널 언젠가 캠핑장 폭포 앞 2번 카라반" · "3채널 언젠가 캠핑장 솔바람채 펜션" */
+export const campHomeLabel = (ch: number, lot: number) => `${ch}채널 ${CAMP_TITLE} ${campLotName(lot)}`;
+/** 집 번지 표시 (오두막이면 포구 번호, 캠핑장이면 터 이름) */
+export const houseLabel = (h: { ch: number; lot: number; zone?: HouseZone }) =>
+  h.zone === "sea" ? seaLotLabel(h.ch, h.lot) : h.zone === "camp" ? campHomeLabel(h.ch, h.lot) : lotLabel(h.ch, h.lot);
+/**
+ * 11/26 짧은 집 이름 (친구 창 버튼처럼 폭이 좁은 곳 — 채널·긴 이름은 houseLabel로 둘째 줄·title에):
+ * 「마을 12번지」·「포구 2번」·「캠핑장 카라반 2번」·「캠핑장 솔바람채」
+ */
+export const houseShortLabel = (h: { lot: number; zone?: HouseZone }) =>
+  h.zone === "sea" ? `포구 ${h.lot}번` : h.zone === "camp" ? `캠핑장 ${campLotShort(h.lot)}` : `마을 ${h.lot}번지`;
 /** 오두막 기본 바닥·벽 (분양 때 가방에 넣어 준다) */
 export const SEA_FLOOR = "floor_deck";
 export const SEA_WALL = "wall_sea";
 /** 오두막 분양 때 함께 주는 가구 (가방 +1씩, 한 집에 한 번만) */
 export const SEA_STARTER: readonly string[] = ["sea_hammock", "rattan_chair", "surfboard", "shell_decor", "life_ring", SEA_FLOOR, SEA_WALL];
+
+// ── 11/23 별장 규칙 (11/26 구현): 두 번째로 산 집부터 별장 ──
+
+/**
+ * 살 때 이미 다른 집(마을·포구·캠핑장 어느 구역이든)이 있으면 그 집은 별장: 분양·넓히기 값 × 4/3 (10P 올림).
+ * 집마다 산 때 표시(villa)를 남기고 이후 바뀌지 않는다 (먼저 산 집이 철거돼도 그대로). 11/26 캠핑장 앞마당 단계 값도 별장이면 × 4/3.
+ * 포구 오두막은 마을 값의 1.5배라 별장이면 2배 (SEA_VILLA_RATE = 1.5 × 4/3 — 예전 값과 같다)
+ */
+export const villaPrice = (base: number, villa: boolean): number => (villa ? Math.ceil((base * 4) / 30) * 10 : base);
+/** 마을 집 바로 사기 값 (별장이면 × 4/3) */
+export const villagePlotCost = (id: PlotTierId, villa: boolean): number => villaPrice(plotCost(id), villa);
+/** 마을 집 넓히기 값 (price = 그 단계 PLOT_TIERS 값) */
+export const villageUpgradeCost = (price: number, villa: boolean): number => villaPrice(price, villa);
+
+// ── 11/26 언젠가 캠핑장 집 (zone "camp" — 카라반 12 · 펜션 2 · 촌캉스 2, 터 자리·이름은 protocol campHomes.ts) ──
+
+export type { CampHomeKind, CampYard, CaravanDesign, CaravanGrade };
+/** 캠핑장 집 정보 (집 기록 camp). kind는 터(lot)로 정해지고, yard = 앞마당 단계 1~3 */
+export type CampInfo = {
+  kind: CampHomeKind;
+  yard: CampYard;
+  /** 11/26 카라반 디자인 (카라반만. 저장된 칸이 없는 옛 카라반은 읽을 때 그 자리 기본 모습 — protocol caravanDesignOf) */
+  design?: CaravanDesign;
+};
+export const CAMP_LOT_COUNT = CAMP_LOTS.length;
+export const CAMP_HOME_KINDS: readonly CampHomeKind[] = ["caravan", "pension", "rural"];
+export { CAMP_HOME_KIND_NAME, campLotByNo, campLotName, campLotShort };
+
+/**
+ * 11/26 운영자 「바닷가와 같게 + 방도 같게」: 캠핑장 집 단계 값 = 포구 오두막과 같은 9,000 · +13,500 · +22,500 (끝까지 45,000).
+ * 카라반은 자리로 배수 — 숲 쪽 ×1 · 강가 ×1.25 · 폭포 앞 ×1.5 (10P 올림). 펜션·촌캉스 ×1.
+ * 별장이면 단계마다 그 값의 × 4/3 (villaPrice — 분양도 앞마당도. 포구 넓히기처럼)
+ */
+export const CAMP_STAGE_PRICE: Record<CampYard, number> = { 1: 9_000, 2: 13_500, 3: 22_500 };
+/** 카라반 자리 등급 배수 (폭포 앞 · 강가 · 숲 쪽) */
+export const CARAVAN_GRADE_RATE: Record<CaravanGrade, number> = { falls: 1.5, river: 1.25, forest: 1 };
+/** 그 터의 단계 값 배수 (모르는 터면 0) */
+const campRate = (lot: number): number => {
+  const l = campLotByNo(lot);
+  if (!l) return 0;
+  return l.kind === "caravan" ? CARAVAN_GRADE_RATE[l.grade ?? "forest"] : 1;
+};
+/** 그 터 stage단계의 무주택 값 (1 = 분양, 2·3 = 바로 아래 단계에서 앞마당 올리기. 10P 올림, 모르는 터면 0) */
+export const campStagePrice = (lot: number, stage: CampYard): number => Math.ceil((CAMP_STAGE_PRICE[stage] * campRate(lot)) / 10) * 10;
+/** 무주택(첫 집) 분양가: 카라반 폭포 앞 13,500 · 강가 11,250 · 숲 쪽 9,000, 펜션·촌캉스 9,000 */
+export const CARAVAN_PRICE: Record<CaravanGrade, number> = { falls: 13_500, river: 11_250, forest: 9_000 };
+export const CAMP_HOME_PRICE: Record<"pension" | "rural", number> = { pension: 9_000, rural: 9_000 };
+/** 카라반 방 크기·가구 수 (앞마당 단계마다) */
+export const CARAVAN_ROOM: Record<CampYard, { w: number; h: number; maxItems: number }> = {
+  1: { w: 10, h: 6, maxItems: 22 },
+  2: { w: 12, h: 7, maxItems: 30 },
+  3: { w: 14, h: 8, maxItems: 40 },
+};
+
+/** 11/26 펜션·촌캉스 방 크기·가구 수 (앞마당 단계마다 — 카라반처럼 방 하나가 커진다. 포구 오두막·마을 집 터와 같은 10×8 → 14×10 → 18×12. 옛 「넓힌 집」 기록은 3단계 방) */
+export const CAMP_HOME_ROOM: Record<CampYard, { w: number; h: number; maxItems: number }> = {
+  1: { w: 10, h: 8, maxItems: 30 },
+  2: { w: 14, h: 10, maxItems: 50 },
+  3: { w: 18, h: 12, maxItems: 80 },
+};
+
+/** 그 터의 무주택 분양가 (모르는 터면 0) */
+export const campBasePrice = (lot: number): number => campStagePrice(lot, 1);
+/** 캠핑장 집 분양가 (별장이면 × 4/3) */
+export const campBuyCost = (lot: number, villa: boolean): number => villaPrice(campBasePrice(lot), villa);
+/** 앞마당 to단계로 올리는 값 (바로 아래 단계에서. 11/26 별장이면 × 4/3 — 포구 넓히기와 같다) */
+export const campYardCost = (lot: number, to: 2 | 3, villa = false): number => villaPrice(campStagePrice(lot, to), villa);
+
+/** 11/26 분양 창 종류 (마을 집 · 포구 오두막 · 캠핑장 집 셋) — 「남은 ○○이 없어요」 */
+export type SaleKind = "village" | "sea" | CampHomeKind;
+export const SALE_KINDS: readonly SaleKind[] = ["village", "sea", "caravan", "pension", "rural"];
+/** 그 종류 집터 (채널마다 같은 번호) */
+const saleLots = (kind: SaleKind): number[] =>
+  kind === "village"
+    ? Array.from({ length: WORLD_LOTS }, (_, i) => i + 1).filter(isOpenLot)
+    : kind === "sea"
+      ? SEA_LOTS.map((l) => l.n)
+      : CAMP_LOTS.filter((l) => l.kind === kind).map((l) => l.lot);
+/** 집 기록 → 그 집이 차지한 분양 종류 (메인 맵 밖 2단지 번지·모르는 터는 null) */
+const saleKindOf = (h: { zone?: HouseZone; lot: number }): SaleKind | null => {
+  if (h.zone === "camp") return campLotByNo(h.lot)?.kind ?? null;
+  if (h.zone === "sea") return SEA_LOTS.some((l) => l.n === h.lot) ? "sea" : null;
+  return isOpenLot(h.lot) && h.lot <= WORLD_LOTS ? "village" : null;
+};
+/**
+ * 11/26 종류마다 터가 다 찬 채널 (분양 창 「지금 N채널에는 남은 ○○이 없어요」 아래 「남은 채널」 — GET /api/housing/channels가 이미 읽은 집 목록으로 센다).
+ * 숨긴 집도 터를 차지하니 센다. 2단지 번지·모르는 터는 세지 않는다
+ */
+export function fullSaleChannels(houses: readonly { zone?: HouseZone; ch: number; lot: number }[]): Record<SaleKind, number[]> {
+  const taken = new Map<string, Set<number>>();
+  for (const h of houses) {
+    const kind = saleKindOf(h);
+    if (!kind) continue;
+    const k = `${kind}|${h.ch}`;
+    let set = taken.get(k);
+    if (!set) taken.set(k, (set = new Set()));
+    set.add(h.lot);
+  }
+  const out = Object.fromEntries(SALE_KINDS.map((k) => [k, [] as number[]])) as Record<SaleKind, number[]>;
+  for (const [k, set] of taken) {
+    const [kind, ch] = k.split("|") as [SaleKind, string];
+    if (set.size >= saleLots(kind).length) out[kind].push(Number(ch));
+  }
+  for (const kind of SALE_KINDS) out[kind].sort((a, b) => a - b);
+  return out;
+}
+
+/**
+ * 11/26 운영자: 캠핑장 집 크기 꾸밈 점수는 쓴 값이 아니라 방 크기로 (마을·포구 터 크기 점수 TIER_SCORE_BONUS처럼).
+ * 펜션·촌캉스 방은 마을·포구 터와 같은 크기라 같은 점수 +0 · +30 · +80, 카라반은 방이 작아 +0 · +15 · +30.
+ * 별장이어도 같다. 옛 「넓힌 집」(tier wide) 펜션·촌캉스 기록은 houseShape처럼 3단계 방으로 센다
+ */
+export const CAMP_SIZE_SCORE: Record<"caravan" | "home", Record<CampYard, number>> = {
+  caravan: { 1: 0, 2: 15, 3: 30 },
+  home: { 1: TIER_SCORE_BONUS.small, 2: TIER_SCORE_BONUS.wide, 3: TIER_SCORE_BONUS.manor },
+};
+export function campSizeBonus(lot: number, tier: string | null | undefined, yard: number): number {
+  const l = campLotByNo(lot);
+  if (!l) return 0;
+  const y = (yard === 2 || yard === 3 ? yard : 1) as CampYard;
+  if (l.kind === "caravan") return CAMP_SIZE_SCORE.caravan[y];
+  return CAMP_SIZE_SCORE.home[tier && tier !== "small" && tierById(tier) ? 3 : y];
+}
+/** 집 크기 꾸밈 점수 (마을·포구 = 터 크기, 캠핑장 = 앞마당 단계의 방 크기). 화면 미리보기는 totalScore(placed, likes, tier, houseSizeBonus(house)) */
+export const houseSizeBonus = (h: { zone?: HouseZone; tier: string; lot: number; camp?: { yard: number } }): number =>
+  h.zone === "camp" ? campSizeBonus(h.lot, h.tier, h.camp?.yard ?? 1) : tierScoreBonus(h.tier);
+
+/** 방 크기·가구 수 (배치 검증·집 안 그림 공용). id = 방 구조(rooms.ts roomPlan), camp = 캠핑장 집 종류 (기본 가구·전용 바닥·벽 검사) */
+export type HouseShape = { id: PlotTierId; name: string; w: number; h: number; maxItems: number; camp?: CampHomeKind };
+/**
+ * 집 하나의 방 (11/26): 마을·포구는 터 크기 그대로. 캠핑장은 앞마당 단계로 방 하나가 커진다 —
+ * 카라반 10×6(22) → 12×7(30) → 14×8(40), 펜션·촌캉스 10×8(30) → 14×10(50) → 18×12(80).
+ * 방이 늘기만 하고 칸막이가 없어 단계를 올려도 놓아 둔 가구는 늘 방 안이다. 옛 「넓힌 집」(tier wide) 기록은 3단계 방으로 읽는다
+ */
+export function houseShape(h: { zone?: HouseZone; tier: string; camp?: { kind: CampHomeKind; yard: number } }): HouseShape {
+  const t = tierById(h.tier) ?? PLOT_TIERS[0];
+  if (h.zone !== "camp" || !h.camp) return { id: t.id, name: t.name, w: t.w, h: t.h, maxItems: t.maxItems };
+  const kind = h.camp.kind;
+  if (kind === "caravan") {
+    const room = CARAVAN_ROOM[h.camp.yard as CampYard] ?? CARAVAN_ROOM[1];
+    return { id: "small", name: CAMP_HOME_KIND_NAME.caravan, ...room, camp: kind };
+  }
+  const stage = Math.max(h.camp.yard, t.id !== "small" ? 3 : 1) as CampYard;
+  const room = CAMP_HOME_ROOM[stage] ?? CAMP_HOME_ROOM[1];
+  return { id: "small", name: CAMP_HOME_KIND_NAME[kind], ...room, camp: kind };
+}
+
+/** 종류별 기본 가구 id (FurnitureDef.fixture) */
+export const CAMP_FIXTURES: Record<CampHomeKind, readonly string[]> = {
+  caravan: FURNITURE.filter((f) => f.fixture === "caravan").map((f) => f.id),
+  pension: FURNITURE.filter((f) => f.fixture === "pension").map((f) => f.id),
+  rural: FURNITURE.filter((f) => f.fixture === "rural").map((f) => f.id),
+};
+export const isFixtureId = (id: string): boolean => !!furnitureById(id)?.fixture;
+
+/** 종류별 전용 바닥·벽 (집 기본 — 가방에 없고 무료·점수 없음. 주인이 산 바닥·벽지를 입히면 그것으로) */
+export const CAMP_FLOOR: Record<CampHomeKind, string> = { caravan: "floor_caravan", pension: "floor_pension", rural: "floor_rural" };
+export const CAMP_WALL: Record<CampHomeKind, string> = { caravan: "wall_caravan", pension: "wall_pension", rural: "wall_rural" };
+const CAMP_SKIN_NAMES: Record<string, string> = {
+  floor_caravan: "카라반 바닥",
+  wall_caravan: "카라반 벽",
+  floor_pension: "펜션 마루",
+  wall_pension: "통나무 벽",
+  floor_rural: "노란 장판",
+  wall_rural: "한지 벽",
+};
+const CAMP_FLOOR_SET = new Set(Object.values(CAMP_FLOOR));
+const CAMP_WALL_SET = new Set(Object.values(CAMP_WALL));
+/** 캠핑장 집 기본 바닥·벽이면 그 종류 (아니면 null) */
+export const campSkinKind = (id: string): CampHomeKind | null =>
+  (CAMP_HOME_KINDS.find((k) => CAMP_FLOOR[k] === id || CAMP_WALL[k] === id) as CampHomeKind | undefined) ?? null;
+/** 무료 스킨 (가방에서 쓰지 않고 점수 없음): 기본 바닥·벽·창문 + 캠핑장 집 기본 바닥·벽 */
+export const isFreeSkin = (id: string): boolean => id === DEFAULT_FLOOR || id === DEFAULT_WALL || id === DEFAULT_WINDOW || campSkinKind(id) !== null;
+
+/**
+ * 분양 때 놓이는 기본 가구 자리 (u = "f1"…, r 4 = 앞을 봄). 가장 작은 방(카라반 10×6 · 펜션·촌캉스 10×8)에 겹치지 않게,
+ * 넓힌 뒤 방 구조(넓은 터 칸막이 x=9, 문 앞 줄 6~7)와 앞마당 단계로 커진 방에서도 그대로 맞는 자리. 주인이 옮기고 돌릴 수 있다
+ */
+export type StarterSpot = { u: string; i: string; x: number; y: number; r: number };
+/**
+ * 11/26 카라반 기본 가구 자리 (앞마당 단계마다 — 운영자 시안처럼 침대는 왼쪽 위 구석, 화장실 칸은 오른쪽 위 구석, 식탁·부엌은 그 사이 안쪽 벽).
+ * 키 큰 부엌·화장실 칸은 둥근 창(rooms.ts roomPlan 창 자리)을 되도록 가리지 않게, 문(아래 줄 가운데)·가운데 바닥은 비운다 (손님 가구 자리).
+ * 단계를 올릴 때 기본 가구를 한 번도 옮기지 않은 집은 다음 단계 자리로 옮겨 준다 (layout.ts caravanFixturesForYard)
+ */
+export const CARAVAN_STARTER: Record<CampYard, readonly StarterSpot[]> = {
+  1: [
+    { u: "f1", i: "fx_cv_bed", x: 0, y: 0, r: 4 },
+    { u: "f2", i: "fx_cv_kitchen", x: 5, y: 0, r: 4 },
+    { u: "f3", i: "fx_cv_dinette", x: 3, y: 0, r: 4 },
+    { u: "f4", i: "fx_cv_toilet", x: 8, y: 0, r: 4 },
+  ],
+  2: [
+    { u: "f1", i: "fx_cv_bed", x: 0, y: 0, r: 4 },
+    { u: "f2", i: "fx_cv_kitchen", x: 6, y: 0, r: 4 },
+    { u: "f3", i: "fx_cv_dinette", x: 4, y: 0, r: 4 },
+    { u: "f4", i: "fx_cv_toilet", x: 10, y: 0, r: 4 },
+  ],
+  3: [
+    { u: "f1", i: "fx_cv_bed", x: 0, y: 0, r: 4 },
+    { u: "f2", i: "fx_cv_kitchen", x: 8, y: 0, r: 4 },
+    { u: "f3", i: "fx_cv_dinette", x: 4, y: 0, r: 4 },
+    { u: "f4", i: "fx_cv_toilet", x: 12, y: 0, r: 4 },
+  ],
+};
+/** 11/26 첫 판 카라반 시작 자리 (침대·부엌·식탁이 왼쪽에 몰렸던 것) — 이 자리 그대로인 집도 「안 옮긴 집」으로 본다 */
+export const CARAVAN_STARTER_OLD: readonly StarterSpot[] = [
+  { u: "f1", i: "fx_cv_bed", x: 0, y: 0, r: 4 },
+  { u: "f2", i: "fx_cv_kitchen", x: 3, y: 0, r: 4 },
+  { u: "f3", i: "fx_cv_dinette", x: 3, y: 2, r: 4 },
+  { u: "f4", i: "fx_cv_toilet", x: 8, y: 0, r: 4 },
+];
+/**
+ * 11/26 펜션·촌캉스 기본 가구 자리 (앞마당 단계마다 — 카라반과 같은 방식: 방이 커지면 안 옮긴 기본 가구는 넓어진 벽·바닥으로 옮겨 준다).
+ * 창(위 벽 1/4·3/4 자리)과 문(아래 줄 가운데)은 비운다. 2·3단계 펜션 침대는 오른쪽 위 구석, 촌캉스 이불장은 오른쪽 벽 쪽.
+ * 방은 10×8 → 14×10 → 18×12 (3단계는 창 3~4·13~14칸, 문 8~9칸 — 주방·밥상은 가운데, 침대·이불장은 오른쪽 끝)
+ */
+export const CAMP_HOME_STARTER: Record<"pension" | "rural", Record<CampYard, readonly StarterSpot[]>> = {
+  pension: {
+    1: [
+      { u: "f1", i: "fx_pn_tv", x: 1, y: 0, r: 4 },
+      { u: "f2", i: "fx_pn_sofa", x: 1, y: 3, r: 6 },
+      { u: "f3", i: "fx_pn_kitchen", x: 5, y: 0, r: 4 },
+      { u: "f4", i: "fx_pn_bed", x: 0, y: 5, r: 4 },
+    ],
+    2: [
+      { u: "f1", i: "fx_pn_tv", x: 1, y: 0, r: 4 },
+      { u: "f2", i: "fx_pn_sofa", x: 1, y: 3, r: 6 },
+      { u: "f3", i: "fx_pn_kitchen", x: 6, y: 0, r: 4 },
+      { u: "f4", i: "fx_pn_bed", x: 12, y: 0, r: 4 },
+    ],
+    3: [
+      { u: "f1", i: "fx_pn_tv", x: 1, y: 0, r: 4 },
+      { u: "f2", i: "fx_pn_sofa", x: 1, y: 3, r: 6 },
+      { u: "f3", i: "fx_pn_kitchen", x: 8, y: 0, r: 4 },
+      { u: "f4", i: "fx_pn_bed", x: 16, y: 0, r: 4 },
+    ],
+  },
+  rural: {
+    1: [
+      { u: "f1", i: "fx_rr_jagae", x: 1, y: 0, r: 4 },
+      { u: "f2", i: "fx_rr_ibul", x: 4, y: 0, r: 4 },
+      { u: "f3", i: "fx_rr_bapsang", x: 4, y: 3, r: 4 },
+    ],
+    2: [
+      { u: "f1", i: "fx_rr_jagae", x: 1, y: 0, r: 4 },
+      { u: "f2", i: "fx_rr_ibul", x: 12, y: 0, r: 4 },
+      { u: "f3", i: "fx_rr_bapsang", x: 6, y: 4, r: 4 },
+    ],
+    3: [
+      { u: "f1", i: "fx_rr_jagae", x: 1, y: 0, r: 4 },
+      { u: "f2", i: "fx_rr_ibul", x: 16, y: 0, r: 4 },
+      { u: "f3", i: "fx_rr_bapsang", x: 8, y: 5, r: 4 },
+    ],
+  },
+};
+export const CAMP_STARTER: Record<CampHomeKind, readonly StarterSpot[]> = {
+  caravan: CARAVAN_STARTER[1],
+  pension: CAMP_HOME_STARTER.pension[1],
+  rural: CAMP_HOME_STARTER.rural[1],
+};
+/** 그 종류·단계 기본 가구 시작 자리 */
+export const campStarterFor = (kind: CampHomeKind, yard: CampYard): readonly StarterSpot[] => (kind === "caravan" ? CARAVAN_STARTER : CAMP_HOME_STARTER[kind])[yard];

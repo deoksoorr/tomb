@@ -58,8 +58,8 @@ class ForageStore {
     this.idsAt = Date.now();
     this.idsEv = ev;
     bridge.emit("forage:nodes", { ids: state.nodes.ids, ev });
-    // 도감 100% 배지: 바뀔 때만 게임에 알린다 (내 캐릭터 이름표 옆)
-    const bits = dexBadgeBits(state.dex);
+    // 도감 100% 배지: 바뀔 때만 게임에 알린다 (내 캐릭터 이름표 옆). 11/26 칭호처럼 한 번 붙으면 남는다 (「전부」 칭호)
+    const bits = dexBadgeBits(state.dex, state.titles);
     if (bridge.last("me:dex")?.bits !== bits) bridge.emit("me:dex", { bits });
     // 서버가 의뢰를 아직 몰랐어도(또는 반대로) 화면이 아는 의뢰 경계에서 다시 굴린다
     this.schedule(Math.min(state.nodes.refreshAt, nodeRefreshAt(this.idsAt, urgentEv())));

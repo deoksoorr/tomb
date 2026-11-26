@@ -19,19 +19,36 @@
  *   GET /ch/:n?t=&x=&y=&v=&m=   채널 WebSocket. Origin·클라이언트 버전·토큰(그 채널용)을 검증한 뒤 Channel DO로 넘긴다 (m=camp: 11/15 캠핑장으로, 토큰에 camp 허락이 있을 때만. m=sea: 11/16 바닷가, sea 허락)
  *   GET /room/:id?t=&x=&y=&v= 방(마을·집·사냥터) WebSocket. 토큰의 room이 id와 같아야 한다. 상한 ROOM_CAPACITY
  *   (v < MIN_CLIENT_VERSION이면 DO까지 가지 않고 4010으로 거절 → 클라이언트가 새로고침 창을 띄운다)
- *   POST /dev/goblin?ch=N    (개발용, DEV_HOOKS=1일 때만) 그 채널에 황금 고블린을 지금 나오게 한다. 운영에서는 404
+ *   POST /dev/goblin?ch=N[&map=village|sea|camp]  (개발용, DEV_HOOKS=1일 때만) 그 채널에 황금 고블린을 지금 나오게 한다 (맵을 정할 수 있다). 운영에서는 404
  *   POST /internal/me        Vercel → 이 서버: 접속 중인 그 방문자들에게 "내 정보 새로 받기"를 보낸다 (관리자 포인트 지급 등). 서명 필수
  *   POST /internal/kick      47번 Vercel → 이 서버: 방문자들을 지금 내보낸다(강퇴 4011·이용 제한 4012). 본문 서명(JOIN_SECRET) 필수
  *   POST /internal/peer      47번 Vercel → 이 서버: 채널·방의 sid가 누구인지 (유저 신고). 본문 서명 필수
  *   POST /internal/hello     친구 Vercel → 이 서버: 입장 직전 "들고 날 때 알릴 친구들" 등록 (로비가 들어옴·나감을 밀어 준다). 본문 서명 필수
  *   POST /internal/where     친구 Vercel → 이 서버: 그 방문자들이 지금 어느 채널·자리에 있는지 (WHERE_CACHE_MS 기억). 본문 서명 필수
  *   POST /internal/say       11/15 Vercel → 이 서버: 마을 공지 한 줄을 사람이 있는 채널 모두의 확성기 줄에 지금 띄운다. 본문 서명 필수
+ *   POST /internal/homes     11/26 Vercel → 이 서버: 그 채널의 집 목록(마을·포구·캠핑장)이 바뀌었다 → 그 채널에 homes 한 줄. 본문 서명 필수
  *   POST /internal/pin       11/17 Vercel → 이 서버: 확성기 창 고정 공지가 바뀌었다 (그 채널 하나, 모든 채널이면 사람이 있는 채널 모두). 본문 서명 필수
  *   POST /internal/people    11/20 Vercel → 이 서버: 접속 중인 사람 전부 (운영자 순간이동 목록 — 채널·sid·이름·자리·맵·실내). 본문 서명 필수
  *   (예약 작업) scheduled  11/21 토요일 20:00 KST — 웹 /api/internal/lottery-draw를 서명해서 불러 행운권을 정각에 추첨한다 (lotteryCron.ts)
  *   POST /internal/online    11/17 Vercel → 이 서버: 지금 접속 중인 방문자 id 전부 (관리자 선물 「지금 접속 중인 사람 모두」). 본문 서명 필수
+ *   GET  /maintenance        11/26 점검 모드 상태(MaintState). 웹 미들웨어·점검 상태 API가 약 15초 기억해 읽는다. 아이솔레이트 메모 MAINT_MEMO_MS
+ *   POST /internal/maint     11/26 Vercel → 이 서버: 점검 시작·끝 (로비 DO에 저장, 시작이면 운영자 빼고 모두 4013으로 끊고 12초 뒤 한 번 더). 본문 서명 필수
+ *   (점검 중에는 운영자 토큰이 아닌 새 입장을 4013으로 거절한다 — 채널·방 모두)
  */
-import { CLOSE, HUNT_ROOMS_CACHE_SEC, INTERNAL_SIG_HEADER, LOBBY_CACHE_SEC, ROOM_ID_RE, WHERE_CACHE_MS, verifyInternal, type PeerWhere } from "@tomb/protocol";
+import {
+  CLOSE,
+  HUNT_ROOMS_CACHE_SEC,
+  INTERNAL_SIG_HEADER,
+  LOBBY_CACHE_SEC,
+  MAINT_OFF,
+  MAINT_READ_HEADER,
+  ROOM_ID_RE,
+  WHERE_CACHE_MS,
+  maintRejects,
+  verifyInternal,
+  type MaintState,
+  type PeerWhere,
+} from "@tomb/protocol";
 import { personOf } from "./people";
 import type { JoinTicket } from "./channel";
 import {
@@ -48,7 +65,7 @@ import {
 import { type Env, channelStub, lobbyStub, readConfig, roomStub } from "./config";
 import { mergeOnline } from "./lobbyState";
 import { drawLottery } from "./lotteryCron";
-import { IsolateMemo, isOutdatedClient, parseChannel, parseMap, parseSpawn, pinEvent, sayRelay } from "./logic";
+import { IsolateMemo, isOutdatedClient, maintBodyFor, parseChannel, parseMap, parseSpawn, pinEvent, sayRelay } from "./logic";
 
 export { ChannelDO } from "./ChannelDO";
 export { LobbyDO } from "./LobbyDO";
@@ -59,16 +76,18 @@ export default {
     if (url.pathname === "/health") return Response.json({ ok: true });
     if (url.pathname === "/lobby") return lobby(req, env, ctx);
     if (url.pathname === "/hunt-rooms") return huntRooms(req, env);
+    if (url.pathname === "/maintenance") return maintenance(req, env);
     if (url.pathname === "/queue") return queue(req, env, url);
     const ch = /^\/ch\/([^/]*)$/.exec(url.pathname);
     if (ch) return channel(req, env, url, ch[1]);
     const rm = /^\/room\/([^/]*)$/.exec(url.pathname);
     if (rm) return room(req, env, url, rm[1]);
-    if (INTERNAL_PATHS.has(url.pathname)) return internal(req, env, url.pathname);
+    if (INTERNAL_PATHS.has(url.pathname)) return internal(req, env, url.pathname, ctx);
     if (url.pathname === "/dev/goblin" && env.DEV_HOOKS === "1" && req.method === "POST") {
       const n = parseChannel(url.searchParams.get("ch") ?? "1", readConfig(env).maxChannels);
       if (n === null) return new Response("bad channel", { status: 400 });
-      return Response.json({ goblin: await channelStub(env, n).devGoblin() });
+      const m = url.searchParams.get("map");
+      return Response.json({ goblin: await channelStub(env, n).devGoblin(m === "village" || m === "camp" || m === "sea" ? m : undefined) });
     }
     return new Response("not found", { status: 404 });
   },
@@ -82,9 +101,9 @@ export default {
 
 /** /internal/* 본문 상한 (바이트) */
 const INTERNAL_MAX_BYTES = 8_000 * 4;
-const INTERNAL_PATHS = new Set(["/internal/kick", "/internal/peer", "/internal/me", "/internal/where", "/internal/hello", "/internal/say", "/internal/pin", "/internal/online", "/internal/people"]);
+const INTERNAL_PATHS = new Set(["/internal/kick", "/internal/peer", "/internal/me", "/internal/where", "/internal/hello", "/internal/say", "/internal/pin", "/internal/online", "/internal/people", "/internal/maint", "/internal/homes"]);
 
-async function internal(req: Request, env: Env, path: string): Promise<Response> {
+async function internal(req: Request, env: Env, path: string, ctx: ExecutionContext): Promise<Response> {
   const notFound = new Response("not found", { status: 404 });
   if (req.method !== "POST") return notFound;
   // 서명을 보기 전에 본문 크기부터 (verifyInternal의 글자 수 상한과 같은 8KB) — 큰 본문을 통째로 읽어 메모리를 쓰지 않게
@@ -93,7 +112,23 @@ async function internal(req: Request, env: Env, path: string): Promise<Response>
   if (!req.headers.get(INTERNAL_SIG_HEADER) || !(len <= INTERNAL_MAX_BYTES)) return notFound;
   const r = await verifyInternal(env.JOIN_SECRET, await req.text(), req.headers.get(INTERNAL_SIG_HEADER));
   if (!r || `/internal/${r.op}` !== path) return notFound;
-  if (r.op === "lotteryDraw") return notFound; // 웹이 받는 요청 (실시간 서버 → 웹)
+  if (r.op === "lotteryDraw" || r.op === "connLog") return notFound; // 웹이 받는 요청 (실시간 서버 → 웹)
+  if (r.op === "maint") {
+    // 11/26 점검 모드: 로비에 저장 → 이 아이솔레이트의 기억도 바로 바꾸고, 시작이면 지금 한 번 + 12초 뒤 한 번 더 끊는다
+    // (다른 아이솔레이트가 기억한 「꺼짐」(MAINT_MEMO_MS) 동안 들어온 사람까지)
+    const state = await lobbyStub(env).setMaintenance({ on: r.on, msg: r.msg, until: r.until, at: Date.now(), skip: r.skip });
+    maintMemo = { at: Date.now(), state };
+    let kicked = 0;
+    if (state.on) {
+      kicked = await sweepForMaintenance(env);
+      ctx.waitUntil(
+        new Promise((ok) => setTimeout(ok, MAINT_RESWEEP_MS))
+          .then(() => sweepForMaintenance(env))
+          .catch((e) => console.error("maintenance resweep failed", e)),
+      );
+    }
+    return Response.json({ state, kicked });
+  }
   if (r.op === "kick") {
     if (r.code !== CLOSE.KICKED && r.code !== CLOSE.BANNED) return new Response("bad code", { status: 400 });
     // 방문자가 어느 채널에 있는지 로비 등록이 늦거나 비어 있을 수 있어, 열린 채널 전부에 묻는다 (채널 수가 적다).
@@ -164,6 +199,19 @@ async function internal(req: Request, env: Env, path: string): Promise<Response>
     );
     return Response.json({ sent: sent.filter(Boolean).length });
   }
+  if (r.op === "homes") {
+    // 11/26 집 바뀜: 그 채널 DO 하나에만 (로비를 묻지 않는다 — 비었으면 보낼 사람이 없을 뿐). 채널 DO의 고정 공지 중계(pinRelay)가
+    // 받은 줄을 그 채널 모두에게 그대로 보내는 길이라 같이 쓴다 (방 DO는 보내지 않는다)
+    // 11/26 채널 DO가 구역마다 10초에 한 번으로 묶는다 (homesRelay — 저장이 몰려도 화면들이 집 목록을 계속 다시 받지 않게)
+    if (parseChannel(String(r.ch), readConfig(env).maxChannels) === null) return Response.json({ sent: 0 });
+    const ok = await channelStub(env, r.ch)
+      .homesRelay(r.zone, r.v)
+      .catch((e) => {
+        console.error("homes relay failed", r.ch, e);
+        return false;
+      });
+    return Response.json({ sent: ok ? 1 : 0 });
+  }
   if (r.op === "online") {
     // 11/17 관리자 선물: 사람이 있는 채널들의 지금 명단(기억을 건너뛰고) + 로비 등록 → 한 번씩
     const lobby = lobbyStub(env);
@@ -197,6 +245,72 @@ async function internal(req: Request, env: Env, path: string): Promise<Response>
   const stub = r.ch !== undefined ? (parseChannel(String(r.ch), readConfig(env).maxChannels) === null ? null : channelStub(env, r.ch)) : roomStub(env, r.room!);
   if (!stub) return Response.json({ peer: null });
   return Response.json({ peer: await stub.peerAt(r.sid) });
+}
+
+// ── 11/26 점검 모드 ──
+// 상태는 로비 DO에 있다. 입장(소켓 업그레이드)마다 로비를 깨우지 않게 아이솔레이트 메모리에 MAINT_MEMO_MS 기억한다.
+// 점검을 켠 아이솔레이트는 바로 알고, 다른 아이솔레이트는 그만큼 늦을 수 있어 12초 뒤 한 번 더 끊는다.
+
+const MAINT_MEMO_MS = 5_000;
+const MAINT_RESWEEP_MS = 12_000;
+let maintMemo: { at: number; state: MaintState } | null = null;
+
+async function maintState(env: Env): Promise<MaintState> {
+  const now = Date.now();
+  if (maintMemo && now - maintMemo.at < MAINT_MEMO_MS) return maintMemo.state;
+  try {
+    const state = await lobbyStub(env).maintenance();
+    maintMemo = { at: now, state };
+    return state;
+  } catch (e) {
+    console.error("maintenance read failed", e);
+    return maintMemo?.state ?? MAINT_OFF; // 로비를 못 읽으면 마지막으로 안 값 (처음이면 꺼짐 — 입장을 막지 않는다)
+  }
+}
+
+/** 사람이 있는 채널 + 로비가 아는 방(마을·사냥터)에서 운영자 아닌 접속을 모두 4013으로 */
+async function sweepForMaintenance(env: Env): Promise<number> {
+  const lobby = lobbyStub(env);
+  const [ids, hunt] = await Promise.all([lobby.liveChannels(), lobby.huntRooms().catch(() => ({ rooms: {} as Record<string, number> }))]);
+  const rooms = ["village", ...Object.keys(hunt.rooms)].filter((id) => ROOM_ID_RE.test(id));
+  const counts = await Promise.all([
+    ...ids.map((id) =>
+      channelStub(env, id)
+        .expelForMaintenance()
+        .catch((e) => {
+          console.error("maintenance expel failed", id, e);
+          return 0;
+        }),
+    ),
+    ...rooms.map((id) =>
+      roomStub(env, id)
+        .expelForMaintenance()
+        .catch((e) => {
+          console.error("maintenance expel failed", id, e);
+          return 0;
+        }),
+    ),
+  ]);
+  return counts.reduce((a, b) => a + b, 0);
+}
+
+/**
+ * GET /maintenance — 점검 상태. 통과 목록 해시(skip)는 웹 서버가 서명한 머리글(MAINT_READ_HEADER, JOIN_SECRET)이 맞을 때만 싣는다
+ * (웹 미들웨어가 운영자를 통과시킬 때 쓴다. 원래 계정 id는 없다). 11/26 보안: 예전에는 Origin이 없으면(curl) 누구에게나 줬다
+ */
+async function maintenance(req: Request, env: Env): Promise<Response> {
+  const { cors, early } = corsFor(req, env);
+  if (early) return early;
+  const state = await maintState(env);
+  // 브라우저(Origin이 있으면)·서명 없는 요청에는 통과 목록을 싣지 않는다 (logic maintBodyFor)
+  const body = await maintBodyFor(state, { origin: req.headers.get("Origin"), auth: req.headers.get(MAINT_READ_HEADER) }, env.JOIN_SECRET ?? "");
+  return Response.json(body, { headers: { ...cors, "Cache-Control": "no-store" } });
+}
+
+/** 점검 중이면 운영자가 아닌 입장을 거절할 응답 */
+async function maintGate(env: Env, staff: boolean): Promise<Response | null> {
+  if (staff) return null; // 운영자는 로비를 묻지도 않는다
+  return maintRejects(await maintState(env), staff) ? rejectSocket(CLOSE.MAINTENANCE, "maintenance") : null;
 }
 
 // ── 친구 위치 (/internal/where) ──
@@ -260,6 +374,8 @@ async function channel(req: Request, env: Env, url: URL, rawN: string): Promise<
   const spawn = parseSpawn(url.searchParams.get("x"), url.searchParams.get("y"), false, map);
   const ticket = await admit(env.JOIN_SECRET, url.searchParams.get("t"), n, spawn, map);
   if (!ticket) return rejectSocket(CLOSE.INVALID_TOKEN, "invalid token");
+  const closed = await maintGate(env, ticket.staff === true);
+  if (closed) return closed;
   return forward(req, channelStub(env, n), ticket);
 }
 
@@ -279,6 +395,8 @@ async function room(req: Request, env: Env, url: URL, rawId: string): Promise<Re
   const spawn = parseSpawn(url.searchParams.get("x"), url.searchParams.get("y"), true);
   const ticket = await admitRoom(env.JOIN_SECRET, url.searchParams.get("t"), id, spawn);
   if (!ticket) return rejectSocket(CLOSE.INVALID_TOKEN, "invalid token");
+  const closed = await maintGate(env, ticket.staff === true);
+  if (closed) return closed;
   return forward(req, roomStub(env, id), ticket);
 }
 

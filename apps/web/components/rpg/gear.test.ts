@@ -91,11 +91,11 @@ describe("bagEntries", () => {
     sg: [sg(1, 1, 1, 0), sg(2, 1, 1, 3, 4), sg(3, 0, 0, 1), sg(4, 0, 2, 3)],
     si: ["w_stamp+3@9.0"],
   };
-  it("세트별 묶음 (야근 → 결재), 낀 것·높은 직급·강화 먼저, 상점 장비는 등급·강화·레벨 순", () => {
+  it("세트별 묶음 (야근 → 결재), 높은 직급·강화 먼저 (11/26 끼는 중보다 직급이 먼저), 상점 장비는 등급·강화·레벨 순", () => {
     const b = bagEntries(c, 50);
     expect(b.sets.map((x) => x.set)).toEqual(["overtime", "approval"]);
-    expect(b.sets[0].items.map((x) => x.it.u)).toEqual([3, 4]);
-    expect(b.sets[0].items[0].slot).toBe("weapon");
+    expect(b.sets[0].items.map((x) => x.it.u)).toEqual([4, 3]);
+    expect(b.sets[0].items[1].slot).toBe("weapon");
     expect(b.sets[1].items.map((x) => x.it.u)).toEqual([2, 1]);
     expect(b.shop[0]).toMatchObject({ key: "c_bonus", equipped: 1 });
     expect(b.shop.find((x) => x.key === "si9")).toMatchObject({ enh: 3, piece: { u: 9 } });
@@ -111,5 +111,40 @@ describe("bagEntries", () => {
       ["si9", true],
     ]);
     expect(low.sets[0].items[0].low).toBe(true);
+  });
+});
+
+// 11/26 세트 장비 직급 순 · 부위별 칸 후보
+import { sgSort, slotCandidates } from "./gear";
+
+describe("직급 순 정렬 · 부위별 칸", () => {
+  const sg = (u: number, s: number, p: number, g: 0 | 1 | 2 | 3, e = 0) => encodeSg({ s, p, g, u, e, o: [], L: 0, rr: 0, f: 0 });
+  it("sgSort: 못 끼는 것 아래 → 직급 → 강화 → 끼는 중", () => {
+    const it = (u: number, g: 0 | 1 | 2 | 3, e: number) => ({ s: 0, p: 1, g, u, e, o: [], L: 0, rr: 0, f: 0 });
+    const rows = [
+      { low: false, slot: null, it: it(1, 0, 15) },
+      { low: false, slot: "armor" as const, it: it(2, 1, 0) },
+      { low: false, slot: null, it: it(3, 3, 0) },
+      { low: false, slot: null, it: it(4, 1, 5) },
+      { low: true, slot: null, it: it(5, 3, 15) },
+      { low: false, slot: null, it: it(6, 1, 0) },
+    ];
+    expect([...rows].sort(sgSort).map((x) => x.it.u)).toEqual([3, 4, 2, 6, 1, 5]);
+  });
+  it("slotCandidates: 그 칸에 낄 수 있는 다른 장비만, 세트 장비는 직급 순, 다른 칸에 낀 것은 빼고", () => {
+    const c = {
+      equip: { ...empty, armor: sg(1, 0, 1, 1), acc1: sg(10, 0, 3, 2), acc2: null },
+      inv: { a_hazmat: 1, c_bonus: 1 },
+      sg: [sg(1, 0, 1, 1), sg(2, 1, 1, 0, 9), sg(3, 2, 1, 3), sg(4, 3, 1, 2, 3), sg(5, 0, 0, 3), sg(10, 0, 3, 2), sg(11, 1, 4, 0)],
+      si: [],
+    };
+    const b = bagEntries(c, 60);
+    const all = [...b.sets.flatMap((x) => x.items), ...b.shop];
+    const armor = slotCandidates(all, "armor");
+    expect(armor.map((x) => (x.type === "sg" ? x.it.u : x.key))).toEqual([3, 4, 2, "a_hazmat"]);
+    // 장신구: acc1에 낀 10번은 acc2 후보에서 빠진다
+    const acc2 = slotCandidates(all, "acc2");
+    expect(acc2.map((x) => (x.type === "sg" ? x.it.u : x.key))).toEqual([11, "c_bonus"]);
+    expect(slotCandidates(all, "weapon").map((x) => (x.type === "sg" ? x.it.u : x.key))).toEqual([5]);
   });
 });

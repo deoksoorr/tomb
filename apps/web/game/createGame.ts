@@ -1,6 +1,9 @@
 import * as Phaser from "phaser";
 import { installBackgroundLoop } from "./backgroundLoop";
-import type { GameStartOptions } from "./bridge";
+import { installEcoLoop } from "./ecoLoop";
+import { readItem, writeItem } from "@/lib/storage";
+import { STUTTER_TIP_KEY } from "@/lib/deviceSettings";
+import { bridge, type GameStartOptions } from "./bridge";
 import { installHousing } from "./housing/install";
 import { HauntHostScene } from "./haunt/HauntHostScene";
 import { HauntScene } from "./haunt/HauntScene";
@@ -60,6 +63,15 @@ export function createGame(parent: HTMLElement, opts: GameStartOptions): GameHan
   });
   game.registry.set("ctx", ctx);
   installHousing(game, ctx); // 하우징: 집 씬 등록 + 월드 ↔ 집 전환 (game/housing)
+  // 11/26 폰·패드 발열: 가만히 있을 때만 루프를 줄인다 (터치 30·절전 20, 움직이면 바로 60 — game/ecoLoop). backgroundLoop보다 먼저 (그쪽이 이 위를 감싼다)
+  const eco = installEcoLoop(game, () => {
+    // 폰에서 움직이는 중에 20초 넘게 버벅이면 기기마다 한 번만 안내
+    if (readItem(STUTTER_TIP_KEY)) return;
+    writeItem(STUTTER_TIP_KEY, "1");
+    bridge.emit("toast", { message: "화면이 자주 끊기면 위쪽 ⚙ 설정에서 절전 모드를 켜 보세요." });
+  });
+  ctx.disposers.push(() => eco.dispose());
+  if (opts.debug) (window as unknown as { __tombFrames?: unknown }).__tombFrames = () => eco.stats();
   // 다른 창을 보는 중(뒤로 간 상태)에는 갱신·그리기를 줄인다 (소리·실시간 연결은 그대로, game/backgroundLoop)
   ctx.disposers.push(installBackgroundLoop(game));
   // 11/22 폰 회전(가로 ↔ 세로) 뒤 캔버스가 예전 크기에 멈추지 않게 실제 부모 크기와 맞춘다 (game/viewportSync)

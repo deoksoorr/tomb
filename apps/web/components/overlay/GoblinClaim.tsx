@@ -8,12 +8,12 @@ import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { meStore } from "@/lib/hooks/useMe";
 import { showToast } from "@/lib/hooks/useToasts";
 import { cx } from "../ui/cx";
-import { goblinCaughtTitle, goblinPointsText, goblinSpawnSub } from "./goblinText";
+import { goblinCaughtTitle, goblinPointsText, goblinSpawnSub, goblinSpawnTitle } from "./goblinText";
 import styles from "./GoblinClaim.module.css";
 
 // 22번 황금 고블린(보너스 요정): 내가 가장 먼저 잡으면 실시간 서버가 증서를 준다(goblin:grant) → 웹 API로 보상을 받는다.
 // 같은 고블린 증서는 서버가 한 번만 받는다.
-// 11/19 강조: 나타나면 화면 위 금빛 띠(goblin:spawn — 마을), 잡히면 「○○님이 황금 고블린을 잡았어요! +800P」 띠 (11/21 채팅 소식 줄 대신 서버가 마을 소식 창에 남긴다 — lib/goblin)
+// 11/19 강조: 나타나면 화면 위 금빛 띠(goblin:spawn — 11/26부터 어느 맵이든 채널 모두에게 「황금 고블린이 ○○에 나타났어요!」), 잡히면 「○○님이 황금 고블린을 잡았어요! +800P」 띠 (11/21 채팅 소식 줄 대신 서버가 마을 소식 창에 남긴다 — lib/goblin)
 // (goblin:caught — 채널 모두, 이름은 실시간 서버가 아는 이름), 내가 잡았으면 가운데 큰 「+800P!」와 튀는 금화.
 // 포인터는 모두 통과시킨다 (게임 조작을 막지 않게).
 
@@ -51,13 +51,13 @@ export default function GoblinClaim() {
       });
   });
 
-  useBridgeEvent("goblin:spawn", ({ id, zone, resumed }) => {
+  useBridgeEvent("goblin:spawn", ({ id, zone, resumed, map, here }) => {
     if (caughtSeen.has(id)) return;
     setBand({
       key: `s:${id}`,
       kind: "spawn",
-      title: resumed ? "지금 마을에 황금 고블린이 있어요!" : "황금 고블린이 나타났어요!",
-      sub: goblinSpawnSub(zone),
+      title: goblinSpawnTitle(map, resumed),
+      sub: goblinSpawnSub(zone, map, here),
       jackpot: false,
       until: Date.now() + SPAWN_MS,
     });

@@ -10,7 +10,7 @@ import { housePlants, waterPlant } from "./service";
 import type { HouseLayout, Placed } from "./types";
 
 /** 오두막 없는 집 하나 (공용 가방 = 이 집 id) */
-const solo = (id: string): HousePair => ({ village: id, sea: `${id}-sea` });
+const solo = (id: string): HousePair => ({ village: id, sea: `${id}-sea`, camp: `${id}-camp` });
 
 // 3번 집 안 개편: 방 구조·칸막이 규칙·가구 자리·화분 자람
 

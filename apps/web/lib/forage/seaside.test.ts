@@ -13,6 +13,7 @@ import {
   DEX_NEW_REWARD,
   gatherNodeById,
   isSeasideSpecies,
+  isCampSpecies,
   buyerOf,
   NPCS,
   npcBuys,
@@ -66,38 +67,38 @@ async function newAccount(): Promise<string> {
 }
 
 describe("카탈로그 (바닷가)", () => {
-  it("바닷물고기 10종은 물고기 칸, 갯벌 10종은 발굴품 칸 (새 도감 칸은 없다)", () => {
-    expect(SEA_FISH).toHaveLength(10);
+  it("바닷물고기 20종(11/26 도감 확장 +10)은 물고기 칸, 갯벌 10종은 발굴품 칸 (새 도감 칸은 없다)", () => {
+    expect(SEA_FISH).toHaveLength(20);
     expect(FLAT).toHaveLength(10);
-    expect(dexIdsOf("fish")).toHaveLength(50);
-    expect(dexIdsOf("dig")).toHaveLength(36); // 11/17 갈매기 깃털 둘
+    expect(dexIdsOf("fish")).toHaveLength(80); // 11/26 캠핑장 물고기 20 · 바닷물고기 +10
+    expect(dexIdsOf("dig")).toHaveLength(50); // 11/17 갈매기 깃털 둘 · 11/26 백사장 4 · 캠핑장 10
     for (const s of [...SEA_FISH, ...FLAT]) {
       expect(dexCatOf(s.id), s.id).toBe(s.cat);
       expect(dexRewardOf(s.id), s.id).toBe(DEX_NEW_REWARD[s.rarity]);
       expect(isSeasideSpecies(s), s.id).toBe(true);
       expect(s.where, s.id).toHaveLength(1);
     }
-    // 희귀도 고루: 흔함 2~3 · 보통 3 · 희귀 2~3 · 아주 희귀 1 · 전설 1
-    for (const list of [SEA_FISH, FLAT]) {
+    // 희귀도 고루: 흔함 2~3 · 보통 3 · 희귀 2~3 · 아주 희귀 1 · 전설 1 (11/26 바닷물고기는 두 묶음이라 둘씩)
+    for (const [list, top, rest] of [[SEA_FISH, 2, 16], [FLAT, 1, 8]] as const) {
       const by = (r: number) => list.filter((s) => s.rarity === r).length;
-      expect([by(4), by(5)]).toEqual([1, 1]);
-      expect(by(1) + by(2) + by(3)).toBe(8);
+      expect([by(4), by(5)]).toEqual([top, top]);
+      expect(by(1) + by(2) + by(3)).toBe(rest);
     }
     expect(new Set(SPECIES.map((s) => s.id)).size).toBe(SPECIES.length);
   });
 
-  it("칭호 기준은 늘어난 칸 수로 (물고기 25·50종, 발굴품 18·36종 — 11/17 갈매기 깃털 둘)", () => {
-    expect([dexTitleNeed("fish", 50), dexTitleNeed("fish", 100)]).toEqual([25, 50]);
-    expect([dexTitleNeed("dig", 50), dexTitleNeed("dig", 100)]).toEqual([18, 36]);
+  it("칭호 기준은 늘어난 칸 수로 (물고기 40·80종 — 11/26 캠핑장 20·바다 10, 발굴품 25·50종 — 11/17 갈매기 깃털 둘·11/26 백사장 4·캠핑장 10)", () => {
+    expect([dexTitleNeed("fish", 50), dexTitleNeed("fish", 100)]).toEqual([40, 80]);
+    expect([dexTitleNeed("dig", 50), dexTitleNeed("dig", 100)]).toEqual([25, 50]);
   });
 
   it("이미 붙은 칭호(붙은 표시·예전 단계 보상)는 칸이 늘어도 그대로 남는다", () => {
-    const old40 = Object.fromEntries(speciesOf("fish").filter((s) => !isSeasideSpecies(s)).map((s) => [s.id, { n: 1 }]));
+    const old40 = Object.fromEntries(speciesOf("fish").filter((s) => !isSeasideSpecies(s) && !isCampSpecies(s)).map((s) => [s.id, { n: 1 }]));
     // 예전 40종을 다 채운 사람: 붙은 표시가 있으면 「호수의 전설」 유지
     expect(titlesOf(old40, {}, ["fish:50", "fish:100"])).toEqual(expect.arrayContaining([DEX_TITLES.fish[50], DEX_TITLES.fish[100]]));
     // 예전 단계 보상으로 받은 칭호도 유지
     expect(titlesOf({}, { "dig:100": "2026-11-01" }, [])).toContain(DEX_TITLES.dig[100]);
-    // 표시가 없으면 지금 기준 (40/50 → 절반만)
+    // 표시가 없으면 지금 기준 (40/80 → 절반만)
     const now = titlesOf(old40, {}, []);
     expect(now).toContain(DEX_TITLES.fish[50]);
     expect(now).not.toContain(DEX_TITLES.fish[100]);

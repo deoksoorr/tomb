@@ -1,5 +1,6 @@
 import { AV_ANIM, AV_H, AV_W, avatarFrameGrid, BODY_METRICS, bodyOf } from "./avatar";
 import { darken, Grid, lighten, type Color } from "./pixel";
+import { isCampBedCover, paintCampBedCover, type CampBedCover } from "../housing/campFurnitureArt";
 
 // 3번 집 안 가구 자세 그림: 아바타 시트의 서 있는 프레임 위에 이불·책·거품을 덧그린 2프레임 시트 (프레임 = AV_W×AV_H).
 //  - lie  (침대): 머리만 베개 위로 나오고 어깨 아래는 누빈 이불. 프레임 1은 이불이 숨 쉬듯 1px 내려가고 작은 "z"
@@ -36,8 +37,11 @@ function span(g: Grid): { x0: number; x1: number; y0: number } {
   return { x0: Math.max(0, x0), x1: Math.min(AV_W - 1, x1), y0 };
 }
 
-/** 11/16 누운 자세 덮개: quilt = 집 침대 이불(보라, 예전 그대로), towel = 바닷가 선베드 하늘빛 수건 (가슴 아래만 — 선베드 그림 RAMP.towel과 같은 색) */
-export type LieCover = "quilt" | "towel";
+/**
+ * 11/16 누운 자세 덮개: quilt = 집 침대 이불(보라, 예전 그대로), towel = 바닷가 선베드 하늘빛 수건 (가슴 아래만 — 선베드 그림 RAMP.towel과 같은 색).
+ * 11/26 캠핑장 침대(카라반·펜션)는 그 침대 이불 그대로 이어지는 덮개 — 침대·방향마다 따로 (housing/campFurnitureArt paintCampBedCover)
+ */
+export type LieCover = "quilt" | "towel" | CampBedCover;
 const TOWEL = [0xcdeef6, 0xa9dcec, 0x8cc8de] as const;
 function towel(g: Grid, top: number): void {
   const t = top + 3;
@@ -154,7 +158,8 @@ export function indoorPoseSheet(kind: IndoorPose, body: string, color: string, l
       // 선베드: 수건이 숨 쉬듯 1px (z는 없어요 — 햇볕 쬐는 중)
       towel(g, neck + f);
     } else if (kind === "lie") {
-      quilt(g, neck + f);
+      if (isCampBedCover(cover)) paintCampBedCover(g, cover, neck + f);
+      else quilt(g, neck + f);
       if (f === 1) {
         // 작은 z
         g.hline(16, 18, 1, 0xdfe6f0);
@@ -172,7 +177,7 @@ export function indoorPoseSheet(kind: IndoorPose, body: string, color: string, l
 }
 
 /** 자세 텍스처 키 (아바타 시트 키 + 접미사) */
-export const indoorPoseKey = (avatarKey: string, kind: IndoorPose, cover: LieCover = "quilt") => `${avatarKey}-${kind}${kind === "lie" && cover === "towel" ? "-towel" : ""}`;
+export const indoorPoseKey = (avatarKey: string, kind: IndoorPose, cover: LieCover = "quilt") => `${avatarKey}-${kind}${kind === "lie" && cover !== "quilt" ? `-${cover}` : ""}`;
 
 /** 자세마다 프레임 바꾸는 주기 (ms) */
 export const INDOOR_POSE_PERIOD: Record<IndoorPose, number> = { lie: 2600, read: 3200, bath: 900 };

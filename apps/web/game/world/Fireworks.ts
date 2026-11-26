@@ -1,6 +1,7 @@
 import * as Phaser from "phaser";
 import { itemById } from "@tomb/protocol";
 import { bridge } from "../bridge";
+import { pokeFrame } from "../frameGovernor";
 import { TEX } from "../assets/manifest";
 import { DEPTH } from "../config";
 import { fireworkPlan, fitBurst, FW_BASE_RADIUS, heartPoint, meteorShower, type FireworkPlan, type MeteorStreak } from "./fxMath";
@@ -583,6 +584,8 @@ export class Fireworks {
   }
 
   update(time: number, dt: number, view: Phaser.Geom.Rectangle): void {
+    // 11/26 폭죽이 터지는 동안은 가만히 있어도 프레임을 줄이지 않는다 (game/frameGovernor)
+    if (this.active > 0) pokeFrame(undefined, "fireworks");
     this.dtAvg += (Math.min(100, dt) - this.dtAvg) * 0.1;
     for (let i = this.timers.length - 1; i >= 0; i--) {
       if (time < this.timers[i].at) continue;

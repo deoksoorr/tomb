@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CLOSE } from "./constants";
 import { WHERE_MAX_IDS } from "./friends";
-import { MEGA_PIN_MAX } from "./events";
+import { MEGA_PIN_MAX, parseHomesMsg } from "./events";
 import { INTERNAL_KICK_MAX, INTERNAL_SAY_MAX, signInternal, verifyInternal } from "./internal";
 
 // 47번 서버 간 내부 요청 서명
@@ -84,5 +84,31 @@ describe("내부 요청 서명", () => {
       const { body, sig } = await signInternal(S, b as never);
       expect(await verifyInternal(S, body, sig, now)).toBeNull();
     }
+  });
+});
+
+describe("11/26 집 목록 바뀜 알림 (/internal/homes)", () => {
+  it("채널·구역·v가 맞으면 받고, 틀리면 버린다", async () => {
+    const ok = await signInternal(S, { op: "homes", ch: 3, zone: "camp", v: 1_795_000_000_000, exp: now + 20 });
+    expect(await verifyInternal(S, ok.body, ok.sig, now)).toEqual({ op: "homes", ch: 3, zone: "camp", v: 1_795_000_000_000, exp: now + 20 });
+    for (const zone of ["village", "sea"] as const) {
+      const z = await signInternal(S, { op: "homes", ch: 1, zone, v: 5, exp: now + 20 });
+      expect(await verifyInternal(S, z.body, z.sig, now)).toMatchObject({ op: "homes", zone });
+    }
+    for (const bad of [
+      { op: "homes", ch: 0, zone: "camp", v: 5, exp: now + 20 },
+      { op: "homes", ch: 1.5, zone: "camp", v: 5, exp: now + 20 },
+      { op: "homes", ch: 1, zone: "moon", v: 5, exp: now + 20 },
+      { op: "homes", ch: 1, zone: "camp", v: 0, exp: now + 20 },
+      { op: "homes", ch: 1, zone: "camp", exp: now + 20 },
+    ]) {
+      const s = await signInternal(S, bad as never);
+      expect(await verifyInternal(S, s.body, s.sig, now)).toBeNull();
+    }
+  });
+  it("받은 homes 이벤트 검증", () => {
+    expect(parseHomesMsg({ t: "homes", zone: "camp", v: 7, extra: 1 })).toEqual({ t: "homes", zone: "camp", v: 7 });
+    expect(parseHomesMsg({ t: "homes", zone: "x", v: 7 })).toBeNull();
+    expect(parseHomesMsg({ t: "homes", zone: "sea", v: "7" })).toBeNull();
   });
 });

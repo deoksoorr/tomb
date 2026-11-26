@@ -159,6 +159,49 @@
   min-width: 0;
 }
 
+/* 11/26 360px 폰(갤럭시 S 등): [메뉴]·노래·⚙ 설정 옆에서 채널·날씨 글자가 잘리지 않게 [메뉴]는 그림만, 단추 사이 6px, 채널 칸 안쪽 여백 8px */
+@media (pointer: coarse) and (max-width: 380px) {
+  .touchBar,
+  .touchLeft {
+    gap: 6px;
+  }
+
+  .touchBar > :nth-child(2) {
+    padding-inline: 8px;
+  }
+
+  .menuTop {
+    width: var(--top-h);
+    padding: 0;
+  }
+
+  .menuLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* 보통 폰(390~430px)도 불멍·놀이기구 중 폭죽(·운영자 단추)까지 왼쪽에 4개 넘게 서면 [메뉴]는 그림만 */
+@media (pointer: coarse) and (max-width: 430px) {
+  .touchLeft:has(> :nth-child(4)) .menuTop {
+    width: var(--top-h);
+    padding: 0;
+  }
+
+  .touchLeft:has(> :nth-child(4)) .menuLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
 .topButton {
   position: relative;
   background: var(--panel);

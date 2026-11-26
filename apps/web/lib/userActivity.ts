@@ -10,7 +10,7 @@ import {
   type ActivityTier,
   type LastSeenBucket,
 } from "./activityRules";
-import { scanAllAccounts } from "./adminMembers";
+import { membersSnapshot } from "./adminMembers";
 import { addDays, daysBetween, gameDay, weekOfDay } from "./gameDay";
 import { staffAccountId } from "./staff";
 import { stayFillDays } from "./stayTime";
@@ -265,7 +265,8 @@ export async function userActivityReport(
   if (!opts.fresh && hit && now - hit.at < CACHE_MS) return hit.report;
 
   const days = Array.from({ length: FETCH_DAYS }, (_, i) => addDays(gameDay(now), -i));
-  const [scan, sets, since, staffId] = await Promise.all([scanAllAccounts(accounts), activity.daySets(days), activity.since(), staffAccountId(now)]);
+  // 11/26 계정 훑기는 회원 목록·잔액 보기와 같은 30초 기억을 함께 쓴다 (탭을 옮길 때마다 키 전체를 다시 훑지 않게)
+  const [scan, sets, since, staffId] = await Promise.all([membersSnapshot(accounts, !!opts.fresh, now), activity.daySets(days), activity.since(), staffAccountId(now)]);
   const report = buildActivityReport({ now, accounts: scan.rows, sets, since, staffId, includeStaff, partial: scan.partial });
   // 목록에 나온 계정만 활동한 날 전부를 한 번에 읽는다
   const listed = [...new Set([...report.frequent, ...report.tiers, ...report.gone].map((u) => u.accountId))];

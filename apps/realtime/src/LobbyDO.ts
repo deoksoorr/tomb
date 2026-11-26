@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
-import { LOBBY_SNAPSHOT_MS, type HuntRoomsInfo, type LobbyInfo, type QueueStatus } from "@tomb/protocol";
+import { LOBBY_SNAPSHOT_MS, MAINT_OFF, connWhyOf, parseMaint, type HuntRoomsInfo, type LobbyInfo, type MaintState, type QueueStatus } from "@tomb/protocol";
+import { ConnLogBuffer, sendConnLog } from "./connLog";
 import { type Config, type Env, channelStub, readConfig } from "./config";
 import {
   LOBBY_REFRESH_MS,
@@ -34,6 +35,10 @@ const HUNT_KEY = "hunt";
 /** 친구 들고 남: 방문자별 기록 "fp:{visitorId}", 나감 알림 대기 목록 */
 const FP_PREFIX = "fp:";
 const FP_PENDING_KEY = "fpPending";
+/** 11/26 점검 모드 상태 (켜고 끌 때만 쓴다) */
+const MAINT_KEY = "maint";
+/** 11/26 아직 웹에 넘기지 못한 접속 기록 줄 (로비가 내려가도 잃지 않게) */
+const CONN_LOG_KEY = "connLog";
 
 export class LobbyDO extends DurableObject<Env> {
   private readonly cfg: Config;
@@ -49,6 +54,11 @@ export class LobbyDO extends DurableObject<Env> {
   private readonly counts = (id: number) => countOf(this.state, id);
   /** 친구 들고 남 알림 (기록은 storage에 두어 로비가 다시 떠도 중복·누락이 없게) */
   private readonly friends: FriendPresence;
+  /** 11/26 접속 기록 (들어옴·나감 줄을 모았다가 웹으로 — connLog.ts) */
+  private readonly connLog = new ConnLogBuffer();
+  private connSending = false;
+  /** 11/26 점검 모드 */
+  private maintState: MaintState;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -58,6 +68,7 @@ export class LobbyDO extends DurableObject<Env> {
     this.hunt = ctx.storage.kv.get<HuntRoomsState>(HUNT_KEY) ?? {};
     this.queue = new AdmissionQueue(this.cfg, ctx.storage.kv.get<QueueSnapshot>(QUEUE_KEY), Date.now());
     this.refreshDueAt = Date.now() + LOBBY_REFRESH_MS;
+    this.maintState = parseMaint(ctx.storage.kv.get<MaintState>(MAINT_KEY) ?? MAINT_OFF);
     const kv = ctx.storage.kv;
     this.friends = new FriendPresence(
       {
@@ -66,6 +77,8 @@ export class LobbyDO extends DurableObject<Env> {
       },
       kv.get<[string, number][]>(FP_PENDING_KEY) ?? [],
     );
+    this.connLog.restore(kv.get<unknown>(CONN_LOG_KEY), Date.now());
+    if (this.connLog.size) this.ensureAlarm();
     // 새로 떴다 = 메모리를 잃었다(유휴 DO는 로컬 workerd에서 약 10초, 운영에서 70~140초 뒤 내려간다).
     // 요청을 받기 전에 채널의 현재 인원으로 맞춘다. 11/17 스냅샷에 사람이 있거나 최근에 있었던 채널만 (빈 채널 DO를 깨우지 않게)
     const targets = startupTargets(this.state, this.cfg, Date.now());
@@ -131,8 +144,10 @@ export class LobbyDO extends DurableObject<Env> {
    * 등록을 먼저 바꾸고 내보내므로, 옛 채널이 뒤이어 보내는 release는 무시된다.
    * claimedAt보다 나중에 옛 채널로 다시 들어간 연결은 그 채널이 건드리지 않는다(빠르게 오가는 경우).
    */
-  async claimVisitor(visitorId: string, channel: number, claimedAt: number): Promise<void> {
+  async claimVisitor(visitorId: string, channel: number, claimedAt: number, dev?: string): Promise<void> {
     if (typeof visitorId !== "string" || !this.validChannel(channel)) return;
+    // 11/26 접속 기록: 어느 채널에도 없던 사람이면 들어옴 (채널 이동·재접속 복귀는 이미 등록돼 있다)
+    if (this.visitors.channelOf(visitorId) === undefined) this.logConn([visitorId, "i", Date.now(), channel, typeof dev === "string" ? dev.slice(0, 30) : "", ""]);
     // 친구 들고 남: 처음 자리를 잡았으면 친구들에게 바로 "들어옴" (나감 대기 중이었으면 취소)
     const notice = this.friends.joined(visitorId);
     this.saveFriends();
@@ -146,11 +161,58 @@ export class LobbyDO extends DurableObject<Env> {
   }
 
   /** Channel DO → 방문자가 최종 퇴장했다(1000 close, 유예 만료, 추방). 등록된 채널이 같을 때만 지운다. */
-  releaseVisitor(visitorId: string, channel: number): void {
+  releaseVisitor(visitorId: string, channel: number, code?: number, dev?: string): void {
     if (typeof visitorId !== "string" || !this.validChannel(channel)) return;
     this.visitors.release(visitorId, channel);
     // 다른 채널에 이미 자리를 잡았으면(채널 이동) 나간 게 아니다
-    if (this.visitors.channelOf(visitorId) === undefined) this.dropFriend(visitorId);
+    if (this.visitors.channelOf(visitorId) === undefined) {
+      this.dropFriend(visitorId);
+      this.logConn([visitorId, "o", Date.now(), channel, typeof dev === "string" ? dev.slice(0, 30) : "", connWhyOf(typeof code === "number" ? code : undefined)]);
+    }
+  }
+
+  /** 11/26 점검 모드 상태 (Worker → GET /maintenance·입장 확인) */
+  maintenance(): MaintState {
+    return this.maintState;
+  }
+
+  /** 11/26 점검 시작·끝 (Worker /internal/maint). 저장하고 새 상태를 돌려준다 (접속 끊기는 Worker가 채널마다) */
+  setMaintenance(next: MaintState): MaintState {
+    this.maintState = parseMaint(next);
+    this.ctx.storage.kv.put(MAINT_KEY, this.maintState);
+    return this.maintState;
+  }
+
+  /** 접속 기록 한 줄. 한 묶음이 차면 바로 보내고, 아니면 알람(1분 뒤)에 */
+  private logConn(row: Parameters<ConnLogBuffer["add"]>[0]): void {
+    const full = this.connLog.add(row, Date.now());
+    this.saveConnLog();
+    if (full) void this.flushConnLog();
+    else this.ensureAlarm();
+  }
+
+  private saveConnLog(): void {
+    if (this.connLog.size) this.ctx.storage.kv.put(CONN_LOG_KEY, this.connLog.snapshot());
+    else this.ctx.storage.kv.delete(CONN_LOG_KEY);
+  }
+
+  private async flushConnLog(): Promise<void> {
+    if (this.connSending) return;
+    this.connSending = true;
+    try {
+      while (this.connLog.size) {
+        const now = Date.now();
+        const rows = this.connLog.take(now);
+        if (!(await sendConnLog(this.env, rows))) {
+          this.connLog.putBack(rows, Date.now());
+          break;
+        }
+      }
+    } finally {
+      this.connSending = false;
+      this.saveConnLog();
+      this.ensureAlarm();
+    }
   }
 
   /** Channel DO → 연결이 끊겼다 (재연결 유예 시작). 유예 안에 돌아오면 claim이 다시 온다 */
@@ -197,6 +259,8 @@ export class LobbyDO extends DurableObject<Env> {
     const now = Date.now();
     for (const n of this.friends.tick(now)) this.tellFriends(n);
     this.saveFriends();
+    const logDue = this.connLog.due();
+    if (logDue !== null && now >= logDue) await this.flushConnLog();
     if (now >= this.refreshDueAt) {
       this.refreshDueAt = now + LOBBY_REFRESH_MS;
       await this.refresh(refreshTargets(this.state, this.cfg, now));
@@ -245,7 +309,7 @@ export class LobbyDO extends DurableObject<Env> {
   /** 알람 하나로 두 주기를 돌린다: min(스냅샷 예정, 재확인 예정). 최근 쓰인 채널이 없고 저장할 것도 없으면 알람 없음 */
   private ensureAlarm(): void {
     const refreshAt = hasRecentChannels(this.state, this.cfg, Date.now()) ? this.refreshDueAt : Infinity;
-    const at = Math.min(this.snapshotDueAt ?? Infinity, refreshAt, this.friends.due() ?? Infinity);
+    const at = Math.min(this.snapshotDueAt ?? Infinity, refreshAt, this.friends.due() ?? Infinity, this.connLog.due() ?? Infinity);
     if (at === Infinity || (this.alarmAt !== null && this.alarmAt <= at)) return;
     this.alarmAt = at;
     this.ctx.storage.setAlarm(at).catch((e) => console.error("lobby setAlarm failed", e));

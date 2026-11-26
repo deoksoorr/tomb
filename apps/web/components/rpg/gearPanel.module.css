@@ -849,3 +849,300 @@ dd .enhPart {
 .inheritCmp td[data-up] {
   color: var(--good, #8fd39a);
 }
+
+/* ── 11/26 세트 장비 직급 구분: 사원·대리는 차분하게, 과장은 은은한 빛, 임원은 금빛 테 + 반짝임 + 작은 별 ── */
+
+.icon[data-sg="0"] {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--grade) 50%, var(--line));
+}
+
+.icon[data-sg="1"] {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--grade) 80%, var(--line));
+}
+
+.icon[data-sg="2"] {
+  background: radial-gradient(circle, color-mix(in srgb, var(--grade) 30%, transparent), transparent 72%), var(--surface);
+  box-shadow:
+    0 0 0 2px var(--grade),
+    0 0 8px color-mix(in srgb, var(--grade) 45%, transparent);
+}
+
+.icon[data-sg="3"] {
+  background: radial-gradient(circle, color-mix(in srgb, var(--grade) 38%, transparent), transparent 72%), color-mix(in srgb, var(--grade) 14%, #14130f);
+  box-shadow:
+    0 0 0 2px var(--grade),
+    0 0 0 4px color-mix(in srgb, var(--grade) 42%, #000),
+    0 0 12px color-mix(in srgb, var(--grade) 60%, transparent);
+}
+
+/* 임원: 빛줄기가 테를 쓸고 지나간다 */
+.icon[data-sg="3"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 38%, rgba(255, 244, 196, 0.55) 50%, transparent 62%) no-repeat;
+  background-size: 260% 100%;
+  pointer-events: none;
+  animation: sgShine 3.2s ease-in-out infinite;
+}
+
+/* 임원: 오른쪽 아래 작은 별 (픽셀 십자) */
+.icon[data-sg="3"]::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 2px;
+  height: 2px;
+  background: #fff6c8;
+  box-shadow:
+    2px 0 0 #fff6c8,
+    -2px 0 0 #fff6c8,
+    0 2px 0 #fff6c8,
+    0 -2px 0 #fff6c8,
+    0 0 6px 2px rgba(255, 220, 110, 0.7);
+  pointer-events: none;
+  animation: sgTwinkle 1.6s steps(2, end) infinite;
+}
+
+@keyframes sgShine {
+  0%,
+  45% {
+    background-position: 130% 0;
+  }
+  100% {
+    background-position: -30% 0;
+  }
+}
+
+@keyframes sgTwinkle {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.6);
+  }
+}
+
+/* 직급 딱지 (아이콘 왼쪽 위) */
+.badge {
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  z-index: 1;
+  display: flex;
+  background: var(--bg-deep);
+  line-height: 0;
+}
+
+.badge > span {
+  padding: 0 3px;
+  font-size: 9px;
+  line-height: 13px;
+}
+
+/* 가방 줄: 과장은 은은한 빛, 임원은 금빛 테 */
+.row[data-sg="2"] {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--grade) 45%, var(--line)),
+    inset 3px 0 0 var(--grade);
+}
+
+.row[data-sg="3"] {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--grade) 10%, transparent), transparent 55%), var(--bg-deep);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--grade) 70%, var(--line)),
+    inset 3px 0 0 var(--grade),
+    0 0 10px color-mix(in srgb, var(--grade) 18%, transparent);
+}
+
+.row[data-sg][data-open] {
+  box-shadow:
+    0 0 0 2px var(--candle),
+    inset 3px 0 0 var(--grade);
+}
+
+/* 이름 아래 꼬리표 줄 (세트 이름표 · 직급 · 더 높은 직급 · 장착 중) */
+.tagLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tagLine .tag {
+  justify-self: auto;
+  line-height: 16px;
+}
+
+.higher {
+  padding: 0 5px;
+  color: var(--good, #8fd39a);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--good, #8fd39a) 60%, transparent);
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.higher::before {
+  content: "▲ ";
+}
+
+/* ── 11/26 부위별 칸 ── */
+
+.slotBoard {
+  display: grid;
+  gap: 10px;
+}
+
+.slotGroup {
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  background: rgba(10, 11, 9, 0.35);
+  box-shadow: 0 0 0 1px var(--line);
+  scroll-margin-top: 8px;
+}
+
+.slotGroup[data-sel] {
+  box-shadow: 0 0 0 2px var(--candle);
+}
+
+.slotHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px;
+  color: var(--bone);
+  font-size: 13px;
+}
+
+.slotHead small {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.slotEmpty {
+  margin: 0;
+  padding: 10px 8px;
+  color: var(--faint);
+  background: var(--bg-deep);
+  outline: 1px dashed var(--line);
+  outline-offset: -1px;
+  font-size: 12px;
+}
+
+.slotAlts {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0 0 0 14px;
+  list-style: none;
+  position: relative;
+}
+
+/* 낀 장비 아래로 이어지는 선 (후보 = 이 칸에 바꿔 낄 것) */
+.slotAlts::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 12px;
+  left: 6px;
+  width: 2px;
+  background: var(--line);
+}
+
+.slotRow {
+  --grade: var(--text);
+  display: grid;
+  background: var(--bg-deep);
+  box-shadow:
+    0 0 0 1px var(--line),
+    inset 3px 0 0 var(--grade);
+}
+
+/* 장착 중: 밝은 바탕 + 초록 테 */
+.slotRow[data-worn] {
+  background: linear-gradient(90deg, rgba(47, 66, 52, 0.75), rgba(47, 66, 52, 0.35));
+  box-shadow:
+    0 0 0 2px var(--moss),
+    inset 3px 0 0 var(--grade);
+}
+
+.slotRow[data-low] {
+  opacity: 0.55;
+}
+
+.slotRow[data-sg="3"]:not([data-worn]) {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--grade) 10%, transparent), transparent 55%), var(--bg-deep);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--grade) 70%, var(--line)),
+    inset 3px 0 0 var(--grade),
+    0 0 10px color-mix(in srgb, var(--grade) 18%, transparent);
+}
+
+.slotRow[data-sg="2"]:not([data-worn]) {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--grade) 45%, var(--line)),
+    inset 3px 0 0 var(--grade);
+}
+
+.slotRow[data-open] {
+  box-shadow:
+    0 0 0 2px var(--candle),
+    inset 3px 0 0 var(--grade);
+}
+
+.slotLine {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.slotLine .pick {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.slotEquip {
+  min-height: 36px;
+  margin-right: 8px;
+  padding: 0 12px;
+}
+
+.slotMore {
+  justify-self: start;
+  margin-left: 14px;
+}
+
+.slotRow .detail {
+  padding-top: 0;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  font-family: var(--font-small);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon[data-sg="3"]::before,
+  .icon[data-sg="3"]::after {
+    animation: none;
+  }
+}
+
+/* 11/26 거르기 칸이 여덟 개라 폰에서는 한 줄 4칸씩 두 줄 (한 개만 떨어지지 않게) */
+@media (max-width: 640px) {
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .tabs button {
+    padding: 0 4px;
+  }
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { captureSource } from "@/lib/signupSourceClient";
 
 // 47번 방문 분석 (가벼운 신호 두 가지, 화면에는 아무것도 그리지 않는다):
 //  - 방문: 브라우저 세션(탭)마다 한 번, 처음 연 주소의 경로 모양·리퍼러·utm을 /api/analytics/hit로
@@ -49,7 +50,11 @@ export default function VisitTracker() {
     } catch {
       first = true;
     }
-    if (first) sendHit();
+    if (first) {
+      sendHit();
+      // 11/26 가입 유입 경로: 처음 방문(localStorage)·이번 접속(sessionStorage) 유입을 둔다 (리퍼러 호스트·utm만)
+      captureSource();
+    }
 
     let since = document.visibilityState === "visible" ? performance.now() : null;
     let acc = 0;

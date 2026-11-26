@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AWAY_PLACE_LABEL, FRIEND_MAX, MAP_NAME, isAwayMap, mapOf, type AwayMapId, type MapId } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
-import type { FriendCard, FriendEntry, FriendListResponse, FriendWhere } from "@/lib/friendTypes";
+import type { FriendCard, FriendEntry, FriendHouse, FriendListResponse, FriendWhere } from "@/lib/friendTypes";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { useLobby } from "@/lib/hooks/useLobby";
 import { friendChannelFullMsg, lobbyChannelFull } from "@/game/net/switchPolicy";
@@ -59,18 +59,30 @@ export function friendFullReason(name: string, w: FriendWhere, myCh: number | nu
   return friendChannelFullMsg(name);
 }
 
+/** 11/26 친구 집 (마을·바닷가·캠핑장 순서, 없는 집은 빠진다). name = 집이 여러 채일 때 자랑거리 이름 */
+export function cardHouses(c: FriendCard): { zone: "village" | "sea" | "camp"; name: string; house: FriendHouse }[] {
+  const all = [
+    { zone: "village" as const, name: "마을 집", house: c.house },
+    { zone: "sea" as const, name: "바닷가 집", house: c.seaHouse ?? null },
+    { zone: "camp" as const, name: "캠핑장 집", house: c.campHouse ?? null },
+  ];
+  return all.flatMap((h) => (h.house ? [{ ...h, house: h.house }] : []));
+}
+
+/** 집 버튼 글자: 짧은 이름 (예전 응답이면 구역 이름) */
+const HOUSE_FALLBACK = { village: "마을 집", sea: "바닷가 집", camp: "캠핑장 집" } as const;
+
 /** 자랑거리 칸들 (꾸미기·집·사냥·도감·최대어). 좁은 화면에서는 줄바꿈된다 */
 export function cardStats(c: FriendCard): string[] {
+  const houses = cardHouses(c);
   return [
     ...(c.fashion !== undefined ? [`꾸미기 ${c.fashion}점`] : []),
-    // 11/25 집이 두 채(마을·바닷가)면 둘 다
-    ...(c.house && c.seaHouse
-      ? [`마을 집 ${c.house.score.toLocaleString("ko-KR")}점`, `바닷가 집 ${c.seaHouse.score.toLocaleString("ko-KR")}점`]
-      : c.house
-        ? [`집 ${c.house.score.toLocaleString("ko-KR")}점`]
-        : c.seaHouse
-          ? [`바닷가 집 ${c.seaHouse.score.toLocaleString("ko-KR")}점`]
-          : ["집 없음"]),
+    // 11/25 집이 여러 채(마을·바닷가·11/26 캠핑장)면 모두, 한 채면 「집 N점」
+    ...(houses.length === 0
+      ? ["집 없음"]
+      : houses.length === 1
+        ? [`${houses[0].zone === "village" ? "집" : houses[0].name} ${houses[0].house.score.toLocaleString("ko-KR")}점`]
+        : houses.map((h) => `${h.name} ${h.house.score.toLocaleString("ko-KR")}점`)),
     `사냥 Lv ${c.hunt}`,
     `도감 ${c.dex}%`,
     c.bigFish ? `최대어 ${c.bigFish.name} ${(c.bigFish.size / 10).toFixed(1)}cm` : "최대어 없음",
@@ -342,24 +354,41 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
                           {f.card && <Stats card={f.card} />}
                         </div>
                       </div>
+                      {/* 11/25 집마다 버튼 하나: 어느 구역 몇 번인지. 11/26 같은 폭 칸(폰 한 줄 2칸 · PC 3칸) — 짧은 이름 + 작은 둘째 줄(채널), 긴 이름은 title */}
+                      {(f.houseId || f.seaHouseId || f.campHouseId) && (
+                        <div className={styles.houses}>
+                          {(
+                            [
+                              ["village", f.houseId, f.card?.house],
+                              ["sea", f.seaHouseId, f.card?.seaHouse],
+                              ["camp", f.campHouseId, f.card?.campHouse],
+                            ] as const
+                          ).map(([zone, id, h]) =>
+                            id ? (
+                              <button
+                                key={zone}
+                                type="button"
+                                className={cx(ui.button, styles.houseBtn)}
+                                disabled={busy}
+                                title={`${h?.label ?? HOUSE_FALLBACK[zone]} 놀러 가기`}
+                                aria-label={`${h?.label ?? HOUSE_FALLBACK[zone]} 놀러 가기`}
+                                onClick={() => visit(id)}
+                              >
+                                <span className={styles.houseMain}>
+                                  <PixelIcon name="house" />
+                                  <span className={styles.houseName}>{h?.short ?? HOUSE_FALLBACK[zone]}</span>
+                                </span>
+                                {h?.ch ? <span className={styles.houseSub}>{h.ch}채널</span> : null}
+                              </button>
+                            ) : null,
+                          )}
+                        </div>
+                      )}
                       <div className={styles.actions}>
                         {/* 늘 보인다: 갈 수 없는 곳(사냥터·잡화점·접속 안 함 …)이면 누를 때 이유를 알려 준다 */}
                         <button type="button" className={cx(ui.button, online && !full && ui.primary)} disabled={busy || !!full} title={full ?? undefined} onClick={() => void go(f)}>
                           {f.where.at === "world" && !here ? `친구한테 가기 (${f.where.ch}채널 ${MAP_NAME[mapOf(f.where.map)]})` : "친구한테 가기"}
                         </button>
-                        {/* 11/25 집마다 버튼 하나: 어느 구역 몇 번인지 (「3채널 12번지」·「3채널 포구 2번 오두막」) */}
-                        {f.houseId && (
-                          <button type="button" className={ui.button} disabled={busy} title="집 놀러 가기" onClick={() => visit(f.houseId!)}>
-                            <PixelIcon name="house" />
-                            {f.card?.house?.label ?? "마을 집"}
-                          </button>
-                        )}
-                        {f.seaHouseId && (
-                          <button type="button" className={ui.button} disabled={busy} title="집 놀러 가기" onClick={() => visit(f.seaHouseId!)}>
-                            <PixelIcon name="house" />
-                            {f.card?.seaHouse?.label ?? "바닷가 집"}
-                          </button>
-                        )}
                         <button
                           type="button"
                           className={cx(ui.button, confirmDrop === f.key ? ui.danger : ui.quiet, styles.drop)}

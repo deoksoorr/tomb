@@ -1,4 +1,5 @@
 import type * as Phaser from "phaser";
+import type { MapId } from "@tomb/protocol";
 import type { PublicHouse, VillageResponse } from "@/lib/housing/types";
 import { bridge } from "../bridge";
 import type { InputHub } from "../input/InputHub";
@@ -7,7 +8,7 @@ import type { GameContext } from "../scenes/context";
 import type { GlyphAtlas } from "../text/GlyphAtlas";
 import { seaHousingHost, type SeaHousingHost } from "../sea/seaHousingHost";
 import { campHousingHost, type CampHousingHost } from "../camp/campHousingHost";
-import { doorOnEnter, houseExitTo } from "./housePlace";
+import { doorOnEnter, houseExitTo, houseMapOf } from "./housePlace";
 import { HouseScene, type HouseSceneData } from "./HouseScene";
 import { VillageScene, type VillageSceneData } from "./VillageScene";
 
@@ -16,7 +17,8 @@ import { VillageScene, type VillageSceneData } from "./VillageScene";
 // 월드의 내 캐릭터는 분양 사무소 앞에 멈춰 있다가 돌아오면 그 자리에서 이어진다.
 //  - 월드 → 마을(village:enter) → 집(house:enter) → 나오면 마을의 그 집 문 앞 → 마을 입구로 나가면 월드
 //  - 월드 → 집(분양 사무소에서 바로) → 나오면 월드
-//  - 11/24 [집] → [내 집 가기](house:enter stay): 들어가기 전 자리 그대로 나온다 (마을·바닷가·캠핑장 — 캠핑장은 campHousingHost)
+//  - 11/26 어디서 어떻게 들어갔든(문·[내 집 가기]·친구 집 놀러 가기) 나오면 그 집 맵의 그 집 문 앞 (housePlace.houseExitTo).
+//    다른 맵이면 친구한테 가기와 같은 버스 길(friend:goto door — 창밖 연출 없이)로 맵을 옮긴다. 마을·바닷가·캠핑장 어디서든 들어간다
 // scene:changed는 마을·집 모두 "house"로 보낸다 (UI는 하우징 영역 동안 월드 HUD를 숨긴다).
 //
 // 월드 씬에 공개된 진입 API가 아직 없어서, 상점 진입(enterShop)이 쓰는 필드를 같은 방식으로 빌려 쓴다.
@@ -36,7 +38,9 @@ type WorldLike = Phaser.Scene & {
   standAtHouseDoor?: (lot: number) => void;
 };
 
-type Where = { at: "village" } | { at: "house"; from: "world" | "village"; lot: number; zone?: "sea"; stay?: boolean } | null;
+type Where = { at: "village" } | { at: "house"; from: "world" | "village"; lot: number; zone?: "sea" | "camp"; /** 그 집 채널 */ ch: number } | null;
+/** 11/26 집이 있는 구역 (PublicHouse.zone — 서버가 "camp"를 넣기 전 타입이라 넓혀 읽는다) */
+const zoneOf = (h: { zone?: string }): "sea" | "camp" | undefined => (h.zone === "sea" || h.zone === "camp" ? h.zone : undefined);
 
 export function installHousing(game: Phaser.Game, ctx: GameContext): void {
   game.scene.add("house", HouseScene, false);
@@ -71,7 +75,7 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
     return true;
   };
 
-  /** 11/24 캠핑장 장면을 빌린다 ([내 집 가기]로 캠핑장에서 바로 들어갈 때만) */
+  /** 11/24 캠핑장 장면을 빌린다 (11/26 캠핑장에서 들어가는 집 모두 — 나오면 그 집 맵으로) */
   const hideCamp = (): boolean => {
     const h = campHousingHost.current;
     if (!h || !h.active() || ctx.disposed) return false;
@@ -138,7 +142,12 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
   };
 
   /** 월드의 내 캐릭터를 그 번지 집 문 앞으로 (월드에서 들어온 집만. 2단지 번지는 메인 맵에 없어 그대로) */
-  const toDoor = (w: WorldLike | null, house: { lot: number; zone?: "sea" }) => {
+  const toDoor = (w: WorldLike | null, house: { lot: number; zone?: string }) => {
+    // 11/26 캠핑장 집: 캠핑장에서 들어왔으면 그 집 문 앞으로
+    if (house.zone === "camp") {
+      camp?.standAtLot?.(house.lot);
+      return;
+    }
     // 11/16 포구 오두막: 바닷가에서 들어왔으면 그 터 앞으로 (마을에서 들어왔으면 마을 캐릭터는 그대로)
     if (house.zone === "sea") {
       sea?.standAtLot(house.lot);
@@ -148,40 +157,44 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
     if (w?.standAtHouseDoor) w.standAtHouseDoor.call(w, house.lot);
   };
 
+  /** 집 씬이 빌린 장면의 맵 (집에 들어가기 전에 있던 맵) */
+  const hostMap = (): MapId => (sea ? "sea" : camp ? "camp" : "village");
+
   const exitHouse = () => {
     if (where?.at !== "house") return;
-    const { from, lot, zone, stay } = where;
+    const { from, lot, zone, ch } = where;
     game.scene.stop("house");
-    const to = houseExitTo(from, !!lastVillage, !!stay);
-    if (to === "village" && lastVillage) {
+    const out = houseExitTo({ from, hasVillage: !!lastVillage, host: hostMap(), zone, lot, houseCh: ch, ch: bridge.last("net:status")?.channel ?? null });
+    if (out.to === "village" && lastVillage) {
       runVillage(lastVillage, lot);
       bridge.emit("house:left", { to: "village" });
     } else {
-      // 문으로 들어갔으면 그 집 문 앞 (친구 집 놀러 가기로 들어왔어도 엉뚱한 곳으로 돌아가지 않게).
-      // 11/24 [내 집 가기]로 바로 들어갔으면(stay) 들어가기 전 자리 그대로 — 숨은 캐릭터를 옮기지 않았다
-      if (to === "door") toDoor(world, { lot, zone });
+      // 그 집이 지금 맵에 있으면 그 집 문 앞 (문·[내 집 가기]·친구 집 놀러 가기 모두)
+      if (out.to === "door") toDoor(world, { lot, zone });
       showWorld();
       bridge.emit("house:left", { to: "world" });
+      // 11/26 다른 맵의 집: 그 맵의 그 집 문 앞으로 (친구한테 가기와 같은 버스 길, 창밖 연출 없이 — 실시간 서버엔 맵 옮기기)
+      if (out.to === "warp") bridge.emit("friend:goto", { sid: -1, name: "", x: out.x, y: out.y, ...(out.map !== "village" ? { map: out.map } : {}), door: lot });
     }
   };
 
-  const enterHouse = (house: PublicHouse, mine: boolean, edit: boolean, stayHere: boolean) => {
-    if (!where && !hideWorld() && !hideSea() && !(stayHere && hideCamp())) {
+  const enterHouse = (house: PublicHouse, mine: boolean, edit: boolean) => {
+    // 11/26 마을·바닷가·캠핑장 어디서든 그 장면을 빌려 들어간다 (나오면 그 집 맵의 문 앞 — exitHouse)
+    if (!where && !hideWorld() && !hideSea() && !hideCamp()) {
       // 들어갈 수 없으면 UI(집 HUD)도 닫는다 — 들어가지도 못했는데 위쪽 집 막대만 남아 닫히지 않던 문제
       bridge.emit("house:left", { to: "world" });
-      // 11/15 캠핑장에 있으면 (월드가 자고 있다) 집은 마을에서 (11/16 바닷가도 같다)
-      const inCamp = (bridge.last("map:changed")?.map ?? "village") !== "village" || bridge.last("bus:state")?.riding === true;
-      bridge.emit("toast", { message: inCamp ? "집은 마을에 있어요. 버스를 타고 마을로 돌아가요." : "지금은 집에 들어갈 수 없어요. 잠시 뒤 다시 해 주세요." });
+      // 버스를 타는 중이면 (빌릴 장면이 없다) 내린 뒤에
+      const riding = bridge.last("bus:state")?.riding === true;
+      bridge.emit("toast", { message: riding ? "버스에서 내린 뒤에 들어갈 수 있어요." : "지금은 집에 들어갈 수 없어요. 잠시 뒤 다시 해 주세요." });
       return;
     }
     const from = where?.at === "village" ? "village" : where?.at === "house" ? where.from : "world";
-    // 집에서 집으로 옮겨 가면(사무소 창에서 다른 집) 처음 들어올 때 정한 나올 자리를 이어 간다
-    const stay = where?.at === "house" ? !!where.stay : stayHere;
     stopAll();
     const data: HouseSceneData = { ...base(), house, mine, editing: edit, onExit: exitHouse };
-    where = { at: "house", from, lot: house.lot, ...(house.zone === "sea" ? { zone: "sea" as const } : {}), ...(stay ? { stay: true } : {}) };
-    // 월드에서 들어온 집: 숨은 월드 캐릭터를 미리 문 앞에 세워 둔다 (새로고침 복원도 문 앞으로). [내 집 가기]면 그 자리 그대로
-    if (doorOnEnter(from, stay)) toDoor(world, house);
+    const zone = zoneOf(house);
+    where = { at: "house", from, lot: house.lot, ...(zone ? { zone } : {}), ch: house.ch };
+    // 그 집이 지금 맵에 있으면 숨은 캐릭터를 미리 문 앞에 세워 둔다 (새로고침 복원도 문 앞으로). 다른 맵이면 나올 때 옮긴다
+    if (doorOnEnter(from, houseMapOf(zone) === hostMap())) toDoor(world, house);
     game.scene.run("house", data);
     bridge.emit("scene:changed", { scene: "house", place: "house", houseId: house.id });
   };
@@ -206,7 +219,7 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
       if (where?.at !== "village") return;
       (game.scene.getScene("village") as VillageScene).leave();
     }),
-    bridge.on("house:enter", ({ house, mine, edit, stay }) => enterHouse(house, mine, !!edit, !!stay)),
+    bridge.on("house:enter", ({ house, mine, edit }) => enterHouse(house, mine, !!edit)),
     bridge.on("house:exit", () => {
       const s = game.scene.getScene("house") as HouseScene | null;
       if (where?.at === "house" && s?.scene.isActive()) s.leave();
@@ -219,7 +232,9 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
       if (where?.at !== "house" || !s?.scene.isActive()) return;
       const cur = (s as unknown as { data0?: HouseSceneData }).data0;
       // 크기가 바뀌면 처음부터 다시 그린다 (편집 모드는 유지)
-      if (cur && cur.house.tier !== house.tier) s.scene.restart({ ...cur, house, editing: s.debugState.editing });
+      // 11/26 캠핑장 카라반은 앞마당 단계로 방 크기가 바뀐다 (camp.yard)
+      const yardOf = (h: { camp?: { yard?: number } }) => h.camp?.yard ?? 0;
+      if (cur && (cur.house.tier !== house.tier || yardOf(cur.house) !== yardOf(house))) s.scene.restart({ ...cur, house, editing: s.debugState.editing });
       else s.markSaved(house);
     }),
   ];

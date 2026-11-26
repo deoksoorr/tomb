@@ -12,13 +12,15 @@ import {
   encodeEvent,
   encodeMove,
   goblinPos,
+  inMapBounds,
+  mulberry32,
   signGrant,
   verifyGrant,
   type Grant,
   type S2C,
 } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
-import { ChannelCore, GOBLIN_AFTER_TELEPORT_MS, type ChannelHost } from "./channel";
+import { ChannelCore, GOBLIN_AFTER_TELEPORT_MS, type ChannelHost, type JoinTicket } from "./channel";
 import { GoblinCore, type GoblinState } from "./goblin";
 
 // 22번 황금 고블린: 등장 일정 · 가장 먼저 닿은 한 명만 · 증서 · 저장/복원
@@ -222,5 +224,172 @@ describe("ChannelCore goblin", () => {
     join("a", 0);
     expect(core.forceGoblin(10)).toBeNull();
     expect(core.goblinDue()).toBeNull();
+  });
+});
+
+// ── 11/26 맵 무작위 (마을 50 · 바닷가 25 · 캠핑장 25), 수명 3분, 채널 전체 알림, 다른 맵 잡기 거절 ──
+
+function setupMaps(random: () => number) {
+  const host: ChannelHost<Conn> = {
+    send: (c, d) => void (typeof d === "string" && c.out.push(d)),
+    close: () => {},
+    persist: () => {},
+    saveReservation: () => {},
+    dropReservation: () => {},
+    requestTick: () => {},
+    countChanged: () => {},
+    lastPing: () => 0,
+    visitorJoined: () => {},
+    visitorLeft: () => {},
+    verifyGrant: async () => null,
+    claimNonce: () => true,
+    signGrant: (g: Grant) => signGrant("secret", g),
+    random,
+  };
+  const core = new ChannelCore<Conn>({ capacity: 10, graceMs: 20_000 }, host);
+  const join = (id: string, o: { map?: "camp" | "sea"; spawn?: { x: number; y: number }; now?: number; perm?: boolean } = {}) => {
+    const c: Conn = { id, out: [] };
+    const perm = o.perm ?? true;
+    const t: JoinTicket = { visitorId: id, name: `${id}님`, color: AVATAR_COLORS[0], channel: 1, spawn: o.spawn, look: [], body: "hood", ...(perm ? { camp: true as const, sea: true as const } : {}), ...(o.map ? { map: o.map } : {}) };
+    core.join(c, t, o.now ?? 0);
+    return c;
+  };
+  const events = (c: Conn) => c.out.map((d) => JSON.parse(d) as S2C);
+  return { core, join, events };
+}
+
+describe("11/26 goblin maps", () => {
+  it("lives 3 minutes", () => {
+    expect(GOBLIN_LIFE_MS).toBe(180_000);
+    const g = new GoblinCore(seq(0.3));
+    const info = g.spawn(1000);
+    expect(info.until - info.at).toBe(180_000);
+  });
+
+  it("map odds: village 34% · sea 33% · camp 33% when everyone can travel; village only when nobody can", () => {
+    const r = mulberry32(2026);
+    const n = { village: 0, sea: 0, camp: 0 };
+    const N = 20_000;
+    for (let i = 0; i < N; i++) {
+      const g = new GoblinCore(r);
+      const info = g.spawn(0, () => true);
+      n[info.m ?? "village"]++;
+    }
+    expect(n.village / N).toBeCloseTo(0.34, 1);
+    expect(n.sea / N).toBeCloseTo(0.33, 1);
+    expect(n.camp / N).toBeCloseTo(0.33, 1);
+    // 바닷가·캠핑장이 닫힌 서버(허락 가진 사람 없음) → 늘 마을, 마을 고블린은 옛 모양(m 없음)
+    for (let i = 0; i < 200; i++) expect(new GoblinCore(r).spawn(0).m).toBeUndefined();
+    // 한 맵만 닫혔으면 그 몫은 마을로
+    const seaOnly = { village: 0, sea: 0, camp: 0 };
+    for (let i = 0; i < N; i++) seaOnly[new GoblinCore(r).spawn(0, (m) => m !== "camp").m ?? "village"]++;
+    expect(seaOnly.camp).toBe(0);
+    expect(seaOnly.village / N).toBeCloseTo(0.67, 1);
+  });
+
+  it("the scheduled spawn asks the channel which maps are open (token permission)", () => {
+    // 맵 뽑기 난수 0.6 → 바닷가. 바닷가 허락이 있는 사람이 없으면 마을
+    const closed = setupMaps(() => 0.6);
+    closed.join("a", { perm: false });
+    expect(closed.core.forceGoblin(1000)!.m).toBeUndefined();
+    const open = setupMaps(() => 0.6);
+    open.join("a");
+    expect(open.core.forceGoblin(1000)!.m).toBe("sea");
+  });
+
+  it("a sea goblin is announced to the whole channel as goblinMap (never as the old goblin event), gone too", () => {
+    const { core, join, events } = setupMaps(() => 0.6);
+    const v = join("v");
+    const c = join("c", { map: "camp", spawn: { x: 300, y: 700 } });
+    const s = join("s", { map: "sea" });
+    const cur = core.forceGoblin(1000)!;
+    expect(cur.m).toBe("sea");
+    const g = { id: cur.id, seed: cur.seed, at: 1000, until: 1000 + GOBLIN_LIFE_MS, m: "sea" };
+    for (const who of [v, c, s]) {
+      expect(events(who)).toContainEqual({ t: "goblinMap", g });
+      expect(events(who).some((e) => e.t === "goblin")).toBe(false); // 옛 클라이언트(맵 모름)는 바닷가 고블린을 그리지 않는다
+    }
+    // 아무도 못 잡고 사라짐 → 모두에게
+    core.goblinCheck(1000 + GOBLIN_LIFE_MS);
+    for (const who of [v, c, s]) expect(events(who)).toContainEqual({ t: "goblinGone", id: cur.id });
+  });
+
+  it("a village goblin goes to everyone in the old shape (no m)", () => {
+    const { core, join, events } = setupMaps(() => 0.2);
+    const v = join("v");
+    const s = join("s", { map: "sea" });
+    const cur = core.forceGoblin(1000)!;
+    expect(cur.m).toBeUndefined();
+    const g = { id: cur.id, seed: cur.seed, at: 1000, until: 1000 + GOBLIN_LIFE_MS };
+    expect(events(v)).toContainEqual({ t: "goblin", g });
+    expect(events(s)).toContainEqual({ t: "goblin", g });
+  });
+
+  it("welcome: old field only for a village goblin to a village joiner; gob (with map) for everyone", () => {
+    const sea = setupMaps(() => 0.6);
+    sea.join("first");
+    const cur = sea.core.forceGoblin(1000)!;
+    const wv = sea.events(sea.join("v", { now: 2000 })).find((e) => e.t === "welcome") as Extract<S2C, { t: "welcome" }>;
+    expect(wv.goblin).toBeUndefined();
+    expect(wv.gob).toEqual({ id: cur.id, seed: cur.seed, at: 1000, until: 1000 + GOBLIN_LIFE_MS, m: "sea" });
+    const ws = sea.events(sea.join("s", { map: "sea", now: 2000 })).find((e) => e.t === "welcome") as Extract<S2C, { t: "welcome" }>;
+    expect(ws.gob?.m).toBe("sea");
+    expect(ws.goblin).toBeUndefined();
+
+    const vil = setupMaps(() => 0.2);
+    vil.join("first");
+    const vc = vil.core.forceGoblin(1000)!;
+    const w1 = vil.events(vil.join("v", { now: 2000 })).find((e) => e.t === "welcome") as Extract<S2C, { t: "welcome" }>;
+    expect(w1.goblin?.id).toBe(vc.id);
+    expect(w1.gob?.id).toBe(vc.id);
+    const w2 = vil.events(vil.join("c", { map: "camp", now: 2000 })).find((e) => e.t === "welcome") as Extract<S2C, { t: "welcome" }>;
+    expect(w2.goblin).toBeUndefined(); // 옛 캠핑장 화면은 원래 고블린을 몰랐다
+    expect(w2.gob?.id).toBe(vc.id);
+  });
+
+  it("claim: only from the goblin's map — the same coordinates on another map are refused", async () => {
+    const g = new GoblinCore(seq(0.3));
+    const info = g.spawn(0, () => true, "sea");
+    const at = goblinPos(info, 5000);
+    expect(g.claim(info.id, "v", [at], 5000, "village")).toBeNull();
+    expect(g.claim(info.id, "c", [at], 5000, "camp")).toBeNull();
+    expect(g.claim(info.id, "s", [at], 5000, "sea")).toBe(g.state.cur!.points);
+
+    // 채널: 바닷가 고블린 → 마을 사람이 같은 좌표에 서 있어도 못 잡고, 바닷가 사람은 잡는다
+    const { core, join, events } = setupMaps(() => 0.6);
+    const watcher = join("w");
+    const cur = core.forceGoblin(10_000)!;
+    expect(cur.m).toBe("sea");
+    let T = 10_000 + GOBLIN_AFTER_TELEPORT_MS + 500;
+    let p = goblinPos(cur, T);
+    for (let k = 0; k < 400 && !inMapBounds("village", p.x, p.y); k++) p = goblinPos(cur, (T += 250));
+    const spot = { x: Math.round(p.x), y: Math.round(p.y) };
+    const v = join("v", { spawn: spot, now: T - GOBLIN_AFTER_TELEPORT_MS });
+    if (inMapBounds("village", spot.x, spot.y)) {
+      expect(core.peer(2)).toMatchObject({ x: spot.x, y: spot.y });
+      expect(core.peer(2)?.map).toBeUndefined();
+    }
+    core.message(v, encodeEvent({ t: "goblin", id: cur.id }), T);
+    await flush();
+    expect(events(watcher).some((e) => e.t === "goblinCaught")).toBe(false);
+    const s = join("s", { map: "sea", spawn: spot, now: T - GOBLIN_AFTER_TELEPORT_MS });
+    expect(core.peer(3)).toMatchObject({ map: "sea", x: spot.x, y: spot.y });
+    core.message(s, encodeEvent({ t: "goblin", id: cur.id }), T);
+    await flush();
+    const caught = events(watcher).filter((e) => e.t === "goblinCaught");
+    expect(caught).toEqual([expect.objectContaining({ id: cur.id, name: "s님", points: cur.points })]);
+    expect(events(s).filter((e) => e.t === "goblinGrant")).toHaveLength(1);
+    expect(events(v).filter((e) => e.t === "goblinGrant")).toHaveLength(0);
+  });
+
+  it("restore: an old save (no map) is a village goblin; a map save keeps its map; junk map → village", () => {
+    const g = new GoblinCore(seq(0.3));
+    g.restore({ next: 5, cur: { id: "gAbc", seed: 1, at: 0, until: 100, points: 300 } });
+    expect(g.visible(50)).toEqual({ id: "gAbc", seed: 1, at: 0, until: 100 });
+    g.restore({ next: 5, cur: { id: "gAbc", seed: 1, at: 0, until: 100, points: 300, m: "camp" } });
+    expect(g.visible(50)?.m).toBe("camp");
+    expect(g.claim("gAbc", "x", [goblinPos({ seed: 1, at: 0, m: "camp" }, 50)], 50, "village")).toBeNull();
+    g.restore({ next: 5, cur: { id: "gAbc", seed: 1, at: 0, until: 100, points: 300, m: "moon" } });
+    expect(g.visible(50)).toEqual({ id: "gAbc", seed: 1, at: 0, until: 100 });
   });
 });

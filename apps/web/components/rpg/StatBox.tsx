@@ -12,8 +12,11 @@ import c from "./cards.module.css";
 
 const LS_OPEN = "tomb.rpg.statsOpen";
 
-/** chair: 11/21 회장님 독대 — 기본 접힘 (펼치면 그 판 동안 유지, 다른 사냥 저장값은 안 건드림) · boxRef: 반투명 판정용 */
-export default function StatBox({ stats, chair = false, boxRef }: { stats: StatPanel | undefined; chair?: boolean; boxRef?: React.Ref<HTMLElement> }) {
+/**
+ * chair: 11/21 회장님 독대 — 기본 접힘 (펼치면 그 판 동안 유지, 다른 사냥 저장값은 안 건드림) · boxRef: 반투명 판정용
+ * noChips: 11/26 야근 빌딩 PC — 카드 효과 요약은 가진 카드 목록 창(RunCards, Tab)에 있어 여기서는 뺀다 (왼쪽 위 판이 몬스터를 덜 가리게)
+ */
+export default function StatBox({ stats, chair = false, boxRef, noChips = false }: { stats: StatPanel | undefined; chair?: boolean; boxRef?: React.Ref<HTMLElement>; noChips?: boolean }) {
   const coarse = useMediaQuery("(pointer: coarse)");
   // null = 아직 안 건드림: PC는 저장된 값(없으면 펼침), 폰은 접힘
   const [pick, setPick] = useState<boolean | null>(null);
@@ -59,7 +62,7 @@ export default function StatBox({ stats, chair = false, boxRef }: { stats: StatP
           </div>
         ))}
       </dl>
-      {stats.chips.length > 0 && (
+      {!noChips && stats.chips.length > 0 && (
         <div className={c.statChips}>
           {stats.chips.map((x) => (
             <span key={x}>{x}</span>

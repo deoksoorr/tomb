@@ -200,7 +200,7 @@ export default function OddsDialog({ section, onClose }: { section: OddsSection;
           <OddsTable head={["등급", "무게", "비율"]} rows={rarityRows()} bar={2} />
           <ul className={styles.facts}>
             <li>
-              자동 낚시는 {f.autoEvery}마다 찌를 올려 {f.autoCatch} 확률로 한 마리가 걸려요. 하루 한도는 없어요.
+              자동 낚시는 {f.autoEvery}마다 찌를 올려 {f.autoCatch} 확률로 한 마리가 걸려요. 하루 한도는 없어요. 캠핑장 물고기 중 희귀 이상은 직접 낚을 때만 나와요.
             </li>
             <li>
               직접 낚시하면 {f.sunken}, 자동 낚시는 걸린 한 마리마다 {f.sunkenAuto} 확률로 물고기 대신 물에 빠진 꾸미기가 걸려요.
@@ -233,6 +233,7 @@ export default function OddsDialog({ section, onClose }: { section: OddsSection;
         <Section id="goblin" title="황금 고블린">
           <ul className={styles.facts}>
             <li>사람이 있는 채널마다 {g.gap}에 한 번쯤 나타나서 {g.life} 머물러요.</li>
+            <li>나타나는 곳은 {g.maps}예요. 바닷가나 캠핑장이 닫혀 있으면 마을에 나와요.</li>
             <li>
               보상은 {g.normal} 확률로 {g.points} 사이에서 고르게(10P 단위), {g.jackpotChance} 확률로 대박 {g.jackpot}이에요. 평균 {g.avg}예요.
             </li>

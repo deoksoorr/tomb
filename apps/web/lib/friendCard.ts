@@ -3,7 +3,7 @@ import { SPECIES, speciesOf } from "./forage/catalog";
 import { getForageStore } from "./forage/store";
 import type { FriendCard } from "./friendTypes";
 import { getHouseStore, houseIdFor } from "./housing/service";
-import { houseLabel, type HouseZone } from "./housing/catalog";
+import { houseLabel, houseShortLabel, type HouseZone } from "./housing/catalog";
 import { lookScore } from "./lookScore";
 import { MAX_LEVEL } from "./rpg/formulas";
 import { getRpgStore } from "./rpg/store";
@@ -38,15 +38,20 @@ export function biggestFish(dex: Record<string, { n: number; max: number }>): Fr
   return best;
 }
 
-/** 11/25 운영자 「어느 구역 몇 번인지 표현」: 집 자리 이름 (번지가 없는 옛 집이면 비운다) */
-const placeOf = (h: { ch: number; lot: number | null; zone?: HouseZone }): { label?: string } => (h.lot != null ? { label: houseLabel({ ch: h.ch, lot: h.lot, zone: h.zone }) } : {});
+/**
+ * 11/25 운영자 「어느 구역 몇 번인지 표현」: 집 자리 이름 (번지가 없는 옛 집이면 비운다).
+ * 11/26 short = 버튼에 쓰는 짧은 이름 (「마을 12번지」·「포구 2번」·「캠핑장 카라반 2번」), ch = 채널 (둘째 줄)
+ */
+const placeOf = (h: { ch: number; lot: number | null; zone?: HouseZone }): { label?: string; short?: string; ch?: number } =>
+  h.lot ? { label: houseLabel({ ch: h.ch, lot: h.lot, zone: h.zone }), short: houseShortLabel({ lot: h.lot, zone: h.zone }), ch: h.ch } : {};
 
 async function build(accountId: string, now: number): Promise<FriendCard> {
   const accounts = getAccounts();
   const houseId = houseIdFor(accountId);
-  // 11/25 운영자 「바닷가에 집 샀는데 친구 목록에 안 뜬다」: 마을 집만 읽고 있었다 → 바닷가 집도 같이
+  // 11/25 운영자 「바닷가에 집 샀는데 친구 목록에 안 뜬다」: 마을 집만 읽고 있었다 → 바닷가 집도 같이. 11/26 캠핑장 집도
   const seaId = houseIdFor(accountId, "sea");
-  const [acct, style, house, sea, rpg, sup, dex] = await Promise.all([
+  const campId = houseIdFor(accountId, "camp");
+  const [acct, style, house, sea, camp, rpg, sup, dex] = await Promise.all([
     accounts.get(accountId, kstDay(now), now),
     getStyleStore(accounts)
       .get(accountId)
@@ -56,6 +61,9 @@ async function build(accountId: string, now: number): Promise<FriendCard> {
       .catch(() => null),
     getHouseStore()
       .get(seaId)
+      .catch(() => null),
+    getHouseStore()
+      .get(campId)
       .catch(() => null),
     getRpgStore()
       .get(accountId)
@@ -70,6 +78,7 @@ async function build(accountId: string, now: number): Promise<FriendCard> {
     look: { color: acct.color ?? AVATAR_COLORS[0], body: acct.body ?? "hood", look: lookOf(acct), ...(style?.dye ? { dye: style.dye } : {}) },
     house: house && !house.hidden ? { id: houseId, score: house.score, ...placeOf(house) } : null,
     seaHouse: sea && !sea.hidden ? { id: seaId, score: sea.score, ...placeOf(sea) } : null,
+    campHouse: camp && !camp.hidden ? { id: campId, score: camp.score, ...placeOf(camp) } : null,
     hunt: sup ? MAX_LEVEL : (rpg?.level ?? 1),
     dex: dexPercentAll(dex),
     bigFish: biggestFish(dex),

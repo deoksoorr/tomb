@@ -184,6 +184,60 @@ describe("RealtimeClient 맵 옮기기 (11/15 캠핑장)", () => {
     c.stop();
   });
 
+  it("11/26 곧바로 두 번 옮기면(캠핑장 → 마을 → 바닷가, 집에서 나와 그 집 맵으로) 두 번째는 서버 간격(1초)이 지난 뒤 보내고, 그동안 위치도 보내지 않는다", async () => {
+    const log: string[] = [];
+    const c = new RealtimeClient({ name: "가람", color: "#e8d9b0", channel: 3 }, callbacks(log, "w"));
+    const ws = await online(c, "camp");
+    vi.useFakeTimers();
+    const maps = () => ws.sent.filter((d) => typeof d === "string" && d.includes('"t":"map"'));
+    c.switchMap("village", 100, 200);
+    expect(maps()).toHaveLength(1);
+    ws.recv({ t: "mapped", m: "village", peers: [], seats: {} });
+    c.switchMap("sea", 300, 400);
+    expect(maps()).toHaveLength(1);
+    expect(c.map).toBe("sea");
+    const before = ws.sent.length;
+    c.tick(performance.now() + 5_000);
+    expect(ws.sent.length).toBe(before);
+    vi.advanceTimersByTime(1_200);
+    expect(maps()).toHaveLength(2);
+    expect(maps()[1]).toContain('"m":"sea"');
+    ws.recv({ t: "mapped", m: "sea", peers: [], seats: {} });
+    expect(c.map).toBe("sea");
+    // 1초가 지난 뒤의 요청은 바로 보낸다
+    vi.advanceTimersByTime(1_200);
+    c.switchMap("village", 100, 200);
+    expect(maps()).toHaveLength(3);
+    vi.useRealTimers();
+    c.stop();
+  });
+
+  it("11/26 앞 요청(마을)의 답이 다음 요청(바닷가)을 들고 있는 동안 늦게 와도 되돌아가지 않는다", async () => {
+    const log: string[] = [];
+    const c = new RealtimeClient({ name: "가람", color: "#e8d9b0", channel: 3 }, callbacks(log, "w"));
+    const ws = await online(c, "camp");
+    vi.useFakeTimers();
+    const maps = () => ws.sent.filter((d) => typeof d === "string" && d.includes('"t":"map"'));
+    c.switchMap("village", 100, 200);
+    c.switchMap("sea", 300, 400);
+    expect(maps()).toHaveLength(1);
+    ws.recv({ t: "mapped", m: "village", peers: [], seats: {} });
+    expect(c.map).toBe("sea");
+    expect(log.filter((l) => l.includes(":mapped:"))).toEqual([]);
+    vi.advanceTimersByTime(1_200);
+    expect(maps()).toHaveLength(2);
+    ws.recv({ t: "mapped", m: "sea", peers: [], seats: {} });
+    expect(c.map).toBe("sea");
+    expect(log.filter((l) => l.includes(":mapped:"))).toEqual(["w:mapped:sea:"]);
+    // 보낸 뒤의 거절(마을)은 그대로 따른다
+    vi.advanceTimersByTime(1_200);
+    c.switchMap("camp", 1, 2);
+    ws.recv({ t: "mapped", m: "sea", peers: [], seats: {} });
+    expect(c.map).toBe("sea");
+    vi.useRealTimers();
+    c.stop();
+  });
+
   it("접속 전이면 보내지 않고 다음 접속을 그 맵으로", () => {
     const c = new RealtimeClient({ name: "가람", color: "#e8d9b0", channel: 3 }, callbacks([], "w"));
     expect(c.switchMap("camp", 1, 2)).toBe(false);
@@ -216,6 +270,8 @@ describe("맵 옮기기 답이 늦어도 되돌아가지 않아요 (캠핑장·�
       c.switchMap(away, 156, 758);
       ws.recv({ t: "mapped", m: away, peers: [], seats: {} });
       log.length = 0;
+      // 버스 창밖 연출(8초) 뒤에 돌아와요 — 서버 맵 요청 간격(1초)은 이미 지났어요
+      vi.advanceTimersByTime(8_000);
     }
     const from = leg === "go" ? "village" : away;
     const to = leg === "go" ? away : "village";

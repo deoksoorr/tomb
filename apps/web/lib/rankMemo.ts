@@ -29,24 +29,37 @@ export function memoTopFetch<T extends Ranked>(
 ): Fetch<Styled<T>> {
   const store = opts.store ?? memo();
   const style = opts.style ?? true;
+  // 상위 밖: 내 순위만 (limit 1 = 1등 한 줄 + 내 줄). 11/26 내 닉네임 꾸미기도 같이 읽는다 (예전엔 순위를 받은 뒤 한 번 더 — Redis 왕복 1번 줄임)
+  const mineOf = async (who: string): Promise<Styled<T> | null> => {
+    const [mine, styled] = await Promise.all([fetch(1, who).then((r) => r.mine), style ? withNameStyles([{ accountId: who }]) : null]);
+    if (!mine || !styled) return mine;
+    const ns = styled[0]?.ns;
+    return { ...mine, ...(ns ? { ns } : {}), [STYLED]: true };
+  };
   return async (limit, who) => {
-    const rows = (await store.get(`${key}|top|${limit}`, async () => {
+    const topKey = `${key}|top|${limit}`;
+    // 11/26 판을 새로 읽어야 하면(이 인스턴스에 기억이 없을 때) 내 줄도 함께 읽기 시작한다 — 내가 상위 안이면 버린다 (작은 읽기 한 번)
+    const early = who && who !== staffId && !store.has(topKey) ? mineOf(who) : null;
+    early?.catch(() => undefined);
+    const rows = (await store.get(topKey, async () => {
       const top = (await fetch(limit, null)).rows;
       return style ? withNameStyles(top) : top;
     })) as Styled<T>[];
     if (!who) return { rows, mine: null };
     const hit = rows.find((r) => r.accountId === who);
     if (hit) return { rows, mine: hit };
-    // 상위 밖: 내 순위만 (limit 1 = 1등 한 줄 + 내 줄). 운영자 순위는 기억한다
-    const mineOf = async () => (await fetch(1, who)).mine;
-    const mine = who === staffId ? ((await store.get(`${key}|staff|${who}`, mineOf)) as T | null) : await mineOf();
+    // 운영자 순위는 기억한다
+    const mine = who === staffId ? ((await store.get(`${key}|staff|${who}`, () => mineOf(who))) as Styled<T> | null) : await (early ?? mineOf(who));
     return { rows, mine };
   };
 }
 
+/** mineOf가 꾸미기까지 붙인 줄 표시 (펼쳐 복사해도 따라간다 · JSON에는 안 나간다) */
+const STYLED = Symbol("rankMemo.styled");
+
 /** 상위 줄은 이미 꾸미기가 붙어 있다 → 내 줄만 (상위 안에서 온 줄이면 그대로, 아니면 한 명만 읽는다) */
 export async function styleMine<T extends { accountId: string }>(rows: readonly Styled<T>[], mine: Styled<T> | null): Promise<Styled<T> | null> {
   if (!mine) return null;
-  if (rows.some((r) => r.accountId === mine.accountId)) return mine;
+  if (rows.some((r) => r.accountId === mine.accountId) || (mine as { [STYLED]?: boolean })[STYLED]) return mine;
   return (await withNameStyles([mine]))[0] ?? mine;
 }

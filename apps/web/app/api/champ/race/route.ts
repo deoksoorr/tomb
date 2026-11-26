@@ -59,11 +59,16 @@ export const GET = handler(async (req) => {
   await rateLimit("rank", req);
   const now = Date.now();
   const week = kstWeek(now);
-  const [s, me, staffId] = await Promise.all([sharedFor(week, now), getVisitorId(req), staffAccountId()]);
+  const sp = sharedFor(week, now);
+  const [me, staffId] = await Promise.all([getVisitorId(req), staffAccountId()]);
   const isStaff = !!me && me === staffId;
+  // 11/26 내 순위는 시상대를 기다리지 않고 함께 읽기 시작한다 (시상대에 있으면 그 줄을 쓰고 읽은 것은 버린다 — 예전과 같은 값)
+  const mineReads = CHAMP_BOARDS.map((b) => (!me || isStaff ? null : champBoard(b, week, 1, me, staffId, memoOn()).then((r) => r.mine)));
+  for (const p of mineReads) p?.catch(() => undefined);
+  const s = await sp;
   const mineOf = async (i: number): Promise<ChampRow | null> => {
     if (!me || isStaff) return null;
-    return s.boards[i].rows.find((r) => r.accountId === me) ?? (await champBoard(CHAMP_BOARDS[i], week, 1, me, staffId, memoOn())).mine;
+    return s.boards[i].rows.find((r) => r.accountId === me) ?? (await mineReads[i]);
   };
   const out: RaceResponse = {
     week,

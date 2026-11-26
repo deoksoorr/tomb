@@ -11,6 +11,7 @@ import styles from "./Admin.module.css";
 import an from "./Analytics.module.css";
 import { fullTime, joinDate, relativeTime } from "./memberFormat";
 import { opsAdminApi } from "./opsAdminApi";
+import { OpsLogSection } from "./OpsLogs";
 import { Empty, LoadState } from "./PanelState";
 import { usePanelLoad } from "./usePanelData";
 import UserStatsDialog from "./UserStatsDialog";
@@ -75,6 +76,8 @@ export default function UserActivityPanel({ toast, onAuthLost, version, onFindMe
         )}
       </div>
       {r ? <Report r={r} onFindMember={setPick} /> : <LoadState data={null} error={load.error} retry={load.retry} />}
+      {/* 11/26 접속 기록 · 사냥터 기록 (전체 500줄, 이름을 누르면 그 계정 50줄) */}
+      <OpsLogSection toast={toast} onAuthLost={onAuthLost} version={version} />
       <SeedCard toast={toast} onAuthLost={onAuthLost} onDone={() => setFresh((n) => n + 1)} />
       {pick && (
         <UserStatsDialog

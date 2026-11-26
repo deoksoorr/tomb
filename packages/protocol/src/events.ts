@@ -131,8 +131,10 @@ export type WelcomeMsg = {
   spots?: boolean;
   /** 22번: 서버 시계(ms). 고양이·유령·고블린 움직임을 모두가 같은 시각으로 계산한다 (없으면 이전 서버 → 내 시계) */
   now?: number;
-  /** 22번: 지금 나와 있는(아직 아무도 못 잡은) 황금 고블린 */
+  /** 22번: 지금 나와 있는(아직 아무도 못 잡은) 황금 고블린 — 옛 모양: 마을 고블린이고 내가 마을에 있을 때만 */
   goblin?: GoblinInfo;
+  /** 11/26 지금 나와 있는 황금 고블린 (어느 맵이든, m = 나타난 맵). 새 클라이언트는 이걸 먼저 본다 */
+  gob?: GoblinInfo;
   /** 11/15 서버가 아는 내 맵 (캠핑장 "camp"·11/16 바닷가 "sea". 없으면 마을 — 옛 서버도 마을) */
   m?: MapId;
   /** 11/15 채널 전체 인원 (마을·캠핑장 합계, 유예 중 포함). 없으면 옛 서버 → 같은 맵 사람 수로 */
@@ -165,9 +167,11 @@ export type S2C =
   | { t: "act"; sid: Sid; kind: ActKind; x: number; y: number }
   | { t: "say"; sid: Sid; id: PhraseId }
   // ── 22번 황금 고블린 (옛 클라이언트는 모르는 t라 그냥 버린다) ──
-  /** 나타났다 */
+  /** 나타났다 — 마을 고블린 (11/26부터 채널 모두에게 — 옛 캠핑장·바닷가 화면은 이 소식을 받아도 아무것도 하지 않는다) */
   | { t: "goblin"; g: GoblinInfo }
-  /** 아무도 못 잡고 사라졌다 */
+  /** 11/26 바닷가·캠핑장에 나타났다 (g.m = 맵, 채널 모두에게). 옛 클라이언트는 모르는 t라 버린다 → 옛 화면엔 마을 고블린만 */
+  | { t: "goblinMap"; g: GoblinInfo }
+  /** 아무도 못 잡고 사라졌다 (11/26부터 채널 모두에게) */
   | { t: "goblinGone"; id: string }
   /** sid가 잡았다. name = 잡은 사람 이름 (서버가 아는 입장 토큰 이름 — 클라이언트가 보낸 값이 아니다). 11/19부터 마을뿐 아니라 채널 모두(캠핑장·바닷가)에게 */
   | { t: "goblinCaught"; id: string; sid: Sid; name: string; points: number }
@@ -254,7 +258,9 @@ export type S2C =
   /** sid가 순간이동으로 (x,y)에서 사라졌다(out)·나타났다(in) → 그 자리에 반짝임 (같은 맵, 움직인 사람 빼고) */
   | { t: "tpFx"; sid: Sid; x: number; y: number; k: "out" | "in" }
   /** 운영자에게만: tp를 받지 않았다 */
-  | { t: "tpNo"; why: StaffTpDenyWhy };
+  | { t: "tpNo"; why: StaffTpDenyWhy }
+  // ── 11/26 집 목록 바뀜 (/internal/homes — 옛 클라이언트는 모르는 t라 버린다) ──
+  | HomesMsg;
 
 /** 23번 확성기 방송 (보낸 사람에게도 간다) */
 /** staff = 운영자 계정이 외친 것 (Vercel이 증서에 넣은 것만 → 이름 금색) */
@@ -262,6 +268,22 @@ export type S2C =
 /** replaces = 이 줄로 바꿔 끼울 앞 공지 id (긴급 의뢰가 끝나면 시작 공지를 끝 공지로) */
 /** mgr = 11/16 매니저 계정이 외친 것 (Vercel이 증서에 넣은 것만 → "매니저" 딱지. 옛 클라이언트는 무시한다) */
 export type MegaphoneMsg = { t: "megaphone"; id: string; name: string; text: string; scope: MegaphoneScope; ch: number; at: number; staff?: true; system?: true; replaces?: string; mgr?: true };
+
+// ── 11/26 집 목록 바뀜 ──
+// 누가 집을 분양받거나 외관·카라반 디자인·앞마당·넓히기를 바꾸면 웹이 /internal/homes로 그 채널에 한 번 알린다 (Redis 0 — 서버끼리 한 번).
+// 그 채널 화면들은 같은 주소(/api/housing/village?…&v=)로 다시 받아 5분 주기를 기다리지 않는다 (CDN이 v마다 한 번만 서버에 묻는다).
+
+/** 집 구역 (마을 분양 구역 · 포구 오두막 · 캠핑장 집터) */
+export const HOMES_ZONES = ["village", "sea", "camp"] as const;
+export type HomesZone = (typeof HOMES_ZONES)[number];
+/** 그 채널의 zone 집 목록이 바뀌었다. v = 바뀐 시각(ms) */
+export type HomesMsg = { t: "homes"; zone: HomesZone; v: number };
+/** 받은 homes 검증 (클라이언트 수신용). 모양이 틀리면 null */
+export function parseHomesMsg(m: Record<string, unknown>): HomesMsg | null {
+  if (typeof m.zone !== "string" || !(HOMES_ZONES as readonly string[]).includes(m.zone)) return null;
+  if (typeof m.v !== "number" || !Number.isInteger(m.v) || m.v <= 0) return null;
+  return { t: "homes", zone: m.zone as HomesZone, v: m.v };
+}
 
 // ── 11/17 확성기 창 고정 공지 (운영자) ──
 // 채널마다 하나 + 모든 채널 하나. 저장은 웹(Redis)이 하고, 들어올 때는 확성기 기록과 같이 받는다(/api/megaphone).

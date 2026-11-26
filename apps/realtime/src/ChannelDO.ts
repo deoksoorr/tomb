@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { CLOSE, LOBBY_DEBOUNCE_MS, PING, PONG, ROOM_CAPACITY, TICK_MS, isHuntRoom, signGrant, verifyGrant, type MapId } from "@tomb/protocol";
+import { CLOSE, LOBBY_DEBOUNCE_MS, PING, PONG, ROOM_CAPACITY, TICK_MS, connDeviceOf, isHuntRoom, signGrant, verifyGrant, type HomesZone, type MapId } from "@tomb/protocol";
 import { TICKET_HEADER, decodeTicket, rejectSocket } from "./auth";
 import { ChannelCore, type PeerRecord, type Reservation } from "./channel";
 import { type Env, channelStub, lobbyStub, readConfig } from "./config";
@@ -68,6 +68,8 @@ export class ChannelDO extends DurableObject<Env> {
   private ticking = false;
   private nextTickAt = 0;
   private reportTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 11/26 묶어 둔 집 바뀜 알림을 보낼 타이머 (homesRelay) */
+  private homesTimer: ReturnType<typeof setTimeout> | null = null;
   private alarmAt: number | null = null;
   private reapDueAt: number | null = null;
   /** 로비 보고에 붙이는 단조 증가 번호. 시각 기반이라 hibernate 뒤 새 인스턴스에서도 앞선 번호보다 크다 */
@@ -81,6 +83,8 @@ export class ChannelDO extends DurableObject<Env> {
   /** 11/18 모아 쓸 눈덩이 목록 (null = 쓸 것 없음) */
   private snowStackPending: unknown = null;
   private snowStackTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 11/26 접속 기록의 기기 종류 (방문자 → "phone·카카오톡" 등). 입장 때 User-Agent로 정하고 최종 퇴장 때 지운다 (잠들었다 깨면 비어 있을 수 있다) */
+  private readonly devices = new Map<string, string>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -165,13 +169,15 @@ export class ChannelDO extends DurableObject<Env> {
         visitorJoined: (visitorId, at) => {
           if (room) return; // 방은 월드 채널과 동시에 붙어 있을 수 있다 → 레지스트리에 올리지 않는다
           lobbyStub(env)
-            .claimVisitor(visitorId, this.channel, at)
+            .claimVisitor(visitorId, this.channel, at, this.devices.get(visitorId))
             .catch((e) => console.error("claimVisitor failed", e));
         },
-        visitorLeft: (visitorId) => {
+        visitorLeft: (visitorId, code) => {
           if (room) return;
+          const dev = this.devices.get(visitorId);
+          this.devices.delete(visitorId);
           lobbyStub(env)
-            .releaseVisitor(visitorId, this.channel)
+            .releaseVisitor(visitorId, this.channel, code, dev)
             .catch((e) => console.error("releaseVisitor failed", e));
         },
         visitorDropped: (visitorId) => {
@@ -281,17 +287,21 @@ export class ChannelDO extends DurableObject<Env> {
     }
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
+    if (this.room === null) {
+      this.devices.set(ticket.visitorId, connDeviceOf(req.headers.get("User-Agent")));
+      if (this.devices.size > 4_000) this.devices.delete(this.devices.keys().next().value!);
+    }
     this.core.join(server, ticket, Date.now());
     this.core.goblinCheck(Date.now()); // 22번: 사람이 생겼다 → 고블린 일정 확인
     this.scheduleAlarm(); // 연결이 생겼다 → 유령 연결 정리 알람
     return new Response(null, { status: 101, webSocket: client });
   }
 
-  /** 개발용 훅(/dev/goblin, DEV_HOOKS=1일 때만): 황금 고블린을 지금 나오게 한다 (RPC) */
-  devGoblin(): { id: string; seed: number; at: number; until: number; points: number } | null {
-    const c = this.core.forceGoblin(Date.now());
+  /** 개발용 훅(/dev/goblin, DEV_HOOKS=1일 때만): 황금 고블린을 지금 나오게 한다 (RPC). map = 11/26 맵을 정해서 */
+  devGoblin(map?: MapId): { id: string; seed: number; at: number; until: number; points: number; m?: string } | null {
+    const c = this.core.forceGoblin(Date.now(), map);
     this.scheduleAlarm();
-    return c ? { id: c.id, seed: c.seed, at: c.at, until: c.until, points: c.points } : null;
+    return c ? { id: c.id, seed: c.seed, at: c.at, until: c.until, points: c.points, ...(c.m ? { m: c.m } : {}) } : null;
   }
 
   /** 23번: 다른 채널의 모든 채널 확성기 (RPC). 같은 nonce는 이 채널에 한 번만 */
@@ -302,6 +312,23 @@ export class ChannelDO extends DurableObject<Env> {
   /** 11/17 확성기 창 고정 공지가 바뀌었다 (Worker의 /internal/pin, RPC). 이 채널 모두에게 보낸다 */
   pinRelay(data: string): boolean {
     return this.core.relayedPin(data);
+  }
+
+  /** 11/26 집 목록이 바뀌었다 (Worker의 /internal/homes, RPC). 구역마다 10초에 한 번만 보내고 그 사이 알림은 묶어 뒤에 보낸다 */
+  homesRelay(zone: HomesZone, v: number): boolean {
+    const r = this.core.relayHomes(zone, v, Date.now());
+    if (r.flushIn !== null) this.scheduleHomes(r.flushIn);
+    return r.ok;
+  }
+
+  private scheduleHomes(ms: number): void {
+    if (this.homesTimer !== null) return;
+    // 기다리는 타이머가 DO를 잠깐(최대 10초) 깨어 있게 한다 — 묶인 알림이 있을 때만
+    this.homesTimer = setTimeout(() => {
+      this.homesTimer = null;
+      const next = this.core.flushHomes(Date.now());
+      if (next !== null) this.scheduleHomes(next);
+    }, ms);
   }
 
   /** Lobby DO가 상태를 다시 맞출 때 부른다 (RPC) */
@@ -315,6 +342,11 @@ export class ChannelDO extends DurableObject<Env> {
     let n = 0;
     for (const v of visitorIds) if (this.core.expel(v, code, reason)) n++;
     return n;
+  }
+
+  /** 11/26 점검 시작: Worker의 /internal/maint → 운영자가 아닌 모든 접속을 4013으로 정리한다. 정리한 수 (RPC) */
+  expelForMaintenance(): number {
+    return this.core.expelForMaintenance();
   }
 
   /** Worker의 /internal/me → 이 채널에 접속 중인 그 방문자들에게 "내 정보 새로 받기". 보낸 수 (RPC) */
@@ -368,7 +400,8 @@ export class ChannelDO extends DurableObject<Env> {
   }
 
   webSocketError(ws: WebSocket): void {
-    this.core.disconnect(ws, 1006, Date.now());
+    // 11/26 1011 = 접속 기록의 「오류」 (유예는 끊김과 같다)
+    this.core.disconnect(ws, 1011, Date.now());
   }
 
   /** 재연결 유예 만료 + 유령 연결 정리 */

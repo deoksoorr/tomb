@@ -4,6 +4,8 @@ import { buildOccupancy, footprint, SPIN_R0, spinDir, type TierShape } from "@/l
 import { partitionViolation, roomPlan, type RoomPlan } from "@/lib/housing/rooms";
 import type { Placed } from "@/lib/housing/types";
 import { OFFICE_STAND_IDS } from "./officeUse";
+import { CAMP_STAND_IDS } from "./seasonUse";
+import { CAMP_BED_LIE_SHIFT, campBedCoverOf, type CampBedCover } from "./campFurnitureArt";
 
 // 3번 집 안 가구 상호작용 규칙 (Phaser 없이 테스트한다).
 //  - 1인 자리(HouseSpot): 의자·소파·책상·피아노에 앉기, 침대에 눕기, 책장 앞에서 읽기, 욕조에 들어가기.
@@ -80,6 +82,8 @@ export type HouseSpot = {
   tilt?: number;
   /** 가구 그림이 사람 앞에 그려진다 (뒤돌아 앉은 의자: 등받이가 앞) */
   behind?: boolean;
+  /** 11/26 캠핑장 침대: 누운 사람 덮개를 그 침대 이불로 (없으면 마을 침대 보라 이불 — sprites/indoorPose LieCover) */
+  cover?: CampBedCover;
 };
 
 export type HouseTarget = {
@@ -167,7 +171,15 @@ const USE_OF: Readonly<Record<string, UseKind>> = {
   // 앉는 셋(바퀴 달린 사무 의자·안마의자·부장님 책상)은 자리 (houseSpots)
   ...Object.fromEntries(OFFICE_STAND_IDS.map((id) => [id, "season" as const])),
   banker_lamp: "light",
+  // 11/26 캠핑장 집 기본 가구: 서서 쓰는 다섯(부엌 둘·화장실 칸·자개장·이불장)은 시즌 가구와 같은 길 (seasonUse CAMP_FX).
+  // 앉고 눕는 넷(침대 둘·소파·식탁·밥상)은 자리 (houseSpots)
+  ...Object.fromEntries(CAMP_STAND_IDS.map((id) => [id, "season" as const])),
+  // 펜션 TV는 스탠드처럼 켜기·끄기 (값 1 = 켜짐, 방 상태로 저장 — lib/housing/states)
+  fx_pn_tv: "lamp",
 };
+
+/** 11/26 캠핑장 기본 가구 중 마을 가구와 같은 자리를 쓰는 것 (침대 = 침대 베개 자리, 소파 = 소파 두 자리) */
+const SPOT_AS: Readonly<Record<string, string>> = { fx_cv_bed: "bed", fx_pn_bed: "bed", fx_pn_sofa: "sofa" };
 
 /** 11/19 쓰다듬는 가구: 시즌 가구처럼 돌린 앞쪽 칸에 서서 바라본다 (seasonStandSpot — 몸이 펫 그림을 25% 넘게 덮지 않고, 위쪽은 마지막) */
 export const PET_STAND_USES: ReadonlySet<UseKind> = new Set<UseKind>(["pet", "dog", "breed"]);
@@ -230,7 +242,7 @@ export const NEAR = 14;
 /** turn 가구의 r → 앉은 사람이 보는 방향 (그림의 등받이가 위 → 오른쪽 → 아래 → 왼쪽으로 돈다) */
 const FACE_BY_R: readonly DirId[] = [DIR.down, DIR.left, DIR.up, DIR.right];
 
-const spot = (kind: SpotKind, use: UseKind, u: string, x: number, y: number, facing: DirId, inside: boolean, extra: Pick<HouseSpot, "tilt" | "behind"> = {}): HouseSpot => {
+const spot = (kind: SpotKind, use: UseKind, u: string, x: number, y: number, facing: DirId, inside: boolean, extra: Pick<HouseSpot, "tilt" | "behind" | "cover"> = {}): HouseSpot => {
   const ax = Math.round(x);
   const ay = Math.round(y);
   return { id: spotSeatId(kind, ax, ay), kind, use, u, x: ax, y: ay, facing, inside, ...extra };
@@ -286,7 +298,7 @@ export function houseSpots(items: readonly Placed[], tier: TierShape, f: Frame):
     // 4방향 가구(spin)는 방향 값(4~7)이 있을 때만 돌린 자리. 예전 값(0~3)은 앞모습 그대로
     const sd = def.spin && p.r >= SPIN_R0 ? spinDir(p.r) : -1;
     const r = def.turn ? p.r % 4 : Math.max(0, sd);
-    switch (p.i) {
+    switch (SPOT_AS[p.i] ?? p.i) {
       case "chair":
       case "rattan_chair":
       // 11/20 바퀴 달린 사무 의자도 의자와 같은 규칙 (보는 쪽 앞 칸이 책상이면 그 일을 한다)
@@ -348,13 +360,19 @@ export function houseSpots(items: readonly Placed[], tier: TierShape, f: Frame):
         } else if ([...Array(b.fh).keys()].every((j) => free(p.x - 1, p.y + j))) out.push(spot("chair", "approve", p.u, b.L - 6, b.cy + 4, DIR.right, false));
         break;
       }
-      case "bed":
+      case "bed": {
         // 머리가 베개 위에 오도록 (침대 그림의 베개 = 칸 위쪽 3~8px). 돌린 침대는 발을 발판 쪽에 두고 자세를 기울인다
-        if (sd === 1) out.push(spot("bed", "lie", p.u, b.L + 8, b.Tp + 17, DIR.down, true, { tilt: 90 }));
-        else if (sd === 2) out.push(spot("bed", "lie", p.u, b.cx, b.Tp + 2, DIR.down, true, { tilt: 180 }));
-        else if (sd === 3) out.push(spot("bed", "lie", p.u, b.R - 8, b.Tp + 17, DIR.down, true, { tilt: -90 }));
-        else out.push(spot("bed", "lie", p.u, b.cx, b.Tp + 20, DIR.down, true));
+        // 11/26 캠핑장 침대는 그 침대 덮개(cover)로, 덮개 깃·베개에 맞게 자리를 조금 옮긴다 (campFurnitureArt CAMP_BED_LIE_SHIFT)
+        const d = Math.max(0, sd);
+        const [dx, dy] = CAMP_BED_LIE_SHIFT[p.i]?.[d] ?? [0, 0];
+        const cover = campBedCoverOf(p.i, d);
+        const ex = cover ? { cover } : {};
+        if (sd === 1) out.push(spot("bed", "lie", p.u, b.L + 8 + dx, b.Tp + 17 + dy, DIR.down, true, { tilt: 90, ...ex }));
+        else if (sd === 2) out.push(spot("bed", "lie", p.u, b.cx + dx, b.Tp + 2 + dy, DIR.down, true, { tilt: 180, ...ex }));
+        else if (sd === 3) out.push(spot("bed", "lie", p.u, b.R - 8 + dx, b.Tp + 17 + dy, DIR.down, true, { tilt: -90, ...ex }));
+        else out.push(spot("bed", "lie", p.u, b.cx + dx, b.Tp + 20 + dy, DIR.down, true, ex));
         break;
+      }
       case "bookshelf":
         if ([...Array(b.fw).keys()].every((i) => free(p.x + i, p.y + b.fh))) out.push(spot("book", "read", p.u, b.cx, b.B + 5, DIR.down, false));
         break;
@@ -385,6 +403,32 @@ export function houseSpots(items: readonly Placed[], tier: TierShape, f: Frame):
       case "sea_hammock":
         out.push(seaHammockSpot(p.u, Math.max(0, sd), b));
         break;
+      // 11/26 카라반 식탁 (2×2): 마주 보는 두 벤치에 한 자리씩. 앞·뒤로 놓으면 위 벤치(아래를 봄)·아래 벤치(위를 봄),
+      // 옆으로 놓으면 왼쪽 벤치(오른쪽을 봄)·오른쪽 벤치(왼쪽을 봄). 그림은 앉은 사람 뒤 (아래 벤치 사람은 등을 보인다)
+      case "fx_cv_dinette": {
+        const d = Math.max(0, sd);
+        if (d % 2 === 0) out.push(spot("chair", "sit", p.u, b.cx, b.Tp + 6, DIR.down, true), spot("chair", "sit", p.u, b.cx, b.B - 6, DIR.up, true));
+        else out.push(spot("chair", "sit", p.u, b.L + 6, b.cy + 4, DIR.right, true), spot("chair", "sit", p.u, b.R - 6, b.cy + 4, DIR.left, true));
+        break;
+      }
+      // 11/26 촌캉스 밥상 (2×1 소반): 상 앞·뒤(옆으로 놓으면 양옆) 빈 칸마다 한 자리 — 바닥에 앉아 상을 본다
+      case "fx_rr_bapsang": {
+        const d = Math.max(0, sd);
+        if (d % 2 === 0) {
+          for (let i = 0; i < b.fw; i++) {
+            const x = b.L + i * T + T / 2;
+            if (free(p.x + i, p.y + b.fh)) out.push(spot("chair", "sit", p.u, x, b.B + 4, DIR.up, false));
+            if (free(p.x + i, p.y - 1)) out.push(spot("chair", "sit", p.u, x, b.Tp - 2, DIR.down, false));
+          }
+        } else {
+          for (let j = 0; j < b.fh; j++) {
+            const y = b.Tp + j * T + T / 2 + 4;
+            if (free(p.x - 1, p.y + j)) out.push(spot("chair", "sit", p.u, b.L - 6, y, DIR.right, false));
+            if (free(p.x + b.fw, p.y + j)) out.push(spot("chair", "sit", p.u, b.R + 6, y, DIR.left, false));
+          }
+        }
+        break;
+      }
     }
   }
   return out;

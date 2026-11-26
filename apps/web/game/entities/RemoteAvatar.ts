@@ -6,6 +6,7 @@ import type { GlyphAtlas } from "../text/GlyphAtlas";
 import { AvatarView } from "./AvatarView";
 import { awayFade } from "./awayFade";
 import { applyFoodView, foodOfPeer, type FoodApplied, type FoodState } from "../camp/foodState";
+import { pokeFrame } from "../frameGovernor";
 
 // 원격 아바타: 받은 상태 값만으로 같은 상태 머신·애니메이션을 재생한다.
 // 위치는 Interpolator(경로 따라가기 + 적응형 버퍼, 짧은 외삽, 96px 스냅)가 정한다.
@@ -50,6 +51,9 @@ export class RemoteAvatar {
   netDir: DirId = DIR.down;
   /** 달리는 중 먼지 타이머 */
   dustAt = 0;
+  /** 11/26 지난번 그린 자리 (화면 안에서 움직이면 게임 루프를 줄이지 않게 — game/frameGovernor) */
+  private seenX = NaN;
+  private seenY = NaN;
   /** 점프를 시작한 (내 시계) 시각. 보간과 따로, 상태가 jump로 바뀐 순간부터 같은 포물선을 그린다 */
   private jumpAt = -1;
   /**
@@ -171,7 +175,13 @@ export class RemoteAvatar {
     const cy = ride ? y - ride.lift : y;
     const visible = !view || (cx > view.x - mx && cx < view.right + mx && cy > view.y - my && cy < view.bottom + CULL_MARGIN);
     this.view.setVisible(visible);
-    if (visible) this.view.sync(now, labelScale);
+    if (visible) {
+      this.view.sync(now, labelScale);
+      // 11/26 화면 안에서 걷거나 뛰는 사람이 있으면 가만히 있을 때의 프레임 줄이기를 잠깐 멈춘다
+      if (Math.abs(cx - this.seenX) > 0.05 || Math.abs(cy - this.seenY) > 0.05 || this.jumpAt >= 0) pokeFrame(undefined, "remote");
+    }
+    this.seenX = cx;
+    this.seenY = cy;
   }
 
   get visible(): boolean {

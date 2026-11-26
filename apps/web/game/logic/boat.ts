@@ -164,6 +164,38 @@ export function shorePoint(x: number, y: number, standable: (x: number, y: numbe
 }
 
 /**
+ * 11/26 같이 탄 사람이 방향키·조이스틱을 움직이면 내린다 (자리의 「이동하면 일어나요」와 같은 규칙 — E는 낚시로 남긴다).
+ * 운영자: 「얻어 타면 노 젓는 사람에게 납치된다」 → 아무 때나 내릴 수 있게
+ */
+export function passengerMoves(move: { ax: number; ay: number }): boolean {
+  return Math.hypot(move.ax, move.ay) >= PASSENGER_MOVE_OFF;
+}
+/** 같이 탄 사람이 내리는 방향 입력 크기 (조이스틱 살짝 닿은 건 무시) */
+export const PASSENGER_MOVE_OFF = 0.35;
+/** 탄 직후 이만큼은 움직여도 안 내린다 (걸어오며 누르던 방향키를 늦게 뗐을 때) */
+export const PASSENGER_GRACE_MS = 600;
+
+/** 11/26 같이 탄 사람이 물 한가운데서 내릴 때 배에서 떨어지는 거리 (배 몸통 밖 — 노 젓는 사람은 그대로 저어 가요) */
+export const PASSENGER_DROP = 13;
+
+/**
+ * 11/26 같이 탄 사람이 물 한가운데서 내리기 (운영자 「얻어 타면 납치된다 — 탈출이 되게」): 배 옆 헤엄칠 수 있는 물 한 자리.
+ * 옆모습 배면 아래·위(화면 앞쪽 먼저), 앞·뒷모습이면 오른쪽·왼쪽, 그다음 대각선. wet = 헤엄칠 수 있는 물인지. 없으면 null (그때는 뭍으로)
+ */
+export function passengerDrop(x: number, y: number, dir: DirId, wet: (x: number, y: number) => boolean, d = PASSENGER_DROP): { x: number; y: number } | null {
+  const side = dir === DIR.left || dir === DIR.right;
+  const tries: readonly [number, number][] = side
+    ? [[0, 1], [0, -1], [0.7, 0.7], [-0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]]
+    : [[1, 0], [-1, 0], [0.7, 0.7], [-0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]];
+  for (const [ux, uy] of tries) {
+    const px = Math.round(x + ux * d);
+    const py = Math.round(y + uy * d * (side ? 0.8 : 1));
+    if (wet(px, py)) return { x: px, y: py };
+  }
+  return null;
+}
+
+/**
  * 두 번째 자리가 노 젓는 자리(오리배는 왼쪽 자리)에서 떨어진 만큼 (배 종류·뱃머리 방향별).
  * 조각배 = 뒷자리(뱃머리 반대쪽 — 옆모습은 가로, 앞·뒷모습은 세로), 오리배 = 옆자리(어느 방향이든 화면 오른쪽으로 나란히)
  */

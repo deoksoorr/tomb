@@ -63,6 +63,7 @@ import {
   type TowerVerdict,
 } from "./tower";
 import { getTowerStore } from "./towerStore";
+import { runLevelBase } from "./cards";
 import { pushVillageNotice } from "../weeklyChamp";
 import { grantSunkenCosmetic, ownedPermanent } from "../forage/sunkenGrant";
 import { constellationById } from "./constellations";
@@ -420,6 +421,7 @@ export async function startRun(
   const sv = game === "stars" ? (planVer === STARS_PLAN_VER ? STARS_PLAN_VER : 1) : undefined;
   // 테스트 서버 운영자(슈퍼) 계정의 시험 드롭 예약: 맨 앞 묶음을 꺼내 티켓에 싣는다 (운영 서버·일반 계정은 꺼내지도 않는다)
   const td = game === "hunt" && sup && !tower ? await takeTestDrops(acct, difficulty, zone?.id) : null;
+  const rb = tower ? runLevelBase(tower) : 0;
   const ticket = await signTicket(env.sessionSecret(), {
     n: nonce,
     a: acct,
@@ -437,6 +439,8 @@ export async function startRun(
     ...(gp > 1 ? { gp } : {}),
     ...(dm ? { dm } : {}),
     ...(pt ? { pt } : {}),
+    // 11/26 엘리베이터 판 시작 레벨 (판 끝 카드 검사가 같은 값으로 센다)
+    ...(rb ? { rb } : {}),
   });
   // 별자리 잇기: 판 시작 시각의 하늘(맑은 밤 = 전설, 계절, 새벽)에 따라 계획에 들어가는 별자리가 달라진다 (끝낼 때 티켓 시각으로 다시 계산)
   const sky = starSkyAt(now);
@@ -449,6 +453,7 @@ export async function startRun(
     seed,
     timeLimitSec: limit,
     ...(tower ? { tower } : {}),
+    ...(rb ? { towerLv0: rb } : {}),
     ...(tier ? { tier } : {}),
     ...stars,
     ...(td ? { testDrops: td } : {}),
@@ -822,7 +827,7 @@ async function finishTower(
   // 11/15 테스트 서버 슈퍼 계정만 처치 속도 상한을 빼고 (테스트용 무적·공격력 ×20) — 운영 서버에서는 isSuperHunter가 늘 false
   const sup = await isSuperHunter(acct);
   // 11/18 최대 피해 검사(dm)도 슈퍼 계정은 뺀다 (테스트용 공격력 ×20)
-  const v = evalTower({ seed: t.s, level, start, ...(gp ? { gp } : {}), ...(t.dm && !sup ? { dm: t.dm } : {}) }, result, elapsed, { lax: sup });
+  const v = evalTower({ seed: t.s, level, start, ...(gp ? { gp } : {}), ...(t.dm && !sup ? { dm: t.dm } : {}), ...(t.rb ? { rb: t.rb } : {}) }, result, elapsed, { lax: sup });
   // 11/15 거절·의심 판은 운영 로그와 관리자 오류 모음(/admin 오류)에 남긴다 (정직한 판이 걸리면 원인을 바로 찾게 — 계정은 앞 6자리만)
   const info = {
     acct: acct.slice(0, 6),

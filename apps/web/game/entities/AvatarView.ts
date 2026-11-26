@@ -885,6 +885,13 @@ export class AvatarView {
   }
 
   /** 해먹 누운 그림으로 (F5). 천이 해먹 소품과 픽셀 1:1로 겹치도록 표시 원점을 맞춘다 */
+  /** 11/26 누운 자세 덮개를 바꾼다 (집 침대마다 다른 이불 — 침대에 누워 있으면 바로 다시 그린다) */
+  setLieCover(cover: LieCover): void {
+    if (cover === this.lieCover) return;
+    this.lieCover = cover;
+    if (this.pose === "lie") this.indoorPose("lie");
+  }
+
   /** 11/16 해먹 천 무늬를 바꾼다 (누워 있으면 바로 다시 그린다) */
   setHammockSkin(skin: HammockSkin): void {
     if (skin === this.hammockSkin) return;

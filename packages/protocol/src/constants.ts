@@ -74,6 +74,7 @@ export const CLOSE = {
   // 47번 운영: 옛 클라이언트는 모르는 코드라 평소처럼 재접속을 시도하고, 입장 토큰 거절(403)에서 멈춘다
   KICKED: 4011, // 운영자가 지금 내보냄 (정지는 아님) → 자동 재접속하지 않고 안내만
   BANNED: 4012, // 이용 제한(정지·IP 차단) → 자동 재접속하지 않고 제한 화면으로
+  MAINTENANCE: 4013, // 11/26 서버 점검 중 (운영자 빼고 모두) → 자동 재접속하지 않고 점검 화면, 끝나면 다시 들어온다
 } as const;
 export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 
@@ -172,7 +173,8 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 //      아이템 색을 몰라 한 번 새로고침 (11/22). 같은 판에 잡화점 「옷」 다섯 벌(wr_*)·옷 깃 → 목 꾸미기 그리기 순서도 함께 (옛 화면은 wr_*를 몰라 버릴 뿐)
 // 83 = 수레 구매 때 자리(map·x·y)를 같이 보냄 — 옛 화면은 자리를 몰라 구매가 막혀 한 번 새로고침 (11/23)
 // 84 = 눈꽃 창가를 벽 창문 모양(집 배치 window)으로, 없앤 창(말풍선 탭·확성기 창·내 정보 탭) — 옛 화면은 바닥에 놓으려다 막혀 한 번 새로고침 (11/24)
-export const CLIENT_VERSION = 84;
+// 85 = 언젠가 캠핑장 개편(폭포 계곡 새 배치·좌석·낚시 자리·나룻배, CAMP_MAP_VERSION 4)·캠핑장 집(zone camp)·황금 고블린 맵 무작위(goblinMap) — 옛 화면은 없어진 좌석·옛 좌표를 보내 한 번 새로고침 (11/26)
+export const CLIENT_VERSION = 85;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */

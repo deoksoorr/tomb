@@ -115,6 +115,16 @@ describe("buildUserStats", () => {
     expect(row(s, "sanction", "받은 유저 신고")?.value).toBe("3번");
   });
 
+  it("11/26 캠핑장 집: 채널·터 이름 + 종류·앞마당 단계·카라반 디자인", () => {
+    const camp = (c: object, lot: number) => ({ ch: 2, lot, score: 15, zone: "camp", camp: c }) as unknown as NonNullable<UserStatsRaw["houses"]>["village"];
+    const cv = buildUserStats(raw({ houses: { village: null, sea: null, camp: camp({ kind: "caravan", yard: 3, design: { model: "airstream", color: 2, awning: 1 } }, 9) } }));
+    expect(row(cv, "deco", "캠핑장 집")).toMatchObject({ value: "2채널 숲 쪽 9번 카라반", note: "카라반, 앞마당 3단계, 에어스트림 · 청록 · 파랑 차양, 꾸밈 점수 15" });
+    const ps = buildUserStats(raw({ houses: { village: null, sea: null, camp: camp({ kind: "pension", yard: 1 }, 13) } }));
+    expect(row(ps, "deco", "캠핑장 집")?.note).toBe("펜션, 앞마당 1단계, 꾸밈 점수 15");
+    expect(row(buildUserStats(raw()), "deco", "캠핑장 집")?.value).toBe("없음");
+    expect(row(buildUserStats(raw({ houses: null })), "deco", "캠핑장 집")?.value).toBe("—");
+  });
+
   it("clock", () => {
     expect(clock(9_950)).toBe("9.9초");
     expect(clock(125_000)).toBe("2분 5.0초");

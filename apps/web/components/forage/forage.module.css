@@ -957,3 +957,89 @@
 .catchGrade[data-grade="2"] {
   background: #ff8a3d;
 }
+
+/* ── 11/26 맵별 도감 완성 배지 (마을·바닷가·캠핑장) ── */
+.mapBadges {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 8px 0 10px;
+}
+
+.mapBadge {
+  display: grid;
+  gap: 3px;
+  padding: 6px 8px;
+  background: var(--bg-deep);
+  box-shadow: 0 0 0 1px var(--line);
+  font-size: 12px;
+  min-width: 0;
+}
+
+.mapBadge[data-done] {
+  box-shadow: 0 0 0 1px var(--candle);
+  background: color-mix(in srgb, var(--candle) 12%, var(--bg-deep));
+}
+
+.mapBadgeHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.mapBadgeHead b {
+  color: var(--bone);
+  font-weight: 600;
+}
+
+.mapBadgeHead small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.mapBadgeHead em {
+  font-style: normal;
+  color: var(--candle);
+  font-size: 11px;
+}
+
+.mapBadgeNum {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mapBadgeTrack {
+  position: relative;
+  height: 4px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.mapBadgeTrack > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--moss);
+}
+
+.mapBadge[data-done] .mapBadgeTrack > span {
+  background: var(--candle);
+}
+
+/* 칸 안의 맵 묶음 제목 (마을 · 바닷가 · 캠핑장) */
+.dexGroup {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  margin: 10px 0 4px;
+  font-size: 12px;
+  color: var(--bone);
+}
+
+.dexGroup span {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}

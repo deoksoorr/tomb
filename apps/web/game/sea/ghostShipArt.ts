@@ -3,6 +3,7 @@ import type { MapConcept } from "@/lib/mapConcept";
 import { seasonHat, seasonHolly, seasonKey, seasonMitt, seasonScarf, seasonSnow } from "../sprites/npcSeasonArt";
 import { darken, Grid, lighten, mix, type Color } from "../sprites/pixel";
 import { pick, toneOutline } from "./seaArt";
+import { padded, type SeaPad } from "./seaPad";
 import { hashU } from "./seaLayout";
 import {
   deckBack,
@@ -80,7 +81,7 @@ const SAIL = hexes(["#f2fbf6", "#e0f3ec", "#c8e7de", "#a9d3c9", "#8ebdb4"]);
 export function ghostBackArt(): Grid {
   const W = GHOST_ART_W;
   const H = GHOST_ART_H;
-  const g = new Grid(W, H);
+  const g = padded(W, H, GHOST_HULL_PAD);
   // 갑판 판자: 가로로 긴 널 (줄마다 이음매가 엇갈려요). 마당은 밝게, 뒤쪽 줄·뱃머리 끝은 어둡게
   for (let x = G_DECK_X0; x <= G_DECK_X1; x++) {
     const yb = Math.round(deckBack(x));
@@ -287,7 +288,7 @@ export function ghostBackArt(): Grid {
     g.hline(x - 2, x + 2, y + 5, IRON_HI);
   }
   toneOutline(g, 0.4);
-  return g;
+  return g.done();
 }
 
 /** 배에 매단 녹색 등불 자리 (그림 좌표 — 빛 번짐도 여기에) */
@@ -305,7 +306,7 @@ export const GHOST_CABIN_WINDOWS: readonly number[] = [G_CABIN.x0 + 8, Math.roun
 export function ghostFrontArt(): Grid {
   const W = GHOST_ART_W;
   const H = GHOST_ART_H;
-  const g = new Grid(W, H);
+  const g = padded(W, H, GHOST_HULL_PAD);
   for (let x = G_DECK_X0 - 6; x <= G_DECK_X1 + 4; x++) {
     const xx = Math.max(G_DECK_X0, Math.min(G_DECK_X1, x));
     const w = deckWidth(xx);
@@ -391,7 +392,7 @@ export function ghostFrontArt(): Grid {
   }
   g.rect(lx - 4, ly0 - 1, 9, 2, IRON); // 고리
   toneOutline(g, 0.42);
-  return g;
+  return g.done();
 }
 /** 뱃전 현호: 뱃머리·고물 쪽으로 올라가는 높이 (px) */
 export function sheerLift(gx: number): number {
@@ -405,7 +406,7 @@ export const GHOST_PORTS: readonly number[] = [50, 128, 164, 200];
 
 /** 녹빛 창 · 선실 창 빛만 (ADD로 겹쳐 밤에 환하게) */
 export function ghostWindowsArt(): Grid {
-  const g = new Grid(GHOST_ART_W, GHOST_ART_H);
+  const g = padded(GHOST_ART_W, GHOST_ART_H, GHOST_HULL_PAD);
   const dot = (x: number, y: number, r: number) => {
     for (let yy = -r - 2; yy <= r + 2; yy++)
       for (let xx = -r - 2; xx <= r + 2; xx++) {
@@ -416,7 +417,7 @@ export function ghostWindowsArt(): Grid {
   };
   for (const px of GHOST_PORTS) dot(px, Math.round(deckFront(px)) + 10, 2);
   for (const wx of GHOST_CABIN_WINDOWS) dot(wx, G_CABIN.top + 12, 2);
-  return g;
+  return g.done();
 }
 
 // ── 돛 (반투명, 해진 밑단 · 구멍 · 덧댄 천 · 큰 돛엔 흐릿한 해골 문양) ──
@@ -474,11 +475,32 @@ export function ghostSailArt(i: number): Grid {
   return g;
 }
 
+// 11/26 둘레 여백 (seaSpriteEdge.test): 배 뒤판·앞판·창 빛은 같은 여백 (뱃머리 끝 윤곽이 왼쪽 끝 열에 닿았다 — 셋이 같은 자리에 겹쳐요),
+// 좌판(차양이 맨 윗줄·왼쪽 끝에 닿았다), 깃발(너덜한 끝·물결이 프레임 끝에 닿았다 — 프레임마다), 다리 입구 기둥 등불(갓이 맨 윗줄).
+// 원점 왼쪽 위로 세우는 그림은 GhostShip이 이 여백만큼 왼쪽·위로 옮겨 세워요 (자리 그대로)
+export const GHOST_HULL_PAD: SeaPad = { x: 1, top: 0, bottom: 0 };
+export const STALLS_PAD: SeaPad = { x: 5, top: 2, bottom: 0 };
+export const FLAG_PAD: SeaPad = { x: 1, top: 1, bottom: 0 };
+/** 다리 입구 기둥: 기둥 밑동이 맨 아랫줄까지라 아래도 한 줄 (GhostShip이 그만큼 내려 세워요) */
+export const GATE_POST_PAD: SeaPad = { x: 1, top: 2, bottom: 1 };
+
 /** 꼭대기 깃발 (3장 — 너덜너덜 휘날려요) */
 export const FLAG_W = 16;
 export const FLAG_H = 9;
 export function ghostFlagArt(): { grid: Grid; frameW: number; frameH: number } {
-  const g = new Grid(FLAG_W * 3, FLAG_H);
+  // 프레임마다 여백 (그리는 좌표는 프레임 안 그대로 — f * FLAG_W + x 를 프레임 칸으로 옮겨 찍어요)
+  const FW = FLAG_W + FLAG_PAD.x * 2;
+  const FH = FLAG_H + FLAG_PAD.top;
+  const sheet = new Grid(FW * 3, FH);
+  const g = {
+    set: (x: number, y: number, c: number) => {
+      const f = Math.floor(x / FLAG_W);
+      sheet.set(f * FW + FLAG_PAD.x + (x - f * FLAG_W), y + FLAG_PAD.top, c);
+    },
+    rect: (x: number, y: number, w: number, h: number, c: number) => {
+      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) g.set(x + i, y + j, c);
+    },
+  };
   for (let f = 0; f < 3; f++)
     for (let x = 0; x < FLAG_W; x++) {
       const wave = Math.round(Math.sin(x / 2.6 + f * 2.1) * 1.2);
@@ -493,7 +515,7 @@ export function ghostFlagArt(): { grid: Grid; frameW: number; frameH: number } {
     g.set(ox, 3 + w, 0x1e262e);
     g.set(ox + 2, 3 + w, 0x1e262e);
   }
-  return { grid: g, frameW: FLAG_W, frameH: FLAG_H };
+  return { grid: sheet, frameW: FW, frameH: FH };
 }
 
 // ── 장터 좌판 둘 (갑판 뒤쪽) ──
@@ -502,7 +524,7 @@ export const STALLS_H = 46;
 /** 좌판 그림 왼쪽 위의 배 그림 좌표 */
 export const STALLS_G = { x: 84 - 2, y: G_BACK_ROW - 46 + 2 } as const;
 export function ghostStallsArt(): Grid {
-  const g = new Grid(STALLS_W, STALLS_H);
+  const g = padded(STALLS_W, STALLS_H, STALLS_PAD);
   const stall = (x0: number, cloth: readonly Color[], awnA: Color, awnB: Color, goods: (x: number, y: number) => void) => {
     const w = 38;
     const top = 18;
@@ -585,7 +607,7 @@ export function ghostStallsArt(): Grid {
     g.set(x0 + 35, top - 4, 0xe8987a);
   });
   toneOutline(g, 0.36);
-  return g;
+  return g.done();
 }
 
 // ── 유령 상인 (반투명 선장 유령 — 등불을 들고 둥실, 2장) ──
@@ -733,7 +755,7 @@ export function ghostPlankFrontArt(): Grid {
 export const GATE_POST_W = 9;
 export const GATE_POST_H = POST_H + 9;
 export function ghostGatePostArt(): Grid {
-  const g = new Grid(GATE_POST_W, GATE_POST_H);
+  const g = padded(GATE_POST_W, GATE_POST_H, GATE_POST_PAD);
   const cx = 4;
   // 기둥 (둥근 나무 · 왼쪽 밝게) · 밧줄 매듭
   for (let y = 8; y < GATE_POST_H; y++) {
@@ -754,7 +776,7 @@ export function ghostGatePostArt(): Grid {
   g.set(cx, 3, GHOST_GREEN[0]);
   g.hline(cx - 3, cx + 3, 7, IRON_HI);
   toneOutline(g, 0.36);
-  return g;
+  return g.done();
 }
 
 /** 안개 한 뭉치 (부드러운 가장자리 — 선형 필터로 늘여 써요) */

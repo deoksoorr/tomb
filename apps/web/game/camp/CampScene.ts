@@ -1,21 +1,24 @@
 import * as Phaser from "phaser";
 import {
   CAMP_ARRIVE,
-  CAMP_CAMPFIRE,
+  CAMP_CAMPFIRES,
+  CAMP_PLUNGE,
   campCampfireOfSeat,
+  campFallsViewSeat,
   CAMP_BOUNDS,
   CAMP_BUS_STOP,
   CAMP_HEIGHT,
   CAMP_NPCS,
   CAMP_ROAD,
-  CAMP_SCOPES,
   CAMP_WIDTH,
   DIR,
   STATE,
   TELEPORT_DIST,
   campSeatById,
+  campRowboatDismount,
   dexBadgeCats,
-  inCampStream,
+  campWet,
+  inCampPlunge,
   type BbqItemId,
   type BbqStand,
   isAvatarBody,
@@ -28,6 +31,8 @@ import {
   type Sid,
   type WelcomeMsg,
   fireworkShowMs,
+  CAMP_HAMMOCK_LIFT,
+  campHammockById,
 } from "@tomb/protocol";
 import { ambienceAt, parseAmbienceOverride } from "@/lib/ambience";
 import type { ResumeState } from "@/lib/resume";
@@ -35,7 +40,7 @@ import { TEX } from "../assets/manifest";
 import { bridge } from "../bridge";
 import { DEPTH, SIT_IDLE_MS } from "../config";
 import { Player, type SeatRequester } from "../entities/Player";
-import { RemoteAvatar } from "../entities/RemoteAvatar";
+import { HAMMOCK_FRONT, RemoteAvatar } from "../entities/RemoteAvatar";
 import { peerList } from "../logic/peerList";
 import { peerAt } from "../entities/peerHit";
 import { SeatHint } from "../entities/SeatHint";
@@ -62,8 +67,9 @@ import { addWorldTintBounds, worldTintOf } from "../world/worldTint";
 import { Riding } from "../world/zoo/Riding";
 import { CampfireView } from "../world/Campfire";
 import { campfireLevel, nearestCampfire } from "../world/campfireMath";
-import { LookoutScope } from "./LookoutScope";
-import { StarScopes } from "../scopes/StarScopes";
+import { FallsView } from "./fallsView";
+import { Effects } from "../world/Effects";
+import { campCurrent } from "./campWater";
 import { WeatherSound } from "../world/WeatherSound";
 import { SnowFight } from "../world/SnowFight";
 import { SnowGrid, type SnowNpc } from "../world/snowNpc";
@@ -81,8 +87,17 @@ import { CampLife } from "./campLife";
 import { CampSnowmen } from "./CampSnowmen";
 import { CAMP_SCENE, type CampFriend, type CampHost, type CampSceneData } from "./campHost";
 import { campHousingHost, type CampHousingHost } from "./campHousingHost";
+import { CampHousing } from "./campHousing";
+import { setDoorHint } from "../logic/doorHint";
+import { CampRowboats } from "./CampRowboats";
+import { CampPlay } from "./CampPlay";
+import { CampFootbath } from "./campFootbath";
+import { RAFT_LADDERS, type RaftLadder } from "./campLayout";
+import { campWalkGrid } from "./campLayout";
+import { AwayRoute, gridOfCells } from "../world/AwayRoute";
+import { campGoblin } from "./campGoblin";
 import { campLines, campNpcName, CAMP_WELCOME } from "./campTalk";
-import { campNeighborSeat, campPickSeat, CAMP_MULTI_SEAT } from "./campSit";
+import { campFootSeatReachable, campLadderAt, campNeighborSeat, campPickSeat, campZoneSeat, CAMP_MULTI_SEAT, isCampLadderSeat, isCampZoneSeat } from "./campSit";
 import { publishRide, standForGate } from "@/lib/rideGate";
 import type { CampInteractable } from "./campTypes";
 import { qaUrlAllowed } from "@/lib/qaUrl";
@@ -96,6 +111,8 @@ import { campConceptNow, type CampActor } from "./CampConceptDecor";
 // 말풍선·이모티콘·채팅·몸짓(같은 맵 사람끼리), 친구 옆으로 가기. 텐트·요리·매점·의뢰는 다음 차수.
 
 const NO_MOVE: MoveInput = { ax: 0, ay: 0, run: false };
+/** 11/26 집 문·집터 (닿으면 앉을 자리보다 먼저) */
+const isDoorItem = (o: CampInteractable): boolean => o.kind === "house" || o.kind === "lot";
 const EMPTY_SEATS = new Map<string, Sid>();
 const DUST_MS = 90;
 const MINIMAP_MS = 250;
@@ -127,6 +144,18 @@ export class CampScene extends Phaser.Scene {
   private forage!: CampForage;
   /** 11/23 골목 붕어빵 수레 (그 회차 자리가 이 맵일 때만 — world/BungeoCartView) */
   private bungeo: BungeoCartView | null = null;
+  /** 11/26 황금 고블린 (캠핑장에 나오면 그리기·잡기 — game/camp/campGoblin, 장면이 꺼지면 스스로 치운다) */
+  private goblin: ReturnType<typeof campGoblin> | null = null;
+  /** 11/26 윤슬 낚시터 2인 나룻배 (game/camp/CampRowboats) */
+  private rowboats: CampRowboats | null = null;
+  /** 11/26 오늘 미션 「팔기」 길 안내 → 낚시터 사장님 (game/world/AwayRoute) */
+  private awayRoute: AwayRoute | null = null;
+  /** 11/26 놀이터 대형 트램펄린·워터 슬라이드(눈썰매) (game/camp/CampPlay) */
+  private play: CampPlay | null = null;
+  /** 11/26 족욕탕 발 담그기 (game/camp/campFootbath) */
+  private footbath: CampFootbath | null = null;
+  /** 11/26 캠핑장 집 (카라반·펜션·촌캉스 겉모습·문·앞마당 자리 — game/camp/campHousing) */
+  private homes: CampHousing | null = null;
   /** 11/16 캠핑장 주민 (돌아다니는 캠퍼 유령들 — game/camp/campLife) */
   private life: CampLife | null = null;
   /** 11/17 눈사람 만들기 (겨울·크리스마스 판 — game/camp/CampSnowmen) */
@@ -137,13 +166,13 @@ export class CampScene extends Phaser.Scene {
   private snowGrid: SnowGrid | null = null;
   /** 눈싸움 막힌 칸 (맵 충돌 — 계곡 물은 뺀다) */
   private campSolid(x: number, y: number): boolean {
-    return (this.snowGrid ??= new SnowGrid(CAMP_WIDTH, CAMP_HEIGHT).fillGroups([this.map.colliders, this.map.furnitureColliders], (cx, cy) => inCampStream(cx, cy, 0))).blocked(x, y);
+    return (this.snowGrid ??= new SnowGrid(CAMP_WIDTH, CAMP_HEIGHT).fillGroups([this.map.colliders, this.map.furnitureColliders], (cx, cy) => campWet(cx, cy))).blocked(x, y);
   }
   private snowNpcs: { life: readonly SnowNpc[]; all: SnowNpc[] } | null = null;
-  /** 전망대 망원경 (망원 뷰) */
-  private scope!: LookoutScope;
-  /** 11/16 별 망원경 (전망대 계단 아래·계곡 둑 — 별자리 잇기, game/scopes) */
-  private stars: StarScopes | null = null;
+  /** 11/26 폭포 멍 (폭포 다리 의자 — 시점 바꾸기) */
+  private fallsView: FallsView | null = null;
+  /** 11/26 폭포 밑 물살 안내 (한 번 들어갈 때마다 한 번) */
+  private plungeWarned = false;
   private meScreen!: MeScreen;
   private fireworks: Fireworks | null = null;
   /** 11/15 큰 모닥불 불멍 (마을 모닥불과 같은 연출 — game/world/Campfire.ts) */
@@ -210,7 +239,7 @@ export class CampScene extends Phaser.Scene {
     // 11/15 버스 창밖 연출 아래에서 미리 만들 때(parked)는 프레임마다 조금씩 만들어요 (한 프레임에 몰면 100ms 가까이 멈췄어요)
     // 지난 여행에서 남은 것을 다시 지우지 않게 비워 두고 시작해요 (다 만들기 전에 닫힐 수 있어요)
     const self = this as unknown as Record<string, unknown>;
-    for (const k of ["map", "player", "rig", "scope", "stars", "atmos", "lighting", "expr", "campfire", "forage", "meScreen"]) self[k] = undefined;
+    for (const k of ["map", "player", "rig", "fallsView", "atmos", "lighting", "expr", "campfire", "forage", "meScreen"]) self[k] = undefined;
     this.building = this.build();
     if (this.parked) {
       this.scene.setVisible(false);
@@ -252,6 +281,9 @@ export class CampScene extends Phaser.Scene {
     const spawn = this.spawnPoint();
     this.player = new Player(this, h.atlas, spawn.x, spawn.y, h.color, h.name, isAvatarBody(h.body) ? h.body : "hood");
     this.player.titleSpeed = true;
+    // 11/26 소·계곡·저수지는 걸어 들어가면 헤엄쳐요 (마을 강·호수와 같은 규칙) — 계곡은 아래로 흐르고 폭포 밑은 바깥으로 밀어내요
+    this.player.water = (x, y) => campWet(x, y);
+    this.player.current = (x, y) => campCurrent(x, y);
     this.player.view.setLook([...h.look]);
     this.physics.add.collider(this.player.sprite, this.map.colliders);
     const furniture = this.physics.add.collider(this.player.sprite, this.map.furnitureColliders);
@@ -263,7 +295,7 @@ export class CampScene extends Phaser.Scene {
 
     this.rig = new CameraRig(this, this.player.sprite, canvas, (x, y) => this.onTap(x, y));
     this.rig.setMapSize(CAMP_WIDTH, CAMP_HEIGHT);
-    this.scope = new LookoutScope(this, { rig: this.rig, atlas: h.atlas, reduced: h.reduced });
+    this.fallsView = new FallsView(this, this.rig, h.reduced);
     yield;
     const tint = worldTintOf(this.game);
     if (tint) addWorldTintBounds(this, tint);
@@ -298,6 +330,89 @@ export class CampScene extends Phaser.Scene {
     });
     this.forage = new CampForage({ scene: this, atlas: h.atlas, reduced: h.reduced, colliders: this.map.colliders, player: () => this.player, net: () => h.net, seats: () => this.seats, remotes: () => this.remotes, toast: (m) => this.toast(m) });
     this.life = new CampLife({ scene: this, atlas: h.atlas, sfx: h.sfx, reduced: h.reduced, player: () => this.player, net: () => h.net, override: this.hourOverride });
+    this.goblin = campGoblin(this, h, () => this.player, () => this.rig.labelScale);
+    this.rowboats = new CampRowboats({
+      scene: this,
+      reduced: h.reduced,
+      player: () => this.player,
+      remotes: () => this.remotes,
+      seats: () => (h.net.online ? this.seats : EMPTY_SEATS),
+      mySid: () => (h.net.online ? h.net.mySid : null),
+      online: () => h.net.online,
+      sit: (id) => h.net.sit(id),
+      stand: () => h.net.stand(),
+      toast: (m) => this.toast(m),
+      splash: (x, y) => (this.fx ??= new Effects(this, h.reduced)).splash(x, y),
+      beforeBoard: () => {
+        if (myBig() > 1) {
+          this.toast(BIG_RIDE_TOAST);
+          return false;
+        }
+        this.closeTalk();
+        this.riding.dismount(false);
+        return true;
+      },
+      // 배 위 낚시: 나룻배가 떠 있는 물 = boat:reservoir (protocol boatFishingSpotId "rowboat")
+      fish: (at) => this.forage.f.fishFromBoat({ ...at, water: "rowboat" }),
+      stopFishing: () => this.forage.f.stopBoatFishing(),
+      fishing: () => this.forage.f.fishingFromBoat,
+    });
+    let routeGrids: ReturnType<typeof gridOfCells>[] | null = null;
+    this.awayRoute = new AwayRoute({
+      scene: this,
+      atlas: h.atlas,
+      reduced: h.reduced,
+      map: "camp",
+      player: () => this.player,
+      grids: () => (routeGrids ??= [gridOfCells(campWalkGrid(8, false)), gridOfCells(campWalkGrid(8, true))]),
+    });
+    this.footbath = new CampFootbath(this, h.reduced);
+    this.play = new CampPlay({
+      scene: this,
+      reduced: h.reduced,
+      player: () => this.player,
+      remotes: () => this.remotes,
+      seats: () => (h.net.online ? this.seats : EMPTY_SEATS),
+      mySid: () => (h.net.online ? h.net.mySid : null),
+      online: () => h.net.online,
+      sit: (id) => h.net.sit(id),
+      seatReq: () => this.seatReq,
+      clock: () => h.net.serverNow(),
+      toast: (m) => this.toast(m),
+      splash: (x, y) => (this.fx ??= new Effects(this, h.reduced)).splash(x, y),
+      splashSound: (g) => h.sfx.splash(g),
+      snowy: () => isSnowy(campConceptNow()),
+      beforeRide: () => {
+        if (myBig() > 1) {
+          this.toast(BIG_RIDE_TOAST);
+          return false;
+        }
+        this.closeTalk();
+        this.riding.dismount(false);
+        return true;
+      },
+    });
+    this.homes = new CampHousing({
+      scene: this,
+      atlas: h.atlas,
+      reduced: h.reduced,
+      map: this.map,
+      concept: () => campConceptNow(),
+      channel: () => (h.net.online ? h.net.channel : null),
+      warp: (x, y) => {
+        const now = this.time.now;
+        if (this.player.sitting) this.player.stand(now, this.seatReq);
+        this.player.warp(x, y, now, null);
+        h.net.warp(x, y);
+        this.rig.recenter();
+      },
+      toast: (m) => this.toast(m),
+      player: () => this.player,
+      // 11/26 촌캉스 아궁이 불: 같은 채널에 알린다 (저장 없이 — 실시간 use 중계)
+      sendUse: (u, a) => {
+        if (h.net.online) h.net.use(u, a);
+      },
+    });
     this.snow = new CampSnowmen({ scene: this, atlas: h.atlas, sfx: h.sfx, reduced: h.reduced, player: () => this.player, net: () => h.net, remotes: () => this.remotes, myName: () => h.name, toast: (m) => this.toast(m), concept });
     this.fight = new SnowFight({
       scene: this,
@@ -308,9 +423,9 @@ export class CampScene extends Phaser.Scene {
       net: () => h.net,
       remotes: () => this.remotes,
       move: () => this.move,
-      live: () => !!this.snow?.on && !this.covered && !this.locked && !this.parked && !this.scope.isOpen,
+      live: () => !!this.snow?.on && !this.covered && !this.locked && !this.parked,
       blocked: () => (this.snow?.holding ? "눈덩이를 내려놓고 던져요." : null),
-      water: (x, y) => inCampStream(x, y, 0),
+      water: (x, y) => campWet(x, y),
       solid: (x, y) => this.campSolid(x, y),
       // 11/18 마을과 같은 규칙: 나무·소품 그림 앞면에 박히고, 자국은 그림의 불투명 픽셀 위에만
       occluders: new SnowOccluders({
@@ -326,7 +441,6 @@ export class CampScene extends Phaser.Scene {
       targets: { hit: (ax, ay, bx, by) => this.snow?.snowballHit(ax, ay, bx, by) ?? null, surprise: (id) => this.snow?.surprise(id) },
       toast: (m) => this.toast(m),
     });
-    this.stars = new StarScopes(this, { spots: CAMP_SCOPES, style: "camp", player: () => this.player, net: () => h.net, seats: () => this.seats, judged: () => this.spotsJudged, toast: (m) => this.toast(m), sfx: h.sfx });
 
     yield;
 
@@ -356,7 +470,8 @@ export class CampScene extends Phaser.Scene {
     this.bindBridge();
     bridge.emit("map:changed", { map: "camp" });
     if (this.data0.arrive === "bus") this.arriveByBus();
-    else if (this.data0.arrive === "friend") {
+    // 11/26 집 문 앞으로 왔으면(door) 친구 도착 안내 없이 (문 앞 맞추기는 CampTrip이 맵을 옮긴 뒤에)
+    else if (this.data0.arrive === "friend" && this.data0.friend?.door === undefined) {
       // 11/20 운영자 순간이동이면 도착 반짝임
       if (this.data0.friend?.tp) playTeleportFx(this, this.player.x, this.player.y, "in", this.host.reduced);
       bridge.emit("friend:notice", { message: this.data0.friend?.tp ? STAFF_TP_ARRIVED : FRIEND_ARRIVED });
@@ -378,6 +493,8 @@ export class CampScene extends Phaser.Scene {
       const r = d.resume;
       const seat = r.pose === "sitChair" && r.seatId ? campSeatById(r.seatId) : undefined;
       if (seat) return standPoint(seat);
+      // 11/26 나룻배에 타고 있었으면 선착장 위에 (다시 탈지는 applyArrivalPose → CampRowboats.resume)
+      if (r.pose === "boat") return campRowboatDismount({ x: r.x, y: r.y });
       return this.map.standable(r.x, r.y) ? { x: r.x, y: r.y } : CAMP_ARRIVE;
     }
     if (d.arrive === "friend" && d.friend) return this.besideFriend(d.friend);
@@ -408,6 +525,7 @@ export class CampScene extends Phaser.Scene {
         this.resumeSeat = seat.id;
       } else if (r.pose === "sitGround") pl.sit(null, now, null);
       pl.view.apply(pl.state, pl.dir, now);
+      if (r.pose === "boat" && r.seatId) this.rowboats?.resume(r.seatId, r.x, r.y, pl.dir);
     }
   }
 
@@ -449,10 +567,25 @@ export class CampScene extends Phaser.Scene {
     } catch {
       // 저장소를 못 쓰면 다음에도 안내한다
     }
-    this.time.delayedCall(this.data0.arrive === "bus" ? 2600 : 900, () => {
+    // 11/26 첫 방문 안내(「걸어 보기」…)나 다른 창(안내 뒤에 뜨는 새 이웃 꾸러미 등)이 떠 있으면 인사 창이 겹친다 → 다 닫힌 뒤에 인사한다
+    const busy = () => !!bridge.last("tutorial:on")?.on || !!bridge.last("ui:blockKeys")?.blocked;
+    const greet = () => {
       if (this.cleaned) return;
+      if (busy()) {
+        const offs: (() => void)[] = [];
+        const again = () => {
+          if (busy()) return;
+          for (const off of offs) off();
+          // 안내가 끝나면 곧이어 새 이웃 꾸러미 창이 뜰 수 있다 — 조금 기다렸다가 다시 본다
+          this.time.delayedCall(2000, greet);
+        };
+        offs.push(bridge.on("tutorial:on", again), bridge.on("ui:blockKeys", again));
+        this.unsubs.push(...offs);
+        return;
+      }
       this.openTalk("keeper", CAMP_WELCOME, false);
-    });
+    };
+    this.time.delayedCall(this.data0.arrive === "bus" ? 2600 : 900, greet);
   }
 
   // ── 실시간 (같은 채널, 캠핑장 사람만) ──
@@ -477,12 +610,14 @@ export class CampScene extends Phaser.Scene {
       },
       onSeat: (seatId, sid) => {
         this.forage.f.seatChanged(seatId, sid);
-        this.stars?.onSeat(seatId, sid);
+        this.rowboats?.onSeat(seatId, sid);
+        this.play?.onSeat(seatId, sid);
         this.onSeat(seatId, sid);
       },
       onSeatDenied: (seatId) => {
         if (this.forage.f.seatDenied(seatId)) return;
-        if (this.stars?.onSeatDenied(seatId)) return;
+        if (this.rowboats?.onSeatDenied(seatId)) return;
+        if (this.play?.onSeatDenied(seatId)) return;
         if (this.player.seat?.id === seatId) this.player.seatDenied(seatId, this.time.now);
       },
       onEmote: () => undefined,
@@ -503,6 +638,9 @@ export class CampScene extends Phaser.Scene {
         const r = this.remotes.get(sid);
         if (r?.visible) r.view.playAct(kind, performance.now());
       },
+      onUse: (_sid, u, a) => {
+        this.homes?.onUse(u, a);
+      },
       onSay: (sid, id) => {
         const text = phraseOf(id);
         const r = this.remotes.get(sid);
@@ -519,9 +657,6 @@ export class CampScene extends Phaser.Scene {
       onRide: (sid, on) => this.riding.onRide(sid, on),
       onRod: (sid, on) => this.forage.f.onRod(sid, on),
       onAway: (sid, on) => this.remotes.get(sid)?.setAway(on, performance.now()),
-      onGoblin: () => undefined,
-      onGoblinGone: () => undefined,
-      onGoblinCaught: () => undefined,
       onBbq: (sid, item, until, lv, at) => this.food.onBbq(sid, sid === this.host.net.mySid, item, until, lv, at),
       onSnowmen: (list, stacks) => this.snow?.onSnowmen(list, stacks),
       onSnowman: (s, sid, st) => this.snow?.onSnowman(s, sid, st),
@@ -570,6 +705,7 @@ export class CampScene extends Phaser.Scene {
     const seat = this.player.state === "sitChair" ? this.player.seat : null;
     const id = seat?.id ?? this.resumeSeat;
     this.resumeSeat = null;
+    this.rowboats?.reclaim();
     if (!id) return;
     const owner = this.seats.get(id);
     if (owner === undefined) net.sit(id);
@@ -597,7 +733,6 @@ export class CampScene extends Phaser.Scene {
   private setSeat(seatId: string, sid: Sid | null): void {
     if (sid === null) this.seats.delete(seatId);
     else this.seats.set(seatId, sid);
-    this.map.setSeatTaken(seatId, sid !== null);
   }
 
   private syncSeats(seats: Record<string, Sid>): void {
@@ -749,15 +884,17 @@ export class CampScene extends Phaser.Scene {
       return last ? { ch: last.ch, bySid: new Map(last.list.map((f) => [f.sid, f.name])) } : this.friends;
     })();
     on.push(
-      bridge.on("friend:goto", ({ sid, name, x, y, map, tp }) => {
+      bridge.on("friend:goto", ({ sid, name, x, y, map, tp, door }) => {
         // 11/19 마을·바닷가 친구 모두 버스로 (바닷가는 마을 정류장을 거쳐 이어 타요 — lib/friendRoute). 몸이 커져 있으면 버스를 못 타요
-        const route = friendRoute("camp", map ?? "village", myBig());
-        if (route.do === "warp") this.goToFriend(sid, name, x, y, tp);
+        // 11/26 door: 집에서 나와 그 집 문 앞으로 (창밖 연출 없는 워프라 몸 크기를 보지 않는다. 이 맵이면 그 터 앞으로)
+        const route = friendRoute("camp", map ?? "village", door !== undefined ? 1 : myBig());
+        if (route.do === "warp" && door !== undefined) bridge.emit("camp:lot", { lot: door });
+        else if (route.do === "warp") this.goToFriend(sid, name, x, y, tp);
         else if (route.do === "block") bridge.emit("friend:notice", { message: route.message });
         else {
           this.closeTalk();
           const next = nextAfterVillage(route);
-          this.host.goVillage({ sid, name, x, y, ...(next ? { next } : {}), ...(tp ? { tp } : {}) });
+          this.host.goVillage({ sid, name, x, y, ...(next ? { next } : {}), ...(tp ? { tp } : {}), ...(door !== undefined ? { door } : {}) });
         }
       }),
     );
@@ -795,6 +932,8 @@ export class CampScene extends Phaser.Scene {
     on.push(
       bridge.on("scene:changed", ({ scene }) => {
         this.covered = scene !== "world";
+        // 11/26 집·사냥터로 들어가면 NPC 대화 창을 닫는다 (집 안까지 말풍선이 따라오지 않게)
+        if (this.covered) this.closeTalk();
         this.scene.setVisible(!this.covered && !this.parked);
         this.rig.enabled = !this.covered;
         if (!this.covered) this.host.hub.setHandler((a) => this.onAction(a));
@@ -814,11 +953,6 @@ export class CampScene extends Phaser.Scene {
   private onAction(a: KeyAction): void {
     const h = this.host;
     if (h.hub.isBlocked || this.cleaned || this.locked || this.covered || this.parked) return;
-    // 망원경을 보는 중: E·Space·X로 내려놓는다
-    if (this.scope.isOpen) {
-      if (a === "interact" || a === "jump" || a === "sit") this.scope.close();
-      return;
-    }
     const pl = this.player;
     const now = this.time.now;
     // 11/17 눈덩이를 들고 있는 동안: 앉기·탈것은 내려놓은 다음에 (E는 내려놓기).
@@ -843,15 +977,35 @@ export class CampScene extends Phaser.Scene {
     const occupied = h.net.online ? this.seats : EMPTY_SEATS;
     const mySid = h.net.online ? h.net.mySid : null;
     if (a === "sit") {
+      // 11/26 나룻배에 같이 탔으면 X·터치 [내리기] = 내리기 (E는 낚시)
+      if (this.rowboats?.passengerOff()) return;
+      // 11/26 트램펄린 위·미끄럼 중이면 X도 내리기 (트램펄린은 튀던 한 번 뒤에 뛰어내린다)
+      if (this.play?.interact()) return;
       if (moving) return;
       if (pl.sitting) pl.stand(now, this.seatReq);
-      else this.sitOn(campPickSeat(pl.x, pl.y, occupied, mySid), now);
+      else this.sitOn(this.pickSeat(pl.x, pl.y, occupied, mySid), now);
       return;
     }
     if (a !== "interact") return;
     // 대화 중이면 E = 다음 말
     if (this.talking) {
       this.nextTalk();
+      return;
+    }
+    // 11/26 나룻배: 탔으면 내리기·배 위 낚시, 빈 배 곁이면 타기
+    if (this.rowboats?.interact()) return;
+    // 11/26 트램펄린에서 내리기 · 미끄럼 타는 동안은 E를 받지 않는다
+    if (this.play?.interact()) return;
+    // 11/26 헤엄치는 중: 잠수·떠오르기 (마을 강·호수와 같다)
+    if (pl.inWater) {
+      // 11/26 물 건너 좌대(4~6) 사다리 밑이면 사다리를 타고 올라간다 (짧게 오르는 연출 — stepClimb)
+      const lad = this.ladderAt(pl.x, pl.y, true);
+      if (lad) {
+        this.startClimb(lad, true, now);
+        return;
+      }
+      pl.toggleDive(now);
+      if (pl.state === "dive") (this.fx ??= new Effects(this, h.reduced)).splash(pl.x, pl.y);
       return;
     }
     if (pl.sitting) {
@@ -865,10 +1019,11 @@ export class CampScene extends Phaser.Scene {
     if (this.life?.talk()) return;
     // 11/17 눈더미 앞이면 눈 뭉치기, 내려놓은 내 덩이 앞이면 다시 들기
     if (this.snow?.interact()) return;
-    const seat = moving ? null : campPickSeat(pl.x, pl.y, occupied, mySid);
+    const seat = moving ? null : this.pickSeat(pl.x, pl.y, occupied, mySid);
     const obj = this.nearestObject(pl.x, pl.y);
     const sd = seat ? Math.hypot(seat.x - pl.x, seat.y - pl.y) : Infinity;
-    const od = obj ? reachDist(obj, pl.x, pl.y) : Infinity;
+    // 11/26 집 문(펜션·촌캉스 테라스 식탁·평상 옆)은 닿으면 앉을 자리보다 먼저 (운영자 「입구가 어디인지」 — 문 앞에서 E가 의자로 갔다)
+    const od = obj ? (isDoorItem(obj) ? 0 : reachDist(obj, pl.x, pl.y)) : Infinity;
     // A-6 낚시 자리·채집 지점이 더 가까우면 그것부터 (마을 Foraging.use와 같다)
     const fo = this.forage.nearest(pl.x, pl.y);
     if (fo && Math.hypot(fo.x - pl.x, fo.y - pl.y) <= Math.min(sd, od)) {
@@ -922,25 +1077,16 @@ export class CampScene extends Phaser.Scene {
         pl.faceTo(o.x, o.y - 10, now);
         this.talkTo(o.npc);
         break;
-      case "van": {
-        const seat = o.seatId ? campSeatById(o.seatId) : undefined;
-        if (!seat) return;
-        const owner = this.seats.get(seat.id);
-        if (owner !== undefined && owner !== this.host.net.mySid) {
-          this.toast("다른 사람이 캠핑카에 앉아 있어요.");
-          return;
-        }
-        this.sitOn(seat, now);
-        break;
-      }
-      case "deck":
-        this.toast(`${o.deck}번 데크예요. 텐트는 곧 칠 수 있어요.`);
-        break;
       case "board":
         this.toast("의뢰판이 아직 비어 있어요. 곧 의뢰가 붙어요.");
         break;
       case "sign":
         this.toast(`시간표에는 '다음 버스: 언젠가'라고 적혀 있어요. 그래도 ${keyJosa("E", "를")} 누르면 와요.`);
+        break;
+      case "sale":
+        // 11/26 분양 안내 입간판: 카라반(관리소 앞) = 언젠가 씨 창 · 펜션(소슬 펜션 입구) = 소슬댁 창 (그 종류만 판다)
+        this.closeTalk();
+        bridge.emit("portal:open", { kind: "housing", zone: "camp", camp: o.id === "sale:pension" ? "pension" : "caravan" });
         break;
       case "bbq":
       case "vending":
@@ -955,14 +1101,6 @@ export class CampScene extends Phaser.Scene {
         this.closeTalk();
         bridge.emit("camp:bbq:open", { stand: o.kind === "vending" ? "vending" : "grill" });
         break;
-      case "telescope": {
-        // 11/16 별 망원경: 앞자리에 서서 별자리 잇기 (StarScopes — 마을 망원경과 같은 1인 자리)
-        const spot = CAMP_SCOPES.find((s) => s.id === o.id);
-        if (!spot || !this.stars) return;
-        this.closeTalk();
-        this.stars.use(spot);
-        break;
-      }
       case "bungeo":
         // 11/23 골목 붕어빵 수레 (캠핑장 자리가 생기면) — 말을 건 자리를 같이 (서버가 수레 가까이인지 본다)
         this.closeTalk();
@@ -970,10 +1108,9 @@ export class CampScene extends Phaser.Scene {
         pl.faceTo(o.x, o.y - 10, now);
         bridge.emit("portal:open", { kind: "bungeo", at: { map: "camp", x: Math.round(pl.x), y: Math.round(pl.y) } });
         break;
-      case "lookout":
-        // 전망대 망원경: 광장·데크를 내려다본다 (LookoutScope)
-        this.closeTalk();
-        this.scope.open();
+      default:
+        // 11/26 집터·집 문·나룻배 (집 화면 담당 campHousing · CampRowboats가 끼워 넣는 것)
+        this.useExtra(o);
         break;
     }
   }
@@ -981,7 +1118,6 @@ export class CampScene extends Phaser.Scene {
   private onTap(wx: number, wy: number): void {
     const h = this.host;
     if (h.hub.isBlocked || this.cleaned || this.locked || this.covered || this.parked) return;
-    if (this.scope.isOpen) return this.scope.close();
     const hit = peerAt(
       [...this.remotes.values()].map((r) => ({ sid: r.sid, name: r.name, x: r.x, y: r.y, visible: r.visible, label: r.view.label.getBounds() })),
       wx,
@@ -1033,6 +1169,13 @@ export class CampScene extends Phaser.Scene {
   // ── NPC 말 걸기 ──
 
   private talkTo(id: CampNpcId): void {
+    // 11/26 분양 세 사람: 말을 걸면 그 사람이 파는 종류 하나만의 분양 창 (카라반 = 언젠가 씨, 펜션 = 소슬댁, 촌캉스 = 순이 할머니 — components/housing)
+    const sale = id === "keeper" ? "caravan" : id === "sosul" ? "pension" : id === "suni" ? "rural" : null;
+    if (sale) {
+      this.closeTalk();
+      bridge.emit("portal:open", { kind: "housing", zone: "camp", camp: sale });
+      return;
+    }
     const turn = this.talkTurn.get(id) ?? 0;
     this.talkTurn.set(id, turn + 1);
     this.openTalk(id, campLines(id, turn, campConceptNow()), true);
@@ -1134,6 +1277,8 @@ export class CampScene extends Phaser.Scene {
     if (this.cleaned || !this.player) return null;
     const pl = this.player;
     const p = pl.netPose(this.poseBuf);
+    // 11/26 나룻배: 배 자리 id를 남긴다 (되살리기는 마을 조각배와 같은 규칙 — CampRowboats.resume)
+    if (pl.boatSeatId && this.rowboats?.isRiding) return { x: Math.round(p.x), y: Math.round(p.y), seatId: pl.boatSeatId, pose: "boat", dir: pl.dir, where: "camp" };
     const pose = pl.state === "sitChair" && pl.seat ? "sitChair" : pl.state === "sitGround" ? "sitGround" : "idle";
     return { x: Math.round(p.x), y: Math.round(p.y), seatId: pose === "sitChair" ? (pl.seat?.id ?? null) : null, pose, dir: pl.dir, where: "camp" };
   }
@@ -1163,18 +1308,16 @@ export class CampScene extends Phaser.Scene {
     }
     this.host.hub.read(this.move);
     if (this.host.hub.isBlocked || this.locked) this.move.ax = this.move.ay = 0;
-    // 전망대 망원경: 방향키는 망원경을 겨누고 캐릭터는 그대로
-    if (this.scope.isOpen) {
-      this.scope.update(now, dt, this.move, this.atmos.levels.darkness);
-      this.move.ax = this.move.ay = 0;
-    }
     // 11/17 눈덩이를 굴리는 동안은 걷기만 (달리면 덩이가 앞질러 가 버린다). 11/18 품에 안고는 달려도 된다
-    const rollHeld = this.host.hub.rollHeld && !this.locked && !this.scope.isOpen;
+    const rollHeld = this.host.hub.rollHeld && !this.locked;
     if (this.snow?.holding && rollHeld) this.move.run = false;
     // 11/18 눈을 뭉치는 잠깐은 그 자리에 선다
     if (this.fight?.gathering) this.move.ax = this.move.ay = 0;
+    this.stepClimb(now);
     const started = pl.update(this.benchInput(now), now, this.seatReq);
-    this.stars?.update();
+    this.rowboats?.steer(this.move, dt);
+    this.rowboats?.update(dt);
+    this.updatePlunge(now);
     if (this.furnitureCollider) this.furnitureCollider.active = !pl.airborne;
     if (net.online && pnow >= this.peerCheckAt) {
       this.peerCheckAt = pnow + PEER_CHECK_MS;
@@ -1193,22 +1336,37 @@ export class CampScene extends Phaser.Scene {
       bridge.emit("view:mode", { mode: "campfire" });
     } else if (!fire && this.campfire.active) this.leaveCampfire();
     this.campfire.update(now, dt);
-    const nf = nearestCampfire(pl.x, pl.y, [CAMP_CAMPFIRE]);
+    const nf = nearestCampfire(pl.x, pl.y, CAMP_CAMPFIRES);
     this.host.sfx.campfire(nf ? campfireLevel(nf.dist, !!fire) : 0);
+    // 11/26 폭포 다리 의자에 앉으면 「폭포 멍」 (불멍·하늘 보기와 같은 시점 바꾸기), 물소리는 폭포에 가까울수록 크게
+    const falls = pl.state === "sitChair" && !!pl.seat && campFallsViewSeat(pl.seat.id);
+    if (falls && !this.fallsView?.active) {
+      this.fallsView?.enter();
+      this.map.setFallsFocus(true);
+      bridge.emit("view:mode", { mode: "falls" });
+    } else if (!falls && this.fallsView?.active) this.leaveFallsView();
+    this.fallsView?.update(dt);
+    const fd = Math.hypot(pl.x - CAMP_PLUNGE.x, (pl.y - CAMP_PLUNGE.y) * 1.3);
+    this.host.sfx.seaWaves(falls ? 0.9 : Math.max(0, Math.min(0.5, 1 - fd / 320)) * 0.6);
     const s = this.rig.labelScale;
     const view = this.rig.frameView(this.view);
     this.expr.update(now);
     this.bungeo?.update(now);
     this.meScreen.update(pl.x, pl.y);
+    this.play?.update(this.move, dt);
     pl.view.sync(now, s);
     const L = this.atmos.levels;
     this.map.update(now, dt, view, { hour: this.hour, darkness: L.darkness, rain: L.rain, fog: L.fog });
     this.riding.update();
     publishRide(pl, this.riding.on); // 11/16 탄 것·앉은 자리 → UI (lib/rideGate)
     this.forage.f.update(dt, view, s);
+    this.awayRoute?.update(now, view, s, this.locked);
     this.life?.update(dt, view, s);
+    this.homes?.update(L.darkness, s, view);
+    this.syncHammocks();
     this.snow?.update(s, rollHeld);
     for (const r of this.remotes.values()) r.update(pnow, view, s);
+    this.footbath?.update(now, pl, this.remotes);
     this.fight?.update(s);
     this.declutterLabels(now, pnow);
     this.updateSeatHint(now, s);
@@ -1216,8 +1374,6 @@ export class CampScene extends Phaser.Scene {
     const longSit = pl.sitting && pl.view.sitSince > 0 && now - pl.view.sitSince > SIT_IDLE_MS;
     this.atmos.gather(longSit ? { x: pl.x, y: pl.y } : null);
     this.atmos.update(now, dt, view);
-    // 큰 타프 아래: 빗소리가 천막을 두드린다
-    WeatherSound.of(this).setRoof(L.rain > 0.05 && this.map.underTarp(pl.x, pl.y));
     this.fireworks?.update(now, dt, view);
     this.updateLighting(view);
     if (pl.state === "run" && now - this.dustAt > DUST_MS) this.dustAt = now;
@@ -1259,30 +1415,61 @@ export class CampScene extends Phaser.Scene {
   private updateSeatHint(now: number, labelScale: number): void {
     const pl = this.player;
     const net = this.host.net;
-    const seat: Seat | null = pl.sitting || this.locked ? null : campPickSeat(pl.x, pl.y, net.online ? this.seats : EMPTY_SEATS, net.online ? net.mySid : null);
+    const seat: Seat | null = pl.sitting || this.locked ? null : this.pickSeat(pl.x, pl.y, net.online ? this.seats : EMPTY_SEATS, net.online ? net.mySid : null);
     const id = seat ? seat.id : null;
     if (id !== this.nearSeatId) {
       this.nearSeatId = id;
       bridge.emit("seat:near", seat ? { seatId: seat.id, kind: seat.id.includes("-") ? "bench" : "chair" } : null);
     }
     const sittingFor = pl.sitting && pl.view.sitSince > 0 ? now - pl.view.sitSince : -1;
-    const obj = !pl.sitting && !this.locked ? this.nearestObject(pl.x, pl.y) : null;
+    // 11/26 해먹에 누워 있으면 물건 안내 대신 「이동하면 일어나요」 (seatHint standText)
+    const obj = !pl.sitting && !this.locked && !pl.anchored ? this.nearestObject(pl.x, pl.y) : null;
     const objSd = seat ? Math.hypot(seat.x - pl.x, seat.y - pl.y) : Infinity;
-    const objOd = obj ? reachDist(obj, pl.x, pl.y) : Infinity;
+    const objOd = obj ? (isDoorItem(obj) ? 0 : reachDist(obj, pl.x, pl.y)) : Infinity;
     // 바닥 영역(버스 정차 칸)은 넓어서 안내를 내 발밑에
-    let other = obj && objOd <= objSd ? { x: obj.zone ? pl.x : obj.x, y: (obj.zone ? pl.y : obj.y) + 2, text: `${this.seatHint.prefix}${obj.label}` } : null;
+    let other: { x: number; y: number; text: string; dim?: boolean } | null = obj && objOd <= objSd ? { x: obj.zone ? pl.x : obj.x, y: (obj.zone ? pl.y : obj.y) + 2, text: `${this.seatHint.prefix}${obj.label}` } : null;
+    // 11/26 누가 누운 해먹: 마을처럼 회색 「누가 누워 있어요」 (useHammock이 거절하는 것과 같은 판정)
+    if (other && obj?.kind === "hammock" && net.online) {
+      const owner = this.seats.get(obj.id.slice("hammock:".length));
+      if (owner !== undefined && owner !== net.mySid) other = { ...other, text: "누가 누워 있어요", dim: true };
+    }
+    // 11/26 트램펄린·워터 슬라이드: 다 찼거나 누가 타고 있으면 그 안내, 겨울엔 눈썰매
+    if (other && obj && (obj.kind === "tramp" || obj.kind === "slide")) other = this.play?.hint(this.seatHint.prefix, obj.kind) ?? other;
     // A-6 낚시 자리·채집 지점 안내 ("E 낚시하기"·"E 약초 캐기")
-    const fo = !pl.sitting && !this.locked ? this.forage.nearest(pl.x, pl.y) : null;
+    const fo = !pl.sitting && !this.locked && !pl.anchored ? this.forage.nearest(pl.x, pl.y) : null;
     if (fo && Math.hypot(fo.x - pl.x, fo.y - pl.y) <= Math.min(objSd, objOd)) other = { x: fo.x, y: fo.y + 2, text: `${this.seatHint.prefix}${fo.label}` };
     const bench = pl.state === "sitChair" && pl.seat && CAMP_MULTI_SEAT.has(pl.seat.furnitureId);
     const keys = this.seatHint.prefix === "E ";
-    const standText = bench ? (keys ? "←→ 옆자리 · ↑↓ 일어나기 · T 벤치 상태" : "좌우로 옆자리 · 위아래로 일어나기") : pl.state === "sitChair" && keys ? "이동하면 일어나요 · T 상태 고르기" : null;
+    const standText = bench
+      ? keys
+        ? "←→ 옆자리 · ↑↓ 일어나기 · T 벤치 상태"
+        : "좌우로 옆자리 · 위아래로 일어나기"
+      : pl.state === "sitChair" && keys
+        ? "이동하면 일어나요 · T 상태 고르기"
+        : null;
     // 불멍 구도에서는 화면을 가리지 않게 앉기 안내를 띄우지 않는다 (마을과 같다)
     const lifeHint = !pl.sitting && !this.locked ? this.life?.hint(this.seatHint.prefix) : null;
     if (lifeHint) other = lifeHint;
     // 11/17 눈사람 만들기: 굴리는 중이면 언제나 그 안내, 아니면 다른 안내가 없을 때 눈더미·내 덩이
     const snowHint = !pl.sitting && !this.locked ? (this.snow?.hint(this.seatHint.prefix) ?? null) : null;
     if (snowHint && (this.snow?.holding || !other)) other = snowHint;
+    // 11/26 나룻배 타기·내리기·배 위 낚시
+    const rowHint = !this.locked && !pl.sitting ? (this.rowboats?.hint(this.seatHint.prefix) ?? null) : null;
+    if (rowHint) other = rowHint;
+    if (this.play?.busy) other = this.play.rideHint(this.seatHint.prefix);
+    // 11/26 좌대 사다리 (물속 밑: E 올라가기 · 마루 위 사다리 앞: 아래로 내려가기)
+    if (!this.locked && !pl.sitting && !this.climb) {
+      const up = pl.inWater ? this.ladderAt(pl.x, pl.y, true) : null;
+      const down = !pl.inWater && !up ? this.ladderAt(pl.x, pl.y, false) : null;
+      if (up) other = { x: up.foot.x, y: up.foot.y + 2, text: `${this.seatHint.prefix}사다리로 올라가기` };
+      else if (down) other = { x: down.top.x, y: down.top.y + 4, text: "아래로 가면 사다리로 내려가요" };
+    } else if (this.climb) other = null;
+    // 11/26 원두막 사다리 밑: 「E 사다리로 올라가기」 (앉기 안내 대신 — 폰 [상호작용] 단추도 같은 이름). 오른 뒤엔 평소 앉은 안내
+    const ladderFoot = !pl.sitting && !this.locked && seat && isCampLadderSeat(seat.id) ? campLadderAt(pl.x, pl.y) : null;
+    if (ladderFoot) other = { x: ladderFoot.x, y: ladderFoot.y + 2, text: `${this.seatHint.prefix}사다리로 올라가기` };
+    setDoorHint(ladderFoot ? "사다리로 올라가기" : null);
+    // 11/26 해먹에 누워 있는 동안
+    if (pl.state === "hammock") other = { x: pl.x, y: pl.y + 8, text: "이동하면 일어나요" };
     this.seatHint.update(other ? null : seat, pl, sittingFor, this.talking !== null || this.campfire.active !== null, labelScale, other, standText);
   }
 
@@ -1330,8 +1517,10 @@ export class CampScene extends Phaser.Scene {
       for (const sp of this.map.staticLights) lit.add(sp.x, sp.y + 6, lr * sp.scale * 1.4, 0.88);
       this.fireworks?.addLights(lit);
       this.forage.f.addLights(lit);
+      this.homes?.addLights(lit);
       this.bungeo?.addLights(lit);
       this.life?.addLights(lit);
+      this.goblin?.addLights(lit);
     }
     lit.end();
   }
@@ -1346,17 +1535,152 @@ export class CampScene extends Phaser.Scene {
 
   /** 불멍에서 나온다 (일어남·버스·친구한테 가기) */
   private leaveCampfire(): void {
+    this.leaveFallsView();
     if (!this.campfire?.active) return;
     this.campfire.exit();
     bridge.emit("view:mode", { mode: "normal" });
   }
 
+  /** 11/26 폭포 멍에서 나온다 */
+  private leaveFallsView(): void {
+    if (!this.fallsView?.active) return;
+    this.fallsView.exit();
+    this.map.setFallsFocus(false);
+    bridge.emit("view:mode", { mode: "normal" });
+  }
+
+  /** 11/26 헤엄쳐 폭포 밑에 들어가면: 물살이 바깥으로 밀어내고(campCurrent) 물보라 + 한 번 안내 */
+  private updatePlunge(now: number): void {
+    const pl = this.player;
+    const inside = (pl.state === "swim" || pl.state === "dive") && inCampPlunge(pl.x, pl.y, 4);
+    if (!inside) {
+      if (this.plungeWarned && !inCampPlunge(pl.x, pl.y, 28)) this.plungeWarned = false;
+      return;
+    }
+    if (now - this.plungeFxAt > 260 && !this.host.reduced) {
+      this.plungeFxAt = now;
+      (this.fx ??= new Effects(this, this.host.reduced)).splash(pl.x, pl.y - 2);
+    }
+    if (this.plungeWarned) return;
+    this.plungeWarned = true;
+    this.host.sfx.splash(0.6);
+    this.toast("물살이 세서 더 못 가요");
+  }
+  private plungeFxAt = 0;
+  private fx: Effects | null = null;
+  /** 11/26 집터·집 문(campHousing)·나룻배(CampRowboats)가 쓰는 E (lot·house·rowboat) */
+  private useExtra(o: CampInteractable): void {
+    if (o.kind === "hammock") {
+      this.useHammock(o.id.slice("hammock:".length));
+      return;
+    }
+    if (this.play?.use(o)) return;
+    if (this.homes?.use(o)) return;
+    this.rowboats?.use(o);
+  }
+  // ── 11/26 해먹에 눕기 (protocol CAMP_HAMMOCKS — 서버 좌석 qM1~4, 한 사람) ──
+  // 마을 해먹과 같은 해먹 자세: 천에 휜 몸 · 앞 천이 하체를 덮는다 · 좌우로 천천히 흔들림 (AvatarView). 캠핑장 천 무늬로 (setHammockSkin)
+  private useHammock(id: string): void {
+    const h = campHammockById(id);
+    if (!h) return;
+    const pl = this.player;
+    const net = this.host.net;
+    const now = this.time.now;
+    if (net.online) {
+      const owner = this.seats.get(id);
+      if (owner !== undefined && owner !== net.mySid) {
+        this.toast("누가 누워 있어요");
+        return;
+      }
+    }
+    pl.faceTo(h.x, h.y, now);
+    pl.view.setHammockSkin(h.skin);
+    pl.attach("hammock", h.x, h.y - CAMP_HAMMOCK_LIFT, h.y - CAMP_HAMMOCK_LIFT + HAMMOCK_FRONT, now, this.seatReq, id);
+    if (net.online) net.sit(id);
+  }
+  /** 누가 누워 있는 해먹은 기둥만 남기고 (맵·집 마당), 원격 누운 사람은 그 해먹 천 무늬로 */
+  private syncHammocks(): void {
+    const busy = new Set<string>();
+    const pl = this.player;
+    if (pl.state === "hammock" && pl.spotId) busy.add(pl.spotId);
+    for (const r of this.remotes.values()) {
+      if (r.stateId !== STATE.hammock || !r.seatId) continue;
+      const h = campHammockById(r.seatId);
+      if (!h) continue;
+      busy.add(h.id);
+      r.view.setHammockSkin(h.skin);
+    }
+    const key = [...busy].sort().join(",");
+    if (key === this.hammockBusyKey) return;
+    this.hammockBusyKey = key;
+    this.map.setHammockBusy(busy);
+    this.homes?.setHammockBusy(busy);
+  }
+  private hammockBusyKey = "";
+  // ── 11/26 물 건너 좌대(4~6) 사다리 오르내리기 ──
+  // 순간이동 대신 사다리 칸을 따라 위·아래로 0.5초쯤 걸어 오르내린다 (입력을 잠깐 대신 넣는다 — 위치·자세는 평소 MOVE 그대로라
+  // 다른 사람 화면에서도 헤엄 → 사다리 → 마루로 같게 보인다). 물 ↔ 마루는 사다리 칸으로만 (둘레 막이 — campLayout raftRimColliders)
+  private climb: { lad: RaftLadder; up: boolean; t0: number } | null = null;
+
+  /** (x,y) 가까운 좌대 사다리 — water = 물속 사다리 밑, 아니면 마루 위 사다리 앞 */
+  private ladderAt(x: number, y: number, water: boolean): RaftLadder | null {
+    for (const l of RAFT_LADDERS) {
+      if (water ? Math.hypot(l.foot.x - x, l.foot.y - y) <= 14 : Math.abs(x - l.x) <= 7 && y >= l.top.y - 6 && y <= l.gap.y + 3) return l;
+    }
+    return null;
+  }
+
+  private startClimb(lad: RaftLadder, up: boolean, now: number): void {
+    this.climb = { lad, up, t0: now };
+    (this.fx ??= new Effects(this, this.host.reduced)).splash(lad.foot.x, lad.foot.y - 2);
+    this.host.sfx.splash(0.4);
+  }
+
+  /** 매 프레임 (플레이어 이동 전에): 사다리를 타는 동안 입력을 사다리 쪽으로 대신 넣고, 다 오르내리면 끝. 사다리로 헤엄쳐·걸어 들어가도 시작 */
+  private stepClimb(now: number): void {
+    const pl = this.player;
+    const m = this.move;
+    if (!this.climb) {
+      if (this.locked || pl.sitting || pl.inBoat || pl.anchored || pl.airborne) return;
+      if (pl.inWater && m.ay < -0.4) {
+        const l = this.ladderAt(pl.x, pl.y, true);
+        if (l) this.startClimb(l, true, now);
+      } else if (!pl.inWater && m.ay > 0.4) {
+        const l = this.ladderAt(pl.x, pl.y, false);
+        if (l) this.startClimb(l, false, now);
+      }
+      if (!this.climb) return;
+    }
+    const c = this.climb;
+    const done = c.up ? !pl.inWater && pl.y <= c.lad.top.y : pl.inWater && pl.y >= c.lad.foot.y - 2;
+    if (done || now - c.t0 > 1600) {
+      if (!c.up) (this.fx ??= new Effects(this, this.host.reduced)).splash(pl.x, pl.y);
+      this.climb = null;
+      return;
+    }
+    m.ax = Math.max(-1, Math.min(1, (c.lad.x - pl.x) / 3));
+    m.ay = c.up ? -1 : 1;
+    m.run = false;
+  }
+  /**
+   * 지금 열린 좌석인지 (집 앞마당 자리는 그 단계 소품이 놓였을 때만). 11/26 원두막·평상·정자 방석은 오르는 자리에서만 (pickSeat — campZoneSeat).
+   * 헤엄치는 중에는 어느 자리도 고르지 않는다 (물속에서 다리·데크 의자에 앉아 올라가지 않게)
+   */
+  private readonly seatOpen = (id: string): boolean =>
+    !this.player.inWater && !isCampZoneSeat(id) && (this.homes?.seatOpen(id) ?? !id.startsWith("qH")) && campFootSeatReachable(id, this.player.x, this.player.y);
+  private readonly ladderOpen = (id: string): boolean => !this.player.inWater && (this.homes?.seatOpen(id) ?? false);
+  /** 앉을 자리 고르기: 원두막 사다리 밑이면 그 원두막 방석, 아니면 가까운 자리 */
+  private pickSeat(x: number, y: number, occupied: ReadonlyMap<string, Sid>, mySid: Sid | null): Seat | null {
+    return campZoneSeat(x, y, occupied, mySid, this.ladderOpen) ?? campPickSeat(x, y, occupied, mySid, undefined, this.seatOpen);
+  }
+  // 11/26 원두막은 사다리 밑에서 E(폰 [상호작용])로만 오른다 (운영자 — 위로 걷기만 해도 오르던 것은 뺐다)
+
   private onResize(): void {
     this.rig?.applyBounds();
     this.campfire?.resize();
+    this.fallsView?.resize();
     this.atmos?.resize();
     this.lighting?.resize();
-    this.scope?.resize();
   }
 
   private cleanup(): void {
@@ -1370,9 +1694,12 @@ export class CampScene extends Phaser.Scene {
     this.scale.off(Phaser.Scale.Events.RESIZE, this.onResize, this);
     this.dropBus();
     WeatherSound.of(this).setRoof(false);
-    if (this.campfire?.active) bridge.emit("view:mode", { mode: "normal" });
+    if (this.campfire?.active || this.fallsView?.active) bridge.emit("view:mode", { mode: "normal" });
     this.campfire?.destroy();
+    this.fallsView?.destroy();
+    this.fallsView = null;
     this.host.sfx.campfire(0);
+    this.host.sfx.seaWaves(0);
     this.clearRemotes();
     this.expr?.destroy();
     this.forage?.f.destroy();
@@ -1380,6 +1707,22 @@ export class CampScene extends Phaser.Scene {
     this.bungeo = null;
     this.life?.destroy();
     this.life = null;
+    // 게임째 닫힐 때(DESTROY)는 물리 세계가 충돌 묶음을 먼저 비워 집 충돌 정리가 실패할 수 있다 — 장면 정리는 끝까지 간다
+    try {
+      this.homes?.destroy();
+    } catch {
+      // 이미 치워진 충돌 묶음
+    }
+    this.homes = null;
+    this.rowboats?.destroy();
+    this.rowboats = null;
+    this.awayRoute?.destroy();
+    this.awayRoute = null;
+    this.play?.destroy();
+    this.play = null;
+    this.footbath?.destroy();
+    this.footbath = null;
+    this.goblin = null;
     this.snow?.destroy();
     this.snow = null;
     this.fight?.destroy();
@@ -1390,9 +1733,6 @@ export class CampScene extends Phaser.Scene {
     this.lighting?.destroy();
     this.fireworks = null;
     this.player?.destroy();
-    this.scope?.destroy();
-    this.stars?.destroy();
-    this.stars = null;
     this.map?.destroy();
     // 소식은 월드로 돌려준다 (CampTrip이 먼저 했어도 한 번 더 — 남은 콜백이 지운 장면을 부르지 않게)
     if (this.begun) this.host.net.divert(null);

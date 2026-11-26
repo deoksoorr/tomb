@@ -5,6 +5,14 @@ import { errorMessage } from "@/lib/api";
 import {
   DEX_CAT_LABEL,
   DEX_CATS,
+  DEX_MAP_BADGE,
+  DEX_MAP_LABEL,
+  DEX_MAP_REWARD,
+  DEX_MAPS,
+  dexMapClaimKey,
+  dexMapGot,
+  dexMapIds,
+  dexMapOf,
   DEX_NEW_REWARD,
   DEX_TITLE_TIERS,
   DEX_TITLES,
@@ -13,14 +21,20 @@ import {
   dexTitleNeed,
   GATHER_NODES,
   NODE_CAT,
+  nodeWheres,
   PHASE_LABEL,
   RARITY_LABEL,
   SEASON_LABEL,
   speciesOf,
+  WATER_LABEL,
+  watersOf,
   WEATHER_LABEL,
   WHERE_LABEL,
-  buyerOf,
+  npcBuys,
+  NPCS,
+  isCampSpecies,
   type DexCat,
+  type DexMap,
   type Species,
   type Where,
 } from "@/lib/forage/catalog";
@@ -53,8 +67,20 @@ const ymd = (d: string) => (d.length === 8 ? `${d.slice(0, 4)}.${d.slice(4, 6)}.
 
 /** 11/19 마을 밖에서도 나오는 곳 (같은 종류 채집 지점이 캠핑장·바닷가에 있으면) — 장소 이름이 마을 기준이라 헷갈렸다 */
 function awayOf(sp: Species): string {
-  if (sp.cat === "fish") return "";
-  const maps = new Set(GATHER_NODES.filter((n) => n.map && NODE_CAT[n.kind] === sp.cat && sp.where.includes(n.where)).map((n) => n.map));
+  if (sp.cat === "fish") {
+    // 11/26 이어진 물에서도 (강 물고기 → 캠핑장 옛길 계곡, 호수 물고기 → 윤슬 낚시터, 계곡 물고기 → 달그늘 소). 나룻배는 낚시터와 같은 물이라 한 번만
+    const ws = watersOf(sp).filter((w) => !sp.where.includes(w) && !(w === "rowboat" && sp.where.includes("reservoir")));
+    const names = ws.filter((w) => !(w === "rowboat" && ws.includes("reservoir"))).map((w) => WATER_LABEL[w]);
+    if (!names.length) return "";
+    return ` (${isCampSpecies(sp) ? "" : "캠핑장 "}${names.join("·")}에도 있어요)`;
+  }
+  // 11/26 도감 확장: 그 맵에서만 나오는 곳(모래 언덕·갯바위·계곡 물가 …)은 어느 맵인지 붙여요 (이름에 맵 이름이 없으면)
+  const home = dexMapOf(sp);
+  if (home !== "village") {
+    const m = DEX_MAP_LABEL[home];
+    return sp.where.every((w) => WHERE_LABEL[w].includes(m)) ? "" : ` (${m})`;
+  }
+  const maps = new Set(GATHER_NODES.filter((n) => n.map && NODE_CAT[n.kind] === sp.cat && nodeWheres(n).some((w) => sp.where.includes(w))).map((n) => n.map));
   const names = [maps.has("camp") ? "캠핑장" : "", maps.has("sea") ? "바닷가" : ""].filter(Boolean);
   return names.length ? ` (${names.join(", ")}에도 있어요)` : "";
 }
@@ -98,7 +124,8 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
   const titles = (mine ? state?.titles : other?.titles) ?? [];
   const reward = mine ? state?.reward : undefined;
   // 별자리·몬스터 칸은 종 목록이 없다 (ConstellationDex·MonsterDex가 따로 그린다)
-  const list = cat === "star" || cat === "mob" ? [] : speciesOf(cat);
+  // 11/26 도감 번호는 보이는 차례대로 (마을 → 바닷가 → 캠핑장 — 카탈로그 차례는 늘린 순서라 섞여 있어요)
+  const list = cat === "star" || cat === "mob" ? [] : groupsOf(speciesOf(cat)).flatMap((g) => g.list);
   const ids = dexIdsOf(cat);
   const got = ids.filter((id) => (dex[id]?.n ?? 0) > 0).length;
   const pct = Math.floor((got * 100) / ids.length);
@@ -142,6 +169,7 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
               ))}
             </div>
           )}
+          <MapBadges dex={dex} claims={mine ? (state?.claims ?? {}) : null} />
           <div className={s.dexTabs} role="tablist" aria-label="도감 종류">
             {DEX_CATS.map((c) => {
               const all = dexIdsOf(c);
@@ -205,28 +233,42 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
             {cat === "star" && <ConstellationDex key={peerKey || accountId || "me"} dex={dex} />}
             {cat === "mob" && <MonsterDex key={peerKey || accountId || "me"} dex={dex} />}
             {/* 별자리·몬스터 칸이면 list가 비어 있어 아무것도 그리지 않는다 */}
-            <div className={s.grid}>
-              {list.map((sp, i) => {
-                const known = (dex[sp.id]?.n ?? 0) > 0;
-                return (
-                  <button
-                    key={sp.id}
-                    type="button"
-                    className={s.cell}
-                    data-known={known}
-                    aria-pressed={sel === sp.id}
-                    aria-label={known ? sp.name : `${i + 1}번 · 아직 모름`}
-                    onClick={() => setSel(sp.id)}
-                  >
-                    <span className={s.num}>{i + 1}</span>
-                    <ItemIcon itemId={sp.id} size={32} />
-                    <span className={s.rare} aria-hidden="true">
-                      {sp.rarity >= 3 ? "★".repeat(sp.rarity - 2) : ""}
+            {/* 11/26 맵마다 묶어서 (마을 → 바닷가 → 캠핑장, 번호는 이어서). 한 맵 것만 있는 칸은 제목 없이 */}
+            {groupsOf(list).map((grp, _gi, all) => (
+              <div key={grp.map}>
+                {all.length > 1 && (
+                  <p className={s.dexGroup}>
+                    {DEX_MAP_LABEL[grp.map]}
+                    <span>
+                      {grp.list.filter((sp) => (dex[sp.id]?.n ?? 0) > 0).length}/{grp.list.length}
                     </span>
-                  </button>
-                );
-              })}
-            </div>
+                  </p>
+                )}
+                <div className={s.grid}>
+                  {grp.list.map((sp) => {
+                    const i = list.indexOf(sp);
+                    const known = (dex[sp.id]?.n ?? 0) > 0;
+                    return (
+                      <button
+                        key={sp.id}
+                        type="button"
+                        className={s.cell}
+                        data-known={known}
+                        aria-pressed={sel === sp.id}
+                        aria-label={known ? sp.name : `${i + 1}번 · 아직 모름`}
+                        onClick={() => setSel(sp.id)}
+                      >
+                        <span className={s.num}>{i + 1}</span>
+                        <ItemIcon itemId={sp.id} size={32} />
+                        <span className={s.rare} aria-hidden="true">
+                          {sp.rarity >= 3 ? "★".repeat(sp.rarity - 2) : ""}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
             {!pick && cat !== "star" && cat !== "mob" && <DexGuide list={list} dex={dex} ambience={ambience} />}
             {pick && (
               <div className={cx(s.detail, !entry && s.unknown)} role="status">
@@ -256,7 +298,10 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
                         <dd>{ymd(entry.first)}</dd>
                         <dt>파는 곳</dt>
                         <dd>
-                          {buyerOf(pick.cat).name} · {pick.price}P
+                          {NPCS.filter((n) => npcBuys(n, pick))
+                            .map((n) => n.name)
+                            .join("·")}{" "}
+                          · {pick.price}P
                         </dd>
                       </>
                     ) : null}
@@ -268,6 +313,45 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
         </div>
       )}
     </Dialog>
+  );
+}
+
+/** 11/26 칸 안의 종을 맵마다 (마을 → 바닷가 → 캠핑장 — 빈 맵은 뺀다) */
+function groupsOf(list: readonly Species[]): { map: DexMap; list: Species[] }[] {
+  return DEX_MAPS.map((map) => ({ map, list: list.filter((sp) => dexMapOf(sp) === map) })).filter((g) => g.list.length > 0);
+}
+
+/**
+ * 11/26 맵별 도감 완성 배지 (마을·바닷가·캠핑장): 그 맵 종을 다 등록하면 배지 + 완성 보상 한 번 (서버가 등록 순간 지급 — lib/forage/dexReward payMapBadges).
+ * claims = 내 도감이면 받은 기록 (남의 도감은 null — 다 채웠는지만)
+ */
+function MapBadges({ dex, claims }: { dex: Record<string, DexEntry>; claims: Record<string, string> | null }) {
+  return (
+    <div className={s.mapBadges} aria-label="맵 도감">
+      {DEX_MAPS.map((m) => {
+        const all = dexMapIds(m).length;
+        const got = dexMapGot(dex, m);
+        const done = got >= all || (claims ? !!claims[dexMapClaimKey(m)] : false);
+        const pct = Math.floor((got * 100) / Math.max(1, all));
+        const tip = done
+          ? `${DEX_MAP_BADGE[m]} 배지를 받았어요.`
+          : `${DEX_MAP_LABEL[m]}에서 나오는 ${all}종을 다 모으면 「${DEX_MAP_BADGE[m]}」 배지${claims ? `와 ${DEX_MAP_REWARD[m]}P` : ""}를 받아요.`;
+        return (
+          <div key={m} className={s.mapBadge} data-done={done || undefined} title={tip} aria-label={`${DEX_MAP_LABEL[m]} 도감 ${got}/${all}${done ? ", 완성" : ""}`}>
+            <span className={s.mapBadgeHead}>
+              <b>{DEX_MAP_LABEL[m]}</b>
+              {done ? <em>완성</em> : claims ? <small>{DEX_MAP_REWARD[m]}P</small> : null}
+            </span>
+            <span className={s.mapBadgeNum}>
+              {got}/{all}
+            </span>
+            <span className={s.mapBadgeTrack} aria-hidden="true">
+              <span style={{ width: `${done ? 100 : pct}%` }} />
+            </span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

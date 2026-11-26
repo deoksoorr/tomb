@@ -31,6 +31,8 @@ export const STATE_MAX: Readonly<Record<string, number>> = {
   cheongsa_lantern: 1,
   // 11/20 총무팀 문대리 야근 스탠드 (처음부터 켜짐: 값 1 = 꺼짐)
   banker_lamp: 1,
+  // 11/26 캠핑장 펜션 기본 가구 TV (처음엔 꺼짐: 값 1 = 켜짐)
+  fx_pn_tv: 1,
 };
 /** 창문 열림 (0/1) */
 export const WINDOW_MAX = 1;

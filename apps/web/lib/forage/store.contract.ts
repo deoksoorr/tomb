@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 import { afterAll, expect, it } from "vitest";
-import { BAG_MAX, DEX_REWARD, dexIdsOf, dexRewardOf, speciesOf } from "./catalog";
+import { BAG_MAX, DEX_EXPANSION_IDS, DEX_REWARD, dexBadgeBits, dexIdsOf, dexRewardOf, isCampSpecies, speciesOf } from "./catalog";
+import { titlesOf } from "./dexReward";
 import type { ForageStore } from "./store";
 
 // 저장소 계약: MemoryForageStore·RedisForageStore가 똑같이 지켜야 하는 동작 (store.test.ts가 두 구현에 돌린다).
@@ -346,6 +347,27 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
     await store.markDexTitles(a, [], DAY);
     expect((await store.dexPay(a)).marks).toEqual(["fish:50", "star:100"]);
     expect((await store.snapshot(a, DAY, 1)).pay.marks).toEqual(["fish:50", "star:100"]);
+  });
+
+  it("11/26 100% 배지(칭호처럼 남기): 붙은 표시·예전 단계 보상·처음 날이 dex()에 실려 종이 늘어도 배지가 켜진다", async () => {
+    const a = acct();
+    const bugs = speciesOf("bug").filter((s) => !DEX_EXPANSION_IDS.includes(s.id) && !isCampSpecies(s));
+    await store.grant(a, "20261110", "gather", bugs.map((s) => ({ id: s.id, size: 0 })), 99);
+    const before = await store.dex(a);
+    expect(before.dex[bugs[0].id].first).toBe("20261110");
+    // 지금 기준(57종)으론 덜 채웠지만 11/14 전 확장 전 곤충을 다 채운 기록이라 「전부」 칭호 → 배지
+    expect(dexBadgeBits(before.dex, titlesOf(before.dex, before.claims, before.pay.marks)) & 2).toBe(2);
+    const b = acct();
+    await store.grant(b, DAY.replace("1112", "1127"), "gather", bugs.map((s) => ({ id: s.id, size: 0 })), 99);
+    let d = await store.dex(b);
+    expect(dexBadgeBits(d.dex, titlesOf(d.dex, d.claims, d.pay.marks)) & 2).toBe(0);
+    await store.markDexTitles(b, ["bug:100"], DAY);
+    d = await store.dex(b);
+    expect(dexBadgeBits(d.dex, titlesOf(d.dex, d.claims, d.pay.marks)) & 2).toBe(2);
+    const c = acct();
+    expect(await store.claimDex(c, "ore:100", DAY)).toBe(true);
+    d = await store.dex(c);
+    expect(dexBadgeBits(d.dex, titlesOf(d.dex, d.claims, d.pay.marks)) & 8).toBe(8);
   });
 
   it("동시에 같은 티켓을 내도 하나만 ok", async () => {

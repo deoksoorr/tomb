@@ -8,6 +8,7 @@ import ui from "./AdminUi.module.css";
 import styles from "./Admin.module.css";
 import us from "./UserStats.module.css";
 import { opsAdminApi } from "./opsAdminApi";
+import { AccountLogs } from "./OpsLogs";
 import { LoadState } from "./PanelState";
 import { usePanelLoad } from "./usePanelData";
 
@@ -41,6 +42,11 @@ export default function UserStatsDialog({ accountId, name, toast, onAuthLost, on
         </div>
       </div>
       {d ? <Body d={d} /> : <LoadState data={null} error={load.error} retry={load.retry} />}
+      {/* 11/26 가입 유입 · 접속 기록 · 사냥터 기록 (계정당 50줄) */}
+      <section className={us.section} aria-label="유입과 기록">
+        <h3 className={us.title}>유입 · 접속 기록</h3>
+        <AccountLogs accountId={accountId} toast={toast} onAuthLost={onAuthLost} />
+      </section>
     </Dialog>
   );
 }

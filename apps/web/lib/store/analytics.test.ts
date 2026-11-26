@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildReport } from "../analyticsReport";
 import { env } from "../env";
 import { FIELD_CAP, MemoryAnalytics, RedisAnalytics, type AnalyticsStore, type HitRecord } from "./analytics";
@@ -162,5 +162,21 @@ describe("47번 보고서", () => {
     expect(w.series[11]).toMatchObject({ visitors: 3, visits: 4, peak: 9 });
     const m = await buildReport(s, "month", now);
     expect(m.series[2]).toMatchObject({ label: "2026.11", visitors: 3 });
+  });
+
+  it("11/26 지금 표본(livePeak)은 읽기와 함께 받아 오늘 그 시각 최고값에 더한다 (더 클 때만), 유입 집계는 다시 읽지 않는다", async () => {
+    const s = new MemoryAnalytics();
+    const now = Date.UTC(2026, 10, 12, 3); // KST 11/12 12시
+    const day = "20261112";
+    await s.hit(hit({ day, hour: 12, visitor: "a" }));
+    await s.concurrent(day, 12, 5);
+    const days = vi.spyOn(s, "days");
+    const up = await buildReport(s, "day", now, Promise.resolve(8));
+    expect(up.today.peak).toBe(8);
+    expect(up.series[29]).toMatchObject({ peak: 8 });
+    expect(days).toHaveBeenCalledTimes(1);
+    expect((await buildReport(s, "hour", now, Promise.resolve(3))).series[23]).toMatchObject({ peak: 5 });
+    expect((await buildReport(s, "hour", now, Promise.resolve(null))).today.peak).toBe(5);
+    expect((await buildReport(s, "hour", now, Promise.resolve(11))).series[23]).toMatchObject({ peak: 11 });
   });
 });

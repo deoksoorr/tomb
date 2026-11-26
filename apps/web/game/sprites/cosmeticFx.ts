@@ -1,5 +1,6 @@
 import { bodyTier, champAuraOn, CHAMP_AURA_OFF, champBoards, CHAMP_BOARDS, DIR, dyeSpecialOf, isDyeableCosmetic, itemById, type DirId } from "@tomb/protocol";
-import { foxSheet, MOUNT_FRAMES, MOUNT_GLIDE, MOUNT_H, MOUNT_SIDE_SHIFT, MOUNT_W, mountLift, mountSheet, mountSideOver, type MountKind } from "./mountArt";
+import { foxSheet, MOUNT_FRAMES, MOUNT_GLIDE, MOUNT_H, MOUNT_SIDE_SHIFT, MOUNT_W, mountArtDef, mountLift, mountSheet, mountSideOver, type MountKind } from "./mountArt";
+import { padArt } from "./artPad";
 import { kstHour, parseAmbienceOverride, timePhase } from "@/lib/ambience";
 import { CUTE_FX, CUTE_FX_ART, cuteIconGrid } from "./cuteFx";
 import { THEME_FX, THEME_FX_ART, themeIconGrid } from "./themeFx";
@@ -212,7 +213,8 @@ export const FX_ART = {
       return g;
     },
   },
-  petCat: {
+  // 11/26 꼬리 끝이 왼쪽 끝 열에 닿아 테 없이 잘려 보였다 → 좌우 1칸 여백 + 테로 닫기 (artPad)
+  petCat: padArt({
     w: 12,
     h: 10,
     frames: 2,
@@ -244,7 +246,7 @@ export const FX_ART = {
       for (const x of legs) g.set(x, 8, lo);
       g.outline(0x4a2a12, false, 220);
     }),
-  },
+  }, 0x4a2a12, 220, { x: 1 }),
   petDog: {
     w: 12,
     h: 10,
@@ -353,10 +355,11 @@ export const FX_ART = {
     }),
   },
   // ── 동물원 펫 (sprites/mountArt.ts) ── 달빛 여우 + 타는 펫 3종 (옆·앞·뒤 + 탄 사람 앞에 그리는 덧그림)
-  petFox: { w: 12, h: 10, frames: 2, build: foxSheet },
+  // 11/26 달빛 꼬리 끝·뿔 끝·꼬리지느러미가 프레임 끝에 닿아 잘려 보였다 → 여백 + 테로 닫기 (artPad)
+  petFox: padArt({ w: 12, h: 10, frames: 2, build: foxSheet }, 0x4a1e08, 220, { x: 1 }),
   mountHound: { w: MOUNT_W, h: MOUNT_H, frames: MOUNT_FRAMES, build: () => mountSheet("hound") },
   mountGoose: { w: MOUNT_W, h: MOUNT_H, frames: MOUNT_FRAMES, build: () => mountSheet("goose") },
-  mountDeer: { w: MOUNT_W, h: MOUNT_H, frames: MOUNT_FRAMES, build: () => mountSheet("deer") },
+  mountDeer: mountArtDef("deer", { top: 1 }),
   /** 물에 들어간 펫 둘레 물결 고리 (아바타 물결보다 작게) */
   petRipple: {
     w: 12,
@@ -861,7 +864,7 @@ export const FX_ART = {
       g.set(9, 3 - (f ? 1 : 0), 0xffffff, 200);
     }),
   },
-  mountCarp: { w: MOUNT_W, h: MOUNT_H, frames: MOUNT_FRAMES, build: () => mountSheet("carp") },
+  mountCarp: mountArtDef("carp", { x: 1 }),
   /** 밤낚시 오라: 발밑에서 퍼지는 물결 고리 */
   qRipple: {
     w: 26,
@@ -2952,14 +2955,17 @@ export function fxIconGrid(id: string): Grid | null {
       // 24×22 옆모습을 16×16에 줄여 담는다 (칸마다 가장 가까운 픽셀)
       const a = FX_ART[(COSMETIC_FX[id] as PetSpec).art];
       const src = a.build();
-      const k = Math.max(a.w / 16, a.h / 15);
+      // 11/26 위 여백(artPad — 뿔 끝·머리 꼭대기 테만 있는 줄)은 빼고 줄여 아이콘 크기는 예전 그대로
+      const top = "pad" in a ? a.pad.top : 0;
+      const h = a.h - top;
+      const k = Math.max(a.w / 16, h / 15);
       const ox = Math.floor((16 - a.w / k) / 2);
       for (let y = 0; y < 16; y++)
         for (let x = 0; x < 16; x++) {
           const sx = Math.floor((x - ox + 0.5) * k);
-          const sy = Math.floor((y - (16 - a.h / k) + 0.5) * k);
-          if (sx < 0 || sy < 0 || sx >= a.w || sy >= a.h) continue;
-          const v = src.px[sy * src.w + sx];
+          const sy = Math.floor((y - (16 - h / k) + 0.5) * k);
+          if (sx < 0 || sy < 0 || sx >= a.w || sy >= h) continue;
+          const v = src.px[(sy + top) * src.w + sx];
           if ((v & 255) > 0) g.px[y * 16 + x] = v;
         }
       return g;

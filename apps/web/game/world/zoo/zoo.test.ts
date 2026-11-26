@@ -157,7 +157,9 @@ describe("펫 그림·타는 모습", () => {
         const spec = COSMETIC_FX[p.id];
         const art = FX_ART[(spec as { art: keyof typeof FX_ART }).art];
         // 11/17 알파카·북극곰은 기본 10장 뒤에 멈춤·동작 옆모습을 덧붙인다
-        expect([art.w, art.h]).toEqual([MOUNT_W, MOUNT_H]);
+        // 11/26 뿔 끝·머리 꼭대기가 맨 윗줄에 닿는 것은 위 여백을 두고 테로 닫는다 (artPad)
+        const pad = "pad" in art ? art.pad : { x: 0, top: 0 };
+        expect([art.w, art.h]).toEqual([MOUNT_W + pad.x * 2, MOUNT_H + pad.top]);
         expect(art.frames).toBe(mountFrames(mountOf(p.id)!));
         expect(art.frames).toBeGreaterThanOrEqual(MOUNT_FRAMES);
         expect(riderLift(p.id)).toBeGreaterThanOrEqual(8);
@@ -306,7 +308,8 @@ describe("11/17 새 펫: 멈춤·귀여운 동작·옛 화면 호환", () => {
     if (spec?.kind !== "pet" || !spec.pose) throw new Error("xm_sleigh");
     const art = FX_ART[spec.art];
     // 11/17 52칸: 루돌프가 옆으로 눌려 보였다
-    expect([art.w, art.h, art.frames]).toEqual([52, MOUNT_H, mountFrames("sleigh")]);
+    // 11/26 선물 자루 꼭대기가 맨 윗줄에 닿아 위 1칸 여백 (artPad)
+    expect([art.w, art.h, art.frames]).toEqual([52, MOUNT_H + 1, mountFrames("sleigh")]);
     expect(riderLift("xm_sleigh")).toBeGreaterThan(0);
     const sim = new CosmeticFxSim();
     sim.setLook(["xm_sleigh"]);

@@ -2,6 +2,7 @@ import { housingApi } from "@/lib/housing/client";
 import { onVisibleAgain, tabHidden } from "@/lib/hooks/visibleAgain";
 import type { VillageResponse } from "@/lib/housing/types";
 import { bridge } from "../bridge";
+import { onHomesChanged } from "../housing/homesRefresh";
 import { graveChannelFor } from "./graveChannel";
 import type { WorldMap } from "./WorldMap";
 
@@ -9,6 +10,7 @@ import type { WorldMap } from "./WorldMap";
 //  - 처음 한 번 + REFRESH_MS마다(탭이 보일 때만) /api/housing/village (CDN 15초·서버 메모리 1분 캐시).
 //    숨긴 탭은 받지 않고, 돌아왔을 때 마지막으로 받은 지 REFRESH_MS가 넘었으면 (흩어서) 한 번
 //  - 분양 사무소가 분양·외관 저장 뒤 village:data를 보내면 바로 다시 세운다 (내 집 id도 거기서 온다)
+//  - 11/26 같은 채널 다른 사람이 바꾸면 실시간 서버가 homes를 보낸다 → 흩어서 &v=로 다시 받는다 (game/housing/homesRefresh)
 //  - 내 집 표시("(내 집)")를 위해 처음 한 번 /api/housing/me를 물어본다 (로그인 전이면 조용히 건너뛴다)
 //  - 채널마다 주거 구역이 따로다: 묘지와 같은 규칙(graveChannelFor)으로 지금 채널을 정하고 그 채널 마을만 받는다.
 //    채널이 바뀌면 곧바로 빈 필지로 비우고 새 채널 마을을 받는다. 다른 채널 마을 정보(늦게 온 응답 등)는 버린다
@@ -39,6 +41,8 @@ export class WorldHouses {
     const last = bridge.last("village:data");
     if (last) this.use(last.village, last.myHouseId);
     this.offs.push(bridge.on("village:data", ({ village, myHouseId }) => this.use(village, myHouseId)));
+    // 11/26 같은 채널 누가 분양·외관·넓히기·문패 → 몇 초 안에 다시 받는다 (실시간 서버 homes — 5분 주기를 기다리지 않게)
+    this.offs.push(onHomesChanged("village", (v) => void this.load({ v })));
     this.offs.push(
       bridge.on("net:status", (st) => {
         const ch = graveChannelFor(st, this.startChannel);
@@ -69,10 +73,10 @@ export class WorldHouses {
     );
   }
 
-  private async load(): Promise<void> {
+  private async load(fresh?: { v: number }): Promise<void> {
     this.loadedAt = Date.now();
     try {
-      const v = await housingApi.village(this.ch);
+      const v = await housingApi.village(this.ch, fresh ?? false);
       if (this.alive) this.use(v, this.myHouseId);
     } catch {
       // 마을 정보를 못 받아도 빈 필지로 둔다 (다음 주기에 다시)

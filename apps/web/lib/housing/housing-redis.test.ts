@@ -16,7 +16,7 @@ import { SCORE_RULE_VER, type HousePair } from "./store";
 import { HK, RedisHouseStore } from "./store-redis";
 
 /** 오두막 없는 집 하나 (공용 가방 = 이 집 id) */
-const solo = (id: string): HousePair => ({ village: id, sea: `${id}-sea` });
+const solo = (id: string): HousePair => ({ village: id, sea: `${id}-sea`, camp: `${id}-camp` });
 import type { MyHouseResponse, VillageResponse } from "./types";
 
 // 하우징 v4 계약: 실제 Redis(일회용 DB)에서만. 분양 번지 Lua·외관·마을 목록·예전 집 번지 배정
@@ -64,6 +64,17 @@ describe.skipIf(!conn)("하우징 v4 (실제 Redis)", () => {
       expect(hash.get(lots[i])).toBe(houseIdFor(id));
       expect(await points(id)).toBe(0);
     }
+  });
+
+  it("11/26 문패 바꾸기: 바꾸기 전 이름을 돌려준다 (같으면 집 바뀜 알림을 건너뛴다), 집이 없으면 null", async () => {
+    const id = await account(PLOT);
+    const hid = (await buyPlot(store, id, "첫문패", "", "주인")).house!.id;
+    expect(await store.setProfile(hid, "새문패", "소개", Date.now())).toBe("첫문패");
+    expect(await store.setProfile(hid, "새문패", "소개2", Date.now())).toBe("새문패");
+    expect(await store.get(hid)).toMatchObject({ name: "새문패", intro: "소개2" });
+    const ghost = `none-${nanoid()}`;
+    expect(await store.setProfile(ghost, "x", "", Date.now())).toBeNull();
+    expect(await raw.exists(HK.meta(ghost))).toBe(0); // 없는 집은 만들지 않는다
   });
 
   it("같은 번지를 동시에 고르면 한 명만 받고, 나머지는 LOT_TAKEN + 포인트 그대로", async () => {
@@ -282,5 +293,24 @@ describe.skipIf(!conn)("하우징 v4 (실제 Redis)", () => {
     const plain = await saveLayout(store, a, "small", { ...my.house!.layout, window: DEFAULT_WINDOW }, 1);
     expect(plain.house!.placedScore).toBe(0);
     expect((await sellFurniture(store, a, "frost_window")).refunded).toBeGreaterThan(0);
+  });
+
+  it("11/26 관리자 신고함: 여러 집 방명록 신고 수를 파이프라인 한 번에 — 집마다 읽은 것과 같다", async () => {
+    const a = await account(PLOT);
+    const b = await account(PLOT);
+    const ha = (await buyPlot(store, a, "가집", "", "가")).house!.id;
+    const hb = (await buyPlot(store, b, "나집", "", "나")).house!.id;
+    for (const [h, e] of [[ha, "e1"], [ha, "e2"], [hb, "e3"]] as const) expect(await store.addGuest(h, { id: e, name: "손", text: "안녕", at: Date.now(), author: "x" }, kstDay())).toBe("ok");
+    await store.reportGuest(ha, "e1", { accountId: "r1", name: "신1" });
+    await store.reportGuest(ha, "e1", { accountId: "r2", name: "신2" });
+    await store.reportGuest(ha, "e2", { accountId: "r1", name: "신1" }, true);
+    const many = await store.guestReportsMany([ha, hb, "nohouse0000"]);
+    expect([...many.keys()]).toEqual([ha, hb, "nohouse0000"]);
+    expect(many.get(ha)).toEqual(await store.guestReports(ha));
+    expect(many.get(hb)).toEqual(await store.guestReports(hb));
+    expect(many.get(ha)?.get("e1")).toBe(2);
+    expect(many.get(hb)?.size).toBe(0);
+    expect(many.get("nohouse0000")?.size).toBe(0);
+    expect((await store.guestReportsMany([])).size).toBe(0);
   });
 });

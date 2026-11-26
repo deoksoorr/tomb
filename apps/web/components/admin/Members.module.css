@@ -204,3 +204,13 @@
   color: var(--ad-faint);
   font-size: 11px;
 }
+
+/* 11/26 가입 유입 칸 (길면 줄바꿈, 너무 넓어지지 않게) */
+.src {
+  min-width: 96px;
+  max-width: 160px;
+  color: var(--ad-muted);
+  font-size: 12px;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}

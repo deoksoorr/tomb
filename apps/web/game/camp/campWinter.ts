@@ -1,4 +1,4 @@
-import { CAMP_FIRE, CAMP_PLAZA_R, CAMP_ROAD, CAMP_STREAM_HALF_W, CAMP_VAN_GEAR, campStreamX } from "@tomb/protocol";
+import { CAMP_CAMPFIRES, CAMP_FIRE, CAMP_PLAZA_R, CAMP_ROAD, CAMP_STREAM_HALF_W, campStreamX } from "@tomb/protocol";
 import { Grid, hash2, mix, rng, vnoise, type Color } from "../sprites/pixel";
 import { ICE, SNOW } from "../sprites/winterArt";
 import { CAMP_BBQ, type CampGround } from "./campLayout";
@@ -26,7 +26,8 @@ const COLD_WATER = { deep: 0x24485a, mid: 0x2e5a6c, light: 0x7aaabc, foam: 0xdce
 /** 눈이 녹은 자리 (가운데·반지름 — 광장 큰 모닥불은 통나무 의자 고리까지) */
 export const CAMP_MELT_SPOTS: readonly { x: number; y: number; r: number }[] = [
   { x: CAMP_FIRE.x, y: CAMP_FIRE.y + 4, r: 70 },
-  ...CAMP_VAN_GEAR.map((g) => ({ x: g.brazier.x, y: g.brazier.y - 2, r: 17 })),
+  // 11/26 작은 불 넷 (폭포 다리 앞·불멍 쉼터 둘·펜션 정원 화로대)
+  ...CAMP_CAMPFIRES.filter((f) => !f.big).map((f) => ({ x: f.x, y: f.y + 4, r: 22 })),
   { x: CAMP_BBQ.grill.x, y: CAMP_BBQ.grill.y - 2, r: 22 },
 ];
 
@@ -152,7 +153,7 @@ export function campWinterGroundColor(x: number, y: number, k: CampGround, c0: C
       if (pathEdge > bank) return 0xa9b6c3;
       return slushAt(x, y, c0);
     }
-    case "deckPad":
+    case "pad":
     case "grass":
     default: {
       if (campMeltAt(x, y)) return wetGround(x, y, 0x6a5a40);

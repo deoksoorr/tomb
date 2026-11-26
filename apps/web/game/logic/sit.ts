@@ -19,8 +19,8 @@ export function pickSeat(
 
 /** 의자에서 일어날 때 내려설 자리. 가구 충돌 박스 바깥(아래)으로 살짝 내려선다 */
 export const STAND_OFFSET_Y = 9;
-export function standPoint(seat: Pick<Seat, "x" | "y" | "standDy">): { x: number; y: number } {
-  return { x: seat.x, y: seat.y + (seat.standDy ?? STAND_OFFSET_Y) };
+export function standPoint(seat: Pick<Seat, "x" | "y" | "standDy" | "standDx">): { x: number; y: number } {
+  return { x: seat.x + (seat.standDx ?? 0), y: seat.y + (seat.standDy ?? STAND_OFFSET_Y) };
 }
 
 export type InteractTarget = { kind: "grave"; graveId: string } | { kind: "seat"; seat: Seat } | { kind: "none" };

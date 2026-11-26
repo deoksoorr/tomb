@@ -14,7 +14,7 @@ import type { ReclaimReport } from "@/lib/housing/reclaim";
 import type { AdminHouse } from "@/lib/housing/types";
 import type { AdminAccountRow } from "@/app/api/admin/accounts/search/route";
 import type { AdminReviewResponse } from "@/app/api/admin/rpg/review/route";
-import type { EconomyResponse, Notice, NoticeInput, NoticeListResponse } from "@/lib/types";
+import type { EconomyResponse } from "@/lib/types";
 import type { AdminAction } from "@/lib/validate";
 
 // 관리자 화면 → /api/admin/*. 인증은 로그인 때 받은 httpOnly 쿠키가 자동으로 실린다.
@@ -27,17 +27,12 @@ const send = (method: string, body: unknown): RequestInit => ({
 const post = (body: unknown) => send("POST", body);
 /** 하우징 집·방명록 관리 작업 */
 export type ModAction = "hide" | "unhide" | "delete";
-const noticePath = (id: string) => `/api/admin/notices/${encodeURIComponent(id)}`;
 
 export const adminApi = {
   login: (key: string) => request<{ ok: true }>("/api/admin/session", post({ key })),
   logout: () => request<{ ok: true }>("/api/admin/session", { method: "DELETE" }),
   graves: () => request<{ graves: AdminGrave[] }>("/api/admin/graves", { cache: "no-store" }),
   channels: () => request<LobbyInfo>("/api/admin/channels", { cache: "no-store" }),
-  notices: () => request<NoticeListResponse>("/api/admin/notices", { cache: "no-store" }),
-  createNotice: (input: NoticeInput) => request<{ notice: Notice }>("/api/admin/notices", post(input)),
-  updateNotice: (id: string, patch: Partial<NoticeInput>) => request<{ notice: Notice }>(noticePath(id), send("PATCH", patch)),
-  deleteNotice: (id: string) => request<{ ok: true }>(noticePath(id), { method: "DELETE" }),
   houses: () => request<{ houses: AdminHouse[] }>("/api/admin/housing", { cache: "no-store" }),
   houseAction: (id: string, action: ModAction) => request<{ ok: true }>(`/api/admin/housing/${encodeURIComponent(id)}`, post({ action })),
   /** 11/15 같은 채널 안에서 번지 옮기기 (빈 번지만) */

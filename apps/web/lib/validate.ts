@@ -1,4 +1,5 @@
 import { checkName, isAvatarBody, isAvatarColor, isGraveStyle, isStarterBody, itemById, ROOM_ID_RE, type CosmeticSlot } from "@tomb/protocol";
+import { SrcInputSchema } from "./signupSource";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { BALANCE_CAP, CODE_RE, normalizeCode } from "./economy";
@@ -160,6 +161,8 @@ export const JoinRequestSchema = z.object({
   color: avatarColor,
   /** 없으면 계정에 저장된 몸 모양 */
   body: avatarBody.optional(),
+  /** 11/26 이번 접속 유입 (그 탭의 첫 입장 요청에만, lib/signupSource). 모양이 틀리면 없는 것으로 */
+  src: SrcInputSchema.catch(undefined),
 });
 
 /** 신고 사유는 선택. 본문이 없거나 사유가 없으면 "other" */
@@ -184,8 +187,8 @@ export const AdminBulkSchema = z.object({
   action: adminAction,
 });
 
-/** 출석 때 입장 화면의 이름·색·몸 모양을 함께 보낸다 (계정에 값이 없을 때만 저장) */
-export const AttendSchema = z.object({ name: userName.optional(), color: avatarColor.optional(), body: avatarBody.optional() });
+/** 출석 때 입장 화면의 이름·색·몸 모양을 함께 보낸다 (계정에 값이 없을 때만 저장). 11/26 src = 처음 방문 유입 (이번에 계정이 만들어졌을 때만 저장, lib/signupSource) */
+export const AttendSchema = z.object({ name: userName.optional(), color: avatarColor.optional(), body: avatarBody.optional(), src: SrcInputSchema.catch(undefined) });
 
 /** 클라이언트 오류 보고. 너무 긴 값은 자른다 (거절하지 않는다) */
 const clip = (max: number) => z.string().transform((s) => s.slice(0, max));
@@ -197,13 +200,17 @@ export const ErrorReportSchema = z.object({
   ua: clip(300).optional(),
 });
 
+/** 11/26 오류 여러 개를 한 번에 (lib/hooks/errorReporting ERROR_BATCH_MAX). 옛 화면은 하나만 보낸다 */
+export const ErrorBatchSchema = z.union([z.object({ reports: z.array(ErrorReportSchema).min(1).max(5) }), ErrorReportSchema.transform((r) => ({ reports: [r] }))]);
+
 export const RoomJoinSchema = z.object({ room: z.string().max(60).regex(ROOM_ID_RE, "들어갈 수 없는 방이에요.") });
 
 export const ActivitySeenSchema = z.object({ at: z.number().int().min(0) });
 export const NameChangeSchema = z.object({ name: userName });
 
 /** POST /api/session — fresh면 기존 쿠키를 버리고 새 계정으로 시작 */
-export const SessionSchema = z.object({ fresh: z.boolean().optional() });
+/** 11/26 src는 옛 화면이 보내던 값 (받기만 하고 쓰지 않는다 — 가입 유입은 첫 입장 기록 /api/me/attend에서 저장) */
+export const SessionSchema = z.object({ fresh: z.boolean().optional(), src: SrcInputSchema.catch(undefined) });
 
 export const CodeLoginSchema = z.object({
   code: z

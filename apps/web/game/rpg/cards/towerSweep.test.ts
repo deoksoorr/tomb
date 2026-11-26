@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { HUNT_ZONES, MONSTERS, type MonsterId } from "@/lib/rpg/catalog";
 import type { CardOfferView } from "@/lib/rpg/cards";
-import { cardPower, isBossDealFloor } from "@/lib/rpg/cards";
+import { cardPower, isBossDealFloor, runLevelBase } from "@/lib/rpg/cards";
 import { seeded } from "@/lib/rpg/formulas";
 import { revivable } from "@/lib/rpg/plan";
 import { RunFinishSchema } from "@/lib/rpg/schemas";
@@ -194,7 +194,7 @@ const clean = (v: TowerVerdict) => v.ok && !(v as { suspect?: string[] }).suspec
 /** 판 끝 요청 그대로 (zod) → evalTower. 서버 시간은 판 시간 + 요청 왕복(1.5~6초) */
 function serverCheck(seed: number, start: number, r: HuntResult, gp: number, rnd: () => number) {
   const parsed = RunFinishSchema.parse({ ticket: "t".repeat(20), result: r }).result as HuntResult;
-  return evalTower({ seed, level: 50, start, ...(gp > 1 ? { gp } : {}) }, parsed, r.durationMs + 1500 + rnd() * 4500);
+  return evalTower({ seed, level: 50, start, ...(gp > 1 ? { gp } : {}), ...(runLevelBase(start) ? { rb: runLevelBase(start) } : {}) }, parsed, r.durationMs + 1500 + rnd() * 4500);
 }
 
 const STARTS = [1, 11, 21, 31, 41, 51, 61, 71, 81, 91, 101, 151, 201, 251, 301, 351];
@@ -306,7 +306,7 @@ describe("야근 빌딩 전수 시뮬레이션 (화면이 만드는 몬스터 �
     const total = Object.values(r.kills).reduce((a, b) => a + (b ?? 0), 0);
     expect(total).toBeGreaterThan(1000);
     const parsed = RunFinishSchema.parse({ ticket: "t".repeat(20), result: r }).result as HuntResult;
-    const v = evalTower({ seed, level: 50, start: 21, gp: 1.66 }, parsed, 1_338_169);
+    const v = evalTower({ seed, level: 50, start: 21, gp: 1.66, rb: runLevelBase(21) }, parsed, 1_338_169);
     expect(clean(v), JSON.stringify(v)).toBe(true);
     expect(v).toMatchObject({ ok: true, floors: 47, best: 67 });
   });

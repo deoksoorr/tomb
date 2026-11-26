@@ -15,8 +15,8 @@ import { earnBoost } from "../store/pointEvent";
 import type { BugsResult } from "../rpg/types";
 import { recordKingCatch, takeKingCatch } from "./kingFish";
 import { CHAMP_FISH_SELL } from "../champPerks";
-import { bagIdOf, bagSpecies, dexBadgeBits, dexIdsOf, gatherNodeById, gradedPrice, gradeOf, NODE_CAT, npcBuys, npcById, speciesById, STACK_MAX, type DexCat, type NpcId, type Species } from "./catalog";
-import { claimPendingDex, ensureDexSettled, payNewDex, reachedTitleKeys, rewardState, titlesOf } from "./dexReward";
+import { bagIdOf, bagSpecies, dexBadgeBits, dexIdsOf, dexMapClaimKey, gatherNodeById, gradedPrice, gradeOf, NODE_CAT, nodeWheres, npcBuys, npcById, speciesById, STACK_MAX, WATER_WHERES, type DexCat, type NpcId, type Species } from "./catalog";
+import { claimPendingDex, ensureDexSettled, payMapBadges, payNewDex, reachedTitleKeys, rewardState, titlesOf } from "./dexReward";
 import {
   activeNodes,
   BUG_ROUND_SEC,
@@ -97,7 +97,8 @@ const newSeed = () => Math.floor(rand() * 0x7fffffff);
 // 11/16 포구 시장 좌판도 같은 포인트 항목 (생선 = 낚시 판매, 갯벌 = 채집 판매) — 새 포인트 항목이 없다
 // 11/20 해녀 할망(바닷가 좌판)은 둘 다 사요 → null = 품목마다 (물고기 = 낚시 판매, 나머지 = 채집 판매)
 type SellSource = Extract<EarnSource, "fish" | "gather">;
-const SOURCE_OF_NPC: Record<NpcId, SellSource | null> = { fishmonger: "fish", collector: "gather", haenyeo: null };
+// 11/26 캠핑장 낚시터 사장님도 둘 다 (해녀 할망과 같아요 — 물고기 값은 낚시 판매라 낚시왕 +15%가 붙어요)
+const SOURCE_OF_NPC: Record<NpcId, SellSource | null> = { fishmonger: "fish", collector: "gather", haenyeo: null, trader: null };
 /** 이 상인에게 이 품목을 판 값이 쌓이는 포인트 항목 (포인트 배수 이벤트·하루 한도가 이 항목을 본다) */
 export const sellSourceOf = (npcId: NpcId, s: Species): SellSource => SOURCE_OF_NPC[npcId] ?? (s.cat === "fish" ? "fish" : "gather");
 
@@ -126,6 +127,12 @@ async function readSnap(store: ForageStore, acct: string, now: number): Promise<
     await store.markDexTitles(acct, missing, kstDay(now));
     snap.pay = { ...snap.pay, marks: [...snap.pay.marks, ...missing].sort() };
   }
+  // 11/26 맵 도감을 이미 다 채운 사람(배지 전에 채운 바닷가 등)은 처음 읽을 때 완성 배지·보상 (다 받았으면 저장소에 묻지 않는다)
+  const map = await payMapBadges(store, acct, snap.dex, snap.claims, undefined, now).catch((e) => {
+    console.error("[forage] 맵 도감 배지 지급 실패", e);
+    return { badges: [] };
+  });
+  if (map.badges.length) snap.claims = { ...snap.claims, ...Object.fromEntries(map.badges.map((b) => [dexMapClaimKey(b.map), kstDay(now)])) };
   return snap;
 }
 
@@ -192,7 +199,8 @@ export async function castLine(acct: string, spotId: string, now = Date.now(), i
   // 11/15 긴급 의뢰 마을 축제: 희귀 이상 조금 더 (축제가 있을 수 있는 때에만 저장소를 본다)
   // 11/16 낚시 갈래 칭호: 큰 물고기 확률 (단 칭호는 기억에서 — lib/titlesServer wornPerk)
   const [fest, perk] = await Promise.all([festivalOn(now), wornPerk(acct, now)]);
-  const s = pickWeighted(candidates("fish", water, cond), rand(), (x) => festWeight(x.rarity, fest));
+  // 11/26 물 → 뽑는 곳 (캠핑장 물은 전용 종 + 이어진 물 — catalog WATER_WHERES)
+  const s = pickWeighted(candidates("fish", WATER_WHERES[water], cond), rand(), (x) => festWeight(x.rarity, fest));
   if (!s) throw new HttpError(409, "NO_FISH", "지금은 아무것도 물지 않아요.");
   // 11/16 바다 낚시: 만조 앞뒤엔 큰 놈 확률을 더 얹는다 (rules withHighTide — 시각만으로 계산, 저장소 명령 없음)
   const size = rollFishSize10(s, rand, water === "sea" ? withHighTide(perk.bigFish, tideLevel(now)) : perk.bigFish);
@@ -352,7 +360,8 @@ export async function startGather(acct: string, nodeId: string, now = Date.now()
   }
   // 11/16 채집 갈래 칭호: 희귀 채집물 확률 (단 칭호는 기억에서 — lib/titlesServer wornPerk)
   const [fest, perk] = await Promise.all([festivalOn(now), wornPerk(acct, now)]);
-  const s = pickGather(candidates(NODE_CAT[n.kind], n.where, conditionsAt(now)), rand, (x) => festWeight(x.rarity, fest), perk.rareGather);
+  // 11/26 캠핑장 지점은 캠핑장 숲·바위 전용 종도 (catalog nodeWheres)
+  const s = pickGather(candidates(NODE_CAT[n.kind], nodeWheres(n), conditionsAt(now)), rand, (x) => festWeight(x.rarity, fest), perk.rareGather);
   if (!s) throw new HttpError(409, "NODE_EMPTY", "지금은 비어 있어요. 조금 뒤에 다시 피어나요.");
   const items = Array.from({ length: gatherCount(n.kind, rand()) }, () => ({ id: s.id, size: 0 }));
   const ms = GATHER_MS[n.kind];
@@ -378,8 +387,8 @@ export async function finishGather(acct: string, token: string, result: BugsResu
     bugPoints = insectPoints(t.s, v.caught, v.golden, v.mistakes);
     const r = insectRolls(v.caught, v.golden, v.mistakes);
     const cond = conditionsAt(t.t);
-    const common = candidates("bug", n.where, cond, (s) => s.rarity <= 2);
-    const rarePool = candidates("bug", n.where, cond, (s) => s.rarity >= 3);
+    const common = candidates("bug", nodeWheres(n), cond, (s) => s.rarity <= 2);
+    const rarePool = candidates("bug", nodeWheres(n), cond, (s) => s.rarity >= 3);
     items = [];
     // 11/16 채집 갈래 칭호: 흔한 곤충 몫 하나하나가 그 확률로 희귀 곤충이 된다
     const rareUp = r.common > 0 && rarePool.length ? (await wornPerk(acct, now)).rareGather : 0;
@@ -535,10 +544,11 @@ export async function peerDex(where: { ch: number } | { room: string }, sid: num
   return { ...d, accountId: "", name: d.name ?? peer.name };
 }
 
-/** 입장 토큰에 넣을 도감 100% 배지 (종류별 비트). 읽지 못하면 0 — 입장 자체를 막지 않는다 */
+/** 입장 토큰에 넣을 도감 100% 배지 (종류별 비트). 읽지 못하면 0 — 입장 자체를 막지 않는다. 11/26 칭호처럼 한 번 붙으면 남는다 (「전부」 칭호) */
 export async function dexBadgeOf(acct: string): Promise<number> {
   try {
-    return dexBadgeBits(await getForageStore().dexEntries(acct));
+    const d = await getForageStore().dex(acct);
+    return dexBadgeBits(d.dex, titlesOf(d.dex, d.claims, d.pay.marks));
   } catch {
     return 0;
   }

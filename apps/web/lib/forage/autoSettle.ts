@@ -81,7 +81,7 @@ async function grantRange(store: ForageStore, acct: string, s: AutoSession, from
     const c = rollAutoCatch(s.seed, k, s.water, t, cond);
     if (!c) return;
     const pick = rollAutoSunken(s.seed, k);
-    const alt = pick !== null ? sunkenFallbackFish(s.water, cond, hash01(`auto|${s.seed}|${k}|alt`), speciesById(c.id)!) : null;
+    const alt = pick !== null ? sunkenFallbackFish(s.water, cond, hash01(`auto|${s.seed}|${k}|alt`), speciesById(c.id)!, true) : null;
     rolled.push({ day: kstDay(t), id: c.id, size: c.size, ...(pick !== null && alt ? { gear: { pick, alt: alt.id } } : {}) });
   });
   const owned = rolled.some((r) => r.gear) ? await ownedPermanent(acct, now) : new Set<string>();

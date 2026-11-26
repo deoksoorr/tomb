@@ -1,4 +1,5 @@
-import { hmacSign, hmacVerify } from "@tomb/protocol";
+import { hmacSign } from "@tomb/protocol";
+import { ADMIN_COOKIE, verifyAdminCookie } from "./adminCookie";
 import type { NextRequest, NextResponse } from "next/server";
 import { env } from "./env";
 import { HttpError } from "./http";
@@ -33,15 +34,11 @@ export type AdminPointsResponse = { accountId: string; points: number };
 /** POST /api/admin/graves/bulk 응답 */
 export type AdminBulkResponse = { done: string[]; notFound: string[] };
 
-export const ADMIN_COOKIE = "tomb_admin";
+export { ADMIN_COOKIE };
 const ADMIN_SESSION_SEC = 12 * 60 * 60;
 
 // 쿠키 값 = `${만료 unix초}.${HMAC(ADMIN_KEY, "admin:" + 만료)}` → ADMIN_KEY를 바꾸면 기존 쿠키가 모두 무효가 된다
-async function verifyAdminCookie(value: string | undefined): Promise<boolean> {
-  const [exp, sig] = value?.split(".") ?? [];
-  if (!exp || !sig || !/^\d+$/.test(exp) || Number(exp) < Date.now() / 1000) return false;
-  return hmacVerify(env.adminKey(), `admin:${exp}`, sig);
-}
+// 11/26 확인 함수는 lib/adminCookie (점검 모드 미들웨어도 같이 쓴다 — 저장소를 불러오지 않게 따로 둔다)
 
 export async function setAdminCookie(res: NextResponse): Promise<void> {
   const exp = Math.floor(Date.now() / 1000) + ADMIN_SESSION_SEC;
@@ -77,9 +74,11 @@ export async function requireAdmin(req: NextRequest): Promise<void> {
   const key = req.headers.get("x-admin-key") ?? bearer;
   if (key) return assertAdminKey(req, key);
 
-  await assertAdminNotLocked(req);
+  // 11/26 맞는 관리자 쿠키(서명 확인 — Redis 안 씀)면 잠금 확인(Redis 왕복 1번)을 건너뛴다: 관리자 화면의 모든 요청이 그만큼 빨라진다.
+  // 잠금은 키·쿠키를 맞히려는 시도를 막는 것이라, 이미 서명된 쿠키를 가진 요청에는 쓸모가 없다. 쿠키가 없거나 틀리면 예전과 같다
   const cookie = req.cookies.get(ADMIN_COOKIE)?.value;
   if (await verifyAdminCookie(cookie)) return;
+  await assertAdminNotLocked(req);
   if (cookie) await recordAdminFailure(req);
   throw unauthorized();
 }

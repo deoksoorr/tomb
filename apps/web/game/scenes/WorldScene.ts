@@ -693,12 +693,10 @@ export class WorldScene extends Phaser.Scene {
           // 보이는 사람의 말풍선만 작게 소리
           if (r.visible) this.sfx.play("say", 0.3);
         },
-        onGoblin: (g) => this.life.onGoblin(g),
-        onGoblinGone: (id) => this.life.onGoblinGone(id),
-        onGoblinCaught: (id, sid, name, points) => this.life.onGoblinCaught(id, sid, name, points),
         onGoblinGrant: (id, grant, points) => this.life.onGoblinGrant(id, grant, points),
         onMegaphone: (m) => bridge.emit("megaphone:heard", m),
         onMegaPin: (m) => bridge.emit("megaphone:pin", m),
+        onHomes: (m) => bridge.emit("homes:changed", m),
         onMeStale: () => bridge.emit("me:stale"),
         onFriend: (m) => bridge.emit("friend:presence", m),
         onSquirrels: (m) => bridge.emit("fx:squirrels", m),
@@ -980,9 +978,11 @@ export class WorldScene extends Phaser.Scene {
     );
     // 11/15 친구가 캠핑장에 있으면 버스를 거쳐 그 옆으로 (캠핑장에 있는 동안은 캠핑장 장면이 받는다). 11/16 바닷가도 같다
     on.push(
-      bridge.on("friend:goto", ({ sid, name, x, y, map, tp }) => {
+      bridge.on("friend:goto", ({ sid, name, x, y, map, tp, door }) => {
         if (this.trip.away) return;
-        if (map) this.goToCampFriend({ sid, name, x, y, ...(tp ? { tp } : {}) }, map);
+        // 11/26 door: 집에서 나와 그 집 문 앞으로 (다른 맵이면 버스 길로, 마을이면 그 번지 문 앞)
+        if (map) this.goToCampFriend({ sid, name, x, y, ...(tp ? { tp } : {}), ...(door !== undefined ? { door } : {}) }, map);
+        else if (door !== undefined) this.standAtHouseDoor(door);
         else this.goToFriend(sid, name, x, y, tp);
       }),
     );
@@ -1704,8 +1704,9 @@ export class WorldScene extends Phaser.Scene {
   private arrivedByBus(friend: CampFriend | null): void {
     if (!friend || this.cleaned) return;
     const next = friend.next;
-    if (!next) return this.goToFriend(friend.sid, friend.name, friend.x, friend.y, friend.tp, true);
-    if (this.goToCampFriend({ sid: friend.sid, name: friend.name, x: friend.x, y: friend.y, ...(friend.tp ? { tp: friend.tp } : {}) }, next, true)) return;
+    // 11/26 집 문 앞으로 온 길이면 그 번지 문 앞 (친구 옆·도착 안내 없이)
+    if (!next) return friend.door !== undefined ? this.standAtHouseDoor(friend.door) : this.goToFriend(friend.sid, friend.name, friend.x, friend.y, friend.tp, true);
+    if (this.goToCampFriend({ sid: friend.sid, name: friend.name, x: friend.x, y: friend.y, ...(friend.tp ? { tp: friend.tp } : {}), ...(friend.door !== undefined ? { door: friend.door } : {}) }, next, true)) return;
     this.player.view.fade = 1;
     this.net.setAway(false);
     bridge.emit("bus:state", { riding: false });
@@ -1721,14 +1722,16 @@ export class WorldScene extends Phaser.Scene {
     if (this.cleaned || !this.net.online) return false;
     if (!(map === "sea" ? this.net.seaOpen : this.net.campOpen)) return notice(`지금은 ${MAP_NAME[map]}에 갈 수 없어요.`);
     if (this.awayScene) return notice("마을로 나온 뒤에 친구한테 갈 수 있어요.");
-    const route = friendRoute("village", map, myBig());
+    // 11/26 집에서 나와 그 집 맵으로 가는 길(door)은 창밖 연출 없는 워프라 몸 크기·탈것을 보지 않는다
+    const door = f.door !== undefined;
+    const route = friendRoute("village", map, door ? 1 : myBig());
     if (route.do === "block") return notice(route.message);
     // 11/16 오리배·범퍼카 같은 탈것에 탄 채로는 버스를 타지 않는다 (lib/rideGate — 사냥터 입구와 같은 규칙)
-    const why = transfer ? null : rideBlocked(`${MAP_NAME[map]}에 갈`);
+    const why = transfer || door ? null : rideBlocked(`${MAP_NAME[map]}에 갈`);
     if (why) return notice(why);
     if (this.inShop) this.exitShop();
     this.leaveCampfire();
-    this.trip.board({ sid: f.sid, name: f.name, x: f.x, y: f.y, ...(f.tp ? { tp: f.tp } : {}) }, map);
+    this.trip.board({ sid: f.sid, name: f.name, x: f.x, y: f.y, ...(f.tp ? { tp: f.tp } : {}), ...(door ? { door: f.door } : {}) }, map);
     return this.trip.away;
   }
 

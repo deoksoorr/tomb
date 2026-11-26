@@ -1,29 +1,19 @@
 import * as Phaser from "phaser";
-import { CAMP_DECK_H, CAMP_DECK_W, CAMP_DECKS, CAMP_FIRE, CAMP_OFFICE, CAMP_SEATS, CAMP_VANS, DIR, type DirId } from "@tomb/protocol";
+import { CAMP_OFFICE, DIR, type DirId } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { isSnowy, parseConceptOverride, type MapConcept } from "@/lib/mapConcept";
-import { addCanvasTexture, TEX } from "../assets/manifest";
+import { addCanvasTexture } from "../assets/manifest";
 import { DEPTH } from "../config";
 import { Grid, hash2, makeCanvas, vnoise, type Color } from "../sprites/pixel";
 import {
   bareTree,
   breathPuff,
-  bulbGlowSheet,
-  christmasTree,
   doorWreath,
-  giftPile,
-  lightString,
-  lightStringOrigin,
   snowCap,
   snowGlint,
-  snowman,
   snowRoof,
   SNOW,
-  woodpile,
-  XTREE_H,
-  XTREE_W,
 } from "../sprites/winterArt";
-import { addTwinkle } from "../world/conceptLights";
 import * as Art from "./campArt";
 import * as Lay from "./campLayout";
 import { CAMP_TEX_PREFIX } from "./campTypes";
@@ -32,19 +22,14 @@ import { snowDriftArt } from "./campWinter";
 // 11/17 캠핑장 맵 컨셉 (lib/mapConcept, 마을 game/world/ConceptDecor와 같은 방식): 겨울·크리스마스 판의 텍스처 고르기 + 겉 장식.
 //  - campSkin(): 캠핑장 그림 키 → 그 판의 그림 키 (처음 쓸 때 원본 캔버스에 눈을 얹어 한 번 굽고, 지우지 않는다)
 //    침엽수는 눈 쌓인 나무, 단풍·노란 잎 나무는 앙상한 나무, 낙엽 무더기·버섯은 눈 더미, 지붕(관리소·캠핑카·정류장)은 눈 + 고드름,
-//    데크·통나무 다리·전망대 바닥·타프 천은 위에서 본 판이라 군데군데 쌓인 눈. 불(모닥불·화롯대·그릴)·빛·NPC는 그대로
-//  - CampConceptDecor: 판마다 얹는 장식 (충돌 없음 — 배치·충돌·상호작용 자리는 그대로). 판이 바뀌면 다 지우고 다시 세운다
-//    겨울: 장작더미, 관리소 굴뚝 연기, 캐릭터 입김
-//    크리스마스: 겨울 + 모닥불 광장 큰 트리(전구·별빛), 데크와 데크를 잇는 전구 줄, 눈사람, 선물 더미, 가끔 반짝이는 눈
-//  움직이는 건 빛 겹 프레임 바꾸기(conceptLights 타이머 하나)·별 숨쉬기 트윈 하나·작은 파티클 풀뿐이다 (폰에서도 가볍게)
+//    통나무 다리는 위에서 본 판이라 군데군데 쌓인 눈. 불(모닥불·화롯대·그릴)·빛·NPC는 그대로
+//  - CampConceptDecor: 판마다 얹는 움직이는 장식 (관리소 굴뚝 연기·입김·반짝이는 눈). 판이 바뀌면 다 지우고 다시 세운다
+//    11/26 트리·눈사람·선물·장작더미·줄 조명은 맵(CampMap)이 폭포 계곡 자리마다 그린다
+//  움직이는 건 작은 파티클 풀뿐이다 (폰에서도 가볍게)
 
 const P = CAMP_TEX_PREFIX;
-const XTREE = `${P}xtree`;
-const XTREE_GLOW = `${P}xtree-glow`;
 const GLINT = `${P}concept-glint`;
 const BREATH = `${P}concept-breath`;
-const WOODPILE = `${P}concept-woodpile`;
-const DECK_POLE = `${P}concept-deckpole`;
 
 /** 지금 판 (주소 시험 값이 있으면 그것, 없으면 관리자가 고른 값 — 마을 장면이 bridge로 알린다) */
 export function campConceptNow(): MapConcept {
@@ -106,11 +91,8 @@ export function forEachCampSkin(concept: MapConcept, each: (base: string, build:
   const T = Art.CAMP_TEX;
   for (let v = 0; v < 2; v++) bases.push(T.spruce(v), T.pine(v), T.fir(v), T.maple(v), T.mapleO(v), T.yellow(v), T.bush(v), T.boulder(v));
   for (let v = 0; v < 3; v++) bases.push(T.leafPile(v), T.mushroom(v), T.fern(v), T.pebbles(v));
-  bases.push(T.rockSeat, T.logChair, T.bench, T.rustyBench, T.plankBench2, T.plankBench3, T.table, T.office, T.board, T.bridge, T.tarp, T.tarpPole);
-  bases.push(T.lookoutFloor, T.lookoutFront, T.pole, T.shelter, T.busSign, T.timetable, T.foldTable, T.icebox, T.plateSign, T.bbqTable, T.vending);
-  for (const d of CAMP_DECKS) bases.push(T.deck(d.n));
-  CAMP_VANS.forEach((_v, i) => bases.push(T.van(i, false), T.van(i, true)));
-  for (let i = 0; i < 3; i++) bases.push(T.campChairFront(i), T.campChairSide(i));
+  bases.push(T.logChair, T.bench, T.rustyBench, T.plankBench2, T.office, T.board, T.bridge);
+  bases.push(T.pole, T.shelter, T.busSign, T.timetable, T.bbqTable, T.vending);
   for (const b of bases) each(b, (scene) => campSkin(scene, b, concept));
 }
 
@@ -212,13 +194,17 @@ function snowFloor(src: HTMLCanvasElement, o: { cover?: number; north?: boolean;
   return canvas;
 }
 
-/** 작은 리스 (9×9 — 자판기·탁자·팻말에) */
+/**
+ * 작은 리스 (9×9 그림 + 둘레 한 칸 = 11×11 — 자판기·탁자·팻말에). 11/26 고리·열매가 9×9 끝까지 닿아 윤곽이 잘렸다 →
+ * 같은 그림을 한 칸 안쪽에 그리고 윤곽을 다 두른다. 붙일 때는 (x − 1, y − 1)에 (그림 자리는 그대로)
+ */
 function miniWreath(): HTMLCanvasElement {
-  const g = new Grid(9, 9);
+  const g = new Grid(11, 11);
+  const set = (x: number, y: number, c: number) => g.set(x + 1, y + 1, c);
   for (let y = 0; y < 9; y++)
     for (let x = 0; x < 9; x++) {
       const r = Math.hypot(x + 0.5 - 4.5, y + 0.5 - 4.5);
-      if (r <= 4.2 && r >= 1.9) g.set(x, y, hash2(x, y, 471) < 0.35 ? 0x3e7a48 : 0x2b5a36);
+      if (r <= 4.2 && r >= 1.9) set(x, y, hash2(x, y, 471) < 0.35 ? 0x3e7a48 : 0x2b5a36);
     }
   for (const [x, y] of [
     [1, 3],
@@ -226,10 +212,10 @@ function miniWreath(): HTMLCanvasElement {
     [7, 5],
     [3, 7],
   ])
-    g.set(x, y, 0xe8323a);
-  g.set(3, 8, 0xd8323a);
-  g.set(5, 8, 0xd8323a);
-  g.set(4, 7, 0xf04a4a);
+    set(x, y, 0xe8323a);
+  set(3, 8, 0xd8323a);
+  set(5, 8, 0xd8323a);
+  set(4, 7, 0xf04a4a);
   g.outline(0x1f1d1a, false, 200);
   return g.toCanvas();
 }
@@ -255,48 +241,25 @@ function christmasCanvas(base: string, src: HTMLCanvasElement): HTMLCanvasElemen
   ctx.drawImage(src, 0, 0);
   const T = Art.CAMP_TEX;
   if (base === T.office) {
-    // 관리소 문 리스 + 매점 차양 끝 호랑가시 줄
-    const b = Art.OFFICE_ART_H - 3;
-    ctx.drawImage(doorWreath(), 50, b - 18);
-    garland(ctx, Art.OFFICE_ART_W / 2 + 6, Art.OFFICE_ART_W / 2 + 82, b - 34, 3);
-  } else if (base === T.vending) ctx.drawImage(miniWreath(), 6, 0);
+    // 관리소 문 리스 + 매점 차양 끝 호랑가시 줄 (그린 그림 좌표 + 텍스처 둘레 여백 OFFICE_PAD)
+    const { x: px, top: pt } = Art.OFFICE_PAD;
+    const b = Art.OFFICE_ART_H - 3 + pt;
+    ctx.drawImage(doorWreath(1), 50 + px - 1, b - 18 - 1);
+    garland(ctx, Art.OFFICE_ART_W / 2 + 6 + px, Art.OFFICE_ART_W / 2 + 82 + px, b - 34, 3);
+  } else if (base === T.vending) ctx.drawImage(miniWreath(), 6 - 1 + Art.VENDING_PAD.x, 0 - 1 + Art.VENDING_PAD.top);
   else if (base === T.bbqTable) {
     garland(ctx, 3, 44, 11, 2);
-    ctx.drawImage(miniWreath(), 19, 8);
-  } else if (base === T.plateSign) ctx.drawImage(miniWreath(), Art.PLATE_SIGN_W / 2 - 4, 0);
+    ctx.drawImage(miniWreath(), 19 - 1, 8 - 1);
+  } else if (base === T.plateSign) ctx.drawImage(miniWreath(), Art.PLATE_SIGN_W / 2 - 4 - 1, 0);
   return canvas;
 }
 
-// ── 장식 ──
+// ── 장식 ── 11/26 폭포 계곡 개편: 트리·눈사람·선물·장작더미·줄 조명은 맵(CampMap)이 자리마다 그린다.
+// 여기엔 판마다 얹는 움직이는 것만 — 관리소 굴뚝 연기, 캐릭터 입김, 눈밭에 가끔 반짝이는 눈(크리스마스).
 
 /** 입김을 낼 사람 */
 export type CampActor = { key: object; x: number; y: number; dir: DirId };
 type Cull = (x: number, y: number, o: Phaser.GameObjects.Image) => void;
-
-/** 크리스마스 트리 받침 (광장 위쪽, 두 조명 기둥 사이 — 모닥불을 앞에 두고 선다) */
-export const CAMP_XTREE = { x: CAMP_FIRE.x, y: CAMP_FIRE.y - 72 } as const;
-/** 장작더미 자리 (관리소 서쪽 벽·바베큐장 구석·광장 둘레) */
-const WOODPILE_ANCHORS: readonly [number, number][] = [
-  [CAMP_OFFICE.x - 100, CAMP_OFFICE.y - 4],
-  [Lay.CAMP_BBQ.area.x + 14, Lay.CAMP_BBQ.area.y + 10],
-  [CAMP_FIRE.x - 118, CAMP_FIRE.y - 40],
-];
-/** 눈사람 자리 (구역마다 하나씩, 가장 가까운 빈 눈밭으로) */
-const SNOWMAN_ANCHORS: readonly [number, number][] = [
-  [CAMP_FIRE.x + 150, CAMP_FIRE.y + 60],
-  [CAMP_FIRE.x - 150, CAMP_FIRE.y + 70],
-  [250, 590],
-  [1196, 560],
-  [560, 610],
-];
-/** 선물 더미 자리 (트리 밑동엔 그림에 선물이 있다 — 버스에서 내리는 곳·타프 옆·전망대 옆) */
-const GIFT_ANCHORS: readonly [number, number][] = [
-  [250, 604],
-  [556, 676],
-  [1210, 186],
-];
-/** 전구 줄 기둥 높이 (데크 번호 말뚝 위로) */
-const DECK_POLE_H = 26;
 
 export class CampConceptDecor {
   private objs: Phaser.GameObjects.GameObject[] = [];
@@ -307,7 +270,6 @@ export class CampConceptDecor {
   private nextGlint = 0;
   private nextBreath = 0;
   private readonly breathAt = new WeakMap<object, number>();
-  private placed: [number, number][] = [];
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -322,12 +284,6 @@ export class CampConceptDecor {
     this.concept = concept;
     if (!isSnowy(concept)) return;
     const scene = this.scene;
-    // 장작더미
-    if (!scene.textures.exists(WOODPILE)) addCanvasTexture(scene, WOODPILE, { canvas: woodpile() });
-    for (const [ax, ay] of WOODPILE_ANCHORS) {
-      const at = this.freeSpot(ax, ay, 40);
-      if (at) this.add(scene.add.image(at[0], at[1] + 1, WOODPILE).setOrigin(0.5, 1).setDepth(at[1]), at[0], at[1]);
-    }
     // 관리소 굴뚝 연기 (겨울엔 난로를 땐다 — officeArt 굴뚝 x 34~41)
     if (!this.reduced && scene.textures.exists(Art.CAMP_TEX.bbqSmoke)) {
       const sx = CAMP_OFFICE.x - Art.OFFICE_ART_W / 2 + 38;
@@ -351,46 +307,6 @@ export class CampConceptDecor {
 
   private dressChristmas(): void {
     const scene = this.scene;
-    // 모닥불 광장 큰 트리 + 전구 빛 겹 + 별빛
-    const t = christmasTree();
-    if (!scene.textures.exists(XTREE)) addCanvasTexture(scene, XTREE, { canvas: t.canvas });
-    if (!scene.textures.exists(XTREE_GLOW)) addCanvasTexture(scene, XTREE_GLOW, { canvas: bulbGlowSheet(XTREE_W, XTREE_H, t.bulbs, t.star), frameW: XTREE_W, frameH: XTREE_H });
-    const { x, y } = CAMP_XTREE;
-    this.add(scene.add.image(x, y + 1, XTREE).setOrigin(0.5, 1).setDepth(y), x, y);
-    this.add(addTwinkle(scene, XTREE_GLOW, x, y + 1, 0.5, 1, { reduced: this.reduced }), x, y);
-    const sx = x - XTREE_W / 2 + t.star.x;
-    const sy = y + 1 - XTREE_H + t.star.y + 1;
-    const halo = scene.add.image(sx, sy, TEX.glow).setBlendMode(Phaser.BlendModes.ADD).setTint(0xffe08a).setScale(0.55).setAlpha(0.6).setDepth(DEPTH.lights + 3);
-    this.add(halo, x, y);
-    if (!this.reduced) this.tweens.push(scene.tweens.add({ targets: halo, alpha: { from: 0.35, to: 0.85 }, scale: { from: 0.45, to: 0.65 }, duration: 1300, yoyo: true, repeat: -1, ease: "Sine.easeInOut" }));
-    this.placed.push([x, y], [x - 20, y], [x + 20, y]);
-    // 데크와 데크를 잇는 전구 줄 (데크 번호 말뚝 자리에 기둥을 세운다 — 텐트를 치면 그 텐트들을 잇는 줄)
-    if (!scene.textures.exists(DECK_POLE)) addCanvasTexture(scene, DECK_POLE, { canvas: deckPole() });
-    const tops = CAMP_DECKS.map((d) => {
-      const px = d.x - CAMP_DECK_W / 2 + 2;
-      const py = d.y - CAMP_DECK_H / 2 - 2;
-      this.add(scene.add.image(px, py + 1, DECK_POLE).setOrigin(0.5, 1).setDepth(py), px, py);
-      return [px, py - DECK_POLE_H, py] as const;
-    });
-    tops.forEach((a, i) => {
-      const b = tops[(i + 1) % tops.length];
-      this.addString(a, b, i);
-    });
-    // 눈사람·선물 더미 (빈 눈밭에만)
-    for (const [i, [ax, ay]] of SNOWMAN_ANCHORS.entries()) {
-      const at = this.freeSpot(ax, ay, 90);
-      if (!at) continue;
-      const k = `${P}concept-snowman-${i % 3}`;
-      if (!scene.textures.exists(k)) addCanvasTexture(scene, k, { canvas: snowman(i % 3) });
-      this.add(scene.add.image(at[0], at[1] + 1, k).setOrigin(0.5, 1).setDepth(at[1]), at[0], at[1]);
-    }
-    for (const [i, [ax, ay]] of GIFT_ANCHORS.entries()) {
-      const at = this.freeSpot(ax, ay, 50);
-      if (!at) continue;
-      const k = `${P}concept-gifts-${i % 2}`;
-      if (!scene.textures.exists(k)) addCanvasTexture(scene, k, { canvas: giftPile(i % 2) });
-      this.add(scene.add.image(at[0], at[1] + 1, k).setOrigin(0.5, 1).setDepth(at[1]), at[0], at[1]);
-    }
     // 반짝이는 눈 (화면 안 눈밭 아무 데나 가끔 한 점)
     if (!scene.textures.exists(GLINT)) addCanvasTexture(scene, GLINT, { canvas: snowGlint() });
     this.glints = scene.add
@@ -404,29 +320,6 @@ export class CampConceptDecor {
       })
       .setDepth(DEPTH.lights + 1);
     this.objs.push(this.glints);
-  }
-
-  /** 두 기둥 머리를 잇는 전구 줄 (a·b = [x, 머리 y, 받침 y]) */
-  private addString(a: readonly [number, number, number], b: readonly [number, number, number], i: number): void {
-    const scene = this.scene;
-    const dx = Math.round(b[0] - a[0]);
-    const dy = Math.round(b[1] - a[1]);
-    const sag = Math.max(5, Math.round(Math.hypot(dx, dy) * 0.09));
-    const key = `${P}concept-string-${dx}-${dy}-${sag}`;
-    // 같은 줄은 한 번만 굽는다 (집이 바뀌어 줄을 다시 걸 때는 자리만 셈한다)
-    if (!scene.textures.exists(key)) {
-      const s = lightString(dx, dy, sag);
-      addCanvasTexture(scene, key, { canvas: s.canvas });
-      addCanvasTexture(scene, `${key}~glow`, { canvas: bulbGlowSheet(s.canvas.width, s.canvas.height, s.bulbs), frameW: s.canvas.width, frameH: s.canvas.height });
-    }
-    const s = lightStringOrigin(dx, dy);
-    const x = a[0] - s.ox;
-    const y = a[1] - s.oy;
-    // 줄은 기둥 머리 높이에 걸린다 — 깊이는 두 받침 중 앞쪽 기준 (그 앞을 지나는 사람·나무가 가린다)
-    const depth = Math.max(a[2], b[2]) + 2;
-    const mx = a[0] + dx / 2;
-    this.add(scene.add.image(x, y, key).setOrigin(0, 0).setDepth(depth), mx, depth);
-    this.add(addTwinkle(scene, `${key}~glow`, x, y, 0, 0, { reduced: this.reduced, phase: i % 2, alpha: 0.9 }), mx, depth);
   }
 
   private makeBreath(): void {
@@ -477,36 +370,6 @@ export class CampConceptDecor {
     }
   }
 
-  private add(o: Phaser.GameObjects.Image, x: number, y: number): void {
-    this.objs.push(o);
-    this.cull(x, y, o);
-  }
-
-  /** 앵커 근처(r px 안)에서 가장 가까운 빈 자리: 걸을 수 있는 눈밭(광장·길·물 밖), 나무·데크·자리·상호작용·이미 놓은 장식과 떨어진 곳 */
-  private freeSpot(ax: number, ay: number, r: number): [number, number] | null {
-    let best: [number, number] | null = null;
-    let bd = Infinity;
-    for (let y = ay - r; y <= ay + r; y += 4)
-      for (let x = ax - r; x <= ax + r; x += 4) {
-        const d = (x - ax) ** 2 + (y - ay) ** 2;
-        if (d >= bd || d > r * r) continue;
-        const k = Lay.campGroundKind(x, y);
-        if (k !== "grass") continue;
-        if (Lay.pathEdgeDist(x, y, 8) < 6) continue;
-        if (!Lay.campStandable(x, y) || !Lay.campStandable(x - 10, y) || !Lay.campStandable(x + 10, y)) continue;
-        if (Lay.CAMP_TREES.some((t) => Math.abs(t.x - x) < 20 && y > t.y - 16 && y < t.y + 22)) continue;
-        if (Lay.CAMP_DECOR.some((t) => Math.abs(t.x - x) < 12 && Math.abs(t.y - y) < 8)) continue;
-        if (CAMP_DECKS.some((dk) => Math.abs(dk.x - x) < CAMP_DECK_W / 2 + 12 && y > dk.y - CAMP_DECK_H / 2 - 4 && y < dk.y + CAMP_DECK_H / 2 + 24)) continue;
-        if (CAMP_SEATS.some((s) => Math.abs(s.x - x) < 18 && Math.abs(s.y - y) < 18)) continue;
-        if (Lay.CAMP_INTERACTABLES.some((o) => Math.hypot(o.x - x, o.y - y) < o.r + 10)) continue;
-        if (this.placed.some((p) => Math.abs(p[0] - x) < 26 && Math.abs(p[1] - y) < 20)) continue;
-        bd = d;
-        best = [x, y];
-      }
-    if (best) this.placed.push(best);
-    return best;
-  }
-
   private clear(): void {
     for (const t of this.tweens) t.remove();
     for (const o of this.objs) o.destroy();
@@ -514,7 +377,6 @@ export class CampConceptDecor {
     this.objs = [];
     this.glints = null;
     this.breath = [];
-    this.placed = [];
   }
 
   destroy(): void {
@@ -522,13 +384,3 @@ export class CampConceptDecor {
   }
 }
 
-/** 데크 번호 말뚝 위로 올린 가는 전구 줄 기둥 (5×30, 원점 바닥 가운데) — 머리에 눈 */
-function deckPole(): HTMLCanvasElement {
-  const H = DECK_POLE_H + 4;
-  const g = new Grid(5, H);
-  g.rect(1, 2, 2, H - 2, 0x845e38);
-  g.vline(1, 2, H - 1, 0xb08250);
-  g.rect(0, 2, 4, 2, 0x4a321e); // 걸이
-  g.outline(0x2c2018);
-  return snowCap(g.toCanvas(), { depth: 1, maxY: 6, seed: 157 });
-}

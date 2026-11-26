@@ -4,6 +4,7 @@
 import { useMemo, useState } from "react";
 import { bridge } from "@/game/bridge";
 import { npcPortraitUrl } from "@/game/world/forage/art";
+import { currentMapConcept } from "@/lib/mapConceptClient";
 import { errorMessage } from "@/lib/api";
 import { bagSpecies, CAT_LABEL, GRADE_LABEL, gradedPrice, gradeOf, LIFE_CATS, npcBuys, npcBuysAll, npcById, RARITY_LABEL, type FishGrade, type NpcId, type Species } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
@@ -22,6 +23,7 @@ import s from "./forage.module.css";
 // 11/16 r11: 포구 시장을 빼서 바다 고기는 어부 영감, 갯벌에서 캔 것은 수집가 유령에게 팔아요
 // 11/20 바닷가 해녀 할망은 물고기·채집물을 다 사요 (값은 마을과 같아요 — 한 목록에 다 나와요)
 // 11/22 직접 낚은 대물·월척은 칸이 따로 (아이콘에 등급 표, 값은 등급 배수). 월척이 섞이면 팔기 전에 한 번 묻는다
+// 11/26 캠핑장 낚시터 사장님도 해녀 할망처럼 다 사요. 얼굴 그림은 지금 맵 판(겨울·크리스마스)으로
 
 type Row = { id: string; sp: Species; grade: FishGrade; price: number; n: number };
 
@@ -29,6 +31,7 @@ const EMPTY: Record<NpcId, string> = {
   fishmonger: "팔 물고기가 없어요. 호수 잔교나 강둑, 바닷가 갯바위에서 낚아 와요.",
   collector: "팔 게 없어요. 숲, 풀밭, 북서쪽 언덕, 갯벌에서 캐거나 수풀에서 곤충을 잡아 와요.",
   haenyeo: "팔 게 없어요. 갯바위나 선착장에서 낚고, 갯벌이나 풀밭에서 캐 와요.",
+  trader: "팔 게 없어요. 계곡이나 윤슬 낚시터에서 낚고, 숲이나 바위에서 캐 와요.",
 };
 
 /** 11/20 큰 값은 쉼표로 (999개면 1만 P를 넘는다) */
@@ -42,7 +45,7 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
   const [notice, setNotice] = useState<string | null>(null);
   /** 11/22 월척을 같이 팔지 묻는 중 (전부 팔기 = true, 고른 것 팔기 = false) */
   const [askBig, setAskBig] = useState<{ all: boolean; n: number } | null>(null);
-  const portrait = useMemo(() => (typeof document === "undefined" ? "" : npcPortraitUrl(npc.id)), [npc.id]);
+  const portrait = useMemo(() => (typeof document === "undefined" ? "" : npcPortraitUrl(npc.id, 2, currentMapConcept())), [npc.id]);
 
   // 가방 칸마다 한 장 (11/22 같은 종의 보통·대물·월척은 나란히)
   const rows = useMemo(() => {

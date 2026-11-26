@@ -1,13 +1,32 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import { errorMessage, isAbortError } from "@/lib/api";
-import { SEA_LOTS } from "@tomb/protocol";
+import {
+  CAMP_HOME_KIND_NAME,
+  CAMP_LOTS,
+  campLotByNo,
+  campLotName,
+  campLotShort,
+  caravanDesignName,
+  caravanDesignOf,
+  defaultCaravanDesign,
+  sameCaravanDesign,
+  SEA_LOTS,
+  type CampHomeKind,
+  type CaravanDesign,
+} from "@tomb/protocol";
+import { campOf, campPrices, campRoom, campYardPrice, fullSaleChannels } from "@/game/camp/campSaleApi";
+import { useLobby, visibleChannels } from "@/lib/hooks/useLobby";
+import { useBridgeValue } from "@/lib/hooks/useBridge";
+import { toUi } from "@/lib/uiScale";
+import { josa } from "@/lib/rpg/skillText";
 import {
   COTTAGE_STYLES,
   HOUSE_INTRO_MAX,
   HOUSE_NAME_MAX,
   houseLabel,
+  houseSizeBonus,
   LIKE_WEIGHT,
   lotLabel,
   nextTier,
@@ -27,16 +46,20 @@ import {
   type CottageStyleId,
   type HouseSort,
   type PlotTierId,
+  type SaleKind,
 } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
 import { styleTag } from "@/lib/housing/layout";
-import { isOpenLot, MAIN_LOTS, WORLD_LOTS } from "@tomb/protocol";
+import { channelStatus, isOpenLot, MAIN_LOTS, WORLD_LOTS } from "@tomb/protocol";
 import type { HouseSummary, MyHouseResponse } from "@/lib/housing/types";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import styles from "./housing.module.css";
 import { CottageStylePicker, fmt, TierCompare, TierPicker, TitleBadge, TitleProgress } from "./parts";
+import { campOfficeTitle, HOST, kindIntro, openChannelsLine, openSaleChannels, soldOutLine, yardChangeLine, yardHint } from "./campOfficeText";
+import { CampLotPicker } from "./CampLotPicker";
+import { CaravanDesignPicker } from "./CaravanDesignPicker";
 
 type Tab = "mine" | "browse";
 
@@ -63,9 +86,14 @@ type Props = {
    * 11/16 "sea" = 포구 부동산 (달물결 포구 오두막). 창 모양·탭·카드·버튼은 분양 사무소와 같고
    * 번지 이름(포구 N번 오두막)·값(1.5배, 마을 집이 있으면 별장 2배)·겉모습(오두막 세 모양)만 다르다
    */
-  zone?: "sea";
-  /** 포구: 마을 집이 있는지 (별장 값). 모르면 null */
+  zone?: "sea" | "camp";
+  /** 포구·캠핑장: 다른 집이 있는지 (서버 값표가 없을 때의 별장 값). 모르면 null */
   villa?: boolean | null;
+  /**
+   * 11/26 캠핑장(zone "camp"): 창을 연 분양 NPC가 파는 종류 하나 — 언젠가 씨 카라반 · 소슬댁 펜션 · 순이 할머니 촌캉스.
+   * 창 모양·탭·카드·버튼은 분양 사무소와 같고, 위 안내가 그 NPC의 인사, 터 고르기가 그 종류의 터, 넓히기 자리에 앞마당 단계가 온다
+   */
+  campKind?: CampHomeKind;
 };
 
 /** 분양 사무소 창: 내 집(분양·넓히기·들어가기) + 분양지 둘러보기·랭킹 */
@@ -86,20 +114,24 @@ export default function OfficeDialog({
   channel,
   zone,
   villa = null,
+  campKind,
 }: Props) {
   const [tab, setTab] = useState<Tab>(initialTab ?? "mine");
   const id = useId();
   const sea = zone === "sea";
+  const camp = zone === "camp" ? (campKind ?? "caravan") : null;
   return (
-    <Dialog title={sea ? "포구 부동산" : "분양 사무소"} onClose={onClose}>
+    <Dialog title={camp ? campOfficeTitle(camp) : sea ? "포구 부동산" : "분양 사무소"} onClose={onClose}>
       <div className={styles.stack}>
         <div className={styles.spread}>
           <p className={styles.small}>
-            {sea
-              ? `달물결 포구 곳곳에 오두막 터가 ${SEA_LOTS.length}곳 있어요. 채널마다 터가 따로 있어요. 지금 ${channel}채널의 빈 터를 골라 분양받아요.`
-              : `광장 동쪽 주거 구역에 집들이 있어요. 채널마다 주거 구역이 따로 있어요. 지금 ${channel}채널의 빈 자리를 골라 분양받아요.`}
+            {camp
+              ? `${HOST[camp].hello} 채널마다 터가 따로 있어요. 지금 ${channel}채널의 빈 터를 골라 분양받아요.`
+              : sea
+                ? `달물결 포구 곳곳에 오두막 터가 ${SEA_LOTS.length}곳 있어요. 채널마다 터가 따로 있어요. 지금 ${channel}채널의 빈 터를 골라 분양받아요.`
+                : `광장 동쪽 주거 구역에 집들이 있어요. 채널마다 주거 구역이 따로 있어요. 지금 ${channel}채널의 빈 자리를 골라 분양받아요.`}
           </p>
-          {!sea && (
+          {!sea && !camp && (
             <button type="button" className={cx(ui.button, ui.primary)} onClick={() => (inVillage ? onClose() : onVillage(null))} disabled={busy}>
               {inVillage ? "마을로 돌아가기" : "주거 구역 보기"}
             </button>
@@ -108,7 +140,7 @@ export default function OfficeDialog({
         <div className={styles.warn} role="note">
           <strong>
             <span className={styles.warnTag}>주의</span>
-            {RECLAIM_DAYS}일 동안 접속하지 않으면 {sea ? "오두막도" : "집이"} 철거돼요
+            {RECLAIM_DAYS}일 동안 접속하지 않으면 {sea ? "오두막도" : camp ? `${CAMP_HOME_KIND_NAME[camp]}도` : "집이"} 철거돼요
           </strong>
           <p>집 가격은 100% 선물함으로 돌려드리고, 가구는 그대로 저장돼요. 철거된 자리는 다른 사람이 분양받을 수 있어요.</p>
         </div>
@@ -124,7 +156,7 @@ export default function OfficeDialog({
               className={styles.tab}
               onClick={() => setTab(t)}
             >
-              {t === "mine" ? (sea ? "내 오두막" : "내 집") : "둘러보기 · 랭킹"}
+              {t === "mine" ? (sea ? "내 오두막" : camp ? "내 캠핑장 집" : "내 집") : "둘러보기 · 랭킹"}
             </button>
           ))}
         </div>
@@ -142,6 +174,7 @@ export default function OfficeDialog({
               onExterior={onExterior}
               zone={zone}
               villa={villa}
+              campKind={camp}
             />
           ) : (
             <HouseList onVisit={onVisit} myId={my?.house?.id ?? null} busy={busy} />
@@ -169,6 +202,7 @@ function MyPlot({
   onExterior,
   zone,
   villa,
+  campKind,
 }: {
   my: MyHouseResponse | null;
   error: string | null;
@@ -179,12 +213,26 @@ function MyPlot({
   channel: number;
   onVillage: (spawnLot: number | null, mine?: boolean) => void;
   onExterior: () => void;
-  zone?: "sea";
+  zone?: "sea" | "camp";
   villa: boolean | null;
+  /** 11/26 캠핑장: 이 창에서 파는 종류 (zone "camp"일 때만) */
+  campKind: CampHomeKind | null;
 }) {
   const sea = zone === "sea";
-  const [lot, setLot] = useState<number | null>(presetLot);
+  const camp = zone === "camp" ? campKind : null;
+  const inCamp = useBridgeValue("map:changed")?.map === "camp";
+  // 캠핑장: 다른 종류의 터에서 열렸으면 고른 자리를 비운다 (그 종류 NPC만 판다)
+  const [lot, setLot] = useState<number | null>(camp && presetLot !== null && campLotByNo(presetLot)?.kind !== camp ? null : presetLot);
   const [free, setFree] = useState<number[] | null>(null);
+  /** 11/26 캠핑장: 분양된 터의 주인 이름 (터 카드에 보인다) */
+  const [campOwners, setCampOwners] = useState<ReadonlyMap<number, string>>(new Map());
+  /** 11/26 분양된 카라반 터의 주인 디자인 (터 카드 그림) */
+  const [campDesigns, setCampDesigns] = useState<ReadonlyMap<number, CaravanDesign>>(new Map());
+  /** 11/26 분양 때 고르는 카라반 디자인 (안 건드렸으면 null — 고른 터의 기본 모습) */
+  const [buyDesign, setBuyDesign] = useState<CaravanDesign | null>(null);
+  /** 11/26 주인이 관리 창에서 고르는 중인 디자인 (null = 닫힘) */
+  const [redesign, setRedesign] = useState<CaravanDesign | null>(null);
+  const xmas = useBridgeValue("map:concept")?.concept === "christmas";
   /** 오두막 겉모습 (분양 때 고르고, 분양 뒤 「겉모습 바꾸기」로 바꾼다) */
   const [style, setStyle] = useState<CottageStyleId>("wood");
   const [restyle, setRestyle] = useState(false);
@@ -193,10 +241,16 @@ function MyPlot({
     if (!noHouse) return;
     let alive = true;
     housingApi
-      .village(channel, false, sea ? "sea" : "village")
+      .village(channel, false, sea ? "sea" : camp ? "camp" : "village")
       .then((v) => {
         if (!alive) return;
         const used = new Set([...v.houses.map((h) => h.lot), ...v.taken]);
+        // 11/26 캠핑장: 이 NPC가 파는 종류의 빈 터만
+        if (camp) {
+          setCampOwners(new Map(v.houses.map((h) => [h.lot, h.ownerName])));
+          setCampDesigns(new Map(v.houses.flatMap((h) => (campLotByNo(h.lot)?.kind === "caravan" ? [[h.lot, caravanDesignOf(h.lot, h.camp?.design)] as const] : []))));
+          return setFree(CAMP_LOTS.filter((l) => l.kind === camp && !used.has(l.lot)).map((l) => l.lot));
+        }
         // 11/16 포구: 그 채널의 오두막 터 중 빈 터
         if (sea) return setFree(SEA_LOTS.map((l) => l.n).filter((l) => !used.has(l)));
         // 메인 맵 주거 구역(1..WORLD_LOTS, 11/19 등불 골목 10~15번지 포함)의 빈 필지만. 2단지는 닫았다 — 다 차면 빈 목록 (자동 분양도 「다 찼어요」)
@@ -206,7 +260,22 @@ function MyPlot({
     return () => {
       alive = false;
     };
-  }, [noHouse, channel, sea]);
+  }, [noHouse, channel, sea, camp]);
+  // 11/26 이 창이 파는 집 터가 이 채널에 다 찼으면(마을·포구·캠핑장 모두) 「남은 ○○이 없어요」 + 터가 남은 채널을 한 번 센다
+  // (채널 목록 폴러와 같은 캐시된 주소 — 새로 폴링하지 않는다)
+  const saleKind: SaleKind = camp ?? (sea ? "sea" : "village");
+  const soldOut = noHouse && free !== null && free.length === 0;
+  const [fullChs, setFullChs] = useState<number[] | null>(null);
+  useEffect(() => {
+    if (!soldOut) return;
+    const ac = new AbortController();
+    void fullSaleChannels(ac.signal).then((f) => !ac.signal.aborted && setFullChs(f ? f[saleKind] : null));
+    return () => ac.abort();
+  }, [soldOut, saleKind]);
+  const lobby = useLobby().lobby;
+  const openChs = soldOut
+    ? openSaleChannels(lobby ? visibleChannels(lobby, [channel]).filter((c) => channelStatus(c, lobby.threshold) !== "full").map((c) => c.id) : null, fullChs, channel)
+    : null;
   const [name, setName] = useState("");
   const [intro, setIntro] = useState("");
   const [pending, setPending] = useState(false);
@@ -215,16 +284,29 @@ function MyPlot({
   /** 처음 분양받을 터 크기 (넓은 터·대저택도 바로 살 수 있다) */
   const [pick, setPick] = useState<PlotTierId>("small");
   const fid = useId();
+  // 11/26 넓히기 카드 높이 고정: 마지막 단계로 넓히면 카드가 짧아져(단추·안내 줄이 빠짐) 아래로 내려 둔 창이 그만큼 튀어 올랐다
+  // (브라우저가 scrollTop을 줄어든 높이에 맞춰 깎음 — 대저택 PC 139→53, 폰 201→87). 넓히기를 누른 순간의 높이를 최소 높이로 둔다
+  const upCard = useRef<HTMLDivElement>(null);
+  const [upMin, setUpMin] = useState<number | undefined>(undefined);
+  const holdUpCard = () => setUpMin((m) => Math.max(m ?? 0, toUi(upCard.current?.getBoundingClientRect().height ?? 0)) || undefined);
 
   if (!my) return <p className={styles.muted}>{error ?? "분양 장부를 펼치는 중…"}</p>;
 
   const plot = tierById(pick)!;
-  const seaCost = (t: PlotTierId) => seaPlotCost(t, !!villa);
-  // 11/18 마을 집: 포구 오두막이 먼저 있으면 별장 값 차이를 더한다 (서버가 알려 준다 — my.villaFee)
-  const villaFee = sea ? 0 : (my.villaFee ?? 0);
-  const villageCost = (t: PlotTierId) => plotCost(t) + villaFee;
-  const cost = sea ? seaCost(pick) : villageCost(pick);
-  const labelOf = (ch: number, l: number) => (sea ? seaLotLabel(ch, l) : lotLabel(ch, l));
+  // 11/26 별장 규칙 변경(두 번째로 산 집부터 별장 — 분양·넓히기 4/3): 값은 서버 값표(my.prices) 그대로. 옛 서버 응답이면 예전 계산
+  const prices = my.prices;
+  // 11/26 캠핑장 값표: 터마다 분양가·앞마당 값 (서버 prices.camp — 없으면 같은 규칙으로 센다)
+  const campP = camp ? campPrices(prices, !!villa) : null;
+  const isVilla = sea ? (prices?.villa.sea ?? !!villa) : camp ? (prices?.villa.camp ?? !!villa) : (prices?.villa.village ?? false);
+  const seaCost = (t: PlotTierId) => prices?.sea[t] ?? seaPlotCost(t, isVilla);
+  const villageCost = (t: PlotTierId) => prices?.village[t] ?? plotCost(t);
+  /** 캠핑장: 고른 터 (안 골랐으면 가장 앞의 빈 터) */
+  const campLot = camp ? (lot !== null && free?.includes(lot) ? lot : (free?.[0] ?? null)) : null;
+  /** 11/26 분양 때 고른 카라반 디자인 (안 건드렸으면 고른 터의 기본 모습) */
+  const campDesign = camp === "caravan" && campLot !== null ? (buyDesign ?? defaultCaravanDesign(campLot)) : null;
+  const cost = camp ? (campLot !== null && campP ? (campP.lots[campLot] ?? 0) : 0) : sea ? seaCost(pick) : villageCost(pick);
+  const labelOf = (ch: number, l: number) => (sea ? seaLotLabel(ch, l) : camp ? `${ch}채널 ${campLotName(l)}` : lotLabel(ch, l));
+  const priceUnknown = (sea || !!camp) && villa === null && !prices;
   async function run(fn: () => Promise<MyHouseResponse>, done: string) {
     setPending(true);
     setMsg(null);
@@ -248,10 +330,18 @@ function MyPlot({
       }}
     >
       <label className={ui.field} htmlFor={`${fid}-name`}>
-        <span className={cx(ui.label, ui.required)}>
+        <span className={cx(ui.label, !(camp && withLot) && ui.required)}>
           집 이름 <span className={ui.counter}>{[...name].length}/{HOUSE_NAME_MAX}</span>
         </span>
-        <input id={`${fid}-name`} className={ui.input} value={name} maxLength={HOUSE_NAME_MAX + 4} onChange={(e) => setName(e.target.value)} placeholder="예) 달빛 서재" required />
+        <input
+          id={`${fid}-name`}
+          className={ui.input}
+          value={name}
+          maxLength={HOUSE_NAME_MAX + 4}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={camp && campLot !== null && withLot ? `비우면 「${campLotShort(campLot)}」` : "예) 달빛 서재"}
+          required={!(camp && withLot)}
+        />
       </label>
       <label className={ui.field} htmlFor={`${fid}-intro`}>
         <span className={ui.label}>
@@ -259,7 +349,7 @@ function MyPlot({
         </span>
         <input id={`${fid}-intro`} className={ui.input} value={intro} maxLength={HOUSE_INTRO_MAX + 4} onChange={(e) => setIntro(e.target.value)} placeholder="찾아온 손님에게 한마디" />
       </label>
-      {withLot && (
+      {withLot && !camp && (
         <label className={ui.field} htmlFor={`${fid}-lot`}>
           <span className={ui.label}>{sea ? `오두막 터 (${channel}채널 포구의 자리)` : `번지 (${channel}채널 주거 구역의 자리)`}</span>
           <select
@@ -280,10 +370,10 @@ function MyPlot({
       )}
       {withLot && (
         <p className={styles.warnLine}>
-          {RECLAIM_DAYS}일 동안 접속하지 않으면 {sea ? "오두막이" : "집이"} 철거돼요. 집 가격은 100% 돌려드리고 가구는 그대로 저장돼요.
+          {RECLAIM_DAYS}일 동안 접속하지 않으면 {sea ? "오두막이" : camp ? josa(CAMP_HOME_KIND_NAME[camp], "이", "가") : "집이"} 철거돼요. 집 가격은 100% 돌려드리고 가구는 그대로 저장돼요.
         </p>
       )}
-      <button type="submit" className={cx(ui.button, ui.primary)} disabled={pending || busy || !name.trim()}>
+      <button type="submit" className={cx(ui.button, ui.primary)} disabled={pending || busy || (camp && withLot ? campLot === null || my.points < cost : !name.trim())}>
         {pending ? "처리 중…" : submit}
       </button>
     </form>
@@ -297,45 +387,117 @@ function MyPlot({
     return (
       <div className={styles.stack}>
         <div className={styles.card}>
-          <p className={styles.houseName}>{sea ? "바닷가 오두막을 분양받아 보세요" : "나만의 집을 분양받아 보세요"}</p>
+          <p className={styles.houseName}>{camp ? `${josa(CAMP_HOME_KIND_NAME[camp], "을", "를")} 분양받아 보세요` : sea ? "바닷가 오두막을 분양받아 보세요" : "나만의 집을 분양받아 보세요"}</p>
           <p className={styles.muted}>
-            {sea
+            {camp
+              ? kindIntro(camp)
+              : sea
               ? "포구의 오두막 터를 드려요. 해먹·라탄 의자·서핑보드·소라 장식·구명 튜브가 놓인 채로 시작해요. 방 아래쪽 창으로 지금 물때의 바다가 보여요."
               : "주거 구역에 내 터를 드려요. 큰 터를 바로 살 수도 있고, 작은 터로 시작해 나중에 넓혀도 돼요. 가구와 소품으로 꾸미면 꾸밈 점수가 올라요. 놀러 온 사람들이 좋아요와 방명록을 남겨 줘요."}
           </p>
-          {sea && (
+          {camp && (
             <p className={styles.tag}>
-              {villa === null ? "값을 확인하는 중…" : villa ? `마을 집이 있어서 별장 값이에요 (마을 집 값의 ${SEA_VILLA_RATE}배).` : `마을 집 값의 ${SEA_COTTAGE_RATE}배예요. 마을 집이 있으면 별장이라 ${SEA_VILLA_RATE}배예요.`}
+              {priceUnknown ? "값을 확인하는 중…" : isVilla ? "이미 다른 집이 있어서 다주택자 가격(약 1.3배)이에요. 앞마당도 다주택자 가격이에요." : "처음 사는 집이라 기본 가격이에요. 다른 집이 있으면 다주택자 가격(약 1.3배)이에요."}
             </p>
           )}
-          {villaFee > 0 && <p className={styles.tag}>포구 오두막이 있어서 오두막이 별장이 돼요. 별장 값 차이 {fmt(villaFee)}P가 분양가에 더해져요.</p>}
+          {sea && (
+            <p className={styles.tag}>
+              {villa === null && !prices
+                ? "값을 확인하는 중…"
+                : isVilla
+                  ? `이미 다른 집이 있어서 다주택자 가격이에요 (마을 집 값의 ${SEA_VILLA_RATE}배).`
+                  : `마을 집 값의 ${SEA_COTTAGE_RATE}배예요. 다른 집이 있으면 다주택자 가격이라 ${SEA_VILLA_RATE}배예요.`}
+            </p>
+          )}
+          {!sea && !camp && isVilla && <p className={styles.tag}>이미 다른 집이 있어서 다주택자 가격(약 1.3배)이에요. 넓히기도 다주택자 가격이에요.</p>}
           {kept > 0 && <p className={styles.tag}>가방에 가구 {kept}개가 있어요. 분양받으면 바로 놓을 수 있어요.</p>}
-          <TierPicker
-            value={pick}
-            onChange={setPick}
-            points={my.points}
-            disabled={pending || busy}
-            {...(sea ? { cottage: style, costOf: seaCost, hintOf: (i: number) => seaHint(i, !!villa) } : villaFee > 0 ? { costOf: villageCost } : {})}
-          />
+          {/* 11/26 캠핑장은 터 크기 대신 터를 고른다 (같은 그림 카드 — 빈 터는 값, 분양된 터는 주인) */}
+          {camp ? (
+            free === null ? (
+              <p className={styles.muted}>터를 살펴보는 중…</p>
+            ) : (
+              <CampLotPicker
+                lots={CAMP_LOTS.filter((l) => l.kind === camp).map((l) => ({
+                  lot: l,
+                  price: campP?.lots[l.lot] ?? null,
+                  owner: campOwners.get(l.lot) ?? null,
+                  mine: false,
+                  free: free.includes(l.lot),
+                  // 11/26 분양된 터 = 주인 디자인, 빈 터 = 지금 고르는 디자인 (값은 터 등급으로만 — 디자인은 어느 터든 같다)
+                  ...(l.kind === "caravan" ? { design: free.includes(l.lot) ? (campDesign ?? undefined) : campDesigns.get(l.lot) } : {}),
+                  // 포구 터 크기 카드의 넓히기 안내 자리: 앞마당 값 (이 사람 기준)
+                  ...(campP?.yard[l.lot] ? { hint: yardHint(campP.yard[l.lot]) } : {}),
+                }))}
+                value={campLot}
+                onChange={setLot}
+                points={my.points}
+                disabled={pending || busy}
+                xmas={xmas}
+              />
+            )
+          ) : (
+            <TierPicker
+              value={pick}
+              onChange={setPick}
+              points={my.points}
+              disabled={pending || busy}
+              {...(sea ? { cottage: style, costOf: seaCost, hintOf: (i: number) => seaHint(i, isVilla) } : isVilla ? { costOf: villageCost } : {})}
+            />
+          )}
           {sea && <CottageStylePicker value={style} onChange={setStyle} tier={pick} disabled={pending || busy} />}
-          <p className={styles.points}>
-            {plot.name} 분양가 <strong>{fmt(cost)}P</strong> · 내 포인트 <strong>{fmt(my.points)}P</strong>
-          </p>
-          {lot !== null && <p className={styles.tag}>고른 자리: {labelOf(channel, lot)}</p>}
-          {short && (
+          {/* 11/26 카라반 디자인: 포구 오두막 겉모습 고르기와 같은 자리·같은 카드 (모델 다음 몸통 색·차양 색 — 분양가와 상관없다. 고른 디자인은 터 카드 그림에) */}
+          {camp === "caravan" && campDesign && <CaravanDesignPicker value={campDesign} onChange={setBuyDesign} xmas={xmas} disabled={pending || busy} preview={false} />}
+          {camp ? (
+            campLot !== null && (
+              <p className={styles.points}>
+                {campLotName(campLot)} 분양가 <strong>{fmt(cost)}P</strong> · 내 포인트 <strong>{fmt(my.points)}P</strong>
+              </p>
+            )
+          ) : (
+            // 남은 터가 없으면 분양가·고른 자리·부족 안내는 빼고 아래 「남은 ○○이 없어요」만
+            !soldOut && (
+              <p className={styles.points}>
+                {plot.name} 분양가 <strong>{fmt(cost)}P</strong> · 내 포인트 <strong>{fmt(my.points)}P</strong>
+              </p>
+            )
+          )}
+          {lot !== null && !camp && !soldOut && <p className={styles.tag}>고른 자리: {labelOf(channel, lot)}</p>}
+          {short && camp && campLot !== null && (
+            <p className={styles.error}>
+              {campLotName(campLot)} 분양까지 {fmt(cost - my.points)}P 부족해요. 출석이나 헌화로 더 모아 주세요.
+              {free && campP && free.some((l) => (campP.lots[l] ?? Infinity) <= my.points) ? " 더 싼 터를 고를 수도 있어요." : ""}
+            </p>
+          )}
+          {short && !camp && !soldOut && (
             <p className={styles.error}>
               {plot.name} 분양까지 {fmt(cost - my.points)}P 부족해요. 출석이나 헌화로 더 모아 주세요.
               {pick !== "small" && my.points >= (sea ? seaCost("small") : villageCost("small")) ? " 작은 터는 지금 바로 살 수 있어요." : ""}
             </p>
           )}
-          {sea && free?.length === 0 && <p className={styles.error}>{channel}채널 포구에는 빈 오두막 터가 없어요. 다른 채널에서 찾아봐요.</p>}
+          {/* 11/26 모든 분양 창 같은 안내: 이 채널에 남은 터가 없으면 이름 칸·분양 단추 대신 이 말 (+ 터가 남은 채널) */}
+          {soldOut && (
+            <>
+              <p className={styles.error} role="status">
+                {soldOutLine(saleKind, channel)}
+              </p>
+              {openChs && <p className={styles.tag}>{openChannelsLine(saleKind, openChs)}</p>}
+            </>
+          )}
         </div>
-        {!short &&
-          !(sea && (villa === null || free?.length === 0)) &&
+        {/* 캠핑장은 터마다 값이 달라 포인트가 모자라도 고르기 칸은 남긴다 (더 싼 터를 고를 수 있게 — 분양 단추만 막는다) */}
+        {!soldOut && (camp ? free !== null && free.length > 0 && !priceUnknown : !short && !(sea && villa === null && !prices)) &&
           form(
-            `${lot ? `${labelOf(channel, lot)}에 ` : `${channel}채널${sea ? " 포구" : ""}에 `}${plot.name} ${sea ? "오두막 " : ""}분양받기 (${fmt(cost)}P)`,
+            camp
+              ? `${campLot !== null ? `${channel}채널 ${campLotName(campLot)} ` : ""}분양받기 (${fmt(cost)}P)`
+              : `${lot ? `${labelOf(channel, lot)}에 ` : `${channel}채널${sea ? " 포구" : ""}에 `}${plot.name} ${sea ? "오두막 " : ""}분양받기 (${fmt(cost)}P)`,
             () =>
-              sea
+              camp
+                ? campLot !== null &&
+                  run(
+                    () => housingApi.buyCamp(channel, campLot, name, intro, camp, campDesign ?? undefined),
+                    `분양을 축하해요! ${channel}채널 캠핑장에 ${josa(campLotName(campLot), "이", "가")} 생겼어요.`,
+                  )
+                : sea
                 ? run(() => housingApi.buyCottage(channel, name, intro, lot, pick, style), `분양을 축하해요! ${channel}채널 포구에 ${plot.name} 오두막이 생겼어요.`)
                 : run(() => housingApi.buyPlot(channel, name, intro, lot, pick), `분양을 축하해요! ${channel}채널 주거 구역에 ${plot.name} 집이 생겼어요.`),
             true,
@@ -350,10 +512,18 @@ function MyPlot({
   const tier = tierById(h.tier)!;
   const up = nextTier(h.tier);
   // 오두막 넓히기 값은 배수를 곱한다 (마을 집이 있으면 별장 배수 — 서버 upgradePlot과 같은 규칙)
-  const upPrice = up ? (sea ? seaUpgradeCost(up.price, !!villa) : up.price) : 0;
+  // 11/26 넓히기 값도 서버 값표 (별장이면 4/3). 옛 서버 응답이면 예전 계산
+  const upPrice = up ? (prices?.upgrade?.to === up.id ? prices.upgrade.price : sea ? seaUpgradeCost(up.price, isVilla) : up.price) : 0;
   const tag = styleTag(h.layout);
   /** 내 집이 지금 채널이 아닌 다른 채널에 있다 (보러 가기·들어가기·꾸미기는 그 채널로 옮긴 뒤) */
   const away = h.ch !== channel;
+  // 11/26 캠핑장 집: 종류·앞마당 단계·방 크기 (모든 종류가 앞마당 단계로 방이 커진다 — 펜션·촌캉스 넓히기는 앞마당에 합쳤다)
+  const ci = camp ? campOf(h) : null;
+  // 옛 「넓힌 집」 기록(tier wide)은 3단계 방 (서버 catalog houseShape와 같다)
+  const room = ci ? campRoom(ci.kind, ci.kind !== "caravan" && h.tier !== "small" ? 3 : ci.yard) : null;
+  /** 이 창의 NPC가 파는 종류와 내 캠핑장 집 종류가 다르면 관리(앞마당)는 그 종류 NPC에게 */
+  const otherKind = !!ci && ci.kind !== camp;
+  const sizeBonus = camp ? houseSizeBonus(h) : TIER_SCORE_BONUS[h.tier];
   return (
     <div className={styles.stack}>
       <div className={styles.card}>
@@ -362,24 +532,38 @@ function MyPlot({
           <TitleBadge score={h.score} />
         </div>
         {h.intro && <p className={styles.muted}>{h.intro}</p>}
-        <p className={styles.small}>
-          {houseLabel(h)} · {tier.name} {tier.w}×{tier.h}칸 · 물건 {h.layout.items.length}/{tier.maxItems}개{tag ? ` · ${tag}` : ""}
-          {sea ? ` · ${COTTAGE_STYLES.find((c) => c.id === h.style)?.name ?? COTTAGE_STYLES[0].name}` : ""}
-        </p>
+        {ci && room ? (
+          <p className={styles.small}>
+            {h.ch}채널 캠핑장 {campLotName(h.lot)}
+            {h.villa ? " · 다주택자 가격" : ""} · 앞마당 {ci.yard}단계 · 방 {room.w}×{room.h}칸 · 물건 {h.layout.items.filter((p) => !p.i.startsWith("fx_")).length}/{room.maxItems}개
+          </p>
+        ) : (
+          <p className={styles.small}>
+            {houseLabel(h)} · {tier.name} {tier.w}×{tier.h}칸 · 물건 {h.layout.items.length}/{tier.maxItems}개{tag ? ` · ${tag}` : ""}
+            {sea ? ` · ${COTTAGE_STYLES.find((c) => c.id === h.style)?.name ?? COTTAGE_STYLES[0].name}` : ""}
+          </p>
+        )}
+        {ci && otherKind && (
+          <p className={styles.tag}>
+            캠핑장 집은 한 사람당 한 채예요. {CAMP_HOME_KIND_NAME[ci.kind]} 앞마당은 {HOST[ci.kind].name}에게 물어봐요.
+          </p>
+        )}
         {/* 11/19 2단지를 닫으며 메인 맵 빈 번지가 없어 「필지 대기」인 집 (번지 0) · 아직 옮기기 전인 2단지 번지 */}
-        {!sea && (h.lot === 0 || h.lot > WORLD_LOTS) && <p className={styles.tag}>주거 구역에 빈 집터가 나면 바로 옮겨 드려요. 그동안 집 안에는 들어갈 수 있어요.</p>}
+        {!sea && !camp && (h.lot === 0 || h.lot > WORLD_LOTS) && <p className={styles.tag}>주거 구역에 빈 집터가 나면 바로 옮겨 드려요. 그동안 집 안에는 들어갈 수 있어요.</p>}
         {away && (
           <p className={styles.tag}>
             {sea
               ? `내 오두막은 ${h.ch}채널 포구에 있어요. 지금은 ${channel}채널이에요. 꾸미기·넓히기는 ${h.ch}채널에서 할 수 있어요.`
-              : `내 집은 ${h.ch}채널에 있어요. 지금은 ${channel}채널이에요. 아래 버튼을 누르면 ${h.ch}채널로 옮긴 다음 가요.`}
+              : camp
+                ? `내 캠핑장 집은 ${h.ch}채널에 있어요. 지금은 ${channel}채널이에요. 꾸미기·앞마당은 ${h.ch}채널에서 할 수 있어요.`
+                : `내 집은 ${h.ch}채널에 있어요. 지금은 ${channel}채널이에요. 아래 버튼을 누르면 ${h.ch}채널로 옮긴 다음 가요.`}
           </p>
         )}
         <p className={styles.score}>
           꾸밈 점수 <strong>{fmt(h.score)}</strong>{" "}
           <span className={styles.small}>
             (물건 {fmt(h.placedScore)} + 좋아요 {h.likes}×{LIKE_WEIGHT}
-            {TIER_SCORE_BONUS[h.tier] > 0 ? ` + ${tier.name} ${TIER_SCORE_BONUS[h.tier]}` : ""})
+            {sizeBonus > 0 ? ` + ${camp ? "집 크기" : tier.name} ${sizeBonus}` : ""})
           </span>
         </p>
         <TitleProgress score={h.score} />
@@ -387,10 +571,17 @@ function MyPlot({
           <button type="button" className={cx(ui.button, ui.primary)} onClick={() => onEnter(false)} disabled={busy}>
             {sea ? "오두막 들어가기" : "내 집 들어가기"}
           </button>
-          <button type="button" className={ui.button} onClick={() => onEnter(true)} disabled={busy || (sea && away)}>
+          <button type="button" className={ui.button} onClick={() => onEnter(true)} disabled={busy || ((sea || !!camp) && away)}>
             들어가서 꾸미기
           </button>
-          {sea ? (
+          {camp ? (
+            ci?.kind === "caravan" &&
+            !otherKind && (
+              <button type="button" className={ui.button} onClick={() => setRedesign((v) => (v ? null : caravanDesignOf(h.lot, ci.design)))} disabled={busy} aria-expanded={!!redesign}>
+                디자인 바꾸기
+              </button>
+            )
+          ) : sea ? (
             <button type="button" className={ui.button} onClick={() => setRestyle((v) => !v)} disabled={busy} aria-expanded={restyle}>
               겉모습 바꾸기
             </button>
@@ -399,7 +590,13 @@ function MyPlot({
               외관 꾸미기
             </button>
           )}
-          {!(sea && away) && (sea || (h.lot >= 1 && h.lot <= WORLD_LOTS)) && (
+          {/* 11/26 캠핑장 집 앞으로는 캠핑장에 있을 때만 (지금 채널 집) */}
+          {camp && inCamp && !away && (
+            <button type="button" className={ui.button} onClick={() => onVillage(h.lot, true)} disabled={busy}>
+              내 집 앞으로 가기
+            </button>
+          )}
+          {!camp && !(sea && away) && (sea || (h.lot >= 1 && h.lot <= WORLD_LOTS)) && (
             <button type="button" className={ui.button} onClick={() => onVillage(h.lot, true)} disabled={busy}>
               {sea ? "내 오두막 보러 가기" : away ? `${h.ch}채널 내 집 보러 가기` : "내 집 보러 가기"}
             </button>
@@ -429,8 +626,52 @@ function MyPlot({
           />
         </div>
       )}
-      {editing && form("저장", () => run(() => housingApi.editProfile(name, intro, sea ? "sea" : "village"), "바꿨어요."))}
-      <div className={styles.card}>
+      {/* 11/26 카라반 디자인 바꾸기 (무료 — 고른 뒤 「바꾸기」로 확인) */}
+      {ci?.kind === "caravan" && !otherKind && redesign && (
+        <div className={styles.card}>
+          <p className={styles.muted}>카라반 디자인은 무료로 바꿀 수 있어요. 지금은 {caravanDesignName(caravanDesignOf(h.lot, ci.design))}이에요.</p>
+          <CaravanDesignPicker value={redesign} onChange={setRedesign} xmas={xmas} disabled={pending || busy} owned />
+          <div className={styles.row}>
+            <button
+              type="button"
+              className={cx(ui.button, ui.primary)}
+              disabled={pending || busy || sameCaravanDesign(redesign, caravanDesignOf(h.lot, ci.design))}
+              onClick={() => {
+                const next = redesign;
+                void run(async () => {
+                  const r = await housingApi.setCaravanDesign(next);
+                  setRedesign(null);
+                  return r;
+                }, `${caravanDesignName(next)}으로 바꿨어요.`);
+              }}
+            >
+              이 디자인으로 바꾸기 (무료)
+            </button>
+            <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setRedesign(null)} disabled={pending}>
+              그만두기
+            </button>
+          </div>
+        </div>
+      )}
+      {editing && form("저장", () => run(() => housingApi.editProfile(name, intro, sea ? "sea" : camp ? "camp" : "village"), "바꿨어요."))}
+      {ci && !otherKind && (
+        <CampUpgrades
+          h={h}
+          yard={ci.yard}
+          points={my.points}
+          yardPrice={ci.yard < 3 ? (prices?.yard?.price ?? (campLotByNo(h.lot) ? campYardPrice(campLotByNo(h.lot)!, (ci.yard + 1) as 2 | 3, !!h.villa) : 0)) : 0}
+          disabled={pending || busy}
+          away={away}
+          cardRef={upCard}
+          minHeight={upMin}
+          onYard={() => {
+            holdUpCard();
+            void run(() => housingApi.yardUp(channel), `앞마당을 ${ci.yard + 1}단계로 올렸어요!`);
+          }}
+        />
+      )}
+      {!camp && (
+      <div className={styles.card} ref={upCard} style={upMin ? { minHeight: upMin } : undefined}>
         <p className={styles.points}>
           내 포인트 <strong>{fmt(my.points)}P</strong>
         </p>
@@ -448,7 +689,10 @@ function MyPlot({
               type="button"
               className={ui.button}
               disabled={pending || busy || my.points < upPrice || away}
-              onClick={() => run(() => housingApi.upgrade(channel, up.id, sea ? "sea" : "village"), `${up.name}으로 넓혔어요!`)}
+              onClick={() => {
+                holdUpCard();
+                void run(() => housingApi.upgrade(channel, up.id, sea ? "sea" : "village"), `${up.name}으로 넓혔어요!`);
+              }}
             >
               {fmt(upPrice)}P로 {up.name} 만들기{away ? ` · ${h.ch}채널에서 할 수 있어요` : my.points < upPrice ? ` · ${fmt(upPrice - my.points)}P 부족해요` : ""}
             </button>
@@ -460,9 +704,62 @@ function MyPlot({
           </>
         )}
       </div>
+      )}
       <p className={styles.notice} role="status">
         {msg}
       </p>
+    </div>
+  );
+}
+
+/**
+ * 11/26 캠핑장 집 앞마당 칸 (마을 집 넓히기 카드와 같은 모양): 모든 종류가 앞마당 다음 단계를 올리면 방도 커진다
+ * (펜션·촌캉스 넓히기는 앞마당에 합쳤다). 값은 서버 값표(prices.yard), 옛 응답이면 같은 규칙으로 센다
+ */
+function CampUpgrades({
+  h,
+  yard,
+  points,
+  yardPrice,
+  disabled,
+  away,
+  cardRef,
+  minHeight,
+  onYard,
+}: {
+  h: { ch: number; lot: number; tier: string; villa?: boolean };
+  yard: 1 | 2 | 3;
+  points: number;
+  yardPrice: number;
+  disabled: boolean;
+  away: boolean;
+  /** 앞마당을 누른 순간 높이를 재는 칸 · 그 뒤 최소 높이 (마지막 단계에서 카드가 짧아져 창이 튀지 않게 — MyPlot holdUpCard) */
+  cardRef: RefObject<HTMLDivElement | null>;
+  minHeight: number | undefined;
+  onYard: () => void;
+}) {
+  const l = campLotByNo(h.lot);
+  const next = yard < 3 ? ((yard + 1) as 2 | 3) : null;
+  const tail = (price: number) => (away ? ` · ${h.ch}채널에서 할 수 있어요` : points < price ? ` · ${fmt(price - points)}P 부족해요` : "");
+  return (
+    <div className={styles.card} ref={cardRef} style={minHeight ? { minHeight } : undefined}>
+      <p className={styles.points}>
+        내 포인트 <strong>{fmt(points)}P</strong>
+      </p>
+      {next && l ? (
+        <>
+          <p className={styles.muted}>캠핑장 집은 한 채만 가질 수 있어요. 대신 앞마당을 올리면 마당도 방도 커져요. 놓아 둔 물건은 그대로예요.</p>
+          <p className={styles.muted}>
+            앞마당 {next}단계: {yardChangeLine(l, yard)}
+          </p>
+          {h.villa && <p className={styles.small}>다른 집이 있을 때 산 집이라 앞마당도 다주택자 가격이에요.</p>}
+          <button type="button" className={ui.button} disabled={disabled || points < yardPrice || away} onClick={onYard}>
+            {fmt(yardPrice)}P로 앞마당 {next}단계 만들기{tail(yardPrice)}
+          </button>
+        </>
+      ) : (
+        <p className={styles.muted}>앞마당은 가장 높은 3단계예요.</p>
+      )}
     </div>
   );
 }

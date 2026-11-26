@@ -28,13 +28,21 @@ export type FriendWhere =
  * 친구 창 한 줄의 자랑거리 (친구에게만, 서버가 잠깐 기억해 둔다).
  * look = 지금 입은 모습(바탕색·몸·꾸미기·염색) — 화면이 avatarColorSpec으로 칠한다
  */
+/** 친구 창 집 하나 (자랑거리 점수·버튼 이름) */
+export type FriendHouse = { id: string; score: number; label?: string; short?: string; ch?: number };
+
 export type FriendCard = {
   look: { color: string; body: string; look: string[]; dye?: AvatarDye };
   /** 집 꾸밈 점수 (집 랭킹 점수). 집이 없거나 숨겨졌으면 null */
-  /** label = 어느 구역 몇 번 (「3채널 12번지」 — 번지가 없는 옛 집이면 없음) */
-  house: { id: string; score: number; label?: string } | null;
+  /**
+   * label = 어느 구역 몇 번 (「3채널 기억숲 마을 12번지」 — 번지가 없는 옛 집이면 없음).
+   * 11/26 short = 버튼용 짧은 이름 (「마을 12번지」·「포구 2번」·「캠핑장 카라반 2번」), ch = 채널 (예전 응답엔 없을 수 있다)
+   */
+  house: FriendHouse | null;
   /** 11/25 바닷가 집(포구 오두막). 없거나 숨겨졌으면 null (예전 응답엔 없을 수 있다). label = 「3채널 포구 2번 오두막」 */
-  seaHouse?: { id: string; score: number; label?: string } | null;
+  seaHouse?: FriendHouse | null;
+  /** 11/26 캠핑장 집. 없거나 숨겨졌으면 null (예전 응답엔 없을 수 있다). label = 「3채널 언젠가 캠핑장 폭포 앞 2번 카라반」 */
+  campHouse?: FriendHouse | null;
   /** 사냥 레벨 */
   hunt: number;
   /** 도감 채운 비율 (0~100, 모든 종류 합쳐) */
@@ -55,6 +63,8 @@ export type FriendEntry = {
   houseId?: string | null;
   /** 11/25 친구 바닷가 집 (분양받았고 숨겨지지 않았으면). 목록에만 있다 */
   seaHouseId?: string | null;
+  /** 11/26 친구 캠핑장 집 (분양받았고 숨겨지지 않았으면). 목록에만 있다 */
+  campHouseId?: string | null;
   /** 마지막 접속 (마지막 머무르기 기록 시각, 없으면 null). 목록에만 있다 */
   lastSeen?: number | null;
   /** 자랑거리 한 줄. 목록에만 있다 */

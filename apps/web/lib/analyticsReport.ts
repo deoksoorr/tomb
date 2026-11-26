@@ -118,13 +118,25 @@ export function ranked(raws: readonly DayRaw[], prefix: string, limit = 10): Ran
   return [...acc].map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count || a.key.localeCompare(b.key)).slice(0, limit);
 }
 
-export async function buildReport(store: AnalyticsStore, range: AnalyticsRange, now = Date.now()): Promise<AnalyticsReport> {
+/**
+ * livePeak: 11/26 지금 동시 접속 표본(실시간 서버에 묻는 중인 값). 예전엔 표본을 찍고 나서 읽기 시작했는데(실시간 서버 왕복 + Redis 쓰기를 먼저 기다림),
+ * 이제 읽기와 함께 돌리고 읽은 오늘 그 시각 최고값에 더한다 (Redis에 적는 값과 같은 규칙 = 더 큰 값). 값은 예전과 같다
+ */
+export async function buildReport(store: AnalyticsStore, range: AnalyticsRange, now = Date.now(), livePeak?: Promise<number | null>): Promise<AnalyticsReport> {
   const today = kstDayAgo(now, 0);
+  const withLive = async (raws: DayRaw[]): Promise<DayRaw[]> => {
+    const n = livePeak ? await livePeak : null;
+    if (typeof n !== "number") return raws;
+    const key = hh(kstHourAt(now));
+    return raws.map((r) => (r.day === today && n > (r.peaks[key] ?? -1) ? { ...r, peaks: { ...r.peaks, [key]: n } } : r));
+  };
   let series: SeriesPoint[];
   let breakdownDays: string[];
   let breakdownLabel: string;
   let todayRaw: DayRaw | undefined;
   let todayUnique: number;
+  /** 위에서 이미 읽은 날들 (유입 등 집계는 다시 읽지 않고 여기서 고른다 — 11/26 Redis 왕복 1번 줄임) */
+  let readRaws: DayRaw[] = [];
 
   if (range === "hour") {
     // 지금 시간대까지 24칸 (어제 같은 시각 다음 칸부터)
@@ -133,7 +145,9 @@ export async function buildReport(store: AnalyticsStore, range: AnalyticsRange, 
       return [kstDayAgo(t, 0), kstHourAt(t)] as const;
     });
     const days = [...new Set(slots.map(([d]) => d))];
-    const [raws, hourU, [tu]] = await Promise.all([store.days(days), store.hourUniques(slots), store.uniqueOver([[today]])]);
+    const [raws0, hourU, [tu]] = await Promise.all([store.days(days), store.hourUniques(slots), store.uniqueOver([[today]])]);
+    const raws = await withLive(raws0);
+    readRaws = raws;
     const byDay = new Map(raws.map((r) => [r.day, r]));
     series = slots.map(([d, h], i) => {
       const r = byDay.get(d);
@@ -156,7 +170,9 @@ export async function buildReport(store: AnalyticsStore, range: AnalyticsRange, 
   } else {
     const groups = groupsFor(range, now);
     const all = [...new Set([today, ...groups.flatMap((g) => g.days)])];
-    const [raws, uniques] = await Promise.all([store.days(all), store.uniqueOver([[today], ...groups.map((g) => g.days)])]);
+    const [raws0, uniques] = await Promise.all([store.days(all), store.uniqueOver([[today], ...groups.map((g) => g.days)])]);
+    const raws = await withLive(raws0);
+    readRaws = raws;
     const byDay = new Map(raws.map((r) => [r.day, r]));
     series = groups.map((g, i) => point(g.label, g.days.map((d) => byDay.get(d)), uniques[i + 1]));
     todayRaw = byDay.get(today);
@@ -165,7 +181,8 @@ export async function buildReport(store: AnalyticsStore, range: AnalyticsRange, 
     breakdownLabel = range === "day" ? "최근 30일" : range === "week" ? "최근 12주" : "최근 3달";
   }
 
-  const bRaws = await store.days(breakdownDays);
+  const readByDay = new Map(readRaws.map((r) => [r.day, r]));
+  const bRaws = breakdownDays.every((d) => readByDay.has(d)) ? breakdownDays.map((d) => readByDay.get(d)!) : await store.days(breakdownDays);
   const refs = ranked(bRaws, "ref:", 10);
   const todayRaws = todayRaw ? [todayRaw] : [];
   const todayRefs = ranked(todayRaws, "ref:", 10);

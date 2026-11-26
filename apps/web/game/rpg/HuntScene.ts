@@ -720,7 +720,7 @@ export class HuntScene extends RpgScene {
     // 11/15 능력 카드 (야근 빌딩): 체크포인트에서 시작하면 첫 층 전에 카드부터 고른다
     this.areaBase = this.area;
     // 11/19 주력 갈래 카드는 제안에 더 자주 (서버가 같은 규칙으로 다시 굴린다 — lib/rpg/cards cardOffer)
-    this.cards = play.tower ? new CardRun<Mon>(this.cardHost(), play.seed, play.tower.start, mainBranchOf(play.skills, (id) => skillById(id)?.branch)) : null;
+    this.cards = play.tower ? new CardRun<Mon>(this.cardHost(), play.seed, play.tower.start, mainBranchOf(play.skills, (id) => skillById(id)?.branch), play.tower.lv0 ?? 0) : null;
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.cards?.destroy();
       this.cards = null;

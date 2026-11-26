@@ -6,7 +6,7 @@ import { env } from "../env";
 import { HttpError } from "../http";
 import { furnitureById, type FurnitureDef } from "../housing/catalog";
 import type { HouseZone } from "../housing/catalog";
-import { buyFurnitureMe, getHouseStore, houseIdFor, housePair } from "../housing/service";
+import { buyFurnitureMe, furnitureZone, getHouseStore, housePair } from "../housing/service";
 import { recordLook } from "../lookRank";
 import { getAccounts } from "../store";
 import { lookGrant, lookOf, loadMe } from "../store/accounts";
@@ -74,11 +74,9 @@ async function rateOf(accountId: string, kind: SeasonKind, now: number): Promise
   return kind === "cos" ? pickDiscount(perk.discount, perkShopDiscount(champ, chair, "shop", "cosmetic")) : pickDiscount(perk.houseDiscount, perkShopDiscount(champ, chair, "furniture"));
 }
 
-/** 가구를 넣을 집 (마을 집 먼저, 없으면 포구 오두막). 둘 다 없으면 null */
+/** 가구를 넣을 집 (마을 집 먼저, 없으면 포구 오두막, 11/26 없으면 캠핑장 집). 셋 다 없으면 null */
 async function houseZone(accountId: string): Promise<HouseZone | null> {
-  const store = getHouseStore();
-  const [v, s] = await Promise.all([store.get(houseIdFor(accountId, "village")), store.get(houseIdFor(accountId, "sea"))]);
-  return v ? "village" : s ? "sea" : null;
+  return furnitureZone(getHouseStore(), accountId);
 }
 
 export async function seasonStatus(accountId: string, kind: SeasonKind, now = Date.now()): Promise<SeasonStatus> {
@@ -163,7 +161,7 @@ export async function buySeason(accountId: string, kind: SeasonKind, id: string,
     if (!f) throw new HttpError(400, "NOT_SOLD", "아직 준비 중인 물건이에요.");
     got = f.name;
     zone = await houseZone(accountId);
-    if (!zone) throw new HttpError(409, "NO_HOUSE", "가구는 집이 있어야 살 수 있어요. 마을 분양 사무소나 포구 부동산에 들러요.");
+    if (!zone) throw new HttpError(409, "NO_HOUSE", "가구는 집이 있어야 살 수 있어요. 마을 분양 사무소·포구 부동산·캠핑장에서 집을 분양받아요.");
     // 가구점과 같은 값 매기기·가방·한도·환불 (마지막 인자 = 가구점 밖 특별 판매 허용 — 유령선과 같은 자리)
     const r = await buyFurnitureMe(getHouseStore(), accountId, id, rate, zone, true);
     bag = { have: r.house.inventory, away: r.house.away ?? {} }; // 산 뒤 가방·내 정보 (결제하며 이미 읽어 돌려준다)

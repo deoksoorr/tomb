@@ -12,6 +12,7 @@ import type { LightSpot } from "./WorldMap";
 import { qaSearch } from "@/lib/qaUrl";
 import { bridge } from "../bridge";
 import { ambiencePreview, ambiencePreviewVersion } from "./ambiencePreview";
+import { deviceSettings, powerSaveOn, weatherFxOn } from "@/lib/deviceSettings";
 
 // 분위기 레이어: [날씨 막(일반 섞기)] → KST 시간대 톤(곱하기 틴트 — 마을은 판 대신 셰이더가 그림마다 곱하고 캐릭터는 절반만, worldTint) → [어둠·빛 구멍은 Lighting] → 빛(가산) → 반딧불 → 날씨(비·눈·낙엽) → 안개 → 번개 → 비네트.
 // 톤·날씨는 lib/ambience(공용, 시계 기반)로 1분마다(날씨가 바뀌는 30분 경계엔 그 순간) 다시 계산하고 바뀌면 2.5초 동안 섞는다.
@@ -74,6 +75,8 @@ export class Atmosphere {
   private readonly override: AmbienceOverride;
   /** 11/19 촬영 모드 시간대·날씨 미리보기 판 (바뀌면 바로 다시 잡는다 — world/ambiencePreview) */
   private previewVer = ambiencePreviewVersion();
+  /** 11/26 설정 창의 날씨 효과·절전 모드 (바뀌면 바로 다시 잡는다 — lib/deviceSettings) */
+  private settingsVer = deviceSettings.version();
   private readonly blender: LevelBlender;
   private nextCheck = 0;
   private readonly tint: Phaser.GameObjects.Image;
@@ -249,7 +252,12 @@ export class Atmosphere {
   }
 
   private targetLevels(): Levels {
-    return levelsFor(this.ambience(Date.now()), this.grade);
+    return levelsFor(Atmosphere.drawn(this.ambience(Date.now())), this.grade);
+  }
+
+  /** 11/26 날씨 효과를 끈 기기는 맑은 날처럼 그린다 (시간대 색은 그대로 — 화면 위 날씨 글은 진짜 날씨에 가로줄) */
+  private static drawn(a: Ambience): Ambience {
+    return weatherFxOn() ? a : { ...a, weather: "clear", intensity: 0 };
   }
 
   /**
@@ -260,7 +268,7 @@ export class Atmosphere {
     const now = Date.now();
     const a = this.ambience(now);
     this.nextCheck = time + recheckDelay(now, a.nextWeatherAt, RECHECK_MS);
-    this.blender.setTarget(levelsFor(a, this.grade), time);
+    this.blender.setTarget(levelsFor(Atmosphere.drawn(a), this.grade), time);
     // 촬영 모드 미리보기 하늘은 화면 위 시간대·날씨 글에 알리지 않는다 (끝나면 진짜 값을 다시 알린다)
     if (!ambiencePreview()) bridge.emit("ambience:now", a);
   }
@@ -284,12 +292,15 @@ export class Atmosphere {
   }
 
   update(time: number, dt: number, view: Phaser.Geom.Rectangle): void {
-    if (time >= this.nextCheck || this.previewVer !== ambiencePreviewVersion()) {
+    if (time >= this.nextCheck || this.previewVer !== ambiencePreviewVersion() || this.settingsVer !== deviceSettings.version()) {
       this.previewVer = ambiencePreviewVersion();
+      this.settingsVer = deviceSettings.version();
       this.recheck(time);
     }
     const L = this.blender.update(time);
     const cam = this.scene.cameras.main;
+    // 11/26 절전 모드: 움직임 줄이기 설정처럼 비·눈은 먼 겹만, 물튐 없음, 반딧불·낙엽 적게, 불빛 일렁임 없음 (흐르는 빠르기는 그대로)
+    const lite = this.reduced || powerSaveOn();
     this.sound?.report(L.rain, this.indoor);
     this.updateThunder(time, L);
 
@@ -313,8 +324,8 @@ export class Atmosphere {
     const dk = this.grade ? L.darkness : 0; // 실내·입장 화면은 예전 그대로
     const glow = (0.12 + 0.88 * L.glow) * (1 + 0.7 * dk);
     const spread = 1 + 0.35 * dk;
-    this.updateLights(this.staticLights, time, glow, view, spread);
-    this.updateLights(this.gridLights, time, glow, view, spread);
+    this.updateLights(this.staticLights, time, glow, view, spread, lite);
+    this.updateLights(this.gridLights, time, glow, view, spread, lite);
 
     const s = time / 1000;
     const drift = this.reduced ? 0.3 : 1;
@@ -336,8 +347,8 @@ export class Atmosphere {
     // 11/16 사람이 잘 안 보인다는 문의로 빗줄기를 옅게 (먼 줄 0.45→0.26, 가까운 줄 0.6→0.3, 가까운 줄은 꽤 올 때만)
     const ra = rain * burst;
     Atmosphere.layerAlpha(this.rainFar, rain > 0.01 ? ra * (this.reduced ? 0.2 : 0.26) : 0, s, 41, g);
-    Atmosphere.layerAlpha(this.rainMid, !this.reduced && rain > 0.2 ? ra * 0.2 : 0, s, 53, g);
-    Atmosphere.layerAlpha(this.rainNear, !this.reduced && rain > 0.35 ? ra * 0.3 : 0, s, 67, g);
+    Atmosphere.layerAlpha(this.rainMid, !lite && rain > 0.2 ? ra * 0.2 : 0, s, 53, g);
+    Atmosphere.layerAlpha(this.rainNear, !lite && rain > 0.35 ? ra * 0.3 : 0, s, 67, g);
     if (rain > 0.01) {
       // 세 겹이 서로 안 맞는 속도(0.22·0.27·0.34px/ms)로, 바람에 따라 기울기가 0.23~0.43 사이로 흔들린다
       const slant = 0.33 + 0.1 * wind;
@@ -349,8 +360,8 @@ export class Atmosphere {
 
     const sa = snow * pulse(s, 37, 0.25 * g, 11);
     Atmosphere.layerAlpha(this.snowFar, snow > 0.01 ? sa * 0.7 : 0, s, 71, g);
-    Atmosphere.layerAlpha(this.snowMid, !this.reduced && snow > 0.1 ? sa * 0.8 : 0, s, 83, g);
-    Atmosphere.layerAlpha(this.snowNear, !this.reduced && snow > 0.15 ? sa * 0.9 : 0, s, 97, g);
+    Atmosphere.layerAlpha(this.snowMid, !lite && snow > 0.1 ? sa * 0.8 : 0, s, 83, g);
+    Atmosphere.layerAlpha(this.snowNear, !lite && snow > 0.15 ? sa * 0.9 : 0, s, 97, g);
     if (snow > 0.01) {
       const k = dt * (this.reduced ? 0.4 : 1);
       // 가로: 바람(공통) + 겹마다 다른 흔들림. 세로: 겹마다 빠르기가 조금씩 출렁인다
@@ -361,9 +372,10 @@ export class Atmosphere {
       Atmosphere.scroll(this.snowNear, k * side(1, 113), -k * fall(0.024, 127));
     }
 
-    this.updateSplashes(time, dt, rain * burst, view);
-    this.updateLeaves(time, dt, this.indoor || this.snowy ? 0 : L.leaves, view);
-    this.updateFireflies(time, dt, L.fireflies, view);
+    this.updateSplashes(time, dt, lite ? 0 : rain * burst, view);
+    // 날씨 효과를 끄면 낙엽도 날리지 않는다
+    this.updateLeaves(time, dt, this.indoor || this.snowy || !weatherFxOn() ? 0 : L.leaves, view, lite);
+    this.updateFireflies(time, dt, L.fireflies, view, lite);
   }
 
   // ── 천둥·번개 ──
@@ -404,8 +416,9 @@ export class Atmosphere {
   // ── 낙엽 ──
 
   /** 가을: 화면 위쪽에서 나뭇잎이 흔들리며 떨어진다 (월드 좌표, 화면을 벗어나면 위에서 다시) */
-  private updateLeaves(time: number, dt: number, density: number, view: Phaser.Geom.Rectangle): void {
-    const active = density < 0.02 ? 0 : Math.max(1, Math.round(this.leaves.length * density));
+  private updateLeaves(time: number, dt: number, density: number, view: Phaser.Geom.Rectangle, lite = false): void {
+    const n = lite ? Math.min(this.leaves.length, LEAF_MAX_REDUCED) : this.leaves.length;
+    const active = density < 0.02 ? 0 : Math.max(1, Math.round(n * density));
     const k = dt / 1000;
     const speed = this.reduced ? 0.5 : 1;
     for (let i = 0; i < this.leaves.length; i++) {
@@ -536,13 +549,13 @@ export class Atmosphere {
     }
   }
 
-  private updateLights(lights: Light[], time: number, glow: number, view: Phaser.Geom.Rectangle, spread: number): void {
+  private updateLights(lights: Light[], time: number, glow: number, view: Phaser.Geom.Rectangle, spread: number, lite = false): void {
     for (const l of lights) {
       const { x, y } = l.spot;
       const vis = x > view.x - 40 && x < view.right + 40 && y > view.y - 40 && y < view.bottom + 40;
       l.img.setVisible(vis);
       if (!vis) continue;
-      const flicker = this.reduced ? 1 : 0.86 + 0.08 * Math.sin(time / 210 + l.phase) + 0.06 * Math.sin(time / 67 + l.phase * 3);
+      const flicker = lite ? 1 : 0.86 + 0.08 * Math.sin(time / 210 + l.phase) + 0.06 * Math.sin(time / 67 + l.phase * 3);
       l.img.setAlpha(Math.min(1, l.spot.base * glow * flicker));
       // 바깥 밤: 빛 무리 크기도 살짝 일렁인다 (실내는 spread=1이라 예전 그대로)
       if (spread !== 1) l.img.setScale(l.spot.scale * spread * (0.97 + 0.03 * flicker));
@@ -582,9 +595,10 @@ export class Atmosphere {
     }
   }
 
-  private updateFireflies(time: number, dt: number, density: number, view: Phaser.Geom.Rectangle): void {
+  private updateFireflies(time: number, dt: number, density: number, view: Phaser.Geom.Rectangle, lite = false): void {
     const gather = this.gatherTarget;
-    const active = Math.max(gather ? 5 : 0, Math.round(this.fireflies.length * density));
+    const n = lite ? Math.min(this.fireflies.length, FIREFLY_MAX_REDUCED) : this.fireflies.length;
+    const active = Math.max(gather ? 5 : 0, Math.round(n * density));
     const brightness = gather ? Math.max(density, 0.45) : density;
     const k = dt / 1000;
     for (let i = 0; i < this.fireflies.length; i++) {

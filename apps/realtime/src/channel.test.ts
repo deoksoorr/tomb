@@ -827,6 +827,22 @@ describe("restore after hibernation", () => {
   });
 });
 
+describe("11/26 닫힘 코드는 잠들었다 깨어나도 남는다 (접속 기록 「창 닫음」)", () => {
+  it("유예 예약에 code를 적고, 새 DO가 예약에서 되살린 뒤 유예가 끝나면 그 코드로 나감", () => {
+    const old = setup();
+    const a = old.join("a");
+    old.core.disconnect(a, 1001, 1_000);
+    const res = [...old.reservations.values()];
+    expect(res[0]).toMatchObject({ visitorId: "a", code: 1001 });
+    const next = setup();
+    const left: [string, number | undefined][] = [];
+    next.host.visitorLeft = (v: string, code?: number) => void left.push([v, code]);
+    next.core.restore([], res, 2_000);
+    next.core.expire(res[0].until + 1);
+    expect(left).toEqual([["a", 1001]]);
+  });
+});
+
 describe("restart (redeploy) survival / seat restore", () => {
   /** 실시간 서버 재배포 흉내: 지금 core의 접속자 스냅샷·유예 예약만 들고 새 core를 만든다 (소켓은 모두 사라짐) */
   function redeploy(old: ReturnType<typeof setup>, now: number, liveGraceMs = 60_000) {
@@ -1402,6 +1418,33 @@ describe("23번 확성기", () => {
     expect(room.core.relayedPin(data)).toBe(false);
     expect(events(c).some((e) => e.t === "megaPin")).toBe(false);
   });
+
+  it("11/26 집 목록 바뀜(homes): 채널 모두에게 한 번, 구역마다 10초에 한 번으로 묶고 그 사이 알림은 가장 새 v로 뒤에 (index /internal/homes)", () => {
+    const { core, join } = setup();
+    const [a, b] = [join("a"), join("b")];
+    clear(a);
+    clear(b);
+    const homes = (c: Conn) => events(c).filter((e) => e.t === "homes");
+    expect(core.relayHomes("camp", 42, 0)).toEqual({ ok: true, flushIn: null });
+    expect(homes(a)).toEqual([{ t: "homes", zone: "camp", v: 42 }]);
+    expect(homes(b)).toHaveLength(1);
+    // 10초 안의 알림은 묶는다 (같은 값 저장을 몰아 보내도 방송은 늘지 않는다)
+    for (let i = 1; i <= 20; i++) expect(core.relayHomes("camp", 42 + i, i * 100).ok).toBe(true);
+    expect(core.relayHomes("camp", 50, 3_000).flushIn).toBe(7_000);
+    // 다른 구역은 따로 센다
+    expect(core.relayHomes("village", 7, 3_000).flushIn).toBe(7_000);
+    expect(homes(a).map((e) => `${(e as { zone: string }).zone}:${(e as { v: number }).v}`)).toEqual(["camp:42", "village:7"]);
+    expect(core.flushHomes(9_999)).toBe(1);
+    expect(homes(a)).toHaveLength(2);
+    expect(core.flushHomes(10_000)).toBeNull();
+    expect(homes(a).slice(2)).toEqual([{ t: "homes", zone: "camp", v: 62 }]);
+    expect(homes(b)).toHaveLength(3);
+    // 간격이 끝난 뒤의 알림은 바로
+    expect(core.relayHomes("camp", 70, 20_000)).toEqual({ ok: true, flushIn: null });
+    expect(homes(a).at(-1)).toEqual({ t: "homes", zone: "camp", v: 70 });
+    // 방은 받지 않는다
+    expect(setup(3, 20_000, true).core.relayHomes("camp", 1, 0)).toEqual({ ok: false, flushIn: null });
+  });
 });
 
 describe("3번 집 안 가구: 방(집)의 1인 자리와 use 중계", () => {
@@ -1498,6 +1541,17 @@ describe("3번 집 안 가구: 방(집)의 1인 자리와 use 중계", () => {
     clear(c, d);
     w.core.message(c, send({ t: "use", u: "ab12cd", a: 3 }), 0);
     expect(events(d)).toEqual([]);
+  });
+
+  it("11/26 월드 채널은 캠핑장 아궁이 불(ag{터})만 받는다 — 마을에서 보낸 것·다른 use는 버린다 (캠핑장 판정은 camp.test)", () => {
+    const w = setup();
+    const c = w.join("c");
+    const d = w.join("d");
+    clear(c, d);
+    w.core.message(c, send({ t: "use", u: "ag16", a: 1 }), 0);
+    w.core.message(c, send({ t: "use", u: "ab12cd", a: 3 }), 2_000);
+    expect(events(d).filter((e) => e.t === "use")).toEqual([]);
+    expect(events(c)).toEqual([]);
   });
 });
 

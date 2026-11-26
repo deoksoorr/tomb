@@ -2,7 +2,8 @@
 
 .layer {
   position: fixed;
-  z-index: 6;
+  /* 11/26 바닷가 물때 줄·채집 수(게임 오버레이 10~11) 위에 (띠는 4초만 떠 있다). 창(30~)보다는 아래 */
+  z-index: 13;
   top: calc(12vh / var(--uz));
   left: 0;
   right: 0;

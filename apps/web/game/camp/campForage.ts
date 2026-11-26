@@ -11,7 +11,7 @@ import { Foraging, type ForageZone } from "../world/forage/Foraging";
 import { ensureZoneTextures, ZTEX } from "../world/forage/zoneArt";
 
 // 11/15 캠핑장 도감 수집 (A-6): 마을 낚시·채집(game/world/forage/Foraging)을 캠핑장 맵으로 그대로 쓴다.
-// - 계곡 물가 낚시 자리(protocol CAMP_FISHING_SPOTS, 강 물고기): 마을 낚시와 같은 1인 자리·같은 낚시 창·같은 연출.
+// - 낚시 자리(protocol CAMP_FISHING_SPOTS — 11/26 옛길 계곡 valley · 달그늘 소 pool · 윤슬 낚시터 reservoir): 마을 낚시와 같은 1인 자리·같은 낚시 창·같은 연출.
 //   자리마다 낚시 의자 + 꽂아 둔 낚싯대 + 찌·물결 + 가까이 오면 낚싯바늘 말풍선 (마을 납품 부두 FishZoneView의 자리 표시와 같은 그림)
 // - 채집 지점(lib/forage/catalog CAMP_GATHER_NODES): 산책로 숲 곤충·약초, 산꼭대기·큰 바위 광석, 낙엽 숲 발굴.
 //   서버가 마을 지점과 함께 알려 주고(forage:nodes) Foraging이 캠핑장 것만 그린다. 하루 한도·도감·피어나는 창(11/16 10분)은 마을과 같이 센다.
@@ -53,7 +53,9 @@ export class CampFishMarkers implements ForageZone {
   private make(s: FishingSpot): Marker {
     const scene = this.scene;
     const [dx, dy] = STEP[s.facing];
-    scene.add.image(s.x, s.y + 2, ZTEX.stool).setOrigin(0.5, 1).setDepth(s.y - 1);
+    // 11/26 달그늘 소 바위·저수지 둑·좌대는 맵 그림에 의자·낚싯대 받침이 있다 → 찌·물결만 (계곡 둑만 의자와 꽂아 둔 낚싯대)
+    const own = s.water === "pool" || s.water === "reservoir";
+    if (!own) scene.add.image(s.x, s.y + 2, ZTEX.stool).setOrigin(0.5, 1).setDepth(s.y - 1);
     // 꽂아 둔 낚싯대: 의자 옆 받침대 → 물 쪽으로 비스듬히 → 늘어진 줄 (계곡 자리는 옆, 바닷가 자리는 아래를 봐요)
     const hx = dy ? s.x + 7 : s.x - dx * 2;
     const hy = s.y + 3;
@@ -62,12 +64,14 @@ export class CampFishMarkers implements ForageZone {
     const bx = dy ? hx + 3 : s.x + dx * CAST;
     const by = dy ? s.y + dy * CAST : s.y - 2;
     const rod = scene.add.graphics().setDepth(s.y + 1);
-    rod.lineStyle(1, 0x3a2a1a, 1).lineBetween(hx - 1, hy, hx - 1, hy - 4).lineBetween(hx + 1, hy, hx + 1, hy - 4);
-    rod.lineStyle(1, 0x7a5432, 1).lineBetween(hx, hy - 3, tipX, tipY);
-    rod.fillStyle(0xe8d8a8, 1).fillRect(Math.round(hx + (tipX - hx) * 0.3), Math.round(hy - 3 + (tipY - hy + 3) * 0.3) - 1, 2, 2);
+    if (!own) {
+      rod.lineStyle(1, 0x3a2a1a, 1).lineBetween(hx - 1, hy, hx - 1, hy - 4).lineBetween(hx + 1, hy, hx + 1, hy - 4);
+      rod.lineStyle(1, 0x7a5432, 1).lineBetween(hx, hy - 3, tipX, tipY);
+      rod.fillStyle(0xe8d8a8, 1).fillRect(Math.round(hx + (tipX - hx) * 0.3), Math.round(hy - 3 + (tipY - hy + 3) * 0.3) - 1, 2, 2);
+    }
     const midX = (tipX + bx) / 2;
     const midY = Math.max(tipY, by - 3) + 2;
-    rod.lineStyle(1, 0xd8e0e8, 0.45).lineBetween(tipX, tipY, midX, midY).lineBetween(midX, midY, bx, by - 3);
+    if (!own) rod.lineStyle(1, 0xd8e0e8, 0.45).lineBetween(tipX, tipY, midX, midY).lineBetween(midX, midY, bx, by - 3);
     const ripple = scene.add.image(bx, by, ZTEX.ripple(0)).setOrigin(0.5, 0.5).setDepth(DEPTH.decal + 4).setAlpha(0.55);
     const bob = scene.add.image(bx, by, FTEX.bobber).setOrigin(0.5, 1).setDepth(by + 1);
     const hook = scene.add.image(s.x, s.y - 26, ZTEX.hook).setOrigin(0.5, 1).setDepth(DEPTH.bubble - 3).setVisible(false);

@@ -27,14 +27,20 @@ export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
   const { room } = await readBody(req, RoomJoinSchema);
   await rateLimit("room", req, visitorId);
-  if (room.startsWith("house:")) {
-    const house = await getHouseStore().get(room.slice("house:".length));
-    if (!house || house.hidden) throw new HttpError(404, "NOT_FOUND", "그 집을 찾을 수 없어요.");
-  }
+  // 11/26 집 확인은 아래 읽기와 함께 (예전엔 집을 먼저 읽고 기다렸다 — 집 들어갈 때 Redis 왕복 1번 줄임). 없거나 숨김이면 그대로 404
+  const houseCheck = room.startsWith("house:")
+    ? getHouseStore()
+        .get(room.slice("house:".length))
+        .then((house) => {
+          if (!house || house.hidden) throw new HttpError(404, "NOT_FOUND", "그 집을 찾을 수 없어요.");
+        })
+    : null;
+  houseCheck?.catch(() => undefined);
   const now = Date.now();
   const accounts = getAccounts();
   // 계정 전체 대신 이름·색·몸·착용만 (명령 9개 → 2개)
-  const [a, style, staff, dex, champ, gear, mgr] = await Promise.all([
+  const [, a, style, staff, dex, champ, gear, mgr] = await Promise.all([
+    houseCheck,
     accounts.appearance(visitorId, now),
     getStyleStore(accounts).get(visitorId),
     isStaff(visitorId),

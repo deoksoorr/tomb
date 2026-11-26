@@ -1,5 +1,5 @@
 import type { FishWater } from "@tomb/protocol";
-import type { Species } from "./catalog";
+import { WATER_WHERES, type Species } from "./catalog";
 import { BITE_MAX_MS, BITE_MIN_MS, candidates, conditionsAt, hash01, reelMinMs, rollSize10, sizeText, weightOf, type Cond } from "./rules";
 
 // 자동 낚시 규칙 (순수 함수 — 서버가 쓰고 테스트한다).
@@ -153,8 +153,11 @@ export function pickAuto(list: readonly Species[], rand: number): Species | null
  * k번째 시도에 걸린 물고기: 그 시각의 조건으로, 시드 + 번호로 결정적으로 (같은 입력 → 같은 결과). 걸렸는지는 autoHit.
  * 크기는 직접 낚을 때와 같은 분포(rollSize10). 내 도감 최대 기록에는 들어가고, 최대어 순위에는 넣지 않는다
  */
+/** 11/26 자동 낚시로 낚일 수 있는 것 (그 물·조건에서 — 캠핑장 희귀 이상 새 물고기 directOnly는 빼요) */
+export const autoCandidates = (water: FishWater, cond: Cond): Species[] => candidates("fish", WATER_WHERES[water], cond, (s) => !s.directOnly);
+
 export function rollAutoCatch(seed: number, k: number, water: FishWater, at: number, cond: Cond = conditionsAt(at)) {
-  const s = pickAuto(candidates("fish", water, cond), hash01(`auto|${seed}|${k}|sp`));
+  const s = pickAuto(autoCandidates(water, cond), hash01(`auto|${seed}|${k}|sp`));
   if (!s) return null;
   return { id: s.id, size: rollSize10(s, hash01(`auto|${seed}|${k}|sz`)), at };
 }
@@ -176,6 +179,10 @@ export function autoChipText(today: number, nextMs: number | null, full: boolean
 
 /** 자동 낚시 안내 (낚시 창·결과 알림이 같이 쓴다) */
 export const AUTO_RANK_NOTE = "자동 낚시로 낚은 물고기는 최대어 순위에 안 올라가요. 크기는 도감에 남아요.";
+/** 11/26 캠핑장 물에서 자동 낚시를 켤 때 덧붙이는 안내 (희귀 이상 새 물고기는 직접 낚시로만 — catalog directOnly) */
+export const AUTO_DIRECT_NOTE = "캠핑장에서만 나오는 희귀 이상 물고기는 직접 낚아야 나와요.";
+/** 11/26 캠핑장 물인지 (자동 낚시 안내) */
+export const isCampWater = (w: FishWater): boolean => w === "valley" || w === "pool" || w === "reservoir" || w === "rowboat";
 /** 11/19 자동 낚시 빠르기 안내: "30초마다 찌를 올려 25% 확률로 걸려요." (숫자는 상수에서) */
 export const AUTO_PACE_NOTE = `${Math.round(AUTO_FISH_EVERY_MS / 1000)}초마다 찌를 올려 ${Math.round(AUTO_CATCH_CHANCE * 100)}% 확률로 걸려요.`;
 

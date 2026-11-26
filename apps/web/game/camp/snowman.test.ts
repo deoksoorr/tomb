@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { campSnowSpotOk } from "@tomb/protocol";
+import { CAMP_HOME_SEATS, campSnowSpotOk } from "@tomb/protocol";
+import { CAMP_GATHER_NODES } from "@/lib/forage/catalog";
 import { BALL_R, carriedBallSheet, carryFrameSize, snowmanArt, snowmanLook, SNOWMAN_H, SNOWMAN_W, stackArt, type BallSize } from "./snowmanArt";
-import { ballFront, campSnowPiles, carryAt, heldStep, meltStage, rectsOverlap, sizeForRoll, snowmanBlockRect, snowPlaceOk, stackBlockRect, stackCheck, stackDone, stackOpen, SNOWBALL_GROW_AT } from "./snowmanLogic";
+import { ballFront, campSnowPiles, carryAt, PILE_NODE_GAP, PILE_SEAT_GAP, heldStep, meltStage, rectsOverlap, sizeForRoll, snowmanBlockRect, snowPlaceOk, stackBlockRect, stackCheck, stackDone, stackOpen, SNOWBALL_GROW_AT } from "./snowmanLogic";
 
 // 11/17 캠핑장 눈사람 만들기: 굴린 거리 → 크기, 쌓기 순서, 눈더미 자리, 같은 씨앗 → 같은 모습
 describe("snowman logic", () => {
@@ -72,6 +73,17 @@ describe("snowman logic", () => {
       expect(campSnowSpotOk(p.x, p.y)).toBe(true);
       expect(snowPlaceOk(p.x, p.y)).toBe(true);
     }
+  });
+  it("11/26 눈더미는 집 앞마당 자리·일어서는 자리와 44px 넘게 떨어져 있다 (E가 앉기 대신 눈 뭉치기로 가지 않게)", () => {
+    for (const p of campSnowPiles())
+      for (const q of CAMP_HOME_SEATS) {
+        expect(Math.hypot(q.x - p.x, q.y - p.y), `${q.id} ${p.x},${p.y}`).toBeGreaterThanOrEqual(PILE_SEAT_GAP);
+        expect(Math.hypot(q.x + (q.standDx ?? 0) - p.x, q.y + (q.standDy ?? 9) - p.y), `${q.id} 일어서는 자리 ${p.x},${p.y}`).toBeGreaterThanOrEqual(PILE_SEAT_GAP);
+      }
+  });
+
+  it("눈더미는 채집 지점과 떨어져 있다 (E가 눈 뭉치기로 가로채지 않게)", () => {
+    for (const p of campSnowPiles()) for (const n of CAMP_GATHER_NODES) expect(Math.hypot(n.x - p.x, n.y - p.y), `${n.id} ${p.x},${p.y}`).toBeGreaterThanOrEqual(PILE_NODE_GAP);
   });
   it("웹이 내려놓을 수 있는 자리는 서버도 받는다 (격자 훑기)", () => {
     for (let y = 40; y < 800; y += 12) for (let x = 20; x < 1280; x += 12) if (snowPlaceOk(x, y)) expect(campSnowSpotOk(x, y), `${x},${y}`).toBe(true);

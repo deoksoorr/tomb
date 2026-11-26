@@ -28,3 +28,6 @@ export type HouseTool =
   | { action: "deselect" }
   | { action: "nudge"; dx: number; dy: number }
   | { action: "skin"; floor?: string; wall?: string; window?: string };
+
+/** 11/26 캠핑장 집 기본 가구를 치우려 할 때 (집 씬·꾸미기 도구 같은 말) */
+export const FIXTURE_LOCKED = "집에 딸린 가구라 뺄 수 없어요. 옮기거나 돌릴 수는 있어요.";

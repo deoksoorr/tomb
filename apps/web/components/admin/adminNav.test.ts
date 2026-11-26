@@ -17,6 +17,18 @@ describe("관리자 메뉴", () => {
     expect(panelFromHash("#content")).toBe("graves");
   });
 
+  it("11/26 뺀·합친 메뉴의 옛 주소는 옮긴 화면으로", () => {
+    expect(panelFromHash("#notices")).toBe("devnotes");
+    expect(panelFromHash("#megaphone")).toBe("reports");
+    expect(panelFromHash("#mapConcept")).toBe("dashboard");
+    expect(panelFromHash("#managers")).toBe("staff");
+    expect(panelFromHash("#graveRules")).toBe("passed");
+  });
+
+  it("빈 묶음이 없다", () => {
+    for (const g of NAV) expect(g.items.length).toBeGreaterThan(0);
+  });
+
   it("메뉴 id는 겹치지 않고, 항목마다 묶음을 찾는다", () => {
     const ids = NAV.flatMap((g) => g.items.map((i) => i.id));
     expect(new Set(ids).size).toBe(ids.length);

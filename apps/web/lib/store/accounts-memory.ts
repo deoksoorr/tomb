@@ -524,13 +524,16 @@ export class MemoryAccounts implements AccountStore {
     return !!best && (best.has(difficulty) || best.has(`clear:${difficulty}`));
   }
 
-  async enter(id: string, profile: Profile, now: number): Promise<void> {
+  async enter(id: string, profile: Profile, now: number): Promise<boolean> {
     // 이름은 이름 색인과 함께 등록한다 (다른 계정이 쓰는 이름이면 저장하지 않는다). 휴면 재설정은 여기서 하지 않는다
     if (profile.name) this.claimNow(id, profile.name, now, true);
     const a = this.acct(id);
     a.color ??= profile.color || null;
     a.body ??= profile.body || null;
+    // 11/26 처음 입장한 시각을 이번에 처음 남겼으면 새 계정 (Redis HSETNX와 같다)
+    const created = a.createdAt == null;
     a.createdAt ??= now;
+    return created;
   }
 
   /** 달(YYYYMM) 기록. 없으면 만든다 */
@@ -1128,6 +1131,13 @@ export class MemoryAccounts implements AccountStore {
     const start = Number(cursor) || 0;
     const end = start + Math.max(1, count);
     return { next: end >= all.length ? "0" : String(end), accounts: all.slice(start, end).map(([id, a]) => summaryOf(id, a)) };
+  }
+
+  async scanIds(cursor: string, count: number): Promise<{ next: string; ids: string[] }> {
+    const all = [...this.accts.keys()];
+    const start = Number(cursor) || 0;
+    const end = start + Math.max(1, count);
+    return { next: end >= all.length ? "0" : String(end), ids: all.slice(start, end) };
   }
 
   /** 31번 운영자 계정: 잔액을 to까지 채운다 (적립이 아니라 모은 포인트·랭킹·경제 통계와 무관). 없는 계정이면 false */

@@ -1,4 +1,4 @@
-import type { AvatarDye, AwayMapId, BbqItemId, ChatPlace, BbqStand, FishWater, GraveEventKind, MapId, MegaPinMsg, QueueStatus } from "@tomb/protocol";
+import type { AvatarDye, AwayMapId, BbqItemId, ChatPlace, BbqStand, FishWater, GraveEventKind, HomesMsg, MapId, MegaPinMsg, QueueStatus } from "@tomb/protocol";
 import type { NpcId } from "@/lib/forage/catalog";
 import type { NodeUrgent } from "@/lib/forage/rules";
 import type { PublicGrave } from "@/lib/types";
@@ -72,7 +72,7 @@ export type GameEvents = {
   /** 근접 툴팁 대상 묘비 (없으면 null). 모바일 상호작용 버튼 표시용 */
   "grave:near": { graveId: string } | null;
   /** 11/19 문 앞이면 폰 [상호작용] 단추 이름 (logic/doorHint, sticky) */
-  "door:near": "들어가기" | "나가기" | "사직서 내러 가기" | null;
+  "door:near": "들어가기" | "나가기" | "사직서 내러 가기" | "사다리로 올라가기" | null;
   /** 앉을 수 있는 빈 좌석 근처(없으면 null). 게임은 좌석 옆에 "X 앉기" 안내를, UI는 모바일 앉기 버튼을 강조한다 (sticky) */
   "seat:near": { seatId: string; kind: "bench" | "chair" } | null;
   /** 24번 벤치 상태 (sticky): seated = 의자·벤치에 앉아 있어 고를 수 있음, mood = 지금 고른 상태 (SEAT_MOODS id, 없으면 "") */
@@ -106,7 +106,7 @@ export type GameEvents = {
   /** 카메라 상태. detached=true면 우클릭 드래그로 시점을 옮겨서 내 캐릭터를 따라가지 않는 중 (UI가 "내 캐릭터로" 버튼 표시) */
   "camera:state": { detached: boolean; zoom: number };
   /** 화면 연출 모드 (sticky). campfire = 모닥불에 앉아 카메라가 불멍 구도로 바뀐 상태 → UI는 HUD를 은은하게 줄인다 */
-  "view:mode": { mode: "normal" | "campfire" | "sky" | "sea" };
+  "view:mode": { mode: "normal" | "campfire" | "sky" | "sea" | /** 11/26 캠핑장 폭포 다리 「폭포 멍」 */ "falls" };
   /**
    * 11/16 r19 바라보는 장면(바닷가 바다 보기·등대·동전 망원경, 캠핑장 전망대 망원경)이 켜져 있거나 켜지고 꺼지는 중 (sticky).
    * 이 동안 게임 단축키는 채팅·V·Esc·움직이는 키만 가요 (lib/viewKeyGuard), 터치 버튼도 채팅·바다 보기만 남겨요
@@ -140,15 +140,22 @@ export type GameEvents = {
   // 11/19 seasonCos = 광장 「계절 보따리상」(기간 한정 코디), seasonFurn = 「가구 보따리상」(기간 한정 가구 — 노점 그림이 나오면 월드에 세운다)
   // 11/19 mungnyang = 동물원 정문 왼쪽 「분양사 보리」(강아지·고양이 분양 — components/mungnyang)
   // 11/20 office = 야근 빌딩 오른쪽 「총무팀 문대리」(사무실 가구 — components/office)
-  "portal:open": { kind: "hunt" | "housing" | "shrine" | "telescope" | "wish" | "haunt" | "tower" | "lottery" | "seasonCos" | "seasonFurn" | "mungnyang" | "office" | "bungeo"; houseId?: string; lot?: number; zone?: "sea"; /** 11/23 붕어빵 수레: 말을 건 맵·자리 (서버가 수레 가까이인지 본다) */ at?: { map: MapId; x: number; y: number } };
+  "portal:open": { kind: "hunt" | "housing" | "shrine" | "telescope" | "wish" | "haunt" | "tower" | "lottery" | "seasonCos" | "seasonFurn" | "mungnyang" | "office" | "bungeo"; houseId?: string; lot?: number; zone?: "sea" | "camp"; /** 11/26 캠핑장 분양 창: 말을 건 분양 NPC가 파는 종류 하나 (caravan 언젠가 씨 · pension 소슬댁 · rural 순이 할머니) */ camp?: "caravan" | "pension" | "rural"; /** 11/23 붕어빵 수레: 말을 건 맵·자리 (서버가 수레 가까이인지 본다) */ at?: { map: MapId; x: number; y: number } };
   /** 11/16 포구 오두막이 바뀌었다 (분양·겉모습·넓히기·이름) → 바닷가 장면이 오두막을 다시 받아 그린다 (myHouseId = 내 오두막 — 문패 「(내 집)」) */
   "sea:cottages": { myHouseId: string | null };
   /** 11/16 바닷가에서 그 오두막 터 앞으로 (내 집 가기) */
   "sea:lot": { lot: number };
+  /** 11/26 캠핑장 집이 바뀌었다 (분양·넓히기·앞마당·이름) → 캠핑장 장면이 집을 다시 받아 그린다 (myHouseId = 내 캠핑장 집 — 문패 「(내 집)」) */
+  "camp:homes": { myHouseId: string | null };
+  /** 11/26 캠핑장에서 그 집터 앞으로 (내 집 보러 가기) */
+  "camp:lot": { lot: number };
   /** 22번 황금 고블린을 내가 가장 먼저 잡았다 → UI가 증서로 /api/goblin에 보상을 받는다 */
   "goblin:grant": { id: string; grant: string; points: number };
-  /** 11/19 황금 고블린이 나타났다(마을) → 화면 위 금빛 띠. zone = 지금 도는 구역, resumed = 들어와 보니 이미 있었다 */
-  "goblin:spawn": { id: string; zone: string; until: number; resumed: boolean };
+  /**
+   * 11/19 황금 고블린이 나타났다 → 화면 위 금빛 띠. zone = 지금 도는 구역, resumed = 들어와 보니 이미 있었다.
+   * 11/26 map = 나타난 맵 (마을·바닷가·캠핑장), here = 내가 있는 맵 (다르면 「○○에 나타났어요」 + 정류장 안내)
+   */
+  "goblin:spawn": { id: string; zone: string; until: number; resumed: boolean; map?: MapId; here?: MapId };
   /** 11/19 누가 황금 고블린을 잡았다 (채널 모두 — 캠핑장·바닷가 포함) → 화면 위 띠·채팅 소식 줄, 나면 큰 숫자. name = 서버가 아는 이름 */
   "goblin:caught": { id: string; name: string; points: number; mine: boolean };
   /** 23번 확성기 한마디가 실시간 서버에서 왔다 (내 것 포함) → UI의 확성기 창에 띄운다 */
@@ -170,6 +177,8 @@ export type GameEvents = {
   };
   /** 11/17 확성기 창 고정 공지가 바뀌었다 (운영자가 쓰거나 지움, 실시간 서버 /internal/pin) → 확성기 창 맨 위 칸을 바꾼다 */
   "megaphone:pin": MegaPinMsg;
+  /** 11/26 지금 채널의 zone 집 목록이 바뀌었다 (실시간 서버 /internal/homes) → 마을·포구·캠핑장 집 그림이 같은 v로 다시 받는다 */
+  "homes:changed": HomesMsg;
   /** 상점 맵에 들어감/나옴 (UI가 HUD 일부를 바꿀 때) */
   "scene:changed": {
     scene: "world" | "shop" | "hunt" | "minigame" | "house";
@@ -274,6 +283,10 @@ export type GameEvents = {
   "ride:state": { pet: string | null; riding: boolean; can: boolean };
   /** 11/15 오리배에 타 있음 (sticky) → 터치 [점프] 버튼이 [꽥!]이 된다 (오리배 위 Space = 꽥) */
   "boat:duck": { riding: boolean };
+  /** 11/26 2인승 배에 같이 탄 사람 (sticky) → 터치 [앉기] 버튼이 [내리기]가 된다 (E는 낚시 — 방향키·조이스틱·X로도 내린다) */
+  "boat:passenger": { on: boolean };
+  /** 11/26 같이 탄 사람 내리기: 낚시 창이 방향키를 받아 낚시를 거뒀다 · 터치 [내리기] (낚시 중엔 게임이 키를 못 받는다) */
+  "boat:moveOff": undefined;
   /** 11/16 범퍼카에 타 있음 (sticky) → 터치 [점프] 버튼이 [빵빵!]이 된다 (범퍼카 위 Space = 빵빵) */
   "bumper:riding": { riding: boolean };
   /** 11/20 이번에 타고 나서 실제로 몰고 다닌 시간 (가만히 있던 시간은 빼고, 1초마다) → 오늘 미션 「범퍼카 한 판 타기」 */
@@ -290,6 +303,8 @@ export type GameEvents = {
 
 /** UI → Game */
 export type UiEvents = {
+  /** 11/26 첫 방문 안내(Tutorial)가 떠 있는지 — 장면이 먼저 거는 인사(캠핑장 처음 도착)는 안내가 닫힌 뒤로 미룬다 */
+  "tutorial:on": { on: boolean };
   /** 관람차·열기구 탑승 중 [시점 변경하기] (버튼·V): 2D 장면 ↔ 맵 위 보기 */
   "sky:view": undefined;
   /** 11/16 바다 보기 켜기·끄기 (버튼·V) */
@@ -424,7 +439,7 @@ export type UiEvents = {
 
   // ── 하우징 ── (game/housing, components/housing)
   /** 집에 들어간다 (분양 사무소 → 내 집/다른 사람 집). 월드는 숨기고 연결은 유지한다 */
-  /** stay: [집] → [내 집 가기]로 바로 들어감 — 나오면 문 앞이 아니라 들어가기 전 자리 (game/housing/housePlace) */
+  /** stay: [집] → [내 집 가기]로 바로 들어감 (11/26부터 나올 자리는 같다 — 늘 그 집 맵의 문 앞, game/housing/housePlace) */
   "house:enter": { house: PublicHouse; mine: boolean; edit?: boolean; stay?: boolean };
   /** 집에서 나간다 (UI의 나가기 버튼) */
   "house:exit": undefined;
@@ -499,7 +514,7 @@ export type UiEvents = {
   /** 친구: 지금 채널에 있는 친구들 (그 채널의 sid·이름) → 게임이 이름표 옆 하트·미니맵 하트로 그린다 (sticky) */
   "friends:here": { ch: number; list: { sid: number; name: string }[] };
   /** 친구한테 가기 (같은 채널 마을): 친구 옆 걸을 수 있는 칸으로 순간이동. x,y = 서버가 알려 준 위치 (화면에 친구가 없을 때 쓴다) */
-  "friend:goto": { sid: number; name: string; x: number; y: number; /** 11/15 친구가 캠핑장에 있으면 "camp", 11/16 바닷가면 "sea" (맵이 다르면 버스를 거쳐 간다) */ map?: AwayMapId; /** 11/20 운영자 순간이동: 버스 연출 없이, 서버에 tp로 (반짝임) */ tp?: true };
+  "friend:goto": { sid: number; name: string; x: number; y: number; /** 11/15 친구가 캠핑장에 있으면 "camp", 11/16 바닷가면 "sea" (맵이 다르면 버스를 거쳐 간다) */ map?: AwayMapId; /** 11/20 운영자 순간이동: 버스 연출 없이, 서버에 tp로 (반짝임) */ tp?: true; /** 11/26 친구 대신 그 맵의 이 번지(터) 집 문 앞으로 (집에서 나올 때 — game/housing/install). 창밖 연출 없이, sid·name은 쓰지 않는다 */ door?: number };
   /** 11/20 누가 순간이동으로 (x,y)에서 사라졌다(out)·나타났다(in) → 그 맵 장면이 반짝임을 그린다. map = 받은 때의 내 맵 */
   "tp:fx": { x: number; y: number; k: "out" | "in"; map: MapId };
   /** 11/15 캠핑장 대화 창: 다음 말 (E·Space·버튼) / 닫았다 */
@@ -619,6 +634,7 @@ const STICKY = new Set<keyof AllEvents>([
   "audio:mix",
   "ride:state",
   "boat:duck",
+  "boat:passenger",
   "bumper:riding",
   "player:ride",
   "ui:radial",
@@ -632,6 +648,7 @@ const STICKY = new Set<keyof AllEvents>([
   "map:changed",
   "bus:state",
   "camp:talk",
+  "tutorial:on",
   "camp:snowball",
   "snow:can",
   "snow:cool",

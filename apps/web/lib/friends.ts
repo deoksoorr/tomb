@@ -111,14 +111,14 @@ export function toFriendWhere(w: PeerWhere | undefined, reached: boolean): Frien
   return { at: "world", ch: w.ch, sid: w.sid, x: w.x, y: w.y, ...(w.map === "camp" || w.map === "sea" ? { map: w.map } : {}) };
 }
 
-/** 친구 집 id (분양받았고 숨겨지지 않았으면). 11/16 마을 집이 없으면 포구 오두막 */
+/** 친구 집 id (분양받았고 숨겨지지 않았으면). 11/16 마을 집이 없으면 포구 오두막, 11/26 그것도 없으면 캠핑장 집 */
 async function houseOf(accountId: string): Promise<string | null> {
-  const id = houseIdFor(accountId);
-  const h = await getHouseStore().get(id);
-  if (h && !h.hidden) return id;
-  const seaId = houseIdFor(accountId, "sea");
-  const sea = await getHouseStore().get(seaId);
-  return sea && !sea.hidden ? seaId : null;
+  for (const zone of ["village", "sea", "camp"] as const) {
+    const id = houseIdFor(accountId, zone);
+    const h = await getHouseStore().get(id);
+    if (h && !h.hidden) return id;
+  }
+  return null;
 }
 
 /** 내 목록에서 key가 가리키는 계정 */
@@ -157,6 +157,7 @@ export async function friendList(me: string, now = Date.now()): Promise<FriendLi
     where: toFriendWhere(where?.[f.id], where !== null),
     houseId: cards[j]?.house?.id ?? null,
     seaHouseId: cards[j]?.seaHouse?.id ?? null,
+    campHouseId: cards[j]?.campHouse?.id ?? null,
     lastSeen: seen[j] || null,
     ...(cards[j] ? { card: cards[j] } : {}),
   }));

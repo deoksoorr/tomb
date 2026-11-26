@@ -1,25 +1,12 @@
-import {
-  CAMP_CROSSINGS,
-  CAMP_HEIGHT,
-  CAMP_WIDTH,
-  CAMP_FIRE,
-  CAMP_LOOKOUT,
-  CAMP_LOOKOUT_STAIRS,
-  CAMP_PLAZA_R,
-  CAMP_ROAD,
-  CAMP_STEP_STONES,
-  CAMP_STREAM_HALF_W,
-  campStreamX,
-  type CampNpcId,
-} from "@tomb/protocol";
+import type { CampNpcId } from "@tomb/protocol";
 import type { MapConcept } from "@/lib/mapConcept";
 import { seasonHat, seasonHolly, seasonMitt, seasonNose, seasonScarf, seasonSnow } from "../sprites/npcSeasonArt";
 import type { NpcWear } from "../sprites/npcWear";
 import { darken, Grid, lighten, mix, rng, type Color } from "../sprites/pixel";
-import { CAMP_SUMMIT, campGroundKind, hashU, pathEdgeDist, type CampGround } from "./campLayout";
+import { padGrid, type Pad } from "./campArtPad";
+import { hashU } from "./campLayout";
 import { CAMP_TEX_PREFIX } from "./campTypes";
-import { CAMP_BUS_BAY } from "../bus/busBays";
-import { campWinterGroundColor, campWinterStoneColor } from "./campWinter";
+import { valleyGroundSteps } from "./valleyGround";
 
 // 11/15 언젠가 캠핑장 픽셀 아트 (코드로 그린다, 마을 그림 재탕 없이 새로).
 // 늦가을 숲(노란 낙엽 + 침엽수), 마을보다 밝고 따뜻한 색. 원점 = 바닥 가운데 (0.5, 1), 맨 아래 줄 근처는 그림자 (마을 props와 같은 규칙).
@@ -80,6 +67,9 @@ export const CAMP_TEX = {
   winterGround: (cx: number, cy: number) => `${P}wground-${cx}-${cy}`,
   // 11/15 캠핑카 앞 캠핑 도구 · 문패 팻말
   foldTable: `${P}foldTable`,
+  // 11/26 카라반 3단계 세로 피크닉 탁자 + 양옆 긴 의자
+  picnicV: `${P}picnicV`,
+  benchV: `${P}benchV`,
   campChairFront: (i: number) => `${P}campChairF${i}`,
   campChairSide: (i: number) => `${P}campChairS${i}`,
   brazier: `${P}brazier`,
@@ -140,16 +130,26 @@ const SPRUCE: Pal4 = { hi: 0x6f9a5a, mid: 0x507a44, lo: 0x3a5c34, deep: 0x2a4428
 const PINE: Pal4 = { hi: 0x82a262, mid: 0x62844a, lo: 0x48663a, deep: 0x344c2c };
 const FIR: Pal4 = { hi: 0x6e9a86, mid: 0x4e7a68, lo: 0x385c50, deep: 0x28443c };
 
+/**
+ * 11/26 운영자 「캠핑장 나무도 도트 잘린 게 중간중간 있다」: 침엽수 맨 아래 층 가지 끝(들쭉날쭉 ±0.8칸)이 w 밖으로, 꼭대기 윤곽이 맨 윗줄에 닿아
+ * 양옆이 평평하게 잘리고 눈판에선 꼭대기 눈이 잘렸다 → 같은 그림(같은 칸·같은 난수)을 좌우 CONIFER_PAD.x·위 CONIFER_PAD.top 여백을 둔 캔버스에 그린다.
+ * 바닥 줄은 그대로라 원점 바닥 가운데(0.5, 1)로 세우는 자리는 그대로
+ */
+export const CONIFER_PAD = { x: 4, top: 2 } as const;
 /** 침엽수: 층층이 쌓인 뾰족한 수관 */
 function conifer(w: number, h: number, pal: Pal4, tiers: number, trunkH: number, seed: number, round = false): Grid {
-  const g = new Grid(w, h);
+  const PX = CONIFER_PAD.x;
+  const PT = CONIFER_PAD.top;
+  const g = new Grid(w + PX * 2, h + PT);
+  const set = (x: number, y: number, c: Color) => g.set(x + PX, y + PT, c);
+  const filled = (x: number, y: number) => g.filled(x + PX, y + PT);
   const r = rng(seed);
   const cx = (w - 1) / 2;
   const base = h - 3;
   // 줄기
   for (let y = base - trunkH; y <= base; y++) {
     const flare = y >= base - 1 ? 1 : 0;
-    for (let x = Math.round(cx - 1 - flare); x <= Math.round(cx + 1 + flare); x++) g.set(x, y, x <= cx - 1 ? TRUNK.hi : x >= cx + 1 ? TRUNK.lo : TRUNK.mid);
+    for (let x = Math.round(cx - 1 - flare); x <= Math.round(cx + 1 + flare); x++) set(x, y, x <= cx - 1 ? TRUNK.hi : x >= cx + 1 ? TRUNK.lo : TRUNK.mid);
   }
   const top = 1;
   const crownBot = base - trunkH + 2;
@@ -165,21 +165,21 @@ function conifer(w: number, h: number, pal: Pal4, tiers: number, trunkH: number,
       for (let x = Math.floor(cx - hw - jag); x <= Math.ceil(cx + hw + jag); x++) {
         const rel = (x - cx) / Math.max(1, hw);
         const c = y >= by - 1 ? pal.lo : rel < -0.45 ? pal.hi : rel > 0.4 ? pal.lo : pal.mid;
-        g.set(x, y, c);
+        set(x, y, c);
       }
     }
     // 층 아래 그늘 한 줄
-    for (let x = Math.floor(cx - half * 0.7); x <= Math.ceil(cx + half * 0.7); x++) if (g.filled(x, by + 1) && hashU(x, by, seed) < 0.7) g.set(x, by + 1, pal.deep);
+    for (let x = Math.floor(cx - half * 0.7); x <= Math.ceil(cx + half * 0.7); x++) if (filled(x, by + 1) && hashU(x, by, seed) < 0.7) set(x, by + 1, pal.deep);
   }
   for (let i = 0; i < w * h * 0.06; i++) {
     const x = Math.floor(r() * w);
     const y = Math.floor(r() * (crownBot - 1));
-    if (g.filled(x, y)) g.set(x, y, r() < 0.5 ? pal.deep : pal.hi);
+    if (filled(x, y)) set(x, y, r() < 0.5 ? pal.deep : pal.hi);
   }
   // 꼭대기 한 점 밝게
-  g.set(Math.round(cx), top, pal.hi);
+  set(Math.round(cx), top, pal.hi);
   g.outline(OUT);
-  shadow(g, cx + 1, base + 1, w * 0.36, 2.2, 62);
+  shadow(g, cx + 1 + PX, base + 1 + PT, w * 0.36, 2.2, 62);
   return g;
 }
 
@@ -233,7 +233,8 @@ function leafy(w: number, h: number, pal: Pal4, seed: number, birch = false): Gr
   // 떨어진 잎 몇 장 (그림자 위)
   for (let i = 0; i < 6; i++) {
     const x = Math.round(cx + (r() - 0.5) * w * 0.8);
-    const y = base - 1 + Math.round(r() * 3);
+    // 11/26 맨 아랫줄(h − 1)에 떨어진 잎은 끝 줄에 걸려 반만 그려졌다 → 한 줄 위까지
+    const y = Math.min(h - 2, base - 1 + Math.round(r() * 3));
     if (!g.filled(x, y) || (g.get(x, y) & 255) < 255) g.set(x, y, r() < 0.5 ? pal.hi : pal.mid);
   }
   return g;
@@ -304,18 +305,20 @@ export function mushroomArt(v: number): Grid {
     if (v % 2) g.set(x, 3, 0xfff0e0);
   }
   g.outline(OUT);
-  return g;
+  // 11/26 버섯 갓 윤곽이 양 끝 열에 닿았다 → 좌우 한 칸 여백 (campSpriteEdge.test)
+  return padGrid(g, { x: 1, top: 0 });
 }
 
 export function fernArt(v: number): Grid {
-  const g = new Grid(14, 9);
+  // 11/26 오른쪽 잎 끝이 끝 열에, 줄기 밑동이 맨 아랫줄에 닿았다 → 좌우 한 칸·아래 한 줄 여백 (14×9 → 16×10, 그림은 그대로)
+  const g = new Grid(16, 10);
   const c = v % 2 ? 0x6a8a40 : 0x8a7a3a;
   for (const [x0, dx] of [
-    [7, -6],
-    [7, 6],
-    [7, -3],
-    [7, 3],
-    [7, 0],
+    [8, -6],
+    [8, 6],
+    [8, -3],
+    [8, 3],
+    [8, 0],
   ] as const)
     line(g, x0, 8, x0 + dx, 1 + Math.abs(dx) / 3, c);
   g.recolor((x, y) => y < 4, lighten(c, 0.2));
@@ -331,7 +334,8 @@ export function pebblesArt(v: number): Grid {
     g.ellipse(x, y, 1.6, 1.1, i % 2 ? STONE.hi : STONE.mid);
   }
   g.outline(darken(STONE.lo, 0.3));
-  return g;
+  // 11/26 자갈이 캔버스 위·아래 끝 줄에 닿아 잘렸다 (camp 그림 끝 검사 — campSpriteEdge.test)
+  return padGrid(g, { bottom: 1 });
 }
 
 export function boulderArt(v: number): Grid {
@@ -395,7 +399,8 @@ export function benchArt(): Grid {
   g.rect(36, 13, 2, 3, WOOD.line);
   g.outline(OUT);
   shadow(g, 21, 16, 19, 1.4, 56);
-  return g;
+  // 11/26 눈판에서 등받이 위에 얹은 눈 윤곽이 맨 윗줄에 닿았다 → 위 두 줄 여백 (원점 바닥 가운데라 자리는 그대로)
+  return padGrid(g, { x: 0, top: 2 });
 }
 
 /** 녹슨 쇠 벤치 (버스 정류장) */
@@ -411,11 +416,27 @@ export function rustyBenchArt(): Grid {
   g.rect(36, 12, 2, 4, rust.lo);
   g.outline(OUT);
   shadow(g, 21, 16, 19, 1.4, 56);
-  return g;
+  // 11/26 눈판 등받이 위 눈 윤곽이 맨 윗줄에 닿았다 → 위 두 줄 여백
+  return padGrid(g, { x: 0, top: 2 });
 }
 
 /** 등받이 없는 긴 판자 의자 (타프 아래·전망대) */
+/**
+ * 11/26 캔버스 끝 잘림 (campSpriteEdge.test): 그린 그림 둘레 여백. 모두 원점 바닥 가운데(0.5, 1)로 세우는 그림이라
+ * 좌우 같은 폭·위만 넓히면(아래 0) 맵 자리·앉은 사람 앞뒤는 픽셀 그대로다. 그림 안 좌표(자르기·겹치는 장식)는 이 여백만큼 옮겨 쓴다
+ */
+export const PLANK_PAD: Pad = { x: 2, top: 0, bottom: 0 };
+export const OFFICE_PAD: Pad = { x: 2, top: 3, bottom: 0 }; // 위 3 — 눈판 지붕 꼭대기 눈 윤곽이 닫은 윤곽 위로 한 줄 더
+export const SHELTER_PAD: Pad = { x: 2, top: 0, bottom: 0 };
+export const GRILL_PAD: Pad = { x: 2, top: 0, bottom: 0 };
+export const VENDING_PAD: Pad = { x: 0, top: 2, bottom: 0 };
+export const PLATE_PAD: Pad = { x: 1, top: 2, bottom: 0 };
+
+/** 등받이 없는 긴 판자 의자 — 판 끝 윤곽이 양 끝 열에 닿아 좌우 여백 (위는 그대로라 CampMap PLANK_UP_FRONT_ROW도 그대로) */
 export function plankBenchArt(seats: 2 | 3): Grid {
+  return padGrid(plankBenchBaseArt(seats), PLANK_PAD);
+}
+export function plankBenchBaseArt(seats: 2 | 3): Grid {
   const w = seats === 3 ? 58 : 42;
   const g = new Grid(w, 12);
   g.rect(1, 3, w - 2, 4, WOOD_DECK.mid);
@@ -491,7 +512,11 @@ export function deckArt(n: number): Grid {
 
 export const OFFICE_ART_W = 180;
 export const OFFICE_ART_H = 92;
+/** 지붕 처마 끝이 양 끝 열에, 굴뚝·지붕 꼭대기가 맨 윗줄에 닿아 여백. OFFICE_ART_W·H는 그린 크기(여백 뺀) — 굴뚝 연기 자리는 그대로, 크리스마스 장식은 OFFICE_PAD만큼 옮겨 단다 */
 export function officeArt(): Grid {
+  return padGrid(officeBaseArt(), OFFICE_PAD);
+}
+export function officeBaseArt(): Grid {
   const W = OFFICE_ART_W;
   const H = OFFICE_ART_H;
   const g = new Grid(W, H);
@@ -616,7 +641,8 @@ export function boardArt(): Grid {
     g.set(x, y, 0xf2c444);
   g.outline(OUT);
   shadow(g, 15, 34, 13, 1.4, 56);
-  return g;
+  // 11/26 지붕 판이 양 끝 열까지 칠해져 끝이 칼로 자른 듯했다 → 좌우·위 여백 + 끝을 윤곽으로 닫는다 (눈판 지붕 위 눈도 들어간다)
+  return padGrid(g);
 }
 
 // ── 큰 모닥불 ──
@@ -868,55 +894,6 @@ export function tarpPoleArt(): Grid {
   return g;
 }
 
-// ── 전망대 ──
-/** 바닥 판자 + 뒤·옆 난간 (CAMP_LOOKOUT 사각형 크기, 왼쪽 위 원점) */
-export function lookoutFloorArt(): Grid {
-  const L = CAMP_LOOKOUT;
-  const g = new Grid(L.w, L.h + 4);
-  for (let y = 4; y < L.h; y++)
-    for (let x = 2; x < L.w - 2; x++) {
-      const k = x % 8;
-      g.set(x, y, k === 7 ? WOOD_DECK.line : k === 0 ? WOOD_DECK.hi : hashU(x, y, 11) < 0.05 ? WOOD_DECK.lo : WOOD_DECK.mid);
-    }
-  // 뒤 난간 (기둥 + 가로대)
-  for (let x = 1; x < L.w; x += 12) g.rect(x, 0, 3, 8, WOOD.lo);
-  g.rect(0, 1, L.w, 2, WOOD.mid);
-  g.hline(0, L.w - 1, 1, WOOD.hi);
-  // 옆 난간
-  for (const x of [0, L.w - 3]) {
-    g.rect(x, 0, 3, L.h, WOOD.mid);
-    g.vline(x, 0, L.h - 1, WOOD.hi);
-    for (let y = 0; y < L.h; y += 14) g.rect(x, y, 3, 3, WOOD.lo);
-  }
-  // 바닥 아래 두께 (산꼭대기에서 살짝 떠 있다)
-  g.rect(2, L.h, L.w - 4, 3, WOOD.lo);
-  g.outline(OUT);
-  return g;
-}
-/** 앞 난간 (계단 자리는 비운다) + 계단 — 왼쪽 위 원점이 (L.x, L.y + L.h - 12) */
-export function lookoutFrontArt(): Grid {
-  const L = CAMP_LOOKOUT;
-  const S = CAMP_LOOKOUT_STAIRS;
-  const g = new Grid(L.w, 30);
-  const sx = S.x - L.x;
-  const rail = (x0: number, x1: number) => {
-    for (let x = x0; x <= x1; x += 10) g.rect(x, 2, 3, 12, WOOD.lo);
-    g.rect(x0, 3, x1 - x0 + 3, 2, WOOD.mid);
-    g.hline(x0, x1 + 2, 3, WOOD.hi);
-    g.rect(x0, 8, x1 - x0 + 3, 1, WOOD.lo);
-  };
-  rail(0, sx - 4);
-  rail(sx + S.w + 1, L.w - 3);
-  // 계단 (세 칸)
-  for (let i = 0; i < 4; i++) {
-    const y = 12 + i * 4;
-    g.rect(sx + 1, y, S.w - 2, 3, i % 2 ? WOOD_DECK.mid : WOOD_DECK.hi);
-    g.hline(sx + 1, sx + S.w - 2, y + 3, WOOD_DECK.line);
-  }
-  g.outline(OUT);
-  return g;
-}
-
 // ── 줄 조명 ──
 export function poleArt(): Grid {
   const g = new Grid(8, 40);
@@ -925,7 +902,7 @@ export function poleArt(): Grid {
   g.rect(1, 3, 7, 2, WOOD.lo); // 걸이
   g.outline(OUT);
   shadow(g, 4, 38, 3.5, 1.2, 60);
-  return g;
+  return padGrid(g);
 }
 export function bulbArt(): Grid {
   const g = new Grid(3, 4);
@@ -950,7 +927,11 @@ export function glowArt(size: number, color: Color, power = 1.6): Grid {
 // ── 버스 정류장 ──
 export const SHELTER_ART_W = 68;
 export const SHELTER_ART_H = 56;
+/** 골함석 지붕이 양 끝 열까지 칠해져 끝이 잘렸다 → 좌우 여백(끝은 윤곽으로 닫는다). SHELTER_ART_W·H는 그린 크기, SHELTER_FRONT는 여백만큼 옮긴 자리 */
 export function shelterArt(): Grid {
+  return padGrid(shelterBaseArt(), SHELTER_PAD);
+}
+export function shelterBaseArt(): Grid {
   const W = SHELTER_ART_W;
   const H = SHELTER_ART_H;
   const g = new Grid(W, H);
@@ -988,11 +969,15 @@ export function shelterArt(): Grid {
  * 11/16 벤치에 앉은 사람 앞에 한 번 더 그리는 정류장 조각 [x, y, w, h]: 지붕(+등 윗부분)과 앞 기둥 둘 (그림자 줄은 뺀다).
  * 나머지(뒷벽·포스터)는 벤치 뒤 depth에 그린다 — 통째로 정류장 depth면 앉은 사람 머리가 뒷벽에 가렸다
  */
-export const SHELTER_FRONT: readonly (readonly [number, number, number, number])[] = [
+export const SHELTER_FRONT_BASE: readonly (readonly [number, number, number, number])[] = [
   [0, 0, SHELTER_ART_W, 16],
   [3, 16, 5, 38],
   [SHELTER_ART_W - 8, 16, 5, 38],
 ];
+/** 여백 둔 텍스처(shelterArt) 기준 자르기 자리: 지붕 조각은 양옆 닫은 윤곽 열까지, 기둥은 여백만큼 옮긴다 */
+export const SHELTER_FRONT: readonly (readonly [number, number, number, number])[] = SHELTER_FRONT_BASE.map(([x, y, w, h], i) =>
+  i === 0 ? ([0, y + SHELTER_PAD.top, w + SHELTER_PAD.x * 2, h] as const) : ([x + SHELTER_PAD.x, y + SHELTER_PAD.top, w, h] as const),
+);
 export function busSignArt(): Grid {
   const g = new Grid(30, 52);
   const base = 49;
@@ -1016,7 +1001,9 @@ export function busSignArt(): Grid {
   g.set(26, 18, 0xb06c40);
   g.outline(OUT);
   shadow(g, 14, base + 1, 4, 1.2, 60);
-  return g;
+  // 11/26 동그란 표지 꼭대기가 맨 윗줄에 닿아 평평하게 잘렸다 · 노선 판 윤곽이 양 끝 열 → 좌우·위 여백 (꼭대기는 윤곽으로 닫는다.
+  // 위는 3줄 — 눈판에서 닫은 윤곽 위에 눈 윤곽이 한 줄 더 얹힌다)
+  return padGrid(g, { top: 3 });
 }
 export function timetableArt(): Grid {
   const g = new Grid(18, 32);
@@ -1028,7 +1015,8 @@ export function timetableArt(): Grid {
   for (let y = 7; y < 15; y += 2) g.hline(3, 14, y, y === 13 ? 0xe0563c : 0x9aa4ac);
   g.outline(OUT);
   shadow(g, 9, base + 1, 4, 1.2, 60);
-  return g;
+  // 11/26 시간표 판 윤곽이 양 끝 열에, 눈판에선 판 위 눈이 맨 윗줄에 닿았다 → 좌우·위 여백
+  return padGrid(g);
 }
 
 // ── NPC 5명 (2프레임 숨쉬기, 20×30 한 칸) ──
@@ -1039,8 +1027,11 @@ const NPC_LOOKS: Record<CampNpcId, NpcLook> = {
   keeper: { skin: 0xf2d6b8, hair: 0x6a5a4a, top: 0x6e8a4a, topLo: 0x4e6a34, bottom: 0x7a6a52, hat: "ranger", hatC: 0x9a7448, extra: "vest" },
   clerk: { skin: 0xf6dcc0, hair: 0x3a2a24, top: 0xf2ece0, topLo: 0xc8bea8, bottom: 0x4a5a78, hat: "cap", hatC: 0xe0563c, extra: "apron" },
   granny: { skin: 0xf0d2b4, hair: 0xd8d4cc, top: 0x8a5aa0, topLo: 0x6a4080, bottom: 0x6a5a4a, hat: "scarf", hatC: 0xd8503a, extra: "rod" },
-  stargazer: { skin: 0xecd8c8, hair: 0x2a2a3a, top: 0x2e3a6a, topLo: 0x1e284a, bottom: 0x2e3a6a, hat: "hood", hatC: 0x2e3a6a, extra: "stars" },
   guitarist: { skin: 0xf2d4b6, hair: 0x5a3a24, top: 0xc84a3a, topLo: 0x8a2e26, bottom: 0x4a5a6a, hat: "beanie", hatC: 0xe8b040, extra: "guitar" },
+  // 11/26 소슬댁 (소슬 펜션 사장님): 초록 니트 + 꽃무늬 앞치마 · 쪽진 머리에 스카프
+  sosul: { skin: 0xf2d6b8, hair: 0x4a3a30, top: 0x4e8a6a, topLo: 0x36684e, bottom: 0x5a4a6a, hat: "scarf", hatC: 0xe8a05a, extra: "apron" },
+  // 11/26 순이 할머니 (촌캉스): 분홍 몸빼 + 보라 조끼 · 흰 머릿수건
+  suni: { skin: 0xf0c8a0, hair: 0xe8e6e0, top: 0xf2ead8, topLo: 0x6a4a8a, bottom: 0xd87a9a, hat: "scarf", hatC: 0xf8f8f4, extra: "vest" },
 };
 
 /**
@@ -1075,15 +1066,20 @@ const NPC_SEASON: Record<CampNpcId, { winter: NpcSeason; christmas: NpcSeason }>
     winter: { coat: [0x8a5aa0, 0x6a4080], quilt: true, scarf: { c: 0xf0a0b8, c2: 0xf8f6f0, pat: "dots", thick: true, tail: -4 }, mitt: 0xf0a0b8, boot: 0x3a6a9a, snowHat: true },
     christmas: { coat: [0x8a5aa0, 0x6a4080], scarf: { c: 0x2e8a4e, c2: 0xf8f6f0, pat: "check", thick: true, tail: -4 }, mitt: 0xd23a44, boot: 0x3a6a9a, holly: [[-2, 0], [3, 1]] },
   },
-  // 별지기: 별빛 노란 목도리·장갑, 크리스마스엔 루돌프 머리띠 + 빨간 코
-  stargazer: {
-    winter: { scarf: { c: 0xf0d040, c2: 0x2e3a6a, pat: "stripe", tail: 2 }, mitt: 0xf0d040, boot: 0x1e284a, snowHat: true },
-    christmas: { hat: { kind: "antler", c: 0xf0c040 }, nose: true, scarf: { c: 0xd23a44, c2: 0xf8f6f0, pat: "stripe", tail: 2 }, mitt: 0xd23a44, boot: 0x1e284a },
-  },
   // 기타 캠퍼: 노란 털모자에 방울 + 남색 체크 목도리, 크리스마스엔 산타 모자
   guitarist: {
     winter: { hat: { kind: "beanie", c: 0xe8b040, c2: 0xf8f6f0 }, scarf: { c: 0x3a5a8a, c2: 0x9ab0d0, pat: "check", thick: true, tail: -4 }, boot: 0x4a3a2a },
     christmas: { hat: { kind: "santa" }, scarf: { c: 0x2e8a4e, c2: 0xf8f6f0, pat: "stripe", thick: true, tail: -4 }, boot: 0x4a3a2a },
+  },
+  // 소슬댁: 초록 누빔 조끼 + 겨자색 목도리, 크리스마스엔 빨간 체크 목도리 + 호랑가시
+  sosul: {
+    winter: { coat: [0x4e8a6a, 0x36684e], quilt: true, scarf: { c: 0xe8b050, c2: 0xf8f6f0, pat: "stripe", tail: -4 }, mitt: 0xe8b050, boot: 0x4a3a2a, snowHat: true },
+    christmas: { scarf: { c: 0xd23a44, c2: 0xf8f6f0, pat: "check", thick: true, tail: -4 }, mitt: 0xd23a44, boot: 0x4a3a2a, holly: [[-2, 0], [2, 0]] },
+  },
+  // 순이 할머니: 자주 누빔 조끼 + 빨간 목도리, 크리스마스엔 초록 숄 + 호랑가시
+  suni: {
+    winter: { coat: [0x7a3a6a, 0x5a2a52], quilt: true, scarf: { c: 0xc83a3a, thick: true, tail: -4 }, mitt: 0xc83a3a, boot: 0x3a2a20, snowHat: true },
+    christmas: { coat: [0x7a3a6a, 0x5a2a52], scarf: { c: 0x2e8a4e, c2: 0xf8f6f0, pat: "check", thick: true, tail: -4 }, mitt: 0xd23a44, boot: 0x3a2a20, holly: [[-2, 0], [3, 1]] },
   },
 };
 
@@ -1210,12 +1206,11 @@ export function npcArt(id: CampNpcId, concept: MapConcept = "default"): ArtOut {
   const S = concept === "default" ? undefined : NPC_SEASON[id][concept];
   const g = new Grid(NPC_W * 2, NPC_H);
   for (let f = 0; f < 2; f++) npcFrame(g, f * NPC_W, L, f, S);
-  if (id === "stargazer") {
-    // 망원경 (등에 메지 않고 옆에 세워 둔다)
+  if (id === "suni") {
+    // 지팡이
     for (let f = 0; f < 2; f++) {
       const ox = f * NPC_W;
-      line(g, ox + 17, NPC_H - 3, ox + 16, NPC_H - 10, 0x6a6a72);
-      line(g, ox + 15, NPC_H - 10, ox + 19, NPC_H - 15, 0xc8a050, 2);
+      line(g, ox + 16, NPC_H - 16, ox + 18, NPC_H - 2, 0x7a5432);
     }
   }
   g.outline(OUT);
@@ -1336,119 +1331,11 @@ export function dripArt(): Grid {
   return g;
 }
 
-// ── 바닥 (덩어리마다 RGBA로 굽는다) ──
+// ── 바닥 (덩어리마다 RGBA로 굽는다) ── 11/26 폭포 계곡 개편: 바닥 색은 valleyGround (소·저수지·카라반 자갈 마당까지)
 
 export const CAMP_CHUNK = 512;
 
-const GC = {
-  grass: [0x8a8642, 0x7a7a3a, 0x9a9450, 0x6e7036] as const,
-  blade: 0xa8a258,
-  path: [0xa88a5e, 0x96784e, 0xbc9c6c] as const,
-  plaza: [0xb49a6e, 0xa2875c, 0xc4aa7c] as const,
-  road: [0x55524e, 0x4a4744, 0x625f5a] as const,
-  bank: [0xb0a690, 0x968c78, 0xc8bea8] as const,
-  rock: [0x9c968a, 0x86817a, 0xb4ae9e, 0x7a8a4a] as const,
-  water: { deep: 0x3a7a8e, mid: 0x4a92a4, shallow: 0x6cb4c0, light: 0xa8dce0, foam: 0xe8f6f4 },
-};
-/**
- * 11/16 바닥 낙엽 색: 낮에 낙엽 점이 너무 쨍해서 눈이 아프다(사용자 — 밤엔 괜찮았다) → 풀색에 섞어 채도·밝기를 낮춘다.
- * 가장 밝은 노랑(0xffe07a)은 바닥에서 뺀다 (나무·낙엽 더미 그림은 LEAF_COLORS 그대로)
- */
-const GROUND_LEAF: readonly Color[] = LEAF_COLORS.slice(0, 4).map((c) => mix(c, GC.grass[0], 0.4));
-
-
-function put(d: Uint8ClampedArray, i: number, c: Color, a = 255): void {
-  d[i] = (c >> 16) & 255;
-  d[i + 1] = (c >> 8) & 255;
-  d[i + 2] = c & 255;
-  d[i + 3] = a;
-}
-
-/** 바닥 한 점 색 (x,y 월드 좌표, k = 그 자리 바닥 종류, nearPath = 길 가까이) */
-function groundColor(x: number, y: number, k: CampGround, nearPath: boolean): Color {
-  const n = hashU(x, y, 1);
-  switch (k) {
-    case "water": {
-      const sx = x - campStreamX(y);
-      const edge = Math.abs(sx) / CAMP_STREAM_HALF_W;
-      // 물결: 흐름 방향(아래)으로 길쭉한 줄
-      const flow = hashU(Math.floor((x + Math.sin(y * 0.09) * 3) / 2), Math.floor(y / 7), 31);
-      let c: Color = edge > 0.8 ? GC.water.shallow : edge > 0.45 ? GC.water.mid : GC.water.deep;
-      if (flow > 0.9) c = GC.water.light;
-      else if (flow > 0.82 && edge < 0.8) c = mix(c, GC.water.light, 0.45);
-      if (edge > 0.9 && n > 0.6) c = GC.water.foam;
-      // 바닥 돌 비침
-      if (edge < 0.7 && hashU(x >> 2, y >> 2, 33) > 0.93) c = mix(c, 0x7a7a6a, 0.35);
-      return c;
-    }
-    case "bank":
-      return n < 0.18 ? GC.bank[1] : n > 0.84 ? GC.bank[2] : hashU(x >> 1, y >> 1, 3) < 0.2 ? 0xa49a84 : GC.bank[0];
-    case "road": {
-      let c: Color = n < 0.12 ? GC.road[1] : n > 0.9 ? GC.road[2] : GC.road[0];
-      // 길 위 가장자리 연석
-      if (y < CAMP_ROAD.y + 5) c = n < 0.5 ? 0x9a968c : 0xb4b0a4;
-      // 정류장 앞 노란 정차 칸 (테두리 점선)
-      // 버스는 문이 정류장 앞에 오게 서고(문은 차 앞쪽), 왼쪽에서 들어온다 → 칸은 정류장 왼쪽으로 치우친다
-      // 11/18 상자는 「버스 타기」 E 범위와 같다 (game/bus/busBays)
-      const bx0 = CAMP_BUS_BAY.x;
-      const bx1 = CAMP_BUS_BAY.x + CAMP_BUS_BAY.w;
-      const by0 = CAMP_BUS_BAY.y;
-      const by1 = CAMP_BUS_BAY.y + CAMP_BUS_BAY.h;
-      if (x >= bx0 && x <= bx1 && y >= by0 && y <= by1) {
-        const onEdge = y === by0 || y === by0 + 1 || y === by1 || y === by1 - 1 ? (x >> 2) % 2 === 0 : x === bx0 || x === bx0 + 1 || x === bx1 || x === bx1 - 1;
-        if (onEdge) c = 0xe8c040;
-      }
-      // 길 가운데 바랜 흰 점선 (정차 칸 밖)
-      if (y >= CAMP_ROAD.y + 40 && y <= CAMP_ROAD.y + 41 && (x >> 3) % 2 === 0 && (x < bx0 - 4 || x > bx1 + 4)) c = 0xc8c4b8;
-      return c;
-    }
-    case "rock": {
-      const crack = hashU(x >> 2, y >> 1, 41) > 0.94;
-      if (crack) return GC.rock[1];
-      if (hashU(x >> 2, y >> 2, 43) < 0.1) return GC.rock[3]; // 이끼
-      // 낙엽이 바위 틈에 조금
-      if (hashU(x >> 1, y >> 1, 45) < 0.04) return GROUND_LEAF[Math.floor(hashU(x, y, 46) * GROUND_LEAF.length)];
-      return n < 0.15 ? GC.rock[1] : n > 0.85 ? GC.rock[2] : GC.rock[0];
-    }
-    case "plaza": {
-      const r = Math.hypot(x - CAMP_FIRE.x, (y - CAMP_FIRE.y) * 1.12);
-      // 가장자리 돌 테두리
-      if (r > CAMP_PLAZA_R - 6) {
-        const cell = hashU(Math.floor(x / 4), Math.floor(y / 3), 51);
-        return cell < 0.55 ? (n < 0.5 ? 0xb4ae9e : 0x9c968a) : GC.plaza[1];
-      }
-      // 불 둘레는 재로 거뭇하게
-      if (r < 30 && n < (30 - r) / 40) return 0x6a5a48;
-      return n < 0.14 ? GC.plaza[1] : n > 0.88 ? GC.plaza[2] : hashU(x >> 1, y >> 1, 53) < 0.03 ? 0xd8a840 : GC.plaza[0];
-    }
-    case "path": {
-      if (hashU(x >> 1, y >> 1, 61) < 0.08) return GROUND_LEAF[Math.floor(hashU(x, y, 62) * GROUND_LEAF.length)];
-      if (hashU(x, y, 63) > 0.97) return 0xc8b89a; // 자갈
-      return n < 0.16 ? GC.path[1] : n > 0.86 ? GC.path[2] : GC.path[0];
-    }
-    case "deckPad":
-    case "grass":
-    default: {
-      // 낙엽 깔린 풀: 군데군데 잎이 수북한 곳 (큰 얼룩) + 흩어진 잎
-      // 11/15 더 촘촘하게 (사용자: 낙엽 점을 늘려 달라) → 11/16 낮에 지글거려 눈이 아프다: 흩어진 점은 줄이고 수북한 곳에 모은다.
-      // 수북한 곳은 4px 덩어리 (2px 점이 화면 가득 흩어지면 낮에 지글거려 보인다), 색은 풀에 섞은 GROUND_LEAF
-      const inPile = hashU(x >> 4, y >> 4, 71) > 0.65;
-      const rate = inPile ? 0.46 : 0.1 + (nearPath ? 0.06 : 0);
-      const gx = inPile ? x >> 2 : x >> 1;
-      const gy = inPile ? y >> 2 : y >> 1;
-      if (hashU(gx, gy, 72) < rate) {
-        const li = Math.floor(hashU(gx, gy, 73) * GROUND_LEAF.length);
-        return n < 0.25 ? darken(GROUND_LEAF[li], 0.08) : GROUND_LEAF[li];
-      }
-      if (n > 0.95) return GC.blade;
-      const g0 = n < 0.18 ? GC.grass[1] : n > 0.86 ? GC.grass[2] : GC.grass[0];
-      // 큰 얼룩 (짙은 풀)
-      return hashU(x >> 3, y >> 3, 75) < 0.18 ? mix(g0, GC.grass[3], 0.5) : g0;
-    }
-  }
-}
-
-/** 바닥 덩어리 RGBA (CAMP_CHUNK × CAMP_CHUNK, 맵 밖은 가장자리 숲 바닥). 11/17 winter = 겨울·크리스마스 판 바닥 (campWinter) */
+/** 바닥 덩어리 RGBA (CAMP_CHUNK × CAMP_CHUNK). 11/17 winter = 겨울·크리스마스 판 바닥 */
 export function campGroundPixels(cx: number, cy: number, size = CAMP_CHUNK, winter = false): Uint8ClampedArray {
   const steps = campGroundSteps(cx, cy, size, 32, winter);
   let r = steps.next();
@@ -1458,70 +1345,11 @@ export function campGroundPixels(cx: number, cy: number, size = CAMP_CHUNK, wint
 
 /** 바닥 덩어리를 줄 묶음(band줄)마다 멈추며 굽는다 — 버스 창밖 연출 동안 프레임마다 조금씩 (campPrebake). 끝나면 RGBA를 돌려준다 */
 export function* campGroundSteps(cx: number, cy: number, size = CAMP_CHUNK, band = 32, winter = false): Generator<void, Uint8ClampedArray> {
-  const out = new Uint8ClampedArray(size * size * 4);
-  const ox = cx * size;
-  const oy = cy * size;
-  // 맵 밖(오른쪽·아래)은 그리지 않는다 (카메라가 맵 밖을 보지 않는다)
-  const w = Math.max(0, Math.min(size, CAMP_WIDTH - ox));
-  const h = Math.max(0, Math.min(size, CAMP_HEIGHT - oy));
-  // 바닥 종류는 2px 칸마다 한 번 (경계 흔들림이 4px 단위라 차이가 없다) — 덩어리 하나 굽는 시간을 1/3로
-  const hw = Math.ceil(w / 2);
-  const kinds: CampGround[] = new Array(hw * Math.ceil(h / 2));
-  const near = new Uint8Array(kinds.length);
-  // 11/17 겨울 판: 흙길 가장자리까지 거리 (길가 눈둑) — 흙길 칸만
-  const edge = winter ? new Float32Array(kinds.length) : null;
-  // band줄씩 (짝수 줄에서 끊어 2px 칸 표가 묶음 안에서 끝난다)
-  const step = Math.max(2, band & ~1);
-  for (let y0 = 0; y0 < h; y0 += step) {
-    const y1 = Math.min(h, y0 + step);
-    for (let y = y0; y < y1; y += 2)
-      for (let x = 0; x < w; x += 2) {
-        const i = (y >> 1) * hw + (x >> 1);
-        const kd = campGroundKind(ox + x, oy + y);
-        kinds[i] = kd;
-        near[i] = kd === "grass" && pathEdgeDist(ox + x, oy + y, 12) < 10 ? 1 : 0;
-        if (edge && kd === "path") edge[i] = pathEdgeDist(ox + x, oy + y);
-      }
-    for (let y = y0; y < y1; y++)
-      for (let x = 0; x < w; x++) {
-        const i = (y >> 1) * hw + (x >> 1);
-        const c0 = groundColor(ox + x, oy + y, kinds[i], near[i] === 1);
-        put(out, (y * size + x) * 4, edge ? campWinterGroundColor(ox + x, oy + y, kinds[i], c0, near[i] === 1, edge[i]) : c0);
-      }
-    yield;
-  }
-  // 징검다리 돌 (물 위에 얹힌 납작한 돌)
-  for (const s of CAMP_STEP_STONES) {
-    for (let y = -5; y <= 5; y++)
-      for (let x = -8; x <= 8; x++) {
-        const d = (x / 7.5) ** 2 + (y / 5) ** 2;
-        if (d > 1) continue;
-        const px = Math.round(s.x + x - ox);
-        const py = Math.round(s.y + y - oy);
-        if (px < 0 || py < 0 || px >= size || py >= size) continue;
-        const c = d > 0.75 ? (y > 0 ? 0x5a5650 : 0x8a857a) : y < -1 ? STONE.hi : hashU(px, py, 81) < 0.15 ? STONE.moss : STONE.mid;
-        put(out, (py * size + px) * 4, winter && d <= 0.75 ? campWinterStoneColor(c, y, px, py) : c);
-      }
-    // 돌 아래 물살 거품
-    for (let x = -6; x <= 6; x++) {
-      const px = Math.round(s.x + x - ox);
-      const py = Math.round(s.y + 6 - oy);
-      if (px >= 0 && py >= 0 && px < size && py < size && hashU(px, py, 83) < 0.7) put(out, (py * size + px) * 4, winter ? 0xdcecf2 : GC.water.foam);
-    }
-  }
-  return out;
+  return yield* valleyGroundSteps(cx, cy, size, band, winter);
 }
 
-/** 건너는 곳 (통나무 다리 그림 자리 — 왼쪽 위 원점) */
-export function bridgePlacement(): { x: number; y: number } {
-  const c = CAMP_CROSSINGS.find((k) => k.kind === "bridge")!;
-  const y = (c.y0 + c.y1) / 2;
-  return { x: Math.round(campStreamX(y) - BRIDGE_W / 2), y: Math.round(y - BRIDGE_H / 2) };
-}
-
-/** 산꼭대기 정보 (일출빛 자리) */
-export const CAMP_SUNRISE = { x: CAMP_SUMMIT.x + 40, y: CAMP_SUMMIT.y - 70 } as const;
-
+/** 일출빛 자리 (오른쪽 위 저수지 너머 숲) */
+export const CAMP_SUNRISE = { x: 1180, y: 40 } as const;
 
 // ── 11/15 캠핑카 앞 캠핑 도구 ──
 
@@ -1553,6 +1381,38 @@ export function foldTableArt(): Grid {
   return g;
 }
 
+/**
+ * 11/26 카라반 3단계 세로 피크닉 탁자 (긴 쪽이 위아래 — 양옆 긴 의자에 둘씩 마주 앉는다). 윗면 판자 8 × 24 · 앞면 · 다리 둘.
+ * 그림 10×32 + 둘레 빈 칸 (14×34, 바닥 가운데 원점)
+ */
+export function picnicTableVArt(): Grid {
+  const g = new Grid(10, 32);
+  for (let y = 1; y < 25; y++) for (let x = 1; x < 9; x++) g.set(x, y, x === 4 || x === 5 ? WOOD_DECK.lo : y === 1 ? WOOD_DECK.hi : x === 1 ? WOOD_DECK.hi : WOOD_DECK.mid);
+  for (let y = 6; y < 25; y += 7) g.hline(1, 8, y, mix(WOOD_DECK.mid, WOOD_DECK.lo, 0.5));
+  g.rect(1, 25, 8, 2, WOOD_DECK.lo);
+  for (const x of [1, 7]) g.rect(x, 27, 2, 3, WOOD_DECK.line);
+  // 접시 둘 · 컵
+  g.rect(3, 8, 4, 3, 0xe8e0d0);
+  g.hline(3, 6, 8, 0xfaf6ec);
+  g.rect(3, 17, 4, 3, 0xe8e0d0);
+  g.hline(3, 6, 17, 0xfaf6ec);
+  g.rect(4, 13, 2, 2, 0x6aa0c8);
+  g.outline(OUT);
+  shadow(g, 5, 30.5, 5, 1, 50);
+  return padGrid(g);
+}
+
+/** 11/26 피크닉 탁자 옆 긴 의자 (세로 — 판자 4 × 22 · 앞면 · 다리). 그림 6×28 + 둘레 빈 칸 (10×30) */
+export function picnicBenchVArt(): Grid {
+  const g = new Grid(6, 28);
+  for (let y = 1; y < 23; y++) for (let x = 1; x < 5; x++) g.set(x, y, y === 1 || x === 1 ? WOOD_DECK.hi : x === 4 ? WOOD_DECK.lo : WOOD_DECK.mid);
+  for (let y = 8; y < 23; y += 7) g.hline(1, 4, y, mix(WOOD_DECK.mid, WOOD_DECK.lo, 0.5));
+  g.rect(1, 23, 4, 2, WOOD_DECK.lo);
+  for (const x of [1, 3]) g.rect(x, 25, 2, 2, WOOD_DECK.line);
+  g.outline(OUT);
+  return padGrid(g);
+}
+
 /** 캠핑 의자 (앞모습 — 아래를 보고 앉는다) */
 export function campChairFrontArt(i: number): Grid {
   const c = CHAIR_CLOTH[i % CHAIR_CLOTH.length];
@@ -1574,7 +1434,8 @@ export function campChairFrontArt(i: number): Grid {
   line(g, 4, 12, 11, 16, METAL.mid);
   g.outline(OUT);
   shadow(g, 8, 17, 7, 1.2, 50);
-  return g;
+  // 11/26 팔걸이 윤곽이 캔버스 양끝 열에 닿아 잘렸다 (카라반 탁자 뒤 의자) — 좌우 빈 칸 (바닥 가운데 원점이라 자리는 그대로)
+  return padGrid(g, { top: 0 });
 }
 
 /** 캠핑 의자 (옆모습 — 오른쪽을 보고 앉는다. 왼쪽은 좌우 뒤집기) */
@@ -1611,7 +1472,7 @@ export function brazierArt(): Grid {
   line(g, 9, 9, 9, 14, 0x2e2a28);
   g.outline(OUT);
   shadow(g, 9, 15, 8, 1.2, 50);
-  return g;
+  return padGrid(g);
 }
 
 /** 화롯대 작은 불꽃 (3프레임 시트, 원점 아래 가운데) */
@@ -1643,7 +1504,7 @@ export function lanternArt(): Grid {
   g.set(1, 1, METAL.mid);
   g.set(6, 1, METAL.mid);
   g.outline(OUT);
-  return g;
+  return padGrid(g);
 }
 
 /** 아이스박스 (하늘색 몸통 + 흰 뚜껑) */
@@ -1710,6 +1571,10 @@ export function plateSignArt(): Grid {
 
 /** 숯불 바베큐 그릴: 드럼통 반쪽 몸통 + 석쇠 위 고기·소시지·꼬치 + 빨간 숯 + 다리 둘 */
 export function bbqGrillArt(): Grid {
+  // 11/26 드럼통·석쇠 끝이 양 끝 열에 닿아 좌우 여백
+  return padGrid(bbqGrillBaseArt(), GRILL_PAD);
+}
+export function bbqGrillBaseArt(): Grid {
   const g = new Grid(30, 26);
   // 다리
   line(g, 6, 15, 4, 24, 0x2e2a28);
@@ -1741,8 +1606,14 @@ export function bbqGrillArt(): Grid {
   return g;
 }
 
-/** 음료 자판기 (빨간 몸통 + 불 들어오는 진열창 + 꺼내는 칸). 22×36, 원점 바닥 가운데 */
+/**
+ * 음료 자판기 (빨간 몸통 + 불 들어오는 진열창 + 꺼내는 칸). 22×36 + 위 여백, 원점 바닥 가운데.
+ * 11/26 눈판 지붕 눈·크리스마스 리스가 맨 윗줄에 닿아 위 여백 (밤 불빛 vendingLitArt도 같은 여백 — 겹쳐 그린다)
+ */
 export function vendingArt(): Grid {
+  return padGrid(vendingBaseArt(), VENDING_PAD);
+}
+export function vendingBaseArt(): Grid {
   const g = new Grid(22, 36);
   // 몸통
   g.rect(2, 2, 18, 31, 0xc8343a);
@@ -1779,8 +1650,11 @@ export function vendingArt(): Grid {
   return g;
 }
 
-/** 자판기 밤 불빛: 진열창·간판·버튼만 밝게 (ADD로 겹친다). vendingArt와 같은 크기 */
+/** 자판기 밤 불빛: 진열창·간판·버튼만 밝게 (ADD로 겹친다). vendingArt와 같은 크기·같은 여백 */
 export function vendingLitArt(): Grid {
+  return padGrid(vendingLitBaseArt(), VENDING_PAD);
+}
+export function vendingLitBaseArt(): Grid {
   const g = new Grid(22, 36);
   g.rect(4, 9, 14, 13, 0x8ac8e8);
   g.rect(5, 10, 12, 11, 0xb8e8ff);
@@ -1819,8 +1693,15 @@ export function bbqSmokeArt(): Grid {
   return g;
 }
 
-/** 먹을 때 뜨는 접시 (메뉴마다 위에 올린 것이 다르다) */
+/**
+ * 먹을 때 뜨는 접시 — 맵 텍스처 (원점 바닥 가운데). 11/26 접시 끝 윤곽이 양 끝 열에, 고기·잔 위 김·장식이 맨 윗줄에 닿아 여백.
+ * 메뉴판·먹은 것 칸 아이콘(DOM img 고정 크기)은 그림 크기가 그대로여야 해 bbqPlateIconArt
+ */
 export function bbqPlateArt(id: string): Grid {
+  return padGrid(bbqPlateIconArt(id), PLATE_PAD);
+}
+/** 먹을 때 뜨는 접시 (메뉴마다 위에 올린 것이 다르다) — 여백 없는 그림 (UI 아이콘) */
+export function bbqPlateIconArt(id: string): Grid {
   // 11/15 마실 거리는 잔·사발·컵 그림
   if (id === "beer" || id === "soju" || id === "makgeolli" || id === "coffee" || id === "hangover" || id === "highball" || id === "sunset" || id === "sikhye" || id === "cola" || id === "slush") return drinkArt(id);
   const g = new Grid(16, 10);

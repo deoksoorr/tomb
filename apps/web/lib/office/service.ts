@@ -33,7 +33,7 @@ export async function buyOffice(accountId: string, id: string, now = Date.now())
   const f = furnitureById(id);
   if (!f || !isOfficeFurn(id)) throw new HttpError(400, "NOT_SOLD", "총무팀 비품 목록에 없는 물건이에요.");
   const zone = await npcHouseZone(accountId);
-  if (!zone) throw new HttpError(409, "NO_HOUSE", "비품은 집이 있어야 지급돼요. 마을 분양 사무소나 포구 부동산에 들러요.");
+  if (!zone) throw new HttpError(409, "NO_HOUSE", "비품은 집이 있어야 지급돼요. 마을 분양 사무소·포구 부동산·캠핑장에서 집을 분양받아요.");
   // 가구점과 같은 값 매기기·가방·한도·환불 (마지막 인자 = 가구점 밖 한정 판매 허용)
   const rate = await npcFurnRate(accountId, now);
   const { house: h, me } = await buyFurnitureMe(getHouseStore(), accountId, id, rate, zone, true);

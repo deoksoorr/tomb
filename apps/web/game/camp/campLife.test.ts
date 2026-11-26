@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inCampStream } from "@tomb/protocol";
+import { campWet } from "@tomb/protocol";
 import type { AmbienceOverride } from "@/lib/ambience";
 import { clearPath, FolkSim, type FolkCtx, type FolkDef } from "../world/life/folkSim";
 import { lintFolkLines } from "../world/life/folkLint";
@@ -12,7 +12,7 @@ const HOUR = 3_600_000;
 const phaseOf = (h: number): FolkCtx["phase"] => (h >= 5 && h < 7 ? "dawn" : h >= 7 && h < 17.5 ? "day" : h >= 17.5 && h < 19.5 ? "dusk" : "night");
 
 describe("캠핑장 주민 길", () => {
-  it("모든 자리는 걸을 수 있는 칸이고 계곡 물속이 아니다", () => {
+  it("모든 자리는 걸을 수 있는 칸이고 물속(소·계곡·저수지)이 아니다", () => {
     const g = campFolkWorld().grid;
     for (const def of CAMP_FOLK)
       for (const hour of [3, 6, 12, 18, 21, 23.5])
@@ -22,7 +22,7 @@ describe("캠핑장 주민 길", () => {
           for (const p of plans)
             for (const s of p.spots) {
               expect(g.blocked(Math.floor(s.x / g.cell), Math.floor(s.y / g.cell)), `${def.id} ${p.act} (${s.x},${s.y}) 막힘`).toBe(false);
-              expect(inCampStream(s.x, s.y)).toBe(false);
+              expect(campWet(s.x, s.y)).toBe(false);
               // 뛰어노는 자리는 둘레(좌우 18·위아래 7)도 트여 있어야 (제자리 둘레를 뛰어다닌다)
               if (p.act === "play")
                 for (const [dx, dy] of [[-18, 0], [18, 0], [0, -7], [0, 7], [-18, -7], [18, 7], [-18, 7], [18, -7]])
@@ -41,7 +41,7 @@ describe("캠핑장 주민 길", () => {
         const k = k0 + n * step;
         const leg = sim.legAt(k);
         expect(clearPath(world.grid, leg.path), `${def.id} 구간 ${k} 길이 막힌 칸을 스침`).toBe(true);
-        for (const p of leg.path) expect(inCampStream(p.x, p.y, -2) && !(p.y > 270 && p.y < 300) && !(p.y > 570 && p.y < 600), `${def.id} 물 (${p.x},${p.y})`).toBe(false);
+        for (const p of leg.path) expect(campWet(p.x, p.y), `${def.id} 물 (${p.x},${p.y})`).toBe(false);
         const end = leg.path[leg.path.length - 1];
         const want = sim.destOf(k).spot;
         expect(Math.hypot(end.x - want.x, end.y - want.y), `${def.id} ${leg.plan.act} (${want.x},${want.y})에 못 닿음`).toBeLessThan(2);
@@ -60,7 +60,7 @@ function acts(id: string, override: AmbienceOverride, hours = 12) {
 const share = (xs: string[], a: string) => xs.filter((x) => x === a).length / xs.length;
 
 describe("캠핑장 주민 일과", () => {
-  it("콩이가 뛰노는 자리가 넉넉하다 (캠핑카 마당)", () => {
+  it("콩이가 뛰노는 자리가 넉넉하다 (카라반 골목·펜션 정원)", () => {
     const kid = CAMP_FOLK.find((d) => d.id === "kid")!;
     const play = kid.plans({ hour: 11, phase: "day", weather: "clear", tide: 0, open: false }).filter((p) => p.act === "play");
     expect(play[0].spots.length).toBeGreaterThanOrEqual(3);
@@ -69,7 +69,7 @@ describe("캠핑장 주민 일과", () => {
     expect(share(acts("woodman", { hour: 11, weather: "clear" }), "chop")).toBeGreaterThan(0.5);
     expect(share(acts("woodman", { hour: 18.5, weather: "clear" }), "stand")).toBeGreaterThan(0.5);
   });
-  it("별바라기는 맑은 밤에 전망대에서 별을 본다", () => {
+  it("별바라기는 맑은 밤에 폭포 다리에서 별을 본다", () => {
     expect(share(acts("stargirl", { hour: 22, weather: "clear" }), "gaze")).toBeGreaterThan(0.6);
     expect(share(acts("stargirl", { hour: 12, weather: "clear" }), "gaze")).toBe(0);
   });

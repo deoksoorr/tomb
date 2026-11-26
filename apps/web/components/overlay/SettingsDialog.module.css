@@ -1,0 +1,172 @@
+/* 11/26 설정 창: 화면 → 소리 → 접속. 내용만큼만 — PC 폭 440px·높이 내용만큼, 폰·패드는 가운데 카드(Dialog phoneCard)로 내용 높이만
+   (11/26 운영자: 「설정창 쓸데없이 넓다」 — 화면 전체·760px 표준 창 대신) */
+.dialog[data-kind="window"][data-fit][data-card] {
+  width: min(440px, var(--dialog-max-w));
+}
+
+.panel {
+  display: grid;
+  gap: 12px;
+}
+
+.section {
+  display: grid;
+  gap: 6px;
+}
+
+/* 이 창의 단추는 한 줄 높이로 (PC 32px · 터치 40px — 공용 .button 터치 44px보다 낮게, 위쪽 줄 단추와 같은 높이) */
+.panel :is(.switch, .mute, .end) {
+  min-height: 32px;
+}
+
+.panel .mute {
+  min-width: 32px;
+  padding: 4px;
+}
+
+@media (pointer: coarse) {
+  .panel :is(.switch, .mute, .end) {
+    min-height: 40px;
+  }
+
+  .panel .mute {
+    min-width: 40px;
+  }
+}
+
+/* 켜기·끄기 한 줄: 이름·설명 | 스위치 */
+.toggleRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px 7px 10px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.toggleText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.label {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.desc {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 1.45;
+  word-break: keep-all;
+}
+
+.switch {
+  min-width: 60px;
+  padding-block: 4px;
+  justify-content: center;
+}
+
+.switch[aria-checked="false"] {
+  color: var(--muted);
+}
+
+/* 소리 줄: 이름 | 끄기 | 볼륨 (줄 사이 여백 없이 단추 높이만) */
+.sound {
+  display: grid;
+  padding: 2px 8px 2px 10px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.soundRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.soundLabel {
+  flex: none;
+  width: 5.5em;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.grow {
+  flex: 1;
+  width: auto;
+}
+
+.volume {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--moss);
+}
+
+.endButtons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.end {
+  width: 100%;
+  justify-content: center;
+  color: var(--muted);
+}
+
+.confirm {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-deep);
+  text-align: center;
+}
+
+.confirmButtons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.warn {
+  color: var(--candle);
+}
+
+.notice {
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.codeBox {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  text-align: left;
+  box-shadow:
+    0 -2px 0 0 var(--candle),
+    0 2px 0 0 var(--candle),
+    -2px 0 0 0 var(--candle),
+    2px 0 0 0 var(--candle);
+}
+
+.code {
+  color: var(--bone);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 16px;
+  letter-spacing: 0.06em;
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+
+.codeButtons {
+  display: flex;
+  gap: 6px;
+}

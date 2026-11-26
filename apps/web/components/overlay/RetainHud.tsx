@@ -414,7 +414,8 @@ function pickTodoGuide(kind: TodoKind, touch: boolean, onRoute?: () => void): vo
     return;
   }
   setGuide(key);
-  if (map && map !== "village") showToast("마을로 돌아가면 길이 보여요.", 4_000);
+  // 11/26 「팔기」는 캠핑장·바닷가에서도 그 맵 상인까지 (game/world/AwayRoute)
+  if (map && map !== "village" && !(d.guide === "seller" && (map === "camp" || map === "sea"))) showToast("마을로 돌아가면 길이 보여요.", 4_000);
   else showToast(touch ? "금빛 화살표를 따라가요." : "금빛 화살표를 따라가요. Esc로 꺼요.", 4_000);
   onRoute?.();
 }

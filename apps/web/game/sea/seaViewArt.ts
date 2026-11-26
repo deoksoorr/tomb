@@ -1,3 +1,4 @@
+import { padded, type SeaPad } from "./seaPad";
 import type { MapConcept } from "@/lib/mapConcept";
 import { Grid, hash2, mix, rng, vnoise, type Color } from "../sprites/pixel";
 import { ICE, SNOW, snowCap, type Bulb } from "../sprites/winterArt";
@@ -162,12 +163,17 @@ export function loungerBackArt(): Grid {
   soft(g);
   return g;
 }
+// 11/26 둘레 여백 (seaSpriteEdge.test): 누운 머리(좌우·위 끝까지 칠한 타원 — 아래는 등받이에 가려지는 목 쪽이라 그대로), 먼 돛단배(돛 끝이 맨 윗줄),
+// 먼바다 배(뱃머리 물결 점이 오른쪽 끝 열 — 세로 원점이 물높이 비율이라 좌우만). 원점이 바닥·가운데라 좌우 같은 폭·위만 넓혀 자리는 그대로
+export const VIEW_HEAD_PAD: SeaPad = { x: 1, top: 1, bottom: 0 };
+export const VIEW_BOAT_PAD: SeaPad = { x: 0, top: 1, bottom: 0 };
+export const VIEW_SHIP_PAD: SeaPad = { x: 1, top: 1, bottom: 0 };
 /** 누운 사람 머리 (등받이 위로 살짝) 8 × 6 */
 export function lyingHead(): Grid {
-  const g = new Grid(8, 6);
+  const g = padded(8, 6, VIEW_HEAD_PAD);
   g.ellipse(4, 3, 3.2, 2.6, 0x3a3440);
   g.set(3, 1, 0x5a5464);
-  return g;
+  return g.done();
 }
 
 /** 11/16 등대 꼭대기 난간 (화면 아래 띠 — 쇠 난간 기둥과 가로대, 바닥 철판) */
@@ -321,12 +327,12 @@ export function gullSheet(): Grid {
 
 /** 멀리 지나가는 배 (작은 흰 돛단배) 16 × 9 */
 export function farBoat(): Grid {
-  const g = new Grid(16, 9);
+  const g = padded(16, 9, VIEW_BOAT_PAD);
   for (let y = 0; y < 6; y++) for (let x = 7 - Math.round(y * 0.7); x <= 7; x++) g.set(x, y, RAMP.wall[y > 3 ? 1 : 0]);
   g.vline(8, 0, 6, RAMP.wood[4]);
   for (let x = 2; x < 14; x++) g.set(x, 7, RAMP.hull[1]);
   for (let x = 3; x < 13; x++) g.set(x, 8, RAMP.hull[2]);
-  return g;
+  return g.done();
 }
 
 /** 흰 점 (채우기·물보라·달빛 점) 2 × 2 */
@@ -435,11 +441,18 @@ export function palmFronds(w: number, h: number): Grid {
 // 지도와 같은 도트 크기(장면 1px = 지도 1px)로 작게 그리고 늘이지 않아요. 원점 = 가운데 물높이(waterline).
 // 물 아래는 그리지 않고, 물높이 줄은 한 단계 짙게, 뱃머리 물결 두어 점 + 아래로 깨진 물빛 반사 두 줄.
 export type FarShipKind = "tanker" | "cargo" | "fishing" | "squid";
-export const FAR_SHIP_WL: Record<FarShipKind, number> = { tanker: 7, cargo: 8, fishing: 6, squid: 5 };
+const FAR_SHIP_WL0: Record<FarShipKind, number> = { tanker: 7, cargo: 8, fishing: 6, squid: 5 };
+/** 텍스처 안 물높이 줄 (그린 줄 + 위 여백 — seaView 원점 WL / (WL + 4)이 그대로 물높이에 오게) */
+export const FAR_SHIP_WL: Record<FarShipKind, number> = {
+  tanker: FAR_SHIP_WL0.tanker + VIEW_SHIP_PAD.top,
+  cargo: FAR_SHIP_WL0.cargo + VIEW_SHIP_PAD.top,
+  fishing: FAR_SHIP_WL0.fishing + VIEW_SHIP_PAD.top,
+  squid: FAR_SHIP_WL0.squid + VIEW_SHIP_PAD.top,
+};
 export function farShip(kind: FarShipKind): Grid {
   const W = kind === "tanker" ? 34 : kind === "cargo" ? 30 : kind === "squid" ? 16 : 14;
-  const wl = FAR_SHIP_WL[kind];
-  const g = new Grid(W, wl + 4);
+  const wl = FAR_SHIP_WL0[kind];
+  const g = padded(W, wl + 4, VIEW_SHIP_PAD);
   const hull = kind === "tanker" ? 0x55648a : kind === "cargo" ? 0x4a6aa0 : 0xe8eef2;
   const band = kind === "fishing" || kind === "squid" ? 0x8a9ab0 : 0x2e3a58;
   // 물 위 옆구리 (뱃머리 쪽이 오른쪽으로 살짝 올라가요)
@@ -480,7 +493,7 @@ export function farShip(kind: FarShipKind): Grid {
     if (hashU(x, 2, 31) < 0.35) g.set(x + ((x >> 2) & 1), wl + 2, hull, 70);
     if (hashU(x, 3, 31) < 0.12) g.set(x, wl + 3, 0xffffff, 90);
   }
-  return g;
+  return g.done();
 }
 
 /** 11/16 r16 방파제 끝 돌 데크 가장자리 (앉은 자리 바로 앞 — 지도와 같은 콘크리트 블록 + 젖은 아랫단). 원점 왼쪽 아래 */

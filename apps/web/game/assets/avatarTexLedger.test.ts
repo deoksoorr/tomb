@@ -62,6 +62,8 @@ describe("아바타 시트 원장", () => {
     expect(derivedBase(hammockLieKey(base, "sea"))).toBe(base);
     for (const k of ["lie", "read", "bath"] as const) expect(derivedBase(indoorPoseKey(base, k))).toBe(base);
     expect(derivedBase(indoorPoseKey(base, "lie", "towel"))).toBe(base);
+    // 11/26 캠핑장 침대 덮개 (침대·방향마다)
+    for (const c of ["cvbed0", "cvbed3", "pnbed1", "pnbed2"] as const) expect(derivedBase(indoorPoseKey(base, "lie", c))).toBe(base);
     expect(derivedBase(`${base}#dye-head`)).toBe(base);
     expect(derivedBase(`${base}#dye-wr_shirt`)).toBe(base);
     expect(derivedBase(base)).toBeNull();

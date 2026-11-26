@@ -705,6 +705,179 @@
   color: #ffe08a;
 }
 
+/* ── 11/26 PC 사냥 HUD(compact): 16px 아이콘 두 줄 + 목록 창. 빈 곳은 눌러도 판으로 (공격) ── */
+.runBoxCompact {
+  gap: 3px;
+  pointer-events: none;
+}
+
+.runBoxCompact .icons {
+  gap: 3px 2px;
+}
+
+.runBoxCompact .icon,
+.runBoxCompact .more,
+.runBoxCompact .listBtn {
+  pointer-events: auto;
+}
+
+.runBoxCompact .icon {
+  width: 18px;
+  height: 18px;
+  padding: 1px;
+}
+
+.runBoxCompact .icon img {
+  width: 16px;
+  height: 16px;
+}
+
+.runBoxCompact .count {
+  z-index: 1;
+  right: -2px;
+  bottom: -3px;
+  font-size: 8px;
+}
+
+/* 물공·마공: 글자 대신 왼쪽 위 3px 점 (옆 아이콘과 겹치지 않게 — 이름은 설명·목록 창에) */
+.runBoxCompact .iconType {
+  left: 0;
+  top: 0;
+  width: 4px;
+  height: 4px;
+  font-size: 0;
+  background: currentColor;
+  box-shadow: 1px 1px 0 #000;
+}
+
+/* 마우스를 올린 카드 설명: 판(.hudPanel[data-compact]) 바로 아래로 떠서 판 크기를 바꾸지 않는다 */
+.runBoxCompact > .tip {
+  position: absolute;
+  z-index: 6;
+  background: rgba(10, 11, 9, 0.97);
+  top: calc(100% + 6px);
+  left: 0;
+  width: 248px;
+  pointer-events: none;
+}
+
+.more {
+  height: 18px;
+  min-width: 26px;
+  padding: 0 3px;
+  border: 0;
+  background: rgba(10, 11, 9, 0.7);
+  box-shadow: 0 0 0 1px var(--line);
+  color: var(--bone);
+  font-family: var(--font-small);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.listBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 4px;
+  border: 0;
+  background: rgba(10, 11, 9, 0.6);
+  box-shadow: 0 0 0 1px var(--line);
+  color: var(--bone);
+  font-family: var(--font-small);
+  font-size: 10px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.listBtn[aria-expanded="true"] {
+  color: #ffe08a;
+  box-shadow: 0 0 0 1px #c8963a;
+}
+
+.listBtn kbd {
+  font: inherit;
+  font-size: 9px;
+  padding: 0 2px;
+  box-shadow: 0 0 0 1px currentColor;
+  color: #b8b2a0;
+}
+
+.more:hover,
+.listBtn:hover {
+  color: #ffe08a;
+}
+
+/* 가진 카드 목록 창: HUD 판 오른쪽에 (열었을 때만) */
+.cardPanel {
+  position: absolute;
+  z-index: 6;
+  top: 0;
+  left: calc(100% + 10px);
+  display: grid;
+  gap: 6px;
+  width: min(540px, calc(100vw / var(--uz) - 360px));
+  max-height: calc(100vh / var(--uz) - 120px);
+  padding: 8px 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: rgba(16, 17, 14, 0.94);
+  box-shadow: var(--px-border);
+  pointer-events: auto;
+  scrollbar-width: thin;
+}
+
+.cardPanelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--candle);
+  font-size: 12px;
+}
+
+.cardRows {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cardRows > li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: none;
+  padding: 4px 6px;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.cardRows > li[data-tier="magic"] {
+  box-shadow: 0 0 0 1px #3a78c8;
+}
+.cardRows > li[data-tier="rare"] {
+  box-shadow: 0 0 0 1px #c89a2a;
+}
+.cardRows > li[data-tier="unique"] {
+  box-shadow: 0 0 0 1px #e0782a;
+}
+.cardRows > li[data-tier="legend"] {
+  box-shadow: 0 0 0 1px #9a5ae8;
+}
+
+.cardRows strong {
+  font-size: 11px;
+}
+
+.rowIcon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  image-rendering: pixelated;
+}
+
 /* 11/15 가진 카드: 지금 수치 → 더해진 수치 */
 .stackLine {
   max-width: 100%;
@@ -749,10 +922,15 @@
   width: 230px;
   max-width: calc(100vw / var(--uz) - 24px);
   padding: 6px 9px 8px;
-  background: var(--panel);
+  /* 11/26 조금 비치게 · 접기 단추만 누를 수 있고 나머지는 눌러도 판으로 (공격) */
+  background: rgba(24, 25, 21, 0.82);
   box-shadow: var(--px-border);
-  pointer-events: auto;
+  pointer-events: none;
   font-size: 11px;
+}
+
+.statBox .statHead {
+  pointer-events: auto;
 }
 
 .statHead,
@@ -800,7 +978,7 @@
 }
 
 .statRows dt {
-  color: var(--muted);
+  color: #b8b2a0;
   font-family: var(--font-small);
   font-size: 10px;
 }
@@ -1149,4 +1327,272 @@
     align-items: flex-end;
     transform: none;
   }
+}
+
+/* ── 11/26 위층 시작 카드: 직접·자동 고르기 · 자동 진행 · 한 화면 요약 ── */
+
+.askRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.askBtn {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 4px;
+  flex: 0 1 240px;
+  min-height: 84px;
+  padding: 12px 14px;
+  text-align: center;
+  word-break: keep-all;
+}
+
+.askBtn b {
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.askBtn kbd {
+  font-family: var(--font-small);
+  font-size: 10px;
+  opacity: 0.75;
+}
+
+.askBtn small {
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 1.5;
+  opacity: 0.85;
+}
+
+.autoBar {
+  display: block;
+  width: min(100%, 320px);
+  height: 8px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.autoBar i {
+  display: block;
+  height: 100%;
+  background: var(--candle);
+  transition: width 100ms linear;
+}
+
+/* 11/26 운영자 「자동 고르기가 너무 반짝인다」: 자동 진행·요약은 앞 화면에서 바로 이어지므로 어두워지기·제목 튀기를 다시 하지 않는다 */
+.calm,
+.calm .title {
+  animation: none;
+}
+
+.sumBox {
+  width: min(100%, 760px);
+  max-height: calc(100dvh - 24px);
+}
+
+.sumGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+  width: 100%;
+  max-height: min(52dvh, 420px);
+  margin: 0;
+  padding: 2px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+/* 카드 한 장: 등급 색 테 (일반은 차분하게, 유니크·전설은 은은한 빛) */
+.sumChip {
+  --r: #b8b4a8;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 4px 8px 4px 6px;
+  background: rgba(10, 11, 9, 0.82);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--r) 70%, transparent),
+    inset 3px 0 0 var(--r);
+  animation: chipIn 240ms ease-out both;
+}
+
+.sumChip[data-rarity="unique"],
+.sumChip[data-rarity="legend"] {
+  box-shadow:
+    0 0 0 2px var(--r),
+    inset 3px 0 0 var(--r);
+}
+
+.sumChip img {
+  image-rendering: pixelated;
+}
+
+.sumName {
+  display: grid;
+  min-width: 0;
+  color: var(--bone);
+  font-size: 12px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.sumName small {
+  color: var(--r);
+  font-family: var(--font-small);
+  font-size: 9px;
+}
+
+.sumN {
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.askGo {
+  min-width: 180px;
+  min-height: 48px;
+}
+
+/* 새로 붙는 칩만 살짝 나타난다 (크기 변화·번쩍임 없이) */
+@keyframes chipIn {
+  from {
+    opacity: 0;
+  }
+}
+
+/* 요약 목록: 이름·등급·효과 (PC 두 줄, 폰 한 줄로 내려가며 목록만 스크롤) */
+.sumList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 6px;
+  width: 100%;
+  max-height: min(60dvh, 520px);
+  margin: 0;
+  padding: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.sumRow {
+  --r: #b8b4a8;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  column-gap: 8px;
+  row-gap: 3px;
+  align-items: start;
+  padding: 6px 8px 7px 8px;
+  background: rgba(10, 11, 9, 0.82);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--r) 55%, transparent),
+    inset 3px 0 0 var(--r);
+}
+
+.sumRow img {
+  grid-row: span 2;
+  margin-top: 1px;
+  image-rendering: pixelated;
+}
+
+.sumRowHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  min-width: 0;
+}
+
+.sumRowHead b {
+  color: var(--bone);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+.sumRowHead small {
+  color: var(--r);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.sumRowHead em {
+  margin-left: auto;
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.sumDesc {
+  color: color-mix(in srgb, var(--bone) 82%, transparent);
+  font-family: var(--font-small);
+  font-size: 11px;
+  line-height: 1.5;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+@media (pointer: coarse) {
+  .askBtn kbd {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .askBtn {
+    flex-basis: 100%;
+    min-height: 70px;
+  }
+  .sumGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sumList {
+    grid-template-columns: minmax(0, 1fr);
+    max-height: calc(100dvh - 190px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .calm,
+  .sumChip,
+  .autoBar i {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* 11/26 고른 카드 목록(진행·요약)이 넘칠 때: 창 본문과 같은 늘 보이는 얇은 스크롤바 + 아래 흐림(전역 more-fade) */
+/* 크롬은 scrollbar-width를 쓰면 ::-webkit-scrollbar를 무시하므로 파이어폭스에만 (Dialog.module.css와 같은 방식) */
+@supports (-moz-appearance: none) {
+  .scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+}
+
+.scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted);
 }

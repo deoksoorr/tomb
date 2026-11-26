@@ -37,6 +37,8 @@ export type TicketClaims = {
   dm?: number;
   /** 11/18 판 시작 때 가진 물약 수 (사냥만). 판 끝에 쓴 물약 수가 이보다 많으면 거절 */
   pt?: Record<string, number>;
+  /** 11/26 야근 빌딩 판 시작 레벨 (엘리베이터 판 — cards runLevelBase). 없으면 0레벨부터 (옛 티켓) */
+  rb?: number;
 };
 
 /** 물약 수 형식 (종류 20개까지, 개수 0..9999 정수) */
@@ -90,7 +92,8 @@ export async function verifyTicket(secret: string, token: string): Promise<Ticke
       (c.tt === undefined || Object.hasOwn(RUN_TIERS, c.tt)) &&
       (c.gp === undefined || (typeof c.gp === "number" && c.gp >= 1 && c.gp <= 40)) &&
       (c.dm === undefined || isDeal(c.dm)) &&
-      (c.pt === undefined || okPotions(c.pt));
+      (c.pt === undefined || okPotions(c.pt)) &&
+      (c.rb === undefined || (Number.isInteger(c.rb) && c.rb >= 0 && c.rb <= 10_000 && c.tw !== undefined));
     return ok ? c : null;
   } catch {
     return null;

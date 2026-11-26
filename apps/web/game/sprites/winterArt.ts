@@ -223,20 +223,34 @@ export function snowLawn(src: Grid, seed = 9): Grid {
 /** 눈 쌓인 상록 활엽수 잎 (짙은 청록) */
 const EVERGREEN: LeafPal = { hi: 0x4f6e5e, mid: 0x3b5648, lo: 0x2b4136, deep: 0x22342b };
 
-/** 눈을 소복이 인 둥근 나무 (tree()와 같은 크기·받침) */
-export function snowyRoundTree(v: number): HTMLCanvasElement {
-  return snowCap(tree(v, EVERGREEN), { depth: 3, maxY: 30, seed: 21 + v });
+/**
+ * 눈을 소복이 인 둥근 나무 (tree()와 같은 받침). 11/26 pad = 둘레 여백 (마을 나무 텍스처와 같은 여백 — 끝 잘림) —
+ * 여백을 두른 뒤 눈을 얹어 꼭대기 눈 윤곽도 캔버스 안에 들어온다
+ */
+export function snowyRoundTree(v: number, pad: { x: number; top: number } = { x: 0, top: 0 }): HTMLCanvasElement {
+  let src = tree(v, EVERGREEN);
+  if (pad.x || pad.top) {
+    const c = makeCanvas(src.width + pad.x * 2, src.height + pad.top);
+    c.ctx.drawImage(src, pad.x, pad.top);
+    src = c.canvas;
+  }
+  return snowCap(src, { depth: 3, maxY: 30 + pad.top, seed: 21 + v });
 }
 
 const BARK = { mid: 0x4e423a, hi: 0x6c5d50, lo: 0x3a302a };
 const BIRCH = { mid: 0xd8d4ca, hi: 0xeeebe2, lo: 0xa8a49a, mark: 0x3a3430 };
 
 /**
- * 앙상한 겨울나무 (32×40, tree()와 같은 받침). kind 0·1 = 짙은 껍질 두 모양, 2 = 하얀 자작나무.
- * 가지 끝으로 갈수록 가늘게 갈라지고, 가지 윗면·갈래마다 눈이 얹힌다
+ * 앙상한 겨울나무 (32×40 받침 + 둘레 여백 BARE_TREE_PAD → 48×50, tree()와 같은 받침). kind 0·1 = 짙은 껍질 두 모양, 2 = 하얀 자작나무.
+ * 가지 끝으로 갈수록 가늘게 갈라지고, 가지 윗면·갈래마다 눈이 얹힌다.
+ * 11/26 운영자 「캠핑장 나무도 도트 잘린 게 중간중간 있다」: 가지가 32×40 밖(위로 10칸·옆으로 몇 칸)까지 뻗어 꼭대기가 칼로 자른 듯 평평했다 →
+ * 같은 그림을 위·좌우 여백을 둔 캔버스에 그린다 (바닥 줄은 그대로라 원점 바닥 가운데(0.5, 1)로 세우는 마을·캠핑장 자리는 그대로)
  */
+export const BARE_TREE_PAD = { x: 8, top: 10 } as const;
 export function bareTree(kind: number): HTMLCanvasElement {
-  const g = new Grid(32, 40);
+  const PX = BARE_TREE_PAD.x;
+  const PT = BARE_TREE_PAD.top;
+  const g = new Grid(32 + PX * 2, 40 + PT);
   const r = rng(301 + kind * 47);
   const birch = kind === 2;
   const bark = birch ? BIRCH.mid : BARK.mid;
@@ -247,9 +261,9 @@ export function bareTree(kind: number): HTMLCanvasElement {
     const flare = y > 34 ? y - 34 : 0;
     const x0 = (birch ? 14 : 13) - flare;
     const x1 = (birch ? 17 : 18) + flare;
-    for (let x = x0; x <= x1; x++) g.set(x, y, x === x0 ? hi : x === x1 ? (birch ? BIRCH.lo : BARK.lo) : bark);
+    for (let x = x0; x <= x1; x++) g.set(x + PX, y + PT, x === x0 ? hi : x === x1 ? (birch ? BIRCH.lo : BARK.lo) : bark);
   }
-  if (birch) for (const [x, y] of [[15, 22], [16, 26], [14, 30], [16, 33], [15, 20]]) g.hline(x, x + 1, y, BIRCH.mark);
+  if (birch) for (const [x, y] of [[15, 22], [16, 26], [14, 30], [16, 33], [15, 20]]) g.hline(x + PX, x + 1 + PX, y + PT, BIRCH.mark);
   // 가지: 줄기 꼭대기에서 위로 갈라진다 (재귀, 굵기 2 → 1)
   const branch = (x: number, y: number, ang: number, len: number, w: number, depth: number) => {
     const x1 = x + Math.cos(ang) * len;
@@ -258,7 +272,7 @@ export function bareTree(kind: number): HTMLCanvasElement {
     for (let i = 0; i <= steps; i++) {
       const px = Math.round(x + ((x1 - x) * i) / steps);
       const py = Math.round(y + ((y1 - y) * i) / steps);
-      g.rect(px, py, w, w, depth === 0 ? bark : depth === 1 ? (birch ? BIRCH.lo : bark) : twig);
+      g.rect(px + PX, py + PT, w, w, depth === 0 ? bark : depth === 1 ? (birch ? BIRCH.lo : bark) : twig);
     }
     if (depth >= 3 || len < 3) return;
     const n = depth === 0 ? 3 : 2;
@@ -295,9 +309,9 @@ export function bareTree(kind: number): HTMLCanvasElement {
     for (let x = 4; x <= 28; x++) {
       const dx = (x + 0.5 - 16) / 10;
       const dy = (y + 0.5 - 38) / 2;
-      if (dx * dx + dy * dy <= 1 && !g.filled(x, y)) g.set(x, y, 0x000000, 60);
+      if (dx * dx + dy * dy <= 1 && !g.filled(x + PX, y + PT)) g.set(x + PX, y + PT, 0x000000, 60);
     }
-  return snowCap(g.toCanvas(), { depth: 1, maxY: 34, seed: 31 + kind });
+  return snowCap(g.toCanvas(), { depth: 1, maxY: 34 + PT, seed: 31 + kind });
 }
 
 // ── 겨울 소품 ──
@@ -410,9 +424,13 @@ export function woodpile(): HTMLCanvasElement {
   return snowCap(g.toCanvas(), { depth: 2, maxY: 13, seed: 51 });
 }
 
-/** 문에 거는 리스 (11×12) */
-export function doorWreath(): HTMLCanvasElement {
-  const g = new Grid(11, 12);
+/**
+ * 문에 거는 리스 (11×12). m = 둘레 빈 칸 (11/26 캠핑장 관리소: 고리·리본이 11×12 끝에 닿아 윤곽이 잘렸다 → m칸 안쪽에 그리고 윤곽을 다 두른다.
+ * 붙일 자리는 (x − m, y − m). 기본 0은 예전 그대로)
+ */
+export function doorWreath(m = 0): HTMLCanvasElement {
+  const g0 = new Grid(11 + m * 2, 12 + m * 2);
+  const g = { set: (x: number, y: number, c: number) => g0.set(x + m, y + m, c) };
   for (let y = 0; y < 11; y++)
     for (let x = 0; x < 11; x++) {
       const d = Math.hypot(x + 0.5 - 5.5, y + 0.5 - 5.5);
@@ -427,8 +445,8 @@ export function doorWreath(): HTMLCanvasElement {
   g.set(6, 10, 0xb82a30);
   g.set(3, 11, 0xb82a30);
   g.set(7, 11, 0xb82a30);
-  g.outline(OUT, false, 200);
-  return g.toCanvas();
+  g0.outline(OUT, false, 200);
+  return g0.toCanvas();
 }
 
 // ── 크리스마스트리 (광장) ──
@@ -610,17 +628,18 @@ export function lightString(dx: number, dy: number, sag: number): { canvas: HTML
 }
 
 /** 가로등 크리스마스판: 기둥에 빨강·흰 줄무늬 리본 + 리스 (streetLamp 12×32 위에) */
-export function xmasLamp(src: HTMLCanvasElement): HTMLCanvasElement {
-  const { canvas, ctx, img } = readCanvas(snowCap(src, { depth: 2, maxY: 29 }));
+/** off = 가로등 텍스처 둘레 여백 (11/26 마을 가로등 텍스처는 위에 여백 — 리본·리스 자리를 그만큼 옮긴다) */
+export function xmasLamp(src: HTMLCanvasElement, off: { x: number; y: number } = { x: 0, y: 0 }): HTMLCanvasElement {
+  const { canvas, ctx, img } = readCanvas(snowCap(src, { depth: 2, maxY: 29 + off.y }));
   const m: Img = { w: img.width, h: img.height, d: img.data };
   for (let y = 10; y < 28; y++) {
     if ((y >> 1) % 2) continue;
-    put(m, 5, y, 0xd8323a);
-    put(m, 6, y, 0xb82a30);
+    put(m, 5 + off.x, y + off.y, 0xd8323a);
+    put(m, 6 + off.x, y + off.y, 0xb82a30);
   }
   // 리스 (기둥 가운데)
-  const cx = 6;
-  const cy = 14;
+  const cx = 6 + off.x;
+  const cy = 14 + off.y;
   for (let y = -3; y <= 3; y++)
     for (let x = -3; x <= 3; x++) {
       const d = Math.hypot(x, y);

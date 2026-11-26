@@ -26,15 +26,28 @@ export type BanCreateBody = {
   reportKey?: string;
 };
 
+/**
+ * 11/26 같은 목록을 동시에 부르면(메뉴 배지와 대시보드가 화면을 열자마자 함께 부른다) 요청 하나를 함께 쓴다.
+ * 끝나면 바로 잊는다 — 그 뒤 부름(새로고침·처리 뒤)은 늘 새로 받는다. 신고 목록은 서버에서 가장 무거운 관리자 읽기라 두 번 돌지 않게
+ */
+const inflight = new Map<string, Promise<unknown>>();
+function shared<T>(key: string, load: () => Promise<T>): Promise<T> {
+  const cur = inflight.get(key) as Promise<T> | undefined;
+  if (cur) return cur;
+  const p = load().finally(() => inflight.delete(key));
+  inflight.set(key, p);
+  return p;
+}
+
 export const moderationApi = {
-  bans: () => request<AdminBansResponse>("/api/admin/bans", { cache: "no-store" }),
+  bans: () => shared("bans", () => request<AdminBansResponse>("/api/admin/bans", { cache: "no-store" })),
   createBan: (body: BanCreateBody) => request<AdminBanCreateResponse>("/api/admin/bans", send("POST", body)),
   editBan: (id: string, body: { action: "edit"; days?: number | null; reason?: string; memo?: string; note?: string } | { action: "lift"; note?: string }) =>
     request<{ ban: AdminBan }>(`/api/admin/bans/${encodeURIComponent(id)}`, send("PATCH", body)),
   /** 차단 전 미리 보기: 계정의 최근 IP별 계정 수, 또는 직접 입력한 IP (본문으로만 보낸다) */
   lookup: (q: { accountId?: string; ip?: string }) => request<BanLookup>("/api/admin/bans/lookup", send("POST", q)),
   kick: (accountId: string) => request<{ expelled: number | null }>("/api/admin/kick", send("POST", { accountId })),
-  reports: (status: "open" | "done") => request<AdminReportsResponse>(`/api/admin/reports?status=${status}`, { cache: "no-store" }),
+  reports: (status: "open" | "done") => shared(`reports:${status}`, () => request<AdminReportsResponse>(`/api/admin/reports?status=${status}`, { cache: "no-store" })),
   reportAction: (key: string, action: ReportAction, note?: string) =>
     request<AdminReportActionResponse>("/api/admin/reports", send("POST", { key, action, ...(note ? { note } : {}) })),
 };

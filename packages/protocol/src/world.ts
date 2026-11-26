@@ -379,7 +379,9 @@ export const PIERS: readonly { x: number; y: number; w: number; h: number }[] = 
 // 앵커(x,y) = 앉는 발 위치(물가 뭍 또는 잔교), facing = 물 쪽. 자리 id = spotSeatId("fish", x, y) — 예 "f_456_158".
 // 무엇이 잡히는지(호수/강)는 water로 웹 서버(apps/web/lib/forage)가 정한다 (연못은 호수와 같은 물). 실시간 서버는 점유만 판정한다.
 /** 11/16 바닷가 낚시 자리는 "sea" (바닷물고기) */
-export type FishWater = "lake" | "river" | "sea";
+/** 11/26 캠핑장 개편: "pool" = 달그늘 소(폭포 낚시 바위) · "reservoir" = 윤슬 낚시터(둑·좌대) · "rowboat" = 윤슬 낚시터 나룻배 위 (배 위 전용 물고기) */
+/** 11/26 "valley" = 캠핑장 옛길 계곡 물가 (계곡 물고기 + 강 물고기 — 마을 강과 갈라 계곡 전용 종이 캠핑장에서만 나와요. 캠핑장 계곡 낚시 자리 water) */
+export type FishWater = "lake" | "river" | "sea" | "valley" | "pool" | "reservoir" | "rowboat";
 export type FishingSpot = { id: string; water: FishWater; x: number; y: number; facing: DirId };
 const fishSpot = (water: FishingSpot["water"], x: number, y: number, facing: DirId): FishingSpot => ({ id: `f_${x}_${y}`, water, x, y, facing });
 /** 강 북쪽 둑(아래를 본다)·남쪽 둑(위를 본다) 낚시 자리 — 가운데 줄에서 27px */
@@ -421,10 +423,11 @@ export function fishingSpotById(id: string): FishingSpot | undefined {
  * 서버(웹 /api/forage/fish/cast)는 물 종류로 물고기를 고르고 나머지 규칙(하루 한도·시간당 시작 수·티켓)은 그대로다.
  * 다른 사람에게는 실시간 서버의 rod 표시(배 자리에 앉아 있을 때만)로 낚싯대를 보여 준다
  */
-export const BOAT_FISHING_SPOTS = { "boat:river": "river", "boat:lake": "lake" } as const satisfies Record<string, FishingSpot["water"]>;
+export const BOAT_FISHING_SPOTS = { "boat:river": "river", "boat:lake": "lake", "boat:reservoir": "rowboat" } as const satisfies Record<string, FishingSpot["water"]>;
 export type BoatFishingSpotId = keyof typeof BOAT_FISHING_SPOTS;
-export function boatFishingSpotId(water: "lake" | "river"): BoatFishingSpotId {
-  return water === "lake" ? "boat:lake" : "boat:river";
+export function boatFishingSpotId(water: "lake" | "river" | "rowboat"): BoatFishingSpotId {
+  // 11/26 캠핑장 윤슬 낚시터 나룻배 위 → boat:reservoir (나룻배 전용 물고기)
+  return water === "lake" ? "boat:lake" : water === "rowboat" ? "boat:reservoir" : "boat:river";
 }
 /** 낚시 자리 id(정해진 자리 또는 배 위 가상 자리) → 물 종류. 모르는 id면 null */
 export function fishingWaterOf(id: string): FishingSpot["water"] | null {
@@ -735,6 +738,8 @@ export type Seat = {
   facing: DirId;
   /** 11/16 일어설 때 내려설 자리 (앉은 자리에서 y로, 없으면 아래 STAND_OFFSET_Y) — 바닷가 끝 걸터앉기는 뒤(데크 쪽)로 */
   standDy?: number;
+  /** 11/26 일어설 때 옆으로 비켜서는 거리 (캠핑장 족욕탕 돌 테에 걸터앉은 자리 — 탕 반대쪽 데크로) */
+  standDx?: number;
 };
 
 /** 좌석 id: 의자는 furniture id 그대로, 벤치는 `${id}-${i}` */
@@ -916,7 +921,18 @@ export type SeatSlot = {
   drift?: boolean;
   /** 점유 요청을 받는 거리 (없으면 SEAT_SERVER_RADIUS) */
   radius?: number;
+  /** 11/26 움직이는 자리가 다닐 수 있는 타원 (캠핑장 대형 트램펄린 매트). 서버는 그 밖으로 보고된 위치를 타원 안으로 당긴다 */
+  area?: { x: number; y: number; rx: number; ry: number };
 };
+
+/** 11/26 (x,y)를 타원 안으로 당긴다 (안이면 그대로) */
+export function clampToArea(a: { x: number; y: number; rx: number; ry: number }, x: number, y: number): { x: number; y: number } {
+  const dx = (x - a.x) / a.rx;
+  const dy = (y - a.y) / a.ry;
+  const d = Math.hypot(dx, dy);
+  if (d <= 1) return { x, y };
+  return { x: a.x + (dx / d) * a.rx, y: a.y + (dy / d) * a.ry };
+}
 
 const seatSlots = new Map<string, SeatSlot>(
   SEATS.map((s) => [s.id, { id: s.id, kind: "seat", x: s.x, y: s.y, facing: s.facing, state: STATE.sitChair, furnitureId: s.furnitureId }]),

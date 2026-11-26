@@ -22,6 +22,8 @@ type FishSpec = {
   eye?: Color;
   /** 비쳐 보이는 몸 (유령 잉어) */
   ghost?: boolean;
+  /** 11/26 틀 위에 더 그리기 (외곽선 전에 — 학꽁치 아래턱·볼락 큰 눈) */
+  extra?: (g: Grid) => void;
 };
 
 function fish(f: FishSpec): Grid {
@@ -96,6 +98,7 @@ function fish(f: FishSpec): Grid {
     g.set(mx + 2, ey + 3, 0x3a3028);
     g.set(mx + 1, ey + 3, 0x3a3028);
   }
+  f.extra?.(g);
   g.outline(OUT);
   if (f.ghost) {
     // 테두리와 눈동자만 진하게, 나머지는 반쯤 비친다
@@ -583,6 +586,9 @@ const HERB_ART: Record<string, () => Grid> = {
       s: 0x8a5a2a,
       y: 0xfff0a0,
     }),
+  // 11/26 캠핑장 숲
+  h_enoki: () => art(["..c.c.c..", ".cwcwcwc.", "..s.s.s..", "..s.s.s..", ".s..s..s.", ".s..s..s.", "..s.s.s..", "...sss...", "..bbbbb.."], { c: 0xf4ecd8, w: 0xe0d4b8, s: 0xfaf6ec, b: 0xb89a6a }),
+  h_pinecone: () => art(["...g....", "..ggg...", "..bdb...", ".bdbdb..", ".dbdbd..", ".bdbdb..", "..dbd...", "...d...."], { b: 0x9a6a3a, d: 0x6a4428, g: 0x4a8a3a }),
   h_ghostpipe: () => art(["..ww......", ".wwww..ww.", ".w.ww.wwww", "...w..ww.w", "...w...w..", "...w...w..", "..w....w..", "..w...w...", ".gggggggg."], { w: 0xf4f6f8, g: 0x5a4a3a }),
 };
 
@@ -633,6 +639,29 @@ const FISH_SPECS: Record<string, FishSpec> = {
   f_mullet: { shape: "torpedo", body: 0x7a8a9a, belly: 0xe8eef2, pattern: "stripes", mark: 0x5a6a7a },
   f_redbream: { shape: "deep", body: 0xe87a8a, belly: 0xf8d0d0, pattern: "spots", mark: 0x4ab0e8, fin: 0xd05a6a },
   f_yellowtail: { shape: "torpedo", body: 0x4a6a98, belly: 0xeef2f4, pattern: "band", mark: 0xf0c840, fin: 0xd8b840 },
+  // 11/26 캠핑장 — 옛길 계곡
+  f_kumgang: { shape: "slim", body: 0x9a8a6a, belly: 0xf0e0c0, pattern: "band", mark: 0x4a3a2a, fin: 0xd89a4a },
+  f_galgyeoni: { shape: "slim", body: 0x8a9ab0, belly: 0xf0f2f4, pattern: "band", mark: 0x34425e, fin: 0xd8705a },
+  f_jonggae: { shape: "long", body: 0xd8c08a, pattern: "spots", mark: 0x6a4a2a, whiskers: true },
+  f_dongsari: { shape: "round", body: 0x6a5a42, pattern: "spots", mark: 0x3a2e20, fin: 0x5a4a32 },
+  f_tunggari: { shape: "slim", body: 0xb07a3a, belly: 0xe0b870, fin: 0x8a5a2a, whiskers: true },
+  f_saekomi: { shape: "long", body: 0xc8b890, pattern: "stripes", mark: 0x6a5a3a, fin: 0xd85a4a, whiskers: true },
+  f_swiri: { shape: "slim", body: 0x7a8ab0, belly: 0xf4f4f8, pattern: "band", mark: 0xe0c040, fin: 0x3a3a5a },
+  f_dukjung: { shape: "round", body: 0x7a6a52, pattern: "spots", mark: 0x4a3a2a, fin: 0x9a8a6a, eye: 0x3a5a3a },
+  f_kkuguri: { shape: "long", body: 0xc8a060, pattern: "stripes", mark: 0x5a3a1a, fin: 0x8a6a3a },
+  f_eoreumchi: { shape: "big", body: 0xb8bcc4, belly: 0xf0f0f4, pattern: "spots", mark: 0x2a2a30, fin: 0xd85a3a },
+  // 달그늘 소
+  f_beodeulgae: { shape: "slim", body: 0x8a7a5a, pattern: "spots", mark: 0x4a3a2a, fin: 0x6a5a3a, belly: 0xe8d8b8 },
+  f_gondal: { shape: "torpedo", body: 0x5a6a7a, belly: 0xe8d0b0, pattern: "spots", mark: 0xf0e0c0, fin: 0xd88a5a },
+  f_lamprey: { shape: "long", body: 0x5a5048, belly: 0x9a8a78, pattern: "spots", mark: 0xd8d0b0, eye: 0x6ab0d8 },
+  f_imugi: { shape: "long", body: 0x2e6a6a, belly: 0xc8d8a0, fin: 0xd8b040, pattern: "shine", whiskers: true, eye: 0xd84a3a },
+  // 윤슬 낚시터 · 나룻배
+  f_chambung: { shape: "round", body: 0xa8a48a, belly: 0xe8e4d0, pattern: "band", mark: 0x6a6a5a },
+  f_molgae: { shape: "slim", body: 0xb8c0c4, belly: 0xf2f4f6, pattern: "band", mark: 0x8a96a0, fin: 0xa0aab0 },
+  f_hyangeo: { shape: "big", body: 0x7a7a6a, belly: 0xd8d4b8, pattern: "scales", mark: 0xa8a890 },
+  f_salchi: { shape: "deep", body: 0xd0d8e0, belly: 0xffffff, fin: 0xb0bcc8, pattern: "shine" },
+  f_kkeuri: { shape: "torpedo", body: 0x6a8ab0, belly: 0xeef2f6, pattern: "band", mark: 0x3a4a7a, fin: 0xd8604a, jaw: true },
+  f_silvercarp: { shape: "big", body: 0xc8ccd4, belly: 0xf4f6f8, fin: 0xa8aeb8, pattern: "scales", mark: 0xb0b6c0 },
 };
 
 // 11/16 바다에서 낚는 물고기 아닌 것 (물고기 칸)
@@ -660,7 +689,532 @@ const SEA_ART: Record<string, () => Grid> = {
     }),
 };
 
+// ── 11/26 도감 확장 84종 (바닷가 48 · 캠핑장 36) ── 같은 16×16·외곽선 규칙. 틀(물고기·나비·딱정벌레·광석 …)이 맞으면 틀로, 아니면 점 그림으로
+/** 반투명 날개 (모시나비): 바깥 테두리·몸통은 그대로, 날개 색만 비치게 */
+function sheer(g: Grid, colors: readonly Color[], a = 170): Grid {
+  const keys = new Set(colors.map((c) => Grid.rgba(c)));
+  for (let i = 0; i < g.px.length; i++) if (keys.has(g.px[i])) g.px[i] = Grid.rgba(g.px[i] >>> 8, a);
+  return g;
+}
+/** 은은한 빛무리를 뒤에 깐 점 그림 (전설·빛나는 것) */
+function glowArt(rows: string[], pal: Record<string, Color>, glow: Color, r = 7): Grid {
+  const g = g16();
+  g.ellipse(8, 8, r, r, glow, 60);
+  g.ellipse(8, 8, r - 2.5, r - 2.5, glow, 90);
+  g.draw(art(rows, pal), 0, 0);
+  return g;
+}
+
+const EXP_ICONS: Record<string, () => Grid> = {
+  // ─ 바다 물고기 (10) ─
+  f_mangdung: () =>
+    art(["........w.w...", ".......kbkb...", "d....bbbbbbb..", "dd.bbsbbbsbbb.", "ddbbbbbbbbbbbm", "dd.bblllllll..", "d....f...f...."], {
+      b: 0x7a6a50,
+      s: 0x5ac0e8,
+      l: 0xc8b890,
+      d: 0x5a4a38,
+      w: 0xffffff,
+      k: 0x101014,
+      m: 0x3a2a20,
+      f: 0x8a7a5a,
+    }),
+  f_halfbeak: () =>
+    fish({
+      shape: "long",
+      body: 0x7aa8c8,
+      belly: 0xf0f6fa,
+      pattern: "band",
+      mark: 0x2a5a8a,
+      extra: (g) => {
+        // 길게 나온 아래턱 (끝이 빨갛다)
+        g.hline(14, 15, 9, 0x2a4a6a);
+        g.set(15, 9, 0xe04a3a);
+      },
+    }),
+  f_tshirt: () =>
+    art(["...######...", "..#wwwwww#..", "####wwww####", "#ww#wwww#ww#", "#www#ww#www#", "...#wbbw#...", "...#wwww#...", "...#wbbw#...", "...#wwww#...", "...######..."], {
+      "#": 0x2a6ab0,
+      w: 0x6aa8e0,
+      b: 0xf4f4ee,
+    }),
+  f_greenling: () => fish({ shape: "torpedo", body: 0x9a6a4a, belly: 0xe8d0b0, pattern: "spots", mark: 0x5a3a24, fin: 0xc8885a }),
+  f_bollak: () =>
+    fish({
+      shape: "deep",
+      body: 0x5a4a40,
+      belly: 0xa8907a,
+      pattern: "stripes",
+      mark: 0x2e2620,
+      fin: 0x3a302a,
+      extra: (g) => {
+        // 해 지면 커지는 큰 눈
+        g.rect(11, 5, 2, 2, 0xffffff);
+        g.set(12, 6, 0x101014);
+      },
+    }),
+  f_puffer: () =>
+    art(["....yyyyy...", "..yykyykyyy.", "d.yyyyyyyywk", "ddyykyyykyyy", "ddywwwwwwwyy", "d..wwwwwwww.", "....wwwwww.."], {
+      y: 0xb89a4a,
+      k: 0x3a2a1a,
+      w: 0xf4f0e0,
+      d: 0x8a7038,
+    }),
+  f_blackbream: () => fish({ shape: "deep", body: 0x56606a, belly: 0xc8ccd2, pattern: "stripes", mark: 0x3a424a, fin: 0x22262c }),
+  f_seabass: () => fish({ shape: "torpedo", body: 0x8a9a9a, belly: 0xf2f4f4, pattern: "spots", mark: 0x24302e, fin: 0x5a6a6a }),
+  f_knifejaw: () => fish({ shape: "deep", body: 0xdcdccc, belly: 0xf2f2e8, pattern: "stripes", mark: 0x1e1e22, fin: 0x3a3a3e }),
+  f_moonhair: () =>
+    glowArt(
+      ["mm...........", "m...........s", "m..........sk", "..........sws", ".........sws.", "........sws..", ".......sws...", "......sws....", ".....sws.....", "....sws......", "...sws.......", "..sws........", ".ss.........."],
+      { m: 0xfff0a0, s: 0x8aa8e0, w: 0xf2f6ff, k: 0x101014 },
+      0x8ab0ff,
+    ),
+  // ─ 바닷가 곤충 (12) ─
+  b_seaslater: () =>
+    art(["a..........a", ".a........a.", "..a.bbbb.a..", "...bddddb...", "..bbbbbbbb..", "l.bddddddb.l", ".lbbbbbbbbl.", "l.bddddddb.l", ".lbbbbbbbbl.", "...bddddb...", "....bbbb....", "...t....t...", "..t......t.."], {
+      a: 0x5a5048,
+      b: 0x8a7a68,
+      d: 0x5e5246,
+      l: 0x4a4038,
+      t: 0x6a5e50,
+    }),
+  b_darkling: () => beetle(0x5a4e42, { stripe: 0x8e7e64, dots: 0xd8c49a }),
+  b_pyrgo: () =>
+    art(["......s.....", ".....sss..k.", "....ssssss..", "...gggggggg.", "..gggggggggk", ".gggggggggg.", "ggllllllll..", ".l...l..l...", "l....l...l.."], {
+      g: 0x7ab848,
+      s: 0x9ad068,
+      l: 0x4a7a2a,
+      k: 0x101014,
+    }),
+  b_glider: () => dragonfly(0xe0a030),
+  b_tigerbeetle: () => beetle(0x2a8a5a, { dots: 0xf4f4ee, tri: 0xd04a2a, jaws: true, shine: true }),
+  b_earwig: () =>
+    art(["..aa.aa..", "...hhh...", "..lhhhl..", "...ttt...", "..lwwwl..", "...www...", "..lbbbl..", "...bbb...", "...bbb...", "...bbb...", "..f...f..", "..f...f..", "...f.f..."], {
+      a: 0x3a2418,
+      h: 0x4a2a1a,
+      t: 0x6a3a22,
+      w: 0xc8884a,
+      b: 0x7a4426,
+      l: 0x3a2418,
+      f: 0x2a1810,
+    }),
+  b_antlion: () => {
+    // 모래 깔때기 구덩이 (위에서 비스듬히) — 바닥에 개미귀신 큰 턱
+    const g = g16();
+    g.ellipse(8, 10, 7.4, 4.6, 0xe8d4a0);
+    g.ellipse(8, 10.4, 5.2, 3.2, 0xd0b47e);
+    g.ellipse(8, 10.8, 3.4, 2, 0x8a6a44);
+    g.ellipse(8, 11.2, 2, 1.1, 0x3e2a1a);
+    // 구덩이 바닥에서 벌린 큰 턱
+    for (const [x, y] of [[6, 10], [6, 9], [7, 8], [10, 10], [10, 9], [9, 8]]) g.set(x, y, 0xe0c890);
+    g.set(8, 11, 0x9a7a4a);
+    for (const [x, y] of [[12, 5], [13, 5], [12, 4]]) g.set(x, y, 0x2a2420);
+    g.outline(OUT, false, 200);
+    return g;
+  },
+  b_seaskater: () => strider(0x2a3a5a),
+  b_antlionfly: () => dragonfly(0x4a3a2e),
+  b_chestnut: () => butterfly(0xc8e0f0, 0xa0502a, 0x2a2420, false, 0x2a2420),
+  b_seafirefly: () => {
+    // 밤 파도에 번지는 푸른 빛 + 씨앗 같은 작은 갑각류
+    const g = g16();
+    g.ellipse(8, 10, 7.4, 4.6, 0x1e3050);
+    g.ellipse(8, 10, 5.6, 3.2, 0x284a78);
+    for (const [x, y, r] of [[4, 9, 1.6], [11, 11, 1.8], [8, 7, 1.2], [12, 8, 1.1]] as const) g.ellipse(x, y, r + 1, r + 0.6, 0x4ad8ff, 120);
+    for (const [x, y] of [[4, 9], [11, 11], [8, 7], [12, 8], [6, 12]]) g.set(x, y, 0xb8f6ff);
+    g.ellipse(7.5, 10.5, 1.8, 1.1, 0xd8c8a0);
+    g.set(9, 10, 0x101014);
+    g.outline(OUT, false, 200);
+    for (const [x, y] of [[2, 3], [13, 2], [5, 2]]) g.set(x, y, 0x8ae8ff, 200);
+    return g;
+  },
+  b_dragonmsg: () => butterfly(0x3ad0c8, 0x2a6ad8, 0xffd060, true, 0xffd060),
+
+  // ─ 바닷가 약초·버섯 (12) ─
+  h_tot: () =>
+    art(["...o..o..", "..ooo.oo.", ".oo.oooo.", "..oooo.o.", ".o.oo.oo.", "..oo.oo..", "...ooo...", "....o....", "..rrrrr..", ".rrrrrrr."], {
+      o: 0x6a6a2a,
+      r: 0x6a6460,
+    }),
+  h_hamcho: () =>
+    art(["..r...r..r.", "..g..rg..g.", ".gg..gg.gg.", "..g.gg..g..", "..gg.g.gg..", "...g.g.g...", "...ggggg...", "....ggg....", "..mmmmmmm..", ".mmmmmmmmm."], {
+      g: 0x5aa848,
+      r: 0xd8504a,
+      m: 0x8a7a68,
+    }),
+  h_beachglory: () =>
+    art(["...pppp....", "..pppppp...", ".ppwwwwpp..", ".ppwyywpp..", ".ppwwwwpp..", "..pppppp...", "...pppp.ll.", "....g..llll", ".llgggg.ll.", "llll..gg...", ".ll....ggg."], {
+      p: 0xf0a0c8,
+      w: 0xfce8f2,
+      y: 0xf8e070,
+      g: 0x4a8a3a,
+      l: 0x5aa848,
+    }),
+  h_parae: () =>
+    art(["..g....g...", ".ggg..ggl..", ".glg.ggg...", "..gggglg.g.", ".g.gglgggg.", "gglggggglg.", ".gggglggg..", "..ggggggg..", ".rrrrrrrrr.", "rrrrrrrrrrr"], {
+      g: 0x6ad050,
+      l: 0xa8f088,
+      r: 0x6a6460,
+    }),
+  h_miyeok: () =>
+    art(["....kk....", "...kkkk...", "..kkllkk..", "..kklkkk..", ".kkllkkkk.", ".kkklkkkk.", "kkkkllkkk.", ".kkklkkkk.", "..kkkkkk..", "...kkkk...", "....ss....", "..rrrrrr.."], {
+      k: 0x4a5a28,
+      l: 0x7a8a3a,
+      s: 0x3a4220,
+      r: 0x6a6460,
+    }),
+  h_bangpung: () => rosette(0x3e7a52, { round: true, spike: 0xe8e0c8 }),
+  h_haedang: () =>
+    art(["...p.p.....", "..ppppp....", ".ppyyypp...", "..pyyyp....", ".ppppppp...", "..p.g.p....", "....g..ll..", "..llg.llll.", ".lll.g.ll..", "..l..g.t...", ".....g......"], {
+      p: 0xe8508a,
+      y: 0xf8d040,
+      g: 0x4a7a3a,
+      l: 0x5a9a48,
+      t: 0xd8c8a0,
+    }),
+  h_agar: () =>
+    art(["..r..r..r..", ".rdr.rr.rr.", "..rrdr.rd..", ".r.rrrrr.r.", "..rr.drr.r.", "...rrrrrr..", "....rdr....", ".....r.....", "..mmmmmmm..", ".mmmmmmmmm."], {
+      r: 0xb83a4a,
+      d: 0x7a2030,
+      m: 0x8a7a68,
+    }),
+  h_laver: () =>
+    art(["..kkkkkkk...", ".kpkkpkkkk..", ".kkkkkkpkk..", "kkpkkkkkkkk.", ".kkkpkkpkk..", "..kkkkkkk...", ".rrrrrrrrrr.", "rrrrlrrrrlrr", ".rrrrrrrrrr."], {
+      k: 0x2a2434,
+      p: 0x5a3a6a,
+      r: 0x6a6a72,
+      l: 0x8a8a92,
+    }),
+  h_sandball: () =>
+    art(["...bbbbb...", "..bbbbbbb..", ".bbhbbbbbb.", ".bhbbbkkbb.", ".bbbbkkkbb.", "..bbbbkbb..", "...bbbbb...", ".sssssssss.", "sssssssssss"], {
+      b: 0xb8946a,
+      h: 0xe0c49a,
+      k: 0x2a2224,
+      s: 0xe8d4a0,
+    }),
+  h_pungran: () =>
+    art(["..w...w....", ".www.www...", "..wyw.wy...", "...w...w...", "..ll.ll....", ".llllll....", "lll..lll...", "...gg......", "..g.g.g....", ".rrrrrrrr..", "rrrrrrrrrr."], {
+      w: 0xf8f6f0,
+      y: 0xe8d070,
+      l: 0x3a7a3a,
+      g: 0xb8c8a8,
+      r: 0x6a6a72,
+    }),
+  h_dragonkelp: () =>
+    glowArt(
+      ["....yy....", "...ytty...", "..yttty...", "..ttytt...", ".tttytt...", ".ttyttt.y.", "..ttytt...", "..tttyt...", "...ttt....", "....y.....", "...yyy...."],
+      { t: 0x2ab8a0, y: 0xffd860 },
+      0x6af0d0,
+    ),
+
+  // ─ 바닷가 광석 (10) ─
+  o_mongdol: () =>
+    art(["...........", "..aaaa.....", ".aahaaa....", ".aaaaaa.bb.", "..aaaa.bhbb", ".cccc..bbbb", "chcccc..bb.", "cccccc.....", ".cccc......"], {
+      a: 0x6a7280,
+      b: 0x8a8478,
+      c: 0x4e525a,
+      h: 0xc8ccd4,
+    }),
+  o_basalt: () => rock(0x4a4a52, 0x1e1e24),
+  o_seasalt: () =>
+    art(["....ww.....", "...wwwh....", "...whhh.ww.", ".ww.hh.wwwh", "wwwh..wwhhh", "whhh.wwhhh.", ".hhwwwh.hh.", "..wwwhhh...", "..whhhh....", "...hhh....."], {
+      w: 0xffffff,
+      h: 0xd8e0e8,
+    }),
+  o_seaglass: () =>
+    art(["..gggg.....", ".gglggg....", ".gllggg....", ".ggggggg...", "..ggggg.bb.", "...ggg.bblb", "......bbllb", "......bbbbb", ".......bbb."], {
+      g: 0x6ad0a8,
+      l: 0xd0fff0,
+      b: 0x6aa8e8,
+    }),
+  o_columnar: () =>
+    art([".....tt.....", "....tttt....", ".tt.lmmd....", "ttttlmmd.tt.", "lmmdlmmdtttt", "lmmdlmmdlmmd", "lmmdlmmdlmmd", "lmmdlmmdlmmd", "lmmdlmmdlmmd", "lmmdlmmdlmmd", "rrrrrrrrrrrr"], {
+      t: 0x9aa0a8,
+      l: 0x6e747c,
+      m: 0x555960,
+      d: 0x3a3e46,
+      r: 0xe8d4a0,
+    }),
+  o_pearl: () =>
+    art(["....wwww....", "...whhwww...", "..whhwwwww..", "..wwwwwwwp..", "..wwwwwwpp..", "...wwwppp...", "....pppp....", "bbbbbbbbbbbb", "bllblllblllb", ".bllbllbllb.", "..bbbbbbbb.."], {
+      w: 0xf8f4ec,
+      h: 0xffffff,
+      p: 0xe0d0e0,
+      b: 0xb8a088,
+      l: 0xe8d8c8,
+    }),
+  o_agate: () =>
+    art(["...oooo...", "..owwooo..", ".owoooowo.", ".oowwwwoo.", "owoorroowo", "owwrwwrowo", "owoorroowo", ".oowwwwoo.", "..oooooo..", "...oooo..."], {
+      o: 0xd8783a,
+      w: 0xf8e8d0,
+      r: 0xa8402a,
+    }),
+  o_blackpearl: () =>
+    art(["....kkkk....", "...kgkkkk...", "..kgpkkkkk..", "..kpkkkkkk..", "..kkkkkkgk..", "...kkkkgk...", "....kkkk....", "............", ".hhhhhhhhhh.", "hhhhhhhhhhhh"], {
+      k: 0x2a2a34,
+      g: 0x5a8a7a,
+      p: 0x8a6aa8,
+      h: 0xb8a088,
+    }),
+  o_coral: () =>
+    art(["r...r....r.", "r..rr..rr..", ".rr.r.rr..r", "..r.rrr..rr", "...rrrr.rr.", "....rrrrr..", ".....rrr...", ".....rr....", "..sssssss..", ".sssssssss."], {
+      r: 0xe0443a,
+      s: 0xe8d4a0,
+    }),
+  o_mermaid: () =>
+    glowArt(["...b....", "...bb...", "..bwb...", "..bwbb..", ".bwbbbb.", ".bwbbbb.", "bbbbbbdb", "bbbbbbdb", ".bbbbdb.", "..bddb.."], { b: 0x4ab0f0, w: 0xe8f8ff, d: 0x2a6ac8 }, 0x6ad0ff),
+
+  // ─ 바닷가 발굴품 (4) ─
+  d_sandflag: () =>
+    art(["...rrrr...", "...rrrrr..", "...rrr....", "...p......", "...p......", "...p......", "..sssss...", ".sssssss..", "sssssssss.", "sssssssss."], {
+      r: 0xe0403a,
+      p: 0x8a6a42,
+      s: 0xe8d4a0,
+    }),
+  d_beachticket: () =>
+    art(["############", "#yyyyyyyy.y#", "#ybbbbyyy.y#", "#yyyyyyyy.y#", "#ynnnnnny.y#", "#yyyyyyyy.y#", "############"], {
+      "#": 0x9a7a4a,
+      y: 0xf0d8a0,
+      b: 0x3a6ab0,
+      n: 0xa08a6a,
+      ".": 0xc8a870,
+    }),
+  d_bottlemail: () =>
+    art(["........kk.", ".......gkg.", "......ggg..", ".....gwwg..", "....gwwwg..", "...gwwwg...", "..gwwwg....", ".ggwwg.....", ".gggg......", "..gg......."], {
+      g: 0x5ab08a,
+      w: 0xf0e4c0,
+      k: 0x8a5a3a,
+    }),
+  d_ambergris: () =>
+    art(["....aaaa...", "..aaaaaaaa.", ".aalaaaaaa.", "aaaaadaaala", "aldaaaaaaaa", ".aaaaadaaa.", "..aaaaaaa..", "...aaaa...."], {
+      a: 0x9a948a,
+      l: 0xc8c4b8,
+      d: 0x6a6458,
+    }),
+
+  // ─ 캠핑장 곤충 (9) ─
+  b_demoiselle: () => {
+    // 까만 날개 물잠자리: 잠자리 틀의 날개만 검게
+    const g = dragonfly(0x2a9a6a);
+    const wing = Grid.rgba(0xd8eef8, 210);
+    for (let i = 0; i < g.px.length; i++) if (g.px[i] === wing) g.px[i] = Grid.rgba(0x4a4458, 240);
+    return g;
+  },
+  b_stonefly: () =>
+    art([".a.....a..", "..a...a...", "...hhh....", "...hhh....", "..wwwww...", "..wwwww...", "..wwwww...", "..wwwww...", "...www....", "...t.t....", "..t...t...", ".sssssss..", "sssssssss."], {
+      a: 0x3a3a40,
+      h: 0x2a2a30,
+      w: 0x4a4a54,
+      t: 0x3a3a40,
+      s: 0xf2f6fa,
+    }),
+  b_mosquito: () =>
+    art(["....w..w....", "...ww..ww...", "..www..www..", "....kkk.....", "....ksk.....", "....kkk.....", "....kwk.....", "....kkk.....", "...l.k.l....", "..l..k..l...", ".l...p...l..", ".....p......"], {
+      w: 0xd8e8f0,
+      k: 0x3a3a40,
+      s: 0xf4f4f4,
+      l: 0x5a5a62,
+      p: 0xd84a3a,
+    }),
+  b_groundbeetle: () => beetle(0x3a2a3a, { stripe: 0xd8402a, shine: true }),
+  b_divingbeetle: () =>
+    art([".....kk.....", "....kkkk....", "...ykkkky...", "..ykkkkkky..", "l.ykkkkkky.l", ".lykkhkkky.l", "l.ykkkkkky.l", "..ykkkkkky..", "...ykkkky...", "....yyyy..w.", ".........wbw", "..........w."], {
+      k: 0x2e3a2a,
+      y: 0xc8b048,
+      h: 0x6a7a5a,
+      l: 0x2a2420,
+      w: 0xd8f0ff,
+      b: 0x8ac8e8,
+    }),
+  b_glacialis: () => sheer(butterfly(0xeef0f0, 0xd4d8d8, 0x2a2420, false, 0x6a6a70), [0xeef0f0, 0xd4d8d8]),
+  b_dobson: () =>
+    art(["j........j.", ".j.hhhhh.j..", "..jhhhhhj...", "...hhhhh....", "..wwwwwww...", ".wwmwwwmww..", "wwwwbbbwwww.", "wwmwbbbwmww.", ".wwwbbbwww..", "..wwbbbww...", "....bbb.....", ".....b......"], {
+      j: 0x3a2418,
+      h: 0x6a4a2e,
+      w: 0xb8a888,
+      m: 0x6a5a42,
+      b: 0x5a3e26,
+    }),
+  b_redspot: () => butterfly(0xf2f0ea, 0xe4e0d6, 0x2a2420, false, 0xd83a2a),
+  b_gumiho: () => {
+    const g = g16();
+    g.ellipse(8, 8, 7.5, 7.5, 0xffb060, 55);
+    g.draw(butterfly(0xf8f0e0, 0xe8883a, 0x3a2a20, true, 0xe8883a), 0, 0);
+    for (const x of [6, 9]) {
+      g.set(x, 14, 0xf8f0e0);
+      g.set(x, 15, 0xe8883a);
+    }
+    return g;
+  },
+  // ─ 캠핑장 약초·버섯 (9) ─
+  h_rockmaple: () =>
+    art(["..w.w.w....", ".wwwwwww...", "..wpwpw....", "...g.g.....", "....g..rr..", "..ll.g.rlr.", ".llll.gllr.", "..ll..gg...", "..mmmmmmmm.", ".mmhmmmmmmm", ".mmmmmmhmm."], {
+      w: 0xfaf6f2,
+      p: 0xf0b8c8,
+      g: 0x6a5a3a,
+      l: 0x5aa848,
+      r: 0xc8503a,
+      m: 0x7a7c84,
+      h: 0xa0a2aa,
+    }),
+  h_moss: () =>
+    art(["...g.g.g....", "..gglgglg...", ".gglgglgggg.", ".gggggggggl.", "glgggglgggg.", "mmmmmmmmmmmm", "mhmmmmmhmmmm", ".mmmmmmmmmm."], {
+      g: 0x4a9a3a,
+      l: 0x8ad060,
+      m: 0x7a7c84,
+      h: 0xa0a2aa,
+    }),
+  h_darae: () => berries(0x8ac850, 0x4a7a2a),
+  h_chopi: () =>
+    art(["......ll...", ".....llll..", "...b.ll....", "..rkr.b....", "...r.rkr...", ".rkr..r.b..", "..r.b...rkr", ".b.rkr...r.", "....r.rkr..", "......r....", "....bbb...."], {
+      r: 0xb8402a,
+      k: 0x1e1a1a,
+      b: 0x6a4a2a,
+      l: 0x4a8a3a,
+    }),
+  h_kudzu: () => root(0x6e4a2e),
+  h_lionmane: () =>
+    art(["..wwwwww...", ".wwhwwhww..", "wwhwwhwwhw.", "whwwhwwhww.", "wwhwwhwwhw.", "whwwhwwhww.", ".whwwhwwh..", "..w.w.w.w..", ".bbbbbbbb..", "bbbbbbbbbb."], {
+      w: 0xf6f2e8,
+      h: 0xd8d0c0,
+      b: 0x6a4a2e,
+    }),
+  h_wasabi: () =>
+    art(["..ll...ll..", ".llll.llll.", ".lllllllll.", "..lllllll..", "....sss....", "....sss....", "...gggggg..", "...gghggg..", "...ggggggg.", "....gggggg.", "....wwwwww.", "...wwwwww.."], {
+      l: 0x4aa040,
+      s: 0x6a9a4a,
+      g: 0x9ac870,
+      h: 0xd8f0b8,
+      w: 0x8ac8e8,
+    }),
+  h_neungi: () =>
+    art([".kkkkkkkkk.", "kbkbkbkbkbk", "kkbkbkbkbkk", ".kkkbbbkkk.", "...kbbbk...", "....bbb....", "....bbb....", "...ttttt...", "..ttttttt.."], {
+      k: 0x3a2618,
+      b: 0x6a4a32,
+      t: 0x8a6a4a,
+    }),
+  h_hasuo: () =>
+    glowArt(
+      ["...ll.l..", "..l.ll...", "...rrr...", "..rhrrr..", "..rrrrr..", ".r.rrr.r.", "r..rrr..r", "...r.r...", "..r...r..", "..r...r.."],
+      { l: 0x4a9a3a, r: 0xa86a3a, h: 0xe8b878 },
+      0xffd860,
+    ),
+
+  // ─ 캠핑장 돌 (8) ─
+  o_chadol: () => rock(0xe8e4dc, 0xffffff, { smooth: true }),
+  o_gneiss: () =>
+    art(["...gggggg...", "..ggggggggg.", ".gdddggddgg.", "gggggddgggg.", "gddggggggdd.", "ggggddddggg.", "ggdddggggdd.", ".gggggdddg..", "..gggggggg.."], {
+      g: 0x9a9488,
+      d: 0x4a463e,
+    }),
+  o_petrified: () =>
+    art(["...bbbbbb...", "..bccccccb..", ".bcddddddcb.", ".bcdccccdcb.", ".bcdcrrcdcb.", ".bcdccccdcb.", ".bcddddddcb.", "..bccccccb..", "...bbbbbb..."], {
+      b: 0x7a6248,
+      c: 0xc8a878,
+      d: 0x9a7a58,
+      r: 0xa85a3a,
+    }),
+  o_pyrite: () =>
+    art(["....yyyy...", "...yyyyyd..", "...hhhyyd..", "...yyyyyd..", ".yyyydddyyy", "yyyyydyyyyd", "hhhyyd.hyyd", "yyyyyd.yyyd", "yyyyyd.dddd", "dddddd....."], {
+      y: 0xc8a840,
+      h: 0xf8e890,
+      d: 0x8a7024,
+    }),
+  o_fluorite: () =>
+    glowArt(
+      ["...pppp...", "..ppllpp..", ".pplppppp.", ".pppppgg..", "..pppgggg.", "..ppggggg.", ".gggglggg.", ".gggggggg.", "..gggggg..", "...gggg..."],
+      { p: 0x9a6ae0, l: 0xe8d8ff, g: 0x5ad0a0 },
+      0x9a7aff,
+      6,
+    ),
+  o_topaz: () => gem(0xf0c040),
+  o_orbicular: () =>
+    art(["...gggggg...", "..gggggggg..", ".gwkwggwkwg.", ".gkwkggkwkg.", "ggwkwggwkwgg", "gggggwkwgggg", "ggggwkwkwggg", ".gggwkwgggg.", "..gggggggg.."], {
+      g: 0x8a8c90,
+      w: 0xf0ece0,
+      k: 0x2e2c2a,
+    }),
+  o_yeouiju: () => {
+    const g = g16();
+    g.ellipse(8, 9, 7, 6.5, 0x6ad0ff, 70);
+    for (const [x, y] of [[8, 1], [7, 2], [9, 2], [6, 3], [10, 3]]) g.set(x, y, 0xffd060);
+    g.ellipse(8, 9, 4.2, 4.2, 0x5aa8f0);
+    g.recolor((x, y) => y >= 11 && g.filled(x, y), 0x3a7ad0);
+    g.ellipse(6.5, 7.5, 1.6, 1.2, 0xd8f4ff);
+    g.set(6, 7, 0xffffff);
+    g.set(10, 10, 0xffe890);
+    g.outline(OUT, false, 200);
+    return g;
+  },
+
+  // ─ 캠핑장 발굴품 (10) ─
+  d_tentpeg: () =>
+    art(["..hhh.....", "..hsh.....", "...s......", "...s......", "...s......", "....s.....", "....s.....", ".....s....", ".....ss...", "......ss..", ".......s.."], {
+      h: 0xd84a3a,
+      s: 0xb8bec8,
+    }),
+  d_sock: () =>
+    art(["....rrrr..", "....wwww..", "....gggg..", "....gggg..", "....gggg..", "....gggg..", "...ggggg..", ".gggggggg.", "gghgggggg.", "gggggggg..", ".rrrrrr..."], {
+      r: 0xd84a3a,
+      w: 0xf2f2ee,
+      g: 0x6a7a5a,
+      h: 0x8a9a7a,
+    }),
+  d_coppel: () =>
+    art(["....hh....", "...h..h...", ".rrrrrrrr.", "rrorrrrorr", "rrrrorrrrr", "rorrrrrror", "rrrrrrorrr", ".rrrrrrrr."], {
+      h: 0x6a6a72,
+      r: 0x9aa0a8,
+      o: 0xb0703a,
+    }),
+  d_film: () =>
+    art(["kkkkkkkkkkkk", "k.k.k.k.k.k.", "kaaakbbbkcck", "kaaakbbbkcck", "kaaakbbbkcck", "k.k.k.k.k.k.", "kkkkkkkkkkkk"], {
+      k: 0x3a2a22,
+      ".": 0xc8a870,
+      a: 0xd8a060,
+      b: 0x8ab8c8,
+      c: 0xc89a6a,
+    }),
+  d_float: () =>
+    art(["...a......", "...a......", "..rrr.....", "..rrr.....", "..yyy.....", "..www.....", "..www.....", "...w......", "...w......", "......ww..", ".....ww...", ".....w....", "....w....."], {
+      a: 0x3a3a40,
+      r: 0xe0403a,
+      y: 0xf0c040,
+      w: 0xf4f0e0,
+    }),
+  d_knife: () =>
+    art(["...........", "..o........", ".oso.......", "..oso......", "...ososs...", "....rrrrrr.", "...rrwrrrrr", "....rrrrrr.", "..........."], {
+      o: 0xb0703a,
+      s: 0xb8bec8,
+      r: 0xc8402a,
+      w: 0xf4f4ee,
+    }),
+  d_rooftile: () =>
+    art(["..kkkkkkkk..", ".kkkkkkkkkk.", "kkggkkggkkkk", "kgkkgggkgkk.", "kkgkkkkgkk..", ".kkggggkk...", "..kkkkkk....", "...kkk......"], {
+      k: 0x5a5e66,
+      g: 0x8a9098,
+    }),
+  d_trilobite: () =>
+    art(["...ssss...", "..sbbbbs..", ".sbbbbbbs.", ".sbsbbsbs.", "..sbbbbs..", ".sbsbbsbs.", "..sbbbbs..", ".sbsbbsbs.", "..sbbbbs..", "...sbbs...", "....ss...."], {
+      s: 0x6a6458,
+      b: 0xb8ae98,
+    }),
+  d_yeopjeon: () =>
+    art(["r.........", ".r........", "..cc......", ".cyyc.....", ".cykc.cc..", ".cyyc.yyc.", "..cc.cykc.", "...rrcyyc.", ".....rcc..", "....cc.r..", "...cyyc...", "...cykc...", "...cyyc...", "....cc...."], {
+      r: 0xb84a3a,
+      c: 0xa87828,
+      y: 0xd8a848,
+      k: 0x3a2a1a,
+    }),
+  d_goldaxe: () =>
+    glowArt(
+      [".yyyy......", "yyhyyyww...", "yhyyyyww...", "yyyyyyww...", "yyyyyyww...", ".yyyy.ww...", ".....ww....", ".....ww....", ".....ww....", ".....ww....", ".....ww....", ".....rr...."],
+      { y: 0xffc830, h: 0xfff0a0, w: 0x9a6a3a, r: 0x6a4424 },
+      0xffe080,
+      6.5,
+    ),
+};
+
 function draw(id: string): Grid | null {
+  if (EXP_ICONS[id]) return EXP_ICONS[id]();
   if (FISH_SPECS[id]) return fish(FISH_SPECS[id]);
   if (SEA_ART[id]) return SEA_ART[id]();
   if (JUNK_ART[id]) return JUNK_ART[id]();
@@ -728,6 +1282,19 @@ function draw(id: string): Grid | null {
       return butterfly(0xd8d4c8, 0xb8b4a8, 0x6a6458, false, 0x8a8478);
     case "b_longhorn":
       return beetle(0x3a3028, { dots: 0xc8a04a, antennae: 0x3a3028 });
+    // 11/26 캠핑장 숲 곤충
+    case "b_springtail":
+      return ant(0x5a6a8a);
+    case "b_cranefly":
+      return mayfly(0xb08a5a);
+    case "b_camelcricket":
+      return hopper(0x8a6a4a, false, true);
+    case "b_caddis":
+      return butterfly(0x8a7a5a, 0x6a5a42, 0x3a2a1a, false, 0xc8b48a);
+    case "b_rainbowbeetle":
+      return beetle(0x2a5ad0, { shine: true, stripe: 0x4ad08a, antennae: 0x2a2420 });
+    case "b_snowscorp":
+      return hopper(0x4a4a5a, true, true);
     // 약초·버섯
     case "h_mugwort":
       return plant(0x8aa88a);
@@ -775,6 +1342,15 @@ function draw(id: string): Grid | null {
       return berries(0x8a5a2a, 0x6a8a3a);
     case "h_adonis":
       return cupFlower(0xf8d020, 0xf4f8ff, 0x9a7a20);
+    // 11/26 캠핑장 숲 버섯·나물
+    case "h_woodear":
+      return mushroom(0x6a3a2a, 0x5a3020, { fan: true });
+    case "h_wildgarlic":
+      return rosette(0x6ab85a, { spike: 0xf4f4ee });
+    case "h_poria":
+      return root(0xa88458, 0x6a4a2a);
+    case "h_sanghwang":
+      return mushroom(0xb07a2a, 0x6a4a2a, { fan: true, spots: 0xe8c040 });
     // 광석
     case "o_pebble":
       return rock(0x9aa0a6, undefined, { smooth: true });
@@ -814,6 +1390,15 @@ function draw(id: string): Grid | null {
       return gem(0xe02a4a);
     case "o_sapphire":
       return gem(0x2a5ad8);
+    // 11/26 캠핑장 바위
+    case "o_skipstone":
+      return rock(0x6a7480, 0xa8b0b8, { smooth: true });
+    case "o_suseok":
+      return rock(0x3e4450, 0x6a7480);
+    case "o_placer":
+      return rock(0xd8c8a0, undefined, { flakes: 0xffd040 });
+    case "o_moonstone":
+      return cabochon(0xd8e4f4, [0x9ab8f0, 0xffffff]);
     case "o_opal":
       return cabochon(0xe8f0f8, [0xf06a8a, 0x6ad0a0, 0x6a9af0, 0xf0c040, 0xb07ae0]);
     default:

@@ -19,7 +19,6 @@ import {
   rerollCost,
   type EnhanceResult,
   type EnhTarget,
-  type InheritFrom,
 } from "@/lib/rpg/enhance";
 import {
   decodeSg,
@@ -30,7 +29,6 @@ import {
   optText,
   SG_LEGENDS,
   sgDef,
-  sgName,
   sgUid,
   SHOP_ENH_MAX,
   shopPieceOf,
@@ -47,6 +45,8 @@ import { pts, statPair } from "./format";
 import { gearGrade, sgGrade } from "./gear";
 import { playEnhance } from "./enhanceSound";
 import RpgIcon from "./RpgIcon";
+import { inheritEmptyHint, inheritSources, inheritTargets, pairKey, samePair, type InheritPair, type InheritSide } from "./inheritPick";
+import { GradeTag, SetTag } from "./SgTags";
 import { OddsLink } from "../odds/OddsLayer";
 import e from "./enhance.module.css";
 import g from "./gearPanel.module.css";
@@ -151,8 +151,10 @@ export default function EnhanceDialog({
   // 11/15 묶음 상점 장비는 처음 강화하면 한 개가 떼어진다 → 그 뒤로는 그 한 개(번호)를 이어서 강화
   const [target, setTarget] = useState<EnhTarget>(target0);
   const [tab, setTab] = useState<EnhanceTab>("sg" in target0 || tab0 !== "reroll" ? tab0 : "enhance");
-  /** 11/19 강화 승계: 고른 재료 · 방금 받은 결과 줄 */
-  const [src, setSrc] = useState<InheritFrom | null>(null);
+  /** 11/19 강화 승계: 고른 짝(재료 → 받는 장비) · 방금 받은 결과 줄. 11/26 이 장비로 받기 / 이 장비 강화 넘기기 · 확인 한 번 더 */
+  const [pick, setPick] = useState<InheritPair | null>(null);
+  const [ihRole, setIhRole] = useState<"in" | "out" | null>(null);
+  const [ihConfirm, setIhConfirm] = useState(false);
   const [inherited, setInherited] = useState<string | null>(null);
   /** 결과 직전 능력치 (숫자가 오르내리는 연출용) */
   const [before, setBefore] = useState<string | null>(null);
@@ -262,24 +264,28 @@ export default function EnhanceDialog({
   }
 
   async function doInherit() {
-    if (!src || busy) return;
-    const plan = inheritPlan(view.character, src, target);
+    const p = ihPick;
+    if (!p || busy) return;
+    const plan = inheritPlan(view.character, p.from, p.to);
     if (!plan.ok) return;
     setBusy(true);
     setErr(null);
     try {
       const res = await rpgApi.gear({
         type: "inherit",
-        ...("sg" in src ? { fromSg: src.sg } : { fromPiece: src.piece }),
-        ...("sg" in target ? { sg: target.sg } : "piece" in target ? { piece: target.piece } : { shop: target.shop }),
+        ...("sg" in p.from ? { fromSg: p.from.sg } : { fromPiece: p.from.piece }),
+        ...("sg" in p.to ? { sg: p.to.sg } : "piece" in p.to ? { piece: p.to.piece } : { shop: p.to.shop }),
         cost: plan.cost,
       });
       if (!alive.current) return;
       onView(res);
       const r = res.gear?.inherit;
-      if (r?.piece !== undefined && !("piece" in target)) setTarget({ piece: r.piece });
-      setSrc(null);
-      if (r) setInherited(`${r.srcName} +${r.src}의 강화를 옮겨서 +${r.from} → +${r.to}가 됐어요.`);
+      // 창을 연 장비가 재료였으면 (사라졌으니) 받은 장비 창으로
+      if (r?.piece !== undefined && !("piece" in p.to)) setTarget({ piece: r.piece });
+      else if (!samePairSide(p.to, target)) setTarget(p.to);
+      setPick(null);
+      setIhConfirm(false);
+      if (r) setInherited(`${r.srcName} +${r.src}의 강화를 옮겨서 ${r.name} 장비가 +${r.from} → +${r.to}까지 올라갔어요.`);
       playEnhance("slam", r?.to ?? 3);
       setTimeout(() => playEnhance("success", r?.to ?? 3), 200);
     } catch (x) {
@@ -289,25 +295,18 @@ export default function EnhanceDialog({
     }
   }
 
-  // 승계 재료 후보: 같은 부위에서 옮길 게 있는 강화 장비 (세트 장비·강화한 상점 장비)
-  const worn = new Set(Object.values(view.character.equip).filter(Boolean));
-  const sources: { from: InheritFrom; name: string; e: number; m: number; worn: boolean }[] = [
-    ...(view.character.sg ?? []).flatMap((c) => {
-      const x = decodeSg(c);
-      return x ? [{ from: { sg: x.u } as InheritFrom, name: sgName(x), e: x.e, code: c }] : [];
-    }),
-    ...(view.character.si ?? []).flatMap((c) => {
-      const p = shopPieceOf(c);
-      const d = p ? gearById(p.id) : undefined;
-      return p && d ? [{ from: { piece: p.u } as InheritFrom, name: d.name, e: p.e, code: c }] : [];
-    }),
-  ].flatMap((x) => {
-    const plan = inheritPlan(view.character, x.from, target);
-    return plan.ok ? [{ from: x.from, name: x.name, e: x.e, m: plan.m, worn: worn.has(x.code) }] : [];
-  });
-  const sameSrc = (a: InheritFrom | null, b: InheritFrom) => !!a && (("sg" in a && "sg" in b && a.sg === b.sg) || ("piece" in a && "piece" in b && a.piece === b.piece));
-  const pick = src ? inheritPlan(view.character, src, target) : null;
-  const ihShort = pick?.ok ? [view.points < pick.cost && "포인트", m.doc < pick.doc && "결재 서류"].filter(Boolean) : [];
+  // 11/26 승계 후보: 이 장비로 받을 재료들 · 이 장비 강화를 받을 장비들 (둘 다 inheritPlan이 되는 것만 — 서버가 같은 함수로 다시 본다)
+  const ihSources = tab === "inherit" ? inheritSources(view.character, target) : [];
+  const ihTargets = tab === "inherit" ? inheritTargets(view.character, target) : [];
+  const role = ihRole ?? (ihSources.length || !ihTargets.length ? "in" : "out");
+  const ihList = role === "in" ? ihSources : ihTargets;
+  const ihPick = pick ? (ihList.find((x) => samePair(pick, x)) ?? null) : null;
+  const pickRole = (r: "in" | "out") => {
+    setIhRole(r);
+    setPick(null);
+    setIhConfirm(false);
+  };
+  const ihShort = ihPick ? [view.points < ihPick.cost && "포인트", m.doc < ihPick.doc && "결재 서류"].filter(Boolean) : [];
 
   const resultLine = (s: Shown) => {
     const r = s.r;
@@ -511,74 +510,176 @@ export default function EnhanceDialog({
           </>
         ) : tab === "inherit" ? (
           <>
+            {/* 11/26 운영자 「재료템을 구하고 눌러야 하는 거지? 그 순서를 알려 줘야」: 순서 세 줄 */}
+            <ol className={e.ihGuide} aria-label="승계 순서">
+              <li>
+                <b>①</b> 강화한 장비(재료)와, 같은 부위에서 그보다 직급이 높은 세트 장비를 함께 갖고 있어야 해요.
+              </li>
+              <li>
+                <b>②</b> 아래 목록에서 짝을 고르면 몇 강이 되는지 보여요.
+              </li>
+              <li>
+                <b>③</b> 포인트와 결재 서류를 내고 [승계하기]를 눌러요. 재료 장비는 사라져요.
+              </li>
+            </ol>
             <p className={g.note}>
-              같은 부위의 강화된 장비를 재료로 써서 더 높은 직급의 이 장비로 강화 단계를 옮겨요. 기본 능력치가 재료보다 낮아지지 않는 단계로 옮겨지고, 재료 장비는 사라져요.{" "}
-              <OddsLink section="enhance" label="승계표" />
+              받는 장비는 기본 능력치가 재료보다 낮아지지 않는 단계까지 올라가요. <OddsLink section="enhance" label="승계표" />
             </p>
             {inherited && (
               <p className={g.result} data-ok role="status">
                 {inherited}
               </p>
             )}
-            {sources.length === 0 ? (
-              <p className={g.note}>옮길 수 있는 재료가 없어요. 같은 부위에서 이 장비보다 낮은 직급의 강화 장비가 있어야 해요.</p>
-            ) : (
-              <div className={g.lockList} role="radiogroup" aria-label="재료 장비">
-                {sources.map((x) => (
-                  <label key={"sg" in x.from ? `s${x.from.sg}` : `p${x.from.piece}`}>
-                    <input type="radio" name="inheritFrom" checked={sameSrc(src, x.from)} onChange={() => setSrc(x.from)} /> {x.name} +{x.e}
-                    <span className={g.note}>
-                      {" "}
-                      → 승계 뒤 +{x.m}{x.worn ? " (장착 중)" : ""}
-                    </span>
-                  </label>
-                ))}
+            {ihSources.length > 0 && ihTargets.length > 0 && (
+              <div className={g.picker} role="group" aria-label="승계 방향">
+                <button type="button" aria-pressed={role === "in"} className={ui.button} onClick={() => pickRole("in")}>
+                  이 장비로 받기
+                </button>
+                <button type="button" aria-pressed={role === "out"} className={ui.button} onClick={() => pickRole("out")}>
+                  이 장비 강화 넘기기
+                </button>
               </div>
             )}
-            {pick?.ok && (
+            {ihList.length === 0 ? (
+              <div className={e.ihEmpty} role="status">
+                <b>아직 승계할 짝이 없어요</b>
+                {inheritEmptyHint(view.character, target).map((line) => (
+                  <p key={line}>{line}</p>
+                ))}
+              </div>
+            ) : (
               <>
-                <div className={g.enhTop}>
-                  <p className={g.levels}>
-                    +{pick.cur} <span>→</span> +{pick.m}
-                  </p>
+                <p className={e.ihHint}>{role === "in" ? "재료로 쓸 장비를 골라요" : "강화를 받을 장비를 골라요"}</p>
+                <ul className={e.ihList} role="radiogroup" aria-label={role === "in" ? "재료 장비" : "받을 장비"}>
+                  {ihList.map((p) => {
+                    const side = role === "in" ? p.src : p.dst;
+                    const sel = !!ihPick && samePair(ihPick, p);
+                    return (
+                      <li key={pairKey(p)}>
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={sel}
+                          className={e.ihOpt}
+                          data-sg={side.g ?? undefined}
+                          style={{ "--grade": sideColor(side) } as CSSProperties}
+                          onClick={() => {
+                            setPick(p);
+                            setIhConfirm(false);
+                          }}
+                        >
+                          <SideIcon side={side} />
+                          <span className={e.ihInfo}>
+                            <span className={e.ihName}>
+                              {side.name} <b>+{side.e}</b>
+                            </span>
+                            <span className={g.tagLine}>
+                              <SideTags side={side} />
+                            </span>
+                          </span>
+                          <span className={e.ihGet}>
+                            {role === "in" ? "받으면" : "넘기면"}
+                            <b>
+                              +{p.cur} → +{p.m}
+                            </b>
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+            {ihPick && (
+              <>
+                {/* 11/26 재료 → 받는 장비를 직급 딱지·색과 함께 나란히, 강화 단계 전→후 */}
+                <div className={e.ihPair}>
+                  <SideCard side={ihPick.src} label="재료" step={<s>+{ihPick.src.e}</s>} note="사라져요" gone />
+                  <span className={e.ihArrow} aria-hidden="true">
+                    ▶
+                  </span>
+                  <SideCard
+                    side={ihPick.dst}
+                    label="받는 장비"
+                    step={
+                      <>
+                        +{ihPick.cur} <span>→</span> <b>+{ihPick.m}</b>
+                      </>
+                    }
+                  />
                 </div>
-                {/* 11/19 기본 능력치가 떨어지지 않는 걸 눈으로 (재료 → 승계 뒤, 랜덤 옵션은 이 장비 것 그대로) */}
+                <p className={e.ihSteps}>
+                  강화 <b>+{ihPick.src.e}</b> <span>→</span> <b className={e.ihTo}>+{ihPick.m}</b>
+                  <small>
+                    {" "}
+                    ({sideGrade(ihPick.src)} → {sideGrade(ihPick.dst)})
+                  </small>
+                </p>
+                {/* 기본 능력치 전→후 (랜덤 옵션은 받는 장비 것 그대로) */}
                 <table className={g.inheritCmp}>
                   <thead>
                     <tr>
                       <th>기본 능력치</th>
-                      <th>{pick.srcName} +{pick.src}</th>
-                      <th>승계 뒤 +{pick.m}</th>
+                      <th>재료 +{ihPick.src.e}</th>
+                      <th>지금 +{ihPick.cur}</th>
+                      <th>승계 뒤 +{ihPick.m}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {pick.lines.map(([k, a, b]) => {
+                    {ihPick.lines.map(([k, a, now, b]) => {
                       const [name, av] = statPair(k, a);
                       return (
                         <tr key={k}>
                           <th>{name}</th>
                           <td>{a > 0 ? av : "—"}</td>
-                          <td data-up={b > a || undefined}>{b > 0 ? statPair(k, b)[1] : "—"}</td>
+                          <td>{now > 0 ? statPair(k, now)[1] : "—"}</td>
+                          <td data-up={b > now || undefined}>
+                            {b > 0 ? statPair(k, b)[1] : "—"}
+                            {b > now && <small> ▲{num(Math.round((b - now) * 100) / 100)}</small>}
+                          </td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
                 <div className={g.costs}>
-                  <span data-short={view.points < pick.cost || undefined}>
-                    {pts(pick.cost)} <small className={g.note}>/ {pts(view.points)}</small>
+                  <span data-short={view.points < ihPick.cost || undefined}>
+                    {pts(ihPick.cost)} <small className={g.note}>/ {pts(view.points)}</small>
                   </span>
-                  <span data-short={m.doc < pick.doc || undefined}>
-                    결재 서류 {pick.doc} <small className={g.note}>/ {m.doc}</small>
+                  <span data-short={m.doc < ihPick.doc || undefined}>
+                    결재 서류 {ihPick.doc} <small className={g.note}>/ {m.doc}</small>
                   </span>
                 </div>
-                <p className={g.note}>
-                  재료로 쓴 {pick.srcName} +{pick.src} 장비는 사라져요. 끼고 있었다면 그 칸에 이 장비를 대신 껴요.
+                <p className={e.ihWarn}>
+                  재료 장비는 사라져요.
+                  {ihPick.src.worn ? " 재료를 끼고 있던 칸에는 받은 장비를 대신 껴요." : ""}
                 </p>
                 {ihShort.length > 0 && <p className={g.note}>{josa(ihShort.join(", "), "이", "가")} 모자라요.</p>}
-                <button type="button" className={cx(ui.button, ui.primary)} style={{ minHeight: 48 }} disabled={busy || ihShort.length > 0} onClick={doInherit}>
-                  승계하기 · {pts(pick.cost)}
-                </button>
+                {ihConfirm ? (
+                  <div className={g.confirm} role="alert">
+                    <p>
+                      정말 옮길까요? 재료로 쓴 <b>{ihPick.src.name} +{ihPick.src.e}</b> 장비는 돌아오지 않아요. {ihPick.dst.name} 장비는 +{ihPick.m}까지 올라가요.
+                    </p>
+                    <div className={g.actions}>
+                      <button type="button" className={cx(ui.button, ui.primary)} style={{ minHeight: 44 }} disabled={busy || ihShort.length > 0} onClick={doInherit}>
+                        승계하기 · {pts(ihPick.cost)}
+                      </button>
+                      <button type="button" className={ui.button} onClick={() => setIhConfirm(false)}>
+                        그만두기
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className={cx(ui.button, ui.primary)}
+                    style={{ minHeight: 48 }}
+                    disabled={busy || ihShort.length > 0}
+                    onClick={() => setIhConfirm(true)}
+                  >
+                    승계하기 · {pts(ihPick.cost)}
+                  </button>
+                )}
               </>
             )}
           </>
@@ -635,5 +736,57 @@ export default function EnhanceDialog({
         )}
       </div>
     </Dialog>
+  );
+}
+
+const samePairSide = (a: EnhTarget, b: EnhTarget) =>
+  ("sg" in a && "sg" in b && a.sg === b.sg) || ("piece" in a && "piece" in b && a.piece === b.piece) || ("shop" in a && "shop" in b && a.shop === b.shop);
+
+/** 승계 한쪽의 색 · 직급 이름 (상점 장비는 등급) */
+function sideColor(side: InheritSide): string {
+  if (side.g !== null) return sgGrade({ g: side.g }).color;
+  const def = gearById(side.code);
+  return def ? gearGrade(def).color : "var(--text)";
+}
+const sideGrade = (side: InheritSide) => (side.g !== null ? sgGrade({ g: side.g }).label : "상점 장비");
+
+/** 11/26 승계 장비 아이콘 (가방 칸과 같은 직급 테·딱지) */
+function SideIcon({ side }: { side: InheritSide }) {
+  const def = gearById(side.code);
+  return (
+    <span className={g.icon} data-sg={side.g ?? undefined} style={{ "--grade": sideColor(side) } as CSSProperties}>
+      {def && <RpgIcon art={def.art} size={32} />}
+      {side.g !== null && (
+        <span className={g.badge}>
+          <GradeTag g={side.g} short />
+        </span>
+      )}
+    </span>
+  );
+}
+
+function SideTags({ side }: { side: InheritSide }) {
+  return (
+    <>
+      {side.set && <SetTag set={side.set} />}
+      {side.g !== null ? <GradeTag g={side.g} /> : <span className={g.sub}>상점 장비</span>}
+      {side.worn && <span className={g.tag}>장착 중</span>}
+    </>
+  );
+}
+
+/** 재료 · 받는 장비 카드 (나란히) */
+function SideCard({ side, label, step, note, gone }: { side: InheritSide; label: string; step: React.ReactNode; note?: string; gone?: boolean }) {
+  return (
+    <div className={e.ihCard} data-gone={gone || undefined} data-sg={side.g ?? undefined} style={{ "--grade": sideColor(side) } as CSSProperties}>
+      <span className={e.ihLabel}>{label}</span>
+      <SideIcon side={side} />
+      <span className={e.ihName}>{side.name}</span>
+      <span className={g.tagLine}>
+        <SideTags side={side} />
+      </span>
+      <span className={e.ihStep}>{step}</span>
+      {note && <span className={e.ihGone}>{note}</span>}
+    </div>
   );
 }

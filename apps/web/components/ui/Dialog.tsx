@@ -2,6 +2,7 @@
 
 import { useEffect, useEffectEvent, useId, useRef, type ReactNode } from "react";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
+import { coverGame, coversMost } from "@/lib/gameCover";
 import { cx } from "./cx";
 import { backdropCloses, escapeAction } from "./dialogDismiss";
 import { watchMoreBelow } from "./moreBelow";
@@ -76,6 +77,32 @@ export default function Dialog({ title, onClose, children, kind = "window", fitH
       }
     };
   }, [coverBelow]);
+
+  // 11/26 큰 창(폰 화면 전체·데스크톱 표준 창처럼 화면 대부분을 덮음)이 열려 있는 동안 뒤 마을은 초당 8번만 그린다 (lib/gameCover — 갱신·연결은 그대로).
+  // 크기가 바뀌면(내용 높이 창이 늘어남·화면 회전) 다시 잰다. 확인 창(kind confirm)은 작아서 보지 않는다
+  useEffect(() => {
+    const me = ref.current;
+    if (kind !== "window" || !me || typeof ResizeObserver === "undefined") return;
+    let release: (() => void) | null = null;
+    const check = () => {
+      const r = me.getBoundingClientRect();
+      const big = coversMost(r.width, r.height, window.innerWidth, window.innerHeight);
+      if (big && !release) release = coverGame();
+      else if (!big && release) {
+        release();
+        release = null;
+      }
+    };
+    const ro = new ResizeObserver(check);
+    ro.observe(me);
+    window.addEventListener("resize", check);
+    check();
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", check);
+      release?.();
+    };
+  }, [kind]);
 
   // 크롬은 ESC를 거듭 누르면 cancel을 막아도 대화상자를 직접 닫는다. 마운트된 채 닫히면 상태를 맞춘다
   const onBrowserClose = useEffectEvent((dialog: HTMLDialogElement) => {

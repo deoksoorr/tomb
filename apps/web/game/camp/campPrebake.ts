@@ -5,6 +5,7 @@ import { makeCanvas } from "../sprites/pixel";
 import * as Art from "./campArt";
 import { clampEdges, forEachCampTexture, type CampTexBuild } from "./CampMap";
 import { campConceptNow, forEachCampSkin } from "./CampConceptDecor";
+import { forEachValleyTex, type ValleyBuilt } from "./campValleyTex";
 import { isSnowy } from "@/lib/mapConcept";
 
 // 11/15 캠핑장 그림 미리 굽기: 버스를 기다리는 동안·창밖 연출 동안 프레임마다 조금씩(예산 ms) 굽는다.
@@ -89,6 +90,17 @@ export class CampPrebake {
       this.cur = base;
       const key = build(this.scene);
       if (key !== base) this.fresh.push(key);
+      yield;
+    }
+    // 11/26 폭포 계곡 그림 (절벽·물줄기·좌대·족욕탕 — 이 판 것만)
+    const valley: [string, () => ValleyBuilt][] = [];
+    forEachValleyTex(concept, (key, build) => valley.push([key, build]));
+    for (const [key, build] of valley) {
+      if (tex.exists(key)) continue;
+      this.cur = key;
+      const out = build();
+      addCanvasTexture(this.scene, key, { canvas: out.canvas, frameW: out.frameW, frameH: out.frameH, linear: out.linear });
+      this.fresh.push(key);
       yield;
     }
     const winter = isSnowy(concept);

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { QueueStatus } from "@tomb/protocol";
 import { onTideShift, tideText } from "@/game/sea/tideClock";
 import { bridge, type NetMode } from "@/game/bridge";
-import { skyLabel, WEATHER_LABELS } from "@/lib/ambience";
+import { skyLabel, WEATHER_LABELS, type Weather } from "@/lib/ambience";
+import { deviceSettings } from "@/lib/deviceSettings";
 import { useAmbience } from "@/lib/hooks/useAmbience";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { hudPlace } from "@/lib/placeName";
@@ -32,6 +33,18 @@ export function queueText(status: QueueStatus | undefined): string {
   return "지금 마을이 꽉 찼어요. 자리가 나면 저절로 들어가요.";
 }
 
+/** 11/26 날씨 글자: 설정에서 날씨 효과를 끈 기기는 가로줄 (진짜 날씨는 그대로 보여 준다) */
+function WeatherWord({ weather }: { weather: Weather }) {
+  const on = useSyncExternalStore(deviceSettings.subscribe, deviceSettings.getSnapshot, deviceSettings.getServerSnapshot).weather;
+  if (on) return <>{WEATHER_LABELS[weather]}</>;
+  return (
+    <span className={styles.weatherOff} title="날씨 효과 꺼짐 (설정)">
+      {WEATHER_LABELS[weather]}
+      <span className="visually-hidden"> (날씨 효과 꺼짐)</span>
+    </span>
+  );
+}
+
 /** 상단 가운데: 채널·인원, 시간대·날씨 (+ 포인트 2배 이벤트 중이면 그 아래 안내 띠). compact(터치 화면 위 가장자리 바)는 작은 한 줄 */
 export default function Hud({ onOpenChannels, compact = false }: { onOpenChannels: () => void; compact?: boolean }) {
   const eventSnap = usePointEvent();
@@ -50,7 +63,12 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
       mode === "online" && channel !== null
         ? `${channel}채널 ${status?.count}/${status?.cap}`
         : MODE_TEXT[mode === "online" ? "connecting" : mode];
-    const sky = ambience ? ` · ${skyLabel(ambience)}·${WEATHER_LABELS[ambience.weather]}` : "";
+    const sky = ambience ? (
+      <>
+        {` · ${skyLabel(ambience)}·`}
+        <WeatherWord weather={ambience.weather} />
+      </>
+    ) : null;
     const tideLine = tide ? <span className={cx(ui.top, styles.tide, styles.tideCompact)} role="status">{tide}</span> : null;
     // 이벤트 띠는 바 아래에 띄운다 (바의 배치에 끼지 않는다)
     const line = mode === "online" && channel !== null ? (
@@ -98,7 +116,8 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
             {/* 11/17 r2 긴급: 시간·날씨를 다시 채널 줄 안으로 한 줄 (아래 줄로 내렸더니 긴급 의뢰 띠를 가렸다) */}
             {ambience && (
               <span className={styles.ambience} title="한국 시간 기준">
-                {` · ${skyLabel(ambience)} · ${WEATHER_LABELS[ambience.weather]}`}
+                {` · ${skyLabel(ambience)} · `}
+                <WeatherWord weather={ambience.weather} />
               </span>
             )}
             <span className="visually-hidden">, 채널 이동</span>
@@ -111,7 +130,7 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
         )}
         {mode !== "online" && ambience && (
           <span className={cx(ui.top, styles.ambience)} title="한국 시간 기준">
-            {skyLabel(ambience)} · {WEATHER_LABELS[ambience.weather]}
+            {skyLabel(ambience)} · <WeatherWord weather={ambience.weather} />
           </span>
         )}
       </div>

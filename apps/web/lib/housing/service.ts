@@ -11,6 +11,21 @@ import type { Me } from "../types";
 import {
   AWAY_MSG,
   SKIN_AWAY_MSG,
+  CAMP_FLOOR,
+  CAMP_LOT_COUNT,
+  CAMP_STARTER,
+  CAMP_WALL,
+  campBuyCost,
+  campLotByNo,
+  campLotShort,
+  campYardCost,
+  HOUSE_ZONES,
+  houseShape,
+  villagePlotCost,
+  villageUpgradeCost,
+  type CampHomeKind,
+  type CampInfo,
+  type CampYard,
   cottageStyleOf,
   DEFAULT_FLOOR,
   DEFAULT_WALL,
@@ -19,11 +34,9 @@ import {
   houseLabel,
   isHousingChannel,
   LEGACY_HOUSING_CHANNEL,
-  lotLabel,
   MAX_OWN_PER_ITEM,
   nextTier,
   PLOT_TIERS,
-  plotCost,
   SEA_FLOOR,
   SEA_LOT_COUNT,
   SEA_STARTER,
@@ -37,14 +50,15 @@ import {
   type HouseZone,
   type PlotTierId,
 } from "./catalog";
-import { designCounts, designScore, layoutCounts, validateExterior, validateLayout } from "./layout";
+import { campFixturesForYard, designCounts, designScore, layoutCounts, validateExterior, validateLayout } from "./layout";
 import { waterWait, watered, type PlantsResponse } from "./plants";
 import { liveStates, stateTarget, type HouseStatesResponse } from "./states";
 import { myBrief, refundAndThrow, rewardLike, spend, refund } from "./points";
 import { discountedPrice } from "../titles";
-import { isHouseOwnItem, MemoryHouseStore, type HousePair, type HouseRecord, type HouseStore } from "./store";
+import { CAMP_LOTS, caravanDesignOf, type CaravanDesign } from "@tomb/protocol";
+import { isHouseOwnItem, MemoryHouseStore, type HouseBrief, type HousePair, type HouseRecord, type HouseStore } from "./store";
 import { RedisHouseStore } from "./store-redis";
-import type { GuestEntryView, HouseExterior, HouseLikeResponse, HouseLayout, HouseSummary, MyHouseResponse, PublicHouse, VillageResponse } from "./types";
+import type { GuestEntryView, HouseExterior, HouseLikeResponse, HouseLayout, HousePrices, HouseSummary, MyHouseResponse, PublicHouse, VillageResponse } from "./types";
 
 // 라우트가 쓰는 하우징 동작. 돈이 오가는 동작은 "검사 → spendPoints → 집 쪽 Lua" 순서이고,
 // 집 쪽 단계가 경합으로 실패하면(동시에 두 번 누름 등) 쓴 포인트를 그대로 돌려준다.
@@ -64,17 +78,19 @@ export function getHouseStore(): HouseStore {
 
 /**
  * 공개 집 id: 계정 id의 HMAC 앞 12자 (계정 id = 쿠키 신원이라 그대로 내보내지 않는다).
- * 11/16 포구 오두막은 다른 HMAC (한 계정이 마을 집 하나 + 오두막 하나를 따로 가진다)
+ * 11/16 포구 오두막은 다른 HMAC (한 계정이 마을 집 하나 + 오두막 하나를 따로 가진다). 11/26 캠핑장 집도 또 다른 HMAC (종류 상관없이 한 사람 한 채)
  */
 export function houseIdFor(accountId: string, zone: HouseZone = "village"): string {
   return createHmac("sha256", env.sessionSecret())
-    .update(zone === "sea" ? `seahouse:${accountId}` : `house:${accountId}`)
+    .update(zone === "sea" ? `seahouse:${accountId}` : zone === "camp" ? `camphouse:${accountId}` : `house:${accountId}`)
     .digest("base64url")
     .slice(0, 12);
 }
 
-/** 11/16 한 계정의 두 집 id (공용 가구 가방은 마을 집 id에 붙는다) */
-export const housePair = (accountId: string): HousePair => ({ village: houseIdFor(accountId), sea: houseIdFor(accountId, "sea") });
+/** 11/16 한 계정의 집 id들 (공용 가구 가방은 마을 집 id에 붙는다). 11/26 캠핑장 집까지 세 채 */
+export const housePair = (accountId: string): HousePair => ({ village: houseIdFor(accountId), sea: houseIdFor(accountId, "sea"), camp: houseIdFor(accountId, "camp") });
+/** 11/26 한 계정의 집 id 셋 (마을·포구·캠핑장 순서) */
+export const houseIdsOf = (accountId: string): string[] => HOUSE_ZONES.map((z) => houseIdFor(accountId, z));
 
 const HOUSE_ID_RE = /^[A-Za-z0-9_-]{12}$/;
 export const isHouseId = (id: string) => HOUSE_ID_RE.test(id);
@@ -83,13 +99,21 @@ export const houseNotFound = () => new HttpError(404, "NOT_FOUND", "그 집을 �
 const noHouse = (zone: HouseZone = "village") =>
   zone === "sea"
     ? new HttpError(409, "NO_HOUSE", "먼저 포구 부동산에서 오두막을 분양받아 주세요.")
-    : new HttpError(409, "NO_HOUSE", "먼저 분양 사무소에서 내 집을 분양받아 주세요.");
+    : zone === "camp"
+      ? new HttpError(409, "NO_HOUSE", "먼저 언젠가 캠핑장에서 집을 분양받아 주세요.")
+      : new HttpError(409, "NO_HOUSE", "먼저 분양 사무소에서 내 집을 분양받아 주세요.");
 
 // 11/15: 집주인 이름은 운영자 집도 저장된 닉네임 그대로 (예전처럼 "대장"으로 바꾸지 않는다)
 export function toPublicHouse(r: HouseRecord): PublicHouse {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { owner, hidden, items, paid, ...pub } = r;
-  return pub;
+  const { owner, hidden, items, paid, villa, ...pub } = r;
+  return { ...pub, ...(r.camp ? { camp: campOut(r.lot, r.camp) } : {}), ...(villa ? { villa: true as const } : {}) };
+}
+
+/** 11/26 내보내는 캠핑장 정보: 카라반은 디자인을 늘 채운다 (디자인 칸이 없는 옛 카라반 = 그 자리 기본 모습 — 지금 그림 그대로) */
+function campOut(lot: number, c: CampInfo): CampInfo {
+  if (c.kind !== "caravan") return { kind: c.kind, yard: c.yard };
+  return { kind: c.kind, yard: c.yard, design: caravanDesignOf(lot, c.design) };
 }
 
 export function toSummary(r: HouseRecord): HouseSummary {
@@ -98,6 +122,8 @@ export function toSummary(r: HouseRecord): HouseSummary {
     ch: r.ch,
     lot: r.lot,
     ...(r.zone === "sea" ? { zone: "sea" as const, style: r.style } : {}),
+    ...(r.zone === "camp" && r.camp ? { zone: "camp" as const, camp: campOut(r.lot, r.camp) } : {}),
+    ...(r.villa ? { villa: true as const } : {}),
     name: r.name,
     ownerName: r.ownerName,
     tier: r.tier,
@@ -117,24 +143,71 @@ export async function findVisibleHouse(store: HouseStore, id: string): Promise<H
 
 export async function myHouse(store: HouseStore, accountId: string, me?: Me, zone: HouseZone = "village"): Promise<MyHouseResponse> {
   const id = houseIdFor(accountId, zone);
-  // 잔액만 쓰므로 계정 전체를 읽지 않는다 (myBrief = HMGET 1개)
-  const [h0, bag, m] = await Promise.all([store.get(id), store.inventory(housePair(accountId), zone), me ?? myBrief(accountId)]);
+  // 잔액만 쓰므로 계정 전체를 읽지 않는다 (myBrief = HMGET 1개). 11/26 값표용 세 집 요약 (HMGET 셋 — 파이프라인 하나)
+  const [h0, bag, m, briefs] = await Promise.all([store.get(id), store.inventory(housePair(accountId), zone), me ?? myBrief(accountId), houseBriefs(store, accountId)]);
   // 마을이 생기기 전에 분양받은 집은 처음 열 때 번지를 받는다
-  const h = h0 && !h0.lot && (await store.assignLot(id)) ? await store.get(id) : h0;
-  // 11/18 마을 집을 아직 안 샀으면 분양가에 더해질 별장 값 차이 (오두막이 먼저 있을 때만)
-  const fee = !h && zone === "village" ? await villaFeeFor(store, accountId) : 0;
-  return { house: h ? toPublicHouse(h) : null, inventory: bag.have, away: bag.away, points: m.points, ...(fee > 0 ? { villaFee: fee } : {}) };
+  const h1 = h0 && !h0.lot && (await store.assignLot(id)) ? await store.get(id) : h0;
+  // 방금 남긴 별장 표시 (옛 기록 — houseBriefs가 정해 남겼다)
+  const h = h1 && h1.villa === undefined && briefs[zone] ? { ...h1, villa: briefs[zone]!.villa } : h1;
+  return { house: h ? toPublicHouse(h) : null, inventory: bag.have, away: bag.away, points: m.points, prices: housePrices(briefs, zone) };
 }
 
+/** 11/26 한 계정의 세 집 요약 (구역 → 없으면 null). 별장 표시가 없는 옛 기록은 여기서 한 번 정해 남긴다 */
+export type HouseBriefs = Record<HouseZone, HouseBrief | null>;
+
 /**
- * 11/18 보안: 포구 오두막을 먼저 사고 마을 집을 사면 오두막이 별장 값(2배)을 피한다. 그래서 마을 집을 살 때 그 차이를 더한다
- * (오두막 터 크기의 별장 값 − 오두막에 낸 값. 낸 값 기록이 없으면 오두막 값으로 본다)
+ * 11/26 세 집 요약을 읽고 옛 기록의 별장 표시를 한 번 남긴다 (이후 안 바뀐다).
+ * 옛 규칙(11/16~11/25)에서 마을 집은 늘 첫 집 값이었고, 포구 오두막은 마을 집이 있으면 별장 값이었다 (순서 무관 — 11/18 차액 제도).
+ * 그래서 옛 마을 집 = 첫 집, 옛 오두막 = 지금 마을 집이 있으면 별장 (지금 값과 같다). 캠핑장 집은 처음부터 표시가 있다
  */
-async function villaFeeFor(store: HouseStore, accountId: string): Promise<number> {
-  const cottage = await store.get(houseIdFor(accountId, "sea"));
-  if (!cottage) return 0;
-  return Math.max(0, seaPlotCost(cottage.tier, true) - (cottage.paid ?? seaPlotCost(cottage.tier, false)));
+export async function houseBriefs(store: HouseStore, accountId: string): Promise<HouseBriefs> {
+  const list = await store.brief(houseIdsOf(accountId));
+  const by = Object.fromEntries(HOUSE_ZONES.map((z, i) => [z, list[i] ?? null])) as HouseBriefs;
+  for (const z of HOUSE_ZONES) {
+    const b = by[z];
+    if (!b || b.villa !== undefined) continue;
+    const want = z === "sea" ? !!by.village : z === "camp" ? !!(by.village || by.sea) : false;
+    by[z] = { ...b, villa: (await store.settleVilla(b.id, want)) ?? want };
+  }
+  return by;
 }
+
+/** 그 구역 집이 별장인지: 가진 집이면 그 집 표시, 아직 없으면 지금 사면 별장인지 (다른 구역에 집이 있으면) */
+const villaFor = (briefs: HouseBriefs, zone: HouseZone): boolean =>
+  briefs[zone] ? !!briefs[zone]!.villa : HOUSE_ZONES.some((z) => z !== zone && !!briefs[z]);
+
+/** 11/26 이 사람 기준 값표 (화면은 이 값을 그대로 보여 준다 — 서버가 받는 값과 같다) */
+export function housePrices(briefs: HouseBriefs, zone: HouseZone): HousePrices {
+  const v = { village: villaFor(briefs, "village"), sea: villaFor(briefs, "sea"), camp: villaFor(briefs, "camp") };
+  const tiers = (cost: (t: PlotTierId) => number) => Object.fromEntries(PLOT_TIERS.map((t) => [t.id, cost(t.id)])) as Record<PlotTierId, number>;
+  const mine = briefs[zone];
+  return {
+    villa: v,
+    village: tiers((t) => villagePlotCost(t, v.village)),
+    sea: tiers((t) => seaPlotCost(t, v.sea)),
+    camp: CAMP_LOTS.map((l) => ({
+      lot: l.lot,
+      kind: l.kind,
+      ...(l.grade ? { grade: l.grade } : {}),
+      buy: campBuyCost(l.lot, v.camp),
+      yard2: campYardCost(l.lot, 2, v.camp),
+      yard3: campYardCost(l.lot, 3, v.camp),
+    })),
+    upgrade: mine ? upgradeQuote(mine, !!mine.villa) : null,
+    yard: mine?.zone === "camp" && mine.camp && mine.camp.yard < 3 ? { to: (mine.camp.yard + 1) as CampYard, price: campYardCost(mine.lot, (mine.camp.yard + 1) as 2 | 3, !!mine.villa) } : null,
+  };
+}
+
+/** 이 집의 다음 넓히기 (없으면 null): 마을 = 다음 터 크기, 포구 = × 1.5(별장 2). 11/26 캠핑장은 넓히기가 없다 (앞마당 단계로 방이 커진다) */
+function upgradeQuote(h: Pick<HouseBrief, "zone" | "tier" | "camp">, villa: boolean): { to: PlotTierId; price: number } | null {
+  if (h.zone === "camp") return null;
+  const next = nextTier(h.tier);
+  if (!next) return null;
+  return { to: next.id, price: h.zone === "sea" ? seaUpgradeCost(next.price, villa) : villageUpgradeCost(next.price, villa) };
+}
+
+/** 11/26 첫 집 값으로 사려는데 그 사이 다른 집이 생겼다 (동시에 두 집을 산 경우) */
+const villaChanged = () => new HttpError(409, "VILLA_CHANGED", "그 사이 다른 집이 생겨서 다주택자 가격이 됐어요. 값을 다시 확인해 주세요.");
 
 const mustHave = async (store: HouseStore, accountId: string, zone: HouseZone = "village"): Promise<HouseRecord> => {
   const h = await store.get(houseIdFor(accountId, zone));
@@ -170,20 +243,24 @@ export async function buyPlot(
   if (!isHousingChannel(ch)) throw badChannel();
   const tier = tierById(tierId);
   if (!tier) throw new HttpError(400, "INVALID_INPUT", "알 수 없는 터 크기예요.");
-  // 바로 사기 값 = 작은 터 + 넓히기 값 누적 (업그레이드로 올린 것과 같은 값) + 11/18 오두막이 먼저 있으면 별장 값 차이
-  const [had, fee] = await Promise.all([store.get(id), villaFeeFor(store, accountId)]);
-  const cost = plotCost(tier.id) + fee;
-  if (had) throw new HttpError(409, "ALREADY_OWNED", `이미 ${lotLabel(had.ch, had.lot)}에 내 집이 있어요. 마을 집은 한 채만 가질 수 있어요.`);
+  // 바로 사기 값 = 작은 터 + 넓히기 값 누적 (업그레이드로 올린 것과 같은 값). 11/26 다른 구역에 집이 있으면 별장 (× 4/3)
+  const briefs = await houseBriefs(store, accountId);
+  const had = briefs.village;
+  if (had) throw new HttpError(409, "ALREADY_OWNED", `이미 ${houseLabel(had)}에 내 집이 있어요. 마을 집은 한 채만 가질 수 있어요.`);
+  const villa = villaFor(briefs, "village");
+  const cost = villagePlotCost(tier.id, villa);
   // 11/19 2단지를 닫아 새 분양은 메인 맵 번지(1..WORLD_LOTS)만
   if (lot !== null && (!Number.isInteger(lot) || lot < 1 || lot > WORLD_LOTS))
     throw new HttpError(400, "INVALID_INPUT", `번지는 1~${WORLD_LOTS} 중에서 골라 주세요.`);
   // 11/15 비운 번지 (CLOSED_LOTS — 지금은 없다)
   if (lot !== null && !isOpenLot(lot)) throw new HttpError(400, "INVALID_INPUT", "그 번지는 이제 분양하지 않아요. 다른 번지를 골라 주세요.");
   if (lot !== null && (await store.village(ch)).some((h) => h.lot === lot)) throw lotTaken();
-  await spend(accountId, cost, tier.id === PLOT_TIERS[0].id ? "plot" : `plot:${tier.id}`);
+  await spend(accountId, cost, villa ? `villa:plot:${tier.id}` : tier.id === PLOT_TIERS[0].id ? "plot" : `plot:${tier.id}`);
   // 낸 포인트를 집에 남긴다 (오래 비워 정리할 때 그대로 돌려준다, reclaim.ts)
-  const r = await store.create({ id, owner: accountId, name, intro, ownerName, tier: tier.id, ch, lot, now: Date.now(), paid: cost });
+  const others = [houseIdFor(accountId, "sea"), houseIdFor(accountId, "camp")];
+  const r = await store.create({ id, owner: accountId, name, intro, ownerName, tier: tier.id, ch, lot, now: Date.now(), paid: cost, villa, others });
   if (r === "exists") await refundAndThrow(accountId, cost, new HttpError(409, "ALREADY_OWNED", "이미 내 집이 있어요."));
+  if (r === "villa_changed") await refundAndThrow(accountId, cost, villaChanged());
   if (r === "lot_taken") await refundAndThrow(accountId, cost, lotTaken());
   if (r === "full") await refundAndThrow(accountId, cost, new HttpError(409, "VILLAGE_FULL", "주거 구역이 다 찼어요. 빈 집터가 나면 다시 와 주세요."));
   return myHouse(store, accountId);
@@ -225,9 +302,11 @@ export async function buyCottage(
   if (!tier) throw new HttpError(400, "INVALID_INPUT", "알 수 없는 터 크기예요.");
   if (lot !== null && (!Number.isInteger(lot) || lot < 1 || lot > SEA_LOT_COUNT))
     throw new HttpError(400, "INVALID_INPUT", `오두막 터는 1~${SEA_LOT_COUNT}번 중에서 골라 주세요.`);
-  const [had, village] = await Promise.all([store.get(id), store.get(houseIdFor(accountId))]);
+  // 11/26 다른 구역(마을·캠핑장)에 집이 있으면 별장 (마을 값 × 2 = 1.5 × 4/3)
+  const briefs = await houseBriefs(store, accountId);
+  const had = briefs.sea;
   if (had) throw new HttpError(409, "ALREADY_OWNED", `이미 오두막이 있어요 (${houseLabel(had)}). 오두막은 한 채만 가질 수 있어요.`);
-  const villa = !!village;
+  const villa = villaFor(briefs, "sea");
   const cost = seaPlotCost(tier.id, villa);
   if (lot !== null && (await store.village(ch, "sea")).some((h) => h.lot === lot)) throw lotTaken();
   // 시작 가구는 한 집 id에 한 번만 준다 (철거 뒤 다시 사면 오두막 몫 가방에 남은 것만 그 자리에 놓는다 — 공용 가방은 건드리지 않는다)
@@ -255,11 +334,86 @@ export async function buyCottage(
     placed: designCounts(layout, ext),
     placedScore: designScore(layout, ext),
     starter: SEA_STARTER,
+    villa,
+    others: [houseIdFor(accountId), houseIdFor(accountId, "camp")],
   });
   if (r === "exists") await refundAndThrow(accountId, cost, new HttpError(409, "ALREADY_OWNED", "이미 오두막이 있어요."));
+  if (r === "villa_changed") await refundAndThrow(accountId, cost, villaChanged());
   if (r === "lot_taken") await refundAndThrow(accountId, cost, lotTaken());
   if (r === "full") await refundAndThrow(accountId, cost, new HttpError(409, "VILLAGE_FULL", "이 채널 포구에는 빈 오두막 터가 없어요."));
   return myHouse(store, accountId, undefined, "sea");
+}
+
+/** 11/26 캠핑장 집 시작 배치: 그 종류 기본 가구(CAMP_STARTER 자리) + 전용 바닥·벽 */
+export function campStarterLayout(kind: CampHomeKind): HouseLayout {
+  return { floor: CAMP_FLOOR[kind], wall: CAMP_WALL[kind], items: CAMP_STARTER[kind].map((p) => ({ ...p })) };
+}
+
+/**
+ * 11/26 언젠가 캠핑장 집 분양: 채널마다 16터 (카라반 12 · 펜션 2 · 촌캉스 2 — 종류는 터로 정해진다).
+ * 한 사람당 캠핑장 집 한 채 (집 id가 계정마다 하나). 값 = 그 터 무주택 분양가, 다른 구역에 집이 있으면 별장 × 4/3.
+ * 기본 가구는 집에 딸려 놓인다 (가방에 넣지 않는다)
+ */
+/** 11/26 캠핑장 집 종류마다 분양하는 NPC (안내 문구) */
+const CAMP_KIND_SELLER: Record<CampHomeKind, string> = { caravan: "관리소 언젠가 씨", pension: "소슬댁", rural: "순이 할머니" };
+
+export async function buyCampHome(
+  store: HouseStore,
+  accountId: string,
+  name: string,
+  intro: string,
+  ownerName: string,
+  lot: number | null | undefined,
+  ch: number,
+  kind?: CampHomeKind,
+  design?: CaravanDesign,
+): Promise<MyHouseResponse> {
+  const id = houseIdFor(accountId, "camp");
+  if (!isHousingChannel(ch)) throw badChannel();
+  const site = typeof lot === "number" ? campLotByNo(lot) : undefined;
+  if (!site) throw new HttpError(400, "INVALID_INPUT", `캠핑장 집터는 1~${CAMP_LOT_COUNT}번 중에서 골라 주세요.`);
+  // 11/26 분양 NPC마다 자기 종류만 판다: 창이 알려 준 종류(kind)와 터 종류가 다르면 막는다 (돈을 쓰기 전에)
+  if (kind && kind !== site.kind) throw new HttpError(400, "WRONG_KIND", `${campLotShort(site.lot)} 터는 ${CAMP_KIND_SELLER[site.kind]}에게 분양받을 수 있어요.`);
+  const briefs = await houseBriefs(store, accountId);
+  const had = briefs.camp;
+  if (had) {
+    // 11/26 받침에 맞는 조사 (「솔바람채 펜션이」·「감나무집 촌캉스가」)
+    const label = houseLabel(had);
+    const c = label.charCodeAt(label.length - 1);
+    const batchim = c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 !== 0;
+    throw new HttpError(409, "ALREADY_OWNED", `이미 ${label}${batchim ? "이" : "가"} 있어요. 캠핑장 집은 한 사람당 한 채예요.`);
+  }
+  const villa = villaFor(briefs, "camp");
+  const cost = campBuyCost(site.lot, villa);
+  const taken = () => new HttpError(409, "LOT_TAKEN", "그 터는 방금 다른 분이 분양받았어요. 다른 터를 골라 주세요.");
+  if ((await store.village(ch, "camp")).some((h) => h.lot === site.lot)) throw taken();
+  const layout = campStarterLayout(site.kind);
+  const ext = defaultExterior();
+  await spend(accountId, cost, villa ? `villa:camp:${site.kind}` : `camp:${site.kind}`);
+  const r = await store.create({
+    id,
+    owner: accountId,
+    name: name || campLotShort(site.lot),
+    intro,
+    ownerName,
+    tier: "small",
+    ch,
+    lot: site.lot,
+    now: Date.now(),
+    paid: cost,
+    zone: "camp",
+    // 11/26 카라반은 고른 디자인 (값은 자리 등급으로만 — 디자인과 상관없다. 안 고르면 그 자리 기본 모습), 펜션·촌캉스는 디자인 없음
+    camp: { kind: site.kind, yard: 1, ...(site.kind === "caravan" ? { design: caravanDesignOf(site.lot, design) } : {}) },
+    villa,
+    others: [houseIdFor(accountId), houseIdFor(accountId, "sea")],
+    layout,
+    placed: designCounts(layout, ext),
+    placedScore: designScore(layout, ext),
+  });
+  if (r === "exists") await refundAndThrow(accountId, cost, new HttpError(409, "ALREADY_OWNED", "이미 캠핑장 집이 있어요. 캠핑장 집은 한 사람당 한 채예요."));
+  if (r === "villa_changed") await refundAndThrow(accountId, cost, villaChanged());
+  if (r === "lot_taken" || r === "full") await refundAndThrow(accountId, cost, taken());
+  return myHouse(store, accountId, undefined, "camp");
 }
 
 /** 가진 것만 남긴 시작 배치 (owned = null이면 시작 가구를 지금 주므로 그대로) */
@@ -276,6 +430,17 @@ function starterFor(layout: HouseLayout, owned: Record<string, number> | null): 
     floor: (owned[layout.floor] ?? 0) > 0 ? layout.floor : DEFAULT_FLOOR,
     wall: (owned[layout.wall] ?? 0) > 0 ? layout.wall : DEFAULT_WALL,
   };
+}
+
+/** 11/26 카라반 디자인 바꾸기 (무료 — 모델·몸통 색·차양 색. 캠핑장 카라반 주인만) */
+export async function setCaravanDesign(store: HouseStore, accountId: string, design: CaravanDesign): Promise<MyHouseResponse> {
+  const id = houseIdFor(accountId, "camp");
+  const h = await store.get(id);
+  if (!h || h.zone !== "camp") throw noHouse("camp");
+  if (h.camp?.kind !== "caravan") throw new HttpError(409, "NOT_CARAVAN", "디자인은 카라반만 바꿀 수 있어요.");
+  const d = caravanDesignOf(h.lot, design);
+  if (!(await store.setCampDesign(id, d, Date.now()))) throw noHouse("camp");
+  return myHouse(store, accountId, undefined, "camp");
 }
 
 /** 오두막 겉모습 바꾸기 (무료) */
@@ -311,12 +476,12 @@ function fillLegacyLots(store: HouseStore): Promise<void> {
 /** 한 채널의 분양 마을: 그 채널에 번지가 있는 집들의 외관·문패 (숨긴 집은 자리만) */
 export async function village(store: HouseStore, ch: number = LEGACY_HOUSING_CHANNEL, now = Date.now(), zone: HouseZone = "village"): Promise<VillageResponse> {
   if (!isHousingChannel(ch)) throw badChannel();
-  if (zone === "sea") {
-    const sea = await store.village(ch, "sea");
+  if (zone === "sea" || zone === "camp") {
+    const sea = await store.village(ch, zone);
     return {
       ch,
-      zone: "sea",
-      lots: SEA_LOT_COUNT,
+      zone,
+      lots: zone === "sea" ? SEA_LOT_COUNT : CAMP_LOT_COUNT,
       houses: sea.filter((h) => !h.hidden).map((h) => ({ ...toSummary(h), exterior: h.exterior })),
       taken: sea.filter((h) => h.hidden).map((h) => h.lot),
       generatedAt: now,
@@ -336,27 +501,69 @@ export async function village(store: HouseStore, ch: number = LEGACY_HOUSING_CHA
   };
 }
 
-export async function editProfile(store: HouseStore, accountId: string, name: string, intro: string, zone: HouseZone = "village"): Promise<MyHouseResponse> {
-  if (!(await store.setProfile(houseIdFor(accountId, zone), name, intro, Date.now()))) throw noHouse(zone);
-  return myHouse(store, accountId, undefined, zone);
+/** 문패(이름)·소개 바꾸기. renamed = 문패가 실제로 바뀌었는지 (11/26 — 마을 목록에는 문패만 보여 소개만 바뀌면 집 바뀜 알림을 건너뛴다) */
+export async function editProfile(
+  store: HouseStore,
+  accountId: string,
+  name: string,
+  intro: string,
+  zone: HouseZone = "village",
+): Promise<{ house: MyHouseResponse; renamed: boolean }> {
+  const prev = await store.setProfile(houseIdFor(accountId, zone), name, intro, Date.now());
+  if (prev === null) throw noHouse(zone);
+  return { house: await myHouse(store, accountId, undefined, zone), renamed: prev !== name };
 }
 
-/** 넓히기 값: 오두막은 배수를 곱한다 (마을 집이 지금 있으면 별장 배수) */
-async function upgradePrice(store: HouseStore, accountId: string, zone: HouseZone, base: number): Promise<number> {
-  if (zone !== "sea") return base;
-  return seaUpgradeCost(base, !!(await store.get(houseIdFor(accountId))));
-}
-
+/**
+ * 넓히기: 바로 다음 단계로만. 11/26 값은 그 집의 별장 표시로 (별장이면 × 4/3 — 오두막은 1.5배·별장 2배).
+ * 11/26 캠핑장 집은 넓히기가 없다 — 카라반·펜션·촌캉스 모두 앞마당 단계를 올리면 방도 커진다 (upgradeYard)
+ */
 export async function upgradePlot(store: HouseStore, accountId: string, to: PlotTierId, ch?: number, zone: HouseZone = "village"): Promise<MyHouseResponse> {
+  if (zone === "camp") throw new HttpError(409, "BAD_TIER", "캠핑장 집은 넓히기가 없어요. 앞마당 단계를 올리면 방도 커져요.");
   const h = await mustHave(store, accountId, zone);
   assertChannel(h, ch);
-  const next = nextTier(h.tier);
-  if (!next || next.id !== to) throw new HttpError(409, "BAD_TIER", "지금 터에서 바로 올릴 수 있는 크기가 아니에요.");
-  const price = await upgradePrice(store, accountId, zone, next.price);
+  const villa = !!(await houseBriefs(store, accountId))[zone]?.villa;
+  const quote = upgradeQuote(h, villa);
+  if (!quote || quote.to !== to) throw new HttpError(409, "BAD_TIER", "지금 터에서 바로 올릴 수 있는 크기가 아니에요.");
+  const price = quote.price;
   await spend(accountId, price, `upgrade:${to}`);
   if (!(await store.upgrade(h.id, h.tier, to, Date.now(), price)))
     await refundAndThrow(accountId, price, new HttpError(409, "CONFLICT", "터 크기가 이미 바뀌었어요. 다시 확인해 주세요."));
   return myHouse(store, accountId, undefined, zone);
+}
+
+/**
+ * 11/26 캠핑장 앞마당 다음 단계 (포구 오두막과 같은 +13,500 · +22,500 — 카라반 강가 ×1.25 · 폭포 앞 ×1.5, 별장이면 × 4/3). 방도 커진다 (catalog CARAVAN_ROOM·CAMP_HOME_ROOM).
+ * 낸 값은 집에 더해 남긴다 (철거 때 돌려준다)
+ */
+export async function upgradeYard(store: HouseStore, accountId: string, ch?: number): Promise<MyHouseResponse> {
+  const h = await mustHave(store, accountId, "camp");
+  assertChannel(h, ch);
+  const yard = h.camp?.yard ?? 1;
+  if (yard >= 3) throw new HttpError(409, "MAX_YARD", "앞마당은 이미 3단계예요.");
+  const to = (yard + 1) as 2 | 3;
+  // 별장 표시는 산 때 남긴 것 (넓히기 upgradePlot과 같은 기준 — 옛 기록이면 houseBriefs가 지금 정해 남긴다)
+  const villa = !!(await houseBriefs(store, accountId)).camp?.villa;
+  const price = campYardCost(h.lot, to, villa);
+  await spend(accountId, price, `camp:yard${to}`);
+  if (!(await store.setYard(h.id, yard, to, Date.now(), price)))
+    await refundAndThrow(accountId, price, new HttpError(409, "CONFLICT", "앞마당 단계가 이미 바뀌었어요. 다시 확인해 주세요."));
+  await settleCampFixtures(store, accountId, to);
+  return myHouse(store, accountId, undefined, "camp");
+}
+
+/**
+ * 11/26 앞마당 단계를 올린 뒤: 기본 가구를 한 번도 안 옮긴 집이면 커진 방의 시작 자리로 옮긴다 (layout campFixturesForYard — 카라반·펜션·촌캉스).
+ * 기본 가구는 가구 수·점수에 안 들어가 놓은 개수·점수는 그대로. 그사이 다른 저장이 끼면(conflict) 그냥 둔다 — 단계 올리기는 이미 끝났다
+ */
+async function settleCampFixtures(store: HouseStore, accountId: string, to: CampYard): Promise<void> {
+  const h = await store.get(houseIdFor(accountId, "camp"));
+  if (!h || !h.camp || h.camp.yard !== to) return;
+  const next = campFixturesForYard(h.layout, to, houseShape(h));
+  if (!next) return;
+  await store
+    .saveDesign(housePair(accountId), "camp", h.tier, next, null, designCounts(next, h.exterior), designScore(next, h.exterior), Date.now(), h.updatedAt)
+    .catch(() => undefined);
 }
 
 /** 11/16 discount = 단 칭호의 가구 할인율 (집 갈래 — 라우트가 lib/titlesServer wornPerk로 넘긴다. 순환 import를 피해 여기서 읽지 않는다) */
@@ -389,11 +596,18 @@ export async function buyFurnitureMe(
   if (def.boriOnly && !ghostSale) throw new HttpError(400, "INVALID_INPUT", "강아지·고양이 가구는 동물원 정문 옆 분양사 보리에게서 사요.");
   // 11/20 사무실 가구 15종은 야근 빌딩 옆 총무팀 문대리만 판다 (lib/office가 ghostSale = true로 부른다)
   if (def.officeShop && !ghostSale) throw new HttpError(400, "INVALID_INPUT", "사무실 가구는 야근 빌딩 옆 총무팀 문대리에게서 사요.");
+  // 11/26 캠핑장 집 기본 가구는 집에 딸려 있어 따로 팔지 않는다 (어느 판매처든)
+  if (def.fixture) throw new HttpError(400, "INVALID_INPUT", "집에 딸린 기본 가구라 따로 팔지 않아요.");
+  if (def.ext && zone === "camp") throw new HttpError(400, "INVALID_INPUT", "외관은 마을 집에서만 바꿀 수 있어요.");
   await mustHave(store, accountId, zone);
-  // 가구·바닥·벽지는 두 집 공용 가방 (다른 집에 놓인 것까지), 외관은 이 집 것만 센다
-  const bag = await store.inventory(housePair(accountId), zone);
+  // 가구·바닥·벽지는 세 집 공용 가방 (다른 집에 놓인 것까지), 외관은 이 집 것만 센다
+  const [bag, briefs] = await Promise.all([store.inventory(housePair(accountId), zone), def.skin === "window" ? houseBriefs(store, accountId) : null]);
   const owned = (bag.have[itemId] ?? 0) + (isHouseOwnItem(itemId) ? 0 : (bag.away[itemId] ?? 0));
   if (owned >= MAX_OWN_PER_ITEM) throw new HttpError(409, "MAX_OWNED", `${def.name}, 이미 ${MAX_OWN_PER_ITEM}개를 다 가졌어요.`);
+  // 11/26 창문 모양(눈꽃 창가)은 집 한 채에 하나만 쓴다 → 가진 집 수만큼까지 (집이 늘면 더 살 수 있다)
+  const houses = briefs ? HOUSE_ZONES.filter((z) => briefs[z]).length : 0;
+  if (briefs && owned >= Math.max(1, houses))
+    throw new HttpError(409, "MAX_OWNED", `${def.name}, 집 한 채에 하나씩 써요. 집이 ${houses}채라 ${houses}개까지 가질 수 있어요.`);
   // 11/16 집 갈래 칭호의 가구 할인 (lib/titles — 원가 × (1 − 할인율), 1P 단위 내림. 되팔기 값은 원가 기준 그대로라 할인가보다 늘 싸다)
   const price = discountedPrice(def.price, discount);
   const me = await spend(accountId, price, `furniture:${itemId}`);
@@ -410,6 +624,8 @@ export async function buyFurnitureMe(
 export async function sellFurniture(store: HouseStore, accountId: string, itemId: string, zone: HouseZone = "village"): Promise<MyHouseResponse & { refunded: number }> {
   const def = furnitureById(itemId);
   if (!def) throw new HttpError(400, "INVALID_INPUT", "알 수 없는 물건이에요.");
+  // 11/26 캠핑장 집 기본 가구는 집에 딸려 있어 팔거나 없앨 수 없다 (가방에도 없다)
+  if (def.fixture) throw new HttpError(409, "FIXTURE", "집에 딸린 기본 가구라 팔 수 없어요. 옮기거나 돌릴 수는 있어요.");
   await mustHave(store, accountId, zone);
   const r = await store.takeItem(housePair(accountId), zone, itemId);
   if (r === "none") throw new HttpError(409, "NO_ITEM", "그 물건을 가지고 있지 않아요.");
@@ -444,7 +660,8 @@ export async function saveLayout(store: HouseStore, accountId: string, tier: Plo
   // 11/24 창문 칸이 없는 저장(예전 화면)은 지금 창문 모양을 그대로 둔다
   const layout: HouseLayout = sent.window === undefined && h.layout.window !== undefined ? { ...sent, window: h.layout.window } : sent;
   const bag = await store.inventory(pair, zone);
-  const v = validateLayout(layout, tier, bag.have);
+  // 11/26 방 크기·가구 수는 집마다 (캠핑장 카라반은 앞마당 단계, 기본 가구 검사 — catalog houseShape)
+  const v = validateLayout(layout, houseShape(h), bag.have);
   if (!v.ok) throw new HttpError(400, v.code, awayHint(v, layout, bag));
   // 놓은 개수·점수는 안(배치) + 밖(지금 외관)을 함께 센다 (외관에 쓴 아이템을 되팔지 못하게)
   // 11/18 읽은 뒤 외관 저장이 먼저 됐으면 놓은 개수가 틀리므로 저장하지 않는다 (h.updatedAt — 다시 열면 된다)
@@ -495,9 +712,12 @@ export async function likeHouse(
 
 /** 지금 놓인 화분의 물 준 기록만 */
 export async function housePlants(store: HouseStore, houseId: string, now = Date.now()): Promise<PlantsResponse> {
+  // 11/26 집 확인과 화분 기록을 함께 읽는다 (집이 없거나 숨김이면 읽은 것은 버린다 — 집 들어갈 때 Redis 왕복 1번 줄임)
+  const early = isHouseId(houseId) ? store.plants(houseId) : null;
+  early?.catch(() => undefined);
   const h = await findVisibleHouse(store, houseId);
   const pots = new Set(h.layout.items.filter((p) => p.i === "pot").map((p) => p.u));
-  const all = await store.plants(h.id);
+  const all = await (early ?? store.plants(h.id));
   return { plants: Object.fromEntries(Object.entries(all).filter(([u]) => pots.has(u))), now };
 }
 
@@ -520,8 +740,11 @@ export async function waterPlant(store: HouseStore, houseId: string, u: string, 
 
 /** 지금 배치와 맞는 켜짐·채널 값만 (0·꺼짐은 빠진다) */
 export async function houseStates(store: HouseStore, houseId: string): Promise<HouseStatesResponse> {
+  // 11/26 집 확인과 가구 상태를 함께 읽는다 (housePlants와 같다)
+  const early = isHouseId(houseId) ? store.states(houseId) : null;
+  early?.catch(() => undefined);
   const h = await findVisibleHouse(store, houseId);
-  return { states: liveStates(h.layout, h.tier, await store.states(h.id)) };
+  return { states: liveStates(h.layout, h.tier, await (early ?? store.states(h.id))) };
 }
 
 /** 가구 u의 상태를 a로 (방에 들어온 누구든 — 방 중계 use와 같은 권한). 0이면 지운다 */
@@ -593,13 +816,22 @@ export async function houseRank(
   staffId: string | null = null,
 ): Promise<{ rows: HouseRankRow[]; mine: HouseRankRow | null }> {
   const since = period === "week" ? kstWeekStart(now) : 0;
-  // 11/16 포구 오두막도 같은 순위에 (번지 자리에 「포구 N번 오두막」). 운영자·내 집은 두 채 모두
-  const staffHouses = staffId ? new Set([houseIdFor(staffId), houseIdFor(staffId, "sea")]) : null;
+  // 11/16 포구 오두막도 같은 순위에 (번지 자리에 「포구 N번 오두막」). 11/26 캠핑장 집도 (「언젠가 캠핑장 폭포 앞 2번 카라반」). 운영자·내 집은 세 채 모두
+  const staffHouses = staffId ? new Set(houseIdsOf(staffId)) : null;
   const pool = (await store.list("score", HOUSE_RANK_POOL)).filter(
     (h) => !h.hidden && !staffHouses?.has(h.id) && Math.max(h.updatedAt, h.createdAt) >= since,
   );
-  const mine = accountId ? new Set([houseIdFor(accountId), houseIdFor(accountId, "sea")]) : null;
+  const mine = accountId ? new Set(houseIdsOf(accountId)) : null;
   const all = pool.map((h, i) => ({ rank: i + 1, name: h.name, sub: `${houseLabel(h)} · ${h.ownerName}`, value: h.score, me: !!mine?.has(h.id) }));
   const mineAt = all.findIndex((r) => r.me);
   return { rows: all.slice(0, size), mine: mineAt >= size ? all[mineAt] : null };
+}
+
+// ── 11/26 가구점 밖 판매처(보따리상·보리·문대리·유령선)가 가구를 넣을 집 ──
+
+/** 가구를 넣을 집: 마을 집 먼저, 없으면 포구 오두막, 없으면 캠핑장 집 (공용 가방이라 어느 집이든 같은 가방). 셋 다 없으면 null */
+export async function furnitureZone(store: HouseStore, accountId: string): Promise<HouseZone | null> {
+  const list = await store.brief(houseIdsOf(accountId));
+  const i = list.findIndex((b) => b !== null);
+  return i < 0 ? null : HOUSE_ZONES[i];
 }

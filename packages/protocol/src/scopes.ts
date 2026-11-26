@@ -25,11 +25,8 @@ export type ScopeSpot = {
 const telescope = (id: string, x: number, y: number, name: string): ScopeSpot => ({ id, kind: "telescope", x, y, ax: x, ay: y + 10, name });
 const binocular = (id: string, x: number, y: number, name: string): ScopeSpot => ({ id, kind: "binocular", x, y, ax: x, ay: y - 10, name });
 
-/** 캠핑장 별 망원경 (전망대 계단 아래 · 계곡 통나무 다리 건너 산책로 옆) */
-export const CAMP_SCOPES: readonly ScopeSpot[] = [
-  telescope("scope:lookout", 1150, 236, "전망대 별 망원경"),
-  telescope("scope:trail", 1124, 330, "계곡 별 망원경"),
-];
+/** 캠핑장 별 망원경 — 11/26 폭포 계곡 개편 때 전망대와 함께 없앴어요 (별자리 미션·퀘스트에 묶인 것 없음). 자리 목록만 남겨 둬요 */
+export const CAMP_SCOPES: readonly ScopeSpot[] = [];
 
 /**
  * 바닷가 동전 망원경. 11/16 r19 사용자 "바닷가 별자리는 어디서 해? 안 보여" → 눈에 띄는 자리로:

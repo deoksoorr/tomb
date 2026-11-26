@@ -1,8 +1,12 @@
 import {
+  CAMP_FIRE_USE_RE,
+  campFireUseId,
+  type HomesZone,
   STAFF_TP_GAP_MS,
   STAFF_TP_NEAR_PX,
   newLookBucket,
   takeLookToken,
+  type GoblinInfo,
   type LookBucket,
   type StaffTpDenyWhy,
   fireworkShowMs,
@@ -44,6 +48,7 @@ import {
   ridePetOfLook,
   lookWithPetFallback,
   boatSeatById,
+  clampToArea,
   balloonBoarding,
   balloonSeatById,
   BALLOON_BOARD_GRACE_MS,
@@ -103,9 +108,11 @@ import {
   nameStyleOfLook,
 } from "@tomb/protocol";
 import { ChatRecent, type RecentChat } from "./chatRecent";
-import { MoveBudget, RateLimiter, allocSid, dist, stepToward, type Point } from "./logic";
+import { MoveBudget, RateLimiter, allocSid, dist, homesEvent, stepToward, type Point } from "./logic";
 import { GoblinCore, type GoblinState } from "./goblin";
 import { SnowStackYard, SnowmanYard } from "./snowmen";
+import { CAMP_FIRE_INTERVAL_MS, CampFires, campFireLotFor } from "./campFire";
+import { HomesCoalescer } from "./homesRelay";
 
 // 채널 하나의 상태 머신. ChannelDO는 소켓·스토리지·타이머만 이어 주고 판정은 전부 여기서 동기적으로 한다.
 // Workers API를 쓰지 않으므로 Node에서 그대로 단위 테스트하고(channel.test.ts) 부하 테스트의 틱 벤치마크에도 쓴다.
@@ -174,7 +181,8 @@ export type PeerRecord = {
 };
 
 /** 재연결 유예 예약. until(ms)까지 sid·좌석·위치를 지킨다 */
-export type Reservation = PeerRecord & { until: number };
+/** code = 11/26 끊길 때 받은 닫힘 코드 (유예 중에 DO가 잠들었다 깨어나도 접속 기록의 「창 닫음」·「연결 끊김」을 잃지 않게) */
+export type Reservation = PeerRecord & { until: number; code?: number };
 
 /** Worker가 토큰을 검증한 뒤 DO에 넘기는 입장 정보 */
 export type JoinTicket = {
@@ -232,7 +240,8 @@ export interface ChannelHost<C> {
   lastPing(conn: C): number;
   /** 방문자가 이 채널에 자리를 잡았다(신규·복귀·교체) / 최종 퇴장했다 → 로비의 채널 간 중복 방지 레지스트리 */
   visitorJoined(visitorId: string, at: number): void;
-  visitorLeft(visitorId: string): void;
+  /** code = 11/26 마지막으로 본 닫힘 코드 (접속 기록의 나감 종류, 없으면 모름) */
+  visitorLeft(visitorId: string, code?: number): void;
   /** 친구 들고 남: 연결이 끊겨 재연결 유예에 들어갔다 (없으면 알리지 않는다) */
   visitorDropped?(visitorId: string): void;
   /** Vercel이 서명한 증서(look/firework) 검증. 비동기(HMAC) */
@@ -326,6 +335,8 @@ export const MAP_INTERVAL_MS = 1_000;
 const SEAT_KEY_PREFIX: Record<AwayMapId, string> = { camp: "@c:", sea: "@s:" };
 /** 이 사람이 있는 맵 */
 const mapOfPeer = (p: { map?: AwayMapId }): MapId => mapOf(p.map);
+/** 11/26 고블린 등장 알림: 마을은 옛 모양(goblin — 옛 클라이언트도 그린다), 바닷가·캠핑장은 goblinMap (옛 클라이언트는 모르는 t라 버린다) */
+const goblinSpawnEvent = (g: GoblinInfo): string => encodeEvent(g.m ? { t: "goblinMap", g } : { t: "goblin", g });
 /** 11/17 월드 채널에서 사냥터에 들어가 있는 사람(away + 장소 hunt)은 실내여도 채널 채팅을 쓴다 */
 const huntChatOk = (room: boolean | undefined, p: { away?: true; place?: AwayPlace }): boolean => !room && p.away === true && p.place === "hunt";
 /** 맵 + 와이어 좌석 id → 좌석표 키 */
@@ -366,6 +377,8 @@ export const SEAT_STAND_DY = 9;
 type Peer<C> = PeerRecord & {
   /** null = 연결이 끊겨 재연결 유예 중. 다른 사람에게는 멈춘 아바타로 계속 보인다 */
   conn: C | null;
+  /** 11/26 접속 기록: 마지막으로 본 닫힘 코드 (끊김·내보냄). 최종 퇴장 때 나감 종류로 로비에 넘긴다 */
+  closeCode?: number;
   until: number;
   /** 클라이언트가 마지막으로 보고한 위치. 서버 위치(x,y)는 속도 예산 안에서 이 지점을 따라간다 */
   tx: number;
@@ -393,6 +406,8 @@ type Peer<C> = PeerRecord & {
   lastMegaphoneAt?: number;
   /** 3번 집 안 가구 쓰기 (없으면 아직 안 씀) */
   lastUseAt?: number;
+  /** 11/26 촌캉스 아궁이 불 켜기·끄기 (없으면 아직 안 씀 — campFire.ts) */
+  lastFireAt?: number;
   /** 5번 이모티콘·24번 벤치 상태 (없으면 아직 안 씀) */
   lastEmoAt?: number;
   lastMoodAt?: number;
@@ -498,6 +513,10 @@ export class ChannelCore<C extends object> {
   private readonly snowmen = new SnowmanYard();
   /** 11/18 캠핑장에 쌓는 중인 덩이 (메모리 + 저장소) */
   private readonly stacks = new SnowStackYard();
+  /** 11/26 촌캉스 아궁이 불 (메모리에만 — 캠핑장에 새로 들어온 사람에게 보낸다) */
+  private readonly campFires = new CampFires();
+  /** 11/26 집 바뀜 알림 묶기 (구역마다 HOMES_GAP_MS에 한 번) */
+  private readonly homes = new HomesCoalescer();
   /** 그 방문자가 지금 이 채널 캠핑장에 있나 (유예 중 포함 — 덩이 주인 확인) */
   private readonly inCamp = (visitorId: string): boolean => {
     const sid = this.byVisitor.get(visitorId);
@@ -622,7 +641,14 @@ export class ChannelCore<C extends object> {
         this.host.close(conn, CLOSE.REPLACED, "replaced");
       }
     }
-    for (const r of reserved) if (!this.adopt(r, null, r.until, now)) this.host.dropReservation(r.sid);
+    for (const r of reserved) {
+      if (!this.adopt(r, null, r.until, now)) this.host.dropReservation(r.sid);
+      else if (typeof r.code === "number") {
+        // 11/26 유예 중에 잠들었다 깨어났다: 끊길 때의 닫힘 코드를 되살린다 (없으면 접속 기록이 모두 「연결 끊김」으로 남았다)
+        const p = this.peers.get(r.sid);
+        if (p && !p.conn) p.closeCode = r.code;
+      }
+    }
     let revived = 0;
     if (liveGraceMs > 0) {
       for (const rec of live) {
@@ -780,6 +806,7 @@ export class ChannelCore<C extends object> {
     }
 
     p.conn = conn;
+    p.closeCode = undefined;
     p.until = 0;
     this.bySocket.set(conn, p.sid);
     this.resetConnState(p, now);
@@ -800,7 +827,7 @@ export class ChannelCore<C extends object> {
   private relocate(p: Peer<C>, want: Point): void {
     const seat = p.seatId ? seatSlotIn(mapOfPeer(p), p.seatId) : undefined;
     // 움직이는 자리(조각배, 50번): 자리는 그대로 두고 위치만 클라이언트가 알려 준 물 위로 (앵커와 멀어도 된다)
-    if (seat?.mobile) return this.moveSeated(p, want);
+    if (seat?.mobile) return this.moveSeated(p, seat.area ? clampToArea(seat.area, want.x, want.y) : want);
     if (seat && dist(seat, want) <= SEAT_SERVER_RADIUS) return;
     if (p.seatId) this.releaseSeat(p);
     // 그 사이 다른 사람이 앉은 좌석 위로 돌아오지 않는다 (클라이언트는 seatDenied를 받고 가까운 빈자리로 옮긴다)
@@ -836,8 +863,10 @@ export class ChannelCore<C extends object> {
 
   private welcome(p: Peer<C>, channel: number, resumed: boolean, now = Date.now()): void {
     const map = mapOfPeer(p);
-    // 22번 고블린은 마을에만 나온다
-    const goblin = this.goblinOn && map === "village" ? this.goblin.visible(now) : undefined;
+    // 22번 고블린: 옛 모양(goblin)은 마을 고블린 + 내가 마을일 때만 (옛 클라이언트는 맵을 모르고 마을 길로 그린다).
+    // 11/26 gob = 어느 맵이든 지금 나와 있는 고블린 (새 클라이언트는 다른 맵이면 정류장 쪽 화살표)
+    const gob = this.goblinOn ? this.goblin.visible(now) : undefined;
+    const goblin = gob && !gob.m && map === "village" ? gob : undefined;
     this.sendTo(p, {
       t: "welcome",
       sid: p.sid,
@@ -852,6 +881,7 @@ export class ChannelCore<C extends object> {
       // 22번: 서버 시계(고양이·유령·고블린을 모두가 같은 시각으로) + 지금 나와 있는 고블린
       ...(this.cfg.room ? {} : { now }),
       ...(goblin ? { goblin } : {}),
+      ...(gob ? { gob } : {}),
       // 11/15 캠핑장·11/16 바닷가에 있으면 알린다 (마을이면 없다 — 옛 서버와 같은 모양)
       ...awayTag(map),
       // 11/15 채널 전체 인원 (마을·캠핑장 합계 — HUD "N/40명"). 방에는 없다
@@ -916,6 +946,7 @@ export class ChannelCore<C extends object> {
     const p = this.peers.get(sid);
     if (!p || p.conn !== conn) return;
     p.conn = null;
+    p.closeCode = code;
     if (code === CLOSE_NORMAL || this.cfg.graceMs <= 0) {
       this.keepDeparted(p, now);
       return this.remove(p);
@@ -930,7 +961,7 @@ export class ChannelCore<C extends object> {
       p.state = STATE.idle;
       this.markDirty(p);
     }
-    this.host.saveReservation({ ...this.record(p), until: p.until });
+    this.host.saveReservation({ ...this.record(p), until: p.until, code });
     this.host.visitorDropped?.(p.visitorId);
   }
 
@@ -970,6 +1001,20 @@ export class ChannelCore<C extends object> {
     if (!p.conn) this.host.dropReservation(p.sid);
     this.kick(p, code, reason);
     return true;
+  }
+
+  /**
+   * 11/26 점검 시작: 운영자(staff)가 아닌 모든 접속과 재연결 유예 예약을 4013으로 정리한다 (유예 없음). 정리한 수
+   */
+  expelForMaintenance(): number {
+    let n = 0;
+    for (const p of [...this.peers.values()]) {
+      if (p.staff === true) continue;
+      if (!p.conn) this.host.dropReservation(p.sid);
+      this.kick(p, CLOSE.MAINTENANCE, "maintenance");
+      n++;
+    }
+    return n;
   }
 
   /** 관리자 포인트 지급 등: 접속 중인 그 방문자에게만 "내 정보 새로 받기"를 보낸다. 보냈으면 true */
@@ -1067,8 +1112,10 @@ export class ChannelCore<C extends object> {
     p.dir = m.dir;
     // 앉아 있는 동안 위치는 좌석 앵커에 고정한다 (움직이는 자리 — 조각배 — 는 보고된 위치를 따라간다)
     if (!p.seatId || held?.mobile) {
-      p.tx = m.x;
-      p.ty = m.y;
+      // 11/26 다닐 수 있는 타원이 있는 자리(캠핑장 트램펄린 매트)는 그 밖으로 나가지 않는다
+      const to = held?.area ? clampToArea(held.area, m.x, m.y) : m;
+      p.tx = to.x;
+      p.ty = to.y;
     }
     // 즉시 중계하지 않는다. 서버 위치만 갱신하고 "바뀐 사람"에 넣어 다음 틱에 한 번에 보낸다.
     if (this.chase(p, now) || changed) this.markDirty(p);
@@ -1097,7 +1144,8 @@ export class ChannelCore<C extends object> {
 
   private onEvent(p: Peer<C>, m: C2S, now: number): void {
     // 3번: 방(집)도 1인 자리(집 안 가구)는 좌석처럼 판정한다 → sit/stand는 받는다 (월드 자리 id는 onSit이 거절)
-    if (!this.cfg.room && m.t === "use") return;
+    // 11/26 월드 채널은 캠핑장 촌캉스 아궁이 불(ag{터})만 받는다 — 같은 맵 사람에게만 (저장 없음)
+    if (!this.cfg.room && m.t === "use" && !CAMP_FIRE_USE_RE.test(m.u)) return;
     if (this.cfg.room && (m.t === "emote" || m.t === "graveEvent" || m.t === "firework" || m.t === "megaphone" || m.t === "bbq")) return;
     switch (m.t) {
       case "sit":
@@ -1139,6 +1187,8 @@ export class ChannelCore<C extends object> {
         p.lastActAt = now;
         return this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "act", sid: p.sid, kind: m.kind, x: p.x, y: p.y }));
       case "use":
+        // 11/26 월드 채널은 촌캉스 아궁이 불만 (마당 근처·사람마다 1초에 한 번 — onCampFire)
+        if (!this.cfg.room) return this.onCampFire(p, m.u, m.a, now);
         // 3번 집 안 가구 쓰기: 뜻은 클라이언트가 정한다 (피아노 음·불 켜기 …). 보낸 사람은 이미 화면에 반영했다
         if (now - (p.lastUseAt ?? -Infinity) < USE_INTERVAL_MS) return;
         p.lastUseAt = now;
@@ -1277,9 +1327,30 @@ export class ChannelCore<C extends object> {
     this.broadcastMap(map, encodeEvent({ t: "snowHit", sid: p.sid, by, n, ...(h !== undefined ? { h } : {}) }));
   }
 
-  /** 11/17 캠핑장에 들어왔다: 지금 서 있는 눈사람과 11/18 쌓는 중인 덩이 */
+  /** 11/17 캠핑장에 들어왔다: 지금 서 있는 눈사람과 11/18 쌓는 중인 덩이 (+ 11/26 누가 켜고 끈 아궁이 불) */
   private sendSnowmen(p: Peer<C>, now: number): void {
     this.sendTo(p, { t: "snowmen", list: this.snowmen.all(now), stacks: this.stacks.all(now, this.inCamp) });
+    this.sendCampFires(p, now);
+  }
+
+  /**
+   * 11/26 촌캉스 아궁이 불 (월드 채널 use "ag{터}"). 캠핑장에 있고(실내 아님) 그 촌캉스 마당 근처에 서 있는 사람만,
+   * 사람마다 CAMP_FIRE_INTERVAL_MS에 한 번. 채널이 터마다 마지막 상태를 기억해 늦게 온 사람에게도 보낸다 (campFire.ts)
+   */
+  private onCampFire(p: Peer<C>, u: string, a: number, now: number): void {
+    if (!this.snowOk(p)) return;
+    if (now - (p.lastFireAt ?? -Infinity) < CAMP_FIRE_INTERVAL_MS) return;
+    const lot = campFireLotFor(u, p.x, p.y);
+    if (lot === null) return;
+    p.lastFireAt = now;
+    const on = a > 0;
+    this.campFires.set(lot, on, now);
+    this.broadcastMap("camp", encodeEvent({ t: "use", sid: p.sid, u: campFireUseId(lot), a: on ? 1 : 0 }), p.sid);
+  }
+
+  /** 기억하는 아궁이 불을 p에게 (sid 0 = 누가 켰는지 모름 — 화면은 불만 바꾼다) */
+  private sendCampFires(p: Peer<C>, now: number): void {
+    for (const [lot, on] of this.campFires.fresh(now)) this.sendTo(p, { t: "use", sid: 0, u: campFireUseId(lot), a: on ? 1 : 0 });
   }
 
   /** 캠핑장에서 눈을 만질 수 있는 사람인지 (월드 채널 캠핑장, 실내 아님) */
@@ -1667,6 +1738,24 @@ export class ChannelCore<C extends object> {
     return true;
   }
 
+  /**
+   * 11/26 집 바뀜 알림 (Worker의 /internal/homes → RPC). 구역마다 HOMES_GAP_MS에 한 번만 이 채널 모두에게 homes 한 줄,
+   * 그 사이 알림은 가장 새 v로 묶어 둔다 → flushIn ms 뒤 flushHomes를 불러야 한다 (null이면 기다리는 것 없음). 방은 받지 않는다
+   */
+  relayHomes(zone: HomesZone, v: number, now: number): { ok: boolean; flushIn: number | null } {
+    if (this.cfg.room) return { ok: false, flushIn: null };
+    const r = this.homes.offer(zone, v, now);
+    if (r.send !== null) this.broadcast(homesEvent({ zone, v: r.send }));
+    return { ok: true, flushIn: r.flushIn };
+  }
+
+  /** 묶어 둔 집 바뀜 알림 중 간격이 끝난 것을 보낸다. 다음에 부를 때까지 남은 ms (없으면 null) */
+  flushHomes(now: number): number | null {
+    const r = this.homes.flush(now);
+    for (const [zone, v] of r.send) this.broadcast(homesEvent({ zone, v }));
+    return r.flushIn;
+  }
+
   /** 채널 단위 중복 제거: 같은 키는 windowMs에 한 번만 true */
   private once(key: string, windowMs: number, now: number): boolean {
     const last = this.recentEvents.get(key);
@@ -1961,19 +2050,26 @@ export class ChannelCore<C extends object> {
   /** 시간이 흘렀다: 사라짐·등장을 알린다. 메시지·입장·알람마다 부른다 (비교 몇 번뿐) */
   goblinCheck(now: number): void {
     if (!this.goblinOn) return;
-    const r = this.goblin.check(now, this.online);
-    // 11/15 고블린은 마을에만 (캠핑장 사람에게는 알리지 않는다)
-    if (r.gone) this.broadcastMap("village", encodeEvent({ t: "goblinGone", id: r.gone }));
-    if (r.spawned) this.broadcastMap("village", encodeEvent({ t: "goblin", g: r.spawned }));
+    const r = this.goblin.check(now, this.online, (m) => this.mapOpen(m));
+    // 11/26 맵 무작위(마을 50·바닷가 25·캠핑장 25) — 나타남·사라짐은 채널 모두에게 (다른 맵 사람은 「○○에 나타났어요」 + 정류장 쪽 화살표)
+    if (r.gone) this.broadcast(encodeEvent({ t: "goblinGone", id: r.gone }));
+    if (r.spawned) this.broadcast(goblinSpawnEvent(r.spawned));
     if (r.changed) this.host.goblinChanged?.(this.goblin.state);
   }
 
-  /** 개발용 훅: 지금 바로 나오게 한다 (이미 나와 있으면 그대로). 접속자가 없으면 null */
-  forceGoblin(now: number): GoblinState["cur"] {
+  /** 11/26 이 맵에 갈 수 있는 사람이 채널에 있다 (입장 토큰 허락 — 바닷가·캠핑장이 닫힌 서버면 그 몫은 마을로) */
+  private mapOpen(m: MapId): boolean {
+    if (m === "village") return true;
+    for (const p of this.peers.values()) if (mapAllowed(m, p)) return true;
+    return false;
+  }
+
+  /** 개발용 훅: 지금 바로 나오게 한다 (이미 나와 있으면 그대로). 접속자가 없으면 null. map = 11/26 맵을 정해서 (없으면 확률대로) */
+  forceGoblin(now: number, map?: MapId): GoblinState["cur"] {
     if (!this.goblinOn || this.online === 0) return null;
     this.goblinCheck(now);
     if (!this.goblin.visible(now)) {
-      this.broadcastMap("village", encodeEvent({ t: "goblin", g: this.goblin.spawn(now) }));
+      this.broadcast(goblinSpawnEvent(this.goblin.spawn(now, (m) => this.mapOpen(m), map)));
       this.host.goblinChanged?.(this.goblin.state);
     }
     return this.goblin.state.cur;
@@ -1982,7 +2078,8 @@ export class ChannelCore<C extends object> {
   /** 잡기 요청: 가장 먼저 닿은 한 명만. 위치는 서버가 아는 값(마지막 보고·서버 추적 위치 중 가까운 쪽)으로 잰다 */
   private onGoblinClaim(p: Peer<C>, id: string, now: number): void {
     // 11/18 보안: 실내(away — 다른 사람 화면에 안 보이는 상태)에서는 잡지 못한다
-    if (!this.goblinOn || !p.conn || mapOfPeer(p) !== "village" || p.away) return;
+    // 11/26 고블린이 나타난 맵에 있어야 한다 (GoblinCore.claim이 맵을 본다)
+    if (!this.goblinOn || !p.conn || p.away) return;
     // 순간이동(warp·같은 맵 옮기기, 11/18 입장 스폰·재접속 위치·좌석으로 옮겨 앉기) 바로 뒤에는 잡지 못한다 — 고블린 위로 순간이동해 먼저 잡는 봇을 막는다
     if (now - Math.max(p.lastWarpAt, p.lastMapAt ?? -Infinity, p.lastTeleportAt ?? -Infinity) < GOBLIN_AFTER_TELEPORT_MS) return;
     this.goblinCheck(now);
@@ -1990,7 +2087,7 @@ export class ChannelCore<C extends object> {
     // 클라이언트가 보고한 목표 지점은 서버 위치 가까이일 때만 인정한다 (목표만 고블린 위에 찍는 속임 방지)
     const positions = [{ x: p.x, y: p.y }];
     if (Math.hypot(p.tx - p.x, p.ty - p.y) <= GOBLIN_TARGET_SLACK) positions.push({ x: p.tx, y: p.ty });
-    const points = this.goblin.claim(id, p.visitorId, positions, now);
+    const points = this.goblin.claim(id, p.visitorId, positions, now, mapOfPeer(p));
     if (points === null) return;
     this.host.goblinChanged?.(this.goblin.state);
     // 11/19 "누가 잡았다"는 채널 모두에게 (캠핑장·바닷가 사람도 띠·채팅 알림으로 본다). 한 마리당 한 번, 이름은 입장 토큰 이름(p.name)
@@ -2061,6 +2158,7 @@ export class ChannelCore<C extends object> {
   // ── 내부 ──
 
   private kick(p: Peer<C>, code: number, reason: string): void {
+    p.closeCode = code;
     if (p.conn) {
       this.host.persist(p.conn, null);
       this.host.close(p.conn, code, reason);
@@ -2084,7 +2182,7 @@ export class ChannelCore<C extends object> {
     this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "leave", sid: p.sid }));
     this.host.countChanged(this.count);
     this.broadcastCount();
-    this.host.visitorLeft(p.visitorId);
+    this.host.visitorLeft(p.visitorId, p.closeCode);
     this.host.liveChanged?.(true);
   }
 

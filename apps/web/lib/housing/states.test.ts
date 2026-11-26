@@ -11,7 +11,7 @@ import type { HouseLayout, Placed } from "./types";
 const lay = (items: Placed[]): HouseLayout => ({ items, floor: "floor_grass", wall: "wall_fence" });
 const ID = "abcdefghijkl";
 /** 오두막 없는 집 하나 (공용 가방 = 이 집 id) */
-const solo = (id: string): HousePair => ({ village: id, sea: `${id}-sea` });
+const solo = (id: string): HousePair => ({ village: id, sea: `${id}-sea`, camp: `${id}-camp` });
 
 const FIRE: Placed = { u: "f1", i: "fireplace", x: 1, y: 1, r: 0 };
 const LAMP: Placed = { u: "l1", i: "floor_lamp", x: 5, y: 1, r: 0 };

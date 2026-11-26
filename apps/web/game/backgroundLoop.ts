@@ -24,6 +24,9 @@ function updateOnly(game: Phaser.Game, time: number, delta: number): void {
   ev.emit(Phaser.Core.Events.PRE_STEP, time, delta);
   ev.emit(Phaser.Core.Events.STEP, time, delta);
   game.scene.update(time, delta);
+  // 11/26 Phaser는 장면 처리 중 표시(isProcessing)를 그리기(render) 끝에서야 내린다. 그리기를 건너뛰면 표시가 켜진 채 남아,
+  // 그 사이 들어온 장면 명령(사냥 시작의 launch·bringToTop 등)이 다음 프레임 처리 중에 자기 자신을 끝없이 다시 줄 세워 탭이 멈췄다(메모리 초과)
+  (game.scene as unknown as { isProcessing: boolean }).isProcessing = false;
   ev.emit(Phaser.Core.Events.POST_STEP, time, delta);
 }
 
@@ -81,8 +84,9 @@ export function installBackgroundLoop(game: Phaser.Game): () => void {
     },
     enterLive: () => wrapThrottled(BACKGROUND_FPS, live),
     leaveLive: unwrap,
-    covered: isGameCovered,
-    enterCovered: () => wrapThrottled(COVERED_FPS, () => isGameCovered() && !isTabHidden()),
+    // 11/26 판 진행 중(사냥 등)에는 창이 덮어도 줄이지 않는다 (조작감)
+    covered: () => isGameCovered() && !live(),
+    enterCovered: () => wrapThrottled(COVERED_FPS, () => isGameCovered() && !isTabHidden() && !live()),
     leaveCovered: unwrap,
     rest: (on) => {
       if ((bridge.last("game:rest")?.on ?? false) !== on) bridge.emit("game:rest", { on });

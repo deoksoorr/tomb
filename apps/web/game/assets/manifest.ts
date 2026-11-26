@@ -9,6 +9,7 @@ import * as props from "../sprites/props";
 import { WORLD_PROP_ART, WORLD_PROP_SHEETS } from "../sprites/worldProps";
 import { GY_ART, GY_SHEETS } from "../sprites/graveyardProps";
 import * as art from "../sprites/extras";
+import { padTexCanvas, villageTexPad } from "../sprites/villagePad";
 
 // 텍스처 키 → 생성기. 지금은 전부 코드로 그린 플레이스홀더 픽셀아트이고,
 // 나중에 CC0 스프라이트시트로 바꾸려면 해당 항목을 { kind: "file", url, frameW?, frameH? } 로 바꾸면 된다
@@ -188,7 +189,19 @@ function buildManifest(): Record<string, TextureSource> {
   return m;
 }
 
-export const MANIFEST: Readonly<Record<string, TextureSource>> = buildManifest();
+/** 여백 두르기 전 그림 (시험용 — 맵은 MANIFEST) */
+export const MANIFEST_RAW: Readonly<Record<string, TextureSource>> = buildManifest();
+/**
+ * 11/26 마을 소품 텍스처는 둘레에 빈 칸을 두르고 끝에 닿은 칠은 윤곽으로 닫는다 (sprites/villagePad — 캔버스 끝 잘림).
+ * 그림 함수는 그대로라 아이콘·다른 장면은 같은 그림, 맵 자리는 원점 기준으로 픽셀 그대로
+ */
+export const MANIFEST: Readonly<Record<string, TextureSource>> = Object.fromEntries(
+  Object.entries(MANIFEST_RAW).map(([key, src]) => {
+    const pad = villageTexPad(key);
+    if (!pad || src.kind !== "procedural") return [key, src];
+    return [key, { kind: "procedural", build: () => { const b = src.build(); return { ...b, ...padTexCanvas(b.canvas, pad, b.frameW, b.frameH) }; } } satisfies TextureSource];
+  }),
+);
 
 /** 캔버스를 텍스처로 등록 (프레임 크기가 있으면 0..n 번호 프레임을 만든다) */
 export function addCanvasTexture(scene: Phaser.Scene, key: string, b: Built): void {

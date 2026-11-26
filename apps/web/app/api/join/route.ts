@@ -22,6 +22,8 @@ import { ensureLotterySettled } from "@/lib/lotteryService";
 import { kstDay, lookOf } from "@/lib/store/accounts";
 import { DORMANT_RENAME_MESSAGE, type JoinResponse } from "@/lib/types";
 import { JoinRequestSchema, readBody } from "@/lib/validate";
+import { signupSrcOf, srcLabel } from "@/lib/signupSource";
+import { getSignupSrc } from "@/lib/store/signupSrc";
 
 /**
  * 입장 토큰(60초) 발급. 채널 상한은 Channel DO가 강제하고, 여기서는 채널만 고른다.
@@ -29,7 +31,7 @@ import { JoinRequestSchema, readBody } from "@/lib/validate";
  */
 export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
-  const { channel, name, color, body } = await readBody(req, JoinRequestSchema);
+  const { channel, name, color, body, src } = await readBody(req, JoinRequestSchema);
   await rateLimit("join", req, visitorId);
   // 47번: 실시간 서버로 들어가는 문이라 캐시 없이 다시 판정하고, 계정의 접속 IP(해시)를 가볍게 남긴다
   await assertNotBanned(req, visitorId, true);
@@ -37,6 +39,11 @@ export const POST = handler(async (req) => {
   await recordSeen(req, visitorId, now);
   // 같은 사람 판정: 기기 표시·브라우저 환경·IP 대역 해시 (응답 뒤에, 같은 값은 10분에 한 번)
   runAfter(() => recordSignals(req, visitorId, now));
+  // 11/26 이번 접속 유입·시작 시각 (그 탭의 첫 입장 요청에만 실려 온다 — 관리자 「지금 접속자」, 응답 뒤에 명령 1개)
+  if (src) {
+    const live = { s: srcLabel(signupSrcOf(src, req.headers.get("user-agent"), now)), at: now };
+    runAfter(() => getSignupSrc().setLive(visitorId, live, kstDay(now)));
+  }
   const accounts = getAccounts();
   // 닉네임 중복 금지: 휴면(90일)에서 돌아왔으면 닉네임을 다시 정해야 들어온다 (입장 화면이 먼저 안내한다)
   const { renameRequired } = await accounts.visit(visitorId, now, true);

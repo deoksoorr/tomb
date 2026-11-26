@@ -18,6 +18,20 @@ export type SeasonFx = {
   jump?: boolean;
 };
 
+/**
+ * 11/26 캠핑장 집 기본 가구 중 서서 쓰는 것 (그림 변형은 campFurnitureArt: cook·open·on). 안내 문구는 카탈로그 use
+ * (요리하기·문 열기·닫기·문 열어 보기·이불 꺼내기). 펜션 TV는 스탠드처럼 켜기·끄기 (켜짐 저장 — interact USE_OF "lamp")
+ */
+const CAMP_FX: Readonly<Record<string, SeasonFx>> = {
+  fx_cv_kitchen: { v: "cook", ms: 5000, emote: "coffee", sfx: "pour", lines: ["버너 하나로 라면 완성!", "보글보글, 물이 끓어요.", "캠핑장에서 먹는 라면이 제일 맛있어요."] },
+  fx_cv_toilet: { v: "open", ms: 2500, sfx: "creak", lines: ["좁아도 있을 건 다 있어요.", "문을 살짝 열어 봤어요."] },
+  fx_pn_kitchen: { v: "cook", ms: 6000, emote: "heart", sfx: "pour", lines: ["찌개가 보글보글 끓어요.", "펜션에서 차려 먹는 아침이에요.", "고기 굽는 냄새가 나요."] },
+  fx_rr_jagae: { v: "open", ms: 4000, emote: "wow", sfx: "creak", lines: ["할머니 한복이 곱게 개어져 있어요.", "자개가 반짝반짝 빛나요.", "나프탈렌 냄새가 솔솔."] },
+  fx_rr_ibul: { v: "open", ms: 5000, emote: "zen", sfx: "sheet", lines: ["두툼한 솜이불을 꺼냈어요.", "햇볕 냄새가 나요.", "오늘은 뜨끈한 아랫목에서 자요."] },
+};
+/** 서서 쓰는 캠핑장 기본 가구 (interact USE_OF "season") */
+export const CAMP_STAND_IDS: readonly string[] = Object.keys(CAMP_FX);
+
 export const SEASON_FX: Readonly<Record<string, SeasonFx>> = {
   frost_window: { v: "breath", ms: 5000, emote: "heart", sfx: "wind", lines: ["호— 하고 하트를 그렸어요.", "창밖에 눈이 펑펑 와요.", "서리에 이름을 써 봤어요."] },
   log_basket: { emote: "fire", sfx: "rustle", lines: ["장작 한 아름! 오늘 밤은 따뜻하겠어요.", "솔방울 향이 나요."] },
@@ -37,6 +51,8 @@ export const SEASON_FX: Readonly<Record<string, SeasonFx>> = {
   resolution_scroll: { emote: "clockout", sfx: "page", lines: ["올해 다짐: 칼퇴!", "칼… 퇴…! 큰 소리로 읽었어요.", "작심삼일은 없어요."] },
   // 11/20 총무팀 문대리 사무실 가구 (game/housing/officeUse.ts — 같은 길로 연출)
   ...OFFICE_FX,
+  // 11/26 캠핑장 집 기본 가구
+  ...CAMP_FX,
 };
 
 /** 불빛 시즌 가구의 E 안내 (켜져 있으면 끄기). 없는 가구는 석등과 같은 「불 끄기·켜기」 */

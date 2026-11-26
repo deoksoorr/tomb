@@ -30,6 +30,11 @@ export class TtlMemo<V> {
     }
   }
 
+  /** 지금 기억(또는 읽는 중)이 있는지 — 읽지 않는다 */
+  has(key: string, now = Date.now()): boolean {
+    const s = this.slots.get(key);
+    return !!s && now - s.at < this.ttlMs;
+  }
   /** 기억을 버린다 (key가 없으면 전부) */
   clear(key?: string): void {
     if (key === undefined) this.slots.clear();

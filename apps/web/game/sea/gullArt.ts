@@ -1,3 +1,4 @@
+import { padded, type SeaPad } from "./seaPad";
 import { Grid, mix, type Color } from "../sprites/pixel";
 import { toneOutline } from "./seaArt";
 import { SEA_TEX_PREFIX } from "./seaTypes";
@@ -104,11 +105,14 @@ export function snackBagIcon(hot: boolean): Grid {
 // 아래엔 큰 단추 둘 (하늘색 · 빨강)과 꺼내는 칸
 export const GULL_VEND_W = 24;
 export const GULL_VEND_H = 44;
+/** 11/26 둘레 여백: 차양 윤곽이 양 끝 열에, 위에 앉은 갈매기 머리가 맨 윗줄에 닿아 잘렸다 (밤 불빛도 같은 여백 — 겹쳐 그려요).
+ *  GULL_VEND_W·H는 그린 크기 (이름표 자리는 그대로), 원점 바닥 가운데라 자리도 그대로 */
+export const GULL_VEND_PAD: SeaPad = { x: 1, top: 3, bottom: 0 };
 const VEND_OUT = 0x1e2a36;
 export function gullVendArt(): Grid {
   const W = GULL_VEND_W;
   const H = GULL_VEND_H;
-  const g = new Grid(W, H);
+  const g = padded(W, H, GULL_VEND_PAD);
   const top = 9;
   // 몸통 (하늘색 · 왼쪽 밝게 · 오른쪽 그늘) + 흰 앞판 띠
   g.rect(2, top, 20, H - top - 3, 0x5ab8e0);
@@ -174,18 +178,18 @@ export function gullVendArt(): Grid {
   g.outline(VEND_OUT);
   // 바닥 그림자
   for (let x = 2; x <= W - 3; x++) g.set(x, H - 1, 0x000000, 50);
-  return g;
+  return g.done();
 }
 /** 과자 자판기 밤 불빛: 진열창·간판·단추만 밝게 (ADD로 겹쳐요). gullVendArt와 같은 크기 */
 export function gullVendLitArt(): Grid {
-  const g = new Grid(GULL_VEND_W, GULL_VEND_H);
+  const g = padded(GULL_VEND_W, GULL_VEND_H, GULL_VEND_PAD);
   const top = 9;
   g.rect(4, top + 10, 16, 13, 0x8ac8e8);
   g.rect(5, top + 11, 14, 11, 0xb8e8ff);
   g.rect(4, top + 3, 16, 5, 0x9aa8b8);
   g.rect(5, top + 25, 4, 2, 0x60b0ff);
   g.rect(10, top + 25, 4, 2, 0xff7060);
-  return g;
+  return g.done();
 }
 
 /** 바닷가 그림 굽는 목록에 더해요 (SeaMap forEachSeaTexture) */

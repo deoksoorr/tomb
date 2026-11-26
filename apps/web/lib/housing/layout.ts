@@ -11,9 +11,19 @@ import {
   isWallSkin,
   isWindowSkin,
   houseScore,
+  CAMP_FIXTURES,
+  CAMP_HOME_STARTER,
+  campStarterFor,
+  CARAVAN_STARTER,
+  CARAVAN_STARTER_OLD,
+  type CampYard,
+  type StarterSpot,
+  campSkinKind,
+  isFreeSkin,
   STYLE_TAGS,
   tierById,
   type FurnitureDef,
+  type HouseShape,
   type PlotTier,
   type PlotTierId,
 } from "./catalog";
@@ -139,14 +149,19 @@ export function buildOccupancy(items: readonly Placed[], tier: TierShape, skipU?
   return occ;
 }
 
-/** 이 배치에서 쓰는 물건 수 (기본 스킨 제외). 11/24 창문 스킨(눈꽃 창가)도 바닥·벽지처럼 1개를 쓰고 점수도 한 번 */
+/**
+ * 이 배치에서 쓰는 물건 수 (기본 스킨 제외). 11/24 창문 스킨(눈꽃 창가)도 바닥·벽지처럼 1개를 쓰고 점수도 한 번.
+ * 11/26 캠핑장 집 기본 가구(fixture)·전용 바닥·벽은 집에 딸린 것이라 가방에서 쓰지 않는다 (세지 않는다)
+ */
 export function layoutCounts(layout: HouseLayout): Record<string, number> {
   const counts: Record<string, number> = {};
-  for (const p of layout.items) counts[p.i] = (counts[p.i] ?? 0) + 1;
-  for (const s of [layout.floor, layout.wall, layout.window ?? DEFAULT_WINDOW])
-    if (s !== DEFAULT_FLOOR && s !== DEFAULT_WALL && s !== DEFAULT_WINDOW) counts[s] = (counts[s] ?? 0) + 1;
+  for (const p of layout.items) if (!furnitureById(p.i)?.fixture) counts[p.i] = (counts[p.i] ?? 0) + 1;
+  for (const s of [layout.floor, layout.wall, layout.window ?? DEFAULT_WINDOW]) if (!isFreeSkin(s)) counts[s] = (counts[s] ?? 0) + 1;
   return counts;
 }
+
+/** 11/26 놓은 물건 수 (기본 가구 제외 — 가구 수 상한·「물건 N개」 표시) */
+export const itemCount = (layout: Pick<HouseLayout, "items">): number => layout.items.filter((p) => !furnitureById(p.i)?.fixture).length;
 
 /** 지금 창문 모양 (없거나 모르는 값이면 기본) */
 export const windowOf = (layout: Pick<HouseLayout, "window">): string => (layout.window && isWindowSkin(layout.window) ? layout.window : DEFAULT_WINDOW);
@@ -170,21 +185,36 @@ export function placedScore(layout: HouseLayout): number {
   return s;
 }
 
-/** 꾸밈 점수 (물건 + 좋아요 + 11/22 터 크기 점수) — 편집 중 미리보기용, 서버 scoreOf와 같은 식 */
-export const totalScore = (placed: number, likes: number, tier: PlotTierId) => houseScore(placed, likes, tier);
+/** 꾸밈 점수 (물건 + 좋아요 + 11/22 터 크기 점수) — 편집 중 미리보기용, 서버 scoreOf와 같은 식. 11/26 캠핑장 집은 sizeBonus = catalog houseSizeBonus(house) */
+export const totalScore = (placed: number, likes: number, tier: PlotTierId, sizeBonus?: number) => houseScore(placed, likes, tier, sizeBonus);
 
 /**
  * 서버 검증. tier 크기·문·겹침·개수 상한·가진 개수를 모두 본다.
  * owned를 null로 주면 가진 개수 확인을 건너뛴다 (저장소가 원자적으로 다시 확인한다).
+ * 11/26 shape(houseShape)를 주면 그 방 크기·가구 수로 본다 (캠핑장 집): 그 종류 기본 가구(fixture)가 정확히 하나씩 있어야 하고
+ * 다른 종류 기본 가구는 안 된다. 기본 가구는 가구 수에 넣지 않는다. 전용 바닥·벽은 그 종류 집에서만
  */
-export function validateLayout(layout: HouseLayout, tierId: PlotTierId, owned: Record<string, number> | null): LayoutOk | LayoutError {
-  const tier = tierById(tierId);
+export function validateLayout(layout: HouseLayout, tierOrShape: PlotTierId | HouseShape, owned: Record<string, number> | null): LayoutOk | LayoutError {
+  const tier: HouseShape | undefined = typeof tierOrShape === "string" ? tierById(tierOrShape) : tierOrShape;
   if (!tier) return fail("BAD_TIER", "터 크기를 알 수 없어요.");
-  if (!isFloorSkin(layout.floor)) return fail("BAD_SKIN", "알 수 없는 바닥이에요.");
-  if (!isWallSkin(layout.wall)) return fail("BAD_SKIN", "알 수 없는 담장이에요.");
+  const kind = tier.camp;
+  if (!isFloorSkin(layout.floor) || (campSkinKind(layout.floor) !== null && campSkinKind(layout.floor) !== kind)) return fail("BAD_SKIN", "알 수 없는 바닥이에요.");
+  if (!isWallSkin(layout.wall) || (campSkinKind(layout.wall) !== null && campSkinKind(layout.wall) !== kind)) return fail("BAD_SKIN", "알 수 없는 담장이에요.");
   if (layout.window !== undefined && !isWindowSkin(layout.window)) return fail("BAD_SKIN", "알 수 없는 창문이에요.");
-  if (layout.items.length > tier.maxItems)
+  if (itemCount(layout) > tier.maxItems)
     return fail("TOO_MANY", `${tier.name}에는 물건을 ${tier.maxItems}개까지 놓을 수 있어요.`);
+  // 11/26 기본 가구: 그 종류 것이 정확히 하나씩 (옮기고 돌릴 수는 있어도 빼거나 더 놓을 수 없다)
+  const fixtures = new Map<string, number>();
+  for (const p of layout.items) {
+    const fx = furnitureById(p.i)?.fixture;
+    if (!fx) continue;
+    if (fx !== kind) return fail("BAD_ITEM", `${furnitureById(p.i)!.name}: 이 집에는 놓을 수 없는 기본 가구예요.`);
+    fixtures.set(p.i, (fixtures.get(p.i) ?? 0) + 1);
+  }
+  if (kind)
+    for (const id of CAMP_FIXTURES[kind])
+      if (fixtures.get(id) !== 1)
+        return fail("FIXTURE", `${furnitureById(id)?.name ?? id}: 집에 딸린 기본 가구라 하나씩 그대로 있어야 해요. 옮기거나 돌릴 수는 있어요.`);
   const occ = new Occupancy(tier);
   const seen = new Set<string>();
   for (const p of layout.items) {
@@ -212,11 +242,11 @@ export function validateLayout(layout: HouseLayout, tierId: PlotTierId, owned: R
 
 /** 가장 많이 놓은 갈래의 별칭 (물건 3개 미만이면 null) */
 export function styleTag(layout: HouseLayout): string | null {
-  if (layout.items.length < 3) return null;
+  if (itemCount(layout) < 3) return null;
   const by: Record<string, number> = {};
   for (const p of layout.items) {
     const c = furnitureById(p.i)?.category;
-    if (c && c !== "skin" && c !== "exterior") by[c] = (by[c] ?? 0) + 1;
+    if (c && c !== "skin" && c !== "exterior" && c !== "fixture") by[c] = (by[c] ?? 0) + 1;
   }
   const top = Object.entries(by).sort((a, b) => b[1] - a[1])[0];
   return top ? STYLE_TAGS[top[0] as keyof typeof STYLE_TAGS] : null;
@@ -293,3 +323,30 @@ export function validateExterior(ext: Record<string, unknown>, owned: Record<str
   }
   return { ok: true, exterior: out };
 }
+
+/**
+ * 11/26 캠핑장 앞마당 단계를 올린 뒤 기본 가구 자리 (운영자 「제일 큰 단계로 올리니 가구 배치가 엉망」 — 카라반, 펜션·촌캉스도 같은 방식).
+ * 방은 오른쪽·아래로만 커지므로 놓인 물건은 벽 안·방 안에 그대로 남는다. 다만 기본 가구를 한 번도 옮기지 않은 집
+ * (모두 어느 단계의 시작 자리 그대로 — 카라반 첫 판 시작 자리 포함)은 새 단계 시작 자리로 옮겨 넓어진 벽을 쓴다.
+ * 주인이 하나라도 옮겼거나, 새 자리가 다른 물건과 겹치면 그대로 둔다. 바꿀 게 없으면 null
+ */
+export function campFixturesForYard(layout: HouseLayout, to: CampYard, shape: HouseShape): HouseLayout | null {
+  const kind = shape.camp;
+  if (!kind) return null;
+  const fx = layout.items.filter((p) => furnitureById(p.i)?.fixture === kind);
+  if (fx.length !== CAMP_FIXTURES[kind].length) return null;
+  const same = (set: readonly StarterSpot[]) =>
+    fx.every((p) => set.some((q) => q.i === p.i && q.x === p.x && q.y === p.y && q.r === p.r));
+  const target = campStarterFor(kind, to);
+  if (same(target)) return null;
+  const sets = kind === "caravan" ? [CARAVAN_STARTER_OLD, ...Object.values(CARAVAN_STARTER)] : Object.values(CAMP_HOME_STARTER[kind]);
+  if (!sets.some(same)) return null;
+  const items = layout.items.map((p) => {
+    const q = furnitureById(p.i)?.fixture === kind ? target.find((t) => t.i === p.i) : undefined;
+    return q ? { ...p, x: q.x, y: q.y, r: q.r } : p;
+  });
+  const next = { ...layout, items };
+  return validateLayout(next, shape, null).ok ? next : null;
+}
+/** @deprecated 11/26 이름만 남김 — campFixturesForYard (펜션·촌캉스도) */
+export const caravanFixturesForYard = campFixturesForYard;

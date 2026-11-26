@@ -115,7 +115,7 @@ export function bagGear(c: Pick<CharacterState, "equip" | "inv">): { gear: GearD
 // ── 11/15 장비창 가방 (세트 장비 + 상점·주운 장비) ──
 
 /** 가방 거르기 칸: 부위별 · 재료 · 물약 */
-export type BagTab = "all" | GearKind | "mats" | "potions";
+export type BagTab = "slots" | "all" | GearKind | "mats" | "potions";
 
 export type BagSg = { type: "sg"; key: string; code: string; it: SgItem; gear: GearDef; slot: GearSlot | null; low: boolean };
 /** piece = 강화해서 묶음에서 떼어 낸 한 개 (번호·코드 — gear는 강화가 반영된 정의) */
@@ -126,6 +126,26 @@ const gradeRank: Record<Grade["id"], number> = { common: 0, fine: 1, rare: 2, le
 
 /** 세트 장비 등급 표시 (사원급… · 직급 색) */
 export const sgGrade = (it: Pick<SgItem, "g">) => ({ label: SG_GRADE_NAMES[it.g], color: SG_GRADE_COLORS[it.g] });
+/** 11/26 직급 딱지 (아이콘 왼쪽 위 — 짧게) */
+export const SG_GRADE_SHORT = ["사원", "대리", "과장", "임원"] as const;
+
+/**
+ * 11/26 세트 장비 순서 (사용자 「뭐가 상위인지 티가 안 남」): 못 끼는 것은 맨 아래 → 직급 높은 순 → 강화 높은 순 → 끼는 중 먼저 → 부위 → 번호
+ */
+export const sgSort = (a: Pick<BagSg, "low" | "slot" | "it">, b: Pick<BagSg, "low" | "slot" | "it">) =>
+  Number(a.low) - Number(b.low) || b.it.g - a.it.g || b.it.e - a.it.e || Number(!!b.slot) - Number(!!a.slot) || a.it.p - b.it.p || a.it.u - b.it.u;
+
+/**
+ * 11/26 부위별 칸 (사냥터 장비창): 그 칸에 낀 장비 + 그 칸에 낄 수 있는 다른 장비 (세트 장비 직급 순 → 상점·주운 장비).
+ * 다른 칸에 끼고 있는 것은 그 칸 쪽에 보이므로 뺀다 (장신구 두 칸). 상점 묶음은 남는 게 있을 때만
+ */
+export function slotCandidates(entries: readonly BagEntry[], slot: GearSlot): BagEntry[] {
+  const fits = (x: BagEntry) => slotAccepts(slot, x.gear.kind);
+  const free = (x: BagEntry) => (x.type === "sg" ? !x.slot : x.piece ? !x.piece.slot : x.count - x.equipped > 0);
+  const sg = entries.filter((x): x is BagSg => x.type === "sg" && fits(x) && free(x)).sort(sgSort);
+  const shop = entries.filter((x): x is BagShop => x.type === "shop" && fits(x) && free(x));
+  return [...sg, ...shop];
+}
 
 /** 장착 칸 id → 등급 이름·색 (세트 장비는 직급, 상점 장비는 요구 레벨 등급) */
 export function slotGrade(id: string | null | undefined): { label: string; color: string } | null {
@@ -156,7 +176,6 @@ export function bagEntries(c: Pick<CharacterState, "equip" | "inv" | "sg" | "si"
     if (!it || !want(SG_PIECE_KIND[sgPieceOf(it)])) continue;
     sgs.push({ type: "sg", key: `sg${it.u}`, code, it, gear: sgDef(it, code), slot: worn.get(it.u) ?? null, low: level < SG_REQ_LEVEL });
   }
-  const sgSort = (a: BagSg, b: BagSg) => Number(a.low) - Number(b.low) || Number(!!b.slot) - Number(!!a.slot) || b.it.g - a.it.g || b.it.e - a.it.e || a.it.p - b.it.p || a.it.u - b.it.u;
   const sets = SG_SETS.map((set) => ({ set, items: sgs.filter((x) => sgSetOf(x.it) === set).sort(sgSort) })).filter((x) => x.items.length > 0);
   const shop: BagShop[] = Object.entries(c.inv)
     .flatMap(([id, count]): BagShop[] => {

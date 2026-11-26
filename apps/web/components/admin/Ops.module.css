@@ -1,0 +1,293 @@
+/* 11/26 지금 접속자 · 점검 모드 · 접속/사냥터 기록 · 가입 유입 (관리자). 색·크기는 Admin.module.css .page의 --ad-* 토큰만 */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.toolbarEnd {
+  margin-left: auto;
+  color: var(--ad-muted);
+  font-size: 12px;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--ad-line);
+  border-radius: var(--ad-radius);
+  background: var(--ad-surface);
+}
+
+.kpiLabel {
+  color: var(--ad-muted);
+  font-size: 12px;
+}
+
+.kpiValue {
+  color: var(--ad-strong);
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpiNote {
+  color: var(--ad-faint);
+  font-size: 11px;
+}
+
+.kpiWarn .kpiValue {
+  color: var(--ad-danger);
+}
+
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.statCard {
+  padding: 12px 14px;
+  border: 1px solid var(--ad-line);
+  border-radius: var(--ad-radius);
+  background: var(--ad-surface);
+  min-width: 0;
+}
+
+.statTitle {
+  margin: 0 0 8px;
+  color: var(--ad-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.barItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(36px, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.barName {
+  overflow: hidden;
+  color: var(--ad-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.barTrack {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--ad-surface-3);
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--ad-gold);
+}
+
+.barCount {
+  min-width: 2.5em;
+  color: var(--ad-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--ad-muted);
+  font-size: 12px;
+}
+
+.tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--ad-surface-3);
+  color: var(--ad-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.tagOk {
+  background: var(--ad-ok-soft);
+  color: var(--ad-ok);
+}
+
+.tagWarn {
+  background: var(--ad-warn-soft);
+  color: var(--ad-warn);
+}
+
+.tagBad {
+  background: var(--ad-danger-bg);
+  color: var(--ad-danger);
+}
+
+.tagInfo {
+  background: var(--ad-info-soft);
+  color: var(--ad-info);
+}
+
+.nameButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ad-text);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: var(--ad-line-strong);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.nameButton:hover {
+  color: var(--ad-strong);
+}
+
+.sub {
+  display: block;
+  color: var(--ad-faint);
+  font-size: 11px;
+}
+
+.detail {
+  max-width: 340px;
+  color: var(--ad-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.tabs {
+  display: inline-flex;
+  gap: 4px;
+}
+
+/* 점검 모드 */
+.maintCard {
+  max-width: 640px;
+  padding: 18px;
+  border: 1px solid var(--ad-line);
+  border-radius: var(--ad-radius);
+  background: var(--ad-surface);
+}
+
+.maintOn {
+  border-color: var(--ad-danger-line);
+  box-shadow: 0 0 0 1px var(--ad-danger-line) inset;
+}
+
+.maintHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.maintTitle {
+  margin: 0;
+  color: var(--ad-strong);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.maintForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.maintForm textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.preview {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: var(--ad-radius);
+  background: linear-gradient(180deg, #221e33, #14121c);
+  color: #ece8f6;
+  text-align: center;
+}
+
+.previewTitle {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.previewMsg {
+  margin: 0 0 6px;
+  color: #d6d0ea;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.previewUntil {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(160, 140, 255, 0.16);
+  color: #cfc4ff;
+  font-size: 12px;
+}
+
+.confirmBox {
+  padding: 12px;
+  border: 1px solid var(--ad-danger-line);
+  border-radius: var(--ad-radius-sm);
+  background: var(--ad-danger-bg);
+  color: var(--ad-text);
+  font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .barItem {
+    grid-template-columns: minmax(0, 1.6fr) minmax(30px, 1fr) auto;
+  }
+  .toolbarEnd {
+    margin-left: 0;
+    width: 100%;
+  }
+}

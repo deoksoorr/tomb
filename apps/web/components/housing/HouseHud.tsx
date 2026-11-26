@@ -2,14 +2,34 @@
 
 import { useEffect, useState } from "react";
 import { bridge } from "@/game/bridge";
-import type { HouseEditState, HouseTool } from "@/game/housing/events";
+import { CAMP_HOME_KIND_NAME } from "@tomb/protocol";
+import { FIXTURE_LOCKED, type HouseEditState, type HouseTool } from "@/game/housing/events";
 import { errorMessage } from "@/lib/api";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { meStore, useMe } from "@/lib/hooks/useMe";
-import { AWAY_MSG, SKIN_AWAY_MSG, DEFAULT_FLOOR, DEFAULT_WALL, DEFAULT_WINDOW, FURNITURE, furnitureById, LIKE_WEIGHT, skinName, tierById, WINDOW_SKINS } from "@/lib/housing/catalog";
+import {
+  AWAY_MSG,
+  CAMP_FLOOR,
+  CAMP_WALL,
+  SKIN_AWAY_MSG,
+  DEFAULT_FLOOR,
+  DEFAULT_WALL,
+  DEFAULT_WINDOW,
+  FURNITURE,
+  furnitureById,
+  houseShape,
+  houseSizeBonus,
+  isFixtureId,
+  LIKE_WEIGHT,
+  skinName,
+  WINDOW_SKINS,
+  type CampHomeKind,
+  type HouseZone,
+} from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
 import { designScore, layoutCounts, ROTATE_LABEL, rotateMode, styleTag, totalScore, WINDOW_LOCKED_MSG } from "@/lib/housing/layout";
 import type { MyHouseResponse, PublicHouse } from "@/lib/housing/types";
+import { CAMP_WINDOW_STYLE } from "@/game/housing/campFurnitureArt";
 import { furnitureDiscount } from "@/lib/champPerks";
 import { chairShopDiscount } from "@/lib/chairPerks";
 import { discountedPrice, equippedPerk } from "@/lib/titles";
@@ -78,9 +98,13 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
   const editing = !!edit?.editing;
   const layout = editing && edit ? { items: edit.items, floor: edit.floor, wall: edit.wall, window: edit.window } : house.layout;
   // 11/22 편집 미리보기도 서버 점수와 같은 식 (외관 + 터 크기 점수까지)
-  const score = editing ? totalScore(designScore(layout, house.exterior), house.likes, house.tier) : house.score;
+  const score = editing ? totalScore(designScore(layout, house.exterior), house.likes, house.tier, houseSizeBonus(house)) : house.score;
   const tag = styleTag(layout);
-  const tier = tierById(house.tier)!;
+  // 11/26 방 이름·가구 수: 캠핑장 집은 종류·앞마당 단계로 (방이 앞마당 단계로 커진다 — 카라반 · 펜션 · 촌캉스)
+  const tier = houseShape(house);
+  const zone: HouseZone = house.zone ?? "village";
+  const campKind = zone === "camp" ? (tier.camp ?? null) : null;
+  const where = zone === "sea" ? `오두막 · ${tier.name}` : campKind ? `${tier.name} · 앞마당 ${house.camp?.yard ?? 1}단계` : tier.name;
 
   async function like() {
     try {
@@ -98,7 +122,7 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
     if (!edit) return;
     setSaving(true);
     try {
-      const r = await housingApi.saveLayout(channel, house.tier, { items: edit.items, floor: edit.floor, wall: edit.wall, window: edit.window }, house.zone === "sea" ? "sea" : "village");
+      const r = await housingApi.saveLayout(channel, house.tier, { items: edit.items, floor: edit.floor, wall: edit.wall, window: edit.window }, zone);
       onMy(r);
       if (r.house) {
         onHouse(r.house);
@@ -119,7 +143,7 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
     if (!def) return;
     setBuying(true);
     try {
-      onMy(await housingApi.buyItem(itemId, house.zone === "sea" ? "sea" : "village"));
+      onMy(await housingApi.buyItem(itemId, zone));
       void meStore.refresh();
       bridge.emit("house:tool", { action: "tryEnd", keep: true });
       setNotice(`${def.name} 사서 놓았어요. 저장하면 꾸밈 점수에 들어가요.`);
@@ -157,8 +181,8 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
                 함께 {here.count}명{!mine && here.ownerHere ? " · 집주인이 집에 있어요" : ""}
               </span>
             )}
-            <span className={styles.hudOwner} title={`${house.ownerName}의 ${tier.name}${tag ? ` · ${tag}` : ""}`}>
-              {house.ownerName}의 {house.zone === "sea" ? `오두막 · ${tier.name}` : tier.name}
+            <span className={styles.hudOwner} title={`${house.ownerName}의 ${where}${tag ? ` · ${tag}` : ""}`}>
+              {house.ownerName}의 {where}
               {tag ? ` · ${tag}` : ""}
             </span>
           </span>
@@ -178,7 +202,8 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
             </button>
           )}
           <button type="button" className={ui.button} onClick={() => leave(true)}>
-            {house.zone === "sea" ? "포구 부동산" : "분양 사무소"}
+            {/* 11/26 캠핑장 집이면 그 종류를 파는 NPC의 분양 창으로 (HousingOffice가 집 종류로 연다) */}
+            {zone === "sea" ? "포구 부동산" : zone === "camp" ? `${CAMP_HOME_KIND_NAME[campKind ?? "caravan"]} 분양` : "분양 사무소"}
           </button>
           <button type="button" className={cx(ui.button, ui.quiet, ui.icon)} onClick={() => leave(false)} aria-label="집에서 나가기">
             <PixelIcon name="close" />
@@ -190,7 +215,7 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
       </div>
 
       {mine && editing && edit && my && (
-        <EditToolbar edit={edit} my={my} saving={saving} buying={buying} maxItems={tier.maxItems} onSave={save} onShop={() => setModal("shop")} onBuyTrial={buyTrial} />
+        <EditToolbar edit={edit} my={my} saving={saving} buying={buying} maxItems={tier.maxItems} campKind={campKind} onSave={save} onShop={() => setModal("shop")} onBuyTrial={buyTrial} />
       )}
 
       {modal === "guestbook" && <GuestbookDialog houseId={house.id} houseName={house.name} mine={mine} onClose={() => setModal(null)} />}
@@ -254,6 +279,7 @@ function EditToolbar({
   saving,
   buying,
   maxItems,
+  campKind,
   onSave,
   onShop,
   onBuyTrial,
@@ -263,6 +289,8 @@ function EditToolbar({
   saving: boolean;
   buying: boolean;
   maxItems: number;
+  /** 11/26 캠핑장 집 종류 (기본 바닥·벽·창문이 종류별 전용 그림). 캠핑장 집이 아니면 null */
+  campKind: CampHomeKind | null;
   onSave: (close: boolean) => void;
   onShop: () => void;
   onBuyTrial: (itemId: string) => void;
@@ -270,12 +298,18 @@ function EditToolbar({
   const counts = layoutCounts({ items: edit.items, floor: edit.floor, wall: edit.wall, window: edit.window });
   const sel = edit.selected ? edit.items.find((p) => p.u === edit.selected) : undefined;
   const selDef = sel && furnitureById(sel.i);
+  // 11/26 캠핑장 집 기본 가구: 옮기고 돌리기만 (치우기·팔기 없음, 가구 수에 안 셈)
+  const selFixture = !!sel && isFixtureId(sel.i);
+  const placedN = edit.items.filter((p) => !isFixtureId(p.i)).length;
   // 11/16 가구는 두 집 공용 가방: 다른 집에 다 놓인 것도 보여 주고, 누르면 거기서 치우라고 알려 준다
   const away = (id: string) => my.away?.[id] ?? 0;
   const owned = FURNITURE.filter((f) => !f.skin && !f.ext && ((my.inventory[f.id] ?? 0) > 0 || away(f.id) > 0));
   // 11/24 바닥·벽지도 두 집 공용 가방: 다른 집에 쓰고 있는 것도 잠금으로 보여 준다
-  const floors = [DEFAULT_FLOOR, ...FURNITURE.filter((f) => f.skin === "floor" && ((my.inventory[f.id] ?? 0) > 0 || away(f.id) > 0)).map((f) => f.id)];
-  const walls = [DEFAULT_WALL, ...FURNITURE.filter((f) => f.skin === "wall" && ((my.inventory[f.id] ?? 0) > 0 || away(f.id) > 0)).map((f) => f.id)];
+  // 11/26 캠핑장 집은 맨 앞이 그 종류 전용 바닥·벽 (무료 — 기본 장판·판자 벽 대신)
+  const baseFloor = campKind ? CAMP_FLOOR[campKind] : DEFAULT_FLOOR;
+  const baseWall = campKind ? CAMP_WALL[campKind] : DEFAULT_WALL;
+  const floors = [baseFloor, ...FURNITURE.filter((f) => f.skin === "floor" && ((my.inventory[f.id] ?? 0) > 0 || away(f.id) > 0)).map((f) => f.id)];
+  const walls = [baseWall, ...FURNITURE.filter((f) => f.skin === "wall" && ((my.inventory[f.id] ?? 0) > 0 || away(f.id) > 0)).map((f) => f.id)];
   const tool = (t: HouseTool) => bridge.emit("house:tool", t);
   const trial = edit.trial;
   const trialDef = trial ? furnitureById(trial.itemId) : undefined;
@@ -295,7 +329,7 @@ function EditToolbar({
   const windowLock = (id: string): string | null =>
     id === DEFAULT_WINDOW || (my.inventory[id] ?? 0) > 0 ? null : away(id) > 0 ? `${skinName(id)}는 다른 집 창문에 쓰고 있어요. 하나로 집 한 채에 쓸 수 있어요.` : WINDOW_LOCKED_MSG;
   const skinLock = (id: string): string | null =>
-    id === DEFAULT_FLOOR || id === DEFAULT_WALL || (my.inventory[id] ?? 0) > 0 || away(id) < 1 ? null : `${skinName(id)}, ${SKIN_AWAY_MSG}`;
+    id === DEFAULT_FLOOR || id === DEFAULT_WALL || id === baseFloor || id === baseWall || (my.inventory[id] ?? 0) > 0 || away(id) < 1 ? null : `${skinName(id)}, ${SKIN_AWAY_MSG}`;
 
   // 11/22 아래쪽 시트 정리: 가방 한 줄만 보이고 [가구 | 바닥 | 벽지] 칸으로 바꿔 본다 (시트 안 세로 스크롤 없이 방이 더 보이게)
   const [tab, setTab] = useState<"items" | "floor" | "wall" | "window">("items");
@@ -306,7 +340,19 @@ function EditToolbar({
     { id: "window", label: "창문", n: WINDOW_SKINS.filter((id) => !windowLock(id)).length },
   ] as const;
   const skins = tab === "floor" ? floors : tab === "wall" ? walls : WINDOW_SKINS;
-  const picked = tab === "floor" ? edit.floor : tab === "wall" ? edit.wall : edit.window;
+  // 캠핑장 집의 기본 바닥·벽(옛 값 DEFAULT_FLOOR·DEFAULT_WALL)은 전용 바닥·벽으로 본다
+  const picked =
+    tab === "floor"
+      ? edit.floor === DEFAULT_FLOOR || !edit.floor
+        ? baseFloor
+        : edit.floor
+      : tab === "wall"
+        ? edit.wall === DEFAULT_WALL || !edit.wall
+          ? baseWall
+          : edit.wall
+        : edit.window;
+  /** 창문 칸 아이콘: 캠핑장 집의 「기본」 창문은 종류별 창 그림 */
+  const skinIcon = (id: string) => (campKind && tab === "window" && id === DEFAULT_WINDOW ? CAMP_WINDOW_STYLE[campKind] : id);
   const lockOf = tab === "window" ? windowLock : skinLock;
   const locked = tab === "items" ? undefined : (skins.map(lockOf).find((m) => m) ?? undefined);
   const hint =
@@ -373,9 +419,15 @@ function EditToolbar({
               >
                 {ROTATE_LABEL[rotateMode(selDef)]}
               </button>
-              <button type="button" className={cx(ui.button, ui.danger, styles.selMain)} onClick={() => tool({ action: "remove" })}>
-                치우기
-              </button>
+              {selFixture ? (
+                <span className={cx(styles.small, styles.selMain)} title={FIXTURE_LOCKED}>
+                  집에 딸린 가구
+                </span>
+              ) : (
+                <button type="button" className={cx(ui.button, ui.danger, styles.selMain)} onClick={() => tool({ action: "remove" })}>
+                  치우기
+                </button>
+              )}
               <div className={styles.nudge} role="group" aria-label="한 칸씩 옮기기">
                 <button type="button" className={cx(ui.button, ui.icon)} onClick={() => tool({ action: "nudge", dx: -1, dy: 0 })} aria-label="왼쪽으로">
                   ←
@@ -407,7 +459,7 @@ function EditToolbar({
         ))}
       </div>
       <span className={styles.editCount}>
-        물건 {edit.items.length}/{maxItems}
+        물건 {placedN}/{maxItems}
       </span>
 
       <div className={styles.editActions}>
@@ -479,7 +531,7 @@ function EditToolbar({
                         <PixelIcon name="lock" />
                       </span>
                     )}
-                    <FurnitureIcon itemId={id} size={36} />
+                    <FurnitureIcon itemId={skinIcon(id)} size={36} />
                     <span className={styles.paletteLabel}>{skinName(id)}</span>
                   </button>
                 );

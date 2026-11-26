@@ -21,9 +21,10 @@ export function roomSocketUrl(wsUrl: string, x: number, y: number): string {
  *  - full: 방이 가득 참 → 토큰을 버리고 천천히 다시
  *  - rate: 너무 많이 보냄 → 최소 2초 쉬고
  *  - outdated: 옛 버전 화면(4010, 큰 패치) → 재접속하지 않고 업데이트 창
+ *  - maintenance: 11/26 서버 점검(4013) → 재접속하지 않고 점검 화면
  *  - retry: 그 밖(네트워크 끊김·서버 재시작) → 같은 토큰으로 백오프 재접속
  */
-export type RoomCloseAction = "leave" | "replaced" | "refetch" | "full" | "rate" | "outdated" | "retry";
+export type RoomCloseAction = "leave" | "replaced" | "refetch" | "full" | "rate" | "outdated" | "maintenance" | "retry";
 
 export function roomCloseAction(code: number, intentional: boolean): RoomCloseAction {
   if (intentional) return "leave";
@@ -39,6 +40,8 @@ export function roomCloseAction(code: number, intentional: boolean): RoomCloseAc
       return "rate";
     case CLOSE.OUTDATED:
       return "outdated";
+    case CLOSE.MAINTENANCE:
+      return "maintenance";
     default:
       return "retry";
   }

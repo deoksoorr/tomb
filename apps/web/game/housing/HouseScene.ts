@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
 import { DIR, STATE, type DirId, type Sid } from "@tomb/protocol";
 import { bgm } from "@/components/bgm/engine";
-import { furnitureById, tierById, type PlotTier } from "@/lib/housing/catalog";
+import { CAMP_FLOOR, CAMP_WALL, DEFAULT_FLOOR, DEFAULT_WALL, DEFAULT_WINDOW, FURNITURE, furnitureById, houseShape, isFixtureId, type HouseShape } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
 import { buildOccupancy, findFreeSpot, footprint, gateTiles, liftWindowSkins, newUid, nextRotation, SPIN_R0, spinDir, windowOf } from "@/lib/housing/layout";
 import { GROW_MS, plantStage, type PlantState } from "@/lib/housing/plants";
@@ -32,7 +32,7 @@ import { Atmosphere } from "../world/Atmosphere";
 import { Lighting, playerLightRadius } from "../world/Lighting";
 import type { LightSpot } from "../world/WorldMap";
 import { animFrames, artUp, DOG_BREATH_FRAMES, drawsTurned, floorGrid, furnitureGrid, hasNightArt, itemVariant, noFootShadow, sconceGrid, usesNightVariant, wallCapColor, wallFaceColor, WALL_H, wallGrid, windowGrid, WINDOW_H, WINDOW_W, yardGrid, zzzGrid } from "./art";
-import type { HouseEditState, HouseTool } from "./events";
+import { FIXTURE_LOCKED, type HouseEditState, type HouseTool } from "./events";
 import { wornRingGrid } from "./seaFurnitureArt";
 import { HouseSfx, hearGain, type HouseSound } from "./houseSfx";
 import { HouseZoom } from "./houseZoom";
@@ -69,6 +69,7 @@ import {
 } from "./interact";
 import { SEASON_FX, SEASON_LIGHTS, seasonLightLabel } from "./seasonUse";
 import { BREED_PET_P1_MS, BREED_PET_P2_MS, isBreedFurniture, isCatFurniture } from "./breedFurnitureArt";
+import { CAMP_GLINT, CAMP_WINDOW_STYLE } from "./campFurnitureArt";
 
 // 개인 집(하우징) 씬 — 3번 집 안 개편. 방문자끼리 같은 방(room "house:{id}")으로 서로 보이고 들린다.
 //  - 집 안: 안쪽 벽(벽지·몰딩·걸레받이·창문·벽등) + 옆벽 + 앞벽(현관문) + 바닥 스킨. 넓은 터·대저택은 칸막이 벽으로 방이 나뉜다(lib/housing/rooms.ts).
@@ -131,7 +132,7 @@ const pianoPrompt = (touch: boolean) => (touch ? "연주하기 · 움직이면 �
 
 /** 화면에 뜰 수 있는 안내 문구 전부 (비트맵 글꼴에 미리 글자를 올린다). 데스크톱·터치 문구 둘 다 */
 const allPrompts = () =>
-  [...Object.values(USE_LABEL), ...Object.values(SPOT_TAKEN_HINT), "벽난로 불 끄기", "스탠드 끄기", "창문 닫기", pianoPrompt(false), pianoPrompt(true), "E · 일어나기", "E · 나가기"].join("");
+  [...Object.values(USE_LABEL), ...Object.values(SPOT_TAKEN_HINT), "벽난로 불 끄기", "스탠드 끄기", "창문 닫기", pianoPrompt(false), pianoPrompt(true), "E · 일어나기", "E · 나가기", "TV 켜기", "TV 끄기", ...FURNITURE.filter((f) => f.fixture).map((f) => f.use ?? "")].join("");
 
 type ItemView = { p: Placed; img: Phaser.GameObjects.Image; variant: string };
 type Using = { spot: HouseSpot; pre: { x: number; y: number }; at: number; next: number; note: number };
@@ -139,7 +140,8 @@ type Glow = { img: Phaser.GameObjects.Image; x: number; y: number; r: number; co
 
 export class HouseScene extends Phaser.Scene {
   private data0!: HouseSceneData;
-  private tier!: PlotTier;
+  /** 방 크기·가구 수 (마을·포구 = 터 크기, 11/26 캠핑장 = 종류·넓히기·앞마당 단계 — catalog houseShape) */
+  private tier!: HouseShape;
   private plan!: RoomPlan;
   private ox = 0;
   private oy = 0;
@@ -250,7 +252,7 @@ export class HouseScene extends Phaser.Scene {
 
   init(data: HouseSceneData): void {
     this.data0 = data;
-    this.tier = tierById(data.house.tier) ?? tierById("small")!;
+    this.tier = houseShape(data.house);
     this.plan = roomPlan(this.tier);
     this.exiting = false;
     this.editing = false;
@@ -444,7 +446,8 @@ export class HouseScene extends Phaser.Scene {
   private drawGround(): void {
     this.ground?.destroy();
     const t = this.tier;
-    const key = `house-ground-${this.work.floor}-${t.id}`;
+    const floorId = this.floorId();
+    const key = `house-ground-${floorId}-${t.id}-${t.w}x${t.h}`;
     this.canvasTex(key, () => {
       const c = document.createElement("canvas");
       c.width = this.W;
@@ -452,7 +455,7 @@ export class HouseScene extends Phaser.Scene {
       const ctx = c.getContext("2d")!;
       ctx.imageSmoothingEnabled = false;
       const outside = [0, 1, 2, 3].map((v) => yardGrid(v).toCanvas());
-      const inside = [0, 1, 2, 3].map((v) => floorGrid(this.work.floor, v).toCanvas());
+      const inside = [0, 1, 2, 3].map((v) => floorGrid(floorId, v).toCanvas());
       for (let y = 0; y * T < this.H; y++) for (let x = 0; x * T < this.W; x++) ctx.drawImage(outside[(x * 7 + y * 3) % 4], x * T, y * T);
       ctx.fillStyle = "rgba(0,0,0,0.35)";
       ctx.fillRect(0, 0, this.W, this.H);
@@ -507,13 +510,13 @@ export class HouseScene extends Phaser.Scene {
     });
     this.wallBodies.clear(true, true);
     const t = this.tier;
-    const wallId = this.work.wall;
+    const wallId = this.wallId();
     const L = this.tileX(0);
     const R = this.tileX(t.w);
     const top = this.tileY(0);
     const bottom = this.tileY(t.h);
     // 안쪽 벽 (한 장)
-    const backKey = this.canvasTex(`house-back-${wallId}-${t.id}`, () => {
+    const backKey = this.canvasTex(`house-back-${wallId}-${t.id}-${t.w}`, () => {
       const c = document.createElement("canvas");
       c.width = t.w * T;
       c.height = WALL_H;
@@ -524,8 +527,9 @@ export class HouseScene extends Phaser.Scene {
     this.walls.push(this.add.image(L, top, backKey).setOrigin(0, 1).setDepth(top - 2));
     // 창문 (낮·밤, 열림·닫힘은 updateWindows가 바꾼다). 11/24 창문 모양(눈꽃 창가)은 창턱 아래로 양말이 늘어져 그림이 조금 길다: 창턱을 같은 높이에 맞춘다
     this.plan.windows.forEach((w, i) => {
-      const x = L + w.x * T + (w.w * T - WINDOW_W) / 2;
-      const img = this.add.image(x, top - 9, this.windowKey(this.night, this.isOpen(`w${i}`))).setDepth(top - 1);
+      const img = this.add.image(0, top - 9, this.windowKey(this.night, this.isOpen(`w${i}`))).setDepth(top - 1);
+      // 11/26 펜션 통창처럼 기본보다 넓은 창문도 창문 자리 가운데에 (기본 창문은 WINDOW_W)
+      img.setX(L + w.x * T + (w.w * T - (img.width || WINDOW_W)) / 2);
       img.setOrigin(0, WINDOW_H / img.height);
       this.walls.push(img);
       this.windows.push({ img, key: "" });
@@ -602,8 +606,36 @@ export class HouseScene extends Phaser.Scene {
     this.wallBodies.add(z);
   }
 
-  private windowKey(night: boolean, open: boolean): string {
+  /** 11/26 캠핑장 집: 바닥·벽·창문이 기본이면 종류별 전용 그림 (주인이 산 바닥·벽지·창문을 입히면 그것) */
+  private campKind(): "caravan" | "pension" | "rural" | null {
+    return this.data0.house.zone === "camp" ? (this.tier.camp ?? this.data0.house.camp?.kind ?? null) : null;
+  }
+
+  private floorId(): string {
+    const k = this.campKind();
+    const f = this.work.floor;
+    return k && (!f || f === DEFAULT_FLOOR) ? CAMP_FLOOR[k] : f;
+  }
+
+  private wallId(): string {
+    const k = this.campKind();
+    const w = this.work.wall;
+    return k && (!w || w === DEFAULT_WALL) ? CAMP_WALL[k] : w;
+  }
+
+  private windowStyle(): string {
+    const k = this.campKind();
     const style = windowOf(this.work);
+    return k && style === DEFAULT_WINDOW ? CAMP_WINDOW_STYLE[k] : style;
+  }
+
+  /** 가구 수 상한에 드는 물건 수 (11/26 캠핑장 집 기본 가구는 세지 않는다) */
+  private countedItems(items: readonly Placed[]): number {
+    return items.filter((p) => !isFixtureId(p.i)).length;
+  }
+
+  private windowKey(night: boolean, open: boolean): string {
+    const style = this.windowStyle();
     return this.canvasTex(`house-window-${style}-${night ? "n" : "d"}-${open ? "o" : "c"}`, () => windowGrid(night, open, style).toCanvas());
   }
 
@@ -666,6 +698,7 @@ export class HouseScene extends Phaser.Scene {
       case "fireplace":
         return this.toggles.get(p.u) ? (this.flameFrame ? "on2" : "on") : "";
       case "floor_lamp":
+      case "fx_pn_tv":
         return this.toggles.get(p.u) ? "on" : "";
       case "radio":
         return this.toggles.get(p.u) ? "on" : "";
@@ -698,6 +731,8 @@ export class HouseScene extends Phaser.Scene {
         if (SEASON_LIGHTS.has(p.i)) return this.toggles.get(p.u) ? "off" : "";
         const f = this.flash.get(p.u);
         if (f && f.until > this.time.now) return f.v;
+        // 11/26 자개장: 연못 잔물결과 같은 박자로 자개가 반짝인다 (동작 줄이기면 멈춤)
+        if (CAMP_GLINT.has(p.i)) return this.data0.reduced ? "" : `g${this.pondFrame}`;
         // 11/19 품종 펫 가구: 잠자는 강아지와 같은 박자로 숨 장면(눈 깜빡 + 꼬리 끝 살랑)
         return isBreedFurniture(p.i) && this.dogFrame ? "b1" : "";
       }
@@ -905,6 +940,7 @@ export class HouseScene extends Phaser.Scene {
       case "fire":
         return on ? "벽난로 불 끄기" : USE_LABEL.fire;
       case "lamp":
+        if (t.item === "fx_pn_tv") return on ? "TV 끄기" : "TV 켜기";
         return on ? "스탠드 끄기" : USE_LABEL.lamp;
       case "window":
         return on ? "창문 닫기" : USE_LABEL.window;
@@ -1450,6 +1486,8 @@ export class HouseScene extends Phaser.Scene {
     if (mine) this.player.sprite.setAngle(mine);
     if (this.presence) for (const r of this.presence.remotes.values()) {
       const t = r.stateId === STATE.lie || r.stateId === STATE.hammock ? tiltOf(r.seatId) : 0;
+      // 11/26 캠핑장 침대에 누운 사람은 그 침대 이불 덮개로 (마을 침대는 보라 이불)
+      if (r.stateId === STATE.lie) r.view.setLieCover((r.seatId ? this.spots.find((x) => x.id === r.seatId)?.cover : undefined) ?? "quilt");
       if (t) r.view.sprite.setAngle(t);
       // 11/16 집 안 해먹에 누운 사람: 해먹 가구 그림(기둥) 앞에
       if (r.stateId === STATE.hammock) {
@@ -1546,6 +1584,8 @@ export class HouseScene extends Phaser.Scene {
       this.refreshHammocks();
     } else {
       const kind = s.kind === "bed" ? "lie" : s.kind === "book" ? "read" : "bath";
+      // 11/26 캠핑장 침대는 그 침대 이불 덮개 (interact houseSpots cover), 마을 침대는 보라 이불
+      if (kind === "lie") this.player.view.setLieCover(s.cover ?? "quilt");
       this.player.attach(kind, s.x, s.y, s.y + INDOOR_FRONT, now, this.seatReq, s.id);
       this.seatReq.sit(s.id);
     }
@@ -1879,7 +1919,7 @@ export class HouseScene extends Phaser.Scene {
     if (!this.data0.reduced && time >= this.pondAt) {
       this.pondAt = time + 420;
       this.pondFrame = (this.pondFrame + 1) % animFrames("pond");
-      for (const it of this.work.items) if (it.i === "pond" && this.drag?.u !== it.u) this.refreshVariant(it.u);
+      for (const it of this.work.items) if ((it.i === "pond" || CAMP_GLINT.has(it.i)) && this.drag?.u !== it.u) this.refreshVariant(it.u);
     }
     // 잠자는 강아지: 들숨(짧게)·날숨(길게)으로 등이 1px 오르내리고, 날숨 때 가끔 z 하나 (동작 줄이기면 멈춤)
     if (!this.data0.reduced && time >= this.dogAt) {
@@ -2090,7 +2130,9 @@ export class HouseScene extends Phaser.Scene {
       const u = this.using;
       text = u.spot.use === "piano" ? pianoPrompt(isTouchUi()) : interactLabel("일어나기");
       x = this.player.x;
-      y = this.player.y + 14;
+      // 11/26 가구 안 자리(침대·소파·욕조)는 가구 아래 끝 밑으로 (뒤를 보게 돌린 침대는 머리가 위 끝이라 발밑이 이불 한가운데였다)
+      const box = u.spot.inside ? this.targets.find((t) => t.spot?.id === u.spot.id)?.rect : undefined;
+      y = Math.max(this.player.y + 14, box ? box.y1 + 2 : 0);
       p.setOrigin(0.5, 0);
     } else if (!nearSign && this.atExit()) {
       door = true;
@@ -2302,7 +2344,7 @@ export class HouseScene extends Phaser.Scene {
           return this.changed();
         }
         // 샀거나 가방에 남은 게 있다: 진짜 물건으로 (그 자리 그대로)
-        if (this.work.items.length - 1 >= this.tier.maxItems) return this.notice(`${this.tier.name}에는 ${this.tier.maxItems}개까지 놓을 수 있어요.`);
+        if (this.countedItems(this.work.items) - 1 >= this.tier.maxItems) return this.notice(`${this.tier.name}에는 ${this.tier.maxItems}개까지 놓을 수 있어요.`);
         this.trialU = null;
         this.views.get(u)?.img.setAlpha(1);
         this.selected = u;
@@ -2311,7 +2353,7 @@ export class HouseScene extends Phaser.Scene {
       case "place": {
         const def = furnitureById(t.itemId);
         if (!def || def.skin) return;
-        if (this.savedWork().items.length >= this.tier.maxItems) return this.notice(`${this.tier.name}에는 ${this.tier.maxItems}개까지 놓을 수 있어요.`);
+        if (this.countedItems(this.savedWork().items) >= this.tier.maxItems) return this.notice(`${this.tier.name}에는 ${this.tier.maxItems}개까지 놓을 수 있어요.`);
         const c = this.toTile(this.cameras.main.midPoint.x, this.cameras.main.midPoint.y);
         const spot = findFreeSpot(this.work.items, this.tier, def, 0, c.x, c.y);
         if (!spot) return this.notice("빈자리가 없어요. 다른 물건을 옮기거나 치워 주세요.");
@@ -2347,6 +2389,8 @@ export class HouseScene extends Phaser.Scene {
           this.dropTrial();
           return this.changed();
         }
+        // 11/26 캠핑장 집 기본 가구: 옮기고 돌리기만 (팔기·가방에 넣기 없음)
+        if (isFixtureId(p.i)) return this.notice(FIXTURE_LOCKED);
         this.work.items = this.work.items.filter((i) => i.u !== p.u);
         this.views.get(p.u)?.img.destroy();
         this.views.delete(p.u);

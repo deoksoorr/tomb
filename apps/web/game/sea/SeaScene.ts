@@ -91,11 +91,14 @@ import { FoodFx } from "../camp/foodFx";
 import { SeaForage } from "./seaForage";
 import { BungeoCartView } from "../world/BungeoCartView";
 import { SeaLife } from "./seaLife";
+import { attachGoblin, type GoblinActor } from "../world/life/GoblinActor";
 import { SeaRides } from "./SeaRides";
 import { SeaKayaks } from "./SeaKayaks";
 import { remoteTouch, type SeaHull } from "./SeaRides";
 import { resolveHulls, SHIP_GAIN, strongerGain, type BounceKind } from "../logic/bounce";
 import { seaSnackZone, seaStandable } from "./seaLayout";
+import { seaWalkGrid } from "./seaLayout";
+import { AwayRoute, gridOfCells } from "../world/AwayRoute";
 import { shipHulls, shipWakeAt, type ShipHull } from "./seaShipsPlan";
 import { StarScopes } from "../scopes/StarScopes";
 import { SeaHornSound, SeaShips } from "./seaShips";
@@ -173,6 +176,10 @@ export class SeaScene extends Phaser.Scene {
   private bungeo: BungeoCartView | null = null;
   /** 11/16 포구 주민 (돌아다니는 유령들 — game/sea/seaLife) */
   private life: SeaLife | null = null;
+  /** 11/26 황금 고블린 (바닷가 고블린 그리기·잡기, 다른 맵이면 마을행 정류장 쪽 화살표) */
+  private goblin: GoblinActor | null = null;
+  /** 11/26 오늘 미션 「팔기」 길 안내 → 해녀 할망 (game/world/AwayRoute) */
+  private awayRoute: AwayRoute | null = null;
   /** 11/16 포구 오두막·등대 등불 (game/sea/seaHousing) */
   private housing: SeaHousing | null = null;
   /** 11/17 맵 컨셉 (겨울·크리스마스판 — game/sea/SeaConceptDecor) · 입김 낼 사람 목록 (프레임마다 다시 채워요) */
@@ -441,6 +448,9 @@ export class SeaScene extends Phaser.Scene {
     });
     this.forage = new SeaForage({ scene: this, atlas: h.atlas, reduced: h.reduced, colliders: this.map.colliders, player: () => this.player, net: () => h.net, seats: () => this.seats, remotes: () => this.remotes, toast: (m) => this.toast(m), tide: () => this.tide });
     this.life = new SeaLife({ scene: this, atlas: h.atlas, sfx: h.sfx, reduced: h.reduced, player: () => this.player, net: () => h.net, water: () => this.map.waterState, override: this.hourOverride });
+    this.goblin = attachGoblin({ scene: this, atlas: h.atlas, sfx: h.sfx, reduced: h.reduced, map: "sea", player: () => this.player, net: () => h.net, labelScale: () => this.rig.labelScale });
+    let routeGrids: ReturnType<typeof gridOfCells>[] | null = null;
+    this.awayRoute = new AwayRoute({ scene: this, atlas: h.atlas, reduced: h.reduced, map: "sea", player: () => this.player, grids: () => (routeGrids ??= [gridOfCells(seaWalkGrid(8))]) });
     this.housing = new SeaHousing({
       scene: this,
       atlas: h.atlas,
@@ -498,7 +508,8 @@ export class SeaScene extends Phaser.Scene {
     // 11/17 가진 갈매기 과자 (던지기 안내)
     void gullApi.get().then(publishSnacks, () => {});
     if (this.data0.arrive === "bus") this.arriveByBus();
-    else if (this.data0.arrive === "friend") {
+    // 11/26 집 문 앞으로 왔으면(door) 친구 도착 안내 없이 (문 앞 맞추기는 CampTrip이 맵을 옮긴 뒤에)
+    else if (this.data0.arrive === "friend" && this.data0.friend?.door === undefined) {
       // 11/20 운영자 순간이동이면 도착 반짝임
       if (this.data0.friend?.tp) playTeleportFx(this, this.player.x, this.player.y, "in", this.host.reduced);
       bridge.emit("friend:notice", { message: this.data0.friend?.tp ? STAFF_TP_ARRIVED : FRIEND_ARRIVED });
@@ -691,9 +702,6 @@ export class SeaScene extends Phaser.Scene {
       onRide: (sid, on) => this.riding.onRide(sid, on),
       onRod: (sid, on) => this.forage.f.onRod(sid, on),
       onAway: (sid, on) => this.remotes.get(sid)?.setAway(on, performance.now()),
-      onGoblin: () => undefined,
-      onGoblinGone: () => undefined,
-      onGoblinCaught: () => undefined,
       // 11/16 바닷가 매점 술·음료·오징어구이 효과 (캠핑장 바베큐와 같은 효과 — 같은 바닷가 사람에게)
       onBbq: (sid, item, until, lv, at) => this.food.onBbq(sid, sid === this.host.net.mySid, item, until, lv, at),
       onMapped: (map, peers, seats) => {
@@ -884,14 +892,16 @@ export class SeaScene extends Phaser.Scene {
       return last ? { ch: last.ch, bySid: new Map(last.list.map((f) => [f.sid, f.name])) } : this.friends;
     })();
     on.push(
-      bridge.on("friend:goto", ({ sid, name, x, y, map, tp }) => {
+      bridge.on("friend:goto", ({ sid, name, x, y, map, tp, door }) => {
         // 11/19 마을·캠핑장 친구 모두 버스로 (캠핑장은 마을 정류장을 거쳐 이어 타요 — lib/friendRoute). 몸이 커져 있으면 버스를 못 타요
-        const route = friendRoute("sea", map ?? "village", myBig());
-        if (route.do === "warp") this.goToFriend(sid, name, x, y, tp);
+        // 11/26 door: 집에서 나와 그 집 문 앞으로 (창밖 연출 없는 워프라 몸 크기를 보지 않는다. 이 맵이면 그 터 앞으로)
+        const route = friendRoute("sea", map ?? "village", door !== undefined ? 1 : myBig());
+        if (route.do === "warp" && door !== undefined) bridge.emit("sea:lot", { lot: door });
+        else if (route.do === "warp") this.goToFriend(sid, name, x, y, tp);
         else if (route.do === "block") bridge.emit("friend:notice", { message: route.message });
         else {
           const next = nextAfterVillage(route);
-          this.host.goVillage({ sid, name, x, y, ...(next ? { next } : {}), ...(tp ? { tp } : {}) });
+          this.host.goVillage({ sid, name, x, y, ...(next ? { next } : {}), ...(tp ? { tp } : {}), ...(door !== undefined ? { door } : {}) });
         }
       }),
     );
@@ -966,6 +976,8 @@ export class SeaScene extends Phaser.Scene {
         if (this.kayaks?.isRiding) this.kayaks.interact();
         else this.rides?.interact();
       }
+      // 11/26 카약에 같이 탔으면 X·터치 [내리기] = 내리기
+      else if (a === "sit" && this.kayaks?.passengerOff()) return;
       else if (a === "wave" || a === "cheer") this.doAct(a);
       else this.expr.key(a, now);
       return;
@@ -1523,6 +1535,7 @@ export class SeaScene extends Phaser.Scene {
     this.housing?.update(now, L.darkness, L.fog, s);
     this.map.update(now, dt, view, { hour: this.hour, darkness: L.darkness, rain: L.rain, fog: L.fog, tide: this.tide, trend: this.trend, actors: this.actors, dusk });
     this.concept?.update(view, this.breatherFn);
+    this.awayRoute?.update(now, view, s, this.locked);
     this.riding.update();
     publishRide(pl, this.riding.on, this.rides?.kind ?? (this.kayaks?.isRiding ? "kayak" : null)); // 11/16 탄 것·앉은 자리 → UI (lib/rideGate). 튜브·제트스키 같은 새 자세도 저절로 막힌다
     // 11/16 쉴거리 자리: 자세가 풀리면(움직임·일어남) 놓아요
@@ -1634,6 +1647,8 @@ export class SeaScene extends Phaser.Scene {
     const keys = this.seatHint.prefix === "E ";
     const standText = bench ? (keys ? "←→ 옆자리 · ↑↓ 일어나기 · T 벤치 상태" : "좌우로 옆자리 · 위아래로 일어나기") : pl.state === "sitChair" && keys ? "이동하면 일어나요 · T 상태 고르기" : null;
     this.seatHint.update(other ? null : seat, pl, sittingFor, false, labelScale, other, standText);
+    // 11/26 오두막 문 「E 들어가기」 안내가 떠 있으면 그 터의 앞마당 땅 문패를 흐린다 (9번 터 — 안내와 겹쳤다)
+    this.housing?.focusDoor(obj?.kind === "lot" && obj.lot && other && other.x === obj.x && other.y === obj.y + 2 ? obj.lot : null);
     this.publishSnackCan();
   }
 
@@ -1670,6 +1685,7 @@ export class SeaScene extends Phaser.Scene {
       this.forage.f.addLights(lit);
       this.bungeo?.addLights(lit);
       this.life?.addLights(lit);
+      this.goblin?.addLights(lit);
       // 11/16 r19 오징어잡이배 · 등대 빛줄기도 밤 어둠을 밝혀요
       this.ships?.addLights(lit, L.darkness);
       this.ghost?.addLights(lit, L.darkness);
@@ -1965,6 +1981,8 @@ export class SeaScene extends Phaser.Scene {
     this.rides = null;
     this.kayaks?.destroy();
     this.kayaks = null;
+    this.awayRoute?.destroy();
+    this.awayRoute = null;
     this.stars?.destroy();
     this.stars = null;
     this.ships?.destroy();

@@ -26,6 +26,15 @@ describe("resume — 캠핑장 기록", () => {
     const r = parseResume(JSON.stringify({ ...camp, pose: "boat", seatId: "b_1_2", campMap: CAMP_MAP_VERSION }), camp.savedAt);
     expect(r).toMatchObject({ where: "camp", pose: "idle", seatId: null, x: 640, y: 470 });
   });
+  it("11/26 캠핑장 나룻배 자리(qN…)는 배 자세·자리 id를 잇는다", () => {
+    const r = parseResume(JSON.stringify({ ...camp, pose: "boat", seatId: "qN2-0", campMap: CAMP_MAP_VERSION }), camp.savedAt);
+    expect(r).toMatchObject({ where: "camp", pose: "boat", seatId: "qN2-0", x: 640, y: 470 });
+  });
+  it("나룻배라도 배치가 바뀌었거나 모르는 자리 id면 서 있기로", () => {
+    expect(parseResume(JSON.stringify({ ...camp, pose: "boat", seatId: "qN9-0", campMap: CAMP_MAP_VERSION }), camp.savedAt)).toMatchObject({ pose: "idle", seatId: null });
+    expect(parseResume(JSON.stringify({ ...camp, pose: "boat", seatId: "qN1-1", campMap: CAMP_MAP_VERSION - 1 }), camp.savedAt)).toMatchObject({ pose: "idle", seatId: null });
+    expect(parseResume(JSON.stringify({ ...camp, where: "sea", pose: "boat", seatId: "qN1-0", seaMap: SEA_MAP_VERSION }), camp.savedAt)).toMatchObject({ where: "sea", pose: "idle", seatId: null });
+  });
   it("마을 기록에는 where가 없다 (예전과 같다)", () => {
     const r = parseResume(JSON.stringify({ ...camp, where: undefined, seatId: "lA-0", map: MAP_VERSION }), camp.savedAt);
     expect(r?.where).toBeUndefined();

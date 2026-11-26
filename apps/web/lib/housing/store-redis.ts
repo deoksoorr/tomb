@@ -1,7 +1,7 @@
 import type { QuestHook } from "../store/types";
 import type { Redis } from "@upstash/redis";
 import { redisClient } from "../redisUsage";
-import { CLOSED_LOTS } from "@tomb/protocol";
+import { caravanDesignKey, CLOSED_LOTS, isCampYard, parseCaravanDesign, type CaravanDesign } from "@tomb/protocol";
 import {
   defaultExterior,
   FURNITURE,
@@ -15,7 +15,11 @@ import {
   LIKE_WEIGHT,
   PLOT_TIERS,
   TIER_SCORE_BONUS,
+  CAMP_LOT_COUNT,
+  campLotByNo,
+  campSizeBonus,
   cottageStyleOf,
+  type CampInfo,
   type CottageStyleId,
   type HouseSort,
   type HouseZone,
@@ -23,16 +27,18 @@ import {
 } from "./catalog";
 import type { ReportBy } from "../reports";
 import { K } from "../store/keys";
-import { emptyLayout, liftWindowSkins, normalizeExterior } from "./layout";
+import { emptyLayout, itemCount, liftWindowSkins, normalizeExterior } from "./layout";
 import {
   GUEST_DAY_TTL_SEC,
   GUEST_REPORT_TTL_SEC,
   invView,
   LIKE_TTL_SEC,
   pairIds,
+  recordScore,
   SCORE_RULE_VER,
-  scoreOf,
   SEA_STARTER_KEEP,
+  zoneTag,
+  type HouseBrief,
   type HousePair,
   type InvView,
   type HouseRecord,
@@ -57,12 +63,15 @@ import type { HouseExterior, HouseLayout } from "./types";
 //  houses:lots:{ch}          HASH 번지 → 집 id (채널마다 분양 마을이 따로. 번지 배정은 HEXISTS 확인과 HSET을 Lua 하나로)
 //  houses:sealots:{ch}       HASH 11/16 포구 오두막 터 번호(1..11) → 집 id (마을 번지와 따로. 오두막 집 기록은 zone=sea, style)
 //                            (오두막 집 id = 계정 id의 다른 HMAC — 한 계정이 마을 집 + 오두막을 따로 가진다)
+//  houses:camplots:{ch}      HASH 11/26 캠핑장 집터 번호(1..16) → 집 id (캠핑장 집 기록은 zone=camp, kind(caravan|pension|rural — 터로 정해짐), yard(1..3 앞마당))
+//                            (캠핑장 집 id = 계정 id의 또 다른 HMAC — 종류와 상관없이 한 사람 한 채)
+//  house:{id} 의 villa 칸     11/26 별장 표시 '1'|'0' (살 때 정한다. 칸이 없으면 옛 기록 — 처음 읽을 때 HSETNX로 한 번 남긴다)
 //  house:{id}:inv 의 "~starter" 칸 = 시작 가구를 이미 준 표시 (가방 읽기에서 뺀다)
 //  houses:lots               HASH 옛 번지 색인 (채널 없음). 1채널 색인을 쓰는 Lua가 먼저 houses:lots:1로 옮긴다 (MIGRATE_FN)
 //  house:{id}:layout         STRING 배치 JSON
 //  house:{id}:inv            HASH 그 집 몫 물건 id → 개수 (놓은 것 포함): 바닥·벽지·외관 + 오두막 시작 가구 (11/16 공용 가방 뒤)
 //                            "~pooled" 칸 = 옛 가방의 가구를 공용 가방으로 옮김 (한 번만. POOL_FN pmerge)
-//  house:{마을 집 id}:pool   HASH 11/16 공용 가구 가방: 물건 id → 개수 (한 계정의 두 집이 나눠 놓는다. 마을 집이 없어도 이 자리)
+//  house:{마을 집 id}:pool   HASH 11/16 공용 가구 가방: 물건 id → 개수 (한 계정의 집들 — 11/26 마을·포구·캠핑장 세 채 — 이 나눠 놓는다. 마을 집이 없어도 이 자리)
 //  house:{id}:placed         HASH 물건 id → 그 집에 놓은 개수 (되팔기·공용 가방 판정용, 배치 저장과 같이 바뀐다)
 //  house:{id}:guest          LIST 방명록 JSON, 최신 먼저 GUEST_KEEP개
 //  house:{id}:guesthide      SET 가린 글 id
@@ -107,25 +116,38 @@ export const HK = {
   lots: (ch: number) => `houses:lots:${ch}`,
   /** 11/16 채널 ch의 포구 오두막 터 색인 */
   seaLots: (ch: number) => `houses:sealots:${ch}`,
+  /** 11/26 채널 ch의 캠핑장 집터 색인 */
+  campLots: (ch: number) => `houses:camplots:${ch}`,
   /** 옛 번지 색인 (채널이 생기기 전. 읽기 호환·이전용) */
   legacyLots: "houses:lots",
 };
 
-const isLegacyCh = (ch: number, zone?: HouseZone | string | null) => (ch === LEGACY_HOUSING_CHANNEL && zone !== "sea" ? "1" : "0");
+const isLegacyCh = (ch: number, zone?: HouseZone | string | null) => (ch === LEGACY_HOUSING_CHANNEL && !zoneTag(zone) ? "1" : "0");
 /** 그 구역의 번지 색인 키 */
-const lotsKey = (ch: number, zone?: HouseZone | string | null) => (zone === "sea" ? HK.seaLots(ch) : HK.lots(ch));
+const lotsKey = (ch: number, zone?: HouseZone | string | null) => (zone === "sea" ? HK.seaLots(ch) : zone === "camp" ? HK.campLots(ch) : HK.lots(ch));
 const STARTER_MARK = "~starter";
 
 const SORT_KEY: Record<HouseSort, string> = { score: HK.score, likes: HK.likes, new: HK.new };
 
 // 11/22 터 크기 꾸밈 점수 (catalog TIER_SCORE_BONUS를 상수로 박는다) + 순위 점수 한 곳 계산 (store.ts scoreOf와 같은 식).
 // 집 해시의 placedScore는 물건 몫만이라, 순위 ZSET을 쓰는 Lua마다 이 함수로 그 집의 지금 tier·likes에서 다시 센다
+// 11/26 캠핑장 집은 터 크기 대신 넓히기·앞마당 점수 (catalog campSizeBonus를 "터:tier:앞마당" 표로 박는다 — 0인 칸은 뺀다)
+const CAMP_BONUS_TABLE = Array.from({ length: CAMP_LOT_COUNT }, (_, i) => i + 1)
+  .flatMap((lot) => ["small", "wide"].flatMap((t) => [1, 2, 3].map((y) => [`${lot}:${t}:${y}`, campSizeBonus(lot, t, y)] as const)))
+  .filter(([, b]) => b > 0)
+  .map(([k, b]) => `[${JSON.stringify(k)}]=${b}`)
+  .join(",");
 const TIER_FN = `
 local TIER_BONUS = {${PLOT_TIERS.map((t) => `${t.id}=${TIER_SCORE_BONUS[t.id]}`).join(",")}}
+local CAMP_BONUS = {${CAMP_BONUS_TABLE}}
 local function tierBonus(t) return TIER_BONUS[t or ''] or 0 end
+local function sizeBonus(t, zone, lot, yard)
+  if zone == 'camp' then return CAMP_BONUS[tostring(lot or '') .. ':' .. tostring(t or '') .. ':' .. tostring(yard or '1')] or 0 end
+  return tierBonus(t)
+end
 local function rankScore(meta, w)
-  local v = redis.call('HMGET', meta, 'placedScore', 'likes', 'tier')
-  return (tonumber(v[1] or '0') or 0) + (tonumber(v[2] or '0') or 0) * tonumber(w) + tierBonus(v[3])
+  local v = redis.call('HMGET', meta, 'placedScore', 'likes', 'tier', 'zone', 'lot', 'yard')
+  return (tonumber(v[1] or '0') or 0) + (tonumber(v[2] or '0') or 0) * tonumber(w) + sizeBonus(v[3], v[4], v[5], v[6])
 end
 `;
 
@@ -178,11 +200,18 @@ return redis.call('HGETALL', KEYS[1])
 
 // KEYS: meta, layout, all, new, score, likes, lots(ch), legacyLots, inv, placed
 // ARGV: id, owner, name, intro, ownerName, tier, now, layoutJson, lot(''=자동), maxLots, exteriorJson, ch, legacy('1'|'0'), paid(''=기록 없음),
-//       zone(''|'sea'), style, starterJson(''=없음: 가방에 +1씩, ~starter 표시가 없을 때만),
-//       placedJson(''=없음: 처음 배치에 놓인 개수), placedScore, itemsCount
-// 반환: 번지, -1 이미 있음, -2 그 번지는 이미 분양됨, -3 빈 번지 없음
+//       zone(''|'sea'|'camp'), style, starterJson(''=없음: 가방에 +1씩, ~starter 표시가 없을 때만),
+//       placedJson(''=없음: 처음 배치에 놓인 개수), placedScore, itemsCount,
+//       11/26 villa(''=기록 안 함 | '0' 첫 집 | '1' 별장), kind(캠핑장 집 종류), yard(캠핑장 앞마당), design(''=없음 | 카라반 디자인 "airstream.2.1")
+// KEYS[11..] = 11/26 같은 계정의 다른 집 meta (villa가 '0'인데 그중 하나라도 있으면 -4 — 동시에 두 집을 사서 둘 다 첫 집 값이 되지 않게)
+// 반환: 번지, -1 이미 있음, -2 그 번지는 이미 분양됨, -3 빈 번지 없음, -4 그 사이 다른 집이 생김 (별장 값으로 다시)
 const CREATE_LUA = `${FREE_LOT_FN}${MIGRATE_FN}${TIER_FN}
 if redis.call('EXISTS', KEYS[1]) == 1 then return -1 end
+if ARGV[21] == '0' then
+  for i = 11, #KEYS do
+    if redis.call('EXISTS', KEYS[i]) == 1 then return -4 end
+  end
+end
 if ARGV[13] == '1' then migrateLegacy(KEYS[8], KEYS[7]) end
 local lot
 if ARGV[9] ~= '' then
@@ -197,6 +226,9 @@ redis.call('HSET', KEYS[1], 'owner', ARGV[2], 'name', ARGV[3], 'intro', ARGV[4],
   'createdAt', ARGV[7], 'updatedAt', ARGV[7], 'likes', 0, 'placedScore', 0, 'items', 0, 'ch', ARGV[12], 'lot', lot, 'exterior', ARGV[11])
 if ARGV[14] and ARGV[14] ~= '' then redis.call('HSET', KEYS[1], 'paid', ARGV[14]) end
 if ARGV[15] == 'sea' then redis.call('HSET', KEYS[1], 'zone', 'sea', 'style', ARGV[16]) end
+if ARGV[15] == 'camp' then redis.call('HSET', KEYS[1], 'zone', 'camp', 'kind', ARGV[22], 'yard', ARGV[23]) end
+if ARGV[15] == 'camp' and ARGV[24] and ARGV[24] ~= '' then redis.call('HSET', KEYS[1], 'design', ARGV[24]) end
+if ARGV[21] ~= '' then redis.call('HSET', KEYS[1], 'villa', ARGV[21]) end
 if ARGV[17] and ARGV[17] ~= '' and redis.call('HSETNX', KEYS[9], '${"~starter"}', '1') == 1 then
   for _, it in ipairs(cjson.decode(ARGV[17])) do redis.call('HINCRBY', KEYS[9], it, 1) end
 end
@@ -210,7 +242,7 @@ if ARGV[18] and ARGV[18] ~= '' then
 end
 redis.call('ZADD', KEYS[3], ARGV[7], ARGV[1])
 redis.call('ZADD', KEYS[4], ARGV[7], ARGV[1])
-redis.call('ZADD', KEYS[5], score0 + tierBonus(ARGV[6]), ARGV[1])
+redis.call('ZADD', KEYS[5], score0 + sizeBonus(ARGV[6], ARGV[15], lot, ARGV[23]), ARGV[1])
 redis.call('ZADD', KEYS[6], 0, ARGV[1])
 return lot
 `;
@@ -291,6 +323,24 @@ redis.call('ZADD', KEYS[2], rankScore(KEYS[1], ARGV[2]), ARGV[1])
 return 1
 `;
 
+// 11/26 캠핑장 앞마당 다음 단계: 캠핑장 집이고 지금 단계가 from일 때만. 낸 포인트(paid) 기록이 있으면 더하고, 순위 점수도 같은 Lua에서
+// KEYS: meta, score  ARGV: from, to, now, price, id, likeWeight  반환: 1 바꿈, 0 아님(다른 집·단계가 이미 바뀜)
+const YARD_LUA = `${TIER_FN}
+if redis.call('HGET', KEYS[1], 'zone') ~= 'camp' then return 0 end
+if (redis.call('HGET', KEYS[1], 'yard') or '1') ~= ARGV[1] then return 0 end
+redis.call('HSET', KEYS[1], 'yard', ARGV[2], 'updatedAt', ARGV[3])
+if tonumber(ARGV[4] or '0') > 0 and redis.call('HEXISTS', KEYS[1], 'paid') == 1 then redis.call('HINCRBY', KEYS[1], 'paid', ARGV[4]) end
+if redis.call('HGET', KEYS[1], 'hidden') ~= '1' then redis.call('ZADD', KEYS[2], rankScore(KEYS[1], ARGV[6]), ARGV[5]) end
+return 1
+`;
+
+// 11/26 별장 표시가 없는 옛 기록에 한 번 남긴다 (HSETNX — 이미 있으면 그대로). KEYS: meta  ARGV: '1'|'0'  반환: 남은 값, 집이 없으면 -1
+const SETTLE_VILLA_LUA = `
+if redis.call('EXISTS', KEYS[1]) == 0 then return -1 end
+redis.call('HSETNX', KEYS[1], 'villa', ARGV[1])
+return redis.call('HGET', KEYS[1], 'villa')
+`;
+
 // 오래 비운 집 정리: 주인·터 크기가 그대로이고 주인 계정의 마지막 접속(seenAt·presenceAt·createdAt 중 가장 늦은 것,
 // accounts-redis.ts NAME_FNS dormant와 같은 규칙. 규칙을 켠 시각 since 전 접속은 since로 센다 — catalog reclaimLastSeen)이 cutoff 이전일 때만. 확인·번지 칸 비우기·집 지우기·정리 기록을 한 번에 →
 // 비우는 도중에 그 번지가 팔리거나, 두 번 비워 두 번 돌려주거나, 그 사이 돌아온 주인의 집을 비우는 일이 없다.
@@ -319,6 +369,21 @@ end
 redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5], KEYS[6], KEYS[7], KEYS[8])
 for i = 9, 12 do redis.call('ZREM', KEYS[i], ARGV[1]) end
 redis.call('HSET', KEYS[16], ARGV[5], ARGV[6])
+return 1
+`;
+
+// 문패·소개 바꾸기  KEYS: meta  ARGV: name, intro, now  반환: {바꾸기 전 이름}, 집이 없으면 nil (11/26 — 이름이 같으면 집 바뀜 알림을 건너뛴다)
+const PROFILE_LUA = `
+if redis.call('EXISTS', KEYS[1]) == 0 then return false end
+local prev = redis.call('HGET', KEYS[1], 'name') or ''
+redis.call('HSET', KEYS[1], 'name', ARGV[1], 'intro', ARGV[2], 'updatedAt', ARGV[3])
+return { prev }
+`;
+
+// 11/26 카라반 디자인 (캠핑장 카라반일 때만)  KEYS: meta  ARGV: design("airstream.2.1"), now  반환: 1 바꿈, 0 카라반 아님·없음
+const CAMP_DESIGN_LUA = `
+if redis.call('HGET', KEYS[1], 'zone') ~= 'camp' or redis.call('HGET', KEYS[1], 'kind') ~= 'caravan' then return 0 end
+redis.call('HSET', KEYS[1], 'design', ARGV[1], 'updatedAt', ARGV[2])
 return 1
 `;
 
@@ -380,23 +445,28 @@ local function over(placed, inv, it)
 end
 `;
 
-// 가방 Lua 공통 KEYS 앞 5개: pool, inv(이 집), inv(다른 집), placed(이 집), placed(다른 집)  ARGV[1]: 이 집이 오두막('1'|'0')
+// 가방 Lua 공통 KEYS 앞 7개 (11/26 세 집): pool, inv(이 집), placed(이 집), inv(다른 집 1), placed(다른 집 1), inv(다른 집 2), placed(다른 집 2)
+// ARGV[1]: 포구 오두막 자리 ('0' 이 집 · '1' 다른 집 1 · '2' 다른 집 2 — 시작 가구를 오두막 몫으로 남길 집). store.ts pairIds와 같은 순서
+// outOthers = 다른 두 집이 공용 가방에서 꺼내 놓은 수 합 (store.ts overOthers)
 const POOL_MERGE = `
-pmerge(KEYS[2], KEYS[1], ARGV[1] == '1')
-pmerge(KEYS[3], KEYS[1], ARGV[1] ~= '1')
+pmerge(KEYS[2], KEYS[1], ARGV[1] == '0')
+pmerge(KEYS[4], KEYS[1], ARGV[1] == '1')
+pmerge(KEYS[6], KEYS[1], ARGV[1] == '2')
 smerge(KEYS[2], KEYS[1])
-smerge(KEYS[3], KEYS[1])
+smerge(KEYS[4], KEYS[1])
+smerge(KEYS[6], KEYS[1])
+local function outOthers(it) return over(KEYS[5], KEYS[4], it) + over(KEYS[7], KEYS[6], it) end
 `;
 
-// 그 집에서 본 가방 (옮기기 먼저)  반환: {pool, inv, otherInv, otherPlaced} HGETALL 넷
+// 그 집에서 본 가방 (옮기기 먼저)  반환: {pool, inv, inv1, placed1, inv2, placed2} HGETALL 여섯
 const INV_LUA = `${POOL_FN}${POOL_MERGE}
-return {redis.call('HGETALL', KEYS[1]), redis.call('HGETALL', KEYS[2]), redis.call('HGETALL', KEYS[3]), redis.call('HGETALL', KEYS[5])}
+return {redis.call('HGETALL', KEYS[1]), redis.call('HGETALL', KEYS[2]), redis.call('HGETALL', KEYS[4]), redis.call('HGETALL', KEYS[5]), redis.call('HGETALL', KEYS[6]), redis.call('HGETALL', KEYS[7])}
 `;
 
-// KEYS: pool, inv, otherInv, placed, otherPlaced, meta(이 집)  ARGV: sea, itemId, max
+// KEYS: 가방 7개, meta(이 집)  ARGV: seaSlot, itemId, max
 // 가구는 공용 가방에, 집에 딸린 물건은 이 집 가방에
 const ADD_ITEM_LUA = `${POOL_FN}
-if redis.call('EXISTS', KEYS[6]) == 0 then return -1 end
+if redis.call('EXISTS', KEYS[8]) == 0 then return -1 end
 ${POOL_MERGE}
 local bag = KEYS[1]
 if OWN[ARGV[2]] then bag = KEYS[2] end
@@ -405,19 +475,19 @@ redis.call('HINCRBY', bag, ARGV[2], 1)
 return 1
 `;
 
-// 되팔기 1개 (store.ts takeFrom): 두 집 어디에도 놓이지 않은 공용 몫이 있으면 공용에서, 아니면 이 집 몫에서
-// KEYS: pool, inv, otherInv, placed, otherPlaced  ARGV: sea, itemId
+// 되팔기 1개 (store.ts takeFrom): 세 집 어디에도 놓이지 않은 공용 몫이 있으면 공용에서, 아니면 이 집 몫에서
+// KEYS: 가방 7개  ARGV: seaSlot, itemId
 // 반환: 1 뺐음, -1 없음, 0 이 집에 다 놓임, -2 남은 건 다른 집에 놓임
 const TAKE_ITEM_LUA = `${POOL_FN}${POOL_MERGE}
 local it = ARGV[2]
 local o = num(KEYS[2], it)
 local p = num(KEYS[1], it)
 if o + p < 1 then return -1 end
-local out = over(KEYS[5], KEYS[3], it)
+local out = outOthers(it)
 local bag
-if p - over(KEYS[4], KEYS[2], it) - out >= 1 then bag = KEYS[1]
-elseif o - num(KEYS[4], it) >= 1 then bag = KEYS[2]
-elseif out > 0 and num(KEYS[4], it) == 0 then return -2
+if p - over(KEYS[3], KEYS[2], it) - out >= 1 then bag = KEYS[1]
+elseif o - num(KEYS[3], it) >= 1 then bag = KEYS[2]
+elseif out > 0 and num(KEYS[3], it) == 0 then return -2
 else return 0 end
 if redis.call('HINCRBY', bag, it, -1) <= 0 then redis.call('HDEL', bag, it) end
 return 1
@@ -427,28 +497,28 @@ return 1
 // 11/16 공용 가방: 물건마다 (이 집이 몫을 넘게 놓을 수) + (다른 집이 몫을 넘게 놓은 수) ≤ 공용 개수 (store.ts fitsPool).
 //  두 집 저장이 모두 이 Lua라 두 집을 동시에 저장해도 합쳐서 넘게 놓이지 않는다
 // 배치가 바뀌면 같은 Lua에서 치우거나 옮긴 가구 상태(서명이 다른 것)와 없어진 화분 기록을 지운다 (states.ts keepState와 같은 규칙)
-// KEYS: pool, inv, otherInv, placed, otherPlaced, meta, layout, score, states, plants
-// ARGV: sea, id, tier, layoutJson(''=그대로), placedScore, itemsCount, now, likeWeight, exteriorJson(''=그대로),
-//       sigsJson(배치 id → 서명, 상태 없는 가구는 ''), potsJson(화분 배치 id → true), [itemId, count]...
+// KEYS: 가방 7개, meta, layout, score, states, plants
+// ARGV: seaSlot, id, tier, layoutJson(''=그대로), placedScore, itemsCount, now, likeWeight, exteriorJson(''=그대로),
+//       sigsJson(배치 id → 서명, 상태 없는 가구는 ''), potsJson(화분 배치 id → true), base, [itemId, count]...
 const SAVE_LUA = `${POOL_FN}${TIER_FN}
-if redis.call('EXISTS', KEYS[6]) == 0 then return -1 end
-if redis.call('HGET', KEYS[6], 'tier') ~= ARGV[3] then return -2 end
-local was = tonumber(redis.call('HGET', KEYS[6], 'updatedAt') or '0') or 0
+if redis.call('EXISTS', KEYS[8]) == 0 then return -1 end
+if redis.call('HGET', KEYS[8], 'tier') ~= ARGV[3] then return -2 end
+local was = tonumber(redis.call('HGET', KEYS[8], 'updatedAt') or '0') or 0
 if ARGV[12] ~= '' and was ~= tonumber(ARGV[12]) then return -4 end
 ${POOL_MERGE}
 for i = 13, #ARGV, 2 do
   local it = ARGV[i]
   local need = tonumber(ARGV[i + 1]) - num(KEYS[2], it)
   if need < 0 then need = 0 end
-  if need + over(KEYS[5], KEYS[3], it) > num(KEYS[1], it) then return -3 end
+  if need + outOthers(it) > num(KEYS[1], it) then return -3 end
 end
-redis.call('DEL', KEYS[4])
-for i = 13, #ARGV, 2 do redis.call('HSET', KEYS[4], ARGV[i], ARGV[i + 1]) end
+redis.call('DEL', KEYS[3])
+for i = 13, #ARGV, 2 do redis.call('HSET', KEYS[3], ARGV[i], ARGV[i + 1]) end
 if ARGV[4] ~= '' then
-  redis.call('SET', KEYS[7], ARGV[4])
-  redis.call('HSET', KEYS[6], 'items', ARGV[6])
+  redis.call('SET', KEYS[9], ARGV[4])
+  redis.call('HSET', KEYS[8], 'items', ARGV[6])
   local sigs = cjson.decode(ARGV[10])
-  local st = redis.call('HGETALL', KEYS[9])
+  local st = redis.call('HGETALL', KEYS[11])
   for i = 1, #st, 2 do
     local ok, v = pcall(cjson.decode, st[i + 1])
     local keep = false
@@ -456,18 +526,18 @@ if ARGV[4] ~= '' then
       local sig = sigs[st[i]]
       if sig ~= nil then keep = sig ~= '' and sig == v.s else keep = v.s == '${WINDOW_SIG}' end
     end
-    if not keep then redis.call('HDEL', KEYS[9], st[i]) end
+    if not keep then redis.call('HDEL', KEYS[11], st[i]) end
   end
   local pots = cjson.decode(ARGV[11])
-  local pl = redis.call('HKEYS', KEYS[10])
+  local pl = redis.call('HKEYS', KEYS[12])
   for i = 1, #pl do
-    if not pots[pl[i]] then redis.call('HDEL', KEYS[10], pl[i]) end
+    if not pots[pl[i]] then redis.call('HDEL', KEYS[12], pl[i]) end
   end
 end
-if ARGV[9] ~= '' then redis.call('HSET', KEYS[6], 'exterior', ARGV[9]) end
-redis.call('HSET', KEYS[6], 'placedScore', ARGV[5], 'updatedAt', math.max(tonumber(ARGV[7]), was + 1))
-if redis.call('HGET', KEYS[6], 'hidden') ~= '1' then
-  redis.call('ZADD', KEYS[8], rankScore(KEYS[6], ARGV[8]), ARGV[2])
+if ARGV[9] ~= '' then redis.call('HSET', KEYS[8], 'exterior', ARGV[9]) end
+redis.call('HSET', KEYS[8], 'placedScore', ARGV[5], 'updatedAt', math.max(tonumber(ARGV[7]), was + 1))
+if redis.call('HGET', KEYS[8], 'hidden') ~= '1' then
+  redis.call('ZADD', KEYS[10], rankScore(KEYS[8], ARGV[8]), ARGV[2])
 end
 return 1
 `;
@@ -597,6 +667,28 @@ function parseLayout(raw: string | null): HouseLayout {
   }
 }
 
+/** 11/26 캠핑장 집 종류·앞마당·카라반 디자인 (종류 칸이 이상하면 터로 정한다 — 터가 종류를 정한다. 디자인 칸이 없거나 이상하면 비워 둔다 → 서비스가 그 자리 기본 모습) */
+function campInfoOf(kind: string | null | undefined, yard: string | null | undefined, lot: number, design?: string | null): CampInfo {
+  const byLot = campLotByNo(lot)?.kind;
+  const k = kind === "caravan" || kind === "pension" || kind === "rural" ? kind : (byLot ?? "caravan");
+  const y = Number(yard ?? 1);
+  const d = k === "caravan" ? parseCaravanDesign(design) : null;
+  return { kind: k, yard: isCampYard(y) ? y : 1, ...(d ? { design: d } : {}) };
+}
+
+/** HMGET 결과 (redisClient는 이름 없는 배열, 혹시 객체로 와도 받는다) → 필드 이름 → 값 */
+function hmgetMap(got: unknown, fields: readonly string[]): Map<string, string> {
+  const m = new Map<string, string>();
+  fields.forEach((f, i) => {
+    const v = Array.isArray(got) ? got[i] : (got as Record<string, unknown> | null)?.[f];
+    if (v !== null && v !== undefined) m.set(f, String(v));
+  });
+  return m;
+}
+
+/** 집 요약에 읽는 칸 (brief) */
+const BRIEF_FIELDS = ["owner", "zone", "ch", "lot", "tier", "villa", "kind", "yard", "paid", "design"] as const;
+
 function toRecord(id: string, m: Map<string, string>, layout: HouseLayout | null): HouseRecord | null {
   if (!m.has("owner")) return null;
   const likes = Number(m.get("likes") ?? 0);
@@ -607,21 +699,27 @@ function toRecord(id: string, m: Map<string, string>, layout: HouseLayout | null
   } catch {
     exterior = null;
   }
+  const lot = Number(m.get("lot") ?? 0);
+  const zone = zoneTag(m.get("zone"));
+  const camp = zone === "camp" ? campInfoOf(m.get("kind"), m.get("yard"), lot, m.get("design")) : null;
+  const tier = (m.get("tier") ?? "small") as PlotTierId;
   return {
     id,
     ch: housingChannelOf(m.get("ch")),
-    lot: Number(m.get("lot") ?? 0),
-    ...(m.get("zone") === "sea" ? { zone: "sea" as const, style: cottageStyleOf(m.get("style")) } : {}),
+    lot,
+    ...(zone === "sea" ? { zone: "sea" as const, style: cottageStyleOf(m.get("style")) } : {}),
+    ...(camp ? { zone: "camp" as const, camp } : {}),
+    ...(m.has("villa") ? { villa: m.get("villa") === "1" } : {}),
     exterior: normalizeExterior(exterior),
     owner: m.get("owner")!,
     name: m.get("name") ?? "",
     intro: m.get("intro") ?? "",
     ownerName: m.get("ownerName") ?? "",
-    tier: (m.get("tier") ?? "small") as PlotTierId,
+    tier,
     layout: layout ?? emptyLayout(),
     likes,
     placedScore,
-    score: scoreOf(placedScore, likes, m.get("tier") ?? "small"),
+    score: recordScore({ placedScore, likes, tier, lot, ...(camp ? { zone: "camp" as const, camp } : {}) }),
     items: Number(m.get("items") ?? 0),
     createdAt: Number(m.get("createdAt") ?? 0),
     updatedAt: Number(m.get("updatedAt") ?? 0),
@@ -659,15 +757,22 @@ export class RedisHouseStore implements HouseStore {
   }
 
   /** 가방 Lua 공통 KEYS 앞 5개와 ARGV[1] (POOL_MERGE) */
+  /** 가방 Lua 공통 KEYS 앞 7개와 ARGV[1] (POOL_MERGE — 포구 오두막 자리) */
   private poolKeys(pair: HousePair, zone: HouseZone): { keys: string[]; sea: string } {
-    const { self, other } = pairIds(pair, zone);
-    return { keys: [HK.pool(pair.village), HK.inv(self), HK.inv(other), HK.placed(self), HK.placed(other)], sea: zone === "sea" ? "1" : "0" };
+    const { self, others, seaSlot } = pairIds(pair, zone);
+    return {
+      keys: [HK.pool(pair.village), HK.inv(self), HK.placed(self), HK.inv(others[0]), HK.placed(others[0]), HK.inv(others[1]), HK.placed(others[1])],
+      sea: String(seaSlot + 1),
+    };
   }
 
   async inventory(pair: HousePair, zone: HouseZone): Promise<InvView> {
     const { keys, sea } = this.poolKeys(pair, zone);
     const r = await this.redis.eval<string[], (string[] | null)[]>(INV_LUA, keys, [sea]);
-    return invView(counts(r?.[0]), counts(r?.[1]), counts(r?.[2]), counts(r?.[3]));
+    return invView(counts(r?.[0]), counts(r?.[1]), [
+      { own: counts(r?.[2]), placed: counts(r?.[3]) },
+      { own: counts(r?.[4]), placed: counts(r?.[5]) },
+    ]);
   }
 
   async ownItems(id: string) {
@@ -676,12 +781,25 @@ export class RedisHouseStore implements HouseStore {
 
   async create(n: NewHouse): Promise<CreateResult> {
     const ch = housingChannelOf(n.ch ?? LEGACY_HOUSING_CHANNEL);
-    const zone = n.zone === "sea" ? "sea" : "";
+    const zone = zoneTag(n.zone) ?? "";
+    const camp = zone === "camp" ? (n.camp ?? campInfoOf(null, null, n.lot ?? 0)) : null;
     if (n.lot !== null) await this.clearStaleLot(ch, n.lot, zone);
     const r = Number(
       await this.redis.eval<string[], number>(
         CREATE_LUA,
-        [HK.meta(n.id), HK.layout(n.id), HK.all, HK.new, HK.score, HK.likes, lotsKey(ch, zone), HK.legacyLots, HK.inv(n.id), HK.placed(n.id)],
+        [
+          HK.meta(n.id),
+          HK.layout(n.id),
+          HK.all,
+          HK.new,
+          HK.score,
+          HK.likes,
+          lotsKey(ch, zone),
+          HK.legacyLots,
+          HK.inv(n.id),
+          HK.placed(n.id),
+          ...(n.villa === false ? (n.others ?? []).map((o) => HK.meta(o)) : []),
+        ],
         [
           n.id,
           n.owner,
@@ -698,22 +816,26 @@ export class RedisHouseStore implements HouseStore {
           isLegacyCh(ch, zone),
           n.paid === undefined ? "" : String(n.paid),
           zone,
-          zone ? cottageStyleOf(n.style) : "",
+          zone === "sea" ? cottageStyleOf(n.style) : "",
           n.starter?.length ? JSON.stringify(n.starter) : "",
           n.placed && Object.keys(n.placed).length ? JSON.stringify(n.placed) : "",
           String(n.placedScore ?? 0),
-          String(n.layout?.items.length ?? 0),
+          String(n.layout ? itemCount(n.layout) : 0),
+          n.villa === undefined ? "" : n.villa ? "1" : "0",
+          camp ? camp.kind : "",
+          camp ? String(camp.yard) : "",
+          camp?.kind === "caravan" && camp.design ? caravanDesignKey(camp.design) : "",
         ],
       ),
     );
-    return r > 0 ? { lot: r } : r === -1 ? "exists" : r === -2 ? "lot_taken" : "full";
+    return r > 0 ? { lot: r } : r === -1 ? "exists" : r === -2 ? "lot_taken" : r === -4 ? "villa_changed" : "full";
   }
 
   async assignLot(id: string) {
     // 집의 채널은 바뀌지 않는다 (분양 때 정해진다). 먼저 읽고 그 채널 색인으로 Lua를 부른다
     const meta = await metaLoc(this.redis, id);
     const ch = housingChannelOf(meta?.ch);
-    const zone = meta?.zone === "sea" ? "sea" : undefined;
+    const zone = zoneTag(meta?.zone);
     const r = Number(
       await this.redis.eval<string[], number>(ASSIGN_LOT_LUA, [HK.meta(id), lotsKey(ch, zone), HK.legacyLots], [id, String(zoneMaxLots(zone)), isLegacyCh(ch, zone)]),
     );
@@ -727,16 +849,16 @@ export class RedisHouseStore implements HouseStore {
   }
 
   async village(ch = LEGACY_HOUSING_CHANNEL, zone?: HouseZone) {
-    const sea = zone === "sea";
-    // 포구 색인은 HGETALL 하나 (옛 색인 옮기기가 필요 없다)
-    const flat = sea
-      ? ((await this.redis.hgetall(HK.seaLots(ch))) as unknown as string[] | Record<string, string> | null)
+    const want = zoneTag(zone);
+    // 포구·캠핑장 색인은 HGETALL 하나 (옛 색인 옮기기가 필요 없다)
+    const flat = want
+      ? ((await this.redis.hgetall(lotsKey(ch, want))) as unknown as string[] | Record<string, string> | null)
       : await this.redis.eval<string[], string[] | null>(VILLAGE_LUA, [HK.lots(ch), HK.legacyLots], [isLegacyCh(ch)]);
     const entries: [string, string][] = Array.isArray(flat) || flat === null ? [...pairs(flat)] : Object.entries(flat).map(([k, v]) => [k, String(v)]);
     const byLot = new Map(entries.map(([lot, id]) => [id, Number(lot)]));
     const recs = await this.records([...byLot.keys()], false);
     // 색인과 집 기록이 서로 맞는 것만 (채널·번지·구역이 다르면 색인이 낡은 것)
-    return recs.filter((r) => r.lot > 0 && r.ch === ch && (r.zone === "sea") === sea && byLot.get(r.id) === r.lot).sort((a, b) => a.lot - b.lot);
+    return recs.filter((r) => r.lot > 0 && r.ch === ch && r.zone === want && byLot.get(r.id) === r.lot).sort((a, b) => a.lot - b.lot);
   }
 
   /** 번지 칸이 낡았으면(가리키는 집이 없거나 다른 번지) 비운다 */
@@ -750,14 +872,14 @@ export class RedisHouseStore implements HouseStore {
   async unlot(id: string) {
     const meta = await metaLoc(this.redis, id);
     const ch = housingChannelOf(meta?.ch ?? undefined);
-    const zone = meta?.zone === "sea" ? "sea" : undefined;
+    const zone = zoneTag(meta?.zone);
     return Number(await this.redis.eval<string[], number>(UNASSIGN_LOT_LUA, [HK.meta(id), lotsKey(ch, zone), HK.legacyLots], [id, isLegacyCh(ch, zone)])) === 1;
   }
 
   async moveLot(id: string, lot: number) {
     const meta = await metaLoc(this.redis, id);
     const ch = housingChannelOf(meta?.ch ?? undefined);
-    const zone = meta?.zone === "sea" ? "sea" : undefined;
+    const zone = zoneTag(meta?.zone);
     await this.clearStaleLot(ch, lot, zone);
     const r = Number(await this.redis.eval<string[], number>(MOVE_LOT_LUA, [HK.meta(id), lotsKey(ch, zone), HK.legacyLots], [id, String(lot), isLegacyCh(ch, zone)]));
     return r === 1 ? ("ok" as const) : r === -1 ? ("no_house" as const) : ("taken" as const);
@@ -780,14 +902,50 @@ export class RedisHouseStore implements HouseStore {
     return Number(await this.redis.eval<string[], number>(STYLE_LUA, [HK.meta(id)], [style, String(now)])) === 1;
   }
 
+  async setCampDesign(id: string, design: CaravanDesign, now: number) {
+    return Number(await this.redis.eval<string[], number>(CAMP_DESIGN_LUA, [HK.meta(id)], [caravanDesignKey(design), String(now)])) === 1;
+  }
+
   async setProfile(id: string, name: string, intro: string, now: number) {
-    if (!(await this.redis.exists(HK.meta(id)))) return false;
-    await this.redis.hset(HK.meta(id), { name, intro, updatedAt: String(now) });
-    return true;
+    const r = (await this.redis.eval(PROFILE_LUA, [HK.meta(id)], [name, intro, String(now)])) as unknown;
+    return Array.isArray(r) ? String(r[0] ?? "") : null;
   }
 
   async upgrade(id: string, from: PlotTierId, to: PlotTierId, now: number, price = 0) {
     return Number(await this.redis.eval<string[], number>(UPGRADE_LUA, [HK.meta(id), HK.score], [from, to, String(now), String(price), id, String(LIKE_WEIGHT)])) === 1;
+  }
+
+  async setYard(id: string, from: number, to: number, now: number, price: number) {
+    return Number(await this.redis.eval<string[], number>(YARD_LUA, [HK.meta(id), HK.score], [String(from), String(to), String(now), String(price), id, String(LIKE_WEIGHT)])) === 1;
+  }
+
+  async settleVilla(id: string, villa: boolean) {
+    const r = await this.redis.eval<string[], string | number | null>(SETTLE_VILLA_LUA, [HK.meta(id)], [villa ? "1" : "0"]);
+    if (r === null || r === undefined || Number(r) === -1) return null;
+    return String(r) === "1";
+  }
+
+  async brief(ids: readonly string[]): Promise<(HouseBrief | null)[]> {
+    if (!ids.length) return [];
+    const p = this.redis.pipeline();
+    for (const id of ids) p.hmget(HK.meta(id), ...BRIEF_FIELDS);
+    const res = await p.exec<unknown[]>();
+    return ids.map((id, i): HouseBrief | null => {
+      const m = hmgetMap(res[i], BRIEF_FIELDS);
+      if (!m.has("owner")) return null;
+      const lot = Number(m.get("lot") ?? 0);
+      const zone = zoneTag(m.get("zone"));
+      return {
+        id,
+        ...(zone ? { zone } : {}),
+        ch: housingChannelOf(m.get("ch")),
+        lot,
+        tier: (m.get("tier") ?? "small") as PlotTierId,
+        ...(m.has("villa") ? { villa: m.get("villa") === "1" } : {}),
+        ...(zone === "camp" ? { camp: campInfoOf(m.get("kind"), m.get("yard"), lot, m.get("design")) } : {}),
+        ...(m.has("paid") ? { paid: Number(m.get("paid")) || 0 } : {}),
+      };
+    });
   }
 
   /**
@@ -900,7 +1058,7 @@ export class RedisHouseStore implements HouseStore {
           tier,
           layout ? JSON.stringify(layout) : "",
           String(placedScore),
-          String(layout?.items.length ?? 0),
+          String(layout ? itemCount(layout) : 0),
           String(now),
           String(LIKE_WEIGHT),
           exterior ? JSON.stringify(exterior) : "",
@@ -1074,5 +1232,15 @@ export class RedisHouseStore implements HouseStore {
   async guestReports(id: string) {
     const flat = (await this.redis.hgetall(HK.guestRep(id))) as unknown as string[] | null;
     return new Map([...pairs(flat)].map(([k, v]) => [k, Number(v)]));
+  }
+
+  async guestReportsMany(ids: readonly string[]) {
+    const out = new Map<string, Map<string, number>>();
+    if (!ids.length) return out;
+    const p = this.redis.pipeline();
+    for (const id of ids) p.hgetall(HK.guestRep(id));
+    const r = await p.exec<(string[] | null)[]>();
+    ids.forEach((id, i) => out.set(id, new Map([...pairs(r[i] ?? null)].map(([k, v]) => [k, Number(v)]))));
+    return out;
   }
 }

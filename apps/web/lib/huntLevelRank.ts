@@ -224,18 +224,29 @@ export async function huntLevelRank(me: string | null, size: number, opts: HuntL
   // 기존 캐릭터를 아직 안 채웠으면 한 번 훑는다 (끝나면 다시 안 돈다)
   await autoFill(store.fill, (c) => fillHuntLevel(c, FILL_BATCH, { store, staffId, rpg }), "huntLevel");
 
-  let myScore = 0;
-  if (me && !isStaffMe) {
-    const c = await rpg.get(me);
-    myScore = ranked(c) ? scoreOf(c) : 0;
-    await store.put(me, myScore, c.equip.weapon ?? null).catch(() => undefined);
+  // 11/26 Redis 왕복 줄이기: 예전엔 내 캐릭터 → 내 기록 적기 → 상위 판 → 이름·무기 → 내 순위를 차례로 기다렸다 (5번).
+  // 이제 내 캐릭터와 상위 판을 함께 읽고, 판은 방금 읽은 내 점수로 고쳐 줄 세운다 (Redis와 같은 규칙: 점수 높은 순, 같으면 id 역순).
+  // 내 기록 적기·이름·내 순위는 그다음 한 번에 (내 무기는 방금 읽은 캐릭터 것으로) → 2번
+  const [c, top0] = await Promise.all([me && !isStaffMe ? rpg.get(me) : Promise.resolve(null), store.top(size + EXTRA)]);
+  const myScore = c && ranked(c) ? scoreOf(c) : 0;
+  let window = top0;
+  if (c) {
+    window = top0.filter((e) => e.accountId !== me);
+    if (myScore > 0) window.push({ accountId: me!, score: myScore });
+    window.sort((a, b) => b.score - a.score || (a.accountId < b.accountId ? 1 : a.accountId > b.accountId ? -1 : 0));
+    window = window.slice(0, size + EXTRA);
   }
-
-  const top = (await store.top(size + EXTRA)).filter((e) => e.accountId !== staffId);
+  const top = window.filter((e) => e.accountId !== staffId);
   const banned = await Promise.all(top.map((e) => isBanned(e.accountId)));
   const list = top.filter((_, i) => !banned[i]).slice(0, size);
   const mineOut = !!me && !isStaffMe && myScore > 0 && !list.some((e) => e.accountId === me) && !(await isBanned(me));
-  const info = await store.info(mineOut ? [...list.map((e) => e.accountId), me!] : list.map((e) => e.accountId), now);
+  const [info, above] = await Promise.all([
+    store.info(mineOut ? [...list.map((e) => e.accountId), me!] : list.map((e) => e.accountId), now),
+    mineOut ? store.countAbove(myScore) : Promise.resolve(0),
+    c ? store.put(me!, myScore, c.equip.weapon ?? null).catch(() => undefined) : undefined,
+  ]);
+  // 무기 표시는 방금 적은 값과 같게 (적기와 읽기가 함께 돌아 옛 값이 올 수 있다)
+  if (c && info.has(me!)) info.set(me!, { ...info.get(me!)!, weapon: myScore > 0 ? (c.equip.weapon ?? null) : null });
   const row = (e: Entry, rank: number): HuntLevelRow => {
     const i = info.get(e.accountId);
     const weapon = i?.weapon && gearById(i.weapon) ? i.weapon : null;
@@ -254,6 +265,5 @@ export async function huntLevelRank(me: string | null, size: number, opts: HuntL
   };
   const rows = list.map((e, i) => row(e, i + 1));
   if (!mineOut) return { rows, mine: null, staff: isStaffMe };
-  const above = await store.countAbove(myScore);
   return { rows, mine: row({ accountId: me!, score: myScore }, Math.max(size + 1, above + 1)), staff: false };
 }

@@ -30,6 +30,47 @@ import { hashU, pathEdgeDist, poolDepth, seaGroundKind, SEA_PLATFORM, type SeaGr
 import { SEA_TEX_PREFIX } from "./seaTypes";
 import { SEA_BUS_BAY } from "../bus/busBays";
 import { seaWinterColor } from "./seaWinterGround";
+import { padded, padOfGrid, type SeaPad } from "./seaPad";
+
+// ── 11/26 둘레 여백 (seaPad · seaSpriteEdge.test) ── 그림을 캔버스 끝 열·줄까지 칠해 윤곽이 잘리거나(옆·위), 눈판에서 윗면 눈이 맨 윗줄에 닿던 그림.
+// 원점 바닥 가운데(0.5, 1)면 좌우 같은 폭·위만(아래 0) → 맵 자리가 픽셀 그대로. 가운데 원점(카약·노)은 위아래도 같은 폭.
+// 그림 안 좌표를 쓰는 곳(정류장 앞 조각·처마 전구 자리·등대 나선·배 장식 줄·터 기하·자르기 줄)은 이 여백만큼 옮겨 쓴다
+const pad = (x: number, top: number, bottom = 0): SeaPad => ({ x, top, bottom });
+export const PINE_PAD = pad(0, 2);
+export const BUSH_PAD = pad(0, 2);
+/** 바닥 소품(갯그령·조개·유목·꽃·디딤돌 — SeaMap addGroundDecor 한 줄로 세워요): 아래 한 줄도 (줄기·돌 밑이 맨 아랫줄에 닿았다 — 세울 때 그만큼 내려요) */
+export const DECOR_PAD = pad(2, 2, 1);
+export const SHELTER_PAD = pad(2, 0);
+export const BUS_SIGN_PAD = pad(2, 3);
+export const TIMETABLE_PAD = pad(2, 2);
+export const BENCH_PAD = pad(0, 2);
+export const PARASOL_PAD = pad(2, 3);
+export const LOUNGER_PAD = pad(0, 2);
+export const KIOSK_PAD = pad(2, 2);
+export const LOT_PAD = pad(5, 2);
+export const MAILBOX_PAD = pad(2, 2);
+export const LEDGE_PAD = pad(1, 2);
+export const LOT_SIGN_PAD = pad(2, 2);
+/** 테트라포드: 다리 끝이 아래까지 (세울 때 그만큼 내려요 — SeaMap) */
+export const TETRA_PAD = pad(2, 2, 2);
+export const LIGHTHOUSE_PAD = pad(0, 3);
+export const BOAT_PAD = pad(0, 2);
+export const BUOY_PAD = pad(1, 2);
+export const LAMP_PAD = pad(1, 3);
+export const CRATES_PAD = pad(1, 2);
+export const POST_PAD = pad(0, 2);
+export const PICNIC_PAD = pad(0, 2);
+export const DRIFTLOG_PAD = pad(0, 2);
+export const CUSHION_PAD = pad(1, 1);
+export const CRAB_PAD = pad(1, 1);
+export const TUBE_PAD = pad(1, 2, 1);
+export const KAYAK_SIDE_PAD = pad(0, 2, 2);
+export const KAYAK_VERT_PAD = pad(1, 1, 1);
+export const PADDLE_PAD = pad(2, 1, 1);
+/** 먼바다 배 (맨 아래 줄은 물높이 줄 — 일부러 끝까지) */
+export const SHIP_PAD = pad(1, 3);
+/** 돗자리 (앞뒤 술이 맨 윗줄 바로 아래 — 위 윤곽이 맨 윗줄) */
+export const MAT_PAD = pad(0, 1);
 
 // 11/16 달물결 포구 픽셀 아트 (코드로 그려요, 마을·캠핑장 그림을 다시 쓰지 않고 새로).
 // 11/16 사용자 "고물상 같아요" → 파스텔 바닷가로: 크림빛 모래, 민트·아쿠아 얕은 물에서 청록·연보라 먼바다로, 복숭아·민트·라일락·버터색 지붕과 차양,
@@ -325,7 +366,7 @@ export function pineArt(v: number): Grid {
   const r0 = v ? 13 : 11;
   const W = Math.ceil(r0 * 3.2) + 8;
   const H = Math.ceil(r0 * 2.6) + 14;
-  const g = new Grid(W, H);
+  const g = padded(W, H, PINE_PAD);
   const cx = W / 2;
   const cy = r0 + 4;
   const base = H - 4;
@@ -345,7 +386,7 @@ export function pineArt(v: number): Grid {
   );
   softOutline(g);
   shadow(g, cx + 2, base + 1, r0 + 3, 2.6, 64);
-  return g;
+  return g.done();
 }
 
 /** 11/16 덤불 (시안 bush): 둥근 덩어리 셋 + 분홍·흰 꽃 몇 송이 */
@@ -353,7 +394,7 @@ export function bushArt(v: number): Grid {
   const r0 = v % 2 ? 6 : 5;
   const W = Math.ceil(r0 * 4) + 6;
   const H = Math.ceil(r0 * 2) + 8;
-  const g = new Grid(W, H);
+  const g = padded(W, H, BUSH_PAD);
   const cx = W / 2;
   const cy = r0 + 2;
   blobPaint(
@@ -375,7 +416,7 @@ export function bushArt(v: number): Grid {
   }
   softOutline(g);
   shadow(g, cx + 1, H - 3, r0 * 1.6 + 2, 2, 56);
-  return g;
+  return g.done();
 }
 
 /** 11/16 야자수 (시안 palm): 휘어진 줄기 + 잎 덩어리 여섯 (잎은 아래 테 없이) */
@@ -414,7 +455,7 @@ export function palmArt(): Grid {
 }
 
 export function beachGrassArt(v: number): Grid {
-  const g = new Grid(12, 10);
+  const g = padded(12, 10, DECOR_PAD);
   const c = v === 2 ? 0xb4a45a : v === 1 ? 0x8e9a52 : 0xa0a85e;
   for (const [x0, dx] of [
     [6, -5],
@@ -425,31 +466,31 @@ export function beachGrassArt(v: number): Grid {
   ] as const)
     line(g, x0, 9, x0 + dx, 1 + Math.abs(dx) / 2, c);
   g.recolor((_x, y) => y < 4, lighten(c, 0.25));
-  return g;
+  return g.done();
 }
 
 export function shellArt(v: number): Grid {
-  const g = new Grid(6, 5);
+  const g = padded(6, 5, DECOR_PAD);
   const c = [0xf4e6d8, 0xe8c4b0, 0xd8d0c4][v % 3];
   g.ellipse(3, 2.5, 2.4, 1.8, c);
   g.set(3, 1, lighten(c, 0.4));
   if (v === 1) g.set(2, 3, darken(c, 0.25));
   softOutline(g, true);
-  return g;
+  return g.done();
 }
 
 export function driftArt(): Grid {
-  const g = new Grid(26, 8);
+  const g = padded(26, 8, DECOR_PAD);
   line(g, 2, 5, 23, 3, DRIFTWOOD.mid, 2);
   line(g, 2, 4, 23, 2, DRIFTWOOD.hi);
   line(g, 16, 3, 20, 0, DRIFTWOOD.lo);
   softOutline(g, true);
   shadow(g, 13, 7, 11, 1, 40);
-  return g;
+  return g.done();
 }
 
 export function flowerArt(v: number): Grid {
-  const g = new Grid(7, 6);
+  const g = padded(7, 6, DECOR_PAD);
   const c = [0xf0a0b8, 0xf8e8a0, 0xd8c8f0][v % 3];
   g.vline(3, 2, 5, 0x6a8a44);
   g.set(3, 1, c);
@@ -458,7 +499,7 @@ export function flowerArt(v: number): Grid {
   g.set(3, 2, 0xf8d040);
   g.set(1, 4, 0x7a9a4a);
   g.set(5, 3, 0x7a9a4a);
-  return g;
+  return g.done();
 }
 
 // ── 버스 정류장 ── 캠핑장 정류장과 같은 틀 (SHELTER_FRONT 자르기 자리 같음), 지붕은 바랜 하늘빛 골함석
@@ -467,7 +508,7 @@ export const SHELTER_ART_H = 56;
 export function shelterArt(): Grid {
   const W = SHELTER_ART_W;
   const H = SHELTER_ART_H;
-  const g = new Grid(W, H);
+  const g = padded(W, H, SHELTER_PAD);
   const base = H - 3;
   const pole = { hi: 0xe8ecec, mid: 0xc4cccc, lo: 0x8e9898 };
   // 뒷벽 (흰 칠 판 + 바닷가 포스터)
@@ -498,17 +539,21 @@ export function shelterArt(): Grid {
   g.rect(W / 2 - 3, 14, 6, 3, 0xfff0c8); // 지붕 등
   softOutline(g);
   shadow(g, W / 2, base + 1, W / 2 - 3, 2, 58);
-  return g;
+  return g.done();
 }
 /** 벤치에 앉은 사람 앞에 한 번 더 그리는 조각 (캠핑장 SHELTER_FRONT와 같은 자리) */
-export const SHELTER_FRONT: readonly (readonly [number, number, number, number])[] = [
+export const SHELTER_FRONT_BASE: readonly (readonly [number, number, number, number])[] = [
   [0, 0, SHELTER_ART_W, 16],
   [3, 16, 5, 38],
   [SHELTER_ART_W - 8, 16, 5, 38],
 ];
+/** 여백 둔 텍스처 기준 자리 (지붕 조각은 양옆 윤곽 열까지, 기둥은 여백만큼 옮겨요) */
+export const SHELTER_FRONT: readonly (readonly [number, number, number, number])[] = SHELTER_FRONT_BASE.map(([x, y, w, h], i) =>
+  i === 0 ? ([0, y + SHELTER_PAD.top, w + SHELTER_PAD.x * 2, h] as const) : ([x + SHELTER_PAD.x, y + SHELTER_PAD.top, w, h] as const),
+);
 
 export function busSignArt(): Grid {
-  const g = new Grid(30, 52);
+  const g = padded(30, 52, BUS_SIGN_PAD);
   const base = 49;
   g.rect(13, 8, 3, base - 8, 0x8a8a86);
   g.vline(13, 8, base - 1, 0xb8b8b2);
@@ -526,11 +571,11 @@ export function busSignArt(): Grid {
   g.hline(4, 18, 25, 0xb8d8ec);
   softOutline(g);
   shadow(g, 14, base + 1, 4, 1.2, 60);
-  return g;
+  return g.done();
 }
 
 export function timetableArt(): Grid {
-  const g = new Grid(18, 32);
+  const g = padded(18, 32, TIMETABLE_PAD);
   const base = 29;
   g.rect(8, 14, 2, base - 14, 0x8a8a86);
   g.rect(1, 2, 16, 14, 0xf4f0e4);
@@ -539,12 +584,12 @@ export function timetableArt(): Grid {
   for (let y = 7; y < 15; y += 2) g.hline(3, 14, y, y === 9 ? 0x4e8cb0 : 0x9aa4ac);
   softOutline(g);
   shadow(g, 9, base + 1, 4, 1.2, 60);
-  return g;
+  return g.done();
 }
 
 /** 정류장 벤치 (하늘빛 칠 나무, 2인) */
 export function benchArt(): Grid {
-  const g = new Grid(42, 18);
+  const g = padded(42, 18, BENCH_PAD);
   const wood = { hi: 0x9ccce0, mid: 0x6aa4c0, lo: 0x46809c };
   g.rect(3, 2, 36, 3, wood.mid);
   g.hline(3, 38, 2, wood.hi);
@@ -558,7 +603,7 @@ export function benchArt(): Grid {
   g.rect(36, 13, 2, 3, 0x5a5650);
   softOutline(g, true);
   shadow(g, 21, 16, 19, 1.4, 56);
-  return g;
+  return g.done();
 }
 
 // ── 11/16 쉴거리 (해변 벤치는 benchArt) ──
@@ -566,7 +611,7 @@ export function benchArt(): Grid {
 export const MAT_W = 44;
 export const MAT_H = 26;
 export function matArt(v: number): Grid {
-  const g = new Grid(MAT_W + 4, MAT_H + 4);
+  const g = padded(MAT_W + 4, MAT_H + 4, MAT_PAD);
   const ramp = v === 0 ? RAMP.towel : v === 1 ? RAMP.umbY : RAMP.umbC;
   for (let y = 2; y < MAT_H + 2; y++)
     for (let x = 2; x < MAT_W + 2; x++) {
@@ -581,24 +626,28 @@ export function matArt(v: number): Grid {
   }
   softOutline(g, true);
   shadow(g, (MAT_W + 4) / 2, MAT_H + 2, MAT_W / 2, 1.2, 40);
-  return g;
+  return g.done();
 }
 /** 파라솔 (줄무늬 갓 + 기둥). 갓과 기둥 아래를 따로 그려요 (사람 위로 갓이 덮이게). 원점 = 기둥 밑 */
-export const PARASOL_W = 52;
-export const PARASOL_H = 46;
+const PARASOL_ART_W = 52;
+const PARASOL_ART_H = 46;
+const PARASOL_ART_CANOPY_H = 19;
+/** 텍스처 크기 (그린 52×46 + 둘레 여백) — SeaMap이 갓·기둥을 나눠 자르는 자리도 이 값 */
+export const PARASOL_W = PARASOL_ART_W + PARASOL_PAD.x * 2;
+export const PARASOL_H = PARASOL_ART_H + PARASOL_PAD.top;
 /** 갓 그림 높이 (이 아래는 기둥 — SeaMap이 갓·기둥을 다른 depth로 나눠 그려요) */
-export const PARASOL_CANOPY_H = 19;
+export const PARASOL_CANOPY_H = PARASOL_ART_CANOPY_H + PARASOL_PAD.top;
 export function parasolArt(v: number): Grid {
-  const g = new Grid(PARASOL_W, PARASOL_H);
-  const cx = PARASOL_W / 2;
-  const base = PARASOL_H - 2;
+  const g = padded(PARASOL_ART_W, PARASOL_ART_H, PARASOL_PAD);
+  const cx = PARASOL_ART_W / 2;
+  const base = PARASOL_ART_H - 2;
   // 기둥
   g.rect(cx - 1, 12, 2, base - 12, RAMP.wall[2]);
   g.vline(cx - 1, 12, base - 1, RAMP.wall[0]);
   // 갓: 위가 둥근 넓은 반원, 여덟 쪽 줄무늬 (두 색 번갈아), 아래 끝은 물결 술
   const ramp = v === 0 ? RAMP.umbC : RAMP.umbY;
   for (let y = 2; y < 18; y++)
-    for (let x = 1; x < PARASOL_W - 1; x++) {
+    for (let x = 1; x < PARASOL_ART_W - 1; x++) {
       const dx = (x + 0.5 - cx) / (cx - 1);
       const dy = (y - 15) / 13;
       if (dx * dx + dy * dy > 1 || y > 15 + (x % 6 < 3 ? 1 : 0)) continue;
@@ -607,16 +656,16 @@ export function parasolArt(v: number): Grid {
       g.set(x, y, seg ? pick(ramp, 0.15 + light * 0.5, x, y) : pick(RAMP.wall, 0.1 + light * 0.4, x, y));
     }
   g.rect(cx - 1, 0, 2, 3, RAMP.wall[1]);
-  fabricFolds(g, { x0: 1, y0: 2, x1: PARASOL_W - 2, y1: 17 }, PARASOL_W / 8, 0.07);
+  fabricFolds(g, { x0: 1, y0: 2, x1: PARASOL_ART_W - 2, y1: 17 }, PARASOL_ART_W / 8, 0.07);
   softOutline(g, true);
   shadow(g, cx, base + 1, 4, 1, 60);
-  return g;
+  return g.done();
 }
 /** 선베드 (뒤가 비스듬히 선 흰 나무 침대, 머리는 위, 발은 바다 쪽 아래). 원점 = 가운데 아래 */
 export const LOUNGER_W = 22;
 export const LOUNGER_H = 44;
 export function loungerArt(): Grid {
-  const g = new Grid(LOUNGER_W, LOUNGER_H);
+  const g = padded(LOUNGER_W, LOUNGER_H, LOUNGER_PAD);
   const x0 = 3;
   const x1 = LOUNGER_W - 4;
   // 등받이 (위 14줄, 조금 세워져 짧아 보여요)
@@ -638,7 +687,7 @@ export function loungerArt(): Grid {
   fabricFolds(g, { x0: x0 + 2, y0: 18, x1: x1 - 2, y1: 27 }, 6, 0.08);
   softOutline(g, true);
   shadow(g, LOUNGER_W / 2, LOUNGER_H - 3, LOUNGER_W / 2, 1.6, 50);
-  return g;
+  return g.done();
 }
 
 /** 11/16 등대지기: 남색 선원 모자·노란 비옷의 작은 할아버지 (16 × 24, 원점 가운데 아래).
@@ -739,7 +788,7 @@ export const KIOSK_SIGN = { dx: 0, dy: -50 } as const;
 export function kioskArt(): Grid {
   const W = KIOSK_ART_W;
   const H = KIOSK_ART_H;
-  const g = new Grid(W, H);
+  const g = padded(W, H, KIOSK_PAD);
   const base = H - 3;
   // 몸통 (하늘빛 판자)
   for (let y = 20; y <= base - 1; y++) for (let x = 4; x < W - 4; x++) g.set(x, y, (x - 4) % 6 === 0 ? ROOF_BLUE.lo : ROOF_BLUE.mid);
@@ -763,18 +812,24 @@ export function kioskArt(): Grid {
   frame(g, 11, 1, W - 22, 13, PAINT.line);
   softOutline(g, true);
   shadow(g, W / 2, base + 1, W / 2 - 3, 2, 56);
-  return g;
+  return g.done();
 }
 
 // ── 오두막 터 (울타리 친 빈 터) ── 그림 원점 = 왼쪽 위 (터 사각형에서 (-2, -LOT_RISE)).
 // 11/16 터마다 크기·출입구 쪽·울타리(나무 울타리·밧줄·생울타리)·바다 쪽 데크가 달라요 (protocol SEA_LOTS)
 export const LOT_RISE = 10;
+/** 텍스처 크기 · 앞 울타리를 나눠 자르는 줄 (그린 크기 + 둘레 여백 LOT_PAD) */
 export function lotArtSize(l: SeaLot): { w: number; h: number; front: number } {
-  return { w: l.w + 4, h: l.h + LOT_RISE + 4, front: LOT_RISE + l.h - 16 };
+  return { w: l.w + 4 + LOT_PAD.x * 2, h: l.h + LOT_RISE + 4 + LOT_PAD.top, front: LOT_RISE + l.h - 16 + LOT_PAD.top };
+}
+/** 텍스처 왼쪽 위가 놓이는 맵 자리 (원점 왼쪽 위 — 터 사각형에서 (-2, -LOT_RISE) − 여백) */
+export function lotArtOrigin(l: SeaLot): { x: number; y: number } {
+  return { x: l.x - 2 - LOT_PAD.x, y: l.y - LOT_RISE - LOT_PAD.top };
 }
 export function lotArt(l: SeaLot): Grid {
-  const { w: W, h: H } = lotArtSize(l);
-  const g = new Grid(W, H);
+  const W = l.w + 4;
+  const H = l.h + LOT_RISE + 4;
+  const g = padded(W, H, LOT_PAD);
   const ox = 2;
   const top = LOT_RISE; // 뒤 울타리 받침 줄
   const bot = LOT_RISE + l.h - 2; // 앞 울타리 받침 줄
@@ -883,12 +938,12 @@ export function lotArt(l: SeaLot): Grid {
     for (let j = 0; j < 4; j++) g.set(x + (j - 1), y - (j % 2) - 1, RAMP.leaf[2 + (j % 2)]);
   }
   softOutline(g);
-  return g;
+  return g.done();
 }
 
 /** 11/16 오두막 단지 함께 쓰는 우편함 (나무 기둥 + 하늘빛 통) */
 export function mailboxArt(): Grid {
-  const g = new Grid(12, 20);
+  const g = padded(12, 20, MAILBOX_PAD);
   const base = 17;
   g.rect(5, 8, 2, base - 8, RAMP.wood[2]);
   g.vline(5, 8, base - 1, RAMP.wood[1]);
@@ -899,11 +954,11 @@ export function mailboxArt(): Grid {
   g.rect(10, 0, 2, 2, RAMP.roofC[2]);
   softOutline(g);
   shadow(g, 6, base + 1, 5, 1.2, 50);
-  return g;
+  return g.done();
 }
 /** 11/16 갯바위 낚시 발판 (넓적한 바위 턱 32×16 — 위가 평평하고 물에 젖은 아래 끝) */
 export function ledgeArt(): Grid {
-  const g = new Grid(34, 18);
+  const g = padded(34, 18, LEDGE_PAD);
   blobPaint(
     g,
     [
@@ -917,17 +972,17 @@ export function ledgeArt(): Grid {
   );
   for (let x = 0; x < 34; x++) for (let y = 13; y < 17; y++) if (g.filled(x, y) && hashU(x, y, 72) < 0.3) g.set(x, y, RAMP.roofM[2]);
   softOutline(g, true);
-  return g;
+  return g.done();
 }
 /** 11/16 디딤돌 (둥근 납작 돌) */
 export function stoneArt(v: number): Grid {
-  const g = new Grid(14, 9);
+  const g = padded(14, 9, DECOR_PAD);
   blobPaint(g, [[7, 4.5, v ? 4.5 : 3.8], [v ? 9 : 5, 5, 3]], RAMP.rock, true, v * 5);
-  return g;
+  return g.done();
 }
 /** 11/16 갯바위 게 (작은 코럴빛 게) */
 export function crabArt(): Grid {
-  const g = new Grid(12, 8);
+  const g = padded(12, 8, CRAB_PAD);
   g.ellipse(6, 5, 3.4, 2.2, RAMP.roofC[2]);
   g.hline(4, 7, 4, RAMP.roofC[1]);
   for (const x of [1, 2, 9, 10]) g.set(x, 6, RAMP.roofC[3]);
@@ -938,7 +993,7 @@ export function crabArt(): Grid {
   g.set(5, 3, 0x3a3440);
   g.set(7, 3, 0x3a3440);
   softOutline(g, true);
-  return g;
+  return g.done();
 }
 
 /** 「분양 준비 중」 팻말 (글씨는 SeaMap) */
@@ -949,7 +1004,7 @@ export const LOT_SIGN_TEXT_DY = -18;
 export function lotSignArt(): Grid {
   const W = LOT_SIGN_W;
   const H = LOT_SIGN_H;
-  const g = new Grid(W, H);
+  const g = padded(W, H, LOT_SIGN_PAD);
   const base = H - 3;
   g.rect(8, 12, 2, base - 12, DRIFTWOOD.lo);
   g.rect(W - 10, 12, 2, base - 12, DRIFTWOOD.lo);
@@ -962,7 +1017,7 @@ export function lotSignArt(): Grid {
   g.hline(W / 2 + 8, W - 6, 9, 0xf8b8a0);
   softOutline(g);
   shadow(g, W / 2, base + 1, W / 2 - 6, 1.2, 50);
-  return g;
+  return g.done();
 }
 
 // ── 선착장 ──
@@ -1055,7 +1110,7 @@ export function pontoonRampArt(): Grid {
 }
 /** 말뚝 (갈매기가 앉아요) */
 export function postArt(): Grid {
-  const g = new Grid(8, 14);
+  const g = padded(8, 14, POST_PAD);
   g.rect(2, 3, 4, 9, DRIFTWOOD.mid);
   g.vline(2, 3, 11, DRIFTWOOD.hi);
   g.vline(5, 3, 11, DRIFTWOOD.lo);
@@ -1064,7 +1119,7 @@ export function postArt(): Grid {
   g.hline(2, 5, 8, 0xa08850);
   g.rect(2, 10, 4, 2, 0x9ac8b8); // 물이끼
   softOutline(g);
-  return g;
+  return g.done();
 }
 
 // ── 방파제 ──
@@ -1108,7 +1163,7 @@ export function tipArt(): Grid {
 }
 /** 테트라포드 (다리 넷 콘크리트 덩어리) */
 export function tetraArt(v: number): Grid {
-  const g = new Grid(20, 18);
+  const g = padded(20, 18, TETRA_PAD);
   const c = mix(CONCRETE.mid, 0x9a9890, v * 0.3);
   const legs: [number, number][] = v === 0 ? [[-6, 3], [6, 3], [0, -6], [0, 5]] : v === 1 ? [[-7, -1], [7, 1], [-2, -6], [3, 6]] : [[-5, 4], [7, -2], [-3, -5], [2, 6]];
   for (const [dx, dy] of legs) line(g, 10, 9, 10 + dx, 9 + dy, c, 3);
@@ -1117,7 +1172,7 @@ export function tetraArt(v: number): Grid {
   g.recolor((x, y) => !g.filled(x, y + 1), darken(c, 0.25));
   g.recolor((x, y) => y > 13 && hashU(x, y, v) < 0.4, 0x9ac8b8); // 물이끼
   softOutline(g, true);
-  return g;
+  return g.done();
 }
 
 // ── 등대 (흰·빨강 줄무늬, 위에 등실) ──
@@ -1126,7 +1181,7 @@ export const LIGHTHOUSE_ART_H = 104;
 export function lighthouseArt(): Grid {
   const W = LIGHTHOUSE_ART_W;
   const H = LIGHTHOUSE_ART_H;
-  const g = new Grid(W, H);
+  const g = padded(W, H, LIGHTHOUSE_PAD);
   const base = H - 3;
   const cx = W / 2;
   const towerTop = 26;
@@ -1161,7 +1216,7 @@ export function lighthouseArt(): Grid {
   g.set(cx, towerTop - 26, RAMP.rock[4]);
   softOutline(g);
   shadow(g, cx + 1, base + 1, 16, 2.4, 62);
-  return g;
+  return g.done();
 }
 
 // ── 낚싯배 (묶여 있어요, 왼쪽을 봐요) ──
@@ -1170,7 +1225,7 @@ export const BOAT_ART_H = 44;
 export function boatArt(): Grid {
   const W = BOAT_ART_W;
   const H = BOAT_ART_H;
-  const g = new Grid(W, H);
+  const g = padded(W, H, BOAT_PAD);
   const water = H - 6;
   // 선체 (뱃머리 왼쪽으로 솟음)
   for (let y = 24; y <= water + 2; y++) {
@@ -1200,10 +1255,10 @@ export function boatArt(): Grid {
   // 물가 거품 줄
   for (let x = 6; x < W - 4; x++) if (hashU(x, 1, 71) < 0.65) g.set(x, water + 3, 0xe8f6f4, 200);
   softOutline(g);
-  return g;
+  return g.done();
 }
 export function buoyArt(): Grid {
-  const g = new Grid(10, 14);
+  const g = padded(10, 14, BUOY_PAD);
   g.vline(5, 0, 5, RAMP.rock[4]);
   g.set(5, 0, 0xffe080);
   g.ellipse(5, 8, 4, 3.6, 0xd8443a);
@@ -1211,7 +1266,7 @@ export function buoyArt(): Grid {
   g.set(3, 6, 0xf08a7a);
   softOutline(g, true);
   for (let x = 1; x < 10; x++) if (x % 2) g.set(x, 13, 0xe8f6f4, 180);
-  return g;
+  return g.done();
 }
 
 // ── 갯바위 (따개비·미역) ──
@@ -1394,7 +1449,7 @@ export function footbathArt(): Grid {
 
 // ── 소품 ──
 export function lampArt(): Grid {
-  const g = new Grid(10, 40);
+  const g = padded(10, 40, LAMP_PAD);
   const base = 37;
   g.rect(4, 10, 2, base - 10, 0x8a90b0);
   g.rect(3, base - 2, 4, 3, 0x8a90b0);
@@ -1405,10 +1460,10 @@ export function lampArt(): Grid {
   metalShine(g, { x0: 4, y0: 10, x1: 5, y1: base - 3 });
   softOutline(g);
   shadow(g, 5, base + 1, 3, 1, 60);
-  return g;
+  return g.done();
 }
 export function cratesArt(): Grid {
-  const g = new Grid(22, 18);
+  const g = padded(22, 18, CRATES_PAD);
   const box = (x: number, y: number, c: Color) => {
     g.rect(x, y, 10, 6, c);
     g.hline(x, x + 9, y, lighten(c, 0.2));
@@ -1420,7 +1475,7 @@ export function cratesArt(): Grid {
   box(6, 3, 0x3e7aa8);
   softOutline(g);
   shadow(g, 11, 16, 10, 1.2, 56);
-  return g;
+  return g.done();
 }
 /** 그물 말리는 틀 (기둥 둘 + 늘어진 그물 + 주황 뜸) */
 export function netRackArt(): Grid {
@@ -1982,7 +2037,7 @@ export function* seaGroundSteps(cx: number, cy: number, size = SEA_CHUNK, band =
 const PICNIC = hexes(["#f6dcb2", "#ecc898", "#dcb282", "#c89c6e", "#b2885e"]);
 /** 피크닉 탁자 상판 (46×18, 원점 가운데 아래 = 탁자 가운데 + 6). 위엔 줄무늬 천 한 장 */
 export function picnicTopArt(): Grid {
-  const g = new Grid(46, 18);
+  const g = padded(46, 18, PICNIC_PAD);
   for (let y = 2; y < 12; y++)
     for (let x = 2; x < 44; x++) {
       const k = (y - 2) % 4;
@@ -2000,11 +2055,11 @@ export function picnicTopArt(): Grid {
   g.set(35, 4, 0x9ad6e6);
   softOutline(g, true);
   shadow(g, 23, 15.5, 20, 1.6, 52);
-  return g;
+  return g.done();
 }
 /** 피크닉 긴 의자 판 (36×7, 원점 가운데 아래) */
 export function picnicPlankArt(): Grid {
-  const g = new Grid(36, 7);
+  const g = padded(36, 7, PICNIC_PAD);
   g.rect(2, 1, 32, 3, PICNIC[2]);
   g.hline(2, 33, 1, PICNIC[0]);
   g.hline(2, 33, 3, PICNIC[4]);
@@ -2012,7 +2067,7 @@ export function picnicPlankArt(): Grid {
   g.rect(29, 4, 2, 2, PICNIC[4]);
   softOutline(g, true);
   shadow(g, 18, 5.5, 15, 1, 48);
-  return g;
+  return g.done();
 }
 /** 꺼진 모닥불 장작 (낮 — 엇갈린 숯 장작, 22×10, 원점 가운데 아래) */
 export function ashLogsArt(): Grid {
@@ -2031,7 +2086,7 @@ export function ashLogsArt(): Grid {
 }
 /** 물에 씻긴 통나무 의자 (1인, 18×10, 원점 가운데 아래) */
 export function driftLogArt(): Grid {
-  const g = new Grid(18, 10);
+  const g = padded(18, 10, DRIFTLOG_PAD);
   const bark = hexes(["#d8c2a2", "#c2a882", "#a88c68", "#8c7254"]);
   for (let y = 2; y < 8; y++) for (let x = 2; x < 16; x++) g.set(x, y, y === 2 ? bark[0] : y === 7 ? bark[3] : pick(bark, 0.25 + h2(x, y) * 0.35, x, y));
   for (const ex of [2, 15]) {
@@ -2040,38 +2095,42 @@ export function driftLogArt(): Grid {
   }
   softOutline(g, true);
   shadow(g, 9, 8.5, 8, 1.1, 50);
-  return g;
+  return g.done();
 }
 /** 끝 걸터앉기 방석 (12×6, 원점 가운데 아래). v: 0 = 산호, 1 = 하늘, 2 = 노랑 — 데크 끝 앉는 자리 표시 */
 export function cushionArt(v: number): Grid {
   const ramp = v === 0 ? RAMP.umbC : v === 1 ? RAMP.towel : RAMP.umbY;
-  const g = new Grid(12, 6);
+  const g = padded(12, 6, CUSHION_PAD);
   for (let y = 1; y < 5; y++) for (let x = 1; x < 11; x++) if (!((x === 1 || x === 10) && (y === 1 || y === 4))) g.set(x, y, y === 1 ? ramp[0] : y === 4 ? ramp[2] : ramp[1]);
   g.set(5, 2, ramp[2]);
   g.set(6, 2, ramp[2]);
   softOutline(g, true);
-  return g;
+  return g.done();
 }
 
 // ── 11/16 r13 바다 놀거리: 튜브 · 제트스키 (부드러운 단계·옅은 테) ──
 /** 튜브 크기 (원점 = 가운데). 위쪽 반(뒤)과 아래쪽 반(앞)을 잘라 탄 사람 앞뒤로 그려요 */
 // r18 사용자 "튜브가 접시처럼 아래에 깔려요" → 구멍을 몸통 폭만큼 넓게 (탄 사람이 구멍 안에 들어가요)
-export const TUBE_W = 32;
-export const TUBE_H = 18;
-export const TUBE_CY = 9;
+const TUBE_ART_W = 32;
+const TUBE_ART_H = 18;
+const TUBE_ART_CY = 9;
+/** 텍스처 크기·고리 가운데 줄 (그린 32×18 + 둘레 여백 — SeaRides 원점·자르기도 이 값) */
+export const TUBE_W = TUBE_ART_W + TUBE_PAD.x * 2;
+export const TUBE_H = TUBE_ART_H + TUBE_PAD.top + TUBE_PAD.bottom;
+export const TUBE_CY = TUBE_ART_CY + TUBE_PAD.top;
 const TUBE_COLORS = [hexes(["#ffd0c4", "#f6a896", "#e48678"]), hexes(["#fff2c0", "#fbe08e", "#eec66e"]), hexes(["#cdf2dc", "#a6e2c0", "#84cba4"]), hexes(["#d4ecff", "#a8d4f6", "#86b8e4"]), hexes(["#ffd6ec", "#f6b0d2", "#e490ba"])];
 /** 줄무늬 튜브 (v = 색). 가운데 구멍은 비워 둬요 (물이 보여요) */
 export function tubeArt(v: number): Grid {
   const ramp = TUBE_COLORS[v % TUBE_COLORS.length];
-  const g = new Grid(TUBE_W, TUBE_H);
-  const cx = TUBE_W / 2;
-  for (let y = 0; y < TUBE_H; y++)
-    for (let x = 0; x < TUBE_W; x++) {
+  const g = padded(TUBE_ART_W, TUBE_ART_H, TUBE_PAD);
+  const cx = TUBE_ART_W / 2;
+  for (let y = 0; y < TUBE_ART_H; y++)
+    for (let x = 0; x < TUBE_ART_W; x++) {
       const dx = (x + 0.5 - cx) / 14.5;
-      const dy = (y + 0.5 - TUBE_CY) / 7.6;
+      const dy = (y + 0.5 - TUBE_ART_CY) / 7.6;
       const o = dx * dx + dy * dy;
       const ix = (x + 0.5 - cx) / 7.2;
-      const iy = (y + 0.5 - TUBE_CY + 0.6) / 3.4;
+      const iy = (y + 0.5 - TUBE_ART_CY + 0.6) / 3.4;
       if (o > 1 || ix * ix + iy * iy < 1) continue;
       const a = Math.atan2(dy, dx);
       const stripe = Math.floor(((a + Math.PI) / (Math.PI * 2)) * 8) % 2 === 0;
@@ -2082,7 +2141,7 @@ export function tubeArt(v: number): Grid {
   g.set(8, 4, 0xffffff);
   g.set(9, 4, 0xffffff);
   softOutline(g, true);
-  return g;
+  return g.done();
 }
 
 /** 제트스키 크기 · 앉는 높이 (원점 = 가운데 아래) */
@@ -2174,6 +2233,7 @@ export function detailPass(g: Grid, o: DetailOpts = {}): Grid {
   const rim = o.rim ?? 0.15; // r16 그늘 쪽을 깊게 → r17 캠핑장 세기에 맞춰 조금 덜
   const grain = o.grain ?? 0.05;
   const salt = o.salt ?? 0;
+  const pad = padOfGrid(g);
   const solid = (x: number, y: number): boolean => {
     if (x < 0 || y < 0 || x >= W || y >= H) return false;
     const v = src[y * W + x];
@@ -2193,10 +2253,13 @@ export function detailPass(g: Grid, o: DetailOpts = {}): Grid {
       if ((r || b) && !l && !t) out = mix(c, 0x3a2c28, rim);
       else if ((l || t) && !r && !b) out = mix(c, 0xffffff, rim * 0.6);
       else if (!r && !b && !l && !t) {
-        const h = h2(x * 7 + salt, y * 13 + salt);
+        // 11/26 둘레 여백 둔 그림(seaPad)도 결 무늬는 원래 그림 좌표로 (여백만큼 무늬가 밀리지 않게)
+        const gx = x - pad.x;
+        const gy = y - pad.top;
+        const h = h2(gx * 7 + salt, gy * 13 + salt);
         if (h < grain) out = mix(c, 0x3a2c28, 0.06);
         else if (h > 1 - grain * 0.7) out = mix(c, 0xffffff, 0.07);
-        if (o.wood && woody(c) && h2((x >> 2) + salt, y * 3 + 7) < 0.2 && h2(x + 11, y + salt) < 0.85) out = mix(out, 0x5a3c28, 0.1);
+        if (o.wood && woody(c) && h2((gx >> 2) + salt, gy * 3 + 7) < 0.2 && h2(gx + 11, gy + salt) < 0.85) out = mix(out, 0x5a3c28, 0.1);
       }
       if (out !== c) g.px[y * W + x] = ((out << 8) | (v & 255)) >>> 0;
     }
@@ -2214,7 +2277,7 @@ export const SHIP_W = { tanker: 128, cargo: 116 } as const;
 export function tankerArt(): Grid {
   const W = SHIP_W.tanker;
   // r15 사용자: 물에 잠겨 보이게 — 물높이(맨 아래 줄 20)까지만 그리고, 물높이 줄은 짙게 + 뱃머리 물결 (반사는 shipReflectArt)
-  const g = new Grid(W, 21);
+  const g = padded(W, 21, SHIP_PAD);
   for (let x = 2; x < W - 2; x++) {
     const bow = x > W - 16 ? Math.round((x - (W - 16)) * 0.35) : 0;
     for (let y = 13 + bow; y < 21; y++) g.set(x, y, y === 20 ? 0x2e3a58 : y >= 18 ? 0xb8606a : y === 13 + bow ? 0x5a6a8e : 0x46557a);
@@ -2229,12 +2292,12 @@ export function tankerArt(): Grid {
   for (let x = 10; x < 23; x += 3) g.set(x, 6, 0x8ab0c8);
   g.rect(14, 0, 3, 3, 0x7a5a5a);
   softOutline(g);
-  return g;
+  return g.done();
 }
 /** 컨테이너선: 남색 배 + 알록달록 상자 더미 + 고물 선교 */
 export function cargoArt(): Grid {
   const W = SHIP_W.cargo;
-  const g = new Grid(W, 25);
+  const g = padded(W, 25, SHIP_PAD);
   for (let x = 2; x < W - 2; x++) {
     const bow = x > W - 14 ? Math.round((x - (W - 14)) * 0.4) : 0;
     for (let y = 17 + bow; y < 25; y++) g.set(x, y, y === 24 ? 0x2e3a58 : y >= 22 ? 0xb06a62 : y === 17 + bow ? 0x4a6aa0 : 0x3e5a8a);
@@ -2252,7 +2315,7 @@ export function cargoArt(): Grid {
   for (let x = 10; x < 21; x += 3) g.set(x, 8, 0x8ab0c8);
   g.rect(13, 1, 3, 4, 0xd86a5a);
   softOutline(g);
-  return g;
+  return g.done();
 }
 /** 오징어잡이배: 작은 흰 배 + 앞뒤 기둥 사이에 줄줄이 매단 등 (등은 따로 squidLampsArt — 밤에 더해 밝혀요) */
 export const SQUID_W = 50;
@@ -2405,49 +2468,54 @@ export function stoneBlocks(g: Grid, b: Box, bw = 12, bh = 7, salt = 0): void {
 
 // ── 11/16 r18 2인승 카약 (밝은 색 셋 — 산호·노랑·청록, 부드러운 단계·제 색 테두리) ──
 const KAYAK_COLORS = [hexes(["#ffc8b8", "#f4a08c", "#e07e6c"]), hexes(["#fff0b0", "#f8d878", "#e8b850"]), hexes(["#bfeee0", "#8ed8c4", "#62bca8"])];
-export const KAYAK_SIDE_W = 44;
-export const KAYAK_SIDE_H = 12;
-export const KAYAK_VERT_W = 12;
-export const KAYAK_VERT_H = 42;
+const KAYAK_SIDE_ART_W = 44;
+const KAYAK_SIDE_ART_H = 12;
+const KAYAK_VERT_ART_W = 12;
+const KAYAK_VERT_ART_H = 42;
+/** 텍스처 크기 (그린 크기 + 둘레 여백 — SeaKayaks 덮개 자르기 줄은 여백 top만큼 더해요) */
+export const KAYAK_SIDE_W = KAYAK_SIDE_ART_W + KAYAK_SIDE_PAD.x * 2;
+export const KAYAK_SIDE_H = KAYAK_SIDE_ART_H + KAYAK_SIDE_PAD.top + KAYAK_SIDE_PAD.bottom;
+export const KAYAK_VERT_W = KAYAK_VERT_ART_W + KAYAK_VERT_PAD.x * 2;
+export const KAYAK_VERT_H = KAYAK_VERT_ART_H + KAYAK_VERT_PAD.top + KAYAK_VERT_PAD.bottom;
 /** 옆모습 (오른쪽이 뱃머리 — 왼쪽은 뒤집어 그려요). 원점 = 가운데 물높이 */
 export function kayakSideArt(v: number): Grid {
   const H = KAYAK_COLORS[v % 3];
-  const g = new Grid(KAYAK_SIDE_W, KAYAK_SIDE_H);
-  for (let x = 1; x < KAYAK_SIDE_W - 1; x++) {
-    const u = (x + 0.5) / KAYAK_SIDE_W;
+  const g = padded(KAYAK_SIDE_ART_W, KAYAK_SIDE_ART_H, KAYAK_SIDE_PAD);
+  for (let x = 1; x < KAYAK_SIDE_ART_W - 1; x++) {
+    const u = (x + 0.5) / KAYAK_SIDE_ART_W;
     const half = Math.round(4 * Math.sin(Math.PI * Math.min(1, u * 1.05)));
     if (half <= 0) continue;
     for (let y = 6 - half; y <= 6 + Math.min(2, half); y++) g.set(x, y, y < 6 - half + 1 ? H[0] : y >= 7 ? H[2] : H[1]);
   }
   // 앉는 구멍 둘 (짙은 남색) · 옆 띠
   for (const cx of [14, 30]) g.rect(cx - 3, 3, 7, 2, 0x4a5878);
-  g.hline(6, KAYAK_SIDE_W - 7, 7, 0xffffff);
+  g.hline(6, KAYAK_SIDE_ART_W - 7, 7, 0xffffff);
   softOutline(g, true);
-  return g;
+  return g.done();
 }
 /** 위에서 본 세로 모습 (아래로 가요 — 위로 가면 뒤집어 그려요). 원점 = 가운데 */
 export function kayakVertArt(v: number): Grid {
   const H = KAYAK_COLORS[v % 3];
-  const g = new Grid(KAYAK_VERT_W, KAYAK_VERT_H);
-  const cx = KAYAK_VERT_W / 2;
-  for (let y = 1; y < KAYAK_VERT_H - 1; y++) {
-    const u = (y + 0.5) / KAYAK_VERT_H;
+  const g = padded(KAYAK_VERT_ART_W, KAYAK_VERT_ART_H, KAYAK_VERT_PAD);
+  const cx = KAYAK_VERT_ART_W / 2;
+  for (let y = 1; y < KAYAK_VERT_ART_H - 1; y++) {
+    const u = (y + 0.5) / KAYAK_VERT_ART_H;
     const half = 4.6 * Math.sin(Math.PI * u);
     for (let x = Math.round(cx - half); x < Math.round(cx + half); x++) g.set(x, y, x < cx - half + 1.5 ? H[0] : x > cx + half - 2 ? H[2] : H[1]);
   }
   for (const cy of [13, 29]) g.rect(cx - 2, cy - 3, 4, 6, 0x4a5878);
   g.vline(cx, 3, 8, 0xffffff);
-  g.vline(cx, KAYAK_VERT_H - 9, KAYAK_VERT_H - 4, 0xffffff);
+  g.vline(cx, KAYAK_VERT_ART_H - 9, KAYAK_VERT_ART_H - 4, 0xffffff);
   softOutline(g, true);
-  return g;
+  return g.done();
 }
 /** 노 (양쪽 날, 가운데가 원점 — 그리는 쪽에서 앞뒤로 기울여 저어요) */
 export function paddleArt(): Grid {
-  const g = new Grid(22, 5);
+  const g = padded(22, 5, PADDLE_PAD);
   g.hline(3, 18, 2, 0xc8a070);
   for (const x of [0, 19]) g.rect(x, 1, 3, 3, 0xf0d060);
   softOutline(g, true);
-  return g;
+  return g.done();
 }
 /** 카약 선착장 다리 (세로 판자) · 뜬 데크 (가로 판자 + 양옆 부표 통) */
 export function kayakWalkArt(): Grid {

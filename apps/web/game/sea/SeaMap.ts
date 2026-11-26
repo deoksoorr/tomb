@@ -383,7 +383,7 @@ export class SeaMap implements SeaMapApi {
     const T = Art.SEA_TEX;
     for (const d of Lay.SEA_DECOR) {
       const key = d.kind === "beachGrass" ? T.beachGrass(d.v) : d.kind === "shell" ? T.shell(d.v) : d.kind === "flower" ? T.flower(d.v) : d.kind === "stone" ? T.stone(d.v % 2) : T.drift;
-      this.prop(key, d.x, d.y, FLAT + d.y, 1);
+      this.prop(key, d.x, d.y, FLAT + d.y, 1 + Art.DECOR_PAD.bottom); // 11/26 그림 아래 여백만큼 내려 자리는 그대로
     }
   }
 
@@ -486,8 +486,7 @@ export class SeaMap implements SeaMapApi {
     this.plate(SEA_KIOSK.x, SEA_KIOSK.y - 58, "매점");
     // 오두막 터 11: 뒤·옆 울타리는 터 뒤 depth, 앞 울타리는 터 앞 depth로 (터 안에 선 사람이 울타리 사이에 보이게)
     for (const l of SEA_LOTS) {
-      const x = l.x - 2;
-      const y = l.y - Art.LOT_RISE;
+      const { x, y } = Art.lotArtOrigin(l); // 11/26 터 사각형 (-2, -LOT_RISE) − 텍스처 둘레 여백
       const key = T.lot(l.n);
       const sz = Art.lotArtSize(l);
       this.cull(l.x + l.w / 2, l.y, s.add.image(x, y, key).setOrigin(0, 0).setDepth(l.y + 1).setCrop(0, 0, sz.w, sz.front));
@@ -634,7 +633,7 @@ export class SeaMap implements SeaMapApi {
     const T = Art.SEA_TEX;
     const s = this.scene;
     for (const p of Lay.SEA_PIER_POSTS) this.prop(T.post, p.x, p.y);
-    for (const t of Lay.SEA_TETRAPODS) this.prop(T.tetra(t.v), t.x, t.y);
+    for (const t of Lay.SEA_TETRAPODS) this.prop(T.tetra(t.v), t.x, t.y, t.y, 2 + Art.TETRA_PAD.bottom);
     SEA_ROCKS.forEach((r, i) => {
       this.prop(T.rock(i), r.x, Math.round(r.y + r.ry * 0.7 + 2), r.y + r.ry * 0.5);
       // 11/16 갯바위에 물이 차면 밑동에 거품 고리 (물이 빠지면 투명)

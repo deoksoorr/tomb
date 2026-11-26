@@ -9,7 +9,10 @@ import { kstDay } from "@/lib/store/accounts";
 export const GET = handler<{ id: string }>(async (req, { id }) => {
   await rateLimit("detail", req);
   const store = getHouseStore();
-  const [h, visitorId] = await Promise.all([findVisibleHouse(store, id), getVisitorId(req)]);
-  const likedToday = visitorId ? await store.likedToday(h.id, visitorId, kstDay()) : false;
+  // 11/26 좋아요 여부도 집 확인과 함께 읽는다 (집이 없으면 404 — 읽은 것은 버린다)
+  const hp = findVisibleHouse(store, id);
+  hp.catch(() => undefined);
+  const visitorId = await getVisitorId(req);
+  const [h, likedToday] = await Promise.all([hp, visitorId ? store.likedToday(id, visitorId, kstDay()) : false]);
   return json<HouseViewerResponse>({ mine: !!visitorId && h.owner === visitorId, likedToday }, { headers: { "Cache-Control": "private, no-store" } });
 });

@@ -3,7 +3,8 @@ import { getChairStore, type ChairMine } from "./chairman/store";
 import { DEX_CAT_LABEL, DEX_CATS, dexIdsOf } from "./forage/catalog";
 import { getHouseStore, houseIdFor } from "./housing/service";
 import type { HouseRecord } from "./housing/store";
-import { PLOT_TIERS } from "./housing/catalog";
+import { CAMP_HOME_KIND_NAME, campLotName, PLOT_TIERS } from "./housing/catalog";
+import { caravanDesignName, caravanDesignOf } from "@tomb/protocol";
 import { kstMonth } from "./referralRules";
 import { BRANCH_INFO, BRANCHES } from "./rpg/skillTree";
 import { spentIn } from "./rpg/skillRules";
@@ -66,7 +67,7 @@ export type UserStatsRaw = {
   friends: { friends: number; incoming: number; outgoing: number } | null;
   referrals: ReferrerStats | null;
   referredBy: string | null;
-  houses: { village: HouseRecord | null; sea: HouseRecord | null } | null;
+  houses: { village: HouseRecord | null; sea: HouseRecord | null; camp?: HouseRecord | null } | null;
   megaphones: number | null;
   bans: BanRecord[] | null;
   reported: { count: number; lastAt: number } | null;
@@ -238,6 +239,13 @@ export function buildUserStats(r: UserStatsRaw): AdminUserStats {
   const invKinds = a ? Object.values(a.inventory).filter((n) => n > 0).length : null;
   const houseText = (h: HouseRecord | null) =>
     h ? `${PLOT_TIERS.find((t) => t.id === h.tier)?.name ?? h.tier}, ${h.ch}채널 ${h.lot}번지` : "없음";
+  // 11/26 캠핑장 집: 「1채널 폭포 앞 2번 카라반」 + 종류·앞마당 단계·카라반 디자인
+  const campHomeText = (h: HouseRecord | null) => (h ? `${h.ch}채널 ${campLotName(h.lot)}` : "없음");
+  const campHomeNote = (h: HouseRecord) => {
+    const c = h.camp;
+    const parts = c ? [CAMP_HOME_KIND_NAME[c.kind] ?? c.kind, `앞마당 ${c.yard}단계`, ...(c.kind === "caravan" ? [caravanDesignName(caravanDesignOf(h.lot, c.design))] : [])] : [];
+    return [...parts, `꾸밈 점수 ${num(h.score)}`].join(", ");
+  };
   const worn = r.wornTitle ? (titleDef(r.wornTitle)?.name ?? r.wornTitle) : null;
   const deco: StatSection = {
     id: "deco",
@@ -249,6 +257,7 @@ export function buildUserStats(r: UserStatsRaw): AdminUserStats {
       { label: "칭호", value: r.titles ? `${num(r.titles.length)} / ${num(TITLE_IDS.length)}` : NA, note: worn ? `달고 있는 칭호 ${worn}` : undefined },
       { label: "마을 집", value: r.houses ? houseText(r.houses.village) : NA, note: r.houses?.village ? `꾸밈 점수 ${num(r.houses.village.score)}, 좋아요 ${num(r.houses.village.likes)}` : undefined },
       { label: "포구 오두막", value: r.houses ? (r.houses.sea ? `${r.houses.sea.ch}채널 ${r.houses.sea.lot}번 터` : "없음") : NA, note: r.houses?.sea ? `꾸밈 점수 ${num(r.houses.sea.score)}` : undefined },
+      { label: "캠핑장 집", value: r.houses ? campHomeText(r.houses.camp ?? null) : NA, note: r.houses?.camp ? campHomeNote(r.houses.camp) : undefined },
     ],
   };
 
@@ -348,7 +357,7 @@ export async function readUserStats(id: string, now = Date.now(), fresh = false)
         null,
       ),
       safe(
-        Promise.all([getHouseStore().get(houseIdFor(id)), getHouseStore().get(houseIdFor(id, "sea"))]).then(([village, sea]) => ({ village, sea })),
+        Promise.all([getHouseStore().get(houseIdFor(id)), getHouseStore().get(houseIdFor(id, "sea")), getHouseStore().get(houseIdFor(id, "camp"))]).then(([village, sea, camp]) => ({ village, sea, camp })),
         null,
       ),
       safe(

@@ -1,7 +1,7 @@
 import type { Redis } from "@upstash/redis";
 import { nanoid } from "nanoid";
 import { afterAll, expect, it } from "vitest";
-import { HOUSING_CHANNELS, SEA_FLOOR, SEA_STARTER, SEA_WALL, type HouseZone } from "./catalog";
+import { campSizeBonus, HOUSING_CHANNELS, SEA_FLOOR, SEA_STARTER, SEA_WALL, type CampHomeKind, type HouseZone } from "./catalog";
 import { SEA_STARTER_KEEP, type HousePair, type HouseStore } from "./store";
 
 // 11/16 공용 가구 가방 계약: MemoryHouseStore·RedisHouseStore가 똑같이 지켜야 하는 동작 (sharedBag.test.ts가 두 구현에 돌린다).
@@ -21,7 +21,7 @@ export function sharedBagContract(kit: BagKit) {
   afterAll(async () => kit.cleanup?.(used));
 
   const pairOf = (): HousePair => {
-    const p = { village: nanoid(12), sea: nanoid(12) };
+    const p = { village: nanoid(12), sea: nanoid(12), camp: nanoid(12) };
     used.push(p);
     return p;
   };
@@ -36,6 +36,18 @@ export function sharedBagContract(kit: BagKit) {
       await store.create({ id: pair.sea, owner, name: "오두막", intro: "", ownerName: "주인", tier: "small", ch, lot: null, now: 1, zone: "sea", ...(starter ? { starter: SEA_STARTER, placed } : {}) }),
     ).toMatchObject({ lot: expect.any(Number) });
     return { pair, owner, ch };
+  }
+  /** 11/26 캠핑장 집 하나 (kind는 터로 정해진다 — 시험은 terms만 맞춘다) */
+  let campLot = 0;
+  async function camp(pair: HousePair, owner: string, ch: number, kind: CampHomeKind = "caravan", extra: { villa?: boolean; others?: string[] } = {}) {
+    const lot = kind === "caravan" ? (campLot++ % 12) + 1 : kind === "pension" ? 13 : 15;
+    return store.create({ id: pair.camp, owner, name: "캠핑장", intro: "", ownerName: "주인", tier: "small", ch, lot, now: 1, zone: "camp", camp: { kind, yard: 1 }, ...extra });
+  }
+  /** 세 집 (마을·오두막·캠핑장) */
+  async function three() {
+    const t = await both();
+    expect(await camp(t.pair, t.owner, t.ch)).toMatchObject({ lot: expect.any(Number) });
+    return t;
   }
   const save = (pair: HousePair, zone: HouseZone, counts: Record<string, number>) => store.saveDesign(pair, zone, "small", null, null, counts, 0, 2);
   const view = (pair: HousePair, zone: HouseZone) => store.inventory(pair, zone);
@@ -237,4 +249,111 @@ export function sharedBagContract(kit: BagKit) {
       expect(await view(pair, "village")).toEqual({ have: { pot: 4 }, away: {} });
       expect(await view(pair, "sea")).toEqual({ have: { pot: 1 }, away: { pot: 3 } });
     });
+
+  it("11/26 세 집 공용: 캠핑장 집에 놓은 것은 마을·포구에서 다른 집에 있다고 나오고, 세 집 합쳐 가진 것까지", async () => {
+    const { pair } = await three();
+    await store.addItem(pair, "camp", "pot", 20);
+    await store.addItem(pair, "sea", "pot", 20);
+    expect(await view(pair, "camp")).toEqual({ have: { pot: 2 }, away: {} });
+    expect(await save(pair, "camp", { pot: 1 })).toBe("ok");
+    expect(await view(pair, "village")).toEqual({ have: { pot: 1 }, away: { pot: 1 } });
+    expect(await save(pair, "sea", { pot: 1 })).toBe("ok");
+    expect(await view(pair, "village")).toEqual({ have: {}, away: { pot: 2 } });
+    expect(await save(pair, "village", { pot: 1 })).toBe("not_owned");
+    expect(await store.takeItem(pair, "village", "pot")).toBe("away");
+    expect(await store.takeItem(pair, "camp", "pot")).toBe("placed");
+    expect(await save(pair, "camp", {})).toBe("ok");
+    expect(await store.takeItem(pair, "village", "pot")).toBe("ok");
+    expect(await view(pair, "camp")).toEqual({ have: {}, away: { pot: 1 } });
+  });
+
+  it("11/26 세 집을 동시에 저장해도 합쳐서 가진 것보다 많이 놓이지 않는다", async () => {
+    for (let round = 0; round < 3; round++) {
+      const { pair } = await three();
+      await store.addItem(pair, "village", "desk", 20);
+      await store.addItem(pair, "village", "desk", 20);
+      const r = await Promise.all([save(pair, "village", { desk: 1 }), save(pair, "sea", { desk: 1 }), save(pair, "camp", { desk: 1 })]);
+      expect([...r].sort()).toEqual(["not_owned", "ok", "ok"]);
+    }
+  });
+
+  it("11/26 캠핑장 집 기록: zone·종류·앞마당·별장 표시, 터 색인은 마을·포구와 따로 (같은 번호 가능), 같은 터는 한 집", async () => {
+    const { pair, owner, ch } = await both();
+    const lot = (await camp(pair, owner, ch, "pension", { villa: true })) as { lot: number };
+    expect(lot).toEqual({ lot: 13 });
+    expect(await store.get(pair.camp)).toMatchObject({ zone: "camp", lot: 13, ch, camp: { kind: "pension", yard: 1 }, villa: true, tier: "small" });
+    // 같은 채널 같은 터는 다른 집이 못 받는다
+    const other = pairOf();
+    expect(await store.create({ id: other.camp, owner: "x", name: "x", intro: "", ownerName: "x", tier: "small", ch, lot: 13, now: 1, zone: "camp", camp: { kind: "pension", yard: 1 } })).toBe("lot_taken");
+    expect((await store.village(ch, "camp")).map((h) => h.id)).toContain(pair.camp);
+    expect((await store.village(ch, "camp")).every((h) => h.zone === "camp")).toBe(true);
+    expect((await store.village(ch)).some((h) => h.id === pair.camp)).toBe(false);
+    expect((await store.village(ch, "sea")).some((h) => h.id === pair.camp)).toBe(false);
+    // 요약 (HMGET — 배열로 와도)
+    const [b, none] = await store.brief([pair.camp, other.camp]);
+    expect(b).toMatchObject({ id: pair.camp, zone: "camp", ch, lot: 13, tier: "small", villa: true, camp: { kind: "pension", yard: 1 } });
+    expect(none).toBeNull();
+    const [v] = await store.brief([pair.village]);
+    expect(v).toMatchObject({ id: pair.village, ch, tier: "small" });
+    expect(v?.zone).toBeUndefined();
+    expect(v?.villa).toBeUndefined();
+  });
+
+  it("11/26 별장 표시: 옛 기록엔 한 번만 남기고(HSETNX) 이후 안 바뀐다 · 첫 집으로 사는데 다른 집이 있으면 villa_changed", async () => {
+    const { pair, owner, ch } = await both();
+    expect(await store.settleVilla(pair.sea, true)).toBe(true);
+    expect(await store.settleVilla(pair.sea, false)).toBe(true);
+    expect((await store.get(pair.sea))?.villa).toBe(true);
+    expect(await store.settleVilla(pair.village, false)).toBe(false);
+    expect(await store.settleVilla(pairOf().village, true)).toBeNull();
+    // 첫 집 값으로 사려는데 다른 집이 있다 → 만들지 않는다
+    expect(await camp(pair, owner, ch, "caravan", { villa: false, others: [pair.village, pair.sea] })).toBe("villa_changed");
+    expect(await store.get(pair.camp)).toBeNull();
+    expect(await camp(pair, owner, ch, "caravan", { villa: true, others: [pair.village, pair.sea] })).toMatchObject({ lot: expect.any(Number) });
+    // 다른 집이 없으면 첫 집으로
+    const solo = pairOf();
+    expect(await camp(solo, "solo", ch, "rural", { villa: false, others: [solo.village, solo.sea] })).toEqual({ lot: 15 });
+    expect((await store.get(solo.camp))?.villa).toBe(false);
+  });
+
+  it("11/26 앞마당: 캠핑장 집이고 단계가 맞을 때만, 낸 값을 더하고 순위 점수(크기 점수)도 같이", async () => {
+    const pair = pairOf();
+    const ch = (n++ % HOUSING_CHANNELS) + 1;
+    expect(await store.create({ id: pair.camp, owner: "y", name: "카라반", intro: "", ownerName: "주인", tier: "small", ch, lot: 1, now: 1, zone: "camp", camp: { kind: "caravan", yard: 1 }, paid: 13_500, villa: false })).toEqual({
+      lot: 1,
+    });
+    expect(await store.setYard(pair.camp, 2, 3, 5, 33_750)).toBe(false);
+    expect(await store.setYard(pair.camp, 1, 2, 5, 20_250)).toBe(true);
+    expect(await store.setYard(pair.camp, 1, 2, 6, 20_250)).toBe(false);
+    expect(await store.get(pair.camp)).toMatchObject({ camp: { kind: "caravan", yard: 2 }, paid: 33_750, score: campSizeBonus(1, "small", 2) });
+    expect(await store.setYard(pair.camp, 2, 3, 7, 33_750)).toBe(true);
+    const h = await store.get(pair.camp);
+    // 11/26 크기 점수는 방 크기로 — 카라반 3단계 +30
+    expect(h).toMatchObject({ camp: { yard: 3 }, paid: 67_500, score: 30 });
+    const listed = (await store.list("score", 1000)).find((x) => x.id === pair.camp);
+    expect(listed?.score).toBe(30);
+    // 마을 집은 앞마당이 없다
+    const { pair: p2 } = await both();
+    expect(await store.setYard(p2.village, 1, 2, 5, 100)).toBe(false);
+    // 11/26 펜션 넓히기는 앞마당에 합쳤다: 옛 넓힌 기록(tier wide)은 3단계 방(18×12)이라 크기 점수도 +80 (앞마당을 올려도 그대로)
+    const pen = pairOf();
+    await store.create({ id: pen.camp, owner: "z", name: "펜션", intro: "", ownerName: "주인", tier: "small", ch, lot: 14, now: 1, zone: "camp", camp: { kind: "pension", yard: 1 } });
+    expect(await store.upgrade(pen.camp, "small", "wide", 5, 13_500)).toBe(true);
+    expect((await store.get(pen.camp))?.score).toBe(80);
+    expect(await store.setYard(pen.camp, 1, 2, 6, 13_500)).toBe(true);
+    expect((await store.get(pen.camp))?.score).toBe(80);
+    expect((await store.list("score", 1000)).find((x) => x.id === pen.camp)?.score).toBe(80);
+  });
+
+  it("11/26 캠핑장 집 철거: 터가 비고 같은 터를 다시 받을 수 있다", async () => {
+    const pair = pairOf();
+    const ch = (n++ % HOUSING_CHANNELS) + 1;
+    const owner = `o_${pair.camp}`;
+    expect(await store.create({ id: pair.camp, owner, name: "x", intro: "", ownerName: "x", tier: "small", ch, lot: 16, now: 1, zone: "camp", camp: { kind: "rural", yard: 1 } })).toEqual({ lot: 16 });
+    await kit.seen?.(owner, 5);
+    expect(await store.reclaim(pair.camp, { owner, tier: "small", ch, points: 6_600, cutoff: 10, since: 0, lastSeenAt: 5, label: "x", now: 20, zone: "camp" })).toEqual({ points: 6_600 });
+    expect((await store.village(ch, "camp")).some((h) => h.lot === 16)).toBe(false);
+    const again = pairOf();
+    expect(await store.create({ id: again.camp, owner: "w", name: "x", intro: "", ownerName: "x", tier: "small", ch, lot: 16, now: 1, zone: "camp", camp: { kind: "rural", yard: 1 } })).toEqual({ lot: 16 });
+  });
 }

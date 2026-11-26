@@ -27,7 +27,9 @@ export const IDLE_MAX_MS = 60_000;
 const RETRY_MAX_MS = 30_000;
 
 /** 아바타 시트에서 만든 그림 키의 끝 (sprites/hammockArt hammockLieKey · sprites/indoorPose indoorPoseKey · entities/DyeFxView 가면) */
-const POSE_SUFFIXES = ["-hammock-sea", "-hammock", "-lie-towel", "-lie", "-read", "-bath"] as const;
+// 11/26 캠핑장 침대 덮개 "-lie-cvbed0"…"-lie-pnbed3" (침대·방향마다 — housing/campFurnitureArt CampBedCover)
+const CAMP_BED_SUFFIXES = (["cv", "pn"] as const).flatMap((k) => [0, 1, 2, 3].map((d) => `-lie-${k}bed${d}`));
+const POSE_SUFFIXES = ["-hammock-sea", "-hammock-campSun", "-hammock-campMint", "-hammock", "-lie-towel", ...CAMP_BED_SUFFIXES, "-lie", "-read", "-bath"] as const;
 const MASK_MARK = "#dye-";
 
 /** 시트에서 만든 그림 키 → 그 시트 키 (아니면 null) */

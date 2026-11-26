@@ -2,6 +2,7 @@ import { handler, json } from "@/lib/http";
 import { UpgradeSchema } from "@/lib/housing/schemas";
 import { getHouseStore, upgradePlot } from "@/lib/housing/service";
 import type { MyHouseResponse } from "@/lib/housing/types";
+import { notifyHomes } from "@/lib/housing/homesNotify";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
 import { readBody } from "@/lib/validate";
@@ -11,5 +12,5 @@ export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
   const { ch, to, zone } = await readBody(req, UpgradeSchema);
   await rateLimit("shop", req, visitorId);
-  return json<MyHouseResponse>(await upgradePlot(getHouseStore(), visitorId, to, ch, zone));
+  return json<MyHouseResponse>(notifyHomes(await upgradePlot(getHouseStore(), visitorId, to, ch, zone)));
 });

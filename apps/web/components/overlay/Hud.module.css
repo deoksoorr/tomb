@@ -204,3 +204,21 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* 11/26 설정에서 날씨 효과를 끈 기기: 날씨 글자에 가로줄 (한 글자 「눈」도 글자 획과 헷갈리지 않게 양옆으로 조금 길게·다른 색으로, 글자는 흐리게) */
+.weatherOff {
+  position: relative;
+  display: inline-block;
+  color: var(--faint);
+}
+
+.weatherOff::after {
+  position: absolute;
+  top: 52%;
+  right: -3px;
+  left: -3px;
+  height: 2px;
+  background: var(--danger);
+  content: "";
+  pointer-events: none;
+}

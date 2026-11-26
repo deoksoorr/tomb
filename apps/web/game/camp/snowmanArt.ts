@@ -94,24 +94,28 @@ function seam(g: Grid, cx: number, y: number, rx: number): void {
 
 // ── 눈더미 (집는 곳) ──
 
-export const SNOW_PILE_W = 34;
-export const SNOW_PILE_H = 30;
+// 11/26 캠핑장 그림 끝 검사(campSpriteEdge.test): 양옆 작은 눈뭉치 윤곽이 끝 열에, 삽 손잡이가 맨 윗줄에 닿아 잘렸다
+// → 같은 그림을 좌우 PILE_PX칸·위 PILE_PT줄 넓힌 캔버스에 (바닥 줄은 그대로 — 원점 바닥 가운데라 자리는 그대로)
+const PILE_PX = 3;
+const PILE_PT = 1;
+export const SNOW_PILE_W = 34 + PILE_PX * 2;
+export const SNOW_PILE_H = 30 + PILE_PT;
 /** 눈더미 모양 수 (꽂힌 도구: 빨간 삽·파란 삽·초록 양동이) */
 export const SNOW_PILE_VARIANTS = 3;
 
-/** 눈더미 (34×30, 원점 바닥 가운데). 소복한 둔덕 꼭대기가 퍼 간 듯 움푹하고 꼬마 삽이 꽂혀 있다 → "여기서 눈을 퍼요" */
+/** 눈더미 (34×30 + 여백, 원점 바닥 가운데). 소복한 둔덕 꼭대기가 퍼 간 듯 움푹하고 꼬마 삽이 꽂혀 있다 → "여기서 눈을 퍼요" */
 export function snowPileArt(v: number): Grid {
   const g = new Grid(SNOW_PILE_W, SNOW_PILE_H);
   const r = rng(6201 + v * 13);
   const kind = ((v % SNOW_PILE_VARIANTS) + SNOW_PILE_VARIANTS) % SNOW_PILE_VARIANTS;
-  const cx = 17;
+  const cx = 17 + PILE_PX;
   const by = SNOW_PILE_H - 4;
   // 둔덕 셋 (가운데 높은 것 + 양옆 낮은 것) + 굴러 나온 작은 눈뭉치 둘
   snowBall(g, cx - 8 + r() * 1.5, by - 3.6, 6.5, 4.2, v);
   snowBall(g, cx + 8 + r() * 1.5, by - 3.2, 6, 3.8, v + 1);
   snowBall(g, cx, by - 6.6, 10.5, 7, v + 2);
-  snowBall(g, 3.6, by - 1.6, 2.4, 2.1, v + 3);
-  snowBall(g, 30.6, by - 1.3, 2, 1.8, v + 5);
+  snowBall(g, 3.6 + PILE_PX, by - 1.6, 2.4, 2.1, v + 3);
+  snowBall(g, 30.6 + PILE_PX, by - 1.3, 2, 1.8, v + 5);
   // 맨 윗줄은 소복하게 밝게
   g.recolor((x, y) => !g.filled(x, y - 1) && x < cx + 7, SNOW.hi);
   // 퍼 간 자리: 꼭대기 오른쪽이 움푹 (안쪽 그늘 + 아래 테 밝게)
@@ -127,7 +131,7 @@ export function snowPileArt(v: number): Grid {
   for (let x = sx - 2; x <= sx + 2; x++) if (g.filled(x, sy + 2)) g.set(x, sy + 2, SNOW.hi);
   // 반짝이 몇 점
   for (let i = 0; i < 5; i++) {
-    const x = 6 + Math.floor(r() * 22);
+    const x = 6 + PILE_PX + Math.floor(r() * 22);
     const y = by - 9 + Math.floor(r() * 7);
     if (g.filled(x, y) && g.get(x, y) >>> 8 === SNOW.mid) g.set(x, y, 0xffffff);
   }
@@ -150,7 +154,7 @@ export function snowPileArt(v: number): Grid {
     g.hline(bx - 1, bx + 2, top + 1, SNOW.mid);
   } else {
     // 옆에 엎어 둔 초록 양동이 (모래성 틀처럼 — 위에 눈 한 줌) + 손잡이
-    const bx = 28;
+    const bx = 28 + PILE_PX;
     const col = 0x3aa060;
     for (let y = 0; y < 6; y++) g.hline(bx - 2 - (y >> 1), bx + 2 + (y >> 1), by - 6 + y, y === 0 ? lighten(col, 0.25) : y === 5 ? darken(col, 0.25) : y === 2 ? darken(col, 0.1) : col);
     g.set(bx - 3, by - 3, lighten(col, 0.35));

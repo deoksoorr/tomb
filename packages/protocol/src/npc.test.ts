@@ -86,7 +86,7 @@ describe("goblin", () => {
     expect(jackpots / N).toBeGreaterThan(GOBLIN_JACKPOT_CHANCE * 0.8);
     expect(jackpots / N).toBeLessThan(GOBLIN_JACKPOT_CHANCE * 1.2);
     expect(Math.abs(sum / N - GOBLIN_POINTS_AVG)).toBeLessThan(25);
-    expect(GOBLIN_POINTS_AVG).toBeGreaterThan(700); // 사냥 20분쯤 — 보이면 달려갈 만한 값
+    expect(GOBLIN_POINTS_AVG).toBeGreaterThan(650); // 사냥 20분쯤 — 보이면 달려갈 만한 값 (11/26 대박 3%로 약 690)
     // 증서: 대박까지는 받고, 그보다 크면 버린다
     const jackpot = await signGrant("s", { kind: "goblin", visitorId: "v1", points: GOBLIN_POINTS_CAP, nonce: "gBig1", exp: 2000 });
     expect(await verifyGrant("s", jackpot, 1000)).toMatchObject({ points: GOBLIN_JACKPOT_POINTS });

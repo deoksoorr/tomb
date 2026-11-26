@@ -9,6 +9,9 @@ import type { MoveInput } from "../logic/movement";
 import { DEADZONE_ENTER } from "../logic/movement";
 import {
   boatHull,
+  passengerDrop,
+  passengerMoves,
+  PASSENGER_GRACE_MS,
   boatOf,
   DOCKED_DIST,
   duckBump,
@@ -121,6 +124,9 @@ export class BoatRide {
   private readonly bounce = new Bounce();
   /** 지금 오리배에 타 있는지 (UI 터치 버튼 "꽥!" — boat:duck) */
   private duckShown = false;
+  /** 11/26 터치 [내리기] (boat:passenger)에 알린 값 · 마지막으로 탄 때 (같이 탄 사람이 움직여 내리기 — 탄 직후는 빼고) */
+  private passengerShown = false;
+  private boardAt = 0;
   /** 오리 연못 둘레 내려설 자리 (처음 쓸 때 한 번) */
   private duckRing: DuckLanding[] | null = null;
   /** 오리배 저절로 둑으로 가는 중 (한가운데서 E): 갈 물 위 자리 · 내려설 뭍 · 그만둘 시각 */
@@ -130,6 +136,9 @@ export class BoatRide {
   /** 11/16 배 몸통 충돌 (헤엄·잠수 중인 나만 막는다 — 배에 탔으면 어느 배에도 안 막힌다) */
   private readonly hulls: Phaser.Physics.Arcade.StaticGroup;
   private readonly hullCollider: Phaser.Physics.Arcade.Collider;
+
+  /** 11/26 낚시 창이 방향키로 낚시를 거두면 같이 탄 사람은 바로 내린다 */
+  private readonly offMoveOff = bridge.on("boat:moveOff", () => void this.passengerOff());
 
   constructor(private readonly host: BoatHost) {
     const scene = host.scene;
@@ -288,6 +297,7 @@ export class BoatRide {
       return true;
     }
     if (a === "interact") this.disembark(false);
+    else if (a === "sit") this.passengerOff(); // 11/26 같이 탄 사람은 X·터치 [내리기]로 내린다
     else if (a === "jump") this.quack(); // 오리배: Space = 꽥 (조각배는 아무것도 하지 않는다)
     return a === "interact" || a === "sit" || a === "jump";
   }
@@ -338,7 +348,8 @@ export class BoatRide {
     const h = this.host;
     const pl = h.player();
     if (!pl.inBoat) return false;
-    const to = this.landSpot() ?? (force ? this.nearestShore() : null);
+    // 11/26 같이 탄 사람: 뭍이 멀면 배 옆 물로 뛰어내려 헤엄 (헤엄칠 물이 없으면 가까운 둑·나루터로). 노 젓는 사람은 그대로 저어 간다
+    const to = this.landSpot() ?? (force ? this.nearestShore() : this.passenger() ? (passengerDrop(pl.x, pl.y, this.dir, inWater) ?? this.nearestShore()) : null);
     if (!to) {
       h.toast(this.inDuck() ? "둑 가까이 가면 내릴 수 있어요" : "둑, 나루터, 잔교 가까이 가면 내릴 수 있어요");
       return false;
@@ -450,6 +461,7 @@ export class BoatRide {
     const seat = pl.boatSeatId;
     if (seat !== this.lastSeat) {
       this.lastSeat = seat;
+      if (seat) this.boardAt = now;
       this.auto = null;
       if (seat) {
         this.motion.x = pl.x;
@@ -462,6 +474,11 @@ export class BoatRide {
     const ref = boatOf(seat);
     if (!ref) return;
     if (ref.seat.index === 1) {
+      // 11/26 같이 탄 사람은 움직이면 내린다 (탄 직후 잠깐은 빼고)
+      if (passengerMoves(move) && now - this.boardAt >= PASSENGER_GRACE_MS) {
+        this.passengerOff();
+        return;
+      }
       // 뒷자리: 노 젓는 사람이 있으면 그 배에 붙어 간다. 노 젓던 사람이 내렸으면 앞자리로 옮겨 앉는다
       const front = seatsOf(ref.boat.id)[0];
       const who = this.occupant(front.id);
@@ -607,6 +624,11 @@ export class BoatRide {
       this.duckShown = duck;
       bridge.emit("boat:duck", { riding: duck });
     }
+    const passenger = pl.inBoat && this.passenger();
+    if (passenger !== this.passengerShown) {
+      this.passengerShown = passenger;
+      bridge.emit("boat:passenger", { on: passenger });
+    }
   }
 
   /** 배 그림 (아바타 갱신 뒤에): 탄 사람을 따라가고, 빈 배는 잠시 뒤 나루터로 돌아온다 */
@@ -750,11 +772,12 @@ export class BoatRide {
       // 오리배: Space = 꽥, E = 내리기 (11/15 — E로도 꽥이 나가 헷갈렸다). 낚시 없음.
       // 11/16 둑 가까이면 어디서든 「E 내리기」, 한가운데서는 E로 가장 가까운 둑까지 저절로 저어 간다 (조종하는 사람만)
       const quack = touch ? "" : "Space 꽥 · ";
-      if (ref.seat.index === 1) return shore ? `${prefix}내리기 · ${quack}같이 타는 중` : touch ? "둑에 닿으면 내리기 · 같이 타는 중" : "Space 꽥 · 둑에 닿으면 E로 내리기 · 같이 타는 중";
+      if (ref.seat.index === 1) return `${prefix}내리기 · ${quack}같이 타는 중`;
       if (this.auto) return `둑으로 가는 중… · ${steer} 직접 몰기`;
       return shore ? `${prefix}내리기 · ${quack}${steer} 페달` : `${prefix}둑으로 가서 내리기 · ${quack}${steer} 페달`;
     }
-    if (ref?.seat.index === 1) return shore ? `${prefix}내리기 · 같이 타는 중` : `${prefix}낚시하기 · 같이 타는 중`;
+    // 11/26 조각배 뒷자리: E = 낚시, 움직이면 내린다 (뭍 가까우면 E = 내리기)
+    if (ref?.seat.index === 1) return shore ? `${prefix}내리기 · 같이 타는 중` : `${prefix}낚시 · 이동하면 내려요`;
     return shore ? `${prefix}내리기 · ${steer} 노 젓기` : `${prefix}낚시하기 · ${steer} 노 젓기`;
   }
 
@@ -776,7 +799,25 @@ export class BoatRide {
   /** 물가(둑·나루터·잔교) 가까이라 E로 내릴 수 있는지 (아니면 E = 배 위 낚시) */
   nearShore(): boolean {
     const pl = this.host.player();
-    return pl.inBoat && this.landSpot() !== null;
+    // 11/26 오리배에 같이 탄 사람은 어디서든 E = 내리기 (오리 연못은 낚시가 없다). 조각배 뒷자리는 E = 낚시, 움직이면 내린다
+    return pl.inBoat && (this.landSpot() !== null || (this.passenger() && this.inDuck()));
+  }
+
+  /**
+   * 11/26 같이 탄 사람 내리기 (방향키·조이스틱·X·터치 [내리기] — 운영자 「얻어 타면 납치된다」): 뭍이 가까우면 뭍, 아니면 배 옆 물로 뛰어내려 헤엄
+   * (헤엄칠 물이 없으면 가까운 둑·나루터). 같이 탄 사람이 아니면 false
+   */
+  passengerOff(): boolean {
+    const pl = this.host.player();
+    if (!pl.inBoat || !this.passenger()) return false;
+    this.leave(this.landSpot() ?? passengerDrop(pl.x, pl.y, this.dir, inWater) ?? this.nearestShore());
+    return true;
+  }
+
+  /** 같이 탄 사람(뒷자리·옆자리)인지 */
+  private passenger(): boolean {
+    const seat = this.host.player().boatSeatId;
+    return !!seat && boatOf(seat)?.seat.index === 1;
   }
 
   /** 배 위 낚시: 지금 내 배가 떠 있는 물과 자리. 배에 타고 있지 않으면 null */
@@ -788,6 +829,7 @@ export class BoatRide {
   }
 
   destroy(): void {
+    this.offMoveOff();
     this.hullCollider.destroy();
     for (const v of this.views) {
       v.fade?.stop();
@@ -798,6 +840,7 @@ export class BoatRide {
     this.drops.destroy();
     this.sign.destroy();
     if (this.duckShown) bridge.emit("boat:duck", { riding: false });
+    if (this.passengerShown) bridge.emit("boat:passenger", { on: false });
   }
 }
 

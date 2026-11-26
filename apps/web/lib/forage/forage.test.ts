@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FISHING_SPOTS, fishingSpotById, seatSlot, SEATS, SEA_FISHING_SPOTS, spotKindOfState, STATE, DIR } from "@tomb/protocol";
+import { FISHING_SPOTS, fishingSpotById, seatSlot, SEATS, spotKindOfState, STATE, DIR } from "@tomb/protocol";
 import { forageIconGrid, isForageIcon } from "@/game/sprites/forageIcons";
 import { spotOf } from "@/game/logic/spots";
 import { allProps, inWater, nearWater, standable } from "@/game/world/layout";
@@ -10,6 +10,7 @@ import {
   DEX_CATS,
   DEX_NEW_REWARD,
   DEX_REWARD,
+  DEX_EXPANSION_IDS,
   DEX_REWARD_TABLE,
   DEX_TITLES,
   dexCatOf,
@@ -23,8 +24,11 @@ import {
   NPCS,
   SPECIES,
   speciesOf,
+  nodeWheres as wheresOfNode,
+  WATER_WHERES,
   type Where, GULL_FEATHER_IDS } from "./catalog";
-import { autoRareFactor, pickAuto } from "./auto";
+import type { FishWater } from "@tomb/protocol";
+import { autoCandidates, autoRareFactor, pickAuto } from "./auto";
 import { sunkenFallbackFish } from "./sunken";
 import {
   activeNodes,
@@ -61,10 +65,12 @@ const REAL_CONDS: Cond[] = (() => {
   return [...seen.values()];
 })();
 
-/** 종류마다 나올 수 있는 곳 (물고기 = 낚시 자리의 물, 나머지 = 그 채집 지점이 있는 구역) */
+/** 11/26 낚시 물 전부 (캠핑장 물 포함 — 물마다 뽑는 곳은 catalog WATER_WHERES) */
+const WATERS = Object.keys(WATER_WHERES) as FishWater[];
+/** 종류마다 나올 수 있는 곳 (물고기 = 낚시 물이 뽑는 곳, 나머지 = 그 채집 지점이 뽑는 곳 — 11/26 캠핑장 지점은 캠핑장 숲·바위도) */
 function wheresOf(cat: string): Set<Where> {
-  if (cat === "fish") return new Set([...FISHING_SPOTS, ...SEA_FISHING_SPOTS].map((s) => s.water as Where));
-  return new Set(GATHER_NODES.filter((n) => NODE_CAT[n.kind] === cat).map((n) => n.where));
+  if (cat === "fish") return new Set(WATERS.flatMap((w) => WATER_WHERES[w]));
+  return new Set(GATHER_NODES.filter((n) => NODE_CAT[n.kind] === cat).flatMap((n) => wheresOfNode(n)));
 }
 
 /** 처음 78종 (2차로 늘리기 전). 이미 잡은 도감·가방·순위가 이 id를 가리키니 빼거나 바꾸면 안 된다 */
@@ -91,12 +97,12 @@ describe("카탈로그", () => {
   });
 
   it("모든 종은 언젠가(시간·날씨·계절 중 어떤 조합에서) 어딘가에서 잡힌다", () => {
-    const fishWheres = new Set([...FISHING_SPOTS, ...SEA_FISHING_SPOTS].map((s) => s.water as Where));
+    const fishWheres = wheresOf("fish");
     const nodeWheres = new Map<string, Set<Where>>();
     for (const n of GATHER_NODES) {
       const cat = NODE_CAT[n.kind];
       if (!nodeWheres.has(cat)) nodeWheres.set(cat, new Set());
-      nodeWheres.get(cat)!.add(n.where);
+      for (const w of wheresOfNode(n)) nodeWheres.get(cat)!.add(w);
     }
     // 11/17 갈매기 깃털은 채집·낚시가 아니라 포구 갈매기에게서만 (lib/sea/gull.test)
     for (const s of SPECIES.filter((x) => !GULL_FEATHER_IDS.includes(x.id))) {
@@ -108,8 +114,12 @@ describe("카탈로그", () => {
 
   it("어떤 조건에서도 낚시 자리마다 걸릴 물고기가 있고, 채집 지점마다 나올 것이 있다", () => {
     for (const c of ALL_CONDS) {
-      for (const w of ["lake", "river", "sea"] as const) expect(candidates("fish", w, c).length, `${w} ${JSON.stringify(c)}`).toBeGreaterThan(0);
-      for (const n of GATHER_NODES) expect(candidates(NODE_CAT[n.kind], n.where, c).length, `${n.id} ${JSON.stringify(c)}`).toBeGreaterThan(0);
+      // 11/26 캠핑장 물도 (자동 낚시 후보 — 직접 낚시 전용을 뺀 것 — 도 늘 있다)
+      for (const w of WATERS) {
+        expect(candidates("fish", WATER_WHERES[w], c).length, `${w} ${JSON.stringify(c)}`).toBeGreaterThan(0);
+        expect(autoCandidates(w, c).length, `자동 ${w} ${JSON.stringify(c)}`).toBeGreaterThan(0);
+      }
+      for (const n of GATHER_NODES) expect(candidates(NODE_CAT[n.kind], wheresOfNode(n), c).length, `${n.id} ${JSON.stringify(c)}`).toBeGreaterThan(0);
     }
   });
 
@@ -134,7 +144,9 @@ describe("카탈로그", () => {
     const ids = new Set(SPECIES.map((s) => s.id));
     for (const id of FIRST_IDS) expect(ids.has(id), id).toBe(true);
     // 2차: 물고기 40 · 곤충 30 · 약초 28 · 광석 20 · 발굴품 24. 11/16 바닷가: 바닷물고기 10 → 물고기 50, 갯벌 10 → 발굴품 34. 11/17 갈매기 깃털 2 → 발굴품 36
-    expect(LIFE_CATS.map((c) => speciesOf(c).length)).toEqual([50, 30, 28, 20, 36]);
+    // 11/26 캠핑장 36종: 물고기 +20 → 70, 곤충 +6 → 36, 약초·버섯 +6 → 34, 광석(돌) +4 → 24
+    // 11/26 도감 확장 84종 (바닷가 48 · 캠핑장 36): 물고기 80 · 곤충 57 · 약초·버섯 55 · 광석 42 · 발굴품 50
+    expect(LIFE_CATS.map((c) => speciesOf(c).length)).toEqual([80, 57, 55, 42, 50]);
   });
 
   it("실제 한 해의 하늘(시간대·날씨·계절)에서 모든 종이 잡힐 때가 있다", () => {
@@ -170,10 +182,16 @@ describe("카탈로그", () => {
 
   it("물고기마다: 그 조건에서 직접·자동 낚시 후보에 들고, 자동 낚시로도 걸릴 수 있다. 꾸미기 대체는 희귀(★3 이상)만", () => {
     for (const s of speciesOf("fish")) {
-      const hit = (["lake", "river", "sea"] as const).flatMap((w) => REAL_CONDS.filter((c) => fits(s, w, c)).map((c) => ({ w, c })));
+      const hit = WATERS.flatMap((w) => REAL_CONDS.filter((c) => fits(s, WATER_WHERES[w], c)).map((c) => ({ w, c })));
       expect(hit.length, s.id).toBeGreaterThan(0);
       const { w, c } = hit[0];
-      const list = candidates("fish", w, c);
+      expect(candidates("fish", WATER_WHERES[w], c), s.id).toContain(s);
+      // 11/26 직접 낚시 전용(캠핑장 희귀 이상)은 자동 낚시 후보에 없다
+      const list = autoCandidates(w, c);
+      if (s.directOnly) {
+        expect(list, s.id).not.toContain(s);
+        continue;
+      }
       expect(list, s.id).toContain(s);
       // 자동 낚시: 난수를 촘촘히 훑으면 이 물고기도 나온다 (희귀는 절반 확률일 뿐 0이 아니다)
       const f = autoRareFactor(list);
@@ -210,7 +228,10 @@ describe("카탈로그", () => {
     const legacy = Object.values(DEX_REWARD).reduce((a, b) => a + b, 0);
     expect(legacy).toBe(290);
     const total = DEX_REWARD_TABLE.reduce((n, r) => n + r.pts, 0);
-    expect(total).toBeLessThanOrEqual(legacy * DEX_CATS.length * 1.6);
+    // 11/26 캠핑장 36종(+367P)이 더해져 1.75배까지 (맵 도감 완성 배지 보상은 따로 — catalog DEX_MAP_REWARD 합 500P)
+    // 11/26 도감 확장 84종(+1,092P, 합 4,551P)이 더해져 2.3배까지 (DEX_NEW_REWARD는 그대로 — 운영자 결정)
+    expect(DEX_REWARD_TABLE.filter((r) => DEX_EXPANSION_IDS.includes(r.id)).reduce((n, r) => n + r.pts, 0)).toBe(1092);
+    expect(total).toBeLessThanOrEqual(legacy * DEX_CATS.length * 2.3);
     for (const c of DEX_CATS) {
       expect(DEX_TITLES[c][50]).toBeTruthy();
       expect(DEX_TITLES[c][100]).toBeTruthy();

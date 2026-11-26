@@ -2,7 +2,7 @@ import type { TodoTick } from "../retain";
 import type { FishWater } from "@tomb/protocol";
 import type { TimePhase } from "../ambience";
 import type { Me } from "../types";
-import type { DexCat, DexTier, FishGrade, LifeCat, NodeKind, NpcId } from "./catalog";
+import type { DexCat, DexMap, DexTier, FishGrade, LifeCat, NodeKind, NpcId } from "./catalog";
 import type { NodeUrgent } from "./rules";
 
 // 낚시·채집·도감 API 계약 (서버 ↔ UI)
@@ -42,7 +42,9 @@ export type DexRewardState = { pending: Partial<Record<DexCat, number>>; got: Pa
  * 이번에 도감에 처음 등록해서 받은 보상 (등록 응답에 실린다). points = 이번 등록 보상 합, earned = 그중 바로 지갑에 들어간 것,
  * pending = 지갑이 꽉 차 받을 도감 보상으로 쌓인 것 (11/19 하루 한도 없음 — 거의 늘 0), titles = 새로 붙은 칭호. me = 지갑이 바뀌었을 때 내 정보
  */
-export type DexGain = { points: number; earned: number; pending: number; titles: string[]; me?: Me };
+export type DexGain = { points: number; earned: number; pending: number; titles: string[]; me?: Me; badges?: DexMapBadgeGain[] };
+/** 11/26 이번에 받은 맵 도감 완성 배지 (points = 지갑에 들어간 완성 보상 — earned에도 들어 있다) */
+export type DexMapBadgeGain = { map: DexMap; name: string; points: number };
 
 export type CatchResult = {
   id: string;

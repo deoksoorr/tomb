@@ -13,7 +13,7 @@ import {
 import { walkReachable } from "@/game/world/walkReach";
 import { SEA_FUTURE_SPOTS, SEA_INTERACTABLES, seaStandable, seaWalkGrid } from "@/game/sea/seaLayout";
 import { earnRule } from "../economy";
-import { GATHER_NODES, NODE_CAT, nodeOnMap, SEA_GATHER_NODES, type GatherNode, type NodeKind } from "./catalog";
+import { GATHER_NODES, isSeasideSpecies, NODE_CAT, nodeOnMap, nodeWheres, SEA_GATHER_NODES, type GatherNode, type NodeKind } from "./catalog";
 import { activeNodes, INSECT_POINTS_MAX, NODE_DENSITY, NODE_SYNC_WINDOWS, NODE_WINDOW_MS, nodeIdsAt, nodeSeed, nodeWindow, candidates } from "./rules";
 import { GatherStartSchema } from "./schemas";
 import { SEA_LAND_NODES } from "./seaNodes";
@@ -44,8 +44,9 @@ const perHour = (c: Record<NodeKind, number>, d: Record<NodeKind, number>, win: 
 describe("지점 수 (맵마다·종류마다)", () => {
   it("마을·캠핑장은 종류마다 반쯤 더, 바닷가는 곤충·약초·모래·갯바위가 새로 생기고 갯벌 구멍도 더", () => {
     expect(countOf("village")).toEqual({ herb: 20, ore: 12, dig: 12, bug: 15, clam: 0 });
-    expect(countOf("camp")).toEqual({ herb: 10, ore: 8, dig: 6, bug: 11, clam: 0 });
-    expect(countOf("sea")).toEqual({ herb: 5, ore: 4, dig: 4, bug: 8, clam: 16 });
+    // 11/26 도감 확장: 캠핑장 계곡 둑 10곳 (곤충 2·약초 2·광석 2·발굴 4), 바닷가 새 16곳 (곤충 4·약초 5·광석 4·모래 파기 3)
+    expect(countOf("camp")).toEqual({ herb: 12, ore: 10, dig: 10, bug: 13, clam: 0 });
+    expect(countOf("sea")).toEqual({ herb: 10, ore: 8, dig: 7, bug: 12, clam: 16 });
     for (const map of ["village", "camp"] as const)
       for (const k of KINDS) {
         const b = BEFORE[map][k];
@@ -79,14 +80,16 @@ describe("얼마나 자주 피나 (기대값)", () => {
     for (const map of ["village", "camp"] as const) {
       const r = after(map) / before(map);
       expect(r, map).toBeGreaterThan(1.9);
-      expect(r, map).toBeLessThan(2.6);
+      // 11/26 캠핑장은 계곡 둑 지점이 더해져 3.0배
+      expect(r, map).toBeLessThan(map === "camp" ? 3.1 : 2.6);
     }
     expect(after("sea") / before("sea")).toBeGreaterThan(2.5);
     // 한 창에 피어 있는 수 (마을: 20.55 → 31.05, 캠핑장: 12.15 → 18.45, 바닷가: 7.2 → 20.6). 한 시간에: 마을 82 → 186, 캠핑장 49 → 111, 바닷가 29 → 124
     // 11/22 광석 0.6 → 마을 32.25(광석 6 → 7.2), 캠핑장 19.25, 바닷가 21.0
     expect(openPerWindow(countOf("village") as Record<NodeKind, number>, NODE_DENSITY)).toBeCloseTo(32.25, 2);
-    expect(openPerWindow(countOf("camp") as Record<NodeKind, number>, NODE_DENSITY)).toBeCloseTo(19.25, 2);
-    expect(openPerWindow(countOf("sea") as Record<NodeKind, number>, NODE_DENSITY)).toBeCloseTo(21.0, 2);
+    // 11/26 도감 확장 지점: 캠핑장 19.25 → 24.35, 바닷가 21.0 → 29.8
+    expect(openPerWindow(countOf("camp") as Record<NodeKind, number>, NODE_DENSITY)).toBeCloseTo(24.35, 2);
+    expect(openPerWindow(countOf("sea") as Record<NodeKind, number>, NODE_DENSITY)).toBeCloseTo(29.8, 2);
   });
 
   it("실제로 굴려도 기대값 근처 (사람 200 × 창 30)", () => {
@@ -120,9 +123,17 @@ describe("11/19 하루 한도는 없고 보호 장치만 남는다", () => {
     expect(FORAGE_STARTS_PER_HOUR).toBe(300);
   });
 
-  it("새 바닷가 지점은 새 종 없이 기존 종이 나온다 (가을 낮·밤)", () => {
+  it("11/26 바닷가 뭍 지점: 예전 21곳은 마을 종 + 바닷가 종을 섞어서, 새 16곳은 바닷가 전용 종만 나온다 (가을 낮·밤)", () => {
     for (const phase of ["day", "night"] as const)
-      for (const n of SEA_LAND_NODES) expect(candidates(NODE_CAT[n.kind], n.where, { phase, weather: "clear", season: "autumn" }).length, `${n.id} ${phase}`).toBeGreaterThan(0);
+      for (const n of SEA_LAND_NODES) {
+        const list = candidates(NODE_CAT[n.kind], nodeWheres(n), { phase, weather: "clear", season: "autumn" });
+        expect(list.length, `${n.id} ${phase}`).toBeGreaterThan(0);
+        if (n.kind === "clam") continue;
+        if (n.also) expect(list.some((s) => !isSeasideSpecies(s)), `${n.id} 마을 종`).toBe(true);
+        else expect(list.every(isSeasideSpecies), `${n.id} 바닷가 전용`).toBe(true);
+      }
+    expect(SEA_LAND_NODES.filter((n) => n.kind !== "clam" && n.also)).toHaveLength(21);
+    expect(SEA_LAND_NODES.filter((n) => n.kind !== "clam" && !n.also)).toHaveLength(16);
   });
 });
 

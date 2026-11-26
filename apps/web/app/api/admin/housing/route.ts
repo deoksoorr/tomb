@@ -12,10 +12,11 @@ export const GET = handler(async (req) => {
   await requireAdmin(req);
   const store = getHouseStore();
   const all = await store.listAll();
-  const [seen, staff] = await Promise.all([getAccounts().summaries(all.map((h) => h.owner)), staffAccountId()]);
+  // 11/26 신고 수는 집마다 따로(HTTP 요청 집 수만큼) 대신 파이프라인 한 번
+  const [seen, staff, repMap] = await Promise.all([getAccounts().summaries(all.map((h) => h.owner)), staffAccountId(), store.guestReportsMany(all.map((h) => h.id))]);
   const houses: AdminHouse[] = await Promise.all(
     all.map(async (h, i) => {
-      const reports = await store.guestReports(h.id);
+      const reports = repMap.get(h.id) ?? new Map<string, number>();
       const entries = reports.size ? await store.guestbook(h.id, true) : [];
       return {
         ...toSummary(h),

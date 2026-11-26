@@ -5,7 +5,7 @@ import { env } from "./env";
 import { DEX_CATS, dexIdsOf, speciesOf } from "./forage/catalog";
 import { titlesOf } from "./forage/dexReward";
 import { getForageStore } from "./forage/store";
-import { getHouseStore, houseIdFor } from "./housing/service";
+import { getHouseStore, houseIdsOf } from "./housing/service";
 import { lookScore, wornSeasonSets } from "./lookScore";
 import { MAX_LEVEL } from "./rpg/formulas";
 import { getRpgStore } from "./rpg/store";
@@ -205,9 +205,9 @@ async function readFacts(accountId: string, now: number): Promise<{ facts: Title
       }),
       { boards: [] as ChampBoard[], count: 0 },
     ),
-    // 11/20 「내 집」 꾸밈 점수 = 마을 집과 포구 오두막 중 높은 쪽 (두 채를 다 가져도 더하지 않는다)
+    // 11/20 「내 집」 꾸밈 점수 = 마을 집과 포구 오두막 중 높은 쪽 (두 채를 다 가져도 더하지 않는다). 11/26 캠핑장 집까지 셋 중 높은 쪽
     safe(
-      Promise.all([getHouseStore().get(houseIdFor(accountId)), getHouseStore().get(houseIdFor(accountId, "sea"))]).then(([v, c]) => Math.max(v?.score ?? 0, c?.score ?? 0)),
+      Promise.all(houseIdsOf(accountId).map((id) => getHouseStore().get(id))).then((hs) => Math.max(0, ...hs.map((h) => h?.score ?? 0))),
       0,
     ),
     safe(getRpgStore().get(accountId), null),

@@ -359,6 +359,8 @@ export default function HuntLobby({
                 ...(towerSec > 0 ? { bonusSec: towerSec } : {}),
                 // 11/24 회장님 독대 헬 1위·2관왕: 상자 세트 장비 20% (서버 정산과 같은 굴림으로 미리 보여 준다)
                 ...(res.view.chair ? { sgChance: chairChestChance(res.view.chair) } : {}),
+                // 11/26 엘리베이터 판 시작 판 레벨 (티켓과 같은 값)
+                ...(res.towerLv0 ? { lv0: res.towerLv0 } : {}),
               },
             }
           : {}),

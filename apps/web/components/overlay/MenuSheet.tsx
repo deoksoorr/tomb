@@ -36,7 +36,9 @@ export type MenuTarget =
   | "gifts"
   | "friends"
   /** 11/19 촬영 모드 */
-  | "photo";
+  | "photo"
+  /** 11/26 설정 (PC: 이 메뉴·Esc. 터치는 위쪽 줄 ⚙ 단추라 메뉴에는 없다) */
+  | "settings";
 
 type Props = {
   canBury: boolean;
@@ -61,6 +63,8 @@ type Props = {
   huntBlocked?: string | null;
   /** 11/19 촬영 모드를 열 수 있는 곳 (사냥·미니게임·버스 연출·집 꾸미기 중이 아님) */
   canPhoto?: boolean;
+  /** 11/26 설정 칸을 보인다 (PC). 터치 화면은 위쪽 줄 ⚙ 단추로 열어 메뉴에서 뺀다 (운영자) */
+  showSettings?: boolean;
   onPick: (target: MenuTarget) => void;
   onClose: () => void;
 };
@@ -99,6 +103,7 @@ export default function MenuSheet({
   noFriends = false,
   huntBlocked = null,
   canPhoto = false,
+  showSettings = true,
   onPick,
   onClose,
 }: Props) {
@@ -145,6 +150,7 @@ export default function MenuSheet({
     { target: "notices", icon: "bell", label: "개발자 노트 (N)", desc: unreadNotice ? "새 글이 있어요 (새 탭)" : "업데이트·점검 소식 (새 탭)", dot: unreadNotice },
     { target: "me", icon: "user", label: "내 정보 (P)", desc: "닉네임·개인 코드·내 집", badge: points !== null ? `${points.toLocaleString("ko-KR")}P` : undefined },
     { target: "guide", icon: "info", label: "안내", desc: "조작법·포인트 규칙·문의" },
+    ...(showSettings ? [{ target: "settings" as const, icon: "gear" as const, label: "설정 (Esc)", desc: "날씨·절전 모드·소리·접속 종료" }] : []),
   ];
   const graveEntries: Entry[] = [
     { target: "graves", icon: "grave", label: "내 묘비 가기", desc: "내가 세운 묘비 앞으로 걸어가기", badge: myGraveCount ? String(myGraveCount) : undefined },

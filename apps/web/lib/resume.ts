@@ -5,7 +5,7 @@
 //  - 좌석은 서버가 최종 판정한다: 그 사이 다른 사람이 앉았으면 가까운 빈자리, 없으면 그 옆에 선다 (WorldScene)
 //  - 맵 배치 버전(MAP_VERSION)이 다른 기록(맵 개편 전 화면이 남긴 것)은 채널·입장 정보만 쓰고 자리는 입구(SPAWN)에서 시작한다
 
-import { CAMP_ARRIVE, CAMP_MAP_VERSION, MAP_VERSION, SEA_ARRIVE, SEA_MAP_VERSION, SPAWN } from "@tomb/protocol";
+import { CAMP_ARRIVE, CAMP_MAP_VERSION, campRowboatSeatById, MAP_VERSION, SEA_ARRIVE, SEA_MAP_VERSION, SPAWN } from "@tomb/protocol";
 
 export const RESUME_KEY = "tomb.resume";
 /** 이보다 오래된 기록은 쓰지 않는다 */
@@ -39,7 +39,7 @@ export type ResumeState = {
   /** 11/16 바닷가 배치 버전 (SEA_MAP_VERSION). 다르면 자리는 버리고 정류장에서 */
   seaMap?: number;
 };
-/** 캠핑장에서 되살리는 자세 (캠핑장엔 그네·배·놀이기구가 없다) */
+/** 캠핑장에서 되살리는 자세 (캠핑장엔 그네·놀이기구가 없다. 11/26 나룻배는 캠핑장 나룻배 자리 id일 때만 — parseAway) */
 const CAMP_POSES: readonly ResumePose[] = ["idle", "sitGround", "sitChair"];
 
 const isNum = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
@@ -85,8 +85,10 @@ function parseAway(where: "camp" | "sea", r: Record<string, unknown>, channel: n
   const sea = where === "sea";
   const same = sea ? r.seaMap === SEA_MAP_VERSION : r.campMap === CAMP_MAP_VERSION;
   const arrive = sea ? SEA_ARRIVE : CAMP_ARRIVE;
-  const pose = same && CAMP_POSES.includes(r.pose as ResumePose) ? (r.pose as ResumePose) : "idle";
-  const seatId = pose === "sitChair" && typeof r.seatId === "string" && r.seatId ? r.seatId : null;
+  // 11/26 캠핑장 나룻배 (자리 id qN…): 배 자리를 잇는다 — 다시 탈지·선착장에 설지는 CampRowboats.resume
+  const rowboat = !sea && same && r.pose === "boat" && typeof r.seatId === "string" && !!campRowboatSeatById(r.seatId);
+  const pose = rowboat ? "boat" : same && CAMP_POSES.includes(r.pose as ResumePose) ? (r.pose as ResumePose) : "idle";
+  const seatId = (pose === "sitChair" || rowboat) && typeof r.seatId === "string" && r.seatId ? r.seatId : null;
   return {
     channel,
     x: same ? x : arrive.x,

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { BBQ_MENU, bbqStands, DRUNK_MAX, drunkLevel, type BbqItem, type BbqItemId, type BbqStand } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
-import { bbqPlateArt } from "@/game/camp/campArt";
+import { bbqPlateIconArt } from "@/game/camp/campArt";
 import { myFood } from "@/game/camp/foodState";
 import { errorMessage, request } from "@/lib/api";
 import type { BbqResponse, BbqStatusResponse } from "@/lib/campBbq";
@@ -24,7 +24,7 @@ const minutes = (ms: number) => Math.round(ms / 60_000);
 function useIcon(id: BbqItemId): string {
   return useMemo(() => {
     try {
-      return bbqPlateArt(id).toCanvas().toDataURL();
+      return bbqPlateIconArt(id).toCanvas().toDataURL();
     } catch {
       return "";
     }

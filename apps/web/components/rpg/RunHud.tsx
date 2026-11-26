@@ -52,19 +52,18 @@ const ring = (left: number) => ({ background: `conic-gradient(rgba(10, 11, 9, 0.
 /** 11/21 도는 중인 스킬 칸: 남은 시간만큼 밝은 테두리 (안쪽은 비운다) */
 const spinRing = (left: number) => ({ background: `conic-gradient(rgba(232, 210, 168, 0.9) ${Math.round(left * 360)}deg, rgba(232, 210, 168, 0.15) 0deg)` });
 
+/** 11/26 PC 사냥 HUD: 이름 · 얇은 막대 · 숫자를 한 줄로 (예전엔 이름·숫자 줄 + 막대 줄) */
 function Bar({ value, max, className, label }: { value: number; max: number; className: string; label: string }) {
   const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
   return (
-    <div>
-      <div className={s.barLabel}>
-        <span>{label}</span>
-        <span>
-          {value} / {max}
-        </span>
-      </div>
-      <div className={cx(s.bar, className)} role="meter" aria-label={label} aria-valuenow={value} aria-valuemin={0} aria-valuemax={max}>
+    <div className={s.barRow}>
+      <span className={s.barTag}>{label}</span>
+      <div className={cx(s.bar, s.barSlim, className)} role="meter" aria-label={label} aria-valuenow={value} aria-valuemin={0} aria-valuemax={max}>
         <span style={{ width: `${pct}%` }} />
       </div>
+      <span className={s.barNum}>
+        {value}/{max}
+      </span>
     </div>
   );
 }
@@ -380,7 +379,8 @@ export default function RunHud({
           {look === "meadow" ? (
             <MeadowBoard hud={hud} title={title ?? GAMES[game].name} totalMs={totalMs} />
           ) : (
-            <div ref={panelEl} className={s.hudPanel} data-practice={hud?.chair?.practice || undefined} data-chair={hud?.chair ? "" : undefined}>
+            // 11/26 사냥(PC): 작은 판 (운영자 「야근 빌딩 왼쪽 위 HP·SP·카드 목록이 몬스터를 가린대」)
+            <div ref={panelEl} className={s.hudPanel} data-compact={hunt || undefined} data-practice={hud?.chair?.practice || undefined} data-chair={hud?.chair ? "" : undefined}>
               <div className={s.hudStats}>
                 <strong>{hud?.chair?.title ?? title ?? GAMES[game].name}</strong>
                 {modeChip}
@@ -402,15 +402,19 @@ export default function RunHud({
                     )}
                   </>
                 ) : (
-                  <span>
-                    남은 시간 <strong className={s.timer}>{hud ? mmss(hud.leftMs) : "–"}</strong>
-                  </span>
-                )}
-                {/* 11/15 야근 빌딩: 지금 층 */}
-                {hud?.floor !== undefined && (
-                  <span>
-                    <strong className={s.timer}>{hud.floor}층</strong>
-                  </span>
+                  <>
+                    {/* 11/15 야근 빌딩: 지금 층 (11/26 남은 시간 앞으로) */}
+                    {hud?.floor !== undefined && (
+                      <span>
+                        <strong className={s.timer}>{hud.floor}층</strong>
+                      </span>
+                    )}
+                    {/* 11/26 사냥 PC는 「남은 시간」 글자 없이 시간만 (판을 줄이려고) */}
+                    <span title={hunt ? "남은 시간" : undefined} aria-label={hunt ? `남은 시간 ${hud ? mmss(hud.leftMs) : "–"}` : undefined}>
+                      {!hunt && "남은 시간 "}
+                      <strong className={s.timer}>{hud ? mmss(hud.leftMs) : "–"}</strong>
+                    </span>
+                  </>
                 )}
                 {hud?.wave && (
                   <span>
@@ -467,7 +471,7 @@ export default function RunHud({
                     </div>
                   )}
                   <Bar value={hud.sp} max={hud.maxSp} className={s.sp} label="SP" />
-                  {hud.run && <RunCards run={hud.run} />}
+                  {hud.run && <RunCards run={hud.run} compact chips={hud.stats?.chips} />}
                   {hud.buffs.some((b) => BUFF_NAMES[b.id]) && (
                     <div className={s.buffs}>
                       {hud.buffs
@@ -509,7 +513,7 @@ export default function RunHud({
         </div>
         )}
         {/* 11/15 능력치 판 (C로 접기, 폰은 [능력] 버튼) — slim은 PhoneTop 자세히 칸의 [능력] */}
-        {hunt && !slimTop && <StatBox stats={hud?.stats} chair={!!hud?.chair} boxRef={statEl} />}
+        {hunt && !slimTop && <StatBox stats={hud?.stats} chair={!!hud?.chair} boxRef={statEl} noChips={!!hud?.run} />}
         {hud?.boss && (
           <div className={s.boss}>
             <span>{hud.boss.name}</span>

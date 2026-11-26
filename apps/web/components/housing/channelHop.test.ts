@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { bridge } from "@/game/bridge";
+import { houseChannelFullMsg } from "@/game/net/switchPolicy";
 import { hopChannel } from "./channelHop";
 
 // 내 집 가기·친구한테 가기의 채널 옮기기 기다림: 꽉 찬 채널이라 게임이 옮기지 않으면(channel:refused) 바로 그만두고 그 안내를 넘긴다
@@ -20,6 +21,20 @@ describe("hopChannel", () => {
     expect(fail).toHaveBeenCalledWith("꽉 참");
     bridge.emit("net:status", { mode: "online", channel: 5, count: 1, cap: 40 });
     expect(run).not.toHaveBeenCalled();
+    offSwitch();
+  });
+
+  it("11/26 다른 채널 집에 들어가기: 그 채널이 꽉 차면 들어가지 않고(run 없음) 집 안내를 넘긴다", () => {
+    const sent: unknown[] = [];
+    const offSwitch = bridge.on("channel:switch", (p) => sent.push(p));
+    const enter = vi.fn();
+    const fail = vi.fn();
+    hopChannel(4, 2, enter, fail, { fullMsg: houseChannelFullMsg(4) });
+    expect(sent).toEqual([{ channel: 4, fullMsg: "4채널이 꽉 차서 지금은 그 집에 갈 수 없어요." }]);
+    bridge.emit("channel:refused", { channel: 4, message: houseChannelFullMsg(4), back: false });
+    expect(fail).toHaveBeenCalledWith("4채널이 꽉 차서 지금은 그 집에 갈 수 없어요.");
+    bridge.emit("net:status", { mode: "online", channel: 4, count: 1, cap: 40 });
+    expect(enter).not.toHaveBeenCalled();
     offSwitch();
   });
 

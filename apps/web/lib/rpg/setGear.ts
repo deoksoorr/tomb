@@ -16,8 +16,9 @@ export type SgPiece = (typeof SG_PIECES)[number];
 export type SgGrade = 0 | 1 | 2 | 3;
 export const SG_GRADES: readonly SgGrade[] = [0, 1, 2, 3];
 export const SG_GRADE_NAMES = ["사원급", "대리급", "과장급", "임원급"] as const;
-/** 직급 테 색 (가방 칸·이름표) */
-export const SG_GRADE_COLORS = ["#b4ae9c", "#6cb4f0", "#d2dcec", "#f2c444"] as const;
+/** 직급 테 색 (가방 칸·이름표). 11/26 운영자 「세트 색이랑 절대 겹치면 안 된다」: 회색 → 은색 → 보라 → 금색으로 갈수록 눈에 띄게.
+ * 세트 색(야근 초록·결재 빨강·회의 파랑·출장 주황)과 CIEDE2000 거리 25 이상 (예전 대리급 하늘색은 회의 파랑과 3.6이라 같은 색이었다) */
+export const SG_GRADE_COLORS = ["#8e8a80", "#e6e6ec", "#c084fc", "#fed730"] as const;
 /** 기본 능력치 = 상점 최고 장비 × 직급 배율 */
 // 11/19 사용자 「하나 먹을 때마다 확실한 능력 상승이 보이게」: 직급마다 기본 능력치 +0.5배씩 (예전 1.15·1.3·1.5·1.75)
 export const SG_GRADE_MULT = [1.0, 1.5, 2.0, 2.5] as const;

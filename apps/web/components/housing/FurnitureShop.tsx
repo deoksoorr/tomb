@@ -24,6 +24,8 @@ import { fmt, FurnitureStage, FurnitureThumb } from "./parts";
 const CATS: FurnitureCategory[] = ["furniture", "dev", "nature", "mood", "living", "sea", "skin", "exterior"];
 /** 11/16 포구 오두막: 외관 탭은 없다 (오두막 겉모습은 포구 부동산에서 고른다). 바닷가 세트부터 보여 준다 */
 const SEA_CATS: FurnitureCategory[] = ["sea", "furniture", "dev", "nature", "mood", "living", "skin"];
+/** 11/26 캠핑장 집: 외관 탭 없이 (기본 가구는 가구점에 없다 — 갈래 "fixture"는 목록에 넣지 않는다) */
+const CAMP_CATS: FurnitureCategory[] = ["furniture", "dev", "nature", "mood", "living", "sea", "skin"];
 const COUNTS = Object.fromEntries(CATS.map((c) => [c, FURNITURE.filter((f) => f.category === c && !f.ghost && !f.petShop && !f.boriOnly && !f.officeShop).length])) as Record<FurnitureCategory, number>;
 
 type Props = {
@@ -68,8 +70,9 @@ function abilities(f: FurnitureDef, touch: boolean): string[] {
  * 산 물건은 하우징 가방에 들어가고, 놓지 않은 것은 절반 값에 되팔 수 있다.
  */
 export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Props) {
-  const zone = my.house?.zone === "sea" ? "sea" : "village";
-  const cats = zone === "sea" ? SEA_CATS : CATS;
+  const zone = my.house?.zone ?? "village";
+  // 11/26 캠핑장 집도 외관 탭이 없다 (겉모습은 캠핑장 분양 창의 넓히기·앞마당)
+  const cats = zone === "sea" ? SEA_CATS : zone === "camp" ? CAMP_CATS : CATS;
   const [cat, setCat] = useState<FurnitureCategory>(cats[0]);
   const [picked, setPicked] = useState<Partial<Record<FurnitureCategory, string>>>({});
   const [pending, setPending] = useState<string | null>(null);

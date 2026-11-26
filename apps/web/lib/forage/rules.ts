@@ -26,8 +26,9 @@ export const conditionsAt = (now: number): Cond => {
   return { phase: a.phase, weather: a.weather, season: a.season };
 };
 
-export function fits(s: Species, where: Where, c: Cond): boolean {
-  if (!s.where.includes(where)) return false;
+/** where = 한 곳 또는 여러 곳 (11/26 캠핑장 물·채집 지점은 전용 종 + 이어진 곳 — catalog WATER_WHERES·nodeWheres) */
+export function fits(s: Species, where: Where | readonly Where[], c: Cond): boolean {
+  if (typeof where === "string" ? !s.where.includes(where) : !where.some((w) => s.where.includes(w))) return false;
   if (s.time && !s.time.includes(c.phase)) return false;
   if (s.weather && !s.weather.includes(c.weather)) return false;
   if (s.season && !s.season.includes(c.season)) return false;
@@ -35,7 +36,7 @@ export function fits(s: Species, where: Where, c: Cond): boolean {
 }
 
 /** 지금 이곳에서 잡힐 수 있는 것 */
-export function candidates(cat: LifeCat, where: Where, c: Cond, filter?: (s: Species) => boolean): Species[] {
+export function candidates(cat: LifeCat, where: Where | readonly Where[], c: Cond, filter?: (s: Species) => boolean): Species[] {
   return SPECIES.filter((s) => s.cat === cat && fits(s, where, c) && (!filter || filter(s)));
 }
 

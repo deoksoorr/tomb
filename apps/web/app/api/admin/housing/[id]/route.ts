@@ -15,6 +15,8 @@ export const POST = handler<{ id: string }>(async (req, { id }) => {
   if (action === "move") {
     // 11/15 같은 채널 안에서 번지 옮기기 (그 번지가 비어 있을 때만)
     if (!lot) throw new HttpError(400, "BAD_LOT", "옮길 번지를 적어 주세요.");
+    // 11/26 캠핑장 집은 터마다 종류(카라반·펜션·촌캉스)가 달라 옮기지 않는다
+    if (house.zone === "camp") throw new HttpError(400, "BAD_LOT", "캠핑장 집은 터마다 종류가 달라 옮길 수 없어요.");
     // 11/16 포구 오두막은 1~6번 터 안에서만
     if (house.zone === "sea" && lot > SEA_LOT_COUNT) throw new HttpError(400, "BAD_LOT", `오두막 터는 1~${SEA_LOT_COUNT}번이에요.`);
     const r = await store.moveLot(id, lot);

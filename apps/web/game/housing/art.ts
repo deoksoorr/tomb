@@ -9,6 +9,7 @@ import { isSeaArt, SEA_DRAW, SEA_EDGE, SEA_EDGE_A, SEA_FLOORS, SEA_PAPERS, SEA_S
 import { isSeasonArt, SEASON_DRAW, SEASON_EDGE, SEASON_EDGE_A, SEASON_NO_EDGE, SEASON_SPIN, SEASON_UP } from "./seasonFurnitureArt";
 import { BREED_FURN_DRAW, BREED_FURN_SPIN, BREED_FURN_UP_MAP, ghostCatBack, ghostCatSide, sleepyDogBack, sleepyDogSide } from "./breedFurnitureArt";
 import { isOfficeArt, OFFICE_AFTER_EDGE, OFFICE_DRAW, OFFICE_EDGE, OFFICE_EDGE_A, OFFICE_SPIN, OFFICE_UP } from "./officeFurnitureArt";
+import { CAMP_DRAW, CAMP_EDGE, CAMP_EDGE_A, CAMP_FLOORS, CAMP_PAPERS, CAMP_SPIN, CAMP_UP, CAMP_WALL_CAP, campWindowGrid, isCampArt, isCampWindowStyle } from "./campFurnitureArt";
 
 // 하우징 물건·바닥·담장 픽셀아트 (캔버스만 쓴다: 게임 텍스처와 UI 아이콘이 같은 그림).
 //  - 물건 그림 크기 = (w×16) × (h×16 + up). 아래쪽 h×16이 차지 칸이고, up만큼 위로 솟는다(책장·나무 등).
@@ -64,6 +65,8 @@ const UP: Record<string, number> = {
   ...BREED_FURN_UP_MAP,
   // 11/20 총무팀 문대리 사무실 가구 (officeFurnitureArt)
   ...OFFICE_UP,
+  // 11/26 캠핑장 집 기본 가구 (campFurnitureArt)
+  ...CAMP_UP,
 };
 
 export const artUp = (id: string) => UP[id] ?? 0;
@@ -891,6 +894,8 @@ const DRAW: Record<string, Draw> = {
   ...BREED_FURN_DRAW,
   // 11/20 총무팀 문대리 사무실 가구 (officeFurnitureArt)
   ...OFFICE_DRAW,
+  // 11/26 캠핑장 집 기본 가구 (campFurnitureArt)
+  ...CAMP_DRAW,
 };
 
 // ── 잠자는 강아지 (1×1): 체크 담요 방석 위에 동그랗게 말려 자는 누렁이 (마을 강아지 game/world/life/sprites.ts의 누렁이 색) ──
@@ -1242,6 +1247,8 @@ const SPIN_ART: Record<string, SpinArt> = {
   ghost_cat: { side: ghostCatSide, back: ghostCatBack },
   // 11/20 총무팀 문대리 사무실 가구 15종 (앞·옆·뒤)
   ...OFFICE_SPIN,
+  // 11/26 캠핑장 집 기본 가구 11종 (앞·옆·뒤)
+  ...CAMP_SPIN,
 };
 
 /** 4방향 가구 그림의 방향 (변형 이름의 d1~d3. 없으면 0 = 앞) */
@@ -1301,7 +1308,10 @@ export function furnitureGrid(id: string, variant = ""): Grid | null {
   else if (isOfficeArt(id)) {
     g.outline(OFFICE_EDGE, false, OFFICE_EDGE_A);
     OFFICE_AFTER_EDGE[id]?.(g, W, H, variant);
-  } else if (id !== "rug" && id !== "flowerbed" && id !== "stone_path") g.outline(OUT, false, 170);
+  }
+  // 11/26 캠핑장 기본 가구는 따뜻한 짙은 갈색 테
+  else if (isCampArt(id)) g.outline(CAMP_EDGE, false, CAMP_EDGE_A);
+  else if (id !== "rug" && id !== "flowerbed" && id !== "stone_path") g.outline(OUT, false, 170);
   return g;
 }
 
@@ -1371,6 +1381,8 @@ const FLOOR: Record<string, Tile> = {
   },
   // 11/16 갑판 마루 (seaFurnitureArt)
   ...SEA_FLOORS,
+  // 11/26 캠핑장 집 전용 바닥 (campFurnitureArt)
+  ...CAMP_FLOORS,
 };
 
 export function floorGrid(id: string, variant: number): Grid {
@@ -1455,6 +1467,8 @@ const PAPER: Record<string, Tile> = {
   },
   // 11/16 하늘색 판자 벽 (seaFurnitureArt)
   ...SEA_PAPERS,
+  // 11/26 캠핑장 집 전용 벽 (campFurnitureArt)
+  ...CAMP_PAPERS,
 };
 
 export function wallGrid(id: string, variant: number): Grid {
@@ -1474,7 +1488,7 @@ export function wallGrid(id: string, variant: number): Grid {
 
 /** 옆벽·칸막이 벽 윗면 색 (벽 종류에 맞춘 어두운 테) */
 export function wallCapColor(id: string): Color {
-  return SEA_WALL_CAP[id] ?? (id === "wall_stone" ? 0x4a4842 : id === "wall_iron" ? 0x1e2438 : 0x3a2a1e);
+  return SEA_WALL_CAP[id] ?? CAMP_WALL_CAP[id] ?? (id === "wall_stone" ? 0x4a4842 : id === "wall_iron" ? 0x1e2438 : 0x3a2a1e);
 }
 
 /** 칸막이 벽 끝면(앞에서 보이는 면) 색 = 벽지 바탕 */
@@ -1492,6 +1506,8 @@ export const WINDOW_H = 24;
 /** 창문 그림. style = 창문 모양 (기본 DEFAULT_WINDOW · 11/24 "frost_window" 눈꽃 창가) */
 export function windowGrid(night: boolean, open: boolean, style: string = DEFAULT_WINDOW): Grid {
   if (style === "frost_window") return frostWindowGrid(night, open);
+  // 11/26 캠핑장 집 기본 창문 (카라반 둥근 창 · 펜션 통창 · 촌캉스 한지 창살 창)
+  if (isCampWindowStyle(style)) return campWindowGrid(style, night, open);
   const g = new Grid(WINDOW_W, WINDOW_H);
   const W = WINDOW_W;
   const H = WINDOW_H;
@@ -1749,14 +1765,14 @@ export function furnitureIcon(id: string, scale: number): { url: string; w: numb
   if (hit) return hit;
   const def = furnitureById(id);
   let src: Grid | null;
-  if (def?.skin === "floor" || id === DEFAULT_FLOOR) {
+  if (def?.skin === "floor" || id === DEFAULT_FLOOR || id in CAMP_FLOORS) {
     src = new Grid(32, 32);
     for (let i = 0; i < 4; i++) src.draw(floorGrid(id, i), (i % 2) * 16, Math.floor(i / 2) * 16);
-  } else if (def?.skin === "wall" || id === DEFAULT_WALL) {
+  } else if (def?.skin === "wall" || id === DEFAULT_WALL || id in CAMP_PAPERS) {
     src = new Grid(32, WALL_H);
     src.draw(wallGrid(id, 0), 0, 0);
     src.draw(wallGrid(id, 1), 16, 0);
-  } else if (def?.skin === "window" || id === DEFAULT_WINDOW) {
+  } else if (def?.skin === "window" || id === DEFAULT_WINDOW || isCampWindowStyle(id)) {
     // 11/24 창문 모양: 낮에 닫힌 창 그대로
     src = windowGrid(false, false, id);
   } else if (def?.ext) src = seasonFacade({ ...defaultExterior(), [def.ext]: id }, "small", false);

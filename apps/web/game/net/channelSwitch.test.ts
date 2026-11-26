@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CLOSE, encodeEvent, type LobbyInfo } from "@tomb/protocol";
 import { bridge } from "../bridge";
 import { RealtimeClient, type NetCallbacks } from "./RealtimeClient";
-import { CHANNEL_FULL_MSG, friendChannelFullMsg, lobbyChannelFull } from "./switchPolicy";
+import { CHANNEL_FULL_MSG, friendChannelFullMsg, houseChannelFullMsg, lobbyChannelFull } from "./switchPolicy";
 
 // 꽉 찬 채널로는 일부러 옮기지 못한다 (채널 메뉴·친구한테 가기·내 집 가기·내 묘비 가기):
 //  - 떠나기 전에 로비를 보고 만석이면 연결을 그대로 두고 안내만
@@ -110,6 +110,8 @@ describe("switchPolicy", () => {
     // 11/20 운영자는 정원 밖: 만석이어도 막지 않는다
     expect(lobbyChannelFull(l, 1, true)).toBe(false);
     expect(friendChannelFullMsg("가람")).toBe("가람님이 있는 채널이 꽉 차서 갈 수 없어요.");
+    // 11/26 내 집·친구 집 모두 같은 안내 (들어가지 않고 지금 자리 그대로)
+    expect(houseChannelFullMsg(3)).toBe("3채널이 꽉 차서 지금은 그 집에 갈 수 없어요.");
   });
 });
 

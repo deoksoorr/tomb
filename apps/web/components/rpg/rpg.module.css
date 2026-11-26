@@ -573,6 +573,55 @@ button.hotSlot:disabled {
   color: var(--muted);
 }
 
+/* ── 11/26 PC 사냥 HUD 작게: 248px 판 · HP/SP 한 줄(이름 · 9px 막대 · 숫자) · 조금 비치게 ──
+   빈 곳은 예전처럼 눌러도 판으로 간다 (.hudTop이 pointer-events: none — 단추·카드 아이콘만 누를 수 있다) */
+.hudPanel[data-compact] {
+  position: relative;
+  flex: 0 0 auto;
+  width: 248px;
+  max-width: 248px;
+  gap: 3px;
+  padding: 6px 8px 7px;
+  font-size: 11px;
+}
+
+.hudPanel[data-compact]:not([data-practice]) {
+  background: rgba(24, 25, 21, 0.82);
+}
+
+.hudPanel[data-compact] .hudStats {
+  gap: 1px 8px;
+}
+
+.barRow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.barTag {
+  flex: 0 0 auto;
+  width: 14px;
+  font-family: var(--font-small);
+  font-size: 10px;
+  color: #b8b2a0;
+}
+
+.barSlim {
+  flex: 1 1 auto;
+  height: 9px;
+}
+
+.barNum {
+  flex: 0 0 auto;
+  min-width: 58px;
+  font-family: var(--font-small);
+  font-size: 10px;
+  color: var(--bone);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .topButtons {
   display: flex;
   flex-direction: column;

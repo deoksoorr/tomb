@@ -8,6 +8,7 @@ import styles from "./Admin.module.css";
 import an from "./Analytics.module.css";
 import { BarChart, duration, fmt, METRICS, RankList } from "./charts";
 import { opsAdminApi } from "./opsAdminApi";
+import { SignupSourcesCard } from "./OpsLogs";
 import { LoadState } from "./PanelState";
 import { usePanelLoad } from "./usePanelData";
 
@@ -67,6 +68,8 @@ export default function AnalyticsPanel({ toast, onAuthLost, version }: Props) {
       </div>
 
       {report && <Breakdown report={report} />}
+      {/* 11/26 유입별 가입 수 (계정에 남긴 가입 유입) */}
+      <SignupSourcesCard toast={toast} onAuthLost={onAuthLost} version={version} />
     </section>
   );
 }

@@ -162,15 +162,25 @@ async function liveContent(): Promise<Map<string, Live>> {
       who: g.reportLog.flatMap((l) => (l.by ? [{ accountId: l.by, name: l.name ?? null, at: l.at, ...(l.weak ? { weak: true as const } : {}) }] : [])),
     });
   }
+  // 11/26 집마다 차례로 읽던 것(집 수만큼 Redis 왕복을 기다렸다)을 한 번에: 신고 수는 파이프라인 한 번, 신고 있는 집만 방명록·신고자를 함께 읽는다.
+  // 목록에 넣는 순서는 예전과 같다 (집 순서 → 글 순서)
   const houses = getHouseStore();
-  for (const h of await houses.listAll()) {
-    const reports = await houses.guestReports(h.id);
-    if (!reports.size) continue;
-    for (const e of await houses.guestbook(h.id, true)) {
+  const all = await houses.listAll();
+  const repMap = await houses.guestReportsMany(all.map((h) => h.id));
+  const reported = all.filter((h) => repMap.get(h.id)?.size);
+  const loaded = await Promise.all(
+    reported.map(async (h) => {
+      const reports = repMap.get(h.id)!;
+      const entries = (await houses.guestbook(h.id, true)).filter((e) => reports.has(e.id));
+      const whos = await Promise.all(entries.map((e) => houses.guestReporters(h.id, e.id)));
+      return { h, reports, entries, whos };
+    }),
+  );
+  for (const { h, reports, entries, whos } of loaded) {
+    for (const [i, e] of entries.entries()) {
       // 갓 만든 계정의 신고만 있으면 수는 0이지만 신고함에는 올린다 (11/18)
-      if (!reports.has(e.id)) continue;
       const n = reports.get(e.id) ?? 0;
-      const who = await houses.guestReporters(h.id, e.id);
+      const who = whos[i];
       if (n <= 0 && !who.length) continue;
       out.set(caseKey("guestbook", `${h.id}/${e.id}`), {
         meta: { type: "guestbook", targetId: `${h.id}/${e.id}`, accountId: e.author ?? null, name: e.name, preview: `${h.name}의 방명록: ${e.text}`, reporters: n },

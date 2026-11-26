@@ -1,4 +1,6 @@
-import { CAMP_DECKS, CAMP_DECK_H, CAMP_DECK_W, CAMP_FIRE, CAMP_SEATS, SNOWMAN_GAP, campSnowSpotOk } from "@tomb/protocol";
+import { CAMP_FIRE, CAMP_HOME_SEATS, CAMP_SEATS, SNOWMAN_GAP, campSnowSpotOk } from "@tomb/protocol";
+import { CAMP_GATHER_NODES } from "@/lib/forage/catalog";
+import { BUNGEO_SPOTS, bungeoTalks, bungeoVendorAt } from "@/lib/bungeo/cart";
 import * as Lay from "./campLayout";
 import { campMeltAt } from "./campWinter";
 import type { BallSize } from "./snowmanArt";
@@ -36,53 +38,52 @@ export function heldStep(h: { size: BallSize; dist: number }, moved: number, rol
 /** 굴리면 커지는 바닥인지 (눈 덮인 풀밭·바위 마당·광장 바깥 — 흙길·녹은 땅·물·버스 길은 아니다) */
 export function snowRollGrows(x: number, y: number): boolean {
   const k = Lay.campGroundKind(x, y);
-  return (k === "grass" || k === "rock" || k === "plaza" || k === "deckPad") && !campMeltAt(x, y);
-}
-
-/** 데크 위·바로 앞 (텐트 칠 자리라 비워 둔다) */
-function onDeck(x: number, y: number, pad = 6): boolean {
-  return CAMP_DECKS.some((d) => Math.abs(d.x - x) < CAMP_DECK_W / 2 + pad && y > d.y - CAMP_DECK_H / 2 - pad && y < d.y + CAMP_DECK_H / 2 + pad + 6);
+  return (k === "grass" || k === "rock" || k === "plaza" || k === "pad" || k === "foot") && !campMeltAt(x, y);
 }
 
 /**
- * 눈덩이·눈사람을 내려놓을 수 있는 자리 (서버 campSnowSpotOk보다 좁게): 눈 바닥이고 걸을 수 있고(양옆도) 데크·앉는 자리·상호작용 자리가 아닌 곳.
+ * 눈덩이·눈사람을 내려놓을 수 있는 자리 (서버 campSnowSpotOk보다 좁게): 눈 바닥이고 걸을 수 있고(양옆도) 집터·앉는 자리·상호작용 자리가 아닌 곳.
  * others = 이미 서 있는 눈사람·내려놓은 덩이 (SNOWMAN_GAP만큼 떨어져야 한다)
  */
 export function snowPlaceOk(x: number, y: number, others: Iterable<Pt> = []): boolean {
   if (!campSnowSpotOk(x, y)) return false;
   const k = Lay.campGroundKind(x, y);
-  if (k !== "grass" && k !== "plaza" && k !== "rock" && k !== "path") return false;
+  if (k !== "grass" && k !== "plaza" && k !== "rock" && k !== "path" && k !== "foot") return false;
   // 11/18 녹은 땅(모닥불 둘레)에도 세울 수 있게 (사용자) — 모닥불 자리 자체는 campSnowSpotOk가 막는다
   if (!Lay.campStandable(x, y) || !Lay.campStandable(x - 6, y) || !Lay.campStandable(x + 6, y)) return false;
-  if (onDeck(x, y)) return false;
   if (CAMP_SEATS.some((s) => Math.abs(s.x - x) < 12 && Math.abs(s.y - y) < 12)) return false;
-  if (Lay.CAMP_INTERACTABLES.some((o) => o.kind !== "deck" && Math.hypot(o.x - x, o.y - y) < o.r)) return false;
+  if (Lay.CAMP_INTERACTABLES.some((o) => Math.hypot(o.x - x, o.y - y) < o.r)) return false;
   for (const o of others) if (Math.hypot(o.x - x, (o.y - y) * 1.4) < SNOWMAN_GAP) return false;
   return true;
 }
 
 // ── 눈더미 자리 ──
 
-/** 눈더미를 둘 대략의 자리 (구역마다 하나 — 정류장 앞 풀밭·데크 바깥 눈밭·타프 옆·계곡 건너 산책로·캠핑카 골목 끝) */
-// 11/18 사용자 「여기저기」: 가장자리 위주 7곳 → 캠핑장 전체에 고르게 13곳 (가까운 빈 눈밭으로 맞춰지고 서로 120px 넘게 떨어진다)
+/** 눈더미를 둘 대략의 자리 (구역마다 하나 — 캠핑장 전체에 고르게, 가까운 빈 눈밭으로 맞춰지고 서로 120px 넘게 떨어진다) */
+// 11/26 폭포 계곡 개편: 정류장 앞 · 펜션 정원 · 족욕탕 아래 · 카라반 골목 · 계곡 건너 · 저수지 둑 · 캠프파이어 존 둘레
 const PILE_ANCHORS: readonly Pt[] = [
-  { x: 330, y: 560 },
-  { x: 880, y: 590 },
-  { x: 360, y: 210 },
-  { x: 880, y: 200 },
-  { x: 1180, y: 470 },
-  { x: CAMP_FIRE.x + 300, y: CAMP_FIRE.y + 30 },
-  { x: 700, y: 610 },
-  { x: 140, y: 380 },
-  { x: 560, y: 150 },
-  { x: 1080, y: 300 },
-  { x: 190, y: 700 },
-  { x: 1100, y: 700 },
-  { x: 470, y: 440 },
+  { x: 330, y: 620 },
+  { x: 250, y: 440 },
+  { x: 372, y: 300 },
+  { x: 470, y: 480 },
+  { x: 560, y: 620 },
+  { x: 760, y: 470 },
+  { x: 860, y: 640 },
+  { x: 920, y: 380 },
+  { x: 900, y: 140 },
+  { x: 1250, y: 560 },
+  { x: CAMP_FIRE.x - 120, y: CAMP_FIRE.y + 30 },
+  { x: 760, y: 760 },
+  { x: 120, y: 720 },
 ];
 
+/** 눈더미와 채집 지점 사이 (눈더미 E 닿는 거리 SNOW_REACH + 6에 지점 닿는 거리 14를 더한 것보다 멀게) */
+export const PILE_NODE_GAP = 48;
+/** 눈더미와 집 앞마당 자리·일어서는 자리 사이 (E 대상끼리 40px 넘게 — 캠핑장_배치규칙.md) */
+export const PILE_SEAT_GAP = 44;
+
 let piles: Pt[] | null = null;
-/** 눈더미 자리 (앵커 근처 가장 가까운 빈 눈밭 — 나무·데크·앉는 자리·상호작용·길과 떨어진 곳). 한 번만 계산 */
+/** 눈더미 자리 (앵커 근처 가장 가까운 빈 눈밭 — 나무·집터·앉는 자리·상호작용·길과 떨어진 곳). 한 번만 계산 */
 export function campSnowPiles(): readonly Pt[] {
   if (piles) return piles;
   const out: Pt[] = [];
@@ -98,8 +99,14 @@ export function campSnowPiles(): readonly Pt[] {
         if (!snowPlaceOk(x, y) || !Lay.campStandable(x - 16, y) || !Lay.campStandable(x + 16, y) || !Lay.campStandable(x, y - 8)) continue;
         if (Lay.CAMP_TREES.some((t) => Math.abs(t.x - x) < 24 && y > t.y - 20 && y < t.y + 24)) continue;
         if (Lay.CAMP_DECOR.some((t) => Math.abs(t.x - x) < 18 && Math.abs(t.y - y) < 10)) continue;
-        if (onDeck(x, y, 16)) continue;
+        if (Lay.inSite(x, y, 12) || Lay.inHome(x, y, 12, 12)) continue;
         if (Lay.CAMP_INTERACTABLES.some((o) => Math.hypot(o.x - x, o.y - y) < o.r + 16)) continue;
+        // 11/26 채집 지점 바로 옆이면 E가 눈 뭉치기로 가서 「E 광석 캐기」가 안 됐다 (계곡 둑 qo720_470)
+        if (CAMP_GATHER_NODES.some((n) => Math.hypot(n.x - x, n.y - y) < PILE_NODE_GAP)) continue;
+        // 11/26 집 앞마당 자리·일어서는 자리 바로 옆이면 E가 눈 뭉치기로 가서 앉지 못했다 (카라반 3·6번 앞마당 — 자리가 자리 끝까지 나온다)
+        if (CAMP_HOME_SEATS.some((q) => Math.hypot(q.x - x, q.y - y) < PILE_SEAT_GAP || Math.hypot(q.x + (q.standDx ?? 0) - x, q.y + (q.standDy ?? 9) - y) < PILE_SEAT_GAP)) continue;
+        // 11/26 밤에만 서는 상점 자리(수레 몸통·장수·말 걸기)는 비운다
+        if (BUNGEO_SPOTS.some((s) => s.map === "camp" && [{ x: s.x, y: s.y - 20 }, bungeoVendorAt(s), ...bungeoTalks(s)].some((p) => Math.hypot(p.x - x, p.y - y) < PILE_SEAT_GAP + 8))) continue;
         if (out.some((p) => Math.hypot(p.x - x, p.y - y) < 120)) continue;
         bd = d;
         best = { x, y };

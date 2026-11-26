@@ -1,3 +1,4 @@
+import { padArt, type ArtPad } from "./artPad";
 import { Grid, type Color } from "./pixel";
 
 // 동물원 펫 그림 (타는 펫 3종 + 달빛 여우). 그림 규칙은 cosmeticFx.ts의 펫과 같다: 옆모습은 오른쪽을 본다(왼쪽은 좌우 반전).
@@ -40,13 +41,16 @@ type Extra = Draw | { draw: Draw; after: Draw };
 type View = "side" | "front" | "back";
 type Views = { side: Draw; front: Draw; back: Draw; frontOver: Draw; backOver: Draw; line: Color; under?: (g: Grid, f: number, view: View) => void; extra?: readonly Extra[]; w?: number; sideOver?: Draw };
 
+/** 타는 펫 외곽선 알파 */
+const OUTLINE_A = 225;
+
 function sheet(v: Views): Grid {
   const W = v.w ?? MOUNT_W;
   const g = new Grid(W * (MOUNT_FRAMES + (v.extra?.length ?? 0) + (v.sideOver ? 1 : 0)), MOUNT_H);
   const put = (i: number, draw: Draw, f: number, outline = true, under?: View, after?: Draw) => {
     const one = new Grid(W, MOUNT_H);
     draw(one, f);
-    if (outline) one.outline(v.line, false, 225);
+    if (outline) one.outline(v.line, false, OUTLINE_A);
     after?.(one, f);
     if (under && v.under) {
       const base = new Grid(W, MOUNT_H);
@@ -1012,6 +1016,13 @@ export function mountFrames(kind: MountKind): number {
 /** 타는 펫 프레임 너비 (루돌프 썰매만 넓다) */
 export function mountW(kind: MountKind): number {
   return VIEWS[kind].w ?? MOUNT_W;
+}
+/**
+ * 11/26 게임에서 쓰는 타는 펫 그림 (FX_ART): 프레임 끝에 닿은 꼬리지느러미(월척 잉어 옆모습)·뿔 끝·머리 꼭대기를
+ * 여백을 두고 외곽선으로 닫는다 (artPad). 발밑(oy 1)·가운데(ox 0.5) 기준이라 탄 사람 자리·높이는 그대로
+ */
+export function mountArtDef(kind: MountKind, pad: Partial<ArtPad>) {
+  return padArt({ w: mountW(kind), h: MOUNT_H, frames: mountFrames(kind), build: () => mountSheet(kind) }, VIEWS[kind].line, OUTLINE_A, pad);
 }
 /** 옆모습에서 탄 사람 앞에 덧그리는 프레임 (없으면 null) */
 export function mountSideOver(kind: MountKind): number | null {

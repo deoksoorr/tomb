@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CAMP_NPCS, CAMP_SEATS } from "@tomb/protocol";
-import { campNeighborSeat, campPickSeat, CAMP_MULTI_SEAT } from "./campSit";
+import { campFootSeatReachable, campNeighborSeat, campPickSeat, CAMP_MULTI_SEAT } from "./campSit";
 import { campBgmPlaylist, campLines, campNpcAround, campNpcName, CAMP_WELCOME } from "./campTalk";
 
 describe("캠핑장 앉기 (campSit)", () => {
@@ -10,23 +10,36 @@ describe("캠핑장 앉기 (campSit)", () => {
     expect(campPickSeat(log.x, log.y + 6, new Map([["qL1", 4]]), 9)?.id).not.toBe("qL1");
     expect(campPickSeat(log.x, log.y + 6, new Map([["qL1", 9]]), 9)?.id).toBe("qL1");
   });
-  it("캠핑카 문간 자리는 좌석 안내에 안 뜬다 (캠핑카 E 하나로), 캠핑카 앞 캠핑 의자는 앉을 수 있다", () => {
-    const door = CAMP_SEATS.find((s) => s.id === "qV2")!;
-    expect(campPickSeat(door.x, door.y + 6, new Map(), null)?.id).not.toBe("qV2");
-    const chair = CAMP_SEATS.find((s) => s.id === "qC21")!;
-    expect(campPickSeat(chair.x, chair.y + 9, new Map(), null)?.id).toBe("qC21");
+  it("11/26 족욕탕 방석·폭포 다리 의자에 앉을 수 있다", () => {
+    const bath = CAMP_SEATS.find((s) => s.id === "qT1")!;
+    expect(campPickSeat(bath.x, bath.y + 2, new Map(), null)?.id).toBe("qT1");
+    const view = CAMP_SEATS.find((s) => s.id === "qW1-0")!;
+    expect(campPickSeat(view.x, view.y + 9, new Map(), null)?.furnitureId).toBe("qW1");
   });
-  it("타프 아래 긴 의자는 옆자리로 옮겨 앉는다", () => {
-    expect(CAMP_MULTI_SEAT.has("qT1")).toBe(true);
-    const left = CAMP_SEATS.find((s) => s.id === "qT1-0")!;
-    expect(campNeighborSeat(left, 1, new Map(), null)?.id).toBe("qT1-1");
+  it("폭포 다리 긴 의자는 옆자리로 옮겨 앉는다", () => {
+    expect(CAMP_MULTI_SEAT.has("qW1")).toBe(true);
+    const left = CAMP_SEATS.find((s) => s.id === "qW1-0")!;
+    expect(campNeighborSeat(left, 1, new Map(), null)?.id).toBe("qW1-1");
     expect(campNeighborSeat(left, -1, new Map(), null)).toBeNull();
-    expect(campNeighborSeat(left, 1, new Map([["qT1-1", 2]]), 1)).toBeNull();
+    expect(campNeighborSeat(left, 1, new Map([["qW1-1", 2]]), 1)).toBeNull();
+  });
+  it("11/26 족욕탕 자리는 데크 위·앞 계단에서만 (울타리 밖에서 앉았다 일어나 데크로 넘어 들어가지 않게)", () => {
+    const open = (x: number, y: number) => (id: string) => campFootSeatReachable(id, x, y);
+    // 울타리 밖 (왼쪽 옆·오른쪽 옆·앞 모서리)에서는 족욕 자리가 안 잡힌다
+    expect(campPickSeat(345, 114, new Map(), null, undefined, open(345, 114))?.id ?? "").not.toMatch(/^qT/);
+    expect(campPickSeat(439, 146, new Map(), null, undefined, open(439, 146))?.id ?? "").not.toMatch(/^qT/);
+    expect(campPickSeat(364, 190, new Map(), null, undefined, open(364, 190))?.id ?? "").not.toMatch(/^qT/);
+    // 데크 위·앞 계단에서는 잡힌다
+    expect(campPickSeat(361, 117, new Map(), null, undefined, open(361, 117))?.id).toBe("qT1");
+    expect(campPickSeat(370, 178, new Map(), null, undefined, open(370, 178))?.id).toBe("qT9");
+    expect(campFootSeatReachable("qT9", 392, 190)).toBe(true);
+    // 다른 자리는 상관없다
+    expect(campFootSeatReachable("qL1", 0, 0)).toBe(true);
   });
 });
 
 describe("캠핑장 NPC 말 걸기 (campTalk)", () => {
-  it("다섯 명 모두 이름과 대사가 있고, 말 걸 때마다 다음 묶음", () => {
+  it("여섯 명 모두 이름과 대사가 있고, 말 걸 때마다 다음 묶음", () => {
     for (const n of CAMP_NPCS) {
       expect(campNpcName(n.id)).toBe(n.name);
       expect(campLines(n.id, 0).length).toBeGreaterThan(0);
@@ -36,19 +49,16 @@ describe("캠핑장 NPC 말 걸기 (campTalk)", () => {
     expect(campLines("clerk", 0)[0]).toBe("중고로 올라온 장비가 반이에요.");
     expect(campLines("granny", 0)[0]).toBe("물고기는 서두르면 안 와.");
   });
-  it("처음 도착 안내: 인사 + 텐트·바베큐장·전망대 세 문장 (곧 열린다는 건 텐트만, 요리 약속은 없다)", () => {
+  it("11/26 처음 도착 안내: 인사 + 폭포·낚시·분양 세 사람 (없어진 데크·전망대 이야기는 없다)", () => {
     expect(CAMP_WELCOME).toHaveLength(4);
-    expect(CAMP_WELCOME.slice(1).join(" ")).toMatch(/데크.*곧/);
-    expect(CAMP_WELCOME.slice(1).join(" ")).toMatch(/바베큐장/);
-    expect(CAMP_WELCOME.join(" ")).not.toMatch(/요리/);
-    expect(CAMP_WELCOME.slice(1).join(" ")).toMatch(/전망대/);
-    // 전망대 망원경은 캠핑장을 내려다보는 것 — 별자리 잇기(마을 별 보기 언덕)와 헷갈리게 "별은 전망대에서"라고 하지 않는다
-    expect(CAMP_WELCOME.join(" ")).not.toMatch(/별은/);
+    const all = CAMP_WELCOME.join(" ");
+    expect(all).toMatch(/폭포/);
+    expect(all).toMatch(/윤슬 낚시터/);
+    expect(all).toMatch(/소슬댁/);
+    expect(all).toMatch(/순이 할머니/);
+    expect(all).not.toMatch(/데크|전망대|타프|요리/);
   });
-  it("별지기는 밤, 기타 캠퍼는 밤 9~11시, 나머지는 늘", () => {
-    expect(campNpcAround("stargazer", 12)).toBe(false);
-    expect(campNpcAround("stargazer", 22)).toBe(true);
-    expect(campNpcAround("stargazer", 3)).toBe(true);
+  it("기타 캠퍼는 밤 9~11시, 나머지는 늘", () => {
     expect(campNpcAround("guitarist", 20.9)).toBe(false);
     expect(campNpcAround("guitarist", 21)).toBe(true);
     expect(campNpcAround("guitarist", 23)).toBe(false);

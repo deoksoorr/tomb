@@ -20,7 +20,9 @@ import {
   encodeMove,
   parseS2C,
   parseMegaPinMsg,
+  parseHomesMsg,
   type MegaPinMsg,
+  type HomesMsg,
   pickChannel,
   type ActKind,
   type AwayPlace,
@@ -31,6 +33,8 @@ import {
   type EmoteKind,
   type GraveEventKind,
   type GoblinInfo,
+  goblinMapOf,
+  goblinRoute,
   type MapId,
   type ChatPlace,
   chatTagOf,
@@ -71,6 +75,8 @@ import { isPermanentJoinError, JoinLimiter, reusableToken, utf8Bytes, type Cache
 import { MoveThrottle, type NetPose } from "./sendThrottle";
 import { bodyFromWsUrl, SYNC_EVERY_MS, SyncPolicy } from "./syncPolicy";
 import { deviceHeaders } from "@/lib/deviceMark";
+import { signalMaintenance } from "@/lib/maintClient";
+import { sessionSource } from "@/lib/signupSourceClient";
 import { CHANNEL_FULL_MSG, lobbyChannelFull } from "./switchPolicy";
 import { staffTpDenyText, type StaffTpDenyWhy } from "@tomb/protocol";
 
@@ -86,6 +92,7 @@ import { staffTpDenyText, type StaffTpDenyWhy } from "@tomb/protocol";
 //  - 4004 잘못된 요청: 자동 배정으로 다시 / /api/join 400: 재시도해도 소용없으니 offline + 안내 1회
 //  - 4010 옛 버전(큰 패치): 재접속하지 않고 app:outdated → UI가 업데이트 창을 띄워 새로고침한다
 //  - 4011 운영자 강퇴: 재접속하지 않고 안내만 / 4012 이용 제한: 재접속하지 않고 app:banned → UI가 새로고침(제한 화면)
+//  - 4013 서버 점검(11/26): 재접속하지 않고 점검 화면 (lib/maintClient — 끝나면 화면이 새로고침한다)
 //  - 클라이언트가 끊는 경우: 의도적 퇴장(stop)만 1000, 채널 이동·타임아웃 등은 4000
 //    (서버는 1000을 "떠남"으로 보고 재연결 유예 없이 자리를 비운다. 채널 이동은 옛 자리를 유예로 남겨 두었다가
 //     새 채널에 들어가면 로비가 바로 정리하고(claim → kick), 새 채널이 꽉 차 거절되면 그 자리로 돌아온다)
@@ -114,6 +121,8 @@ export type NetCallbacks = {
   onFirework(sid: Sid, item: string, x: number, y: number, wait?: number): void;
   /** 한 번 하는 동작 (종 치기·물 튀기기·손 흔들기·환호). 내 것은 오지 않는다 */
   onAct(sid: Sid, kind: ActKind, x: number, y: number): void;
+  /** 11/26 같은 채널 누가 맵 소품을 썼다 (캠핑장 촌캉스 아궁이 불 켜기 등 — 뜻은 장면이 정한다, 저장 없음) */
+  onUse?(sid: Sid, u: string, a: number): void;
   /** 정해진 문장 말풍선 (PHRASES id). 내 것은 오지 않는다 */
   onSay(sid: Sid, id: PhraseId): void;
   /** 5번 이모티콘 (EMOS id). 내 것은 오지 않는다 */
@@ -134,11 +143,13 @@ export type NetCallbacks = {
   /** 입장 토큰에 든 내 아바타 몸 모양 (계정에 저장된 값) */
   onSelfBody?(body: string): void;
   // ── 22번 황금 고블린 ──
-  /** 나타났다 (welcome에 실려 온 것도 이걸로) */
+  // 11/26 나타남·사라짐·잡힘은 더 이상 장면 콜백으로 보내지 않는다 — 채널 전체 소식이라 RealtimeClient가 goblinNow()·goblinEnd로 들고 있고
+  // 장면마다 GoblinActor(game/world/life)가 읽어 그린다. 아래 셋은 옛 장면 코드가 남아 있어도 컴파일되게 남겨 둔 자리 (부르지 않는다)
+  /** @deprecated 11/26부터 부르지 않는다 (GoblinActor) */
   onGoblin?(g: GoblinInfo): void;
-  /** 아무도 못 잡고 사라졌다 */
+  /** @deprecated 11/26부터 부르지 않는다 (GoblinActor) */
   onGoblinGone?(id: string): void;
-  /** 누가 잡았다 (나 포함) */
+  /** @deprecated 11/26부터 부르지 않는다 (GoblinActor) */
   onGoblinCaught?(id: string, sid: Sid, name: string, points: number): void;
   /** 내가 잡았다: 보상 증서 */
   onGoblinGrant?(id: string, grant: string, points: number): void;
@@ -154,6 +165,8 @@ export type NetCallbacks = {
   onMegaphone?(m: { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true; system?: true; replaces?: string; mgr?: true }): void;
   /** 11/17 확성기 창 고정 공지가 바뀌었다 (운영자가 쓰거나 지움) */
   onMegaPin?(m: MegaPinMsg): void;
+  /** 11/26 이 채널의 zone 집 목록이 바뀌었다 (누가 분양·외관·디자인·앞마당·넓히기) → 같은 v로 다시 받는다 */
+  onHomes?(m: HomesMsg): void;
   /**
    * 11/15 맵을 옮겼다 (switchMap의 답). map = 서버가 정한 지금 맵 (허락이 없으면 옮기기 전 맵 그대로),
    * peers·seats = 그 맵 사람(나 빼고)과 그 사람들이 앉은 자리
@@ -188,13 +201,21 @@ export type NetCallbacks = {
 export type ChatMeta = { name?: string; staff?: true; mgr?: true; /** 11/17 사냥 중이면 "hunt" */ m?: ChatPlace; /** 11/20 서버가 실은 닉네임 꾸미기 id (다른 맵 사람) */ ns?: string[]; /** 11/22 새싹(새 이웃)이 쓴 줄 */ nb?: true };
 
 /** 맵이 바뀌어도 늘 처음 콜백(월드)이 받는 것: 계정·친구·확성기·내 몸 모양·고블린 보상 */
-const GLOBAL_CALLBACKS = ["onMegaphone", "onMegaPin", "onMeStale", "onFriend", "onSelfBody", "onGoblinGrant", "onSquirrels", "onSquirrelsWait"] as const;
+const GLOBAL_CALLBACKS = ["onMegaphone", "onMegaPin", "onHomes", "onMeStale", "onFriend", "onSelfBody", "onGoblinGrant", "onSquirrels", "onSquirrelsWait"] as const;
 /** 맵 옮기기 답을 기다리는 시간 */
 const MAP_REPLY_MS = 4000;
 /** 맵 옮기기 답이 없을 때 다시 보내는 횟수 (서버는 맵 요청을 1초에 한 번만 받는다 — MAP_REPLY_MS 간격이면 넉넉하다) */
 const MAP_RETRIES = 2;
-/** 맵을 옮기는 중에 버리는 옛 맵 소식 (사람·자리·몸짓·말풍선). 11/19 goblinCaught는 채널 모두에게 오는 소식이라 버리지 않는다 */
-const OLD_MAP_EVENTS = new Set(["join", "leave", "seat", "emote", "graveEvent", "look", "act", "say", "emo", "chat", "mood", "ride", "rod", "away", "firework", "peers", "goblin", "goblinGone", "chatLog", "bbq", "snowman", "snowmanGone", "snowHold", "snowStack", "snowStackGone", "snowball", "snowHit", "tpFx"]);
+/**
+ * 11/26 맵 요청 사이 최소 간격 (서버 MAP_INTERVAL_MS 1초 + 여유). 창밖 연출 없이 캠핑장 → 마을 → 바닷가를 곧바로 옮기면(집에서 나와 그 집 맵으로)
+ * 두 번째 요청이 1초 안에 가 서버가 버리고 4초 뒤 다시 보낼 때까지 맵이 어긋났다 → 그만큼 기다렸다 보낸다 (그동안 위치도 보내지 않는다)
+ */
+const MAP_GAP_MS = 1_100;
+/** 맵을 옮기는 중에 버리는 옛 맵 소식 (사람·자리·몸짓·말풍선). 11/19 goblinCaught, 11/26 goblin·goblinMap·goblinGone은 채널 모두에게 오는 소식이라 버리지 않는다 */
+const OLD_MAP_EVENTS = new Set(["join", "leave", "seat", "emote", "graveEvent", "look", "act", "say", "emo", "chat", "mood", "ride", "rod", "away", "firework", "peers", "chatLog", "bbq", "snowman", "snowmanGone", "snowHold", "snowStack", "snowStackGone", "snowball", "snowHit", "tpFx"]);
+
+/** 11/26 끝난 황금 고블린: caught = 누가 잡았다 (mine = 나), 아니면 아무도 못 잡고 사라졌다 */
+export type GoblinEnd = { id: string; caught: boolean; name?: string; points?: number; mine?: boolean };
 
 export type NetOptions = { name: string; color: string; channel: number | "auto"; debug?: boolean; body?: string };
 
@@ -235,6 +256,9 @@ export class RealtimeClient {
   /** 11/15 맵을 옮기는 중 (mapped를 기다린다 — 그 전에 온 옛 맵 소식은 버린다) */
   private mapPending: MapId | null = null;
   private mapTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 11/26 마지막 맵 요청(map)을 보낸 시각 · 간격 때문에 아직 보내지 않고 들고 있는 중 (MAP_GAP_MS) */
+  private mapSentAt = -Infinity;
+  private mapHeld = false;
   /** 11/15 다른 맵 장면(캠핑장)이 받는 콜백. 없으면 처음 콜백(월드) */
   private alt: NetCallbacks | null = null;
   /** 11/15 채널 전체 인원 (마을·캠핑장 합계, 서버 welcome.n·count). 옛 서버면 null → 같은 맵 사람 수 */
@@ -248,6 +272,8 @@ export class RealtimeClient {
   private attempt = 0;
   private everOnline = false;
   private stopped = true;
+  /** 11/26 이번 접속 유입을 이미 보냈다 (첫 입장 요청에만) */
+  private srcSent = false;
   private target: number | "auto";
   private connectingTo: number | null = null;
   private readonly triedFull = new Set<number>();
@@ -356,7 +382,11 @@ export class RealtimeClient {
     this.throttle.reset();
     // 11/20 운영자 순간이동이면 그 사람 옆으로 (tp — 서버가 같은 약속으로 mapped를 답한다)
     const msg = tpSid !== undefined ? ({ t: "tp", sid: tpSid, m: map, x: Math.round(x), y: Math.round(y) } as const) : ({ t: "map", m: map, x: Math.round(x), y: Math.round(y) } as const);
-    this.send(msg);
+    const sendMap = (): void => {
+      this.send(msg);
+      // 운영자 tp도 맵을 옮기면 서버가 간격 시계를 새로 잡는다
+      this.mapSentAt = performance.now();
+    };
     // 답이 없으면 MAP_RETRIES번 다시 보낸다 (11/16 운영: 사람이 많은 채널에서 캠핑장에 내리자마자 마을로 돌아온 문의 — 서버는 같은 맵 요청을 자리 옮기기로만 받는다).
     // 그래도 없으면 (맵을 모르는 옛 서버) 옮기지 못한 것으로 — 처음 맵 그대로, 목록은 다시 받는다
     let tries = 0;
@@ -365,16 +395,35 @@ export class RealtimeClient {
         this.mapTimer = null;
         if (this.mapPending !== map) return;
         if (tries++ < MAP_RETRIES && this.online) {
-          this.send(msg);
+          sendMap();
           return wait();
         }
         this.onMapped(from, [], {});
         this.requestSync();
       }, MAP_REPLY_MS);
     };
-    wait();
+    // 11/26 앞 맵 요청이 1초 안이면 서버가 버리니 남은 만큼 기다렸다 보낸다 (운영자 tp는 서버가 간격을 보지 않는다)
+    const hold = msg.t === "map" ? this.mapSentAt + MAP_GAP_MS - performance.now() : 0;
+    this.mapHeld = hold > 0;
+    if (hold > 0) {
+      this.mapTimer = setTimeout(() => {
+        this.mapTimer = null;
+        this.mapHeld = false;
+        if (this.mapPending !== map || !this.online) return;
+        sendMap();
+        wait();
+      }, hold);
+    } else {
+      sendMap();
+      wait();
+    }
     this.emitStatus();
     return true;
+  }
+
+  /** 11/26 맵 옮기기 답을 기다리는 중 (CampTrip이 다음 맵 장면을 깨우기 전에 본다) */
+  get mapWaiting(): boolean {
+    return this.mapPending !== null;
   }
 
   get peerCount(): number {
@@ -491,6 +540,8 @@ export class RealtimeClient {
   /** 매 프레임 호출. 보낼 때가 아니면 아무것도 하지 않는다 */
   tick(now: number): void {
     if (!this.online) return;
+    // 11/26 맵 요청을 간격 때문에 들고 있는 동안은 옛 맵에 위치·순간이동을 보내지 않는다 (MAP_GAP_MS)
+    if (this.mapHeld && this.mapPending !== null) return;
     if (this.pendingWarp) {
       // 서버 warp 쿨다운(1초) 안이면 기다린다. 그동안 MOVE도 보내지 않아야 속도 검증에 걸리지 않는다
       const w = this.pendingWarp;
@@ -566,6 +617,11 @@ export class RealtimeClient {
     this.send({ t: "act", kind });
   }
 
+  /** 11/26 맵 소품 쓰기 알림 (u = 소품 id 영문 소문자·숫자 8자 · a = 값 0~255). 서버가 같은 채널 다른 사람에게 그대로 중계한다 */
+  use(u: string, a: number): void {
+    this.send({ t: "use", u, a });
+  }
+
   /** 11/15 캠핑장 바베큐 한 접시 증서 (웹이 서명). 서버가 검증해 같은 맵에 알린다 */
   bbq(grant: string): void {
     this.send({ t: "bbq", grant });
@@ -631,6 +687,33 @@ export class RealtimeClient {
     return Date.now() + this.clockOffset;
   }
   private clockOffset = 0;
+
+  // ── 11/26 황금 고블린 (채널 전체 — 어느 맵에 나타났든 들고 있다. 그리기·화살표는 장면마다 GoblinActor) ──
+  private gob: GoblinInfo | null = null;
+  /** 마지막으로 끝난 고블린 (잡힘·사라짐) — GoblinActor가 연출(금화·펑)을 고른다 */
+  goblinEnd: GoblinEnd | null = null;
+
+  /** 지금 나와 있는(아직 아무도 못 잡은) 황금 고블린. m 없음 = 마을 */
+  goblinNow(): GoblinInfo | null {
+    const g = this.gob;
+    return g && this.serverNow() < g.until ? g : null;
+  }
+
+  /** 나타났다 (알림·welcome). 처음 보는 고블린이면 화면 위 띠 (같은 고블린을 다시 받으면 조용히) */
+  private setGoblin(g: GoblinInfo, resumed: boolean): void {
+    if (this.gob?.id === g.id || this.goblinEnd?.id === g.id) return;
+    const info: GoblinInfo = { id: g.id, seed: Number(g.seed) || 0, at: Number(g.at) || 0, until: Number(g.until) || 0, ...(goblinMapOf(g) !== "village" ? { m: goblinMapOf(g) as "sea" | "camp" } : {}) };
+    if (this.serverNow() >= info.until) return;
+    this.gob = info;
+    const map = goblinMapOf(info);
+    bridge.emit("goblin:spawn", { id: info.id, zone: goblinRoute(info.seed, map).zone, until: info.until, resumed, map, here: this.map });
+  }
+
+  /** 잡혔다·사라졌다 */
+  private endGoblin(e: GoblinEnd): void {
+    this.goblinEnd = e;
+    if (this.gob?.id === e.id) this.gob = null;
+  }
 
   /** 정해진 문장 말풍선 */
   say(id: PhraseId): void {
@@ -760,6 +843,11 @@ export class RealtimeClient {
     this.joinLimiter.record(Date.now());
     const body: JoinRequest = { channel, name: this.opts.name, color: this.opts.color };
     if (this.opts.body) body.body = this.opts.body;
+    // 11/26 이번 접속 유입: 이 화면의 첫 입장 요청에만 (관리자 「지금 접속자」)
+    if (!this.srcSent) {
+      this.srcSent = true;
+      body.src = sessionSource() ?? {};
+    }
     // 같은 사람 판정용 기기 표시·브라우저 환경 머리글 (lib/deviceMark)
     const dev = await deviceHeaders();
     const post = () =>
@@ -787,6 +875,13 @@ export class RealtimeClient {
   }
 
   private onJoinFailed(e: unknown): void {
+    if (e instanceof JoinError && e.status === 503 && e.code === "MAINTENANCE") {
+      // 11/26 서버 점검 (사이트 미들웨어가 막음): 다시 시도하지 않고 점검 화면
+      this.clearRetry();
+      this.setMode("offline");
+      signalMaintenance();
+      return;
+    }
     if (e instanceof JoinError && isPermanentJoinError(e.status)) {
       // 이름·색 검증 실패 등: 몇 번을 다시 해도 같다 → 혼자 걷기(offline)로 두고 한 번만 알린다
       this.toast(e.message || "실시간 접속 정보를 확인할 수 없어 혼자 걷는 중이에요.");
@@ -875,6 +970,9 @@ export class RealtimeClient {
       if (this.mapPending !== null && OLD_MAP_EVENTS.has(m.t)) return;
       switch (m.t) {
         case "mapped":
+          // 11/26 앞 맵 요청의 늦은 답: 다음 요청을 간격 때문에 아직 들고 있으면 그 요청의 답이 아니다
+          // (받아 들이면 다음 맵을 거절당한 것으로 알고 되돌아갔다 — 캠핑장 → 마을 → 바닷가를 곧바로 옮길 때)
+          if (this.mapHeld && this.mapPending !== null && mapOf(m.m) !== this.mapPending) break;
           this.onMapped(m.m, m.peers ?? [], m.seats ?? {});
           break;
         case "bbq":
@@ -958,6 +1056,9 @@ export class RealtimeClient {
           if (m.sid !== this.mySid && (ACT_KINDS as readonly string[]).includes(m.kind) && Number.isFinite(m.x) && Number.isFinite(m.y))
             this.h.onAct(m.sid, m.kind, m.x, m.y);
           break;
+        case "use":
+          if (m.sid !== this.mySid && typeof m.u === "string" && typeof m.a === "number") this.h.onUse?.(m.sid, m.u, m.a);
+          break;
         case "say":
           if (m.sid !== this.mySid && isPhraseId(m.id)) this.h.onSay(m.sid, m.id);
           break;
@@ -1014,16 +1115,18 @@ export class RealtimeClient {
           bridge.emit("toast", { message: "지금 다른 불꽃쇼가 하고 있어요. 끝나고 다시 쏴 주세요" });
           break;
         // ── 22번 황금 고블린 (판정은 서버, 여기서는 전달만) ──
+        // 11/26 맵 무작위: goblin = 마을 고블린(옛 모양), goblinMap = 바닷가·캠핑장 고블린. 어느 맵에 있든 받는다
         case "goblin":
-          if (m.g && typeof m.g.id === "string") this.h.onGoblin?.(m.g);
+        case "goblinMap":
+          if (m.g && typeof m.g.id === "string") this.setGoblin(m.t === "goblin" ? { ...m.g, m: undefined } : m.g, false);
           break;
         case "goblinGone":
-          this.h.onGoblinGone?.(m.id);
+          if (typeof m.id === "string") this.endGoblin({ id: m.id, caught: false });
           break;
         case "goblinCaught": {
           const points = Number(m.points) || 0;
           const name = String(m.name ?? "");
-          this.h.onGoblinCaught?.(m.id, m.sid, name, points);
+          if (typeof m.id === "string") this.endGoblin({ id: m.id, caught: true, name, points, mine: m.sid === this.mySid });
           // 11/19 누가 잡았는지는 어느 장면(마을·캠핑장·바닷가)이든 띠·채팅 소식으로 (GoblinClaim이 고블린 id로 한 번만 보인다)
           if (typeof m.id === "string") bridge.emit("goblin:caught", { id: m.id, name, points, mine: m.sid === this.mySid });
           break;
@@ -1053,6 +1156,11 @@ export class RealtimeClient {
         case "megaPin": {
           const pin = parseMegaPinMsg(m as unknown as Record<string, unknown>);
           if (pin) this.cb.onMegaPin?.(pin);
+          break;
+        }
+        case "homes": {
+          const h = parseHomesMsg(m as unknown as Record<string, unknown>);
+          if (h) this.cb.onHomes?.(h);
           break;
         }
         case "me":
@@ -1153,6 +1261,10 @@ export class RealtimeClient {
     this.setMode("online");
     // 11/22 내 새싹 표시 (서버가 입장 토큰으로 정한 끝 시각 — 없으면 새싹 아님)
     bridge.emit("me:sprout", { until: isSproutUntil(m.nb) ? m.nb : 0 });
+    // 11/26 지금 나와 있는 고블린 (gob = 어느 맵이든. 없으면 옛 서버 → goblin = 마을 고블린). 없으면 비운다
+    const g = m.gob ?? m.goblin;
+    if (g && typeof g.id === "string") this.setGoblin(m.gob ? g : { ...g, m: undefined }, true);
+    else this.gob = null;
     this.h.onWelcome({ ...m, peers: m.peers.filter((p) => p.sid !== m.sid) });
     // 실내 표시: 들어가 있으면 새 연결에 다시 알린다. 유예 안에 자리를 되찾았으면 서버가 옛 값을 들고 있을 수 있어 나와 있어도 알린다
     if (this.away || m.resumed) this.send(this.awayMsg());
@@ -1275,6 +1387,13 @@ export class RealtimeClient {
         this.channel = null;
         this.setMode("offline");
         bridge.emit("app:banned");
+        return;
+      case CLOSE.MAINTENANCE:
+        // 11/26 서버 점검: 다시 붙지 않는다. 점검 화면이 30초마다 확인하다가 끝나면 새로고침한다
+        this.clearRetry();
+        this.channel = null;
+        this.setMode("offline");
+        signalMaintenance();
         return;
       case CLOSE.BAD_REQUEST:
         this.token = null;

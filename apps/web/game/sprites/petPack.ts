@@ -1,5 +1,5 @@
 import type { FxSpec } from "./cosmeticFx";
-import { MOUNT_FRAMES, MOUNT_H, MOUNT_W, mountFrames, mountSheet, mountW } from "./mountArt";
+import { MOUNT_FRAMES, MOUNT_H, MOUNT_W, mountArtDef, mountFrames, mountSheet } from "./mountArt";
 import { Grid, type Color } from "./pixel";
 
 // 11/17 동물원 새 펫 묶음 (데리고 다니는 펫 8 · 타는 펫 2). 그림 규칙은 cosmeticFx 펫과 같다: 옆모습은 오른쪽을 본다(왼쪽은 좌우 반전), 발바닥이 맨 아랫줄.
@@ -397,10 +397,12 @@ export const PET_PACK_ART = {
   pkOtter: { w: 14, h: 11, frames: 6, build: otter },
   pkRedPanda: { w: 13, h: 13, frames: 6, build: redPanda },
   // 타는 펫 (sprites/mountArt.ts — 기본 10장 + 멈춤·동작 4장)
-  mountAlpaca: { w: MOUNT_W, h: MOUNT_H, frames: mountFrames("alpaca"), build: () => mountSheet("alpaca") },
+  // 11/26 정수리 솜뭉치·귀 끝이 맨 윗줄에 닿아 잘려 보였다 → 위 1칸 여백 + 테로 닫기 (artPad)
+  mountAlpaca: mountArtDef("alpaca", { top: 1 }),
   mountPolar: { w: MOUNT_W, h: MOUNT_H, frames: mountFrames("polar"), build: () => mountSheet("polar") },
   // 12월 루돌프 썰매 (크리스마스 선물상자 전용 — 너비 40, 옆모습 덧그림 한 장 더)
-  mountSleigh: { w: mountW("sleigh"), h: MOUNT_H, frames: mountFrames("sleigh"), build: () => mountSheet("sleigh") },
+  // 11/26 선물 자루 꼭대기가 맨 윗줄에 닿아 잘려 보였다 → 위 1칸 여백 (옆 물보라는 일부러 끝까지 — 닫지 않는다)
+  mountSleigh: mountArtDef("sleigh", { top: 1 }),
 } as const;
 
 export type PetPackArtId = keyof typeof PET_PACK_ART;

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { DRUNK_MAX, type BbqItemId } from "@tomb/protocol";
-import { bbqPlateArt } from "@/game/camp/campArt";
+import { bbqPlateIconArt } from "@/game/camp/campArt";
 import { foodGauge, gaugeClock, myFood, onMyFood, type GaugeRow } from "@/game/camp/foodState";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
@@ -16,7 +16,7 @@ import styles from "./FoodGauge.module.css";
 function useIcon(id: BbqItemId): string {
   return useMemo(() => {
     try {
-      return bbqPlateArt(id).toCanvas().toDataURL();
+      return bbqPlateIconArt(id).toCanvas().toDataURL();
     } catch {
       return "";
     }

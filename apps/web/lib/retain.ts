@@ -248,7 +248,7 @@ export const TODO_POOL: readonly TodoDef[] = [
   // 머무르기 기록(10분마다 1번) 3번 = 30분
   { kind: "stay", cat: "life", label: "마을에 30분 머무르기", need: 3, unit: "분", scale: 10, hint: "마을에 있으면 저절로 쌓여요." },
   // 11/19 가방이 300칸이라 팔러 가는 일이 생겼다
-  { kind: "sell", cat: "life", label: "물고기나 채집물 팔기", need: 1, unit: "번", hint: "어부 영감이나 수집가에게 가방 속 것을 팔아요.", guide: "seller" },
+  { kind: "sell", cat: "life", label: "물고기나 채집물 팔기", need: 1, unit: "번", hint: "가까운 상인에게 가방 속 것을 팔아요.", guide: "seller" },
   { kind: "wish", cat: "life", label: "소원 분수에 동전 던지기", need: 1, unit: "번", hint: "광장 소원 분수에서 동전을 던져요. 하루 한 번이에요.", guide: "wish" },
   { kind: "guestbook", cat: "life", label: "이웃 집 방명록 남기기", need: 1, unit: "번", hint: "이웃 집에 들어가 방명록에 한 줄 남겨요.", guide: "visit" },
   { kind: "quest", cat: "life", label: "마을 의뢰 하나 납품하기", need: 1, unit: "번", hint: "캠핑장행 정류장 왼쪽 의뢰 게시판에서 납품해요.", guide: "questBoard" },

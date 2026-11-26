@@ -2,6 +2,8 @@ import type { ErrorReport } from "@/lib/types";
 
 // 클라이언트 오류를 운영자에게 알린다 (POST /api/errors). 같은 메시지는 세션(탭)당 한 번, 전체로 분당 5건까지.
 // api.ts의 request가 이 모듈을 부르므로 여기서는 api.ts를 쓰지 않고 fetch를 직접 쓴다.
+// 11/26 화면 오류·API 실패(서버 5xx·연결 실패)를 BATCH_MS 동안 모았다가 한 번에 보낸다 (페이지를 떠날 때는 바로). 로그인한 계정이면
+// 서버가 그 계정의 접속 기록에도 한 줄씩 남긴다 (관리자 유저 활동 「접속 기록」)
 
 const PER_MINUTE = 5;
 const MESSAGE_MAX = 500;
@@ -22,6 +24,35 @@ export function createErrorGate(perMinute = PER_MINUTE) {
 }
 
 const gate = createErrorGate();
+
+/** 모아 보내는 시간 / 한 번에 보내는 최대 수 (서버 ErrorBatchSchema와 같다) */
+const BATCH_MS = 3_000;
+export const ERROR_BATCH_MAX = 5;
+let queue: ErrorReport[] = [];
+let timer: ReturnType<typeof setTimeout> | null = null;
+
+function flush(): void {
+  if (timer) clearTimeout(timer);
+  timer = null;
+  if (!queue.length) return;
+  const reports = queue.slice(0, ERROR_BATCH_MAX);
+  queue = [];
+  const body = JSON.stringify(reports.length === 1 ? reports[0] : { reports });
+  void fetch("/api/errors", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body,
+    keepalive: true,
+  }).catch(() => {
+    // 보고가 실패해도 할 수 있는 일이 없다
+  });
+}
+
+function enqueue(r: ErrorReport): void {
+  queue.push(r);
+  if (queue.length >= ERROR_BATCH_MAX) return flush();
+  timer ??= setTimeout(flush, BATCH_MS);
+}
 
 // 11/18 우리 코드 탓이 아닌 오류는 보내지 않는다 (운영 오류 기록: 확장 프로그램 M_ID, 인앱 브라우저 iabjs postMessage, 출처를 알 수 없는 Script error)
 const FOREIGN_STACK = /(chrome|moz|safari(-web)?)-extension:\/\/|iabjs:\/\/|webkit-masked-url:/;
@@ -45,14 +76,7 @@ export function reportClientError(kind: ErrorReport["kind"], error: unknown): vo
     ua: navigator.userAgent,
     ...(error instanceof Error && error.stack && { stack: error.stack.slice(0, STACK_MAX) }),
   };
-  void fetch("/api/errors", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(report),
-    keepalive: true,
-  }).catch(() => {
-    // 보고가 실패해도 할 수 있는 일이 없다
-  });
+  enqueue(report);
 }
 
 /** 앱 전체에 한 번: 잡히지 않은 오류·거부된 프로미스를 보고한다 */
@@ -61,8 +85,11 @@ export function installErrorReporting(): () => void {
   const onRejection = (e: PromiseRejectionEvent) => reportClientError("unhandledrejection", e.reason);
   window.addEventListener("error", onError);
   window.addEventListener("unhandledrejection", onRejection);
+  window.addEventListener("pagehide", flush);
   return () => {
     window.removeEventListener("error", onError);
     window.removeEventListener("unhandledrejection", onRejection);
+    window.removeEventListener("pagehide", flush);
+    flush();
   };
 }

@@ -4,7 +4,8 @@ import { useEffect } from "react";
 
 /**
  * 11/22 큰 데스크톱 화면(27인치 2560×1440 @1x 등)에서 HTML HUD·창이 1배라 너무 작았다 → 화면 크기만큼 HUD 전체를 CSS zoom으로 키운다.
- *  - 배율 = min(폭/1600, 높이/900)을 0.05 단위로, 1~1.5 사이 (1600×900 이하 1 · 1920×1080 1.2 · 2560×1440 1.5). 터치 화면은 늘 1
+ *  - 배율 = min(폭/1920, 높이/1080)을 0.05 단위로, 1~1.5 사이 (1920×1080 이하 1 · 2560×1440 1.3 · 3840×2160 1.5). 터치 화면은 늘 1
+ *    (11/26 운영자 「UI가 점점 커진다」: 기준 1600×900이면 1080p 모니터도 1.05~1.2배로 커졌다 → 1080p는 예전 크기로)
  *  - useUiScale(GameShell)이 html[data-uiz]·:root --ui-scale을 붙이고, 게임 캔버스(data-game)를 뺀 .shell 바로 밑 칸마다 zoom을 건다
  *    (GameShell.module.css — 게임 캔버스·게임 확대는 그대로)
  *  - zoom 안의 CSS px = 화면 px ÷ 배율. getBoundingClientRect·clientX·innerWidth(화면 px)를 HUD의 CSS 변수·style로 넣을 땐 toUi()로 나눈다
@@ -12,8 +13,8 @@ import { useEffect } from "react";
  *  - zoom 안에서는 vw·vh도 배율만큼 커진다 → HUD CSS의 vw·vh는 var(--uz)로 나눈다 (--uz는 zoom 칸 안에서만 배율, 밖은 1 — globals.css)
  */
 
-export const UI_BASE_W = 1600;
-export const UI_BASE_H = 900;
+export const UI_BASE_W = 1920;
+export const UI_BASE_H = 1080;
 export const UI_SCALE_MAX = 1.5;
 
 /** 화면(px)·터치 여부 → HUD 배율 */

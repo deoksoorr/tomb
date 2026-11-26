@@ -20,6 +20,8 @@ const kst = (ms: number) => {
 };
 /** 닫는 시각은 시:분만 (늘 다음날 새벽) */
 const kstTime = (ms: number) => kst(ms).split(" ").pop();
+/** 운영자 일정에만 보이는 맵 이름 */
+const MAP_NAME: Record<string, string> = { village: "마을", sea: "바닷가", camp: "캠핑장" };
 
 export default function StaffBungeoSchedule() {
   const [data, setData] = useState<BungeoSchedule | null>(null);
@@ -49,7 +51,7 @@ export default function StaffBungeoSchedule() {
             const now = data.now >= s.opensAt && data.now < s.closesAt;
             return (
               <li key={s.day} className={cx(now && styles.now)}>
-                {kst(s.opensAt)} ~ 다음날 {kstTime(s.closesAt)} - {s.spot}
+                {kst(s.opensAt)} ~ 다음날 {kstTime(s.closesAt)} - [{MAP_NAME[s.map] ?? s.map}] {s.spot}
                 {now ? " (지금)" : ""}
               </li>
             );

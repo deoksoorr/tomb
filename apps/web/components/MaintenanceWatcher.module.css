@@ -1,0 +1,88 @@
+/* 11/26 점검 화면 (미들웨어 503 화면 lib/maintenance maintPageHtml과 같은 모양) */
+.screen {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: radial-gradient(120% 90% at 50% 10%, #2a2440 0%, #15131f 55%, #0d0c14 100%);
+  color: #ece8f6;
+  font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  line-height: 1.55;
+}
+.card {
+  width: 100%;
+  max-width: 420px;
+  text-align: center;
+  padding: 36px 24px 28px;
+  border-radius: 20px;
+  background: rgba(30, 27, 44, 0.86);
+  border: 1px solid rgba(190, 176, 255, 0.18);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+.ghost {
+  width: 64px;
+  height: 72px;
+  margin: 0 auto 18px;
+  border-radius: 32px 32px 10px 10px;
+  background: #f4f1ff;
+  position: relative;
+  animation: float 3.2s ease-in-out infinite;
+  box-shadow: 0 0 28px rgba(200, 190, 255, 0.35);
+}
+.ghost::before,
+.ghost::after {
+  content: "";
+  position: absolute;
+  top: 26px;
+  width: 8px;
+  height: 11px;
+  border-radius: 50%;
+  background: #2a2440;
+}
+.ghost::before {
+  left: 19px;
+}
+.ghost::after {
+  right: 19px;
+}
+@keyframes float {
+  50% {
+    transform: translateY(-6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ghost {
+    animation: none;
+  }
+}
+.title {
+  margin: 0 0 10px;
+  font-size: 22px;
+  font-weight: 800;
+}
+.msg {
+  margin: 0 0 18px;
+  font-size: 15px;
+  color: #d6d0ea;
+  white-space: pre-wrap;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.until {
+  display: inline-block;
+  margin: 0 0 18px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(160, 140, 255, 0.14);
+  color: #cfc4ff;
+  font-size: 14px;
+  font-weight: 600;
+}
+.note {
+  margin: 0;
+  font-size: 13px;
+  color: #9a93b4;
+}

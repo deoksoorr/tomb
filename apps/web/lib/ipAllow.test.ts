@@ -75,10 +75,10 @@ describe("proxy (관리자 경로 IP 제한)", () => {
     expect(clientIp(req("/", { "x-real-ip": "58.233.55.38" }))).toBe("58.233.55.38");
   });
 
-  it("허용 IP는 통과(+noindex), 그 밖은 일반 404로 숨긴다", () => {
+  it("허용 IP는 통과(+noindex), 그 밖은 일반 404로 숨긴다", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("ADMIN_ALLOWED_IPS", "58.233.55.38");
-    const ok = proxy(req("/admin", { "x-forwarded-for": "58.233.55.38, 10.0.0.1" }));
+    const ok = await proxy(req("/admin", { "x-forwarded-for": "58.233.55.38, 10.0.0.1" }));
     expect(hidden(ok)).toBe(false);
     expect(ok.headers.get("x-middleware-next")).toBe("1");
     expect(ok.headers.get("x-robots-tag")).toBe("noindex, nofollow");
@@ -88,12 +88,12 @@ describe("proxy (관리자 경로 IP 제한)", () => {
       ["/api/admin/graves", "1.2.3.4"],
       ["/api/admin/session", ""],
     ])
-      expect(hidden(proxy(req(path, ip ? { "x-forwarded-for": ip } : {}))), `${path} ${ip}`).toBe(true);
+      expect(hidden(await proxy(req(path, ip ? { "x-forwarded-for": ip } : {}))), `${path} ${ip}`).toBe(true);
   });
 
-  it("운영에서 목록이 비어 있으면 누구도 못 들어온다", () => {
+  it("운영에서 목록이 비어 있으면 누구도 못 들어온다", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("ADMIN_ALLOWED_IPS", "");
-    expect(hidden(proxy(req("/admin", { "x-forwarded-for": "127.0.0.1" })))).toBe(true);
+    expect(hidden(await proxy(req("/admin", { "x-forwarded-for": "127.0.0.1" })))).toBe(true);
   });
 });

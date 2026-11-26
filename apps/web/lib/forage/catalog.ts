@@ -1,5 +1,5 @@
 import type { Season, TimePhase, Weather } from "../ambience";
-import { SEA_DIG_HOLES } from "@tomb/protocol";
+import { CAMP_TRADER, SEA_DIG_HOLES, type FishWater } from "@tomb/protocol";
 import { CONSTELLATIONS } from "../rpg/constellations";
 // 11/16 도감 몬스터 칸 (사는 곳·희귀도 — lib/forage/mobDex)
 import { isMobId, MOB_DEX_IDS, mobRarity } from "./mobDex";
@@ -15,8 +15,33 @@ export type LifeCat = "fish" | "bug" | "herb" | "ore" | "dig";
 export const LIFE_CATS: readonly LifeCat[] = ["fish", "bug", "herb", "ore", "dig"];
 export const CAT_LABEL: Record<LifeCat, string> = { fish: "물고기", bug: "곤충", herb: "약초·버섯", ore: "광석", dig: "발굴품" };
 
-/** 어디서: 물고기는 물(호수·강·11/16 바다), 채집물은 채집 지점이 있는 구역 (11/16 바닷가 갯벌 flat) */
-export type Where = "lake" | "river" | "forest" | "meadow" | "hill" | "cave" | "lakeside" | "sea" | "flat";
+/**
+ * 어디서: 물고기는 물(호수·강·11/16 바다), 채집물은 채집 지점이 있는 구역 (11/16 바닷가 갯벌 flat).
+ * 11/26 캠핑장 개편: 옛길 계곡(valley)·달그늘 소(pool)·윤슬 낚시터(reservoir)·윤슬 나룻배(rowboat) 물, 캠핑장 숲(campwood)·캠핑장 바위(camprock) 채집 —
+ * 이 여섯 곳의 종은 캠핑장에서만 나와요 (물 → 뽑는 곳은 WATER_WHERES, 캠핑장 채집 지점은 GatherNode.also)
+ */
+export type Where =
+  | "lake"
+  | "river"
+  | "forest"
+  | "meadow"
+  | "hill"
+  | "cave"
+  | "lakeside"
+  | "sea"
+  | "flat"
+  | "valley"
+  | "pool"
+  | "reservoir"
+  | "rowboat"
+  | "campwood"
+  | "camprock"
+  // 11/26 도감 확장: 바닷가 모래 언덕·갯바위·바위 웅덩이·백사장, 캠핑장 계곡 물가
+  | "dune"
+  | "searock"
+  | "tidepool"
+  | "beach"
+  | "campbank";
 export const WHERE_LABEL: Record<Where, string> = {
   lake: "호수",
   river: "강",
@@ -28,7 +53,22 @@ export const WHERE_LABEL: Record<Where, string> = {
   lakeside: "호숫가",
   sea: "바다",
   flat: "갯벌",
+  valley: "옛길 계곡",
+  pool: "달그늘 소",
+  reservoir: "윤슬 낚시터",
+  rowboat: "윤슬 나룻배",
+  campwood: "캠핑장 숲",
+  camprock: "캠핑장 바위",
+  dune: "모래 언덕",
+  searock: "갯바위",
+  tidepool: "바위 웅덩이",
+  beach: "백사장",
+  campbank: "계곡 물가",
 };
+/** 11/26 캠핑장에서만 나오는 곳 (맵별 도감·수집 의뢰 제외에 쓴다) */
+export const CAMP_WHERES: readonly Where[] = ["valley", "pool", "reservoir", "rowboat", "campwood", "camprock", "campbank"];
+/** 11/26 바닷가에서만 나오는 곳 (바다 낚시·갯벌·모래 언덕·갯바위·바위 웅덩이·백사장) */
+export const SEA_WHERES: readonly Where[] = ["sea", "flat", "dune", "searock", "tidepool", "beach"];
 export const PHASE_LABEL: Record<TimePhase, string> = { dawn: "새벽", day: "낮", dusk: "해질녘", night: "밤" };
 export const WEATHER_LABEL: Record<Weather, string> = { clear: "맑음", cloudy: "흐림", fog: "안개", rain: "비", snow: "눈" };
 export const SEASON_LABEL: Record<Season, string> = { spring: "봄", summer: "여름", autumn: "가을", winter: "겨울" };
@@ -57,6 +97,8 @@ export type Species = {
   junk?: boolean;
   /** 무게를 따로 줄 때 (잡동사니) */
   weight?: number;
+  /** 11/26 직접 낚시로만 (자동 낚시·자동 낚시의 꾸미기 대신 물고기로는 안 나와요 — 캠핑장·도감 확장 바다의 희귀 이상 새 물고기) */
+  directOnly?: true;
   desc: string;
 };
 
@@ -268,78 +310,324 @@ const GULL_DIGS: Species[] = [
   { id: "d_redfeather", cat: "dig", name: "붉은 갈매기 깃털", rarity: 2, price: 6, where: ["sea"], desc: "매운 새우 과자를 먹고 빨개진 갈매기가 떨어뜨렸다. 아직 따끈하다." },
 ];
 
+
+// ── 11/26 캠핑장 개편: 캠핑장에서만 나오는 36종 ── (물고기 20 · 곤충 6 · 약초·버섯 6 · 돌 4). 도감은 원래 칸(물고기·곤충·약초·광석)에 같이 들어가요.
+// 물고기: 옛길 계곡(valley) 10 · 달그늘 소(pool) 4 · 윤슬 낚시터(reservoir) 4 + 나룻배 위에서만(rowboat) 2. 희귀(★3) 이상은 직접 낚시만(directOnly).
+// 채집: 캠핑장 숲(campwood) 곤충·약초 · 캠핑장 바위(camprock) 돌 — 캠핑장 채집 지점이 원래 종과 함께 뽑아요 (GatherNode.also).
+// 33종(92%)은 겨울에도 나와요. 값은 마을 같은 등급과 같은 줄 (물고기 ×1.3 반영 뒤 값)
+const CAMP_FISH: Species[] = [
+  // 옛길 계곡 (10)
+  { id: "f_kumgang", cat: "fish", name: "금강모치", rarity: 1, price: 4, where: ["valley"], size: [6, 10], desc: "찬물이 아니면 못 산다. 사무실 에어컨 바로 밑자리의 주인." },
+  { id: "f_galgyeoni", cat: "fish", name: "갈겨니", rarity: 1, price: 4, where: ["valley"], time: ["dawn", "day", "dusk"], size: [10, 18], desc: "눈이 크고 겁이 많다. 그림자만 비쳐도 회의실 밖으로 흩어진다." },
+  { id: "f_jonggae", cat: "fish", name: "참종개", rarity: 1, price: 3, where: ["valley"], size: [6, 12], desc: "모래 속에 몸을 묻고 눈만 내놓는다. 월요일 아침 이불 속의 나." },
+  { id: "f_dongsari", cat: "fish", name: "동사리", rarity: 2, price: 8, where: ["valley"], time: ["dusk", "night"], size: [8, 16], desc: "바위 밑 구석 자리를 절대 안 내준다. 자율 좌석제가 와도 그대로다." },
+  { id: "f_tunggari", cat: "fish", name: "퉁가리", rarity: 2, price: 8, where: ["valley"], time: ["night", "dawn"], size: [7, 12], desc: "가슴지느러미 가시에 쏘이면 얼얼하다. 조용한데 건드리면 맵다." },
+  { id: "f_saekomi", cat: "fish", name: "새코미꾸리", rarity: 2, price: 9, where: ["valley"], time: ["day", "dusk"], size: [8, 15], desc: "주둥이가 빨갛다. 한겨울 바깥 미팅을 마치고 들어온 얼굴." },
+  { id: "f_swiri", cat: "fish", name: "쉬리", rarity: 2, price: 8, where: ["valley"], time: ["dawn", "day"], weather: ["clear", "cloudy"], size: [8, 14], desc: "이름만 불러도 쉬고 싶어진다. 맑은 여울에서만 산다." },
+  { id: "f_dukjung", cat: "fish", name: "둑중개", rarity: 3, price: 20, where: ["valley"], time: ["dawn", "dusk", "night"], season: ["winter", "spring"], size: [8, 15], directOnly: true, desc: "한겨울 찬물에서 알을 지킨다. 추울수록 출근 도장이 또렷하다." },
+  { id: "f_kkuguri", cat: "fish", name: "꾸구리", rarity: 3, price: 18, where: ["valley"], time: ["day"], weather: ["clear", "cloudy"], size: [6, 12], directOnly: true, desc: "빛이 세면 눈꺼풀을 내린다. 모니터 밝기는 늘 최저." },
+  { id: "f_eoreumchi", cat: "fish", name: "어름치", rarity: 4, price: 44, where: ["valley"], time: ["dawn", "day"], season: ["spring", "summer"], size: [20, 40], directOnly: true, desc: "천연기념물. 자갈을 탑처럼 쌓아 알을 숨긴다. 서류 더미 쌓기의 원조." },
+  // 달그늘 소 (4) — 폭포 낚시 바위
+  { id: "f_beodeulgae", cat: "fish", name: "버들개", rarity: 2, price: 9, where: ["pool"], size: [8, 15], desc: "폭포 물보라 아래 떼로 모인다. 탕비실 커피 머신 앞 같다." },
+  { id: "f_gondal", cat: "fish", name: "곤들매기", rarity: 3, price: 21, where: ["pool"], time: ["dawn", "dusk"], season: ["autumn", "winter"], size: [20, 45], directOnly: true, desc: "얼음장 같은 소에서만 산다. 첫인상은 차가워도 무늬는 곱다." },
+  { id: "f_lamprey", cat: "fish", name: "칠성장어", rarity: 4, price: 47, where: ["pool"], time: ["night"], weather: ["cloudy", "fog", "snow"], size: [30, 60], directOnly: true, desc: "옆구리 구멍 일곱 개가 북두칠성처럼 박혀 있다. 한번 붙으면 퇴근을 안 시켜 준다." },
+  { id: "f_imugi", cat: "fish", name: "만년 대리 이무기", rarity: 5, price: 104, where: ["pool"], time: ["night", "dawn"], weather: ["fog", "snow"], size: [120, 300], directOnly: true, desc: "전설. 천 년을 기다렸는데 아직 대리다. 안개나 눈 오는 밤, 소 깊은 곳에서 승천 대신 기지개만 켠다." },
+  // 윤슬 낚시터 (4) + 나룻배 위에서만 (2)
+  { id: "f_chambung", cat: "fish", name: "참붕어", rarity: 1, price: 4, where: ["reservoir"], size: [5, 12], desc: "낚시터 매점 앞에 늘 모여 있다. 컵라면 국물 냄새를 안다." },
+  { id: "f_molgae", cat: "fish", name: "몰개", rarity: 1, price: 3, where: ["reservoir"], time: ["day", "dusk"], size: [5, 10], desc: "작은 떼로 우르르 몰려다닌다. 점심 메뉴 정하러 나가는 팀처럼." },
+  { id: "f_hyangeo", cat: "fish", name: "향어", rarity: 2, price: 9, where: ["reservoir"], size: [30, 70], desc: "낚시터 손맛 담당. 걸리면 의자에서 엉덩이가 들린다." },
+  { id: "f_salchi", cat: "fish", name: "살치", rarity: 2, price: 8, where: ["reservoir"], time: ["dawn", "dusk"], size: [15, 25], desc: "월급날 전 지갑처럼 얇다. 해 뜰 녘과 해 질 녘에 은빛으로 뛴다." },
+  { id: "f_kkeuri", cat: "fish", name: "끄리", rarity: 2, price: 9, where: ["rowboat"], time: ["day", "dusk"], size: [20, 40], desc: "배 밑 깊은 물에서 먹이를 쫓는다. 입이 삐뚤어져 늘 불만 있는 얼굴." },
+  { id: "f_silvercarp", cat: "fish", name: "백련어", rarity: 3, price: 21, where: ["rowboat"], time: ["day"], weather: ["clear", "cloudy"], size: [50, 100], directOnly: true, desc: "노 젓는 소리에 놀라 배 옆으로 펄쩍 뛴다. 갑자기 잡힌 회의에 놀란 팀원 같다." },
+];
+const CAMP_BUGS: Species[] = [
+  { id: "b_springtail", cat: "bug", name: "톡토기", rarity: 1, price: 2, where: ["campwood"], time: ["dawn", "day"], size: [0.1, 0.4], desc: "눈 위에 후추처럼 뿌려져 있다. 작아도 톡톡 잘 튄다." },
+  { id: "b_cranefly", cat: "bug", name: "겨울각다귀", rarity: 1, price: 3, where: ["campwood"], time: ["day", "dusk"], season: ["autumn", "winter", "spring"], size: [1.5, 3], desc: "모기처럼 생겼지만 물지 않는다. 겉모습만 무서운 신입." },
+  { id: "b_camelcricket", cat: "bug", name: "꼽등이", rarity: 2, price: 6, where: ["campwood"], time: ["dusk", "night"], size: [1.5, 2.5], desc: "텐트를 걷으면 꼭 한 마리 나온다. 놀라지 마요, 먼저 와서 자리 잡은 거예요." },
+  { id: "b_caddis", cat: "bug", name: "돌집 날도래", rarity: 2, price: 6, where: ["campwood"], time: ["dusk"], season: ["spring", "summer", "autumn"], size: [1, 2.5], desc: "애벌레 때 계곡 돌로 집을 지었다. 대출 없이 지은 집." },
+  { id: "b_rainbowbeetle", cat: "bug", name: "멋조롱박딱정벌레", rarity: 3, price: 14, where: ["campwood"], time: ["night"], size: [3, 4.5], desc: "썩은 통나무 속에서 무지갯빛 등을 빛낸다. 겨울잠도 멋을 내고 잔다." },
+  { id: "b_snowscorp", cat: "bug", name: "눈밑들이", rarity: 4, price: 34, where: ["campwood"], time: ["day"], weather: ["snow", "cloudy"], season: ["winter"], size: [0.3, 0.6], desc: "날개 없이 눈 위를 걸어 다니는 겨울 곤충. 눈이 와도 걸어서 출근한다." },
+];
+const CAMP_HERBS: Species[] = [
+  { id: "h_enoki", cat: "herb", name: "야생 팽이버섯", rarity: 1, price: 3, where: ["campwood"], season: ["autumn", "winter", "spring"], desc: "눈 속에서도 자라는 야생 팽이. 캠핑 라면에 넣으면 끝이다." },
+  { id: "h_woodear", cat: "herb", name: "목이버섯", rarity: 1, price: 2, where: ["campwood"], desc: "죽은 나무에 귀처럼 붙어 있다. 회의 내용은 다 듣고 있다." },
+  { id: "h_pinecone", cat: "herb", name: "잣송이", rarity: 2, price: 6, where: ["campwood"], season: ["autumn", "winter"], desc: "다람쥐가 숨겨 두고 잊었다. 비상금 숨긴 자리를 잊은 그 마음." },
+  { id: "h_wildgarlic", cat: "herb", name: "산마늘", rarity: 2, price: 7, where: ["campwood"], season: ["spring"], desc: "봄 계곡 그늘의 명이나물. 고기 구울 때 꼭 찾게 된다." },
+  { id: "h_poria", cat: "herb", name: "복령", rarity: 3, price: 15, where: ["campwood"], time: ["dawn", "day"], desc: "소나무 뿌리 밑 땅속 덩어리. 쇠꼬챙이로 한참 찔러 봐야 찾는다." },
+  { id: "h_sanghwang", cat: "herb", name: "상황버섯", rarity: 4, price: 34, where: ["campwood"], weather: ["cloudy", "fog", "rain"], desc: "뽕나무에 붙은 노란 테 버섯. 이름처럼 상황 봐 가며 나타난다." },
+];
+const CAMP_ORES: Species[] = [
+  { id: "o_skipstone", cat: "ore", name: "물수제비 납작돌", rarity: 1, price: 2, where: ["camprock"], desc: "다섯 번은 튈 것 같은 완벽한 납작돌. 던지기 아깝다." },
+  { id: "o_suseok", cat: "ore", name: "계곡 수석", rarity: 2, price: 7, where: ["camprock"], desc: "산 모양이 들어앉은 돌. 부장님 책상 위로 갈 운명." },
+  { id: "o_placer", cat: "ore", name: "계곡 사금", rarity: 3, price: 15, where: ["camprock"], time: ["day"], weather: ["clear"], desc: "볕 좋은 날 모래 사이에서 반짝인다. 체로 한참 걸러야 한 알." },
+  { id: "o_moonstone", cat: "ore", name: "달그늘 월장석", rarity: 4, price: 36, where: ["camprock"], time: ["night"], weather: ["clear", "snow"], desc: "달빛이 비치면 푸르스름하게 떠오른다. 캠핑장 바위틈에서만 나온다." },
+];
+
+// ── 11/26 도감 확장 84종 (바닷가 48 · 캠핑장 36) ── 마을 종은 그대로, 맵 전용 종만 더해요 (~/Desktop/목요일작업/도감확장_종목록_초안.md).
+// 바닷가 새 곳(모래 언덕·갯바위·바위 웅덩이·백사장)은 바닷가 뭍 지점이(lib/forage/seaNodes), 계곡 물가는 캠핑장 옛길 계곡 둑 지점이 뽑아요.
+// 바다 물고기 +10 (바다 낚시 자리 그대로). 희귀(★3) 이상 넷은 직접 낚시만 — 자동 낚시 수입은 그대로
+const SEA_FISH2: Species[] = [
+  { id: "f_mangdung", cat: "fish", name: "망둥어", rarity: 1, price: 4, where: ["sea"], size: [8, 25], desc: "옆에서 뛰면 일단 같이 뛴다. 이유는 나중에 묻는다." },
+  { id: "f_halfbeak", cat: "fish", name: "학꽁치", rarity: 1, price: 3, where: ["sea"], time: ["day", "dusk"], season: ["autumn", "winter", "spring"], size: [15, 40], desc: "아래턱만 길게 나왔다. 할 말은 많은데 꾹 참는 얼굴." },
+  { id: "f_tshirt", cat: "fish", name: "워크숍 단체 티셔츠", rarity: 1, price: 1, where: ["sea"], junk: true, weight: 10, desc: "'2019 워크숍 — 우리는 하나'. 등판 이름은 누가 지웠다." },
+  { id: "f_greenling", cat: "fish", name: "노래미", rarity: 2, price: 8, where: ["sea"], time: ["dawn", "day", "dusk"], size: [15, 40], desc: "바위 틈에서 혼자 흥얼거린다. 이름만 보고 노래방 총무를 맡기면 안 된다." },
+  { id: "f_bollak", cat: "fish", name: "볼락", rarity: 2, price: 9, where: ["sea"], time: ["dusk", "night"], size: [12, 30], desc: "해가 지면 눈이 커진다. 퇴근하고 나서야 살아나는 타입." },
+  { id: "f_puffer", cat: "fish", name: "졸복", rarity: 2, price: 8, where: ["sea"], weather: ["clear", "cloudy"], size: [8, 20], desc: "건드리면 배를 빵빵하게 부풀린다. 피드백 받은 날의 내 볼." },
+  { id: "f_blackbream", cat: "fish", name: "감성돔", rarity: 3, price: 20, where: ["sea"], time: ["dawn", "dusk"], weather: ["cloudy", "fog", "rain"], season: ["autumn", "winter", "spring"], size: [25, 60], directOnly: true, desc: "갯바위 낚시꾼의 꿈. 감성이 풍부해서 흐린 날 더 잘 문다." },
+  { id: "f_seabass", cat: "fish", name: "농어", rarity: 3, price: 21, where: ["sea"], time: ["dusk", "night", "dawn"], weather: ["rain", "cloudy"], season: ["summer", "autumn"], size: [40, 100], directOnly: true, desc: "파도가 거친 날 갯바위 앞까지 들이친다. 일이 몰리는 날 꼭 오는 손님." },
+  { id: "f_knifejaw", cat: "fish", name: "돌돔", rarity: 4, price: 44, where: ["sea"], time: ["day"], weather: ["clear", "cloudy"], season: ["summer", "autumn"], size: [30, 70], directOnly: true, desc: "이빨로 소라 껍데기를 깨 먹는다. 연봉 협상 자리에 데려가고 싶다." },
+  { id: "f_moonhair", cat: "fish", name: "달빛 은갈치", rarity: 5, price: 104, where: ["sea"], time: ["night"], weather: ["clear"], season: ["summer", "autumn"], size: [100, 220], directOnly: true, desc: "전설. 맑은 밤 달빛을 따라 꼿꼿이 선 채 헤엄친다. 꼬리 끝까지 재려면 줄자가 모자란다." },
+];
+// 바닷가 곤충 +12: 모래 언덕(dune)·갯바위(searock)·바위 웅덩이(tidepool)
+const SEA_BUGS: Species[] = [
+  { id: "b_seaslater", cat: "bug", name: "갯강구", rarity: 1, price: 2, where: ["searock", "tidepool"], size: [2, 4.5], desc: "갯바위 바퀴벌레라고 불리지만, 사실 바위를 치우는 성실한 청소 담당이다." },
+  { id: "b_darkling", cat: "bug", name: "모래거저리", rarity: 1, price: 3, where: ["dune"], size: [0.6, 1.2], desc: "하루 종일 모래 언덕을 걷는다. 만보기는 늘 만 보를 넘긴다." },
+  { id: "b_pyrgo", cat: "bug", name: "섬서구메뚜기", rarity: 1, price: 3, where: ["dune"], time: ["day"], season: ["summer", "autumn"], size: [2, 4], desc: "작은 수컷을 등에 업고 다닌다. 출근길 백팩처럼." },
+  { id: "b_glider", cat: "bug", name: "된장잠자리", rarity: 1, price: 3, where: ["dune"], time: ["day", "dusk"], season: ["summer", "autumn"], size: [4, 5], desc: "바다 건너 남쪽에서 날아왔다. 해외 파견 마치고 돌아온 얼굴." },
+  { id: "b_tigerbeetle", cat: "bug", name: "길앞잡이", rarity: 2, price: 6, where: ["dune"], time: ["day"], weather: ["clear"], season: ["spring", "summer", "autumn"], size: [1.5, 2], desc: "사람 앞에서 몇 걸음씩 앞서 날아간다. 길 안내는 하는데 목적지는 모른다." },
+  { id: "b_earwig", cat: "bug", name: "큰집게벌레", rarity: 2, price: 6, where: ["dune", "searock"], time: ["dusk", "night"], size: [2, 3], desc: "밤이면 모래 밑에서 집게를 들고 나온다. 서류 집게보다 꽉 문다." },
+  { id: "b_antlion", cat: "bug", name: "개미귀신", rarity: 2, price: 6, where: ["dune"], size: [0.8, 1.5], desc: "모래에 깔때기 구덩이를 파 놓고 기다린다. 한번 빠지면 못 나오는 회의실 같다." },
+  { id: "b_seaskater", cat: "bug", name: "바다소금쟁이", rarity: 3, price: 14, where: ["tidepool"], time: ["day"], weather: ["clear"], season: ["summer", "autumn"], size: [0.4, 0.6], desc: "바다 위를 걷는 단 하나의 곤충. 평생 뭍으로 출근한 적이 없다." },
+  { id: "b_antlionfly", cat: "bug", name: "명주잠자리", rarity: 3, price: 15, where: ["dune"], time: ["dusk", "night"], season: ["summer"], size: [3.5, 4], desc: "개미귀신 시절을 끝내고 날개를 달았다. 수습 기간을 무사히 넘긴 얼굴." },
+  { id: "b_chestnut", cat: "bug", name: "왕나비", rarity: 4, price: 32, where: ["dune"], time: ["day"], weather: ["clear"], season: ["summer", "autumn"], size: [8, 10], desc: "바다를 건너 천 킬로미터를 난다. 출장비는 한 푼도 안 받는다." },
+  { id: "b_seafirefly", cat: "bug", name: "바다반딧불이", rarity: 4, price: 34, where: ["tidepool"], time: ["night"], weather: ["clear", "cloudy"], size: [0.2, 0.3], desc: "밤 파도에 닿으면 파랗게 번진다. 꺼 둔 모니터 불빛보다 은은하다." },
+  { id: "b_dragonmsg", cat: "bug", name: "용궁 전령 나비", rarity: 5, price: 80, where: ["dune"], time: ["dawn"], weather: ["fog"], size: [9, 13], desc: "전설. 안개 낀 새벽 바다 쪽에서 날아온다. 용왕님 결재 서류를 나른다는 소문." },
+];
+// 바닷가 약초·버섯 +12: 해초·갯나물·바닷가 꽃·버섯
+const SEA_HERBS: Species[] = [
+  { id: "h_tot", cat: "herb", name: "톳", rarity: 1, price: 2, where: ["searock"], desc: "갯바위에 다닥다닥. 뜯어 가도 다음 주면 또 그만큼 있다." },
+  { id: "h_hamcho", cat: "herb", name: "함초", rarity: 1, price: 3, where: ["tidepool"], desc: "짠물만 먹고 자랐다. 그래서 월급처럼 짜다." },
+  { id: "h_beachglory", cat: "herb", name: "갯메꽃", rarity: 1, price: 2, where: ["dune"], time: ["dawn", "day"], season: ["spring", "summer", "autumn"], desc: "모래 위로 덩굴을 뻗는다. 자리가 없으면 만들어서 앉는다." },
+  { id: "h_parae", cat: "herb", name: "파래", rarity: 1, price: 2, where: ["searock", "tidepool"], season: ["autumn", "winter", "spring"], desc: "물 빠진 바위에 깔린 초록 카펫. 겨울 반찬 담당." },
+  { id: "h_miyeok", cat: "herb", name: "미역", rarity: 2, price: 6, where: ["searock"], season: ["winter", "spring"], desc: "생일 아침엔 꼭 미역국. 사내 메신저 생일 알림보다 정확하다." },
+  { id: "h_bangpung", cat: "herb", name: "갯방풍", rarity: 2, price: 6, where: ["dune"], season: ["spring", "summer"], desc: "모래 언덕에 납작 엎드려 바닷바람을 버틴다. 이름부터 바람막이." },
+  { id: "h_haedang", cat: "herb", name: "해당화", rarity: 2, price: 7, where: ["dune"], time: ["day"], season: ["spring", "summer"], desc: "모래밭에 핀 분홍 꽃. 예쁘다고 덥석 잡으면 가시에 찔린다." },
+  { id: "h_agar", cat: "herb", name: "우뭇가사리", rarity: 2, price: 6, where: ["searock", "tidepool"], season: ["spring", "summer"], desc: "끓여 식히면 우무가 된다. 여름 콩국 속 반투명한 그 녀석." },
+  { id: "h_laver", cat: "herb", name: "돌김", rarity: 3, price: 14, where: ["searock"], time: ["dawn", "day"], weather: ["clear", "cloudy"], season: ["winter"], desc: "한겨울 갯바위에서 한 장씩 뜯는다. 도시락 반찬 서열 1위." },
+  { id: "h_sandball", cat: "herb", name: "모래밭버섯", rarity: 3, price: 15, where: ["dune"], weather: ["rain", "cloudy", "fog"], season: ["summer", "autumn"], desc: "비 온 뒤 모래에서 감자처럼 불쑥. 쪼개 보면 속이 까만 가루투성이다." },
+  { id: "h_pungran", cat: "herb", name: "풍란", rarity: 4, price: 34, where: ["searock"], weather: ["fog", "cloudy"], desc: "바닷바람 부는 바위에 뿌리만 걸고 산다. 사무실 화분 중 유일하게 안 죽을 녀석." },
+  { id: "h_dragonkelp", cat: "herb", name: "용궁 미역", rarity: 5, price: 80, where: ["searock", "tidepool"], time: ["dawn"], weather: ["fog"], desc: "전설. 한 줄기로 백 그릇이 나온다는 용궁 미역. 안개 낀 새벽 파도에 딱 한 번 밀려온다." },
+];
+// 바닷가 광석 +10: 몽돌·바다유리·진주 (갯바위·바위 웅덩이·백사장 beach)
+const SEA_ORES: Species[] = [
+  { id: "o_mongdol", cat: "ore", name: "몽돌", rarity: 1, price: 1, where: ["searock", "beach"], desc: "파도에 오래 굴러 모난 데가 없다. 산전수전 다 겪은 과장님처럼." },
+  { id: "o_basalt", cat: "ore", name: "현무암 조각", rarity: 1, price: 2, where: ["searock", "tidepool"], desc: "구멍이 숭숭 뚫렸다. 빈틈없다던 일정표의 실제 모습." },
+  { id: "o_seasalt", cat: "ore", name: "천일염 결정", rarity: 1, price: 3, where: ["tidepool"], time: ["day"], weather: ["clear"], desc: "바위 웅덩이가 마르면 하얗게 남는다. 사회생활의 맛을 굳혀 놓았다." },
+  { id: "o_seaglass", cat: "ore", name: "바다유리", rarity: 2, price: 6, where: ["beach", "searock"], desc: "깨진 병이 파도에 몇 년 굴러 둥글어졌다. 모난 말도 시간이 지나면 이렇다." },
+  { id: "o_columnar", cat: "ore", name: "주상절리 조각", rarity: 2, price: 7, where: ["searock"], desc: "육각 기둥으로 반듯하게 쪼개진다. 엑셀 칸 같은 돌." },
+  { id: "o_pearl", cat: "ore", name: "진주", rarity: 3, price: 15, where: ["tidepool"], desc: "조개가 아픈 데를 감싸서 만들었다. 버틴 만큼 빛난다." },
+  { id: "o_agate", cat: "ore", name: "바다 마노", rarity: 3, price: 14, where: ["beach", "searock"], weather: ["rain", "cloudy"], desc: "줄무늬가 겹겹이 쌓였다. 미뤄 둔 일도 이렇게 층이 진다." },
+  { id: "o_blackpearl", cat: "ore", name: "흑진주", rarity: 4, price: 34, where: ["tidepool"], time: ["night"], desc: "회식 다음 날 다크서클 빛깔. 그래도 값은 제일 비싸다." },
+  { id: "o_coral", cat: "ore", name: "붉은 산호 조각", rarity: 4, price: 32, where: ["searock", "beach"], weather: ["rain", "fog"], desc: "깊은 바다에서 떠밀려 온 붉은 가지. 회사 로비 수족관 장식과는 급이 다르다." },
+  { id: "o_mermaid", cat: "ore", name: "인어의 눈물", rarity: 5, price: 80, where: ["searock", "tidepool"], time: ["night"], weather: ["clear"], desc: "전설. 맑은 밤 갯바위에 떨어진 푸른 구슬. 퇴사하던 인어가 흘렸다는 소문." },
+];
+// 바닷가 발굴품 +4: 백사장 모래 파기 (beach)
+const SEA_DIGS2: Species[] = [
+  { id: "d_sandflag", cat: "dig", name: "모래성 깃발", rarity: 1, price: 2, where: ["beach"], desc: "쌓다 만 모래성 꼭대기에 꽂혀 있었다. 깃발만 꽂고 끝난 프로젝트." },
+  { id: "d_beachticket", cat: "dig", name: "옛 해수욕장 입장권", rarity: 2, price: 6, where: ["beach"], desc: "'1988 여름, 어른 300원'. 그때도 휴가는 사흘이었다." },
+  { id: "d_bottlemail", cat: "dig", name: "병 속 편지", rarity: 3, price: 14, where: ["beach"], time: ["dawn", "dusk"], desc: "'이 편지를 찾은 분, 제 대신 월요일에 출근해 주세요.'" },
+  { id: "d_ambergris", cat: "dig", name: "용연향", rarity: 4, price: 34, where: ["beach"], time: ["dawn"], weather: ["fog", "cloudy"], desc: "고래 배 속에서 나온 귀한 향 덩어리. 유령 고래 것이라는 말도 돈다." },
+];
+// 캠핑장 곤충 +9: 캠핑장 숲(campwood)·계곡 물가(campbank)
+const CAMP_BUGS2: Species[] = [
+  { id: "b_demoiselle", cat: "bug", name: "검은물잠자리", rarity: 1, price: 3, where: ["campbank"], time: ["day"], season: ["spring", "summer", "autumn"], size: [5, 6], desc: "까만 날개를 느릿느릿 접었다 편다. 결재 도장 찍기 전 뜸 들이는 손 같다." },
+  { id: "b_stonefly", cat: "bug", name: "겨울강도래", rarity: 1, price: 2, where: ["campbank"], season: ["winter", "spring"], size: [0.8, 1.5], desc: "한겨울 눈 위로 기어 나온다. 물이 더러워지면 제일 먼저 사표를 낸다." },
+  { id: "b_mosquito", cat: "bug", name: "모기", rarity: 1, price: 2, where: ["campwood"], time: ["dusk", "night"], size: [0.4, 0.7], desc: "한겨울에도 난로 켠 텐트 안엔 꼭 한 마리 있다." },
+  { id: "b_groundbeetle", cat: "bug", name: "홍단딱정벌레", rarity: 2, price: 6, where: ["campwood"], time: ["dusk", "night"], size: [3, 4.5], desc: "붉은 갑옷을 입고 밤길을 순찰한다. 경비실 아저씨보다 부지런하다." },
+  { id: "b_divingbeetle", cat: "bug", name: "물방개", rarity: 2, price: 6, where: ["campbank"], size: [3, 4], desc: "공기 방울을 꽁무니에 달고 잠수한다. 회의마다 텀블러 챙겨 오는 사람." },
+  { id: "b_glacialis", cat: "bug", name: "모시나비", rarity: 3, price: 14, where: ["campwood"], time: ["day"], weather: ["clear"], season: ["spring", "summer"], size: [5, 6.5], desc: "모시처럼 얇은 날개가 비친다. 여름 쿨비즈 셔츠 같다." },
+  { id: "b_dobson", cat: "bug", name: "뱀잠자리", rarity: 3, price: 15, where: ["campbank"], time: ["dusk", "night"], season: ["summer", "autumn"], size: [4, 6], desc: "애벌레 땐 계곡 돌 밑에서 낚시 미끼로 끌려갔다. 살아남아 날개를 단 생존자." },
+  { id: "b_redspot", cat: "bug", name: "붉은점모시나비", rarity: 4, price: 34, where: ["campwood"], time: ["day"], weather: ["clear"], season: ["spring"], size: [6, 7], desc: "멸종위기 1급. 붉은 점 박힌 날개로 봄 산비탈을 딱 한 달만 난다." },
+  { id: "b_gumiho", cat: "bug", name: "구미호 꼬리 나방", rarity: 5, price: 80, where: ["campwood"], time: ["night"], weather: ["fog", "snow"], size: [8, 12], desc: "전설. 안개 낀 밤 랜턴 불빛에 꼬리 아홉 개 그림자를 남긴다. 끝까지 세어 본 사람은 없다." },
+];
+// 캠핑장 약초·버섯 +9
+const CAMP_HERBS2: Species[] = [
+  { id: "h_rockmaple", cat: "herb", name: "돌단풍", rarity: 1, price: 2, where: ["campbank"], season: ["spring", "summer", "autumn"], desc: "계곡 바위틈에 뿌리를 내렸다. 자리 하나는 기막히게 잡는다." },
+  { id: "h_moss", cat: "herb", name: "계곡 이끼", rarity: 1, price: 2, where: ["campbank", "campwood"], desc: "바위마다 초록 방석. 오래 앉아 있으면 엉덩이에도 자랄 것 같다." },
+  { id: "h_darae", cat: "herb", name: "다래", rarity: 2, price: 6, where: ["campwood"], season: ["autumn"], desc: "산속 키위. 덩굴 꼭대기까지 올라가야 잘 익은 게 있다. 승진처럼." },
+  { id: "h_chopi", cat: "herb", name: "초피 열매", rarity: 2, price: 6, where: ["campwood"], season: ["autumn", "winter"], desc: "씹으면 혀가 얼얼하다. 매운탕에 한 줌 넣으면 정신이 번쩍 든다." },
+  { id: "h_kudzu", cat: "herb", name: "칡뿌리", rarity: 2, price: 7, where: ["campwood"], season: ["autumn", "winter", "spring"], desc: "캐도 캐도 끝이 안 나온다. 회의록 정리처럼." },
+  { id: "h_lionmane", cat: "herb", name: "노루궁뎅이버섯", rarity: 3, price: 15, where: ["campwood"], weather: ["rain", "cloudy", "fog"], season: ["autumn"], desc: "하얀 털 뭉치처럼 생겼다. 노루 엉덩이를 본 사람만 이름을 이해한다." },
+  { id: "h_wasabi", cat: "herb", name: "고추냉이", rarity: 3, price: 14, where: ["campbank"], time: ["dawn", "day"], desc: "찬 계곡물에서만 자란다. 갈아 먹으면 코끝이 찡, 아침 일곱 시 알람처럼." },
+  { id: "h_neungi", cat: "herb", name: "능이버섯", rarity: 4, price: 34, where: ["campwood"], weather: ["rain", "fog"], season: ["autumn"], desc: "1능이 2표고 3송이. 향 하나로 버섯 서열 1위에 올랐다." },
+  { id: "h_hasuo", cat: "herb", name: "천년 하수오", rarity: 5, price: 80, where: ["campwood"], time: ["dawn"], weather: ["snow", "fog"], desc: "전설. 먹으면 흰머리가 까매진다는 뿌리. 십 년 차 팀장님들이 눈 오는 새벽마다 찾아 헤맨다." },
+];
+// 캠핑장 돌 +8: 모두 캠핑장 바위(camprock)
+const CAMP_ORES2: Species[] = [
+  { id: "o_chadol", cat: "ore", name: "차돌", rarity: 1, price: 2, where: ["camprock"], desc: "차돌처럼 단단하다는 그 차돌. 차돌박이와는 아무 상관 없다." },
+  { id: "o_gneiss", cat: "ore", name: "편마암 조각", rarity: 1, price: 3, where: ["camprock"], desc: "줄무늬가 구불구불 접혔다. 꽉 막힌 출근길 지도 같다." },
+  { id: "o_petrified", cat: "ore", name: "규화목 조각", rarity: 2, price: 6, where: ["camprock"], desc: "나무였는데 돌이 됐다. 한자리에 너무 오래 앉아 있으면 이렇게 된다." },
+  { id: "o_pyrite", cat: "ore", name: "황철석", rarity: 2, price: 7, where: ["camprock"], time: ["day"], weather: ["clear"], desc: "금인 줄 알고 심장이 뛰었다. 숫자 다섯 개 맞은 복권 같은 돌." },
+  { id: "o_fluorite", cat: "ore", name: "형석", rarity: 3, price: 15, where: ["camprock"], time: ["night"], desc: "어둠 속에서 은은하게 빛난다. 퇴근하고 나서야 빛나는 사람." },
+  { id: "o_topaz", cat: "ore", name: "황옥", rarity: 3, price: 14, where: ["camprock"], time: ["day"], weather: ["clear"], desc: "맑은 노란빛. 금요일 오후 네 시의 햇살 색." },
+  { id: "o_orbicular", cat: "ore", name: "구상화강암", rarity: 4, price: 34, where: ["camprock"], weather: ["snow", "fog", "cloudy"], desc: "돌 속에 둥근 무늬가 꽃처럼 박혔다. 천연기념물급 우연." },
+  { id: "o_yeouiju", cat: "ore", name: "이무기의 여의주", rarity: 5, price: 80, where: ["camprock"], time: ["night"], weather: ["snow", "fog"], desc: "전설. 만년 대리 이무기가 승진 심사 날 떨어뜨린 구슬. 아직 주인을 기다린다." },
+];
+// 캠핑장 발굴품 +10: 계곡·캠핑 유실물
+const CAMP_DIGS: Species[] = [
+  { id: "d_tentpeg", cat: "dig", name: "휜 텐트 팩", rarity: 1, price: 2, where: ["campwood"], desc: "망치질 세 번 만에 휘었다. 첫 캠핑의 기억." },
+  { id: "d_sock", cat: "dig", name: "짝 잃은 등산 양말", rarity: 1, price: 1, where: ["campwood", "campbank"], desc: "나머지 한 짝은 지금도 어느 텐트 속에 있다." },
+  { id: "d_coppel", cat: "dig", name: "녹슨 코펠 뚜껑", rarity: 1, price: 3, where: ["campbank"], desc: "라면 물 끓이던 그 뚜껑. 냄비는 어디로 갔을까." },
+  { id: "d_film", cat: "dig", name: "빛바랜 캠핑 필름", rarity: 2, price: 6, where: ["campwood"], desc: "비춰 보면 다들 웃고 있다. 그날 종일 비 왔다고 들었는데." },
+  { id: "d_float", cat: "dig", name: "부러진 낚시찌", rarity: 2, price: 6, where: ["campbank"], desc: "놓친 대어 이야기만 남았다. 들을 때마다 고기가 커진다." },
+  { id: "d_knife", cat: "dig", name: "녹슨 주머니칼", rarity: 2, price: 7, where: ["campwood"], desc: "칼, 가위, 병따개, 정체 모를 무언가. 전부 녹슬어 안 펴진다." },
+  { id: "d_rooftile", cat: "dig", name: "산신각 기와 조각", rarity: 3, price: 14, where: ["campwood"], weather: ["rain", "cloudy", "fog"], desc: "용 무늬가 반쯤 남았다. 옛길을 넘던 누군가 여기서 빌고 갔다." },
+  { id: "d_trilobite", cat: "dig", name: "삼엽충 화석", rarity: 3, price: 15, where: ["campbank"], desc: "계곡 바위 속 5억 년 선배. 그때부터 같은 자세로 엎드려 있다." },
+  { id: "d_yeopjeon", cat: "dig", name: "보부상 엽전 꾸러미", rarity: 4, price: 34, where: ["campwood", "campbank"], time: ["dusk", "night"], desc: "옛길을 넘던 장사꾼의 비상금. 돌아와 찾을 생각이었겠지." },
+  { id: "d_goldaxe", cat: "dig", name: "산신령의 금도끼", rarity: 5, price: 80, where: ["campbank"], time: ["dawn"], weather: ["snow", "fog"], desc: "전설. '이 도끼가 네 도끼냐?' 정직하게 답한 사람만 눈 오는 새벽 계곡에서 줍는다." },
+];
+
+/** 11/26 캠핑장 전용 72종 id (시험·맵별 도감) — 개편 36 + 도감 확장 36 */
+export const CAMP_SPECIES_IDS: readonly string[] = [...CAMP_FISH, ...CAMP_BUGS, ...CAMP_HERBS, ...CAMP_ORES, ...CAMP_BUGS2, ...CAMP_HERBS2, ...CAMP_ORES2, ...CAMP_DIGS].map((s) => s.id);
+/** 11/26 도감 확장으로 더한 84종 id (시험) */
+export const DEX_EXPANSION_IDS: readonly string[] = [...SEA_FISH2, ...SEA_BUGS, ...SEA_HERBS, ...SEA_ORES, ...SEA_DIGS2, ...CAMP_BUGS2, ...CAMP_HERBS2, ...CAMP_ORES2, ...CAMP_DIGS].map((s) => s.id);
+
 /** 채집·낚시가 아니라 갈매기에게서만 받는 종 (시험이 「어딘가에서 잡힌다」를 이 둘만 빼고 봐요) */
 export const GULL_FEATHER_IDS: readonly string[] = GULL_DIGS.map((s) => s.id);
 
-export const SPECIES: readonly Species[] = [...FISH, ...SEA_FISH, ...BUGS, ...HERBS, ...ORES, ...DIGS, ...FLAT_DIGS, ...GULL_DIGS];
+// 11/26 캠핑장 종은 그 칸 끝에 (도감 번호는 원래 종 뒤로 이어져요). 도감 확장 종은 또 그 뒤에 (저장은 id라 번호만 바뀌어요)
+export const SPECIES: readonly Species[] = [
+  ...FISH,
+  ...SEA_FISH,
+  ...CAMP_FISH,
+  ...SEA_FISH2,
+  ...BUGS,
+  ...CAMP_BUGS,
+  ...CAMP_BUGS2,
+  ...SEA_BUGS,
+  ...HERBS,
+  ...CAMP_HERBS,
+  ...CAMP_HERBS2,
+  ...SEA_HERBS,
+  ...ORES,
+  ...CAMP_ORES,
+  ...CAMP_ORES2,
+  ...SEA_ORES,
+  ...DIGS,
+  ...FLAT_DIGS,
+  ...GULL_DIGS,
+  ...SEA_DIGS2,
+  ...CAMP_DIGS,
+];
 const BY_ID = new Map(SPECIES.map((s) => [s.id, s]));
 export const speciesById = (id: string): Species | undefined => BY_ID.get(id);
 export const speciesOf = (cat: LifeCat): Species[] => SPECIES.filter((s) => s.cat === cat);
 export const isSpeciesId = (id: unknown): id is string => typeof id === "string" && BY_ID.has(id);
-/** 11/16 바닷가에서만 나오는 것 (바닷물고기·갯벌). 수집 의뢰·긴급 의뢰 상자는 예전처럼 마을·캠핑장 것만 낸다 */
-export const isSeasideSpecies = (s: Species): boolean => s.where.includes("sea") || s.where.includes("flat");
+/** 11/16 바닷가에서만 나오는 것 (바닷물고기·갯벌, 11/26 모래 언덕·갯바위·바위 웅덩이·백사장). 수집 의뢰·긴급 의뢰 상자는 예전처럼 마을·캠핑장 것만 낸다 */
+export const isSeasideSpecies = (s: Species): boolean => s.where.some((w) => SEA_WHERES.includes(w));
+/** 11/26 캠핑장에서만 나오는 것 (캠핑장 전용 물·숲·바위) */
+export const isCampSpecies = (s: Species): boolean => s.where.some((w) => CAMP_WHERES.includes(w));
+/** 11/26 마을 밖(바닷가·캠핑장)에서만 나오는 것 — 수집 의뢰·긴급 의뢰 상자는 예전처럼 마을에서도 나오는 것만 */
+export const isAwaySpecies = (s: Species): boolean => isSeasideSpecies(s) || isCampSpecies(s);
+
+/**
+ * 11/26 낚시 물 → 뽑는 곳 (서버 castLine·자동 낚시·화면 힌트가 같이 쓴다). 캠핑장 물은 전용 종 + 이어진 물의 종:
+ * 옛길 계곡 = 계곡 + 강, 달그늘 소 = 소 + 계곡, 윤슬 낚시터 = 낚시터 + 호수, 나룻배 위 = 나룻배 전용 + 낚시터 + 호수
+ */
+export const WATER_WHERES: Record<FishWater, readonly Where[]> = {
+  lake: ["lake"],
+  river: ["river"],
+  sea: ["sea"],
+  valley: ["valley", "river"],
+  pool: ["pool", "valley"],
+  reservoir: ["reservoir", "lake"],
+  rowboat: ["rowboat", "reservoir", "lake"],
+};
+/** 낚시 창 제목의 물 이름 (「낚시 · 옛길 계곡」) */
+export const WATER_LABEL: Record<FishWater, string> = {
+  lake: "호수",
+  river: "강",
+  sea: "바다",
+  valley: WHERE_LABEL.valley,
+  pool: WHERE_LABEL.pool,
+  reservoir: WHERE_LABEL.reservoir,
+  rowboat: WHERE_LABEL.rowboat,
+};
+/** 이 물고기가 잡히는 물 (힌트 — 「캠핑장 윤슬 낚시터에도 있어요」) */
+export const watersOf = (s: Species): FishWater[] => (Object.keys(WATER_WHERES) as FishWater[]).filter((w) => WATER_WHERES[w].some((x) => s.where.includes(x)));
 
 // ── 채집 지점 ── 맵 곳곳의 고정 후보 자리. 지금 피어 있는지는 사람마다 따로(lib/forage/rules nodeActive)
 // 11/16 clam = 바닷가 갯벌 구멍 (캐는 것은 발굴품 칸 — 물이 빠졌을 때만, protocol seaDigOpen)
 export type NodeKind = "herb" | "ore" | "dig" | "bug" | "clam";
 export const NODE_LABEL: Record<NodeKind, string> = { herb: "약초 캐기", ore: "광석 캐기", dig: "땅 파 보기", bug: "수풀에서 곤충 잡기", clam: "갯벌 캐기" };
 export const NODE_CAT: Record<NodeKind, LifeCat> = { herb: "herb", ore: "ore", dig: "dig", bug: "bug", clam: "dig" };
-/** map = 11/15 캠핑장 지점이면 "camp", 11/16 바닷가면 "sea" (좌표는 그 맵). 없으면 마을 */
-export type GatherNode = { id: string; kind: NodeKind; where: Where; x: number; y: number; map?: "camp" | "sea" };
+/**
+ * map = 11/15 캠핑장 지점이면 "camp", 11/16 바닷가면 "sea" (좌표는 그 맵). 없으면 마을.
+ * also = 11/26 이 지점에서 같이 뽑는 곳 (캠핑장 지점 = 캠핑장 숲·바위 전용 종도 — nodeWheres)
+ */
+export type GatherNode = { id: string; kind: NodeKind; where: Where; x: number; y: number; map?: "camp" | "sea"; also?: Where };
 
 const node = (kind: NodeKind, where: Where, x: number, y: number): GatherNode => ({ id: `${kind[0]}${x}_${y}`, kind, where, x, y });
-/** 캠핑장 지점: id 앞에 q (마을 지점 id와 겹치지 않게 — 캠핑장 좌석 id와 같은 규칙) */
-const campNode = (kind: NodeKind, where: Where, x: number, y: number): GatherNode => ({ id: `q${kind[0]}${x}_${y}`, kind, where, x, y, map: "camp" });
+/**
+ * 캠핑장 지점: id 앞에 q (마을 지점 id와 겹치지 않게 — 캠핑장 좌석 id와 같은 규칙).
+ * 11/26 광석 지점은 캠핑장 바위(돌 4종), 나머지는 캠핑장 숲(곤충·약초 전용 종)도 같이 뽑아요 — 좌표만 옮겨도 그대로
+ */
+const campNode = (kind: NodeKind, where: Where, x: number, y: number, also?: Where): GatherNode => ({
+  id: `q${kind[0]}${x}_${y}`,
+  kind,
+  where,
+  x,
+  y,
+  map: "camp",
+  // 11/26 도감 확장: 계곡 둑 지점은 계곡 물가(campbank)를 넘겨요
+  also: also ?? (kind === "ore" ? "camprock" : "campwood"),
+});
 
 /**
  * 11/15 언젠가 캠핑장 채집 지점 (새 종은 없다 — 기존 종의 출현 장소만). 도감·피어나는 창은 마을과 같이 센다.
- * 숲 산책로·데크 둘레 숲 = 숲(forest), 데크 고리 안 풀밭 = 풀밭(meadow), 산꼭대기·큰 바위 둘레 = 언덕(hill).
+ * 둘레 숲 = 숲(forest), 카라반 골목 풀밭 = 풀밭(meadow), 달그늘 소·절벽 둘레 바위 = 언덕(hill) (11/26 폭포 계곡 개편 자리).
  * game/camp/campLayout.test가 서 있을 수 있는 곳·물 밖·자리와 떨어짐을 본다 (나무는 이 자리를 비켜 선다)
  */
 export const CAMP_GATHER_NODES: readonly GatherNode[] = [
-  // 곤충 수풀 (7 + 11/16 4): 산책로 숲·위쪽 숲·캠핑카 뒤 숲, 데크 고리 안 풀밭
-  campNode("bug", "forest", 1196, 440),
-  campNode("bug", "forest", 1122, 340),
-  campNode("bug", "forest", 860, 170),
-  campNode("bug", "forest", 420, 160),
-  campNode("bug", "forest", 250, 300),
-  campNode("bug", "meadow", 470, 330),
-  campNode("bug", "meadow", 770, 470),
-  // 11/16 더 (덜 쓰던 곳): 서쪽 데크 뒤 숲 · 아래 숲 · 데크 고리 안 풀밭 · 계곡 동쪽 숲
-  campNode("bug", "forest", 162, 452),
-  campNode("bug", "forest", 702, 644),
-  campNode("bug", "meadow", 618, 412),
-  campNode("bug", "forest", 1102, 552),
-  // 약초 (7 + 11/16 3): 산책로·계곡 숲, 위쪽 숲, 타프 옆 숲, 산꼭대기 아래, 데크 고리 안 풀밭
-  campNode("herb", "forest", 1210, 360),
-  campNode("herb", "forest", 1110, 450),
-  campNode("herb", "forest", 900, 130),
-  campNode("herb", "forest", 560, 120),
-  campNode("herb", "forest", 880, 600),
-  campNode("herb", "hill", 1216, 260),
-  campNode("herb", "meadow", 720, 300),
-  // 11/16 더: 서북쪽 숲 · 아래 숲 · 위쪽 숲
-  campNode("herb", "forest", 200, 194),
-  campNode("herb", "forest", 582, 560),
-  campNode("herb", "forest", 752, 194),
-  // 광석 (5 + 11/16 3): 산꼭대기 바위·큰 바위 둘레
-  campNode("ore", "hill", 1248, 214),
-  campNode("ore", "hill", 1072, 190),
-  campNode("ore", "hill", 1100, 62),
-  campNode("ore", "hill", 980, 334),
-  campNode("ore", "hill", 1120, 656),
-  // 11/16 더: 산꼭대기 둘 · 계곡 아래 바위
-  campNode("ore", "hill", 1180, 130),
-  campNode("ore", "hill", 1132, 250),
-  campNode("ore", "hill", 970, 680),
-  // 발굴 (4 + 11/16 2): 낙엽 숲 (위쪽 숲·산책로 옆·타프 아래 숲)
-  campNode("dig", "forest", 640, 150),
-  campNode("dig", "forest", 300, 140),
-  campNode("dig", "forest", 1190, 600),
-  campNode("dig", "forest", 880, 770),
-  // 11/16 더: 아래 숲 · 서쪽 숲
-  campNode("dig", "forest", 540, 728),
-  campNode("dig", "forest", 300, 560),
+  // 11/26 폭포 계곡 개편 자리 (종류·장소 갈래 그대로): 곤충 숲 8 · 풀밭 3 / 약초 숲 8 · 언덕 1 · 풀밭 1 / 광석 소·절벽 둘레 8 / 발굴 숲 6
+  campNode("bug", "forest", 60, 758),
+  campNode("bug", "forest", 250, 770),
+  campNode("bug", "forest", 860, 770),
+  campNode("bug", "forest", 1238, 560),
+  campNode("bug", "forest", 1262, 100),
+  campNode("bug", "forest", 900, 62),
+  campNode("bug", "forest", 330, 40),
+  campNode("bug", "forest", 560, 780),
+  campNode("bug", "meadow", 456, 492),
+  // 11/26 5번 카라반 앞마당(탁자 뒤 의자)과 20px 넘게 띄우려고 위로
+  campNode("bug", "meadow", 750, 506),
+  campNode("bug", "meadow", 314, 300),
+  campNode("herb", "forest", 120, 766),
+  campNode("herb", "forest", 420, 780),
+  campNode("herb", "forest", 958, 788),
+  campNode("herb", "forest", 1262, 420),
+  campNode("herb", "forest", 1100, 40),
+  campNode("herb", "forest", 1222, 298),
+  campNode("herb", "forest", 612, 782),
+  campNode("herb", "forest", 1186, 781),
+  campNode("herb", "hill", 870, 240),
+  campNode("herb", "meadow", 564, 440),
+  campNode("ore", "hill", 426, 238),
+  campNode("ore", "hill", 840, 250),
+  campNode("ore", "hill", 508, 362),
+  campNode("ore", "hill", 774, 360),
+  campNode("ore", "hill", 930, 330),
+  campNode("ore", "hill", 1262, 200),
+  campNode("ore", "hill", 440, 596),
+  campNode("ore", "hill", 1000, 582),
+  campNode("dig", "forest", 180, 780),
+  campNode("dig", "forest", 700, 780),
+  campNode("dig", "forest", 1010, 775),
+  campNode("dig", "forest", 30, 600),
+  campNode("dig", "forest", 1262, 700),
+  campNode("dig", "forest", 330, 770),
+  // 11/26 도감 확장: 옛길 계곡 둑 (10) — 곤충 2·약초 2·발굴 4는 호숫가 + 계곡 물가, 광석 2는 폭포 다리 아래 둑 바위 (언덕 + 캠핑장 바위)
+  campNode("bug", "lakeside", 600, 500, "campbank"),
+  campNode("bug", "lakeside", 716, 560, "campbank"),
+  campNode("herb", "lakeside", 610, 590, "campbank"),
+  campNode("herb", "lakeside", 714, 624, "campbank"), // 초안 712,650은 단풍나무 잎에 가려 조금 위로
+  campNode("ore", "hill", 604, 420),
+  campNode("ore", "hill", 720, 470),
+  // 11/26 2번 카라반 앞마당(3단계 화롯대 통나무)과 20px 넘게 띄우려고 4·4 비켜 (id도 바뀐다 — 채집 지점은 저장하지 않는다)
+  campNode("dig", "lakeside", 608, 554, "campbank"),
+  campNode("dig", "lakeside", 700, 700, "campbank"),
+  campNode("dig", "lakeside", 590, 740, "campbank"),
+  campNode("dig", "lakeside", 690, 746, "campbank"),
 ];
 
 /**
@@ -424,6 +712,8 @@ export const GATHER_NODES: readonly GatherNode[] = [
   // 11/16 바닷가 뭍 지점·갯벌 구멍 더 (lib/forage/seaNodes)
   ...SEA_LAND_NODES,
 ];
+/** 11/26 이 지점에서 뽑는 곳 (원래 구역 + also) */
+export const nodeWheres = (n: GatherNode): readonly Where[] => (n.also ? [n.where, n.also] : [n.where]);
 /** 그 맵의 채집 지점인지 (마을 지점은 map이 없다) */
 export const nodeOnMap = (n: GatherNode, map: "village" | "camp" | "sea"): boolean => (n.map ?? "village") === map;
 const NODE_BY_ID = new Map(GATHER_NODES.map((n) => [n.id, n]));
@@ -432,8 +722,10 @@ export const gatherNodeById = (id: string): GatherNode | undefined => NODE_BY_ID
 // ── NPC ── 물고기는 어부, 나머지는 수집가에게 판다 (NPC 앞에서만 — UI가 NPC 창에서만 판매를 연다)
 // 11/16 r11 사용자: 포구 시장을 뺐어요 → 바다 고기는 어부 영감, 갯벌에서 캔 것은 수집가 유령이 사요 (같은 판매 API)
 // 11/20 달물결 포구 「해녀 할망」 좌판: 물고기·채집물을 한자리에서 다 사요 (값은 마을과 같아요 — 정류장 길 끝 모퉁이, game/sea/seaLayout SEA_BUYER)
-export type NpcId = "fishmonger" | "collector" | "haenyeo";
-export type Npc = { id: NpcId; name: string; title: string; x: number; y: number; buys: readonly LifeCat[]; hello: string; map?: "sea"; where?: Where };
+// 11/26 캠핑장 「낚시터 사장님」(trader): 해녀 할망처럼 물고기·채집물을 다 사요 (값도 마을과 같아요 — 미끼·대여 부스 앞, protocol CAMP_TRADER·CAMP_TRADER_STALL)
+export type NpcId = "fishmonger" | "collector" | "haenyeo" | "trader";
+export type NpcMap = "village" | "camp" | "sea";
+export type Npc = { id: NpcId; name: string; title: string; x: number; y: number; buys: readonly LifeCat[]; hello: string; map?: "sea" | "camp"; where?: Where };
 export const NPCS: readonly Npc[] = [
   {
     id: "fishmonger",
@@ -467,6 +759,16 @@ export const NPCS: readonly Npc[] = [
     hello: "죽어서도 물질은 못 끊었지 뭐예요. 생선이든 조개든 풀뿌리든 다 받아요. 값은 마을이랑 똑같이 쳐줘요.",
     map: "sea",
   },
+  {
+    id: "trader",
+    name: "낚시터 사장님",
+    title: "다 삽니다",
+    x: CAMP_TRADER.x,
+    y: CAMP_TRADER.y,
+    buys: LIFE_CATS,
+    hello: "잡은 거 있으면 이리 줘 봐요. 생선이든 버섯이든 돌멩이든 다 사요. 값은 마을이랑 똑같이 쳐줘요.",
+    map: "camp",
+  },
 ];
 /** 물고기·채집물을 다 사는 상인인지 (판매 창 「물고기와 채집물 전부」, 포인트는 품목마다 낚시·채집 판매로 나눠 적립) */
 export const npcBuysAll = (npc: Npc): boolean => LIFE_CATS.every((c) => npc.buys.includes(c));
@@ -475,6 +777,14 @@ export const npcBuys = (npc: Npc, s: Species): boolean => npc.buys.includes(s.ca
 export const npcById = (id: string): Npc | undefined => NPCS.find((n) => n.id === id);
 /** 이 품목을 사는 마을 NPC (가방·도감에 적는 이름) */
 export const buyerOf = (cat: LifeCat): Npc => NPCS.find((n) => !n.map && n.buys.includes(cat))!;
+/** 11/26 이 맵에 서 있는 상인 (마을 = 어부 영감·수집가 유령, 바닷가 = 해녀 할망, 캠핑장 = 낚시터 사장님) */
+export const npcsOn = (map: NpcMap): Npc[] => NPCS.filter((n) => (n.map ?? "village") === map);
+/** 11/26 오늘 미션 「팔기」 길 안내: 이 맵에서 (x,y)와 가장 가까운 상인 (그 맵에 상인이 없으면 null) */
+export function nearestSeller(map: NpcMap, x: number, y: number): Npc | null {
+  let best: Npc | null = null;
+  for (const n of npcsOn(map)) if (!best || Math.hypot(n.x - x, n.y - y) < Math.hypot(best.x - x, best.y - y)) best = n;
+  return best;
+}
 
 // ── 숫자 ──
 /** 한 칸(종류)에 쌓을 수 있는 수 */
@@ -621,10 +931,39 @@ export const DEX_REWARD_TABLE: readonly { id: string; cat: DexCat; pts: number }
 );
 
 /** 도감 100% 배지 비트 묶음 (protocol DEX_BADGE_CATS 순서 = LIFE_CATS 순서). 하나도 없으면 0 */
-export function dexBadgeBits(dex: Record<string, { n: number }>): number {
+// 11/26 도감 확장: 칭호처럼 한 번 붙으면 남아요 — 그 칸 「전부」 칭호(붙은 표시·예전 단계 보상 포함 — lib/forage/dexReward titlesOf)가 있으면 켜요.
+// 종이 늘어 지금 기준으로 덜 채웠어도 꺼지지 않아요. titles를 안 넘기면 지금 도감만 봐요
+export function dexBadgeBits(dex: Record<string, { n: number }>, titles: readonly string[] = []): number {
   let bits = 0;
   LIFE_CATS.forEach((cat, i) => {
-    if (speciesOf(cat).every((s) => (dex[s.id]?.n ?? 0) > 0)) bits |= 1 << i;
+    const full = DEX_TITLES[cat][100];
+    if ((full && titles.includes(full)) || speciesOf(cat).every((s) => (dex[s.id]?.n ?? 0) > 0)) bits |= 1 << i;
   });
   return bits;
 }
+
+// ── 11/26 맵별 도감 완성 배지 ── 마을·바닷가·캠핑장 따로: 그 맵에서만(마을은 마을에서도) 나오는 종을 전부 등록하면 배지 + 포인트 한 번.
+// 칸(물고기·곤충 …) 칭호와 같은 방식으로 등록하는 순간 자동으로 (lib/forage/dexReward payMapBadges). 별자리·몬스터는 조건에 넣지 않아요.
+// 받은 기록은 예전 단계 보상 장부(forage:{a}:claims)에 `map:${맵}`으로 한 번만 (HSETNX — 나중에 종이 늘어도 다시 주지 않아요)
+export type DexMap = "village" | "sea" | "camp";
+export const DEX_MAPS: readonly DexMap[] = ["village", "sea", "camp"];
+export const DEX_MAP_LABEL: Record<DexMap, string> = { village: "마을", sea: "바닷가", camp: "캠핑장" };
+/** 배지 이름 */
+export const DEX_MAP_BADGE: Record<DexMap, string> = { village: "마을 도감 완성", sea: "바닷가 도감 완성", camp: "캠핑장 도감 완성" };
+/**
+ * 완성 보상 포인트 (맵마다 한 번 — 운영자가 여기 숫자만 바꾸면 돼요). 예전 칸 100% 보상 150P 수준으로 작게:
+ * 마을은 종이 많아 200, 캠핑장 150, 바닷가 150 (11/26 도감 확장으로 바닷가 22 → 70종이 되어 100 → 150)
+ */
+export const DEX_MAP_REWARD: Record<DexMap, number> = { village: 200, sea: 150, camp: 150 };
+/** 이 종이 어느 맵 도감에 드는지 (바닷가 전용 → 바닷가, 캠핑장 전용 → 캠핑장, 나머지 → 마을) */
+export const dexMapOf = (s: Species): DexMap => (isSeasideSpecies(s) ? "sea" : isCampSpecies(s) ? "camp" : "village");
+const MAP_IDS: Record<DexMap, string[]> = { village: [], sea: [], camp: [] };
+for (const sp of SPECIES) MAP_IDS[dexMapOf(sp)].push(sp.id);
+/** 그 맵 도감의 종 id */
+export const dexMapIds = (m: DexMap): readonly string[] => MAP_IDS[m];
+/** 받은 기록 열쇠 (forage claims) */
+export const dexMapClaimKey = (m: DexMap) => `map:${m}`;
+/** 그 맵 도감을 다 채웠는지 */
+export const dexMapDone = (dex: Record<string, { n: number }>, m: DexMap): boolean => MAP_IDS[m].every((id) => (dex[id]?.n ?? 0) > 0);
+/** 그 맵 도감에서 등록한 수 */
+export const dexMapGot = (dex: Record<string, { n: number }>, m: DexMap): number => MAP_IDS[m].filter((id) => (dex[id]?.n ?? 0) > 0).length;

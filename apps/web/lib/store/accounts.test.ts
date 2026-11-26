@@ -66,6 +66,28 @@ function contract(make: () => Kit) {
     for (const s of ["hunt", "bugs", "stars", "fish", "gather", "dex", "goblin", "wish"] as const) expect(await accounts.earn(id, s, DAY, { amount: BIG })).toBe(BIG);
   };
 
+  it("11/26 scanIds: 끝까지 훑으면 모든 계정 id가 나오고 계정 해시가 아닌 키(가방 등)는 빠진다 — scanAccounts와 같은 계정", async () => {
+    const ids = [newId(), newId(), newId()];
+    for (const id of ids) {
+      await accounts.enter(id, { color: "#9fc5a8", body: "hood" }, 1_000);
+      await accounts.earn(id, "flower", DAY);
+    }
+    const seen = new Set<string>();
+    const viaSummary = new Set<string>();
+    for (const [scan, into] of [[(c: string) => accounts.scanIds(c, 50).then((r) => ({ next: r.next, ids: r.ids })), seen], [(c: string) => accounts.scanAccounts(c, 50).then((r) => ({ next: r.next, ids: r.accounts.map((a) => a.accountId) })), viaSummary]] as const) {
+      let cursor = "0";
+      for (let i = 0; i < 10_000; i++) {
+        const r = await scan(cursor);
+        for (const id of r.ids) into.add(id);
+        cursor = r.next;
+        if (cursor === "0") break;
+      }
+    }
+    for (const id of ids) expect(seen.has(id)).toBe(true);
+    expect([...seen].every((id) => !id.includes(":"))).toBe(true);
+    for (const id of ids) expect(viaSummary.has(id)).toBe(true);
+  });
+
   it("항목별 하루 한도: 헌화는 2점씩 하루 20점까지, 다음 날 다시", async () => {
     const id = newId();
     const got: number[] = [];

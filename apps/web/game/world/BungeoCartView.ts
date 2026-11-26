@@ -1,6 +1,6 @@
 import * as Phaser from "phaser";
 import type { MapId } from "@tomb/protocol";
-import { BUNGEO_VENDOR_DX, BUNGEO_VENDOR_DY, bungeoColliders, bungeoLastSpot, bungeoOpenSpot, bungeoTalks, type BungeoSpot, type BungeoTalk } from "@/lib/bungeo/cart";
+import { bungeoColliders, bungeoLastSpot, bungeoOpenSpot, bungeoTalks, bungeoVendorAt, type BungeoSpot, type BungeoTalk } from "@/lib/bungeo/cart";
 import { addCanvasTexture } from "../assets/manifest";
 import { CART_CX, CART_FOOT, CART_H, CART_W, cartGrid, cartSteamGrid, EMPTY_CX, EMPTY_FOOT, EMPTY_H, EMPTY_W, emptySpotGrid, VENDOR_H, VENDOR_W, vendorSheet } from "../sprites/bungeoCart";
 import { Grid, makeCanvas } from "../sprites/pixel";
@@ -14,8 +14,6 @@ import type { Lighting } from "./Lighting";
 //  - 시계 = 실시간 서버 시각. 개발 서버에서만 localStorage "tomb:dev:bungeoOffset"(ms)만큼 앞당겨 본다 (화면 확인용 — 운영 빌드는 무시)
 
 const TEX = { cart: "bungeo-cart-stall", steam: "bungeo-cart-steam", empty: "bungeo-cart-empty", vendor: "bungeo-vendor", glow: "bungeo-cart-glow" } as const;
-const VENDOR_DX = BUNGEO_VENDOR_DX;
-const VENDOR_DY = BUNGEO_VENDOR_DY;
 const BREATH_MS = 700;
 const STEAM_MS = 900;
 
@@ -76,8 +74,7 @@ export class BungeoCartView {
     this.empty = s.add.image(x, y, TEX.empty).setOrigin(EMPTY_CX / EMPTY_W, EMPTY_FOOT / EMPTY_H).setDepth(y - 40).setVisible(false);
     this.cart = s.add.image(x, y, TEX.cart).setOrigin(CART_CX / CART_W, CART_FOOT / CART_H).setDepth(y).setVisible(false);
     this.steam = s.add.image(x, y, TEX.steam, 0).setOrigin(CART_CX / CART_W, CART_FOOT / CART_H).setDepth(y + 0.5).setAlpha(0.85).setVisible(false);
-    const vx = x + VENDOR_DX;
-    const vy = y + VENDOR_DY;
+    const { x: vx, y: vy } = bungeoVendorAt({ x, y });
     this.vendor = s.add.image(vx, vy, TEX.vendor, 0).setOrigin(0.5, (VENDOR_H - 1) / VENDOR_H).setDepth(vy).setVisible(false);
     ensureGlow(s);
     const left = x - CART_CX;
@@ -104,8 +101,7 @@ export class BungeoCartView {
     this.empty.setPosition(x, y).setDepth(y - 40);
     this.cart.setPosition(x, y).setDepth(y);
     this.steam.setPosition(x, y).setDepth(y + 0.5);
-    const vx = x + VENDOR_DX;
-    const vy = y + VENDOR_DY;
+    const { x: vx, y: vy } = bungeoVendorAt(spot);
     this.vendor.setPosition(vx, vy).setDepth(vy);
     const left = x - CART_CX;
     const top = y - CART_FOOT;
@@ -159,7 +155,8 @@ export class BungeoCartView {
     const top = sp.y - CART_FOOT;
     lit.add(left + this.lights[0][0], top + this.lights[0][1], 30, 0.7);
     lit.add(left + this.lights[1][0], top + this.lights[1][1], 16, 0.4);
-    lit.add(sp.x + VENDOR_DX, sp.y + VENDOR_DY - 10, 18, 0.35);
+    const v = bungeoVendorAt(sp);
+    lit.add(v.x, v.y - 10, 18, 0.35);
   }
 
   destroy(): void {

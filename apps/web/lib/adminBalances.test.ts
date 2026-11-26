@@ -88,7 +88,7 @@ describe("잔액 보기 (balanceStats)", () => {
 
   it("기억해 둔 결과를 다시 쓰고, fresh는 짧은 간격 뒤에만 다시 훑는다", async () => {
     const s = await store([["a", "가나다", 100]]);
-    const scan = vi.spyOn(s, "scanAccounts");
+    const scan = vi.spyOn(s, "scanIds");
     await balanceStats({ accounts: s, now: NOW });
     const calls = scan.mock.calls.length;
     expect(calls).toBeGreaterThan(0);

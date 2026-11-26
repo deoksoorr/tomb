@@ -50,6 +50,7 @@ import {
   sellWarning,
   sgGrade,
   slotAccepts,
+  slotCandidates,
   slotGrade,
   type BagEntry,
   type BagTab,
@@ -61,6 +62,7 @@ import EnhanceDialog, { type EnhanceTab } from "./EnhanceDialog";
 import HuntDoll from "./HuntDoll";
 import RpgIcon from "./RpgIcon";
 import { ExchangeDialog } from "./SetGearBag";
+import { GradeTag, SetTag } from "./SgTags";
 import s from "./rpg.module.css";
 import g from "./gearPanel.module.css";
 
@@ -87,6 +89,8 @@ const GEAR_SILHOUETTE: Record<GearSlot, string> = {
   acc2: "c_earphones",
 };
 const TABS: [BagTab, string][] = [
+  // 11/26 부위별 칸 (낀 것 + 그 칸에 낄 수 있는 다른 장비) — 처음 여는 칸
+  ["slots", "부위별"],
   ["all", "전체"],
   ["weapon", "무기"],
   ["armor", "갑옷"],
@@ -103,7 +107,9 @@ type Dlg = { kind: "enhance"; sg?: number; shop?: string; piece?: number; tab: E
 export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: Props) {
   const c = view.character;
   const level = c.level;
-  const [tab, setTab] = useState<BagTab>("all");
+  const [tab, setTab] = useState<BagTab>("slots");
+  /** 11/26 부위별 칸에서 「더 보기」를 펼친 칸 */
+  const [more, setMore] = useState<GearSlot[]>([]);
   const [open, setOpen] = useState<string | null>(null);
   const [slotSel, setSlotSel] = useState<GearSlot | null>(null);
   const [dlg, setDlg] = useState<Dlg>(null);
@@ -113,7 +119,7 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
   const [gBusy, setGBusy] = useState(false);
   const working = busy || gBusy;
   const mats = { doc: 0, seal: 0, prot: 0, ...c.mats };
-  const { sets, shop } = bagEntries(c, level, tab === "mats" || tab === "potions" ? "all" : tab);
+  const { sets, shop } = bagEntries(c, level, tab === "mats" || tab === "potions" || tab === "slots" ? "all" : tab);
   const all: BagEntry[] = [...sets.flatMap((x) => x.items), ...shop];
   const openEntry = all.find((x) => x.key === open) ?? null;
   const counts = activeSets(c.equip).counts;
@@ -151,6 +157,12 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
   }
 
   function pickSlot(slot: GearSlot) {
+    // 11/26 부위별 칸에서는 그 칸으로 내려가 테두리만 (가방 거르기는 그대로)
+    if (tab === "slots") {
+      setSlotSel(slotSel === slot ? null : slot);
+      document.getElementById(`gear-slot-${slot}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      return;
+    }
     if (slotSel === slot) {
       setSlotSel(null);
       setTab("all");
@@ -162,8 +174,8 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
     if (id) setOpen(isSgCode(id) ? `sg${sgUid(id)}` : shopPieceOf(id) ? `si${pieceUid(id)}` : baseGearId(id));
   }
 
-  function equipEntry(x: BagEntry) {
-    const slot = targetOf(x.gear);
+  function equipEntry(x: BagEntry, to?: GearSlot) {
+    const slot = to ?? targetOf(x.gear);
     if (x.type === "sg" || x.piece)
       void gear({ type: "equip", slot, uid: x.type === "sg" ? x.it.u : x.piece!.u }, `${josa(x.gear.name, "을", "를")} ${SLOT_LABELS[slot]}에 꼈어요.`);
     else onCharacter({ type: "equip", slot, itemId: x.gear.id }, `${josa(x.gear.name, "을", "를")} ${SLOT_LABELS[slot]}에 꼈어요.`);
@@ -211,6 +223,140 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
     onSell(x.gear.id, n);
   }
 
+  // ── 11/26 부위별 칸: 칸마다 낀 장비(강조) + 그 칸에 낄 수 있는 다른 장비 (세트 장비 직급 순) — 낀 것과 비교 ▲▼ ──
+  const wornIn = (slot: GearSlot): BagEntry | null => {
+    const id = c.equip[slot];
+    if (!id) return null;
+    return (
+      all.find((x) =>
+        x.type === "sg" ? x.slot === slot : x.piece ? x.piece.slot === slot : !shopPieceOf(id) && !isSgCode(id) && baseGearId(id) === x.gear.id,
+      ) ?? null
+    );
+  };
+  const slotDetail = (x: BagEntry, slot: GearSlot, worn: boolean) => {
+    const diff = worn ? [] : gearDiff(c, slot, idOf(x));
+    if (x.type === "sg")
+      return (
+        <SgDetail
+          x={x}
+          set={sgSetOf(x.it)}
+          count={counts[sgSetOf(x.it)]}
+          egg={eggKnown(c.sgEgg, sgSetOf(x.it))}
+          diff={diff}
+          target={slot}
+          cur={c.equip[slot]}
+          busy={working}
+          canGear={!!onView}
+          confirming={confirm === `dis:${x.key}`}
+          onEquip={() => equipEntry(x, slot)}
+          onUnequip={() => x.slot && unequip(x.slot)}
+          onEnhance={(t) => setDlg({ kind: "enhance", sg: x.it.u, tab: t })}
+          onDisassemble={() => {
+            if (confirm !== `dis:${x.key}`) return setConfirm(`dis:${x.key}`);
+            setConfirm(null);
+            setOpen(null);
+            const got = DISASSEMBLE[x.it.g];
+            void gear({ type: "disassemble", uids: [x.it.u] }, `분해해서 결재 서류 ${got.doc}장${got.seal ? `, 인감 도장 ${got.seal}개` : ""}를 받았어요.`);
+          }}
+          onCancel={() => setConfirm(null)}
+        />
+      );
+    return (
+      <div className={g.detail}>
+        <p className={g.opts}>
+          <EnhStats id={x.piece?.code ?? x.gear.id} />
+        </p>
+        <Compare diff={diff} target={slot} cur={c.equip[slot]} worn={worn} />
+        <div className={g.actions}>
+          {worn ? (
+            <button type="button" className={ui.button} disabled={working} onClick={() => unequip(slot)}>
+              빼기
+            </button>
+          ) : (
+            <button type="button" className={cx(ui.button, ui.primary)} disabled={working || x.low} onClick={() => equipEntry(x, slot)}>
+              장착
+            </button>
+          )}
+          {onView && (
+            <button
+              type="button"
+              className={ui.button}
+              disabled={working || x.enh >= SHOP_ENH_MAX}
+              onClick={() => setDlg(x.piece ? { kind: "enhance", piece: x.piece.u, tab: "enhance" } : { kind: "enhance", shop: x.gear.id, tab: "enhance" })}
+            >
+              {x.enh >= SHOP_ENH_MAX ? `강화 끝 +${SHOP_ENH_MAX}` : "강화"}
+            </button>
+          )}
+        </div>
+        <p className={g.note}>팔기는 [전체] 칸에서 해요.</p>
+      </div>
+    );
+  };
+  const slotBoard = () => (
+    <div className={g.slotBoard}>
+      {GEAR_SLOTS.map((slot) => {
+        const worn = wornIn(slot);
+        const curIt = worn?.type === "sg" ? worn.it : null;
+        const alts = slotCandidates(all, slot);
+        const showAll = more.includes(slot);
+        const shown = showAll ? alts : alts.slice(0, SLOT_ALTS);
+        const headKey = `@${slot}`;
+        return (
+          <section key={slot} id={`gear-slot-${slot}`} className={g.slotGroup} data-sel={slotSel === slot || undefined} aria-label={`${SLOT_LABELS[slot]} 칸`}>
+            <div className={g.slotHead}>
+              <span>{SLOT_LABELS[slot]}</span>
+              <small>{alts.length ? `다른 장비 ${alts.length}개` : "다른 장비 없음"}</small>
+            </div>
+            {worn ? (
+              <SlotRow x={worn} worn open={open === headKey} onToggle={() => setOpen(open === headKey ? null : headKey)}>
+                {slotDetail(worn, slot, true)}
+              </SlotRow>
+            ) : (
+              <p className={g.slotEmpty}>비어 있어요{alts.length ? ". 아래에서 골라 껴요." : ""}</p>
+            )}
+            {shown.length > 0 && (
+              <ul className={g.slotAlts} aria-label={`${SLOT_LABELS[slot]}에 낄 수 있는 다른 장비`}>
+                {shown.map((x) => {
+                  const k = `${slot}:${x.key}`;
+                  const diff = gearDiff(c, slot, idOf(x));
+                  const higher = x.type === "sg" && !!curIt && x.it.g > curIt.g;
+                  return (
+                    <SlotRow
+                      key={k}
+                      x={x}
+                      open={open === k}
+                      diff={diff}
+                      higher={higher}
+                      onToggle={() => setOpen(open === k ? null : k)}
+                      equip={
+                        x.low || (!onView && (x.type === "sg" || !!x.piece))
+                          ? undefined
+                          : { busy: working, onClick: () => equipEntry(x, slot) }
+                      }
+                    >
+                      {slotDetail(x, slot, false)}
+                    </SlotRow>
+                  );
+                })}
+              </ul>
+            )}
+            {alts.length > SLOT_ALTS && (
+              <button
+                type="button"
+                className={cx(ui.button, s.small, g.slotMore)}
+                aria-expanded={showAll}
+                onClick={() => setMore((m) => (showAll ? m.filter((x) => x !== slot) : [...m, slot]))}
+              >
+                {showAll ? "접기" : `${alts.length - SLOT_ALTS}개 더 보기`}
+              </button>
+            )}
+          </section>
+        );
+      })}
+      <p className={g.note}>세트 장비는 직급 높은 순이에요. 강화·옵션 굴리기·승계는 장비를 누르면 나와요.</p>
+    </div>
+  );
+
   // ── 왼쪽: 인형 ──
   const doll = (
     <PaperDoll
@@ -229,7 +375,7 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
             area={slot}
             label={SLOT_LABELS[slot]}
             name={def ? plusName(def.name, e) : null}
-            icon={def ? <SlotIcon art={def.art} e={e} color={grade?.color} /> : null}
+            icon={def ? <SlotIcon art={def.art} e={e} color={grade?.color} sg={isSgCode(id) ? decodeSg(id)?.g : undefined} /> : null}
             silhouette={<RpgIcon art={gearById(GEAR_SILHOUETTE[slot])?.art ?? GEAR[0].art} size={32} />}
             sub={grade?.label ?? null}
             tone={grade?.color}
@@ -352,6 +498,8 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
             </ul>
           ) : tab === "potions" ? (
             <PotionList view={view} busy={working} qty={qty} setQty={setQty} onSell={onSell} />
+          ) : tab === "slots" ? (
+            slotBoard()
           ) : (
             <>
               <div className={g.groupHead}>
@@ -579,10 +727,11 @@ function EnhStats({ id }: { id: string }) {
 }
 
 /** 칸·목록 아이콘 (직급·등급 테 + 강화 수치) */
-function SlotIcon({ art, e, color }: { art: GearDef["art"]; e: number; color?: string }) {
+function SlotIcon({ art, e, color, sg }: { art: GearDef["art"]; e: number; color?: string; sg?: number }) {
   return (
     <span
       className={g.icon}
+      data-sg={sg}
       style={
         {
           "--grade": color ?? "var(--text)",
@@ -611,7 +760,13 @@ function Row({ x, open, onToggle, children }: { x: BagEntry; open: boolean; onTo
     ? `${grade.label} · ${KIND_LABELS[SG_PIECE_KIND[sgPieceOf(x.it)]]}`
     : `${grade.label} · ${KIND_LABELS[x.gear.kind]} · Lv.${x.gear.reqLevel}${x.gear.kind === "weapon" ? ` · ${weaponStyleOf(x.gear).name} · ${WEAPON_DMG_LABEL[weaponDmgKind(weaponStyleOf(x.gear).id)]}` : ""}`;
   return (
-    <li className={g.row} data-open={open || undefined} data-low={x.low || undefined} style={{ "--grade": grade.color } as CSSProperties}>
+    <li
+      className={g.row}
+      data-open={open || undefined}
+      data-low={x.low || undefined}
+      data-sg={isSg ? x.it.g : undefined}
+      style={{ "--grade": grade.color } as CSSProperties}
+    >
       <button
         type="button"
         className={g.pick}
@@ -619,18 +774,17 @@ function Row({ x, open, onToggle, children }: { x: BagEntry; open: boolean; onTo
         onClick={onToggle}
         aria-label={`${plusName(x.gear.name, e)}, ${sub}${worn ? ", 끼는 중" : ""}${x.low ? ", 아직 못 껴요" : ""}`}
       >
-        <span className={g.icon}>
-          <RpgIcon art={x.gear.art} size={32} />
-          {e > 0 && (
-            <span className={g.enh} data-tier={enhTier(e)}>
-              +{e}
-            </span>
-          )}
-          {!isSg && x.count > 1 && <span className={g.count}>×{x.count}</span>}
-        </span>
+        <EntryIcon x={x} />
         <span className={g.info}>
           <span className={g.name}>{plusName(x.gear.name, e)}</span>
-          <span className={g.sub}>{sub}</span>
+          {isSg ? (
+            <span className={g.tagLine}>
+              <GradeTag g={x.it.g} />
+              <span className={g.sub}>{KIND_LABELS[SG_PIECE_KIND[sgPieceOf(x.it)]]}</span>
+            </span>
+          ) : (
+            <span className={g.sub}>{sub}</span>
+          )}
           <span className={g.opts}>
             {isSg ? (
               x.it.o.map(([k, v]) => optText(k, v)).join(" · ") + (x.it.L ? ` · ${SG_LEGENDS[x.it.L].name}` : "")
@@ -645,6 +799,112 @@ function Row({ x, open, onToggle, children }: { x: BagEntry; open: boolean; onTo
           <span className={g.sub}>Lv.{x.gear.reqLevel}부터</span>
         ) : null}
       </button>
+      {open && children}
+    </li>
+  );
+}
+
+/** 11/26 가방·부위별 칸 아이콘: 직급(세트 장비)·등급 테 + 왼쪽 위 직급 딱지 + 강화 수치 (임원급은 금빛 테·반짝임·작은 별) */
+function EntryIcon({ x }: { x: BagEntry }) {
+  const isSg = x.type === "sg";
+  const e = isSg ? x.it.e : x.enh;
+  return (
+    <span className={g.icon} data-sg={isSg ? x.it.g : undefined}>
+      <RpgIcon art={x.gear.art} size={32} />
+      {isSg && (
+        <span className={g.badge}>
+          <GradeTag g={x.it.g} short />
+        </span>
+      )}
+      {e > 0 && (
+        <span className={g.enh} data-tier={enhTier(e)}>
+          +{e}
+        </span>
+      )}
+      {!isSg && x.count > 1 && <span className={g.count}>×{x.count}</span>}
+    </span>
+  );
+}
+
+/** 11/26 비교 꼬리표 한 개 ("ATK ▲12") */
+const diffChip = (d: StatDiff) => `${d.label} ${d.delta > 0 ? "▲" : "▼"}${deltaText(d.delta).slice(1)}`;
+/** 부위별 칸에 보이는 다른 장비 수 (나머지는 「더 보기」) */
+const SLOT_ALTS = 3;
+
+/** 11/26 부위별 칸 한 줄: 낀 장비(강조) 또는 그 칸에 낄 수 있는 다른 장비 — 세트 이름표·직급 꼬리표·낀 것과 비교 ▲▼, 바로 [장착] */
+function SlotRow({
+  x,
+  worn,
+  open,
+  diff,
+  higher,
+  equip,
+  onToggle,
+  children,
+}: {
+  x: BagEntry;
+  worn?: boolean;
+  open: boolean;
+  diff?: StatDiff[];
+  higher?: boolean;
+  equip?: { busy: boolean; onClick: () => void };
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  const isSg = x.type === "sg";
+  const grade = isSg ? sgGrade(x.it) : gearGrade(x.gear);
+  const e = isSg ? x.it.e : x.enh;
+  const ups = diff?.filter((d) => d.delta > 0) ?? [];
+  const downs = diff?.filter((d) => d.delta < 0) ?? [];
+  const chips = [...ups, ...downs].slice(0, 4);
+  return (
+    <li
+      className={g.slotRow}
+      data-worn={worn || undefined}
+      data-open={open || undefined}
+      data-low={x.low || undefined}
+      data-sg={isSg ? x.it.g : undefined}
+      style={{ "--grade": grade.color } as CSSProperties}
+    >
+      <div className={g.slotLine}>
+        <button
+          type="button"
+          className={g.pick}
+          aria-expanded={open}
+          onClick={onToggle}
+          aria-label={`${plusName(x.gear.name, e)}, ${grade.label}${worn ? ", 장착 중" : ""}${x.low ? ", 아직 못 껴요" : ""}`}
+        >
+          <EntryIcon x={x} />
+          <span className={g.info}>
+            <span className={g.name}>{plusName(x.gear.name, e)}</span>
+            <span className={g.tagLine}>
+              {isSg ? <SetTag set={sgSetOf(x.it)} /> : <span className={g.sub}>{x.low ? `Lv.${x.gear.reqLevel}부터` : "상점·주운 장비"}</span>}
+              {isSg ? <GradeTag g={x.it.g} /> : <span className={g.sub}>{grade.label}</span>}
+              {higher && <span className={g.higher}>더 높은 직급</span>}
+              {worn && <span className={g.tag}>장착 중</span>}
+            </span>
+            {!worn && diff && (
+              <span className={g.chips}>
+                {chips.length === 0 ? (
+                  <span className={g.note}>능력치가 같아요</span>
+                ) : (
+                  chips.map((d) => (
+                    <span key={d.key} className={d.delta > 0 ? g.up : g.down}>
+                      {diffChip(d)}
+                    </span>
+                  ))
+                )}
+                {ups.length + downs.length > chips.length && <span className={g.note}>…</span>}
+              </span>
+            )}
+          </span>
+        </button>
+        {equip && !worn && (
+          <button type="button" className={cx(ui.button, g.slotEquip)} disabled={equip.busy} onClick={equip.onClick}>
+            장착
+          </button>
+        )}
+      </div>
       {open && children}
     </li>
   );

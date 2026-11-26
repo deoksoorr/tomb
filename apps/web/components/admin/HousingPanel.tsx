@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ApiRequestError, errorMessage } from "@/lib/api";
-import { RECLAIM_DAYS, RECLAIM_WARN_DAYS, tierById } from "@/lib/housing/catalog";
+import { houseLabel, houseShape, RECLAIM_DAYS, RECLAIM_WARN_DAYS } from "@/lib/housing/catalog";
 import type { AdminHouse } from "@/lib/housing/types";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -152,7 +152,7 @@ export default function HousingPanel({ toast, onAuthLost }: Props) {
               <span className={cx(styles.badge, h.hidden ? styles.badgeHidden : styles.badgeOpen)}>{h.hidden ? "숨김" : "공개"}</span>
               <strong>{h.name}</strong>
               <span className={styles.meta}>
-                {h.ownerName} ({h.ownerTail}…) · {tierById(h.tier)?.name ?? h.tier} · {formatDate(h.createdAt)}
+                {h.ownerName} ({h.ownerTail}…) · {h.lot ? houseLabel(h) : `${h.ch}채널 집터 대기`} · {houseShape(h).name} · {formatDate(h.createdAt)}
               </span>
             </div>
             <span className={styles.meta}>

@@ -41,7 +41,8 @@ function setup(saved?: unknown, savedStacks?: unknown) {
 const events = (c: Conn) => c.out.filter((d): d is string => typeof d === "string").map((d) => JSON.parse(d) as S2C);
 const of = <T extends S2C["t"]>(c: Conn, t: T) => events(c).filter((e): e is Extract<S2C, { t: T }> => e.t === t);
 const send = (m: C2S) => encodeEvent(m);
-const SPOT = { x: 330, y: 540 };
+// 11/26 폭포 계곡 개편: 관리소 아래 흙길 줄 (오른쪽 140px까지 집터·건물이 없는 눈밭)
+const SPOT = { x: 330, y: 740 };
 const STEP = Math.max(SNOW_ACT_INTERVAL_MS, SNOWMAN_BUILD_INTERVAL_MS);
 
 /** 몸통 내려놓기 → 배 → 머리 (t부터 SNOW_ACT_INTERVAL_MS 간격). 세운 눈사람 id (못 세웠으면 undefined) */

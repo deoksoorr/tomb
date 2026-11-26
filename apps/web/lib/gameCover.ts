@@ -37,3 +37,12 @@ export function onGameCoverChange(fn: Listener): () => void {
     listeners.delete(fn);
   };
 }
+
+/** 11/26 창이 화면의 이만큼(넓이 비율) 넘게 덮으면 「큰 창」 — 뒤 마을 그리기를 줄인다 (components/ui/Dialog) */
+export const COVER_AREA = 0.45;
+
+/** 창 크기(w×h)가 화면(vw×vh)의 대부분을 덮는지 (폰 화면 전체 창·데스크톱 760×660 표준 창은 덮음, 확인 창은 아님) */
+export function coversMost(w: number, h: number, vw: number, vh: number): boolean {
+  if (!(w > 0 && h > 0 && vw > 0 && vh > 0)) return false;
+  return (Math.min(w, vw) * Math.min(h, vh)) / (vw * vh) >= COVER_AREA;
+}

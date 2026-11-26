@@ -65,18 +65,23 @@ import ExprRadial, { ExprButton } from "./ExprRadial";
 import SayDialog from "./SayDialog";
 import { ChatSheet } from "./ChatInput";
 import ChatLog, { focusChatLog } from "./ChatLog";
+import SettingsDialog from "./SettingsDialog";
+import { escOpensSettings } from "./settingsEsc";
 import ReportLayer from "./ReportLayer";
 import SproutTip from "./SproutTip";
 import Tutorial from "./Tutorial";
 import UpdateNotice from "./UpdateNotice";
 import styles from "./GameShell.module.css";
 import HousingOffice, { type HousingIntent } from "@/components/housing/HousingOffice";
+import { CAMP_SALE_GUIDE } from "@/components/housing/campOfficeText";
+import { campOf } from "@/game/camp/campSaleApi";
+import { housingApi } from "@/lib/housing/client";
 import MyHouseDialog from "@/components/housing/MyHouseDialog";
 import { hopChannel } from "@/components/housing/channelHop";
 import { houseChannelFullMsg } from "@/game/net/switchPolicy";
 import { graveChannelFor } from "@/game/world/graveChannel";
 import type { PublicHouse } from "@/lib/housing/types";
-import { isRideablePet, type ItemKind, type MapId } from "@tomb/protocol";
+import { isRideablePet, type CampHomeKind, type ItemKind, type MapId } from "@tomb/protocol";
 import HuntLobby from "@/components/rpg/HuntLobby";
 import { towerTaunt } from "@/lib/rpg/tower";
 import ForageLayer from "@/components/forage/ForageLayer";
@@ -407,9 +412,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   useEffect(() => {
     if (onlineChannel) rememberChannel(onlineChannel);
   }, [onlineChannel]);
-  useBridgeEvent("portal:open", ({ kind, houseId, lot, zone, at }) => {
+  useBridgeEvent("portal:open", ({ kind, houseId, lot, zone, camp, at }) => {
     if (kind === "bungeo") setBungeoAt(at ?? null);
-    setHousingIntent(kind === "housing" && (houseId || lot || zone) ? { houseId, lot, zone } : null);
+    setHousingIntent(kind === "housing" && (houseId || lot || zone) ? { houseId, lot, zone, ...(camp ? { camp } : {}) } : null);
     setPanel(kind);
     // 집으로 바로 들어갈 때(친구 창 [집 놀러 가기]·[친구한테 가기]·집 문): 떠 있던 다른 창·목록은 닫는다
     if (kind === "housing" && houseId) {
@@ -429,12 +434,16 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   // 불멍·놀이기구 하늘 시점(관람차·열기구)에서는 HUD를 은은하게 줄인다
   const viewMode = useBridgeValue("view:mode")?.mode;
   // 11/16 바닷가 바다 보기 장면도 같이
-  const campfire = viewMode === "campfire" || viewMode === "sky" || viewMode === "sea";
+  const campfire = viewMode === "campfire" || viewMode === "sky" || viewMode === "sea" || viewMode === "falls";
   // 첫 방문 안내: 계정이 아직 안 봤으면 저절로, 안내(ⓘ)에서 다시 보기
   // 11/18 첫 걸음 ① 꾸미기 열어 보기: 가방·상점 창을 열면
   useLookStep(panel === "bag" || panel === "shop");
   const [tutorialOn, setTutorialOn] = useState<boolean | null>(null);
   const showTutorial = ready && !away && (tutorialOn ?? (me ? !me.tutorialDone : false));
+  // 11/26 장면이 먼저 거는 인사(캠핑장 처음 도착)는 첫 방문 안내가 닫힌 뒤로 (game/camp/CampScene)
+  useEffect(() => {
+    bridge.emit("tutorial:on", { on: showTutorial });
+  }, [showTutorial]);
 
   // 즐겨찾기 원형 목록은 내 캐릭터가 보이는 월드·마을·집에서만 (상점·사냥터·미니게임 제외)
   const canRadial = !scene || scene === "world" || scene === "house";
@@ -603,6 +612,39 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       window.removeEventListener("keyup", onKey);
     };
   }, [ready]);
+  // 11/26 Esc → 설정 창: 열린 창·입력칸·큰 지도·길 안내·표현 목록·채팅 줄·촬영·버스·바라보는 장면·집 꾸미기가 없을 때만 (components/overlay/settingsEsc).
+  // 누른 순간의 상태를 맨 앞(capture)에서 보고, 다른 Esc 처리가 이 키를 썼으면(preventDefault) 열지 않는다
+  // 집 안에서도 열린다 — 집 HUD(panel "housing")는 그대로 두고 설정 창만 위에 (settingsOpen은 panel과 따로)
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsQuiet = (quiet || roomQuiet) && !settingsOpen && canRadial && !radial && !chatOpen && !photo && !houseEditing && !riding && !viewing;
+  const settingsQuietRef = useRef(settingsQuiet);
+  useEffect(() => {
+    settingsQuietRef.current = settingsQuiet;
+  });
+  useEffect(() => {
+    if (!ready) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const el = document.activeElement;
+      const ok = escOpensSettings({
+        plainEsc: !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.isComposing,
+        shellQuiet: settingsQuietRef.current,
+        editable: el instanceof HTMLElement && (el.isContentEditable || el.matches("input, textarea, select")),
+        dialogOpen: !!document.querySelector("dialog[open]"),
+        expanded: !!document.querySelector('[aria-expanded="true"]'),
+        bigMap: !!document.querySelector("[data-bigmap]"),
+        keysBlocked: bridge.last("ui:blockKeys")?.blocked === true,
+        guiding: !!bridge.last("route:guide")?.target,
+      });
+      if (!ok) return;
+      setTimeout(() => {
+        if (e.defaultPrevented || !settingsQuietRef.current || document.querySelector("dialog[open]")) return;
+        setSettingsOpen(true);
+      }, 0);
+    };
+    window.addEventListener("keydown", onKey, { capture: true });
+    return () => window.removeEventListener("keydown", onKey, { capture: true });
+  }, [ready]);
   // 장면·맵이 바뀌거나 버스를 타면 촬영 모드를 끝낸다 (카메라·필터는 게임이 되돌린다)
   useBridgeEvent("scene:changed", ({ scene: next }) => next !== scene && setPhoto(false));
   useBridgeEvent("map:changed", () => setPhoto(false));
@@ -684,8 +726,24 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
    * 지우지 않고 setPanel("housing")만 해서 HousingOffice가 그 집으로 바로 들어갔다. 사무소를 열 때는 늘 비운다
    */
   function openOffice() {
-    // 11/24 운영자: 지금 있는 맵의 사무소 — 바닷가면 포구 부동산(오두막), 그 밖엔 마을 분양 사무소
+    // 11/24 운영자: 지금 있는 맵의 사무소 — 바닷가면 포구 부동산(오두막), 그 밖엔 마을 분양 사무소.
+    // 11/26 캠핑장은 종류마다 분양 NPC가 따로다(언젠가 씨 카라반·소슬댁 펜션·순이 할머니 촌캉스): 캠핑장 집이 있으면 그 종류 NPC의 창,
+    // 없으면 마을 분양 사무소를 열지 않고 누구에게 가면 되는지만 알린다
+    if (mapNow === "camp") {
+      setPanel(null);
+      housingApi
+        .mine("camp")
+        .then((r) => (r.house ? openCampOffice(campOf(r.house).kind) : showToast(CAMP_SALE_GUIDE)))
+        .catch(() => showToast(CAMP_SALE_GUIDE));
+      return;
+    }
     setHousingIntent(mapNow === "sea" ? { zone: "sea" } : null);
+    setPanel("housing");
+  }
+
+  /** 11/26 캠핑장 분양 창 (그 종류를 파는 NPC의 창 — [집] 창의 [○○ 분양]: 내 캠핑장 집 종류) */
+  function openCampOffice(kind: CampHomeKind) {
+    setHousingIntent({ zone: "camp", camp: kind });
     setPanel("housing");
   }
 
@@ -785,6 +843,10 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       setPanel(null);
       openPhoto();
     } else if (target === "housing") setPanel("myhouse");
+    else if (target === "settings") {
+      setPanel(null);
+      setSettingsOpen(true);
+    }
     else if (target === "notices") {
       // 11/20 개발자 노트 사이트를 새 탭으로
       setPanel(null);
@@ -836,13 +898,14 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {ready && (
         <div className={cx(styles.overlay, (away || riding) && styles.away, campfire && styles.campfire, viewing && styles.viewing)}>
           {coarse ? (
-            // 터치: 위 가장자리 바(메뉴 · 음악 · 채널·날씨) + 아래 조이스틱(그 위 확성기)·행동 버튼. 바로 가기 줄은 없고 모두 메뉴 시트에
+            // 터치: 위 가장자리 바(메뉴 · 음악 · ⚙ 설정 · 채널·날씨) + 아래 조이스틱(그 위 확성기)·행동 버튼. 바로 가기 줄은 없고 모두 메뉴 시트에
             <div className={styles.touchBar}>
-              {/* 맨 왼쪽 [메뉴], 그 오른쪽에 노래 버튼 */}
+              {/* 맨 왼쪽 [메뉴], 그 오른쪽에 노래 버튼·설정 */}
               <div className={styles.touchLeft}>
-                <button type="button" className={cx(ui.button, ui.top, styles.topButton)} onClick={() => setPanel("menu")}>
+                <button type="button" className={cx(ui.button, ui.top, styles.topButton, styles.menuTop)} onClick={() => setPanel("menu")}>
                   <PixelIcon name="menu" />
-                  메뉴
+                  {/* 11/26 아주 좁은 폰(380px 이하)은 ⚙ 설정 단추 자리만큼 글자를 숨기고 그림만 (읽는 기기에는 그대로) */}
+                  <span className={styles.menuLabel}>메뉴</span>
                   {(calendarReady || giftCount > 0 || friendIncoming > 0) && (
                     <>
                       <span className={cx(styles.dot, styles.redDot, styles.dotSecond)} aria-hidden="true" />
@@ -857,6 +920,16 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                   )}
                 </button>
                 <BgmPlayer compact />
+                {/* 11/26 설정 ⚙ (터치는 메뉴 시트 칸 대신 위쪽 줄 단추 — 운영자) */}
+                <button
+                  type="button"
+                  className={cx(ui.button, ui.icon, ui.top, styles.topButton)}
+                  onClick={() => setSettingsOpen(true)}
+                  aria-label="설정"
+                  aria-haspopup="dialog"
+                >
+                  <PixelIcon name="gear" />
+                </button>
                 {/* 불멍·놀이기구 중: 폭죽이 있으면 위쪽 줄에서 바로 쏘기 (메뉴 시트를 안 거쳐도) */}
                 {campfire && <FireworkButton variant="top" onOpen={() => setPanel("fireworks")} />}
                 <GhostStaffButton variant="top" className={cx(ui.button, ui.icon, ui.top)} />
@@ -1093,6 +1166,17 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
         />
       )}
       {panel === "channels" && <ChannelMenu onClose={closePanel} graveChannels={myGraves.entries.map((e) => e.grave.channel)} />}
+      {settingsOpen && (
+        <SettingsDialog
+          onLeave={onLeave}
+          onLoggedOut={onLoggedOut}
+          onOpenMe={() => {
+            setSettingsOpen(false);
+            setPanel("me");
+          }}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
       {panel === "guide" && (
         <GuideDialog
           onClose={closePanel}
@@ -1169,6 +1253,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           titleNew={titleNew}
           huntBlocked={rideOff}
           canPhoto={canPhoto}
+          showSettings={!coarse}
           points={me ? me.points : null}
           onPick={pickFromMenu}
           onClose={closePanel}
@@ -1197,9 +1282,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           footer={<GraveyardNow graves={graves.graves} channel={graves.channel} onPick={lookAtGrave} />}
         />
       )}
-      {panel === "myhouse" && <MyHouseDialog channel={houseChannel} onGo={goToMyHouse} onOffice={openOffice} onClose={closePanel} />}
+      {panel === "myhouse" && <MyHouseDialog channel={houseChannel} onGo={goToMyHouse} onOffice={openOffice} onCampOffice={openCampOffice} onClose={closePanel} />}
       {panel === "housing" && (
-        <HousingOffice key={housingIntent?.houseId ? `${housingIntent.houseId}${housingIntent.stay ? ":stay" : ""}` : `${housingIntent?.zone ?? ""}${housingIntent?.lot ?? "office"}`} intent={housingIntent} channel={houseChannel} onClose={closePanel} />
+        <HousingOffice key={housingIntent?.houseId ? `${housingIntent.houseId}${housingIntent.stay ? ":stay" : ""}` : `${housingIntent?.zone ?? ""}${housingIntent?.camp ?? ""}${housingIntent?.lot ?? "office"}`} intent={housingIntent} channel={houseChannel} onClose={closePanel} />
       )}
       {panel === "hunt" && <HuntLobby onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
       {/* 11/22 탈것에 탄 채 입구에서 막혔을 때 가운데 알림 (lib/rideStop) */}

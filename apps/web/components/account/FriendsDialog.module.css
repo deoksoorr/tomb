@@ -102,6 +102,53 @@
   margin-left: auto;
 }
 
+/* 11/26 친구 집 버튼: 같은 폭 칸 (폰은 한 줄 2칸 고정, 넓으면 3칸 — 마을·바닷가·캠핑장). 짧은 이름 + 작은 둘째 줄 */
+.houses {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+@media (min-width: 561px) {
+  .houses {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.houseBtn {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  min-width: 0;
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+.houseMain {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.houseName,
+.houseSub {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.houseSub {
+  max-width: 100%;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.1;
+}
+
 .card .actions .drop:first-child {
   margin-left: 0;
 }

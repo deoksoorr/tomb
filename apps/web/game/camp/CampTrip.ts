@@ -41,6 +41,8 @@ const CAMP_CLOSE_FRAMES = 6;
 const LIFE_WARM_LEAD_MS = 3000;
 /** 창밖 연출이 끝나고 마을이 깨어나기까지 (머무름 + 어두워지기, 대략 ms) */
 const RIDE_TAIL_MS = 800;
+/** 11/26 다른 맵에 내리기 전에 앞 맵 옮기기 답을 기다리는 최대 시간 (ms) */
+const MAP_WAIT_MS = 6000;
 
 // 11/15 마을 ↔ 캠핑장 버스 여행 (월드 장면이 하나 가지고 있다).
 // 같은 채널 연결 그대로 맵만 옮긴다: 실시간 소식은 캠핑장에 있는 동안 캠핑장 장면이 받는다(net.divert).
@@ -146,6 +148,8 @@ export class CampTrip {
   private dest: Dest = DEST.camp;
   private bus: BusArrivalApi | null = null;
   private campLaunched = false;
+  /** 11/26 앞 맵 옮기기 답을 기다리는 끝 시각 (arriveCamp — 창밖 연출 없이 마을을 거쳐 곧바로 이어 갈 때) */
+  private mapWaitUntil: number | null = null;
   /** 11/15 캠핑장 그림 미리 굽기 (정류장 근처·버스를 기다리는 동안·창밖 연출 동안 프레임마다 조금씩). 11/16 가는 곳마다 따로 */
   private readonly bakes = new Map<AwayMapId, { bake: Prebake; near: Pt }>();
   private bakeMap: AwayMapId = "camp";
@@ -255,6 +259,7 @@ export class CampTrip {
     this.dest = d;
     this.phase = "toCamp";
     this.campPending = null;
+    this.mapWaitUntil = null;
     w.lock(true);
     this.startBaking(d, friend ? { x: friend.x, y: friend.y } : d.arrive);
     const pl = w.player();
@@ -305,8 +310,8 @@ export class CampTrip {
       route: this.dest.route,
       reduced: this.w.reduced,
       hour: this.hour(),
-      // 11/20 운영자 순간이동: 창밖 연출 없이 바로 (어두운 한 프레임 뒤 도착)
-      ...(friend?.tp ? { instant: true } : {}),
+      // 11/20 운영자 순간이동: 창밖 연출 없이 바로 (어두운 한 프레임 뒤 도착). 11/26 집에서 나와 그 집 맵으로 갈 때(door)도
+      ...(friend?.tp || friend?.door !== undefined ? { instant: true } : {}),
       onDone: () => (leg === "toCamp" ? this.arriveCamp(friend) : this.arriveVillage(friend)),
     };
     const sm = this.game.scene;
@@ -345,6 +350,15 @@ export class CampTrip {
       this.whenCampReady(() => this.arriveCamp(friend));
       return;
     }
+    // 11/26 앞 맵 옮기기(마을 정류장)의 답을 아직 기다리면 받은 뒤에 장면을 깨운다 (창밖 연출 없이 곧바로 이어 갈 때 —
+    // 늦게 온 마을 답을 캠핑장 장면이 받아 거절로 알고 마을로 되돌아갔다). 답이 끝내 없어도 RealtimeClient가 12초 안에 정리한다
+    const now = performance.now();
+    this.mapWaitUntil ??= now + MAP_WAIT_MS;
+    if (this.w.net.mapWaiting && now < this.mapWaitUntil) {
+      this.afterFrames(1, () => this.arriveCamp(friend));
+      return;
+    }
+    this.mapWaitUntil = null;
     this.phase = "camp";
     const w = this.w;
     w.clearRemotes();
@@ -360,6 +374,8 @@ export class CampTrip {
       // 11/20 운영자 순간이동이면 tp로 (그 사람 옆, 서버가 운영자 연결만 받는다)
       w.net.switchMap(map, to.x, to.y, friend?.tp ? friend.sid : undefined);
       w.net.setAway(false);
+      // 11/26 집 문 앞으로 왔으면: 맵 옮기기를 보낸 뒤 그 집 문 바로 앞으로 맞춘다 (집 그림 기준 — 아직 못 그렸으면 그린 뒤에)
+      if (friend?.door !== undefined) bridge.emit(map === "sea" ? "sea:lot" : "camp:lot", { lot: friend.door });
     });
     // 11/15 화면 UI는 몇 프레임 뒤에 다시 보여요 (캠핑장을 처음 그리는 프레임과 겹치면 한 번 멈췄어요)
     this.afterFrames(UI_DELAY_FRAMES, () => {

@@ -159,17 +159,24 @@ export function bench(width: number, w: WoodPal = WOOD): HTMLCanvasElement {
   return g.toCanvas();
 }
 
-/** 위(화면 안쪽)를 보는 벤치에서 등받이가 시작되는 줄. 이 줄부터 아래는 앉은 사람 앞에 한 번 더 그린다 (WorldMap) */
-export const BENCH_UP_BACK_ROW = 7;
+/** 그림 안에서 등받이가 시작되는 줄 (benchUp이 그릴 때) */
+const BENCH_UP_ART_BACK_ROW = 7;
+/** 11/26 벤치 텍스처 위 여백 (manifest가 그림 둘레에 빈 칸을 두른다 — sprites/villagePad BENCH_TEX_PAD) */
+export const BENCH_TEX_PAD_TOP = 2;
+/**
+ * 위(화면 안쪽)를 보는 벤치 텍스처에서 등받이가 시작되는 줄. 이 줄부터 아래는 앉은 사람 앞에 한 번 더 그린다 (WorldMap 자르기).
+ * 텍스처는 위에 BENCH_TEX_PAD_TOP줄 여백이 있어 그만큼 내린다 (그림 속 줄은 그대로 7)
+ */
+export const BENCH_UP_BACK_ROW = BENCH_UP_ART_BACK_ROW + BENCH_TEX_PAD_TOP;
 
 /**
  * 위를 보는 벤치 (뒤에서 본 모습): 앉는 판이 위(안쪽), 등받이가 아래(화면 쪽)에 있다.
- * 크기·원점은 bench()와 같고, BENCH_UP_BACK_ROW부터 아래(등받이·다리)는 앉은 사람의 허리 아래를 가린다.
+ * 크기·원점은 bench()와 같고, BENCH_UP_ART_BACK_ROW부터 아래(등받이·다리)는 앉은 사람의 허리 아래를 가린다.
  */
 export function benchUp(width: number, w: WoodPal = WOOD): HTMLCanvasElement {
   const W = width + 6;
   const g = new Grid(W, 18);
-  const top = BENCH_UP_BACK_ROW;
+  const top = BENCH_UP_ART_BACK_ROW;
   // 앉는 판 (등받이 너머로 보이는 윗면)
   g.rect(1, 2, W - 2, top - 2, w.mid);
   g.rect(1, 2, W - 2, 1, w.hi);

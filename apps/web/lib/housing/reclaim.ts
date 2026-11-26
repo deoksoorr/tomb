@@ -3,7 +3,7 @@ import { staffAccountId } from "../staff";
 import { getAccounts, getGifts } from "../store";
 import { GIFT_KEEP_MS, type GiftRecord } from "../store/gifts";
 import { houseLabel, legacyPlotCost, RECLAIM_DAYS, RECLAIM_SINCE, reclaimLastSeen } from "./catalog";
-import { houseIdFor } from "./service";
+import { houseIdsOf } from "./service";
 import type { HouseRecord, HouseStore } from "./store";
 
 // 오래 비운 집 정리: 주인이 RECLAIM_DAYS일 넘게 들어오지 않은 집을 비워 그 번지를 다시 분양할 수 있게 한다.
@@ -97,7 +97,8 @@ export async function sweepReclaim(
     const [s] = await accounts.summaries([h.owner]);
     const label = h.lot ? houseLabel(h) : `${h.ch}채널`;
     const points = refundOf(h);
-    const r = await store.reclaim(h.id, { owner: h.owner, tier: h.tier, ch: h.ch, points, cutoff, since, lastSeenAt: s?.lastSeenAt ?? 0, label, now, ...(h.zone === "sea" ? { zone: "sea" as const } : {}) });
+    // 11/16 오두막·11/26 캠핑장 집은 번지 색인이 따로 (zone)
+    const r = await store.reclaim(h.id, { owner: h.owner, tier: h.tier, ch: h.ch, points, cutoff, since, lastSeenAt: s?.lastSeenAt ?? 0, label, now, ...(h.zone ? { zone: h.zone } : {}) });
     if (typeof r === "object") report.reclaimed.push({ id: h.id, name: h.name, ownerName: h.ownerName, label, points: r.points });
     else report.kept++;
   }
@@ -125,8 +126,8 @@ export function resetReclaimGate() {
  * 선물 id가 기록마다 정해져 있어, 보낸 뒤 기록을 지우기 전에 끊겨도 다음에 같은 선물을 다시 넣을 뿐이다
  */
 export async function deliverReclaim(store: HouseStore, accountId: string, now = Date.now()): Promise<string | null> {
-  // 11/16 마을 집과 포구 오두막은 집 id가 따로다 (둘 다 본다)
-  const ids = [houseIdFor(accountId), houseIdFor(accountId, "sea")];
+  // 11/16 마을 집과 포구 오두막은 집 id가 따로다. 11/26 캠핑장 집까지 셋 다 본다
+  const ids = houseIdsOf(accountId);
   const lists = await Promise.all(ids.map((id) => store.pendingReclaims(id)));
   const rows = ids.flatMap((id, i) => lists[i].map((p) => ({ id, p })));
   if (!rows.length) return null;

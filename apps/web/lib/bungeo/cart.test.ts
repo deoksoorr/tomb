@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isShopListed, ITEMS, itemById, permanentPrice, seasonSetsOfLook, ALLEY_SETS, ALLEY_BODIES, isAvatarBody } from "@tomb/protocol";
 import { readFileSync } from "node:fs";
-import { BUNGEO_BUY_RADIUS, BUNGEO_CALLS, BUNGEO_GOODS, BUNGEO_LAST_DAY, BUNGEO_SPOTS, bungeoCalls, bungeoCallsDue, bungeoDays, bungeoLastSpot, bungeoNear, bungeoOpen, bungeoOpenSpot, bungeoSpotOf, bungeoUpcoming, isBungeoDay } from "./cart";
+import { BUNGEO_BUY_RADIUS, BUNGEO_CALLS, BUNGEO_GOODS, BUNGEO_LAST_DAY, BUNGEO_SPOTS, bungeoCalls, bungeoCallsDue, bungeoDays, bungeoLastSpot, bungeoNear, bungeoOpen, bungeoOpenSpot, bungeoSpotOf, bungeoUpcoming, isBungeoDay, BUNGEO_FIXED_DAYS, BUNGEO_MAP_RULE_AFTER } from "./cart";
 import { SUNKEN_POOL } from "../forage/sunken";
 import { CHEST_COSMETICS } from "../rpg/setGearRoll";
 import { COSMETIC_DROPS } from "../rpg/catalog";
@@ -69,7 +69,8 @@ describe("일정 (게임 날짜 기준 사흘에 한 번, 밤 10시 ~ 새벽 2�
 
 describe("11/23 회차마다 무작위 자리 (씨앗 = 게임 날짜)", () => {
   const days = bungeoDays();
-  const SEQ = ["fence", "seaRocks", "fence", "alley", "fence", "seaLot1"];
+  // 20261125까지는 예전 규칙 그대로 (고정). 20261128은 정해 둔 회차, 그 뒤는 맵 먼저 고르기
+  const SEQ = ["fence", "seaRocks", "fence", "campPlaza", "seaLot1", "campResSE"];
   it("출현 날짜 목록: 따로 여는 날 + 3일 간격, 오름차순·중복 없음", () => {
     expect(days[0]).toBe("20261121");
     expect(days[1]).toBe("20261122");
@@ -88,10 +89,10 @@ describe("11/23 회차마다 무작위 자리 (씨앗 = 게임 날짜)", () => {
   it("바로 앞 회차와 같은 자리는 안 나온다", () => {
     for (let i = 1; i < days.length; i++) expect(bungeoSpotOf(days[i]).id, `${days[i - 1]} → ${days[i]}`).not.toBe(bungeoSpotOf(days[i - 1]).id);
   });
-  it("시즌 전체로 다섯 자리가 고루 (자리마다 3번 이상, 한 자리가 40%를 넘지 않음) · 바닷가도 나온다", () => {
+  it("시즌 전체로 자리가 고루 (자리마다 3번 이상 — 나중에 더한 자리는 2번 이상, 한 자리가 40%를 넘지 않음) · 바닷가도 나온다", () => {
     const count = new Map<string, number>();
     for (const d of days) count.set(bungeoSpotOf(d).id, (count.get(bungeoSpotOf(d).id) ?? 0) + 1);
-    for (const s of BUNGEO_SPOTS) expect(count.get(s.id) ?? 0, s.id).toBeGreaterThanOrEqual(3);
+    for (const s of BUNGEO_SPOTS) expect(count.get(s.id) ?? 0, s.id).toBeGreaterThanOrEqual(s.from ? 2 : 3);
     for (const [id, n] of count) expect(n / days.length, id).toBeLessThanOrEqual(0.4);
     expect(days.some((d) => bungeoSpotOf(d).map === "sea")).toBe(true);
     expect(days.some((d) => bungeoSpotOf(d).map === "village")).toBe(true);
@@ -108,6 +109,21 @@ describe("11/23 회차마다 무작위 자리 (씨앗 = 게임 날짜)", () => {
     expect(bungeoLastSpot(kst(2026, 11, 25, 21, 0))).toBe(bungeoSpotOf("20261122"));
     expect(bungeoLastSpot(kst(2026, 11, 26, 3, 0))).toBe(bungeoSpotOf(d));
     expect(bungeoLastSpot(kst(2026, 11, 20, 12, 0))).toBeNull();
+  });
+  it("정해 둔 회차는 그 자리 · 이날까지(20261125)의 회차는 예전 그대로", () => {
+    for (const [d, id] of Object.entries(BUNGEO_FIXED_DAYS)) expect(bungeoSpotOf(d).id, d).toBe(id);
+    expect(BUNGEO_MAP_RULE_AFTER).toBe("20261125");
+    expect(["20261121", "20261122", "20261125"].map((d) => bungeoSpotOf(d).id)).toEqual(["fence", "seaRocks", "fence"]);
+  });
+  it("그 뒤로는 맵이 고르게 (마을·바닷가·캠핑장 1/3쯤) · 바로 앞 회차와 같은 맵은 안 나온다", () => {
+    const later = days.filter((d) => d > BUNGEO_MAP_RULE_AFTER);
+    const maps = later.map((d) => bungeoSpotOf(d).map);
+    for (let i = 1; i < later.length; i++) expect(maps[i], `${later[i - 1]} → ${later[i]}`).not.toBe(maps[i - 1]);
+    for (const m of ["village", "sea", "camp"]) {
+      const share = maps.filter((x) => x === m).length / maps.length;
+      expect(share, m).toBeGreaterThan(0.25);
+      expect(share, m).toBeLessThan(0.42);
+    }
   });
   it("자리를 새로 더해도(from) 그 전 회차 자리는 그대로 — from 이전 날짜는 뽑기에 안 들어간다", () => {
     const late = BUNGEO_SPOTS.filter((s) => s.from);

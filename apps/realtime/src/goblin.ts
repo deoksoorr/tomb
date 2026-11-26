@@ -7,9 +7,13 @@ import {
   GOBLIN_LATE_MAX_MS,
   GOBLIN_LATE_MIN_MS,
   GOBLIN_LIFE_MS,
+  goblinMapOf,
   goblinPoints,
   goblinPos,
+  isAwayMap,
+  pickGoblinMap,
   type GoblinInfo,
+  type MapId,
 } from "@tomb/protocol";
 
 // 22번 황금 고블린(보너스 요정)의 등장·주인 판정. 순수 상태 머신이라 Node에서 테스트한다(goblin.test.ts).
@@ -19,6 +23,7 @@ import {
 //   예정 시각에 아무도 없었으면, 사람이 다시 생겼을 때 몇 분 뒤로 다시 잡는다(들어오자마자 나오지 않게).
 // - 판정: 같은 고블린은 한 번만 잡힌다(caughtBy). 이 상태도 저장되므로 hibernate·재시작 뒤에도 두 번 잡히지 않고,
 //   웹 API도 고블린 id(= 증서 nonce)를 한 번만 받는다 (이중 안전장치).
+// - 11/26 맵: 등장 때 마을 50 · 바닷가 25 · 캠핑장 25로 고른다(갈 수 있는 사람이 없는 맵 몫은 마을). 그 맵에 있는 사람만 잡는다.
 
 export type GoblinCur = GoblinInfo & {
   points: number;
@@ -38,6 +43,11 @@ function newId(r: () => number): string {
   return s;
 }
 
+/** 알림에 싣는 등장 정보 (마을이면 옛 모양 그대로 — m 없음) */
+function infoOf(c: GoblinCur): GoblinInfo {
+  return { id: c.id, seed: c.seed, at: c.at, until: c.until, ...(c.m ? { m: c.m } : {}) };
+}
+
 export class GoblinCore {
   state: GoblinState = { next: null, cur: null };
 
@@ -53,6 +63,7 @@ export class GoblinCore {
       c && typeof c === "object" && typeof c.id === "string" && typeof c.seed === "number" && typeof c.at === "number" && typeof c.until === "number" && typeof c.points === "number"
         ? { ...c }
         : null;
+    if (cur && !isAwayMap(cur.m)) delete cur.m; // 옛 저장(맵 없음)·이상한 값 = 마을
     this.state = { next, cur };
   }
 
@@ -60,7 +71,7 @@ export class GoblinCore {
   visible(now: number): GoblinInfo | undefined {
     const c = this.state.cur;
     if (!c || c.caughtBy || now < c.at || now >= c.until) return undefined;
-    return { id: c.id, seed: c.seed, at: c.at, until: c.until };
+    return infoOf(c);
   }
 
   /** DO가 이 시각에 깨어나야 한다 (사라질 때 · 사람이 있으면 다음 등장). 없으면 null */
@@ -73,7 +84,7 @@ export class GoblinCore {
   /**
    * 시간이 흘렀다. 사라짐(gone: 아무도 못 잡았을 때 id)·등장(spawned)을 돌려준다. changed = 저장할 것이 생겼다.
    */
-  check(now: number, online: number): { gone?: string; spawned?: GoblinInfo; changed: boolean } {
+  check(now: number, online: number, allowed?: (m: MapId) => boolean): { gone?: string; spawned?: GoblinInfo; changed: boolean } {
     const s = this.state;
     const out: { gone?: string; spawned?: GoblinInfo; changed: boolean } = { changed: false };
     if (s.cur && now >= s.cur.until) {
@@ -87,14 +98,17 @@ export class GoblinCore {
       out.changed = true;
     } else if (now >= s.next && online > 0) {
       if (now - s.next > GOBLIN_LIFE_MS) s.next = now + between(this.random, GOBLIN_LATE_MIN_MS, GOBLIN_LATE_MAX_MS);
-      else out.spawned = this.spawn(now);
+      else out.spawned = this.spawn(now, allowed);
       out.changed = true;
     }
     return out;
   }
 
-  /** 지금 나오게 한다 (일정·개발용 훅). 다음 등장 일정도 새로 잡는다 */
-  spawn(now: number): GoblinInfo {
+  /**
+   * 지금 나오게 한다 (일정·개발용 훅). 다음 등장 일정도 새로 잡는다.
+   * allowed = 이 맵에 갈 수 있는 사람이 있다 (없으면 마을만). force = 개발용 훅이 맵을 정했다
+   */
+  spawn(now: number, allowed?: (m: MapId) => boolean, force?: MapId): GoblinInfo {
     const r = this.random;
     const cur: GoblinCur = {
       id: newId(r),
@@ -103,18 +117,22 @@ export class GoblinCore {
       until: now + GOBLIN_LIFE_MS,
       points: goblinPoints(r), // 11/19 보통 300~1,000P, 드물게 대박 2,000P (protocol npc.ts)
     };
-    this.state.cur = cur;
     this.state.next = now + between(r, GOBLIN_GAP_MIN_MS, GOBLIN_GAP_MAX_MS);
-    return { id: cur.id, seed: cur.seed, at: cur.at, until: cur.until };
+    // 맵은 맨 끝에 뽑는다 (앞의 id·시드·보상·다음 일정 뽑기 순서는 예전 그대로)
+    const map = force ?? pickGoblinMap(r(), allowed);
+    if (map !== "village") cur.m = map;
+    this.state.cur = cur;
+    return infoOf(cur);
   }
 
   /**
    * 잡기 요청: 이 고블린이 아직 있고, 아무도 못 잡았고, 그 순간 고블린 위치와 플레이어 위치(가까운 쪽)가 반경 안이면
    * 이 사람을 주인으로 정하고 보상 포인트를 돌려준다. 아니면 null (가장 먼저 온 요청 하나만 통과한다)
    */
-  claim(id: string, visitorId: string, positions: readonly { x: number; y: number }[], now: number): number | null {
+  claim(id: string, visitorId: string, positions: readonly { x: number; y: number }[], now: number, map: MapId = "village"): number | null {
     const c = this.state.cur;
     if (!c || c.id !== id || c.caughtBy || now < c.at || now >= c.until) return null;
+    if (goblinMapOf(c) !== map) return null; // 11/26 다른 맵에서는 못 잡는다 (같은 좌표라도)
     const g = goblinPos(c, now);
     const near = positions.some((p) => Math.hypot(p.x - g.x, p.y - g.y) <= GOBLIN_CLAIM_RADIUS);
     if (!near) return null;

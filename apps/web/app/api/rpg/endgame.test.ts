@@ -4,7 +4,7 @@ import { tExpToNext, TRANSCEND_EXP_MUL } from "@/lib/rpg/endgame";
 import { floorTExp, isCheckpoint, isChestFloor, nextCheckpoint, TOWER_CHEST_FROM, TOWER_LOW_CHECKPOINTS, towerFloorPoints, towerOfScore, towerPlan, towerReachedLabel, towerZone } from "@/lib/rpg/tower";
 import { getTowerStore } from "@/lib/rpg/towerStore";
 import { getAccounts, getErrors, getMegaphone } from "@/lib/store";
-import { cardOffer, CARD_IDS } from "@/lib/rpg/cards";
+import { cardOffer, CARD_IDS, runLevel, runLevelBase, runXpOf, startPicks, type CardCounts, type CardPick } from "@/lib/rpg/cards";
 import type { MonsterId } from "@/lib/rpg/catalog";
 import * as rank from "../rank/route";
 import { huntPlan } from "@/lib/rpg/plan";
@@ -293,6 +293,57 @@ describe("야근 빌딩 판 끝 정산", () => {
     const r = await end(v, s, climbed(s, 10), climbMs(10));
     expect(r.reward.tower).toMatchObject({ chests: want, emptyChests: 0 });
     expect((await getRpgStore().get(v.id)).tChest).toBe(14 + want.length);
+  });
+});
+
+describe("11/26 엘리베이터 판 시작 판 레벨", () => {
+  /** 시작 카드 다 고르고, 층마다 쌓인 경험치로 레벨이 오른 층을 적은 정직한 기록 (base = 시작 판 레벨) */
+  const picksFor = (s: RunStartResponse, floors: number, base: number): CardPick[] => {
+    const start = s.tower!;
+    const owned: CardCounts = {};
+    const out: CardPick[] = [];
+    const take = (k: "s" | "l", i: number, f: number) => {
+      const c = cardOffer(s.seed, k, i, 0, owned, f)[0];
+      owned[c] = (owned[c] ?? 0) + 1;
+      out.push({ k, i, r: 0, c, ...(k === "l" ? { f } : {}) });
+    };
+    for (let i = 0; i < startPicks(start); i++) take("s", i, start);
+    let xp = 0;
+    let n = 0;
+    for (let i = 0; i < floors; i++) {
+      for (const w of towerPlan(s.seed, start + i, start)) for (const m of w.monsters) xp += runXpOf(m);
+      while (n < runLevel(xp, base).level) take("l", n++, start + i);
+    }
+    return out;
+  };
+  const ticketRb = (s: RunStartResponse) => (JSON.parse(Buffer.from(s.ticket.split(".")[0], "base64url").toString()) as { rb?: number }).rb;
+
+  it("51층 시작 티켓에 시작 판 레벨이 실리고, 그 레벨부터 센 기록은 깨끗한 판 · 0레벨부터 센 기록은 의심 판", async () => {
+    const v = await newVisitor({ level: 50, fBest: CP_MID - 1 });
+    const s = await begin(v, CP_MID);
+    expect(ticketRb(s)).toBe(runLevelBase(CP_MID));
+    // 화면도 같은 값으로 센다 (판 시작 응답)
+    expect(s.towerLv0).toBe(runLevelBase(CP_MID));
+    const good = picksFor(s, 8, runLevelBase(CP_MID));
+    expect(good.filter((p) => p.k === "l").length).toBeLessThanOrEqual(3);
+    const r = await end(v, s, climbed(s, 8, { cards: good }), climbMs(8));
+    expect(r.reward.tower?.suspect).toBeUndefined();
+    const s2 = await begin(v, CP_MID);
+    const many = picksFor(s2, 8, 0);
+    expect(many.filter((p) => p.k === "l").length).toBeGreaterThanOrEqual(6);
+    const r2 = await end(v, s2, climbed(s2, 8, { cards: many }), climbMs(8));
+    expect(r2.reward.tower?.suspect).toBe(true);
+    const item = (await listReviews()).find((i) => i.kind === "tower" && i.acct === v.id)!;
+    expect(item.kind === "tower" && item.why).toEqual(["cards:level"]);
+  });
+
+  it("1층 시작은 그대로 (티켓에 없음, 0레벨부터)", async () => {
+    const v = await newVisitor();
+    const s = await begin(v, 1);
+    expect(ticketRb(s)).toBeUndefined();
+    expect(s.towerLv0).toBeUndefined();
+    const r = await end(v, s, climbed(s, 6, { cards: picksFor(s, 6, 0) }), climbMs(6));
+    expect(r.reward.tower?.suspect).toBeUndefined();
   });
 });
 

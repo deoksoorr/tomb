@@ -349,7 +349,7 @@ function ProfileRows({ me, googleLinked, chips }: { me: Me; googleLinked: boolea
   const price = cost === 0 ? "이번 변경은 무료예요." : `바꾸면 ${cost.toLocaleString("ko-KR")} 포인트가 들어요.`;
   const { state } = useForage();
   // 도감 100% 배지: 다 채운 종류 (이름표 옆 별과 같다)
-  const cats = dexBadgeCats(state ? dexBadgeBits(state.dex) : 0);
+  const cats = dexBadgeCats(state ? dexBadgeBits(state.dex, state.titles) : 0);
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

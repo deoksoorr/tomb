@@ -46,6 +46,8 @@ export default function MobileControls({
   const duck = useBridgeValue("boat:duck")?.riding === true;
   // 11/16 범퍼카 위에서도 점프 대신 빵빵
   const car = useBridgeValue("bumper:riding")?.riding === true;
+  // 11/26 2인승 배에 같이 탔으면 [앉기] 자리가 [내리기] (E·[상호작용]은 낚시로 남는다)
+  const passenger = useBridgeValue("boat:passenger")?.on === true;
   // 11/18 캠핑장 눈덩이를 들고 있으면 점프 대신 굴리기 (들고 있는 동안 점프는 막혀 있다)
   const snowball = useBridgeValue("camp:snowball")?.held === true;
   // 11/18 눈싸움: 바닷가·실내에서는 숨긴다 (장면이 바뀌는 사이 남은 값이 있어도)
@@ -90,10 +92,11 @@ export default function MobileControls({
           type="button"
           className={styles.action}
           data-slot="sit"
-          data-near={nearSeat != null}
-          {...pressProps(() => bridge.emit("input:sit"))}
+          data-near={nearSeat != null || passenger}
+          // 같이 탔으면 [내리기]는 낚시 창이 열려 있어도(키가 막혀 있어도) 바로 내린다
+          {...pressProps(() => (passenger ? bridge.emit("boat:moveOff") : bridge.emit("input:sit")))}
         >
-          {nearSeat ? (nearSeat.kind === "bench" ? "벤치에 앉기" : "의자에 앉기") : "앉기"}
+          {passenger ? "내리기" : nearSeat ? (nearSeat.kind === "bench" ? "벤치에 앉기" : "의자에 앉기") : "앉기"}
         </button>
         <button
           type="button"

@@ -12,9 +12,9 @@ export function friendChannelFullMsg(name: string): string {
   return `${name}님이 있는 채널이 꽉 차서 갈 수 없어요.`;
 }
 
-/** 내 집 가기: 내 집이 있는 채널이 꽉 찼다 */
+/** 내 집 가기·친구 집 놀러 가기: 그 집이 있는 채널이 꽉 찼다 (11/26 — 채널을 그대로 두고 들어가지 않는다, 지금 자리 그대로) */
 export function houseChannelFullMsg(channel: number): string {
-  return `내 집이 있는 ${channel}채널이 꽉 차서 갈 수 없어요. 자리가 나면 다시 가 보세요.`;
+  return `${channel}채널이 꽉 차서 지금은 그 집에 갈 수 없어요.`;
 }
 
 /**

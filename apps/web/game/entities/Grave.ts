@@ -3,7 +3,8 @@ import { flowersKey, TEX } from "../assets/manifest";
 import { DEPTH, TOOLTIP_EPITAPH, TOOLTIP_NAME } from "../config";
 import { GRAVE_SCALE } from "@tomb/protocol";
 import { SHAPE_SIZE, type GraveShape } from "../graveShape";
-import { GRAVE_STONE_H, graveOriginY, graveTexKey, MONITOR_CURSOR, ROCKET_TIP, SERVER_LEDS } from "../sprites/graves";
+import { GRAVE_STONE_H, graveTexKey, MONITOR_CURSOR, ROCKET_TIP, SERVER_LEDS } from "../sprites/graves";
+import { FLOWERS_TEX_PAD, graveTexOriginY, MINE_FLAG_ORIGIN_X, RIBBON_TEX_PAD } from "../sprites/villagePad";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import type { GravePlacement } from "../world/graveLayout";
 
@@ -79,7 +80,7 @@ export class GraveView {
     this.phase = (p.index * 1.7) % (Math.PI * 2);
     const s = this.stone;
     s.setTexture(graveTexKey(p.shape, p.variant))
-      .setOrigin(0.5, graveOriginY(p.shape))
+      .setOrigin(0.5, graveTexOriginY(p.shape)) // 11/26 텍스처 위 여백만큼 (받침 줄 그대로)
       .clearTint()
       .setPosition(p.x, p.y)
       .setDepth(p.y)
@@ -89,7 +90,7 @@ export class GraveView {
 
     if (p.flowers > 0) {
       if (!this.flowers) this.flowers = this.scene.add.image(0, 0, flowersKey(1)).setOrigin(0.5, 0);
-      this.flowers.setTexture(flowersKey(p.flowers)).setPosition(p.x, p.y - 2 * K).setScale(K).setDepth(p.y + 1).setVisible(true);
+      this.flowers.setTexture(flowersKey(p.flowers)).setPosition(p.x, p.y - (2 + FLOWERS_TEX_PAD.top) * K).setScale(K).setDepth(p.y + 1).setVisible(true);
     } else this.flowers?.setVisible(false);
 
     const level = reviveLevel(p.revives);
@@ -119,7 +120,7 @@ export class GraveView {
       const h = stoneH(p.shape);
       this.flag = this.scene.add
         .image(p.x + w / 2, p.y - h + 4 * K, TEX.mineFlag)
-        .setOrigin(0.15, 1)
+        .setOrigin(MINE_FLAG_ORIGIN_X, 1)
         .setDepth(p.y + 0.7)
         .setScale((p.copy ? 0.7 : 1) * Math.max(0.85, K));
       if (!p.copy) {
@@ -249,7 +250,7 @@ export class GraveView {
           this.decorObjs.push(this.scene.add.image(p.x, p.y + 3 * K, TEX.wreath).setScale(K).setDepth(p.y + 3));
           break;
         case "decor_ribbon":
-          this.decorObjs.push(this.scene.add.image(p.x + 4 * K, p.y - h + 3 * K, TEX.ribbon).setOrigin(0.5, 0).setScale(K).setDepth(p.y + 0.5));
+          this.decorObjs.push(this.scene.add.image(p.x + 4 * K, p.y - h + (3 - RIBBON_TEX_PAD.top) * K, TEX.ribbon).setOrigin(0.5, 0).setScale(K).setDepth(p.y + 0.5));
           break;
         case "decor_lantern": {
           const lx = p.x + 13 * K;

@@ -1,17 +1,22 @@
 import { handler, json } from "@/lib/http";
+import { fullSaleChannels, type SaleKind } from "@/lib/housing/catalog";
 import { getHouseStore } from "@/lib/housing/service";
 
-export type HouseChannelsResponse = { channels: number[] };
+/** full = 11/26 분양 종류(마을·포구·카라반·펜션·촌캉스)마다 터가 다 찬 채널 (분양 창이 「남은 채널」을 센다 — 같은 집 목록이라 읽기가 늘지 않는다) */
+export type HouseChannelsResponse = { channels: number[]; full: Record<SaleKind, number[]> };
 
 /** 서버 메모리 캐시 (분양·철거가 잦지 않아 1분이면 충분하다) */
 const MEMO_MS = 60_000;
-let memo: { at: number; v: Promise<number[]> } | null = null;
+let memo: { at: number; v: Promise<HouseChannelsResponse> } | null = null;
 
-function houseChannels(now: number): Promise<number[]> {
+function houseChannels(now: number): Promise<HouseChannelsResponse> {
   if (memo && now - memo.at < MEMO_MS) return memo.v;
   const v = getHouseStore()
     .listAll()
-    .then((houses) => [...new Set(houses.map((h) => h.ch))].filter((ch) => Number.isInteger(ch) && ch > 0).sort((a, b) => a - b));
+    .then((houses) => ({
+      channels: [...new Set(houses.map((h) => h.ch))].filter((ch) => Number.isInteger(ch) && ch > 0).sort((a, b) => a - b),
+      full: fullSaleChannels(houses),
+    }));
   memo = { at: now, v };
   v.catch(() => {
     if (memo?.v === v) memo = null;
@@ -26,7 +31,7 @@ function houseChannels(now: number): Promise<number[]> {
  */
 export const GET = handler(async () =>
   json<HouseChannelsResponse>(
-    { channels: await houseChannels(Date.now()) },
+    await houseChannels(Date.now()),
     { headers: { "Vercel-CDN-Cache-Control": "max-age=60, stale-while-revalidate=86400", "Cache-Control": "no-store" } },
   ),
 );

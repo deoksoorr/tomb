@@ -335,8 +335,9 @@ export interface AccountStore {
    * 입장 기록: 이름·색·몸 모양은 계정에 아직 값이 없을 때만 저장한다 (코드로 시작·이어서 들어온 기기의 다른 값이
    * 덮어쓰지 않게). 이름은 이름 색인과 함께 등록하고, 다른 계정이 쓰는 이름이면 저장하지 않는다.
    * 처음 입장한 시각도 한 번만 남긴다. 포인트는 주지 않는다 (10번: 출석은 달력에서 받는다)
+   * 11/26 처음 입장한 시각을 이번에 처음 남겼으면(= 새 계정) true (가입 유입을 이때만 저장한다)
    */
-  enter(id: string, profile: Profile, now: number): Promise<void>;
+  enter(id: string, profile: Profile, now: number): Promise<boolean>;
   /**
    * 10번 출석 달력 한 달 (month = YYYYMM). 처음 부르면 달력 개편 전 출석(마지막 출석일·연속 일수)을
    * 도장으로 옮겨 둔다 (legacyAttendDays, 한 번만)
@@ -504,6 +505,8 @@ export interface AccountStore {
   summaries(ids: readonly string[]): Promise<(AccountSummary | null)[]>;
   /** 모든 계정을 cursor부터 count개 안팎씩 훑는다 (Redis SCAN과 같은 약속: next = "0"이면 끝, 한 번에 나오는 수는 count와 다를 수 있다) */
   scanAccounts(cursor: string, count: number): Promise<{ next: string; accounts: AccountSummary[] }>;
+  /** 11/26 scanAccounts에서 계정 id만 (요약은 summaries로 따로 — 훑기와 요약 읽기를 겹쳐 돌리려고) */
+  scanIds(cursor: string, count: number): Promise<{ next: string; ids: string[] }>;
 }
 
 /** 관리자 회원 목록 한 줄의 원재료 (계정 해시에서 바로 읽는 값) */

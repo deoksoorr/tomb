@@ -3,6 +3,12 @@ import { kstDay } from "../store/accounts";
 import type { Me } from "../types";
 import {
   DEX_CATS,
+  DEX_EXPANSION_IDS,
+  DEX_MAP_BADGE,
+  DEX_MAP_REWARD,
+  DEX_MAPS,
+  dexMapClaimKey,
+  dexMapDone,
   DEX_REWARD,
   DEX_TIERS,
   DEX_TITLE_TIERS,
@@ -12,11 +18,15 @@ import {
   dexIdsOf,
   dexRewardOf,
   dexTitleNeed,
+  isCampSpecies,
+  LIFE_CATS,
+  SPECIES,
   type DexCat,
+  type DexMap,
   type DexTitleTier,
 } from "./catalog";
 import type { DexPay, ForageStore } from "./store";
-import type { DexGain, DexRewardState } from "./types";
+import type { DexGain, DexMapBadgeGain, DexRewardState } from "./types";
 
 // 도감 보상 (11/14 개편): 예전 25·50·75·100% 단계 보상 대신 종(칸) 하나를 처음 등록할 때마다 희귀도별 포인트 (catalog DEX_NEW_REWARD).
 //  - 등록 순간: 저장소의 등록 연산(grant·grantAuto·addStars)이 정산을 마친 계정이면 그 종의 보상을 "받을 도감 보상"(p:{cat})에 원자적으로 쌓고,
@@ -35,13 +45,31 @@ function titleName(key: string): string | undefined {
   return DEX_TITLES[cat as DexCat]?.[Number(tier) as DexTitleTier];
 }
 
-/** 지금 도감으로 붙는 칭호 열쇠 (절반·전부 등록) */
-export function reachedTitleKeys(dex: Record<string, { n: number }>): string[] {
+/**
+ * 11/26 도감 확장 전에 닿았던 칭호도 지켜요: 붙은 표시(t:)는 11/14부터 도감을 읽거나 등록할 때마다 남겨서 그 뒤에 채운 사람은 이미 있어요.
+ * 그 전에 채우고 그 뒤로 안 들어온 사람 몫만 — 확장 전 종(캠핑장·확장 84종 빼고)을 11/14까지 처음 등록한 것만 세요 (그 뒤 등록으로는 안 닿아요)
+ */
+const MARKS_SINCE = "20261114";
+const PRE_EXPANSION = new Set(SPECIES.filter((s) => !isCampSpecies(s) && !DEX_EXPANSION_IDS.includes(s.id)).map((s) => s.id));
+function legacyTitleKeys(dex: Record<string, { n: number; first?: string }>): string[] {
+  const out: string[] = [];
+  for (const cat of LIFE_CATS) {
+    const ids = dexIdsOf(cat).filter((id) => PRE_EXPANSION.has(id));
+    const got = ids.filter((id) => has(dex, id) && !!dex[id].first && dex[id].first! <= MARKS_SINCE).length;
+    if (!got) continue;
+    for (const t of DEX_TITLE_TIERS) if (DEX_TITLES[cat][t] && got >= (t === 100 ? ids.length : Math.ceil(ids.length / 2))) out.push(dexClaimKey(cat, t));
+  }
+  return out;
+}
+
+/** 지금 도감으로 붙는 칭호 열쇠 (절반·전부 등록 + 11/26 확장 전 기준으로 닿았던 것) */
+export function reachedTitleKeys(dex: Record<string, { n: number; first?: string }>): string[] {
   const out: string[] = [];
   for (const cat of DEX_CATS) {
     const got = dexIdsOf(cat).filter((id) => has(dex, id)).length;
     for (const t of DEX_TITLE_TIERS) if (DEX_TITLES[cat][t] && got >= dexTitleNeed(cat, t)) out.push(dexClaimKey(cat, t));
   }
+  for (const k of legacyTitleKeys(dex)) if (!out.includes(k)) out.push(k);
   return out;
 }
 
@@ -157,7 +185,49 @@ export async function payNewDex(
     .filter((k) => !held.has(k))
     .map(titleName)
     .filter((t): t is string => !!t);
-  return { points, earned, pending: points - paid, titles, ...(me && earned > 0 ? { me } : {}) };
+  // 11/26 이번 등록으로 맵 도감을 다 채웠으면 완성 배지·보상 (받은 기록은 방금 읽은 claims)
+  const map = await payMapBadges(store, acct, after.dex, after.claims, ip, now);
+  if (map.me) me = map.me;
+  const mapEarned = map.badges.reduce((n, b) => n + b.points, 0);
+  return {
+    points,
+    earned: earned + mapEarned,
+    pending: points - paid,
+    titles,
+    ...(map.badges.length ? { badges: map.badges } : {}),
+    ...(me && earned + mapEarned > 0 ? { me } : {}),
+  };
+}
+
+/**
+ * 11/26 맵별 도감 완성 배지: 마을·바닷가·캠핑장 도감을 다 채웠고 아직 안 받았으면 받은 표시(claims `map:${맵}`, HSETNX — 한 번만)를 남기고
+ * 완성 보상(DEX_MAP_REWARD)을 「도감」 포인트로 준다. 지갑이 꽉 차 못 들어간 만큼은 쌓아 두지 않는다 (배지는 그대로).
+ * claims = 이미 읽어 둔 받은 기록 (있으면 다 받은 맵은 저장소에 묻지 않는다)
+ */
+export async function payMapBadges(
+  store: ForageStore,
+  acct: string,
+  dex: Record<string, { n: number }>,
+  claims: Record<string, string> | null,
+  ip: string | undefined,
+  now: number,
+): Promise<{ badges: DexMapBadgeGain[]; me: Me | null }> {
+  const badges: DexMapBadgeGain[] = [];
+  let me: Me | null = null;
+  for (const m of DEX_MAPS as readonly DexMap[]) {
+    const key = dexMapClaimKey(m);
+    if ((claims && claims[key]) || !dexMapDone(dex, m)) continue;
+    if (!(await store.claimDex(acct, key, kstDay(now)))) continue;
+    const pts = DEX_MAP_REWARD[m];
+    let earned = 0;
+    if (pts > 0) {
+      const r = await earnPoints(acct, "dex", pts, ip);
+      earned = r.earned;
+      me = r.me ?? me;
+    }
+    badges.push({ map: m, name: DEX_MAP_BADGE[m], points: earned });
+  }
+  return { badges, me };
 }
 
 /** 도감 창의 [도감 보상 받기]: 그 칸의 받을 보상을 한 번에 받는다 (동시에 눌러도 꺼내기가 원자적이라 한 번만) */

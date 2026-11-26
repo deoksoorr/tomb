@@ -195,6 +195,8 @@ export type RunStartResponse = {
   timeLimitSec: number;
   /** 11/15 야근 빌딩 시작 층 (없으면 보통 판) */
   tower?: number;
+  /** 11/26 야근 빌딩 시작 판 레벨 (엘리베이터 판 — 티켓에 실린 값, 화면 CardRun이 이 레벨부터 센다). 없으면 0 */
+  towerLv0?: number;
   /** 11/15 초월 판 구간 (레벨 50 지옥 판만). practice면 초월 EXP·드롭 없음 */
   tier?: RunTier;
   /** 별자리 잇기: 판 시작 시각이 맑은 밤 (전설 별자리가 나올 수 있다, 포인트 보너스). 1판 화면도 읽는다 */
@@ -331,6 +333,8 @@ export type RpgPlay = {
     bonusSec?: number;
     /** 11/24 상자 세트 장비 확률 (회장님 독대 헬 1위·2관왕 20% — 판 시작 응답 view.chair로 lib/chairPerks chairChestChance. 없으면 보통 15%). 보상은 서버가 같은 값으로 정한다 */
     sgChance?: number;
+    /** 11/26 시작 판 레벨 (판 시작 응답 towerLv0 — 서버 티켓과 같은 값). 없으면 0 */
+    lv0?: number;
   };
   /** 11/15 연습 판 (초월 구간을 다 써서 드롭이 없다) — 바닥 드롭 연출을 하지 않는다 */
   noDrops?: boolean;

@@ -1,5 +1,5 @@
 import { dayStartMs } from "../../gameDay";
-import { isSeasideSpecies, SPECIES, speciesById, type LifeCat, type Species } from "../catalog";
+import { isAwaySpecies, SPECIES, speciesById, type LifeCat, type Species } from "../catalog";
 import { hash01 } from "../rules";
 
 // 11/15: 긴급 의뢰 (순수 함수 — 서버·화면·시험이 같이 쓴다).
@@ -296,7 +296,7 @@ const BOX_TOTAL = BOX_WEIGHTS.stamps + BOX_WEIGHTS.dye_pick + BOX_WEIGHTS.fish +
 const STAMP_W = Array.from({ length: 10 }, (_, i) => 10 - i);
 /** 상자에서 나오는 물고기: 희귀(★3)만. 아주 희귀·전설은 넣지 않는다 */
 // 11/16 바닷물고기는 넣지 않는다 (예전 상자 그대로)
-export const BOX_FISH: readonly Species[] = SPECIES.filter((s) => s.cat === "fish" && !s.junk && s.rarity === 3 && !isSeasideSpecies(s));
+export const BOX_FISH: readonly Species[] = SPECIES.filter((s) => s.cat === "fish" && !s.junk && s.rarity === 3 && !isAwaySpecies(s));
 /** 염색권 아이템 id (도장 교환소와 같은 것) */
 export const DYE_PICK = "q_dye_pick";
 export const DYE_SPECIAL = "q_dye_special";

@@ -16,6 +16,7 @@ export const HUNT_KEYS: readonly (readonly [string, string])[] = [
   ["Esc", "잠깐 멈춰요"],
   ["Enter", "채팅해요 (같은 채널에 [사냥터]로 보여요)"],
   ["C", "능력치 판을 열고 닫아요"],
+  ["Tab", "야근 빌딩에서 가진 카드 목록을 열고 닫아요"],
   ["H", "이 키 안내를 열고 닫아요"],
 ];
 

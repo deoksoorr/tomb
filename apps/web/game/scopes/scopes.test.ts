@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   BOATS,
-  CAMP_ARRIVE,
-  CAMP_FISHING_SPOTS,
-  CAMP_SEATS,
   FISHING_SPOTS,
   SEATS,
   CAMP_SCOPES,
@@ -22,7 +19,7 @@ import {
   spotSeatId,
 } from "@tomb/protocol";
 import { allProps, inWater, interactables, LANDMARKS, propCollider, staticColliders, standable, walkableGrid } from "../world/layout";
-import { CAMP_INTERACTABLES, CAMP_TREES, campStandable, campStaticColliders, campWalkGrid } from "../camp/campLayout";
+import { CAMP_INTERACTABLES } from "../camp/campLayout";
 import { CAMP_LANDMARKS } from "../camp/campMinimap";
 import { SEA_INTERACTABLES, SEA_TREES, seaFurnitureColliders, seaGroundKind, seaStandable, seaStaticColliders, seaWalkGrid } from "../sea/seaLayout";
 import { MAP_ICONS } from "../world/minimapIcons";
@@ -35,7 +32,6 @@ import { SCOPE_E_RADIUS, scopeBaseRect } from "./scopeGeom";
 type Rect = { x: number; y: number; w: number; h: number };
 type Grid = { cell: number; cols: number; rows: number; cells: Uint8Array };
 const overlap = (a: Rect, b: Rect) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
-const sameRect = (a: Rect, b: Rect) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 
 /** 시작점에서 열린 칸(0)으로 이어진 칸들 → 이 점(또는 발 한 걸음 아래)에 닿는지 */
 function reach(g: Grid, from: { x: number; y: number }): (x: number, y: number) => boolean {
@@ -106,31 +102,10 @@ describe("마을 곳곳 망원경 (VILLAGE_SCOPES)", () => {
 });
 
 describe("캠핑장 별 망원경 (CAMP_SCOPES)", () => {
-  it("상호작용·받침 충돌·미니맵", () => {
-    expect(CAMP_SCOPES.length).toBeGreaterThanOrEqual(2);
-    const cols = campStaticColliders();
-    for (const s of CAMP_SCOPES) {
-      expect(s.kind).toBe("telescope");
-      expect(CAMP_INTERACTABLES.find((o) => o.id === s.id)).toMatchObject({ kind: "telescope", x: s.ax, y: s.ay, r: SCOPE_E_RADIUS });
-      expect(cols.some((c) => sameRect(c, scopeBaseRect(s))), s.id).toBe(true);
-    }
-    expect(CAMP_LANDMARKS.some((l) => l.kind === "telescope")).toBe(true);
-  });
-
-  it("앞자리는 서 있을 수 있고 정류장에서 걸어서 닿는다, 다른 E 자리·나무와 겹치지 않는다", () => {
-    const ok = reach(campWalkGrid(8), CAMP_ARRIVE);
-    for (const s of CAMP_SCOPES) {
-      expect(campStandable(s.ax, s.ay), s.id).toBe(true);
-      expect(ok(s.ax, s.ay), s.id).toBe(true);
-      for (const o of CAMP_INTERACTABLES) if (o.id !== s.id) expect(Math.hypot(o.x - s.ax, o.y - s.ay), `${s.id} ↔ ${o.id}`).toBeGreaterThan(o.r + SCOPE_E_RADIUS);
-      for (const t of CAMP_TREES) expect(Math.hypot(t.x - s.x, t.y - s.y), `${s.id} ↔ tree@${t.x},${t.y}`).toBeGreaterThan(16);
-      for (const f of CAMP_FISHING_SPOTS) expect(Math.hypot(f.x - s.ax, f.y - s.ay), `${s.id} ↔ ${f.id}`).toBeGreaterThan(30);
-      for (const st of CAMP_SEATS) expect(Math.hypot(st.x - s.ax, st.y - s.ay), `${s.id} ↔ ${st.id}`).toBeGreaterThan(24);
-    }
-  });
-
-  it("서버가 캠핑장에서 받는 1인 자리 (별 망원경 = 하늘을 본다)", () => {
-    for (const s of CAMP_SCOPES) expect(seatSlotIn("camp", scopeSeatId(s))).toMatchObject({ kind: "telescope", x: s.ax, y: s.ay, state: STATE.idle, facing: DIR.up });
+  it("11/26 폭포 계곡 개편 때 전망대와 함께 없앴다 — E 자리·지도 표시도 없다", () => {
+    expect(CAMP_SCOPES).toHaveLength(0);
+    expect(CAMP_INTERACTABLES.some((o) => o.id.startsWith("scope:"))).toBe(false);
+    expect(CAMP_LANDMARKS.some((l) => l.id.startsWith("scope:"))).toBe(false);
   });
 });
 

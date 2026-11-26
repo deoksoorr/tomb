@@ -965,9 +965,11 @@ describe("11/22 순위 보상 (판정)", () => {
 
 describe("11/22 순위 보상 (서버 흐름)", () => {
   const GOAL = 30;
+  // 지난 날짜(DAY보다 앞)의 의뢰만 쓴다: 앞의 시험들은 진짜 시각(Date.now())으로 urgentMine·urgentPublic을 불러
+  // 지금 진행 중인 실제 일정 의뢰의 목표를 먼저 정해 버린다 (11/26 17:30에 DAY+11 = 오늘 의뢰 목표가 40으로 굳어 실패)
   async function open(offset: number) {
-    const ev = urgentSchedule(addDays(DAY, offset), env.sessionSecret())[0];
-    await urgentStore().setGoal(ev.id, GOAL, 0);
+    const ev = urgentSchedule(addDays(DAY, -offset), env.sessionSecret())[0];
+    expect((await urgentStore().setGoal(ev.id, GOAL, 0)).goal).toBe(GOAL);
     return ev;
   }
   const stampsOf = async (a: string, t: number) => (await questBoard(a, t)).stamps;
@@ -1102,6 +1104,26 @@ describe("11/22 순위 보상 (서버 흐름)", () => {
     const r = (await adminUrgentResults(ev.end + 1_000)).results.find((x) => x.id === ev.id);
     expect(r).toMatchObject({ n: 3, pct: 10, stage: 0, count: 1, lucky: null, last: null });
     expect(r!.rows[0]).toMatchObject({ acct: a, rank: 1, stamps: 0, king: false, box: false });
+  });
+
+  it("11/26 받기 기한(끝나고 3일) 끝까지 게시판에 남는다: 3일째 새벽 5시(게임 날짜 바뀜)를 넘겨도 보이고 받을 수 있고, 기한이 지나는 순간 빠진다", async () => {
+    const ev = await open(16);
+    const [a, b] = await Promise.all(["기한일", "기한이"].map((n) => newAcct(n, ev.start)));
+    await deliverUrgent(a, ev.id, await fill(a, ev, 20), ev.start + 1_000);
+    await deliverUrgent(b, ev.id, await fill(b, ev, 10), ev.start + 2_000);
+    const day3 = dayStartMs(addDays(gameDay(ev.start), 3));
+    const deadline = ev.end + 3 * 24 * HOUR;
+    expect(deadline).toBeGreaterThan(day3 + HOUR);
+    const row = async (x: string, t: number) => (await urgentMine(x, t)).rows.find((r) => r.id === ev.id);
+    for (const t of [day3 - 1, day3, day3 + 1, deadline - 1]) expect(await row(b, t), String(t - day3)).toMatchObject({ done: true, claimed: null, reward: { rank: 2, rankStamps: 3 } });
+    // 5시 넘어 받는다 (순위 보상 그대로)
+    expect((await claimUrgent(a, ev.id, day3 + 1)).claimed).toMatchObject({ stage: 100, rank: 1, rankStamps: 5, king: true });
+    expect((await row(a, deadline - 1))!.claimed).toMatchObject({ rank: 1 });
+    // 기한이 지나면 목록에서도 빠지고 받기도 막힌다
+    expect(await row(b, deadline)).toBeUndefined();
+    expect(await row(a, deadline)).toBeUndefined();
+    await expect(claimUrgent(b, ev.id, deadline)).rejects.toMatchObject({ code: "URGENT_EXPIRED" });
+    expect((await claimUrgent(b, ev.id, deadline - 1)).claimed).toMatchObject({ rank: 2, rankStamps: 3 });
   });
 
   it("결과 목록은 최근 20개까지 (최신이 앞), 같은 의뢰는 한 번만", async () => {

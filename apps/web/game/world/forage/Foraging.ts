@@ -1,9 +1,9 @@
 import * as Phaser from "phaser";
-import { boatFishingSpotId, CAMP_FISHING_SPOTS, campFishingSpotById, DIR, FISHING_SPOTS, fishingSpotById, SEA_FISHING_SPOTS, seaFishingSpotById, STATE, type DirId, type FishingSpot, type PeerInfo, type Sid, type WelcomeMsg } from "@tomb/protocol";
+import { boatFishingSpotId, CAMP_FISHING_SPOTS, CAMP_TRADER, CAMP_TRADER_STALL, campFishingSpotById, DIR, FISHING_SPOTS, fishingSpotById, SEA_FISHING_SPOTS, seaFishingSpotById, STATE, type DirId, type FishingSpot, type PeerInfo, type Sid, type WelcomeMsg } from "@tomb/protocol";
 import { ambienceAt, parseAmbienceOverride, type AmbienceOverride } from "@/lib/ambience";
 import { currentMapConcept } from "@/lib/mapConceptClient";
 import type { MapConcept } from "@/lib/mapConcept";
-import { gatherNodeById, NODE_LABEL, nodeOnMap, NPCS, type GatherNode, type Npc } from "@/lib/forage/catalog";
+import { gatherNodeById, NODE_LABEL, nodeOnMap, npcsOn, NPCS, type GatherNode, type Npc } from "@/lib/forage/catalog";
 import { bridge, type ForageRodPhase } from "../../bridge";
 import { DEPTH } from "../../config";
 import type { Player } from "../../entities/Player";
@@ -12,7 +12,7 @@ import type { RealtimeClient } from "../../net/RealtimeClient";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../../text/GlyphAtlas";
 import type { Interactable } from "../layout";
 import type { Lighting } from "../Lighting";
-import { ensureForageTextures, ensureIconTexture, FTEX } from "./art";
+import { ensureForageTextures, ensureIconTexture, FTEX, nodeArtOf } from "./art";
 import { nodeBloomRule, type NodeUrgent } from "@/lib/forage/rules";
 import { FishZoneView } from "./FishZoneView";
 import { WHARF_BOARD, WHARF_PLACARD } from "../fishZone";
@@ -80,8 +80,9 @@ type NodeView = { node: GatherNode; img: Phaser.GameObjects.Image; aura: NodeAur
 const NODE_BLINK_MS = 10_000;
 /** "뿅" 소리가 들리는 거리 (새로 핀 지점이 이 안에 있을 때만) */
 const NODE_HEAR = 260;
-/** 이 맵에 서 있는 NPC (마을 = 어부 영감·수집가 유령, 11/20 바닷가 = 해녀 할망. 캠핑장엔 없다) */
-const npcsOn = (mapId: "village" | "camp" | "sea") => NPCS.filter((n) => (n.map ?? "village") === mapId);
+// 이 맵에 서 있는 NPC: lib/forage/catalog npcsOn (마을 = 어부 영감·수집가 유령, 11/20 바닷가 = 해녀 할망, 11/26 캠핑장 = 낚시터 사장님)
+/** 11/26 캠핑장 부스 간판 글자 (부스 그림 위 — 한글은 비트맵 글꼴로) */
+const BOOTH_SIGN = "미끼·대여";
 /**
  * 노점 자리 (NPC 발에서 — 그리는 순서 기준). 마을 어부 노점은 호수 낚시 잔교 서쪽 끝, 11/20 해녀 할망 좌판은 할망 왼쪽 (game/sea/seaLayout SEA_BUYER_STALL).
  * oy = 그림 바닥을 이만큼 더 내려요 (좌판 그림은 아래 두 줄이 그림자)
@@ -90,6 +91,8 @@ const STALL_AT: Record<Npc["id"], { dx: number; dy: number; oy?: number }> = {
   fishmonger: { dx: -22, dy: 2 },
   collector: { dx: -20, dy: 6 },
   haenyeo: { dx: SEA_BUYER_STALL.x - SEA_BUYER.x, dy: SEA_BUYER_STALL.y - SEA_BUYER.y, oy: 2 },
+  // 11/26 캠핑장 낚시터 사장님: 미끼·대여 부스 앞 (부스는 뒤 — protocol CAMP_TRADER_STALL, 그림 아래 두 줄이 그림자)
+  trader: { dx: CAMP_TRADER_STALL.x - CAMP_TRADER.x, dy: CAMP_TRADER_STALL.y - CAMP_TRADER.y, oy: 2 },
 };
 
 export class Foraging {
@@ -98,7 +101,7 @@ export class Foraging {
   private readonly override: AmbienceOverride;
   private night = false;
   private serverKnows = false;
-  private readonly npcImgs: { npc: Npc; img: Phaser.GameObjects.Image; label: Phaser.GameObjects.BitmapText; title: Phaser.GameObjects.BitmapText; stall: Phaser.GameObjects.Image }[] = [];
+  private readonly npcImgs: { npc: Npc; img: Phaser.GameObjects.Image; label: Phaser.GameObjects.BitmapText; title: Phaser.GameObjects.BitmapText; stall: Phaser.GameObjects.Image; sign?: Phaser.GameObjects.BitmapText }[] = [];
   /** 이 맵에 서 있는 NPC */
   private readonly npcs: readonly Npc[];
   private readonly nodes = new Map<string, NodeView>();
@@ -144,7 +147,7 @@ export class Foraging {
     this.night = this.isNight();
     ensureForageTextures(scene, this.night);
     ensureNodeFxTextures(scene);
-    d.atlas.ensure(NPCS.map((n) => n.name + n.title).join("") + "낚시하기" + Object.values(NODE_LABEL).join("") + "에게 팔기");
+    d.atlas.ensure(NPCS.map((n) => n.name + n.title).join("") + "낚시하기" + Object.values(NODE_LABEL).join("") + "에게 팔기" + BOOTH_SIGN);
     this.mapId = d.map ?? "village";
     // 11/16 바닷가 갯바위 낚시 자리 (SEA_FISHING_SPOTS)
     this.spots = this.mapId === "camp" ? CAMP_FISHING_SPOTS : this.mapId === "sea" ? SEA_FISHING_SPOTS : FISHING_SPOTS;
@@ -158,11 +161,23 @@ export class Foraging {
       const stall = scene.add.image(npc.x + at.dx, npc.y + at.dy + (at.oy ?? 0), this.stallKey(npc, concept)).setOrigin(0.5, 1).setDepth(npc.y + at.dy);
       const label = scene.add.bitmapText(npc.x, npc.y - 27, FONT_KEY, npc.name, FONT_PX).setOrigin(0.5, 1).setTint(0xffe8b0).setDepth(DEPTH.labels - 1);
       const title = scene.add.bitmapText(npc.x, npc.y - 35, FONT_KEY, npc.title, FONT_PX).setOrigin(0.5, 1).setTint(0xc8d8b0).setAlpha(0.85).setDepth(DEPTH.labels - 1);
-      this.npcImgs.push({ npc, img, label, title, stall });
+      // 11/26 캠핑장 부스 간판 「미끼·대여」 (부스 지붕 위)
+      const sign =
+        npc.id === "trader"
+          ? scene.add
+              .bitmapText(npc.x + at.dx - 3, npc.y + at.dy - 44, FONT_KEY, BOOTH_SIGN, FONT_PX)
+              .setOrigin(0.5, 1)
+              .setTint(0xffe6a0)
+              .setAlpha(0.92)
+              .setDepth(DEPTH.labels - 2)
+          : undefined;
+      this.npcImgs.push({ npc, img, label, title, stall, ...(sign ? { sign } : {}) });
       // 발밑 충돌 (노점까지). 바닷가 좌판·할망 발밑은 seaLayout seaStaticColliders가 막아요 (걷기 격자·설 자리 판정도 같이 봐요)
-      if (this.mapId !== "village") continue;
+      if (this.mapId === "sea") continue;
       this.addCollider(npc.x - 6, npc.y - 5, 12, 5);
-      this.addCollider(npc.x + at.dx - 12, npc.y + at.dy - 6, 24, 6);
+      // 11/26 캠핑장 부스는 통나무 벽·걸이·앞 소품까지 (그림 52×48 — 아래 두 줄 그림자 위 9줄)
+      if (npc.id === "trader") this.addCollider(npc.x + at.dx - 22, npc.y + at.dy - 11, 44, 9);
+      else this.addCollider(npc.x + at.dx - 12, npc.y + at.dy - 6, 24, 6);
     }
     this.offs.push(
       bridge.on("forage:nodes", ({ ids, ev }) => this.setNodes(ids, ev)),
@@ -180,7 +195,10 @@ export class Foraging {
 
   /** 노점 그림 (11/20 해녀 할망 좌판은 판마다·밤엔 파라솔 등을 켠 그림) */
   private stallKey(npc: Npc, concept: MapConcept): string {
-    return npc.id === "haenyeo" ? FTEX.seaStall(concept, this.night) : FTEX.stall(npc.id);
+    if (npc.id === "haenyeo") return FTEX.seaStall(concept, this.night);
+    // 11/26 캠핑장 부스: 판마다·밤엔 창 불빛
+    if (npc.id === "trader") return FTEX.campStall(concept, this.night);
+    return FTEX.stall(npc.id);
   }
 
   private addCollider(x: number, y: number, w: number, h: number): void {
@@ -260,7 +278,7 @@ export class Foraging {
     for (const id of this.nodeIds) {
       if (this.nodes.has(id)) continue;
       const node = gatherNodeById(id)!;
-      const img = this.scene.add.image(node.x, node.y + 2, FTEX.node(node.kind, 0, this.night)).setOrigin(0.5, 1).setDepth(node.y);
+      const img = this.scene.add.image(node.x, node.y + 2, FTEX.node(nodeArtOf(node), 0, this.night)).setOrigin(0.5, 1).setDepth(node.y);
       if (!this.d.reduced) {
         img.setScale(0.2);
         this.scene.tweens.add({ targets: img, scale: 1, duration: 260, delay: this.nodesLoaded ? 120 : 0, ease: "Back.easeOut" });
@@ -362,7 +380,7 @@ export class Foraging {
    * 배 위 낚시 시작 (WorldScene: 조각배에서 물가가 아닌 곳에서 E). at = BoatRide.fishingSpot().
    * 이미 낚시 중이면 아무것도 안 한다
    */
-  fishFromBoat(at: { x: number; y: number; water: "river" | "lake" }): void {
+  fishFromBoat(at: { x: number; y: number; water: "river" | "lake" | "rowboat" }): void {
     if (this.fishing) return;
     const pl = this.d.player();
     const now = this.scene.time.now;
@@ -777,6 +795,7 @@ export class Foraging {
       for (const n of this.npcImgs) {
         n.label.setScale(labelScale);
         n.title.setScale(labelScale);
+        n.sign?.setScale(labelScale);
       }
     }
     // 2프레임 흔들림 (덤불·NPC 자락)
@@ -790,7 +809,7 @@ export class Foraging {
         n.stall.setTexture(this.stallKey(n.npc, concept));
       }
       if (!this.d.reduced) {
-        for (const v of this.nodes.values()) v.img.setTexture(FTEX.node(v.node.kind, this.frame, this.night));
+        for (const v of this.nodes.values()) v.img.setTexture(FTEX.node(nodeArtOf(v.node), this.frame, this.night));
       }
     }
     // 가끔: 밤낮이 바뀌면 곤충 수풀 그림, 점유표가 바뀌면 낚싯대·안내
@@ -800,7 +819,7 @@ export class Foraging {
       if (night !== this.night) {
         this.night = night;
         ensureForageTextures(this.scene, night);
-        for (const v of this.nodes.values()) v.img.setTexture(FTEX.node(v.node.kind, this.frame, this.night));
+        for (const v of this.nodes.values()) v.img.setTexture(FTEX.node(nodeArtOf(v.node), this.frame, this.night));
       }
       this.syncRods();
       this.rebuildItems();
@@ -882,6 +901,8 @@ export class Foraging {
   /** 밤: 피어 있는 지점마다 작은 빛 구멍 (발밑 빛·물건이 어둠에 묻히지 않게) */
   addLights(lit: Lighting): void {
     for (const v of this.nodes.values()) if (v.img.visible) lit.add(v.node.x, v.node.y - 4, 22, 0.55 * v.img.alpha);
+    // 11/26 캠핑장 부스 판매 창 불빛 (밤 그림과 같이)
+    if (this.night) for (const n of this.npcImgs) if (n.npc.id === "trader") lit.add(n.stall.x - 4, n.stall.y - 20, 34, 0.6);
   }
 
   destroy(): void {

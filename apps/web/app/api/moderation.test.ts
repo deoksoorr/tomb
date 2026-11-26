@@ -69,10 +69,10 @@ function fakeRealtime(peers: Record<number, { visitorId: string; name: string }>
     if (r.op === "me") return Response.json({ sent: r.visitorIds.length });
     if (r.op === "where") return Response.json({ where: {} });
     if (r.op === "hello") return Response.json({ ok: true });
-    if (r.op === "say" || r.op === "pin") return Response.json({ sent: 1 });
+    if (r.op === "say" || r.op === "pin" || r.op === "homes") return Response.json({ sent: 1 });
     if (r.op === "online") return Response.json({ visitorIds: [] });
     if (r.op === "people") return Response.json({ people: [] });
-    if (r.op === "lotteryDraw") return new Response("not found", { status: 404 });
+    if (r.op === "lotteryDraw" || r.op === "maint" || r.op === "connLog") return new Response("not found", { status: 404 });
     return Response.json({ peer: r.ch === 1 ? (peers[r.sid] ?? null) : null });
   });
   return calls;

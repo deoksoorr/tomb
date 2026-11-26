@@ -1,4 +1,4 @@
-import { GOBLIN_GAP_MAX_MS, GOBLIN_GAP_MIN_MS, GOBLIN_JACKPOT_CHANCE, GOBLIN_JACKPOT_POINTS, GOBLIN_LIFE_MS, GOBLIN_POINTS_AVG, GOBLIN_POINTS_MAX, GOBLIN_POINTS_MIN, ITEMS, itemById, itemName, type DyeSpecial, DYE_SPECIAL_NAMES } from "@tomb/protocol";
+import { GOBLIN_MAP_ODDS, MAP_NAME, GOBLIN_GAP_MAX_MS, GOBLIN_GAP_MIN_MS, GOBLIN_JACKPOT_CHANCE, GOBLIN_JACKPOT_POINTS, GOBLIN_LIFE_MS, GOBLIN_POINTS_AVG, GOBLIN_POINTS_MAX, GOBLIN_POINTS_MIN, ITEMS, itemById, itemName, type DyeSpecial, DYE_SPECIAL_NAMES } from "@tomb/protocol";
 import { DYE_TIERS, type DyeTier } from "@/lib/dye/palette";
 import { RARITY_LABEL, RARITY_WEIGHT, type Rarity } from "@/lib/forage/catalog";
 import { AUTO_CATCH_CHANCE, AUTO_FISH_EVERY_MS } from "@/lib/forage/auto";
@@ -218,7 +218,9 @@ export const wishBonus = () => ({ jackpot: pct(WISH_BONUS_JACKPOT), sparkle: pct
 
 export const goblinFacts = () => ({
   gap: `${GOBLIN_GAP_MIN_MS / 3_600_000}~${GOBLIN_GAP_MAX_MS / 3_600_000}시간`,
-  life: `${GOBLIN_LIFE_MS / 1000}초`,
+  life: GOBLIN_LIFE_MS % 60_000 === 0 ? `${GOBLIN_LIFE_MS / 60_000}분` : `${GOBLIN_LIFE_MS / 1000}초`,
+  /** 11/26 나타나는 맵 */
+  maps: GOBLIN_MAP_ODDS.map((o) => `${MAP_NAME[o.map]} ${pct(o.p)}`).join(", "),
   // 11/19 보통 300~1,000P(10P 단위로 고르게) + 드물게 대박 2,000P
   points: `${GOBLIN_POINTS_MIN.toLocaleString("en-US")}~${GOBLIN_POINTS_MAX.toLocaleString("en-US")}P`,
   normal: pct(1 - GOBLIN_JACKPOT_CHANCE),

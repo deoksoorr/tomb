@@ -45,9 +45,9 @@ export const GET = handler(async (req) => {
   const zone = huntZoneParam(params.get("zone"));
   if (board === "huntBest" && !zone) throw new HttpError(400, "INVALID_INPUT", "모르는 사냥터예요.");
   const personal = params.get("me") === "1";
-  const me = personal ? await getVisitorId(req) : null;
+  // 11/26 쿠키 확인(세대 캐시)과 운영자 id(캐시)는 서로 기다릴 필요가 없다 — 인스턴스가 새로 뜬 때 Redis 왕복 1번 줄임
+  const [me, staffId] = await Promise.all([personal ? getVisitorId(req) : null, staffAccountId()]);
   const week = period === "week" ? kstWeek() : undefined;
-  const staffId = await staffAccountId();
   const staff = !!me && me === staffId ? { staff: true as const } : {};
   if (board === "fish") {
     const fish = params.get("fish") ?? "all";

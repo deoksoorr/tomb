@@ -1,7 +1,8 @@
 import { ROOM_ID_RE } from "./constants";
-import { MEGA_PIN_MAX } from "./events";
+import { HOMES_ZONES, MEGA_PIN_MAX, type HomesZone } from "./events";
 import { FRIEND_KEY_RE, FRIEND_MAX, WHERE_MAX_IDS } from "./friends";
 import { hmacSign, hmacVerify } from "./token";
+import { CONN_LOG_BATCH, MAINT_MSG_MAX, parseConnWire, type ConnLogWire } from "./maint";
 
 // 47번: Vercel(웹 서버) → 실시간 서버 내부 요청 서명. 브라우저를 거치지 않는 서버끼리의 호출이라
 // 본문 JSON 전체를 JOIN_SECRET으로 서명하고(헤더), 본문 안의 exp(unix초)가 지나면 받지 않는다.
@@ -17,6 +18,11 @@ import { hmacSign, hmacVerify } from "./token";
 //  - POST /internal/people { exp }                         → 11/20 운영자 순간이동: 접속 중인 사람 전부 (채널·sid·이름·자리·맵·실내)
 // 반대 방향 (실시간 서버 → 웹, 같은 서명):
 //  - POST {WEB_ORIGIN}/api/internal/lottery-draw { op: "lotteryDraw", exp } → 11/21 토요일 저녁 8시 예약 작업이 행운권 추첨을 정각에 돌린다
+//  - POST {웹}/api/internal/conn-log { op: "connLog", rows, exp } → 11/26 로비가 모은 접속 기록(들어옴·나감)을 한 번에 넘긴다 (maint.ts)
+// 11/26 집 바뀜 알림:
+//  - POST /internal/homes { ch, zone, v, exp }            → 그 채널에 「이 구역 집 목록이 바뀌었다」(분양·외관·디자인·앞마당·넓히기) 한 줄 — 화면이 다시 받는다
+// 11/26 점검 모드:
+//  - POST /internal/maint { on, msg, until, skip, exp }   → 점검 시작·끝 (로비 DO에 저장, 시작이면 운영자 빼고 모두 4013으로 끊는다)
 
 export const INTERNAL_SIG_HEADER = "X-Tomb-Internal";
 /** 내부 요청 유효 시간 (초). 서버끼리라 짧게 */
@@ -41,7 +47,13 @@ export type InternalOnline = { op: "online"; exp: number };
 export type InternalPeople = { op: "people"; exp: number };
 /** 11/21 실시간 서버 → 웹: 행운권 정각 추첨 (토요일 20:00 KST 예약 작업). 웹만 받는다 */
 export type InternalLotteryDraw = { op: "lotteryDraw"; exp: number };
-export type InternalRequest = InternalKick | InternalPeer | InternalMe | InternalWhere | InternalHello | InternalSay | InternalPin | InternalOnline | InternalPeople | InternalLotteryDraw;
+/** 11/26 점검 모드 시작·끝. skip = 점검 중에도 사이트를 열어 둘 계정 해시 (MaintState.skip). 응답 { state, kicked } */
+export type InternalMaint = { op: "maint"; on: boolean; msg: string; until: number | null; skip: string[]; exp: number };
+/** 11/26 실시간 서버 → 웹: 접속 기록 묶음. 웹만 받는다 */
+export type InternalConnLog = { op: "connLog"; rows: ConnLogWire[]; exp: number };
+/** 11/26 집 목록 바뀜 (웹이 저장한 뒤). v = 바뀐 시각(ms) — 같은 채널 화면들이 같은 주소(&v=)로 다시 받아 CDN이 한 번만 서버에 묻게 */
+export type InternalHomes = { op: "homes"; ch: number; zone: HomesZone; v: number; exp: number };
+export type InternalRequest = InternalKick | InternalPeer | InternalMe | InternalWhere | InternalHello | InternalSay | InternalPin | InternalOnline | InternalPeople | InternalLotteryDraw | InternalMaint | InternalConnLog | InternalHomes;
 /** 마을 공지 한 줄 최대 길이 (확성기 60자보다 넉넉히 — 시스템이 만든 문장이라 서명만 확인한다) */
 export const INTERNAL_SAY_MAX = 200;
 const SAY_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
@@ -122,6 +134,27 @@ export async function verifyInternal(
   if (r.op === "online") return { op: "online", exp: r.exp };
   if (r.op === "people") return { op: "people", exp: r.exp };
   if (r.op === "lotteryDraw") return { op: "lotteryDraw", exp: r.exp };
+  if (r.op === "maint") {
+    if (typeof r.on !== "boolean" || typeof r.msg !== "string" || [...r.msg].length > MAINT_MSG_MAX) return null;
+    const until = r.until;
+    if (until !== null && !(typeof until === "number" && Number.isFinite(until) && until > 0)) return null;
+    const skip = r.skip;
+    if (!Array.isArray(skip) || skip.length > 8 || !skip.every((v) => typeof v === "string" && /^[0-9a-f]{16}$/.test(v))) return null;
+    return { op: "maint", on: r.on, msg: r.msg, until: until as number | null, skip: skip as string[], exp: r.exp };
+  }
+  if (r.op === "connLog") {
+    if (!Array.isArray(r.rows) || r.rows.length < 1 || r.rows.length > CONN_LOG_BATCH) return null;
+    const rows = r.rows.map(parseConnWire);
+    if (rows.some((x) => x === null)) return null;
+    return { op: "connLog", rows: rows as ConnLogWire[], exp: r.exp };
+  }
+  if (r.op === "homes") {
+    const ch = r.ch;
+    if (typeof ch !== "number" || !Number.isInteger(ch) || ch < 1 || ch > 999) return null;
+    if (typeof r.zone !== "string" || !(HOMES_ZONES as readonly string[]).includes(r.zone)) return null;
+    if (typeof r.v !== "number" || !Number.isInteger(r.v) || r.v <= 0) return null;
+    return { op: "homes", ch, zone: r.zone as HomesZone, v: r.v, exp: r.exp };
+  }
   if (r.op === "peer") {
     if (typeof r.sid !== "number" || !Number.isInteger(r.sid) || r.sid < 0) return null;
     const hasCh = typeof r.ch === "number" && Number.isInteger(r.ch) && r.ch >= 1;

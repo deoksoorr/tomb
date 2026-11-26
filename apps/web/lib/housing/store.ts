@@ -14,13 +14,17 @@ import {
   reclaimLastSeen,
   SEA_LOT_COUNT,
   SEA_STARTER,
+  CAMP_LOT_COUNT,
+  houseSizeBonus,
+  type CampInfo,
+  type CaravanDesign,
   type CottageStyleId,
   type HouseSort,
   type HouseZone,
   type PlotTierId,
 } from "./catalog";
 import type { ReportBy } from "../reports";
-import { emptyLayout, liftWindowSkins, normalizeExterior } from "./layout";
+import { emptyLayout, itemCount, liftWindowSkins, normalizeExterior } from "./layout";
 import type { PlantState } from "./plants";
 import { keepState, stateSigs, type HouseState } from "./states";
 import type { GuestEntry, HouseExterior, HouseLayout, PublicHouse } from "./types";
@@ -32,7 +36,14 @@ import type { GuestEntry, HouseExterior, HouseLayout, PublicHouse } from "./type
  * 저장소 원본. owner(계정 id)·hidden·paid는 그대로 내보내지 않는다 (toPublicHouse).
  * paid = 이 집에 낸 포인트 (분양가 + 넓히기). 이 기록이 생기기 전에 분양된 집은 없다 → 비울 때 지금 가격표로 센다 (reclaim.ts refundOf)
  */
-export type HouseRecord = PublicHouse & { owner: string; hidden: boolean; items: number; paid?: number };
+export type HouseRecord = Omit<PublicHouse, "villa"> & {
+  owner: string;
+  hidden: boolean;
+  items: number;
+  paid?: number;
+  /** 11/26 별장 표시 (살 때 정한다 — 이후 안 바뀐다). undefined = 이 표시가 생기기 전 기록 (service settleVillas가 한 번 정해 남긴다) */
+  villa?: boolean;
+};
 
 /** 방명록 원본: author(계정 id)는 내보내지 않고 mine 판정에만 쓴다 */
 export type StoredGuest = GuestEntry & { author: string };
@@ -49,9 +60,18 @@ export type NewHouse = {
   lot: number | null;
   now: number;
   paid?: number;
-  /** 11/16 sea = 포구 오두막 (번지 색인이 마을과 따로, 1..SEA_LOT_COUNT). 없으면 마을 */
+  /** 11/16 sea = 포구 오두막 (번지 색인이 마을과 따로, 1..SEA_LOT_COUNT). 11/26 camp = 캠핑장 집 (1..CAMP_LOT_COUNT). 없으면 마을 */
   zone?: HouseZone;
   style?: CottageStyleId;
+  /** 11/26 캠핑장 집 종류·앞마당 단계 (zone camp) */
+  camp?: CampInfo;
+  /** 11/26 별장 표시 (살 때 이미 다른 집이 있었다) */
+  villa?: boolean;
+  /**
+   * 11/26 villa가 false일 때 이 집 id들 중 하나라도 이미 있으면 만들지 않는다 ("villa_changed" — 두 집을 동시에 사서 둘 다 첫 집 값으로 사지 못하게).
+   * 같은 단계(Redis Lua 하나)에서 본다
+   */
+  others?: readonly string[];
   /** 처음 배치 (없으면 빈 방). placed = 그 배치에 놓인 개수, placedScore = 그 점수 (호출자가 designCounts·designScore로 센다) */
   layout?: HouseLayout;
   placed?: Record<string, number>;
@@ -61,15 +81,21 @@ export type NewHouse = {
 };
 
 /**
- * 11/16 공용 가구 가방: 한 계정의 두 집 id (마을 집·포구 오두막, service housePair).
- * 가구는 마을 집 id에 붙은 공용 가방 하나에 모이고 (마을 집이 없어도 같은 자리), 두 집이 나눠 놓는다 — N개를 가지면 두 집 합쳐 N개까지.
+ * 11/16 공용 가구 가방: 한 계정의 집 id들 (마을 집·포구 오두막·11/26 캠핑장 집, service housePair).
+ * 가구는 마을 집 id에 붙은 공용 가방 하나에 모이고 (마을 집이 없어도 같은 자리), 세 집이 나눠 놓는다 — N개를 가지면 세 집 합쳐 N개까지.
  * 외관(isHouseOwnItem)과 오두막 시작 가구는 그 집 몫 (집 가방 inv에 남는다). 11/24 바닥·벽지는 공용 가방 (예전 집 몫은 읽을 때 옮긴다 — mergeSkins)
  */
-export type HousePair = { village: string; sea: string };
+export type HousePair = { village: string; sea: string; camp: string };
 
-/** 그 집의 id와 다른 집 id */
-export const pairIds = (pair: HousePair, zone: HouseZone | undefined) =>
-  zone === "sea" ? { self: pair.sea, other: pair.village } : { self: pair.village, other: pair.sea };
+/** 그 집의 id와 다른 집 id들 (others 순서는 늘 같다: 구역 순서대로 자기를 뺀 것). seaSlot = 포구 오두막 자리 (-1 이 집, 0·1 others 번째) */
+export function pairIds(pair: HousePair, zone: HouseZone | undefined): { self: string; others: [string, string]; seaSlot: -1 | 0 | 1 } {
+  if (zone === "sea") return { self: pair.sea, others: [pair.village, pair.camp], seaSlot: -1 };
+  if (zone === "camp") return { self: pair.camp, others: [pair.village, pair.sea], seaSlot: 1 };
+  return { self: pair.village, others: [pair.sea, pair.camp], seaSlot: 0 };
+}
+
+/** 다른 집 하나의 몫 가방·놓은 개수 */
+export type OtherBag = { own: Record<string, number>; placed: Record<string, number> };
 
 /** 집에 딸린 물건 (외관): 공용 가방에 넣지 않고 산 집 가방에 */
 export const isHouseOwnItem = (itemId: string) => isHouseOwnDef(furnitureById(itemId));
@@ -86,12 +112,15 @@ export type InvView = { have: Record<string, number>; away: Record<string, numbe
 /** 다른 집이 공용 가방에서 꺼내 놓은 개수 (그 집 몫을 넘게 놓은 만큼) */
 const overOwn = (placed: Record<string, number>, own: Record<string, number>, it: string) => Math.max(0, (placed[it] ?? 0) - (own[it] ?? 0));
 
-/** 두 저장소가 같은 규칙으로 센다 */
-export function invView(pool: Record<string, number>, own: Record<string, number>, otherOwn: Record<string, number>, otherPlaced: Record<string, number>): InvView {
+/** 다른 집들이 공용 가방에서 꺼내 놓은 개수 합 */
+const overOthers = (others: readonly OtherBag[], it: string) => others.reduce((sum, o) => sum + overOwn(o.placed, o.own, it), 0);
+
+/** 두 저장소가 같은 규칙으로 센다 (11/26 다른 집 여럿 — 마을·포구·캠핑장) */
+export function invView(pool: Record<string, number>, own: Record<string, number>, others: readonly OtherBag[]): InvView {
   const have: Record<string, number> = {};
   const away: Record<string, number> = {};
   for (const it of new Set([...Object.keys(pool), ...Object.keys(own)])) {
-    const out = overOwn(otherPlaced, otherOwn, it);
+    const out = overOthers(others, it);
     const n = Math.max(0, (own[it] ?? 0) + (pool[it] ?? 0) - out);
     if (n > 0) have[it] = n;
     const a = Math.min(out, pool[it] ?? 0);
@@ -104,8 +133,8 @@ export function invView(pool: Record<string, number>, own: Record<string, number
  * 공용 가방 규칙으로 counts(이 집에 놓을 개수)를 놓을 수 있나: 물건마다 (이 집이 몫을 넘게 놓은 수) + (다른 집이 몫을 넘게 놓은 수) ≤ 공용 개수.
  * Redis SAVE_LUA와 같은 규칙
  */
-export function fitsPool(counts: Record<string, number>, pool: Record<string, number>, own: Record<string, number>, otherOwn: Record<string, number>, otherPlaced: Record<string, number>): boolean {
-  return Object.entries(counts).every(([it, n]) => Math.max(0, n - (own[it] ?? 0)) + overOwn(otherPlaced, otherOwn, it) <= (pool[it] ?? 0));
+export function fitsPool(counts: Record<string, number>, pool: Record<string, number>, own: Record<string, number>, others: readonly OtherBag[]): boolean {
+  return Object.entries(counts).every(([it, n]) => Math.max(0, n - (own[it] ?? 0)) + overOthers(others, it) <= (pool[it] ?? 0));
 }
 
 /**
@@ -117,22 +146,27 @@ export function takeFrom(
   pool: Record<string, number>,
   own: Record<string, number>,
   placed: Record<string, number>,
-  otherOwn: Record<string, number>,
-  otherPlaced: Record<string, number>,
+  others: readonly OtherBag[],
 ): "pool" | "own" | "none" | "placed" | "away" {
   const o = own[it] ?? 0;
   const p = pool[it] ?? 0;
   if (o + p < 1) return "none";
-  const out = overOwn(otherPlaced, otherOwn, it);
+  const out = overOthers(others, it);
   if (p - overOwn(placed, own, it) - out >= 1) return "pool";
   if (o - (placed[it] ?? 0) >= 1) return "own";
   return out > 0 && (placed[it] ?? 0) === 0 ? "away" : "placed";
 }
 
 /** 번지 수 상한 (마을·포구). 11/19 2단지를 닫아 마을은 메인 맵 번지(1..WORLD_LOTS)까지만 — 다 차면 분양·번지 배정이 「빈 번지 없음」 */
-export const zoneMaxLots = (zone: HouseZone | undefined) => (zone === "sea" ? SEA_LOT_COUNT : WORLD_LOTS);
+export const zoneMaxLots = (zone: HouseZone | undefined) => (zone === "sea" ? SEA_LOT_COUNT : zone === "camp" ? CAMP_LOT_COUNT : WORLD_LOTS);
+/** 집 기록의 zone 칸 (마을 집은 없다) */
+export const zoneTag = (zone: HouseZone | string | null | undefined): "sea" | "camp" | undefined => (zone === "sea" || zone === "camp" ? zone : undefined);
 
-export type CreateResult = { lot: number } | "exists" | "lot_taken" | "full";
+/** villa_changed = 11/26 첫 집 값으로 사려는데 그 사이 다른 집이 생겼다 (다시 값을 보고 사야 한다) */
+export type CreateResult = { lot: number } | "exists" | "lot_taken" | "full" | "villa_changed";
+
+/** 11/26 집 한 채 요약 (값표·별장 판정용 — 배치·외관은 읽지 않는다. Redis는 HMGET 하나) */
+export type HouseBrief = { id: string; zone?: "sea" | "camp"; ch: number; lot: number; tier: PlotTierId; villa?: boolean; camp?: CampInfo; paid?: number };
 
 /** conflict = 11/18 읽은 뒤 다른 저장이 먼저 됐다 (base가 지금 updatedAt과 다르다 — 배치·외관을 동시에 저장해 놓은 개수가 옛 값으로 덮이지 않게) */
 export type SaveResult = "ok" | "no_house" | "tier" | "not_owned" | "conflict";
@@ -153,7 +187,7 @@ export type ReclaimInput = {
   lastSeenAt: number;
   label: string;
   now: number;
-  /** 11/16 오두막이면 sea (번지 색인이 따로) */
+  /** 11/16 오두막이면 sea, 11/26 캠핑장 집이면 camp (번지 색인이 따로) */
   zone?: HouseZone;
 };
 
@@ -189,6 +223,8 @@ export interface HouseStore {
   village(ch?: number, zone?: HouseZone): Promise<HouseRecord[]>;
   /** 오두막 겉모습 바꾸기 (오두막이 아니거나 없으면 false) */
   setStyle(id: string, style: CottageStyleId, now: number): Promise<boolean>;
+  /** 11/26 카라반 디자인 바꾸기 (캠핑장 카라반이 아니거나 없으면 false) */
+  setCampDesign(id: string, design: CaravanDesign, now: number): Promise<boolean>;
   /** 집과 딸린 키를 모두 지운다 (분양 결제 실패 보상·관리자 삭제). 공용 가구 가방은 남긴다 (다른 집이 쓴다) */
   remove(id: string): Promise<void>;
   /**
@@ -207,9 +243,16 @@ export interface HouseStore {
   moveLot(id: string, lot: number): Promise<"ok" | "no_house" | "taken">;
   /** 11/19 「필지 대기」: 번지 칸을 비우고 집의 번지를 0으로 (집·가구·방명록은 그대로 — 빈 번지가 나면 assignLot이 다시 준다). 집이 없으면 false */
   unlot(id: string): Promise<boolean>;
-  setProfile(id: string, name: string, intro: string, now: number): Promise<boolean>;
+  /** 문패(이름)·소개를 바꾼다. 바꾸기 전 이름 (11/26 — 이름이 같으면 집 바뀜 알림을 건너뛴다), 집이 없으면 null */
+  setProfile(id: string, name: string, intro: string, now: number): Promise<string | null>;
   /** tier가 from일 때만 to로 바꾼다. price = 넓히기 값 (낸 포인트 기록 paid가 있으면 더한다) */
   upgrade(id: string, from: PlotTierId, to: PlotTierId, now: number, price?: number): Promise<boolean>;
+  /** 11/26 캠핑장 집 앞마당: 캠핑장 집이고 지금 단계가 from일 때만 to로 (paid에 price를 더하고 순위 점수도 같은 단계에서) */
+  setYard(id: string, from: number, to: number, now: number, price: number): Promise<boolean>;
+  /** 11/26 별장 표시가 없는 옛 기록에 한 번 남긴다 (이미 있으면 그대로). 남은 값(있던 값 또는 새로 쓴 값), 집이 없으면 null */
+  settleVilla(id: string, villa: boolean): Promise<boolean | null>;
+  /** 11/26 여러 집의 요약 (없는 집은 null) */
+  brief(ids: readonly string[]): Promise<(HouseBrief | null)[]>;
   /** 가방에 1개: 가구·바닥·벽지는 공용 가방, 외관은 그 집 가방 (그 가방에서 max 이상이면 "max", 그 집이 없으면 "no_house") */
   addItem(pair: HousePair, zone: HouseZone, itemId: string, max: number): Promise<"ok" | "max" | "no_house">;
   /** 두 집 어디에도 놓이지 않은 1개를 뺀다 (되팔기, takeFrom). 이 집에 다 놓였으면 "placed", 남은 게 다른 집에 놓였으면 "away", 없으면 "none" */
@@ -254,6 +297,8 @@ export interface HouseStore {
   setGuestHidden(id: string, entryId: string, hidden: boolean): Promise<boolean>;
   /** 관리자: 신고가 있는 글 → 신고 수 */
   guestReports(id: string): Promise<Map<string, number>>;
+  /** 11/26 관리자 신고함: 여러 집을 한 번에 (Redis 왕복 1번 — 집마다 따로 읽으면 집 수만큼 차례로 기다렸다). 집 id → (글 → 신고 수) */
+  guestReportsMany(ids: readonly string[]): Promise<Map<string, Map<string, number>>>;
   /** 3번 화분: 배치 id → 물 준 기록 */
   plants(id: string): Promise<Record<string, PlantState>>;
   setPlant(id: string, u: string, st: PlantState): Promise<void>;
@@ -272,7 +317,10 @@ export interface HouseStore {
 export const SCORE_RULE_VER = "2026-11-22-tier";
 
 /** 꾸밈 점수 = 물건 점수 + 좋아요 × LIKE_WEIGHT + 터 크기 점수 (11/22 tier — catalog houseScore) */
-export const scoreOf = (placed: number, likes: number, tier: string | null | undefined) => houseScore(placed, likes, tier);
+export const scoreOf = (placed: number, likes: number, tier: string | null | undefined, sizeBonus?: number) => houseScore(placed, likes, tier, sizeBonus);
+/** 11/26 집 기록 하나의 꾸밈 점수 (마을·포구 = 터 크기, 캠핑장 = 넓히기·앞마당 — catalog houseSizeBonus) */
+export const recordScore = (r: { placedScore: number; likes: number; tier: string; zone?: HouseZone; lot: number; camp?: { yard: number } }) =>
+  scoreOf(r.placedScore, r.likes, r.tier, houseSizeBonus(r));
 
 // ── 메모리 (로컬 개발·테스트) ──
 
@@ -342,8 +390,9 @@ export class MemoryHouseStore implements HouseStore {
       ch: housingChannelOf(r.ch),
       lot: r.lot ?? 0,
       exterior: normalizeExterior(r.exterior),
-      score: scoreOf(r.placedScore, r.likes, r.tier),
-      items: layout.items.length,
+      ...(r.camp ? { camp: { ...r.camp } } : {}),
+      score: recordScore({ ...r, lot: r.lot ?? 0 }),
+      items: itemCount(layout),
     };
   }
 
@@ -376,7 +425,7 @@ export class MemoryHouseStore implements HouseStore {
    */
   private mergeSkins(pair: HousePair): void {
     const pool = this.pool(pair);
-    for (const id of [pair.village, pair.sea]) {
+    for (const id of [pair.village, pair.sea, pair.camp]) {
       const inv = this.houses.get(id)?.inv ?? this.keptInv.get(id);
       if (!inv) continue;
       for (const [it, n] of [...inv])
@@ -389,8 +438,13 @@ export class MemoryHouseStore implements HouseStore {
 
   async inventory(pair: HousePair, zone: HouseZone) {
     this.mergeSkins(pair);
-    const { self, other } = pairIds(pair, zone);
-    return invView(Object.fromEntries(this.pool(pair)), this.own(self), this.own(other), this.placedOf(other));
+    const { self, others } = pairIds(pair, zone);
+    return invView(Object.fromEntries(this.pool(pair)), this.own(self), this.othersOf(others));
+  }
+
+  /** 다른 집들의 몫 가방·놓은 개수 */
+  private othersOf(ids: readonly string[]): OtherBag[] {
+    return ids.map((id) => ({ own: this.own(id), placed: this.placedOf(id) }));
   }
 
   async ownItems(id: string) {
@@ -399,20 +453,22 @@ export class MemoryHouseStore implements HouseStore {
 
   /** 채널마다 번지 → 집 (메모리는 집 기록에서 바로 센다. 채널이 없는 예전 기록은 1채널로 본다) */
   private lotTaken(ch: number, lot: number, zone?: HouseZone): boolean {
-    for (const h of this.houses.values()) if (h.rec.lot === lot && housingChannelOf(h.rec.ch) === ch && h.rec.zone === (zone === "sea" ? "sea" : undefined)) return true;
+    for (const h of this.houses.values()) if (h.rec.lot === lot && housingChannelOf(h.rec.ch) === ch && h.rec.zone === zoneTag(zone)) return true;
     return false;
   }
 
   private freeLot(ch: number, zone?: HouseZone): number | null {
     // 비운 번지(CLOSED_LOTS)는 마을에서만 건너뛴다
-    for (let l = 1; l <= zoneMaxLots(zone); l++) if ((zone === "sea" || isOpenLot(l)) && !this.lotTaken(ch, l, zone)) return l;
+    for (let l = 1; l <= zoneMaxLots(zone); l++) if ((zoneTag(zone) || isOpenLot(l)) && !this.lotTaken(ch, l, zone)) return l;
     return null;
   }
 
   async create(n: NewHouse): Promise<CreateResult> {
     if (this.houses.has(n.id)) return "exists";
+    if (n.villa === false && n.others?.some((o) => this.houses.has(o))) return "villa_changed";
     const ch = housingChannelOf(n.ch ?? LEGACY_HOUSING_CHANNEL);
     const sea = n.zone === "sea";
+    const camp = n.zone === "camp" && n.camp ? { ...n.camp } : null;
     if (n.lot !== null && this.lotTaken(ch, n.lot, n.zone)) return "lot_taken";
     const lot = n.lot ?? this.freeLot(ch, n.zone);
     if (lot === null) return "full";
@@ -428,6 +484,8 @@ export class MemoryHouseStore implements HouseStore {
         ch,
         lot,
         ...(sea ? { zone: "sea" as const, style: n.style ?? "wood" } : {}),
+        ...(camp ? { zone: "camp" as const, camp } : {}),
+        ...(n.villa !== undefined ? { villa: n.villa } : {}),
         exterior: defaultExterior(),
         owner: n.owner,
         name: n.name,
@@ -463,7 +521,7 @@ export class MemoryHouseStore implements HouseStore {
   }
 
   async village(ch = LEGACY_HOUSING_CHANNEL, zone?: HouseZone) {
-    const want = zone === "sea" ? "sea" : undefined;
+    const want = zoneTag(zone);
     return [...this.houses.values()]
       .filter((h) => h.rec.lot > 0 && housingChannelOf(h.rec.ch) === ch && h.rec.zone === want)
       .map((h) => this.view(h))
@@ -531,11 +589,20 @@ export class MemoryHouseStore implements HouseStore {
     return true;
   }
 
+  async setCampDesign(id: string, design: CaravanDesign, now: number) {
+    const h = this.houses.get(id);
+    if (!h || h.rec.zone !== "camp" || h.rec.camp?.kind !== "caravan") return false;
+    h.rec.camp = { ...h.rec.camp, design: { ...design } };
+    h.rec.updatedAt = now;
+    return true;
+  }
+
   async setProfile(id: string, name: string, intro: string, now: number) {
     const h = this.houses.get(id);
-    if (!h) return false;
+    if (!h) return null;
+    const prev = h.rec.name;
     Object.assign(h.rec, { name, intro, updatedAt: now });
-    return true;
+    return prev;
   }
 
   async upgrade(id: string, from: PlotTierId, to: PlotTierId, now: number, price = 0) {
@@ -544,6 +611,39 @@ export class MemoryHouseStore implements HouseStore {
     Object.assign(h.rec, { tier: to, updatedAt: now });
     if (h.rec.paid !== undefined && price > 0) h.rec.paid += price;
     return true;
+  }
+
+  async setYard(id: string, from: number, to: number, now: number, price: number) {
+    const h = this.houses.get(id);
+    if (!h || h.rec.zone !== "camp" || !h.rec.camp || h.rec.camp.yard !== from) return false;
+    h.rec.camp = { ...h.rec.camp, yard: to as CampInfo["yard"] };
+    h.rec.updatedAt = now;
+    if (h.rec.paid !== undefined && price > 0) h.rec.paid += price;
+    return true;
+  }
+
+  async settleVilla(id: string, villa: boolean) {
+    const h = this.houses.get(id);
+    if (!h) return null;
+    if (h.rec.villa === undefined) h.rec.villa = villa;
+    return h.rec.villa;
+  }
+
+  async brief(ids: readonly string[]) {
+    return ids.map((id): HouseBrief | null => {
+      const r = this.houses.get(id)?.rec;
+      if (!r) return null;
+      return {
+        id,
+        ...(r.zone ? { zone: r.zone } : {}),
+        ch: housingChannelOf(r.ch),
+        lot: r.lot ?? 0,
+        tier: r.tier,
+        ...(r.villa !== undefined ? { villa: r.villa } : {}),
+        ...(r.camp ? { camp: { ...r.camp } } : {}),
+        ...(r.paid !== undefined ? { paid: r.paid } : {}),
+      };
+    });
   }
 
   async addItem(pair: HousePair, zone: HouseZone, itemId: string, max: number) {
@@ -559,9 +659,9 @@ export class MemoryHouseStore implements HouseStore {
 
   async takeItem(pair: HousePair, zone: HouseZone, itemId: string) {
     this.mergeSkins(pair);
-    const { self, other } = pairIds(pair, zone);
+    const { self, others } = pairIds(pair, zone);
     const pool = this.pool(pair);
-    const from = takeFrom(itemId, Object.fromEntries(pool), this.own(self), this.placedOf(self), this.own(other), this.placedOf(other));
+    const from = takeFrom(itemId, Object.fromEntries(pool), this.own(self), this.placedOf(self), this.othersOf(others));
     if (from === "none" || from === "placed" || from === "away") return from;
     const bag = from === "pool" ? pool : (this.houses.get(self)?.inv ?? this.keptInv.get(self));
     const n = bag?.get(itemId) ?? 0;
@@ -582,13 +682,13 @@ export class MemoryHouseStore implements HouseStore {
     now: number,
     base?: number,
   ) {
-    const { self: id, other } = pairIds(pair, zone);
+    const { self: id, others } = pairIds(pair, zone);
     const h = this.houses.get(id);
     if (!h) return "no_house" as const;
     if (h.rec.tier !== tier) return "tier" as const;
     if (base !== undefined && h.rec.updatedAt !== base) return "conflict" as const;
     this.mergeSkins(pair);
-    if (!fitsPool(counts, Object.fromEntries(this.pool(pair)), this.own(id), this.own(other), this.placedOf(other))) return "not_owned" as const;
+    if (!fitsPool(counts, Object.fromEntries(this.pool(pair)), this.own(id), this.othersOf(others))) return "not_owned" as const;
     h.placed = new Map(Object.entries(counts));
     if (layout) {
       h.rec.layout = structuredClone(layout);
@@ -607,7 +707,7 @@ export class MemoryHouseStore implements HouseStore {
     this.likes.add(key);
     if (quest) quest.have = quest.local(1);
     h.rec.likes += 1;
-    return { likes: h.rec.likes, score: scoreOf(h.rec.placedScore, h.rec.likes, h.rec.tier) };
+    return { likes: h.rec.likes, score: recordScore(h.rec) };
   }
 
   async likedToday(id: string, visitorId: string, day: string) {
@@ -700,6 +800,10 @@ export class MemoryHouseStore implements HouseStore {
   async guestReports(id: string) {
     const h = this.houses.get(id);
     return new Map([...(h?.guestReports ?? [])].map(([k, v]) => [k, v.size]));
+  }
+
+  async guestReportsMany(ids: readonly string[]) {
+    return new Map(await Promise.all(ids.map(async (id) => [id, await this.guestReports(id)] as const)));
   }
 
   async syncRankScores() {

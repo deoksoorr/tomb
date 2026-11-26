@@ -658,6 +658,8 @@ export type TowerTicket = {
   gp?: number;
   /** 11/18 한 마리에게 넣을 수 있는 초당 최대 피해 (판 시작 때 서버가 잰 값 — lib/rpg/dealCap). 없으면(옛 티켓) 이 검사는 건너뛴다 */
   dm?: number;
+  /** 11/26 판 시작 레벨 (엘리베이터 판 — cards runLevelBase, 판 시작 때 서버가 실었다). 없으면(옛 티켓) 0레벨부터 센다 */
+  rb?: number;
 };
 export type TowerVerdict =
   | {
@@ -780,7 +782,7 @@ export function evalTower(
   }
   const lim: PickLimits = {
     // 게임은 처치마다 경험치 × 배율을 소수로 더해 간다 → 문턱에 딱 닿는 판에서 곱셈 한 번과 끝자리가 갈릴 수 있어 아주 조금 여유
-    levels: (owned) => runLevel(runXp(r.kills) * cardXpMul(owned) + 1e-6).level,
+    levels: (owned) => runLevel(runXp(r.kills) * cardXpMul(owned) + 1e-6, t.rb ?? 0).level,
     starts: startPicks(t.start),
     bossFloors,
     rerolls: rerollsAllowed(k),
@@ -788,7 +790,7 @@ export function evalTower(
     top: t.start + k,
     levelFloorMax: (i) => {
       let need = 0;
-      for (let L = 0; L <= i; L++) need += runXpNeed(L);
+      for (let L = 0; L <= i; L++) need += runXpNeed((t.rb ?? 0) + L);
       const j = floorXp.findIndex((x) => x >= need);
       return t.start + (j < 0 ? k : j);
     },

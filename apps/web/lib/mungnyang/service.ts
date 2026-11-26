@@ -4,7 +4,7 @@ import { perkShopDiscount } from "../chairPerks";
 import { chairPerkSafe } from "../chairman/settle";
 import { HttpError } from "../http";
 import { furnitureById, type HouseZone } from "../housing/catalog";
-import { buyFurnitureMe, getHouseStore, houseIdFor, housePair } from "../housing/service";
+import { buyFurnitureMe, furnitureZone, getHouseStore, housePair } from "../housing/service";
 import { getAccounts } from "../store";
 import { loadMe } from "../store/accounts";
 import { champBoardsSafe } from "../store/champ";
@@ -47,9 +47,8 @@ async function furnRate(accountId: string, now: number): Promise<number> {
 
 /** 가구를 넣을 집 (마을 집 먼저, 없으면 포구 오두막). 둘 다 없으면 null (가구 보따리상과 같은 규칙) */
 async function houseZone(accountId: string): Promise<HouseZone | null> {
-  const store = getHouseStore();
-  const [v, s] = await Promise.all([store.get(houseIdFor(accountId, "village")), store.get(houseIdFor(accountId, "sea"))]);
-  return v ? "village" : s ? "sea" : null;
+  // 11/26 캠핑장 집만 있어도 (공용 가방이라 어느 집이든 같다)
+  return furnitureZone(getHouseStore(), accountId);
 }
 
 export async function mungnyangStatus(accountId: string, now = Date.now()): Promise<MungnyangStatus> {
@@ -99,7 +98,7 @@ export async function buyMungnyang(accountId: string, kind: MungnyangKind, id: s
     const f = furnitureById(id);
     if (!f || !isMungnyangFurn(id)) throw new HttpError(400, "NOT_SOLD", "보리가 팔지 않는 가구예요.");
     zone = await houseZone(accountId);
-    if (!zone) throw new HttpError(409, "NO_HOUSE", "가구는 집이 있어야 살 수 있어요. 마을 분양 사무소나 포구 부동산에 들러요.");
+    if (!zone) throw new HttpError(409, "NO_HOUSE", "가구는 집이 있어야 살 수 있어요. 마을 분양 사무소·포구 부동산·캠핑장에서 집을 분양받아요.");
     rate = await furnRate(accountId, now);
     // 가구점과 같은 값 매기기·가방·한도·환불 (마지막 인자 = 가구점 밖 한정 판매 허용 — 품종 가구. 가구점 셋은 원래 열려 있다)
     const r = await buyFurnitureMe(getHouseStore(), accountId, id, rate, zone, true);

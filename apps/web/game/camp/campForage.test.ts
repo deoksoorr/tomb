@@ -2,27 +2,25 @@ import { describe, expect, it } from "vitest";
 import {
   anyFishingWaterOf,
   CAMP_ARRIVE,
-  CAMP_DECKS,
-  CAMP_DECK_H,
-  CAMP_DECK_W,
   CAMP_FISHING_SPOTS,
   CAMP_NPCS,
   CAMP_SEATS,
   DIR,
   FISHING_SPOTS,
+  campWet,
   inCampStream,
   seatSlotIn,
 } from "@tomb/protocol";
 import { CAMP_GATHER_NODES, GATHER_NODES, NODE_CAT, nodeOnMap } from "@/lib/forage/catalog";
 import { candidates } from "@/lib/forage/rules";
 import { CastSchema, GatherStartSchema } from "@/lib/forage/schemas";
-import { campStandable, campWalkGrid } from "./campLayout";
+import { campStandable, campWalkGrid, inHome, inSite } from "./campLayout";
 
-// A-6 캠핑장 도감 수집: 계곡 낚시 자리·숲 채집 지점이 서 있을 수 있고 걸어서 닿는 곳인지, 서버가 받는지
+// A-6 캠핑장 도감 수집: 낚시 자리·숲 채집 지점이 서 있을 수 있고 닿는 곳인지, 서버가 받는지
+// 11/26 폭포 계곡 개편: 계곡 둑·달그늘 소 바위·윤슬 낚시터 둑·좌대 — 좌대 4~6은 헤엄쳐서 닿는다 (닿기는 물을 열어 둔 격자로)
 
-const grid = campWalkGrid(8);
-const reach = (() => {
-  const { cols, rows, cells, cell } = grid;
+const reachOf = (g: ReturnType<typeof campWalkGrid>) => {
+  const { cols, rows, cells, cell } = g;
   const seen = new Uint8Array(cols * rows);
   const start = Math.floor(CAMP_ARRIVE.y / cell) * cols + Math.floor(CAMP_ARRIVE.x / cell);
   const q = [start];
@@ -46,39 +44,46 @@ const reach = (() => {
       q.push(j);
     }
   }
-  return seen;
-})();
+  return { g, seen };
+};
+// 8px 격자로 못 닿으면 4px 격자로 한 번 더 (11/26 좌대 4~6 사다리 칸·족욕탕 계단처럼 좁은 길)
+const coarse = reachOf(campWalkGrid(8, true));
+const fine = reachOf(campWalkGrid(4, true));
 function reachableNear(x: number, y: number, r: number): boolean {
-  const { cell, cols, rows } = grid;
-  for (let cy = Math.floor((y - r) / cell); cy <= Math.floor((y + r) / cell); cy++)
-    for (let cx = Math.floor((x - r) / cell); cx <= Math.floor((x + r) / cell); cx++) {
-      if (cx < 0 || cy < 0 || cx >= cols || cy >= rows) continue;
-      if (Math.hypot(cx * cell + cell / 2 - x, cy * cell + cell / 2 - y) <= r && reach[cy * cols + cx]) return true;
-    }
+  for (const { g, seen } of [coarse, fine]) {
+    const { cell, cols, rows } = g;
+    for (let cy = Math.floor((y - r) / cell); cy <= Math.floor((y + r) / cell); cy++)
+      for (let cx = Math.floor((x - r) / cell); cx <= Math.floor((x + r) / cell); cx++) {
+        if (cx < 0 || cy < 0 || cx >= cols || cy >= rows) continue;
+        if (Math.hypot(cx * cell + cell / 2 - x, cy * cell + cell / 2 - y) <= r && seen[cy * cols + cx]) return true;
+      }
+  }
   return false;
 }
 const STEP: Record<number, [number, number]> = { [DIR.down]: [0, 1], [DIR.up]: [0, -1], [DIR.left]: [-1, 0], [DIR.right]: [1, 0] };
 
-describe("캠핑장 계곡 낚시 자리", () => {
-  it("여러 곳, 서 있을 수 있는 물가에서 물을 바라보고, 정류장에서 걸어서 닿는다", () => {
-    expect(CAMP_FISHING_SPOTS.length).toBeGreaterThanOrEqual(6);
+describe("캠핑장 낚시 자리", () => {
+  it("여러 곳, 서 있을 수 있는 마른 자리에서 물을 바라보고, 정류장에서 걷거나 헤엄쳐 닿는다", () => {
+    expect(CAMP_FISHING_SPOTS.length).toBeGreaterThanOrEqual(40);
     for (const s of CAMP_FISHING_SPOTS) {
       expect(campStandable(s.x, s.y), s.id).toBe(true);
-      expect(inCampStream(s.x, s.y), `${s.id} 발밑은 뭍`).toBe(false);
+      expect(campWet(s.x, s.y), `${s.id} 발밑은 마른 자리`).toBe(false);
       const [dx, dy] = STEP[s.facing];
-      expect(inCampStream(s.x + dx * 24, s.y + dy * 24), `${s.id} 앞이 물`).toBe(true);
+      expect(campWet(s.x + dx * 24, s.y + dy * 24), `${s.id} 앞이 물`).toBe(true);
       expect(reachableNear(s.x, s.y, 10), `${s.id} 닿기`).toBe(true);
       for (const q of CAMP_SEATS) expect(Math.hypot(q.x - s.x, q.y - s.y), `${s.id} ~ ${q.id}`).toBeGreaterThanOrEqual(20);
       for (const n of CAMP_NPCS) expect(Math.hypot(n.x - s.x, n.y - s.y), `${s.id} ~ ${n.id}`).toBeGreaterThanOrEqual(24);
     }
   });
-  it("id는 마을 낚시 자리와 겹치지 않고, 계곡은 강 물고기", () => {
+  it("id는 마을 낚시 자리와 겹치지 않고, 물마다 그 물고기 (계곡 valley · 소 pool · 저수지 reservoir · 나룻배 rowboat)", () => {
     const village = new Set(FISHING_SPOTS.map((s) => s.id));
     expect(new Set(CAMP_FISHING_SPOTS.map((s) => s.id)).size).toBe(CAMP_FISHING_SPOTS.length);
     for (const s of CAMP_FISHING_SPOTS) {
       expect(village.has(s.id), s.id).toBe(false);
-      expect(anyFishingWaterOf(s.id)).toBe("river");
+      expect(anyFishingWaterOf(s.id)).toBe(s.water);
     }
+    expect(new Set(CAMP_FISHING_SPOTS.map((s) => s.water))).toEqual(new Set(["valley", "pool", "reservoir"]));
+    expect(anyFishingWaterOf("boat:reservoir")).toBe("rowboat");
     // 마을 자리·배 위 가상 자리는 예전 그대로
     expect(anyFishingWaterOf(FISHING_SPOTS[0].id)).toBe(FISHING_SPOTS[0].water);
     expect(anyFishingWaterOf("boat:lake")).toBe("lake");
@@ -107,15 +112,15 @@ describe("캠핑장 채집 지점", () => {
     }
     expect(GATHER_NODES.filter((n) => nodeOnMap(n, "village")).length).toBeGreaterThan(30);
   });
-  it("서 있을 수 있고 걸어서 닿으며, 물·자리·데크·낚시 자리·서로와 떨어져 있다", () => {
+  it("서 있을 수 있고 걸어서 닿으며, 물·자리·집터·낚시 자리·서로와 떨어져 있다", () => {
     for (const n of CAMP_GATHER_NODES) {
       expect(campStandable(n.x, n.y), n.id).toBe(true);
-      expect(inCampStream(n.x, n.y, 8), n.id).toBe(false);
+      expect(inCampStream(n.x, n.y, 8) || campWet(n.x, n.y), n.id).toBe(false);
       expect(reachableNear(n.x, n.y, 12), `${n.id} 닿기`).toBe(true);
       for (const q of CAMP_SEATS) expect(Math.hypot(q.x - n.x, q.y - n.y), `${n.id} ~ ${q.id}`).toBeGreaterThanOrEqual(20);
       for (const q of CAMP_NPCS) expect(Math.hypot(q.x - n.x, q.y - n.y), `${n.id} ~ ${q.id}`).toBeGreaterThanOrEqual(24);
       for (const f of CAMP_FISHING_SPOTS) expect(Math.hypot(f.x - n.x, f.y - n.y), `${n.id} ~ ${f.id}`).toBeGreaterThanOrEqual(24);
-      for (const d of CAMP_DECKS) expect(Math.abs(d.x - n.x) < CAMP_DECK_W / 2 + 6 && Math.abs(d.y - n.y) < CAMP_DECK_H / 2 + 8, `${n.id} ~ ${d.n}번 데크`).toBe(false);
+      expect(!!inSite(n.x, n.y, 6) || inHome(n.x, n.y, 6, 6), `${n.id} 집터`).toBe(false);
       for (const o of CAMP_GATHER_NODES) if (o !== n) expect(Math.hypot(o.x - n.x, o.y - n.y), `${n.id} ~ ${o.id}`).toBeGreaterThanOrEqual(20);
     }
   });

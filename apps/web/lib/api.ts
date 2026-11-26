@@ -48,6 +48,8 @@ import type { ReportReason } from "./reports";
 import type { PlayEndResponse, PlayKind, PlayStartResponse } from "./retainPlay";
 import { reportClientError } from "./hooks/errorReporting";
 import { deviceHeaders } from "./deviceMark";
+import { signalMaintenance } from "./maintClient";
+import { firstSource } from "./signupSourceClient";
 
 // 브라우저 → Next API 호출. 서버가 준 한국어 메시지를 그대로 사용자에게 보여 준다.
 
@@ -91,11 +93,18 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     res = await fetch(path, init);
   } catch (e) {
     if (isAbortError(e)) throw e;
+    // 11/26 API 실패(연결 실패)도 남긴다 — 같은 경로는 세션당 한 번·분당 5건 (errorReporting이 묶어 보낸다)
+    reportClientError("api", new Error(`${init?.method ?? "GET"} ${path.split("?")[0]} → 연결 실패`));
     throw new ApiRequestError(0, "NETWORK", FALLBACK_MESSAGE);
   }
   const body: unknown = await res.json().catch(() => null);
   if (!res.ok) {
     const err = (body as Partial<ApiError> | null)?.error;
+    // 11/26 서버 점검 중 (미들웨어 503): 오류로 세지 않고 점검 화면
+    if (res.status === 503 && err?.code === "MAINTENANCE") {
+      signalMaintenance();
+      throw new ApiRequestError(503, "MAINTENANCE", err.message ?? "서버 점검 중이에요.");
+    }
     // 서버가 터진 경우만 운영자에게 알린다 (4xx는 사용자 입력 문제)
     if (res.status >= 500) reportClientError("api", new Error(`${init?.method ?? "GET"} ${path} → ${res.status} ${err?.code ?? ""}`));
     const retry = Number(res.headers?.get?.("retry-after"));
@@ -150,8 +159,9 @@ export const api = {
   me: () => request<Me>("/api/me", { cache: "no-store" }),
   /** 출석. name은 계정에 이름이 아직 없을 때만 저장된다(코드로 시작한 기기가 이름을 덮어쓰지 않게) */
   /** 출석. 이름·색·몸은 계정에 값이 아직 없을 때만 저장된다(코드로 시작·이어서 들어가기가 덮어쓰지 않게) */
+  // 11/26 src = 처음 방문 유입 (이번에 계정이 처음 만들어졌을 때만 서버가 저장한다 — lib/signupSourceClient)
   attend: (name: string, color: string, body?: string) =>
-    request<AttendResponse>("/api/me/attend", jsonInit("POST", body ? { name, color, body } : { name, color })),
+    request<AttendResponse>("/api/me/attend", jsonInit("POST", { name, color, ...(body ? { body } : {}), src: firstSource() ?? {} })),
   issueCode: () => request<CodeResponse>("/api/me/code", { method: "POST" }),
   /** 11/18 다른 기기에서 모두 로그아웃 (지금 기기는 남는다) */
   logoutOthers: () => request<{ ok: true }>("/api/me/sessions", { method: "POST" }),

@@ -292,8 +292,7 @@ const ENTER_LUA = `
 if ARGV[1] ~= '' then redis.call('HSETNX', KEYS[1], 'name', ARGV[1]) end
 if ARGV[2] ~= '' then redis.call('HSETNX', KEYS[1], 'color', ARGV[2]) end
 if ARGV[3] ~= '' then redis.call('HSETNX', KEYS[1], 'body', ARGV[3]) end
-redis.call('HSETNX', KEYS[1], 'createdAt', ARGV[4])
-return 1
+return redis.call('HSETNX', KEYS[1], 'createdAt', ARGV[4])
 `;
 
 // 10번: 달력 개편 전 출석을 도장으로 옮긴다 (한 번만). 읽은 뒤 마지막 출석일이 바뀌었으면(그 사이 도장) 0 → 다시 읽어 시도.
@@ -1220,10 +1219,11 @@ export class RedisAccounts implements AccountStore {
     return (legacy !== null && legacy !== undefined) || (now !== null && now !== undefined);
   }
 
-  async enter(id: string, profile: Profile, now: number): Promise<void> {
+  async enter(id: string, profile: Profile, now: number): Promise<boolean> {
     // 이름은 이름 색인과 함께 등록한다 (다른 계정이 쓰는 이름이면 저장하지 않는다). 휴면 재설정은 여기서 하지 않는다
     if (profile.name) await this.claim(id, profile.name, now, true);
-    await this.redis.eval<string[], number>(ENTER_LUA, [K.acct(id)], ["", profile.color ?? "", profile.body ?? "", String(now)]);
+    // 11/26 1 = 처음 입장한 시각을 이번에 처음 남겼다 (새 계정)
+    return Number(await this.redis.eval<string[], number>(ENTER_LUA, [K.acct(id)], ["", profile.color ?? "", profile.body ?? "", String(now)])) === 1;
   }
 
   /** 달력 개편 전 출석을 도장으로 옮긴다 (한 번만, 경합하면 다시 읽어 시도) */
@@ -1692,10 +1692,14 @@ export class RedisAccounts implements AccountStore {
 
   /** SCAN acct:* (해시만) → 계정 해시(acct:{id})만 골라 요약. 부속 키(acct:{id}:inv 등)는 거른다 */
   async scanAccounts(cursor: string, count: number): Promise<{ next: string; accounts: AccountSummary[] }> {
-    const [next, keys] = await this.redis.scan(cursor, { match: "acct:*", count, type: "hash" });
-    const ids = keys.filter((k) => /^acct:[^:]+$/.test(k)).map((k) => k.slice("acct:".length));
+    const { next, ids } = await this.scanIds(cursor, count);
     const rows = await this.summaries(ids);
-    return { next: String(next), accounts: rows.filter((r): r is AccountSummary => r !== null) };
+    return { next, accounts: rows.filter((r): r is AccountSummary => r !== null) };
+  }
+
+  async scanIds(cursor: string, count: number): Promise<{ next: string; ids: string[] }> {
+    const [next, keys] = await this.redis.scan(cursor, { match: "acct:*", count, type: "hash" });
+    return { next: String(next), ids: keys.filter((k) => /^acct:[^:]+$/.test(k)).map((k) => k.slice("acct:".length)) };
   }
 }
 

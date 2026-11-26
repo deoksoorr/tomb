@@ -1,4 +1,5 @@
-import { CAMP_BOUNDS, CAMP_BUS_STOP, CAMP_FIRE, CAMP_LOOKOUT, CAMP_OFFICE, CAMP_OFFICE_H, CAMP_OFFICE_W, CAMP_ROAD, CAMP_VANS, CAMP_VAN_H, CAMP_VAN_W, inCampStream } from "./camp";
+import { CAMP_BOUNDS, CAMP_BUS_STOP, CAMP_CLIFF_X0, CAMP_CLIFF_X1, CAMP_FIRE, CAMP_OFFICE, CAMP_OFFICE_H, CAMP_OFFICE_W, CAMP_RES, CAMP_ROAD, CAMP_RES_EMBANK, campCliffEnvelope, campPoolD, inCampStream } from "./camp";
+import { CAMP_LOTS } from "./campHomes";
 import type { Sid } from "./types";
 
 // 11/17 캠핑장 「눈사람 만들기」 (겨울·크리스마스 판에서만 — 판은 웹이 정하고 서버는 모른다).
@@ -56,7 +57,7 @@ export function snowmanAlive(at: number, now: number): boolean {
 const inBox = (x: number, y: number, x0: number, y0: number, x1: number, y1: number) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
 
 /**
- * 서버 검증: 캠핑장 눈밭에 세울 수 있는 자리인지 (대략 — 건물·물·버스 길·모닥불 둘레 녹은 땅·전망대를 뺀다).
+ * 서버 검증: 캠핑장 눈밭에 세울 수 있는 자리인지 (대략 — 건물·물·버스 길·모닥불 자리·절벽·집터를 뺀다).
  * 웹은 이보다 좁게(바닥 종류·충돌까지) 본다. 판(겨울·크리스마스)은 서버가 모르므로 보지 않는다
  */
 export function campSnowSpotOk(x: number, y: number): boolean {
@@ -69,10 +70,12 @@ export function campSnowSpotOk(x: number, y: number): boolean {
   if (inBox(x, y, CAMP_BUS_STOP.x - 40, CAMP_BUS_STOP.y - 16, CAMP_BUS_STOP.x + 40, CAMP_BUS_STOP.y + 22)) return false;
   // 모닥불 자리만 (11/18 사용자 「모닥불 근처도 되게」 — 예전엔 녹은 땅 둘레 76px을 막았다)
   if (Math.hypot(x - CAMP_FIRE.x, (y - CAMP_FIRE.y) * 1.2) < 26) return false;
-  // 전망대 데크·관리소·캠핑카
-  if (inBox(x, y, CAMP_LOOKOUT.x - 6, CAMP_LOOKOUT.y - 6, CAMP_LOOKOUT.x + CAMP_LOOKOUT.w + 6, CAMP_LOOKOUT.y + CAMP_LOOKOUT.h + 10)) return false;
+  // 관리소 · 11/26 폭포 절벽·달그늘 소·저수지(둑 포함) · 집터(카라반·펜션·촌캉스 — 집과 앞마당)
   if (inBox(x, y, CAMP_OFFICE.x - CAMP_OFFICE_W / 2 - 6, CAMP_OFFICE.y - CAMP_OFFICE_H, CAMP_OFFICE.x + CAMP_OFFICE_W / 2 + 6, CAMP_OFFICE.y + 8)) return false;
-  for (const v of CAMP_VANS) if (inBox(x, y, v.x - CAMP_VAN_W / 2 - 4, v.y - CAMP_VAN_H, v.x + CAMP_VAN_W / 2 + 4, v.y + 8)) return false;
+  if (x > CAMP_CLIFF_X0 && x < CAMP_CLIFF_X1 && y < campCliffEnvelope(x) + 10) return false;
+  if (campPoolD(x, y) < 1.08) return false;
+  if (inBox(x, y, CAMP_RES.x0 - CAMP_RES_EMBANK - 4, CAMP_RES.y0 - CAMP_RES_EMBANK - 4, CAMP_RES.x1 + CAMP_RES_EMBANK + 4, CAMP_RES.y1 + CAMP_RES_EMBANK + 4)) return false;
+  for (const l of CAMP_LOTS) if (inBox(x, y, l.x - 2, l.y - 2, l.x + l.w + 2, l.y + l.h + 2)) return false;
   return true;
 }
 

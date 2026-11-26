@@ -1,6 +1,6 @@
 import { ITEMS, isShopListed, type FishWater, type ItemDef } from "@tomb/protocol";
 import { candidates, hash01, pickWeighted, type Cond } from "./rules";
-import type { Species } from "./catalog";
+import { WATER_WHERES, type Species } from "./catalog";
 
 // 물에 빠진 꾸미기: 낚시 한 번에 아주 드물게 물고기 대신 캐릭터 꾸미기가 걸린다 (서버가 판정, 영구 소장으로 지급).
 //  - 직접 낚시: 찌를 던질 때(cast) 서버 난수로 걸렸는지·고를 난수를 정해 진행 기록에만 둔다 (손맛·그림자는 물고기 그대로)
@@ -38,9 +38,9 @@ export function pickSunkenCosmetic(rand: number, owned: ReadonlySet<string> = ne
 
 export const sunkenName = (item: Pick<ItemDef, "name">) => `물에 빠진 ${item.name}`;
 
-/** 다 가졌을 때 대신 줄 물고기: 그 물·조건의 희귀(★3 이상) 중 하나, 없으면 원래 걸린 것 */
-export function sunkenFallbackFish(water: FishWater, c: Cond, rand: number, orig: Species): Species {
-  return pickWeighted(candidates("fish", water, c, (s) => s.rarity >= 3 && !s.junk), rand) ?? orig;
+/** 다 가졌을 때 대신 줄 물고기: 그 물·조건의 희귀(★3 이상) 중 하나, 없으면 원래 걸린 것. auto = 11/26 자동 낚시면 직접 낚시 전용(directOnly)은 빼요 */
+export function sunkenFallbackFish(water: FishWater, c: Cond, rand: number, orig: Species, auto = false): Species {
+  return pickWeighted(candidates("fish", WATER_WHERES[water], c, (s) => s.rarity >= 3 && !s.junk && !(auto && s.directOnly)), rand) ?? orig;
 }
 
 /** 자동 낚시 k번째(걸린 시도)가 꾸미기인지 (시드 + 번호로 결정적). 꾸미기면 고를 때 쓸 난수 */

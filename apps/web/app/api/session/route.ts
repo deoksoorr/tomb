@@ -12,6 +12,8 @@ import { readBody, SessionSchema } from "@/lib/validate";
  */
 export const POST = handler(async (req) => {
   await rateLimit("session", req);
+  // 11/26 src(처음 방문 유입)는 옛 화면이 보내던 값이라 받기만 한다 — 저장은 계정이 실제로 만들어지는 첫 입장 기록(/api/me/attend)에서
+  //   (여기서 저장하면 로그인 없이 fresh 요청만 반복해도 영구 저장이 계속 늘어난다)
   const { fresh } = await readBody(req, SessionSchema);
   const known = !fresh && (await getVisitorId(req));
   const visitorId = known || newVisitorId();

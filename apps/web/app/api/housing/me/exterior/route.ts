@@ -2,6 +2,7 @@ import { handler, json } from "@/lib/http";
 import { ExteriorSchema } from "@/lib/housing/schemas";
 import { getHouseStore, saveExterior } from "@/lib/housing/service";
 import type { MyHouseResponse } from "@/lib/housing/types";
+import { notifyHomes } from "@/lib/housing/homesNotify";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
 import { readBody } from "@/lib/validate";
@@ -14,5 +15,5 @@ export const PUT = handler(async (req) => {
   const visitorId = await requireVisitor(req);
   const { ch, exterior } = await readBody(req, ExteriorSchema);
   await rateLimit("shop", req, visitorId);
-  return json<MyHouseResponse>(await saveExterior(getHouseStore(), visitorId, exterior, ch));
+  return json<MyHouseResponse>(notifyHomes(await saveExterior(getHouseStore(), visitorId, exterior, ch)));
 });

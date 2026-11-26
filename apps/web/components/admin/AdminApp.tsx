@@ -17,6 +17,8 @@ import type { BanTarget } from "./BanPanel";
 import BansPanel from "./BansPanel";
 import CodeLogPanel from "./CodeLogPanel";
 import DashboardPanel from "./DashboardPanel";
+import MaintenancePanel from "./MaintenancePanel";
+import OnlinePanel from "./OnlinePanel";
 import DevNotesPanel from "./DevNotesPanel";
 import DyePanel from "./DyePanel";
 import EconomyPanel from "./EconomyPanel";
@@ -26,21 +28,18 @@ import TowerGrantPanel from "./TowerGrantPanel";
 import ReviewPanel from "./ReviewPanel";
 import GravesPanel from "./GravesPanel";
 import HousingPanel from "./HousingPanel";
-import MegaphonePanel from "./MegaphonePanel";
 import ManagersPanel from "./ManagersPanel";
 import ReferralsPanel from "./ReferralsPanel";
 import InquiriesPanel from "./InquiriesPanel";
 import { inquiryAdminApi } from "./inquiryAdminApi";
 import MembersPanel from "./MembersPanel";
 import { moderationApi } from "./moderationApi";
-import NoticesPanel from "./NoticesPanel";
 import { Failed, Loading } from "./PanelState";
 import PassedPanel from "./PassedPanel";
 import ReportsPanel from "./ReportsPanel";
 import PointEventPanel from "./PointEventPanel";
 import LotteryPanel from "./LotteryPanel";
 import UrgentResultsPanel from "./UrgentResultsPanel";
-import MapConceptPanel from "./MapConceptPanel";
 import ResidentsPanel from "./ResidentsPanel";
 import StaffPanel from "./StaffPanel";
 import SystemPanel from "./SystemPanel";
@@ -111,12 +110,15 @@ export default function AdminApp() {
   const reload = useCallback(() => setVersion((v) => v + 1), []);
   useEffect(() => {
     let alive = true;
+    // 11/26 지금 접속(실시간 서버 로비)은 묘비 목록을 기다리지 않고 함께 받기 시작한다 (예전엔 묘비 목록이 온 뒤에 물었다)
+    const lobbyP = adminApi.channels();
+    lobbyP.catch(() => undefined);
     adminApi.graves().then(
       ({ graves }) => {
         if (!alive) return;
         setGraves(graves);
         setPhase("ready");
-        adminApi.channels().then(
+        lobbyP.then(
           (l) => alive && setLobby(l),
           () => alive && setLobby("error"),
         );
@@ -303,7 +305,19 @@ export default function AdminApp() {
               graveCount={graves.length}
               reportedCount={reportedCount}
               reportsOpen={reportsOpen}
+              inquiriesNew={inquiriesNew}
+              errorsToday={errorsToday}
               version={version}
+            />
+          )}
+          {panel === "online" && (
+            <OnlinePanel
+              {...p}
+              version={version}
+              onFindMember={(id) => {
+                setMemberQuery(id);
+                go("members");
+              }}
             />
           )}
           {panel === "economy" && <EconomyPanel key={version} {...p} />}
@@ -321,8 +335,12 @@ export default function AdminApp() {
 
           {panel === "members" && <MembersPanel key={version} {...p} banPreset={banPreset} onBanPresetUsed={clearBanPreset} searchPreset={memberQuery} onSearchPresetUsed={clearMemberQuery} />}
           {panel === "codes" && <CodeLogPanel {...p} version={version} />}
-          {panel === "staff" && <StaffPanel key={version} {...p} />}
-          {panel === "managers" && <ManagersPanel key={version} {...p} />}
+          {panel === "staff" && (
+            <div className={styles.notices}>
+              <StaffPanel key={`s${version}`} {...p} />
+              <ManagersPanel key={`m${version}`} {...p} />
+            </div>
+          )}
           {panel === "referrals" && (
             <ReferralsPanel
               key={version}
@@ -354,9 +372,7 @@ export default function AdminApp() {
             />
           )}
           {panel === "bans" && <BansPanel {...p} version={version} onChanged={reload} />}
-          {panel === "megaphone" && <MegaphonePanel key={version} {...p} />}
 
-          {panel === "notices" && <NoticesPanel key={version} {...p} />}
           {panel === "devnotes" && <DevNotesPanel {...p} version={version} />}
           {panel === "inquiries" && (
             <InquiriesPanel
@@ -373,7 +389,7 @@ export default function AdminApp() {
           {panel === "dye" && <DyePanel {...p} />}
 
           {panel === "graves" && <GravesPanel graves={graves} toast={toast} onError={handleError} onChanged={reload} />}
-          {panel === "passed" && <PassedPanel key={version} {...p} part="list" onChanged={reload} />}
+          {panel === "passed" && <PassedPanel key={version} {...p} onChanged={reload} />}
           {panel === "housing" && <HousingPanel key={version} {...p} />}
           {panel === "review" && <ReviewPanel key={version} {...p} />}
           {panel === "towerGrant" && <TowerGrantPanel {...p} />}
@@ -382,10 +398,9 @@ export default function AdminApp() {
           {panel === "pointEvent" && <PointEventPanel key={version} {...p} />}
           {panel === "lottery" && <LotteryPanel key={version} {...p} />}
           {panel === "urgent" && <UrgentResultsPanel key={version} {...p} />}
-          {panel === "mapConcept" && <MapConceptPanel key={version} {...p} />}
-          {panel === "graveRules" && <PassedPanel key={version} {...p} part="settings" onChanged={reload} />}
 
           {panel === "errors" && <ErrorsPanel key={version} {...p} />}
+          {panel === "maintenance" && <MaintenancePanel {...p} version={version} />}
           {panel === "system" && <SystemPanel {...p} />}
         </div>
       </main>

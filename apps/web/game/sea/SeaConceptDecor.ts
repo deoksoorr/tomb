@@ -7,12 +7,13 @@ import { bridge } from "../bridge";
 import { DEPTH } from "../config";
 import { breathPuff, bulbGlowSheet, doorWreath, giftPile, snowCap, snowGlint, snowman, snowRoof, type Bulb, type SnowCapOpts } from "../sprites/winterArt";
 import { addTwinkle } from "../world/conceptLights";
-import { GULL_TEX, GULL_VEND_W } from "./gullArt";
+import { GULL_TEX, GULL_VEND_PAD, GULL_VEND_W } from "./gullArt";
 import * as Art from "./seaArt";
 import { cottageRoofArea } from "./seaCottageArt";
 import * as Lay from "./seaLayout";
 import type { SeaMap } from "./SeaMap";
 import type { SeaShips } from "./seaShips";
+import { NO_PAD, type SeaPad } from "./seaPad";
 import { SEA_TEX_PREFIX } from "./seaTypes";
 import { drawString, lighthouseRailBulbs, lighthouseSpiral, putPx, ribbonLamp, seaXmasSpots, SHIP_DRESS, snowDeck, stringLights, type Img, type Pt } from "./seaWinterArt";
 import { seaSnowyGround } from "./seaWinterGround";
@@ -69,13 +70,19 @@ function withImg<T>(c: HTMLCanvasElement, fn: (m: Img) => T): T {
   return out;
 }
 
-/** 리스 (11×12)를 (x, y) 왼쪽 위에 */
+/** 리스 (11×12)를 (x, y) 왼쪽 위에 — 11/26 둘레 한 칸 둔 리스(doorWreath(1))를 한 칸 앞에: 고리·리본 끝 윤곽까지 (자리는 그대로) */
 function wreath(c: HTMLCanvasElement, x: number, y: number): void {
-  c.getContext("2d")!.drawImage(doorWreath(), Math.round(x), Math.round(y));
+  c.getContext("2d")!.drawImage(doorWreath(1), Math.round(x) - 1, Math.round(y) - 1);
 }
 
-/** 처마 전구 줄 + (주면) 리스 */
-function eaveDress(a: Pt, b: Pt, sag: number, door?: Pt): (c: HTMLCanvasElement) => Bulb[] {
+/** 그림 안 좌표를 그 텍스처 둘레 여백(seaArt *_PAD)만큼 옮겨요 */
+const at = (p: Pt, o: SeaPad): Pt => ({ x: p.x + o.x, y: p.y + o.top });
+
+/** 처마 전구 줄 + (주면) 리스 (점은 그린 그림 좌표 — o = 텍스처 둘레 여백) */
+function eaveDress(a0: Pt, b0: Pt, sag: number, door0?: Pt, o: SeaPad = NO_PAD): (c: HTMLCanvasElement) => Bulb[] {
+  const a = at(a0, o);
+  const b = at(b0, o);
+  const door = door0 && at(door0, o);
   return (c) => {
     const bulbs = withImg(c, (m) => drawString(m, a, b, sag));
     if (door) wreath(c, door.x, door.y);
@@ -85,11 +92,13 @@ function eaveDress(a: Pt, b: Pt, sag: number, door?: Pt): (c: HTMLCanvasElement)
 
 /** 별장 터 (seaArt lotArt와 같은 좌표): 출입구 기둥·데크 */
 function lotGeom(l: SeaLot) {
-  const top = Art.LOT_RISE;
-  const bot = Art.LOT_RISE + l.h - 2;
-  const x0 = 2;
-  const x1 = 2 + l.w - 1;
-  const gx0 = 2 + l.w / 2 - SEA_LOT_GATE_W / 2;
+  // 11/26 텍스처 둘레 여백(LOT_PAD)만큼 옮긴 자리
+  const px = Art.LOT_PAD.x;
+  const top = Art.LOT_RISE + Art.LOT_PAD.top;
+  const bot = top + l.h - 2;
+  const x0 = 2 + px;
+  const x1 = 2 + px + l.w - 1;
+  const gx0 = 2 + px + l.w / 2 - SEA_LOT_GATE_W / 2;
   const gy0 = top + l.h / 2 - SEA_LOT_GATE_W / 2;
   return { top, bot, x0, x1, gx0, gx1: gx0 + SEA_LOT_GATE_W, gy0, gy1: gy0 + SEA_LOT_GATE_W };
 }
@@ -109,37 +118,46 @@ function skinOf(name: string): Skin | null {
       return { cap: { depth: 2 }, xmas: (c) => (withImg(c, ribbonLamp), []) };
     case "shelter":
       // 하늘빛 골함석 지붕 (4~13줄) · 크리스마스엔 처마 전구 + 뒷벽 리스
-      return { roof: (_x, y) => y >= 4 && y <= 13, xmas: eaveDress({ x: 1, y: 14 }, { x: Art.SHELTER_ART_W - 2, y: 14 }, 2, { x: Art.SHELTER_ART_W / 2 - 5, y: 18 }) };
+      return {
+        roof: (_x, y) => y >= 4 + Art.SHELTER_PAD.top && y <= 13 + Art.SHELTER_PAD.top,
+        xmas: eaveDress({ x: 1, y: 14 }, { x: Art.SHELTER_ART_W - 2, y: 14 }, 2, { x: Art.SHELTER_ART_W / 2 - 5, y: 18 }, Art.SHELTER_PAD),
+      };
     case "realty":
       // 마을 분양 사무소와 같은 그림: 지붕 13~23줄 (간판·간판 다리는 빼요), 문 위 리스 + 처마 전구
       return { roof: (_x, y, c) => y >= 13 && y <= 23 && lum(c) > 60, xmas: eaveDress({ x: 3, y: 24 }, { x: 56, y: 24 }, 3, { x: 25, y: 34 }) };
     case "gullVend":
       // 11/17 r2 과자 자판기: 차양·위에 앉은 갈매기 머리에 소복이 · 크리스마스엔 차양 끝 전구 줄
-      return { cap: { depth: 2 }, xmas: eaveDress({ x: 1, y: 10 }, { x: GULL_VEND_W - 2, y: 10 }, 1) };
+      return { cap: { depth: 2 }, xmas: eaveDress({ x: 1, y: 10 }, { x: GULL_VEND_W - 2, y: 10 }, 1, undefined, GULL_VEND_PAD) };
     case "kiosk":
       // 차양 위에 소복이 · 크리스마스엔 차양 끝 전구 + 앞판 리스
-      return { cap: { depth: 3 }, xmas: eaveDress({ x: 2, y: 23 }, { x: Art.KIOSK_ART_W - 3, y: 23 }, 2, { x: Art.KIOSK_ART_W / 2 - 5, y: 44 }) };
+      return { cap: { depth: 3 }, xmas: eaveDress({ x: 2, y: 23 }, { x: Art.KIOSK_ART_W - 3, y: 23 }, 2, { x: Art.KIOSK_ART_W / 2 - 5, y: 44 }, Art.KIOSK_PAD) };
     case "lighthouse":
       return {
         // 등실 지붕 (1~8줄) 통째로 눈, 전망대·줄무늬 턱엔 윗면 눈
-        roof: (_x, y) => y >= 1 && y <= 8,
-        cap: { depth: 2, maxY: Art.LIGHTHOUSE_ART_H - 4 },
+        // (줄·점은 그린 그림 좌표 + 텍스처 위 여백 LIGHTHOUSE_PAD)
+        roof: (_x, y) => y >= 1 + Art.LIGHTHOUSE_PAD.top && y <= 8 + Art.LIGHTHOUSE_PAD.top,
+        cap: { depth: 2, maxY: Art.LIGHTHOUSE_ART_H - 4 + Art.LIGHTHOUSE_PAD.top },
         xmas: (c) =>
           withImg(c, (m) => {
+            const o = Art.LIGHTHOUSE_PAD;
             const sp = lighthouseSpiral();
-            for (const p of sp.wire) if (m.d[(p.y * m.w + p.x) * 4 + 3] > 200) putPx(m, p.x, p.y, 0x3a3430);
-            for (const b of sp.bulbs) putPx(m, b.x, b.y, b.c);
+            const bulbs = sp.bulbs.map((b) => ({ ...b, ...at(b, o) }));
+            for (const p0 of sp.wire) {
+              const p = at(p0, o);
+              if (m.d[(p.y * m.w + p.x) * 4 + 3] > 200) putPx(m, p.x, p.y, 0x3a3430);
+            }
+            for (const b of bulbs) putPx(m, b.x, b.y, b.c);
             // 전망대 난간 솔잎 화환 + 전구
-            for (let x = 9; x <= 35; x++) putPx(m, x, 20, (x & 1) === 0 ? 0x2b5a36 : 0x3e7a48);
-            const rail = lighthouseRailBulbs();
+            for (let x = 9; x <= 35; x++) putPx(m, x + o.x, 20 + o.top, (x & 1) === 0 ? 0x2b5a36 : 0x3e7a48);
+            const rail = lighthouseRailBulbs().map((b) => ({ ...b, ...at(b, o) }));
             for (const b of rail) putPx(m, b.x, b.y, b.c);
-            return [...sp.bulbs, ...rail];
+            return [...bulbs, ...rail];
           }),
       };
     case "boat":
     case "ship-tanker":
     case "ship-cargo": {
-      const pts = SHIP_DRESS[name];
+      const pts = SHIP_DRESS[name].map((p) => at(p, name === "boat" ? Art.BOAT_PAD : Art.SHIP_PAD));
       return {
         cap: { depth: 2, maxY: 0 },
         xmas: (c) => withImg(c, (m) => pts.slice(1).flatMap((b, i) => drawString(m, pts[i], b, 2))),
@@ -193,6 +211,22 @@ function skinnable(key: string): Skin | null {
   return key.startsWith(P) ? skinOf(key.slice(P.length)) : null;
 }
 
+/**
+ * 원본 그림 → 겨울·크리스마스 그림 (새 캔버스 + 크리스마스 전구 자리). 텍스처를 건드리지 않는 순수 계산이라 테스트(seaSpriteEdge.test)도 이걸 부른다.
+ * 바꿀 그림이 아니면 null
+ */
+export function seaSkinCanvas(key: string, orig: HTMLCanvasElement, target: "winter" | "christmas", skin: Skin | null = skinnable(key)): { canvas: HTMLCanvasElement; bulbs: Bulb[] } {
+  let bulbs: Bulb[] = [];
+  let c = copyCanvas(orig);
+  if (!skin) return { canvas: c, bulbs };
+  const h = c.height;
+  if (skin.deck) withImg(c, (m) => snowDeck(m, skin.deck!.lip, key.length, skin.deck!.area));
+  if (skin.roof) c = snowRoof(c, skin.roof, { seed: key.length });
+  if (skin.cap) c = snowCap(c, { ...skin.cap, maxY: skin.cap.maxY === 0 ? h - 1 : (skin.cap.maxY ?? h - 2), seed: key.length });
+  if (target === "christmas" && skin.xmas) bulbs = skin.xmas(c);
+  return { canvas: c, bulbs };
+}
+
 /** 텍스처 하나를 그 판의 그림으로 (이미 그 판이면 그대로) */
 function skinTexture(scene: Phaser.Scene, key: string, concept: MapConcept): void {
   const skin = skinnable(key);
@@ -211,15 +245,7 @@ function skinTexture(scene: Phaser.Scene, key: string, concept: MapConcept): voi
   const orig = st?.orig ?? copyCanvas(src);
   let out = orig;
   let bulbs: Bulb[] = [];
-  if (target !== "default") {
-    let c = copyCanvas(orig);
-    const h = c.height;
-    if (skin.deck) withImg(c, (m) => snowDeck(m, skin.deck!.lip, key.length, skin.deck!.area));
-    if (skin.roof) c = snowRoof(c, skin.roof, { seed: key.length });
-    if (skin.cap) c = snowCap(c, { ...skin.cap, maxY: skin.cap.maxY === 0 ? h - 1 : (skin.cap.maxY ?? h - 2), seed: key.length });
-    if (target === "christmas" && skin.xmas) bulbs = skin.xmas(c);
-    out = c;
-  }
+  if (target !== "default") ({ canvas: out, bulbs } = seaSkinCanvas(key, orig, target, skin));
   const ctx = src.getContext("2d");
   if (!ctx) return;
   ctx.clearRect(0, 0, src.width, src.height);
@@ -305,7 +331,7 @@ export class SeaConceptDecor {
       [T.kiosk, SEA_KIOSK.x, SEA_KIOSK.y + 3, 0.5, 1],
       [GULL_TEX.vend, Lay.SEA_SNACK_VEND.x, Lay.SEA_SNACK_VEND.y + 2, 0.5, 1],
       [T.lighthouse, SEA_LIGHTHOUSE.x, SEA_LIGHTHOUSE.y + 3, 0.5, 1],
-      ...SEA_LOTS.map((l): [string, number, number, number, number] => [T.lot(l.n), l.x - 2, l.y - Art.LOT_RISE, 0, 0]),
+      ...SEA_LOTS.map((l): [string, number, number, number, number] => [T.lot(l.n), Art.lotArtOrigin(l).x, Art.lotArtOrigin(l).y, 0, 0]),
     ];
     glows.forEach(([key, x, y, ox, oy], i) => {
       if (s.textures.exists(`${key}~xglow`)) this.add(addTwinkle(s, `${key}~xglow`, x, y, ox, oy, { reduced, phase: i % 2 }));

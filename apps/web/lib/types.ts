@@ -176,6 +176,8 @@ export type JoinRequest = {
   color: string;
   /** AVATAR_BODIES id */
   body?: string;
+  /** 11/26 이번 접속 유입 (그 탭의 첫 입장 요청에만 — 리퍼러 호스트·utm, lib/signupSourceClient) */
+  src?: { r?: string; us?: string; um?: string; uc?: string };
 };
 
 /**

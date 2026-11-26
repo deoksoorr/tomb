@@ -3,7 +3,7 @@ import { perkShopDiscount } from "../chairPerks";
 import { chairPerkSafe } from "../chairman/settle";
 import { env } from "../env";
 import { HttpError } from "../http";
-import { buyFurniture, getHouseStore, houseIdFor } from "../housing/service";
+import { buyFurniture, furnitureZone, getHouseStore } from "../housing/service";
 import type { HouseZone } from "../housing/catalog";
 import { recordLook } from "../lookRank";
 import { onceClaim } from "../store/once";
@@ -63,9 +63,8 @@ export async function ghostCallOf(ch: number | null): Promise<GhostCall> {
 
 /** 가구를 넣을 집 (마을 집 먼저, 없으면 포구 오두막). 둘 다 없으면 null */
 async function houseZone(accountId: string): Promise<HouseZone | null> {
-  const store = getHouseStore();
-  const [v, s] = await Promise.all([store.get(houseIdFor(accountId, "village")), store.get(houseIdFor(accountId, "sea"))]);
-  return v ? "village" : s ? "sea" : null;
+  // 11/26 캠핑장 집만 있어도 (공용 가방이라 어느 집이든 같다)
+  return furnitureZone(getHouseStore(), accountId);
 }
 
 /** 꾸미기·가구 칭호 할인 · 포인트왕 할인 */
@@ -128,7 +127,7 @@ export async function buyGhost(accountId: string, key: string, now = Date.now(),
       grant = await lookGrant(env.joinSecret(), accountId, lookOf(me), now, me);
     } else {
       const zone = await houseZone(accountId);
-      if (!zone) throw new HttpError(409, "NO_HOUSE", "가구는 집이 있어야 살 수 있어요. 마을 분양 사무소나 포구 부동산에 들러요.");
+      if (!zone) throw new HttpError(409, "NO_HOUSE", "가구는 집이 있어야 살 수 있어요. 마을 분양 사무소·포구 부동산·캠핑장에서 집을 분양받아요.");
       // buyFurniture가 같은 할인율로 값을 매겨요 (원가 × (1 − 큰 할인 하나)) — 가구점과 같은 가방·한도·환불
       await buyFurniture(getHouseStore(), accountId, s.id, rate, zone, true);
     }

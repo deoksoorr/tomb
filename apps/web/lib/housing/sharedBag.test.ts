@@ -27,8 +27,8 @@ describe.skipIf(!conn)("공용 가구 가방 (RedisHouseStore, 실제 Redis)", (
     raw,
     seen: async (owner, at) => void (await raw().hset(K.acct(owner), { seenAt: String(at) })),
     cleanup: async (pairs) => {
-      for (const p of pairs) await Promise.all([store.remove(p.village), store.remove(p.sea)]);
-      if (pairs.length) await raw().del(...pairs.flatMap((p) => [HK.pool(p.village), HK.inv(p.sea), HK.reclaimed(p.sea)]));
+      for (const p of pairs) await Promise.all([store.remove(p.village), store.remove(p.sea), store.remove(p.camp)]);
+      if (pairs.length) await raw().del(...pairs.flatMap((p) => [HK.pool(p.village), HK.inv(p.sea), HK.reclaimed(p.sea), HK.inv(p.camp), HK.reclaimed(p.camp)]));
     },
   });
 });
@@ -90,7 +90,7 @@ describe.skipIf(!!conn)("공용 가구 가방 (서비스)", () => {
     const a = await account(50_000);
     await buyPlot(store, a, "마을 집", "", "주인", null, 3);
     await buyCottage(store, a, "오두막", "", "주인", null, 3);
-    for (let i = 0; i < 20; i++) await store.addItem({ village: houseIdFor(a), sea: houseIdFor(a, "sea") }, "village", "pot", 20);
+    for (let i = 0; i < 20; i++) await store.addItem({ village: houseIdFor(a), sea: houseIdFor(a, "sea"), camp: houseIdFor(a, "camp") }, "village", "pot", 20);
     await saveLayout(store, a, "small", room([{ u: "p", i: "pot", x: 1, y: 3, r: 0 }]), 3);
     await expect(buyFurniture(store, a, "pot", 0, "sea")).rejects.toMatchObject({ code: "MAX_OWNED" });
   });

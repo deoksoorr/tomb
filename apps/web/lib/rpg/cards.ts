@@ -454,16 +454,27 @@ export function runXp(kills: Partial<Record<MonsterId, number>>): number {
 export const RUN_XP_BASE = 20;
 export const RUN_XP_STEP = 7;
 export const runXpNeed = (lv: number) => RUN_XP_BASE + RUN_XP_STEP * Math.max(0, lv);
-/** 경험치 → 판 레벨(오른 횟수)·이번 레벨에 쌓인 양·필요한 양 */
-export function runLevel(xp: number): { level: number; into: number; need: number } {
+/**
+ * 경험치 → 판 레벨(이 판에서 오른 횟수)·이번 레벨에 쌓인 양·필요한 양.
+ * base = 판 시작 레벨 (11/26 엘리베이터 판 — runLevelBase): 그 레벨부터 필요한 경험치로 센다
+ */
+export function runLevel(xp: number, base = 0): { level: number; into: number; need: number } {
   let level = 0;
   let left = Math.max(0, xp);
-  while (left >= runXpNeed(level) && level < 10_000) {
-    left -= runXpNeed(level);
+  while (left >= runXpNeed(base + level) && level < 10_000) {
+    left -= runXpNeed(base + level);
     level++;
   }
-  return { level, into: left, need: runXpNeed(level) };
+  return { level, into: left, need: runXpNeed(base + level) };
 }
+/** 1층부터 오를 때 층마다 쌓이는 판 경험치 (층 계획 몬스터 평균 — 낮은 층 44, 200층 위 51) */
+export const RUN_XP_PER_FLOOR = 48;
+/**
+ * 11/26 엘리베이터로 위층에서 시작한 판의 시작 판 레벨: 1층부터 올라왔으면 경험치 배율 없이 닿았을 레벨.
+ * 그 레벨들의 카드는 시작 카드가 대신한다. 0레벨에서 시작하면 낮은 문턱(20·27·34…)을 높은 층 경험치로 금방 넘어
+ * 레벨 업 카드가 쉬지 않고 나왔다 (51층 시작 첫 10층 9.8장 ↔ 올라온 판 2.8장)
+ */
+export const runLevelBase = (start: number) => runLevel(RUN_XP_PER_FLOOR * Math.max(0, Math.floor(start) - 1)).level;
 
 // ── 다시 뽑기·상사의 제안·체크포인트 ──
 
@@ -926,7 +937,8 @@ export type CardOfferView = {
   more?: number;
 };
 /** 화면 → 게임: 몇 번째 카드를 골랐다 / 다시 뽑기 / 상사의 제안 받기·거절 */
-export type CardChoice = { slot: number } | { reroll: true } | { accept: boolean };
+/** quiet = 11/26 자동 고르기 (장마다 소리·흔들림·글자를 내지 않는다 — 기록에는 안 남는다) */
+export type CardChoice = { slot: number; quiet?: boolean } | { reroll: true } | { accept: boolean };
 
 // ── 11/15 HUD 능력치 판 (기본 = 캐릭터·장비, (+N) = 카드가 더한 만큼) ──
 

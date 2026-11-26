@@ -25,6 +25,7 @@ import {
   replayPicks,
   rerollsAllowed,
   runLevel,
+  runLevelBase,
   runXp,
   runXpOf,
   startPicks,
@@ -287,6 +288,39 @@ describe("야근 빌딩 결과 검증에 카드", () => {
     expect(towerClean(evalTower(t21, { ...r, cards: six }, r.durationMs + 1_000))).toBe(true);
     const seven = honest(77, Array.from({ length: 7 }, (_, i) => ({ k: "s" as const, i })), 21);
     expect(towerClean(evalTower(t21, { ...r, cards: seven }, r.durationMs + 1_000))).toBe(false);
+  });
+
+  it("11/26 엘리베이터 판: 시작 판 레벨은 그 층까지 올라왔을 레벨, 레벨 업 수가 그만큼 줄고 옛 티켓(rb 없음)은 0레벨부터", () => {
+    expect(runLevelBase(1)).toBe(0);
+    expect([51, 101, 201, 301, 501].map(runLevelBase)).toEqual([23, 34, 50, 61, 80]);
+    // 문턱이 높아진다: 0레벨 20 → 23레벨 181
+    expect(runLevel(0, 23).need).toBe(181);
+    expect(runLevel(181, 23).level).toBe(1);
+    const seed = 515;
+    const r = climb(seed, 51, 10);
+    const xp = runXp(r.kills);
+    const rb = runLevelBase(51);
+    const lv0 = runLevel(xp).level;
+    const lv = runLevel(xp, rb).level;
+    expect(lv0).toBeGreaterThanOrEqual(8);
+    expect(lv).toBeLessThanOrEqual(3);
+    // 층마다 경험치를 쌓아 레벨이 오른 층을 그대로 적는다 (시작 카드 15장 뒤)
+    const steps = (base: number) => {
+      const out: { k: OfferKind; i: number; f?: number }[] = Array.from({ length: startPicks(51) }, (_, i) => ({ k: "s" as const, i }));
+      let acc = 0;
+      let n = 0;
+      for (let f = 51; f <= 60; f++) {
+        for (const w of towerPlan(seed, f, 51)) for (const m of w.monsters) acc += runXpOf(m);
+        while (n < runLevel(acc, base).level) out.push({ k: "l", i: n++, f });
+      }
+      return honest(seed, out, 51);
+    };
+    const t51 = { seed, level: 50, start: 51 };
+    // 새 판 (티켓에 rb): 새 곡선으로 고른 기록은 통과, 옛 곡선만큼 고르면 레벨 업이 너무 많다
+    expect(towerClean(evalTower({ ...t51, rb }, { ...r, cards: steps(rb) }, r.durationMs + 1_000))).toBe(true);
+    expect(towerClean(evalTower({ ...t51, rb }, { ...r, cards: steps(0) }, r.durationMs + 1_000))).toBe(false);
+    // 배포 전에 시작한 판 (티켓에 rb 없음): 옛 곡선 기록 그대로 통과
+    expect(towerClean(evalTower(t51, { ...r, cards: steps(0) }, r.durationMs + 1_000))).toBe(true);
   });
 
   it("처치 속도 상한은 카드 배율만큼 늘어난다 (강한 정직한 판이 거절되지 않게)", () => {

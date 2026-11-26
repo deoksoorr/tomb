@@ -5,8 +5,8 @@ import { SEA_TIDE_OUT_MSG, type FishWater } from "@tomb/protocol";
 import { bridge, type ForageRodPhase } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import { onBackgroundChange } from "@/lib/background";
-import { AUTO_PACE_NOTE, AUTO_RANK_NOTE, AUTO_SYNC_MS, autoChipText, autoNextLabel } from "@/lib/forage/auto";
-import { BAG_MAX, bagCount, GRADE_LABEL, speciesById } from "@/lib/forage/catalog";
+import { AUTO_DIRECT_NOTE, AUTO_PACE_NOTE, AUTO_RANK_NOTE, AUTO_SYNC_MS, autoChipText, autoNextLabel, isCampWater } from "@/lib/forage/auto";
+import { BAG_MAX, bagCount, GRADE_LABEL, speciesById, WATER_LABEL } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
 import { sunkenText } from "@/lib/forage/sunken";
 import type { AutoFishResponse, AutoFishStatus, CastResponse, CatchResult, SunkenCatch } from "@/lib/forage/types";
@@ -314,6 +314,8 @@ export default function FishingPanel({
         if (phaseRef.current === "reel" && e.code !== "Escape") return;
         e.preventDefault();
         onLeave();
+        // 11/26 배에 같이 탔으면 방향키 한 번에 낚시를 거두고 바로 내린다 (게임이 듣는다 — 혼자 탄 배·땅에서는 아무 일 없다)
+        if (e.code !== "Escape") bridge.emit("boat:moveOff");
         return;
       }
       if (!KEYS.has(e.code)) return;
@@ -435,7 +437,7 @@ export default function FishingPanel({
     return (
       <div className={cx(s.dock, s.dockAuto)} role="region" aria-label="자동 낚시">
         <div className={s.dockHead}>
-          <strong>낚시 · {water === "sea" ? "바다" : water === "lake" ? "호수" : "강"}</strong>
+          <strong>낚시 · {WATER_LABEL[water]}</strong>
         </div>
         <p className={s.autoLine} data-full={bagFull || undefined} data-tone={msg.tone === "bad" ? "bad" : undefined} role="status" aria-live="polite">
           {msg.tone === "bad" ? (
@@ -459,7 +461,7 @@ export default function FishingPanel({
   return (
     <div className={s.dock} role="region" aria-label="낚시">
       <div className={s.dockHead}>
-        <strong>낚시 · {water === "sea" ? "바다" : water === "lake" ? "호수" : "강"}</strong>
+        <strong>낚시 · {WATER_LABEL[water]}</strong>
         <span>오늘 {caught}마리</span>
         {coarse && auto && (
           <button type="button" className={s.dockFold} onClick={() => setUnfold(false)} aria-expanded={true} aria-label="낚시 창 접기">
@@ -516,7 +518,7 @@ export default function FishingPanel({
           onClick={toggleAuto}
           disabled={autoBusy || (!auto && phase !== "ready" && phase !== "done")}
           aria-pressed={auto !== null}
-          title={`자리를 비워도 접속해 있는 동안 천천히 낚아요. ${AUTO_PACE_NOTE} ${AUTO_RANK_NOTE}`}
+          title={`자리를 비워도 접속해 있는 동안 천천히 낚아요. ${AUTO_PACE_NOTE} ${AUTO_RANK_NOTE}${isCampWater(water) ? ` ${AUTO_DIRECT_NOTE}` : ""}`}
         >
           {auto ? "자동 낚시 끄기" : "자동 낚시 켜기"}
         </button>

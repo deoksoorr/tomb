@@ -11,7 +11,9 @@ export const GET = handler(async (req) => {
   await requireAdmin(req);
   const raw = req.nextUrl.searchParams.get("range") ?? "day";
   if (!(ANALYTICS_RANGES as readonly string[]).includes(raw)) throw new HttpError(400, "INVALID_INPUT", "기간은 hour·day·week·month 중 하나예요.");
-  // 표본을 먼저 찍어야 오늘 최고값에 들어간다 (로비가 느리면 1.5초에서 포기)
-  await sampleConcurrency(true, Date.now(), undefined, 1500).catch(() => null);
-  return json<AnalyticsReport>(await buildReport(getAnalytics(), raw as AnalyticsRange));
+  // 지금 표본도 오늘 최고값에 들어가게: 11/26부터 표본 찍기(실시간 서버 로비 → Redis)와 보고서 읽기를 함께 돌리고, 보고서가 표본 값을 더한다
+  // (예전엔 표본을 다 찍은 뒤에야 읽기 시작했다). 로비가 느리면 1.5초에서 포기 — 그때는 표본 없이
+  const now = Date.now();
+  const live = sampleConcurrency(true, now, undefined, 1500).catch(() => null);
+  return json<AnalyticsReport>(await buildReport(getAnalytics(), raw as AnalyticsRange, now, live));
 });

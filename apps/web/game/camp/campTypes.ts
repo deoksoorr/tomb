@@ -9,8 +9,12 @@ import type { ReachZone } from "../logic/reach";
 export const CAMP_TEX_PREFIX = "camp-";
 
 /** E로 쓰는 것 (자리 앉기는 좌석 체계 — CAMP_SEATS — 가 따로) */
-/** lookout = 전망대 망원경 (망원 뷰, LookoutScope) · telescope = 11/16 별 망원경 (별자리 잇기, protocol CAMP_SCOPES — game/scopes) */
-export type CampInteractKind = "bus" | "npc" | "van" | "deck" | "board" | "sign" | "lookout" | "bbq" | "vending" | "telescope" | "bungeo";
+/**
+ * 11/26 폭포 계곡 개편: 데크·캠핑카·전망대 망원경·별 망원경을 없앴어요.
+ * sale = 분양 안내 입간판 (카라반·펜션) · rowboat = 윤슬 낚시터 나룻배 타기 · lot·house = 집 화면 담당(campHousing)이 끼워 넣는 집터·집 문
+ * agungi = 11/26 촌캉스 아궁이 불 켜기·끄기 (campHousing) · tramp·slide = 11/26 놀이터 대형 트램펄린(매트 둘레)·워터 슬라이드 사다리 밑 (game/camp/CampPlay)
+ */
+export type CampInteractKind = "bus" | "npc" | "board" | "sign" | "sale" | "bbq" | "vending" | "bungeo" | "rowboat" | "lot" | "house" | "tramp" | "slide" | "agungi" | "hammock";
 export type CampInteractable = {
   id: string;
   kind: CampInteractKind;
@@ -24,9 +28,8 @@ export type CampInteractable = {
   /** 화면 안내 ("E 버스 타기") */
   label: string;
   npc?: CampNpcId;
-  deck?: number;
-  /** 캠핑카 id (v1~v3)와 그 문간 좌석 id (qV1~qV3) */
-  van?: string;
+  /** 11/26 집터 번호 (집 화면 담당이 쓰는 lot·house) */
+  lot?: number;
   seatId?: string;
 };
 
@@ -60,15 +63,13 @@ export interface CampMapApi {
   standable(x: number, y: number): boolean;
   /** 매 프레임: 화면 근처 컬링, 불꽃·물결·줄 조명·물안개·다람쥐·반딧불·은하수·NPC 시간대 표시 */
   update(time: number, delta: number, view: Phaser.Geom.Rectangle, t: CampTime): void;
-  /** 좌석 점유가 바뀌면 (캠핑카 문 열림, 앉은 자리 표시 등) */
-  setSeatTaken(seatId: string, taken: boolean): void;
-  /** NPC가 지금 보이는지 (별지기는 밤만, 기타 캠퍼는 밤 9~11시) — 말 걸기 판정에 쓴다 */
+  /** NPC가 지금 보이는지 (기타 캠퍼는 밤 9~11시) — 말 걸기 판정에 쓴다 */
   npcVisible(id: CampNpcId): boolean;
   /** NPC 머리 위 말풍선 자리 (없으면 null) */
   npcAnchor(id: CampNpcId): { x: number; y: number } | null;
   /** 큰 모닥불 둘레에 앉아 불멍 중이면 불티를 더 (CampfireView) */
   boostCampfire(id: string | null): void;
-  /** (x,y)가 큰 타프 지붕 아래인지 (빗소리) */
+  /** (x,y)가 지붕 아래인지 (빗소리) — 11/26 큰 타프를 없애 늘 false */
   underTarp(x: number, y: number): boolean;
   /** 모든 오브젝트·캠핑장 텍스처 정리 */
   destroy(): void;

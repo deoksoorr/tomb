@@ -13,6 +13,7 @@ import type { Atmosphere } from "../world/Atmosphere";
 import { clampChars, DOOR_NAME_MAX } from "../text/fitLabel";
 import { PLATE_LOT_FREE, PLATE_LOT_HOUSE, SignPlate } from "../world/SignPlate";
 import { houseLotLabels, scaleLotLabel } from "../housing/worldLots";
+import { onHomesChanged } from "../housing/homesRefresh";
 import { COTTAGE_RISE, cottageBox, cottageCanvas } from "./seaCottageArt";
 import { seaHousingHost } from "./seaHousingHost";
 import { lampApi, lampHourOf, SeaLamp } from "./seaLamp";
@@ -33,6 +34,8 @@ const REFRESH_MS = 5 * 60_000;
 const LAMP_POLL_MS = 3 * 60_000;
 /** 집에서 나오면 문 밑변에서 이만큼 아래에 선다 (마을 집 문 앞과 같은 느낌) */
 const DOOR_STAND = 10;
+/** 11/26 오두막을 받기 전에 문 앞으로 가라고 했으면 이 안에 받았을 때만 문 바로 앞으로 다시 맞춘다 (ms) */
+const STAND_LATER_MS = 4000;
 /** 밤 그림으로 바꾸는 어둠 */
 const NIGHT_AT = 0.5;
 
@@ -75,7 +78,13 @@ type Built = {
 };
 
 /** 터 팻말: 빈 터·숨긴 오두막이면 땅에 꽂은 팻말(sign), 오두막이면 지붕 위 문패 세 줄(labels). key가 같으면 다시 만들지 않아요 */
-type LotPlate = { key: string; sign: SignPlate | null; labels: Phaser.GameObjects.BitmapText[] };
+type LotPlate = {
+  key: string;
+  sign: SignPlate | null;
+  labels: Phaser.GameObjects.BitmapText[];
+  /** 11/26 제 터 앞마당(문 바로 아래)에 세운 땅 문패 (9번 터) — 그 문 앞 「E 들어가기」 안내와 겹쳐서 안내가 뜨는 동안 흐려요. base = 줄마다 원래 알파 */
+  yard?: { base: number[]; fade: number };
+};
 
 export class SeaHousing {
   private houses = new Map<number, VillageHouse>();
@@ -89,8 +98,14 @@ export class SeaHousing {
   /** 내 오두막 id (문패 「(내 집)」 — 로그인 전·없으면 null) */
   private myId: string | null = null;
   private ch: number | null = null;
+  /** 11/26 오두막을 받기 전에 문 앞으로 가라고 했다 (다른 맵 집에서 나와 막 도착) → 받아 그리면 문 바로 앞으로 한 번 더. at = 부른 시각 */
+  private standLater: { lot: number; at: number } | null = null;
+  /** 11/26 「E 들어가기」 안내가 떠 있는 오두막 터 (focusDoor) */
+  private doorFocus: number | null = null;
   private fetchedAt = 0;
   private loading = false;
+  /** 11/26 받는 중에 온 집 바뀜 알림 v (끝나면 한 번 더 받는다) */
+  private pendingV = 0;
   private night = false;
   private readonly lamp: SeaLamp;
   private lampCh: number | null = null;
@@ -122,6 +137,8 @@ export class SeaHousing {
         void this.refresh(true);
       }),
       bridge.on("sea:lot", ({ lot }) => this.standAtLot(lot)),
+      // 11/26 같은 채널 누가 오두막 분양·겉모습 바꾸기 → 몇 초 안에 다시 받는다 (5분 주기를 기다리지 않게)
+      onHomesChanged("sea", (v) => void this.refresh({ v })),
     );
     // 내 오두막 문패에 「(내 집)」 (마을 WorldHouses처럼 처음 한 번 묻는다. 분양·바꾸기 뒤에는 sea:cottages가 알려 줘요)
     housingApi
@@ -136,9 +153,14 @@ export class SeaHousing {
 
   // ── 오두막 ──
 
-  private async refresh(fresh = false): Promise<void> {
+  private async refresh(fresh: boolean | { v: number } = false): Promise<void> {
     const ch = this.d.channel();
-    if (ch === null || this.loading || this.destroyed) return;
+    if (ch === null || this.destroyed) return;
+    if (this.loading) {
+      // 받는 중에 집 바뀜 알림이 오면 끝난 뒤 한 번 더
+      if (typeof fresh === "object") this.pendingV = fresh.v;
+      return;
+    }
     this.loading = true;
     this.fetchedAt = performance.now();
     try {
@@ -149,10 +171,16 @@ export class SeaHousing {
       this.taken = new Set(v.taken);
       for (const l of SEA_LOTS) this.draw(l);
       this.syncInteractables();
+      const later = this.standLater;
+      this.standLater = null;
+      if (later && performance.now() - later.at < STAND_LATER_MS && this.built.has(later.lot)) this.standAtLot(later.lot);
     } catch {
       // 다음 주기에 다시
     } finally {
       this.loading = false;
+      const pv = this.pendingV;
+      this.pendingV = 0;
+      if (pv && !this.destroyed) void this.refresh({ v: pv });
     }
   }
 
@@ -222,7 +250,8 @@ export class SeaHousing {
       const at = top - 2 < ROOF_PLATE_MIN_Y ? lowPlateSpot(l, h.tier) : { cx: l.x + l.w / 2, bottom: top - 2, w: l.w };
       const labels = houseLotLabels(this.d.scene, this.d.atlas, at, h, `${l.n}번 터 · `, mine, DEPTH.labels - 1);
       for (const t of labels) scaleLotLabel(t, s);
-      this.plates.set(l.n, { key, sign: null, labels });
+      const yard = "inLot" in at && at.inLot ? { base: labels.map((t) => t.alpha), fade: 1 } : undefined;
+      this.plates.set(l.n, { key, sign: null, labels, ...(yard ? { yard } : {}) });
       return;
     }
     const sg = seaLotSign(l);
@@ -232,6 +261,11 @@ export class SeaHousing {
     this.plates.set(l.n, { key, sign: p, labels: [] });
   }
 
+  /** 11/26 내 캐릭터에게 「E 들어가기」 안내가 떠 있는 오두막 터 (없으면 null) — 앞마당 땅 문패를 그동안 흐린다 (SeaScene이 매 프레임) */
+  focusDoor(lot: number | null): void {
+    this.doorFocus = lot;
+  }
+
   /** 그 오두막 문 앞으로 (집에서 나올 때·내 집 가기 — 마을 집처럼 문 바로 앞). 오두막이 아직 안 그려졌으면 터 출입구 앞 */
   standAtLot(lot: number): void {
     const l = SEA_LOTS.find((x) => x.n === lot);
@@ -239,6 +273,8 @@ export class SeaHousing {
     const b = this.built.get(lot);
     const f = b ? { x: b.door.x, y: b.door.y + DOOR_STAND } : seaLotFront(l, 14);
     this.d.warp(f.x, f.y);
+    // 아직 오두막 목록을 못 받았다: 받아 그린 뒤 문 바로 앞으로 (그새 걸어갔을 만큼 오래면 그대로)
+    if (!b && this.ch === null) this.standLater = { lot, at: performance.now() };
   }
 
   /**
@@ -359,6 +395,14 @@ export class SeaHousing {
         p.sign?.setScale(s);
         for (const t of p.labels) scaleLotLabel(t, s);
       }
+    }
+    // 11/26 앞마당 땅 문패: 내 캐릭터 「E 들어가기」 안내가 그 문 앞에 뜨는 동안 흐려요 (안내 글씨와 겹치지 않게)
+    for (const [n, p] of this.plates) {
+      if (!p.yard) continue;
+      const want = this.doorFocus === n ? 0 : 1;
+      if (p.yard.fade === want) continue;
+      const f = (p.yard.fade = Math.abs(want - p.yard.fade) < 0.05 ? want : p.yard.fade + (want - p.yard.fade) * 0.3);
+      p.labels.forEach((t, i) => t.setAlpha(p.yard!.base[i] * f));
     }
     this.d.map.lampLit = this.lamp.lit;
     const on = Math.max(0, Math.min(1, (darkness - 0.18) / 0.4));

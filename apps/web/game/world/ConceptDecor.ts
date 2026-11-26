@@ -5,6 +5,7 @@ import { addCanvasTexture, TEX } from "../assets/manifest";
 import { DEPTH } from "../config";
 import { SHOP_HUT_H, SHOP_HUT_W } from "../sprites/extras";
 import { OFFICE_H, WP } from "../sprites/worldProps";
+import { HOLLY_TEX_PAD, padTexCanvas, SHOP_HUT_TEX_PAD, STREET_LAMP_TEX_PAD, TREE_TEX_PAD } from "../sprites/villagePad";
 import {
   bareTree,
   breathPuff,
@@ -60,7 +61,7 @@ function winterTreeKey(kind: PropDef["kind"], v: number): string | null {
 }
 
 function buildTreeKey(key: string): HTMLCanvasElement {
-  if (key.startsWith("concept-snowtree-")) return snowyRoundTree(+key.slice(-1));
+  if (key.startsWith("concept-snowtree-")) return snowyRoundTree(+key.slice(-1), TREE_TEX_PAD);
   return bareTree(+key.slice(-1));
 }
 
@@ -91,8 +92,10 @@ function dressHut(c: HTMLCanvasElement, door: { x: number; y: number }, eave: { 
   return s.bulbs.map((b) => ({ x: b.x + eave.x0 - s.ox, y: b.y + eave.y - s.oy, c: b.c }));
 }
 
-const HUT_DRESS: Readonly<Record<string, { door: { x: number; y: number }; eave: { x0: number; x1: number; y: number } }>> = {
-  [TEX.shopHut]: { door: { x: 30, y: 37 }, eave: { x0: 1, x1: 58, y: 26 } },
+// 11/26 잡화점 텍스처는 둘레 여백(SHOP_HUT_TEX_PAD)만큼 넓다 — 그림 속 자리에 여백을 더한다 (분양 사무소는 여백 없음)
+const SP = SHOP_HUT_TEX_PAD;
+export const HUT_DRESS: Readonly<Record<string, { door: { x: number; y: number }; eave: { x0: number; x1: number; y: number } }>> = {
+  [TEX.shopHut]: { door: { x: 30 + SP.x, y: 37 + SP.top }, eave: { x0: 1 + SP.x, x1: 58 + SP.x, y: 26 + SP.top } },
   [WP.office]: { door: { x: 30, y: 34 }, eave: { x0: 3, x1: 56, y: 24 } },
 };
 
@@ -114,14 +117,14 @@ export function skin(scene: Phaser.Scene, base: string, concept: MapConcept, pro
     }
     if (prop.kind === "flowers") {
       const k = `concept-holly-${prop.variant % 3}`;
-      if (!scene.textures.exists(k)) addCanvasTexture(scene, k, { canvas: hollyBed(prop.variant % 3) });
+      if (!scene.textures.exists(k)) addCanvasTexture(scene, k, { canvas: padTexCanvas(hollyBed(prop.variant % 3), HOLLY_TEX_PAD).canvas });
       return k;
     }
     if (prop.kind === "pine") return skin(scene, prop.variant % 2 ? WP.snowPine1 : WP.snowPine0, concept);
     if (prop.kind === "lamp" && concept === "christmas") {
       const k = "concept-xmas-lamp";
       const src = sourceCanvas(scene, base);
-      if (!scene.textures.exists(k) && src) addCanvasTexture(scene, k, { canvas: xmasLamp(src) });
+      if (!scene.textures.exists(k) && src) addCanvasTexture(scene, k, { canvas: xmasLamp(src, { x: STREET_LAMP_TEX_PAD.x, y: STREET_LAMP_TEX_PAD.top }) });
       return scene.textures.exists(k) ? k : base;
     }
   }
