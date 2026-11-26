@@ -52,7 +52,6 @@ const KEEP = new Set<string>([
   Art.CAMP_TEX.vendingLit,
   Art.CAMP_TEX.bbqSmoke,
   Art.CAMP_TEX.squirrel,
-  Art.CAMP_TEX.milkyWay,
   Art.CAMP_TEX.mist,
   Art.CAMP_TEX.sunGlow,
   Art.CAMP_TEX.sparkle,

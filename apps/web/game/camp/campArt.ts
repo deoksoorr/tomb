@@ -55,7 +55,6 @@ export const CAMP_TEX = {
   timetable: `${P}timetable`,
   npc: (id: CampNpcId) => `${P}npc-${id}`,
   squirrel: `${P}squirrel`,
-  milkyWay: `${P}milkyWay`,
   mist: `${P}mist`,
   sunGlow: `${P}sunGlow`,
   sparkle: `${P}sparkle`,
@@ -1237,53 +1236,6 @@ export function squirrelArt(): ArtOut {
 }
 
 // ── 하늘·효과 ──
-
-/** 부드러운 값 잡음 (격자 해시를 겹선형 보간) 0..1 */
-function smoothNoise(x: number, y: number, salt: number): number {
-  const x0 = Math.floor(x);
-  const y0 = Math.floor(y);
-  const tx = x - x0;
-  const ty = y - y0;
-  const sx = tx * tx * (3 - 2 * tx);
-  const sy = ty * ty * (3 - 2 * ty);
-  const a = hashU(x0, y0, salt);
-  const b = hashU(x0 + 1, y0, salt);
-  const c = hashU(x0, y0 + 1, salt);
-  const d = hashU(x0 + 1, y0 + 1, salt);
-  return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
-}
-
-/** 은하수 띠 (화면 고정, 가산 섞기 — 투명 바탕에 별·옅은 띠) */
-export function milkyWayArt(): Grid {
-  const W = 320;
-  const H = 140;
-  const g = new Grid(W, H);
-  const r = rng(424242);
-  for (let y = 0; y < H; y++)
-    for (let x = 0; x < W; x++) {
-      // 띠: 왼쪽 아래 → 오른쪽 위로 기운 선에서의 거리
-      const d = Math.abs(y - (H * 0.78 - x * 0.32)) / 26;
-      const band = Math.max(0, 1 - d);
-      const neb = band * (0.35 + 0.65 * smoothNoise(x / 12, y / 9, 9)) * 0.42;
-      if (neb > 0.04) g.set(x, y, mix(0x5a6aa8, 0xc8a8d8, smoothNoise(x / 30, y / 20, 3)), Math.round(255 * neb));
-    }
-  for (let i = 0; i < 520; i++) {
-    const x = Math.floor(r() * W);
-    const yLine = H * 0.78 - x * 0.32;
-    const spread = r() < 0.65 ? 22 : 70;
-    const y = Math.round(yLine + (r() - 0.5) * 2 * spread);
-    if (y < 0 || y >= H) continue;
-    const bright = r();
-    g.set(x, y, bright > 0.92 ? 0xfff8e0 : bright > 0.6 ? 0xd8e4ff : 0xa8b4d8, bright > 0.92 ? 255 : 150 + Math.round(bright * 100));
-    if (bright > 0.97) {
-      g.set(x - 1, y, 0xd8e4ff, 120);
-      g.set(x + 1, y, 0xd8e4ff, 120);
-      g.set(x, y - 1, 0xd8e4ff, 120);
-      g.set(x, y + 1, 0xd8e4ff, 120);
-    }
-  }
-  return g;
-}
 
 /** 물안개 한 덩이 (부드러운 타원) */
 export function mistArt(): Grid {

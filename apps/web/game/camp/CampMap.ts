@@ -160,7 +160,6 @@ export class CampMap implements CampMapApi {
   /** 폭포 멍 (폭포 다리에 앉아 시점을 바꾼 동안 — 물보라·물안개를 더 짙게) */
   private fallsFocus = 0;
   private sunGlow!: Phaser.GameObjects.Image;
-  private milky!: Phaser.GameObjects.Image;
   private hour: number;
   private destroyed = false;
   private started = false;
@@ -214,10 +213,9 @@ export class CampMap implements CampMapApi {
     yield;
     this.addLabels();
     this.addPools();
-    // 일출빛 (저수지 너머 숲) · 은하수 (밤 하늘, 화면을 따라온다)
+    // 일출빛 (저수지 너머 숲). 11/26 은하수는 뺐다 — 위에서 본 맵이라 하늘이 없어 화면을 따라오는 흰 점으로만 보였다
     const s = this.scene;
     this.sunGlow = this.keep(s.add.image(Art.CAMP_SUNRISE.x, Art.CAMP_SUNRISE.y, Art.CAMP_TEX.sunGlow).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights + 3).setScale(3.2).setVisible(false));
-    this.milky = this.keep(s.add.image(0, 0, Art.CAMP_TEX.milkyWay).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.fireflies - 1).setVisible(false));
     yield;
     // 겨울·크리스마스 겉 장식 (관리소 굴뚝 연기·입김·반짝이는 눈 — 기본 판이면 아무것도 세우지 않는다)
     this.decor = new CampConceptDecor(s, this.reduced, (x, y, o) => this.cullExtra(x, y, o), () => this.actors());
@@ -956,7 +954,7 @@ export class CampMap implements CampMapApi {
     this.updateFireflies(time, t);
     this.updateSquirrels(time, t);
     this.updateMist(time, t);
-    this.updateSky(time, view, t);
+    this.updateSky(time, t);
     this.decor?.update(time, view);
   }
 
@@ -1289,26 +1287,12 @@ export class CampMap implements CampMapApi {
     }
   }
 
-  /** 일출빛(5~8시)과 은하수(맑은 밤) */
-  private updateSky(time: number, view: Phaser.Geom.Rectangle, t: CampTime): void {
+  /** 일출빛(5~8시) */
+  private updateSky(time: number, t: CampTime): void {
     const sunrise = t.hour >= 5 && t.hour <= 8 ? Math.sin(((t.hour - 5) / 3) * Math.PI) : 0;
     const sr = sunrise * (1 - t.rain) * (1 - t.fog * 0.5);
     if (sr > 0.02) this.sunGlow.setVisible(true).setAlpha(sr * (0.75 + 0.05 * Math.sin(time / 1500)));
     else if (this.sunGlow.visible) this.sunGlow.setVisible(false);
-
-    const night = t.hour >= 20 || t.hour < 4.5 ? 1 : t.hour >= 19 ? t.hour - 19 : t.hour < 5 ? (5 - t.hour) * 2 : 0;
-    const clear = Math.max(0, 1 - t.rain * 3 - t.fog);
-    const a = Math.min(1, night) * clear * Math.max(0.5, t.darkness) * 0.6;
-    if (a < 0.02) {
-      if (this.milky.visible) this.milky.setVisible(false);
-      return;
-    }
-    const scale = (view.width / 320) * 1.15;
-    this.milky
-      .setVisible(true)
-      .setScale(scale)
-      .setPosition(view.centerX - (view.centerX - CAMP_WIDTH / 2) * 0.06, view.y + view.height * 0.32 - (view.centerY - CAMP_HEIGHT / 2) * 0.04)
-      .setAlpha(a);
   }
 
   destroy(): void {
@@ -1401,7 +1385,6 @@ export function forEachCampTexture(tex: (key: string, build: CampTexBuild, linea
   // 11/17 겨울·크리스마스판 NPC 옷 (판마다 따로 — 판이 바뀌면 setConcept가 갈아 끼운다)
   for (const c of ["winter", "christmas"] as const) for (const n of CAMP_NPCS) tex(seasonKey(T.npc(n.id), c), () => Art.npcArt(n.id, c));
   tex(T.squirrel, Art.squirrelArt);
-  tex(T.milkyWay, Art.milkyWayArt, true);
   tex(T.mist, Art.mistArt, true);
   tex(T.sunGlow, () => Art.glowArt(64, 0xffb070, 1.4), true);
   tex(T.sparkle, Art.sparkleArt);
