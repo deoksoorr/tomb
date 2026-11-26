@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, ApiRequestError } from "./api";
 
+const rep = vi.hoisted(() => ({ leaving: false, reports: [] as string[] }));
+vi.mock("./hooks/errorReporting", () => ({
+  pageLeaving: () => rep.leaving,
+  reportClientError: (_kind: string, e: Error) => void rep.reports.push(e.message),
+}));
+
 type Reply = { status: number; body: unknown };
 function stubFetch(replies: Record<string, Reply>) {
   const calls: { key: string; headers: Record<string, string>; body?: unknown }[] = [];
@@ -47,5 +53,30 @@ describe("api", () => {
     await api.spendItem("fw_small");
     await api.spendItem("decor_candles", "g1");
     expect(calls.map((c) => c.body)).toEqual([{ itemId: "fw_small" }, { itemId: "decor_candles", graveId: "g1" }]);
+  });
+});
+
+describe("연결 실패 기록 (11/27)", () => {
+  const failFetch = () => vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("Load failed"))));
+  afterEach(() => {
+    rep.leaving = false;
+    rep.reports.length = 0;
+  });
+  it("평소에는 남긴다", async () => {
+    failFetch();
+    await expect(api.listGraves(1)).rejects.toBeInstanceOf(ApiRequestError);
+    expect(rep.reports).toEqual(["GET /api/graves → 연결 실패"]);
+  });
+  it("새로고침·닫는 중에 끊긴 요청은 남기지 않는다", async () => {
+    failFetch();
+    rep.leaving = true;
+    await expect(api.listGraves(1)).rejects.toBeInstanceOf(ApiRequestError);
+    expect(rep.reports).toEqual([]);
+  });
+  it("기기가 오프라인이면 남기지 않는다", async () => {
+    failFetch();
+    vi.stubGlobal("navigator", { onLine: false });
+    await expect(api.listGraves(1)).rejects.toBeInstanceOf(ApiRequestError);
+    expect(rep.reports).toEqual([]);
   });
 });

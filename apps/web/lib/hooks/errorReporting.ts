@@ -65,6 +65,16 @@ export function isForeignError(message: string, stack?: string): boolean {
   return !!stack && FOREIGN_STACK.test(stack) && !stack.includes("/_next/");
 }
 
+/** 11/27 페이지를 떠나는 중(새로고침·닫기)인지 — 그때 끊기는 요청은 서버 탓이 아니라 남기지 않는다 (lib/api) */
+let leaving = false;
+export const pageLeaving = (): boolean => leaving;
+const markLeaving = () => {
+  leaving = true;
+};
+const markBack = () => {
+  leaving = false;
+};
+
 export function reportClientError(kind: ErrorReport["kind"], error: unknown): void {
   if (typeof window === "undefined") return;
   const message = (error instanceof Error ? error.message : String(error)).slice(0, MESSAGE_MAX) || "(빈 메시지)";
@@ -87,7 +97,13 @@ export function installErrorReporting(): () => void {
   window.addEventListener("error", onError);
   window.addEventListener("unhandledrejection", onRejection);
   window.addEventListener("pagehide", flush);
+  window.addEventListener("beforeunload", markLeaving);
+  window.addEventListener("pagehide", markLeaving);
+  window.addEventListener("pageshow", markBack);
   return () => {
+    window.removeEventListener("beforeunload", markLeaving);
+    window.removeEventListener("pagehide", markLeaving);
+    window.removeEventListener("pageshow", markBack);
     window.removeEventListener("error", onError);
     window.removeEventListener("unhandledrejection", onRejection);
     window.removeEventListener("pagehide", flush);
