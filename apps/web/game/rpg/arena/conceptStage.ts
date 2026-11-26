@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { weatherFxOn } from "@/lib/deviceSettings";
 import type { MapConcept } from "@/lib/mapConcept";
 import { conceptSuffix } from "../../sprites/winterScenery";
 import { bulbGlowSheet, breathPuff, type Bulb } from "../../sprites/winterArt";
@@ -254,8 +255,12 @@ export class ArenaConcept {
   /** 매 프레임: 창밖 눈 · 내리는 눈 · 입김 · 히터 빛. wind = 지금 바람 (px/s, 사막 모래바람) */
   update(now: number, dt: number, player: Pt, face: Pt | null, wind: number): void {
     if (!this.reduced) for (const t of this.tiles) t.tilePositionY -= dt * 13;
+    // 11/26 설정에서 날씨 효과를 끄면 바깥 사냥터에 내리는 눈도 숨긴다 (창밖 눈은 벽 그림이라 그대로)
+    const snowOn = weatherFxOn();
     for (const f of this.flakes) {
       const img = f.img;
+      if (img.visible !== snowOn) img.setVisible(snowOn);
+      if (!snowOn) continue;
       img.x += (f.vx + wind * 1.6 + (this.reduced ? 0 : Math.sin(now / 900 + f.ph) * 6)) * dt;
       img.y += f.vy * dt * (wind ? 1.4 : 1);
       if (img.y > AH + 2) {

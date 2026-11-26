@@ -3,11 +3,13 @@ import {
   SNOWMAN_PER_CHANNEL,
   SNOWMAN_PER_PERSON,
   SNOW_STACKS_PER_CHANNEL,
+  SNOW_BREAK_REACH,
   SNOW_STACKS_PER_PERSON,
   SNOWMAN_ID_RE,
   campSnowSpotOk,
   parseSnowmanInfo,
   snowGapWhy,
+  snowLoneBlocks,
   snowSizesDone,
   snowSizesOk,
   snowStackAlive,
@@ -89,6 +91,19 @@ export class SnowmanYard {
     while (this.list.length > SNOWMAN_PER_CHANNEL) drop(this.list[0]);
     return { ok: true, s: pub(s), gone };
   }
+
+  /**
+   * 11/26 다 세운 내 눈사람을 허문다 (세운 사람만 — 남의 것·없는 것·다 녹은 것은 lost, 서버가 아는 내 위치(px,py)에서 SNOW_BREAK_REACH 밖이면 spot).
+   * 지우면 한 사람 몫(SNOWMAN_PER_PERSON)이 바로 빈다
+   */
+  dismantle(visitorId: string, id: string, px: number, py: number, now: number): { ok: true; s: SnowmanInfo } | { ok: false; why: SnowmanDenyWhy } {
+    this.prune(now);
+    const r = this.list.find((o) => o.id === id && o.visitorId === visitorId);
+    if (!r) return { ok: false, why: "lost" };
+    if (!(Math.hypot(r.x - px, r.y - py) <= SNOW_BREAK_REACH)) return { ok: false, why: "spot" };
+    this.list = this.list.filter((o) => o !== r);
+    return { ok: true, s: pub(r) };
+  }
 }
 
 function pub(r: Rec): SnowmanInfo {
@@ -138,6 +153,8 @@ export class SnowStackYard {
    * 채널이 가득이면 full, 내 것이 넘치면 가장 오래된 내 덩이를 지운다 (gone). men = 서 있는 눈사람
    */
   put(visitorId: string, sid: number, x: number, y: number, s: SnowBall, now: number, men: { x: number; y: number; visitorId: string }[]): SnowStackResult {
+    // 11/26 한 덩이만 놓인 내 덩이가 있으면 그 위에 먼저 올리거나 허문다 (자리보다 먼저 — 어디에 놓아도 안 되는 까닭이라)
+    if (snowLoneBlocks(this.list.filter((o) => o.visitorId === visitorId))) return { ok: false, why: "lone" };
     if (!campSnowSpotOk(x, y)) return { ok: false, why: "spot" };
     const all = [...men, ...this.list];
     const why = snowGapWhy(
@@ -181,6 +198,17 @@ export class SnowStackYard {
       return { ok: true, st: null, s };
     }
     return { ok: true, st: pubStack(r), s };
+  }
+
+  /**
+   * 11/26 쌓다 만 내 덩이를 허문다 (주인만 — 남의 것·없는 것은 lost, 서버가 아는 내 위치(px,py)에서 SNOW_BREAK_REACH 밖이면 spot). 허문 덩이
+   */
+  dismantle(visitorId: string, id: string, px: number, py: number): { ok: true; st: SnowStackInfo } | { ok: false; why: SnowmanDenyWhy } {
+    const r = this.list.find((o) => o.id === id && o.visitorId === visitorId);
+    if (!r) return { ok: false, why: "lost" };
+    if (!(Math.hypot(r.x - px, r.y - py) <= SNOW_BREAK_REACH)) return { ok: false, why: "spot" };
+    this.list = this.list.filter((o) => o !== r);
+    return { ok: true, st: pubStack(r) };
   }
 
   /** 지운다 (눈사람으로 바뀜) */

@@ -92,6 +92,7 @@ import { BIG_RIDE_TOAST, myBig, RIDE_OBJECT_KINDS } from "../camp/foodState";
 import { friendRoute } from "@/lib/friendRoute";
 import type { CampFriend } from "../camp/campHost";
 import { publishRide, rideBlocked, standForGate } from "@/lib/rideGate";
+import { noteHomes } from "../housing/homesRefresh";
 
 // 월드 씬: 맵·묘비·내 캐릭터·원격 아바타·분위기·조명·카메라·네트워크를 묶고 bridge 이벤트를 처리한다.
 // 유령 잡화점에 들어가면 이 씬은 숨기만 하고(업데이트·연결은 유지) 상점 씬이 그 위에 그려진다.
@@ -696,7 +697,11 @@ export class WorldScene extends Phaser.Scene {
         onGoblinGrant: (id, grant, points) => this.life.onGoblinGrant(id, grant, points),
         onMegaphone: (m) => bridge.emit("megaphone:heard", m),
         onMegaPin: (m) => bridge.emit("megaphone:pin", m),
-        onHomes: (m) => bridge.emit("homes:changed", m),
+        // 11/26 맵에 없을 때 온 집 바뀜도 기억한다 (나중에 그 맵에 들어가 CDN 옛 목록을 받으면 이 v로 다시 받게 — homesRefresh staleHomesV)
+        onHomes: (m) => {
+          noteHomes(m);
+          bridge.emit("homes:changed", m);
+        },
         onMeStale: () => bridge.emit("me:stale"),
         onFriend: (m) => bridge.emit("friend:presence", m),
         onSquirrels: (m) => bridge.emit("fx:squirrels", m),
@@ -994,6 +999,7 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("input:interact", () => this.hub.dispatch("interact")));
     on.push(bridge.on("input:jump", () => this.hub.dispatch("jump")));
     on.push(bridge.on("input:roll", ({ on: v }) => this.hub.setRollHold(v)));
+    on.push(bridge.on("input:sitHold", ({ on: v }) => this.hub.setSitHold(v)));
     // 11/18 눈싸움: F(키보드)·[눈 던지기](터치). 캠핑장에 있으면 캠핑장 장면이 받는다
     on.push(
       bridge.on("input:snowball", () => {

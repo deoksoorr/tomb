@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { CAMP_HOME_SEATS, campSnowSpotOk } from "@tomb/protocol";
+import { CAMP_FORAGE_SPOTS, CAMP_HOME_SEATS, campSnowSpotOk } from "@tomb/protocol";
 import { CAMP_GATHER_NODES } from "@/lib/forage/catalog";
 import { BALL_R, carriedBallSheet, carryFrameSize, snowmanArt, snowmanLook, SNOWMAN_H, SNOWMAN_W, stackArt, type BallSize } from "./snowmanArt";
-import { ballFront, campSnowPiles, carryAt, PILE_NODE_GAP, PILE_SEAT_GAP, heldStep, meltStage, rectsOverlap, sizeForRoll, snowmanBlockRect, snowPlaceOk, stackBlockRect, stackCheck, stackDone, stackOpen, SNOWBALL_GROW_AT } from "./snowmanLogic";
+import { ballFront, breakHoldStep, campSnowPiles, carryAt, PILE_NODE_GAP, PILE_SEAT_GAP, heldStep, meltStage, rectsOverlap, sizeForRoll, snowmanBlockRect, snowPlaceOk, stackBlockRect, stackCheck, stackDone, stackOpen, SNOWBALL_GROW_AT } from "./snowmanLogic";
 
 // 11/17 캠핑장 눈사람 만들기: 굴린 거리 → 크기, 쌓기 순서, 눈더미 자리, 같은 씨앗 → 같은 모습
 describe("snowman logic", () => {
@@ -25,6 +25,34 @@ describe("snowman logic", () => {
     expect(sizes).toEqual([0, 1, 2]);
     // 몸통을 들고 다시 안았다가 굴려도 몸통 (더 커지지도 작아지지도 않는다)
     expect(heldStep({ size: 2, dist: 0 }, 5, true, true).size).toBe(2);
+  });
+  it("11/26 내 눈사람 길게 눌러 허물기: 다 차야 한 번 보내고, 떼거나 멀어지면 처음부터, 보낸 뒤엔 손을 뗄 때까지 다시 안 센다", () => {
+    let r = breakHoldStep(null, false, "m1", true, 0, 800);
+    expect(r).toMatchObject({ k: 0, fire: null });
+    r = breakHoldStep(r.hold, r.spent, "m1", true, 400, 800);
+    expect(r.k).toBe(0.5);
+    // 떼면 처음부터
+    expect(breakHoldStep(r.hold, r.spent, "m1", false, 500, 800)).toEqual({ hold: null, spent: false, k: 0, fire: null });
+    // 다른 눈사람으로 옮기면 처음부터
+    expect(breakHoldStep(r.hold, r.spent, "m2", true, 500, 800).k).toBe(0);
+    // 멀어지면 처음부터
+    expect(breakHoldStep(r.hold, r.spent, null, true, 500, 800).hold).toBeNull();
+    r = breakHoldStep(r.hold, r.spent, "m1", true, 800, 800);
+    expect(r).toMatchObject({ fire: "m1", spent: true, hold: null });
+    // 누른 채 옆 눈사람으로 가도 다시 세지 않는다
+    r = breakHoldStep(r.hold, r.spent, "m2", true, 900, 800);
+    expect(r).toMatchObject({ fire: null, k: 0, spent: true });
+    r = breakHoldStep(r.hold, r.spent, "m2", false, 950, 800);
+    expect(breakHoldStep(r.hold, r.spent, "m2", true, 1000, 800).hold).toEqual({ id: "m2", at: 1000 });
+  });
+  it("11/26 몸통만 놓인 내 덩이가 있으면(max 1) 배까지만 커지고, 풀리면 조금만 더 굴려 몸통", () => {
+    let h: { size: BallSize; dist: number } = { size: 0, dist: 0 };
+    for (let i = 0; i < 300; i++) h = heldStep(h, 5, true, true, 1);
+    expect(h).toEqual({ size: 1, dist: SNOWBALL_GROW_AT[1] - 1 });
+    // 이미 든 몸통은 그대로 (작아지지 않는다)
+    expect(heldStep({ size: 2, dist: 400 }, 5, true, true, 1).size).toBe(2);
+    // 막힘이 풀리면 한 걸음에 몸통
+    expect(heldStep(h, 5, true, true).size).toBe(2);
   });
   it("11/18 안은 덩이: 아래를 보면 몸 앞에 낮게, 옆이면 그쪽, 위를 보면 몸 뒤", () => {
     for (const s of [0, 1, 2] as const) {
@@ -82,6 +110,12 @@ describe("snowman logic", () => {
       }
   });
 
+  it("11/26 서버가 아는 채집 지점 자리(protocol CAMP_FORAGE_SPOTS)는 웹 채집 지점과 같다 — 옮기면 둘 다", () => {
+    expect([...CAMP_FORAGE_SPOTS].map(([x, y]) => `${x},${y}`).sort()).toEqual(CAMP_GATHER_NODES.map((n) => `${n.x},${n.y}`).sort());
+  });
+  it("11/26 채집 지점 바로 옆에는 눈덩이를 못 놓는다 (「E 약초 캐기」가 덩이 안내를 가리지 않게)", () => {
+    for (const n of CAMP_GATHER_NODES) for (const [dx, dy] of [[0, 0], [10, 8], [-16, 12], [0, 20]]) expect(snowPlaceOk(n.x + dx, n.y + dy)).toBe(false);
+  });
   it("눈더미는 채집 지점과 떨어져 있다 (E가 눈 뭉치기로 가로채지 않게)", () => {
     for (const p of campSnowPiles()) for (const n of CAMP_GATHER_NODES) expect(Math.hypot(n.x - p.x, n.y - p.y), `${n.id} ${p.x},${p.y}`).toBeGreaterThanOrEqual(PILE_NODE_GAP);
   });

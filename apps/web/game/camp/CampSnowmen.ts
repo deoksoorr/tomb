@@ -7,6 +7,7 @@ import {
   SNOW_STACKS_PER_PERSON,
   parseSnowHold,
   snowGapWhy,
+  snowLoneBlocks,
   snowmanAlive,
   snowmanMelt,
   snowStackAlive,
@@ -31,11 +32,14 @@ import type { RealtimeClient } from "../net/RealtimeClient";
 import { handAnchor } from "../sprites/avatar";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import type { Sfx } from "../world/Sfx";
+import { markCharTint } from "../world/charTint";
+import { ensureSnowFightTextures, PUFF_FRAMES, SNOWFIGHT_TEX } from "../world/snowFightArt";
 import { CAMP_TEX_PREFIX } from "./campTypes";
 import * as Art from "./snowmanArt";
 import type { BallSize } from "./snowmanArt";
 import {
   ballFront,
+  breakHoldStep,
   campSnowPiles,
   carryAt,
   heldStep,
@@ -44,6 +48,7 @@ import {
   PUDDLE_MS,
   rectsOverlap,
   SNOWBALL_GROW_AT,
+  sizeForRoll,
   snowmanBlockRect,
   snowPlaceOk,
   snowRollGrows,
@@ -52,6 +57,7 @@ import {
   stackCheck,
   stackDone,
   stackOpen,
+  type BreakHold,
   type Rect,
 } from "./snowmanLogic";
 
@@ -63,6 +69,9 @@ import {
 //    내 동작은 화면에 먼저 그리고 서버 확인(snowStack)으로 맞춘다. 거절되면 되돌리고 덩이를 다시 든다. 다른 사람 덩이·눈사람 곁에는 못 놓는다
 //  - 11/18 다 세운 눈사람·내려놓은 덩이는 밑동에 작은 충돌 상자 — 내 캐릭터가 지나가지 못한다 (생길 때 겹쳐 서 있었으면 빠져나갈 때까지 비켜 준다)
 //  - 1시간 뒤 녹는다: 마지막 10분은 단계마다 작아지고, 다 녹으면 물웅덩이가 잠깐 남는다
+//  - 11/26 몸통만 놓인 내 덩이는 하나까지 (서버 lone): 있으면 굴려도 배까지만 커지고, 두 번째 몸통은 내려놓지 못한다 (든 덩이는 그대로).
+//    쌓다 만 내 덩이 앞에서 X(터치 [앉기] 자리가 [허물기])로 허문다 — 서버가 확인하면 모두에게 눈가루 (snowStackGone.brk)
+//    다 세운 내 눈사람은 X·[허물기]를 MAN_BREAK_HOLD_MS 길게 눌러 허문다 (막대가 찬다, 떼면 처음부터 — snowmanGone.brk, 내 몫이 바로 빈다)
 // 들고 있는 동안 앉기·탈것은 막는다 (CampScene이 blocks로 묻는다). 점프 키는 굴리기가 되고, 굴리는 동안은 달리지 않는다.
 
 const P = `${CAMP_TEX_PREFIX}snow-`;
@@ -95,16 +104,17 @@ const OH_MS = 1_200;
 const HIT_R = 10;
 
 /** rolling = 지금 굴리는 중 (아니면 품에 안고 있다), walked = 안고 걸은 거리 (걸음마다 덩이가 살짝 들썩인다) */
-type Held = { size: BallSize; dist: number; roll: number; lastX: number; lastY: number; trackAt: number; rolling: boolean; walked: number; img: Phaser.GameObjects.Sprite };
+/** capped = 11/26 몸통만 놓인 내 덩이가 있어 배에서 멈췄다고 이번에 알렸다 */
+type Held = { size: BallSize; dist: number; roll: number; lastX: number; lastY: number; trackAt: number; rolling: boolean; walked: number; img: Phaser.GameObjects.Sprite; capped?: boolean };
 /** 밑동 충돌 상자. solid = 막는다 (생길 때 내 발과 겹쳤으면 빠져나갈 때까지 false) */
 type Wall = { zone: Phaser.GameObjects.Zone; rect: Rect; solid: boolean };
 /** oh = 11/18 눈뭉치에 맞아 놀란 얼굴이 끝나는 시각 (0 = 원래 얼굴) */
 type ManView = { s: SnowmanInfo; img: Phaser.GameObjects.Image; label: Phaser.GameObjects.BitmapText; stage: number; puddleUntil: number; wall: Wall | null; oh: number };
 /**
  * 내려놓은 덩이 (내 것·다른 사람 것). id = null이면 내가 막 내려놓아 서버 확인을 기다린다.
- * wait = 확인을 기다리는 내 동작 수 (0이 되면 서버 모양으로 맞춘다), sentAt = 마지막으로 보낸 시각
+ * wait = 확인을 기다리는 내 동작 수 (0이 되면 서버 모양으로 맞춘다), sentAt = 마지막으로 보낸 시각, breakAt = 11/26 허물기를 보내고 기다리는 중(보낸 시각, 0 = 아님)
  */
-type StackView = { id: string | null; sid: Sid; x: number; y: number; sizes: BallSize[]; at: number; wait: number; sentAt: number; img: Phaser.GameObjects.Image; wall: Wall | null };
+type StackView = { id: string | null; sid: Sid; x: number; y: number; sizes: BallSize[]; at: number; wait: number; sentAt: number; breakAt: number; img: Phaser.GameObjects.Image; wall: Wall | null };
 /** 다른 사람이 들고 있는 눈덩이 (roll·walked = 굴린·걸은 거리 — 굴러가는 그림·들썩임) */
 type PeerBall = { h: SnowHold; img: Phaser.GameObjects.Sprite; roll: number; walked: number; lastX: number; lastY: number; trackAt: number };
 
@@ -124,7 +134,12 @@ export type CampSnowmenDeps = {
 };
 
 /** 11/18 한 사람 몫(SNOWMAN_PER_PERSON)이 다 찼을 때 */
-const MANY_TOAST = `눈사람은 한 사람이 ${SNOWMAN_PER_PERSON}개까지 만들 수 있어요. 하나가 녹으면 다시 만들어요.`;
+const MANY_TOAST = `눈사람은 한 사람이 ${SNOWMAN_PER_PERSON}개까지 만들 수 있어요. 하나가 녹거나 허물면 다시 만들어요.`;
+/** 11/26 다 세운 내 눈사람 허물기: X·[허물기]를 이만큼 누르고 있어야 한다 · 닿는 거리 (발 위치 — 밑동 충돌 상자 바로 바깥까지) */
+const MAN_BREAK_HOLD_MS = 800;
+const MAN_REACH = 22;
+/** 11/26 몸통만 놓인 내 덩이가 있는데 새 몸통을 내려놓으려 했다 (서버 lone). 터치는 몸통 앞에서 [앉기] 자리가 [허물기]가 된다 */
+const loneToast = (): string => `먼저 세워 둔 몸통에 배를 올려 주세요. 필요 없으면 몸통 앞에서 ${isTouchUi() ? "" : "X로 "}허물 수 있어요.`;
 const holdKey = (h: SnowHold | null): string => (h ? `${h.s}${h.r ? "r" : ""}` : "");
 const dirName = (d: number): "down" | "left" | "right" | "up" => (d === DIR.left ? "left" : d === DIR.right ? "right" : d === DIR.up ? "up" : "down");
 
@@ -144,6 +159,14 @@ export class CampSnowmen {
   /** 서버가 아는 내 손 (holdKey). undefined = 모른다 → 다음 프레임에 지금 상태를 보낸다 */
   private sentHold: string | undefined = "";
   private holdSentAt = -Infinity;
+  /** 11/26 터치 [허물기] 단추에 알린 값 (바뀔 때만 다시) */
+  private breakNear = false;
+  private breakHoldUi = false;
+  /** 11/26 내 눈사람 길게 눌러 허물기: 누르기 시작한 눈사람·시각, 보낸 뒤 답을 기다리는 눈사람, 한 번 보낸 뒤엔 손을 뗄 때까지 다시 세지 않는다 */
+  private manHold: BreakHold = null;
+  private manBreaking: { id: string; at: number } | null = null;
+  private manHoldSpent = false;
+  private holdBar: Phaser.GameObjects.Graphics | null = null;
 
   constructor(private readonly d: CampSnowmenDeps) {
     this.concept = d.concept;
@@ -186,6 +209,11 @@ export class CampSnowmen {
   /** 11/18 서 있는 내 눈사람 + 쌓는 중인 내 덩이 (SNOWMAN_PER_PERSON까지 — 서버와 같은 규칙) */
   private myProjects(): number {
     return this.myMenCount() + this.stacks.filter((v) => this.mine(v)).length;
+  }
+
+  /** 11/26 몸통만 놓인 내 덩이가 있나 (확인을 기다리는 내려놓기 포함 — 서버 lone과 같은 규칙) */
+  private myLone(): boolean {
+    return snowLoneBlocks(this.stacks.filter((v) => this.mine(v)));
   }
 
   setConcept(c: MapConcept): void {
@@ -278,13 +306,28 @@ export class CampSnowmen {
     }
   }
 
-  onGone(id: string): void {
+  /** brk = 11/26 세운 사람이 허물었다: 웅덩이 없이 눈가루와 함께 바로 지운다 */
+  onGone(id: string, brk = false): void {
+    if (this.manBreaking?.id === id) this.manBreaking = null;
     const v = this.men.get(id);
-    if (v && v.puddleUntil === 0) this.toPuddle(v);
+    if (!v || v.puddleUntil !== 0) return;
+    if (!brk) return this.toPuddle(v);
+    this.breakPuff(v.s.x, v.s.y, [2, 1, 0]);
+    this.removeMan(id);
   }
 
   /** 내 내려놓기·올리기·다시 들기를 서버가 받지 않았다: 화면을 되돌린다 (덩이 모양은 뒤따라 오는 snowStack이 맞춘다) */
   onDenied(why: SnowmanDenyWhy, a?: SnowAct, id?: string): void {
+    // 11/26 허물기는 손과 상관없다: 기다림만 풀고 까닭을 알린다 (없는 덩이면 서버가 snowStackGone도 보낸다)
+    if (a === "break") {
+      const st = id ? this.stacks.find((v) => v.id === id) : undefined;
+      if (st) st.breakAt = 0;
+      const man = id !== undefined && this.manBreaking?.id === id;
+      if (man) this.manBreaking = null;
+      const what = man ? "눈사람" : "덩이";
+      if (this.on) this.d.toast(why === "wait" ? "조금 있다가 다시 해 주세요." : why === "lost" ? `이미 없어진 ${what}예요.` : `${what} 바로 앞에서 허물 수 있어요.`);
+      return;
+    }
     this.sentHold = undefined;
     if (a === "put") {
       const st = this.stacks.find((v) => v.id === null);
@@ -303,6 +346,7 @@ export class CampSnowmen {
     else if (why === "full") this.d.toast("캠핑장에 덩이가 너무 많아요. 조금 있다가 해 주세요.");
     else if (why === "lost") this.d.toast("덩이가 녹아 없어졌어요.");
     else if (why === "many") this.d.toast(MANY_TOAST);
+    else if (why === "lone") this.d.toast(loneToast());
     else this.d.toast(a === "add" ? "여기에는 눈사람을 세울 수 없어요. 다른 눈밭에서 쌓아요." : "여기에는 내려놓을 수 없어요.");
   }
 
@@ -312,9 +356,10 @@ export class CampSnowmen {
     this.upsertStack(s);
   }
 
-  /** 덩이가 사라졌다. took = 주인이 마지막 덩이를 다시 들었다 */
-  onStackGone(id: string, sid: Sid, took?: SnowBall): void {
+  /** 덩이가 사라졌다. took = 주인이 마지막 덩이를 다시 들었다, brk = 11/26 주인이 허물었다 (그 자리에 눈가루) */
+  onStackGone(id: string, sid: Sid, took?: SnowBall, brk = false): void {
     const st = this.stacks.find((v) => v.id === id);
+    if (st && brk) this.breakPuff(st.x, st.y, st.sizes);
     if (st) this.removeStack(st);
     if (took !== undefined && sid !== this.mySid) this.setPeerHold(sid, { s: took });
   }
@@ -401,6 +446,30 @@ export class CampSnowmen {
     return false;
   }
 
+  /**
+   * 11/26 X (터치 [허물기]): 바로 앞 쌓다 만 내 덩이를 허문다 (들고 있어도 된다 — 손은 그대로). 처리했으면 true.
+   * 서버가 확인하면(snowStackGone.brk) 모두의 화면에서 눈가루와 함께 사라진다.
+   * 다 세운 내 눈사람 앞이면 누름만 받아 둔다 (길게 눌러야 해서 update가 센다 — 앉기로 넘어가지 않게 true)
+   */
+  dismantle(): boolean {
+    if (!this.on) return false;
+    const pl = this.d.player();
+    const st = this.nearStack(pl.x, pl.y);
+    const now = this.d.scene.time.now;
+    if (!st) {
+      const man = this.nearMyMan(pl.x, pl.y);
+      if (man) pl.faceTo(man.s.x, man.s.y, now);
+      return man !== null;
+    }
+    pl.faceTo(st.x, st.y, now);
+    if (!this.d.net().snowBreak(st.id!)) {
+      this.d.toast("연결된 뒤에 허물 수 있어요.");
+      return true;
+    }
+    st.breakAt = now;
+    return true;
+  }
+
   /** 처음 눈더미에서 집으면 굴리는 법을 한 번 알린다 (이 기기에서 한 번 — 저장소를 못 쓰면 다음에도) */
   private rollTip(): void {
     try {
@@ -443,20 +512,45 @@ export class CampSnowmen {
       if (st) {
         const c = stackCheck(st, h.size);
         if (c === "ok") return { x: at.x, y: at.y + 4, text: st.sizes.length === 2 && h.size === 0 ? `${prefix}머리 올려 눈사람 완성` : `${prefix}${name} 올리기` };
-        return { x: at.x, y: at.y + 4, text: c === "full" ? "다 쌓은 덩이예요" : c === "skip" ? "한 단씩 올려요 (더 굴려 키워요)" : "더 작은 덩이만 올릴 수 있어요" };
+        // 11/26 못 올리는 내 덩이 앞이면 허물기도 알린다 (터치는 [허물기] 단추가 보인다)
+        const brk = !isTouchUi() && this.nearStack(pl.x, pl.y) ? "\nX 허물기" : "";
+        return { x: at.x, y: at.y + 4, text: (c === "full" ? "다 쌓은 덩이예요" : c === "skip" ? "한 단씩 올려요 (더 굴려 키워요)" : "더 작은 덩이만 올릴 수 있어요") + brk };
       }
       if (this.gapWhy(Math.round(at.x), Math.round(at.y)) === "near") return { x: at.x, y: at.y + 4, text: "다른 사람이 만들고 있어요" };
+      const lone = this.myLone();
       if (h.rolling) {
-        const text = !snowRollGrows(at.x, at.y) ? "여기는 눈이 안 묻어요" : h.size === 2 ? "가장 큰 몸통이에요\n손을 떼면 다시 안아요" : "손을 떼면 다시 안아요";
+        const text = !snowRollGrows(at.x, at.y)
+          ? "여기는 눈이 안 묻어요"
+          : h.size === 2
+            ? "가장 큰 몸통이에요\n손을 떼면 다시 안아요"
+            : h.size === 1 && lone
+              ? "세워 둔 몸통이 있어 배까지만 커져요\n손을 떼면 다시 안아요"
+              : "손을 떼면 다시 안아요";
         return { x: at.x, y: at.y + 4, text };
+      }
+      // 11/26 몸통만 놓인 내 덩이가 있으면 바닥에 새로 못 놓는다: 할 일을 알린다 (바로 앞이 내 덩이면 허물기도)
+      if (lone && h.size > 0) {
+        const brk = this.nearStack(pl.x, pl.y) && !isTouchUi() ? "\nX 허물기" : "";
+        return { x: pl.x, y: pl.y + 3, text: `${h.size === 2 ? "먼저 세워 둔 몸통에 배를 올려요" : "세워 둔 몸통에 올려요"}${brk}` };
+      }
+      // 11/26 몸통인데 발 앞이 못 놓는 자리(채집 지점 둘레·길·눈더미 등)면 미리 알린다 — 「E 몸통 내려놓기」를 보고 눌렀다가 거절되지 않게
+      if (h.size === 2) {
+        const fx = Math.round(at.x);
+        const fy = Math.round(at.y);
+        if (!snowPlaceOk(fx, fy) || this.piles.some((p) => Math.abs(p.x - fx) < 24 && Math.abs(p.y - fy) < 14)) return { x: pl.x, y: pl.y + 3, text: "여기에는 못 놓아요" };
       }
       const how = h.size === 2 ? "" : isTouchUi() ? "\n[굴리기]를 누른 채 걸으면 굴러요" : "\nSpace를 누른 채 걸으면 굴러요";
       return { x: pl.x, y: pl.y + 3, text: `${prefix}${name} 내려놓기${how}` };
     }
     const pile = this.nearPile(pl.x, pl.y);
     const st = this.nearStack(pl.x, pl.y);
-    if (st && (!pile || Math.hypot(st.x - pl.x, st.y - pl.y) < Math.hypot(pile.x - pl.x, pile.y - pl.y))) return { x: st.x, y: st.y + 4, text: `${prefix}다시 들기` };
-    if (pile) return { x: pile.x, y: pile.y + 4, text: this.myMenCount() >= SNOWMAN_PER_PERSON ? "내 눈사람이 녹으면 다시 만들어요" : `${prefix}눈 뭉치기` };
+    if (st && (!pile || Math.hypot(st.x - pl.x, st.y - pl.y) < Math.hypot(pile.x - pl.x, pile.y - pl.y)))
+      return { x: st.x, y: st.y + 4, text: `${prefix}다시 들기 · ${isTouchUi() ? "[허물기]" : "X 허물기"}` };
+    // 11/26 다 세운 내 눈사람 앞: 길게 눌러 허물기
+    const man = st ? null : this.nearMyMan(pl.x, pl.y);
+    if (man && (!pile || Math.hypot(man.s.x - pl.x, man.s.y - pl.y) < Math.hypot(pile.x - pl.x, pile.y - pl.y)))
+      return { x: man.s.x, y: man.s.y + 4, text: isTouchUi() ? "[허물기] 길게 눌러 허물기" : "X 길게 눌러 허물기" };
+    if (pile) return { x: pile.x, y: pile.y + 4, text: this.myMenCount() >= SNOWMAN_PER_PERSON ? "내 눈사람이 녹거나 허물면 다시 만들어요" : `${prefix}눈 뭉치기` };
     return null;
   }
 
@@ -486,11 +580,27 @@ export class CampSnowmen {
     let best: StackView | null = null;
     let bd = SNOW_REACH;
     for (const st of this.stacks) {
-      if (st.id === null || !this.mine(st) || stackDone(st)) continue;
+      if (st.id === null || !this.mine(st) || stackDone(st) || st.breakAt > 0) continue;
       const d = Math.hypot(st.x - x, st.y - y);
       if (d < bd) {
         bd = d;
         best = st;
+      }
+    }
+    return best;
+  }
+
+  /** 11/26 바로 앞에 다 세운 내 눈사람 (다 녹아 웅덩이가 된 것·허물기 답을 기다리는 것은 빼고). 서버 목록엔 방문자 id가 없어 이름으로 본다 */
+  private nearMyMan(x: number, y: number): ManView | null {
+    const me = this.d.myName();
+    let best: ManView | null = null;
+    let bd = MAN_REACH;
+    for (const v of this.men.values()) {
+      if (v.puddleUntil !== 0 || v.s.by !== me || this.manBreaking?.id === v.s.id) continue;
+      const d = Math.hypot(v.s.x - x, v.s.y - y);
+      if (d < bd) {
+        bd = d;
+        best = v;
       }
     }
     return best;
@@ -564,6 +674,11 @@ export class CampSnowmen {
       this.d.sfx.play("thud", 0.35, 1.1);
       return;
     }
+    // 11/26 몸통만 놓인 내 덩이가 있으면 새로 놓지 않는다 (서버 lone — 든 덩이는 그대로 안고 있다)
+    if (this.myLone()) {
+      this.d.toast(loneToast());
+      return;
+    }
     const x = Math.round(at.x);
     const y = Math.round(at.y);
     const nearPile = this.piles.some((p) => Math.abs(p.x - x) < 24 && Math.abs(p.y - y) < 14);
@@ -591,7 +706,7 @@ export class CampSnowmen {
       this.d.toast("연결된 뒤에 내려놓을 수 있어요.");
       return;
     }
-    const ns: StackView = { id: null, sid: me, x, y, sizes: [h.size], at: net.serverNow(), wait: 0, sentAt: 0, img: this.d.scene.add.image(0, 0, "__DEFAULT"), wall: null };
+    const ns: StackView = { id: null, sid: me, x, y, sizes: [h.size], at: net.serverNow(), wait: 0, sentAt: 0, breakAt: 0, img: this.d.scene.add.image(0, 0, "__DEFAULT"), wall: null };
     this.sent(ns);
     this.stacks.push(ns);
     this.sentHold = "";
@@ -616,7 +731,7 @@ export class CampSnowmen {
       if (v) v.id = s.id;
     }
     if (!v) {
-      v = { id: s.id, sid: s.sid, x: s.x, y: s.y, sizes: [...s.sizes], at: s.at, wait: 0, sentAt: 0, img: this.d.scene.add.image(0, 0, "__DEFAULT"), wall: null };
+      v = { id: s.id, sid: s.sid, x: s.x, y: s.y, sizes: [...s.sizes], at: s.at, wait: 0, sentAt: 0, breakAt: 0, img: this.d.scene.add.image(0, 0, "__DEFAULT"), wall: null };
       this.stacks.push(v);
       this.redrawStack(v);
       return;
@@ -644,6 +759,34 @@ export class CampSnowmen {
     st.img.destroy();
     this.removeWall(st.wall);
     st.wall = null;
+  }
+
+  /** 11/26 허문 덩이·눈사람 자리(x,y = 발)에 눈가루 (눈싸움 퍽 그림 — 쌓인 덩이마다 아래부터 차례로) */
+  private breakPuff(x: number, y: number, sizes: readonly BallSize[]): void {
+    if (!this.on) return;
+    const scene = this.d.scene;
+    ensureSnowFightTextures(scene);
+    let h = 0;
+    const at: number[] = [];
+    for (const s of sizes) {
+      at.push(h + Art.BALL_R[s]);
+      h += Art.BALL_R[s] * 2 - 2;
+    }
+    const spots = this.d.reduced ? [at[0]] : at;
+    spots.forEach((dy, i) => {
+      const img = markCharTint(scene.add.sprite(x, y - Math.round(dy), SNOWFIGHT_TEX.puff, 0).setDepth(y + 1));
+      img.setScale(i === 0 ? 1.3 : 1).setVisible(false);
+      let f = -1 - i;
+      const step = () => {
+        if (!img.scene) return;
+        f++;
+        if (f >= PUFF_FRAMES) return void img.destroy();
+        if (f >= 0) img.setVisible(true).setFrame(f);
+        scene.time.delayedCall(100, step);
+      };
+      step();
+    });
+    this.d.sfx.snow("hit", 0.7);
   }
 
   private ensureRoll(s: BallSize): void {
@@ -743,8 +886,8 @@ export class CampSnowmen {
 
   // ── 매 프레임 ──
 
-  /** rolling = 굴리기(Space·[굴리기])를 누르고 있다 */
-  update(labelScale: number, rolling = false): void {
+  /** rolling = 굴리기(Space·[굴리기])를 누르고 있다, breakHeld = 11/26 X·[허물기]를 누르고 있다 (내 눈사람 길게 눌러 허물기) */
+  update(labelScale: number, rolling = false, breakHeld = false): void {
     const now = this.d.scene.time.now;
     if (now >= this.meltAt) {
       this.meltAt = now + 1000;
@@ -761,6 +904,11 @@ export class CampSnowmen {
             continue;
           }
           st.wait = 0;
+        }
+        // 11/26 허물기 답이 없다 (옛 서버 등): 기다림을 풀고 덩이는 그대로
+        if (st.breakAt > 0 && now - st.breakAt > PENDING_MS) {
+          st.breakAt = 0;
+          if (this.mine(st) && this.on) this.d.toast("지금은 허물 수 없어요. 조금 있다가 다시 해 주세요.");
         }
         // 오래 손대지 않은 덩이는 서버에서도 사라진다
         if (st.id !== null && st.wait === 0 && !snowStackAlive(st.at, sn)) this.removeStack(st);
@@ -783,6 +931,51 @@ export class CampSnowmen {
     if (this.held) this.syncHeld(rolling && this.on);
     this.syncPeerBalls();
     this.syncHoldNet(now);
+    // 11/26 쌓다 만 내 덩이·다 세운 내 눈사람 바로 앞이면 터치 [앉기] 자리가 [허물기] (눈사람은 길게 누르기)
+    const pl = this.d.player();
+    const st = this.on && !pl.sitting ? this.nearStack(pl.x, pl.y) : null;
+    const man = this.on && !pl.sitting && !st ? this.nearMyMan(pl.x, pl.y) : null;
+    this.setBreakNear(st !== null || man !== null, man !== null);
+    this.stepManHold(man, breakHeld, now);
+  }
+
+  private setBreakNear(near: boolean, hold = false): void {
+    if (near === this.breakNear && hold === this.breakHoldUi) return;
+    this.breakNear = near;
+    this.breakHoldUi = hold;
+    bridge.emit("camp:snowBreak", { near, hold });
+  }
+
+  /** 11/26 내 눈사람 앞에서 X·[허물기]를 누르고 있으면 막대를 채우고, 다 차면 허물기를 보낸다 (떼거나 멀어지면 처음부터) */
+  private stepManHold(man: ManView | null, held: boolean, now: number): void {
+    if (this.manBreaking && now - this.manBreaking.at > PENDING_MS) {
+      this.manBreaking = null;
+      if (this.on) this.d.toast("지금은 허물 수 없어요. 조금 있다가 다시 해 주세요.");
+    }
+    const r = breakHoldStep(this.manHold, this.manHoldSpent, man?.s.id ?? null, held, now, MAN_BREAK_HOLD_MS);
+    this.manHold = r.hold;
+    this.manHoldSpent = r.spent;
+    if (man && r.hold) this.drawHoldBar(man, r.k);
+    else this.holdBar?.setVisible(false);
+    if (!man || r.fire === null) return;
+    if (!this.d.net().snowmanBreak(man.s.id)) {
+      this.d.toast("연결된 뒤에 허물 수 있어요.");
+      return;
+    }
+    this.manBreaking = { id: man.s.id, at: now };
+    this.d.sfx.play("thud", 0.3, 0.8);
+  }
+
+  /** 길게 누르는 동안 눈사람 몸 가운데에 작은 막대 (k = 0..1) */
+  private drawHoldBar(man: ManView, k: number): void {
+    const g = (this.holdBar ??= this.d.scene.add.graphics());
+    const w = 20;
+    const x = Math.round(man.s.x - w / 2);
+    const y = Math.round(man.s.y - Art.snowmanTop(man.stage) / 2);
+    g.clear().setDepth(DEPTH.labels - 1).setVisible(true);
+    g.fillStyle(0x1b2233, 0.9).fillRect(x - 1, y - 1, w + 2, 5);
+    g.fillStyle(0x47546e, 1).fillRect(x, y, w, 3);
+    g.fillStyle(0xcfeaff, 1).fillRect(x, y, Math.round(w * k), 3);
   }
 
   /** 내 손이 서버가 아는 것과 다르면 알린다 (바뀔 때만, SNOW_HOLD_SEND_MS 넘게 띄워 — 마지막 상태는 꼭) */
@@ -817,7 +1010,13 @@ export class CampSnowmen {
     if (step > 0) {
       h.roll += step;
       const grows = snowRollGrows(at.x, at.y);
-      const next = heldStep(h, step, true, grows);
+      // 11/26 몸통만 놓인 내 덩이가 있으면 배까지만 (두 번째 몸통은 놓을 데가 없다)
+      const lone = h.size < 2 && this.myLone();
+      const next = heldStep(h, step, true, grows, lone ? 1 : 2);
+      if (lone && grows && !h.capped && next.size === 1 && sizeForRoll(h.dist + step) === 2) {
+        h.capped = true;
+        this.d.toast("세워 둔 몸통이 있어서 배 크기까지만 커져요. 몸통에 올려 주세요.");
+      }
       h.dist = next.dist;
       if (grows) {
         h.trackAt += step;
@@ -918,7 +1117,10 @@ export class CampSnowmen {
       h.img.setScale(0.8);
       this.d.scene.tweens.add({ targets: h.img, scale: 1, duration: 220, ease: "Back.easeOut" });
     }
-    this.d.toast(size === 2 ? "몸통 크기가 됐어요. 가장 큰 크기예요." : "배 크기가 됐어요. 더 굴리면 몸통이 돼요.");
+    // 11/26 몸통만 놓인 내 덩이가 있으면 배에서 멈춘다 (더 굴려도 몸통이 되지 않는다)
+    const lone = size === 1 && this.myLone();
+    if (lone) h.capped = true;
+    this.d.toast(size === 2 ? "몸통 크기가 됐어요. 가장 큰 크기예요." : lone ? "배 크기가 됐어요. 세워 둔 몸통이 있어서 더는 안 커져요." : "배 크기가 됐어요. 더 굴리면 몸통이 돼요.");
   }
 
   private addTrack(s: BallSize, x: number, y: number): void {
@@ -943,6 +1145,9 @@ export class CampSnowmen {
 
   destroy(): void {
     this.dropHeld();
+    this.setBreakNear(false);
+    this.holdBar?.destroy();
+    this.holdBar = null;
     for (const p of this.piles.splice(0)) p.img.destroy();
     for (const st of [...this.stacks]) this.removeStack(st);
     for (const id of [...this.men.keys()]) this.removeMan(id);

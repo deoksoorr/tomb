@@ -2,6 +2,7 @@ import {
   CAMP_BOARD_SPOT,
   CAMP_BUS_STOP,
   CAMP_FIRE,
+  CAMP_FALL_X,
   CAMP_FOOTBATH,
   CAMP_HEIGHT,
   CAMP_LOTS,
@@ -15,8 +16,10 @@ import {
   CAMP_RAFTS,
   CAMP_RES,
   CAMP_ROW_DOCK_RECT,
+  CAMP_SLIDE,
   CAMP_TRADER,
   CAMP_TRADER_STALL,
+  CAMP_TRAMPOLINE,
   CAMP_VENDING_ROW,
   CAMP_VIEW_BRIDGE,
   CAMP_VIEW_BRIDGE_X,
@@ -171,25 +174,38 @@ export type CampLandmark = {
   label: string;
   x: number;
   y: number;
-  kind: "bus" | "office" | "fire" | "stream" | "bbq" | "vending" | "board" | "dock" | "pier" | "housing" | "fishmonger" | "seat" | "fish";
+  /** area = 그림 없이 이름표만 그 자리 가운데에 얹는 구역 (폭포·저수지·좌대·카라반 자리처럼 지도 바탕에 이미 보이는 곳) */
+  kind: "bus" | "office" | "fire" | "stream" | "bbq" | "vending" | "board" | "dock" | "pier" | "housing" | "fishmonger" | "seat" | "fish" | "tramp" | "slide" | "cabin" | "area";
 };
 const npc = (id: string) => CAMP_NPCS.find((n) => n.id === id)!;
-/** 미니맵 주요 장소 (UI가 작은 표시를 그린다). 붕어빵 수레 자리는 넣지 않는다 (비밀) */
+/**
+ * 미니맵 주요 장소 (UI가 작은 표시를 그린다). 붕어빵 수레 자리는 넣지 않는다 (비밀).
+ * 11/26 큰 지도 이름표 개편: 분양은 NPC에게서만 받으니 분양 NPC(언젠가 씨·소슬댁·순이 할머니)는 서 있는 자리에 집 그림 + 이름표,
+ * 펜션·카라반 자리는 집터 쪽에 구역 이름표를 따로 (촌캉스는 할머니가 집터 바로 밑이라 이름표 하나로). 놀이터 트램펄린·눈썰매(워터 슬라이드) 추가
+ */
 export const CAMP_LANDMARKS: readonly CampLandmark[] = [
   { id: "bus", label: "버스 정류장", x: CAMP_BUS_STOP.x, y: CAMP_BUS_STOP.y, kind: "bus" },
-  { id: "office", label: "관리소·매점", x: CAMP_OFFICE.x, y: CAMP_OFFICE.y - 30, kind: "office" },
-  { id: "falls", label: "아스라 폭포", x: 640, y: 70, kind: "stream" },
-  { id: "pool", label: "달그늘 소", x: CAMP_POOL.x, y: CAMP_POOL.y + 30, kind: "stream" },
+  { id: "office", label: "관리소·매점", x: CAMP_OFFICE.x, y: CAMP_OFFICE.y - 30, kind: "cabin" },
+  { id: "keeper", label: "언젠가 씨 (카라반 분양)", x: npc("keeper").x, y: npc("keeper").y, kind: "housing" },
+  { id: "falls", label: "아스라 폭포", x: CAMP_FALL_X, y: 40, kind: "area" },
+  { id: "pool", label: "달그늘 소", x: CAMP_POOL.x, y: CAMP_POOL.y - 6, kind: "area" },
   { id: "rocks", label: "폭포 낚시 바위", x: 486, y: 276, kind: "fish" },
-  { id: "vending", label: "자판기", x: 866, y: CAMP_VENDING_ROW[0].y - 10, kind: "vending" },
-  { id: "stream", label: "옛길 계곡", x: Math.round(campStreamX(640)), y: 640, kind: "stream" },
-  { id: "fishing", label: "윤슬 낚시터", x: (CAMP_RES.x0 + CAMP_RES.x1) / 2, y: CAMP_PIER.y, kind: "pier" },
+  { id: "vending", label: "자판기", x: CAMP_VENDING_ROW[1].x, y: CAMP_VENDING_ROW[1].y - 10, kind: "vending" },
+  { id: "stream", label: "옛길 계곡", x: Math.round(campStreamX(560)), y: 560, kind: "area" },
+  { id: "fishing", label: "윤슬 낚시터", x: (CAMP_RES.x0 + CAMP_RES.x1) / 2, y: CAMP_RES.y0 + 18, kind: "area" },
+  // 좌대 1~6: 위 줄(4~6)과 아래 줄(1~3) 사이 잔교 가운데에 이름표 하나
+  { id: "rafts", label: "좌대 1~6", x: Math.round((CAMP_RAFTS[0].x + CAMP_RAFTS[2].x) / 2), y: CAMP_PIER.y, kind: "area" },
   { id: "rowboat", label: "나룻배 선착장", x: CAMP_ROW_DOCK_RECT.x + 12, y: CAMP_ROW_DOCK_RECT.y + 7, kind: "dock" },
   { id: "trader", label: "낚시터 사장님", x: CAMP_TRADER.x, y: CAMP_TRADER.y, kind: "fishmonger" },
   { id: "footbath", label: "계곡 족욕탕", x: CAMP_FOOTBATH.x, y: CAMP_FOOTBATH.y - 60, kind: "seat" },
-  { id: "pension", label: "소슬 펜션 · 소슬댁", x: npc("sosul").x, y: npc("sosul").y, kind: "housing" },
   { id: "rural", label: "촌캉스 · 순이 할머니", x: npc("suni").x, y: npc("suni").y, kind: "housing" },
-  { id: "caravans", label: "카라반 자리", x: 520, y: 470, kind: "housing" },
+  // 소슬 펜션 두 채 사이 (집터 가운데)
+  { id: "pensionArea", label: "소슬 펜션", x: 157, y: 300, kind: "area" },
+  { id: "pension", label: "소슬댁 (펜션 분양)", x: npc("sosul").x, y: npc("sosul").y, kind: "housing" },
+  // 카라반 자리: 계곡 양쪽 열두 자리 한가운데 (폭포 다리와 징검다리 사이 계곡 위)
+  { id: "caravans", label: "카라반 자리", x: Math.round(campStreamX(470)), y: 470, kind: "area" },
+  { id: "tramp", label: "트램펄린", x: CAMP_TRAMPOLINE.x, y: CAMP_TRAMPOLINE.y, kind: "tramp" },
+  { id: "slide", label: "워터 슬라이드 (겨울엔 눈썰매)", x: CAMP_SLIDE.x, y: CAMP_SLIDE.y + 14, kind: "slide" },
   { id: "fire", label: "캠프파이어 존", x: CAMP_FIRE.x, y: CAMP_FIRE.y, kind: "fire" },
   { id: "bbq", label: "바베큐", x: CAMP_BBQ.grill.x, y: CAMP_BBQ.grill.y - 8, kind: "bbq" },
   { id: "board", label: "의뢰판", x: CAMP_BOARD_SPOT.x, y: CAMP_BOARD_SPOT.y - 12, kind: "board" },
@@ -198,6 +214,7 @@ export const CAMP_LANDMARKS: readonly CampLandmark[] = [
 export const CAMP_LANDMARK_COLOR: Record<CampLandmark["kind"], string> = {
   bus: "#ffd84a",
   office: "#ffb070",
+  cabin: "#c8905a",
   fire: "#ff9a3a",
   stream: "#9ad8ff",
   bbq: "#ff8a40",
@@ -209,4 +226,7 @@ export const CAMP_LANDMARK_COLOR: Record<CampLandmark["kind"], string> = {
   fishmonger: "#c89a60",
   seat: "#f8c8a0",
   fish: "#9ae8ff",
+  tramp: "#6fa8e8",
+  slide: "#9ad8ff",
+  area: "#ffffff",
 };

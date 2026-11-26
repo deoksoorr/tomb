@@ -26,12 +26,17 @@ export function sizeForRoll(dist: number): BallSize {
 
 /**
  * 들고 있는 덩이가 한 걸음(moved px) 움직였을 때: 굴리는 중(rolling)이고 눈이 묻는 바닥(grows)이면 굴린 거리를 더하고 크기를 다시 본다.
- * 안고만 걸으면 그대로다. 몸통(2)이 가장 크다
+ * 안고만 걸으면 그대로다. 몸통(2)이 가장 크다.
+ * max = 11/26 이보다 크게는 안 커진다 (몸통만 놓인 내 덩이가 있으면 배까지 — 굴린 거리도 그 바로 아래에서 멈춘다)
  */
-export function heldStep(h: { size: BallSize; dist: number }, moved: number, rolling: boolean, grows: boolean): { size: BallSize; dist: number } {
+export function heldStep(h: { size: BallSize; dist: number }, moved: number, rolling: boolean, grows: boolean, max: BallSize = 2): { size: BallSize; dist: number } {
   if (!rolling || !grows || moved <= 0) return { size: h.size, dist: h.dist };
-  const dist = h.dist + moved;
-  const size = sizeForRoll(dist);
+  let dist = h.dist + moved;
+  let size = sizeForRoll(dist);
+  if (size > max && max < 2) {
+    size = max;
+    dist = Math.max(h.dist, (max === 0 ? SNOWBALL_GROW_AT[0] : SNOWBALL_GROW_AT[1]) - 1);
+  }
   return { size: size > h.size ? size : h.size, dist };
 }
 
@@ -139,6 +144,30 @@ export function stackOpen(st: LocalStack): boolean {
 /** 세 단(몸통·배·머리)이 다 쌓였나 */
 export function stackDone(st: LocalStack): boolean {
   return st.sizes.length === 3 && st.sizes[0] === 2 && st.sizes[1] === 1 && st.sizes[2] === 0;
+}
+
+// ── 11/26 다 세운 내 눈사람 길게 눌러 허물기 ──
+
+export type BreakHold = { id: string; at: number } | null;
+
+/**
+ * 한 프레임: target = 바로 앞 내 눈사람 id (없으면 null), held = X·[허물기]를 누르고 있다.
+ * 떼거나 멀어지거나 다른 눈사람으로 옮기면 처음부터. 다 차면 fire = 그 id, 그 뒤엔 손을 뗄 때까지(spent) 다시 세지 않는다. k = 0..1 막대
+ */
+export function breakHoldStep(
+  hold: BreakHold,
+  spent: boolean,
+  target: string | null,
+  held: boolean,
+  now: number,
+  ms: number,
+): { hold: BreakHold; spent: boolean; k: number; fire: string | null } {
+  if (!held) spent = false;
+  if (!target || !held || spent) return { hold: null, spent, k: 0, fire: null };
+  const h = hold?.id === target ? hold : { id: target, at: now };
+  const k = Math.min(1, (now - h.at) / ms);
+  if (k < 1) return { hold: h, spent, k, fire: null };
+  return { hold: null, spent: true, k: 1, fire: target };
 }
 
 // ── 11/18 못 지나가게 (밑동 충돌 상자) ──

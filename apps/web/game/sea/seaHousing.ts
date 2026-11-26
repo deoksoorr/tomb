@@ -13,7 +13,7 @@ import type { Atmosphere } from "../world/Atmosphere";
 import { clampChars, DOOR_NAME_MAX } from "../text/fitLabel";
 import { PLATE_LOT_FREE, PLATE_LOT_HOUSE, SignPlate } from "../world/SignPlate";
 import { houseLotLabels, scaleLotLabel } from "../housing/worldLots";
-import { onHomesChanged } from "../housing/homesRefresh";
+import { isOlderHomes, onHomesChanged, staleHomesV } from "../housing/homesRefresh";
 import { COTTAGE_RISE, cottageBox, cottageCanvas } from "./seaCottageArt";
 import { seaHousingHost } from "./seaHousingHost";
 import { lampApi, lampHourOf, SeaLamp } from "./seaLamp";
@@ -106,6 +106,8 @@ export class SeaHousing {
   private loading = false;
   /** 11/26 받는 중에 온 집 바뀜 알림 v (끝나면 한 번 더 받는다) */
   private pendingV = 0;
+  /** 11/26 지금 그린 목록을 서버가 만든 시각 (generatedAt — 늦게 온 옛 응답을 거른다) */
+  private shownAt = 0;
   private night = false;
   private readonly lamp: SeaLamp;
   private lampCh: number | null = null;
@@ -138,7 +140,7 @@ export class SeaHousing {
       }),
       bridge.on("sea:lot", ({ lot }) => this.standAtLot(lot)),
       // 11/26 같은 채널 누가 오두막 분양·겉모습 바꾸기 → 몇 초 안에 다시 받는다 (5분 주기를 기다리지 않게)
-      onHomesChanged("sea", (v) => void this.refresh({ v })),
+      onHomesChanged("sea", (v) => void this.refresh({ v }), undefined, (v) => this.covers(v)),
     );
     // 내 오두막 문패에 「(내 집)」 (마을 WorldHouses처럼 처음 한 번 묻는다. 분양·바꾸기 뒤에는 sea:cottages가 알려 줘요)
     housingApi
@@ -153,6 +155,11 @@ export class SeaHousing {
 
   // ── 오두막 ──
 
+  /** 11/26 지금 그린 목록이 이 채널에서 v 뒤에 만든 것이다 (입장 때 다시 온 마지막 v는 다시 받지 않는다) */
+  private covers(v: number): boolean {
+    return this.ch !== null && this.ch === this.d.channel() && this.shownAt >= v;
+  }
+
   private async refresh(fresh: boolean | { v: number } = false): Promise<void> {
     const ch = this.d.channel();
     if (ch === null || this.destroyed) return;
@@ -166,7 +173,13 @@ export class SeaHousing {
     try {
       const v = await housingApi.village(ch, fresh, "sea");
       if (this.destroyed || this.d.channel() !== ch) return;
+      // 11/26 지금 그린 것보다 먼저 만든 목록(늦게 온 CDN 옛 응답)은 버린다 — 알림으로 받은 분양이 5분 주기 조회에 다시 사라지지 않게
+      if (this.ch === ch && isOlderHomes(this.shownAt, v.generatedAt)) return;
+      // 11/26 CDN 주소로 받은 목록이 이 채널에서 이미 들은 집 바뀜보다 먼저 만든 것이면 그 v로 한 번 더 (운영: 분양이 새로고침해야 보였다)
+      const stale = typeof fresh === "object" ? null : staleHomesV("sea", v.generatedAt);
+      if (stale !== null) this.pendingV = Math.max(this.pendingV, stale);
       this.ch = ch;
+      this.shownAt = v.generatedAt;
       this.houses = new Map(v.houses.map((h) => [h.lot, h]));
       this.taken = new Set(v.taken);
       for (const l of SEA_LOTS) this.draw(l);

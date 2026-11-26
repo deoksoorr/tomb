@@ -1,4 +1,4 @@
-import { AVATAR_COLORS, CAMP_ARRIVE, SNOWMAN_BUILD_INTERVAL_MS, SNOWMAN_LIFE_MS, SNOWMAN_PER_CHANNEL, SNOWMAN_PER_PERSON, SNOW_ACT_INTERVAL_MS, SNOW_STACK_IDLE_MS, SNOW_STACKS_PER_PERSON, encodeEvent, type C2S, type Grant, type S2C } from "@tomb/protocol";
+import { AVATAR_COLORS, CAMP_ARRIVE, CAMP_FORAGE_SPOTS, SNOWMAN_BUILD_INTERVAL_MS, SNOWMAN_LIFE_MS, SNOWMAN_PER_CHANNEL, SNOWMAN_PER_PERSON, SNOW_ACT_INTERVAL_MS, SNOW_STACK_IDLE_MS, SNOW_STACKS_PER_PERSON, encodeEvent, type C2S, type Grant, type S2C } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import { ChannelCore, type ChannelHost, type JoinTicket, type PeerRecord } from "./channel";
 import { SnowmanYard } from "./snowmen";
@@ -41,8 +41,8 @@ function setup(saved?: unknown, savedStacks?: unknown) {
 const events = (c: Conn) => c.out.filter((d): d is string => typeof d === "string").map((d) => JSON.parse(d) as S2C);
 const of = <T extends S2C["t"]>(c: Conn, t: T) => events(c).filter((e): e is Extract<S2C, { t: T }> => e.t === t);
 const send = (m: C2S) => encodeEvent(m);
-// 11/26 폭포 계곡 개편: 관리소 아래 흙길 줄 (오른쪽 140px까지 집터·건물이 없는 눈밭)
-const SPOT = { x: 330, y: 740 };
+// 11/26 폭포 계곡 개편 + 채집 지점 둘레 비우기: 서쪽 산책로 눈밭 (오른쪽 240px·아래 40px까지 집터·건물·채집 지점이 없다)
+const SPOT = { x: 100, y: 400 };
 const STEP = Math.max(SNOW_ACT_INTERVAL_MS, SNOWMAN_BUILD_INTERVAL_MS);
 
 /** 몸통 내려놓기 → 배 → 머리 (t부터 SNOW_ACT_INTERVAL_MS 간격). 세운 눈사람 id (못 세웠으면 undefined) */
@@ -66,7 +66,7 @@ describe("snowman yard", () => {
     }
     expect(y.build("a", "a", 200 + SNOWMAN_PER_PERSON * 30, 520, 9, 1)).toEqual({ ok: false, why: "many" });
     expect(y.size).toBe(SNOWMAN_PER_PERSON);
-    for (let i = 0; i < SNOWMAN_PER_CHANNEL; i++) y.build(`p${i}`, "p", 200 + (i % 10) * 30, 760 - Math.floor(i / 10) * 30, 100 + i, 1);
+    for (let i = 0; i < SNOWMAN_PER_CHANNEL; i++) y.build(`p${i}`, "p", SPOT.x - 40 + (i % 10) * 30, SPOT.y + Math.floor(i / 10) * 30, 100 + i, 1);
     expect(y.size).toBe(SNOWMAN_PER_CHANNEL);
     expect(y.all(1000).some((s) => s.id === ids[0])).toBe(false);
   });
@@ -177,13 +177,13 @@ describe("snow stacks (11/18 만드는 과정)", () => {
     // 없는 덩이는 지우라고 한다
     core.message(b, send({ t: "snowTake", id: "knone" }), 10 + SNOW_ACT_INTERVAL_MS * 3);
     expect(of(b, "snowStackGone")).toEqual([{ t: "snowStackGone", id: "knone", sid: of(b, "welcome")[0].sid }]);
-    // 서 있는 남의 눈사람 곁도 안 된다
+    // 서 있는 남의 눈사람 곁도 안 된다 (11/26 몸통만 놓인 처음 덩이는 먼저 거둔다 — 두 번째 몸통은 lone)
+    core.message(a, send({ t: "snowTake", id: st.id }), 700);
     const id = buildAt(core, a, SPOT.x + 120, SPOT.y, 1000);
     expect(id).toBeDefined();
     core.message(b, send({ t: "snowPut", x: SPOT.x + 130, y: SPOT.y + 4, s: 1 }), 2000);
     expect(of(b, "snowmanDenied").pop()).toMatchObject({ why: "near", a: "put" });
-    // 내 것끼리는 SNOWMAN_GAP까지 붙여도 된다 (11/18 2개 몫: 처음 덩이를 거둬 1개 자리를 비우고 내 눈사람 곁에)
-    core.message(a, send({ t: "snowTake", id: st.id }), 2500);
+    // 내 것끼리는 SNOWMAN_GAP까지 붙여도 된다 (11/18 2개 몫: 눈사람 1개 + 새 덩이)
     core.message(a, send({ t: "snowPut", x: SPOT.x + 136, y: SPOT.y, s: 1 }), 3000);
     expect(of(a, "snowmanDenied")).toEqual([]);
   });
@@ -191,16 +191,133 @@ describe("snow stacks (11/18 만드는 과정)", () => {
     const { core, join } = setup();
     const a = join("a", { camp: true, spawn: SPOT });
     const b = join("b", { camp: true, spawn: { x: SPOT.x + 60, y: SPOT.y } });
-    for (let i = 0; i <= SNOW_STACKS_PER_PERSON; i++) core.message(a, send({ t: "snowPut", x: 200 + i * 30, y: 520, s: 1 }), 10 + i * SNOW_ACT_INTERVAL_MS);
+    // 11/26 몸통만 놓인 덩이는 하나까지라, 앞 덩이마다 배를 올려 두고 다음 몸통을 놓는다
+    let t = 10;
+    for (let i = 0; i <= SNOW_STACKS_PER_PERSON; i++) {
+      core.message(a, send({ t: "snowPut", x: SPOT.x + i * 30, y: SPOT.y, s: 2 }), t);
+      t += SNOW_ACT_INTERVAL_MS;
+      const st = of(a, "snowStack").filter((e) => e.st.sizes.length === 1).pop()?.st;
+      if (i < SNOW_STACKS_PER_PERSON && st) {
+        core.message(a, send({ t: "snowAdd", id: st.id, s: 1 }), t);
+        t += SNOW_ACT_INTERVAL_MS;
+      }
+    }
     expect(of(a, "snowmanDenied")).toEqual([expect.objectContaining({ why: "many", a: "put" })]);
-    const ids = of(b, "snowStack").map((e) => e.st.id);
+    const ids = [...new Set(of(b, "snowStack").map((e) => e.st.id))];
     expect(ids).toHaveLength(SNOW_STACKS_PER_PERSON);
     expect(of(b, "snowStackGone")).toEqual([]);
     // 거절된 놓기는 간격을 세지 않아 바로 다시 들 수 있고, 그 직후 또 들면 wait
-    core.message(a, send({ t: "snowTake", id: ids[1] }), 10 + SNOW_STACKS_PER_PERSON * SNOW_ACT_INTERVAL_MS + 1);
+    core.message(a, send({ t: "snowTake", id: ids[1] }), t + 1);
     expect(of(a, "snowmanDenied")).toHaveLength(1);
-    core.message(a, send({ t: "snowTake", id: ids[0] }), 10 + SNOW_STACKS_PER_PERSON * SNOW_ACT_INTERVAL_MS + 2);
+    core.message(a, send({ t: "snowTake", id: ids[0] }), t + 2);
     expect(of(a, "snowmanDenied").pop()).toMatchObject({ why: "wait", a: "take" });
+  });
+  it("11/26 몸통만 놓인 내 덩이가 있으면 두 번째 몸통은 lone으로 거절 (배를 올리면 다시 된다)", () => {
+    const { core, join } = setup();
+    const a = join("a", { camp: true, spawn: SPOT });
+    const b = join("b", { camp: true, spawn: { x: SPOT.x + 200, y: SPOT.y } });
+    core.message(a, send({ t: "snowPut", x: SPOT.x, y: SPOT.y, s: 2 }), 10);
+    const st = of(a, "snowStack")[0].st;
+    core.message(a, send({ t: "snowPut", x: SPOT.x + 40, y: SPOT.y, s: 2 }), 10 + SNOW_ACT_INTERVAL_MS);
+    expect(of(a, "snowmanDenied")).toEqual([{ t: "snowmanDenied", why: "lone", a: "put" }]);
+    // 자리가 나빠도 lone이 먼저 (어디에 놓아도 안 되는 까닭)
+    core.message(a, send({ t: "snowPut", x: -10, y: SPOT.y, s: 2 }), 10 + SNOW_ACT_INTERVAL_MS * 2);
+    expect(of(a, "snowmanDenied").pop()).toMatchObject({ why: "lone", a: "put" });
+    expect(of(b, "snowStack")).toHaveLength(1);
+    // 다른 사람은 내 몸통과 상관없이 놓는다
+    core.message(b, send({ t: "snowPut", x: SPOT.x + 200, y: SPOT.y + 20, s: 2 }), 10);
+    expect(of(b, "snowmanDenied")).toEqual([]);
+    // 배를 올리면 두 번째 몸통을 놓을 수 있다
+    core.message(a, send({ t: "snowAdd", id: st.id, s: 1 }), 10 + SNOW_ACT_INTERVAL_MS * 3);
+    core.message(a, send({ t: "snowPut", x: SPOT.x + 40, y: SPOT.y, s: 2 }), 10 + SNOW_ACT_INTERVAL_MS * 4);
+    expect(of(a, "snowmanDenied")).toHaveLength(2);
+    expect(of(a, "snowStack").pop()!.st).toMatchObject({ x: SPOT.x + 40, sizes: [2] });
+  });
+  it("11/26 허물기: 내 덩이만, 가까이에서. 모두에게 snowStackGone(brk), 저장도 지우고 내 몫이 빈다", () => {
+    const { core, join, store } = setup();
+    const a = join("a", { camp: true, spawn: { x: SPOT.x, y: SPOT.y + 16 } });
+    const b = join("b", { camp: true, spawn: { x: SPOT.x + 60, y: SPOT.y + 16 } });
+    // 멀리 놓은 덩이(배까지)와 바로 앞 몸통
+    core.message(a, send({ t: "snowPut", x: SPOT.x + 200, y: SPOT.y, s: 2 }), 10);
+    const far = of(a, "snowStack")[0].st;
+    core.message(a, send({ t: "snowAdd", id: far.id, s: 1 }), 10 + SNOW_ACT_INTERVAL_MS);
+    core.message(a, send({ t: "snowPut", x: SPOT.x, y: SPOT.y, s: 2 }), 10 + SNOW_ACT_INTERVAL_MS * 2);
+    const st = of(a, "snowStack").pop()!.st;
+    expect(st).toMatchObject({ x: SPOT.x, sizes: [2] });
+    expect(store.stacks).toHaveLength(2);
+    // 남의 덩이는 못 허문다 (lost, 지우라고도 하지 않는다)
+    core.message(b, send({ t: "snowBreak", id: st.id }), 300);
+    expect(of(b, "snowmanDenied")).toEqual([{ t: "snowmanDenied", why: "lost", a: "break", id: st.id }]);
+    expect(of(b, "snowStackGone")).toEqual([]);
+    // 멀리서는 못 허문다 (spot — 덩이 모양을 다시 받는다)
+    core.message(a, send({ t: "snowBreak", id: far.id }), 700);
+    expect(of(a, "snowmanDenied").pop()).toMatchObject({ why: "spot", a: "break", id: far.id });
+    expect(of(a, "snowStack").pop()!.st).toMatchObject({ id: far.id, sizes: [2, 1] });
+    core.message(a, send({ t: "snowBreak", id: st.id }), 1000);
+    const gone = { t: "snowStackGone", id: st.id, sid: st.sid, brk: true };
+    expect(of(a, "snowStackGone")).toEqual([gone]);
+    expect(of(b, "snowStackGone")).toEqual([gone]);
+    expect((store.stacks as { id: string }[]).map((r) => r.id)).toEqual([far.id]);
+    // 이미 없는 덩이는 lost
+    core.message(a, send({ t: "snowBreak", id: st.id }), 1000 + SNOW_ACT_INTERVAL_MS);
+    expect(of(a, "snowmanDenied").pop()).toMatchObject({ why: "lost", a: "break" });
+    // 몸통 자리가 비어 새 몸통을 놓을 수 있다
+    core.message(a, send({ t: "snowPut", x: SPOT.x + 40, y: SPOT.y, s: 2 }), 1000 + SNOW_ACT_INTERVAL_MS * 2);
+    expect(of(a, "snowStack").pop()!.st).toMatchObject({ x: SPOT.x + 40, sizes: [2] });
+    const c = join("c", { camp: true, now: 5000 });
+    expect(of(c, "snowmen")[0].stacks!.map((s) => s.x)).toEqual([SPOT.x + 200, SPOT.x + 40]);
+  });
+  it("11/26 다 세운 내 눈사람 허물기: 세운 사람만·가까이에서, 모두에게 snowmanGone(brk), 저장하고 한 사람 몫이 바로 빈다", () => {
+    const { core, join, store } = setup();
+    const a = join("a", { camp: true, spawn: { x: SPOT.x, y: SPOT.y + 30 } });
+    const b = join("b", { camp: true, spawn: { x: SPOT.x + 60, y: SPOT.y + 30 } });
+    const near = buildAt(core, a, SPOT.x, SPOT.y + 16, 10)!;
+    const far = buildAt(core, a, SPOT.x + 200, SPOT.y, 10 + STEP * 2)!;
+    expect(near && far).toBeTruthy();
+    let t = 10 + STEP * 4;
+    // 2개가 다 서 있어 새 덩이는 many
+    core.message(a, send({ t: "snowPut", x: SPOT.x + 100, y: SPOT.y + 20, s: 2 }), t);
+    expect(of(a, "snowmanDenied").pop()).toMatchObject({ why: "many", a: "put" });
+    // 남의 눈사람은 못 허문다 (lost, 덩이 지우기도 보내지 않는다)
+    core.message(b, send({ t: "snowmanBreak", id: near }), t);
+    expect(of(b, "snowmanDenied")).toEqual([{ t: "snowmanDenied", why: "lost", a: "break", id: near }]);
+    expect(of(b, "snowStackGone")).toEqual([]);
+    // 멀리 있는 내 눈사람은 spot
+    core.message(a, send({ t: "snowmanBreak", id: far }), (t += STEP));
+    expect(of(a, "snowmanDenied").pop()).toMatchObject({ why: "spot", a: "break", id: far });
+    core.message(a, send({ t: "snowmanBreak", id: near }), (t += STEP));
+    expect(of(a, "snowmanGone")).toEqual([{ t: "snowmanGone", id: near, brk: true }]);
+    expect(of(b, "snowmanGone")).toEqual([{ t: "snowmanGone", id: near, brk: true }]);
+    expect((store.snow as { id: string }[]).map((r) => r.id)).toEqual([far]);
+    // 몫이 비어 바로 새로 놓는다
+    core.message(a, send({ t: "snowPut", x: SPOT.x + 100, y: SPOT.y + 20, s: 2 }), (t += STEP));
+    expect(of(a, "snowStack").pop()!.st).toMatchObject({ x: SPOT.x + 100, sizes: [2] });
+    // 이미 없는 눈사람은 lost, 새로 온 사람은 남은 것만 받는다
+    core.message(a, send({ t: "snowmanBreak", id: near }), (t += STEP));
+    expect(of(a, "snowmanDenied").pop()).toMatchObject({ why: "lost", a: "break" });
+    const c = join("c", { camp: true, now: t + 100 });
+    expect(of(c, "snowmen")[0].list.map((x) => x.id)).toEqual([far]);
+  });
+  it("11/26 채집 지점 바로 옆에는 못 놓는다 (spot — 옛 웹도 아는 까닭)", () => {
+    const { core, join } = setup();
+    const [nx, ny] = CAMP_FORAGE_SPOTS[0];
+    const a = join("a", { camp: true, spawn: { x: nx, y: ny + 30 } });
+    core.message(a, send({ t: "snowPut", x: nx + 10, y: ny + 20, s: 2 }), 10);
+    expect(of(a, "snowmanDenied")).toEqual([{ t: "snowmanDenied", why: "spot", a: "put" }]);
+    expect(of(a, "snowStack")).toEqual([]);
+  });
+  it("11/26 허물기도 간격·1분 상한을 같이 센다, 마을에서는 무시", () => {
+    const { core, join } = setup();
+    const a = join("a", { camp: true, spawn: { x: SPOT.x, y: SPOT.y + 16 } });
+    const v = join("v");
+    core.message(a, send({ t: "snowPut", x: SPOT.x, y: SPOT.y, s: 2 }), 10);
+    const st = of(a, "snowStack")[0].st;
+    core.message(a, send({ t: "snowBreak", id: st.id }), 20);
+    expect(of(a, "snowmanDenied").pop()).toMatchObject({ why: "wait", a: "break" });
+    expect(of(a, "snowStackGone")).toEqual([]);
+    core.message(v, send({ t: "snowBreak", id: st.id }), 1000);
+    expect(of(v, "snowmanDenied")).toEqual([]);
+    expect(of(v, "snowStackGone")).toEqual([]);
   });
   it("들고 있는 눈덩이: 바뀔 때만 다른 사람에게, 늦게 온 사람은 PeerInfo.snow, 너무 잦으면 버린다", () => {
     const { core, join } = setup();

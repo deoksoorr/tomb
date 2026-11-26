@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ambienceAt } from "@/lib/ambience";
-import { LevelBlender, levelsFor } from "./ambienceMix";
+import { drawnAmbience, fireflyLevel, LevelBlender, levelsFor } from "./ambienceMix";
 import { isQuietHour, THUNDER_MIN_RAIN, thunderDelaySec, thunderFlash, thunderGapMs } from "./weatherMath";
 
 // 12번: 빗소리·천둥·눈·낙엽
@@ -61,5 +61,50 @@ describe("snow and leaves levels", () => {
     expect(mid).toBeGreaterThan(0);
     expect(mid).toBeLessThan(autumn.leaves);
     expect(bl.update(2500).leaves).toBeCloseTo(autumn.leaves, 5);
+  });
+});
+
+// 11/26 운영자 문의 「날씨 효과 끄니까 눈 점점거리는 게 그대로 멈춤, 다시 켜도 안 켜짐」 (크리스마스판 밤·그때 날씨는 맑음):
+// 멈춘 「눈」은 반딧불이었다 (날씨가 아니라 설정과 상관없이 남음). 켜고 끄기는 몇 번을 되풀이해도 눈이 사라졌다 돌아와야 한다
+describe("날씨 효과 끄기·켜기 (설정)", () => {
+  const snowNight = ambienceAt(0, { hour: 23, weather: "snow" });
+  const clearNight = ambienceAt(0, { hour: 23, weather: "clear" });
+  const L = (on: boolean, a = snowNight) => levelsFor(drawnAmbience(a, on), true);
+
+  it("끄면 비·눈·안개·흐림이 0, 시간대 색은 그대로", () => {
+    const off = L(false);
+    expect(off.snow).toBe(0);
+    expect(off.rain).toBe(0);
+    expect(off.cloud).toBe(0);
+    expect(L(true).snow).toBeGreaterThan(0.5);
+    expect(drawnAmbience(snowNight, false).phase).toBe(snowNight.phase);
+    expect(drawnAmbience(snowNight, true)).toBe(snowNight);
+  });
+
+  it("끄기→켜기→끄기를 되풀이해도 매번 끝까지 섞인다 (멈춘 값이 남지 않음)", () => {
+    const bl = new LevelBlender(L(true), 2500);
+    let t = 0;
+    for (let i = 0; i < 3; i++) {
+      bl.setTarget(L(false), t);
+      expect(bl.update(t + 2500).snow).toBe(0);
+      t += 4000;
+      bl.setTarget(L(true), t);
+      expect(bl.update(t + 2500).snow).toBeCloseTo(L(true).snow, 5);
+      t += 4000;
+    }
+    // 섞는 도중에 다시 눌러도 그 자리에서 새 목표로 간다
+    bl.setTarget(L(false), t);
+    const mid = bl.update(t + 1000).snow;
+    expect(mid).toBeGreaterThan(0);
+    bl.setTarget(L(true), t + 1000);
+    expect(bl.update(t + 1000).snow).toBeCloseTo(mid, 5);
+    expect(bl.update(t + 3500).snow).toBeCloseTo(L(true).snow, 5);
+  });
+
+  it("겨울·크리스마스판에는 반딧불이 없다 (밤 눈밭에 멈춘 눈송이처럼 보였다) — 다른 판은 그대로", () => {
+    const night = levelsFor(clearNight, true).fireflies;
+    expect(night).toBeGreaterThan(0.5);
+    expect(fireflyLevel(night, true)).toBe(0);
+    expect(fireflyLevel(night, false)).toBe(night);
   });
 });

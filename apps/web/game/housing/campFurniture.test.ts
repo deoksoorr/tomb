@@ -1,6 +1,6 @@
 import { DIR } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
-import { CAMP_FIXTURES, CAMP_FLOOR, CAMP_STARTER, CAMP_WALL, FURNITURE, houseShape, isFixtureId } from "@/lib/housing/catalog";
+import { CAMP_FIXTURES, CAMP_FLOOR, CAMP_STARTER, CAMP_WALL, FURNITURE, furnitureById, houseShape, isFixtureId } from "@/lib/housing/catalog";
 import { footprint, SPIN_R0 } from "@/lib/housing/layout";
 import { roomPlan } from "@/lib/housing/rooms";
 import type { Placed } from "@/lib/housing/types";
@@ -8,7 +8,7 @@ import { EMOTE_ICONS } from "../sprites/emotes";
 import { indoorPoseSheet } from "../sprites/indoorPose";
 import { artUp, floorGrid, furnitureGrid, itemVariant, shownItemGrid, wallCapColor, wallGrid, WALL_H, windowGrid, WINDOW_H, WINDOW_W } from "./art";
 import { CAMP_DRAW, CAMP_GLINT, CAMP_WINDOW_STYLE, PENSION_WINDOW_W } from "./campFurnitureArt";
-import { houseSpots, houseTargets, USE_LABEL } from "./interact";
+import { BAPSANG_FAR_IN, BENCH_BACK_Y, houseSpots, houseTargets, itemDepthY, USE_LABEL } from "./interact";
 import { CAMP_STAND_IDS, SEASON_FX } from "./seasonUse";
 
 // 11/26 캠핑장 집 실내: 종류별 기본 가구 11종(네 방향 그림·쓰기), 전용 바닥·벽·창문, 방 크기
@@ -203,6 +203,146 @@ describe("캠핑장 집 방·바닥·벽·창문", () => {
       const g = windowGrid(false, false, style);
       expect(g.h, style).toBe(WINDOW_H);
       expect(g.w, style).toBe(style === CAMP_WINDOW_STYLE.pension ? PENSION_WINDOW_W : WINDOW_W);
+    }
+  });
+});
+
+describe("캠핑장 기본 가구 앉는 자리 (그림·방향·앞뒤)", () => {
+  // 게임과 같은 자리: 가구 그림은 칸 왼쪽 아래 기준 (오른쪽을 보면 옆모습을 뒤집은 그림 — shownItemGrid), 앉은 사람 depth = 발 y + 1
+  const shape = { w: 18, h: 12 };
+  const SAGE_HI = 0xb8ccae;
+  const view = (id: string, r: number) => {
+    const p = at(id, r, 4, 4);
+    const fp = footprint(furnitureById(id)!, r);
+    const g = shownItemGrid(id, r, itemVariant(id, "", { r }))!;
+    const L = F.ox + p.x * 16;
+    const Tp = F.oy + p.y * 16;
+    const B = Tp + fp.h * 16;
+    const spots = houseSpots([p], shape, F);
+    return { p, g, L, Tp, B, top: B - g.h, spots, depth: itemDepthY(p, furnitureById(id)!, spots, F) };
+  };
+  /** 그림의 (x, y) 칸 색 (투명이면 -1) */
+  const colorAt = (g: { get(x: number, y: number): number }, x: number, y: number) => {
+    const v = g.get(x, y);
+    return v & 255 ? v >>> 8 : -1;
+  };
+  /** 그 줄에서 x를 포함한 방석 색 칸의 가운데 */
+  const runMid = (g: { get(x: number, y: number): number; w: number }, x: number, y: number) => {
+    let a = x;
+    let b = x;
+    while (a > 0 && colorAt(g, a - 1, y) === SAGE_HI) a--;
+    while (b < g.w - 1 && colorAt(g, b + 1, y) === SAGE_HI) b++;
+    return (a + b) / 2;
+  };
+
+  it("펜션 소파: 네 방향 모두 두 자리가 방석 한가운데에 앉고 보는 쪽이 등받이 반대", () => {
+    const FACE = [DIR.down, DIR.left, DIR.up, DIR.right];
+    for (let sd = 0; sd < 4; sd++) {
+      const v = view("fx_pn_sofa", SPIN_R0 + sd);
+      expect(v.spots.length, `sd${sd}`).toBe(2);
+      for (const s of v.spots) {
+        expect(s.facing, `sd${sd}`).toBe(FACE[sd]);
+        // 엉덩이 자리(발 5px 위)가 방석 색이고, 그 방석 칸의 가운데에서 1px 안
+        const ax = s.x - v.L;
+        const ay = s.y - 5 - v.top;
+        expect(colorAt(v.g, ax, ay), `sd${sd} (${ax},${ay})`).toBe(SAGE_HI);
+        expect(Math.abs(runMid(v.g, ax, ay) - ax), `sd${sd} x`).toBeLessThanOrEqual(1);
+      }
+      // 옆을 보면 두 자리가 위·아래 방석에 하나씩 (같은 방석에 둘이 앉지 않는다)
+      if (sd % 2) expect(new Set(v.spots.map((s) => Math.floor((s.y - 5 - v.Tp) / 13))).size).toBe(2);
+    }
+  });
+
+  it("펜션 소파: TV 쪽(뒤)을 보면 등받이가 앉은 사람 앞에, 나머지 방향은 사람이 소파 앞에 그려진다", () => {
+    for (let sd = 0; sd < 4; sd++) {
+      const v = view("fx_pn_sofa", SPIN_R0 + sd);
+      for (const s of v.spots) {
+        expect(!!s.behind, `sd${sd}`).toBe(sd === 2);
+        if (sd === 2) expect(v.depth, "등받이가 앞").toBeGreaterThan(s.y + 1);
+        else expect(v.depth, `sd${sd} 사람이 앞`).toBeLessThan(s.y + 1);
+      }
+    }
+    // 뒤를 보고 앉으면 엉덩이(발 5px 위)가 등받이 너머 방석(그림 맨 위 줄들)에 — 머리·어깨가 등받이 위로 보인다.
+    // 아래 끝까지 이어지는 등받이 몸통(진한 색)은 엉덩이보다 아래에서 시작한다
+    const back = view("fx_pn_sofa", SPIN_R0 + 2);
+    for (const s of back.spots) {
+      const hip = s.y - 5 - back.top;
+      expect(hip, "엉덩이가 그림 위쪽 방석 줄").toBeLessThan(6);
+      expect(colorAt(back.g, s.x - back.L, hip + 4), "그 아래는 등받이").not.toBe(SAGE_HI);
+    }
+  });
+
+  it("뒤를 보게 돌린 펜션 소파·벨벳 파티 소파: 등받이가 사람 앞, 발이 등판 윗끝보다 7~9px 아래 (머리·어깨가 등받이 위로)", () => {
+    for (const id of ["fx_pn_sofa", "party_sofa"]) {
+      const v = view(id, SPIN_R0 + 2);
+      expect(v.spots.length, id).toBe(2);
+      for (const s of v.spots) {
+        expect(s.facing, id).toBe(DIR.up);
+        expect(s.behind, id).toBe(true);
+        expect(s.y, id).toBe(v.Tp + BENCH_BACK_Y[id]);
+        expect(v.depth, `${id} 등받이가 앞`).toBeGreaterThan(s.y + 1);
+        let edge = 0;
+        while (edge < v.g.h && colorAt(v.g, s.x - v.L, edge) === -1) edge++;
+        const below = s.y - (v.top + edge);
+        expect(below, id).toBeGreaterThanOrEqual(7);
+        expect(below, id).toBeLessThanOrEqual(9);
+      }
+    }
+    // 앞·옆을 보면 예전 자리 그대로 (파티 소파)
+    const party = (sd: number) => houseSpots([at("party_sofa", SPIN_R0 + sd, 4, 4)], shape, F).map((s) => [s.x - F.ox - 64, s.y - F.oy - 64]);
+    expect(party(0)).toEqual([[8, 12], [24, 12]]);
+    expect(party(1)).toEqual([[6, 12], [6, 28]]);
+    expect(party(3)).toEqual([[10, 12], [10, 28]]);
+  });
+
+  it("마을 소파·라탄 벤치 자리는 그대로", () => {
+    const sofa = houseSpots([at("sofa", 2, 4, 4)], shape, F);
+    expect(sofa.map((s) => [s.x, s.y, s.facing])).toEqual([
+      [F.ox + 64 + 8, F.oy + 64 + 7, DIR.up],
+      [F.ox + 64 + 24, F.oy + 64 + 7, DIR.up],
+    ]);
+    // 라탄 벤치 뒤를 보면 예전처럼 칸 위 끝 7px 아래 (등받이가 낮아 머리·어깨가 보인다)
+    expect(houseSpots([at("rattan_bench", SPIN_R0 + 2, 4, 4)], shape, F).map((s) => s.y - F.oy - 64)).toEqual([7, 7]);
+    const bench = houseSpots([at("rattan_bench", SPIN_R0 + 1, 4, 4)], shape, F);
+    expect(bench.map((s) => [s.x, s.y])).toEqual([
+      [F.ox + 64 + 6, F.oy + 64 + 12],
+      [F.ox + 64 + 6, F.oy + 64 + 28],
+    ]);
+  });
+
+  it("밥상 뒤에 앉으면 상 바로 뒤 (떠 보이지 않게): 상 먼 끝이 무릎을 가리고, 상 그림이 사람 앞", () => {
+    for (const sd of [0, 2]) {
+      const v = view("fx_rr_bapsang", SPIN_R0 + sd);
+      const far = v.spots.filter((s) => s.facing === DIR.down);
+      const near = v.spots.filter((s) => s.facing === DIR.up);
+      expect(far.length).toBe(2);
+      expect(near.length).toBe(2);
+      for (const s of far) {
+        expect(s.y).toBe(v.Tp + BAPSANG_FAR_IN);
+        // 상판 먼 끝(그 열에서 처음 칠한 줄)이 발보다 위, 무릎 높이(발 3~8px 위) 안
+        const col = s.x - v.L;
+        let edge = 0;
+        while (edge < v.g.h && colorAt(v.g, col, edge) === -1) edge++;
+        const gap = s.y - (v.top + edge);
+        expect(gap, `sd${sd}`).toBeGreaterThanOrEqual(3);
+        expect(gap, `sd${sd}`).toBeLessThanOrEqual(8);
+        expect(v.depth).toBeGreaterThan(s.y + 1);
+      }
+      // 앞자리는 상 앞 (사람이 상 앞에 그려진다)
+      for (const s of near) expect(s.y + 1).toBeGreaterThan(v.depth);
+    }
+  });
+
+  it("카라반 식탁: 앞·뒤는 위 벤치(아래를 봄)·아래 벤치(위를 봄), 옆은 등받이 반대쪽을 보고 벤치 가운데", () => {
+    for (let sd = 0; sd < 4; sd++) {
+      const v = view("fx_cv_dinette", SPIN_R0 + sd);
+      const faces = v.spots.map((s) => s.facing);
+      if (sd % 2 === 0) expect(faces).toEqual([DIR.down, DIR.up]);
+      else {
+        expect(faces).toEqual([DIR.right, DIR.left]);
+        // 앉는 자리 열이 밝은 파란 방석 위 (등받이 나무 기둥이 아님 — campFurnitureArt dinetteSide FABRIC_BLUE.hi)
+        for (const s of v.spots) expect(colorAt(v.g, s.x - v.L, s.y - 5 - v.top), `sd${sd}`).toBe(0x7a9ac8);
+      }
     }
   });
 });

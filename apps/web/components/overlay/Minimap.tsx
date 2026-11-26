@@ -8,7 +8,7 @@ import { CAMP_LANDMARK_COLOR, CAMP_LANDMARKS, CAMP_MINIMAP_H, CAMP_MINIMAP_W, CA
 import { SEA_LANDMARK_COLOR, SEA_LANDMARKS, SEA_MINIMAP_H, SEA_MINIMAP_W, seaMinimapPixels, toSeaMinimap } from "@/game/sea/seaMinimap";
 import { gatherNodeById } from "@/lib/forage/catalog";
 import { MAP_ICONS } from "@/game/world/minimapIcons";
-import { estimateTextWidth, MAP_LABELS, placeLabels, type LabelGroup, type LabelItem, type Rect } from "@/game/world/minimapLabels";
+import { estimateTextWidth, labelText, MAP_LABELS, placeLabels, type LabelGroup, type LabelItem, type Rect } from "@/game/world/minimapLabels";
 import { SEA_WINTER_PALETTE, winterizeMinimap } from "@/game/world/minimapWinter";
 import { isSnowy } from "@/lib/mapConcept";
 import { toUi } from "@/lib/uiScale";
@@ -177,11 +177,16 @@ function readOpen(): boolean {
 }
 
 /** 11/15 캠핑장 지도 (11/16 바닷가도 같은 방식): 바탕·주요 장소·같은 맵 사람 */
-function drawAway(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, map: AwayMapId, d: { me: { x: number; y: number }; others: number[]; friends?: number[] } | null, nodeIds: readonly string[] = []): void {
+/** 11/26 큰 지도에만 그리는 장소 그림 (작은 지도는 정류장 딱지 밑에 깔려 지저분해서 — 캠핑장 놀이터) */
+const BIG_ONLY_KINDS: ReadonlySet<string> = new Set(["tramp", "slide"]);
+
+function drawAway(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, map: AwayMapId, d: { me: { x: number; y: number }; others: number[]; friends?: number[] } | null, nodeIds: readonly string[] = [], bigMap = false): void {
   const M = AWAY_MINIMAP[map];
   const toMap = M.to;
   ctx.drawImage(awayImage(map), 0, 0);
   for (const l of M.landmarks) {
+    // 11/26 구역 이름(폭포·저수지·좌대·카라반 자리)은 그림 없이 큰 지도 이름표만
+    if (l.kind === "area" || (!bigMap && BIG_ONLY_KINDS.has(l.kind))) continue;
     const p = toMap(l.x, l.y);
     if (l.kind in BUS_TINT) {
       drawBus(ctx, l.kind, p.x, p.y, c.clientWidth / M.w || 1);
@@ -256,7 +261,7 @@ export default function Minimap() {
     ctx.imageSmoothingEnabled = false;
     const away = last.current?.map;
     if (away) {
-      drawAway(ctx, c, away, last.current, nodes.current);
+      drawAway(ctx, c, away, last.current, nodes.current, scale === BIG_SCALE);
       return;
     }
     ctx.drawImage(baseImage(), 0, 0);
@@ -571,6 +576,9 @@ function MapLabels({ map, corner = false, focus = null, coarse = false, crop = N
       live = false;
     };
   }, []);
+  // 11/26 판(기본·겨울·크리스마스)에 따라 바뀌는 이름표 (워터 슬라이드 ↔ 눈썰매)
+  const [snowy, setSnowy] = useState(() => isSnowy(bridge.last("map:concept")?.concept ?? "default"));
+  useBridgeEvent("map:concept", ({ concept }) => setSnowy(isSnowy(concept)));
   const layout = useMemo(() => {
     if (!box.w || !box.h) return { placed: [], anchors: new Map<string, { x: number; y: number }>() };
     const size = mapSize(map);
@@ -588,20 +596,22 @@ function MapLabels({ map, corner = false, focus = null, coarse = false, crop = N
       const x = (p.x - crop.l) * unit;
       const y = (p.y - crop.t) * unit;
       if (!lab || (corner && lab.group !== "bus")) {
+        if (l.kind === "area" || (corner && BIG_ONLY_KINDS.has(l.kind))) continue;
         const g = Math.max(2, Math.round(3 * unit));
         soft.push({ x: x - g, y: y - g, w: g * 2, h: g * 2 });
         continue;
       }
       anchors.set(l.id, { x, y });
-      const g = Math.max(3, Math.round((l.kind in BUS_TINT ? busMark(unit).r : 3) * unit));
-      items.push({ id: l.id, x, y, w: textWidth(lab.text) + LABEL_PAD_X * 2, h: LABEL_H, g, pri: l.id === focus ? -1 : lab.pri, hard: lab.group === "bus", group: lab.group });
+      const on = l.kind === "area";
+      const g = on ? 0 : Math.max(3, Math.round((l.kind in BUS_TINT ? busMark(unit).r : 3) * unit));
+      items.push({ id: l.id, x, y, w: textWidth(labelText(lab, snowy)) + LABEL_PAD_X * 2, h: LABEL_H, g, pri: l.id === focus ? -1 : lab.pri, hard: lab.group === "bus", on, group: lab.group });
     }
     // 작은 지도: 왼쪽 위 맵 이름 딱지·[크게] 단추 자리는 비운다 (딱지 둘 = 글자 + 좌우 여백 12px씩, 사이 4px, 바깥 4px — 폰 [크게]는 손가락 크기라 더 크게)
     const obstacles: Rect[] = corner && !coarse ? [{ x: 0, y: 0, w: textWidth(PLACE_TITLE[map]) + textWidth("크게") + (coarse ? 44 : 36), h: coarse ? 30 : 24 }] : [];
     return { placed: placeLabels(items, box.w, box.h, obstacles, 2, soft), anchors };
     // fontsTick: 글꼴이 들어오면 다시 잰다
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [box.w, box.h, map, corner, focus, fontsTick, coarse, crop]);
+  }, [box.w, box.h, map, corner, focus, fontsTick, coarse, crop, snowy]);
   const labels = MAP_LABELS[map];
   const f = focus ? layout.anchors.get(focus) : undefined;
   return (
@@ -609,7 +619,7 @@ function MapLabels({ map, corner = false, focus = null, coarse = false, crop = N
       {f && <span className={styles.focusRing} style={{ left: f.x, top: f.y }} />}
       {layout.placed.map((p) => (
         <span key={p.id} className={styles.label} data-group={labels[p.id].group} data-dest={labels[p.id].group === "bus" ? p.id : undefined} data-focus={p.id === focus || undefined} style={{ left: p.left, top: p.top }}>
-          {labels[p.id].text}
+          {labelText(labels[p.id], snowy)}
         </span>
       ))}
     </div>

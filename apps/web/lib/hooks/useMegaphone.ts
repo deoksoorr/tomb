@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { MEGA_FEED_TTL_MS, type MegaPin, type MegaPinMsg } from "@tomb/protocol";
+import { isOpShout } from "@/lib/opShout";
 import { socialApi } from "@/lib/socialApi";
 import { readItem, writeItem } from "@/lib/storage";
 import type { MegaphoneEntry } from "@/lib/types";
@@ -82,6 +83,8 @@ class MegaphoneStore {
   /** 고정 공지를 마지막으로 맞춘 채널과, 실시간으로 바뀐 공지를 서버 목록보다 먼저 믿는 때 */
   private pinCh = 0;
   private pinHeldUntil = 0;
+  /** 11/26 이미 띄운 운영자 외치기 id (기록에 없어 따로 — 같은 줄이 두 번 와도 한 번만) */
+  private seenOps: string[] = [];
 
   subscribe = (fn: () => void) => {
     if (!this.loaded) {
@@ -134,8 +137,11 @@ class MegaphoneStore {
   /** 새 한마디 (실시간 방송 또는 내가 방금 외친 것). 같은 id는 한 번만. 가운데 표시는 앞의 것이 끝나면 차례로.
    * 11/15 replaces가 있으면(긴급 의뢰 끝 공지) 바꿔 끼울 앞 공지를 기록·기다리는 줄에서 뺀다 */
   push(e: MegaphoneEntry): void {
-    if (this.state.entries.some((x) => x.id === e.id)) return;
-    const entries = [...this.state.entries.filter((x) => x.id !== e.replaces), e].slice(-MEGA_FEED_MAX);
+    // 11/26 운영자 외치기는 가운데 알림만 (소식 기록에 넣지 않는다 — 기록에 남지 않는 외침). 같은 id는 따로 기억해 한 번만
+    const op = isOpShout(e);
+    if (op ? this.seenOps.includes(e.id) : this.state.entries.some((x) => x.id === e.id)) return;
+    if (op) this.seenOps = [...this.seenOps, e.id].slice(-20);
+    const entries = op ? this.state.entries : [...this.state.entries.filter((x) => x.id !== e.replaces), e].slice(-MEGA_FEED_MAX);
     if (e.replaces && this.state.queue.some((x) => x.id === e.replaces)) this.update({ queue: this.state.queue.filter((x) => x.id !== e.replaces) });
     if (!this.state.flash) {
       this.update({ entries });

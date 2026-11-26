@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
-import { CHAT_MAX, CHAT_STORE_MAX, maskChat, nameKey, newChatBucket, normalizeChat, takeChatToken } from "@tomb/protocol";
+import { CHAT_MAX, CHAT_STORE_MAX, maskChat, MEGAPHONE_MAX, nameKey, newChatBucket, normalizeChat, takeChatToken } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { isBareWhisper, isWhisperCommand, parseWhisper, whisperChips, whisperPrefill } from "@/game/logic/whisper";
+import { errorMessage } from "@/lib/api";
 import { useBridgeEvent, useBridgeValue } from "@/lib/hooks/useBridge";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
+import { isShoutCommand, shoutCommandText, SHOUT_COMMAND } from "@/lib/opShout";
+import { socialApi } from "@/lib/socialApi";
 import { useWhisperPartners } from "@/lib/whisperPartners";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
@@ -25,6 +28,8 @@ const takeToken = () => takeChatToken(bucket, performance.now());
 const SLOW_MS = 1500;
 /** 11/16 귓속말 입력칸 글자 수: "/w " + 이름(공백 포함) + 할 말 CHAT_MAX자 */
 const WHISPER_INPUT_MAX = CHAT_MAX + 30;
+/** 11/26 운영자 외치기 입력칸 글자 수: "/외치기 " + 외칠 말 MEGAPHONE_MAX자 (넘치면 서버가 안내) */
+const SHOUT_INPUT_MAX = MEGAPHONE_MAX + 10;
 /** 캐릭터 메뉴 [귓속말]이 채운 글을 막 열린 입력칸(폰 한 줄 입력칸)이 가져갈 수 있는 시간 */
 const PREFILL_MS = 2_000;
 
@@ -73,6 +78,9 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
   const [pick, setPick] = useState(-1);
   const partners = useWhisperPartners();
   const online = useBridgeValue("whisper:online");
+  // 11/26 「/외치기 할 말」: 운영자 계정만 (일반 채팅으로는 절대 내보내지 않는다)
+  const iAmStaff = useBridgeValue("me:staff")?.on === true;
+  const [shouting, setShouting] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
   const slowTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -108,11 +116,13 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
 
   // 11/16 "/w 닉네임 할 말": 글자 수·가림 안내는 할 말만 본다
   const whisper = isWhisperCommand(text);
+  const shout = !whisper && isShoutCommand(text);
+  const shoutText = shout ? (shoutCommandText(text) ?? "") : "";
   const draft = whisper ? parseWhisper(text, knownNames(partners)) : null;
-  const clean = whisper ? (text.trim() ? text : null) : normalizeChat(text);
-  const said = draft?.kind === "send" ? draft.text : whisper ? "" : (clean ?? "");
+  const clean = whisper || shout ? (text.trim() ? text : null) : normalizeChat(text);
+  const said = draft?.kind === "send" ? draft.text : whisper || shout ? "" : (clean ?? "");
   const masked = said !== "" && maskChat(said) !== said;
-  const count = draft?.kind === "long" ? draft.size : [...(whisper ? said : text)].length;
+  const count = draft?.kind === "long" ? draft.size : [...(shout ? shoutText : whisper ? said : text)].length;
   // 11/16 이름 칩: "/w " 뒤에 이름을 쓰는 중이면 그 앞부분에 맞는 상대 (방향키로 고른다). [귓] 버튼은 없앴다 (/w + Enter로 충분)
   const chips = whisperChips(text, partners);
   const picked = chips && pick >= 0 && pick < chips.length ? pick : -1;
@@ -143,9 +153,36 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
     return false;
   }
 
+  /** 11/26 운영자 외치기 보내기 (모든 채널 가운데 알림, 기록에 남지 않는다). 운영자가 아니면 안내만 — 서버에도 채팅으로도 보내지 않는다 */
+  async function sendShout() {
+    if (!iAmStaff) {
+      setWhisperHint("운영자만 쓸 수 있는 명령이에요");
+      return;
+    }
+    if (!shoutText) {
+      setWhisperHint(`${SHOUT_COMMAND} 뒤에 외칠 말을 적어 주세요`);
+      return;
+    }
+    if (shouting) return;
+    setShouting(true);
+    try {
+      await socialApi.opShout(shoutText);
+      setText("");
+      onSent?.();
+    } catch (e) {
+      setWhisperHint(errorMessage(e));
+    } finally {
+      setShouting(false);
+    }
+  }
+
   function send() {
     if (!clean) {
       onCancel?.();
+      return;
+    }
+    if (shout) {
+      void sendShout();
       return;
     }
     // 11/16 귓속말: 이름·할 말이 덜 됐으면 안내만 (글은 그대로). 채팅과 같은 도배 제한
@@ -240,7 +277,7 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
           type="text"
           enterKeyHint="send"
           autoComplete="off"
-          maxLength={whisper ? WHISPER_INPUT_MAX : CHAT_MAX}
+          maxLength={whisper ? WHISPER_INPUT_MAX : shout ? SHOUT_INPUT_MAX : CHAT_MAX}
           value={text}
           placeholder={placeholder}
           aria-label={`채팅 (${CHAT_MAX}자까지, 같은 채널 최근 ${CHAT_STORE_MAX}줄은 하루 동안 남아요. /w 닉네임 할 말로 귓속말)`}
@@ -254,7 +291,7 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
         <button
           type="submit"
           className={cx(ui.button, styles.send)}
-          disabled={!clean}
+          disabled={!clean || shouting}
           // 눌러도 포커스를 입력칸에 둔다 (폰 키보드가 내려갔다 올라오지 않게)
           onMouseDown={(e) => e.preventDefault()}
         >
@@ -266,6 +303,8 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
           <span className={styles.slow}>너무 빨리 치면 잠깐 막혀요</span>
         ) : whisperHint ? (
           <span className={styles.slow}>{whisperHint}</span>
+        ) : shout ? (
+          <span>{iAmStaff ? "모든 채널에 운영자 알림으로 떠요. 기록에는 남지 않아요" : "운영자만 쓸 수 있는 명령이에요"}</span>
         ) : masked ? (
           <span>일부 낱말·주소는 ***로 가려져요</span>
         ) : whisper && partners.length > 0 && isBareWhisper(text) ? (
@@ -278,7 +317,7 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
           <span>같은 채널에 보이고, 최근 {CHAT_STORE_MAX}줄은 하루 동안 남아요</span>
         )}
         <span className={styles.count}>
-          {count}/{CHAT_MAX}
+          {count}/{shout ? MEGAPHONE_MAX : CHAT_MAX}
         </span>
       </p>
     </form>

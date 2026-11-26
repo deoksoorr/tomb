@@ -14,14 +14,17 @@ export type MegaphoneTextCheck = { ok: true; text: string } | { ok: false; reaso
 /** 한 줄로 고른 글 (보이지 않는 글자·줄바꿈은 빈칸 하나로) */
 const oneLine = (raw: unknown) => (typeof raw === "string" ? raw.normalize("NFC").replace(INVISIBLE_RE, " ").replace(/\s+/g, " ").trim() : "");
 
-export function checkMegaphoneText(raw: unknown): MegaphoneTextCheck {
+/** 이름 흉내를 막으려고 금칙어에 든 운영 낱말 (11/26 운영자 외치기에서는 운영자가 스스로 쓰므로 뺀다 — 욕설은 그대로 걸린다) */
+const STAFF_WORDS_RE = /운영자|운영진|운영팀|관리자|admin|대장/gi;
+
+export function checkMegaphoneText(raw: unknown, opts: { staffWords?: boolean } = {}): MegaphoneTextCheck {
   const text = oneLine(raw);
   const len = [...text].length;
   if (len < 1) return { ok: false, reason: "외칠 말을 적어 주세요." };
   if (len > MEGAPHONE_MAX) return { ok: false, reason: `확성기는 ${MEGAPHONE_MAX}자까지 외칠 수 있어요.` };
   if (URL_RE.test(text)) return { ok: false, reason: "링크는 넣을 수 없어요." };
   if (REPEAT_RE.test(text)) return { ok: false, reason: "같은 글자를 너무 많이 반복했어요." };
-  if (hasBanned(text)) return { ok: false, reason: "쓸 수 없는 단어가 들어 있어요." };
+  if (hasBanned(opts.staffWords ? text.replace(STAFF_WORDS_RE, " ") : text)) return { ok: false, reason: "쓸 수 없는 단어가 들어 있어요." };
   return { ok: true, text };
 }
 

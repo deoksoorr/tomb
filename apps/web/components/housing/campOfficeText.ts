@@ -1,6 +1,6 @@
 import { campRoom, YARD_SEATS } from "@/game/camp/campSaleApi";
 import type { SaleKind } from "@/lib/housing/catalog";
-import { CAMP_HOME_KIND_NAME, CARAVAN_GRADE_NAME, campLotByNo, type CampHomeKind, type CampLot, type CampYard } from "@tomb/protocol";
+import { CAMP_HOME_KIND_NAME, CARAVAN_GRADE_NAME, type CampHomeKind, type CampLot, type CampYard } from "@tomb/protocol";
 
 // 11/26 분양 사무소 창의 캠핑장 문구 (OfficeDialog zone "camp" — 분양 NPC 셋의 인사·터 소개·앞마당 안내. 그림 없이 시험한다)
 
@@ -85,9 +85,9 @@ export const campOfficeTitle = (kind: CampHomeKind): string => `${HOST[kind].nam
 /** 터 카드의 자리 이름 (카라반 = 폭포 앞·강가·숲 쪽, 펜션·촌캉스 = 집 개성) */
 export const campLotTag = (l: CampLot): string => (l.kind === "caravan" ? (l.grade ? CARAVAN_GRADE_NAME[l.grade] : "") : (FLAVOR[l.lot] ?? ""));
 
-/** 캠핑장 분양 창이 파는 종류: 말을 건 NPC의 종류(camp) → 빈 터 문·팻말이면 그 터 종류 → 카라반 */
-export function campKindOf(intent: { camp?: CampHomeKind; lot?: number } | null): CampHomeKind {
-  return intent?.camp ?? (intent?.lot ? campLotByNo(intent.lot)?.kind : undefined) ?? "caravan";
+/** 캠핑장 분양 창이 파는 종류: 말을 건 NPC의 종류(camp) → 카라반. 11/26 빈 터 E는 창을 열지 않는다 (분양은 NPC에게서만) */
+export function campKindOf(intent: { camp?: CampHomeKind } | null): CampHomeKind {
+  return intent?.camp ?? "caravan";
 }
 
 /** 11/26 캠핑장에서 캠핑장 집 없이 [분양 사무소]를 눌렀을 때 (마을 사무소 대신 이 안내) */

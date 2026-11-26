@@ -27,7 +27,6 @@ import {
   CAMP_OFFICE_H,
   CAMP_OFFICE_W,
   CAMP_PENSION_GATE,
-  CAMP_PENSION_SALE_SIGN,
   CAMP_PENSION_SIGN,
   CAMP_PIER,
   CAMP_PITS,
@@ -45,7 +44,6 @@ import {
   CAMP_ROW_DOCK,
   CAMP_BUOY_LINE,
   CAMP_ROWBOATS,
-  CAMP_SALE_BOARD,
   CAMP_SMALL_FIRE,
   CAMP_SNACK,
   CAMP_STEP_STONES,
@@ -62,6 +60,7 @@ import {
   CAMP_TRADER_STALL,
   CAMP_VENDING_ROW,
   CAMP_VIEW_BRIDGE,
+  CAMP_VIEW_BRIDGE_X,
   CAMP_WIDTH,
   CAMP_XTREE_AT,
   campCliffEnvelope,
@@ -236,6 +235,21 @@ export const RAPIDS: readonly number[] = [438, 512, 640];
 export const VIEW_BRIDGE = CAMP_VIEW_BRIDGE;
 export const STONES_Y = CAMP_STONES_Y;
 export const LOG_BRIDGE_Y = CAMP_LOG_BRIDGE_Y;
+/**
+ * 11/26 폭포 다리 난간 (그림 valleyArt.viewBridgeArt 104 너비 — 판자 윗줄 = 뒤 난간 받침 VIEW_BRIDGE.y − 14, 앞 난간 기둥 받침 = VIEW_BRIDGE.y + 13).
+ * 운영자 「다리 바깥에서 다리 쪽으로 걸치면 난간 뒤에 내가 있어야」: 뒤·앞 난간에 막는 상자 (양 끝은 열어 가로로만 오르내린다 — 마을 다리 난간 F13과 같다).
+ * 다리 위 발은 y 372~393, 뒤(소 쪽)는 364까지, 앞은 401부터 — 난간 가림판 깊이(뒤 368 · 앞 397)가 그 사이에 온다 (CampMap.addBridges)
+ */
+export const VIEW_BRIDGE_RAIL = { x0: CAMP_VIEW_BRIDGE_X - 51, x1: CAMP_VIEW_BRIDGE_X + 51, backY: CAMP_VIEW_BRIDGE.y - 14, frontY: CAMP_VIEW_BRIDGE.y + 13 } as const;
+export const VIEW_BRIDGE_BACK_DEPTH = CAMP_VIEW_BRIDGE.y - 12;
+export const VIEW_BRIDGE_FRONT_DEPTH = CAMP_VIEW_BRIDGE.y + 17;
+function viewBridgeRailColliders(): Rect[] {
+  const R = VIEW_BRIDGE_RAIL;
+  return [
+    { x: R.x0, y: R.backY - 2, w: R.x1 - R.x0, h: 3 },
+    { x: R.x0, y: R.frontY, w: R.x1 - R.x0, h: 3 },
+  ];
+}
 export const STEP_STONES = CAMP_STEP_STONES;
 /** 계곡 물 안 (소 제외) */
 export function inStream(x: number, y: number, pad = 0): boolean {
@@ -298,7 +312,6 @@ export const ROAD = CAMP_ROAD;
 export const OFFICE = CAMP_OFFICE;
 export const OFFICE_RECT: Rect = { x: CAMP_OFFICE.x - CAMP_OFFICE_W / 2, y: CAMP_OFFICE.y - CAMP_OFFICE_H, w: CAMP_OFFICE_W, h: CAMP_OFFICE_H };
 export const BOARD_SPOT = CAMP_BOARD_SPOT;
-export const SALE_BOARD = CAMP_SALE_BOARD;
 export const SMALL_FIRE = CAMP_SMALL_FIRE;
 
 // ── 윤슬 낚시터 ──
@@ -348,7 +361,6 @@ export const LANE_X = 338;
 export const VILLAGE_Y = 211;
 export const PENSION_GATE = CAMP_PENSION_GATE;
 export const SIDE_GATE = { x: 440, y: VILLAGE_Y } as const;
-export const PENSION_SALE_SIGN = CAMP_PENSION_SALE_SIGN;
 /** 놀이터: 대형 트램펄린(8인) · 워터 슬라이드(겨울엔 눈썰매장) */
 export const TRAMPOLINE = CAMP_TRAMPOLINE;
 export const SLIDE = CAMP_SLIDE;
@@ -571,11 +583,9 @@ export function keepClear(x: number, y: number): boolean {
   for (const w of WOOD_STACKS) if (Math.hypot(x - w.x, y - w.y) < 18) return true;
   if (Math.hypot(x - PENSION_GATE.x, y - PENSION_GATE.y) < 36) return true;
   for (const n of CAMP_NPCS) if (Math.hypot(x - n.x, y - n.y) < 28) return true;
-  if (Math.hypot(x - PENSION_SALE_SIGN.x, y - PENSION_SALE_SIGN.y) < 22) return true;
   for (const f of POND_SPOTS) if (Math.hypot(x - f.x, y - f.y) < 20) return true;
   for (const s of SITES) if (Math.abs(x - s.x) < SITE_W / 2 + 12 && y > s.y - SITE_H / 2 - 4 && y < s.y + SITE_H / 2 + 26) return true;
   for (const f of FISH_SPOTS) if (Math.hypot(x - f.x, y - f.y) < 20) return true;
-  if (Math.hypot(x - SALE_BOARD.x, y - SALE_BOARD.y) < 26) return true;
   if (Math.hypot(x - SMALL_FIRE.x, y - SMALL_FIRE.y) < 40) return true;
   if (Math.hypot(x - BOARD_SPOT.x, y - BOARD_SPOT.y) < 26) return true;
   if (x > VENDING_ROW[0].x - 24 && x < VENDING_ROW[2].x + 22 && y > VENDING_ROW[0].y - 44 && y < VENDING_ROW[0].y + 30) return true;
@@ -742,7 +752,6 @@ function gardenColliders(): Rect[] {
     post(PG_CAR, 38, 10),
     post(PG_SIGN, 40, 5),
     post(PG_WOOD, 22, 5),
-    post(PENSION_SALE_SIGN, 16, 4),
   ];
 }
 /** 좌대 둘레 막이 폭 (헤엄치는 사람이 좌대 그림 밑으로 파고들지 않게). 11/26 좌대는 모두 잔교에서 걸어 들어간다 (1~3 큰 잔교 · 4~6 북쪽 잔교) */
@@ -833,7 +842,6 @@ function propColliders(): Rect[] {
     { x: BBQ.table.x - 22, y: BBQ.table.y - 4, w: 44, h: 4 },
     ...VENDING_ROW.map((v) => ({ x: v.x - 10, y: v.y - 6, w: 20, h: 6 })),
     ...LAMPS.map((p) => post(p, 4, 3)),
-    post(SALE_BOARD, 16, 4),
     ...ROCKS.map((r) => ({ x: r.x - 11 * r.s, y: r.y - 6 * r.s, w: 22 * r.s, h: 6 * r.s })),
   ];
 }
@@ -868,6 +876,7 @@ export function campStaticColliders(): Rect[] {
     { x: CAMP_BUS_TIMETABLE.x - 6, y: CAMP_BUS_TIMETABLE.y - 4, w: 12, h: 4 },
     { x: CAMP_BOARD_SPOT.x - 13, y: CAMP_BOARD_SPOT.y - 5, w: 26, h: 5 },
     ...cliffColliders(),
+    ...viewBridgeRailColliders(),
     ...footbathColliders(),
     ...fishingColliders(),
     ...gardenColliders(),
@@ -929,8 +938,7 @@ export const CAMP_INTERACTABLES: readonly CampInteractable[] = [
   ...CAMP_NPCS.map((n): CampInteractable => ({ id: `npc:${n.id}`, kind: "npc", npc: n.id, x: n.x, y: n.y + 10, r: 26, label: `${n.name}에게 말 걸기` })),
   { id: "board", kind: "board", x: CAMP_BOARD_SPOT.x, y: CAMP_BOARD_SPOT.y + 12, r: 20, label: "의뢰판 보기" },
   { id: "sign", kind: "sign", x: CAMP_BUS_SIGN.x, y: CAMP_BUS_SIGN.y + 12, r: 18, label: "표지판 보기" },
-  { id: "sale:caravan", kind: "sale", x: SALE_BOARD.x, y: SALE_BOARD.y + 10, r: 18, label: "카라반 분양 안내 보기" },
-  { id: "sale:pension", kind: "sale", x: PENSION_SALE_SIGN.x, y: PENSION_SALE_SIGN.y + 10, r: 18, label: "펜션 분양 안내 보기" },
+  // 11/26 카라반·펜션 분양 입간판은 뺐다 (운영자 「헷갈려한다」 → 「카라반, 촌캉스도 NPC만으로 통일」) — 분양은 언젠가 씨·소슬댁·순이 할머니에게 말을 걸어서만
   { id: "bbq", kind: "bbq", x: BBQ.grill.x, y: BBQ.grill.y + 14, r: 28, label: "바베큐 사 먹기" },
   { id: "snack", kind: "bbq", x: SNACK.x, y: SNACK.y + 12, r: 24, label: "간식 사 먹기" },
   ...VENDING_ROW.map((v, i): CampInteractable => ({ id: i ? `vending${i + 1}` : "vending", kind: "vending", x: v.x, y: v.y + 12, r: 14, label: "음료 뽑기" })),

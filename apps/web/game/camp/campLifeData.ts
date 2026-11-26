@@ -68,8 +68,8 @@ const TRAIL = many([
   [1000, 530],
   [900, 716],
 ]);
-/** 폭포 다리 위 (폭포를 본다 — 앉는 자리는 비켜서) */
-const LOOKOUT_TOP = [sp(CAMP_VIEW_BRIDGE_X - 40, CAMP_VIEW_BRIDGE.y + 12, DIR.up), sp(CAMP_VIEW_BRIDGE_X + 40, CAMP_VIEW_BRIDGE.y + 12, DIR.up)];
+/** 폭포 다리 위 (폭포를 본다 — 앉는 자리는 비켜서. 11/26 앞 난간에 막는 상자가 생겨 발은 다리 판 안 y + 8) */
+const LOOKOUT_TOP = [sp(CAMP_VIEW_BRIDGE_X - 40, CAMP_VIEW_BRIDGE.y + 8, DIR.up), sp(CAMP_VIEW_BRIDGE_X + 40, CAMP_VIEW_BRIDGE.y + 8, DIR.up)];
 /** 할아버지 낚시 자리 (사람 낚시 자리·앉는 바위·할머니를 비켜서) */
 const FISH = [bank(476, 1, 36), bank(596, -1, 36), bank(664, 1, 36)];
 /** 카라반 골목 풀밭 (산책) */

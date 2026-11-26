@@ -4,7 +4,7 @@ import * as A from "./campHomeArt";
 import * as P4 from "./campHomeArtPension";
 import { allCampHomeSeats, campHomePlan, campHomeSeatsOf, caravanTypeOf, planKey } from "./campHousingPlan";
 import { homeSeatOpen, plateHead, saleLabel } from "./campHousingPlan";
-import { campOf, campPrices, villaPrice } from "./campSaleApi";
+import { CAMP_SALE_NPC, campOf, campPrices, campSaleHint, campSaleKindOf, emptyDoorAction, villaPrice } from "./campSaleApi";
 import { CAMP_LADDERS, campLadderSeat, campPickSeat, isCampLadderSeat } from "./campSit";
 
 const YARDS: CampYard[] = [1, 2, 3];
@@ -309,6 +309,28 @@ describe("캠핑장 집 그림", () => {
 });
 
 describe("캠핑장 집 문구·값", () => {
+  it("11/26 빈 터엔 분양 팻말이 없다 (카라반·펜션·촌캉스 모두 — 분양은 NPC에게만), 빈 카라반 자리는 둘레 줄만", () => {
+    for (const l of CAMP_LOTS)
+      for (const xmas of [false, true]) {
+        const plan = campHomePlan(l, { owned: false, yard: 1, wide: false, snowy: xmas, xmas, night: false });
+        expect(plan.props.filter((p) => /post-(p|r)?sale/.test(p.key)), `${l.lot}번`).toHaveLength(0);
+        if (l.kind === "caravan") {
+          expect(plan.props.filter((p) => /plotRope/.test(p.key)), `${l.lot}번`).toHaveLength(1);
+          // 옛 팻말 막는 상자도 없다 (빈 자리 가운데를 지나다닐 수 있다)
+          expect(plan.furniture, `${l.lot}번`).toEqual([]);
+        }
+      }
+  });
+
+  it("11/26 빈 터 E: 세 종류 모두 「분양 안내」 → 그 종류 분양 NPC 안내 토스트만 (분양 창은 NPC에게서만)", () => {
+    for (const l of CAMP_LOTS) expect(emptyDoorAction(l), `${l.lot}번`).toEqual({ label: "분양 안내", toast: campSaleHint(l.kind) });
+    expect(campSaleHint("caravan")).toBe("카라반 분양은 언젠가 씨에게 물어보세요.");
+    expect(campSaleHint("pension")).toBe("펜션 분양은 소슬댁에게 물어보세요.");
+    expect(campSaleHint("rural")).toBe("촌캉스 분양은 순이 할머니에게 물어보세요.");
+    expect(CAMP_SALE_NPC).toEqual({ caravan: "keeper", pension: "sosul", rural: "suni" });
+    expect(["keeper", "sosul", "suni", "clerk", "granny", "guitarist"].map((id) => campSaleKindOf(id as never))).toEqual(["caravan", "pension", "rural", null, null, null]);
+  });
+
   it("빈 터 팻말과 문패 머리", () => {
     expect(saleLabel(CAMP_LOTS[0])).toBe("분양 중 · 폭포 앞 자리");
     expect(saleLabel(CAMP_LOTS.find((l) => l.lot === 2)!)).toBe("분양 중 · 강가 자리");

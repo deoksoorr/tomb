@@ -828,56 +828,84 @@ export function hookupArt(): Grid {
 
 /** 폭포 다리 (웅덩이 바로 아래, 넓은 판자 + 양쪽 난간 + 네 모서리 등 기둥) */
 export const VBRIDGE_W = 104;
-export const VBRIDGE_H = 44;
-export function viewBridgeArt(): Grid {
+/** 11/26 위 빈 칸: 뒤 등 기둥 등갓이 그림 위 끝 밖으로 나가 잘려 있었다 (CampMap은 이만큼 올려 깔아 판자·난간 자리는 그대로) */
+export const VBRIDGE_PAD = 8;
+export const VBRIDGE_H = 44 + VBRIDGE_PAD;
+/** 판자 윗줄 (뒤 난간이 서는 줄) · 앞 두께 윗줄 */
+export const VBRIDGE_TOP = 10 + VBRIDGE_PAD;
+export const VBRIDGE_BOT = VBRIDGE_H - 8;
+/** 등 기둥 등갓 왼쪽 위 (뒤 둘 · 앞 둘) */
+const VB_LAMP_AT: readonly (readonly [number, number, "back" | "front"])[] = [
+  [1, VBRIDGE_TOP - 14, "back"],
+  [VBRIDGE_W - 6, VBRIDGE_TOP - 14, "back"],
+  [1, VBRIDGE_BOT - 13, "front"],
+  [VBRIDGE_W - 6, VBRIDGE_BOT - 13, "front"],
+];
+/** side를 주면 그쪽 난간·등 기둥만 그린다 (viewBridgeRail 가림판 모양) */
+function drawViewBridge(g: Grid, side?: "back" | "front"): void {
   const W = VBRIDGE_W;
-  const H = VBRIDGE_H;
-  const g = new Grid(W, H);
-  const top = 10;
-  const bot = H - 8;
-  // 판자 (세로 — 사람은 가로로 건넌다)
-  for (let x = 4; x < W - 4; x += 4)
-    for (let y = top; y < bot; y++) {
-      g.set(x, y, LOG.hi);
-      g.set(x + 1, y, LOG.mid);
-      g.set(x + 2, y, LOG.mid);
-      g.set(x + 3, y, (x + y) % 9 === 0 ? 0x3a2a1c : LOG.lo);
-    }
-  // 앞 두께
-  g.rect(3, bot, W - 6, 3, WOOD.lo);
-  g.hline(3, W - 4, bot + 2, WOOD.line);
-  // 뒤 난간 (기둥 + 가로대)
-  for (let x = 4; x < W - 4; x += 16) g.rect(x, top - 9, 3, 10, WOOD.lo);
-  g.rect(3, top - 9, W - 6, 2, WOOD.mid);
-  g.hline(3, W - 4, top - 9, WOOD.hi);
-  g.rect(3, top - 4, W - 6, 1, WOOD.lo);
-  // 앞 난간
-  for (let x = 4; x < W - 4; x += 16) g.rect(x, bot - 8, 3, 10, WOOD.mid);
-  g.rect(3, bot - 8, W - 6, 2, WOOD.hi);
-  g.hline(3, W - 4, bot - 3, WOOD.lo);
+  const top = VBRIDGE_TOP;
+  const bot = VBRIDGE_BOT;
+  if (!side) {
+    // 판자 (세로 — 사람은 가로로 건넌다)
+    for (let x = 4; x < W - 4; x += 4)
+      for (let y = top; y < bot; y++) {
+        g.set(x, y, LOG.hi);
+        g.set(x + 1, y, LOG.mid);
+        g.set(x + 2, y, LOG.mid);
+        // 옛 그림(위 빈 칸 없을 때)과 같은 나뭇결
+        g.set(x + 3, y, (x + y - VBRIDGE_PAD) % 9 === 0 ? 0x3a2a1c : LOG.lo);
+      }
+    // 앞 두께
+    g.rect(3, bot, W - 6, 3, WOOD.lo);
+    g.hline(3, W - 4, bot + 2, WOOD.line);
+  }
+  if (side !== "front") {
+    // 뒤 난간 (기둥 + 가로대)
+    for (let x = 4; x < W - 4; x += 16) g.rect(x, top - 9, 3, 10, WOOD.lo);
+    g.rect(3, top - 9, W - 6, 2, WOOD.mid);
+    g.hline(3, W - 4, top - 9, WOOD.hi);
+    g.rect(3, top - 4, W - 6, 1, WOOD.lo);
+  }
+  if (side !== "back") {
+    // 앞 난간
+    for (let x = 4; x < W - 4; x += 16) g.rect(x, bot - 8, 3, 10, WOOD.mid);
+    g.rect(3, bot - 8, W - 6, 2, WOOD.hi);
+    g.hline(3, W - 4, bot - 3, WOOD.lo);
+  }
   // 네 모서리 등 기둥 (등갓 + 불빛 창)
-  for (const [x, y] of [
-    [1, top - 14],
-    [W - 6, top - 14],
-    [1, bot - 13],
-    [W - 6, bot - 13],
-  ] as const) {
+  for (const [x, y, s] of VB_LAMP_AT) {
+    if (side && s !== side) continue;
     g.rect(x + 1, y + 5, 3, 12, WOOD.lo);
     g.rect(x, y, 5, 6, 0x3a3634);
     g.rect(x + 1, y + 1, 3, 4, WIN.warm);
     g.hline(x - 1, x + 5, y - 1, 0x2a2624);
   }
+}
+export function viewBridgeArt(): Grid {
+  const g = new Grid(VBRIDGE_W, VBRIDGE_H);
+  drawViewBridge(g);
   g.outline(OUT);
-  for (let x = 6; x < W - 6; x++) if (!g.filled(x, H - 3)) g.set(x, H - 3, 0x0e1e28, 80);
+  for (let x = 6; x < VBRIDGE_W - 6; x++) if (!g.filled(x, VBRIDGE_H - 3)) g.set(x, VBRIDGE_H - 3, 0x0e1e28, 80);
   return g;
 }
-/** 폭포 다리 등불 자리 (그림 안 좌표 → 밤 빛) */
-export const VBRIDGE_LAMPS: readonly { x: number; y: number }[] = [
-  { x: 3, y: -4 + 10 - 14 + 3 },
-  { x: VBRIDGE_W - 4, y: -4 + 10 - 14 + 3 },
-  { x: 3, y: VBRIDGE_H - 8 - 13 + 3 },
-  { x: VBRIDGE_W - 4, y: VBRIDGE_H - 8 - 13 + 3 },
-];
+/**
+ * 11/26 운영자 「폭포 다리 바깥에서 다리 쪽으로 걸치면 난간 뒤에 내가 있어야」: 다 그린 다리(full — 눈판이면 눈 얹은 그림)에서
+ * 한쪽 난간·등 기둥 칸과 그 윤곽만 떼어 낸 가림판. CampMap이 바닥에 깐 다리 위에 그 난간 받침 깊이로 한 번 더 그린다
+ */
+export function viewBridgeRail(full: Grid, side: "back" | "front"): Grid {
+  const core = new Grid(full.w, full.h);
+  drawViewBridge(core, side);
+  const ring = new Grid(full.w, full.h);
+  ring.px.set(core.px);
+  ring.outline(OUT);
+  const edge = Grid.rgba(OUT);
+  const out = new Grid(full.w, full.h);
+  for (let i = 0; i < out.px.length; i++) if ((core.px[i] & 255) > 0 || ((ring.px[i] & 255) > 0 && full.px[i] === edge)) out.px[i] = full.px[i];
+  return out;
+}
+/** 폭포 다리 등불 자리 (그림 안 좌표 → 밤 빛 — 등갓 불빛 창 가운데) */
+export const VBRIDGE_LAMPS: readonly { x: number; y: number }[] = VB_LAMP_AT.map(([x, y]) => ({ x: x + 2, y: y + 3 }));
 
 /** 위에서 본 판(다리)에 군데군데 쌓인 눈 (CampConceptDecor.snowFloor와 같은 생각) */
 export function snowDust(src: Grid, cover = 0.42, seed = 0): Grid {
@@ -983,27 +1011,3 @@ export function edgeLogArt(len: number): Grid {
   return g;
 }
 
-/** 관리소 앞 「카라반 분양」 A자 입간판 (작은 카라반 그림 + 빨간 리본) */
-export function saleStandArt(): Grid {
-  const g = new Grid(22, 24);
-  // 다리 (A자)
-  line(g, 4, 21, 7, 8, WOOD.lo);
-  line(g, 17, 21, 14, 8, WOOD.lo);
-  g.rect(2, 3, 18, 13, 0xf6efe0);
-  frame(g, 2, 3, 18, 13, WOOD.line);
-  // 작은 카라반 그림 (물방울 모양)
-  g.ellipse(9, 10, 4.5, 3, 0x9ed6c0);
-  g.rect(5, 10, 9, 3, 0x9ed6c0);
-  g.hline(5, 13, 12, 0x8a9096);
-  g.set(8, 9, 0xffd890);
-  g.ellipse(10, 13, 1.2, 1.2, 0x2e2a28);
-  g.hline(14, 17, 12, 0x6a6a70);
-  // 빨간 띠 (분양)
-  g.hline(4, 17, 6, 0xd84a3a);
-  g.set(11, 2, 0xd84a3a);
-  g.set(10, 1, 0xd84a3a);
-  g.set(12, 1, 0xd84a3a);
-  g.outline(OUT);
-  shadow(g, 11, 22.5, 8, 1.2, 56);
-  return g;
-}

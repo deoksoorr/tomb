@@ -38,6 +38,8 @@ const GOBLIN_KEY = "goblin";
 const SNOW_KEY = "snow";
 /** 11/18 캠핑장 쌓는 중인 덩이 (내려놓기·올리기·다시 들기 때 쓴다 — 잠들었다 깨어나도 그대로 놓여 있게) */
 const SNOW_STACK_KEY = "snowStack";
+/** 11/26 구역별 마지막 집 바뀜 v { village?, sea?, camp? } (집 저장 알림 때만 쓴다 — 늦게 들어온 사람에게 입장 때 보낸다) */
+const HOMES_KEY = "homesV";
 /** 맵별 최근 채팅 저장 키 접두어 (+ "village" | "camp". 11/16 지금은 "village" 하나에 모든 맵 줄) */
 const CHAT_PREFIX = "chat:";
 /** 채팅이 바뀐 뒤 저장하기까지 모으는 시간 (그 사이 줄은 한 번에 쓴다 — 맵마다 이 간격에 최대 한 번) */
@@ -110,6 +112,7 @@ export class ChannelDO extends DurableObject<Env> {
     if (this.room === null) this.core.restoreGoblin(ctx.storage.kv.get(GOBLIN_KEY));
     if (this.room === null) this.core.restoreSnowmen(ctx.storage.kv.get(SNOW_KEY));
     if (this.room === null) this.core.restoreSnowStacks(ctx.storage.kv.get(SNOW_STACK_KEY));
+    if (this.room === null) this.core.restoreHomes(ctx.storage.kv.get(HOMES_KEY));
     if (revived > 0) {
       console.log(`channel ${this.channel}: restored ${revived} peer(s) from live snapshot`);
       this.scheduleReport();
@@ -232,6 +235,9 @@ export class ChannelDO extends DurableObject<Env> {
           }
         },
         // 11/18 보안: 덩이 목록은 바뀔 때마다 쓰지 않고 SNOW_STACK_SAVE_MS로 모아 마지막 목록만 쓴다 (채팅 저장과 같다 — 대기 중인 타이머가 있으면 DO는 잠들지 않는다)
+        homesChanged: (snap) => {
+          if (!room) ctx.storage.kv.put(HOMES_KEY, snap);
+        },
         snowStacksChanged: (list) => {
           if (room) return;
           this.snowStackPending = list;

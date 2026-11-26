@@ -1,4 +1,5 @@
 import { request } from "./api";
+import type { OpShoutResponse } from "./opShout";
 import type {
   CalendarClaimResponse,
   CalendarResponse,
@@ -27,4 +28,6 @@ export const socialApi = {
   // 11/17 확성기 창 고정 공지 (운영자만)
   pin: (text: string, scope: "channel" | "all", channel: number) => request<MegaPinResponse>("/api/megaphone/pin", post({ text, scope, channel })),
   unpin: (scope: "channel" | "all", channel: number) => request<MegaPinResponse>(`/api/megaphone/pin?scope=${scope}&channel=${channel}`, { method: "DELETE" }),
+  // 11/26 운영자 외치기 (게임 채팅 「/외치기 할 말」, 운영자 계정만 — 기록에 남지 않는다)
+  opShout: (text: string) => request<OpShoutResponse>("/api/staff/shout", post({ text })),
 };

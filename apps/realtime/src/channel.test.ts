@@ -1445,6 +1445,42 @@ describe("23번 확성기", () => {
     // 방은 받지 않는다
     expect(setup(3, 20_000, true).core.relayHomes("camp", 1, 0)).toEqual({ ok: false, flushIn: null });
   });
+
+  it("11/26 늦게 들어온 사람: 구역마다 마지막 v를 기억해 입장(welcome) 바로 뒤 homes로 보내고, 저장했다 깨어나도 그대로 (방은 없음)", () => {
+    const saved: unknown[] = [];
+    const { core, join, host } = setup();
+    host.homesChanged = (snap) => void saved.push(snap);
+    // 아무 알림도 없었으면 입장 때 homes가 없다 (옛 서버와 같은 모양)
+    const a = join("a");
+    expect(events(a).some((e) => e.t === "homes")).toBe(false);
+    core.relayHomes("camp", 100, 0);
+    core.relayHomes("camp", 150, 1_000); // 묶여 아직 안 보냈어도 가장 새 v를 기억한다
+    core.relayHomes("sea", 90, 1_000);
+    core.relayHomes("camp", 120, 2_000); // 옛 v는 기억을 되돌리지 않는다
+    expect(saved.at(-1)).toEqual({ camp: 150, sea: 90 });
+    const b = join("b", 3_000);
+    const evs = events(b);
+    const wi = evs.findIndex((e) => e.t === "welcome");
+    expect(wi).toBeGreaterThanOrEqual(0);
+    expect(evs.filter((e) => e.t === "homes")).toEqual([
+      { t: "homes", zone: "camp", v: 150 },
+      { t: "homes", zone: "sea", v: 90 },
+    ]);
+    expect(evs.findIndex((e) => e.t === "homes")).toBeGreaterThan(wi);
+    // 잠들었다 깨어난 DO: 저장한 것으로 되살린다 (모양이 틀린 칸은 버린다)
+    const woke = setup();
+    woke.core.restoreHomes({ camp: 150, sea: 90, village: -1, moon: 5 });
+    const c = woke.join("c");
+    expect(events(c).filter((e) => e.t === "homes").sort((x, y) => JSON.stringify(x).localeCompare(JSON.stringify(y)))).toEqual([
+      { t: "homes", zone: "camp", v: 150 },
+      { t: "homes", zone: "sea", v: 90 },
+    ]);
+    woke.core.restoreHomes("garbage");
+    // 방은 기억도 보내지도 않는다
+    const room = setup(3, 20_000, true);
+    room.core.restoreHomes({ camp: 1 });
+    expect(events(room.join("r")).some((e) => e.t === "homes")).toBe(false);
+  });
 });
 
 describe("3번 집 안 가구: 방(집)의 1인 자리와 use 중계", () => {

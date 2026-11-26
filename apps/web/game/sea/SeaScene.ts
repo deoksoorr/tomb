@@ -371,7 +371,10 @@ export class SeaScene extends Phaser.Scene {
       stand: () => h.net.stand(),
       toast: (m) => this.toast(m),
       tide: () => this.tide,
-      splash: (x, y) => this.fx.splash(x, y),
+      splash: (x, y) => {
+        // 11/26 장면 정리 중(튜브에서 내리기 등)에는 물보라를 만들지 않는다 (입자는 Phaser가 이미 지웠다)
+        if (!this.cleaned) this.fx.splash(x, y);
+      },
       beforeBoard: () => {
         // 11/17 술에 취한 동안엔 튜브·제트스키·카약을 못 타요 (서버도 거절해요)
         if (seaDrunkBlocked(myFood().drunk, Date.now())) {
@@ -410,7 +413,10 @@ export class SeaScene extends Phaser.Scene {
       player: () => this.player,
       colliders: this.map.colliders,
       toast: (m) => this.toast(m),
-      splash: (x, y) => this.fx.splash(x, y),
+      splash: (x, y) => {
+        // 11/26 장면 정리 중(튜브에서 내리기 등)에는 물보라를 만들지 않는다 (입자는 Phaser가 이미 지웠다)
+        if (!this.cleaned) this.fx.splash(x, y);
+      },
       warp: (x, y) => {
         const now = this.time.now;
         if (this.rest) this.leaveRest(now);

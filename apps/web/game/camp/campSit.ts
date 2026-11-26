@@ -64,7 +64,7 @@ export function campLadderAt(x: number, y: number): CampLadder | null {
 
 /**
  * 11/26 높은·큰 자리는 정해진 쪽에서만 (운영자 「원두막을 뒤에서 접근했더니 바로 걸터앉아」·「평상을 뒤에서 들어갔더니 바로 위로 올라가져」):
- * 원두막 = 앞 사다리 밑 · 평상 = 앞 긴 쪽 + 길 쪽 짧은 쪽 · 정자 = 앞 계단 쪽 (campHousingPlan campSeatZones).
+ * 원두막 = 앞 사다리 밑 · 평상 = 다가간 쪽 방석 (11/26 「윗쪽에서 앉기 하면 윗방석에」 — 위·앞·옆 오르는 자리마다 그쪽 방석) · 정자 = 앞 계단 쪽 (campHousingPlan campSeatZones).
  * 그 자리(rects) 안에 서 있으면 그 가구 방석을 먼저 고르고 (반경 없이 가까운 빈 방석), 밖에서는 그 방석을 아예 안 고른다
  */
 export const CAMP_SEAT_ZONES: readonly CampSeatZone[] = campSeatZones(CAMP_LOTS);

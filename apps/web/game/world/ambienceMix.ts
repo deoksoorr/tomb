@@ -35,6 +35,19 @@ export function recheckDelay(now: number, nextWeatherAt: number, every: number):
   return Math.min(every, Math.max(50, nextWeatherAt - now + 50));
 }
 
+/** 11/26 이 기기에서 그릴 하늘·날씨: 설정에서 날씨 효과를 끄면 맑은 날처럼 (시간대 색은 그대로 — 화면 위 날씨 글은 진짜 날씨에 가로줄) */
+export function drawnAmbience(a: Ambience, weatherFx: boolean): Ambience {
+  return weatherFx ? a : { ...a, weather: "clear", intensity: 0 };
+}
+
+/**
+ * 11/26 반딧불 짙기: 겨울·크리스마스판(눈 덮인 맵)에는 반딧불이 없다 (오래 앉으면 모여드는 반딧불은 그대로 — Atmosphere.gather).
+ * 밤 눈밭에서 제자리에 떠서 깜박이는 흰 점이 멈춘 눈송이로 보였다 — 날씨 효과를 꺼도 남아 「눈이 그대로 멈췄다」는 문의 (그때 날씨는 맑음)
+ */
+export function fireflyLevel(level: number, snowy: boolean): number {
+  return snowy ? 0 : level;
+}
+
 const BASE_FOG: Record<TimePhase, number> = { night: 0.1, dawn: 0.16, day: 0.04, dusk: 0.08 };
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 

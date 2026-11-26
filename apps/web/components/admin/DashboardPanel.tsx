@@ -22,6 +22,7 @@ import { logsAdminApi } from "./logsAdminApi";
 import { fullTime } from "./memberFormat";
 import { moderationApi } from "./moderationApi";
 import { opsAdminApi } from "./opsAdminApi";
+import OpShoutCard from "./OpShoutCard";
 import ops from "./Ops.module.css";
 import { ConnHealthCard } from "./OpsLogs";
 import { Empty, Loading } from "./PanelState";
@@ -102,6 +103,8 @@ export default function DashboardPanel({ toast, onAuthLost, lobby, graveCount, r
         <MaintCard state={part("maint")} toast={toast} fail={fail} onDone={() => setAgain((n) => n + 1)} />
         <ConceptCard concept={part("concept")} toast={toast} fail={fail} />
       </div>
+      {/* 11/26 운영자 외치기: 모든 채널에 확성기 모양 알림 (기록에 남지 않는다) */}
+      <OpShoutCard toast={toast} fail={fail} />
 
       <div className={d.todo} aria-label="처리할 일">
         <TodoTile label="신고 대기" n={openCount} href="#reports" tone="alert" none="처리할 신고가 없어요" />

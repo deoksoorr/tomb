@@ -178,8 +178,8 @@ const USE_OF: Readonly<Record<string, UseKind>> = {
   fx_pn_tv: "lamp",
 };
 
-/** 11/26 캠핑장 기본 가구 중 마을 가구와 같은 자리를 쓰는 것 (침대 = 침대 베개 자리, 소파 = 소파 두 자리) */
-const SPOT_AS: Readonly<Record<string, string>> = { fx_cv_bed: "bed", fx_pn_bed: "bed", fx_pn_sofa: "sofa" };
+/** 11/26 캠핑장 기본 가구 중 마을 가구와 같은 자리를 쓰는 것 (침대 = 침대 베개 자리, 펜션 소파 = 네 방향 라탄 벤치 두 자리) */
+const SPOT_AS: Readonly<Record<string, string>> = { fx_cv_bed: "bed", fx_pn_bed: "bed", fx_pn_sofa: "rattan_bench" };
 
 /** 11/19 쓰다듬는 가구: 시즌 가구처럼 돌린 앞쪽 칸에 서서 바라본다 (seasonStandSpot — 몸이 펫 그림을 25% 넘게 덮지 않고, 위쪽은 마지막) */
 export const PET_STAND_USES: ReadonlySet<UseKind> = new Set<UseKind>(["pet", "dog", "breed"]);
@@ -279,6 +279,18 @@ export function seaHammockSpot(u: string, d: number, b: Pick<Box, "cx" | "B">): 
   const tilt = d === 1 ? 90 : -90;
   return spot("hammockIn", "lie", u, b.cx + (d === 1 ? -HAMMOCK_FABRIC_UP : HAMMOCK_FABRIC_UP), b.B - HAMMOCK_SIDE_MID, DIR.down, true, { tilt });
 }
+
+/**
+ * 11/26 밥상 뒤(먼 쪽)에 앉는 사람 발 위치: 칸 위 끝에서 이만큼 안쪽. 밥상은 2px만 솟는 낮은 상이라 책상처럼 칸 밖(Tp − 2)에 앉히면
+ * 상과 사람 사이가 떠 보였다. 상 먼 쪽 끝(Tp − 0.5)이 무릎을 가리게 칸 안으로 — 상 그림(depth = 칸 아래 끝)이 사람 앞에 그려진다
+ */
+export const BAPSANG_FAR_IN = 4;
+/**
+ * 11/26 뒤를 보게 돌린 두 자리 소파에 앉은 사람 발 위치 (칸 위 끝에서 이만큼 아래, 없으면 라탄 벤치 7).
+ * 등받이가 높은 소파는 7이면 등받이에 몸이 다 가려 머리 끝만 보였다 — 발이 등판 윗끝보다 8px 아래면 마을 소파를 뒤로 돌린 것처럼 머리·어깨가 보인다.
+ * 펜션 소파: 등판 윗끝(테) Tp − 6 → 2 · 벨벳 파티 소파: 등판 윗끝 Tp − 8 → 1 (자리는 소파 칸 안이어야 해서 0이 아니라 1, 9px 아래)
+ */
+export const BENCH_BACK_Y: Readonly<Record<string, number>> = { fx_pn_sofa: 2, party_sofa: 1 };
 
 /** 이 배치의 1인 자리 전부 */
 export function houseSpots(items: readonly Placed[], tier: TierShape, f: Frame): HouseSpot[] {
@@ -385,14 +397,20 @@ export function houseSpots(items: readonly Placed[], tier: TierShape, f: Frame):
       case "party_sofa": {
         const d = Math.max(0, sd);
         const face = FACE_BY_R[d];
+        // 11/26 펜션 소파도 이 규칙 (예전엔 마을 소파(돌리는 그림) 규칙이라 TV 쪽을 보면 등받이 위에 몸이 다 드러나고, 옆을 보면 등받이에 걸터앉았다).
+        // 펜션 소파 방석은 앞·뒤 x 5~15·17~26(가운데 L+10·R−10), 옆 y 0~11·13~24(아래 끝 + 2) — campFurnitureArt sofaFront·sofaSide
+        const pn = p.i === "fx_pn_sofa";
         if (d % 2 === 0) {
-          const y = d === 0 ? b.B - 4 : b.Tp + 7;
+          // 뒷모습이 높은 소파(펜션 소파·파티 소파)는 엉덩이를 등받이 너머 방석에 올려 머리·어깨가 등받이 위로 보이게 (BENCH_BACK_Y)
+          const y = d === 0 ? b.B - 4 : b.Tp + (BENCH_BACK_Y[p.i] ?? 7);
           const extra = d === 2 ? { behind: true } : {};
-          out.push(spot("chair", "sit", p.u, b.L + 8, y, face, true, extra), spot("chair", "sit", p.u, b.L + 24, y, face, true, extra));
+          const [x0, x1] = pn ? [b.L + 10, b.R - 10] : [b.L + 8, b.L + 24];
+          out.push(spot("chair", "sit", p.u, x0, y, face, true, extra), spot("chair", "sit", p.u, x1, y, face, true, extra));
         } else {
           // 옆을 봄: 앉는 판이 보는 쪽 (왼쪽을 보면 왼쪽 절반)
           const x = d === 1 ? b.L + 6 : b.R - 6;
-          out.push(spot("chair", "sit", p.u, x, b.Tp + 12, face, true), spot("chair", "sit", p.u, x, b.Tp + 28, face, true));
+          const [y0, y1] = pn ? [b.Tp + 13, b.Tp + 26] : [b.Tp + 12, b.Tp + 28];
+          out.push(spot("chair", "sit", p.u, x, y0, face, true), spot("chair", "sit", p.u, x, y1, face, true));
         }
         break;
       }
@@ -418,7 +436,7 @@ export function houseSpots(items: readonly Placed[], tier: TierShape, f: Frame):
           for (let i = 0; i < b.fw; i++) {
             const x = b.L + i * T + T / 2;
             if (free(p.x + i, p.y + b.fh)) out.push(spot("chair", "sit", p.u, x, b.B + 4, DIR.up, false));
-            if (free(p.x + i, p.y - 1)) out.push(spot("chair", "sit", p.u, x, b.Tp - 2, DIR.down, false));
+            if (free(p.x + i, p.y - 1)) out.push(spot("chair", "sit", p.u, x, b.Tp + BAPSANG_FAR_IN, DIR.down, false));
           }
         } else {
           for (let j = 0; j < b.fh; j++) {

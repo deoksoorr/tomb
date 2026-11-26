@@ -104,8 +104,6 @@ export const CAMP_OFFICE_W = 176;
 export const CAMP_OFFICE_H = 84;
 /** 의뢰판 자리 */
 export const CAMP_BOARD_SPOT = { x: 520, y: 684 } as const;
-/** 관리소 문 앞 「카라반 분양」 입간판 (분양은 언젠가 씨가 받는다) */
-export const CAMP_SALE_BOARD = { x: 384, y: 708 } as const;
 
 // ── 아스라 폭포 · 달그늘 소 (위 가운데) ── 절벽은 x 424~856, 물줄기는 맵 위 밖에서 쏟아진다
 export const CAMP_FALL_X = 640;
@@ -358,7 +356,7 @@ export const CAMP_SNACK = { x: 1238, y: 756 } as const;
 // ── 소슬 펜션 구역 ── 입구 아치 · 「소슬 펜션」 간판 · 정원 (집터는 campHomes CAMP_LOTS)
 export const CAMP_PENSION_GATE = { x: 330, y: 540 } as const;
 export const CAMP_PENSION_SIGN = { x: 248, y: 574 } as const;
-export const CAMP_PENSION_SALE_SIGN = { x: 372, y: 572 } as const;
+// 11/26 「펜션 분양」 입간판(372, 572)은 뺐다 (운영자 「헷갈려한다」 — 펜션 분양은 소슬댁에게 말을 걸어서만)
 
 // ── 11/26 놀이터 (펜션 정원 옆) ── 대형 트램펄린 8인 · 워터 슬라이드 (겨울·크리스마스판엔 눈썰매 언덕 — 같은 자리)
 /** 대형 트램펄린 매트 (타원) */

@@ -11,7 +11,7 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { addTwinkle } from "../world/conceptLights";
 import { PLATE_LOT_FREE, PLATE_LOT_HOUSE, SignPlate } from "../world/SignPlate";
 import { houseLotLabels, scaleLotLabel } from "../housing/worldLots";
-import { onHomesChanged } from "../housing/homesRefresh";
+import { isOlderHomes, onHomesChanged, staleHomesV } from "../housing/homesRefresh";
 import * as Art from "./campArt";
 import { campSkin } from "./CampConceptDecor";
 import { campHousingHost } from "./campHousingHost";
@@ -30,12 +30,14 @@ import {
   type PlanLight,
   type PlanRect,
 } from "./campHousingPlan";
-import { campHousingApi, campOf, type CampVillageHouse } from "./campSaleApi";
+import { campHousingApi, campOf, emptyDoorAction, type CampVillageHouse } from "./campSaleApi";
 import type { CampInteractable } from "./campTypes";
 
 // 11/26 캠핑장 집 (카라반 12 · 소슬 펜션 2 · 촌캉스 2)을 캠핑장 장면에 붙여요 — 바닷가 오두막(game/sea/seaHousing)과 같은 흐름.
-//  - 지금 채널의 캠핑장 집터 16 (/api/housing/village?zone=camp — CDN 15초). 터마다 그림(campHousingPlan)·막는 상자·문패·분양 팻말
-//  - E: 집 문 → 그 집 안으로 (내 집이면 주인, 남의 집이면 놀러 가기 — UI 하우징 창이 집 씬을 연다), 빈 터·분양 팻말 → 캠핑장 분양 창
+//  - 지금 채널의 캠핑장 집터 16 (/api/housing/village?zone=camp — CDN 15초). 터마다 그림(campHousingPlan)·막는 상자·문패(빈 터는 「분양 중」 글씨)
+//  - E: 집 문 → 그 집 안으로 (내 집이면 주인, 남의 집이면 놀러 가기 — UI 하우징 창이 집 씬을 연다)
+//    (11/26 운영자 「카라반, 촌캉스도 NPC만으로 통일」: 빈 터엔 분양 팻말이 없고, 빈 집 문 앞·빈 카라반 자리 가운데 E는 「분양 안내」 토스트만 —
+//     분양 창은 언젠가 씨·소슬댁·순이 할머니에게 말을 걸어서만 (CampScene.talkTo · campSaleApi CAMP_SALE_NPC))
 //  - 앞마당 앉을 자리(protocol CAMP_HOME_SEATS — id "qH{터}_{i}")는 앞마당 단계에 맞는 자리만 연다 (seatOpen — 장면의 좌석 고르기가 거른다)
 //  - 밤: 창 불빛·화롯대·아궁이·등 빛 (addLights + ADD 빛), 겨울·크리스마스판: 지붕 눈·고드름·눈 마당·크리스마스 전구 (concept)
 // CampScene은 만들기·매 프레임(update)·E(use)·빛(addLights)·좌석 거르기(seatOpen)·정리(destroy)만 넘겨요.
@@ -152,6 +154,8 @@ export class CampHousing {
   private loading = false;
   /** 11/26 받는 중에 온 집 바뀜 알림 v (끝나면 한 번 더 받는다) */
   private pendingV = 0;
+  /** 11/26 지금 그린 목록을 서버가 만든 시각 (generatedAt — 늦게 온 옛 응답을 거른다) */
+  private shownAt = 0;
   private night = false;
   /** 11/26 밤낮을 한 번이라도 판정했는지 (처음 판정은 「바뀐 것」이 아니다 — 들어올 때 서버가 보내 준 아궁이 불을 지우지 않게) */
   private nightKnown = false;
@@ -176,7 +180,7 @@ export class CampHousing {
       }),
       bridge.on("camp:lot", ({ lot }) => this.standAtLot(lot)),
       // 11/26 같은 채널 누가 분양·디자인·앞마당·넓히기 → 몇 초 안에 다시 받는다 (5분 주기를 기다리지 않게 — 분양 끝난 터의 「분양 중」 팻말도 바로 빠진다)
-      onHomesChanged("camp", (v) => void this.refresh({ v })),
+      onHomesChanged("camp", (v) => void this.refresh({ v }), undefined, (v) => this.covers(v)),
     );
     // 집에서 나올 때·[내 집 앞으로] — 집 씬(install.ts)이 캠핑장 장면에서 들어온 캠핑장 집이면 이 자리로
     this.hostStand();
@@ -192,6 +196,11 @@ export class CampHousing {
 
   // ── 받기 ──
 
+  /** 11/26 지금 그린 목록이 이 채널에서 v 뒤에 만든 것이다 (입장 때 다시 온 마지막 v는 다시 받지 않는다) */
+  private covers(v: number): boolean {
+    return this.ch !== null && this.ch === this.d.channel() && this.shownAt >= v;
+  }
+
   private async refresh(fresh: boolean | { v: number } = false): Promise<void> {
     const ch = this.d.channel();
     if (ch === null || this.destroyed) return;
@@ -205,7 +214,13 @@ export class CampHousing {
     try {
       const v = await campHousingApi.village(ch, fresh);
       if (this.destroyed || this.d.channel() !== ch) return;
+      // 11/26 지금 그린 것보다 먼저 만든 목록(늦게 온 CDN 옛 응답)은 버린다 — 알림으로 받은 분양이 5분 주기 조회에 다시 사라지지 않게
+      if (this.ch === ch && isOlderHomes(this.shownAt, v.generatedAt)) return;
+      // 11/26 CDN 주소로 받은 목록이 이 채널에서 이미 들은 집 바뀜보다 먼저 만든 것이면 그 v로 한 번 더 (운영: 분양이 새로고침해야 보였다)
+      const stale = typeof fresh === "object" ? null : staleHomesV("camp", v.generatedAt);
+      if (stale !== null) this.pendingV = Math.max(this.pendingV, stale);
       this.ch = ch;
+      this.shownAt = v.generatedAt;
       this.houses = new Map(v.houses.map((h) => [h.lot, h]));
       this.taken = new Set(v.taken);
       for (const l of CAMP_LOTS) this.draw(l);
@@ -493,7 +508,7 @@ export class CampHousing {
     const b = this.built.get(l.lot);
     const plan = b?.plan;
     const mine = !!h && h.id === this.myId;
-    const key = h ? `h|${plan?.plate.bottom}|${h.name}|${h.ownerName}|${h.score}|${mine ? 1 : 0}` : hidden ? `hid|${l.lot}` : `sale|${l.lot}|${plan?.sale?.y}`;
+    const key = h ? `h|${plan?.plate.bottom}|${h.name}|${h.ownerName}|${h.score}|${mine ? 1 : 0}` : hidden ? `hid|${l.lot}` : `sale|${l.lot}|${plan?.plate.bottom}`;
     const old = this.plates.get(l.lot);
     if (old?.key === key) return;
     if (old) destroyPlate(old);
@@ -508,7 +523,7 @@ export class CampHousing {
       this.plates.set(l.lot, plate);
       return;
     }
-    const at = plan?.sale ? { x: plan.sale.x, y: plan.sale.y - 30 } : { x: plan?.plate.cx ?? l.x + l.w / 2, y: plan?.plate.bottom ?? l.y };
+    const at = { x: plan?.plate.cx ?? l.x + l.w / 2, y: plan?.plate.bottom ?? l.y };
     const p = new SignPlate(this.d.scene, this.d.atlas, at.x, at.y, hidden ? campLotShort(l.lot) : saleLabel(l), hidden ? PLATE_LOT_HOUSE : PLATE_LOT_FREE);
     p.setScale(s);
     this.plates.set(l.lot, { key, sign: p, labels: [] });
@@ -516,7 +531,7 @@ export class CampHousing {
 
   // ── E ──
 
-  /** 터 상호작용: 집이 있으면 문 앞 「내 집 들어가기」·「○○ 놀러 가기」, 빈 터면 분양 팻말·문 앞 「○○ 분양 문의」 */
+  /** 터 상호작용: 집이 있으면 문 앞 「내 집 들어가기」·「○○ 놀러 가기」, 빈 터면 문 앞(빈 카라반 자리는 가운데) 「분양 안내」 — 그 종류 분양 NPC에게 가라는 안내만 */
   private syncInteractables(): void {
     const map = this.d.map as { interactables: readonly CampInteractable[] };
     // 맵 고정 목록에 터·집 문이 있으면 빼고 분양 상태대로 다시 끼운다
@@ -541,16 +556,13 @@ export class CampHousing {
         homes.push({ id: `lot:${l.lot}`, kind: "lot", lot: l.lot, x: door.x, y: door.y, r: 16, label: campLotShort(l.lot) });
         continue;
       }
-      const label = `${campLotShort(l.lot)} 분양 문의`;
-      // 펜션·촌캉스는 빈 집 문 앞도, 팻말 앞도
-      if (l.kind !== "caravan") homes.push({ id: `lot:${l.lot}`, kind: "lot", lot: l.lot, x: door.x, y: door.y, r: 16, label });
-      const sp = b.plan.sale;
-      if (sp) homes.push({ id: `lot:${l.lot}:sale`, kind: "lot", lot: l.lot, x: sp.x, y: sp.y + 6, r: 18, label });
+      // 11/26 빈 터 E는 「분양 안내」 (분양 창 대신 그 종류 NPC 안내만 — 운영자 「카라반, 촌캉스도 NPC만으로 통일」)
+      homes.push({ id: `lot:${l.lot}`, kind: "lot", lot: l.lot, x: door.x, y: door.y, r: 16, label: emptyDoorAction(l).label });
     }
     map.interactables = [...base, ...homes];
   }
 
-  /** E: 처리했으면 true (집 문 "house"·빈 터와 분양 팻말 "lot") */
+  /** E: 처리했으면 true (집 문 "house"·빈 터 "lot") */
   use(o: { kind: string; lot?: number }): boolean {
     if (o.kind === "agungi" && o.lot) {
       const on = !(this.built.get(o.lot)?.plan.fire?.on ?? false);
@@ -560,10 +572,11 @@ export class CampHousing {
     }
     if ((o.kind !== "lot" && o.kind !== "house") || !o.lot) return false;
     const h = this.houses.get(o.lot);
+    const site = campLotByNo(o.lot);
     if (h) bridge.emit("portal:open", { kind: "housing", houseId: h.id });
     else if (this.taken.has(o.lot)) this.d.toast(`${campLotShort(o.lot)}은 지금 들어갈 수 없어요.`);
-    else if (this.ch !== null) bridge.emit("portal:open", { kind: "housing", zone: "camp", lot: o.lot });
-    else this.d.toast("캠핑장 집을 불러오는 중이에요. 잠시 뒤 다시 눌러 주세요.");
+    else if (this.ch === null) this.d.toast("캠핑장 집을 불러오는 중이에요. 잠시 뒤 다시 눌러 주세요.");
+    else if (site) this.d.toast(emptyDoorAction(site).toast);
     return true;
   }
 

@@ -7,8 +7,13 @@ import type { MapId } from "@tomb/protocol";
 
 /** 이름표 갈래: 다른 맵으로 가는 정류장 · 상점·상인 · 가 볼 곳 */
 export type LabelGroup = "bus" | "shop" | "place";
-/** 이름표 하나: 글자 · 갈래 · 앞 순위(작을수록 먼저 자리를 잡아요) */
-export type MapLabel = { text: string; group: LabelGroup; pri: number };
+/** 이름표 하나: 글자 · 갈래 · 앞 순위(작을수록 먼저 자리를 잡아요) · snow = 겨울·크리스마스 판 글자 (그 판에서 모습이 바뀌는 곳) */
+export type MapLabel = { text: string; group: LabelGroup; pri: number; snow?: string };
+
+/** 지금 판에 맞는 이름표 글자 (snowy = 겨울·크리스마스 판) */
+export function labelText(l: MapLabel, snowy: boolean): string {
+  return snowy && l.snow ? l.snow : l.text;
+}
 
 export const LABEL_GROUP_NAME: Record<LabelGroup, string> = { bus: "다른 맵으로", shop: "상점·상인", place: "가 볼 곳" };
 
@@ -41,24 +46,30 @@ export const MAP_LABELS: Record<MapId, Readonly<Record<string, MapLabel>>> = {
     bumper: { text: "범퍼카장", group: "place", pri: 5 },
     shrine: { text: "옛 묘역 입구", group: "place", pri: 5 },
   },
-  // 11/26 폭포 계곡 개편 (붕어빵 수레 자리는 넣지 않는다)
+  // 11/26 폭포 계곡 개편 → 큰 지도 이름표 개편: 분양 NPC는 서 있는 자리에 「이름·무엇을 분양」, 집터는 구역 이름 (붕어빵 수레 자리는 넣지 않는다).
+  // 작은 지도는 정류장만 — 순위는 큰 지도(폰 좁은 판)에서 자리가 모자랄 때 무엇부터 남길지
   camp: {
     bus: { text: "마을행", group: "bus", pri: 0 },
-    office: { text: "관리소", group: "shop", pri: 1 },
-    trader: { text: "낚시터 사장님", group: "shop", pri: 1 },
+    office: { text: "관리소·매점", group: "shop", pri: 1 },
     falls: { text: "아스라 폭포", group: "place", pri: 1 },
     fishing: { text: "윤슬 낚시터", group: "place", pri: 1 },
-    pension: { text: "소슬 펜션·소슬댁", group: "place", pri: 2 },
-    rural: { text: "촌캉스·순이 할머니", group: "place", pri: 2 },
+    trader: { text: "낚시터 사장님", group: "shop", pri: 1 },
+    fire: { text: "캠프파이어 존", group: "place", pri: 1 },
+    keeper: { text: "언젠가 씨·카라반 분양", group: "shop", pri: 2 },
+    pension: { text: "소슬댁·펜션 분양", group: "shop", pri: 2 },
+    rural: { text: "촌캉스·순이 할머니", group: "shop", pri: 2 },
+    rafts: { text: "좌대 1~6", group: "place", pri: 2 },
     caravans: { text: "카라반 자리", group: "place", pri: 2 },
-    fire: { text: "캠프파이어 존", group: "place", pri: 2 },
     vending: { text: "자판기", group: "shop", pri: 2 },
-    pool: { text: "달그늘 소", group: "place", pri: 3 },
-    rocks: { text: "폭포 낚시 바위", group: "place", pri: 3 },
+    tramp: { text: "트램펄린", group: "place", pri: 2 },
+    slide: { text: "워터 슬라이드", snow: "눈썰매", group: "place", pri: 2 },
+    pensionArea: { text: "소슬 펜션", group: "place", pri: 3 },
     rowboat: { text: "나룻배 선착장", group: "place", pri: 3 },
     footbath: { text: "계곡 족욕탕", group: "place", pri: 3 },
+    rocks: { text: "폭포 낚시 바위", group: "place", pri: 3 },
     bbq: { text: "바베큐", group: "shop", pri: 4 },
     board: { text: "의뢰판", group: "place", pri: 4 },
+    pool: { text: "달그늘 소", group: "place", pri: 4 },
     stream: { text: "옛길 계곡", group: "place", pri: 5 },
   },
   sea: {
@@ -78,10 +89,13 @@ export const MAP_LABELS: Record<MapId, Readonly<Record<string, MapLabel>>> = {
 
 export type Rect = { x: number; y: number; w: number; h: number };
 /** 자리를 고를 이름표: 장소 점(x, y — 화면 px) · 이름표 크기 · 장소 그림 반폭(g) · 앞 순위 */
-/** hard = 그 그림은 어떤 이름표도 덮지 않는다 (다른 맵으로 가는 정류장) */
-export type LabelItem = { id: string; x: number; y: number; w: number; h: number; g: number; pri: number; hard?: boolean };
+/** hard = 그 그림은 어떤 이름표도 덮지 않는다 (다른 맵으로 가는 정류장) · on = 그림 없는 구역 이름 (그 자리 가운데에 먼저 얹어요, g = 0) */
+export type LabelItem = { id: string; x: number; y: number; w: number; h: number; g: number; pri: number; hard?: boolean; on?: boolean };
 /** 고른 자리 (이름표 왼쪽 위, 화면 px) */
 export type PlacedLabel = { id: string; left: number; top: number };
+
+/** 마지막 빈자리 찾기에서 장소 점과 이름표 사이 최대 거리 (화면 px) */
+const NEAR_MAX = 24;
 
 const hit = (a: Rect, b: Rect, pad: number) => a.x < b.x + b.w + pad && b.x < a.x + a.w + pad && a.y < b.y + b.h + pad && b.y < a.y + a.h + pad;
 
@@ -99,7 +113,8 @@ export function estimateTextWidth(text: string, size: number): number {
  */
 export function placeLabels(items: readonly LabelItem[], W: number, H: number, obstacles: readonly Rect[] = [], pad = 2, softIcons: readonly Rect[] = []): PlacedLabel[] {
   const sorted = [...items].sort((a, b) => a.pri - b.pri);
-  const icons = [...items.map((it) => ({ id: it.id, hard: !!it.hard, r: { x: it.x - it.g, y: it.y - it.g, w: it.g * 2, h: it.g * 2 } })), ...softIcons.map((r) => ({ id: "", hard: false, r }))];
+  // 구역 이름표(on)는 그림이 없으니 피할 것도 없다
+  const icons = [...items.filter((it) => !it.on).map((it) => ({ id: it.id, hard: !!it.hard, r: { x: it.x - it.g, y: it.y - it.g, w: it.g * 2, h: it.g * 2 } })), ...softIcons.map((r) => ({ id: "", hard: false, r }))];
   const placed: Rect[] = [...obstacles];
   const out: PlacedLabel[] = [];
   for (const it of sorted) {
@@ -116,6 +131,8 @@ export function placeLabels(items: readonly LabelItem[], W: number, H: number, o
       : [];
     const cands: [number, number][] = [
       ...busFirst,
+      // 11/26 구역 이름: 그 자리 가운데 → 조금 위·아래
+      ...(it.on ? ([[clampX(x - w / 2), y - h / 2], [clampX(x - w / 2), y - h - 1], [clampX(x - w / 2), y + 1]] as [number, number][]) : []),
       [clampX(x - w / 2), y - g - h - 1],
       [clampX(x - w / 2), y + g + 1],
       [x + g + 2, y - h / 2],
@@ -152,6 +169,22 @@ export function placeLabels(items: readonly LabelItem[], W: number, H: number, o
         }
       }
       if (got) break;
+    }
+    // 11/26 그래도 자리가 없으면 (폰 큰 지도의 붐비는 캠핑장 놀이터·펜션 입구) 장소 점에서 가까운 빈자리를 4px 간격으로 찾는다 —
+    // 이름표 있는 그림·자기 그림은 덮지 않고, 점에서 이름표 가장자리까지 NEAR_MAX px 안에서만 (멀면 어느 장소 이름인지 헷갈려요)
+    if (!got) {
+      let best = Infinity;
+      const own = icons.find((ic) => ic.id === it.id);
+      for (let dy = -NEAR_MAX - h; dy <= NEAR_MAX + h; dy += 4)
+        for (let dx = -NEAR_MAX - w; dx <= NEAR_MAX + w; dx += 4) {
+          const r = { x: Math.round(x - w / 2 + dx), y: Math.round(y - h / 2 + dy), w, h };
+          const ex = Math.max(r.x - x, 0, x - (r.x + r.w));
+          const ey = Math.max(r.y - y, 0, y - (r.y + r.h));
+          const d = Math.hypot(ex, ey);
+          if (d > NEAR_MAX || d >= best || (own && hit(own.r, r, 0)) || !fits(r, 1)) continue;
+          best = d;
+          got = r;
+        }
     }
     if (!got) continue;
     placed.push(got);

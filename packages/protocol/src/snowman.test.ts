@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CAMP_ARRIVE, CAMP_FIRE, CAMP_OFFICE, CAMP_ROAD, campStreamX } from "./camp";
 import { encodeEvent, parseC2S } from "./events";
-import { SNOWMAN_GAP, SNOWMAN_LIFE_MS, SNOWMAN_SHRINK_MS, SNOW_STACK_GAP, campSnowSpotOk, parseSnowHold, parseSnowStackInfo, parseSnowmanInfo, snowGapWhy, snowSizesOk, snowmanAlive, snowmanMelt } from "./snowman";
+import { CAMP_FORAGE_SPOTS, SNOW_NODE_GAP, SNOWMAN_GAP, SNOWMAN_LIFE_MS, SNOWMAN_SHRINK_MS, SNOW_STACK_GAP, campSnowSpotOk, isSnowAct, isSnowmanDenyWhy, parseSnowHold, parseSnowStackInfo, parseSnowmanInfo, snowGapWhy, snowLoneBlocks, snowSizesOk, snowmanAlive, snowmanMelt } from "./snowman";
 
 // 11/17 캠핑장 눈사람: 세우기 요청 모양·자리 검증·녹는 시각
 describe("snowman wire", () => {
@@ -12,6 +12,24 @@ describe("snowman wire", () => {
     expect(parseC2S(JSON.stringify({ t: "snowAdd", id: "K 1", s: 1 }))).toBeNull();
     expect(parseC2S(JSON.stringify({ t: "snowTake", id: "k1", x: 9 }))).toEqual({ t: "snowTake", id: "k1" });
     expect(parseC2S(JSON.stringify({ t: "snowman", x: 1, y: 2 }))).toBeNull();
+  });
+  it("11/26 허물기 snowBreak는 id만 받는다, 허문 덩이는 brk로 알린다", () => {
+    expect(parseC2S(JSON.stringify({ t: "snowBreak", id: "k1", x: 3 }))).toEqual({ t: "snowBreak", id: "k1" });
+    expect(parseC2S(JSON.stringify({ t: "snowBreak", id: "K 1" }))).toBeNull();
+    expect(parseC2S(JSON.stringify({ t: "snowBreak" }))).toBeNull();
+    expect(parseC2S(JSON.stringify({ t: "snowmanBreak", id: "m1", z: 1 }))).toEqual({ t: "snowmanBreak", id: "m1" });
+    expect(parseC2S(JSON.stringify({ t: "snowmanBreak", id: 3 }))).toBeNull();
+    expect(JSON.parse(encodeEvent({ t: "snowmanGone", id: "m1", brk: true }))).toEqual({ t: "snowmanGone", id: "m1", brk: true });
+    expect(JSON.parse(encodeEvent({ t: "snowStackGone", id: "k1", sid: 2, brk: true }))).toEqual({ t: "snowStackGone", id: "k1", sid: 2, brk: true });
+    expect(isSnowAct("break")).toBe(true);
+    expect(isSnowAct("drop")).toBe(false);
+    expect(isSnowmanDenyWhy("lone")).toBe(true);
+  });
+  it("11/26 몸통만 놓인 내 덩이가 있으면 새 덩이를 못 놓는다 (배를 올렸으면 된다)", () => {
+    expect(snowLoneBlocks([])).toBe(false);
+    expect(snowLoneBlocks([{ sizes: [2, 1] }])).toBe(false);
+    expect(snowLoneBlocks([{ sizes: [2, 1] }, { sizes: [2] }])).toBe(true);
+    expect(snowLoneBlocks([{ sizes: [1] }])).toBe(true);
   });
   it("11/18 들고 있는 상태: 크기만 받고 r은 true일 때만, null은 빈손", () => {
     expect(parseC2S(JSON.stringify({ t: "snowHold", h: { s: 1, r: true, z: 1 } }))).toEqual({ t: "snowHold", h: { s: 1, r: true } });
@@ -47,6 +65,12 @@ describe("snowman wire", () => {
 });
 
 describe("snowman spot", () => {
+  it("11/26 채집 지점 둘레 SNOW_NODE_GAP 안에는 못 놓는다 (안내가 겹치지 않게)", () => {
+    const [nx, ny] = CAMP_FORAGE_SPOTS.find(([x, y]) => x === 714 && y === 624)!;
+    expect(campSnowSpotOk(nx + 6, ny + 4)).toBe(false);
+    expect(campSnowSpotOk(nx, ny + SNOW_NODE_GAP - 1)).toBe(false);
+    for (const [x, y] of CAMP_FORAGE_SPOTS) expect(campSnowSpotOk(x, y)).toBe(false);
+  });
   it("눈밭은 되고, 물·버스 길·모닥불 자리·관리소·맵 밖은 안 된다 (11/18 모닥불 근처는 돼요)", () => {
     expect(campSnowSpotOk(330, 540)).toBe(true);
     expect(campSnowSpotOk(campStreamX(400), 400)).toBe(false);

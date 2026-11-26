@@ -50,6 +50,11 @@ export default function MobileControls({
   const passenger = useBridgeValue("boat:passenger")?.on === true;
   // 11/18 캠핑장 눈덩이를 들고 있으면 점프 대신 굴리기 (들고 있는 동안 점프는 막혀 있다)
   const snowball = useBridgeValue("camp:snowball")?.held === true;
+  // 11/26 쌓다 만 내 눈덩이 앞이면 [앉기] 자리가 [허물기] (게임이 input:sit을 허물기로 받는다)
+  const snowBreakNear = useBridgeValue("camp:snowBreak");
+  const snowBreak = snowBreakNear?.near === true;
+  // 11/26 다 세운 내 눈사람 앞이면 [허물기]를 길게 누른다 (누르는 동안 input:sitHold)
+  const snowBreakHold = snowBreak && snowBreakNear?.hold === true;
   // 11/18 눈싸움: 바닷가·실내에서는 숨긴다 (장면이 바뀌는 사이 남은 값이 있어도)
   const map = useBridgeValue("map:changed")?.map;
   const scene = useBridgeValue("scene:changed")?.scene;
@@ -88,16 +93,20 @@ export default function MobileControls({
             {duck ? "꽥!" : car ? "빵빵!" : "점프"}
           </button>
         )}
-        <button
-          type="button"
-          className={styles.action}
-          data-slot="sit"
-          data-near={nearSeat != null || passenger}
-          // 같이 탔으면 [내리기]는 낚시 창이 열려 있어도(키가 막혀 있어도) 바로 내린다
-          {...pressProps(() => (passenger ? bridge.emit("boat:moveOff") : bridge.emit("input:sit")))}
-        >
-          {passenger ? "내리기" : nearSeat ? (nearSeat.kind === "bench" ? "벤치에 앉기" : "의자에 앉기") : "앉기"}
-        </button>
+        {snowBreakHold && !passenger ? (
+          <HoldBreakButton off={chatOpen || viewing} />
+        ) : (
+          <button
+            type="button"
+            className={styles.action}
+            data-slot="sit"
+            data-near={nearSeat != null || passenger || snowBreak}
+            // 같이 탔으면 [내리기]는 낚시 창이 열려 있어도(키가 막혀 있어도) 바로 내린다
+            {...pressProps(() => (passenger ? bridge.emit("boat:moveOff") : bridge.emit("input:sit")))}
+          >
+            {passenger ? "내리기" : snowBreak ? "허물기" : nearSeat ? (nearSeat.kind === "bench" ? "벤치에 앉기" : "의자에 앉기") : "앉기"}
+          </button>
+        )}
         <button
           type="button"
           className={styles.action}
@@ -129,6 +138,68 @@ export default function MobileControls({
         <RideButton variant="touch" className={styles.action} />
       </div>
     </>
+  );
+}
+
+/**
+ * 11/26 [허물기] (다 세운 내 눈사람 앞에서 [앉기] 자리): 누르고 있는 동안 input:sitHold on — 게임이 눈사람에 막대를 채우고 다 차면 허문다.
+ * 떼거나 off(채팅 입력·바라보는 장면)·버튼이 사라지면 뗀 것으로 친다 ([굴리기]와 같은 손가락 붙잡기)
+ */
+function HoldBreakButton({ off }: { off: boolean }) {
+  const [held, setHeld] = useState(false);
+  const pointer = useRef<number | null>(null);
+
+  function release() {
+    if (pointer.current === null) return;
+    pointer.current = null;
+    setHeld(false);
+    bridge.emit("input:sitHold", { on: false });
+  }
+
+  useEffect(() => {
+    if (off) release();
+  });
+  useEffect(
+    () => () => {
+      if (pointer.current !== null) bridge.emit("input:sitHold", { on: false });
+    },
+    [],
+  );
+
+  function onDown(e: PointerEvent<HTMLButtonElement>) {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (pointer.current !== null) return;
+    e.preventDefault();
+    pointer.current = e.pointerId;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // 붙잡지 못해도 pointerup·cancel로 뗀다
+    }
+    setHeld(true);
+    bridge.emit("input:sitHold", { on: true });
+  }
+
+  function onUp(e: PointerEvent<HTMLButtonElement>) {
+    if (e.pointerId === pointer.current) release();
+  }
+
+  return (
+    <button
+      type="button"
+      className={styles.action}
+      data-slot="sit"
+      data-near
+      data-held={held || undefined}
+      aria-pressed={held}
+      aria-label="허물기: 길게 누르면 내 눈사람을 허물어요"
+      onPointerDown={onDown}
+      onPointerUp={onUp}
+      onPointerCancel={onUp}
+      onLostPointerCapture={onUp}
+    >
+      {held ? "허무는 중" : "허물기"}
+    </button>
   );
 }
 

@@ -48,6 +48,7 @@ import {
   SNOWBALL_HIT_H_MAX,
   isSnowBall,
   isSnowmanDenyWhy,
+  isSnowAct,
   type SnowAct,
   type SnowBall,
   type SnowHold,
@@ -180,16 +181,16 @@ export type NetCallbacks = {
   onSnowmen?(list: SnowmanInfo[], stacks: SnowStackInfo[]): void;
   /** 누가 세웠다 (내 것 포함, sid = 세운 사람, st = 눈사람으로 바뀐 덩이) */
   onSnowman?(s: SnowmanInfo, sid: Sid, st?: string): void;
-  /** 개수가 넘쳐 서버가 먼저 녹였다 */
-  onSnowmanGone?(id: string): void;
+  /** 개수가 넘쳐 서버가 먼저 녹였다. brk = 11/26 세운 사람이 허물었다 (눈가루와 함께 바로 사라진다 — 아니면 녹은 것처럼 웅덩이) */
+  onSnowmanGone?(id: string, brk?: boolean): void;
   /** 내 내려놓기·올리기·다시 들기(a)를 서버가 받지 않았다 */
   onSnowmanDenied?(why: SnowmanDenyWhy, a?: SnowAct, id?: string): void;
   /** 11/18 누가 들고 있는 눈덩이가 바뀌었다 (나 빼고) */
   onSnowHold?(sid: Sid, h: SnowHold | null): void;
   /** 11/18 덩이가 놓였다·바뀌었다 (내 것은 확인). h = 주인이 이제 든 크기 (없으면 빈손) */
   onSnowStack?(st: SnowStackInfo, h?: SnowBall): void;
-  /** 11/18 덩이가 사라졌다. took = 주인이 마지막 덩이를 다시 들었다 */
-  onSnowStackGone?(id: string, sid: Sid, took?: SnowBall): void;
+  /** 11/18 덩이가 사라졌다. took = 주인이 마지막 덩이를 다시 들었다, brk = 11/26 주인이 허물었다 */
+  onSnowStackGone?(id: string, sid: Sid, took?: SnowBall, brk?: boolean): void;
   // ── 11/18 마을·캠핑장 눈싸움 (같은 맵) ──
   /** sid가 n번 눈을 (x,y)에서 (tx,ty)로 던졌다 (내 것은 오지 않는다) */
   onSnowball?(sid: Sid, n: number, x: number, y: number, tx: number, ty: number): void;
@@ -657,6 +658,20 @@ export class RealtimeClient {
     return true;
   }
 
+  /** 11/26 쌓다 만 내 덩이를 허문다 */
+  snowBreak(id: string): boolean {
+    if (!this.online) return false;
+    this.send({ t: "snowBreak", id });
+    return true;
+  }
+
+  /** 11/26 다 세운 내 눈사람을 허문다 */
+  snowmanBreak(id: string): boolean {
+    if (!this.online) return false;
+    this.send({ t: "snowmanBreak", id });
+    return true;
+  }
+
   // ── 11/18 눈싸움 (접속 중이 아니면 false — 보내지 않는다) ──
 
   /** 눈을 던진다: (x,y) = 내 발, (tx,ty) = 떨어질 곳. 서버는 위치를 넉넉히 비교하니 위치를 따로 먼저 보내지 않는다 (요청 수를 늘리지 않게) */
@@ -1000,13 +1015,13 @@ export class RealtimeClient {
           break;
         }
         case "snowStackGone":
-          if (typeof m.id === "string" && typeof m.sid === "number") this.h.onSnowStackGone?.(m.id, m.sid, isSnowBall(m.took) ? m.took : undefined);
+          if (typeof m.id === "string" && typeof m.sid === "number") this.h.onSnowStackGone?.(m.id, m.sid, isSnowBall(m.took) ? m.took : undefined, m.brk === true);
           break;
         case "snowmanGone":
-          if (typeof m.id === "string") this.h.onSnowmanGone?.(m.id);
+          if (typeof m.id === "string") this.h.onSnowmanGone?.(m.id, m.brk === true);
           break;
         case "snowmanDenied":
-          this.h.onSnowmanDenied?.(isSnowmanDenyWhy(m.why) ? m.why : "spot", m.a === "put" || m.a === "add" || m.a === "take" ? m.a : undefined, typeof m.id === "string" ? m.id : undefined);
+          this.h.onSnowmanDenied?.(isSnowmanDenyWhy(m.why) ? m.why : "spot", isSnowAct(m.a) ? m.a : undefined, typeof m.id === "string" ? m.id : undefined);
           break;
         case "count":
           if (typeof m.n === "number" && Number.isFinite(m.n)) {

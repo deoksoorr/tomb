@@ -56,7 +56,8 @@ function enqueue(r: ErrorReport): void {
 
 // 11/18 우리 코드 탓이 아닌 오류는 보내지 않는다 (운영 오류 기록: 확장 프로그램 M_ID, 인앱 브라우저 iabjs postMessage, 출처를 알 수 없는 Script error)
 const FOREIGN_STACK = /(chrome|moz|safari(-web)?)-extension:\/\/|iabjs:\/\/|webkit-masked-url:/;
-const FOREIGN_MESSAGE = /^Script error\.?$|Java object is gone/;
+// 11/26 ResizeObserver 반복 경고도 거른다 (한 프레임에 크기 알림을 다 못 보냈다는 브라우저 안내 — 화면은 다음 프레임에 맞춰진다)
+const FOREIGN_MESSAGE = /^Script error\.?$|Java object is gone|^ResizeObserver loop (completed with undelivered notifications|limit exceeded)/;
 
 /** 우리 코드 밖(확장 프로그램·인앱 브라우저·다른 출처 스크립트)에서 난 오류인지 (순수) */
 export function isForeignError(message: string, stack?: string): boolean {

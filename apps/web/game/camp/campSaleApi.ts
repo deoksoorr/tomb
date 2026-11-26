@@ -1,4 +1,4 @@
-import { CAMP_LOTS, campLotByNo, caravanDesignOf, type CampHomeKind, type CampLot, type CampYard, type CaravanDesign } from "@tomb/protocol";
+import { CAMP_HOME_KIND_NAME, CAMP_LOTS, CAMP_NPCS, campLotByNo, caravanDesignOf, type CampHomeKind, type CampLot, type CampNpcId, type CampYard, type CaravanDesign } from "@tomb/protocol";
 import { request } from "@/lib/api";
 import type { MyHouseResponse, PublicHouse, VillageHouse, VillageResponse } from "@/lib/housing/types";
 import { SALE_KINDS, type SaleKind } from "@/lib/housing/catalog";
@@ -64,6 +64,25 @@ export function campOf(h: { lot: number; camp?: Partial<CampHouseInfo> | null })
   const y = h.camp?.yard;
   return { kind, yard: y === 2 || y === 3 ? y : 1, ...(kind === "caravan" ? { design: caravanDesignOf(h.lot, h.camp?.design) } : {}) };
 }
+/**
+ * 11/26 캠핑장 분양 NPC (종류마다 한 사람). 분양 창은 이 세 사람에게 말을 걸어서만 연다
+ * (운영자 「헷갈려한다」 → 「카라반, 촌캉스도 NPC만으로 통일」 — 입간판·빈 터 팻말은 없고, 빈 터 E는 누구에게 가면 되는지 안내만)
+ */
+export const CAMP_SALE_NPC: Record<CampHomeKind, CampNpcId> = { caravan: "keeper", pension: "sosul", rural: "suni" };
+/** 말을 건 NPC가 파는 종류 (분양 NPC가 아니면 null) */
+export function campSaleKindOf(id: CampNpcId): CampHomeKind | null {
+  return (Object.keys(CAMP_SALE_NPC) as CampHomeKind[]).find((k) => CAMP_SALE_NPC[k] === id) ?? null;
+}
+/** 「카라반 분양은 언젠가 씨에게 물어보세요.」 */
+export function campSaleHint(kind: CampHomeKind): string {
+  const name = CAMP_NPCS.find((n) => n.id === CAMP_SALE_NPC[kind])?.name ?? "";
+  return `${CAMP_HOME_KIND_NAME[kind]} 분양은 ${name}에게 물어보세요.`;
+}
+/** 빈 터 문 앞(빈 카라반 자리는 가운데) E: 분양 창 대신 그 종류 NPC 안내 토스트만 */
+export function emptyDoorAction(l: CampLot): { label: string; toast: string } {
+  return { label: "분양 안내", toast: campSaleHint(l.kind) };
+}
+
 export const isCampHouse = (h: { zone?: string } | null | undefined): boolean => (h as { zone?: string } | null)?.zone === "camp";
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);

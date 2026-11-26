@@ -42,7 +42,9 @@ export const GET = handler(async (req) => {
   });
   // 11/26 `&v=` = 실시간 서버의 집 바뀜 알림(homes)을 받은 화면들이 같은 값으로 묻는다 → 서버 메모리는 건너뛰고, CDN은 v마다 한 번만 여기로 온다
   const fresh = req.nextUrl.searchParams.has("t") || req.nextUrl.searchParams.has("v") || !!swept?.reclaimed.length;
+  // 11/26 stale-while-revalidate 하루 → 45초: 조용한 채널은 맵에 들어갈 때 몇 분·몇 시간 묵은 목록(분양 전)을 받아 5분 들고 있었다
+  // (운영: 카라반 분양이 새로고침해야 보였다). 뒤에서 다시 받는 횟수는 같고, 1분 넘게 아무도 안 물은 주소만 한 번 기다려 새로 받는다
   return json<VillageResponse>(await cachedVillage(parsed.data, fresh, zoneOfQuery(req.nextUrl.searchParams.get("zone"))), {
-    headers: { "Vercel-CDN-Cache-Control": "max-age=15, stale-while-revalidate=86400", "Cache-Control": "no-store" },
+    headers: { "Vercel-CDN-Cache-Control": "max-age=15, stale-while-revalidate=45", "Cache-Control": "no-store" },
   });
 });

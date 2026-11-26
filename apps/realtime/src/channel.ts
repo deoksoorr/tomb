@@ -269,6 +269,8 @@ export interface ChannelHost<C> {
   snowmenChanged?(list: unknown): void;
   /** 11/18 쌓는 중인 덩이 목록이 바뀌었다 (내려놓기·올리기·다시 들기·사라짐) → 저장 (깨면 restoreSnowStacks) */
   snowStacksChanged?(list: unknown): void;
+  /** 11/26 구역별 마지막 집 바뀜 v가 바뀌었다 → 저장 (깨면 restoreHomes — 늦게 들어온 사람에게 입장 때 보낸다) */
+  homesChanged?(snap: unknown): void;
 }
 
 /**
@@ -893,6 +895,8 @@ export class ChannelCore<C extends object> {
     });
     // 11/17 캠핑장이면 지금 서 있는 눈사람
     if (!this.cfg.room && map === "camp") this.sendSnowmen(p, now);
+    // 11/26 이 채널 구역별 마지막 집 바뀜 (늦게 들어온 사람도 CDN 옛 목록을 거르게 — 웹 homesRefresh staleHomesV. 옛 웹은 다시 한 번 받을 뿐)
+    if (!this.cfg.room) for (const [zone, v] of this.homes.known()) this.sendTo(p, { t: "homes", zone, v });
     // 고블린을 잡았는데 증서를 받기 전에 끊겼다 → 다시 보낸다 (웹은 같은 고블린을 한 번만 지급한다)
     const owed = this.goblinOn ? this.goblin.grantFor(p.visitorId, now) : null;
     if (owed) this.sendTo(p, { t: "goblinGrant", ...owed });
@@ -1276,6 +1280,8 @@ export class ChannelCore<C extends object> {
       case "snowPut":
       case "snowAdd":
       case "snowTake":
+      case "snowBreak":
+      case "snowmanBreak":
         return this.onSnowAct(p, m, now);
       case "snowball":
         return this.onSnowball(p, m, now);
@@ -1378,18 +1384,19 @@ export class ChannelCore<C extends object> {
   }
 
   /**
-   * 11/18 덩이 내려놓기(snowPut)·올리기(snowAdd)·다시 들기(snowTake). 자리·간격·주인·쌓는 순서를 서버가 보고,
+   * 11/18 덩이 내려놓기(snowPut)·올리기(snowAdd)·다시 들기(snowTake)·11/26 허물기(snowBreak·다 세운 눈사람 snowmanBreak). 자리·간격·주인·쌓는 순서를 서버가 보고,
    * 받으면 같은 캠핑장 모두(주인 포함 — 확인)에게 snowStack·snowStackGone, 세 단째를 올리면 그 자리에 눈사람을 세운다 (snowman.st).
    * 거절은 보낸 사람에게만 snowmanDenied (+ 내 덩이면 지금 모양을 다시 — 웹이 미리 바꾼 화면을 맞춘다. 없는 덩이면 snowStackGone,
    * 남의 덩이면 더 보내지 않는다 — 그 모양은 이미 모두가 받았다)
    */
-  private onSnowAct(p: Peer<C>, m: Extract<C2S, { t: "snowPut" | "snowAdd" | "snowTake" }>, now: number): void {
+  private onSnowAct(p: Peer<C>, m: Extract<C2S, { t: "snowPut" | "snowAdd" | "snowTake" | "snowBreak" | "snowmanBreak" }>, now: number): void {
     if (!this.snowOk(p)) return;
-    const a: SnowAct = m.t === "snowPut" ? "put" : m.t === "snowAdd" ? "add" : "take";
+    const a: SnowAct = m.t === "snowPut" ? "put" : m.t === "snowAdd" ? "add" : m.t === "snowTake" ? "take" : "break";
     const id = m.t === "snowPut" ? undefined : m.id;
     const deny = (why: SnowmanDenyWhy) => {
       this.sendTo(p, { t: "snowmanDenied", why, a, ...(id ? { id } : {}) });
-      if (!id) return;
+      // 눈사람 허물기는 덩이 모양을 다시 보낼 것이 없다
+      if (!id || m.t === "snowmanBreak") return;
       const st = this.stacks.mine(p.visitorId, id);
       if (st) this.sendTo(p, { t: "snowStack", st });
       else if (!this.stacks.has(id)) this.sendTo(p, { t: "snowStackGone", id, sid: p.sid });
@@ -1401,6 +1408,22 @@ export class ChannelCore<C extends object> {
     if (acts.length >= SNOW_ACTS_PER_MINUTE) return deny("wait");
     acts.push(now);
     this.stacks.prune(now, this.inCamp);
+    // 11/26 다 세운 내 눈사람 허물기 (웹은 길게 눌러야 보낸다): 세운 사람만, 가까이에서. 저장하고 모두에게 snowmanGone.brk (눈가루)
+    if (m.t === "snowmanBreak") {
+      const r = this.snowmen.dismantle(p.visitorId, m.id, p.x, p.y, now);
+      if (!r.ok) return deny(r.why);
+      p.lastSnowActAt = now;
+      this.host.snowmenChanged?.(this.snowmen.snapshot());
+      return this.broadcastMap("camp", encodeEvent({ t: "snowmanGone", id: m.id, brk: true }));
+    }
+    // 11/26 허물기: 내 덩이만, 서 있는 자리 가까이에서. 손은 그대로 (들고 있던 것도 그대로) — 모두에게 brk (눈가루)
+    if (m.t === "snowBreak") {
+      const r = this.stacks.dismantle(p.visitorId, m.id, p.x, p.y);
+      if (!r.ok) return deny(r.why);
+      p.lastSnowActAt = now;
+      this.stacksChanged();
+      return this.broadcastMap("camp", encodeEvent({ t: "snowStackGone", id: r.st.id, sid: p.sid, brk: true }));
+    }
     if (m.t === "snowTake") {
       const r = this.stacks.take(p.visitorId, m.id, now);
       if (!r.ok) return deny(r.why);
@@ -1746,6 +1769,7 @@ export class ChannelCore<C extends object> {
     if (this.cfg.room) return { ok: false, flushIn: null };
     const r = this.homes.offer(zone, v, now);
     if (r.send !== null) this.broadcast(homesEvent({ zone, v: r.send }));
+    if (this.homes.remember(zone, v)) this.host.homesChanged?.(this.homes.snapshot());
     return { ok: true, flushIn: r.flushIn };
   }
 
@@ -2040,6 +2064,11 @@ export class ChannelCore<C extends object> {
   /** 11/18 저장해 둔 쌓는 중인 덩이 (DO가 잠들었다 깨어날 때 — 접속자를 되살린 다음에 부른다) */
   restoreSnowStacks(raw: unknown, now = Date.now()): void {
     if (!this.cfg.room) this.stacks.restore(raw, now);
+  }
+
+  /** 11/26 저장해 둔 구역별 마지막 집 바뀜 v (DO가 잠들었다 깨어날 때) */
+  restoreHomes(raw: unknown): void {
+    if (!this.cfg.room) this.homes.restore(raw);
   }
 
   /** DO가 고블린 때문에 깨어나야 하는 시각 (없으면 null) */

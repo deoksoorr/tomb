@@ -310,6 +310,8 @@ export class AvatarView {
       this.texKey = key;
       this.anim = "";
       this.swingFrame = -1;
+      // 11/26 옛 시트 애니메이션(몸짓 중이면 apply가 바로 안 바꾼다)을 멈춘다 — 남아 돌면 원장이 옛 시트를 지울 때 Phaser가 터진다
+      this.sprite.stop();
       if (this.lying || this.pose) {
         this.lying = false;
         this.pose = null;
@@ -839,6 +841,8 @@ export class AvatarView {
 
   /** 상태·방향 반영. 바뀔 때만 애니메이션을 바꾼다 */
   apply(state: StateName, dir: DirId, now: number): void {
+    // 11/26 장면이 내려가면 Phaser가 화면 목록(스프라이트)을 먼저 지우고 장면 정리(배·카약에서 내리기 등)가 뒤에 온다 — 지운 그림은 건드리지 않는다
+    if (!this.sprite.scene) return;
     const sitting = state === "sitGround" || state === "sitChair";
     if (sitting && !(this.state === "sitGround" || this.state === "sitChair")) this.sitSince = now || 1;
     if (!sitting) this.sitSince = 0;

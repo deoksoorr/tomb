@@ -18,6 +18,11 @@ describe("isForeignError (11/18 우리 탓이 아닌 오류 거르기)", () => {
     expect(isForeignError("Error invoking postMessage: Java object is gone", "Error\n    at sendDataToNative (iabjs://navigation_performance_logger_android:1:11722)")).toBe(true);
     expect(isForeignError("Script error.")).toBe(true);
   });
+  it("11/26 브라우저가 알리는 ResizeObserver 반복 경고는 거른다 (오류가 아니다)", () => {
+    expect(isForeignError("ResizeObserver loop completed with undelivered notifications.")).toBe(true);
+    expect(isForeignError("ResizeObserver loop limit exceeded")).toBe(true);
+    expect(isForeignError("ResizeObserver is not defined")).toBe(false);
+  });
   it("우리 번들에서 난 오류는 보낸다 (확장 프로그램이 끼어 있어도)", () => {
     expect(isForeignError("Cannot read properties of null (reading 'x')", "TypeError\n    at dp.panBy (https://myproject.rip/_next/static/chunks/a.js:46:5440)")).toBe(false);
     expect(isForeignError("boom", "Error\n    at a (https://myproject.rip/_next/static/chunks/a.js:1:1)\n    at b (chrome-extension://abc/x.js:1:1)")).toBe(false);

@@ -126,4 +126,26 @@ describe("11/26 집 바뀜 알림 (homes)", () => {
     const v2 = sent.at(-1)!.v;
     expect((await bodyOf<VillageResponse>(villageRoute.GET(call(`/api/housing/village?ch=${ch}&zone=camp&v=${v2}`)))).houses.map((h) => h.lot).sort()).toEqual([5, 6]);
   });
+
+  // 11/26 운영: 카라반 분양이 새로고침해야 보였다 — 맵에 들어갈 때 받은 CDN 옛 목록(stale-while-revalidate 하루)을 5분 들고 있었다
+  it("옛 목록은 알림 v보다 먼저 만든 것(generatedAt < v)이라 화면이 거를 수 있고, CDN은 옛 목록을 오래 주지 않는다", async () => {
+    const ch = 8;
+    const a = await newVisitor("늦게옴", 200_000);
+    const old = await bodyOf<VillageResponse>(villageRoute.GET(call(`/api/housing/village?ch=${ch}&zone=camp`)));
+    await new Promise((r) => setTimeout(r, 5));
+    await buy.POST(call("/api/housing/me/buy", { visitor: a, body: { ch, lot: 2, zone: "camp", kind: "caravan" } }));
+    await flush();
+    const v = sent.at(-1)!.v;
+    const cached = await bodyOf<VillageResponse>(villageRoute.GET(call(`/api/housing/village?ch=${ch}&zone=camp`)));
+    expect(cached.houses).toHaveLength(0);
+    expect(cached.generatedAt).toBe(old.generatedAt);
+    expect(cached.generatedAt).toBeLessThan(v);
+    const fresh = await bodyOf<VillageResponse>(villageRoute.GET(call(`/api/housing/village?ch=${ch}&zone=camp&v=${v}`)));
+    expect(fresh.generatedAt).toBeGreaterThanOrEqual(v);
+    const cdn = (await villageRoute.GET(call(`/api/housing/village?ch=${ch}&zone=camp`))).headers.get("Vercel-CDN-Cache-Control") ?? "";
+    const swr = Number(/stale-while-revalidate=(\d+)/.exec(cdn)?.[1] ?? 0);
+    expect(cdn).toContain("max-age=15");
+    expect(swr).toBeGreaterThan(0);
+    expect(swr).toBeLessThanOrEqual(60);
+  });
 });

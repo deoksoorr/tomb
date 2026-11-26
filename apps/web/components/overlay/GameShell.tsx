@@ -117,6 +117,7 @@ import GiftsDialog from "../account/GiftsDialog";
 import FriendsDialog from "../account/FriendsDialog";
 import { useFriendPresence } from "./useFriendPresence";
 import FriendNotice from "./FriendNotice";
+import OpShoutSpot from "./OpShoutSpot";
 import CampTalk from "../camp/CampTalk";
 import CampBgm from "../camp/CampBgm";
 import CampBbq from "../camp/CampBbq";
@@ -872,6 +873,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {ready && <SproutTip />}
       {/* 친구 안내 띠 (접속·퇴장·친구 옆으로): 화면 가운데, 집·사냥터 안에서도 보이게 월드 HUD 밖에 */}
       {ready && <FriendNotice />}
+      {/* 11/26 운영자 외치기: 확성기 모양 가운데 알림 (집·사냥터 안에서도 보이게 월드 HUD 밖에) */}
+      {ready && <OpShoutSpot />}
       {/* 11/15 캠핑장: NPC 대화 창·배경음 (캠핑장에 있을 때만 일한다) */}
       {ready && <CampTalk />}
       {ready && <CampBgm />}

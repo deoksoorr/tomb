@@ -222,8 +222,8 @@ describe("11/26 캠핑장 그림이 캔버스 끝에서 잘리지 않아요", ()
 
   it("맵 소품 (campValleyTex — 기본·겨울·크리스마스 판 전부, 바닥에 까는 판 제외)", async () => {
     const { forEachValleyTex } = await import("./campValleyTex");
-    // 물결·물보라·김·빛 (흐릿한 효과 시트) · 땅에 까는 판(잔디·잔교·선착장·디딤돌·부표 줄·얼음 구멍·폭포·절벽 — 끝이 맵 다른 그림과 이어진다)
-    const SKIP = /-v-(cliff|falls|foam|drop|ripple|rainbow|lawn|step|wpier|rowdock|buoys|iceHole|steamCol|vbridge)/;
+    // 물결·물보라·빛 (흐릿한 효과 시트) · 땅에 까는 판(잔디·잔교·선착장·디딤돌·부표 줄·얼음 구멍·폭포·절벽 — 끝이 맵 다른 그림과 이어진다)
+    const SKIP = /-v-(cliff|falls|foam|drop|ripple|rainbow|lawn|step|wpier|rowdock|buoys|iceHole|vbridge)/;
     // 좌대: 아랫줄은 물에 잠기는 받침·사다리 (일부러 끝까지) · 잔교에 붙은 좌대(1~3)의 윗줄은 잔교로 이어지는 판자 다리
     const LINKED = new Set(CAMP_RAFTS.filter((r) => r.link).map((r) => `raft${r.n}`));
     const fails: string[] = [];
@@ -329,7 +329,6 @@ describe("11/26 캠핑장 그림이 캔버스 끝에서 잘리지 않아요", ()
     const fails: string[] = [];
     for (const concept of ["default", "christmas", "winter"] as const)
       forEachValleyTex(concept as never, (key, build) => {
-        if (/-v-steamCol/.test(key)) return; // 그라디언트 김 (가짜 캔버스로는 못 굽는다 — 판과 상관없는 한 장)
         const c = build().canvas as unknown as FakeCanvas;
         const d = c.px();
         let sum = 0;

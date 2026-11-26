@@ -24,6 +24,8 @@ const c = (g: Grid): ValleyBuilt => ({ canvas: g.toCanvas() });
 /** 겨울·크리스마스 판이면 윗면에 눈 */
 const sc = (f: Flags, cv: HTMLCanvasElement, maxY: number): HTMLCanvasElement => (f.snowy ? snowCap(cv, { depth: 1, maxY }) : cv);
 
+const vbridgeFull = (f: Flags): Grid => (f.snowy ? A.snowDust(A.viewBridgeArt(), 0.36, 5) : A.viewBridgeArt());
+
 /** 판에 따라 달라지는 그림인지 (키에 판을 붙인다) — 나머지는 한 장 */
 const BUILDS: Record<string, { build: Build; by: "none" | "snow" | "xmas" }> = {
   cliff: { by: "snow", build: (f) => c(A.cliffArt(f.snowy)) },
@@ -40,10 +42,12 @@ const BUILDS: Record<string, { build: Build; by: "none" | "snow" | "xmas" }> = {
   drop: { by: "none", build: () => c(A.dropArt()) },
   ripple: { by: "none", build: () => c(A.rippleArt()) },
   rainbow: { by: "none", build: () => ({ canvas: A.rainbowArt().toCanvas(), linear: true }) },
-  vbridge: { by: "snow", build: (f) => c(f.snowy ? A.snowDust(A.viewBridgeArt(), 0.36, 5) : A.viewBridgeArt()) },
+  vbridge: { by: "snow", build: (f) => c(vbridgeFull(f)) },
+  // 11/26 폭포 다리 뒤·앞 난간 가림판 (사람 깊이 사이에 끼워 그린다 — CampMap.addBridges)
+  vbridgeBack: { by: "snow", build: (f) => c(A.viewBridgeRail(vbridgeFull(f), "back")) },
+  vbridgeFront: { by: "snow", build: (f) => c(A.viewBridgeRail(vbridgeFull(f), "front")) },
   shrub0: { by: "snow", build: (f) => c(A.ledgeShrubArt(0, f.snowy)) },
   shrub1: { by: "snow", build: (f) => c(A.ledgeShrubArt(1, f.snowy)) },
-  saleStand: { by: "snow", build: (f) => ({ canvas: sc(f, A.saleStandArt().toCanvas(), 20) }) },
   lamp: { by: "snow", build: (f) => ({ canvas: sc(f, A.lampPostArt().toCanvas(), 20) }) },
   scree1: { by: "snow", build: (f) => c(A6.screeArt(1, f.snowy, !f.snowy)) },
   scree2: { by: "snow", build: (f) => c(A6.screeArt(2, f.snowy, !f.snowy)) },
@@ -53,7 +57,6 @@ const BUILDS: Record<string, { build: Build; by: "none" | "snow" | "xmas" }> = {
   snowman2: { by: "none", build: () => ({ canvas: snowman(2) }) },
   gifts0: { by: "none", build: () => ({ canvas: giftPile(0) }) },
   gifts1: { by: "none", build: () => ({ canvas: giftPile(1) }) },
-  penStand: { by: "snow", build: (f) => ({ canvas: sc(f, A3.pensionStandArt().toCanvas(), 20) }) },
   slide: { by: "xmas", build: (f) => c(f.snowy ? A3.sledHillArt(f.xmas) : A3.waterSlideArt()) },
   sledRide: { by: "none", build: () => c(A3.sledRideArt()) },
   trampB: { by: "none", build: () => c(A4.bigTrampolineArt().back) },
@@ -81,9 +84,6 @@ const BUILDS: Record<string, { build: Build; by: "none" | "snow" | "xmas" }> = {
       return { canvas: f.snowy ? snowCap(cv, { depth: 1, maxY: A6.FOOTBATH.h - 6 }) : cv };
     },
   },
-  steamCol0: { by: "none", build: () => ({ canvas: A6.steamColumnCanvas(0), linear: true }) },
-  steamCol1: { by: "none", build: () => ({ canvas: A6.steamColumnCanvas(1.7), linear: true }) },
-  steamCol2: { by: "none", build: () => ({ canvas: A6.steamColumnCanvas(3.4), linear: true }) },
   wpier: { by: "snow", build: (f) => c(f.snowy ? A.snowDust(A4.widePierArt(L.PIER.x1 - L.PIER.x0), 0.28, 9) : A4.widePierArt(L.PIER.x1 - L.PIER.x0)) },
   rowdock: { by: "snow", build: (f) => c(f.snowy ? A.snowDust(A6.rowDockArt(L.ROW_DOCK.len), 0.3, 13) : A6.rowDockArt(L.ROW_DOCK.len)) },
   boatSign: { by: "snow", build: (f) => ({ canvas: sc(f, A6.boatSignArt().toCanvas(), 14) }) },
@@ -118,7 +118,7 @@ const BUILDS: Record<string, { build: Build; by: "none" | "snow" | "xmas" }> = {
  */
 const PAD_BOTTOM = new Set(["bike", "gLamp", "lightArch", "penSign", "scree1", "scree2", "woodpile"]);
 const PADDED = new Set([
-  "saleStand", "lamp", "scree1", "scree2", "shrub0", "shrub1", "woodpile", "snowman0", "snowman1", "snowman2", "gifts0", "gifts1", "penStand", "sledRide", "trampB", "trampF",
+  "lamp", "scree1", "scree2", "shrub0", "shrub1", "woodpile", "snowman0", "snowman1", "snowman2", "gifts0", "gifts1", "sledRide", "trampB", "trampF",
   "firewood", "swing", "hammockSun", "hammockMint", "hammockPosts", "planter30", "planter22", "penSign", "lightArch", "gLamp", "bike", "car", "footbath", "boatSign", "fishRock",
   "swimSign", "bankSeat", "snack", "xtree", "sooni",
 ]);

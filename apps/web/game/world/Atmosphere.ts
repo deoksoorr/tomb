@@ -2,7 +2,7 @@ import * as Phaser from "phaser";
 import { ambienceAt, kstHour, parseAmbienceOverride, type Ambience, type AmbienceOverride } from "@/lib/ambience";
 import { TEX } from "../assets/manifest";
 import { DEPTH, ZOOM_MIN } from "../config";
-import { LevelBlender, levelsFor, recheckDelay, TRANSITION_MS, type Levels } from "./ambienceMix";
+import { drawnAmbience, fireflyLevel, LevelBlender, levelsFor, recheckDelay, TRANSITION_MS, type Levels } from "./ambienceMix";
 import { isQuietHour, THUNDER_MIN_RAIN, thunderDelaySec, thunderFlash, thunderGapMs } from "./weatherMath";
 import { centerFade, gust, pulse, smooth01, wrapInto } from "./weatherNoise";
 import { WeatherSound } from "./WeatherSound";
@@ -257,7 +257,7 @@ export class Atmosphere {
 
   /** 11/26 날씨 효과를 끈 기기는 맑은 날처럼 그린다 (시간대 색은 그대로 — 화면 위 날씨 글은 진짜 날씨에 가로줄) */
   private static drawn(a: Ambience): Ambience {
-    return weatherFxOn() ? a : { ...a, weather: "clear", intensity: 0 };
+    return drawnAmbience(a, weatherFxOn());
   }
 
   /**
@@ -375,7 +375,8 @@ export class Atmosphere {
     this.updateSplashes(time, dt, lite ? 0 : rain * burst, view);
     // 날씨 효과를 끄면 낙엽도 날리지 않는다
     this.updateLeaves(time, dt, this.indoor || this.snowy || !weatherFxOn() ? 0 : L.leaves, view, lite);
-    this.updateFireflies(time, dt, L.fireflies, view, lite);
+    // 겨울·크리스마스판은 반딧불 없음 (멈춘 눈송이처럼 보였다 — ambienceMix fireflyLevel)
+    this.updateFireflies(time, dt, fireflyLevel(L.fireflies, this.snowy), view, lite);
   }
 
   // ── 천둥·번개 ──

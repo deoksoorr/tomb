@@ -101,6 +101,10 @@ export type C2S =
   | { t: "snowAdd"; id: string; s: SnowBall }
   /** 내 덩이 id의 맨 위를 다시 든다 */
   | { t: "snowTake"; id: string }
+  /** 11/26 쌓다 만 내 덩이 id를 허문다 (주인만, 서버가 아는 내 위치에서 SNOW_BREAK_REACH 안). 옛 서버는 모르는 t라 버린다 */
+  | { t: "snowBreak"; id: string }
+  /** 11/26 다 세운 내 눈사람 id를 허문다 (주인만, SNOW_BREAK_REACH 안 — 웹은 X·[허물기]를 길게 눌러야 보낸다). 옛 서버는 모르는 t라 버린다 */
+  | { t: "snowmanBreak"; id: string }
   // ── 11/18 마을·캠핑장 눈싸움 (v74, snowfight.ts). 옛 서버는 모르는 t라 버린다 ──
   /** 눈을 뭉쳐 던진다: (x,y) = 출발점(내 발), (tx,ty) = 떨어질 곳. 서버가 번호를 붙여 같은 맵 다른 사람에게 snowball */
   | { t: "snowball"; x: number; y: number; tx: number; ty: number }
@@ -235,8 +239,11 @@ export type S2C =
   | { t: "snowmen"; list: SnowmanInfo[]; stacks?: SnowStackInfo[] }
   /** 누가 눈사람을 세웠다 (같은 캠핑장, 세운 사람 포함). sid = 세운 사람, st = 눈사람으로 바뀐 덩이 id (그 덩이를 지우고 세운 사람은 빈손) */
   | { t: "snowman"; s: SnowmanInfo; sid: Sid; st?: string }
-  /** 개수가 넘쳐 서버가 먼저 녹였다 (같은 캠핑장). 제때 녹는 것은 알리지 않는다 (각자 시각으로) */
-  | { t: "snowmanGone"; id: string }
+  /**
+   * 개수가 넘쳐 서버가 먼저 녹였다 (같은 캠핑장). 제때 녹는 것은 알리지 않는다 (각자 시각으로).
+   * brk = 11/26 세운 사람이 허물었다 (눈가루와 함께 바로 사라진다 — 옛 웹은 모르는 칸이라 녹은 것처럼 웅덩이로 그린다)
+   */
+  | { t: "snowmanGone"; id: string; brk?: true }
   /** 보낸 사람에게만: 내려놓기·올리기·다시 들기(a)를 받지 않았다. id = 그 덩이 (add·take) */
   | { t: "snowmanDenied"; why: SnowmanDenyWhy; a?: SnowAct; id?: string }
   // ── 11/18 만드는 과정 (같은 캠핑장) ──
@@ -247,8 +254,11 @@ export type S2C =
    * h가 없으면 빈손 (내려놓기·올리기)
    */
   | { t: "snowStack"; st: SnowStackInfo; h?: SnowBall }
-  /** 덩이가 사라졌다 (같은 캠핑장). took = 주인이 마지막 덩이를 다시 들어서 (주인은 이제 그 크기를 들고 있다). 없으면 주인 손은 그대로 */
-  | { t: "snowStackGone"; id: string; sid: Sid; took?: SnowBall }
+  /**
+   * 덩이가 사라졌다 (같은 캠핑장). took = 주인이 마지막 덩이를 다시 들어서 (주인은 이제 그 크기를 들고 있다). 없으면 주인 손은 그대로.
+   * brk = 11/26 주인이 허물었다 (그 자리에 눈가루 — 옛 웹은 모르는 칸이라 그냥 지운다)
+   */
+  | { t: "snowStackGone"; id: string; sid: Sid; took?: SnowBall; brk?: true }
   // ── 11/18 마을·캠핑장 눈싸움 (같은 맵. 옛 클라이언트는 모르는 t라 버린다) ──
   /** sid가 n번 눈을 던졌다 (던진 사람 빼고). 받은 때부터 뭉치기 → 날기를 각자 같은 식으로 그린다 */
   | { t: "snowball"; sid: Sid; n: number; x: number; y: number; tx: number; ty: number }
@@ -464,6 +474,10 @@ export function parseC2S(text: string): C2S | null {
       return typeof m.id === "string" && SNOWMAN_ID_RE.test(m.id) && isSnowBall(m.s) ? { t: "snowAdd", id: m.id, s: m.s } : null;
     case "snowTake":
       return typeof m.id === "string" && SNOWMAN_ID_RE.test(m.id) ? { t: "snowTake", id: m.id } : null;
+    case "snowBreak":
+      return typeof m.id === "string" && SNOWMAN_ID_RE.test(m.id) ? { t: "snowBreak", id: m.id } : null;
+    case "snowmanBreak":
+      return typeof m.id === "string" && SNOWMAN_ID_RE.test(m.id) ? { t: "snowmanBreak", id: m.id } : null;
     case "snowball":
       return isNum(m.x) && isNum(m.y) && isNum(m.tx) && isNum(m.ty) ? { t: "snowball", x: Math.round(m.x), y: Math.round(m.y), tx: Math.round(m.tx), ty: Math.round(m.ty) } : null;
     case "snowHit":

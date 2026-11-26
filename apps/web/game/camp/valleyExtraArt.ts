@@ -39,10 +39,10 @@ function inRound(x: number, y: number, x0: number, y0: number, x1: number, y1: n
 // ════════════════════════ 계곡 족욕탕 (노천) ════════════════════════
 
 export const FOOTBATH = { w: 80, h: 122 } as const;
-export type FootBathArt = { grid: Grid; lanterns: { x: number; y: number }[]; seats: { x: number; y: number; dir: "left" | "right" | "up" }[]; steam: { x: number; y: number }[] };
+export type FootBathArt = { grid: Grid; lanterns: { x: number; y: number }[]; seats: { x: number; y: number; dir: "left" | "right" | "up" }[] };
 
 /**
- * 나무 데크 위 돌 테 족욕탕 (김 나는 온천물) + 뒤 대나무 울·대나무 물대롱 + 양옆·앞 나무 벤치(방석) + 네 귀 작은 등롱 + 앞 계단.
+ * 나무 데크 위 돌 테 족욕탕 (보글보글 온천물 — 거품은 CampMap이 띄운다: game/camp/campFootbathBubbles) + 뒤 대나무 울·대나무 물대롱 + 양옆·앞 나무 벤치(방석) + 네 귀 작은 등롱 + 앞 계단.
  * 원점 = 바닥 가운데 (계단 아래). seats = 앉는 자리 (발을 물에 담근다)
  */
 export function footBathArt(xmas: boolean): FootBathArt {
@@ -76,7 +76,7 @@ export function footBathArt(xmas: boolean): FootBathArt {
   g.hline(2, W - 3, 12, BAMBOO.tie);
   g.hline(2, W - 3, 18, BAMBOO.tie);
   if (xmas) for (let x = 6; x < W - 4; x += 5) g.set(x, 12, XMAS[(x / 5) % 5 | 0]);
-  // 탕 (돌 테 + 김 나는 물)
+  // 탕 (돌 테 + 온천물)
   const P0 = { x: 18, y: 32 };
   const P1 = { x: 61, y: 92 };
   for (let y = P0.y - 4; y <= P1.y + 4; y++)
@@ -175,47 +175,7 @@ export function footBathArt(xmas: boolean): FootBathArt {
   }
   g.outline(OUT);
   shadow(g, W / 2, D1 + 5, W / 2 - 2, 4, 50);
-  const steam = [
-    { x: 30, y: 52 },
-    { x: 48, y: 64 },
-    { x: 36, y: 82 },
-    { x: 40, y: 40 },
-  ];
-  return { grid: g, lanterns, seats, steam };
-}
-
-/** 김 기둥 (부드러운 흰 김 덩이가 위로 피어오르며 흔들린다 · 눈 바탕에서도 보이게 가장자리는 옅은 회청색) */
-export function steamColumnCanvas(seed: number): HTMLCanvasElement {
-  const W = 34;
-  const H = 78;
-  const c = document.createElement("canvas");
-  c.width = W;
-  c.height = H;
-  const ctx = c.getContext("2d")!;
-  const n = 16;
-  for (const pass of [0, 1]) {
-    for (let i = 0; i < n; i++) {
-      const t = i / (n - 1);
-      const y = H - 6 - t * (H - 16);
-      const x = W / 2 + Math.sin(t * 4.2 + seed) * 6 * t;
-      const r = 4 + t * 8;
-      const a = Math.min(1, 1.0 * (1 - t * 0.6));
-      const gr = ctx.createRadialGradient(x, y, 0, x, y, r + (pass === 0 ? 2 : 0));
-      if (pass === 0) {
-        gr.addColorStop(0.5, `rgba(110,136,158,${a * 0.6})`);
-        gr.addColorStop(1, "rgba(110,136,158,0)");
-      } else {
-        gr.addColorStop(0, `rgba(255,255,255,${a})`);
-        gr.addColorStop(0.65, `rgba(246,250,253,${a * 0.9})`);
-        gr.addColorStop(1, "rgba(230,240,246,0)");
-      }
-      ctx.fillStyle = gr;
-      ctx.beginPath();
-      ctx.arc(x, y, r + 2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-  return c;
+  return { grid: g, lanterns, seats };
 }
 
 /** 부표 줄 (좌대 구역과 나룻배 구역을 가른다): 밧줄 + 빨강·흰 부표 */

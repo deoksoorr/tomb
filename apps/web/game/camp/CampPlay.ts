@@ -3,9 +3,12 @@ import { CAMP_SLIDE, CAMP_SLIDE_SEAT, CAMP_TRAMP_AREA, CAMP_TRAMP_GATE, CAMP_TRA
 import type { Player, SeatRequester } from "../entities/Player";
 import type { RemoteAvatar } from "../entities/RemoteAvatar";
 import type { MoveInput } from "../logic/movement";
+import type { MapConcept } from "@/lib/mapConcept";
 import { RideSound } from "../world/RideSound";
-import { TRAMPOLINE_MAT, TRAMPOLINE_PERIOD_MS, trampolineHeight } from "../world/rides";
+import { bystanderGain, TRAMPOLINE_MAT, TRAMPOLINE_PERIOD_MS, trampolineHeight } from "../world/rides";
 import { nearTrampGate, slideRidePose, SLIDE_DEPTH, SLIDE_RIDE_MS, TRAMP_RUN, TRAMP_WALK } from "./campPlayPath";
+import { SlideSound } from "./SlideSound";
+import { endRemoteSlide, slideCuesBetween, slideRunSpeed, slideVoiceOf, trackRemoteSlide, type RemoteSlideTrack, type SlideVoice } from "./slideSoundPlan";
 import { valleyTex } from "./campValleyTex";
 
 // 11/26 캠핑장 놀이터 (펜션 정원 옆): 대형 트램펄린 8인 · 워터 슬라이드(겨울·크리스마스판엔 눈썰매 언덕).
@@ -30,9 +33,10 @@ export type CampPlayHost = {
   clock(): number;
   toast(message: string): void;
   splash(x: number, y: number): void;
-  splashSound(gain: number): void;
   /** 겨울·크리스마스판 (눈썰매) */
   snowy(): boolean;
+  /** 지금 맵 컨셉 (미끄럼 소리: 눈썰매·크리스마스 방울·워터 슬라이드) */
+  concept(): MapConcept;
   /** 타기 전에 (펫에서 내리기·커졌으면 막기). false면 타지 않아요 */
   beforeRide(): boolean;
 };
@@ -47,8 +51,12 @@ const isTramp = (id: string | null | undefined): id is string => !!id && /^qJ\d$
 
 export class CampPlay {
   private readonly sound = new RideSound();
-  /** 내가 탄 미끄럼 (시작 시각 — scene time) */
-  private slide: { t0: number; snowy: boolean; splashed: boolean; fxAt: number } | null = null;
+  /** 11/26 미끄럼 효과음 (눈썰매·워터 슬라이드 — 오르기·앉기·내려가기 루프·닿기) */
+  private readonly slideSfx = new SlideSound();
+  /** 내가 탄 미끄럼 (시작 시각 — scene time, 지난 프레임의 탄 뒤 시간 — 소리 박자) */
+  private slide: { t0: number; snowy: boolean; splashed: boolean; fxAt: number; voice: SlideVoice; lastT: number } | null = null;
+  /** 다른 사람이 탄 미끄럼 (소리용 — 보이는 자리·빠르기) */
+  private remoteSlide: { who: RemoteAvatar; track: RemoteSlideTrack } | null = null;
   /** 지난 프레임에 놀이 연출을 넣은 원격 (내린 사람은 비운다) */
   private styled = new Set<RemoteAvatar>();
   private mineStyled = false;
@@ -174,7 +182,7 @@ export class CampPlay {
     if (!h.beforeRide()) return;
     const now = h.scene.time.now;
     pl.board(SLIDE_ID, CAMP_SLIDE_SEAT.x, CAMP_SLIDE_SEAT.y, DIR.up, now, h.seatReq());
-    this.slide = { t0: now, snowy: h.snowy(), splashed: false, fxAt: 0 };
+    this.slide = { t0: now, snowy: h.snowy(), splashed: false, fxAt: 0, voice: slideVoiceOf(h.concept()), lastT: -1 };
     if (h.online()) h.sit(SLIDE_ID);
   }
 
@@ -183,6 +191,7 @@ export class CampPlay {
     const s = this.slide;
     if (!s) return;
     this.slide = null;
+    this.slideSfx.stopRun(abort ? 0.08 : 0.18);
     const h = this.host;
     const pl = h.player();
     const to = abort ? { x: CAMP_SLIDE_SEAT.x, y: CAMP_SLIDE_SEAT.y + 2 } : slideRidePose(SLIDE_RIDE_MS, s.snowy).out;
@@ -232,6 +241,7 @@ export class CampPlay {
     // 순간이동(친구한테 가기 등)으로 배 자리에서 풀렸으면 미끄럼도 끝
     if (this.slide && !pl.inBoat) {
       this.slide = null;
+      this.slideSfx.stopRun(0.08);
       pl.view.ride = null;
       this.mineStyled = false;
     }
@@ -239,6 +249,10 @@ export class CampPlay {
     const sledUnder: { x: number; y: number; who: object }[] = [];
     if (s) {
       const t = now - s.t0;
+      // 소리: 오르기(탈 때)·앉기(꼭대기)·닿기(풀·언덕 밑) 한 번씩 + 내려가는 동안 빠르기를 따르는 루프
+      for (const cue of slideCuesBetween(s.lastT, t, s.snowy)) this.slideSfx.cue(s.voice.kind, cue, 1, s.voice.bells);
+      s.lastT = t;
+      this.slideSfx.runLevel(s.voice.kind, 1, slideRunSpeed(t, s.snowy));
       if (t >= SLIDE_RIDE_MS) this.endSlide(null);
       else {
         const p = slideRidePose(t, s.snowy);
@@ -250,7 +264,6 @@ export class CampPlay {
           s.splashed = true;
           s.fxAt = now + 220;
           h.splash(p.x, p.y);
-          h.splashSound(0.7);
         } else if (p.inPool && now >= s.fxAt && !h.reduced) {
           s.fxAt = now + 260;
           h.splash(p.x, p.y);
@@ -264,6 +277,7 @@ export class CampPlay {
     }
     // 원격: 트램펄린 자리(qJ)·미끄럼(qZ)에 있는 사람
     const styled = new Set<RemoteAvatar>();
+    let slider: { r: RemoteAvatar; alt: StateName | null } | null = null;
     for (const r of h.remotes().values()) {
       const id = r.seatId;
       if (isTramp(id) && r.stateId === STATE.trampoline) {
@@ -273,12 +287,39 @@ export class CampPlay {
         const alt = remoteSlideAlt(r.x, r.y, h.snowy(), now);
         r.view.ride = { ox: 0, lift: 0, depth: SLIDE_DEPTH, alt };
         styled.add(r);
+        slider = { r, alt };
         if (alt === null && h.snowy()) sledUnder.push({ x: r.x, y: r.y, who: r });
       }
     }
     for (const r of this.styled) if (!styled.has(r)) r.view.ride = null;
     this.styled = styled;
     this.placeSleds(sledUnder);
+    if (!s) this.remoteSlideSound(slider, dtMs);
+  }
+
+  /** 다른 사람이 미끄럼을 탈 때 소리: 탄 사람 둘레에서만 작게 (rides.bystanderGain — 다른 놀거리 구경꾼 소리와 같은 규칙) */
+  private remoteSlideSound(slider: { r: RemoteAvatar; alt: StateName | null } | null, dtMs: number): void {
+    const h = this.host;
+    const voice = slideVoiceOf(h.concept());
+    const cur = this.remoteSlide;
+    if (cur && cur.who !== slider?.r) {
+      // 내렸다 (또는 다른 사람으로 바뀜): 내려가던 중이면 닿는 소리
+      const pl = h.player();
+      for (const cue of endRemoteSlide(cur.track)) this.slideSfx.cue(voice.kind, cue, bystanderGain(Math.hypot(cur.track.x - pl.x, cur.track.y - pl.y)), voice.bells);
+      this.remoteSlide = null;
+    }
+    if (!slider) {
+      this.slideSfx.runLevel(voice.kind, 0, 0);
+      return;
+    }
+    const { r, alt } = slider;
+    const phase = alt === "swim" ? "pool" : alt === "walk" || alt === "idle" ? "climb" : "ride";
+    const step = trackRemoteSlide(this.remoteSlide?.track ?? null, r.x, r.y, phase, dtMs, voice.kind);
+    this.remoteSlide = { who: r, track: step.track };
+    const pl = h.player();
+    const g = bystanderGain(Math.hypot(r.x - pl.x, r.y - pl.y));
+    for (const cue of step.cues) this.slideSfx.cue(voice.kind, cue, g, voice.bells);
+    this.slideSfx.runLevel(voice.kind, g, step.run);
   }
 
   /** 눈썰매: 미끄러지는(앉은) 동안 탄 사람 밑에 빨간 썰매 (언덕 그림 위, 사람 아래). 다른 사람에게도 같은 규칙으로 보인다 */
@@ -351,6 +392,8 @@ export class CampPlay {
   destroy(): void {
     this.placeSleds([]);
     this.slide = null;
+    this.remoteSlide = null;
+    this.slideSfx.destroy();
     this.tramp = null;
     for (const r of this.styled) r.view.ride = null;
     this.styled.clear();

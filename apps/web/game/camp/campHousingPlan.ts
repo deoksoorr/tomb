@@ -156,8 +156,6 @@ export type HomePlan = {
   hammock?: { id: string; x: number; y: number };
   /** 문패 세 줄 자리 (가운데·맨 아랫줄 바닥·폭) */
   plate: { cx: number; bottom: number; w: number };
-  /** 분양 팻말 (빈 터 — 「분양 중」 글씨는 그 위) */
-  sale: { x: number; y: number } | null;
 };
 
 export const FLAT_TAG = -100_000;
@@ -454,7 +452,6 @@ function caravanPlan(l: CampLot, st: HomeState): HomePlan {
   const g = siteGeo(l);
   const { s, toward, cy } = g;
   const top = s.y - SITE_H / 2;
-  const front = [1, 2, 3, 4, 5, 6].includes(l.lot);
   const flip = g.side === 1;
   const out: HomePlan = {
     props: [],
@@ -466,7 +463,6 @@ function caravanPlan(l: CampLot, st: HomeState): HomePlan {
     door: { x: s.x, y: s.y + SITE_H / 2 + 6 },
     entry: { x: s.x, y: s.y + SITE_H / 2 },
     plate: { cx: s.x, bottom: top - 2, w: SITE_W },
-    sale: null,
   };
   const prop = (key: string, x: number, y: number, depth = y, lift = 2, extra: Partial<PlanProp> = {}) => out.props.push({ key, x, y: y + lift, depth, ...extra });
   const camp = (key: string, x: number, y: number, depth = y, lift = 2, extra: Partial<PlanProp> = {}) => prop(key, x, y, depth, lift, { camp: true, ...extra });
@@ -477,13 +473,11 @@ function caravanPlan(l: CampLot, st: HomeState): HomePlan {
   camp(T.pebbles((l.lot + 1) % 3), s.x + toward * (SITE_W / 2 - 4), top + 22, FLAT_TAG + s.y, 1);
   prop(`${TP}hookup-${sb(st)}`, s.x - toward * (SITE_W / 2 - 9), top + 18, top + 18, 2, { make: () => cap(st, A.hookupArt().toCanvas(), 12) });
   if (!st.owned) {
-    // 분양 전: 둘레 줄 + 가운데 「분양」 번호 팻말
-    prop(`${TP}post-sale-${l.lot}-${front ? 1 : 0}-${sb(st)}`, s.x, s.y + 6, s.y + 6, 2, { make: () => cap(st, A.sitePostArt(l.n, true, front).toCanvas(), 26) });
+    // 분양 전: 둘레 줄만. 11/26 가운데 「분양」 번호 팻말은 뺐다 (운영자 「카라반, 촌캉스도 NPC만으로 통일」 — 분양은 언젠가 씨에게 말을 걸어서만).
+    // door = 터 가운데 E 「분양 안내」 자리 (옛 팻말 자리), 「분양 중」 글씨는 그 위 plate
     prop(`${TP}plotRope-${SITE_W}`, s.x, s.y + SITE_H / 2 - 4, s.y + SITE_H / 2 - 6, 0, { make: () => A.plotRopeArt(SITE_W - 12, SITE_H - 12).toCanvas() });
-    out.sale = { x: s.x, y: s.y + 6 };
     out.door = { x: s.x, y: s.y + 14 };
     out.plate = { cx: s.x, bottom: s.y - 22, w: SITE_W };
-    out.furniture.push({ x: s.x - 10, y: s.y + 2, w: 20, h: 6 });
     return out;
   }
   const stage = st.yard;
@@ -727,7 +721,6 @@ function pensionPlan(l: CampLot, st: HomeState): HomePlan {
     door: { x: px, y: py },
     entry: { x: px, y: l.y + l.h },
     plate: { cx: px, bottom: l.y, w: l.w },
-    sale: null,
   };
   const prop = (key: string, x: number, y: number, depth = y, lift = 2, extra: Partial<PlanProp> = {}) => out.props.push({ key, x, y: y + lift, depth, ...extra });
   const furn = (key: string, make: () => HTMLCanvasElement, x: number, y: number, depth = y) =>
@@ -963,14 +956,8 @@ function pensionPlan(l: CampLot, st: HomeState): HomePlan {
         tint: 0xffb060,
         base: 0.8,
       });
-  } else {
-    // 11/26 분양 팻말은 오른쪽 마당 (계단 앞 곧은 길 밖)
-    const sp = { x: px + 67, y: py + 16 };
-    prop(`${TP}post-psale-${l.n}-${sb(st)}`, sp.x, sp.y, sp.y, 2, {
-      make: () => cap(st, A.sitePostArt(l.n, true, false).toCanvas(), 26),
-    });
-    out.sale = sp;
   }
+  // 11/26 빈 펜션 분양 팻말은 뺐다 (운영자 「헷갈려한다」 — 펜션 분양은 소슬댁에게 말을 걸어서만. 「분양 중」 글씨는 문패 자리에)
   return out;
 }
 
@@ -1076,10 +1063,17 @@ const ruralSize = (l: CampLot): "wide" | "small" => (l.name === "감나무집" ?
 // 11/26 그린 윗면 전부 (그림 3줄 = pp.y − 27) 위 2px부터 — 뒤로 돌아가도 평상 위에 선 것처럼 보이지 않게
 const PYEONG_BOX = { dx: -26, dy: -29, w: 52, h: 27 } as const;
 /**
- * 11/26 평상은 앞(긴 쪽)과 길 쪽 짧은 쪽에서만 오른다 (운영자 「평상을 뒤에서 들어갔더니 바로 위로 올라가져」 — 뒤는 집, 먼 쪽은 담).
- * 방석 넷 모두 일어서면 평상 앞 (pp.y + 7 — 오르는 자리 안)
+ * 11/26 평상은 다가간 쪽 방석에 앉는다 (운영자 「윗쪽에서 앉기 하면 윗방석에 앉게」): 위(집 쪽) = 윗방석 둘 · 앞 = 아랫방석(양옆) 둘 · 옆 = 그쪽 방석.
+ * 막는 상자 둘레 오르는 자리 넷 (campSeatZones). 윗방석은 일어서면 평상 뒤(pp.y − 30 — 집 막는 상자와 평상 막는 상자 사이 7px 틈),
+ * 아랫방석은 평상 앞 (pp.y + 7)
  */
 const PYEONG_FRONT = 7;
+const PYEONG_BACK = -30;
+/**
+ * 11/26 운영자 「방석 위에 정확하게 앉지를 않네」: 앉는 점이 방석 가운데(그림 s.y − 2)보다 2px 아래라 앉은 몸(점 − 3 위)이 방석 위 끝에 걸쳐
+ * 방석 밖 위에 떠 보였다. 정자·원두막 방석처럼 앉는 점 = 방석 아래 테 + 1 (몸이 방석을 덮고 아래 테만 보인다)
+ */
+const PYEONG_SIT_DY = 2;
 /** 정자 마루 막는 상자 (그림 58×58 — 기둥 바깥까지, 바닥 = pp.y + 2) · 일어서는 줄 (마루 앞 끝 아래) */
 // 11/26 마루·기단 전부 (그림 32줄 = pp.y − 24) 위 2px부터 (지붕은 막지 않는다 — 뒤에 선 사람을 지붕이 가린다)
 const PAVILION_BOX = { dx: -25, dy: -26, w: 50, h: 23 } as const;
@@ -1090,7 +1084,7 @@ const PAVILION_STEP_HALF = 6;
 const ACCESS_DEPTH = 12;
 
 /**
- * 11/26 높은·큰 자리는 정해진 쪽에서만 앉는다 (원두막 = 앞 사다리 밑 · 평상 = 앞 긴 쪽 + 길 쪽 짧은 쪽 · 정자 = 앞 계단 쪽).
+ * 11/26 높은·큰 자리는 정해진 쪽에서만 앉는다 (원두막 = 앞 사다리 밑 · 평상 = 다가간 쪽 방석(위 = 윗방석 · 앞 = 아랫방석 · 옆 = 그쪽) · 정자 = 앞 계단 쪽).
  * 플레이어가 rects 안에 있을 때만 seats를 고르고 (가까운 다른 자리보다 먼저), 밖에서는 아예 안 고른다 (campSit campZoneSeat).
  * 일어서는 자리도 rects 안이다 (테스트)
  */
@@ -1104,19 +1098,18 @@ export function campSeatZones(lots: readonly CampLot[]): CampSeatZone[] {
     const seats = ruralSeats(l);
     const ids = (min: CampYard, max: CampYard, near: { x: number; y: number }, r: number) =>
       seats.filter((q) => q.minYard === min && (q.maxYard ?? 3) === max && Math.hypot(q.x - near.x, q.y - near.y) < r).map((q) => q.id);
-    // 평상 (1·2단계): 앞 긴 쪽 + 길 쪽 짧은 쪽 (길이 왼쪽이면 왼쪽 끝)
+    // 평상 (1·2단계): 다가간 쪽 방석 (11/26 운영자 「윗쪽에서 앉기 하면 윗방석에 앉게」)
+    //  위(평상 뒤 — 집과 평상 사이) = 윗방석 둘 · 앞(아래 모서리까지) = 아랫방석 둘 · 왼쪽·오른쪽 = 그쪽 아랫방석·윗방석 (가까운 것)
     const pp = { x: l.x + R.pyeong.x, y: l.y + R.pyeong.y };
     const pb = pyeongBox(pp);
-    const pathLeft = R.door < R.pyeong.x;
-    out.push({
-      lot: l.lot,
-      kind: "pyeong",
-      seats: ids(1, 2, { x: pp.x, y: pp.y - 16 }, 30),
-      rects: [
-        { x: pb.x, y: pb.y + pb.h, w: pb.w, h: ACCESS_DEPTH },
-        { x: pathLeft ? pb.x - ACCESS_DEPTH : pb.x + pb.w, y: pb.y + 4, w: ACCESS_DEPTH, h: pb.h - 4 + ACCESS_DEPTH },
-      ],
-    });
+    const py = ids(1, 2, { x: pp.x, y: pp.y - 16 }, 30);
+    // ruralSeats 순서: [왼쪽 아랫방석, 오른쪽 아랫방석, 왼쪽 윗방석, 오른쪽 윗방석]
+    const [lo, ro, lu, ru] = py;
+    const side = (seats: string[], r: PlanRect) => out.push({ lot: l.lot, kind: "pyeong", seats, rects: [r] });
+    side([lu, ru], { x: pb.x, y: pb.y - ACCESS_DEPTH, w: pb.w, h: ACCESS_DEPTH });
+    side([lo, ro], { x: pb.x - ACCESS_DEPTH, y: pb.y + pb.h, w: pb.w + ACCESS_DEPTH * 2, h: ACCESS_DEPTH });
+    side([lo, lu], { x: pb.x - ACCESS_DEPTH, y: pb.y + 4, w: ACCESS_DEPTH, h: pb.h - 4 });
+    side([ro, ru], { x: pb.x + pb.w, y: pb.y + 4, w: ACCESS_DEPTH, h: pb.h - 4 });
     const vp = { x: l.x + R.pavilion.x, y: l.y + R.pavilion.y };
     if (wide) {
       // 정자 (3단계): 앞 가운데 계단 쪽 (마루 앞 끝 아래 12px — 오른쪽 앞 기둥 옆은 작은 장독대)
@@ -1145,13 +1138,14 @@ function ruralSeats(l: CampLot): HomeSeat[] {
   const seat = seatMaker(l);
   const at = (p: { x: number; y: number }) => ({ x: l.x + p.x, y: l.y + p.y });
   const out: HomeSeat[] = [];
-  // 평상 (방석 4 — 그림 원점 바닥 가운데, 2px 들어 올림). 평상 마루를 통째로 막고(PYEONG_BOX), 일어서면 평상 앞 (오르는 자리 — campSeatZones)
+  // 평상 (방석 4 — 그림 원점 바닥 가운데, 2px 들어 올림). 평상 마루를 통째로 막고(PYEONG_BOX), 앉는 점은 방석 아래 테 + 1 (PYEONG_SIT_DY)
   const pp = at(R.pyeong);
   const P = R5.PYEONG;
+  // 양옆 아랫방석은 일어서면 평상 앞, 윗방석은 평상 뒤 (다가간 쪽 — campSeatZones)
   const pfaces = [DIR.right, DIR.left, DIR.down, DIR.down] as const;
   P.seats.forEach((q, i) => {
-    const y = pp.y + 2 - P.h + q.y;
-    out.push(seat(pp.x - P.w / 2 + q.x, y, pfaces[i], 1, 2, { dy: pp.y + PYEONG_FRONT - y }));
+    const y = pp.y + 2 - P.h + q.y + PYEONG_SIT_DY;
+    out.push(seat(pp.x - P.w / 2 + q.x, y, pfaces[i], 1, 2, { dy: pp.y + (i < 2 ? PYEONG_FRONT : PYEONG_BACK) - y }));
   });
   // 2단계 밥상 (평상 앞 — 양옆 작은 의자 둘, 일어서면 밥상 옆 바깥으로)
   const LT = R5.LOWTABLE;
@@ -1219,7 +1213,6 @@ function ruralPlan(l: CampLot, st: HomeState): HomePlan {
     door: { x: x0, y: y0 },
     entry: { x: x0 + R.door, y: y0 + l.h },
     plate: { cx: x0 + fpw / 2, bottom: y0, w: fpw },
-    sale: null,
   };
   const prop = (key: string, x: number, y: number, depth = y, lift = 2, extra: Partial<PlanProp> = {}) => out.props.push({ key, x, y: y + lift, depth, ...extra });
   const furn = (key: string, make: () => HTMLCanvasElement, x: number, y: number, depth = y, maxY = 999) =>
@@ -1447,10 +1440,11 @@ function ruralPlan(l: CampLot, st: HomeState): HomePlan {
     out.furniture.push({ x: tb.x - 14, y: tb.y - 18, w: 28, h: 16 });
   };
   if (lv <= 2) {
-    // 평상 (1·2단계 오른쪽 칸 위). 평상은 앉은 사람 밑, 소반만 뒤에 앉은 사람 앞 (다리를 가린다 — 마을 식탁 의자와 같은 규칙)
+    // 평상 (1·2단계 오른쪽 칸 위). 평상은 앉은 사람 밑, 소반만 윗방석에 앉은 사람 앞 (다리를 가린다 — 마을 식탁 의자와 같은 규칙)
+    // 11/26 앉는 점을 방석 아래 테로 내려서(PYEONG_SIT_DY) 소반 층도 윗방석(pp.y − 18)과 양옆 방석(pp.y − 11) 사이로. 자르는 칸은 소반만 (평상 바닥이 앉은 몸을 덮지 않게)
     const pp = at(R.pyeong);
     furn("pyeongMeal", () => R5.pyeongsangMealArt().toCanvas(), pp.x, pp.y, pp.y - 26, 22);
-    prop(`${TP}pyeongMeal-${S}`, pp.x, pp.y, pp.y - 30 + 10.5, 2, { make: () => cap(st, R5.pyeongsangMealArt().toCanvas(), 22), crop: [16, 7, 22, 14] });
+    prop(`${TP}pyeongMeal-${S}`, pp.x, pp.y, pp.y - 14.5, 2, { make: () => cap(st, R5.pyeongsangMealArt().toCanvas(), 22), crop: [18, 10, 20, 12] });
     out.furniture.push(pyeongBox(pp));
     if (lv === 2) lowTable(R.table2);
   } else {
@@ -1519,17 +1513,10 @@ function ruralPlan(l: CampLot, st: HomeState): HomePlan {
       },
     );
   }
-  // 우체통 · 분양 팻말 (대문 밖 양옆)
+  // 우체통 (대문 밖). 11/26 빈 집 대문 밖 분양 팻말은 뺐다 (운영자 「카라반, 촌캉스도 NPC만으로 통일」 — 촌캉스 분양은 순이 할머니에게 말을 걸어서만)
   const mb = { x: x0 + gA - 8, y: frontY + 12 };
   furn("mailbox", () => P4.mailboxArt().toCanvas(), mb.x, mb.y);
   out.furniture.push({ x: mb.x - 2, y: mb.y - 3, w: 4, h: 3 });
-  if (!lit) {
-    const sp = { x: x0 + gB + 30, y: frontY + 16 };
-    prop(`${TP}post-rsale-${l.n}-${S}`, sp.x, sp.y, sp.y, 2, {
-      make: () => cap(st, A.sitePostArt(l.n, true, false).toCanvas(), 26),
-    });
-    out.sale = sp;
-  }
   return out;
 }
 

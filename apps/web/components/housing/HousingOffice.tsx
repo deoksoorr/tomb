@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { campLotByNo, HOUSE_LOTS, WORLD_LOTS, type CampHomeKind } from "@tomb/protocol";
+import { HOUSE_LOTS, WORLD_LOTS, type CampHomeKind } from "@tomb/protocol";
 import { campKindOf } from "./campOfficeText";
 import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
@@ -506,7 +506,7 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
         onMy={onCampMy}
         busy={busy}
         visitError={visitError}
-        presetLot={intent?.zone === "camp" && intent.lot && campLotByNo(intent.lot)?.kind === campKind ? intent.lot : null}
+        presetLot={null}
         channel={channel}
         onClose={onClose}
         onEnterMine={enterCamp}

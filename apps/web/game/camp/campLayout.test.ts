@@ -125,10 +125,11 @@ describe("언젠가 캠핑장 배치", () => {
     expect(campStandable(x0 + 40, y0 + 112)).toBe(true);
   });
 
-  it("상호작용 자리는 반지름 안에서 닿는다 (버스·NPC 6·의뢰판·표지판·분양 안내 둘·바베큐·간식·자판기 셋)", () => {
+  it("상호작용 자리는 반지름 안에서 닿는다 (버스·NPC 6·의뢰판·표지판·바베큐·간식·자판기 셋)", () => {
     expect(CAMP_INTERACTABLES.filter((i) => i.kind === "npc")).toHaveLength(6);
     expect(CAMP_INTERACTABLES.filter((i) => i.kind === "vending")).toHaveLength(CAMP_VENDING_ROW.length);
-    expect(CAMP_INTERACTABLES.filter((i) => i.kind === "sale")).toHaveLength(2);
+    // 11/26 분양 입간판은 카라반·펜션 모두 뺐다 (운영자 「카라반, 촌캉스도 NPC만으로 통일」 — 분양은 NPC에게 말을 걸어서만)
+    expect(CAMP_INTERACTABLES.filter((i) => i.id.startsWith("sale"))).toEqual([]);
     for (const it of CAMP_INTERACTABLES) expect(reachableNear(it.x, it.y, it.r), it.id).toBe(true);
   });
 

@@ -38,6 +38,7 @@ import * as VA from "./valleyArt";
 import * as V3 from "./valleyProps";
 import * as V6 from "./valleyExtraArt";
 import { MAP_HAMMOCKS } from "./campHammock";
+import { FootbathBubbles } from "./campFootbathBubbles";
 
 // 11/15 언젠가 캠핑장 맵 (CampMapApi 구현): 바닥(덩어리 텍스처, 화면 근처만), 나무·소품(칸 컬링, y 정렬), 이름표,
 // 충돌, 시간대 풍경(새벽 물안개·일출빛 / 낮 다람쥐·물 반짝임 / 노을 단풍 / 밤 줄 조명·은하수·반딧불).
@@ -76,7 +77,6 @@ type Drop = { img: Phaser.GameObjects.Image; x0: number; y0: number; vx: number;
 type Puff = { img: Phaser.GameObjects.Image; x: number; y: number; ph: number; rise: number; a: number; sc: number };
 type Phased = { img: Phaser.GameObjects.Image; x: number; y: number; ph: number };
 type Fleck = { img: Phaser.GameObjects.Image; y0: number; off: number; k: number };
-type Emitter = { e: Phaser.GameObjects.Particles.ParticleEmitter; x: number; y: number; on: boolean };
 
 const SQUIRREL_HOURS = [7, 17] as const;
 const hashR = (i: number, s: number) => {
@@ -153,7 +153,8 @@ export class CampMap implements CampMapApi {
   private glints: Phased[] = [];
   private rare: Phaser.GameObjects.Image[] = [];
   private flecks: Fleck[] = [];
-  private emitters: Emitter[] = [];
+  /** 족욕탕 보글보글 (판마다 다시 세운다) */
+  private footBubbles: FootbathBubbles | null = null;
   private fallsShown = true;
   private streamShown = true;
   /** 폭포 멍 (폭포 다리에 앉아 시점을 바꾼 동안 — 물보라·물안개를 더 짙게) */
@@ -270,7 +271,8 @@ export class CampMap implements CampMapApi {
     this.glints = [];
     this.rare = [];
     this.flecks = [];
-    this.emitters = [];
+    this.footBubbles?.destroy();
+    this.footBubbles = null;
     this.lights = [];
   }
 
@@ -368,24 +370,6 @@ export class CampMap implements CampMapApi {
     f.play({ key: `${P}flames`, startFrame: frame });
     this.cull(x, y, f);
   }
-  /** 연기·김 파티클 (화면 근처일 때만 뿜는다) */
-  private smokeAt(x: number, y: number, depth: number, o: { freq?: number; alpha?: number; scale?: number; tint?: number; tex?: string } = {}): void {
-    if (this.reduced) return;
-    const e = this.scene.add
-      .particles(x, y, o.tex ?? Art.CAMP_TEX.bbqSmoke, {
-        lifespan: { min: 2600, max: 3600 },
-        speedX: { min: 1, max: 6 },
-        speedY: { min: -12, max: -7 },
-        scale: { start: 0.4 * (o.scale ?? 1), end: 1.5 * (o.scale ?? 1) },
-        alpha: { start: o.alpha ?? 0.42, end: 0 },
-        frequency: o.freq ?? 760,
-        tint: o.tint ?? 0xffffff,
-      })
-      .setDepth(depth);
-    e.stop();
-    this.vis.push(e);
-    this.emitters.push({ e, x, y, on: false });
-  }
 
   // ── 그리기 (판마다) ──
 
@@ -405,7 +389,6 @@ export class CampMap implements CampMapApi {
     this.addSmallFire();
     this.addFurniture();
     yield;
-    this.addVillage();
     this.addPlayground();
     yield;
     this.addFishing();
@@ -611,8 +594,7 @@ export class CampMap implements CampMapApi {
     for (const [cx, cy, cw, ch] of Art.SHELTER_FRONT) this.cprop(T.shelter, CAMP_BUS_STOP.x, CAMP_BUS_STOP.y).setCrop(cx, cy, cw, ch);
     this.cprop(T.busSign, CAMP_BUS_SIGN.x, CAMP_BUS_SIGN.y);
     this.cprop(T.timetable, CAMP_BUS_TIMETABLE.x, CAMP_BUS_TIMETABLE.y);
-    // 관리소 문 앞 「카라반 분양」 입간판 (분양은 관리소 사장 언젠가 씨가 받는다)
-    this.prop(this.vt("saleStand"), Lay.SALE_BOARD.x, Lay.SALE_BOARD.y);
+    // 11/26 관리소 문 앞 「카라반 분양」 입간판은 뺐다 (운영자 「카라반, 촌캉스도 NPC만으로 통일」 — 분양은 언젠가 씨에게 말을 걸어서만)
     if (this.xmas) this.prop(this.vt("gifts1"), 250, 604);
     // 바베큐 그릴·탁자 (캠프파이어 존 윗줄) + 연기
     const B = Lay.BBQ;
@@ -686,8 +668,13 @@ export class CampMap implements CampMapApi {
     const vy = Lay.VIEW_BRIDGE.y;
     const vx = CAMP_VIEW_BRIDGE_X;
     const bx0 = vx - VA.VBRIDGE_W / 2;
-    const by0 = vy - VA.VBRIDGE_H / 2 - 2;
+    // 그림 위 빈 칸(VBRIDGE_PAD — 뒤 등갓)만큼 올려 깐다: 판자 윗줄(뒤 난간 받침) = 다리 y − 14
+    const by0 = vy - 14 - VA.VBRIDGE_TOP;
     this.flat(this.vt("vbridge"), bx0, by0, FLAT + 2600, vx, vy);
+    // 11/26 운영자 「다리 바깥에서 다리 쪽으로 걸치면 난간 뒤에 내가 있어야」: 판 전체는 바닥에 깔고, 뒤·앞 난간(+ 등 기둥)만 사람 깊이 사이에 한 번 더.
+    // 소 쪽에 선 사람(발 ≤ 364)은 뒤 난간 뒤, 다리 위(372~393)는 뒤 난간 앞·앞 난간 뒤, 다리 앞(401~)은 앞 (막는 상자 Lay.VIEW_BRIDGE_RAIL)
+    this.flat(this.vt("vbridgeBack"), bx0, by0, Lay.VIEW_BRIDGE_BACK_DEPTH, vx, vy);
+    this.flat(this.vt("vbridgeFront"), bx0, by0, Lay.VIEW_BRIDGE_FRONT_DEPTH, vx, vy);
     for (const lp of VA.VBRIDGE_LAMPS) this.light(bx0 + lp.x, by0 + lp.y, 0.55, 0xffd28a, 0.85);
     const by = Lay.LOG_BRIDGE_Y;
     const bx = Math.round(Lay.streamX(by));
@@ -702,11 +689,8 @@ export class CampMap implements CampMapApi {
     this.light(F.x, F.y - 10, 1.9, 0xffa048, 1);
   }
 
-  /** 소슬 펜션 구역: 분양 안내판 · 촌캉스 흙마당 (집·앞마당은 집 화면 담당). 11/26 입구 나무 아치는 없앴어요 (운영자 — 길만 남김) */
-  private addVillage(): void {
-    this.prop(this.vt("penStand"), Lay.PENSION_SALE_SIGN.x, Lay.PENSION_SALE_SIGN.y);
-    // 11/26 촌캉스 흙마당은 집 화면 담당(campHousingPlan)이 앞마당 단계에 맞춰 그린다 (단계마다 넓어진다 — 맵은 풀밭 그대로)
-  }
+  // 소슬 펜션 구역: 집·앞마당·촌캉스 흙마당은 집 화면 담당(campHousingPlan)이 앞마당 단계에 맞춰 그린다 (맵은 풀밭 그대로).
+  // 11/26 입구 나무 아치는 없앴어요 (운영자 — 길만 남김). 11/26 「펜션 분양」 입간판도 뺐어요 (운영자 「헷갈려한다」 — 펜션 분양은 소슬댁에게만)
 
   /** 놀이터 (트램펄린·워터 슬라이드/눈썰매장) · 펜션 정원 · 계곡 족욕탕 */
   private addPlayground(): void {
@@ -757,7 +741,7 @@ export class CampMap implements CampMapApi {
     this.prop(this.vt("car"), Lay.PG_CAR.x, Lay.PG_CAR.y);
   }
 
-  /** 계곡 족욕탕 — 김 나는 돌 테 탕 + 나무 데크·벤치·등롱 */
+  /** 계곡 족욕탕 — 보글보글 끓는 돌 테 탕 + 나무 데크·벤치·등롱 */
   private addFootBath(): void {
     const F = Lay.FOOTBATH_AT;
     const fb = V6.footBathArt(this.xmas);
@@ -765,19 +749,8 @@ export class CampMap implements CampMapApi {
     const y0 = F.y - V6.FOOTBATH.h;
     this.prop(this.vt("footbath"), F.x, F.y, y0 + 30, 0);
     for (const l of fb.lanterns) this.light(x0 + l.x, y0 + l.y, 0.5, 0xffd28a, 0.9);
-    for (const st of fb.steam) this.smokeAt(x0 + st.x, y0 + st.y, y0 + 200, { freq: 380, alpha: this.snowy ? 0.6 : 0.3, scale: 1.25 });
-    // 김 기둥 셋 (탕에서 데크·대나무 울 위로 피어오른다)
-    for (const [i, [sx, sy]] of ([
-      [28, 70],
-      [52, 62],
-      [40, 52],
-    ] as const).entries()) {
-      const img = this.cull(F.x, F.y, this.scene.add.image(x0 + sx, y0 + sy, this.vt(`steamCol${i}`)).setOrigin(0.5, 1).setDepth(y0 + 210).setScale(1.25, 1.45).setAlpha(this.snowy ? 0.9 : 0.4));
-      if (!this.reduced)
-        this.vis.push(
-          this.scene.tweens.add({ targets: img, alpha: { from: this.snowy ? 1 : 0.45, to: this.snowy ? 0.8 : 0.32 }, scaleX: { from: 1.2, to: 1.32 }, duration: 1800 + i * 400, yoyo: true, repeat: -1, ease: "Sine.easeInOut" }) as unknown as Phaser.GameObjects.GameObject,
-        );
-    }
+    // 11/26 김(김 기둥·김 파티클)은 뺐어요 (운영자 「연기 빼고 보글보글만 더 빡세게」) — 물 위 거품이 올라와 톡 터지고 물결 고리가 번진다
+    this.footBubbles = new FootbathBubbles(this.scene, x0, y0, y0 + 30.5, DEPTH.lights + 2, this.reduced);
     if (this.snowy) this.prop(this.vt("snowman1"), 364, 246);
   }
 
@@ -899,8 +872,6 @@ export class CampMap implements CampMapApi {
     this.addLabel(CAMP_OFFICE.x - 50, CAMP_OFFICE.y - 37, "관리소", 0x5a3a22, 1, 0.5);
     this.addLabel(CAMP_OFFICE.x + 44, CAMP_OFFICE.y - 40, "매점", 0x5a3a22, 1, 0.5);
     this.addLabel(CAMP_BOARD_SPOT.x, CAMP_BOARD_SPOT.y - 36, "의뢰판", land, 0.8);
-    this.addLabel(Lay.SALE_BOARD.x, Lay.SALE_BOARD.y - 26, "카라반 분양", 0xffe6a0, 0.95);
-    this.addLabel(Lay.PENSION_SALE_SIGN.x, Lay.PENSION_SALE_SIGN.y - 26, "펜션 분양", 0xffe6a0, 0.95);
     // 11/26 이름 팻말 글자는 짧게, 「헤엄쳐서」 안내는 수영 표지판 위로 (긴 한 줄이 사장님 머리에 걸렸다)
     this.addLabel(Lay.POND_SIGN.x, Lay.POND_SIGN.y - 34, "윤슬 낚시터", 0xbfe6ff, 0.95);
     // 11/26 수영 안내는 잔교 위쪽 끝 팻말 위 (4~6번 좌대 사다리를 바로 앞에 두고)
@@ -980,6 +951,7 @@ export class CampMap implements CampMapApi {
     this.updateFalls(time, view, dark);
     this.updateEmbers(time, delta, t.darkness);
     this.updateSmoke(time, delta, view);
+    this.footBubbles?.update(time, view, dark, this.actors());
     this.updateSparkles(time, t);
     this.updateFireflies(time, t);
     this.updateSquirrels(time, t);
@@ -1013,15 +985,6 @@ export class CampMap implements CampMapApi {
       if (this.shownCells.has(k)) continue;
       this.shownCells.add(k);
       for (const o of this.cells.get(k) ?? []) o.setVisible(true);
-    }
-    // 연기·김 파티클도 화면 근처에서만 뿜는다
-    const pad = 80;
-    for (const m of this.emitters) {
-      const on = m.x > view.x - pad && m.x < view.right + pad && m.y > view.y - pad && m.y < view.bottom + pad * 2;
-      if (on === m.on) continue;
-      m.on = on;
-      if (on) m.e.start();
-      else m.e.stop();
     }
     // 폭포·계곡 움직임 (화면 밖이면 멈추고 숨긴다)
     const F = FALLS_AREA;
@@ -1353,6 +1316,8 @@ export class CampMap implements CampMapApi {
     this.destroyed = true;
     this.decor?.destroy();
     this.decor = null;
+    this.footBubbles?.destroy();
+    this.footBubbles = null;
     for (const o of this.vis) o.destroy();
     this.vis = [];
     for (const o of this.objs) o.destroy();

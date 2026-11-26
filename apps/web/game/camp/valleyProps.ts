@@ -206,23 +206,6 @@ export function archArt(xmas: boolean): Grid {
   return g;
 }
 
-/** 「펜션 분양」 입간판 (작은 집 그림 + 빨간 리본) */
-export function pensionStandArt(): Grid {
-  const g = new Grid(22, 24);
-  line(g, 4, 21, 7, 8, WOOD.lo);
-  line(g, 17, 21, 14, 8, WOOD.lo);
-  g.rect(2, 3, 18, 13, 0xf6efe0);
-  frame(g, 2, 3, 18, 13, WOOD.line);
-  for (let y = 7; y < 10; y++) g.hline(11 - (y - 6) * 2, 11 + (y - 6) * 2, y, 0xb85a3c);
-  g.rect(7, 10, 9, 4, LOG.mid);
-  g.rect(10, 11, 2, 3, WIN.warm);
-  g.hline(4, 17, 5, 0xd84a3a);
-  g.set(11, 2, 0xd84a3a);
-  g.outline(OUT);
-  shadow(g, 11, 22.5, 8, 1.2, 56);
-  return g;
-}
-
 // ════════════════════════ 단지 놀이터 ════════════════════════
 
 /** 워터 슬라이드: 나무 계단 탑(난간·지붕) + 구불구불 미끄럼틀(파랑·노랑 줄) → 작은 풀. 원점 = 그림 왼쪽 위 (장면이 자리를 맞춘다) */

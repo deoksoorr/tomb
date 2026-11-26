@@ -88,6 +88,7 @@ import { CampSnowmen } from "./CampSnowmen";
 import { CAMP_SCENE, type CampFriend, type CampHost, type CampSceneData } from "./campHost";
 import { campHousingHost, type CampHousingHost } from "./campHousingHost";
 import { CampHousing } from "./campHousing";
+import { campSaleKindOf } from "./campSaleApi";
 import { setDoorHint } from "../logic/doorHint";
 import { CampRowboats } from "./CampRowboats";
 import { CampPlay } from "./CampPlay";
@@ -342,7 +343,10 @@ export class CampScene extends Phaser.Scene {
       sit: (id) => h.net.sit(id),
       stand: () => h.net.stand(),
       toast: (m) => this.toast(m),
-      splash: (x, y) => (this.fx ??= new Effects(this, h.reduced)).splash(x, y),
+      splash: (x, y) => {
+        // 장면 정리 중(배에서 내리기 등)에는 물보라를 만들지 않는다 (입자는 Phaser가 이미 지웠다)
+        if (!this.cleaned) (this.fx ??= new Effects(this, h.reduced)).splash(x, y);
+      },
       beforeBoard: () => {
         if (myBig() > 1) {
           this.toast(BIG_RIDE_TOAST);
@@ -379,9 +383,12 @@ export class CampScene extends Phaser.Scene {
       seatReq: () => this.seatReq,
       clock: () => h.net.serverNow(),
       toast: (m) => this.toast(m),
-      splash: (x, y) => (this.fx ??= new Effects(this, h.reduced)).splash(x, y),
-      splashSound: (g) => h.sfx.splash(g),
+      splash: (x, y) => {
+        // 장면 정리 중(배에서 내리기 등)에는 물보라를 만들지 않는다 (입자는 Phaser가 이미 지웠다)
+        if (!this.cleaned) (this.fx ??= new Effects(this, h.reduced)).splash(x, y);
+      },
       snowy: () => isSnowy(campConceptNow()),
+      concept: () => campConceptNow(),
       beforeRide: () => {
         if (myBig() > 1) {
           this.toast(BIG_RIDE_TOAST);
@@ -660,11 +667,11 @@ export class CampScene extends Phaser.Scene {
       onBbq: (sid, item, until, lv, at) => this.food.onBbq(sid, sid === this.host.net.mySid, item, until, lv, at),
       onSnowmen: (list, stacks) => this.snow?.onSnowmen(list, stacks),
       onSnowman: (s, sid, st) => this.snow?.onSnowman(s, sid, st),
-      onSnowmanGone: (id) => this.snow?.onGone(id),
+      onSnowmanGone: (id, brk) => this.snow?.onGone(id, brk),
       onSnowmanDenied: (why, a, id) => this.snow?.onDenied(why, a, id),
       onSnowHold: (sid, h) => this.snow?.setPeerHold(sid, h),
       onSnowStack: (st, h) => this.snow?.onStack(st, h),
-      onSnowStackGone: (id, sid, took) => this.snow?.onStackGone(id, sid, took),
+      onSnowStackGone: (id, sid, took, brk) => this.snow?.onStackGone(id, sid, took, brk),
       onSnowball: (sid, n, x, y, tx, ty) => this.fight?.onThrow(sid, n, x, y, tx, ty),
       onSnowHit: (sid, by, n, h) => this.fight?.onHit(sid, by, n, h),
       onMapped: (map, peers, seats) => {
@@ -958,6 +965,8 @@ export class CampScene extends Phaser.Scene {
     // 11/17 눈덩이를 들고 있는 동안: 앉기·탈것은 내려놓은 다음에 (E는 내려놓기).
     // 11/18 점프 키(Space·터치 [굴리기])는 굴리기라 점프하지 않는다 — 누르고 있는지는 update가 hub.rollHeld로 본다
     if (a === "jump" && this.snow?.holding) return;
+    // 11/26 쌓다 만 내 눈덩이 바로 앞이면 X(터치 [허물기]) = 허물기 (들고 있어도 된다). 내 눈사람 앞이면 길게 눌러야 해서 누름만 받아 둔다
+    if (a === "sit" && !pl.sitting && this.snow?.dismantle()) return;
     if ((a === "sit" || a === "ride") && this.snow?.blocks()) return;
     if (a === "jump") {
       pl.jump(now, this.seatReq);
@@ -1083,11 +1092,6 @@ export class CampScene extends Phaser.Scene {
       case "sign":
         this.toast(`시간표에는 '다음 버스: 언젠가'라고 적혀 있어요. 그래도 ${keyJosa("E", "를")} 누르면 와요.`);
         break;
-      case "sale":
-        // 11/26 분양 안내 입간판: 카라반(관리소 앞) = 언젠가 씨 창 · 펜션(소슬 펜션 입구) = 소슬댁 창 (그 종류만 판다)
-        this.closeTalk();
-        bridge.emit("portal:open", { kind: "housing", zone: "camp", camp: o.id === "sale:pension" ? "pension" : "caravan" });
-        break;
       case "bbq":
       case "vending":
         // 11/15 야외 바베큐 그릴(먹거리)·음료 자판기(마실 거리): 메뉴 창 (사면 camp:bbq:eat으로 돌아온다)
@@ -1169,8 +1173,9 @@ export class CampScene extends Phaser.Scene {
   // ── NPC 말 걸기 ──
 
   private talkTo(id: CampNpcId): void {
-    // 11/26 분양 세 사람: 말을 걸면 그 사람이 파는 종류 하나만의 분양 창 (카라반 = 언젠가 씨, 펜션 = 소슬댁, 촌캉스 = 순이 할머니 — components/housing)
-    const sale = id === "keeper" ? "caravan" : id === "sosul" ? "pension" : id === "suni" ? "rural" : null;
+    // 11/26 분양 세 사람: 말을 걸면 그 사람이 파는 종류 하나만의 분양 창 (카라반 = 언젠가 씨, 펜션 = 소슬댁, 촌캉스 = 순이 할머니 — components/housing).
+    // 캠핑장 분양 창은 여기서만 연다 (운영자 「카라반, 촌캉스도 NPC만으로 통일」 — 입간판·빈 터 팻말 없음, 빈 터 E는 안내만)
+    const sale = campSaleKindOf(id);
     if (sale) {
       this.closeTalk();
       bridge.emit("portal:open", { kind: "housing", zone: "camp", camp: sale });
@@ -1364,7 +1369,8 @@ export class CampScene extends Phaser.Scene {
     this.life?.update(dt, view, s);
     this.homes?.update(L.darkness, s, view);
     this.syncHammocks();
-    this.snow?.update(s, rollHeld);
+    // 11/26 X·[허물기]를 누르고 있으면 내 눈사람 길게 눌러 허물기
+    this.snow?.update(s, rollHeld, this.host.hub.sitHeld && !this.locked && !this.covered);
     for (const r of this.remotes.values()) r.update(pnow, view, s);
     this.footbath?.update(now, pl, this.remotes);
     this.fight?.update(s);
@@ -1732,6 +1738,9 @@ export class CampScene extends Phaser.Scene {
     this.atmos?.destroy();
     this.lighting?.destroy();
     this.fireworks = null;
+    // 11/26 장면은 한 번 만들어 여행마다 다시 쓰므로 물보라 효과도 버린다 (남기면 다음 여행에서 지운 입자로 터진다 — 운영 오류 'fill' null)
+    this.fx = null;
+    this.snowGrid = null;
     this.player?.destroy();
     this.map?.destroy();
     // 소식은 월드로 돌려준다 (CampTrip이 먼저 했어도 한 번 더 — 남은 콜백이 지운 장면을 부르지 않게)

@@ -260,6 +260,11 @@ export type GameEvents = {
   "camp:talk": { npc: string; name: string; lines: string[] } | null;
   /** 11/18 캠핑장 눈덩이를 들고 있음 (sticky) → 터치 [점프] 버튼이 [굴리기]가 된다 (누르고 있는 동안 굴리기, 떼면 안기) */
   "camp:snowball": { held: boolean };
+  /**
+   * 11/26 캠핑장 쌓다 만 내 덩이·다 세운 내 눈사람 바로 앞 (sticky) → 터치 [앉기] 단추가 [허물기]가 된다.
+   * hold = 눈사람이라 길게 눌러야 한다 (누르는 동안 input:sitHold), 아니면 한 번 누르기(input:sit)
+   */
+  "camp:snowBreak": { near: boolean; hold?: boolean };
   /** 11/18 마을·캠핑장 눈싸움: 지금 눈을 던질 수 있는 곳·자세인지 (sticky, 겨울판 바깥에서 서 있거나 걸을 때) → 터치 [눈 던지기] 단추를 보인다 */
   "snow:can": { on: boolean };
   /** 11/18 눈 던지기 쿨타임: 다시 던질 수 있는 시각 (Date.now 기준 ms, sticky) → 터치 [눈 던지기] 단추가 남은 시간을 시계처럼 */
@@ -362,6 +367,8 @@ export type UiEvents = {
   "input:jump": undefined;
   /** 11/18 캠핑장 눈덩이 [굴리기] 버튼을 누르고 있음(on)·뗌. 데스크톱은 Space를 누르고 있는 동안 */
   "input:roll": { on: boolean };
+  /** 11/26 터치 [허물기]를 누르고 있음 (캠핑장 내 눈사람 길게 눌러 허물기 — 누르는 동안 on) */
+  "input:sitHold": { on: boolean };
   /** 11/18 눈싸움 [눈 던지기] (터치 단추). 데스크톱은 F (바닷가에서는 갈매기 과자) */
   "input:snowball": undefined;
   /** 감정표현 (모바일 버튼). 데스크톱은 1=wave, 2=cheer */
@@ -650,6 +657,7 @@ const STICKY = new Set<keyof AllEvents>([
   "camp:talk",
   "tutorial:on",
   "camp:snowball",
+  "camp:snowBreak",
   "snow:can",
   "snow:cool",
   "portal:walk",

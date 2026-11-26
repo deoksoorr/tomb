@@ -116,6 +116,11 @@ export class KeyboardInput {
     return this.down.has("Space");
   }
 
+  /** 11/26 X(·C)를 누르고 있는지 (캠핑장 내 눈사람 길게 눌러 허물기 — 누르는 순간은 sit으로도 온다) */
+  get sitHeld(): boolean {
+    return this.down.has("KeyX") || this.down.has("KeyC");
+  }
+
   get running(): boolean {
     return this.down.has("ShiftLeft") || this.down.has("ShiftRight");
   }

@@ -11,6 +11,8 @@ export class InputHub {
   private runToggle = false;
   /** 11/18 터치 [굴리기]를 누르고 있음 */
   private rollTouch = false;
+  /** 11/26 터치 [허물기]를 누르고 있음 (내 눈사람 길게 눌러 허물기) */
+  private sitTouch = false;
   private blocked = false;
   private handler: ((a: KeyAction) => void) | null = null;
 
@@ -57,6 +59,15 @@ export class InputHub {
     this.rollTouch = on;
   }
 
+  setSitHold(on: boolean): void {
+    this.sitTouch = on;
+  }
+
+  /** 11/26 앉기 키를 누르고 있는지 (X·C 또는 터치 [허물기] — 캠핑장 내 눈사람 길게 눌러 허물기) */
+  get sitHeld(): boolean {
+    return !this.blocked && (this.sitTouch || this.keys.sitHeld);
+  }
+
   /** 11/18 굴리기를 누르고 있는지 (Space 또는 터치 [굴리기]) */
   get rollHeld(): boolean {
     return !this.blocked && (this.rollTouch || this.keys.jumpHeld);
@@ -68,6 +79,7 @@ export class InputHub {
     if (b) {
       this.joyX = this.joyY = 0;
       this.rollTouch = false;
+      this.sitTouch = false;
     }
   }
 

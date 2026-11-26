@@ -85,12 +85,9 @@ describe("앞마당 안내", () => {
 });
 
 describe("분양 NPC마다 자기 종류만", () => {
-  it("창이 파는 종류: 말을 건 NPC(camp) → 빈 터 문·팻말의 터 종류 → 카라반", () => {
+  it("창이 파는 종류: 말을 건 NPC(camp) → 카라반 (빈 터 E는 창을 열지 않는다)", () => {
     expect(campKindOf({ camp: "pension" })).toBe("pension");
-    expect(campKindOf({ camp: "rural", lot: 1 })).toBe("rural");
-    expect(campKindOf({ lot: 13 })).toBe("pension");
-    expect(campKindOf({ lot: 16 })).toBe("rural");
-    expect(campKindOf({ lot: 7 })).toBe("caravan");
+    expect(campKindOf({ camp: "rural" })).toBe("rural");
     expect(campKindOf(null)).toBe("caravan");
   });
   it("창 제목은 NPC · 종류 하나, 터 카드의 자리 이름", () => {

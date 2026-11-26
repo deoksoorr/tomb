@@ -51,6 +51,11 @@ export type SlidePose = P & {
   out: P;
 };
 
+/** 한 번 타는 박자 (ms — 효과음이 따른다): 꼭대기에 앉는 때 · 미끄러지기 시작 · 풀·언덕 밑에 닿는 때 */
+export function slideTimeline(snowy: boolean): { sitAt: number; startAt: number; endAt: number } {
+  return { sitAt: CLIMB_MS + STEP_MS, startAt: SLIDE_START, endAt: SLIDE_START + (snowy ? SLED_MS : SLIDE_MS) };
+}
+
 /** 탄 뒤 t ms의 자리·자세 */
 export function slideRidePose(t: number, snowy: boolean): SlidePose {
   const base = { inPool: false, out: SLIDE_OUT };

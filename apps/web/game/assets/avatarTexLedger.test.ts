@@ -166,6 +166,27 @@ describe("아바타 시트 원장", () => {
     expect(textures.has("avatar-a-lie")).toBe(false);
   });
 
+  it("11/26 그림은 새 시트인데 옛 시트 애니메이션이 아직 도는 스프라이트가 있으면 미룬다 (운영 오류: globalRemove → sourceSize null)", () => {
+    // 손 흔드는 중(몸짓) 남이 갈아입으면 retexture가 새 시트로 바꿔도 옛 몸짓 애니메이션이 남고, 탭이 뒤에 있어 게임 루프가 멈추면
+    // 다음 프레임에 옛 시트로 돌아가지 않는다. 그 사이 옛 시트를 지우면 Phaser가 지운 프레임으로 되돌리다 터지고 스프라이트 텍스처가 null이 된다
+    const { ledger, sheet, textures, anims, lists, advance } = setup();
+    sheet("avatar-a");
+    sheet("avatar-b");
+    ledger.hold("avatar-b");
+    ledger.hold("avatar-a");
+    ledger.release("avatar-a");
+    const spr = { texture: { key: "avatar-b" }, anims: { isPlaying: true, currentAnim: { key: "avatar-a:walk:0" } } };
+    lists[0].push(spr as unknown as { texture: { key: string } });
+    advance(IDLE_MAX_MS + GRACE_MS);
+    expect(textures.has("avatar-a")).toBe(true);
+    expect(anims.has("avatar-a:walk:0")).toBe(true);
+    // 멈춘(지난) 애니메이션은 막지 않는다 — Phaser globalRemove는 도는 것만 건드린다
+    spr.anims.isPlaying = false;
+    advance(60_000);
+    expect(textures.has("avatar-a")).toBe(false);
+    expect(anims.has("avatar-a:walk:0")).toBe(false);
+  });
+
   it("만든 그림 키가 다른 잡힌 시트와 같아도 그 시트는 지우지 않는다", () => {
     const { ledger, sheet, textures, advance } = setup();
     sheet("avatar-a");

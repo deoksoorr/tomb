@@ -1,5 +1,6 @@
 import type * as Phaser from "phaser";
 import {
+  CAMP_ROWBOAT_SPEED,
   CAMP_ROWBOATS,
   campRowboatDismount,
   campRowboatSeatById,
@@ -12,6 +13,7 @@ import { addCanvasTexture } from "../assets/manifest";
 import type { Player } from "../entities/Player";
 import type { RemoteAvatar } from "../entities/RemoteAvatar";
 import { bridge } from "../bridge";
+import { BoatSfx } from "../world/boatSfx";
 import { boatFacing, PASSENGER_GRACE_MS, passengerDrop, passengerMoves } from "../logic/boat";
 import type { MoveInput } from "../logic/movement";
 import { BOAT_FRAMES, BOAT_H, BOAT_TINTS, BOAT_VW, boatGeom, boatSheet, boatVH, boatVSheet, boatW } from "../sprites/rideProps";
@@ -73,7 +75,12 @@ const texKey = (n: number, dir: DirId, layer: "back" | "front") => `${CAMP_TEX_P
 export class CampRowboats {
   private readonly views: View[] = [];
   private motion = { x: 0, y: 0, vx: 0, vy: 0 };
-  private strokeAt = 0;
+  /** 11/26 배 공용 소리 (탈 때·내릴 때·노 — 마을 조각배·카약과 같은 소리, 구경꾼은 놀거리 거리 규칙) */
+  private readonly sfx = new BoatSfx();
+  /** 지난 프레임에 접속해 있었는지 (접속 직후 자리 목록이 한꺼번에 들어올 때 탈 때 소리를 몰아 내지 않게) */
+  private wasOnline = false;
+  /** 장면 정리 중 (맵 옮길 때 내리기 소리를 내지 않게) */
+  private closing = false;
   private pinned = new Set<RemoteAvatar>();
   /** 터치 [내리기] 버튼 (boat:passenger)에 알린 값 */
   private passengerShown = false;
@@ -193,6 +200,7 @@ export class CampRowboats {
     v.home = null;
     if (k === 0) this.motion = { x: v.x, y: v.y, vx: 0, vy: 0 };
     if (h.online()) h.sit(`qN${v.n + 1}-${k}`);
+    this.sfx.board(`row${v.n}`, true, 0, now);
     if (!h.reduced) h.splash(v.x, v.y + 2);
   }
 
@@ -206,6 +214,7 @@ export class CampRowboats {
     pl.leaveBoat(Math.round(to.x), Math.round(to.y), h.scene.time.now);
     if (h.online()) h.stand();
     if (toast) h.toast(toast);
+    if (!this.closing) this.sfx.leave(`row${v.n}`, true, 0);
   }
 
   onSeat(seatId: string, sid: Sid | null): void {
@@ -293,7 +302,6 @@ export class CampRowboats {
       v.x = this.motion.x;
       v.y = this.motion.y;
       v.dir = boatFacing(v.dir, this.motion.vx, this.motion.vy);
-      if (rowing && now >= this.strokeAt) this.strokeAt = now + STROKE_MS;
     } else {
       if (passengerMoves(move) && now - this.boardAt >= PASSENGER_GRACE_MS) {
         this.passengerOff();
@@ -329,9 +337,20 @@ export class CampRowboats {
     const wall = Date.now();
     const remotes = h.remotes();
     const pinned = new Set<RemoteAvatar>();
+    const pl = h.player();
+    const online = h.online();
     for (const v of this.views) {
       const before = [v.seat[0], v.seat[1]];
       v.seat = [this.seatOwner(v.n, 0), this.seatOwner(v.n, 1)];
+      const onBoat = v.seat[0] === -1 || v.seat[1] === -1;
+      const ear = Math.hypot(v.x - pl.x, v.y - pl.y);
+      // 다른 사람이 타고 내리는 소리 (내 것은 board·leave가 낸다. 자리만 바꿔 앉는 건 소리 없음)
+      if (online && this.wasOnline) {
+        const was = before.filter((s): s is Sid => s !== null && s !== -1);
+        const cur = v.seat.filter((s): s is Sid => s !== null && s !== -1);
+        if (cur.some((s) => !was.includes(s))) this.sfx.board(`row${v.n}`, onBoat, ear, now);
+        if (was.some((s) => !cur.includes(s))) this.sfx.leave(`row${v.n}`, onBoat, ear);
+      }
       const empty = v.seat[0] === null && v.seat[1] === null;
       if (empty && (before[0] !== null || before[1] !== null) && !v.home) v.home = { x: v.x, y: v.y, at: now };
       const ref = v.seat[0] !== null ? { who: v.seat[0], k: 0 as const } : v.seat[1] !== null ? { who: v.seat[1], k: 1 as const } : null;
@@ -356,8 +375,11 @@ export class CampRowboats {
       v.speed = inst > 300 ? v.speed : v.speed + (inst - v.speed) * Math.min(1, dtMs / 160);
       v.lastX = v.x;
       v.lastY = v.y;
+      // 노 젓는 소리: 노 젓는 사람이 있는 배만 (빈 배가 매어 둔 자리로 떠가는 건 조용히), 박자는 배 속도를 따라
+      this.sfx.row(`row${v.n}`, now, v.seat[0] !== null ? v.speed : 0, CAMP_ROWBOAT_SPEED, onBoat, ear);
       this.draw(v, wall);
     }
+    this.wasOnline = online;
     for (const r of this.pinned) if (!pinned.has(r)) r.posOverride = null;
     this.pinned = pinned;
   }
@@ -406,7 +428,9 @@ export class CampRowboats {
 
   destroy(): void {
     this.offMoveOff();
+    this.closing = true;
     this.dismount();
+    this.sfx.destroy();
     if (this.passengerShown) bridge.emit("boat:passenger", { on: false });
     for (const r of this.pinned) r.posOverride = null;
     this.pinned.clear();

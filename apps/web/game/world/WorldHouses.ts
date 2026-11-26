@@ -2,7 +2,7 @@ import { housingApi } from "@/lib/housing/client";
 import { onVisibleAgain, tabHidden } from "@/lib/hooks/visibleAgain";
 import type { VillageResponse } from "@/lib/housing/types";
 import { bridge } from "../bridge";
-import { onHomesChanged } from "../housing/homesRefresh";
+import { onHomesChanged, staleHomesV } from "../housing/homesRefresh";
 import { graveChannelFor } from "./graveChannel";
 import type { WorldMap } from "./WorldMap";
 
@@ -42,7 +42,8 @@ export class WorldHouses {
     if (last) this.use(last.village, last.myHouseId);
     this.offs.push(bridge.on("village:data", ({ village, myHouseId }) => this.use(village, myHouseId)));
     // 11/26 같은 채널 누가 분양·외관·넓히기·문패 → 몇 초 안에 다시 받는다 (실시간 서버 homes — 5분 주기를 기다리지 않게)
-    this.offs.push(onHomesChanged("village", (v) => void this.load({ v })));
+    // 11/26 지금 그린 마을이 이미 v 뒤에 만든 것이면 건너뛴다 (실시간 서버가 입장 때 이 채널 마지막 v를 다시 보낸다)
+    this.offs.push(onHomesChanged("village", (v) => void this.load({ v }), undefined, (v) => !!this.village && (this.village.ch ?? 1) === this.ch && this.village.generatedAt >= v));
     this.offs.push(
       bridge.on("net:status", (st) => {
         const ch = graveChannelFor(st, this.startChannel);
@@ -78,6 +79,9 @@ export class WorldHouses {
     try {
       const v = await housingApi.village(this.ch, fresh ?? false);
       if (this.alive) this.use(v, this.myHouseId);
+      // 11/26 CDN 주소로 받은 목록이 이 채널에서 이미 들은 집 바뀜보다 먼저 만든 것이면 그 v로 한 번 더 (homesRefresh staleHomesV)
+      const stale = !fresh && this.alive ? staleHomesV("village", v.generatedAt) : null;
+      if (stale !== null) void this.load({ v: stale });
     } catch {
       // 마을 정보를 못 받아도 빈 필지로 둔다 (다음 주기에 다시)
       if (this.alive && !this.village) this.use(null, this.myHouseId);

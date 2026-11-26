@@ -142,7 +142,7 @@ export class AvatarTexLedger {
     }
     const want = new Set<string>();
     for (const ks of groups.values()) for (const k of ks) want.add(k);
-    const used = this.inUse(want);
+    const used = this.inUse(want, groups);
     let anims: string[] | null = null;
     for (const [base, ks] of groups) {
       // 다시 잡혔거나(같은 키를 쓰는 AvatarView) 그림이 아직 쓰면 미룬다. 만든 그림 키가 다른 시트 키와 겹쳐도 잡힌 시트는 지우지 않는다
@@ -167,13 +167,21 @@ export class AvatarTexLedger {
     }
   }
 
-  /** 화면 목록(컨테이너·레이어 안까지)에서 want 중 쓰는 텍스처 키 */
-  private inUse(want: ReadonlySet<string>): Set<string> {
+  /**
+   * 화면 목록(컨테이너·레이어 안까지)에서 want 중 쓰는 텍스처 키.
+   * 11/26 그림은 다른 시트여도 그 시트 애니메이션("시트:…")이 도는 스프라이트가 있으면 시트 키도 쓰는 것으로 친다
+   * — 지우면 Phaser(AnimationState.globalRemove)가 지운 프레임으로 되돌리다 터지고(sourceSize null) 스프라이트 텍스처가 null로 남는다
+   */
+  private inUse(want: ReadonlySet<string>, bases: ReadonlyMap<string, unknown>): Set<string> {
     const used = new Set<string>();
     const visit = (list: readonly unknown[]) => {
       for (const o of list) {
         const k = (o as { texture?: { key?: unknown } } | null)?.texture?.key;
         if (typeof k === "string" && want.has(k)) used.add(k);
+        const a = (o as { anims?: { isPlaying?: unknown; currentAnim?: { key?: unknown } | null } } | null)?.anims;
+        const ak = a?.isPlaying ? a.currentAnim?.key : undefined;
+        // 지울 때와 같은 기준 ("시트:"로 시작하는 애니메이션)
+        if (typeof ak === "string") for (const b of bases.keys()) if (ak.startsWith(`${b}:`)) used.add(b);
         const kids = (o as { list?: unknown } | null)?.list;
         if (Array.isArray(kids)) visit(kids);
       }

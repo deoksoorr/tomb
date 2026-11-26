@@ -34,10 +34,12 @@ export type SnowmanInfo = { id: string; x: number; y: number; seed: number; by: 
  * full = 캠핑장에 덩이가 너무 많음, lost = 그 덩이가 없음(사라졌거나 내 것이 아님)
  */
 /** many = 11/18 서 있는 내 눈사람과 쌓는 중인 내 덩이가 이미 SNOWMAN_PER_PERSON개 */
-export type SnowmanDenyWhy = "spot" | "wait" | "near" | "full" | "lost" | "many";
-/** 거절된 동작: put = 내려놓기, add = 올리기(세 단째면 세우기까지), take = 다시 들기 */
-export type SnowAct = "put" | "add" | "take";
-const DENY_WHYS: readonly SnowmanDenyWhy[] = ["spot", "wait", "near", "full", "lost", "many"];
+/** lone = 11/26 한 덩이만 놓인 내 덩이(몸통만)가 이미 있다 — 그 위에 먼저 올리거나 허문다. 옛 웹은 모르는 값이라 spot으로 받는다 (덩이를 다시 든다) */
+export type SnowmanDenyWhy = "spot" | "wait" | "near" | "full" | "lost" | "many" | "lone";
+/** 거절된 동작: put = 내려놓기, add = 올리기(세 단째면 세우기까지), take = 다시 들기, break = 11/26 허물기 (쌓다 만 덩이·다 세운 눈사람 — id로 가린다) */
+export type SnowAct = "put" | "add" | "take" | "break";
+const DENY_WHYS: readonly SnowmanDenyWhy[] = ["spot", "wait", "near", "full", "lost", "many", "lone"];
+export const isSnowAct = (v: unknown): v is SnowAct => v === "put" || v === "add" || v === "take" || v === "break";
 export const isSnowmanDenyWhy = (v: unknown): v is SnowmanDenyWhy => (DENY_WHYS as readonly unknown[]).includes(v);
 
 export const SNOWMAN_ID_RE = /^[a-z0-9]{1,16}$/;
@@ -57,7 +59,18 @@ export function snowmanAlive(at: number, now: number): boolean {
 const inBox = (x: number, y: number, x0: number, y0: number, x1: number, y1: number) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
 
 /**
- * 서버 검증: 캠핑장 눈밭에 세울 수 있는 자리인지 (대략 — 건물·물·버스 길·모닥불 자리·절벽·집터를 뺀다).
+ * 11/26 캠핑장 채집 지점 자리 (웹 lib/forage/catalog CAMP_GATHER_NODES와 같은 좌표 — 웹 game/camp/snowman.test가 맞는지 본다).
+ * 서버가 눈덩이·눈사람 자리를 볼 때 쓴다
+ */
+export const CAMP_FORAGE_SPOTS: readonly (readonly [number, number])[] = [[60, 758], [250, 770], [860, 770], [1238, 560], [1262, 100], [900, 62], [330, 40], [560, 780], [456, 492], [750, 506], [314, 300], [120, 766], [420, 780], [958, 788], [1262, 420], [1100, 40], [1222, 298], [612, 782], [1186, 781], [870, 240], [564, 440], [426, 238], [840, 250], [508, 362], [774, 360], [930, 330], [1262, 200], [440, 596], [1000, 582], [180, 780], [700, 780], [1010, 775], [30, 600], [1262, 700], [330, 770], [600, 500], [716, 560], [610, 590], [714, 624], [604, 420], [720, 470], [608, 554], [700, 700], [590, 740], [690, 746]];
+/**
+ * 11/26 눈덩이·눈사람은 채집 지점과 이만큼 떨어진다 — 붙어 있으면 「E 약초 캐기」 안내가 덩이 안내(다시 들기·허물기)를 가렸다.
+ * 덩이 안내 거리(웹 SNOW_REACH 20) + 지점 닿는 거리(14) + 지점 E 자리가 6px 아래인 몫
+ */
+export const SNOW_NODE_GAP = 40;
+
+/**
+ * 서버 검증: 캠핑장 눈밭에 세울 수 있는 자리인지 (대략 — 건물·물·버스 길·모닥불 자리·절벽·집터·채집 지점 둘레를 뺀다).
  * 웹은 이보다 좁게(바닥 종류·충돌까지) 본다. 판(겨울·크리스마스)은 서버가 모르므로 보지 않는다
  */
 export function campSnowSpotOk(x: number, y: number): boolean {
@@ -76,6 +89,8 @@ export function campSnowSpotOk(x: number, y: number): boolean {
   if (campPoolD(x, y) < 1.08) return false;
   if (inBox(x, y, CAMP_RES.x0 - CAMP_RES_EMBANK - 4, CAMP_RES.y0 - CAMP_RES_EMBANK - 4, CAMP_RES.x1 + CAMP_RES_EMBANK + 4, CAMP_RES.y1 + CAMP_RES_EMBANK + 4)) return false;
   for (const l of CAMP_LOTS) if (inBox(x, y, l.x - 2, l.y - 2, l.x + l.w + 2, l.y + l.h + 2)) return false;
+  // 11/26 채집 지점 둘레 (안내가 겹치지 않게)
+  for (const [nx, ny] of CAMP_FORAGE_SPOTS) if (Math.hypot(x - nx, y - ny) < SNOW_NODE_GAP) return false;
   return true;
 }
 
@@ -117,6 +132,18 @@ export const SNOW_ACT_INTERVAL_MS = 200;
 export const SNOW_HOLD_INTERVAL_MS = 150;
 /** 웹이 들고 있는 상태를 보내는 최소 간격 (마지막 상태는 꼭 보낸다) */
 export const SNOW_HOLD_SEND_MS = 400;
+
+/**
+ * 11/26 한 사람이 바닥에 한 덩이만 놓아 둔 덩이(몸통만)는 하나까지 — 두 번째 몸통을 따로 놓으면 둘 다 배를 기다리다 내 몫이 막혔다.
+ * 새로 내려놓기 전에 본다 (웹·서버 같은 식). mine = 내 쌓는 중인 덩이들의 크기
+ */
+export function snowLoneBlocks(mine: Iterable<{ sizes: readonly unknown[] }>): boolean {
+  for (const st of mine) if (st.sizes.length === 1) return true;
+  return false;
+}
+
+/** 11/26 내 덩이·눈사람을 허물 수 있는 거리 (서버가 아는 내 위치에서 — 웹은 바로 앞에서만 보낸다) */
+export const SNOW_BREAK_REACH = SNOWMAN_REACH;
 
 /** 아직 놓여 있는 덩이인지 */
 export function snowStackAlive(at: number, now: number): boolean {
