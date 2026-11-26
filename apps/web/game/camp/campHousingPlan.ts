@@ -452,6 +452,7 @@ function caravanPlan(l: CampLot, st: HomeState): HomePlan {
   const g = siteGeo(l);
   const { s, toward, cy } = g;
   const top = s.y - SITE_H / 2;
+  const front = [1, 2, 3, 4, 5, 6].includes(l.lot);
   const flip = g.side === 1;
   const out: HomePlan = {
     props: [],
@@ -473,11 +474,13 @@ function caravanPlan(l: CampLot, st: HomeState): HomePlan {
   camp(T.pebbles((l.lot + 1) % 3), s.x + toward * (SITE_W / 2 - 4), top + 22, FLAT_TAG + s.y, 1);
   prop(`${TP}hookup-${sb(st)}`, s.x - toward * (SITE_W / 2 - 9), top + 18, top + 18, 2, { make: () => cap(st, A.hookupArt().toCanvas(), 12) });
   if (!st.owned) {
-    // 분양 전: 둘레 줄만. 11/26 가운데 「분양」 번호 팻말은 뺐다 (운영자 「카라반, 촌캉스도 NPC만으로 통일」 — 분양은 언젠가 씨에게 말을 걸어서만).
-    // door = 터 가운데 E 「분양 안내」 자리 (옛 팻말 자리), 「분양 중」 글씨는 그 위 plate
+    // 분양 전: 둘레 줄 + 가운데 번호 팻말 (11/26 운영자: 언젠가 씨 창에서 고를 「N번 자리」가 맵에서 보여야 한다).
+    // 팻말은 파는 곳이 아니다 — door = 팻말 앞 E 「분양 안내」 (언젠가 씨 안내 토스트만), 「분양 중 · N번 · ○○ 자리」 글씨는 팻말 위 plate
+    prop(`${TP}post-sale-${l.lot}-${front ? 1 : 0}-${sb(st)}`, s.x, s.y + 6, s.y + 6, 2, { make: () => cap(st, A.sitePostArt(l.n, front).toCanvas(), 26) });
     prop(`${TP}plotRope-${SITE_W}`, s.x, s.y + SITE_H / 2 - 4, s.y + SITE_H / 2 - 6, 0, { make: () => A.plotRopeArt(SITE_W - 12, SITE_H - 12).toCanvas() });
     out.door = { x: s.x, y: s.y + 14 };
-    out.plate = { cx: s.x, bottom: s.y - 22, w: SITE_W };
+    out.plate = { cx: s.x, bottom: s.y - 24, w: SITE_W };
+    out.furniture.push({ x: s.x - 10, y: s.y + 2, w: 20, h: 6 });
     return out;
   }
   const stage = st.yard;
@@ -1576,9 +1579,9 @@ export function allCampHomeSeats(lots: readonly CampLot[]): HomeSeat[] {
   return lots.flatMap((l) => campHomeSeatsOf(l));
 }
 
-/** 빈 터 팻말 글씨: 「분양 중 · 폭포 앞 자리」·「분양 중 · 솔바람채」 */
+/** 빈 터 글씨: 「분양 중 · 1번 · 폭포 앞 자리」(카라반 — 언젠가 씨 창 「카라반 1번」 카드와 같은 번호)·「분양 중 · 솔바람채」 */
 export function saleLabel(l: CampLot): string {
-  if (l.kind === "caravan") return `분양 중 · ${CARAVAN_GRADE_NAME[l.grade ?? "forest"]} 자리`;
+  if (l.kind === "caravan") return `분양 중 · ${l.n}번 · ${CARAVAN_GRADE_NAME[l.grade ?? "forest"]} 자리`;
   return `분양 중 · ${l.name ?? campLotShort(l.lot)}`;
 }
 

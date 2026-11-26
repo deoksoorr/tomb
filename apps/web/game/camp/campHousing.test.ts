@@ -1,4 +1,4 @@
-import { CAMP_HOME_SEATS, CAMP_LOTS, CAMP_OFFICE, CAMP_OFFICE_W, CAMP_SEATS, CARAVAN_MODELS, type CampYard } from "@tomb/protocol";
+import { CAMP_HOME_SEATS, CAMP_LOTS, CAMP_OFFICE, CAMP_OFFICE_W, CAMP_SEATS, CARAVAN_MODELS, campLotShort, type CampYard } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import * as A from "./campHomeArt";
 import * as P4 from "./campHomeArtPension";
@@ -309,17 +309,31 @@ describe("캠핑장 집 그림", () => {
 });
 
 describe("캠핑장 집 문구·값", () => {
-  it("11/26 빈 터엔 분양 팻말이 없다 (카라반·펜션·촌캉스 모두 — 분양은 NPC에게만), 빈 카라반 자리는 둘레 줄만", () => {
+  it("11/26 빈 카라반 자리는 둘레 줄 + 가운데 번호 팻말 (몇 번 자리인지 보이게), 펜션·촌캉스는 팻말 없음 — 팻말 앞 E는 안내만", () => {
     for (const l of CAMP_LOTS)
       for (const xmas of [false, true]) {
         const plan = campHomePlan(l, { owned: false, yard: 1, wide: false, snowy: xmas, xmas, night: false });
-        expect(plan.props.filter((p) => /post-(p|r)?sale/.test(p.key)), `${l.lot}번`).toHaveLength(0);
-        if (l.kind === "caravan") {
-          expect(plan.props.filter((p) => /plotRope/.test(p.key)), `${l.lot}번`).toHaveLength(1);
-          // 옛 팻말 막는 상자도 없다 (빈 자리 가운데를 지나다닐 수 있다)
-          expect(plan.furniture, `${l.lot}번`).toEqual([]);
+        const posts = plan.props.filter((p) => /post-(p|r)?sale/.test(p.key));
+        if (l.kind !== "caravan") {
+          expect(posts, `${l.lot}번`).toHaveLength(0);
+          continue;
         }
+        expect(posts.map((p) => p.key.split("-")[3]), `${l.lot}번`).toEqual([String(l.lot)]);
+        expect(plan.props.filter((p) => /plotRope/.test(p.key)), `${l.lot}번`).toHaveLength(1);
+        // E 「분양 안내」 자리(door)는 팻말 막는 상자 바로 앞 (상자 밖에서 닿는다)
+        const [box] = plan.furniture;
+        expect(plan.furniture, `${l.lot}번`).toHaveLength(1);
+        expect(plan.door.y, `${l.lot}번`).toBeGreaterThan(box.y + box.h);
+        expect(Math.abs(plan.door.x - (box.x + box.w / 2)), `${l.lot}번`).toBeLessThan(1);
       }
+  });
+
+  it("11/26 빈 카라반 글씨 번호 = 언젠가 씨 창 카드 번호 (campLotShort 「카라반 N번」), 집 있는 카라반 문패도 「N번 · 」", () => {
+    for (const l of CAMP_LOTS.filter((x) => x.kind === "caravan")) {
+      const num = /카라반 (\d+)번/.exec(campLotShort(l.lot))![1];
+      expect(saleLabel(l)).toContain(` ${num}번 · `);
+      expect(plateHead(l, "콩이네")).toBe(`${num}번 · `);
+    }
   });
 
   it("11/26 빈 터 E: 세 종류 모두 「분양 안내」 → 그 종류 분양 NPC 안내 토스트만 (분양 창은 NPC에게서만)", () => {
@@ -332,9 +346,9 @@ describe("캠핑장 집 문구·값", () => {
   });
 
   it("빈 터 팻말과 문패 머리", () => {
-    expect(saleLabel(CAMP_LOTS[0])).toBe("분양 중 · 폭포 앞 자리");
-    expect(saleLabel(CAMP_LOTS.find((l) => l.lot === 2)!)).toBe("분양 중 · 강가 자리");
-    expect(saleLabel(CAMP_LOTS.find((l) => l.lot === 8)!)).toBe("분양 중 · 숲 쪽 자리");
+    expect(saleLabel(CAMP_LOTS[0])).toBe("분양 중 · 1번 · 폭포 앞 자리");
+    expect(saleLabel(CAMP_LOTS.find((l) => l.lot === 2)!)).toBe("분양 중 · 2번 · 강가 자리");
+    expect(saleLabel(CAMP_LOTS.find((l) => l.lot === 8)!)).toBe("분양 중 · 8번 · 숲 쪽 자리");
     expect(saleLabel(CAMP_LOTS.find((l) => l.lot === 13)!)).toBe("분양 중 · 솔바람채");
     expect(plateHead(CAMP_LOTS[2], "콩이네")).toBe("3번 · ");
     expect(

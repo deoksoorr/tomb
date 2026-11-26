@@ -36,6 +36,7 @@ const FAMILY: [RegExp, RegExp][] = [
   [/pers-/, /annex|agungi|pyeong|wondumak|pavilion|brushF|dolH|dolV/],
   [/annex/, /wondumak|pavilion/],
   [/hookup/, /cv-/],
+  [/post-sale/, /plotRope/],
 ];
 const sameFamily = (a: string, b: string) => {
   const ka = a.replace(/-[nsx]+$/, "");

@@ -1,4 +1,4 @@
-// 11/26 캠핑장 집 겉모습 그림 ① 카라반 셋(티어드롭·에어스트림·버스)·차양·분양 줄·연결 기둥·등 기둥·경계 통나무. (번호·분양 말뚝은 11/26 뺐다 — 분양은 NPC에게서만)
+// 11/26 캠핑장 집 겉모습 그림 ① 카라반 셋(티어드롭·에어스트림·버스)·차양·빈 자리 번호 팻말·분양 줄·연결 기둥·등 기둥·경계 통나무.
 // 6차 시안(game/camp/mock/mockArt.ts — 실서버 빌드에서 빠짐) 그림을 그대로 옮기고, 앞마당 단계마다 커지는 카라반(caravanStageArt)을 더했다.
 // 캠핑장 그림 규칙 그대로 (campArt): 코드로 그린 픽셀, 윤곽 0x2c2018, 왼쪽 위 빛, 바닥 그림자 타원, 원점 = 바닥 가운데.
 
@@ -41,6 +41,17 @@ function frame(g: Grid, x: number, y: number, w: number, h: number, c: Color): v
 function line(g: Grid, x0: number, y0: number, x1: number, y1: number, c: Color): void {
   const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
   for (let i = 0; i <= steps; i++) g.set(Math.round(x0 + ((x1 - x0) * i) / steps), Math.round(y0 + ((y1 - y0) * i) / steps), c);
+}
+
+const DIGITS: readonly string[] = ["111101101101111", "010110010010111", "111001111100111", "111001111001111", "101101111001001", "111100111001111", "111100111101111", "111001010010010", "111101111101111", "111101111001111"];
+
+function drawNumber(g: Grid, n: number, x: number, y: number, c: Color): void {
+  String(n)
+    .split("")
+    .forEach((ch, i) => {
+      const bits = DIGITS[Number(ch)];
+      for (let k = 0; k < 15; k++) if (bits[k] === "1") g.set(x + i * 4 + (k % 3), y + Math.floor(k / 3), c);
+    });
 }
 
 export type CaravanPal = { body: Color; hi: Color; lo: Color };
@@ -637,6 +648,39 @@ export function caravanDesignArt(d: CaravanDesign, stage: CampYard = 1, o: { xma
 export function caravanBodySwatch(model: CaravanModel, color: number): Color {
   if (model === "airstream") return AIR_ACCENT[color % AIR_ACCENT.length];
   return (model === "teardrop" ? TEARDROP_PALS : BUS_PALS)[color % 4].body;
+}
+
+/** 물가 앞줄 자리 = 물빛 번호판, 숲 뒷줄 = 나무색 (멀리서도 어느 줄인지 보이게) */
+const ROW_PLATE = { front: { bg: 0xcfe6f2, band: 0x3a86b8 }, back: { bg: 0xf2e6c8, band: 0x5a9a5a } } as const;
+
+/**
+ * 빈 카라반 자리 가운데 번호 팻말 (말뚝 둘 + 넓은 판 + 빨간 리본). 11/26 운영자: 언젠가 씨 창에서 고를 때 「몇 번 자리」인지 맵에서 보여야 한다 —
+ * 파는 곳은 아니다 (E는 「분양 안내」 토스트만, 분양은 언젠가 씨에게서만)
+ */
+export function sitePostArt(n: number, front = false): Grid {
+  const P = front ? ROW_PLATE.front : ROW_PLATE.back;
+  const W = 26;
+  const H = 30;
+  const g = new Grid(W, H);
+  const pw = n >= 10 ? 11 : 7;
+  // 말뚝 둘 + 넓은 판 (번호 + 줄 색 띠)
+  g.rect(4, 12, 2, H - 14, WOOD.lo);
+  g.rect(W - 6, 12, 2, H - 14, WOOD.lo);
+  g.rect(1, 3, W - 2, 12, P.bg);
+  frame(g, 1, 3, W - 2, 12, WOOD.line);
+  drawNumber(g, n, Math.round(W / 2 - pw / 2) + 1, 5, 0x3a2a1e);
+  g.hline(3, W - 4, 12, P.band);
+  g.hline(3, W - 4, 11, P.band);
+  // 빨간 리본 (판 위 매듭)
+  g.set(W / 2, 2, 0xd84a3a);
+  g.set(W / 2 - 1, 1, 0xd84a3a);
+  g.set(W / 2 + 1, 1, 0xd84a3a);
+  g.set(W / 2 - 2, 2, 0xb83a2e);
+  g.set(W / 2 + 2, 2, 0xb83a2e);
+  g.outline(OUT);
+  shadow(g, W / 2, H - 1.5, W / 2 - 2, 1.2, 50);
+  // 11/26 팻말 판이 캔버스 양 끝 열(윤곽)까지 닿아 배율에 따라 잘렸다
+  return padGrid(g);
 }
 
 /** 전기·물 연결 기둥 (자리마다 하나, 작은 회색 함 + 초록 불) */
