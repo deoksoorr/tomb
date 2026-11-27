@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { furnitureById } from "@/lib/housing/catalog";
+import { furnitureById, houseUseNote } from "@/lib/housing/catalog";
 import { rotateMode } from "@/lib/housing/layout";
 import type { NpcFurnRow } from "@/lib/housing/npcFurnShop";
 import { FurnitureStage, FurnitureThumb } from "../housing/parts";
@@ -46,9 +46,11 @@ export type NpcFurniturePanelProps = {
   loadingText: string;
   /** 고르거나 돌려 볼 때 (부모가 알림을 지운다) */
   onPick?: () => void;
+  /** 11/27 살 수 없는 까닭 (주면 사기 단추를 막고 이 글로 — 캠핑장 전용 가구 「카라반 주인만 살 수 있어요」) */
+  lockText?: string | null;
 };
 
-export default function NpcFurniturePanel({ rows, points, signedIn, noHouse, pending, onBuy, listLabel, loadingText, onPick }: NpcFurniturePanelProps) {
+export default function NpcFurniturePanel({ rows, points, signedIn, noHouse, pending, onBuy, listLabel, loadingText, onPick, lockText }: NpcFurniturePanelProps) {
   const [picked, setPicked] = useState<string | null>(null);
   const [turn, setTurn] = useState(0);
   const [night, setNight] = useState(false);
@@ -72,9 +74,12 @@ export default function NpcFurniturePanel({ rows, points, signedIn, noHouse, pen
             <FurnitureStage itemId={r.id} w={200} h={140} r={turn % ways} night={night} />
           </div>
           <div className={styles.stageBar}>
-            <button type="button" className={cx(ui.button, styles.stageBtn)} onClick={() => setTurn((t) => (t + 1) % ways)}>
-              {ways === 4 ? "돌려 보기" : "뒤집어 보기"}
-            </button>
+            {/* 11/27 바닥·벽지는 방 전체에 입혀 방향이 없다 */}
+            {!def?.skin && (
+              <button type="button" className={cx(ui.button, styles.stageBtn)} onClick={() => setTurn((t) => (t + 1) % ways)}>
+                {ways === 4 ? "돌려 보기" : "뒤집어 보기"}
+              </button>
+            )}
             <button type="button" className={cx(ui.button, styles.stageBtn)} aria-pressed={night} onClick={() => setNight((n) => !n)}>
               {night ? "낮으로" : "밤으로"}
             </button>
@@ -84,9 +89,10 @@ export default function NpcFurniturePanel({ rows, points, signedIn, noHouse, pen
           <p className={shop.name}>{r.name}</p>
           <p className={shop.desc}>{r.desc}</p>
           {def?.use && <p className={shop.meta}>집에서 「{def.use}」 할 수 있어요.</p>}
+          {def?.campOnly && <p className={shop.meta}>{houseUseNote(def)}</p>}
           {r.have > 0 && <p className={styles.state}>{haveText(r.have)}</p>}
-          <button type="button" className={cx(ui.button, ui.primary, shop.buy)} disabled={!signedIn || pending !== null || short || noHouse} onClick={() => onBuy(r)}>
-            {pending === r.id ? "사는 중…" : noHouse ? "집이 있어야 살 수 있어요" : <span>사기 ({priceText(r.base, r.cost)}){short ? " 모자라요" : ""}</span>}
+          <button type="button" className={cx(ui.button, ui.primary, shop.buy)} disabled={!signedIn || pending !== null || short || noHouse || !!lockText} onClick={() => onBuy(r)}>
+            {pending === r.id ? "사는 중…" : lockText ? lockText.replace(/\.$/, "") : noHouse ? "집이 있어야 살 수 있어요" : <span>사기 ({priceText(r.base, r.cost)}){short ? " 모자라요" : ""}</span>}
           </button>
         </div>
       </section>

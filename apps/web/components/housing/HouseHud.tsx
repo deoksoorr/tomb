@@ -11,6 +11,7 @@ import {
   AWAY_MSG,
   CAMP_FLOOR,
   CAMP_WALL,
+  campOnlyBlock,
   SKIN_AWAY_MSG,
   DEFAULT_FLOOR,
   DEFAULT_WALL,
@@ -329,7 +330,9 @@ function EditToolbar({
   const windowLock = (id: string): string | null =>
     id === DEFAULT_WINDOW || (my.inventory[id] ?? 0) > 0 ? null : away(id) > 0 ? `${skinName(id)}는 다른 집 창문에 쓰고 있어요. 하나로 집 한 채에 쓸 수 있어요.` : WINDOW_LOCKED_MSG;
   const skinLock = (id: string): string | null =>
-    id === DEFAULT_FLOOR || id === DEFAULT_WALL || id === baseFloor || id === baseWall || (my.inventory[id] ?? 0) > 0 || away(id) < 1 ? null : `${skinName(id)}, ${SKIN_AWAY_MSG}`;
+    // 11/27 다른 종류 캠핑장 집 전용 바닥·벽지 (이 집엔 못 입힌다 — 서버도 같은 말로 거절)
+    campOnlyBlock(furnitureById(id), campKind) ??
+    (id === DEFAULT_FLOOR || id === DEFAULT_WALL || id === baseFloor || id === baseWall || (my.inventory[id] ?? 0) > 0 || away(id) < 1 ? null : `${skinName(id)}, ${SKIN_AWAY_MSG}`);
 
   // 11/22 아래쪽 시트 정리: 가방 한 줄만 보이고 [가구 | 바닥 | 벽지] 칸으로 바꿔 본다 (시트 안 세로 스크롤 없이 방이 더 보이게)
   const [tab, setTab] = useState<"items" | "floor" | "wall" | "window">("items");
@@ -489,20 +492,29 @@ function EditToolbar({
           {tab === "items"
             ? owned.map((f) => {
                 const left = (my.inventory[f.id] ?? 0) - (counts[f.id] ?? 0);
-                const elsewhere = left < 1 && away(f.id) > 0;
+                // 11/27 다른 종류 캠핑장 집 전용 가구: 잠금으로 보여 주고 누르면 그 까닭 (가방에 남아 되팔기는 된다)
+                const only = campOnlyBlock(f, campKind);
+                const elsewhere = !only && left < 1 && away(f.id) > 0;
+                const why = only ?? (elsewhere ? `${f.name}, ${AWAY_MSG}` : null);
                 return (
                   <button
                     key={f.id}
                     type="button"
                     className={styles.paletteItem}
-                    disabled={left < 1 && !elsewhere}
-                    aria-disabled={elsewhere || undefined}
-                    style={elsewhere ? { opacity: 0.55 } : undefined}
-                    title={elsewhere ? AWAY_MSG : f.name}
-                    onClick={() => (elsewhere ? bridge.emit("house:notice", { message: `${f.name}, ${AWAY_MSG}` }) : tool({ action: "place", itemId: f.id }))}
-                    aria-label={elsewhere ? `${f.name}, ${AWAY_MSG}` : `${f.name} 놓기, 남은 개수 ${left}`}
+                    disabled={!why && left < 1}
+                    aria-disabled={why ? true : undefined}
+                    style={why ? { opacity: 0.55 } : undefined}
+                    title={only ?? (elsewhere ? AWAY_MSG : f.name)}
+                    onClick={() => (why ? bridge.emit("house:notice", { message: why }) : tool({ action: "place", itemId: f.id }))}
+                    aria-label={why ?? `${f.name} 놓기, 남은 개수 ${left}`}
                   >
-                    <span className={styles.count}>{Math.max(0, left)}</span>
+                    {only ? (
+                      <span className={styles.count} aria-hidden="true">
+                        <PixelIcon name="lock" />
+                      </span>
+                    ) : (
+                      <span className={styles.count}>{Math.max(0, left)}</span>
+                    )}
                     <FurnitureIcon itemId={f.id} size={36} />
                     <span className={styles.paletteLabel}>{f.name}</span>
                   </button>

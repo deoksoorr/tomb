@@ -731,3 +731,60 @@ describe("11/20 야근 빌딩 층 구간마다 포인트 (1~50층 8P · 51~100�
     expect(towerRunPoints(101, 4, 50)).toEqual({ points: 4 * 23, free: 0 });
   });
 });
+
+import { activeCurses, CURSES_BY_FLOOR, curseNotice, curseText, newCurses, nextCurse } from "./tower";
+
+// 11/27 판 HUD 저주 줄 · 새 저주 알림
+describe("저주 줄과 새 저주 알림", () => {
+  it("걸린 저주는 층 순서, 짧은 이름이 다 있다", () => {
+    expect(CURSES_BY_FLOOR.map((c) => c.from)).toEqual([30, 60, 80, 100, 120, 140, 160]);
+    for (const c of CURSES_BY_FLOOR) {
+      expect(c.short.length).toBeGreaterThan(0);
+      // PC 저주 판 한 줄 (「연차 반려 · 회복 절반」)
+      expect(c.brief.length).toBeGreaterThan(0);
+      expect(c.brief.length).toBeLessThanOrEqual(14);
+    }
+    expect(CURSES_BY_FLOOR.find((c) => c.id === "no_potion")!.brief).toBe("물약 못 마심");
+    expect(new Set(CURSES_BY_FLOOR.map((c) => c.short)).size).toBe(CURSES_BY_FLOOR.length);
+    expect(activeCurses(29)).toEqual([]);
+    expect(activeCurses(101).map((c) => c.name)).toEqual(["탕비실 절약", "탕비실 폐쇄", "독촉 메일", "연차 반려"]);
+    for (const f of [1, 30, 59, 60, 99, 100, 161, 300]) expect(new Set(activeCurses(f).map((c) => c.id))).toEqual(new Set(cursesAt(f)));
+  });
+
+  it("다음 저주: 지금 층보다 위에서 처음 걸리는 것", () => {
+    expect(nextCurse(1)).toMatchObject({ from: 30, name: "탕비실 절약" });
+    expect(nextCurse(60)).toMatchObject({ from: 80, name: "독촉 메일" });
+    expect(nextCurse(79)).toMatchObject({ from: 80 });
+    expect(nextCurse(101)).toMatchObject({ from: 120, name: "연달아 회의" });
+    expect(nextCurse(160)).toBeNull();
+  });
+
+  it("새 저주: 판 시작은 시작 층에 걸린 전부, 그 뒤는 새로 넘은 층의 것만 (한 번씩)", () => {
+    expect(newCurses(null, 1)).toEqual([]);
+    expect(newCurses(null, 51).map((c) => c.id)).toEqual(["potion_half"]);
+    expect(newCurses(null, 101).map((c) => c.id)).toEqual(["potion_half", "no_potion", "mon_move", "heal_half"]);
+    expect(newCurses(29, 30).map((c) => c.id)).toEqual(["potion_half"]);
+    expect(newCurses(30, 31)).toEqual([]);
+    expect(newCurses(99, 100).map((c) => c.id)).toEqual(["heal_half"]);
+    // 1층부터 160층까지 한 층씩 오르면 저주마다 꼭 한 번
+    const seen: string[] = [];
+    for (let f = 1, prev: number | null = null; f <= 170; prev = f, f++) seen.push(...newCurses(prev, f).map((c) => c.id));
+    expect(seen).toEqual(CURSES_BY_FLOOR.map((c) => c.id));
+  });
+
+  it("알림 문구: 60층 「탕비실 폐쇄」가 물약 안내를 겸한다", () => {
+    expect(curseNotice(null, 1)).toBeNull();
+    expect(curseNotice(30, 31)).toBeNull();
+    expect(curseNotice(99, 100)).toEqual({ title: "새 저주: 연차 반려", lines: ["스킬, 재생, 지형, 우두머리 층 회복까지 모두 절반이 돼요"] });
+    const at60 = curseNotice(59, 60)!;
+    expect(at60.title).toBe("새 저주: 탕비실 폐쇄");
+    expect(at60.lines[0]).toMatch(/^60층부터는 물약을 마실 수 없어요/);
+    const start = curseNotice(null, 101)!;
+    expect(start.title).toBe("저주 4개가 걸린 채 시작해요");
+    expect(start.lines).toHaveLength(4);
+    expect(start.lines[1]).toBe(`탕비실 폐쇄: ${curseText(CURSES_BY_FLOOR[1])}`);
+    // 폰 판 시작은 한 줄
+    expect(start.brief).toBe("저주 4개: 절약·폐쇄·독촉·연차 (칩을 누르면 설명)");
+    expect(curseNotice(59, 60)!.brief).toBeUndefined();
+  });
+});

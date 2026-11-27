@@ -245,11 +245,11 @@ describe("11/15 캠핑장 2차 다듬기", () => {
     expect(campFallsViewSeat("qW1-0")).toBe(true);
     expect(campFallsViewSeat("qL1")).toBe(false);
   });
-  it("11/26 낚시 자리: 소 바위 6 · 계곡 둑 8 · 저수지 둑 6 · 좌대 6×4, id는 마을 낚시 자리와 안 겹친다", () => {
+  it("11/26 낚시 자리: 소 바위 6 · 계곡 둑 8 · 저수지 둑 6 · 11/27 잔교 6 · 좌대 6×1, id는 마을 낚시 자리와 안 겹친다", () => {
     const by = (w: string) => CAMP_FISHING_SPOTS.filter((f) => f.water === w).length;
     expect(by("pool")).toBe(6);
     expect(by("valley")).toBe(8);
-    expect(by("reservoir")).toBe(6 + 24);
+    expect(by("reservoir")).toBe(6 + 6 + 6);
     // 운영자 「중간 좌대 기준 저수지 양옆 낚시 자리는 다 빼」: 좌대 줄 높이(위 좌대 지붕 ~ 아래 좌대 앞 + 24)의 왼쪽·오른쪽 둑에는 자리가 없다
     const top = Math.min(...CAMP_RAFTS.map((r) => r.y)) - CAMP_RAFT_ART_H - 8;
     const bottom = Math.max(...CAMP_RAFTS.map((r) => r.y)) + 24;

@@ -234,6 +234,7 @@ export const ShopBuySchema = z.object({
     .refine((id) => !itemById(id)?.event, "크리스마스 한정은 선물상자에서만 나와요.")
     .refine((id) => !itemById(id)?.invite, "친구 초대 한정은 친구를 데려오면 받아요.")
     .refine((id) => !itemById(id)?.stargaze, "유성우 오라는 망원경에서만 나와요.")
+    .refine((id) => !itemById(id)?.raft, "좌대 전용 코디는 좌대 자동 낚시에서만 나와요.")
     .refine((id) => !itemById(id)?.seasonSet, "계절 한정은 계절 보따리상에서만 팔아요.")
     // 11/21 확성기는 「마을 소식」으로 바뀌어 더 팔지 않는다 (상점 목록에서도 빠짐)
     .refine((id) => itemById(id)?.kind !== "megaphone", "확성기는 이제 팔지 않아요."),

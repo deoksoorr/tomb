@@ -92,3 +92,23 @@ export function campKindOf(intent: { camp?: CampHomeKind } | null): CampHomeKind
 
 /** 11/26 캠핑장에서 캠핑장 집 없이 [분양 사무소]를 눌렀을 때 (마을 사무소 대신 이 안내) */
 export const CAMP_SALE_GUIDE = "캠핑장 집은 언젠가 씨(카라반)·소슬댁(펜션)·순이 할머니(촌캉스)에게 말을 걸어 분양받아요.";
+
+// ── 11/27 「전용 가구」 탭 (CampExclusiveShop) ──
+
+/** 탭 이름 */
+export const CAMP_SHOP_TAB = "전용 가구";
+/** 탭 위 NPC 인사 (분양 인사 대신) */
+export const CAMP_SHOP_HELLO: Record<CampHomeKind, string> = {
+  caravan: "카라반에 딱 맞는 캠핑 살림만 골라 왔어요. 카라반에만 놓을 수 있어요.",
+  pension: "펜션에서 쓰던 가구를 조금 내놨어요. 펜션에만 놓을 수 있어요.",
+  rural: "옛날 살림을 곱게 닦아 내놨어요. 촌캉스에만 놓을 수 있어요.",
+};
+/** 아래 안내 (알림이 없을 때) */
+export const CAMP_SHOP_FOOT: Record<CampHomeKind, string> = {
+  caravan: "산 물건은 가방에 들어가요. 카라반 꾸미기에서 놓아 보세요.",
+  pension: "산 물건은 가방에 들어가요. 펜션 꾸미기에서 놓아 보세요.",
+  rural: "산 물건은 가방에 들어가요. 촌캉스 꾸미기에서 놓아 보세요.",
+};
+export const CAMP_SHOP_LOADING = "물건을 꺼내 오는 중…";
+/** 사고 난 뒤 한 줄 */
+export const campShopBoughtText = (name: string) => `${name}, 가방에 넣었어요.`;

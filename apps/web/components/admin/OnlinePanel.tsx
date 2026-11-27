@@ -13,6 +13,7 @@ import ops from "./Ops.module.css";
 import { Empty, LoadState } from "./PanelState";
 import { usePanelLoad } from "./usePanelData";
 import UserStatsDialog from "./UserStatsDialog";
+import RaftCard from "./RaftCard";
 
 type Props = {
   toast: (message: string) => void;
@@ -117,6 +118,8 @@ export default function OnlinePanel({ toast, onAuthLost, version, onFindMember }
             <Bars title="맵별" rows={s!.byMap} total={s!.count} />
             <Bars title="가입 유입별" rows={s!.bySignup} total={s!.count} />
             <Bars title="이번 접속 유입별" rows={s!.bySession} total={s!.count} />
+            {/* 11/27 좌대 입장권 주인 (새로고침하면 다시 부른다) */}
+            <RaftCard key={r.at} />
           </div>
 
           {rows.length === 0 ? (

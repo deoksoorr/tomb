@@ -1,5 +1,6 @@
 import type { EmoteIcon } from "../sprites/emotes";
 import type { HouseSound } from "./houseSfx";
+import { CX_ACT } from "@/lib/housing/campExclusive";
 import { OFFICE_FX, OFFICE_LIGHT_LABEL } from "./officeUse";
 
 // 11/19 시즌 가구 써 보기 (서서 E — interact.ts의 "season"). 연출만 하고 포인트·아이템은 주지 않는다.
@@ -53,6 +54,8 @@ export const SEASON_FX: Readonly<Record<string, SeasonFx>> = {
   ...OFFICE_FX,
   // 11/26 캠핑장 집 기본 가구
   ...CAMP_FX,
+  // 11/27 캠핑장 전용 가구 (lib/housing/campExclusive 종류 파일 act.fx — 켜기·끄기 가구의 fx는 켤 때 연출)
+  ...Object.fromEntries(Object.entries(CX_ACT).flatMap(([id, a]) => (a.fx ? [[id, a.fx as SeasonFx]] : []))),
 };
 
 /** 불빛 시즌 가구의 E 안내 (켜져 있으면 끄기). 없는 가구는 석등과 같은 「불 끄기·켜기」 */

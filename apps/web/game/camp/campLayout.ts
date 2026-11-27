@@ -323,6 +323,11 @@ export const resEdge = campResEdge;
 export const PIER = CAMP_PIER;
 export const RAFTS = CAMP_RAFTS;
 export const BOOTH = CAMP_TRADER_STALL;
+/**
+ * 11/27 좌대 매표소 창구 앞 (말 걸기 자리 — 부스 왼쪽 모서리 앞). 안내 글자(「E 좌대 입장권 사기」 — 자리 + 6에서 아래로)가
+ * 낚시터 사장님 이름표·칭호(부스 앞 가운데 — 사장님 발 − 27 위로)와 겹치지 않게 왼쪽·아래로 비켰다 (전에는 BOOTH.x − 8, + 8이라 이름표에 얹혔다)
+ */
+export const RAFT_BOOTH_SPOT = { x: BOOTH.x - 30, y: BOOTH.y + 12 } as const;
 export const POND_SIGN = CAMP_POND_SIGN;
 /**
  * 11/26 수영 안내 팻말 「4~6번 좌대는 헤엄쳐 가서 사다리로 올라가요」: 잔교 위쪽 끝(4·5번 좌대 사이 앞) — 잔교에서 물로 들어가 바로 위 좌대 사다리로 헤엄쳐 가는 자리.
@@ -937,6 +942,8 @@ export const CAMP_INTERACTABLES: readonly CampInteractable[] = [
   { id: "bus:village", kind: "bus", x: CAMP_BOARD.x, y: CAMP_BOARD.y, r: 22, zone: CAMP_BUS_BAY, label: "마을행 버스 타기" },
   ...CAMP_NPCS.map((n): CampInteractable => ({ id: `npc:${n.id}`, kind: "npc", npc: n.id, x: n.x, y: n.y + 10, r: 26, label: `${n.name}에게 말 걸기` })),
   { id: "board", kind: "board", x: CAMP_BOARD_SPOT.x, y: CAMP_BOARD_SPOT.y + 12, r: 20, label: "의뢰판 보기" },
+  // 11/27 좌대 매표소: 미끼·대여 부스 창구 앞 (창구 안 매표소 직원 — game/camp/CampRafts). 낚시터 사장님(팔기)은 부스 앞 그대로
+  { id: "raftBooth", kind: "raftBooth", x: RAFT_BOOTH_SPOT.x, y: RAFT_BOOTH_SPOT.y, r: 16, label: "좌대 입장권 사기" },
   { id: "sign", kind: "sign", x: CAMP_BUS_SIGN.x, y: CAMP_BUS_SIGN.y + 12, r: 18, label: "표지판 보기" },
   // 11/26 카라반·펜션 분양 입간판은 뺐다 (운영자 「헷갈려한다」 → 「카라반, 촌캉스도 NPC만으로 통일」) — 분양은 언젠가 씨·소슬댁·순이 할머니에게 말을 걸어서만
   { id: "bbq", kind: "bbq", x: BBQ.grill.x, y: BBQ.grill.y + 14, r: 28, label: "바베큐 사 먹기" },

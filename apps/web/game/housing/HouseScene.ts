@@ -1,21 +1,27 @@
 import * as Phaser from "phaser";
 import { DIR, STATE, type DirId, type Sid } from "@tomb/protocol";
 import { bgm } from "@/components/bgm/engine";
-import { CAMP_FLOOR, CAMP_WALL, DEFAULT_FLOOR, DEFAULT_WALL, DEFAULT_WINDOW, FURNITURE, furnitureById, houseShape, isFixtureId, type HouseShape } from "@/lib/housing/catalog";
+import { CAMP_FLOOR, CAMP_WALL, campOnlyBlock, DEFAULT_FLOOR, DEFAULT_WALL, DEFAULT_WINDOW, FURNITURE, furnitureById, houseShape, isFixtureId, type HouseShape } from "@/lib/housing/catalog";
+import { CX_ACT, cxLit, cxToggleVariant } from "@/lib/housing/campExclusive";
+import { cxAnimIndex, cxDetour, cxEnterAt, cxEnterBlocked, cxEnterDepth, cxEnterSeg, cxWalkRoute, type CxEnterStep, type CxSeat } from "@/lib/housing/campExclusive/types";
+import { CX_HELD, CX_HELD_POSE, CX_WINDOW_OVER } from "./campExclusive";
+import { cxCoverName } from "./campExclusive/types";
+import type { LieCover } from "../sprites/indoorPose";
+import { handAnchor } from "../sprites/avatar";
 import { housingApi } from "@/lib/housing/client";
 import { buildOccupancy, findFreeSpot, footprint, gateTiles, liftWindowSkins, newUid, nextRotation, SPIN_R0, spinDir, windowOf } from "@/lib/housing/layout";
 import { GROW_MS, plantStage, type PlantState } from "@/lib/housing/plants";
 import { roomPlan, type RoomPlan } from "@/lib/housing/rooms";
 import { placedSig } from "@/lib/housing/states";
 import type { HouseLayout, Placed, PublicHouse } from "@/lib/housing/types";
-import { errorMessage } from "@/lib/api";
+import { ApiRequestError, errorMessage } from "@/lib/api";
 import { bridge } from "../bridge";
 import { DEPTH } from "../config";
 import { Player, type SeatRequester } from "../entities/Player";
 import { INDOOR_FRONT } from "../entities/RemoteAvatar";
 import { SAY_MS } from "../entities/SpeechBubble";
 import type { InputHub } from "../input/InputHub";
-import { interactLabel, isTouchUi, keyJosa } from "../input/keyHint";
+import { interactLabel, isTouchUi, keyJosa, keyName } from "../input/keyHint";
 import type { KeyAction } from "../input/Keyboard";
 import { SPOT_TAKEN_HINT, SPOT_TAKEN_TOAST } from "../logic/spots";
 import { besideFriend, findFollowed, FRIEND_ARRIVED, followDeadline } from "../logic/friendSpot";
@@ -31,6 +37,7 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { Atmosphere } from "../world/Atmosphere";
 import { Lighting, playerLightRadius } from "../world/Lighting";
 import type { LightSpot } from "../world/WorldMap";
+import { lightOffset } from "./art";
 import { animFrames, artUp, DOG_BREATH_FRAMES, drawsTurned, floorGrid, furnitureGrid, hasNightArt, itemVariant, noFootShadow, sconceGrid, usesNightVariant, wallCapColor, wallFaceColor, WALL_H, wallGrid, windowGrid, WINDOW_H, WINDOW_W, yardGrid, zzzGrid } from "./art";
 import { FIXTURE_LOCKED, type HouseEditState, type HouseTool } from "./events";
 import { wornRingGrid } from "./seaFurnitureArt";
@@ -67,7 +74,7 @@ import {
   type StandSpot,
   type UseKind,
 } from "./interact";
-import { SEASON_FX, SEASON_LIGHTS, seasonLightLabel } from "./seasonUse";
+import { SEASON_FX, SEASON_LIGHTS, seasonLightLabel, type SeasonFx } from "./seasonUse";
 import { BREED_PET_P1_MS, BREED_PET_P2_MS, isBreedFurniture, isCatFurniture } from "./breedFurnitureArt";
 import { CAMP_GLINT, CAMP_WINDOW_STYLE } from "./campFurnitureArt";
 
@@ -112,6 +119,8 @@ const PART_H = 26;
 /** 앞벽 높이 (윗면 + 바깥 면) */
 const FRONT_H = 14;
 const NO_SEATS: SeatRequester = { sit: () => undefined, stand: () => undefined };
+/** 11/27 켜기·끄기 상태 저장: 마지막으로 바꾸고 이만큼(ms) 조용하면 보낸다 */
+const STATE_SAVE_IDLE = 400;
 /** 11/19 시즌 가구를 쓸 때 이모티콘을 띄워 두는 시간 (그다음 한마디 말풍선) */
 const SEASON_EMOTE_MS = 800;
 /** 11/16 집 안 해먹에 누운 사람 depth: 해먹 가구 그림(아래 끝 = 칸 아래 끝)보다 앞 (interact seaHammockSpot 앵커 기준) */
@@ -636,7 +645,9 @@ export class HouseScene extends Phaser.Scene {
 
   private windowKey(night: boolean, open: boolean): string {
     const style = this.windowStyle();
-    return this.canvasTex(`house-window-${style}-${night ? "n" : "d"}-${open ? "o" : "c"}`, () => windowGrid(night, open, style).toCanvas());
+    // 11/27 벽지마다 창문 덧칠(캠핑장 전용 벽지 windowOver)이 있으면 벽지 id도 키에 (벽지를 바꾸면 다시 그린다)
+    const wall = CX_WINDOW_OVER[this.work.wall] ? this.work.wall : "";
+    return this.canvasTex(`house-window-${style}-${night ? "n" : "d"}-${open ? "o" : "c"}${wall ? `-${wall}` : ""}`, () => windowGrid(night, open, style, wall || undefined).toCanvas());
   }
 
   private sconceKey(on: boolean): string {
@@ -730,6 +741,8 @@ export class HouseScene extends Phaser.Scene {
         // 11/19 시즌 불빛 가구도 같은 규칙 (값 1 = 꺼짐)
         if (SEASON_LIGHTS.has(p.i)) return this.toggles.get(p.u) ? "off" : "";
         const f = this.flash.get(p.u);
+        // 11/27 캠핑장 전용 가구 켜기·끄기: 켜짐 "on" · 값 "s{a}" (+ 켤 때 잠깐 바뀌는 그림)
+        if (furnitureById(p.i)?.campOnly) return this.cxVariant(p);
         if (f && f.until > this.time.now) return f.v;
         // 11/26 자개장: 연못 잔물결과 같은 박자로 자개가 반짝인다 (동작 줄이기면 멈춤)
         if (CAMP_GLINT.has(p.i)) return this.data0.reduced ? "" : `g${this.pondFrame}`;
@@ -754,6 +767,8 @@ export class HouseScene extends Phaser.Scene {
 
   /** 꺼 둔 석등·촛대 */
   private isDark(p: Placed): boolean {
+    // 11/27 캠핑장 전용 가구 켜기·끄기: 꺼져 있으면 밤 빛도 없다
+    if (CX_ACT[p.i]?.toggle) return !cxLit(p.i, this.toggles.get(p.u) ?? 0);
     return (p.i === "stone_lantern" || p.i === "candles" || p.i === "sea_lantern" || p.i === "ghost_lamp" || SEASON_LIGHTS.has(p.i)) && !!this.toggles.get(p.u);
   }
 
@@ -861,9 +876,12 @@ export class HouseScene extends Phaser.Scene {
       const yb = this.tileY(p.y + fp.h);
       if (hasNightArt(p.i)) this.pondSpots.push({ x, y: yb - (fp.h * T) / 2, r: Math.max(fp.w, fp.h) * T * 0.9 });
       if (def.light && !this.isDark(p)) {
-        const y = yb - Math.min(14, artUp(p.i) + 6);
-        this.glowSpots.push({ x, y, r: def.light.r, color: def.light.color });
-        spots.push({ x, y, scale: def.light.r / 40, tint: def.light.color, base: 0.5 });
+        // 빛 자리: 11/27 light.dx·dy가 있으면 그 자리 (랜턴·전구 높이), 없으면 그림 높이로 어림 (art lightOffset)
+        const [ldx, ldy] = lightOffset(p.i, p.r);
+        const lx = x + ldx;
+        const y = yb + ldy;
+        this.glowSpots.push({ x: lx, y, r: def.light.r, color: def.light.color });
+        spots.push({ x: lx, y, scale: def.light.r / 40, tint: def.light.color, base: 0.5 });
       }
       // 켜고 끄는 빛 (벽난로·스탠드)
       if (p.i === "fireplace" || p.i === "floor_lamp") {
@@ -934,6 +952,16 @@ export class HouseScene extends Phaser.Scene {
 
   /** 대상의 지금 안내 문구 (켜짐·열림이면 끄기·닫기) */
   private labelOf(t: HouseTarget): string {
+    // 11/27 고르는 자리: 둘 이상 비었으면 「눕기 (위칸·아래칸)」, 하나만 비었으면 그 자리 이름
+    const group = this.cxPickGroup(t);
+    if (group) {
+      const free = group.filter((x) => !this.takenByOther(x.spot!.id));
+      const label = free.length >= 2 ? CX_ACT[t.item]?.pickLabel : free.length === 1 ? this.cxSeatOf(free[0].spot!)?.pick : undefined;
+      if (label) {
+        this.data0.atlas.ensure(label);
+        return label;
+      }
+    }
     if (t.spot && this.takenByOther(t.spot.id)) return SPOT_TAKEN_HINT[t.spot.kind];
     const on = !!this.toggles.get(t.u);
     switch (t.use) {
@@ -946,6 +974,13 @@ export class HouseScene extends Phaser.Scene {
         return on ? "창문 닫기" : USE_LABEL.window;
       case "light":
         return seasonLightLabel(t.item, on) ?? (on ? "불 켜기" : USE_LABEL.light);
+      case "cxToggle": {
+        const tg = CX_ACT[t.item]?.toggle;
+        const a = this.toggles.get(t.u) ?? 0;
+        if (!tg) return USE_LABEL.cxToggle;
+        if (tg.useWhileOn && cxLit(t.item, a)) return tg.useWhileOn.label;
+        return tg.labels?.[a] ?? tg.label[cxLit(t.item, a) ? 0 : 1];
+      }
       case "season":
         return furnitureById(t.item)?.use ?? USE_LABEL.season;
       case "breed":
@@ -970,6 +1005,9 @@ export class HouseScene extends Phaser.Scene {
   private use(t: HouseTarget): void {
     const now = this.time.now;
     if (t.spot) {
+      // 11/27 고르는 자리 (벙커 침대 위칸·아래칸)
+      const group = this.cxPickGroup(t);
+      if (group) return this.cxPickStart(t, group);
       if (this.takenByOther(t.spot.id)) return this.notice(SPOT_TAKEN_TOAST[t.spot.kind]);
       return this.enterSpot(t.spot);
     }
@@ -1005,6 +1043,28 @@ export class HouseScene extends Phaser.Scene {
         this.applyToggle(t.u, t.use, on, 1);
         this.emitUse(t.u, on);
         this.saveState(t.u, on);
+        return;
+      }
+      case "cxToggle": {
+        // 11/27 캠핑장 전용 가구: 다음 값 (마지막 다음은 0). 켜질 때 fx가 있으면 그 연출도 (a = 한마디 번호는 보내지 않아 다른 사람은 그림·소리만)
+        const tg = CX_ACT[t.item]?.toggle;
+        const cur = this.toggles.get(t.u) ?? 0;
+        // 켜 둔 채로 쓰기 (노래방 「노래하기」): 값은 그대로, 연출·손에 들기만 (끄기는 X — onAction)
+        if (tg?.useWhileOn && cxLit(t.item, cur)) {
+          const fx = SEASON_FX[t.item];
+          const i = fx?.lines?.length ? Math.floor(Math.random() * fx.lines.length) : 0;
+          if (fx) this.playSeason(t.u, t.item, i, 1, this.player.view);
+          this.fxHold(t.item, this.myHand, true);
+          this.emitUse(t.u, cur);
+          return;
+        }
+        const next = (cur + 1) % (tg?.steps ?? 2);
+        this.applyToggle(t.u, t.use, next, 1);
+        this.emitUse(t.u, next);
+        this.saveState(t.u, next);
+        const fx = SEASON_FX[t.item];
+        if (fx && cxLit(t.item, next)) this.playSeason(t.u, t.item, Math.floor(Math.random() * Math.max(1, fx.lines?.length ?? 1)), 1, this.player.view);
+        if (cxLit(t.item, next)) this.fxHold(t.item, this.myHand, true);
         return;
       }
       case "fridge": {
@@ -1069,7 +1129,11 @@ export class HouseScene extends Phaser.Scene {
   /** 11/19 시즌 가구 써 보기 연출 (내가 쓴 것·다른 사람이 쓴 것 공용). a = 한마디 번호 */
   private playSeason(u: string, item: string, a: number, gain: number, view: { emote(k: EmoteIcon, now: number, ms?: number): void; say(t: string, now: number): void } | undefined): void {
     const fx = SEASON_FX[item];
-    if (!fx) return;
+    if (fx) this.playFx(u, fx, a, gain, view);
+  }
+
+  /** 연출 하나 (시즌 가구 연출 표 · 11/27 캠핑장 전용 가구 seatFx): 잠깐 바뀌는 그림·소리·이모티콘·한마디 a번째 */
+  private playFx(u: string, fx: SeasonFx, a: number, gain: number, view: { emote(k: EmoteIcon, now: number, ms?: number): void; say(t: string, now: number): void } | undefined): void {
     if (fx.v) this.flashVariant(u, fx.v, fx.ms ?? 1200);
     if (fx.sfx) this.sfx.play(fx.sfx, gain);
     // 말풍선은 한 자리 하나라 이모티콘을 먼저 짧게 띄우고 한마디로 바꾼다 (한마디가 없으면 이모티콘만)
@@ -1127,12 +1191,14 @@ export class HouseScene extends Phaser.Scene {
         const i = fx?.lines?.length ? Math.floor(Math.random() * fx.lines.length) : 0;
         if (fx?.jump) p.jump(this.time.now, null);
         this.playSeason(t.u, t.item, i, 1, p.view);
+        this.fxHold(t.item, this.myHand, true);
         this.emitUse(t.u, i);
         return;
       }
       case "rug":
         // 11/19 니트 러그: 가구가 없는 러그 칸 중 가까운 곳에 앉고, 옆 칸에 가구(코코아 탁자…)가 있으면 그쪽을 본다
-        if (t.item === "knit_rug") {
+        // 11/27 캠핑장 전용 러그(종류 파일 act.rug)도 같은 규칙
+        if (t.item === "knit_rug" || CX_ACT[t.item]?.rug) {
           const rug = this.work.items.find((x) => x.u === t.u);
           const seat = rug && rugSeat(rug, this.work.items, this.tier, this.frame, p.x, p.y);
           if (!seat) return this.notice("러그 위가 가구로 꽉 찼어요.");
@@ -1261,6 +1327,176 @@ export class HouseScene extends Phaser.Scene {
    * 11/16 구명 튜브 끼기: 허리에 빨강·하양 고리를 RING_WEAR_MS 동안 두른다 (at = 그 사람 발 위치·방향, 없어지면 끝).
    * 고리 윗 반은 사람 뒤, 아랫 반은 사람 앞에 그려 몸에 낀 것처럼. 옆을 보면 고리가 좁아진다
    */
+  // ── 11/27 캠핑장 전용 가구: 앉은 자리·장면·가까이 가기 (종류 파일 act — lib/housing/campExclusive) ──
+
+  /** 누가 앉거나 누운 전용 가구 (배치 id → 누운 자리가 있는지) — updateCx가 매 프레임 센다 */
+  private cxOcc = new Map<string, { lie: boolean }>();
+  /** 가까이 다가가 있는 전용 가구 (near — 다가갈 때 한 번만 연출) */
+  private cxNear = new Set<string>();
+  /** 흔들고 있는 앉은 사람 그림: 기준 자리(bx, by)와 이번에 쓴 자리(wx, wy) — 흔들기가 쌓이지 않게 */
+  private cxSway = new Map<{ x: number; y: number }, { bx: number; by: number; wx: number; wy: number }>();
+
+  /** 장면 번호 (움직임 줄이기면 0) */
+  private cxFrame(frames: readonly string[], ms: number | readonly number[]): string {
+    return this.data0.reduced || !frames.length ? (frames[0] ?? "") : frames[cxAnimIndex(ms, frames.length, this.time.now)];
+  }
+
+  /**
+   * 전용 가구 그림 변형: 켜기·끄기(on·s{a}) + 켜진 동안 장면(toggle.anim) + 누운 사람이 있으면 "lie"(그림이 정의했으면 — 해먹처럼)
+   * + 앉아 있는 동안 장면(seatAnim) + 잠깐 바뀌는 그림(fx v)
+   */
+  private cxVariant(p: Placed): string {
+    const act = CX_ACT[p.i];
+    const a = this.toggles.get(p.u) ?? 0;
+    const occ = this.cxOcc.get(p.u);
+    const f = this.flash.get(p.u);
+    const parts = [
+      act?.toggle ? cxToggleVariant(p.i, a) : "",
+      act?.toggle?.anim && cxLit(p.i, a) ? this.cxFrame(act.toggle.anim.frames, act.toggle.anim.ms) : "",
+      occ?.lie ? "lie" : "",
+      occ && act?.seatAnim ? this.cxFrame(act.seatAnim.frames, act.seatAnim.ms) : "",
+      f && f.until > this.time.now ? f.v : "",
+    ];
+    return parts.filter(Boolean).join("-");
+  }
+
+  /** 매 프레임: 앉은 자리 세기·자리 깊이(depthY)·앉은 사람 흔들기(sway)·장면 바꾸기·가까이 가기(near) */
+  private updateCx(time: number): void {
+    const occ = new Map<string, { lie: boolean }>();
+    const sway: { sprite: { x: number; y: number; angle: number }; u: string }[] = [];
+    const mark = (st: HouseSpot | undefined, sprite: { x: number; y: number; angle: number }, view: { depthOverride: number | null; sprite: { setDepth(d: number): unknown } }) => {
+      if (!st || !furnitureById(this.views.get(st.u)?.p.i ?? "")?.campOnly) return;
+      occ.set(st.u, { lie: (occ.get(st.u)?.lie ?? false) || st.kind === "bed" });
+      if (st.depth !== undefined) {
+        view.depthOverride = st.depth;
+        view.sprite.setDepth(st.depth);
+      }
+      sway.push({ sprite, u: st.u });
+    };
+    if (this.using) mark(this.using.spot, this.player.sprite, this.player.view);
+    if (this.presence)
+      for (const r of this.presence.remotes.values())
+        if (r.seatId && (r.stateId === STATE.sitChair || r.stateId === STATE.lie)) mark(this.spots.find((x) => x.id === r.seatId), r.view.sprite, r.view);
+    this.cxOcc = occ;
+    // 앉은 사람 흔들기 (흔들의자 — 장면마다 [dx, dy]): 늘 앉은 자리(기준 자리)에서 옮긴 값으로 — 쌓이지 않게.
+    // 아바타가 이번 프레임에 자리를 다시 잡지 않았으면(지난번에 쓴 자리 그대로) 기준 자리는 지난번 기준 그대로 둔다
+    const swayed = new Set<object>();
+    if (!this.data0.reduced)
+      for (const { sprite, u } of sway) {
+        const pl = this.views.get(u)?.p;
+        const sa = CX_ACT[pl?.i ?? ""]?.seatAnim;
+        if (!pl || !sa || (!sa.sway?.length && !sa.sitPose)) continue;
+        // 가구 그림과 같은 장면 시계 (장면마다 길이가 달라도) — 앉은 사람이 의자와 같은 장면에 움직인다
+        const fi = cxAnimIndex(sa.ms, sa.frames.length, time);
+        // sitPose: 놓인 방향마다 [dx, dy, 기울기°] (옆을 본 흔들의자는 몸이 의자와 같이 젖혀진다), 없으면 sway [dx, dy]
+        const d = (furnitureById(pl.i)?.spin && pl.r >= SPIN_R0 ? spinDir(pl.r) : 0) as 0 | 1 | 2 | 3;
+        const [dx, dy, ang] = sa.sitPose ? sa.sitPose(d, fi) : [...(sa.sway![fi % sa.sway!.length] ?? [0, 0]), 0];
+        // 아바타 갱신이 매 프레임 각도를 되돌리므로 (AvatarView sync) 그 뒤인 여기서 다시 기울인다
+        if (ang) sprite.angle = ang;
+        const st = this.cxSway.get(sprite);
+        const kept = st && sprite.x === st.wx && sprite.y === st.wy;
+        const bx = kept ? st.bx : sprite.x;
+        const by = kept ? st.by : sprite.y;
+        sprite.x = bx + dx;
+        sprite.y = by + dy;
+        this.cxSway.set(sprite, { bx, by, wx: sprite.x, wy: sprite.y });
+        swayed.add(sprite);
+      }
+    // 일어났거나 흔들기가 끝난 사람은 기준 자리로 되돌린다 (그사이 아바타가 자리를 다시 잡았으면 그대로)
+    for (const [sprite, st] of this.cxSway)
+      if (!swayed.has(sprite)) {
+        if (sprite.x === st.wx && sprite.y === st.wy) {
+          sprite.x = st.bx;
+          sprite.y = st.by;
+        }
+        this.cxSway.delete(sprite);
+      }
+    // 그림이 바뀐 전용 가구만 다시 그린다 (누가 앉음·장면·켜짐)
+    for (const v of this.views.values()) if (furnitureById(v.p.i)?.campOnly && this.variantOf(v.p) !== v.variant) this.refreshVariant(v.p.u);
+    // 가까이 다가가면 한 번 (난로에 손 녹이기)
+    if (this.editing) return;
+    for (const v of this.views.values()) {
+      const act = CX_ACT[v.p.i];
+      const nr = act?.near;
+      if (!nr) continue;
+      // 켜기·끄기 가구는 켜져 있을 때만 (불 꺼진 난로에 손 녹이지 않게). 꺼져 있으면 다가간 것으로 치지 않아 켜면 그때 한 번
+      if (act.toggle && !cxLit(v.p.i, this.toggles.get(v.p.u) ?? 0)) {
+        this.cxNear.delete(v.p.u);
+        continue;
+      }
+      const at = this.whereU(v.p.u);
+      if (!at) continue;
+      const d = Math.hypot(at.x - this.player.x, at.y - this.player.y);
+      if (d <= nr.r && !this.cxNear.has(v.p.u)) {
+        this.cxNear.add(v.p.u);
+        const now = performance.now();
+        const line = nr.lines?.length ? nr.lines[Math.floor(Math.random() * nr.lines.length)] : null;
+        if (nr.emote) this.player.view.emote(nr.emote, now, line ? SEASON_EMOTE_MS : undefined);
+        if (line) this.time.delayedCall(nr.emote ? SEASON_EMOTE_MS : 0, () => this.player.view.say(line, performance.now()));
+      } else if (d > nr.r + 12) this.cxNear.delete(v.p.u);
+    }
+  }
+
+  /** 내 캐릭터 손 자리 재료 (fxHold) */
+  private myHand = () => ({ x: this.player.x, y: this.player.y, dir: this.player.dir, body: this.player.view.bodyId });
+  /** 같은 방 사람 손 자리 재료 (나가면 null) */
+  private remoteHand(sid: Sid, r: { x: number; y: number; netDir: DirId; view: { bodyId: string } }) {
+    return () => (this.presence?.remotes.get(sid) === r ? { x: r.x, y: r.y, dir: r.netDir, body: r.view.bodyId } : null);
+  }
+
+  /**
+   * 11/27 캠핑장 전용 가구 손에 들기 (종류 파일 act.hold — 그림 파일 heldArt[item]): 손 자리(handAnchor)에 작은 그림.
+   * 왼쪽을 보면 좌우로 뒤집고, 뒤를 보면 몸 뒤에. ms(기본 4000) 동안 또는 움직이면(3px 넘게) 사라진다. 그림이 없으면 아무것도 안 한다
+   */
+  private fxHold(item: string, at: () => { x: number; y: number; dir: DirId; body: string } | null, mine = false): void {
+    const hold = CX_ACT[item]?.hold;
+    const art = hold ? CX_HELD[hold.item] : undefined;
+    // 내 캐릭터는 들고 나서 앞(화면 쪽)을 본다: 손에 든 물건이 몸 앞에 보이게 (다른 사람 화면엔 방향이 중계로 간다)
+    if (hold && art && mine) this.player.faceTo(this.player.x, this.player.y + 8, this.time.now);
+    const first = at();
+    if (!hold || !art || !first) return;
+    // 그림 함수가 방향을 받으면(art.length ≥ 1) 방향마다 그림·자리를 그림 파일이 정한다 (스키를 등에 비스듬히), 아니면 한 장을 뒤집어 쓴다
+    const perDir = art.length >= 1;
+    const poseOf = CX_HELD_POSE[hold.item];
+    const tex = (dn: number) => this.canvasTex(`house-held-${hold.item}${perDir ? `-${dn}` : ""}`, () => art(dn).toCanvas());
+    const img = this.add.image(first.x, first.y, tex(0)).setOrigin(0.5, 0.5);
+    let lastDn = 0;
+    const start = this.time.now;
+    const until = start + (hold.ms ?? 4000);
+    // 앞에 설 자리로 옮겨 가는 동안(다른 사람 화면은 몸이 미끄러져 온다)은 움직임으로 치지 않는다: 처음 0.4초 동안은 기준 자리를 따라간다
+    let base = first;
+    const place = (pos: { x: number; y: number; dir: DirId; body: string }) => {
+      const d = pos.dir === DIR.left ? "left" : pos.dir === DIR.right ? "right" : pos.dir === DIR.up ? "up" : "down";
+      const dn = d === "down" ? 0 : d === "left" ? 1 : d === "up" ? 2 : 3;
+      const h = handAnchor(pos.body, d);
+      const ps = poseOf?.(dn);
+      const behind = ps?.behind ?? d === "up";
+      if (dn !== lastDn) {
+        lastDn = dn;
+        img.setTexture(tex(dn));
+      }
+      img
+        .setPosition(Math.round(pos.x + h.dx + (ps?.dx ?? 0)), Math.round(pos.y - h.up + (ps?.dy ?? 0)))
+        .setFlipX(!perDir && d === "left")
+        .setDepth(behind ? pos.y - 0.5 : pos.y + INDOOR_FRONT + 1);
+    };
+    place(first);
+    const ev = this.time.addEvent({
+      delay: 16,
+      loop: true,
+      callback: () => {
+        const pos = at();
+        if (pos && this.time.now < start + 400) base = pos;
+        if (!pos || this.time.now >= until || !img.active || Math.hypot(pos.x - base.x, pos.y - base.y) > 3) {
+          ev.remove();
+          img.destroy();
+          return;
+        }
+        place(pos);
+      },
+    });
+  }
+
   private fxWornRing(at: () => { x: number; y: number; dir: DirId } | null): void {
     const tex = (part: "back" | "front", side: boolean) => this.canvasTex(`house-worn-ring-${part}-${side ? "s" : "f"}`, () => wornRingGrid(part, side).toCanvas());
     const first = at();
@@ -1393,6 +1629,12 @@ export class HouseScene extends Phaser.Scene {
       return;
     }
     this.refreshVariant(u);
+    if (use === "cxToggle") {
+      // 11/27 캠핑장 전용 가구: 밤 빛을 다시 계산하고 그 가구 소리 (기본 딸깍)
+      this.applyLights();
+      this.sfx.play(CX_ACT[this.views.get(u)?.p.i ?? ""]?.toggle?.sfx ?? "click", gain);
+      return;
+    }
     if (use === "light") {
       // 석등·촛대: 값 1 = 꺼짐. 밤 조명(빛 번짐)도 다시 계산
       this.applyLights();
@@ -1435,11 +1677,11 @@ export class HouseScene extends Phaser.Scene {
         let lit = false;
         for (const [u, a] of Object.entries(r.states)) {
           const use = this.useByU.get(u);
-          if (this.stateTouched.has(u) || (use !== "radio" && use !== "fire" && use !== "lamp" && use !== "window" && use !== "light")) continue;
+          if (this.stateTouched.has(u) || (use !== "radio" && use !== "fire" && use !== "lamp" && use !== "window" && use !== "light" && use !== "cxToggle")) continue;
           this.toggles.set(u, a);
           if (use === "window") win = true;
           else this.refreshVariant(u);
-          if (use === "light") lit = true;
+          if (use === "light" || use === "cxToggle") lit = true;
         }
         if (win) this.updateWindows();
         if (lit) this.applyLights();
@@ -1447,19 +1689,47 @@ export class HouseScene extends Phaser.Scene {
       .catch(() => undefined);
   }
 
-  /** 바꾼 상태를 서버에 남긴다 (나갔다 와도·나중에 온 사람도 그대로). 600ms 안의 연타는 마지막 값만 */
+  /**
+   * 바꾼 상태를 서버에 남긴다 (나갔다 와도·나중에 온 사람도 그대로). 11/27 연타는 마지막 값만: 마지막으로 누르고 STATE_SAVE_IDLE ms 동안
+   * 조용하면 보낸다 (예전엔 첫 누름 600ms 뒤 한 번 — 연달아 켜고 끄면 마지막 저장이 빠지곤 했다)
+   */
   private saveState(u: string, a: number): void {
     this.stateTouched.add(u);
     this.statePending.set(u, a);
-    if (this.stateTimer === null) this.stateTimer = setTimeout(() => this.flushStates(), 600);
+    if (this.stateTimer !== null) clearTimeout(this.stateTimer);
+    this.stateTimer = setTimeout(() => this.flushStates(), STATE_SAVE_IDLE);
   }
 
+  /** 모아 둔 상태를 보낸다: 가구마다 마지막 값 하나씩, 한 번에 몰리지 않게 차례로 */
   private flushStates(): void {
     if (this.stateTimer !== null) clearTimeout(this.stateTimer);
     this.stateTimer = null;
     const id = this.data0.house.id;
-    for (const [u, a] of this.statePending) housingApi.setState(id, u, a).catch(() => undefined);
+    const batch = [...this.statePending];
     this.statePending.clear();
+    void (async () => {
+      for (const [u, a] of batch) await this.sendState(id, u, a);
+    })();
+  }
+
+  /**
+   * 상태 하나 저장. 요청이 많다(429)·서버 오류(5xx)·연결 끊김이면 한 번만 다시 보낸다 (429면 서버가 준 Retry-After만큼 기다려서).
+   * 그사이 같은 가구를 또 바꿨으면 새 값이 곧 가므로 그만둔다. 다시 보내도 실패하면 알림
+   */
+  private async sendState(id: string, u: string, a: number, retried = false): Promise<void> {
+    try {
+      await housingApi.setState(id, u, a);
+    } catch (e) {
+      if (this.statePending.has(u)) return;
+      const status = e instanceof ApiRequestError ? e.status : 0;
+      if (!retried && (status === 429 || status === 0 || status >= 500)) {
+        const wait = e instanceof ApiRequestError && e.retryAfter ? e.retryAfter * 1000 : 1200;
+        await new Promise((r) => setTimeout(r, Math.min(5000, wait)));
+        if (this.statePending.has(u)) return;
+        return this.sendState(id, u, a, true);
+      }
+      if (this.scene.isActive()) this.notice("가구 상태를 저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.");
+    }
   }
 
   private loadPlants(): void {
@@ -1570,11 +1840,324 @@ export class HouseScene extends Phaser.Scene {
   }
 
   /** 1인 자리에 앉기·눕기·읽기·욕조 (서버 점유 요청과 동시에 자리로) */
-  private enterSpot(s: HouseSpot): void {
+  // ── 11/27 캠핑장 전용 자리 드나들기 (CxSeat enter — 벙커 침대 위층은 사다리로 오르내리고, 아래층은 열린 쪽에서 들어간다) ──
+  // 길을 지나는 동안은 몸 충돌을 끄고 길을 따라 옮긴다. 걷기 자세·방향·위치는 평소 MOVE 그대로 나가 다른 사람 화면도 같은 길로 보이고,
+  // 깊이는 길 구간마다 가구 그림 앞(앞쪽 사다리)·뒤(먼 쪽 사다리) — 다른 사람도 길 위에 있으면 같은 깊이 (cxEnterDepths)
+  private cxTransit: { spot: HouseSpot; pts: CxEnterStep[]; t0: number; out: boolean; pre: { x: number; y: number } } | null = null;
+  private cxPaths: { spots: readonly HouseSpot[]; map: Map<string, { path: CxEnterStep[]; blocked: boolean; ladder: boolean }> } | null = null;
+  private cxOpen: { targets: readonly HouseTarget[]; list: HouseTarget[] } | null = null;
+  /** 덮개 없이 누운 모습 (자리로 미끄러지는 동안 — 그림 파일 coverArt.cx_bare는 빈 그림) */
+  private static readonly CX_BARE = cxCoverName("cx_bare", 0);
+
+  /**
+   * 그 자리의 드나드는 길 (월드 좌표, 걸어 들어가는 차례)과 막혔는지 (걸어 지나는 바닥 점이 벽·다른 가구에 막힘 — footBlocked).
+   * 배치가 바뀌면 다시 (몸 상자를 다시 만든 뒤 처음 물을 때 계산). 길이 없으면 null
+   */
+  private cxEnterInfo(s: HouseSpot): { path: CxEnterStep[]; blocked: boolean; ladder: boolean } | null {
+    if (this.cxPaths?.spots !== this.spots) this.cxPaths = { spots: this.spots, map: new Map() };
+    const hit = this.cxPaths.map.get(s.id);
+    if (hit) return hit.path.length ? hit : null;
+    const p = this.views.get(s.u)?.p;
+    const def = p ? furnitureById(p.i) : undefined;
+    const seats = p ? CX_ACT[p.i]?.seats : undefined;
+    let info = { path: [] as CxEnterStep[], blocked: false, ladder: false };
+    if (p && def && seats) {
+      const fp = footprint(def, p.r);
+      const d = (def.spin && p.r >= SPIN_R0 ? spinDir(p.r) : 0) as 0 | 1 | 2 | 3;
+      const L = this.tileX(p.x);
+      const Tp = this.tileY(p.y);
+      const seat = seats(d, fp.w * T, fp.h * T).find((q) => L + q.x === s.x && Tp + q.y === s.y);
+      const path = (seat?.enter ?? []).map((q) => ({ ...q, x: L + q.x, y: Tp + q.y }));
+      if (path.length) info = { path, blocked: cxEnterBlocked(path, this.footBlocked(), { x0: L, y0: Tp, x1: L + fp.w * T, y1: Tp + fp.h * T }), ladder: path.some((q) => q.climb) };
+    }
+    this.cxPaths.map.set(s.id, info);
+    return info.path.length ? info : null;
+  }
+
+  /** 지나갈 수 있는 드나드는 길 (막혔으면 null — 사다리 없는 자리는 예전처럼 바로 자리로) */
+  private cxEnterPath(s: HouseSpot): CxEnterStep[] | null {
+    const info = this.cxEnterInfo(s);
+    return info && !info.blocked ? info.path : null;
+  }
+
+  /** E 대상: 사다리 길이 막힌 자리(벽에 붙은 벙커 위층 등)는 내놓지 않는다 */
+  private cxOpenTargets(): readonly HouseTarget[] {
+    if (this.cxOpen?.targets !== this.targets)
+      this.cxOpen = {
+        targets: this.targets,
+        list: this.targets.filter((t) => {
+          const info = t.spot ? this.cxEnterInfo(t.spot) : null;
+          return !(info?.blocked && info.ladder);
+        }),
+      };
+    return this.cxOpen.list;
+  }
+
+  /** 드나드는 길이 있는 자리면 길 첫 점까지 걸어가 길을 지난 뒤 자리에 든다 (도착하면 enterSpotNow) */
+  private cxEnterStart(s: HouseSpot): boolean {
+    const path = this.cxEnterPath(s);
+    if (!path) return false;
     const now = this.time.now;
-    const pre = { x: this.player.x, y: this.player.y };
+    if (this.player.sitting) this.player.stand(now, NO_SEATS);
+    // 길 첫 점까지는 가구를 가로지르지 않게 둘레(차지 칸 바깥 6px)로 돌아간다
+    const p = this.views.get(s.u)?.p;
+    const def = p ? furnitureById(p.i) : undefined;
+    const fp = p && def ? footprint(def, p.r) : null;
+    const me = { x: this.player.x, y: this.player.y };
+    const box = p && fp ? { x0: this.tileX(p.x) - 6, y0: this.tileY(p.y) - 6, x1: this.tileX(p.x + fp.w) + 6, y1: this.tileY(p.y + fp.h) + 6 } : null;
+    // 집 안 발 자리 격자로 다른 가구·벽을 피해 걷는 길 (못 찾으면 그 가구 둘레로)
+    const wb = this.physics.world.bounds;
+    const fb = this.footBlocked();
+    // 가구 옆을 스치지 않게 좌우 2px 여유
+    const route = cxWalkRoute(me, path[0], (x, y) => fb(x, y) || fb(x - 2, y) || fb(x + 2, y), { x0: wb.x, y0: wb.y, x1: wb.right, y1: wb.bottom });
+    const around = route ? route.slice(0, -1) : box ? cxDetour(me, path[0], box) : [];
+    this.cxTransit = { spot: s, pts: [me, ...around, ...path], t0: now, out: false, pre: { x: path[0].x, y: path[0].y } };
+    return true;
+  }
+
+  /** 드나드는 길이 있는 자리에서 일어나면 길을 거꾸로 지나 첫 점에 내려선다 (앉은·누운 자세는 이미 푼 뒤) */
+  private cxExitStart(u: Using): boolean {
+    const path = this.cxEnterPath(u.spot);
+    if (!path) return false;
+    // 앞으로 갈 때 구간 i(점 i−1 → i)의 사다리·뒤 표시를 거꾸로 갈 때도 같은 구간에 (자리 → 마지막 점은 가구 그림 앞(먼 쪽이면 뒤)으로 걷기)
+    const back: CxEnterStep[] = [{ x: u.spot.x, y: u.spot.y }];
+    for (let i = path.length - 1; i >= 0; i--) {
+      const seg = path[i + 1] ?? (path[i].behind ? { behind: true } : { front: true });
+      back.push({ x: path[i].x, y: path[i].y, ...(seg.climb ? { climb: true } : {}), ...(seg.behind ? { behind: true } : {}), ...(seg.front ? { front: true } : {}) });
+    }
+    this.cxTransit = { spot: u.spot, pts: back, t0: this.time.now, out: true, pre: u.pre };
+    return true;
+  }
+
+  /** 매 프레임 (플레이어 이동 대신): 길을 지나는 중이면 위치·자세·깊이를 옮기고 true */
+  private stepCxTransit(time: number): boolean {
+    const tr = this.cxTransit;
+    if (!tr) return false;
+    const pl = this.player;
+    const at = cxEnterAt(tr.pts, time - tr.t0);
+    pl.body.enable = false;
+    pl.sprite.setPosition(at.x, at.y);
+    pl.state = at.done ? "idle" : "walk";
+    // 사다리는 사다리를 보고(뒷모습) 오르내린다
+    if (!at.done) pl.dir = at.climb ? DIR.up : Math.abs(at.dx) > Math.abs(at.dy) ? (at.dx < 0 ? DIR.left : DIR.right) : at.dy < 0 ? DIR.up : DIR.down;
+    pl.view.apply(pl.state, pl.dir, time);
+    pl.view.depthOverride = cxEnterDepth(at, at.y, this.views.get(tr.spot.u)?.img.depth ?? at.y, this.oy - 1);
+    if (at.done) {
+      this.cxTransit = null;
+      if (tr.out) {
+        pl.view.depthOverride = null;
+        pl.warp(at.x, at.y, time, NO_SEATS);
+      } else this.enterSpotNow(tr.spot, tr.pre);
+    }
+    return true;
+  }
+
+  /** 아바타 갱신 뒤: 드나드는 길 위에 선 다른 사람도 그 구간 깊이 (사다리 앞·뒤) · 자리로 미끄러지는 동안은 덮개 없이 */
+  private cxEnterDepths(): void {
+    // 사다리 꼭대기에서 자리로 미끄러지는 0.14초 동안 덮개가 몸을 따라 떠다니지 않게: 자리에 닿으면 덮개
+    const settle = (s: HouseSpot | undefined, sprite: { x: number; y: number }, view: { setLieCover(c: LieCover): void }) => {
+      if (!s?.cover || !this.cxEnterPath(s)) return;
+      view.setLieCover(Math.hypot(sprite.x - s.x, sprite.y - s.y) < 0.75 ? s.cover : HouseScene.CX_BARE);
+    };
+    if (this.using?.spot.kind === "bed" && this.player.anchored) settle(this.using.spot, this.player.sprite, this.player.view);
+    if (!this.presence) return;
+    for (const r of this.presence.remotes.values()) if (r.stateId === STATE.lie && r.seatId) settle(this.spots.find((x) => x.id === r.seatId), r.view.sprite, r.view);
+    for (const r of this.presence.remotes.values()) {
+      if (r.stateId !== STATE.walk && r.stateId !== STATE.idle) continue;
+      for (const s of this.spots) {
+        const path = this.cxEnterPath(s);
+        // 길 + 마지막 점 → 자리 구간 (일어나 사다리 꼭대기로 걷는 길)
+        const last = path?.[path.length - 1];
+        const seg = path && last && cxEnterSeg([...path, { x: s.x, y: s.y, ...(last.behind ? { behind: true } : { front: true }) }], r.x, r.y);
+        const depth = seg ? cxEnterDepth(seg, r.y, this.views.get(s.u)?.img.depth ?? r.y, this.oy - 1) : null;
+        if (depth === null) continue;
+        r.view.depthOverride = depth;
+        r.view.sprite.setDepth(depth);
+        break;
+      }
+    }
+  }
+
+  // ── 11/27 고르는 자리 (CxSeat pick — 벙커 침대 위칸·아래칸): 둘 이상 비었으면 E에 작은 말풍선으로 고른다 ──
+  // PC = ↑·↓ 또는 1·2 로 고르고 E, 또는 누르기. 폰 = 누르기. Esc·옆으로 움직이기·멀어지기·점프·X = 그만. 고른 뒤는 평소 자리 들기(enterSpot)
+  private cxSeats: { spots: readonly HouseSpot[]; map: Map<string, CxSeat | null> } | null = null;
+  private cxChoice: {
+    spots: HouseSpot[];
+    sel: number;
+    at: { x: number; y: number };
+    anchor: { x: number; y: number };
+    box: Phaser.GameObjects.Container;
+    mark: Phaser.GameObjects.Graphics;
+    texts: Phaser.GameObjects.BitmapText[];
+    w: number;
+    h: number;
+    rowY: number[];
+    rowH: number;
+  } | null = null;
+
+  /** 그 자리의 종류 파일 자리 선언 (pick 이름 등) */
+  private cxSeatOf(s: HouseSpot): CxSeat | null {
+    if (this.cxSeats?.spots !== this.spots) this.cxSeats = { spots: this.spots, map: new Map() };
+    if (this.cxSeats.map.has(s.id)) return this.cxSeats.map.get(s.id) ?? null;
+    const p = this.views.get(s.u)?.p;
+    const def = p ? furnitureById(p.i) : undefined;
+    const seats = p ? CX_ACT[p.i]?.seats : undefined;
+    let seat: CxSeat | null = null;
+    if (p && def && seats) {
+      const fp = footprint(def, p.r);
+      const d = (def.spin && p.r >= SPIN_R0 ? spinDir(p.r) : 0) as 0 | 1 | 2 | 3;
+      const L = this.tileX(p.x);
+      const Tp = this.tileY(p.y);
+      seat = seats(d, fp.w * T, fp.h * T).find((q) => L + q.x === s.x && Tp + q.y === s.y) ?? null;
+    }
+    this.cxSeats.map.set(s.id, seat);
+    return seat;
+  }
+
+  /** 그 대상 가구의 고르는 자리들 (안내하는 자리 중 pick 이름이 있는 것 — 둘 이상일 때만) */
+  private cxPickGroup(t: HouseTarget): HouseTarget[] | null {
+    if (!t.spot || !this.cxSeatOf(t.spot)?.pick) return null;
+    const g = this.cxOpenTargets().filter((x) => x.u === t.u && x.spot && this.cxSeatOf(x.spot)?.pick);
+    return g.length >= 2 ? g : null;
+  }
+
+  /** E: 빈 자리가 둘 이상이면 고르는 말풍선, 하나면 그 자리로, 없으면 「누가 쓰고 있어요」 */
+  private cxPickStart(t: HouseTarget, group: HouseTarget[]): void {
+    const free = group.filter((x) => !this.takenByOther(x.spot!.id));
+    if (!free.length) return this.notice(SPOT_TAKEN_TOAST[t.spot!.kind]);
+    if (free.length === 1) return this.enterSpot(free[0].spot!);
+    const spots = free.map((x) => x.spot!);
+    const touch = isTouchUi();
+    const labels = spots.map((sp, i) => `${touch ? "" : `${i + 1} `}${this.cxSeatOf(sp)?.pick ?? ""}`);
+    const hint = touch ? "" : `${keyName("E")} 고르기 · Esc 그만`;
+    this.data0.atlas.ensure(labels.join("") + hint);
+    const PAD = 4;
+    const MARK = 7;
+    const rowH = FONT_PX + 3;
+    const texts = labels.map((l) => this.add.bitmapText(0, 0, FONT_KEY, l, FONT_PX).setOrigin(0, 0));
+    const hintText = hint ? this.add.bitmapText(0, 0, FONT_KEY, hint, FONT_PX).setOrigin(0, 0).setTint(0xa8a49a) : null;
+    const w = Math.ceil(Math.max(...texts.map((x) => x.width + MARK), hintText ? hintText.width : 0)) + PAD * 2;
+    const rowY = texts.map((_, i) => PAD + i * rowH);
+    const h = PAD * 2 + texts.length * rowH + (hintText ? rowH : 0);
+    texts.forEach((x, i) => x.setPosition(PAD + MARK, rowY[i] + 1));
+    hintText?.setPosition(PAD, PAD + texts.length * rowH + 1);
+    const bg = this.add.graphics();
+    bg.fillStyle(0x1c1814, 0.94).fillRoundedRect(0, 0, w, h, 3);
+    bg.lineStyle(1, 0xe8d8b0, 0.9).strokeRoundedRect(0.5, 0.5, w - 1, h - 1, 3);
+    // 말풍선 꼬리 (가구 쪽)
+    bg.fillStyle(0x1c1814, 0.94).fillTriangle(w / 2 - 3, h - 0.5, w / 2 + 3, h - 0.5, w / 2, h + 3);
+    const mark = this.add.graphics();
+    const box = this.add.container(0, 0, [bg, ...texts, ...(hintText ? [hintText] : []), mark]).setDepth(DEPTH.labels + 1);
+    const r = t.rect;
+    this.cxChoice = { spots, sel: 0, at: { x: this.player.x, y: this.player.y }, anchor: { x: (r.x0 + r.x1) / 2, y: r.y0 - Math.min(16, artUp(t.item) + 2) - 4 }, box, mark, texts, w, h, rowY, rowH };
+    this.cxPickMark();
+    this.game.canvas.addEventListener("pointerdown", this.onPickDown);
+    // 잡기 단계에서 먼저 받는다: Esc가 설정 창(GameShell)까지 가지 않게
+    window.addEventListener("keydown", this.onPickKey, true);
+    this.player.faceTo((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, this.time.now);
+    this.sfx.play("click", 0.5);
+  }
+
+  /** 고른 줄 표시 (작은 삼각형 + 글자 밝게) */
+  private cxPickMark(): void {
+    const c = this.cxChoice;
+    if (!c) return;
+    c.mark.clear().fillStyle(0xffe39a, 1);
+    const y = c.rowY[c.sel] + Math.floor(c.rowH / 2);
+    c.mark.fillTriangle(5, y - 3, 5, y + 3, 9, y);
+    c.texts.forEach((o, i) => o.setTint(i === c.sel ? 0xffe39a : 0xd8d0c0));
+  }
+
+  private cxPickClose(): void {
+    const c = this.cxChoice;
+    if (!c) return;
+    this.cxChoice = null;
+    c.box.destroy(true);
+    this.game.canvas.removeEventListener("pointerdown", this.onPickDown);
+    window.removeEventListener("keydown", this.onPickKey, true);
+  }
+
+  private cxPickConfirm(): void {
+    const c = this.cxChoice;
+    if (!c) return;
+    const s = c.spots[c.sel];
+    this.cxPickClose();
+    if (this.takenByOther(s.id)) return this.notice(SPOT_TAKEN_TOAST[s.kind]);
+    this.enterSpot(s);
+  }
+
+  /** 매 프레임 (이동 전): 고르는 중이면 이동은 막는다 (↑·↓는 onPickKey가 고른다). 옆으로 움직이거나(폰은 조이스틱 아무 쪽) 멀어지면 그만 */
+  private cxPickMove(): void {
+    const c = this.cxChoice;
+    if (!c) return;
+    if (this.editing || this.using || this.cxTransit || this.data0.input.isBlocked) return this.cxPickClose();
+    const m = this.move;
+    const touch = isTouchUi();
+    if (Math.abs(m.ax) > 0.5 || (touch && Math.hypot(m.ax, m.ay) > 0.3) || Math.hypot(this.player.x - c.at.x, this.player.y - c.at.y) > 20) return this.cxPickClose();
+    m.ax = m.ay = 0;
+  }
+
+  /** 말풍선 자리·크기 (화면 확대와 상관없이 같은 크기 — 안내 글자와 같은 배율 s) */
+  private cxPickDraw(s: number): void {
+    const c = this.cxChoice;
+    if (!c) return;
+    c.box.setScale(s).setPosition(Math.round(c.anchor.x - (c.w * s) / 2), c.anchor.y - (c.h + 3) * s);
+  }
+
+  /** 고르는 중 키: E = 고르기, 1·2 = 그 줄, 점프·X = 그만 */
+  private cxPickKey(a: KeyAction): void {
+    const c = this.cxChoice;
+    if (!c) return;
+    if (a === "interact") return this.cxPickConfirm();
+    if (a === "wave" || a === "cheer") {
+      c.sel = Math.min(c.spots.length - 1, a === "wave" ? 0 : 1);
+      this.cxPickMark();
+      return;
+    }
+    if (a === "jump" || a === "sit") this.cxPickClose();
+  }
+
+  /** Esc = 그만, ↑·↓(W·S) = 위·아래 줄 (누를 때마다 한 줄 — 매 프레임 이동 값으로 보면 짧게 누른 키를 놓친다) */
+  private onPickKey = (e: KeyboardEvent) => {
+    const c = this.cxChoice;
+    if (!c || e.repeat) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return this.cxPickClose();
+    }
+    const dir = e.code === "ArrowUp" || e.code === "KeyW" ? -1 : e.code === "ArrowDown" || e.code === "KeyS" ? 1 : 0;
+    if (!dir) return;
+    c.sel = Math.max(0, Math.min(c.spots.length - 1, c.sel + dir));
+    this.cxPickMark();
+  };
+
+  /** 말풍선 줄을 누르면 그 자리로, 밖을 누르면 그만 */
+  private onPickDown = (e: PointerEvent) => {
+    const c = this.cxChoice;
+    if (!c || e.button > 0) return;
+    const w = this.worldPoint(e);
+    const k = c.box.scaleX;
+    const lx = (w.x - c.box.x) / k;
+    const ly = (w.y - c.box.y) / k;
+    const i = lx >= 0 && lx <= c.w ? c.rowY.findIndex((y) => ly >= y && ly < y + c.rowH) : -1;
+    if (i < 0) return this.cxPickClose();
+    c.sel = i;
+    this.cxPickConfirm();
+  };
+
+  private enterSpot(s: HouseSpot): void {
+    if (this.cxEnterStart(s)) return;
+    this.enterSpotNow(s);
+  }
+
+  private enterSpotNow(s: HouseSpot, at?: { x: number; y: number }): void {
+    const now = this.time.now;
+    const pre = at ?? { x: this.player.x, y: this.player.y };
     if (s.kind === "chair") {
       this.player.sit({ id: s.id, furnitureId: s.u, x: s.x, y: s.y, facing: s.facing }, now, this.seatReq);
+      // 11/27 깊이를 따로 정한 자리 (캠핑장 전용 가구 depthY)
+      if (s.depth !== undefined) this.player.view.depthOverride = s.depth;
     } else if (s.kind === "hammockIn") {
       // 11/16 바닷가 세트 해먹: 마을 해먹과 같은 누운 그림 (줄·천·몸이 함께 흔들린다). 가구 그림은 기둥만 남긴다 (baseVariantOf)
       // 이 해먹 무늬(산호·조개·물빛 띠)로 눕는다 — 다른 사람 화면도 같은 무늬 (tiltLying)
@@ -1586,7 +2169,7 @@ export class HouseScene extends Phaser.Scene {
       const kind = s.kind === "bed" ? "lie" : s.kind === "book" ? "read" : "bath";
       // 11/26 캠핑장 침대는 그 침대 이불 덮개 (interact houseSpots cover), 마을 침대는 보라 이불
       if (kind === "lie") this.player.view.setLieCover(s.cover ?? "quilt");
-      this.player.attach(kind, s.x, s.y, s.y + INDOOR_FRONT, now, this.seatReq, s.id);
+      this.player.attach(kind, s.x, s.y, s.depth ?? s.y + INDOOR_FRONT, now, this.seatReq, s.id);
       this.seatReq.sit(s.id);
     }
     this.using = { spot: s, pre, at: now, next: now + 300, note: 0 };
@@ -1659,6 +2242,7 @@ export class HouseScene extends Phaser.Scene {
       this.player.leaveAnchor(now, true);
       this.seatReq.stand();
     }
+    if (this.cxExitStart(u)) return;
     const to = this.standSpot(u);
     this.player.warp(to.x, to.y, now, NO_SEATS);
   }
@@ -1688,6 +2272,11 @@ export class HouseScene extends Phaser.Scene {
     const at = this.whereU(u) ?? (r ? { x: r.x, y: r.y } : null);
     const gain = at ? hearGain(Math.hypot(at.x - this.player.x, at.y - this.player.y)) : 0.5;
     const now = performance.now();
+    // 11/27 캠핑장 전용 가구에 앉은 사람이 E (보드게임 주사위 — seatFx)
+    if (use === "sit" || use === "lie") {
+      const sf = CX_ACT[this.views.get(u)?.p.i ?? ""]?.seatFx;
+      if (sf) return this.playFx(u, sf, a, gain, r?.view);
+    }
     switch (use) {
       case "piano":
         this.sfx.note(a, gain);
@@ -1710,6 +2299,19 @@ export class HouseScene extends Phaser.Scene {
         this.stateTouched.add(u);
         this.applyToggle(u, use, a ? 1 : 0, gain);
         return;
+      // 11/27 캠핑장 전용 가구: 값 그대로 (채널 돌리는 TV처럼 2 이상도)
+      case "cxToggle": {
+        this.stateTouched.add(u);
+        // 같은 값이면 켜 둔 채로 쓰기 (노래하기) — 딸깍 소리 없이 연출만
+        if ((this.toggles.get(u) ?? 0) !== a) this.applyToggle(u, use, a, gain);
+        // 켰으면 그 사람 머리 위 연출·손에 든 물건도 (내 화면과 같은 길)
+        const item = this.work.items.find((x) => x.u === u)?.i;
+        if (item && cxLit(item, a)) {
+          if (SEASON_FX[item]) this.playSeason(u, item, 0, gain, r?.view);
+          if (r) this.fxHold(item, this.remoteHand(sid, r));
+        }
+        return;
+      }
       case "fridge":
         this.openFridge(u, gain);
         r?.view.emote(SNACKS[a % SNACKS.length], now);
@@ -1830,6 +2432,8 @@ export class HouseScene extends Phaser.Scene {
       case "season": {
         const item = this.work.items.find((x) => x.u === u)?.i;
         if (item) this.playSeason(u, item, a, gain, r?.view);
+        // 11/27 캠핑장 전용 가구 손에 들기도 같은 use 이벤트로 (같은 방 사람에게 보인다)
+        if (item && r) this.fxHold(item, this.remoteHand(sid, r));
         return;
       }
       case "breed": {
@@ -1974,7 +2578,8 @@ export class HouseScene extends Phaser.Scene {
   }
 
   private onAction(a: KeyAction): void {
-    if (this.exiting || this.editing) return;
+    if (this.exiting || this.editing || this.cxTransit) return;
+    if (this.cxChoice) return this.cxPickKey(a);
     const now = this.time.now;
     if (this.using) {
       // 피아노 앞: E = 가락 한 음, 1·2(손 흔들기·환호 키)는 건반 → onKey가 친다
@@ -1985,8 +2590,28 @@ export class HouseScene extends Phaser.Scene {
         return;
       }
       if (this.using.spot.use === "piano" && (a === "wave" || a === "cheer")) return;
+      // 11/27 캠핑장 전용 가구 seatFx: 앉은 채로 E = 연출 (일어나기는 X·점프·움직이기)
+      const sf = a === "interact" ? CX_ACT[this.views.get(this.using.spot.u)?.p.i ?? ""]?.seatFx : undefined;
+      if (sf) {
+        const i = sf.lines?.length ? Math.floor(Math.random() * sf.lines.length) : 0;
+        this.playFx(this.using.spot.u, sf, i, 1, this.player.view);
+        this.emitUse(this.using.spot.u, i);
+        return;
+      }
       if (a === "interact" || a === "jump" || a === "sit") this.exitSpot();
       return;
+    }
+    // 11/27 켜 둔 채로 쓰는 가구(노래방) 앞에서 X = 끄기
+    if (a === "sit" && this.target?.use === "cxToggle") {
+      const t = this.target;
+      const tg = CX_ACT[t.item]?.toggle;
+      if (tg?.useWhileOn && cxLit(t.item, this.toggles.get(t.u) ?? 0)) {
+        const off = tg.startOn ? 1 : 0;
+        this.applyToggle(t.u, t.use, off, 1);
+        this.emitUse(t.u, off);
+        this.saveState(t.u, off);
+        return;
+      }
     }
     if (a === "interact" && this.nearSign()) {
       this.player.faceTo(this.sign.x, this.sign.y, now);
@@ -2023,14 +2648,20 @@ export class HouseScene extends Phaser.Scene {
     const input = this.data0.input;
     input.read(this.move);
     if (input.isBlocked || this.editing) this.move.ax = this.move.ay = 0;
-    this.player.update(this.move, time, this.using ? this.seatReq : NO_SEATS);
+    if (!this.stepCxTransit(time)) {
+      this.cxPickMove();
+      this.player.update(this.move, time, this.using ? this.seatReq : NO_SEATS);
+    }
     // 움직여서 자리에서 일어났다 → 원래 서 있던 곳으로 (가구 안에 끼지 않게)
     if (this.using && !this.player.sitting && !this.player.anchored) {
       const u = this.using;
       this.using = null;
       if (u.spot.kind !== "chair") this.seatReq.stand();
-      const to = this.standSpot(u);
-      this.player.warp(to.x, to.y, time, NO_SEATS);
+      // 11/27 드나드는 길이 있는 자리(벙커 침대)는 길을 거꾸로 지나 내려선다
+      if (!this.cxExitStart(u)) {
+        const to = this.standSpot(u);
+        this.player.warp(to.x, to.y, time, NO_SEATS);
+      }
     }
     const cam = this.cameras.main;
     // 휠·핀치 줌 (편집 중에는 경계 없이 그 자리에서)
@@ -2058,9 +2689,11 @@ export class HouseScene extends Phaser.Scene {
       }
     }
     this.tiltLying();
+    this.updateCx(time);
+    this.cxEnterDepths();
     this.updatePondSitters();
     // 가구 안내 (가장 가까운 것 하나)
-    this.target = this.editing || this.using ? null : pickTarget(this.targets, this.player.x, this.player.y, (id) => this.takenByOther(id));
+    this.target = this.editing || this.using || this.cxTransit ? null : pickTarget(this.cxOpenTargets(), this.player.x, this.player.y, (id) => this.takenByOther(id));
     const nearSign = !this.editing && this.nearSign();
     this.prompt.setScale(s).setVisible(nearSign);
     this.titleLabel.setScale(s);
@@ -2121,6 +2754,12 @@ export class HouseScene extends Phaser.Scene {
 
   private updateUsePrompt(s: number, nearSign: boolean): void {
     const p = this.usePrompt;
+    // 11/27 고르는 말풍선이 떠 있는 동안은 안내 대신 말풍선
+    if (this.cxChoice) {
+      p.setVisible(false);
+      this.cxPickDraw(s);
+      return;
+    }
     let text = "";
     let x = 0;
     let y = 0;
@@ -2128,7 +2767,14 @@ export class HouseScene extends Phaser.Scene {
     let door = false;
     if (this.using && !this.editing) {
       const u = this.using;
-      text = u.spot.use === "piano" ? pianoPrompt(isTouchUi()) : interactLabel("일어나기");
+      // 11/27 앉은 채 E로 쓰는 전용 가구(seatFx — 보드게임 주사위): 「E · 주사위 굴리기 · X 일어나기」
+      const sf = CX_ACT[this.views.get(u.spot.u)?.p.i ?? ""]?.seatFx;
+      text =
+        u.spot.use === "piano"
+          ? pianoPrompt(isTouchUi())
+          : sf
+            ? `${interactLabel(sf.label ?? "써 보기")} · ${keyName("X")} 일어나기`
+            : interactLabel("일어나기");
       x = this.player.x;
       // 11/26 가구 안 자리(침대·소파·욕조)는 가구 아래 끝 밑으로 (뒤를 보게 돌린 침대는 머리가 위 끝이라 발밑이 이불 한가운데였다)
       const box = u.spot.inside ? this.targets.find((t) => t.spot?.id === u.spot.id)?.rect : undefined;
@@ -2143,8 +2789,11 @@ export class HouseScene extends Phaser.Scene {
       p.setOrigin(0, 0.5);
     } else if (this.target && !nearSign && !(this.promptQuiet && this.promptQuiet.u === this.target.u && this.time.now < this.promptQuiet.until)) {
       const t = this.target;
-      grey = !!t.spot && this.takenByOther(t.spot.id);
+      grey = !!t.spot && (this.cxPickGroup(t)?.every((x) => this.takenByOther(x.spot!.id)) ?? this.takenByOther(t.spot.id));
       text = grey ? this.labelOf(t) : interactLabel(this.labelOf(t));
+      // 11/27 켜 둔 채로 쓰는 가구: 「E · 노래하기 · X 끄기」
+      const wo = t.use === "cxToggle" ? CX_ACT[t.item]?.toggle?.useWhileOn : undefined;
+      if (wo && !grey && cxLit(t.item, this.toggles.get(t.u) ?? 0)) text += ` · ${keyName("X")} ${wo.offLabel}`;
       x = (t.rect.x0 + t.rect.x1) / 2;
       y = t.use === "window" ? this.oy + 2 : t.rect.y0 - Math.min(16, artUp(t.item) + 2);
       if (t.use === "window") p.setOrigin(0.5, 0);
@@ -2161,6 +2810,7 @@ export class HouseScene extends Phaser.Scene {
 
   leave(): void {
     if (this.exiting) return;
+    this.cxPickClose();
     if (this.using) this.exitSpot();
     this.exiting = true;
     this.data0.input.setHandler(null);
@@ -2353,6 +3003,9 @@ export class HouseScene extends Phaser.Scene {
       case "place": {
         const def = furnitureById(t.itemId);
         if (!def || def.skin) return;
+        // 11/27 캠핑장 전용 가구는 그 종류 집에만 (서버 validateLayout도 같은 말로 거절)
+        const only = campOnlyBlock(def, this.tier.camp);
+        if (only) return this.notice(only);
         if (this.countedItems(this.savedWork().items) >= this.tier.maxItems) return this.notice(`${this.tier.name}에는 ${this.tier.maxItems}개까지 놓을 수 있어요.`);
         const c = this.toTile(this.cameras.main.midPoint.x, this.cameras.main.midPoint.y);
         const spot = findFreeSpot(this.work.items, this.tier, def, 0, c.x, c.y);
@@ -2409,13 +3062,17 @@ export class HouseScene extends Phaser.Scene {
           this.time.delayedCall(120, () => this.sel.setAlpha(1));
         }
         return this.changed();
-      case "skin":
+      case "skin": {
+        // 11/27 캠핑장 전용 바닥·벽지는 그 종류 집에만
+        const only = campOnlyBlock(furnitureById(t.floor ?? t.wall ?? ""), this.tier.camp);
+        if (only) return this.notice(only);
         if (t.floor) this.work.floor = t.floor;
         if (t.wall) this.work.wall = t.wall;
         if (t.window) this.work.window = t.window;
         if (t.floor) this.drawGround();
         if (t.wall || t.window) this.drawWalls();
         return this.changed();
+      }
     }
   }
 

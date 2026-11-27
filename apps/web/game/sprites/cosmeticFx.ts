@@ -9,7 +9,8 @@ import { PET_PACK_ART, PET_PACK_FX, petPackIconGrid } from "./petPack";
 import { BREED_ART, BREED_FX, breedIconGrid } from "./petBreeds";
 import { LIGHTS_UP as BUNGEO_LIGHTS_UP } from "./bungeoFx";
 import { SEASON_FX, SEASON_FX_ART, SEASON_GEAR_FX, SEASON_SET_FX, seasonAura, seasonFxIconGrid, type SeasonMotion } from "./seasonSetFx";
-import { seasonSetsOfLook } from "@tomb/protocol";
+import { raftSetWorn, seasonSetsOfLook } from "@tomb/protocol";
+import { RAFT_FX_ART, RAFT_SET_FX, raftSetAura } from "./raftSetFx";
 import { METEOR_FX, METEOR_FX_ART, meteorAura, meteorIcon } from "./meteorFx";
 import { CHAIR_CROWN_UP, CHAIR_DUO_UP, CHAIR_FLAME_UP, CHAIR_FX, CHAIR_FX_ART, CHAIR_GEAR_FX, chairAura, chairIcon, type ChairMotion } from "./chairFx";
 import { Grid, parseHex, type Color } from "./pixel";
@@ -1148,6 +1149,8 @@ export const FX_ART = {
   ...CHAIR_FX_ART,
   // 11/19 멍냥 분양소 품종 펫 (petBreeds.ts — 옆 6장 + 앞·뒤 8장)
   ...BREED_ART,
+  // 11/27 좌대 영구 한 벌 「금빛 월척」 (raftSetFx.ts)
+  ...RAFT_FX_ART,
 } satisfies Record<string, ArtDef>;
 
 export type FxArtId = keyof typeof FX_ART;
@@ -1182,7 +1185,7 @@ type TrailSpec = { kind: "trail"; art: FxArtId; step: number; life: number; moti
 type AuraSpec = {
   kind: "aura";
   /** tier* = 25번 프리미엄 외형 등급 연출 (꾸미기가 아니라 몸에 딸린다) */
-  motion: "orbit" | "snow" | "petals" | "cloud" | "notes" | "zzz" | "fall" | "float" | "steam" | "ring" | "tierFine" | "tierRare" | "tierLegend" | "champ" | "qFireflies" | "qNightfish" | "qCapeDust" | "qLamp" | "qSnowGlobe" | "qSnowPuff" | "qWishGlow" | "uSiren" | "gMist" | "mtMeteor" | ChairMotion | XmasMotion | SeasonMotion;
+  motion: "orbit" | "snow" | "petals" | "cloud" | "notes" | "zzz" | "fall" | "float" | "steam" | "ring" | "tierFine" | "tierRare" | "tierLegend" | "champ" | "qFireflies" | "qNightfish" | "qCapeDust" | "qLamp" | "qSnowGlobe" | "qSnowPuff" | "qWishGlow" | "uSiren" | "gMist" | "mtMeteor" | "jwGold" | ChairMotion | XmasMotion | SeasonMotion;
   art?: FxArtId;
   light?: boolean;
   /** champ = 주간 랭킹 1위 오라 테마 (champTheme) */
@@ -1597,6 +1600,8 @@ export class CosmeticFxSim {
       const fx = SEASON_SET_FX[set.id];
       if (fx) next.push([`@set:${set.id}`, fx]);
     }
+    // 11/27 좌대 영구 한 벌 「금빛 월척」 (game/sprites/raftSetFx — 발밑 금빛 윤슬 + 금 잉어)
+    if (raftSetWorn(look)) next.push(["@set:raft", RAFT_SET_FX]);
     const had = new Set(this.specs.map(([id]) => id));
     if (!next.some(([, s]) => s.kind === "pet")) {
       this.petOn = false;
@@ -2132,6 +2137,14 @@ export class CosmeticFxSim {
         seasonAura(s.motion, f, t, {
           push: (art, frame, x, y, o) => out.push(cmd(art, frame, x, y, o)),
           around: (z, o, light) => around(f, z, o, light),
+          night: !!f.still || isNight(f.now),
+          depth: bodyDepth(f),
+        });
+        break;
+      case "jwGold":
+        // 11/27 좌대 영구 한 벌 「금빛 월척」 (raftSetFx.ts): 그리기 도우미를 넘겨 그 파일이 그린다 (밤 = 해질녘·밤, 미리보기는 늘 밤처럼)
+        raftSetAura(f, t, {
+          push: (art, frame, x, y, o) => out.push(cmd(art, frame, x, y, o)),
           night: !!f.still || isNight(f.now),
           depth: bodyDepth(f),
         });

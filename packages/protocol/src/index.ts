@@ -11,6 +11,7 @@ export * from "./scopes";
 export * from "./sea";
 export * from "./seaForage";
 export * from "./bbq";
+export * from "./raft";
 export * from "./lobby";
 export * from "./names";
 export * from "./items";

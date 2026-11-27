@@ -124,6 +124,14 @@
   min-height: 32px;
 }
 
+/* 11/27 물약 [모두 팔기]: 오른쪽 끝에 작게 (팔기 버튼 공용 flex:1을 끈다) */
+.groupHead > .sellAllBtn {
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 14px;
+}
+
 .list {
   display: grid;
   gap: 6px;

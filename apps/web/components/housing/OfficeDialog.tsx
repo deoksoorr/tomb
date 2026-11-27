@@ -56,12 +56,14 @@ import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import styles from "./housing.module.css";
 import { CottageStylePicker, fmt, TierCompare, TierPicker, TitleBadge, TitleProgress } from "./parts";
-import { campOfficeTitle, HOST, kindIntro, openChannelsLine, openSaleChannels, soldOutLine, yardChangeLine, yardHint } from "./campOfficeText";
+import { CAMP_SHOP_HELLO, CAMP_SHOP_TAB, campOfficeTitle, HOST, kindIntro, openChannelsLine, openSaleChannels, soldOutLine, yardChangeLine, yardHint } from "./campOfficeText";
 import { CampLotPicker } from "./CampLotPicker";
 import { CaravanDesignPicker } from "./CaravanDesignPicker";
+import CampExclusiveShop from "./CampExclusiveShop";
 import { CARAVAN_BUY_START, caravanBuy, caravanBuyDesign, caravanCardDesign } from "./caravanBuyFlow";
 
-type Tab = "mine" | "browse";
+/** 11/27 shop = 캠핑장 분양 NPC의 「전용 가구」 탭 (zone "camp"만) */
+type Tab = "mine" | "browse" | "shop";
 
 type Props = {
   my: MyHouseResponse | null;
@@ -116,20 +118,26 @@ export default function OfficeDialog({
   villa = null,
   campKind,
 }: Props) {
-  const [tab, setTab] = useState<Tab>(initialTab ?? "mine");
+  const [picked, setTab] = useState<Tab | null>(initialTab ?? null);
   const id = useId();
   const sea = zone === "sea";
   const camp = zone === "camp" ? (campKind ?? "caravan") : null;
+  // 11/27 캠핑장: 그 종류 집 주인이 창을 열면 「전용 가구」 탭부터 (고른 탭이 있으면 그것), 아니면 분양 탭
+  const tab: Tab = picked ?? (camp && my?.house?.camp?.kind === camp ? "shop" : "mine");
+  const tabs: readonly Tab[] = camp ? ["mine", "shop", "browse"] : ["mine", "browse"];
+  const shopTab = !!camp && tab === "shop";
   return (
     <Dialog title={camp ? campOfficeTitle(camp) : sea ? "포구 부동산" : "분양 사무소"} onClose={onClose}>
-      <div className={styles.stack}>
+      <div className={styles.stack} style={shopTab ? { flex: 1, minHeight: 0, gridTemplateRows: "auto auto minmax(0, 1fr)" } : undefined}>
         <div className={styles.spread}>
           <p className={styles.small}>
-            {camp
-              ? `${HOST[camp].hello} 채널마다 터가 따로 있어요. 지금 ${channel}채널의 빈 터를 골라 분양받아요.`
-              : sea
-                ? `달물결 포구 곳곳에 오두막 터가 ${SEA_LOTS.length}곳 있어요. 채널마다 터가 따로 있어요. 지금 ${channel}채널의 빈 터를 골라 분양받아요.`
-                : `광장 동쪽 주거 구역에 집들이 있어요. 채널마다 주거 구역이 따로 있어요. 지금 ${channel}채널의 빈 자리를 골라 분양받아요.`}
+            {camp && shopTab
+              ? CAMP_SHOP_HELLO[camp]
+              : camp
+                ? `${HOST[camp].hello} 채널마다 터가 따로 있어요. 지금 ${channel}채널의 빈 터를 골라 분양받아요.`
+                : sea
+                  ? `달물결 포구 곳곳에 오두막 터가 ${SEA_LOTS.length}곳 있어요. 채널마다 터가 따로 있어요. 지금 ${channel}채널의 빈 터를 골라 분양받아요.`
+                  : `광장 동쪽 주거 구역에 집들이 있어요. 채널마다 주거 구역이 따로 있어요. 지금 ${channel}채널의 빈 자리를 골라 분양받아요.`}
           </p>
           {!sea && !camp && (
             <button type="button" className={cx(ui.button, ui.primary)} onClick={() => (inVillage ? onClose() : onVillage(null))} disabled={busy}>
@@ -137,15 +145,17 @@ export default function OfficeDialog({
             </button>
           )}
         </div>
-        <div className={styles.warn} role="note">
-          <strong>
-            <span className={styles.warnTag}>주의</span>
-            {RECLAIM_DAYS}일 동안 접속하지 않으면 {sea ? "오두막도" : camp ? `${CAMP_HOME_KIND_NAME[camp]}도` : "집이"} 철거돼요
-          </strong>
-          <p>집 가격은 100% 선물함으로 돌려드리고, 가구는 그대로 저장돼요. 철거된 자리는 다른 사람이 분양받을 수 있어요.</p>
-        </div>
+        {!shopTab && (
+          <div className={styles.warn} role="note">
+            <strong>
+              <span className={styles.warnTag}>주의</span>
+              {RECLAIM_DAYS}일 동안 접속하지 않으면 {sea ? "오두막도" : camp ? `${CAMP_HOME_KIND_NAME[camp]}도` : "집이"} 철거돼요
+            </strong>
+            <p>집 가격은 100% 선물함으로 돌려드리고, 가구는 그대로 저장돼요. 철거된 자리는 다른 사람이 분양받을 수 있어요.</p>
+          </div>
+        )}
         <div className={styles.tabs} role="tablist" aria-label="분양 사무소">
-          {(["mine", "browse"] as const).map((t) => (
+          {tabs.map((t) => (
             <button
               key={t}
               type="button"
@@ -156,12 +166,19 @@ export default function OfficeDialog({
               className={styles.tab}
               onClick={() => setTab(t)}
             >
-              {t === "mine" ? (sea ? "내 오두막" : camp ? "내 캠핑장 집" : "내 집") : "둘러보기 · 랭킹"}
+              {t === "mine" ? (sea ? "내 오두막" : camp ? "내 캠핑장 집" : "내 집") : t === "shop" ? CAMP_SHOP_TAB : "둘러보기 · 랭킹"}
             </button>
           ))}
         </div>
-        <div id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-${tab}`}>
-          {tab === "mine" ? (
+        <div
+          id={`${id}-panel`}
+          role="tabpanel"
+          aria-labelledby={`${id}-${tab}`}
+          style={shopTab ? { display: "flex", flexDirection: "column", minHeight: 0 } : undefined}
+        >
+          {camp && shopTab ? (
+            <CampExclusiveShop kind={camp} onMy={onMy} />
+          ) : tab === "mine" ? (
             <MyPlot
               my={my}
               error={myError}

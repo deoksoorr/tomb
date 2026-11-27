@@ -56,6 +56,8 @@ export type ForageDeps = {
   blocked?: (spot: FishingSpot) => string | null;
   /** 11/16 이 채집 지점을 지금 못 쓰는 까닭 (바닷가 갯벌 구멍: 물이 덮음). 있으면 그림·빛을 숨기고 E엔 안내만 */
   nodeBlocked?: (n: GatherNode) => string | null;
+  /** 11/27 이 낚시 자리의 손 낚싯대·찌를 숨긴다 (캠핑장 좌대 주인이 앉으면 받침틀 낚싯대 넷이 대신 — game/camp/CampRafts) */
+  hideRod?: (spotId: string) => boolean;
 };
 
 /** 낚시 자리 표시 (마을 FishZoneView · 캠핑장 game/camp/campForage) */
@@ -82,7 +84,8 @@ const NODE_BLINK_MS = 10_000;
 const NODE_HEAR = 260;
 // 이 맵에 서 있는 NPC: lib/forage/catalog npcsOn (마을 = 어부 영감·수집가 유령, 11/20 바닷가 = 해녀 할망, 11/26 캠핑장 = 낚시터 사장님)
 /** 11/26 캠핑장 부스 간판 글자 (부스 그림 위 — 한글은 비트맵 글꼴로) */
-const BOOTH_SIGN = "미끼·대여";
+// 11/27 미끼·대여 부스 → 좌대 매표소 (창구 안 매표소 직원 — game/camp/CampRafts)
+const BOOTH_SIGN = "좌대 매표소";
 /**
  * 노점 자리 (NPC 발에서 — 그리는 순서 기준). 마을 어부 노점은 호수 낚시 잔교 서쪽 끝, 11/20 해녀 할망 좌판은 할망 왼쪽 (game/sea/seaLayout SEA_BUYER_STALL).
  * oy = 그림 바닥을 이만큼 더 내려요 (좌판 그림은 아래 두 줄이 그림자)
@@ -191,6 +194,11 @@ export class Foraging {
     const nodes = bridge.last("forage:nodes");
     if (nodes) this.setNodes(nodes.ids, nodes.ev);
     else this.rebuildItems();
+  }
+
+  /** 11/27 캠핑장 좌대 매표소가 밤 그림인지 (CampRafts가 창 안 직원·현황판 등을 같은 때 바꾼다) */
+  get boothLit(): boolean {
+    return this.night;
   }
 
   /** 노점 그림 (11/20 해녀 할망 좌판은 판마다·밤엔 파라솔 등을 켠 그림) */
@@ -637,6 +645,11 @@ export class Foraging {
 
   private drawRod(r: Rod, now: number): void {
     const { spot, g, bob } = r;
+    if (!r.follow && this.d.hideRod?.(spot.id)) {
+      g.clear();
+      bob.setVisible(false);
+      return;
+    }
     if (r.follow) {
       const at = r.follow();
       if (!at) {

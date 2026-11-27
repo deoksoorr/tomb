@@ -1,3 +1,4 @@
+import { CX_STATE_MAX } from "./campExclusive";
 import { tierById, type PlotTierId } from "./catalog";
 import { roomPlan } from "./rooms";
 import type { HouseLayout, Placed } from "./types";
@@ -33,6 +34,8 @@ export const STATE_MAX: Readonly<Record<string, number>> = {
   banker_lamp: 1,
   // 11/26 캠핑장 펜션 기본 가구 TV (처음엔 꺼짐: 값 1 = 켜짐)
   fx_pn_tv: 1,
+  // 11/27 캠핑장 집 종류별 전용 가구의 켜기·끄기 (값 0..steps−1 — campExclusive 종류 파일의 act.toggle)
+  ...CX_STATE_MAX,
 };
 /** 창문 열림 (0/1) */
 export const WINDOW_MAX = 1;

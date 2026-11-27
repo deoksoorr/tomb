@@ -64,7 +64,8 @@ const STEP: Record<number, [number, number]> = { [DIR.down]: [0, 1], [DIR.up]: [
 
 describe("캠핑장 낚시 자리", () => {
   it("여러 곳, 서 있을 수 있는 마른 자리에서 물을 바라보고, 정류장에서 걷거나 헤엄쳐 닿는다", () => {
-    expect(CAMP_FISHING_SPOTS.length).toBeGreaterThanOrEqual(40);
+    // 11/27 좌대는 의자 하나씩 (좌대 입장권) + 잔교 북쪽 여섯 → 32자리
+    expect(CAMP_FISHING_SPOTS.length).toBeGreaterThanOrEqual(32);
     for (const s of CAMP_FISHING_SPOTS) {
       expect(campStandable(s.x, s.y), s.id).toBe(true);
       expect(campWet(s.x, s.y), `${s.id} 발밑은 마른 자리`).toBe(false);

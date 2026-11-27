@@ -6,6 +6,8 @@ import type { Placed } from "@/lib/housing/types";
 import { OFFICE_STAND_IDS } from "./officeUse";
 import { CAMP_STAND_IDS } from "./seasonUse";
 import { CAMP_BED_LIE_SHIFT, campBedCoverOf, type CampBedCover } from "./campFurnitureArt";
+import { CX_ACT, type CxAct } from "@/lib/housing/campExclusive";
+import { cxCoverName, type CxCover } from "./campExclusive/types";
 
 // 3번 집 안 가구 상호작용 규칙 (Phaser 없이 테스트한다).
 //  - 1인 자리(HouseSpot): 의자·소파·책상·피아노에 앉기, 침대에 눕기, 책장 앞에서 읽기, 욕조에 들어가기.
@@ -61,7 +63,9 @@ export type UseKind =
   | "breed"
   // ── 11/20 총무팀 문대리 사무실 가구: 안마의자(앉으면 덜덜덜)·부장님 책상(뒤에서 손님 쪽 보고 앉아 결재) ──
   | "massage"
-  | "approve";
+  | "approve"
+  // ── 11/27 캠핑장 전용 가구 켜기·끄기 (lib/housing/campExclusive 종류 파일 act.toggle — 값 0..steps−1, 방 상태로 저장) ──
+  | "cxToggle";
 
 /** 집 씬에서 칸 (0,0)의 왼쪽 위 월드 좌표 */
 export type Frame = { ox: number; oy: number };
@@ -83,7 +87,9 @@ export type HouseSpot = {
   /** 가구 그림이 사람 앞에 그려진다 (뒤돌아 앉은 의자: 등받이가 앞) */
   behind?: boolean;
   /** 11/26 캠핑장 침대: 누운 사람 덮개를 그 침대 이불로 (없으면 마을 침대 보라 이불 — sprites/indoorPose LieCover) */
-  cover?: CampBedCover;
+  cover?: CampBedCover | CxCover;
+  /** 11/27 앉은·누운 사람 그림 깊이 (월드 y — 캠핑장 전용 가구 CxSeat depthY). 없으면 자세마다 기본 */
+  depth?: number;
 };
 
 export type HouseTarget = {
@@ -176,6 +182,11 @@ const USE_OF: Readonly<Record<string, UseKind>> = {
   ...Object.fromEntries(CAMP_STAND_IDS.map((id) => [id, "season" as const])),
   // 펜션 TV는 스탠드처럼 켜기·끄기 (값 1 = 켜짐, 방 상태로 저장 — lib/housing/states)
   fx_pn_tv: "lamp",
+  // 11/27 캠핑장 전용 가구: 종류 파일 act 선언대로 (켜기·끄기 → cxToggle · 서서 쓰기 → season 길 · 바닥 러그 → 러그 빈 칸에 앉기).
+  // 앉기·눕기(seats)·둘레 앉기(around)는 자리 (houseSpots → cxSpots)
+  ...Object.fromEntries(
+    Object.entries(CX_ACT).flatMap(([id, a]): [string, UseKind][] => (a.toggle ? [[id, "cxToggle"]] : a.fx ? [[id, "season"]] : a.rug ? [[id, "rug"]] : [])),
+  ),
 };
 
 /** 11/26 캠핑장 기본 가구 중 마을 가구와 같은 자리를 쓰는 것 (침대 = 침대 베개 자리, 펜션 소파 = 네 방향 라탄 벤치 두 자리) */
@@ -234,6 +245,8 @@ export const USE_LABEL: Readonly<Record<UseKind, string>> = {
   breed: "쓰다듬기",
   massage: "앉아서 안마받기",
   approve: "앉아서 결재하기",
+  // 실제 안내는 가구마다 종류 파일 act.toggle.label (HouseScene.labelOf)
+  cxToggle: "켜기",
 };
 
 /** 가까이 있다고 보는 거리 (발 위치 ↔ 대상 사각형, px) */
@@ -429,6 +442,12 @@ export function houseSpots(items: readonly Placed[], tier: TierShape, f: Frame):
         else out.push(spot("chair", "sit", p.u, b.L + 6, b.cy + 4, DIR.right, true), spot("chair", "sit", p.u, b.R - 6, b.cy + 4, DIR.left, true));
         break;
       }
+      // 11/27 캠핑장 전용 가구: 종류 파일의 자리 선언 (lib/housing/campExclusive — seats·around)
+      default: {
+        const act = CX_ACT[p.i];
+        if (act?.seats || act?.around) out.push(...cxSpots(p, b, Math.max(0, sd), act, free));
+        break;
+      }
       // 11/26 촌캉스 밥상 (2×1 소반): 상 앞·뒤(옆으로 놓으면 양옆) 빈 칸마다 한 자리 — 바닥에 앉아 상을 본다
       case "fx_rr_bapsang": {
         const d = Math.max(0, sd);
@@ -447,6 +466,58 @@ export function houseSpots(items: readonly Placed[], tier: TierShape, f: Frame):
         }
         break;
       }
+    }
+  }
+  return out;
+}
+
+/**
+ * 11/27 캠핑장 전용 가구의 자리 (종류 파일 act 선언 — Phaser 없이 시험한다):
+ *  - seats(d, w, h): 방향 d로 놓인 차지 칸 왼쪽 위 기준 px 자리 (lie면 침대 자리 "bed", 아니면 의자 자리 "chair")
+ *  - around: 둘레 빈 칸마다 한 자리 (촌캉스 밥상 규칙을 네 변으로 — 아래 변은 위를 보고, 위 변은 아래를 보고(farIn px만큼 칸 안으로), 옆 변은 가구 쪽을 본다)
+ */
+export function cxSpots(p: Placed, b: Pick<Box, "L" | "Tp" | "R" | "B" | "fw" | "fh">, d: number, act: CxAct, free: (x: number, y: number) => boolean): HouseSpot[] {
+  const out: HouseSpot[] = [];
+  for (const s of act.seats?.((d & 3) as 0 | 1 | 2 | 3, b.fw * T, b.fh * T) ?? []) {
+    // 발이 차지 칸 밖 칸에 있는 자리(다듬잇돌 옆·뒤)는 그 칸이 비어야 (둘레 앉기와 같은 검사 — 다른 가구·집 밖이면 자리 없음).
+    // 칸 위로 솟은 자리(벙커 침대 위층)는 inside:false가 아니면 보지 않는다
+    // 차지 칸 테두리 위(x = 0·w, y = 0·h)는 안으로 친다. 밖이면 그 칸 줄·열 (가로·세로 각각)
+    const tx = s.x < 0 ? Math.floor(s.x / T) : s.x > b.fw * T ? Math.floor(s.x / T) : Math.min(b.fw - 1, Math.floor(s.x / T));
+    const ty = s.y < 0 ? Math.floor(s.y / T) : s.y > b.fh * T ? Math.floor(s.y / T) : Math.min(b.fh - 1, Math.floor(s.y / T));
+    const outside = s.x < 0 || s.y < 0 || s.x > b.fw * T || s.y > b.fh * T;
+    if (outside && (s.inside === false || ty >= 0) && !free(p.x + tx, p.y + ty)) continue;
+    out.push(
+      spot(s.lie ? "bed" : "chair", s.lie ? "lie" : "sit", p.u, b.L + s.x, b.Tp + s.y, FACE_BY_R[s.face], s.inside !== false, {
+        ...(s.tilt ? { tilt: s.tilt } : {}),
+        ...(s.behind ? { behind: true } : {}),
+        // 눕는 자리 덮개: 그림 파일 coverArt[가구 id 또는 키] (방향마다 — indoorPose가 그린다)
+        ...(s.lie && s.cover ? { cover: cxCoverName(s.cover === true ? p.i : s.cover, d & 3) } : {}),
+        ...(s.depthY !== undefined ? { depth: b.Tp + s.depthY } : {}),
+      }),
+    );
+  }
+  if (act.around?.mode === "sideCenter") {
+    // 변마다 가운데 한 자리 (그 변 바깥 칸이 모두 비어야)
+    const farIn = act.around.farIn ?? 0;
+    const row = (y: number) => [...Array(b.fw).keys()].every((i) => free(p.x + i, y));
+    const col = (x: number) => [...Array(b.fh).keys()].every((j) => free(x, p.y + j));
+    const cx = (b.L + b.R) / 2;
+    const cy = (b.Tp + b.B) / 2 + 4;
+    if (row(p.y + b.fh)) out.push(spot("chair", "sit", p.u, cx, b.B + 4, DIR.up, false));
+    if (row(p.y - 1)) out.push(spot("chair", "sit", p.u, cx, b.Tp - 2 + farIn, DIR.down, false));
+    if (col(p.x - 1)) out.push(spot("chair", "sit", p.u, b.L - 6, cy, DIR.right, false));
+    if (col(p.x + b.fw)) out.push(spot("chair", "sit", p.u, b.R + 6, cy, DIR.left, false));
+  } else if (act.around) {
+    const farIn = act.around.farIn ?? 0;
+    for (let i = 0; i < b.fw; i++) {
+      const x = b.L + i * T + T / 2;
+      if (free(p.x + i, p.y + b.fh)) out.push(spot("chair", "sit", p.u, x, b.B + 4, DIR.up, false));
+      if (free(p.x + i, p.y - 1)) out.push(spot("chair", "sit", p.u, x, b.Tp - 2 + farIn, DIR.down, false));
+    }
+    for (let j = 0; j < b.fh; j++) {
+      const y = b.Tp + j * T + T / 2 + 4;
+      if (free(p.x - 1, p.y + j)) out.push(spot("chair", "sit", p.u, b.L - 6, y, DIR.right, false));
+      if (free(p.x + b.fw, p.y + j)) out.push(spot("chair", "sit", p.u, b.R + 6, y, DIR.left, false));
     }
   }
   return out;
@@ -571,7 +642,8 @@ export function houseTargets(items: readonly Placed[], tier: TierShape, plan: Ro
     const b = boxOf(p, def, f);
     // 11/19 품종 펫 가구·고양이 쿠션·잠자는 강아지·유령 고양이도 쓰다듬을 때 같은 규칙으로 앞에 서서 바라본다 (PET_STAND_USES)
     // 11/20 총무팀 문대리 사무실 가구도 시즌 가구와 같은 규칙으로 앞에 서서 쓴다
-    const stand = (def.seasonWeek || def.officeShop || PET_STAND_USES.has(use)) && !def.floor ? seasonStandSpot(p, occ, tier, f) : null;
+    // 11/27 캠핑장 전용 가구(서서 쓰기·켜기·끄기)도 같은 규칙
+    const stand = (def.seasonWeek || def.officeShop || def.campOnly || PET_STAND_USES.has(use)) && !def.floor ? seasonStandSpot(p, occ, tier, f) : null;
     out.push({ key: `u:${p.u}`, use, u: p.u, item: p.i, rect: { x0: b.L, y0: b.Tp, x1: b.R, y1: b.B }, ...(LOW_PRIORITY.has(use) ? { low: true } : {}), ...(stand ? { stand } : {}) });
   }
   plan.windows.forEach((w, i) => {
@@ -615,7 +687,9 @@ export function itemDepthY(p: Placed, def: FurnitureDef, spots: readonly HouseSp
   const b = boxOf(p, def, f);
   let d = b.B - 1;
   // 위를 보고 앉는 소파 자리(돌린 소파)는 등받이가 앞에 와야 하므로 그대로 둔다. 의자는 위를 봐도(책상 앞) 사람이 앞에
-  for (const s of spots) if (s.u === p.u && s.inside && !s.behind && !(s.facing === DIR.up && p.i === "sofa")) d = Math.min(d, s.y - 1);
+  // 11/27 깊이를 따로 정한 자리(depth)·차지 칸 위로 솟은 자리(벙커 침대 위층)는 가구 깊이를 끌어올리지 않는다
+  for (const s of spots)
+    if (s.u === p.u && s.inside && !s.behind && s.depth === undefined && s.y >= b.Tp && !(s.facing === DIR.up && p.i === "sofa")) d = Math.min(d, s.y - 1);
   return d;
 }
 

@@ -47,6 +47,7 @@ import {
   equipTarget,
   gearDiff,
   gearGrade,
+  sellAllPotions,
   sellWarning,
   sgGrade,
   slotAccepts,
@@ -75,6 +76,8 @@ type Props = {
   busy: boolean;
   onCharacter: (a: CharacterAction, ok?: string) => void;
   onSell: (id: string, count?: number) => void;
+  /** 11/27 물약 모두 팔기 (종류마다 되팔기 API를 차례로) — 없으면 버튼이 안 보인다 */
+  onSellAll?: (items: { id: string; count: number }[]) => void;
   /** 세트 장비·강화 요청이 돌려준 화면 정보 (없으면 강화·세트 장비 버튼이 안 보인다) */
   onView?: (v: RpgView) => void;
   figure: { color: string; body: string; look: readonly string[] };
@@ -104,7 +107,7 @@ const enhTier = (e: number) => (e >= 15 ? 3 : e >= 13 ? 2 : e >= 10 ? 1 : 0);
 const plusName = (name: string, e: number) => (e > 0 ? `${name} +${e}` : name);
 type Dlg = { kind: "enhance"; sg?: number; shop?: string; piece?: number; tab: EnhanceTab } | { kind: "exchange" } | null;
 
-export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: Props) {
+export function GearPanel({ view, busy, onCharacter, onSell, onSellAll, onView, figure }: Props) {
   const c = view.character;
   const level = c.level;
   const [tab, setTab] = useState<BagTab>("slots");
@@ -497,7 +500,7 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
               <li className={g.note}>재료는 거래할 수 없어요. 쓰지 않는 세트 장비를 분해해도 얻을 수 있어요.</li>
             </ul>
           ) : tab === "potions" ? (
-            <PotionList view={view} busy={working} qty={qty} setQty={setQty} onSell={onSell} />
+            <PotionList view={view} busy={working} qty={qty} setQty={setQty} onSell={onSell} onSellAll={onSellAll} />
           ) : tab === "slots" ? (
             slotBoard()
           ) : (
@@ -1102,21 +1105,66 @@ function PotionList({
   qty,
   setQty,
   onSell,
+  onSellAll,
 }: {
   view: RpgView;
   busy: boolean;
   qty: Record<string, number>;
   setQty: (f: (q: Record<string, number>) => Record<string, number>) => void;
   onSell: (id: string, count?: number) => void;
+  onSellAll?: (items: { id: string; count: number }[]) => void;
 }) {
   const c = view.character;
   // 단축키는 키보드 기기에서만 보인다 (터치는 사냥 화면의 물약 버튼)
   const coarse = useMediaQuery("(pointer: coarse)");
+  const [askAll, setAskAll] = useState(false);
   const potions = POTIONS.flatMap((p) => ((c.potions[p.id] ?? 0) > 0 ? [{ p, count: c.potions[p.id] }] : []));
   if (!potions.length) return <p className={g.note}>물약이 없어요. 상점에서 사거나 사냥터에서 주워요.</p>;
+  // 11/27 물약 모두 팔기: 확인 창에 종류별 개수와 합계 (야근 빌딩 60층부터는 물약을 못 마셔서 높은 층에서는 쌓이기만 한다).
+  // 부활 쿠키는 빼고 마시는 물약만 (쿠키는 자기 카드의 팔기로 — 운영자)
+  const drinks = sellAllPotions(potions);
+  const total = drinks.reduce((a, x) => a + x.count, 0);
+  const totalValue = drinks.reduce((a, { p, count }) => a + sellValue(p.price) * count, 0);
   // 11/20 운영자: 물약도 세로 카드 격자 (위 아이콘 → 이름 → 단축키 → 값 → 수량·팔기). 설명은 카드에 올리면(title)
   return (
     <>
+      {onSellAll && total > 0 && (
+        <>
+          <div className={g.groupHead}>
+            <span>
+              마시는 물약 <small>{total.toLocaleString("ko-KR")}개</small>
+            </span>
+            <button type="button" className={cx(ui.button, s.sellBtn, g.sellAllBtn)} disabled={busy || askAll} onClick={() => setAskAll(true)}>
+              모두 팔기
+            </button>
+          </div>
+          {askAll && (
+            <div className={g.confirm} role="alert">
+              <p>
+                {drinks.map(({ p, count }) => `${p.name} ${count}개`).join(", ")}를 모두 팔아요. 합계 {pts(totalValue)}예요.
+                {drinks.length < potions.length ? " 부활 쿠키는 팔지 않아요." : ""}
+              </p>
+              <div className={g.actions}>
+                <button
+                  type="button"
+                  className={cx(ui.button, s.sellBtn)}
+                  disabled={busy}
+                  onClick={() => {
+                    setAskAll(false);
+                    setQty(() => ({}));
+                    onSellAll(drinks.map(({ p, count }) => ({ id: p.id, count })));
+                  }}
+                >
+                  {pts(totalValue)}에 모두 팔기
+                </button>
+                <button type="button" className={ui.button} onClick={() => setAskAll(false)}>
+                  그만두기
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
       <ul className={g.cards}>
         {potions.map(({ p, count }) => {
           const price = sellValue(p.price);

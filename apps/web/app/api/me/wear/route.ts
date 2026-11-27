@@ -1,4 +1,4 @@
-import { isStaffItem, itemById, seasonSetsOfLook } from "@tomb/protocol";
+import { isRaftGearId, isStaffItem, itemById, raftSetWorn, seasonSetsOfLook } from "@tomb/protocol";
 import { env } from "@/lib/env";
 import { handler, HttpError, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
@@ -29,5 +29,7 @@ export const POST = handler(async (req) => {
   await recordLook(visitorId, me, { now }); // 꾸미기 랭킹 점수
   // 11/19 계절 한정 세트 한 벌을 막 다 입었으면 칭호 기억을 비운다 (세트 칭호가 몇 분 기다리지 않고 바로 열리게)
   if ((itemById(itemId)?.seasonSet || itemById(itemId)?.alleySet) && seasonSetsOfLook(me.equipped.map((e) => e.itemId)).length) forgetTitles(visitorId);
+  // 11/27 좌대 영구 넷을 막 함께 입었으면 「좌대의 전설」도 바로
+  else if (isRaftGearId(itemId) && raftSetWorn(me.equipped.map((e) => e.itemId))) forgetTitles(visitorId);
   return json<WearResponse>({ me, lookGrant: await lookGrant(env.joinSecret(), visitorId, lookOf(me), now, me) });
 });

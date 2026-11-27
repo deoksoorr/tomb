@@ -6,8 +6,9 @@ import { attackCooldownMs, CHAIN_GRACE_MS, FINISHER_EVERY, WEAPON_STYLES, weapon
 import { gearById } from "@/lib/rpg/catalog";
 import { ELITE, huntPlan, STREAM_GAP_MS, WAVE_FORMATION_LABEL, WAVE_MAX_GAP_SEC, type HuntWave } from "@/lib/rpg/plan";
 import { POTION_CURES, rollStatus, STATUS_IDS, StatusBook, STATUSES, type StatusId } from "@/lib/rpg/status";
-import { CURSES, floorSeed, isBossFloor, isChestFloor, NO_CURSE, TOWER_BOSS_HEAL, TOWER_POWER, towerChestDrops, towerCurseFx, towerFloorSec, towerPlan, towerScale, towerBlock, towerZone, type CurseFx } from "@/lib/rpg/tower";
+import { floorSeed, isBossFloor, isChestFloor, NO_CURSE, splitChestPotions, TOWER_BOSS_HEAL, TOWER_POWER, towerChestDrops, towerCurseFx, towerFloorSec, towerPlan, towerScale, towerBlock, towerZone, type CurseFx } from "@/lib/rpg/tower";
 import type { HuntResult, RpgAction, RpgHud } from "@/lib/rpg/types";
+import { potionSaleValue } from "@/lib/rpg/character";
 import { isMagicBranch, packCdCut, skillSpCost, SYNERGY, synergyGuard, synergyMul, wkCdFloor } from "@/lib/rpg/skillTree";
 import { soulFocus } from "@/lib/rpg/skillRules";
 import { NO_TMODS, tMods, type TMods } from "@/lib/rpg/transcendTree";
@@ -4129,8 +4130,13 @@ export class HuntScene extends RpgScene {
           this.fx.shake(140, 0.004);
           try {
             // 상자에는 물약·결재 서류가 늘 들어 있어서(towerChestDrops) 빈 상자는 없다 — 드롭이 없으면 시드를 못 받은 것
-            if (drops.length) this.loot.drop(drops, c.x, c.y - 8, false, 60);
-            else this.floatText(c.x, c.y - 26, "상자 안은 결과 화면에서 보여요", "#c8c0a8", 10);
+            if (drops.length) {
+              // 11/27 60층부터(탕비실 폐쇄) 물약은 가방에 들어가지 않고 판 끝에 바로 팔린다 (서버 settleTowerRun과 같은 나눔)
+              const sp = splitChestPotions(f, drops);
+              if (sp.keep.length) this.loot.drop(sp.keep, c.x, c.y - 8, false, 60);
+              const n = Object.values(sp.sold).reduce((a, b) => a + b, 0);
+              if (n > 0) this.floatText(c.x, c.y - 26, `물약 ${n}개는 바로 팔아요 +${potionSaleValue(sp.sold)}P`, "#ffe08a", 10);
+            } else this.floatText(c.x, c.y - 26, "상자 안은 결과 화면에서 보여요", "#c8c0a8", 10);
           } catch {
             // 연출만 빠진다 (보상은 서버가)
           }
@@ -4212,9 +4218,9 @@ export class HuntScene extends RpgScene {
     this.rootUntil = 0;
     this.floorAt = this.lastWaveAt = this.now + 700;
     const boss = isBossFloor(f);
-    const curse = CURSES.find((c) => c.from === f);
     const sub = this.theme?.title?.();
-    this.flash(`${f}층 · ${this.zone.name}${sub ? ` · ${sub}` : ""}${boss ? " · 우두머리 층" : ""}${curse ? ` · 새 저주 「${curse.name}」 ${curse.desc}` : ""}`, curse ? 3600 : 2400);
+    // 11/27 새 저주는 화면(RunHud 새 저주 알림·저주 줄)이 따로 띄운다 (웨이브 알림에 바로 덮이던 것 — 여기서는 층 이름만)
+    this.flash(`${f}층 · ${this.zone.name}${sub ? ` · ${sub}` : ""}${boss ? " · 우두머리 층" : ""}`, 2400);
     const t = this.label(this.px, this.py - 26, `${f}F`, boss ? "#ff9a7a" : "#ffe08a", 30).setDepth(1e6).setAlpha(0);
     this.tweens.add({ targets: t, alpha: 1, y: this.py - 34, duration: 260, ease: "Quad.easeOut" });
     this.tweens.add({ targets: t, alpha: 0, delay: 1100, duration: 500, onComplete: () => t.destroy() });

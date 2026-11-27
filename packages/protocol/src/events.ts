@@ -11,6 +11,7 @@ import { AWAY_HOUSE_RE, isAwayPlace, type AwayPlace } from "./friends";
 import type { PeerInfo, Sid } from "./types";
 import { isMapId, type AwayMapId, type ChatPlace, type MapId } from "./camp";
 import type { BbqItemId } from "./bbq";
+import type { RaftBoardEntry, RaftOutWhy } from "./raft";
 import { SNOWBALL_HIT_H_MAX } from "./snowfight";
 import type { StaffTpDenyWhy } from "./staffTp";
 import { SNOWMAN_ID_RE, isSnowBall, type SnowAct, type SnowBall, type SnowHold, type SnowmanDenyWhy, type SnowmanInfo, type SnowStackInfo } from "./snowman";
@@ -92,6 +93,8 @@ export type C2S =
   | { t: "tp"; sid: Sid; m: MapId; x: number; y: number }
   /** 11/15 캠핑장 바베큐 한 접시 증서 (웹이 포인트를 쓰고 서명). 서버가 검증해 같은 맵에 bbq로 알린다. 옛 서버는 버린다 */
   | { t: "bbq"; grant: string }
+  /** 11/27 좌대 입장권 증서 (웹이 사기·연장 때 서명 — grants "raft"). 서버가 검증해 그 채널 좌대 주인 표에 넣는다. 옛 서버는 버린다 */
+  | { t: "raft"; grant: string }
   // ── 11/18 캠핑장 눈사람 만드는 과정 (v73 — 11/17 snowman { x, y } 한 번 보내던 것을 바꿨다). 옛 서버는 모르는 t라 버린다 ──
   /** 들고 있는 눈덩이가 바뀌었다 (집기·크기 바뀜·굴리기 시작/멈춤·버리기). h = null이면 빈손. 바뀔 때만 보낸다 */
   | { t: "snowHold"; h: SnowHold | null }
@@ -232,6 +235,10 @@ export type S2C =
   | { t: "squirrelsWait"; left: number }
   /** 11/15 누가 바베큐를 먹고 u(epoch ms)까지 커졌다 (같은 맵, 보낸 사람 포함). 옛 클라이언트는 모르는 t라 버린다 */
   | { t: "bbq"; sid: Sid; i: BbqItemId; u: number; /** 마실 거리: 마신 뒤 취기 단계·마신 시각 */ lv?: number; at?: number }
+  /** 11/27 받는 사람에게만: 서버가 좌대 마루에서 내려보냈다 → (x,y)로 옮긴다 (4~6번은 사다리 밑 물속 — 헤엄). 옛 클라이언트는 모르는 t라 버린다 */
+  | { t: "raftOut"; n: number; x: number; y: number; why: RaftOutWhy }
+  /** 11/27 그 채널 좌대 주인 표 (캠핑장 사람에게 — 들어올 때·바뀔 때). 이름표·낚싯대 그림용. 옛 클라이언트는 모르는 t라 버린다 */
+  | { t: "rafts"; b: RaftBoardEntry[] }
   /** 11/17 확성기 창 고정 공지가 바뀌었다 (운영자가 쓰거나 지움, 사람이 있는 채널 모두에게). 옛 클라이언트는 모르는 t라 버린다 */
   | MegaPinMsg
   // ── 11/17 캠핑장 눈사람 (옛 클라이언트는 모르는 t라 버린다) ──
@@ -462,6 +469,8 @@ export function parseC2S(text: string): C2S | null {
     }
     case "bbq":
       return typeof m.grant === "string" && m.grant.length <= MAX_GRANT_LEN ? { t: "bbq", grant: m.grant } : null;
+    case "raft":
+      return typeof m.grant === "string" && m.grant.length <= MAX_GRANT_LEN ? { t: "raft", grant: m.grant } : null;
     case "snowHold": {
       if (m.h === null) return { t: "snowHold", h: null };
       const h = m.h as Record<string, unknown> | undefined;

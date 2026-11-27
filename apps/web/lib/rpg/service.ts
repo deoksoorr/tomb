@@ -36,9 +36,11 @@ import {
   spentStats,
   statPointsEarned,
   removeForSale,
+  potionSaleValue,
   removePieceForSale,
   returnUnsold,
   RpgError,
+  unpaidPotions,
   setHotbar,
 } from "./character";
 import { isTranscendRun, pioneerEligible, rollDay, RUN_TIERS, runTier, TRANSCEND_EXP_MUL, TRANSCEND_MAX, type RunTier } from "./endgame";
@@ -50,6 +52,7 @@ import {
   TOWER_FIRSTS,
   TOWER_MAX_RUN_SEC,
   TOWER_TICKET_SEC,
+  splitChestPotions,
   towerChestDrops,
   towerReach,
   towerArrival,
@@ -1059,10 +1062,14 @@ async function settleTowerRun(
       const g = gainTranscend(settled, tChamp > 0 ? Math.round(st.tExp * (1 + tChamp)) : st.tExp);
       // 11/15 상자마다 세트 장비 천장을 이어서 센다 (게임이 판 안에서 같은 순서로 센다) · 슈퍼 계정 시험 드롭(sup)
       let pity = cur.sgPity ?? 0;
+      // 11/27 「탕비실 폐쇄」(60층~) 상자의 물약은 가방에 넣지 않고 판 끝에 되팔기 값으로 바로 판다 (아래 포인트 적립)
+      const sold: Record<string, number> = {};
       const rolled = st.chests.flatMap((f) => {
         const d = towerChestDrops(seed, f, start, pity, sup, chestP);
         pity = nextPity(d, pity);
-        return d;
+        const sp = splitChestPotions(f, d);
+        for (const [id, n] of Object.entries(sp.sold)) sold[id] = (sold[id] ?? 0) + n;
+        return sp.keep;
       });
       // 11/15 보호 문서: 이번 주 최고 층이 10층 단위를 새로 넘으면 1장 (한 주 2장까지)
       const prevWk = cur.fWk === week ? cur.fWkBest : 0;
@@ -1074,7 +1081,7 @@ async function settleTowerRun(
       const dr = addDrops(sgd.state, drops);
       return {
         state: { ...dr.state, runs: dr.state.runs + 1, hz: bumpRuns(dr.state.hz, "tower", v.floors) },
-        result: { st, prevBest: cur.fBest, levels: g.levelsGained, lost: dr.lost, drops, star100: cur.tLevel < TRANSCEND_MAX && g.state.tLevel >= TRANSCEND_MAX },
+        result: { st, prevBest: cur.fBest, levels: g.levelsGained, lost: dr.lost, drops, sold, star100: cur.tLevel < TRANSCEND_MAX && g.state.tLevel >= TRANSCEND_MAX },
       };
     }),
   );
@@ -1142,10 +1149,13 @@ async function settleTowerRun(
   const fit = towerRunPoints(start, v.floors, tAtStart);
   const tp = { points: Math.min(v.points, fit.points), free: v.points > 0 ? fit.free : 0 };
   const earned = tp.points > 0 ? (await earnPointsOnly(acct, "hunt", tp.points, ipHash)).earned : 0;
+  // 11/27 60층부터 상자 물약 바로 팔기: 가방 되팔기와 같은 값·같은 적립(사냥 수입). 지갑 한도에 막혀 못 받은 만큼은 가방에 되돌린다
+  const sale = await sellTowerPotions(acct, done.result.sold, ipHash, store);
+  if (sale.state) state = sale.state;
   // 11/16 몬스터 도감: 의심 판이 아닐 때만 evalTower가 mobs를 싣는다 (관리자 대신 정산 grantTowerRun은 처치 기록이 없다)
   const mobs = v.mobs && !suspect ? await recordMobKills(acct, v.mobs, now, ipHash) : undefined;
   const quest = questHook(acct, day, "hunt");
-  const daily = await store.addDaily(acct, day, { points: earned, runs: 1 }, quest);
+  const daily = await store.addDaily(acct, day, { points: earned + (sale.info?.points ?? 0), runs: 1 }, quest);
   await recordEvent("hunt", now);
   // 처치 수는 주간 사냥 레이스에 그대로 (지옥, 레벨 50 콘텐츠라 늘 레이스에 든다)
   if (v.kills > 0 && !staff && !suspect) await getAccounts().recordHunt(acct, "hell", { kills: v.kills, clearMs: null }, week, true);
@@ -1158,6 +1168,7 @@ async function settleTowerRun(
       points: earned,
       capped: earned < tp.points,
       ...(tp.free > 0 ? { lowFloors: { floors: tp.free, from: towerPointFrom(tAtStart) } } : {}),
+      ...(sale.info ? { potionSale: sale.info } : {}),
       drops,
       levelsGained: 0,
       newLevel: state.level,
@@ -1173,6 +1184,32 @@ async function settleTowerRun(
     view: await rpgView(acct, store, now, state, day === kstDay(now) ? daily : undefined),
     ...todoTickOf(quest, day),
   };
+}
+
+/**
+ * 11/27 야근 빌딩 60층부터 상자에서 나온 물약(sold — 가방에 넣지 않은 것)을 되팔기 값으로 적립한다.
+ * 사냥 상점 되팔기와 같이 사냥 수입(earnPointsOnly hunt)이고, 지갑 한도에 막혀 값을 못 받은 물약은 가방에 되돌린다
+ */
+async function sellTowerPotions(
+  acct: string,
+  sold: Record<string, number>,
+  ipHash: string,
+  store: RpgStore,
+): Promise<{ info?: { count: number; points: number; back?: number }; state?: CharacterState }> {
+  const count = Object.values(sold).reduce((a, n) => a + n, 0);
+  const want = potionSaleValue(sold);
+  if (count <= 0 || want <= 0) return {};
+  const { earned, paid } = await earnPointsOnly(acct, "hunt", want, ipHash);
+  const back = paid < want ? unpaidPotions(sold, paid) : {};
+  const nBack = Object.values(back).reduce((a, n) => a + n, 0);
+  let state: CharacterState | undefined;
+  if (nBack > 0)
+    state = (
+      await http(
+        store.update(acct, (s) => ({ state: Object.entries(back).reduce((st, [id, n]) => returnUnsold(st, id, n), s), result: null })),
+      )
+    ).state;
+  return { info: { count: count - nBack, points: earned, ...(nBack > 0 ? { back: nBack } : {}) }, ...(state ? { state } : {}) };
 }
 
 /**

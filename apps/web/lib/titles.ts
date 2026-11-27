@@ -189,6 +189,10 @@ export const TITLE_PERK_GROUP: Readonly<Record<TitleId, PerkGroup>> = {
   // 11/22 골목 붕어빵 수레 두 벌 덤 칭호: 능력 없음
   t_ssCampus: "none",
   t_ssDate: "none",
+  // 11/27 좌대 입장권: 단골·장인은 낚시 갈래, 좌대의 전설은 보여 주기용 (능력 없음)
+  t_raftReg: "fish",
+  t_raftNight: "fish",
+  t_raftLegend: "none",
 };
 
 /** 칭호 능력 한 벌 (갈래가 아닌 칸은 0). 서버(보상·확률)와 화면(속도·표시)이 같이 쓴다 */
@@ -328,6 +332,10 @@ export type TitleMetric =
   // 11/22 골목 붕어빵 수레 두 벌
   | "ssCampus"
   | "ssDate"
+  // 11/27 좌대 입장권 산 수(연장 포함) · 산 좌대 시간 합(분) · 좌대 전용 코디 넷을 영구로 함께 입음(1/0)
+  | "rafts"
+  | "raftMin"
+  | "raftSet"
   | `dex_${DexCat}`;
 
 export type TitleDef = {
@@ -463,6 +471,10 @@ const STEP_ROWS: readonly StepRow[] = [
     // 11/22 골목 붕어빵 수레 두 벌 (어디서 파는지는 안내하지 않는다 — 이스터에그)
     ["t_ssCampus", "얼죽아", "bronze", "「캠퍼스 후드핏」 다섯 점을 함께 입으면", "ssCampus", 1, "look"],
     ["t_ssDate", "겨울 데이트 장인", "bronze", "「겨울 데이트룩」 다섯 점을 함께 입으면", "ssDate", 1, "look"],
+    // 11/27 캠핑장 좌대 입장권 (lib/raft — 사기·연장 Lua가 titles:stats에 같이 센다)
+    ["t_raftReg", "좌대 단골", "silver", "좌대 입장권을 20번 사면 (연장 포함)", "rafts", 20, "fish"],
+    ["t_raftNight", "밤낚시 장인", "gold", "좌대 입장권으로 모두 합쳐 50시간을 쓰면", "raftMin", 3000, "fish"],
+    ["t_raftLegend", "좌대의 전설", "legend", "좌대 영구 코디 네 가지를 함께 입으면", "raftSet", 1, "fish"],
 ];
 const STEP_OF = new Map(STEP_ROWS.map((r) => [r[0], r]));
 
@@ -655,6 +667,9 @@ export function progressText(t: TitleDef, value: number): string {
   if (t.metric === "sgOvertime" || t.metric === "sgApproval" || t.metric === "sgMeeting" || t.metric === "sgTrip" || t.metric.startsWith("ss")) return value > 0 ? "완성" : "아직";
   if (t.metric === "enh") return `+${Math.min(value, t.need)} / +${t.need}`;
   if (t.metric === "refs") return `${v}명 / ${t.need}명`;
+  if (t.metric === "rafts") return `${v}장 / ${t.need}장`;
+  if (t.metric === "raftMin") return `${Math.floor(v / 60)}시간 / ${t.need / 60}시간`;
+  if (t.metric === "raftSet") return value > 0 ? "완성" : "아직";
   return `${v.toLocaleString("ko-KR")} / ${t.need.toLocaleString("ko-KR")}`;
 }
 

@@ -238,6 +238,11 @@ export type RunReward = {
   overLevel?: "star" | "level";
   /** 11/19 야근 빌딩: 적정 층보다 낮아 포인트를 받지 않은 층 수와 포인트를 주는 첫 층 */
   lowFloors?: { floors: number; from: number };
+  /**
+   * 11/27 야근 빌딩 60층부터(「탕비실 폐쇄」) 상자에서 나온 물약: 가방에 넣지 않고 되팔기 값으로 바로 판 개수·받은 포인트
+   * (points는 위 points와 따로 — 지갑 한도에 막혀 못 판 back개는 가방에 들어갔다)
+   */
+  potionSale?: { count: number; points: number; back?: number };
   drops: Drop[];
   levelsGained: number;
   newLevel: number;

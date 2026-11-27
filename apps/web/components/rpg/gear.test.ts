@@ -148,3 +148,16 @@ describe("직급 순 정렬 · 부위별 칸", () => {
     expect(slotCandidates(all, "weapon").map((x) => (x.type === "sg" ? x.it.u : x.key))).toEqual([5]);
   });
 });
+
+import { POTIONS } from "@/lib/rpg/catalog";
+import { sellAllPotions } from "./gear";
+
+describe("11/27 물약 [모두 팔기]", () => {
+  it("마시는 물약만 넣고 부활 쿠키는 뺀다", () => {
+    const list = POTIONS.map((p) => ({ p, count: 3 }));
+    const ids = sellAllPotions(list).map((x) => x.p.id);
+    expect(ids).toEqual(["p_coffee", "p_energy", "p_lunchbox"]);
+    expect(ids).not.toContain("p_cookie");
+    expect(sellAllPotions(list.filter((x) => x.p.id === "p_cookie"))).toEqual([]);
+  });
+});

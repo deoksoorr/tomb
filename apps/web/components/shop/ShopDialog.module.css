@@ -250,6 +250,8 @@
 .buy {
   min-width: 0;
   min-height: 44px;
+  /* 11/27 잠긴 단추 글(「펜션 주인만 살 수 있어요」)이 낱말 중간에서 줄바꿈되지 않게 */
+  word-break: keep-all;
 }
 
 @media (pointer: fine) {

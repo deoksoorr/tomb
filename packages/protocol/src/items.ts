@@ -53,6 +53,8 @@ export type ItemDef = {
   invite?: true;
   /** 11/20 별자리 잇기(망원경) 전용 「유성우 오라」: 상점 목록에 없고 사거나 팔거나 선물할 수 없다. 맑은 밤 판에서 아주 드물게 영구로 떨어진다 (web lib/rpg/meteorDrop) */
   stargaze?: true;
+  /** 11/27 캠핑장 좌대 전용 코디: 상점·교환소에 없고 살 수 없다. 내 좌대 자동 낚시로 한 마리 걸릴 때 아주 드물게 7일·30일·영구로 나온다 (protocol raft.ts RAFT_GEAR · web lib/raft/gear) */
+  raft?: true;
   /**
    * 11/22 골목 붕어빵 수레 한정 (이스터에그): 상점·계절 보따리상·상자·관리자 선물 목록에 없고, 밤에 가끔 나오는 수레에서만 영구로 산다 (web lib/bungeo).
    * 영구 값 = price × 영구 배율 (꾸미기 점수도 같은 셈 — BUNGEO_PRICES)
@@ -675,6 +677,17 @@ export const ITEMS: readonly ItemDef[] = [
   { id: "inv_hand_lantern", kind: "cosmetic", slot: "hand", grade: "rare", name: "마중 등불", desc: "친구를 마을로 데려온 이웃이 드는 초롱. 두 사람의 하트가 따뜻하게 빛나요.", price: 300, durationMs: COSMETIC_DURATION_MS, invite: true },
   // 11/20 별자리 잇기 전용 전설 오라 (상점·교환소·유령선에 없다 — 맑은 밤 판에서 아주 드물게 영구로, web lib/rpg/meteorDrop). 그림 web game/sprites/meteorFx.ts
   { id: "st_meteor", kind: "cosmetic", slot: "aura", grade: "legend", name: "유성우 오라", desc: "망원경으로 오래 들여다본 사람에게만 떨어지는 별똥별 부스러기예요. 머리 위로 작은 별똥별이 가끔 스쳐 가요.", price: 1500, durationMs: COSMETIC_DURATION_MS, stargaze: true },
+  // 11/27 캠핑장 좌대 전용 코디 (상점·교환소에 없다 — 내 좌대 자동 낚시로 7일·30일·영구, protocol raft.ts RAFT_GEAR · web lib/raft/gear). 그림 web game/sprites/raftGear.ts
+  //  영구 넷(삿갓·찌 목걸이·가슴장화·망토)을 함께 입으면 세트 연출 「금빛 월척」(raftSetFx) + 칭호 「좌대의 전설」
+  ...([
+    { id: "jw_carphat", slot: "head", grade: "fine", name: "붕어 털모자", desc: "붕어가 머리를 덥석 문 니트 모자. 왕눈이 둘이 서로 다른 데를 봐요.", price: 200 },
+    { id: "jw_vest", slot: "back", grade: "rare", name: "좌대 낚시 조끼", desc: "주머니가 많은 낚시 조끼. 등에 꽂은 낚싯대 끝에서 방울이 흔들려요.", price: 360 },
+    { id: "jw_net", slot: "pack", grade: "rare", name: "월척 뜰채", desc: "은빛 월척이 든 큰 뜰채를 등에 메요.", price: 360 },
+    { id: "jw_sedge", slot: "head", grade: "legend", name: "물빛 삿갓", desc: "물빛으로 물들인 삿갓. 금테 챙 끝에 작은 금 잉어가 달려 있어요.", price: 600 },
+    { id: "jw_bell", slot: "neck", grade: "legend", name: "금방울 찌 목걸이", desc: "큰 찌 둘 사이에 금방울을 꿴 목걸이예요.", price: 600 },
+    { id: "jw_waders", slot: "back", grade: "legend", name: "물빛 가슴장화", desc: "가슴까지 올라오는 낚시 장화 바지. 노란 고무장화를 신어요.", price: 600 },
+    { id: "jw_cape", slot: "pack", grade: "legend", name: "황금 월척 망토", desc: "등에 금 월척을 수놓은 물빛 망토. 밑단이 꼬리지느러미처럼 갈라져요.", price: 600 },
+  ] as const).map((it): ItemDef => ({ ...it, kind: "cosmetic", durationMs: COSMETIC_DURATION_MS, raft: true })),
   // 긴급 의뢰 100% 보상 상자: 받으면 가방(소모품)에 들어가고 [열기]로 연다. 내용물은 (의뢰, 계정)으로 미리 정해진다 (web lib/forage/quests/urgent openBox)
   { id: "u_box_pocket", kind: "box", grade: "rare", name: "수집가의 뒷주머니", desc: "수집가 유령이 슬쩍 건넨 주머니. 열면 도장이나 염색권, 희귀 물고기가 나와요.", price: 0, urgent: true },
 
@@ -761,8 +774,8 @@ export function styleItemId(id: string): string | null {
 export const SHOP_KINDS: readonly ItemKind[] = ["firework", "cosmetic", "graveStyle", "dye"];
 /** 상점 목록에 나오는지. 펫은 상점에서 팔지 않는다 (동물원 사육사에게서 영구로만 — ZOO_PETS) */
 /** 11/19 계절 한정 세트(seasonSet)도 잡화점에 없다 (계절 보따리상에서만 — SEASON_SETS). 11/22 붕어빵 수레 한정(alley)도 */
-export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot; staff?: true; champ?: true; chair?: true; quest?: true; urgent?: true; ghost?: true; event?: true; invite?: true; stargaze?: true; seasonSet?: string; alley?: true }): boolean {
-  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet" && !item.staff && !item.champ && !item.chair && !item.quest && !item.urgent && !item.ghost && !item.event && !item.invite && !item.stargaze && !item.seasonSet && !item.alley;
+export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot; staff?: true; champ?: true; chair?: true; quest?: true; urgent?: true; ghost?: true; event?: true; invite?: true; stargaze?: true; seasonSet?: string; alley?: true; raft?: true }): boolean {
+  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet" && !item.staff && !item.champ && !item.chair && !item.quest && !item.urgent && !item.ghost && !item.event && !item.invite && !item.stargaze && !item.seasonSet && !item.alley && !item.raft;
 }
 /** 12월 크리스마스 이벤트 한정인지 (상점·포인트로 살 수 없다 — 선물상자에서만) */
 export function isEventItem(id: unknown): boolean {
@@ -1288,6 +1301,10 @@ export const TITLE_IDS = [
   "t_chairHell",
   // 11/23 회장님 독대 2관왕 (노멀·헬 모두 1위 — 두 칭호 대신 이것 하나)
   "t_chairDuo",
+  // 11/27 캠핑장 좌대 입장권: 「좌대 단골」(20장) · 「밤낚시 장인」(50시간) · 「좌대의 전설」(좌대 전용 코디 넷을 영구로 함께 — protocol raft.ts RAFT_GEAR_IDS)
+  "t_raftReg",
+  "t_raftNight",
+  "t_raftLegend",
 ] as const;
 export type TitleId = (typeof TITLE_IDS)[number];
 const titleSet = new Set<string>(TITLE_IDS);

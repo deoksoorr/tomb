@@ -56,7 +56,14 @@ export type AutoSession = {
   done: number;
   /** 11/16 바닷가 갯바위: end가 물이 빠지는 때 (끝나면 ended "tide") */
   tide?: true;
+  /** 11/27 찌 올리는 간격 (ms). 없으면 AUTO_FISH_EVERY_MS. 한 세션은 처음부터 끝까지 같은 간격 (번호·시각 계산이 안 꼬이게) */
+  every?: number;
+  /** 11/27 내 좌대(입장권) 세션: end가 입장권 끝 (끝나면 ended "raft", 연장하면 end를 늘린다) */
+  raft?: { ch: number; n: number };
 };
+
+/** 그 세션의 찌 올리는 간격 */
+export const everyOf = (s: Pick<AutoSession, "every">): number => (typeof s.every === "number" && s.every >= 5_000 ? s.every : AUTO_FISH_EVERY_MS);
 
 export function newAutoSession(seed: number, spot: string, water: FishWater, ch: number | null, now: number): AutoSession {
   return { v: 1, seed, spot, water, ch, start: now, end: AUTO_NO_END, beat: now, segs: [], done: 0 };
@@ -69,7 +76,8 @@ export function parseAutoSession(raw: string | null): AutoSession | null {
     const s = JSON.parse(raw) as AutoSession;
     if (s?.v !== 1 || !Number.isFinite(s.start) || !Number.isFinite(s.beat) || !Array.isArray(s.segs)) return null;
     // 11/22 시간 제한 없음: 물때로 끝나는 세션만 end를 지킨다 (6시간 제한 때 저장된 세션도 시간 때문에 끝나지 않게)
-    if (!s.tide || !Number.isFinite(s.end)) s.end = AUTO_NO_END;
+    // 11/27 좌대 입장권 세션도 end(입장권 끝)를 지킨다
+    if ((!s.tide && !s.raft) || !Number.isFinite(s.end)) s.end = AUTO_NO_END;
     return s;
   } catch {
     return null;
@@ -99,10 +107,10 @@ export function beatAuto(s: AutoSession, now: number): AutoSession {
 export const autoAliveMs = (s: AutoSession) => s.segs.reduce((n, [a, b]) => n + (b - a), 0);
 
 /** 지금까지 찌를 올린 수 (정산 여부와 상관없이, 접속 시간 기준 — 놓친 것 포함) */
-export const autoTriesTotal = (s: AutoSession) => Math.floor(autoAliveMs(s) / AUTO_FISH_EVERY_MS);
+export const autoTriesTotal = (s: AutoSession) => Math.floor(autoAliveMs(s) / everyOf(s));
 
 /** 다음 찌 올리기까지 남은 접속 시간 (ms) */
-export const autoNextInMs = (s: AutoSession) => AUTO_FISH_EVERY_MS - (autoAliveMs(s) % AUTO_FISH_EVERY_MS);
+export const autoNextInMs = (s: AutoSession) => everyOf(s) - (autoAliveMs(s) % everyOf(s));
 
 /** k번째(1부터) 시도에 걸렸는지 (시드 + 번호로 결정적 — 다시 정산해도 같다) */
 export const autoHit = (seed: number, k: number) => hash01(`auto|${seed}|${k}|hit`) < AUTO_CATCH_CHANCE;
@@ -110,12 +118,13 @@ export const autoHit = (seed: number, k: number) => hash01(`auto|${seed}|${k}|hi
 /** k번째(1부터) 시도 시각: 접속 구간을 이어 붙여 k × AUTO_FISH_EVERY_MS가 채워지는 순간 */
 export function autoCatchTimes(s: AutoSession, from: number, to: number): number[] {
   const out: number[] = [];
+  const every = everyOf(s);
   let cum = 0;
   let k = from;
   for (const [a, b] of s.segs) {
     const len = b - a;
-    while (k <= to && k * AUTO_FISH_EVERY_MS <= cum + len) {
-      out.push(a + (k * AUTO_FISH_EVERY_MS - cum));
+    while (k <= to && k * every <= cum + len) {
+      out.push(a + (k * every - cum));
       k++;
     }
     cum += len;
@@ -185,6 +194,8 @@ export const AUTO_DIRECT_NOTE = "캠핑장에서만 나오는 희귀 이상 물�
 export const isCampWater = (w: FishWater): boolean => w === "valley" || w === "pool" || w === "reservoir" || w === "rowboat";
 /** 11/19 자동 낚시 빠르기 안내: "30초마다 찌를 올려 25% 확률로 걸려요." (숫자는 상수에서) */
 export const AUTO_PACE_NOTE = `${Math.round(AUTO_FISH_EVERY_MS / 1000)}초마다 찌를 올려 ${Math.round(AUTO_CATCH_CHANCE * 100)}% 확률로 걸려요.`;
+/** 11/27 내 좌대에서 켠 자동 낚시 안내 (간격은 protocol RAFT_AUTO_EVERY_MS) */
+export const AUTO_RAFT_NOTE = "내 좌대에서는 15초마다 찌를 올려요.";
 
 /**
  * 종류별 마릿수 요약: "월요병 붕어 5(최대 42.3cm), 야근 메기 1(새 도감·61.0cm) 외 2종".

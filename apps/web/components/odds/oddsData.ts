@@ -12,7 +12,7 @@ import { HUNT_DROP_ROLLS, KILLS_PER_DROP_ROLL } from "@/lib/rpg/rewards";
 import { METEOR_DAY_ROLLS, METEOR_LEGEND_P, METEOR_P, METEOR_PITY } from "@/lib/rpg/meteorDrop";
 import { SG_GRADE_NAMES, SG_LEGEND_CHANCE, SG_PIECE_LABEL, SG_PIECES, SG_SETS } from "@/lib/rpg/setGear";
 import { CHEST_COSMETIC_CHANCE, chestDocs, chestSeals, COS_DAYS, COS_TIER_NAMES, cosTierWeights, SG_CHEST_CHANCE, SG_PIECE_WEIGHTS, sgGradeForFloor } from "@/lib/rpg/setGearRoll";
-import { TOWER_BOSS_EVERY, TOWER_CHEST_FROM } from "@/lib/rpg/tower";
+import { NO_POTION_FROM, TOWER_BOSS_EVERY, TOWER_CHEST_FROM } from "@/lib/rpg/tower";
 import { FEATHER_CHANCE, RED_FEATHER_SHARE } from "@/lib/sea/gull";
 import { PERK_VALUES, TITLE_GRADE_NAMES } from "@/lib/titles";
 import { WISH_BONUS_JACKPOT, WISH_BONUS_SPARKLE, WISH_LUCK_TABLE } from "@/lib/wish";
@@ -101,7 +101,8 @@ export function chestRows(): string[][] {
   });
   return [
     ["상자", `${TOWER_CHEST_FROM}층부터 우두머리 층마다 열려요.`],
-    ["물약", `1개 ${pct(1 - CHEST_TWO_POTIONS)}, 2개 ${pct(CHEST_TWO_POTIONS)}`],
+    // 11/27 「탕비실 폐쇄」 층부터는 가방에 넣지 않고 되팔기 값으로 (lib/rpg/service settleTowerRun)
+    ["물약", `1개 ${pct(1 - CHEST_TWO_POTIONS)}, 2개 ${pct(CHEST_TWO_POTIONS)}예요. ${NO_POTION_FROM}층부터 상자에서 나온 물약은 바로 되팔기 값으로 포인트가 돼요.`],
     ["결재 서류", `늘 나와요. ${TOWER_CHEST_FROM}층 상자는 ${chestDocs(TOWER_CHEST_FROM)}장, 10층마다 1장씩 늘어요.`],
     ["인감 도장", sealFrom[0] ? `${sealFrom[0]}층부터 ${chestSeals(sealFrom[0])}개${sealFrom[1] ? `, ${sealFrom[1]}층부터 ${chestSeals(sealFrom[1])}개` : ""}예요.` : "나오지 않아요."],
     ["세트 장비", `${pct(SG_CHEST_CHANCE)}예요. 못 받은 횟수가 쌓여도 확률은 그대로예요.`],

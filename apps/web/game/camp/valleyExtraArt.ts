@@ -1,6 +1,7 @@
 // 11/26 캠핑장 그림 (6차 시안에서 옮김): 계곡 족욕탕 · 낚시 바위 · 4인 좌대 · 나룻배 선착장 · 펜션 정원 소품 · 순이 할머니. 캠핑장 그림 규칙 그대로 (윤곽 0x2c2018, 왼쪽 위 빛, 원점 = 바닥 가운데).
 
 import { darken, Grid, hash2, lighten, type Color } from "../sprites/pixel";
+import { drawRaftHolder, RAFT_HOLDER_UP, raftRig } from "./raftRodsArt";
 import { ROOFS } from "./valleyProps";
 
 const OUT = 0x2c2018;
@@ -237,6 +238,38 @@ export function fishRockArt(v: number): Grid {
 
 /** 3×5 숫자 (좌대 번호판) */
 const RAFT_DIGITS: readonly string[] = ["111101101101111", "010110010010111", "111001111100111", "111001111001111", "101101111001001", "111100111001111", "111100111101111", "111001010010010", "111101111101111", "111101111001111"];
+/** 11/27 좌대 전용 팔걸이 낚시의자 (11×12, 아래 가운데 = 다리 끝 — 시안 jwadaemock/art/raft.ts): 짙은 초록 천 · 은색 틀 · 나무 팔받침 · 컵 홀더 */
+function raftChairArt(): Grid {
+  const g = new Grid(11, 12);
+  const C = 0x3e6a4a;
+  const CH = 0x5a8a62;
+  const CL = 0x2a4a34;
+  const F = 0xb8bcc4;
+  const FL = 0x7a808a;
+  g.hline(2, 8, 0, F);
+  g.rect(2, 1, 7, 3, C);
+  g.hline(2, 8, 1, CH);
+  g.vline(8, 1, 3, CL);
+  for (const x of [0, 10]) g.vline(x, 3, 8, F);
+  g.hline(0, 1, 3, 0xc8925a);
+  g.hline(9, 10, 3, 0xc8925a);
+  g.set(10, 2, 0x2a2a30);
+  g.rect(1, 4, 9, 4, C);
+  g.hline(1, 9, 4, CH);
+  g.hline(1, 9, 7, CL);
+  g.set(2, 8, FL);
+  g.set(3, 9, FL);
+  g.set(8, 8, FL);
+  g.set(7, 9, FL);
+  g.set(5, 9, F);
+  g.set(3, 10, F);
+  g.set(7, 10, F);
+  g.set(2, 11, FL);
+  g.set(8, 11, FL);
+  g.outline(OUT);
+  return g;
+}
+
 /** 좌대 번호판 (오두막 지붕 앞 가운데 — 그림 x 31~39 · 2~10줄). 지붕 눈(roof 칸)에서 뺀다 */
 export const RAFT_PLATE = { x: 31, y: 2, w: 9, h: 9 } as const;
 
@@ -282,22 +315,18 @@ export function raft4Art(roofI: number, xmas: boolean, ladder: "left" | "front",
   }
   g.rect(8, 19, 4, 3, 0x6a8aa0);
   g.hline(8, 11, 19, 0x9ab8c8);
-  // 앞 낚시 의자 넷 + 낚싯대 넷
-  const cols = [0x4f9a88, 0xd8786a, 0xe8b850, 0x6a8ac8] as const;
-  const seats = [7 + X, 21 + X, 40 + X, 54 + X];
-  for (const [i, x] of seats.entries()) {
-    const c = cols[i];
-    g.rect(x, 27 + D, 7, 5, c);
-    g.rect(x, 24 + D, 7, 3, darken(c, 0.25));
-    g.vline(x + 1, 32 + D, 34 + D, 0x5a5a60);
-    g.vline(x + 5, 32 + D, 34 + D, 0x5a5a60);
-    const dx = i < 2 ? -1 : 1;
-    const bx = i < 2 ? x : x + 6;
-    line(g, bx, 34 + D, bx + dx * 5, 46 + D, 0x4a321e);
-    g.set(bx + dx * 5, 47 + D, 0xe8e0d0);
-  }
-  g.rect(30 + X, 31 + D, 8, 4, 0x6a8aa0); // 미끼통
-  g.hline(30 + X, 37 + X, 31 + D, 0x9ab8c8);
+  // 11/27 앞 낚시 의자 하나 (좌대 입장권 주인 혼자 — 운영자: 의자 넷 대신 하나) + 낚싯대 하나.
+  // 앞 끝 가운데 (protocol campRaftSeatDx — 물 건너 좌대는 가운데가 사다리라 오른쪽). 주인이 앉아 낚시하면 받침틀 낚싯대 넷(game/camp/CampRafts)
+  // 11/27 시안(좌대시안 03·04번): 좌대 전용 팔걸이 낚시의자 + 마루 앞 끝 빈 낚싯대 받침틀 (주인이 앉으면 받침틀에 낚싯대 넷 — raftRodsArt)
+  const sdx = ladder === "front" ? 11 : 0;
+  const seats = [W / 2 - 3 + sdx];
+  const cx = W / 2 + sdx;
+  g.draw(raftChairArt(), cx - 5, 47 - 12 + 1);
+  drawRaftHolder(g, cx, H - RAFT_HOLDER_UP, raftRig(ladder === "left"));
+  // 미끼통: 의자 옆 (물 건너 좌대는 사다리 왼쪽)
+  const bait = ladder === "front" ? 20 + X : 44 + X;
+  g.rect(bait, 31 + D, 8, 4, 0x6a8aa0);
+  g.hline(bait, bait + 7, 31 + D, 0x9ab8c8);
   if (ladder === "front") {
     // 11/26 물 쪽에서 잘 보이는 앞 사다리 (운영자: 헤엄쳐 가서 사다리로만 오른다) — 은색 손잡이가 마루 위로 휘어 올라오고 흰 디딤판 넷
     for (const x of [30 + X, 37 + X]) {

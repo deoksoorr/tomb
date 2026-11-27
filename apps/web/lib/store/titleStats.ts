@@ -10,11 +10,12 @@ import { env } from "../env";
 //  - titles:stats:{계정}  HASH  stay → 누적 머문 기록 수
 //                         11/15 quests → 끝낸 수집 의뢰 수 · qking → 수집가 유령 외형을 받음(1). 둘은 수집 의뢰 Lua(lib/forage/quests/store)가 같이 바꾼다
 //                         11/15 urgKing·urgLast → 긴급 의뢰 칭호(「긴급 배달왕」·「아슬아슬 마감」)가 끝나는 시각 ms. 긴급 의뢰 받기 Lua(lib/forage/quests/urgentStore)가 쓴다
+//                         11/27 rafts·raftMin → 좌대 입장권을 산(연장 포함) 수 · 산 좌대 시간 합(분). 좌대 사기·연장 Lua(lib/raft/store)가 쓴다
 
 const key = (id: string) => `titles:stats:${id}`;
 export const titleStatsKey = key;
 
-export type TitleStats = { stay: number; quests: number; qking: number; urgKing: number; urgLast: number };
+export type TitleStats = { stay: number; quests: number; qking: number; urgKing: number; urgLast: number; /** 11/27 좌대 입장권 산 수·산 시간(분) */ rafts?: number; raftMin?: number };
 
 export interface TitleStatStore {
   get(accountId: string): Promise<TitleStats>;
@@ -29,7 +30,14 @@ export class MemoryTitleStats implements TitleStatStore {
   private rows = new Map<string, TitleStats>();
   async get(accountId: string): Promise<TitleStats> {
     const r = this.rows.get(accountId);
-    return { stay: r?.stay ?? 0, quests: r?.quests ?? 0, qking: r?.qking ?? 0, urgKing: r?.urgKing ?? 0, urgLast: r?.urgLast ?? 0 };
+    return { stay: r?.stay ?? 0, quests: r?.quests ?? 0, qking: r?.qking ?? 0, urgKing: r?.urgKing ?? 0, urgLast: r?.urgLast ?? 0, rafts: r?.rafts ?? 0, raftMin: r?.raftMin ?? 0 };
+  }
+  /** 11/27 좌대 입장권 한 장(연장 포함) · 그 분 (좌대 메모리 저장소가 사기·연장과 한 번에 부른다 — 동기) */
+  bumpRaft(accountId: string, min: number): void {
+    const r = this.rows.get(accountId) ?? { stay: 0, quests: 0, qking: 0, urgKing: 0, urgLast: 0 };
+    r.rafts = (r.rafts ?? 0) + 1;
+    r.raftMin = (r.raftMin ?? 0) + min;
+    this.rows.set(accountId, r);
   }
   /** 수집 의뢰 메모리 저장소가 부른다 (동기 — 의뢰 저장과 한 번에) */
   bump(accountId: string, field: "quests" | "qking", by: number): void {
@@ -59,10 +67,10 @@ export class RedisTitleStats implements TitleStatStore {
     this.redis = redisClient(conn, "titleStats");
   }
   async get(accountId: string): Promise<TitleStats> {
-    const r = (await this.redis.hmget(key(accountId), "stay", "quests", "qking", "urgKing", "urgLast")) as unknown;
+    const r = (await this.redis.hmget(key(accountId), "stay", "quests", "qking", "urgKing", "urgLast", "rafts", "raftMin")) as unknown;
     const o = (r ?? {}) as Record<string, unknown>;
-    const v = Array.isArray(r) ? r : [o.stay, o.quests, o.qking, o.urgKing, o.urgLast];
-    return { stay: Number(v[0]) || 0, quests: Number(v[1]) || 0, qking: Number(v[2]) || 0, urgKing: Number(v[3]) || 0, urgLast: Number(v[4]) || 0 };
+    const v = Array.isArray(r) ? r : [o.stay, o.quests, o.qking, o.urgKing, o.urgLast, o.rafts, o.raftMin];
+    return { stay: Number(v[0]) || 0, quests: Number(v[1]) || 0, qking: Number(v[2]) || 0, urgKing: Number(v[3]) || 0, urgLast: Number(v[4]) || 0, rafts: Number(v[5]) || 0, raftMin: Number(v[6]) || 0 };
   }
   async addStay(accountId: string, by: number, todayTotal: number): Promise<number> {
     if (this.seeded.has(accountId)) return Number(await this.redis.hincrby(key(accountId), "stay", by)) || 0;

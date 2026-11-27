@@ -474,6 +474,39 @@ export function returnUnsold(s: CharacterState, id: string, n: number): Characte
 }
 
 export const sellValue = (price: number) => Math.floor(price * SELL_RATE);
+
+/** 11/27 물약 묶음(id별 개수)을 가방에서 되팔 때와 같은 값 (상점가의 50%) — 야근 빌딩 60층부터 상자 물약을 바로 파는 값 */
+export function potionSaleValue(sold: Readonly<Record<string, number>>): number {
+  let v = 0;
+  for (const [id, n] of Object.entries(sold)) {
+    const p = potionById(id);
+    if (p && Number.isInteger(n) && n > 0) v += n * sellValue(p.price);
+  }
+  return v;
+}
+
+/**
+ * 11/27 판 물약 값을 지갑 한도에 막혀 paid(판 값 기준)만큼만 받았을 때 가방에 되돌릴 물약 (id별 개수).
+ * 되팔기(사냥 상점)와 같이, 한 푼이라도 받은 것은 판 것으로 친다. 비싼 물약부터 되돌린다
+ */
+export function unpaidPotions(sold: Readonly<Record<string, number>>, paid: number): Record<string, number> {
+  let left = potionSaleValue(sold) - Math.max(0, paid);
+  const back: Record<string, number> = {};
+  if (left <= 0) return back;
+  const ids = Object.keys(sold)
+    .filter((id) => potionById(id) && (sold[id] ?? 0) > 0)
+    .sort((a, b) => potionById(b)!.price - potionById(a)!.price);
+  for (const id of ids) {
+    const unit = sellValue(potionById(id)!.price);
+    if (unit <= 0) continue;
+    const k = Math.min(sold[id], Math.floor(left / unit));
+    if (k > 0) {
+      back[id] = k;
+      left -= k * unit;
+    }
+  }
+  return back;
+}
 /** 11/20 사용자: 주운 장비 하나 되팔기 값 (상점 값의 25%) */
 export const dropSellValue = (price: number) => Math.floor(price * DROP_SELL_RATE);
 

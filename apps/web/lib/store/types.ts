@@ -538,5 +538,7 @@ export function spendCategory(reason: string): string {
   if (reason.startsWith("shop")) return "shop";
   if (reason.startsWith("admin")) return "admin";
   if (reason.startsWith("lottery")) return "lottery";
+  // 11/27 좌대 입장권·연장 (lib/raft — Redis는 좌대 Lua가 spend:raft로 바로 센다)
+  if (reason.startsWith("raft")) return "raft";
   return "other";
 }

@@ -1,5 +1,5 @@
 import type * as Phaser from "phaser";
-import { CAMP_FISHING_SPOTS, DIR, type FishingSpot, type Sid } from "@tomb/protocol";
+import { CAMP_FISHING_SPOTS, CAMP_PIER, DIR, type FishingSpot, type Sid } from "@tomb/protocol";
 import { DEPTH } from "../config";
 import type { Player } from "../entities/Player";
 import type { RemoteAvatar } from "../entities/RemoteAvatar";
@@ -54,7 +54,9 @@ export class CampFishMarkers implements ForageZone {
     const scene = this.scene;
     const [dx, dy] = STEP[s.facing];
     // 11/26 달그늘 소 바위·저수지 둑·좌대는 맵 그림에 의자·낚싯대 받침이 있다 → 찌·물결만 (계곡 둑만 의자와 꽂아 둔 낚싯대)
-    const own = s.water === "pool" || s.water === "reservoir";
+    // 11/27 잔교 북쪽 가장자리 자리(맵 그림에 의자가 없다)는 계곡 둑처럼 의자·꽂아 둔 낚싯대도
+    const pier = s.water === "reservoir" && Math.abs(s.y - CAMP_PIER.y) <= CAMP_PIER.w / 2;
+    const own = s.water === "pool" || (s.water === "reservoir" && !pier);
     if (!own) scene.add.image(s.x, s.y + 2, ZTEX.stool).setOrigin(0.5, 1).setDepth(s.y - 1);
     // 꽂아 둔 낚싯대: 의자 옆 받침대 → 물 쪽으로 비스듬히 → 늘어진 줄 (계곡 자리는 옆, 바닷가 자리는 아래를 봐요)
     const hx = dy ? s.x + 7 : s.x - dx * 2;
@@ -127,6 +129,10 @@ export type CampForageDeps = {
   seats: () => ReadonlyMap<string, Sid>;
   remotes: () => ReadonlyMap<Sid, RemoteAvatar>;
   toast: (message: string) => void;
+  /** 11/27 이 낚시 자리를 지금 못 쓰는 까닭 (좌대 입장권 — game/camp/CampRafts) */
+  blocked?: (spot: FishingSpot) => string | null;
+  /** 11/27 좌대 주인이 앉아 받침틀 낚싯대 넷이 보이면 그 자리 손 낚싯대·찌를 숨긴다 (game/camp/CampRafts rigOn) */
+  hideRod?: (spotId: string) => boolean;
 };
 
 /** 캠핑장 낚시·채집 (Foraging을 캠핑장 맵으로) + 지금 E로 쓸 수 있는 낚시 자리·채집 지점 */

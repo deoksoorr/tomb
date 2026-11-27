@@ -87,6 +87,14 @@ export const GEAR_DYE_REGIONS: Readonly<Record<string, DyeRegion>> = {
   back_wings_angel: { colors: [0xf8f8ff, 0xc8d0e8, 0xffffff, 0xdde2f2], main: 0xdde2f2, hiK: 1.3 },
   // 용 날개: 날개막·뼈살·윗테 (검은 외곽선은 그대로)
   back_wings_dragon: { colors: [0x3a8a5a, 0x2a5a3a, 0x8ad08a, 0x2a6a44], main: 0x3a8a5a },
+  // 11/27 좌대 전용 코디 (raftGear.ts — 그 파일 JW_DYE와 같아야 한다: raftGear.test). 천 4톤 [빛, 바탕, 그늘, 짙은 그늘]만 — 금테·금방울·흰 찌 띠·눈·입술·루어·패치·장화는 그대로
+  jw_carphat: { colors: [0xf2cc68, 0xd49c3a, 0xa8742a, 0x7a521e], main: 0xd49c3a },
+  jw_vest: { colors: [0xe4d29e, 0xc6ae74, 0x9c8450, 0x6e5c34], main: 0xc6ae74 },
+  jw_net: { colors: [0xe0b070, 0xb47c42, 0x8a5a2e, 0x5e3a1c], main: 0xb47c42 },
+  jw_sedge: { colors: [0x52a8bc, 0x2e7c94, 0x1e5e74, 0x123e50], main: 0x2e7c94 },
+  jw_bell: { colors: [0xff8a7a, 0xe04a3c, 0xb03028, 0x7a1e1a], main: 0xe04a3c },
+  jw_waders: { colors: [0x5a9c8a, 0x3a7a6a, 0x285a4e, 0x183c34], main: 0x3a7a6a },
+  jw_cape: { colors: [0x3e94aa, 0x246a82, 0x194e64, 0x0f3548], main: 0x246a82 },
 };
 
 export function toHsl(c: Color): Hsl {

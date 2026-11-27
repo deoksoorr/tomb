@@ -1,3 +1,4 @@
+import { RAFT_GEAR_TIER_NAME } from "@tomb/protocol";
 import { AUTO_RANK_NOTE, autoSummary } from "@/lib/forage/auto";
 import { speciesById } from "@/lib/forage/catalog";
 import { sunkenText } from "@/lib/forage/sunken";
@@ -43,9 +44,13 @@ export function toastAutoCatch(r: AutoFishResponse, away: boolean): void {
   const cut = n && r.missed > 0 ? ` (${r.missed}번은 놓쳤어요)` : "";
   // 물에 빠진 꾸미기는 따로 덧붙인다
   const extra = gear.map((g) => ` · 반짝! ${sunkenText(g, name)}`).join("");
+  // 11/27 좌대 전용 코디 (내 좌대 자동 낚시 — 입고 있으면 그 자리, 아니면 벗어 둔 꾸미기에 들어간다)
+  const raft = r.raftGear ?? [];
+  if (raft.length) void meStore.refresh();
+  const raftText = raft.map((g) => ` · 반짝! 좌대 코디 「${g.name}」 ${RAFT_GEAR_TIER_NAME[g.tier]} 획득`).join("");
   // 크기는 도감 최대 기록에만 들어간다는 안내 (물고기를 받았을 때)
   const note = n ? ` · ${AUTO_RANK_NOTE}` : "";
   noteDexGain(r.dex, false);
   const dex = dexGainText(r.dex);
-  showToast(`${head}${cut}${extra}${dex ? ` · ${dex}` : ""}${rest ? ` · ${rest}` : ""}${note}`, gear.length ? 10_000 : 8_000);
+  showToast(`${head}${cut}${extra}${raftText}${dex ? ` · ${dex}` : ""}${rest ? ` · ${rest}` : ""}${note}`, gear.length || raft.length ? 10_000 : 8_000);
 }

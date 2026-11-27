@@ -15,7 +15,9 @@ import { conditionsAt, hash01 } from "./rules";
 import { pickSunkenCosmetic, rollAutoSunken, sunkenFallbackFish, sunkenName } from "./sunken";
 import { grantSunkenCosmetic, ownedPermanent } from "./sunkenGrant";
 import { getForageStore, type ForageStore, type GrantItem } from "./store";
-import type { AutoFishStatus, CatchResult, LifeDay, SunkenCatch } from "./types";
+import type { AutoFishStatus, CatchResult, LifeDay, RaftGearCatch, SunkenCatch } from "./types";
+import { everyOf } from "./auto";
+import { grantRaftRange } from "../raft/gear";
 
 // 자동 낚시 정산 (서버). 세션은 저장소의 문자열 하나이고 "이전 값과 같을 때만 바꾸기"(autoSwap)로만 바꾼다
 // → 동시에 정산을 여러 번 눌러도 같은 번호의 물고기는 한 번만 지급된다 (바꾸기에 성공한 쪽만 지급).
@@ -33,7 +35,9 @@ export type AutoSettled = {
   /** 11/19 가방이 가득 차서 쉰 시도가 있었는지 */
   full?: boolean;
   /** 11/22 시간 제한이 없어져 "time"(예전 6시간)은 더 나오지 않는다 */
-  ended?: "stop" | "tide";
+  ended?: "stop" | "tide" | "raft";
+  /** 11/27 좌대 전용 코디 (내 좌대 자동 낚시로 걸린 한 마리마다 굴린다 — lib/raft/gear, protocol RAFT_GEAR_ODDS) */
+  raftGear?: RaftGearCatch[];
 };
 
 /** 정산: 지금까지 올린 시도 번호 중 아직 안 본 것을 그 시각 조건으로 굴려 걸린 것만 그날(게임 날짜, 새벽 5시 경계) 기록으로 넣는다. stop이면 세션을 끝낸다 */
@@ -55,7 +59,9 @@ export async function settleAuto(store: ForageStore, acct: string, now: number, 
     const next: AutoSession = { ...beaten, done: Math.max(cur.done, total) };
     if (!(await store.autoSwap(acct, raw, finish ? null : JSON.stringify(next)))) continue;
     const { items, missed, gear, full } = await grantRange(store, acct, beaten, cur.done + 1, total, now);
-    return { session: finish ? null : next, items, missed, gear, ...(full ? { full } : {}), ...(finish ? { ended: stop || !cur.tide ? ("stop" as const) : ("tide" as const) } : {}) };
+    const raftGear = cur.raft ? await grantRaftRange(acct, beaten, cur.done + 1, total, now) : [];
+    const ended = stop ? ("stop" as const) : cur.tide ? ("tide" as const) : cur.raft ? ("raft" as const) : ("stop" as const);
+    return { session: finish ? null : next, items, missed, gear, ...(full ? { full } : {}), ...(raftGear.length ? { raftGear } : {}), ...(finish ? { ended } : {}) };
   }
   throw new Error("[forage] 자동 낚시 정산이 계속 겹쳤어요");
 }
@@ -147,8 +153,9 @@ export function autoStatus(s: AutoSession, day: LifeDay, now: number): AutoFishS
     spot: s.spot,
     water: s.water,
     startedAt: s.start,
-    // 11/22 끝이 있는 건 바닷가 물때뿐 (나머지는 null)
-    endsAt: s.tide ? s.end : null,
+    // 11/22 끝이 있는 건 바닷가 물때·11/27 좌대 입장권뿐 (나머지는 null)
+    endsAt: s.tide || s.raft ? s.end : null,
+    ...(s.raft ? { raft: s.raft.n, every: everyOf(s) } : {}),
     nextInMs: now >= s.end ? null : autoNextInMs(s),
     today: day.auto,
   };

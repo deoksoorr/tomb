@@ -4,6 +4,7 @@ import { CHAMP_ALL, CHAMP_AURA_OFF, isAvatarBody } from "./constants";
 import { packDye, packItemDye, sanitizeItemDye, unpackWireDye, type AvatarDye } from "./dye";
 import { bbqItem, DRUNK_MAX, DRUNK_STEP_MS, isBbqId, type BbqItemId } from "./bbq";
 import { GOBLIN_POINTS_CAP } from "./npc";
+import { isRaftNum, RAFT_TICKET_MS } from "./raft";
 
 // Vercel(포인트·가방의 원천)이 서명하고 실시간 서버가 검증하는 짧은 증서. 비밀키는 JOIN_SECRET.
 //  - look: 지금 착용 중인 꾸미기. 실시간 서버는 검증 후 채널에 브로드캐스트한다.
@@ -26,7 +27,9 @@ export type Grant =
    * 11/15 캠핑장 바베큐 한 접시·한 잔: until(epoch ms)까지 효과 (bbq.ts). nonce는 한 번만.
    * 마실 거리(취기)면 lv = 마신 뒤 취기 단계, at = 마신 시각 (until = 다 깨는 시각)
    */
-  | { kind: "bbq"; visitorId: string; item: BbqItemId; until: number; nonce: string; exp: number; lv?: number; at?: number };
+  | { kind: "bbq"; visitorId: string; item: BbqItemId; until: number; nonce: string; exp: number; lv?: number; at?: number }
+  /** 11/27 좌대 입장권: ch 채널 n번 좌대를 until(epoch ms)까지 (사기·연장·다시 받기 — 같은 증서를 다시 보내도 그대로 덮어쓸 뿐) */
+  | { kind: "raft"; visitorId: string; ch: number; n: number; until: number; exp: number };
 
 export const GRANT_TTL_SEC = 60;
 /** 증서 최대 길이. 확성기 증서는 닉네임·문장(한글 60자)을 품어 다른 증서보다 길다 */
@@ -126,7 +129,16 @@ export async function verifyGrant(
     if (g.until > nowSec * 1000 + (item.ms + GRANT_TTL_SEC * 1000)) return null;
     return { kind: "bbq", visitorId: g.visitorId, item: g.item, until: g.until, nonce: g.nonce, exp: g.exp };
   }
+  if (g.kind === "raft") return raftGrantOf(g, nowSec);
   return null;
+}
+
+/** 11/27 좌대 증서: 번호 1~6 · 채널 1~100 · 끝나는 시각은 지금 + 한 장 길이(+여유) 안 (연장은 남은 1분 + 2시간) */
+function raftGrantOf(g: Record<string, unknown>, nowSec: number): Grant | null {
+  const { ch, n, until } = g;
+  if (!isRaftNum(n) || typeof ch !== "number" || !Number.isInteger(ch) || ch < 1 || ch > 100) return null;
+  if (typeof until !== "number" || !Number.isFinite(until) || until > nowSec * 1000 + RAFT_TICKET_MS + 2 * 60_000 + GRANT_TTL_SEC * 1000) return null;
+  return { kind: "raft", visitorId: g.visitorId as string, ch, n, until, exp: g.exp as number };
 }
 
 /** 착용 증서의 주간 1위 값: 0(1위 아님), 1위 비트(+ 오라 끔 표시), 또는 오라 끔 표시만(운영자 오라를 끈 운영자) */

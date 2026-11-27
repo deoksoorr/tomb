@@ -41,6 +41,9 @@ import {
   mapOf,
   type BbqItemId,
   isBbqId,
+  isRaftBoard,
+  type RaftBoardEntry,
+  type RaftOutWhy,
   parseSnowmanInfo,
   parseSnowHold,
   parseSnowStackInfo,
@@ -176,6 +179,10 @@ export type NetCallbacks = {
   /** 11/15 캠핑장 바베큐: sid가 먹고 until(epoch ms)까지 커졌다 (서버가 증서를 확인한 것만, 내 것도 온다) */
   /** 11/15 바베큐 한 접시·한 잔 (같은 맵, 내 것 포함). 마실 거리면 lv·at = 취기 */
   onBbq?(sid: Sid, item: BbqItemId, until: number, lv?: number, at?: number): void;
+  /** 11/27 서버가 나를 좌대 마루에서 내려보냈다 → (x,y)로 옮긴다 (캠핑장 장면만) */
+  onRaftOut?(n: number, x: number, y: number, why: RaftOutWhy): void;
+  /** 11/27 이 채널 좌대 주인 표 (캠핑장에 들어올 때·바뀔 때) */
+  onRafts?(board: RaftBoardEntry[]): void;
   // ── 11/17 캠핑장 눈사람 (캠핑장 장면만 받는다) ──
   /** 캠핑장에 들어왔다: 지금 서 있는 눈사람 전부와 11/18 쌓는 중인 덩이 전부 */
   onSnowmen?(list: SnowmanInfo[], stacks: SnowStackInfo[]): void;
@@ -213,7 +220,7 @@ const MAP_RETRIES = 2;
  */
 const MAP_GAP_MS = 1_100;
 /** 맵을 옮기는 중에 버리는 옛 맵 소식 (사람·자리·몸짓·말풍선). 11/19 goblinCaught, 11/26 goblin·goblinMap·goblinGone은 채널 모두에게 오는 소식이라 버리지 않는다 */
-const OLD_MAP_EVENTS = new Set(["join", "leave", "seat", "emote", "graveEvent", "look", "act", "say", "emo", "chat", "mood", "ride", "rod", "away", "firework", "peers", "chatLog", "bbq", "snowman", "snowmanGone", "snowHold", "snowStack", "snowStackGone", "snowball", "snowHit", "tpFx"]);
+const OLD_MAP_EVENTS = new Set(["join", "leave", "seat", "emote", "graveEvent", "look", "act", "say", "emo", "chat", "mood", "ride", "rod", "away", "firework", "peers", "chatLog", "bbq", "snowman", "snowmanGone", "snowHold", "snowStack", "snowStackGone", "snowball", "snowHit", "tpFx", "raftOut", "rafts"]);
 
 /** 11/26 끝난 황금 고블린: caught = 누가 잡았다 (mine = 나), 아니면 아무도 못 잡고 사라졌다 */
 export type GoblinEnd = { id: string; caught: boolean; name?: string; points?: number; mine?: boolean };
@@ -628,6 +635,11 @@ export class RealtimeClient {
     this.send({ t: "bbq", grant });
   }
 
+  /** 11/27 좌대 입장권 증서 (웹이 사기·연장 때 서명). 서버가 검증해 그 채널 좌대 주인 표에 넣는다 */
+  raft(grant: string): void {
+    this.send({ t: "raft", grant });
+  }
+
   // ── 11/18 캠핑장 눈사람 만드는 과정 (접속 중이 아니면 false — 보내지 않는다) ──
 
   /** 들고 있는 눈덩이가 바뀌었다 (바뀔 때만, CampSnowmen이 SNOW_HOLD_SEND_MS로 모아 보낸다) */
@@ -993,6 +1005,12 @@ export class RealtimeClient {
         case "bbq":
           if (isBbqId(m.i) && typeof m.u === "number" && Number.isFinite(m.u))
             this.h.onBbq?.(m.sid, m.i, m.u, typeof m.lv === "number" ? m.lv : undefined, typeof m.at === "number" ? m.at : undefined);
+          break;
+        case "raftOut":
+          if (typeof m.n === "number" && typeof m.x === "number" && typeof m.y === "number") this.h.onRaftOut?.(m.n, m.x, m.y, m.why);
+          break;
+        case "rafts":
+          if (isRaftBoard(m.b)) this.h.onRafts?.(m.b);
           break;
         case "snowmen":
           if (Array.isArray(m.list))

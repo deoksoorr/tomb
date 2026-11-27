@@ -9,6 +9,7 @@ import { cx } from "../ui/cx";
 import PixelIcon from "../ui/PixelIcon";
 import ui from "../ui/ui.module.css";
 import RpgIcon from "./RpgIcon";
+import CurseStrip from "./CurseStrip";
 import RunCards from "./RunCards";
 import s from "./rpg.module.css";
 
@@ -77,6 +78,8 @@ export default function HuntPhoneTop({
             {tower && <> · 처치 {fmt(hud?.kills ?? 0)}</>}
           </p>
         )}
+        {/* 11/27 야근 빌딩: 걸린 저주 수 (누르면 이름·설명·다음 저주) */}
+        {tower && <CurseStrip floor={hud!.floor!} compact />}
         {(hud?.statuses?.length ?? 0) > 0 && (
           <div
             className={s.huntTopStatus}

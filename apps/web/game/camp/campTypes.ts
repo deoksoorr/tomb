@@ -14,7 +14,7 @@ export const CAMP_TEX_PREFIX = "camp-";
  * (11/26 분양 입간판 sale은 뺐다 — 캠핑장 분양은 언젠가 씨·소슬댁·순이 할머니에게 말을 걸어서만) · rowboat = 윤슬 낚시터 나룻배 타기 · lot·house = 집 화면 담당(campHousing)이 끼워 넣는 집터·집 문
  * agungi = 11/26 촌캉스 아궁이 불 켜기·끄기 (campHousing) · tramp·slide = 11/26 놀이터 대형 트램펄린(매트 둘레)·워터 슬라이드 사다리 밑 (game/camp/CampPlay)
  */
-export type CampInteractKind = "bus" | "npc" | "board" | "sign" | "bbq" | "vending" | "bungeo" | "rowboat" | "lot" | "house" | "tramp" | "slide" | "agungi" | "hammock";
+export type CampInteractKind = "bus" | "npc" | "board" | "sign" | "bbq" | "vending" | "bungeo" | "rowboat" | "lot" | "house" | "tramp" | "slide" | "agungi" | "hammock" | "raftBooth";
 export type CampInteractable = {
   id: string;
   kind: CampInteractKind;

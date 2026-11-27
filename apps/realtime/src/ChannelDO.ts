@@ -40,6 +40,8 @@ const SNOW_KEY = "snow";
 const SNOW_STACK_KEY = "snowStack";
 /** 11/26 구역별 마지막 집 바뀜 v { village?, sea?, camp? } (집 저장 알림 때만 쓴다 — 늦게 들어온 사람에게 입장 때 보낸다) */
 const HOMES_KEY = "homesV";
+/** 11/27 좌대 입장권 주인 표 (rafts.ts RaftBoard 스냅샷) */
+const RAFT_KEY = "rafts";
 /** 맵별 최근 채팅 저장 키 접두어 (+ "village" | "camp". 11/16 지금은 "village" 하나에 모든 맵 줄) */
 const CHAT_PREFIX = "chat:";
 /** 채팅이 바뀐 뒤 저장하기까지 모으는 시간 (그 사이 줄은 한 번에 쓴다 — 맵마다 이 간격에 최대 한 번) */
@@ -113,6 +115,7 @@ export class ChannelDO extends DurableObject<Env> {
     if (this.room === null) this.core.restoreSnowmen(ctx.storage.kv.get(SNOW_KEY));
     if (this.room === null) this.core.restoreSnowStacks(ctx.storage.kv.get(SNOW_STACK_KEY));
     if (this.room === null) this.core.restoreHomes(ctx.storage.kv.get(HOMES_KEY));
+    if (this.room === null) this.core.restoreRafts(ctx.storage.kv.get(RAFT_KEY));
     if (revived > 0) {
       console.log(`channel ${this.channel}: restored ${revived} peer(s) from live snapshot`);
       this.scheduleReport();
@@ -246,6 +249,15 @@ export class ChannelDO extends DurableObject<Env> {
             this.snowStackTimer = null;
             this.saveSnowStacks();
           }, SNOW_STACK_SAVE_MS);
+        },
+        raftsChanged: (snap) => {
+          if (room) return;
+          try {
+            ctx.storage.kv.put(RAFT_KEY, snap);
+          } catch (e) {
+            console.error("raft save failed", e);
+          }
+          this.scheduleAlarm();
         },
         goblinChanged: (s) => {
           if (room) return;
@@ -416,6 +428,7 @@ export class ChannelDO extends DurableObject<Env> {
     this.alarmAt = null;
     this.core.expire(now);
     this.core.goblinCheck(now); // 22번: 고블린 등장·사라짐
+    this.core.raftCheck(now); // 11/27 좌대 입장권이 끝났으면 내려보낸다
     if (this.reapDueAt !== null && now >= this.reapDueAt) {
       this.reapDueAt = null;
       this.core.reap(now);
@@ -434,6 +447,9 @@ export class ChannelDO extends DurableObject<Env> {
     // 22번 황금 고블린: 사람이 있으면 다음 등장 시각, 나와 있으면 사라질 시각에 깨운다
     const goblin = this.core.goblinDue();
     if (goblin !== null) at = at === null ? goblin : Math.min(at, goblin);
+    // 11/27 좌대 입장권: 가장 이른 끝 + 여유에 깨워 내려보낸다
+    const raft = this.core.raftDue();
+    if (raft !== null) at = at === null ? raft : Math.min(at, raft);
     if (at === this.alarmAt) return;
     this.alarmAt = at;
     const op = at === null ? this.ctx.storage.deleteAlarm() : this.ctx.storage.setAlarm(at);

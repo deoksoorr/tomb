@@ -654,6 +654,262 @@ button.hotSlot:disabled {
   text-align: center;
 }
 
+/* 11/27 야근 빌딩 60층부터 물약 안내 (판마다 한 번, 6초): 두 줄 · 저주 색 테두리 */
+.potionNote {
+  display: grid;
+  gap: 2px;
+  max-width: min(440px, calc(100vw - 32px));
+  margin: 0;
+  box-shadow:
+    0 0 0 2px #0a0b09,
+    0 0 0 3px #c8603c;
+  animation: potionNote 6s ease forwards;
+  /* 11/27 누르면 바로 닫힌다 */
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.potionNote strong {
+  color: #ffd27a;
+  font-size: 15px;
+}
+
+.potionNote small {
+  font-family: var(--font-small);
+  font-size: 12px;
+  color: var(--bone);
+}
+
+@keyframes potionNote {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  6%,
+  88% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 11/27 폰 판 시작 저주 알림: 한 줄 (설명은 「저주 4」 칩) */
+.potionNote[data-brief] {
+  padding: 4px 10px;
+}
+
+.potionNote[data-brief] strong {
+  font-size: 12px;
+  white-space: nowrap;
+  word-break: keep-all;
+}
+
+/* 11/27 새 저주 알림의 설명 줄 (판 시작 때 여러 개면 한 줄씩) */
+.potionNote small + small {
+  margin-top: 1px;
+}
+
+/* 11/27 야근 빌딩 저주 줄: PC 작은 판 안 한 줄(배지) · 폰은 「저주 3」 칩. 올리거나 누르면 목록 */
+.curseStrip {
+  position: relative;
+  pointer-events: auto;
+  justify-self: start;
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.curseBtn {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.curseLabel {
+  margin-right: 1px;
+  color: #e0907a;
+}
+
+.curseBadge {
+  padding: 0 4px;
+  background: rgba(120, 30, 24, 0.55);
+  box-shadow: 0 0 0 1px #c8603c;
+  color: #ffd6c4;
+  line-height: 14px;
+}
+
+.curseCount {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  background: rgba(120, 30, 24, 0.6);
+  box-shadow: 0 0 0 1px #c8603c;
+  color: #ffd6c4;
+  line-height: 16px;
+}
+
+.curseCount b {
+  color: #ffd27a;
+  font-weight: 400;
+}
+
+.curseCount i {
+  font-style: normal;
+  font-size: 9px;
+}
+
+.curseList {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: -4px;
+  z-index: 30;
+  display: none;
+  width: max-content;
+  max-width: min(300px, calc(100vw - 32px));
+  padding: 6px 8px;
+  background: rgba(14, 12, 20, 0.94);
+  box-shadow:
+    0 0 0 2px #0a0b09,
+    0 0 0 3px #c8603c;
+  color: var(--bone);
+  text-shadow: none;
+}
+
+.curseStrip[data-open] .curseList {
+  display: block;
+}
+
+@media (hover: hover) {
+  .curseStrip:hover .curseList {
+    display: block;
+  }
+}
+
+.curseList ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.curseList li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 6px;
+}
+
+.curseList li b {
+  color: #ffb08a;
+  font-weight: 400;
+  font-size: 11px;
+}
+
+.curseFrom {
+  justify-self: end;
+  color: var(--muted);
+}
+
+.curseList li small {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  color: var(--bone);
+}
+
+.curseNone {
+  margin: 0;
+  color: var(--muted);
+}
+
+.curseNext {
+  margin: 6px 0 0;
+  padding-top: 4px;
+  border-top: 1px solid rgba(200, 96, 60, 0.4);
+  color: #ffd27a;
+}
+
+/* 11/27 PC 저주 판: 키 안내 버튼 바로 옆 (오른쪽 위 벽 자리), 키 안내 상자와 같은 판 */
+.cursePanel {
+  align-self: flex-start;
+  margin-left: auto;
+  display: grid;
+  gap: 2px;
+  max-width: 240px;
+  padding: 5px 8px 6px;
+  background: rgba(24, 25, 21, 0.82);
+  box-shadow: var(--px-border);
+  color: var(--text);
+  font-family: var(--font-small);
+  font-size: 10px;
+  pointer-events: auto;
+}
+
+.cursePanel > strong {
+  color: #e0907a;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.cursePanel ul {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cursePanel li {
+  white-space: nowrap;
+}
+
+.cursePanel li b {
+  color: var(--candle);
+  font-weight: 400;
+}
+
+.cursePanel > small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+/* 키 안내 버튼 줄은 저주 판 바로 오른쪽에 붙는다 */
+.cursePanel + .topButtons {
+  margin-left: 0;
+}
+
+/* 폰 위 HUD: 칩은 처치 줄 아래, 목록은 왼쪽 위 글자 밑으로 */
+.curseStrip[data-compact] {
+  margin-top: 3px;
+  font-size: 11px;
+}
+
+/* 폰 위 HUD: 새 몬스터 카드(캔버스 위 78px부터) 밑으로 */
+.capture[data-phtop] .potionNote {
+  margin-top: 60px;
+}
+
+@media (max-height: 520px) {
+  .capture[data-phtop] .potionNote {
+    margin-top: 84px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .potionNote {
+    animation: none;
+  }
+}
+
 .boss {
   justify-self: center;
   width: min(420px, 100%);

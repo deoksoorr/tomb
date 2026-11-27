@@ -26,7 +26,7 @@ const CATS: FurnitureCategory[] = ["furniture", "dev", "nature", "mood", "living
 const SEA_CATS: FurnitureCategory[] = ["sea", "furniture", "dev", "nature", "mood", "living", "skin"];
 /** 11/26 캠핑장 집: 외관 탭 없이 (기본 가구는 가구점에 없다 — 갈래 "fixture"는 목록에 넣지 않는다) */
 const CAMP_CATS: FurnitureCategory[] = ["furniture", "dev", "nature", "mood", "living", "sea", "skin"];
-const COUNTS = Object.fromEntries(CATS.map((c) => [c, FURNITURE.filter((f) => f.category === c && !f.ghost && !f.petShop && !f.boriOnly && !f.officeShop).length])) as Record<FurnitureCategory, number>;
+const COUNTS = Object.fromEntries(CATS.map((c) => [c, FURNITURE.filter((f) => f.category === c && !f.ghost && !f.petShop && !f.boriOnly && !f.officeShop && !f.campOnly).length])) as Record<FurnitureCategory, number>;
 
 type Props = {
   my: MyHouseResponse;
@@ -95,7 +95,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
   const houseDiscount = furnitureDiscount(equippedPerk(me?.equipped).houseDiscount, me?.champ, chairShopDiscount(me?.chair, "furniture"));
   const cost = (f: FurnitureDef) => discountedPrice(f.price, houseDiscount);
 
-  const items = FURNITURE.filter((f) => f.category === cat && !f.ghost && !f.petShop && !f.boriOnly && !f.officeShop); // 11/17 유령선 한정은 가구점에 없어요 · 11/19 멍냥 분양소 품종 펫 가구도 · 11/20 분양사 보리만 파는 강아지·고양이 가구도 · 총무팀 문대리 사무실 가구도
+  const items = FURNITURE.filter((f) => f.category === cat && !f.ghost && !f.petShop && !f.boriOnly && !f.officeShop && !f.campOnly); // 11/17 유령선 한정은 가구점에 없어요 · 11/19 멍냥 분양소 품종 펫 가구도 · 11/20 분양사 보리만 파는 강아지·고양이 가구도 · 총무팀 문대리 사무실 가구도 · 11/27 캠핑장 전용(그 종류 NPC)도
   const shown = items.find((f) => f.id === picked[cat]) ?? items[0];
   const frames = shown ? animFrames(shown.id) : 1;
 

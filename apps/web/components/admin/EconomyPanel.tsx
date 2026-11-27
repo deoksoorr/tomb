@@ -26,6 +26,7 @@ const SPEND_LABELS: Record<string, string> = {
   housing: "하우징",
   name: "닉네임 변경",
   lottery: "행운권",
+  raft: "좌대 입장권",
   other: "기타",
 };
 /** 관리자 지급과 회수 카드 (out = 관리자 회수, 합계에서는 뺀다) */

@@ -15,6 +15,7 @@ import {
   type CaravanDesign,
   type CaravanGrade,
 } from "@tomb/protocol";
+import { CAMP_EXCLUSIVE_DEFS, CX_SELLER } from "./campExclusive";
 
 // 하우징(개인 집) 카탈로그와 밸런스 값. 서버(검증·가격)와 클라이언트(상점·게임 그림)가 같이 쓴다.
 // 가격·점수를 바꾸면 상점 화면과 서버 검증이 함께 바뀐다. 이미 놓인 물건의 점수는 다음 저장 때 다시 계산된다.
@@ -57,7 +58,8 @@ export const plotCost = (id: PlotTierId): number => {
 };
 
 /** 11/26 fixture = 캠핑장 집 종류별 기본 가구 (가구점 갈래가 아니다 — 가구점 탭 목록에 없어서 보이지 않는다) */
-export type FurnitureCategory = "furniture" | "living" | "dev" | "nature" | "mood" | "sea" | "season" | "skin" | "exterior" | "fixture";
+/** 11/27 camp = 캠핑장 집 종류별 전용 가구 (campOnly — 가구점 탭에 없고 그 종류 NPC 판매 창에서만) */
+export type FurnitureCategory = "furniture" | "living" | "dev" | "nature" | "mood" | "sea" | "season" | "skin" | "exterior" | "fixture" | "camp";
 
 export const CATEGORY_LABELS: Record<FurnitureCategory, string> = {
   furniture: "가구",
@@ -70,6 +72,7 @@ export const CATEGORY_LABELS: Record<FurnitureCategory, string> = {
   skin: "바닥·벽지",
   exterior: "외관",
   fixture: "기본 가구",
+  camp: "캠핑장 전용",
 };
 
 export type FurnitureDef = {
@@ -93,7 +96,7 @@ export type FurnitureDef = {
    */
   spin?: boolean;
   /** 밤에 빛을 내는 물건 (색, 반지름 px) */
-  light?: { color: number; r: number };
+  light?: { color: number; r: number; /** 11/27 빛 자리 (차지 칸 아래 가운데에서 px, dy 위로 음수). 없으면 그림 높이로 어림 */ dx?: number; dy?: number };
   /**
    * 바닥·담장 스킨: 칸에 놓지 않고 집 전체에 입힌다.
    * 11/24 "window" = 안쪽 벽 창문 모양 (눈꽃 창가). 바닥·벽지·창문 모두 두 집 공용 가방 (하나로 집 한 채 — isHouseOwnDef는 외관만)
@@ -127,6 +130,13 @@ export type FurnitureDef = {
    * 옮기기·돌리기는 된다 (배치 저장 때 그 종류 기본 가구가 정확히 하나씩 있어야 한다 — layout.ts validateLayout). 값·점수 0
    */
   fixture?: CampHomeKind;
+  /**
+   * 11/27 캠핑장 집 종류별 전용 가구·바닥·벽지 (lib/housing/campExclusive — 종류마다 파일 하나): 가구점 목록·일반 구매에서 빠지고
+   * 그 종류 NPC(언젠가 씨 카라반 · 소슬댁 펜션 · 순이 할머니 촌캉스) 판매 창(buyFurniture 한정 판매 인자 — campExclusive/service)으로만,
+   * 그 종류 집 주인만 산다. 놓기·바닥·벽지 입히기도 그 종류 집에서만 (layout.ts validateLayout · campOnlyBlock).
+   * 공용 가방에 남아 다른 집으로 옮기지는 못해도 되팔 수는 있다. 그림 game/housing/campExclusive/<종류>Art.ts
+   */
+  campOnly?: CampHomeKind;
 };
 
 /** 11/20 사용자 「가구 값을 두 배 정도로 올려, 문대리도. 특별이니까」: 시즌 가구·문대리 사무실 가구 값만 표의 2배 (꾸미기 점수는 표 그대로) */
@@ -336,6 +346,8 @@ export const FURNITURE: readonly FurnitureDef[] = [
     ["sign_wood", "나무 간판", "집 이름을 새긴 나무 간판.", 120, 4],
     ["sign_neon", "네온 간판", "밤에 은은하게 빛나는 간판.", 360, 12],
   ]),
+  // ── 11/27 캠핑장 집 종류별 전용 가구 8 · 바닥 3 · 벽지 3씩 (campOnly — lib/housing/campExclusive/<종류>.ts. 값 확정, 점수 = 값 ÷ 20) ──
+  ...CAMP_EXCLUSIVE_DEFS,
 ];
 
 /** 11/19 시즌 가구 한 묶음: 니트 러그만 바닥에 까는 물건(돌리면 90°씩 돌아감), 11/24 눈꽃 창가는 벽 창문 모양, 나머지는 모두 네 방향 가구 */
@@ -407,8 +419,31 @@ export const skinName = (id: string): string =>
  * 11/20 판매처가 따로 있는 전용·기간 한정 가구인지: 유령선 한정(ghost)·가구 보따리상 시즌 가구(seasonWeek)·
  * 분양사 보리 품종 가구(petShop)·보리만 파는 강아지·고양이 가구(boriOnly)·총무팀 문대리 사무실 가구(officeShop). 유령선 주간 할인 후보 등 「아무 가구나」 고르는 곳에서 뺀다
  */
-export const isExclusiveFurniture = (f: Pick<FurnitureDef, "ghost" | "seasonWeek" | "petShop" | "boriOnly" | "officeShop" | "fixture">): boolean =>
-  !!(f.ghost || f.seasonWeek || f.petShop || f.boriOnly || f.officeShop || f.fixture);
+export const isExclusiveFurniture = (f: Pick<FurnitureDef, "ghost" | "seasonWeek" | "petShop" | "boriOnly" | "officeShop" | "fixture" | "campOnly">): boolean =>
+  !!(f.ghost || f.seasonWeek || f.petShop || f.boriOnly || f.officeShop || f.fixture || f.campOnly);
+
+/** 11/27 그 종류 집 전용 물건 ids (판매 창 순서: 가구 → 바닥 → 벽지) */
+export const CAMP_ONLY_IDS: Record<CampHomeKind, readonly string[]> = {
+  caravan: CAMP_EXCLUSIVE_DEFS.filter((f) => f.campOnly === "caravan").map((f) => f.id),
+  pension: CAMP_EXCLUSIVE_DEFS.filter((f) => f.campOnly === "pension").map((f) => f.id),
+  rural: CAMP_EXCLUSIVE_DEFS.filter((f) => f.campOnly === "rural").map((f) => f.id),
+};
+/** 11/27 그 종류 집 주인만 살 수 있다는 말 (판매 창 단추·서버 거절) */
+export const campOnlyOwnerMsg = (kind: CampHomeKind): string => `${CAMP_HOME_KIND_NAME[kind]} 주인만 살 수 있어요.`;
+/** 11/27 가구점 등 다른 판매처에서 전용 물건을 사려 할 때 */
+export const campOnlyShopMsg = (kind: CampHomeKind): string =>
+  `${CAMP_HOME_KIND_NAME[kind]} 전용 물건은 ${CX_SELLER[kind].where} ${CX_SELLER[kind].name}에게서 사요.`;
+/**
+ * 11/27 이 집(종류 kind — 마을 집·포구 오두막이면 null)에 이 물건을 놓거나 입힐 수 없으면 그 까닭 (되면 null).
+ * 서버 배치 검사(validateLayout)·꾸미기 가방·편집 장면이 같은 말을 쓴다
+ */
+export function campOnlyBlock(def: Pick<FurnitureDef, "name" | "campOnly" | "skin"> | undefined, kind: CampHomeKind | null | undefined): string | null {
+  if (!def?.campOnly || def.campOnly === kind) return null;
+  const k = CAMP_HOME_KIND_NAME[def.campOnly];
+  if (def.skin === "floor") return `${def.name}: ${k} 전용 바닥이라 ${k}에만 깔 수 있어요.`;
+  if (def.skin === "wall") return `${def.name}: ${k} 전용 벽지라 ${k}에만 바를 수 있어요.`;
+  return `${def.name}: ${k} 전용 가구라 ${k}에만 놓을 수 있어요.`;
+}
 
 /** 바닥 스킨인지 (11/26 캠핑장 집 기본 바닥 floor_caravan 등도 — 그 종류 집에만 쓰는지는 validateLayout이 본다) */
 export const isFloorSkin = (id: string) => id === DEFAULT_FLOOR || CAMP_FLOOR_SET.has(id) || furnitureById(id)?.skin === "floor";
@@ -426,9 +461,11 @@ export const isSharedSkinDef = (d: Pick<FurnitureDef, "skin" | "ext"> | undefine
 /** 11/24 바닥·벽지·창문 스킨이 다른 집에서 쓰이고 있을 때 (꾸미기 칸·되팔기·저장 오류가 같은 말) */
 export const SKIN_AWAY_MSG = "다른 집에 쓰고 있어요. 하나로 집 한 채에 쓸 수 있어요.";
 /** 11/24 상점 미리보기 한 줄: 산 집에만 남는 것(외관)·바닥·벽지·두 집 공용 가방 가구를 구분 (창문 스킨은 설명에 「하나로 집 한 채」가 있어 없음) */
-export const houseUseNote = (d: Pick<FurnitureDef, "skin" | "ext"> | undefined): string | null =>
+export const houseUseNote = (d: Pick<FurnitureDef, "skin" | "ext" | "campOnly"> | undefined): string | null =>
   !d || d.skin === "window"
     ? null
+    : d.campOnly
+      ? `${CAMP_HOME_KIND_NAME[d.campOnly]}에서만 쓸 수 있어요.`
     : isHouseOwnDef(d)
       ? "산 집에서만 쓸 수 있어요."
       : d.skin
@@ -497,6 +534,7 @@ export const STYLE_TAGS: Record<Exclude<FurnitureCategory, "skin" | "exterior" |
   mood: "달빛 정취",
   sea: "바닷바람 오두막",
   season: "계절 손님맞이",
+  camp: "캠핑장 감성",
 };
 
 export const SORTS = ["score", "likes", "new"] as const;

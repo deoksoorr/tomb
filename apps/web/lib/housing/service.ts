@@ -11,6 +11,7 @@ import type { Me } from "../types";
 import {
   AWAY_MSG,
   SKIN_AWAY_MSG,
+  campOnlyShopMsg,
   CAMP_FLOOR,
   CAMP_LOT_COUNT,
   CAMP_STARTER,
@@ -596,6 +597,8 @@ export async function buyFurnitureMe(
   if (def.boriOnly && !ghostSale) throw new HttpError(400, "INVALID_INPUT", "강아지·고양이 가구는 동물원 정문 옆 분양사 보리에게서 사요.");
   // 11/20 사무실 가구 15종은 야근 빌딩 옆 총무팀 문대리만 판다 (lib/office가 ghostSale = true로 부른다)
   if (def.officeShop && !ghostSale) throw new HttpError(400, "INVALID_INPUT", "사무실 가구는 야근 빌딩 옆 총무팀 문대리에게서 사요.");
+  // 11/27 캠핑장 집 종류별 전용 가구·바닥·벽지는 그 종류 NPC 판매 창만 판다 (lib/housing/campExclusive/service가 주인 확인 뒤 ghostSale = true로 부른다)
+  if (def.campOnly && !ghostSale) throw new HttpError(400, "INVALID_INPUT", campOnlyShopMsg(def.campOnly));
   // 11/26 캠핑장 집 기본 가구는 집에 딸려 있어 따로 팔지 않는다 (어느 판매처든)
   if (def.fixture) throw new HttpError(400, "INVALID_INPUT", "집에 딸린 기본 가구라 따로 팔지 않아요.");
   if (def.ext && zone === "camp") throw new HttpError(400, "INVALID_INPUT", "외관은 마을 집에서만 바꿀 수 있어요.");

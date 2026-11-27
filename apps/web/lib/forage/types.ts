@@ -77,7 +77,13 @@ export type AutoFishStatus = {
   nextInMs: number | null;
   /** 오늘 자동으로 낚은 수 (11/19 하루 한도 없음) */
   today: number;
+  /** 11/27 내 좌대(입장권) 세션이면 좌대 번호 · 찌 올리는 간격 ms */
+  raft?: number;
+  every?: number;
 };
+
+/** 11/27 자동 낚시로 건진 좌대 전용 코디 (tier = 7일·30일·영구) */
+export type RaftGearCatch = { id: string; name: string; tier: "d7" | "d30" | "perm" };
 
 /** 자동 낚시 켜기·정산·끄기 응답. items = 이번에 새로 받은 것 (크기는 내 도감 최대 기록에 반영해 record가 설 수 있다. 최대어 순위에는 넣지 않는다) */
 export type AutoFishResponse = {
@@ -91,7 +97,9 @@ export type AutoFishResponse = {
   full?: boolean;
   /** 세션이 끝난 까닭 (끄기·시간 다 됨·11/16 물이 빠짐). 켜져 있으면 없음 */
   /** 11/22 시간 제한이 없어져 "time"(예전 6시간)은 더 나오지 않는다 */
-  ended?: "stop" | "tide";
+  ended?: "stop" | "tide" | "raft";
+  /** 11/27 이번에 건진 좌대 전용 코디 (내 좌대 자동 낚시만) */
+  raftGear?: RaftGearCatch[];
   /** 이번 정산으로 도감에 처음 등록한 보상 */
   dex?: DexGain;
   state: ForageState;

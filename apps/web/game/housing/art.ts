@@ -9,6 +9,9 @@ import { isSeaArt, SEA_DRAW, SEA_EDGE, SEA_EDGE_A, SEA_FLOORS, SEA_PAPERS, SEA_S
 import { isSeasonArt, SEASON_DRAW, SEASON_EDGE, SEASON_EDGE_A, SEASON_NO_EDGE, SEASON_SPIN, SEASON_UP } from "./seasonFurnitureArt";
 import { BREED_FURN_DRAW, BREED_FURN_SPIN, BREED_FURN_UP_MAP, ghostCatBack, ghostCatSide, sleepyDogBack, sleepyDogSide } from "./breedFurnitureArt";
 import { isOfficeArt, OFFICE_AFTER_EDGE, OFFICE_DRAW, OFFICE_EDGE, OFFICE_EDGE_A, OFFICE_SPIN, OFFICE_UP } from "./officeFurnitureArt";
+import { CX_ACT, CX_NO_SHADOW } from "@/lib/housing/campExclusive";
+import { CX_WINDOW_OVER } from "./campExclusive";
+import { CX_DRAW, CX_EDGE, CX_FLOORS, CX_PAPERS, CX_SPIN, CX_UP, CX_WALL_CAP, isCxArt } from "./campExclusive";
 import { CAMP_DRAW, CAMP_EDGE, CAMP_EDGE_A, CAMP_FLOORS, CAMP_PAPERS, CAMP_SPIN, CAMP_UP, CAMP_WALL_CAP, campWindowGrid, isCampArt, isCampWindowStyle } from "./campFurnitureArt";
 
 // 하우징 물건·바닥·담장 픽셀아트 (캔버스만 쓴다: 게임 텍스처와 UI 아이콘이 같은 그림).
@@ -67,6 +70,8 @@ const UP: Record<string, number> = {
   ...OFFICE_UP,
   // 11/26 캠핑장 집 기본 가구 (campFurnitureArt)
   ...CAMP_UP,
+  // 11/27 캠핑장 전용 가구 (campExclusive/<종류>Art.ts)
+  ...CX_UP,
 };
 
 export const artUp = (id: string) => UP[id] ?? 0;
@@ -896,6 +901,7 @@ const DRAW: Record<string, Draw> = {
   ...OFFICE_DRAW,
   // 11/26 캠핑장 집 기본 가구 (campFurnitureArt)
   ...CAMP_DRAW,
+  ...CX_DRAW,
 };
 
 // ── 잠자는 강아지 (1×1): 체크 담요 방석 위에 동그랗게 말려 자는 누렁이 (마을 강아지 game/world/life/sprites.ts의 누렁이 색) ──
@@ -1249,6 +1255,7 @@ const SPIN_ART: Record<string, SpinArt> = {
   ...OFFICE_SPIN,
   // 11/26 캠핑장 집 기본 가구 11종 (앞·옆·뒤)
   ...CAMP_SPIN,
+  ...CX_SPIN,
 };
 
 /** 4방향 가구 그림의 방향 (변형 이름의 d1~d3. 없으면 0 = 앞) */
@@ -1262,7 +1269,20 @@ export const drawsTurned = (id: string) => id === "pond";
 /** 은은하게 움직이는 물건의 장면 수 (연못 잔물결·반짝임). 1이면 멈춘 그림 */
 export const animFrames = (id: string) => (id === "pond" ? POND_FRAMES : 1);
 /** 발밑 그림자를 깔지 않는 물건 (연못: 바닥에 낮게 깔린 물이라 돌 테두리만으로 충분) */
-export const noFootShadow = (id: string) => id === "pond";
+export const noFootShadow = (id: string) => id === "pond" || CX_NO_SHADOW.has(id);
+
+/**
+ * 밤 빛 자리: 차지 칸 아래 가운데에서 [dx, dy] px (dy 위로 음수). 11/27 light.dx·dy가 있으면 그 자리
+ * (오른쪽을 보게 돌린 4방향 가구는 dx 좌우 뒤집음), 없으면 그림 높이로 어림 (예전 그대로)
+ */
+export function lightOffset(id: string, r = 0): [number, number] {
+  const l = furnitureById(id)?.light;
+  if (l && l.dy !== undefined) {
+    const flip = furnitureById(id)?.spin && spinDir(r) === 3;
+    return [flip ? -(l.dx ?? 0) || 0 : (l.dx ?? 0), l.dy];
+  }
+  return [0, -Math.min(14, artUp(id) + 6)];
+}
 /** 밤에 다른 그림을 쓰는 물건 (연못: 달이 비친다) */
 export const hasNightArt = (id: string) => id === "pond";
 /** 11/20 밤 그림 조각(n)을 받는 물건: 연못 + 이파리 햇빛가리개 (낮에만 바닥에 잎 그림자 — 밤 변형 n이면 안 그린다) */
@@ -1311,6 +1331,8 @@ export function furnitureGrid(id: string, variant = ""): Grid | null {
   }
   // 11/26 캠핑장 기본 가구는 따뜻한 짙은 갈색 테
   else if (isCampArt(id)) g.outline(CAMP_EDGE, false, CAMP_EDGE_A);
+  // 11/27 캠핑장 전용 가구는 종류 그림 파일의 테
+  else if (isCxArt(id)) g.outline(CX_EDGE[id].color, false, CX_EDGE[id].a);
   else if (id !== "rug" && id !== "flowerbed" && id !== "stone_path") g.outline(OUT, false, 170);
   return g;
 }
@@ -1383,6 +1405,8 @@ const FLOOR: Record<string, Tile> = {
   ...SEA_FLOORS,
   // 11/26 캠핑장 집 전용 바닥 (campFurnitureArt)
   ...CAMP_FLOORS,
+  // 11/27 캠핑장 전용 바닥
+  ...CX_FLOORS,
 };
 
 export function floorGrid(id: string, variant: number): Grid {
@@ -1469,6 +1493,8 @@ const PAPER: Record<string, Tile> = {
   ...SEA_PAPERS,
   // 11/26 캠핑장 집 전용 벽 (campFurnitureArt)
   ...CAMP_PAPERS,
+  // 11/27 캠핑장 전용 벽지
+  ...CX_PAPERS,
 };
 
 export function wallGrid(id: string, variant: number): Grid {
@@ -1488,7 +1514,7 @@ export function wallGrid(id: string, variant: number): Grid {
 
 /** 옆벽·칸막이 벽 윗면 색 (벽 종류에 맞춘 어두운 테) */
 export function wallCapColor(id: string): Color {
-  return SEA_WALL_CAP[id] ?? CAMP_WALL_CAP[id] ?? (id === "wall_stone" ? 0x4a4842 : id === "wall_iron" ? 0x1e2438 : 0x3a2a1e);
+  return SEA_WALL_CAP[id] ?? CAMP_WALL_CAP[id] ?? CX_WALL_CAP[id] ?? (id === "wall_stone" ? 0x4a4842 : id === "wall_iron" ? 0x1e2438 : 0x3a2a1e);
 }
 
 /** 칸막이 벽 끝면(앞에서 보이는 면) 색 = 벽지 바탕 */
@@ -1504,7 +1530,20 @@ export const WINDOW_W = 32;
 export const WINDOW_H = 24;
 
 /** 창문 그림. style = 창문 모양 (기본 DEFAULT_WINDOW · 11/24 "frost_window" 눈꽃 창가) */
-export function windowGrid(night: boolean, open: boolean, style: string = DEFAULT_WINDOW): Grid {
+/**
+ * 창문 그림. 11/27 wall = 지금 벽지 id: 캠핑장 전용 벽지가 창문 덧칠(그림 파일 windowOver — 창호 한지 벽이면 창 나무를 짙게)을 주면 그 위에 덧칠한다
+ */
+export function windowGrid(night: boolean, open: boolean, style: string = DEFAULT_WINDOW, wall?: string): Grid {
+  const g = windowBaseGrid(night, open, style);
+  const over = wall ? CX_WINDOW_OVER[wall] : undefined;
+  if (!over) return g;
+  const out = new Grid(g.w, g.h);
+  out.px.set(g.px);
+  over(out);
+  return out;
+}
+
+function windowBaseGrid(night: boolean, open: boolean, style: string): Grid {
   if (style === "frost_window") return frostWindowGrid(night, open);
   // 11/26 캠핑장 집 기본 창문 (카라반 둥근 창 · 펜션 통창 · 촌캉스 한지 창살 창)
   if (isCampWindowStyle(style)) return campWindowGrid(style, night, open);
@@ -1906,12 +1945,14 @@ export function furniturePreview(id: string, scale: number, opts: PreviewOpts = 
   // 벽 밑 그늘
   for (let x = 0; x < W; x++) g.set(x, wallShow, darken(((g.get(x, wallShow) >>> 8) & 0xffffff) as Color, 0.35));
   // 11/24 창문 모양: 집 안과 같은 자리(창턱이 바닥선 9px 위)에 건 창
-  if (winSkin) g.draw(windowGrid(night, r === 1, id), Math.round((W - WINDOW_W) / 2), wallShow - 9 - WINDOW_H);
+  if (winSkin) g.draw(windowGrid(night, r === 1, id, wallId), Math.round((W - WINDOW_W) / 2), wallShow - 9 - WINDOW_H);
   const lights: PreviewLight[] = [];
   if (def && !def.skin && !def.ext) {
     // 밤에는 켜고 끄는 빛(벽난로·스탠드)을 켠 모습으로 보여 준다
     const lit = night && (id === "fireplace" || id === "floor_lamp");
-    const art = shownItemGrid(id, pr, itemVariant(id, lit ? "on" : "", { r: pr, night, frame }));
+    // 11/27 캠핑장 전용 켜기·끄기 가구도 밤에는 켠 모습 (처음부터 켜진 것은 낮에도)
+    const cxOn = CX_ACT[id]?.toggle ? night || !!CX_ACT[id].toggle!.startOn : false;
+    const art = shownItemGrid(id, pr, itemVariant(id, lit || cxOn ? "on" : "", { r: pr, night, frame }));
     if (art) {
       const bottom = wallShow + Math.round((floorH - fh * 16) / 2) + fh * 16;
       if (!def.floor && !noFootShadow(id)) {
@@ -1924,7 +1965,10 @@ export function furniturePreview(id: string, scale: number, opts: PreviewOpts = 
       }
       g.draw(art, left, bottom - art.h);
       const mx = left + (fw * 16) / 2;
-      if (def.light) lights.push({ x: mx, y: bottom - Math.min(14, artUp(id) + 6), r: def.light.r * 1.9, color: def.light.color, k: 0.95 });
+      if (def.light) {
+        const [ldx, ldy] = lightOffset(id, pr);
+        lights.push({ x: mx + ldx, y: bottom + ldy, r: def.light.r * 1.9, color: def.light.color, k: 0.95 });
+      }
       if (lit) lights.push({ x: mx, y: bottom - (id === "fireplace" ? 8 : 26), r: id === "fireplace" ? 64 : 52, color: id === "fireplace" ? 0xff9a50 : 0xffe0a0, k: 1 });
       // 연못: 물에 비친 달이 은은하게 밝다
       if (hasNightArt(id)) lights.push({ x: mx, y: bottom - (fh * 16) / 2, r: Math.max(fw, fh) * 11, color: 0xc8d8f0, k: 0.4 });

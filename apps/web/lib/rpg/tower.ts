@@ -203,43 +203,61 @@ export const CURSES: readonly {
   id: CurseId;
   from: number;
   name: string;
+  /** 11/27 판 HUD 저주 줄의 짧은 이름 (배지) */
+  short: string;
+  /** 11/27 PC 판 HUD 저주 판의 짧은 효과 (「탕비실 폐쇄 · 물약 못 마심」) */
+  brief: string;
   desc: string;
 }[] = [
   {
     id: "potion_half",
     from: 30,
     name: "탕비실 절약",
+    short: "절약",
+    brief: "물약 회복량 절반",
     desc: "물약 회복량이 절반이 돼요",
   },
   {
     id: "no_potion",
     from: 60,
     name: "탕비실 폐쇄",
-    desc: "물약을 마실 수 없어요",
+    short: "폐쇄",
+    brief: "물약 못 마심",
+    desc: "물약을 마실 수 없어요. 상자에서 나온 물약은 바로 팔아 포인트로 드려요",
   },
   {
     id: "heal_half",
     from: 100,
     name: "연차 반려",
+    short: "연차",
+    brief: "회복 절반",
     desc: "스킬, 재생, 지형, 우두머리 층 회복까지 모두 절반이 돼요",
   },
   {
     id: "mon_move",
     from: 80,
     name: "독촉 메일",
+    short: "독촉",
+    brief: "몬스터 이동 속도 +20%",
     desc: "몬스터 이동 속도가 20% 빨라져요",
   },
   {
     id: "mon_atk",
     from: 120,
     name: "연달아 회의",
+    short: "회의",
+    brief: "몬스터 공격 속도 +20%",
     desc: "몬스터 공격 속도가 20% 빨라져요",
   },
-  { id: "time_20", from: 140, name: "마감 당김", desc: "층마다 제한 시간이 20% 줄어요" },
+  { id: "time_20", from: 140, name: "마감 당김",
+    short: "마감",
+    brief: "층 제한 시간 −20%", desc: "층마다 제한 시간이 20% 줄어요" },
   {
     id: "elite_mix",
     from: 160,
     name: "임원 순시",
+    short: "순시",
+    brief: "정예가 섞여 나옴",
     desc: "정예가 일반 몬스터 사이에 섞여 나와요",
   },
 ];
@@ -247,6 +265,36 @@ export const CURSES: readonly {
 /** f층에 걸린 저주 */
 export const cursesAt = (f: number): CurseId[] =>
   CURSES.filter((c) => f >= c.from).map((c) => c.id);
+
+/** 11/27 판 HUD 저주 줄: 걸리는 층 순서 */
+export type CurseDef = (typeof CURSES)[number];
+export const CURSES_BY_FLOOR: readonly CurseDef[] = [...CURSES].sort((a, b) => a.from - b.from);
+/** f층에 걸린 저주 (걸리는 층 순서) */
+export const activeCurses = (f: number): CurseDef[] => CURSES_BY_FLOOR.filter((c) => f >= c.from);
+/** f층 다음에 새로 걸리는 저주 (없으면 null) */
+export const nextCurse = (f: number): CurseDef | null => CURSES_BY_FLOOR.find((c) => c.from > f) ?? null;
+/** 이번에 새로 걸린 저주: prev = 판에서 앞서 있던 층 (판 시작이면 null → 시작 층에 걸린 저주 전부) */
+export const newCurses = (prev: number | null, f: number): CurseDef[] =>
+  prev === null ? activeCurses(f) : CURSES_BY_FLOOR.filter((c) => c.from > prev && c.from <= f);
+/** 저주 설명 (탕비실 폐쇄는 「60층부터는 …」 — 60층 물약 안내를 겸한다) */
+export const curseText = (c: CurseDef): string => (c.id === "no_potion" ? `${c.from}층부터는 ${c.desc}` : c.desc);
+/**
+ * 11/27 새 저주 알림 (판 HUD): 판 시작이면 시작 층에 걸린 저주를 한 번에, 층이 오르며 저주가 더해지면 그 저주를.
+ * 걸린 것이 없으면 null
+ */
+export function curseNotice(prev: number | null, f: number): { title: string; lines: string[]; brief?: string } | null {
+  const nc = newCurses(prev, f);
+  if (!nc.length) return null;
+  // brief = 폰 판 시작 한 줄 (설명은 저주 칩을 눌러 본다)
+  if (prev === null)
+    return {
+      title: `저주 ${nc.length}개가 걸린 채 시작해요`,
+      lines: nc.map((c) => `${c.name}: ${curseText(c)}`),
+      brief: `저주 ${nc.length}개: ${nc.map((c) => c.short).join("·")} (칩을 누르면 설명)`,
+    };
+  if (nc.length === 1) return { title: `새 저주: ${nc[0].name}`, lines: [curseText(nc[0])] };
+  return { title: `새 저주 ${nc.length}개`, lines: nc.map((c) => `${c.name}: ${curseText(c)}`) };
+}
 
 /** 저주가 바꾸는 값 (게임 HuntScene). revive: 부활 쿠키 — 야근 빌딩은 늘 안 된다 */
 export type CurseFx = {
@@ -583,6 +631,21 @@ export function towerChestDrops(seed: number, f: number, _start: number, _pity =
   const cos = chestCosmetic(fs, f, sup);
   if (cos) drops.push(cos);
   return drops;
+}
+
+/** 11/27 「탕비실 폐쇄」(60층~)라 물약을 못 마시는 층: 이 층 상자의 물약은 가방에 넣지 않고 판 끝에 되팔기 값(포인트)으로 바꾼다 */
+export const NO_POTION_FROM = CURSES.find((c) => c.id === "no_potion")!.from;
+export const towerSellsPotions = (f: number) => !towerCurseFx(f).potions;
+/** 11/27 f층 상자 드롭을 가방에 넣을 것(keep)과 바로 팔 물약(sold — id별 개수)으로 나눈다. 물약을 마실 수 있는 층이면 그대로 */
+export function splitChestPotions(f: number, drops: readonly Drop[]): { keep: Drop[]; sold: Record<string, number> } {
+  const sold: Record<string, number> = {};
+  if (!towerSellsPotions(f)) return { keep: [...drops], sold };
+  const keep: Drop[] = [];
+  for (const d of drops) {
+    if (d.kind === "potion") sold[d.id] = (sold[d.id] ?? 0) + Math.max(0, d.qty);
+    else keep.push(d);
+  }
+  return { keep, sold };
 }
 
 /** 우두머리 상자에서 세트 장비가 나올 확률 (11/15 일반 장비 자리를 세트 장비가 대신한다) */

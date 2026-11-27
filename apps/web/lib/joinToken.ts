@@ -1,6 +1,7 @@
 import { LEGACY_JOIN_TOKEN_MAX_LEN, LOBBY_CACHE_SEC, pickChannel, signJoinToken, type AvatarDye, type LobbyInfo } from "@tomb/protocol";
 import { z } from "zod";
 import { env } from "./env";
+import { raftClaims } from "./raft/service";
 import { HttpError } from "./http";
 import type { JoinResponse } from "./types";
 
@@ -69,13 +70,15 @@ async function resolveChannel(requested: number | "auto", staff = false): Promis
 /** camp = 11/15 캠핑장 허락 (lib/camp campOpen), sea = 11/16 바닷가 허락 (lib/sea seaOpen) */
 /** mgr = 11/16 매니저 (lib/managers — 라우트가 확인한 뒤에만) */
 /** nb = 11/22 새싹 남은 분 (lib/sprout — 라우트가 계정 기록으로 정한 것만) */
-type Claims = { visitorId: string; name: string; color: string; body: string; look: string[]; dye?: AvatarDye; staff?: true; dex?: number; champ?: number; camp?: true; sea?: true; mgr?: true; nb?: number };
+/** rafts·raft = 11/27 좌대 입장권 막기 켬·이 채널 입장권 (issueJoin이 채널을 정한 뒤 lib/raft raftClaims로 넣는다) */
+type Claims = { visitorId: string; name: string; color: string; body: string; look: string[]; dye?: AvatarDye; staff?: true; dex?: number; champ?: number; camp?: true; sea?: true; mgr?: true; nb?: number; rafts?: true; raft?: { n: number; u: number } };
 
 /**
  * 입장 토큰 발급. 전체 만석이면 대기열 주소를 준다: 클라이언트가 QUEUE_POLL_MS마다 GET하다가
  * admitted가 오면 그 채널로 /api/join을 다시 부른다.
  */
-export async function issueJoin(requested: number | "auto", claims: Claims): Promise<JoinResponse> {
+export async function issueJoin(requested: number | "auto", claimsIn: Claims): Promise<JoinResponse> {
+  let claims = claimsIn;
   const wsBase = env.realtimeWsUrl();
   const channel = await resolveChannel(requested, claims.staff === true);
   if (channel === null) {
@@ -83,6 +86,8 @@ export async function issueJoin(requested: number | "auto", claims: Claims): Pro
     return { mode: "queue", queueUrl: `${env.realtimePublicUrl()}/queue?t=${encodeURIComponent(token)}` };
   }
 
+  // 11/27 좌대 입장권: 막기 켬 + 이 채널 입장권 (캠핑장이 열린 서버만 — GET 하나)
+  if (claims.camp) claims = { ...claims, ...(await raftClaims(claims.visitorId, channel)) };
   // 토큰은 배정된 채널 하나에만 유효하다 (토큰 하나로 여러 채널 자리를 차지하지 못하게)
   let token = await signJoinToken(env.joinSecret(), { ...claims, channel });
   // 11/22 입은 아이템 색(idye)까지 실어 옛 실시간 서버 한도(900자)를 넘으면 아이템 색만 빼고 다시 만든다 (색은 바로 뒤 착용 증서로 간다)

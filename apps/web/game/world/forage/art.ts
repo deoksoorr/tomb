@@ -4,7 +4,7 @@ import { seasonHat, seasonHolly, seasonKey, seasonMitt, seasonScarf, seasonSnow 
 import { forageIconCanvas } from "../../sprites/forageIcons";
 import { darken, Grid, lighten, type Color } from "../../sprites/pixel";
 import { RAMP, toneOutline } from "../../sea/seaArt";
-import { snowRoof } from "../../sprites/winterArt";
+import { jwadaeBooth } from "../../camp/raftBoothArt";
 
 // 4·32번 낚시·채집 월드 그림 (코드로 그리는 픽셀아트): NPC 둘(어부 영감·수집가 유령)과 노점, 11/20 바닷가 해녀 할망과 파라솔 좌판, 채집 지점 4종, 찌, 느낌표.
 // 처음 쓸 때 장면 텍스처에 한 번 올린다 (ensureForageTextures). 발 위치가 그림 맨 아래 줄 가운데다.
@@ -596,120 +596,12 @@ function trader(frame: number, concept: MapConcept = "default"): HTMLCanvasEleme
   return g.toCanvas();
 }
 
-/** 부스 그림 크기 (발 = 맨 아래 가운데) */
-const BOOTH_W = 52;
-const BOOTH_H = 48;
-
 /**
- * 미끼·대여 부스: 푸른 함석 외지붕 아래 통나무 벽 작은 매점, 판매 창(안에 미끼 통·찌 상자, 밤엔 불빛), 창 위 크림색 간판 판(물고기 그림),
- * 오른쪽에 대여 낚싯대 걸이(세 대 + 찌), 앞에 미끼 통·아이스박스. 52×48, 받침 = 맨 아래 가운데.
- * 「미끼·대여」 글자는 장면이 그린다 (Foraging — 한글은 비트맵 글꼴로)
+ * 11/27 미끼·대여 부스 → 좌대 매표소 (자리·크기 52×48·막는 칸 그대로). 그림은 game/camp/raftBoothArt (시안 확정본 그대로),
+ * 현황판 등과 창 안 매표소 직원은 game/camp/CampRafts가 덧그린다. 「좌대 매표소」 글자는 장면이 그린다 (Foraging — 한글은 비트맵 글꼴로)
  */
 function traderBooth(concept: MapConcept = "default", lit = false): HTMLCanvasElement {
-  const W = BOOTH_W;
-  const H = BOOTH_H;
-  const g = new Grid(W, H);
-  const base = H - 3;
-  const roof = [0x6a86a6, 0x4e6a8a, 0x3e5a7a, 0x2c425c] as const;
-  const log = { hi: 0xb07c4c, mid: 0x8e5e36, lo: 0x6c4426, ring: 0xd8b07a } as const;
-  // ── 통나무 벽 (가로 통나무 다섯 단 — 단마다 윗줄 밝게, 오른쪽 끝 그늘)
-  const wx0 = 5;
-  const wx1 = 38;
-  const wy0 = 17;
-  for (let y = wy0; y <= base - 4; y++)
-    for (let x = wx0; x <= wx1; x++) {
-      const row = (y - wy0) % 4;
-      let c: Color = row === 0 ? log.hi : row === 3 ? log.lo : log.mid;
-      if (x >= wx1 - 2) c = darken(c, 0.14);
-      g.set(x, y, c);
-    }
-  // 통나무 끝 단면 (왼쪽 모서리)
-  for (let y = wy0 + 1; y <= base - 5; y += 4) {
-    g.set(wx0 - 1, y, log.ring);
-    g.set(wx0 - 1, y + 1, darken(log.ring, 0.15));
-  }
-  // 받침돌 (벽 아래)
-  g.hline(wx0, wx1, base - 3, 0x6a6e74);
-  g.hline(wx0, wx1, base - 2, 0x56595e);
-  // ── 판매 창 (어두운 틀 + 안쪽 불빛 + 미끼 통·찌 상자)
-  const winC = lit ? 0xffd98a : 0xe8c47a;
-  g.rect(9, 22, 26, 10, 0x3a2a1e);
-  g.rect(10, 23, 24, 8, winC);
-  g.hline(10, 33, 23, lit ? 0xfff0c0 : 0xf2d898);
-  g.rect(13, 26, 4, 5, 0x4f9a88); // 미끼 통 (청록)
-  g.hline(13, 16, 26, 0x6fbaa8);
-  g.rect(20, 28, 7, 3, 0xd84a3a); // 찌 상자 (빨강)
-  g.hline(20, 26, 28, 0xf07a6a);
-  for (const x of [21, 23, 25]) g.set(x, 27, x === 23 ? 0xf0c040 : 0xfaf2de); // 꽂힌 찌
-  g.rect(29, 25, 3, 6, 0x8a9096); // 대여 장부
-  g.hline(29, 31, 25, 0xc8ccd2);
-  // 판매대 (창 아래 널빤지)
-  g.rect(7, 32, 30, 2, 0xc89a62);
-  g.hline(7, 36, 32, 0xe0b880);
-  g.set(9, 34, 0x8a6a42);
-  g.set(34, 34, 0x8a6a42);
-  // ── 창 위 간판 판 (크림 판 + 작은 파란 물고기)
-  g.rect(13, 18, 18, 4, 0xf2e6c8);
-  g.hline(13, 30, 18, 0xfaf2de);
-  g.hline(13, 30, 21, 0xc8b490);
-  g.ellipse(21.5, 19.8, 3, 1.1, 0x3a7ab0);
-  g.set(18, 19, 0x3a7ab0);
-  g.set(18, 20, 0x3a7ab0);
-  g.set(23, 19, 0xfaf2de);
-  // ── 외지붕 (오른쪽이 높은 함석 — 골 무늬, 처마가 벽 앞으로 나와요)
-  for (let y = 5; y <= 16; y++) {
-    const x0 = 2 + Math.max(0, Math.round((16 - y) * 0.15));
-    const x1 = 41 - Math.max(0, Math.round((y - 5) * 0.1));
-    const lean = Math.round((16 - y) * 0.55); // 왼쪽이 낮게
-    for (let x = x0 + (y < 10 ? lean - 3 : 0); x <= x1; x++) {
-      if (x < 0) continue;
-      const k = y <= 6 ? 0 : y >= 15 ? 3 : (x + 40) % 4 === 0 ? 3 : y < 10 ? 1 : 2;
-      g.set(x, y, roof[k]);
-    }
-  }
-  g.hline(2, 41, 16, darken(roof[3], 0.1));
-  // ── 대여 낚싯대 걸이 (오른쪽 — 판자 받침에 세 대를 세워 두고 위로 끝·찌가 삐죽. 가는 대끼리 붙으면 외곽선에 묻혀 판자 위에 그려요)
-  const rx = 40;
-  g.rect(rx, 18, 10, base - 18 + 1, log.lo);
-  g.vline(rx, 18, base, darken(log.lo, 0.15));
-  g.hline(rx, rx + 9, 18, log.mid);
-  g.hline(rx, rx + 9, base - 7, log.mid);
-  g.hline(rx, rx + 9, base - 6, log.hi);
-  const rods: [number, Color, number][] = [
-    [rx + 2, 0xe0503c, 10],
-    [rx + 5, 0xf0c040, 14],
-    [rx + 8, 0x4f9a88, 10],
-  ];
-  for (const [x, c, tip] of rods) {
-    for (let y = 19; y <= base - 8; y++) g.set(x, y, (y + x) % 5 === 0 ? 0x8a6a42 : 0xc8a060);
-    // 판자 위로 삐죽 나온 끝 + 찌
-    for (let y = tip + 2; y <= 17; y++) g.set(x, y, 0xc8a060);
-    g.set(x, tip + 1, 0xfaf2de);
-    g.set(x, tip, c);
-  }
-  // ── 앞: 미끼 통 둘 (파랑·회색 양동이) + 아이스박스
-  g.rect(8, base - 6, 6, 6, 0x4a7ab0);
-  g.hline(8, 13, base - 6, 0x7aa6d0);
-  g.hline(9, 12, base - 7, 0x3a3e44);
-  g.rect(15, base - 5, 5, 5, 0x8a9096);
-  g.hline(15, 19, base - 5, 0xb4bac0);
-  g.set(17, base - 6, 0x6a5a48); // 지렁이 통 손잡이
-  g.rect(30, base - 6, 9, 6, 0xf4f6f8);
-  g.rect(30, base - 7, 9, 2, 0x3a8ac8);
-  g.hline(30, 38, base - 7, 0x6ab0e0);
-  g.vline(38, base - 5, base - 1, 0xd0d8de);
-  // ── 시즌
-  if (concept === "christmas") {
-    for (let x = 4; x <= 40; x += 3) g.set(x, 17, [0xe0303c, 0xf2c444, 0x2e8a4e, 0x6ab8f0][(x >> 1) % 4]);
-    seasonHolly(g, 22, 17);
-  }
-  g.outline(OUT);
-  stallShadow(g, W / 2 - 2, base + 1, W / 2 - 3, 2.2, 60);
-  const c = g.toCanvas();
-  if (concept !== "winter") return c;
-  // 겨울: 지붕을 눈으로 덮고 처마 밑 고드름 (집·캠핑장 지붕과 같은 붓 — sprites/winterArt snowRoof)
-  const roofSet = new Set<number>(roof);
-  return snowRoof(c, (_x, y, col) => y <= 16 && roofSet.has(col), { seed: 191 });
+  return jwadaeBooth(concept, lit);
 }
 
 function stallShadow(g: Grid, cx: number, cy: number, rx: number, ry: number, a = 64): void {

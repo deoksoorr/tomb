@@ -2,7 +2,7 @@ import { nanoid } from "nanoid";
 import { questHook, todoTickOf } from "../retainQuest";
 import { campOpen } from "../camp";
 import { seaOpen } from "../sea";
-import { anyFishingWaterOf, SEA_DIG_CLOSED_MSG, seaDigOpen, seaFishDryAt, seaFishingSpotById, seaFishWet, SEA_TIDE_OUT_MSG, tideLevel } from "@tomb/protocol";
+import { anyFishingWaterOf, SEA_DIG_CLOSED_MSG, seaDigOpen, seaFishDryAt, seaFishingSpotById, seaFishWet, SEA_TIDE_OUT_MSG, tideLevel, RAFT_AUTO_EVERY_MS } from "@tomb/protocol";
 import { WALLET_MAX, type EarnSource } from "../economy";
 import { env } from "../env";
 import { peerOf, whereOf } from "../ban";
@@ -55,6 +55,7 @@ import { beatAuto, newAutoSession, parseAutoSession } from "./auto";
 import { autoLeftSpot } from "./autoSpot";
 import { logMoves } from "../opsLog";
 import type { MoveVia } from "../moveLog";
+import { raftAutoGate } from "../raft/service";
 import { autoStatus, settleAuto, type AutoSettled } from "./autoSettle";
 import { getFishRank } from "./fishRank";
 import { festWeight } from "./quests/urgent";
@@ -267,6 +268,7 @@ async function autoResponse(store: ForageStore, acct: string, r: AutoSettled, no
     gear: r.gear,
     ...(r.full ? { full: true } : {}),
     ...(r.ended ? { ended: r.ended } : {}),
+    ...(r.raftGear?.length ? { raftGear: r.raftGear } : {}),
     ...withDex(dex),
     state: toState(acct, snap, now, ev),
   };
@@ -278,9 +280,16 @@ export async function startAutoFish(acct: string, spotId: string, ch: number | n
   const water = anyFishingWaterOf(spotId);
   if (!water) throw new HttpError(400, "INVALID_INPUT", "여기서는 낚시를 할 수 없어요.");
   tideGate(spotId, now);
+  // 11/27 좌대 낚시 자리는 그 채널 그 좌대 입장권이 있어야 (있으면 15초마다, 입장권이 끝나면 같이 끝난다)
+  const raft = await raftAutoGate(acct, spotId, ch, now);
   // 11/19 하루 자동 낚시·낚시 수 한도가 없어져 오늘 기록을 읽지 않는다 (명령 2개 줄임)
   const prev = await settleAuto(store, acct, now, true);
   const session = newAutoSession(newSeed(), spotId, water, ch, now);
+  if (raft) {
+    session.raft = { ch: raft.ch, n: raft.n };
+    session.every = RAFT_AUTO_EVERY_MS;
+    session.end = raft.until;
+  }
   // 11/16 갯바위 자리는 물이 빠져 찌 자리가 마르는 때에 자동 낚시도 끝나요
   const sea = seaFishingSpotById(spotId);
   const dryAt = sea ? seaFishDryAt(sea, now) : Infinity;

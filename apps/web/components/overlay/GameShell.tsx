@@ -121,6 +121,8 @@ import OpShoutSpot from "./OpShoutSpot";
 import CampTalk from "../camp/CampTalk";
 import CampBgm from "../camp/CampBgm";
 import CampBbq from "../camp/CampBbq";
+import RaftBooth from "../camp/RaftBooth";
+import RaftRenew from "../camp/RaftRenew";
 import MegaphoneFeed, { MegaPinButton } from "./MegaphoneFeed";
 import { installViewKeyGuard } from "@/lib/viewKeyGuard";
 import { useSocial } from "./useSocial";
@@ -879,6 +881,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {ready && <CampTalk />}
       {ready && <CampBgm />}
       {ready && <CampBbq />}
+      {/* 11/27 좌대 매표소 창 · 끝나기 1분 전 연장 칸 */}
+      {ready && <RaftBooth avatar={{ color: options.color, body: options.body }} />}
+      {ready && <RaftRenew />}
       {/* 4·32·51번 낚시·채집·판매·도감 (자기 창·HUD를 스스로 연다) */}
       {ready && <ForageLayer />}
       {ready && <ZooLayer />}

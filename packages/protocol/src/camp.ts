@@ -206,8 +206,11 @@ export const CAMP_RAFTS: readonly (Pt & { n: number; link: boolean; roof: number
   { n: 5, x: 1100, y: 174, link: false, roof: 4 },
   { n: 6, x: 1178, y: 174, link: false, roof: 5 },
 ];
-/** 좌대 낚시 의자 넷 (좌대 가운데 기준 x) · 앉는 줄 (받침에서 위로) */
-export const CAMP_RAFT_SEAT_DX: readonly number[] = [-24, -10, 9, 23];
+/**
+ * 11/27 좌대 낚시 의자 하나 (좌대 입장권 주인이 혼자 쓴다 — 운영자: 의자 넷 대신 하나). 앞 끝 가운데 (좌대 가운데 기준 x),
+ * 물 건너 좌대(4~6)는 가운데가 사다리 칸이라 사다리 오른쪽에. 앉는 줄 = 받침에서 위로
+ */
+export const campRaftSeatDx = (r: { link: boolean }): number => (r.link ? 0 : 11);
 export const CAMP_RAFT_SEAT_DY = -12;
 /** 11/26 좌대 마루 반폭 · 받침에서 마루 뒤 끝까지 (그림 valleyExtraArt raft4Art 72×57 — 마루 3~68 · 17~48줄) */
 export const CAMP_RAFT_HALF_W = 33;
@@ -392,6 +395,8 @@ const campBank = (y: number, side: -1 | 1): FishingSpot => {
   return { id: `f_${x}_${y}`, water: "valley", x, y, facing: side < 0 ? DIR.right : DIR.left };
 };
 const spot = (water: FishingSpot["water"], x: number, y: number, facing: DirId): FishingSpot => ({ id: `f_${x}_${y}`, water, x, y, facing });
+/** 11/27 잔교 북쪽 가장자리 낚시 자리 x (좌대 4~6 사다리 줄 x 1022·1100·1178, 수영 팻말 x 1061을 비켜서) */
+export const CAMP_PIER_SPOT_XS: readonly number[] = [998, 1036, 1086, 1124, 1156, 1192];
 /** 윤슬 낚시터 둑 자리 (석축 위 — 물을 본다) */
 const R0 = CAMP_RES;
 export const CAMP_FISHING_SPOTS: readonly FishingSpot[] = [
@@ -405,8 +410,10 @@ export const CAMP_FISHING_SPOTS: readonly FishingSpot[] = [
   ...[1040, 1100, 1160].map((x) => spot("reservoir", x, R0.y1 + 8, DIR.up)),
   spot("reservoir", R0.x1 + 6, 420, DIR.left),
   ...[1060, 1140].map((x) => spot("reservoir", x, R0.y0 - 4, DIR.down)),
-  // 좌대 여섯 × 4인
-  ...CAMP_RAFTS.flatMap((r) => CAMP_RAFT_SEAT_DX.map((dx) => spot("reservoir", r.x + dx, r.y + CAMP_RAFT_SEAT_DY, DIR.down))),
+  // 11/27 잔교 북쪽 가장자리 여섯 (좌대 입장권이 없어도 앉는 자리 — 물 건너 좌대 쪽 물을 본다). 사다리로 가는 헤엄 길(좌대 가운데 x)·수영 팻말은 비웠다
+  ...CAMP_PIER_SPOT_XS.map((x) => spot("reservoir", x, CAMP_PIER.y - CAMP_PIER.w / 2 + 8, DIR.up)),
+  // 좌대 여섯 × 의자 하나 (늘 마지막 여섯 자리 — 좌대 입장권 protocol raft.ts campRaftOfSpot)
+  ...CAMP_RAFTS.map((r) => spot("reservoir", r.x + campRaftSeatDx(r), r.y + CAMP_RAFT_SEAT_DY, DIR.down)),
 ];
 export function campFishingSpotById(id: string): FishingSpot | undefined {
   return CAMP_FISHING_SPOTS.find((s) => s.id === id);

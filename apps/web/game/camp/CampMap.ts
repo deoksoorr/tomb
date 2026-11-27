@@ -830,6 +830,11 @@ export class CampMap implements CampMapApi {
 
   // ── NPC·이름표 (판이 바뀌어도 남는다) ──
 
+  /** 11/27 캠핑장 NPC 그림 키 (지금 판 — 겨울·크리스마스 — 에 맞춘). 좌대 매표소 직원 자리 그림이 쓴다 */
+  npcTexture(id: CampNpcId): string {
+    return seasonKey(Art.CAMP_TEX.npc(id), this.concept);
+  }
+
   private addNpcs(): void {
     const s = this.scene;
     for (const n of CAMP_NPCS) {

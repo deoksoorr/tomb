@@ -9,9 +9,10 @@ import { kstDay, loadMe } from "./accounts";
 // 11/22 운영자 결정: 등 뒤에 걸치는 망토 5종 · 어깨 걸친 재킷 · 체크 담요 숄은 「등」(pack) 칸. 옷(back)에는 몸에 입는 옷만 남는다.
 // 슬롯을 쓰는 곳(가방·상점 칸 필터, 염색 칸 순서, 세트 판정, 수집 의뢰 교환소, 착용 옮기기)이 아이템 칸 정의를 그대로 따라오는지 본다.
 
-const PACK_CAPES = ["back_cape", "back_milkcape", "xm_cape", "fr_cloak", "q_back_cape", "back_jacket", "back_shawl"];
+const PACK_CAPES = ["back_cape", "back_milkcape", "xm_cape", "fr_cloak", "q_back_cape", "back_jacket", "back_shawl", "jw_cape"];
 // 11/22 잡화점 「옷」 다섯 벌(wr_*)도 옷 칸
-const CLOTHES = ["kc_hoodie", "kd_coat", "kn_cable", "kn_fleece", "sc_padding", "staff_robe", "wr_shirt", "wr_puffer", "wr_robe", "wr_apron", "wr_coat"];
+// 11/27 캠핑장 좌대 전용 좌대 낚시 조끼·물빛 가슴장화도 옷 칸 (황금 월척 망토·월척 뜰채는 등 — protocol raft.ts RAFT_GEAR)
+const CLOTHES = ["kc_hoodie", "kd_coat", "kn_cable", "kn_fleece", "sc_padding", "staff_robe", "wr_shirt", "wr_puffer", "wr_robe", "wr_apron", "wr_coat", "jw_vest", "jw_waders"];
 const DAY = 86_400_000;
 
 describe("11/22 망토·걸친 재킷·숄 = 등(pack) 칸", () => {

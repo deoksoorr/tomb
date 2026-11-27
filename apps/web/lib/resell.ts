@@ -18,7 +18,7 @@ export function resellKindBlock(itemId: string): string | null {
   const it = itemById(itemId);
   if (!it || it.kind !== "cosmetic") return "팔 수 없는 물건이에요.";
   if (it.seasonSet || it.alley || it.ghost) return "기간 한정이라 팔 수 없어요.";
-  if (it.event || it.quest || it.urgent || it.champ || it.chair || it.invite || it.stargaze || it.staff) return "보상으로 받은 거라 팔 수 없어요.";
+  if (it.event || it.quest || it.urgent || it.champ || it.chair || it.invite || it.stargaze || it.raft || it.staff) return "보상으로 받은 거라 팔 수 없어요.";
   if (it.slot === "pet") return "펫은 팔 수 없어요.";
   if (!isShopListed(it) || !permanentPrice(itemId)) return "상점에서 파는 꾸미기가 아니라 팔 수 없어요.";
   return null;

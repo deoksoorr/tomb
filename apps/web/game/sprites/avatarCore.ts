@@ -197,7 +197,7 @@ type Pal = {
  * 입장 화면 캐릭터 미리보기(기본 몸·색만)는 이 파일(avatarCore)만 불러 첫 화면 묶음에 계절 그림이 안 들어간다.
  * 게임·상점·꾸미기 등 나머지는 모두 avatar.ts를 부르므로 등록이 먼저 끝난 뒤에 그린다.
  */
-type SeasonArt = Pick<typeof SeasonSetGear, "SEASON_SHEET_IDS" | "seasonGearOf" | "ssCovers" | "ssHeadWorn" | "drawSsBack" | "drawSsNeck" | "drawSsHead" | "drawSsHand" | "drawSsGlow" | "ssFrameCtx">;
+type SeasonArt = Pick<typeof SeasonSetGear, "SEASON_SHEET_IDS" | "seasonGearOf" | "ssCovers" | "ssHeadWorn" | "drawSsBack" | "drawSsNeck" | "drawSsHead" | "drawSsHand" | "drawSsGlow" | "ssFrameCtx"> & Partial<Pick<typeof SeasonSetGear, "ssBeginFrame">>;
 const noop = (): void => {};
 let ssArt: SeasonArt = { SEASON_SHEET_IDS: [], seasonGearOf: () => [], ssCovers: () => false, ssHeadWorn: () => false, drawSsBack: noop, drawSsNeck: noop, drawSsHead: noop, drawSsHand: noop, drawSsGlow: noop, ssFrameCtx: noop };
 /** 시트에 그려지는 꾸미기 (같은 조합이면 텍스처를 같이 쓴다) */
@@ -404,6 +404,21 @@ const P = (bob = 0, f0: [number, number] = [0, 0], f1: [number, number] = [0, 0]
   hem,
 });
 
+/** 11/27 시트 열의 동작 묶음 (서기·걷기·뛰기 stand / 앉기 sit / 점프 jump / 매달리기 hang / 수영·잠수 water / 그네 swing / 손 흔들기·환호 act / 해먹 lie) */
+function poseGroup(p: Pose): string {
+  if (p.lie) return "lie";
+  const a = p.arms ?? "";
+  if (a === "rope") return "swing";
+  if (a.startsWith("wave") || a.startsWith("cheer")) return "act";
+  if (p.sink) return "water";
+  if (a === "up") return "hang";
+  if (p.air) return "jump";
+  if (p.sit) return "sit";
+  return "stand";
+}
+/** 시트 열 col(앞·옆·뒤)의 동작 묶음 (테스트용) */
+export const avatarPoseGroup = (view: View, col: number): string => poseGroup(framesFor(view)[col]);
+
 function framesFor(view: View): Pose[] {
   const side = view === "side";
   const idle = [P(0, [0, 0], [0, 0], 0, 0, 0), P(1, [0, 0], [0, 0], 0, 0, 1)];
@@ -554,6 +569,8 @@ export function waterSink(body: string, state: "swim" | "dive"): number {
 
 /** 프레임 하나를 그린다 (오른쪽을 보는 옆모습 기준, 왼쪽은 좌우 반전) */
 function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear0: Gear): Grid {
+  // 11/27 계절 꾸미기 그림에 몸·동작 묶음을 먼저 알린다 (좌대 코디가 동작마다 크기를 맞춘다 — seasonSetGear ssBeginFrame)
+  if (gear0.ss.length) ssArt.ssBeginFrame?.(body, poseGroup(pose), gear0.ss);
   let g = new Grid(AV_W, AV_H);
   // 11/22 골목 외형 「붕어빵 장수 유령」: 앞치마·머리 수건·집게 붕어빵(bd_vendor)을 계절 꾸미기 자리 맨 나중에 덧그린다
   // (누빔 조끼 bd_vendor_base는 아래 몸통 덧그림 자리에서). 그림은 bungeoGear.ts — 등록 전(입장 화면 미리보기)이면 그리지 않는다

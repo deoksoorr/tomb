@@ -1,6 +1,8 @@
 import { AV_ANIM, AV_H, AV_W, avatarFrameGrid, BODY_METRICS, bodyOf } from "./avatar";
 import { darken, Grid, lighten, type Color } from "./pixel";
 import { isCampBedCover, paintCampBedCover, type CampBedCover } from "../housing/campFurnitureArt";
+import { paintCxCover } from "../housing/campExclusive";
+import { isCxCover, type CxCover } from "../housing/campExclusive/types";
 
 // 3번 집 안 가구 자세 그림: 아바타 시트의 서 있는 프레임 위에 이불·책·거품을 덧그린 2프레임 시트 (프레임 = AV_W×AV_H).
 //  - lie  (침대): 머리만 베개 위로 나오고 어깨 아래는 누빈 이불. 프레임 1은 이불이 숨 쉬듯 1px 내려가고 작은 "z"
@@ -41,7 +43,8 @@ function span(g: Grid): { x0: number; x1: number; y0: number } {
  * 11/16 누운 자세 덮개: quilt = 집 침대 이불(보라, 예전 그대로), towel = 바닷가 선베드 하늘빛 수건 (가슴 아래만 — 선베드 그림 RAMP.towel과 같은 색).
  * 11/26 캠핑장 침대(카라반·펜션)는 그 침대 이불 그대로 이어지는 덮개 — 침대·방향마다 따로 (housing/campFurnitureArt paintCampBedCover)
  */
-export type LieCover = "quilt" | "towel" | CampBedCover;
+/** 11/27 CxCover = 캠핑장 전용 가구 덮개 ("cx|키|방향" — game/housing/campExclusive coverArt) */
+export type LieCover = "quilt" | "towel" | CampBedCover | CxCover;
 const TOWEL = [0xcdeef6, 0xa9dcec, 0x8cc8de] as const;
 function towel(g: Grid, top: number): void {
   const t = top + 3;
@@ -159,7 +162,7 @@ export function indoorPoseSheet(kind: IndoorPose, body: string, color: string, l
       towel(g, neck + f);
     } else if (kind === "lie") {
       if (isCampBedCover(cover)) paintCampBedCover(g, cover, neck + f);
-      else quilt(g, neck + f);
+      else if (!(isCxCover(cover) && paintCxCover(g, cover, neck + f))) quilt(g, neck + f);
       if (f === 1) {
         // 작은 z
         g.hline(16, 18, 1, 0xdfe6f0);

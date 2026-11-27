@@ -52,7 +52,7 @@ import TowerEntrance, { towerBoostAllowed } from "./TowerEntrance";
 import s from "./rpg.module.css";
 import OverLevelSpot, { OVER_LEVEL_SPOT_MS } from "./OverLevelSpot";
 import { HUNT_POINT_T_STOP, huntPointBlock } from "@/lib/rpg/formulas";
-import { TOWER_CHEST_FROM, towerFitFloor, towerNoPointGain, towerPointFrom } from "@/lib/rpg/tower";
+import { NO_POTION_FROM, TOWER_CHEST_FROM, towerFitFloor, towerNoPointGain, towerPointFrom } from "@/lib/rpg/tower";
 import { FINISH_GRACE_SEC, PAUSE_ALLOW_MS } from "@/lib/rpg/rewards";
 import { useRideStopGate } from "../overlay/RideStopDialog";
 import { usePageZoomLock } from "@/lib/hooks/usePageZoomLock";
@@ -282,6 +282,39 @@ export default function HuntLobby({
       })
       .catch((e) => setNotice(errorMessage(e)))
       .finally(() => setBusy(false));
+  };
+
+  // 11/27 물약 모두 팔기 (가방 물약 칸): 종류마다 되팔기를 차례로 — 지갑 한도에 막히면 거기서 멈추고 남은 것은 가방에 그대로
+  const onSellAll = (items: { id: string; count: number }[]) => {
+    setBusy(true);
+    setNotice(null);
+    let value = 0;
+    let sold = 0;
+    void (async () => {
+      try {
+        for (const it of items) {
+          const v = await rpgApi.sell(it.id, it.count);
+          setView(v);
+          const n = v.sold?.count ?? it.count;
+          value += v.sold?.value ?? 0;
+          sold += n;
+          if (v.sold?.capped || n < it.count) break;
+        }
+        const all = items.reduce((a, it) => a + it.count, 0);
+        setNotice(
+          sold <= 0
+            ? "포인트를 더 받을 수 없어서 물약을 팔지 못했어요. 가방에 그대로 있어요."
+            : sold < all
+              ? `물약 ${sold}개를 ${pts(value)}에 팔았어요. 포인트를 더 받을 수 없어서 ${all - sold}개는 가방에 남겨 뒀어요.`
+              : `물약 ${sold}개를 ${pts(value)}에 팔았어요.`,
+        );
+      } catch (e) {
+        setNotice(sold > 0 ? `물약 ${sold}개를 ${pts(value)}에 팔았어요. ${errorMessage(e)}` : errorMessage(e));
+      } finally {
+        void meStore.refresh();
+        setBusy(false);
+      }
+    })();
   };
 
   async function start(game = cur.game, difficulty = cur.diff, towerFloor?: number, boost = false) {
@@ -621,7 +654,7 @@ export default function HuntLobby({
                 />
               )}
               {tab === "character" && <CharacterPanel view={view} busy={busy} onCharacter={onCharacter} />}
-              {tab === "gear" && <GearPanel view={view} busy={busy} onCharacter={onCharacter} onSell={onSell} onView={setView} figure={figure} />}
+              {tab === "gear" && <GearPanel view={view} busy={busy} onCharacter={onCharacter} onSell={onSell} onSellAll={onSellAll} onView={setView} figure={figure} />}
               {tab === "skills" && <SkillPanel view={view} busy={busy} onCharacter={onCharacter} />}
               {tab === "shop" && <ShopPanel view={view} busy={busy} onBuy={onBuy} />}
             </div>
@@ -738,7 +771,8 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
               ) : null}
             </div>
             <div>
-              <strong>+{r.points}</strong>포인트
+              {/* 11/27 야근 빌딩 60층부터 바로 판 물약 값까지 (아래 한 줄에 따로 적는다) */}
+              <strong>+{r.points + (r.potionSale?.points ?? 0)}</strong>포인트
             </div>
             <div>
               <strong>{r.score.toLocaleString("ko-KR")}</strong>
@@ -762,6 +796,12 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
               포인트를 더 받을 수 없어서 {r.pointsRaw}P 중 {r.points}P만 받았어요.
             </p>
           )}
+          {r.potionSale && r.potionSale.count > 0 && (
+            <p className={ui.hint}>
+              물약 {r.potionSale.count}개 → +{r.potionSale.points}P ({NO_POTION_FROM}층부터는 마실 수 없어 바로 팔았어요)
+            </p>
+          )}
+          {r.potionSale?.back ? <p className={ui.hint}>포인트를 더 받을 수 없어서 물약 {r.potionSale.back}개는 가방에 넣었어요.</p> : null}
           <EndgameResult reward={r} />
           {r.levelsGained > 0 && (
             <p className={s.levelUp} role="status">

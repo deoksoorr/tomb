@@ -8,6 +8,8 @@ import { GAMES, POTIONS, SKILLS, type GameKind, type SkillId } from "@/lib/rpg/c
 import { comboMult } from "@/lib/rpg/plan";
 import { STATUSES } from "@/lib/rpg/status";
 import { autoBlock, ULT_SLOT } from "@/lib/rpg/hotbar";
+import { curseNotice, NO_POTION_FROM, towerSellsPotions } from "@/lib/rpg/tower";
+import { CursePanel } from "./CurseStrip";
 import { readItem, writeItem } from "@/lib/storage";
 import FloatingStick from "../ui/FloatingStick";
 import type { RpgAction, RpgHud } from "@/lib/rpg/types";
@@ -82,6 +84,15 @@ const LONG_PRESS_MS = 450;
 const TOAST_MS = 1300;
 /** 야근 빌딩 층이 바뀔 때 「자동 스킬 3칸 켜져 있어요」 */
 const FLOOR_TOAST_MS = 2000;
+/** 11/27 야근 빌딩 새 저주 알림: 떠 있는 시간(설명 한 줄 늘 때마다 더, 최대) · 층이 바뀐 뒤 · 판 시작 뒤 띄우기까지 */
+/** 11/27 운영자 「알림이 너무 늦게 사라진다」: 새 저주 2.5초 · PC 판 시작(여러 줄) 3초 · 폰 판 시작 한 줄 2.5초. 누르면 바로 닫힌다 */
+const CURSE_NOTE_MS = 2500;
+const CURSE_NOTE_START_MS = 3000;
+const CURSE_NOTE_DELAY = 900;
+const CURSE_NOTE_START_DELAY = 1500;
+/** 폰 판 시작 한 줄 알림 */
+const CURSE_NOTE_BRIEF_MS = 2500;
+type CurseNote = { key: number; title: string; lines: string[]; delay: number; ms: number };
 
 /** 11/15 H: 사냥 키 안내 (키 목록은 huntKeys — 사냥터 고르기 화면과 같다) */
 function KeyHelp({ chair }: { chair: boolean }) {
@@ -265,6 +276,57 @@ export default function RunHud({
     // hud는 층이 바뀐 그 순간 값만 본다
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [floorNow, touch]);
+  // 11/27 야근 빌딩 새 저주 알림: 판 시작(시작 층에 걸린 저주 전부를 한 번에) · 층이 오르며 저주가 더해질 때.
+  // 층 이름·웨이브 알림(hud.message)과 따로 띄우고, 여러 개면 차례로 (60층 「탕비실 폐쇄」가 물약 안내를 겸한다)
+  const noPotion = floorNow !== undefined && towerSellsPotions(floorNow);
+  const [curseNote, setCurseNote] = useState<CurseNote | null>(null);
+  const curseSeen = useRef<number | null>(null);
+  const curseQ = useRef<CurseNote[]>([]);
+  const curseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pumpCurse = () => {
+    if (curseTimer.current || !curseQ.current.length) return;
+    const n = curseQ.current[0];
+    curseTimer.current = setTimeout(() => {
+      curseQ.current.shift();
+      setCurseNote(n);
+      curseTimer.current = setTimeout(() => {
+        setCurseNote(null);
+        curseTimer.current = null;
+        pumpCurse();
+      }, n.ms);
+    }, n.delay);
+  };
+  /** 알림을 누르면 바로 닫고 다음 알림으로 */
+  const dismissCurse = () => {
+    if (curseTimer.current) clearTimeout(curseTimer.current);
+    curseTimer.current = null;
+    setCurseNote(null);
+    pumpCurse();
+  };
+  useBridgeEvent("rpg:hud", (h) => {
+    if (h.floor === undefined || h.floor === curseSeen.current) return;
+    const prev = curseSeen.current;
+    curseSeen.current = h.floor;
+    const full = curseNotice(prev, h.floor);
+    if (!full) return;
+    // 11/27 폰: 판 시작 알림은 한 줄로 (여러 줄이면 위 절반을 가렸다 — 설명은 「저주 4」 칩). PC는 그대로 여러 줄
+    const note = slimTop && full.brief ? { title: full.brief, lines: [] as string[] } : full;
+    curseQ.current.push({
+      title: note.title,
+      lines: note.lines,
+      key: h.floor,
+      // 판 시작은 엘리베이터 문이 열릴 즈음, 층이 오를 땐 문이 열린 뒤
+      delay: prev === null ? CURSE_NOTE_START_DELAY : CURSE_NOTE_DELAY,
+      ms: !note.lines.length ? CURSE_NOTE_BRIEF_MS : prev === null ? CURSE_NOTE_START_MS : CURSE_NOTE_MS,
+    });
+    pumpCurse();
+  });
+  useEffect(
+    () => () => {
+      if (curseTimer.current) clearTimeout(curseTimer.current);
+    },
+    [],
+  );
   useEffect(() => pressEnd, []);
   const longPress = (i: number) => {
     const id = hotbar[i];
@@ -449,6 +511,7 @@ export default function RunHud({
                   </span>
                 )}
               </div>
+              {/* 11/27 야근 빌딩: 지금 걸린 저주 (올리거나 누르면 설명·다음 저주) */}
               {game === "hunt" && hud && (
                 <>
                   <Bar value={hud.hp} max={hud.maxHp} className={s.hp} label="HP" />
@@ -487,6 +550,8 @@ export default function RunHud({
               )}
             </div>
           )}
+          {/* 11/27 야근 빌딩 PC: 걸린 저주 판 (키 안내 버튼 바로 옆) */}
+          {hud?.floor !== undefined && !hud.chair && <CursePanel floor={hud.floor} />}
           <div ref={btnEl} className={s.topButtons}>
             {topExtra}
             {hunt && (
@@ -527,6 +592,23 @@ export default function RunHud({
             {hud.message}
           </p>
         )}
+        {curseNote && (
+          <p
+            key={curseNote.key}
+            className={cx(s.banner, s.potionNote)}
+            data-brief={curseNote.lines.length ? undefined : ""}
+            role="status"
+            title="누르면 닫혀요"
+            style={{ animationDuration: `${curseNote.ms}ms` }}
+            onPointerDown={stop}
+            onClick={dismissCurse}
+          >
+            <strong>{curseNote.title}</strong>
+            {curseNote.lines.map((l) => (
+              <small key={l}>{l}</small>
+            ))}
+          </p>
+        )}
         {editing && (
           <p className={cx(s.banner, s.autoHint)} role="status">
             자동으로 쓸 스킬 칸을 눌러요. 다 고르면 [자동]을 다시 눌러요.
@@ -564,9 +646,10 @@ export default function RunHud({
                     key={p.id}
                     type="button"
                     className={s.skillBtn}
-                    disabled={n <= 0}
+                    disabled={n <= 0 || noPotion}
                     onPointerDown={(e) => act(e, { kind: "potion", id: p.id })}
-                    aria-label={`${p.name} 마시기 (${p.key}), ${n}개 남음`}
+                    aria-label={noPotion ? `${p.name}, ${NO_POTION_FROM}층부터는 마실 수 없어요` : `${p.name} 마시기 (${p.key}), ${n}개 남음`}
+                    title={noPotion ? `${NO_POTION_FROM}층부터는 물약을 마실 수 없어요` : undefined}
                   >
                     <RpgIcon art={p.art} size={32} />
                     <span className={s.skillKey}>{p.key}</span>

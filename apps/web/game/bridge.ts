@@ -1,5 +1,6 @@
 import type { AvatarDye, AwayMapId, BbqItemId, ChatPlace, BbqStand, FishWater, GraveEventKind, HomesMsg, MapId, MegaPinMsg, QueueStatus } from "@tomb/protocol";
 import type { NpcId } from "@/lib/forage/catalog";
+import type { RaftStatusResponse } from "@/lib/raft/types";
 import type { NodeUrgent } from "@/lib/forage/rules";
 import type { PublicGrave } from "@/lib/types";
 import type { HouseEditState, HouseTool } from "@/game/housing/events";
@@ -19,6 +20,9 @@ import type { FirstGuideTarget } from "@/lib/retain";
 
 // React(UI 오버레이) ↔ Phaser(게임) 사이의 유일한 통로. 양쪽은 서로를 직접 import하지 않는다.
 // "sticky" 이벤트는 마지막 값을 기억해서, 늦게 구독한 쪽도 last()로 현재 값을 읽을 수 있다.
+
+/** 11/27 좌대 연장 칸 (game/camp/CampRafts → components/camp/RaftRenew) */
+export type RaftPrompt = { n: number; at: number; min: number; price: number; dayLeftMin: number; renewLeft: number };
 
 export type NetMode =
   | "connecting" // 첫 연결 시도 중
@@ -272,6 +276,15 @@ export type GameEvents = {
   /** 11/15 캠핑장 바베큐 그릴 앞에서 E → 메뉴 창 */
   /** shop = 11/27 캠핑장 매점 알바에게 말을 걸어 연 창 (파는 것은 그릴과 같고 제목만 「캠핑장 매점」) */
   "camp:bbq:open": { stand: BbqStand; shop?: boolean };
+  // ── 11/27 좌대 입장권 (game/camp/CampRafts ↔ components/camp/RaftBooth·RaftRenew) ──
+  /** 좌대 매표소 창구에서 E → 매표소 창 */
+  "camp:raft:open": undefined;
+  /** 매표소 창이 산·연장한 증서 + 새 상태 → 장면이 실시간 서버에 증서를 보내고 내 좌대를 연다 */
+  "camp:raft:grant": { grant: string; status: RaftStatusResponse };
+  /** 매표소 창이 새로 읽은 상태 (장면이 내 좌대·막이를 맞춘다) */
+  "camp:raft:status": RaftStatusResponse;
+  /** 끝나기 1분 전 내 좌대 위: 연장 칸 (null = 닫기). at = 화면 시계로 끝나는 시각 */
+  "camp:raft:prompt": RaftPrompt | null;
   /** 채널 이동 창: 지금 같은 채널에 보이는 사람들 닉네임 (peers:ask에 답한다, 나는 빼고). map = 지금 맵 (11/17 그 맵에 보이는 사람만이라서) */
   /** 11/20 staff = names 중 운영자 수 (로비 채널 인원엔 운영자가 없다) */
   "peers:list": { names: string[]; map: MapId; staff?: number };

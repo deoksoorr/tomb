@@ -1,4 +1,4 @@
-import { GEAR_SLOTS, gearById, type GearDef, type GearKind, type GearSlot } from "@/lib/rpg/catalog";
+import { GEAR_SLOTS, gearById, type GearDef, type GearKind, type GearSlot, type PotionDef } from "@/lib/rpg/catalog";
 import { derive, type Derived } from "@/lib/rpg/formulas";
 import type { CharacterState } from "@/lib/rpg/types";
 import { decodeSg, isSgCode, SG_GRADE_COLORS, SG_GRADE_NAMES, SG_PIECE_KIND, SG_REQ_LEVEL, SG_SETS, sgDef, sgPieceOf, sgSetOf, sgUid, shopEnhOf, shopPieceOf, enhSplit, type SgItem, type SgSet } from "@/lib/rpg/setGear";
@@ -90,6 +90,9 @@ export function sellWarning(c: Pick<CharacterState, "equip" | "inv">, g: GearDef
   if (grade.id === "rare" || grade.id === "legend") return `${grade.label} 장비예요. 정말 팔까요?`;
   return null;
 }
+
+/** 11/27 물약 [모두 팔기]에 넣는 것: 마시는 물약만 (부활 쿠키는 자기 카드의 팔기로 — 운영자) */
+export const sellAllPotions = <T extends { p: Pick<PotionDef, "revive"> }>(list: readonly T[]): T[] => list.filter((x) => !x.p.revive);
 
 /** 팔 수 있는 개수 (장착 중인 것은 못 판다) */
 export function sellable(c: Pick<CharacterState, "equip" | "inv">, id: string): number {

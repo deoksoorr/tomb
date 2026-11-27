@@ -71,3 +71,10 @@ describe("확률 안내 숫자", () => {
     expect(lotteryAny(100)).toBeCloseTo(0.03);
   });
 });
+
+describe("11/27 야근 빌딩 상자 물약", () => {
+  it("60층부터 바로 되팔기 값으로 포인트가 된다는 말이 있다", () => {
+    const row = chestRows().find((r) => r[0] === "물약")!;
+    expect(row[1]).toContain("60층부터 상자에서 나온 물약은 바로 되팔기 값으로 포인트가 돼요");
+  });
+});

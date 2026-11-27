@@ -19,6 +19,7 @@ import {
   type CampYard,
   type StarterSpot,
   campSkinKind,
+  campOnlyBlock,
   isFreeSkin,
   STYLE_TAGS,
   tierById,
@@ -201,6 +202,11 @@ export function validateLayout(layout: HouseLayout, tierOrShape: PlotTierId | Ho
   if (!isFloorSkin(layout.floor) || (campSkinKind(layout.floor) !== null && campSkinKind(layout.floor) !== kind)) return fail("BAD_SKIN", "알 수 없는 바닥이에요.");
   if (!isWallSkin(layout.wall) || (campSkinKind(layout.wall) !== null && campSkinKind(layout.wall) !== kind)) return fail("BAD_SKIN", "알 수 없는 담장이에요.");
   if (layout.window !== undefined && !isWindowSkin(layout.window)) return fail("BAD_SKIN", "알 수 없는 창문이에요.");
+  // 11/27 캠핑장 집 종류별 전용 바닥·벽지는 그 종류 집에서만 (마을 집·오두막·다른 종류 캠핑장 집은 거절)
+  for (const s of [layout.floor, layout.wall]) {
+    const why = campOnlyBlock(furnitureById(s), kind);
+    if (why) return fail("CAMP_ONLY", why);
+  }
   if (itemCount(layout) > tier.maxItems)
     return fail("TOO_MANY", `${tier.name}에는 물건을 ${tier.maxItems}개까지 놓을 수 있어요.`);
   // 11/26 기본 가구: 그 종류 것이 정확히 하나씩 (옮기고 돌릴 수는 있어도 빼거나 더 놓을 수 없다)
@@ -223,6 +229,9 @@ export function validateLayout(layout: HouseLayout, tierOrShape: PlotTierId | Ho
     const def = furnitureById(p.i);
     if (def?.skin === "window") return fail("BAD_ITEM", `${def.name}: 바닥에 놓지 않고 꾸미기의 「창문」 칸에서 골라요.`);
     if (!def || def.skin || def.ext) return fail("BAD_ITEM", "알 수 없는 물건이 있어요.");
+    // 11/27 캠핑장 집 종류별 전용 가구는 그 종류 집에만
+    const only = campOnlyBlock(def, kind);
+    if (only) return fail("CAMP_ONLY", only);
     if (![p.x, p.y].every(Number.isInteger) || !validRotation(def, p.r)) return fail("BAD_LAYOUT", "배치 정보가 올바르지 않아요.");
     const why = occ.check(def, p.x, p.y, p.r);
     if (why) return fail("BAD_PLACE", `${def.name}: ${why}`);

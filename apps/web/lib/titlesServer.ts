@@ -1,6 +1,6 @@
 import type { Redis } from "@upstash/redis";
 import { redisClient } from "./redisUsage";
-import { champBoards, MANAGER_TITLE_ID, TITLE_IDS, titleOfLook, type AvatarDye, type ChampBoard } from "@tomb/protocol";
+import { champBoards, isPermanentUntil, MANAGER_TITLE_ID, RAFT_SET_IDS, TITLE_IDS, titleOfLook, type AvatarDye, type ChampBoard } from "@tomb/protocol";
 import { env } from "./env";
 import { DEX_CATS, dexIdsOf, speciesOf } from "./forage/catalog";
 import { titlesOf } from "./forage/dexReward";
@@ -251,6 +251,10 @@ async function readFacts(accountId: string, now: number): Promise<{ facts: Title
     grad: l?.grad ?? 0,
     // 11/19 계절 한정 세트: 지금 만료 전 착용품으로 한 벌을 다 입었는지 (내 정보에서 같이 읽는다 — 명령 추가 없음)
     ...seasonSetMetrics(l?.equipped ?? [], now),
+    // 11/27 좌대 입장권: 산 수·산 시간(분)은 칭호 누적 해시에서 같이 읽고, 좌대 영구 한 벌 넷 영구 착용은 내 정보에서 (명령 추가 없음)
+    rafts: stats.rafts ?? 0,
+    raftMin: stats.raftMin ?? 0,
+    raftSet: RAFT_SET_IDS.every((id) => (l?.equipped ?? []).some((e) => e.itemId === id && isPermanentUntil(e.until))) ? 1 : 0,
   };
   for (const cat of DEX_CATS) metrics[`dex_${cat}`] = dexIdsOf(cat).filter(has).length;
   return {

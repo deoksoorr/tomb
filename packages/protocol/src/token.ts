@@ -35,6 +35,10 @@ export type JoinClaims = {
   camp?: true;
   /** 11/16 바닷가(달물결 포구)에 갈 수 있다 (테스트 서버이거나 운영 SEA_ENABLED=1일 때 Vercel이 넣는다). 없으면 바닷가행 버스를 타도 마을에 그대로 */
   sea?: true;
+  /** 11/27 좌대 입장권 막기를 켠다 (웹이 좌대 입장권을 파는 서버일 때 넣는다 — 실시간 서버만 먼저 배포돼도 좌대가 막히지 않게). 없으면 막지 않는다 */
+  rafts?: true;
+  /** 11/27 이 채널 좌대 입장권 (n번, u = 끝나는 시각 epoch ms). 웹이 확인한 것만 */
+  raft?: { n: number; u: number };
   /** 만료 시각 (unix seconds) */
   exp: number;
 };
@@ -131,7 +135,7 @@ export async function verifyJoinToken(
     return null;
   }
   if (!c || typeof c !== "object") return null;
-  const { visitorId, name, color, channel, exp, look, body: rawBody, room, dye, idye, staff, dex, champ, camp, sea, mgr, nb } = c as Record<string, unknown>;
+  const { visitorId, name, color, channel, exp, look, body: rawBody, room, dye, idye, staff, dex, champ, camp, sea, mgr, nb, rafts, raft } = c as Record<string, unknown>;
   // 방 id가 있는데 형식이 틀리면 토큰째 버린다 (방 없는 채널 0 토큰 = 대기열 토큰으로 바뀌지 않게)
   if (room !== undefined && !(typeof room === "string" && ROOM_ID_RE.test(room))) return null;
   if (
@@ -150,5 +154,11 @@ export async function verifyJoinToken(
   const lk = mgrGateLook(staffGateLook(sanitizeLook(look), isStaff), mgr === true);
   // 염색: 캐릭터 3부위 + 입은 아이템 색 (착용 목록에 없는 아이템 색은 버린다)
   const wireDye = unpackWireDye(dye, idye, lk);
-  return { visitorId, name, color, channel, exp, look: lk, body: staffGateBody(isAvatarBody(rawBody) ? rawBody : "hood", isStaff), ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(Object.keys(wireDye).length ? { dye: wireDye } : {}), ...(staff === true ? { staff: true as const } : {}), ...(isDexBadge(dex) ? { dex } : {}), ...(isChampValue(champ) ? { champ } : {}), ...(camp === true ? { camp: true as const } : {}), ...(sea === true ? { sea: true as const } : {}), ...(mgr === true ? { mgr: true as const } : {}), ...(isSproutLeft(nb) && staff !== true && mgr !== true ? { nb } : {}) };
+  return { visitorId, name, color, channel, exp, look: lk, body: staffGateBody(isAvatarBody(rawBody) ? rawBody : "hood", isStaff), ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(Object.keys(wireDye).length ? { dye: wireDye } : {}), ...(staff === true ? { staff: true as const } : {}), ...(isDexBadge(dex) ? { dex } : {}), ...(isChampValue(champ) ? { champ } : {}), ...(camp === true ? { camp: true as const } : {}), ...(sea === true ? { sea: true as const } : {}), ...(mgr === true ? { mgr: true as const } : {}), ...(isSproutLeft(nb) && staff !== true && mgr !== true ? { nb } : {}), ...(rafts === true ? { rafts: true as const } : {}), ...(isRaftClaim(raft) ? { raft: { n: raft.n, u: raft.u } } : {}) };
+}
+
+/** 11/27 입장 토큰의 좌대 입장권 (번호 1~6, 끝나는 시각) */
+function isRaftClaim(v: unknown): v is { n: number; u: number } {
+  const r = v as { n?: unknown; u?: unknown } | null;
+  return !!r && typeof r === "object" && typeof r.n === "number" && Number.isInteger(r.n) && r.n >= 1 && r.n <= 6 && typeof r.u === "number" && Number.isFinite(r.u);
 }
