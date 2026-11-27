@@ -31,6 +31,8 @@
 
 .section {
   display: grid;
+  /* 11/27 칸이 안의 표 너비만큼 늘어나지 않게 (폰에서 접속 기록 표·기록 종류 버튼이 창 밖으로 나가던 것 — 표는 표 칸 안에서 가로 스크롤) */
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 

@@ -136,14 +136,15 @@ describe("가입 유입 (/api/me/attend 첫 입장) · 이번 접속 유입 (/ap
     expect((await enter(x)).status).toBe(200);
     await settle();
     expect((await getSignupSrc().get([x.id]))[0]).toMatchObject({});
-    // 유입별 가입 수: 들어온 계정만, 모르는 사이트는 「기타 사이트」로
+    // 유입별 가입 수: 들어온 계정만. 11/27 모르는 사이트도 호스트 그대로 (커뮤니티 이름이 보이게)
     const y = await newVisitor();
-    await enter(y, { r: `x${ipSeq}.example.org` });
+    const forum = `x${ipSeq}.example.org`;
+    await enter(y, { r: forum });
     await settle();
     const counts = await bodyOf<{ rows: { label: string; n: number }[] }>(signupSources.GET(call("/api/admin/signup-sources?days=1", { admin: true })));
     expect(counts.rows.find((r) => r.label === "utm blog/post")?.n).toBeGreaterThanOrEqual(1);
-    expect(counts.rows.find((r) => r.label === "기타 사이트")?.n).toBeGreaterThanOrEqual(1);
-    expect(counts.rows.some((r) => r.label.includes("spam") || r.label.includes("example.org"))).toBe(false);
+    expect(counts.rows.find((r) => r.label === forum)?.n).toBe(1);
+    expect(counts.rows.some((r) => r.label.includes("spam"))).toBe(false);
   });
 
   it("입장 첫 요청의 src는 그날 이번 접속 유입으로", async () => {
@@ -153,6 +154,23 @@ describe("가입 유입 (/api/me/attend 첫 입장) · 이번 접속 유입 (/ap
     await settle();
     const [live] = await getSignupSrc().live([v.id], [kstDay(Date.now())]);
     expect(live?.s).toBe("인스타그램");
+    // 11/27 유저 상세: 가입 유입과 함께 최근 접속 유입
+    const mine = await bodyOf<AdminLogsResponse>(adminLogs.GET(call(`/api/admin/logs?list=conn&account=${v.id}`, { admin: true })));
+    expect(mine.account).toMatchObject({ signup: "기록 없음", session: "인스타그램" });
+    expect(mine.account?.sessionAt).toBeGreaterThan(0);
+  });
+
+  it("11/27 리퍼러가 빈 앱 안 브라우저는 앱 이름으로 (「네이버 앱 앱」이 아니라 「네이버 앱」), 모르는 커뮤니티는 호스트 그대로", async () => {
+    const v = await newVisitor();
+    const naverApp = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 NAVER(inapp; search; 2000; 12.1.2; 15ProMax)";
+    const body = { channel: 1, name: `앱유입${ipSeq}`, color: "#9fc5a8", src: {} };
+    expect((await join.POST(call("/api/join", { visitor: v, body, headers: { "user-agent": naverApp } }))).status).toBe(200);
+    const w = await newVisitor();
+    const body2 = { channel: 1, name: `포럼${ipSeq}`, color: "#9fc5a8", src: { r: "forum.example.com" } };
+    expect((await join.POST(call("/api/join", { visitor: w, body: body2 }))).status).toBe(200);
+    await settle();
+    const lives = await getSignupSrc().live([v.id, w.id], [kstDay(Date.now())]);
+    expect(lives.map((l) => l?.s)).toEqual(["네이버 앱", "forum.example.com"]);
   });
 });
 

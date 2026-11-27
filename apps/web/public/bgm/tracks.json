@@ -3,7 +3,6 @@
     {
       "id": "retrowinter",
       "title": "레트로",
-      "isNew": true,
       "tracks": [
         { "file": "/bgm/retrowinter/retrowinter-01.mp3", "title": "돌길 마을 화롯가", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 116 },
         { "file": "/bgm/retrowinter/retrowinter-02.mp3", "title": "회전목마가 도는 저녁 광장", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 116 },
@@ -60,7 +59,6 @@
     {
       "id": "carol",
       "title": "눈꽃 캐럴",
-      "isNew": true,
       "tracks": [
         { "file": "/bgm/carol/carol-01.mp3", "title": "눈꽃 내리는 광장", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 97 },
         { "file": "/bgm/carol/carol-02.mp3", "title": "광장 트리에 불 켜는 날", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 124 },
@@ -117,7 +115,6 @@
     {
       "id": "citypop",
       "title": "노을 시티팝",
-      "isNew": true,
       "tracks": [
         { "file": "/bgm/citypop/citypop-01.mp3", "title": "노을 지는 포구의 오후", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 202 },
         { "file": "/bgm/citypop/citypop-02.mp3", "title": "퇴근길 바다 쪽으로 돌아가기", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 182 },
@@ -174,7 +171,6 @@
     {
       "id": "fantasy",
       "title": "판타지 마을",
-      "isNew": true,
       "tracks": [
         { "file": "/bgm/fantasy/fantasy-01.mp3", "title": "마법사의 탑 아래 장터", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 133 },
         { "file": "/bgm/fantasy/fantasy-02.mp3", "title": "요정이 사는 버섯 골목", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 107 },
@@ -226,6 +222,43 @@
         { "file": "/bgm/fantasy/fantasy-48.mp3", "title": "짧은 마법 주문 한 소절", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 72 },
         { "file": "/bgm/fantasy/fantasy-49.mp3", "title": "달 아래 늑대 언덕", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 155 },
         { "file": "/bgm/fantasy/fantasy-50.mp3", "title": "다시 떠나는 모험길", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 207 }
+      ]
+    },
+    {
+      "id": "jazz",
+      "title": "재즈",
+      "isNew": true,
+      "tracks": [
+        { "file": "/bgm/jazz/jazz-01.mp3", "title": "기억숲 마을에 켜진 등불", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 168 },
+        { "file": "/bgm/jazz/jazz-02.mp3", "title": "돌담길 따라 걷는 오후", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 174 },
+        { "file": "/bgm/jazz/jazz-03.mp3", "title": "지각할 뻔한 출근길", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 84 },
+        { "file": "/bgm/jazz/jazz-04.mp3", "title": "벽난로 앞 코코아 한 잔", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 164 },
+        { "file": "/bgm/jazz/jazz-05.mp3", "title": "북적이는 주말 장터", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 163 },
+        { "file": "/bgm/jazz/jazz-06.mp3", "title": "캠핑장 아침 커피 내리기", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 124 },
+        { "file": "/bgm/jazz/jazz-07.mp3", "title": "야근 끝난 빌딩 로비", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 163 },
+        { "file": "/bgm/jazz/jazz-08.mp3", "title": "골목 빵집 첫 오븐", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 169 },
+        { "file": "/bgm/jazz/jazz-09.mp3", "title": "화롯가에 둘러앉은 밤", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 203 },
+        { "file": "/bgm/jazz/jazz-10.mp3", "title": "별이 내려앉은 돌다리", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 177 },
+        { "file": "/bgm/jazz/jazz-11.mp3", "title": "퇴근길 골목 산책", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 167 },
+        { "file": "/bgm/jazz/jazz-12.mp3", "title": "카약 타고 포구 한 바퀴", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 163 },
+        { "file": "/bgm/jazz/jazz-13.mp3", "title": "모퉁이 재즈 카페 문 열 때", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 166 },
+        { "file": "/bgm/jazz/jazz-14.mp3", "title": "잠 못 드는 새벽 두 시", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 178 },
+        { "file": "/bgm/jazz/jazz-15.mp3", "title": "단골 찻집 구석 자리", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 199 },
+        { "file": "/bgm/jazz/jazz-16.mp3", "title": "등불 켜지는 저녁 골목", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 153 },
+        { "file": "/bgm/jazz/jazz-17.mp3", "title": "꺼져 가는 난로 곁에서", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 194 },
+        { "file": "/bgm/jazz/jazz-18.mp3", "title": "눈 내린 돌길 위 발자국", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 150 },
+        { "file": "/bgm/jazz/jazz-19.mp3", "title": "겨울밤 창가의 촛불", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 158 },
+        { "file": "/bgm/jazz/jazz-20.mp3", "title": "비 오는 날의 우산 속", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 165 },
+        { "file": "/bgm/jazz/jazz-21.mp3", "title": "광장 시계탑 아래 약속", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 150 },
+        { "file": "/bgm/jazz/jazz-22.mp3", "title": "새벽 첫차 기다리는 정류장", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 184 },
+        { "file": "/bgm/jazz/jazz-23.mp3", "title": "안개 낀 새벽 골목", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 189 },
+        { "file": "/bgm/jazz/jazz-24.mp3", "title": "참나무 마을의 늦은 밤", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 198 },
+        { "file": "/bgm/jazz/jazz-25.mp3", "title": "흔들의자에 기대어", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 188 },
+        { "file": "/bgm/jazz/jazz-26.mp3", "title": "노을 지는 포구 방파제", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 208 },
+        { "file": "/bgm/jazz/jazz-27.mp3", "title": "갈매기 쉬어 가는 부두", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 164 },
+        { "file": "/bgm/jazz/jazz-28.mp3", "title": "모닥불 너머 반짝이는 별", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 184 },
+        { "file": "/bgm/jazz/jazz-29.mp3", "title": "눈 쌓인 지붕 위 등불", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 182 },
+        { "file": "/bgm/jazz/jazz-30.mp3", "title": "오늘도 수고한 하루 끝에", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "자체 제작", "durationSec": 193 }
       ]
     },
     {

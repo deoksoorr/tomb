@@ -6,7 +6,7 @@ import { FALLS_VIEW_CENTER, fallsZoom } from "./campWater";
 
 // 11/26 「폭포 멍」: 폭포 다리 긴 의자(qW1·qW2)에 앉으면 모닥불 불멍·관람차 하늘 보기처럼 시점을 바꾼다 (view:mode "falls").
 //  - 카메라가 폭포와 달그늘 소가 한 프레임에 들어오게 천천히 다가가고(위아래 레터박스), 화면에 차가운 물안개 빛이 옅게 깔린다
-//  - 물보라·물안개는 CampMap.setFallsFocus가 짙게, 물소리는 장면이 크게 (Sfx.seaWaves 루프를 폭포 소리로)
+//  - 물보라·물안개는 CampMap.setFallsFocus가 짙게, 물소리는 장면이 크게 (Sfx.fallsRush — 폭포 전용 루프 falls-loop.mp3)
 // reduced-motion이면 카메라는 미끄러지지 않고 바로 바뀐다.
 
 export class FallsView {

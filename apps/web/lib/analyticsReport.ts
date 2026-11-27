@@ -33,10 +33,14 @@ export type AnalyticsReport = {
   /** 11/17 대시보드용: 기간과 상관없이 오늘(한국 시각) 유입 분류·리퍼러 도메인 */
   todayReferrers: { cat: RefCategory; count: number }[];
   todayDomains: Ranked;
+  /** 11/27 오늘 앱 안 브라우저로 연 방문 (카카오톡·인스타그램 … — 리퍼러를 비우는 앱이 많아 따로 센다) */
+  todayApps: Ranked;
   /** 유입·기기 분석을 모은 기간 이름 ("오늘", "최근 30일" …) */
   breakdownLabel: string;
   referrers: { cat: RefCategory; count: number }[];
   domains: Ranked;
+  /** 11/27 앱 안 브라우저 (기간 합) */
+  apps: Ranked;
   utm: Ranked;
   landings: Ranked;
   devices: Ranked;
@@ -194,7 +198,9 @@ export async function buildReport(store: AnalyticsStore, range: AnalyticsRange, 
     referrers: REF_CATEGORIES.map((cat) => ({ cat, count: refs.find((r) => r.key === cat)?.count ?? 0 })),
     todayReferrers: REF_CATEGORIES.map((cat) => ({ cat, count: todayRefs.find((r) => r.key === cat)?.count ?? 0 })),
     todayDomains: ranked(todayRaws, "dom:"),
+    todayApps: ranked(todayRaws, "app:"),
     domains: ranked(bRaws, "dom:"),
+    apps: ranked(bRaws, "app:"),
     utm: ranked(bRaws, "utm:"),
     landings: ranked(bRaws, "land:"),
     devices: ranked(bRaws, "dev:"),

@@ -37,6 +37,8 @@ export class Sfx extends AudioHost {
   private readonly fire = new AmbientLoop(this, "/sfx/campfire.mp3", { gain: 0.75, bus: "amb" });
   /** 11/16 바닷가 파도·갈매기 루프 (바닷가 맵에 있는 동안만, 환경음 — scripts/gen-sea-loop.mjs가 굽는다) */
   private readonly sea = new AmbientLoop(this, "/sfx/sea-loop.mp3", { gain: 0.55, bus: "amb" });
+  /** 11/27 캠핑장 폭포 물소리 루프 (파도 박자 없이 한결같이 쏟아지는 소리, 환경음 — scripts/gen-falls-loop.mjs가 파도와 같은 크기로 굽는다) */
+  private readonly falls = new AmbientLoop(this, "/sfx/falls-loop.mp3", { gain: 0.55, bus: "amb" });
   /** 14번 물소리: 수영하는 동안 물장구 루프 (잠수하면 먹먹하게, 환경음) */
   private readonly swim = new AmbientLoop(this, "/sfx/swim.mp3", { gain: 0.5, bus: "amb", filter: true });
   /** 잠수 중 다음 물방울 소리 시각 */
@@ -53,6 +55,7 @@ export class Sfx extends AudioHost {
     this.fire.refresh();
     this.swim.refresh();
     this.sea.refresh();
+    this.falls.refresh();
   }
 
   /**
@@ -281,6 +284,11 @@ export class Sfx extends AudioHost {
     this.sea.set(level);
   }
 
+  /** 11/27 캠핑장 폭포 물소리 크기 0..1 (캠핑장 장면이 매 프레임 — 폭포에 가까울수록·폭포 멍이면 크게, 떠나면 0) */
+  fallsRush(level: number): void {
+    this.falls.set(level);
+  }
+
   /**
    * 11/16 갈매기 울음 한 번 (바닷가). gain 0..1 (거리·상황), pan -1(왼쪽)..1(오른쪽). 셋 중 하나를 높낮이를 조금 바꿔 내요.
    * 환경음 갈래(볼륨·음소거)를 따라요
@@ -339,6 +347,7 @@ export class Sfx extends AudioHost {
     this.fire.destroy();
     this.swim.destroy();
     this.sea.destroy();
+    this.falls.destroy();
     this.closeAudio();
   }
 }

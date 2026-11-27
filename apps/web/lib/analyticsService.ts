@@ -60,6 +60,7 @@ export async function recordHit(req: NextRequest, body: HitBody, cookie: string,
     device: ua.device,
     browser: ua.browser,
     country: countryOf(req.headers.get("x-vercel-ip-country")),
+    app: ua.app,
   });
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type RefObject } from "react";
+import { useEffect, useId, useReducer, useRef, useState, type RefObject } from "react";
 import { errorMessage, isAbortError } from "@/lib/api";
 import {
   CAMP_HOME_KIND_NAME,
@@ -10,7 +10,6 @@ import {
   campLotShort,
   caravanDesignName,
   caravanDesignOf,
-  defaultCaravanDesign,
   sameCaravanDesign,
   SEA_LOTS,
   type CampHomeKind,
@@ -60,6 +59,7 @@ import { CottageStylePicker, fmt, TierCompare, TierPicker, TitleBadge, TitleProg
 import { campOfficeTitle, HOST, kindIntro, openChannelsLine, openSaleChannels, soldOutLine, yardChangeLine, yardHint } from "./campOfficeText";
 import { CampLotPicker } from "./CampLotPicker";
 import { CaravanDesignPicker } from "./CaravanDesignPicker";
+import { CARAVAN_BUY_START, caravanBuy, caravanBuyDesign, caravanCardDesign } from "./caravanBuyFlow";
 
 type Tab = "mine" | "browse";
 
@@ -228,8 +228,18 @@ function MyPlot({
   const [campOwners, setCampOwners] = useState<ReadonlyMap<number, string>>(new Map());
   /** 11/26 분양된 카라반 터의 주인 디자인 (터 카드 그림) */
   const [campDesigns, setCampDesigns] = useState<ReadonlyMap<number, CaravanDesign>>(new Map());
-  /** 11/26 분양 때 고르는 카라반 디자인 (안 건드렸으면 null — 고른 터의 기본 모습) */
-  const [buyDesign, setBuyDesign] = useState<CaravanDesign | null>(null);
+  /**
+   * 11/27 캠핑장 분양: 고른 터 + 카라반 두 단계(1 자리 → 2 모델·몸통 색·차양 색 — caravanBuyFlow). 디자인은 자리와 따로 간다
+   * (자리를 바꿔도·되돌아가도 고른 디자인 그대로 — 예전엔 안 건드린 디자인이 고른 터의 기본 모습을 따라가 터를 누르면 모델이 바뀌었다)
+   */
+  const [cv, cvDo] = useReducer(caravanBuy, CARAVAN_BUY_START);
+  /** 단계를 바꾸면 순서 표시가 창 위에 오게 (2단계 미리보기·고른 자리 줄부터 보이게) */
+  const stepsRef = useRef<HTMLDivElement>(null);
+  const toStep = (a: "next" | "back") => {
+    if (a === "next" && campLot !== null) cvDo({ type: "lot", lot: campLot });
+    cvDo({ type: a });
+    requestAnimationFrame(() => stepsRef.current?.scrollIntoView({ block: "start" }));
+  };
   /** 11/26 주인이 관리 창에서 고르는 중인 디자인 (null = 닫힘) */
   const [redesign, setRedesign] = useState<CaravanDesign | null>(null);
   const xmas = useBridgeValue("map:concept")?.concept === "christmas";
@@ -301,9 +311,11 @@ function MyPlot({
   const seaCost = (t: PlotTierId) => prices?.sea[t] ?? seaPlotCost(t, isVilla);
   const villageCost = (t: PlotTierId) => prices?.village[t] ?? plotCost(t);
   /** 캠핑장: 고른 터 (안 골랐으면 가장 앞의 빈 터) */
-  const campLot = camp ? (lot !== null && free?.includes(lot) ? lot : (free?.[0] ?? null)) : null;
-  /** 11/26 분양 때 고른 카라반 디자인 (안 건드렸으면 고른 터의 기본 모습) */
-  const campDesign = camp === "caravan" && campLot !== null ? (buyDesign ?? defaultCaravanDesign(campLot)) : null;
+  const campLot = camp ? (cv.lot !== null && free?.includes(cv.lot) ? cv.lot : (free?.[0] ?? null)) : null;
+  /** 11/27 카라반 분양 단계 (고른 터가 없으면 1단계) · 분양 때 보낼 디자인 (2단계에서 정한 것 — 자리와 따로) */
+  const cvStep = camp === "caravan" && campLot !== null ? cv.step : 1;
+  const campDesign = camp === "caravan" && campLot !== null ? caravanBuyDesign(cv, campLot) : null;
+  const cvCard = { ...cv, lot: campLot };
   const cost = camp ? (campLot !== null && campP ? (campP.lots[campLot] ?? 0) : 0) : sea ? seaCost(pick) : villageCost(pick);
   const labelOf = (ch: number, l: number) => (sea ? seaLotLabel(ch, l) : camp ? `${ch}채널 ${campLotName(l)}` : lotLabel(ch, l));
   const priceUnknown = (sea || !!camp) && villa === null && !prices;
@@ -412,9 +424,27 @@ function MyPlot({
           {!sea && !camp && isVilla && <p className={styles.tag}>이미 다른 집이 있어서 다주택자 가격(약 1.3배)이에요. 넓히기도 다주택자 가격이에요.</p>}
           {kept > 0 && <p className={styles.tag}>가방에 가구 {kept}개가 있어요. 분양받으면 바로 놓을 수 있어요.</p>}
           {/* 11/26 캠핑장은 터 크기 대신 터를 고른다 (같은 그림 카드 — 빈 터는 값, 분양된 터는 주인) */}
+          {camp === "caravan" && free !== null && free.length > 0 && (
+            <div ref={stepsRef}>
+              <CaravanSteps step={cvStep} />
+            </div>
+          )}
           {camp ? (
             free === null ? (
               <p className={styles.muted}>터를 살펴보는 중…</p>
+            ) : cvStep === 2 && campLot !== null && campDesign ? (
+              // 11/27 카라반 2단계: 고른 자리(위치 이름·값) + 모델·몸통 색·차양 색 (큰 미리보기). 자리 다시 고르기를 눌러도 디자인은 그대로
+              <div className={styles.stack}>
+                <div className={styles.spread}>
+                  <p className={styles.tag}>
+                    고른 자리: <strong>{campLotName(campLot)}</strong> · {fmt(cost)}P
+                  </p>
+                  <button type="button" className={ui.button} style={{ whiteSpace: "nowrap" }} onClick={() => toStep("back")} disabled={pending || busy}>
+                    ← 자리 바꾸기
+                  </button>
+                </div>
+                <CaravanDesignPicker value={campDesign} onChange={(d) => cvDo({ type: "design", design: d })} xmas={xmas} disabled={pending || busy} />
+              </div>
             ) : (
               <CampLotPicker
                 lots={CAMP_LOTS.filter((l) => l.kind === camp).map((l) => ({
@@ -423,13 +453,13 @@ function MyPlot({
                   owner: campOwners.get(l.lot) ?? null,
                   mine: false,
                   free: free.includes(l.lot),
-                  // 11/26 분양된 터 = 주인 디자인, 빈 터 = 지금 고르는 디자인 (값은 터 등급으로만 — 디자인은 어느 터든 같다)
-                  ...(l.kind === "caravan" ? { design: free.includes(l.lot) ? (campDesign ?? undefined) : campDesigns.get(l.lot) } : {}),
+                  // 11/26 분양된 터 = 주인 디자인. 11/27 빈 터 = 고른 터만 2단계에서 고른 디자인, 나머지는 그 자리 기본 모습 (터를 눌러도 디자인은 안 바뀐다)
+                  ...(l.kind === "caravan" ? { design: free.includes(l.lot) ? caravanCardDesign(cvCard, l.lot) : campDesigns.get(l.lot) } : {}),
                   // 포구 터 크기 카드의 넓히기 안내 자리: 앞마당 값 (이 사람 기준)
                   ...(campP?.yard[l.lot] ? { hint: yardHint(campP.yard[l.lot]) } : {}),
                 }))}
                 value={campLot}
-                onChange={setLot}
+                onChange={(l) => cvDo({ type: "lot", lot: l })}
                 points={my.points}
                 disabled={pending || busy}
                 xmas={xmas}
@@ -445,8 +475,17 @@ function MyPlot({
             />
           )}
           {sea && <CottageStylePicker value={style} onChange={setStyle} tier={pick} disabled={pending || busy} />}
-          {/* 11/26 카라반 디자인: 포구 오두막 겉모습 고르기와 같은 자리·같은 카드 (모델 다음 몸통 색·차양 색 — 분양가와 상관없다. 고른 디자인은 터 카드 그림에) */}
-          {camp === "caravan" && campDesign && <CaravanDesignPicker value={campDesign} onChange={setBuyDesign} xmas={xmas} disabled={pending || busy} preview={false} />}
+          {/* 11/27 카라반 1단계 끝: 다음 단계로 (디자인은 분양가와 상관없다) */}
+          {camp === "caravan" && cvStep === 1 && campLot !== null && (
+            <button
+              type="button"
+              className={cx(ui.button, ui.primary)}
+              onClick={() => toStep("next")}
+              disabled={pending || busy}
+            >
+              다음: {campLotName(campLot)} 디자인 고르기
+            </button>
+          )}
           {camp ? (
             campLot !== null && (
               <p className={styles.points}>
@@ -485,7 +524,7 @@ function MyPlot({
           )}
         </div>
         {/* 캠핑장은 터마다 값이 달라 포인트가 모자라도 고르기 칸은 남긴다 (더 싼 터를 고를 수 있게 — 분양 단추만 막는다) */}
-        {!soldOut && (camp ? free !== null && free.length > 0 && !priceUnknown : !short && !(sea && villa === null && !prices)) &&
+        {!soldOut && (camp ? free !== null && free.length > 0 && !priceUnknown && (camp !== "caravan" || cvStep === 2) : !short && !(sea && villa === null && !prices)) &&
           form(
             camp
               ? `${campLot !== null ? `${channel}채널 ${campLotName(campLot)} ` : ""}분양받기 (${fmt(cost)}P)`
@@ -853,4 +892,18 @@ function seaHint(i: number, villa: boolean): string {
     .map((t, k) => `${fmt(k === 0 ? seaPlotCost(t.id, villa) : seaUpgradeCost(t.price, villa))}P`)
     .join(" + ");
   return `${PLOT_TIERS[0].name}에서 업그레이드로도 넓힐 수 있어요 (${steps})`;
+}
+
+/** 11/27 카라반 분양 순서 표시 (1 자리 고르기 · 2 모델·색 고르기) */
+function CaravanSteps({ step }: { step: 1 | 2 }) {
+  return (
+    <ol className={styles.buySteps} aria-label="분양 순서">
+      {(["자리 고르기", "모델·색 고르기"] as const).map((t, i) => (
+        <li key={t} aria-current={step === i + 1 ? "step" : undefined}>
+          <span>{i + 1}</span>
+          {t}
+        </li>
+      ))}
+    </ol>
+  );
 }

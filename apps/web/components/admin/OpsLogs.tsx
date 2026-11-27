@@ -170,6 +170,10 @@ export function AccountLogs({ accountId, toast, onAuthLost }: Common & { account
     <div>
       <div className={ops.toolbar}>
         <span className={ops.tag}>가입 유입 · {r?.account?.signup ?? "…"}</span>
+        {/* 11/27 최근 접속 유입: 오늘·어제 입장한 탭의 유입 (그보다 오래되면 「기록 없음」) */}
+        <span className={ops.tag} title={r?.account?.sessionAt ? fullTime(r.account.sessionAt) : undefined}>
+          최근 접속 유입 · {r ? (r.account?.session ?? "기록 없음 (최근 2일)") : "…"}
+        </span>
         <div className={styles.segmented} role="group" aria-label="기록 종류">
           <button type="button" className={ui.button} aria-pressed={list === "conn"} onClick={() => setList("conn")}>
             접속 기록

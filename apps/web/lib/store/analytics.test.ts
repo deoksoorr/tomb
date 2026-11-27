@@ -124,6 +124,18 @@ const conn = env.redis();
 if (conn) contract("47번 방문 분석 저장소 (실제 Redis)", () => new RedisAnalytics(conn));
 
 describe("47번 보고서", () => {
+  it("11/27 앱 안 브라우저: 리퍼러가 비어도 어느 앱에서 열었는지 센다 (오늘·기간)", async () => {
+    const s = new MemoryAnalytics();
+    const now = Date.UTC(2026, 10, 12, 3);
+    await s.hit(hit({ day: "20261112", hour: 12, visitor: "a", ref: "messenger", domain: null, app: "카카오톡" }));
+    await s.hit(hit({ day: "20261112", hour: 12, visitor: "b", ref: "other", domain: "forum.example.com" }));
+    await s.hit(hit({ day: "20261111", hour: 20, visitor: "c", ref: "sns", domain: null, app: "카카오톡" }));
+    const r = await buildReport(s, "day", now);
+    expect(r.todayApps).toEqual([{ key: "카카오톡", count: 1 }]);
+    expect(r.apps).toEqual([{ key: "카카오톡", count: 2 }]);
+    expect(r.todayDomains).toEqual([{ key: "forum.example.com", count: 1 }]);
+  });
+
   it("오늘 요약·기간 차트·유입 순위", async () => {
     const s = new MemoryAnalytics();
     const now = Date.UTC(2026, 10, 12, 3); // KST 11/12 12시

@@ -50,11 +50,10 @@ export default function VisitTracker() {
     } catch {
       first = true;
     }
-    if (first) {
-      sendHit();
-      // 11/26 가입 유입 경로: 처음 방문(localStorage)·이번 접속(sessionStorage) 유입을 둔다 (리퍼러 호스트·utm만)
-      captureSource();
-    }
+    if (first) sendHit();
+    // 11/26 가입 유입 경로: 처음 방문(localStorage)·이번 접속(sessionStorage) 유입을 둔다 (리퍼러 호스트·utm만).
+    // 11/27 이 탭에 아직 없으면 언제든 (방문 표시만 있고 유입 칸이 없는 옛 탭도 채운다 — lib/signupSourceClient)
+    captureSource();
 
     let since = document.visibilityState === "visible" ? performance.now() : null;
     let acc = 0;

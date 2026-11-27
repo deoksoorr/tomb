@@ -42,6 +42,8 @@ export type HitRecord = {
   device: string;
   browser: string;
   country: string;
+  /** 11/27 앱 안 브라우저 이름 (카카오톡·인스타그램 …, @tomb/protocol inAppOf). 리퍼러가 비어도 어느 앱에서 열었는지는 보인다 */
+  app?: string | null;
 };
 export type DailyEvent = "signup" | "grave" | "hunt";
 
@@ -79,6 +81,7 @@ export function hitFields(h: HitRecord): [string, boolean][] {
   ];
   if (h.domain) out.push([`dom:${h.domain}`, true]);
   if (h.utm) out.push([`utm:${h.utm}`, true]);
+  if (h.app) out.push([`app:${h.app}`, true]);
   return out;
 }
 

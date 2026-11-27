@@ -1,4 +1,4 @@
-import { inAppOf } from "@tomb/protocol";
+import { inAppLabel, inAppOf } from "@tomb/protocol";
 import { z } from "zod";
 import { cleanUtm } from "./analytics";
 
@@ -59,26 +59,20 @@ export function srcLabel(s: Pick<SignupSrc, "r" | "us" | "um" | "app"> | null | 
   if (!s) return "기록 없음";
   if (s.us) return `utm ${s.us}${s.um ? `/${s.um}` : ""}`;
   if (s.r) return hostLabel(s.r);
-  if (s.app) return `${s.app} 앱`;
+  if (s.app) return inAppLabel(s.app);
   return "직접·알 수 없음";
 }
 
-/** 모르는 사이트를 묶는 이름 (유입별 가입 수) */
-export const OTHER_SITE_LABEL = "기타 사이트";
 /** 하루 유입 이름 칸 상한을 넘으면 이 이름으로 센다 */
 export const OVERFLOW_LABEL = "기타";
 /** 하루에 따로 세는 유입 이름 수 상한 (넘으면 OVERFLOW_LABEL) */
 export const SIGNUP_DAY_LABEL_MAX = 50;
 
 /**
- * 유입별 가입 수에 쓰는 이름: srcLabel과 같되 모르는 리퍼러 호스트는 「기타 사이트」로 묶는다
- * (호스트 문자열을 그대로 이름으로 쓰면 이름 칸이 끝없이 늘 수 있다 — 계정 칸에는 호스트가 그대로 남는다)
+ * 유입별 가입 수에 쓰는 이름: srcLabel과 같다. 11/27 모르는 사이트도 호스트 그대로 센다 (운영자: 「어느 커뮤니티에서 왔는지」가 보여야 한다).
+ * 이름 칸이 끝없이 늘지 않게 하루 SIGNUP_DAY_LABEL_MAX개까지만 따로 세고 넘치면 「기타」(OVERFLOW_LABEL — 저장소가 판정)
  */
 export function signupDayLabel(s: Pick<SignupSrc, "r" | "us" | "um" | "app"> | null | undefined): string {
-  if (s && !s.us && s.r) {
-    const name = hostLabel(s.r);
-    return name === s.r ? OTHER_SITE_LABEL : name;
-  }
   return srcLabel(s);
 }
 

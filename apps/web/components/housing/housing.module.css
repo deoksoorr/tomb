@@ -1384,3 +1384,36 @@
     font-size: 12px;
   }
 }
+
+/* 11/27 카라반 분양 순서 (1 자리 고르기 · 2 모델·색 고르기 — 지금 단계만 촛불색) */
+.buySteps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 12px;
+  list-style: none;
+}
+
+.buySteps li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.buySteps li span {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 11px;
+}
+
+.buySteps li[aria-current="step"] {
+  color: var(--candle);
+}

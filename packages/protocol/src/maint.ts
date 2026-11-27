@@ -117,24 +117,29 @@ export function connWhyOf(code: number | undefined): ConnWhy {
 
 /** 기기 종류 (User-Agent에서. 문자열 자체는 남기지 않는다) */
 export type ConnDevice = "pc" | "phone" | "tablet";
-/** 앱 안 브라우저 이름 (카카오톡 등). 없으면 null */
+/** 앱 안 브라우저 이름 (카카오톡 등). 없으면 null. 11/27 텔레그램·X·틱톡 더함, 스레드는 인스타그램보다 먼저 (스레드 앱 UA에 Instagram이 같이 붙는 일이 있다) */
 export function inAppOf(ua: string | null | undefined): string | null {
   if (!ua) return null;
   const rules: [RegExp, string][] = [
     [/KAKAOTALK/i, "카카오톡"],
+    [/Barcelona|Threads/i, "스레드"],
     [/Instagram/i, "인스타그램"],
-    [/FBAN|FBAV|FB_IAB/i, "페이스북"],
+    [/FBAN|FBAV|FB_IAB|FB4A/i, "페이스북"],
     [/NAVER\(inapp|NAVER\//i, "네이버 앱"],
     [/DaumApps/i, "다음 앱"],
     [/\bLine\//, "라인"],
     [/everytimeApp/i, "에브리타임"],
-    [/Threads|Barcelona/i, "스레드"],
     [/BAND\//, "밴드"],
     [/Discord\//i, "디스코드"],
+    [/Telegram/i, "텔레그램"],
+    [/Twitter for|TwitterAndroid/i, "X(트위터)"],
+    [/musical_ly|BytedanceWebview|TikTok/i, "틱톡"],
   ];
   for (const [re, name] of rules) if (re.test(ua)) return name;
   return null;
 }
+/** 앱 이름 → 「○○ 앱」 (이미 「앱」으로 끝나면 그대로 — 「네이버 앱 앱」이 되지 않게) */
+export const inAppLabel = (app: string): string => (app.endsWith("앱") ? app : `${app} 앱`);
 export function deviceOf(ua: string | null | undefined): ConnDevice {
   if (!ua) return "pc";
   if (/iPad|Tablet|PlayBook|Silk|(Android(?!.*Mobile))/i.test(ua)) return "tablet";

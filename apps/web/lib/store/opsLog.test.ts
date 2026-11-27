@@ -2,7 +2,7 @@ import { nanoid } from "nanoid";
 import { describe, expect, it } from "vitest";
 import { env } from "../env";
 import { connHealthOf } from "../opsLog";
-import { OTHER_SITE_LABEL, OVERFLOW_LABEL, SIGNUP_DAY_LABEL_MAX, signupDayLabel, srcLabel, signupSrcOf, srcText } from "../signupSource";
+import { OVERFLOW_LABEL, SIGNUP_DAY_LABEL_MAX, signupDayLabel, srcLabel, signupSrcOf, srcText } from "../signupSource";
 import { hourKeyOf, lastHourKeys, LOG_KEEP_ALL, LOG_KEEP_USER, MemoryOpsLog, RedisOpsLog, type ConnLogEntry, type OpsLogStore } from "./opsLog";
 import { MemorySignupSrc, RedisSignupSrc, type SignupSrcStore } from "./signupSrc";
 
@@ -89,23 +89,26 @@ function srcContract(make: () => SignupSrcStore) {
     expect(await store.get([])).toEqual([]);
   });
 
-  it("11/26 보안: 하루 유입 이름은 상한까지만 따로 세고 넘치면 「기타」, 모르는 사이트는 「기타 사이트」 (계정 칸에는 호스트 그대로)", async () => {
+  it("11/26 보안: 하루 유입 이름은 상한까지만 따로 세고 넘치면 「기타」. 11/27 모르는 사이트도 호스트 그대로 센다", async () => {
     const day = `t${nanoid(6)}`;
     const odd = nanoid(10);
     expect(await store.save(odd, signupSrcOf({ r: "unknown-site.example" }, null, 1), day)).toBe(true);
     expect((await store.get([odd]))[0]?.r).toBe("unknown-site.example");
-    expect(await store.dayCounts([day])).toEqual({ [OTHER_SITE_LABEL]: 1 });
+    expect(await store.dayCounts([day])).toEqual({ "unknown-site.example": 1 });
     for (let i = 0; i < SIGNUP_DAY_LABEL_MAX + 4; i++) await store.save(nanoid(10), { us: `u${i}`, at: i }, day);
     const c = await store.dayCounts([day]);
     expect(Object.keys(c)).toHaveLength(SIGNUP_DAY_LABEL_MAX + 1);
     expect(c[OVERFLOW_LABEL]).toBe(5);
     // 이미 있는 이름은 상한이 차도 그 칸에 센다
     await store.save(nanoid(10), { us: "u0", at: 1 }, day);
+    await store.save(nanoid(10), { r: "unknown-site.example", at: 1 }, day);
+    // 상한이 찬 뒤 처음 보는 사이트는 「기타」로
     await store.save(nanoid(10), { r: "other.example", at: 1 }, day);
     const d = await store.dayCounts([day]);
     expect(d["utm u0"]).toBe(2);
-    expect(d[OTHER_SITE_LABEL]).toBe(2);
-    expect(d[OVERFLOW_LABEL]).toBe(5);
+    expect(d["unknown-site.example"]).toBe(2);
+    expect(d["other.example"]).toBeUndefined();
+    expect(d[OVERFLOW_LABEL]).toBe(6);
   });
 
   it("이번 접속 유입: 오늘 칸 먼저, 없으면 어제 칸", async () => {
@@ -133,11 +136,14 @@ describe("유입 이름·비정상 종료 비율 (순수)", () => {
     expect(srcLabel({ app: "인스타그램" })).toBe("인스타그램 앱");
     expect(srcLabel({})).toBe("직접·알 수 없음");
     expect(srcText({ r: "instagram.com", app: "인스타그램", at: 1 })).toBe("인스타그램 · 인스타그램");
-    // 유입별 가입 수 이름: 모르는 호스트만 묶는다
-    expect(signupDayLabel({ r: "example.org" })).toBe(OTHER_SITE_LABEL);
+    // 유입별 가입 수 이름: 11/27 모르는 호스트도 그대로 (커뮤니티 이름이 보이게)
+    expect(signupDayLabel({ r: "example.org" })).toBe("example.org");
     expect(signupDayLabel({ r: "blog.naver.com" })).toBe("네이버 블로그");
     expect(signupDayLabel({ us: "naver_blog", r: "example.org" })).toBe("utm naver_blog");
     expect(signupDayLabel({ app: "카카오톡" })).toBe("카카오톡 앱");
+    // 이름이 이미 「앱」으로 끝나면 덧붙이지 않는다 (예전엔 「네이버 앱 앱」)
+    expect(srcLabel({ app: "네이버 앱" })).toBe("네이버 앱");
+    expect(srcLabel({ r: "null.ncsoft.com" })).toBe("null.ncsoft.com");
     expect(signupDayLabel(null)).toBe("기록 없음");
     // 전체 주소·검색어는 남지 않는다 (호스트 모양만)
     expect(signupSrcOf({ r: "google.com/search?q=abc" as string }, null, 1)).toEqual({ at: 1 });

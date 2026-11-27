@@ -1,3 +1,5 @@
+import { inAppOf } from "@tomb/protocol";
+
 // 47번 방문 분석: 서버가 받은 값을 집계용 짧은 이름으로 바꾸는 순수 함수 모음 (테스트: analytics.test.ts).
 // 원본 IP·리퍼러 전체 주소·User-Agent 문자열은 저장하지 않는다. 남는 것은 분류 이름·도메인·경로 모양뿐이다.
 
@@ -94,21 +96,34 @@ export function isBot(ua: string | null | undefined): boolean {
   return !ua || BOT_RE.test(ua);
 }
 
-/** User-Agent → 기기·브라우저 이름 (문자열 자체는 저장하지 않는다) */
-export function parseUa(ua: string): { device: Device; browser: string; inApp: "messenger" | "sns" | null } {
+/** 앱 안 브라우저(lib inAppOf 이름) → 유입 분류. 표에 없는 앱(네이버 앱·다음 앱)은 분류하지 않는다 */
+const IN_APP_CAT: Record<string, "messenger" | "sns"> = {
+  카카오톡: "messenger",
+  라인: "messenger",
+  디스코드: "messenger",
+  텔레그램: "messenger",
+  밴드: "messenger",
+  인스타그램: "sns",
+  페이스북: "sns",
+  스레드: "sns",
+  "X(트위터)": "sns",
+  틱톡: "sns",
+  에브리타임: "sns",
+};
+
+/**
+ * User-Agent → 기기·브라우저 이름·앱 이름 (문자열 자체는 저장하지 않는다).
+ * 앱 안 브라우저는 @tomb/protocol inAppOf 한 곳에서 알아본다 (가입 유입·접속 기록과 같은 이름). 브라우저 칸은 예전 이름 그대로 「○○ 인앱」·「네이버 앱」
+ */
+export function parseUa(ua: string): { device: Device; browser: string; inApp: "messenger" | "sns" | null; app: string | null } {
   const device: Device = /iPad|Tablet|PlayBook|Silk|(Android(?!.*Mobile))/i.test(ua)
     ? "tablet"
     : /Mobi|iPhone|iPod|Android|Windows Phone/i.test(ua)
       ? "mobile"
       : "desktop";
-  const rules: [RegExp, string, ("messenger" | "sns" | null)?][] = [
-    [/KAKAOTALK/i, "카카오톡 인앱", "messenger"],
-    [/\bLine\//, "라인 인앱", "messenger"],
-    [/DiscordBot|Discord\//i, "디스코드 인앱", "messenger"],
-    [/Instagram/i, "인스타그램 인앱", "sns"],
-    [/FBAN|FBAV|FB_IAB/i, "페이스북 인앱", "sns"],
-    [/NAVER\(inapp|NAVER\//i, "네이버 앱"],
-    [/DaumApps/i, "다음 앱"],
+  const app = inAppOf(ua);
+  if (app) return { device, browser: app.endsWith("앱") ? app : `${app} 인앱`, inApp: IN_APP_CAT[app] ?? null, app };
+  const rules: [RegExp, string][] = [
     [/SamsungBrowser/i, "삼성 인터넷"],
     [/Whale\//i, "웨일"],
     [/Edg(e|A|iOS)?\//, "엣지"],
@@ -117,8 +132,8 @@ export function parseUa(ua: string): { device: Device; browser: string; inApp: "
     [/CriOS|Chrome\//, "크롬"],
     [/Safari\//, "사파리"],
   ];
-  for (const [re, name, inApp] of rules) if (re.test(ua)) return { device, browser: name, inApp: inApp ?? null };
-  return { device, browser: "기타", inApp: null };
+  for (const [re, name] of rules) if (re.test(ua)) return { device, browser: name, inApp: null, app: null };
+  return { device, browser: "기타", inApp: null, app: null };
 }
 
 /** utm 값: 소문자, 글자·숫자·._-만, 30자. 비면 null */

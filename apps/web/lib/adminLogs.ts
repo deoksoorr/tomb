@@ -1,7 +1,8 @@
 import { DIFFS, HUNT_ZONES, isZoneId } from "./rpg/catalog";
 import { getAccounts } from "./store";
 import { getOpsLog, type LogEntry, type LogList } from "./store/opsLog";
-import { getSignupSrc } from "./store/signupSrc";
+import { kstDay } from "./store/accounts";
+import { getSignupSrc, type LiveSrc } from "./store/signupSrc";
 import { srcText } from "./signupSource";
 
 // 11/26 관리자 「접속 기록」·「사냥터 기록」 읽기: 전체 최근 500줄 또는 한 계정 50줄 + 이름 (나온 계정만 한 번에 읽는다)
@@ -21,23 +22,30 @@ export type AdminLogsResponse = {
   /** 서버 시각 (몇 분 전 표시 기준) */
   at: number;
   rows: AdminLogRow[];
-  /** 한 계정을 볼 때: 그 계정의 가입 유입 */
-  account?: { id: string; name: string | null; signup: string };
+  /** 한 계정을 볼 때: 그 계정의 가입 유입 + 11/27 최근 접속 유입(오늘·어제 입장한 탭, 없으면 null)·그 접속 시작 */
+  account?: { id: string; name: string | null; signup: string; session: string | null; sessionAt: number | null };
 };
 
 export async function readAdminLogs(list: LogList, accountId: string | null): Promise<AdminLogsResponse> {
   const log = getOpsLog();
   const entries = accountId ? await log.ofAccount(list, accountId) : await log.recent(list);
   const ids = [...new Set([...entries.map((e) => e.a), ...(accountId ? [accountId] : [])])];
-  const [sums, src] = await Promise.all([getAccounts().summaries(ids), accountId ? getSignupSrc().get([accountId]) : Promise.resolve([])]);
+  const now = Date.now();
+  const [sums, src, live] = await Promise.all([
+    getAccounts().summaries(ids),
+    accountId ? getSignupSrc().get([accountId]) : Promise.resolve([]),
+    accountId ? getSignupSrc().live([accountId], [kstDay(now), kstDay(now - 86_400_000)]) : Promise.resolve([] as (LiveSrc | null)[]),
+  ]);
   const names = new Map(ids.map((id, i) => [id, sums[i]?.name ?? null]));
   return {
     list,
-    at: Date.now(),
+    at: now,
     rows: entries.map((e) => {
       const where = list === "hunt" ? whereOf(e) : undefined;
       return { ...e, name: names.get(e.a) ?? null, ...(where ? { where } : {}) };
     }),
-    ...(accountId ? { account: { id: accountId, name: names.get(accountId) ?? null, signup: srcText(src[0]) } } : {}),
+    ...(accountId
+      ? { account: { id: accountId, name: names.get(accountId) ?? null, signup: srcText(src[0]), session: live[0]?.s ?? null, sessionAt: live[0]?.at ?? null } }
+      : {}),
   };
 }

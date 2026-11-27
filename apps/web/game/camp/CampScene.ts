@@ -1361,7 +1361,7 @@ export class CampScene extends Phaser.Scene {
     } else if (!falls && this.fallsView?.active) this.leaveFallsView();
     this.fallsView?.update(dt);
     const fd = Math.hypot(pl.x - CAMP_PLUNGE.x, (pl.y - CAMP_PLUNGE.y) * 1.3);
-    this.host.sfx.seaWaves(falls ? 0.9 : Math.max(0, Math.min(0.5, 1 - fd / 320)) * 0.6);
+    this.host.sfx.fallsRush(falls ? 0.9 : Math.max(0, Math.min(0.5, 1 - fd / 320)) * 0.6);
     const s = this.rig.labelScale;
     const view = this.rig.frameView(this.view);
     this.expr.update(now);
@@ -1714,7 +1714,7 @@ export class CampScene extends Phaser.Scene {
     this.fallsView?.destroy();
     this.fallsView = null;
     this.host.sfx.campfire(0);
-    this.host.sfx.seaWaves(0);
+    this.host.sfx.fallsRush(0);
     this.clearRemotes();
     this.expr?.destroy();
     this.forage?.f.destroy();

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { inAppLabel } from "@tomb/protocol";
 import { DEVICE_LABELS, REF_LABELS, type Device } from "@/lib/analytics";
 import type { AnalyticsRange, AnalyticsReport, SeriesPoint } from "@/lib/analyticsReport";
 import ui from "./AdminUi.module.css";
@@ -118,6 +119,7 @@ function Breakdown({ report }: { report: AnalyticsReport }) {
         <div className={an.lists}>
           <RankList title="어디서 왔나" total={refTotal} rows={report.referrers.map((r) => ({ key: REF_LABELS[r.cat], count: r.count }))} keepZero />
           <RankList title="리퍼러 도메인" rows={report.domains} empty="다른 사이트에서 온 방문이 아직 없어요." />
+          <RankList title="앱에서 연 방문" rows={(report.apps ?? []).map((r) => ({ key: inAppLabel(r.key), count: r.count }))} empty="앱 안 브라우저로 연 방문이 아직 없어요. (11/27부터 기록)" />
           <RankList title="utm (출처 / 매체 / 캠페인)" rows={report.utm} empty="utm이 붙은 방문이 아직 없어요." />
           <RankList title="첫 랜딩 경로" rows={report.landings} />
         </div>

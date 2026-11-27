@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { CAMP_HOME_KIND_NAME, type CampHomeKind, type LobbyInfo, type MaintState } from "@tomb/protocol";
+import { CAMP_HOME_KIND_NAME, inAppLabel, type CampHomeKind, type LobbyInfo, type MaintState } from "@tomb/protocol";
 import type { AdminDashboardResponse, CountRow } from "@/lib/adminDashboard";
 import { onlineView } from "@/lib/adminOnlineView";
 import { REF_LABELS } from "@/lib/analytics";
@@ -164,6 +164,7 @@ export default function DashboardPanel({ toast, onAuthLost, lobby, graveCount, r
             <>
               <RankList title="어디서 왔나" total={refTotal} rows={(report.todayReferrers ?? []).map((r) => ({ key: REF_LABELS[r.cat], count: r.count }))} keepZero />
               <RankList title="리퍼러 도메인 상위 5" rows={report.todayDomains} limit={5} empty="오늘은 다른 사이트에서 온 방문이 아직 없어요." />
+              <RankList title="앱에서 연 방문" rows={(report.todayApps ?? []).map((r) => ({ key: inAppLabel(r.key), count: r.count }))} limit={5} empty="오늘은 앱 안 브라우저로 연 방문이 아직 없어요." />
             </>
           ) : (
             <Loading />
