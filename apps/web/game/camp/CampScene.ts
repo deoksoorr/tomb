@@ -49,7 +49,7 @@ import type { KeyAction } from "../input/Keyboard";
 import { keyJosa } from "../input/keyHint";
 import { besideFriend, FRIEND_ARRIVED } from "../logic/friendSpot";
 import { playTeleportFx } from "../fx/teleportFx";
-import { STAFF_TP_ARRIVED, STAFF_TP_INSIDE_MSG } from "@tomb/protocol";
+import { STAFF_TP_ARRIVED, STAFF_TP_INSIDE_MSG, WELCOME_POS_SNAP_PX } from "@tomb/protocol";
 import { DEADZONE_ENTER, type MoveInput } from "../logic/movement";
 import { sideIntent, standPoint } from "../logic/sit";
 import { inReach, reachDist } from "../logic/reach";
@@ -719,10 +719,12 @@ export class CampScene extends Phaser.Scene {
   private onWelcome(m: WelcomeMsg): void {
     // 서버가 캠핑장으로 받지 않았다 (허락 없음·옛 서버) → 마을로
     if (m.m !== "camp") {
-      this.host.bail();
+      this.host.bail(m.m);
       this.host.net.base.onWelcome(m);
       return;
     }
+    // 11/27 서버가 아는 내 자리로 (다른 탭·기기에서 넘겨받으면 서버는 주소 자리를 받지 않는다)
+    if (m.pos && this.player && Math.hypot(m.pos.x - this.player.x, m.pos.y - this.player.y) > WELCOME_POS_SNAP_PX) this.player.warp(m.pos.x, m.pos.y, this.time.now, null);
     this.clearRemotes();
     this.snow?.onWelcome();
     this.spotsJudged = m.spots === true;

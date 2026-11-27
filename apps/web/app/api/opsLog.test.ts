@@ -1,4 +1,5 @@
-import { INTERNAL_SIG_HEADER, signInternal, verifyInternal, type InternalPerson } from "@tomb/protocol";
+import { INTERNAL_SIG_HEADER, signInternal, verifyInternal, type ConnLogWire, type InternalPerson } from "@tomb/protocol";
+import { moveText, type MoveLogEntry } from "@/lib/moveLog";
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AdminLogsResponse } from "@/lib/adminLogs";
@@ -77,6 +78,34 @@ describe("접속 기록 받기 (/api/internal/conn-log)", () => {
     expect(h.outs).toBeGreaterThanOrEqual(2);
     // 관리자가 아니면 막힌다
     expect((await adminLogs.GET(call("/api/admin/logs?list=conn"))).status).toBe(401);
+  });
+});
+
+describe("11/27 다시 접속·다른 탭·서버 맵 옮김 줄 (실시간 서버 일곱 칸 줄)", () => {
+  it("다른 탭 줄은 계정·전체 목록에, 맵 옮김 줄은 계정 목록에만, 회원 상세에 읽을 수 있는 말로", async () => {
+    const v = await newVisitor();
+    const now = Date.now();
+    const rows: ConnLogWire[] = [
+      [v.id, "m", now - 3_000, 1, "pc", "", { f: "village", t: "sea", c: "mapReq" }],
+      [v.id, "t", now - 2_000, 1, "pc", "", { m: "sea", a: "village", tab: "tabA1", pt: "tabB1", live: 1 }],
+      [v.id, "t", now - 1_000, 2, "pc", "", { m: "sea", a: "village", tab: "tabC1", pt: "tabA1", pc: 1 }],
+    ];
+    const signed = await signInternal(SECRET, { op: "connLog", rows, exp: Math.floor(now / 1000) + 20 });
+    const ok = await connLog.POST(call("/api/internal/conn-log", { body: signed.body, headers: { [INTERNAL_SIG_HEADER]: signed.sig } }));
+    expect(await bodyOf(ok)).toEqual({ saved: 3 });
+    const mine = await bodyOf<AdminLogsResponse>(adminLogs.GET(call(`/api/admin/logs?list=conn&account=${v.id}`, { admin: true })));
+    const texts = mine.rows.map((r) => moveText(r as MoveLogEntry));
+    expect(texts).toEqual([
+      "다른 채널 탭에서 들어옴 (1채널에서) · 2채널 바닷가 → 서버 맵 유지 · 화면이 다른 맵을 보냄(마을) · 탭 tabC1 ← tabA1",
+      "다른 탭에서 다시 접속 (이전 탭 끊음) · 1채널 바닷가 → 서버 맵 유지 · 화면이 다른 맵을 보냄(마을) · 탭 tabA1 ← tabB1",
+      "맵 마을 → 바닷가 · 맵 옮기기 요청(버스·친구·집 문)",
+    ]);
+    const all = await bodyOf<AdminLogsResponse>(adminLogs.GET(call("/api/admin/logs?list=conn", { admin: true })));
+    const fromMe = all.rows.filter((r) => r.a === v.id);
+    expect(fromMe.map((r) => (r as MoveLogEntry).m)).toEqual(["tab", "tab"]);
+    // 틀린 줄이 섞이면 묶음 전체를 받지 않는다 (서명이 맞아도)
+    const bad = await signInternal(SECRET, { op: "connLog", rows: [[v.id, "t", now, 1, "pc", "", { tab: "x" }]], exp: Math.floor(now / 1000) + 20 });
+    expect((await connLog.POST(call("/api/internal/conn-log", { body: bad.body, headers: { [INTERNAL_SIG_HEADER]: bad.sig } }))).status).toBe(404);
   });
 });
 

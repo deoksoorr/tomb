@@ -5,13 +5,21 @@ import { isMapId, type MapId } from "@tomb/protocol";
 //  - 맵 옮기기·집에서 나옴·채널 옮기기는 화면이 알려 준 것 (POST /api/me/moves — src "c"). 버튼 이름(via)은 화면 말만 믿고, 권한 판단에는 쓰지 않는다
 //  - 버튼 이름이 없거나 모르는 값이면 「알 수 없음(옛 화면)」
 
-/** map = 맵 옮기기(버스 등), houseIn = 집 들어감, houseNo = 집 못 들어감, houseOut = 집에서 나옴, channel = 채널 옮기기, fishStop = 자리를 떠나 서버가 자동 낚시를 끔 */
-export const MOVE_KINDS = ["map", "houseIn", "houseNo", "houseOut", "channel", "fishStop"] as const;
+/**
+ * map = 맵 옮기기(버스 등), houseIn = 집 들어감, houseNo = 집 못 들어감, houseOut = 집에서 나옴, channel = 채널 옮기기, fishStop = 자리를 떠나 서버가 자동 낚시를 끔,
+ * 11/27 tab = 다시 접속·다른 탭 (실시간 서버가 적는다 — 서버 맵을 지킴, 화면이 다른 맵을 보냄)
+ */
+export const MOVE_KINDS = ["map", "houseIn", "houseNo", "houseOut", "channel", "fishStop", "tab"] as const;
 export type MoveKind = (typeof MOVE_KINDS)[number];
 
 /** 누른 버튼·계기 */
 export const MOVE_VIA_LABEL = {
   bus: "버스",
+  // 11/27 실시간 서버가 맵을 옮긴 까닭 (src "s")
+  mapReq: "맵 옮기기 요청(버스·친구·집 문)",
+  permLost: "허락 없음 → 마을",
+  // 11/27 화면이 서버 맵으로 따라감 (다른 탭에서 다시 접속 등)
+  follow: "다시 접속: 서버 맵으로",
   friend: "친구한테 가기",
   staffTp: "운영자 순간이동",
   bail: "맵을 못 열어 마을 정류장으로",
@@ -54,6 +62,15 @@ export type MoveLogEntry = {
   no?: MoveNo;
   /** s = 서버가 판단, c = 화면이 알려 줌 */
   src: "s" | "c";
+  /** 11/27 실시간 서버 줄: 채널·기기 */
+  ch?: number;
+  dev?: string;
+  /** 11/27 다시 접속(tab): 이번·이전 탭 id, 화면이 보낸 다른 맵, 이전 채널(다른 채널 탭), 이전 연결을 끊음 */
+  tab?: string;
+  ptab?: string;
+  ask?: MapId;
+  pch?: number;
+  live?: true;
 };
 
 /** 화면 → 서버 한 줄 */
@@ -76,7 +93,7 @@ export function parseMoveWire(raw: unknown, accountId: string, now: number): Mov
   for (const r of raw.slice(0, MOVE_BATCH_MAX)) {
     if (!r || typeof r !== "object") continue;
     const o = r as Record<string, unknown>;
-    if (!(MOVE_KINDS as readonly unknown[]).includes(o.m) || o.m === "houseIn" || o.m === "fishStop") continue; // 집 들어감·자동 낚시 멈춤은 서버만 적는다
+    if (!(MOVE_KINDS as readonly unknown[]).includes(o.m) || o.m === "houseIn" || o.m === "fishStop" || o.m === "tab") continue; // 집 들어감·자동 낚시 멈춤·다시 접속은 서버만 적는다
     const at = typeof o.at === "number" && Number.isFinite(o.at) ? Math.min(now, Math.max(now - MOVE_AT_SKEW_MS, Math.round(o.at))) : now;
     const from = typeof o.from === "string" && SPOT_RE.test(o.from) ? o.from : undefined;
     const to = typeof o.to === "string" && SPOT_RE.test(o.to) ? o.to : undefined;
@@ -91,8 +108,25 @@ const MAP_LABEL: Record<MapId, string> = { village: "마을", camp: "캠핑장",
 const spotText = (s: string | undefined): string => (s === undefined ? "?" : isMapId(s) ? MAP_LABEL[s] : /^\d+$/.test(s) ? `${s}채널` : s);
 export const UNKNOWN_VIA = "알 수 없음(옛 화면)";
 
+/**
+ * 11/27 다시 접속 줄: 「다른 탭에서 다시 접속 (이전 탭 끊음) · 1채널 바닷가 → 서버 맵 유지 · 화면이 다른 맵을 보냄(마을) · 탭 ab12 ← cd34」
+ */
+export function tabText(e: Pick<MoveLogEntry, "to" | "ch" | "tab" | "ptab" | "ask" | "pch" | "live">): string {
+  const head = e.pch
+    ? `다른 채널 탭에서 들어옴 (${e.pch}채널에서)`
+    : e.live
+      ? "다른 탭에서 다시 접속 (이전 탭 끊음)"
+      : e.ptab
+        ? "다른 탭에서 다시 접속"
+        : "다시 접속";
+  const where = `${e.ch ? `${e.ch}채널 ` : ""}${spotText(e.to)} → 서버 맵 유지`;
+  const ask = e.ask ? ` · 화면이 다른 맵을 보냄(${spotText(e.ask)})` : "";
+  const tab = e.tab ? ` · 탭 ${e.tab}${e.ptab ? ` ← ${e.ptab}` : ""}` : "";
+  return `${head} · ${where}${ask}${tab}`;
+}
+
 /** 관리자 화면 한 줄 설명 */
-export function moveText(e: Pick<MoveLogEntry, "m" | "from" | "to" | "via" | "tgt" | "no" | "src">): string {
+export function moveText(e: Pick<MoveLogEntry, "m" | "from" | "to" | "via" | "tgt" | "no" | "src" | "ch" | "tab" | "ptab" | "ask" | "pch" | "live">): string {
   const via = e.via ? MOVE_VIA_LABEL[e.via] ?? UNKNOWN_VIA : UNKNOWN_VIA;
   const tgt = e.tgt ? ` · ${e.tgt}` : "";
   const by = e.src === "c" ? " (화면 보고)" : "";
@@ -107,6 +141,8 @@ export function moveText(e: Pick<MoveLogEntry, "m" | "from" | "to" | "via" | "tg
       return `집에서 나옴(${e.from === "mine" ? "내 집" : "남의 집"}) → ${spotText(e.to)}${e.from === "mine" ? "" : "(원래 맵)"} · ${via}${tgt}${by}`;
     case "fishStop":
       return `자동 낚시 멈춤: ${via}`;
+    case "tab":
+      return tabText(e);
     case "channel":
       // 채널 창·집 채널로 옮기기 모두 같은 길이라 버튼 이름이 없다
       return `채널 ${spotText(e.from)} → ${spotText(e.to)}${e.via ? ` · ${via}` : ""}${by}`;

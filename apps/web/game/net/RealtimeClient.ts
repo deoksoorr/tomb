@@ -82,6 +82,7 @@ import { deviceHeaders } from "@/lib/deviceMark";
 import { signalMaintenance } from "@/lib/maintClient";
 import { sessionSource } from "@/lib/signupSourceClient";
 import { CHANNEL_FULL_MSG, lobbyChannelFull } from "./switchPolicy";
+import { tabId } from "@/lib/tabId";
 import { staffTpDenyText, type StaffTpDenyWhy } from "@tomb/protocol";
 
 // 실시간 연결 (명세 3-2, 4-1).
@@ -940,7 +941,8 @@ export class RealtimeClient {
     this.seaOpen = res.seaOpen === true;
     // 11/15 캠핑장에 있으면 처음부터 캠핑장으로 (새로고침·채널 이동·재접속). 허락이 없는 토큰이면 서버가 마을로 받는다 (11/16 바닷가도 같다)
     const mapQ = this.map !== "village" ? `&m=${this.map}` : "";
-    const url = `${res.wsUrl}${sep}x=${Math.round(p.x)}&y=${Math.round(p.y)}${mapQ}&v=${CLIENT_VERSION}`;
+    // 11/27 탭 id (운영 기록에서 다른 탭을 구분 — lib/tabId)
+    const url = `${res.wsUrl}${sep}x=${Math.round(p.x)}&y=${Math.round(p.y)}${mapQ}&v=${CLIENT_VERSION}&tab=${tabId()}`;
     let ws: WebSocket;
     try {
       ws = new WebSocket(url);

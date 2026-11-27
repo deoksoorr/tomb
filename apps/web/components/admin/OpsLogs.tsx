@@ -41,6 +41,8 @@ const HUNT_LABEL: Record<HuntLogEntry["k"], string> = {
 
 function connKind(e: ConnLogEntry | MoveLogEntry): { text: string; tone?: string } {
   // 11/27 자리 옮김 (버튼·집·맵·채널·자동 낚시 멈춤 — lib/moveLog)
+  // 11/27 tab = 다시 접속·다른 탭 (실시간 서버 기록). 이전 연결을 끊었거나 다른 채널 탭·화면이 다른 맵을 보냈으면 눈에 띄게
+  if (e.k === "mv" && e.m === "tab") return { text: e.live || e.pch || e.ptab ? "다른 탭" : "다시 접속", tone: e.live || e.pch || e.ask ? ops.tagWarn : ops.tagInfo };
   if (e.k === "mv") return { text: e.m === "houseNo" ? "못 들어감" : e.m === "fishStop" ? "낚시 멈춤" : "자리 옮김", tone: e.m === "houseNo" ? ops.tagWarn : ops.tagInfo };
   if (e.k === "in") return { text: "들어옴", tone: ops.tagOk };
   if (e.k === "err") return { text: "오류", tone: ops.tagBad };
@@ -67,7 +69,8 @@ function huntDetail(e: HuntLogEntry & { where?: string }): string {
 }
 
 function connDetail(e: ConnLogEntry | MoveLogEntry): string {
-  if (e.k === "mv") return moveText(e);
+  // 11/27 실시간 서버 줄은 기기도 (다른 탭·기기 구분)
+  if (e.k === "mv") return [moveText(e), e.src === "s" ? deviceText(e.dev) : ""].filter(Boolean).join(" · ");
   if (e.k === "err") return e.msg ?? "";
   return [e.ch ? `${e.ch}채널` : "", deviceText(e.dev)].filter(Boolean).join(" · ");
 }

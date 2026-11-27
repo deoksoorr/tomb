@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { CAMP_ARRIVE, DIR, MAP_NAME, SEA_ARRIVE, type AwayMapId } from "@tomb/protocol";
+import { CAMP_ARRIVE, DIR, MAP_NAME, SEA_ARRIVE, type AwayMapId, type MapId } from "@tomb/protocol";
 import { ambienceAt, parseAmbienceOverride } from "@/lib/ambience";
 import type { ResumeState } from "@/lib/resume";
 import { reportClientError } from "@/lib/hooks/errorReporting";
@@ -249,7 +249,7 @@ export class CampTrip {
       body: w.myBody(),
       look: w.myLook(),
       goVillage: (friend) => this.goVillage(friend ?? null),
-      bail: () => this.bail(),
+      bail: (server) => this.bail(server),
       isFriend: (sid, name) => w.isFriend(sid, name),
     };
   }
@@ -310,6 +310,31 @@ export class CampTrip {
     setTimeout(() => {
       if (this.phase === "camp") this.sleepWorld();
     }, 0);
+  }
+
+  /**
+   * 11/27 서버가 나를 캠핑장·바닷가에 둔 채로 마을 화면에서 다시 붙었다 (다른 탭·기기에서 그 맵에 있다가 여기서 다시 접속·새 탭).
+   * 서버는 다시 붙어도 맵을 바꾸지 않으니(realtime channel.ts takeOver·join) 화면이 그 맵 서버 자리로 따라간다 — 버스 없이 마을로 오던 길을 막은 짝.
+   * 장면이 뜨면 같은 맵 옮기기(자리 옮기기 — 서버 자리 그대로)로 그 맵 사람 목록을 받는다
+   */
+  followServer(map: AwayMapId, pos?: { x: number; y: number }): void {
+    if (this.phase !== "village") return;
+    const w = this.w;
+    const ch = w.net.channel;
+    if (typeof ch !== "number") return;
+    const d = DEST[map];
+    const at = pos ?? d.arrive;
+    reportMove({ m: "map", from: "village", to: map, via: "follow" });
+    this.resumeInCamp({ channel: ch, x: at.x, y: at.y, seatId: null, pose: "idle", dir: DIR.down, savedAt: Date.now(), name: w.name, color: w.color, where: map });
+    const sync = (): void => {
+      if (this.phase !== "camp" || this.dest !== d) return void this.game.events.off(Phaser.Core.Events.POST_STEP, sync);
+      const s = this.campScene();
+      if (!s || s.sys.settings.status < Phaser.Scenes.RUNNING) return;
+      this.game.events.off(Phaser.Core.Events.POST_STEP, sync);
+      w.net.switchMap(map, at.x, at.y);
+      w.net.setAway(false);
+    };
+    this.game.events.on(Phaser.Core.Events.POST_STEP, sync);
   }
 
   /** 캠핑장에 들어가 있는 동안 버스로 가는 친구: 다른 채널이면 채널부터 (UI가 먼저 옮긴다) — 여기서는 같은 채널만 */
@@ -480,10 +505,17 @@ export class CampTrip {
     this.w.arrived(friend);
   }
 
-  /** 캠핑장을 열 수 없다 (서버가 마을로 받았다 · 캠핑장 장면 오류): 연출 없이 마을 정류장으로 */
-  private bail(): void {
+  /**
+   * 캠핑장을 열 수 없다 (서버가 마을로 받았다 · 캠핑장 장면 오류): 연출 없이 마을 정류장으로.
+   * 11/27 server = 서버가 알려 준 맵 (welcome·mapped). 다른 마을 밖 맵이면(다른 탭에서 그 맵에 있다가 여기서 다시 접속) 마을로 옮기지 않고 장면만 닫는다
+   * — 곧이어 월드가 같은 welcome을 받아 그 맵으로 따라간다 (followServer)
+   */
+  private bail(server?: MapId): void {
     const w = this.w;
     const was = this.phase;
+    // 11/27 기록: 화면이 있던 맵 (서버 welcome·mapped가 먼저 net.map을 바꿔 둔 뒤라 net.map으로는 남지 않았다)
+    const shown: MapId = was === "village" ? w.net.map : this.dest.map;
+    const follow = server === "camp" || server === "sea";
     this.campPending = null;
     this.stopCamp();
     w.net.divert(null);
@@ -495,12 +527,13 @@ export class CampTrip {
     pl.view.fade = 1;
     pl.warp(land.x, land.y, w.scene.time.now, null);
     pl.dir = DIR.down;
-    if (w.net.map !== "village") reportMove({ m: "map", from: w.net.map, to: "village", via: "bail" });
+    w.lock(false);
+    bridge.emit("bus:state", { riding: false });
+    if (follow) return;
+    if (shown !== "village") reportMove({ m: "map", from: shown, to: "village", via: "bail" });
     w.net.switchMap("village", land.x, land.y);
     w.net.setAway(false);
     w.net.requestSync();
-    w.lock(false);
-    bridge.emit("bus:state", { riding: false });
     if (was !== "village") w.toast(`지금은 ${MAP_NAME[this.dest.map]}에 갈 수 없어요. 마을 정류장에 내렸어요.`);
   }
 

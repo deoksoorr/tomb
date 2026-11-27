@@ -176,7 +176,8 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 // 85 = 언젠가 캠핑장 개편(폭포 계곡 새 배치·좌석·낚시 자리·나룻배, CAMP_MAP_VERSION 4)·캠핑장 집(zone camp)·황금 고블린 맵 무작위(goblinMap) — 옛 화면은 없어진 좌석·옛 좌표를 보내 한 번 새로고침 (11/26)
 // 86 = 11/26 밤 캠핑장 다듬기 묶음(분양 NPC만·눈사람 허물기·운영자 외치기·끊긴 요청 기록 거르기 등)이 열어 둔 옛 화면에 남지 않게 — 모두 한 번 새로고침 (11/27)
 // 87 = 캠핑장 좌대 입장권(좌대 매표소·좌대 마루 막기 raftOut·주인 표 rafts·잔교 낚시 자리) — 옛 화면은 마루 막이를 몰라 서버에 계속 밀려나 한 번 새로고침 (11/27)
-export const CLIENT_VERSION = 87;
+// 88 = 다시 붙어도 서버가 아는 맵·자리 그대로(탭 두 개·새 탭으로 버스 없이 맵을 오가던 것) — 화면이 welcome의 맵·자리로 따라간다. 옛 화면은 못 따라가 한 번 새로고침 (11/27)
+export const CLIENT_VERSION = 88;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */

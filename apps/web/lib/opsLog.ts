@@ -5,20 +5,43 @@ import { getOpsLog, hourKeyOf, lastHourKeys, type ConnLogEntry, type HuntLogEntr
 
 // 11/26 운영 기록 쓰기·읽기 (저장소: lib/store/opsLog). 기록 실패는 손님 요청을 깨지 않는다 (조용히 로그만).
 
-/** 실시간 서버가 1분마다 모아 보낸 들어옴·나감 → 접속 기록 (한 번에 넣는다) */
+/** 11/27 실시간 서버의 맵 옮김·다시 접속 줄 → 자리 옮김 줄 (src "s") */
+function serverMoveOf(r: Extract<ConnLogWire, [string, "m" | "t", ...unknown[]]>, now: number): MoveLogEntry {
+  const [a, k, at, ch, dev, , x] = r;
+  const base = { a, k: "mv" as const, at: Math.min(at, now), src: "s" as const, ...(ch ? { ch } : {}), ...(dev ? { dev } : {}) };
+  if (k === "m") return { ...base, m: "map", ...(x.f ? { from: x.f } : {}), ...(x.t ? { to: x.t } : {}), ...(x.c ? { via: x.c } : {}) };
+  return {
+    ...base,
+    m: "tab",
+    ...(x.m ? { to: x.m } : {}),
+    ...(x.a ? { ask: x.a } : {}),
+    ...(x.tab ? { tab: x.tab } : {}),
+    ...(x.pt ? { ptab: x.pt } : {}),
+    ...(x.pc ? { pch: x.pc } : {}),
+    ...(x.live ? { live: true as const } : {}),
+  };
+}
+
+/**
+ * 실시간 서버가 1분마다 모아 보낸 들어옴·나감 → 접속 기록 (한 번에 넣는다).
+ * 11/27 다시 접속·다른 탭 줄(t)은 들어옴·나감과 함께 전체 목록에도, 맵 옮김 줄(m — 버스마다)은 계정 목록에만 (전체 목록을 밀어내지 않게)
+ */
 export async function recordConnRows(rows: readonly ConnLogWire[], now = Date.now()): Promise<number> {
-  const entries: ConnLogEntry[] = rows
-    .map(([a, k, at, ch, dev, why]): ConnLogEntry => ({
-      a,
-      k: k === "i" ? "in" : "out",
-      at: Math.min(at, now),
-      ...(ch ? { ch } : {}),
-      ...(dev ? { dev } : {}),
-      ...(k === "o" && why ? { why } : {}),
-    }))
-    .sort((x, y) => x.at - y.at);
-  if (entries.length) await getOpsLog().push("conn", entries, hourKeyOf(now));
-  return entries.length;
+  const main: LogEntry[] = [];
+  const maps: LogEntry[] = [];
+  for (const r of rows) {
+    if (r[1] === "m" || r[1] === "t") {
+      (r[1] === "m" ? maps : main).push(serverMoveOf(r as Extract<ConnLogWire, [string, "m" | "t", ...unknown[]]>, now));
+      continue;
+    }
+    const [a, k, at, ch, dev, why] = r;
+    main.push({ a, k: k === "i" ? "in" : "out", at: Math.min(at, now), ...(ch ? { ch } : {}), ...(dev ? { dev } : {}), ...(k === "o" && why ? { why } : {}) } as ConnLogEntry);
+  }
+  const byAt = (x: LogEntry, y: LogEntry) => x.at - y.at;
+  // 맵 옮김을 먼저 (같은 묶음이면 대개 더 이른 일 — 목록은 넣은 순서로 최신 먼저)
+  if (maps.length) await getOpsLog().push("conn", maps.sort(byAt), undefined, { all: false });
+  if (main.length) await getOpsLog().push("conn", main.sort(byAt), hourKeyOf(now));
+  return main.length + maps.length;
 }
 
 /**

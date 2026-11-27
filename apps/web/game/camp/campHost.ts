@@ -1,4 +1,4 @@
-import type { AwayMapId } from "@tomb/protocol";
+import type { AwayMapId, MapId } from "@tomb/protocol";
 import type { ResumeState } from "@/lib/resume";
 import type { InputHub } from "../input/InputHub";
 import type { RealtimeClient } from "../net/RealtimeClient";
@@ -29,7 +29,8 @@ export type CampHost = {
   /** 캠핑장 → 마을 (캠핑장 장면이 버스를 태운 뒤). friend면 마을에 내려 그 친구 옆으로 */
   goVillage(friend?: CampFriend | null): void;
   /** 캠핑장을 열 수 없다 (서버가 마을로 받았다) → 연출 없이 마을로 */
-  bail(): void;
+  /** 11/27 server = 서버가 알려 준 맵 (다른 마을 밖 맵이면 마을로 옮기지 않고 장면만 닫는다 — 월드가 그 맵으로 따라간다) */
+  bail(server?: MapId): void;
   isFriend(sid: number, name: string): boolean;
 };
 

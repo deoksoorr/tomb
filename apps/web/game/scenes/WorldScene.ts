@@ -34,7 +34,7 @@ import { inReach } from "../logic/reach";
 import { anchorAt, nudgeSpot, restoreAfterDenied, resumeSpot, spotVerdict, standBesideSpot } from "../logic/restore";
 import { besideFriend, FRIEND_ARRIVED } from "../logic/friendSpot";
 import { playTeleportFx } from "../fx/teleportFx";
-import { STAFF_TP_ARRIVED, STAFF_TP_INSIDE_MSG } from "@tomb/protocol";
+import { STAFF_TP_ARRIVED, STAFF_TP_INSIDE_MSG, WELCOME_POS_SNAP_PX } from "@tomb/protocol";
 import { doorFront } from "../logic/doorSpot";
 import { SPOT_TAKEN_HINT, SPOT_TAKEN_TOAST, spotOf, spotTaken } from "../logic/spots";
 import { neighborSeat, pickSeat, sideIntent, standPoint } from "../logic/sit";
@@ -579,6 +579,11 @@ export class WorldScene extends Phaser.Scene {
         getPose: (out) => this.player.netPose(out),
         getFps: () => this.game.loop.actualFps,
         onWelcome: (m) => {
+          // 11/27 서버가 나를 캠핑장·바닷가에 두고 있다 (다른 탭·기기에서 그 맵에 있다가 여기서 다시 접속 — 서버는 주소의 맵을 따르지 않는다): 화면도 그 맵 서버 자리로
+          if ((m.m === "camp" || m.m === "sea") && this.trip && !this.trip.away) {
+            this.trip.followServer(m.m, m.pos);
+            return;
+          }
           this.clearRemotes();
           this.life.onWelcome(m);
           this.forage.onWelcome(m);
@@ -609,6 +614,9 @@ export class WorldScene extends Phaser.Scene {
           this.boats.onWelcome(m);
           // 범퍼카에 탄 채로 (다시) 붙었다: 차 자리도 서버 점유표로 (놓쳤으면 입구 앞으로)
           this.bumper.onWelcome(m);
+          // 11/27 서버가 아는 내 자리로 (다른 탭·기기에서 넘겨받으면 서버는 주소 자리를 받지 않는다). 버스·집 안이면 그대로
+          const pl = this.player;
+          if (m.pos && !this.trip?.away && Math.hypot(m.pos.x - pl.x, m.pos.y - pl.y) > WELCOME_POS_SNAP_PX) pl.warp(m.pos.x, m.pos.y, this.time.now, null);
         },
         onJoin: (p) => this.addRemote(p),
         onLeave: (sid) => {

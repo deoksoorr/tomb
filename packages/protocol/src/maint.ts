@@ -1,4 +1,5 @@
 import { hmacSign, hmacVerify } from "./token";
+import type { MapId } from "./camp";
 
 // 11/26 점검 모드 + 접속 기록 (웹 ↔ 실시간 서버 공용 약속).
 //
@@ -155,8 +156,45 @@ export function connDeviceOf(ua: string | null | undefined): string {
 /**
  * 실시간 서버 → 웹 한 줄: [방문자 id, "i"(들어옴)|"o"(나감), 시각(ms), 채널, 기기, 나감 종류]
  * (본문 상한 8KB 안에 많이 싣게 배열로)
+ * 11/27 일곱 칸 줄: "m" = 서버가 맵을 옮김 (x.f → x.t, 까닭 x.c), "t" = 다시 접속·다른 탭 (x.m = 서버가 지킨 맵, x.a = 화면이 보낸 다른 맵,
+ * x.tab·x.pt = 이번·이전 탭 id, x.pc = 이전 채널(다른 채널 탭), x.live = 이전 탭 연결이 살아 있어 끊음)
  */
-export type ConnLogWire = [string, "i" | "o", number, number, string, ConnWhy | ""];
+export type ConnLogWire = [string, "i" | "o", number, number, string, ConnWhy | ""] | [string, "m" | "t", number, number, string, "", ConnLogExtra];
+/** 11/27 서버가 맵을 옮긴 까닭: mapReq = 맵 옮기기 요청(버스·친구한테 가기·집 문), staffTp = 운영자 순간이동, permLost = 허락이 없어져 마을로 */
+export const MAP_CAUSES = ["mapReq", "staffTp", "permLost"] as const;
+export type MapCause = (typeof MAP_CAUSES)[number];
+export type ConnLogExtra = { f?: MapId; t?: MapId; c?: MapCause; m?: MapId; a?: MapId; tab?: string; pt?: string; pc?: number; live?: 1 };
+/** 11/27 탭 id (화면이 sessionStorage에 만들어 접속 주소 &tab=로 보낸다 — 기록에만 쓴다) */
+export const TAB_ID_RE = /^[A-Za-z0-9]{4,12}$/;
+const isMap = (v: unknown): v is MapId => v === "village" || v === "camp" || v === "sea";
+function parseExtra(raw: unknown): ConnLogExtra | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const out: ConnLogExtra = {};
+  for (const k of ["f", "t", "m", "a"] as const) {
+    if (o[k] === undefined) continue;
+    if (!isMap(o[k])) return null;
+    out[k] = o[k] as MapId;
+  }
+  if (o.c !== undefined) {
+    if (!(MAP_CAUSES as readonly unknown[]).includes(o.c)) return null;
+    out.c = o.c as MapCause;
+  }
+  for (const k of ["tab", "pt"] as const) {
+    if (o[k] === undefined) continue;
+    if (typeof o[k] !== "string" || !TAB_ID_RE.test(o[k] as string)) return null;
+    out[k] = o[k] as string;
+  }
+  if (o.pc !== undefined) {
+    if (typeof o.pc !== "number" || !Number.isInteger(o.pc) || o.pc < 1 || o.pc > 1000) return null;
+    out.pc = o.pc;
+  }
+  if (o.live !== undefined) {
+    if (o.live !== 1) return null;
+    out.live = 1;
+  }
+  return out;
+}
 /** 한 번에 넘기는 최대 줄 수 (8KB 서명 본문 안) */
 export const CONN_LOG_BATCH = 60;
 /** 로비가 모아 두었다가 넘기는 간격 */
@@ -165,9 +203,19 @@ export const CONN_LOG_FLUSH_MS = 60_000;
 const VISITOR_RE = /^[A-Za-z0-9_-]{1,64}$/;
 /** 받은 한 줄 검사 (틀리면 null) */
 export function parseConnWire(raw: unknown): ConnLogWire | null {
-  if (!Array.isArray(raw) || raw.length !== 6) return null;
-  const [v, k, at, ch, dev, why] = raw as unknown[];
+  if (!Array.isArray(raw) || (raw.length !== 6 && raw.length !== 7)) return null;
+  const [v, k, at, ch, dev, why, extra] = raw as unknown[];
   if (typeof v !== "string" || !VISITOR_RE.test(v)) return null;
+  // 11/27 맵 옮김·다시 접속 줄 (일곱 칸)
+  if (k === "m" || k === "t") {
+    if (raw.length !== 7 || why !== "") return null;
+    if (typeof at !== "number" || !Number.isFinite(at) || at <= 0) return null;
+    if (typeof ch !== "number" || !Number.isInteger(ch) || ch < 0 || ch > 1000) return null;
+    if (typeof dev !== "string" || dev.length > 30) return null;
+    const x = parseExtra(extra);
+    return x ? [v, k, at, ch, dev, "", x] : null;
+  }
+  if (raw.length !== 6) return null;
   if (k !== "i" && k !== "o") return null;
   if (typeof at !== "number" || !Number.isFinite(at) || at <= 0) return null;
   if (typeof ch !== "number" || !Number.isInteger(ch) || ch < 0 || ch > 1000) return null;

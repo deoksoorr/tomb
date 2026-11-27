@@ -153,7 +153,15 @@ export type WelcomeMsg = {
   lk?: 1;
   /** 11/22 내 새싹 표시가 끝나는 시각 (epoch ms, PeerInfo.nb와 같다 — 내 머리 위에도 새싹). 없으면 새싹 아님·옛 서버 */
   nb?: number;
+  /**
+   * 11/27 서버가 아는 내 자리 (월드 채널만). 다시 붙어도 서버는 맵·자리를 클라이언트 주소(m·x·y)대로 옮기지 않는다 —
+   * 화면은 m(맵)과 이 자리로 맞춘다 (다른 탭 「여기서 다시 접속」·새 탭으로 버스 없이 맵을 오가던 것). 없으면 옛 서버
+   */
+  pos?: { x: number; y: number };
 };
+
+/** 11/27 welcome.pos와 화면 자리가 이보다 멀면 화면이 서버 자리로 옮긴다 (px) */
+export const WELCOME_POS_SNAP_PX = 48;
 
 export type S2C =
   | WelcomeMsg
