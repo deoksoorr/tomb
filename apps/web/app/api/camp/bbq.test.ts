@@ -4,6 +4,7 @@ import { BBQ_MENU, bbqStands, DRUNK_MAX, DRUNK_STEP_MS, verifyGrant } from "@tom
 import { getAccounts } from "@/lib/store";
 import { kstDay } from "@/lib/store/accounts";
 import { env } from "@/lib/env";
+import { devTodoOverrides } from "@/lib/retain";
 import type { BbqResponse, BbqStatusResponse } from "@/lib/campBbq";
 import * as session from "../session/route";
 import * as bbq from "./bbq/route";
@@ -156,6 +157,21 @@ describe("POST /api/camp/bbq", () => {
     // 하이볼·맥주 두 잔 → 취기 2
     const st = (await (await bbq.GET(call("/api/camp/bbq", v, "GET"))).json()) as BbqStatusResponse;
     expect(st.drunk).toBe(2);
+  });
+
+  it("11/27 오늘 미션 「한 끼 사 먹기」: 사자마자 센다 — 응답의 내 정보(me)에도 진행이 들어 있다 (그릴·자판기·포구 매점 모두)", async () => {
+    for (const [item, stand] of [["pork", "grill"], ["beer", "vending"], ["squid", "kiosk"], ["highball", "seaVend"]] as const) {
+      const v = await newVisitor();
+      devTodoOverrides()!.set(v.visitorId, ["bbq", "fish", "wish"]);
+      await getAccounts().earn(v.visitorId, "hunt", kstDay(), { amount: 300 });
+      const res = await bbq.POST(call("/api/camp/bbq", v, "POST", { item, stand }));
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as BbqResponse;
+      expect(body.todo).toMatchObject({ kind: "bbq", have: 1 });
+      // 화면은 응답의 me로 내 정보를 덮는다 → me도 올린 뒤 값이어야 미션 칸이 0으로 되돌아가지 않는다
+      expect(body.me.retain?.todo.items.find((it) => it.kind === "bbq")).toMatchObject({ have: 1, need: 1 });
+      devTodoOverrides()!.delete(v.visitorId);
+    }
   });
 
   it("캠핑장이 닫힌 운영 서버에서는 없는 경로 (CAMP_ENABLED=1이면 열린다)", async () => {

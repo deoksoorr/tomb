@@ -270,7 +270,8 @@ export type GameEvents = {
   /** 11/18 눈 던지기 쿨타임: 다시 던질 수 있는 시각 (Date.now 기준 ms, sticky) → 터치 [눈 던지기] 단추가 남은 시간을 시계처럼 */
   "snow:cool": { until: number };
   /** 11/15 캠핑장 바베큐 그릴 앞에서 E → 메뉴 창 */
-  "camp:bbq:open": { stand: BbqStand };
+  /** shop = 11/27 캠핑장 매점 알바에게 말을 걸어 연 창 (파는 것은 그릴과 같고 제목만 「캠핑장 매점」) */
+  "camp:bbq:open": { stand: BbqStand; shop?: boolean };
   /** 채널 이동 창: 지금 같은 채널에 보이는 사람들 닉네임 (peers:ask에 답한다, 나는 빼고). map = 지금 맵 (11/17 그 맵에 보이는 사람만이라서) */
   /** 11/20 staff = names 중 운영자 수 (로비 채널 인원엔 운영자가 없다) */
   "peers:list": { names: string[]; map: MapId; staff?: number };

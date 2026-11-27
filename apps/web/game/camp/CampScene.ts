@@ -1181,6 +1181,15 @@ export class CampScene extends Phaser.Scene {
       bridge.emit("portal:open", { kind: "housing", zone: "camp", camp: sale });
       return;
     }
+    // 11/27 매점 알바: 말을 걸면 매점 메뉴 (그릴과 같은 먹거리 — 사면 camp:bbq:eat. 오늘 미션 「한 끼 사 먹기」도 여기서 된다)
+    if (id === "clerk") {
+      this.closeTalk();
+      if (this.riding.on) return this.toast(RIDING_EAT_TOAST);
+      const pl = this.player;
+      if (pl.sitting) pl.stand(this.time.now, this.seatReq);
+      bridge.emit("camp:bbq:open", { stand: "grill", shop: true });
+      return;
+    }
     const turn = this.talkTurn.get(id) ?? 0;
     this.talkTurn.set(id, turn + 1);
     this.openTalk(id, campLines(id, turn, campConceptNow()), true);

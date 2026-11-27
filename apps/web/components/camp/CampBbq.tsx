@@ -47,13 +47,14 @@ function effectText(m: BbqItem): string {
 }
 
 export default function CampBbq() {
-  const [stand, setStand] = useState<BbqStand | null>(null);
-  useEffect(() => bridge.on("camp:bbq:open", (e) => setStand(e?.stand ?? "grill")), []);
-  if (!stand) return null;
-  return <BbqDialog key={stand} stand={stand} onClose={() => setStand(null)} />;
+  const [open, setOpen] = useState<{ stand: BbqStand; shop: boolean } | null>(null);
+  useEffect(() => bridge.on("camp:bbq:open", (e) => setOpen({ stand: e?.stand ?? "grill", shop: !!e?.shop })), []);
+  if (!open) return null;
+  return <BbqDialog key={`${open.stand}:${open.shop}`} stand={open.stand} shop={open.shop} onClose={() => setOpen(null)} />;
 }
 
-function BbqDialog({ stand, onClose }: { stand: BbqStand; onClose: () => void }) {
+/** shop = 11/27 캠핑장 매점 알바에게 말을 걸어 열었다 (그릴과 같은 먹거리, 제목·소개만 매점) */
+function BbqDialog({ stand, shop, onClose }: { stand: BbqStand; shop: boolean; onClose: () => void }) {
   const { me } = useMe();
   const tab = stand === "grill" || stand === "kiosk" ? "food" : "drink";
   const [pending, setPending] = useState<BbqItemId | null>(null);
@@ -90,9 +91,10 @@ function BbqDialog({ stand, onClose }: { stand: BbqStand; onClose: () => void })
 
   // 11/16 r12 바닷가: 매점은 먹거리, 바닷가 자판기는 술·음료 (bbqStands)
   const items = BBQ_MENU.filter((m) => bbqStands(m).includes(stand));
-  const title = stand === "kiosk" ? "포구 매점" : stand === "vending" || stand === "seaVend" ? "음료 자판기" : "야외 바베큐";
-  const lead =
-    stand === "kiosk"
+  const title = shop ? "캠핑장 매점" : stand === "kiosk" ? "포구 매점" : stand === "vending" || stand === "seaVend" ? "음료 자판기" : "야외 바베큐";
+  const lead = shop
+    ? "출출하면 하나 데워 드려요. 먹으면 몸이 커지거나 걸음이 빨라져요."
+    : stand === "kiosk"
       ? "바닷바람 맞으며 한 입 해요. 먹으면 몸이 커지거나 걸음이 빨라져요."
       : tab === "drink"
         ? "버튼을 누르면 덜컹 떨어져요. 마실수록 볼이 발그레해져요."
@@ -120,7 +122,7 @@ function BbqDialog({ stand, onClose }: { stand: BbqStand; onClose: () => void })
                   onClick={() => void buy(m)}
                   disabled={pending !== null || (me ? me.points < m.price : false)}
                 >
-                  {pending === m.id ? (stand === "kiosk" ? "받는 중…" : m.cat === "drink" ? "뽑는 중…" : "굽는 중…") : `${m.price}P`}
+                  {pending === m.id ? (stand === "kiosk" || shop ? "받는 중…" : m.cat === "drink" ? "뽑는 중…" : "굽는 중…") : `${m.price}P`}
                 </button>
               </li>
             ))}

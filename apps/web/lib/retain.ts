@@ -275,7 +275,7 @@ export const TODO_POOL: readonly TodoDef[] = [
   { kind: "seaGather", cat: "trip", label: "바닷가 갯벌·모래에서 채집 2번 하기", need: 2, unit: "번", hint: "물이 빠지면 갯벌 구멍, 늘 백사장 모래를 파요.", group: "gather", open: "sea", guide: "busSea" },
   { kind: "campGather", cat: "trip", label: "캠핑장 숲에서 채집 2번 하기", need: 2, unit: "번", hint: "캠핑장 숲·물가의 반짝이는 곳에서 채집해요.", group: "gather", open: "camp", guide: "busCamp" },
   { kind: "gull", cat: "trip", label: "갈매기에게 과자 3번 던지기", need: 3, unit: "번", hint: "포구 매점에서 과자를 사서 갈매기에게 던져요.", open: "sea", guide: "busSea" },
-  { kind: "bbq", cat: "trip", label: "캠핑장·바닷가에서 한 끼 사 먹기", need: 1, unit: "번", hint: "캠핑장 큰 타프 옆 바베큐장이나 포구 매점에서 하나 사 먹어요.", open: "trip", guide: "busCamp" },
+  { kind: "bbq", cat: "trip", label: "캠핑장·바닷가에서 한 끼 사 먹기", need: 1, unit: "번", hint: "캠핑장 매점·바베큐장이나 포구 매점에서 하나 사 먹어요.", open: "trip", guide: "busCamp" },
 ];
 export const TODO_COUNT = 3;
 /** 하나에 (11/19 300P + 결재 서류 2장) */

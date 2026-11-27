@@ -21,6 +21,14 @@ import styles from "./housing.module.css";
 import OfficeDialog from "./OfficeDialog";
 import { campOf, isCampHouse } from "@/game/camp/campSaleApi";
 import { useRideStopGate } from "../overlay/RideStopDialog";
+import { BIG_HOUSE_TOAST, myBig } from "@/game/camp/foodState";
+
+/** 11/27 바베큐로 커진 동안에는 집에 못 들어간다 (안내 토스트를 띄우고 true) */
+function bigBlocked(): boolean {
+  if (myBig() <= 1) return false;
+  bridge.emit("toast", { message: BIG_HOUSE_TOAST });
+  return true;
+}
 
 type Mode = { kind: "office" } | { kind: "pending" } | { kind: "village" } | { kind: "house"; house: PublicHouse; mine: boolean; edit: boolean };
 /** 메인 맵 주거 구역에서 열었을 때: 그 집 문(houseId) 또는 빈 필지(lot) */
@@ -297,6 +305,8 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
   const enterKey = mode.kind === "house" ? `${mode.house.id}:${mode.edit}` : null;
   useEffect(() => {
     if (mode.kind !== "house") return;
+    // 11/27 커진 동안에는 문을 못 지나간다 (들어갔다 나오면 크기가 풀렸다) — 안내하고 창을 닫는다. 효과가 끝나면 다시 들어갈 수 있다
+    if (!inScene.current && bigBlocked()) return void onCloseRef.current();
     // 11/16 마을에서 바로 들어갈 때: 탈것에 탄 채로는 못 들어간다. 의자·벤치면 일어나서
     // 11/22 아래 토스트 대신 가운데 알림 ([확인]이면 창을 닫고, [내리고 들어가기]면 내린 뒤 다시 — enterTry)
     if (!inScene.current && gate("집에 들어갈", { label: "내리고 들어가기", run: () => setEnterTry((n) => n + 1) })) return;
@@ -404,6 +414,11 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
   useEffect(() => {
     if (!intentHouse) return;
     let alive = true;
+    // 11/27 커진 채로 문 앞 E: 집 정보를 받기 전에 안내하고 닫는다 (위 집 안으로 막기와 같은 안내)
+    if (!inScene.current && bigBlocked()) {
+      onCloseRef.current();
+      return;
+    }
     const go = async () => {
       // 내 집 문이면 주인으로 들어간다 (내 정보가 아직 없으면 한 번 받아 본다).
       // 11/26 내 정보를 아직 모르면 그 집 정보도 함께 받기 시작한다 (예전엔 내 정보를 받은 뒤에야 집을 받았다 — 남의 집이 요청 한 번만큼 늦게 열렸다)

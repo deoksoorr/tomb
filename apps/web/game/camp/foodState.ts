@@ -58,6 +58,8 @@ export const RIDING_EAT_TOAST = "타는 동안엔 먹을 수 없어요. 내린 �
 export const BIG_SEAT_MAX = 2;
 export const bigSeatBlocked = (seatId: string, big: number): boolean => big > BIG_SEAT_MAX && (seatId.startsWith("qV") || seatId.startsWith("qB"));
 export const BIG_SEAT_TOAST = "몸이 너무 커서 여기엔 앉을 수 없어요. 효과가 끝나면 다시 와요.";
+/** 11/27 커진 동안에는 집(마을 집·포구 오두막·캠핑장 카라반·펜션·촌캉스)에 못 들어간다 — 문·[내 집 가기]·친구 집 놀러 가기 모두 (components/housing/HousingOffice) */
+export const BIG_HOUSE_TOAST = "몸이 너무 커서 문을 못 지나가요. 효과가 끝나면 들어와요.";
 function saveMine(): void {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(mine ?? {}));
