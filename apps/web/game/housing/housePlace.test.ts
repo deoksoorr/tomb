@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { campLotByNo, houseLot, inMapBounds, SEA_LOTS, seaLotFront } from "@tomb/protocol";
 import { doorOnEnter, houseDoorSpot, houseExitTo, houseMapOf, type HouseExitInput } from "./housePlace";
 
-const base: HouseExitInput = { from: "world", hasVillage: false, host: "village", zone: undefined, lot: 3, houseCh: 1, ch: 1 };
+const base: HouseExitInput = { from: "world", hasVillage: false, host: "village", zone: undefined, lot: 3, houseCh: 1, ch: 1, mine: true };
 
 describe("housePlace", () => {
   it("그 집 맵에 있으면 들어갈 때 미리 문 앞, 나올 때 문 앞 (문·[내 집 가기] 모두)", () => {
@@ -25,6 +25,30 @@ describe("housePlace", () => {
     const vil = houseExitTo({ ...base, host: "camp", zone: undefined, lot: 3 });
     const d = houseLot(3)!.door;
     expect(vil).toEqual({ to: "warp", map: "village", x: d.x, y: d.y + 14 });
+  });
+
+  it("11/27 남의 집은 어느 맵·채널의 집이든 나오면 들어가기 전 맵·자리 그대로 (남의 카라반으로 맵을 건너뛰지 않는다)", () => {
+    const other = { ...base, mine: false };
+    // 바닷가에서 친구 카라반(캠핑장) → 나오면 바닷가
+    expect(houseExitTo({ ...other, host: "sea", zone: "camp", lot: 7 })).toEqual({ to: "stay" });
+    // 캠핑장에서 남의 오두막 → 캠핑장
+    expect(houseExitTo({ ...other, host: "camp", zone: "sea", lot: 4 })).toEqual({ to: "stay" });
+    // 마을에서 남의 캠핑장 집 · 같은 맵의 남의 집도 자리 그대로
+    expect(houseExitTo({ ...other, host: "village", zone: "camp", lot: 7 })).toEqual({ to: "stay" });
+    expect(houseExitTo({ ...other, host: "sea", zone: "sea", lot: 4 })).toEqual({ to: "stay" });
+    // 다른 채널의 남의 집에서 채널이 바뀐 뒤 나와도 (채널 옮기기 · 다시 접속) 그 맵으로 가지 않는다
+    expect(houseExitTo({ ...other, host: "sea", zone: "camp", lot: 7, houseCh: 2, ch: 3 })).toEqual({ to: "stay" });
+    expect(houseExitTo({ ...other, host: "sea", zone: "camp", lot: 7, houseCh: 2, ch: null })).toEqual({ to: "stay" });
+    // 들어갈 때도 문 앞에 미리 세우지 않는다 (새로고침 복원·다시 접속은 숨은 캐릭터 자리 = 들어가기 전 맵·자리)
+    expect(doorOnEnter("world", true, false)).toBe(false);
+    expect(doorOnEnter("world", false, false)).toBe(false);
+    // 분양 마을에서 들어간 남의 집은 분양 마을로 (예전 그대로)
+    expect(houseExitTo({ ...other, from: "village", hasVillage: true })).toEqual({ to: "village" });
+  });
+
+  it("11/27 내 집은 예전 그대로 그 집 맵의 문 앞 (내 집 가기)", () => {
+    expect(doorOnEnter("world", true, true)).toBe(true);
+    expect(houseExitTo({ ...base, host: "sea", zone: "camp", lot: 13 }).to).toBe("warp");
   });
 
   it("분양 마을에서 들어간 집은 분양 마을로 돌아간다", () => {

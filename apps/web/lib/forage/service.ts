@@ -5,7 +5,7 @@ import { seaOpen } from "../sea";
 import { anyFishingWaterOf, SEA_DIG_CLOSED_MSG, seaDigOpen, seaFishDryAt, seaFishingSpotById, seaFishWet, SEA_TIDE_OUT_MSG, tideLevel } from "@tomb/protocol";
 import { WALLET_MAX, type EarnSource } from "../economy";
 import { env } from "../env";
-import { peerOf } from "../ban";
+import { peerOf, whereOf } from "../ban";
 import { HttpError } from "../http";
 import { isStaff } from "../staff";
 import { earnPointsOnly, getAccounts } from "../store";
@@ -51,7 +51,10 @@ import {
   withHighTide,
   type NodeUrgent,
 } from "./rules";
-import { newAutoSession } from "./auto";
+import { beatAuto, newAutoSession, parseAutoSession } from "./auto";
+import { autoLeftSpot } from "./autoSpot";
+import { logMoves } from "../opsLog";
+import type { MoveVia } from "../moveLog";
 import { autoStatus, settleAuto, type AutoSettled } from "./autoSettle";
 import { getFishRank } from "./fishRank";
 import { festWeight } from "./quests/urgent";
@@ -296,10 +299,67 @@ export async function startAutoFish(acct: string, spotId: string, ch: number | n
   return autoResponse(store, acct, { ...prev, session, ended: undefined }, now, ip);
 }
 
-/** 정산 (보이는 동안 주기적으로, 숨었다가 돌아오면). 세션이 없으면 auto: null */
+/** 정산 (보이는 동안 주기적으로, 숨었다가 돌아오면). 세션이 없으면 auto: null. 11/27 자리를 떠났으면 마지막 신호까지만 치고 끈다 */
 export async function syncAutoFish(acct: string, now = Date.now(), ip?: string): Promise<AutoFishResponse> {
   const store = getForageStore();
+  const left = await endAutoFishOnLeave(acct, now, null, store);
+  if (left) return autoResponse(store, acct, left, now, ip);
   return autoResponse(store, acct, await settleAuto(store, acct, now, false), now, ip);
+}
+
+// ── 11/27 자리를 떠나면 자동 낚시 끄기 (규칙: lib/forage/autoSpot) ──
+
+/**
+ * 서버가 아는 「자리 떠남」에서 자동 낚시를 끄고 정산한다 (꺼졌으면 정산 결과, 세션이 없거나 그대로면 null).
+ *  - cause가 있으면(집 들어감·방 입장·다른 채널 입장) 지금 끈다. 다만 실시간 서버가 이미 다른 곳으로 알면(먼저 떠났다) 마지막 신호 시각까지만
+ *  - cause가 null이면(정산·머무르기 신호) 실시간 서버 자리를 보고 떠났을 때만 마지막 신호 시각까지만 쳐서 끈다
+ *  - join: 채널 입장 토큰을 받는다 (새로 들어옴·재접속·채널 옮기기) — 켠 채널과 다른 채널이면 지금 끈다.
+ *    실시간 서버에 연결이 없으면(재접속 유예가 지났다 — 탭 강제 종료·긴 끊김) 끊긴 동안은 치지 않고 마지막 신호까지만
+ * 그 계정 접속 기록에 「자동 낚시 멈춤」 한 줄. 실시간 서버에 닿지 못하면 판단하지 않는다 (cause만 본다)
+ */
+export async function endAutoFishOnLeave(
+  acct: string,
+  now: number,
+  cause: MoveVia | null,
+  store: ForageStore = getForageStore(),
+  join?: { channel: number | "auto" },
+): Promise<AutoSettled | null> {
+  const raw = await store.autoGet(acct);
+  const cur = parseAutoSession(raw);
+  if (!raw || !cur) return null;
+  const where = await whereOf([acct], !!join).catch(() => null);
+  const w = where?.[acct];
+  const left = autoLeftSpot(cur, where !== null, w);
+  const quit = !!join && where !== null && !w;
+  const otherCh = join && typeof join.channel === "number" && cur.ch !== null && join.channel !== cur.ch ? ("fishChannel" as const) : null;
+  const via = left ?? (quit ? "fishQuit" : (otherCh ?? cause));
+  if (!via) return null;
+  // 먼저 떠났거나 끊겨 있었으면 마지막 신호까지만 (그 뒤는 자리에 없었다)
+  const at = left || quit ? Math.min(now, cur.beat) : now;
+  const r = await settleAuto(store, acct, at, true);
+  await dexGainOf(store, acct, r.items, undefined, now);
+  logMoves([{ a: acct, k: "mv", at: now, m: "fishStop", via, tgt: `${r.items.length}마리 정산`, src: "s" }]);
+  return { ...r, ended: "stop" };
+}
+
+/**
+ * 머무르기 기록의 「접속해 있음」 신호 (lib/forage/autoSettle beatAutoFish 대신). 11/27 실시간 서버에 연결이 없으면(끊김·탭 닫음) 늘리지 않고,
+ * 자리를 떠났으면 끈다. 실시간 서버에 닿지 못하면 예전처럼 늘린다
+ */
+export async function beatAutoFishAt(acct: string, now: number, store: ForageStore = getForageStore()): Promise<void> {
+  const raw = await store.autoGet(acct);
+  const cur = parseAutoSession(raw);
+  if (!raw || !cur) return;
+  const where = await whereOf([acct]).catch(() => null);
+  const w = where?.[acct];
+  if (where !== null && !w) return;
+  if (autoLeftSpot(cur, where !== null, w)) {
+    await endAutoFishOnLeave(acct, now, null, store);
+    return;
+  }
+  const next = beatAuto(cur, now);
+  if (next === cur) return;
+  await store.autoSwap(acct, raw, JSON.stringify(next));
 }
 
 /** 끄기 (움직임·일어남·장면 떠남): 정산하고 끝낸다 */

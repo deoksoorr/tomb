@@ -3,6 +3,8 @@ import { CAMP_ARRIVE, DIR, MAP_NAME, SEA_ARRIVE, type AwayMapId } from "@tomb/pr
 import { ambienceAt, parseAmbienceOverride } from "@/lib/ambience";
 import type { ResumeState } from "@/lib/resume";
 import { reportClientError } from "@/lib/hooks/errorReporting";
+import type { MoveVia } from "@/lib/moveLog";
+import { reportMove } from "@/lib/moveReport";
 import { bridge } from "../bridge";
 import type { Player } from "../entities/Player";
 import type { InputHub } from "../input/InputHub";
@@ -22,6 +24,13 @@ import { SEA_SCENE } from "../sea/seaHost";
 import { SeaPrebake } from "../sea/seaPrebake";
 import { seaMinimapSteps } from "../sea/seaMinimap";
 import type { RealtimeClient as Net } from "../net/RealtimeClient";
+
+/** 11/27 운영 기록: 이 버스 길을 탄 까닭 (집 문 앞 = 내 집에서 나옴, 운영자 순간이동, 친구한테 가기, 그냥 버스) */
+function tripVia(friend: CampFriend | null): MoveVia {
+  if (friend?.door !== undefined) return "houseExit";
+  if (friend?.tp) return "staffTp";
+  return friend ? "friend" : "bus";
+}
 
 /** 캠핑장 그림 미리 굽기: 한 프레임에 쓰는 시간 (ms) — 느린 기기에서도 버스·창밖 연출이 멈추지 않게 */
 const BAKE_BUDGET_MS = 4;
@@ -372,6 +381,7 @@ export class CampTrip {
     this.afterFrames(2, () => {
       if (this.phase !== "camp") return;
       // 11/20 운영자 순간이동이면 tp로 (그 사람 옆, 서버가 운영자 연결만 받는다)
+      reportMove({ m: "map", from: w.net.map, to: map, via: tripVia(friend) });
       w.net.switchMap(map, to.x, to.y, friend?.tp ? friend.sid : undefined);
       w.net.setAway(false);
       // 11/26 집 문 앞으로 왔으면: 맵 옮기기를 보낸 뒤 그 집 문 바로 앞으로 맞춘다 (집 그림 기준 — 아직 못 그렸으면 그린 뒤에)
@@ -429,6 +439,8 @@ export class CampTrip {
     // 맵 옮기기: 마을 사람들 화면에는 정류장에 나타난다 (mapped → 월드가 마을 사람 목록을 맞춘다). 11/16 바닷가에서 오면 바닷가행 정류장에
     // 11/19 캠핑장 ↔ 바닷가 친구(friend.next)는 마을 정류장에 내려 버스 안에 숨은 채로 이어 탄다 (friend.x·y는 다음 맵 좌표)
     const land = friend && !friend.next ? { x: friend.x, y: friend.y } : d.land;
+    // 11/27 운영 기록 (캠핑장 ↔ 바닷가 이어 타기는 마지막 맵에서 한 번)
+    if (!friend?.next) reportMove({ m: "map", from: w.net.map, to: "village", via: tripVia(friend) });
     w.net.switchMap("village", land.x, land.y, friend?.tp && !friend.next ? friend.sid : undefined);
     if (friend?.next) {
       pl.warp(land.x, land.y, w.scene.time.now, null);
@@ -483,6 +495,7 @@ export class CampTrip {
     pl.view.fade = 1;
     pl.warp(land.x, land.y, w.scene.time.now, null);
     pl.dir = DIR.down;
+    if (w.net.map !== "village") reportMove({ m: "map", from: w.net.map, to: "village", via: "bail" });
     w.net.switchMap("village", land.x, land.y);
     w.net.setAway(false);
     w.net.requestSync();

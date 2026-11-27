@@ -175,7 +175,8 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 // 84 = 눈꽃 창가를 벽 창문 모양(집 배치 window)으로, 없앤 창(말풍선 탭·확성기 창·내 정보 탭) — 옛 화면은 바닥에 놓으려다 막혀 한 번 새로고침 (11/24)
 // 85 = 언젠가 캠핑장 개편(폭포 계곡 새 배치·좌석·낚시 자리·나룻배, CAMP_MAP_VERSION 4)·캠핑장 집(zone camp)·황금 고블린 맵 무작위(goblinMap) — 옛 화면은 없어진 좌석·옛 좌표를 보내 한 번 새로고침 (11/26)
 // 86 = 11/26 밤 캠핑장 다듬기 묶음(분양 NPC만·눈사람 허물기·운영자 외치기·끊긴 요청 기록 거르기 등)이 열어 둔 옛 화면에 남지 않게 — 모두 한 번 새로고침 (11/27)
-export const CLIENT_VERSION = 86;
+// 87 = 11/27 남의 집 나가면 원래 맵으로·주인 접속 확인·자리 떠나면 자동 낚시 끄기가 열어 둔 옛 화면에도 걸리게 — 모두 한 번 새로고침 (11/27)
+export const CLIENT_VERSION = 87;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */

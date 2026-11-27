@@ -32,6 +32,7 @@ import {
 } from "./campHousingPlan";
 import { campHousingApi, campOf, emptyDoorAction, type CampVillageHouse } from "./campSaleApi";
 import type { CampInteractable } from "./campTypes";
+import { markVisitVia } from "@/lib/housing/visitVia";
 
 // 11/26 캠핑장 집 (카라반 12 · 소슬 펜션 2 · 촌캉스 2)을 캠핑장 장면에 붙여요 — 바닷가 오두막(game/sea/seaHousing)과 같은 흐름.
 //  - 지금 채널의 캠핑장 집터 16 (/api/housing/village?zone=camp — CDN 15초). 터마다 그림(campHousingPlan)·막는 상자·문패(빈 터는 「분양 중」 글씨)
@@ -573,8 +574,10 @@ export class CampHousing {
     if ((o.kind !== "lot" && o.kind !== "house") || !o.lot) return false;
     const h = this.houses.get(o.lot);
     const site = campLotByNo(o.lot);
-    if (h) bridge.emit("portal:open", { kind: "housing", houseId: h.id });
-    else if (this.taken.has(o.lot)) this.d.toast(`${campLotShort(o.lot)}은 지금 들어갈 수 없어요.`);
+    if (h) {
+      markVisitVia(h.id, "door");
+      bridge.emit("portal:open", { kind: "housing", houseId: h.id });
+    } else if (this.taken.has(o.lot)) this.d.toast(`${campLotShort(o.lot)}은 지금 들어갈 수 없어요.`);
     else if (this.ch === null) this.d.toast("캠핑장 집을 불러오는 중이에요. 잠시 뒤 다시 눌러 주세요.");
     else if (site) this.d.toast(emptyDoorAction(site).toast);
     return true;

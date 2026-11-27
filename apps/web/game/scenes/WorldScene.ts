@@ -2,6 +2,8 @@ import * as Phaser from "phaser";
 import { CAMPFIRES, fireworkShowMs, campfireOfSeat, dexBadgeCats, DIR, MAP_NAME, type AwayMapId, FURNITURE, LAKE_PIER, houseLot, MAP_HEIGHT, MAP_WIDTH, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, sanitizeDye, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, squirrelWaitText, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
 import { avatarColorSpec, type AppearanceChange } from "../sprites/avatar";
 import { saveResume, type ResumePose, type ResumeState } from "@/lib/resume";
+import { markVisitVia } from "@/lib/housing/visitVia";
+import { reportMove } from "@/lib/moveReport";
 import { nameStyleIds } from "@/lib/nameStyle";
 import { setDoorHint } from "../logic/doorHint";
 import type { IncomingChatLine } from "../logic/chatLog";
@@ -1486,7 +1488,10 @@ export class WorldScene extends Phaser.Scene {
         // 주거 구역의 집 문 → UI(하우징)가 집 정보를 받아 house:enter. 나오면 이 문 앞으로 돌아온다
         pl.faceTo(o.x, o.y - 10, now);
         if (pl.sitting) pl.stand(now, this.seatReq);
-        if (o.houseId) bridge.emit("portal:open", { kind: "housing", houseId: o.houseId });
+        if (o.houseId) {
+          markVisitVia(o.houseId, "door");
+          bridge.emit("portal:open", { kind: "housing", houseId: o.houseId });
+        }
         break;
       case "lot":
         // 빈 필지 팻말 → 그 번지로 분양 문의 (분양 사무소 창)
@@ -1600,6 +1605,8 @@ export class WorldScene extends Phaser.Scene {
   private switchChannel(channel: number, fullMsg?: string): void {
     this.walker.cancel();
     if (this.net.online && this.net.channel === channel) return;
+    // 11/27 운영 기록 (채널 창·집 채널로 옮기기 모두 여기로 온다. 꽉 차 되돌아와도 시도는 남는다)
+    reportMove({ m: "channel", ...(this.net.channel ? { from: String(this.net.channel) } : {}), to: String(channel) });
     void this.net.switchChannel(channel, fullMsg);
   }
 

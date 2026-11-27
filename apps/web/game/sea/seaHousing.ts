@@ -21,6 +21,7 @@ import { lowPlateSpot, ROOF_PLATE_MIN_Y } from "./seaLotPlate";
 import { SEA_LIGHTHOUSE_LAMP } from "./seaLayout";
 import type { SeaMap } from "./SeaMap";
 import { SEA_TEX_PREFIX, type SeaInteractable } from "./seaTypes";
+import { markVisitVia } from "@/lib/housing/visitVia";
 
 // 11/16 달물결 포구 오두막(Task A)과 등대 등불(Task B)을 바닷가 장면에 붙여요. SeaScene은 만들기·매 프레임·E·act 소식만 넘겨요.
 //  - 오두막: 지금 채널의 포구 11터 (/api/housing/village?zone=sea — CDN 15초). 터에 오두막 그림·막는 상자·팻말(빈 터 「분양 중」)
@@ -314,8 +315,10 @@ export class SeaHousing {
     }
     if (o.kind === "lot" && o.lot) {
       const h = this.houses.get(o.lot);
-      if (h) bridge.emit("portal:open", { kind: "housing", houseId: h.id });
-      else if (this.ch !== null) bridge.emit("portal:open", { kind: "housing", zone: "sea", lot: o.lot });
+      if (h) {
+        markVisitVia(h.id, "door");
+        bridge.emit("portal:open", { kind: "housing", houseId: h.id });
+      } else if (this.ch !== null) bridge.emit("portal:open", { kind: "housing", zone: "sea", lot: o.lot });
       else this.d.toast("오두막 터를 불러오는 중이에요. 잠시 뒤 다시 눌러 주세요.");
       return true;
     }

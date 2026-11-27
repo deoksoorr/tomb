@@ -1,7 +1,7 @@
 import { runAfter, sampleConcurrency } from "@/lib/analyticsService";
 import { handler, json } from "@/lib/http";
 import { serverNow } from "@/lib/devClock";
-import { beatAutoFish } from "@/lib/forage/autoSettle";
+import { beatAutoFishAt } from "@/lib/forage/service";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
 import { staffAccountId } from "@/lib/staff";
@@ -35,7 +35,8 @@ export const POST = handler(async (req) => {
   const tick = await accounts.presenceTick(visitorId, kstDay(now), now, SID_RE.test(rawSid) ? rawSid : "");
   const earned = tick?.earned ?? 0;
   // 자동 낚시: 숨은 탭에서도 오는 이 기록을 "접속해 있음" 신호로 쓴다 (끊긴 구간은 세지 않게). 실패해도 머무르기는 그대로
-  await beatAutoFish(visitorId, now).catch((e) => console.error("[forage] 자동 낚시 신호 실패", e));
+  // 11/27 실시간 서버에 연결이 없으면 늘리지 않고, 켠 자리(맵·채널)를 떠났으면 끈다 (lib/forage/autoSpot)
+  await beatAutoFishAt(visitorId, now).catch((e) => console.error("[forage] 자동 낚시 신호 실패", e));
   // 47번: 누군가 머무는 동안 동시 접속을 1분에 한 번씩 찍어 둔다 (cron 없이)
   runAfter(() => sampleConcurrency());
   // 행운권: 토요일 저녁 8시가 지나면 접속해 있는 화면의 머무르기 기록이 추첨을 시작한다 (끝난 회차는 프로세스가 기억해 건너뛴다)

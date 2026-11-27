@@ -1,5 +1,6 @@
 import { CONN_ABNORMAL, CONN_WHYS, type ConnLogWire, type ConnWhy } from "@tomb/protocol";
 import { runAfter } from "./analyticsService";
+import type { MoveLogEntry } from "./moveLog";
 import { getOpsLog, hourKeyOf, lastHourKeys, type ConnLogEntry, type HuntLogEntry, type LogEntry } from "./store/opsLog";
 
 // 11/26 운영 기록 쓰기·읽기 (저장소: lib/store/opsLog). 기록 실패는 손님 요청을 깨지 않는다 (조용히 로그만).
@@ -27,6 +28,14 @@ export async function recordConnRows(rows: readonly ConnLogWire[], now = Date.no
 export function logClientErrors(accountId: string, items: readonly { kind: string; message: string }[], now = Date.now()): void {
   if (!items.length) return;
   const entries: ConnLogEntry[] = items.slice(0, 5).map((r) => ({ a: accountId, k: "err", at: now, msg: `${r.kind === "api" ? "API" : "화면"}: ${r.message}`.slice(0, 140) }));
+  runAfter(() => getOpsLog().push("conn", entries, undefined, { all: false }));
+}
+
+/**
+ * 11/27 자리 옮김 줄들 (집 들어감·못 들어감·맵·채널 옮기기 — lib/moveLog). 계정 목록에만 (전체 접속 기록의 들어옴·나감을 밀어내지 않게), 응답 뒤에 한 번에
+ */
+export function logMoves(entries: readonly MoveLogEntry[]): void {
+  if (!entries.length) return;
   runAfter(() => getOpsLog().push("conn", entries, undefined, { all: false }));
 }
 

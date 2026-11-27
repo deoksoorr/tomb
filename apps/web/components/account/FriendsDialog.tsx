@@ -25,6 +25,7 @@ import PixelIcon from "../ui/PixelIcon";
 import StyledName from "../ui/StyledName";
 import ui from "../ui/ui.module.css";
 import styles from "./FriendsDialog.module.css";
+import { markVisitVia } from "@/lib/housing/visitVia";
 
 /** 친구가 있는 곳 한 줄. myMap = 지금 내 맵 (11/15 같은 채널이어도 맵이 다르면 "여기"가 아니다) */
 export function whereText(w: FriendWhere, myCh: number | null, myMap: MapId = "village"): string {
@@ -181,6 +182,7 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
         }
         const houseId = w.houseId;
         const enter = () => {
+          markVisitVia(houseId, "friend");
           bridge.emit("house:follow", { houseId, name: now.name, at: Date.now() });
           bridge.emit("portal:open", { kind: "housing", houseId });
         };
@@ -235,6 +237,7 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
   /** 친구 집 놀러 가기 (분양 사무소의 집 방문 흐름을 그대로 쓴다) */
   function visit(houseId: string) {
     onClose();
+    markVisitVia(houseId, "friendWin");
     bridge.emit("portal:open", { kind: "housing", houseId });
   }
 

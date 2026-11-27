@@ -1,6 +1,6 @@
 import { AVATAR_COLORS, signJoinToken } from "@tomb/protocol";
 import { env } from "@/lib/env";
-import { dexBadgeOf } from "@/lib/forage/service";
+import { dexBadgeOf, endAutoFishOnLeave } from "@/lib/forage/service";
 import { getHouseStore } from "@/lib/housing/service";
 import { handler, HttpError, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
@@ -37,6 +37,8 @@ export const POST = handler(async (req) => {
     : null;
   houseCheck?.catch(() => undefined);
   const now = Date.now();
+  // 11/27 방(집·사냥터·분양 마을)에 들어가면 자동 낚시는 지금 끝난다 (켠 자리를 떠났다 — 방 안 재접속이면 세션이 없어 그냥 넘어간다)
+  const fishEnd = endAutoFishOnLeave(visitorId, now, room.startsWith("house:") ? "fishHouse" : "fishRoom").catch((e) => console.error("[forage] 자동 낚시 끄기 실패", e));
   const accounts = getAccounts();
   // 계정 전체 대신 이름·색·몸·착용만 (명령 9개 → 2개)
   const [, a, style, staff, dex, champ, gear, mgr] = await Promise.all([
@@ -50,6 +52,7 @@ export const POST = handler(async (req) => {
     room.startsWith("hunt:") ? getRpgStore().get(visitorId).then((c) => huntGearIds(c.equip)).catch(() => []) : Promise.resolve([] as string[]),
     // 11/16 매니저 (전용 칭호·채팅 딱지 — 사냥터에서도)
     isManager(visitorId, now),
+    fishEnd,
   ]);
   // 11/22 새싹 (사냥터·집 방에서도 이름표·채팅에)
   const nb = sproutLeftMinutes(a, { staff, mgr });

@@ -5,6 +5,7 @@ import { CONN_ABNORMAL, CONN_WHY_LABEL, type ConnWhy } from "@tomb/protocol";
 import type { AdminLogRow } from "@/lib/adminLogs";
 import type { ConnHealth } from "@/lib/opsLog";
 import type { ConnLogEntry, HuntLogEntry } from "@/lib/store/opsLog";
+import { moveText, type MoveLogEntry } from "@/lib/moveLog";
 import { cx } from "../ui/cx";
 import ui from "./AdminUi.module.css";
 import styles from "./Admin.module.css";
@@ -38,7 +39,9 @@ const HUNT_LABEL: Record<HuntLogEntry["k"], string> = {
   reject: "서버 판정 거절",
 };
 
-function connKind(e: ConnLogEntry): { text: string; tone?: string } {
+function connKind(e: ConnLogEntry | MoveLogEntry): { text: string; tone?: string } {
+  // 11/27 자리 옮김 (버튼·집·맵·채널·자동 낚시 멈춤 — lib/moveLog)
+  if (e.k === "mv") return { text: e.m === "houseNo" ? "못 들어감" : e.m === "fishStop" ? "낚시 멈춤" : "자리 옮김", tone: e.m === "houseNo" ? ops.tagWarn : ops.tagInfo };
   if (e.k === "in") return { text: "들어옴", tone: ops.tagOk };
   if (e.k === "err") return { text: "오류", tone: ops.tagBad };
   const why = (e.why ?? "drop") as ConnWhy;
@@ -63,7 +66,8 @@ function huntDetail(e: HuntLogEntry & { where?: string }): string {
   return parts.join(" · ");
 }
 
-function connDetail(e: ConnLogEntry): string {
+function connDetail(e: ConnLogEntry | MoveLogEntry): string {
+  if (e.k === "mv") return moveText(e);
   if (e.k === "err") return e.msg ?? "";
   return [e.ch ? `${e.ch}채널` : "", deviceText(e.dev)].filter(Boolean).join(" · ");
 }
@@ -84,8 +88,8 @@ function LogTable({ list, rows, now, onPick, showName }: { list: List; rows: Adm
         </thead>
         <tbody>
           {rows.map((r, i) => {
-            const k = list === "conn" ? connKind(r as ConnLogEntry) : huntKind(r as HuntLogEntry);
-            const detail = list === "conn" ? connDetail(r as ConnLogEntry) : huntDetail(r as HuntLogEntry & { where?: string });
+            const k = list === "conn" ? connKind(r as ConnLogEntry | MoveLogEntry) : huntKind(r as HuntLogEntry);
+            const detail = list === "conn" ? connDetail(r as ConnLogEntry | MoveLogEntry) : huntDetail(r as HuntLogEntry & { where?: string });
             return (
               <tr key={`${r.at}-${r.a}-${i}`}>
                 <td className={styles.nowrap} title={fullTime(r.at)}>
@@ -149,7 +153,7 @@ export function OpsLogSection({ toast, onAuthLost, version }: Common & { version
           <span className={ops.muted}>이름을 누르면 그 계정 기록만 봐요.</span>
         )}
         <span className={ops.toolbarEnd}>
-          {list === "conn" ? "들어옴·나감(종료 종류·기기)·화면 오류" : "입장·나감·튕김·쓰러짐·보상 지급·서버 판정 거절"} · 계정당 50줄, 전체 500줄 · IP는 남기지 않아요
+          {list === "conn" ? "들어옴·나감(종료 종류·기기)·화면 오류 · 회원 상세에는 자리 옮김(누른 버튼·집·맵·채널·자동 낚시 멈춤)도" : "입장·나감·튕김·쓰러짐·보상 지급·서버 판정 거절"} · 계정당 50줄, 전체 500줄 · IP는 남기지 않아요
         </span>
       </div>
       {r ? <LogTable list={list} rows={r.rows} now={r.at} onPick={account ? undefined : setAccount} showName={!account} /> : <LoadState data={null} error={load.error} retry={load.retry} inline />}

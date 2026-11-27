@@ -3,7 +3,7 @@ import { assertNotBanned, recordSeen } from "@/lib/ban";
 import { campOpen } from "@/lib/camp";
 import { seaOpen } from "@/lib/sea";
 import { announceFriends } from "@/lib/friends";
-import { dexBadgeOf } from "@/lib/forage/service";
+import { dexBadgeOf, endAutoFishOnLeave } from "@/lib/forage/service";
 import { handler, HttpError, json } from "@/lib/http";
 import { issueJoin } from "@/lib/joinToken";
 import { rateLimit } from "@/lib/ratelimit";
@@ -63,6 +63,8 @@ export const POST = handler(async (req) => {
     isStaff(visitorId).then((s) => champWireFor(visitorId, s, now)).catch(() => 0),
     // 11/16 매니저 (전용 칭호·채팅 딱지 — 서버가 확인한 것만 토큰에)
     isManager(visitorId, now),
+    // 11/27 자동 낚시: 켠 채널과 다른 채널로 들어오거나, 연결이 끊겼다가(재접속 유예가 지나) 새로 들어오면 끝낸다 (끊긴 동안은 치지 않는다)
+    endAutoFishOnLeave(visitorId, now, null, undefined, { channel }).catch((e) => console.error("[forage] 자동 낚시 끄기 실패", e)),
   ]);
   // 머리 위 이름은 계정 이름이 정답. 계정에 아직 이름이 없으면 요청 이름을 이름 색인과 함께 등록한다 (다른 계정이 쓰면 거절)
   let shown = account.name;

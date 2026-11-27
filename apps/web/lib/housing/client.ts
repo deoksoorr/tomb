@@ -1,5 +1,6 @@
 import type { CampHomeKind, CaravanDesign } from "@tomb/protocol";
 import { request } from "../api";
+import type { MoveVia } from "../moveLog";
 import type { CottageStyleId, HouseSort, HouseZone, PlotTierId } from "./catalog";
 import type { PlantsResponse } from "./plants";
 import type { HouseStatesResponse } from "./states";
@@ -25,6 +26,8 @@ const send = (method: string, data?: unknown): RequestInit => ({
 const house = (id: string, sub = "") => `/api/housing/houses/${encodeURIComponent(id)}${sub}`;
 
 export const housingApi = {
+  /** 11/27 들어가기 전 확인 (남의 집은 주인이 접속 중일 때만 — 막히면 403 「○○님이 접속해 있을 때만…」). via = 누른 버튼 (기록용) */
+  visit: (id: string, via?: MoveVia) => request<{ ok: true; unknown?: true }>(house(id, "/visit"), { ...send("POST", via ? { via } : {}), cache: "no-store" }),
   mine: (zone: HouseZone = "village") => request<MyHouseResponse>(zone === "village" ? "/api/housing/me" : `/api/housing/me?zone=${zone}`, { cache: "no-store" }),
   // 채널마다 주거 구역이 따로다: ch = 지금 있는 채널 (서버가 다른 채널의 필지는 다루지 않는다)
   buyPlot: (ch: number, name: string, intro: string, lot?: number | null, tier: PlotTierId = "small") =>

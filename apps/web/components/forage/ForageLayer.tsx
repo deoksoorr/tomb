@@ -147,6 +147,20 @@ export default function ForageLayer() {
     } else void startGather(u.node);
   });
   useBridgeEvent("forage:left", () => setFishing(null));
+  // 11/27 낚시 자리를 떠나는 길(집·사냥터·분양 마을 들어감, 맵·채널 옮기기, 버스)에서는 바로 일어나 끈다 — 창이 닫히며 자동 낚시도 정산하고 끝난다.
+  // 서버도 그 길마다 따로 끈다 (lib/forage/autoSpot). 망원경(stay)처럼 자리에 남는 장면은 그대로
+  const leaveFishing = () => {
+    bridge.emit("forage:leave");
+    setFishing(null);
+  };
+  useBridgeEvent("scene:changed", ({ scene, stay }) => {
+    if (scene !== "world" && !stay) leaveFishing();
+  });
+  useBridgeEvent("map:changed", leaveFishing);
+  useBridgeEvent("channel:leave", leaveFishing);
+  useBridgeEvent("bus:state", ({ riding }) => {
+    if (riding) leaveFishing();
+  });
   useBridgeEvent("forage:dex", (d) => setDex(d));
 
   // 게이지가 다 차면 서버에 낸다

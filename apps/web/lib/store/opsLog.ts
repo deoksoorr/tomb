@@ -1,6 +1,7 @@
 import type { Redis } from "@upstash/redis";
 import type { ConnWhy } from "@tomb/protocol";
 import { env } from "../env";
+import type { MoveLogEntry } from "../moveLog";
 import { redisClient } from "../redisUsage";
 
 // 11/26 운영 기록: 접속 기록(들어옴·나감·화면 오류)과 사냥터 기록(입장·나감·튕김·쓰러짐·보상·서버 판정 거절).
@@ -42,7 +43,8 @@ export type HuntLogEntry = {
   code?: string;
   msg?: string;
 };
-export type LogEntry = ConnLogEntry | HuntLogEntry;
+/** 11/27 접속 기록 목록에는 자리 옮김 줄(k: "mv" — lib/moveLog)도 들어간다 (계정 목록에만) */
+export type LogEntry = ConnLogEntry | HuntLogEntry | MoveLogEntry;
 
 export interface OpsLogStore {
   /**

@@ -9,6 +9,8 @@ import type { GlyphAtlas } from "../text/GlyphAtlas";
 import { seaHousingHost, type SeaHousingHost } from "../sea/seaHousingHost";
 import { campHousingHost, type CampHousingHost } from "../camp/campHousingHost";
 import { doorOnEnter, houseExitTo, houseMapOf } from "./housePlace";
+import type { MoveVia } from "@/lib/moveLog";
+import { reportMove } from "@/lib/moveReport";
 import { HouseScene, type HouseSceneData } from "./HouseScene";
 import { VillageScene, type VillageSceneData } from "./VillageScene";
 
@@ -38,12 +40,42 @@ type WorldLike = Phaser.Scene & {
   standAtHouseDoor?: (lot: number) => void;
 };
 
-type Where = { at: "village" } | { at: "house"; from: "world" | "village"; lot: number; zone?: "sea" | "camp"; /** 그 집 채널 */ ch: number } | null;
+type Where = { at: "village" } | { at: "house"; from: "world" | "village"; lot: number; zone?: "sea" | "camp"; /** 그 집 채널 */ ch: number; /** 11/27 내 집 (남의 집이면 나올 때 들어가기 전 자리) */ mine: boolean } | null;
 /** 11/26 집이 있는 구역 (PublicHouse.zone — 서버가 "camp"를 넣기 전 타입이라 넓혀 읽는다) */
 const zoneOf = (h: { zone?: string }): "sea" | "camp" | undefined => (h.zone === "sea" || h.zone === "camp" ? h.zone : undefined);
 
+// 11/27 운영 기록: 집 안에 있다가 새로고침·탭 닫기로 끊겼으면 다음에 열 때 한 줄 (집 안 = 들어가기 전 맵·자리가 그대로 남아 있다 — 다시 접속하면 거기서)
+const IN_HOUSE_KEY = "tomb.inHouse";
+function rememberInHouse(mine: boolean, host: MapId): void {
+  try {
+    sessionStorage.setItem(IN_HOUSE_KEY, JSON.stringify({ mine, host }));
+  } catch {
+    // 기록일 뿐
+  }
+}
+function forgetInHouse(): void {
+  try {
+    sessionStorage.removeItem(IN_HOUSE_KEY);
+  } catch {
+    // 기록일 뿐
+  }
+}
+function reportReloadedInHouse(): void {
+  try {
+    const raw = sessionStorage.getItem(IN_HOUSE_KEY);
+    sessionStorage.removeItem(IN_HOUSE_KEY);
+    const o = raw ? (JSON.parse(raw) as { mine?: unknown; host?: unknown }) : null;
+    if (o && (o.host === "village" || o.host === "sea" || o.host === "camp")) reportMove({ m: "houseOut", from: o.mine === true ? "mine" : "other", to: o.host, via: "reload" });
+  } catch {
+    // 기록일 뿐
+  }
+}
+
 export function installHousing(game: Phaser.Game, ctx: GameContext): void {
   game.scene.add("house", HouseScene, false);
+  reportReloadedInHouse();
+  /** 11/27 기록용: 지금 집에서 나오는 길 (house:exit = 창이 닫혀서, 아니면 집 문으로) */
+  let exitVia: MoveVia = "exitDoor";
   game.scene.add("village", VillageScene, false);
   let where: Where = null;
   let world: WorldLike | null = null;
@@ -162,9 +194,14 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
 
   const exitHouse = () => {
     if (where?.at !== "house") return;
-    const { from, lot, zone, ch } = where;
+    const { from, lot, zone, ch, mine } = where;
     game.scene.stop("house");
-    const out = houseExitTo({ from, hasVillage: !!lastVillage, host: hostMap(), zone, lot, houseCh: ch, ch: bridge.last("net:status")?.channel ?? null });
+    const host = hostMap();
+    const out = houseExitTo({ from, hasVillage: !!lastVillage, host, zone, lot, houseCh: ch, ch: bridge.last("net:status")?.channel ?? null, mine });
+    // 11/27 운영 기록: 집에서 나와 어디로 갔는지 (남의 집이면 원래 맵) · 어떻게 나왔는지 (집 문 / 창 닫힘·채널 옮기기)
+    reportMove({ m: "houseOut", from: mine ? "mine" : "other", to: out.to === "warp" ? out.map : host, via: exitVia });
+    exitVia = "exitDoor";
+    forgetInHouse();
     if (out.to === "village" && lastVillage) {
       runVillage(lastVillage, lot);
       bridge.emit("house:left", { to: "village" });
@@ -192,9 +229,11 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
     stopAll();
     const data: HouseSceneData = { ...base(), house, mine, editing: edit, onExit: exitHouse };
     const zone = zoneOf(house);
-    where = { at: "house", from, lot: house.lot, ...(zone ? { zone } : {}), ch: house.ch };
+    where = { at: "house", from, lot: house.lot, ...(zone ? { zone } : {}), ch: house.ch, mine };
+    rememberInHouse(mine, hostMap());
     // 그 집이 지금 맵에 있으면 숨은 캐릭터를 미리 문 앞에 세워 둔다 (새로고침 복원도 문 앞으로). 다른 맵이면 나올 때 옮긴다
-    if (doorOnEnter(from, houseMapOf(zone) === hostMap())) toDoor(world, house);
+    // 11/27 남의 집은 세우지 않는다 (나오면 들어가기 전 자리 그대로)
+    if (doorOnEnter(from, houseMapOf(zone) === hostMap(), mine)) toDoor(world, house);
     game.scene.run("house", data);
     bridge.emit("scene:changed", { scene: "house", place: "house", houseId: house.id });
   };
@@ -222,6 +261,8 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
     bridge.on("house:enter", ({ house, mine, edit }) => enterHouse(house, mine, !!edit)),
     bridge.on("house:exit", () => {
       const s = game.scene.getScene("house") as HouseScene | null;
+      // 창이 닫혀 나온다 (채널 옮기기·다른 창·친구 따라가기 등). 집 장면의 문으로 나오면 exitDoor 그대로
+      if (where?.at === "house") exitVia = "panel";
       if (where?.at === "house" && s?.scene.isActive()) s.leave();
       else if (where?.at === "house") exitHouse();
       // 게임은 집에 없는데 UI만 집 HUD를 띄우고 있다 → UI도 닫게 알린다

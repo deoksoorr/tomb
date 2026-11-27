@@ -22,12 +22,21 @@ import OfficeDialog from "./OfficeDialog";
 import { campOf, isCampHouse } from "@/game/camp/campSaleApi";
 import { useRideStopGate } from "../overlay/RideStopDialog";
 import { BIG_HOUSE_TOAST, myBig } from "@/game/camp/foodState";
+import { takeVisitVia } from "@/lib/housing/visitVia";
+import type { MoveVia } from "@/lib/moveLog";
+import { reportMove } from "@/lib/moveReport";
 
-/** 11/27 바베큐로 커진 동안에는 집에 못 들어간다 (안내 토스트를 띄우고 true) */
-function bigBlocked(): boolean {
+/** 11/27 바베큐로 커진 동안에는 집에 못 들어간다 (안내 토스트를 띄우고 true). 운영 기록에도 한 줄 */
+function bigBlocked(via?: MoveVia): boolean {
   if (myBig() <= 1) return false;
   bridge.emit("toast", { message: BIG_HOUSE_TOAST });
+  reportMove({ m: "houseNo", no: "big", ...(via ? { via } : {}) });
   return true;
+}
+
+/** 11/27 지금 그 집이 있는 채널·맵에 서 있는지 (실시간 서버에 닿지 못해 주인 접속을 모를 때 — 이때는 이런 집만 들어간다) */
+function onHouseSpot(house: PublicHouse, ch: number): boolean {
+  return house.ch === ch && (bridge.last("map:changed")?.map ?? "village") === (house.zone ?? "village");
 }
 
 type Mode = { kind: "office" } | { kind: "pending" } | { kind: "village" } | { kind: "house"; house: PublicHouse; mine: boolean; edit: boolean };
@@ -306,7 +315,7 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
   useEffect(() => {
     if (mode.kind !== "house") return;
     // 11/27 커진 동안에는 문을 못 지나간다 (들어갔다 나오면 크기가 풀렸다) — 안내하고 창을 닫는다. 효과가 끝나면 다시 들어갈 수 있다
-    if (!inScene.current && bigBlocked()) return void onCloseRef.current();
+    if (!inScene.current && bigBlocked(mode.mine ? "mine" : undefined)) return void onCloseRef.current();
     // 11/16 마을에서 바로 들어갈 때: 탈것에 탄 채로는 못 들어간다. 의자·벤치면 일어나서
     // 11/22 아래 토스트 대신 가운데 알림 ([확인]이면 창을 닫고, [내리고 들어가기]면 내린 뒤 다시 — enterTry)
     if (!inScene.current && gate("집에 들어갈", { label: "내리고 들어가기", run: () => setEnterTry((n) => n + 1) })) return;
@@ -317,54 +326,80 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
   }, [enterKey, enterTry]);
 
   /**
-   * 11/26 집 안으로: 다른 채널의 집이면 그 채널로 옮긴 뒤 (나오면 그 채널 그 집 맵의 문 앞 — game/housing/housePlace).
+   * 11/26 집 안으로: 다른 채널의 집이면 그 채널로 옮긴 뒤 (나오면 내 집은 그 채널 그 집 맵의 문 앞, 11/27 남의 집은 들어가기 전 맵·자리 — game/housing/housePlace).
    * 그 채널이 꽉 찼거나 못 옮겼으면 들어가지 않고 창을 닫는다 (지금 자리 그대로 — 꽉 찬 안내는 게임이 토스트로). 집 안에서 다른 집으로 갈 때는 옮기지 않는다
    */
-  const enterOn = useCallback((house: PublicHouse, mine: boolean) => {
+  const enterOn = useCallback((house: PublicHouse, mine: boolean, via0?: MoveVia) => {
     const go = () => {
       setOverlay(null);
       setMode({ kind: "house", house, mine, edit: false });
     };
     hopOff.current?.();
     hopOff.current = null;
-    if (inScene.current || house.ch === chRef.current) return go();
+    const enterNow = () => {
+      if (inScene.current || house.ch === chRef.current) return go();
+      setBusy(true);
+      setNotice(`${house.ch}채널로 옮기는 중…`);
+      hopOff.current = hopChannel(
+        house.ch,
+        chRef.current,
+        () => {
+          hopOff.current = null;
+          chRef.current = house.ch;
+          setBusy(false);
+          setNotice(null);
+          go();
+        },
+        (full) => {
+          hopOff.current = null;
+          setBusy(false);
+          setNotice(null);
+          // 꽉 찬 채널이면 게임이 옮기지 않고(지금 채널 그대로) 이미 토스트로 안내했다
+          if (!full) bridge.emit("toast", { message: `${house.ch}채널로 옮기지 못했어요. 잠시 뒤 다시 해 주세요.` });
+          onCloseRef.current();
+        },
+        { fullMsg: houseChannelFullMsg(house.ch) },
+      );
+    };
+    const via = via0 ?? takeVisitVia(house.id);
+    // 11/27 들어가기 전 서버 확인 (기록도 서버가 남긴다): 남의 집은 주인이 접속 중일 때만 — 막히면 안내하고 창을 닫는다. 내 집은 기다리지 않는다
+    if (mine) {
+      housingApi.visit(house.id, via ?? "mine").catch(() => undefined);
+      return enterNow();
+    }
     setBusy(true);
-    setNotice(`${house.ch}채널로 옮기는 중…`);
-    hopOff.current = hopChannel(
-      house.ch,
-      chRef.current,
-      () => {
-        hopOff.current = null;
-        chRef.current = house.ch;
+    setVisitError(null);
+    housingApi.visit(house.id, via).then(
+      (r) => {
         setBusy(false);
-        setNotice(null);
-        go();
+        // 실시간 서버에 닿지 못해 주인 접속을 모르면: 지금 채널·맵의 집(문 앞)만
+        if (r.unknown && !onHouseSpot(house, chRef.current)) {
+          bridge.emit("toast", { message: "지금은 주인이 접속해 있는지 알 수 없어요. 잠시 뒤 다시 해 주세요." });
+          return void onCloseRef.current();
+        }
+        enterNow();
       },
-      (full) => {
-        hopOff.current = null;
+      (e) => {
         setBusy(false);
-        setNotice(null);
-        // 꽉 찬 채널이면 게임이 옮기지 않고(지금 채널 그대로) 이미 토스트로 안내했다
-        if (!full) bridge.emit("toast", { message: `${house.ch}채널로 옮기지 못했어요. 잠시 뒤 다시 해 주세요.` });
+        bridge.emit("toast", { message: errorMessage(e) });
         onCloseRef.current();
       },
-      { fullMsg: houseChannelFullMsg(house.ch) },
     );
   }, []);
 
-  const visit = useCallback(async (id: string) => {
+  const visit = useCallback(async (id: string, via?: MoveVia) => {
     setVisitError(null);
     const mine = myRef.current?.house;
-    if (mine?.id === id) return enterOn(mine, true);
+    if (mine?.id === id) return enterOn(mine, true, via);
     const sea = seaRef.current?.house;
-    if (sea?.id === id) return enterOn(sea, true);
+    if (sea?.id === id) return enterOn(sea, true, via);
     const camp = campRef.current?.house;
-    if (camp?.id === id) return enterOn(camp, true);
+    if (camp?.id === id) return enterOn(camp, true, via);
     setBusy(true);
     try {
       const { house } = await housingApi.detail(id);
       setBusy(false);
-      enterOn(house, false);
+      enterOn(house, false, via);
     } catch (e) {
       setVisitError(errorMessage(e));
       setNotice(errorMessage(e));
@@ -389,7 +424,7 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
         inScene.current = false;
         onCloseRef.current();
       }),
-      bridge.on("village:door", ({ houseId }) => void visit(houseId)),
+      bridge.on("village:door", ({ houseId }) => void visit(houseId, "door")),
       bridge.on("house:presence", (p) => p.where === "village" && setVillageCount(p.online ? p.count : null)),
       bridge.on("village:lot", ({ lot }) => {
         const h = myRef.current?.house;
@@ -411,11 +446,14 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
 
   // 주거 구역에서 열린 창: 집 문이면 바로 그 집으로 (못 들어가면 안내 후 닫기)
   const intentHouse = intent?.houseId ?? null;
+  const intentStay = !!intent?.stay;
   useEffect(() => {
     if (!intentHouse) return;
     let alive = true;
+    // 11/27 기록용: 누른 버튼 ([내 집 가기] · 친구 창 · 집 문)
+    const via: MoveVia | undefined = intentStay ? "mine" : takeVisitVia(intentHouse);
     // 11/27 커진 채로 문 앞 E: 집 정보를 받기 전에 안내하고 닫는다 (위 집 안으로 막기와 같은 안내)
-    if (!inScene.current && bigBlocked()) {
+    if (!inScene.current && bigBlocked(via)) {
       onCloseRef.current();
       return;
     }
@@ -428,7 +466,7 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
       const me = known ?? (await loadMine().catch(() => null));
       if (!alive) return;
       const mine = me?.house;
-      if (mine?.id === intentHouse) return enterOn(mine, true);
+      if (mine?.id === intentHouse) return enterOn(mine, true, via);
       try {
         const { house } = await (early ?? housingApi.detail(intentHouse));
         if (!alive) return;
@@ -440,7 +478,7 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
           if (camp?.house?.id === intentHouse) {
             campRef.current = camp;
             setCampMy(camp);
-            return enterOn(camp.house, true);
+            return enterOn(camp.house, true, via);
           }
         }
         if (house.zone === "sea") {
@@ -449,10 +487,10 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
           if (sea?.house?.id === intentHouse) {
             seaRef.current = sea;
             setSeaMy(sea);
-            return enterOn(sea.house, true);
+            return enterOn(sea.house, true, via);
           }
         }
-        enterOn(house, false);
+        enterOn(house, false, via);
       } catch (e) {
         if (!alive) return;
         bridge.emit("toast", { message: errorMessage(e) });
@@ -463,7 +501,7 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
     return () => {
       alive = false;
     };
-  }, [intentHouse, loadMine, enterOn]);
+  }, [intentHouse, intentStay, loadMine, enterOn]);
 
   useEffect(() => {
     if (!notice) return;
@@ -525,7 +563,7 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
         channel={channel}
         onClose={onClose}
         onEnterMine={enterCamp}
-        onVisit={(id) => void visit(id)}
+        onVisit={(id) => void visit(id, "list")}
         onVillage={(lot) => {
           // 내 캠핑장 집 앞으로 (캠핑장에 있을 때만 단추가 보인다 — 창을 닫는다)
           if (lot !== null) bridge.emit("camp:lot", { lot });
@@ -550,7 +588,7 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
         channel={channel}
         onClose={onClose}
         onEnterMine={enterSea}
-        onVisit={(id) => void visit(id)}
+        onVisit={(id) => void visit(id, "list")}
         onVillage={(lot) => {
           // 내 오두막 보러 가기: 바닷가면 그 터 앞으로 (창을 닫는다)
           if (lot !== null) bridge.emit("sea:lot", { lot });
@@ -572,7 +610,7 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
       channel={channel}
       onClose={inVillage ? () => setOverlay(null) : onClose}
       onEnterMine={enterMine}
-      onVisit={visit}
+      onVisit={(id) => void visit(id, "list")}
       onVillage={(spawnLot, mine) => goVillage(spawnLot, false, mine)}
       onExterior={openExterior}
     />

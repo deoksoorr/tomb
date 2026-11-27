@@ -42,6 +42,9 @@ const LIMITS = {
   // 접속 시간 보너스 받기 (구간은 30분마다라 넉넉해도 된다)
   stayBonus: { visitor: 10, ip: 1200, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   room: { visitor: 20, ip: 2400, windowSec: MIN, message: "방 입장 요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  // 11/27 집 들어가기 전 확인 (남의 집은 주인 접속 확인 — 실시간 서버에 묻는다) · 자리 옮김 기록 (화면이 몇 줄씩 묶어 보낸다). 1분 창 → 메모리 한도
+  houseVisit: { visitor: 30, ip: 2400, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  moves: { visitor: 30, ip: 2400, windowSec: MIN, message: "요청이 너무 잦아요." },
   errors: { visitor: null, ip: 300, windowSec: MIN, message: "오류 보고가 너무 많아요." },
   // 11/18 오류 보고 하루 한도 (Redis). 로그인 없이 부르는 경로라 하루로도 묶는다 — 집·회사처럼 한 IP에 여럿이 있어도
   // 정상 오류는 이만큼 나지 않으니 IP는 넉넉히, 쿠키가 있으면 계정마다 따로 더 센다
