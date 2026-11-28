@@ -351,7 +351,7 @@ function TierBadge({ tier, className }: { tier: RaftGearTier; className?: string
 /**
  * 좌대 한정 획득 코디 (단계마다 나오는 것이 다르다 — protocol RAFT_GEAR): 고른 것을 내 아바타에 입혀 돌려 보고 염색 색도 미리 본다. 영구 넷은 한 벌로도.
  * 확률은 보여 주지 않는다 (운영자 11/27). wide = PC 가로 창.
- * 11/27 운영자 「레이아웃이 이상하다」: 위 = 아바타를 크게(무대를 몸 둘레로 잘라 6배) + 옆에 이름·부위·기간·설명·염색,
+ * 11/27 운영자 「레이아웃이 이상하다」: 위 = 아바타 (무대를 몸 둘레 56×52로 잘라 4배 — 11/28 삿갓·낚싯대·발밑 연출까지 다 보이게) + 옆에 이름·부위·기간·설명·염색,
  * 아래 = 같은 폭 카드 4칸 격자 (줄마다 앞에 기간 배지 — 7일 1 · 30일 2 · 영구 4 한 줄), 영구 줄 아래 한 벌 상자 (폰은 2칸)
  */
 function GearPreview({ avatar, wide = false }: { avatar?: { color: string; body?: string }; wide?: boolean }) {

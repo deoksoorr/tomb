@@ -814,19 +814,63 @@ function wadersBack(g0: Grid, v: V, m: GearM, fb: FB, layer: "back" | "front", _
   const big = bigBody(fb);
   const n = neckY(m, fb);
   if (big) {
-    const top = bigTop(w) - 1;
+    // 11/28 운영자 「물빛가슴장화 도트가 이상한데요」: 이불·동글이는 머리와 몸이 한 덩어리라 (머리를 나중에 덮어 그리지 않는다)
+    // 예전처럼 가슴판 네모·멜빵을 윗단 위로 올리면 얼굴에 그대로 남았다 — 이불은 입 밑에 청록 네모 + 금 버클 둘이 「입」처럼,
+    // 멜빵이 두 눈 옆에 수염처럼. 이제 윗단은 얼굴 밑(이불: 입 두 줄 아래 · 동글이: 얼굴 가리개 밑)에서 평평하게 끊고,
+    // 금 버클은 윗단 위 · 멜빵은 버클에서 바깥 위로 두 칸만 (어깨 쪽으로, 얼굴 안쪽으로는 안 들어간다). 장화는 이불은 밑단 물결 이빨 둘,
+    // 동글이는 공 밑 두 발을 노란 고무장화로
+    const sheet = fb === "sheet";
+    const top = sheet ? Math.round(m.hy) + 4 : bigTop(w) - 1;
+    const hemY = sit === 1 ? 26 : sit === 2 ? 24 : 25;
+    // 이불 천 안쪽만 (뒤에 멘 뜰채 자루·망토 자락이 옆으로 삐져나온 칸은 그대로 둔다)
+    const inSheet = (x: number, y: number) => {
+      const flare = y >= hemY - 3 ? 1 + (sit === 1 ? 1 : 0) : 0;
+      return x >= cx - 6 - flare && x < cx + 6 + flare;
+    };
     for (let y = top; y < 27; y++) {
       let l = 99;
       let r = -1;
-      for (let x = 1; x <= 18; x++) if (g.filled(x, y) && (fb === "sheet" || inBall(w, x, y))) { l = Math.min(l, x); r = Math.max(r, x); }
+      for (let x = 1; x <= 18; x++) if (g.filled(x, y) && (sheet ? inSheet(x, y) : inBall(w, x, y))) { l = Math.min(l, x); r = Math.max(r, x); }
       if (r < 0) continue;
       for (let x = l; x <= r; x++) if (g.filled(x, y)) g.set(x, y, x === l ? WAD.hi : x >= r - 1 ? (x === r ? WAD.deep : WAD.lo) : y === top ? WAD.hi : WAD.c);
     }
-    if (v !== "side") {
-      // 가슴판 위로 솟은 네모 + 멜빵 + 금 버클
-      for (let x = cx - 2; x <= cx + 1; x++) for (let y = top - 2; y < top; y++) g.set(x, y, x === cx - 2 ? WAD.hi : x === cx + 1 ? WAD.lo : WAD.c);
-      for (const [x0, d] of [[cx - 3, -1], [cx + 2, 1]] as const) for (let k = 0; k < 3; k++) soft(g0).set(x0 + d * k, top - 2 - k, WAD.deep);
-      if (v === "down") { g.set(cx - 2, top - 2, GOLD); g.set(cx + 1, top - 2, GOLD); }
+    if (v === "side") {
+      // 옆: 어깨로 가는 멜빵 한 줄 + 금 버클
+      g.set(cx - 1, top, GOLD);
+      for (let k = 1; k <= 2; k++) g.set(cx - 1, top - k, WAD.deep);
+    } else {
+      // 앞·뒤: 윗단 양쪽 버클(앞만 금) → 바깥 위로 멜빵 두 칸 · 앞은 가슴 주머니
+      for (const [x0, d] of [[cx - 3, -1], [cx + 2, 1]] as const) {
+        g.set(x0, top, v === "down" ? GOLD : WAD.deep);
+        for (let k = 1; k <= 2; k++) g.set(x0 + d * k, top - k, WAD.deep);
+      }
+      if (v === "down") {
+        g.set(cx - 1, top + 2, WAD.deep);
+        g.set(cx, top + 2, WAD.deep);
+      }
+    }
+    if (sit !== 0) return;
+    if (sheet) {
+      // 밑단 물결 이빨(2칸) 둘을 장화로: 가운데에 가장 가까운 왼쪽·오른쪽 이빨 (걸을 때 물결이 밀리면 장화도 한 칸씩 — 발걸음처럼)
+      const tooth = (x: number) => (x + _hem + 9) % 3 === 0;
+      const lx = [cx - 3, cx - 4, cx - 2].find(tooth)!;
+      const rx = [cx + 1, cx, cx + 2].find(tooth)!;
+      for (const x of [lx, rx])
+        for (let y = hemY - 2; y <= hemY; y++) {
+          const c = y === hemY - 2 ? BOOT_HI : y === hemY ? BOOT_LO : null;
+          g.set(x, y, c ?? BOOT_HI);
+          g.set(x + 1, y, c ?? BOOT);
+        }
+    } else {
+      // 동글이 두 발 (공 밑으로 나온 칸)
+      const hy = Math.round(m.hy);
+      for (let y = hy + 5; y <= FIT_Y1; y++)
+        for (let x = cx - 7; x <= cx + 6; x++) {
+          if (!g.filled(x, y) || inBall(w, x, y)) continue;
+          const left = !(g.filled(x - 1, y) && !inBall(w, x - 1, y));
+          const below = y < FIT_Y1 && g.filled(x, y + 1) && !inBall(w, x, y + 1);
+          g.set(x, y, !below ? BOOT_LO : left ? BOOT_HI : BOOT);
+        }
     }
     return;
   }

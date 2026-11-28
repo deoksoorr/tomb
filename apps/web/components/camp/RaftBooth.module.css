@@ -385,19 +385,19 @@
   align-content: start;
 }
 
-/* 무대(72×64)를 몸 둘레 40×40만 잘라 크게 (발밑 한 벌 연출 「금빛 월척」 잉어까지 들어간다) — 픽셀은 정수 배율 그대로 */
+/* 무대(72×64)를 몸 둘레 56×52만 잘라 4배 (정수 배율 그대로). 아바타 발바닥(36,44)이 가로 한가운데 —
+   11/28 운영자 「미리보기 캐릭터 사이즈도 줄여야」: 예전 40×40 × 5·6배는 삿갓·낚싯대 끝·발밑 한 벌 연출 「금빛 월척」 잉어·따라오는 펫이 잘렸다.
+   이제 키다리 + 삿갓 + 낚싯대 끝부터 발밑 잉어 고리까지 위아래·양옆 여백을 두고 다 들어간다 (PC·폰 같은 4배 = 224×208) */
 .fitBox {
-  --scale: 5;
+  --scale: 4;
+  --crop-w: 56px;
+  --crop-h: 52px;
   position: relative;
-  width: calc(40px * var(--scale));
-  height: calc(40px * var(--scale));
+  width: calc(var(--crop-w) * var(--scale));
+  height: calc(var(--crop-h) * var(--scale));
   overflow: hidden;
   background: var(--bg-deep);
   box-shadow: var(--px-border);
-}
-
-.gear[data-wide] .fitBox {
-  --scale: 6;
 }
 
 .fitBox:focus-within {
@@ -407,8 +407,8 @@
 
 .fitCanvas {
   position: absolute;
-  left: calc(-16px * var(--scale));
-  top: calc(-14px * var(--scale));
+  left: calc(-8px * var(--scale));
+  top: calc(-6px * var(--scale));
   box-shadow: none;
 }
 
@@ -417,13 +417,9 @@
 }
 
 .fitControls {
-  width: calc(40px * var(--scale, 5));
+  width: calc(56px * 4);
   grid-template-columns: 3fr 2fr;
   gap: 4px;
-}
-
-.gear[data-wide] .fitControls {
-  --scale: 6;
 }
 
 .fitControls > div {

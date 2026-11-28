@@ -140,6 +140,31 @@ describe("11/27 좌대 전용 코디 그림", () => {
       expect(hits.slice(0, 8)).toEqual([]);
     }, 120_000);
 
+  // 11/28 가슴장화 (이불·동글이 윗단·멜빵·장화 개편) + 함께 입는 좌대 코디 · 운영자 겨울 데이트룩(비니·체크 머플러)
+  for (const withIds of [
+    ["jw_sedge", "jw_bell", "jw_cape"],
+    ["jw_carphat", "jw_net"],
+    ["jw_vest"],
+    ["kd_beanie", "kd_muffler"],
+  ])
+    it(`잘림 없음: jw_waders + ${withIds.join("+")} (16몸 × 4방향 × 28열, 1px 여백)`, () => {
+      const { hits, frames } = clipHits("jw_waders", withIds);
+      expect(frames).toBe(BODIES.length * 4 * AV_COLS);
+      expect(hits.slice(0, 8)).toEqual([]);
+    }, 120_000);
+
+  it("11/28 가슴장화: 이불·동글이는 얼굴(윗단 위 두 줄 넘게)에 청록·금을 칠하지 않고, 서 있으면 노란 장화가 보인다", () => {
+    const has = (g: Grid, c: number, y0 = 0, y1 = 27) => [...g.px].some((v, i) => v & 255 && v >>> 8 === c && Math.floor(i / g.w) >= y0 && Math.floor(i / g.w) <= y1);
+    for (const body of ["sheet", "round"])
+      for (const view of ["down", "side", "up"] as const)
+        for (const col of [0, 2, 3, 4, 5]) {
+          const g = avatarFrameGrid(body, view, col, COLOR, ["jw_waders"]);
+          // 이불 눈 줄(14~15)·동글이 얼굴 가리개 윗줄(15~16)에는 장화 천·버클이 없다
+          for (const c of [...JW_DYE.jw_waders.colors, 0xf6c83c]) expect(has(g, c, 0, body === "sheet" ? 16 : 17), `${body}/${view}/${col} ${c.toString(16)}`).toBe(false);
+          expect(has(g, 0xf6c62a) || has(g, 0xffe68a), `${body}/${view}/${col} 장화`).toBe(true);
+        }
+  });
+
   it("줄임 단계는 몸·방향·동작 묶음마다 하나 (걷는 프레임끼리 크기가 같다)", () => {
     // 위 검사로 채워진 기록: 같은 꾸미기·자리·몸·방향·묶음이면 프레임과 상관없이 한 값
     expect(STICKY.size).toBeGreaterThan(0);
