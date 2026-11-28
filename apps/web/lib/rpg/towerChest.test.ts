@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { potionById } from "./catalog";
 import { potionSaleValue, sellValue, unpaidPotions } from "./character";
-import { isChestFloor, NO_POTION_FROM, splitChestPotions, TOWER_CHEST_FROM, TOWER_CHESTS_PER_DAY, towerChestDrops, towerChestFloors, towerSellsPotions, towerSettle, type TowerState } from "./tower";
+import { isChestFloor, NO_POTION_FROM, splitChestPotions, TOWER_CHEST_FROM, TOWER_CHESTS_PER_DAY, towerChestDrops, towerChestFloors, towerChestFrom, towerGivesChest, towerNoPointGain, towerNoPointLoss, towerPointFrom, towerPointFromText, towerRunPoints, towerSellsPotions, towerSettle, type TowerState } from "./tower";
 
 // 11/15 우두머리 상자: 게임이 판 안에서 여는 상자(층·순서·드롭)와 서버가 판 끝에 주는 상자가 같다
 
@@ -23,6 +23,52 @@ describe("우두머리 상자 (게임 ↔ 서버)", () => {
     expect(towerChestFloors(Math.max(1, TOWER_CHEST_FROM - 9), 20, 500)).toEqual(range(Math.max(1, TOWER_CHEST_FROM - 9), 20).filter(isChestFloor));
     expect(towerChestFloors(Math.max(1, TOWER_CHEST_FROM - 9), 20, 500).length).toBeGreaterThanOrEqual(2);
     expect(TOWER_CHESTS_PER_DAY).toBe(Infinity);
+  });
+
+  it("11/27 포인트를 못 받는 저층(towerPointFrom 아래)은 상자도 없다 — 게임과 서버 정산이 같은 층을 연다", () => {
+    for (const t of [0, 10, 20, 30, 33, 35, 40, 50, 80])
+      for (const start of [1, 51, 101, 121, 141])
+        for (const floors of [0, 7, 25, 60]) {
+          const st = towerSettle({ ...base, tDay: DAY }, { day: DAY, week: WEEK, start, floors, floorMs: floors * 50_000, tLevel: t });
+          const game = towerChestFloors(start, floors, 0, t);
+          expect(game, `★${50 + t} ${start}층부터 ${floors}층`).toEqual(st.chests);
+          // 연 상자 층은 모두 포인트를 받는 층 · 포인트를 받는 상자 층은 모두 열린다
+          const from = towerPointFrom(t);
+          expect(game.every((f) => f >= from && isChestFloor(f))).toBe(true);
+          const pts = towerRunPoints(start, floors, t);
+          expect(game).toEqual(Array.from({ length: floors - pts.free }, (_, i) => start + pts.free + i).filter(isChestFloor));
+        }
+  });
+
+  it("11/27 경계: 포인트 시작 층 바로 아래는 상자 없음, 그 층이 상자 층이면 상자를 연다 · 낮은 초월 레벨은 그대로", () => {
+    // ★85 (t 35): 적정 70층 → 60층부터 포인트 = 60층이 상자 층
+    expect(towerPointFrom(35)).toBe(60);
+    expect([55, 59, 60, 65].map((f) => towerGivesChest(f, 35))).toEqual([false, false, true, true]);
+    // ★83 (t 33): 56층부터 포인트 → 상자는 60층부터
+    expect(towerPointFrom(33)).toBe(56);
+    expect([55, 56, 60].map((f) => towerGivesChest(f, 33))).toEqual([false, false, true]);
+    expect(towerChestFrom(33)).toBe(56);
+    for (let t = 0; t <= 100; t++)
+      for (let f = 1; f <= 260; f++) expect(towerGivesChest(f, t)).toBe(isChestFloor(f) && f >= towerPointFrom(t));
+    // 포인트 시작 층이 원래 상자 층(51층) 아래인 초월 레벨은 상자가 예전과 같다
+    for (let t = 0; towerPointFrom(t) <= TOWER_CHEST_FROM; t++)
+      for (const start of [1, 51]) expect(towerChestFloors(start, 80, 0, t)).toEqual(towerChestFloors(start, 80, 0));
+    // tLevel을 안 넘기면(옛 부름) 예전과 같다
+    const st = towerSettle({ ...base, tDay: DAY }, { day: DAY, week: WEEK, start: 51, floors: 30, floorMs: 30 * 50_000 });
+    expect(st.chests).toEqual([55, 60, 65, 70, 75, 80]);
+    // 초월 EXP·기록은 상자와 상관없이 그대로
+    const hi = towerSettle({ ...base, tDay: DAY }, { day: DAY, week: WEEK, start: 51, floors: 30, floorMs: 30 * 50_000, tLevel: 40 });
+    expect(hi.chests).toEqual([70, 75, 80]);
+    expect([hi.tExp, hi.best, hi.patch.fBest]).toEqual([st.tExp, st.best, st.patch.fBest]);
+  });
+
+  it("11/27 안내 문구: 포인트 없는 층은 「초월 EXP만」, 상자 층이 끼면 「포인트와 우두머리 상자 없이」", () => {
+    expect(towerNoPointGain(51, 59)).toBe("초월 EXP만");
+    expect(towerNoPointLoss(51, 59)).toBe("포인트와 우두머리 상자");
+    expect(towerNoPointLoss(1, 49)).toBe("포인트");
+    expect(towerNoPointLoss(51, 54)).toBe("포인트");
+    expect(towerPointFromText(33)).toBe("56층부터 포인트와 우두머리 상자를 받아요");
+    expect(towerPointFromText(20)).toBe("30층부터 포인트를 받아요");
   });
 
   it("상자 드롭은 판 시드 + 층으로 정해진다 (게임이 떨군 것 = 서버가 준 것)", () => {

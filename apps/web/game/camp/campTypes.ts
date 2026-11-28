@@ -25,6 +25,8 @@ export type CampInteractable = {
   r: number;
   /** 11/18 바닥 영역 (있으면 반지름 대신 이 상자 안이 닿는 곳 — 버스 정차 칸, game/logic/reach) */
   zone?: ReachZone;
+  /** 11/27 바닥 영역이 있을 때 안내 글자 자리 (없으면 내 발밑) — 좌대 매표소는 부스 전체가 닿는 곳이지만 안내는 창구 왼쪽 앞에 (낚시터 사장님 이름표와 안 겹치게) */
+  promptAt?: { x: number; y: number };
   /** 화면 안내 ("E 버스 타기") */
   label: string;
   npc?: CampNpcId;

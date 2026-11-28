@@ -11,8 +11,8 @@ import { ampNeed, ENH_AMP_MUL, ENHANCE_TABLE, enhanceRate, inheritTo, pityOf } f
 import { HUNT_DROP_ROLLS, KILLS_PER_DROP_ROLL } from "@/lib/rpg/rewards";
 import { METEOR_DAY_ROLLS, METEOR_LEGEND_P, METEOR_P, METEOR_PITY } from "@/lib/rpg/meteorDrop";
 import { SG_GRADE_NAMES, SG_LEGEND_CHANCE, SG_PIECE_LABEL, SG_PIECES, SG_SETS } from "@/lib/rpg/setGear";
-import { CHEST_COSMETIC_CHANCE, chestDocs, chestSeals, COS_DAYS, COS_TIER_NAMES, cosTierWeights, SG_CHEST_CHANCE, SG_PIECE_WEIGHTS, sgGradeForFloor } from "@/lib/rpg/setGearRoll";
-import { NO_POTION_FROM, TOWER_BOSS_EVERY, TOWER_CHEST_FROM } from "@/lib/rpg/tower";
+import { CHEST_COSMETIC_CHANCE, chestDocs, chestSeals, COS_DAYS, COS_TIER_NAMES, cosTierWeights, SG_CHEST_CHANCE, SG_GRADE_ODDS, SG_PIECE_WEIGHTS, sgGradeBands, type SgGradeWeights } from "@/lib/rpg/setGearRoll";
+import { isChestFloor, NO_POTION_FROM, TOWER_BOSS_EVERY, TOWER_CHEST_FROM } from "@/lib/rpg/tower";
 import { FEATHER_CHANCE, RED_FEATHER_SHARE } from "@/lib/sea/gull";
 import { PERK_VALUES, TITLE_GRADE_NAMES } from "@/lib/titles";
 import { WISH_BONUS_JACKPOT, WISH_BONUS_SPARKLE, WISH_LUCK_TABLE } from "@/lib/wish";
@@ -79,26 +79,33 @@ export const meteorRows = (): string[][] => [
 
 // ── 야근 빌딩 우두머리 상자 ──
 
-/** 우두머리 층 구간마다 직급 ("50~99층 사원급" …). 상자가 열리는 우두머리 층만 본다 (11/19 TOWER_CHEST_FROM층부터) */
-export function gradeBands(maxFloor = 200): { from: number; to: number | null; name: string }[] {
-  const out: { from: number; to: number | null; name: string }[] = [];
-  for (let f = TOWER_CHEST_FROM; f <= maxFloor; f += TOWER_BOSS_EVERY) {
-    const name = SG_GRADE_NAMES[sgGradeForFloor(f)];
-    const last = out[out.length - 1];
-    if (last && last.name === name) continue;
-    if (last) last.to = f - 1;
-    out.push({ from: f, to: null, name });
-  }
-  return out;
+/** maxFloor층까지 상자가 열리는 층 (55, 60, …) */
+export const chestFloorsUpTo = (maxFloor: number): number[] => Array.from({ length: maxFloor }, (_, i) => i + 1).filter(isChestFloor);
+/** 직급 확률 표의 마지막 구간이 시작한 다음 상자 층까지 보면 모든 구간이 나온다 */
+const GRADE_TABLE_TOP = Math.max(...SG_GRADE_ODDS.map((b) => b.from)) + TOWER_BOSS_EVERY;
+
+/**
+ * 11/27 상자 층 구간마다 세트 장비 직급 확률 (「55~100층 사원급」, 「130~150층 대리급 70% · 과장급 30%」 …).
+ * 상자가 열리는 우두머리 층만 본다 — from·to는 실제 상자 층, 마지막 구간은 끝이 없다
+ */
+export function gradeBands(maxFloor = GRADE_TABLE_TOP): { from: number; to: number | null; w: SgGradeWeights }[] {
+  return sgGradeBands(chestFloorsUpTo(Math.max(maxFloor, TOWER_CHEST_FROM + TOWER_BOSS_EVERY)));
 }
 
-const floorText = (b: { from: number; to: number | null }) => (b.to === null ? `${b.from}층부터` : `${b.from}~${b.to}층`);
+/** 직급 확률 글: 한 직급뿐이면 「사원급」(pure = "100%"면 「사원급 100%」), 섞이면 「대리급 70% · 과장급 30%」 */
+export function gradeOddsText(w: SgGradeWeights, pure = ""): string {
+  const total = w.reduce((a, x) => a + x, 0);
+  const on = w.map((x, g) => [g, x] as const).filter(([, x]) => x > 0);
+  if (on.length === 1) return pure ? `${SG_GRADE_NAMES[on[0][0]]} ${pure}` : SG_GRADE_NAMES[on[0][0]];
+  return on.map(([g, x]) => `${SG_GRADE_NAMES[g]} ${pct(x / total)}`).join(" · ");
+}
+
+/** 상자 층 구간 글: 「55~100층」 · 한 층이면 「155층」 · 끝이 없으면 「205층부터」 */
+export const floorText = (b: { from: number; to: number | null }) => (b.to === null ? `${b.from}층부터` : b.to === b.from ? `${b.from}층` : `${b.from}~${b.to}층`);
 
 export function chestRows(): string[][] {
-  const sealFrom = [1, 2].map((n) => {
-    for (let f = 1; f <= 200; f++) if (chestSeals(f) >= n) return f;
-    return null;
-  });
+  // 상자 층으로 센다 (11/27 직급 표와 같이 — 101층부터라도 처음 받는 상자는 105층)
+  const sealFrom = [1, 2].map((n) => chestFloorsUpTo(GRADE_TABLE_TOP).find((f) => chestSeals(f) >= n) ?? null);
   return [
     ["상자", `${TOWER_CHEST_FROM}층부터 우두머리 층마다 열려요.`],
     // 11/27 「탕비실 폐쇄」 층부터는 가방에 넣지 않고 되팔기 값으로 (lib/rpg/service settleTowerRun)
@@ -110,7 +117,7 @@ export function chestRows(): string[][] {
   ];
 }
 
-export const gradeRows = (): string[][] => gradeBands().map((b) => [floorText(b), b.name]);
+export const gradeRows = (): string[][] => gradeBands().map((b) => [floorText(b), gradeOddsText(b.w, "100%")]);
 
 /** 세트 장비 부위 비율 (장신구 두 칸은 합쳐서) */
 export function pieceRows(): string[][] {
@@ -122,19 +129,20 @@ export function pieceRows(): string[][] {
 export const setShare = () => pct(1 / SG_SETS.length);
 export const legendOption = () => ({ grade: SG_GRADE_NAMES[3], chance: pct(SG_LEGEND_CHANCE) });
 
-/** 꾸미기 등급 비율 (층 구간마다 바뀌는 곳에서 끊는다) */
+/** 꾸미기 등급 비율 (층 구간마다 바뀌는 곳에서 끊는다 — 11/27 직급 표처럼 실제 상자 층으로: 55~100층 …) */
 export function cosTierRows(): { head: string[]; rows: string[][] } {
-  const bands: { from: number; w: readonly number[] }[] = [];
-  for (let f = TOWER_CHEST_FROM; f <= 200; f += TOWER_BOSS_EVERY) {
+  const bands: { from: number; to: number | null; w: readonly number[] }[] = [];
+  for (const f of chestFloorsUpTo(GRADE_TABLE_TOP)) {
     const w = cosTierWeights(f);
     const last = bands[bands.length - 1];
-    if (!last || last.w.join() !== w.join()) bands.push({ from: f, w });
+    if (last && last.w.join() === w.join()) last.to = f;
+    else bands.push({ from: f, to: f, w });
   }
-  const head = ["층", ...COS_TIER_NAMES];
-  const rows = bands.map((b, i) => {
-    const next = bands[i + 1];
+  if (bands.length) bands[bands.length - 1].to = null;
+  const head = ["상자 층", ...COS_TIER_NAMES];
+  const rows = bands.map((b) => {
     const total = b.w.reduce((a, x) => a + x, 0);
-    return [next ? `${b.from}~${next.from - TOWER_BOSS_EVERY}층` : `${b.from}층부터`, ...b.w.map((x) => (x > 0 ? pct(x / total) : "없어요"))];
+    return [floorText(b), ...b.w.map((x) => (x > 0 ? pct(x / total) : "없어요"))];
   });
   return { head, rows };
 }
@@ -192,9 +200,17 @@ const PERK_GRADES = ["silver", "gold", "legend", "mythic"] as const;
 /** 낚시·채집 갈래 칭호 등급별 확률 */
 export const perkRows = (group: "fish" | "forage"): string[][] => PERK_GRADES.map((g) => [TITLE_GRADE_NAMES[g], pct(PERK_VALUES[group][g])]);
 
+/** 아주 작은 확률: 「1/40,000(0.0025%)」 (pct는 소수 둘째 자리까지라 0%로 보인다) */
+export function oneIn(v: number): string {
+  const p = Number((v * 100).toPrecision(2)).toLocaleString("ko-KR", { maximumFractionDigits: 8 });
+  return `1/${Math.round(1 / v).toLocaleString("ko-KR")}(${p}%)`;
+}
+
 export const forageFacts = () => ({
-  sunken: pct(SUNKEN_CHANCE),
-  sunkenAuto: pct(SUNKEN_CHANCE_AUTO),
+  // 11/28 물에 빠진 꾸미기 1/40,000 · 기간제 (기간표는 상자 꾸미기와 같다 — cosDaysRows)
+  sunken: oneIn(SUNKEN_CHANCE),
+  sunkenAuto: oneIn(SUNKEN_CHANCE_AUTO),
+  sunkenDays: COS_DAYS.map(([d, w]) => `${d}일 ${pct(w / COS_DAYS.reduce((a, [, x]) => a + x, 0))}`).join(" · "),
   /** 11/19 자동 낚시: 찌를 올리는 간격과 한 번에 걸릴 확률 (lib/forage/auto) */
   autoEvery: `${Math.round(AUTO_FISH_EVERY_MS / 1000)}초`,
   autoCatch: pct(AUTO_CATCH_CHANCE),

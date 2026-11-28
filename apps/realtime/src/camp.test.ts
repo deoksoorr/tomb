@@ -63,7 +63,7 @@ function setup(capacity = 10, opts: { goblin?: boolean; random?: () => number } 
   const core = new ChannelCore<Conn>({ capacity, graceMs: 20_000 }, host);
   const join = (id: string, o: { camp?: boolean; map?: "camp"; spawn?: { x: number; y: number }; now?: number; c?: Conn; look?: string[] } = {}) => {
     const c = o.c ?? { id, out: [] };
-    const t: JoinTicket = { visitorId: id, name: id, color: AVATAR_COLORS[0], channel: 1, spawn: o.spawn, look: o.look ?? [], body: "hood", ...(o.camp ? { camp: true as const } : {}), ...(o.map ? { map: o.map } : {}) };
+    const t: JoinTicket = { visitorId: id, name: id, color: AVATAR_COLORS[0], channel: 1, spawn: o.spawn, look: o.look ?? [], body: "hood", ...(o.camp ? { camp: true as const } : {}), ...(o.map ? { map: o.map, known: o.map } : {}) };
     core.join(c, t, o.now ?? 0);
     return c;
   };
@@ -371,7 +371,7 @@ describe("seats per map", () => {
 });
 
 describe("reconnect and records", () => {
-  it("resumes in camp with m=camp; a stale village record moves to camp on takeOver", () => {
+  it("resumes in camp with m=camp; a village record stays in the village on takeOver even with m=camp (11/27)", () => {
     const { core, join } = setup();
     const c = join("c", { camp: true, map: "camp", spawn: { x: 400, y: 700 } });
     expect(c.att).toMatchObject({ map: "camp", camp: true });
@@ -380,13 +380,13 @@ describe("reconnect and records", () => {
     expect(welcome(c2)).toMatchObject({ sid: 1, resumed: true, m: "camp" });
     expect(core.peer(1)).toMatchObject({ map: "camp", x: 410 });
 
-    // 마을에 있던 사람이 캠핑장 주소로 다시 붙었다 (다른 탭에서 버스를 탐 등) → 맵을 옮긴 뒤 welcome
+    // 11/27 마을에 있던 사람이 캠핑장 주소로 다시 붙었다 (다른 탭 등): 맵은 서버가 아는 마을 그대로 (mapKeep.test.ts)
     const v = join("v");
     const w = join("w");
     clear(w);
     join("v", { camp: true, map: "camp", spawn: { x: 500, y: 700 }, now: 3_000, c: { id: "v2", out: [] } });
-    expect(core.peer(2)).toMatchObject({ map: "camp", x: 500, y: 700 });
-    expect(events(w)).toContainEqual({ t: "leave", sid: 2 });
+    expect(core.peer(2)?.map).toBeUndefined();
+    expect(events(w)).not.toContainEqual({ t: "leave", sid: 2 });
     expect(v.closed?.code).toBeDefined();
   });
 

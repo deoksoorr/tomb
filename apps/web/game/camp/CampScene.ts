@@ -1479,7 +1479,9 @@ export class CampScene extends Phaser.Scene {
     const objSd = seat ? Math.hypot(seat.x - pl.x, seat.y - pl.y) : Infinity;
     const objOd = obj ? (isDoorItem(obj) ? 0 : reachDist(obj, pl.x, pl.y)) : Infinity;
     // 바닥 영역(버스 정차 칸)은 넓어서 안내를 내 발밑에
-    let other: { x: number; y: number; text: string; dim?: boolean } | null = obj && objOd <= objSd ? { x: obj.zone ? pl.x : obj.x, y: (obj.zone ? pl.y : obj.y) + 2, text: `${this.seatHint.prefix}${obj.label}` } : null;
+    // 11/27 좌대 매표소처럼 안내 자리를 정해 둔 영역은 그 자리에 (promptAt)
+    let other: { x: number; y: number; text: string; dim?: boolean } | null =
+      obj && objOd <= objSd ? { x: obj.promptAt?.x ?? (obj.zone ? pl.x : obj.x), y: (obj.promptAt?.y ?? (obj.zone ? pl.y : obj.y)) + 2, text: `${this.seatHint.prefix}${obj.label}` } : null;
     // 11/26 누가 누운 해먹: 마을처럼 회색 「누가 누워 있어요」 (useHammock이 거절하는 것과 같은 판정)
     if (other && obj?.kind === "hammock" && net.online) {
       const owner = this.seats.get(obj.id.slice("hammock:".length));

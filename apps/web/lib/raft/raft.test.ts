@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { campRaftSpots, RAFT_AUTO_EVERY_MS, RAFT_REBUY_WAIT_MS, RAFT_TICKET_MS, verifyGrant } from "@tomb/protocol";
+import { campRaftSpots, RAFT_AUTO_EVERY_MS, RAFT_REBUY_WAIT_MS, RAFT_RENEW_MAX, RAFT_TICKET_MS, verifyGrant } from "@tomb/protocol";
 import { env } from "../env";
 import { autoCatchTimes, autoTriesTotal, beatAuto, newAutoSession, parseAutoSession, AUTO_FISH_EVERY_MS, AUTO_NO_END } from "../forage/auto";
 import { startAutoFish, syncAutoFish } from "../forage/service";
@@ -47,7 +47,7 @@ describe("좌대 입장권 사기·연장", () => {
     const g = await verifyGrant(env.joinSecret(), r.grant, Math.floor(T0 / 1000));
     expect(g).toMatchObject({ kind: "raft", visitorId: a, ch: 1, n: 3, until: T0 + RAFT_TICKET_MS });
     expect(r.status.slots[2]).toMatchObject({ n: 3, state: "mine", until: T0 + RAFT_TICKET_MS });
-    expect(r.status.mine).toMatchObject({ ch: 1, n: 3, renewLeft: 2 });
+    expect(r.status.mine).toMatchObject({ ch: 1, n: 3, renewLeft: RAFT_RENEW_MAX });
     expect(r.status.dayLeftMin).toBe(120);
     expect((await err(buyRaft(b, 1, 3, T0 + 1000)))?.code).toBe("RAFT_SOLD");
     expect((await err(buyRaft(a, 1, 4, T0 + 1000)))?.code).toBe("RAFT_HAVE");
@@ -66,17 +66,17 @@ describe("좌대 입장권 사기·연장", () => {
     expect(await pts(a)).toBe(100);
   });
 
-  it("연장은 끝나기 1분 전부터 · 2시간 늘고 270P · 한 장에 두 번 · 켜 둔 좌대 자동 낚시도 같이 늘린다", async () => {
+  it("연장은 끝나기 1분 전부터 · 2시간 늘고 270P · 한 장에 한 번 · 켜 둔 좌대 자동 낚시도 같이 늘린다", async () => {
     const a = await account(5000);
     await buyRaft(a, 4, 2, T0);
     expect((await err(renewRaft(a, T0 + 60_000)))?.code).toBe("RAFT_EARLY");
     const t1 = T0 + RAFT_TICKET_MS - 30_000;
     const r1 = await renewRaft(a, t1);
     expect(r1.price).toBe(270);
-    expect(r1.status.mine).toMatchObject({ until: T0 + 2 * RAFT_TICKET_MS, renews: 1, renewLeft: 1 });
-    // 하루 4시간을 다 써서 두 번째 연장은 막힌다
+    expect(r1.status.mine).toMatchObject({ until: T0 + 2 * RAFT_TICKET_MS, renews: 1, renewLeft: 0 });
+    // 한 장에 연장은 한 번 (하루 4시간도 다 썼다)
     const t2 = T0 + 2 * RAFT_TICKET_MS - 10_000;
-    expect((await err(renewRaft(a, t2)))?.message).toBe(RAFT_DAY_DONE_MSG);
+    expect((await err(renewRaft(a, t2)))?.code).toBe("RAFT_MAX");
   });
 
   it("하루 4시간: 남은 만큼만 팔고 값은 분 비례 · 다 쓰면 「오늘 좌대 시간을 다 썼어요」", async () => {

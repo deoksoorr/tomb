@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { GEAR, gearById, type GearKind, type GearSlot } from "./catalog";
 import { normalize, removePieceForSale, sellValue } from "./character";
-import { ampNeed, disassemble, DISASSEMBLE, enhance, enhanceRate, ENHANCE_TABLE, ENH_AMP_MUL, ENH_AMP_TABLE, ENH_FAIL_MAX, ENH_PITY, equipSg, pityLeft, pityOf, exchange, grantSgDrops, reroll, rerollCost, type EnhTarget } from "./enhance";
+import { ampNeed, disassemble, DISASSEMBLE, enhance, enhanceRate, ENHANCE_TABLE, ENH_AMP_MUL, ENH_AMP_TABLE, ENH_FAIL_MAX, ENH_PITY, equipSg, pityLeft, pityOf, exchange, grantSgDrops, reroll, rerollCost, returnSg, sellSg, SG_SELL_RATE, sgSellValue, sgUnsold, type EnhTarget } from "./enhance";
 import { baseStats, derive, seeded } from "./formulas";
 import {
   activeSets,
@@ -41,11 +41,15 @@ import {
   crossesTen,
   PROT_FROM_FLOOR,
   gearPower,
-  nextPity,
   rollOptions,
+  rollSgFixed,
+  rollSgGrade,
   rollSgItem,
-  sgGradeForFloor,
   SG_CHEST_CHANCE,
+  SG_GRADE_ODDS,
+  sgGradeOdds,
+  TOP_SHOP,
+  sgGradesForFloor,
 } from "./setGearRoll";
 import { floorSeed, isChestFloor, TOWER_CHEST_FROM, towerChestDrops, towerChestFloors } from "./tower";
 
@@ -191,13 +195,65 @@ describe("랜덤 옵션", () => {
 });
 
 describe("우두머리 상자 (게임 ↔ 서버, 천장)", () => {
-  it("직급은 층으로: 높이 오를수록 사원 → 대리 → 과장 → 임원 (경계는 sgGradeForFloor)", () => {
-    expect(monotone(sgGradeForFloor)).toBe(true);
-    const firsts = ([0, 1, 2, 3] as const).map((g) => firstFloor((f) => sgGradeForFloor(f) === g));
-    expect(firsts.every((f) => f !== null)).toBe(true);
-    expect(firsts).toEqual([...firsts].sort((a, b) => a! - b!));
-    // 상자가 처음 열리는 층은 사원급
-    expect(sgGradeForFloor(TOWER_CHEST_FROM)).toBe(0);
+  // 11/27 운영자 확정 표 (상자 층 → [사원, 대리, 과장, 임원] %)
+  const APPROVED: [number, number, [number, number, number, number]][] = [
+    [55, 100, [100, 0, 0, 0]],
+    [105, 125, [0, 100, 0, 0]],
+    [130, 150, [0, 70, 30, 0]],
+    [155, 155, [0, 0, 100, 0]],
+    [160, 175, [0, 0, 80, 20]],
+    [180, 200, [0, 0, 50, 50]],
+    [205, TOP, [0, 0, 0, 100]],
+  ];
+  const approvedAt = (f: number) => APPROVED.find(([a, b]) => f >= a && f <= b)![2];
+
+  it("11/27 직급은 상자 층 구간마다 섞어 굴린다: 모든 상자 층이 운영자 표와 같고 합은 100", () => {
+    expect(SG_GRADE_ODDS.map((b) => b.from)).toEqual([...SG_GRADE_ODDS.map((b) => b.from)].sort((a, b) => a - b));
+    for (const b of SG_GRADE_ODDS) expect(b.w.reduce((a, x) => a + x, 0)).toBe(100);
+    for (let f = TOWER_CHEST_FROM; f <= TOP; f++) {
+      if (!isChestFloor(f)) continue;
+      expect([f, ...sgGradeOdds(f)]).toEqual([f, ...approvedAt(f)]);
+      expect(sgGradesForFloor(f)).toEqual(([0, 1, 2, 3] as const).filter((g) => approvedAt(f)[g] > 0));
+    }
+    // 상자가 처음 열리는 층은 사원급만
+    expect(sgGradesForFloor(TOWER_CHEST_FROM)).toEqual([0]);
+  });
+
+  it("인감 도장·꾸미기 등급은 직급 섞기와 상관없이 101층·151층 경계 그대로", () => {
+    expect([100, 101, 150, 151].map(chestSeals)).toEqual([0, 1, 1, 2]);
+    expect([100, 101, 150, 151].map((f) => cosTierWeights(f)[2] > 0)).toEqual([false, true, true, true]);
+    expect([150, 151].map((f) => cosTierWeights(f)[3] > 0)).toEqual([false, true]);
+  });
+
+  it("직급 굴림은 100% 구간이어도 난수를 늘 딱 한 번 쓴다 (게임·서버 난수 순서가 층과 상관없이 같게)", () => {
+    for (let f = TOWER_CHEST_FROM; f <= TOP; f += 5) {
+      for (let seed = 1; seed <= 20; seed++) {
+        const base = seeded(seed * 7919 + f);
+        let n = 0;
+        const r = () => {
+          n++;
+          return base();
+        };
+        rollSgGrade(r, f);
+        expect(n).toBe(1);
+      }
+    }
+  });
+
+  it("직급 비율이 구간 확률대로 나오고 155층·205층부터는 한 직급만 (상자 굴림 그대로, 시드 여러 개)", () => {
+    const N = 4000;
+    for (const f of [55, 100, 105, 125, 130, 150, 155, 160, 175, 180, 200, 205, 250, 300]) {
+      const cnt = [0, 0, 0, 0];
+      for (let seed = 1; seed <= N; seed++) {
+        const s = towerChestDrops(seed, f, 1, 0, true).find((x) => x.kind === "set")!;
+        cnt[itemOfSpec(s.id, 1)!.g]++;
+      }
+      const want = approvedAt(f);
+      for (const g of [0, 1, 2, 3] as const) {
+        if (want[g] === 0 || want[g] === 100) expect([f, g, cnt[g]]).toEqual([f, g, want[g] === 0 ? 0 : N]);
+        else expect(Math.abs(cnt[g] / N - want[g] / 100), `${f}층 직급 ${g}`).toBeLessThan(0.03);
+      }
+    }
   });
 
   it("상자마다 결재 서류 2 + 층÷10, 인감 도장은 높은 층부터 1개·2개 (경계는 chestSeals) · 꾸미기 일반 장비 대신 세트 장비", () => {
@@ -235,15 +291,15 @@ describe("우두머리 상자 (게임 ↔ 서버, 천장)", () => {
     }
     expect(hits / n).toBeGreaterThan(SG_CHEST_CHANCE * 0.7);
     expect(hits / n).toBeLessThan(SG_CHEST_CHANCE * 1.3);
-    // 상자 직급
-    const at = (f: number) => {
-      for (let seed = 1; ; seed++) {
-        const s = towerChestDrops(seed, f, 1, 0, true).find((x) => x.kind === "set");
-        if (s) return itemOfSpec(s.id, 1)!.g;
+    // 상자 직급: 그 층 구간에서 나올 수 있는 직급만 · 저절로 나온 세트 장비는 슈퍼 계정 시험 드롭과 같은 물건 (확률 굴림 뒤 난수 순서가 같다)
+    for (let seed = 1; seed <= 300; seed++) {
+      for (const f of towerChestFloors(1, 260, 0)) {
+        const forced = towerChestDrops(seed, f, 1, 0, true).find((x) => x.kind === "set")!;
+        expect(sgGradesForFloor(f)).toContain(itemOfSpec(forced.id, 1)!.g);
+        const natural = towerChestDrops(seed, f, 1, 0, false).find((x) => x.kind === "set");
+        if (natural) expect(natural).toEqual(forced);
       }
-    };
-    const firsts = ([0, 1, 2, 3] as const).map((g) => firstFloor((f) => isChestFloor(f) && sgGradeForFloor(f) === g)!);
-    expect(firsts.map(at)).toEqual([0, 1, 2, 3]);
+    }
   });
 
   it("슈퍼 계정 시험 드롭: 상자마다 세트 장비·꾸미기 하나씩 (재료는 그대로), 끄면 보통 굴림과 같다", () => {
@@ -254,6 +310,69 @@ describe("우두머리 상자 (게임 ↔ 서버, 천장)", () => {
       expect(d.find((x) => x.id === "m_doc")?.qty).toBe(chestDocs(35));
       expect(towerChestDrops(seed, 35, 1, 0, false)).toEqual(towerChestDrops(seed, 35, 1));
     }
+  });
+});
+
+describe("11/27 세트 장비 판매 (SG_SELL_RATE)", () => {
+  const priceOf = (p: number, g: SgGrade) => Math.floor(gearById(TOP_SHOP[SG_PIECES[p]])!.price * SG_SELL_RATE * SG_GRADE_MULT[g] + 1e-6);
+
+  it("값 = 그 부위 상점 최고 장비 값 × SG_SELL_RATE × 직급 배율 · 강화·옵션·전설 옵션은 값에 안 들어간다", () => {
+    for (let p = 0; p < SG_PIECES.length; p++)
+      for (const g of [0, 1, 2, 3] as const) {
+        const v = sgSellValue({ p, g });
+        expect(v).toBe(priceOf(p, g));
+        expect(Number.isInteger(v) && v > 0).toBe(true);
+        expect(sgSellValue(item({ p, g, e: 15, L: 2, o: [["a", 8]] }))).toBe(v);
+      }
+    // 직급이 오를수록 비싸고, 같은 직급이면 무기 ≥ 갑옷·장신구 ≥ 머리 (기준 장비 값 순)
+    for (let p = 0; p < SG_PIECES.length; p++) for (const g of [1, 2, 3] as const) expect(sgSellValue({ p, g })).toBeGreaterThan(sgSellValue({ p, g: (g - 1) as SgGrade }));
+    // 기준 장비가 실제 상점 장비인지 (값이 0이면 안 된다)
+    for (const piece of SG_PIECES) expect(gearById(TOP_SHOP[piece])?.price ?? 0).toBeGreaterThan(0);
+    // 부동소수 곱이 한 칸 내려가지 않는다 (정수로 계산한 값과 같다)
+    for (let p = 0; p < SG_PIECES.length; p++)
+      for (const g of [0, 1, 2, 3] as const) expect(sgSellValue({ p, g })).toBe(Math.floor((gearById(TOP_SHOP[SG_PIECES[p]])!.price * Math.round(SG_SELL_RATE * 1000) * Math.round(SG_GRADE_MULT[g] * 10)) / 10_000));
+  });
+
+  const sgOf = (u: number, p: number, g: SgGrade, e = 0) => encodeSg({ ...rollSgFixed(seeded(u * 31), 0, p, g), u, e, rr: 0, f: 0 });
+  const bag = (): CharacterState => char({ sg: [sgOf(1, 0, 3), sgOf(2, 1, 0), sgOf(3, 2, 2, 7)], sgN: 4 });
+
+  it("여러 개를 한 번에 빼고 값은 물건마다 더한다", () => {
+    const s0 = bag();
+    const r = sellSg(s0, [1, 3]);
+    expect(r.state.sg!.map((c) => decodeSg(c)!.u)).toEqual([2]);
+    expect(r.result.sold.map(([, v]) => v)).toEqual([sgSellValue({ p: 0, g: 3 }), sgSellValue({ p: 2, g: 2 })]);
+    expect(r.result.value).toBe(sgSellValue({ p: 0, g: 3 }) + sgSellValue({ p: 2, g: 2 }));
+    expect(r.result.sold.map(([c]) => decodeSg(c)!.u)).toEqual([1, 3]);
+  });
+
+  it("장착 중·같은 번호 두 번·없는 번호·빈 목록이면 하나도 안 판다", () => {
+    const s0 = bag();
+    const worn = equipSg(s0, "weapon", 1);
+    const before = JSON.stringify(worn);
+    expect(() => sellSg(worn, [2, 1])).toThrow(expect.objectContaining({ code: "EQUIPPED" }));
+    expect(JSON.stringify(worn)).toBe(before);
+    expect(() => sellSg(s0, [2, 2])).toThrow(expect.objectContaining({ code: "INVALID_INPUT" }));
+    expect(() => sellSg(s0, [2, 99])).toThrow();
+    expect(() => sellSg(s0, [])).toThrow(expect.objectContaining({ code: "INVALID_INPUT" }));
+    expect(s0.sg).toHaveLength(3);
+  });
+
+  it("포인트를 다 못 받으면 한 푼도 못 받은 장비만 가방에 되돌린다 (일부 받은 한 개는 판 것)", () => {
+    const sold: [string, number][] = [
+      ["a", 100],
+      ["b", 200],
+      ["c", 300],
+    ];
+    expect(sgUnsold(sold, 600)).toEqual([]);
+    expect(sgUnsold(sold, 150)).toEqual(["c"]);
+    expect(sgUnsold(sold, 100)).toEqual(["b", "c"]);
+    expect(sgUnsold(sold, 0)).toEqual(["a", "b", "c"]);
+    const s0 = bag();
+    const r = sellSg(s0, [1, 3]);
+    const back = returnSg(r.state, sgUnsold(r.result.sold, 0));
+    expect(back.sg!.map((c) => decodeSg(c)!.u).sort()).toEqual([1, 2, 3]);
+    // 이미 가방에 있는 번호는 두 번 넣지 않는다
+    expect(returnSg(s0, [s0.sg![0]]).sg).toHaveLength(3);
   });
 });
 

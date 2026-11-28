@@ -24,8 +24,7 @@
   min-width: 0;
 }
 
-.lead,
-.foot {
+.lead {
   margin: 0;
   font-size: 13px;
   opacity: 0.85;
@@ -53,6 +52,7 @@
   color: #b8f0c8;
 }
 
+/* 11/28 운영자 「박스 사이즈에 비해서 너무 빈약한데??」: 카드는 제 높이만 (늘이지 않는다) — 좌대 그림 · 번호 + 상태 배지 · 한 줄 설명 · 가는 길 · 사기 */
 .grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -63,10 +63,11 @@
 }
 
 .card {
+  --thumb-scale: 1;
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-rows: auto auto auto auto 1fr;
   gap: 2px;
-  padding: 8px;
+  padding: 5px 5px 6px;
   min-width: 0;
   background: rgba(255, 255, 255, 0.04);
   box-shadow: inset 0 0 0 1px rgba(232, 220, 192, 0.18);
@@ -74,45 +75,288 @@
 
 .cardMine {
   background: rgba(120, 220, 160, 0.1);
-  box-shadow: inset 0 0 0 1px rgba(150, 230, 180, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(150, 230, 180, 0.55);
 }
 
-.cardUsed {
-  opacity: 0.75;
+/* 사용 중: 그림·글을 조금 눌러 (버튼 줄은 그대로 또렷하게) */
+.cardUsed .thumb,
+.cardUsed .sub,
+.cardUsed .where {
+  opacity: 0.72;
+}
+
+/* 좌대 그림 칸: 물빛 바탕 위에 1배 그림 (폰 2배) — 정수 배율, 이웃 픽셀 그대로 */
+.thumb {
+  display: grid;
+  place-items: center;
+  margin-bottom: 2px;
+  overflow: hidden;
+  background: #285365;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.thumbCanvas {
+  display: block;
+  width: calc(var(--w, 84px) * var(--thumb-scale));
+  height: calc(var(--h, 61px) * var(--thumb-scale));
+  image-rendering: pixelated;
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-width: 0;
 }
 
 .num {
   font-weight: 700;
   font-size: 15px;
+  line-height: 1.2;
 }
 
-.where {
+/* 상태 배지: 점 + 글 (빈 좌대 초록 · 사용 중 주황 · 내 좌대 민트) */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 5px;
   font-size: 11px;
-  opacity: 0.65;
+  line-height: 1.4;
+  white-space: nowrap;
+  background: rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 1px rgba(232, 220, 192, 0.16);
 }
 
-.state {
+.dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  background: currentColor;
+}
+
+.badge[data-state="free"] {
+  color: var(--status-ok, #8fc27a);
+}
+
+.badge[data-state="used"] {
+  color: #ffb27a;
+}
+
+.badge[data-state="mine"] {
+  color: #9ff0c4;
+  box-shadow: inset 0 0 0 1px rgba(150, 230, 180, 0.5);
+}
+
+.sub {
   display: grid;
-  gap: 2px;
-  font-size: 12px;
-  overflow-wrap: anywhere;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text);
+  word-break: keep-all;
 }
 
 .who {
-  font-size: 12px;
   color: #ffe8b0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.buy {
-  margin-top: 4px;
-  width: 100%;
+.where {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+  word-break: keep-all;
 }
 
-/* 코디 미리보기 */
-/* 창이 좁아(입장권 창 크기) 입어 보기 무대를 위에 크게, 코디 목록은 아래로 */
+.accessIcon {
+  flex: none;
+  width: 7px;
+  height: 7px;
+}
+
+.accessIcon[data-kind="walk"] {
+  color: #d2a66c;
+}
+
+.accessIcon[data-kind="swim"] {
+  color: #7ac8ff;
+}
+
+/* 버튼 줄은 카드 아래 끝 (한 줄 안 카드끼리 버튼 높이가 맞는다) */
+.act {
+  display: grid;
+  align-content: end;
+  gap: 3px;
+  margin-top: 3px;
+}
+
+.buy {
+  width: 100%;
+  min-height: 30px;
+  padding: 3px 4px;
+  font-size: 13px;
+}
+
+/* 내 좌대: 버튼 자리에 「이용 중」 */
+.using {
+  display: grid;
+  place-items: center;
+  min-height: 30px;
+  font-size: 12px;
+  color: #b8f0c8;
+  background: rgba(120, 220, 160, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(150, 230, 180, 0.45);
+}
+
+/* 11/27 구매 불가 (사용 중·이미 입장권·오늘 시간 다 씀·다시 살 수 있는 때 전·포인트 모자람) */
+.card .noBuy:disabled {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.04);
+  color: #ff9a8a;
+  box-shadow: inset 0 0 0 1px rgba(255, 140, 120, 0.4);
+  cursor: not-allowed;
+}
+
+.why {
+  font-size: 11px;
+  line-height: 1.3;
+  color: #ffc8b8;
+  word-break: keep-all;
+}
+
+/* 이용 안내 (공용 InfoCard) — 짧은 여섯 줄을 두 칸으로. PC는 입장권 칸 남는 높이를 채우고 줄 사이를 고르게 벌린다 (아래 빈 띠 없이) */
+.guide {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+}
+
+.tips {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: space-evenly;
+  gap: 5px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.tips li {
+  position: relative;
+  min-width: 0;
+  padding-left: 10px;
+  word-break: keep-all;
+}
+
+.tips li::before {
+  content: "";
+  position: absolute;
+  top: 0.6em;
+  left: 0;
+  width: 4px;
+  height: 4px;
+  background: var(--moss);
+}
+
+.tips b {
+  color: var(--bone);
+  font-weight: normal;
+}
+
+.short {
+  margin: 0;
+  font-size: 12px;
+  color: var(--candle);
+}
+
+.fullWhy {
+  display: block;
+  margin-top: 2px;
+  font-weight: normal;
+  color: #ffe0c8;
+}
+
+/* 여섯이 다 찼다: 목록 위 한 줄 */
+.full {
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffd8c8;
+  background: rgba(255, 120, 100, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(255, 140, 120, 0.45);
+}
+
+/* PC: 가로로 넓은 창 (왼쪽 입장권 · 오른쪽 좌대 한정 획득 코디) — 1280×800에서 스크롤 없이 */
+@media (min-width: 561px) {
+  .dialog[data-kind][open] {
+    width: min(1000px, var(--dialog-max-w));
+  }
+}
+
+.cols {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+/* 두 칸 높이를 맞춘다: 입장권 칸은 카드 아래 이용 안내가 남는 높이를 채운다 (아래 빈 칸 없이) */
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 카드는 제 높이, 남는 높이는 이용 안내가 가진다 (두 칸 아래 끝이 맞게 — 빈 띠 없이).
+   안내 칸은 크기 격리(container-type: size)라 칸 높이를 늘리지 않고 오른쪽 칸이 정한 높이 안에서 남는 만큼만 쓴다 —
+   넉넉하면 한 줄에 하나, 위에 알림 줄이 붙어 좁아지면 두 칸으로 */
+.col > .guide {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  container-type: size;
+}
+
+@container (max-height: 172px) {
+  .tips {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* 알림 줄이 여럿 붙어 더 좁으면 제목 줄을 접는다 (안내 여섯 줄은 그대로) */
+@container (max-height: 100px) {
+  .col > .guide > h3 {
+    display: none;
+  }
+}
+
+.colGear {
+  padding-left: 16px;
+  box-shadow: inset 1px 0 0 rgba(232, 220, 192, 0.14);
+}
+
+.colHead {
+  margin: 0;
+  font-size: 15px;
+  color: var(--candle, #ffd98a);
+}
+
+/* 좌대 한정 획득 코디 (11/27 운영자 「레이아웃이 이상하다」 — 위 큰 미리보기 + 옆 정보, 아래 같은 폭 카드 격자) */
 .gear {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -120,14 +364,165 @@
   align-items: start;
 }
 
+/* 미리보기 + 옆에 이름·기간·설명·염색 (폰은 위아래) */
+.fitRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  justify-items: center;
+}
+
+.gear[data-wide] .fitRow {
+  grid-template-columns: auto minmax(0, 1fr);
+  justify-items: stretch;
+  align-items: stretch;
+}
+
 .fitCol {
   display: grid;
   gap: 6px;
-  min-width: 0;
+  justify-items: center;
+  align-content: start;
 }
 
-.fit {
+/* 무대(72×64)를 몸 둘레 40×40만 잘라 크게 (발밑 한 벌 연출 「금빛 월척」 잉어까지 들어간다) — 픽셀은 정수 배율 그대로 */
+.fitBox {
+  --scale: 5;
+  position: relative;
+  width: calc(40px * var(--scale));
+  height: calc(40px * var(--scale));
+  overflow: hidden;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.gear[data-wide] .fitBox {
+  --scale: 6;
+}
+
+.fitBox:focus-within {
+  outline: 2px solid var(--candle);
+  outline-offset: 2px;
+}
+
+.fitCanvas {
+  position: absolute;
+  left: calc(-16px * var(--scale));
+  top: calc(-14px * var(--scale));
+  box-shadow: none;
+}
+
+.fitCanvas:focus-visible {
+  outline: none;
+}
+
+.fitControls {
+  width: calc(40px * var(--scale, 5));
+  grid-template-columns: 3fr 2fr;
+  gap: 4px;
+}
+
+.gear[data-wide] .fitControls {
+  --scale: 6;
+}
+
+.fitControls > div {
+  gap: 2px;
+}
+
+.fitControls button {
   min-width: 0;
+  min-height: 26px;
+  padding: 2px 3px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+@media (pointer: coarse) {
+  .fitControls button {
+    min-height: 34px;
+  }
+}
+
+.fitSide {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  align-content: start;
+  justify-self: stretch;
+}
+
+.gear[data-wide] .fitSide {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+}
+
+/* PC: 이름·기간·설명은 위, 염색은 무대 아래 끝에 맞춰 (가운데 빈 칸이 없게) */
+.gear[data-wide] .dyeHead {
+  margin-top: auto;
+}
+
+.facts {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 6px 8px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 0 0 1px rgba(232, 220, 192, 0.14);
+}
+
+.facts > div {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 6px;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+  word-break: keep-all;
+}
+
+.dyeHead {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.pickName {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--bone, #f2ecdc);
+}
+
+.pickMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+/* 상점 등급 배지(.tierTag)를 그대로 — 여백만 맞춘다 */
+.tierBadge {
+  margin: 0;
+  padding: 1px 6px;
+  font-size: 11px;
+  vertical-align: 0;
+  white-space: nowrap;
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
 }
 
 /* 염색 미리보기 (동그란 색 칸) */
@@ -173,58 +568,54 @@
 .desc {
   margin: 0;
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.5;
   opacity: 0.85;
 }
 
-.gearInfo {
+/* 카드 격자: 줄마다 앞 칸에 기간 배지, 그 뒤 같은 폭 카드 4칸 (7일 1 · 30일 2 · 영구 4) — 오른쪽 끝이 칸에 맞는다 */
+.cards {
   display: grid;
-  gap: 8px;
+  grid-template-columns: 40px repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  align-items: stretch;
+}
+
+/* 배지 칸은 늘 첫 칸 → 다음 기간은 새 줄에서 시작한다 */
+.cardsHead {
+  display: flex;
+  grid-column: 1;
+  align-items: center;
+  justify-content: center;
+}
+
+.gearCard {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  justify-items: start;
+  align-items: center;
+  gap: 6px;
+  min-height: 48px;
+  padding: 5px 6px;
+  text-align: left;
+}
+
+.gearThumb {
+  width: 36px;
+  height: 36px;
+}
+
+.gearText {
+  display: grid;
+  gap: 1px;
   min-width: 0;
 }
 
-.gearList {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.gearBtn {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  width: 100%;
-  min-height: 0;
-  padding: 6px 8px;
-  gap: 6px;
-  text-align: left;
-  font-size: 13px;
-}
-
-.tier {
-  display: grid;
-  gap: 4px;
-}
-
-.tierHead {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 8px;
-  margin: 0;
-  font-size: 13px;
-}
-
-/* 영구 한 벌 입어 보기: 한 줄 전체 */
-.setRow {
-  grid-column: 1 / -1;
-}
-
-.gearBtn[aria-pressed="true"] {
-  box-shadow: inset 0 0 0 2px rgba(255, 220, 140, 0.7);
+.gearName {
+  color: var(--bone);
+  font-size: 12px;
+  line-height: 1.25;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 .slot {
@@ -232,18 +623,83 @@
   opacity: 0.65;
 }
 
-.odds {
-  font-size: 11px;
-  font-weight: 400;
-  opacity: 0.7;
+/* 영구 줄 아래 한 벌 상자: 카드 4칸 폭 그대로 — [네 가지 함께 입어 보기] + 세트 효과·칭호 한 줄 */
+.setBox {
+  display: flex;
+  grid-column: 2 / -1;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  background: rgba(255, 210, 100, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(232, 180, 64, 0.45);
 }
 
+.setBox[data-on] {
+  background: rgba(255, 210, 100, 0.12);
+  box-shadow: inset 0 0 0 2px var(--candle, #ffd98a);
+}
+
+.setBtn {
+  flex: none;
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.setBtn[aria-pressed="true"] {
+  background: var(--moss-deep);
+  color: var(--bone);
+}
+
+.setText {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #ffe6a8;
+  word-break: keep-all;
+}
+
+/* 폰: 카드 2칸, 기간 배지는 줄 위 제목처럼 한 줄 전체 */
+@media (max-width: 560px) {
+  .cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cardsHead {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    padding-top: 2px;
+  }
+
+  .setBox {
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+  }
+
+  .setBtn {
+    flex: 1 1 100%;
+  }
+}
+
+/* 폰: 카드 2칸, 좌대 그림 2배 */
 @media (max-width: 560px) {
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
   }
   .card {
-    padding: 6px;
+    --thumb-scale: 2;
+  }
+  .num {
+    font-size: 16px;
+  }
+  .sub,
+  .where,
+  .badge {
+    font-size: 12px;
+  }
+  .buy,
+  .using {
+    min-height: 36px;
   }
 }

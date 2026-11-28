@@ -1,4 +1,4 @@
-import { CONN_LOG_BATCH, CONN_LOG_FLUSH_MS, INTERNAL_SIG_HEADER, INTERNAL_TTL_SEC, signInternal, type ConnLogWire } from "@tomb/protocol";
+import { CONN_LOG_BATCH, CONN_LOG_BODY_MAX, CONN_LOG_FLUSH_MS, INTERNAL_SIG_HEADER, INTERNAL_TTL_SEC, RIDE_TOGGLE_MS, signInternal, type ConnActExtra, type ConnLogWire, type ConnRideExtra } from "@tomb/protocol";
 import { parseOrigins } from "./auth";
 import type { Env } from "./config";
 
@@ -12,12 +12,85 @@ export const CONN_LOG_PATH = "/api/internal/conn-log";
 /** 보내지 못해 다시 쌓을 때의 상한 (웹이 오래 멈춰도 메모리가 끝없이 늘지 않게) */
 export const CONN_LOG_MAX_PENDING = CONN_LOG_BATCH * 5;
 
+type ActRow = [string, "r", number, number, string, "", ConnActExtra];
+const isAct = (r: ConnLogWire): r is ActRow => r[1] === "r";
+const sumSkip = (a: ConnActExtra, b: ConnActExtra) => ((a.s ?? 0) + (b.s ?? 0) ? { s: (a.s ?? 0) + (b.s ?? 0) } : {});
+/** 탄 줄의 탈것 칸만 (n·k는 있을 때만) */
+const rideBase = (x: ConnRideExtra): ConnRideExtra => ({ g: x.g, m: x.m, ...(x.n !== undefined ? { n: x.n } : {}), ...(x.k !== undefined ? { k: x.k } : {}) });
+
+/**
+ * 11/28 탈것 줄 접기 (순수 — rows를 고친다). 그 사람의 마지막 "r" 줄이 같은 채널·같은 탈것일 때만:
+ *  - 내림이 탄 줄에서 RIDE_TOGGLE_MS 안 → 탄 줄을 「탔다가 바로 내림」(b) 한 줄로
+ *  - 탐이 내림 줄(또는 접은 줄의 내린 때)에서 RIDE_TOGGLE_MS 안 → 내림 줄을 지우고(접은 줄은 다시 탄 줄로) 계속 탄 것으로
+ * 접었으면 true (새 줄은 더하지 않는다)
+ */
+export function foldRide(rows: ConnLogWire[], row: ConnLogWire): boolean {
+  if (!isAct(row) || row[6].g === "raft") return false;
+  const [v, , at, ch, , , x] = row;
+  let i = rows.length - 1;
+  while (i >= 0 && !(rows[i][0] === v && rows[i][1] === "r")) i--;
+  if (i < 0) return false;
+  const prev = rows[i] as ActRow;
+  const y = prev[6];
+  if (y.g === "raft" || y.g !== x.g || y.m !== x.m || y.n !== x.n || prev[3] !== ch) return false;
+  const t = prev[2];
+  if (!x.on) {
+    if (!y.on || at < t || at - t > RIDE_TOGGLE_MS) return false;
+    rows[i] = [v, "r", t, ch, prev[4], "", { ...rideBase(y), b: 1, d: Math.round((at - t) / 1000), ...(x.w ? { w: x.w } : {}), ...sumSkip(x, y) }];
+    return true;
+  }
+  if (y.on) return false;
+  const offAt = y.b ? t + (y.d ?? 0) * 1000 : t;
+  if (at < offAt - 1_000 || at - offAt > RIDE_TOGGLE_MS) return false;
+  if (y.b) rows[i] = [v, "r", t, ch, prev[4], "", { ...rideBase(y), on: 1, ...sumSkip(x, y) }];
+  else {
+    rows.splice(i, 1);
+    // 건너뛴 수는 잃지 않게: 앞에 남은 탄 줄이 있으면 거기에
+    if (y.s) {
+      for (let j = i - 1; j >= 0; j--) {
+        const r = rows[j];
+        if (r[0] !== v || r[1] !== "r") continue;
+        const z = (r as ActRow)[6];
+        rows[j] = [v, "r", r[2], r[3], r[4], "", { ...z, s: (z.s ?? 0) + y.s }];
+        break;
+      }
+    }
+  }
+  return true;
+}
+
+/** 한 묶음으로 넘길 줄 (오래된 것부터): 맨 앞 줄과 같은 갈래("r" 줄 / 그 밖)만, CONN_LOG_BATCH줄·CONN_LOG_BODY_MAX자까지. 나머지는 그대로 남긴다 */
+export function takeBatch(rows: readonly ConnLogWire[]): { out: ConnLogWire[]; rest: ConnLogWire[] } {
+  if (!rows.length) return { out: [], rest: [] };
+  const want = isAct(rows[0]);
+  const out: ConnLogWire[] = [];
+  const rest: ConnLogWire[] = [];
+  let size = 2;
+  let full = false;
+  for (const r of rows) {
+    if (full || isAct(r) !== want) {
+      rest.push(r);
+      continue;
+    }
+    const len = JSON.stringify(r).length + 1;
+    if (out.length && (out.length >= CONN_LOG_BATCH || size + len > CONN_LOG_BODY_MAX)) {
+      full = true;
+      rest.push(r);
+      continue;
+    }
+    out.push(r);
+    size += len;
+  }
+  return { out, rest };
+}
+
 export class ConnLogBuffer {
   private rows: ConnLogWire[] = [];
   private dueAt: number | null = null;
 
-  /** 한 줄 더한다. 한 묶음이 찼으면 true (바로 보낼 때) */
+  /** 한 줄 더한다 (11/28 탈것을 바로 타고 내린 줄은 접는다). 한 묶음이 찼으면 true (바로 보낼 때) */
   add(row: ConnLogWire, now: number): boolean {
+    if (foldRide(this.rows, row)) return false;
     this.rows.push(row);
     if (this.rows.length > CONN_LOG_MAX_PENDING) this.rows.splice(0, this.rows.length - CONN_LOG_MAX_PENDING);
     this.dueAt ??= now + CONN_LOG_FLUSH_MS;
@@ -33,9 +106,13 @@ export class ConnLogBuffer {
     return this.rows.length;
   }
 
-  /** 보낼 한 묶음 (오래된 것부터). 남은 게 있으면 다음 시각을 다시 잡는다 */
+  /**
+   * 보낼 한 묶음 (오래된 것부터 — takeBatch). 남은 게 있으면 다음 시각을 다시 잡는다.
+   * 11/28 "r" 줄은 따로 묶는다: 옛 웹은 모르는 줄이 섞인 묶음을 통째로 404로 버린다 (들어옴·나감까지 잃지 않게)
+   */
   take(now: number): ConnLogWire[] {
-    const out = this.rows.splice(0, CONN_LOG_BATCH);
+    const { out, rest } = takeBatch(this.rows);
+    this.rows = rest;
     this.dueAt = this.rows.length ? now + 1_000 : null;
     return out;
   }

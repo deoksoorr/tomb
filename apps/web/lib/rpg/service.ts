@@ -1057,7 +1057,8 @@ async function settleTowerRun(
       const cur = consumePotions(s, potionsUsed).state;
       tAtStart = cur.tLevel;
       // 11/15 의심 판(부드러운 거절): 층·초월 EXP·상자·포인트는 그대로, 최고·주간 기록은 그대로 두고 체크포인트만 연다 (fSus)
-      const st: TowerSettle = towerSettle(cur, { day, week, start, floors: v.floors, floorMs: v.floorMs, suspect: !!v.suspect });
+      // 11/27 포인트를 못 받는 저층은 상자도 없다 — 포인트(towerRunPoints)와 같은 초월 레벨(tAtStart, 정산 전 저장값)
+      const st: TowerSettle = towerSettle(cur, { day, week, start, floors: v.floors, floorMs: v.floorMs, suspect: !!v.suspect, tLevel: cur.tLevel });
       const settled = { ...cur, ...st.patch };
       const g = gainTranscend(settled, tChamp > 0 ? Math.round(st.tExp * (1 + tChamp)) : st.tExp);
       // 11/15 상자마다 세트 장비 천장을 이어서 센다 (게임이 판 안에서 같은 순서로 센다) · 슈퍼 계정 시험 드롭(sup)

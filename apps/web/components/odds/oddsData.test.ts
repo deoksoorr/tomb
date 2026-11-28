@@ -3,7 +3,7 @@ import { DIFFICULTIES, DIFFS } from "@/lib/rpg/catalog";
 import { SG_CHEST_CHANCE } from "@/lib/rpg/setGearRoll";
 import { TOWER_CHEST_FROM } from "@/lib/rpg/tower";
 import { AUTO_CATCH_CHANCE, AUTO_FISH_EVERY_MS } from "@/lib/forage/auto";
-import { chestRows, cosDaysRows, cosTierRows, dyeRows, enhanceRows, forageFacts, gearAtLeastOne, gradeBands, huntRows, lotteryAny, pct, pieceRows, potionRows, rarityRows, wishRows, xmasRows } from "./oddsData";
+import { chestRows, cosDaysRows, cosTierRows, dyeRows, enhanceRows, forageFacts, gearAtLeastOne, gradeBands, gradeOddsText, gradeRows, huntRows, lotteryAny, pct, pieceRows, potionRows, rarityRows, wishRows, xmasRows } from "./oddsData";
 
 const sum = (rows: string[][], col: number) => rows.reduce((n, r) => n + Number(r[col].replace("%", "")), 0);
 
@@ -43,11 +43,26 @@ describe("확률 안내 숫자", () => {
     expect(chestRows().length).toBeGreaterThanOrEqual(4);
   });
 
-  it("직급 구간은 우두머리 층부터 끊김 없이 이어지고 마지막은 끝이 없다", () => {
+  it("11/27 직급 표는 상자 층 구간마다 섞인 확률 그대로 (운영자 확정 표), 마지막은 끝이 없다", () => {
     const b = gradeBands();
-    expect(b[0].from).toBe(TOWER_CHEST_FROM);
+    expect(b[0].from).toBeGreaterThanOrEqual(TOWER_CHEST_FROM);
     expect(b[b.length - 1].to).toBeNull();
-    expect(new Set(b.map((x) => x.name)).size).toBe(b.length);
+    expect(gradeRows()).toEqual([
+      ["55~100층", "사원급 100%"],
+      ["105~125층", "대리급 100%"],
+      ["130~150층", "대리급 70% · 과장급 30%"],
+      ["155층", "과장급 100%"],
+      ["160~175층", "과장급 80% · 임원급 20%"],
+      ["180~200층", "과장급 50% · 임원급 50%"],
+      ["205층부터", "임원급 100%"],
+    ]);
+    expect(gradeOddsText([0, 70, 30, 0])).toBe("대리급 70% · 과장급 30%");
+    expect(gradeOddsText([0, 0, 100, 0])).toBe("과장급");
+  });
+
+  it("인감 도장·꾸미기 등급 표도 실제 상자 층으로 끊는다 (경계 101·151층은 그대로)", () => {
+    expect(chestRows().find((r) => r[0] === "인감 도장")![1]).toBe("105층부터 1개, 155층부터 2개예요.");
+    expect(cosTierRows().rows.map((r) => r[0])).toEqual(["55~100층", "105~150층", "155층부터"]);
   });
 
   it("강화 표는 +1부터 있고 확률이 0~100%", () => {

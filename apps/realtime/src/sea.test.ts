@@ -28,7 +28,7 @@ function setup(o0: { grants?: boolean } = {}) {
   const core = new ChannelCore<Conn>({ capacity: 10, graceMs: 20_000 }, host);
   const join = (id: string, o: { camp?: boolean; sea?: boolean; map?: "camp" | "sea"; spawn?: { x: number; y: number }; now?: number } = {}) => {
     const c: Conn = { id, out: [] };
-    const t: JoinTicket = { visitorId: id, name: id, color: AVATAR_COLORS[0], channel: 1, spawn: o.spawn, look: [], body: "hood", ...(o.camp ? { camp: true as const } : {}), ...(o.sea ? { sea: true as const } : {}), ...(o.map ? { map: o.map } : {}) };
+    const t: JoinTicket = { visitorId: id, name: id, color: AVATAR_COLORS[0], channel: 1, spawn: o.spawn, look: [], body: "hood", ...(o.camp ? { camp: true as const } : {}), ...(o.sea ? { sea: true as const } : {}), ...(o.map ? { map: o.map, known: o.map } : {}) };
     core.join(c, t, o.now ?? 0);
     return c;
   };

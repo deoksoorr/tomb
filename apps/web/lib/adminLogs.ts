@@ -1,22 +1,18 @@
-import { DIFFS, HUNT_ZONES, isZoneId } from "./rpg/catalog";
 import { getAccounts } from "./store";
 import { getOpsLog, type LogEntry, type LogList } from "./store/opsLog";
 import { kstDay } from "./store/accounts";
 import { getSignupSrc, type LiveSrc } from "./store/signupSrc";
 import { srcText } from "./signupSource";
+import { describeLog, type LogLine } from "./logText";
 
 // 11/26 관리자 「접속 기록」·「사냥터 기록」 읽기: 전체 최근 500줄 또는 한 계정 50줄 + 이름 (나온 계정만 한 번에 읽는다)
 
-/** 이름 + 사냥터 기록이면 어디인지 (사냥터·난이도·야근 빌딩 층 — 서버가 이름으로 바꿔 보낸다) */
-export type AdminLogRow = LogEntry & { name: string | null; where?: string };
+/**
+ * 이름 + 11/28 한 문장(lib/logText — 「자동 낚시 시작 (캠핑장 윤슬 낚시터 좌대 4번 · 1채널)」).
+ * 저장된 줄 필드는 그대로 같이 보낸다 (관리 화면 「원본」 펼치기 — 디버그용)
+ */
+export type AdminLogRow = LogEntry & { name: string | null; line: LogLine };
 
-function whereOf(e: LogEntry): string | undefined {
-  const h = e as { zone?: string; d?: string; tw?: number };
-  if (h.tw) return `야근 빌딩 ${h.tw}층부터`;
-  const diff = h.d && h.d in DIFFS ? DIFFS[h.d as keyof typeof DIFFS].name : null;
-  const zone = h.zone && isZoneId(h.zone) ? HUNT_ZONES[h.zone].name : null;
-  return [zone, diff].filter(Boolean).join(" · ") || undefined;
-}
 export type AdminLogsResponse = {
   list: LogList;
   /** 서버 시각 (몇 분 전 표시 기준) */
@@ -40,10 +36,7 @@ export async function readAdminLogs(list: LogList, accountId: string | null): Pr
   return {
     list,
     at: now,
-    rows: entries.map((e) => {
-      const where = list === "hunt" ? whereOf(e) : undefined;
-      return { ...e, name: names.get(e.a) ?? null, ...(where ? { where } : {}) };
-    }),
+    rows: entries.map((e) => ({ ...e, name: names.get(e.a) ?? null, line: describeLog(list, e) })),
     ...(accountId
       ? { account: { id: accountId, name: names.get(accountId) ?? null, signup: srcText(src[0]), session: live[0]?.s ?? null, sessionAt: live[0]?.at ?? null } }
       : {}),

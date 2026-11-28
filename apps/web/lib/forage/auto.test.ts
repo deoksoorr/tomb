@@ -9,6 +9,7 @@ import {
   autoCatchTimes,
   autoChipText,
   autoHit,
+  autoHitInMs,
   autoNextInMs,
   autoRareFactor,
   autoSummary,
@@ -282,5 +283,27 @@ describe("11/22 터치 화면 위쪽 자동 낚시 칩 글귀", () => {
   });
   it("가방이 가득 차면 쉰다고 (낚은 수는 뒤로)", () => {
     expect(autoChipText(5, 70_000, true)).toEqual({ head: "자동 낚시", count: "가방 가득", next: "쉬는 중 · 5마리" });
+  });
+});
+
+describe("11/27 걸리는 순간 정산 (hitInMs — 운영자 「일어나야 갱신되는 게 아니라 실시간으로」)", () => {
+  it("다음 걸리는 찌 번호까지 남은 접속 시간: 그때 정산하면 그 번호까지 세어 걸린 것이 들어간다", () => {
+    for (const every of [AUTO_FISH_EVERY_MS, 15_000]) {
+      let s: AutoSession = { ...newAutoSession(4242, "f_1", "reservoir", 1, T0), every };
+      s = beats(s, T0, T0 + 7 * MIN + 1234, 30_000);
+      const ms = autoHitInMs(s)!;
+      expect(ms).toBeGreaterThan(0);
+      const total = autoTriesTotal(s);
+      const k = total + Math.round((ms + autoAliveMs(s) - total * every) / every);
+      expect(autoHit(4242, k)).toBe(true);
+      for (let j = total + 1; j < k; j++) expect(autoHit(4242, j)).toBe(false);
+      // 그 순간까지 접속해 있으면 그 번호까지 찌를 올린 것
+      const later = beatAuto(s, s.beat + ms);
+      expect(autoTriesTotal(later)).toBe(k);
+    }
+  });
+  it("내 좌대 칩은 「좌대 자동 낚시 중 · 속도 2배 · 4마리」 (11/28 초 숫자 대신 표준 용어)", () => {
+    expect(autoChipText(4, 9_000, false, 15_000)).toEqual({ head: "좌대 자동 낚시 중 · 속도 2배", count: "4마리", next: "" });
+    expect(autoChipText(4, 9_000, true, 15_000).head).toBe("좌대 자동 낚시");
   });
 });

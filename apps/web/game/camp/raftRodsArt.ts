@@ -1,19 +1,37 @@
 import { Grid, lighten, type Color } from "../sprites/pixel";
+import { ICE, SNOW } from "../sprites/winterArt";
 
 // 11/27 좌대 입장권 「낚싯대 4대」 그림 (시안 scratchpad jwadaemock/art/rods.ts · ~/Desktop/목요일작업/좌대시안 03·04번 그대로).
 // 주인이 자기 좌대 의자에 앉아 있으면 마루 앞 끝 받침틀에 낚싯대 넷을 부채꼴로 펼치고, 끝마다 방울, 줄은 물속 찌로 (game/camp/CampRafts).
 // 좌표 기준: 앉는 자리 x(SX = 좌대 x + campRaftSeatDx)와 받침틀 줄(front = 좌대 받침 y − 9 = 앉는 자리 + 3 — 마루 앞 끝 바로 안).
 // 받침틀은 빈 채로 좌대 그림에도 있다 (valleyExtraArt raft4Art — 같은 drawRaftHolder).
-// 4~6번(사다리가 앞 가운데 — 의자는 오른쪽 +11)은 부채를 오른쪽으로 좁혀 낚싯대·줄이 사다리를 가로지르지 않게 (RAFT_LADDER_DX — 아래 시험이 지킨다).
+// 4~6번(사다리가 앞 가운데 — 의자는 오른쪽 +11)은 받침틀을 사다리 양옆 둘로 나눠 낚싯대·줄이 사다리를 가로지르지 않게 (RAFT_LADDER_DX — 아래 시험이 지킨다).
+// 11/27 운영자 「찌가 한쪽으로 쏠려 있다, 좌대 앞 물가를 넷이 다 채워야」: 찌 넷을 좌대 앞 물 전체 폭에 고르게 (좌대 가운데 기준 −30·−10·10·30 — RAFT_FLOAT_DX).
+// 좌대 옆 물은 이웃 좌대·둑까지 5~12칸뿐이라 앞 물만 쓴다.
 
-export type RaftRod = { /** 받침 x (SX 기준) */ bx: number; /** 끝 (SX·front 기준) */ tdx: number; tdy: number };
-export type RaftRig = { /** 받침틀 가로대 (SX 기준, 양끝 포함) */ holder: readonly [number, number]; rods: readonly RaftRod[] };
+export type RaftRod = {
+  /** 받침 x (SX 기준) */ bx: number;
+  /** 끝 (SX·front 기준) */ tdx: number;
+  tdy: number;
+  /** 찌가 끝에서 기운 쪽 (없으면 tdx 부호 — 곧게 앞으로 뻗은 대만 정한다) */ d?: -1 | 1;
+};
+export type RaftRig = { /** 받침틀 가로대 (SX 기준, 양끝 포함) — 4~6번은 사다리 양옆 둘 */ holders: readonly (readonly [number, number])[]; rods: readonly RaftRod[] };
 
-const rod = (bx: number, tdx: number, tdy: number): RaftRod => ({ bx, tdx, tdy });
-/** 잔교에 붙은 좌대 1~3: 시안 그대로 (바깥 둘은 옆으로 길게, 안쪽 둘은 앞으로) */
-export const RIG_WIDE: RaftRig = { holder: [-10, 10], rods: [rod(-7, -22, 13), rod(-2, -8, 19), rod(2, 8, 19), rod(7, 22, 13)] };
-/** 물 건너 좌대 4~6: 받침틀·부채를 오른쪽으로 좁혀 사다리(SX −16 ~ −6)를 비운다 */
-export const RIG_NARROW: RaftRig = { holder: [-4, 9], rods: [rod(-2, -4, 18), rod(1, 1, 20), rod(4, 9, 19), rod(7, 19, 13)] };
+const rod = (bx: number, tdx: number, tdy: number, d?: -1 | 1): RaftRod => ({ bx, tdx, tdy, ...(d ? { d } : {}) });
+/** 찌가 기운 쪽 */
+export const rodDir = (r: RaftRod): -1 | 1 => r.d ?? (r.tdx < 0 ? -1 : 1);
+/** 찌 넷 자리 (좌대 가운데 기준 x — 앞 물 폭 66에 고르게) */
+export const RAFT_FLOAT_DX: readonly number[] = [-30, -10, 10, 30];
+/** 잔교에 붙은 좌대 1~3: 의자 앞 받침틀 하나에서 부채꼴 (바깥 둘은 옆으로 길게, 안쪽 둘은 앞으로) */
+export const RIG_WIDE: RaftRig = { holders: [[-10, 10]], rods: [rod(-7, -28, 13), rod(-2, -8, 18), rod(2, 8, 18), rod(7, 28, 13)] };
+/** 물 건너 좌대 4~6 (SX = 좌대 가운데 + 11): 사다리(SX −16 ~ −6) 양옆 받침틀 둘에 둘씩 — 사다리 가운데(SX −11)를 두고 좌우 대칭 */
+export const RIG_NARROW: RaftRig = {
+  holders: [
+    [-31, -19],
+    [-3, 9],
+  ],
+  rods: [rod(-28, -39, 13), rod(-24, -23, 18, 1), rod(2, 1, 18, -1), rod(6, 17, 13)],
+};
 export const raftRig = (link: boolean): RaftRig => (link ? RIG_WIDE : RIG_NARROW);
 /** 4~6번 앞 사다리 (그림 외곽선 포함 x 범위 — SX 기준, 받침 y −14 ~ 0) */
 export const RAFT_LADDER_DX: readonly [number, number] = [-16, -6];
@@ -40,11 +58,12 @@ export function rodPoints(x0: number, y0: number, x1: number, y1: number): [numb
 
 /** 빈 받침틀 (가로대 + 위 밝은 줄 + 양끝 다리 + 받침마다 Y 홈) — cx = SX, fy = front */
 export function drawRaftHolder(g: Grid, cx: number, fy: number, rig: RaftRig): void {
-  const [h0, h1] = rig.holder;
-  for (let x = cx + h0; x <= cx + h1; x++) g.set(x, fy, x === cx + h0 ? HOLDER_HI : HOLDER);
-  g.hline(cx + h0 + 1, cx + h1 - 1, fy - 1, HOLDER_HI);
-  g.set(cx + h0, fy + 1, HOLDER);
-  g.set(cx + h1, fy + 1, HOLDER);
+  for (const [h0, h1] of rig.holders) {
+    for (let x = cx + h0; x <= cx + h1; x++) g.set(x, fy, x === cx + h0 ? HOLDER_HI : HOLDER);
+    g.hline(cx + h0 + 1, cx + h1 - 1, fy - 1, HOLDER_HI);
+    g.set(cx + h0, fy + 1, HOLDER);
+    g.set(cx + h1, fy + 1, HOLDER);
+  }
   for (const r of rig.rods) {
     g.set(cx + r.bx - 1, fy - 1, HOLDER_HI);
     g.set(cx + r.bx + 1, fy - 1, HOLDER_HI);
@@ -52,9 +71,9 @@ export function drawRaftHolder(g: Grid, cx: number, fy: number, rig: RaftRig): v
 }
 
 /** 받침 그림 원점: SX = 그림 x RIG_OX, front = 그림 y RIG_OY */
-export const RIG_OX = 26;
+export const RIG_OX = 42;
 export const RIG_OY = 2;
-export const RIG_W = 52;
+export const RIG_W = 72;
 export const RIG_H = 24;
 
 /** 받침틀 + 낚싯대 넷 (손잡이·대·초릿대 끝) — 방울·줄·찌는 raftRodTipArt */
@@ -65,7 +84,7 @@ export function raftRigBaseArt(rig: RaftRig): Grid {
   drawRaftHolder(g, cx, fy, rig);
   for (const r of rig.rods) {
     const bx = cx + r.bx;
-    g.set(bx - Math.sign(r.tdx || 1), fy - 2, GRIP);
+    g.set(bx - rodDir(r), fy - 2, GRIP);
     g.set(bx, fy - 1, GRIP);
     const pts = rodPoints(bx, fy, cx + r.tdx, fy + r.tdy);
     pts.forEach(([x, y], k) => g.set(x, y, k > pts.length - 5 ? TIP : k % 4 === 1 ? ROD_HI : ROD));
@@ -106,5 +125,20 @@ export function raftRodTipArt(dir: number, odd: boolean, lit: boolean, bob: bool
 
 /** 찌 머리 자리 (SX·front 기준) — 밤 전자찌 불빛 */
 export function raftFloatAt(r: RaftRod): { x: number; y: number } {
-  return { x: r.tdx + Math.sign(r.tdx || 1) * 2, y: r.tdy + 4 };
+  return { x: r.tdx + rodDir(r) * 2, y: r.tdy + 4 };
+}
+
+/** 11/27 겨울 판: 찌가 저수지 가장자리 얼음 위에 떨어지면 그 자리에 작은 얼음낚시 구멍 (캠핑장 얼음낚시 구멍 iceHoleArt와 같은 색 — 눈 테 + 짙은 물) */
+export const HOLE_W = 9;
+export const HOLE_H = 5;
+/** 구멍 가운데 = 찌 머리 바로 아래 물 줄 (그림 원점 기준) */
+export const HOLE_OX = 4;
+export const HOLE_OY = 2;
+export function raftIceHoleArt(): Grid {
+  const g = new Grid(HOLE_W, HOLE_H);
+  g.ellipse(HOLE_W / 2, HOLE_H / 2, HOLE_W / 2, HOLE_H / 2, SNOW.hi);
+  g.ellipse(HOLE_W / 2, HOLE_H / 2, 3, 1.4, 0x1a3442);
+  g.set(HOLE_OX - 2, HOLE_OY, 0x4a7a8e);
+  for (let x = 2; x <= HOLE_W - 3; x++) g.set(x, HOLE_H - 1, ICE.lo);
+  return g;
 }

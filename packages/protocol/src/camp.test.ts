@@ -17,6 +17,7 @@ import {
   campRaftWalks,
   CAMP_RAFT_ART_H,
   CAMP_RAFT_DEPTH,
+  CAMP_RAFT_HUT_DX,
   CAMP_RAFT_HALF_W,
   campResEdge,
   CAMP_RES,
@@ -164,15 +165,18 @@ describe("맵별 좌석 판정", () => {
     // 좌석 id는 캠핑장 다른 자리와 겹치지 않는다
     expect(CAMP_SEATS.some((q) => q.id === CAMP_SLIDE_SEAT.id || q.id.startsWith("qJ"))).toBe(false);
   });
-  it("11/26 좌대 1~3은 잔교에서 판자 다리 둘로 걸어 들어가고(다리 칸만 마른 판), 4~6은 물 건너 (헤엄쳐 가서 사다리로)", () => {
+  it("11/26 좌대 1~3은 잔교에서 판자 다리로 걸어 들어가고(다리 칸만 마른 판), 4~6은 물 건너 (헤엄쳐 가서 사다리로)", () => {
     for (const r of CAMP_RAFTS) {
       const d = campRaftDeck(r);
       expect(d.y, `좌대 ${r.n} 마루 뒤 끝`).toBe(r.y - CAMP_RAFT_DEPTH);
       if (r.n <= 3) {
         expect(r.link, `좌대 ${r.n}`).toBe(true);
         const walks = campRaftWalks(r);
-        // 잔교 위에서 시작하는 다리만 (1·2 = 양옆 둘, 3 = 잔교 끝 밖인 오른쪽은 없다)
-        expect(walks).toHaveLength(r.n === 3 ? 1 : 2);
+        // 11/28 운영자 「좌대 길은 하나로 합쳐, 좀 넓게」: 셋 다 왼쪽 뒤 넓은 다리 하나 (몸 상자 8px 세 개가 나란히), 잔교 위에서 시작
+        expect(walks).toHaveLength(1);
+        expect(walks[0].w + 1).toBeGreaterThanOrEqual(24);
+        // 오두막(오른쪽 뒤 모서리 — 지붕 그림 x = 받침 + HUT_DX − 17 ~ + 16)과 안 겹친다 (난간 한 칸 + 물 한 칸 띄우고)
+        expect(walks[0].x + walks[0].w + 2).toBeLessThan(r.x + CAMP_RAFT_HUT_DX - 17);
         for (const w of walks) expect(w.x >= CAMP_PIER.x0 && w.x + w.w <= CAMP_PIER.x1, `좌대 ${r.n} 다리 ${w.x}`).toBe(true);
         for (const w of walks) {
           // 잔교 아래 끝 → 마루 뒤 끝까지 빈틈없이 이어진다
@@ -187,7 +191,8 @@ describe("맵별 좌석 판정", () => {
         expect(campWet(r.x, mid)).toBe(true);
         expect(campWet(walks[0].x - 2, mid)).toBe(true);
         expect(campWet(walks[walks.length - 1].x + walks[walks.length - 1].w + 2, mid)).toBe(true);
-        expect(campWet(r.x + 25, mid), `좌대 ${r.n} 오른쪽`).toBe(r.n !== 3 ? false : true);
+        // 오두막 뒤(오른쪽)는 물
+        expect(campWet(r.x + 25, mid), `좌대 ${r.n} 오른쪽`).toBe(true);
       } else {
         expect(campRaftWalks(r)).toHaveLength(0);
         expect(r.link, `좌대 ${r.n}`).toBe(false);

@@ -1,5 +1,5 @@
-import type { FishWater } from "@tomb/protocol";
-import { WATER_WHERES, type Species } from "./catalog";
+import { campRaftOfSpot, RAFT_AUTO_EVERY_MS, RAFT_GEAR_TIER_NAME, type FishWater, type RaftGearTier } from "@tomb/protocol";
+import { GRADE_LABEL, WATER_WHERES, type Species } from "./catalog";
 import { BITE_MAX_MS, BITE_MIN_MS, candidates, conditionsAt, hash01, reelMinMs, rollSize10, sizeText, weightOf, type Cond } from "./rules";
 
 // 자동 낚시 규칙 (순수 함수 — 서버가 쓰고 테스트한다).
@@ -36,6 +36,13 @@ export const AUTO_BEAT_GAP_MS = 40 * 60_000;
 export const AUTO_SEGS_MAX = 64;
 /** 보이는 동안 정산 주기 (클라이언트. 서버가 접속 시간으로 세므로 늦게 물어도 몫은 같다 — Redis 명령을 아끼려고 90초 → 3분) */
 export const AUTO_SYNC_MS = 3 * 60_000;
+/**
+ * 11/27 운영자 「자동 낚시로 잡으면 일어나야 갱신되는 게 아니라 실시간으로」: 서버가 다음에 걸리는 찌까지 남은 시간(hitInMs)을 알려 주고,
+ * 화면은 그 순간 바로 뒤에만 정산을 부른다 → 걸린 수만큼만 요청 (보통 자리 평균 2분, 내 좌대 평균 1분에 한 번). 그사이엔 AUTO_SYNC_MS 그대로
+ */
+export const AUTO_HIT_SLACK_MS = 1_500;
+/** 다음 걸리는 찌를 이 횟수까지만 찾는다 (없으면 null — AUTO_SYNC_MS로) */
+export const AUTO_HIT_LOOK = 40;
 
 export type AutoSession = {
   v: 1;
@@ -115,6 +122,15 @@ export const autoNextInMs = (s: AutoSession) => everyOf(s) - (autoAliveMs(s) % e
 /** k번째(1부터) 시도에 걸렸는지 (시드 + 번호로 결정적 — 다시 정산해도 같다) */
 export const autoHit = (seed: number, k: number) => hash01(`auto|${seed}|${k}|hit`) < AUTO_CATCH_CHANCE;
 
+/** 11/27 다음에 걸리는 찌까지 남은 접속 시간 (ms). AUTO_HIT_LOOK번 안에 없으면 null (무엇이 걸리는지는 정산 때 굴린다) */
+export function autoHitInMs(s: AutoSession): number | null {
+  const every = everyOf(s);
+  const alive = autoAliveMs(s);
+  const total = Math.floor(alive / every);
+  for (let k = total + 1; k <= total + AUTO_HIT_LOOK; k++) if (autoHit(s.seed, k)) return k * every - alive;
+  return null;
+}
+
 /** k번째(1부터) 시도 시각: 접속 구간을 이어 붙여 k × AUTO_FISH_EVERY_MS가 채워지는 순간 */
 export function autoCatchTimes(s: AutoSession, from: number, to: number): number[] {
   const out: number[] = [];
@@ -181,21 +197,69 @@ export function autoNextLabel(ms: number): string {
  * 11/22 터치 화면 위쪽 자동 낚시 칩 글귀 (낚시 창을 접어 둔 동안): 「자동 낚시 중 · 3마리 · 다음 약 1분」.
  * 가방이 가득 차면 쉰다고 (다음 시각 대신). next는 좁은 화면에서 숨긴다 — 비어 있을 수 있다
  */
-export function autoChipText(today: number, nextMs: number | null, full: boolean): { head: string; count: string; next: string } {
-  if (full) return { head: "자동 낚시", count: "가방 가득", next: `쉬는 중 · ${today}마리` };
+export function autoChipText(today: number, nextMs: number | null, full: boolean, raftEvery?: number): { head: string; count: string; next: string } {
+  if (full) return { head: raftEvery ? "좌대 자동 낚시" : "자동 낚시", count: "가방 가득", next: `쉬는 중 · ${today}마리` };
+  // 11/27 내 좌대: 보통 자리보다 빠르다는 걸 보여 준다 (운영자 「좌대에서 속도 개편된 거 맞아?」).
+  // 11/28 운영자 「15초마다 찌를 올려요 어색함」 → 표준 용어 「속도 2배」 (간격 숫자는 protocol RAFT_AUTO_EVERY_MS — 화면엔 안 쓴다). 좁은 화면에서도 낚은 수가 보이게 head에 붙인다
+  if (raftEvery) return { head: `좌대 자동 낚시 중 · ${RAFT_SPEED_TEXT}`, count: `${today}마리`, next: "" };
   return { head: "자동 낚시 중", count: `${today}마리`, next: nextMs == null ? "" : `다음 ${autoNextLabel(Math.max(0, nextMs))}` };
 }
 
-/** 자동 낚시 안내 (낚시 창·결과 알림이 같이 쓴다) */
-export const AUTO_RANK_NOTE = "자동 낚시로 낚은 물고기는 최대어 순위에 안 올라가요. 크기는 도감에 남아요.";
-/** 11/26 캠핑장 물에서 자동 낚시를 켤 때 덧붙이는 안내 (희귀 이상 새 물고기는 직접 낚시로만 — catalog directOnly) */
-export const AUTO_DIRECT_NOTE = "캠핑장에서만 나오는 희귀 이상 물고기는 직접 낚아야 나와요.";
+/** 자동 낚시 안내. 11/28 운영자 「구구절절 계속 나온다」: 알림에서는 빼고 낚시 창 [자동 낚시 켜기] 도움말(autoTip) 한 곳에만 */
+export const AUTO_RANK_NOTE = "자동으로 낚은 물고기는 최대어 순위에 안 올라가요.";
 /** 11/26 캠핑장 물인지 (자동 낚시 안내) */
 export const isCampWater = (w: FishWater): boolean => w === "valley" || w === "pool" || w === "reservoir" || w === "rowboat";
-/** 11/19 자동 낚시 빠르기 안내: "30초마다 찌를 올려 25% 확률로 걸려요." (숫자는 상수에서) */
-export const AUTO_PACE_NOTE = `${Math.round(AUTO_FISH_EVERY_MS / 1000)}초마다 찌를 올려 ${Math.round(AUTO_CATCH_CHANCE * 100)}% 확률로 걸려요.`;
-/** 11/27 내 좌대에서 켠 자동 낚시 안내 (간격은 protocol RAFT_AUTO_EVERY_MS) */
-export const AUTO_RAFT_NOTE = "내 좌대에서는 15초마다 찌를 올려요.";
+/** 11/28 좌대 자동 낚시 빠르기 (표준 용어 — 실제 간격은 protocol RAFT_AUTO_EVERY_MS 15초 = 보통 AUTO_FISH_EVERY_MS 30초의 절반) */
+export const RAFT_SPEED_TEXT = `속도 ${Math.round(AUTO_FISH_EVERY_MS / RAFT_AUTO_EVERY_MS)}배`;
+
+/**
+ * 11/28 [자동 낚시 켜기] 도움말 (운영자: 짧게, 초 숫자 없이). 캠핑장 물이면 희귀 물고기 안내를 최대어 안내와 한 문장으로 묶는다
+ * (11/26 캠핑장 희귀 이상 새 물고기는 직접 낚시로만 — catalog directOnly)
+ */
+export function autoTip(water: FishWater, raft: boolean): string {
+  const head = `자리를 비워도 접속해 있는 동안 자동으로 낚아요.${raft ? ` 좌대에서는 ${RAFT_SPEED_TEXT}예요.` : ""}`;
+  if (!isCampWater(water)) return `${head} ${AUTO_RANK_NOTE}`;
+  return `${head} 최대어 순위와 캠핑장 희귀 물고기는 ${raft ? "좌대 밖에서 " : ""}직접 낚아야 해요.`;
+}
+/** 11/28 좌대 낚시 자리는 자동 낚시만 (운영자 「좌대에서는 자동낚시만 가능하게」) — 서버 castLine·reelIn이 막고, 낚시 창은 찌 던지기를 뺀다 */
+export const RAFT_AUTO_ONLY_MSG = "좌대에서는 자동 낚시만 할 수 있어요.";
+/** 좌대 낚시 창 안내 한 줄 (자동 낚시를 켜기 전 — 11/28 운영자 문구 그대로) */
+export const RAFT_AUTO_ONLY_LINE = "좌대에서는 자동 낚시만 할 수 있고, 속도는 일반 자리의 2배예요.";
+/** 그 낚시 자리가 좌대 자리인지 (직접 낚시 막기 — 입장권 판매가 꺼진 서버에서도 좌대는 자동 낚시만) */
+export const isRaftAutoOnly = (spotId: string): boolean => campRaftOfSpot(spotId) !== null;
+/** 11/28 낚시 창 모양 (FishingPanel): 좌대 자리면 [찌 던지기]·던지는 조작 안내를 빼고 「자동 낚시만」 한 줄. 보통 자리면 그대로 */
+export const fishPanelOf = (spotId: string): { cast: boolean; note: string | null } =>
+  isRaftAutoOnly(spotId) ? { cast: false, note: RAFT_AUTO_ONLY_LINE } : { cast: true, note: null };
+
+/**
+ * 11/28 자동 낚시 알림 한 줄 (운영자 「안내문이 너무 길다」): 한 마리면 「블루길 9.7cm」, 여러 마리면 「3마리 · 블루길 외 2」,
+ * 새로 도감에 올랐으면 「 · 새 도감 +3P」. 대물·월척은 붙어 있을 때만 (자동 낚시엔 없다). 없으면 빈 문자열 (알림 없음).
+ * 앞에 세울 한 마리 = 새 도감 → 새 기록 → 큰 것 순. dex = 이번 정산의 도감 처음 등록 보상 (받은 P · 지갑이 꽉 차 못 받은 P)
+ */
+export function autoCatchLine(
+  items: readonly { id: string; isNew: boolean; size?: number; record?: boolean; grade?: 0 | 1 | 2 }[],
+  nameOf: (id: string) => string,
+  dex?: { earned: number; pending: number },
+): string {
+  if (!items.length) return "";
+  const first = [...items].sort((a, b) => Number(b.isNew) - Number(a.isNew) || Number(!!b.record) - Number(!!a.record) || (b.size ?? 0) - (a.size ?? 0))[0];
+  const head =
+    items.length === 1
+      ? [nameOf(first.id), sizeText(first.size ?? 0), first.grade ? GRADE_LABEL[first.grade] : ""].filter(Boolean).join(" ")
+      : `${items.length}마리 · ${nameOf(first.id)} 외 ${items.length - 1}`;
+  if (!items.some((i) => i.isNew)) return head;
+  const earned = dex?.earned ?? 0;
+  return `${head} · 새 도감${earned > 0 ? ` +${earned}P` : dex?.pending ? " (보상은 도감 창에서)" : ""}`;
+}
+
+/** 11/28 좌대 코디 알림 (따로 띄운다): 「좌대 코디 「붕어 털모자」 7일 획득」 */
+export const raftGearText = (g: { name: string; tier: RaftGearTier }): string => `좌대 코디 「${g.name}」 ${RAFT_GEAR_TIER_NAME[g.tier]} 획득`;
+
+/** 11/28 이 응답으로 꾸미기를 새로 받았는지 (물에 빠진 꾸미기 kept · 좌대 코디) → 내 정보를 새로 받아 가방 [꾸미기]·[지금 모습]에 바로 보이게 */
+export function gotCosmetic(r: { gear?: readonly { kept: boolean }[] | { kept: boolean } | null; raftGear?: readonly unknown[] | null }): boolean {
+  const gear = r.gear ? (Array.isArray(r.gear) ? r.gear : [r.gear]) : [];
+  return gear.some((g: { kept: boolean }) => g.kept) || (r.raftGear?.length ?? 0) > 0;
+}
 
 /**
  * 종류별 마릿수 요약: "월요병 붕어 5(최대 42.3cm), 야근 메기 1(새 도감·61.0cm) 외 2종".

@@ -217,17 +217,23 @@ export const CAMP_RAFT_HALF_W = 33;
 export const CAMP_RAFT_DEPTH = 40;
 /** 좌대 그림 높이 (받침에서 지붕 꼭대기까지 — 물 건너 좌대 뒤 막이가 지붕까지 덮는다) */
 export const CAMP_RAFT_ART_H = 57;
-/** 좌대 마루 (걸을 수 있는 판 — 받침 기준). 11/26 잔교에 붙은 좌대도 마루는 같고, 잔교 → 마루는 판자 다리 둘(campRaftWalks)로만 건넌다 */
+/**
+ * 11/28 좌대 오두막 자리: 옛 뒤 가운데에서 오른쪽으로 민 칸 (운영자 「좌대 길은 하나로 합쳐, 좀 넓게, 건물을 한쪽에 빼고」 — 오두막은 오른쪽 뒤 모서리,
+ * 왼쪽 뒤는 넓은 판자 다리 하나·트인 마루). 여섯 다 같은 자리. 그림 valleyExtraArt raft4Art · 막이 campLayout · 지붕 덧그림 CampMap · 이름표 CampRafts가 같이 쓴다
+ */
+export const CAMP_RAFT_HUT_DX = 16;
+/** 좌대 마루 (걸을 수 있는 판 — 받침 기준). 11/26 잔교에 붙은 좌대도 마루는 같고, 잔교 → 마루는 판자 다리(campRaftWalks)로만 건넌다 */
 export function campRaftDeck(r: { x: number; y: number; link: boolean }): Rect {
   const top = r.y - CAMP_RAFT_DEPTH;
   return { x: r.x - CAMP_RAFT_HALF_W, y: top, w: CAMP_RAFT_HALF_W * 2, h: r.y - 8 - top };
 }
 /**
- * 11/26 잔교에 붙은 좌대(1~3)의 판자 다리 (오두막 양옆 둘 — 3번은 왼쪽 하나 — 잔교 아래 끝 → 마루 뒤 끝, 걷는 폭 12).
- * 운영자 「다리랑 붙어 있는 좌대는 연결 부분을 다리로」 — 그림 valleyExtraArt raft4Art의 다리 칸(x 5~16 · 55~66)과 같다. 물 건너 좌대는 없다
+ * 잔교에 붙은 좌대(1~3)의 판자 다리 (잔교 아래 끝 → 마루 뒤 끝). 11/26 운영자 「다리랑 붙어 있는 좌대는 연결 부분을 다리로」.
+ * 11/28 오두막 양옆 좁은 다리 둘(폭 12) → 왼쪽 뒤 넓은 다리 하나(폭 26 — 몸 세 칸). 그림 valleyExtraArt raft4Art의 다리 칸(x 6~31)과 같다.
+ * 3번도 잔교 안에서 시작한다 (잔교 끝 x 1198). 물 건너 좌대는 없다
  */
-export const CAMP_RAFT_WALK_DX: readonly number[] = [-31, 19];
-export const CAMP_RAFT_WALK_W = 11;
+export const CAMP_RAFT_WALK_DX: readonly number[] = [-30];
+export const CAMP_RAFT_WALK_W = 25;
 export function campRaftWalks(r: { x: number; y: number; link: boolean }): Rect[] {
   if (!r.link) return [];
   const top = CAMP_PIER.y + CAMP_PIER.w / 2;

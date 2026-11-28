@@ -224,6 +224,14 @@ function poolColor(x: number, y: number, d: number): Color {
   return c;
 }
 
+/** 겨울 판 저수지 가장자리 얼음 띠 폭 (물가에서 안쪽으로 px — 굽이마다 18~28) */
+const pondIceW = (x: number, y: number): number => 18 + vnoise(x, y, 26, 543) * 10;
+/** 11/27 겨울 판 저수지 그 점이 얼음(+ 얼음 끝 거품 줄)인지 — 좌대 찌가 얼음 위면 game/camp/CampRafts가 얼음낚시 구멍을 그 자리에 판다 */
+export function pondIcy(x: number, y: number): boolean {
+  const e = -L.resEdge(x, y);
+  return e >= 0 && e < pondIceW(x, y) + 2;
+}
+
 /** 저수지: 가장자리에서 멀수록 깊다. 겨울 판은 가장자리 한 띠가 얼고(얼음낚시 구멍은 그림으로) 가운데·좌대 둘레는 물 */
 function pondColor(x: number, y: number, snowy: boolean): Color {
   const e = -L.resEdge(x, y); // 물가에서 안쪽으로 px
@@ -231,7 +239,7 @@ function pondColor(x: number, y: number, snowy: boolean): Color {
   // 석축 그늘 (북쪽 벽 아래·서쪽 벽 옆 물은 어둡게)
   const shadeN = Math.max(0, 1 - (y - L.RES.y0) / 14);
   if (snowy) {
-    const iceW = 18 + vnoise(x, y, 26, 543) * 10;
+    const iceW = pondIceW(x, y);
     if (e < iceW) {
       if (e > iceW - 1.5) return hash2(x, y, 545) < 0.5 ? ICE.hi : SNOW.hi;
       const dust = vnoise(x, y, 8, 547);

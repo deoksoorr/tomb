@@ -33,7 +33,7 @@ export const POST = handler<{ id: string }>(async (req, { id }) => {
   });
   const now = Date.now();
   const tgt = houseTargetText(house);
-  logMoves([{ a: visitorId, k: "mv", at: now, m: verdict.ok ? "houseIn" : "houseNo", ...(via ? { via } : {}), tgt, ...(verdict.ok ? {} : { no: verdict.why }), src: "s" }]);
+  logMoves([{ a: visitorId, k: "mv", at: now, m: verdict.ok ? "houseIn" : "houseNo", ...(via ? { via } : {}), tgt, ...(mine ? { mine: true as const } : {}), ...(verdict.ok ? {} : { no: verdict.why }), src: "s" }]);
   if (!verdict.ok) throw new HttpError(403, "OWNER_OFFLINE", ownerOfflineMessage(house.ownerName));
   // 11/27 집에 들어가면 자동 낚시는 지금 끝난다 (켠 자리를 떠났다 — lib/forage/autoSpot). 실패해도 들어가기는 그대로
   await endAutoFishOnLeave(visitorId, now, "fishHouse").catch((e) => console.error("[forage] 자동 낚시 끄기 실패", e));

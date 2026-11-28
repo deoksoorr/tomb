@@ -31,7 +31,7 @@ function setup(saved?: unknown, savedStacks?: unknown) {
   if (savedStacks !== undefined) core.restoreSnowStacks(savedStacks, 100);
   const join = (id: string, o: { camp?: boolean; perm?: boolean; spawn?: { x: number; y: number }; now?: number } = {}) => {
     const c: Conn = { id, out: [] };
-    const t: JoinTicket = { visitorId: id, name: id, color: AVATAR_COLORS[0], channel: 1, look: [], body: "hood", spawn: o.spawn, ...(o.camp || o.perm ? { camp: true as const } : {}), ...(o.camp ? { map: "camp" as const } : {}) };
+    const t: JoinTicket = { visitorId: id, name: id, color: AVATAR_COLORS[0], channel: 1, look: [], body: "hood", spawn: o.spawn, ...(o.camp || o.perm ? { camp: true as const } : {}), ...(o.camp ? { map: "camp" as const, known: "camp" as const } : {}) };
     core.join(c, t, o.now ?? 0);
     return c;
   };

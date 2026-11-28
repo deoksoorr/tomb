@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { CONN_ABNORMAL, CONN_WHY_LABEL, type ConnWhy } from "@tomb/protocol";
+import { CONN_WHY_LABEL, type ConnWhy } from "@tomb/protocol";
 import type { AdminLogRow } from "@/lib/adminLogs";
 import type { ConnHealth } from "@/lib/opsLog";
-import type { ConnLogEntry, HuntLogEntry } from "@/lib/store/opsLog";
-import { moveText, type MoveLogEntry } from "@/lib/moveLog";
+import type { LogLine, LogTone } from "@/lib/logText";
 import { cx } from "../ui/cx";
 import ui from "./AdminUi.module.css";
 import styles from "./Admin.module.css";
@@ -22,65 +21,26 @@ import { usePanelLoad } from "./usePanelData";
 type Common = { toast: (message: string) => void; onAuthLost: () => void };
 type List = "conn" | "hunt";
 
-const DEVICE: Record<string, string> = { pc: "PC", phone: "폰", tablet: "패드" };
-/** "phone·카카오톡" → "폰 · 카카오톡" */
-export function deviceText(dev: string | undefined): string {
-  if (!dev) return "";
-  const [kind, app] = dev.split("·");
-  return [DEVICE[kind] ?? kind, app].filter(Boolean).join(" · ");
+/** 11/28 문장·종류 칸은 서버가 만든다 (lib/logText) — 여기는 색만 */
+const TONE: Record<LogTone, string | undefined> = { ok: ops.tagOk, info: ops.tagInfo, warn: ops.tagWarn, bad: ops.tagBad, plain: undefined };
+
+/** 「원본」 펼치기: 저장된 필드 그대로 (계정 id·이름·문장 빼고) */
+function rawText(r: AdminLogRow): string {
+  return Object.entries(r)
+    .filter(([k]) => k !== "a" && k !== "name" && k !== "line")
+    .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)
+    .join("  ");
 }
 
-const HUNT_LABEL: Record<HuntLogEntry["k"], string> = {
-  start: "입장",
-  leave: "나감",
-  drop: "튕김",
-  die: "쓰러짐",
-  reward: "보상 지급",
-  reject: "서버 판정 거절",
-};
-
-function connKind(e: ConnLogEntry | MoveLogEntry): { text: string; tone?: string } {
-  // 11/27 자리 옮김 (버튼·집·맵·채널·자동 낚시 멈춤 — lib/moveLog)
-  // 11/27 tab = 다시 접속·다른 탭 (실시간 서버 기록). 이전 연결을 끊었거나 다른 채널 탭·화면이 다른 맵을 보냈으면 눈에 띄게
-  if (e.k === "mv" && e.m === "tab") return { text: e.live || e.pch || e.ptab ? "다른 탭" : "다시 접속", tone: e.live || e.pch || e.ask ? ops.tagWarn : ops.tagInfo };
-  if (e.k === "mv") return { text: e.m === "houseNo" ? "못 들어감" : e.m === "fishStop" ? "낚시 멈춤" : "자리 옮김", tone: e.m === "houseNo" ? ops.tagWarn : ops.tagInfo };
-  if (e.k === "in") return { text: "들어옴", tone: ops.tagOk };
-  if (e.k === "err") return { text: "오류", tone: ops.tagBad };
-  const why = (e.why ?? "drop") as ConnWhy;
-  return { text: `나감 · ${CONN_WHY_LABEL[why] ?? why}`, tone: CONN_ABNORMAL.includes(why) ? ops.tagWarn : undefined };
-}
-
-function huntKind(e: HuntLogEntry): { text: string; tone?: string } {
-  const tone = e.k === "reject" ? ops.tagBad : e.k === "drop" || e.k === "die" ? ops.tagWarn : e.k === "reward" ? ops.tagOk : e.k === "start" ? ops.tagInfo : undefined;
-  return { text: HUNT_LABEL[e.k] ?? e.k, tone };
-}
-
-function huntDetail(e: HuntLogEntry & { where?: string }): string {
-  const parts: string[] = [];
-  if (e.where) parts.push(e.where);
-  if (e.k === "reward" || e.k === "die" || e.k === "leave") {
-    if (e.floors) parts.push(`${e.floors}층`);
-    parts.push(`EXP ${fmt(e.exp ?? 0)} · ${fmt(e.pts ?? 0)}P${e.drops ? ` · 드롭 ${e.drops}` : ""}`);
-    if (e.sec) parts.push(`${Math.floor(e.sec / 60)}분 ${e.sec % 60}초`);
-  }
-  if (e.k === "reject") parts.push(`${e.code ?? ""} ${e.msg ?? ""}`.trim());
-  if (e.k === "drop" && e.msg) parts.push(e.msg);
-  return parts.join(" · ");
-}
-
-function connDetail(e: ConnLogEntry | MoveLogEntry): string {
-  // 11/27 실시간 서버 줄은 기기도 (다른 탭·기기 구분)
-  if (e.k === "mv") return [moveText(e), e.src === "s" ? deviceText(e.dev) : ""].filter(Boolean).join(" · ");
-  if (e.k === "err") return e.msg ?? "";
-  return [e.ch ? `${e.ch}채널` : "", deviceText(e.dev)].filter(Boolean).join(" · ");
-}
+/** 옛 응답(문장이 없는 줄)도 깨지지 않게 */
+const lineOf = (r: AdminLogRow): LogLine => r.line ?? { tag: String(r.k), tone: "plain", text: "—" };
 
 /** 기록 표 (전체 목록이면 이름 칸, 한 계정이면 빼고) */
 function LogTable({ list, rows, now, onPick, showName }: { list: List; rows: AdminLogRow[]; now: number; onPick?: (id: string) => void; showName: boolean }) {
   if (!rows.length) return <Empty inline>{list === "conn" ? "아직 접속 기록이 없어요." : "아직 사냥터 기록이 없어요."}</Empty>;
   return (
     <div className={styles.tableWrap}>
-      <table className={styles.table} aria-label={list === "conn" ? "접속 기록" : "사냥터 기록"}>
+      <table className={cx(styles.table, ops.logTable)} aria-label={list === "conn" ? "접속 기록" : "사냥터 기록"}>
         <thead>
           <tr>
             <th scope="col">시각</th>
@@ -91,16 +51,15 @@ function LogTable({ list, rows, now, onPick, showName }: { list: List; rows: Adm
         </thead>
         <tbody>
           {rows.map((r, i) => {
-            const k = list === "conn" ? connKind(r as ConnLogEntry | MoveLogEntry) : huntKind(r as HuntLogEntry);
-            const detail = list === "conn" ? connDetail(r as ConnLogEntry | MoveLogEntry) : huntDetail(r as HuntLogEntry & { where?: string });
+            const l = lineOf(r);
             return (
               <tr key={`${r.at}-${r.a}-${i}`}>
-                <td className={styles.nowrap} title={fullTime(r.at)}>
+                <td className={cx(styles.nowrap, ops.cTime)} title={fullTime(r.at)}>
                   {relativeTime(r.at, now)}
                   <span className={ops.sub}>{fullTime(r.at)}</span>
                 </td>
                 {showName && (
-                  <td>
+                  <td className={ops.cName}>
                     {onPick ? (
                       <button type="button" className={ops.nameButton} onClick={() => onPick(r.a)}>
                         {r.name ?? "이름 없음"}
@@ -110,10 +69,17 @@ function LogTable({ list, rows, now, onPick, showName }: { list: List; rows: Adm
                     )}
                   </td>
                 )}
-                <td>
-                  <span className={cx(ops.tag, k.tone)}>{k.text}</span>
+                <td className={ops.cTag}>
+                  <span className={cx(ops.tag, TONE[l.tone])}>{l.tag}</span>
                 </td>
-                <td className={ops.detail}>{detail || "—"}</td>
+                <td className={ops.line}>
+                  <span className={ops.lineText}>{l.text}</span>
+                  {l.more && <span className={ops.lineMore}>{l.more}</span>}
+                  <details className={ops.raw}>
+                    <summary>{l.note ? `${l.note} · 원본` : "원본"}</summary>
+                    <code>{rawText(r)}</code>
+                  </details>
+                </td>
               </tr>
             );
           })}
@@ -156,7 +122,7 @@ export function OpsLogSection({ toast, onAuthLost, version }: Common & { version
           <span className={ops.muted}>이름을 누르면 그 계정 기록만 봐요.</span>
         )}
         <span className={ops.toolbarEnd}>
-          {list === "conn" ? "들어옴·나감(종료 종류·기기)·화면 오류 · 회원 상세에는 자리 옮김(누른 버튼·집·맵·채널·자동 낚시 멈춤)도" : "입장·나감·튕김·쓰러짐·보상 지급·서버 판정 거절"} · 계정당 50줄, 전체 500줄 · IP는 남기지 않아요
+          {list === "conn" ? "접속·나감(종료 종류·기기)·화면 오류 · 회원 상세에는 맵 이동·집 들어감/나옴·채널·자동 낚시 시작/해제·좌대 입장권도" : "입장·나옴·튕김·쓰러짐·보상(아이템 드롭 목록)·서버 판정 거절"} · 계정당 50줄, 전체 500줄 · IP는 남기지 않아요
         </span>
       </div>
       {r ? <LogTable list={list} rows={r.rows} now={r.at} onPick={account ? undefined : setAccount} showName={!account} /> : <LoadState data={null} error={load.error} retry={load.retry} inline />}

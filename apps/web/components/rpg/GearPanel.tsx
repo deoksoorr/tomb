@@ -4,7 +4,7 @@ import { Fragment, useState, type CSSProperties, type ReactNode } from "react";
 import { GEAR, GEAR_SLOTS, gearById, KIND_LABELS, POTIONS, SLOT_LABELS, slotKind, type GearDef, type GearSlot } from "@/lib/rpg/catalog";
 import { DROP_SELL_RATE, GEAR_INV_MAX, gearSaleSplit, gearSaleValue, pieceSaleBought, SELL_RATE, sellValue } from "@/lib/rpg/character";
 import { rpgApi, type CharacterAction, type GearAction } from "@/lib/rpg/client";
-import { DISASSEMBLE } from "@/lib/rpg/enhance";
+import { DISASSEMBLE, sgSellValue } from "@/lib/rpg/enhance";
 import { derive, type Derived } from "@/lib/rpg/formulas";
 import {
   activeSets,
@@ -17,6 +17,7 @@ import {
   MAT_KEY,
   optText,
   SG_INV_MAX,
+  SG_GRADE_NAMES,
   SG_LEGENDS,
   SG_PIECE_KIND,
   SG_SET_INFO,
@@ -35,6 +36,7 @@ import {
 import type { RpgView } from "@/lib/rpg/types";
 import { weaponStyleOf, weaponStyleText, WEAPON_DMG_LABEL, weaponDmgKind } from "@/lib/rpg/weapons";
 import { errorMessage } from "@/lib/api";
+import { meStore } from "@/lib/hooks/useMe";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { josa } from "@/lib/rpg/skillText";
 import { cx } from "../ui/cx";
@@ -226,6 +228,34 @@ export function GearPanel({ view, busy, onCharacter, onSell, onSellAll, onView, 
     onSell(x.gear.id, n);
   }
 
+  // 11/27 세트 장비 판매 (분해 옆 [팔기] → 확인 → 서버가 값을 매겨 포인트로). 지갑 상한에 막혀 못 판 것은 서버가 가방에 되돌린다
+  function sellSgEntry(x: Extract<BagEntry, { type: "sg" }>) {
+    if (confirm !== `sgsell:${x.key}`) return setConfirm(`sgsell:${x.key}`);
+    if (!onView) return;
+    setConfirm(null);
+    setOpen(null);
+    setGBusy(true);
+    setMsg(null);
+    const name = sgLabel(x);
+    rpgApi
+      .gear({ type: "sell", uids: [x.it.u] })
+      .then((v) => {
+        onView(v);
+        void meStore.refresh();
+        const sold = v.gear?.sold;
+        setMsg(
+          !sold || sold.count <= 0
+            ? `포인트를 더 받을 수 없어서 ${josa(name, "을", "를")} 팔지 못했어요. 가방에 그대로 있어요.`
+            : sold.capped
+              ? `${josa(name, "을", "를")} ${pts(sold.value)}에 팔았어요. 포인트를 더 받을 수 없어서 일부만 받았어요.`
+              : `${josa(name, "을", "를")} ${pts(sold.value)}에 팔았어요.`,
+        );
+      })
+      .catch((e) => setMsg(errorMessage(e)))
+      .finally(() => setGBusy(false));
+  }
+  const sgConfirm = (x: BagEntry) => (confirm === `dis:${x.key}` ? "dis" : confirm === `sgsell:${x.key}` ? "sell" : null);
+
   // ── 11/26 부위별 칸: 칸마다 낀 장비(강조) + 그 칸에 낄 수 있는 다른 장비 (세트 장비 직급 순) — 낀 것과 비교 ▲▼ ──
   const wornIn = (slot: GearSlot): BagEntry | null => {
     const id = c.equip[slot];
@@ -250,7 +280,8 @@ export function GearPanel({ view, busy, onCharacter, onSell, onSellAll, onView, 
           cur={c.equip[slot]}
           busy={working}
           canGear={!!onView}
-          confirming={confirm === `dis:${x.key}`}
+          confirming={sgConfirm(x)}
+          onSell={() => sellSgEntry(x)}
           onEquip={() => equipEntry(x, slot)}
           onUnequip={() => x.slot && unequip(x.slot)}
           onEnhance={(t) => setDlg({ kind: "enhance", sg: x.it.u, tab: t })}
@@ -544,7 +575,8 @@ export function GearPanel({ view, busy, onCharacter, onSell, onSellAll, onView, 
                           cur={c.equip[targetOf(x.gear)]}
                           busy={working}
                           canGear={!!onView}
-                          confirming={confirm === `dis:${x.key}`}
+                          confirming={sgConfirm(x)}
+                          onSell={() => sellSgEntry(x)}
                           onEquip={() => equipEntry(x)}
                           onUnequip={() => x.slot && unequip(x.slot)}
                           onEnhance={(t) => setDlg({ kind: "enhance", sg: x.it.u, tab: t })}
@@ -972,6 +1004,15 @@ function Compare({ diff, target, cur, worn }: { diff: StatDiff[]; target: GearSl
   );
 }
 
+/** 세트 장비 이름 (직급·강화 포함 — 판매 확인·알림 줄) */
+const sgLabel = (x: Extract<BagEntry, { type: "sg" }>) => `${SG_GRADE_NAMES[x.it.g]} ${plusName(x.gear.name, x.it.e)}`;
+
+/** 11/27 팔기 전에 한 번 더 알릴 것: 과장급 이상 · 강화 +1 이상 · 전설 옵션 (없으면 null) */
+function sellCaution(it: { g: number; e: number; L: number }): string | null {
+  const why = [it.g >= 2 ? SG_GRADE_NAMES[it.g] : "", it.e > 0 ? `강화 +${it.e}` : "", it.L > 0 ? "전설 옵션" : ""].filter(Boolean);
+  return why.length ? `${why.join(" · ")} 장비예요. 판 장비는 되돌릴 수 없어요.` : null;
+}
+
 function SgDetail({
   x,
   set,
@@ -987,6 +1028,7 @@ function SgDetail({
   onUnequip,
   onEnhance,
   onDisassemble,
+  onSell,
   onCancel,
 }: {
   x: Extract<BagEntry, { type: "sg" }>;
@@ -999,15 +1041,19 @@ function SgDetail({
   cur: string | null;
   busy: boolean;
   canGear: boolean;
-  confirming: boolean;
+  /** 펼친 확인: 분해(dis) · 11/27 판매(sell) */
+  confirming: "dis" | "sell" | null;
   onEquip: () => void;
   onUnequip: () => void;
   onEnhance: (tab: EnhanceTab) => void;
   onDisassemble: () => void;
+  onSell: () => void;
   onCancel: () => void;
 }) {
   const info = SG_SET_INFO[set];
   const got = DISASSEMBLE[x.it.g];
+  const price = sgSellValue(x.it);
+  const precious = sellCaution(x.it);
   // 이 장비를 끼면 세트 몇 부위가 되나 (같은 세트의 같은 부위를 이미 끼고 있으면 그대로)
   const curIt = cur && isSgCode(cur) ? decodeSg(cur) : null;
   const after = x.slot ? count : count + (curIt && sgSetOf(curIt) === set ? 0 : 1);
@@ -1050,7 +1096,21 @@ function SgDetail({
         {x.gear.desc}
         {x.gear.kind === "weapon" ? ` · ${weaponStyleText(x.gear)}` : ""}
       </p>
-      {confirming ? (
+      {canGear && <p className={g.note}>판매 가격 {pts(price)}</p>}
+      {confirming === "sell" ? (
+        <div className={g.confirm} role="alert">
+          <p>{josa(sgLabel(x), "을", "를")} {pts(price)}에 팔아요. 강화와 옵션은 판매 가격에 들어가지 않아요.</p>
+          {precious && <p className={s.warn}>{precious}</p>}
+          <div className={g.actions}>
+            <button type="button" className={cx(ui.button, s.sellBtn)} disabled={busy} onClick={onSell}>
+              {pts(price)}에 팔기
+            </button>
+            <button type="button" className={ui.button} onClick={onCancel}>
+              그만두기
+            </button>
+          </div>
+        </div>
+      ) : confirming === "dis" ? (
         <div className={g.confirm} role="alert">
           <p>
             분해하면 결재 서류 {got.doc}장{got.seal ? `과 인감 도장 ${got.seal}개` : ""}를 받아요.
@@ -1089,6 +1149,9 @@ function SgDetail({
               </button>
               <button type="button" className={ui.button} disabled={busy || !!x.slot} onClick={onDisassemble}>
                 분해
+              </button>
+              <button type="button" className={cx(ui.button, s.sellBtn)} disabled={busy || !!x.slot} onClick={onSell} aria-label={`팔기, ${pts(price)}`}>
+                팔기
               </button>
             </>
           )}

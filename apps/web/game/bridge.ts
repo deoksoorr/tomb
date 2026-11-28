@@ -23,6 +23,8 @@ import type { FirstGuideTarget } from "@/lib/retain";
 
 /** 11/27 좌대 연장 칸 (game/camp/CampRafts → components/camp/RaftRenew) */
 export type RaftPrompt = { n: number; at: number; min: number; price: number; dayLeftMin: number; renewLeft: number };
+/** 11/27 지금 채널 내 좌대 입장권 (game/camp/CampRafts → components/camp/FoodGauge 남은 시간 게이지). until = 화면 시계로 끝나는 시각 */
+export type RaftTicket = { n: number; until: number };
 
 export type NetMode =
   | "connecting" // 첫 연결 시도 중
@@ -285,6 +287,8 @@ export type GameEvents = {
   "camp:raft:status": RaftStatusResponse;
   /** 끝나기 1분 전 내 좌대 위: 연장 칸 (null = 닫기). at = 화면 시계로 끝나는 시각 */
   "camp:raft:prompt": RaftPrompt | null;
+  /** 캠핑장에 있는 동안 이 채널 내 입장권 (null = 없음·캠핑장 밖) — 남은 시간 게이지 */
+  "camp:raft:ticket": RaftTicket | null;
   /** 채널 이동 창: 지금 같은 채널에 보이는 사람들 닉네임 (peers:ask에 답한다, 나는 빼고). map = 지금 맵 (11/17 그 맵에 보이는 사람만이라서) */
   /** 11/20 staff = names 중 운영자 수 (로비 채널 인원엔 운영자가 없다) */
   "peers:list": { names: string[]; map: MapId; staff?: number };
@@ -671,6 +675,7 @@ const STICKY = new Set<keyof AllEvents>([
   "camp:talk",
   "tutorial:on",
   "camp:snowball",
+  "camp:raft:ticket",
   "camp:snowBreak",
   "snow:can",
   "snow:cool",

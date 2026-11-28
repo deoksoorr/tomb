@@ -10,6 +10,7 @@ import {
   CAMP_HEIGHT,
   CAMP_NPCS,
   CAMP_OFFICE,
+  CAMP_RAFT_HUT_DX,
   CAMP_STREAM_HALF_W,
   CAMP_STREAM_TOP,
   BBQ_MENU,
@@ -763,10 +764,12 @@ export class CampMap implements CampMapApi {
       this.prop(key, r.x, r.y, FLAT + 2700, 0);
       // 11/26 좌대를 넓혀(그림 72×57) 오두막이 마루 뒤로 9 물러났다 — 밑동 깊이 받침 − 37
       // 11/26 물 건너 좌대 텍스처는 위에 빈 칸(RAFT_TOP_PAD — 지붕 위 눈이 잘리지 않게)이 있어 crop을 그만큼 내린다 (지붕 crop은 그 빈 칸까지)
+      // 11/28 오두막은 오른쪽 뒤 모서리 (protocol CAMP_RAFT_HUT_DX — 그림 valleyExtraArt raft4Art), 창은 오두막 오른쪽
       const tp = r.link ? 0 : RAFT_TOP_PAD;
-      this.prop(key, r.x, r.y, r.y - 37, 0).setCrop(19, 0, 34, 12 + tp);
-      this.prop(key, r.x, r.y, r.y - 37, 0).setCrop(21, 12 + tp, 30, 10);
-      this.light(r.x - 6, r.y - 41, this.xmas ? 0.76 : 0.65, this.xmas ? 0xffd890 : 0xffc070, 0.85);
+      const hx = CAMP_RAFT_HUT_DX;
+      this.prop(key, r.x, r.y, r.y - 37, 0).setCrop(19 + hx, 0, 34, 12 + tp);
+      this.prop(key, r.x, r.y, r.y - 37, 0).setCrop(21 + hx, 12 + tp, 30, 10);
+      this.light(r.x + hx + 4, r.y - 41, this.xmas ? 0.76 : 0.65, this.xmas ? 0xffd890 : 0xffc070, 0.85);
       // 11/26 물 건너 좌대 앞 사다리 작은 등 (밤에도 물에서 사다리가 보이게)
       if (!r.link) this.light(r.x, r.y - 6, 0.4, 0xfff0d0, 0.8);
     }

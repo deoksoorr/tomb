@@ -51,17 +51,18 @@ import {
   withHighTide,
   type NodeUrgent,
 } from "./rules";
-import { beatAuto, newAutoSession, parseAutoSession } from "./auto";
+import { beatAuto, isRaftAutoOnly, newAutoSession, parseAutoSession, RAFT_AUTO_ONLY_MSG } from "./auto";
 import { autoLeftSpot } from "./autoSpot";
 import { logMoves } from "../opsLog";
 import type { MoveVia } from "../moveLog";
 import { raftAutoGate } from "../raft/service";
+import { gearForced } from "./gearDev";
 import { autoStatus, settleAuto, type AutoSettled } from "./autoSettle";
 import { getFishRank } from "./fishRank";
 import { festWeight } from "./quests/urgent";
 import { festivalOn, urgentNodeEvent } from "./quests/urgentService";
 import { pickSunkenCosmetic, SUNKEN_CHANCE, sunkenFallbackFish, sunkenName } from "./sunken";
-import { grantSunkenCosmetic, ownedPermanent } from "./sunkenGrant";
+import { grantSunkenTerm, ownedCosmetics, sunkenDays } from "./sunkenGrant";
 import { getForageStore, type GrantItem, type Granted, type ForageStore, type Snapshot } from "./store";
 import { wornPerk } from "../titlesServer";
 import { signForageTicket, verifyForageTicket, type ForageTicket } from "./ticket";
@@ -187,17 +188,23 @@ function tideGate(spotId: string, now: number): void {
   if (sea && !seaFishWet(sea, now)) throw new HttpError(409, "TIDE_OUT", SEA_TIDE_OUT_MSG);
 }
 
-/** g = 물에 빠진 꾸미기를 고를 난수 (아주 드물게, 던질 때 서버가 정한다), alt = 꾸미기를 다 가졌을 때 대신 줄 물고기 */
-type FishPayload = { k: "fish"; sp: string; sz: number; g?: number; alt?: string };
+/** g = 물에 빠진 꾸미기를 고를 난수 (아주 드물게, 던질 때 서버가 정한다), alt = 꾸미기를 다 가졌을 때 대신 줄 물고기, gd = 11/28 기간 난수 */
+type FishPayload = { k: "fish"; sp: string; sz: number; g?: number; alt?: string; gd?: number };
 
 export async function castLine(acct: string, spotId: string, now = Date.now(), ip?: string): Promise<CastResponse> {
   const store = getForageStore();
   // 정해진 낚시 자리 또는 배 위 가상 자리(boat:river·boat:lake) — 물 종류로 물고기를 고른다
   const water = anyFishingWaterOf(spotId);
   if (!water) throw new HttpError(400, "INVALID_INPUT", "여기서는 낚시를 할 수 없어요.");
+  // 11/28 좌대 자리는 자동 낚시만 (켜 둔 자동 낚시도 건드리지 않는다 — 정산·끄기보다 먼저 막는다)
+  if (isRaftAutoOnly(spotId)) throw new HttpError(409, "RAFT_AUTO_ONLY", RAFT_AUTO_ONLY_MSG);
   tideGate(spotId, now);
   // 직접 던지면 자동 낚시는 끝난다 (둘을 한꺼번에 할 수 없다). 그때까지 낚은 것은 정산해 넣는다 (처음 등록 보상도 조용히 지급)
-  if (await store.autoGet(acct)) await dexGainOf(store, acct, (await settleAuto(store, acct, now, true)).items, ip, now);
+  if (await store.autoGet(acct)) {
+    const r = await settleAuto(store, acct, now, true);
+    logAutoStop(acct, now, "fishCast", r);
+    await dexGainOf(store, acct, r.items, ip, now);
+  }
   // 11/19 하루 낚시 수 한도가 없어져 오늘 기록을 읽지 않는다 (명령 2개 줄임)
   const cond = conditionsAt(now);
   // 11/15 긴급 의뢰 마을 축제: 희귀 이상 조금 더 (축제가 있을 수 있는 때에만 저장소를 본다)
@@ -213,9 +220,10 @@ export async function castLine(acct: string, spotId: string, now = Date.now(), i
   const nonce = nanoid(16);
   const payload: FishPayload = { k: "fish", sp: s.id, sz: size };
   // 아주 드물게 물고기 대신 꾸미기 (손맛·입질은 물고기 그대로 → 미리 알 수 없다). 무엇인지는 감을 때 가진 것을 보고 고른다
-  if (rand() < SUNKEN_CHANCE) {
+  if (rand() < SUNKEN_CHANCE || gearForced(acct, "sunken")) {
     payload.g = rand();
     payload.alt = sunkenFallbackFish(water, cond, rand(), s).id;
+    payload.gd = rand();
   }
   const ttl = Math.ceil((bite - now + HOOK_WINDOW_MS + REEL_MAX_MS) / 1000) + 30;
   // 버리고 다시 던진 찌(그림자만 보고 큰 것 고르기)도 시간당 시작 수 1번으로 센다 (11/19 하루 낚시 수 한도는 없앴다)
@@ -234,6 +242,8 @@ export async function reelIn(acct: string, token: string, ok: boolean, now = Dat
   // 놓치면(너무 빨리·너무 늦게 감은 것 포함) 기록만 끝낸다. 11/19 하루 낚시 수 한도가 없어져 놓친 것을 세지 않는다
   // (그림자를 보고 큰 것만 고르기는 시간당 시작 수가 막는다)
   if (!ok) return { result: null, state: await forageState(acct, now, store) };
+  // 11/28 좌대 자리 표(막기 전에 받은 것)로는 못 감는다 — 대물·월척·오늘 미션·최대어·물에 빠진 꾸미기 모두 직접 낚시 길이라 여기서 끊는다
+  if (isRaftAutoOnly(t.x)) throw new HttpError(409, "RAFT_AUTO_ONLY", RAFT_AUTO_ONLY_MSG);
   const since = now - (t.b ?? t.t);
   if (since < reelMinMs(t.p ?? 1) - REEL_SLACK_MS) throw new HttpError(422, "TOO_FAST", "너무 빨리 감았어요. 이번 물고기는 놓쳤어요.");
   if (since > HOOK_WINDOW_MS + REEL_MAX_MS) throw new HttpError(410, "TICKET_EXPIRED", "너무 오래 걸려서 물고기가 도망갔어요.");
@@ -257,6 +267,13 @@ export async function reelIn(acct: string, token: string, ok: boolean, now = Dat
 }
 
 // ── 자동 낚시 (lib/forage/auto.ts) ──
+
+/** 11/28 관리자 접속 기록 「자동 낚시 해제 (까닭 · 자리 · N마리 정산)」 — 실제로 켜져 있던 세션을 끝냈을 때만 (명령을 더 쓰지 않는다) */
+function logAutoStop(acct: string, now: number, via: MoveVia, r: AutoSettled): void {
+  if (!r.ended || !r.was) return;
+  const w = r.was;
+  logMoves([{ a: acct, k: "mv", at: now, m: "fishStop", via, spot: w.spot, ...(w.ch ? { ch: w.ch } : {}), ...(w.n ? { n: w.n } : {}), fish: r.items.length, src: "s" }]);
+}
 
 async function autoResponse(store: ForageStore, acct: string, r: AutoSettled, now: number, ip?: string): Promise<AutoFishResponse> {
   const dex = await dexGainOf(store, acct, r.items, ip, now);
@@ -305,6 +322,9 @@ export async function startAutoFish(acct: string, spotId: string, ch: number | n
     prev.missed += more.missed;
     if (more.full) prev.full = true;
   }
+  // 11/28 기록: 켜 둔 것이 있었으면 「해제 (새로 다시 켬)」, 그리고 「시작 (자리 · 채널)」
+  logAutoStop(acct, now, "fishRestart", prev);
+  logMoves([{ a: acct, k: "mv", at: now, m: "fishStart", spot: spotId, ...(ch ? { ch } : {}), ...(raft ? { n: raft.n, until: raft.until } : {}), src: "s" }]);
   return autoResponse(store, acct, { ...prev, session, ended: undefined }, now, ip);
 }
 
@@ -313,7 +333,10 @@ export async function syncAutoFish(acct: string, now = Date.now(), ip?: string):
   const store = getForageStore();
   const left = await endAutoFishOnLeave(acct, now, null, store);
   if (left) return autoResponse(store, acct, left, now, ip);
-  return autoResponse(store, acct, await settleAuto(store, acct, now, false), now, ip);
+  const r = await settleAuto(store, acct, now, false);
+  // 11/28 정산하다 끝났으면 (갯바위 물때·좌대 입장권 끝) 기록
+  logAutoStop(acct, now, r.ended === "tide" ? "fishTide" : r.ended === "raft" ? "fishRaftEnd" : "fishSelf", r);
+  return autoResponse(store, acct, r, now, ip);
 }
 
 // ── 11/27 자리를 떠나면 자동 낚시 끄기 (규칙: lib/forage/autoSpot) ──
@@ -324,7 +347,7 @@ export async function syncAutoFish(acct: string, now = Date.now(), ip?: string):
  *  - cause가 null이면(정산·머무르기 신호) 실시간 서버 자리를 보고 떠났을 때만 마지막 신호 시각까지만 쳐서 끈다
  *  - join: 채널 입장 토큰을 받는다 (새로 들어옴·재접속·채널 옮기기) — 켠 채널과 다른 채널이면 지금 끈다.
  *    실시간 서버에 연결이 없으면(재접속 유예가 지났다 — 탭 강제 종료·긴 끊김) 끊긴 동안은 치지 않고 마지막 신호까지만
- * 그 계정 접속 기록에 「자동 낚시 멈춤」 한 줄. 실시간 서버에 닿지 못하면 판단하지 않는다 (cause만 본다)
+ * 그 계정 접속 기록에 「자동 낚시 해제」 한 줄. 실시간 서버에 닿지 못하면 판단하지 않는다 (cause만 본다)
  */
 export async function endAutoFishOnLeave(
   acct: string,
@@ -347,7 +370,7 @@ export async function endAutoFishOnLeave(
   const at = left || quit ? Math.min(now, cur.beat) : now;
   const r = await settleAuto(store, acct, at, true);
   await dexGainOf(store, acct, r.items, undefined, now);
-  logMoves([{ a: acct, k: "mv", at: now, m: "fishStop", via, tgt: `${r.items.length}마리 정산`, src: "s" }]);
+  logMoves([{ a: acct, k: "mv", at: now, m: "fishStop", via, spot: cur.spot, ...(cur.ch ? { ch: cur.ch } : {}), ...(cur.raft ? { n: cur.raft.n } : {}), fish: r.items.length, src: "s" }]);
   return { ...r, ended: "stop" };
 }
 
@@ -374,16 +397,21 @@ export async function beatAutoFishAt(acct: string, now: number, store: ForageSto
 /** 끄기 (움직임·일어남·장면 떠남): 정산하고 끝낸다 */
 export async function stopAutoFish(acct: string, now = Date.now(), ip?: string): Promise<AutoFishResponse> {
   const store = getForageStore();
-  return autoResponse(store, acct, await settleAuto(store, acct, now, true), now, ip);
+  const r = await settleAuto(store, acct, now, true);
+  logAutoStop(acct, now, "fishSelf", r);
+  return autoResponse(store, acct, r, now, ip);
 }
 
 /** 물에 빠진 꾸미기를 건졌다: 영구 소장으로 지급(오늘 낚은 수 1로 셈, 도감·최대어 기록 없음). 다 가졌으면 대신 희귀 물고기 */
 async function reelSunken(store: ForageStore, acct: string, p: FishPayload, now: number, ip: string | undefined): Promise<ReelResponse> {
   const day = kstDay(now);
-  const c = pickSunkenCosmetic(p.g!, await ownedPermanent(acct, now));
-  if (c && (await grantSunkenCosmetic(acct, c.id))) {
+  // 11/28 기간제: 영구로 가진 것만 빼고 고른다. 기간제로 가진 것이면 기간이 더해진다 (던질 때 정한 기간 난수 gd — 막기 전 표는 0 → 1일)
+  const owned = await ownedCosmetics(acct, now);
+  const c = pickSunkenCosmetic(p.g!, owned.perm);
+  const days = c ? sunkenDays(p.gd ?? 0, c) : 0;
+  if (c && (await grantSunkenTerm(acct, c.id, days, now))) {
     await store.addDay(acct, day, "fish", 1);
-    return { result: null, gear: { id: c.id, name: sunkenName(c), kept: true }, state: await forageState(acct, now, store) };
+    return { result: null, gear: { id: c.id, name: sunkenName(c), kept: true, days, ...(owned.timed.has(c.id) ? { ext: true as const } : {}) }, state: await forageState(acct, now, store) };
   }
   const alt = p.alt ?? p.sp;
   const got = await store.grant(acct, day, "fish", [{ id: alt, size: 0 }], STACK_MAX);

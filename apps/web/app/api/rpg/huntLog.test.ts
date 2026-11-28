@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { huntPlan } from "@/lib/rpg/plan";
-import type { RunStartResponse } from "@/lib/rpg/types";
+import { huntDropList } from "@/lib/opsLog";
+import type { RunFinishResponse, RunStartResponse } from "@/lib/rpg/types";
 import { getOpsLog, type HuntLogEntry } from "@/lib/store/opsLog";
 import * as session from "../session/route";
 import * as finish from "./run/finish/route";
@@ -46,6 +47,7 @@ describe("사냥터 기록", () => {
     vi.spyOn(Date, "now").mockReturnValue(real + 101_000);
     const ok = await finish.POST(call("/api/rpg/run/finish", v, { ticket: b.ticket, result: clearAll(b.seed) }));
     expect(ok.status).toBe(200);
+    const got = (await ok.json()) as RunFinishResponse;
     const again = await finish.POST(call("/api/rpg/run/finish", v, { ticket: b.ticket, result: clearAll(b.seed) }));
     expect(again.status).toBe(409);
     vi.restoreAllMocks();
@@ -54,5 +56,8 @@ describe("사냥터 기록", () => {
     const [rej, reward] = await getOpsLog().ofAccount("hunt", v.id);
     expect(rej).toMatchObject({ code: "TICKET_USED", d: "easy" });
     expect((reward as HuntLogEntry).exp).toBeGreaterThan(0);
+    // 11/28 드롭은 수와 함께 목록도 (같은 것은 합쳐서)
+    expect((reward as HuntLogEntry).drops).toBe(got.reward.drops.length);
+    expect((reward as HuntLogEntry).dl ?? []).toEqual(huntDropList(got.reward.drops).dl);
   });
 });

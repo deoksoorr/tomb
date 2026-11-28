@@ -44,7 +44,7 @@ function setup() {
   const core = new ChannelCore<Conn>({ capacity: 10, graceMs: 20_000 }, host);
   const join = (id: string, o: { rf?: boolean; spawn?: { x: number; y: number }; raft?: { n: number; u: number }; now?: number } = {}) => {
     const c: Conn = { id, out: [] };
-    const t: JoinTicket = { visitorId: id, name: `${id}님`, color: AVATAR_COLORS[0], channel: 1, spawn: o.spawn, look: [], body: "hood", camp: true, map: "camp", ...(o.rf !== false ? { rafts: true as const } : {}), ...(o.raft ? { raft: o.raft } : {}) };
+    const t: JoinTicket = { visitorId: id, name: `${id}님`, color: AVATAR_COLORS[0], channel: 1, spawn: o.spawn, look: [], body: "hood", camp: true, map: "camp", known: "camp", ...(o.rf !== false ? { rafts: true as const } : {}), ...(o.raft ? { raft: o.raft } : {}) };
     core.join(c, t, o.now ?? 1000);
     return c;
   };

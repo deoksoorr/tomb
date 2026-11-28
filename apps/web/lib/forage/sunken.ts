@@ -2,16 +2,18 @@ import { ITEMS, isShopListed, type FishWater, type ItemDef } from "@tomb/protoco
 import { candidates, hash01, pickWeighted, type Cond } from "./rules";
 import { WATER_WHERES, type Species } from "./catalog";
 
-// 물에 빠진 꾸미기: 낚시 한 번에 아주 드물게 물고기 대신 캐릭터 꾸미기가 걸린다 (서버가 판정, 영구 소장으로 지급).
-//  - 직접 낚시: 찌를 던질 때(cast) 서버 난수로 걸렸는지·고를 난수를 정해 진행 기록에만 둔다 (손맛·그림자는 물고기 그대로)
-//  - 자동 낚시: 세션 시드 + 번호로 결정적으로, 걸린 물고기 한 마리당 직접의 절반 (11/19 시도마다 25%만 걸려도 잡힌 한 마리 기준은 그대로)
+// 물에 빠진 꾸미기: 낚시 한 번에 아주 드물게 물고기 대신 캐릭터 꾸미기가 걸린다 (서버가 판정).
+// 11/28 운영자: 영구 소장 대신 기간제 (야근 빌딩 상자 꾸미기와 같은 기간표 — lib/forage/sunkenGrant sunkenDays: 1일 45% · 3일 30% · 7일 20% · 30일 5%, 전설 등급은 30일 대신 7일)
+//  - 직접 낚시: 찌를 던질 때(cast) 서버 난수로 걸렸는지·고를 난수·기간 난수를 정해 진행 기록에만 둔다 (손맛·그림자는 물고기 그대로)
+//  - 자동 낚시: 세션 시드 + 번호로 결정적으로, 걸린 물고기 한 마리당 (11/19 시도마다 25%만 걸려도 잡힌 한 마리 기준)
 //  - 낚은 수 1로 센다. 도감·최대어 기록에는 넣지 않는다
-//  - 이미 영구로 가진 것이 뽑히면 아직 없는 것 중에서 다시 고르고, 다 가졌으면 희귀 물고기로 대신
+//  - 이미 영구로 가진 것이 뽑히면 아직 없는 것 중에서 다시 고르고, 다 영구로 가졌으면 희귀 물고기로 대신.
+//    기간제로 가진 것이면 그 기간에 더한다 (지금보다 짧아지지 않는다 — 상자 꾸미기 grantTerm과 같은 규칙)
 
-/** 직접 낚시 한 번에 꾸미기가 걸릴 확률 (약 300번에 1번) */
-export const SUNKEN_CHANCE = 0.003;
-/** 자동 낚시는 걸린 한 마리당 절반 (시도 기준이면 × AUTO_CATCH_CHANCE) */
-export const SUNKEN_CHANCE_AUTO = SUNKEN_CHANCE / 2;
+/** 직접 낚시 한 번(찌 던지기)에 꾸미기가 걸릴 확률. 11/28 운영자 1/40,000 (전에는 0.3%) */
+export const SUNKEN_CHANCE = 1 / 40_000;
+/** 자동 낚시는 걸린 한 마리당. 11/28 운영자가 숫자 하나(1/40,000)를 줘서 직접과 같게 — 따로 바꿀 수 있게 상수는 나눠 둔다 (전에는 직접의 절반 0.15%) */
+export const SUNKEN_CHANCE_AUTO = 1 / 40_000;
 
 /** 낚일 수 있는 꾸미기: 상점에서 파는 부위 있는 꾸미기 (펫·운영자 전용은 빠진다 — isShopListed) */
 // 닉네임 꾸미기(이름 글자·이름표 바탕판)는 물에서 건져 올릴 물건이 아니라 뺀다
@@ -49,6 +51,9 @@ export function rollAutoSunken(seed: number, k: number): number | null {
   return hash01(`auto|${seed}|${k}|gp`);
 }
 
+/** 11/28 자동 낚시 k번째 꾸미기의 기간 난수 (새 열쇠 「gd」 — 걸림·고르기 굴림은 그대로) */
+export const rollAutoSunkenDays = (seed: number, k: number): number => hash01(`auto|${seed}|${k}|gd`);
+
 /** 받침이 있으면 "을", 없으면 "를" (한글이 아니면 "을(를)") */
 function objJosa(word: string): string {
   const c = word.charCodeAt(word.length - 1);
@@ -56,9 +61,9 @@ function objJosa(word: string): string {
   return (c - 0xac00) % 28 ? "을" : "를";
 }
 
-/** 건진 꾸미기 알림 문구 */
-export function sunkenText(c: { name: string; kept: boolean; instead?: string }, fishName?: (id: string) => string): string {
-  if (c.kept) return `${c.name}${objJosa(c.name)} 건졌어요! (영구 소장)`;
+/** 건진 꾸미기 알림 문구 (11/28 기간제: 「물에 빠진 산타 모자 7일 획득」, 기간제로 가지고 있던 것이면 남은 기간에 더했다고) */
+export function sunkenText(c: { name: string; kept: boolean; instead?: string; days?: number; ext?: true }, fishName?: (id: string) => string): string {
+  if (c.kept) return c.days ? `${c.name} ${c.days}일 획득${c.ext ? " (남은 기간에 더함)" : ""}` : `${c.name}${objJosa(c.name)} 건졌어요!`;
   const alt = c.instead && fishName ? fishName(c.instead) : "희귀 물고기";
   return `물에 빠진 꾸미기를 건졌지만 이미 모두 가지고 있어서 대신 ${alt}${objJosa(alt)} 챙겼어요`;
 }

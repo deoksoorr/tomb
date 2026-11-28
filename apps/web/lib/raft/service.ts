@@ -67,7 +67,7 @@ function failOf(d: Extract<RaftDeal, { ok: false }>, ch: number, n: number, now:
     case "EARLY":
       return new HttpError(409, "RAFT_EARLY", "끝나기 1분 전부터 연장할 수 있어요.");
     case "MAX":
-      return new HttpError(409, "RAFT_MAX", `연장은 한 장에 ${RAFT_RENEW_MAX}번까지예요.`);
+      return new HttpError(409, "RAFT_MAX", RAFT_RENEW_MAX === 1 ? "연장은 한 장에 한 번만 할 수 있어요." : `연장은 한 장에 ${RAFT_RENEW_MAX}번까지예요.`);
     default:
       return new HttpError(409, "RAFT_NONE", "입장권 시간이 끝났어요.");
   }

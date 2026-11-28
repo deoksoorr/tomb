@@ -1,12 +1,12 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { GEAR_SLOTS, type MonsterId } from "@/lib/rpg/catalog";
-import { ENH_PITY, ENHANCE_TABLE } from "@/lib/rpg/enhance";
-import { encodeSg, SG_EGG_BIT, SG_PIECES, SG_SETS, type SgItem } from "@/lib/rpg/setGear";
+import { ENH_PITY, ENHANCE_TABLE, sgSellValue } from "@/lib/rpg/enhance";
+import { encodeSg, SG_EGG_BIT, SG_PIECES, SG_SETS, sgUid, type SgItem } from "@/lib/rpg/setGear";
 import { chestSeals, crossesTen, nextPity, PROT_FROM_FLOOR } from "@/lib/rpg/setGearRoll";
 import { approveReview, dropSeedOf, forgetEndgameLaunch, listReviews } from "@/lib/rpg/service";
 import { getRpgStore } from "@/lib/rpg/store";
-import { checkpointsUpTo, isCheckpoint, isChestFloor, nextCheckpoint, TOWER_CHEST_FROM, towerChestDrops, towerPlan } from "@/lib/rpg/tower";
+import { checkpointsUpTo, isCheckpoint, isChestFloor, nextCheckpoint, TOWER_CHEST_FROM, towerChestDrops, towerChestFloors, towerChestFrom, towerPlan, towerPointFrom } from "@/lib/rpg/tower";
 // 11/19 상자 층 경계는 상수에서 (경계가 바뀌어도 그대로 통과하게)
 const floorsOf = (start: number, n: number) => Array.from({ length: n }, (_, i) => start + i);
 const chestsIn = (start: number, n: number) => floorsOf(start, n).filter(isChestFloor);
@@ -18,6 +18,7 @@ import type { CharacterState, Drop, RpgView, RunFinishResponse, RunStartResponse
 import type { GearActionResponse } from "@/lib/rpg/gearService";
 import { setStaff } from "@/lib/staff";
 import { getAccounts, getMegaphone } from "@/lib/store";
+import { WALLET_MAX } from "@/lib/economy";
 import { earnedTitleIds, type TitleFacts } from "@/lib/titles";
 import * as session from "../session/route";
 import * as gear from "./gear/route";
@@ -132,6 +133,23 @@ async function preview(s: RunStartResponse, chests: number[], pity: number, sup 
 }
 
 describe("우두머리 상자: 세트 장비·재료·꾸미기", () => {
+  it("11/27 적정 층보다 10층 넘게 낮은 층(포인트 없는 층)은 상자도 없다 — 서버 정산 = 게임이 여는 층 (판 시작 때 초월 레벨)", async () => {
+    const st = cpFrom(TOWER_CHEST_FROM);
+    const t = 40; // ★90 → 70층부터 포인트·상자
+    const v = await newVisitor({ level: 50, fBest: st + 40, tLevel: t });
+    const s = await begin(v, st);
+    const r = await end(v, s, 30);
+    const want = towerChestFloors(st, 30, 0, t);
+    expect(want.length).toBeGreaterThan(0);
+    expect(want[0]).toBe(towerChestFrom(t) + ((5 - (towerChestFrom(t) % 5)) % 5));
+    expect(r.reward.tower!.chests).toEqual(want);
+    expect(r.reward.tower!.chests.every((f) => f >= towerPointFrom(t))).toBe(true);
+    // 같은 층을 낮은 초월 레벨로 오르면 상자가 예전처럼 다 열린다
+    const lo = await newVisitor({ level: 50, fBest: st + 40, tLevel: 0 });
+    const r0 = await end(lo, await begin(lo, st), 30);
+    expect(r0.reward.tower!.chests).toEqual(chestsIn(st, 30));
+  });
+
   it("판 안에서 떨군 것 = 서버가 준 것 (11/19 천장 없음 — 못 받은 수와 상관없이 같은 굴림), 재료는 가방에", async () => {
     // 보호 문서가 처음 나오는 층(PROT_FROM_FLOOR)을 넘는 10층 판 — 그 층들이 상자 층 위인지도 본다
     const st = Math.max(cpFrom(TOWER_CHEST_FROM), checkpointsUpTo(PROT_FROM_FLOOR).at(-1)!);
@@ -281,6 +299,52 @@ describe("강화·분해·끼기 (app/api/rpg/gear)", () => {
     const d = await act(v, { type: "disassemble", uids: [2] });
     expect(d.body.gear!.got).toEqual({ doc: 40, seal: 3 });
     expect(d.body.character.sg).toHaveLength(1);
+  });
+
+  it("11/27 세트 장비 판매: 서버가 저장된 물건으로 값을 매겨 포인트를 주고, 장착 중·같은 번호가 섞이면 하나도 안 판다", async () => {
+    const v = await newVisitor({
+      level: 50,
+      sg: [encodeSg(mk({ u: 1 })), encodeSg(mk({ u: 2, p: 1, g: 2, o: [["h", 9]], e: 7 })), encodeSg(mk({ u: 3, p: 1, g: 2, o: [["h", 9]] }))],
+      sgN: 4,
+    });
+    expect((await act(v, { type: "equip", slot: "weapon", uid: 1 })).status).toBe(200);
+    const bag = async () => (await getRpgStore().get(v.id)).sg!.map((c) => sgUid(c)).sort();
+    const pts0 = (await getAccounts().get(v.id, "20261127", Date.now())).points;
+    // 장착 중이 하나라도 섞이면 아무것도 안 빠진다 (한 번에)
+    const worn = await act(v, { type: "sell", uids: [2, 1] });
+    expect(worn.status).toBe(409);
+    expect(worn.body.error!.code).toBe("EQUIPPED");
+    expect(await bag()).toEqual([1, 2, 3]);
+    // 같은 번호 두 번
+    expect((await act(v, { type: "sell", uids: [2, 2] })).status).toBe(400);
+    expect(await bag()).toEqual([1, 2, 3]);
+    // 화면이 값을 보내도 무시한다 (스키마에 없는 칸) — 값은 직급·부위로만
+    const ok = await act(v, { type: "sell", uids: [2, 3], value: 999_999 });
+    expect(ok.status).toBe(200);
+    const want = 2 * sgSellValue({ p: 1, g: 2 });
+    expect(ok.body.gear!.sold).toEqual({ value: want, capped: false, count: 2 });
+    expect(ok.body.points).toBe(pts0 + want);
+    expect((await getAccounts().get(v.id, "20261127", Date.now())).points).toBe(pts0 + want);
+    expect(await bag()).toEqual([1]);
+    // 없는 번호(이미 판 것)
+    expect((await act(v, { type: "sell", uids: [2] })).status).toBe(404);
+  });
+
+  it("11/27 세트 장비 판매: 지갑 상한에 막히면 받은 만큼만 팔고, 한 푼도 못 받은 장비는 가방에 되돌린다", async () => {
+    const one = sgSellValue({ p: 1, g: 2 });
+    const v = await newVisitor(
+      {
+        level: 50,
+        sg: [1, 2, 3].map((u) => encodeSg(mk({ u, p: 1, g: 2, o: [["h", 9]] }))),
+        sgN: 4,
+      },
+      WALLET_MAX - one - 1,
+    );
+    const r = await act(v, { type: "sell", uids: [1, 2, 3] });
+    expect(r.status).toBe(200);
+    // 첫 장비는 다 받고, 둘째는 1P만 받아도 판 것, 셋째는 못 받아서 되돌린다
+    expect(r.body.gear!.sold).toEqual({ value: one + 1, capped: true, count: 2 });
+    expect((await getRpgStore().get(v.id)).sg!.map((c) => sgUid(c))).toEqual([3]);
   });
 
   it("+15 처음: 「강화의 시작」 서버 최초 (운영자 제외) · 확성기", async () => {

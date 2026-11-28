@@ -5,7 +5,7 @@ import { paintCxCover } from "../housing/campExclusive";
 import { isCxCover, type CxCover } from "../housing/campExclusive/types";
 
 // 3번 집 안 가구 자세 그림: 아바타 시트의 서 있는 프레임 위에 이불·책·거품을 덧그린 2프레임 시트 (프레임 = AV_W×AV_H).
-//  - lie  (침대): 머리만 베개 위로 나오고 어깨 아래는 누빈 이불. 프레임 1은 이불이 숨 쉬듯 1px 내려가고 작은 "z"
+//  - lie  (침대): 머리만 베개 위로 나오고 어깨 아래는 누빈 이불. 프레임 1은 이불이 숨 쉬듯 1px 내려간다
 //  - read (책장): 가슴 앞에 펼친 책. 프레임 1은 넘기는 책장
 //  - bath (욕조): 어깨 아래가 타원 수면 속에 잠긴다(물결·거품·김). 프레임마다 거품 방울 자리가 바뀐다
 // 몸 6종·시트 꾸미기(모자 등)는 원본 프레임에서 그대로 따라온다. 표시 원점은 아바타와 같다(발바닥).
@@ -163,12 +163,7 @@ export function indoorPoseSheet(kind: IndoorPose, body: string, color: string, l
     } else if (kind === "lie") {
       if (isCampBedCover(cover)) paintCampBedCover(g, cover, neck + f);
       else if (!(isCxCover(cover) && paintCxCover(g, cover, neck + f))) quilt(g, neck + f);
-      if (f === 1) {
-        // 작은 z
-        g.hline(16, 18, 1, 0xdfe6f0);
-        g.set(17, 2, 0xdfe6f0);
-        g.hline(16, 18, 3, 0xdfe6f0);
-      }
+      // 11/27 프레임 1에 그리던 "작은 z"(3×3)는 I자로만 보였고, 돌린 침대·릴렉스 체어에서는 자세와 같이 돌아가 머리 옆·발밑에 떴다 → 뺀다 (숨 쉬는 덮개 1px만)
     } else if (kind === "read") {
       book(g, neck - 1, Math.round((s.x0 + s.x1) / 2), f);
     } else {

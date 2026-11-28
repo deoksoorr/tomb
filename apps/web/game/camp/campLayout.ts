@@ -51,6 +51,7 @@ import {
   CAMP_SLIDE_SEAT,
   CAMP_TRAMP_GATE,
   CAMP_TRAMPOLINE,
+  CAMP_RAFT_HUT_DX,
   campRaftDeck,
   campRaftWalks,
   CAMP_STONES_Y,
@@ -328,6 +329,12 @@ export const BOOTH = CAMP_TRADER_STALL;
  * 낚시터 사장님 이름표·칭호(부스 앞 가운데 — 사장님 발 − 27 위로)와 겹치지 않게 왼쪽·아래로 비켰다 (전에는 BOOTH.x − 8, + 8이라 이름표에 얹혔다)
  */
 export const RAFT_BOOTH_SPOT = { x: BOOTH.x - 30, y: BOOTH.y + 12 } as const;
+/**
+ * 11/27 운영자 「닿는 곳이 너무 작다」: 매표소 건물 전체(그림 52칸 폭 — 벽·낚싯대 걸이, 앞 계단까지)가 「E 좌대 입장권 사기」.
+ * 앞·양옆에서 다가가면 닿는다 (가장자리 여유 ZONE_PAD). 아래 끝은 부스 밑동 + 8 — 낚시터 사장님(발 − 부스 밑동 = 42 아래, 닿는 곳 반지름 20)과는 겹치지 않고
+ * 가운데 틈에서는 가까운 쪽이 이긴다 (CampScene — 사장님 쪽 판정은 그대로)
+ */
+export const RAFT_BOOTH_ZONE = { x: BOOTH.x - 28, y: BOOTH.y - 24, w: 56, h: 32 } as const;
 export const POND_SIGN = CAMP_POND_SIGN;
 /**
  * 11/26 수영 안내 팻말 「4~6번 좌대는 헤엄쳐 가서 사다리로 올라가요」: 잔교 위쪽 끝(4·5번 좌대 사이 앞) — 잔교에서 물로 들어가 바로 위 좌대 사다리로 헤엄쳐 가는 자리.
@@ -784,7 +791,7 @@ export function raftRimColliders(): Rect[] {
     // 뒤 (물 건너 좌대). 오두막 지붕까지 덮어 헤엄치는 사람이 지붕 밑에 숨지 않게
     if (!r.link) out.push({ x: x0, y: r.y - CAMP_RAFT_ART_H + 2, w: x1 - x0, h: d.y - (r.y - CAMP_RAFT_ART_H + 2) });
     else {
-      // 11/26 잔교에 붙은 좌대: 잔교 아래 끝 → 마루 뒤 끝 사이는 판자 다리(campRaftWalks) 칸만 열고 나머지(다리 난간·오두막 뒤·다리 바깥 물)는 막는다
+      // 11/26 잔교에 붙은 좌대: 잔교 아래 끝 → 마루 뒤 끝 사이는 판자 다리(campRaftWalks — 11/28 넓은 다리 하나) 칸만 열고 나머지(다리 난간·오두막 뒤·다리 바깥 물)는 막는다
       const top = PIER.y + PIER.w / 2;
       let x = x0;
       for (const w of campRaftWalks(r)) {
@@ -804,11 +811,11 @@ export function raftRimColliders(): Rect[] {
   return out;
 }
 
-/** 저수지 시설: 좌대 오두막(가운데 뒤)·둘레 막이 · 관리 부스 · 팻말 */
+/** 저수지 시설: 좌대 오두막(오른쪽 뒤 모서리)·둘레 막이 · 관리 부스 · 팻말 */
 function fishingColliders(): Rect[] {
   return [
-    // 11/26 좌대를 넓혀 오두막이 9 뒤로 (그림 72×57 — 오두막 밑동 = 받침 − 37)
-    ...RAFTS.map((r) => ({ x: r.x - 14, y: r.y - 49, w: 28, h: 12 })),
+    // 11/26 좌대를 넓혀 오두막이 9 뒤로 (그림 72×57 — 오두막 밑동 = 받침 − 37). 11/28 오두막은 오른쪽 뒤 모서리 (CAMP_RAFT_HUT_DX)
+    ...RAFTS.map((r) => ({ x: r.x + CAMP_RAFT_HUT_DX - 14, y: r.y - 49, w: 28, h: 12 })),
     ...raftRimColliders(),
     // 미끼·대여 부스 (그림·말 걸기는 world/forage/Foraging — 맵은 52×48 자리만 비워 두고 밑동을 막는다)
     { x: BOOTH.x - 26, y: BOOTH.y - 12, w: 52, h: 12 },
@@ -943,7 +950,7 @@ export const CAMP_INTERACTABLES: readonly CampInteractable[] = [
   ...CAMP_NPCS.map((n): CampInteractable => ({ id: `npc:${n.id}`, kind: "npc", npc: n.id, x: n.x, y: n.y + 10, r: 26, label: `${n.name}에게 말 걸기` })),
   { id: "board", kind: "board", x: CAMP_BOARD_SPOT.x, y: CAMP_BOARD_SPOT.y + 12, r: 20, label: "의뢰판 보기" },
   // 11/27 좌대 매표소: 미끼·대여 부스 창구 앞 (창구 안 매표소 직원 — game/camp/CampRafts). 낚시터 사장님(팔기)은 부스 앞 그대로
-  { id: "raftBooth", kind: "raftBooth", x: RAFT_BOOTH_SPOT.x, y: RAFT_BOOTH_SPOT.y, r: 16, label: "좌대 입장권 사기" },
+  { id: "raftBooth", kind: "raftBooth", x: RAFT_BOOTH_SPOT.x, y: RAFT_BOOTH_SPOT.y, r: 16, zone: RAFT_BOOTH_ZONE, promptAt: RAFT_BOOTH_SPOT, label: "좌대 입장권 사기" },
   { id: "sign", kind: "sign", x: CAMP_BUS_SIGN.x, y: CAMP_BUS_SIGN.y + 12, r: 18, label: "표지판 보기" },
   // 11/26 카라반·펜션 분양 입간판은 뺐다 (운영자 「헷갈려한다」 → 「카라반, 촌캉스도 NPC만으로 통일」) — 분양은 언젠가 씨·소슬댁·순이 할머니에게 말을 걸어서만
   { id: "bbq", kind: "bbq", x: BBQ.grill.x, y: BBQ.grill.y + 14, r: 28, label: "바베큐 사 먹기" },

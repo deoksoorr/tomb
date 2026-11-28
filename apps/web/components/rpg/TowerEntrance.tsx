@@ -7,11 +7,14 @@ import {
   cursesAt,
   nextCheckpoint,
   TOWER_BOSS_EVERY,
-  TOWER_CHEST_FROM,
+  towerChestFrom,
   towerFloorSec,
   towerNoPointGain,
+  towerNoPointLoss,
   towerPointFrom,
+  towerPointFromText,
 } from "@/lib/rpg/tower";
+import { josa } from "@/lib/rpg/skillText";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { useMe } from "@/lib/hooks/useMe";
 import { equippedPerk } from "@/lib/titles";
@@ -123,7 +126,7 @@ export default function TowerEntrance({
         </p>
         {start < pointFrom && (
           <p className={s.warn}>
-            {start}층부터 {pointFrom - 1}층까지는 포인트 없이 {towerNoPointGain(start, pointFrom - 1)} 받아요. ★{50 + tLv}에서는 {pointFrom}층부터 포인트를 받아요.
+            {start}층부터 {pointFrom - 1}층까지는 {towerNoPointLoss(start, pointFrom - 1)} 없이 {towerNoPointGain(start, pointFrom - 1)} 받아요. {josa(`★${50 + tLv}`, "은", "는")} {towerPointFromText(tLv)}.
           </p>
         )}
         <ul className={s.towerWhy}>
@@ -131,7 +134,8 @@ export default function TowerEntrance({
             깬 층마다 초월 EXP와 포인트를 받고, 쓰러져도 깬 층만큼은 받아요.
           </li>
           <li>
-            {TOWER_BOSS_EVERY}층마다 우두머리가 나오고, {TOWER_CHEST_FROM}층부터는 우두머리 층을 깨면 상자가 열려요. <OddsLink section="tower" label="확률 보기" />
+            {/* 11/27 적정 층보다 10층 넘게 낮은 층은 상자도 없어서 내 초월 레벨로 상자가 열리는 첫 층 */}
+            {TOWER_BOSS_EVERY}층마다 우두머리가 나오고, {towerChestFrom(tLv)}층부터는 우두머리 층을 깨면 상자가 열려요. <OddsLink section="tower" label="확률 보기" />
           </li>
           <li>쓰러지면 바로 끝나고 부활 쿠키는 쓸 수 없어요. {coarse ? "멈춤 버튼으로" : "Esc로"} 나가도 그 층까지는 기록돼요.</li>
         </ul>

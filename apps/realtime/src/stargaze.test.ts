@@ -91,7 +91,7 @@ describe("more telescopes (village · camp · sea)", () => {
     const core = new ChannelCore<Conn>({ capacity: 20, graceMs: 20_000 }, host);
     const join = (id: string, x: number, y: number, map?: "camp" | "sea") => {
       const c: Conn = { out: [] };
-      const t: JoinTicket = { visitorId: id, name: id, color: AVATAR_COLORS[0], channel: 1, spawn: { x, y }, look: [], body: "hood", ...(map === "camp" ? { camp: true as const, map } : map === "sea" ? { sea: true as const, map } : {}) };
+      const t: JoinTicket = { visitorId: id, name: id, color: AVATAR_COLORS[0], channel: 1, spawn: { x, y }, look: [], body: "hood", ...(map === "camp" ? { camp: true as const, map, known: map } : map === "sea" ? { sea: true as const, map, known: map } : {}) };
       core.join(c, t, 0);
       return c;
     };

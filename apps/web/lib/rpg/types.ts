@@ -340,6 +340,8 @@ export type RpgPlay = {
     sgChance?: number;
     /** 11/26 시작 판 레벨 (판 시작 응답 towerLv0 — 서버 티켓과 같은 값). 없으면 0 */
     lv0?: number;
+    /** 11/27 판 시작 때 초월 레벨: 포인트를 못 받는 저층(lib/rpg/tower towerGivesChest)은 상자도 열지 않는다 — 서버 정산과 같은 값. 없으면 0 */
+    tLv?: number;
   };
   /** 11/15 연습 판 (초월 구간을 다 써서 드롭이 없다) — 바닥 드롭 연출을 하지 않는다 */
   noDrops?: boolean;

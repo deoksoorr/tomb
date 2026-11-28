@@ -51,7 +51,7 @@ import { BUILDS, buildSteps } from "@/lib/rpg/builds";
 import { SYNERGY, SYNERGY_GUARD } from "@/lib/rpg/skillTree";
 import { ampNeed, exchangeNeed } from "@/lib/rpg/enhance";
 import { enhMul, SG_ENH_MAX, SG_GRADE_MULT, SG_GRADE_NAMES, SHOP_ENH_MAX } from "@/lib/rpg/setGear";
-import { SG_GRADE_FLOORS } from "@/lib/rpg/setGearRoll";
+import { floorText, gradeBands, gradeOddsText } from "@/components/odds/oddsData";
 import { MAX_SLOW, MONSTER_STATUS, POTION_CURES, STATUS_DIFF, STATUS_IDS, STATUSES, statusFor, type StatusId } from "@/lib/rpg/status";
 import { CHAIN_GRACE_MS, FINISHER_EVERY, WEAPON_STYLES, weaponStyleOf } from "@/lib/rpg/weapons";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
@@ -113,11 +113,10 @@ function HuntDemo({ page, title }: { page: number; title: string }) {
   );
 }
 
-/** 11/19 상자 층 구간마다 세트 장비 직급 (「51~100층은 사원급, …」 — lib/rpg/setGearRoll SG_GRADE_FLOORS) */
+/** 11/27 상자 층 구간마다 세트 장비 직급 확률 (「55~100층은 사원급, …, 130~150층은 대리급 70% · 과장급 30%, …」 — lib/rpg/setGearRoll SG_GRADE_ODDS, 확률 안내와 같은 표) */
 function gradeBandText(): string {
-  const starts = [TOWER_CHEST_FROM, ...SG_GRADE_FLOORS];
-  const bands = starts.map((f, i) => (i < starts.length - 1 ? `${f}~${starts[i + 1] - 1}층은 ${SG_GRADE_NAMES[i]}` : `${f}층부터는 ${SG_GRADE_NAMES[i]}`));
-  return `세트 장비 직급은 ${bands.join(", ")}이에요.`;
+  const bands = gradeBands().map((b) => `${floorText(b)}${b.to === null ? "는" : "은"} ${gradeOddsText(b.w)}`);
+  return `세트 장비 직급은 상자 층마다 달라요. ${bands.join(", ")}이에요.`;
 }
 
 /** 비율 → 퍼센트 (13.5%처럼 소수 한 자리까지) */
@@ -584,10 +583,10 @@ function pages(): Page[] {
             </Item>
             <Item art={POTIONS[0]?.art} title="야근 빌딩 보상">
               깬 층마다 초월 EXP를 받아요. 1층은 {floorTExp(1)}, 30층은 {floorTExp(30)}, 100층은 {floorTExp(100)}만큼 받아요. {TOWER_STEEP_FROM + 1}층부터는 확 늘어서 {TOWER_STEEP_FROM + 1}층은{" "}
-              {floorTExp(TOWER_STEEP_FROM + 1)}이에요. 쓰러져도 깬 층만큼은 받아요.
-              {TOWER_CHEST_FROM}층부터는 우두머리 층을 깨면 우두머리 상자가 열려요. 물약과 강화 재료는 늘 들어 있어요. 세트 장비는 {Math.round(TOWER_CHEST_GEAR_CHANCE * 100)}% 확률로 나와요.
+              {floorTExp(TOWER_STEEP_FROM + 1)}이에요. 쓰러져도 깬 층만큼은 받아요.{" "}
+              {TOWER_CHEST_FROM}층부터는 우두머리 층을 깨면 우두머리 상자가 열려요. 물약과 강화 재료는 늘 들어 있어요. 세트 장비는 {Math.round(TOWER_CHEST_GEAR_CHANCE * 100)}% 확률로 나와요.{" "}
               {gradeBandText()} 꾸미기 이용권도 일정 확률로 나와요.
-              깬 층마다 포인트도 조금 받아요({towerFloorPointsText()}). 초월 레벨마다 적정 층이 있어서(★{50 + 30}이면 {towerFitFloor(30)}층) 그보다 10층 넘게 낮은 층은 포인트 없이 초월 EXP만 받아요. {TOWER_CHEST_FROM}층부터 열리는 우두머리 상자는 그대로 받아요. 처치한 몬스터 수는 주간 사냥 레이스에 반영돼요. 50층 우두머리를 처치하면 다음부터 51층에서, 100층을 깨면 101층에서 바로 시작할 수 있어요. 그 위로는{" "}
+              깬 층마다 포인트도 조금 받아요({towerFloorPointsText()}). 초월 레벨마다 적정 층이 있어서(★{50 + 30}이면 {towerFitFloor(30)}층) 그보다 10층 넘게 낮은 층은 포인트와 우두머리 상자 없이 초월 EXP만 받아요. 처치한 몬스터 수는 주간 사냥 레이스에 반영돼요. 50층 우두머리를 처치하면 다음부터 51층에서, 100층을 깨면 101층에서 바로 시작할 수 있어요. 그 위로는{" "}
               {TOWER_CHECKPOINT_EVERY}층마다(121층, 141층 …) 엘리베이터가 켜져요.
             </Item>
             <Item art={GEAR.find((g) => g.kind === "acc")?.art} title="칭호와 랭킹">

@@ -28,7 +28,8 @@ const BODIES = AVATAR_BODIES.map((b) => b.id);
 
 type Hit = { body: string; dir: string; col: number; drops: number; edge: number };
 
-function clipHits(item: string): { hits: Hit[]; frames: number } {
+/** item 하나를 입힌 프레임을 비교 기준(with — 같이 입은 다른 좌대 코디)과 견준다 */
+function clipHits(item: string, withIds: readonly string[] = []): { hits: Hit[]; frames: number } {
   const hits: Hit[] = [];
   let frames = 0;
   const head = !!JW_ITEMS[item]?.head && JW_ITEMS[item]?.headWorn !== false;
@@ -36,9 +37,9 @@ function clipHits(item: string): { hits: Hit[]; frames: number } {
     for (const [dir, view, flip] of VIEWS)
       for (let col = 0; col < AV_COLS; col++) {
         frames++;
-        const base = avatarFrameGrid(body, view, col, COLOR, []);
+        const base = avatarFrameGrid(body, view, col, COLOR, [...withIds]);
         CLIP.drops.length = 0;
-        const g0 = avatarFrameGrid(body, view, col, COLOR, [item]);
+        const g0 = avatarFrameGrid(body, view, col, COLOR, [...withIds, item]);
         const drops = CLIP.drops.length;
         const ref0 = head ? avatarFrameGrid(body, view, col, COLOR, ["hat_beanie"]) : null;
         const fl = (g: Grid | null) => (g && flip ? g.mirrored() : g);
@@ -104,12 +105,38 @@ describe("11/27 좌대 전용 코디 그림", () => {
     }
   });
 
+  it("11/28 조끼 낚싯대: 몸 명암 칠에 덮이지 않고 4방향 모두 초릿대가 보인다 · 염색해도 대·찌는 그대로", () => {
+    const has = (g: Grid, c: number) => [...g.px].some((v) => v & 255 && v >>> 8 === c);
+    for (const body of ["hood", "cat", "round", "tall"])
+      for (const view of ["down", "side", "up"] as const) {
+        const g = avatarFrameGrid(body, view, 0, COLOR, ["jw_vest"]);
+        expect(has(g, 0xff4a2a), `${body}/${view} 초릿대`).toBe(true);
+        expect(has(g, 0xa8682e) || has(g, 0xd4954c), `${body}/${view} 대나무`).toBe(true);
+      }
+    const red = avatarFrameGrid("hood", "down", 0, avatarColorSpec(COLOR, { items: { jw_vest: "#d83a3a" } }), ["jw_vest"]);
+    expect(has(red, JW_DYE.jw_vest.main)).toBe(false);
+    for (const keep of [0xff4a2a, 0xe8392c, 0xfbf8f0]) expect(has(red, keep), keep.toString(16)).toBe(true);
+  });
+
   // 7점 × 16몸 × 4방향 × 28열 (+ 맨몸·비니 비교) — 몇 초 걸린다
   for (const id of RAFT_GEAR_IDS)
     it(`잘림 없음: ${id} (16몸 × 4방향 × 28열, 1px 여백)`, () => {
       const { hits, frames } = clipHits(id);
       expect(frames).toBe(BODIES.length * 4 * AV_COLS);
       expect(BODIES.length).toBeGreaterThanOrEqual(16);
+      expect(hits.slice(0, 8)).toEqual([]);
+    }, 120_000);
+
+  // 11/28 조끼(낚싯대) + 함께 입는 좌대 코디: 조끼 때문에 바뀐 픽셀이 가장자리에 닿거나 버려진 칠이 없다
+  for (const withIds of [
+    ["jw_sedge", "jw_bell", "jw_cape"],
+    ["jw_sedge", "jw_bell", "jw_net"],
+    ["jw_carphat", "jw_net"],
+    ["jw_carphat", "jw_bell", "jw_cape"],
+  ])
+    it(`잘림 없음: jw_vest + ${withIds.join("+")} (16몸 × 4방향 × 28열, 1px 여백)`, () => {
+      const { hits, frames } = clipHits("jw_vest", withIds);
+      expect(frames).toBe(BODIES.length * 4 * AV_COLS);
       expect(hits.slice(0, 8)).toEqual([]);
     }, 120_000);
 

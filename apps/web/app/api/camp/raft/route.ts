@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { handler, HttpError, json, notFound } from "@/lib/http";
-import { buyRaft, raftDevLeft, raftOpen, raftRegrant, raftStatus, renewRaft, type RaftStatusResponse } from "@/lib/raft/service";
+import { logMoves } from "@/lib/opsLog";
+import { buyRaft, raftDevLeft, raftOpen, raftRegrant, raftStatus, renewRaft, type RaftDealResponse, type RaftStatusResponse } from "@/lib/raft/service";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
 import { readBody } from "@/lib/validate";
@@ -25,6 +26,12 @@ export const GET = handler(async (req) => {
   return json<RaftStatusResponse>(await raftStatus(visitorId, c.data, Date.now()));
 });
 
+/** 11/28 관리자 접속 기록 「좌대 입장권 구매·연장 (1채널 4번 좌대 · 120분 · 3,000P · 14:30까지)」 (산 뒤에만) */
+function logRaft(acct: string, m: "raftBuy" | "raftRenew", r: RaftDealResponse, now: number): void {
+  const own = r.status.mine;
+  logMoves([{ a: acct, k: "mv", at: now, m, ...(own ? { ch: own.ch, n: own.n, until: own.until } : {}), min: r.min, pts: r.price, src: "s" }]);
+}
+
 /** 사기 `{op:"buy", ch, n}` · 연장 `{op:"renew"}` · 증서 다시 `{op:"grant", ch}` */
 export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
@@ -36,8 +43,11 @@ export const POST = handler(async (req) => {
     return json({ grant: await raftRegrant(visitorId, b.ch, now) });
   }
   await rateLimit("shop", req, visitorId);
-  if (b.op === "buy") return json(await buyRaft(visitorId, b.ch, b.n, now));
-  if (b.op === "renew") return json(await renewRaft(visitorId, now));
+  if (b.op === "buy" || b.op === "renew") {
+    const r = b.op === "buy" ? await buyRaft(visitorId, b.ch, b.n, now) : await renewRaft(visitorId, now);
+    logRaft(visitorId, b.op === "buy" ? "raftBuy" : "raftRenew", r, now);
+    return json(r);
+  }
   const r = await raftDevLeft(visitorId, b.left, now);
   if (!r) throw new HttpError(409, "RAFT_NONE", "입장권이 없어요.");
   return json(r);

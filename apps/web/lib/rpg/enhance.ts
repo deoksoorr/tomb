@@ -35,7 +35,7 @@ import {
   type SgItem,
   type SgOpt,
 } from "./setGear";
-import { rollOptions, rollSgFixed } from "./setGearRoll";
+import { rollOptions, rollSgFixed, TOP_SHOP } from "./setGearRoll";
 import type { CharacterState, Drop } from "./types";
 import { discountedPrice } from "../titles";
 
@@ -537,6 +537,55 @@ export function disassemble(s: CharacterState, uids: readonly number[]): { state
     seal: Math.min(MAT_MAX, m.seal + got.seal),
   };
   return { state: settle(next), result: got };
+}
+
+// ── 판매 (11/27 운영자 「야근 빌딩 드롭템 팔 수 있게」) ──
+
+/**
+ * 세트 장비 판매 비율: 그 부위 상점 최고 장비 값(setGearRoll TOP_SHOP) × 이 비율 × 직급 배율(SG_GRADE_MULT).
+ * 주운 상점 장비 비율(character DROP_SELL_RATE)과 따로 둔다 — 이 값 하나만 바꿔 따로 조정한다. 11/27 운영자 7% (무기 140·210·280·350P, 갑옷·장신구 119·178·238·297P, 머리 91·136·182·227P)
+ */
+export const SG_SELL_RATE = 0.07;
+/** 세트 장비 하나 판매 값 (포인트). 강화·옵션·전설 옵션은 값에 들어가지 않는다 — 서버가 저장된 물건으로 계산한다 */
+export function sgSellValue(it: Pick<SgItem, "p" | "g">): number {
+  const base = gearById(TOP_SHOP[SG_PIECES[it.p]])?.price ?? 0;
+  // 비율·배율 곱이 119.00000000000001 같은 부동소수로 떨어져도 한 칸 내려가지 않게
+  return Math.floor(base * SG_SELL_RATE * SG_GRADE_MULT[it.g as SgGrade] + 1e-6);
+}
+
+/**
+ * 세트 장비 여러 개 판매: 가방에서 한 번에 뺀다 (분해와 같은 검사 — 장착 중·없는 번호·같은 번호 두 번이면 하나도 안 뺀다).
+ * 돌려주는 sold = 뺀 물건마다 [코드, 값] (고른 순서 그대로 — 포인트가 모자라 못 받은 만큼 되돌릴 때 쓴다)
+ */
+export function sellSg(s: CharacterState, uids: readonly number[]): { state: CharacterState; result: { sold: [string, number][]; value: number } } {
+  if (!uids.length) throw new RpgError(400, "INVALID_INPUT", "팔 장비를 골라 주세요.");
+  const { rest, items } = takeItems(s, uids);
+  const sold = items.map((it): [string, number] => [encodeSg(it), sgSellValue(it)]);
+  const next = clone(s);
+  next.sg = rest;
+  return { state: settle(next), result: { sold, value: sold.reduce((a, [, v]) => a + v, 0) } };
+}
+
+/**
+ * 판매 값을 다 못 받았을 때 (지갑 상한): 고른 순서대로 받은 값(paid)으로 덮은 만큼은 판 것, 한 푼도 못 받은 물건은 가방에 되돌릴 코드.
+ * 일부만 받은 한 개는 판 것으로 친다 (상점 되팔기 returnUnsold와 같은 규칙)
+ */
+export function sgUnsold(sold: readonly [string, number][], paid: number): string[] {
+  const back: string[] = [];
+  let acc = 0;
+  for (const [code, v] of sold) {
+    if (acc >= paid && v > 0) back.push(code);
+    acc += v;
+  }
+  return back;
+}
+/** 되돌릴 세트 장비 코드를 가방에 다시 넣는다 (번호는 그대로 — 방금 뺀 것이라 겹치지 않는다) */
+export function returnSg(s: CharacterState, codes: readonly string[]): CharacterState {
+  if (!codes.length) return s;
+  const have = new Set((s.sg ?? []).map((c) => sgUid(c)));
+  const next = clone(s);
+  next.sg = [...(next.sg ?? []), ...codes.filter((c) => !have.has(sgUid(c)))];
+  return settle(next);
 }
 
 // ── 끼기 ──

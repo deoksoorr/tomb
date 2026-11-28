@@ -159,7 +159,10 @@ export function connDeviceOf(ua: string | null | undefined): string {
  * 11/27 일곱 칸 줄: "m" = 서버가 맵을 옮김 (x.f → x.t, 까닭 x.c), "t" = 다시 접속·다른 탭 (x.m = 서버가 지킨 맵, x.a = 화면이 보낸 다른 맵,
  * x.tab·x.pt = 이번·이전 탭 id, x.pc = 이전 채널(다른 채널 탭), x.live = 이전 탭 연결이 살아 있어 끊음)
  */
-export type ConnLogWire = [string, "i" | "o", number, number, string, ConnWhy | ""] | [string, "m" | "t", number, number, string, "", ConnLogExtra];
+export type ConnLogWire =
+  | [string, "i" | "o", number, number, string, ConnWhy | ""]
+  | [string, "m" | "t", number, number, string, "", ConnLogExtra]
+  | [string, "r", number, number, string, "", ConnActExtra];
 /** 11/27 서버가 맵을 옮긴 까닭: mapReq = 맵 옮기기 요청(버스·친구한테 가기·집 문), staffTp = 운영자 순간이동, permLost = 허락이 없어져 마을로 */
 export const MAP_CAUSES = ["mapReq", "staffTp", "permLost"] as const;
 export type MapCause = (typeof MAP_CAUSES)[number];
@@ -195,8 +198,80 @@ function parseExtra(raw: unknown): ConnLogExtra | null {
   }
   return out;
 }
+
+// ── 11/28 "r" 줄: 실시간 서버 안에서만 일어나는 동작 (탈것 타고 내림 · 좌대에서 내려보냄) ──
+// [방문자 id, "r", 시각, 채널, 기기, "", x]. x.g = 무엇:
+//  - 탈것 (RIDE_GEARS): x.m = 맵, x.on = 1이면 탐(없으면 내림), x.n = 몇 번(1부터), x.k = 2인승 자리(0 앞·1 뒤 — 1인승은 없음),
+//    x.d = 내림: 탄 시간(초, 모르면 없음), x.w = 내림 까닭(RIDE_OFF_WHYS, 직접 내리면 없음), x.b = 1이면 「탔다가 바로 내림」 한 줄로 접음 (시각 = 탄 때)
+//  - 좌대 ("raft"): x.n = 좌대 번호, x.w = 내려보낸 까닭 (raft.ts RaftOutWhy)
+//  - x.s = 그 사이 너무 잦아 실시간 서버가 건너뛴 줄 수
+// 옛 웹은 이 줄을 모른다 → 실시간 서버는 "r" 줄을 다른 줄과 한 묶음에 섞지 않는다 (connLog.ts take — 옛 웹이 묶음째 404로 버려도 들어옴·나감은 남게)
+/** 탈것: tube 튜브 · jetski 제트스키 · kayak 카약 (바닷가), rowboat 나룻배 (캠핑장), boat 조각배 · duck 오리배 (마을) */
+export const RIDE_GEARS = ["tube", "jetski", "kayak", "rowboat", "boat", "duck"] as const;
+export type RideGear = (typeof RIDE_GEARS)[number];
+/** 내린 까닭: quit = 접속이 끊김(유예가 끝남), map = 맵을 옮김, big = 몸이 커짐 */
+export const RIDE_OFF_WHYS = ["quit", "map", "big"] as const;
+export type RideOffWhy = (typeof RIDE_OFF_WHYS)[number];
+export const RAFT_OUT_WHYS = ["ticket", "end", "sold"] as const;
+/** 탈것을 타고 이 안에 내리거나, 내리고 이 안에 다시 타면 한 줄로 접는다 (실시간 서버 connLog.ts·rideLog.ts) */
+export const RIDE_TOGGLE_MS = 3_000;
+export type ConnRideExtra = { g: RideGear; m: MapId; on?: 1; n?: number; k?: 0 | 1; d?: number; w?: RideOffWhy; b?: 1; s?: number };
+export type ConnRaftExtra = { g: "raft"; n: number; w: (typeof RAFT_OUT_WHYS)[number]; s?: number };
+export type ConnActExtra = ConnRideExtra | ConnRaftExtra;
+/** 탄 시간 상한 (초) — 하루 */
+const RIDE_SEC_MAX = 86_400;
+const isInt = (v: unknown, lo: number, hi: number): v is number => typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi;
+function parseAct(raw: unknown): ConnActExtra | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const s = o.s === undefined ? {} : isInt(o.s, 1, 100_000) ? { s: o.s } : null;
+  if (!s) return null;
+  if (o.g === "raft") {
+    if (!isInt(o.n, 1, 6) || !(RAFT_OUT_WHYS as readonly unknown[]).includes(o.w)) return null;
+    return { g: "raft", n: o.n, w: o.w as ConnRaftExtra["w"], ...s };
+  }
+  if (!(RIDE_GEARS as readonly unknown[]).includes(o.g) || !isMap(o.m)) return null;
+  const out: ConnRideExtra = { g: o.g as RideGear, m: o.m, ...s };
+  if (o.on !== undefined) {
+    if (o.on !== 1) return null;
+    out.on = 1;
+  }
+  if (o.n !== undefined) {
+    if (!isInt(o.n, 1, 99)) return null;
+    out.n = o.n;
+  }
+  if (o.k !== undefined) {
+    if (o.k !== 0 && o.k !== 1) return null;
+    out.k = o.k;
+  }
+  // 탄 시간·까닭·접음은 내림 줄에만
+  if (o.d !== undefined) {
+    if (out.on || !isInt(o.d, 0, RIDE_SEC_MAX)) return null;
+    out.d = o.d;
+  }
+  if (o.w !== undefined) {
+    if (out.on || !(RIDE_OFF_WHYS as readonly unknown[]).includes(o.w)) return null;
+    out.w = o.w as RideOffWhy;
+  }
+  if (o.b !== undefined) {
+    if (out.on || o.b !== 1) return null;
+    out.b = 1;
+  }
+  return out;
+}
+/** 지금 아는 줄 종류. 이 밖의 종류(앞으로 더할 것)는 웹이 그 줄만 버린다 (internal.ts connLog) */
+export const CONN_KINDS = ["i", "o", "m", "t", "r"] as const;
+/** 모양은 줄 같은데(배열 6·7칸, 방문자 id, 종류 글자) 모르는 종류 — 묶음을 버리지 않고 그 줄만 건너뛴다 */
+export function isUnknownConnKind(raw: unknown): boolean {
+  if (!Array.isArray(raw) || (raw.length !== 6 && raw.length !== 7)) return false;
+  const [v, k] = raw as unknown[];
+  return typeof v === "string" && VISITOR_RE.test(v) && typeof k === "string" && /^[a-z]{1,4}$/.test(k) && !(CONN_KINDS as readonly string[]).includes(k);
+}
+
 /** 한 번에 넘기는 최대 줄 수 (8KB 서명 본문 안) */
 export const CONN_LOG_BATCH = 60;
+/** 11/28 한 묶음 줄들의 JSON 글자 수 상한 (서명 본문 8,000자 — verifyInternal — 에서 머리·꼬리 몫을 뺀 것). 긴 줄(다른 탭 등)이 60줄 모이면 넘던 것 */
+export const CONN_LOG_BODY_MAX = 7_600;
 /** 로비가 모아 두었다가 넘기는 간격 */
 export const CONN_LOG_FLUSH_MS = 60_000;
 
@@ -206,12 +281,16 @@ export function parseConnWire(raw: unknown): ConnLogWire | null {
   if (!Array.isArray(raw) || (raw.length !== 6 && raw.length !== 7)) return null;
   const [v, k, at, ch, dev, why, extra] = raw as unknown[];
   if (typeof v !== "string" || !VISITOR_RE.test(v)) return null;
-  // 11/27 맵 옮김·다시 접속 줄 (일곱 칸)
-  if (k === "m" || k === "t") {
+  // 11/27 맵 옮김·다시 접속 줄 (일곱 칸) · 11/28 실시간 서버 동작 줄 "r"
+  if (k === "m" || k === "t" || k === "r") {
     if (raw.length !== 7 || why !== "") return null;
     if (typeof at !== "number" || !Number.isFinite(at) || at <= 0) return null;
     if (typeof ch !== "number" || !Number.isInteger(ch) || ch < 0 || ch > 1000) return null;
     if (typeof dev !== "string" || dev.length > 30) return null;
+    if (k === "r") {
+      const a = parseAct(extra);
+      return a ? [v, "r", at, ch, dev, "", a] : null;
+    }
     const x = parseExtra(extra);
     return x ? [v, k, at, ch, dev, "", x] : null;
   }

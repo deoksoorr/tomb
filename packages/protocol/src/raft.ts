@@ -17,8 +17,8 @@ export const RAFT_PRICE = 270;
 export const RAFT_PRICE_MIN = 30;
 /** 연장 버튼이 뜨는 때 (끝나기 전) */
 export const RAFT_RENEW_WINDOW_MS = 60_000;
-/** 한 장에 연장할 수 있는 횟수 */
-export const RAFT_RENEW_MAX = 2;
+/** 한 장에 연장할 수 있는 횟수 (11/28 하루 4시간 = 한 장 + 연장 한 번. 2번이면 자정을 넘겨 6시간 이어 앉을 수 있었다) */
+export const RAFT_RENEW_MAX = 1;
 /** 끝난 뒤 같은 채널 좌대를 다시 못 사는 시간 */
 export const RAFT_REBUY_WAIT_MS = 10 * 60_000;
 /** 하루(KST) 계정마다 쓸 수 있는 좌대 시간 (분) */

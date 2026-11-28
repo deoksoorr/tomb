@@ -1,9 +1,10 @@
 import { CAMP_RAFTS, campRaftSeatDx } from "@tomb/protocol";
 import { beforeAll, describe, expect, it } from "vitest";
 import { BOOTH_LAMPS, BOOTH_WINDOW, CLERK_ROLL, jwadaeBooth, raftClerkWindow } from "./raftBoothArt";
-import { RAFT_HOLDER_UP, RAFT_LADDER_DX, raftFloatAt, raftRig, raftRigBaseArt, raftRodTipArt, RIG_OX, RIG_OY, rodPoints, TIP_OX, TIP_OY } from "./raftRodsArt";
+import { HOLE_OX, HOLE_OY, RAFT_FLOAT_DX, RAFT_HOLDER_UP, raftIceHoleArt, RAFT_LADDER_DX, raftFloatAt, raftRig, raftRigBaseArt, raftRodTipArt, RIG_OX, RIG_OY, rodDir, rodPoints, TIP_OX, TIP_OY } from "./raftRodsArt";
 import { installFakeCanvas, pixOfCanvas } from "./campTestCanvas";
 import { raft4Art } from "./valleyExtraArt";
+import { pondIcy } from "./valleyGround";
 
 // 11/27 좌대 매표소·낚싯대 4대 그림 (game/camp/raftBoothArt · raftRodsArt — 장면 덧그림 자리가 그림과 맞는지)
 
@@ -32,11 +33,12 @@ describe("좌대 낚싯대 4대", () => {
     for (const r of CAMP_RAFTS.filter((q) => !q.link)) {
       const rig = raftRig(r.link);
       expect(campRaftSeatDx(r)).toBe(11);
-      expect(rig.holder[0], `${r.n}번 받침틀`).toBeGreaterThan(RAFT_LADDER_DX[1] + 1);
+      // 받침틀 둘은 사다리 양옆 (외곽선 한 칸 띄우고)
+      for (const [h0, h1] of rig.holders) expect(h1 < RAFT_LADDER_DX[0] - 1 || h0 > RAFT_LADDER_DX[1] + 1, `${r.n}번 받침틀 ${h0}~${h1}`).toBe(true);
       for (const rd of rig.rods)
         for (const [x, y] of rodPoints(rd.bx, 0, rd.tdx, rd.tdy))
-          // 사다리 줄 높이 (받침 y −14 ~ 0 = 받침틀 줄 −5 ~ +9) 안에서는 사다리 오른쪽 끝보다 1칸 이상 오른쪽
-          if (y <= RAFT_HOLDER_UP) expect(x, `${r.n}번 낚싯대 (${rd.tdx},${rd.tdy}) 줄 ${y}`).toBeGreaterThan(RAFT_LADDER_DX[1] + 1);
+          // 사다리 줄 높이 (받침 y −14 ~ 0 = 받침틀 줄 −5 ~ +9) 안에서는 사다리 밖 (외곽선 한 칸 띄우고)
+          if (y <= RAFT_HOLDER_UP) expect(x < RAFT_LADDER_DX[0] - 1 || x > RAFT_LADDER_DX[1] + 1, `${r.n}번 낚싯대 (${rd.tdx},${rd.tdy}) 줄 ${y} x ${x}`).toBe(true);
     }
   });
 
@@ -47,8 +49,10 @@ describe("좌대 낚싯대 4대", () => {
       const fy = g.h - RAFT_HOLDER_UP;
       const rig = raftRig(ladder === "left");
       const base = raftRigBaseArt(rig);
-      for (let x = rig.holder[0]; x <= rig.holder[1]; x++) if (!rig.rods.some((rd) => rd.bx === x)) expect(g.get(cx + x, fy) >>> 8, `${ladder} ${x}`).toBe(base.get(RIG_OX + x, RIG_OY) >>> 8);
-      expect(g.get(cx + rig.holder[0] - 1, fy) >>> 8).not.toBe(0x3e5a3a);
+      for (const [h0, h1] of rig.holders) {
+        for (let x = h0; x <= h1; x++) if (!rig.rods.some((rd) => rd.bx === x)) expect(g.get(cx + x, fy) >>> 8, `${ladder} ${x}`).toBe(base.get(RIG_OX + x, RIG_OY) >>> 8);
+        expect(g.get(cx + h0 - 1, fy) >>> 8).not.toBe(0x3e5a3a);
+      }
     }
   });
 
@@ -71,6 +75,47 @@ describe("좌대 낚싯대 4대", () => {
           // 방울
           expect(t.get(TIP_OX + (bite ? 1 : 0), TIP_OY - 1) >>> 8).toBe(0xf6d24a);
         }
+  });
+});
+
+describe("좌대 찌 넷 자리 (11/27 운영자 「한쪽으로 쏠렸다 — 앞 물가를 넷이 다 채워야」)", () => {
+  it("좌대 여섯 모두 찌 넷이 좌대 앞 물 전체 폭에 고르게 (좌대 가운데 기준 −30·−10·10·30), 마루 그림 아래 물에, 서로 안 겹친다", () => {
+    for (const r of CAMP_RAFTS) {
+      const rig = raftRig(r.link);
+      const sx = campRaftSeatDx(r);
+      const fl = rig.rods.map((rd) => raftFloatAt(rd));
+      expect(
+        fl.map((f) => f.x + sx),
+        `${r.n}번`,
+      ).toEqual([...RAFT_FLOAT_DX]);
+      // 찌 머리(+ 까딱일 때 한 칸)가 좌대 그림 아래 끝(받침 r.y = 받침틀 줄 + RAFT_HOLDER_UP)보다 아래 물
+      for (const f of fl) expect(f.y - 2, `${r.n}번 찌 줄`).toBeGreaterThan(RAFT_HOLDER_UP);
+      // 마루 폭(±33) 안 — 옆 좌대·둑 쪽으로 넘어가지 않는다
+      for (const f of fl) expect(Math.abs(f.x + sx)).toBeLessThan(33);
+      // 찌 그림(물결 포함 3칸 폭) 사이 띄움
+      for (let i = 1; i < fl.length; i++) expect(fl[i].x - fl[i - 1].x).toBeGreaterThanOrEqual(10);
+    }
+  });
+
+  it("겨울 판: 얼음 띠 위 찌만 얼음낚시 구멍 (가운데 좌대 2·5번 찌는 늘 물) — 구멍 가운데는 짙은 물, 둘레는 눈", () => {
+    const icy = (n: number) =>
+      raftRig(CAMP_RAFTS.find((r) => r.n === n)!.link).rods.map((rd) => {
+        const r = CAMP_RAFTS.find((q) => q.n === n)!;
+        const f = raftFloatAt(rd);
+        return pondIcy(r.x + campRaftSeatDx(r) + f.x, r.y - RAFT_HOLDER_UP + f.y + 1);
+      });
+    expect(icy(2)).toEqual([false, false, false, false]);
+    expect(icy(5)).toEqual([false, false, false, false]);
+    // 가장자리 좌대 바깥 찌는 얼음 띠(물가에서 18~28) 안
+    expect(icy(1)[0] && icy(3)[3] && icy(4)[0] && icy(6)[3]).toBe(true);
+    const h = raftIceHoleArt();
+    expect(h.get(HOLE_OX, HOLE_OY) >>> 8).toBe(0x1a3442);
+    expect(h.get(0, HOLE_OY) & 255).toBe(255);
+  });
+
+  it("찌가 기운 쪽 = 줄이 내려가는 쪽 (곧게 뻗은 대는 사다리 반대쪽으로)", () => {
+    for (const wide of [true, false]) for (const rd of raftRig(wide).rods) expect(Math.abs(raftFloatAt(rd).x - rd.tdx)).toBe(2);
+    expect(raftRig(false).rods.map(rodDir)).toEqual([-1, 1, -1, 1]);
   });
 });
 

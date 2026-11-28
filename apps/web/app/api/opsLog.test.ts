@@ -1,5 +1,5 @@
 import { INTERNAL_SIG_HEADER, signInternal, verifyInternal, type ConnLogWire, type InternalPerson } from "@tomb/protocol";
-import { moveText, type MoveLogEntry } from "@/lib/moveLog";
+import type { MoveLogEntry } from "@/lib/moveLog";
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AdminLogsResponse } from "@/lib/adminLogs";
@@ -94,11 +94,12 @@ describe("11/27 다시 접속·다른 탭·서버 맵 옮김 줄 (실시간 서�
     const ok = await connLog.POST(call("/api/internal/conn-log", { body: signed.body, headers: { [INTERNAL_SIG_HEADER]: signed.sig } }));
     expect(await bodyOf(ok)).toEqual({ saved: 3 });
     const mine = await bodyOf<AdminLogsResponse>(adminLogs.GET(call(`/api/admin/logs?list=conn&account=${v.id}`, { admin: true })));
-    const texts = mine.rows.map((r) => moveText(r as MoveLogEntry));
+    const texts = mine.rows.map((r) => r.line.text);
+    expect(mine.rows.map((r) => r.line.note)).toEqual(["탭 tabC1 ← tabA1 · PC", "탭 tabA1 ← tabB1 · PC", "PC"]);
     expect(texts).toEqual([
-      "다른 채널 탭에서 들어옴 (1채널에서) · 2채널 바닷가 → 서버 맵 유지 · 화면이 다른 맵을 보냄(마을) · 탭 tabC1 ← tabA1",
-      "다른 탭에서 다시 접속 (이전 탭 끊음) · 1채널 바닷가 → 서버 맵 유지 · 화면이 다른 맵을 보냄(마을) · 탭 tabA1 ← tabB1",
-      "맵 마을 → 바닷가 · 맵 옮기기 요청(버스·친구·집 문)",
+      "다른 채널 탭에서 들어옴 (1채널에서 · 2채널 바닷가 · 서버 맵 유지 · 화면이 보낸 맵: 마을)",
+      "다른 탭에서 다시 접속, 이전 탭 끊음 (1채널 바닷가 · 서버 맵 유지 · 화면이 보낸 맵: 마을)",
+      "서버가 맵 옮김 → 바닷가 (마을에서)",
     ]);
     const all = await bodyOf<AdminLogsResponse>(adminLogs.GET(call("/api/admin/logs?list=conn", { admin: true })));
     const fromMe = all.rows.filter((r) => r.a === v.id);
@@ -279,5 +280,35 @@ describe("점검 모드 관리자 API", () => {
     const off = await bodyOf<{ state: { on: boolean } }>(adminMaint.POST(call("/api/admin/maintenance", { admin: true, body: { on: false } })));
     expect(off.state.on).toBe(false);
     expect(sent[1]).toMatchObject({ on: false, msg: "", until: null, skip: [] });
+  });
+});
+
+describe("11/28 탈것·좌대 줄 (실시간 서버 「r」 줄)", () => {
+  it("계정 목록에만 문장으로, 모르는 종류 줄은 그 줄만 건너뛰고, 계정마다 1분 상한", async () => {
+    const { resetMoveCap, MOVE_CAP } = await import("@/lib/opsLog");
+    resetMoveCap();
+    const v = await newVisitor();
+    const now = Date.now();
+    const rows = [
+      [v.id, "r", now - 5_000, 1, "phone", "", { g: "kayak", m: "sea", on: 1, n: 2, k: 1 }],
+      [v.id, "r", now - 4_000, 1, "phone", "", { g: "kayak", m: "sea", n: 2, d: 60 }],
+      [v.id, "z", now - 3_500, 1, "phone", "", { future: 1 }], // 앞으로 더할 종류: 이 줄만 버린다
+      [v.id, "r", now - 3_000, 1, "pc", "", { g: "raft", n: 4, w: "end" }],
+      [v.id, "i", now - 2_000, 1, "pc", ""],
+    ] as unknown as ConnLogWire[];
+    const signed = await signInternal(SECRET, { op: "connLog", rows, exp: Math.floor(now / 1000) + 20 });
+    const ok = await connLog.POST(call("/api/internal/conn-log", { body: signed.body, headers: { [INTERNAL_SIG_HEADER]: signed.sig } }));
+    expect(await bodyOf(ok)).toEqual({ saved: 4 });
+    const mine = await bodyOf<AdminLogsResponse>(adminLogs.GET(call(`/api/admin/logs?list=conn&account=${v.id}`, { admin: true })));
+    expect(mine.rows.map((r) => r.line.text)).toEqual(["게임 접속 (1채널 · PC)", "좌대에서 내려옴 (1채널 4번 좌대 · 입장권 시간 끝남)", "카약에서 내림 (바닷가 · 2번 카약 · 1분 0초 탐)", "카약 탐 (바닷가 · 2번 카약 · 2인 중 뒷자리)"]);
+    // 전체 목록에는 들어옴만
+    const all = await bodyOf<AdminLogsResponse>(adminLogs.GET(call("/api/admin/logs?list=conn", { admin: true })));
+    expect(all.rows.filter((r) => r.a === v.id).map((r) => r.k)).toEqual(["in"]);
+    // 상한: 1분에 MOVE_CAP.max줄 (앞의 3줄 포함)
+    const many = Array.from({ length: 30 }, (_, i) => [v.id, "r", now - 1_000 + i, 1, "pc", "", { g: "tube", m: "sea", on: 1, n: 1 }]) as unknown as ConnLogWire[];
+    const s2 = await signInternal(SECRET, { op: "connLog", rows: many, exp: Math.floor(now / 1000) + 20 });
+    const res2 = await bodyOf<{ saved: number }>(connLog.POST(call("/api/internal/conn-log", { body: s2.body, headers: { [INTERNAL_SIG_HEADER]: s2.sig } })));
+    expect(res2.saved).toBe(MOVE_CAP.max - 3);
+    resetMoveCap();
   });
 });

@@ -61,10 +61,10 @@ export type CatchResult = {
 };
 
 /**
- * 물에 빠진 꾸미기 (아주 드물게 물고기 대신, 영구 소장). id = 꾸미기 아이템 id.
- * kept=false면 이미 모두 가지고 있어서 instead(물고기 id)를 대신 가방에 넣었다 (그때 id·name은 빈 문자열일 수 있다)
+ * 물에 빠진 꾸미기 (아주 드물게 물고기 대신). id = 꾸미기 아이템 id. 11/28 기간제: days = 받은 기간(일), ext = 기간제로 가지고 있던 것이라 기간이 더해졌다.
+ * kept=false면 이미 모두 영구로 가지고 있어서 instead(물고기 id)를 대신 가방에 넣었다 (그때 id·name은 빈 문자열일 수 있다)
  */
-export type SunkenCatch = { id: string; name: string; kept: boolean; instead?: string };
+export type SunkenCatch = { id: string; name: string; kept: boolean; instead?: string; days?: number; ext?: true };
 
 /** 자동 낚시 상태 (켜져 있을 때) */
 export type AutoFishStatus = {
@@ -75,6 +75,8 @@ export type AutoFishStatus = {
   endsAt: number | null;
   /** 다음 찌 올리기까지 남은 접속 시간 (ms). 세션이 끝났으면 null */
   nextInMs: number | null;
+  /** 11/27 다음에 걸리는 찌까지 남은 접속 시간 (ms — 화면이 그때 정산을 불러 바로 반영). 멀거나 끝났으면 null */
+  hitInMs?: number | null;
   /** 오늘 자동으로 낚은 수 (11/19 하루 한도 없음) */
   today: number;
   /** 11/27 내 좌대(입장권) 세션이면 좌대 번호 · 찌 올리는 간격 ms */

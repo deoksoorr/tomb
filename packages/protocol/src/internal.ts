@@ -2,7 +2,7 @@ import { ROOM_ID_RE } from "./constants";
 import { HOMES_ZONES, MEGA_PIN_MAX, type HomesZone } from "./events";
 import { FRIEND_KEY_RE, FRIEND_MAX, WHERE_MAX_IDS } from "./friends";
 import { hmacSign, hmacVerify } from "./token";
-import { CONN_LOG_BATCH, MAINT_MSG_MAX, parseConnWire, type ConnLogWire } from "./maint";
+import { CONN_LOG_BATCH, MAINT_MSG_MAX, isUnknownConnKind, parseConnWire, type ConnLogWire } from "./maint";
 
 // 47번: Vercel(웹 서버) → 실시간 서버 내부 요청 서명. 브라우저를 거치지 않는 서버끼리의 호출이라
 // 본문 JSON 전체를 JOIN_SECRET으로 서명하고(헤더), 본문 안의 exp(unix초)가 지나면 받지 않는다.
@@ -18,7 +18,7 @@ import { CONN_LOG_BATCH, MAINT_MSG_MAX, parseConnWire, type ConnLogWire } from "
 //  - POST /internal/people { exp }                         → 11/20 운영자 순간이동: 접속 중인 사람 전부 (채널·sid·이름·자리·맵·실내)
 // 반대 방향 (실시간 서버 → 웹, 같은 서명):
 //  - POST {WEB_ORIGIN}/api/internal/lottery-draw { op: "lotteryDraw", exp } → 11/21 토요일 저녁 8시 예약 작업이 행운권 추첨을 정각에 돌린다
-//  - POST {웹}/api/internal/conn-log { op: "connLog", rows, exp } → 11/26 로비가 모은 접속 기록(들어옴·나감)을 한 번에 넘긴다 (maint.ts)
+//  - POST {웹}/api/internal/conn-log { op: "connLog", rows, exp } → 11/26 로비가 모은 접속 기록(들어옴·나감)을 한 번에 넘긴다 (maint.ts). 11/28 탈것·좌대 줄 "r"
 // 11/26 집 바뀜 알림:
 //  - POST /internal/homes { ch, zone, v, exp }            → 그 채널에 「이 구역 집 목록이 바뀌었다」(분양·외관·디자인·앞마당·넓히기) 한 줄 — 화면이 다시 받는다
 // 11/26 점검 모드:
@@ -144,7 +144,10 @@ export async function verifyInternal(
   }
   if (r.op === "connLog") {
     if (!Array.isArray(r.rows) || r.rows.length < 1 || r.rows.length > CONN_LOG_BATCH) return null;
-    const rows = r.rows.map(parseConnWire);
+    // 11/28 앞으로 더할 줄 종류(모르는 종류 글자)는 그 줄만 건너뛴다. 아는 종류인데 모양이 틀린 줄이 섞이면 묶음째 버린다
+    const known = r.rows.filter((x) => !isUnknownConnKind(x));
+    if (!known.length) return null;
+    const rows = known.map(parseConnWire);
     if (rows.some((x) => x === null)) return null;
     return { op: "connLog", rows: rows as ConnLogWire[], exp: r.exp };
   }

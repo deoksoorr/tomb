@@ -1,5 +1,4 @@
-import { RAFT_GEAR_TIER_NAME } from "@tomb/protocol";
-import { AUTO_RANK_NOTE, autoSummary } from "@/lib/forage/auto";
+import { autoCatchLine, gotCosmetic, raftGearText } from "@/lib/forage/auto";
 import { speciesById } from "@/lib/forage/catalog";
 import { sunkenText } from "@/lib/forage/sunken";
 import type { AutoFishResponse, DexGain } from "@/lib/forage/types";
@@ -28,29 +27,40 @@ export function noteDexGain(g: DexGain | undefined, alone = true): void {
   if (alone && text) showToast(text, g.titles.length || g.badges?.length ? 6_000 : 3_500);
 }
 
-/** 자동 낚시 정산 결과 → 토스트 (새로 받은 게 있을 때만, 종류별 가장 큰 크기 포함). away = 숨어 있다 돌아옴 */
-export function toastAutoCatch(r: AutoFishResponse, away: boolean): void {
-  const gear = r.gear ?? [];
-  // 11/19 가방이 가득 차서 쉬었으면 (새로 받은 게 없어도) 알려 준다
-  const rest = r.full ? "가방이 가득 차서 쉬는 중이에요" : "";
-  if (!r.items.length && !gear.length) {
-    if (rest && away) showToast(`자동 낚시 · ${rest}`, 6_000);
-    return;
-  }
-  const name = (id: string) => speciesById(id)?.name ?? id;
-  const n = r.items.length;
-  const head = n ? `${away ? "자리 비운 동안" : "자동 낚시로"} ${n}마리 낚았어요 · ${autoSummary(r.items, name)}` : away ? "자리 비운 동안" : "자동 낚시 중";
-  // 11/19 시도마다 걸릴 확률이 있어 놓친 수도 알려 준다
-  const cut = n && r.missed > 0 ? ` (${r.missed}번은 놓쳤어요)` : "";
-  // 물에 빠진 꾸미기는 따로 덧붙인다
-  const extra = gear.map((g) => ` · 반짝! ${sunkenText(g, name)}`).join("");
-  // 11/27 좌대 전용 코디 (내 좌대 자동 낚시 — 입고 있으면 그 자리, 아니면 벗어 둔 꾸미기에 들어간다)
-  const raft = r.raftGear ?? [];
-  if (raft.length) void meStore.refresh();
-  const raftText = raft.map((g) => ` · 반짝! 좌대 코디 「${g.name}」 ${RAFT_GEAR_TIER_NAME[g.tier]} 획득`).join("");
-  // 크기는 도감 최대 기록에만 들어간다는 안내 (물고기를 받았을 때)
-  const note = n ? ` · ${AUTO_RANK_NOTE}` : "";
+/** 11/28 자동 낚시 알림에서 따로 띄우는 도감 칭호·맵 배지 (P는 물고기 줄에 「새 도감 +NP」로) */
+function dexHonorText(g: DexGain | undefined): string {
+  if (!g) return "";
+  return [...g.titles.map((t) => `칭호 「${t}」`), ...(g.badges ?? []).map((b) => `「${b.name}」 배지${b.points > 0 ? ` (완성 보상 ${b.points}P)` : ""}`)].join(" · ");
+}
+
+/** 물고기 한 줄 알림 시간 */
+export const AUTO_FISH_TOAST_MS = 4_000;
+/** 꾸미기·칭호 알림 시간 (물고기 줄보다 조금 오래) */
+export const AUTO_GEAR_TOAST_MS = 8_000;
+
+/**
+ * 자동 낚시 정산 결과 → 알림 (11/28 운영자 「안내문이 너무 길다」·「구구절절」):
+ *  - 물고기는 짧은 한 줄 (lib/forage/auto autoCatchLine — 「블루길 9.7cm · 새 도감 +3P」 / 「3마리 · 블루길 외 2」), 4초. 낚은 게 없으면 알림 없음
+ *  - 꾸미기(물에 빠진 꾸미기·좌대 코디)와 도감 칭호·배지는 각각 따로 조금 더 오래
+ *  - 최대어 순위 안내는 알림에서 뺐다 (낚시 창 [자동 낚시 켜기] 도움말에만)
+ * 꾸미기를 받았으면 내 정보를 새로 받아 가방 [꾸미기]가 바로 바뀌게 한다 (refreshCosmetics)
+ */
+export function toastAutoCatch(r: AutoFishResponse): void {
   noteDexGain(r.dex, false);
-  const dex = dexGainText(r.dex);
-  showToast(`${head}${cut}${extra}${raftText}${dex ? ` · ${dex}` : ""}${rest ? ` · ${rest}` : ""}${note}`, gear.length || raft.length ? 10_000 : 8_000);
+  const name = (id: string) => speciesById(id)?.name ?? id;
+  const line = autoCatchLine(r.items, name, r.dex);
+  if (line) showToast(`${line}${r.full ? " · 가방 가득" : ""}`, AUTO_FISH_TOAST_MS);
+  for (const g of r.gear ?? []) showToast(sunkenText(g, name), AUTO_GEAR_TOAST_MS);
+  for (const g of r.raftGear ?? []) showToast(raftGearText(g), AUTO_GEAR_TOAST_MS);
+  const honor = dexHonorText(r.dex);
+  if (honor) showToast(honor, AUTO_GEAR_TOAST_MS);
+  refreshCosmetics(r);
+}
+
+/**
+ * 11/28 꾸미기를 새로 받았으면(물에 빠진 꾸미기·좌대 코디 — 자동 정산·직접 낚시 모두) 내 정보를 바로 새로 받는다.
+ * 가방 [꾸미기]·[지금 모습]은 내 정보(useMe)만 보므로 창이 열려 있어도 그 자리에서 바뀐다. 받은 게 없으면 요청하지 않는다
+ */
+export function refreshCosmetics(r: Parameters<typeof gotCosmetic>[0]): void {
+  if (gotCosmetic(r)) void meStore.refresh();
 }

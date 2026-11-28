@@ -20,7 +20,9 @@ export const POST = handler(async (req) => {
   const res = await startRun(visitorId, game, difficulty, Date.now(), zone, planVer, tower);
   if (hunt) {
     if (unfinished) logHunt(visitorId, { k: "drop", msg: "앞 판을 끝내지 못하고 새 판을 시작" });
-    logHunt(visitorId, { k: "start", d: difficulty, ...(zone ? { zone } : {}), ...(tower ? { tw: tower } : {}) });
+    // 11/28 사냥터는 서버가 정한 것 (안 고르면 그 난이도 기본 사냥터 — 「사냥터 입장 (월요일 회의실 · 쉬움)」)
+    const z = res.zone ?? zone;
+    logHunt(visitorId, { k: "start", d: difficulty, ...(z ? { zone: z } : {}), ...(tower ? { tw: tower } : {}) });
   }
   return json<RunStartResponse>(res);
 });

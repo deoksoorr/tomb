@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { CLOSE, LOBBY_DEBOUNCE_MS, PING, PONG, ROOM_CAPACITY, TICK_MS, connDeviceOf, isHuntRoom, signGrant, verifyGrant, type HomesZone, type MapId } from "@tomb/protocol";
+import { CLOSE, LOBBY_DEBOUNCE_MS, PING, PONG, ROOM_CAPACITY, TICK_MS, connDeviceOf, isHuntRoom, signGrant, verifyGrant, type ConnActExtra, type HomesZone, type MapCause, type MapId } from "@tomb/protocol";
 import { TICKET_HEADER, decodeTicket, rejectSocket } from "./auth";
 import { ChannelCore, type PeerRecord, type Reservation } from "./channel";
 import { type Env, channelStub, lobbyStub, readConfig } from "./config";
@@ -61,6 +61,8 @@ const LIVE_POS_MAX_MS = 60_000;
 const RESTART_GRACE_MIN_MS = 60_000;
 /** 새 방문자 입장 때 로비에 묻는 시간 상한. 넘기면(로비 장애) 받아 준다 — 순서보다 입장 가능성이 우선 */
 const ADMIT_TIMEOUT_MS = 3_000;
+/** 11/27 다른 채널에서 맵을 찾는 데 기다리는 최대 시간 (넘으면 모르는 것으로) */
+const KNOWN_TIMEOUT_MS = 1_500;
 /** 연결이 있는 동안 유령 연결을 확인하는 알람 주기. DO가 이미 깨어 있을 때(틱 루프가 멈출 때)도 확인한다 */
 const REAP_INTERVAL_MS = 5 * 60_000;
 
@@ -172,11 +174,25 @@ export class ChannelDO extends DurableObject<Env> {
           if (!room || isHuntRoom(this.room)) this.scheduleReport();
         },
         lastPing: (ws) => ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? 0,
-        visitorJoined: (visitorId, at) => {
+        visitorJoined: (visitorId, at, info) => {
           if (room) return; // 방은 월드 채널과 동시에 붙어 있을 수 있다 → 레지스트리에 올리지 않는다
           lobbyStub(env)
-            .claimVisitor(visitorId, this.channel, at, this.devices.get(visitorId))
+            .claimVisitor(visitorId, this.channel, at, this.devices.get(visitorId), info)
             .catch((e) => console.error("claimVisitor failed", e));
+        },
+        // 11/27 서버가 맵을 옮김 → 접속 기록 한 줄 (로비가 모아 웹으로)
+        mapMoved: (visitorId: string, from: MapId, to: MapId, cause: MapCause) => {
+          if (room) return;
+          lobbyStub(env)
+            .logMapMove(visitorId, this.channel, from, to, cause, this.devices.get(visitorId))
+            .catch((e) => console.error("logMapMove failed", e));
+        },
+        // 11/28 탈것 타고 내림·좌대에서 내려보냄 → 접속 기록 "r" 줄 (한 사람 1분 상한 안에서만 — rideLog.ts)
+        actLogged: (visitorId: string, x: ConnActExtra) => {
+          if (room) return;
+          lobbyStub(env)
+            .logAct(visitorId, this.channel, x, this.devices.get(visitorId))
+            .catch((e) => console.error("logAct failed", e));
         },
         visitorLeft: (visitorId, code) => {
           if (room) return;
@@ -303,6 +319,13 @@ export class ChannelDO extends DurableObject<Env> {
         return rejectSocket(CLOSE.CHANNEL_FULL, "channel full");
       }
     }
+    // 11/27 이 채널에 처음 자리를 잡는 사람: 다른 채널에 있거나(다른 채널 탭·채널 옮기기) 방금 나갔으면 그 맵으로 (주소의 m보다 서버 기록).
+    // Worker가 넘긴 known은 믿지 않고 여기서 다시 정한다
+    delete ticket.known;
+    if (this.room === null && !this.core.has(ticket.visitorId)) {
+      const known = await this.knownElsewhere(ticket.visitorId);
+      if (known) ticket.known = known;
+    }
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
     if (this.room === null) {
@@ -392,6 +415,36 @@ export class ChannelDO extends DurableObject<Env> {
   /** Lobby DO → 같은 방문자가 claimedAt에 다른 채널에 들어갔다. 여기 자리(접속·유예 예약)를 4002로 정리한다 (RPC) */
   kick(visitorId: string, claimedAt: number): void {
     this.core.evict(visitorId, claimedAt);
+  }
+
+  /** 11/27 다른 채널 DO → 이 채널에서 이 방문자의 맵 (자리가 있거나 방금 나갔으면, 아니면 null) (RPC) */
+  visitorMap(visitorId: string): MapId | null {
+    return this.room === null ? this.core.visitorMap(visitorId) : null;
+  }
+
+  /**
+   * 11/27 다른 채널에서 이 방문자의 맵: 로비가 등록해 둔 채널을 먼저, 등록이 없으면(로비가 다시 떴다·방금 나감) 사람이 있는 채널들에 묻는다.
+   * 늦으면(KNOWN_TIMEOUT_MS) 모르는 것으로 — 그때는 새로 들어온 사람 규칙(캠핑장·바닷가는 정류장에서)
+   */
+  private async knownElsewhere(visitorId: string): Promise<MapId | null> {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const timeout = new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), KNOWN_TIMEOUT_MS)));
+    const ask = async (): Promise<MapId | null> => {
+      const lobby = lobbyStub(this.env);
+      const reg = await lobby.channelOfVisitor(visitorId);
+      const ids = typeof reg === "number" && reg !== this.channel ? [reg] : await lobby.liveChannels();
+      const others = ids.filter((id) => id !== this.channel);
+      const found = await Promise.all(others.map((id) => channelStub(this.env, id).visitorMap(visitorId).catch(() => null)));
+      return found.find((m): m is MapId => m === "village" || m === "camp" || m === "sea") ?? null;
+    };
+    try {
+      return await Promise.race([ask(), timeout]);
+    } catch (e) {
+      console.error("knownElsewhere failed", e);
+      return null;
+    } finally {
+      if (timer !== null) clearTimeout(timer);
+    }
   }
 
   private async lobbyAdmits(visitorId: string): Promise<boolean> {

@@ -71,6 +71,33 @@
   background: linear-gradient(#ffb0c8, #d45a84);
 }
 
+/* 11/27 좌대 입장권: 물빛 막대 + 번호 칸, 끝나기 1분 전부터 경고 색 (연장 칸 RaftRenew .sec와 같은 노랑 글자) */
+.row[data-kind="raft"] .fill {
+  background: linear-gradient(#a8f0d8, #2a9a7a);
+}
+
+.row[data-kind="raft"] .badge {
+  width: 24px;
+  background: #1e4a4a;
+  box-shadow: inset 0 0 0 1px #7ad8c0;
+  color: #d8fff4;
+}
+
+.row[data-kind="raft"][data-warn] .fill {
+  background: linear-gradient(#ffb08a, #d4483a);
+}
+
+.row[data-kind="raft"][data-warn] .badge {
+  background: #6a2a2a;
+  box-shadow: inset 0 0 0 1px #ff9a7a;
+  color: #ffe0d4;
+}
+
+.row[data-kind="raft"][data-warn] .time {
+  color: #ffd27a;
+  font-weight: 700;
+}
+
 .time {
   min-width: 30px;
   color: var(--muted);
@@ -120,6 +147,15 @@
 .compact .time {
   min-width: 0;
   text-align: center;
+}
+
+/* 좌대 「102분」은 그림 칸보다 조금 넓다 */
+.compact .row[data-kind="raft"] {
+  grid-template-columns: minmax(24px, auto);
+}
+
+.compact .row[data-kind="raft"] .bar {
+  width: 100%;
 }
 
 .badge {

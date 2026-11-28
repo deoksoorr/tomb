@@ -183,6 +183,131 @@
   overflow-wrap: anywhere;
 }
 
+/* 11/28 기록 한 줄: 문장 · 둘째 줄(보상·드롭) · 흐린 덧말과 원본 펼치기 */
+.line {
+  min-width: 220px;
+  max-width: 620px;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.lineText {
+  display: block;
+  color: var(--ad-text);
+}
+
+.lineMore {
+  display: block;
+  margin-top: 2px;
+  color: var(--ad-muted);
+  font-size: 12px;
+}
+
+.raw {
+  margin-top: 2px;
+  color: var(--ad-faint);
+  font-size: 11px;
+}
+
+.raw > summary {
+  cursor: pointer;
+  list-style: none;
+  width: fit-content;
+}
+
+.raw > summary::-webkit-details-marker {
+  display: none;
+}
+
+.raw > summary::after {
+  content: " ▾";
+}
+
+.raw[open] > summary::after {
+  content: " ▴";
+}
+
+.raw > code {
+  display: block;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--ad-surface-3);
+  color: var(--ad-muted);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* 폰: 기록 한 줄 = 카드 하나 (윗줄 종류·이름·시각, 아랫줄 문장 — 가로로 밀지 않게) */
+@media (max-width: 640px) {
+  /* 관리 표 공통 최소 폭(Admin.module.css .tableWrap > .table)보다 앞서게 */
+  .logTable.logTable.logTable.logTable {
+    min-width: 0;
+  }
+
+  .logTable thead {
+    display: none;
+  }
+
+  .logTable,
+  .logTable tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .logTable tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--ad-line);
+  }
+
+  .logTable td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+
+  /* 줄무늬는 칸마다가 아니라 카드 전체에 */
+  .logTable.logTable.logTable tbody tr td {
+    background: none;
+  }
+
+  .logTable tbody tr:nth-child(even) {
+    background: var(--ad-zebra);
+  }
+
+  .cTag {
+    order: 0;
+  }
+
+  .cName {
+    order: 1;
+  }
+
+  .cTime {
+    order: 2;
+    margin-left: auto;
+    text-align: right;
+  }
+
+  .cTime .sub {
+    display: inline;
+    margin-left: 6px;
+  }
+
+  .line {
+    order: 3;
+    flex-basis: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+}
+
 .tabs {
   display: inline-flex;
   gap: 4px;

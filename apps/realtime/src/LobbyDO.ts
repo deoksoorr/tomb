@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
-import { LOBBY_SNAPSHOT_MS, MAINT_OFF, connWhyOf, parseMaint, type HuntRoomsInfo, type LobbyInfo, type MaintState, type QueueStatus } from "@tomb/protocol";
+import { LOBBY_SNAPSHOT_MS, MAINT_OFF, TAB_ID_RE, connWhyOf, parseConnWire, parseMaint, type ConnActExtra, type HuntRoomsInfo, type LobbyInfo, type MaintState, type MapCause, type MapId, type QueueStatus } from "@tomb/protocol";
+import type { JoinInfo } from "./channel";
 import { ConnLogBuffer, sendConnLog } from "./connLog";
 import { type Config, type Env, channelStub, readConfig } from "./config";
 import {
@@ -13,6 +14,7 @@ import {
   liveChannels,
   refreshTargets,
   startupTargets,
+  tabRow,
   type LobbyState,
 } from "./lobbyState";
 import { AdmissionQueue, type QueueSnapshot } from "./queue";
@@ -57,6 +59,8 @@ export class LobbyDO extends DurableObject<Env> {
   /** 11/26 접속 기록 (들어옴·나감 줄을 모았다가 웹으로 — connLog.ts) */
   private readonly connLog = new ConnLogBuffer();
   private connSending = false;
+  /** 11/27 방문자별 마지막 탭 id (메모리에만 — 다른 탭에서 다시 접속한 걸 기록하려고) */
+  private readonly tabs = new Map<string, string>();
   /** 11/26 점검 모드 */
   private maintState: MaintState;
 
@@ -144,10 +148,20 @@ export class LobbyDO extends DurableObject<Env> {
    * 등록을 먼저 바꾸고 내보내므로, 옛 채널이 뒤이어 보내는 release는 무시된다.
    * claimedAt보다 나중에 옛 채널로 다시 들어간 연결은 그 채널이 건드리지 않는다(빠르게 오가는 경우).
    */
-  async claimVisitor(visitorId: string, channel: number, claimedAt: number, dev?: string): Promise<void> {
+  async claimVisitor(visitorId: string, channel: number, claimedAt: number, dev?: string, info?: JoinInfo): Promise<void> {
     if (typeof visitorId !== "string" || !this.validChannel(channel)) return;
+    const device = typeof dev === "string" ? dev.slice(0, 30) : "";
+    const prevCh = this.visitors.channelOf(visitorId);
     // 11/26 접속 기록: 어느 채널에도 없던 사람이면 들어옴 (채널 이동·재접속 복귀는 이미 등록돼 있다)
-    if (this.visitors.channelOf(visitorId) === undefined) this.logConn([visitorId, "i", Date.now(), channel, typeof dev === "string" ? dev.slice(0, 30) : "", ""]);
+    if (prevCh === undefined) this.logConn([visitorId, "i", Date.now(), channel, device, ""]);
+    // 11/27 다른 탭·기기에서 다시 접속 (이전 연결을 끊음 · 다른 채널 탭 · 화면이 다른 맵을 보냄): 한 줄
+    const extra = info ? tabRow(info, this.tabs.get(visitorId), prevCh !== undefined && prevCh !== channel ? prevCh : undefined) : null;
+    if (extra) this.logConn([visitorId, "t", Date.now(), channel, device, "", extra]);
+    if (info?.tab && TAB_ID_RE.test(info.tab)) {
+      this.tabs.delete(visitorId);
+      this.tabs.set(visitorId, info.tab);
+      if (this.tabs.size > 4_000) this.tabs.delete(this.tabs.keys().next().value!);
+    }
     // 친구 들고 남: 처음 자리를 잡았으면 친구들에게 바로 "들어옴" (나감 대기 중이었으면 취소)
     const notice = this.friends.joined(visitorId);
     this.saveFriends();
@@ -158,6 +172,24 @@ export class LobbyDO extends DurableObject<Env> {
         .kick(visitorId, claimedAt)
         .catch((e) => console.error("kick failed", e));
     }
+  }
+
+  /** 11/27 Channel DO → 이 방문자가 등록된 채널 (없으면 null — 다른 채널에서 들어올 때 서버가 아는 맵을 찾으려고) */
+  channelOfVisitor(visitorId: string): number | null {
+    return typeof visitorId === "string" ? (this.visitors.channelOf(visitorId) ?? null) : null;
+  }
+
+  /** 11/27 Channel DO → 서버가 맵을 옮겼다 (접속 기록 한 줄) */
+  logMapMove(visitorId: string, channel: number, from: MapId, to: MapId, cause: MapCause, dev?: string): void {
+    if (typeof visitorId !== "string" || !this.validChannel(channel)) return;
+    this.logConn([visitorId, "m", Date.now(), channel, typeof dev === "string" ? dev.slice(0, 30) : "", "", { f: from, t: to, c: cause }]);
+  }
+
+  /** 11/28 Channel DO → 탈것 타고 내림·좌대에서 내려보냄 (접속 기록 "r" 줄 — 모양이 틀리면 버린다, 바로 타고 내린 줄은 버퍼가 접는다) */
+  logAct(visitorId: string, channel: number, x: ConnActExtra, dev?: string): void {
+    if (typeof visitorId !== "string" || !this.validChannel(channel)) return;
+    const row = parseConnWire([visitorId, "r", Date.now(), channel, typeof dev === "string" ? dev.slice(0, 30) : "", "", x]);
+    if (row) this.logConn(row);
   }
 
   /** Channel DO → 방문자가 최종 퇴장했다(1000 close, 유예 만료, 추방). 등록된 채널이 같을 때만 지운다. */

@@ -1,6 +1,6 @@
 // 11/27 좌대 전용 코디 (캠핑장 윤슬 낚시터 좌대 입장권 — protocol raft.ts RAFT_GEAR). 시안(~/Desktop/목요일작업/좌대시안, scratchpad jwadaemock/art/gear.ts)을 그대로 옮겼다.
 //  7일  jw_carphat 붕어 털모자 (머리)        — 니트 붕어가 머리를 덮고 꼬리가 뒤로 튄다
-//  30일 jw_vest    좌대 낚시 조끼 (옷)        — 주머니 조끼 + 등 낚싯대 꽂이 (어깨 너머로 초릿대·방울)
+//  30일 jw_vest    좌대 낚시 조끼 (옷)        — 올리브 주머니 조끼 + 등 꽂이 대나무 낚싯대 (어깨 너머로 빨강·흰 초릿대·낚싯줄, 11/28 개편)
 //  30일 jw_net     월척 뜰채 (등)             — 등에 멘 큰 뜰채, 그물 속 은빛 월척
 //  영구 jw_sedge   물빛 삿갓 (머리)  · jw_bell 금방울 찌 목걸이 (목) · jw_waders 물빛 가슴장화 (옷) · jw_cape 황금 월척 망토 (등) — 넷이 한 벌
 // 시트 칸(20×28) 밖·가장자리 1px에 닿으면 저절로 한 단계씩 줄여 다시 그린다 (adapt). 줄임 단계는 꾸미기·자리·몸·방향·동작 묶음마다 그 묶음의 모든 프레임 중
@@ -223,19 +223,23 @@ function carpHead(g0: Grid, v: V, m: GearM, fb: FB, top: number): void {
 }
 
 // ═════════════ 2. 좌대 낚시 조끼 (30일) ═════════════
-export const VEST: T = { hi: 0xe4d29e, c: 0xc6ae74, lo: 0x9c8450, deep: 0x6e5c34 };
-const LURE_A = 0xf0603a;
-const LURE_B = 0xb8e43c;
-const ZIP = 0xd8dce4;
-const PATCH = 0x2e4a7a;
-const PATCH_FISH = 0xf4f6fa;
-const ROD = 0x2c2c36;
-const ROD_HI = 0x5a5a6a;
-const ROD_TIP = 0xf04030;
-const BELL = 0xf6d24a;
-const REEL = 0xc8ccd4;
-const REEL_LO = 0x8a8e98;
-
+// 11/28 개편 (시안 B — ~/Desktop/목요일작업/좌대시안/조끼개편_B.png): 올리브 카키 주머니 조끼 + 등 꽂이 대나무 낚싯대.
+//  옛 그림은 앞모습 대를 몸보다 먼저 그려 몸 명암 칠이 대를 몸 색으로 덮었다(귀처럼 보임) → 대는 외곽선 뒤(glow)에 빈칸에만 그린다.
+//  천 4톤만 염색 묶음 — 찌·루어·D링·낚싯대·낚싯줄은 다른 색 계열이라 그대로
+export const VEST: T = { hi: 0xaec474, c: 0x7c9a4c, lo: 0x587236, deep: 0x3a4e24 };
+const BOB_R = 0xe8392c;
+const BOB_RH = 0xff8466;
+const BOB_W = 0xfbf8f0;
+const BOB_WL = 0xd2ccbe;
+const RING = 0xe4e8ee;
+const LURE_G = 0xf6c838;
+const LURE_O = 0xf2782a;
+const ROD_C = 0xa8682e;
+const ROD_L = 0xd4954c;
+const ROD_K = 0x5e3618;
+const TIP_R = 0xff4a2a;
+const TIP_W = 0xfffaf2;
+const LINE_C = 0xe8f0f8;
 type W = { v: V; m: GearM; fb: FB; body: string; sit: number };
 function torsoTB(w: W): { top: number; bot: number } {
   const tall = w.fb === "tall";
@@ -264,151 +268,246 @@ function inBall(w: W, x: number, y: number): boolean {
 const bigTop = (w: W) => Math.round(w.m.hy) + (w.fb === "round" ? 2 : 4);
 const neckY = (m: GearM, fb: FB) => (fb === "round" ? Math.round(m.hy) + 2 : fb === "sheet" ? Math.round(m.hy) + 4 : m.neck);
 
-/** 등 낚싯대 꽂이: 몸 뒤 (layer back) — 왼쪽 어깨 너머로 초릿대가 솟고 끝에 방울 */
-function vestRod(g: Grid, v: V, m: GearM, fb: FB): void {
-  const { cx } = m;
-  const n = neckY(m, fb);
-  const big = bigBody(fb);
-  const tall = fb === "tall";
-  if (v === "down") {
-    // 앞모습: 머리 왼쪽 뒤로 대가 솟는다 (머리가 덮는 곳은 가려진다)
-    // 줄임 단계: 대를 몸 쪽으로 한 칸씩 (넓은 몸·칸 끝)
-    const x = cx - (big ? 8 : tall ? 6 : 7) + Math.min(SH, big ? 7 : 3);
-    // 왕관 외형은 몸통 망토가 옆으로 퍼지므로 대 아래쪽(몸 뒤에 가려지는 부분)은 17줄까지만
-    const y0 = KING ? Math.min(17, n + 2) : Math.min(24, n + 2);
-    const y1 = Math.max(SAFE_TOP + 1, m.top - 3);
-    for (let y = y1; y <= y0; y++) g.set(x + (y < y1 + 3 ? -1 : 0), y, (y + 40) % 4 === 0 ? ROD_HI : ROD);
-    g.set(x - 1, y1 - 1, ROD_TIP);
-    g.set(x - 2, y1, BELL);
-  } else if (v === "side") {
-    // 옆(오른쪽을 본다): 등 뒤에서 뒤로 비스듬히
-    const bx = cx - (big ? 7 : tall ? 4 : 5) + SH;
-    const y0 = KING ? Math.min(17, n + 3) : Math.min(n + 3, 24);
-    const len = y0 - 3 - Math.max(SAFE_TOP + 1, m.top - 3 + 3);
-    const lean = 3 + SH * 2;
-    for (let k = 0; k <= len; k++) g.set(bx - Math.floor(k / lean), y0 - k, (k + 40) % 4 === 0 ? ROD_HI : ROD);
-    const tx = bx - Math.floor(len / lean);
-    const ty = y0 - len;
-    g.set(tx - 1, ty - 1, ROD_TIP);
-    g.set(tx - 2, ty, BELL);
-    // 릴 (등 아래)
-    g.set(bx + 1, y0 - 1, REEL);
-    g.set(bx + 1, y0, REEL_LO);
-  }
+
+const vestCell = (x: number, a: number, b: number): Color => (x === a ? VEST.hi : x === b ? VEST.deep : x === b - 1 ? VEST.lo : VEST.c);
+/** 찌 (빨강 머리 + 흰 배, 2×2) */
+function bobber(g: Grid, x: number, y: number): void {
+  g.set(x, y, BOB_RH);
+  g.set(x + 1, y, BOB_R);
+  g.set(x, y + 1, BOB_W);
+  g.set(x + 1, y + 1, BOB_WL);
 }
-function vestBack(g0: Grid, v: V, m: GearM, fb: FB, layer: "back" | "front", _hem: number, sit: number, body: string): void {
+/** 주머니 줄 (덮개 짙게 → 면 그늘): 목 줄 바로 아래가 가슴 주머니, 밑단 위가 아래 주머니, 몸통이 긴 키다리는 가운데 하나 더 */
+function pocketRows(n: number, bot: number): Map<number, "flap" | "face"> {
+  const r = new Map<number, "flap" | "face">();
+  r.set(n + 1, "flap");
+  r.set(n + 2, "face");
+  for (let y = n + 4; y + 1 < bot - 1; y += 3) {
+    r.set(y, "flap");
+    r.set(y + 1, "face");
+  }
+  if (bot - 1 > n + 2) {
+    r.set(bot - 1, "flap");
+    r.set(bot, "face");
+  }
+  return r;
+}
+/** 사람 몸: 열린 앞섶 + 양쪽 주머니 칸 (가장자리 빛·그늘 칸과 앞섶 옆 한 칸은 천) + 찌·루어·D링 / 뒤 = 망사판 + 등 주머니 덮개 */
+function vestTorso(g0: Grid, w: W): void {
   const g = brush(g0);
+  const { v, m } = w;
   const { cx } = m;
-  if (layer === "back") {
-    vestRod(g, v, m, fb);
-    return;
-  }
-  if (objectBody(body)) return;
-  const w: W = { v, m, fb, body, sit };
-  const big = bigBody(fb);
-  if (big) {
-    const top = bigTop(w);
-    for (let y = top; y < 27; y++) {
-      let l = 99;
-      let r = -1;
-      for (let x = 1; x <= 18; x++) if (g.filled(x, y) && (fb === "sheet" || inBall(w, x, y))) { l = Math.min(l, x); r = Math.max(r, x); }
-      if (r < 0) continue;
-      for (let x = l; x <= r; x++) {
-        if (!g.filled(x, y)) continue;
-        const open = v === "down" && (x === cx - 1 || x === cx);
-        if (open) continue;
-        const pocket = (y - top) % 3 === 1 && x > l + 1 && x < r - 1 && v !== "up";
-        g.set(x, y, x === l ? VEST.hi : x >= r - 1 ? (x === r ? VEST.deep : VEST.lo) : pocket ? VEST.deep : VEST.c);
-      }
-    }
-    if (v === "down") {
-      // 앉은 자세처럼 몸이 칸 바닥에 가까우면 아래쪽 장식은 뺀다 (24줄까지만)
-      if (top + 1 <= 24) g.set(cx - 3, top + 1, LURE_A);
-      if (top <= 24) soft(g0).set(cx + 2, top, LURE_B);
-      if (top + 3 <= 24) soft(g0).set(cx + 3, top + 3, PATCH);
-    }
-    if (v === "up") {
-      vestBackPanel(soft(g0), cx, top + 1, 5);
-      const yb = Math.min(top + 4, 24);
-      const tipY = Math.max(SAFE_TOP + 1, m.top - 4);
-      const len = yb - tipY;
-      const reach = Math.max(3, 11 - SH * 2);
-      for (let k = 0; k <= len; k++) g.set(cx + 3 - Math.floor((k * reach) / Math.max(1, len)), yb - k, (k + 40) % 4 === 0 ? ROD_HI : ROD);
-      g.set(cx + 3 - reach, tipY - 1, ROD_TIP);
-      g.set(cx + 4 - reach, tipY - 1, BELL);
-    }
-    return;
-  }
   const { top, bot } = torsoTB(w);
-  const n = neckY(m, fb);
+  const n = neckY(m, w.fb);
   const y0 = Math.min(top, n + 1);
+  const pr = pocketRows(n, bot);
   for (let y = y0; y <= bot; y++) {
     const [l, r0] = span(w, Math.max(y, top));
-    const r = r0 - 1;
-    row(g, y, l, r, (x, a, b) => {
-      // 앞섶은 열려 몸이 보인다
+    const kind = pr.get(y);
+    row(g, y, l, r0 - 1, (x, a, b) => {
       if (v === "down" && (x === cx - 1 || x === cx) && y > y0) return null;
-      if (y === bot) return x >= b - 1 ? VEST.deep : VEST.lo;
-      return x === a ? VEST.hi : x === b ? VEST.deep : x === b - 1 ? VEST.lo : VEST.c;
+      const pocket = v === "down" ? x > a && x < b - 1 && x !== cx - 2 && x !== cx + 1 : v === "side" ? x >= cx && x < b - 1 : false;
+      if (pocket && kind === "flap") return VEST.deep;
+      if (pocket && kind === "face") return VEST.lo;
+      if (y === bot) return x >= b - 1 ? VEST.deep : x === a ? VEST.c : VEST.lo;
+      return vestCell(x, a, b);
     });
   }
+  const s = soft(g0);
   if (v === "down") {
-    // 주머니 덮개 넷 (짙은 줄) + 은색 지퍼 고리 + 가슴 루어 둘 + 오른 가슴 좌대 패치
-    const [l, r0] = span(w, bot);
-    for (const y of [y0 + 2, bot - 1]) {
-      if (y >= bot) continue;
-      soft(g0).set(l + 1, y, VEST.deep);
-      soft(g0).set(l + 2, y, VEST.deep);
-      soft(g0).set(cx - 2, y, VEST.deep);
-      soft(g0).set(cx + 1, y, VEST.deep);
-      soft(g0).set(r0 - 3, y, VEST.deep);
-      soft(g0).set(r0 - 2, y, VEST.deep);
-      if (y + 1 < bot) { soft(g0).set(l + 1, y + 1, VEST.hi); soft(g0).set(cx + 1, y + 1, VEST.hi); }
-    }
-    soft(g0).set(cx - 2, y0 + 3, ZIP);
-    soft(g0).set(cx - 3, y0, LURE_A);
-    soft(g0).set(cx - 3, y0 + 1, 0xfff0c0);
-    soft(g0).set(cx + 2, y0 + 1, PATCH);
-    soft(g0).set(cx + 3, y0 + 1, PATCH);
-    soft(g0).set(cx + 2, y0 + 2, PATCH);
-    soft(g0).set(cx + 3, y0 + 2, PATCH_FISH);
-    soft(g0).set(cx + 1, y0, LURE_B);
+    // 찌는 오른 가슴 바깥쪽 (안쪽 칸은 기본 목도리 끝자락이 덮는다)
+    // (키다리는 목도리 끝자락이 더 길어 한 줄 아래)
+    const by = n + (w.fb === "tall" ? 3 : 1);
+    const [, rc] = span(w, Math.max(by, top));
+    bobber(s, rc - 2, by);
+    s.set(cx - 2, n + 1, RING);
+    s.set(cx - 3, n + 2, LURE_G);
+    s.set(cx - 2, n + 2, LURE_O);
   } else if (v === "side") {
-    const [l, r0] = span(w, bot);
-    for (const y of [y0 + 2, bot - 1]) if (y < bot) for (let x = l + 1; x <= r0 - 2; x += 2) soft(g0).set(x, y, VEST.deep);
-    soft(g0).set(r0 - 1, y0 + 1, LURE_A);
-    // 등 꽂이 (몸 뒤 판 위로 대 밑동)
-    soft(g0).set(l, y0 + 2, ROD);
-    soft(g0).set(l, y0 + 3, ROD);
+    const [, r0] = span(w, Math.max(n + 1, top));
+    bobber(s, r0 - 3, n + 1);
+    s.set(cx - 1, n + 1, RING);
   } else {
-    vestBackPanel(soft(g0), cx, y0 + 1, 3);
-    // 뒷판에서 비스듬히 대가 꽂혀 왼쪽 어깨 위로 (뒷모습은 머리가 가리지 않아 길게)
-    const yb = bot - 1;
-    const tipY = Math.max(SAFE_TOP + 1, m.top - 3);
-    const len = yb - tipY;
-    const reach = Math.max(3, 9 - SH * 2);
-    for (let k = 0; k <= len; k++) g.set(cx + 2 - Math.floor((k * reach) / Math.max(1, len)), yb - k, (k + 40) % 4 === 0 ? ROD_HI : ROD);
-    g.set(cx + 2, yb, REEL);
-    g.set(cx + 3, yb, REEL_LO);
-    g.set(cx + 2 - reach, tipY - 1, ROD_TIP);
-    g.set(cx + 1 - reach, tipY, BELL);
+    for (let y = n + 1; y <= Math.min(bot - 2, n + 3); y++) {
+      const [l, r0] = span(w, Math.max(y, top));
+      for (let x = l + 1; x <= r0 - 3; x++) g.set(x, y, (x + y) % 2 ? VEST.deep : VEST.lo);
+    }
+    const [l, r0] = span(w, bot - 1);
+    for (let x = l + 1; x <= r0 - 2; x++) g.set(x, bot - 1, VEST.deep);
+    s.set(cx - 1, n, RING);
   }
 }
-/** 뒷판 「좌대」 패치 (남색 바탕 + 흰 물고기) */
-function vestBackPanel(g: Grid, cx: number, y: number, w: number): void {
-  const x0 = cx - Math.floor(w / 2);
-  for (let x = x0; x < x0 + w; x++) {
-    g.set(x, y, PATCH);
-    g.set(x, y + 1, PATCH);
-  }
-  g.set(cx - 1, y, PATCH_FISH);
-  g.set(cx, y + 1, PATCH_FISH);
-  if (w >= 5) g.set(cx + 1, y, PATCH_FISH);
-}
-function vestNeck(g0: Grid, v: V, m: GearM, fb: FB, body: string): void {
-  // 큰 몸·물건 몸은 깃 없음. 사람 몸은 목 줄(기본 목도리) 양옆을 조끼 어깨로 덮고, 뒤에서 대가 머리 뒤에 가려지지 않게 한 번 더 (뒷모습)
+/** 큰 몸(동글이·이불): 공 아래쪽을 덮고 주머니 칸 넷 + 찌·루어 / 뒤 = 망사 */
+function vestBig(g0: Grid, w: W): void {
   const g = brush(g0);
-  if (bigBody(fb) || objectBody(body)) return;
+  const { v, m, fb } = w;
+  const { cx } = m;
+  const top = bigTop(w);
+  const L = new Map<number, [number, number]>();
+  for (let y = top; y < 27; y++) {
+    let l = 99;
+    let r = -1;
+    for (let x = 1; x <= 18; x++) if (g.filled(x, y) && (fb === "sheet" || inBall(w, x, y))) { l = Math.min(l, x); r = Math.max(r, x); }
+    if (r < 0) continue;
+    L.set(y, [l, r]);
+    for (let x = l; x <= r; x++) {
+      if (!g.filled(x, y)) continue;
+      if (v === "down" && (x === cx - 1 || x === cx)) continue;
+      g.set(x, y, x === l ? VEST.hi : x >= r - 1 ? (x === r ? VEST.deep : VEST.lo) : VEST.c);
+    }
+  }
+  const s = soft(g0);
+  const ok = (x: number, y: number) => {
+    const q = L.get(y);
+    return !!q && x > q[0] && x < q[1] - 1 && y <= 24;
+  };
+  const pocket = (x: number, y: number, wd: number) => {
+    for (let k = 0; k < wd; k++) {
+      if (ok(x + k, y)) g.set(x + k, y, VEST.deep);
+      if (ok(x + k, y + 1)) g.set(x + k, y + 1, VEST.lo);
+    }
+  };
+  if (v === "down") {
+    pocket(cx - 5, top + 1, 3);
+    pocket(cx + 2, top + 1, 3);
+    pocket(cx - 5, top + 4, 3);
+    pocket(cx + 2, top + 4, 3);
+    if (top + 2 <= 24) bobber(s, cx + 2, top + 1);
+    s.set(cx - 3, top + 1, RING);
+    s.set(cx - 4, top + 2, LURE_G);
+    s.set(cx - 3, top + 2, LURE_O);
+  } else if (v === "side") {
+    pocket(cx + 1, top + 1, 3);
+    pocket(cx + 1, top + 4, 3);
+    if (top + 2 <= 24) bobber(s, cx + 2, top + 1);
+  } else {
+    for (let y = top + 1; y <= top + 3; y++) for (let x = cx - 4; x <= cx + 3; x++) if (ok(x, y)) g.set(x, y, (x + y) % 2 ? VEST.deep : VEST.lo);
+    for (let x = cx - 5; x <= cx + 4; x++) if (ok(x, top + 5)) g.set(x, top + 5, VEST.deep);
+  }
+}
+
+// ── 등 꽂이 낚싯대: 대나무 대 + 빨강·흰 초릿대 + 낚싯줄 한 가닥 ──
+/** 대 색: 끝에서부터 초릿대 빨강·흰, 그다음 대나무 (네 칸마다 마디) */
+const rodCol = (fromTip: number): Color => (fromTip === 0 ? TIP_R : fromTip === 1 ? TIP_W : fromTip % 4 === 0 ? ROD_K : fromTip % 2 ? ROD_L : ROD_C);
+/** 대 점들 (0 = 끝). 앞·옆 = 머리 위 바깥(왼쪽 위)에서 몸 쪽 아래로 열 칸, 뒤 = 등 왼쪽 아래 밑동 → 오른 어깨 위 바깥 (앞을 가리는 몸은 앞처럼 빈칸에만) */
+function rodPts(v: V, m: GearM, fb: FB, body: string, sit: number): [number, number][] {
+  const { cx } = m;
+  const ty = SAFE_TOP + 1 + Math.floor(SH / 2);
+  if (v !== "up" || objectBody(body)) {
+    const right = v === "up";
+    // 끝 둘레에 외곽선 한 칸이 들어갈 자리를 남긴다 (칸 가장자리 여백 규칙)
+    const tx = right ? Math.min(FIT_X1 - 3 - shearAt(ty), cx + 5 - SH) : Math.max(FIT_X0 + 3 + shearAt(ty), cx - 6 + SH);
+    const d = right ? -1 : 1;
+    // 끝 한 칸은 수평(휜 초릿대), 그다음 1:1로 몸 쪽 아래 — 보이는 길이는 열 칸까지 (그 아래는 머리·몸 뒤로 숨는다)
+    const pts: [number, number][] = [[tx, ty], [tx + d, ty]];
+    for (let k = 1; k < 9; k++) pts.push([tx + d + d * k, ty + k]);
+    return pts;
+  }
+  const w: W = { v, m, fb, body, sit };
+  const yb = Math.min(24, bigBody(fb) ? bigTop(w) + 3 : torsoTB(w).bot - 1);
+  const tx = Math.min(FIT_X1 - 3 - shearAt(ty), cx + 5 - SH);
+  const bx = cx - 2;
+  const line: [number, number][] = [];
+  const steps = Math.max(Math.abs(tx - 1 - bx), Math.abs(ty - yb));
+  for (let k = 0; k <= steps; k++) {
+    const x = Math.round(bx + ((tx - 1 - bx) * k) / steps);
+    const y = Math.round(yb + ((ty - yb) * k) / steps);
+    if (line.length && line[line.length - 1][0] === x && line[line.length - 1][1] === y) continue;
+    line.push([x, y]);
+  }
+  line.push([tx, ty]);
+  return line.reverse();
+}
+/** 뒷모습에서 등판 위에 그린 대 (같은 프레임의 glow가 이어 그린다 — 앉은 자세처럼 몸통 높이가 바뀌어도 한 줄로) */
+let backRod: [number, number][] | null = null;
+/** 뒷모습 등판 위 (옷 front 자리): 목 줄 아래 부분만 — 머리 위로 지나가는 부분은 glow가 빈칸에만 (머리 뒤로 숨는다). 큰 몸은 공 위로 전부 */
+function rodOnBack(g: Grid, w: W): void {
+  const { m, fb } = w;
+  const n = neckY(m, fb);
+  const big = bigBody(fb);
+  const pts = rodPts("up", m, fb, w.body, w.sit);
+  backRod = pts;
+  pts.forEach(([x, y], i) => {
+    if (big || y >= n) g.set(x, y, rodCol(i));
+  });
+  const [bx, by] = pts[pts.length - 1];
+  g.set(bx, by, RING);
+}
+/** 외곽선 뒤(glow): 빈칸에만 대 + 낚싯줄. 앞·옆은 머리·몸·다른 꾸미기에 닿으면 멈춘다 (그 뒤는 가려진 것) — 몸 명암 칠이 대를 덮지 않는다 */
+/** 이 프레임의 아바타 외곽선 색 (몸 색마다 조금 다르다 — 빈칸과 맞닿은 칠한 칸 중 가장 많은 색) */
+function outlineColorOf(g: Grid): Color {
+  const n = new Map<number, number>();
+  for (let y = 1; y < g.h - 1; y++)
+    for (let x = 1; x < g.w - 1; x++) {
+      const v = g.get(x, y);
+      if (!(v & 255)) continue;
+      if (g.filled(x - 1, y) && g.filled(x + 1, y) && g.filled(x, y - 1) && g.filled(x, y + 1)) continue;
+      n.set(v >>> 8, (n.get(v >>> 8) ?? 0) + 1);
+    }
+  let best = 0x21242c;
+  let bn = 0;
+  for (const [c, k] of n) if (k > bn) [best, bn] = [c, k];
+  return best;
+}
+/**
+ * 외곽선 뒤(glow): 빈칸에만 대 + 낚싯줄 + 그 둘레 외곽선 (눈밭·나무 잔교·물·밤 어디서든 대가 묻히지 않게 — 아바타와 같은 외곽선 색).
+ * 앞·옆은 머리·몸·다른 꾸미기에 닿으면 멈춘다 (그 뒤는 가려진 것) — 몸 명암 칠이 대를 덮지 않는다
+ */
+function vestGlow(g0: Grid, v: V, m: GearM, fb: FB, _top: number, body: string): void {
+  const g = soft(g0);
+  const backOnBody = v === "up" && !objectBody(body);
+  const pts = backOnBody && backRod ? backRod : rodPts(v, m, fb, body, 0);
+  backRod = null;
+  const line = outlineColorOf(g0);
+  const mine: [number, number][] = [];
+  for (let i = 0; i < pts.length; i++) {
+    const [x, y] = pts[i];
+    if (g0.filled(x, y)) {
+      if (backOnBody) continue;
+      break;
+    }
+    g.set(x, y, rodCol(i));
+    mine.push([x, y]);
+  }
+  if ((backOnBody ? pts.length : mine.length) < 3) return;
+  const [tx, ty] = pts[0];
+  for (let k = 1; k <= 2; k++)
+    if (!g0.filled(tx, ty + k)) {
+      g.set(tx, ty + k, LINE_C);
+      mine.push([tx, ty + k]);
+    }
+  for (const [x, y] of mine)
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) if (!g0.filled(x + dx, y + dy)) g.set(x + dx, y + dy, line);
+}
+function vestBack(g0: Grid, v: V, m: GearM, fb: FB, layer: "back" | "front", _hem: number, sit: number, body: string): void {
+  if (layer === "back" || objectBody(body)) return;
+  const w: W = { v, m, fb, body, sit };
+  if (bigBody(fb)) vestBig(g0, w);
+  else vestTorso(g0, w);
+  if (v === "up") rodOnBack(brush(g0), w);
+}
+/** 앞을 가리는 몸(상자·머그잔·튜브): 몸통은 덮지 않고 목 줄에 조끼 어깨 + D링 + 찌 (가슴장화 wadersNeck과 같은 규칙) */
+function vestNeckObj(g0: Grid, v: V, m: GearM, fb: FB): void {
+  const g = brush(g0);
+  const s = soft(g0);
+  const { cx } = m;
+  const n = neckY(m, fb);
+  if (v === "down") {
+    row(g, n, cx - 4, cx + 3, (x, a, b) => (x === cx - 1 || x === cx ? null : vestCell(x, a, b)));
+    s.set(cx - 2, n, RING);
+    bobber(s, cx + 1, n + 1);
+  } else if (v === "up") {
+    row(g, n, cx - 4, cx + 3, (x, a, b) => ((x + n) % 2 ? VEST.deep : vestCell(x, a, b)));
+  } else {
+    row(g, n, cx - 3, cx + 2, (x, a, b) => vestCell(x, a, b));
+    bobber(s, cx + 1, n + 1);
+  }
+}
+/** 사람 몸은 목 줄(기본 목도리) 양옆을 조끼 어깨로 덮는다 (뒤는 한 줄 전부) */
+function vestNeck(g0: Grid, v: V, m: GearM, fb: FB, body: string): void {
+  if (objectBody(body)) return vestNeckObj(g0, v, m, fb);
+  if (bigBody(fb)) return;
+  const g = brush(g0);
   const { cx } = m;
   const n = neckY(m, fb);
   const half = fb === "tall" ? 3 : 4;
@@ -421,7 +520,6 @@ function vestNeck(g0: Grid, v: V, m: GearM, fb: FB, body: string): void {
     for (let x = cx - half; x < cx + half; x++) g.set(x, n, x >= cx + half - 1 ? VEST.deep : x === cx - half ? VEST.hi : VEST.c);
   }
 }
-
 // ═════════════ 3. 황금 월척 망토 (영구) ═════════════
 // 물빛 망토 + 비늘 결 + 등판 금 월척 문장 + 지느러미처럼 선 깃(앞에서도 머리 양옆으로 보인다) + 꼬리지느러미처럼 갈라져 퍼지는 밑단
 export const CAPE: T = { hi: 0x3e94aa, c: 0x246a82, lo: 0x194e64, deep: 0x0f3548 };
@@ -806,7 +904,7 @@ function wadersBoots(g0: Grid): void {
 // ── 등록 ──
 const JW_RAW: Readonly<Record<string, SsItem>> = {
   jw_carphat: { covers: true, head: (g, v, m, fb, top) => carpHead(g, v, m, fb, top) },
-  jw_vest: { back: vestBack, neck: vestNeck },
+  jw_vest: { back: vestBack, neck: vestNeck, glow: vestGlow },
   jw_cape: { headWorn: false, back: capeBack, head: capeOver },
   jw_net: { headWorn: false, back: netBack, head: (g, v, m, fb) => netBehind(g, v, m, fb) },
   jw_sedge: { covers: true, head: (g, v, m, fb, top) => sakkatHead(g, v, m, fb, top) },
@@ -822,6 +920,7 @@ export const JW_ITEMS: Readonly<Record<string, SsItem>> = Object.fromEntries(
       ...(it.head ? { head: adapt(it.head, `${id}.head`) } : {}),
       ...(it.neck ? { neck: adapt(it.neck, `${id}.neck`) } : {}),
       ...(it.back ? { back: adapt(it.back, `${id}.back`) } : {}),
+      ...(it.glow ? { glow: adapt(it.glow, `${id}.glow`) } : {}),
     },
   ]),
 );
@@ -893,20 +992,20 @@ export const ICONS6: Readonly<Record<string, () => Grid>> = {
   jw_vest: () =>
     iconOf(
       [
-        "...hc....cd...",
-        "..hcc....ccd..",
-        ".hcac....cpdd.",
-        ".hcrc....cpPd.",
+        "..TU..........",
+        "..n.T.........",
+        "..nhca...cd...",
+        "..hcc.L..ccd..",
+        ".hddg..k.rRdd.",
+        ".hlyo...aWwld.",
         "hcccc....ccccd",
-        "hdddc.z..cdddd",
-        "hhchc....chcld",
         "hcccc....cccld",
         "hdddc....cdddd",
-        "hhchc....chcld",
-        "hcccl....ccclld",
+        "hlllc....cllld",
+        "hcccc....cccld",
         "llllll..llllll",
       ],
-      { h: VEST.hi, c: VEST.c, l: VEST.lo, d: VEST.deep, a: LURE_A, r: LURE_B, p: PATCH, P: PATCH_FISH, z: ZIP },
+      { h: VEST.hi, c: VEST.c, l: VEST.lo, d: VEST.deep, T: TIP_R, U: TIP_W, a: ROD_C, L: ROD_L, k: ROD_K, n: LINE_C, g: RING, y: LURE_G, o: LURE_O, r: BOB_RH, R: BOB_R, W: BOB_W, w: BOB_WL },
     ),
   jw_net: () =>
     iconOf(

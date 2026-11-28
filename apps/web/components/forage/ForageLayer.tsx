@@ -43,7 +43,7 @@ type Gather = { ticket: string; node: string; kind: string; endsAt: number; ms: 
 type Insect = { ticket: string; node: string; seed: number; timeLimitSec: number };
 /** 곤충 채집 결과 카드. items가 null이면 아직 서버 답을 기다리는 중 */
 type InsectDone = { result: BugsResult; aborted: boolean; items: CatchResult[] | null; message?: string; points?: number };
-/** 잡은 것 카드. cosmetic이면 물에 빠진 꾸미기 (영구 소장) */
+/** 잡은 것 카드. cosmetic이면 물에 빠진 꾸미기 (11/28 기간제 — days) */
 type Card = { item: CatchResult; more: number; cosmetic?: SunkenCatch };
 
 const NEUTRAL = { str: 0, agi: 0, vit: 0, int: 0, dex: 0, luk: 0 };
@@ -90,10 +90,10 @@ export default function ForageLayer() {
     forageApi
       .autoStop()
       .then((r) => {
-        if (!r.items.length && !r.gear.length) return;
+        if (!r.items.length && !r.gear.length && !r.raftGear?.length) return;
         forageStore.set(r.state);
-        if (r.gear.some((g) => g.kept)) void meStore.refresh();
-        toastAutoCatch(r, true);
+        // 꾸미기를 받았으면 내 정보도 새로 (toastAutoCatch → refreshCosmetics)
+        toastAutoCatch(r);
       })
       .catch(() => {
         // 다음 입장 때 다시
@@ -223,8 +223,7 @@ export default function ForageLayer() {
           water={fishing.water}
           onCatch={(r) => showCard([r])}
           onSunken={(c) => {
-            // 영구 소장이 늘었다 → 내 정보(벗어 둔 꾸미기)를 새로
-            void meStore.refresh();
+            // 꾸미기가 늘었다 → 내 정보는 낚시 창이 새로 받는다 (autoToast refreshCosmetics — 직접·자동 모두)
             if (cardTimer.current) clearTimeout(cardTimer.current);
             setCard({ item: { id: c.id, size: 0, kept: true, isNew: false, record: false }, more: 0, cosmetic: c });
             cardTimer.current = setTimeout(() => setCard(null), 5_000);
@@ -401,7 +400,7 @@ function CatchCard({ card }: { card: Card }) {
         <ItemIcon itemId={cosmetic.id} size={48} />
         <div className={s.catchMeta}>
           <strong>{cosmetic.name}</strong>
-          <span className={s.badgeNew}>반짝! 영구 소장 꾸미기를 건졌어요</span>
+          <span className={s.badgeNew}>{cosmetic.days ? `반짝! 꾸미기 ${cosmetic.days}일 획득${cosmetic.ext ? " (기간 더함)" : ""}` : "반짝! 꾸미기를 건졌어요"}</span>
           <span>가방 [꾸미기]에서 입을 수 있어요</span>
         </div>
       </div>

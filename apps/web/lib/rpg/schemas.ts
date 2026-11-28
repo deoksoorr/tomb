@@ -123,6 +123,8 @@ export const GearActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("reroll"), uid: sgUidIn, lock: z.enum(["a", "c", "d", "s", "b", "h", "r", "p", "m", "k", "L"]).nullable().default(null), cost: z.number().int().min(0).max(100_000) }),
   z.object({ type: z.literal("exchange"), uids: z.array(sgUidIn).min(3).max(5), set: z.number().int().min(0).max(3), piece: z.number().int().min(0).max(4) }),
   z.object({ type: z.literal("disassemble"), uids: z.array(sgUidIn).min(1).max(60) }),
+  // 11/27 세트 장비 판매 (포인트 — 값은 서버가 저장된 물건으로 계산)
+  z.object({ type: z.literal("sell"), uids: z.array(sgUidIn).min(1).max(60) }),
   // 11/19 강화 승계: 재료(세트 장비 번호 fromSg 또는 강화한 상점 장비 번호 fromPiece) → 받는 장비(sg·piece·shop 하나). cost = 화면에 보인 포인트
   z.object({
     type: z.literal("inherit"),

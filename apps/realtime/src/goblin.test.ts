@@ -250,7 +250,7 @@ function setupMaps(random: () => number) {
   const join = (id: string, o: { map?: "camp" | "sea"; spawn?: { x: number; y: number }; now?: number; perm?: boolean } = {}) => {
     const c: Conn = { id, out: [] };
     const perm = o.perm ?? true;
-    const t: JoinTicket = { visitorId: id, name: `${id}님`, color: AVATAR_COLORS[0], channel: 1, spawn: o.spawn, look: [], body: "hood", ...(perm ? { camp: true as const, sea: true as const } : {}), ...(o.map ? { map: o.map } : {}) };
+    const t: JoinTicket = { visitorId: id, name: `${id}님`, color: AVATAR_COLORS[0], channel: 1, spawn: o.spawn, look: [], body: "hood", ...(perm ? { camp: true as const, sea: true as const } : {}), ...(o.map ? { map: o.map, known: o.map } : {}) };
     core.join(c, t, o.now ?? 0);
     return c;
   };

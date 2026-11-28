@@ -1,5 +1,6 @@
 // 11/26 캠핑장 그림 (6차 시안에서 옮김): 계곡 족욕탕 · 낚시 바위 · 4인 좌대 · 나룻배 선착장 · 펜션 정원 소품 · 순이 할머니. 캠핑장 그림 규칙 그대로 (윤곽 0x2c2018, 왼쪽 위 빛, 원점 = 바닥 가운데).
 
+import { CAMP_RAFT_HUT_DX, CAMP_RAFT_WALK_W } from "@tomb/protocol";
 import { darken, Grid, hash2, lighten, type Color } from "../sprites/pixel";
 import { drawRaftHolder, RAFT_HOLDER_UP, raftRig } from "./raftRodsArt";
 import { ROOFS } from "./valleyProps";
@@ -270,20 +271,23 @@ function raftChairArt(): Grid {
   return g;
 }
 
-/** 좌대 번호판 (오두막 지붕 앞 가운데 — 그림 x 31~39 · 2~10줄). 지붕 눈(roof 칸)에서 뺀다 */
-export const RAFT_PLATE = { x: 31, y: 2, w: 9, h: 9 } as const;
+/** 좌대 번호판 (오두막 지붕 앞 가운데 — 11/28 오두막을 오른쪽 뒤 모서리로 옮겨 그림 x 47~55 · 2~10줄). 지붕 눈(roof 칸)에서 뺀다 */
+export const RAFT_PLATE = { x: 31 + CAMP_RAFT_HUT_DX, y: 2, w: 9, h: 9 } as const;
 
 /**
- * 4인 좌대: 넓힌 평상(드럼 넷) + 뒤 작은 지붕 오두막(지붕 앞 번호판) + 앞 낚시 의자 넷·낚싯대 넷 + 물 사다리.
- * opts.n = 번호판 숫자 · opts.walks = 잔교에서 마루까지 판자 다리 칸 (그림 x — protocol campRaftWalks와 같은 자리, 걷는 폭 12) ·
+ * 4인 좌대: 넓힌 평상(드럼 넷) + 오른쪽 뒤 모서리 작은 지붕 오두막(지붕 앞 번호판) + 앞 낚시 의자·빈 받침틀 + 물 사다리.
+ * opts.n = 번호판 숫자 · opts.walks = 잔교에서 마루까지 판자 다리 왼쪽 끝 (그림 x — protocol campRaftWalks와 같은 자리, 폭 CAMP_RAFT_WALK_W + 1) ·
  * opts.snowy = 겨울판 (다리 난간 위에만 얇은 눈 줄 — 다리 판자는 덮지 않는다)
  */
 export function raft4Art(roofI: number, xmas: boolean, ladder: "left" | "front", opts: { n?: number; walks?: readonly number[]; snowy?: boolean } = {}): { grid: Grid; roof: Uint8Array; seats: number[] } {
   // 11/26 좌대를 넓혔다 (68×48 → 72×57): 마루 62×23 → 66×32 (뒤로 9 깊어져 오두막 둘레에 걸을 자리 — 운영자 「좌대가 너무 좁다」).
   // 받침(아래 끝)·앞 끝·낚시 의자·사다리는 아래 기준 그대로, 오두막은 마루 뒤 끝에 붙어 위로 물러났다. X = 옛 그림 x + 2, D = 옛 줄 + 9 (마루 아래쪽)
+  // 11/28 운영자 「좌대 길은 하나로 합쳐, 좀 넓게, 건물을 한쪽에 빼고」: 오두막을 오른쪽 뒤 모서리로 (HX = X + CAMP_RAFT_HUT_DX — 여섯 다 같은 자리),
+  // 1~3은 왼쪽 뒤에 넓은 판자 다리 하나, 4~6은 왼쪽 뒤가 트인 마루
   const W = 72;
   const H = 57;
   const X = 2;
+  const HX = X + CAMP_RAFT_HUT_DX;
   const D = 9;
   const g = new Grid(W, H);
   const R = ROOFS[roofI % ROOFS.length];
@@ -296,25 +300,24 @@ export function raft4Art(roofI: number, xmas: boolean, ladder: "left" | "front",
   for (let x = 3; x < W - 3; x++) if ((x - 3) % 4 !== 3) g.set(x, 17 + 11, DECK.hi);
   g.rect(3, 40 + D, W - 6, 3, 0x3a6a8a);
   for (const x of [5, 22, 42, 59]) g.rect(x, 40 + D, 8, 4, 0x2a5a8a);
-  // 오두막 (뒤 가운데)
-  g.rect(20 + X, 10, 28, 11, LOG.mid);
-  for (let y = 10; y < 21; y += 3) g.hline(20 + X, 47 + X, y, LOG.hi);
-  g.rect(25 + X, 13, 6, 5, 0xffd890);
-  g.set(27 + X, 14, 0xfff4d0);
-  g.rect(37 + X, 13, 6, 8, LOG.lo);
+  // 오두막 (오른쪽 뒤 모서리 — 지붕 오른쪽 끝 = 마루 오른쪽 끝). 문은 왼쪽(다리·트인 마루 쪽), 창은 오른쪽 (밤 창 불빛 CampMap 받침 + HUT_DX + 4)
+  g.rect(20 + HX, 10, 28, 11, LOG.mid);
+  for (let y = 10; y < 21; y += 3) g.hline(20 + HX, 47 + HX, y, LOG.hi);
+  g.rect(23 + HX, 13, 6, 8, LOG.lo);
+  g.set(27 + HX, 17, 0xd8b070);
+  g.rect(35 + HX, 13, 6, 5, 0xffd890);
+  g.set(37 + HX, 14, 0xfff4d0);
   for (let y = 2; y < 11; y++) {
     const inset = Math.max(0, 7 - y);
-    for (let x = 17 + X + inset; x < 51 + X - inset; x++) g.set(x, y, y === 10 ? R.lo : (x + y) % 5 === 0 ? R.lo : y < 5 ? R.hi : R.mid);
+    for (let x = 17 + HX + inset; x < 51 + HX - inset; x++) g.set(x, y, y === 10 ? R.lo : (x + y) % 5 === 0 ? R.lo : y < 5 ? R.hi : R.mid);
   }
-  if (xmas) for (let x = 18 + X; x < 50 + X; x += 3) g.set(x, 11, XMAS[((x - X) / 3) % 5 | 0]);
-  // 오두막 앞 작은 화분 둘 · 양동이 (넓어진 뒤 마루)
-  for (const px of [14, 56]) {
-    g.rect(px, 18, 4, 3, 0xc8704a);
-    g.hline(px, px + 3, 18, 0xe08a5a);
-    g.rect(px + 1, 15, 2, 3, 0x5a9a4a);
-  }
-  g.rect(8, 19, 4, 3, 0x6a8aa0);
-  g.hline(8, 11, 19, 0x9ab8c8);
+  if (xmas) for (let x = 18 + HX; x < 50 + HX; x += 3) g.set(x, 11, XMAS[((x - HX) / 3) % 5 | 0]);
+  // 오두막 문 옆 작은 화분 하나 · 양동이는 앞 왼쪽 모서리 (뒤 왼쪽은 다리·트인 마루로 비운다)
+  g.rect(15 + HX, 18, 4, 3, 0xc8704a);
+  g.hline(15 + HX, 18 + HX, 18, 0xe08a5a);
+  g.rect(16 + HX, 15, 2, 3, 0x5a9a4a);
+  g.rect(6, 41, 4, 3, 0x6a8aa0);
+  g.hline(6, 9, 41, 0x9ab8c8);
   // 11/27 앞 낚시 의자 하나 (좌대 입장권 주인 혼자 — 운영자: 의자 넷 대신 하나) + 낚싯대 하나.
   // 앞 끝 가운데 (protocol campRaftSeatDx — 물 건너 좌대는 가운데가 사다리라 오른쪽). 주인이 앉아 낚시하면 받침틀 낚싯대 넷(game/camp/CampRafts)
   // 11/27 시안(좌대시안 03·04번): 좌대 전용 팔걸이 낚시의자 + 마루 앞 끝 빈 낚싯대 받침틀 (주인이 앉으면 받침틀에 낚싯대 넷 — raftRodsArt)
@@ -337,17 +340,18 @@ export function raft4Art(roofI: number, xmas: boolean, ladder: "left" | "front",
     g.hline(37 + X, 38 + X, 34 + D, 0xffffff);
     for (let y = 41 + D; y < 48 + D; y += 2) g.hline(32 + X, 36 + X, y, 0xffffff);
   } else {
-    // 11/26 잔교에 붙은 좌대: 잔교 아래 끝 → 마루 뒤 끝 판자 다리 (운영자 「연결 부분을 다리로 표현해 줘야지」).
-    // 걷는 방향과 직각인 가로 판자(3줄마다 이음새) + 양쪽 난간 귀틀(기둥 머리 5줄마다) — 다리 옆·사이는 물이 보인다
+    // 11/26 잔교에 붙은 좌대: 잔교 아래 끝 → 마루 뒤 끝 판자 다리 (운영자 「연결 부분을 다리로 표현해 줘야지」). 11/28 넓은 다리 하나 (폭 26).
+    // 걷는 방향과 직각인 가로 판자(3줄마다 이음새) + 양쪽 난간 귀틀(기둥 머리 5줄마다) — 다리 옆은 물이 보인다
     for (const x0 of opts.walks ?? []) {
+      const x1 = x0 + CAMP_RAFT_WALK_W;
       for (let y = 0; y < 17; y++)
-        for (let x = x0; x < x0 + 12; x++) {
+        for (let x = x0; x <= x1; x++) {
           const seam = y % 3 === 2;
           // 판자 끝을 한 칸씩 엇갈리게 (판자가 한 장씩 보이게)
-          const edge = (x === x0 || x === x0 + 11) && (y % 6 < 3) === (x === x0);
+          const edge = (x === x0 || x === x1) && (y % 6 < 3) === (x === x0);
           g.set(x, y, seam ? DECK.line : edge ? DECK.lo : y % 3 === 0 ? DECK.hi : DECK.mid);
         }
-      for (const rx of [x0 - 1, x0 + 12]) {
+      for (const rx of [x0 - 1, x1 + 1]) {
         g.vline(rx, 0, 16, opts.snowy ? 0xeef4fa : LOG.mid);
         for (let y = 1; y < 17; y += 5) {
           g.set(rx, y, LOG.lo);
@@ -355,7 +359,7 @@ export function raft4Art(roofI: number, xmas: boolean, ladder: "left" | "front",
         }
       }
       // 마루 뒤 끝과 만나는 문턱 판
-      g.hline(x0, x0 + 11, 16, DECK.lo);
+      g.hline(x0, x1, 16, DECK.lo);
     }
   }
   // 번호판 (지붕 앞 가운데 — 크림 판 + 진한 테 + 숫자)
@@ -375,7 +379,7 @@ export function raft4Art(roofI: number, xmas: boolean, ladder: "left" | "front",
   const roof = new Uint8Array(W * H);
   const P = RAFT_PLATE;
   for (let y = 0; y < 11; y++)
-    for (let x = 17 + X; x < 51 + X; x++) {
+    for (let x = 17 + HX; x < 51 + HX; x++) {
       const plate = opts.n !== undefined && x >= P.x && x < P.x + P.w && y >= P.y && y < P.y + P.h;
       if (g.filled(x, y) && !plate) roof[y * W + x] = 1;
     }

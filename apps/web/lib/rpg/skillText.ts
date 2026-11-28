@@ -641,6 +641,9 @@ export function compareStats(def: SkillDef, a: number, b: number | null): Compar
 // ── 선행 조건 문구 ──
 
 const hasBatchim = (word: string) => {
+  // 11/27 숫자로 끝나면 읽는 소리로 (「도끼 +7을」 — 영·일·삼·육·칠·팔, 10·100·1000도 0으로 끝나 받침이 있다)
+  const last = word[word.length - 1];
+  if (last >= "0" && last <= "9") return "013678".includes(last);
   const c = word.charCodeAt(word.length - 1);
   return c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 !== 0;
 };

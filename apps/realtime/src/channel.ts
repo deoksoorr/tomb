@@ -97,6 +97,7 @@ import {
   type C2S,
   type MapId,
   type AwayMapId,
+  type MapCause,
   type DirId,
   type Grant,
   type MoveMsg,
@@ -110,6 +111,8 @@ import {
   campRaftExit,
   campRaftOfSpot,
   type RaftOutWhy,
+  type ConnActExtra,
+  type RideOffWhy,
 } from "@tomb/protocol";
 import { ChatRecent, type RecentChat } from "./chatRecent";
 import { MoveBudget, RateLimiter, allocSid, dist, homesEvent, stepToward, type Point } from "./logic";
@@ -118,6 +121,7 @@ import { SnowStackYard, SnowmanYard } from "./snowmen";
 import { CAMP_FIRE_INTERVAL_MS, CampFires, campFireLotFor } from "./campFire";
 import { HomesCoalescer } from "./homesRelay";
 import { RaftBoard } from "./rafts";
+import { ActLog, rideChange, rideOf } from "./rideLog";
 
 // 채널 하나의 상태 머신. ChannelDO는 소켓·스토리지·타이머만 이어 주고 판정은 전부 여기서 동기적으로 한다.
 // Workers API를 쓰지 않으므로 Node에서 그대로 단위 테스트하고(channel.test.ts) 부하 테스트의 틱 벤치마크에도 쓴다.
@@ -228,7 +232,28 @@ export type JoinTicket = {
   rafts?: true;
   /** 11/27 이 채널 좌대 입장권 (JoinClaims.raft) */
   raft?: { n: number; u: number };
+  /** 11/27 서버가 아는 지금 맵 (DO가 다른 채널·방금 나간 기록에서 찾아 넣는다 — 클라이언트·Worker는 넣지 못한다). 있으면 주소의 m보다 이것 */
+  known?: MapId;
+  /** 11/27 탭 id (주소 &tab=, 기록에만) */
+  tab?: string;
 };
+
+/** 11/27 자리를 잡을 때 로비에 알리는 것 (다른 탭·다시 접속 기록 — 로비가 이전 탭 id와 견줘 한 줄 남긴다) */
+export type JoinInfo = {
+  /** 지금 서버 맵 */
+  map: MapId;
+  /** 화면(주소)이 보낸 맵이 서버 맵과 달랐다 → 화면이 보낸 맵 */
+  ask?: MapId;
+  tab?: string;
+  /** 넘겨받기 전 연결의 탭 id (같은 채널) */
+  ptab?: string;
+  /** 같은 채널에 이미 자리가 있어 넘겨받았다 (다시 접속) */
+  take?: true;
+  /** 그때 이전 연결이 살아 있어 끊었다 (다른 탭·기기) */
+  live?: true;
+};
+/** 11/27 나간 사람의 마지막 맵을 기억하는 시간 (새로고침 이어하기 기록과 같다) — 이 안에 다시 들어오면 그 맵으로 */
+export const LAST_MAP_MS = 60_000;
 
 /** ChannelCore가 바깥(DO)에 맡기는 부수 효과 */
 export interface ChannelHost<C> {
@@ -250,7 +275,9 @@ export interface ChannelHost<C> {
   /** 이 소켓에 런타임이 마지막으로 pong을 자동 응답한 시각(ms, 없으면 0) */
   lastPing(conn: C): number;
   /** 방문자가 이 채널에 자리를 잡았다(신규·복귀·교체) / 최종 퇴장했다 → 로비의 채널 간 중복 방지 레지스트리 */
-  visitorJoined(visitorId: string, at: number): void;
+  visitorJoined(visitorId: string, at: number, info?: JoinInfo): void;
+  /** 11/27 서버가 맵을 옮겼다 (기록) */
+  mapMoved?(visitorId: string, from: MapId, to: MapId, cause: MapCause): void;
   /** code = 11/26 마지막으로 본 닫힘 코드 (접속 기록의 나감 종류, 없으면 모름) */
   visitorLeft(visitorId: string, code?: number): void;
   /** 친구 들고 남: 연결이 끊겨 재연결 유예에 들어갔다 (없으면 알리지 않는다) */
@@ -284,6 +311,8 @@ export interface ChannelHost<C> {
   homesChanged?(snap: unknown): void;
   /** 11/27 좌대 주인 표가 바뀌었다 → 저장하고 알람을 다시 잡는다 (끝나는 시각에 내려보내기) */
   raftsChanged?(snap: unknown): void;
+  /** 11/28 탈것 타고 내림·좌대에서 내려보냄 (접속 기록 "r" 줄 — 로비가 모아 웹으로). 월드 채널만, 한 사람 1분 상한 안에서만 온다 (rideLog.ts) */
+  actLogged?(visitorId: string, x: ConnActExtra): void;
 }
 
 /**
@@ -462,6 +491,8 @@ type Peer<C> = PeerRecord & {
   rejoins?: number[];
   /** 마지막으로 메시지를 받은 시각 (입장·복원 시각으로 시작). 유령 연결 판정에 ping 시각과 함께 쓴다 */
   lastSeenAt: number;
+  /** 11/27 이 연결의 탭 id (주소 &tab=, 기록에만 — 다른 탭이 넘겨받으면 이전 탭으로 알린다) */
+  tab?: string;
   /** attachment가 최신인지 */
   saved: boolean;
 };
@@ -504,6 +535,8 @@ export class ChannelCore<C extends object> {
   private readonly byVisitor = new Map<string, number>();
   /** 11/18 보안: 방금 나간 방문자의 연결 단위 기록 (visitorId → DEPART_MEMO_MS 동안) */
   private readonly departed = new Map<string, Departed>();
+  /** 11/27 방금 나간 방문자의 마지막 맵 (visitorId → LAST_MAP_MS 동안, 메모리에만) */
+  private readonly lastMap = new Map<string, { m: MapId; at: number }>();
   /** 좌석표 키(seatKey: 마을은 seatId 그대로, 캠핑장은 접두어) → sid */
   private readonly seats = new Map<string, number>();
   /** 다음 틱 SNAPSHOT에 실을 sid ("바뀐 사람" 집합) */
@@ -537,6 +570,8 @@ export class ChannelCore<C extends object> {
   private readonly homes = new HomesCoalescer();
   /** 11/27 좌대 입장권 주인 표 (월드 채널만) */
   private readonly rafts = new RaftBoard();
+  /** 11/28 탈것·좌대 기록 줄 (탄 시각·상한 — 메모리만) */
+  private readonly acts = new ActLog();
   /** 그 방문자가 지금 이 채널 캠핑장에 있나 (유예 중 포함 — 덩이 주인 확인) */
   private readonly inCamp = (visitorId: string): boolean => {
     const sid = this.byVisitor.get(visitorId);
@@ -699,9 +734,15 @@ export class ChannelCore<C extends object> {
     // 11/18 보안: 방금 나간 사람이면 재접속 반복 제한을 이어서 센다 (DO가 로비에 묻기 전에 rejoinBlocked로 먼저 거른다)
     if (this.rejoinBlocked(t.visitorId, now)) return this.host.close(conn, CLOSE.RATE_LIMITED, "rejoin too fast");
 
-    const map: MapId = t.map && mapAllowed(t.map, t) ? t.map : "village";
-    // 방은 크기를 모른다 (Worker가 u16 범위만 본다). 월드 채널은 그 맵 범위 안일 때만
-    const spawn = t.spawn && (this.cfg.room || inMapBounds(map, t.spawn.x, t.spawn.y)) ? t.spawn : mapSpawn(map, SPAWN);
+    const asked: MapId = t.map && mapAllowed(t.map, t) ? t.map : "village";
+    // 11/27 서버가 아는 맵이 있으면(다른 채널에 있음·유예 중·1분 안에 나감) 그 맵으로. 허락이 없어졌으면 마을
+    const knownRaw = this.cfg.room ? undefined : (t.known ?? this.recentMap(t.visitorId, now));
+    const known: MapId | undefined = knownRaw === undefined ? undefined : mapAllowed(knownRaw, t) ? knownRaw : "village";
+    const map: MapId = known ?? asked;
+    // 방은 크기를 모른다 (Worker가 u16 범위만 본다). 월드 채널은 그 맵 범위 안일 때만.
+    // 11/27 주소의 맵이 서버가 아는 맵과 다르면 주소 자리는 받지 않고 그 맵 입구(정류장)에서. 서버가 모르는(새로 들어온) 사람은 마을만 주소 자리, 캠핑장·바닷가는 정류장에서
+    const takeSpawn = this.cfg.room || (asked === map && (known !== undefined || map === "village"));
+    const spawn = t.spawn && takeSpawn && (this.cfg.room || inMapBounds(map, t.spawn.x, t.spawn.y)) ? t.spawn : mapSpawn(map, SPAWN);
     const pos = this.clearOfSeats(spawn, undefined, map);
     const rec: PeerRecord = {
       sid: newSid,
@@ -728,6 +769,7 @@ export class ChannelCore<C extends object> {
       ...(t.rafts ? { rf: true as const } : {}),
     };
     const p = this.adoptNew(rec, conn, now);
+    if (t.tab) p.tab = t.tab;
     this.carryDeparted(p, now);
     // 입장 스폰도 순간이동으로 친다 (고블린 위치로 바로 들어와 잡기 방지)
     p.lastTeleportAt = now;
@@ -739,8 +781,24 @@ export class ChannelCore<C extends object> {
     this.broadcastMap(map, encodeEvent({ t: "join", ...this.info(p) }), p.sid);
     this.host.countChanged(this.count);
     this.broadcastCount(p.sid);
-    this.host.visitorJoined(p.visitorId, p.joinedAt);
+    this.host.visitorJoined(p.visitorId, p.joinedAt, { map, ...(asked !== map ? { ask: t.map ?? "village" } : {}), ...(t.tab ? { tab: t.tab } : {}) });
     this.host.liveChanged?.(true);
+  }
+
+  /** 11/27 이 채널에서 이 방문자의 맵: 자리가 있으면(접속·유예) 그 맵, LAST_MAP_MS 안에 나갔으면 그때 맵, 아니면 null (다른 채널 DO가 묻는다) */
+  visitorMap(visitorId: string, now = Date.now()): MapId | null {
+    const sid = this.byVisitor.get(visitorId);
+    const p = sid === undefined ? undefined : this.peers.get(sid);
+    if (p) return mapOfPeer(p);
+    return this.recentMap(visitorId, now) ?? null;
+  }
+
+  private recentMap(visitorId: string, now: number): MapId | undefined {
+    const m = this.lastMap.get(visitorId);
+    if (!m) return undefined;
+    if (now - m.at < LAST_MAP_MS) return m.m;
+    this.lastMap.delete(visitorId);
+    return undefined;
   }
 
   /**
@@ -791,6 +849,10 @@ export class ChannelCore<C extends object> {
     }
     recent.push(now);
     p.rejoins = recent;
+    // 11/27 이전 연결이 살아 있다 = 다른 탭·기기에서 넘겨받는다 (기록 · 자리도 주소대로 옮기지 않는다)
+    const live = p.conn !== null;
+    const ptab = p.tab;
+    p.tab = t.tab;
     if (p.conn) {
       this.bySocket.delete(p.conn);
       this.host.persist(p.conn, null);
@@ -818,11 +880,16 @@ export class ChannelCore<C extends object> {
     p.joinedAt = now;
     // 새 소켓을 붙이기 전에 옮긴다: 좌석 해제 알림은 다른 사람에게만 가고, 본인은 결과가 반영된 welcome을 처음으로 받는다
     // 11/15 다른 맵으로 다시 붙었다 (캠핑장에서 새로고침·허락이 없어진 토큰): 맵을 옮긴 뒤 welcome (옛 맵 leave · 새 맵 join)
-    const want: MapId = t.map && mapAllowed(t.map, t) ? t.map : "village";
-    if (want !== mapOfPeer(p)) {
-      const to = t.spawn && inMapBounds(want, t.spawn.x, t.spawn.y) ? t.spawn : mapSpawn(want, SPAWN);
-      this.switchMap(p, want, this.clearOfSeats(to, p.sid, want), now);
-    } else if (t.spawn) this.relocate(p, t.spawn);
+    // 11/27 보안: 다시 붙어도 맵은 서버가 아는 그대로 (주소의 m은 따르지 않는다 — 탭 두 개 「여기서 다시 접속」·새로고침으로 버스 없이 맵을 오가던 것).
+    // 맵을 바꾸는 건 허락(토큰 camp·sea)이 없어졌을 때만 → 마을. 자리는 같은 맵이고 이전 연결이 끊긴 뒤(유예 중 복귀·새로고침)일 때만 주소대로,
+    // 다른 탭·기기가 넘겨받으면 서버 자리 그대로. 화면은 welcome의 m·pos로 맞춘다
+    const cur = mapOfPeer(p);
+    const asked: MapId = t.map && mapAllowed(t.map, t) ? t.map : "village";
+    const want: MapId = mapAllowed(cur, t) ? cur : "village";
+    if (want !== cur) {
+      const to = t.spawn && asked === want && inMapBounds(want, t.spawn.x, t.spawn.y) ? t.spawn : mapSpawn(want, SPAWN);
+      this.switchMap(p, want, this.clearOfSeats(to, p.sid, want), now, "permLost");
+    } else if (t.spawn && asked === cur && !live) this.relocate(p, t.spawn);
 
     // 11/18 다시 붙었다 (새로고침이면 빈손): 들고 있던 눈덩이는 지운다. 들고 있으면 웹이 welcome 뒤에 다시 알린다
     if (p.snow) {
@@ -848,7 +915,8 @@ export class ChannelCore<C extends object> {
       this.host.countChanged(this.count);
       this.broadcastCount(p.sid);
     }
-    this.host.visitorJoined(p.visitorId, p.joinedAt);
+    const now2 = mapOfPeer(p);
+    this.host.visitorJoined(p.visitorId, p.joinedAt, { map: now2, take: true, ...(live ? { live: true as const } : {}), ...(ptab && ptab !== t.tab ? { ptab } : {}), ...((t.map ?? "village") !== now2 ? { ask: t.map ?? "village" } : {}), ...(t.tab ? { tab: t.tab } : {}) });
     this.host.liveChanged?.(true);
   }
 
@@ -919,6 +987,8 @@ export class ChannelCore<C extends object> {
       lk: 1,
       // 11/22 내 새싹 표시 끝 시각 (내 머리 위·내 채팅 줄에도 새싹)
       ...(p.nb ? { nb: p.nb } : {}),
+      // 11/27 서버가 아는 내 자리 (화면이 맞춘다 — 다시 붙어도 서버는 주소대로 옮기지 않는다)
+      ...(this.cfg.room ? {} : { pos: { x: Math.round(p.x), y: Math.round(p.y) } }),
     });
     // 11/17 캠핑장이면 지금 서 있는 눈사람
     if (!this.cfg.room && map === "camp") this.sendSnowmen(p, now);
@@ -981,7 +1051,7 @@ export class ChannelCore<C extends object> {
     p.closeCode = code;
     if (code === CLOSE_NORMAL || this.cfg.graceMs <= 0) {
       this.keepDeparted(p, now);
-      return this.remove(p);
+      return this.remove(p, now);
     }
 
     p.until = now + this.cfg.graceMs;
@@ -1002,7 +1072,7 @@ export class ChannelCore<C extends object> {
     for (const p of [...this.peers.values()]) {
       if (p.conn || p.until > now) continue;
       this.host.dropReservation(p.sid);
-      this.remove(p);
+      this.remove(p, now);
     }
     for (const [v, d] of this.departed) if (now - d.at >= DEPART_MEMO_MS) this.departed.delete(v);
   }
@@ -1587,7 +1657,7 @@ export class ChannelCore<C extends object> {
       p.budget = new MoveBudget(now);
       this.markDirty(p);
     } else if (ok) {
-      this.switchMap(p, target, this.clearOfSeats(at, p.sid, target), now);
+      this.switchMap(p, target, this.clearOfSeats(at, p.sid, target), now, "mapReq");
     }
     const map = mapOfPeer(p);
     this.sendTo(p, { t: "mapped", m: map, peers: this.othersOf(p), seats: this.seatsOf(map) });
@@ -1631,7 +1701,7 @@ export class ChannelCore<C extends object> {
       this.raftBlocked(p, p.x, p.y, now);
     } else {
       p.lastMapAt = now;
-      this.switchMap(p, target, this.clearOfSeats(at, p.sid, target), now);
+      this.switchMap(p, target, this.clearOfSeats(at, p.sid, target), now, "staffTp");
     }
     // 떠난 자리: 맵을 옮기는 중이면 이미 숨어 있지만(버스 안) 사라진 자리 그대로라 거기에
     this.broadcastMap(cur, encodeEvent({ t: "tpFx", sid: p.sid, x: from.x, y: from.y, k: "out" }), p.sid);
@@ -1649,9 +1719,11 @@ export class ChannelCore<C extends object> {
    * 좌석(배 낚싯대·벤치 상태 포함)을 놓고 실내 표시를 끄고, 옛 맵 사람들에게 leave, 새 맵 사람들에게 join.
    * 위치는 속도 검증 없이 바로 (순간이동과 같다). 타는 펫은 그대로 탄다
    */
-  private switchMap(p: Peer<C>, target: MapId, to: Point, now: number): void {
+  private switchMap(p: Peer<C>, target: MapId, to: Point, now: number, cause: MapCause): void {
     const from = mapOfPeer(p);
-    if (p.seatId) this.releaseSeat(p);
+    // 11/27 기록 (월드 채널만 — 방은 맵이 없다)
+    if (!this.cfg.room && from !== target) this.host.mapMoved?.(p.visitorId, from, target, cause);
+    if (p.seatId) this.releaseSeat(p, "map");
     if (p.state === STATE.sitChair || p.state === STATE.sitGround || spotKindOfState(p.state)) p.state = STATE.idle;
     if (from === "camp" && !this.cfg.room) this.leaveSnow(p);
     p.away = undefined;
@@ -1756,7 +1828,7 @@ export class ChannelCore<C extends object> {
         this.clearRide(p);
         const seat = p.seatId ? seatSlotIn(mapOfPeer(p), p.seatId) : undefined;
         if (seat && isRideSpotKind(seat.kind)) {
-          this.releaseSeat(p);
+          this.releaseSeat(p, "big");
           if (p.state === seat.state) p.state = STATE.idle;
           this.markDirty(p);
         }
@@ -1921,6 +1993,13 @@ export class ChannelCore<C extends object> {
     }
     this.seats.set(seatKey(map, seatId), p.sid);
     p.seatId = seatId;
+    // 11/28 기록: 탈것에서 내림·탐 (같은 탈것 안에서 자리만 옮기면 없음)
+    const rc = rideChange(map, prevSeat, seatId);
+    if (rc.off || rc.on) {
+      const now = Date.now();
+      if (rc.off) this.logAct(p, this.acts.leave(p.visitorId, map, rc.off, now));
+      if (rc.on) this.logAct(p, this.acts.board(p.visitorId, map, rc.on, now));
+    }
     // 11/16 r13 떠다니는 자리(바닷가 튜브)는 바다 어디서든 올라타요 → 탄 곳 그대로 (앵커로 끌어가지 않아요)
     if (!(seat.mobile && (slide || seat.drift))) {
       // 11/18 보안: 앉으면서 서버 위치가 크게 옮겨지면 순간이동으로 친다 (고블린 2초 제한)
@@ -2065,17 +2144,24 @@ export class ChannelCore<C extends object> {
     this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "mood", sid: p.sid, m: "" }));
   }
 
-  /** 좌석을 비우고 모두에게 알린다. 상태(state)는 호출한 쪽이 정한다. 벤치 상태도 함께 풀린다 */
-  private releaseSeat(p: Peer<C>): void {
+  /** 좌석을 비우고 모두에게 알린다. 상태(state)는 호출한 쪽이 정한다. 벤치 상태도 함께 풀린다. why = 11/28 탈것이면 기록에 남길 내린 까닭 */
+  private releaseSeat(p: Peer<C>, why?: RideOffWhy): void {
     const seatId = p.seatId;
     if (!seatId) return;
     this.seats.delete(seatKey(mapOfPeer(p), seatId));
     p.seatId = null;
+    const ride = rideOf(mapOfPeer(p), seatId);
+    if (ride) this.logAct(p, this.acts.leave(p.visitorId, mapOfPeer(p), ride, Date.now(), why));
     p.saved = false;
     this.clearMood(p);
     this.clearRod(p);
     this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "seat", seatId, sid: null }));
     this.host.liveChanged?.(true);
+  }
+
+  /** 11/28 접속 기록 "r" 줄 (월드 채널만 — 상한에 걸린 줄은 null) */
+  private logAct(p: Peer<C>, x: ConnActExtra | null): void {
+    if (x && !this.cfg.room) this.host.actLogged?.(p.visitorId, x);
   }
 
   /** 랭킹 클릭 등 의도된 순간이동: 속도 검증 없이 범위만 본다. 쿨다운 안의 요청은 무시. */
@@ -2177,6 +2263,7 @@ export class ChannelCore<C extends object> {
     p.budget = new MoveBudget(now);
     this.markDirty(p);
     this.sendTo(p, { t: "raftOut", n, x: e.x, y: e.y, why });
+    this.logAct(p, this.acts.raftOut(p.visitorId, n, why, Date.now())); // 기록 시계는 탈것 줄과 같이 벽시계
     this.host.liveChanged?.(true);
   }
 
@@ -2324,12 +2411,18 @@ export class ChannelCore<C extends object> {
   }
 
   /** 퇴장: 좌석 해제 → leave 브로드캐스트 → 인원 보고 */
-  private remove(p: Peer<C>): void {
+  private remove(p: Peer<C>, now = Date.now()): void {
+    // 11/27 마지막 맵 (LAST_MAP_MS 안에 이 채널·다른 채널로 다시 들어오면 그 맵으로 — 탭을 닫았다 다른 탭으로 맵을 건너뛰지 못하게)
+    if (!this.cfg.room) {
+      this.lastMap.delete(p.visitorId);
+      this.lastMap.set(p.visitorId, { m: mapOfPeer(p), at: now });
+      if (this.lastMap.size > 4_000) this.lastMap.delete(this.lastMap.keys().next().value!);
+    }
     if (p.conn) {
       this.bySocket.delete(p.conn);
       p.conn = null;
     }
-    if (p.seatId) this.releaseSeat(p);
+    if (p.seatId) this.releaseSeat(p, "quit");
     if (mapOfPeer(p) === "camp" && !this.cfg.room) this.leaveSnow(p);
     this.peers.delete(p.sid);
     this.byVisitor.delete(p.visitorId);

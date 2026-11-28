@@ -1,5 +1,6 @@
 import { itemById, isPermanentUntil, PERMANENT_UNTIL, RAFT_GEAR_TIER_DAYS, raftGearOfTier, raftGearTier, type RaftGearTier } from "@tomb/protocol";
 import { autoCatchTimes, autoHit, type AutoSession } from "../forage/auto";
+import { gearForced } from "../forage/gearDev";
 import { hash01 } from "../forage/rules";
 import type { RaftGearCatch } from "../forage/types";
 import { getStaffStore } from "../staff";
@@ -24,10 +25,12 @@ export function raftGearChoices(tier: RaftGearTier, ownedPerm: ReadonlySet<strin
 export async function grantRaftRange(acct: string, s: AutoSession, from: number, to: number, now: number, on?: boolean): Promise<RaftGearCatch[]> {
   if (to < from || !s.raft) return [];
   const rolls: { tier: RaftGearTier; pick: number }[] = [];
+  // 11/28 개발 전용 확인 (lib/forage/gearDev — 운영은 늘 false): 걸린 한 마리마다 7일 단계로
+  const force = gearForced(acct, "raft");
   autoCatchTimes(s, from, to).forEach((_, i) => {
     const k = from + i;
     if (!autoHit(s.seed, k)) return;
-    const r = rollRaftGear(s.seed, k, on);
+    const r = force ? { tier: "d7" as const, pick: hash01(`auto|${s.seed}|${k}|raftpick`) } : rollRaftGear(s.seed, k, on);
     if (r) rolls.push(r);
   });
   if (!rolls.length) return [];

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { AVATAR_BODIES } from "@tomb/protocol";
-import { AV_H, AV_W } from "./avatar";
+import { AV_ANIM, AV_H, AV_W, avatarFrameGrid, BODY_METRICS, bodyOf } from "./avatar";
 import { hammockLieKey } from "./hammockArt";
-import { INDOOR_POSE_FRAMES, indoorPoseKey, indoorPoseSheet } from "./indoorPose";
+import { INDOOR_POSE_FRAMES, indoorPoseKey, indoorPoseSheet, type LieCover } from "./indoorPose";
+import { CX_COVER } from "../housing/campExclusive";
+import { cxCoverName } from "../housing/campExclusive/types";
 
 // 욕조 물: 네모 블록이 아니라 욕조 물 타원 안에서만 (프레임 아래쪽·양 끝은 비워 욕조 그림이 보이게)
 describe("bath pose water", () => {
@@ -45,5 +47,29 @@ describe("pose texture keys never collide", () => {
     expect(new Set(distinct).size).toBe(distinct.length);
     // 아바타 시트 키 자체와도 겹치지 않는다
     for (const k of distinct) expect(k).not.toBe(av);
+  });
+});
+
+// 11/27 운영 버그: 누운 자세 프레임 1에 그리던 3×3 "작은 z"가 I자로 보였고, 돌린 자리(릴렉스 체어·돌린 침대)에서는 자세와 함께 돌아 머리 옆·발밑에 떴다.
+// 누운 자세는 목선 위(머리·모자)를 아바타 그림 그대로 둔다 — 덮개 말고는 아무것도 덧그리지 않는다.
+// (캠핑장 기본 침대의 옆·뒤 덮개 cvbed1~3·pnbed1~3은 침대 그림을 프레임 가장자리까지 이어 그리므로 뺀다)
+describe("lie pose adds nothing above the neck", () => {
+  it("every body × every cover × both frames: rows above the cover equal the plain avatar frame", () => {
+    const covers: LieCover[] = ["quilt", "towel", "cvbed0", "pnbed0"];
+    for (const key of Object.keys(CX_COVER)) for (let d = 0; d < 4; d++) covers.push(cxCoverName(key, d));
+    for (const { id: body } of AVATAR_BODIES)
+      for (const look of [[], ["hat_crown"]]) {
+        const b = bodyOf(body);
+        const base = avatarFrameGrid(b, "down", AV_ANIM.hammock.col, "#9fb8d8", look);
+        let y0 = AV_H;
+        for (let y = 0; y < AV_H && y0 === AV_H; y++) for (let x = 0; x < AV_W; x++) if (base.filled(x, y)) { y0 = y; break; }
+        const neck = Math.max(AV_H - 1 - BODY_METRICS[b].shoulder - 1, y0 + 7);
+        for (const cover of covers) {
+          const g = indoorPoseSheet("lie", body, "#9fb8d8", look, cover);
+          for (let f = 0; f < INDOOR_POSE_FRAMES; f++)
+            for (let y = 0; y < neck; y++)
+              for (let x = 0; x < AV_W; x++) expect(g.get(f * AV_W + x, y), `${body} ${look.join()} ${cover} f${f} (${x},${y})`).toBe(base.get(x, y));
+        }
+      }
   });
 });

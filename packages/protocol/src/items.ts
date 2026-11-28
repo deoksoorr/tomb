@@ -681,7 +681,7 @@ export const ITEMS: readonly ItemDef[] = [
   //  영구 넷(삿갓·찌 목걸이·가슴장화·망토)을 함께 입으면 세트 연출 「금빛 월척」(raftSetFx) + 칭호 「좌대의 전설」
   ...([
     { id: "jw_carphat", slot: "head", grade: "fine", name: "붕어 털모자", desc: "붕어가 머리를 덥석 문 니트 모자. 왕눈이 둘이 서로 다른 데를 봐요.", price: 200 },
-    { id: "jw_vest", slot: "back", grade: "rare", name: "좌대 낚시 조끼", desc: "주머니가 많은 낚시 조끼. 등에 꽂은 낚싯대 끝에서 방울이 흔들려요.", price: 360 },
+    { id: "jw_vest", slot: "back", grade: "rare", name: "좌대 낚시 조끼", desc: "주머니가 많은 낚시 조끼. 등에 꽂은 낚싯대 초릿대가 어깨 너머로 보여요.", price: 360 },
     { id: "jw_net", slot: "pack", grade: "rare", name: "월척 뜰채", desc: "은빛 월척이 든 큰 뜰채를 등에 메요.", price: 360 },
     { id: "jw_sedge", slot: "head", grade: "legend", name: "물빛 삿갓", desc: "물빛으로 물들인 삿갓. 금테 챙 끝에 작은 금 잉어가 달려 있어요.", price: 600 },
     { id: "jw_bell", slot: "neck", grade: "legend", name: "금방울 찌 목걸이", desc: "큰 찌 둘 사이에 금방울을 꿴 목걸이예요.", price: 600 },

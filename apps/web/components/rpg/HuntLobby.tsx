@@ -52,7 +52,7 @@ import TowerEntrance, { towerBoostAllowed } from "./TowerEntrance";
 import s from "./rpg.module.css";
 import OverLevelSpot, { OVER_LEVEL_SPOT_MS } from "./OverLevelSpot";
 import { HUNT_POINT_T_STOP, huntPointBlock } from "@/lib/rpg/formulas";
-import { NO_POTION_FROM, TOWER_CHEST_FROM, towerFitFloor, towerNoPointGain, towerPointFrom } from "@/lib/rpg/tower";
+import { NO_POTION_FROM, TOWER_CHEST_FROM, towerChestFrom, towerFitFloor, towerNoPointGain, towerNoPointLoss, towerPointFrom, towerPointFromText } from "@/lib/rpg/tower";
 import { FINISH_GRACE_SEC, PAUSE_ALLOW_MS } from "@/lib/rpg/rewards";
 import { useRideStopGate } from "../overlay/RideStopDialog";
 import { usePageZoomLock } from "@/lib/hooks/usePageZoomLock";
@@ -350,7 +350,11 @@ export default function HuntLobby({
       setOverLevel(
         res.tower
           ? res.tower < from
-            ? { until, title: `${from}층부터 포인트를 받아요`, text: `${starLabel(c.tLevel)}의 적정 층은 ${towerFitFloor(c.tLevel)}층이에요. ${from - 1}층까지는 포인트 없이 ${towerNoPointGain(res.tower, from - 1)} 받아요.` }
+            ? {
+                until,
+                title: towerPointFromText(c.tLevel),
+                text: `${starLabel(c.tLevel)}의 적정 층은 ${towerFitFloor(c.tLevel)}층이에요. ${from - 1}층까지는 ${towerNoPointLoss(res.tower, from - 1)} 없이 ${towerNoPointGain(res.tower, from - 1)} 받아요.`,
+              }
             : null
           : game !== "hunt"
             ? null
@@ -394,6 +398,8 @@ export default function HuntLobby({
                 ...(res.view.chair ? { sgChance: chairChestChance(res.view.chair) } : {}),
                 // 11/26 엘리베이터 판 시작 판 레벨 (티켓과 같은 값)
                 ...(res.towerLv0 ? { lv0: res.towerLv0 } : {}),
+                // 11/27 포인트 못 받는 저층은 상자도 없다 (서버 정산 towerSettle과 같은 초월 레벨)
+                ...(res.view.character.tLevel > 0 ? { tLv: res.view.character.tLevel } : {}),
               },
             }
           : {}),
@@ -788,7 +794,9 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
           )}
           {r.lowFloors && (
             <p className={s.warn}>
-              적정 층보다 낮은 {r.lowFloors.floors}층은 포인트를 받지 않았어요. {r.lowFloors.from}층부터 포인트를 받아요.
+              {/* 11/27 그 층들은 우두머리 상자도 없다 */}
+              적정 층보다 낮은 {r.lowFloors.floors}층은 {outcome.tower ? towerNoPointLoss(outcome.tower, r.lowFloors.from - 1) : "포인트"}를 받지 않았어요.{" "}
+              {r.lowFloors.from > TOWER_CHEST_FROM ? `${r.lowFloors.from}층부터 포인트와 우두머리 상자를 받아요.` : `${r.lowFloors.from}층부터 포인트를 받아요.`}
             </p>
           )}
           {r.capped && !r.overLevel && (
@@ -867,7 +875,7 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
               })}
             </div>
           ) : (
-            <p className={s.meta}>{outcome.tower ? `주운 것이 없어요. ${TOWER_CHEST_FROM}층부터 우두머리 층을 깨면 상자가 열려요.` : "주운 것이 없어요"}</p>
+            <p className={s.meta}>{outcome.tower ? `주운 것이 없어요. ${r?.lowFloors ? Math.max(TOWER_CHEST_FROM, r.lowFloors.from) : towerChestFrom(c?.tLevel ?? 0)}층부터 우두머리 층을 깨면 상자가 열려요.` : "주운 것이 없어요"}</p>
           )}
           {r && r.lostDrops > 0 && <p className={s.warn}>가방이 가득 차서 {r.lostDrops}개는 못 챙겼어요.</p>}
         </section>

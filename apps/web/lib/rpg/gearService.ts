@@ -2,19 +2,20 @@ import type { z } from "zod";
 import { HttpError } from "../http";
 import { isStaff } from "../staff";
 import { josa } from "./skillText";
-import { displayName } from "../store";
+import { displayName, earnPointsOnly } from "../store";
+import { kstDay } from "../store/accounts";
 import { pushVillageNotice } from "../weeklyChamp";
 import { forgetTitles } from "../titlesServer";
 import { RpgError } from "./character";
 import { chairEnhanceDiscount } from "../chairPerks";
 import { chairPerkSafe } from "../chairman/settle";
-import { disassemble, enhance, enhanceNeed, enhanceState, equipSg, exchange, inherit, inheritPlan, reroll, rerollCost, type EnhanceResult, type EnhTarget, type InheritFrom, type InheritResult } from "./enhance";
+import { disassemble, enhance, enhanceNeed, enhanceState, equipSg, exchange, inherit, inheritPlan, returnSg, reroll, rerollCost, sellSg, sgUnsold, type EnhanceResult, type EnhTarget, type InheritFrom, type InheritResult } from "./enhance";
 import type { GearActionSchema } from "./schemas";
 import { effectiveLevel, queueFirstTitles, rpgView } from "./service";
 import { decodeSg, discoverEgg, SG_SETS, sgUid } from "./setGear";
 import { getRpgStore } from "./store";
 import { isSuperHunter } from "./superHunter";
-import type { CharacterState, RpgView } from "./types";
+import type { CharacterState, RpgView, SoldInfo } from "./types";
 
 // 11/15 세트 장비·강화 서버 (라우트 app/api/rpg/gear). 포인트를 쓰는 강화·옵션 굴리기는 포인트 빼기·재료 빼기·결과 저장을
 // 저장소 명령 한 번(updatePaid)으로 한다 — 버튼 한 번에 한 번, 중간에 실패해서 포인트만 빠지는 일이 없다.
@@ -29,6 +30,8 @@ export type GearActionResponse = RpgView & {
     code?: string;
     /** 분해로 받은 재료 */
     got?: { doc: number; seal: number };
+    /** 11/27 세트 장비 판매: 받은 포인트(value) · 지갑 상한에 막혔나(capped) · 실제로 판 개수(count — 못 판 것은 가방에 되돌렸다) */
+    sold?: SoldInfo;
   };
 };
 
@@ -52,7 +55,7 @@ async function http<T>(p: Promise<T>): Promise<T> {
 
 const titleBits = (s: CharacterState) => `${s.sgDone ?? 0}|${s.enhMax ?? 0}`;
 
-export async function gearAction(acct: string, a: z.output<typeof GearActionSchema>, now = Date.now()): Promise<GearActionResponse> {
+export async function gearAction(acct: string, a: z.output<typeof GearActionSchema>, now = Date.now(), ipHash?: string): Promise<GearActionResponse> {
   const store = getRpgStore();
   const before = await store.get(acct);
   let state: CharacterState;
@@ -120,6 +123,26 @@ export async function gearAction(acct: string, a: z.output<typeof GearActionSche
       const r = await http(store.update(acct, (s) => disassemble(s, a.uids)));
       state = r.state;
       gear = { got: r.result };
+      break;
+    }
+    case "sell": {
+      // 11/27 세트 장비 판매: 1) 가방에서 한 번에 뺀다 (값은 서버가 저장된 물건으로 계산 — 화면 말은 안 믿는다)
+      const r = await http(store.update(acct, (s) => sellSg(s, a.uids)));
+      state = r.state;
+      const { sold, value: want } = r.result;
+      // 2) 주운 장비 되팔기처럼 사냥 수입으로 적립 (지갑 상한에 막히면 받은 만큼만). 적립이 실패하면 뺀 장비를 모두 되돌린다
+      let got: { earned: number; paid: number };
+      try {
+        got = want > 0 ? await earnPointsOnly(acct, "hunt", want, ipHash) : { earned: 0, paid: 0 };
+      } catch (e) {
+        await store.update(acct, (s) => ({ state: returnSg(s, sold.map(([c]) => c)), result: null })).catch(() => undefined);
+        throw e;
+      }
+      if (got.earned > 0) await store.addDaily(acct, kstDay(now), { points: got.earned });
+      // 3) 한 푼도 못 받은 장비는 가방에 되돌린다
+      const back = got.paid < want ? sgUnsold(sold, got.paid) : [];
+      if (back.length) state = (await http(store.update(acct, (s) => ({ state: returnSg(s, back), result: null })))).state;
+      gear = { sold: { value: got.earned, capped: got.paid < want, count: sold.length - back.length } };
       break;
     }
     case "inherit": {

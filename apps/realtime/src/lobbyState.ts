@@ -1,4 +1,5 @@
-import type { ChannelInfo, LobbyInfo } from "@tomb/protocol";
+import { TAB_ID_RE, type ChannelInfo, type ConnLogExtra, type LobbyInfo } from "@tomb/protocol";
+import type { JoinInfo } from "./channel";
 import type { Config } from "./config";
 
 // 로비 판정 (순수 함수). LobbyDO는 채널 인원을 받아 이 상태를 고치고 저장만 한다. 테스트: lobbyState.test.ts
@@ -165,4 +166,25 @@ export function mergeOnline(rosters: readonly (readonly { visitorId: string }[])
   for (const r of rosters) for (const { visitorId } of r) seen.add(visitorId);
   for (const v of registry) seen.add(v);
   return [...seen];
+}
+
+/**
+ * 11/27 다시 접속 기록 한 줄 (없으면 null): 이전 연결이 살아 있어 끊었다 · 다른 채널에 있던 다른 탭 · 같은 채널 다른 탭의 복귀 · 화면이 다른 맵을 보냄.
+ * 같은 탭의 새로고침·잠깐 끊김 복귀·채널 옮기기는 남기지 않는다
+ */
+export function tabRow(info: JoinInfo, lobbyTab: string | undefined, prevCh: number | undefined): ConnLogExtra | null {
+  const tab = info.tab && TAB_ID_RE.test(info.tab) ? info.tab : undefined;
+  // 같은 채널은 채널이 기억한 이전 탭이 정답 (로비 기억은 로비가 다시 뜨면 사라진다)
+  const prevTab = info.ptab && TAB_ID_RE.test(info.ptab) ? info.ptab : lobbyTab;
+  const otherTab = !!(tab && prevTab && prevTab !== tab);
+  const cross = prevCh !== undefined && otherTab;
+  if (!info.live && !info.ask && !(otherTab && (info.take || cross))) return null;
+  return {
+    m: info.map,
+    ...(info.ask ? { a: info.ask } : {}),
+    ...(tab ? { tab } : {}),
+    ...(otherTab ? { pt: prevTab } : {}),
+    ...(cross ? { pc: prevCh } : {}),
+    ...(info.live ? { live: 1 as const } : {}),
+  };
 }

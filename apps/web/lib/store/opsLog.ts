@@ -24,6 +24,9 @@ export type LogList = "conn" | "hunt";
 export type ConnLogEntry = { a: string; k: "in" | "out" | "err"; at: number; ch?: number; dev?: string; why?: ConnWhy; msg?: string };
 /** 사냥터 기록 종류: 입장·나감(그만두고 나옴)·튕김(앞 판을 끝내지 못함)·쓰러짐·보상 지급·서버 판정 거절 */
 export type HuntLogKind = "start" | "leave" | "drop" | "die" | "reward" | "reject";
+/** 11/28 드롭 한 칸 [종류(gear·potion·cosmetic·set·mat), id, 수, 코디 이용권 일수?] — 같은 것은 합쳐서 HUNT_DROP_LIST_MAX칸까지 (lib/opsLog huntDropList) */
+export type HuntDrop = [kind: string, id: string, qty: number, days?: number];
+export const HUNT_DROP_LIST_MAX = 20;
 export type HuntLogEntry = {
   a: string;
   k: HuntLogKind;
@@ -32,10 +35,13 @@ export type HuntLogEntry = {
   zone?: string;
   d?: string;
   tw?: number;
-  /** 보상: 경험치·포인트·드롭 수 / 야근 빌딩 깬 층 */
+  /** 보상: 경험치·포인트·드롭 수(칸 수, 11/28 이전 줄은 이것만) / 야근 빌딩 깬 층 */
   exp?: number;
   pts?: number;
   drops?: number;
+  /** 11/28 드롭 목록 (앞 HUNT_DROP_LIST_MAX칸)과 넘쳐서 뺀 칸 수 */
+  dl?: HuntDrop[];
+  dlx?: number;
   floors?: number;
   /** 판 시간 (초) */
   sec?: number;

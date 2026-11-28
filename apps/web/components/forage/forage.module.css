@@ -190,8 +190,11 @@
 }
 
 .autoChipMain b {
+  overflow: hidden;
+  min-width: 0;
   color: var(--bone);
   font-weight: inherit;
+  text-overflow: ellipsis;
 }
 
 .autoChipMain[data-full] b,
@@ -219,7 +222,9 @@
   }
 }
 
+/* 11/28 좌대 칩은 머리글이 길다(「좌대 자동 낚시 중 · 속도 2배」) → 좁으면 머리글을 줄이고 낚은 수는 늘 보인다 */
 .autoCount {
+  flex: none;
   color: var(--bone);
   font-variant-numeric: tabular-nums;
 }

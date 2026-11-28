@@ -37,12 +37,52 @@ export const SG_PIECE_WEIGHTS: Record<SgPiece, number> = {
 };
 
 /**
- * 우두머리 층 → 직급 (11/19 개편, 50층 단위 — 지켜보며 조정): 51~100 사원 · 101~150 대리 · 151~200 과장 · 201~ 임원.
- * 인감 도장·꾸미기 등급도 이 경계를 따른다
+ * 상자 층 → 세트 장비 직급 확률 [사원, 대리, 과장, 임원] (11/27 운영자 확정 — 예전엔 50층 단위로 층마다 직급 하나였다: 51~100 사원 · 101~150 대리 · 151~200 과장 · 201~ 임원).
+ * from = 그 구간의 첫 상자 층 (상자는 55층부터 5층마다라 그 사이 층은 앞 구간을 따른다). 구간은 from 오름차순.
+ * 55~100 사원 · 105~125 대리 · 130~150 대리 70 과장 30 · 155 과장 · 160~175 과장 80 임원 20 · 180~200 과장 50 임원 50 · 205~ 임원.
+ * 인감 도장·꾸미기 등급은 이 표를 따르지 않고 예전 경계(CHEST_TIER_FLOORS 101·151층)를 그대로 쓴다
  */
-export const SG_GRADE_FLOORS = [101, 151, 201] as const;
-const [G_DAERI, G_GWAJANG, G_IMWON] = SG_GRADE_FLOORS;
-export const sgGradeForFloor = (f: number): SgGrade => (f >= G_IMWON ? 3 : f >= G_GWAJANG ? 2 : f >= G_DAERI ? 1 : 0);
+export type SgGradeWeights = readonly [number, number, number, number];
+export const SG_GRADE_ODDS: readonly { from: number; w: SgGradeWeights }[] = [
+  { from: 0, w: [100, 0, 0, 0] },
+  { from: 105, w: [0, 100, 0, 0] },
+  { from: 130, w: [0, 70, 30, 0] },
+  { from: 155, w: [0, 0, 100, 0] },
+  { from: 160, w: [0, 0, 80, 20] },
+  { from: 180, w: [0, 0, 50, 50] },
+  { from: 205, w: [0, 0, 0, 100] },
+];
+/** f층 상자의 직급 확률 [사원, 대리, 과장, 임원] (합 100) */
+export function sgGradeOdds(f: number): SgGradeWeights {
+  let w = SG_GRADE_ODDS[0].w;
+  for (const b of SG_GRADE_ODDS) if (f >= b.from) w = b.w;
+  return w;
+}
+const SG_GRADES = [0, 1, 2, 3] as const satisfies readonly SgGrade[];
+/** f층 상자에서 나올 수 있는 직급 (확률이 0보다 큰 것) */
+export const sgGradesForFloor = (f: number): SgGrade[] => SG_GRADES.filter((g) => sgGradeOdds(f)[g] > 0);
+
+/**
+ * 층 목록(오름차순, 보통 상자 층)을 직급 확률이 같은 곳끼리 묶는다 — 안내 표용. 마지막 구간은 끝이 없다(to = null)
+ */
+export function sgGradeBands(floors: readonly number[]): { from: number; to: number | null; w: SgGradeWeights }[] {
+  const out: { from: number; to: number | null; w: SgGradeWeights }[] = [];
+  for (const f of floors) {
+    const w = sgGradeOdds(f);
+    const last = out[out.length - 1];
+    if (last && last.w === w) {
+      last.to = f;
+      continue;
+    }
+    out.push({ from: f, to: f, w });
+  }
+  if (out.length) out[out.length - 1].to = null;
+  return out;
+}
+
+/** 인감 도장·꾸미기 등급이 바뀌는 층 [대리급 자리, 과장급 자리] (11/19 개편 경계 그대로 — 11/27 직급 섞기와 따로 둔다) */
+export const CHEST_TIER_FLOORS = [101, 151] as const;
+const [T_MID, T_HIGH] = CHEST_TIER_FLOORS;
 
 const pickWeighted = <T>(r: () => number, items: readonly T[], w: (t: T) => number): T => {
   const total = items.reduce((a, t) => a + w(t), 0);
@@ -81,19 +121,32 @@ export function rollSgItem(r: () => number, g: SgGrade): Pick<SgItem, "s" | "p" 
   return rollSgFixed(r, s, SG_PIECES.indexOf(piece), g);
 }
 
-/** 상자 하나의 세트 장비 굴림: SG_CHEST_CHANCE (11/19 천장 없음). force = 테스트 서버 슈퍼 계정 시험 드롭 (확률 굴림은 늘 한 번 뽑는다 — 난수 순서가 같게) */
+/**
+ * 직급 굴림 (11/27 층 구간 확률 SG_GRADE_ODDS). 구간 확률이 100%여도 r()을 늘 딱 한 번 쓴다 —
+ * 뒤 굴림(세트·부위·옵션)이 층과 상관없이 같은 난수 자리에서 시작한다
+ */
+export const rollSgGrade = (r: () => number, f: number): SgGrade => {
+  const w = sgGradeOdds(f);
+  return pickWeighted(r, SG_GRADES, (g) => w[g]);
+};
+
+/**
+ * 상자 하나의 세트 장비 굴림: SG_CHEST_CHANCE (11/19 천장 없음). force = 테스트 서버 슈퍼 계정 시험 드롭 (확률 굴림은 늘 한 번 뽑는다 — 난수 순서가 같게).
+ * 난수 순서 (게임이 상자를 열 때 = 서버 정산, 같은 시드): 확률 1번 → (나오면) 직급 1번 → 세트·부위·옵션 (rollSgItem). 상자의 꾸미기는 따로 시드라 이 순서와 상관없다
+ */
 export function chestSetGear(r: () => number, f: number, force = false, chance = SG_CHEST_CHANCE): Drop | null {
   const hit = r() < chance;
   if (!hit && !force) return null;
-  return { kind: "set", id: sgSpec(rollSgItem(r, sgGradeForFloor(f))), qty: 1 };
+  const g = rollSgGrade(r, f);
+  return { kind: "set", id: sgSpec(rollSgItem(r, g)), qty: 1 };
 }
 
 /** 상자를 하나 연 뒤의 못 받은 수 (세트 장비가 나왔으면 0부터). 11/19 천장은 없앴고 기록만 남는다 */
 export const nextPity = (drops: readonly Drop[], pity: number) => (drops.some((d) => d.kind === "set") ? 0 : pity + 1);
 
-/** 상자마다 재료: 결재 서류 2 + 층÷10, 인감 도장 165층(대리급)부터 1개·180층(과장급)부터 2개 (11/19 개편) */
+/** 상자마다 재료: 결재 서류 2 + 층÷10, 인감 도장 101층부터 1개·151층부터 2개 (11/19 개편 — CHEST_TIER_FLOORS, 11/27 직급 섞기와 상관없이 그대로) */
 export const chestDocs = (f: number) => 2 + Math.floor(f / 10);
-export const chestSeals = (f: number) => (f >= G_GWAJANG ? 2 : f >= G_DAERI ? 1 : 0);
+export const chestSeals = (f: number) => (f >= T_HIGH ? 2 : f >= T_MID ? 1 : 0);
 export function chestMats(f: number): Drop[] {
   const out: Drop[] = [{ kind: "mat", id: "m_doc", qty: chestDocs(f) }];
   if (chestSeals(f) > 0) out.push({ kind: "mat", id: "m_seal", qty: chestSeals(f) });
@@ -119,10 +172,10 @@ export const cosTierOf = (price: number): CosTier => (price <= 100 ? 0 : price <
 export const CHEST_COSMETICS: readonly ItemDef[] = ITEMS.filter((i) => i.kind === "cosmetic" && isShopListed(i) && !isNameSlot(i.slot) && !!i.slot);
 export const cosmeticsOfTier = (t: CosTier): readonly ItemDef[] => CHEST_COSMETICS.filter((i) => cosTierOf(i.price) === t);
 
-/** 층별 등급 비율 [일반, 고급, 희귀, 전설]: 165층 아래는 고급까지, 180층 아래는 희귀까지, 180층부터 전설 3% (11/19 개편 — 직급 경계와 같이) */
+/** 층별 등급 비율 [일반, 고급, 희귀, 전설]: 101층 아래는 고급까지, 151층 아래는 희귀까지, 151층부터 전설 3% (11/19 개편 — CHEST_TIER_FLOORS, 11/27 직급 섞기와 상관없이 그대로) */
 export function cosTierWeights(f: number): readonly [number, number, number, number] {
-  if (f < G_DAERI) return [60, 40, 0, 0];
-  if (f < G_GWAJANG) return [45, 40, 15, 0];
+  if (f < T_MID) return [60, 40, 0, 0];
+  if (f < T_HIGH) return [45, 40, 15, 0];
   return [37, 40, 20, 3];
 }
 /** 기간: 1일 45% · 3일 30% · 7일 20% · 30일 5% (전설은 30일 대신 7일) */
@@ -154,8 +207,8 @@ export function chestCosmetic(floorSeedValue: number, f: number, sup = false): D
 
 // ── 서버 결과 검증: 장비로 세진 만큼 처치 속도 상한을 늘린다 ──
 
-/** 세트 장비 자리에 그 부위 상점 최고 장비 (강화 없이) 를 낀 것으로 바꾼 장착 칸 — 비교 기준 */
-const TOP_SHOP: Record<SgPiece, string> = {
+/** 세트 장비 자리에 그 부위 상점 최고 장비 (강화 없이) 를 낀 것으로 바꾼 장착 칸 — 비교 기준. 11/27 세트 장비 판매 값의 기준 값도 이 장비 값 (lib/rpg/enhance sgSellValue) */
+export const TOP_SHOP: Record<SgPiece, string> = {
   weapon: "w_stamp",
   armor: "a_hazmat",
   head: "h_halo",

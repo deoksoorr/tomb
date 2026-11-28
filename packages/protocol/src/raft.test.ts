@@ -91,10 +91,12 @@ describe("11/27 좌대 입장권 규칙", () => {
         expect(campWet(e.x, e.y)).toBe(true);
       }
     }
-    // 1번: 오른쪽에서 내리면 오른쪽 다리
-    const r1 = CAMP_RAFTS[0];
-    expect(campRaftExit(1, { x: r1.x + 30, y: r1.y }).x).toBeGreaterThan(r1.x);
-    expect(campRaftExit(1, { x: r1.x - 30, y: r1.y }).x).toBeLessThan(r1.x);
+    // 11/28 다리는 하나 (왼쪽 뒤 넓은 다리) — 어디서 내려도 그 다리 가운데, 오두막(오른쪽 뒤) 밑이 아니다
+    for (const r of CAMP_RAFTS.filter((q) => q.link)) {
+      const [w] = campRaftWalks(r);
+      for (const fx of [r.x - 30, r.x + 30]) expect(campRaftExit(r.n, { x: fx, y: r.y })).toEqual({ x: Math.round(w.x + w.w / 2), y: Math.round(w.y + w.h / 2), swim: false });
+      expect(campRaftExit(r.n).x).toBeLessThan(r.x);
+    }
   });
   it("안내 글귀", () => {
     expect(raftOutText(3, "ticket")).toBe("입장권이 있어야 3번 좌대에 올라갈 수 있어요.");

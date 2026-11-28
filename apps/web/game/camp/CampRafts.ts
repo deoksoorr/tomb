@@ -3,6 +3,7 @@ import {
   CAMP_RAFTS,
   CAMP_TRADER_STALL,
   CAMP_RAFT_ART_H,
+  CAMP_RAFT_HUT_DX,
   RAFT_RENEW_WINDOW_MS,
   campRaftAt,
   campRaftDeck,
@@ -16,7 +17,7 @@ import {
   type RaftOutWhy,
   type Sid,
 } from "@tomb/protocol";
-import { MAP_CONCEPTS, type MapConcept } from "@/lib/mapConcept";
+import { isSnowy, MAP_CONCEPTS, type MapConcept } from "@/lib/mapConcept";
 import { currentMapConcept } from "@/lib/mapConceptClient";
 import { request } from "@/lib/api";
 import type { RaftMine, RaftStatusResponse } from "@/lib/raft/types";
@@ -28,7 +29,8 @@ import type { RealtimeClient } from "../net/RealtimeClient";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import type { Lighting } from "../world/Lighting";
 import { BOOTH_H, BOOTH_LAMPS, BOOTH_W, BOOTH_WINDOW, lampArt, raftClerkWindow } from "./raftBoothArt";
-import { RAFT_HOLDER_UP, raftFloatAt, raftRig, raftRigBaseArt, raftRodTipArt, RIG_OX, RIG_OY, TIP_OX, TIP_OY, type RaftRig } from "./raftRodsArt";
+import { HOLE_OX, HOLE_OY, RAFT_HOLDER_UP, raftFloatAt, raftIceHoleArt, raftRig, raftRigBaseArt, raftRodTipArt, RIG_OX, RIG_OY, rodDir, TIP_OX, TIP_OY, type RaftRig } from "./raftRodsArt";
+import { pondIcy } from "./valleyGround";
 
 // 11/27 캠핑장 좌대 입장권 (화면). 규칙은 protocol raft.ts, 판매는 웹(/api/camp/raft), 마루 막기는 실시간 서버.
 //  - 좌대 매표소: 옛 미끼·대여 부스 자리 (그림 game/camp/raftBoothArt — world/forage/art.ts가 FTEX.campStall로 올린다).
@@ -43,13 +45,14 @@ const RIG_TEX = (wide: boolean) => `raft-rig-${wide ? "w" : "n"}`;
 const TIP_TEX = (dir: number, odd: boolean, lit: boolean, bob: boolean, bite: boolean) => `raft-tip-${dir < 0 ? "l" : "r"}${odd ? 1 : 0}${lit ? 1 : 0}${bob ? 1 : 0}${bite ? 1 : 0}`;
 const CLERK_TEX = (c: MapConcept, lit: boolean, f: number) => `raft-clerk-${c}-${lit ? 1 : 0}-${f}`;
 const LAMP_TEX = (free: boolean, lit: boolean) => `raft-lamp-${free ? 1 : 0}${lit ? 1 : 0}`;
+const HOLE_TEX = "raft-ice-hole";
 /** 전자찌 불빛 색 (짝수 대 빨강 · 홀수 대 초록) */
 const LED = [0xff6a5a, 0x7affa0] as const;
 /** 남의 좌대(또는 자동 낚시)에서 가끔 방울이 흔들리는 간격·길이 (입질 신호가 없는 화면의 생기 — 내 손 낚시 중엔 진짜 입질만) */
 const IDLE_BITE_EVERY = 11_000;
 const IDLE_BITE_MS = 700;
 
-type Rig = { n: number; base: Phaser.GameObjects.Image; tips: Phaser.GameObjects.Image[]; leds: Phaser.GameObjects.Image[]; rig: RaftRig; sx: number; fy: number; mine: boolean };
+type Rig = { n: number; base: Phaser.GameObjects.Image; tips: Phaser.GameObjects.Image[]; leds: Phaser.GameObjects.Image[]; holes: Phaser.GameObjects.Image[]; rig: RaftRig; sx: number; fy: number; mine: boolean };
 
 const LABEL_TINT = 0xffe8b0;
 const MINE_TINT = 0xb8f0c8;
@@ -97,6 +100,8 @@ export class CampRafts {
   private rodPhaseAt = 0;
   private biteCount = 0;
   private promptKey = "";
+  /** 남은 시간 게이지로 보낸 입장권 (n:끝 — 바뀔 때만 보낸다) */
+  private ticketKey = "";
   private warnedAt = 0;
   /** 연장 못 하는 마지막 1분 안내를 한 입장권 끝 */
   private endWarned = 0;
@@ -169,6 +174,16 @@ export class CampRafts {
     this.mine = st.mine && st.mine.ch === st.ch ? st.mine : null;
     this.dayLeftMin = st.dayLeftMin;
     this.syncZones();
+    this.syncTicket();
+  }
+
+  /** 11/27 남은 시간 게이지 (components/camp/FoodGauge): 이 채널 내 입장권이 바뀔 때만 */
+  private syncTicket(): void {
+    const m = this.mine && this.now() < this.mine.until ? this.mine : null;
+    const key = m ? `${m.n}:${m.until}:${this.offset}` : "";
+    if (key === this.ticketKey) return;
+    this.ticketKey = key;
+    bridge.emit("camp:raft:ticket", m ? { n: m.n, until: m.until - this.offset } : null);
   }
 
   setBoard(b: RaftBoardEntry[]): void {
@@ -216,6 +231,7 @@ export class CampRafts {
       bridge.emit("camp:raft:prompt", null);
       this.promptKey = "";
       this.syncZones();
+      this.syncTicket();
       void this.refresh();
     }
   }
@@ -253,8 +269,8 @@ export class CampRafts {
       const text = `${r.n}번 · ${e.name}`;
       this.d.atlas.ensure(text);
       if (!t) {
-        // 오두막 지붕 위 (앞 물에는 받침틀 낚싯대·찌가 있다 — 1~3은 잔교 아래 끝 가장자리에 걸린다)
-        t = this.d.scene.add.bitmapText(r.x, r.y - CAMP_RAFT_ART_H - 1, FONT_KEY, text, FONT_PX).setOrigin(0.5, 1).setDepth(DEPTH.labels - 2).setAlpha(0.9);
+        // 오두막 지붕 위 (앞 물에는 받침틀 낚싯대·찌가 있다 — 1~3은 잔교 아래 끝 가장자리에 걸린다). 11/28 오두막이 오른쪽 뒤 모서리라 그 위로
+        t = this.d.scene.add.bitmapText(r.x + CAMP_RAFT_HUT_DX, r.y - CAMP_RAFT_ART_H - 1, FONT_KEY, text, FONT_PX).setOrigin(0.5, 1).setDepth(DEPTH.labels - 2).setAlpha(0.9);
         this.labels.set(r.n, t);
       } else t.setText(text);
       t.setTint(this.mine?.n === r.n ? MINE_TINT : LABEL_TINT);
@@ -269,6 +285,7 @@ export class CampRafts {
     for (const free of [false, true]) for (const lit of [false, true]) tx.addCanvas(LAMP_TEX(free, lit), lampArt(free, lit).toCanvas());
     for (const wide of [false, true]) tx.addCanvas(RIG_TEX(wide), raftRigBaseArt(raftRig(wide)).toCanvas());
     for (const dir of [-1, 1]) for (const odd of [false, true]) for (const lit of [false, true]) for (const bob of [false, true]) for (const bite of [false, true]) tx.addCanvas(TIP_TEX(dir, odd, lit, bob, bite), raftRodTipArt(dir, odd, lit, bob, bite).toCanvas());
+    tx.addCanvas(HOLE_TEX, raftIceHoleArt().toCanvas());
   }
 
   /** 그 낚시 자리에 받침틀 낚싯대 넷이 보이는지 (보이면 Foraging이 그 자리 손 낚싯대·찌를 숨긴다) */
@@ -302,7 +319,7 @@ export class CampRafts {
     for (const [n, g] of this.rigs) {
       if (want.get(n) === g.mine) continue;
       g.base.destroy();
-      for (const o of [...g.tips, ...g.leds]) o.destroy();
+      for (const o of [...g.tips, ...g.leds, ...g.holes]) o.destroy();
       this.rigs.delete(n);
     }
     const s = this.d.scene;
@@ -315,7 +332,7 @@ export class CampRafts {
       const fy = r.y - RAFT_HOLDER_UP;
       const depth = fy + 0.5;
       const base = s.add.image(sx - RIG_OX, fy - RIG_OY, RIG_TEX(r.link)).setOrigin(0, 0).setDepth(depth);
-      const tips = rig.rods.map((rd, i) => s.add.image(sx + rd.tdx - TIP_OX, fy + rd.tdy - TIP_OY, TIP_TEX(Math.sign(rd.tdx || 1), i % 2 === 1, this.lit, false, false)).setOrigin(0, 0).setDepth(depth + 0.1));
+      const tips = rig.rods.map((rd, i) => s.add.image(sx + rd.tdx - TIP_OX, fy + rd.tdy - TIP_OY, TIP_TEX(rodDir(rd), i % 2 === 1, this.lit, false, false)).setOrigin(0, 0).setDepth(depth + 0.1));
       const leds = rig.rods.map((rd, i) => {
         const f = raftFloatAt(rd);
         return s.add
@@ -326,8 +343,22 @@ export class CampRafts {
           .setDepth(DEPTH.lights + 1)
           .setAlpha(0);
       });
-      this.rigs.set(n, { n, base, tips, leds, rig, sx, fy, mine });
+      // 11/27 겨울 판: 저수지 가장자리 얼음 위에 떨어진 찌는 얼음낚시 구멍에 (찌 넷을 좌대 앞 폭 전체에 펼치면 1·3·4·6번 바깥 찌가 얼음 띠에 닿는다)
+      const snowy = isSnowy(this.concept);
+      const holes = rig.rods.flatMap((rd) => {
+        const f = raftFloatAt(rd);
+        const x = sx + f.x;
+        const y = fy + f.y + 1;
+        if (!snowy || ![-1, 0, 1].some((dx) => pondIcy(x + dx, y) || pondIcy(x + dx, y - 1))) return [];
+        return [s.add.image(x - HOLE_OX, y - HOLE_OY, HOLE_TEX).setOrigin(0, 0).setDepth(depth + 0.05)];
+      });
+      this.rigs.set(n, { n, base, tips, leds, holes, rig, sx, fy, mine });
     }
+  }
+
+  private dropRigs(): void {
+    for (const g of this.rigs.values()) for (const o of [g.base, ...g.tips, ...g.leds, ...g.holes]) o.destroy();
+    this.rigs.clear();
   }
 
   /** 내 손 낚시 입질: 몇 번째 대가 흔들리는지 (없으면 -1) */
@@ -352,7 +383,7 @@ export class CampRafts {
       g.rig.rods.forEach((rd, i) => {
         const bite = i === own || i === idle;
         const bob = !reduced && Math.floor((now + i * 530 + g.n * 170) / 900) % 2 === 1;
-        const key = TIP_TEX(Math.sign(rd.tdx || 1), i % 2 === 1, this.lit, bob, bite);
+        const key = TIP_TEX(rodDir(rd), i % 2 === 1, this.lit, bob, bite);
         const tip = g.tips[i];
         if (tip.texture.key !== key) tip.setTexture(key);
         const f = raftFloatAt(rd);
@@ -390,6 +421,8 @@ export class CampRafts {
     const concept = currentMapConcept();
     const lit = this.d.boothLit();
     if (concept !== this.concept || lit !== this.lit) {
+      // 판이 바뀌면 낚싯대도 새로 (겨울 얼음낚시 구멍)
+      if (isSnowy(concept) !== isSnowy(this.concept)) this.dropRigs();
       this.concept = concept;
       this.lit = lit;
       this.syncLamps();
@@ -399,6 +432,7 @@ export class CampRafts {
     if (this.mine && this.now() >= this.mine.until) this.mine = null;
     this.syncZones();
     this.syncPrompt();
+    this.syncTicket();
   }
 
   private onMyRaft(): boolean {
@@ -431,6 +465,7 @@ export class CampRafts {
     for (const off of this.offs) off();
     this.offs.length = 0;
     bridge.emit("camp:raft:prompt", null);
+    bridge.emit("camp:raft:ticket", null);
     for (const z of this.zones.values()) {
       try {
         this.d.colliders.remove(z, true, true);
@@ -441,8 +476,7 @@ export class CampRafts {
     this.zones.clear();
     for (const t of this.labels.values()) t.destroy();
     this.labels.clear();
-    for (const g of this.rigs.values()) for (const o of [g.base, ...g.tips, ...g.leds]) o.destroy();
-    this.rigs.clear();
+    this.dropRigs();
     for (const o of [this.clerk, this.winGlow, ...this.lamps, ...this.lampGlows]) o.destroy();
   }
 }

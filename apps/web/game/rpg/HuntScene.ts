@@ -6,7 +6,7 @@ import { attackCooldownMs, CHAIN_GRACE_MS, FINISHER_EVERY, WEAPON_STYLES, weapon
 import { gearById } from "@/lib/rpg/catalog";
 import { ELITE, huntPlan, STREAM_GAP_MS, WAVE_FORMATION_LABEL, WAVE_MAX_GAP_SEC, type HuntWave } from "@/lib/rpg/plan";
 import { POTION_CURES, rollStatus, STATUS_IDS, StatusBook, STATUSES, type StatusId } from "@/lib/rpg/status";
-import { floorSeed, isBossFloor, isChestFloor, NO_CURSE, splitChestPotions, TOWER_BOSS_HEAL, TOWER_POWER, towerChestDrops, towerCurseFx, towerFloorSec, towerPlan, towerScale, towerBlock, towerZone, type CurseFx } from "@/lib/rpg/tower";
+import { floorSeed, isBossFloor, isChestFloor, NO_CURSE, splitChestPotions, TOWER_BOSS_HEAL, TOWER_POWER, towerChestDrops, towerCurseFx, towerFloorSec, towerPlan, towerGivesChest, towerScale, towerBlock, towerZone, type CurseFx } from "@/lib/rpg/tower";
 import type { HuntResult, RpgAction, RpgHud } from "@/lib/rpg/types";
 import { potionSaleValue } from "@/lib/rpg/character";
 import { isMagicBranch, packCdCut, skillSpCost, SYNERGY, synergyGuard, synergyMul, wkCdFloor } from "@/lib/rpg/skillTree";
@@ -1527,7 +1527,7 @@ export class HuntScene extends RpgScene {
     if (split) for (let i = 0; i < split.n; i++) this.spawn(split.id, m.x + (i - (split.n - 1) / 2) * 16, m.y, m.wave);
     this.theme?.killed?.(m);
     // 11/15 야근 빌딩 우두머리: 쓰러진 자리에 상자 (층을 다 깨면 열린다). 11/24 상자 없는 층(TOWER_CHEST_FROM 아래)은 알림 없이 넘긴다 — 하루 상자 한도가 없어서 「오늘 상자는 다 받았어요」는 틀린 말이었다
-    if (this.play.tower && m.boss && m.id === this.zone.boss && isBossFloor(this.floor) && !this.bossChest && this.chestsLeft > 0 && isChestFloor(this.floor)) {
+    if (this.play.tower && m.boss && m.id === this.zone.boss && isBossFloor(this.floor) && !this.bossChest && this.chestsLeft > 0 && towerGivesChest(this.floor, this.play.tower.tLv ?? 0)) {
       this.bossChest = new BossChest(this, m.x, m.y, this.now, RTEX.glow, this.data0.reduced);
     }
   }
@@ -4107,8 +4107,8 @@ export class HuntScene extends RpgScene {
       // 11/15 우두머리 상자: 우두머리가 쓰러진 자리의 상자가 층을 깨는 순간 열리고, 안의 것은 사냥터 드롭처럼 튀어나온다 (빔·소리·줍기 그대로).
       // 오늘 남은 상자만큼 — 서버(towerSettle)와 같은 순서·같은 굴림(towerChestDrops: 11/18 드롭 시드 + 층)
       let opened = false;
-      // 11/19 상자는 TOWER_CHEST_FROM층부터 (서버 towerChestFloors와 같다)
-      if (this.chestsLeft > 0 && isChestFloor(f)) {
+      // 11/19 상자는 TOWER_CHEST_FROM층부터, 11/27 포인트를 못 받는 저층(판 시작 때 초월 레벨)은 상자 없음 (서버 towerSettle과 같다)
+      if (this.chestsLeft > 0 && towerGivesChest(f, this.play.tower?.tLv ?? 0)) {
         this.chestsLeft--;
         const c = this.bossChest ?? new BossChest(this, this.lootSrc(this.lastKill).x, this.lootSrc(this.lastKill).y, this.now, RTEX.glow, this.data0.reduced);
         this.bossChest = c;
@@ -4146,7 +4146,8 @@ export class HuntScene extends RpgScene {
         this.bossChest?.destroy();
         this.bossChest = null;
         // 11/24 상자 없는 우두머리 층(50층까지). 하루 상자 한도는 없어서(TOWER_CHESTS_PER_DAY) 「오늘 상자는 다 받았어요」는 뺐다
-        this.flash(`${f}층 우두머리를 처치했어요! HP가 회복됐어요`, 2400);
+        // 11/27 상자 층인데 적정 층보다 낮아 상자가 없으면 그 까닭을 같이
+        this.flash(isChestFloor(f) ? `${f}층 우두머리를 처치했어요! HP가 회복됐어요. 적정 층보다 낮아 상자는 없어요` : `${f}층 우두머리를 처치했어요! HP가 회복됐어요`, 2400);
       }
       // 상자에서 나온 것을 보여 줄 틈: 다 주웠으면 바로, 아니면 잠시 뒤 끌어오고 엘리베이터 (아무것도 놓치지 않는다)
       if (opened) {

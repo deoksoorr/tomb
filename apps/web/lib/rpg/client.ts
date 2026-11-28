@@ -30,6 +30,7 @@ export type GearAction =
   | { type: "reroll"; uid: number; lock: string | null; cost: number }
   | { type: "exchange"; uids: number[]; set: number; piece: number }
   | { type: "disassemble"; uids: number[] }
+  | { type: "sell"; uids: number[] }
   | { type: "inherit"; fromSg?: number; fromPiece?: number; sg?: number; shop?: string; piece?: number; cost: number }
   | { type: "equip"; slot: GearSlot; uid: number | null }
   | { type: "egg"; set: number };

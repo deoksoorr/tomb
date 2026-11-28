@@ -203,7 +203,7 @@ export default function OddsDialog({ section, onClose }: { section: OddsSection;
               자동 낚시는 {f.autoEvery}마다 찌를 올려 {f.autoCatch} 확률로 한 마리가 걸려요. 하루 한도는 없어요. 캠핑장 물고기 중 희귀 이상은 직접 낚을 때만 나와요.
             </li>
             <li>
-              직접 낚시하면 {f.sunken}, 자동 낚시는 걸린 한 마리마다 {f.sunkenAuto} 확률로 물고기 대신 물에 빠진 꾸미기가 걸려요.
+              직접 낚시하면 찌를 던질 때마다 {f.sunken}, 자동 낚시는 걸린 한 마리마다 {f.sunkenAuto} 확률로 물고기 대신 물에 빠진 꾸미기가 걸려요. 기간제이고 기간은 {f.sunkenDays}예요(전설 등급은 30일 대신 7일). 영구로 가진 꾸미기는 나오지 않고, 기간제로 가진 꾸미기는 남은 기간에 더해져요.
             </li>
             <li>바닷가 만조 앞뒤 30분쯤은 {f.highTide} 확률로 크기를 한 번 더 굴려 큰 쪽을 가져요.</li>
             {/* 11/22 물고기 크기 등급 (catalog GRADE_U·GRADE_MULT) */}

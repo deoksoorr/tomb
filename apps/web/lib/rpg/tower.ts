@@ -179,7 +179,7 @@ export const TOWER_BOSS_EVERY = 5;
 export const isBossFloor = (f: number) => fl(f) % TOWER_BOSS_EVERY === 0;
 /**
  * 11/19 야근 빌딩 개편: 우두머리 상자는 이 층부터. 사용자 「아이템 후딱후딱 끼는 게 나을 것 같아서」 — 50층 단위로 두고 상황을 지켜본다
- * (1~50층 상자 없음 · 51~100 사원 · 101~150 대리 · 151~200 과장 · 201~ 임원 — 직급 경계는 setGearRoll SG_GRADE_FLOORS)
+ * (1~50층 상자 없음 · 상자는 55층부터 5층마다. 세트 장비 직급은 11/27부터 층 구간마다 섞어 굴린다 — setGearRoll SG_GRADE_ODDS)
  */
 export const TOWER_CHEST_FROM = 51;
 /** 우두머리 상자가 열리는 층 */
@@ -571,7 +571,8 @@ export const towerFloorPointsText = () =>
   }).join(", ");
 /**
  * 11/19 초월 레벨마다 적정 층 (저층에서 포인트 쓸어 가기 막기 — 사용자): ★(50+t)의 적정 층은 t × TOWER_FIT_PER_T층.
- * 사냥터와 같이 적정보다 TOWER_POINT_GRACE층 넘게 낮은 층은 포인트를 주지 않는다 (초월 EXP·상자·기록은 그대로).
+ * 사냥터와 같이 적정보다 TOWER_POINT_GRACE층 넘게 낮은 층은 포인트를 주지 않는다 (초월 EXP·기록은 그대로).
+ * 11/27 운영자 「고렙은 저층에서 포인트 못 받으니 상자도 막아야지」: 그 층들은 우두머리 상자도 열리지 않는다 (towerGivesChest).
  * ★60 → 20층(10층부터 포인트) · ★80 → 60층(50층부터) · ★100 → 100층(90층부터)
  */
 export const TOWER_FIT_PER_T = 2;
@@ -579,11 +580,28 @@ export const TOWER_POINT_GRACE = 10;
 export const towerFitFloor = (tLevel: number) => Math.max(1, Math.floor(Math.max(0, tLevel)) * TOWER_FIT_PER_T);
 /** 이 층부터 포인트를 준다 */
 export const towerPointFrom = (tLevel: number) => Math.max(1, towerFitFloor(tLevel) - TOWER_POINT_GRACE);
-/** 11/24 포인트 없는 lo~hi층에서 받는 것 (「초월 경험치만」 / 상자 층이 끼면 상자까지) — 「… 받아요」 앞에 붙인다 */
+/** 11/24 포인트 없는 lo~hi층에서 받는 것 — 「… 받아요」 앞에 붙인다. 11/27 그 층들은 우두머리 상자도 없어서 늘 「초월 EXP만」 */
 export function towerNoPointGain(lo: number, hi: number): string {
-  if (hi < TOWER_CHEST_FROM) return "초월 EXP만";
-  if (lo >= TOWER_CHEST_FROM) return "초월 EXP와 우두머리 상자만";
-  return `초월 EXP와 ${TOWER_CHEST_FROM}층부터 열리는 우두머리 상자만`;
+  void lo;
+  void hi;
+  return "초월 EXP만";
+}
+/**
+ * 11/27 f층 우두머리 상자를 여나: 상자 층(TOWER_CHEST_FROM부터 우두머리 층)이고 포인트를 받는 층(towerPointFrom 이상)일 때만.
+ * tLevel = 판을 시작할 때 초월 레벨 (포인트와 같은 값 — 게임은 판 시작 응답, 서버 정산은 정산 전 저장값). 슈퍼 계정도 같다
+ */
+export const towerGivesChest = (f: number, tLevel: number) => isChestFloor(f) && fl(f) >= towerPointFrom(tLevel);
+/** 11/27 이 초월 레벨에서 우두머리 상자가 열리기 시작하는 층 (그 층부터 우두머리 층마다) — 안내 글용 */
+export const towerChestFrom = (tLevel: number) => Math.max(TOWER_CHEST_FROM, towerPointFrom(tLevel));
+/** 11/27 포인트 없는 lo~hi층에서 못 받는 것: 원래 상자가 열리는 층이 끼면 「포인트와 우두머리 상자」, 아니면 「포인트」 (「… 없이」 앞에 붙인다) */
+export function towerNoPointLoss(lo: number, hi: number): string {
+  for (let f = Math.max(lo, TOWER_CHEST_FROM); f <= hi; f++) if (isChestFloor(f)) return "포인트와 우두머리 상자";
+  return "포인트";
+}
+/** 11/27 안내: 「56층부터 포인트와 우두머리 상자를 받아요」 (포인트 시작 층이 원래 상자 층보다 아래면 상자는 그대로라 「30층부터 포인트를 받아요」) */
+export function towerPointFromText(tLevel: number): string {
+  const from = towerPointFrom(tLevel);
+  return from > TOWER_CHEST_FROM ? `${from}층부터 포인트와 우두머리 상자를 받아요` : `${from}층부터 포인트를 받아요`;
 }
 /** start층부터 깬 floors층의 포인트 (적정보다 낮은 층은 0). 초월 레벨은 판을 시작할 때 값 */
 export function towerRunPoints(start: number, floors: number, tLevel: number): { points: number; free: number } {
@@ -596,14 +614,14 @@ export function towerRunPoints(start: number, floors: number, tLevel: number): {
 
 /**
  * 11/15 상자를 여는 우두머리 층 (게임이 판 안에서 여는 순서 = 서버 towerSettle이 주는 순서): start층부터 깬 floors층 중 우두머리 층을,
- * 오늘 이미 연 상자(used) 다음부터 하루 한도까지
+ * 오늘 이미 연 상자(used) 다음부터 하루 한도까지. 11/27 tLevel(판 시작 때 초월 레벨)로 포인트를 못 받는 층은 빼고 (towerGivesChest)
  */
-export function towerChestFloors(start: number, floors: number, used: number): number[] {
+export function towerChestFloors(start: number, floors: number, used: number, tLevel = 0): number[] {
   const out: number[] = [];
   let n = used;
   for (let i = 0; i < floors; i++) {
     const f = start + i;
-    if (!isChestFloor(f)) continue;
+    if (!towerGivesChest(f, tLevel)) continue;
     if (n >= TOWER_CHESTS_PER_DAY) break;
     n++;
     out.push(f);
@@ -617,7 +635,7 @@ export function towerChestDrops(seed: number, f: number, _start: number, _pity =
   void _start;
   void _pity;
   // 11/15: 지옥 드롭표를 그대로 굴리면 상자 넷 중 셋이 비어 있었다 → 상자 전용 굴림.
-  // 물약 1~2개는 늘 · 강화 재료 · 세트 장비 2% (11/19 천장 없음) · 꾸미기 3% (층별 등급·랜덤 일수, 깔끔한 클리어와 상관없이) — lib/rpg/setGearRoll.
+  // 물약 1~2개는 늘 · 강화 재료 · 세트 장비 15% (11/19 천장 없음, 11/27 직급은 층 구간 확률로 굴림) · 꾸미기 3% (층별 등급·랜덤 일수, 깔끔한 클리어와 상관없이) — lib/rpg/setGearRoll.
   // sup = 테스트 서버 슈퍼 계정 시험 드롭 (서버가 계정으로 정한다): 세트 장비·꾸미기가 늘 하나씩
   const fs = floorSeed(seed, f);
   const r = seeded(fs ^ 0x43485354);
@@ -969,6 +987,8 @@ export function towerSettle(
     floorMs: number;
     /** 11/15 의심 판: 층·EXP·상자는 그대로, 최고 기록·이번 주 기록은 그대로 두고 fSus(체크포인트용)만 올린다 */
     suspect?: boolean;
+    /** 11/27 판 시작 때 초월 레벨: 포인트를 못 받는 층(towerPointFrom 아래)은 상자도 없다 (없으면 0 — 모든 상자 층) */
+    tLevel?: number;
   },
 ): TowerSettle {
   const d = rollDay(s, a.day);
@@ -988,7 +1008,7 @@ export function towerSettle(
       tRuns++;
       runs++;
     }
-    if (isChestFloor(f)) {
+    if (towerGivesChest(f, a.tLevel ?? 0)) {
       if (tChest < TOWER_CHESTS_PER_DAY) {
         tChest++;
         chests.push(f);

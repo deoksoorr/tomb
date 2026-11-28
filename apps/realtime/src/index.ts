@@ -43,6 +43,7 @@ import {
   MAINT_OFF,
   MAINT_READ_HEADER,
   ROOM_ID_RE,
+  TAB_ID_RE,
   WHERE_CACHE_MS,
   maintRejects,
   verifyInternal,
@@ -374,6 +375,9 @@ async function channel(req: Request, env: Env, url: URL, rawN: string): Promise<
   const spawn = parseSpawn(url.searchParams.get("x"), url.searchParams.get("y"), false, map);
   const ticket = await admit(env.JOIN_SECRET, url.searchParams.get("t"), n, spawn, map);
   if (!ticket) return rejectSocket(CLOSE.INVALID_TOKEN, "invalid token");
+  // 11/27 탭 id (기록에만 — 다른 탭에서 다시 접속한 걸 구분)
+  const tab = url.searchParams.get("tab");
+  if (tab && TAB_ID_RE.test(tab)) ticket.tab = tab;
   const closed = await maintGate(env, ticket.staff === true);
   if (closed) return closed;
   return forward(req, channelStub(env, n), ticket);
