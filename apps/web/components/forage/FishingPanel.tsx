@@ -257,7 +257,8 @@ export default function FishingPanel({
   // 11/27 걸리는 순간 정산 (운영자 「자동 낚시로 잡으면 일어나야 갱신되는 게 아니라 실시간으로」): 서버가 알려 준 다음 걸리는 찌(hitInMs) 바로 뒤에 한 번 →
   // 가방·도감·포인트(도감 보상)·좌대 코디가 앉아 있는 동안 바로 바뀐다. 요청은 걸린 수만큼 (응답마다 다음 때를 새로 받는다). 숨은 탭은 돌아올 때 정산
   useEffect(() => {
-    if (!auto || auto.hitInMs == null || auto.hitInMs + AUTO_HIT_SLACK_MS >= AUTO_SYNC_MS) return;
+    // 11/28 일반 자리도 똑같이: 다음 걸리는 찌가 3분(AUTO_SYNC_MS) 넘게 남아도 그때 맞춰 부른다 (예전엔 3분 주기 정산에 맡겨 최대 3분 늦게 보였다)
+    if (!auto || auto.hitInMs == null) return;
     const t = setTimeout(() => {
       if (!tabHidden()) void syncAuto();
     }, Math.max(1_000, auto.hitInMs + AUTO_HIT_SLACK_MS));
