@@ -245,7 +245,7 @@
   flex: 1;
   grid-template-columns: minmax(0, 1fr);
   align-content: space-evenly;
-  gap: 5px 10px;
+  gap: 6px 10px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -332,13 +332,13 @@
   container-type: size;
 }
 
-@container (max-height: 172px) {
+@container (max-height: 96px) {
   .tips {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-/* 알림 줄이 여럿 붙어 더 좁으면 제목 줄을 접는다 (안내 여섯 줄은 그대로) */
+/* 알림 줄이 여럿 붙어 더 좁으면 제목 줄을 접는다 (안내 네 줄은 그대로) */
 @container (max-height: 100px) {
   .col > .guide > h3 {
     display: none;

@@ -212,24 +212,16 @@ function BoothDialog({ avatar, onClose }: { avatar?: { color: string; body?: str
         )}
         <ul className={s.tips}>
           <li>
-            입장권 <b>{minText(RAFT_TICKET_MIN)}</b> · <b>{RAFT_PRICE}P</b>
+            입장권은 <b>{minText(RAFT_TICKET_MIN)}에 {RAFT_PRICE}P</b>이고, 하루 {minText(RAFT_DAILY_MIN)}까지 쓸 수 있어요.
           </li>
           <li>
-            내 좌대 자동 낚시 <b>속도 2배</b>
+            좌대에서는 <b>자동 낚시만</b> 되고, 속도는 2배예요.
           </li>
           <li>
-            좌대는 <b>자동 낚시만</b>
+            끝나기 {RAFT_RENEW_WINDOW_MS / 60_000}분 전에 {RAFT_RENEW_MAX === 1 ? "한 번" : `${RAFT_RENEW_MAX}번까지`} 연장할 수 있어요.
           </li>
-          <li>
-            하루 <b>{minText(RAFT_DAILY_MIN)}</b>까지
-          </li>
-          <li>
-            끝나기 {RAFT_RENEW_WINDOW_MS / 60_000}분 전 <b>{RAFT_RENEW_MAX === 1 ? "한 번" : `${RAFT_RENEW_MAX}번까지`} 연장</b>
-          </li>
-          <li>
-            연장 없이 끝나면 <b>{RAFT_REBUY_WAIT_MS / 60_000}분 뒤</b> 다시 구매
-          </li>
-          <li>잔교·둑은 입장권 없이 낚시</li>
+          <li>연장 없이 끝나면 {RAFT_REBUY_WAIT_MS / 60_000}분 뒤에 다시 살 수 있어요.</li>
+          <li>잔교와 둑은 입장권 없이 낚시할 수 있어요.</li>
         </ul>
       </InfoCard>
       {error && (
