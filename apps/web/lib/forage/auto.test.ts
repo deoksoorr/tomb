@@ -273,10 +273,10 @@ describe("요약", () => {
 });
 
 describe("11/22 터치 화면 위쪽 자동 낚시 칩 글귀", () => {
-  it("낚은 수와 다음 찌 올리기까지 (분 단위, 1분 안이면 곧)", () => {
-    expect(autoChipText(3, 70_000, false)).toEqual({ head: "자동 낚시 중", count: "3마리", next: "다음 약 1분" });
-    expect(autoChipText(0, 10_000, false).next).toBe("다음 곧");
-    expect(autoChipText(0, -5_000, false).next).toBe("다음 곧");
+  it("낚은 수만 (11/28 다음 찌까지 남은 시간은 안 보인다)", () => {
+    expect(autoChipText(3, 70_000, false)).toEqual({ head: "자동 낚시 중", count: "3마리", next: "" });
+    expect(autoChipText(0, 10_000, false).next).toBe("");
+    expect(autoChipText(0, -5_000, false).next).toBe("");
   });
   it("세션이 끝나 다음 시각이 없으면 다음 칸은 비운다", () => {
     expect(autoChipText(2, null, false)).toEqual({ head: "자동 낚시 중", count: "2마리", next: "" });

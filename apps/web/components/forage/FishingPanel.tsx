@@ -5,7 +5,7 @@ import { SEA_TIDE_OUT_MSG, type FishWater } from "@tomb/protocol";
 import { bridge, type ForageRodPhase } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import { onBackgroundChange } from "@/lib/background";
-import { AUTO_HIT_SLACK_MS, AUTO_SYNC_MS, autoChipText, autoNextLabel, autoTip, fishPanelOf, RAFT_AUTO_ONLY_MSG, RAFT_SPEED_TEXT } from "@/lib/forage/auto";
+import { AUTO_HIT_SLACK_MS, AUTO_SYNC_MS, autoChipText, autoTip, fishPanelOf, RAFT_AUTO_ONLY_MSG, RAFT_SPEED_TEXT } from "@/lib/forage/auto";
 import { BAG_MAX, bagCount, GRADE_LABEL, speciesById, WATER_LABEL } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
 import { sunkenText } from "@/lib/forage/sunken";
@@ -453,7 +453,7 @@ export default function FishingPanel({
   // 터치 기기(화면 버튼)는 키 대신 위의 큰 버튼으로 던지고 당긴다
   const coarse = useMediaQuery("(pointer: coarse)");
 
-  // 11/22 터치 화면: 자동 낚시 중엔 창 대신 왼쪽 위 칩 한 줄 [● 자동 낚시 중 3마리 다음 약 1분][끄기] — 왼쪽 위 칩 묶음(TopLeftCluster)의 긴급 의뢰 옆
+  // 11/22 터치 화면: 자동 낚시 중엔 창 대신 왼쪽 위 칩 한 줄 [● 자동 낚시 중 3마리][끄기] — 왼쪽 위 칩 묶음(TopLeftCluster)의 긴급 의뢰 옆
   if (coarse && auto && !unfold) {
     const chip = autoChipText(auto.today, auto.nextInMs == null ? null : nextAt - clock, bagFull, auto.raft ? auto.every : undefined);
     return (
@@ -522,7 +522,7 @@ export default function FishingPanel({
             ? `자동 낚시 중 · 가방이 가득 차서 쉬는 중이에요`
             : auto.raft
               ? `좌대 자동 낚시 중 · ${RAFT_SPEED_TEXT} · 오늘 ${auto.today}마리`
-              : `자동 낚시 중 · 오늘 ${auto.today}마리 · 다음 찌 올리기까지 ${auto.nextInMs == null ? "—" : autoNextLabel(Math.max(0, nextAt - clock))}`}
+              : `자동 낚시 중 · 오늘 ${auto.today}마리`}
         </p>
       )}
       {phase === "reel" && (

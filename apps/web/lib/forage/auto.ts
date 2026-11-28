@@ -187,22 +187,17 @@ export function rollAutoCatch(seed: number, k: number, water: FishWater, at: num
   return { id: s.id, size: rollSize10(s, hash01(`auto|${seed}|${k}|sz`)), at };
 }
 
-/** "약 n분" / "곧" */
-export function autoNextLabel(ms: number): string {
-  const min = Math.round(ms / 60_000);
-  return min >= 1 ? `약 ${min}분` : "곧";
-}
-
 /**
- * 11/22 터치 화면 위쪽 자동 낚시 칩 글귀 (낚시 창을 접어 둔 동안): 「자동 낚시 중 · 3마리 · 다음 약 1분」.
- * 가방이 가득 차면 쉰다고 (다음 시각 대신). next는 좁은 화면에서 숨긴다 — 비어 있을 수 있다
+ * 11/22 터치 화면 위쪽 자동 낚시 칩 글귀 (낚시 창을 접어 둔 동안): 「자동 낚시 중 · 3마리」.
+ * 가방이 가득 차면 쉰다고. 11/28 운영자 「설명이 1분으로 돼 있다」: 다음 찌까지 남은 시간(30초 주기)을 분으로 반올림해 「다음 약 1분」으로 보였다 → 빼고 낚은 수만
  */
 export function autoChipText(today: number, nextMs: number | null, full: boolean, raftEvery?: number): { head: string; count: string; next: string } {
   if (full) return { head: raftEvery ? "좌대 자동 낚시" : "자동 낚시", count: "가방 가득", next: `쉬는 중 · ${today}마리` };
   // 11/27 내 좌대: 보통 자리보다 빠르다는 걸 보여 준다 (운영자 「좌대에서 속도 개편된 거 맞아?」).
   // 11/28 운영자 「15초마다 찌를 올려요 어색함」 → 표준 용어 「속도 2배」 (간격 숫자는 protocol RAFT_AUTO_EVERY_MS — 화면엔 안 쓴다). 좁은 화면에서도 낚은 수가 보이게 head에 붙인다
   if (raftEvery) return { head: `좌대 자동 낚시 중 · ${RAFT_SPEED_TEXT}`, count: `${today}마리`, next: "" };
-  return { head: "자동 낚시 중", count: `${today}마리`, next: nextMs == null ? "" : `다음 ${autoNextLabel(Math.max(0, nextMs))}` };
+  void nextMs;
+  return { head: "자동 낚시 중", count: `${today}마리`, next: "" };
 }
 
 /** 자동 낚시 안내. 11/28 운영자 「구구절절 계속 나온다」: 알림에서는 빼고 낚시 창 [자동 낚시 켜기] 도움말(autoTip) 한 곳에만 */
