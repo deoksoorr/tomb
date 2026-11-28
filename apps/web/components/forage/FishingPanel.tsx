@@ -5,7 +5,7 @@ import { SEA_TIDE_OUT_MSG, type FishWater } from "@tomb/protocol";
 import { bridge, type ForageRodPhase } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import { onBackgroundChange } from "@/lib/background";
-import { AUTO_HIT_SLACK_MS, AUTO_SYNC_MS, autoChipText, autoTip, fishPanelOf, RAFT_AUTO_ONLY_MSG, RAFT_SPEED_TEXT } from "@/lib/forage/auto";
+import { AUTO_HIT_SLACK_MS, AUTO_SYNC_MS, autoChipText, autoEndText, autoTip, fishPanelOf, RAFT_AUTO_ONLY_MSG, RAFT_SPEED_TEXT } from "@/lib/forage/auto";
 import { BAG_MAX, bagCount, GRADE_LABEL, speciesById, WATER_LABEL } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
 import { sunkenText } from "@/lib/forage/sunken";
@@ -70,6 +70,8 @@ export default function FishingPanel({
   const [auto, setAuto] = useState<AutoFishStatus | null>(null);
   const [autoBusy, setAutoBusy] = useState(false);
   const autoRef = useRef<AutoFishStatus | null>(null);
+  /** 11/28 이번에 켠 자동 낚시로 낚은 수 (끝날 때 「자동 낚시 끝. N마리 낚았어요.」) — 정산 응답마다 더한다 */
+  const autoCaught = useRef(0);
   const [nextAt, setNextAt] = useState(0);
   const [clock, setClock] = useState(0);
   // 11/22 터치 화면(폰·태블릿): 자동 낚시가 도는 동안 창을 접어 왼쪽 위 칩 한 줄로 (눌러 펼치면 지금 창, [접기]로 다시)
@@ -183,8 +185,11 @@ export default function FishingPanel({
 
   /** 서버 응답 반영 (켜짐·꺼짐·정산). 11/28 알림은 늘 짧은 한 줄 (autoToast) */
   function applyAuto(r: AutoFishResponse) {
+    const wasOn = autoRef.current !== null;
     forageStore.set(r.state);
     toastAutoCatch(r);
+    autoCaught.current += r.items.length + r.gear.length;
+    if (wasOn && !r.auto) showToast(autoEndText(autoCaught.current));
     const won = r.gear.find((g) => g.kept);
     if (won) {
       bridge.emit("forage:pop", { itemId: won.id, sparkle: true });
@@ -229,6 +234,7 @@ export default function FishingPanel({
       .autoStart(spot, bridge.last("net:status")?.channel ?? null)
       .then((r) => {
         applyAuto(r);
+        autoCaught.current = 0;
         if (!r.auto) return;
         go("ready");
         rod("wait");
@@ -310,6 +316,7 @@ export default function FishingPanel({
         .then((r) => {
           forageStore.set(r.state);
           toastAutoCatch(r);
+          showToast(autoEndText(autoCaught.current + r.items.length + r.gear.length));
         })
         .catch(() => {
           // 다음에 들어오면 ForageLayer가 정산한다

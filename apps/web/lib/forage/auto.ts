@@ -206,6 +206,8 @@ export const AUTO_RANK_NOTE = "자동으로 낚은 물고기는 최대어 순위
 export const isCampWater = (w: FishWater): boolean => w === "valley" || w === "pool" || w === "reservoir" || w === "rowboat";
 /** 11/28 좌대 자동 낚시 빠르기 (표준 용어 — 실제 간격은 protocol RAFT_AUTO_EVERY_MS 15초 = 보통 AUTO_FISH_EVERY_MS 30초의 절반) */
 export const RAFT_SPEED_TEXT = `속도 ${Math.round(AUTO_FISH_EVERY_MS / RAFT_AUTO_EVERY_MS)}배`;
+/** 11/28 운영자: 자동 낚시가 끝날 때(일어남·끄기·물때·입장권 끝) 한 줄 — 「자동 낚시 끝. 12마리 낚았어요.」, 못 낚았으면 「자동 낚시 끝」 */
+export const autoEndText = (caught: number): string => (caught > 0 ? `자동 낚시 끝. ${caught}마리 낚았어요.` : "자동 낚시 끝");
 
 /**
  * 11/28 [자동 낚시 켜기] 도움말 (운영자: 짧게, 초 숫자 없이). 캠핑장 물이면 희귀 물고기 안내를 최대어 안내와 한 문장으로 묶는다

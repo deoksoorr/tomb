@@ -8,6 +8,7 @@ import {
   autoAliveMs,
   autoCatchTimes,
   autoChipText,
+  autoEndText,
   autoHit,
   autoHitInMs,
   autoNextInMs,
@@ -305,5 +306,13 @@ describe("11/27 걸리는 순간 정산 (hitInMs — 운영자 「일어나야 �
   it("내 좌대 칩은 「좌대 자동 낚시 중 · 속도 2배 · 4마리」 (11/28 초 숫자 대신 표준 용어)", () => {
     expect(autoChipText(4, 9_000, false, 15_000)).toEqual({ head: "좌대 자동 낚시 중 · 속도 2배", count: "4마리", next: "" });
     expect(autoChipText(4, 9_000, true, 15_000).head).toBe("좌대 자동 낚시");
+  });
+});
+
+describe("11/28 자동 낚시 끝 한 줄 (운영자 「자동 낚시 끝. ○○마리 낚았어요.」)", () => {
+  it("낚은 수가 있으면 마릿수까지, 없으면 「자동 낚시 끝」만", () => {
+    expect(autoEndText(12)).toBe("자동 낚시 끝. 12마리 낚았어요.");
+    expect(autoEndText(1)).toBe("자동 낚시 끝. 1마리 낚았어요.");
+    expect(autoEndText(0)).toBe("자동 낚시 끝");
   });
 });
